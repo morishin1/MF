@@ -5,7 +5,7 @@ function renderSidebar(activeKey) {
     <nav class="sidebar">
       <div class="sidebar-brand">
         <h1>KessanPilot</h1>
-        <p>自社経理運用</p>
+        <p>for 会計事務所</p>
       </div>
       <div class="sidebar-nav">
         <div class="sidebar-section">メイン</div>
@@ -13,21 +13,25 @@ function renderSidebar(activeKey) {
           <span class="material-symbols-outlined">dashboard</span> ダッシュボード
         </a>
         <div class="sidebar-section">月次業務</div>
-        <a href="journal-approval.html" class="${activeKey === 'journal' ? 'active' : ''}">
-          <span class="material-symbols-outlined">receipt_long</span> 仕訳の承認
-        </a>
         <a href="closing-check.html" class="${activeKey === 'closing' ? 'active' : ''}">
           <span class="material-symbols-outlined">fact_check</span> 月次締めチェック
         </a>
-        <a href="report-generator.html" class="${activeKey === 'report' ? 'active' : ''}">
-          <span class="material-symbols-outlined">assessment</span> 月次レポート
+        <a href="journal-approval.html" class="${activeKey === 'journal' ? 'active' : ''}">
+          <span class="material-symbols-outlined">receipt_long</span> 仕訳候補の承認
         </a>
-        <div class="sidebar-section">その他</div>
+        <a href="report-generator.html" class="${activeKey === 'report' ? 'active' : ''}">
+          <span class="material-symbols-outlined">assessment</span> 経営レポート生成
+        </a>
+        <div class="sidebar-section">参考</div>
+        <a href="client-report.html" class="${activeKey === 'client-report' ? 'active' : ''}">
+          <span class="material-symbols-outlined">visibility</span> 顧問先が見る画面
+        </a>
         <a href="index.html" class="${activeKey === 'logout' ? 'active' : ''}">
           <span class="material-symbols-outlined">logout</span> ログアウト
         </a>
       </div>
     </nav>
+    <div class="demo-ribbon">DEMO MOCK</div>
   `;
 }
 

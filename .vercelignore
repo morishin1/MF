@@ -1,0 +1,23 @@
+# Vercel 公開デプロイに含めないもの（リポジトリには残すが配信しない）
+# 内部の業務ルール・接続設定・設計ドキュメントは公開URLに出さない
+
+CLAUDE.md
+README.md
+.mcp.json
+.env.local.example
+
+# Claude Code 設定・スラッシュコマンド・スキル
+.claude/
+
+# 設計/セキュリティ等の内部ドキュメント
+docs/
+
+# 旧デモの退避置き場
+_archive/
+
+# 業務データ・バックアップ（gitignore済だが念のため）
+data/
+backup/
+
+# その他Markdown（READMEなど）
+*.md
