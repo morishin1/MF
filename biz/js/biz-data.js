@@ -21,12 +21,12 @@ const DRIVE_CONFIG = {
   last_sync: "2026年4月14日 15:42",
   auto_sync: true,
   folders: [
-    { id: "f01", name: "📥 受信トレイ", path: "/DriveKeiri/受信トレイ", count: 3, description: "スキャンした書類をここに入れるだけ" },
-    { id: "f02", name: "✅ 処理済（請求書）", path: "/DriveKeiri/済/請求書/2026-03", count: 18, description: "AIが自動で整理した請求書" },
-    { id: "f03", name: "✅ 処理済（領収書）", path: "/DriveKeiri/済/領収書/2026-03", count: 42, description: "AIが自動で整理した領収書" },
-    { id: "f04", name: "✅ 処理済（銀行明細）", path: "/DriveKeiri/済/銀行明細/2026-03", count: 4, description: "銀行明細（AIが仕訳済）" },
-    { id: "f05", name: "✅ 処理済（給与関連）", path: "/DriveKeiri/済/給与/2026-03", count: 3, description: "給与明細等" },
-    { id: "f06", name: "❓ 確認が必要", path: "/DriveKeiri/確認待ち", count: 2, description: "AIから質問が届いている書類" }
+    { id: "f01", name: "受信トレイ", icon: "inbox", path: "/DriveKeiri/受信トレイ", count: 3, description: "スキャンした書類をここに入れるだけ" },
+    { id: "f02", name: "処理済（請求書）", icon: "check_circle", path: "/DriveKeiri/済/請求書/2026-03", count: 18, description: "AIが自動で整理した請求書" },
+    { id: "f03", name: "処理済（領収書）", icon: "check_circle", path: "/DriveKeiri/済/領収書/2026-03", count: 42, description: "AIが自動で整理した領収書" },
+    { id: "f04", name: "処理済（銀行明細）", icon: "check_circle", path: "/DriveKeiri/済/銀行明細/2026-03", count: 4, description: "銀行明細（AIが仕訳済）" },
+    { id: "f05", name: "処理済（給与関連）", icon: "check_circle", path: "/DriveKeiri/済/給与/2026-03", count: 3, description: "給与明細等" },
+    { id: "f06", name: "確認が必要", icon: "help", path: "/DriveKeiri/確認待ち", count: 2, description: "AIから質問が届いている書類" }
   ]
 };
 

@@ -60,7 +60,7 @@
     </div>
     <div class="msg-friendly-body" style="color:#2c5282;">
       <b>使い方はとってもシンプル</b><br>
-      ① スマホや複合機で書類をスキャン ② 下の「📥 受信トレイ」フォルダにファイルを保存するだけ<br>
+      ① スマホや複合機で書類をスキャン ② 下の「受信トレイ」フォルダにファイルを保存するだけ<br>
       あとは自動でAIが書類を判別し、仕訳候補を作って税理士に送ります。
     </div>
   </div>
@@ -95,7 +95,7 @@
       <button class="btn btn-secondary" onclick="recognize(2)"><span class="material-symbols-outlined icon-inline">cloud</span>AWS請求書サンプル</button>
     </div>
     <div style="margin-top:14px;font-size:11px;color:var(--text-muted);">
-      ※ 実運用では Google Drive の「📥 受信トレイ」に保存するだけ。自動で同期・認識されます。
+      ※ 実運用では Google Drive の「受信トレイ」に保存するだけ。自動で同期・認識されます。
     </div>
   </div>
 
@@ -141,7 +141,7 @@
 
   document.getElementById("folder-list").innerHTML = DRIVE_CONFIG.folders.map(f => `
     <div class="drive-folder">
-      <div class="drive-folder-icon"><span class="material-symbols-outlined">folder</span></div>
+      <div class="drive-folder-icon"><span class="material-symbols-outlined">${f.icon || 'folder'}</span></div>
       <div style="flex:1;">
         <div class="drive-folder-name">${f.name}</div>
         <div class="drive-folder-path">${f.path}</div>
