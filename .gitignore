@@ -1,0 +1,22 @@
+# 機密情報
+.env
+.env.*
+!.env.local.example
+
+# ローカル運用データ（業務データ・個人情報を含むためgit追跡禁止）
+data/
+backup/
+
+# Claude Code ローカル設定
+.claude/settings.local.json
+
+# OS生成ファイル
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*~

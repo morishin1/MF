@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>月次レポート - DriveKeiri</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="css/biz.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div id="topbar-root"></div>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">月次レポート</div>
+      <div class="page-subtitle">税理士が内容を確認した、あなたの会社の経営レポートです。</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary"><span class="material-symbols-outlined icon-inline">download</span>PDFダウンロード</button>
+      <button class="btn btn-secondary"><span class="material-symbols-outlined icon-inline">print</span>印刷</button>
+    </div>
+  </div>
+
+  <!-- 過去レポート選択 -->
+  <div class="simple-box" style="margin-bottom:20px;display:flex;align-items:center;gap:16px;">
+    <span class="material-symbols-outlined" style="color:var(--biz-primary-soft);">calendar_month</span>
+    <div style="font-size:13px;font-weight:600;">レポート期間：</div>
+    <select style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+      <option>2026年3月度（最新）</option>
+      <option>2026年2月度</option>
+      <option>2026年1月度</option>
+      <option>2025年12月度</option>
+    </select>
+    <div style="margin-left:auto;font-size:12px;color:var(--text-muted);">
+      <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;color:var(--biz-green);">verified</span>
+      税理士チェック済み（2026/04/14 配信）
+    </div>
+  </div>
+
+  <!-- ヘッドライン -->
+  <div class="biz-hero" style="padding:32px 40px;">
+    <div style="font-size:12px;opacity:0.8;letter-spacing:2px;margin-bottom:8px;">2026年3月度 経営レポート</div>
+    <h1 style="font-size:24px;line-height:1.5;">売上は好調に回復、利益も前月比+23%。<br>ただし広告費の急増には要注意。</h1>
+    <p style="margin-top:12px;">発行日：2026年4月14日　/　担当：佐藤 花子 税理士（さくら会計事務所）</p>
+  </div>
+
+  <!-- 3大指標 -->
+  <div class="three-col" style="margin-bottom:24px;">
+    <div class="big-card">
+      <div class="big-icon blue"><span class="material-symbols-outlined">payments</span></div>
+      <div style="font-size:12px;color:var(--text-muted);">売上</div>
+      <div style="font-size:28px;font-weight:700;color:var(--primary-dark);">3,850万円</div>
+      <div style="font-size:13px;color:var(--biz-green);font-weight:600;margin-top:4px;">
+        <span class="material-symbols-outlined icon-inline" style="color:var(--biz-green);">trending_up</span>前月比 +17.4%
+      </div>
+    </div>
+    <div class="big-card">
+      <div class="big-icon green"><span class="material-symbols-outlined">savings</span></div>
+      <div style="font-size:12px;color:var(--text-muted);">営業利益</div>
+      <div style="font-size:28px;font-weight:700;color:var(--primary-dark);">245万円</div>
+      <div style="font-size:13px;color:var(--biz-green);font-weight:600;margin-top:4px;">
+        <span class="material-symbols-outlined icon-inline" style="color:var(--biz-green);">trending_up</span>前月比 +23.7%
+      </div>
+    </div>
+    <div class="big-card">
+      <div class="big-icon purple"><span class="material-symbols-outlined">account_balance_wallet</span></div>
+      <div style="font-size:12px;color:var(--text-muted);">現預金残高</div>
+      <div style="font-size:28px;font-weight:700;color:var(--primary-dark);">5,230万円</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">月商の約1.4ヶ月分</div>
+    </div>
+  </div>
+
+  <!-- グラフ -->
+  <div class="simple-box" style="margin-bottom:20px;">
+    <div style="font-size:15px;font-weight:700;color:var(--primary-dark);margin-bottom:16px;">売上と利益の6ヶ月の動き</div>
+    <canvas id="trendChart" height="150"></canvas>
+  </div>
+
+  <!-- セクション：ハイライト -->
+  <div class="simple-box" style="margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span class="material-symbols-outlined" style="color:var(--accent);">flag</span>
+      今月のハイライト
+    </div>
+    <p style="font-size:14px;line-height:1.9;">
+      3月の売上は3,850万円で、前月比+17.4%と大きく回復しました。営業利益は245万円（前月+23.7%）で、年度末として良い形で締めくくれています。一方、広告宣伝費が前月比で3倍近くに増えており、この支出が継続するかどうかで来期の利益水準が変わります。
+    </p>
+  </div>
+
+  <!-- 売上 -->
+  <div class="simple-box" style="margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span class="material-symbols-outlined" style="color:var(--accent);">storefront</span>
+      売上と粗利について
+    </div>
+    <p style="font-size:14px;line-height:1.9;">
+      売上は前月2月の3,280万円から一気に3,850万円へ。前年同月（3,520万円）比でも+9.4%と堅調です。主要取引先からの受注が増えたことが要因と見られます。売上原価率は70.9%で前月（71.0%）とほぼ同水準。売上増加にきちんと利益がついてきている健全な状態です。
+    </p>
+  </div>
+
+  <!-- コスト -->
+  <div class="simple-box" style="margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span class="material-symbols-outlined" style="color:var(--accent);">receipt_long</span>
+      コスト構造の変化
+    </div>
+    <p style="font-size:14px;line-height:1.9;">
+      固定費は875万円で前月比ほぼ横ばい。ただし<b>広告宣伝費が52万円（前月18万円）と大きく増加</b>しています。新規施策の開始であれば問題ありませんが、一時的な重複計上の可能性も含めて税理士で内容を確認中です。また、仮払金18万円（昨年11月計上分）が長期未精算のため、4月中の処理を推奨します。
+    </p>
+  </div>
+
+  <!-- アクション -->
+  <div class="simple-box" style="margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+      <span class="material-symbols-outlined" style="color:var(--accent);">task_alt</span>
+      次月に向けたアクション提案
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;gap:14px;padding:14px;background:#f7fafc;border-radius:10px;">
+        <div style="flex-shrink:0;width:36px;height:36px;background:var(--accent);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;">1</div>
+        <div style="flex:1;font-size:14px;line-height:1.7;padding-top:6px;">広告宣伝費の増加要因を確認し、継続施策か一時的な支出かを整理する</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:14px;background:#f7fafc;border-radius:10px;">
+        <div style="flex-shrink:0;width:36px;height:36px;background:var(--accent);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;">2</div>
+        <div style="flex:1;font-size:14px;line-height:1.7;padding-top:6px;">仮払金（出張費）の精算を4月中に完了させる</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:14px;background:#f7fafc;border-radius:10px;">
+        <div style="flex-shrink:0;width:36px;height:36px;background:var(--accent);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;">3</div>
+        <div style="flex:1;font-size:14px;line-height:1.7;padding-top:6px;">△△商事様への売掛金68万円の回収状況を先方に確認する</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 税理士からのメッセージ -->
+  <div class="simple-box" style="background:linear-gradient(135deg, #fef9e7 0%, #fef5e7 100%);border:1px solid #fbd38d;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <div style="width:48px;height:48px;background:#fbd38d;border-radius:12px;display:flex;align-items:center;justify-content:center;">
+        <span class="material-symbols-outlined" style="color:#744210;">support_agent</span>
+      </div>
+      <div>
+        <div style="font-weight:700;color:#744210;">担当税理士からの一言</div>
+        <div style="font-size:11px;color:#744210;opacity:0.7;">佐藤 花子 税理士 / さくら会計事務所</div>
+      </div>
+    </div>
+    <p style="font-size:14px;line-height:1.9;color:#744210;">
+      3月は締め作業にご協力ありがとうございました。広告費の増加について、もし新しい施策の開始であればその意図を共有いただけると、効果測定までサポートできます。4月第2週に面談をセットさせてください。
+    </p>
+  </div>
+
+  <!-- フッターアクション -->
+  <div style="display:flex;gap:12px;margin-top:24px;padding:20px;background:white;border-radius:12px;border:1px solid var(--border);">
+    <button class="btn btn-secondary" style="flex:1;justify-content:center;">
+      <span class="material-symbols-outlined icon-inline">chat</span>税理士に質問する
+    </button>
+    <button class="btn btn-secondary" style="flex:1;justify-content:center;">
+      <span class="material-symbols-outlined icon-inline">event</span>面談を予約する
+    </button>
+    <button class="btn btn-primary" style="flex:1;justify-content:center;">
+      <span class="material-symbols-outlined icon-inline">share</span>銀行・金融機関に共有
+    </button>
+  </div>
+
+</div>
+
+<script src="js/biz-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderBizSidebar("report");
+  document.getElementById("topbar-root").innerHTML = renderTopBar();
+
+  const ctx = document.getElementById("trendChart").getContext("2d");
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: ["2025/10", "2025/11", "2025/12", "2026/1", "2026/2", "2026/3"],
+      datasets: [
+        {
+          label: "売上",
+          data: [31200000, 33500000, 36800000, 30100000, 32800000, 38500000],
+          backgroundColor: "rgba(49, 130, 206, 0.7)",
+          borderRadius: 6,
+          yAxisID: "y"
+        },
+        {
+          label: "営業利益",
+          data: [2100000, 2400000, 2800000, 1650000, 1980000, 2450000],
+          type: "line",
+          borderColor: "#d69e2e",
+          backgroundColor: "#d69e2e",
+          yAxisID: "y1",
+          tension: 0.3,
+          borderWidth: 3,
+          pointRadius: 5
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: {
+        y: { beginAtZero: true, position: "left", ticks: { callback: v => (v/10000).toFixed(0) + "万" } },
+        y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => (v/10000).toFixed(0) + "万" } }
+      }
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KessanPilot - AI月次支援で、顧問先に"伝わる会計"を</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <h1>KessanPilot</h1>
+      <p>AI月次支援で、顧問先に"伝わる会計"を</p>
+    </div>
+
+    <div style="background:#f7fafc;border-radius:6px;padding:14px;margin-bottom:24px;font-size:12px;color:var(--text-muted);text-align:center;display:flex;align-items:center;justify-content:center;gap:6px;">
+      <span class="material-symbols-outlined" style="font-size:16px;color:var(--accent);">info</span>
+      これはデモ版です。ログイン情報は不要です。
+    </div>
+
+    <div style="background:#e6f0fa;border-radius:8px;padding:10px 14px;margin-bottom:20px;font-size:12px;text-align:center;color:var(--primary);font-weight:600;">
+      会計事務所向け（税理士が使う画面）
+    </div>
+
+    <div class="form-field">
+      <label>メールアドレス</label>
+      <input type="email" value="demo@sakura-tax.jp" readonly>
+    </div>
+    <div class="form-field">
+      <label>パスワード</label>
+      <input type="password" value="••••••••" readonly>
+    </div>
+
+    <a href="dashboard.html" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:14px;margin-top:8px;">
+      <span class="material-symbols-outlined icon-inline">login</span>KessanPilot のデモを開く
+    </a>
+
+    <!-- 法人側デモへの導線 -->
+    <div style="display:flex;align-items:center;gap:8px;margin:24px 0 20px;color:var(--text-muted);font-size:11px;">
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+      <span>もうひとつのデモ</span>
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+    </div>
+
+    <a href="biz/index.html" style="text-decoration:none;color:inherit;display:block;">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;gap:14px;align-items:center;transition:all 0.15s;cursor:pointer;" onmouseover="this.style.borderColor='var(--primary)';this.style.background='#f7fafc';" onmouseout="this.style.borderColor='var(--border)';this.style.background='white';">
+        <div style="width:44px;height:44px;background:linear-gradient(135deg, #1e3a5f 0%, #3182ce 100%);border-radius:10px;display:flex;align-items:center;justify-content:center;color:white;flex-shrink:0;">
+          <span class="material-symbols-outlined">cloud_upload</span>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:var(--primary-dark);">DriveKeiri（法人向け）</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;line-height:1.5;">顧問先企業が使う側のデモ。書類をGoogle Driveに入れるだけ。</div>
+        </div>
+        <span class="material-symbols-outlined" style="color:var(--text-muted);">arrow_forward_ios</span>
+      </div>
+    </a>
+
+    <div style="text-align:center;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);">
+      <div>さくら会計事務所様 向けデモ</div>
+      <div style="margin-top:4px;">マネーフォワードクラウド会計 連携済み</div>
+    </div>
+  </div>
+</div>
+
+<div style="position:fixed;bottom:24px;left:24px;color:rgba(255,255,255,0.6);font-size:11px;">
+  © 2026 KessanPilot Demo
+</div>
+
+</body>
+</html>

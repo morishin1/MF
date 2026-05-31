@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mf-accounting": {
+      "type": "http",
+      "url": "https://beta.mcp.developers.biz.moneyforward.com/mcp/ca/v3",
+      "headers": {
+        "Authorization": "Bearer ${MF_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

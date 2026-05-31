@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIからの質問 - DriveKeiri</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="css/biz.css">
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div id="topbar-root"></div>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">AIからの質問</div>
+      <div class="page-subtitle">書類の内容が不明なとき、AIからお尋ねします。選択式で簡単に答えられます。</div>
+    </div>
+    <div>
+      <span class="badge badge-high" id="q-count-badge" style="font-size:13px;padding:6px 12px;">未回答 <span id="q-count">0</span>件</span>
+    </div>
+  </div>
+
+  <!-- 説明ボックス -->
+  <div class="msg-friendly">
+    <div class="msg-friendly-icon">
+      <span class="material-symbols-outlined">psychology</span>
+    </div>
+    <div class="msg-friendly-body">
+      <b>なぜ質問が来るの？</b><br>
+      会計知識がなくても、書類の内容（何に使ったお金か？など）はあなたが一番よく知っています。
+      AIは書類を読むのが得意ですが、<b>用途や目的を判断するのは人間にしかできません</b>。
+      選択式なので、該当する選択肢を選ぶだけで大丈夫です。
+    </div>
+  </div>
+
+  <!-- 質問一覧 -->
+  <div id="question-list"></div>
+
+  <!-- 質問がない時 -->
+  <div id="empty-state" style="display:none;padding:60px 20px;text-align:center;background:white;border:1px solid var(--border);border-radius:16px;">
+    <div style="width:80px;height:80px;background:#d6f5d6;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+      <span class="material-symbols-outlined" style="font-size:48px;color:var(--biz-green);">check_circle</span>
+    </div>
+    <div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">すべて回答済みです 🎉</div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.8;">
+      AIからの新しい質問は現在ありません。<br>
+      新しい書類をDriveに入れていただくだけで、引き続き自動処理されます。
+    </div>
+  </div>
+
+  <!-- 回答完了メッセージ -->
+  <div id="answer-toast" style="display:none;position:fixed;bottom:24px;right:24px;background:var(--biz-green);color:white;padding:14px 20px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.2);font-size:13px;z-index:1000;">
+    <span class="material-symbols-outlined icon-inline">check_circle</span>
+    回答ありがとうございます。AIが仕訳を作り直しています。
+  </div>
+
+  <!-- 過去の質問履歴（小さく） -->
+  <div style="margin-top:32px;">
+    <div style="font-size:14px;font-weight:700;color:var(--text-muted);margin-bottom:12px;">回答済みの質問履歴</div>
+    <div class="simple-box">
+      <div class="simple-row">
+        <div style="font-size:13px;">
+          <div>電気代（3月分） → 水道光熱費</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">2026/04/08 回答済</div>
+        </div>
+        <span class="badge badge-done">完了</span>
+      </div>
+      <div class="simple-row">
+        <div style="font-size:13px;">
+          <div>新規取引先A社からの入金55万円 → 売上（製品販売）</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">2026/04/05 回答済</div>
+        </div>
+        <span class="badge badge-done">完了</span>
+      </div>
+      <div class="simple-row">
+        <div style="font-size:13px;">
+          <div>書店領収書 → 新聞図書費</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">2026/04/02 回答済</div>
+        </div>
+        <span class="badge badge-done">完了</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/biz-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderBizSidebar("questions");
+  document.getElementById("topbar-root").innerHTML = renderTopBar();
+
+  function renderQuestions() {
+    const open = AI_QUESTIONS.filter(q => q.status === "open");
+    document.getElementById("q-count").textContent = open.length;
+
+    if (open.length === 0) {
+      document.getElementById("question-list").innerHTML = "";
+      document.getElementById("empty-state").style.display = "block";
+      document.getElementById("q-count-badge").className = "badge badge-done";
+      document.getElementById("q-count-badge").style.padding = "6px 12px";
+      document.getElementById("q-count-badge").style.fontSize = "13px";
+      return;
+    }
+
+    document.getElementById("empty-state").style.display = "none";
+    document.getElementById("question-list").innerHTML = open.map((q, qIdx) => `
+      <div class="question-card" id="qc-${q.id}">
+        <div class="question-header">
+          <div class="question-avatar">
+            <span class="material-symbols-outlined">smart_toy</span>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--primary-dark);">AIアシスタントからの質問</div>
+            <div style="font-size:11px;color:var(--text-muted);">${q.created_at} / 書類：${q.doc_name}</div>
+          </div>
+          <span class="status-pill status-asking" style="margin-left:auto;">
+            <span class="status-dot-anim"></span>回答待ち
+          </span>
+        </div>
+
+        <div class="question-body">${q.question}</div>
+
+        ${q.detail ? `<div style="background:#f7fafc;border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.7;">
+          <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;color:var(--biz-primary-soft);">info</span>
+          ${q.detail}
+        </div>` : ''}
+
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">該当する選択肢を選んでください</div>
+        <div class="question-options" id="opt-${q.id}">
+          ${q.options.map(o => `
+            <div class="question-option" onclick="selectOption('${q.id}', '${o.id}', this)">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-weight:500;">${o.label}</div>
+                <span class="material-symbols-outlined" style="font-size:16px;color:var(--text-muted);">radio_button_unchecked</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${o.hint}</div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn btn-secondary btn-sm" onclick="skipQuestion('${q.id}')">
+            <span class="material-symbols-outlined icon-inline">help</span>税理士に相談する
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="submitAnswer('${q.id}')" id="submit-${q.id}" disabled>
+            <span class="material-symbols-outlined icon-inline">send</span>この内容で回答
+          </button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function selectOption(qId, optId, el) {
+    const container = document.getElementById("opt-" + qId);
+    container.querySelectorAll(".question-option").forEach(c => {
+      c.classList.remove("selected");
+      c.querySelector(".material-symbols-outlined").textContent = "radio_button_unchecked";
+    });
+    el.classList.add("selected");
+    el.querySelector(".material-symbols-outlined").textContent = "radio_button_checked";
+    document.getElementById("submit-" + qId).disabled = false;
+  }
+
+  function submitAnswer(qId) {
+    const q = AI_QUESTIONS.find(x => x.id === qId);
+    if (q) q.status = "answered";
+
+    const card = document.getElementById("qc-" + qId);
+    card.style.transition = "all 0.4s";
+    card.style.opacity = "0.3";
+    card.style.transform = "translateX(20px)";
+
+    setTimeout(() => {
+      renderQuestions();
+    }, 400);
+
+    const t = document.getElementById("answer-toast");
+    t.style.display = "block";
+    setTimeout(() => t.style.display = "none", 3000);
+  }
+
+  function skipQuestion(qId) {
+    alert("【デモ】この質問は担当税理士（佐藤 花子 税理士）に転送されました。\n税理士から連絡があるまでお待ちください。");
+  }
+
+  renderQuestions();
+</script>
+
+</body>
+</html>

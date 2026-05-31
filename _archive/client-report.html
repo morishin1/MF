@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>月次経営レポート - BizCompass（顧問先向け）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #f0f4f8; }
+    .client-header {
+      background: var(--primary);
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .client-header h1 {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .client-main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d5282 100%);
+      color: white;
+      border-radius: 12px;
+      padding: 36px 40px;
+      margin-bottom: 24px;
+    }
+    .hero-label {
+      font-size: 12px;
+      opacity: 0.8;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    .hero h1 {
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .hero-meta {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .metric {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .metric-label { font-size: 12px; color: var(--text-muted); }
+    .metric-value { font-size: 24px; font-weight: 700; margin: 6px 0; color: var(--primary-dark);}
+    .metric-trend { font-size: 12px; font-weight: 600; }
+    .section-card {
+      background: white;
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+    }
+    .section-card h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-card h2::before {
+      content: "";
+      width: 4px;
+      height: 20px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+    .section-card p {
+      font-size: 14px;
+      line-height: 1.9;
+      color: var(--text);
+    }
+    .action-item {
+      display: flex;
+      gap: 14px;
+      padding: 14px;
+      background: #f7fafc;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .action-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    .tax-box {
+      background: #fef9e7;
+      border-left: 4px solid var(--accent);
+      padding: 20px 24px;
+      border-radius: 8px;
+      margin-top: 24px;
+    }
+    .tax-box .label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="client-header">
+  <h1>BizCompass — 経営レポート</h1>
+  <div style="display:flex;gap:16px;align-items:center;font-size:13px;">
+    <span id="company-name"></span>
+    <a href="dashboard.html" style="color:white;opacity:0.8;font-size:12px;">← 事務所画面へ戻る（デモ）</a>
+  </div>
+</div>
+
+<div class="client-main">
+
+  <!-- ヘッドライン -->
+  <div class="hero">
+    <div class="hero-label">2026年3月度 月次経営レポート</div>
+    <h1 id="headline"></h1>
+    <div class="hero-meta" id="hero-meta"></div>
+  </div>
+
+  <!-- 3つの主要指標 -->
+  <div class="metric-grid">
+    <div class="metric">
+      <div class="metric-label">売上</div>
+      <div class="metric-value" id="m-revenue"></div>
+      <div class="metric-trend" id="m-revenue-trend"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">営業利益</div>
+      <div class="metric-value" id="m-op"></div>
+      <div class="metric-trend" id="m-op-trend"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">現預金残高</div>
+      <div class="metric-value" id="m-cash"></div>
+      <div class="metric-trend" id="m-cash-trend"></div>
+    </div>
+  </div>
+
+  <!-- グラフ -->
+  <div class="section-card">
+    <h2>売上・利益の推移</h2>
+    <canvas id="trendChart" height="180"></canvas>
+  </div>
+
+  <!-- ハイライト -->
+  <div class="section-card">
+    <h2>今月のハイライト</h2>
+    <p id="s-highlight"></p>
+  </div>
+
+  <!-- 売上 -->
+  <div class="section-card">
+    <h2>売上と粗利について</h2>
+    <p id="s-revenue"></p>
+  </div>
+
+  <!-- コスト -->
+  <div class="section-card">
+    <h2>コスト構造の変化</h2>
+    <p id="s-costs"></p>
+  </div>
+
+  <!-- キャッシュ -->
+  <div class="section-card">
+    <h2>キャッシュの状況</h2>
+    <p id="s-cash"></p>
+  </div>
+
+  <!-- アクション -->
+  <div class="section-card">
+    <h2>次月に向けたアクション提案</h2>
+    <div id="actions"></div>
+  </div>
+
+  <!-- 次月ポイント -->
+  <div class="section-card">
+    <h2>次月の注目ポイント</h2>
+    <p id="s-next"></p>
+  </div>
+
+  <!-- 税理士コメント -->
+  <div class="section-card">
+    <div class="tax-box">
+      <div class="label" style="display:flex;align-items:center;gap:6px;"><span class="material-symbols-outlined" style="font-size:18px;">support_agent</span>担当税理士より</div>
+      <p id="tax-comment" style="margin-top:4px;"></p>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">
+        <span id="tax-name"></span> / <span id="firm-name"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <div style="text-align:center;padding:32px;font-size:12px;color:var(--text-muted);">
+    このレポートはKessanPilotで自動生成され、担当税理士の確認を経て配信されています。<br>
+    質問がある場合は、担当税理士までお気軽にお問い合わせください。
+  </div>
+
+</div>
+
+<script src="js/mock-data.js"></script>
+<script>
+  const client = getCurrentClient();
+  const fin = FINANCIAL_DATA[client.id];
+  const report = REPORTS[client.id];
+
+  document.getElementById("company-name").textContent = client.name;
+  document.getElementById("headline").textContent = report.headline;
+  document.getElementById("hero-meta").textContent = `発行日: ${report.generated_at.split(' ')[0]}  /  担当: ${client.assigned}（${FIRM.name}）`;
+
+  // メトリクス
+  document.getElementById("m-revenue").textContent = fmtYenShort(fin.summary.revenue);
+  const revPct = ((fin.summary.revenue - fin.summary.revenue_prev) / fin.summary.revenue_prev * 100).toFixed(1);
+  document.getElementById("m-revenue-trend").innerHTML = revPct >= 0 ?
+    `<span style="color:var(--success);display:inline-flex;align-items:center;gap:2px;"><span class="material-symbols-outlined" style="font-size:14px;">trending_up</span>前月比 +${revPct}%</span>` :
+    `<span style="color:var(--danger);display:inline-flex;align-items:center;gap:2px;"><span class="material-symbols-outlined" style="font-size:14px;">trending_down</span>前月比 ${revPct}%</span>`;
+
+  document.getElementById("m-op").textContent = fmtYenShort(fin.summary.operating_profit);
+  const opPct = ((fin.summary.operating_profit - fin.summary.operating_profit_prev) / Math.abs(fin.summary.operating_profit_prev) * 100).toFixed(1);
+  document.getElementById("m-op-trend").innerHTML = opPct >= 0 ?
+    `<span style="color:var(--success);display:inline-flex;align-items:center;gap:2px;"><span class="material-symbols-outlined" style="font-size:14px;">trending_up</span>前月比 +${opPct}%</span>` :
+    `<span style="color:var(--danger);display:inline-flex;align-items:center;gap:2px;"><span class="material-symbols-outlined" style="font-size:14px;">trending_down</span>前月比 ${opPct}%</span>`;
+
+  document.getElementById("m-cash").textContent = fmtYenShort(fin.summary.cash);
+  const cashMonths = (fin.summary.cash / fin.summary.revenue).toFixed(1);
+  document.getElementById("m-cash-trend").innerHTML = `<span style="color:var(--text-muted);">月商の約${cashMonths}ヶ月分</span>`;
+
+  // レポート本文
+  document.getElementById("s-highlight").textContent = report.sections.highlight;
+  document.getElementById("s-revenue").textContent = report.sections.revenue;
+  document.getElementById("s-costs").textContent = report.sections.costs;
+  document.getElementById("s-cash").textContent = report.sections.cash;
+  document.getElementById("s-next").textContent = report.sections.next_month_note;
+
+  document.getElementById("actions").innerHTML = report.sections.action.map((a, i) => `
+    <div class="action-item">
+      <div class="action-num">${i+1}</div>
+      <div style="flex:1;padding-top:4px;">${a}</div>
+    </div>
+  `).join("");
+
+  document.getElementById("tax-comment").textContent = report.tax_comment;
+  document.getElementById("tax-name").textContent = client.assigned + "（税理士）";
+  document.getElementById("firm-name").textContent = FIRM.name;
+
+  // グラフ
+  const ctx = document.getElementById("trendChart").getContext("2d");
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: fin.trend.months,
+      datasets: [
+        {
+          label: "売上",
+          data: fin.trend.revenue,
+          backgroundColor: "rgba(30, 58, 95, 0.7)",
+          yAxisID: "y"
+        },
+        {
+          label: "営業利益",
+          data: fin.trend.operating_profit,
+          type: "line",
+          borderColor: "#d69e2e",
+          backgroundColor: "#d69e2e",
+          yAxisID: "y1",
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: {
+        y: { beginAtZero: true, position: "left", ticks: { callback: v => (v/10000).toFixed(0) + "万" } },
+        y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => (v/10000).toFixed(0) + "万" } }
+      }
+    }
+  });
+</script>
+
+</body>
+</html>

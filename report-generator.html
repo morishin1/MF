@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経営レポート生成 - KessanPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">経営レポート生成（社長向け）</div>
+      <div class="page-subtitle">AIが試算表・推移表を読み取り、社長が理解できる自然文レポートを自動生成します。</div>
+    </div>
+    <div id="client-selector-root" style="position:relative;"></div>
+  </div>
+
+  <!-- 数値サマリー -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">売上高（当月）</div>
+      <div class="kpi-value" id="kpi-revenue">-</div>
+      <div class="kpi-sub" id="kpi-revenue-sub">-</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">営業利益</div>
+      <div class="kpi-value" id="kpi-op">-</div>
+      <div class="kpi-sub" id="kpi-op-sub">-</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">固定費</div>
+      <div class="kpi-value" id="kpi-fixed">-</div>
+      <div class="kpi-sub">販管費計</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">現預金残高</div>
+      <div class="kpi-value" id="kpi-cash">-</div>
+      <div class="kpi-sub" id="kpi-cash-sub">月商換算</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- 推移グラフ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">売上・営業利益の推移（6ヶ月）</div>
+      </div>
+      <canvas id="trendChart" height="200"></canvas>
+    </div>
+
+    <!-- 科目別 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">主要科目の増減</div>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>科目</th>
+            <th class="num">当月</th>
+            <th class="num">前月比</th>
+          </tr>
+        </thead>
+        <tbody id="accounts-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- レポート生成 -->
+  <div class="card" style="margin-top:24px;">
+    <div class="card-header">
+      <div class="card-title">AI生成レポート</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary btn-sm" onclick="regenerateReport()"><span class="material-symbols-outlined" style="font-size:14px;">refresh</span>再生成</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()"><span class="material-symbols-outlined" style="font-size:14px;">print</span>印刷</button>
+        <a href="client-report.html" class="btn btn-primary btn-sm"><span class="material-symbols-outlined" style="font-size:14px;">visibility</span>顧問先が見る画面で確認</a>
+      </div>
+    </div>
+
+    <div class="ai-box" style="margin-bottom:20px;">
+      <div class="ai-label"><span class="material-symbols-outlined">auto_awesome</span>AI生成の流れ</div>
+      <div style="font-size:13px;">
+        試算表・推移表・前年同月比データを解析 → 変動要因を自動抽出 → 社長向けに自然文に要約 → 税理士が確認・加筆 → 顧問先に配信
+      </div>
+    </div>
+
+    <div id="report-preview"></div>
+
+    <!-- 税理士コメント -->
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px;">税理士からの一言（配信前に追記）</div>
+      <textarea id="tax-comment" rows="3" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" placeholder="例：今月は売上回復で一安心です。次回面談で来期の計画を議論しましょう。"></textarea>
+    </div>
+
+    <!-- アクション -->
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary"><span class="material-symbols-outlined icon-inline">picture_as_pdf</span>PDFプレビュー</button>
+      <button class="btn btn-secondary"><span class="material-symbols-outlined icon-inline">mail</span>メール送信</button>
+      <button class="btn btn-primary" onclick="sendReport()"><span class="material-symbols-outlined icon-inline">send</span>顧問先に配信</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/mock-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderSidebar("report");
+  document.getElementById("client-selector-root").innerHTML = renderClientSelector();
+
+  const client = getCurrentClient();
+  const fin = FINANCIAL_DATA[client.id];
+  const report = REPORTS[client.id];
+
+  // KPI
+  document.getElementById("kpi-revenue").textContent = fmtYenShort(fin.summary.revenue);
+  document.getElementById("kpi-revenue-sub").innerHTML = `前月比 <span class="${fin.summary.revenue >= fin.summary.revenue_prev ? 'num-positive' : 'num-negative'}">${fmtPct(fin.summary.revenue, fin.summary.revenue_prev)}</span> / 前年比 ${fmtPct(fin.summary.revenue, fin.summary.revenue_prev_year)}`;
+  document.getElementById("kpi-op").textContent = fmtYenShort(fin.summary.operating_profit);
+  document.getElementById("kpi-op-sub").innerHTML = `前月比 <span class="${fin.summary.operating_profit >= fin.summary.operating_profit_prev ? 'num-positive' : 'num-negative'}">${fmtPct(fin.summary.operating_profit, fin.summary.operating_profit_prev)}</span>`;
+  document.getElementById("kpi-fixed").textContent = fmtYenShort(fin.summary.fixed_cost);
+  document.getElementById("kpi-cash").textContent = fmtYenShort(fin.summary.cash);
+  const cashMonths = (fin.summary.cash / fin.summary.revenue).toFixed(1);
+  document.getElementById("kpi-cash-sub").textContent = `月商の約${cashMonths}ヶ月分`;
+
+  // 主要科目
+  document.getElementById("accounts-tbody").innerHTML = fin.key_accounts.map(a => {
+    const diff = a.current - a.prev;
+    const pct = a.prev === 0 ? 0 : (diff / Math.abs(a.prev)) * 100;
+    const cls = Math.abs(pct) >= 30 ? "num-negative" : pct < 0 ? "num-positive" : "";
+    return `
+      <tr>
+        <td>${a.name}</td>
+        <td class="num">${(a.current/10000).toLocaleString('ja-JP', {maximumFractionDigits: 0})}万</td>
+        <td class="num"><span class="${cls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  // グラフ
+  const ctx = document.getElementById("trendChart").getContext("2d");
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: fin.trend.months,
+      datasets: [
+        {
+          label: "売上高",
+          data: fin.trend.revenue,
+          backgroundColor: "rgba(30, 58, 95, 0.7)",
+          yAxisID: "y",
+          order: 2
+        },
+        {
+          label: "営業利益",
+          data: fin.trend.operating_profit,
+          type: "line",
+          borderColor: "#d69e2e",
+          backgroundColor: "#d69e2e",
+          yAxisID: "y1",
+          tension: 0.3,
+          order: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          position: "left",
+          ticks: { callback: v => (v/10000000).toFixed(0) + "千万" }
+        },
+        y1: {
+          beginAtZero: true,
+          position: "right",
+          grid: { drawOnChartArea: false },
+          ticks: { callback: v => (v/10000).toFixed(0) + "万" }
+        }
+      }
+    }
+  });
+
+  // レポートプレビュー
+  function renderReport() {
+    document.getElementById("report-preview").innerHTML = `
+      <div class="report-page" style="max-width:100%;padding:32px;">
+        <div class="report-header">
+          <h1>${client.name} 様　月次経営レポート</h1>
+          <div class="meta">
+            <span><span class="material-symbols-outlined icon-inline">calendar_today</span>${report.period}</span>
+            <span><span class="material-symbols-outlined icon-inline">business</span>${FIRM.name}</span>
+            <span><span class="material-symbols-outlined icon-inline">person</span>担当：${client.assigned}</span>
+          </div>
+        </div>
+
+        <div class="report-highlight">
+          <div style="font-weight:700;font-size:15px;margin-bottom:6px;display:flex;align-items:center;gap:6px;"><span class="material-symbols-outlined" style="color:var(--accent);">push_pin</span>今月のひとことサマリー</div>
+          ${report.headline}
+        </div>
+
+        <div class="report-section">
+          <h2>1. 今月のハイライト</h2>
+          <p>${report.sections.highlight}</p>
+        </div>
+
+        <div class="report-section">
+          <h2>2. 売上と粗利の動き</h2>
+          <p>${report.sections.revenue}</p>
+        </div>
+
+        <div class="report-section">
+          <h2>3. コスト構造の変化</h2>
+          <p>${report.sections.costs}</p>
+        </div>
+
+        <div class="report-section">
+          <h2>4. キャッシュの状況</h2>
+          <p>${report.sections.cash}</p>
+        </div>
+
+        <div class="report-section">
+          <h2>5. 次月に向けたアクション提案</h2>
+          ${report.sections.action.map((a, i) => `
+            <div class="report-action">
+              <div class="report-action-num">${i+1}</div>
+              <div style="flex:1;font-size:14px;line-height:1.8;padding-top:2px;">${a}</div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="report-section">
+          <h2>6. 次月の注目ポイント</h2>
+          <p>${report.sections.next_month_note}</p>
+        </div>
+      </div>
+    `;
+    document.getElementById("tax-comment").value = report.tax_comment;
+  }
+  renderReport();
+
+  function regenerateReport() {
+    const btn = event.target.closest("button");
+    btn.textContent = "🔄 生成中...";
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = "🔄 再生成";
+      btn.disabled = false;
+      alert("【デモ】AIが最新データでレポートを再生成しました。");
+    }, 1500);
+  }
+
+  function sendReport() {
+    if (confirm(`${client.name} 様にレポートを配信しますか？\n\n配信方法: メール＋顧問先マイページ`)) {
+      alert("【デモ】レポートを配信しました。顧問先にはメール通知が送信されます。");
+    }
+  }
+</script>
+
+</body>
+</html>

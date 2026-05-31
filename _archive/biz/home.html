@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ホーム - DriveKeiri</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="css/biz.css">
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div id="topbar-root"></div>
+
+  <!-- ヒーロー：今月の状況 -->
+  <div class="biz-hero">
+    <h1>今月の経理、<span style="color:#ffd89b;">AIが処理中</span>です 👋</h1>
+    <p>
+      <span id="hero-msg"></span>
+      書類をGoogle Driveに入れていただくだけで、自動で仕訳されます。
+    </p>
+    <div class="status-row">
+      <div class="biz-hero-stat">
+        <div class="label">今月Driveに入れた書類</div>
+        <div class="value" id="hero-total">-</div>
+      </div>
+      <div class="biz-hero-stat">
+        <div class="label">AIが自動処理</div>
+        <div class="value" id="hero-auto">-</div>
+      </div>
+      <div class="biz-hero-stat">
+        <div class="label">あなたへの質問</div>
+        <div class="value" id="hero-q">-</div>
+      </div>
+      <div class="biz-hero-stat">
+        <div class="label">削減時間（推定）</div>
+        <div class="value" id="hero-time">-</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- アクションに誘導する3つの大カード -->
+  <div class="three-col" style="margin-bottom:24px;">
+    <a href="drive.html" style="text-decoration:none;color:inherit;">
+      <div class="big-card">
+        <div class="big-icon blue"><span class="material-symbols-outlined">cloud_upload</span></div>
+        <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;">書類を入れる</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;">Google Driveの「受信トレイ」にスキャンした書類を入れるだけ。</div>
+        <div style="margin-top:14px;color:var(--biz-primary-soft);font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;">
+          Driveを開く <span class="material-symbols-outlined" style="font-size:16px;">arrow_forward</span>
+        </div>
+      </div>
+    </a>
+    <a href="questions.html" style="text-decoration:none;color:inherit;">
+      <div class="big-card" id="q-card">
+        <div class="big-icon orange"><span class="material-symbols-outlined">chat</span></div>
+        <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;">AIからの質問に答える</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;" id="q-desc">-</div>
+        <div style="margin-top:14px;color:var(--biz-orange);font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;">
+          確認する <span class="material-symbols-outlined" style="font-size:16px;">arrow_forward</span>
+        </div>
+      </div>
+    </a>
+    <a href="report.html" style="text-decoration:none;color:inherit;">
+      <div class="big-card">
+        <div class="big-icon green"><span class="material-symbols-outlined">insights</span></div>
+        <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;">月次レポートを見る</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;">税理士が作った、社長向けの経営レポートをチェック。</div>
+        <div style="margin-top:14px;color:var(--biz-green);font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;">
+          レポートを開く <span class="material-symbols-outlined" style="font-size:16px;">arrow_forward</span>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <!-- 処理フロー -->
+  <div class="flow-container">
+    <div class="flow-title">
+      <span class="material-symbols-outlined" style="color:var(--biz-primary-soft);">route</span>
+      書類がどこまで進んでいるか
+    </div>
+    <div class="flow-steps">
+      <div class="flow-step done">
+        <div class="flow-step-icon"><span class="material-symbols-outlined">cloud_upload</span></div>
+        <div class="flow-step-label">Driveに到着</div>
+        <div class="flow-step-count">72件</div>
+        <div class="flow-step-sub">今月合計</div>
+        <div class="flow-arrow"></div>
+      </div>
+      <div class="flow-step done">
+        <div class="flow-step-icon"><span class="material-symbols-outlined">visibility</span></div>
+        <div class="flow-step-label">AIが読み取り</div>
+        <div class="flow-step-count">70件</div>
+        <div class="flow-step-sub">OCR完了</div>
+        <div class="flow-arrow"></div>
+      </div>
+      <div class="flow-step active">
+        <div class="flow-step-icon"><span class="material-symbols-outlined">auto_awesome</span></div>
+        <div class="flow-step-label">仕訳を作成</div>
+        <div class="flow-step-count">68件</div>
+        <div class="flow-step-sub">AIが生成中</div>
+        <div class="flow-arrow"></div>
+      </div>
+      <div class="flow-step active">
+        <div class="flow-step-icon"><span class="material-symbols-outlined">hourglass_top</span></div>
+        <div class="flow-step-label">税理士が確認</div>
+        <div class="flow-step-count">5件</div>
+        <div class="flow-step-sub">確認待ち</div>
+        <div class="flow-arrow"></div>
+      </div>
+      <div class="flow-step done">
+        <div class="flow-step-icon"><span class="material-symbols-outlined">check_circle</span></div>
+        <div class="flow-step-label">登録完了</div>
+        <div class="flow-step-count" id="flow-done">-</div>
+        <div class="flow-step-sub">会計データ化</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- 直近の処理書類 -->
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:16px;font-weight:700;color:var(--primary-dark);">直近の書類</div>
+        <a href="processing.html" style="font-size:12px;color:var(--biz-primary-soft);">すべて見る →</a>
+      </div>
+      <div id="recent-docs"></div>
+    </div>
+
+    <!-- サイド情報 -->
+    <div>
+      <!-- 月次レポート状況 -->
+      <div class="simple-box" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="width:40px;height:40px;background:#d6f5d6;border-radius:10px;display:flex;align-items:center;justify-content:center;">
+            <span class="material-symbols-outlined" style="color:var(--biz-green);">mark_email_read</span>
+          </div>
+          <div>
+            <div style="font-weight:700;">2026年3月のレポート</div>
+            <div style="font-size:11px;color:var(--text-muted);">税理士から届きました</div>
+          </div>
+        </div>
+        <div style="background:#fef9e7;border-radius:8px;padding:12px;font-size:12px;line-height:1.7;color:#744210;margin-bottom:12px;">
+          💬 「3月は売上が回復して良い形でした。次回の面談で広告費の効果を見ていきましょう」（佐藤税理士）
+        </div>
+        <a href="report.html" class="btn btn-primary" style="width:100%;justify-content:center;">
+          <span class="material-symbols-outlined icon-inline">open_in_new</span>レポートを開く
+        </a>
+      </div>
+
+      <!-- 今月の節約効果 -->
+      <div class="simple-box" style="background:linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">DriveKeiriを使って今月</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+          <div>
+            <div style="font-size:28px;font-weight:700;color:var(--biz-green);">14<span style="font-size:14px;">時間</span></div>
+            <div style="font-size:11px;color:var(--text-muted);">経理作業の削減</div>
+          </div>
+          <div>
+            <div style="font-size:28px;font-weight:700;color:var(--biz-green);">¥28,000</div>
+            <div style="font-size:11px;color:var(--text-muted);">人件費換算</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.7;">
+          ※ 時給2,000円換算での試算。書類整理・入力・仕訳作業にかかっていた時間を削減しています。
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/biz-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderBizSidebar("home");
+  document.getElementById("topbar-root").innerHTML = renderTopBar();
+
+  // ヒーロー
+  document.getElementById("hero-msg").textContent = `${BIZ_STATS.period}は ${BIZ_STATS.total_docs}件 の書類が届き、${BIZ_STATS.auto_processed}件 はAIが自動で処理しました。`;
+  document.getElementById("hero-total").textContent = BIZ_STATS.total_docs + "件";
+  document.getElementById("hero-auto").textContent = BIZ_STATS.auto_processed + "件";
+  const openQ = AI_QUESTIONS.filter(q => q.status === "open").length;
+  document.getElementById("hero-q").textContent = openQ + "件";
+  document.getElementById("hero-time").textContent = BIZ_STATS.time_saved_hours + "時間";
+  document.getElementById("flow-done").textContent = BIZ_STATS.completed + "件";
+
+  // 質問カードの文言
+  document.getElementById("q-desc").textContent = openQ > 0 ?
+    `AIから ${openQ}件 の確認質問が届いています。選択式で簡単に答えられます。` :
+    "現在、AIからの質問はありません。";
+  if (openQ === 0) {
+    document.getElementById("q-card").style.opacity = "0.6";
+  }
+
+  // 直近書類
+  const recent = BIZ_DOCUMENTS.slice(0, 5);
+  document.getElementById("recent-docs").innerHTML = recent.map(d => `
+    <div class="doc-card">
+      <div class="doc-thumb ${d.type}">
+        <span class="material-symbols-outlined" style="font-size:28px;">${docIcon(d.type)}</span>
+      </div>
+      <div class="doc-body">
+        <div class="doc-title">${d.name}</div>
+        <div class="doc-meta">
+          <span>${d.type_label}</span>
+          <span>• ${d.sender}</span>
+          ${d.amount ? `<span>• ${fmtYen(d.amount)}</span>` : ''}
+          <span>• ${d.uploaded_at.substring(5)}</span>
+        </div>
+        <div class="doc-status">
+          <span class="status-pill status-${d.status}">
+            ${d.status !== 'done' ? '<span class="status-dot-anim"></span>' : '<span class="material-symbols-outlined" style="font-size:12px;">check</span>'}
+            ${statusLabel(d.status)}
+          </span>
+          <span style="color:var(--text-muted);">${d.ai_comment}</span>
+        </div>
+      </div>
+    </div>
+  `).join("");
+</script>
+
+</body>
+</html>

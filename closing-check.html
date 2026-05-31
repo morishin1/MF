@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>月次締めチェック - KessanPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">月次締めチェック</div>
+      <div class="page-subtitle">AIが検知した確認項目を一覧化。判断・承認は税理士が行います。</div>
+    </div>
+    <div id="client-selector-root" style="position:relative;"></div>
+  </div>
+
+  <!-- サマリーカード -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">検知された確認項目</div>
+      <div class="kpi-value" id="total-count">-</div>
+      <div class="kpi-sub">AIによる月次分析</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">高優先度</div>
+      <div class="kpi-value" style="color:var(--danger);" id="high-count">-</div>
+      <div class="kpi-sub">早急に対応が必要</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">処理済</div>
+      <div class="kpi-value" style="color:var(--success);" id="done-count">-</div>
+      <div class="kpi-sub">チェック完了</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">推定削減時間</div>
+      <div class="kpi-value">2.8<span style="font-size:14px;color:var(--text-muted);font-weight:500;">h</span></div>
+      <div class="kpi-sub">従来の手動チェック比</div>
+    </div>
+  </div>
+
+  <!-- AIコメント -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="ai-box" id="ai-summary"></div>
+  </div>
+
+  <!-- フィルタ -->
+  <div class="tabs">
+    <div class="tab active" data-filter="all">すべて <span id="tab-all-count"></span></div>
+    <div class="tab" data-filter="high">高優先度のみ</div>
+    <div class="tab" data-filter="open">未対応のみ</div>
+    <div class="tab" data-filter="done">処理済</div>
+  </div>
+
+  <!-- チェック項目リスト -->
+  <div id="check-list"></div>
+
+  <!-- 完了アクション -->
+  <div style="margin-top:24px;padding:20px;background:white;border:1px solid var(--border);border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div style="font-weight:600;">すべての確認が完了したら</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">次のステップで社長向けレポートを生成できます</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a href="journal-approval.html" class="btn btn-secondary">仕訳承認へ<span class="material-symbols-outlined" style="font-size:16px;margin-left:4px;">arrow_forward</span></a>
+      <a href="report-generator.html" class="btn btn-primary">レポート生成へ<span class="material-symbols-outlined" style="font-size:16px;margin-left:4px;">arrow_forward</span></a>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/mock-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderSidebar("closing");
+  document.getElementById("client-selector-root").innerHTML = renderClientSelector();
+
+  const client = getCurrentClient();
+  const checks = CLOSING_CHECKS[client.id] || [];
+
+  // KPI
+  document.getElementById("total-count").textContent = checks.length + "件";
+  document.getElementById("high-count").textContent = checks.filter(c => c.severity === "high" && !c.done).length + "件";
+  document.getElementById("done-count").textContent = checks.filter(c => c.done).length + "件";
+  document.getElementById("tab-all-count").textContent = `(${checks.length})`;
+
+  // AI要約
+  const highItems = checks.filter(c => c.severity === "high" && !c.done);
+  let summary = "";
+  const aiLabel = `<div class="ai-label"><span class="material-symbols-outlined">auto_awesome</span>AI月次サマリー</div>`;
+  if (client.id === "c001") {
+    summary = aiLabel + `
+      <div style="font-size:14px;line-height:1.8;">
+        <b>${client.name}</b> の2026年3月度月次チェックを行いました。全${checks.length}項目のうち、<b style="color:var(--danger);">高優先度 ${highItems.length}件</b>が未対応です。
+        特に<b>預金残高差異 51,600円</b>と<b>仮払金の長期滞留 18万円</b>の2点は、期末に近いため早期解決を推奨します。
+        広告宣伝費の急増は新規施策か重複計上かの確認が必要です。
+      </div>`;
+  } else if (client.id === "c002") {
+    summary = aiLabel + `
+      <div style="font-size:14px;line-height:1.8;">
+        <b>${client.name}</b> の2026年3月度は、<b style="color:var(--danger);">営業損失△42万円</b>が発生しています。
+        売上が前月比△15.5%と急減した一方、人件費や家賃などの固定費は変わらず赤字化しました。
+        未仕訳明細23件（合計28.8万円）と立替経費の滞留 23.5万円 も含め、月次締めの前に解消が必要です。
+        早めの社長面談をセットすることをおすすめします。
+      </div>`;
+  } else {
+    summary = aiLabel + `
+      <div style="font-size:14px;line-height:1.8;">
+        <b>${client.name}</b> の2026年3月度月次チェックが完了しました。<b style="color:var(--success);">重大な問題は検知されていません</b>。
+        売上・利益ともに好調で、前受収益の振替処理も適切に行われています。次のステップとして経営レポートの生成へお進みください。
+      </div>`;
+  }
+  document.getElementById("ai-summary").innerHTML = summary;
+
+  // リスト描画
+  function renderChecks(filter = "all") {
+    const filtered = checks.filter(c => {
+      if (filter === "high") return c.severity === "high" && !c.done;
+      if (filter === "open") return !c.done;
+      if (filter === "done") return c.done;
+      return true;
+    });
+
+    const container = document.getElementById("check-list");
+    if (filtered.length === 0) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);background:white;border:1px solid var(--border);border-radius:8px;">該当する項目はありません</div>`;
+      return;
+    }
+
+    container.innerHTML = filtered.map(c => {
+      const sevLabel = c.severity === "high" ? "高" : c.severity === "mid" ? "中" : "低";
+      const amountText = c.amount !== 0 ? `金額: ${fmtYen(c.amount)}` : "";
+      return `
+        <div class="check-item ${c.done ? 'done' : ''}">
+          <div class="check-icon ${c.severity}">${sevLabel}</div>
+          <div class="check-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+              <span class="badge badge-${c.severity === 'high' ? 'high' : c.severity === 'mid' ? 'mid' : 'low'}">${c.category}</span>
+              ${c.done ? '<span class="badge badge-done">処理済</span>' : ''}
+            </div>
+            <div class="check-title">${c.title}</div>
+            <div class="check-desc">${c.description}</div>
+            <div style="margin-top:8px;padding:8px 10px;background:#f0f5ff;border-radius:4px;font-size:12px;color:var(--primary-dark);display:flex;align-items:flex-start;gap:6px;">
+              <span class="material-symbols-outlined" style="font-size:16px;color:var(--accent);">lightbulb</span>
+              <span>${c.suggested_action}</span>
+            </div>
+            <div class="check-meta">
+              <span><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">search</span> 検知元: ${c.source}</span>
+              ${amountText ? `<span><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">payments</span> ${amountText}</span>` : ''}
+            </div>
+          </div>
+          <div class="check-actions">
+            ${c.done ? `
+              <button class="btn btn-secondary btn-sm"><span class="material-symbols-outlined" style="font-size:14px;">visibility</span>詳細</button>
+            ` : `
+              <button class="btn btn-primary btn-sm" onclick="markDone('${c.id}')"><span class="material-symbols-outlined" style="font-size:14px;">check</span>処理済にする</button>
+              <button class="btn btn-secondary btn-sm"><span class="material-symbols-outlined" style="font-size:14px;">visibility</span>詳細</button>
+            `}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function markDone(id) {
+    const item = checks.find(c => c.id === id);
+    if (item) {
+      item.done = true;
+      renderChecks(currentFilter);
+      document.getElementById("done-count").textContent = checks.filter(c => c.done).length + "件";
+      document.getElementById("high-count").textContent = checks.filter(c => c.severity === "high" && !c.done).length + "件";
+    }
+  }
+
+  let currentFilter = "all";
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      currentFilter = t.dataset.filter;
+      renderChecks(currentFilter);
+    });
+  });
+
+  renderChecks();
+</script>
+
+</body>
+</html>

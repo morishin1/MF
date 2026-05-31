@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ダッシュボード - KessanPilot（自社経理運用）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* 月次運用パイプライン（このページ専用） */
+    .pipeline { display:flex; gap:0; overflow-x:auto; padding:4px 0; }
+    .pipe-step { flex:1 1 0; min-width:120px; position:relative; padding:0 6px; }
+    .pipe-step:not(:last-child)::after {
+      content:""; position:absolute; top:18px; right:-2px; width:calc(100% - 36px);
+      left:calc(50% + 18px); height:2px; background:var(--border); z-index:0;
+    }
+    .pipe-step.done:not(:last-child)::after { background:var(--success); }
+    .pipe-dot {
+      width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      margin:0 auto 8px; position:relative; z-index:1; border:2px solid var(--border);
+      background:#fff; color:var(--text-muted);
+    }
+    .pipe-dot .material-symbols-outlined { font-size:18px; }
+    .pipe-step.done   .pipe-dot { background:var(--success); border-color:var(--success); color:#fff; }
+    .pipe-step.active .pipe-dot { background:#fff; border-color:var(--primary); color:var(--primary); box-shadow:0 0 0 4px rgba(30,58,95,0.12); }
+    .pipe-label { text-align:center; font-size:12px; font-weight:600; color:var(--text); }
+    .pipe-sub   { text-align:center; font-size:11px; color:var(--text-muted); margin-top:2px; min-height:15px; }
+    .pipe-cmd   { display:block; text-align:center; font-size:10px; color:var(--primary); margin-top:6px;
+                  font-family:'Inter',monospace; word-break:break-all; }
+    .empty-hint { color:var(--text-muted); font-size:13px; padding:24px; text-align:center; }
+    .stat-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+    .stat-row:last-child { border-bottom:none; }
+  </style>
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">ダッシュボード</div>
+      <div class="page-subtitle" id="page-subtitle">読み込み中…</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <label style="font-size:12px;color:var(--text-muted);">対象月</label>
+      <select id="period-select" class="btn btn-secondary" style="padding:7px 12px;"></select>
+      <button class="btn btn-secondary" id="reload-btn"><span class="material-symbols-outlined icon-inline">refresh</span>更新</button>
+    </div>
+  </div>
+
+  <!-- セットアップ／接続バナー（必要時のみ表示） -->
+  <div id="setup-banner"></div>
+
+  <!-- KPI -->
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <!-- 月次運用パイプライン -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header">
+      <div class="card-title">月次運用パイプライン</div>
+      <span class="badge badge-info" id="pipeline-period"></span>
+    </div>
+    <div class="pipeline" id="pipeline"></div>
+  </div>
+
+  <!-- AI サマリー -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="ai-box">
+      <div class="ai-label"><span class="material-symbols-outlined">auto_awesome</span>AIサマリー</div>
+      <div style="font-size:14px;line-height:1.8;" id="ai-summary"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- 左：当月の仕訳 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">当月の仕訳</div>
+        <a href="journal-approval.html" class="btn btn-secondary btn-sm">承認画面へ<span class="material-symbols-outlined" style="font-size:14px;margin-left:2px;">arrow_forward</span></a>
+      </div>
+      <div id="journal-summary"></div>
+    </div>
+
+    <!-- 右：優先アラート＋接続状態 -->
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <div class="card-title">優先アラート</div>
+          <span class="badge badge-high" id="alert-count">0件</span>
+        </div>
+        <div id="alert-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">接続・マスタ状態</div>
+        </div>
+        <div id="connection-status"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/data-loader.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderSidebar("dashboard");
+
+  // 月セレクタ初期化
+  const periodSelect = document.getElementById("period-select");
+  const periods = recentPeriods(12);
+  const def = defaultPeriod();
+  if (!periods.includes(def)) periods.unshift(def);
+  periodSelect.innerHTML = periods.map(p => `<option value="${p}">${fmtPeriodJa(p)}</option>`).join("");
+  periodSelect.value = def;
+
+  periodSelect.addEventListener("change", () => render(periodSelect.value));
+  document.getElementById("reload-btn").addEventListener("click", () => render(periodSelect.value));
+
+  // ---- ヘルパ --------------------------------------------------------
+  const sev = { high: { cls: "danger", bg: "#fff5f5", label: "高" },
+                mid:  { cls: "warning", bg: "#fffaf0", label: "中" },
+                low:  { cls: "success", bg: "#f0fff4", label: "低" } };
+
+  function kpiCard(label, value, sub, opts = {}) {
+    const valColor = opts.color ? `color:${opts.color};` : "";
+    const badge = opts.badge ? `<div class="kpi-badge ${opts.badgeClass || 'badge-up'}">${opts.badge}</div>` : "";
+    const unit = opts.unit ? `<span style="font-size:14px;color:var(--text-muted);font-weight:500;">${opts.unit}</span>` : "";
+    return `<div class="kpi-card">
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value" style="${valColor}">${value}${unit}</div>
+      ${badge}
+      <div class="kpi-sub">${sub}</div>
+    </div>`;
+  }
+
+  // ---- メイン描画 ----------------------------------------------------
+  async function render(ym) {
+    document.getElementById("pipeline-period").textContent = fmtPeriodJa(ym);
+
+    const [company, masters, period] = await Promise.all([
+      DataLoader.company(),
+      DataLoader.masters(),
+      DataLoader.period(ym),
+    ]);
+
+    const companyName = (company && company.name) ? company.name : "（自社名 未設定）";
+    document.getElementById("page-subtitle").textContent = `${companyName} / ${fmtPeriodJa(ym)} 度 月次処理状況`;
+
+    renderSetupBanner(company, masters);
+    renderKpi(period);
+    renderPipeline(ym, period);
+    renderAiSummary(ym, period);
+    renderJournalSummary(period);
+    renderAlerts(period);
+    renderConnection(company, masters);
+  }
+
+  // ---- セットアップバナー -------------------------------------------
+  function renderSetupBanner(company, masters) {
+    const el = document.getElementById("setup-banner");
+    const msgs = [];
+    if (DataLoader.isFileProtocol()) {
+      msgs.push({ cls: "alert-danger",
+        html: `<b>file:// で開いています。</b> 実データを読み込むにはローカルサーバ経由で開いてください。例: <code>python -m http.server 8000</code> → <code>http://localhost:8000/dashboard.html</code>` });
+    }
+    if (!company || !company.name) {
+      msgs.push({ cls: "alert-warn",
+        html: `<b>自社情報が未設定です。</b> <code>CLAUDE.md</code> の会社情報欄と <code>data/company.json</code> を記入してください。` });
+    }
+    const acc = masters && masters.accounts;
+    const fetched = acc && acc.fetched_at;
+    if (!fetched || !(acc.items && acc.items.length)) {
+      msgs.push({ cls: "alert-info",
+        html: `<b>マスタが未取得です。</b> Claude Code で <code>/マスタ更新</code> を実行して勘定科目・取引先を取得してください。` });
+    }
+    el.innerHTML = msgs.map(m => `<div class="alert ${m.cls}">${m.html}</div>`).join("");
+  }
+
+  // ---- KPI ----------------------------------------------------------
+  function renderKpi(period) {
+    const s = period.trial && period.trial.summary ? period.trial.summary : null;
+    const draftJournals = (period.draft && period.draft.journals) || [];
+    const pending = draftJournals.filter(j => (j.status || "pending") === "pending").length;
+    const issues = (period.closing && period.closing.issues) || [];
+    const high = issues.filter(i => i.severity === "high").length;
+    const mid  = issues.filter(i => i.severity === "mid").length;
+    const low  = issues.filter(i => i.severity === "low").length;
+
+    const op = s ? s.operating_profit : null;
+    const opColor = op === null || op === undefined ? "" : (op < 0 ? "var(--danger)" : "var(--success)");
+
+    const cards = [
+      kpiCard("当月売上", s ? fmtYenShort(s.revenue) : "—",
+        s ? "残高試算表より" : "試算表未取得"),
+      kpiCard("営業利益", s ? fmtYenShort(op) : "—",
+        s ? "残高試算表より" : "試算表未取得", { color: opColor }),
+      kpiCard("現預金残高", s ? fmtYenShort(s.cash) : "—",
+        s ? "残高試算表より" : "試算表未取得"),
+      kpiCard("未承認ドラフト", draftJournals.length ? String(pending) : "—",
+        draftJournals.length ? `ドラフト合計 ${draftJournals.length} 件` : "ドラフト未生成",
+        { unit: draftJournals.length ? "件" : "",
+          badge: pending > 0 ? "要承認" : null, badgeClass: "badge-up" }),
+      kpiCard("AI検知アラート", period.closing ? String(issues.length) : "—",
+        period.closing ? `高 ${high} / 中 ${mid} / 低 ${low}` : "締めチェック未実行",
+        { unit: period.closing ? "件" : "",
+          color: high > 0 ? "var(--warning)" : "",
+          badge: high > 0 ? "要対応" : null, badgeClass: "badge-up" }),
+    ];
+    document.getElementById("kpi-grid").innerHTML = cards.join("");
+  }
+
+  // ---- パイプライン --------------------------------------------------
+  function renderPipeline(ym, period) {
+    const draftJournals = (period.draft && period.draft.journals) || [];
+    const approved = draftJournals.filter(j => j.status === "approved").length;
+    const pending  = draftJournals.filter(j => (j.status || "pending") === "pending").length;
+    const sent = (period.sent && period.sent.journals) || [];
+
+    const steps = [
+      { label: "証憑集約", icon: "folder", cmd: `data/evidence/${ym}/`,
+        state: draftJournals.length ? "done" : "todo",
+        sub: draftJournals.length ? "取込済" : "手動で集約" },
+      { label: "仕訳ドラフト", icon: "auto_awesome", cmd: `/月次仕訳 ${ym}`,
+        state: draftJournals.length ? "done" : "todo",
+        sub: draftJournals.length ? `${draftJournals.length} 件生成` : "未生成" },
+      { label: "承認", icon: "task_alt", cmd: "journal-approval.html",
+        state: draftJournals.length === 0 ? "todo" : (pending === 0 ? "done" : "active"),
+        sub: draftJournals.length ? `承認 ${approved}/${draftJournals.length}` : "—" },
+      { label: "MF投入", icon: "cloud_upload", cmd: `/仕訳投入 ${ym}`,
+        state: sent.length === 0 ? "todo" : (approved > 0 && sent.length >= approved ? "done" : "active"),
+        sub: sent.length ? `${sent.length} 件投入` : "未投入" },
+      { label: "試算表取得", icon: "table_chart", cmd: `/試算表取得 ${ym}`,
+        state: period.trial ? "done" : "todo",
+        sub: period.trial ? "取得済" : "未取得" },
+      { label: "月次締め", icon: "fact_check", cmd: `/月次締め ${ym}`,
+        state: period.closing ? "done" : "todo",
+        sub: period.closing ? `${(period.closing.issues || []).length} 件検知` : "未実行" },
+      { label: "レポート", icon: "assessment", cmd: `/月次レポート ${ym}`,
+        state: period.report ? "done" : "todo",
+        sub: period.report ? "生成済" : "未生成" },
+    ];
+
+    // 先頭の todo を active（次にやること）にする
+    const firstTodo = steps.findIndex(s => s.state === "todo");
+    if (firstTodo >= 0) steps[firstTodo].state = "active";
+
+    document.getElementById("pipeline").innerHTML = steps.map(s => {
+      const link = s.cmd.endsWith(".html") || s.cmd.endsWith("/");
+      const cmdHtml = link
+        ? `<a class="pipe-cmd" href="${s.cmd.endsWith("/") ? "#" : s.cmd}">${s.cmd}</a>`
+        : `<span class="pipe-cmd">${s.cmd}</span>`;
+      const icon = s.state === "done" ? "check" : s.icon;
+      return `<div class="pipe-step ${s.state}">
+        <div class="pipe-dot"><span class="material-symbols-outlined">${icon}</span></div>
+        <div class="pipe-label">${s.label}</div>
+        <div class="pipe-sub">${s.sub}</div>
+        ${cmdHtml}
+      </div>`;
+    }).join("");
+  }
+
+  // ---- AIサマリー ----------------------------------------------------
+  function renderAiSummary(ym, period) {
+    const el = document.getElementById("ai-summary");
+    const issues = (period.closing && period.closing.issues) || [];
+
+    if (period.report) {
+      // レポート冒頭を要約代わりに表示（先頭の本文行を数行）
+      const lines = period.report.split("\n").filter(l => l.trim() && !l.trim().startsWith("#")).slice(0, 3);
+      el.innerHTML = `${fmtPeriodJa(ym)} の月次レポートが生成済みです。<br>` +
+        lines.map(l => l.replace(/^[-*]\s*/, "・")).join("<br>");
+      return;
+    }
+
+    if (issues.length) {
+      const top = issues.slice().sort((a, b) => order(b.severity) - order(a.severity)).slice(0, 3);
+      el.innerHTML = `${fmtPeriodJa(ym)} の月次締めチェックで <b>${issues.length}件</b> の確認項目を検知しました：<br>` +
+        top.map((i, idx) => `${["①", "②", "③"][idx]} <b>${i.title}</b>${i.description ? "：" + i.description : ""}`).join("<br>");
+      return;
+    }
+
+    // データ状況から「次にやること」を案内
+    const draftJournals = (period.draft && period.draft.journals) || [];
+    let next;
+    if (!draftJournals.length) next = `まず証憑を <code>data/evidence/${ym}/</code> に集約し、<code>/月次仕訳 ${ym}</code> で仕訳ドラフトを生成してください。`;
+    else if (draftJournals.some(j => (j.status || "pending") === "pending")) next = `仕訳ドラフトが ${draftJournals.length} 件あります。<a href="journal-approval.html">承認画面</a>でレビューしてください。`;
+    else if (!(period.sent && period.sent.journals && period.sent.journals.length)) next = `承認済み仕訳を <code>/仕訳投入 ${ym}</code> でマネーフォワードに投入してください。`;
+    else if (!period.trial) next = `<code>/試算表取得 ${ym}</code> で残高試算表を取得してください。`;
+    else if (!period.closing) next = `<code>/月次締め ${ym}</code> で締めチェックを実行してください。`;
+    else next = `<code>/月次レポート ${ym}</code> で月次レポートを生成してください。`;
+
+    el.innerHTML = `${fmtPeriodJa(ym)} の処理状況です。<b>次のアクション：</b><br>${next}`;
+  }
+
+  function order(s) { return s === "high" ? 3 : s === "mid" ? 2 : 1; }
+
+  // ---- 当月の仕訳サマリー --------------------------------------------
+  function renderJournalSummary(period) {
+    const el = document.getElementById("journal-summary");
+    const draftJournals = (period.draft && period.draft.journals) || [];
+    const sent = (period.sent && period.sent.journals) || [];
+
+    if (!draftJournals.length && !sent.length) {
+      el.innerHTML = `<div class="empty-hint">まだ当月の仕訳がありません。<br><code>/月次仕訳 ${period.ym}</code> でドラフトを生成してください。</div>`;
+      return;
+    }
+
+    const approved = draftJournals.filter(j => j.status === "approved").length;
+    const pending  = draftJournals.filter(j => (j.status || "pending") === "pending").length;
+    const rejected = draftJournals.filter(j => j.status === "rejected").length;
+
+    const stats = `
+      <div style="display:flex;gap:12px;margin-bottom:16px;">
+        <div class="kpi-card" style="flex:1;padding:14px;"><div class="kpi-label">ドラフト</div><div class="kpi-value" style="font-size:22px;">${draftJournals.length}</div></div>
+        <div class="kpi-card" style="flex:1;padding:14px;"><div class="kpi-label">承認済</div><div class="kpi-value" style="font-size:22px;color:var(--success);">${approved}</div></div>
+        <div class="kpi-card" style="flex:1;padding:14px;"><div class="kpi-label">未承認</div><div class="kpi-value" style="font-size:22px;color:${pending ? 'var(--warning)' : 'var(--text)'};">${pending}</div></div>
+        <div class="kpi-card" style="flex:1;padding:14px;"><div class="kpi-label">MF投入済</div><div class="kpi-value" style="font-size:22px;">${sent.length}</div></div>
+      </div>`;
+
+    const recent = draftJournals.slice(0, 8);
+    const rows = recent.map(j => {
+      const conf = j.confidence || "";
+      const confBadge = conf === "high" ? `<span class="badge badge-low">高</span>` :
+                        conf === "mid"  ? `<span class="badge badge-mid">中</span>` :
+                        conf === "low"  ? `<span class="badge badge-high">低</span>` : "";
+      const st = j.status === "approved" ? `<span class="badge badge-done">承認</span>` :
+                 j.status === "rejected" ? `<span class="badge badge-high">却下</span>` :
+                 `<span class="badge badge-wait">未承認</span>`;
+      return `<tr>
+        <td style="font-size:12px;">${j.date || "—"}</td>
+        <td>${j.description || j.partner || "—"}</td>
+        <td class="num">${fmtYen(j.amount)}</td>
+        <td>${confBadge}</td>
+        <td>${st}</td>
+      </tr>`;
+    }).join("");
+
+    const table = `<table class="table">
+      <thead><tr><th>日付</th><th>摘要</th><th style="text-align:right;">金額</th><th>確度</th><th>状態</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" class="empty-hint">ドラフトなし</td></tr>`}</tbody>
+    </table>`;
+
+    el.innerHTML = stats + table +
+      (draftJournals.length > recent.length ? `<div style="text-align:center;margin-top:10px;font-size:12px;color:var(--text-muted);">ほか ${draftJournals.length - recent.length} 件</div>` : "");
+  }
+
+  // ---- 優先アラート --------------------------------------------------
+  function renderAlerts(period) {
+    const el = document.getElementById("alert-list");
+    const countEl = document.getElementById("alert-count");
+    const issues = (period.closing && period.closing.issues) || [];
+
+    if (!period.closing) {
+      countEl.textContent = "—";
+      countEl.className = "badge badge-neutral";
+      el.innerHTML = `<div class="empty-hint" style="padding:12px;">締めチェック未実行<br><code>/月次締め ${period.ym}</code></div>`;
+      return;
+    }
+    if (!issues.length) {
+      countEl.textContent = "0件";
+      countEl.className = "badge badge-done";
+      el.innerHTML = `<div class="empty-hint" style="padding:12px;">検知された問題はありません 🎉</div>`;
+      return;
+    }
+
+    const high = issues.filter(i => i.severity === "high").length;
+    countEl.textContent = `${high || issues.length}件`;
+    countEl.className = "badge badge-high";
+
+    const sorted = issues.slice().sort((a, b) => order(b.severity) - order(a.severity));
+    el.innerHTML = sorted.slice(0, 6).map(i => {
+      const c = sev[i.severity] || sev.low;
+      return `<div style="padding:10px;border-left:3px solid var(--${c.cls});background:${c.bg};border-radius:4px;">
+        <div style="font-weight:600;font-size:13px;">${i.title || "(無題)"}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${i.description || ""}</div>
+      </div>`;
+    }).join("");
+  }
+
+  // ---- 接続・マスタ状態 ----------------------------------------------
+  function renderConnection(company, masters) {
+    const el = document.getElementById("connection-status");
+    const acc = masters && masters.accounts;
+    const partners = masters && masters.partners;
+    const fetchedAt = acc && acc.fetched_at;
+
+    function row(label, ok, value) {
+      const dot = ok === null ? "gray" : ok ? "green" : "red";
+      return `<div class="stat-row"><span><span class="dot ${dot}"></span>${label}</span><span style="color:var(--text-muted);">${value}</span></div>`;
+    }
+
+    const officeSet = company && company.mf_office_uuid;
+    const accCount = (acc && acc.items && acc.items.length) || 0;
+    const partnerCount = (partners && partners.items && partners.items.length) || 0;
+
+    el.innerHTML =
+      row("自社情報", !!(company && company.name), (company && company.name) || "未設定") +
+      row("MF事業者UUID", !!officeSet, officeSet ? "設定済" : "未取得") +
+      row("勘定科目マスタ", accCount > 0, accCount ? `${accCount} 件` : "未取得") +
+      row("取引先マスタ", partnerCount > 0, partnerCount ? `${partnerCount} 件` : "未取得") +
+      row("マスタ最終取得", !!fetchedAt, fetchedAt || "—") +
+      `<div style="margin-top:12px;font-size:12px;color:var(--text-muted);">更新は Claude Code で <code>/マスタ更新</code></div>`;
+  }
+
+  render(periodSelect.value);
+</script>
+
+</body>
+</html>

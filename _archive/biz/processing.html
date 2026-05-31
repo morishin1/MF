@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>書類の処理状況 - DriveKeiri</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="css/biz.css">
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div id="topbar-root"></div>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">書類の処理状況</div>
+      <div class="page-subtitle">AIがいま何の書類をどこまで処理しているか、ひと目でわかります。</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary"><span class="material-symbols-outlined icon-inline">filter_alt</span>絞り込み</button>
+      <button class="btn btn-secondary"><span class="material-symbols-outlined icon-inline">refresh</span>更新</button>
+    </div>
+  </div>
+
+  <!-- ステータス別件数 -->
+  <div class="kpi-grid">
+    <div class="kpi-card" style="cursor:pointer;" onclick="setFilter('all')">
+      <div class="kpi-label">すべて</div>
+      <div class="kpi-value" id="count-all">-</div>
+      <div class="kpi-sub">今月届いた書類</div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer;" onclick="setFilter('reading')">
+      <div class="kpi-label">AIが処理中</div>
+      <div class="kpi-value" style="color:#975a16;" id="count-ing">-</div>
+      <div class="kpi-sub">読取・仕訳作成中</div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer;" onclick="setFilter('asking')">
+      <div class="kpi-label">あなたへの質問</div>
+      <div class="kpi-value" style="color:#c53030;" id="count-ask">-</div>
+      <div class="kpi-sub">確認をお願いしています</div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer;" onclick="setFilter('waiting')">
+      <div class="kpi-label">税理士が確認中</div>
+      <div class="kpi-value" style="color:#c05621;" id="count-wait">-</div>
+      <div class="kpi-sub">もうすぐ完了します</div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer;" onclick="setFilter('done')">
+      <div class="kpi-label">処理完了</div>
+      <div class="kpi-value" style="color:var(--biz-green);" id="count-done">-</div>
+      <div class="kpi-sub">会計データ化済み</div>
+    </div>
+  </div>
+
+  <!-- フィルタタブ -->
+  <div class="tabs">
+    <div class="tab active" data-filter="all">すべて</div>
+    <div class="tab" data-filter="reading">処理中</div>
+    <div class="tab" data-filter="asking">確認依頼あり</div>
+    <div class="tab" data-filter="waiting">税理士確認中</div>
+    <div class="tab" data-filter="done">完了</div>
+  </div>
+
+  <!-- 書類リスト -->
+  <div id="doc-list"></div>
+
+  <!-- ヘルプ -->
+  <div class="msg-friendly" style="margin-top:24px;">
+    <div class="msg-friendly-icon">
+      <span class="material-symbols-outlined">tips_and_updates</span>
+    </div>
+    <div class="msg-friendly-body">
+      <b>ステータスについて</b><br>
+      <span class="status-pill status-reading" style="margin:2px;">読み取り中</span> AIが書類の中身を読んでいます<br>
+      <span class="status-pill status-creating" style="margin:2px;">仕訳を作成中</span> 勘定科目を判断して仕訳を作っています<br>
+      <span class="status-pill status-asking" style="margin:2px;">確認をお願いしています</span> 内容が不明なためご確認ください<br>
+      <span class="status-pill status-waiting" style="margin:2px;">税理士の確認待ち</span> 最終チェックを税理士が行っています<br>
+      <span class="status-pill status-done" style="margin:2px;">処理完了</span> 会計データとして登録されました
+    </div>
+  </div>
+
+</div>
+
+<!-- 詳細モーダル -->
+<div id="detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:white;border-radius:16px;padding:32px;max-width:600px;width:100%;max-height:90vh;overflow:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:var(--primary-dark);" id="m-title"></div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="m-meta"></div>
+      </div>
+      <button class="icon-btn" onclick="closeModal()"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="m-body"></div>
+  </div>
+</div>
+
+<script src="js/biz-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderBizSidebar("processing");
+  document.getElementById("topbar-root").innerHTML = renderTopBar();
+
+  // 件数
+  const docs = BIZ_DOCUMENTS;
+  document.getElementById("count-all").textContent = docs.length + "件";
+  document.getElementById("count-ing").textContent = docs.filter(d => d.status === "reading" || d.status === "creating").length + "件";
+  document.getElementById("count-ask").textContent = docs.filter(d => d.status === "asking").length + "件";
+  document.getElementById("count-wait").textContent = docs.filter(d => d.status === "waiting").length + "件";
+  document.getElementById("count-done").textContent = docs.filter(d => d.status === "done").length + "件";
+
+  let currentFilter = "all";
+
+  function renderDocs() {
+    const filtered = docs.filter(d => {
+      if (currentFilter === "all") return true;
+      if (currentFilter === "reading") return d.status === "reading" || d.status === "creating";
+      return d.status === currentFilter;
+    });
+
+    const list = document.getElementById("doc-list");
+    if (filtered.length === 0) {
+      list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);background:white;border:1px solid var(--border);border-radius:12px;">該当する書類はありません</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(d => {
+      const progColor = d.status === "done" ? "var(--biz-green)" :
+                        d.status === "asking" ? "var(--biz-red)" :
+                        d.status === "waiting" ? "var(--biz-orange)" :
+                        "var(--biz-primary-soft)";
+      return `
+        <div class="doc-card" onclick='openDetail(${JSON.stringify(d)})' style="cursor:pointer;">
+          <div class="doc-thumb ${d.type}">
+            <span class="material-symbols-outlined" style="font-size:28px;">${docIcon(d.type)}</span>
+          </div>
+          <div class="doc-body">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="flex:1;min-width:0;">
+                <div class="doc-title">${d.name}</div>
+                <div class="doc-meta">
+                  <span>${d.type_label}</span>
+                  ${d.sender ? `<span>• ${d.sender}</span>` : ''}
+                  ${d.amount ? `<span>• ${fmtYen(d.amount)}</span>` : ''}
+                  <span>• アップロード：${d.uploaded_at.substring(5)}</span>
+                </div>
+              </div>
+              <span class="status-pill status-${d.status}">
+                ${d.status !== 'done' ? '<span class="status-dot-anim"></span>' : '<span class="material-symbols-outlined" style="font-size:12px;">check</span>'}
+                ${statusLabel(d.status)}
+              </span>
+            </div>
+            <div class="doc-status" style="color:var(--text-muted);margin-top:8px;">
+              ${d.ai_comment}
+            </div>
+            <div class="doc-progress">
+              <div class="doc-progress-bar" style="width:${d.progress}%;background:${progColor};"></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function setFilter(f) {
+    currentFilter = f;
+    document.querySelectorAll(".tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.filter === f);
+    });
+    renderDocs();
+  }
+
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => setFilter(t.dataset.filter));
+  });
+
+  renderDocs();
+
+  function openDetail(d) {
+    document.getElementById("m-title").textContent = d.name;
+    document.getElementById("m-meta").textContent = `${d.type_label} / ${d.sender || '-'} / アップロード：${d.uploaded_at}`;
+    let body = `
+      <div style="padding:16px;background:var(--biz-soft);border-radius:8px;margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px;">AIからのコメント</div>
+        <div style="font-size:14px;">${d.ai_comment}</div>
+      </div>
+    `;
+    if (d.journal) {
+      body += `
+        <div style="font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">AIが作った仕訳候補</div>
+        <div style="background:#fef9e7;border-radius:8px;padding:16px;font-size:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);">借方（使った／買った）</div>
+              <div style="font-weight:600;">${d.journal.debit}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);">貸方（お金の出どころ）</div>
+              <div style="font-weight:600;">${d.journal.credit}</div>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid #fbd38d;">
+            <div style="font-size:11px;color:var(--text-muted);">金額</div>
+            <div style="font-weight:700;font-size:18px;">${fmtYen(d.journal.amount)}</div>
+          </div>
+        </div>
+      `;
+    }
+    body += `
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+      </div>
+    `;
+    document.getElementById("m-body").innerHTML = body;
+    document.getElementById("detail-modal").style.display = "flex";
+  }
+
+  function closeModal() {
+    document.getElementById("detail-modal").style.display = "none";
+  }
+</script>
+
+</body>
+</html>

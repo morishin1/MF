@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>仕訳候補の承認 - KessanPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">仕訳候補の承認</div>
+      <div class="page-subtitle">AIが生成した仕訳候補を確認・承認し、マネーフォワードクラウド会計に登録します。</div>
+    </div>
+    <div id="client-selector-root" style="position:relative;"></div>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">今月のAI生成仕訳</div>
+      <div class="kpi-value" id="total-journals">-</div>
+      <div class="kpi-sub">証憑・明細からAIが自動生成</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">信頼度：高</div>
+      <div class="kpi-value" style="color:var(--success);" id="high-conf">-</div>
+      <div class="kpi-sub">一括承認可能</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">信頼度：中／低</div>
+      <div class="kpi-value" style="color:var(--warning);" id="mid-low-conf">-</div>
+      <div class="kpi-sub">個別に確認が必要</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">推定削減時間</div>
+      <div class="kpi-value">1.5<span style="font-size:14px;color:var(--text-muted);font-weight:500;">h</span></div>
+      <div class="kpi-sub">手入力との比較</div>
+    </div>
+  </div>
+
+  <!-- AI アラート -->
+  <div class="alert alert-info" style="display:flex;align-items:center;gap:10px;">
+    <span class="material-symbols-outlined" style="color:var(--primary);">shield</span>
+    <div><b>安全設計：</b>信頼度「低」の仕訳と金額10万円以上の仕訳は、必ず税理士の承認を経てから登録されます。自動登録はされません。</div>
+  </div>
+
+  <!-- 操作バー -->
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;gap:8px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="select-all"> すべて選択
+        </label>
+        <span style="color:var(--border);margin:0 4px;">|</span>
+        <button class="btn btn-secondary btn-sm">フィルタ</button>
+        <button class="btn btn-secondary btn-sm">取込元: すべて</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-danger-outline btn-sm"><span class="material-symbols-outlined" style="font-size:14px;">close</span>選択を却下</button>
+        <button class="btn btn-secondary btn-sm"><span class="material-symbols-outlined" style="font-size:14px;">edit</span>一括編集</button>
+        <button class="btn btn-success btn-sm" onclick="approveSelected()"><span class="material-symbols-outlined" style="font-size:14px;">check</span>選択を承認して登録</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 仕訳一覧 -->
+  <div class="card" style="padding:0;">
+    <div class="journal-row header">
+      <div></div>
+      <div>取引内容</div>
+      <div>借方</div>
+      <div>貸方</div>
+      <div>金額</div>
+      <div>信頼度</div>
+      <div style="text-align:center;">操作</div>
+    </div>
+    <div id="journal-list"></div>
+  </div>
+
+  <!-- 凡例 -->
+  <div style="display:flex;gap:24px;margin-top:16px;font-size:12px;color:var(--text-muted);">
+    <div><span class="confidence-dot" style="display:inline-block;background:var(--success);margin-right:4px;"></span>高：過去仕訳と一致度が高く、自動承認可</div>
+    <div><span class="confidence-dot" style="display:inline-block;background:var(--warning);margin-right:4px;"></span>中：確認推奨</div>
+    <div><span class="confidence-dot" style="display:inline-block;background:var(--danger);margin-right:4px;"></span>低：必ず人が確認</div>
+  </div>
+
+</div>
+
+<script src="js/mock-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderSidebar("journal");
+  document.getElementById("client-selector-root").innerHTML = renderClientSelector();
+
+  const client = getCurrentClient();
+  const journals = JOURNAL_CANDIDATES[client.id] || JOURNAL_CANDIDATES.c001; // デモ用に山田のデータを使う
+
+  document.getElementById("total-journals").textContent = journals.length + "件";
+  document.getElementById("high-conf").textContent = journals.filter(j => j.confidence === "high").length + "件";
+  document.getElementById("mid-low-conf").textContent = journals.filter(j => j.confidence !== "high").length + "件";
+
+  function confBadge(c) {
+    const color = c === "high" ? "var(--success)" : c === "mid" ? "var(--warning)" : "var(--danger)";
+    const label = c === "high" ? "高" : c === "mid" ? "中" : "低";
+    return `<div class="confidence-bar"><div class="confidence-dot" style="background:${color};"></div><span>${label}</span></div>`;
+  }
+
+  function srcIcon(type) {
+    const map = {
+      "請求書": "description",
+      "領収書": "receipt",
+      "銀行明細": "account_balance",
+      "カード明細": "credit_card"
+    };
+    const name = map[type] || "attach_file";
+    return `<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;color:var(--text-muted);">${name}</span>`;
+  }
+
+  const listEl = document.getElementById("journal-list");
+  listEl.innerHTML = journals.map(j => `
+    <div class="journal-row">
+      <div><input type="checkbox" class="journal-check" data-id="${j.id}" ${j.confidence === 'high' ? 'checked' : ''}></div>
+      <div>
+        <div style="font-weight:500;">${j.description}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${srcIcon(j.source_type)} ${j.source_name}</div>
+        <div style="font-size:11px;color:var(--text-muted);">日付: ${j.date}</div>
+      </div>
+      <div>
+        <div style="font-weight:500;">${j.debit.account}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${j.debit.tax || '-'}</div>
+      </div>
+      <div>
+        <div style="font-weight:500;">${j.credit.account}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${j.credit.tax || '-'}</div>
+      </div>
+      <div class="num" style="font-weight:600;">${j.debit.amount.toLocaleString()}</div>
+      <div>
+        ${confBadge(j.confidence)}
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;max-width:180px;line-height:1.4;">${j.reason}</div>
+      </div>
+      <div style="display:flex;gap:4px;justify-content:center;">
+        <button class="btn btn-success btn-sm" style="padding:4px 8px;" onclick="approveOne('${j.id}')" title="承認"><span class="material-symbols-outlined" style="font-size:16px;">check</span></button>
+        <button class="btn btn-secondary btn-sm" style="padding:4px 8px;" title="編集"><span class="material-symbols-outlined" style="font-size:16px;">edit</span></button>
+        <button class="btn btn-danger-outline btn-sm" style="padding:4px 8px;" title="却下"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+      </div>
+    </div>
+  `).join("");
+
+  // 全選択
+  document.getElementById("select-all").addEventListener("change", (e) => {
+    document.querySelectorAll(".journal-check").forEach(c => c.checked = e.target.checked);
+  });
+
+  function approveOne(id) {
+    const item = journals.find(j => j.id === id);
+    if (!item) return;
+    alert(`【デモ】MFクラウド会計に仕訳を登録しました：\n\n${item.description}\n借方: ${item.debit.account} / 貸方: ${item.credit.account}\n金額: ${item.debit.amount.toLocaleString()}円`);
+  }
+
+  function approveSelected() {
+    const checked = document.querySelectorAll(".journal-check:checked").length;
+    if (checked === 0) {
+      alert("承認する仕訳を選択してください");
+      return;
+    }
+    alert(`【デモ】${checked}件の仕訳をMFクラウド会計に登録しました。`);
+  }
+</script>
+
+</body>
+</html>
