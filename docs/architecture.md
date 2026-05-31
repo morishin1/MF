@@ -57,10 +57,10 @@
 
 | Phase | 内容 | 状態 |
 |---|---|---|
-| 0 | デモUIを Vercel で公開し、会計士が UX と方針をレビュー | ← いま here（モックデータのみ・実データなし） |
-| 1 | Supabase 構築（Auth + テーブル + RLS + Storage）、テナント分離の確立 | |
-| 2 | PDFアップロード → AI仕訳ドラフト → 承認のWebフロー | |
-| 3 | MF連携アダプタ（OAuth・冪等投入・送信ログ） | |
+| 0 | デモUIを Vercel で公開し、会計士が UX と方針をレビュー | ✅ 公開済 https://mf-nu-ecru.vercel.app/ |
+| 1 | Supabase 構築（Auth + テーブル + RLS + Storage）、テナント分離の確立 | ✅ 骨組みコード一式（`db/schema.sql` / `api/` / `lib/`） → 鍵設定で稼働。手順: [SETUP_PHASE1.md](SETUP_PHASE1.md) |
+| 2 | PDFアップロード → AI仕訳ドラフト → 承認のWebフロー | 🟡 サーバ側API実装済（`/api/documents/upload-url` / `/api/documents/recognize` / `/api/journals/approve`）。フロント結線が残り |
+| 3 | MF連携アダプタ（OAuth・冪等投入・送信ログ） | 設計書: [mf-adapter.md](mf-adapter.md) |
 | 4 | freee/弥生アダプタ、監査・運用整備 | |
 
 ## 現デモ（Phase 0）の注意

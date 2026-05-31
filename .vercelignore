@@ -5,6 +5,7 @@ CLAUDE.md
 README.md
 .mcp.json
 .env.local.example
+.env.local
 
 # Claude Code 設定・スラッシュコマンド・スキル
 .claude/
@@ -19,5 +20,8 @@ _archive/
 data/
 backup/
 
-# その他Markdown（READMEなど）
+# ローカル開発成果物
+node_modules/
+
+# その他Markdown
 *.md

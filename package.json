@@ -1,0 +1,18 @@
+{
+  "name": "kessanpilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "会計事務所向けマルチテナントSaaS: 顧問先がPDFを置く→AIが仕訳→税理士が承認→各社の会計ソフトへ連携",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

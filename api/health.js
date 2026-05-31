@@ -1,0 +1,17 @@
+// 環境変数チェック付き ヘルスチェック
+export default function handler(req, res) {
+  const env = {
+    supabase: !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+  };
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.statusCode = 200;
+  res.end(JSON.stringify({
+    ok: true,
+    service: "kessanpilot-api",
+    env,
+    note: env.supabase && env.anthropic
+      ? "ready"
+      : "set missing env vars in Vercel project settings"
+  }));
+}
