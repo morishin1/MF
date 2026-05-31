@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "outputDirectory": ".",
-  "trailingSlash": true,
   "redirects": [
     { "source": "/biz", "destination": "/biz/", "permanent": false }
   ],
