@@ -38,7 +38,7 @@
           <span class="dot green"></span>接続済み
         </div>
         <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">
-          アカウント：<b>keiri@yamada-seisakusho.co.jp</b>　/　最終同期：${'2026年4月14日 15:42'}
+          アカウント：<b>keiri@yamada-seisakusho.co.jp</b>　/　最終同期：2026年4月14日 15:42
         </div>
       </div>
     </div>
@@ -74,27 +74,33 @@
 
   <div style="display:flex;flex-direction:column;gap:10px;" id="folder-list"></div>
 
-  <!-- アップロード風エリア（デモ用） -->
-  <div style="margin-top:32px;background:white;border:2px dashed var(--biz-primary-soft);border-radius:16px;padding:48px;text-align:center;">
+  <!-- 書類を置く → AIが認識する デモ操作 -->
+  <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin:32px 0 12px;display:flex;align-items:center;gap:8px;">
+    <span class="material-symbols-outlined" style="color:var(--biz-primary-soft);">play_circle</span>
+    書類を置いてみる（デモ操作）
+  </div>
+
+  <div id="drop-zone" style="background:white;border:2px dashed var(--biz-primary-soft);border-radius:16px;padding:40px;text-align:center;transition:all .2s;">
     <div style="width:72px;height:72px;background:#e6f0fa;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
       <span class="material-symbols-outlined" style="font-size:40px;color:var(--biz-primary-soft);">upload_file</span>
     </div>
-    <div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">ここに書類をドラッグしてもOK</div>
+    <div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">ここに書類をドラッグ、またはサンプルで体験</div>
     <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.7;">
-      PDF・JPG・PNG・HEIC 形式の書類に対応しています。<br>
-      上限1ファイル10MB。複数まとめてのアップロードもできます。
+      PDF・JPG・PNG・HEIC 形式に対応（1ファイル10MBまで）。<br>
+      下のサンプルをクリックすると、<b>AIが書類を認識する流れ</b>をその場で体験できます。
     </div>
-    <button class="btn btn-primary" onclick="simulateUpload()"><span class="material-symbols-outlined icon-inline">add</span>ファイルを選ぶ</button>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="recognize(0)"><span class="material-symbols-outlined icon-inline">description</span>請求書サンプル</button>
+      <button class="btn btn-secondary" onclick="recognize(1)"><span class="material-symbols-outlined icon-inline">receipt</span>領収書サンプル</button>
+      <button class="btn btn-secondary" onclick="recognize(2)"><span class="material-symbols-outlined icon-inline">cloud</span>AWS請求書サンプル</button>
+    </div>
     <div style="margin-top:14px;font-size:11px;color:var(--text-muted);">
-      ※ 通常はGoogle Drive経由での保存をおすすめします（自動で同期されます）
+      ※ 実運用では Google Drive の「📥 受信トレイ」に保存するだけ。自動で同期・認識されます。
     </div>
   </div>
 
-  <!-- アップロード完了のトースト風 -->
-  <div id="toast" style="display:none;position:fixed;bottom:24px;right:24px;background:var(--primary-dark);color:white;padding:14px 20px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.2);font-size:13px;z-index:1000;">
-    <span class="material-symbols-outlined icon-inline">check_circle</span>
-    <span id="toast-msg"></span>
-  </div>
+  <!-- 認識フロー パネル（デモ実行時に表示） -->
+  <div id="reco-panel" style="display:none;margin-top:20px;"></div>
 
   <!-- セキュリティ説明 -->
   <div class="simple-box" style="margin-top:24px;">
@@ -146,22 +152,148 @@
     </div>
   `).join("");
 
-  function simulateUpload() {
-    showToast("書類をアップロードしました。AIが読み取りを開始します…");
-    setTimeout(() => {
-      showToast("✨ AIが書類を判別しました（請求書と認識）");
-    }, 2000);
-    setTimeout(() => {
-      showToast("✅ 仕訳候補を作成しました。税理士の確認待ちです。");
-    }, 4000);
+  // ===== 書類認識デモ =====
+  const SAMPLES = [
+    { name:"請求書_山田電機_2026年4月分.pdf", thumb:"invoice", type_label:"請求書",
+      sender:"山田電機株式会社", date:"2026-04-30", amount:248000, tax:"課仕10%",
+      account:"仕入高", journal:{ debit:"仕入高", credit:"買掛金" } },
+    { name:"領収書_タクシー_田中.jpg", thumb:"receipt", type_label:"領収書",
+      sender:"日本交通", date:"2026-04-12", amount:3200, tax:"課仕10%",
+      account:"旅費交通費", journal:{ debit:"旅費交通費", credit:"現金" } },
+    { name:"AWS請求書_2026-04.pdf", thumb:"invoice", type_label:"請求書",
+      sender:"Amazon Web Services", date:"2026-04-30", amount:42800, tax:"課仕10%",
+      account:"通信費", journal:{ debit:"通信費", credit:"未払金" } },
+  ];
+
+  const RECO_STEPS = [
+    { icon:"download",     label:"Driveに受信しました",        sub:"受信トレイに保存" },
+    { icon:"visibility",   label:"AIが書類を読み取り中",        sub:"OCRで文字を抽出" },
+    { icon:"sell",         label:"書類の種類を判別",            sub:"" },
+    { icon:"data_object",  label:"取引先・金額・日付を抽出",     sub:"" },
+    { icon:"auto_awesome", label:"仕訳候補を作成",              sub:"" },
+    { icon:"send",         label:"担当税理士へ送信",            sub:"確認待ちになります" },
+  ];
+
+  let recoTimers = [];
+  function clearRecoTimers(){ recoTimers.forEach(clearTimeout); recoTimers = []; }
+
+  function recognize(i) {
+    const s = SAMPLES[i];
+    clearRecoTimers();
+    const panel = document.getElementById("reco-panel");
+    panel.style.display = "block";
+    panel.innerHTML = recoSkeleton(s);
+    panel.scrollIntoView({ behavior:"smooth", block:"center" });
+
+    let t = 350;
+    RECO_STEPS.forEach((st, idx) => {
+      recoTimers.push(setTimeout(() => setStep(idx, "active"), t));
+      t += 850;
+      recoTimers.push(setTimeout(() => setStep(idx, "done", s), t));
+    });
+    recoTimers.push(setTimeout(() => {
+      const r = document.getElementById("reco-result");
+      if (r) { r.style.display = "block"; r.scrollIntoView({ behavior:"smooth", block:"center" }); }
+    }, t + 250));
   }
 
-  function showToast(msg) {
-    const t = document.getElementById("toast");
-    document.getElementById("toast-msg").textContent = msg;
-    t.style.display = "block";
-    clearTimeout(window.__toastT);
-    window.__toastT = setTimeout(() => t.style.display = "none", 3000);
+  function recoSkeleton(s) {
+    const steps = RECO_STEPS.map((st, idx) => `
+      <div class="reco-step" id="reco-step-${idx}" style="display:flex;align-items:center;gap:14px;padding:10px 0;">
+        <div class="reco-ic" style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#fafbfc;border:2px solid var(--border);color:var(--text-muted);">
+          <span class="material-symbols-outlined" style="font-size:20px;">${st.icon}</span>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--primary-dark);">${st.label}</div>
+          <div class="reco-sub" style="font-size:11px;color:var(--text-muted);">${st.sub}</div>
+        </div>
+        <div class="reco-st" style="font-size:12px;color:var(--text-muted);">待機</div>
+      </div>
+    `).join("");
+
+    return `
+      <div style="background:white;border:1px solid var(--border);border-radius:16px;padding:24px 28px;">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+          <div class="doc-thumb ${s.thumb}"><span class="material-symbols-outlined">${docIcon(s.thumb)}</span></div>
+          <div style="flex:1;min-width:0;">
+            <div class="doc-title">${s.name}</div>
+            <div style="font-size:12px;color:var(--biz-primary-soft);font-weight:600;margin-top:2px;">
+              <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">auto_awesome</span>
+              AIが処理しています…
+            </div>
+          </div>
+        </div>
+        ${steps}
+        ${recoResult(s)}
+      </div>
+    `;
+  }
+
+  function recoResult(s) {
+    const row = (label, val, strong) => `
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;">
+        <span style="color:var(--text-muted);">${label}</span>
+        <span style="font-weight:${strong?700:600};color:var(--primary-dark);">${val}</span>
+      </div>`;
+    return `
+      <div id="reco-result" style="display:none;margin-top:18px;background:#f0fff4;border:1px solid #9ae6b4;border-radius:12px;padding:20px 22px;">
+        <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:#22543d;font-size:14px;margin-bottom:14px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          AIが認識し、仕訳候補を作成しました
+        </div>
+        ${row("書類の種類", s.type_label)}
+        ${row("取引先", s.sender)}
+        ${row("日付", s.date)}
+        ${row("金額", fmtYen(s.amount), true)}
+        ${row("税区分", s.tax)}
+        ${row("推定 勘定科目", s.account)}
+        <div style="margin-top:14px;background:white;border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">作成された仕訳</div>
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="flex:1;text-align:center;background:#e6f0fa;border-radius:8px;padding:10px;">
+              <div style="font-size:10px;color:var(--text-muted);">借方</div>
+              <div style="font-weight:700;color:var(--primary-dark);">${s.journal.debit}</div>
+              <div style="font-size:12px;color:var(--text-muted);">${fmtYen(s.amount)}</div>
+            </div>
+            <span class="material-symbols-outlined" style="color:var(--text-muted);">arrow_forward</span>
+            <div style="flex:1;text-align:center;background:#fef9e7;border-radius:8px;padding:10px;">
+              <div style="font-size:10px;color:var(--text-muted);">貸方</div>
+              <div style="font-weight:700;color:var(--primary-dark);">${s.journal.credit}</div>
+              <div style="font-size:12px;color:var(--text-muted);">${fmtYen(s.amount)}</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:8px;font-size:12px;color:#744210;background:#fef9e7;border-radius:8px;padding:10px 14px;">
+          <span class="material-symbols-outlined" style="font-size:16px;">hourglass_top</span>
+          この仕訳は<b>担当税理士の確認待ち</b>です。承認されると会計ソフトへ自動で登録されます。
+        </div>
+      </div>`;
+  }
+
+  function setStep(idx, state, s) {
+    const el = document.getElementById("reco-step-" + idx);
+    if (!el) return;
+    const ic = el.querySelector(".reco-ic");
+    const st = el.querySelector(".reco-st");
+    const sub = el.querySelector(".reco-sub");
+    if (state === "active") {
+      ic.style.background = "#e6f0fa";
+      ic.style.borderColor = "var(--biz-primary-soft)";
+      ic.style.color = "var(--biz-primary-soft)";
+      st.innerHTML = `<span style="color:var(--biz-primary-soft);display:inline-flex;align-items:center;gap:6px;"><span class="status-dot-anim"></span>処理中…</span>`;
+    } else if (state === "done") {
+      ic.style.background = "#e6fffa";
+      ic.style.borderColor = "var(--biz-green)";
+      ic.style.color = "var(--biz-green)";
+      ic.innerHTML = `<span class="material-symbols-outlined" style="font-size:20px;">check</span>`;
+      st.innerHTML = `<span style="color:var(--biz-green);">完了</span>`;
+      // 認識結果をステップの補足に反映
+      if (s) {
+        if (idx === 2 && sub) sub.textContent = `「${s.type_label}」と判別`;
+        if (idx === 3 && sub) sub.textContent = `${s.sender} / ${fmtYen(s.amount)} / ${s.date}`;
+        if (idx === 4 && sub) sub.textContent = `(借)${s.journal.debit} → (貸)${s.journal.credit}`;
+      }
+    }
   }
 </script>
 

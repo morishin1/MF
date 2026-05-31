@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>使い方ガイド - DriveKeiri</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="css/biz.css">
+  <style>
+    .guide-step { display:flex; gap:20px; align-items:flex-start; background:white; border:1px solid var(--border); border-radius:16px; padding:24px 28px; margin-bottom:16px; }
+    .guide-num { flex-shrink:0; width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,#1e3a5f 0%,#3182ce 100%); color:white; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; }
+    .guide-step h3 { font-size:17px; font-weight:700; color:var(--primary-dark); margin-bottom:6px; }
+    .guide-step p { font-size:14px; line-height:1.8; color:var(--text); }
+    .guide-step .hint { font-size:12px; color:var(--text-muted); margin-top:6px; }
+    .pill { display:inline-block; background:var(--biz-soft); color:var(--biz-primary); border-radius:6px; padding:2px 8px; font-size:12px; font-weight:600; margin:0 2px; }
+    @media print {
+      .sidebar, .top-bar, .demo-ribbon, .no-print { display:none !important; }
+      .main { margin-left:0 !important; padding:0 !important; }
+      .guide-step, .simple-box { break-inside:avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="sidebar-root"></div>
+
+<div class="main">
+  <div id="topbar-root"></div>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">DriveKeiri の使い方</div>
+      <div class="page-subtitle">やることは「書類を入れるだけ」。3分で読めます。</div>
+    </div>
+    <button class="btn btn-primary no-print" onclick="window.print()"><span class="material-symbols-outlined icon-inline">print</span>印刷 / PDF保存</button>
+  </div>
+
+  <!-- いちばん大事なこと -->
+  <div class="biz-hero" style="margin-bottom:24px;">
+    <h1>あなたがやることは、たった1つ 🙌</h1>
+    <p>
+      スキャンした書類を <b style="color:#ffd89b;">Google Drive の「📥 受信トレイ」フォルダに入れるだけ</b>。<br>
+      AIが書類を読み取り、仕訳を作り、担当税理士に届けます。仕訳の知識も、難しい操作もいりません。
+    </p>
+  </div>
+
+  <!-- 4ステップ -->
+  <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin:8px 0 16px;display:flex;align-items:center;gap:8px;">
+    <span class="material-symbols-outlined" style="color:var(--biz-primary-soft);">checklist</span>
+    毎月の流れ（4ステップ）
+  </div>
+
+  <div class="guide-step">
+    <div class="guide-num">1</div>
+    <div>
+      <h3>📁 専用フォルダをブックマークする（最初の1回だけ）</h3>
+      <p>Google Drive の <span class="pill">DriveKeiri - ○○（御社名）</span> フォルダを開き、ブックマークしておきます。この中の <span class="pill">📥 受信トレイ</span> が書類の入り口です。</p>
+      <div class="hint">※ フォルダは契約時に自動で作成・共有されています。見当たらない場合は担当税理士にご連絡ください。</div>
+    </div>
+  </div>
+
+  <div class="guide-step">
+    <div class="guide-num">2</div>
+    <div>
+      <h3>📷 書類をスキャンして「受信トレイ」に入れる</h3>
+      <p>請求書・領収書・銀行明細などを、スマホのカメラや複合機でスキャンし、<b>「📥 受信トレイ」フォルダに保存</b>します。それで完了です。</p>
+      <div class="hint">対応形式：PDF / JPG / PNG / HEIC（1ファイル10MBまで）。スマホで撮った写真でもOK。複数まとめてでも大丈夫です。</div>
+    </div>
+  </div>
+
+  <div class="guide-step">
+    <div class="guide-num">3</div>
+    <div>
+      <h3>🤖 AIが自動で読み取り・仕訳（あなたの操作は不要）</h3>
+      <p>書類が入ると、AIが内容を読み取り、<b>取引先・金額・日付</b>を抽出して<b>仕訳候補</b>を作成します。書類は種類ごとのフォルダに自動で整理されます。</p>
+      <div class="hint">※ 内容がはっきりしない書類だけ、AIから「AIからの質問」に確認メッセージが届きます。選ぶだけで回答できます。</div>
+    </div>
+  </div>
+
+  <div class="guide-step">
+    <div class="guide-num">4</div>
+    <div>
+      <h3>✅ 担当税理士が確認して完了</h3>
+      <p>AIが作った仕訳は<b>必ず担当税理士がチェック</b>してから会計ソフトに登録されます。月末には「月次レポート」が届きます。</p>
+      <div class="hint">あなたは受信トレイに入れるだけ。確認・登録はプロにおまかせなので安心です。</div>
+    </div>
+  </div>
+
+  <!-- 試してみる -->
+  <div class="msg-friendly" style="background:linear-gradient(135deg, #e6f0fa 0%, #d6e9f5 100%);margin-top:24px;">
+    <div class="msg-friendly-icon" style="background:#bee3f8;color:#2c5282;"><span class="material-symbols-outlined">play_circle</span></div>
+    <div class="msg-friendly-body" style="color:#2c5282;">
+      <b>実際の動きを体験してみましょう。</b><br>
+      「Google Drive」画面の下にあるサンプルボタンを押すと、書類を置いてからAIが認識して仕訳を作るまでの流れがその場で見られます。
+      <div class="no-print" style="margin-top:12px;">
+        <a href="drive.html" class="btn btn-primary btn-sm"><span class="material-symbols-outlined icon-inline">cloud</span>Google Drive画面で体験する</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- よくある質問 -->
+  <div style="font-size:16px;font-weight:700;color:var(--primary-dark);margin:28px 0 12px;display:flex;align-items:center;gap:8px;">
+    <span class="material-symbols-outlined" style="color:var(--biz-primary-soft);">help</span>
+    よくある質問
+  </div>
+  <div class="simple-box">
+    <div style="padding:12px 0;border-bottom:1px solid var(--border);">
+      <div style="font-weight:700;font-size:14px;color:var(--primary-dark);">Q. ファイル名は決まりがありますか？</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;line-height:1.7;">A. 自由で大丈夫です。AIが中身を読んで自動で判別・整理します。</div>
+    </div>
+    <div style="padding:12px 0;border-bottom:1px solid var(--border);">
+      <div style="font-weight:700;font-size:14px;color:var(--primary-dark);">Q. 間違った書類を入れてしまいました。</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;line-height:1.7;">A. 受信トレイから削除すれば取り消せます。登録前なら問題ありません。</div>
+    </div>
+    <div style="padding:12px 0;">
+      <div style="font-weight:700;font-size:14px;color:var(--primary-dark);">Q. 写真がぼやけていても読めますか？</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;line-height:1.7;">A. 文字が読める明るさで撮ってください。読み取れない場合はAIから撮り直しのお願いが届きます。</div>
+    </div>
+  </div>
+
+  <!-- セキュリティ一言 -->
+  <div class="simple-box" style="margin-top:16px;">
+    <div style="font-size:14px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+      <span class="material-symbols-outlined" style="color:var(--biz-green);">verified_user</span>
+      安心してお使いいただけます
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.8;">
+      書類のオリジナルは常に御社のGoogle Drive内に保管されます。通信はすべて暗号化され、閲覧できるのは設定した担当税理士のみです。
+    </div>
+  </div>
+
+  <div style="text-align:center;color:var(--text-muted);font-size:11px;margin:28px 0;">
+    DriveKeiri 使い方ガイド ／ ご不明点は担当税理士までお気軽にどうぞ
+  </div>
+
+</div>
+
+<script src="js/biz-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+  document.getElementById("sidebar-root").innerHTML = renderBizSidebar("guide");
+  document.getElementById("topbar-root").innerHTML = renderTopBar();
+</script>
+
+</body>
+</html>

@@ -28,6 +28,9 @@ function renderBizSidebar(activeKey) {
           <span class="material-symbols-outlined">insights</span> 月次レポート
         </a>
         <div class="sidebar-section">その他</div>
+        <a href="guide.html" class="${activeKey === 'guide' ? 'active' : ''}">
+          <span class="material-symbols-outlined">menu_book</span> 使い方ガイド
+        </a>
         <a href="index.html" class="${activeKey === 'logout' ? 'active' : ''}">
           <span class="material-symbols-outlined">logout</span> ログアウト
         </a>
