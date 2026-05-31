@@ -4,6 +4,10 @@
   "buildCommand": null,
   "installCommand": null,
   "outputDirectory": ".",
+  "trailingSlash": true,
+  "redirects": [
+    { "source": "/biz", "destination": "/biz/", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)",
