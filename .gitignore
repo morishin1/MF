@@ -10,8 +10,10 @@
 data/
 backup/
 
-# Claude Code ローカル設定
+# Claude Code ローカル設定・実行時ファイル
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/*.lock
 
 # OS生成ファイル
 Thumbs.db
