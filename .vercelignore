@@ -23,5 +23,11 @@ backup/
 # ローカル開発成果物
 node_modules/
 
+# Phase1 API（環境変数の準備ができるまで Vercel デプロイから一時除外。リポジトリには残る）
+api/
+lib/
+db/
+package.json
+
 # その他Markdown
 *.md
