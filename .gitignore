@@ -1,7 +1,10 @@
-# 機密情報
+# ===== 自社経理運用ツール 固有ルール =====
+
+# 機密情報（MFアクセストークン等）
 .env
 .env.*
 !.env.local.example
+!.env.example
 
 # ローカル運用データ（業務データ・個人情報を含むためgit追跡禁止）
 data/
@@ -20,3 +23,44 @@ desktop.ini
 .idea/
 *.swp
 *~
+
+# ===== Node / フロントエンド一般（GitHub標準テンプレート由来）=====
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage / test
+coverage
+*.lcov
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Caches
+.npm
+.eslintcache
+.stylelintcache
+.cache
+.parcel-cache
+.vite/
+
+# Build output
+dist
+.output
+*.tsbuildinfo
+
+# Misc
+*.tgz
+.node_repl_history
