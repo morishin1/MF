@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デモ評価ガイド - KessanPilot / DriveKeiri</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background:#f5f7fb; }
+    .doc { max-width:840px; margin:0 auto; padding:40px 28px 80px; }
+    .doc h1 { font-size:26px; font-weight:700; color:var(--primary-dark); margin-bottom:6px; }
+    .doc .sub { color:var(--text-muted); font-size:13px; margin-bottom:24px; }
+    .doc .lead { background:linear-gradient(135deg,#1e3a5f 0%,#3182ce 100%); color:white; border-radius:14px; padding:24px 28px; margin-bottom:24px; }
+    .doc .lead h2 { font-size:20px; font-weight:700; margin-bottom:6px; }
+    .doc .lead p { font-size:14px; line-height:1.8; opacity:.95; }
+    .doc section { background:white; border:1px solid var(--border); border-radius:12px; padding:22px 26px; margin-bottom:16px; }
+    .doc section h2 { font-size:17px; font-weight:700; color:var(--primary-dark); margin-bottom:10px; display:flex; align-items:center; gap:8px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+    .doc section h2 .num { width:30px; height:30px; border-radius:50%; background:var(--primary); color:white; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+    .doc p, .doc li { font-size:14px; line-height:1.85; }
+    .doc ol, .doc ul { margin:6px 0 6px 22px; }
+    .doc li { margin-bottom:4px; }
+    .doc a.btn-link { display:inline-flex; align-items:center; gap:6px; background:#f0f5ff; border:1px solid #bee3f8; color:var(--primary); padding:6px 12px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; margin:2px 0; }
+    .doc a.btn-link:hover { background:#e6f0fa; }
+    .doc code, .doc .kbd { background:#edf2f7; padding:2px 6px; border-radius:4px; font-size:12.5px; font-family:'Inter',monospace; }
+    .doc .callout { background:#fef9e7; border-left:4px solid #d69e2e; border-radius:6px; padding:14px 16px; margin:10px 0; font-size:13.5px; line-height:1.8; }
+    .doc .callout.warn { background:#fff5f5; border-left-color:var(--danger); }
+    .doc .callout.ok { background:#f0fff4; border-left-color:var(--success); }
+    .doc table { width:100%; border-collapse:collapse; margin:8px 0; font-size:13.5px; }
+    .doc th, .doc td { padding:9px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+    .doc th { background:#fafbfc; font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+    .doc .checkrow { display:flex; align-items:flex-start; gap:10px; padding:6px 0; }
+    .doc .checkrow .material-symbols-outlined { font-size:18px; color:var(--success); flex-shrink:0; margin-top:2px; }
+    .doc .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .doc .toolbar .crumb { font-size:12px; color:var(--text-muted); }
+    .doc .footer { text-align:center; color:var(--text-muted); font-size:11px; margin-top:24px; }
+    .pill { display:inline-block; background:#edf2f7; color:var(--primary); border-radius:6px; padding:2px 8px; font-size:12px; font-weight:600; }
+    @media print {
+      body { background:white; }
+      .doc { max-width:none; padding:0; }
+      .doc .lead { background:#1e3a5f !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .no-print { display:none !important; }
+      section { break-inside:avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="doc">
+
+  <div class="toolbar no-print">
+    <div class="crumb">KessanPilot / DriveKeiri — デモ評価ガイド</div>
+    <button class="btn btn-primary" onclick="window.print()"><span class="material-symbols-outlined icon-inline">print</span>印刷 / PDF保存</button>
+  </div>
+
+  <h1>デモ評価ガイド <span style="font-size:14px;color:var(--text-muted);font-weight:500;">（先生にお願いしたい確認のしかた）</span></h1>
+  <div class="sub">所要時間の目安：通読5分 ＋ 操作20〜30分</div>
+
+  <!-- リード -->
+  <div class="lead">
+    <h2>これは何のシステム？</h2>
+    <p>
+      会計事務所さまが、顧問先に <b>「書類をフォルダに置くだけ」</b> の体験を提供する Web ツールです。<br>
+      顧問先がスキャンした請求書・領収書を <b>AI が読み取り、仕訳ドラフトを作成 → 先生が承認 → 各社の会計ソフトへ連携</b>します。<br>
+      <span style="opacity:.85;font-size:13px;">※ 本デモはモック画面と動作プレビューです。実際のお客様データ・実 API 送信は行いません。</span>
+    </p>
+  </div>
+
+  <!-- 1. 全体像 -->
+  <section>
+    <h2><span class="num">1</span> 全体像（30秒で把握）</h2>
+    <p>処理は次の4段階です。先生が触るのは主に <b>③ 仕訳の承認</b> と <b>④ 月次の確認</b> です。</p>
+    <table>
+      <thead><tr><th>段階</th><th>誰が</th><th>何をする</th></tr></thead>
+      <tbody>
+        <tr><td>① 書類を置く</td><td>顧問先</td><td>専用フォルダ（Google Drive 想定）に PDF / 写真を保存するだけ</td></tr>
+        <tr><td>② AIが読み取り</td><td>システム</td><td>取引先・金額・日付・勘定科目を推論し、仕訳ドラフトを作成</td></tr>
+        <tr><td>③ 仕訳の承認</td><td><b>先生</b></td><td>確度の低い仕訳を中心にチェックして承認・修正</td></tr>
+        <tr><td>④ 各社ソフトへ連携</td><td>システム</td><td>承認済みのみ、マネーフォワード / freee / 弥生 へ送信</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 2. 触っていただきたい3シナリオ -->
+  <section>
+    <h2><span class="num">2</span> 触っていただきたい3つのシナリオ</h2>
+
+    <p style="margin-bottom:14px;">下のリンクは別タブで開きます。順番に進めると一連の体験ができます（所要 20〜30 分）。</p>
+
+    <h3 style="font-size:15px;font-weight:700;color:var(--primary-dark);margin:14px 0 6px;">A. 顧問先側の体験（DriveKeiri）</h3>
+    <p>「書類を入れるだけ」が顧問先にどう見えるか、を確認してください。</p>
+    <ol>
+      <li><a class="btn-link" href="biz/" target="_blank">DriveKeiri ログイン画面</a> を開く → そのまま <b>「ログイン」</b>（デモのため入力不要）</li>
+      <li>ホーム画面で <b>「今月の処理状況」</b>「書類がどこまで進んでいるか」を確認</li>
+      <li>左メニュー <b>「Google Drive」</b> を開き、ページ下部の <b>「書類を置いてみる（デモ操作）」</b> でサンプルボタンをクリック<br>
+        → AIが <b>受信 → 読み取り → 判別 → 抽出 → 仕訳生成 → 税理士へ送信</b> する流れがその場で再生されます</li>
+      <li>左メニュー <b>「AIからの質問」</b>：内容が曖昧な書類は、選択式で顧問先に確認できます</li>
+      <li><a class="btn-link" href="biz/guide.html" target="_blank">使い方ガイド</a>：顧問先にそのまま配布する想定の説明資料です</li>
+    </ol>
+
+    <h3 style="font-size:15px;font-weight:700;color:var(--primary-dark);margin:18px 0 6px;">B. 事務所側の体験（先生が使う画面）</h3>
+    <p>毎月の業務を、複数顧問先で「同じUI」で進める想定です。</p>
+    <ol>
+      <li><a class="btn-link" href="/" target="_blank">トップ</a> → <b>「KessanPilot のデモを開く」</b></li>
+      <li><a class="btn-link" href="dashboard.html" target="_blank">ダッシュボード</a>：顧問先一覧・締め進捗・優先アラート・配信予定レポート</li>
+      <li><a class="btn-link" href="journal-approval.html" target="_blank">仕訳候補の承認</a>：AIが作ったドラフトを <b>確度（高/中/低）</b> 別に確認・承認</li>
+      <li><a class="btn-link" href="closing-check.html" target="_blank">月次締めチェック</a>：残高差異・滞留・異常値を AI が検知</li>
+      <li><a class="btn-link" href="report-generator.html" target="_blank">経営レポート生成</a>：顧問先向けの月次レポートのたたき台</li>
+    </ol>
+
+    <h3 style="font-size:15px;font-weight:700;color:var(--primary-dark);margin:18px 0 6px;">C. AIの仕訳イメージ（実体験ミニ）</h3>
+    <p>シナリオAの「書類を置いてみる」で <b>「請求書サンプル」「領収書サンプル」「AWS請求書サンプル」</b> を順に試して、抽出された取引先・金額・税区分・推定勘定科目・借方/貸方が <b>先生の感覚と合っているか</b> 見てください。</p>
+  </section>
+
+  <!-- 3. 評価ポイント -->
+  <section>
+    <h2><span class="num">3</span> 評価していただきたいポイント</h2>
+    <p>「使う側」と「事務所側」で観点が違います。気になった箇所は次の章のフィードバックでお送りください。</p>
+    <table>
+      <thead><tr><th>観点</th><th>確認していただきたい点</th></tr></thead>
+      <tbody>
+        <tr><td>UX（顧問先）</td><td>「書類を入れるだけ」は本当に顧問先に伝わるか／怖さや迷う点はないか</td></tr>
+        <tr><td>UX（事務所）</td><td>仕訳承認の手数・並び順・確度の見せ方は実務に合うか</td></tr>
+        <tr><td>仕訳精度</td><td>サンプル仕訳の勘定科目・税区分の妥当性（実運用での想定誤りパターン）</td></tr>
+        <tr><td>運用フロー</td><td>月次の流れ（証憑→AI→承認→投入→締め→レポート）に過不足はないか</td></tr>
+        <tr><td>セキュリティ</td><td>顧問先データの分離・トークン管理・AIへの送信 などの説明で気になる点</td></tr>
+        <tr><td>料金・契約</td><td>顧問先への提供形態（人数・通数・サポート範囲）について感じたこと</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4. セキュリティ・情報漏洩対策 -->
+  <section>
+    <h2><span class="num">4</span> 情報漏洩対策（重要視している方針）</h2>
+    <p>顧問先の財務データと、各社会計ソフトの認証情報を預かるため、以下を <b>基盤レイヤーで強制</b> する設計です（アプリの if 文では守りません）。</p>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>テナント越境の物理的禁止</b>：DBの行レベルセキュリティ（RLS）で、別の顧問先の行はクエリしても返らない。</div></div>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>会計ソフトのトークンは暗号化保管</b>：復号はサーバ内のみ、画面・ブラウザに絶対露出させない。</div></div>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>書類PDFは非公開バケット＋短期署名URL</b>（数分で失効）。共有はしない。</div></div>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>AIには「学習しない／ゼロ保持」設定</b>のAPIキーを使用。PDF本文をログに残さない。</div></div>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>事務所スタッフはMFA必須</b>、ロール（admin / staff / client）で最小権限。</div></div>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>会計ソフトへの自動投入は必ず人の承認後</b>。冪等キーで二重投入も防止。</div></div>
+    <div class="checkrow"><span class="material-symbols-outlined">check_circle</span><div><b>すべての閲覧・送信は監査ログに追記</b>。テナント所属者は自テナント分のみ閲覧可。</div></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:10px;">
+      ※ 詳細な設計書は GitHub リポジトリ <code>docs/architecture.md</code> ／ <code>docs/security.md</code> に掲載しています。
+    </p>
+  </section>
+
+  <!-- 5. 現状の限界 -->
+  <section>
+    <h2><span class="num">5</span> 現時点の限界（正直にお伝えする内容）</h2>
+    <div class="callout warn">
+      <b>このデモはまだ「動作プレビュー」です</b>。以下は「これから」の段階です：
+      <ul style="margin-top:6px;">
+        <li>表示データは <b>すべて架空</b>（実際の顧問先データは含みません）</li>
+        <li>ログイン認証は <b>未実装</b>（評価しやすさのため誰でも入れる状態）</li>
+        <li>AI による <b>実 PDF からの仕訳生成</b> は、サーバ側コード一式は完成済み・本番稼働はまだ</li>
+        <li>マネーフォワード / freee / 弥生への <b>実 API 送信</b> は次のフェーズ</li>
+      </ul>
+      実運用には <b>認証・テナント分離・実 API 連携</b> を組み込んだ Phase 1〜3 を順次進めます。
+    </div>
+  </section>
+
+  <!-- 6. フィードバックの送り方 -->
+  <section>
+    <h2><span class="num">6</span> フィードバックの送り方</h2>
+    <p>下記のテンプレに沿って、画面のスクリーンショット付きでメール／メッセでお送りいただけると助かります。</p>
+    <div class="callout">
+      <b>テンプレ</b><br>
+      ・触った画面：（例：DriveKeiri ホーム ／ 仕訳承認）<br>
+      ・良かった点：<br>
+      ・気になった点・直してほしい点：<br>
+      ・実務でこれは厳しい：（必須機能の不足など）<br>
+      ・追加したいシナリオ：（こういう書類も試したい等）
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);">疑問点だけでもOKです。「ここはどういう想定？」のご質問だけでも構いません。</p>
+  </section>
+
+  <div class="footer">
+    KessanPilot / DriveKeiri デモ評価ガイド ／ ご質問は窓口担当まで。<br>
+    本ガイドは印刷 / PDF 保存して関係者と共有していただけます。
+  </div>
+
+</div>
+
+</body>
+</html>
