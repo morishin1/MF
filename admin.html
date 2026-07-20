@@ -51,6 +51,28 @@
     <div class="card">
       <h2><span class="n">1</span>取引先を選ぶ</h2>
       <select id="client-select" onchange="onClientChange()"></select>
+
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;">＋ 取引先を追加</summary>
+        <div class="inline-controls" style="margin-top:12px;">
+          <div style="flex:2;">
+            <label>会社名</label>
+            <input id="new-client-name" type="text" placeholder="例: エイトエステート">
+          </div>
+          <div style="flex:0 0 auto;">
+            <label>&nbsp;</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:var(--text);cursor:pointer;height:40px;">
+              <input id="new-client-mf" type="checkbox" checked style="width:auto;"> MF連携を使う
+            </label>
+          </div>
+          <div style="flex:0 0 auto;">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" onclick="addClient(this)"><span class="material-symbols-outlined icon-inline">add</span>追加</button>
+          </div>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:6px;">「MF連携を使う」を外すと、その取引先はMFに接続せず、試算表は<b>アプリ内の仕訳から集計</b>します。</div>
+        <div id="add-client-msg" class="err-text"></div>
+      </details>
     </div>
 
     <!-- 仕訳の承認 -->
@@ -83,18 +105,21 @@
       <div id="mf-status"><div class="empty">読み込み中…</div></div>
     </div>
 
-    <!-- ①〜④ 月次分析 -->
+    <!-- 月次試算表＋AIアドバイス（MF不要・自社集計） -->
     <div class="card">
-      <h2><span class="n">4</span>月次分析（試算表・締め・レポート・税理士共有）</h2>
-      <div class="banner info"><span class="material-symbols-outlined">hourglass_top</span>
-        <div><b>MF連携の設定後に有効化</b>されます。承認済み仕訳がMFに登録され、MFから試算表を取得できるようになると、ここに
-        ①残高試算表 ②月次締めチェック ③AI経営レポート・アドバイス ④税理士共有 が表示されます。</div></div>
-      <div class="kpi-grid" style="margin-top:14px;opacity:.5;">
-        <div class="kpi"><div class="k">売上高</div><div class="v">—</div></div>
-        <div class="kpi"><div class="k">営業利益</div><div class="v">—</div></div>
-        <div class="kpi"><div class="k">経常利益</div><div class="v">—</div></div>
-        <div class="kpi"><div class="k">現預金残高</div><div class="v">—</div></div>
+      <h2><span class="n">4</span>月次試算表 ＆ AIアドバイス</h2>
+      <div class="muted" style="font-size:12px;margin-bottom:12px;">
+        当アプリで<b>承認済みの仕訳</b>を月ごとに集計した試算表です（MF不要）。※期首残高や他システムの取引は含みません。
       </div>
+      <div class="inline-controls" style="margin-bottom:14px;">
+        <div style="flex:0 0 auto;"><label>対象月</label><input id="tb-month" type="month"></div>
+        <div style="flex:0 0 auto;"><label>&nbsp;</label>
+          <button class="btn btn-secondary" onclick="loadTrialBalance()"><span class="material-symbols-outlined icon-inline">calculate</span>試算表を集計</button></div>
+        <div style="flex:0 0 auto;"><label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="loadAdvice(this)"><span class="material-symbols-outlined icon-inline">smart_toy</span>AIアドバイス</button></div>
+      </div>
+      <div id="tb-result"><div class="empty">「試算表を集計」を押してください</div></div>
+      <div id="tb-advice"></div>
     </div>
 
   </div>
@@ -119,7 +144,7 @@
   function el(id){ return document.getElementById(id); }
   function thisMonth(){ return new Date().toISOString().slice(0,7); }
 
-  let currentClientId=null, currentStatus="draft";
+  let currentClientId=null, currentStatus="draft", clientsById={};
 
   (async function init(){
     let health=null;
@@ -166,22 +191,50 @@
   }
   function doLogout(){ API.logout(); showLogin(); }
 
-  async function loadClients(){
+  async function loadClients(selectId){
     const sel=el("client-select");
     try{
       const clients=await API.listClients();
       if(!clients.length){ sel.innerHTML=`<option value="">（取引先がありません）</option>`; return; }
-      sel.innerHTML=clients.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
-      currentClientId=clients[0].id;
+      clientsById={}; clients.forEach(c=>clientsById[c.id]=c);
+      sel.innerHTML=clients.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}${c.accounting_software!=="mf"?"（MF連携なし）":""}</option>`).join("");
+      currentClientId=selectId&&clientsById[selectId]?selectId:clients[0].id;
+      sel.value=currentClientId;
+      el("tb-month").value=thisMonth();
       loadJournals(); loadDocuments(); loadMfStatus();
+      el("tb-result").innerHTML=`<div class="empty">「試算表を集計」を押してください</div>`; el("tb-advice").innerHTML="";
     }catch(e){ sel.innerHTML=`<option value="">取得失敗</option>`; }
   }
-  function onClientChange(){ currentClientId=el("client-select").value; loadJournals(); loadDocuments(); loadMfStatus(); }
+  function onClientChange(){ currentClientId=el("client-select").value;
+    el("tb-result").innerHTML=`<div class="empty">「試算表を集計」を押してください</div>`; el("tb-advice").innerHTML="";
+    loadJournals(); loadDocuments(); loadMfStatus(); }
+
+  // ---- 取引先の追加 ----
+  async function addClient(btn){
+    const name=el("new-client-name").value.trim();
+    const useMf=el("new-client-mf").checked;
+    el("add-client-msg").textContent="";
+    if(!name){ el("add-client-msg").textContent="会社名を入力してください"; return; }
+    btn.disabled=true; btn.textContent="追加中…";
+    try{
+      const c=await API.createClient(name,useMf);
+      el("new-client-name").value="";
+      toast(`取引先「${c.name}」を追加しました`);
+      await loadClients(c.id);
+    }catch(e){ el("add-client-msg").textContent=`追加に失敗: ${e.message}${e.detail?`（${e.detail}）`:""}`; }
+    finally{ btn.disabled=false; btn.innerHTML='<span class="material-symbols-outlined icon-inline">add</span>追加'; }
+  }
 
   // ---- MF連携 ----
   async function loadMfStatus(){
     const box=el("mf-status");
     if(!currentClientId){ box.innerHTML=`<div class="empty">取引先を選択してください</div>`; return; }
+    const c=clientsById[currentClientId];
+    if(c && c.accounting_software!=="mf"){
+      box.innerHTML=`<div class="banner info"><span class="material-symbols-outlined">info</span>
+        <div>この取引先は<b>MF連携なし</b>の設定です。試算表は下の「月次試算表 ＆ AIアドバイス」（自社集計）をご利用ください。</div></div>`;
+      return;
+    }
     box.innerHTML=`<div class="empty">読み込み中…</div>`;
     try{
       const s=await API.mfStatus(currentClientId);
@@ -291,6 +344,69 @@
     btn.disabled=true; btn.textContent="処理中…";
     try{ await API.reprocessDocument(documentId); loadDocuments(); loadJournals(); }
     catch(e){ btn.disabled=false; btn.textContent="再処理"; alert(`再処理に失敗: ${e.message}${e.detail?`（${e.detail}）`:""}`); }
+  }
+
+  // ---- 月次試算表 ＆ AIアドバイス ----
+  function tbPeriod(){ return el("tb-month").value || thisMonth(); }
+
+  function renderTB(tb){
+    if(!tb.journalCount){
+      el("tb-result").innerHTML=`<div class="empty">${esc(tb.period)}に承認済みの仕訳がありません。<br>仕訳を承認すると試算表を集計できます。</div>`;
+      return;
+    }
+    const rows=tb.accounts.map(a=>`<tr>
+      <td>${esc(a.account)}</td>
+      <td style="text-align:right;">${fmtYen(a.debit)}</td>
+      <td style="text-align:right;">${fmtYen(a.credit)}</td>
+      <td style="text-align:right;font-weight:600;">${fmtYen(a.balance)}</td></tr>`).join("");
+    el("tb-result").innerHTML=`
+      <div class="muted" style="font-size:12px;margin-bottom:8px;">${esc(tb.period)}／対象仕訳 ${tb.journalCount}件</div>
+      <table><thead><tr><th>勘定科目</th><th style="text-align:right;">借方</th><th style="text-align:right;">貸方</th><th style="text-align:right;">残高</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700;border-top:2px solid var(--border);">
+        <td>合計</td><td style="text-align:right;">${fmtYen(tb.totals.debit)}</td><td style="text-align:right;">${fmtYen(tb.totals.credit)}</td><td></td></tr></tfoot>
+      </table>`;
+  }
+
+  async function loadTrialBalance(){
+    if(!currentClientId){ return; }
+    el("tb-result").innerHTML=`<div class="empty">集計中…</div>`; el("tb-advice").innerHTML="";
+    try{ const tb=await API.trialBalance(currentClientId, tbPeriod()); renderTB(tb); }
+    catch(e){ el("tb-result").innerHTML=`<div class="empty"><span class="err-text">集計に失敗: ${esc(e.message)}${e.detail?`（${esc(e.detail)}）`:""}</span></div>`; }
+  }
+
+  async function loadAdvice(btn){
+    if(!currentClientId){ return; }
+    btn.disabled=true; const orig=btn.innerHTML; btn.textContent="生成中…";
+    el("tb-advice").innerHTML=`<div class="empty">AIがアドバイスを作成中…（10〜20秒）</div>`;
+    try{
+      const r=await API.trialBalanceAdvice(currentClientId, tbPeriod());
+      if(r.trialBalance) renderTB(r.trialBalance);
+      if(r.advice){
+        el("tb-advice").innerHTML=`<div class="card" style="margin-top:14px;background:#f8fafc;">
+          <h2><span class="material-symbols-outlined">smart_toy</span>AIアドバイス（${esc(tbPeriod())}）</h2>
+          <div style="font-size:14px;line-height:1.8;">${mdToHtml(r.advice)}</div>
+          <div class="muted" style="font-size:11px;margin-top:10px;">※当アプリ内の承認済み仕訳に基づく参考情報です。正式な判断は税理士にご相談ください。</div></div>`;
+      }else{
+        el("tb-advice").innerHTML=`<div class="empty">${esc(r.note||"アドバイスを作成できませんでした")}</div>`;
+      }
+    }catch(e){ el("tb-advice").innerHTML=`<div class="empty"><span class="err-text">アドバイス生成に失敗: ${esc(e.message)}${e.detail?`（${esc(e.detail)}）`:""}</span></div>`; }
+    finally{ btn.disabled=false; btn.innerHTML=orig; }
+  }
+
+  // 簡易 Markdown → HTML（見出し・箇条書き・太字のみ）
+  function mdToHtml(md){
+    const lines=String(md).split(/\r?\n/); let html=""; let inUl=false;
+    const inline=(s)=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+    for(let line of lines){
+      const t=line.trim();
+      if(/^#{1,6}\s/.test(t)){ if(inUl){html+="</ul>";inUl=false;} html+=`<h3 style="font-size:14px;color:var(--primary-dark);margin:14px 0 6px;">${inline(t.replace(/^#{1,6}\s/,""))}</h3>`; }
+      else if(/^[-*]\s/.test(t)){ if(!inUl){html+="<ul style='margin:6px 0 6px 18px;'>";inUl=true;} html+=`<li>${inline(t.replace(/^[-*]\s/,""))}</li>`; }
+      else if(!t){ if(inUl){html+="</ul>";inUl=false;} }
+      else { if(inUl){html+="</ul>";inUl=false;} html+=`<p style="margin:6px 0;">${inline(t)}</p>`; }
+    }
+    if(inUl) html+="</ul>";
+    return html;
   }
 
   function toast(msg){
