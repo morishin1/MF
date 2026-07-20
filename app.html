@@ -107,6 +107,7 @@
 </div>
 
 <script src="js/api-client.js"></script>
+<script src="js/preview.js"></script>
 <script>
   const DOC_TYPE_LABEL = {
     invoice:"請求書", receipt:"領収書", bank:"通帳・銀行", card:"カード明細", salary:"給与明細",
@@ -248,7 +249,7 @@
     return `<tr>
       <td>${esc(d.doc_date||"—")}</td>
       <td><span class="dt ${esc(d.doc_type)}">${esc(type)}</span></td>
-      <td><div>${esc(d.filename||"")}</div><div class="lines">${esc(d.ai_summary||"")}</div></td>
+      <td><div><a href="#" onclick="openPreview('${esc(d.id)}');return false;" style="color:var(--primary);font-weight:600;text-decoration:none;"><span class="material-symbols-outlined" style="font-size:15px;">visibility</span> ${esc(d.filename||"")}</a></div><div class="lines">${esc(d.ai_summary||"")}</div></td>
       <td>${esc(d.period||"—")}</td>
       <td><span class="pill ${esc(d.status)}">${esc(DOC_STATUS_LABEL[d.status]||d.status)}</span></td>
       <td class="muted">${esc(fmtDT(d.uploaded_at))}</td>
