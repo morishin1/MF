@@ -120,6 +120,9 @@
 
   const listClients = () => api("/api/clients").then((d) => d.clients || []);
 
+  const reprocessDocument = (documentId) =>
+    api("/api/documents/process", { method: "POST", body: { documentId } });
+
   const listDocuments = (clientId, { period, docType, status } = {}) => {
     const q = new URLSearchParams();
     if (clientId) q.set("clientId", clientId);
@@ -138,6 +141,11 @@
 
   const approveJournal = (journalId) =>
     api("/api/journals/approve", { method: "POST", body: { journalId } });
+
+  // ---- MF連携 ----
+  const mfStatus = (clientId) => api(`/api/mf/status?clientId=${encodeURIComponent(clientId)}`);
+  const mfConnectUrl = (clientId) =>
+    api(`/api/mf/oauth/start?clientId=${encodeURIComponent(clientId)}`).then((d) => d.authorizeUrl);
 
   // アップロード → 署名URLへPUT → AI仕訳、の一連。onStep(phase) で進捗通知。
   async function uploadAndRecognize(clientId, file, onStep = () => {}) {
@@ -197,6 +205,7 @@
     config, login, logout, refresh, getToken,
     isLoggedIn, currentEmail,
     api, me, listClients, listJournals, listDocuments,
-    approveJournal, uploadAndRecognize, uploadAndProcess,
+    approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument,
+    mfStatus, mfConnectUrl,
   };
 })();

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>使い方ガイド - KessanPilot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
+    .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
+    .stepbox .num{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;}
+    .stepbox .body{flex:1;}
+    .stepbox .body b{color:var(--text);}
+    .faq{margin-bottom:14px;}
+    .faq .q{font-weight:700;color:var(--primary-dark);display:flex;gap:6px;align-items:flex-start;}
+    .faq .a{color:var(--text);margin:4px 0 0 22px;font-size:14px;}
+    .lead{color:var(--muted);font-size:14px;line-height:1.7;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">KessanPilot <span class="tag">使い方ガイド</span></div>
+  <div class="who">
+    <a class="navlink" href="app.html"><span class="material-symbols-outlined icon-inline">arrow_back</span>アップロード画面へ戻る</a>
+  </div>
+</div>
+
+<div class="wrap guide" style="max-width:760px;">
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">menu_book</span>このツールでできること</h2>
+    <p class="lead">
+      書類（請求書・領収書など）を<b>アップロードするだけ</b>で、AIが「何の書類か」を判定して<b>月ごとに自動で整理</b>します。
+      会計に関係する書類は、AIが<b>仕訳の下書き</b>まで作り、管理者が確認して会計処理します。<br>
+      むずかしい操作は不要です。<b>集めた書類をここに上げていくだけ</b>でOKです。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">footprint</span>使い方（4ステップ）</h2>
+
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>ログインする</b><br>
+        メールアドレスとパスワードでログインします。分からない場合は管理者に確認してください。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>取引先を選ぶ</b><br>
+        画面上部のプルダウンから対象の会社を選びます（1社だけなら自動で選ばれています）。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>書類をアップロードする</b><br>
+        点線のエリアを<b>クリックして選択</b>、または<b>ファイルをドラッグ&ドロップ</b>します。<br>
+        請求書・領収書はもちろん、<b>契約書・名刺など会計に関係ない書類でもOK</b>。とりあえず上げてください。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">4</div>
+      <div class="body"><b>AIの判定を確認する</b><br>
+        数秒で「種別・対象月・要約」が表示され、下の一覧に追加されます。<br>
+        会計書類なら「仕訳作成済（承認待ち）」となり、あとは管理者が承認します。あなたの作業はここまでです。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">flag</span>状況（ステータス）の見方</h2>
+    <table>
+      <thead><tr><th>表示</th><th>意味</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill recognizing">処理中</span></td><td>AIが判定している最中です（数秒で終わります）</td></tr>
+        <tr><td><span class="pill ready">仕訳作成済（承認待ち）</span></td><td>会計書類として仕訳の下書きができました。管理者の承認待ちです</td></tr>
+        <tr><td><span class="pill filed">整理完了</span></td><td>会計に関係ない書類として、その月に保管しました</td></tr>
+        <tr><td><span class="pill approved">承認済</span></td><td>管理者が仕訳を承認しました</td></tr>
+        <tr><td><span class="pill sent">MF登録済</span></td><td>マネーフォワードへ登録されました</td></tr>
+        <tr><td><span class="pill error">エラー</span></td><td>処理に失敗しました。<b>「再処理」ボタン</b>を押すとやり直せます</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">description</span>アップロードできるファイル</h2>
+    <p class="lead">
+      PDF ／ 画像（JPG・PNG・WEBP・HEIC）／ Excel（.xlsx・.xls）／ CSV　・　1ファイル <b>10MBまで</b><br>
+      スマホで撮った領収書の写真もそのまま上げられます。ピンボケや傾きは、なるべく文字が読めるように撮ってください。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">quiz</span>よくある質問</h2>
+
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>会計に関係ない書類を上げても大丈夫？</div>
+      <div class="a">大丈夫です。AIが種別を判定して月ごとに保管します。迷ったら、とりあえず上げてください。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>「対象月」は何で決まる？</div>
+      <div class="a">AIが書類に書かれた日付を読み取り、その月に振り分けます（例：7月に上げた6月の領収書は「6月分」）。日付が読めない場合はアップロードした月になります。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>仕訳の承認や会計ソフト（MF）への登録は誰がやる？</div>
+      <div class="a">管理者が行います。メンバーの方は<b>書類を上げるだけ</b>でOKです。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>間違ったファイルを上げてしまった／内容がおかしい</div>
+      <div class="a">管理者に伝えてください。管理者側で確認・修正できます。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>アップロードした書類が一覧に出てこない</div>
+      <div class="a">一覧の「全期間」にチェックが入っているか確認してください。エラー表示のものは「再処理」を押すと復活します。</div>
+    </div>
+  </div>
+
+  <div class="card" style="text-align:center;">
+    <a class="btn btn-primary" href="app.html" style="justify-content:center;">
+      <span class="material-symbols-outlined icon-inline">upload_file</span>アップロード画面へ戻る</a>
+  </div>
+
+</div>
+
+</body>
+</html>
