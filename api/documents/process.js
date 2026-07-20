@@ -71,6 +71,9 @@ export default async function handler(req, res) {
     // --- 2) 会計証憑なら仕訳ドラフト生成 ---
     let journal = null;
     if (cls.is_accounting) {
+      // 再処理時の重複を防ぐ: この書類に紐づく未承認(draft)仕訳は作り直す
+      await sb.from("journals").delete().eq("document_id", doc.id).eq("status", "draft");
+
       const draft = await recognizeDocument({ pdfBase64, mimeType: doc.mime_type, textContent });
       const total = Number(draft.total_amount) || 0;
       // 安全装置: 50万円超は自動承認させないため confidence=low

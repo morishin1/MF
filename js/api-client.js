@@ -120,6 +120,9 @@
 
   const listClients = () => api("/api/clients").then((d) => d.clients || []);
 
+  const reprocessDocument = (documentId) =>
+    api("/api/documents/process", { method: "POST", body: { documentId } });
+
   const listDocuments = (clientId, { period, docType, status } = {}) => {
     const q = new URLSearchParams();
     if (clientId) q.set("clientId", clientId);
@@ -202,7 +205,7 @@
     config, login, logout, refresh, getToken,
     isLoggedIn, currentEmail,
     api, me, listClients, listJournals, listDocuments,
-    approveJournal, uploadAndRecognize, uploadAndProcess,
+    approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument,
     mfStatus, mfConnectUrl,
   };
 })();
