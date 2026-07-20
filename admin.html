@@ -76,6 +76,12 @@
       <div id="doc-list"><div class="empty">読み込み中…</div></div>
     </div>
 
+    <!-- MF連携 -->
+    <div class="card">
+      <h2><span class="material-symbols-outlined">link</span>マネーフォワード連携</h2>
+      <div id="mf-status"><div class="empty">読み込み中…</div></div>
+    </div>
+
     <!-- ①〜④ 月次分析 -->
     <div class="card">
       <h2><span class="n">4</span>月次分析（試算表・締め・レポート・税理士共有）</h2>
@@ -121,6 +127,10 @@
     for(const [k,v] of Object.entries(DOC_TYPE_LABEL)){ const o=document.createElement("option"); o.value=k; o.textContent=v; ft.appendChild(o); }
     el("filter-month").value=thisMonth();
     if(API.isLoggedIn()) enter(); else showLogin();
+    // MF連携コールバックの結果通知
+    const p=new URLSearchParams(location.search);
+    if(p.get("mf")==="connected"){ toast("MFと連携しました"); history.replaceState({},"","admin.html"); }
+    else if(p.get("mf")==="error"){ toast("MF連携に失敗: "+(p.get("reason")||"")); history.replaceState({},"","admin.html"); }
   })();
 
   function renderEnvBanner(health){
@@ -160,10 +170,40 @@
       if(!clients.length){ sel.innerHTML=`<option value="">（取引先がありません）</option>`; return; }
       sel.innerHTML=clients.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
       currentClientId=clients[0].id;
-      loadJournals(); loadDocuments();
+      loadJournals(); loadDocuments(); loadMfStatus();
     }catch(e){ sel.innerHTML=`<option value="">取得失敗</option>`; }
   }
-  function onClientChange(){ currentClientId=el("client-select").value; loadJournals(); loadDocuments(); }
+  function onClientChange(){ currentClientId=el("client-select").value; loadJournals(); loadDocuments(); loadMfStatus(); }
+
+  // ---- MF連携 ----
+  async function loadMfStatus(){
+    const box=el("mf-status");
+    if(!currentClientId){ box.innerHTML=`<div class="empty">取引先を選択してください</div>`; return; }
+    box.innerHTML=`<div class="empty">読み込み中…</div>`;
+    try{
+      const s=await API.mfStatus(currentClientId);
+      if(!s.configured){
+        box.innerHTML=`<div class="banner warn"><span class="material-symbols-outlined">warning</span>
+          <div>サーバ側のMF設定が未完了です。Vercelに <code>MF_CLIENT_SECRET</code> と <code>MF_APP_SECRET</code> を設定してください。</div></div>`;
+        return;
+      }
+      if(s.connected){
+        const exp=s.expires_at?new Date(s.expires_at).toLocaleString("ja-JP"):"—";
+        box.innerHTML=`<div class="banner ok"><span class="material-symbols-outlined">check_circle</span>
+          <div><b>連携済み</b>（スコープ: ${esc((s.scopes||[]).join(", ")||"—")}／トークン有効期限: ${esc(exp)}）</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="mfConnect(this)">再連携する</button>`;
+      }else{
+        box.innerHTML=`<div class="banner info"><span class="material-symbols-outlined">info</span>
+          <div>まだMFと連携していません。連携すると、承認済み仕訳のMF登録や試算表取得ができるようになります。</div></div>
+          <button class="btn btn-primary" onclick="mfConnect(this)"><span class="material-symbols-outlined icon-inline">link</span>MFと連携する</button>`;
+      }
+    }catch(e){ box.innerHTML=`<div class="empty"><span class="err-text">状態取得に失敗: ${esc(e.message)}</span></div>`; }
+  }
+  async function mfConnect(btn){
+    btn.disabled=true; btn.textContent="接続先を取得中…";
+    try{ const url=await API.mfConnectUrl(currentClientId); window.location.href=url; }
+    catch(e){ btn.disabled=false; alert(`MF連携の開始に失敗しました: ${e.message}`); loadMfStatus(); }
+  }
 
   // ---- 仕訳承認 ----
   function setStatus(s){ currentStatus=s;

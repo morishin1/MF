@@ -139,6 +139,11 @@
   const approveJournal = (journalId) =>
     api("/api/journals/approve", { method: "POST", body: { journalId } });
 
+  // ---- MF連携 ----
+  const mfStatus = (clientId) => api(`/api/mf/status?clientId=${encodeURIComponent(clientId)}`);
+  const mfConnectUrl = (clientId) =>
+    api(`/api/mf/oauth/start?clientId=${encodeURIComponent(clientId)}`).then((d) => d.authorizeUrl);
+
   // アップロード → 署名URLへPUT → AI仕訳、の一連。onStep(phase) で進捗通知。
   async function uploadAndRecognize(clientId, file, onStep = () => {}) {
     const mimeType = guessMime(file);
@@ -198,5 +203,6 @@
     isLoggedIn, currentEmail,
     api, me, listClients, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess,
+    mfStatus, mfConnectUrl,
   };
 })();
