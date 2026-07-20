@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理者画面 - KessanPilot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">KessanPilot <span class="tag admin">管理者</span></div>
+  <div class="who">
+    <a class="navlink" href="app.html"><span class="material-symbols-outlined icon-inline">upload_file</span>アップロード画面</a>
+    <span id="who-email"></span>
+    <button id="logout-btn" class="btn btn-secondary btn-sm hidden" onclick="doLogout()">
+      <span class="material-symbols-outlined icon-inline">logout</span>ログアウト
+    </button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="env-banner"></div>
+
+  <!-- ログイン -->
+  <div id="login-view" class="card hidden" style="max-width:420px;margin:40px auto;">
+    <h2><span class="material-symbols-outlined">login</span>ログイン</h2>
+    <div style="margin-bottom:12px;"><label>メールアドレス</label>
+      <input id="login-email" type="email" placeholder="you@example.com" autocomplete="username"></div>
+    <div style="margin-bottom:16px;"><label>パスワード</label>
+      <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <button id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;" onclick="doLogin()">ログイン</button>
+    <div id="login-err" class="err-text"></div>
+  </div>
+
+  <!-- 権限なし -->
+  <div id="denied-view" class="card hidden" style="max-width:520px;margin:40px auto;">
+    <div class="banner err"><span class="material-symbols-outlined">block</span>
+      <div>この画面は<b>管理者（admin / staff）</b>専用です。あなたのアカウントには権限がありません。アップロードは
+      <a href="app.html">アップロード画面</a>から行えます。</div></div>
+    <button class="btn btn-secondary btn-sm" onclick="doLogout()">別のアカウントでログイン</button>
+  </div>
+
+  <!-- メイン -->
+  <div id="app-view" class="hidden">
+
+    <!-- 取引先 -->
+    <div class="card">
+      <h2><span class="n">1</span>取引先を選ぶ</h2>
+      <select id="client-select" onchange="onClientChange()"></select>
+    </div>
+
+    <!-- 仕訳の承認 -->
+    <div class="card">
+      <h2><span class="n">2</span>AI仕訳を確認して承認 → MF登録</h2>
+      <div class="tabs">
+        <div class="tab active" data-status="draft" onclick="setStatus('draft')">確認待ち（下書き）</div>
+        <div class="tab" data-status="approved" onclick="setStatus('approved')">承認済み（MF登録待ち）</div>
+        <div class="tab" data-status="sent" onclick="setStatus('sent')">MF登録済み</div>
+      </div>
+      <div id="journal-list"><div class="empty">読み込み中…</div></div>
+    </div>
+
+    <!-- 書類の月次管理 -->
+    <div class="card">
+      <h2><span class="n">3</span>書類の月次管理（全メンバー分）</h2>
+      <div class="inline-controls" style="margin-bottom:14px;">
+        <div><label>対象月</label><input id="filter-month" type="month" onchange="loadDocuments()"></div>
+        <div><label>種別</label><select id="filter-type" onchange="loadDocuments()"><option value="">すべての種別</option></select></div>
+        <div style="flex:0 0 auto;"><label>&nbsp;</label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:var(--text);cursor:pointer;">
+            <input id="filter-all" type="checkbox" style="width:auto;" onchange="loadDocuments()"> 全期間</label></div>
+      </div>
+      <div id="doc-list"><div class="empty">読み込み中…</div></div>
+    </div>
+
+    <!-- ①〜④ 月次分析 -->
+    <div class="card">
+      <h2><span class="n">4</span>月次分析（試算表・締め・レポート・税理士共有）</h2>
+      <div class="banner info"><span class="material-symbols-outlined">hourglass_top</span>
+        <div><b>MF連携の設定後に有効化</b>されます。承認済み仕訳がMFに登録され、MFから試算表を取得できるようになると、ここに
+        ①残高試算表 ②月次締めチェック ③AI経営レポート・アドバイス ④税理士共有 が表示されます。</div></div>
+      <div class="kpi-grid" style="margin-top:14px;opacity:.5;">
+        <div class="kpi"><div class="k">売上高</div><div class="v">—</div></div>
+        <div class="kpi"><div class="k">営業利益</div><div class="v">—</div></div>
+        <div class="kpi"><div class="k">経常利益</div><div class="v">—</div></div>
+        <div class="kpi"><div class="k">現預金残高</div><div class="v">—</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/api-client.js"></script>
+<script>
+  const DOC_TYPE_LABEL = {
+    invoice:"請求書", receipt:"領収書", bank:"通帳・銀行", card:"カード明細", salary:"給与明細",
+    contract:"契約書", quote:"見積書", tax:"納付書・税金", certificate:"証明書", namecard:"名刺",
+    other:"その他", unknown:"未判定",
+  };
+  const DOC_STATUS_LABEL = {
+    uploaded:"アップロード済", recognizing:"処理中", classified:"分類済",
+    ready:"仕訳作成済（承認待ち）", filed:"整理完了", approved:"承認済", sent:"MF登録済", error:"エラー",
+  };
+  const J_STATUS_LABEL = { draft:"確認待ち", approved:"承認済み（MF登録待ち）", sent:"MF登録済み", rejected:"却下", error:"エラー" };
+
+  function fmtYen(v){ if(v===null||v===undefined||isNaN(v))return "—"; return "¥"+Math.round(v).toLocaleString("ja-JP"); }
+  function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  function el(id){ return document.getElementById(id); }
+  function thisMonth(){ return new Date().toISOString().slice(0,7); }
+
+  let currentClientId=null, currentStatus="draft";
+
+  (async function init(){
+    let health=null;
+    try{ health=await (await fetch("/api/health",{cache:"no-store"})).json(); }catch(_){}
+    renderEnvBanner(health);
+    const ft=el("filter-type");
+    for(const [k,v] of Object.entries(DOC_TYPE_LABEL)){ const o=document.createElement("option"); o.value=k; o.textContent=v; ft.appendChild(o); }
+    el("filter-month").value=thisMonth();
+    if(API.isLoggedIn()) enter(); else showLogin();
+  })();
+
+  function renderEnvBanner(health){
+    const b=el("env-banner");
+    if(!health){ b.innerHTML=`<div class="banner warn"><span class="material-symbols-outlined">warning</span><div>APIに接続できません（<code>/api/health</code>）。</div></div>`; return; }
+    const s=health.env?.supabase,a=health.env?.anthropic;
+    if(!(s&&a)){ const miss=[!s?"Supabase":null,!a?"Anthropic":null].filter(Boolean).join(" / ");
+      b.innerHTML=`<div class="banner warn"><span class="material-symbols-outlined">warning</span><div>未設定の環境変数: <b>${esc(miss)}</b></div></div>`; }
+  }
+
+  function showLogin(){ el("login-view").classList.remove("hidden"); el("app-view").classList.add("hidden");
+    el("denied-view").classList.add("hidden"); el("logout-btn").classList.add("hidden"); el("who-email").textContent=""; }
+
+  async function enter(){
+    el("who-email").textContent=API.currentEmail()||""; el("logout-btn").classList.remove("hidden");
+    let m=null; try{ m=await API.me(); }catch(_){}
+    if(!m || !m.isAdmin){ el("login-view").classList.add("hidden"); el("app-view").classList.add("hidden"); el("denied-view").classList.remove("hidden"); return; }
+    el("login-view").classList.add("hidden"); el("denied-view").classList.add("hidden"); el("app-view").classList.remove("hidden");
+    loadClients();
+  }
+
+  async function doLogin(){
+    const btn=el("login-btn"); el("login-err").textContent="";
+    const email=el("login-email").value.trim(), pw=el("login-password").value;
+    if(!email||!pw){ el("login-err").textContent="メールとパスワードを入力してください"; return; }
+    btn.disabled=true; btn.textContent="ログイン中…";
+    try{ await API.login(email,pw); enter(); }
+    catch(e){ el("login-err").textContent=e.message||"ログインに失敗しました"; }
+    finally{ btn.disabled=false; btn.textContent="ログイン"; }
+  }
+  function doLogout(){ API.logout(); showLogin(); }
+
+  async function loadClients(){
+    const sel=el("client-select");
+    try{
+      const clients=await API.listClients();
+      if(!clients.length){ sel.innerHTML=`<option value="">（取引先がありません）</option>`; return; }
+      sel.innerHTML=clients.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+      currentClientId=clients[0].id;
+      loadJournals(); loadDocuments();
+    }catch(e){ sel.innerHTML=`<option value="">取得失敗</option>`; }
+  }
+  function onClientChange(){ currentClientId=el("client-select").value; loadJournals(); loadDocuments(); }
+
+  // ---- 仕訳承認 ----
+  function setStatus(s){ currentStatus=s;
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.status===s)); loadJournals(); }
+
+  async function loadJournals(){
+    const list=el("journal-list");
+    if(!currentClientId){ list.innerHTML=`<div class="empty">取引先を選択してください</div>`; return; }
+    list.innerHTML=`<div class="empty">読み込み中…</div>`;
+    try{
+      const rows=await API.listJournals(currentClientId,currentStatus);
+      if(!rows.length){ list.innerHTML=`<div class="empty">${esc(J_STATUS_LABEL[currentStatus])}の仕訳はありません</div>`; return; }
+      list.innerHTML=`<table><thead><tr>
+        <th>日付</th><th>取引先 / 摘要</th><th>金額</th><th>税区分</th><th>確度</th><th>状態</th><th></th>
+        </tr></thead><tbody>${rows.map(jRow).join("")}</tbody></table>`;
+    }catch(e){ list.innerHTML=`<div class="empty"><span class="err-text">取得失敗: ${esc(e.message)}</span></div>`; }
+  }
+
+  function jRow(j){
+    const lines=(j.lines||[]).map(l=>`${esc(l.side==="debit"?"借":"貸")} ${esc(l.account||"")} ${fmtYen(l.amount)}`).join(" ／ ");
+    const canApprove=j.status==="draft";
+    return `<tr>
+      <td>${esc(j.txn_date||"—")}</td>
+      <td><div>${esc(j.partner_name||"—")}</div><div class="lines">${esc(j.description||"")}<br>${lines}</div></td>
+      <td>${fmtYen(j.total_amount)}</td>
+      <td>${esc(j.tax_category||"—")}</td>
+      <td><span class="conf ${esc(j.confidence)}">${esc(j.confidence||"")}</span></td>
+      <td><span class="pill ${esc(j.status)}">${esc(J_STATUS_LABEL[j.status]||j.status)}</span></td>
+      <td class="row-actions">${canApprove?`<button class="btn btn-approve" onclick="approve('${esc(j.id)}',this)">承認</button>`:""}</td>
+    </tr>`;
+  }
+
+  async function approve(journalId, btn){
+    if(!confirm("この仕訳を承認します。承認後はMF登録の対象になります。よろしいですか？")) return;
+    btn.disabled=true; btn.textContent="承認中…";
+    try{
+      const res=await API.approveJournal(journalId);
+      if(res.mf?.sent) toast("承認し、MFへ登録しました");
+      else if(res.mf?.reason==="mf_not_configured") toast("承認しました（MF登録待ち：連携設定後に登録されます）");
+      else if(res.mf?.reason) toast(`承認しました（MF未登録: ${res.mf.reason}）`);
+      else toast("承認しました");
+      loadJournals();
+    }catch(e){ btn.disabled=false; btn.textContent="承認"; alert(`承認に失敗しました: ${e.message}`); }
+  }
+
+  // ---- 書類の月次管理 ----
+  async function loadDocuments(){
+    const list=el("doc-list");
+    if(!currentClientId){ list.innerHTML=`<div class="empty">取引先を選択してください</div>`; return; }
+    const all=el("filter-all").checked; el("filter-month").disabled=all;
+    const period=all?undefined:el("filter-month").value;
+    const docType=el("filter-type").value||undefined;
+    list.innerHTML=`<div class="empty">読み込み中…</div>`;
+    try{
+      const rows=await API.listDocuments(currentClientId,{period,docType});
+      if(!rows.length){ list.innerHTML=`<div class="empty">該当する書類はありません</div>`; return; }
+      list.innerHTML=`<table><thead><tr>
+        <th>日付</th><th>種別</th><th>ファイル / 要約</th><th>対象月</th><th>会計</th><th>状態</th>
+        </tr></thead><tbody>${rows.map(dRow).join("")}</tbody></table>`;
+    }catch(e){ list.innerHTML=`<div class="empty"><span class="err-text">取得失敗: ${esc(e.message)}</span></div>`; }
+  }
+
+  function dRow(d){
+    const type=DOC_TYPE_LABEL[d.doc_type]||d.doc_type;
+    return `<tr>
+      <td>${esc(d.doc_date||"—")}</td>
+      <td><span class="dt ${esc(d.doc_type)}">${esc(type)}</span></td>
+      <td><div>${esc(d.filename||"")}</div><div class="lines">${esc(d.ai_summary||"")}</div></td>
+      <td>${esc(d.period||"—")}</td>
+      <td>${d.is_accounting?'<span class="material-symbols-outlined" style="color:var(--green);font-size:18px;">check_circle</span>':'<span class="muted">—</span>'}</td>
+      <td><span class="pill ${esc(d.status)}">${esc(DOC_STATUS_LABEL[d.status]||d.status)}</span></td>
+    </tr>`;
+  }
+
+  function toast(msg){
+    const t=document.createElement("div"); t.textContent=msg;
+    t.style.cssText="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a202c;color:white;padding:12px 20px;border-radius:8px;font-size:14px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.25);";
+    document.body.appendChild(t); setTimeout(()=>t.remove(),2600);
+  }
+</script>
+
+</body>
+</html>

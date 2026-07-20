@@ -116,7 +116,18 @@
   }
 
   // ---- 高水準API -------------------------------------------------------
+  const me = () => api("/api/me");
+
   const listClients = () => api("/api/clients").then((d) => d.clients || []);
+
+  const listDocuments = (clientId, { period, docType, status } = {}) => {
+    const q = new URLSearchParams();
+    if (clientId) q.set("clientId", clientId);
+    if (period) q.set("period", period);
+    if (docType) q.set("docType", docType);
+    if (status) q.set("status", status);
+    return api(`/api/documents?${q.toString()}`).then((d) => d.documents || []);
+  };
 
   const listJournals = (clientId, status) => {
     const q = new URLSearchParams();
@@ -155,9 +166,37 @@
     return rec; // { document, journal }
   }
 
+  // アップロード → 署名URLへPUT → AI種別判定(＋会計なら仕訳ドラフト)。onStep(phase) で進捗通知。
+  async function uploadAndProcess(clientId, file, onStep = () => {}) {
+    const mimeType = guessMime(file);
+    if (!mimeType) throw new Error("対応していないファイル形式です");
+
+    onStep("uploading");
+    const signed = await api("/api/documents/upload-url", {
+      method: "POST",
+      body: { clientId, filename: file.name, mimeType, sizeBytes: file.size },
+    });
+
+    const put = await fetch(signed.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType, "x-upsert": "true" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+
+    onStep("recognizing");
+    const out = await api("/api/documents/process", {
+      method: "POST",
+      body: { documentId: signed.documentId },
+    });
+    onStep("done");
+    return out; // { document, journal? }
+  }
+
   window.API = {
     config, login, logout, refresh, getToken,
     isLoggedIn, currentEmail,
-    api, listClients, listJournals, approveJournal, uploadAndRecognize,
+    api, me, listClients, listJournals, listDocuments,
+    approveJournal, uploadAndRecognize, uploadAndProcess,
   };
 })();

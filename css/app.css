@@ -1,0 +1,71 @@
+/* app.css — 実データ版UI（メンバー画面 / 管理者画面）共通スタイル */
+:root{
+  --primary:#3182ce; --primary-dark:#1e3a5f; --border:#e2e8f0; --text:#1a202c;
+  --muted:#718096; --bg:#f5f7fb; --green:#2f855a; --orange:#c05621; --red:#c53030;
+  --soft:#f0f5ff;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);color:var(--text);}
+.topbar{background:white;border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.brand{font-weight:700;color:var(--primary-dark);font-size:16px;display:flex;align-items:center;gap:8px;}
+.brand .tag{font-size:11px;background:var(--soft);color:var(--primary);border-radius:6px;padding:2px 8px;font-weight:600;}
+.brand .tag.admin{background:#fef5e7;color:#975a16;}
+.who{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:12px;}
+.navlink{font-size:12px;color:var(--primary);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:4px;}
+.wrap{max-width:1000px;margin:0 auto;padding:24px 20px 80px;}
+.card{background:white;border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:18px;}
+.card h2{font-size:15px;font-weight:700;color:var(--primary-dark);margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+.card h2 .n{width:24px;height:24px;border-radius:50%;background:var(--primary);color:white;display:inline-flex;align-items:center;justify-content:center;font-size:13px;}
+label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:white;}
+.inline-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+.inline-controls > div{flex:1;min-width:150px;}
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+.btn-primary{background:var(--primary);color:white;}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-secondary{background:#edf2f7;color:var(--primary-dark);}
+.btn-approve{background:var(--green);color:white;padding:6px 12px;font-size:13px;}
+.btn-sm{padding:6px 12px;font-size:13px;}
+.material-symbols-outlined{font-variation-settings:'opsz' 20;vertical-align:middle;}
+.icon-inline{font-size:18px;margin-right:2px;}
+.banner{border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:18px;display:flex;gap:8px;align-items:flex-start;}
+.banner.info{background:#ebf8ff;border:1px solid #bee3f8;color:#2c5282;}
+.banner.warn{background:#fffaf0;border:1px solid #fbd38d;color:#975a16;}
+.banner.err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;}
+.banner.ok{background:#f0fff4;border:1px solid #c6f6d5;color:#276749;}
+.drop{border:2px dashed #cbd5e0;border-radius:10px;padding:26px;text-align:center;color:var(--muted);background:#fafbfc;cursor:pointer;transition:.15s;}
+.drop:hover,.drop.hot{border-color:var(--primary);background:var(--soft);}
+.steps{display:flex;gap:6px;margin:14px 0 0;flex-wrap:wrap;}
+.step{font-size:12px;padding:5px 10px;border-radius:20px;background:#edf2f7;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.step.active{background:var(--primary);color:white;}
+.step.done{background:#c6f6d5;color:#276749;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}
+th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+.pill{display:inline-block;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap;}
+.pill.draft,.pill.uploaded,.pill.recognizing{background:#fef5e7;color:#975a16;}
+.pill.approved,.pill.ready,.pill.classified{background:#e6fffa;color:#234e52;}
+.pill.sent,.pill.filed{background:#c6f6d5;color:#276749;}
+.pill.rejected,.pill.error{background:#fed7d7;color:#c53030;}
+/* 書類種別バッジ */
+.dt{display:inline-block;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;background:#edf2f7;color:#4a5568;white-space:nowrap;}
+.dt.invoice{background:#ebf8ff;color:#2c5282;}
+.dt.receipt{background:#f0fff4;color:#276749;}
+.dt.bank,.dt.card{background:#faf5ff;color:#553c9a;}
+.dt.salary,.dt.tax{background:#fffaf0;color:#975a16;}
+.dt.contract,.dt.quote,.dt.certificate{background:#fff5f5;color:#9b2c2c;}
+.conf{font-size:11px;font-weight:700;}
+.conf.high{color:var(--green);} .conf.mid{color:var(--orange);} .conf.low{color:var(--red);}
+.tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;}
+.tab{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);background:#edf2f7;}
+.tab.active{background:var(--primary);color:white;}
+.muted{color:var(--muted);}
+.empty{padding:28px;text-align:center;color:var(--muted);}
+.row-actions{white-space:nowrap;}
+.hidden{display:none;}
+.lines{font-size:12px;color:var(--muted);margin-top:4px;}
+.err-text{color:var(--red);font-size:13px;margin-top:8px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
+.kpi{background:#fafbfc;border:1px solid var(--border);border-radius:10px;padding:14px;}
+.kpi .k{font-size:11px;color:var(--muted);font-weight:600;}
+.kpi .v{font-size:20px;font-weight:700;color:var(--primary-dark);margin-top:4px;}
