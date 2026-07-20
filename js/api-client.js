@@ -119,6 +119,12 @@
   const me = () => api("/api/me");
 
   const listClients = () => api("/api/clients").then((d) => d.clients || []);
+  const createClient = (name, useMf) => api("/api/clients", { method: "POST", body: { name, useMf } }).then((d) => d.client);
+
+  const trialBalance = (clientId, period) =>
+    api(`/api/reports/trial-balance?clientId=${encodeURIComponent(clientId)}&period=${encodeURIComponent(period || "")}`);
+  const trialBalanceAdvice = (clientId, period) =>
+    api("/api/reports/advice", { method: "POST", body: { clientId, period } });
 
   const reprocessDocument = (documentId) =>
     api("/api/documents/process", { method: "POST", body: { documentId } });
@@ -207,8 +213,8 @@
   window.API = {
     config, login, logout, refresh, getToken,
     isLoggedIn, currentEmail,
-    api, me, listClients, listJournals, listDocuments,
+    api, me, listClients, createClient, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,
-    mfStatus, mfConnectUrl,
+    mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
   };
 })();
