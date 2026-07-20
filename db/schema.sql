@@ -33,9 +33,14 @@ create table if not exists public.memberships (
   tenant_id   uuid not null references public.tenants(id) on delete cascade,
   role        text not null check (role in ('admin','staff','client')),
   client_id   uuid,  -- role='client' のとき必須（clients.id を参照、循環FKは後で）
-  created_at  timestamptz not null default now(),
-  unique (user_id, tenant_id, coalesce(client_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  created_at  timestamptz not null default now()
 );
+
+-- 一意性: (user_id, tenant_id, client_id)。client_id が NULL の行も1件に絞るため
+-- coalesce で NULL をゼロUUIDに寄せた「式インデックス」で表現する。
+-- （テーブル定義内の UNIQUE 制約には式を書けないため、ユニークインデックスで実現）
+create unique index if not exists uq_memberships_identity
+  on public.memberships (user_id, tenant_id, coalesce(client_id, '00000000-0000-0000-0000-000000000000'::uuid));
 
 create index if not exists idx_memberships_user on public.memberships(user_id);
 create index if not exists idx_memberships_tenant on public.memberships(tenant_id);
