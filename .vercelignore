@@ -23,11 +23,8 @@ backup/
 # ローカル開発成果物
 node_modules/
 
-# Phase1 API（環境変数の準備ができるまで Vercel デプロイから一時除外。リポジトリには残る）
-api/
-lib/
+# DBスキーマは公開配信不要（Supabase側で手動適用するため）
 db/
-package.json
 
 # その他Markdown
 *.md

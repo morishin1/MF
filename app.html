@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経理処理（実データ版） - KessanPilot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <style>
+    :root{
+      --primary:#3182ce; --primary-dark:#1e3a5f; --border:#e2e8f0; --text:#1a202c;
+      --muted:#718096; --bg:#f5f7fb; --green:#2f855a; --orange:#c05621; --red:#c53030;
+      --soft:#f0f5ff;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);color:var(--text);}
+    .topbar{background:white;border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+    .brand{font-weight:700;color:var(--primary-dark);font-size:16px;display:flex;align-items:center;gap:8px;}
+    .brand .tag{font-size:11px;background:var(--soft);color:var(--primary);border-radius:6px;padding:2px 8px;font-weight:600;}
+    .who{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:12px;}
+    .wrap{max-width:960px;margin:0 auto;padding:24px 20px 80px;}
+    .card{background:white;border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:18px;}
+    .card h2{font-size:15px;font-weight:700;color:var(--primary-dark);margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+    .card h2 .n{width:24px;height:24px;border-radius:50%;background:var(--primary);color:white;display:inline-flex;align-items:center;justify-content:center;font-size:13px;}
+    label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;}
+    input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:white;}
+    .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+    .btn-primary{background:var(--primary);color:white;}
+    .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+    .btn-secondary{background:#edf2f7;color:var(--primary-dark);}
+    .btn-approve{background:var(--green);color:white;padding:6px 12px;font-size:13px;}
+    .btn-sm{padding:6px 12px;font-size:13px;}
+    .material-symbols-outlined{font-variation-settings:'opsz' 20;vertical-align:middle;}
+    .icon-inline{font-size:18px;margin-right:2px;}
+    .banner{border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:18px;display:flex;gap:8px;align-items:flex-start;}
+    .banner.info{background:#ebf8ff;border:1px solid #bee3f8;color:#2c5282;}
+    .banner.warn{background:#fffaf0;border:1px solid #fbd38d;color:#975a16;}
+    .banner.err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;}
+    .banner.ok{background:#f0fff4;border:1px solid #c6f6d5;color:#276749;}
+    .drop{border:2px dashed #cbd5e0;border-radius:10px;padding:26px;text-align:center;color:var(--muted);background:#fafbfc;cursor:pointer;transition:.15s;}
+    .drop:hover,.drop.hot{border-color:var(--primary);background:var(--soft);}
+    .steps{display:flex;gap:6px;margin:14px 0 0;flex-wrap:wrap;}
+    .step{font-size:12px;padding:5px 10px;border-radius:20px;background:#edf2f7;color:var(--muted);display:flex;align-items:center;gap:5px;}
+    .step.active{background:var(--primary);color:white;}
+    .step.done{background:#c6f6d5;color:#276749;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}
+    th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+    .pill{display:inline-block;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;}
+    .pill.draft{background:#fef5e7;color:#975a16;}
+    .pill.approved{background:#e6fffa;color:#234e52;}
+    .pill.sent{background:#c6f6d5;color:#276749;}
+    .pill.rejected,.pill.error{background:#fed7d7;color:#c53030;}
+    .conf{font-size:11px;font-weight:700;}
+    .conf.high{color:var(--green);} .conf.mid{color:var(--orange);} .conf.low{color:var(--red);}
+    .tabs{display:flex;gap:4px;margin-bottom:12px;}
+    .tab{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);background:#edf2f7;}
+    .tab.active{background:var(--primary);color:white;}
+    .muted{color:var(--muted);}
+    .empty{padding:28px;text-align:center;color:var(--muted);}
+    .row-actions{white-space:nowrap;}
+    .hidden{display:none;}
+    .lines{font-size:12px;color:var(--muted);margin-top:4px;}
+    .err-text{color:var(--red);font-size:13px;margin-top:8px;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">KessanPilot <span class="tag">実データ版</span></div>
+  <div class="who">
+    <span id="who-email"></span>
+    <button id="logout-btn" class="btn btn-secondary btn-sm hidden" onclick="doLogout()">
+      <span class="material-symbols-outlined icon-inline">logout</span>ログアウト
+    </button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div id="env-banner"></div>
+
+  <!-- ログイン -->
+  <div id="login-view" class="card hidden" style="max-width:420px;margin:40px auto;">
+    <h2><span class="material-symbols-outlined">login</span>ログイン</h2>
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>メールアドレス</label>
+      <input id="login-email" type="email" placeholder="you@example.com" autocomplete="username">
+    </div>
+    <div class="form-field" style="margin-bottom:16px;">
+      <label>パスワード</label>
+      <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;" onclick="doLogin()">ログイン</button>
+    <div id="login-err" class="err-text"></div>
+  </div>
+
+  <!-- メイン -->
+  <div id="app-view" class="hidden">
+
+    <!-- 取引先選択 -->
+    <div class="card">
+      <h2><span class="n">1</span>取引先（顧問先）を選ぶ</h2>
+      <select id="client-select" onchange="onClientChange()"></select>
+      <div id="client-note" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    </div>
+
+    <!-- アップロード -->
+    <div class="card">
+      <h2><span class="n">2</span>書類をアップロード → AIが仕訳</h2>
+      <div id="drop" class="drop">
+        <span class="material-symbols-outlined" style="font-size:32px;color:var(--primary);">upload_file</span>
+        <div style="margin-top:8px;font-weight:600;color:var(--text);">クリックして選択、またはここにドラッグ</div>
+        <div style="font-size:12px;margin-top:4px;">PDF / 画像（JPG・PNG）/ Excel（.xlsx・.xls）/ CSV ・ 10MBまで</div>
+        <input id="file-input" type="file" class="hidden"
+               accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.xlsx,.xls,.csv,application/pdf,image/*,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+      </div>
+      <div id="upload-steps" class="steps hidden">
+        <span class="step" data-s="uploading"><span class="material-symbols-outlined" style="font-size:14px;">cloud_upload</span>アップロード</span>
+        <span class="step" data-s="recognizing"><span class="material-symbols-outlined" style="font-size:14px;">smart_toy</span>AI仕訳中</span>
+        <span class="step" data-s="done"><span class="material-symbols-outlined" style="font-size:14px;">check</span>完了</span>
+      </div>
+      <div id="upload-err" class="err-text"></div>
+      <div id="recognize-result"></div>
+    </div>
+
+    <!-- 仕訳一覧 & 承認 -->
+    <div class="card">
+      <h2><span class="n">3</span>仕訳を確認して承認 → MFへ連動</h2>
+      <div class="tabs">
+        <div class="tab active" data-status="draft" onclick="setStatus('draft')">確認待ち（下書き）</div>
+        <div class="tab" data-status="approved" onclick="setStatus('approved')">承認済み</div>
+        <div class="tab" data-status="sent" onclick="setStatus('sent')">MF登録済み</div>
+      </div>
+      <div id="journal-list"><div class="empty">読み込み中…</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/api-client.js"></script>
+<script>
+  // ---- 表示ユーティリティ ----
+  function fmtYen(v){ if(v===null||v===undefined||isNaN(v))return "—"; return "¥"+Math.round(v).toLocaleString("ja-JP"); }
+  function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  function el(id){ return document.getElementById(id); }
+
+  let currentClientId = null;
+  let currentStatus = "draft";
+
+  // ---- 起動: env確認 → ログイン状態でビュー切替 ----
+  (async function init(){
+    let health = null;
+    try { health = await (await fetch("/api/health",{cache:"no-store"})).json(); } catch(_){}
+    renderEnvBanner(health);
+
+    if (health && (!health.env?.supabase || !health.env?.anthropic)) {
+      // 環境未整備でもUI自体は見せる（ログインは失敗する旨バナーで案内済み）
+    }
+
+    if (API.isLoggedIn()) {
+      showApp();
+    } else {
+      showLogin();
+    }
+  })();
+
+  function renderEnvBanner(health){
+    const b = el("env-banner");
+    if (!health) {
+      b.innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">warning</span>
+        <div>APIに接続できませんでした（<code>/api/health</code>）。Vercel等にデプロイされた環境で開いてください。ローカルの <code>file://</code> 直開きでは動作しません。</div></div>`;
+      return;
+    }
+    const s = health.env?.supabase, a = health.env?.anthropic;
+    if (s && a) {
+      b.innerHTML = `<div class="banner ok"><span class="material-symbols-outlined">check_circle</span>
+        <div>サーバ準備OK（Supabase・Anthropic 設定済み）。MF実送信は <code>MF_API_BASE</code> 設定後に有効化されます。</div></div>`;
+    } else {
+      const miss = [!s?"Supabase（SUPABASE_URL / ANON / SERVICE_ROLE）":null, !a?"Anthropic（ANTHROPIC_API_KEY）":null].filter(Boolean).join(" / ");
+      b.innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">warning</span>
+        <div>未設定の環境変数があります: <b>${esc(miss)}</b>。設定するとログイン・AI仕訳が有効になります。</div></div>`;
+    }
+  }
+
+  function showLogin(){ el("login-view").classList.remove("hidden"); el("app-view").classList.add("hidden");
+    el("logout-btn").classList.add("hidden"); el("who-email").textContent=""; }
+  function showApp(){ el("login-view").classList.add("hidden"); el("app-view").classList.remove("hidden");
+    el("logout-btn").classList.remove("hidden"); el("who-email").textContent = API.currentEmail() || "";
+    loadClients(); }
+
+  // ---- ログイン ----
+  async function doLogin(){
+    const btn = el("login-btn"); el("login-err").textContent="";
+    const email = el("login-email").value.trim(), pw = el("login-password").value;
+    if(!email||!pw){ el("login-err").textContent="メールとパスワードを入力してください"; return; }
+    btn.disabled=true; btn.textContent="ログイン中…";
+    try { await API.login(email, pw); showApp(); }
+    catch(e){ el("login-err").textContent = e.message || "ログインに失敗しました"; }
+    finally { btn.disabled=false; btn.textContent="ログイン"; }
+  }
+  function doLogout(){ API.logout(); showLogin(); }
+
+  // ---- 取引先 ----
+  async function loadClients(){
+    const sel = el("client-select");
+    try {
+      const clients = await API.listClients();
+      if(!clients.length){ sel.innerHTML=`<option value="">（アクセスできる取引先がありません）</option>`;
+        el("client-note").textContent="このユーザーに紐づく顧問先がありません。事務所側で clients / memberships を登録してください。"; return; }
+      sel.innerHTML = clients.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}${c.accounting_software?`（${esc(c.accounting_software)}）`:""}</option>`).join("");
+      currentClientId = clients[0].id;
+      el("client-note").textContent="";
+      loadJournals();
+    } catch(e){
+      sel.innerHTML=`<option value="">取得失敗</option>`;
+      el("client-note").innerHTML = `<span class="err-text">取引先の取得に失敗: ${esc(e.message)}</span>`;
+    }
+  }
+  function onClientChange(){ currentClientId = el("client-select").value; el("recognize-result").innerHTML=""; loadJournals(); }
+
+  // ---- アップロード → AI仕訳 ----
+  const drop = el("drop"), fileInput = el("file-input");
+  drop.addEventListener("click", ()=>fileInput.click());
+  drop.addEventListener("dragover", e=>{e.preventDefault();drop.classList.add("hot");});
+  drop.addEventListener("dragleave", ()=>drop.classList.remove("hot"));
+  drop.addEventListener("drop", e=>{e.preventDefault();drop.classList.remove("hot"); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);});
+  fileInput.addEventListener("change", ()=>{ if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+  function markStep(phase){
+    const order=["uploading","recognizing","done"]; const idx=order.indexOf(phase);
+    document.querySelectorAll("#upload-steps .step").forEach(s=>{
+      const i=order.indexOf(s.dataset.s); s.classList.remove("active","done");
+      if(i<idx) s.classList.add("done"); else if(i===idx) s.classList.add(phase==="done"?"done":"active");
+    });
+  }
+
+  async function handleFile(file){
+    if(!currentClientId){ el("upload-err").textContent="先に取引先を選択してください"; return; }
+    el("upload-err").textContent=""; el("recognize-result").innerHTML="";
+    el("upload-steps").classList.remove("hidden");
+    try {
+      const res = await API.uploadAndRecognize(currentClientId, file, markStep);
+      renderRecognizeResult(res.journal);
+      if(currentStatus!=="draft"){ setStatus("draft"); } else { loadJournals(); }
+    } catch(e){
+      el("upload-err").textContent = `失敗: ${e.message}${e.detail?`（${e.detail}）`:""}`;
+      markStep("");
+    }
+    fileInput.value="";
+  }
+
+  function renderRecognizeResult(j){
+    if(!j){ return; }
+    el("recognize-result").innerHTML = `
+      <div class="banner ok" style="margin-top:14px;"><span class="material-symbols-outlined">smart_toy</span>
+        <div>AIが仕訳ドラフトを作成しました（確認待ちに追加）。<b>${esc(j.partner_name||"—")}</b> ／
+        ${esc(j.txn_date||"日付不明")} ／ ${fmtYen(j.total_amount)} ／
+        <span class="conf ${esc(j.confidence)}">確度:${esc(j.confidence)}</span></div></div>`;
+  }
+
+  // ---- 仕訳一覧 & 承認 ----
+  function setStatus(s){
+    currentStatus=s;
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.status===s));
+    loadJournals();
+  }
+
+  async function loadJournals(){
+    const list = el("journal-list");
+    if(!currentClientId){ list.innerHTML=`<div class="empty">取引先を選択してください</div>`; return; }
+    list.innerHTML=`<div class="empty">読み込み中…</div>`;
+    try {
+      const rows = await API.listJournals(currentClientId, currentStatus);
+      if(!rows.length){ list.innerHTML=`<div class="empty">${statusLabel(currentStatus)}の仕訳はありません</div>`; return; }
+      list.innerHTML = `<table><thead><tr>
+        <th>日付</th><th>取引先 / 摘要</th><th>金額</th><th>税区分</th><th>確度</th><th>状態</th><th></th>
+        </tr></thead><tbody>${rows.map(rowHtml).join("")}</tbody></table>`;
+    } catch(e){
+      list.innerHTML=`<div class="empty"><span class="err-text">取得失敗: ${esc(e.message)}</span></div>`;
+    }
+  }
+
+  function rowHtml(j){
+    const lines = (j.lines||[]).map(l=>`${esc(l.side==="debit"?"借":"貸")} ${esc(l.account||"")} ${fmtYen(l.amount)}`).join(" ／ ");
+    const canApprove = j.status==="draft";
+    return `<tr>
+      <td>${esc(j.txn_date||"—")}</td>
+      <td><div>${esc(j.partner_name||"—")}</div><div class="lines">${esc(j.description||"")}<br>${lines}</div></td>
+      <td>${fmtYen(j.total_amount)}</td>
+      <td>${esc(j.tax_category||"—")}</td>
+      <td><span class="conf ${esc(j.confidence)}">${esc(j.confidence||"")}</span></td>
+      <td><span class="pill ${esc(j.status)}">${statusLabel(j.status)}</span></td>
+      <td class="row-actions">${canApprove?`<button class="btn btn-approve" onclick="approve('${esc(j.id)}',this)">承認</button>`:""}</td>
+    </tr>`;
+  }
+
+  function statusLabel(s){
+    return {draft:"確認待ち", approved:"承認済み", sent:"MF登録済み", rejected:"却下", error:"エラー"}[s]||s;
+  }
+
+  async function approve(journalId, btn){
+    if(!confirm("この仕訳を承認します。よろしいですか？")) return;
+    btn.disabled=true; btn.textContent="承認中…";
+    try {
+      const res = await API.approveJournal(journalId);
+      if(res.mf?.sent){ toast("承認し、MFへ登録しました"); }
+      else if(res.mf?.reason==="mf_not_configured"){ toast("承認しました（MF連動は未設定のため保留）"); }
+      else if(res.mf?.reason){ toast(`承認しました（MF未送信: ${res.mf.reason}）`); }
+      else { toast("承認しました"); }
+      loadJournals();
+    } catch(e){
+      btn.disabled=false; btn.textContent="承認";
+      alert(`承認に失敗しました: ${e.message}`);
+    }
+  }
+
+  function toast(msg){
+    const t=document.createElement("div");
+    t.textContent=msg;
+    t.style.cssText="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a202c;color:white;padding:12px 20px;border-radius:8px;font-size:14px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.25);";
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 2600);
+  }
+</script>
+
+</body>
+</html>
