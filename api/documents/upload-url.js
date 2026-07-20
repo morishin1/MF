@@ -16,6 +16,11 @@ const ALLOWED_MIME = new Set([
   "image/png",
   "image/heic",
   "image/webp",
+  // 事務が上げる帳票（Excel / CSV）
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel",                                          // .xls
+  "text/csv",                                                          // .csv
+  "application/csv",
 ]);
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 const SIGNED_TTL = 60 * 5;          // 5分

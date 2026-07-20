@@ -9,6 +9,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser, getMemberships } from "../../lib/auth.js";
 import { admin } from "../../lib/supabase.js";
 import { audit } from "../../lib/audit.js";
+import { maybeSendToMf } from "../../lib/mf-adapter.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -55,8 +56,28 @@ export default async function handler(req, res) {
     detail: { idempotencyKey },
   });
 
-  // TODO(Phase3): ここで MFアダプタに送信を投げる
-  //   await sendToMf(updated);
+  // 承認後、そのまま MF へ連動を試みる（Phase3）。
+  // MF 未構成のうちは何もせず status='approved' のまま返す（安全に停止）。
+  // TODO(Phase3): accounting_credentials から officeUuid / accessToken を復号取得して渡す。
+  const mf = await maybeSendToMf(updated, { officeUuid: null, accessToken: null });
 
-  return json(res, 200, { journal: updated });
+  if (mf.sent) {
+    const { data: sentJrn, error: e3 } = await sb
+      .from("journals")
+      .update({ status: "sent", external_id: mf.external_id, sent_at: new Date().toISOString() })
+      .eq("id", jrn.id)
+      .select()
+      .single();
+    if (e3) return json(res, 500, { error: "mf_sent_but_update_failed", detail: e3.message });
+
+    await audit({
+      tenantId: jrn.tenant_id, clientId: jrn.client_id, actorId: user.id,
+      action: "mf.send", target: `journal:${jrn.id}`,
+      detail: { externalId: mf.external_id, idempotencyKey },
+    });
+    return json(res, 200, { journal: sentJrn, mf: { sent: true } });
+  }
+
+  // 未送信（MF未構成など）: 承認までで確定
+  return json(res, 200, { journal: updated, mf: { sent: false, reason: mf.reason } });
 }

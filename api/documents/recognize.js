@@ -13,6 +13,7 @@ import { requireUser, getMemberships, canAccessClient } from "../../lib/auth.js"
 import { admin } from "../../lib/supabase.js";
 import { audit } from "../../lib/audit.js";
 import { recognizeDocument } from "../../lib/ai.js";
+import { isSpreadsheet, extractSpreadsheetText } from "../../lib/extract.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -48,22 +49,23 @@ export default async function handler(req, res) {
     const r = await fetch(signed.signedUrl);
     if (!r.ok) throw new Error("download_failed: " + r.status);
     const buf = Buffer.from(await r.arrayBuffer());
-    const base64 = buf.toString("base64");
 
     // 2) ヒント（既存マスタの一部を渡して命中率を上げる）
-    const [{ data: accs }, { data: parts }] = await Promise.all([
-      // 将来 master テーブルを置く想定。現状は空でOK（hintsなしで動く）
-      sb.from("clients").select("id").eq("id", doc.client_id).limit(0),
-      sb.from("clients").select("id").eq("id", doc.client_id).limit(0),
-    ]);
     const hints = {}; // 仕様確定後に accounts/partners を渡す
 
     // 3) Claude に推論依頼
-    const draft = await recognizeDocument({
-      pdfBase64: base64,
-      mimeType: doc.mime_type,
-      hints,
-    });
+    //    Excel/CSV はサーバ側で表テキスト化して渡す。PDF/画像は base64 のまま渡す。
+    const draft = isSpreadsheet(doc.mime_type)
+      ? await recognizeDocument({
+          mimeType: doc.mime_type,
+          textContent: extractSpreadsheetText(buf),
+          hints,
+        })
+      : await recognizeDocument({
+          pdfBase64: buf.toString("base64"),
+          mimeType: doc.mime_type,
+          hints,
+        });
 
     // 4) journals に保存
     const { data: jrn, error: e3 } = await sb.from("journals").insert({
