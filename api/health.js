@@ -3,6 +3,7 @@ export default function handler(req, res) {
   const env = {
     supabase: !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
+    drive: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL) && !!process.env.GDRIVE_ROOT_FOLDER_ID,
   };
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.statusCode = 200;

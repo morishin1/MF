@@ -151,6 +151,10 @@
   const approveJournal = (journalId) =>
     api("/api/journals/approve", { method: "POST", body: { journalId } });
 
+  // ---- Google Drive 連携 ----
+  const driveStatus = (clientId) => api(`/api/drive/status?clientId=${encodeURIComponent(clientId)}`);
+  const driveSync = (clientId, limit) => api("/api/drive/sync", { method: "POST", body: { clientId, limit } });
+
   // ---- MF連携 ----
   const mfStatus = (clientId) => api(`/api/mf/status?clientId=${encodeURIComponent(clientId)}`);
   const mfConnectUrl = (clientId) =>
@@ -216,5 +220,6 @@
     api, me, listClients, createClient, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
+    driveStatus, driveSync,
   };
 })();
