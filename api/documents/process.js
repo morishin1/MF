@@ -13,6 +13,7 @@ import { admin } from "../../lib/supabase.js";
 import { audit } from "../../lib/audit.js";
 import { classifyDocument, recognizeDocument } from "../../lib/ai.js";
 import { isSpreadsheet, extractSpreadsheetText } from "../../lib/extract.js";
+import { syncDocumentToDrive, syncMonthlyCsv } from "../../lib/drive-sync.js";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -31,6 +32,9 @@ export default async function handler(req, res) {
     .select("id, tenant_id, client_id, filename, mime_type, storage_path, status, uploaded_at")
     .eq("id", documentId).single();
   if (e1 || !doc) return json(res, 404, { error: "document_not_found" });
+
+  const { data: client } = await sb.from("clients").select("name").eq("id", doc.client_id).single();
+  const clientName = client?.name || "未設定";
 
   const memberships = await getMemberships(user.id);
   if (!canAccessClient(memberships, doc.client_id, doc.tenant_id)) {
@@ -79,7 +83,14 @@ export default async function handler(req, res) {
       // 安全装置: 50万円超は自動承認させないため confidence=low
       const confidence = total > 500000 ? "low" : (draft.confidence || "mid");
 
+      // 自動承認: 確度が low 以外はそのまま承認済みにする。
+      // low（＝新規パターン / 50万円超 など）は人の確認を残す。
+      const autoApprove = confidence !== "low";
+      const jid = crypto.randomUUID();
+      const now = new Date().toISOString();
+
       const { data: jrow, error: je } = await sb.from("journals").insert({
+        id: jid,
         tenant_id: doc.tenant_id,
         client_id: doc.client_id,
         document_id: doc.id,
@@ -91,11 +102,14 @@ export default async function handler(req, res) {
         confidence,
         lines: Array.isArray(draft.lines) ? draft.lines : [],
         ai_note: draft.ai_note || null,
-        status: "draft",
+        status: autoApprove ? "approved" : "draft",
+        approved_by: autoApprove ? user.id : null,
+        approved_at: autoApprove ? now : null,
+        idempotency_key: autoApprove ? `kp_${doc.client_id}_${jid}` : null,
       }).select().single();
       if (je) throw new Error("journal_insert: " + je.message);
       journal = jrow;
-      docUpdate.status = "ready";
+      docUpdate.status = autoApprove ? "approved" : "ready";
     } else {
       docUpdate.status = "filed";
     }
@@ -110,7 +124,22 @@ export default async function handler(req, res) {
       detail: { doc_type: docUpdate.doc_type, period, is_accounting: docUpdate.is_accounting, journalId: journal?.id },
     });
 
-    return json(res, 200, { document: updated, journal });
+    // --- 3) Google Drive へ自動保存（未設定・失敗でも処理は成功扱い） ---
+    let drive = null;
+    try {
+      const r = await syncDocumentToDrive(sb, { doc: { ...updated }, clientName, buffer: buf });
+      if (r.link || r.fileId) {
+        drive = r;
+        updated.drive_file_id = r.fileId;
+        updated.drive_link = r.link;
+        // 仕訳一覧CSVも同じ月フォルダで最新化
+        try { await syncMonthlyCsv(sb, { clientId: doc.client_id, clientName, period }); } catch (_) {}
+      }
+    } catch (e) {
+      drive = { error: String(e?.message || e) };
+    }
+
+    return json(res, 200, { document: updated, journal, drive });
   } catch (err) {
     await sb.from("documents").update({ status: "error" }).eq("id", doc.id);
     return json(res, 500, { error: "process_failed", detail: String(err?.message || err) });

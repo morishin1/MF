@@ -34,8 +34,9 @@
     <h2><span class="material-symbols-outlined">menu_book</span>このツールでできること</h2>
     <p class="lead">
       書類（請求書・領収書など）を<b>アップロードするだけ</b>で、AIが「何の書類か」を判定して<b>月ごとに自動で整理</b>します。
-      会計に関係する書類は、AIが<b>仕訳の下書き</b>まで作り、管理者が確認して会計処理します。<br>
-      むずかしい操作は不要です。<b>集めた書類をここに上げていくだけ</b>でOKです。
+      会計に関係する書類は<b>そのまま自動で仕訳</b>され、<b>Google Driveの「取引先 / 月 / 種別」フォルダにも自動保存</b>されます。<br>
+      承認作業は不要です。むずかしい操作もありません。<b>集めた書類をここに上げていくだけ</b>でOKです。<br>
+      ※高額（50万円超）や新しいパターンの取引だけは、念のため管理者が確認します。
     </p>
   </div>
 
@@ -62,7 +63,7 @@
       <div class="num">4</div>
       <div class="body"><b>AIの判定を確認する</b><br>
         数秒で「種別・対象月・要約」が表示され、下の一覧に追加されます。<br>
-        会計書類なら「仕訳作成済（承認待ち）」となり、あとは管理者が承認します。あなたの作業はここまでです。</div>
+        会計書類なら自動で仕訳され「仕訳済」に、Driveへの保存も同時に完了します。あなたの作業はここまでです。</div>
     </div>
   </div>
 
@@ -72,9 +73,9 @@
       <thead><tr><th>表示</th><th>意味</th></tr></thead>
       <tbody>
         <tr><td><span class="pill recognizing">処理中</span></td><td>AIが判定している最中です（数秒で終わります）</td></tr>
-        <tr><td><span class="pill ready">仕訳作成済（承認待ち）</span></td><td>会計書類として仕訳の下書きができました。管理者の承認待ちです</td></tr>
-        <tr><td><span class="pill filed">整理完了</span></td><td>会計に関係ない書類として、その月に保管しました</td></tr>
-        <tr><td><span class="pill approved">承認済</span></td><td>管理者が仕訳を承認しました</td></tr>
+        <tr><td><span class="pill approved">仕訳済</span></td><td>自動で仕訳し、Driveの月別フォルダに保存しました（作業不要）</td></tr>
+        <tr><td><span class="pill filed">整理完了</span></td><td>会計に関係ない書類として、その月のフォルダに保管しました</td></tr>
+        <tr><td><span class="pill ready">要確認</span></td><td>高額（50万円超）や新しいパターンのため、管理者が確認します</td></tr>
         <tr><td><span class="pill sent">MF登録済</span></td><td>マネーフォワードへ登録されました</td></tr>
         <tr><td><span class="pill error">エラー</span></td><td>処理に失敗しました。<b>「再処理」ボタン</b>を押すとやり直せます</td></tr>
       </tbody>
@@ -101,8 +102,12 @@
       <div class="a">AIが書類に書かれた日付を読み取り、その月に振り分けます（例：7月に上げた6月の領収書は「6月分」）。日付が読めない場合はアップロードした月になります。</div>
     </div>
     <div class="faq">
-      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>仕訳の承認や会計ソフト（MF）への登録は誰がやる？</div>
-      <div class="a">管理者が行います。メンバーの方は<b>書類を上げるだけ</b>でOKです。</div>
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>アップロードしたファイルはどこに保存される？</div>
+      <div class="a">Google Driveの <b>取引先 / 対象月 / 種別</b> のフォルダに自動保存されます（フォルダは自動で作られます）。一覧の「Driveで開く」から確認できます。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>承認や会計ソフト（MF）への登録は誰がやる？</div>
+      <div class="a">通常は<b>自動</b>で仕訳まで完了します。「要確認」のものだけ管理者がチェックします。メンバーの方は<b>書類を上げるだけ</b>でOKです。</div>
     </div>
     <div class="faq">
       <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>間違ったファイルを上げてしまった／内容がおかしい</div>

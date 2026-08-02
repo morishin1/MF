@@ -55,7 +55,7 @@
       <h2><span class="n">2</span>書類をアップロード（AIが種別を判定）</h2>
       <div class="banner info" style="margin-bottom:14px;">
         <span class="material-symbols-outlined">lightbulb</span>
-        <div>請求書・領収書はもちろん、契約書・名刺など<b>会計に関係ない書類でもOK</b>。AIが「何の書類か」を判定して<b>月ごとに整理</b>します。会計書類は仕訳の下書きも自動作成され、管理者が確認します。<br><a href="help.html" style="color:var(--primary);font-weight:600;">▶ 詳しい使い方ガイドを見る</a></div>
+        <div>請求書・領収書はもちろん、契約書・名刺など<b>会計に関係ない書類でもOK</b>。AIが「何の書類か」を判定して<b>月ごとに整理</b>します。会計書類は<b>自動で仕訳</b>され、Google Driveの月別フォルダにも<b>自動保存</b>されます。<br><a href="help.html" style="color:var(--primary);font-weight:600;">▶ 詳しい使い方ガイドを見る</a></div>
       </div>
       <div id="drop" class="drop">
         <span class="material-symbols-outlined" style="font-size:32px;color:var(--primary);">upload_file</span>
@@ -78,8 +78,9 @@
       <h2><span class="n">3</span>アップロードした書類（状況つき）</h2>
       <div class="muted" style="font-size:12px;margin-bottom:10px;">
         状況の見方：<span class="pill recognizing">処理中</span>AI判定中／
-        <span class="pill ready">仕訳作成済（承認待ち）</span>会計書類→管理者が承認／
-        <span class="pill filed">整理完了</span>非会計書類→保管のみ／
+        <span class="pill approved">仕訳済</span>自動で仕訳＋Drive保存まで完了／
+        <span class="pill filed">整理完了</span>非会計書類→Driveに保管／
+        <span class="pill ready">要確認</span>高額・新規など管理者チェック待ち／
         <span class="pill error">エラー</span>失敗（「再処理」で再実行）
       </div>
       <div class="inline-controls" style="margin-bottom:14px;">
@@ -116,7 +117,7 @@
   };
   const DOC_STATUS_LABEL = {
     uploaded:"アップロード済", recognizing:"処理中", classified:"分類済",
-    ready:"仕訳作成済（承認待ち）", filed:"整理完了", approved:"承認済", sent:"MF登録済", error:"エラー",
+    ready:"要確認（管理者チェック）", filed:"整理完了", approved:"仕訳済", sent:"MF登録済", error:"エラー",
   };
 
   function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
@@ -213,13 +214,16 @@
     if(!doc) return;
     const type=DOC_TYPE_LABEL[doc.doc_type]||doc.doc_type;
     const extra = journal
-      ? `会計書類として<b>仕訳ドラフトを作成</b>しました（管理者の承認待ち）。`
+      ? (journal.status==="approved"
+          ? `会計書類として<b>自動で仕訳</b>しました。`
+          : `会計書類として仕訳しました。<b>高額・新規のため管理者の確認待ち</b>です。`)
       : `<b>${esc(doc.period||"")}分</b>の書類として整理しました。`;
     el("process-result").innerHTML=`
       <div class="banner ok" style="margin-top:14px;"><span class="material-symbols-outlined">smart_toy</span>
         <div>AI判定：<span class="dt ${esc(doc.doc_type)}">${esc(type)}</span>
         ${doc.doc_date?`／ 日付 ${esc(doc.doc_date)}`:""} ／ 対象月 <b>${esc(doc.period||"—")}</b><br>
-        ${esc(doc.ai_summary||"")}<br>${extra}</div></div>`;
+        ${esc(doc.ai_summary||"")}<br>${extra}
+        ${doc.drive_link?`<br><a href="${esc(doc.drive_link)}" target="_blank" rel="noopener" style="color:var(--green);font-weight:600;">Driveに保存しました（開く）</a>`:""}</div></div>`;
   }
 
   // ---- 月次書類一覧 ----
@@ -249,7 +253,7 @@
     return `<tr>
       <td>${esc(d.doc_date||"—")}</td>
       <td><span class="dt ${esc(d.doc_type)}">${esc(type)}</span></td>
-      <td><div><a href="#" onclick="openPreview('${esc(d.id)}');return false;" style="color:var(--primary);font-weight:600;text-decoration:none;"><span class="material-symbols-outlined" style="font-size:15px;">visibility</span> ${esc(d.filename||"")}</a></div><div class="lines">${esc(d.ai_summary||"")}</div></td>
+      <td><div><a href="#" onclick="openPreview('${esc(d.id)}');return false;" style="color:var(--primary);font-weight:600;text-decoration:none;"><span class="material-symbols-outlined" style="font-size:15px;">visibility</span> ${esc(d.filename||"")}</a></div><div class="lines">${esc(d.ai_summary||"")}</div>${d.drive_link?`<div class="lines"><a href="${esc(d.drive_link)}" target="_blank" rel="noopener" style="color:var(--green);font-weight:600;text-decoration:none;"><span class="material-symbols-outlined" style="font-size:14px;">cloud_done</span> Driveで開く</a></div>`:""}</td>
       <td>${esc(d.period||"—")}</td>
       <td><span class="pill ${esc(d.status)}">${esc(DOC_STATUS_LABEL[d.status]||d.status)}</span></td>
       <td class="muted">${esc(fmtDT(d.uploaded_at))}</td>
