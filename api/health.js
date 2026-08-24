@@ -6,10 +6,14 @@ export default function handler(req, res) {
     drive: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL) && !!process.env.GDRIVE_ROOT_FOLDER_ID,
   };
   res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
   res.statusCode = 200;
   res.end(JSON.stringify({
     ok: true,
     service: "kessanpilot-api",
+    // どのビルドが動いているかを画面を開かずに判別するための印
+    assetVersion: "20260824a",
+    features: { documentDelete: true },
     env,
     note: env.supabase && env.anthropic
       ? "ready"
