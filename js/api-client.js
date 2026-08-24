@@ -132,6 +132,10 @@
   const documentPreviewUrl = (documentId) =>
     api(`/api/documents/preview?documentId=${encodeURIComponent(documentId)}`);
 
+  // 誤アップロードの取り消し。DB行・Storage実体・Drive上のコピーをまとめて片付ける。
+  const deleteDocument = (documentId) =>
+    api(`/api/documents?documentId=${encodeURIComponent(documentId)}`, { method: "DELETE" });
+
   const listDocuments = (clientId, { period, docType, status } = {}) => {
     const q = new URLSearchParams();
     if (clientId) q.set("clientId", clientId);
@@ -219,6 +223,7 @@
     isLoggedIn, currentEmail,
     api, me, listClients, createClient, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,
+    deleteDocument,
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
   };

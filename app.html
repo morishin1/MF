@@ -125,6 +125,8 @@
   function thisMonth(){ return new Date().toISOString().slice(0,7); }
 
   let currentClientId = null;
+  let docsById = {};                 // 行の削除確認でファイル名を引くため
+  window.KP_onDocumentDeleted = () => loadDocuments();
 
   (async function init(){
     let health=null;
@@ -237,6 +239,7 @@
     list.innerHTML=`<div class="empty">読み込み中…</div>`;
     try{
       const rows=await API.listDocuments(currentClientId,{period,docType});
+      docsById=Object.fromEntries(rows.map(r=>[r.id,r]));
       if(!rows.length){ list.innerHTML=`<div class="empty">まだ書類がありません。上のエリアからアップロードしてください。</div>`; return; }
       list.innerHTML=`<div class="muted" style="font-size:12px;margin-bottom:8px;">${rows.length}件</div>
         <table><thead><tr>
@@ -257,7 +260,7 @@
       <td>${esc(d.period||"—")}</td>
       <td><span class="pill ${esc(d.status)}">${esc(DOC_STATUS_LABEL[d.status]||d.status)}</span></td>
       <td class="muted">${esc(fmtDT(d.uploaded_at))}</td>
-      <td class="row-actions">${stuck?`<button class="btn btn-secondary btn-sm" onclick="reprocess('${esc(d.id)}',this)">再処理</button>`:""}</td>
+      <td class="row-actions">${stuck?`<button class="btn btn-secondary btn-sm" onclick="reprocess('${esc(d.id)}',this)">再処理</button> `:""}${d.status!=="sent"?`<button class="btn btn-danger btn-sm" onclick="removeDoc('${esc(d.id)}',this)" title="この書類を削除する"><span class="material-symbols-outlined" style="font-size:15px;">delete</span>削除</button>`:""}</td>
     </tr>`;
   }
 
@@ -265,6 +268,13 @@
     btn.disabled=true; btn.textContent="処理中…";
     try{ await API.reprocessDocument(documentId); loadDocuments(); }
     catch(e){ btn.disabled=false; btn.textContent="再処理"; alert(`再処理に失敗: ${e.message}${e.detail?`（${e.detail}）`:""}`); }
+  }
+
+  // 削除（確認ダイアログ〜APIまでは preview.js の共通処理に任せる）
+  async function removeDoc(documentId, btn){
+    btn.disabled=true;
+    const ok=await KP_deleteDocument(documentId, docsById[documentId]?.filename||"");
+    if(!ok) btn.disabled=false;   // 成功時は一覧が再描画されるのでそのまま
   }
 </script>
 

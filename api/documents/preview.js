@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   const sb = admin();
   const { data: doc, error } = await sb
     .from("documents")
-    .select("id, tenant_id, client_id, filename, mime_type, storage_path")
+    .select("id, tenant_id, client_id, filename, mime_type, storage_path, status")
     .eq("id", documentId).single();
   if (error || !doc) return json(res, 404, { error: "document_not_found" });
 
@@ -33,5 +33,5 @@ export default async function handler(req, res) {
     .from("documents").createSignedUrl(doc.storage_path, TTL);
   if (e2) return json(res, 500, { error: "sign_failed", detail: e2.message });
 
-  return json(res, 200, { url: signed.signedUrl, mimeType: doc.mime_type, filename: doc.filename, expiresInSec: TTL });
+  return json(res, 200, { url: signed.signedUrl, mimeType: doc.mime_type, filename: doc.filename, status: doc.status, expiresInSec: TTL });
 }
