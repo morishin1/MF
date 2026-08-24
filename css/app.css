@@ -25,6 +25,8 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
 .btn-secondary{background:#edf2f7;color:var(--primary-dark);}
 .btn-approve{background:var(--green);color:white;padding:6px 12px;font-size:13px;}
+.btn-danger{background:#fff5f5;color:var(--red);border:1px solid #fed7d7;}
+.btn-danger:disabled{opacity:.5;cursor:not-allowed;}
 .btn-sm{padding:6px 12px;font-size:13px;}
 .material-symbols-outlined{font-variation-settings:'opsz' 20;vertical-align:middle;}
 .icon-inline{font-size:18px;margin-right:2px;}
