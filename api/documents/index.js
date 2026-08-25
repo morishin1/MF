@@ -45,11 +45,18 @@ async function deleteDocument(req, res) {
   if (!documentId) return json(res, 400, { error: "invalid_query", required: ["documentId"] });
 
   const sb = admin();
+  // 列名を並べると、未適用のマイグレーションがあるだけで丸ごと失敗する
+  // （drive_file_id など）。* なら存在する列だけが返り、スキーマ差分に強い。
   const { data: doc, error } = await sb
     .from("documents")
-    .select("id, tenant_id, client_id, uploaded_by, filename, mime_type, size_bytes, storage_path, doc_type, doc_date, period, status, drive_file_id, drive_link")
-    .eq("id", documentId).single();
-  if (error || !doc) return json(res, 404, { error: "document_not_found" });
+    .select("*")
+    .eq("id", documentId)
+    .maybeSingle();
+  // 「見つからない」と「クエリが失敗した」は別物。混ぜると原因が追えなくなる。
+  if (error) {
+    return json(res, 500, { error: "db_query_failed", detail: `${error.message}${error.code ? ` (${error.code})` : ""}` });
+  }
+  if (!doc) return json(res, 404, { error: "document_not_found", detail: "指定された書類がデータベースにありません" });
 
   const memberships = await getMemberships(user.id);
   if (!canAccessClient(memberships, doc.client_id, doc.tenant_id)) {
@@ -75,10 +82,12 @@ async function deleteDocument(req, res) {
   // 2) 実体の片付け。ここから先の失敗は「消し残り」でしかないので警告に留める。
   const warnings = [];
 
-  const { error: eStore } = await sb.storage.from("documents").remove([doc.storage_path]);
-  if (eStore) warnings.push({ step: "storage", detail: eStore.message });
+  if (doc.storage_path) {
+    const { error: eStore } = await sb.storage.from("documents").remove([doc.storage_path]);
+    if (eStore) warnings.push({ step: "storage", detail: eStore.message });
+  }
 
-  if (doc.drive_file_id && driveConfigured()) {
+  if (doc.drive_file_id && driveConfigured()) {   // 列が無い環境では undefined になり、そのまま skip
     try {
       await trashFile(doc.drive_file_id);
     } catch (e) {
@@ -93,7 +102,7 @@ async function deleteDocument(req, res) {
       filename: doc.filename, mimeType: doc.mime_type, sizeBytes: doc.size_bytes,
       storagePath: doc.storage_path, docType: doc.doc_type, docDate: doc.doc_date,
       period: doc.period, status: doc.status,
-      driveFileId: doc.drive_file_id, driveLink: doc.drive_link,
+      driveFileId: doc.drive_file_id ?? null, driveLink: doc.drive_link ?? null,
       uploadedBy: doc.uploaded_by,
       deletedJournalIds: (journals || []).map((j) => j.id),
       warnings,

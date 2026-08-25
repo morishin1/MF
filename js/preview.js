@@ -131,7 +131,7 @@
       if (typeof window.KP_onDocumentDeleted === "function") window.KP_onDocumentDeleted(documentId);
       return true;
     } catch (e) {
-      const msg = `削除に失敗しました: ${e.detail || e.message || e}`;
+      const msg = `削除に失敗しました: ${e.message || e}${e.detail ? `\n${e.detail}` : ""}`;
       if (typeof onError === "function") onError(msg); else alert(msg);
       return false;
     }
