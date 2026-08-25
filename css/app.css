@@ -28,6 +28,12 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 .btn-approve{background:var(--green);color:white;padding:6px 12px;font-size:13px;}
 .btn-danger{background:#fff5f5;color:var(--red);border:1px solid #fed7d7;}
 .btn-danger:disabled{opacity:.5;cursor:not-allowed;}
+/* 行内の削除など、普段は主張させたくない操作 */
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;border-radius:6px;background:transparent;color:#a0aec0;cursor:pointer;font-family:inherit;transition:.12s;}
+.icon-btn:hover{background:#fff5f5;color:var(--red);}
+.icon-btn:focus-visible{outline:2px solid var(--red);outline-offset:1px;}
+.icon-btn:disabled{opacity:.35;cursor:not-allowed;}
+.icon-btn:disabled:hover{background:transparent;color:#a0aec0;}
 .btn-sm{padding:6px 12px;font-size:13px;}
 .material-symbols-outlined{font-variation-settings:'opsz' 20;vertical-align:middle;}
 .icon-inline{font-size:18px;margin-right:2px;}

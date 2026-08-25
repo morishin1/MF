@@ -4,6 +4,13 @@
 // 削除に成功すると window.KP_onDocumentDeleted(documentId) を呼ぶので、
 // 各画面はそこで一覧を再読込する。API.documentPreviewUrl / API.deleteDocument に依存。
 (function () {
+  const JS_VERSION = "20260825b";   // このファイル自身の版
+  // 画面のHTMLがどの版か（上部のビルド印から読む）。JSとHTMLの版ズレを検出できる。
+  function htmlVersion() {
+    const t = document.querySelector(".brand .tag.build");
+    return (t && t.textContent.replace("build", "").trim()) || "不明";
+  }
+
   // 開いている書類。削除ボタンの確認文とAPI呼び出しに使う。
   let current = null; // { id, filename, deletable }
 
@@ -19,8 +26,9 @@
           <div id="kp-preview-title" style="font-weight:600;font-size:14px;color:#1a202c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
           <div style="display:flex;gap:10px;align-items:center;flex:0 0 auto;">
             <button id="kp-preview-delete" type="button" onclick="KP_deleteFromPreview()" disabled
-              style="border:1px solid #fed7d7;background:#fff5f5;color:#c53030;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;">
-              <span class="material-symbols-outlined" style="font-size:15px;">delete</span>削除
+              title="削除" aria-label="削除"
+              style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:none;border-radius:6px;background:transparent;color:#a0aec0;cursor:pointer;font-family:inherit;">
+              <span class="material-symbols-outlined" style="font-size:19px;">delete</span>
             </button>
             <a id="kp-preview-open" href="#" target="_blank" rel="noopener" style="font-size:12px;color:#3182ce;font-weight:600;text-decoration:none;">新しいタブで開く</a>
             <button onclick="KP_closePreview()" style="border:none;background:#edf2f7;border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:18px;line-height:1;">×</button>
@@ -50,9 +58,10 @@
     const b = document.getElementById("kp-preview-delete");
     if (!b) return;
     b.disabled = !ok;
-    b.style.opacity = ok ? "1" : ".45";
+    b.style.opacity = ok ? "1" : ".35";
+    b.style.color = ok ? "#c53030" : "#a0aec0";
     b.style.cursor = ok ? "pointer" : "not-allowed";
-    b.title = ok ? "この書類を削除する" : (reason || "");
+    b.title = ok ? "削除" : (reason || "削除できません");
   }
 
   window.KP_closePreview = function () {
@@ -131,7 +140,9 @@
       if (typeof window.KP_onDocumentDeleted === "function") window.KP_onDocumentDeleted(documentId);
       return true;
     } catch (e) {
-      const msg = `削除に失敗しました: ${e.message || e}${e.detail ? `\n${e.detail}` : ""}`;
+      const msg = `削除に失敗しました\n\n理由: ${e.message || e}`
+        + (e.detail ? `\n詳細: ${e.detail}` : "")
+        + `\n\n--- 問い合わせ用 ---\nid: ${documentId}\nhtml: ${htmlVersion()} / js: ${JS_VERSION}`;
       if (typeof onError === "function") onError(msg); else alert(msg);
       return false;
     }
