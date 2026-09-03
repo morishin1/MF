@@ -1,0 +1,161 @@
+/* layout.css — グループウェア共通レイアウト（js/layout.js とセット）
+   css/app.css のトークン（--primary 等）を前提にする。app.css の後に読み込むこと。
+   既存の app.html / admin.html はこのファイルを読み込まないため影響を受けない。 */
+
+/* =============================================================================
+   メンバー: 画面下のタブバー（スマホ優先）
+   ============================================================================= */
+.kp-tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #fff;
+  border-top: 1px solid var(--border);
+  /* iPhone のホームバー分を空ける */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.kp-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 9px 4px 8px;
+  min-height: 56px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  border-top: 2px solid transparent;
+}
+.kp-tab.on {
+  color: var(--primary);
+  border-top-color: var(--primary);
+  background: var(--soft);
+}
+.kp-tab.soon { opacity: .45; cursor: default; }
+
+/* タブバーの高さぶん、本文の下に余白を作る */
+body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
+
+/* =============================================================================
+   管理者: 左サイドメニュー（PC前提）
+   ============================================================================= */
+.kp-sidebar {
+  position: fixed;
+  top: 57px;                /* .topbar の高さぶん下げる */
+  left: 0; bottom: 0;
+  width: 216px;
+  overflow-y: auto;
+  background: #fff;
+  border-right: 1px solid var(--border);
+  padding: 12px 10px;
+  z-index: 15;
+}
+.kp-side-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primary-dark);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.kp-side-item:hover { background: var(--soft); }
+.kp-side-item.on { background: var(--primary); color: #fff; }
+.kp-side-item.soon { color: var(--muted); font-weight: 500; cursor: default; }
+.kp-side-item.soon:hover { background: transparent; }
+.kp-side-item em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  background: #edf2f7;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.kp-has-sidebar .wrap {
+  margin-left: 216px;
+  max-width: none;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* サイドメニューは狭い画面では上部の横スクロールに切り替える */
+@media (max-width: 860px) {
+  .kp-sidebar {
+    position: static;
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 12px;
+  }
+  .kp-side-item { margin-bottom: 0; flex: 0 0 auto; font-size: 12.5px; padding: 8px 12px; }
+  .kp-side-item em { display: none; }
+  .kp-has-sidebar .wrap { margin-left: 0; padding-left: 14px; padding-right: 14px; }
+}
+
+/* =============================================================================
+   ホーム / ダッシュボードのタイル
+   ============================================================================= */
+.kp-greet { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: var(--primary-dark); }
+.kp-greet-sub { margin: 0 0 20px; font-size: 13px; color: var(--muted); }
+
+.kp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kp-tile {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.kp-tile:hover { border-color: var(--primary); }
+.kp-tile .k {
+  font-size: 11.5px; color: var(--muted); font-weight: 600;
+  display: flex; align-items: center; gap: 5px;
+}
+.kp-tile .v {
+  font-size: 26px; font-weight: 700; color: var(--primary-dark);
+  margin-top: 6px; line-height: 1.2;
+}
+.kp-tile .v small { font-size: 13px; font-weight: 600; margin-left: 3px; }
+.kp-tile .s { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.kp-tile.alert { border-color: #fbd38d; background: #fffaf0; }
+.kp-tile.alert .v { color: var(--orange); }
+
+/* まだ実装していない領域。存在は見せるが、期待させない見た目にする */
+.kp-soon {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  background: #fafbfc;
+}
+.kp-soon b { color: var(--text); font-size: 13.5px; display: block; margin-bottom: 3px; }
+.kp-soon-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+@media (max-width: 720px) {
+  .kp-greet { font-size: 18px; }
+  .kp-tiles { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .kp-tile { padding: 13px; }
+  .kp-tile .v { font-size: 22px; }
+}

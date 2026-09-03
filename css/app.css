@@ -78,3 +78,49 @@ th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4p
 .kpi{background:#fafbfc;border:1px solid var(--border);border-radius:10px;padding:14px;}
 .kpi .k{font-size:11px;color:var(--muted);font-weight:600;}
 .kpi .v{font-size:20px;font-weight:700;color:var(--primary-dark);margin-top:4px;}
+
+/* =============================================================================
+   スマートフォン対応
+   要件「メンバー画面はスマホ優先」に対応。既存クラスへ後から効かせるため末尾に置く。
+   このファイルは元々80行で @media が1件も無く、.wrap は max-width:1000px 固定、
+   .topbar は折り返し指定なし、表は横スクロール枠なしだった。
+   ============================================================================= */
+
+/* 表は必ず自前の横スクロール枠に入れ、ページ本体が横に伸びないようにする。
+   新規画面は .table-scroll で囲む。既存3画面は表の親が id 指定なのでそれも拾う。 */
+.table-scroll,
+#doc-list, #journal-list, #tb-result {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 720px) {
+  body { font-size: 14px; }
+
+  .topbar { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+  .brand  { font-size: 15px; }
+  .who    { font-size: 11px; gap: 10px; flex-wrap: wrap; }
+
+  .wrap    { padding: 16px 14px 72px; }
+  .card    { padding: 16px 14px; border-radius: 10px; }
+  .card h2 { font-size: 14px; }
+
+  /* 横並びの絞り込みコントロールを縦積みにする（min-width:150px で潰れるため） */
+  .inline-controls        { flex-direction: column; align-items: stretch; gap: 10px; }
+  .inline-controls > div  { min-width: 0; width: 100%; }
+
+  table   { font-size: 12.5px; }
+  th, td  { padding: 8px 6px; }
+
+  .tabs { gap: 6px; }
+  .tab  { padding: 7px 11px; font-size: 12px; }
+
+  .drop { padding: 20px 14px; }
+}
+
+/* 指で操作する端末ではタップ領域を確保する */
+@media (pointer: coarse) {
+  .btn      { min-height: 44px; }
+  .btn-sm   { min-height: 38px; }
+  .icon-btn { min-width: 40px; min-height: 40px; }
+}

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ホーム - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260903a">
+  <link rel="stylesheet" href="css/layout.css?v=20260903a">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 id="greet" class="kp-greet">読み込み中…</h1>
+  <p id="greet-sub" class="kp-greet-sub"></p>
+
+  <div id="tiles" class="kp-tiles"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">upload_file</span>書類をアップロードする</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 14px;">
+      請求書・領収書はもちろん、契約書や名刺などもそのままどうぞ。AIが種別を判定して月ごとに整理し、
+      会計書類は自動で仕訳します。
+    </p>
+    <a class="btn btn-primary" href="app.html">
+      <span class="material-symbols-outlined icon-inline">upload_file</span>アップロード画面へ
+    </a>
+    <a class="btn btn-secondary" href="help.html" style="margin-left:8px;">
+      <span class="material-symbols-outlined icon-inline">help</span>使い方
+    </a>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">construction</span>これから使えるようになる機能</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 14px;">
+      社内グループウェアを順番に追加しています。準備ができ次第、下のタブから使えるようになります。
+    </p>
+    <div class="kp-soon-grid">
+      <div class="kp-soon"><b>メッセージ</b>1対1・グループでのやりとり、未読と既読、ファイル添付</div>
+      <div class="kp-soon"><b>やること</b>自分の担当タスクと予定を1画面で確認</div>
+      <div class="kp-soon"><b>お知らせ</b>全社・部署からの連絡</div>
+      <div class="kp-soon"><b>入社手続き</b>提出書類の進捗確認</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260903a"></script>
+<script src="js/layout.js?v=20260903a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const thisMonth = () => new Date().toISOString().slice(0, 7);
+
+  KPLayout.init({ active: "home", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    const name = ctx.me?.gw?.employee?.display_name;
+    el("greet").textContent = name ? `${name} さん、おつかれさまです` : "おつかれさまです";
+    el("greet-sub").textContent = new Date().toLocaleDateString("ja-JP", {
+      year: "numeric", month: "long", day: "numeric", weekday: "long",
+    });
+
+    // 社員名簿にまだ登録されていない場合は、その旨を出す（管理者の作業待ち）
+    if (ctx.me?.gw?.available && !ctx.me?.gw?.employee) {
+      el("greet-sub").insertAdjacentHTML("afterend",
+        `<div class="banner warn" style="margin-bottom:18px;">
+           <span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていません。管理者に登録を依頼してください（書類のアップロードは今でも使えます）。</div>
+         </div>`);
+    }
+
+    renderTiles(await loadStats());
+  }
+
+  // 今出せる実データだけを集める。失敗しても画面は壊さない。
+  async function loadStats() {
+    const stats = { month: thisMonth(), total: null, thisMonth: null, needsCheck: null, error: null };
+    try {
+      const clients = await API.listClients();
+      if (!clients.length) { stats.error = "取引先が登録されていません"; return stats; }
+      const clientId = clients[0].id;
+
+      const all = await API.listDocuments(clientId, {});
+      stats.total = all.length;
+      stats.thisMonth = all.filter((d) => d.period === stats.month).length;
+      stats.needsCheck = all.filter((d) => d.status === "ready" || d.status === "error").length;
+    } catch (e) {
+      stats.error = e.message || String(e);
+    }
+    return stats;
+  }
+
+  function renderTiles(s) {
+    if (s.error) {
+      el("tiles").innerHTML =
+        `<div class="banner warn" style="grid-column:1/-1;">
+           <span class="material-symbols-outlined">info</span>
+           <div>書類の状況を取得できませんでした：${esc(s.error)}</div>
+         </div>`;
+      return;
+    }
+    const tile = (href, icon, k, v, unit, s2, cls) => `
+      <a class="kp-tile${cls ? " " + cls : ""}" href="${href}">
+        <div class="k"><span class="material-symbols-outlined" style="font-size:15px;">${icon}</span>${k}</div>
+        <div class="v">${v}${unit ? `<small>${unit}</small>` : ""}</div>
+        <div class="s">${s2}</div>
+      </a>`;
+
+    el("tiles").innerHTML = [
+      tile("app.html", "calendar_month", "今月の書類", s.thisMonth ?? "—", "件", `${esc(s.month)} 分`),
+      tile("app.html", "inventory_2", "書類の合計", s.total ?? "—", "件", "これまでにアップした数"),
+      s.needsCheck
+        ? tile("app.html", "error", "確認が必要", s.needsCheck, "件", "要確認・エラーの書類", "alert")
+        : tile("app.html", "check_circle", "確認が必要", "0", "件", "すべて処理済みです"),
+    ].join("");
+  }
+</script>
+
+</body>
+</html>
