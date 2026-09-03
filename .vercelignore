@@ -16,6 +16,19 @@ docs/
 # 旧デモの退避置き場
 _archive/
 
+# 営業デモ資産（架空の顧問先名・売上高を含むため公開配信しない）
+# リポジトリには残す。再公開が必要なら認証付きの別URLへ置くこと。
+dashboard.html
+journal-approval.html
+closing-check.html
+report-generator.html
+client-report.html
+review.html
+js/mock-data.js
+js/common.js
+js/data-loader.js
+biz/
+
 # 業務データ・バックアップ（gitignore済だが念のため）
 data/
 backup/
