@@ -289,3 +289,20 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
 @media (max-width:720px){
   .kp-bell-panel{ position:fixed; right:12px; left:12px; width:auto; top:56px; }
 }
+
+/* 添付ファイル（メッセージ） */
+.kp-attach{
+  display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:12.5px;
+  background:var(--soft); border-radius:8px; padding:6px 10px;
+}
+.kp-attach span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.kp-attach .icon-btn{ margin-left:auto; }
+
+.kp-bubble .kp-file{
+  display:inline-flex; align-items:center; gap:6px; margin-top:6px;
+  font-size:12.5px; text-decoration:none; color:var(--primary-dark);
+  background:#f4f7fa; border:1px solid var(--border); border-radius:8px; padding:6px 10px;
+  max-width:100%; overflow:hidden;
+}
+.kp-bubble .kp-file:hover{ background:#e9eff5; }
+.kp-bubble .kp-file .material-symbols-outlined{ font-size:17px; color:var(--muted); }

@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260906d">
-  <link rel="stylesheet" href="css/layout.css?v=20260906d">
+  <link rel="stylesheet" href="css/app.css?v=20260906e">
+  <link rel="stylesheet" href="css/layout.css?v=20260906e">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -68,9 +68,16 @@
 
     <div class="card">
       <div id="th-messages" class="kp-chat"><div class="empty">読み込み中…</div></div>
+      <div id="th-attach" class="kp-attach hidden"></div>
       <div class="kp-compose">
+        <label class="icon-btn" title="ファイルを添付" style="cursor:pointer;flex:0 0 auto;">
+          <span class="material-symbols-outlined">attach_file</span>
+          <input type="file" class="hidden" id="th-file"
+                 accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.gif,.csv,.txt,.xlsx,.xls,.docx"
+                 onchange="pickAttachment(this)">
+        </label>
         <textarea id="th-input" rows="2" placeholder="メッセージを入力（Ctrl+Enter で送信）"></textarea>
-        <button class="btn btn-primary" onclick="send()">
+        <button class="btn btn-primary" id="th-send" onclick="send()">
           <span class="material-symbols-outlined icon-inline">send</span>送信
         </button>
       </div>
@@ -79,15 +86,16 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260906d"></script>
-<script src="js/layout.js?v=20260906d"></script>
+<script src="js/api-client.js?v=20260906e"></script>
+<script src="js/layout.js?v=20260906e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   let me = null;
   let threads = [];
-  let current = null;   // 開いているスレッドID
+  let current = null;      // 開いているスレッドID
+  let pending = null;      // 送信待ちの添付 { fileId, name }
 
   KPLayout.init({ active: "messages", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
@@ -183,6 +191,7 @@
   }
 
   async function openThread(id, { push = true } = {}) {
+    if (current !== id) clearAttachment();
     current = id;
     el("view-list").classList.add("hidden");
     el("view-thread").classList.remove("hidden");
@@ -233,7 +242,12 @@
         <div class="kp-bubble-row${mine ? " mine" : ""}">
           <div class="kp-bubble">
             ${mine ? "" : `<div class="who">${esc(nameOf.get(m.sender_id) || "")}</div>`}
-            <div class="body">${esc(m.body)}</div>
+            ${m.body ? `<div class="body">${esc(m.body)}</div>` : ""}
+            ${(m.files || []).map((f) => `
+              <a class="kp-file" href="#" onclick="openAttachment('${esc(f.id)}');return false;">
+                <span class="material-symbols-outlined">${f.mime_type?.startsWith("image/") ? "image" : "description"}</span>
+                ${esc(f.filename)}
+              </a>`).join("")}
             <div class="time">${esc(time)}</div>
           </div>
         </div>`);
@@ -243,15 +257,58 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  // 選んだ時点で預けておき、送信時に本文と結び付ける。
+  // 先に預けることで、大きめのファイルでも送信のときに待たされない。
+  async function pickAttachment(input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || !current) return;
+
+    el("th-attach").classList.remove("hidden");
+    el("th-attach").innerHTML = `<span class="muted">${esc(file.name)} を準備中…</span>`;
+    try {
+      const fileId = await API.uploadMessageFile(current, file);
+      pending = { fileId, name: file.name };
+      renderAttachment();
+    } catch (e) {
+      pending = null;
+      el("th-attach").classList.add("hidden");
+      alert(e.detail || e.message || "添付できませんでした");
+    }
+  }
+
+  function renderAttachment() {
+    const box = el("th-attach");
+    if (!pending) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    box.classList.remove("hidden");
+    box.innerHTML = `
+      <span class="material-symbols-outlined" style="font-size:18px;">attach_file</span>
+      <span>${esc(pending.name)}</span>
+      <button class="icon-btn" title="取り消す" onclick="clearAttachment()">
+        <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+      </button>`;
+  }
+
+  function clearAttachment() { pending = null; renderAttachment(); }
+
+  async function openAttachment(fileId) {
+    try {
+      const { url } = await API.messageFileUrl(fileId);
+      window.open(url, "_blank", "noopener");
+    } catch (e) { alert(e.detail || e.message || "開けませんでした"); }
+  }
+
   async function send() {
     const input = el("th-input");
     const text = input.value.trim();
-    if (!text || !current) return;
+    if ((!text && !pending) || !current) return;
     el("th-msg").textContent = "";
     input.disabled = true;
+    el("th-send").disabled = true;
     try {
-      await API.sendMessage(current, text);
+      await API.sendMessage(current, text, pending?.fileId || null);
       input.value = "";
+      clearAttachment();
       const res = await API.getThread(current);
       renderMessages(res.messages, res.thread.members);
       loadThreads();
@@ -259,6 +316,7 @@
       el("th-msg").textContent = e.detail || e.message || "送信できませんでした";
     } finally {
       input.disabled = false;
+      el("th-send").disabled = false;
       input.focus();
     }
   }

@@ -219,8 +219,29 @@
     api("/api/messages", { method: "POST", body: { kind, memberIds, title } });
   const getThread = (threadId) =>
     api(`/api/messages/thread?threadId=${encodeURIComponent(threadId)}`);
-  const sendMessage = (threadId, body) =>
-    api("/api/messages/thread", { method: "POST", body: { threadId, body } }).then((d) => d.message);
+  const sendMessage = (threadId, body, fileId) =>
+    api("/api/messages/thread", { method: "POST", body: { threadId, body, fileId } }).then((d) => d.message);
+
+  const messageFileUrl = (fileId) =>
+    api(`/api/messages/upload?fileId=${encodeURIComponent(fileId)}`);
+
+  // 添付を先に預けて fileId を得る。そのあと sendMessage に渡すと本文に付く
+  async function uploadMessageFile(threadId, file) {
+    const mimeType = guessMime(file);
+    if (!mimeType) throw new Error("対応していないファイル形式です");
+
+    const signed = await api("/api/messages/upload", {
+      method: "POST",
+      body: { threadId, filename: file.name, mimeType, sizeBytes: file.size },
+    });
+    const put = await fetch(signed.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType, "x-upsert": "true" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return signed.fileId;
+  }
   const markThreadRead = (threadId) =>
     api("/api/messages/thread", { method: "PATCH", body: { threadId } });
 
@@ -364,6 +385,7 @@
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
     listThreads, createThread, getThread, sendMessage, markThreadRead,
+    uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
     uploadProcedureFile, procedureFileUrl,

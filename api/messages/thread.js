@@ -1,5 +1,5 @@
 // GET   /api/messages/thread?threadId=…  … スレッドの本文と参加者
-// POST  /api/messages/thread             … 投稿 { threadId, body }
+// POST  /api/messages/thread             … 投稿 { threadId, body, fileId? }
 // PATCH /api/messages/thread             … 既読にする { threadId }
 //
 // 参照と投稿は RLS が可否を決める（参加者だけ・自分名義だけ）。
@@ -51,6 +51,18 @@ export default async function handler(req, res) {
       return json(res, 500, { error: "db_query_failed", detail: messagesRes.error.message });
     }
 
+    // 添付。メッセージに結び付いたものだけを返す
+    const { data: files } = await sb
+      .from("gw_message_files")
+      .select("id, message_id, filename, mime_type, size_bytes")
+      .eq("thread_id", threadId)
+      .not("message_id", "is", null);
+    const byMessage = new Map();
+    for (const f of files || []) {
+      if (!byMessage.has(f.message_id)) byMessage.set(f.message_id, []);
+      byMessage.get(f.message_id).push(f);
+    }
+
     const members = (membersRes.data || []).map((m) => m.employee || { id: m.employee_id });
     const others = members.filter((m) => m.id !== ctx.employee.id);
     return json(res, 200, {
@@ -61,7 +73,7 @@ export default async function handler(req, res) {
           ? (thread.title || "グループ")
           : (others[0]?.display_name || "（退職者）"),
       },
-      messages: messagesRes.data || [],
+      messages: (messagesRes.data || []).map((m) => ({ ...m, files: byMessage.get(m.id) || [] })),
       me: ctx.employee,
     });
   }
@@ -69,8 +81,10 @@ export default async function handler(req, res) {
   if (req.method === "POST") {
     const body = await readJson(req);
     const text = String(body?.body ?? "").trim();
-    if (!body?.threadId || !text) {
-      return json(res, 400, { error: "invalid_body", required: ["threadId", "body"] });
+    const fileId = body?.fileId || null;
+    // 添付だけを送ることもできる。本文が空でも fileId があれば通す
+    if (!body?.threadId || (!text && !fileId)) {
+      return json(res, 400, { error: "invalid_body", required: ["threadId", "body または fileId"] });
     }
     if (text.length > MAX_BODY) {
       return json(res, 400, { error: "body_too_long", detail: `${MAX_BODY}文字までです` });
@@ -92,6 +106,23 @@ export default async function handler(req, res) {
     }
 
     const sbAdmin = admin();
+
+    // 預けてあった添付をこのメッセージに結び付ける。
+    // 同じスレッドの、まだどのメッセージにも付いていないものだけを対象にする
+    let attached = null;
+    if (fileId) {
+      const { data: f } = await sbAdmin
+        .from("gw_message_files")
+        .update({ message_id: data.id })
+        .eq("id", fileId)
+        .eq("thread_id", body.threadId)
+        .eq("tenant_id", ctx.tenantId)
+        .is("message_id", null)
+        .select("id, filename, mime_type")
+        .maybeSingle();
+      attached = f || null;
+    }
+
     // 一覧の並び順に使う。失敗しても投稿自体は成立しているので止めない
     await sbAdmin
       .from("gw_threads")
@@ -101,9 +132,9 @@ export default async function handler(req, res) {
     await markRead(sbAdmin, body.threadId, ctx.employee.id, data.created_at);
 
     // 同じスレッドの他の参加者に通知する。連投しても1件にまとまる
-    await notifyThread(sbAdmin, ctx, body.threadId, text);
+    await notifyThread(sbAdmin, ctx, body.threadId, text || `ファイル：${attached?.filename || "添付"}`);
 
-    return json(res, 200, { message: data });
+    return json(res, 200, { message: { ...data, files: attached ? [attached] : [] } });
   }
 
   if (req.method === "PATCH") {
