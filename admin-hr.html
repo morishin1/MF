@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260905d">
-  <link rel="stylesheet" href="css/layout.css?v=20260905d">
+  <link rel="stylesheet" href="css/app.css?v=20260905e">
+  <link rel="stylesheet" href="css/layout.css?v=20260905e">
 </head>
 <body>
 
@@ -76,8 +76,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260905d"></script>
-<script src="js/layout.js?v=20260905d"></script>
+<script src="js/api-client.js?v=20260905e"></script>
+<script src="js/layout.js?v=20260905e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -204,6 +204,13 @@
           </table>
         </div>
         <div class="foot">
+          ${p.drive_link
+            ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive_link)}" target="_blank" rel="noopener">
+                 <span class="material-symbols-outlined icon-inline">folder_open</span>個人フォルダ
+               </a>`
+            : `<button class="btn btn-secondary btn-sm" onclick="makeFolder('${esc(p.id)}')">
+                 <span class="material-symbols-outlined icon-inline">create_new_folder</span>個人フォルダを作る
+               </button>`}
           ${p.status === "done"
             ? `<button class="btn btn-secondary btn-sm" onclick="setProcStatus('${esc(p.id)}','in_progress')">進行中に戻す</button>`
             : `<button class="btn btn-primary btn-sm" onclick="setProcStatus('${esc(p.id)}','done')">
@@ -258,6 +265,12 @@
     if (!confirm("この項目を削除します。よろしいですか？")) return;
     try { await API.deleteProcedureItem(id); await loadProcedures(); }
     catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  }
+
+  // Drive に個人フォルダを用意する。GDRIVE_HR_FOLDER_ID が未設定なら理由を出す
+  async function makeFolder(id) {
+    try { await API.updateProcedure({ id, createFolder: true }); await loadProcedures(); }
+    catch (e) { alert(e.hint || e.detail || e.message || "フォルダを作れませんでした"); }
   }
 
   async function setProcStatus(id, status) {

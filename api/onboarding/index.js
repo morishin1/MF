@@ -10,6 +10,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { defaultChecklist } from "../../lib/onboarding.js";
+import { ensureProcedureFolder } from "../../lib/hr-drive.js";
 
 const KINDS = ["onboarding", "offboarding"];
 const STATUSES = ["not_started", "in_progress", "done", "cancelled"];
@@ -76,7 +77,7 @@ export default async function handler(req, res) {
     // 既定チェックリストは雇用区分で変わるので、まず対象者を読む
     const { data: employee, error: ee } = await sb
       .from("gw_employees")
-      .select("id, employment_type")
+      .select("id, employment_type, display_name")
       .eq("id", employeeId)
       .eq("tenant_id", ctx.tenantId)
       .maybeSingle();
@@ -111,8 +112,14 @@ export default async function handler(req, res) {
       return json(res, 500, { error: "checklist_insert_failed", detail: ce.message });
     }
 
+    // 個人フォルダ。未設定の環境では作らない。失敗しても手続きは成立させる
+    const folder = await attachFolder(sb, ctx.tenantId, proc, employee.display_name);
+
     return json(res, 200, {
-      procedure: { ...proc, items: items || [], progress: { done: 0, total: (items || []).length } },
+      procedure: {
+        ...proc, ...folder,
+        items: items || [], progress: { done: 0, total: (items || []).length },
+      },
     });
   }
 
@@ -128,6 +135,34 @@ export default async function handler(req, res) {
     }
     if (body.targetOn !== undefined) patch.target_on = body.targetOn || null;
     if (body.note !== undefined) patch.note = body.note || null;
+
+    // 後から個人フォルダを作る（作成時に Drive 未設定だった手続きの手当て）
+    if (body.createFolder) {
+      const { data: cur } = await sb
+        .from("gw_procedures")
+        .select("id, kind, target_on, drive_folder_id, employee:gw_employees(display_name)")
+        .eq("id", body.id)
+        .eq("tenant_id", ctx.tenantId)
+        .maybeSingle();
+      if (!cur) return json(res, 404, { error: "procedure_not_found" });
+      if (cur.drive_folder_id) return json(res, 409, { error: "folder_exists" });
+
+      const made = await ensureProcedureFolder({
+        kind: cur.kind,
+        targetOn: body.targetOn !== undefined ? body.targetOn : cur.target_on,
+        displayName: cur.employee?.display_name,
+      });
+      if (made.skipped) {
+        return json(res, 400, {
+          error: "drive_not_ready",
+          hint: made.skipped === "not_configured"
+            ? "Vercel に GDRIVE_HR_FOLDER_ID を設定してください"
+            : "対象者の氏名が取得できませんでした",
+        });
+      }
+      patch.drive_folder_id = made.folderId;
+      patch.drive_link = made.link;
+    }
 
     const { data, error } = await sb
       .from("gw_procedures")
@@ -159,4 +194,25 @@ export default async function handler(req, res) {
   }
 
   return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);
+}
+
+// 個人フォルダを用意して手続きに記録する。
+// Drive 未設定や一時的な失敗で手続きの作成まで巻き戻さないよう、握りつぶす。
+async function attachFolder(sb, tenantId, proc, displayName) {
+  try {
+    const made = await ensureProcedureFolder({
+      kind: proc.kind, targetOn: proc.target_on, displayName,
+    });
+    if (made.skipped) return {};
+
+    await sb
+      .from("gw_procedures")
+      .update({ drive_folder_id: made.folderId, drive_link: made.link })
+      .eq("id", proc.id)
+      .eq("tenant_id", tenantId);
+    return { drive_folder_id: made.folderId, drive_link: made.link };
+  } catch (e) {
+    console.error("[onboarding] drive folder failed:", e?.message || e);
+    return {};
+  }
 }

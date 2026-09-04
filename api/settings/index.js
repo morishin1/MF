@@ -8,7 +8,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
-import { isConfigured as driveConfigured } from "../../lib/gdrive.js";
+import { isConfigured as driveConfigured, hrConfigured } from "../../lib/gdrive.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -45,6 +45,7 @@ export default async function handler(req, res) {
         .map(({ id, display_name, email, department }) => ({ id, display_name, email, department })),
       integrations: {
         drive: driveConfigured(),
+        driveHr: hrConfigured(),
         slack: !!process.env.SLACK_WEBHOOK_URL,
         anthropic: !!process.env.ANTHROPIC_API_KEY,
       },
