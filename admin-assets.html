@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260907a">
-  <link rel="stylesheet" href="css/layout.css?v=20260907a">
+  <link rel="stylesheet" href="css/app.css?v=20260907b">
+  <link rel="stylesheet" href="css/layout.css?v=20260907b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -43,7 +43,7 @@
       <div style="min-width:170px;"><label>識別番号・ID（任意）</label><input id="a-identifier" type="text" placeholder="製造番号やアカウント名"></div>
       <div style="min-width:180px;"><label>貸出先（任意）</label><select id="a-assignee"></select></div>
       <div>
-        <button class="btn btn-primary" onclick="add()">
+        <button class="btn btn-primary" onclick="add(this)">
           <span class="material-symbols-outlined icon-inline">add</span>追加
         </button>
       </div>
@@ -61,8 +61,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260907a"></script>
-<script src="js/layout.js?v=20260907a"></script>
+<script src="js/api-client.js?v=20260907b"></script>
+<script src="js/layout.js?v=20260907b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -93,18 +93,18 @@
     }
   }
 
-  async function add() {
+  async function add(btn) {
     const msg = el("a-msg");
     msg.textContent = "";
     const name = el("a-name").value.trim();
     if (!name) { msg.textContent = "名称を入力してください"; return; }
     try {
-      await API.createAsset({
+      await KPLayout.busy(btn, "追加中…", () => API.createAsset({
         kind: el("a-kind").value,
         name,
         identifier: el("a-identifier").value.trim() || null,
         assignedTo: el("a-assignee").value || null,
-      });
+      }));
       el("a-name").value = "";
       el("a-identifier").value = "";
       await loadAssets();

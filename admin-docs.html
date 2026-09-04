@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260907a">
-  <link rel="stylesheet" href="css/layout.css?v=20260907a">
+  <link rel="stylesheet" href="css/app.css?v=20260907b">
+  <link rel="stylesheet" href="css/layout.css?v=20260907b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -60,7 +60,7 @@
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="btn-save" class="btn btn-primary" onclick="save()">
+      <button id="btn-save" class="btn btn-primary" onclick="save(this)">
         <span class="material-symbols-outlined icon-inline">save</span>保存
       </button>
       <button id="btn-cancel" class="btn btn-secondary hidden" onclick="resetForm()">編集をやめる</button>
@@ -94,8 +94,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260907a"></script>
-<script src="js/layout.js?v=20260907a"></script>
+<script src="js/api-client.js?v=20260907b"></script>
+<script src="js/layout.js?v=20260907b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -194,21 +194,20 @@
     el("form-msg").textContent = "";
   }
 
-  async function save() {
+  async function save(btn) {
     const msg = el("form-msg");
     msg.textContent = "";
     const payload = collect();
     if (!payload.name || !payload.body) { msg.textContent = "名前と本文を入力してください"; return; }
-    el("btn-save").disabled = true;
     try {
-      if (editingId) await API.updateTemplate({ id: editingId, ...payload });
-      else await API.createTemplate(payload);
+      await KPLayout.busy(btn, "保存中…", async () => {
+        if (editingId) await API.updateTemplate({ id: editingId, ...payload });
+        else await API.createTemplate(payload);
+      });
       resetForm();
       await loadTemplates();
     } catch (e) {
       msg.textContent = e.detail || e.message || "保存に失敗しました";
-    } finally {
-      el("btn-save").disabled = false;
     }
   }
 

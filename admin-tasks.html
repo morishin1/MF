@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260907a">
-  <link rel="stylesheet" href="css/layout.css?v=20260907a">
+  <link rel="stylesheet" href="css/app.css?v=20260907b">
+  <link rel="stylesheet" href="css/layout.css?v=20260907b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -46,7 +46,7 @@
       <div style="min-width:150px;"><label>分類（任意）</label><input id="t-category" type="text" placeholder="月次経理"></div>
       <div style="min-width:180px;"><label>期限超過時の連絡先</label><select id="t-escalate"></select></div>
       <div>
-        <button class="btn btn-primary" onclick="create()">
+        <button class="btn btn-primary" onclick="create(this)">
           <span class="material-symbols-outlined icon-inline">add</span>追加
         </button>
       </div>
@@ -65,8 +65,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260907a"></script>
-<script src="js/layout.js?v=20260907a"></script>
+<script src="js/api-client.js?v=20260907b"></script>
+<script src="js/layout.js?v=20260907b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -99,20 +99,20 @@
     }
   }
 
-  async function create() {
+  async function create(btn) {
     const msg = el("t-msg");
     msg.textContent = "";
     const title = el("t-title").value.trim();
     if (!title) { msg.textContent = "やることを入力してください"; return; }
     try {
-      await API.createTask({
+      await KPLayout.busy(btn, "追加中…", () => API.createTask({
         title,
         assigneeId: el("t-assignee").value || null,
         escalateTo: el("t-escalate").value || null,
         dueOn: el("t-due").value || null,
         priority: el("t-priority").value,
         category: el("t-category").value.trim() || null,
-      });
+      }));
       el("t-title").value = "";
       el("t-due").value = "";
       await loadTasks();

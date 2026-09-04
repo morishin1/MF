@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260907a">
-  <link rel="stylesheet" href="css/layout.css?v=20260907a">
+  <link rel="stylesheet" href="css/app.css?v=20260907b">
+  <link rel="stylesheet" href="css/layout.css?v=20260907b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -46,7 +46,7 @@
         <input id="p-target" type="date">
       </div>
       <div>
-        <button class="btn btn-primary" onclick="createProcedure()">
+        <button class="btn btn-primary" onclick="createProcedure(this)">
           <span class="material-symbols-outlined icon-inline">playlist_add</span>作成
         </button>
       </div>
@@ -68,7 +68,7 @@
         </div>
         <div><label>入社日</label><input id="e-joined" type="date"></div>
         <div>
-          <button class="btn btn-secondary" onclick="addEmployee()">
+          <button class="btn btn-secondary" onclick="addEmployee(this)">
             <span class="material-symbols-outlined icon-inline">badge</span>名簿に追加
           </button>
         </div>
@@ -86,8 +86,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260907a"></script>
-<script src="js/layout.js?v=20260907a"></script>
+<script src="js/api-client.js?v=20260907b"></script>
+<script src="js/layout.js?v=20260907b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -121,20 +121,20 @@
     }
   }
 
-  async function addEmployee() {
+  async function addEmployee(btn) {
     const msg = el("e-msg");
     msg.textContent = "";
     const display_name = el("e-name").value.trim();
     if (!display_name) { msg.textContent = "氏名を入力してください"; return; }
     try {
-      await API.createEmployee({
+      await KPLayout.busy(btn, "追加中…", () => API.createEmployee({
         display_name,
         email: el("e-email").value.trim() || null,
         department: el("e-dept").value.trim() || null,
         employment_type: el("e-type").value,
         joined_on: el("e-joined").value || null,
         status: "invited",
-      });
+      }));
       for (const id of ["e-name", "e-email", "e-dept", "e-joined"]) el(id).value = "";
       await loadEmployees();
       msg.textContent = "";
@@ -143,17 +143,17 @@
     }
   }
 
-  async function createProcedure() {
+  async function createProcedure(btn) {
     const msg = el("p-msg");
     msg.textContent = "";
     const employeeId = el("p-employee").value;
     if (!employeeId) { msg.textContent = "対象者を選んでください"; return; }
     try {
-      await API.createProcedure({
+      await KPLayout.busy(btn, "作成中…", () => API.createProcedure({
         employeeId,
         kind: el("p-kind").value,
         targetOn: el("p-target").value || null,
-      });
+      }));
       el("p-target").value = "";
       await loadProcedures();
     } catch (e) {
@@ -218,12 +218,12 @@
             ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive_link)}" target="_blank" rel="noopener">
                  <span class="material-symbols-outlined icon-inline">folder_open</span>個人フォルダ
                </a>`
-            : `<button class="btn btn-secondary btn-sm" onclick="makeFolder('${esc(p.id)}')">
+            : `<button class="btn btn-secondary btn-sm" onclick="makeFolder('${esc(p.id)}', this)">
                  <span class="material-symbols-outlined icon-inline">create_new_folder</span>個人フォルダを作る
                </button>`}
           ${p.status === "done"
-            ? `<button class="btn btn-secondary btn-sm" onclick="setProcStatus('${esc(p.id)}','in_progress')">進行中に戻す</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="setProcStatus('${esc(p.id)}','done')">
+            ? `<button class="btn btn-secondary btn-sm" onclick="setProcStatus('${esc(p.id)}','in_progress',this)">進行中に戻す</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="setProcStatus('${esc(p.id)}','done',this)">
                  <span class="material-symbols-outlined icon-inline">done_all</span>手続きを完了にする
                </button>`}
           <button class="btn btn-danger btn-sm" onclick="removeProc('${esc(p.id)}')">
@@ -288,14 +288,18 @@
   }
 
   // Drive に個人フォルダを用意する。GDRIVE_HR_FOLDER_ID が未設定なら理由を出す
-  async function makeFolder(id) {
-    try { await API.updateProcedure({ id, createFolder: true }); await loadProcedures(); }
-    catch (e) { alert(e.hint || e.detail || e.message || "フォルダを作れませんでした"); }
+  async function makeFolder(id, btn) {
+    try {
+      await KPLayout.busy(btn, "作成中…", () => API.updateProcedure({ id, createFolder: true }));
+      await loadProcedures();
+    } catch (e) { alert(e.hint || e.detail || e.message || "フォルダを作れませんでした"); }
   }
 
-  async function setProcStatus(id, status) {
-    try { await API.updateProcedure({ id, status }); await loadProcedures(); }
-    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); }
+  async function setProcStatus(id, status, btn) {
+    try {
+      await KPLayout.busy(btn, "更新中…", () => API.updateProcedure({ id, status }));
+      await loadProcedures();
+    } catch (e) { alert(e.detail || e.message || "更新に失敗しました"); }
   }
 
   async function removeProc(id) {
