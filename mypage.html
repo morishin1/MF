@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>マイページ - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260907a">
+  <link rel="stylesheet" href="css/layout.css?v=20260907a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">マイページ</h1>
+  <p class="kp-greet-sub">自分の登録情報の確認と、パスワードの変更ができます。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">badge</span>登録情報</h2>
+    <div id="profile"><div class="empty">読み込み中…</div></div>
+    <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
+      氏名・所属・雇用区分の変更は管理部が行います。誤りがあれば連絡してください。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">key</span>パスワードの変更</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 14px;">
+      会社から渡された初回パスワードのままの場合は、ここで自分だけが知っているものに変えてください。
+    </p>
+
+    <div style="max-width:360px;">
+      <div style="margin-bottom:12px;">
+        <label>新しいパスワード（8文字以上）</label>
+        <input id="pw1" type="password" autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label>確認のためもう一度</label>
+        <input id="pw2" type="password" autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <button id="save" class="btn btn-primary" onclick="save()">
+        <span class="material-symbols-outlined icon-inline">save</span>変更する
+      </button>
+      <div id="msg" class="err-text"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260907a"></script>
+<script src="js/layout.js?v=20260907a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const ROLE_JA = { owner: "経営者", hr: "人事", manager: "責任者", labor_advisor: "社労士" };
+  const STATUS_JA = { invited: "招待中", active: "在籍", leaving: "退職手続き中", left: "退職" };
+
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner", "sr"] })
+    .then((ctx) => { if (ctx) render(ctx); });
+
+  function render(ctx) {
+    const e = ctx.me?.gw?.employee;
+    const rows = [
+      ["メールアドレス", ctx.me?.email || "—"],
+      ["氏名", e?.display_name || "（社員名簿に未登録）"],
+      ["部署", e?.department || "—"],
+      ["役職", e?.position || "—"],
+      ["雇用区分", e?.employment_type || "—"],
+      ["入社日", e?.joined_on ? new Date(e.joined_on).toLocaleDateString("ja-JP") : "—"],
+      ["在籍状態", e ? (STATUS_JA[e.status] || e.status) : "—"],
+      ["社内権限", (ctx.me?.gw?.roles || []).map((r) => ROLE_JA[r] || r).join("、") || "（なし）"],
+    ];
+    el("profile").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <tbody>${rows.map(([k, v]) => `
+            <tr><td style="width:130px;color:var(--muted);">${esc(k)}</td><td>${esc(v)}</td></tr>
+          `).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function save() {
+    const msg = el("msg");
+    msg.textContent = "";
+    const p1 = el("pw1").value;
+    const p2 = el("pw2").value;
+
+    if (p1.length < 8) { msg.textContent = "8文字以上にしてください"; return; }
+    if (p1 !== p2) { msg.textContent = "2つの入力が一致していません"; return; }
+
+    try {
+      await KPLayout.busy(el("save"), "変更中…", () => API.changePassword(p1));
+      el("pw1").value = "";
+      el("pw2").value = "";
+      msg.style.color = "var(--primary-dark)";
+      msg.textContent = "パスワードを変更しました。次回のログインから新しいパスワードを使ってください。";
+    } catch (e) {
+      msg.style.color = "";
+      msg.textContent = e.message || "変更できませんでした";
+    }
+  }
+</script>
+
+</body>
+</html>

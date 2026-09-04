@@ -19,25 +19,38 @@
 // 独立して動くまま維持し、グループウェア側からはメニュー項目として参照する。
 
 (function () {
-  // ready:false は「枠だけ用意し、実装はこれから」の意味。押しても遷移させない。
+  // メンバー: 画面下のタブ。片手で届く5つに絞る。
+  // 「書類」は会計システムへの入口。グループウェアとは別物なので、
+  // その先の画面でも会計であることが分かる見せ方にしている。
   const MEMBER_NAV = [
-    { key: "home",     href: "home.html",     label: "ホーム",     icon: "home",        ready: true  },
-    { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",       ready: true  },
-    { key: "tasks",    href: "tasks.html",    label: "やること",   icon: "checklist",   ready: true  },
-    { key: "docs",     href: "app.html",      label: "書類",       icon: "description", ready: true  },
+    { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",         ready: true },
+    { key: "messages", href: "messages.html",  label: "メッセージ", icon: "forum",        ready: true },
+    { key: "tasks",    href: "tasks.html",     label: "やること",   icon: "checklist",    ready: true },
+    { key: "docs",     href: "app.html",       label: "会計書類",   icon: "receipt_long", ready: true },
+    { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",         ready: true },
   ];
 
+  // 管理者: 左サイドメニュー。
+  // 「日々の業務」と「組織・システムの管理」を分け、会計は別システムとして
+  // 一番下に切り出す。ready:false は枠だけ用意した項目（押しても遷移しない）。
   const ADMIN_NAV = [
-    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",   icon: "dashboard",    ready: true  },
-    { key: "notices",   href: "admin-notices.html",   label: "お知らせ",         icon: "campaign",     ready: true  },
-    { key: "messages",  href: "messages.html",        label: "メッセージ",       icon: "forum",        ready: true  },
-    { key: "members",   href: "admin-members.html",   label: "メンバー",         icon: "group",        ready: true  },
-    { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き", icon: "badge",        ready: true  },
-    { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",     icon: "checklist",    ready: true  },
-    { key: "templates", href: "admin-docs.html",      label: "書類・雛形",       icon: "folder_copy",  ready: true  },
-    { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: true  },
-    { key: "accounting",href: "admin.html",           label: "会計書類",         icon: "receipt_long", ready: true  },
-    { key: "settings",  href: "admin-settings.html",  label: "管理設定",         icon: "settings",     ready: true  },
+    { section: "業務" },
+    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",     icon: "dashboard",    ready: true  },
+    { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信",       icon: "campaign",     ready: true  },
+    { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
+    { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },
+    { key: "schedule",  href: "admin-schedule.html",  label: "スケジュール",       icon: "calendar_month", ready: false },
+    { key: "workflow",  href: "admin-workflow.html",  label: "申請・承認",         icon: "approval",     ready: false },
+
+    { section: "組織・システム管理" },
+    { key: "members",   href: "admin-members.html",   label: "メンバー・権限",     icon: "group",        ready: true  },
+    { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き",   icon: "badge",        ready: true  },
+    { key: "templates", href: "admin-docs.html",      label: "書類・雛形",         icon: "folder_copy",  ready: true  },
+    { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",      ready: true  },
+    { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ",     icon: "settings",     ready: true  },
+
+    { section: "会計（別システム）" },
+    { key: "accounting", href: "admin.html", label: "会計書類・仕訳", icon: "receipt_long", ready: true, external: true },
   ];
 
   // 社労士は社外の人。会計にも社内の他の画面にも入れず、共有された手続きだけを見る
@@ -143,8 +156,9 @@
     const el = document.createElement("nav");
     el.className = "kp-sidebar";
     el.innerHTML = items.map((n) => {
+      if (n.section) return `<div class="kp-side-section">${esc(n.section)}</div>`;
       const on = n.key === active;
-      const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}`;
+      const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}${n.external ? " ext" : ""}`;
       const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>${n.ready ? "" : '<em>準備中</em>'}`;
       return n.ready
         ? `<a class="${cls}" href="${n.href}">${inner}</a>`
@@ -184,6 +198,22 @@
     if (appRole === "admin" || appRole === "owner") renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active);
+  }
+
+  // ボタンの押し心地。押した直後に無効化して回転アイコンに差し替え、
+  // 終わったら元に戻す。「押せたのか分からない時間」を作らないため。
+  async function withBusy(btn, label, fn) {
+    if (!btn) return fn();
+    const before = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML =
+      `<span class="material-symbols-outlined icon-inline kp-spin">progress_activity</span>${esc(label || "処理中…")}`;
+    try {
+      return await fn();
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = before;
+    }
   }
 
   function showLogin(message) {
@@ -293,6 +323,8 @@
         alert(e.detail || e.message || "既読にできませんでした");
       }
     },
+
+    busy: withBusy,
 
     logout() { API.logout(); clearCache(); location.href = "index.html"; },
     homeFor,

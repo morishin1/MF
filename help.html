@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260906g">
+  <link rel="stylesheet" href="css/app.css?v=20260907a">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -86,7 +86,7 @@
     <h2><span class="material-symbols-outlined">grid_view</span>画面の見方</h2>
     <span class="who-for member">メンバーの方</span>
     <p class="lead" style="margin-top:0;">
-      画面の一番下に<b>4つのタブ</b>が並びます。片手で押せる位置にあります。
+      画面の一番下に<b>5つのタブ</b>が並びます。片手で押せる位置にあります。
     </p>
     <div class="table-scroll">
       <table class="screens">
@@ -95,14 +95,17 @@
           <tr><td>ホーム</td><td>今月の書類の件数、お知らせ、自分の入社手続きの進み具合をまとめて確認します</td></tr>
           <tr><td>メッセージ</td><td>社内の人と1対1・グループでやりとりします</td></tr>
           <tr><td>やること</td><td>自分に割り当てられたタスクを確認し、終わったら「完了」を押します</td></tr>
-          <tr><td>書類</td><td>請求書・領収書などをアップロードします</td></tr>
+          <tr><td>会計書類</td><td>請求書・領収書を提出します（<b>会計は別システム</b>です）</td></tr>
+          <tr><td>メニュー</td><td>社員名簿、マイページ（パスワード変更）、使い方ガイド</td></tr>
         </tbody>
       </table>
     </div>
 
     <span class="who-for admin" style="margin-top:20px;">管理者・経営者の方</span>
     <p class="lead" style="margin-top:0;">
-      画面の左側にメニューが並びます。細い画面では上部の横スクロールに変わります。
+      画面の左側にメニューが並びます（細い画面では上部の横スクロール）。
+      <b>業務</b>・<b>組織／システム管理</b>・<b>会計</b>の3つに分かれていて、
+      会計は別システムとして一番下に切り出してあります。
       詳しくは<a href="#admin">管理者の方へ</a>をご覧ください。
     </p>
   </div>
@@ -280,15 +283,16 @@
         <thead><tr><th>メニュー</th><th>できること</th></tr></thead>
         <tbody>
           <tr><td>ダッシュボード</td><td>今月の書類件数、要確認の仕訳、Drive の保存状況をまとめて確認します</td></tr>
-          <tr><td>お知らせ</td><td>全社または部署を指定して連絡を配信します。下書き保存、上部固定、掲載終了日の設定ができ、一覧に「既読 3 / 8 人」の形で行き渡り具合が出ます</td></tr>
+          <tr><td>お知らせ配信</td><td>全社または部署を指定して連絡を配信します。下書き保存、上部固定、掲載終了日の設定ができ、一覧に「既読 3 / 8 人」の形で行き渡り具合が出ます</td></tr>
           <tr><td>メッセージ</td><td>メンバーと同じ画面です。参加しているやりとりだけが見えます</td></tr>
-          <tr><td>メンバー</td><td>社員名簿の追加・編集、在籍状態の切替、社内権限（経営者・人事・責任者・社労士）の付け外し、CSV出力</td></tr>
+          <tr><td>メンバー・権限</td><td>社員名簿の追加・編集、在籍状態の切替、社内権限（経営者・人事・責任者・社労士）の付け外し、CSV出力</td></tr>
           <tr><td>入社・退職手続き</td><td>対象者を選ぶと<b>雇用区分に合わせたチェックリストが自動で用意されます</b>。項目ごとに状態と社労士への共有可否を切り替えられます</td></tr>
           <tr><td>タスク・予定</td><td>担当者・期限・重要度を決めて割り当てます。期限超過だけを絞り込めます</td></tr>
           <tr><td>書類・雛形</td><td>雇用契約書などの雛形を登録し、対象者を選んで <code>{{氏名}}</code> などを差し込んで書き出します</td></tr>
           <tr><td>アカウント・貸与品</td><td>PC・スマホ・アカウント・鍵の貸出状況を管理します。退職時の返却漏れ防止に使います</td></tr>
-          <tr><td>会計書類</td><td>アップロードされた書類の確認、仕訳の承認、試算表の取得を行います</td></tr>
-          <tr><td>管理設定</td><td>会社名の変更、ログインアカウントの作成と紐づけ、外部サービス（Drive など）の設定状況、<b>操作ログ</b>の確認</td></tr>
+          <tr><td>スケジュール／申請・承認</td><td>準備中です。予定・会議室の予約、経費精算や有給の申請を予定しています</td></tr>
+          <tr><td>会計書類・仕訳<br><span class="muted" style="font-weight:400;font-size:11.5px;">（別システム）</span></td><td>アップロードされた書類の確認、仕訳の承認、試算表の取得を行います</td></tr>
+          <tr><td>組織設定・ログ</td><td>会社名の変更、ログインアカウントの作成と紐づけ、外部サービス（Drive など）の設定状況、<b>操作ログ</b>の確認</td></tr>
         </tbody>
       </table>
     </div>

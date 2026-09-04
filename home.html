@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260906g">
-  <link rel="stylesheet" href="css/layout.css?v=20260906g">
+  <link rel="stylesheet" href="css/app.css?v=20260907a">
+  <link rel="stylesheet" href="css/layout.css?v=20260907a">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -41,23 +41,24 @@
   </div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">upload_file</span>書類をアップロードする</h2>
+    <h2><span class="material-symbols-outlined">receipt_long</span>会計書類
+      <span class="kp-chip" style="margin-left:6px;">別システム</span></h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
-      請求書・領収書はもちろん、契約書や名刺などもそのままどうぞ。AIが種別を判定して月ごとに整理し、
-      会計書類は自動で仕訳します。
+      請求書・領収書の提出はこちらです。AIが種別を判定して月ごとに整理し、自動で仕訳します。
+      社内の連絡や手続きとは別の仕組みで動いています。
     </p>
     <a class="btn btn-primary" href="app.html">
-      <span class="material-symbols-outlined icon-inline">upload_file</span>アップロード画面へ
+      <span class="material-symbols-outlined icon-inline">upload_file</span>会計書類を提出する
     </a>
-    <a class="btn btn-secondary" href="help.html" style="margin-left:8px;">
-      <span class="material-symbols-outlined icon-inline">help</span>使い方
+    <a class="btn btn-secondary" href="menu.html" style="margin-left:8px;">
+      <span class="material-symbols-outlined icon-inline">apps</span>ほかのメニュー
     </a>
   </div>
 
 </div>
 
-<script src="js/api-client.js?v=20260906g"></script>
-<script src="js/layout.js?v=20260906g"></script>
+<script src="js/api-client.js?v=20260907a"></script>
+<script src="js/layout.js?v=20260907a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;

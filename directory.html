@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社員名簿 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260907a">
+  <link rel="stylesheet" href="css/layout.css?v=20260907a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">社員名簿</h1>
+  <p class="kp-greet-sub">氏名・部署・役職で探せます。連絡先の確認とメッセージの送信に使ってください。</p>
+
+  <div class="card">
+    <div style="margin-bottom:12px;">
+      <label>検索</label>
+      <input id="q" type="search" placeholder="氏名・部署・役職で絞り込む" oninput="render()">
+    </div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260907a"></script>
+<script src="js/layout.js?v=20260907a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let employees = [];
+  let me = null;
+
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(ctx); });
+
+  async function load(ctx) {
+    me = ctx.me?.gw?.employee || null;
+    if (!me) {
+      el("list").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、一覧を表示できません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    try {
+      const res = await API.listEmployees();
+      // 退職した人は既定では出さない。連絡先として使う画面なので
+      employees = (res.employees || []).filter((e) => e.status !== "left");
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    const q = (el("q")?.value || "").trim().toLowerCase();
+    const shown = employees.filter((e) => {
+      if (!q) return true;
+      return [e.display_name, e.department, e.position, e.email]
+        .filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+    });
+
+    if (!shown.length) {
+      el("list").innerHTML = `<div class="empty">${q ? "該当する人がいません。" : "まだ誰も登録されていません。"}</div>`;
+      return;
+    }
+
+    // 部署ごとにまとめる。所属が空の人は最後に置く
+    const groups = new Map();
+    for (const e of shown) {
+      const key = e.department || "（所属未設定）";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(e);
+    }
+    const keys = [...groups.keys()].sort((a, b) =>
+      a === "（所属未設定）" ? 1 : b === "（所属未設定）" ? -1 : a.localeCompare(b, "ja"));
+
+    el("list").innerHTML = keys.map((k) => `
+      <div class="kp-side-section" style="padding-left:0;">${esc(k)}</div>
+      ${groups.get(k).map(card).join("")}
+    `).join("");
+  }
+
+  function card(e) {
+    const mine = me && e.id === me.id;
+    return `
+      <div class="kp-todo" style="align-items:center;">
+        <span class="material-symbols-outlined" style="font-size:22px;color:var(--muted);">person</span>
+        <span class="t">
+          <b>${esc(e.display_name)}${mine ? "（自分）" : ""}</b>
+          <small>${[e.position, e.employment_type].filter(Boolean).map(esc).join("　／　") || "—"}</small>
+          ${e.email ? `<small><a href="mailto:${esc(e.email)}">${esc(e.email)}</a></small>` : ""}
+        </span>
+        ${mine || !e.user_id ? "" :
+          `<button class="btn btn-secondary btn-sm" onclick="talk('${esc(e.id)}', this)">
+             <span class="material-symbols-outlined icon-inline">forum</span>メッセージ
+           </button>`}
+      </div>`;
+  }
+
+  // その人との1対1を開く。すでにあるやりとりがあれば、そこへ合流する
+  async function talk(employeeId, btn) {
+    try {
+      const res = await KPLayout.busy(btn, "準備中…", () => API.createThread("dm", [employeeId]));
+      location.href = `messages.html?t=${encodeURIComponent(res.threadId)}`;
+    } catch (e) {
+      alert(e.detail || e.message || "開けませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

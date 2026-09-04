@@ -76,6 +76,27 @@
     return sess.access_token;
   }
 
+  // 自分のパスワードを変える。Supabase Auth を直接呼ぶ（本人のトークンで実行）
+  async function changePassword(password) {
+    const c = await config();
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const r = await fetch(`${c.supabaseUrl}/auth/v1/user`, {
+      method: "PUT",
+      headers: {
+        apikey: c.supabaseAnonKey,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ password }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(data.msg || data.error_description || data.message || "パスワードを変更できませんでした");
+    }
+    return data;
+  }
+
   function isLoggedIn() { return !!loadSession(); }
   function currentEmail() { return loadSession()?.email || null; }
   function logout() { clearSession(); }
@@ -370,7 +391,7 @@
   }
 
   window.API = {
-    config, login, logout, refresh, getToken,
+    config, login, logout, refresh, getToken, changePassword,
     isLoggedIn, currentEmail,
     api, me, listClients, createClient, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,

@@ -306,3 +306,49 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
 }
 .kp-bubble .kp-file:hover{ background:#e9eff5; }
 .kp-bubble .kp-file .material-symbols-outlined{ font-size:17px; color:var(--muted); }
+
+/* サイドメニューの区切り見出し（業務 / 組織・システム管理 / 会計） */
+.kp-side-section{
+  font-size:10.5px; font-weight:700; letter-spacing:.06em; color:#9aa7b4;
+  padding:14px 14px 6px;
+}
+.kp-sidebar > .kp-side-section:first-child{ padding-top:4px; }
+/* 会計は別システム。線で切って、同じ並びに見えないようにする */
+.kp-side-item.ext{ border-top:1px dashed var(--border); }
+
+/* 処理中のボタン */
+.kp-spin{ animation: kp-spin 1s linear infinite; }
+@keyframes kp-spin { to { transform: rotate(360deg); } }
+.btn:disabled{ opacity:.6; cursor:default; }
+
+@media (max-width:860px){
+  /* 横スクロールのメニューでは見出しを畳んで、項目だけを並べる */
+  .kp-side-section{
+    padding:0 4px 0 10px; display:flex; align-items:center;
+    white-space:nowrap; font-size:10px; color:#b3bcc6;
+  }
+}
+
+/* メニュー一覧（メンバーの「メニュー」画面） */
+.kp-menu{ display:grid; gap:10px; }
+.kp-menu > a, .kp-menu > .soon{
+  display:flex; align-items:center; gap:13px; text-decoration:none; color:inherit;
+  border:1px solid var(--border); border-radius:10px; padding:14px 16px; background:#fff;
+  transition:.15s;
+}
+.kp-menu > a:hover{ border-color:var(--primary); background:var(--soft); }
+.kp-menu > .soon{ background:#fafbfc; color:var(--muted); }
+.kp-menu .ico{
+  flex:0 0 auto; width:40px; height:40px; border-radius:10px; background:var(--soft);
+  color:var(--primary); display:flex; align-items:center; justify-content:center;
+}
+.kp-menu > .soon .ico{ background:#eef0f2; color:#b3bcc6; }
+.kp-menu .ico .material-symbols-outlined{ font-size:21px; }
+.kp-menu b{ display:block; font-size:14.5px; color:var(--primary-dark); }
+.kp-menu > .soon b{ color:var(--muted); }
+.kp-menu small{ display:block; font-size:12.5px; color:var(--muted); margin-top:2px; line-height:1.7; }
+.kp-menu .go{ margin-left:auto; color:var(--muted); }
+.kp-menu > .soon em{
+  margin-left:auto; font-style:normal; font-size:11px; font-weight:700;
+  background:#eef0f2; color:#8c98a4; border-radius:999px; padding:3px 9px; white-space:nowrap;
+}
