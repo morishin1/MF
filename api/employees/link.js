@@ -64,6 +64,20 @@ export default async function handler(req, res) {
     .eq("id", employeeId);
   if (ue) return json(res, 500, { error: "db_update_failed", detail: ue.message });
 
+  // 社労士は社外の人なので、会計側の権限は一切与えない。
+  // 名簿の行だけで手続き画面に入れる（lib/gw.js がテナントを名簿から解決する）。
+  const { data: grants } = await sb
+    .from("gw_role_grants")
+    .select("role")
+    .eq("employee_id", employeeId);
+  const isAdvisor = (grants || []).some((g) => g.role === "labor_advisor");
+  if (isAdvisor) {
+    return json(res, 200, {
+      ok: true, employeeId, userId,
+      membership: { created: false, role: null, note: "社労士のため会計の権限は付与していません" },
+    });
+  }
+
   // 会計側のメンバーシップ。既にあれば触らない（管理者を降格させないため）
   const membership = await ensureMembership(sb, ctx.tenantId, userId, body?.clientId);
 

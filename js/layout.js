@@ -40,6 +40,11 @@
     { key: "settings",  href: "admin-settings.html",  label: "管理設定",         icon: "settings",     ready: true  },
   ];
 
+  // 社労士は社外の人。会計にも社内の他の画面にも入れず、共有された手続きだけを見る
+  const ADVISOR_NAV = [
+    { key: "hr", href: "advisor.html", label: "入社・退職手続き", icon: "badge", ready: true },
+  ];
+
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -50,7 +55,7 @@
   // 管理者側の画面をメンバーが開いた場合などに、行き先へ送り返す
   function homeFor(appRole) {
     if (appRole === "admin" || appRole === "owner") return "admin-dashboard.html";
-    if (appRole === "sr") return "app.html";
+    if (appRole === "sr") return "advisor.html";
     return "home.html";
   }
 
@@ -89,10 +94,10 @@
   }
 
   // 管理者: 左サイドメニュー。PC前提だが、狭い画面では上部の横スクロールに変わる
-  function renderAdminNav(active) {
+  function renderAdminNav(active, items = ADMIN_NAV) {
     const el = document.createElement("nav");
     el.className = "kp-sidebar";
-    el.innerHTML = ADMIN_NAV.map((n) => {
+    el.innerHTML = items.map((n) => {
       const on = n.key === active;
       const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}`;
       const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>${n.ready ? "" : '<em>準備中</em>'}`;
@@ -167,6 +172,7 @@
 
       renderTopbar({ me, appRole });
       if (appRole === "admin" || appRole === "owner") renderAdminNav(opts.active);
+      else if (appRole === "sr") renderAdminNav(opts.active, ADVISOR_NAV);
       else renderMemberNav(opts.active);
 
       return { me, appRole };

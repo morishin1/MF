@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手続き（社労士） - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260905d">
+  <link rel="stylesheet" href="css/layout.css?v=20260905d">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">入社・退職手続き</h1>
+  <p class="kp-greet-sub">共有された項目のみ表示しています。会計情報や共有対象外の書類は参照できません。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">checklist</span>対象者</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260905d"></script>
+<script src="js/layout.js?v=20260905d"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const ITEM_STATUS = { todo: "未着手", submitted: "提出済み", done: "完了", na: "対象外" };
+  const CATEGORY_ICON = { document: "description", task: "task_alt", account: "key", equipment: "devices" };
+
+  KPLayout.init({ active: "hr", roles: ["sr", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listProcedures();
+      render(res.procedures || []);
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render(procedures) {
+    // 共有された項目が1件も無い手続きは出さない
+    const shown = procedures.filter((p) => (p.items || []).length && p.status !== "cancelled");
+    if (!shown.length) {
+      el("list").innerHTML = `<div class="empty">共有されている手続きはありません。</div>`;
+      return;
+    }
+    el("list").innerHTML = shown.map(card).join("");
+  }
+
+  function card(p) {
+    const kind = p.kind === "onboarding" ? "入社" : "退職";
+    const date = p.target_on
+      ? new Date(p.target_on).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })
+      : "日付未定";
+
+    return `
+      <div class="kp-notice" style="margin-bottom:14px;">
+        <div class="head">
+          <span class="kp-chip ${p.kind === "onboarding" ? "event" : "archived"}">${kind}</span>
+          <span class="meta">${esc(date)}</span>
+        </div>
+        <div class="title">${esc(p.employee?.display_name || "（対象者不明）")}
+          ${p.employee?.employment_type
+            ? `<span class="muted" style="font-weight:400;font-size:13px;">　${esc(p.employee.employment_type)}</span>` : ""}
+        </div>
+        <div class="table-scroll" style="margin-top:12px;">
+          <table class="kp-items">
+            <thead><tr><th>項目</th><th>状態</th></tr></thead>
+            <tbody>${(p.items || []).map((i) => `
+              <tr class="${i.status === "done" || i.status === "na" ? "done" : (i.status === "submitted" ? "submitted" : "")}">
+                <td>
+                  <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;color:var(--muted);">
+                    ${CATEGORY_ICON[i.category] || "circle"}</span>
+                  ${esc(i.title)}
+                </td>
+                <td>${esc(ITEM_STATUS[i.status] || i.status)}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+</script>
+
+</body>
+</html>

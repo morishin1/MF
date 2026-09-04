@@ -43,21 +43,23 @@ export default async function handler(req, res) {
 // 社員名簿と社内ロールを引く。005 未適用でも落とさない。
 async function loadGroupware(userId, tenantId) {
   const empty = { available: false, tenantId, employee: null, roles: [], isHr: false, isOwner: false };
-  if (!tenantId) return empty;
 
   const sb = admin();
-  const { data: employee, error } = await sb
+  // 会計側のメンバーシップが無い人（社労士など）も名簿から拾えるように、
+  // tenantId が決まっていないときは user_id だけで引く。
+  let q = sb
     .from("gw_employees")
-    .select("id, display_name, email, department, position, employment_type, joined_on, status")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", userId)
-    .maybeSingle();
+    .select("id, tenant_id, display_name, email, department, position, employment_type, joined_on, status")
+    .eq("user_id", userId);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  const { data: employee, error } = await q.limit(1).maybeSingle();
 
   // テーブルが無い（マイグレーション未適用）場合はここで抜ける。
   // 会計機能はグループウェアに依存しないので、エラーにはしない。
   if (error) return empty;
 
   if (!employee) return { ...empty, available: true };
+  tenantId = tenantId || employee.tenant_id;
 
   const { data: grants } = await sb
     .from("gw_role_grants")
