@@ -1,0 +1,162 @@
+// GET    /api/onboarding              … 手続きの一覧（見える範囲は RLS が決める）
+//          管理者・人事 … 全件 / 本人 … 自分の分 / 社労士 … 共有された項目のみ
+// POST   /api/onboarding              … 手続きを新規作成（既定チェックリスト付き）
+//          { employeeId, kind?, targetOn?, note? }
+// PATCH  /api/onboarding {id, ...}    … 手続きの更新（status / targetOn / note）
+// DELETE /api/onboarding?id=...       … 手続きの削除（項目もまとめて消える）
+
+import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { requireUser } from "../../lib/auth.js";
+import { gwContext, canManageHr } from "../../lib/gw.js";
+import { userClient } from "../../lib/supabase.js";
+import { defaultChecklist } from "../../lib/onboarding.js";
+
+const KINDS = ["onboarding", "offboarding"];
+const STATUSES = ["not_started", "in_progress", "done", "cancelled"];
+
+const P_FIELDS =
+  "id, tenant_id, employee_id, kind, status, target_on, note, drive_folder_id, drive_link, created_at, updated_at";
+const I_FIELDS =
+  "id, procedure_id, title, category, owner, required, share_with_advisor, status, due_on, note, sort_order, document_id, completed_at";
+
+export default async function handler(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const ctx = await gwContext(user.id);
+  if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
+
+  const sb = userClient(req);
+
+  if (req.method === "GET") {
+    const { data: procedures, error } = await sb
+      .from("gw_procedures")
+      .select(`${P_FIELDS}, employee:gw_employees(id, display_name, department, position, employment_type, status)`)
+      .eq("tenant_id", ctx.tenantId)
+      .order("target_on", { ascending: true, nullsFirst: false })
+      .limit(200);
+    if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
+
+    const list = procedures || [];
+    if (!list.length) return json(res, 200, { procedures: [], canManage: canManageHr(ctx), me: ctx.employee });
+
+    const { data: items, error: ie } = await sb
+      .from("gw_procedure_items")
+      .select(I_FIELDS)
+      .in("procedure_id", list.map((p) => p.id))
+      .order("sort_order", { ascending: true });
+    if (ie) return json(res, 500, { error: "db_query_failed", detail: ie.message });
+
+    const byProc = new Map();
+    for (const it of items || []) {
+      if (!byProc.has(it.procedure_id)) byProc.set(it.procedure_id, []);
+      byProc.get(it.procedure_id).push(it);
+    }
+
+    return json(res, 200, {
+      procedures: list.map((p) => {
+        const its = byProc.get(p.id) || [];
+        const done = its.filter((i) => i.status === "done" || i.status === "na").length;
+        return { ...p, items: its, progress: { done, total: its.length } };
+      }),
+      canManage: canManageHr(ctx),
+      isAdvisor: ctx.isAdvisor,
+      me: ctx.employee,
+    });
+  }
+
+  if (req.method === "POST") {
+    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    const body = await readJson(req);
+    const employeeId = body?.employeeId;
+    const kind = body?.kind || "onboarding";
+    if (!employeeId) return json(res, 400, { error: "invalid_body", required: ["employeeId"] });
+    if (!KINDS.includes(kind)) return json(res, 400, { error: "invalid_kind", detail: KINDS.join(", ") });
+
+    // 既定チェックリストは雇用区分で変わるので、まず対象者を読む
+    const { data: employee, error: ee } = await sb
+      .from("gw_employees")
+      .select("id, employment_type")
+      .eq("id", employeeId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+    if (ee) return json(res, 500, { error: "db_query_failed", detail: ee.message });
+    if (!employee) return json(res, 404, { error: "employee_not_found" });
+
+    const { data: proc, error } = await sb
+      .from("gw_procedures")
+      .insert({
+        tenant_id: ctx.tenantId,
+        employee_id: employeeId,
+        kind,
+        target_on: body.targetOn || null,
+        note: body.note || null,
+        created_by: user.id,
+      })
+      .select(P_FIELDS)
+      .single();
+    if (error) {
+      // 同じ人・同じ種別の手続きは1件だけ
+      if (error.code === "23505") return json(res, 409, { error: "procedure_exists" });
+      return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
+    }
+
+    const checklist = defaultChecklist(kind, employee.employment_type).map((it) => ({
+      ...it, tenant_id: ctx.tenantId, procedure_id: proc.id,
+    }));
+    const { data: items, error: ce } = await sb.from("gw_procedure_items").insert(checklist).select(I_FIELDS);
+    if (ce) {
+      // 項目が入らないと使い物にならないので、手続きごと巻き戻す
+      await sb.from("gw_procedures").delete().eq("id", proc.id);
+      return json(res, 500, { error: "checklist_insert_failed", detail: ce.message });
+    }
+
+    return json(res, 200, {
+      procedure: { ...proc, items: items || [], progress: { done: 0, total: (items || []).length } },
+    });
+  }
+
+  if (req.method === "PATCH") {
+    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    const body = await readJson(req);
+    if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
+
+    const patch = { updated_at: new Date().toISOString() };
+    if (body.status !== undefined) {
+      if (!STATUSES.includes(body.status)) return json(res, 400, { error: "invalid_status", detail: STATUSES.join(", ") });
+      patch.status = body.status;
+    }
+    if (body.targetOn !== undefined) patch.target_on = body.targetOn || null;
+    if (body.note !== undefined) patch.note = body.note || null;
+
+    const { data, error } = await sb
+      .from("gw_procedures")
+      .update(patch)
+      .eq("id", body.id)
+      .eq("tenant_id", ctx.tenantId)
+      .select(P_FIELDS)
+      .maybeSingle();
+    if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+    if (!data) return json(res, 404, { error: "procedure_not_found" });
+    return json(res, 200, { procedure: data });
+  }
+
+  if (req.method === "DELETE") {
+    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    const id = new URL(req.url, "http://localhost").searchParams.get("id");
+    if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
+
+    const { data, error } = await sb
+      .from("gw_procedures")
+      .delete()
+      .eq("id", id)
+      .eq("tenant_id", ctx.tenantId)
+      .select("id")
+      .maybeSingle();
+    if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
+    if (!data) return json(res, 404, { error: "procedure_not_found" });
+    return json(res, 200, { ok: true, id });
+  }
+
+  return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);
+}

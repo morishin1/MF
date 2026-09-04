@@ -32,7 +32,7 @@
     { key: "notices",   href: "admin-notices.html",   label: "お知らせ",         icon: "campaign",     ready: true  },
     { key: "messages",  href: "messages.html",        label: "メッセージ",       icon: "forum",        ready: false },
     { key: "members",   href: "admin-members.html",   label: "メンバー",         icon: "group",        ready: false },
-    { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き", icon: "badge",        ready: false },
+    { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き", icon: "badge",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",     icon: "checklist",    ready: false },
     { key: "templates", href: "admin-docs.html",      label: "書類・雛形",       icon: "folder_copy",  ready: false },
     { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: false },

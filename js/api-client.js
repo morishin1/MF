@@ -168,6 +168,31 @@
   const markNoticeRead = (noticeId) =>
     api("/api/notices/read", { method: "POST", body: { noticeId } });
 
+  // ---- 社員名簿 ----
+  const listEmployees = () => api("/api/employees");
+  const createEmployee = (employee) =>
+    api("/api/employees", { method: "POST", body: employee }).then((d) => d.employee);
+  const updateEmployee = (employee) =>
+    api("/api/employees", { method: "PATCH", body: employee }).then((d) => d.employee);
+
+  // ---- 入社・退職手続き ----
+  const listProcedures = () => api("/api/onboarding");
+  const createProcedure = (p) =>
+    api("/api/onboarding", { method: "POST", body: p }).then((d) => d.procedure);
+  const updateProcedure = (p) =>
+    api("/api/onboarding", { method: "PATCH", body: p }).then((d) => d.procedure);
+  const deleteProcedure = (id) =>
+    api(`/api/onboarding?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const addProcedureItem = (item) =>
+    api("/api/onboarding/items", { method: "POST", body: item }).then((d) => d.item);
+  const updateProcedureItem = (item) =>
+    api("/api/onboarding/items", { method: "PATCH", body: item }).then((d) => d.item);
+  const deleteProcedureItem = (id) =>
+    api(`/api/onboarding/items?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  // 本人が「提出しました」を付ける。undo:true で取り消し
+  const submitProcedureItem = (itemId, opts = {}) =>
+    api("/api/onboarding/submit", { method: "POST", body: { itemId, ...opts } });
+
   // ---- Google Drive 連携 ----
   const driveStatus = (clientId) => api(`/api/drive/status?clientId=${encodeURIComponent(clientId)}`);
   const driveSync = (clientId, limit) => api("/api/drive/sync", { method: "POST", body: { clientId, limit } });
@@ -240,5 +265,8 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
+    listEmployees, createEmployee, updateEmployee,
+    listProcedures, createProcedure, updateProcedure, deleteProcedure,
+    addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
   };
 })();

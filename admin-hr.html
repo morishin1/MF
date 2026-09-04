@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>入社・退職手続き - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260904c">
+  <link rel="stylesheet" href="css/layout.css?v=20260904c">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">入社・退職手続き</h1>
+  <p class="kp-greet-sub">対象者を登録すると、雇用区分に合わせたチェックリストが自動で用意されます。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">person_add</span>手続きを始める</h2>
+
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div style="min-width:220px;flex:1;">
+        <label>対象者</label>
+        <select id="p-employee"></select>
+      </div>
+      <div>
+        <label>種別</label>
+        <select id="p-kind">
+          <option value="onboarding">入社</option>
+          <option value="offboarding">退職</option>
+        </select>
+      </div>
+      <div>
+        <label>入社日／退職日</label>
+        <input id="p-target" type="date">
+      </div>
+      <div>
+        <button class="btn btn-primary" onclick="createProcedure()">
+          <span class="material-symbols-outlined icon-inline">playlist_add</span>作成
+        </button>
+      </div>
+    </div>
+    <div id="p-msg" class="err-text"></div>
+
+    <details style="margin-top:6px;">
+      <summary class="muted" style="cursor:pointer;font-size:13px;">名簿にいない人を追加する（内定者など）</summary>
+      <div class="inline-controls" style="margin-top:12px;">
+        <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
+        <div><label>メール（任意）</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
+        <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
+        <div>
+          <label>雇用区分</label>
+          <select id="e-type">
+            <option>正社員</option><option>契約社員</option><option>パート</option>
+            <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
+          </select>
+        </div>
+        <div><label>入社日</label><input id="e-joined" type="date"></div>
+        <div>
+          <button class="btn btn-secondary" onclick="addEmployee()">
+            <span class="material-symbols-outlined icon-inline">badge</span>名簿に追加
+          </button>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px;margin:10px 0 0;">
+        アカウントとの紐づけは、その人が初めてログインしたあとに管理設定から行います。
+      </p>
+      <div id="e-msg" class="err-text"></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">checklist</span>進行中の手続き</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260904c"></script>
+<script src="js/layout.js?v=20260904c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const OWNER_LABEL = { employee: "本人", hr: "会社", labor_advisor: "社労士" };
+  const CATEGORY_ICON = { document: "description", task: "task_alt", account: "key", equipment: "devices" };
+  const ITEM_STATUS = { todo: "未着手", submitted: "提出済み", done: "完了", na: "対象外" };
+
+  let employees = [];
+  let procedures = [];
+
+  KPLayout.init({ active: "hr", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    await Promise.all([loadEmployees(), loadProcedures()]);
+  }
+
+  async function loadEmployees() {
+    try {
+      const res = await API.listEmployees();
+      employees = res.employees || [];
+      el("p-employee").innerHTML = employees.length
+        ? employees.map((e) =>
+            `<option value="${esc(e.id)}">${esc(e.display_name)}${e.department ? `（${esc(e.department)}）` : ""}</option>`
+          ).join("")
+        : `<option value="">（名簿に誰もいません）</option>`;
+    } catch (e) {
+      el("p-employee").innerHTML = `<option value="">取得失敗</option>`;
+      el("p-msg").textContent = e.detail || e.message;
+    }
+  }
+
+  async function addEmployee() {
+    const msg = el("e-msg");
+    msg.textContent = "";
+    const display_name = el("e-name").value.trim();
+    if (!display_name) { msg.textContent = "氏名を入力してください"; return; }
+    try {
+      await API.createEmployee({
+        display_name,
+        email: el("e-email").value.trim() || null,
+        department: el("e-dept").value.trim() || null,
+        employment_type: el("e-type").value,
+        joined_on: el("e-joined").value || null,
+        status: "invited",
+      });
+      for (const id of ["e-name", "e-email", "e-dept", "e-joined"]) el(id).value = "";
+      await loadEmployees();
+      msg.textContent = "";
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "追加に失敗しました";
+    }
+  }
+
+  async function createProcedure() {
+    const msg = el("p-msg");
+    msg.textContent = "";
+    const employeeId = el("p-employee").value;
+    if (!employeeId) { msg.textContent = "対象者を選んでください"; return; }
+    try {
+      await API.createProcedure({
+        employeeId,
+        kind: el("p-kind").value,
+        targetOn: el("p-target").value || null,
+      });
+      el("p-target").value = "";
+      await loadProcedures();
+    } catch (e) {
+      msg.textContent = e.error === "procedure_exists"
+        ? "この方の同じ種別の手続きはすでにあります"
+        : (e.detail || e.message || "作成に失敗しました");
+    }
+  }
+
+  async function loadProcedures() {
+    try {
+      const res = await API.listProcedures();
+      procedures = res.procedures || [];
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    const active = procedures.filter((p) => p.status !== "cancelled");
+    if (!active.length) {
+      el("list").innerHTML = `<div class="empty">進行中の手続きはありません。</div>`;
+      return;
+    }
+    el("list").innerHTML = active.map(procCard).join("");
+  }
+
+  function procCard(p) {
+    const name = p.employee?.display_name || "（対象者不明）";
+    const kind = p.kind === "onboarding" ? "入社" : "退職";
+    const pct = p.progress.total ? Math.round((p.progress.done / p.progress.total) * 100) : 0;
+    const dateLabel = p.target_on
+      ? new Date(p.target_on).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })
+      : "日付未定";
+    const overdue = p.target_on && p.status !== "done" && new Date(p.target_on) < new Date();
+
+    return `
+      <div class="kp-notice" style="margin-bottom:14px;">
+        <div class="head">
+          <span class="kp-chip ${p.kind === "onboarding" ? "event" : "archived"}">${kind}</span>
+          ${p.status === "done" ? '<span class="kp-chip">完了</span>' : ""}
+          ${overdue ? '<span class="kp-chip important">日付超過</span>' : ""}
+          <span class="meta">${esc(dateLabel)}　${p.progress.done} / ${p.progress.total} 完了（${pct}%）</span>
+        </div>
+        <div class="title">${esc(name)}
+          ${p.employee?.employment_type ? `<span class="muted" style="font-weight:400;font-size:13px;">　${esc(p.employee.employment_type)}</span>` : ""}
+        </div>
+        <div class="kp-progress"><span style="width:${pct}%"></span></div>
+        <div class="table-scroll" style="margin-top:12px;">
+          <table class="kp-items">
+            <thead><tr>
+              <th>項目</th><th>担当</th><th>状態</th><th>社労士</th><th></th>
+            </tr></thead>
+            <tbody>${(p.items || []).map((i) => itemRow(p, i)).join("")}</tbody>
+          </table>
+        </div>
+        <div class="foot">
+          ${p.status === "done"
+            ? `<button class="btn btn-secondary btn-sm" onclick="setProcStatus('${esc(p.id)}','in_progress')">進行中に戻す</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="setProcStatus('${esc(p.id)}','done')">
+                 <span class="material-symbols-outlined icon-inline">done_all</span>手続きを完了にする
+               </button>`}
+          <button class="btn btn-danger btn-sm" onclick="removeProc('${esc(p.id)}')">
+            <span class="material-symbols-outlined icon-inline">delete</span>削除
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function itemRow(p, i) {
+    const cls = i.status === "done" || i.status === "na" ? "done" : (i.status === "submitted" ? "submitted" : "");
+    return `
+      <tr class="${cls}">
+        <td>
+          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;color:var(--muted);">
+            ${CATEGORY_ICON[i.category] || "circle"}</span>
+          ${esc(i.title)}${i.required ? "" : ' <span class="muted" style="font-size:11px;">任意</span>'}
+        </td>
+        <td>${esc(OWNER_LABEL[i.owner] || i.owner)}</td>
+        <td>
+          <select onchange="setItemStatus('${esc(i.id)}', this.value)">
+            ${Object.entries(ITEM_STATUS).map(([k, v]) =>
+              `<option value="${k}"${i.status === k ? " selected" : ""}>${v}</option>`).join("")}
+          </select>
+        </td>
+        <td style="text-align:center;">
+          <input type="checkbox" style="width:auto;" ${i.share_with_advisor ? "checked" : ""}
+                 onchange="setItemShare('${esc(i.id)}', this.checked)">
+        </td>
+        <td style="text-align:right;">
+          <button class="icon-btn" title="項目を削除" onclick="removeItem('${esc(i.id)}')">
+            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+          </button>
+        </td>
+      </tr>`;
+  }
+
+  async function setItemStatus(id, status) {
+    try { await API.updateProcedureItem({ id, status }); await loadProcedures(); }
+    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadProcedures(); }
+  }
+
+  async function setItemShare(id, shareWithAdvisor) {
+    try { await API.updateProcedureItem({ id, shareWithAdvisor }); }
+    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadProcedures(); }
+  }
+
+  async function removeItem(id) {
+    if (!confirm("この項目を削除します。よろしいですか？")) return;
+    try { await API.deleteProcedureItem(id); await loadProcedures(); }
+    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  }
+
+  async function setProcStatus(id, status) {
+    try { await API.updateProcedure({ id, status }); await loadProcedures(); }
+    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); }
+  }
+
+  async function removeProc(id) {
+    const p = procedures.find((x) => x.id === id);
+    if (!confirm(`${p?.employee?.display_name || ""} さんの手続きを削除します。項目もすべて消えます。よろしいですか？`)) return;
+    try { await API.deleteProcedure(id); await loadProcedures(); }
+    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  }
+</script>
+
+</body>
+</html>

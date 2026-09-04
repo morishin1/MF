@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260904b">
-  <link rel="stylesheet" href="css/layout.css?v=20260904b">
+  <link rel="stylesheet" href="css/app.css?v=20260904c">
+  <link rel="stylesheet" href="css/layout.css?v=20260904c">
 </head>
 <body>
 
@@ -17,6 +17,13 @@
   <p id="greet-sub" class="kp-greet-sub"></p>
 
   <div id="tiles" class="kp-tiles"></div>
+
+  <div id="hr-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">badge</span><span id="hr-title">入社手続き</span></h2>
+    <p class="muted" style="font-size:13px;margin:0 0 6px;" id="hr-sub"></p>
+    <div class="kp-progress"><span id="hr-bar" style="width:0%"></span></div>
+    <div id="hr-items" style="margin-top:10px;"></div>
+  </div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span></h2>
@@ -45,13 +52,12 @@
     <div class="kp-soon-grid">
       <div class="kp-soon"><b>メッセージ</b>1対1・グループでのやりとり、未読と既読、ファイル添付</div>
       <div class="kp-soon"><b>やること</b>自分の担当タスクと予定を1画面で確認</div>
-      <div class="kp-soon"><b>入社手続き</b>提出書類の進捗確認</div>
     </div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260904b"></script>
-<script src="js/layout.js?v=20260904b"></script>
+<script src="js/api-client.js?v=20260904c"></script>
+<script src="js/layout.js?v=20260904c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -78,6 +84,70 @@
 
     renderTiles(await loadStats());
     loadNotices();
+    loadProcedure();
+  }
+
+  // --- 入社・退職手続き（自分の分だけ） -------------------------------------
+  let myProcedure = null;
+
+  async function loadProcedure() {
+    try {
+      const res = await API.listProcedures();
+      // 自分が対象の、まだ終わっていない手続き
+      myProcedure = (res.procedures || []).find(
+        (p) => p.employee?.id === res.me?.id && p.status !== "done" && p.status !== "cancelled"
+      ) || null;
+      renderProcedure();
+    } catch (e) {
+      // 未適用の環境やアクセス権が無い場合は、カードごと出さない
+      el("hr-card").classList.add("hidden");
+    }
+  }
+
+  function renderProcedure() {
+    if (!myProcedure) { el("hr-card").classList.add("hidden"); return; }
+
+    // 本人が出すものだけを見せる。会社側・社労士側の作業は本人の画面には出さない
+    const mine = (myProcedure.items || []).filter((i) => i.owner === "employee");
+    if (!mine.length) { el("hr-card").classList.add("hidden"); return; }
+
+    const done = mine.filter((i) => i.status === "done" || i.status === "na").length;
+    const submitted = mine.filter((i) => i.status === "submitted").length;
+    const pct = Math.round(((done + submitted) / mine.length) * 100);
+
+    el("hr-title").textContent = myProcedure.kind === "onboarding" ? "入社手続き" : "退職手続き";
+    el("hr-sub").textContent = myProcedure.target_on
+      ? `${new Date(myProcedure.target_on).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}　提出 ${done + submitted} / ${mine.length} 件`
+      : `提出 ${done + submitted} / ${mine.length} 件`;
+    el("hr-bar").style.width = `${pct}%`;
+
+    el("hr-items").innerHTML = mine.map((i) => {
+      const finished = i.status === "done" || i.status === "na";
+      const label = finished ? "確認済み" : (i.status === "submitted" ? "提出済み" : "");
+      return `
+        <div class="kp-todo${finished ? " done" : ""}">
+          <span class="material-symbols-outlined" style="font-size:20px;color:${finished || i.status === "submitted" ? "var(--primary)" : "#c3cad3"};">
+            ${finished || i.status === "submitted" ? "check_circle" : "radio_button_unchecked"}</span>
+          <span class="t">${esc(i.title)}
+            ${i.due_on ? `<small>期限 ${esc(new Date(i.due_on).toLocaleDateString("ja-JP"))}</small>` : ""}
+            ${label ? `<small>${label}</small>` : ""}
+          </span>
+          ${finished ? "" : (i.status === "submitted"
+            ? `<button class="btn btn-secondary btn-sm" onclick="submitItem('${esc(i.id)}', true)">取り消す</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="submitItem('${esc(i.id)}', false)">提出した</button>`)}
+        </div>`;
+    }).join("");
+
+    el("hr-card").classList.remove("hidden");
+  }
+
+  async function submitItem(itemId, undo) {
+    try {
+      await API.submitProcedureItem(itemId, { undo });
+      await loadProcedure();
+    } catch (e) {
+      alert(e.detail || e.message || "更新できませんでした");
+    }
   }
 
   // --- お知らせ -------------------------------------------------------------
