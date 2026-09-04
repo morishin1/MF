@@ -36,6 +36,9 @@ export default async function handler(req, res) {
 
   return json(res, 200, {
     configured,
+    // どちらの方式で動いているか。設定を切り分けるときの手がかりにする
+    mode: process.env.GOOGLE_IMPERSONATE_USER ? "impersonate" : "service_account",
+    impersonateUser: process.env.GOOGLE_IMPERSONATE_USER || null,
     rootFolderId: configured ? rootFolderId() : null,
     rootFolderUrl: configured ? `https://drive.google.com/drive/folders/${rootFolderId()}` : null,
     pending, total,
