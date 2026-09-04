@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260906b">
-  <link rel="stylesheet" href="css/layout.css?v=20260906b">
+  <link rel="stylesheet" href="css/app.css?v=20260906c">
+  <link rel="stylesheet" href="css/layout.css?v=20260906c">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -64,8 +64,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260906b"></script>
-<script src="js/layout.js?v=20260906b"></script>
+<script src="js/api-client.js?v=20260906c"></script>
+<script src="js/layout.js?v=20260906c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -144,7 +144,7 @@
       ["Google Drive（人事書類）", data.integrations.driveHr,
        "入社者の個人フォルダ。証憑と混ざらないよう GDRIVE_HR_FOLDER_ID に別フォルダを指定する"],
       ["Slack", data.integrations.slack,
-       "新着メッセージの通知。SLACK_WEBHOOK_URL が必要（通知処理は未実装）"],
+       "新着メッセージは画面右上のベルで届きます。Slack にも流す場合は SLACK_WEBHOOK_URL が必要（未実装）"],
       ["AI（書類判定・仕訳）", data.integrations.anthropic,
        "アップロードした書類の種別判定と仕訳ドラフト。ANTHROPIC_API_KEY が必要"],
     ];

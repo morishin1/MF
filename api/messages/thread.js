@@ -10,6 +10,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
+import { notify, clearNotification } from "../../lib/notify.js";
 
 const MAX_BODY = 4000;
 
@@ -99,6 +100,9 @@ export default async function handler(req, res) {
     // 自分が書いたものは自分にとって既読
     await markRead(sbAdmin, body.threadId, ctx.employee.id, data.created_at);
 
+    // 同じスレッドの他の参加者に通知する。連投しても1件にまとまる
+    await notifyThread(sbAdmin, ctx, body.threadId, text);
+
     return json(res, 200, { message: data });
   }
 
@@ -112,10 +116,38 @@ export default async function handler(req, res) {
     if (!thread) return json(res, 404, { error: "thread_not_found" });
 
     await markRead(admin(), body.threadId, ctx.employee.id, new Date().toISOString());
+    await clearNotification(ctx.employee.id, `message:${body.threadId}`);
     return json(res, 200, { ok: true });
   }
 
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
+}
+
+// スレッドの参加者（自分以外）へ新着を知らせる。
+// 本文はそのスレッドを読める人にしか届かないので、先頭だけ載せる。
+async function notifyThread(sbAdmin, ctx, threadId, text) {
+  const [{ data: members }, { data: thread }] = await Promise.all([
+    sbAdmin.from("gw_thread_members").select("employee_id").eq("thread_id", threadId),
+    sbAdmin.from("gw_threads").select("kind, title").eq("id", threadId).maybeSingle(),
+  ]);
+
+  const others = (members || [])
+    .map((m) => m.employee_id)
+    .filter((id) => id && id !== ctx.employee.id);
+  if (!others.length) return;
+
+  const where = thread?.kind === "group" ? `（${thread.title || "グループ"}）` : "";
+  const snippet = text.replace(/\s+/g, " ").slice(0, 60);
+
+  await notify(others.map((employeeId) => ({
+    tenantId: ctx.tenantId,
+    employeeId,
+    kind: "message",
+    title: `${ctx.employee.display_name} さんからメッセージ${where}`,
+    body: snippet,
+    link: `messages.html?t=${threadId}`,
+    dedupeKey: `message:${threadId}`,
+  })));
 }
 
 function markRead(sbAdmin, threadId, employeeId, at) {

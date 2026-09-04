@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260906b">
+  <link rel="stylesheet" href="css/app.css?v=20260906c">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -74,6 +74,7 @@
       <a href="#notices"><span class="material-symbols-outlined">campaign</span>お知らせ</a>
       <a href="#tasks"><span class="material-symbols-outlined">checklist</span>やること</a>
       <a href="#messages"><span class="material-symbols-outlined">forum</span>メッセージ</a>
+      <a href="#bell"><span class="material-symbols-outlined">notifications</span>通知</a>
       <a href="#hr"><span class="material-symbols-outlined">badge</span>入社手続き</a>
       <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
       <a href="#faq"><span class="material-symbols-outlined">quiz</span>よくある質問</a>
@@ -210,6 +211,24 @@
     <div class="banner info">
       <span class="material-symbols-outlined">lock</span>
       <div>やりとりは<b>参加している人しか読めません</b>。管理者や経営者であっても、参加していないスレッドの中身は見られない作りになっています。</div>
+    </div>
+  </div>
+
+  <!-- ======================================================== 通知 -->
+  <div class="card" id="bell">
+    <h2><span class="material-symbols-outlined">notifications</span>通知（画面右上のベル）</h2>
+    <span class="who-for member">全員</span>
+    <p class="lead" style="margin-top:0;">
+      画面の右上に<b>ベルのマーク</b>があります。あなたに関係することが起きると、赤いバッジに件数が出ます。
+      押すと一覧が開き、項目をクリックするとその画面へ移動します。
+    </p>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li><b>新しいメッセージ</b> — 相手が送ると届きます。同じ相手からの連投は1件にまとまります</li>
+      <li><b>タスクの期限超過</b> — 期限を過ぎた翌朝に届きます。責任者が設定されていればその人にも届きます</li>
+    </ul>
+    <div class="banner info">
+      <span class="material-symbols-outlined">lock</span>
+      <div>通知は<b>自分あてのものしか見えません</b>。管理者や経営者でも、他の人にどんな通知が届いたかは見られません。</div>
     </div>
   </div>
 
