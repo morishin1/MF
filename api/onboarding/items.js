@@ -9,6 +9,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 
 const CATEGORIES = ["document", "task", "account", "equipment"];
 const OWNERS = ["employee", "hr", "labor_advisor"];
@@ -73,6 +74,14 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
     if (!data) return json(res, 404, { error: "item_not_found" });
+    // 社外（社労士）に見せるかどうかの変更は必ず残す
+    if (row.value.share_with_advisor !== undefined) {
+      await gwLog({
+        tenantId: ctx.tenantId, actorId: user.id, action: "procedure.share_advisor",
+        target: `item:${data.id}`,
+        detail: { title: data.title, share: row.value.share_with_advisor },
+      });
+    }
     return json(res, 200, { item: data });
   }
 

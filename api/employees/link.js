@@ -14,6 +14,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -83,6 +84,13 @@ export default async function handler(req, res) {
     .update({ user_id: userId, updated_at: new Date().toISOString() })
     .eq("id", employeeId);
   if (ue) return json(res, 500, { error: "db_update_failed", detail: ue.message });
+
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id,
+    action: createdPassword || body?.create ? "account.create" : "account.link",
+    target: `employee:${employeeId}`,
+    detail: { email, name: employee.display_name },   // パスワードは残さない
+  });
 
   // 社労士は社外の人なので、会計側の権限は一切与えない。
   // 名簿の行だけで手続き画面に入れる（lib/gw.js がテナントを名簿から解決する）。

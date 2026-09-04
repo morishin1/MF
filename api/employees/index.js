@@ -9,6 +9,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 
 const EMPLOYMENT_TYPES = ["正社員", "契約社員", "パート", "アルバイト", "業務委託", "役員", "その他"];
 const STATUSES = ["invited", "active", "leaving", "left"];
@@ -65,6 +66,11 @@ export default async function handler(req, res) {
       .select(FIELDS)
       .single();
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "employee.create",
+      target: `employee:${data.id}`,
+      detail: { name: data.display_name, department: data.department, employment_type: data.employment_type },
+    });
     return json(res, 200, { employee: data });
   }
 
@@ -84,6 +90,13 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
     if (!data) return json(res, 404, { error: "employee_not_found" });
+    // 在籍状態は退職処理につながるので、変更を残す
+    if (row.value.status) {
+      await gwLog({
+        tenantId: ctx.tenantId, actorId: user.id, action: "employee.status",
+        target: `employee:${data.id}`, detail: { name: data.display_name, status: row.value.status },
+      });
+    }
     return json(res, 200, { employee: data });
   }
 

@@ -8,6 +8,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 import { isConfigured as driveConfigured, hrConfigured } from "../../lib/gdrive.js";
 
 export default async function handler(req, res) {
@@ -51,6 +52,7 @@ export default async function handler(req, res) {
       },
       me: { isAdmin: ctx.isAdmin, isHr: ctx.isHr, roles: ctx.roles, employee: ctx.employee },
       canManage: canManageHr(ctx),
+      activity: await recentActivity(sb, employees),
     });
   }
 
@@ -67,8 +69,28 @@ export default async function handler(req, res) {
       .select("id, name")
       .single();
     if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "settings.tenant_name",
+      target: `tenant:${ctx.tenantId}`, detail: { name },
+    });
     return json(res, 200, { tenant: data });
   }
 
   return methodNotAllowed(res, ["GET", "PATCH"]);
+}
+
+// 直近の操作ログ。誰が操作したかは社員名簿の氏名に置き換えて返す。
+// 読めるかどうかは RLS（社内の人だけ）が決める。
+async function recentActivity(sb, employees) {
+  const { data } = await sb
+    .from("gw_activity_log")
+    .select("id, ts, actor_id, action, target, detail")
+    .order("ts", { ascending: false })
+    .limit(100);
+
+  const nameOf = new Map((employees || []).filter((e) => e.user_id).map((e) => [e.user_id, e.display_name]));
+  return (data || []).map((r) => ({
+    id: r.id, ts: r.ts, action: r.action, target: r.target, detail: r.detail,
+    actor: nameOf.get(r.actor_id) || "（不明）",
+  }));
 }

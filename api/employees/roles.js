@@ -11,6 +11,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 
 const ROLES = ["owner", "hr", "manager", "labor_advisor"];
 
@@ -40,6 +41,10 @@ export default async function handler(req, res) {
         { onConflict: "employee_id,role", ignoreDuplicates: true }
       );
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "role.grant",
+      target: `employee:${employeeId}`, detail: { role },
+    });
     return json(res, 200, { ok: true, employeeId, role, granted: true });
   }
 
@@ -62,5 +67,9 @@ export default async function handler(req, res) {
     .eq("employee_id", employeeId)
     .eq("role", role);
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "role.revoke",
+    target: `employee:${employeeId}`, detail: { role },
+  });
   return json(res, 200, { ok: true, employeeId, role, granted: false });
 }
