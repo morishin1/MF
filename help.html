@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>使い方ガイド - KessanPilot</title>
+  <title>使い方ガイド - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260905g">
+  <link rel="stylesheet" href="css/app.css?v=20260906a">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -16,37 +17,110 @@
     .faq{margin-bottom:14px;}
     .faq .q{font-weight:700;color:var(--primary-dark);display:flex;gap:6px;align-items:flex-start;}
     .faq .a{color:var(--text);margin:4px 0 0 22px;font-size:14px;}
-    .lead{color:var(--muted);font-size:14px;line-height:1.7;}
+    .lead{color:var(--muted);font-size:14px;line-height:1.9;}
+
+    /* 目次 */
+    .toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;}
+    .toc a{
+      display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--primary-dark);
+      background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13.5px;font-weight:600;
+    }
+    .toc a:hover{background:#e3ebf3;}
+    .toc .material-symbols-outlined{font-size:19px;color:var(--primary);}
+
+    /* 誰向けの説明かの帯 */
+    .who-for{
+      display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+      padding:3px 10px;border-radius:999px;margin-bottom:12px;
+    }
+    .who-for.member{background:#eaf5ec;color:#256b36;}
+    .who-for.admin{background:#eef0fb;color:#3f4bab;}
+
+    /* 画面の一覧 */
+    .screens{width:100%;border-collapse:collapse;font-size:13.5px;}
+    .screens th{text-align:left;font-size:11.5px;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap;}
+    .screens td{padding:9px 8px;border-bottom:1px solid #f0f2f5;vertical-align:top;}
+    .screens td:first-child{white-space:nowrap;font-weight:600;color:var(--primary-dark);}
+    .screens tr:last-child td{border-bottom:none;}
+
+    @media (max-width:720px){
+      .toc{grid-template-columns:1fr 1fr;}
+      .screens{min-width:420px;}
+    }
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="brand">KessanPilot <span class="tag">使い方ガイド</span></div>
+  <div class="brand">エイト <span class="tag">使い方ガイド</span></div>
   <div class="who">
-    <a class="navlink" href="app.html"><span class="material-symbols-outlined icon-inline">arrow_back</span>アップロード画面へ戻る</a>
+    <a class="navlink" href="home.html"><span class="material-symbols-outlined icon-inline">arrow_back</span>ホームへ戻る</a>
   </div>
 </div>
 
-<div class="wrap guide" style="max-width:760px;">
+<div class="wrap guide" style="max-width:800px;">
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">menu_book</span>このツールでできること</h2>
+    <h2><span class="material-symbols-outlined">menu_book</span>このシステムについて</h2>
     <p class="lead">
-      書類（請求書・領収書など）を<b>アップロードするだけ</b>で、AIが「何の書類か」を判定して<b>月ごとに自動で整理</b>します。
-      会計に関係する書類は<b>そのまま自動で仕訳</b>され、<b>Google Driveの「取引先 / 月 / 種別」フォルダにも自動保存</b>されます。<br>
-      承認作業は不要です。むずかしい操作もありません。<b>集めた書類をここに上げていくだけ</b>でOKです。<br>
-      ※高額（50万円超）や新しいパターンの取引だけは、念のため管理者が確認します。
+      社内の連絡・書類・手続きを1か所にまとめたシステムです。
+      <b>スマートフォンでもそのまま使えます</b>。ログインすると、あなたの権限に合わせた画面が開きます。<br>
+      分からないことがあれば管理部までお問い合わせください。
+    </p>
+    <div class="toc" style="margin-top:16px;">
+      <a href="#screens"><span class="material-symbols-outlined">grid_view</span>画面の見方</a>
+      <a href="#upload"><span class="material-symbols-outlined">upload_file</span>書類を上げる</a>
+      <a href="#status"><span class="material-symbols-outlined">flag</span>状況の見方</a>
+      <a href="#notices"><span class="material-symbols-outlined">campaign</span>お知らせ</a>
+      <a href="#tasks"><span class="material-symbols-outlined">checklist</span>やること</a>
+      <a href="#messages"><span class="material-symbols-outlined">forum</span>メッセージ</a>
+      <a href="#hr"><span class="material-symbols-outlined">badge</span>入社手続き</a>
+      <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
+      <a href="#faq"><span class="material-symbols-outlined">quiz</span>よくある質問</a>
+    </div>
+  </div>
+
+  <!-- ======================================================== 画面の見方 -->
+  <div class="card" id="screens">
+    <h2><span class="material-symbols-outlined">grid_view</span>画面の見方</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      画面の一番下に<b>4つのタブ</b>が並びます。片手で押せる位置にあります。
+    </p>
+    <div class="table-scroll">
+      <table class="screens">
+        <thead><tr><th>タブ</th><th>できること</th></tr></thead>
+        <tbody>
+          <tr><td>ホーム</td><td>今月の書類の件数、お知らせ、自分の入社手続きの進み具合をまとめて確認します</td></tr>
+          <tr><td>メッセージ</td><td>社内の人と1対1・グループでやりとりします</td></tr>
+          <tr><td>やること</td><td>自分に割り当てられたタスクを確認し、終わったら「完了」を押します</td></tr>
+          <tr><td>書類</td><td>請求書・領収書などをアップロードします</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <span class="who-for admin" style="margin-top:20px;">管理者・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      画面の左側にメニューが並びます。細い画面では上部の横スクロールに変わります。
+      詳しくは<a href="#admin">管理者の方へ</a>をご覧ください。
     </p>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">footprint</span>使い方（4ステップ）</h2>
+  <!-- ======================================================== 書類 -->
+  <div class="card" id="upload">
+    <h2><span class="material-symbols-outlined">upload_file</span>書類をアップロードする</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      書類を<b>上げるだけ</b>で、AIが「何の書類か」を判定して<b>月ごとに自動で整理</b>します。
+      会計に関係する書類は<b>そのまま自動で仕訳</b>され、<b>Google Drive の「取引先 / 月 / 種別」フォルダにも自動保存</b>されます。
+      承認作業は要りません。<br>
+      ※高額（50万円超）や新しいパターンの取引だけは、念のため管理者が確認します。
+    </p>
 
-    <div class="stepbox">
+    <div class="stepbox" style="margin-top:18px;">
       <div class="num">1</div>
-      <div class="body"><b>ログインする</b><br>
-        メールアドレスとパスワードでログインします。分からない場合は管理者に確認してください。</div>
+      <div class="body"><b>下タブの「書類」を開く</b><br>
+        メールアドレスとパスワードでログインします。分からない場合は管理部に確認してください。</div>
     </div>
     <div class="stepbox">
       <div class="num">2</div>
@@ -56,41 +130,172 @@
     <div class="stepbox">
       <div class="num">3</div>
       <div class="body"><b>書類をアップロードする</b><br>
-        点線のエリアを<b>クリックして選択</b>、または<b>ファイルをドラッグ&ドロップ</b>します。<br>
+        点線のエリアを<b>クリックして選択</b>、または<b>ファイルをドラッグ＆ドロップ</b>します。
+        スマートフォンならその場で撮影もできます。<br>
         請求書・領収書はもちろん、<b>契約書・名刺など会計に関係ない書類でもOK</b>。とりあえず上げてください。</div>
     </div>
     <div class="stepbox">
       <div class="num">4</div>
       <div class="body"><b>AIの判定を確認する</b><br>
-        数秒で「種別・対象月・要約」が表示され、下の一覧に追加されます。<br>
-        会計書類なら自動で仕訳され「仕訳済」に、Driveへの保存も同時に完了します。あなたの作業はここまでです。</div>
+        数秒で「種別・対象月・要約」が表示され、下の一覧に追加されます。
+        会計書類なら自動で仕訳され「仕訳済」に、Drive への保存も同時に完了します。あなたの作業はここまでです。</div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">flag</span>状況（ステータス）の見方</h2>
-    <table>
-      <thead><tr><th>表示</th><th>意味</th></tr></thead>
-      <tbody>
-        <tr><td><span class="pill recognizing">処理中</span></td><td>AIが判定している最中です（数秒で終わります）</td></tr>
-        <tr><td><span class="pill approved">仕訳済</span></td><td>自動で仕訳し、Driveの月別フォルダに保存しました（作業不要）</td></tr>
-        <tr><td><span class="pill filed">整理完了</span></td><td>会計に関係ない書類として、その月のフォルダに保管しました</td></tr>
-        <tr><td><span class="pill ready">要確認</span></td><td>高額（50万円超）や新しいパターンのため、管理者が確認します</td></tr>
-        <tr><td><span class="pill sent">MF登録済</span></td><td>マネーフォワードへ登録されました</td></tr>
-        <tr><td><span class="pill error">エラー</span></td><td>処理に失敗しました。<b>「再処理」ボタン</b>を押すとやり直せます</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="card">
-    <h2><span class="material-symbols-outlined">description</span>アップロードできるファイル</h2>
-    <p class="lead">
+    <h3><span class="material-symbols-outlined">description</span>上げられるファイル</h3>
+    <p class="lead" style="margin-top:0;">
       PDF ／ 画像（JPG・PNG・WEBP・HEIC）／ Excel（.xlsx・.xls）／ CSV　・　1ファイル <b>10MBまで</b><br>
       スマホで撮った領収書の写真もそのまま上げられます。ピンボケや傾きは、なるべく文字が読めるように撮ってください。
     </p>
   </div>
 
-  <div class="card">
+  <!-- ======================================================== ステータス -->
+  <div class="card" id="status">
+    <h2><span class="material-symbols-outlined">flag</span>状況（ステータス）の見方</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>表示</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill recognizing">処理中</span></td><td>AIが判定している最中です（数秒で終わります）</td></tr>
+          <tr><td><span class="pill approved">仕訳済</span></td><td>自動で仕訳し、Drive の月別フォルダに保存しました（作業不要）</td></tr>
+          <tr><td><span class="pill filed">整理完了</span></td><td>会計に関係ない書類として、その月のフォルダに保管しました</td></tr>
+          <tr><td><span class="pill ready">要確認</span></td><td>高額（50万円超）や新しいパターンのため、管理者が確認します</td></tr>
+          <tr><td><span class="pill sent">MF登録済</span></td><td>マネーフォワードへ登録されました</td></tr>
+          <tr><td><span class="pill error">エラー</span></td><td>処理に失敗しました。<b>「再処理」ボタン</b>を押すとやり直せます</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======================================================== お知らせ -->
+  <div class="card" id="notices">
+    <h2><span class="material-symbols-outlined">campaign</span>お知らせ</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      全社や部署あての連絡が<b>ホーム画面</b>に並びます。まだ読んでいないものには「未読」が付き、
+      見出しの横に未読の件数が出ます。<br>
+      読んだら「<b>読みました</b>」を押してください。誰が読んだかが管理者側で分かるので、
+      重要な連絡の行き渡りを確認できます。
+    </p>
+    <p class="lead">
+      自分の部署あてでないお知らせは表示されません。届いていないと感じたら管理部にご確認ください。
+    </p>
+  </div>
+
+  <!-- ======================================================== やること -->
+  <div class="card" id="tasks">
+    <h2><span class="material-symbols-outlined">checklist</span>やること</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      下タブの「やること」に、<b>自分に割り当てられたタスクだけ</b>が並びます。他の人の分は出ません。
+    </p>
+    <ul class="lead" style="margin:0;padding-left:20px;">
+      <li>終わったら「<b>完了</b>」を押します。押し間違えたら「戻す」で戻せます</li>
+      <li>期限を過ぎているものは<b>赤字で「超過」</b>と表示されます</li>
+      <li>「高」が付いているものは急ぎの用件です</li>
+    </ul>
+  </div>
+
+  <!-- ======================================================== メッセージ -->
+  <div class="card" id="messages">
+    <h2><span class="material-symbols-outlined">forum</span>メッセージ</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      社内の人とやりとりします。相手を<b>1人選べば1対1</b>、<b>複数選べばグループ</b>になります。
+    </p>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>一覧には最新のメッセージと<b>未読の件数</b>が出ます。開くと自動で既読になります</li>
+      <li>同じ相手との1対1は作り直されず、これまでのやりとりに続きます</li>
+      <li>パソコンでは <b>Ctrl+Enter</b>（Mac は <b>⌘+Enter</b>）で送信できます</li>
+    </ul>
+    <div class="banner info">
+      <span class="material-symbols-outlined">lock</span>
+      <div>やりとりは<b>参加している人しか読めません</b>。管理者や経営者であっても、参加していないスレッドの中身は見られない作りになっています。</div>
+    </div>
+  </div>
+
+  <!-- ======================================================== 入社手続き -->
+  <div class="card" id="hr">
+    <h2><span class="material-symbols-outlined">badge</span>入社・退職手続き</h2>
+    <span class="who-for member">対象になった方</span>
+    <p class="lead" style="margin-top:0;">
+      手続きが始まると、<b>ホーム画面</b>に提出物のチェックリストが出ます。
+      並ぶのは<b>あなたが出すものだけ</b>で、会社側や社労士が行う作業は表示されません。
+    </p>
+
+    <div class="stepbox" style="margin-top:16px;">
+      <div class="num">1</div>
+      <div class="body"><b>「ファイルを出す」を押す</b><br>
+        書類を撮影するか、PDFを選びます。送信から提出済みへの更新まで一度に進みます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>提出したファイル名を確認する</b><br>
+        項目の下にファイル名が出れば提出できています。クリックすると内容を確認できます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>会社の確認を待つ</b><br>
+        人事が中身を確認すると「確認済み」に変わります。不備があれば連絡が来ます。</div>
+    </div>
+
+    <p class="lead">
+      紙で渡すものや、システムを通さずに済ませたものは「<b>提出済みにする</b>」だけ押してください。
+    </p>
+    <div class="banner info">
+      <span class="material-symbols-outlined">lock</span>
+      <div>
+        提出した書類は<b>会計の書類とは別の場所</b>に保管され、本人と人事以外は見られません。
+        社会保険の手続きに必要な書類だけ、社労士に共有されます（どれを共有するかは人事が指定します）。
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== 管理者 -->
+  <div class="card" id="admin">
+    <h2><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</h2>
+    <span class="who-for admin">管理者・経営者の方</span>
+    <p class="lead" style="margin-top:0;">左メニューの各項目でできることです。</p>
+    <div class="table-scroll">
+      <table class="screens">
+        <thead><tr><th>メニュー</th><th>できること</th></tr></thead>
+        <tbody>
+          <tr><td>ダッシュボード</td><td>今月の書類件数、要確認の仕訳、Drive の保存状況をまとめて確認します</td></tr>
+          <tr><td>お知らせ</td><td>全社または部署を指定して連絡を配信します。下書き保存、上部固定、掲載終了日の設定ができ、一覧に「既読 3 / 8 人」の形で行き渡り具合が出ます</td></tr>
+          <tr><td>メッセージ</td><td>メンバーと同じ画面です。参加しているやりとりだけが見えます</td></tr>
+          <tr><td>メンバー</td><td>社員名簿の追加・編集、在籍状態の切替、社内権限（経営者・人事・責任者・社労士）の付け外し、CSV出力</td></tr>
+          <tr><td>入社・退職手続き</td><td>対象者を選ぶと<b>雇用区分に合わせたチェックリストが自動で用意されます</b>。項目ごとに状態と社労士への共有可否を切り替えられます</td></tr>
+          <tr><td>タスク・予定</td><td>担当者・期限・重要度を決めて割り当てます。期限超過だけを絞り込めます</td></tr>
+          <tr><td>書類・雛形</td><td>雇用契約書などの雛形を登録し、対象者を選んで <code>{{氏名}}</code> などを差し込んで書き出します</td></tr>
+          <tr><td>アカウント・貸与品</td><td>PC・スマホ・アカウント・鍵の貸出状況を管理します。退職時の返却漏れ防止に使います</td></tr>
+          <tr><td>会計書類</td><td>アップロードされた書類の確認、仕訳の承認、試算表の取得を行います</td></tr>
+          <tr><td>管理設定</td><td>会社名の変更、ログインアカウントの紐づけ、外部サービス（Drive など）の設定状況の確認</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="material-symbols-outlined">person_add</span>新しいメンバーを迎えるとき</h3>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>メンバー画面で名簿に追加</b><br>氏名・部署・雇用区分・入社日を入れます。アカウントはまだ無くて構いません。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>入社・退職手続きを作成</b><br>対象者を選ぶだけで、雇用区分に応じたチェックリストが用意されます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>ログインアカウントを用意して紐づける</b><br>
+        アカウントを作ったあと、<b>管理設定 →「ログインアカウントの紐づけ」</b>でメールアドレスを入れて結び付けます。
+        紐づけると同時に、書類のアップロードができるようになります。</div>
+    </div>
+    <p class="lead">
+      本人がログインすると、ホーム画面に提出物のチェックリストが出ます。
+      提出されたファイルは手続き画面から確認でき、中身を見てから「完了」にできます。
+    </p>
+  </div>
+
+  <!-- ======================================================== FAQ -->
+  <div class="card" id="faq">
     <h2><span class="material-symbols-outlined">quiz</span>よくある質問</h2>
 
     <div class="faq">
@@ -103,25 +308,35 @@
     </div>
     <div class="faq">
       <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>アップロードしたファイルはどこに保存される？</div>
-      <div class="a">Google Driveの <b>取引先 / 対象月 / 種別</b> のフォルダに自動保存されます（フォルダは自動で作られます）。一覧の「Driveで開く」から確認できます。</div>
-    </div>
-    <div class="faq">
-      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>承認や会計ソフト（MF）への登録は誰がやる？</div>
-      <div class="a">通常は<b>自動</b>で仕訳まで完了します。「要確認」のものだけ管理者がチェックします。メンバーの方は<b>書類を上げるだけ</b>でOKです。</div>
+      <div class="a">Google Drive の <b>取引先 / 対象月 / 種別</b> のフォルダに自動保存されます（フォルダは自動で作られます）。一覧の「Driveで開く」から確認できます。</div>
     </div>
     <div class="faq">
       <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>間違ったファイルを上げてしまった／内容がおかしい</div>
-      <div class="a">一覧の<b>「削除」ボタン</b>、またはファイル名をクリックして開いたプレビュー右上の<b>「削除」</b>から、その場で取り消せます。書類から作られた仕訳ドラフトも一緒に消え、Google Drive に保存済みのファイルは<b>ゴミ箱</b>へ移動します（30日間は復元可能）。<br>ただし<b>会計ソフトへ登録済み（MF登録済み）の書類は削除できません</b>。その場合は管理者にご相談ください。</div>
+      <div class="a">一覧の<b>「削除」ボタン</b>、またはファイル名をクリックして開いたプレビュー右上の<b>「削除」</b>から、その場で取り消せます。書類から作られた仕訳ドラフトも一緒に消え、Google Drive のファイルは<b>ゴミ箱</b>へ移動します（30日間は復元可能）。<br>ただし<b>会計ソフトへ登録済み（MF登録済み）の書類は削除できません</b>。その場合は管理部にご相談ください。</div>
     </div>
     <div class="faq">
       <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>アップロードした書類が一覧に出てこない</div>
       <div class="a">一覧の「全期間」にチェックが入っているか確認してください。エラー表示のものは「再処理」を押すと復活します。</div>
     </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>「社員名簿に登録されていません」と出る</div>
+      <div class="a">ログインはできているものの、名簿との紐づけがまだの状態です。管理部に連絡してください。書類のアップロードはこの状態でも使えます。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>メッセージやお知らせは他の人に見られる？</div>
+      <div class="a">メッセージは<b>参加している人だけ</b>が読めます。お知らせは宛先に指定された人にだけ表示されます。入社手続きで提出した書類は、<b>本人と人事</b>（および共有を指定された項目のみ社労士）しか見られません。</div>
+    </div>
+    <div class="faq">
+      <div class="q"><span class="material-symbols-outlined" style="font-size:18px;">help</span>スマートフォンでも使える？</div>
+      <div class="a">使えます。画面下のタブから操作でき、書類はその場で撮影して上げられます。ホーム画面に追加しておくとアプリのように開けます。</div>
+    </div>
   </div>
 
   <div class="card" style="text-align:center;">
-    <a class="btn btn-primary" href="app.html" style="justify-content:center;">
-      <span class="material-symbols-outlined icon-inline">upload_file</span>アップロード画面へ戻る</a>
+    <a class="btn btn-primary" href="home.html" style="justify-content:center;">
+      <span class="material-symbols-outlined icon-inline">home</span>ホームへ戻る</a>
+    <a class="btn btn-secondary" href="app.html" style="justify-content:center;margin-left:8px;">
+      <span class="material-symbols-outlined icon-inline">upload_file</span>書類をアップロード</a>
   </div>
 
 </div>
