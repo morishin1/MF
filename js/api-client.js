@@ -181,6 +181,13 @@
   const linkEmployeeAccount = (employeeId, email, clientId) =>
     api("/api/employees/link", { method: "POST", body: { employeeId, email, clientId } });
 
+  // ---- 通知 ----
+  const listNotifications = () => api("/api/notifications");
+  const markNotificationRead = (id) =>
+    api("/api/notifications", { method: "PATCH", body: { id } });
+  const markAllNotificationsRead = () =>
+    api("/api/notifications", { method: "PATCH", body: { all: true } });
+
   // ---- 管理設定 ----
   const settings = () => api("/api/settings");
   const updateSettings = (patch) =>
@@ -350,6 +357,7 @@
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
+    listNotifications, markNotificationRead, markAllNotificationsRead,
     listAssets, createAsset, updateAsset, deleteAsset,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,

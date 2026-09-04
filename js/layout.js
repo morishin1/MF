@@ -70,11 +70,57 @@
       </div>
       <div class="who">
         <span>${esc(name)}</span>
+        <div class="kp-bell">
+          <button class="icon-btn" id="kp-bell-btn" title="通知" onclick="KPLayout.toggleBell()">
+            ${icon("notifications", 20)}
+            <span class="kp-bell-badge hidden" id="kp-bell-badge"></span>
+          </button>
+          <div class="kp-bell-panel hidden" id="kp-bell-panel"></div>
+        </div>
         <button class="btn btn-secondary btn-sm" onclick="KPLayout.logout()">
           ${icon("logout", 18)}ログアウト
         </button>
       </div>`;
     document.body.prepend(el);
+    loadNotifications();
+  }
+
+  // ---- 通知 ---------------------------------------------------------------
+  let notifications = [];
+
+  async function loadNotifications() {
+    try {
+      const res = await API.listNotifications();
+      notifications = res.notifications || [];
+      const badge = document.getElementById("kp-bell-badge");
+      if (!badge) return;
+      badge.textContent = res.unread > 9 ? "9+" : String(res.unread || "");
+      badge.classList.toggle("hidden", !res.unread);
+    } catch (e) {
+      // 未適用の環境や名簿未登録では通知が無いだけ。画面は壊さない
+    }
+  }
+
+  function renderBell() {
+    const panel = document.getElementById("kp-bell-panel");
+    if (!panel) return;
+    if (!notifications.length) {
+      panel.innerHTML = `<div class="empty" style="padding:18px;">通知はありません。</div>`;
+      return;
+    }
+    const unread = notifications.filter((n) => !n.read_at).length;
+    panel.innerHTML = `
+      <div class="kp-bell-head">
+        <b>通知</b>
+        ${unread ? `<button class="btn btn-secondary btn-sm" onclick="KPLayout.readAllNotifications()">すべて既読</button>` : ""}
+      </div>
+      ${notifications.map((n) => `
+        <a class="kp-bell-item${n.read_at ? "" : " unread"}" href="${esc(n.link || "#")}"
+           onclick="KPLayout.openNotification('${esc(n.id)}')">
+          <b>${esc(n.title)}</b>
+          ${n.body ? `<small>${esc(n.body)}</small>` : ""}
+          <small>${esc(new Date(n.created_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</small>
+        </a>`).join("")}`;
   }
 
   // メンバー: 画面下のタブ。片手で届く位置に置く
@@ -220,6 +266,32 @@
       }
 
       return { me, appRole };
+    },
+
+    toggleBell() {
+      const panel = document.getElementById("kp-bell-panel");
+      if (!panel) return;
+      const opening = panel.classList.contains("hidden");
+      if (opening) renderBell();
+      panel.classList.toggle("hidden", !opening);
+    },
+
+    // リンク先へ移動しつつ既読にする。移動が先に走ってもよいよう待たない
+    openNotification(id) {
+      const n = notifications.find((x) => x.id === id);
+      if (n && !n.read_at) API.markNotificationRead(id).catch(() => {});
+    },
+
+    async readAllNotifications() {
+      try {
+        await API.markAllNotificationsRead();
+        for (const n of notifications) n.read_at = n.read_at || new Date().toISOString();
+        renderBell();
+        const badge = document.getElementById("kp-bell-badge");
+        if (badge) badge.classList.add("hidden");
+      } catch (e) {
+        alert(e.detail || e.message || "既読にできませんでした");
+      }
     },
 
     logout() { API.logout(); clearCache(); location.href = "index.html"; },

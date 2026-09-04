@@ -255,3 +255,37 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
   .kp-chat{ max-height:46vh; }
   .kp-bubble{ max-width:88%; }
 }
+
+/* =============================================================================
+   通知（トップバーのベル）
+   ========================================================================== */
+.kp-bell{ position:relative; }
+.kp-bell .icon-btn{ position:relative; }
+.kp-bell-badge{
+  position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px;
+  border-radius:999px; background:#b3261e; color:#fff;
+  font-size:10.5px; font-weight:700; line-height:16px; text-align:center;
+}
+.kp-bell-panel{
+  position:absolute; right:0; top:calc(100% + 8px); width:min(320px, calc(100vw - 24px));
+  max-height:min(420px, 70vh); overflow-y:auto; z-index:60;
+  background:#fff; border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 8px 24px rgba(16,32,56,.14);
+}
+.kp-bell-head{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px;
+}
+.kp-bell-item{
+  display:block; padding:11px 14px; border-bottom:1px solid #f0f2f5;
+  text-decoration:none; color:inherit;
+}
+.kp-bell-item:last-child{ border-bottom:none; }
+.kp-bell-item:hover{ background:var(--soft); }
+.kp-bell-item.unread{ border-left:3px solid var(--primary); background:#fbfdff; }
+.kp-bell-item b{ display:block; font-size:13.5px; color:var(--primary-dark); line-height:1.6; }
+.kp-bell-item small{ display:block; font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.6; }
+
+@media (max-width:720px){
+  .kp-bell-panel{ position:fixed; right:12px; left:12px; width:auto; top:56px; }
+}
