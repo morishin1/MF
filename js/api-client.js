@@ -155,6 +155,19 @@
   const approveJournal = (journalId) =>
     api("/api/journals/approve", { method: "POST", body: { journalId } });
 
+  // ---- 社内お知らせ ----
+  // scope='admin' で下書き・期限切れも含む全件（管理者のみ）
+  const listNotices = (scope) =>
+    api(`/api/notices${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`);
+  const createNotice = (notice) =>
+    api("/api/notices", { method: "POST", body: notice }).then((d) => d.notice);
+  const updateNotice = (notice) =>
+    api("/api/notices", { method: "PATCH", body: notice }).then((d) => d.notice);
+  const deleteNotice = (id) =>
+    api(`/api/notices?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const markNoticeRead = (noticeId) =>
+    api("/api/notices/read", { method: "POST", body: { noticeId } });
+
   // ---- Google Drive 連携 ----
   const driveStatus = (clientId) => api(`/api/drive/status?clientId=${encodeURIComponent(clientId)}`);
   const driveSync = (clientId, limit) => api("/api/drive/sync", { method: "POST", body: { clientId, limit } });
@@ -226,5 +239,6 @@
     deleteDocument,
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
+    listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
   };
 })();

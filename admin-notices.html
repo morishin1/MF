@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>お知らせ - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260904b">
+  <link rel="stylesheet" href="css/layout.css?v=20260904b">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">お知らせ</h1>
+  <p class="kp-greet-sub">全社・部署への連絡を配信し、既読状況を確認します。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">campaign</span><span id="form-title">新しいお知らせ</span></h2>
+
+    <div style="margin-bottom:12px;">
+      <label>件名</label>
+      <input id="f-title" type="text" maxlength="200" placeholder="例: 年末年始の休業について">
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label>本文</label>
+      <textarea id="f-body" rows="6" placeholder="改行はそのまま表示されます。"></textarea>
+    </div>
+
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div>
+        <label>種別</label>
+        <select id="f-category">
+          <option value="general">お知らせ</option>
+          <option value="important">重要</option>
+          <option value="event">イベント</option>
+          <option value="system">システム</option>
+        </select>
+      </div>
+      <div>
+        <label>宛先</label>
+        <select id="f-audience" onchange="onAudienceChange()">
+          <option value="all">全社</option>
+          <option value="department">部署を指定</option>
+        </select>
+      </div>
+      <div id="dept-wrap" class="hidden">
+        <label>対象部署（カンマ区切り）</label>
+        <input id="f-departments" type="text" placeholder="例: 管理部, 営業部">
+      </div>
+      <div>
+        <label>掲載終了日（任意）</label>
+        <input id="f-expires" type="date">
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="display:inline-flex;align-items:center;gap:8px;font-weight:normal;">
+        <input id="f-pinned" type="checkbox" style="width:auto;margin:0;">
+        上部に固定して表示する
+      </label>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="btn-publish" class="btn btn-primary" onclick="save('published')">
+        <span class="material-symbols-outlined icon-inline">send</span>配信する
+      </button>
+      <button class="btn btn-secondary" onclick="save('draft')">
+        <span class="material-symbols-outlined icon-inline">draft</span>下書き保存
+      </button>
+      <button id="btn-cancel" class="btn btn-secondary hidden" onclick="resetForm()">編集をやめる</button>
+    </div>
+    <div id="form-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">list</span>配信済み・下書き</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260904b"></script>
+<script src="js/layout.js?v=20260904b"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  let editingId = null;
+  let loaded = [];   // 一覧の実データ。編集時は id から引く（HTML属性にJSONを埋めない）
+
+  const CATEGORY_LABEL = { general: "お知らせ", important: "重要", event: "イベント", system: "システム" };
+
+  KPLayout.init({ active: "notices", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  function onAudienceChange() {
+    el("dept-wrap").classList.toggle("hidden", el("f-audience").value !== "department");
+  }
+
+  function resetForm() {
+    editingId = null;
+    el("form-title").textContent = "新しいお知らせ";
+    el("btn-publish").innerHTML =
+      '<span class="material-symbols-outlined icon-inline">send</span>配信する';
+    el("btn-cancel").classList.add("hidden");
+    for (const id of ["f-title", "f-body", "f-departments", "f-expires"]) el(id).value = "";
+    el("f-category").value = "general";
+    el("f-audience").value = "all";
+    el("f-pinned").checked = false;
+    el("form-msg").textContent = "";
+    onAudienceChange();
+  }
+
+  function collect(status) {
+    const departments = el("f-departments").value.split(",").map((s) => s.trim()).filter(Boolean);
+    return {
+      title: el("f-title").value.trim(),
+      body: el("f-body").value.trim(),
+      category: el("f-category").value,
+      audience: el("f-audience").value,
+      departments,
+      pinned: el("f-pinned").checked,
+      status,
+      // 日付だけの入力なのでその日の終わりまで掲載する
+      expires_at: el("f-expires").value ? `${el("f-expires").value}T23:59:59+09:00` : null,
+    };
+  }
+
+  async function save(status) {
+    const msg = el("form-msg");
+    msg.textContent = "";
+    const payload = collect(status);
+    if (!payload.title || !payload.body) { msg.textContent = "件名と本文を入力してください"; return; }
+    if (payload.audience === "department" && !payload.departments.length) {
+      msg.textContent = "対象部署を入力してください"; return;
+    }
+
+    const btn = el("btn-publish");
+    btn.disabled = true;
+    try {
+      if (editingId) await API.updateNotice({ id: editingId, ...payload });
+      else await API.createNotice(payload);
+      resetForm();
+      await load();
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "保存に失敗しました";
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function startEdit(id) {
+    const n = loaded.find((x) => x.id === id);
+    if (!n) return;
+    editingId = n.id;
+    el("form-title").textContent = "お知らせを編集";
+    el("btn-publish").innerHTML =
+      '<span class="material-symbols-outlined icon-inline">save</span>保存して配信';
+    el("btn-cancel").classList.remove("hidden");
+    el("f-title").value = n.title;
+    el("f-body").value = n.body;
+    el("f-category").value = n.category;
+    el("f-audience").value = n.audience;
+    el("f-departments").value = (n.departments || []).join(", ");
+    el("f-pinned").checked = !!n.pinned;
+    el("f-expires").value = n.expires_at ? n.expires_at.slice(0, 10) : "";
+    onAudienceChange();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function remove(id) {
+    const n = loaded.find((x) => x.id === id);
+    if (!confirm(`「${n ? n.title : ""}」を削除します。よろしいですか？`)) return;
+    try { await API.deleteNotice(id); await load(); }
+    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  }
+
+  async function load() {
+    try {
+      const { notices } = await API.listNotices("admin");
+      render(notices || []);
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render(notices) {
+    loaded = notices;
+    if (!notices.length) {
+      el("list").innerHTML = `<div class="empty">まだお知らせはありません。上のフォームから作成してください。</div>`;
+      return;
+    }
+    el("list").innerHTML = notices.map(card).join("");
+  }
+
+  function card(n) {
+    const chips = [
+      `<span class="kp-chip ${esc(n.category)}">${esc(CATEGORY_LABEL[n.category] || n.category)}</span>`,
+      n.pinned ? `<span class="kp-chip pinned">固定</span>` : "",
+      n.status === "draft" ? `<span class="kp-chip draft">下書き</span>` : "",
+      n.status === "archived" ? `<span class="kp-chip archived">終了</span>` : "",
+      n.audience === "department"
+        ? `<span class="kp-chip">${esc((n.departments || []).join("・"))}</span>`
+        : `<span class="kp-chip">全社</span>`,
+    ].filter(Boolean).join("");
+
+    const date = new Date(n.publish_at).toLocaleDateString("ja-JP",
+      { year: "numeric", month: "long", day: "numeric" });
+    const read = n.status === "published"
+      ? `既読 ${n.readCount} / ${n.targetCount} 人`
+      : "未配信";
+
+    return `
+      <div class="kp-notice">
+        <div class="head">
+          ${chips}
+          <span class="meta">${esc(date)}　${esc(read)}</span>
+        </div>
+        <div class="title">${esc(n.title)}</div>
+        <div class="body">${esc(n.body)}</div>
+        <div class="foot">
+          <button class="btn btn-secondary btn-sm" onclick="startEdit('${esc(n.id)}')">
+            <span class="material-symbols-outlined icon-inline">edit</span>編集
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="remove('${esc(n.id)}')">
+            <span class="material-symbols-outlined icon-inline">delete</span>削除
+          </button>
+        </div>
+      </div>`;
+  }
+</script>
+
+</body>
+</html>

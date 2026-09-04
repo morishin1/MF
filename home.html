@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260904a">
-  <link rel="stylesheet" href="css/layout.css?v=20260904a">
+  <link rel="stylesheet" href="css/app.css?v=20260904b">
+  <link rel="stylesheet" href="css/layout.css?v=20260904b">
 </head>
 <body>
 
@@ -17,6 +17,11 @@
   <p id="greet-sub" class="kp-greet-sub"></p>
 
   <div id="tiles" class="kp-tiles"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span></h2>
+    <div id="notices"><div class="empty">読み込み中…</div></div>
+  </div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">upload_file</span>書類をアップロードする</h2>
@@ -40,14 +45,13 @@
     <div class="kp-soon-grid">
       <div class="kp-soon"><b>メッセージ</b>1対1・グループでのやりとり、未読と既読、ファイル添付</div>
       <div class="kp-soon"><b>やること</b>自分の担当タスクと予定を1画面で確認</div>
-      <div class="kp-soon"><b>お知らせ</b>全社・部署からの連絡</div>
       <div class="kp-soon"><b>入社手続き</b>提出書類の進捗確認</div>
     </div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260904a"></script>
-<script src="js/layout.js?v=20260904a"></script>
+<script src="js/api-client.js?v=20260904b"></script>
+<script src="js/layout.js?v=20260904b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -73,6 +77,64 @@
     }
 
     renderTiles(await loadStats());
+    loadNotices();
+  }
+
+  // --- お知らせ -------------------------------------------------------------
+  const CATEGORY_LABEL = { general: "お知らせ", important: "重要", event: "イベント", system: "システム" };
+  let notices = [];
+
+  async function loadNotices() {
+    try {
+      const res = await API.listNotices();
+      notices = res.notices || [];
+      el("unread-badge").innerHTML = res.unread
+        ? `<span class="kp-chip important" style="margin-left:8px;">未読 ${res.unread}</span>` : "";
+      renderNotices();
+    } catch (e) {
+      el("notices").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">info</span>
+           <div>お知らせを取得できませんでした：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderNotices() {
+    if (!notices.length) {
+      el("notices").innerHTML = `<div class="empty">現在お知らせはありません。</div>`;
+      return;
+    }
+    el("notices").innerHTML = notices.map((n) => {
+      const date = new Date(n.publish_at).toLocaleDateString("ja-JP", { month: "long", day: "numeric" });
+      return `
+        <div class="kp-notice${n.read ? "" : " unread"}" id="n-${esc(n.id)}">
+          <div class="head">
+            <span class="kp-chip ${esc(n.category)}">${esc(CATEGORY_LABEL[n.category] || n.category)}</span>
+            ${n.pinned ? '<span class="kp-chip pinned">固定</span>' : ""}
+            ${n.read ? "" : '<span class="kp-chip important">未読</span>'}
+            <span class="meta">${esc(date)}</span>
+          </div>
+          <div class="title">${esc(n.title)}</div>
+          <div class="body">${esc(n.body)}</div>
+          ${n.read ? "" : `
+          <div class="foot">
+            <button class="btn btn-secondary btn-sm" onclick="markRead('${esc(n.id)}')">
+              <span class="material-symbols-outlined icon-inline">check</span>読みました
+            </button>
+          </div>`}
+        </div>`;
+    }).join("");
+  }
+
+  async function markRead(id) {
+    const n = notices.find((x) => x.id === id);
+    if (!n || n.read) return;
+    n.read = true;                       // 先に反映して、押した手応えを返す
+    const remaining = notices.filter((x) => !x.read).length;
+    el("unread-badge").innerHTML = remaining
+      ? `<span class="kp-chip important" style="margin-left:8px;">未読 ${remaining}</span>` : "";
+    renderNotices();
+    try { await API.markNoticeRead(id); }
+    catch (e) { n.read = false; renderNotices(); alert(e.detail || e.message || "既読にできませんでした"); }
   }
 
   // 今出せる実データだけを集める。失敗しても画面は壊さない。

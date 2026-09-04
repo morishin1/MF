@@ -18,7 +18,7 @@ body{margin:0;font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--b
 .card h2{font-size:15px;font-weight:700;color:var(--primary-dark);margin:0 0 14px;display:flex;align-items:center;gap:8px;}
 .card h2 .n{width:24px;height:24px;border-radius:50%;background:var(--primary);color:white;display:inline-flex;align-items:center;justify-content:center;font-size:13px;}
 label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;}
-input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:white;}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:white;}
 .inline-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
 .inline-controls > div{flex:1;min-width:150px;}
 .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
@@ -124,3 +124,5 @@ th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4p
   .btn-sm   { min-height: 38px; }
   .icon-btn { min-width: 40px; min-height: 40px; }
 }
+
+textarea{resize:vertical;line-height:1.8;}

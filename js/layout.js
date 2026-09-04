@@ -29,7 +29,7 @@
 
   const ADMIN_NAV = [
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",   icon: "dashboard",    ready: true  },
-    { key: "notices",   href: "admin-notices.html",   label: "お知らせ",         icon: "campaign",     ready: false },
+    { key: "notices",   href: "admin-notices.html",   label: "お知らせ",         icon: "campaign",     ready: true  },
     { key: "messages",  href: "messages.html",        label: "メッセージ",       icon: "forum",        ready: false },
     { key: "members",   href: "admin-members.html",   label: "メンバー",         icon: "group",        ready: false },
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き", icon: "badge",        ready: false },
