@@ -11,6 +11,8 @@ body{margin:0;font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--b
 .brand .tag{font-size:11px;background:var(--soft);color:var(--primary);border-radius:6px;padding:2px 8px;font-weight:600;}
 .brand .tag.admin{background:#fef5e7;color:#975a16;}
 .brand .tag.build{background:#edf2f7;color:var(--muted);font-weight:500;}
+/* メンバー表示で確認中。ふだんの画面と一目で区別できるよう、強い色にする */
+.brand .tag.preview{background:#3f4bab;color:#fff;font-weight:700;}
 .who{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:12px;}
 .navlink{font-size:12px;color:var(--primary);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:4px;}
 .wrap{max-width:1000px;margin:0 auto;padding:24px 20px 80px;}

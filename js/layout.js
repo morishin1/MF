@@ -72,17 +72,30 @@
     return "home.html";
   }
 
-  function renderTopbar({ name, appRole }) {
-    const tag = { admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "";
+  function renderTopbar({ name, appRole, memberView }) {
+    const tag = memberView
+      ? "メンバー表示で確認中"
+      : ({ admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "");
+    const home = memberView ? "home.html" : homeFor(appRole);
+    const canPreview = appRole === "admin" || appRole === "owner";
+
     const el = document.createElement("div");
     el.className = "topbar";
     el.innerHTML = `
       <div class="brand">
-        <a href="${homeFor(appRole)}" style="text-decoration:none;color:inherit;">エイト</a>
-        ${tag ? `<span class="tag${appRole !== "member" ? " admin" : ""}">${esc(tag)}</span>` : ""}
+        <a href="${home}" style="text-decoration:none;color:inherit;">エイト</a>
+        ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
         <span>${esc(name)}</span>
+        ${canPreview ? (memberView
+          ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
+               ${icon("admin_panel_settings", 18)}管理画面に戻る
+             </button>`
+          : `<button class="btn btn-secondary btn-sm" onclick="KPLayout.viewAsMember()"
+                     title="メンバーに見える画面を、このアカウントのまま確認します">
+               ${icon("visibility", 18)}メンバー表示
+             </button>`) : ""}
         <div class="kp-bell">
           <button class="icon-btn" id="kp-bell-btn" title="通知" onclick="KPLayout.toggleBell()">
             ${icon("notifications", 20)}
@@ -192,10 +205,33 @@
     document.documentElement.classList.remove("kp-has-sidebar");
   }
 
+  // 管理者が「メンバーにはどう見えるか」を確かめるための表示切替。
+  //
+  // 別アカウントに切り替える形にしなかった理由:
+  //   デモ用のアカウントを作ると、そのパスワードを配って回ることになり、
+  //   使われなくなったあとも生き続ける。見たいのは「メニューと画面の見え方」で、
+  //   他人のデータではないので、自分のアカウントのまま枠だけメンバー用にする。
+  //   データは自分のものが出る。権限は一切変わらない（管理者のままなので、
+  //   この状態で管理用の画面を開けばそのまま開ける。そこで表示も元に戻す）。
+  const VIEW_KEY = "kp_view";
+  const isMemberView = () => {
+    try { return localStorage.getItem(VIEW_KEY) === "member"; } catch { return false; }
+  };
+  const setMemberView = (on) => {
+    try {
+      if (on) localStorage.setItem(VIEW_KEY, "member");
+      else localStorage.removeItem(VIEW_KEY);
+    } catch { /* 保存できなくても、その画面の中では切り替わる */ }
+  };
+
   function renderChrome({ name, appRole }, active) {
     clearChrome();
-    renderTopbar({ name, appRole });
-    if (appRole === "admin" || appRole === "owner") renderAdminNav(active);
+    const canPreview = appRole === "admin" || appRole === "owner";
+    const memberView = canPreview && isMemberView();
+
+    renderTopbar({ name, appRole, memberView });
+    if (memberView) renderMemberNav(active);
+    else if (canPreview) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active);
   }
@@ -290,6 +326,13 @@
         return null;
       }
 
+      // メンバーが開けない画面（管理用）を開いたら、確認モードは終わりにする。
+      // 下タブのままサイドメニューの画面に居ると、どちらの立場なのか分からなくなる
+      if (isMemberView() && allowed && !allowed.includes("member")) {
+        setMemberView(false);
+        painted = null;
+      }
+
       // 覚えていた内容と違っていたときだけ描き直す
       if (!painted || painted.appRole !== appRole || painted.name !== name) {
         renderChrome({ name, appRole }, opts.active);
@@ -326,7 +369,12 @@
 
     busy: withBusy,
 
-    logout() { API.logout(); clearCache(); location.href = "index.html"; },
+    // メンバーに見える画面を、このアカウントのまま確認する／やめる
+    viewAsMember() { setMemberView(true); location.href = "home.html"; },
+    exitMemberView() { setMemberView(false); location.href = "admin-dashboard.html"; },
+    isMemberView,
+
+    logout() { API.logout(); clearCache(); setMemberView(false); location.href = "index.html"; },
     homeFor,
     esc,
     icon,

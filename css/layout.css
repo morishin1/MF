@@ -389,3 +389,56 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
 .kp-chip.pending{ background:#fff3d6; color:#8a6d1f; }
 .kp-chip.approved{ background:#eaf5ec; color:#256b36; }
 .kp-chip.rejected{ background:#fdecec; color:#b3261e; }
+
+/* ---- 自分の予定（スケジュール） ----------------------------------------- */
+
+/* 週の帯。スマホで片手で送れるよう、1週間を7つに割り切って出す */
+.kp-week{ display:flex; align-items:center; gap:6px; margin-bottom:14px; }
+.kp-week .nav{
+  flex:0 0 auto; width:34px; height:34px; border-radius:9px; border:1px solid var(--border);
+  background:#fff; color:var(--muted); cursor:pointer; display:grid; place-items:center;
+}
+.kp-week .nav:hover{ border-color:var(--primary); color:var(--primary); }
+.kp-days{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; flex:1 1 auto; }
+.kp-day{
+  border:1px solid var(--border); border-radius:9px; background:#fff; cursor:pointer;
+  padding:7px 2px 6px; text-align:center; transition:.12s;
+}
+.kp-day:hover{ border-color:var(--primary); }
+.kp-day.on{ background:var(--primary); border-color:var(--primary); color:#fff; }
+.kp-day.today .n{ text-decoration:underline; text-underline-offset:3px; }
+.kp-day .w{ display:block; font-size:10px; color:var(--muted); }
+.kp-day.on .w{ color:rgba(255,255,255,.8); }
+.kp-day .n{ display:block; font-size:15px; font-weight:700; color:var(--primary-dark); line-height:1.5; }
+.kp-day.on .n{ color:#fff; }
+.kp-day.sat .n{ color:#3f4bab; } .kp-day.sun .n{ color:#b3261e; }
+.kp-day.on.sat .n, .kp-day.on.sun .n{ color:#fff; }
+.kp-day .dots{ display:flex; gap:2px; justify-content:center; height:5px; margin-top:2px; }
+.kp-day .dots i{ width:4px; height:4px; border-radius:50%; background:var(--primary); }
+.kp-day.on .dots i{ background:#fff; }
+
+/* その日の予定 */
+.kp-events{ display:grid; gap:7px; }
+.kp-event{
+  display:flex; gap:11px; align-items:flex-start; background:#fff;
+  border:1px solid var(--border); border-left:3px solid var(--primary);
+  border-radius:9px; padding:11px 13px;
+}
+.kp-event .tm{
+  flex:0 0 auto; min-width:52px; font-size:12px; font-weight:700; line-height:1.6;
+  color:var(--primary-dark); font-variant-numeric:tabular-nums;
+}
+.kp-event .tm small{ display:block; font-weight:400; color:var(--muted); }
+.kp-event .ct{ flex:1 1 auto; min-width:0; }
+.kp-event .ct b{ font-size:14px; color:var(--text); display:block; }
+.kp-event .ct small{ display:block; font-size:12px; color:var(--muted); margin-top:2px; line-height:1.7; }
+.kp-event .row-actions{ flex:0 0 auto; display:flex; gap:4px; }
+
+/* 予定の色分け。どこから来た予定かを左の線で見分ける */
+.kp-event.meeting{ border-left-color:#3f4bab; }
+.kp-event.visit{ border-left-color:#e0a92a; }
+.kp-event.private{ border-left-color:#8c98a4; }
+.kp-event.other{ border-left-color:#7d6be8; }
+.kp-event.booking{ border-left-color:#256b36; background:#f8fbf9; }
+.kp-event.task{ border-left-color:#b3261e; background:#fffaf9; }
+.kp-event.readonly .ct b{ font-weight:600; }

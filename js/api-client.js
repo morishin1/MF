@@ -247,6 +247,17 @@
   const deleteBooking = (id) =>
     api(`/api/bookings?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
+  // ---- 自分の予定 ----
+  // from/to は ISO 文字列。1画面ぶん（週や月）をまとめて取る
+  const schedule = (from, to) =>
+    api(`/api/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  const createEvent = (ev) =>
+    api("/api/schedule", { method: "POST", body: ev }).then((d) => d.event);
+  const updateEvent = (ev) =>
+    api("/api/schedule", { method: "PATCH", body: ev }).then((d) => d.event);
+  const deleteEvent = (id) =>
+    api(`/api/schedule?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   // ---- 経費精算 ----
   // scope: "mine" | "pending" | "all"
   const listExpenses = (scope, opts = {}) => {
@@ -474,6 +485,7 @@
     listAssets, createAsset, updateAsset, deleteAsset,
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
+    schedule, createEvent, updateEvent, deleteEvent,
     listExpenses, createExpense, decideExpense, deleteExpense,
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
