@@ -22,7 +22,7 @@
   // ready:false は「枠だけ用意し、実装はこれから」の意味。押しても遷移させない。
   const MEMBER_NAV = [
     { key: "home",     href: "home.html",     label: "ホーム",     icon: "home",        ready: true  },
-    { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",       ready: false },
+    { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",       ready: true  },
     { key: "tasks",    href: "tasks.html",    label: "やること",   icon: "checklist",   ready: true  },
     { key: "docs",     href: "app.html",      label: "書類",       icon: "description", ready: true  },
   ];
@@ -30,7 +30,7 @@
   const ADMIN_NAV = [
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",   icon: "dashboard",    ready: true  },
     { key: "notices",   href: "admin-notices.html",   label: "お知らせ",         icon: "campaign",     ready: true  },
-    { key: "messages",  href: "messages.html",        label: "メッセージ",       icon: "forum",        ready: false },
+    { key: "messages",  href: "messages.html",        label: "メッセージ",       icon: "forum",        ready: true  },
     { key: "members",   href: "admin-members.html",   label: "メンバー",         icon: "group",        ready: true  },
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き", icon: "badge",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",     icon: "checklist",    ready: true  },

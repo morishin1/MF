@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メッセージ - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260905b">
+  <link rel="stylesheet" href="css/layout.css?v=20260905b">
+</head>
+<body>
+
+<div class="wrap">
+  <!-- 一覧 -->
+  <div id="view-list">
+    <h1 class="kp-greet">メッセージ</h1>
+    <p class="kp-greet-sub">社内の1対1・グループのやりとりです。</p>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">edit_square</span>新しいやりとりを始める</h2>
+      <div class="inline-controls">
+        <div style="min-width:220px;flex:1;">
+          <label>相手（複数選ぶとグループになります）</label>
+          <select id="new-members" multiple size="5"></select>
+        </div>
+        <div style="min-width:160px;">
+          <label>グループ名（任意）</label>
+          <input id="new-title" type="text" placeholder="経理チーム">
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="startThread()">
+            <span class="material-symbols-outlined icon-inline">forum</span>開始
+          </button>
+        </div>
+      </div>
+      <div id="new-msg" class="err-text"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">chat</span>やりとり</h2>
+      <div id="threads"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
+
+  <!-- スレッド -->
+  <div id="view-thread" class="hidden">
+    <div class="kp-thread-head">
+      <button class="icon-btn" onclick="backToList()" title="一覧へ戻る">
+        <span class="material-symbols-outlined">arrow_back</span>
+      </button>
+      <div>
+        <h1 class="kp-greet" id="th-title" style="margin:0;">　</h1>
+        <p class="kp-greet-sub" id="th-sub" style="margin:2px 0 0;"></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="th-messages" class="kp-chat"><div class="empty">読み込み中…</div></div>
+      <div class="kp-compose">
+        <textarea id="th-input" rows="2" placeholder="メッセージを入力（Ctrl+Enter で送信）"></textarea>
+        <button class="btn btn-primary" onclick="send()">
+          <span class="material-symbols-outlined icon-inline">send</span>送信
+        </button>
+      </div>
+      <div id="th-msg" class="err-text"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260905b"></script>
+<script src="js/layout.js?v=20260905b"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let me = null;
+  let threads = [];
+  let current = null;   // 開いているスレッドID
+
+  KPLayout.init({ active: "messages", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    if (!ctx.me?.gw?.employee) {
+      el("view-list").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、メッセージを使えません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    me = ctx.me.gw.employee;
+    await Promise.all([loadPeople(), loadThreads()]);
+
+    // URL に ?t=... があればそのスレッドを開く（一覧から戻れるように履歴も使う）
+    const t = new URLSearchParams(location.search).get("t");
+    if (t) openThread(t, { push: false });
+
+    el("th-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+    });
+    window.addEventListener("popstate", () => {
+      const id = new URLSearchParams(location.search).get("t");
+      if (id) openThread(id, { push: false });
+      else backToList({ push: false });
+    });
+  }
+
+  async function loadPeople() {
+    try {
+      const res = await API.listEmployees();
+      const others = (res.employees || []).filter((e) => e.id !== me.id && e.status !== "left");
+      el("new-members").innerHTML = others.length
+        ? others.map((e) =>
+            `<option value="${esc(e.id)}">${esc(e.display_name)}${e.department ? `（${esc(e.department)}）` : ""}</option>`).join("")
+        : `<option value="" disabled>（ほかに登録された社員がいません）</option>`;
+    } catch (e) {
+      el("new-msg").textContent = e.detail || e.message;
+    }
+  }
+
+  async function loadThreads() {
+    try {
+      const res = await API.listThreads();
+      threads = res.threads || [];
+      renderThreads();
+    } catch (e) {
+      el("threads").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderThreads() {
+    if (!threads.length) {
+      el("threads").innerHTML = `<div class="empty">まだやりとりはありません。上から相手を選んで始めてください。</div>`;
+      return;
+    }
+    el("threads").innerHTML = threads.map((t) => {
+      const last = t.lastMessage;
+      const when = last
+        ? new Date(last.created_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+        : "";
+      const preview = last ? last.body.replace(/\s+/g, " ").slice(0, 60) : "（まだメッセージがありません）";
+      return `
+        <div class="kp-todo" style="cursor:pointer;" onclick="openThread('${esc(t.id)}')">
+          <span class="material-symbols-outlined" style="font-size:22px;color:var(--muted);">
+            ${t.kind === "group" ? "groups" : "person"}</span>
+          <span class="t">
+            <b>${esc(t.displayName)}</b>
+            ${t.unread ? `<span class="kp-chip important" style="margin-left:6px;">${t.unread}</span>` : ""}
+            <small>${esc(preview)}</small>
+          </span>
+          <span class="muted" style="font-size:11.5px;white-space:nowrap;">${esc(when)}</span>
+        </div>`;
+    }).join("");
+  }
+
+  async function startThread() {
+    const msg = el("new-msg");
+    msg.textContent = "";
+    const ids = [...el("new-members").selectedOptions].map((o) => o.value).filter(Boolean);
+    if (!ids.length) { msg.textContent = "相手を選んでください"; return; }
+    const kind = ids.length > 1 ? "group" : "dm";
+    try {
+      const res = await API.createThread(kind, ids, el("new-title").value.trim() || null);
+      el("new-title").value = "";
+      await loadThreads();
+      openThread(res.threadId);
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "開始できませんでした";
+    }
+  }
+
+  async function openThread(id, { push = true } = {}) {
+    current = id;
+    el("view-list").classList.add("hidden");
+    el("view-thread").classList.remove("hidden");
+    el("th-messages").innerHTML = `<div class="empty">読み込み中…</div>`;
+    if (push) history.pushState({}, "", `?t=${encodeURIComponent(id)}`);
+
+    try {
+      const res = await API.getThread(id);
+      el("th-title").textContent = res.thread.displayName;
+      el("th-sub").textContent = res.thread.kind === "group"
+        ? res.thread.members.map((m) => m.display_name).join("、")
+        : "";
+      renderMessages(res.messages, res.thread.members);
+      await API.markThreadRead(id).catch(() => {});
+      loadThreads();   // 一覧の未読バッジを消す
+    } catch (e) {
+      el("th-messages").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>読み込めませんでした：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function backToList({ push = true } = {}) {
+    current = null;
+    el("view-thread").classList.add("hidden");
+    el("view-list").classList.remove("hidden");
+    if (push) history.pushState({}, "", location.pathname);
+  }
+
+  function renderMessages(messages, members) {
+    if (!messages.length) {
+      el("th-messages").innerHTML = `<div class="empty">まだメッセージがありません。</div>`;
+      return;
+    }
+    const nameOf = new Map((members || []).map((m) => [m.id, m.display_name]));
+    let lastDay = "";
+    const html = [];
+    for (const m of messages) {
+      const d = new Date(m.created_at);
+      const day = d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+      if (day !== lastDay) {
+        html.push(`<div class="kp-chat-day">${esc(day)}</div>`);
+        lastDay = day;
+      }
+      const mine = m.sender_id === me.id;
+      const time = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+      html.push(`
+        <div class="kp-bubble-row${mine ? " mine" : ""}">
+          <div class="kp-bubble">
+            ${mine ? "" : `<div class="who">${esc(nameOf.get(m.sender_id) || "")}</div>`}
+            <div class="body">${esc(m.body)}</div>
+            <div class="time">${esc(time)}</div>
+          </div>
+        </div>`);
+    }
+    const box = el("th-messages");
+    box.innerHTML = html.join("");
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function send() {
+    const input = el("th-input");
+    const text = input.value.trim();
+    if (!text || !current) return;
+    el("th-msg").textContent = "";
+    input.disabled = true;
+    try {
+      await API.sendMessage(current, text);
+      input.value = "";
+      const res = await API.getThread(current);
+      renderMessages(res.messages, res.thread.members);
+      loadThreads();
+    } catch (e) {
+      el("th-msg").textContent = e.detail || e.message || "送信できませんでした";
+    } finally {
+      input.disabled = false;
+      input.focus();
+    }
+  }
+</script>
+
+</body>
+</html>

@@ -178,6 +178,17 @@
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
 
+  // ---- メッセージ ----
+  const listThreads = () => api("/api/messages");
+  const createThread = (kind, memberIds, title) =>
+    api("/api/messages", { method: "POST", body: { kind, memberIds, title } });
+  const getThread = (threadId) =>
+    api(`/api/messages/thread?threadId=${encodeURIComponent(threadId)}`);
+  const sendMessage = (threadId, body) =>
+    api("/api/messages/thread", { method: "POST", body: { threadId, body } }).then((d) => d.message);
+  const markThreadRead = (threadId) =>
+    api("/api/messages/thread", { method: "PATCH", body: { threadId } });
+
   // ---- やること（タスク・予定） ----
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
@@ -281,6 +292,7 @@
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, setEmployeeRole,
     listTasks, createTask, updateTask, deleteTask,
+    listThreads, createThread, getThread, sendMessage, markThreadRead,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
   };
