@@ -16,6 +16,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
+import { fetchExternalEvents } from "../../lib/google-link.js";
 
 const FIELDS =
   "id, title, body, location, category, all_day, starts_at, ends_at, created_at";
@@ -48,9 +49,9 @@ async function list(req, res, ctx) {
 
   const sb = userClient(req);
 
-  // 3本とも RLS が効く。空振り（未適用の環境など）でも画面は出したいので
+  // どれも空振り（未適用の環境、連携なし）でも画面は出したいので
   // 個別に握りつぶし、取れたものだけ返す
-  const [events, bookings, tasks] = await Promise.all([
+  const [events, bookings, tasks, external] = await Promise.all([
     sb.from("gw_calendar_events")
       .select(FIELDS)
       .gte("starts_at", from).lt("starts_at", to)
@@ -72,13 +73,13 @@ async function list(req, res, ctx) {
       .gte("due_on", from.slice(0, 10)).lte("due_on", to.slice(0, 10))
       .order("due_on").limit(200)
       .then((r) => r.data || [], () => []),
+
+    // 本人が連携していれば、その人の Google カレンダーも一緒に取る。
+    // 連携が切れていても error を添えて返すだけで、画面は出す
+    fetchExternalEvents(ctx.employee.id, { from, to }),
   ]);
 
-  return json(res, 200, {
-    events, bookings, tasks,
-    // 外部カレンダーの連携はまだ入れていない。画面が形を変えずに済むよう器だけ返す
-    external: { connected: false, provider: null, events: [] },
-  });
+  return json(res, 200, { events, bookings, tasks, external });
 }
 
 // ---- 作成・更新・削除 -------------------------------------------------------

@@ -258,6 +258,10 @@
   const deleteEvent = (id) =>
     api(`/api/schedule?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
+  // 自分の Google カレンダーとの連携。トークンは画面には返ってこない
+  const googleLink = () => api("/api/google/connect");
+  const googleUnlink = () => api("/api/google/connect", { method: "DELETE" });
+
   // ---- 経費精算 ----
   // scope: "mine" | "pending" | "all"
   const listExpenses = (scope, opts = {}) => {
@@ -485,7 +489,7 @@
     listAssets, createAsset, updateAsset, deleteAsset,
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
-    schedule, createEvent, updateEvent, deleteEvent,
+    schedule, createEvent, updateEvent, deleteEvent, googleLink, googleUnlink,
     listExpenses, createExpense, decideExpense, deleteExpense,
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,

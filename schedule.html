@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260909a">
-  <link rel="stylesheet" href="css/layout.css?v=20260909a">
+  <link rel="stylesheet" href="css/app.css?v=20260909b">
+  <link rel="stylesheet" href="css/layout.css?v=20260909b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -101,21 +101,17 @@
 
     <div class="card">
       <h2><span class="material-symbols-outlined">sync</span>Googleカレンダーとの連携</h2>
-      <div class="banner info">
-        <span class="material-symbols-outlined">info</span>
-        <div>
-          この画面には<b>ポータルの中の予定だけ</b>が出ます。
-          各自のGoogleカレンダー（自分のメールアドレスのアカウント）の予定は、まだ出ません。<br>
-          スペース予約の予定は、承認されると会社の共有カレンダー「社内ポータル」に入ります。
-          そちらはGoogleカレンダー側で確認できます。
-        </div>
-      </div>
+      <div id="gcal"><div class="empty">確認中…</div></div>
+      <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
+        読み取りだけの連携です。ポータルからGoogleカレンダーの予定を作ったり
+        書き換えたりはしません。連携した予定は<b>あなたにしか見えません</b>。
+      </p>
     </div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260909a"></script>
-<script src="js/layout.js?v=20260909a"></script>
+<script src="js/api-client.js?v=20260909b"></script>
+<script src="js/layout.js?v=20260909b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -125,7 +121,7 @@
 
   let weekStart = null;   // 表示中の週の月曜（ローカル日付）
   let selected = null;    // 選択中の日 "YYYY-MM-DD"
-  let data = { events: [], bookings: [], tasks: [] };
+  let data = { events: [], bookings: [], tasks: [], external: { connected: false, events: [] } };
   let editingId = null;
 
   KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
@@ -139,7 +135,29 @@
       return;
     }
     el("main").classList.remove("hidden");
+    showCallbackResult();
     goToday();
+    loadGoogle();
+  }
+
+  // 連携から戻ってきた直後の一言。URLに結果が残り続けないよう消しておく
+  function showCallbackResult() {
+    const p = new URLSearchParams(location.search).get("gcal");
+    if (!p) return;
+    history.replaceState(null, "", location.pathname);
+    const msg = {
+      ok: ["ok", "Googleカレンダーと連携しました。"],
+      cancelled: ["warn", "連携をやめました。"],
+      expired: ["warn", "時間が経ちすぎたため、やり直してください。"],
+      no_refresh_token: ["warn", "連携の許可が受け取れませんでした。もう一度お試しください。"],
+      failed: ["err", "連携できませんでした。しばらくしてからお試しください。"],
+      bad_request: ["err", "連携できませんでした。もう一度お試しください。"],
+    }[p] || ["warn", "連携の結果が分かりませんでした。"];
+
+    el("gate").innerHTML =
+      `<div class="banner ${msg[0]}" style="margin-bottom:18px;">
+         <span class="material-symbols-outlined">${msg[0] === "ok" ? "check_circle" : "info"}</span>
+         <div>${esc(msg[1])}</div></div>`;
   }
 
   // ---- 日付の扱い -----------------------------------------------------------
@@ -215,6 +233,7 @@
   function countFor(key) {
     return (data.events || []).filter((e) => onDay(e.starts_at, key)).length
       + (data.bookings || []).filter((b) => onDay(b.starts_at, key)).length
+      + (data.external?.events || []).filter((g) => onDay(g.startsAt, key)).length
       + (data.tasks || []).filter((t) => t.due_on === key).length;
   }
 
@@ -264,6 +283,24 @@
             <span class="row-actions">
               <a class="btn btn-secondary btn-sm" href="booking.html">予約</a>
             </span>
+          </div>`,
+      });
+    }
+
+    for (const g of (data.external?.events || []).filter((x) => onDay(x.startsAt, selected))) {
+      rows.push({
+        sort: g.allDay ? "" : g.startsAt,
+        html: `
+          <div class="kp-event google readonly">
+            <span class="tm">${g.allDay ? "終日" : esc(hhmm(g.startsAt))}
+              ${g.allDay || !g.endsAt ? "" : `<small>${esc(hhmm(g.endsAt))}</small>`}</span>
+            <span class="ct">
+              <b>${esc(g.title)}</b>
+              <small>Googleカレンダー${g.location ? `／${esc(g.location)}` : ""}</small>
+            </span>
+            ${g.link ? `<span class="row-actions">
+              <a class="icon-btn" href="${esc(g.link)}" target="_blank" rel="noopener" title="Googleカレンダーで開く">
+                <span class="material-symbols-outlined">open_in_new</span></a></span>` : ""}
           </div>`,
       });
     }
@@ -365,6 +402,72 @@
       await load();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  // ---- Googleカレンダー連携 -------------------------------------------------
+  async function loadGoogle() {
+    try {
+      renderGoogle(await API.googleLink());
+    } catch (e) {
+      el("gcal").innerHTML =
+        `<div class="empty">状態を確認できませんでした：${esc(e.detail || e.message)}</div>`;
+    }
+  }
+
+  function renderGoogle(s) {
+    if (!s.configured) {
+      el("gcal").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">link_off</span>
+           <div>この機能はまだ使えません。管理者に設定を依頼してください。</div></div>`;
+      return;
+    }
+
+    if (!s.connected) {
+      el("gcal").innerHTML = `
+        <p class="muted" style="font-size:13px;margin:0 0 12px;">
+          自分のGoogleカレンダーの予定を、この画面にも出せます。
+          ボタンを押すとGoogleの確認画面が開くので、<b>会社のアカウント</b>で許可してください。
+        </p>
+        <button id="gcal-btn" class="btn btn-primary" onclick="connectGoogle(this)">
+          <span class="material-symbols-outlined icon-inline">link</span>Googleカレンダーと連携する
+        </button>`;
+      return;
+    }
+
+    el("gcal").innerHTML = `
+      <div class="banner ok" style="margin-bottom:12px;">
+        <span class="material-symbols-outlined">check_circle</span>
+        <div><b>${esc(s.email || "Googleアカウント")}</b> と連携しています。</div>
+      </div>
+      ${s.error ? `
+        <div class="banner warn" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined">warning</span>
+          <div>予定を取得できませんでした。連携し直してください。<br>
+            <span class="muted" style="font-size:12px;">${esc(s.error)}</span></div>
+        </div>` : ""}
+      <button class="btn btn-secondary" onclick="disconnectGoogle(this)">
+        <span class="material-symbols-outlined icon-inline">link_off</span>連携をやめる
+      </button>`;
+  }
+
+  async function connectGoogle(btn) {
+    try {
+      const s = await KPLayout.busy(btn, "準備中…", () => API.googleLink());
+      if (!s.authUrl) { alert("連携の準備ができていません。管理者にご連絡ください。"); return; }
+      location.href = s.authUrl;
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "連携を始められませんでした");
+    }
+  }
+
+  async function disconnectGoogle(btn) {
+    if (!confirm("Googleカレンダーとの連携をやめます。予定はこの画面に出なくなります。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "解除中…", () => API.googleUnlink());
+      await Promise.all([loadGoogle(), load()]);
+    } catch (e) {
+      alert(e.detail || e.message || "解除できませんでした");
     }
   }
 

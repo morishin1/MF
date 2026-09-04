@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260909a">
+  <link rel="stylesheet" href="css/app.css?v=20260909b">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -246,12 +246,24 @@
         管理者にも経営者にも見えない作りになっています。</div>
     </div>
 
-    <h3><span class="material-symbols-outlined">sync</span>Googleカレンダーとの関係</h3>
+    <h3><span class="material-symbols-outlined">sync</span>Googleカレンダーと連携する</h3>
     <p class="lead" style="margin-top:0;">
-      いまのところ、<b>各自のGoogleカレンダーの予定はこの画面には出ません</b>。<br>
-      Googleカレンダーは<b>会社の共有カレンダー「社内ポータル」</b>として、
-      スペース予約の予定を入れるのに使っています。承認された予約はそちらにも入ります。
+      自分のGoogleカレンダーの予定も、この画面に一緒に出せます。
+      画面の下にある「<b>Googleカレンダーと連携する</b>」を押し、Googleの確認画面で
+      <b>会社のアカウント</b>を選んで許可してください。<b>1回押すだけ</b>です。
     </p>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li><b>読み取りだけ</b>の連携です。ポータルからGoogleカレンダーの予定を作ったり書き換えたりはしません</li>
+      <li>連携した予定も<b>あなたにしか見えません</b>。会社側から他の人の予定は見られません</li>
+      <li>いつでも「<b>連携をやめる</b>」で解除できます。解除するとGoogle側の許可も取り消されます</li>
+      <li>青い線の予定がGoogleカレンダーから来たものです。押すとGoogleカレンダーで開けます</li>
+    </ul>
+    <div class="banner info">
+      <span class="material-symbols-outlined">info</span>
+      <div><b>会社の共有カレンダー「社内ポータル」とは別</b>です。
+        あちらは<b>スペース予約</b>を入れる場所で、承認された予約が自動で入ります。
+        こちらは<b>あなた個人の</b>カレンダーを読むための連携です。</div>
+    </div>
   </div>
 
   <!-- ======================================================== スペース予約 -->
@@ -293,6 +305,30 @@
       <li>予約の履歴が残っているスペースは削除できません。「停止」を使ってください</li>
       <li><b>カレンダー×</b>と出ている予約は、Googleカレンダーへの反映に失敗しています</li>
     </ul>
+
+    <p class="lead" style="margin:20px 0 8px;"><b>各自のGoogleカレンダー連携の設定（初回だけ・管理者）</b></p>
+    <p class="lead" style="margin:0 0 8px;">
+      メンバーが「予定」画面で自分のGoogleカレンダーとつなげるようにするための準備です。
+      上のスペース予約のカレンダーとは<b>別の設定</b>になります。
+    </p>
+    <ol class="lead" style="margin:0 0 16px;padding-left:20px;">
+      <li>Google Cloud → <b>APIとサービス</b> → <b>OAuth同意画面</b>を作る。
+        ユーザーの種類は<b>「内部」</b>（社内のアカウントだけ）にすると審査が要りません</li>
+      <li>スコープに <code>calendar.readonly</code> を追加する</li>
+      <li><b>認証情報</b> → 「認証情報を作成」→ <b>OAuth クライアント ID</b> →
+        種類は<b>ウェブアプリケーション</b></li>
+      <li>「承認済みのリダイレクト URI」に
+        <code>https://mf.8grp.co.jp/api/google/callback</code> を<b>そのまま</b>入れる</li>
+      <li>できたクライアントIDとシークレットを、Vercel の環境変数
+        <code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code>
+        に入れて<b>再デプロイ</b>する（シークレットは Sensitive にする）</li>
+    </ol>
+    <div class="banner info" style="margin-bottom:16px;">
+      <span class="material-symbols-outlined">key</span>
+      <div><code>GOOGLE_OAUTH_CLIENT_SECRET</code> は、各自の連携を保管するときの
+        <b>暗号鍵のもと</b>にもなっています。これを入れ替えると<b>全員の連携が切れて</b>、
+        各自で連携し直しになります。差し替えるときは先に周知してください。</div>
+    </div>
 
     <p class="lead" style="margin:16px 0 8px;"><b>Googleカレンダー連携の設定（初回だけ）</b></p>
     <ol class="lead" style="margin:0;padding-left:20px;">

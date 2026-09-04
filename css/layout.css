@@ -442,3 +442,5 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
 .kp-event.booking{ border-left-color:#256b36; background:#f8fbf9; }
 .kp-event.task{ border-left-color:#b3261e; background:#fffaf9; }
 .kp-event.readonly .ct b{ font-weight:600; }
+/* Googleカレンダーから来た予定。ポータルの予定と見分けが付くようにする */
+.kp-event.google{ border-left-color:#1a73e8; background:#f7faff; }
