@@ -48,10 +48,23 @@ export default async function handler(req, res) {
       .order("sort_order", { ascending: true });
     if (ie) return json(res, 500, { error: "db_query_failed", detail: ie.message });
 
+    // 提出ファイル。見える範囲は RLS が決める（本人・人事・共有項目の社労士）
+    const { data: files } = await sb
+      .from("gw_procedure_files")
+      .select("id, procedure_id, item_id, filename, mime_type, drive_link, created_at")
+      .in("procedure_id", list.map((p) => p.id))
+      .order("created_at", { ascending: true });
+    const byItem = new Map();
+    for (const f of files || []) {
+      if (!f.item_id) continue;
+      if (!byItem.has(f.item_id)) byItem.set(f.item_id, []);
+      byItem.get(f.item_id).push(f);
+    }
+
     const byProc = new Map();
     for (const it of items || []) {
       if (!byProc.has(it.procedure_id)) byProc.set(it.procedure_id, []);
-      byProc.get(it.procedure_id).push(it);
+      byProc.get(it.procedure_id).push({ ...it, files: byItem.get(it.id) || [] });
     }
 
     return json(res, 200, {

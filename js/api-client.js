@@ -244,6 +244,38 @@
   const submitProcedureItem = (itemId, opts = {}) =>
     api("/api/onboarding/submit", { method: "POST", body: { itemId, ...opts } });
 
+  // 提出ファイルの閲覧用URL（短時間だけ有効）
+  const procedureFileUrl = (fileId) =>
+    api(`/api/onboarding/upload?fileId=${encodeURIComponent(fileId)}`);
+
+  // 提出ファイルのアップロード。署名URLへ直接PUTしたあと確定させる。
+  // 証憑（documents）とは別のバケットに入るので、会計側の仕訳は動かない。
+  async function uploadProcedureFile(itemId, file, onStep = () => {}) {
+    const mimeType = guessMime(file);
+    if (!mimeType) throw new Error("対応していないファイル形式です");
+
+    onStep("uploading");
+    const signed = await api("/api/onboarding/upload", {
+      method: "POST",
+      body: { itemId, filename: file.name, mimeType, sizeBytes: file.size },
+    });
+
+    const put = await fetch(signed.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType, "x-upsert": "true" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+
+    onStep("saving");
+    const out = await api("/api/onboarding/upload", {
+      method: "PATCH",
+      body: { fileId: signed.fileId },
+    });
+    onStep("done");
+    return out;
+  }
+
   // ---- Google Drive 連携 ----
   const driveStatus = (clientId) => api(`/api/drive/status?clientId=${encodeURIComponent(clientId)}`);
   const driveSync = (clientId, limit) => api("/api/drive/sync", { method: "POST", body: { clientId, limit } });
@@ -324,5 +356,6 @@
     listThreads, createThread, getThread, sendMessage, markThreadRead,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
+    uploadProcedureFile, procedureFileUrl,
   };
 })();

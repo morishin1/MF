@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260905e">
-  <link rel="stylesheet" href="css/layout.css?v=20260905e">
+  <link rel="stylesheet" href="css/app.css?v=20260905f">
+  <link rel="stylesheet" href="css/layout.css?v=20260905f">
 </head>
 <body>
 
@@ -46,8 +46,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260905e"></script>
-<script src="js/layout.js?v=20260905e"></script>
+<script src="js/api-client.js?v=20260905f"></script>
+<script src="js/layout.js?v=20260905f"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -114,6 +114,8 @@
     el("hr-items").innerHTML = mine.map((i) => {
       const finished = i.status === "done" || i.status === "na";
       const label = finished ? "確認済み" : (i.status === "submitted" ? "提出済み" : "");
+      const files = (i.files || []).map((f) =>
+        `<small><a href="#" onclick="openFile('${esc(f.id)}');return false;">${esc(f.filename)}</a></small>`).join("");
       return `
         <div class="kp-todo${finished ? " done" : ""}">
           <span class="material-symbols-outlined" style="font-size:20px;color:${finished || i.status === "submitted" ? "var(--primary)" : "#c3cad3"};">
@@ -121,14 +123,48 @@
           <span class="t">${esc(i.title)}
             ${i.due_on ? `<small>期限 ${esc(new Date(i.due_on).toLocaleDateString("ja-JP"))}</small>` : ""}
             ${label ? `<small>${label}</small>` : ""}
+            ${files}
           </span>
-          ${finished ? "" : (i.status === "submitted"
-            ? `<button class="btn btn-secondary btn-sm" onclick="submitItem('${esc(i.id)}', true)">取り消す</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="submitItem('${esc(i.id)}', false)">提出した</button>`)}
+          ${finished ? "" : `
+            <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+              <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを出す
+              <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp"
+                     onchange="pickFile('${esc(i.id)}', this)">
+            </label>
+            ${i.status === "submitted"
+              ? `<button class="btn btn-secondary btn-sm" onclick="submitItem('${esc(i.id)}', true)">取り消す</button>`
+              : `<button class="btn btn-secondary btn-sm" onclick="submitItem('${esc(i.id)}', false)">提出済みにする</button>`}`}
         </div>`;
     }).join("");
 
     el("hr-card").classList.remove("hidden");
+  }
+
+  // ファイルを選んだらそのまま提出まで進める。
+  // 会計の書類アップロードとは別の保存先に入るので、仕訳は作られない。
+  async function pickFile(itemId, input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const card = document.getElementById("hr-items");
+    const before = card.innerHTML;
+    card.insertAdjacentHTML("afterbegin", `<div class="empty" id="hr-uploading">送信中…</div>`);
+    try {
+      await API.uploadProcedureFile(itemId, file);
+      await loadProcedure();
+    } catch (e) {
+      card.innerHTML = before;
+      alert(e.hint || e.detail || e.message || "送信できませんでした");
+    }
+  }
+
+  async function openFile(fileId) {
+    try {
+      const { url } = await API.procedureFileUrl(fileId);
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      alert(e.detail || e.message || "開けませんでした");
+    }
   }
 
   async function submitItem(itemId, undo) {
