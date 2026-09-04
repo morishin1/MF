@@ -1,7 +1,10 @@
-// POST /api/employees/link  { employeeId, email, clientId? }
+// POST /api/employees/link  { employeeId, email, clientId?, create?, password? }
 // 社員名簿の行を、ログインアカウント（auth.users）に紐づける。
 //
-// 名簿に先に登録した内定者が、自分のアカウントを作った後にここで結び付ける。
+// 名簿に先に登録した内定者を、ログインアカウントに結び付ける。
+// create:true を渡すと、アカウントが無い場合はここで作る（招待）。
+// password を省略すると自動生成し、その1回だけ応答に含めて画面に出す。
+// メール送信の設定に依存させないため、本人へは管理者が直接伝える方式。
 // 紐づけただけでは何も使えないため、そのテナントのメンバーシップが無ければ
 // 併せて作る（会計側は顧問先ロール＝書類のアップロードのみ）。
 //
@@ -39,12 +42,29 @@ export default async function handler(req, res) {
   if (!employee) return json(res, 404, { error: "employee_not_found" });
   if (employee.user_id) return json(res, 409, { error: "already_linked" });
 
-  const userId = await findUserByEmail(sb, email);
+  let userId = await findUserByEmail(sb, email);
+  let createdPassword = null;
+
   if (!userId) {
-    return json(res, 404, {
-      error: "auth_user_not_found",
-      hint: "そのメールアドレスのログインアカウントがありません。先に Supabase の Authentication で作成してください",
+    // 招待: アカウントが無ければここで作る。Supabase の管理画面を開かずに済む。
+    // メール送信の設定に依存させたくないので、初回パスワードは画面に出して
+    // 本人へ直接渡してもらう方式にする。
+    if (!body?.create) {
+      return json(res, 404, {
+        error: "auth_user_not_found",
+        hint: "そのメールアドレスのログインアカウントがありません。「アカウントを作る」を押すとこの場で作成できます",
+      });
+    }
+    const password = String(body.password || "").trim() || randomPassword();
+    if (password.length < 8) {
+      return json(res, 400, { error: "weak_password", hint: "パスワードは8文字以上にしてください" });
+    }
+    const { data: created, error: ce } = await sb.auth.admin.createUser({
+      email, password, email_confirm: true,
     });
+    if (ce) return json(res, 500, { error: "create_user_failed", detail: ce.message });
+    userId = created.user.id;
+    createdPassword = body.password ? null : password;   // 自動生成のときだけ返す
   }
 
   // 1つのアカウントを2人の社員に割り当てない
@@ -73,7 +93,7 @@ export default async function handler(req, res) {
   const isAdvisor = (grants || []).some((g) => g.role === "labor_advisor");
   if (isAdvisor) {
     return json(res, 200, {
-      ok: true, employeeId, userId,
+      ok: true, employeeId, userId, createdPassword,
       membership: { created: false, role: null, note: "社労士のため会計の権限は付与していません" },
     });
   }
@@ -81,7 +101,14 @@ export default async function handler(req, res) {
   // 会計側のメンバーシップ。既にあれば触らない（管理者を降格させないため）
   const membership = await ensureMembership(sb, ctx.tenantId, userId, body?.clientId);
 
-  return json(res, 200, { ok: true, employeeId, userId, membership });
+  return json(res, 200, { ok: true, employeeId, userId, createdPassword, membership });
+}
+
+// 初回パスワード。読み上げや転記で困らないよう、紛らわしい文字を外す
+function randomPassword(len = 12) {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
 }
 
 async function findUserByEmail(sb, email) {

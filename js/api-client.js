@@ -178,8 +178,10 @@
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
 
-  const linkEmployeeAccount = (employeeId, email, clientId) =>
-    api("/api/employees/link", { method: "POST", body: { employeeId, email, clientId } });
+  // opts.create=true でアカウントが無ければ作る（招待）。
+  // password を省くと自動生成され、その1回だけ応答に含まれる。
+  const linkEmployeeAccount = (employeeId, email, clientId, opts = {}) =>
+    api("/api/employees/link", { method: "POST", body: { employeeId, email, clientId, ...opts } });
 
   // ---- 通知 ----
   const listNotifications = () => api("/api/notifications");

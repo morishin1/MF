@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260906c">
-  <link rel="stylesheet" href="css/layout.css?v=20260906c">
+  <link rel="stylesheet" href="css/app.css?v=20260906d">
+  <link rel="stylesheet" href="css/layout.css?v=20260906d">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -44,8 +44,8 @@
     <h2><span class="material-symbols-outlined">link</span>ログインアカウントの紐づけ</h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
       名簿に先に登録した人を、本人のログインアカウントと結び付けます。
-      先に Supabase の Authentication でアカウントを作っておいてください。
-      紐づけると同時に、書類のアップロードができるようになります。
+      すでにアカウントがある人は「<b>紐づけ</b>」を、まだ無い人は「<b>アカウントを作る</b>」を押してください。
+      作った場合は初回パスワードがこの画面に一度だけ表示されるので、本人へお伝えください。
     </p>
     <div id="unlinked"><div class="empty">読み込み中…</div></div>
   </div>
@@ -64,8 +64,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260906c"></script>
-<script src="js/layout.js?v=20260906c"></script>
+<script src="js/api-client.js?v=20260906d"></script>
+<script src="js/layout.js?v=20260906d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -119,22 +119,52 @@
         <input type="email" id="lk-${esc(e.id)}" value="${esc(e.email || "")}"
                placeholder="taro@8grp.co.jp" style="max-width:210px;">
         <select id="lc-${esc(e.id)}" style="max-width:140px;">${clientOpts}</select>
-        <button class="btn btn-primary btn-sm" onclick="link('${esc(e.id)}')">紐づけ</button>
-      </div>`).join("") + `<div id="lk-msg" class="err-text"></div>`;
+        <button class="btn btn-secondary btn-sm" onclick="link('${esc(e.id)}', false)">紐づけ</button>
+        <button class="btn btn-primary btn-sm" onclick="link('${esc(e.id)}', true)">アカウントを作る</button>
+      </div>`).join("") + `<div id="lk-msg" class="err-text"></div><div id="lk-pass"></div>`;
   }
 
-  async function link(employeeId) {
+  async function link(employeeId, create) {
     const msg = el("lk-msg");
     msg.textContent = "";
     const email = el(`lk-${employeeId}`).value.trim();
+    const name = data.unlinked.find((x) => x.id === employeeId)?.display_name || "";
     const clientId = el(`lc-${employeeId}`)?.value || null;
     if (!email) { msg.textContent = "メールアドレスを入力してください"; return; }
+    if (create && !confirm(`${email} でログインアカウントを作り、${name} さんに紐づけます。よろしいですか？`)) return;
+
     try {
-      await API.linkEmployeeAccount(employeeId, email, clientId);
+      const res = await API.linkEmployeeAccount(employeeId, email, clientId, create ? { create: true } : {});
       await load();
+      // 自動生成した初回パスワードは、この1回しか表示できない
+      if (res.createdPassword) showPassword(name, email, res.createdPassword);
     } catch (e) {
       msg.textContent = e.detail || e.hint || e.message || "紐づけに失敗しました";
     }
+  }
+
+  function showPassword(name, email, password) {
+    el("lk-pass").innerHTML = `
+      <div class="banner ok" style="margin-top:14px;align-items:flex-start;">
+        <span class="material-symbols-outlined">key</span>
+        <div>
+          <b>${esc(name)} さんのアカウントを作成しました。</b><br>
+          <span class="muted" style="font-size:12.5px;">この初回パスワードは、この画面を離れると二度と表示できません。いま控えて本人へお伝えください。</span>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <code style="font-size:15px;padding:6px 10px;background:#fff;border:1px solid var(--border);border-radius:6px;">${esc(password)}</code>
+            <button class="btn btn-secondary btn-sm" onclick="copyPassword('${esc(password)}')">コピー</button>
+          </div>
+          <div class="muted" style="font-size:12.5px;margin-top:10px;">
+            ログイン先：<b>${esc(location.origin)}/home.html</b>　ID：<b>${esc(email)}</b><br>
+            本人には、最初のログイン後にパスワードを変更するようご案内ください。
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function copyPassword(password) {
+    try { await navigator.clipboard.writeText(password); }
+    catch { alert("コピーできませんでした。手動で選択してください。"); }
   }
 
   function renderIntegrations() {
