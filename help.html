@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260907b">
+  <link rel="stylesheet" href="css/app.css?v=20260908a">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -74,6 +74,7 @@
       <a href="#notices"><span class="material-symbols-outlined">campaign</span>お知らせ</a>
       <a href="#tasks"><span class="material-symbols-outlined">checklist</span>やること</a>
       <a href="#messages"><span class="material-symbols-outlined">forum</span>メッセージ</a>
+      <a href="#booking"><span class="material-symbols-outlined">calendar_month</span>スペース予約</a>
       <a href="#bell"><span class="material-symbols-outlined">notifications</span>通知</a>
       <a href="#hr"><span class="material-symbols-outlined">badge</span>入社手続き</a>
       <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
@@ -96,7 +97,7 @@
           <tr><td>メッセージ</td><td>社内の人と1対1・グループでやりとりします</td></tr>
           <tr><td>やること</td><td>自分に割り当てられたタスクを確認し、終わったら「完了」を押します</td></tr>
           <tr><td>会計書類</td><td>請求書・領収書を提出します（<b>会計は別システム</b>です）</td></tr>
-          <tr><td>メニュー</td><td>社員名簿、マイページ（パスワード変更）、使い方ガイド</td></tr>
+          <tr><td>メニュー</td><td>スペース予約、社員名簿、マイページ（パスワード変更）、使い方ガイド</td></tr>
         </tbody>
       </table>
     </div>
@@ -218,6 +219,63 @@
     </div>
   </div>
 
+  <!-- ======================================================== スペース予約 -->
+  <div class="card" id="booking">
+    <h2><span class="material-symbols-outlined">calendar_month</span>スペース予約</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      カフェ・スタジオ・ワークスペース・BOX・個室・会議スペースの予約を申請します。
+      下タブの<b>「メニュー」→「スペース予約」</b>から開きます。
+    </p>
+    <ol class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li><b>スペースを選ぶ</b>（受付を止めているスペースは薄く表示され、選べません）</li>
+      <li><b>日付と時間を選ぶ</b>。選ぶとその日の予約状況がすぐ下に出ます。
+        黄色い行は<b>まだ承認されていない申請</b>です</li>
+      <li><b>件名・人数・用途</b>を書いて「この内容で申請する」を押す</li>
+    </ol>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>申請すると管理者に通知が届きます。<b>承認されると通知が返ってきます</b></li>
+      <li>同じスペースの<b>同じ時間は二重に取れません</b>。先に申請した人が優先です</li>
+      <li>まだ始まっていない予約は、下の「自分の申請」から<b>自分で取り消せます</b></li>
+      <li>1件あたり最長12時間、1年先まで申請できます。過ぎた日時は申請できません</li>
+    </ul>
+    <div class="banner info">
+      <span class="material-symbols-outlined">event_available</span>
+      <div>承認されると<b>Googleカレンダーに予定が入ります</b>。承認待ちの間は「仮の予定」として入るので、
+        カレンダーを見れば押さえられていることが分かります。却下・取消のときは予定が消えます。</div>
+    </div>
+
+    <span class="who-for admin" style="margin-top:20px;">管理者・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      左メニューの<b>「スペース予約」</b>で、承認待ちの申請が上に並びます。
+      ひとことを添えて<b>承認</b>または<b>却下</b>すると、申請者に通知が届きます。
+    </p>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>「これからの予約」で全員の予定を日ごとに確認できます。管理者は代理で取り消せます</li>
+      <li>スペースの追加・名称変更・定員・並び順は同じ画面の下で行います</li>
+      <li><b>承認「不要」</b>にすると、申請と同時に確定してカレンダーに入ります（承認待ちを挟みません）</li>
+      <li><b>受付「停止」</b>にすると新しい申請を受け付けません。既に入っている予約は残ります</li>
+      <li>予約の履歴が残っているスペースは削除できません。「停止」を使ってください</li>
+      <li><b>カレンダー×</b>と出ている予約は、Googleカレンダーへの反映に失敗しています</li>
+    </ul>
+
+    <p class="lead" style="margin:16px 0 8px;"><b>Googleカレンダー連携の設定（初回だけ）</b></p>
+    <ol class="lead" style="margin:0;padding-left:20px;">
+      <li>Googleカレンダーで「エイト スペース予約」などの<b>カレンダーを新しく作る</b></li>
+      <li>そのカレンダーの<b>設定 →「特定のユーザーとの共有」</b>で、
+        サービスアカウントのメールアドレス（<code>…@….iam.gserviceaccount.com</code>）を
+        <b>「予定の変更権限」</b>で追加する</li>
+      <li>同じ設定画面の<b>「カレンダーの統合」</b>にある<b>カレンダーID</b>をコピーする</li>
+      <li>Vercel の環境変数に <code>GCAL_CALENDAR_ID</code> として貼り、<b>再デプロイ</b>する</li>
+      <li>社員がこのカレンダーを見られるよう、<b>社内メンバーにも共有</b>しておく</li>
+    </ol>
+    <div class="banner info" style="margin-top:12px;">
+      <span class="material-symbols-outlined">info</span>
+      <div>設定しなくても<b>予約の申請と承認はそのまま使えます</b>。カレンダーに入らないだけです。
+        スペースごとに別のカレンダーに入れたい場合は、スペースの表の「カレンダーID」欄に個別に入れてください。</div>
+    </div>
+  </div>
+
   <!-- ======================================================== 通知 -->
   <div class="card" id="bell">
     <h2><span class="material-symbols-outlined">notifications</span>通知（画面右上のベル）</h2>
@@ -290,7 +348,8 @@
           <tr><td>タスク・予定</td><td>担当者・期限・重要度を決めて割り当てます。期限超過だけを絞り込めます</td></tr>
           <tr><td>書類・雛形</td><td>雇用契約書などの雛形を登録し、対象者を選んで <code>{{氏名}}</code> などを差し込んで書き出します</td></tr>
           <tr><td>アカウント・貸与品</td><td>PC・スマホ・アカウント・鍵の貸出状況を管理します。退職時の返却漏れ防止に使います</td></tr>
-          <tr><td>スケジュール／申請・承認</td><td>準備中です。予定・会議室の予約、経費精算や有給の申請を予定しています</td></tr>
+          <tr><td>スペース予約</td><td>スペースの予約申請を承認・却下します。承認すると<b>Googleカレンダーに予定が入ります</b>。スペースの追加や受付停止も同じ画面です（<a href="#booking">詳しく</a>）</td></tr>
+          <tr><td>申請・承認</td><td>準備中です。経費精算や有給の申請を予定しています</td></tr>
           <tr><td>会計書類・仕訳<br><span class="muted" style="font-weight:400;font-size:11.5px;">（別システム）</span></td><td>アップロードされた書類の確認、仕訳の承認、試算表の取得を行います</td></tr>
           <tr><td>組織設定・ログ</td><td>会社名の変更、ログインアカウントの作成と紐づけ、外部サービス（Drive など）の設定状況、<b>操作ログ</b>の確認</td></tr>
         </tbody>

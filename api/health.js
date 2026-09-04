@@ -5,6 +5,7 @@ export default function handler(req, res) {
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     drive: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL) && !!process.env.GDRIVE_ROOT_FOLDER_ID,
     driveHr: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL) && !!process.env.GDRIVE_HR_FOLDER_ID,
+    calendar: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL) && !!process.env.GCAL_CALENDAR_ID,
   };
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
@@ -13,8 +14,8 @@ export default function handler(req, res) {
     ok: true,
     service: "kessanpilot-api",
     // どのビルドが動いているかを画面を開かずに判別するための印
-    assetVersion: "20260907b",
-    features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true, notifications: true, invite: true, messageFiles: true, activityLog: true, splitMenus: true },
+    assetVersion: "20260908a",
+    features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true, notifications: true, invite: true, messageFiles: true, activityLog: true, splitMenus: true, spaces: true, bookings: true, calendarSync: true },
     env,
     note: env.supabase && env.anthropic
       ? "ready"

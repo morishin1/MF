@@ -352,3 +352,40 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
   margin-left:auto; font-style:normal; font-size:11px; font-weight:700;
   background:#eef0f2; color:#8c98a4; border-radius:999px; padding:3px 9px; white-space:nowrap;
 }
+
+/* ---- スペース予約 ------------------------------------------------------- */
+
+/* スペースの選択。NO.xx を先頭に置き、掲示の並びと同じ見え方にする */
+.kp-spaces{ display:grid; gap:8px; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); }
+.kp-space{
+  display:flex; align-items:center; gap:11px; cursor:pointer;
+  border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:#fff;
+  transition:.15s;
+}
+.kp-space:hover{ border-color:var(--primary); }
+.kp-space input{ width:auto; margin:0; flex:0 0 auto; }
+.kp-space.on{ border-color:var(--primary); background:var(--soft); }
+.kp-space.off{ opacity:.5; }
+.kp-space .no{
+  flex:0 0 auto; font-size:11px; font-weight:700; letter-spacing:.04em;
+  background:#eef0f2; color:#6b7681; border-radius:5px; padding:3px 7px; white-space:nowrap;
+}
+.kp-space .nm{ font-size:14px; font-weight:600; color:var(--primary-dark); }
+.kp-space .cap{ display:block; font-size:11.5px; color:var(--muted); font-weight:400; margin-top:2px; }
+
+/* その日の予約の並び */
+.kp-slots{ display:grid; gap:6px; }
+.kp-slot{
+  display:flex; align-items:center; gap:10px; font-size:13px;
+  border:1px solid var(--border); border-left:3px solid var(--primary);
+  border-radius:8px; padding:9px 12px; background:#fff;
+}
+.kp-slot.pending{ border-left-color:#e0a92a; background:#fffdf3; }
+.kp-slot.mine{ background:var(--soft); }
+.kp-slot .tm{ flex:0 0 auto; font-variant-numeric:tabular-nums; font-weight:700; color:var(--primary-dark); }
+.kp-slot .ttl{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.kp-slot .by{ flex:0 0 auto; font-size:11.5px; color:var(--muted); }
+
+.kp-chip.pending{ background:#fff3d6; color:#8a6d1f; }
+.kp-chip.approved{ background:#eaf5ec; color:#256b36; }
+.kp-chip.rejected{ background:#fdecec; color:#b3261e; }

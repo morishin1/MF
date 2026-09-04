@@ -39,7 +39,7 @@
     { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信",       icon: "campaign",     ready: true  },
     { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },
-    { key: "schedule",  href: "admin-schedule.html",  label: "スケジュール",       icon: "calendar_month", ready: false },
+    { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",       icon: "calendar_month", ready: true  },
     { key: "workflow",  href: "admin-workflow.html",  label: "申請・承認",         icon: "approval",     ready: false },
 
     { section: "組織・システム管理" },

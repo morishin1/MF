@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スペース予約 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260908a">
+  <link rel="stylesheet" href="css/layout.css?v=20260908a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">スペース予約</h1>
+  <p class="kp-greet-sub">申請の承認と、スペースの登録を行います。承認するとGoogleカレンダーに予定が入ります。</p>
+
+  <div id="cal-banner"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">pending_actions</span>承認待ち<span id="pending-badge"></span></h2>
+    <div id="pending"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">event_upcoming</span>これからの予約</h2>
+    <div id="upcoming"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">meeting_room</span>スペースの登録</h2>
+
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div style="max-width:120px;"><label>番号</label><input id="s-code" type="text" placeholder="NO.08"></div>
+      <div style="min-width:180px;flex:1;"><label>名称</label><input id="s-name" type="text" placeholder="ラウンジスペース"></div>
+      <div style="max-width:110px;"><label>定員</label><input id="s-capacity" type="number" min="1" step="1" placeholder="8"></div>
+      <div style="max-width:120px;"><label>並び順</label><input id="s-sort" type="number" step="1" placeholder="8"></div>
+      <div>
+        <button class="btn btn-secondary" onclick="addSpace(this)">
+          <span class="material-symbols-outlined icon-inline">add</span>追加
+        </button>
+      </div>
+    </div>
+    <div id="s-msg" class="err-text"></div>
+
+    <div class="table-scroll">
+      <table class="kp-items">
+        <thead><tr>
+          <th style="width:78px;">番号</th><th>名称</th><th style="width:80px;">定員</th>
+          <th style="width:110px;">承認</th><th style="width:110px;">受付</th>
+          <th style="width:190px;">カレンダーID</th><th style="width:60px;"></th>
+        </tr></thead>
+        <tbody id="s-rows"><tr><td colspan="7" class="muted">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;">
+      カレンダーIDは、そのスペースだけ別のGoogleカレンダーに書きたいときに入れます。
+      空欄なら共通のカレンダー（環境変数 <code>GCAL_CALENDAR_ID</code>）に入ります。
+    </p>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260908a"></script>
+<script src="js/layout.js?v=20260908a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const STATUS_LABEL = { pending: "承認待ち", approved: "承認済み", rejected: "却下", cancelled: "取消" };
+
+  let spaces = [];
+
+  KPLayout.init({ active: "bookings", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    await Promise.all([loadSpaces(), loadPending(), loadUpcoming()]);
+  }
+
+  const fmtDay = (iso) => new Date(iso).toLocaleDateString("ja-JP",
+    { timeZone: "Asia/Tokyo", year: "numeric", month: "long", day: "numeric", weekday: "short" });
+  const hhmm = (iso) => new Date(iso).toLocaleTimeString("ja-JP",
+    { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
+
+  // ---- 承認待ち -------------------------------------------------------------
+  async function loadPending() {
+    try {
+      const res = await API.listBookings("pending");
+      const list = res.bookings || [];
+      el("pending-badge").innerHTML = list.length
+        ? `<span class="kp-chip important" style="margin-left:8px;">${list.length}</span>` : "";
+
+      if (!list.length) {
+        el("pending").innerHTML = `<div class="empty">承認待ちの申請はありません。</div>`;
+        return;
+      }
+      el("pending").innerHTML = list.map(pendingCard).join("");
+    } catch (e) {
+      el("pending").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function pendingCard(b) {
+    const past = new Date(b.starts_at).getTime() < Date.now();
+    return `
+      <div class="kp-notice unread">
+        <div class="head">
+          <span class="kp-chip">${esc(b.space?.code || "")}　${esc(b.space?.name || "")}</span>
+          ${past ? '<span class="kp-chip important">日時が過ぎています</span>' : ""}
+          <span class="meta">${esc(fmtDay(b.starts_at))}　${esc(hhmm(b.starts_at))}〜${esc(hhmm(b.ends_at))}</span>
+        </div>
+        <div class="title">${esc(b.title)}</div>
+        <div class="body">申請者：${esc(b.applicant?.display_name || "不明")}${
+          b.applicant?.department ? `（${esc(b.applicant.department)}）` : ""}${
+          b.headcount ? `　${b.headcount} 名` : ""}</div>
+        ${b.note ? `<div class="body">${esc(b.note)}</div>` : ""}
+        <div class="foot">
+          <input type="text" id="note-${esc(b.id)}" placeholder="ひとこと（任意・申請者に届きます）"
+                 style="max-width:280px;margin:0;">
+          <button class="btn btn-primary btn-sm" onclick="decide('${esc(b.id)}','approve',this)">
+            <span class="material-symbols-outlined icon-inline">check</span>承認
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="decide('${esc(b.id)}','reject',this)">
+            <span class="material-symbols-outlined icon-inline">close</span>却下
+          </button>
+        </div>
+      </div>`;
+  }
+
+  async function decide(id, action, btn) {
+    const note = el(`note-${id}`)?.value.trim() || null;
+    if (action === "reject" && !confirm("この申請を却下します。よろしいですか？")) return;
+    try {
+      const res = await KPLayout.busy(btn, action === "approve" ? "承認中…" : "却下中…",
+        () => API.decideBooking(id, action, note));
+      if (res.calendar && res.calendar.synced === false && res.calendar.error) {
+        alert("予約は処理しましたが、Googleカレンダーへの反映に失敗しました。\n" + res.calendar.error);
+      }
+      await Promise.all([loadPending(), loadUpcoming()]);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "処理できませんでした");
+    }
+  }
+
+  // ---- これからの予約 -------------------------------------------------------
+  async function loadUpcoming() {
+    try {
+      const res = await API.listBookings("all", { from: new Date().toISOString() });
+      const list = (res.bookings || [])
+        .filter((b) => b.status === "approved" || b.status === "pending")
+        .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+
+      if (!list.length) {
+        el("upcoming").innerHTML = `<div class="empty">これからの予約はありません。</div>`;
+        return;
+      }
+      // 日ごとにまとめて出す
+      const byDay = new Map();
+      for (const b of list) {
+        const k = fmtDay(b.starts_at);
+        if (!byDay.has(k)) byDay.set(k, []);
+        byDay.get(k).push(b);
+      }
+      el("upcoming").innerHTML = [...byDay.entries()].map(([day, rows]) => `
+        <p class="muted" style="font-size:12.5px;font-weight:700;margin:16px 0 6px;">${esc(day)}</p>
+        <div class="kp-slots">${rows.map(upcomingRow).join("")}</div>`).join("");
+    } catch (e) {
+      el("upcoming").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function upcomingRow(b) {
+    return `
+      <div class="kp-slot ${b.status === "pending" ? "pending" : ""}">
+        <span class="tm">${esc(hhmm(b.starts_at))}〜${esc(hhmm(b.ends_at))}</span>
+        <span class="ttl">${esc(b.space?.name || "")}｜${esc(b.title)}</span>
+        <span class="by">${esc(b.applicant?.display_name || "")}${b.status === "pending" ? "（承認待ち）" : ""}</span>
+        ${b.gcal_error ? '<span class="kp-chip important" title="カレンダー未反映">カレンダー×</span>' : ""}
+        <button class="btn btn-secondary btn-sm" onclick="cancelBooking('${esc(b.id)}', this)">取消</button>
+      </div>`;
+  }
+
+  async function cancelBooking(id, btn) {
+    if (!confirm("この予約を取り消します。申請者に通知が届きます。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "取消中…", () => API.decideBooking(id, "cancel"));
+      await Promise.all([loadPending(), loadUpcoming()]);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "取り消せませんでした");
+    }
+  }
+
+  // ---- スペースのマスタ -----------------------------------------------------
+  async function loadSpaces() {
+    try {
+      const res = await API.listSpaces();
+      spaces = res.spaces || [];
+      renderSpaces();
+      renderCalendarBanner(res.calendar || {});
+    } catch (e) {
+      el("s-rows").innerHTML = `<tr><td colspan="7" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function renderCalendarBanner(cal) {
+    if (cal.configured) {
+      el("cal-banner").innerHTML =
+        `<div class="banner ok" style="margin-bottom:18px;">
+           <span class="material-symbols-outlined">event_available</span>
+           <div>Googleカレンダー連携は有効です。承認すると
+             <code>${esc(cal.defaultCalendarId || "")}</code> に予定が入ります。</div>
+         </div>`;
+      return;
+    }
+    el("cal-banner").innerHTML =
+      `<div class="banner warn" style="margin-bottom:18px;">
+         <span class="material-symbols-outlined">event_busy</span>
+         <div><b>Googleカレンダー連携が未設定です。</b>
+           予約の受付と承認はこのまま使えますが、カレンダーには入りません。<br>
+           Googleカレンダーを1つ作り、サービスアカウントに「予定の変更権限」で共有したうえで、
+           そのカレンダーIDを Vercel の環境変数 <code>GCAL_CALENDAR_ID</code> に設定してください。
+           手順は<a href="help.html#booking">使い方ガイド</a>にあります。</div>
+       </div>`;
+  }
+
+  function renderSpaces() {
+    if (!spaces.length) {
+      el("s-rows").innerHTML = `<tr><td colspan="7" class="muted">スペースがまだありません。上から追加してください。</td></tr>`;
+      return;
+    }
+    el("s-rows").innerHTML = spaces.map((s) => `
+      <tr>
+        <td><b>${esc(s.code)}</b></td>
+        <td>${esc(s.name)}</td>
+        <td>${s.capacity ? `${s.capacity} 名` : "—"}</td>
+        <td>
+          <select onchange="patch('${esc(s.id)}', { needsApproval: this.value === 'yes' }, this)">
+            <option value="yes"${s.needs_approval ? " selected" : ""}>必要</option>
+            <option value="no"${s.needs_approval ? "" : " selected"}>不要</option>
+          </select>
+        </td>
+        <td>
+          <select onchange="patch('${esc(s.id)}', { active: this.value === 'on' }, this)">
+            <option value="on"${s.active ? " selected" : ""}>受付中</option>
+            <option value="off"${s.active ? "" : " selected"}>停止</option>
+          </select>
+        </td>
+        <td>
+          <input type="text" value="${esc(s.calendar_id || "")}" placeholder="（共通）"
+                 style="margin:0;font-size:12px;"
+                 onchange="patch('${esc(s.id)}', { calendarId: this.value.trim() }, this)">
+        </td>
+        <td>
+          <button class="icon-btn" title="削除" onclick="removeSpace('${esc(s.id)}')">
+            <span class="material-symbols-outlined">delete</span>
+          </button>
+        </td>
+      </tr>`).join("");
+  }
+
+  async function addSpace(btn) {
+    const msg = el("s-msg");
+    msg.textContent = "";
+    const code = el("s-code").value.trim();
+    const name = el("s-name").value.trim();
+    if (!code || !name) { msg.textContent = "番号と名称を入力してください"; return; }
+
+    try {
+      await KPLayout.busy(btn, "追加中…", () => API.createSpace({
+        code, name,
+        capacity: el("s-capacity").value || null,
+        sortOrder: el("s-sort").value ? Number(el("s-sort").value) : spaces.length + 1,
+      }));
+      for (const id of ["s-code", "s-name", "s-capacity", "s-sort"]) el(id).value = "";
+      await loadSpaces();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "追加できませんでした";
+    }
+  }
+
+  // 表の中の select / input からの更新。入力欄そのものを止めて手応えを出す
+  async function patch(id, body, control) {
+    if (control) control.disabled = true;
+    try {
+      await API.updateSpace({ id, ...body });
+      await loadSpaces();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "更新できませんでした");
+      await loadSpaces();
+    } finally {
+      if (control) control.disabled = false;
+    }
+  }
+
+  async function removeSpace(id) {
+    const s = spaces.find((x) => x.id === id);
+    if (!confirm(`${s ? s.name : ""} を削除します。よろしいですか？`)) return;
+    try { await API.deleteSpace(id); await loadSpaces(); }
+    catch (e) { alert(e.hint || e.detail || e.message || "削除できませんでした"); }
+  }
+</script>
+
+</body>
+</html>

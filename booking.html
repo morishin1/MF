@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スペース予約 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260908a">
+  <link rel="stylesheet" href="css/layout.css?v=20260908a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">スペース予約</h1>
+  <p class="kp-greet-sub">申請すると管理者に通知が届きます。承認されるとGoogleカレンダーに予定が入ります。</p>
+
+  <div id="gate"></div>
+
+  <div id="main" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">meeting_room</span>スペースを選ぶ</h2>
+      <div id="spaces" class="kp-spaces"><div class="empty">読み込み中…</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">event</span>日時</h2>
+
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div><label>日付</label><input id="f-date" type="date" onchange="loadDay()"></div>
+        <div><label>開始</label><select id="f-start" onchange="onStartChange()"></select></div>
+        <div><label>終了</label><select id="f-end"></select></div>
+      </div>
+
+      <p class="muted" style="font-size:12.5px;margin:0 0 8px;">
+        <span id="day-label">この日</span>の予約状況
+      </p>
+      <div id="day" class="kp-slots"><div class="empty">スペースと日付を選んでください。</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">edit_note</span>内容</h2>
+
+      <div style="margin-bottom:12px;">
+        <label>件名</label>
+        <input id="f-title" type="text" maxlength="200" placeholder="例: 定例ミーティング">
+      </div>
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div style="max-width:140px;">
+          <label>人数（任意）</label>
+          <input id="f-headcount" type="number" min="1" step="1" placeholder="4">
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label>用途・備考（任意）</label>
+        <textarea id="f-note" rows="3" placeholder="来客あり、机の配置をコの字に など"></textarea>
+      </div>
+
+      <button id="btn-apply" class="btn btn-primary" onclick="apply(this)">
+        <span class="material-symbols-outlined icon-inline">send</span>この内容で申請する
+      </button>
+      <div id="apply-msg" class="err-text"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">history</span>自分の申請</h2>
+      <div id="mine"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260908a"></script>
+<script src="js/layout.js?v=20260908a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const STATUS_LABEL = { pending: "承認待ち", approved: "承認済み", rejected: "却下", cancelled: "取消" };
+
+  let spaces = [];
+  let selectedSpace = null;
+  let dayBookings = [];
+  let me = null;
+
+  // メンバーは「メニュー」から入ってくる。下タブはそこを点けたままにする
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    if (!ctx.me?.gw?.employee) {
+      el("gate").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、予約を申請できません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    me = ctx.me.gw.employee;
+    el("main").classList.remove("hidden");
+
+    fillTimes();
+    el("f-date").value = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
+    await loadSpaces();
+    loadMine();
+  }
+
+  // ---- 時刻の選択肢（8:00〜22:00 を30分刻み） -------------------------------
+  function fillTimes() {
+    const opts = [];
+    for (let m = 8 * 60; m <= 22 * 60; m += 30) {
+      const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      opts.push(`<option value="${t}">${t}</option>`);
+    }
+    el("f-start").innerHTML = opts.join("");
+    el("f-end").innerHTML = opts.join("");
+    el("f-start").value = "10:00";
+    el("f-end").value = "11:00";
+  }
+
+  // 開始を動かしたら、終了はその1時間後に寄せる（毎回2か所直させない）
+  function onStartChange() {
+    const [h, m] = el("f-start").value.split(":").map(Number);
+    const end = h * 60 + m + 60;
+    const t = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+    if ([...el("f-end").options].some((o) => o.value === t)) el("f-end").value = t;
+  }
+
+  // ---- スペース -------------------------------------------------------------
+  async function loadSpaces() {
+    try {
+      const res = await API.listSpaces();
+      spaces = res.spaces || [];
+      if (!spaces.length) {
+        el("spaces").innerHTML =
+          `<div class="empty" style="grid-column:1/-1;">スペースがまだ登録されていません。管理者にご連絡ください。</div>`;
+        return;
+      }
+      selectedSpace = spaces.find((s) => s.active) || null;
+      renderSpaces();
+      loadDay();
+    } catch (e) {
+      el("spaces").innerHTML =
+        `<div class="banner err" style="grid-column:1/-1;"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderSpaces() {
+    el("spaces").innerHTML = spaces.map((s) => {
+      const on = selectedSpace?.id === s.id;
+      const cls = `kp-space${on ? " on" : ""}${s.active ? "" : " off"}`;
+      const cap = [s.capacity ? `定員 ${s.capacity} 名` : null, s.active ? null : "受付停止中"]
+        .filter(Boolean).join("　");
+      return `
+        <label class="${cls}">
+          <input type="radio" name="space" value="${esc(s.id)}"
+                 ${on ? "checked" : ""} ${s.active ? "" : "disabled"}
+                 onchange="pickSpace('${esc(s.id)}')">
+          <span class="no">${esc(s.code)}</span>
+          <span class="nm">${esc(s.name)}${cap ? `<span class="cap">${esc(cap)}</span>` : ""}</span>
+        </label>`;
+    }).join("");
+  }
+
+  function pickSpace(id) {
+    selectedSpace = spaces.find((s) => s.id === id) || null;
+    renderSpaces();
+    loadDay();
+  }
+
+  // ---- その日の予約状況 -----------------------------------------------------
+  async function loadDay() {
+    const date = el("f-date").value;
+    if (!selectedSpace || !date) return;
+    el("day-label").textContent = `${selectedSpace.name}（${date}）`;
+    el("day").innerHTML = `<div class="empty">読み込み中…</div>`;
+
+    try {
+      const res = await API.listBookings("all", {
+        spaceId: selectedSpace.id,
+        from: `${date}T00:00:00+09:00`,
+        to: `${date}T23:59:59+09:00`,
+      });
+      dayBookings = (res.bookings || []).filter((b) => b.status === "pending" || b.status === "approved");
+      renderDay();
+    } catch (e) {
+      el("day").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  const hhmm = (iso) =>
+    new Date(iso).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
+
+  function renderDay() {
+    if (!dayBookings.length) {
+      el("day").innerHTML = `<div class="empty">この日はまだ予約がありません。</div>`;
+      return;
+    }
+    el("day").innerHTML = dayBookings
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+      .map((b) => `
+        <div class="kp-slot ${b.status === "pending" ? "pending" : ""} ${b.employee_id === me.id ? "mine" : ""}">
+          <span class="tm">${esc(hhmm(b.starts_at))}〜${esc(hhmm(b.ends_at))}</span>
+          <span class="ttl">${esc(b.title)}</span>
+          <span class="by">${esc(b.applicant?.display_name || "")}${b.status === "pending" ? "（承認待ち）" : ""}</span>
+        </div>`).join("");
+  }
+
+  // ---- 申請 -----------------------------------------------------------------
+  async function apply(btn) {
+    const msg = el("apply-msg");
+    msg.style.color = "";
+    msg.textContent = "";
+
+    if (!selectedSpace) { msg.textContent = "スペースを選んでください"; return; }
+    const date = el("f-date").value;
+    const title = el("f-title").value.trim();
+    if (!date) { msg.textContent = "日付を選んでください"; return; }
+    if (!title) { msg.textContent = "件名を入力してください"; return; }
+    if (el("f-end").value <= el("f-start").value) {
+      msg.textContent = "終了時刻は開始時刻より後にしてください"; return;
+    }
+
+    const payload = {
+      spaceId: selectedSpace.id,
+      title,
+      note: el("f-note").value.trim() || null,
+      headcount: el("f-headcount").value ? Number(el("f-headcount").value) : null,
+      // 日本時間で入力されたものとして送る。サーバはUTCで持つ
+      startsAt: `${date}T${el("f-start").value}:00+09:00`,
+      endsAt: `${date}T${el("f-end").value}:00+09:00`,
+    };
+
+    try {
+      const res = await KPLayout.busy(btn, "申請中…", () => API.createBooking(payload));
+      el("f-title").value = "";
+      el("f-note").value = "";
+      el("f-headcount").value = "";
+
+      msg.style.color = "var(--primary-dark)";
+      msg.textContent = res.booking?.status === "approved"
+        ? "予約が確定しました。"
+        : "申請しました。管理者の承認をお待ちください。";
+      if (res.calendar && res.calendar.synced === false && res.calendar.error) {
+        msg.textContent += " ※カレンダーへの反映に失敗しました（管理者が確認します）";
+      }
+      await Promise.all([loadDay(), loadMine()]);
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "申請できませんでした";
+    }
+  }
+
+  // ---- 自分の申請 -----------------------------------------------------------
+  async function loadMine() {
+    try {
+      const res = await API.listBookings("mine");
+      renderMine(res.bookings || []);
+    } catch (e) {
+      el("mine").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderMine(list) {
+    if (!list.length) {
+      el("mine").innerHTML = `<div class="empty">まだ申請はありません。</div>`;
+      return;
+    }
+    const fmt = (iso) => new Date(iso).toLocaleDateString("ja-JP",
+      { timeZone: "Asia/Tokyo", year: "numeric", month: "long", day: "numeric" });
+
+    el("mine").innerHTML = list.map((b) => {
+      const live = b.status === "pending" || b.status === "approved";
+      const future = new Date(b.starts_at).getTime() > Date.now();
+      return `
+        <div class="kp-notice">
+          <div class="head">
+            <span class="kp-chip ${esc(b.status)}">${esc(STATUS_LABEL[b.status] || b.status)}</span>
+            <span class="kp-chip">${esc(b.space?.name || "")}</span>
+            <span class="meta">${esc(fmt(b.starts_at))} ${esc(hhmm(b.starts_at))}〜${esc(hhmm(b.ends_at))}</span>
+          </div>
+          <div class="title">${esc(b.title)}</div>
+          ${b.note ? `<div class="body">${esc(b.note)}</div>` : ""}
+          ${b.decision_note ? `<div class="body muted">管理者より：${esc(b.decision_note)}</div>` : ""}
+          <div class="foot">
+            ${b.gcal_link && b.status === "approved"
+              ? `<a class="btn btn-secondary btn-sm" href="${esc(b.gcal_link)}" target="_blank" rel="noopener">
+                   <span class="material-symbols-outlined icon-inline">calendar_month</span>カレンダーで見る
+                 </a>` : ""}
+            ${live && future
+              ? `<button class="btn btn-secondary btn-sm" onclick="cancel('${esc(b.id)}', this)">
+                   <span class="material-symbols-outlined icon-inline">close</span>取り消す
+                 </button>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  async function cancel(id, btn) {
+    if (!confirm("この予約を取り消します。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "取消中…", () => API.decideBooking(id, "cancel"));
+      await Promise.all([loadMine(), loadDay()]);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "取り消せませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

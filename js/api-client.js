@@ -225,6 +225,28 @@
   const deleteAsset = (id) =>
     api(`/api/assets?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
+  // ---- スペース（設備）と予約 ----
+  const listSpaces = () => api("/api/spaces");
+  const createSpace = (s) =>
+    api("/api/spaces", { method: "POST", body: s }).then((d) => d.space);
+  const updateSpace = (s) =>
+    api("/api/spaces", { method: "PATCH", body: s }).then((d) => d.space);
+  const deleteSpace = (id) =>
+    api(`/api/spaces?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  // scope: "mine" | "pending" | "all"、from/to は ISO 文字列
+  const listBookings = (scope = "all", opts = {}) => {
+    const q = new URLSearchParams({ scope });
+    for (const k of ["from", "to", "spaceId"]) if (opts[k]) q.set(k, opts[k]);
+    return api(`/api/bookings?${q.toString()}`);
+  };
+  const createBooking = (b) => api("/api/bookings", { method: "POST", body: b });
+  // action: "approve" | "reject" | "cancel"
+  const decideBooking = (id, action, note) =>
+    api("/api/bookings", { method: "PATCH", body: { id, action, note } });
+  const deleteBooking = (id) =>
+    api(`/api/bookings?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   // ---- 書類の雛形 ----
   const listTemplates = () => api("/api/templates");
   const createTemplate = (t) =>
@@ -403,6 +425,8 @@
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
     listAssets, createAsset, updateAsset, deleteAsset,
+    listSpaces, createSpace, updateSpace, deleteSpace,
+    listBookings, createBooking, decideBooking, deleteBooking,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
     listThreads, createThread, getThread, sendMessage, markThreadRead,
