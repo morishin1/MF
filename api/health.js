@@ -13,7 +13,7 @@ export default function handler(req, res) {
     ok: true,
     service: "kessanpilot-api",
     // どのビルドが動いているかを画面を開かずに判別するための印
-    assetVersion: "20260905f",
+    assetVersion: "20260905g",
     features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true },
     env,
     note: env.supabase && env.anthropic

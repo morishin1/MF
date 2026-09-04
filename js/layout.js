@@ -59,15 +59,14 @@
     return "home.html";
   }
 
-  function renderTopbar(ctx) {
-    const name = ctx.me?.gw?.employee?.display_name || ctx.me?.email || "";
-    const tag = { admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[ctx.appRole] || "";
+  function renderTopbar({ name, appRole }) {
+    const tag = { admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "";
     const el = document.createElement("div");
     el.className = "topbar";
     el.innerHTML = `
       <div class="brand">
-        <a href="${homeFor(ctx.appRole)}" style="text-decoration:none;color:inherit;">エイト</a>
-        ${tag ? `<span class="tag${ctx.appRole !== "member" ? " admin" : ""}">${esc(tag)}</span>` : ""}
+        <a href="${homeFor(appRole)}" style="text-decoration:none;color:inherit;">エイト</a>
+        ${tag ? `<span class="tag${appRole !== "member" ? " admin" : ""}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
         <span>${esc(name)}</span>
@@ -106,7 +105,39 @@
         : `<span class="${cls}">${inner}</span>`;
     }).join("");
     document.body.appendChild(el);
+    // html にも付ける。次に開く画面で、最初の描画から余白を確保するため
     document.body.classList.add("kp-has-sidebar");
+    document.documentElement.classList.add("kp-has-sidebar");
+  }
+
+  // 前回の権限を覚えておき、次の画面では /api/me を待たずに枠を描く。
+  // 待ってから描くと、画面を移るたびにメニューが消えて出て、本文がずれる。
+  // 覚えた内容は毎回 /api/me で確かめ、違っていれば描き直す。
+  const CACHE_KEY = "kp_layout";
+  const loadCache = () => {
+    try { return JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch { return null; }
+  };
+  const saveCache = (v) => {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(v)); } catch { /* 保存できなくても動く */ }
+  };
+  const clearCache = () => {
+    try { localStorage.removeItem(CACHE_KEY); } catch { /* 同上 */ }
+  };
+
+  function clearChrome() {
+    for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar"]) {
+      for (const n of document.querySelectorAll(sel)) n.remove();
+    }
+    document.body.classList.remove("kp-has-sidebar");
+    document.documentElement.classList.remove("kp-has-sidebar");
+  }
+
+  function renderChrome({ name, appRole }, active) {
+    clearChrome();
+    renderTopbar({ name, appRole });
+    if (appRole === "admin" || appRole === "owner") renderAdminNav(active);
+    else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
+    else renderMemberNav(active);
   }
 
   function showLogin(message) {
@@ -151,7 +182,16 @@
      * @returns {Promise<{me:object, appRole:string}|null>}
      */
     async init(opts = {}) {
-      if (!API.isLoggedIn()) { showLogin(); return null; }
+      if (!API.isLoggedIn()) { clearCache(); showLogin(); return null; }
+
+      // 覚えている権限があれば、通信を待たずに先に描く。
+      // この画面を開いてよい権限のときだけ描く（違えばこのあと送り返される）
+      const cached = loadCache();
+      let painted = null;
+      if (cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole))) {
+        painted = cached;
+        renderChrome(cached, opts.active);
+      }
 
       let me;
       try {
@@ -159,26 +199,30 @@
       } catch (e) {
         // トークン切れ等。ログイン画面に戻す
         API.logout();
+        clearCache();
         showLogin("セッションが切れました。もう一度ログインしてください。");
         return null;
       }
 
       const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
+      const name = me.gw?.employee?.display_name || me.email || "";
+      saveCache({ appRole, name });
+
       const allowed = opts.roles;
       if (allowed && !allowed.includes(appRole)) {
         location.replace(homeFor(appRole));
         return null;
       }
 
-      renderTopbar({ me, appRole });
-      if (appRole === "admin" || appRole === "owner") renderAdminNav(opts.active);
-      else if (appRole === "sr") renderAdminNav(opts.active, ADVISOR_NAV);
-      else renderMemberNav(opts.active);
+      // 覚えていた内容と違っていたときだけ描き直す
+      if (!painted || painted.appRole !== appRole || painted.name !== name) {
+        renderChrome({ name, appRole }, opts.active);
+      }
 
       return { me, appRole };
     },
 
-    logout() { API.logout(); location.href = "index.html"; },
+    logout() { API.logout(); clearCache(); location.href = "index.html"; },
     homeFor,
     esc,
     icon,
