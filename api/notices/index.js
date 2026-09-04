@@ -12,6 +12,7 @@
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser, getMemberships } from "../../lib/auth.js";
 import { userClient, admin } from "../../lib/supabase.js";
+import { notifySlack } from "../../lib/slack.js";
 
 const CATEGORIES = ["general", "important", "system", "event"];
 const AUDIENCES = ["all", "department"];
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
       .select(FIELDS)
       .single();
     if (error) return json(res, insertStatus(error), { error: "db_insert_failed", detail: error.message });
+    await announceToSlack(data);
     return json(res, 200, { notice: data });
   }
 
@@ -83,6 +85,8 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (error) return json(res, insertStatus(error), { error: "db_update_failed", detail: error.message });
     if (!data) return json(res, 404, { error: "notice_not_found" });
+    // 下書きから配信に切り替えたときにも1回だけ流す
+    if (row.value.status === "published") await announceToSlack(data);
     return json(res, 200, { notice: data });
   }
 
@@ -203,4 +207,18 @@ async function withMyReadState(tenantId, userId, notices, isAdmin) {
     enrolled: true,
     employeeId: employee.id,
   };
+}
+
+// 配信したお知らせを Slack にも流す。下書きのうちは流さない。
+// SLACK_WEBHOOK_URL が未設定なら何も起きない
+async function announceToSlack(notice) {
+  if (!notice || notice.status !== "published") return;
+  const where = notice.audience === "department"
+    ? (notice.departments || []).join("・")
+    : "全社";
+  await notifySlack({
+    text: `:loudspeaker: お知らせ（${where}）　${notice.title}`,
+    lines: [String(notice.body || "").slice(0, 300)],
+    link: "home.html",
+  });
 }

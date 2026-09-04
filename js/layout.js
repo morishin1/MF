@@ -40,7 +40,7 @@
     { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },
     { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",       icon: "calendar_month", ready: true  },
-    { key: "workflow",  href: "admin-workflow.html",  label: "申請・承認",         icon: "approval",     ready: false },
+    { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",           icon: "receipt",      ready: true  },
 
     { section: "組織・システム管理" },
     { key: "members",   href: "admin-members.html",   label: "メンバー・権限",     icon: "group",        ready: true  },

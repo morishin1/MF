@@ -23,6 +23,7 @@ import { userClient, admin } from "../../lib/supabase.js";
 import { syncBooking } from "../../lib/gcal.js";
 import { approverEmployeeIds, validateRange, rangeLabel } from "../../lib/bookings.js";
 import { notify } from "../../lib/notify.js";
+import { notifySlack } from "../../lib/slack.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
 const FIELDS =
@@ -174,6 +175,12 @@ async function create(req, res, ctx) {
       link: "admin-bookings.html",
       dedupeKey: `booking:${booking.id}`,
     })));
+
+    await notifySlack({
+      text: `:office: スペース予約の申請　${applicantName}`,
+      lines: [`${space.name}　${rangeLabel(booking.starts_at, booking.ends_at)}`, title],
+      link: "admin-bookings.html",
+    });
   }
 
   // 申請そのものは一覧に残るのでログには入れない。

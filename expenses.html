@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経費精算 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260908b">
+  <link rel="stylesheet" href="css/layout.css?v=20260908b">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">経費精算</h1>
+  <p class="kp-greet-sub">立て替えた経費を申請します。承認されると管理部が支払います。</p>
+
+  <div id="gate"></div>
+
+  <div id="main" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">post_add</span>申請をつくる</h2>
+
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div style="min-width:200px;flex:1;">
+          <label>件名</label>
+          <input id="f-title" type="text" maxlength="200" placeholder="例: 9月分 交通費・会議費">
+        </div>
+        <div style="max-width:150px;">
+          <label>対象月</label>
+          <input id="f-period" type="month">
+        </div>
+        <div style="max-width:160px;">
+          <label>支払い方法</label>
+          <select id="f-method">
+            <option value="personal">立替（自腹）</option>
+            <option value="corporate_card">法人カード</option>
+          </select>
+        </div>
+      </div>
+
+      <p class="muted" style="font-size:12.5px;margin:14px 0 8px;font-weight:700;">明細</p>
+      <div class="inline-controls" style="margin-bottom:10px;">
+        <div style="max-width:150px;"><label>日付</label><input id="l-date" type="date"></div>
+        <div style="max-width:150px;"><label>勘定科目</label><select id="l-category"></select></div>
+        <div style="max-width:130px;"><label>金額（円）</label><input id="l-amount" type="number" min="1" step="1" placeholder="1200"></div>
+        <div style="max-width:100px;">
+          <label>税率</label>
+          <select id="l-tax"><option value="10">10%</option><option value="8">8%</option><option value="0">対象外</option></select>
+        </div>
+        <div style="min-width:140px;"><label>支払先</label><input id="l-payee" type="text" placeholder="JR東日本"></div>
+        <div style="min-width:160px;flex:1;"><label>摘要</label><input id="l-desc" type="text" placeholder="渋谷→品川 往復"></div>
+      </div>
+      <div class="inline-controls" style="margin-bottom:10px;align-items:center;">
+        <div>
+          <label style="display:inline-flex;align-items:center;gap:7px;font-weight:normal;font-size:13px;">
+            <input id="l-invoice" type="checkbox" checked style="width:auto;margin:0;">
+            インボイス登録事業者の領収書
+          </label>
+        </div>
+        <div>
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+            <span class="material-symbols-outlined icon-inline">attach_file</span>
+            <span id="l-file-label">領収書を付ける</span>
+            <input type="file" class="hidden" id="l-file"
+                   accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" onchange="pickReceipt(this)">
+          </label>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="addLine(this)">
+            <span class="material-symbols-outlined icon-inline">add</span>明細を追加
+          </button>
+        </div>
+      </div>
+      <div id="l-msg" class="err-text"></div>
+
+      <div class="table-scroll" style="margin-top:6px;">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:100px;">日付</th><th style="width:110px;">科目</th>
+            <th>支払先・摘要</th><th style="width:110px;">金額</th>
+            <th style="width:90px;">領収書</th><th style="width:44px;"></th>
+          </tr></thead>
+          <tbody id="l-rows"><tr><td colspan="6" class="muted">明細がまだありません。</td></tr></tbody>
+          <tfoot><tr>
+            <th colspan="3" style="text-align:right;">合計</th>
+            <th id="l-total" colspan="3">0 円</th>
+          </tr></tfoot>
+        </table>
+      </div>
+
+      <div id="two-stage" class="banner info hidden" style="margin-top:14px;">
+        <span class="material-symbols-outlined">approval</span>
+        <div id="two-stage-text"></div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <button id="btn-submit" class="btn btn-primary" onclick="submitReport(this)">
+          <span class="material-symbols-outlined icon-inline">send</span>この内容で申請する
+        </button>
+      </div>
+      <div id="f-msg" class="err-text"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">history</span>自分の申請</h2>
+      <div id="mine"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260908b"></script>
+<script src="js/layout.js?v=20260908b"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const yen = (n) => `${Number(n || 0).toLocaleString("ja-JP")} 円`;
+
+  const STATUS_LABEL = {
+    pending: "承認待ち（管理部）", pending_owner: "承認待ち（代表）",
+    approved: "承認済み", paid: "支払済み", rejected: "却下", cancelled: "取消",
+  };
+  const STATUS_CHIP = {
+    pending: "pending", pending_owner: "pending", approved: "approved",
+    paid: "event", rejected: "rejected", cancelled: "archived",
+  };
+
+  let settings = { expense_owner_threshold: 0, expense_categories: [] };
+  let lines = [];            // 申請前の明細（送信するまでサーバには無い）
+  let pendingReceipt = null; // 添付待ちの領収書 { path, name }
+
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    if (!ctx.me?.gw?.employee) {
+      el("gate").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、経費精算を申請できません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    el("main").classList.remove("hidden");
+
+    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    el("l-date").value = today;
+    el("f-period").value = today.slice(0, 7);
+
+    await load();
+  }
+
+  async function load() {
+    try {
+      const res = await API.listExpenses("mine");
+      settings = res.settings || settings;
+      el("l-category").innerHTML = (settings.expense_categories || [])
+        .map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+      renderMine(res.reports || []);
+      renderLines();
+    } catch (e) {
+      el("mine").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  // ---- 明細 -----------------------------------------------------------------
+  async function pickReceipt(input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const label = el("l-file-label");
+    const before = label.textContent;
+    label.textContent = "アップロード中…";
+    try {
+      pendingReceipt = await API.uploadReceipt(file);
+      label.textContent = pendingReceipt.name.slice(0, 20);
+    } catch (e) {
+      label.textContent = before;
+      alert(e.hint || e.detail || e.message || "アップロードできませんでした");
+    }
+  }
+
+  function addLine(btn) {
+    const msg = el("l-msg");
+    msg.textContent = "";
+    const amount = Number(el("l-amount").value);
+    if (!el("l-date").value) { msg.textContent = "日付を入れてください"; return; }
+    if (!Number.isInteger(amount) || amount <= 0) { msg.textContent = "金額を正しく入れてください"; return; }
+    if (!el("l-category").value) { msg.textContent = "勘定科目を選んでください"; return; }
+
+    lines.push({
+      spentOn: el("l-date").value,
+      category: el("l-category").value,
+      amount,
+      taxRate: Number(el("l-tax").value),
+      payee: el("l-payee").value.trim() || null,
+      description: el("l-desc").value.trim() || null,
+      invoiceRegistered: el("l-invoice").checked,
+      receiptPath: pendingReceipt?.path || null,
+      receiptName: pendingReceipt?.name || null,
+    });
+
+    // 次の1件をすぐ足せるよう、日付と科目は残して金額まわりだけ空にする
+    el("l-amount").value = "";
+    el("l-payee").value = "";
+    el("l-desc").value = "";
+    el("l-invoice").checked = true;
+    pendingReceipt = null;
+    el("l-file-label").textContent = "領収書を付ける";
+    renderLines();
+  }
+
+  function removeLine(i) { lines.splice(i, 1); renderLines(); }
+
+  function total() { return lines.reduce((s, l) => s + l.amount, 0); }
+
+  function renderLines() {
+    if (!lines.length) {
+      el("l-rows").innerHTML = `<tr><td colspan="6" class="muted">明細がまだありません。</td></tr>`;
+    } else {
+      el("l-rows").innerHTML = lines.map((l, i) => `
+        <tr>
+          <td>${esc(l.spentOn)}</td>
+          <td>${esc(l.category)}</td>
+          <td>${esc([l.payee, l.description].filter(Boolean).join("／") || "—")}
+            ${l.invoiceRegistered ? "" : '<span class="kp-chip draft" style="margin-left:6px;">インボイス無</span>'}</td>
+          <td>${esc(yen(l.amount))}<small class="muted">（${l.taxRate}%）</small></td>
+          <td>${l.receiptPath ? '<span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">description</span>' : "—"}</td>
+          <td><button class="icon-btn" title="削除" onclick="removeLine(${i})">
+            <span class="material-symbols-outlined">close</span></button></td>
+        </tr>`).join("");
+    }
+    el("l-total").textContent = yen(total());
+
+    // しきい値を超えたら、承認が2段になることを申請前に伝える
+    const th = Number(settings.expense_owner_threshold || 0);
+    const two = th > 0 && total() >= th;
+    el("two-stage").classList.toggle("hidden", !two);
+    if (two) {
+      el("two-stage-text").innerHTML =
+        `合計が <b>${esc(yen(th))}</b> 以上のため、管理部の承認のあとに<b>代表の承認</b>も必要になります。`;
+    }
+  }
+
+  // ---- 申請 -----------------------------------------------------------------
+  async function submitReport(btn) {
+    const msg = el("f-msg");
+    msg.style.color = "";
+    msg.textContent = "";
+    const title = el("f-title").value.trim();
+    if (!title) { msg.textContent = "件名を入力してください"; return; }
+    if (!lines.length) { msg.textContent = "明細を1件以上追加してください"; return; }
+    if (!confirm(`合計 ${yen(total())} で申請します。よろしいですか？`)) return;
+
+    try {
+      const res = await KPLayout.busy(btn, "申請中…", () => API.createExpense({
+        title,
+        period: el("f-period").value || null,
+        paymentMethod: el("f-method").value,
+        lines,
+      }));
+      lines = [];
+      el("f-title").value = "";
+      renderLines();
+      msg.style.color = "var(--primary-dark)";
+      msg.textContent = res.twoStage
+        ? "申請しました。管理部の承認のあと、代表の承認に進みます。"
+        : "申請しました。管理部の承認をお待ちください。";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "申請できませんでした";
+    }
+  }
+
+  // ---- 自分の申請 -----------------------------------------------------------
+  function renderMine(reports) {
+    if (!reports.length) {
+      el("mine").innerHTML = `<div class="empty">まだ申請はありません。</div>`;
+      return;
+    }
+    el("mine").innerHTML = reports.map((r) => {
+      const open = r.status === "pending" || r.status === "pending_owner";
+      return `
+        <div class="kp-notice">
+          <div class="head">
+            <span class="kp-chip ${esc(STATUS_CHIP[r.status] || "")}">${esc(STATUS_LABEL[r.status] || r.status)}</span>
+            ${r.payment_method === "corporate_card" ? '<span class="kp-chip">法人カード</span>' : ""}
+            ${r.period ? `<span class="kp-chip">${esc(r.period)}</span>` : ""}
+            <span class="meta">${esc(yen(r.total_amount))}　明細 ${(r.lines || []).length} 件</span>
+          </div>
+          <div class="title">${esc(r.title)}</div>
+          ${r.decision_note ? `<div class="body muted">管理部より：${esc(r.decision_note)}</div>` : ""}
+          ${r.paid_on ? `<div class="body muted">支払日：${esc(r.paid_on)}</div>` : ""}
+          <div class="table-scroll" style="margin-top:10px;">
+            <table class="kp-items">
+              <tbody>${(r.lines || []).map(lineRow).join("")}</tbody>
+            </table>
+          </div>
+          ${open ? `
+            <div class="foot">
+              <button class="btn btn-secondary btn-sm" onclick="cancelReport('${esc(r.id)}', this)">
+                <span class="material-symbols-outlined icon-inline">undo</span>取り下げる
+              </button>
+            </div>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function lineRow(l) {
+    return `
+      <tr>
+        <td style="width:100px;">${esc(l.spent_on)}</td>
+        <td style="width:110px;">${esc(l.category)}</td>
+        <td>${esc([l.payee, l.description].filter(Boolean).join("／") || "—")}</td>
+        <td style="width:110px;">${esc(yen(l.amount))}</td>
+        <td style="width:70px;">${l.receipt_path
+          ? `<a href="#" onclick="openReceipt('${esc(l.receipt_path)}');return false;">領収書</a>` : "—"}</td>
+      </tr>`;
+  }
+
+  async function openReceipt(path) {
+    try {
+      const { url } = await API.receiptUrl(path);
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      alert(e.detail || e.message || "開けませんでした");
+    }
+  }
+
+  async function cancelReport(id, btn) {
+    if (!confirm("この申請を取り下げます。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "取下中…", () => API.decideExpense(id, "cancel"));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "取り下げられませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経費精算 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260908b">
+  <link rel="stylesheet" href="css/layout.css?v=20260908b">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">経費精算</h1>
+  <p class="kp-greet-sub">申請の承認と支払記録、会計へ渡すCSVの書き出しを行います。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">pending_actions</span>承認待ち<span id="pending-badge"></span></h2>
+    <div id="pending"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">payments</span>支払い待ち（承認済み）</h2>
+    <div id="payable"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">download</span>会計へ渡す</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 12px;">
+      承認済み・支払済みの明細をCSVで書き出します。<b>自動で仕訳は作りません。</b>
+      会計側で取り込むか、月次相談の資料にしてください。
+    </p>
+    <div class="inline-controls">
+      <div style="max-width:150px;"><label>対象月</label><input id="x-period" type="month"></div>
+      <div style="max-width:170px;">
+        <label>状態</label>
+        <select id="x-status">
+          <option value="">承認済み＋支払済み</option>
+          <option value="approved">承認済みのみ</option>
+          <option value="paid">支払済みのみ</option>
+        </select>
+      </div>
+      <div>
+        <button class="btn btn-secondary" onclick="exportCsv(this)">
+          <span class="material-symbols-outlined icon-inline">table_view</span>CSVを書き出す
+        </button>
+      </div>
+    </div>
+    <div id="x-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">rule</span>承認のきまり</h2>
+    <div class="inline-controls">
+      <div style="max-width:220px;">
+        <label>代表承認が必要になる金額（円）</label>
+        <input id="w-threshold" type="number" min="0" step="1000">
+      </div>
+      <div>
+        <button class="btn btn-secondary" onclick="saveThreshold(this)">
+          <span class="material-symbols-outlined icon-inline">save</span>保存
+        </button>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin:10px 0 0;">
+      この金額以上の申請は、管理部が承認したあとに<b>代表（経営者権限）の承認</b>が必要になります。
+      <b>0 にすると常に管理部の1段だけ</b>になります。
+    </p>
+    <div id="w-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">list</span>すべての申請</h2>
+    <div class="tabs">
+      <button class="tab active" onclick="setFilter('', this)">すべて</button>
+      <button class="tab" onclick="setFilter('rejected', this)">却下</button>
+      <button class="tab" onclick="setFilter('paid', this)">支払済み</button>
+    </div>
+    <div id="all"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260908b"></script>
+<script src="js/layout.js?v=20260908b"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const yen = (n) => `${Number(n || 0).toLocaleString("ja-JP")} 円`;
+
+  const STATUS_LABEL = {
+    pending: "承認待ち（管理部）", pending_owner: "承認待ち（代表）",
+    approved: "承認済み", paid: "支払済み", rejected: "却下", cancelled: "取消",
+  };
+  const STATUS_CHIP = {
+    pending: "pending", pending_owner: "important", approved: "approved",
+    paid: "event", rejected: "rejected", cancelled: "archived",
+  };
+
+  let reports = [];
+  let settings = {};
+  let isOwner = false;
+  let filter = "";
+
+  KPLayout.init({ active: "expenses", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listExpenses("all");
+      reports = res.reports || [];
+      settings = res.settings || {};
+      isOwner = !!res.isOwner;
+      el("w-threshold").value = settings.expense_owner_threshold ?? 0;
+      render();
+    } catch (e) {
+      el("pending").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    const pending = reports.filter((r) => r.status === "pending" || r.status === "pending_owner");
+    el("pending-badge").innerHTML = pending.length
+      ? `<span class="kp-chip important" style="margin-left:8px;">${pending.length}</span>` : "";
+    el("pending").innerHTML = pending.length
+      ? pending.map((r) => card(r, true)).join("")
+      : `<div class="empty">承認待ちの申請はありません。</div>`;
+
+    // 立替のみ。法人カードは会社が直接払っているので支払処理は要らない
+    const payable = reports.filter((r) => r.status === "approved" && r.payment_method === "personal");
+    el("payable").innerHTML = payable.length
+      ? payable.map((r) => card(r, false, true)).join("")
+      : `<div class="empty">支払い待ちの精算はありません。</div>`;
+
+    const all = filter ? reports.filter((r) => r.status === filter) : reports;
+    el("all").innerHTML = all.length
+      ? all.map((r) => card(r, false)).join("")
+      : `<div class="empty">該当する申請はありません。</div>`;
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
+    render();
+  }
+
+  function card(r, showDecide, showPay) {
+    // 代表承認の段は owner 権限を持つ人しか押せない。押せない人にはその理由を出す
+    const needsOwner = r.status === "pending_owner";
+    const canPress = !needsOwner || isOwner;
+
+    return `
+      <div class="kp-notice${showDecide ? " unread" : ""}">
+        <div class="head">
+          <span class="kp-chip ${esc(STATUS_CHIP[r.status] || "")}">${esc(STATUS_LABEL[r.status] || r.status)}</span>
+          ${r.payment_method === "corporate_card" ? '<span class="kp-chip">法人カード</span>' : ""}
+          ${r.period ? `<span class="kp-chip">${esc(r.period)}</span>` : ""}
+          <span class="meta"><b>${esc(yen(r.total_amount))}</b>　明細 ${(r.lines || []).length} 件</span>
+        </div>
+        <div class="title">${esc(r.title)}</div>
+        <div class="body">申請者：${esc(r.applicant?.display_name || "不明")}${
+          r.applicant?.department ? `（${esc(r.applicant.department)}）` : ""}　${
+          esc(new Date(r.created_at).toLocaleDateString("ja-JP"))} 申請</div>
+        ${r.decision_note ? `<div class="body muted">ひとこと：${esc(r.decision_note)}</div>` : ""}
+        ${r.paid_on ? `<div class="body muted">支払日：${esc(r.paid_on)}</div>` : ""}
+
+        <div class="table-scroll" style="margin-top:10px;">
+          <table class="kp-items">
+            <thead><tr>
+              <th style="width:100px;">日付</th><th style="width:110px;">科目</th>
+              <th>支払先・摘要</th><th style="width:120px;">金額</th><th style="width:70px;">領収書</th>
+            </tr></thead>
+            <tbody>${(r.lines || []).map(lineRow).join("")}</tbody>
+          </table>
+        </div>
+
+        <div class="foot">
+          ${showDecide ? `
+            ${canPress ? `
+              <input type="text" id="note-${esc(r.id)}" placeholder="ひとこと（任意・申請者に届きます）"
+                     style="max-width:260px;margin:0;">
+              <button class="btn btn-primary btn-sm" onclick="decide('${esc(r.id)}','approve',this)">
+                <span class="material-symbols-outlined icon-inline">check</span>${needsOwner ? "代表として承認" : "承認"}
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="decide('${esc(r.id)}','reject',this)">
+                <span class="material-symbols-outlined icon-inline">close</span>却下
+              </button>`
+            : `<span class="muted" style="font-size:12.5px;">
+                 ${esc(yen(settings.expense_owner_threshold || 0))}以上のため、代表（経営者権限）の承認待ちです
+               </span>`}` : ""}
+          ${showPay ? `
+            <button class="btn btn-primary btn-sm" onclick="decide('${esc(r.id)}','pay',this)">
+              <span class="material-symbols-outlined icon-inline">payments</span>支払済みにする
+            </button>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function lineRow(l) {
+    return `
+      <tr>
+        <td>${esc(l.spent_on)}</td>
+        <td>${esc(l.category)}</td>
+        <td>${esc([l.payee, l.description].filter(Boolean).join("／") || "—")}
+          ${l.invoice_registered ? "" : '<span class="kp-chip draft" style="margin-left:6px;">インボイス無</span>'}</td>
+        <td>${esc(yen(l.amount))}<small class="muted">（${l.tax_rate}%）</small></td>
+        <td>${l.receipt_path
+          ? `<a href="#" onclick="openReceipt('${esc(l.receipt_path)}');return false;">見る</a>` : "—"}</td>
+      </tr>`;
+  }
+
+  async function openReceipt(path) {
+    try {
+      const { url } = await API.receiptUrl(path);
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      alert(e.detail || e.message || "開けませんでした");
+    }
+  }
+
+  async function decide(id, action, btn) {
+    const note = el(`note-${id}`)?.value.trim() || null;
+    const label = { approve: "承認中…", reject: "却下中…", pay: "記録中…" }[action];
+    if (action === "reject" && !confirm("この申請を却下します。よろしいですか？")) return;
+    if (action === "pay" && !confirm("支払済みとして記録します。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, label, () => API.decideExpense(id, action, note));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "処理できませんでした");
+    }
+  }
+
+  async function saveThreshold(btn) {
+    const msg = el("w-msg");
+    msg.style.color = "";
+    msg.textContent = "";
+    const n = Number(el("w-threshold").value);
+    if (!Number.isInteger(n) || n < 0) { msg.textContent = "0以上の整数で入れてください"; return; }
+    try {
+      settings = await KPLayout.busy(btn, "保存中…", () => API.updateWorkflowSettings({ ownerThreshold: n }));
+      msg.style.color = "var(--primary-dark)";
+      msg.textContent = n === 0 ? "常に管理部の1段だけになりました。" : `${yen(n)}以上は代表承認が必要になりました。`;
+      render();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  async function exportCsv(btn) {
+    const msg = el("x-msg");
+    msg.style.color = "";
+    msg.textContent = "";
+    try {
+      const blob = await KPLayout.busy(btn, "書き出し中…", () => API.downloadExpenseCsv({
+        period: el("x-period").value || null,
+        status: el("x-status").value || null,
+      }));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `expenses_${el("x-period").value || "all"}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "書き出せませんでした";
+    }
+  }
+</script>
+
+</body>
+</html>

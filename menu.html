@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260908a">
-  <link rel="stylesheet" href="css/layout.css?v=20260908a">
+  <link rel="stylesheet" href="css/app.css?v=20260908b">
+  <link rel="stylesheet" href="css/layout.css?v=20260908b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -42,9 +42,14 @@
         <span><b>スペース予約</b><small>カフェ・スタジオ・会議スペースなどの予約を申請する</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
+      <a href="expenses.html">
+        <span class="ico"><span class="material-symbols-outlined">receipt</span></span>
+        <span><b>経費精算</b><small>立て替えた交通費・会議費などを申請する</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
       <span class="soon">
         <span class="ico"><span class="material-symbols-outlined">approval</span></span>
-        <span><b>申請・承認</b><small>経費精算・有給・稟議の申請</small></span>
+        <span><b>有給・稟議の申請</b><small>経費精算以外の申請</small></span>
         <em>準備中</em>
       </span>
     </div>
@@ -79,8 +84,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260908a"></script>
-<script src="js/layout.js?v=20260908a"></script>
+<script src="js/api-client.js?v=20260908b"></script>
+<script src="js/layout.js?v=20260908b"></script>
 <script>
   KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] });
 </script>

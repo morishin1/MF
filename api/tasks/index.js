@@ -9,6 +9,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
+import { notifySlack } from "../../lib/slack.js";
 
 const PRIORITIES = ["low", "normal", "high"];
 const STATUSES = ["todo", "doing", "done", "cancelled"];
@@ -62,6 +63,14 @@ export default async function handler(req, res) {
       .select(WITH_NAMES)
       .single();
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
+
+    if (data.assignee_id) {
+      await notifySlack({
+        text: `:white_square_button: タスクを割り当て　${data.assignee?.display_name || ""}`,
+        lines: [data.title, data.due_on ? `期限 ${data.due_on}` : null],
+        link: "tasks.html",
+      });
+    }
     return json(res, 200, { task: data });
   }
 

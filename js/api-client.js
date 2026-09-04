@@ -247,6 +247,53 @@
   const deleteBooking = (id) =>
     api(`/api/bookings?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
+  // ---- 経費精算 ----
+  // scope: "mine" | "pending" | "all"
+  const listExpenses = (scope, opts = {}) => {
+    const q = new URLSearchParams();
+    if (scope) q.set("scope", scope);
+    for (const k of ["period", "status"]) if (opts[k]) q.set(k, opts[k]);
+    return api(`/api/expenses?${q.toString()}`);
+  };
+  const createExpense = (report) => api("/api/expenses", { method: "POST", body: report });
+  // action: "approve" | "reject" | "cancel" | "pay"
+  const decideExpense = (id, action, note) =>
+    api("/api/expenses/decide", { method: "POST", body: { id, action, note } });
+  const deleteExpense = (id) =>
+    api(`/api/expenses?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const updateWorkflowSettings = (patch) =>
+    api("/api/expenses/settings", { method: "PATCH", body: patch }).then((d) => d.settings);
+
+  // 領収書。申請を作る前に上げて、返ってきた path を明細に付ける
+  async function uploadReceipt(file) {
+    const sign = await api("/api/expenses/upload", {
+      method: "POST",
+      body: { filename: file.name, mimeType: file.type, sizeBytes: file.size },
+    });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type, "x-upsert": "false" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return { path: sign.path, name: file.name };
+  }
+  const receiptUrl = (path) =>
+    api(`/api/expenses/upload?path=${encodeURIComponent(path)}`);
+
+  // CSVは署名付きURLではなく認証ヘッダで取るので、Blob にしてから保存する
+  async function downloadExpenseCsv(opts = {}) {
+    const q = new URLSearchParams({ format: "csv", scope: "all" });
+    for (const k of ["period", "status"]) if (opts[k]) q.set(k, opts[k]);
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const r = await fetch(`/api/expenses?${q.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error("CSVを取得できませんでした");
+    return r.blob();
+  }
+
   // ---- 書類の雛形 ----
   const listTemplates = () => api("/api/templates");
   const createTemplate = (t) =>
@@ -427,6 +474,8 @@
     listAssets, createAsset, updateAsset, deleteAsset,
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
+    listExpenses, createExpense, decideExpense, deleteExpense,
+    updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
     listThreads, createThread, getThread, sendMessage, markThreadRead,
