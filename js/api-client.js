@@ -178,6 +178,32 @@
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
 
+  const linkEmployeeAccount = (employeeId, email, clientId) =>
+    api("/api/employees/link", { method: "POST", body: { employeeId, email, clientId } });
+
+  // ---- 管理設定 ----
+  const settings = () => api("/api/settings");
+  const updateSettings = (patch) =>
+    api("/api/settings", { method: "PATCH", body: patch }).then((d) => d.tenant);
+
+  // ---- 貸与品・アカウント台帳 ----
+  const listAssets = () => api("/api/assets");
+  const createAsset = (asset) =>
+    api("/api/assets", { method: "POST", body: asset }).then((d) => d.asset);
+  const updateAsset = (asset) =>
+    api("/api/assets", { method: "PATCH", body: asset }).then((d) => d.asset);
+  const deleteAsset = (id) =>
+    api(`/api/assets?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  // ---- 書類の雛形 ----
+  const listTemplates = () => api("/api/templates");
+  const createTemplate = (t) =>
+    api("/api/templates", { method: "POST", body: t }).then((d) => d.template);
+  const updateTemplate = (t) =>
+    api("/api/templates", { method: "PATCH", body: t }).then((d) => d.template);
+  const deleteTemplate = (id) =>
+    api(`/api/templates?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   // ---- メッセージ ----
   const listThreads = () => api("/api/messages");
   const createThread = (kind, memberIds, title) =>
@@ -290,7 +316,10 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
-    listEmployees, createEmployee, updateEmployee, setEmployeeRole,
+    listEmployees, createEmployee, updateEmployee, setEmployeeRole, linkEmployeeAccount,
+    settings, updateSettings,
+    listAssets, createAsset, updateAsset, deleteAsset,
+    listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
     listThreads, createThread, getThread, sendMessage, markThreadRead,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,

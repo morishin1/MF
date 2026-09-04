@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理設定 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260905c">
+  <link rel="stylesheet" href="css/layout.css?v=20260905c">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">管理設定</h1>
+  <p class="kp-greet-sub">会社情報・アカウント連携・外部サービスの状態を確認します。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">domain</span>会社情報</h2>
+    <div class="inline-controls">
+      <div style="min-width:260px;flex:1;"><label>会社名</label><input id="s-name" type="text"></div>
+      <div>
+        <button class="btn btn-primary" onclick="saveName()">
+          <span class="material-symbols-outlined icon-inline">save</span>保存
+        </button>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0;" id="s-depts"></p>
+    <div id="s-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">link</span>ログインアカウントの紐づけ</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 14px;">
+      名簿に先に登録した人を、本人のログインアカウントと結び付けます。
+      先に Supabase の Authentication でアカウントを作っておいてください。
+      紐づけると同時に、書類のアップロードができるようになります。
+    </p>
+    <div id="unlinked"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">hub</span>外部サービスの状態</h2>
+    <div id="integrations"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">store</span>取引先（会計）</h2>
+    <div id="clients"><div class="empty">読み込み中…</div></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;">
+      取引先の追加は「会計書類」画面から行います。
+    </p>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260905c"></script>
+<script src="js/layout.js?v=20260905c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let data = null;
+
+  KPLayout.init({ active: "settings", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.settings();
+    } catch (e) {
+      el("s-msg").textContent = e.detail || e.message || "取得に失敗しました";
+      return;
+    }
+    el("s-name").value = data.tenant?.name || "";
+    el("s-depts").textContent = data.departments.length
+      ? `部署：${data.departments.join("、")}　／　社員 ${data.counts.employees} 名（在籍 ${data.counts.active} 名）`
+      : `部署はまだ登録されていません（メンバー画面で部署を入力すると、ここに集計されます）`;
+
+    renderUnlinked();
+    renderIntegrations();
+    renderClients();
+  }
+
+  async function saveName() {
+    const msg = el("s-msg");
+    msg.textContent = "";
+    const name = el("s-name").value.trim();
+    if (!name) { msg.textContent = "会社名を入力してください"; return; }
+    try { await API.updateSettings({ name }); msg.textContent = "保存しました"; setTimeout(() => msg.textContent = "", 2500); }
+    catch (e) { msg.textContent = e.detail || e.message || "保存に失敗しました"; }
+  }
+
+  function renderUnlinked() {
+    if (!data.unlinked.length) {
+      el("unlinked").innerHTML = `<div class="empty">未連携のメンバーはいません。</div>`;
+      return;
+    }
+    const clientOpts = data.clients.map((c) =>
+      `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+
+    el("unlinked").innerHTML = data.unlinked.map((e) => `
+      <div class="kp-todo" style="align-items:center;">
+        <span class="material-symbols-outlined" style="font-size:20px;color:var(--muted);">person</span>
+        <span class="t">
+          <b>${esc(e.display_name)}</b>
+          ${e.department ? `<small>${esc(e.department)}</small>` : ""}
+        </span>
+        <input type="email" id="lk-${esc(e.id)}" value="${esc(e.email || "")}"
+               placeholder="taro@8grp.co.jp" style="max-width:210px;">
+        <select id="lc-${esc(e.id)}" style="max-width:140px;">${clientOpts}</select>
+        <button class="btn btn-primary btn-sm" onclick="link('${esc(e.id)}')">紐づけ</button>
+      </div>`).join("") + `<div id="lk-msg" class="err-text"></div>`;
+  }
+
+  async function link(employeeId) {
+    const msg = el("lk-msg");
+    msg.textContent = "";
+    const email = el(`lk-${employeeId}`).value.trim();
+    const clientId = el(`lc-${employeeId}`)?.value || null;
+    if (!email) { msg.textContent = "メールアドレスを入力してください"; return; }
+    try {
+      await API.linkEmployeeAccount(employeeId, email, clientId);
+      await load();
+    } catch (e) {
+      msg.textContent = e.detail || e.hint || e.message || "紐づけに失敗しました";
+    }
+  }
+
+  function renderIntegrations() {
+    const rows = [
+      ["Google Drive", data.integrations.drive,
+       "書類の自動保存。GOOGLE_SERVICE_ACCOUNT_JSON と GDRIVE_ROOT_FOLDER_ID が必要"],
+      ["Slack", data.integrations.slack,
+       "新着メッセージの通知。SLACK_WEBHOOK_URL が必要（通知処理は未実装）"],
+      ["AI（書類判定・仕訳）", data.integrations.anthropic,
+       "アップロードした書類の種別判定と仕訳ドラフト。ANTHROPIC_API_KEY が必要"],
+    ];
+    el("integrations").innerHTML = rows.map(([name, ok, note]) => `
+      <div class="kp-todo" style="align-items:center;">
+        <span class="material-symbols-outlined" style="font-size:20px;color:${ok ? "var(--primary)" : "#c3cad3"};">
+          ${ok ? "check_circle" : "radio_button_unchecked"}</span>
+        <span class="t"><b>${esc(name)}</b><small>${esc(note)}</small></span>
+        <span class="kp-chip ${ok ? "event" : "draft"}">${ok ? "設定済み" : "未設定"}</span>
+      </div>`).join("") + `
+      <p class="muted" style="font-size:12px;margin:12px 0 0;">
+        設定は Vercel の環境変数で行います。変更後は Redeploy が必要です。
+      </p>`;
+  }
+
+  function renderClients() {
+    if (!data.clients.length) {
+      el("clients").innerHTML = `<div class="empty">取引先が登録されていません。</div>`;
+      return;
+    }
+    el("clients").innerHTML = data.clients.map((c) => `
+      <div class="kp-todo" style="align-items:center;">
+        <span class="material-symbols-outlined" style="font-size:20px;color:var(--muted);">storefront</span>
+        <span class="t"><b>${esc(c.name)}</b></span>
+        <span class="kp-chip ${c.accounting_software === "mf" ? "event" : ""}">
+          ${c.accounting_software === "mf" ? "MF連携あり" : "MF連携なし"}</span>
+      </div>`).join("");
+  }
+</script>
+
+</body>
+</html>

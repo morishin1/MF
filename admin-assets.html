@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アカウント・貸与品 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260905c">
+  <link rel="stylesheet" href="css/layout.css?v=20260905c">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">アカウント・貸与品</h1>
+  <p class="kp-greet-sub">PC・スマホ・各種アカウント・鍵の貸出状況を管理します。退職時の返却漏れを防ぐための台帳です。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">add_box</span>台帳に追加</h2>
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div>
+        <label>種別</label>
+        <select id="a-kind">
+          <option value="pc">PC</option>
+          <option value="phone">スマホ・携帯</option>
+          <option value="account">アカウント</option>
+          <option value="key">鍵・カード</option>
+          <option value="other">その他</option>
+        </select>
+      </div>
+      <div style="min-width:200px;flex:1;"><label>名称</label><input id="a-name" type="text" placeholder="MacBook Air M2 / Slack"></div>
+      <div style="min-width:170px;"><label>識別番号・ID（任意）</label><input id="a-identifier" type="text" placeholder="製造番号やアカウント名"></div>
+      <div style="min-width:180px;"><label>貸出先（任意）</label><select id="a-assignee"></select></div>
+      <div>
+        <button class="btn btn-primary" onclick="add()">
+          <span class="material-symbols-outlined icon-inline">add</span>追加
+        </button>
+      </div>
+    </div>
+    <div id="a-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" data-filter="active" onclick="setFilter('active', this)">貸出中・在庫</button>
+      <button class="tab" data-filter="assigned" onclick="setFilter('assigned', this)">貸出中のみ</button>
+      <button class="tab" data-filter="all" onclick="setFilter('all', this)">すべて</button>
+    </div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260905c"></script>
+<script src="js/layout.js?v=20260905c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const KIND_LABEL = { pc: "PC", phone: "スマホ", account: "アカウント", key: "鍵・カード", other: "その他" };
+  const KIND_ICON = { pc: "laptop_mac", phone: "smartphone", account: "key", key: "vpn_key", other: "inventory_2" };
+  const STATUS_LABEL = { in_stock: "在庫", assigned: "貸出中", returned: "返却済み", disposed: "廃棄" };
+
+  let assets = [];
+  let employees = [];
+  let filter = "active";
+
+  KPLayout.init({ active: "assets", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    await Promise.all([loadEmployees(), loadAssets()]);
+  }
+
+  async function loadEmployees() {
+    try {
+      const res = await API.listEmployees();
+      employees = (res.employees || []).filter((e) => e.status !== "left");
+      el("a-assignee").innerHTML = `<option value="">（在庫のまま）</option>` + employees.map((e) =>
+        `<option value="${esc(e.id)}">${esc(e.display_name)}${e.department ? `（${esc(e.department)}）` : ""}</option>`).join("");
+    } catch (e) {
+      el("a-msg").textContent = e.detail || e.message;
+    }
+  }
+
+  async function add() {
+    const msg = el("a-msg");
+    msg.textContent = "";
+    const name = el("a-name").value.trim();
+    if (!name) { msg.textContent = "名称を入力してください"; return; }
+    try {
+      await API.createAsset({
+        kind: el("a-kind").value,
+        name,
+        identifier: el("a-identifier").value.trim() || null,
+        assignedTo: el("a-assignee").value || null,
+      });
+      el("a-name").value = "";
+      el("a-identifier").value = "";
+      await loadAssets();
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "追加に失敗しました";
+    }
+  }
+
+  async function loadAssets() {
+    try {
+      const res = await API.listAssets();
+      assets = res.assets || [];
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
+    render();
+  }
+
+  function render() {
+    const shown = assets.filter((a) => {
+      if (filter === "active") return a.status === "in_stock" || a.status === "assigned";
+      if (filter === "assigned") return a.status === "assigned";
+      return true;
+    });
+
+    if (!shown.length) {
+      el("list").innerHTML = `<div class="empty">該当するものはありません。</div>`;
+      return;
+    }
+
+    el("list").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>種別</th><th>名称</th><th>識別番号・ID</th><th>貸出先</th><th>状態</th><th></th>
+          </tr></thead>
+          <tbody>${shown.map(row).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function row(a) {
+    const cls = a.status === "returned" || a.status === "disposed" ? "done" : "";
+    return `
+      <tr class="${cls}">
+        <td style="white-space:nowrap;">
+          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;color:var(--muted);">
+            ${KIND_ICON[a.kind] || "inventory_2"}</span>
+          ${esc(KIND_LABEL[a.kind] || a.kind)}
+        </td>
+        <td>${esc(a.name)}</td>
+        <td>${esc(a.identifier || "—")}</td>
+        <td>
+          <select onchange="setAssignee('${esc(a.id)}', this.value)">
+            <option value="">（在庫）</option>
+            ${employees.map((e) =>
+              `<option value="${esc(e.id)}"${a.assigned_to === e.id ? " selected" : ""}>${esc(e.display_name)}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <select onchange="setStatus('${esc(a.id)}', this.value)">
+            ${Object.entries(STATUS_LABEL).map(([k, v]) =>
+              `<option value="${k}"${a.status === k ? " selected" : ""}>${v}</option>`).join("")}
+          </select>
+        </td>
+        <td style="text-align:right;">
+          <button class="icon-btn" title="削除" onclick="remove('${esc(a.id)}')">
+            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+          </button>
+        </td>
+      </tr>`;
+  }
+
+  async function setAssignee(id, assignedTo) {
+    try { await API.updateAsset({ id, assignedTo: assignedTo || null }); await loadAssets(); }
+    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadAssets(); }
+  }
+
+  async function setStatus(id, status) {
+    try { await API.updateAsset({ id, status }); await loadAssets(); }
+    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadAssets(); }
+  }
+
+  async function remove(id) {
+    const a = assets.find((x) => x.id === id);
+    if (!confirm(`「${a ? a.name : ""}」を台帳から削除します。よろしいですか？`)) return;
+    try { await API.deleteAsset(id); await loadAssets(); }
+    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  }
+</script>
+
+</body>
+</html>

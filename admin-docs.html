@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>書類・雛形 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260905c">
+  <link rel="stylesheet" href="css/layout.css?v=20260905c">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">書類・雛形</h1>
+  <p class="kp-greet-sub">雇用契約書や案内文の雛形を登録し、対象者の情報を差し込んで書き出します。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">note_add</span><span id="form-title">雛形を作る</span></h2>
+
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div style="min-width:220px;flex:1;"><label>名前</label><input id="f-name" type="text" placeholder="雇用契約書（正社員）"></div>
+      <div>
+        <label>用途</label>
+        <select id="f-kind">
+          <option value="onboarding">入社</option>
+          <option value="offboarding">退職</option>
+          <option value="general">その他</option>
+        </select>
+      </div>
+      <div style="min-width:260px;">
+        <label>対象の雇用区分（未選択＝全区分）</label>
+        <select id="f-types" multiple size="4">
+          <option>正社員</option><option>契約社員</option><option>パート</option>
+          <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label>本文</label>
+      <textarea id="f-body" rows="10" placeholder="{{氏名}} 様&#10;&#10;このたびは……"></textarea>
+      <p class="muted" style="font-size:12px;margin:8px 0 0;">
+        差し込みできる項目：
+        <code>{{氏名}}</code> <code>{{部署}}</code> <code>{{役職}}</code>
+        <code>{{雇用区分}}</code> <code>{{入社日}}</code> <code>{{メール}}</code>
+        <code>{{会社名}}</code> <code>{{今日}}</code>
+      </p>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="btn-save" class="btn btn-primary" onclick="save()">
+        <span class="material-symbols-outlined icon-inline">save</span>保存
+      </button>
+      <button id="btn-cancel" class="btn btn-secondary hidden" onclick="resetForm()">編集をやめる</button>
+    </div>
+    <div id="form-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">folder_copy</span>登録済みの雛形</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">auto_fix_high</span>差し込んで書き出す</h2>
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div style="min-width:220px;flex:1;"><label>雛形</label><select id="m-template" onchange="preview()"></select></div>
+      <div style="min-width:200px;"><label>対象者</label><select id="m-employee" onchange="preview()"></select></div>
+      <div>
+        <button class="btn btn-secondary" onclick="copyOut()">
+          <span class="material-symbols-outlined icon-inline">content_copy</span>コピー
+        </button>
+      </div>
+      <div>
+        <button class="btn btn-secondary" onclick="downloadOut()">
+          <span class="material-symbols-outlined icon-inline">download</span>テキスト保存
+        </button>
+      </div>
+    </div>
+    <textarea id="m-out" rows="12" readonly placeholder="雛形と対象者を選ぶと、ここに差し込み結果が出ます。"></textarea>
+    <div id="m-msg" class="err-text"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260905c"></script>
+<script src="js/layout.js?v=20260905c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const KIND_LABEL = { onboarding: "入社", offboarding: "退職", general: "その他" };
+
+  let templates = [];
+  let employees = [];
+  let companyName = "";
+  let editingId = null;
+
+  KPLayout.init({ active: "templates", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    // 会社名は差し込みの {{会社名}} に使う
+    await API.settings().then((s) => { companyName = s.tenant?.name || ""; }).catch(() => {});
+    await Promise.all([loadTemplates(), loadEmployees()]);
+  }
+
+  async function loadEmployees() {
+    try {
+      const res = await API.listEmployees();
+      employees = res.employees || [];
+      el("m-employee").innerHTML = employees.length
+        ? employees.map((e) => `<option value="${esc(e.id)}">${esc(e.display_name)}</option>`).join("")
+        : `<option value="">（名簿に誰もいません）</option>`;
+      preview();
+    } catch (e) {
+      el("m-msg").textContent = e.detail || e.message;
+    }
+  }
+
+  async function loadTemplates() {
+    try {
+      const res = await API.listTemplates();
+      templates = res.templates || [];
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    el("m-template").innerHTML = templates.length
+      ? templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")
+      : `<option value="">（雛形がありません）</option>`;
+
+    if (!templates.length) {
+      el("list").innerHTML = `<div class="empty">まだ雛形はありません。上のフォームから作成してください。</div>`;
+      return;
+    }
+    el("list").innerHTML = templates.map((t) => `
+      <div class="kp-notice">
+        <div class="head">
+          <span class="kp-chip ${t.kind === "onboarding" ? "event" : (t.kind === "offboarding" ? "archived" : "")}">
+            ${esc(KIND_LABEL[t.kind] || t.kind)}</span>
+          ${(t.employment_types || []).length
+            ? `<span class="kp-chip">${esc((t.employment_types || []).join("・"))}</span>`
+            : `<span class="kp-chip">全区分</span>`}
+          <span class="meta">${esc(new Date(t.updated_at || t.created_at).toLocaleDateString("ja-JP"))}</span>
+        </div>
+        <div class="title">${esc(t.name)}</div>
+        <div class="body" style="max-height:5.6em;overflow:hidden;">${esc(t.body)}</div>
+        <div class="foot">
+          <button class="btn btn-secondary btn-sm" onclick="startEdit('${esc(t.id)}')">
+            <span class="material-symbols-outlined icon-inline">edit</span>編集
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="remove('${esc(t.id)}')">
+            <span class="material-symbols-outlined icon-inline">delete</span>削除
+          </button>
+        </div>
+      </div>`).join("");
+    preview();
+  }
+
+  function collect() {
+    return {
+      name: el("f-name").value.trim(),
+      kind: el("f-kind").value,
+      employmentTypes: [...el("f-types").selectedOptions].map((o) => o.value),
+      body: el("f-body").value.trim(),
+    };
+  }
+
+  function resetForm() {
+    editingId = null;
+    el("form-title").textContent = "雛形を作る";
+    el("btn-cancel").classList.add("hidden");
+    el("f-name").value = "";
+    el("f-body").value = "";
+    el("f-kind").value = "onboarding";
+    for (const o of el("f-types").options) o.selected = false;
+    el("form-msg").textContent = "";
+  }
+
+  async function save() {
+    const msg = el("form-msg");
+    msg.textContent = "";
+    const payload = collect();
+    if (!payload.name || !payload.body) { msg.textContent = "名前と本文を入力してください"; return; }
+    el("btn-save").disabled = true;
+    try {
+      if (editingId) await API.updateTemplate({ id: editingId, ...payload });
+      else await API.createTemplate(payload);
+      resetForm();
+      await loadTemplates();
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "保存に失敗しました";
+    } finally {
+      el("btn-save").disabled = false;
+    }
+  }
+
+  function startEdit(id) {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    editingId = id;
+    el("form-title").textContent = "雛形を編集";
+    el("btn-cancel").classList.remove("hidden");
+    el("f-name").value = t.name;
+    el("f-body").value = t.body;
+    el("f-kind").value = t.kind;
+    for (const o of el("f-types").options) o.selected = (t.employment_types || []).includes(o.value);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function remove(id) {
+    const t = templates.find((x) => x.id === id);
+    if (!confirm(`「${t ? t.name : ""}」を削除します。よろしいですか？`)) return;
+    try { await API.deleteTemplate(id); await loadTemplates(); }
+    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  }
+
+  // {{項目}} を対象者の情報で置き換える。該当が無い項目はそのまま残し、
+  // 埋め忘れに気づけるようにする。
+  function preview() {
+    const t = templates.find((x) => x.id === el("m-template").value);
+    const e = employees.find((x) => x.id === el("m-employee").value);
+    if (!t || !e) { el("m-out").value = ""; return; }
+
+    const map = {
+      "氏名": e.display_name || "",
+      "部署": e.department || "",
+      "役職": e.position || "",
+      "雇用区分": e.employment_type || "",
+      "入社日": e.joined_on ? new Date(e.joined_on).toLocaleDateString("ja-JP") : "",
+      "メール": e.email || "",
+      "会社名": companyName,
+      "今日": new Date().toLocaleDateString("ja-JP"),
+    };
+    el("m-out").value = t.body.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (whole, key) =>
+      Object.prototype.hasOwnProperty.call(map, key) ? map[key] : whole);
+  }
+
+  async function copyOut() {
+    const text = el("m-out").value;
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); el("m-msg").textContent = "コピーしました"; }
+    catch { el("m-out").select(); el("m-msg").textContent = "コピーできませんでした。手動で選択してください"; }
+    setTimeout(() => { el("m-msg").textContent = ""; }, 2500);
+  }
+
+  function downloadOut() {
+    const text = el("m-out").value;
+    if (!text) return;
+    const t = templates.find((x) => x.id === el("m-template").value);
+    const e = employees.find((x) => x.id === el("m-employee").value);
+    const blob = new Blob(["﻿" + text], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(t?.name || "書類")}_${(e?.display_name || "")}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+</script>
+
+</body>
+</html>

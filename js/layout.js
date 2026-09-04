@@ -34,10 +34,10 @@
     { key: "members",   href: "admin-members.html",   label: "メンバー",         icon: "group",        ready: true  },
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き", icon: "badge",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",     icon: "checklist",    ready: true  },
-    { key: "templates", href: "admin-docs.html",      label: "書類・雛形",       icon: "folder_copy",  ready: false },
-    { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: false },
+    { key: "templates", href: "admin-docs.html",      label: "書類・雛形",       icon: "folder_copy",  ready: true  },
+    { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: true  },
     { key: "accounting",href: "admin.html",           label: "会計書類",         icon: "receipt_long", ready: true  },
-    { key: "settings",  href: "admin-settings.html",  label: "管理設定",         icon: "settings",     ready: false },
+    { key: "settings",  href: "admin-settings.html",  label: "管理設定",         icon: "settings",     ready: true  },
   ];
 
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
