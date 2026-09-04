@@ -175,6 +175,20 @@
   const updateEmployee = (employee) =>
     api("/api/employees", { method: "PATCH", body: employee }).then((d) => d.employee);
 
+  const setEmployeeRole = (employeeId, role, grant) =>
+    api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
+
+  // ---- やること（タスク・予定） ----
+  // scope='mine' で自分の担当分だけ
+  const listTasks = (scope) =>
+    api(`/api/tasks${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`);
+  const createTask = (task) =>
+    api("/api/tasks", { method: "POST", body: task }).then((d) => d.task);
+  const updateTask = (task) =>
+    api("/api/tasks", { method: "PATCH", body: task }).then((d) => d.task);
+  const deleteTask = (id) =>
+    api(`/api/tasks?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   // ---- 入社・退職手続き ----
   const listProcedures = () => api("/api/onboarding");
   const createProcedure = (p) =>
@@ -265,7 +279,8 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
-    listEmployees, createEmployee, updateEmployee,
+    listEmployees, createEmployee, updateEmployee, setEmployeeRole,
+    listTasks, createTask, updateTask, deleteTask,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
   };

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>やること - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260905a">
+  <link rel="stylesheet" href="css/layout.css?v=20260905a">
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">やること</h1>
+  <p id="sub" class="kp-greet-sub">自分に割り当てられたタスクです。</p>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" data-filter="open" onclick="setFilter('open', this)">未完了</button>
+      <button class="tab" data-filter="done" onclick="setFilter('done', this)">完了</button>
+    </div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260905a"></script>
+<script src="js/layout.js?v=20260905a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  let tasks = [];
+  let filter = "open";
+
+  KPLayout.init({ active: "tasks", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(ctx); });
+
+  async function load(ctx) {
+    if (!ctx.me?.gw?.employee) {
+      el("list").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、タスクを表示できません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    try {
+      const res = await API.listTasks("mine");
+      tasks = res.tasks || [];
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
+    render();
+  }
+
+  const isOverdue = (t) =>
+    t.due_on && t.status !== "done" && t.status !== "cancelled" && t.due_on < today();
+
+  function render() {
+    const shown = tasks.filter((t) =>
+      filter === "open" ? (t.status === "todo" || t.status === "doing") : t.status === "done");
+
+    const open = tasks.filter((t) => t.status === "todo" || t.status === "doing").length;
+    const late = tasks.filter(isOverdue).length;
+    el("sub").textContent = late
+      ? `未完了 ${open} 件（うち期限超過 ${late} 件）`
+      : `未完了 ${open} 件`;
+
+    if (!shown.length) {
+      el("list").innerHTML = `<div class="empty">${filter === "open" ? "やることはありません。おつかれさまです。" : "完了したタスクはありません。"}</div>`;
+      return;
+    }
+
+    el("list").innerHTML = shown.map((t) => {
+      const over = isOverdue(t);
+      const done = t.status === "done";
+      const due = t.due_on
+        ? new Date(t.due_on).toLocaleDateString("ja-JP", { month: "long", day: "numeric" })
+        : null;
+      return `
+        <div class="kp-todo${done ? " done" : ""}">
+          <span class="material-symbols-outlined" style="font-size:20px;color:${done ? "var(--primary)" : "#c3cad3"};">
+            ${done ? "check_circle" : "radio_button_unchecked"}</span>
+          <span class="t">
+            ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${esc(t.title)}
+            ${t.body ? `<small>${esc(t.body)}</small>` : ""}
+            ${due ? `<small${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>期限 ${esc(due)}${over ? "（超過）" : ""}</small>` : ""}
+            ${t.category ? `<small>${esc(t.category)}</small>` : ""}
+          </span>
+          ${done
+            ? `<button class="btn btn-secondary btn-sm" onclick="setStatus('${esc(t.id)}','todo')">戻す</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="setStatus('${esc(t.id)}','done')">完了</button>`}
+        </div>`;
+    }).join("");
+  }
+
+  async function setStatus(id, status) {
+    const t = tasks.find((x) => x.id === id);
+    if (t) t.status = status;          // 先に反映して、押した手応えを返す
+    render();
+    try { await API.updateTask({ id, status }); }
+    catch (e) {
+      alert(e.detail || e.message || "更新できませんでした");
+      const res = await API.listTasks("mine").catch(() => null);
+      if (res) { tasks = res.tasks || []; render(); }
+    }
+  }
+</script>
+
+</body>
+</html>

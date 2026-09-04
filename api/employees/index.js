@@ -34,7 +34,23 @@ export default async function handler(req, res) {
       .order("display_name", { ascending: true })
       .limit(500);
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
-    return json(res, 200, { employees: data || [], canManage: canManageHr(ctx) });
+
+    // 社内ロールを添える。読めない立場（メンバー等）では空のまま返る
+    const { data: grants } = await sb
+      .from("gw_role_grants")
+      .select("employee_id, role")
+      .eq("tenant_id", ctx.tenantId);
+    const byEmployee = new Map();
+    for (const g of grants || []) {
+      if (!byEmployee.has(g.employee_id)) byEmployee.set(g.employee_id, []);
+      byEmployee.get(g.employee_id).push(g.role);
+    }
+
+    return json(res, 200, {
+      employees: (data || []).map((e) => ({ ...e, roles: byEmployee.get(e.id) || [] })),
+      canManage: canManageHr(ctx),
+      canGrantRoles: ctx.isHr,
+    });
   }
 
   if (req.method === "POST") {
