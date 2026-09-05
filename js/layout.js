@@ -36,6 +36,7 @@
   const ADMIN_NAV = [
     { section: "業務" },
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",     icon: "dashboard",    ready: true  },
+    { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",       icon: "monitoring",   ready: true  },
     { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信",       icon: "campaign",     ready: true  },
     { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },

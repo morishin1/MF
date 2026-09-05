@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アクセス分析 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910a">
+  <link rel="stylesheet" href="css/layout.css?v=20260910a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && localStorage.getItem("kp_view") !== "member"
+          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">アクセス分析</h1>
+  <p class="kp-greet-sub">自社のWebサイトが伸びているか、落ちているかを1画面で見ます。</p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <div class="tabs" style="margin-bottom:0;">
+      <button class="tab" onclick="setDays(1, this)">今日</button>
+      <button class="tab active" onclick="setDays(7, this)">7日</button>
+      <button class="tab" onclick="setDays(30, this)">30日</button>
+      <button class="tab" onclick="setDays(90, this)">90日</button>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="sync(this)">
+        <span class="material-symbols-outlined icon-inline">sync</span>いま取り込む
+      </button>
+    </div>
+  </div>
+
+  <!-- 全体 -->
+  <div id="totals" class="kp-tiles"></div>
+
+  <!-- 伸び／落ち -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">trending_up</span>伸びているサイト・落ちているサイト</h2>
+    <div id="movers"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- 一覧 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">language</span>サイト別<span id="period-label" class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;"></span></h2>
+    <div class="table-scroll">
+      <table class="kp-items">
+        <thead><tr>
+          <th>サイト</th>
+          <th style="width:90px;text-align:right;">PV</th>
+          <th style="width:90px;text-align:right;">訪問者</th>
+          <th style="width:100px;text-align:right;">前期間比</th>
+          <th style="width:90px;text-align:right;">今日</th>
+          <th style="width:110px;">状態</th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="muted">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 1サイトの詳細 -->
+  <div id="detail-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">insights</span><span id="detail-name">サイト</span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDetail()">閉じる</button></h2>
+    <div id="detail"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- 口コミサイトブロック（8grp のみ） -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">block</span>口コミサイト流入ブロック（8grp.co.jp）</h2>
+    <div id="block"><div class="empty">読み込み中…</div></div>
+    <p class="muted" style="font-size:12.5px;margin:12px 0 0;">
+      ブロックの判定は 8grp.co.jp のサーバー側で行っています。
+      対象サイトの追加・ON/OFF は<b>事務ポータル →「口コミサイト流入ブロック」</b>から。
+    </p>
+  </div>
+
+  <!-- サイトの登録 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">add_link</span>サイトの登録と計測タグ</h2>
+    <div class="inline-controls" style="margin-bottom:10px;">
+      <div style="min-width:170px;"><label>サイト名</label><input id="n-name" type="text" placeholder="ENGER"></div>
+      <div style="min-width:190px;"><label>ドメイン</label><input id="n-domain" type="text" placeholder="enger.jp"></div>
+      <div>
+        <button class="btn btn-secondary" onclick="addSite(this)">
+          <span class="material-symbols-outlined icon-inline">add</span>追加
+        </button>
+      </div>
+    </div>
+    <div id="n-msg" class="err-text"></div>
+
+    <p class="muted" style="font-size:12.5px;margin:10px 0 12px;">
+      各サイトの <code>&lt;/body&gt;</code> の直前に、下の1行を貼ると数字が入りはじめます。
+      <b>ドメインを登録した場合、そのドメインからの計測だけを受け付けます。</b>
+    </p>
+    <div id="tags"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910a"></script>
+<script src="js/layout.js?v=20260910a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const n = (v) => Number(v || 0).toLocaleString("ja-JP");
+
+  let days = 7;
+  let data = null;
+  let openId = null;
+
+  KPLayout.init({ active: "analytics", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  function setDays(d, btn) {
+    days = d;
+    for (const b of document.querySelectorAll(".tabs .tab")) b.classList.toggle("active", b === btn);
+    load();
+  }
+
+  async function load() {
+    try {
+      data = await API.analytics({ days });
+      render();
+      if (openId) openDetail(openId);
+    } catch (e) {
+      el("rows").innerHTML =
+        `<tr><td colspan="6" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function render() {
+    renderNotice();
+    renderTotals();
+    renderMovers();
+    renderRows();
+    renderBlock();
+    renderTags();
+    el("period-label").textContent = days === 1 ? "（今日）" : `（直近${days}日）`;
+  }
+
+  // ---- 全体 -----------------------------------------------------------------
+  function renderTotals() {
+    const s = data.sites.filter((x) => x.enabled);
+    const pv = s.reduce((a, x) => a + x.pv, 0);
+    const uv = s.reduce((a, x) => a + x.uv, 0);
+    const prev = s.reduce((a, x) => a + x.prevPv, 0);
+    const g = prev > 0 ? Math.round(((pv - prev) / prev) * 1000) / 10 : null;
+
+    const tile = (k, v, sub, cls) => `
+      <div class="kp-tile${cls ? " " + cls : ""}">
+        <div class="k">${esc(k)}</div>
+        <div class="v">${v}</div>
+        <div class="s">${esc(sub)}</div>
+      </div>`;
+
+    el("totals").innerHTML =
+      tile("総PV", n(pv), days === 1 ? "今日" : `直近${days}日`)
+      + tile("総訪問者", n(uv), days === 1 ? "今日" : `直近${days}日`)
+      + tile("前期間比", growthText(g), `前の${days}日は ${n(prev)} PV`, g !== null && g < 0 ? "alert" : "")
+      + tile("計測中のサイト", `${s.filter((x) => x.hasData).length}<small> / ${s.length}</small>`, "数字が入っているサイト");
+  }
+
+  const growthText = (g) =>
+    g === null ? "—" : `${g > 0 ? "↑" : (g < 0 ? "↓" : "")}${Math.abs(g)}<small>%</small>`;
+
+  // ---- 伸び／落ち -----------------------------------------------------------
+  function renderMovers() {
+    const withG = data.sites.filter((s) => s.enabled && s.growth !== null);
+    if (!withG.length) {
+      el("movers").innerHTML =
+        `<div class="empty">前の期間と比べられるデータがまだありません。数日ぶん貯まると出ます。</div>`;
+      return;
+    }
+    const up = withG.filter((s) => s.growth > 0).sort((a, b) => b.growth - a.growth).slice(0, 5);
+    const down = withG.filter((s) => s.growth < 0).sort((a, b) => a.growth - b.growth).slice(0, 5);
+
+    const list = (title, icon, rows, cls) => rows.length ? `
+      <p class="muted" style="font-size:12.5px;font-weight:700;margin:14px 0 6px;">
+        <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;">${icon}</span> ${title}
+      </p>
+      <div class="kp-slots">${rows.map((s) => `
+        <div class="kp-slot ${cls}" style="cursor:pointer;" onclick="openDetail('${esc(s.id)}')">
+          <span class="tm">${growthText(s.growth)}</span>
+          <span class="ttl">${esc(s.name)}</span>
+          <span class="by">${n(s.pv)} PV（前 ${n(s.prevPv)}）</span>
+        </div>`).join("")}</div>` : "";
+
+    el("movers").innerHTML =
+      list("伸びている", "local_fire_department", up, "")
+      + list("落ちている", "trending_down", down, "pending")
+      || `<div class="empty">大きな増減はありません。</div>`;
+  }
+
+  // ---- 一覧 -----------------------------------------------------------------
+  function renderRows() {
+    const rows = data.sites.slice().sort((a, b) => b.pv - a.pv);
+    if (!rows.length) {
+      el("rows").innerHTML = `<tr><td colspan="6" class="muted">サイトがまだ登録されていません。</td></tr>`;
+      return;
+    }
+    el("rows").innerHTML = rows.map((s) => {
+      const state = !s.enabled ? '<span class="kp-chip archived">非表示</span>'
+        : (s.hasData ? '<span class="kp-chip approved">計測中</span>'
+          : '<span class="kp-chip draft">計測未設定</span>');
+      const color = s.growth === null ? "var(--muted)" : (s.growth >= 0 ? "#256b36" : "#b3261e");
+      return `
+        <tr>
+          <td><a href="#" onclick="openDetail('${esc(s.id)}');return false;"><b>${esc(s.name)}</b></a>
+            ${s.domain ? `<small class="muted">　${esc(s.domain)}</small>` : ""}</td>
+          <td style="text-align:right;">${n(s.pv)}</td>
+          <td style="text-align:right;">${n(s.uv)}</td>
+          <td style="text-align:right;color:${color};font-weight:700;">${growthText(s.growth)}</td>
+          <td style="text-align:right;">${n(s.today.pv)}</td>
+          <td>${state}</td>
+        </tr>`;
+    }).join("");
+  }
+
+  // ---- 詳細 -----------------------------------------------------------------
+  async function openDetail(id) {
+    openId = id;
+    const card = el("detail-card");
+    card.classList.remove("hidden");
+    el("detail").innerHTML = `<div class="empty">読み込み中…</div>`;
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    try {
+      const d = await API.analytics({ days, projectId: id });
+      const s = d.sites[0];
+      el("detail-name").textContent = s ? s.name : "サイト";
+      el("detail").innerHTML = `
+        <div class="kp-tiles" style="margin-bottom:16px;">
+          <div class="kp-tile"><div class="k">PV</div><div class="v">${n(s?.pv)}</div>
+            <div class="s">直近${days}日</div></div>
+          <div class="kp-tile"><div class="k">訪問者</div><div class="v">${n(s?.uv)}</div>
+            <div class="s">直近${days}日</div></div>
+          <div class="kp-tile"><div class="k">前期間比</div><div class="v">${growthText(s?.growth ?? null)}</div>
+            <div class="s">前 ${n(s?.prevPv)} PV</div></div>
+          <div class="kp-tile"><div class="k">今日</div><div class="v">${n(s?.today?.pv)}</div>
+            <div class="s">${n(s?.today?.uv)} 人</div></div>
+        </div>
+        ${sparkline(d.series || [])}
+        <div class="inline-controls" style="align-items:flex-start;gap:24px;margin-top:18px;">
+          <div style="min-width:240px;flex:1;">${rank("流入元", d.referrers || [])}</div>
+          <div style="min-width:240px;flex:1;">${rank("人気ページ", d.pages || [])}</div>
+        </div>`;
+    } catch (e) {
+      el("detail").innerHTML = `<div class="empty">取得に失敗しました：${esc(e.detail || e.message)}</div>`;
+    }
+  }
+
+  function closeDetail() { openId = null; el("detail-card").classList.add("hidden"); }
+
+  // 日別の推移。ライブラリを足さずに、棒の高さだけで形を見せる
+  function sparkline(series) {
+    if (!series.length) return `<div class="empty">日別のデータがありません。</div>`;
+    const max = Math.max(1, ...series.map((d) => d.pageviews));
+    return `
+      <p class="muted" style="font-size:12.5px;font-weight:700;margin:0 0 8px;">日別のPV</p>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:90px;border-bottom:1px solid var(--border);padding-bottom:2px;">
+        ${series.map((d) => `
+          <div title="${esc(d.date)}：${n(d.pageviews)} PV"
+               style="flex:1;min-width:3px;height:${Math.max(2, Math.round((d.pageviews / max) * 88))}px;
+                      background:var(--primary);border-radius:2px 2px 0 0;opacity:${d.pageviews ? 1 : .25};"></div>`).join("")}
+      </div>
+      <div class="muted" style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px;">
+        <span>${esc(series[0].date)}</span><span>${esc(series[series.length - 1].date)}</span>
+      </div>`;
+  }
+
+  function rank(title, rows) {
+    if (!rows.length) return `
+      <p class="muted" style="font-size:12.5px;font-weight:700;margin:0 0 8px;">${esc(title)}</p>
+      <div class="empty">データがありません。</div>`;
+    const max = Math.max(...rows.map((r) => r.pageviews));
+    return `
+      <p class="muted" style="font-size:12.5px;font-weight:700;margin:0 0 8px;">${esc(title)}</p>
+      <div class="kp-slots">${rows.map((r) => `
+        <div class="kp-slot" style="position:relative;overflow:hidden;">
+          <span style="position:absolute;inset:0 auto 0 0;width:${Math.round((r.pageviews / max) * 100)}%;
+                       background:var(--soft);"></span>
+          <span class="ttl" style="position:relative;">${esc(r.key)}</span>
+          <span class="by" style="position:relative;">${n(r.pageviews)}</span>
+        </div>`).join("")}</div>`;
+  }
+
+  // ---- ブロック件数 ---------------------------------------------------------
+  function renderBlock() {
+    if (!data.block) {
+      el("block").innerHTML =
+        `<div class="empty">ブロックの記録がまだありません（8grp.co.jp 側の設定が済むと出ます）。</div>`;
+      return;
+    }
+    const t = (k, v) => `<div class="kp-tile"><div class="k">${k}</div>
+      <div class="v">${n(v)}<small>件</small></div><div class="s">ブロック</div></div>`;
+    el("block").innerHTML =
+      `<div class="kp-tiles">${t("本日", data.block.today)}${t("7日間", data.block.week)}${t("30日間", data.block.month)}</div>`;
+  }
+
+  // ---- 計測タグ -------------------------------------------------------------
+  function renderTags() {
+    const rows = data.projects.filter((p) => p.beacon_key);
+    if (!rows.length) { el("tags").innerHTML = ""; return; }
+    el("tags").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr><th style="width:170px;">サイト</th><th>貼り付ける1行</th><th style="width:110px;"></th></tr></thead>
+          <tbody>${rows.map((p) => {
+            const tag = `<script src="${location.origin}/js/beacon.js" data-key="${p.beacon_key}" defer><\/script>`;
+            return `
+              <tr>
+                <td><b>${esc(p.name)}</b>${p.domain ? `<small class="muted">　${esc(p.domain)}</small>` : ""}</td>
+                <td><code style="font-size:11.5px;word-break:break-all;">${esc(tag)}</code></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="copyTag(this, '${esc(p.beacon_key)}')">コピー</button></td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function copyTag(btn, key) {
+    const tag = `<script src="${location.origin}/js/beacon.js" data-key="${key}" defer><\/script>`;
+    try {
+      await navigator.clipboard.writeText(tag);
+      const before = btn.textContent;
+      btn.textContent = "コピー済";
+      setTimeout(() => { btn.textContent = before; }, 1500);
+    } catch { alert("コピーできませんでした。手で選択してください。"); }
+  }
+
+  // ---- 取り込み・追加 -------------------------------------------------------
+  function renderNotice() {
+    if (data.vercel) { el("notice").innerHTML = ""; return; }
+    el("notice").innerHTML = `
+      <div class="banner warn" style="margin-bottom:18px;">
+        <span class="material-symbols-outlined">info</span>
+        <div><b>Vercel との連携は未設定です。</b>
+          サイト一覧の自動取得は使えませんが、<b>下でサイトを追加して計測タグを貼れば数字は入ります</b>。<br>
+          自動取得を使う場合は、Vercel のトークンを環境変数 <code>VERCEL_API_TOKEN</code> に設定してください。</div>
+      </div>`;
+  }
+
+  async function sync(btn) {
+    try {
+      const r = await KPLayout.busy(btn, "取り込み中…", () => API.syncAnalytics());
+      if (r.skipped === "no_token") {
+        alert("Vercel のトークンが未設定です。\n" + (r.hint || ""));
+      } else if (r.unavailable) {
+        alert(`サイト ${r.projects} 件を取り込みました。\n`
+          + `うち ${r.unavailable} 件は数値を取得できませんでした。\n\n`
+          + `VercelのWeb Analyticsは外部から取得できる正式なAPIが用意されていません。`
+          + `数字を入れるには、下の計測タグを各サイトに貼ってください。`);
+      }
+      await load();
+    } catch (e) {
+      alert(e.detail || e.message || "取り込めませんでした");
+    }
+  }
+
+  async function addSite(btn) {
+    const msg = el("n-msg");
+    msg.textContent = "";
+    const name = el("n-name").value.trim();
+    if (!name) { msg.textContent = "サイト名を入れてください"; return; }
+    try {
+      await KPLayout.busy(btn, "追加中…", () => API.addAnalyticsSite({
+        name, domain: el("n-domain").value.trim() || null,
+      }));
+      el("n-name").value = ""; el("n-domain").value = "";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "追加できませんでした";
+    }
+  }
+</script>
+
+</body>
+</html>

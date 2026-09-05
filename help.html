@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260909c">
+  <link rel="stylesheet" href="css/app.css?v=20260910a">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -81,6 +81,7 @@
       <a href="#library"><span class="material-symbols-outlined">folder_shared</span>社内文書</a>
       <a href="#bell"><span class="material-symbols-outlined">notifications</span>通知</a>
       <a href="#hr"><span class="material-symbols-outlined">badge</span>入社手続き</a>
+      <a href="#analytics"><span class="material-symbols-outlined">monitoring</span>アクセス分析</a>
       <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
       <a href="#faq"><span class="material-symbols-outlined">quiz</span>よくある質問</a>
     </div>
@@ -489,6 +490,46 @@
     </ul>
   </div>
 
+  <!-- ======================================================== アクセス分析 -->
+  <div class="card" id="analytics">
+    <h2><span class="material-symbols-outlined">monitoring</span>アクセス分析</h2>
+    <span class="who-for admin">管理者・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      自社が運営しているWebサイトのうち、<b>何が伸びていて何が落ちているか</b>を1画面で見るための画面です。
+      左メニューの「<b>アクセス分析</b>」から開きます。
+    </p>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>上部で<b>今日／7日／30日／90日</b>を切り替えます。前期間比は「直近N日」と「その前のN日」の比較です</li>
+      <li>「伸びているサイト・落ちているサイト」で、増減の大きい順に並びます</li>
+      <li>サイト名を押すと、<b>日別のPV・流入元・人気ページ</b>が出ます</li>
+      <li>8grp.co.jp の<b>口コミサイトブロック件数</b>（本日／7日／30日）も同じ画面に出ます</li>
+    </ul>
+
+    <h3><span class="material-symbols-outlined">code</span>数字を入れる（計測タグ）</h3>
+    <div class="banner warn" style="margin-bottom:14px;">
+      <span class="material-symbols-outlined">info</span>
+      <div><b>VercelのWeb Analyticsには、外部から数値を取り出せる公式なAPIがありません。</b>
+        そのため、数字は<b>自前の計測タグ</b>で数えます。サイト一覧はVercelから自動で取れます。</div>
+    </div>
+    <ol class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>画面いちばん下の「サイトの登録と計測タグ」で、サイトごとの<b>1行のタグ</b>をコピーする</li>
+      <li>そのサイトの <code>&lt;/body&gt;</code> の直前に貼って公開する</li>
+      <li>数分後からPVが入りはじめます（Vercelにないサイトも「追加」から登録できます）</li>
+    </ol>
+    <p class="lead" style="margin:0 0 12px;">
+      計測タグが送るのは<b>ページのパス・参照元のホスト名・その日はじめての訪問かどうか</b>だけです。
+      IPアドレスも、個人を追う印も持ちません。ドメインを登録すると、<b>そのドメインからの計測だけ</b>受け付けます。
+    </p>
+
+    <h3><span class="material-symbols-outlined">key</span>Vercelとの連携（任意）</h3>
+    <p class="lead" style="margin-top:0;">
+      Vercel → Account Settings → Tokens でトークンを発行し、環境変数
+      <code>VERCEL_API_TOKEN</code>（チームなら <code>VERCEL_TEAM_ID</code> も）に設定すると、
+      <b>プロジェクト一覧が自動で取り込まれます</b>（1時間ごと＋「いま取り込む」）。
+      設定しなくても、サイトを手で追加すれば分析は使えます。
+    </p>
+  </div>
+
   <!-- ======================================================== 通知 -->
   <div class="card" id="bell">
     <h2><span class="material-symbols-outlined">notifications</span>通知（画面右上のベル）</h2>
@@ -553,6 +594,7 @@
       <table class="screens">
         <thead><tr><th>メニュー</th><th>できること</th></tr></thead>
         <tbody>
+          <tr><td>アクセス分析</td><td>自社Webサイトのアクセス数・前期間比・伸びているサイトを1画面で見ます。各サイトに<b>計測タグを1行</b>貼ると数字が入ります。8grp.co.jpのブロック件数もここに出ます（<a href="#analytics">詳しく</a>）</td></tr>
           <tr><td>ダッシュボード</td><td>今月の書類件数、要確認の仕訳、Drive の保存状況をまとめて確認します</td></tr>
           <tr><td>お知らせ配信</td><td>全社または部署を指定して連絡を配信します。下書き保存、上部固定、掲載終了日の設定ができ、一覧に「既読 3 / 8 人」の形で行き渡り具合が出ます</td></tr>
           <tr><td>メッセージ</td><td>メンバーと同じ画面です。参加しているやりとりだけが見えます</td></tr>

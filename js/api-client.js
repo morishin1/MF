@@ -262,6 +262,20 @@
   const googleLink = () => api("/api/google/connect");
   const googleUnlink = () => api("/api/google/connect", { method: "DELETE" });
 
+  // ---- アクセス分析 ----
+  const analytics = (opts = {}) => {
+    const q = new URLSearchParams({ days: String(opts.days || 7) });
+    if (opts.projectId) q.set("projectId", opts.projectId);
+    return api(`/api/analytics?${q.toString()}`);
+  };
+  const syncAnalytics = () => api("/api/analytics/sync", { method: "POST", body: {} });
+  const addAnalyticsSite = (site) =>
+    api("/api/analytics", { method: "POST", body: site }).then((d) => d.project);
+  const updateAnalyticsSite = (site) =>
+    api("/api/analytics", { method: "PATCH", body: site }).then((d) => d.project);
+  const deleteAnalyticsSite = (id) =>
+    api(`/api/analytics?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   // ---- 社内文書（マニュアル・規定・様式） ----
   const listLibrary = () => api("/api/library");
   const createLibraryDoc = (d) =>
@@ -535,6 +549,7 @@
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
     schedule, createEvent, updateEvent, deleteEvent, googleLink, googleUnlink,
+    analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,
     listRequests, createRequest, decideRequest, deleteRequest,
