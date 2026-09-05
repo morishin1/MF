@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雇用契約・面談 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910k">
+  <link rel="stylesheet" href="css/layout.css?v=20260910k">
+  <script>
+    try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .ct-box { border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+    .ct-box.draft { border-color:#f0d98c; background:#fffdf5; }
+    .ct-box.superseded { opacity:.6; }
+    .ct-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:10px; }
+    .ct-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; }
+    @media (max-width:720px){ .ct-grid { grid-template-columns:1fr; } }
+    .ct-grid label { font-size:11.5px; font-weight:700; color:var(--muted); display:block; margin-bottom:3px; }
+    .ct-grid input, .ct-grid select, .ct-grid textarea { margin:0; }
+    .ms { border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; }
+    .ms.overdue { border-color:#f5b7b7; background:#fffafa; }
+    .ms.done { background:#fbfcfe; opacity:.85; }
+    .pb-check { display:flex; align-items:center; gap:9px; padding:7px 0;
+                border-bottom:1px solid var(--border); font-size:13px; }
+    .pb-check:last-child { border-bottom:none; }
+    .pb-check .m { width:18px; text-align:center; font-weight:700; }
+    .pb-check .l { flex:1; }
+    .pb-check .v { font-variant-numeric:tabular-nums; font-weight:700; }
+    .pb-check .t { font-size:11.5px; color:var(--muted); width:96px; text-align:right; }
+    .pb-check.ok .m { color:#2f855a; }
+    .pb-check.ng .m { color:#c53030; }
+    .pb-check.na { opacity:.6; }
+    .pb-ai { border:1px solid var(--border); border-left:3px solid var(--primary);
+             background:var(--soft); border-radius:0 8px 8px 0; padding:12px 14px; margin:12px 0; }
+    .pb-ai h5 { font-size:11.5px; font-weight:700; margin:0 0 4px; }
+    .pb-ai div.i { font-size:12.5px; margin-bottom:3px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">雇用契約・面談</h1>
+  <p class="kp-greet-sub">
+    契約書を上げるとAIが期間や条件を読み取ります。
+    <b>内容を確認して確定すると</b>、試用期間の満了・更新の判断・契約満了が予定として並び、
+    期日が来たら日報とKGIの記録を集計します。
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">event_upcoming</span>これから来る面談・期日</h2>
+    <div id="upcoming"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">upload_file</span>契約書を上げる</h2>
+    <div class="inline-controls" style="margin-bottom:10px;">
+      <div style="min-width:220px;"><label>対象者</label><select id="u-emp"></select></div>
+      <div style="align-self:flex-end;">
+        <label class="btn btn-primary" style="cursor:pointer;">
+          <span class="material-symbols-outlined icon-inline">description</span>ファイルを選ぶ
+          <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" onchange="pickFile(this)">
+        </label>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0;">
+      PDF・画像に対応（15MBまで）。読み取った内容は<b>そのままでは使いません</b>。
+      下の欄で確認・修正してから「確定」を押してください。
+    </p>
+    <div id="u-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">folder_shared</span>契約一覧
+      <div style="margin-left:auto;">
+        <select id="f-emp" onchange="openEmployee(this.value)" style="width:auto;margin:0;">
+          <option value="">全員</option>
+        </select>
+      </div>
+    </h2>
+    <div id="contracts"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div id="detail-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">badge</span><span id="d-name">　</span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDetail()">閉じる</button>
+    </h2>
+    <div id="detail"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910k"></script>
+<script src="js/layout.js?v=20260910k"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const VERDICT = {
+    meets:   { label: "基準を満たす", cls: "event" },
+    partial: { label: "一部を下回る", cls: "draft" },
+    below:   { label: "複数を下回る", cls: "important" },
+  };
+  const CONF = { high: "", mid: "読み取りに迷いがあります", low: "読み取りの確度が低いです。必ず原本と照らしてください" };
+
+  let data = null;
+  let detail = null;
+
+  KPLayout.init({ active: "contracts", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.contracts();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+    renderPickers();
+    renderUpcoming();
+    renderContracts();
+  }
+
+  function renderPickers() {
+    const opts = (data.employees || []).map((e) =>
+      `<option value="${esc(e.id)}">${esc(e.display_name)}</option>`).join("");
+    const keep = el("u-emp").value;
+    el("u-emp").innerHTML = `<option value="">選んでください</option>${opts}`;
+    if (keep) el("u-emp").value = keep;
+    const keep2 = el("f-emp").value;
+    el("f-emp").innerHTML = `<option value="">全員</option>${opts}`;
+    if (keep2) el("f-emp").value = keep2;
+  }
+
+  // --- これから来る面談 -------------------------------------------------------
+  function renderUpcoming() {
+    const rows = data.upcoming || [];
+    if (!rows.length) {
+      el("upcoming").innerHTML = `<div class="empty">予定はありません。契約書を確定すると並びます。</div>`;
+      return;
+    }
+    el("upcoming").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:110px;">期日</th><th>氏名</th><th>種類</th>
+            <th style="width:130px;">判定</th><th style="width:90px;"></th>
+          </tr></thead>
+          <tbody>${rows.map((m) => `
+            <tr class="${m.overdue ? "" : ""}">
+              <td>${esc(m.dueOn)}<br>${m.overdue
+                ? '<span class="kp-chip important">期日超過</span>'
+                : `<span class="muted" style="font-size:11px;">あと${m.daysLeft}日</span>`}</td>
+              <td><a href="#" onclick="openEmployee('${esc(m.employeeId)}');return false;"
+                     style="color:var(--primary);font-weight:600;text-decoration:none;">${esc(m.employeeName || "")}</a></td>
+              <td>${esc(m.title)}<br><span class="muted" style="font-size:11px;">${esc(data.labels.kind[m.kind] || "")}</span></td>
+              <td>${m.verdict ? `<span class="kp-chip ${VERDICT[m.verdict].cls}">${VERDICT[m.verdict].label}</span>`
+                              : '<span class="muted">未集計</span>'}</td>
+              <td><button class="btn btn-secondary btn-sm" onclick="openEmployee('${esc(m.employeeId)}')">開く</button></td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // --- 契約一覧 ---------------------------------------------------------------
+  function renderContracts() {
+    const rows = data.contracts || [];
+    if (!rows.length) {
+      el("contracts").innerHTML = `<div class="empty">まだ契約書が登録されていません。</div>`;
+      return;
+    }
+    el("contracts").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>氏名</th><th style="width:110px;">区分</th><th style="width:190px;">契約期間</th>
+            <th style="width:110px;">試用期間</th><th style="width:110px;">状態</th><th style="width:90px;"></th>
+          </tr></thead>
+          <tbody>${rows.map((c) => `
+            <tr class="${c.status === "superseded" ? "done" : ""}">
+              <td>${esc(c.employeeName || "")}</td>
+              <td>${esc(c.contractType || "—")}</td>
+              <td>${c.periodFrom ? `${esc(c.periodFrom)} 〜 ${esc(c.periodTo || "期間の定めなし")}` : "—"}</td>
+              <td>${c.probationEnd ? esc(c.probationEnd) : (c.probationMonths ? `${c.probationMonths}か月` : "—")}</td>
+              <td>${statusChip(c)}</td>
+              <td><button class="btn btn-secondary btn-sm" onclick="openEmployee('${esc(c.employeeId)}')">開く</button></td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  const statusChip = (c) => ({
+    draft: '<span class="kp-chip draft">未確定</span>',
+    active: '<span class="kp-chip event">有効</span>',
+    superseded: '<span class="kp-chip archived">更新済み</span>',
+  }[c.status] || "");
+
+  // --- 契約書を上げる ---------------------------------------------------------
+  async function pickFile(input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const employeeId = el("u-emp").value;
+    const msg = el("u-msg");
+    msg.className = "err-text";
+    if (!employeeId) { msg.textContent = "先に対象者を選んでください"; return; }
+
+    msg.className = "muted";
+    msg.textContent = "アップロードして、AIが読んでいます…（20秒ほどかかります）";
+    try {
+      const r = await API.uploadContract(employeeId, file);
+      msg.textContent = r.hint || "読み取りました。内容を確認してください。";
+      await load();
+      await openEmployee(employeeId);
+    } catch (e) {
+      msg.className = "err-text";
+      msg.textContent = e.hint || e.detail || e.message || "登録できませんでした";
+    }
+  }
+
+  // --- 1人ぶんの詳細 ----------------------------------------------------------
+  async function openEmployee(employeeId) {
+    if (!employeeId) { closeDetail(); return; }
+    try {
+      detail = await API.contracts(employeeId);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "開けませんでした");
+      return;
+    }
+    el("detail-card").classList.remove("hidden");
+    el("d-name").textContent = detail.employee.display_name;
+    renderDetail();
+    el("detail-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function closeDetail() { el("detail-card").classList.add("hidden"); detail = null; }
+
+  function renderDetail() {
+    const cs = detail.contracts || [];
+    el("detail").innerHTML = cs.length
+      ? cs.map(contractBlock).join("")
+      : `<div class="empty">この方の契約書はまだ登録されていません。</div>`;
+  }
+
+  function contractBlock(c) {
+    const ms = (detail.milestones || []).filter((m) => m.contractId === c.id);
+    const draft = c.status === "draft";
+    return `
+      <div class="ct-box ${esc(c.status)}">
+        <div class="ct-head">
+          <b style="font-size:14.5px;color:var(--primary-dark);">${esc(c.filename || "契約書")}</b>
+          ${statusChip(c)}
+          ${c.aiConfidence && c.aiConfidence !== "high"
+            ? `<span class="kp-chip important">${esc(CONF[c.aiConfidence])}</span>` : ""}
+          <span class="muted" style="font-size:11.5px;margin-left:auto;">
+            ${esc(new Date(c.createdAt).toLocaleDateString("ja-JP"))}
+          </span>
+        </div>
+
+        ${c.aiStatus === "failed" ? `
+          <div class="banner warn" style="margin-bottom:12px;">
+            <span class="material-symbols-outlined">error_outline</span>
+            <div>AIが読み取れませんでした（${esc(c.aiError || "")}）。項目を手で入れてください。</div>
+          </div>` : ""}
+
+        ${(c.unreadable || []).length ? `
+          <div class="banner warn" style="margin-bottom:12px;">
+            <span class="material-symbols-outlined">help</span>
+            <div><strong>AIが読み取れなかった点</strong>
+              ${c.unreadable.map((t) => `<div style="font-size:12.5px;margin-top:3px;">・${esc(t)}</div>`).join("")}</div>
+          </div>` : ""}
+
+        ${draft ? fields(c) : summary(c)}
+
+        ${draft ? `
+          <div style="margin-top:12px;">
+            <button class="btn btn-secondary btn-sm" onclick="saveContract('${esc(c.id)}', this)">下書きを保存</button>
+            <button class="btn btn-primary btn-sm" onclick="confirmContract('${esc(c.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">check</span>内容を確認した・確定する
+            </button>
+            <div class="muted" style="font-size:11.5px;margin-top:6px;">
+              確定すると、試用期間の満了・更新の判断・契約満了が予定として並びます。
+            </div>
+            <div id="cmsg-${esc(c.id)}" class="err-text"></div>
+          </div>`
+          : `<div style="margin-top:10px;">
+               <button class="btn btn-secondary btn-sm" onclick="reopenContract('${esc(c.id)}')">内容を直す</button>
+             </div>`}
+
+        ${ms.length ? `
+          <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+            <div style="font-size:12.5px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">
+              この契約から並んだ予定
+            </div>
+            ${ms.map(milestoneBlock).join("")}
+          </div>` : ""}
+      </div>`;
+  }
+
+  // 直せる欄。AIが読んだ値が初期値で、人が直してから確定する
+  function fields(c) {
+    const opt = (list, v) => `<option value="">—</option>` +
+      list.map((x) => `<option value="${esc(x)}"${x === v ? " selected" : ""}>${esc(x)}</option>`).join("");
+    const id = (k) => `c-${c.id}-${k}`;
+    return `
+      <div class="ct-grid">
+        <div><label>雇用区分</label>
+          <select id="${id("contract_type")}">${opt(data.contractTypes, c.contractType)}</select></div>
+        <div><label>期間の定め</label>
+          <select id="${id("fixed_term")}">
+            <option value="">—</option>
+            <option value="true"${c.fixedTerm === true ? " selected" : ""}>あり（有期）</option>
+            <option value="false"${c.fixedTerm === false ? " selected" : ""}>なし（無期）</option>
+          </select></div>
+        <div><label>契約開始日</label><input id="${id("period_from")}" type="date" value="${esc(c.periodFrom || "")}"></div>
+        <div><label>契約終了日（有期のみ）</label><input id="${id("period_to")}" type="date" value="${esc(c.periodTo || "")}"></div>
+        <div><label>試用期間（月）</label><input id="${id("probation_months")}" type="number" min="0" max="24"
+             value="${c.probationMonths ?? ""}" placeholder="無ければ空"></div>
+        <div><label>更新の可能性</label>
+          <select id="${id("renewable")}">
+            <option value="">—</option>
+            <option value="true"${c.renewable === true ? " selected" : ""}>あり</option>
+            <option value="false"${c.renewable === false ? " selected" : ""}>なし</option>
+          </select></div>
+        <div><label>更新の判断を満了の何日前に置くか</label>
+          <input id="${id("renewal_notice_days")}" type="number" min="0" max="365" value="${c.renewalNoticeDays ?? 30}"></div>
+        <div><label>賃金</label>
+          <div style="display:flex;gap:6px;">
+            <select id="${id("wage_type")}" style="flex:0 0 110px;">${opt(data.wageTypes, c.wageType)}</select>
+            <input id="${id("wage_amount")}" type="number" min="0" step="1" value="${c.wageAmount ?? ""}" placeholder="金額">
+          </div></div>
+        <div><label>所定労働時間</label><input id="${id("work_hours")}" type="text" value="${esc(c.workHours || "")}"></div>
+        <div><label>所定労働日・休日</label><input id="${id("work_days")}" type="text" value="${esc(c.workDays || "")}"></div>
+        <div><label>就業場所</label><input id="${id("work_place")}" type="text" value="${esc(c.workPlace || "")}"></div>
+        <div><label>賃金の補足（手当・締日など）</label><input id="${id("wage_note")}" type="text" value="${esc(c.wageNote || "")}"></div>
+        <div style="grid-column:1/-1;"><label>業務内容</label>
+          <textarea id="${id("job_content")}" rows="2">${esc(c.jobContent || "")}</textarea></div>
+        <div style="grid-column:1/-1;"><label>更新の判断基準（契約書の文言）</label>
+          <textarea id="${id("renewal_criteria")}" rows="2">${esc(c.renewalCriteria || "")}</textarea></div>
+        <div style="grid-column:1/-1;"><label>メモ</label>
+          <input id="${id("note")}" type="text" value="${esc(c.note || "")}"></div>
+      </div>`;
+  }
+
+  function summary(c) {
+    const r = (k, v) => v ? `<div><span class="muted" style="font-size:11.5px;">${esc(k)}</span>
+      <div style="font-size:13px;">${esc(v)}</div></div>` : "";
+    return `<div class="ct-grid">
+      ${r("雇用区分", c.contractType)}
+      ${r("契約期間", c.periodFrom ? `${c.periodFrom} 〜 ${c.periodTo || "期間の定めなし"}` : "")}
+      ${r("試用期間", c.probationEnd ? `${c.probationMonths}か月（${c.probationEnd} まで）` : "")}
+      ${r("更新", c.renewable === true ? "あり" : c.renewable === false ? "なし" : "")}
+      ${r("賃金", c.wageType ? `${c.wageType} ${c.wageAmount != null ? Number(c.wageAmount).toLocaleString() + "円" : ""}` : "")}
+      ${r("所定労働時間", c.workHours)}
+      ${r("就業場所", c.workPlace)}
+      ${r("所定労働日・休日", c.workDays)}
+      ${c.jobContent ? `<div style="grid-column:1/-1;">${r("業務内容", c.jobContent)}</div>` : ""}
+      ${c.renewalCriteria ? `<div style="grid-column:1/-1;">${r("更新の判断基準", c.renewalCriteria)}</div>` : ""}
+    </div>`;
+  }
+
+  // --- 面談の1件 --------------------------------------------------------------
+  function milestoneBlock(m) {
+    const today = data.today;
+    const overdue = !m.decision && m.dueOn < today;
+    if (m.dismissedAt) return "";
+    return `
+      <div class="ms ${m.decision ? "done" : ""} ${overdue ? "overdue" : ""}">
+        <div class="ct-head" style="margin-bottom:8px;">
+          <b style="font-size:13.5px;">${esc(m.title)}</b>
+          <span class="kp-chip">${esc(m.dueOn)}</span>
+          ${overdue ? '<span class="kp-chip important">期日超過</span>' : ""}
+          ${m.verdict ? `<span class="kp-chip ${VERDICT[m.verdict].cls}">${VERDICT[m.verdict].label}</span>` : ""}
+          ${m.decision ? `<span class="kp-chip event">${esc(detail.labels.decision[m.decision])}</span>` : ""}
+          <span style="margin-left:auto;">
+            <button class="btn btn-secondary btn-sm" onclick="computeMs('${esc(m.id)}', this)">集計する</button>
+            ${m.decision ? "" : `<button class="btn btn-secondary btn-sm" onclick="dismissMs('${esc(m.id)}')">消す</button>`}
+          </span>
+        </div>
+
+        ${!m.computedAt
+          ? `<div class="muted" style="font-size:12.5px;">「集計する」を押すと、${esc(m.periodFrom)} 〜 ${esc(m.periodTo)} の日報とKGIを集計します。</div>`
+          : `${checksBlock(m)}${metricsBlock(m)}${aiBlock(m)}${decisionBlock(m)}`}
+      </div>`;
+  }
+
+  function checksBlock(m) {
+    return `<div style="margin-bottom:10px;">${Object.values(m.checks || {}).map((c) => {
+      const cls = c.pass === null ? "na" : c.pass ? "ok" : "ng";
+      const mark = c.pass === null ? "—" : c.pass ? "○" : "×";
+      return `<div class="pb-check ${cls}"><span class="m">${mark}</span>
+        <span class="l">${esc(c.label)}</span>
+        <span class="v">${c.value != null ? `${c.value}${esc(c.unit)}` : "材料不足"}</span>
+        <span class="t">基準 ${c.threshold}${esc(c.unit)}</span></div>`;
+    }).join("")}</div>`;
+  }
+
+  function metricsBlock(m) {
+    const x = m.metrics || {};
+    const t = (k, v, s) => `<div class="kp-tile"><div class="k">${esc(k)}</div>
+      <div class="v">${v}</div><div class="s">${esc(s)}</div></div>`;
+    return `<div class="kp-tiles" style="margin-bottom:10px;">
+      ${t("日報の提出", `${x.submitted}<small>/${x.workdays}</small>`, `${x.submitRate ?? "—"}%`)}
+      ${t("KGI達成", x.kgiRate != null ? `${x.kgiRate}<small>%</small>` : "—",
+           x.kgiTotal ? `${x.kgiAchieved} / ${x.kgiTotal} 日` : "記録なし")}
+      ${t("週次の平均", x.weeklyAvg != null ? `${x.weeklyAvg}<small>/100</small>` : "—", `${x.weeks} 週ぶん`)}
+      ${t("後半の伸び", x.improving != null ? `${x.improving > 0 ? "+" : ""}${x.improving}` : "—", "前半との差")}
+    </div>`;
+  }
+
+  function aiBlock(m) {
+    if (!detail.aiConfigured) return "";
+    if (!m.aiStatus || m.aiStatus === "pending") {
+      return `<div style="margin-bottom:10px;">
+        <button class="btn btn-primary btn-sm" onclick="summarizeMs('${esc(m.id)}', this)">
+          <span class="material-symbols-outlined icon-inline">auto_awesome</span>面談の所見をまとめさせる
+        </button></div>`;
+    }
+    if (m.aiStatus === "processing") return `<div class="muted" style="font-size:12.5px;">AIが書いています…</div>`;
+    if (m.aiStatus === "failed") {
+      return `<div class="banner warn" style="margin-bottom:10px;">
+        <span class="material-symbols-outlined">error_outline</span>
+        <div>まとめに失敗しました（${esc(m.aiError || "")}）
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;"
+                  onclick="summarizeMs('${esc(m.id)}', this)">もう一度</button></div></div>`;
+    }
+    return `
+      <div class="pb-ai">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">auto_awesome</span>
+          <b style="font-size:12.5px;color:var(--primary-dark);">面談の準備</b>
+          <span class="muted" style="font-size:11px;">${esc(m.aiModel || "")}</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="summarizeMs('${esc(m.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">refresh</span>書き直す
+          </button>
+        </div>
+        ${m.aiSummary ? `<div style="font-size:13px;margin-bottom:10px;">${esc(m.aiSummary)}</div>` : ""}
+        ${aiList("記録から確認できたこと", m.aiStrengths, "#2f855a")}
+        ${aiList("気になる点", m.aiConcerns, "#b7791f")}
+        ${aiList("面談で確認するとよいこと", m.aiQuestions, "var(--primary)")}
+        <div class="muted" style="font-size:11px;margin-top:8px;">
+          AIは更新の可否を判断していません。記録の整理と、確認したほうがよい点までです。
+        </div>
+      </div>`;
+  }
+
+  const aiList = (title, items, color) => (items || []).length
+    ? `<div style="margin-bottom:8px;"><h5 style="color:${color};">${esc(title)}</h5>
+         ${items.map((t) => `<div class="i">・${esc(t)}</div>`).join("")}</div>`
+    : "";
+
+  // ★ 決定は人が押す
+  function decisionBlock(m) {
+    if (m.decision) {
+      return `<div class="banner ok" style="margin-top:10px;">
+        <span class="material-symbols-outlined">how_to_reg</span>
+        <div><strong>${esc(detail.labels.decision[m.decision])}</strong>
+          <span class="muted" style="margin-left:8px;font-size:12px;">
+            ${esc(new Date(m.decidedAt).toLocaleString("ja-JP"))}</span>
+          ${m.decisionNote ? `<div style="margin-top:6px;white-space:pre-wrap;font-size:13px;">${esc(m.decisionNote)}</div>` : ""}
+        </div></div>`;
+    }
+    const kinds = m.kind === "renewal_decision" || m.kind === "contract_end"
+      ? [["renew", "更新する"], ["change", "条件を変えて更新する"], ["end", "更新しない"]]
+      : [["done", "確認した"]];
+    return `
+      <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+        <div style="font-size:12.5px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;">
+          決定（押した人の名前と日時が記録に残ります）
+        </div>
+        <textarea id="mn-${esc(m.id)}" rows="2"
+                  placeholder="面談で決まったこと・理由（更新しない・条件を変えるときは必須）"></textarea>
+        ${kinds.map(([k, label]) =>
+          `<button class="btn ${k === "renew" || k === "done" ? "btn-primary" : "btn-secondary"} btn-sm"
+                   onclick="decideMs('${esc(m.id)}','${k}', this)">${esc(label)}</button>`).join("")}
+        <div id="md-${esc(m.id)}" class="err-text"></div>
+      </div>`;
+  }
+
+  // --- 操作 -------------------------------------------------------------------
+  function readFields(id) {
+    const g = (k) => el(`c-${id}-${k}`)?.value ?? "";
+    const b = (k) => (g(k) === "" ? null : g(k) === "true");
+    return {
+      contract_type: g("contract_type") || null,
+      fixed_term: b("fixed_term"),
+      period_from: g("period_from") || null,
+      period_to: g("period_to") || null,
+      probation_months: g("probation_months") === "" ? null : Number(g("probation_months")),
+      renewable: b("renewable"),
+      renewal_notice_days: g("renewal_notice_days") === "" ? 30 : Number(g("renewal_notice_days")),
+      renewal_criteria: g("renewal_criteria") || null,
+      work_hours: g("work_hours") || null,
+      work_days: g("work_days") || null,
+      work_place: g("work_place") || null,
+      job_content: g("job_content") || null,
+      wage_type: g("wage_type") || null,
+      wage_amount: g("wage_amount") === "" ? null : Number(g("wage_amount")),
+      wage_note: g("wage_note") || null,
+      note: g("note") || null,
+    };
+  }
+
+  async function saveContract(id, btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.contractsAct({
+        action: "update", id, contract: readFields(id),
+      }));
+      await refresh();
+    } catch (e) {
+      el(`cmsg-${id}`).textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  async function confirmContract(id, btn) {
+    if (!confirm("この内容で確定します。\n\n" +
+                 "原本と照らし合わせて、期間・試用期間・更新の有無が合っているか確認しましたか？\n" +
+                 "確定すると、ここから面談や満了の予定が並びます。")) return;
+    try {
+      // 画面で直したぶんを先に保存してから確定する
+      await KPLayout.busy(btn, "確定中…", async () => {
+        await API.contractsAct({ action: "update", id, contract: readFields(id) });
+        await API.contractsAct({ action: "confirm", id });
+      });
+      await refresh();
+    } catch (e) {
+      el(`cmsg-${id}`).textContent = e.hint || e.detail || e.message || "確定できませんでした";
+    }
+  }
+
+  function reopenContract(id) {
+    alert("内容を直すには、契約書をもう一度アップロードしてください。\n\n"
+      + "確定した契約をその場で書き換えられる作りにすると、"
+      + "面談の判断材料が後から変わってしまい、経緯が追えなくなります。");
+  }
+
+  async function computeMs(id, btn) {
+    try {
+      await KPLayout.busy(btn, "集計中…", () => API.contractsAct({ action: "compute", milestoneId: id }));
+      await refresh();
+    } catch (e) { alert(e.hint || e.detail || e.message || "集計できませんでした"); }
+  }
+
+  async function summarizeMs(id, btn) {
+    try {
+      await KPLayout.busy(btn, "まとめ中…", () => API.contractsAct({ action: "summarize", milestoneId: id }));
+      await refresh();
+    } catch (e) { alert(e.hint || e.detail || e.message || "まとめられませんでした"); }
+  }
+
+  async function decideMs(id, decision, btn) {
+    const note = el(`mn-${id}`).value.trim();
+    if (["end", "change"].includes(decision) && !note) {
+      el(`md-${id}`).textContent = "更新しない・条件を変えるときは理由を残してください。";
+      return;
+    }
+    if (!confirm(`「${detail.labels.decision[decision]}」で記録します。\n\n押した人の名前と日時が残ります。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.contractsAct({
+        action: "decide", milestoneId: id, decision, note,
+      }));
+      await refresh();
+    } catch (e) {
+      el(`md-${id}`).textContent = e.hint || e.detail || e.message || "記録できませんでした";
+    }
+  }
+
+  async function dismissMs(id) {
+    if (!confirm("この予定を消します。契約を確定し直しても復活しません。よろしいですか？")) return;
+    try {
+      await API.contractsAct({ action: "dismiss", milestoneId: id });
+      await refresh();
+    } catch (e) { alert(e.hint || e.detail || e.message || "消せませんでした"); }
+  }
+
+  async function refresh() {
+    const id = detail?.employee?.id;
+    await load();
+    if (id) await openEmployee(id);
+  }
+</script>
+
+</body>
+</html>

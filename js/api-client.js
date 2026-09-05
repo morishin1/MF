@@ -308,6 +308,30 @@
   const evaluateNippo = (nippoId, opts = {}) =>
     api("/api/nippo/evaluate", { method: "POST", body: { nippoId, ...opts } });
 
+  // ---- 雇用契約書 ----
+  const contracts = (employeeId) =>
+    api(`/api/contracts${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+  const contractsAct = (body) => api("/api/contracts", { method: "POST", body });
+
+  // 契約書を上げて、そのままAIに読ませる。読み取りは draft なので、
+  // 人が確認して confirm するまで予定は作られない
+  async function uploadContract(employeeId, file) {
+    const sign = await contractsAct({
+      action: "upload", employeeId,
+      filename: file.name, mimeType: file.type || "application/pdf", sizeBytes: file.size,
+    });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream", "x-upsert": "false" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return contractsAct({
+      action: "read", employeeId, path: sign.path,
+      filename: file.name, mimeType: file.type || "application/pdf",
+    });
+  }
+
   // 試用期間。employeeId を省くと一覧、渡すとその人の各区切り
   const probation = (employeeId) =>
     api(`/api/probation${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
@@ -611,6 +635,7 @@
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,
+    contracts, contractsAct, uploadContract,
     listBlocks, createBlock, updateBlock, deleteBlock,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,
