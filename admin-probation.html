@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>試用期間 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910j">
+  <link rel="stylesheet" href="css/layout.css?v=20260910j">
+  <script>
+    try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .pb-check { display:flex; align-items:center; gap:9px; padding:8px 0;
+                border-bottom:1px solid var(--border); font-size:13px; }
+    .pb-check:last-child { border-bottom:none; }
+    .pb-check .m { width:18px; text-align:center; font-weight:700; }
+    .pb-check .l { flex:1; }
+    .pb-check .v { font-variant-numeric:tabular-nums; font-weight:700; }
+    .pb-check .t { font-size:11.5px; color:var(--muted); width:96px; text-align:right; }
+    .pb-check.ok .m { color:#2f855a; }
+    .pb-check.ng .m { color:#c53030; }
+    .pb-check.na { opacity:.6; }
+    .pb-cp { border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+    .pb-cp.reached { border-color:#c7d2f0; }
+    .pb-cp.decided { background:#fbfcfe; }
+    .pb-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:10px; }
+    .pb-ai { border:1px solid var(--border); border-left:3px solid var(--primary);
+             background:var(--soft); border-radius:0 8px 8px 0; padding:12px 14px; margin:12px 0; }
+    .pb-ai h5 { font-size:11.5px; font-weight:700; margin:0 0 4px; }
+    .pb-ai div.i { font-size:12.5px; margin-bottom:3px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">試用期間</h1>
+  <p class="kp-greet-sub">
+    日報とKGIの記録を集計し、決めた基準を満たしているかを出します。
+    <b>本採用・延長・不採用の決定は、ここで人が押します。</b>
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">group</span>試用期間中のメンバー</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div id="detail-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">badge</span><span id="d-name">　</span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDetail()">閉じる</button>
+    </h2>
+    <div id="detail"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">tune</span>判定の基準
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="toggleSettings()">
+        <span class="material-symbols-outlined icon-inline" id="s-caret">expand_more</span>開く
+      </button>
+    </h2>
+    <div id="s-body" class="hidden"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910j"></script>
+<script src="js/layout.js?v=20260910j"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const VERDICT = {
+    meets:   { label: "基準を満たす",   cls: "event" },
+    partial: { label: "一部を下回る",   cls: "draft" },
+    below:   { label: "複数を下回る",   cls: "important" },
+  };
+  const DECISION = {
+    pass:   { label: "本採用",   cls: "event" },
+    extend: { label: "期間を延長", cls: "draft" },
+    fail:   { label: "不採用",   cls: "important" },
+  };
+
+  let data = null;
+  let detail = null;
+  // 決定済みの区切りで「やり直す」を押したもの。画面の中だけの状態
+  let reopened = new Set();
+
+  KPLayout.init({ active: "probation", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.probation();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+    renderList();
+    renderSettings();
+  }
+
+  // --- 一覧 -------------------------------------------------------------------
+  function renderList() {
+    const people = data.people || [];
+    if (!people.length) {
+      el("list").innerHTML = `<div class="empty">試用期間中のメンバーはいません。</div>`;
+      return;
+    }
+    el("list").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>氏名</th><th>部署</th><th style="width:110px;">入社日</th>
+            <th style="width:120px;">次の区切り</th><th style="width:90px;">期日</th>
+            <th style="width:130px;">判定</th><th style="width:110px;">決定</th><th style="width:90px;"></th>
+          </tr></thead>
+          <tbody>${people.map(row).join("")}</tbody>
+        </table>
+      </div>
+      <p class="muted" style="font-size:11.5px;margin:12px 0 0;">
+        「判定」は集計した数字を基準に当てはめた結果です。本採用の可否ではありません。
+      </p>`;
+  }
+
+  function row(p) {
+    const n = p.next;
+    const cp = n ? (p.checkpoints.find((c) => c.checkpoint === n.checkpoint) || n) : null;
+    // 期日を過ぎていて、まだ何も押していない人。押し忘れを見つけるための目印
+    const late = n && n.reached && !cp?.decision;
+    return `
+      <tr>
+        <td><a href="#" onclick="openDetail('${esc(p.employeeId)}');return false;"
+               style="color:var(--primary);font-weight:600;text-decoration:none;">${esc(p.name)}</a></td>
+        <td class="muted">${esc(p.department || "—")}</td>
+        <td>${esc(p.joinedOn)}</td>
+        <td>${n ? esc(data.labels[n.checkpoint] || n.checkpoint) : "—"}</td>
+        <td>${n ? `${esc(n.due)}${late ? '<br><span class="kp-chip important">期日超過</span>'
+                                        : `<br><span class="muted" style="font-size:11px;">あと${n.daysLeft}日</span>`}` : "—"}</td>
+        <td>${cp?.verdict ? `<span class="kp-chip ${VERDICT[cp.verdict].cls}">${VERDICT[cp.verdict].label}</span>`
+                          : '<span class="muted">未集計</span>'}</td>
+        <td>${cp?.decision ? `<span class="kp-chip ${DECISION[cp.decision].cls}">${DECISION[cp.decision].label}</span>`
+                           : '<span class="muted">未決定</span>'}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="openDetail('${esc(p.employeeId)}')">開く</button></td>
+      </tr>`;
+  }
+
+  // --- 1人ぶんの詳細 ----------------------------------------------------------
+  async function openDetail(employeeId) {
+    try {
+      detail = await API.probation(employeeId);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "開けませんでした");
+      return;
+    }
+    el("detail-card").classList.remove("hidden");
+    el("d-name").textContent =
+      `${detail.employee.display_name}（入社 ${detail.employee.joined_on || "未登録"}）`;
+    renderDetail();
+    el("detail-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function closeDetail() { el("detail-card").classList.add("hidden"); detail = null; }
+
+  function renderDetail() {
+    if (!detail.employee.joined_on) {
+      el("detail").innerHTML = `<div class="banner warn">
+        <span class="material-symbols-outlined">info</span>
+        <div>入社日が登録されていません。メンバー画面で登録すると、区切りが出ます。</div></div>`;
+      return;
+    }
+    el("detail").innerHTML = (detail.checkpoints || []).map(cpBlock).join("");
+  }
+
+  function cpBlock(c) {
+    const r = c.review;
+    const decided = !!r?.decision;
+    return `
+      <div class="pb-cp${c.reached ? " reached" : ""}${decided ? " decided" : ""}">
+        <div class="pb-head">
+          <b style="font-size:14.5px;color:var(--primary-dark);">${esc(c.label)}</b>
+          <span class="muted" style="font-size:12px;">${esc(c.periodFrom)} 〜 ${esc(c.periodTo)}</span>
+          ${c.reached ? "" : `<span class="kp-chip draft">あと${c.daysLeft}日</span>`}
+          ${r?.verdict ? `<span class="kp-chip ${VERDICT[r.verdict].cls}">${VERDICT[r.verdict].label}</span>` : ""}
+          ${decided ? `<span class="kp-chip ${DECISION[r.decision].cls}">${DECISION[r.decision].label}</span>` : ""}
+          ${c.reached ? `
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                    onclick="compute('${c.checkpoint}', this)">
+              <span class="material-symbols-outlined icon-inline">calculate</span>集計する
+            </button>` : ""}
+        </div>
+
+        ${!c.reached
+          ? `<div class="muted" style="font-size:12.5px;">期日が来たら集計できます。</div>`
+          : !r?.computedAt
+            ? `<div class="empty">「集計する」を押すと、この期間の日報・KGI・週次評価を集計します。</div>`
+            : `${checksBlock(r)}${metricsBlock(r)}${aiBlock(c, r)}${decisionBlock(c, r)}`}
+      </div>`;
+  }
+
+  function checksBlock(r) {
+    const rows = Object.entries(r.checks || {}).map(([, c]) => {
+      const cls = c.pass === null ? "na" : c.pass ? "ok" : "ng";
+      const mark = c.pass === null ? "—" : c.pass ? "○" : "×";
+      return `<div class="pb-check ${cls}">
+        <span class="m">${mark}</span>
+        <span class="l">${esc(c.label)}</span>
+        <span class="v">${c.value != null ? `${c.value}${esc(c.unit)}` : "材料不足"}</span>
+        <span class="t">基準 ${c.threshold}${esc(c.unit)}</span>
+      </div>`;
+    }).join("");
+    return `<div style="margin-bottom:12px;">${rows}</div>`;
+  }
+
+  function metricsBlock(r) {
+    const m = r.metrics || {};
+    const t = (k, v, s) => `<div class="kp-tile"><div class="k">${esc(k)}</div>
+      <div class="v">${v}</div><div class="s">${esc(s)}</div></div>`;
+    return `
+      <div class="kp-tiles" style="margin-bottom:12px;">
+        ${t("日報の提出", `${m.submitted}<small>/${m.workdays}</small>`, `${m.submitRate ?? "—"}%`)}
+        ${t("KGI達成", m.kgiRate != null ? `${m.kgiRate}<small>%</small>` : "—",
+             m.kgiTotal ? `${m.kgiAchieved} / ${m.kgiTotal} 日` : "記録なし")}
+        ${t("週次の平均", m.weeklyAvg != null ? `${m.weeklyAvg}<small>/100</small>` : "—", `${m.weeks} 週ぶん`)}
+        ${t("後半の伸び", m.improving != null ? `${m.improving > 0 ? "+" : ""}${m.improving}` : "—",
+             "前半との差")}
+      </div>
+      ${(m.trend || []).length ? `
+        <div style="display:flex;align-items:flex-end;gap:3px;height:48px;margin-bottom:12px;">
+          ${m.trend.map((x) => `<div style="flex:1;background:var(--soft);border-radius:2px 2px 0 0;position:relative;"
+              title="${esc(x.weekStart)} ${x.total}点">
+              <span style="position:absolute;inset:auto 0 0 0;height:${x.total}%;background:var(--primary);
+                           border-radius:2px 2px 0 0;"></span></div>`).join("")}
+        </div>` : ""}
+      <div class="table-scroll" style="margin-bottom:12px;">
+        <table class="kp-items">
+          <thead><tr>${(detail.criteria || []).map((c) =>
+            `<th style="text-align:center;">${esc(c.short)}</th>`).join("")}</tr></thead>
+          <tbody><tr>${(detail.criteria || []).map((c) =>
+            `<td style="text-align:center;">${m.perKey?.[c.key] ?? "—"}</td>`).join("")}</tr></tbody>
+        </table>
+      </div>`;
+  }
+
+  function aiBlock(c, r) {
+    if (!detail.aiConfigured) return "";
+    if (!r.aiStatus || r.aiStatus === "pending") {
+      return `<div style="margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" onclick="summarize('${c.checkpoint}', this)">
+          <span class="material-symbols-outlined icon-inline">auto_awesome</span>AIに所見をまとめさせる
+        </button>
+        <span class="muted" style="font-size:11.5px;margin-left:8px;">
+          面談の前に、期間中の記録を整理します（可否の判断はしません）
+        </span></div>`;
+    }
+    if (r.aiStatus === "processing") return `<div class="muted" style="margin-bottom:12px;">AIが書いています…</div>`;
+    if (r.aiStatus === "failed") {
+      return `<div class="banner warn" style="margin-bottom:12px;">
+        <span class="material-symbols-outlined">error_outline</span>
+        <div>まとめに失敗しました（${esc(r.aiError || "")}）
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;"
+                  onclick="summarize('${c.checkpoint}', this)">もう一度</button></div></div>`;
+    }
+    return `
+      <div class="pb-ai">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">auto_awesome</span>
+          <b style="font-size:12.5px;color:var(--primary-dark);">AIの所見</b>
+          <span class="muted" style="font-size:11px;">${esc(r.aiModel || "")}</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="summarize('${c.checkpoint}', this)">
+            <span class="material-symbols-outlined icon-inline">refresh</span>書き直す
+          </button>
+        </div>
+        ${r.aiSummary ? `<div style="font-size:13px;margin-bottom:10px;">${esc(r.aiSummary)}</div>` : ""}
+        ${aiList("記録から確認できたこと", r.aiStrengths, "#2f855a")}
+        ${aiList("気になる点", r.aiConcerns, "#b7791f")}
+        ${aiList("面談で確認するとよいこと", r.aiQuestions, "var(--primary)")}
+        <div class="muted" style="font-size:11px;margin-top:8px;">
+          AIは本採用の可否を判断していません。記録の整理と、確認したほうがよい点までです。
+        </div>
+      </div>`;
+  }
+
+  const aiList = (title, items, color) => (items || []).length
+    ? `<div style="margin-bottom:8px;">
+         <h5 style="color:${color};">${esc(title)}</h5>
+         ${items.map((t) => `<div class="i">・${esc(t)}</div>`).join("")}
+       </div>`
+    : "";
+
+  // ★ ここだけは人が押す。AIも判定も、この欄には何も書かない
+  function decisionBlock(c, r) {
+    if (r.decision && !reopened.has(c.checkpoint)) {
+      return `
+        <div class="banner ok" style="margin-top:12px;">
+          <span class="material-symbols-outlined">how_to_reg</span>
+          <div>
+            <strong>${DECISION[r.decision].label}</strong>
+            <span class="muted" style="margin-left:8px;font-size:12px;">
+              ${esc(new Date(r.decidedAt).toLocaleString("ja-JP"))}
+            </span>
+            ${r.decisionNote ? `<div style="margin-top:6px;white-space:pre-wrap;font-size:13px;">${esc(r.decisionNote)}</div>` : ""}
+            <div style="margin-top:8px;">
+              <button class="btn btn-secondary btn-sm" onclick="reopen('${c.checkpoint}')">決定をやり直す</button>
+            </div>
+          </div>
+        </div>`;
+    }
+    return `
+      <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+        <div style="font-size:12.5px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;">
+          決定（押した人の名前と日時が記録に残ります）
+        </div>
+        ${r.decision ? `<div class="banner warn" style="margin-bottom:10px;">
+          <span class="material-symbols-outlined">history</span>
+          <div>いまは「${DECISION[r.decision].label}」です。押し直すと上書きされます
+            （前の決定は監査ログに残ります）。</div></div>` : ""}
+        <textarea id="note-${c.checkpoint}" rows="2"
+                  placeholder="理由・面談で決まったこと（延長・不採用のときは必須）"></textarea>
+        <button class="btn btn-primary btn-sm" onclick="decide('${c.checkpoint}','pass', this)">本採用にする</button>
+        <button class="btn btn-secondary btn-sm" onclick="decide('${c.checkpoint}','extend', this)">期間を延長する</button>
+        <button class="btn btn-secondary btn-sm" onclick="decide('${c.checkpoint}','fail', this)">不採用にする</button>
+        <div id="dmsg-${c.checkpoint}" class="err-text"></div>
+      </div>`;
+  }
+
+  // --- 操作 -------------------------------------------------------------------
+  async function compute(checkpoint, btn) {
+    try {
+      await KPLayout.busy(btn, "集計中…", () => API.probationAct({
+        employeeId: detail.employee.id, checkpoint, action: "compute",
+      }));
+      await refresh();
+    } catch (e) { alert(e.hint || e.detail || e.message || "集計できませんでした"); }
+  }
+
+  async function summarize(checkpoint, btn) {
+    try {
+      await KPLayout.busy(btn, "まとめ中…", () => API.probationAct({
+        employeeId: detail.employee.id, checkpoint, action: "summarize",
+      }));
+      await refresh();
+    } catch (e) { alert(e.hint || e.detail || e.message || "まとめられませんでした"); }
+  }
+
+  async function decide(checkpoint, decision, btn) {
+    const note = el(`note-${checkpoint}`).value.trim();
+    const label = DECISION[decision].label;
+    if (decision !== "pass" && !note) {
+      el(`dmsg-${checkpoint}`).textContent = "延長・不採用のときは理由を残してください。";
+      return;
+    }
+    if (!confirm(`${detail.employee.display_name} さんを「${label}」にします。\n\n` +
+                 "押した人の名前と日時が記録に残ります。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.probationAct({
+        employeeId: detail.employee.id, checkpoint, action: "decide", decision, note,
+      }));
+      await refresh();
+    } catch (e) {
+      el(`dmsg-${checkpoint}`).textContent = e.hint || e.detail || e.message || "記録できませんでした";
+    }
+  }
+
+  // 決定は消さずに、押し直せるようにする。
+  // 消せる作りにすると経緯が追えなくなるので、上書きだけを許す
+  // （前の決定は監査ログに残る）
+  function reopen(checkpoint) {
+    reopened.add(checkpoint);
+    renderDetail();
+  }
+
+  async function refresh() {
+    const id = detail.employee.id;
+    reopened = new Set();
+    await load();
+    await openDetail(id);
+  }
+
+  // --- 基準の設定 -------------------------------------------------------------
+  function toggleSettings() {
+    const body = el("s-body");
+    const open = body.classList.toggle("hidden");
+    el("s-caret").textContent = open ? "expand_more" : "expand_less";
+    el("s-caret").nextSibling.textContent = open ? "開く" : "閉じる";
+  }
+
+  function renderSettings() {
+    const s = data.settings;
+    const TH = [
+      ["submitRate", "日報の提出率", "%"],
+      ["kgiRate", "KGIの達成率", "%"],
+      ["weeklyAvg", "週次評価の平均", "点"],
+      ["consultRate", "困りごとを相談まで書けた割合", "%"],
+      ["resultRate", "やったことを結果まで書けた割合", "%"],
+    ];
+    el("s-body").innerHTML = `
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div style="max-width:150px;"><label>試用期間</label>
+          <input id="s-months" type="number" min="1" max="24" value="${s.months}"></div>
+        <div>
+          <label>途中で見る区切り</label>
+          <div style="display:flex;gap:10px;padding-top:6px;">
+            ${["1m", "3m", "6m"].map((c) => `
+              <label style="display:inline-flex;align-items:center;gap:5px;font-weight:400;font-size:13px;">
+                <input type="checkbox" id="s-cp-${c}" style="width:auto;margin:0;"
+                       ${s.checkpoints.includes(c) ? "checked" : ""}>${esc(data.labels[c])}
+              </label>`).join("")}
+          </div>
+        </div>
+      </div>
+      <div class="inline-controls" style="margin-bottom:12px;">
+        ${TH.map(([k, label, unit]) => `
+          <div style="max-width:180px;">
+            <label>${esc(label)}（${unit}）</label>
+            <input id="s-${k}" type="number" min="0" max="100" value="${s.thresholds[k]}">
+          </div>`).join("")}
+      </div>
+      <button class="btn btn-primary" onclick="saveSettings(this)">
+        <span class="material-symbols-outlined icon-inline">save</span>基準を保存
+      </button>
+      <p class="muted" style="font-size:11.5px;margin:12px 0 0;">
+        この基準は「下回ったら理由を確認する」の線です。下回ったこと自体が不採用の理由にはなりません。
+        変えると、次に集計したぶんから反映されます（過去の集計結果は書き換わりません）。
+      </p>
+      <div id="s-msg" class="err-text"></div>`;
+  }
+
+  async function saveSettings(btn) {
+    const thresholds = {};
+    for (const k of ["submitRate", "kgiRate", "weeklyAvg", "consultRate", "resultRate"]) {
+      thresholds[k] = el(`s-${k}`).value;
+    }
+    const checkpoints = ["1m", "3m", "6m"].filter((c) => el(`s-cp-${c}`).checked);
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.probationAct({
+        action: "settings",
+        probation: { months: Number(el("s-months").value), checkpoints, thresholds },
+      }));
+      await load();
+      el("s-msg").className = "muted";
+      el("s-msg").textContent = "保存しました。";
+    } catch (e) {
+      el("s-msg").className = "err-text";
+      el("s-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+</script>
+
+</body>
+</html>

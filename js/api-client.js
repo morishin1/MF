@@ -308,6 +308,12 @@
   const evaluateNippo = (nippoId, opts = {}) =>
     api("/api/nippo/evaluate", { method: "POST", body: { nippoId, ...opts } });
 
+  // 試用期間。employeeId を省くと一覧、渡すとその人の各区切り
+  const probation = (employeeId) =>
+    api(`/api/probation${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+  // action: compute（集計）/ summarize（AIの所見）/ decide（人が決定）/ settings
+  const probationAct = (body) => api("/api/probation", { method: "POST", body });
+
   // 週次（10項目×10点＝100点）。action: evaluate（AIに採点させる）/ save / submit
   const nippoWeekly = (userId, weekStart) =>
     api(`/api/nippo/weekly?userId=${encodeURIComponent(userId)}&weekStart=${encodeURIComponent(weekStart)}`);
@@ -604,6 +610,7 @@
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
+    probation, probationAct,
     listBlocks, createBlock, updateBlock, deleteBlock,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,
