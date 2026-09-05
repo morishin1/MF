@@ -1,5 +1,7 @@
 // GET  /api/nippo/admin?date=YYYY-MM-DD&days=14 … その日の全員の日報と、提出率の推移
-// POST /api/nippo/admin {action:…}                … 確認・個別メッセージ・AI返信のON/OFF・週次評価
+// POST /api/nippo/admin {action:…}                … 確認・個別メッセージ・AI返信のON/OFF
+//
+// 週次・月次の評価は /api/nippo/weekly と /api/nippo/monthly が持つ。
 //
 // 8grp.co.jp/8/zimu/dr/ にあった管理画面を、このグループウェアへ移したもの。
 //
@@ -236,71 +238,13 @@ async function act(req, res, ctx, user) {
       return json(res, 200, { aiAutoReply: enabled });
     }
 
-    case "weekly_eval": {
-      // レーダー評価と総評。submit を付けたときだけ本人の画面に出る
-      const ws = isDate(body?.weekStart) ? body.weekStart : weekStart(jstDate());
-      if (!body?.userId) return json(res, 400, { error: "invalid_body", required: ["userId"] });
-
-      const scores = normalizeScores(body?.scores);
-      if (scores === false) return json(res, 400, { error: "invalid_scores", hint: "各項目は1〜5です" });
-
-      const { data: emp } = await sb.from("gw_employees")
-        .select("display_name").eq("user_id", body.userId).eq("tenant_id", ctx.tenantId).maybeSingle();
-      if (!emp) return json(res, 404, { error: "employee_not_found" });
-
-      const patch = {
-        user_id: body.userId,
-        user_name: emp.display_name,
-        week_start: ws,
-        eval_scores: scores,
-        eval_comment: String(body?.comment ?? "").trim().slice(0, 4000) || null,
-        updated_at: new Date().toISOString(),
-      };
-      if (body.submit) patch.submitted_at = new Date().toISOString();
-
-      const { data, error } = await sb.from("tc_weekly_review")
-        .upsert(patch, { onConflict: "user_id,week_start" }).select("*").single();
-      if (error) return json(res, 500, { error: "db_upsert_failed", detail: error.message });
-
-      if (body.submit) {
-        await gwLog({
-          tenantId: ctx.tenantId, actorId: user.id, action: "nippo.weekly_eval",
-          target: `employee:${emp.display_name}`, detail: { week_start: ws },
-        });
-      }
-      return json(res, 200, { weekly: data });
-    }
-
-    case "weekly_get": {
-      if (!body?.userId) return json(res, 400, { error: "invalid_body", required: ["userId"] });
-      const ws = isDate(body?.weekStart) ? body.weekStart : weekStart(jstDate());
-      const { data } = await sb.from("tc_weekly_review").select("*")
-        .eq("user_id", body.userId).eq("week_start", ws).maybeSingle();
-      return json(res, 200, { weekly: data || null });
-    }
+    // 週次評価は /api/nippo/weekly へ移した（10項目 × 10点 ＝ 100点）。
+    // 旧6項目×5点の口をここに残しておくと、同じ eval_scores に別の形が
+    // 混ざって、どちらの基準の点か分からなくなる。
 
     default:
       return json(res, 400, { error: "unknown_action" });
   }
 }
 
-const EVAL_KEYS = ["achieve", "speed", "accuracy", "priority", "solve", "share"];
 
-/**
- * レーダー評価を検算する。
- * 「点を付けていない」と「点がおかしい」は区別する。
- * 総評だけ書いて点は後で、という使い方を弾かないため。
- * @returns {object|null|false} 点 / 未入力 / 不正
- */
-function normalizeScores(v) {
-  if (v === undefined || v === null) return null;
-  if (typeof v !== "object") return false;
-  const out = {};
-  for (const k of EVAL_KEYS) {
-    if (v[k] === undefined || v[k] === null || v[k] === "") continue;
-    const n = Number(v[k]);
-    if (!Number.isInteger(n) || n < 1 || n > 5) return false;
-    out[k] = n;
-  }
-  return Object.keys(out).length ? out : null;
-}

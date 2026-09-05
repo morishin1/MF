@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910h">
-  <link rel="stylesheet" href="css/layout.css?v=20260910h">
+  <link rel="stylesheet" href="css/app.css?v=20260910i">
+  <link rel="stylesheet" href="css/layout.css?v=20260910i">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -92,16 +92,30 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">radar</span>週次評価
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">10項目 × 10点 ＝ 100点</span>
       <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <div class="inline-controls" style="margin-bottom:12px;">
       <div><label>対象者</label><select id="w-user" onchange="loadWeekly()"></select></div>
+      <div style="align-self:flex-end;">
+        <button class="btn btn-secondary btn-sm" onclick="shiftWeekSel(-1)">前の週</button>
+        <button class="btn btn-secondary btn-sm" onclick="shiftWeekSel(1)">次の週</button>
+      </div>
     </div>
     <div id="w-form"></div>
   </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">trending_up</span>月次
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">成長の確認</span></h2>
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div style="max-width:170px;"><label>対象月</label><input id="m-month" type="month" onchange="loadMonthly()"></div>
+    </div>
+    <div id="m-form"><div class="empty">上の「対象者」を選ぶと出ます。</div></div>
+  </div>
 </div>
 
-<script src="js/api-client.js?v=20260910h"></script>
-<script src="js/layout.js?v=20260910h"></script>
+<script src="js/api-client.js?v=20260910i"></script>
+<script src="js/layout.js?v=20260910i"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -118,11 +132,6 @@
     feedback: "FBを反映した", process: "やり方を改善した",
     ai_tool: "AI・ツールを活用", other: "その他",
   };
-
-  const EVAL = [
-    ["achieve", "達成"], ["speed", "スピード"], ["accuracy", "正確さ"],
-    ["priority", "優先順位"], ["solve", "解決力"], ["share", "共有"],
-  ];
 
   let data = null;
   let weekly = null;
@@ -170,10 +179,6 @@
     const done = (data.nippos || []).length;
     const confirmed = (data.nippos || []).filter((n) => n.confirmed).length;
     const struggling = (data.nippos || []).filter((n) => n.mood === "苦戦").length;
-    const tile = (k, v, sub, cls) => `
-      <div class="kp-tile${cls ? " " + cls : ""}">
-        <div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${esc(sub)}</div>
-      </div>`;
     el("tiles").innerHTML = [
       tile("提出", `${done}<small>/${total}</small>`, total ? `${Math.round((done / total) * 100)}%` : "—"),
       tile("未確認", done - confirmed, `確認済み ${confirmed} 件`, done - confirmed ? "alert" : ""),
@@ -686,83 +691,328 @@
     catch (e) { input.checked = !enabled; alert(e.detail || e.message || "変更に失敗しました"); }
   }
 
-  // --- 週次評価 ---------------------------------------------------------------
+  // --- 週次評価（10項目 × 10点 ＝ 100点） ---------------------------------------
+  // 日次は行動改善、週次は評価。役割を分けている。
+  // AI が付けた点をそのまま最終評価にしない。管理者が直してから本人へ出す。
+  let weekSel = null;   // 表示中の週の月曜
+
   function renderUserPicker() {
     const sel = el("w-user");
     const keep = sel.value;
     sel.innerHTML = `<option value="">選んでください</option>` + (data.members || []).map((m) =>
       `<option value="${esc(m.userId)}"${m.userId === keep ? " selected" : ""}>${esc(m.name)}</option>`).join("");
-    if (keep) loadWeekly(); else el("w-form").innerHTML = `<div class="empty">対象者を選ぶと入力できます。</div>`;
+    if (!weekSel) weekSel = data.weekStart;
+    if (!el("m-month").value) el("m-month").value = data.date.slice(0, 7);
+    if (keep) { loadWeekly(); loadMonthly(); }
+    else {
+      el("w-form").innerHTML = `<div class="empty">対象者を選ぶと入力できます。</div>`;
+      el("m-form").innerHTML = `<div class="empty">対象者を選ぶと出ます。</div>`;
+    }
+  }
+
+  function shiftWeekSel(n) {
+    const d = new Date(`${weekSel || data.weekStart}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n * 7);
+    weekSel = d.toISOString().slice(0, 10);
+    el("wk-tag").textContent = `${weekSel} の週`;
+    loadWeekly();
   }
 
   async function loadWeekly() {
     const userId = el("w-user").value;
     if (!userId) { el("w-form").innerHTML = `<div class="empty">対象者を選ぶと入力できます。</div>`; return; }
+    weekSel = weekSel || data.weekStart;
+    el("wk-tag").textContent = `${weekSel} の週`;
     try {
-      const res = await API.nippoAdminAct({ action: "weekly_get", userId, weekStart: data.weekStart });
-      weekly = res.weekly;
-    } catch { weekly = null; }
+      weekly = await API.nippoWeekly(userId, weekSel);
+    } catch (e) {
+      el("w-form").innerHTML = `<div class="err-text">${esc(e.hint || e.detail || e.message)}</div>`;
+      return;
+    }
     renderWeeklyForm();
   }
 
   function renderWeeklyForm() {
-    const s = weekly?.eval_scores || {};
+    const w = weekly.review;
+    const m = weekly.metrics;
+    const ai = w?.aiStatus;
+
     el("w-form").innerHTML = `
-      ${weekly?.q1 || weekly?.q2 || weekly?.q3 || weekly?.q4 ? `
+      <div class="kp-tiles" style="margin-bottom:14px;">
+        ${tile("提出", `${m.submitted}<small>/${m.workdays}</small>`, `${m.submitRate}%`,
+               m.submitRate < 80 ? "alert" : "")}
+        ${tile("KGI達成", m.kgiRate != null ? `${m.kgiRate}<small>%</small>` : "—",
+               m.kgiTotal ? `${m.kgiAchieved} / ${m.kgiTotal} 日` : "記録なし")}
+        ${tile("成果", m.resultCount, `やったこと ${m.workCount} 件`)}
+        ${tile("相談", m.consultedCount, `困りごと ${m.issueCount} 件`)}
+      </div>
+
+      ${(w?.q1 || w?.q2 || w?.q3 || w?.q4) ? `
         <div class="banner info" style="margin-bottom:14px;">
           <span class="material-symbols-outlined">quiz</span>
-          <div style="font-size:12.5px;">
-            <strong>本人の振り返り</strong>
-            ${["q1", "q2", "q3", "q4"].filter((k) => weekly[k]).map((k) =>
-              `<div style="margin-top:6px;white-space:pre-wrap;">${esc(weekly[k])}</div>`).join("")}
-          </div>
-        </div>` : `<div class="banner warn" style="margin-bottom:14px;">
-          <span class="material-symbols-outlined">info</span>
-          <div>この週の本人の振り返りはまだ入っていません。</div></div>`}
+          <div style="font-size:12.5px;"><strong>本人の振り返り</strong>
+            ${["q1", "q2", "q3", "q4"].filter((k) => w[k])
+              .map((k) => `<div style="margin-top:6px;white-space:pre-wrap;">${esc(w[k])}</div>`).join("")}</div>
+        </div>`
+        : `<div class="banner warn" style="margin-bottom:14px;">
+             <span class="material-symbols-outlined">info</span>
+             <div>この週の本人の振り返りはまだ入っていません。</div></div>`}
 
-      <div class="inline-controls" style="margin-bottom:12px;">
-        ${EVAL.map(([k, label]) => `
-          <div style="min-width:110px;">
-            <label>${esc(label)}</label>
-            <select id="ev-${k}">
-              <option value="">—</option>
-              ${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${s[k] === n ? " selected" : ""}>${n}</option>`).join("")}
-            </select>
-          </div>`).join("")}
+      ${weekly.aiConfigured ? weeklyAiBlock(w, ai) : ""}
+
+      <div class="table-scroll" style="margin-bottom:12px;">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:90px;">項目</th>
+            <th style="width:70px;text-align:right;">日次平均</th>
+            <th style="width:60px;text-align:right;">AI</th>
+            <th style="width:90px;">確定</th>
+            <th>AIの理由</th>
+          </tr></thead>
+          <tbody>${CRITERIA.map(([key, short]) => {
+            const daily = m.dailyAvg?.[key];
+            const a = w?.aiScores?.[key];
+            const aiScore = a && a.status === "evaluated" && a.score != null ? a.score : null;
+            const fixed = w?.evalScores?.[key];
+            // 確定欄の初期値はAIの点。管理者はそこから直す
+            const value = fixed != null ? fixed : (aiScore != null ? aiScore : "");
+            return `<tr>
+              <td>${esc(short)}</td>
+              <td style="text-align:right;" class="muted">${daily?.avg ?? "—"}</td>
+              <td style="text-align:right;">${aiScore != null ? aiScore : '<span class="muted">—</span>'}</td>
+              <td><input type="number" min="0" max="10" step="1" id="wk-${key}"
+                         style="width:66px;margin:0;padding:3px 6px;" value="${value}"></td>
+              <td class="muted" style="font-size:11.5px;">${esc(a?.reason || "")}</td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>
       </div>
+
       <div style="margin-bottom:12px;">
-        <label>総評</label>
-        <textarea id="ev-comment" rows="3">${esc(weekly?.eval_comment || "")}</textarea>
+        <label>総評（本人が読みます）</label>
+        <textarea id="wk-comment" rows="3">${esc(w?.evalComment || w?.aiSummary || "")}</textarea>
       </div>
-      ${weekly?.submitted_at
-        ? `<div class="banner ok" style="margin-bottom:12px;">
-             <span class="material-symbols-outlined">check_circle</span>
-             <div>本人へ提出済みです（${esc(new Date(weekly.submitted_at).toLocaleString("ja-JP"))}）。上書きして再提出できます。</div>
-           </div>` : ""}
-      <button class="btn btn-secondary" onclick="saveEval(false, this)">下書きとして保存</button>
-      <button class="btn btn-primary" onclick="saveEval(true, this)">
+
+      ${w?.submittedAt ? `
+        <div class="banner ok" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          <div>本人へ提出済み（${esc(new Date(w.submittedAt).toLocaleString("ja-JP"))}）
+            ${w.evalTotal != null ? `／ ${w.evalTotal} 点` : ""}。上書きして再提出できます。</div>
+        </div>` : ""}
+
+      <button class="btn btn-secondary" onclick="saveWeek('save', this)">下書きとして保存</button>
+      <button class="btn btn-primary" onclick="saveWeek('submit', this)">
         <span class="material-symbols-outlined icon-inline">send</span>本人へ提出
       </button>
-      <div id="ev-msg" class="err-text"></div>`;
+      <div id="wk-msg" class="err-text"></div>`;
   }
 
-  async function saveEval(submitToUser, btn) {
+  const tile = (k, v, sub, cls) => `
+    <div class="kp-tile${cls ? " " + cls : ""}">
+      <div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${esc(sub)}</div>
+    </div>`;
+
+  function weeklyAiBlock(w, ai) {
+    if (!w || ai === "pending" || !ai) {
+      return `<div style="margin-bottom:14px;">
+        <button class="btn btn-primary btn-sm" onclick="runWeekAi(this)">
+          <span class="material-symbols-outlined icon-inline">auto_awesome</span>AIに採点させる
+        </button>
+        <span class="muted" style="font-size:11.5px;margin-left:8px;">
+          その週の日報と日次評価をまとめて読み、10項目を採点します
+        </span></div>`;
+    }
+    if (ai === "processing") return `<div class="muted" style="margin-bottom:14px;">AIが採点しています…</div>`;
+    if (ai === "failed") {
+      return `<div class="banner warn" style="margin-bottom:14px;">
+        <span class="material-symbols-outlined">error_outline</span>
+        <div>AI採点に失敗しました（${esc(w.aiError || "")}）
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="runWeekAi(this)">もう一度</button></div>
+      </div>`;
+    }
+    return `
+      <div style="border:1px solid var(--border);border-left:3px solid var(--primary);
+                  background:var(--soft);border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">auto_awesome</span>
+          <b style="font-size:12.5px;color:var(--primary-dark);">AIの参考評価</b>
+          <span class="kp-chip">${w.aiTotal != null ? `${w.aiTotal} 点 / 100` : "材料不足"}</span>
+          <span class="muted" style="font-size:11px;">${esc(w.aiModel || "")}</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="runWeekAi(this)">
+            <span class="material-symbols-outlined icon-inline">refresh</span>採点し直す
+          </button>
+        </div>
+        ${w.aiSummary ? `<div style="font-size:13px;margin-bottom:10px;">${esc(w.aiSummary)}</div>` : ""}
+        ${listBlock("強み", w.aiStrengths, "#2f855a")}
+        ${listBlock("改善項目", w.aiImprovements, "#b7791f")}
+        ${listBlock("次週の重点行動", w.aiFocus, "var(--primary)")}
+      </div>`;
+  }
+
+  const listBlock = (title, items, color) => (items || []).length
+    ? `<div style="margin-bottom:8px;">
+         <div style="font-size:11.5px;font-weight:700;color:${color};margin-bottom:3px;">${esc(title)}</div>
+         ${items.map((t) => `<div style="font-size:12.5px;">・${esc(t)}</div>`).join("")}
+       </div>`
+    : "";
+
+  async function runWeekAi(btn) {
     const userId = el("w-user").value;
     if (!userId) return;
+    try {
+      await KPLayout.busy(btn, "採点中…", () => API.nippoWeeklyAct({
+        action: "evaluate", userId, weekStart: weekSel,
+      }));
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "採点できませんでした");
+    }
+    await loadWeekly();
+  }
+
+  async function saveWeek(action, btn) {
+    const userId = el("w-user").value;
+    if (!userId) return;
+    if (action === "submit" && !confirm("この評価を本人へ提出します。よろしいですか？")) return;
+
     const scores = {};
-    for (const [k] of EVAL) {
-      const v = el(`ev-${k}`).value;
-      if (v) scores[k] = Number(v);
+    for (const [key] of CRITERIA) {
+      const v = el(`wk-${key}`).value;
+      if (v !== "") scores[key] = Number(v);
     }
     try {
-      const res = await KPLayout.busy(btn, "保存中…", () => API.nippoAdminAct({
-        action: "weekly_eval", userId, weekStart: data.weekStart,
-        scores, comment: el("ev-comment").value, submit: submitToUser,
+      await KPLayout.busy(btn, action === "submit" ? "提出中…" : "保存中…", () => API.nippoWeeklyAct({
+        action, userId, weekStart: weekSel, scores, comment: el("wk-comment").value,
       }));
-      weekly = res.weekly;
-      renderWeeklyForm();
+      await loadWeekly();
     } catch (e) {
-      el("ev-msg").textContent = e.hint || e.detail || e.message || "保存に失敗しました";
+      el("wk-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  // --- 月次（成長の確認） -------------------------------------------------------
+  let monthly = null;
+
+  async function loadMonthly() {
+    const userId = el("w-user").value;
+    if (!userId) { el("m-form").innerHTML = `<div class="empty">対象者を選ぶと出ます。</div>`; return; }
+    try {
+      monthly = await API.nippoMonthly(el("m-month").value || data.date.slice(0, 7), userId);
+    } catch (e) {
+      el("m-form").innerHTML = `<div class="err-text">${esc(e.hint || e.detail || e.message)}</div>`;
+      return;
+    }
+    renderMonthly();
+  }
+
+  function renderMonthly() {
+    const m = monthly.metrics;
+    const s = monthly.summary;
+    const diff = m.diff;
+
+    el("m-form").innerHTML = `
+      <div class="kp-tiles" style="margin-bottom:14px;">
+        ${tile("週次の平均", m.avgScore != null ? `${m.avgScore}<small>/100</small>` : "—",
+               `${m.scoredWeeks} 週ぶん`)}
+        ${tile("前月比", diff != null ? `${diff > 0 ? "+" : ""}${diff}` : "—",
+               m.prevAvgScore != null ? `前月 ${m.prevAvgScore} 点` : "前月の記録なし",
+               diff != null && diff < 0 ? "alert" : "")}
+        ${tile("日報提出", m.submitRate != null ? `${m.submitRate}<small>%</small>` : "—",
+               `${m.submitted} / ${m.workdays} 日`, m.submitRate != null && m.submitRate < 80 ? "alert" : "")}
+        ${tile("KGI達成", m.kgiRate != null ? `${m.kgiRate}<small>%</small>` : "—",
+               m.kgiTotal ? `${m.kgiAchieved} / ${m.kgiTotal} 日` : "記録なし")}
+      </div>
+
+      <div class="table-scroll" style="margin-bottom:14px;">
+        <table class="kp-items">
+          <thead><tr>${CRITERIA.map(([, short]) => `<th style="text-align:center;">${esc(short)}</th>`).join("")}</tr></thead>
+          <tbody><tr>${CRITERIA.map(([key]) =>
+            `<td style="text-align:center;">${m.perKey[key] ?? "—"}</td>`).join("")}</tr></tbody>
+        </table>
+      </div>
+
+      ${monthly.trend.length ? `
+        <div style="margin-bottom:14px;">
+          <div class="muted" style="font-size:11.5px;margin-bottom:4px;">週ごとの推移</div>
+          <div class="dr-bar">${monthly.trend.map((t) => `
+            <div title="${esc(t.weekStart)} ${t.total ?? "—"}点">
+              <span style="height:${t.total != null ? t.total : 0}%;"></span></div>`).join("")}</div>
+        </div>` : ""}
+
+      ${monthlyAiBlock(s)}
+
+      <div style="margin-bottom:12px;">
+        <label>管理者コメント（本人が読みます）</label>
+        <textarea id="m-comment" rows="3">${esc(s?.managerComment || "")}</textarea>
+      </div>
+      ${s?.submittedAt ? `
+        <div class="banner ok" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          <div>本人へ提出済み（${esc(new Date(s.submittedAt).toLocaleString("ja-JP"))}）。上書きして再提出できます。</div>
+        </div>` : ""}
+      <button class="btn btn-secondary" onclick="saveMonth('save', this)">下書きとして保存</button>
+      <button class="btn btn-primary" onclick="saveMonth('submit', this)">
+        <span class="material-symbols-outlined icon-inline">send</span>本人へ提出
+      </button>
+      <div id="m-msg" class="err-text"></div>`;
+  }
+
+  function monthlyAiBlock(s) {
+    if (!monthly.aiConfigured) return "";
+    if (!s || s.aiStatus === "pending" || !s.aiStatus) {
+      return `<div style="margin-bottom:14px;">
+        <button class="btn btn-primary btn-sm" onclick="runMonthAi(this)">
+          <span class="material-symbols-outlined icon-inline">auto_awesome</span>AIに総括させる
+        </button></div>`;
+    }
+    if (s.aiStatus === "processing") return `<div class="muted" style="margin-bottom:14px;">AIが書いています…</div>`;
+    if (s.aiStatus === "failed") {
+      return `<div class="banner warn" style="margin-bottom:14px;">
+        <span class="material-symbols-outlined">error_outline</span>
+        <div>AI総括に失敗しました（${esc(s.aiError || "")}）
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="runMonthAi(this)">もう一度</button></div>
+      </div>`;
+    }
+    return `
+      <div style="border:1px solid var(--border);border-left:3px solid var(--primary);
+                  background:var(--soft);border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">auto_awesome</span>
+          <b style="font-size:12.5px;color:var(--primary-dark);">AIの総括</b>
+          <span class="muted" style="font-size:11px;">${esc(s.aiModel || "")}</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="runMonthAi(this)">
+            <span class="material-symbols-outlined icon-inline">refresh</span>書き直す
+          </button>
+        </div>
+        ${s.aiSummary ? `<div style="font-size:13px;margin-bottom:10px;">${esc(s.aiSummary)}</div>` : ""}
+        ${listBlock("強み TOP3", s.aiStrengths, "#2f855a")}
+        ${listBlock("改善 TOP3", s.aiImprovements, "#b7791f")}
+      </div>`;
+  }
+
+  async function runMonthAi(btn) {
+    const userId = el("w-user").value;
+    if (!userId) return;
+    try {
+      await KPLayout.busy(btn, "作成中…", () => API.nippoMonthlyAct({
+        action: "summarize", userId, month: el("m-month").value,
+      }));
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "作成できませんでした");
+    }
+    await loadMonthly();
+  }
+
+  async function saveMonth(action, btn) {
+    const userId = el("w-user").value;
+    if (!userId) return;
+    if (action === "submit" && !confirm("この月次を本人へ提出します。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, action === "submit" ? "提出中…" : "保存中…", () => API.nippoMonthlyAct({
+        action, userId, month: el("m-month").value, comment: el("m-comment").value,
+      }));
+      await loadMonthly();
+    } catch (e) {
+      el("m-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした";
     }
   }
 </script>

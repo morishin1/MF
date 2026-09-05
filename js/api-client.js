@@ -308,6 +308,19 @@
   const evaluateNippo = (nippoId, opts = {}) =>
     api("/api/nippo/evaluate", { method: "POST", body: { nippoId, ...opts } });
 
+  // 週次（10項目×10点＝100点）。action: evaluate（AIに採点させる）/ save / submit
+  const nippoWeekly = (userId, weekStart) =>
+    api(`/api/nippo/weekly?userId=${encodeURIComponent(userId)}&weekStart=${encodeURIComponent(weekStart)}`);
+  const nippoWeeklyAct = (body) => api("/api/nippo/weekly", { method: "POST", body });
+
+  // 月次（成長確認）。userId を省くと自分の分
+  const nippoMonthly = (month, userId) => {
+    const q = new URLSearchParams({ month });
+    if (userId) q.set("userId", userId);
+    return api(`/api/nippo/monthly?${q}`);
+  };
+  const nippoMonthlyAct = (body) => api("/api/nippo/monthly", { method: "POST", body });
+
   // ---- 口コミサイト流入ブロック（8grp.co.jp） ----
   const listBlocks = () => api("/api/blocks");
   const createBlock = (b) => api("/api/blocks", { method: "POST", body: b }).then((d) => d.referrer);
@@ -590,6 +603,7 @@
     schedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle, googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
+    nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     listBlocks, createBlock, updateBlock, deleteBlock,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,
