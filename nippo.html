@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910g">
-  <link rel="stylesheet" href="css/layout.css?v=20260910g">
+  <link rel="stylesheet" href="css/app.css?v=20260910h">
+  <link rel="stylesheet" href="css/layout.css?v=20260910h">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -183,6 +183,17 @@
     </p>
   </div>
 
+  <!-- AIフィードバック -->
+  <div id="ai-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">auto_awesome</span>今日のAIフィードバック
+      <span id="ai-tag" class="kp-chip" style="margin-left:8px;"></span>
+      <button class="btn btn-secondary btn-sm" id="ai-btn" style="margin-left:auto;" onclick="runEval(this)">
+        <span class="material-symbols-outlined icon-inline">refresh</span>評価する
+      </button>
+    </h2>
+    <div id="ai-body"></div>
+  </div>
+
   <!-- 週次レビュー -->
   <div class="card">
     <h2><span class="material-symbols-outlined">radar</span>今週の振り返り
@@ -220,8 +231,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910g"></script>
-<script src="js/layout.js?v=20260910g"></script>
+<script src="js/api-client.js?v=20260910h"></script>
+<script src="js/layout.js?v=20260910h"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -269,6 +280,7 @@
     // 提出済みならその内容を、まだなら書きかけを出す
     fillForm(data.today || loadDraft(date));
     renderFlags(data.today?.daily_flags);
+    renderEval();
     renderThanksReceived();
     renderWeekly();
     renderTeam();
@@ -494,6 +506,8 @@
         </div>`;
       await load(body.date);
       el("flags-card").scrollIntoView({ behavior: "smooth", block: "center" });
+      // 提出のたびに待たせたくないので、評価はここから別に走らせる
+      if (res.ai?.configured && data.today) runEval();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
     }
@@ -513,6 +527,89 @@
       return `<div class="np-flag ${cls}" title="${esc(c.label)}">
         <span class="m">${MARK[v] || "―"}</span>${esc(c.short)}</div>`;
     }).join("");
+  }
+
+  // --- AIフィードバック -------------------------------------------------------
+  // 点数を前面に出さない。日次の中心は「良かった点・改善点・明日のポイント」で、
+  // 100点評価は週次で見る。毎日点数を見せると、点を取るための日報になる
+  function currentEval() {
+    if (!data.today) return null;
+    return (data.evals || []).find((e) => e.nippoId === data.today.id) || null;
+  }
+
+  function renderEval() {
+    const card = el("ai-card");
+    if (!data.today || !data.aiConfigured) { card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+
+    const e = currentEval();
+    const tag = el("ai-tag");
+    const body = el("ai-body");
+
+    if (!e || e.status === "pending") {
+      tag.textContent = "未評価";
+      tag.className = "kp-chip draft";
+      body.innerHTML = `<div class="empty">「評価する」を押すと、AIが今日の日報を読みます。</div>`;
+      return;
+    }
+    if (e.status === "processing") {
+      tag.textContent = "評価中…";
+      tag.className = "kp-chip draft";
+      body.innerHTML = `<div class="empty">AIが読んでいます。少し待ってから画面を更新してください。</div>`;
+      return;
+    }
+    if (e.status === "failed") {
+      tag.textContent = "失敗";
+      tag.className = "kp-chip important";
+      body.innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">error_outline</span>
+        <div>AI評価を準備できませんでした。「評価する」でもう一度お試しください。</div></div>`;
+      return;
+    }
+
+    tag.textContent = "評価済み";
+    tag.className = "kp-chip event";
+    body.innerHTML = `
+      ${e.goodPoints.length ? `
+        <div class="ai-block">
+          <h4><span class="material-symbols-outlined" style="font-size:15px;color:#2f855a;">thumb_up</span>良かったところ</h4>
+          <ul style="margin:0;padding-left:20px;">${e.goodPoints.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+        </div>` : ""}
+
+      ${e.improvementPoints.length ? `
+        <div class="ai-block">
+          <h4><span class="material-symbols-outlined" style="font-size:15px;color:#b7791f;">tips_and_updates</span>次に改善すると良いところ</h4>
+          <ul style="margin:0;padding-left:20px;">${e.improvementPoints.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+        </div>` : ""}
+
+      ${e.tomorrowAdvice ? `
+        <div class="ai-block">
+          <h4><span class="material-symbols-outlined" style="font-size:15px;">flag</span>明日のポイント</h4>
+          <div class="ai-tomorrow">${esc(e.tomorrowAdvice)}</div>
+        </div>` : ""}
+
+      ${e.aiComment ? `<div style="font-size:13px;line-height:1.9;">${esc(e.aiComment)}</div>` : ""}
+
+      <p class="muted" style="font-size:11.5px;margin:14px 0 0;">
+        AIが日報の記述だけを読んで書いたものです。人物評価ではありません。
+        点数での評価は週次でまとめて行います。
+      </p>`;
+  }
+
+  async function runEval(btn) {
+    if (!data.today) return;
+    const tag = el("ai-tag");
+    tag.textContent = "評価中…";
+    tag.className = "kp-chip draft";
+    el("ai-body").innerHTML = `<div class="empty">AIが読んでいます…（10秒ほどかかります）</div>`;
+    el("ai-btn").disabled = true;
+    try {
+      await API.evaluateNippo(data.today.id);
+    } catch (e) {
+      // 失敗した内容も行に残っているので、読み直してその状態を出す
+      console.error(e);
+    }
+    el("ai-btn").disabled = false;
+    await load(el("f-date").value);
   }
 
   // --- 受け取った感謝 ---------------------------------------------------------

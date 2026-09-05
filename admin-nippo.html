@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910g">
-  <link rel="stylesheet" href="css/layout.css?v=20260910g">
+  <link rel="stylesheet" href="css/app.css?v=20260910h">
+  <link rel="stylesheet" href="css/layout.css?v=20260910h">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -100,8 +100,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910g"></script>
-<script src="js/layout.js?v=20260910g"></script>
+<script src="js/api-client.js?v=20260910h"></script>
+<script src="js/layout.js?v=20260910h"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -221,6 +221,7 @@
             <th style="width:70px;text-align:right;">成果</th>
             <th style="width:110px;">困りごと</th>
             <th style="width:80px;">提出</th>
+            <th style="width:80px;text-align:right;">参考点</th>
             <th>要確認</th>
           </tr></thead>
           <tbody>${members.map((m) => overviewRow(m, byUser.get(m.userId))).join("")}</tbody>
@@ -234,6 +235,7 @@
       return `<tr class="done">
         <td>${esc(m.name)}</td><td colspan="6" class="muted">—</td>
         <td><span class="kp-chip draft">未提出</span></td>
+        <td class="muted" style="text-align:right;">—</td>
         <td>${flagChips(flags)}</td></tr>`;
     }
     const issues = n.no_issues ? 0 : (n.issues || []).length;
@@ -251,6 +253,7 @@
                                               : '<span class="kp-chip draft" style="margin-left:4px;">相談なし</span>'}`
                     : '<span class="muted">—</span>'}</td>
       <td><span class="kp-chip event">提出</span>${n.confirmed ? '<span class="kp-chip">確認済</span>' : ""}</td>
+      <td style="text-align:right;">${scoreCell(n.id)}</td>
       <td>${flagChips(flags)}</td></tr>`;
   }
 
@@ -265,6 +268,17 @@
     if (n.tomorrow_plan && !n.tomorrow_deadline && !n.tomorrow_target) f.push("明日の最優先が抽象的");
     if (n.mood === "苦戦") f.push("調子が苦戦");
     return f;
+  }
+
+  function scoreCell(nippoId) {
+    const e = evalOf(nippoId);
+    if (!e || e.status === "pending") return '<span class="muted">—</span>';
+    if (e.status === "processing") return '<span class="muted">採点中</span>';
+    if (e.status === "failed") return '<span class="kp-chip important">失敗</span>';
+    const total = e.managerTotal ?? e.totalScore;
+    return total != null
+      ? `<b>${total}</b>${e.managerTotal != null ? '<span class="muted" style="font-size:10px;">修正</span>' : ""}`
+      : '<span class="muted">材料不足</span>';
   }
 
   const flagChips = (f) => f.length
@@ -315,6 +329,7 @@
         </div>
 
         ${flagsRow(n.daily_flags)}
+        ${evalBlock(n)}
         ${legacyBlock(n)}
 
         ${rs.map(replyBox).join("")}
@@ -434,6 +449,105 @@
           <button class="btn btn-secondary btn-sm" onclick="deleteDraft('${esc(r.id)}', this)">下書きを消す</button>
         </div>` : ""}
     </div>`;
+  }
+
+  // --- AIの参考評価 -----------------------------------------------------------
+  // AI評価を最終評価にしない。管理者がその場で直せて、直した項目だけを残す
+  const evalOf = (nippoId) => (data.evals || []).find((e) => e.nippoId === nippoId) || null;
+
+  function evalBlock(n) {
+    if (!data.aiEval?.configured) return "";
+    const e = evalOf(n.id);
+
+    if (!e || e.status === "pending") {
+      return `<div style="margin:8px 0;">
+        <button class="btn btn-secondary btn-sm" onclick="runEval('${esc(n.id)}', this)">
+          <span class="material-symbols-outlined icon-inline">auto_awesome</span>AIで採点する
+        </button></div>`;
+    }
+    if (e.status === "processing") {
+      return `<div class="muted" style="font-size:12px;margin:8px 0;">AIが採点しています…</div>`;
+    }
+    if (e.status === "failed") {
+      return `<div class="banner warn" style="margin:8px 0;">
+        <span class="material-symbols-outlined">error_outline</span>
+        <div>AI採点に失敗しました（${esc(e.error || "")}）
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;"
+                  onclick="runEval('${esc(n.id)}', this, true)">もう一度</button></div></div>`;
+    }
+
+    const total = e.managerTotal ?? e.totalScore;
+    return `
+      <details style="margin:10px 0;" ${e.managerTotal != null ? "" : ""}>
+        <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--primary-dark);">
+          AI参考評価 ${total != null ? `${total} 点 / 100` : "（材料不足）"}
+          ${e.managerTotal != null ? '<span class="kp-chip event" style="margin-left:6px;">修正済み</span>' : ""}
+          <span class="muted" style="font-weight:400;margin-left:6px;">${esc(e.model || "")}</span>
+        </summary>
+        <div style="margin-top:10px;">
+          <table class="dr-mini" style="width:100%;">
+            <tr><th style="width:80px;">項目</th><th style="width:60px;">AI</th>
+                <th style="width:90px;">修正</th><th>理由</th></tr>
+            ${CRITERIA.map(([key, short]) => {
+              const sc = e.scores?.[key];
+              const ai = sc && sc.status === "evaluated" && sc.score != null ? sc.score : null;
+              const mg = e.managerScores?.[key];
+              return `<tr>
+                <td>${esc(short)}</td>
+                <td>${ai != null ? ai : '<span class="muted">材料不足</span>'}</td>
+                <td><input type="number" min="0" max="10" step="1" style="width:64px;margin:0;padding:3px 6px;"
+                           id="ov-${esc(e.id)}-${key}" value="${mg != null ? mg : ""}" placeholder="—"></td>
+                <td class="muted" style="font-size:11.5px;">${esc(sc?.reason || "")}</td>
+              </tr>`;
+            }).join("")}
+          </table>
+
+          <div style="margin-top:10px;">
+            <label style="font-size:11.5px;font-weight:700;color:var(--muted);">管理者コメント</label>
+            <textarea id="ovc-${esc(e.id)}" rows="2">${esc(e.managerComment || "")}</textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveOverride('${esc(e.id)}','${esc(n.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">save</span>評価を確定
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="runEval('${esc(n.id)}', this, true)">
+            <span class="material-symbols-outlined icon-inline">refresh</span>もう一度AIで採点
+          </button>
+          <div class="muted" style="font-size:11px;margin-top:6px;">
+            修正した項目だけが記録に残り、AIが何点だったかは消えません。
+            再採点しても前の評価は上書きされず、履歴として残ります。
+          </div>
+        </div>
+      </details>`;
+  }
+
+  async function runEval(nippoId, btn, force) {
+    const before = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined icon-inline kp-spin">progress_activity</span>採点中…';
+    try {
+      await API.evaluateNippo(nippoId, force ? { force: true } : {});
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "採点できませんでした");
+    }
+    btn.innerHTML = before;
+    btn.disabled = false;
+    await load(el("f-date").value);
+  }
+
+  async function saveOverride(evalId, nippoId, btn) {
+    const scores = {};
+    for (const [key] of CRITERIA) {
+      const v = el(`ov-${evalId}-${key}`).value;
+      if (v !== "") scores[key] = Number(v);
+    }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.evaluateNippo(nippoId, {
+        override: { scores, comment: el(`ovc-${evalId}`).value },
+      }));
+      await load(el("f-date").value);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "保存できませんでした");
+    }
   }
 
   // --- AIで読む ---------------------------------------------------------------

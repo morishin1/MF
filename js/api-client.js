@@ -303,6 +303,11 @@
   };
   const nippoAdminAct = (body) => api("/api/nippo/admin", { method: "POST", body });
 
+  // 提出直後にこれを1回叩くと、AIが評価して返す。
+  // force:true は管理者だけ（もう一度評価し直す）
+  const evaluateNippo = (nippoId, opts = {}) =>
+    api("/api/nippo/evaluate", { method: "POST", body: { nippoId, ...opts } });
+
   // ---- 口コミサイト流入ブロック（8grp.co.jp） ----
   const listBlocks = () => api("/api/blocks");
   const createBlock = (b) => api("/api/blocks", { method: "POST", body: b }).then((d) => d.referrer);
@@ -584,7 +589,7 @@
     listBookings, createBooking, decideBooking, deleteBooking,
     schedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle, googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
-    nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct,
+    nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     listBlocks, createBlock, updateBlock, deleteBlock,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,

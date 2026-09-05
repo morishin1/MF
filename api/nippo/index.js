@@ -14,9 +14,11 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
-  jstDate, weekStart, isDate, normalizeNippo, hasContent, requestAiReply,
+  jstDate, weekStart, isDate, normalizeNippo, hasContent,
   evaluateDaily, CRITERIA, IMPROVE_TAGS,
 } from "../../lib/nippo.js";
+import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
+import { shape as shapeEval } from "./evaluate.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -69,6 +71,20 @@ async function read(req, res, user, ctx) {
 
   const rows = mine.data || [];
   const ids = rows.map((r) => r.id);
+
+  // 日報1件につき最新の評価だけを添える。再評価の履歴は管理画面で見る
+  let evals = [];
+  if (ids.length) {
+    const { data } = await sb.from("gw_nippo_ai_evals").select("*")
+      .in("nippo_id", ids).order("created_at", { ascending: false });
+    const seen = new Set();
+    for (const e of data || []) {
+      if (seen.has(e.nippo_id)) continue;
+      seen.add(e.nippo_id);
+      evals.push(shapeEval(e));
+    }
+  }
+
   let replies = [];
   if (ids.length) {
     const { data } = await sb.from("tc_nippo_replies").select("*")
@@ -89,6 +105,8 @@ async function read(req, res, user, ctx) {
     today: rows.find((r) => r.work_date === date) || null,
     recent: rows,
     replies,
+    evals,
+    aiConfigured: aiConfigured(),
     thanks: thanks.data || [],
     weekly: weekly.data || null,
     // 画面に出す選択肢と基準はサーバから渡す。定義を2か所に置かないため
@@ -145,11 +163,22 @@ async function submit(res, user, ctx, body) {
     nippoId = data.id;
   }
 
-  // AI の自動返信。落ちていても日報の保存はもう済んでいるので、
-  // 結果は「出せたかどうか」だけ返して画面の表示に使う
-  const ai = await requestAiReply(nippoId);
+  // AI評価は「待ち」の行を作るだけにして、ここでは走らせない。
+  // 提出のたびに10〜20秒待たせると、日報を出すのが億劫になる。
+  // 画面が提出直後に /api/nippo/evaluate を1回叩いて、結果を受け取る。
+  let aiPending = false;
+  if (aiConfigured()) {
+    const { error } = await sb.from("gw_nippo_ai_evals").insert({
+      nippo_id: nippoId, user_id: user.id, work_date: date, status: "pending",
+    });
+    // 評価の行が作れなくても日報の提出は成功。画面から回し直せる
+    aiPending = !error;
+  }
 
-  return json(res, 200, { ok: true, id: nippoId, ai, dailyFlags: row.daily_flags });
+  return json(res, 200, {
+    ok: true, id: nippoId, dailyFlags: row.daily_flags,
+    ai: { configured: aiConfigured(), pending: aiPending },
+  });
 }
 
 // ⑧「今日の感謝」は、要件の見直しで ⑤「顧客・チームのためにしたこと」に

@@ -15,6 +15,8 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate, weekStart, isDate } from "../../lib/nippo.js";
 import { analyzeNippo } from "../../lib/ai.js";
+import { shape as shapeEval } from "./evaluate.js";
+import { isConfigured as aiConfigured, CRITERIA } from "../../lib/nippo-eval.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -60,6 +62,19 @@ async function read(req, res, ctx) {
 
   const nippos = dayRows.data || [];
   const ids = nippos.map((n) => n.id);
+
+  // その日の日報のAI評価（1件につき最新のものだけ）
+  let evals = [];
+  if (ids.length) {
+    const { data } = await sb.from("gw_nippo_ai_evals").select("*")
+      .in("nippo_id", ids).order("created_at", { ascending: false });
+    const seen = new Set();
+    for (const e of data || []) {
+      if (seen.has(e.nippo_id)) continue;
+      seen.add(e.nippo_id);
+      evals.push(shapeEval(e));
+    }
+  }
   let replies = [];
   if (ids.length) {
     const { data } = await sb.from("tc_nippo_replies").select("*")
@@ -91,6 +106,8 @@ async function read(req, res, ctx) {
     days,
     nippos: nippos.sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     replies,
+    evals,
+    aiEval: { configured: aiConfigured(), criteria: CRITERIA },
     trend,
     aiAutoReply: setting.data?.value !== false,
     members: staff.map((e) => ({
