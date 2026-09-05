@@ -43,7 +43,8 @@ async function read(req, res, ctx) {
 
   const { data: projects, error } = await sb
     .from("gw_web_projects")
-    .select("id, name, project_name, domain, provider, beacon_key, enabled, sort_order, last_synced_at, sync_source, sync_error")
+    .select("id, name, project_name, domain, provider, beacon_key, enabled, sort_order, " +
+            "ga4_property_id, ga4_measurement_id, last_synced_at, sync_source, sync_error")
     .eq("tenant_id", ctx.tenantId)
     .order("sort_order").order("name")
     .limit(200);
@@ -56,13 +57,23 @@ async function read(req, res, ctx) {
     return json(res, 200, { days, projects: [], sites: [], vercel: vercelConfigured(), block: await blockStats() });
   }
 
-  let dq = sb.from("gw_web_daily").select("project_id, date, pageviews, visitors").gte("date", since).limit(20000);
+  let dq = sb.from("gw_web_daily")
+    .select("project_id, date, source, pageviews, visitors").gte("date", since).limit(20000);
   if (projectId) dq = dq.eq("project_id", projectId);
   const { data: daily } = await dq;
 
+  // 1つのサイトで GA4 と計測タグが両方動いていることがある。
+  // そのまま足すと倍になるので、サイトごとに出どころを1つだけ選んで数える
+  const primary = new Map();
+  for (const p of projects || []) {
+    primary.set(p.id, pickSource((daily || []).filter((d) => d.project_id === p.id)));
+  }
+  const rowsFor = (id) =>
+    (daily || []).filter((d) => d.project_id === id && d.source === primary.get(id));
+
   const sites = (projects || [])
     .filter((p) => !projectId || p.id === projectId)
-    .map((p) => summarize(p, (daily || []).filter((d) => d.project_id === p.id), days));
+    .map((p) => ({ ...summarize(p, rowsFor(p.id), days), source: primary.get(p.id) }));
 
   const out = {
     days,
@@ -75,16 +86,28 @@ async function read(req, res, ctx) {
   // 1サイトの詳細では、流入元と人気ページも添える
   if (projectId) {
     const from = dayString(-(days - 1));
+    const src = primary.get(projectId) || "beacon";
     const [{ data: refs }, { data: pages }] = await Promise.all([
-      sb.from("gw_web_referrers").select("referrer, pageviews").eq("project_id", projectId).gte("date", from).limit(5000),
-      sb.from("gw_web_pages").select("path, pageviews").eq("project_id", projectId).gte("date", from).limit(5000),
+      sb.from("gw_web_referrers").select("referrer, pageviews")
+        .eq("project_id", projectId).eq("source", src).gte("date", from).limit(5000),
+      sb.from("gw_web_pages").select("path, pageviews")
+        .eq("project_id", projectId).eq("source", src).gte("date", from).limit(5000),
     ]);
     out.referrers = topBy(refs || [], "referrer");
     out.pages = topBy(pages || [], "path");
-    out.series = seriesFor((daily || []).filter((d) => d.project_id === projectId), days);
+    out.series = seriesFor(rowsFor(projectId), days);
+    out.source = src;
   }
 
   return json(res, 200, out);
+}
+
+// どの出どころを信じるか。GA4 が入っていればそれ、次に自前の計測タグ。
+// Vercel は取れたら儲けものの位置づけなので最後
+const SOURCE_PRIORITY = ["ga4", "beacon", "vercel"];
+function pickSource(rows) {
+  for (const s of SOURCE_PRIORITY) if (rows.some((r) => r.source === s)) return s;
+  return "beacon";
 }
 
 // 直近N日と、その前のN日を足し合わせて比べる
@@ -193,6 +216,25 @@ async function update(req, res, ctx) {
     if (body.domain && !d) return json(res, 400, { error: "invalid_domain" });
     patch.domain = d;
   }
+  // GA4。プロパティID（数字）と測定ID（G-…）は別物なので、形で取り違えを止める
+  if (body.ga4PropertyId !== undefined) {
+    const v = String(body.ga4PropertyId || "").trim().replace(/^properties\//, "");
+    if (v && !/^\d{6,15}$/.test(v)) {
+      return json(res, 400, {
+        error: "invalid_property_id",
+        hint: "プロパティIDは数字だけです（G- で始まるものは「測定ID」の欄に入れてください）",
+      });
+    }
+    patch.ga4_property_id = v || null;
+  }
+  if (body.ga4MeasurementId !== undefined) {
+    const v = String(body.ga4MeasurementId || "").trim().toUpperCase();
+    if (v && !/^G-[A-Z0-9]{4,20}$/.test(v)) {
+      return json(res, 400, { error: "invalid_measurement_id", hint: "測定IDは G- で始まります" });
+    }
+    patch.ga4_measurement_id = v || null;
+  }
+
   // 合鍵の作り直し。貼り替えるまで、そのサイトの計測は止まる
   if (body.rotateKey) patch.beacon_key = newKey();
 

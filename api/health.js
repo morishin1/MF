@@ -8,6 +8,7 @@ export default function handler(req, res) {
     calendar: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL) && !!process.env.GCAL_CALENDAR_ID,
     slack: !!process.env.SLACK_WEBHOOK_URL,
     vercel: !!process.env.VERCEL_API_TOKEN,
+    ga4: !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_CLIENT_EMAIL),
     googleOauth: !!process.env.GOOGLE_OAUTH_CLIENT_ID && !!process.env.GOOGLE_OAUTH_CLIENT_SECRET,
   };
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -17,8 +18,8 @@ export default function handler(req, res) {
     ok: true,
     service: "kessanpilot-api",
     // どのビルドが動いているかを画面を開かずに判別するための印
-    assetVersion: "20260910a",
-    features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true, notifications: true, invite: true, messageFiles: true, activityLog: true, splitMenus: true, spaces: true, bookings: true, calendarSync: true, expenses: true, workflowSettings: true, slack: true, schedule: true, memberPreview: true, googleCalendarLink: true, leaveRequests: true, ringi: true, library: true, memberMenu: true, webAnalytics: true, beacon: true },
+    assetVersion: "20260910b",
+    features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true, notifications: true, invite: true, messageFiles: true, activityLog: true, splitMenus: true, spaces: true, bookings: true, calendarSync: true, expenses: true, workflowSettings: true, slack: true, schedule: true, memberPreview: true, googleCalendarLink: true, leaveRequests: true, ringi: true, library: true, memberMenu: true, webAnalytics: true, beacon: true, ga4: true },
     env,
     note: env.supabase && env.anthropic
       ? "ready"

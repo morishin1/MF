@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910a">
-  <link rel="stylesheet" href="css/layout.css?v=20260910a">
+  <link rel="stylesheet" href="css/app.css?v=20260910b">
+  <link rel="stylesheet" href="css/layout.css?v=20260910b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -97,16 +97,48 @@
     </div>
     <div id="n-msg" class="err-text"></div>
 
-    <p class="muted" style="font-size:12.5px;margin:10px 0 12px;">
-      各サイトの <code>&lt;/body&gt;</code> の直前に、下の1行を貼ると数字が入りはじめます。
-      <b>ドメインを登録した場合、そのドメインからの計測だけを受け付けます。</b>
-    </p>
-    <div id="tags"></div>
+    <div class="tabs" style="margin-top:16px;">
+      <button class="tab active" onclick="setTagMode('ga4', this)">Googleアナリティクス（推奨）</button>
+      <button class="tab" onclick="setTagMode('beacon', this)">かんたん計測タグ</button>
+    </div>
+
+    <div id="mode-ga4">
+      <div class="banner info" style="margin-bottom:14px;">
+        <span class="material-symbols-outlined">insights</span>
+        <div>
+          <b>1サイトにつき1回だけの準備です。</b>
+          GA4 でプロパティを作り、<b>測定ID</b>（G-…）を貼ってタグを出し、
+          <b>プロパティID</b>（数字）をここに入れると、この画面に数字が入ります。<br>
+          手順は<a href="help.html#analytics">使い方ガイド</a>にあります。
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:150px;">サイト</th>
+            <th style="width:150px;">プロパティID</th>
+            <th style="width:150px;">測定ID</th>
+            <th>サイトに貼る</th>
+            <th style="width:70px;"></th>
+          </tr></thead>
+          <tbody id="ga4-rows"><tr><td colspan="5" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="mode-beacon" class="hidden">
+      <p class="muted" style="font-size:12.5px;margin:10px 0 12px;">
+        GA4 を入れないサイト向けの簡易版です。PV・訪問者・参照元・ページだけを数えます。
+        各サイトの <code>&lt;/body&gt;</code> の直前に、下の1行を貼ってください。
+        <b>ドメインを登録した場合、そのドメインからの計測だけを受け付けます。</b>
+      </p>
+      <div id="tags"></div>
+    </div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910a"></script>
-<script src="js/layout.js?v=20260910a"></script>
+<script src="js/api-client.js?v=20260910b"></script>
+<script src="js/layout.js?v=20260910b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -121,7 +153,8 @@
 
   function setDays(d, btn) {
     days = d;
-    for (const b of document.querySelectorAll(".tabs .tab")) b.classList.toggle("active", b === btn);
+    // タブの行が2つあるので、押した行の中だけを切り替える
+    for (const b of btn.parentElement.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
     load();
   }
 
@@ -143,7 +176,68 @@
     renderRows();
     renderBlock();
     renderTags();
+    renderGa4();
     el("period-label").textContent = days === 1 ? "（今日）" : `（直近${days}日）`;
+  }
+
+  // ---- GA4 の設定 -----------------------------------------------------------
+  const SOURCE_LABEL = { ga4: "GA4", beacon: "計測タグ", vercel: "Vercel" };
+
+  function setTagMode(m, btn) {
+    for (const b of btn.parentElement.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
+    el("mode-ga4").classList.toggle("hidden", m !== "ga4");
+    el("mode-beacon").classList.toggle("hidden", m !== "beacon");
+  }
+
+  function renderGa4() {
+    const rows = data.projects;
+    if (!rows.length) {
+      el("ga4-rows").innerHTML = `<tr><td colspan="5" class="muted">サイトがまだ登録されていません。</td></tr>`;
+      return;
+    }
+    el("ga4-rows").innerHTML = rows.map((p) => `
+      <tr>
+        <td><b>${esc(p.name)}</b>${p.domain ? `<small class="muted">　${esc(p.domain)}</small>` : ""}</td>
+        <td><input type="text" id="pid-${esc(p.id)}" value="${esc(p.ga4_property_id || "")}"
+                   placeholder="123456789" style="margin:0;font-size:12.5px;"></td>
+        <td><input type="text" id="mid-${esc(p.id)}" value="${esc(p.ga4_measurement_id || "")}"
+                   placeholder="G-XXXXXXXXXX" style="margin:0;font-size:12.5px;"></td>
+        <td>${p.ga4_measurement_id
+          ? `<code style="font-size:11px;word-break:break-all;">${esc(ga4Tag(p.ga4_measurement_id))}</code>
+             <button class="btn btn-secondary btn-sm" style="margin-top:5px;"
+                     onclick="copyText(this, ga4Tag('${esc(p.ga4_measurement_id)}'))">コピー</button>`
+          : `<span class="muted" style="font-size:12px;">測定IDを入れるとタグが出ます</span>`}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="saveGa4('${esc(p.id)}', this)">保存</button></td>
+      </tr>`).join("");
+  }
+
+  // GA4 の標準のタグ。gtag.js を読んで、そのプロパティへ送るだけ
+  function ga4Tag(mid) {
+    return `<script async src="https://www.googletagmanager.com/gtag/js?id=${mid}"><\/script>\n`
+      + `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}\n`
+      + `gtag('js',new Date());gtag('config','${mid}');<\/script>`;
+  }
+
+  async function saveGa4(id, btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateAnalyticsSite({
+        id,
+        ga4PropertyId: el(`pid-${id}`).value.trim(),
+        ga4MeasurementId: el(`mid-${id}`).value.trim(),
+      }));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "保存できませんでした");
+    }
+  }
+
+  async function copyText(btn, text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      const before = btn.textContent;
+      btn.textContent = "コピー済";
+      setTimeout(() => { btn.textContent = before; }, 1500);
+    } catch { alert("コピーできませんでした。手で選択してください。"); }
   }
 
   // ---- 全体 -----------------------------------------------------------------
@@ -208,7 +302,8 @@
     }
     el("rows").innerHTML = rows.map((s) => {
       const state = !s.enabled ? '<span class="kp-chip archived">非表示</span>'
-        : (s.hasData ? '<span class="kp-chip approved">計測中</span>'
+        : (s.hasData
+          ? `<span class="kp-chip approved">${esc(SOURCE_LABEL[s.source] || "計測中")}</span>`
           : '<span class="kp-chip draft">計測未設定</span>');
       const color = s.growth === null ? "var(--muted)" : (s.growth >= 0 ? "#256b36" : "#b3261e");
       return `
@@ -351,8 +446,14 @@
   async function sync(btn) {
     try {
       const r = await KPLayout.busy(btn, "取り込み中…", () => API.syncAnalytics());
+      const g = r.ga4;
+      if (g && g.failed) {
+        alert(`GA4 から ${g.synced} サイト取り込みました。\n`
+          + `${g.failed} サイトは取得できませんでした：\n`
+          + (g.details || []).map((d) => `・${d.name}：${d.reason}`).join("\n"));
+      }
       if (r.skipped === "no_token") {
-        alert("Vercel のトークンが未設定です。\n" + (r.hint || ""));
+        if (!g || !g.synced) alert("Vercel のトークンが未設定です。\n" + (r.hint || ""));
       } else if (r.unavailable) {
         alert(`サイト ${r.projects} 件を取り込みました。\n`
           + `うち ${r.unavailable} 件は数値を取得できませんでした。\n\n`

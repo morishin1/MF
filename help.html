@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910a">
+  <link rel="stylesheet" href="css/app.css?v=20260910b">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -505,21 +505,66 @@
       <li>8grp.co.jp の<b>口コミサイトブロック件数</b>（本日／7日／30日）も同じ画面に出ます</li>
     </ul>
 
-    <h3><span class="material-symbols-outlined">code</span>数字を入れる（計測タグ）</h3>
+    <h3><span class="material-symbols-outlined">insights</span>数字を入れる（Googleアナリティクス）</h3>
     <div class="banner warn" style="margin-bottom:14px;">
       <span class="material-symbols-outlined">info</span>
       <div><b>VercelのWeb Analyticsには、外部から数値を取り出せる公式なAPIがありません。</b>
-        そのため、数字は<b>自前の計測タグ</b>で数えます。サイト一覧はVercelから自動で取れます。</div>
+        サイト一覧はVercelから自動で取れますが、数字は別に用意する必要があります。
+        <b>Googleアナリティクス（GA4）</b>を入れるのがおすすめです。</div>
     </div>
-    <ol class="lead" style="margin:0 0 12px;padding-left:20px;">
-      <li>画面いちばん下の「サイトの登録と計測タグ」で、サイトごとの<b>1行のタグ</b>をコピーする</li>
-      <li>そのサイトの <code>&lt;/body&gt;</code> の直前に貼って公開する</li>
-      <li>数分後からPVが入りはじめます（Vercelにないサイトも「追加」から登録できます）</li>
-    </ol>
-    <p class="lead" style="margin:0 0 12px;">
-      計測タグが送るのは<b>ページのパス・参照元のホスト名・その日はじめての訪問かどうか</b>だけです。
-      IPアドレスも、個人を追う印も持ちません。ドメインを登録すると、<b>そのドメインからの計測だけ</b>受け付けます。
+    <p class="lead" style="margin-top:0;">
+      1サイトにつき1回だけの準備です。<b>2回目からは5分もかかりません。</b>
     </p>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>GA4 でプロパティを作る</b><br>
+        <a href="https://analytics.google.com/" target="_blank" rel="noopener">Googleアナリティクス</a> →
+        管理 → プロパティを作成 → データストリームで「ウェブ」を選び、サイトのURLを入れます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>測定ID（G-…）をポータルに入れる</b><br>
+        作ったデータストリームの画面に <code>G-XXXXXXXXXX</code> が出ます。これを
+        「アクセス分析」→「サイトの登録と計測タグ」→ <b>測定ID</b> の欄に入れて保存すると、
+        <b>貼り付ける用のタグがその場で出ます</b>。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>タグをサイトに貼る</b><br>
+        出てきた2行を、そのサイトの <code>&lt;/head&gt;</code> の直前に貼って公開します。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">4</div>
+      <div class="body"><b>プロパティID（数字）もポータルに入れる</b><br>
+        GA4 → 管理 → プロパティの詳細 に <b>プロパティID</b>（<code>123456789</code> のような数字）があります。
+        これを<b>プロパティID</b>の欄に入れて保存します。<br>
+        <span class="muted">測定ID（G-…）とプロパティID（数字）は<b>別物</b>です。取り違えると保存できません。</span></div>
+    </div>
+    <div class="stepbox">
+      <div class="num">5</div>
+      <div class="body"><b>サービスアカウントを閲覧者として追加する</b>（サイトごとに1回）<br>
+        GA4 → 管理 → <b>プロパティのアクセス管理</b> → 右上の「＋」→
+        サービスアカウントのメールアドレス（<code>…@….iam.gserviceaccount.com</code>）を
+        <b>「閲覧者」</b>で追加します。<br>
+        <span class="muted">これをしないと、ポータル側は 403 で数字を取れません。</span></div>
+    </div>
+    <p class="lead" style="margin:0 0 12px;">
+      あわせて、Google Cloud で <b>「Google Analytics Data API」を有効</b>にしてください（<b>全体で1回だけ</b>）。<br>
+      ここまで済むと、1時間ごとに数字が入り、「いま取り込む」ですぐ反映されます。
+    </p>
+
+    <h3><span class="material-symbols-outlined">bolt</span>かんたん計測タグ（GA4を入れないサイト向け）</h3>
+    <p class="lead" style="margin-top:0;">
+      GA4 を用意しないサイトには、ポータル独自の<b>1行のタグ</b>が使えます。
+      分かるのは <b>PV・訪問者・参照元・人気ページ</b>だけですが、貼るだけで動きます。
+      「サイトの登録と計測タグ」→「<b>かんたん計測タグ</b>」タブからコピーしてください。
+    </p>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>送るのは<b>ページのパス・参照元のホスト名・その日はじめての訪問かどうか</b>だけ。
+        IPアドレスも、個人を追う印も持ちません</li>
+      <li>ドメインを登録すると、<b>そのドメインからの計測だけ</b>を受け付けます</li>
+      <li>同じサイトで GA4 と両方動いていても、<b>二重には数えません</b>（GA4を優先します）</li>
+    </ul>
 
     <h3><span class="material-symbols-outlined">key</span>Vercelとの連携（任意）</h3>
     <p class="lead" style="margin-top:0;">

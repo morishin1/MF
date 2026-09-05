@@ -14,6 +14,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { listProjects, fetchAnalytics, isConfigured } from "../../lib/vercel.js";
+import { fetchAll as fetchGa4, isConfigured as ga4Configured } from "../../lib/ga4.js";
 import crypto from "node:crypto";
 
 const DAYS = 30;   // さかのぼって取り直す日数
@@ -24,19 +25,23 @@ export default async function handler(req, res) {
   const tenantId = await authorize(req, res);
   if (!tenantId) return;
 
+  const sb = admin();
+
+  // GA4 は Vercel と関係なく回す。トークンが無くても GA4 の数字は取り込める
+  const ga4 = await syncGa4(sb, tenantId);
+
   if (!isConfigured()) {
     return json(res, 200, {
-      ok: true, skipped: "no_token",
-      hint: "VERCEL_API_TOKEN が未設定です。サイトは手で追加し、計測タグを貼れば数字は入ります",
+      ok: true, skipped: "no_token", ga4,
+      hint: "VERCEL_API_TOKEN が未設定です。サイト一覧の自動取得は使えませんが、GA4と計測タグの数字は入ります",
     });
   }
 
-  const sb = admin();
   let projects;
   try {
     projects = await listProjects();
   } catch (e) {
-    return json(res, 502, { error: "vercel_failed", detail: String(e?.message || e) });
+    return json(res, 502, { error: "vercel_failed", detail: String(e?.message || e), ga4 });
   }
 
   // 1) 一覧を反映。名前は運用側で変えられるようにしたいので、
@@ -105,7 +110,73 @@ export default async function handler(req, res) {
     unavailable: unavailable.length,
     // どのサイトがなぜ取れなかったかを返す。画面で理由を出せるように
     details: unavailable.slice(0, 30),
+    ga4,
   });
+}
+
+/**
+ * GA4 のプロパティIDが入っているサイトを回して取り込む。
+ * 1件失敗しても他は続ける。原因はサイトごとに違う（権限、ID違い）ので、
+ * まとめて止めると直すべき相手が分からなくなる。
+ */
+async function syncGa4(sb, tenantId) {
+  if (!ga4Configured()) return { skipped: "no_service_account", synced: 0 };
+
+  const { data: targets } = await sb
+    .from("gw_web_projects")
+    .select("id, name, ga4_property_id")
+    .eq("tenant_id", tenantId)
+    .not("ga4_property_id", "is", null)
+    .limit(100);
+  if (!targets?.length) return { skipped: "no_property", synced: 0 };
+
+  const to = dayString(0);
+  const from = dayString(-(DAYS - 1));
+  let synced = 0;
+  const failed = [];
+
+  for (const t of targets) {
+    const r = await fetchGa4(t.ga4_property_id, { from, to });
+    if (r.unavailable) {
+      failed.push({ name: t.name, reason: r.unavailable });
+      await sb.from("gw_web_projects").update({
+        last_synced_at: new Date().toISOString(), sync_source: "ga4", sync_error: r.unavailable,
+      }).eq("id", t.id);
+      continue;
+    }
+
+    const now = new Date().toISOString();
+    if (r.days.length) {
+      await sb.from("gw_web_daily").upsert(r.days.map((d) => ({
+        project_id: t.id, date: d.date, source: "ga4",
+        pageviews: d.pageviews, visitors: d.visitors, updated_at: now,
+      })), { onConflict: "project_id,date,source" });
+    }
+    // ページと流入元は期間まとめの数字しか返らないので、期間の最終日に寄せて入れる。
+    // 日別に割り戻すと、実際には無い日の数字を作ってしまう
+    if (r.pages.length) {
+      await sb.from("gw_web_pages").upsert(r.pages.map((p) => ({
+        project_id: t.id, date: to, source: "ga4", path: p.path, pageviews: p.pageviews,
+      })), { onConflict: "project_id,date,source,path" });
+    }
+    if (r.referrers.length) {
+      await sb.from("gw_web_referrers").upsert(r.referrers.map((x) => ({
+        project_id: t.id, date: to, source: "ga4", referrer: x.referrer, pageviews: x.pageviews,
+      })), { onConflict: "project_id,date,source,referrer" });
+    }
+
+    await sb.from("gw_web_projects").update({
+      last_synced_at: now, sync_source: "ga4", sync_error: null,
+    }).eq("id", t.id);
+    synced++;
+  }
+
+  return { synced, failed: failed.length, details: failed.slice(0, 20) };
+}
+
+// 日本時間での「n日前」
+function dayString(offset) {
+  return new Date(Date.now() + 9 * 3600000 + offset * 86400000).toISOString().slice(0, 10);
 }
 
 /**
