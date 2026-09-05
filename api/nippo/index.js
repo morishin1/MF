@@ -181,9 +181,17 @@ async function saveThanks(sb, user, ctx, nippoId, date, list) {
   }
   if (!rows.length) return { sent: 0 };
 
-  const { error } = await sb.from("tc_thanks").upsert(rows, { ignoreDuplicates: true });
-  if (error) return { sent: 0, error: error.message };
-  return { sent: rows.length };
+  // 1件ずつ入れる。重複を止めているのは (送り主, 宛先, 日付, 本文) の式インデックスで、
+  // これは PostgREST の on_conflict では指定できない。まとめて入れると、
+  // 出し直しで1件ぶつかっただけで残り全部が入らなくなる。
+  let sent = 0;
+  for (const row of rows) {
+    const { error } = await sb.from("tc_thanks").insert(row);
+    if (!error) sent++;
+    else if (error.code !== "23505") return { sent, error: error.message };
+    // 23505 = 同じ日に同じ相手へ同じ文面。日報を出し直しただけなので数えない
+  }
+  return { sent };
 }
 
 // ---- 週次レビュー（本人の振り返り4問） ---------------------------------------
