@@ -260,10 +260,13 @@
   // from/to は ISO 文字列。1画面ぶん（週や月）をまとめて取る
   const schedule = (from, to) =>
     api(`/api/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-  const createEvent = (ev) =>
-    api("/api/schedule", { method: "POST", body: ev }).then((d) => d.event);
-  const updateEvent = (ev) =>
-    api("/api/schedule", { method: "PATCH", body: ev }).then((d) => d.event);
+  // pushToGoogle:true を添えると、保存と同時に本人の Google カレンダーへ入る。
+  // 書き出しの結果は d.google に入るので、丸ごと返す
+  const createEvent = (ev) => api("/api/schedule", { method: "POST", body: ev });
+  const updateEvent = (ev) => api("/api/schedule", { method: "PATCH", body: ev });
+  // action: "push"（入れる／直す）| "unpush"（Google側から取り消す）
+  const syncEventToGoogle = (id, action = "push") =>
+    api("/api/schedule", { method: "POST", body: { action, id } });
   const deleteEvent = (id) =>
     api(`/api/schedule?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
@@ -579,7 +582,7 @@
     listAssets, createAsset, updateAsset, deleteAsset,
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
-    schedule, createEvent, updateEvent, deleteEvent, googleLink, googleUnlink,
+    schedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle, googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct,
     listBlocks, createBlock, updateBlock, deleteBlock,

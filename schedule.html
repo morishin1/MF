@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910e">
-  <link rel="stylesheet" href="css/layout.css?v=20260910e">
+  <link rel="stylesheet" href="css/app.css?v=20260910f">
+  <link rel="stylesheet" href="css/layout.css?v=20260910f">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -90,6 +90,13 @@
         <textarea id="f-body" rows="3" placeholder="持ち物、相手先の連絡先など"></textarea>
       </div>
 
+      <div id="f-push-wrap" class="hidden" style="margin-bottom:14px;">
+        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:normal;">
+          <input id="f-push" type="checkbox" style="width:auto;margin:0;">
+          保存したら、そのままGoogleカレンダーにも入れる
+        </label>
+      </div>
+
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button id="btn-save" class="btn btn-primary" onclick="save(this)">
           <span class="material-symbols-outlined icon-inline">save</span>保存
@@ -103,15 +110,17 @@
       <h2><span class="material-symbols-outlined">sync</span>Googleカレンダーとの連携</h2>
       <div id="gcal"><div class="empty">確認中…</div></div>
       <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
-        読み取りだけの連携です。ポータルからGoogleカレンダーの予定を作ったり
-        書き換えたりはしません。連携した予定は<b>あなたにしか見えません</b>。
+        連携すると、Googleカレンダーの予定をこの画面に出せます。あわせて、
+        ここで入れた予定を<b>あなたのGoogleカレンダーへ書き出す</b>ことができます。
+        書き出すのは、あなたがボタンを押した予定だけです。
+        連携した予定は<b>あなたにしか見えません</b>（管理者・経営者にも見えません）。
       </p>
     </div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910e"></script>
-<script src="js/layout.js?v=20260910e"></script>
+<script src="js/api-client.js?v=20260910f"></script>
+<script src="js/layout.js?v=20260910f"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -196,6 +205,9 @@
     const from = `${ymd(weekStart)}T00:00:00+09:00`;
     const to = `${ymd(addDays(weekStart, 7))}T00:00:00+09:00`;
     try {
+      // data.googleLink は書き出しボタンを出すかどうかの判断に使う。
+      // 連携カードの表示は loadGoogle() が持っている（あちらは
+      // OAuth 自体の設定有無まで見ているので、こちらで上書きしない）
       data = await API.schedule(from, to);
       render();
     } catch (e) {
@@ -257,10 +269,12 @@
               ${e.all_day ? "" : `<small>${esc(hhmm(e.ends_at))}</small>`}</span>
             <span class="ct">
               <b>${esc(e.title)}</b>
-              <small>${esc(CATEGORY_LABEL[e.category] || "")}${e.location ? `／${esc(e.location)}` : ""}</small>
+              <small>${esc(CATEGORY_LABEL[e.category] || "")}${e.location ? `／${esc(e.location)}` : ""}${
+                e.gcal_event_id ? '／<span style="color:var(--primary);font-weight:600;">Googleに反映済み</span>' : ""}</small>
               ${e.body ? `<small>${esc(e.body)}</small>` : ""}
             </span>
             <span class="row-actions">
+              ${gcalButton(e)}
               <button class="icon-btn" title="直す" onclick="openForm('${esc(e.id)}')">
                 <span class="material-symbols-outlined">edit</span></button>
               <button class="icon-btn" title="消す" onclick="remove('${esc(e.id)}')">
@@ -327,6 +341,39 @@
       : `<div class="empty">この日の予定はありません。</div>`;
   }
 
+  // ---- Googleカレンダーへの書き出し -----------------------------------------
+  // 連携していない・読むだけの権限でつないである場合は、ボタン自体を出さない。
+  // 押してから「できません」と言われるより、出さないほうが分かりやすい
+  function gcalButton(e) {
+    const g = data.googleLink || {};
+    if (!g.connected || !g.canWrite) return "";
+    return e.gcal_event_id
+      ? `<button class="icon-btn" title="Googleカレンダーから取り消す"
+                 onclick="pushToGoogle('${esc(e.id)}', true, this)">
+           <span class="material-symbols-outlined" style="color:var(--primary);">event_available</span></button>`
+      : `<button class="icon-btn" title="Googleカレンダーに入れる"
+                 onclick="pushToGoogle('${esc(e.id)}', false, this)">
+           <span class="material-symbols-outlined">event_upcoming</span></button>`;
+  }
+
+  async function pushToGoogle(id, undo, btn) {
+    const e = (data.events || []).find((x) => x.id === id);
+    if (undo && !confirm(`「${e ? e.title : ""}」をGoogleカレンダーから取り消します。\n社内の予定は残ります。よろしいですか？`)) return;
+    // アイコンだけのボタンなので、KPLayout.busy の文字は入らない。
+    // アイコンを回転に差し替えて待たせる
+    const before = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined kp-spin">progress_activity</span>';
+    try {
+      await API.syncEventToGoogle(id, undo ? "unpush" : "push");
+      await load();
+    } catch (err) {
+      btn.innerHTML = before;
+      btn.disabled = false;
+      alert(err.hint || err.detail || err.message || "Googleカレンダーに反映できませんでした");
+    }
+  }
+
   // ---- 入力 -----------------------------------------------------------------
   function openForm(id) {
     editingId = id || null;
@@ -354,6 +401,13 @@
       el("f-start").value = "10:00";
       el("f-end").value = "11:00";
     }
+    // Googleへ書き出せる状態のときだけチェック欄を出す
+    const g = data.googleLink || {};
+    el("f-push-wrap").classList.toggle("hidden", !(g.connected && g.canWrite));
+    // 既に書き出してある予定は、保存すれば自動で向こうも直る。外させない
+    el("f-push").checked = e ? !!e.gcal_event_id : false;
+    el("f-push").disabled = !!(e && e.gcal_event_id);
+
     onAllDayChange();
     el("form-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
@@ -391,9 +445,16 @@
       endsAt: `${date}T${end}:00+09:00`,
     };
 
+    payload.pushToGoogle = !el("f-push-wrap").classList.contains("hidden") && el("f-push").checked;
+
     try {
-      await KPLayout.busy(btn, "保存中…", () =>
+      const res = await KPLayout.busy(btn, "保存中…", () =>
         editingId ? API.updateEvent({ id: editingId, ...payload }) : API.createEvent(payload));
+      // 社内には保存できたが Google へ入らなかった場合。黙って落とさない
+      if (res?.google && res.google.ok === false) {
+        alert("予定は保存しましたが、Googleカレンダーには入りませんでした。\n\n"
+          + (res.google.hint || res.google.detail || ""));
+      }
       closeForm();
       selected = date;
       // 週の外に保存したら、その週へ移す
@@ -426,7 +487,8 @@
     if (!s.connected) {
       el("gcal").innerHTML = `
         <p class="muted" style="font-size:13px;margin:0 0 12px;">
-          自分のGoogleカレンダーの予定を、この画面にも出せます。
+          自分のGoogleカレンダーの予定をこの画面に出したり、ここで入れた予定を
+          Googleカレンダーへ書き出したりできます。
           ボタンを押すとGoogleの確認画面が開くので、<b>会社のアカウント</b>で許可してください。
         </p>
         <button id="gcal-btn" class="btn btn-primary" onclick="connectGoogle(this)">
@@ -440,12 +502,22 @@
         <span class="material-symbols-outlined">check_circle</span>
         <div><b>${esc(s.email || "Googleアカウント")}</b> と連携しています。</div>
       </div>
+      ${s.canWrite ? "" : `
+        <div class="banner warn" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined">upload</span>
+          <div><b>書き出しはまだ使えません。</b>
+            読み取りだけの許可でつないでいます。「つなぎ直す」を押して、
+            Googleの画面で<b>予定の追加・変更</b>にも許可を出してください。</div>
+        </div>`}
       ${s.error ? `
         <div class="banner warn" style="margin-bottom:12px;">
           <span class="material-symbols-outlined">warning</span>
           <div>予定を取得できませんでした。連携し直してください。<br>
             <span class="muted" style="font-size:12px;">${esc(s.error)}</span></div>
         </div>` : ""}
+      <button class="btn ${s.canWrite ? "btn-secondary" : "btn-primary"}" onclick="connectGoogle(this)">
+        <span class="material-symbols-outlined icon-inline">sync</span>つなぎ直す
+      </button>
       <button class="btn btn-secondary" onclick="disconnectGoogle(this)">
         <span class="material-symbols-outlined icon-inline">link_off</span>連携をやめる
       </button>`;
@@ -474,8 +546,15 @@
   async function remove(id) {
     const e = (data.events || []).find((x) => x.id === id);
     if (!confirm(`「${e ? e.title : ""}」を消します。よろしいですか？`)) return;
-    try { await API.deleteEvent(id); await load(); }
-    catch (err) { alert(err.detail || err.message || "消せませんでした"); }
+    try {
+      const res = await API.deleteEvent(id);
+      // 社内からは消えたが Google に残った場合。黙って食べない
+      if (res?.google && res.google.ok === false) {
+        alert("社内の予定は消しましたが、Googleカレンダー側は消せませんでした。\n\n"
+          + (res.google.hint || res.google.detail || "") + "\n\nGoogleカレンダーで直接消してください。");
+      }
+      await load();
+    } catch (err) { alert(err.detail || err.message || "消せませんでした"); }
   }
 </script>
 
