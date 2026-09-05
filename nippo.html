@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910d">
-  <link rel="stylesheet" href="css/layout.css?v=20260910d">
+  <link rel="stylesheet" href="css/app.css?v=20260910e">
+  <link rel="stylesheet" href="css/layout.css?v=20260910e">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -68,101 +68,118 @@
       <input id="f-date" type="date" style="width:auto;margin:0 0 0 auto;">
     </h2>
 
+    <!-- 毎日書く4つ。ここだけで提出できる -->
     <div class="np-sec">
       <label>今日の調子</label>
       <div class="np-moods" id="f-mood"></div>
     </div>
 
     <div class="np-sec">
-      <label>① 今日の目的<span class="hint">何を前に進めるか。作業の記録ではなく前進の記録にするための項目です</span></label>
-      <div class="np-areas" id="f-area"></div>
-      <textarea id="f-purpose" rows="2" placeholder="例：A社の提案を、見積提示まで進める"></textarea>
-    </div>
-
-    <div class="np-sec">
-      <label>今週のKGI（自分が最終的に責任を持つ結果）</label>
-      <input id="f-kgi" type="text" placeholder="例：今週中に3社へ提案書を提出する">
-      <div class="np-row" style="margin-top:6px;">
-        <input id="f-done" type="number" step="0.5" placeholder="達成" style="width:100px;">
-        <span style="align-self:center;color:var(--muted);">/</span>
-        <input id="f-total" type="number" step="0.5" placeholder="目標" style="width:100px;">
-        <span id="f-pct" style="align-self:center;font-size:13px;font-weight:700;color:var(--primary-dark);"></span>
-      </div>
-    </div>
-
-    <div class="np-sec">
-      <label>② 今日のKPI<span class="hint">目標と実績。数字が出せるものだけでかまいません</span></label>
-      <div class="np-rows" id="f-kpis"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('kpis')">
-        <span class="material-symbols-outlined icon-inline">add</span>行を足す
-      </button>
-    </div>
-
-    <div class="np-sec">
-      <label>チームKGI<span class="hint">チーム全体の週目標に対する現在地（分かる範囲で）</span></label>
-      <div class="np-rows" id="f-team"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('team')">
-        <span class="material-symbols-outlined icon-inline">add</span>行を足す
-      </button>
-    </div>
-
-    <div class="np-sec">
-      <label>③ 今日の成果<span class="hint">どの段階まで進めたか</span></label>
+      <label>今日進んだこと<span class="hint">やった作業ではなく、どこまで進んだか</span></label>
       <textarea id="f-today" rows="3" placeholder="例：B社と打合せ。要件が固まり、見積の作成に着手"></textarea>
     </div>
 
     <div class="np-sec">
-      <label>次の工程へ進めた結果<span class="hint">認知集客→初回対応→商談提案→導入支援→成果確認→事例化 のどこが動いたか</span></label>
-      <textarea id="f-funnel" rows="2" placeholder="例：初回対応 → 商談提案 が2件"></textarea>
+      <label>困っていること・止まっていること<span class="hint">無ければ空でかまいません</span></label>
+      <textarea id="f-struggle" rows="2" placeholder="例：A社の返事待ちで見積が出せない"></textarea>
     </div>
 
     <div class="np-sec">
-      <label>④ 次工程への引き継ぎ<span class="hint">誰に渡したかを必ず書きます。バトンが実際に渡ったかを残すための項目です</span></label>
-      <div class="np-rows" id="f-handoff"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('handoff')">
-        <span class="material-symbols-outlined icon-inline">add</span>行を足す
+      <label>明日やること<span class="hint">数字・期限まで書けると翌日が楽になります</span></label>
+      <textarea id="f-tomorrow" rows="2" placeholder="例：C社の見積を12時までに送る"></textarea>
+    </div>
+
+    <!-- ここから先は書きたい日だけ。開いた状態は次回も覚えている -->
+    <div style="border-top:1px solid var(--border);margin:4px 0 16px;padding-top:14px;">
+      <button class="btn btn-secondary btn-sm" onclick="toggleMore()">
+        <span class="material-symbols-outlined icon-inline" id="more-caret">expand_more</span>
+        <span id="more-label">くわしく書く（任意）</span>
       </button>
+      <span class="muted" style="font-size:11.5px;margin-left:8px;" id="more-count"></span>
     </div>
 
-    <div class="np-sec">
-      <label>⑤ 止まっていること<span class="hint">誰のボールで止まっているかまで書くと、翌日に動きます</span></label>
-      <div class="np-rows" id="f-stuck"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('stuck')">
-        <span class="material-symbols-outlined icon-inline">add</span>行を足す
-      </button>
-    </div>
+    <div id="more" class="hidden">
+      <div class="np-sec">
+        <label>今日の感謝<span class="hint">選んだ相手の日報画面に届きます</span></label>
+        <div class="np-rows" id="f-thanks"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('thanks')">
+          <span class="material-symbols-outlined icon-inline">add</span>行を足す
+        </button>
+      </div>
 
-    <div class="np-sec">
-      <label>⑤-2 未達の原因</label>
-      <textarea id="f-miss" rows="2" placeholder="目標に届かなかったとき、その理由"></textarea>
-    </div>
+      <div class="np-sec">
+        <label>今日の目的<span class="hint">何を前に進めるつもりだったか</span></label>
+        <div class="np-areas" id="f-area"></div>
+        <textarea id="f-purpose" rows="2" placeholder="例：A社の提案を、見積提示まで進める"></textarea>
+      </div>
 
-    <div class="np-sec">
-      <label>⑥ 今日の挑戦・改善<span class="hint">昨日と変えたこと</span></label>
-      <textarea id="f-challenge" rows="2"></textarea>
-    </div>
+      <div class="np-sec">
+        <label>今週のKGI（自分が最終的に責任を持つ結果）</label>
+        <input id="f-kgi" type="text" placeholder="例：今週中に3社へ提案書を提出する">
+        <div class="np-row" style="margin-top:6px;">
+          <input id="f-done" type="number" step="0.5" placeholder="達成" style="width:100px;">
+          <span style="align-self:center;color:var(--muted);">/</span>
+          <input id="f-total" type="number" step="0.5" placeholder="目標" style="width:100px;">
+          <span id="f-pct" style="align-self:center;font-size:13px;font-weight:700;color:var(--primary-dark);"></span>
+        </div>
+      </div>
 
-    <div class="np-sec">
-      <label>⑦ 今日の小さな成功<span class="hint">昨日よりできるようになったこと</span></label>
-      <textarea id="f-smallwin" rows="2"></textarea>
-    </div>
+      <div class="np-sec">
+        <label>今日のKPI<span class="hint">数字が出せるものだけで結構です</span></label>
+        <div class="np-rows" id="f-kpis"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('kpis')">
+          <span class="material-symbols-outlined icon-inline">add</span>行を足す
+        </button>
+      </div>
 
-    <div class="np-sec">
-      <label>⑧ 今日の感謝<span class="hint">選んだ相手の日報画面に届きます</span></label>
-      <div class="np-rows" id="f-thanks"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('thanks')">
-        <span class="material-symbols-outlined icon-inline">add</span>行を足す
-      </button>
-    </div>
+      <div class="np-sec">
+        <label>チームKGI<span class="hint">チーム全体の週目標に対する現在地（分かる範囲で）</span></label>
+        <div class="np-rows" id="f-team"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('team')">
+          <span class="material-symbols-outlined icon-inline">add</span>行を足す
+        </button>
+      </div>
 
-    <div class="np-sec">
-      <label>⑨ 顧客・会社への貢献<span class="hint">誰の何を前に進めたか</span></label>
-      <textarea id="f-contrib" rows="2"></textarea>
-    </div>
+      <div class="np-sec">
+        <label>次の工程へ進めた結果<span class="hint">認知集客→初回対応→商談提案→導入支援→成果確認→事例化 のどこが動いたか</span></label>
+        <textarea id="f-funnel" rows="2" placeholder="例：初回対応 → 商談提案 が2件"></textarea>
+      </div>
 
-    <div class="np-sec">
-      <label>⑩ 明日の最優先<span class="hint">数字・期限・完了条件まで書く</span></label>
-      <textarea id="f-tomorrow" rows="2" placeholder="例：C社の見積を12時までに送る（金額・納期を確定させる）"></textarea>
+      <div class="np-sec">
+        <label>次工程への引き継ぎ<span class="hint">誰に渡したかを書くと、バトンが渡ったことが残ります</span></label>
+        <div class="np-rows" id="f-handoff"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('handoff')">
+          <span class="material-symbols-outlined icon-inline">add</span>行を足す
+        </button>
+      </div>
+
+      <div class="np-sec">
+        <label>止まっていること（内訳）<span class="hint">誰のボールで止まっているかまで書くと、翌日に動きます</span></label>
+        <div class="np-rows" id="f-stuck"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('stuck')">
+          <span class="material-symbols-outlined icon-inline">add</span>行を足す
+        </button>
+      </div>
+
+      <div class="np-sec">
+        <label>未達の原因</label>
+        <textarea id="f-miss" rows="2" placeholder="目標に届かなかったとき、その理由"></textarea>
+      </div>
+
+      <div class="np-sec">
+        <label>今日の挑戦・改善<span class="hint">昨日と変えたこと</span></label>
+        <textarea id="f-challenge" rows="2"></textarea>
+      </div>
+
+      <div class="np-sec">
+        <label>今日の小さな成功<span class="hint">昨日よりできるようになったこと</span></label>
+        <textarea id="f-smallwin" rows="2"></textarea>
+      </div>
+
+      <div class="np-sec">
+        <label>顧客・会社への貢献<span class="hint">誰の何を前に進めたか</span></label>
+        <textarea id="f-contrib" rows="2"></textarea>
+      </div>
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -208,8 +225,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910d"></script>
-<script src="js/layout.js?v=20260910d"></script>
+<script src="js/api-client.js?v=20260910e"></script>
+<script src="js/layout.js?v=20260910e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -237,6 +254,7 @@
     el("f-date").max = jstToday();
     el("f-date").addEventListener("change", () => load(el("f-date").value));
     for (const id of ["f-done", "f-total"]) el(id).addEventListener("input", updatePct);
+    setMore(moreOpen());
     await load(jstToday());
   }
 
@@ -320,18 +338,20 @@
     area = AREAS.includes(n?.purpose_area) ? n.purpose_area : null;
     renderMoodArea();
 
+    v("f-today", n?.today_work);
+    v("f-struggle", n?.struggle);
+    v("f-tomorrow", n?.tomorrow_plan);
     v("f-purpose", n?.purpose);
     v("f-kgi", n?.kgi_week);
     v("f-done", n?.progress_done);
     v("f-total", n?.progress_total);
-    v("f-today", n?.today_work);
     v("f-funnel", n?.funnel);
     v("f-miss", n?.miss_reason);
     v("f-challenge", n?.challenge);
     v("f-smallwin", n?.small_win);
     v("f-contrib", n?.contribution);
-    v("f-tomorrow", n?.tomorrow_plan);
     updatePct();
+    updateMoreCount();
 
     // 「誰に」の候補一覧は1つだけ置く
     if (!document.getElementById("dl-members")) {
@@ -354,6 +374,32 @@
     el("f-pct").textContent = (t > 0 && Number.isFinite(d)) ? `${Math.round((d / t) * 100)}%` : "";
   }
 
+  // --- くわしく書く -----------------------------------------------------------
+  // 毎日書くのは上の4つだけ。残りはここに畳んである。
+  // 開いた状態は覚えておく。毎日きちんと書く人に、毎日開かせないため
+  const MORE_KEY = "kp_nippo_more";
+  const moreOpen = () => { try { return localStorage.getItem(MORE_KEY) === "1"; } catch { return false; } };
+
+  function setMore(open) {
+    el("more").classList.toggle("hidden", !open);
+    el("more-caret").textContent = open ? "expand_less" : "expand_more";
+    el("more-label").textContent = open ? "とじる" : "くわしく書く（任意）";
+    try { localStorage.setItem(MORE_KEY, open ? "1" : "0"); } catch { /* 覚えられなくても動く */ }
+  }
+
+  function toggleMore() { setMore(el("more").classList.contains("hidden")); }
+
+  // 畳んだままでも、中に書いてあることがあると分かるようにする。
+  // 「書いたはずなのに消えた」と思わせないため
+  function updateMoreCount() {
+    const filled = ["f-purpose", "f-kgi", "f-funnel", "f-miss", "f-challenge", "f-smallwin", "f-contrib"]
+      .filter((id) => el(id).value.trim()).length
+      + ["kpis", "team", "handoff", "stuck", "thanks"]
+        .filter((k) => collectRows(k).some((r) => Object.values(r).some(Boolean))).length;
+    el("more-count").textContent = filled ? `${filled} 項目に記入あり` : "";
+    if (filled && el("more").classList.contains("hidden") && !moreOpen()) setMore(true);
+  }
+
   // --- 提出 -------------------------------------------------------------------
   async function submit(btn) {
     const msg = el("f-msg");
@@ -371,6 +417,7 @@
       kpis: collectRows("kpis"),
       team_kgi: collectRows("team"),
       today_work: el("f-today").value,
+      struggle: el("f-struggle").value,
       funnel: el("f-funnel").value,
       handoff: collectRows("handoff"),
       stuck: collectRows("stuck"),

@@ -14,6 +14,7 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate, weekStart, isDate } from "../../lib/nippo.js";
+import { analyzeNippo } from "../../lib/ai.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -116,6 +117,45 @@ async function act(req, res, ctx, user) {
       if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
       if (!data) return json(res, 404, { error: "nippo_not_found" });
       return json(res, 200, { ok: true, confirmed });
+    }
+
+    case "ai_draft": {
+      // 1人ぶんの日報を AI に読ませ、気づいた点と返信の下書きを返す。
+      // ここでは保存も送信もしない。送るかどうかは人が決める
+      if (!body?.nippoId) return json(res, 400, { error: "invalid_body", required: ["nippoId"] });
+
+      const { data: today } = await sb.from("tc_nippo").select("*").eq("id", body.nippoId).maybeSingle();
+      if (!today) return json(res, 404, { error: "nippo_not_found" });
+
+      // 同じ人の直近ぶんと、これまで送った返信。
+      // 今日1日だけ見ても「先週から止まったまま」に気づけないため
+      const [{ data: recent }, { data: past }] = await Promise.all([
+        sb.from("tc_nippo").select("*").eq("user_id", today.user_id)
+          .lt("work_date", today.work_date).order("work_date", { ascending: false }).limit(5),
+        sb.from("tc_nippo_replies").select("body, nippo_id, kind, draft_only")
+          .eq("kind", "admin").eq("draft_only", false)
+          .order("created_at", { ascending: false }).limit(30),
+      ]);
+
+      const mineIds = new Set([today.id, ...(recent || []).map((r) => r.id)]);
+      const pastReplies = (past || []).filter((r) => mineIds.has(r.nippo_id)).map((r) => r.body);
+
+      try {
+        const result = await analyzeNippo({ today, recent: recent || [], pastReplies });
+        await gwLog({
+          tenantId: ctx.tenantId, actorId: user.id, action: "nippo.ai_draft",
+          target: `nippo:${body.nippoId}`, detail: { name: today.user_name, needsHuman: !!result.needs_human },
+        });
+        return json(res, 200, { draft: result });
+      } catch (e) {
+        return json(res, 502, {
+          error: "ai_failed",
+          hint: /ANTHROPIC_API_KEY/.test(e.message || "")
+            ? "AIの鍵（ANTHROPIC_API_KEY）が未設定です"
+            : "AIが応答しませんでした。少し待ってからもう一度お試しください",
+          detail: e.message,
+        });
+      }
     }
 
     case "reply": {
