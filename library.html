@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社内文書 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260909c">
+  <link rel="stylesheet" href="css/layout.css?v=20260909c">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && localStorage.getItem("kp_view") !== "member"
+          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">社内文書</h1>
+  <p class="kp-greet-sub">就業規則・マニュアル・申請様式などをここにまとめています。</p>
+
+  <div class="card">
+    <div class="inline-controls" style="margin-bottom:6px;">
+      <div style="min-width:200px;flex:1;">
+        <label>探す</label>
+        <input id="q" type="search" placeholder="タイトル・説明で絞り込む" oninput="render()">
+      </div>
+    </div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260909c"></script>
+<script src="js/layout.js?v=20260909c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const CATEGORY_LABEL = { rule: "社内規定", manual: "マニュアル", form: "様式・テンプレート", other: "その他" };
+  const CATEGORY_ORDER = ["rule", "manual", "form", "other"];
+  const CATEGORY_ICON = { rule: "gavel", manual: "menu_book", form: "description", other: "folder" };
+
+  let documents = [];
+
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listLibrary();
+      documents = res.documents || [];
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    const q = el("q").value.trim().toLowerCase();
+    const shown = documents.filter((d) =>
+      !q || `${d.title} ${d.description || ""}`.toLowerCase().includes(q));
+
+    if (!shown.length) {
+      el("list").innerHTML = `<div class="empty">${
+        documents.length ? "見つかりませんでした。" : "まだ文書が登録されていません。"}</div>`;
+      return;
+    }
+
+    // 種類ごとにまとめる。数が増えても探しやすいように
+    el("list").innerHTML = CATEGORY_ORDER.map((c) => {
+      const rows = shown.filter((d) => d.category === c);
+      if (!rows.length) return "";
+      return `
+        <p class="muted" style="font-size:12.5px;font-weight:700;margin:18px 0 8px;">
+          ${esc(CATEGORY_LABEL[c])}
+        </p>
+        <div class="kp-menu">${rows.map(row).join("")}</div>`;
+    }).join("");
+  }
+
+  function row(d) {
+    const size = d.size_bytes ? `${Math.max(1, Math.round(d.size_bytes / 1024))} KB` : "";
+    const meta = [d.description, d.link_url ? "外部リンク" : size].filter(Boolean).join("　");
+    // 外部リンクはそのまま開く。バケットのファイルは署名URLを取ってから開く
+    const open = d.link_url
+      ? `href="${esc(d.link_url)}" target="_blank" rel="noopener"`
+      : `href="#" onclick="openFile('${esc(d.file_path)}');return false;"`;
+    return `
+      <a ${open}>
+        <span class="ico"><span class="material-symbols-outlined">${esc(CATEGORY_ICON[d.category] || "folder")}</span></span>
+        <span><b>${esc(d.title)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}</span>
+        <span class="go material-symbols-outlined">${d.link_url ? "open_in_new" : "chevron_right"}</span>
+      </a>`;
+  }
+
+  async function openFile(path) {
+    try {
+      const { url } = await API.libraryFileUrl(path);
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      alert(e.detail || e.message || "開けませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

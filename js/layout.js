@@ -41,11 +41,12 @@
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },
     { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",       icon: "calendar_month", ready: true  },
     { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",           icon: "receipt",      ready: true  },
+    { key: "requests",  href: "admin-requests.html",  label: "休暇・稟議",         icon: "approval",     ready: true  },
 
     { section: "組織・システム管理" },
     { key: "members",   href: "admin-members.html",   label: "メンバー・権限",     icon: "group",        ready: true  },
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き",   icon: "badge",        ready: true  },
-    { key: "templates", href: "admin-docs.html",      label: "書類・雛形",         icon: "folder_copy",  ready: true  },
+    { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形",         icon: "folder_copy",  ready: true  },
     { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",      ready: true  },
     { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ",     icon: "settings",     ready: true  },
 

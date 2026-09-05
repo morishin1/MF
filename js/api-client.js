@@ -262,6 +262,51 @@
   const googleLink = () => api("/api/google/connect");
   const googleUnlink = () => api("/api/google/connect", { method: "DELETE" });
 
+  // ---- 社内文書（マニュアル・規定・様式） ----
+  const listLibrary = () => api("/api/library");
+  const createLibraryDoc = (d) =>
+    api("/api/library", { method: "POST", body: d }).then((r) => r.document);
+  const updateLibraryDoc = (d) =>
+    api("/api/library", { method: "PATCH", body: d }).then((r) => r.document);
+  const deleteLibraryDoc = (id) =>
+    api(`/api/library?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const libraryFileUrl = (path) =>
+    api(`/api/library?path=${encodeURIComponent(path)}`);
+
+  async function uploadLibraryFile(file) {
+    const sign = await api("/api/library?sign=1", {
+      method: "POST",
+      body: { filename: file.name, sizeBytes: file.size },
+    });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream", "x-upsert": "false" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return { path: sign.path, name: file.name, mimeType: file.type, sizeBytes: file.size };
+  }
+
+  // ---- 有給・稟議の申請 ----
+  // scope: "mine" | "pending" | "all"、kind: "leave" | "ringi"
+  const listRequests = (scope, opts = {}) => {
+    const q = new URLSearchParams();
+    if (scope) q.set("scope", scope);
+    for (const k of ["kind", "year"]) if (opts[k]) q.set(k, opts[k]);
+    return api(`/api/requests?${q.toString()}`);
+  };
+  const createRequest = (r) => api("/api/requests", { method: "POST", body: r });
+  // action: "approve" | "reject" | "cancel"
+  const decideRequest = (id, action, note) =>
+    api("/api/requests/decide", { method: "POST", body: { id, action, note } });
+  const deleteRequest = (id) =>
+    api(`/api/requests?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  const leaveGrants = (year) =>
+    api(`/api/requests/grants${year ? `?year=${encodeURIComponent(year)}` : ""}`);
+  const saveLeaveGrant = (grant) =>
+    api("/api/requests/grants", { method: "PUT", body: grant });
+
   // ---- 経費精算 ----
   // scope: "mine" | "pending" | "all"
   const listExpenses = (scope, opts = {}) => {
@@ -490,6 +535,10 @@
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
     schedule, createEvent, updateEvent, deleteEvent, googleLink, googleUnlink,
+    listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
+    libraryFileUrl, uploadLibraryFile,
+    listRequests, createRequest, decideRequest, deleteRequest,
+    leaveGrants, saveLeaveGrant,
     listExpenses, createExpense, decideExpense, deleteExpense,
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,

@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260909b">
+  <link rel="stylesheet" href="css/app.css?v=20260909c">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -77,6 +77,8 @@
       <a href="#schedule"><span class="material-symbols-outlined">calendar_month</span>予定</a>
       <a href="#booking"><span class="material-symbols-outlined">meeting_room</span>スペース予約</a>
       <a href="#expense"><span class="material-symbols-outlined">receipt</span>経費精算</a>
+      <a href="#requests"><span class="material-symbols-outlined">approval</span>休暇・稟議</a>
+      <a href="#library"><span class="material-symbols-outlined">folder_shared</span>社内文書</a>
       <a href="#bell"><span class="material-symbols-outlined">notifications</span>通知</a>
       <a href="#hr"><span class="material-symbols-outlined">badge</span>入社手続き</a>
       <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
@@ -95,11 +97,32 @@
       <table class="screens">
         <thead><tr><th>タブ</th><th>できること</th></tr></thead>
         <tbody>
-          <tr><td>ホーム</td><td>今月の書類の件数、お知らせ、自分の入社手続きの進み具合をまとめて確認します</td></tr>
+          <tr><td>ホーム</td><td>お知らせ、自分の入社手続き、今月の書類の件数をまとめて確認します</td></tr>
           <tr><td>メッセージ</td><td>社内の人と1対1・グループでやりとりします</td></tr>
           <tr><td>やること</td><td>自分に割り当てられたタスクを確認し、終わったら「完了」を押します</td></tr>
           <tr><td>会計書類</td><td>請求書・領収書を提出します（<b>会計は別システム</b>です）</td></tr>
-          <tr><td>メニュー</td><td>予定、スペース予約、経費精算、社員名簿、マイページ（パスワード変更）、使い方ガイド</td></tr>
+          <tr><td>メニュー</td><td>下の一覧のとおり、使える機能がすべて並びます</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="lead" style="margin-top:16px;">
+      「<b>メニュー</b>」を開くと、使える機能が3つのまとまりで並びます。
+    </p>
+    <div class="table-scroll">
+      <table class="screens">
+        <thead><tr><th>メニュー</th><th>できること</th></tr></thead>
+        <tbody>
+          <tr><td>ホーム</td><td>ログイン直後の画面。自分に必要なものが一目で分かります</td></tr>
+          <tr><td>お知らせ・掲示板</td><td>会社や部署からの連絡をまとめて読み、「読んだ」を押します（<a href="#notices">詳しく</a>）</td></tr>
+          <tr><td>スケジュール</td><td>自分の予定。Googleカレンダーとつなげます（<a href="#schedule">詳しく</a>）</td></tr>
+          <tr><td>設備・スペース予約</td><td>カフェ・スタジオ・会議スペースなどを押さえます（<a href="#booking">詳しく</a>）</td></tr>
+          <tr><td>メッセージ・チャット</td><td>1対1、グループでのやりとり。ファイルも送れます（<a href="#messages">詳しく</a>）</td></tr>
+          <tr><td>タスク・やること</td><td>頼まれた業務の期限と進み具合（<a href="#tasks">詳しく</a>）</td></tr>
+          <tr><td>ワークフロー<br>（申請・承認）</td><td><b>経費精算</b>（<a href="#expense">詳しく</a>）、<b>休暇</b>と<b>稟議</b>（<a href="#requests">詳しく</a>）の申請と、その進み具合</td></tr>
+          <tr><td>ファイル・文書管理</td><td>就業規則・マニュアル・申請様式などを読みます（<a href="#library">詳しく</a>）</td></tr>
+          <tr><td>社員名簿・プロフィール</td><td>他の部署のメンバーの所属や連絡先を探します</td></tr>
+          <tr><td>マイページ</td><td>自分の情報の確認、パスワードの変更、入社・退職の手続き（<a href="#hr">詳しく</a>）</td></tr>
         </tbody>
       </table>
     </div>
@@ -396,6 +419,76 @@
     </ul>
   </div>
 
+  <!-- ======================================================== 休暇・稟議 -->
+  <div class="card" id="requests">
+    <h2><span class="material-symbols-outlined">approval</span>休暇・稟議の申請</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      「メニュー」→「<b>ワークフロー（申請・承認）</b>」から開きます。上のタブで<b>休暇</b>と<b>稟議</b>を切り替えます。
+    </p>
+
+    <h3><span class="material-symbols-outlined">beach_access</span>休暇</h3>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>種類は<b>有給（全日）・午前半休・午後半休・特別休暇・欠勤</b>から選びます</li>
+      <li>日数は<b>土日を除いて自動計算</b>します。<b>祝日は判定できません</b>ので、
+        含まれる場合は手で直してください</li>
+      <li>画面の上に<b>残り／取得済み／申請中／付与</b>が出ます。
+        残日数は付与日数が登録されていないと出せません（管理部が登録します）</li>
+      <li><b>管理部の承認だけ</b>で確定します。承認されると
+        会社の共有カレンダー「社内ポータル」に<b>「〇〇さん 有給」</b>として入ります
+        （<b>休む理由はカレンダーには出ません</b>）</li>
+      <li>同じ日に二重には出せません</li>
+    </ul>
+
+    <h3><span class="material-symbols-outlined">description</span>稟議</h3>
+    <ul class="lead" style="margin:0 0 12px;padding-left:20px;">
+      <li>件名・内容は必須、金額は任意です（金額の無い稟議も出せます）</li>
+      <li><b>管理部が確認したあと、代表の承認</b>に進みます。金額に関わらず2段階です</li>
+      <li>カレンダーには入りません</li>
+    </ul>
+    <p class="lead" style="margin:0;">
+      どちらも、承認される前なら「<b>取り下げる</b>」で引っ込められます。
+      結果はベルの通知で届きます。
+    </p>
+
+    <span class="who-for admin" style="margin-top:20px;">管理者・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      左メニューの「<b>休暇・稟議</b>」で承認します。稟議の2段目は
+      <b>経営者権限を持つ人しか押せません</b>。
+    </p>
+    <ul class="lead" style="margin:0;padding-left:20px;">
+      <li>同じ画面の下で、<b>有給の付与日数</b>を年度ごとに登録します。
+        付与のきまり（勤続年数に応じた日数、繰越の上限）は<b>自動計算していません</b>。
+        労務側で決めた日数をそのまま入れてください</li>
+      <li>承認済みの休暇は「取り消す」で戻せます。カレンダーの予定も消えます</li>
+      <li>「カレンダー×」と出ている申請は、共有カレンダーへの反映に失敗しています</li>
+    </ul>
+  </div>
+
+  <!-- ======================================================== 社内文書 -->
+  <div class="card" id="library">
+    <h2><span class="material-symbols-outlined">folder_shared</span>ファイル・文書管理</h2>
+    <span class="who-for member">メンバーの方</span>
+    <p class="lead" style="margin-top:0;">
+      就業規則・マニュアル・申請様式などを置いてある場所です。
+      「メニュー」→「<b>ファイル・文書管理</b>」から開きます。
+      <b>社内規定／マニュアル／様式・テンプレート／その他</b>に分かれていて、上の欄で絞り込めます。
+    </p>
+
+    <span class="who-for admin" style="margin-top:20px;">管理者・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      左メニューの「<b>社内文書・雛形</b>」の上半分で登録します。
+    </p>
+    <ul class="lead" style="margin:0;padding-left:20px;">
+      <li><b>ファイルを上げる</b>か、<b>リンクを入れる</b>かのどちらかで登録できます。
+        すでにGoogleドライブで運用している文書は<b>リンクだけ登録すれば移す必要はありません</b></li>
+      <li>ファイルは25MBまで</li>
+      <li>「<b>非公開</b>」にするとメンバーには出ません。作りかけを隠すときに使ってください</li>
+      <li>同じ画面の下半分にある「<b>雛形</b>」は別物です。あちらは管理部が
+        <code>{{氏名}}</code> などを差し込んで書き出すためのもので、メンバーには見えません</li>
+    </ul>
+  </div>
+
   <!-- ======================================================== 通知 -->
   <div class="card" id="bell">
     <h2><span class="material-symbols-outlined">notifications</span>通知（画面右上のベル）</h2>
@@ -471,7 +564,7 @@
           <tr><td>メンバー表示</td><td>右上の「<b>メンバー表示</b>」を押すと、<b>ログインしたまま</b>メンバーに見える画面（下タブ5つ）に切り替わります。デモ用のアカウントは要りません。権限は変わらないので、管理用の画面を開けばそのまま開け、表示も元に戻ります。「管理画面に戻る」でいつでも戻れます</td></tr>
           <tr><td>スペース予約</td><td>スペースの予約申請を承認・却下します。承認すると<b>Googleカレンダーに予定が入ります</b>。スペースの追加や受付停止も同じ画面です（<a href="#booking">詳しく</a>）</td></tr>
           <tr><td>経費精算</td><td>申請の承認、支払済みの記録、会計へ渡すCSVの書き出し、承認しきい値の設定（<a href="#expense">詳しく</a>）</td></tr>
-          <tr><td>有給・稟議</td><td>準備中です</td></tr>
+          <tr><td>休暇・稟議</td><td>休暇と稟議の承認、有給の付与日数の登録（<a href="#requests">詳しく</a>）</td></tr>
           <tr><td>会計書類・仕訳<br><span class="muted" style="font-weight:400;font-size:11.5px;">（別システム）</span></td><td>アップロードされた書類の確認、仕訳の承認、試算表の取得を行います</td></tr>
           <tr><td>組織設定・ログ</td><td>会社名の変更、ログインアカウントの作成と紐づけ、外部サービス（Drive など）の設定状況、<b>操作ログ</b>の確認</td></tr>
         </tbody>

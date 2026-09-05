@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>休暇・稟議の申請 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260909c">
+  <link rel="stylesheet" href="css/layout.css?v=20260909c">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && localStorage.getItem("kp_view") !== "member"
+          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">休暇・稟議の申請</h1>
+  <p class="kp-greet-sub">申請すると管理部に通知が届きます。承認された休暇は社内カレンダーに入ります。</p>
+
+  <div id="gate"></div>
+
+  <div id="main" class="hidden">
+    <div class="card">
+      <div class="tabs">
+        <button class="tab active" onclick="setTab('leave', this)">休暇</button>
+        <button class="tab" onclick="setTab('ringi', this)">稟議</button>
+      </div>
+
+      <!-- 休暇 -->
+      <div id="form-leave">
+        <div id="balance" class="kp-tiles" style="margin-bottom:16px;"></div>
+
+        <div class="inline-controls" style="margin-bottom:12px;">
+          <div style="max-width:170px;">
+            <label>種類</label>
+            <select id="l-type" onchange="onLeaveTypeChange()">
+              <option value="paid">有給（全日）</option>
+              <option value="am">午前半休</option>
+              <option value="pm">午後半休</option>
+              <option value="special">特別休暇</option>
+              <option value="absence">欠勤</option>
+            </select>
+          </div>
+          <div style="max-width:150px;"><label>開始日</label><input id="l-from" type="date" onchange="recalcDays()"></div>
+          <div style="max-width:150px;" id="l-to-wrap"><label>終了日</label><input id="l-to" type="date" onchange="recalcDays()"></div>
+          <div style="max-width:110px;"><label>日数</label><input id="l-days" type="number" min="0.5" step="0.5"></div>
+        </div>
+        <p class="muted" style="font-size:12px;margin:0 0 12px;">
+          日数は土日を除いて自動で計算します。<b>祝日は判定できません</b>ので、含まれる場合は手で直してください。
+        </p>
+
+        <div style="margin-bottom:12px;">
+          <label>件名</label>
+          <input id="l-title" type="text" maxlength="200" placeholder="例: 私用のため">
+        </div>
+        <div style="margin-bottom:14px;">
+          <label>引き継ぎ・連絡事項（任意）</label>
+          <textarea id="l-body" rows="3" placeholder="連絡がつく時間帯、代わりに対応してもらう方 など"></textarea>
+        </div>
+
+        <button class="btn btn-primary" onclick="submitLeave(this)">
+          <span class="material-symbols-outlined icon-inline">send</span>休暇を申請する
+        </button>
+        <div id="l-msg" class="err-text"></div>
+      </div>
+
+      <!-- 稟議 -->
+      <div id="form-ringi" class="hidden">
+        <div class="banner info" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">approval</span>
+          <div>稟議は<b>管理部が確認したあと、代表の承認</b>に進みます（金額に関わらず2段階です）。</div>
+        </div>
+
+        <div class="inline-controls" style="margin-bottom:12px;">
+          <div style="min-width:220px;flex:1;">
+            <label>件名</label>
+            <input id="r-title" type="text" maxlength="200" placeholder="例: 開発用PCの購入について">
+          </div>
+          <div style="max-width:170px;">
+            <label>金額（円・任意）</label>
+            <input id="r-amount" type="number" min="0" step="1" placeholder="180000">
+          </div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label>内容</label>
+          <textarea id="r-body" rows="7" placeholder="目的、必要な理由、他の案と比べた結果、いつまでに必要か、費用の内訳 など"></textarea>
+        </div>
+
+        <button class="btn btn-primary" onclick="submitRingi(this)">
+          <span class="material-symbols-outlined icon-inline">send</span>稟議を申請する
+        </button>
+        <div id="r-msg" class="err-text"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">history</span>自分の申請</h2>
+      <div id="mine"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260909c"></script>
+<script src="js/layout.js?v=20260909c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const LEAVE_LABEL = {
+    paid: "有給（全日）", am: "午前半休", pm: "午後半休", special: "特別休暇", absence: "欠勤",
+  };
+  const STATUS_LABEL = {
+    pending: "承認待ち（管理部）", pending_owner: "承認待ち（代表）",
+    approved: "承認済み", rejected: "却下", cancelled: "取消",
+  };
+  const STATUS_CHIP = {
+    pending: "pending", pending_owner: "pending", approved: "approved",
+    rejected: "rejected", cancelled: "archived",
+  };
+
+  let tab = "leave";
+  let balance = null;
+
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    if (!ctx.me?.gw?.employee) {
+      el("gate").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、申請できません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    el("main").classList.remove("hidden");
+
+    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    el("l-from").value = today;
+    el("l-to").value = today;
+    recalcDays();
+
+    await load();
+  }
+
+  function setTab(t, btn) {
+    tab = t;
+    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
+    el("form-leave").classList.toggle("hidden", t !== "leave");
+    el("form-ringi").classList.toggle("hidden", t !== "ringi");
+    renderMine();
+  }
+
+  // ---- 日数の計算 -----------------------------------------------------------
+  function onLeaveTypeChange() {
+    const half = el("l-type").value === "am" || el("l-type").value === "pm";
+    // 半休は1日分。終了日を触らせない
+    el("l-to-wrap").classList.toggle("hidden", half);
+    if (half) el("l-to").value = el("l-from").value;
+    recalcDays();
+  }
+
+  function recalcDays() {
+    const half = el("l-type").value === "am" || el("l-type").value === "pm";
+    if (half) { el("l-to").value = el("l-from").value; el("l-days").value = "0.5"; return; }
+
+    const from = el("l-from").value, to = el("l-to").value;
+    if (!from || !to || to < from) { el("l-days").value = ""; return; }
+
+    let n = 0;
+    for (let d = new Date(from + "T00:00:00"); d <= new Date(to + "T00:00:00"); d.setDate(d.getDate() + 1)) {
+      const w = d.getDay();
+      if (w !== 0 && w !== 6) n++;      // 土日は数えない。祝日は判定できない
+    }
+    el("l-days").value = n || "";
+  }
+
+  // ---- 取得 -----------------------------------------------------------------
+  let requests = [];
+
+  async function load() {
+    try {
+      const res = await API.listRequests("mine");
+      requests = res.requests || [];
+      balance = res.balance;
+      renderBalance();
+      renderMine();
+    } catch (e) {
+      el("mine").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderBalance() {
+    if (!balance) { el("balance").innerHTML = ""; return; }
+    if (!balance.hasGrant) {
+      el("balance").innerHTML =
+        `<div class="banner warn" style="grid-column:1/-1;">
+           <span class="material-symbols-outlined">info</span>
+           <div>${balance.year}年度の有給付与日数がまだ登録されていません。
+             申請はできますが、残日数は表示できません。管理部にご確認ください。</div>
+         </div>`;
+      return;
+    }
+    const tile = (k, v, s, cls) => `
+      <div class="kp-tile${cls ? " " + cls : ""}">
+        <div class="k">${esc(k)}</div>
+        <div class="v">${v}<small>日</small></div>
+        <div class="s">${esc(s)}</div>
+      </div>`;
+    el("balance").innerHTML =
+      tile("残り", balance.remaining, `${balance.year}年度（4月〜3月）`, balance.remaining <= 3 ? "alert" : "")
+      + tile("取得済み", balance.taken, "承認された日数")
+      + tile("申請中", balance.pending, "まだ承認されていない分")
+      + tile("付与", balance.granted, "繰越を含む");
+  }
+
+  // ---- 申請 -----------------------------------------------------------------
+  async function submitLeave(btn) {
+    const msg = el("l-msg");
+    msg.style.color = ""; msg.textContent = "";
+    const title = el("l-title").value.trim();
+    const days = Number(el("l-days").value);
+    if (!title) { msg.textContent = "件名を入力してください"; return; }
+    if (!el("l-from").value) { msg.textContent = "開始日を選んでください"; return; }
+    if (!(days > 0)) { msg.textContent = "日数を確認してください"; return; }
+
+    const type = el("l-type").value;
+    if (type !== "absence" && balance?.hasGrant && type !== "special" && days > balance.remaining) {
+      if (!confirm(`残り ${balance.remaining} 日に対して ${days} 日の申請です。このまま出しますか？`)) return;
+    }
+
+    try {
+      await KPLayout.busy(btn, "申請中…", () => API.createRequest({
+        kind: "leave",
+        leaveType: type,
+        startsOn: el("l-from").value,
+        endsOn: el("l-to").value || el("l-from").value,
+        days,
+        title,
+        body: el("l-body").value.trim() || null,
+      }));
+      el("l-title").value = ""; el("l-body").value = "";
+      msg.style.color = "var(--primary-dark)";
+      msg.textContent = "申請しました。管理部の承認をお待ちください。";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "申請できませんでした";
+    }
+  }
+
+  async function submitRingi(btn) {
+    const msg = el("r-msg");
+    msg.style.color = ""; msg.textContent = "";
+    const title = el("r-title").value.trim();
+    const body = el("r-body").value.trim();
+    if (!title) { msg.textContent = "件名を入力してください"; return; }
+    if (!body) { msg.textContent = "内容を書いてください"; return; }
+
+    try {
+      await KPLayout.busy(btn, "申請中…", () => API.createRequest({
+        kind: "ringi",
+        title, body,
+        amount: el("r-amount").value ? Number(el("r-amount").value) : null,
+      }));
+      el("r-title").value = ""; el("r-body").value = ""; el("r-amount").value = "";
+      msg.style.color = "var(--primary-dark)";
+      msg.textContent = "申請しました。管理部の確認のあと、代表の承認に進みます。";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "申請できませんでした";
+    }
+  }
+
+  // ---- 自分の申請 -----------------------------------------------------------
+  const fmtDay = (d) => new Date(`${d}T00:00:00+09:00`)
+    .toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "long", day: "numeric" });
+  const yen = (n) => `${Number(n || 0).toLocaleString("ja-JP")} 円`;
+
+  function renderMine() {
+    const shown = requests.filter((r) => r.kind === tab);
+    if (!shown.length) {
+      el("mine").innerHTML = `<div class="empty">${tab === "leave" ? "休暇" : "稟議"}の申請はまだありません。</div>`;
+      return;
+    }
+    el("mine").innerHTML = shown.map((r) => {
+      const open = r.status === "pending" || r.status === "pending_owner";
+      const head = r.kind === "leave"
+        ? `${esc(r.starts_on === r.ends_on ? fmtDay(r.starts_on) : `${fmtDay(r.starts_on)}〜${fmtDay(r.ends_on)}`)}　${r.days}日`
+        : (r.amount ? esc(yen(r.amount)) : "金額なし");
+      return `
+        <div class="kp-notice">
+          <div class="head">
+            <span class="kp-chip ${esc(STATUS_CHIP[r.status] || "")}">${esc(STATUS_LABEL[r.status] || r.status)}</span>
+            ${r.kind === "leave" ? `<span class="kp-chip">${esc(LEAVE_LABEL[r.leave_type] || "")}</span>` : ""}
+            <span class="meta">${head}</span>
+          </div>
+          <div class="title">${esc(r.title)}</div>
+          ${r.body ? `<div class="body">${esc(r.body)}</div>` : ""}
+          ${r.decision_note ? `<div class="body muted">管理部より：${esc(r.decision_note)}</div>` : ""}
+          <div class="foot">
+            ${r.gcal_link && r.status === "approved"
+              ? `<a class="btn btn-secondary btn-sm" href="${esc(r.gcal_link)}" target="_blank" rel="noopener">
+                   <span class="material-symbols-outlined icon-inline">calendar_month</span>カレンダーで見る
+                 </a>` : ""}
+            ${open
+              ? `<button class="btn btn-secondary btn-sm" onclick="cancelRequest('${esc(r.id)}', this)">
+                   <span class="material-symbols-outlined icon-inline">undo</span>取り下げる
+                 </button>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  async function cancelRequest(id, btn) {
+    if (!confirm("この申請を取り下げます。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "取下中…", () => API.decideRequest(id, "cancel"));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "取り下げられませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

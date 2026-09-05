@@ -16,8 +16,8 @@ export default function handler(req, res) {
     ok: true,
     service: "kessanpilot-api",
     // どのビルドが動いているかを画面を開かずに判別するための印
-    assetVersion: "20260909b",
-    features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true, notifications: true, invite: true, messageFiles: true, activityLog: true, splitMenus: true, spaces: true, bookings: true, calendarSync: true, expenses: true, workflowSettings: true, slack: true, schedule: true, memberPreview: true, googleCalendarLink: true },
+    assetVersion: "20260909c",
+    features: { documentDelete: true, groupware: true, notices: true, onboarding: true, tasks: true, members: true, messages: true, assets: true, templates: true, settings: true, advisor: true, hrFolder: true, hrFiles: true, notifications: true, invite: true, messageFiles: true, activityLog: true, splitMenus: true, spaces: true, bookings: true, calendarSync: true, expenses: true, workflowSettings: true, slack: true, schedule: true, memberPreview: true, googleCalendarLink: true, leaveRequests: true, ringi: true, library: true, memberMenu: true },
     env,
     note: env.supabase && env.anthropic
       ? "ready"

@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260909b">
-  <link rel="stylesheet" href="css/layout.css?v=20260909b">
+  <link rel="stylesheet" href="css/app.css?v=20260909c">
+  <link rel="stylesheet" href="css/layout.css?v=20260909c">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -24,8 +24,60 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">書類・雛形</h1>
-  <p class="kp-greet-sub">雇用契約書や案内文の雛形を登録し、対象者の情報を差し込んで書き出します。</p>
+  <h1 class="kp-greet">社内文書・雛形</h1>
+  <p class="kp-greet-sub">
+    <b>社内文書</b>はメンバーが読むもの（就業規則・マニュアル・様式）、
+    <b>雛形</b>は管理部が差し込んで書き出すものです。
+  </p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">folder_shared</span>社内文書（メンバーが読むもの）</h2>
+
+    <div class="inline-controls" style="margin-bottom:10px;">
+      <div style="min-width:200px;flex:1;"><label>タイトル</label>
+        <input id="d-title" type="text" placeholder="就業規則（2026年4月版）"></div>
+      <div style="max-width:180px;"><label>種類</label>
+        <select id="d-category">
+          <option value="rule">社内規定</option>
+          <option value="manual">マニュアル</option>
+          <option value="form">様式・テンプレート</option>
+          <option value="other">その他</option>
+        </select></div>
+      <div style="min-width:200px;flex:1;"><label>説明（任意）</label>
+        <input id="d-desc" type="text" placeholder="改定日、対象者など"></div>
+    </div>
+    <div class="inline-controls" style="margin-bottom:10px;align-items:center;">
+      <div style="min-width:240px;flex:1;"><label>リンク（Googleドライブ等・任意）</label>
+        <input id="d-link" type="url" placeholder="https://drive.google.com/..."></div>
+      <div>
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+          <span class="material-symbols-outlined icon-inline">attach_file</span>
+          <span id="d-file-label">ファイルを選ぶ</span>
+          <input type="file" class="hidden" id="d-file" onchange="pickLibraryFile(this)">
+        </label>
+      </div>
+      <div>
+        <button class="btn btn-primary" onclick="addLibrary(this)">
+          <span class="material-symbols-outlined icon-inline">add</span>登録
+        </button>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px;">
+      ファイルを上げるか、リンクを入れるかのどちらかで登録できます。
+      すでにGoogleドライブで運用している文書は、リンクだけ登録すれば移す必要はありません（25MBまで）。
+    </p>
+    <div id="d-msg" class="err-text"></div>
+
+    <div class="table-scroll">
+      <table class="kp-items">
+        <thead><tr>
+          <th style="width:130px;">種類</th><th>タイトル</th>
+          <th style="width:120px;">公開</th><th style="width:60px;"></th>
+        </tr></thead>
+        <tbody id="d-rows"><tr><td colspan="4" class="muted">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">note_add</span><span id="form-title">雛形を作る</span></h2>
@@ -95,8 +147,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260909b"></script>
-<script src="js/layout.js?v=20260909b"></script>
+<script src="js/api-client.js?v=20260909c"></script>
+<script src="js/layout.js?v=20260909c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -114,7 +166,102 @@
   async function load() {
     // 会社名は差し込みの {{会社名}} に使う
     await API.settings().then((s) => { companyName = s.tenant?.name || ""; }).catch(() => {});
-    await Promise.all([loadTemplates(), loadEmployees()]);
+    await Promise.all([loadTemplates(), loadEmployees(), loadLibrary()]);
+  }
+
+  /* ===== 社内文書 ===== */
+  const LIB_LABEL = { rule: "社内規定", manual: "マニュアル", form: "様式・テンプレート", other: "その他" };
+  let library = [];
+  let pendingFile = null;   // 登録待ちのファイル
+
+  async function loadLibrary() {
+    try {
+      const res = await API.listLibrary();
+      library = res.documents || [];
+      renderLibrary();
+    } catch (e) {
+      el("d-rows").innerHTML =
+        `<tr><td colspan="4" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function renderLibrary() {
+    if (!library.length) {
+      el("d-rows").innerHTML = `<tr><td colspan="4" class="muted">まだ登録がありません。</td></tr>`;
+      return;
+    }
+    el("d-rows").innerHTML = library.map((d) => `
+      <tr>
+        <td>${esc(LIB_LABEL[d.category] || d.category)}</td>
+        <td><b>${esc(d.title)}</b>${d.description ? `<small class="muted">　${esc(d.description)}</small>` : ""}
+          ${d.link_url ? '<span class="kp-chip">リンク</span>' : ""}</td>
+        <td>
+          <select onchange="setPublished(\'${esc(d.id)}\', this)">
+            <option value="on"${d.published ? " selected" : ""}>公開</option>
+            <option value="off"${d.published ? "" : " selected"}>非公開</option>
+          </select>
+        </td>
+        <td><button class="icon-btn" title="削除" onclick="removeLibrary(\'${esc(d.id)}\')">
+          <span class="material-symbols-outlined">delete</span></button></td>
+      </tr>`).join("");
+  }
+
+  async function pickLibraryFile(input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const label = el("d-file-label");
+    label.textContent = "アップロード中…";
+    try {
+      pendingFile = await API.uploadLibraryFile(file);
+      label.textContent = pendingFile.name.slice(0, 24);
+    } catch (e) {
+      label.textContent = "ファイルを選ぶ";
+      alert(e.hint || e.detail || e.message || "アップロードできませんでした");
+    }
+  }
+
+  async function addLibrary(btn) {
+    const msg = el("d-msg");
+    msg.textContent = "";
+    const title = el("d-title").value.trim();
+    const link = el("d-link").value.trim();
+    if (!title) { msg.textContent = "タイトルを入力してください"; return; }
+    if (!pendingFile && !link) { msg.textContent = "ファイルを選ぶか、リンクを入れてください"; return; }
+
+    try {
+      await KPLayout.busy(btn, "登録中…", () => API.createLibraryDoc({
+        title,
+        category: el("d-category").value,
+        description: el("d-desc").value.trim() || null,
+        linkUrl: link || null,
+        filePath: pendingFile?.path || null,
+        fileName: pendingFile?.name || null,
+        mimeType: pendingFile?.mimeType || null,
+        sizeBytes: pendingFile?.sizeBytes || null,
+        sortOrder: library.length + 1,
+      }));
+      for (const id of ["d-title", "d-desc", "d-link"]) el(id).value = "";
+      pendingFile = null;
+      el("d-file-label").textContent = "ファイルを選ぶ";
+      await loadLibrary();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "登録できませんでした";
+    }
+  }
+
+  async function setPublished(id, sel) {
+    sel.disabled = true;
+    try { await API.updateLibraryDoc({ id, published: sel.value === "on" }); await loadLibrary(); }
+    catch (e) { alert(e.detail || e.message || "変更できませんでした"); await loadLibrary(); }
+    finally { sel.disabled = false; }
+  }
+
+  async function removeLibrary(id) {
+    const d = library.find((x) => x.id === id);
+    if (!confirm(`${d ? d.title : ""} を削除します。よろしいですか？`)) return;
+    try { await API.deleteLibraryDoc(id); await loadLibrary(); }
+    catch (e) { alert(e.detail || e.message || "削除できませんでした"); }
   }
 
   async function loadEmployees() {

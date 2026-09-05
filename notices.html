@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>お知らせ - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260909c">
+  <link rel="stylesheet" href="css/layout.css?v=20260909c">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && localStorage.getItem("kp_view") !== "member"
+          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">お知らせ</h1>
+  <p id="sub" class="kp-greet-sub">会社・部署からの連絡です。</p>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="setFilter('all', this)">すべて</button>
+      <button class="tab" onclick="setFilter('unread', this)">未読</button>
+      <button class="tab" onclick="setFilter('important', this)">重要</button>
+    </div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260909c"></script>
+<script src="js/layout.js?v=20260909c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const CATEGORY_LABEL = { general: "お知らせ", important: "重要", event: "イベント", system: "システム" };
+
+  let notices = [];
+  let filter = "all";
+
+  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listNotices();
+      notices = res.notices || [];
+      el("sub").textContent = res.unread
+        ? `未読 ${res.unread} 件`
+        : "会社・部署からの連絡です。";
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
+    render();
+  }
+
+  function render() {
+    const shown = notices.filter((n) =>
+      filter === "unread" ? !n.read : (filter === "important" ? n.category === "important" : true));
+
+    if (!shown.length) {
+      el("list").innerHTML = `<div class="empty">${
+        filter === "unread" ? "未読のお知らせはありません。" : "お知らせはありません。"}</div>`;
+      return;
+    }
+    el("list").innerHTML = shown.map(card).join("");
+  }
+
+  function card(n) {
+    const date = new Date(n.publish_at).toLocaleDateString("ja-JP",
+      { year: "numeric", month: "long", day: "numeric" });
+    return `
+      <div class="kp-notice${n.read ? "" : " unread"}">
+        <div class="head">
+          <span class="kp-chip ${esc(n.category)}">${esc(CATEGORY_LABEL[n.category] || n.category)}</span>
+          ${n.pinned ? '<span class="kp-chip pinned">固定</span>' : ""}
+          ${n.read ? "" : '<span class="kp-chip important">未読</span>'}
+          <span class="meta">${esc(date)}</span>
+        </div>
+        <div class="title">${esc(n.title)}</div>
+        <div class="body">${esc(n.body)}</div>
+        ${n.read ? "" : `
+          <div class="foot">
+            <button class="btn btn-secondary btn-sm" onclick="markRead('${esc(n.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">done</span>読んだ
+            </button>
+          </div>`}
+      </div>`;
+  }
+
+  // 開いただけで既読にはしない。長い連絡を流し読みしたまま
+  // 「読んだこと」にされると、配信側の既読数が当てにならなくなる
+  async function markRead(id, btn) {
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.markNoticeRead(id));
+      const n = notices.find((x) => x.id === id);
+      if (n) n.read = true;
+      const unread = notices.filter((x) => !x.read).length;
+      el("sub").textContent = unread ? `未読 ${unread} 件` : "会社・部署からの連絡です。";
+      render();
+    } catch (e) {
+      alert(e.detail || e.message || "記録できませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

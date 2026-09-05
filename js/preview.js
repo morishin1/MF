@@ -4,7 +4,7 @@
 // 削除に成功すると window.KP_onDocumentDeleted(documentId) を呼ぶので、
 // 各画面はそこで一覧を再読込する。API.documentPreviewUrl / API.deleteDocument に依存。
 (function () {
-  const JS_VERSION = "20260909b";   // このファイル自身の版
+  const JS_VERSION = "20260909c";   // このファイル自身の版
   // 画面のHTMLがどの版か（上部のビルド印から読む）。JSとHTMLの版ズレを検出できる。
   function htmlVersion() {
     const t = document.querySelector(".brand .tag.build");

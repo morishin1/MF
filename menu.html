@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260909b">
-  <link rel="stylesheet" href="css/layout.css?v=20260909b">
+  <link rel="stylesheet" href="css/app.css?v=20260909c">
+  <link rel="stylesheet" href="css/layout.css?v=20260909c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -23,41 +23,76 @@
 
 <div class="wrap">
   <h1 class="kp-greet">メニュー</h1>
-  <p class="kp-greet-sub">下のタブに入りきらない機能はこちらから。</p>
+  <p class="kp-greet-sub">使える機能の一覧です。よく使うものは下のタブからも開けます。</p>
 
+  <!-- 日々の業務。下タブに入っているものも、ここに揃えて全体像が分かるようにする -->
   <div class="card">
-    <h2><span class="material-symbols-outlined">groups</span>社内</h2>
+    <h2><span class="material-symbols-outlined">today</span>日々の業務</h2>
     <div class="kp-menu">
-      <a href="directory.html">
-        <span class="ico"><span class="material-symbols-outlined">contacts</span></span>
-        <span><b>社員名簿</b><small>他の部署のメンバーの所属や連絡先を探す</small></span>
+      <a href="home.html">
+        <span class="ico"><span class="material-symbols-outlined">home</span></span>
+        <span><b>ホーム</b><small>お知らせ・今日の予定・自分のやることをまとめて確認する</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
-      <a href="mypage.html">
-        <span class="ico"><span class="material-symbols-outlined">account_circle</span></span>
-        <span><b>マイページ</b><small>自分のプロフィールの確認、パスワードの変更</small></span>
+      <a href="notices.html">
+        <span class="ico"><span class="material-symbols-outlined">campaign</span></span>
+        <span><b>お知らせ・掲示板</b><small>会社や部署からの連絡事項をまとめて読む</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
       <a href="schedule.html">
         <span class="ico"><span class="material-symbols-outlined">calendar_month</span></span>
-        <span><b>予定</b><small>自分の予定・スペース予約・タスクの期限をまとめて見る</small></span>
+        <span><b>スケジュール</b><small>自分の予定。Googleカレンダーとつなげます</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
       <a href="booking.html">
         <span class="ico"><span class="material-symbols-outlined">meeting_room</span></span>
-        <span><b>スペース予約</b><small>カフェ・スタジオ・会議スペースなどの予約を申請する</small></span>
+        <span><b>設備・スペース予約</b><small>カフェ・スタジオ・会議スペースなどを押さえる</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
-      <a href="expenses.html">
-        <span class="ico"><span class="material-symbols-outlined">receipt</span></span>
-        <span><b>経費精算</b><small>立て替えた交通費・会議費などを申請する</small></span>
+      <a href="messages.html">
+        <span class="ico"><span class="material-symbols-outlined">forum</span></span>
+        <span><b>メッセージ・チャット</b><small>1対1、グループでのやりとり。ファイルも送れます</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
-      <span class="soon">
-        <span class="ico"><span class="material-symbols-outlined">approval</span></span>
-        <span><b>有給・稟議の申請</b><small>経費精算以外の申請</small></span>
-        <em>準備中</em>
-      </span>
+      <a href="tasks.html">
+        <span class="ico"><span class="material-symbols-outlined">checklist</span></span>
+        <span><b>タスク・やること</b><small>頼まれた業務の期限と進み具合</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- 申請と書類 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">approval</span>申請・書類</h2>
+    <div class="kp-menu">
+      <a href="workflow.html">
+        <span class="ico"><span class="material-symbols-outlined">assignment_turned_in</span></span>
+        <span><b>ワークフロー（申請・承認）</b><small>経費精算・休暇・稟議の申請と、その進み具合</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+      <a href="library.html">
+        <span class="ico"><span class="material-symbols-outlined">folder_shared</span></span>
+        <span><b>ファイル・文書管理</b><small>就業規則・マニュアル・申請様式などを読む</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- 自分と社内の人 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">groups</span>自分・社内の人</h2>
+    <div class="kp-menu">
+      <a href="directory.html">
+        <span class="ico"><span class="material-symbols-outlined">contacts</span></span>
+        <span><b>社員名簿・プロフィール</b><small>他の部署のメンバーの所属や連絡先を探す</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+      <a href="mypage.html">
+        <span class="ico"><span class="material-symbols-outlined">account_circle</span></span>
+        <span><b>マイページ</b><small>自分の情報の確認、パスワードの変更、入社・退職の手続き</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
     </div>
   </div>
 
@@ -65,6 +100,7 @@
     <h2><span class="material-symbols-outlined">receipt_long</span>会計（別システム）</h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
       請求書・領収書の提出はこちらです。社内の連絡や手続きとは別の仕組みで動いています。
+      <b>立て替えた経費の精算は「ワークフロー」から</b>行ってください。
     </p>
     <div class="kp-menu">
       <a href="app.html">
@@ -90,8 +126,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260909b"></script>
-<script src="js/layout.js?v=20260909b"></script>
+<script src="js/api-client.js?v=20260909c"></script>
+<script src="js/layout.js?v=20260909c"></script>
 <script>
   KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] });
 </script>
