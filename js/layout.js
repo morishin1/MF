@@ -23,11 +23,37 @@
   // 「書類」は会計システムへの入口。グループウェアとは別物なので、
   // その先の画面でも会計であることが分かる見せ方にしている。
   const MEMBER_NAV = [
-    { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",         ready: true },
-    { key: "messages", href: "messages.html",  label: "メッセージ", icon: "forum",        ready: true },
-    { key: "tasks",    href: "tasks.html",     label: "やること",   icon: "checklist",    ready: true },
-    { key: "docs",     href: "app.html",       label: "会計書類",   icon: "receipt_long", ready: true },
-    { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",         ready: true },
+    { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",      ready: true },
+    { key: "nippo",    href: "nippo.html",     label: "日報",       icon: "edit_note", ready: true },
+    { key: "messages", href: "messages.html",  label: "メッセージ", icon: "forum",     ready: true },
+    { key: "tasks",    href: "tasks.html",     label: "やること",   icon: "checklist", ready: true },
+    { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",      ready: true },
+  ];
+
+  // メンバー: PCでの左サイドメニュー。
+  // 管理者だけがサイドメニューで、メンバーは下のタブだけ、という作りにしていたが、
+  // PCで開いたときに「どこに何があるか」が一覧できず、管理画面と別物に見えていた。
+  // 中身は menu.html と同じ並びにして、どちらから入っても迷わないようにする。
+  const MEMBER_SIDE_NAV = [
+    { section: "業務" },
+    { key: "home",     href: "home.html",     label: "ホーム",           icon: "home",           ready: true },
+    { key: "notices",  href: "notices.html",  label: "お知らせ・掲示板", icon: "campaign",       ready: true },
+    { key: "nippo",    href: "nippo.html",    label: "日報",             icon: "edit_note",      ready: true },
+    { key: "schedule", href: "schedule.html", label: "スケジュール",     icon: "calendar_month", ready: true },
+    { key: "booking",  href: "booking.html",  label: "設備・スペース予約", icon: "meeting_room", ready: true },
+    { key: "messages", href: "messages.html", label: "メッセージ",       icon: "forum",          ready: true },
+    { key: "tasks",    href: "tasks.html",    label: "やること",         icon: "checklist",      ready: true },
+
+    { section: "申請・書類" },
+    { key: "workflow", href: "workflow.html", label: "申請・承認",       icon: "approval",       ready: true },
+    { key: "library",  href: "library.html",  label: "社内文書・様式",   icon: "folder_open",    ready: true },
+
+    { section: "自分・社内の人" },
+    { key: "directory", href: "directory.html", label: "社員名簿",       icon: "groups",         ready: true },
+    { key: "mypage",    href: "mypage.html",    label: "マイページ",     icon: "account_circle", ready: true },
+
+    { section: "会計（別システム）" },
+    { key: "docs", href: "app.html", label: "会計書類", icon: "receipt_long", ready: true, external: true },
   ];
 
   // 管理者: 左サイドメニュー。
@@ -37,6 +63,7 @@
     { section: "業務" },
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",     icon: "dashboard",    ready: true  },
     { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",       icon: "monitoring",   ready: true  },
+    { key: "nippo",     href: "admin-nippo.html",     label: "日報",               icon: "edit_note",    ready: true  },
     { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信",       icon: "campaign",     ready: true  },
     { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
     { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },
@@ -49,6 +76,7 @@
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き",   icon: "badge",        ready: true  },
     { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形",         icon: "folder_copy",  ready: true  },
     { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",      ready: true  },
+    { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック", icon: "block",        ready: true  },
     { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ",     icon: "settings",     ready: true  },
 
     { section: "会計（別システム）" },
@@ -151,8 +179,11 @@
         </a>`).join("")}`;
   }
 
-  // メンバー: 画面下のタブ。片手で届く位置に置く
+  // メンバー: PCでは左サイドメニュー、スマホでは画面下のタブ。
+  // 両方を描いて CSS で出し分ける。同じ画面幅で2つ出ることはない。
   function renderMemberNav(active) {
+    renderSidebar(active, MEMBER_SIDE_NAV, "member");
+
     const el = document.createElement("nav");
     el.className = "kp-tabbar";
     el.innerHTML = MEMBER_NAV.map((n) => {
@@ -164,12 +195,17 @@
         : `<span class="${cls}" title="準備中">${inner}</span>`;
     }).join("");
     document.body.appendChild(el);
+    document.body.classList.add("kp-has-tabbar");
   }
 
   // 管理者: 左サイドメニュー。PC前提だが、狭い画面では上部の横スクロールに変わる
   function renderAdminNav(active, items = ADMIN_NAV) {
+    renderSidebar(active, items, "admin");
+  }
+
+  function renderSidebar(active, items, variant) {
     const el = document.createElement("nav");
-    el.className = "kp-sidebar";
+    el.className = `kp-sidebar${variant === "member" ? " member" : ""}`;
     el.innerHTML = items.map((n) => {
       if (n.section) return `<div class="kp-side-section">${esc(n.section)}</div>`;
       const on = n.key === active;
@@ -203,7 +239,7 @@
     for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar"]) {
       for (const n of document.querySelectorAll(sel)) n.remove();
     }
-    document.body.classList.remove("kp-has-sidebar");
+    document.body.classList.remove("kp-has-sidebar", "kp-has-tabbar");
     document.documentElement.classList.remove("kp-has-sidebar");
   }
 

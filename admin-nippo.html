@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日報 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910c">
+  <link rel="stylesheet" href="css/layout.css?v=20260910c">
+  <script>
+    try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .dr-card { border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+    .dr-card.confirmed { background:#fbfcfe; }
+    .dr-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+    .dr-name { font-size:14.5px; font-weight:700; color:var(--primary-dark); }
+    .dr-item { margin-bottom:9px; }
+    .dr-item .k { font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:2px; }
+    .dr-item .v { font-size:13px; white-space:pre-wrap; }
+    .dr-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 20px; }
+    @media (max-width:720px){ .dr-grid { grid-template-columns:1fr; } }
+    .dr-mini { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .dr-mini th { text-align:left; font-weight:600; color:var(--muted); padding:2px 8px 2px 0; }
+    .dr-mini td { padding:2px 8px 2px 0; }
+    .dr-reply { border-left:3px solid #2f855a; background:#f0f7f2; padding:9px 12px;
+                border-radius:0 8px 8px 0; margin-top:8px; font-size:12.5px; white-space:pre-wrap; }
+    .dr-reply.ai { border-left-color:var(--primary); background:var(--soft); }
+    .dr-reply.draft { border-left-color:#c05621; background:#fffaf0; }
+    .dr-reply .rh { font-size:11px; font-weight:700; margin-bottom:3px; color:var(--primary-dark); }
+    .dr-bar { display:flex; align-items:flex-end; gap:3px; height:60px; }
+    .dr-bar div { flex:1; background:var(--soft); border-radius:2px 2px 0 0; position:relative; }
+    .dr-bar div span { position:absolute; inset:auto 0 0 0; background:var(--primary); border-radius:2px 2px 0 0; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">日報</h1>
+  <p class="kp-greet-sub">全員の日報を1日ぶんまとめて確認し、必要なら本人へメッセージを返します。</p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <div class="inline-controls" style="margin-bottom:0;">
+      <div><label>日付</label><input id="f-date" type="date"></div>
+      <div style="align-self:flex-end;">
+        <button class="btn btn-secondary btn-sm" onclick="shift(-1)">前の日</button>
+        <button class="btn btn-secondary btn-sm" onclick="shift(1)">次の日</button>
+        <button class="btn btn-secondary btn-sm" onclick="jump(todayStr())">今日</button>
+      </div>
+      <div style="margin-left:auto;align-self:flex-end;">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-weight:500;font-size:12.5px;">
+          <input id="ai-toggle" type="checkbox" style="width:auto;margin:0;" onchange="toggleAi(this)">
+          AI自動返信
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div id="tiles" class="kp-tiles"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">trending_up</span>提出率<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近の平日</span></h2>
+    <div class="dr-bar" id="trend"></div>
+    <div id="trend-labels" style="display:flex;gap:3px;margin-top:4px;font-size:10px;color:var(--muted);"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">person_off</span>未提出</h2>
+    <div id="not-submitted"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">description</span>提出された日報</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">radar</span>週次評価
+      <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div><label>対象者</label><select id="w-user" onchange="loadWeekly()"></select></div>
+    </div>
+    <div id="w-form"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910c"></script>
+<script src="js/layout.js?v=20260910c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const EVAL = [
+    ["achieve", "達成"], ["speed", "スピード"], ["accuracy", "正確さ"],
+    ["priority", "優先順位"], ["solve", "解決力"], ["share", "共有"],
+  ];
+
+  let data = null;
+  let weekly = null;
+
+  KPLayout.init({ active: "nippo", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) start(); });
+
+  const todayStr = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
+  function start() {
+    el("f-date").value = todayStr();
+    el("f-date").addEventListener("change", () => load(el("f-date").value));
+    load(todayStr());
+  }
+
+  function shift(n) {
+    const d = new Date(`${el("f-date").value || todayStr()}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    jump(d.toISOString().slice(0, 10));
+  }
+  function jump(date) { el("f-date").value = date; load(date); }
+
+  async function load(date) {
+    try {
+      data = await API.nippoAdmin(date, 14);
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+    el("ai-toggle").checked = !!data.aiAutoReply;
+    el("wk-tag").textContent = `${data.weekStart} の週`;
+    renderTiles();
+    renderTrend();
+    renderNotSubmitted();
+    renderList();
+    renderUserPicker();
+  }
+
+  function renderTiles() {
+    const total = (data.members || []).length;
+    const done = (data.nippos || []).length;
+    const confirmed = (data.nippos || []).filter((n) => n.confirmed).length;
+    const struggling = (data.nippos || []).filter((n) => n.mood === "苦戦").length;
+    const tile = (k, v, sub, cls) => `
+      <div class="kp-tile${cls ? " " + cls : ""}">
+        <div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${esc(sub)}</div>
+      </div>`;
+    el("tiles").innerHTML = [
+      tile("提出", `${done}<small>/${total}</small>`, total ? `${Math.round((done / total) * 100)}%` : "—"),
+      tile("未確認", done - confirmed, `確認済み ${confirmed} 件`, done - confirmed ? "alert" : ""),
+      tile("苦戦", struggling, "調子が「苦戦」の人", struggling ? "alert" : ""),
+      tile("対象者", total, "在籍・ログインあり"),
+    ].join("");
+  }
+
+  function renderTrend() {
+    const rows = data.trend || [];
+    if (!rows.length) { el("trend").innerHTML = ""; el("trend-labels").innerHTML = ""; return; }
+    el("trend").innerHTML = rows.map((r) => {
+      const pct = r.total ? Math.round((r.submitted / r.total) * 100) : 0;
+      return `<div title="${esc(r.date)} ${r.submitted}/${r.total}"><span style="height:${pct}%;"></span></div>`;
+    }).join("");
+    el("trend-labels").innerHTML = rows.map((r) =>
+      `<div style="flex:1;text-align:center;">${esc(r.date.slice(5))}</div>`).join("");
+  }
+
+  function renderNotSubmitted() {
+    const yet = data.notSubmitted || [];
+    el("not-submitted").innerHTML = yet.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">
+           ${yet.map((n) => `<span class="kp-chip draft">${esc(n)}</span>`).join("")}
+         </div>`
+      : `<div class="empty">全員提出済みです。</div>`;
+  }
+
+  // --- 日報の一覧 -------------------------------------------------------------
+  function renderList() {
+    const rows = data.nippos || [];
+    if (!rows.length) { el("list").innerHTML = `<div class="empty">この日の日報はありません。</div>`; return; }
+    el("list").innerHTML = rows.map(card).join("");
+  }
+
+  function card(n) {
+    const rs = (data.replies || []).filter((r) => r.nippo_id === n.id);
+    const item = (k, v) => v ? `<div class="dr-item"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>` : "";
+
+    return `
+      <div class="dr-card${n.confirmed ? " confirmed" : ""}">
+        <div class="dr-head">
+          <span class="dr-name">${esc(n.user_name)}</span>
+          <span class="kp-chip${n.mood === "苦戦" ? " important" : ""}">${esc(n.mood || "")}</span>
+          ${n.employ_type ? `<span class="muted" style="font-size:11.5px;">${esc(n.employ_type)}</span>` : ""}
+          ${n.confirmed ? '<span class="kp-chip event">確認済み</span>' : ""}
+          <button class="btn ${n.confirmed ? "btn-secondary" : "btn-primary"} btn-sm" style="margin-left:auto;"
+                  onclick="confirmOne('${esc(n.id)}', ${!n.confirmed}, this)">
+            ${n.confirmed ? "確認を外す" : "確認した"}
+          </button>
+        </div>
+
+        <div class="dr-grid">
+          <div>
+            ${item(`① 今日の目的${n.purpose_area ? `（${n.purpose_area}）` : ""}`, n.purpose)}
+            ${kpiTable("② 今日のKPI", n.kpis)}
+            ${item("③ 今日の成果", n.today_work)}
+            ${item("次工程へ進めた結果", n.funnel)}
+            ${rowTable("④ 引き継ぎ", n.handoff, [["to_name", "誰に"], ["what", "何を"], ["state", "状態"]])}
+          </div>
+          <div>
+            ${rowTable("⑤ 止まっていること", n.stuck,
+              [["item", "案件"], ["pos", "工程"], ["reason", "理由"], ["ball", "ボール"], ["next", "次の一手"]])}
+            ${item("⑤-2 未達の原因", n.miss_reason)}
+            ${item("⑥ 挑戦・改善", n.challenge)}
+            ${item("⑦ 小さな成功", n.small_win)}
+            ${item("⑨ 貢献", n.contribution)}
+            ${item("⑩ 明日の最優先", n.tomorrow_plan)}
+            ${kgiLine(n)}
+          </div>
+        </div>
+
+        ${rs.map(replyBox).join("")}
+
+        <div style="margin-top:10px;">
+          <textarea id="rp-${esc(n.id)}" rows="2" placeholder="本人へのメッセージ（任意）"></textarea>
+          <button class="btn btn-primary btn-sm" onclick="reply('${esc(n.id)}', false, this)">
+            <span class="material-symbols-outlined icon-inline">send</span>本人へ送る
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="reply('${esc(n.id)}', true, this)">
+            下書きとして保存
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function kgiLine(n) {
+    if (!n.kgi_week && n.progress_total == null) return "";
+    const pct = n.progress_total > 0 ? Math.round((n.progress_done / n.progress_total) * 100) : null;
+    return `<div class="dr-item"><div class="k">今週のKGI</div>
+      <div class="v">${esc(n.kgi_week || "")}${pct !== null
+        ? `<span class="muted" style="margin-left:8px;">${n.progress_done ?? 0} / ${n.progress_total}（${pct}%）</span>` : ""}</div></div>`;
+  }
+
+  function kpiTable(label, rows) {
+    if (!Array.isArray(rows) || !rows.length) return "";
+    return `<div class="dr-item"><div class="k">${esc(label)}</div>
+      <table class="dr-mini"><tr><th>指標</th><th>目標</th><th>実績</th></tr>
+      ${rows.map((r) => `<tr><td>${esc(r.name || "")}</td><td>${esc(r.goal || "")}</td><td>${esc(r.actual || "")}</td></tr>`).join("")}
+      </table></div>`;
+  }
+
+  function rowTable(label, rows, cols) {
+    if (!Array.isArray(rows) || !rows.length) return "";
+    return `<div class="dr-item"><div class="k">${esc(label)}</div>
+      <table class="dr-mini"><tr>${cols.map(([, h]) => `<th>${esc(h)}</th>`).join("")}</tr>
+      ${rows.map((r) => `<tr>${cols.map(([k]) => `<td>${esc(r[k] || "")}</td>`).join("")}</tr>`).join("")}
+      </table></div>`;
+  }
+
+  function replyBox(r) {
+    if (r.kind === "ai") {
+      const st = r.status || "sent";
+      const body = st === "error" || !r.body
+        ? `AI返信は生成できませんでした${r.error_detail ? `（${esc(r.error_detail)}）` : ""}`
+        : esc(r.body);
+      return `<div class="dr-reply ai"><div class="rh">AIによる自動返信${r.needs_human ? "・要確認" : ""}</div>${body}</div>`;
+    }
+    return `<div class="dr-reply${r.draft_only ? " draft" : ""}">
+      <div class="rh">担当者より${r.draft_only ? "（下書き・本人には未送信）" : ""}</div>${esc(r.body)}
+      ${r.draft_only ? `
+        <div style="margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="sendDraft('${esc(r.id)}', this)">本人へ送る</button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteDraft('${esc(r.id)}', this)">下書きを消す</button>
+        </div>` : ""}
+    </div>`;
+  }
+
+  // --- 操作 -------------------------------------------------------------------
+  async function confirmOne(nippoId, confirmed, btn) {
+    try {
+      await KPLayout.busy(btn, "更新中…", () => API.nippoAdminAct({ action: "confirm", nippoId, confirmed }));
+      await load(el("f-date").value);
+    } catch (e) { alert(e.detail || e.message || "更新に失敗しました"); }
+  }
+
+  async function reply(nippoId, draftOnly, btn) {
+    const box = el(`rp-${nippoId}`);
+    const body = box.value.trim();
+    if (!body) { box.focus(); return; }
+    try {
+      await KPLayout.busy(btn, draftOnly ? "保存中…" : "送信中…",
+        () => API.nippoAdminAct({ action: "reply", nippoId, body, draftOnly }));
+      await load(el("f-date").value);
+    } catch (e) { alert(e.detail || e.message || "送信に失敗しました"); }
+  }
+
+  async function sendDraft(replyId, btn) {
+    try {
+      await KPLayout.busy(btn, "送信中…", () => API.nippoAdminAct({ action: "send_draft", replyId }));
+      await load(el("f-date").value);
+    } catch (e) { alert(e.detail || e.message || "送信に失敗しました"); }
+  }
+
+  async function deleteDraft(replyId, btn) {
+    if (!confirm("この下書きを消します。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.nippoAdminAct({ action: "delete_reply", replyId }));
+      await load(el("f-date").value);
+    } catch (e) { alert(e.hint || e.detail || e.message || "削除に失敗しました"); }
+  }
+
+  async function toggleAi(input) {
+    const enabled = input.checked;
+    try { await API.nippoAdminAct({ action: "ai_toggle", enabled }); }
+    catch (e) { input.checked = !enabled; alert(e.detail || e.message || "変更に失敗しました"); }
+  }
+
+  // --- 週次評価 ---------------------------------------------------------------
+  function renderUserPicker() {
+    const sel = el("w-user");
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">選んでください</option>` + (data.members || []).map((m) =>
+      `<option value="${esc(m.userId)}"${m.userId === keep ? " selected" : ""}>${esc(m.name)}</option>`).join("");
+    if (keep) loadWeekly(); else el("w-form").innerHTML = `<div class="empty">対象者を選ぶと入力できます。</div>`;
+  }
+
+  async function loadWeekly() {
+    const userId = el("w-user").value;
+    if (!userId) { el("w-form").innerHTML = `<div class="empty">対象者を選ぶと入力できます。</div>`; return; }
+    try {
+      const res = await API.nippoAdminAct({ action: "weekly_get", userId, weekStart: data.weekStart });
+      weekly = res.weekly;
+    } catch { weekly = null; }
+    renderWeeklyForm();
+  }
+
+  function renderWeeklyForm() {
+    const s = weekly?.eval_scores || {};
+    el("w-form").innerHTML = `
+      ${weekly?.q1 || weekly?.q2 || weekly?.q3 || weekly?.q4 ? `
+        <div class="banner info" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">quiz</span>
+          <div style="font-size:12.5px;">
+            <strong>本人の振り返り</strong>
+            ${["q1", "q2", "q3", "q4"].filter((k) => weekly[k]).map((k) =>
+              `<div style="margin-top:6px;white-space:pre-wrap;">${esc(weekly[k])}</div>`).join("")}
+          </div>
+        </div>` : `<div class="banner warn" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">info</span>
+          <div>この週の本人の振り返りはまだ入っていません。</div></div>`}
+
+      <div class="inline-controls" style="margin-bottom:12px;">
+        ${EVAL.map(([k, label]) => `
+          <div style="min-width:110px;">
+            <label>${esc(label)}</label>
+            <select id="ev-${k}">
+              <option value="">—</option>
+              ${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${s[k] === n ? " selected" : ""}>${n}</option>`).join("")}
+            </select>
+          </div>`).join("")}
+      </div>
+      <div style="margin-bottom:12px;">
+        <label>総評</label>
+        <textarea id="ev-comment" rows="3">${esc(weekly?.eval_comment || "")}</textarea>
+      </div>
+      ${weekly?.submitted_at
+        ? `<div class="banner ok" style="margin-bottom:12px;">
+             <span class="material-symbols-outlined">check_circle</span>
+             <div>本人へ提出済みです（${esc(new Date(weekly.submitted_at).toLocaleString("ja-JP"))}）。上書きして再提出できます。</div>
+           </div>` : ""}
+      <button class="btn btn-secondary" onclick="saveEval(false, this)">下書きとして保存</button>
+      <button class="btn btn-primary" onclick="saveEval(true, this)">
+        <span class="material-symbols-outlined icon-inline">send</span>本人へ提出
+      </button>
+      <div id="ev-msg" class="err-text"></div>`;
+  }
+
+  async function saveEval(submitToUser, btn) {
+    const userId = el("w-user").value;
+    if (!userId) return;
+    const scores = {};
+    for (const [k] of EVAL) {
+      const v = el(`ev-${k}`).value;
+      if (v) scores[k] = Number(v);
+    }
+    try {
+      const res = await KPLayout.busy(btn, "保存中…", () => API.nippoAdminAct({
+        action: "weekly_eval", userId, weekStart: data.weekStart,
+        scores, comment: el("ev-comment").value, submit: submitToUser,
+      }));
+      weekly = res.weekly;
+      renderWeeklyForm();
+    } catch (e) {
+      el("ev-msg").textContent = e.hint || e.detail || e.message || "保存に失敗しました";
+    }
+  }
+</script>
+
+</body>
+</html>

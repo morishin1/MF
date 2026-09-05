@@ -7,15 +7,15 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910b">
-  <link rel="stylesheet" href="css/layout.css?v=20260910b">
+  <link rel="stylesheet" href="css/app.css?v=20260910c">
+  <link rel="stylesheet" href="css/layout.css?v=20260910c">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
     try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
-      if (kpc && localStorage.getItem("kp_view") !== "member"
-          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+      if (kpc && kpc.appRole) {
         document.documentElement.classList.add("kp-has-sidebar");
       }
     } catch (e) { /* 読めなくても動く */ }
@@ -28,12 +28,13 @@
   <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">person_add</span>メンバーを追加</h2>
+    <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
     <div class="inline-controls" style="margin-bottom:12px;">
       <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
       <div><label>メール</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
       <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
       <div><label>役職</label><input id="e-position" type="text" placeholder="主任"></div>
+      <div><label>勤務地</label><input id="e-location" type="text" placeholder="本社"></div>
       <div>
         <label>雇用区分</label>
         <select id="e-type">
@@ -42,13 +43,19 @@
         </select>
       </div>
       <div><label>入社日</label><input id="e-joined" type="date"></div>
+      <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
       <div>
-        <button class="btn btn-primary" onclick="add(this)">
+        <button class="btn btn-primary" id="e-save" onclick="save(this)">
           <span class="material-symbols-outlined icon-inline">add</span>追加
         </button>
       </div>
+      <div id="e-cancel-wrap" style="display:none;">
+        <button class="btn btn-secondary" onclick="resetForm()">
+          <span class="material-symbols-outlined icon-inline">close</span>編集をやめる
+        </button>
+      </div>
     </div>
-    <p class="muted" style="font-size:12px;margin:0;">
+    <p class="muted" style="font-size:12px;margin:0;" id="e-note">
       ここで追加した人はまだログインアカウントと紐づいていません。本人のアカウントを作った後、
       Supabase 側で紐づけるか、下の一覧の「未連携」表示を目印に対応してください。
     </p>
@@ -65,8 +72,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910b"></script>
-<script src="js/layout.js?v=20260910b"></script>
+<script src="js/api-client.js?v=20260910c"></script>
+<script src="js/layout.js?v=20260910c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -75,7 +82,9 @@
   const STATUS_LABEL = { invited: "招待中", active: "在籍", leaving: "退職手続き中", left: "退職" };
 
   let employees = [];
-  let canGrantRoles = false;
+  let canGrantRoles = false;  // 社内権限の付け外し（人事のみ）
+  let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
+  let editingId = null;      // null なら追加、id が入っていればその人の編集
 
   KPLayout.init({ active: "members", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -85,6 +94,7 @@
       const res = await API.listEmployees();
       employees = res.employees || [];
       canGrantRoles = !!res.canGrantRoles;
+      canManage = !!res.canManage;
       render();
     } catch (e) {
       el("list").innerHTML =
@@ -93,25 +103,92 @@
     }
   }
 
-  async function add(btn) {
+  // 追加と編集で同じフォームを使う。項目が同じものを2つ並べても、
+  // どちらに書いたか分からなくなるだけなので、切り替えにした。
+  async function save(btn) {
     const msg = el("e-msg");
     msg.textContent = "";
     const display_name = el("e-name").value.trim();
     if (!display_name) { msg.textContent = "氏名を入力してください"; return; }
+
+    const fields = {
+      display_name,
+      email: el("e-email").value.trim() || null,
+      department: el("e-dept").value.trim() || null,
+      position: el("e-position").value.trim() || null,
+      work_location: el("e-location").value.trim() || null,
+      employment_type: el("e-type").value,
+      joined_on: el("e-joined").value || null,
+    };
+
     try {
-      await KPLayout.busy(btn, "追加中…", () => API.createEmployee({
-        display_name,
-        email: el("e-email").value.trim() || null,
-        department: el("e-dept").value.trim() || null,
-        position: el("e-position").value.trim() || null,
-        employment_type: el("e-type").value,
-        joined_on: el("e-joined").value || null,
-        status: "invited",
-      }));
-      for (const id of ["e-name", "e-email", "e-dept", "e-position", "e-joined"]) el(id).value = "";
+      if (editingId) {
+        await KPLayout.busy(btn, "保存中…", () => API.updateEmployee({
+          id: editingId, ...fields, left_on: el("e-left").value || null,
+        }));
+      } else {
+        await KPLayout.busy(btn, "追加中…", () => API.createEmployee({ ...fields, status: "invited" }));
+      }
+      resetForm();
       await load();
     } catch (e) {
-      msg.textContent = e.detail || e.message || "追加に失敗しました";
+      msg.textContent = e.detail || e.hint || e.message || "保存に失敗しました";
+    }
+  }
+
+  function startEdit(id) {
+    const e = employees.find((x) => x.id === id);
+    if (!e) return;
+    editingId = id;
+    el("e-name").value = e.display_name || "";
+    el("e-email").value = e.email || "";
+    el("e-dept").value = e.department || "";
+    el("e-position").value = e.position || "";
+    el("e-location").value = e.work_location || "";
+    el("e-type").value = e.employment_type || "正社員";
+    el("e-joined").value = e.joined_on || "";
+    el("e-left").value = e.left_on || "";
+
+    el("e-icon").textContent = "edit";
+    el("e-title").textContent = `${e.display_name} さんを編集`;
+    el("e-save").innerHTML = '<span class="material-symbols-outlined icon-inline">save</span>保存';
+    el("e-cancel-wrap").style.display = "";
+    el("e-left-wrap").style.display = "";
+    el("e-note").textContent = "在籍状態と社内権限は、下の一覧で切り替えます。";
+    el("e-msg").textContent = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetForm() {
+    editingId = null;
+    for (const id of ["e-name", "e-email", "e-dept", "e-position", "e-location", "e-joined", "e-left"]) {
+      el(id).value = "";
+    }
+    el("e-type").value = "正社員";
+    el("e-icon").textContent = "person_add";
+    el("e-title").textContent = "メンバーを追加";
+    el("e-save").innerHTML = '<span class="material-symbols-outlined icon-inline">add</span>追加';
+    el("e-cancel-wrap").style.display = "none";
+    el("e-left-wrap").style.display = "none";
+    el("e-note").textContent =
+      "ここで追加した人はまだログインアカウントと紐づいていません。本人のアカウントを作った後、" +
+      "Supabase 側で紐づけるか、下の一覧の「未連携」表示を目印に対応してください。";
+    el("e-msg").textContent = "";
+  }
+
+  async function remove(id, btn) {
+    const e = employees.find((x) => x.id === id);
+    if (!e) return;
+    if (!confirm(
+      `${e.display_name} さんを名簿から削除します。\n\n` +
+      "退職した方は、削除ではなく状態を「退職」にしてください（記録が残ります）。\n" +
+      "削除してよろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deleteEmployee(id));
+      if (editingId === id) resetForm();
+      await load();
+    } catch (e2) {
+      alert(e2.hint || e2.detail || e2.message || "削除に失敗しました");
     }
   }
 
@@ -124,7 +201,7 @@
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
-            <th>氏名</th><th>部署・役職</th><th>雇用区分</th><th>状態</th><th>社内権限</th><th>ログイン</th>
+            <th>氏名</th><th>部署・役職</th><th>雇用区分</th><th>状態</th><th>社内権限</th><th>ログイン</th><th>操作</th>
           </tr></thead>
           <tbody>${employees.map(row).join("")}</tbody>
         </table>
@@ -151,7 +228,7 @@
         <td>${esc(e.department || "—")}${e.position ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.position)}</span>` : ""}</td>
         <td>${esc(e.employment_type || "—")}</td>
         <td>
-          <select ${canGrantRoles ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
+          <select ${canManage ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
               `<option value="${k}"${e.status === k ? " selected" : ""}>${v}</option>`).join("")}
           </select>
@@ -160,6 +237,12 @@
         <td>${e.user_id
           ? '<span class="kp-chip event">連携済み</span>'
           : '<span class="kp-chip draft">未連携</span>'}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                  onclick="startEdit('${esc(e.id)}')">編集</button>
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                  onclick="remove('${esc(e.id)}', this)">削除</button>
+        </td>
       </tr>`;
   }
 

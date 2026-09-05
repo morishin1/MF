@@ -1,6 +1,7 @@
 // GET    /api/employees          … 社員名簿の一覧（管理者・人事）
 // POST   /api/employees          … 社員を追加（入社予定者は user_id なしで登録できる）
 // PATCH  /api/employees {id,...} … 社員情報を更新
+// DELETE /api/employees?id=…     … 社員を名簿から消す（記録が無い人だけ）
 //
 // 可視範囲・書き込み可否は RLS（db/005_groupware_core.sql）が決める。
 // ここでの分岐は入口の親切表示のため。
@@ -100,7 +101,68 @@ export default async function handler(req, res) {
     return json(res, 200, { employee: data });
   }
 
-  return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
+  if (req.method === "DELETE") {
+    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    const id = new URL(req.url, "http://localhost").searchParams.get("id");
+    if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
+
+    const { data: target } = await sb
+      .from("gw_employees").select("id, display_name, user_id")
+      .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
+    if (!target) return json(res, 404, { error: "employee_not_found" });
+
+    // 自分を消すと、その場で名簿を触れなくなる
+    if (ctx.employee?.id === id) {
+      return json(res, 400, { error: "cannot_delete_self", hint: "自分自身は削除できません" });
+    }
+
+    // 経費や申請が紐づいている人を消すと、その記録ごと消える（外部キーが cascade）。
+    // 過去の申請・承認の記録は会社として残すものなので、消させずに退職を勧める。
+    const blockers = await relatedRecords(sb, ctx.tenantId, id);
+    if (blockers.length) {
+      return json(res, 409, {
+        error: "employee_has_records",
+        blockers,
+        hint: `${blockers.map((b) => `${b.label}${b.count}件`).join("・")}が残っています。` +
+              "消すとこの記録も一緒に消えるため、状態を「退職」に変えてください。",
+      });
+    }
+
+    const { error } = await sb
+      .from("gw_employees").delete().eq("id", id).eq("tenant_id", ctx.tenantId);
+    if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
+
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "employee.delete",
+      target: `employee:${id}`, detail: { name: target.display_name, had_login: !!target.user_id },
+    });
+    // ログインアカウント（auth.users）はここでは消さない。
+    // 同じアカウントを LMS・事務ポータル・タイムカードも使っているため。
+    return json(res, 200, { ok: true, id, authUserKept: !!target.user_id });
+  }
+
+  return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);
+}
+
+// 消すと道連れになる記録を数える。0件のものは返さない
+async function relatedRecords(sb, tenantId, employeeId) {
+  const targets = [
+    { table: "gw_expense_reports", column: "employee_id", label: "経費申請" },
+    { table: "gw_requests",        column: "employee_id", label: "有給・稟議" },
+    { table: "gw_bookings",        column: "employee_id", label: "設備予約" },
+    { table: "gw_procedures",      column: "employee_id", label: "入退社手続き" },
+    { table: "gw_messages",        column: "sender_id",   label: "チャット" },
+  ];
+  const out = [];
+  for (const t of targets) {
+    // まだ流していないマイグレーションの表があっても、削除の判定を止めない
+    const { count, error } = await sb
+      .from(t.table).select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId).eq(t.column, employeeId);
+    if (error) continue;
+    if (count) out.push({ label: t.label, count });
+  }
+  return out;
 }
 
 function normalize(body, { partial = false } = {}) {

@@ -10,7 +10,10 @@
   left: 0; right: 0; bottom: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* 項目数を数えずに済むよう自動で割る。4つ固定にしていたため
+     5つ目（メニュー）が2段目に落ちて見切れていた */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   background: #fff;
   border-top: 1px solid var(--border);
   /* iPhone のホームバー分を空ける */
@@ -37,8 +40,17 @@
 }
 .kp-tab.soon { opacity: .45; cursor: default; }
 
-/* タブバーの高さぶん、本文の下に余白を作る */
-body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
+/* タブバーの高さぶん、本文の下に余白を作る。
+   メンバーはPCでサイドメニュー・スマホでタブバーの両方を持つので、
+   「サイドメニューが無いこと」ではなく「タブバーが出ていること」で判断する */
+body.kp-has-tabbar .wrap { padding-bottom: 88px; }
+body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
+
+/* PCではタブバーを出さない。サイドメニューと二重になるため */
+@media (min-width: 861px) {
+  .kp-tabbar { display: none; }
+  body.kp-has-tabbar .wrap { padding-bottom: 40px; }
+}
 
 /* =============================================================================
    管理者: 左サイドメニュー（PC前提）
@@ -88,8 +100,10 @@ body:not(.kp-has-sidebar) .wrap { padding-bottom: 88px; }
   padding-right: 24px;
 }
 
-/* サイドメニューは狭い画面では上部の横スクロールに切り替える */
+/* サイドメニューは狭い画面では上部の横スクロールに切り替える。
+   ただしメンバーは下のタブバーがあるので、そちらに任せて消す */
 @media (max-width: 860px) {
+  .kp-sidebar.member { display: none; }
   .kp-sidebar {
     position: static;
     width: auto;

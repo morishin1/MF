@@ -7,15 +7,15 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910b">
-  <link rel="stylesheet" href="css/layout.css?v=20260910b">
+  <link rel="stylesheet" href="css/app.css?v=20260910c">
+  <link rel="stylesheet" href="css/layout.css?v=20260910c">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
     try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
-      if (kpc && localStorage.getItem("kp_view") !== "member"
-          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+      if (kpc && kpc.appRole) {
         document.documentElement.classList.add("kp-has-sidebar");
       }
     } catch (e) { /* 読めなくても動く */ }
@@ -59,8 +59,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260910b"></script>
-<script src="js/layout.js?v=20260910b"></script>
+<script src="js/api-client.js?v=20260910c"></script>
+<script src="js/layout.js?v=20260910c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -246,46 +246,58 @@
     catch (e) { n.read = false; renderNotices(); alert(e.detail || e.message || "既読にできませんでした"); }
   }
 
-  // 今出せる実データだけを集める。失敗しても画面は壊さない。
-  async function loadStats() {
-    const stats = { month: thisMonth(), total: null, thisMonth: null, needsCheck: null, error: null };
-    try {
-      const clients = await API.listClients();
-      if (!clients.length) { stats.error = "取引先が登録されていません"; return stats; }
-      const clientId = clients[0].id;
+  // ホームに出すのは「今日、自分が動く必要があること」だけにする。
+  // 会計書類の枚数は自分の行動を変えないので、タイルからは外して下のカードに残した。
+  // 4つの取得はそれぞれ独立していて、1つ失敗しても他は出る。
+  const dayStr = (d) => new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
 
-      const all = await API.listDocuments(clientId, {});
-      stats.total = all.length;
-      stats.thisMonth = all.filter((d) => d.period === stats.month).length;
-      stats.needsCheck = all.filter((d) => d.status === "ready" || d.status === "error").length;
-    } catch (e) {
-      stats.error = e.message || String(e);
+  async function loadStats() {
+    const today = dayStr(new Date());
+    const out = { today };
+
+    const [nippo, sched, tasks, reqs] = await Promise.allSettled([
+      API.nippo(today),
+      API.schedule(new Date(`${today}T00:00:00+09:00`).toISOString(),
+                   new Date(`${today}T23:59:59+09:00`).toISOString()),
+      API.listTasks("mine"),
+      API.listRequests("mine"),
+    ]);
+
+    if (nippo.status === "fulfilled") out.nippoDone = !!nippo.value.today;
+    if (sched.status === "fulfilled") {
+      out.events = (sched.value.events || []).length + (sched.value.external || []).length;
     }
-    return stats;
+    if (tasks.status === "fulfilled") {
+      const list = (tasks.value.tasks || []).filter((t) => t.status !== "done");
+      out.tasksOpen = list.length;
+      out.tasksLate = list.filter((t) => t.due_on && t.due_on < today).length;
+    }
+    if (reqs.status === "fulfilled") {
+      out.pending = (reqs.value.requests || [])
+        .filter((r) => r.status === "pending" || r.status === "pending_owner").length;
+    }
+    return out;
   }
 
   function renderTiles(s) {
-    if (s.error) {
-      el("tiles").innerHTML =
-        `<div class="banner warn" style="grid-column:1/-1;">
-           <span class="material-symbols-outlined">info</span>
-           <div>書類の状況を取得できませんでした：${esc(s.error)}</div>
-         </div>`;
-      return;
-    }
-    const tile = (href, icon, k, v, unit, s2, cls) => `
+    const tile = (href, icon, k, v, unit, sub, cls) => `
       <a class="kp-tile${cls ? " " + cls : ""}" href="${href}">
         <div class="k"><span class="material-symbols-outlined" style="font-size:15px;">${icon}</span>${k}</div>
         <div class="v">${v}${unit ? `<small>${unit}</small>` : ""}</div>
-        <div class="s">${s2}</div>
+        <div class="s">${sub}</div>
       </a>`;
 
     el("tiles").innerHTML = [
-      tile("app.html", "calendar_month", "今月の書類", s.thisMonth ?? "—", "件", `${esc(s.month)} 分`),
-      tile("app.html", "inventory_2", "書類の合計", s.total ?? "—", "件", "これまでにアップした数"),
-      s.needsCheck
-        ? tile("app.html", "error", "確認が必要", s.needsCheck, "件", "要確認・エラーの書類", "alert")
-        : tile("app.html", "check_circle", "確認が必要", "0", "件", "すべて処理済みです"),
+      s.nippoDone === undefined
+        ? tile("nippo.html", "edit_note", "今日の日報", "—", "", "読み込めませんでした")
+        : (s.nippoDone
+          ? tile("nippo.html", "check_circle", "今日の日報", "提出済み", "", "見直し・書き直しができます")
+          : tile("nippo.html", "edit_note", "今日の日報", "未提出", "", "帰る前に書きましょう", "alert")),
+      tile("schedule.html", "calendar_month", "今日の予定", s.events ?? "—", "件", "自分のカレンダー"),
+      s.tasksLate
+        ? tile("tasks.html", "error", "やること", s.tasksOpen ?? "—", "件", `期限切れ ${s.tasksLate} 件`, "alert")
+        : tile("tasks.html", "checklist", "やること", s.tasksOpen ?? "—", "件", "未完了のタスク"),
+      tile("workflow.html", "approval", "承認待ちの申請", s.pending ?? "—", "件", "自分が出したもの"),
     ].join("");
   }
 </script>

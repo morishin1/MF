@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日報 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910c">
+  <link rel="stylesheet" href="css/layout.css?v=20260910c">
+  <script>
+    try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .np-sec { margin-bottom: 18px; }
+    .np-sec > label { display:block; font-size:12.5px; font-weight:700; color:var(--primary-dark); margin-bottom:5px; }
+    .np-sec .hint { font-size:11.5px; color:var(--muted); font-weight:400; margin-left:6px; }
+    .np-rows { display:flex; flex-direction:column; gap:6px; }
+    .np-row { display:flex; gap:6px; align-items:flex-start; }
+    .np-row input, .np-row select, .np-row textarea { margin:0; }
+    .np-row .x { flex:0 0 auto; }
+    .np-moods { display:flex; gap:8px; }
+    .np-mood { flex:1; padding:10px; border:1px solid var(--border); border-radius:8px;
+               background:#fff; font-size:13px; font-weight:600; cursor:pointer; color:var(--muted); }
+    .np-mood.on { border-color:var(--primary); background:var(--soft); color:var(--primary-dark); }
+    .np-areas { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+    .np-area { padding:6px 12px; border:1px solid var(--border); border-radius:999px;
+               background:#fff; font-size:12.5px; cursor:pointer; color:var(--muted); }
+    .np-area.on { border-color:var(--primary); background:var(--primary); color:#fff; }
+    .np-reply { border-left:3px solid var(--primary); background:var(--soft);
+                padding:10px 12px; border-radius:0 8px 8px 0; margin-top:8px; white-space:pre-wrap; font-size:13px; }
+    .np-reply .rh { display:flex; align-items:center; gap:5px; font-size:11.5px;
+                    font-weight:700; color:var(--primary-dark); margin-bottom:4px; }
+    .np-reply .note { font-size:11px; color:var(--muted); margin-top:6px; white-space:normal; }
+    .np-reply.admin { border-left-color:#2f855a; background:#f0f7f2; }
+    .np-reply.ng { border-left-color:#c05621; background:#fffaf0; }
+    .np-thanks { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+    .np-thanks .who { font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:3px; }
+    .np-past { border-bottom:1px solid var(--border); padding:10px 0; }
+    .np-past:last-child { border-bottom:none; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">日報</h1>
+  <p class="kp-greet-sub">その日に前へ進めたことを残します。ここに書いたことが週次の振り返りの材料になります。</p>
+
+  <div id="notice"></div>
+
+  <!-- 受け取った感謝 -->
+  <div id="thanks-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">favorite</span>あなたへの感謝</h2>
+    <div id="thanks-list"></div>
+  </div>
+
+  <!-- 入力 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">edit_note</span>日報を書く
+      <span id="date-tag" class="kp-chip" style="margin-left:8px;"></span>
+      <input id="f-date" type="date" style="width:auto;margin:0 0 0 auto;">
+    </h2>
+
+    <div class="np-sec">
+      <label>今日の調子</label>
+      <div class="np-moods" id="f-mood"></div>
+    </div>
+
+    <div class="np-sec">
+      <label>① 今日の目的<span class="hint">何を前に進めるか。作業の記録ではなく前進の記録にするための項目です</span></label>
+      <div class="np-areas" id="f-area"></div>
+      <textarea id="f-purpose" rows="2" placeholder="例：A社の提案を、見積提示まで進める"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>今週のKGI（自分が最終的に責任を持つ結果）</label>
+      <input id="f-kgi" type="text" placeholder="例：今週中に3社へ提案書を提出する">
+      <div class="np-row" style="margin-top:6px;">
+        <input id="f-done" type="number" step="0.5" placeholder="達成" style="width:100px;">
+        <span style="align-self:center;color:var(--muted);">/</span>
+        <input id="f-total" type="number" step="0.5" placeholder="目標" style="width:100px;">
+        <span id="f-pct" style="align-self:center;font-size:13px;font-weight:700;color:var(--primary-dark);"></span>
+      </div>
+    </div>
+
+    <div class="np-sec">
+      <label>② 今日のKPI<span class="hint">目標と実績。数字が出せるものだけでかまいません</span></label>
+      <div class="np-rows" id="f-kpis"></div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('kpis')">
+        <span class="material-symbols-outlined icon-inline">add</span>行を足す
+      </button>
+    </div>
+
+    <div class="np-sec">
+      <label>チームKGI<span class="hint">チーム全体の週目標に対する現在地（分かる範囲で）</span></label>
+      <div class="np-rows" id="f-team"></div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('team')">
+        <span class="material-symbols-outlined icon-inline">add</span>行を足す
+      </button>
+    </div>
+
+    <div class="np-sec">
+      <label>③ 今日の成果<span class="hint">どの段階まで進めたか</span></label>
+      <textarea id="f-today" rows="3" placeholder="例：B社と打合せ。要件が固まり、見積の作成に着手"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>次の工程へ進めた結果<span class="hint">認知集客→初回対応→商談提案→導入支援→成果確認→事例化 のどこが動いたか</span></label>
+      <textarea id="f-funnel" rows="2" placeholder="例：初回対応 → 商談提案 が2件"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>④ 次工程への引き継ぎ<span class="hint">誰に渡したかを必ず書きます。バトンが実際に渡ったかを残すための項目です</span></label>
+      <div class="np-rows" id="f-handoff"></div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('handoff')">
+        <span class="material-symbols-outlined icon-inline">add</span>行を足す
+      </button>
+    </div>
+
+    <div class="np-sec">
+      <label>⑤ 止まっていること<span class="hint">誰のボールで止まっているかまで書くと、翌日に動きます</span></label>
+      <div class="np-rows" id="f-stuck"></div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('stuck')">
+        <span class="material-symbols-outlined icon-inline">add</span>行を足す
+      </button>
+    </div>
+
+    <div class="np-sec">
+      <label>⑤-2 未達の原因</label>
+      <textarea id="f-miss" rows="2" placeholder="目標に届かなかったとき、その理由"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>⑥ 今日の挑戦・改善<span class="hint">昨日と変えたこと</span></label>
+      <textarea id="f-challenge" rows="2"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>⑦ 今日の小さな成功<span class="hint">昨日よりできるようになったこと</span></label>
+      <textarea id="f-smallwin" rows="2"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>⑧ 今日の感謝<span class="hint">選んだ相手の日報画面に届きます</span></label>
+      <div class="np-rows" id="f-thanks"></div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addRow('thanks')">
+        <span class="material-symbols-outlined icon-inline">add</span>行を足す
+      </button>
+    </div>
+
+    <div class="np-sec">
+      <label>⑨ 顧客・会社への貢献<span class="hint">誰の何を前に進めたか</span></label>
+      <textarea id="f-contrib" rows="2"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <label>⑩ 明日の最優先<span class="hint">数字・期限・完了条件まで書く</span></label>
+      <textarea id="f-tomorrow" rows="2" placeholder="例：C社の見積を12時までに送る（金額・納期を確定させる）"></textarea>
+    </div>
+
+    <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
+      <span class="material-symbols-outlined icon-inline">send</span>提出する
+    </button>
+    <div id="f-msg" class="err-text"></div>
+    <div id="f-result"></div>
+  </div>
+
+  <!-- 週次レビュー -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">radar</span>今週の振り返り
+      <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div id="wk-eval"></div>
+    <div class="np-sec">
+      <label>今週、最もKGIに貢献した行動</label><textarea id="w-q1" rows="2"></textarea>
+    </div>
+    <div class="np-sec">
+      <label>数字が伸びた／伸びなかった原因</label><textarea id="w-q2" rows="2"></textarea>
+    </div>
+    <div class="np-sec">
+      <label>来週やめる・続ける・新しく試すこと</label><textarea id="w-q3" rows="2"></textarea>
+    </div>
+    <div class="np-sec">
+      <label>来週のKGI・KPI設定</label><textarea id="w-q4" rows="2"></textarea>
+    </div>
+    <button class="btn btn-secondary" onclick="saveWeekly(this)">
+      <span class="material-symbols-outlined icon-inline">save</span>振り返りを保存
+    </button>
+    <div id="w-msg" class="err-text"></div>
+  </div>
+
+  <!-- 今日の提出状況 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">groups</span>今日の提出状況</h2>
+    <div id="team"></div>
+  </div>
+
+  <!-- 過去の日報 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">history</span>これまでの日報</h2>
+    <div id="past"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910c"></script>
+<script src="js/layout.js?v=20260910c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const MOODS = ["順調", "普通", "苦戦"];
+  const AREAS = ["企業", "人材", "案件", "提案", "参画"];
+  // 行が増える項目の作り。列の定義をここに集めておき、描画も収集も同じ定義から作る
+  const ROW_SPECS = {
+    kpis:    [["name", "指標名"], ["goal", "目標"], ["actual", "実績"]],
+    team:    [["name", "チーム指標"], ["goal", "目標"], ["actual", "実績"]],
+    handoff: [["to_name", "誰に", "member"], ["what", "何を"], ["state", "どの状態で"]],
+    stuck:   [["item", "案件・作業"], ["pos", "工程"], ["reason", "理由"], ["ball", "誰のボール", "member"], ["next", "次の一手"]],
+    thanks:  [["toUserId", "誰に", "select"], ["body", "何をしてもらったか"]],
+  };
+
+  let data = null;
+  let mood = "順調";
+  let area = null;
+
+  KPLayout.init({ active: "nippo", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(); });
+
+  async function start() {
+    el("f-date").value = jstToday();
+    el("f-date").max = jstToday();
+    el("f-date").addEventListener("change", () => load(el("f-date").value));
+    for (const id of ["f-done", "f-total"]) el(id).addEventListener("input", updatePct);
+    await load(jstToday());
+  }
+
+  const jstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
+  async function load(date) {
+    try {
+      data = await API.nippo(date);
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+    el("date-tag").textContent = data.today ? "提出済み" : "未提出";
+    el("date-tag").className = `kp-chip ${data.today ? "event" : "draft"}`;
+    el("submit-btn").innerHTML = data.today
+      ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して保存'
+      : '<span class="material-symbols-outlined icon-inline">send</span>提出する';
+
+    renderMoodArea();
+    fillForm(data.today);
+    renderThanksReceived();
+    renderWeekly();
+    renderTeam();
+    renderPast();
+  }
+
+  // --- 入力欄の組み立て -------------------------------------------------------
+  function renderMoodArea() {
+    el("f-mood").innerHTML = MOODS.map((m) =>
+      `<button type="button" class="np-mood${m === mood ? " on" : ""}" onclick="setMood('${m}')">${m}</button>`).join("");
+    el("f-area").innerHTML = AREAS.map((a) =>
+      `<button type="button" class="np-area${a === area ? " on" : ""}" onclick="setArea('${a}')">${a}</button>`).join("");
+  }
+  function setMood(m) { mood = m; renderMoodArea(); }
+  function setArea(a) { area = (area === a) ? null : a; renderMoodArea(); }
+
+  function memberOptions(selected) {
+    return `<option value="">選んでください</option>` + (data.members || []).map((m) =>
+      `<option value="${esc(m.userId)}"${m.userId === selected ? " selected" : ""}>${esc(m.name)}</option>`).join("");
+  }
+
+  // 「誰に」は名簿から選べたほうが速いが、社外の人にも渡すので入力もできるようにする
+  function memberDatalist() {
+    return `<datalist id="dl-members">${(data.members || []).map((m) =>
+      `<option value="${esc(m.name)}"></option>`).join("")}</datalist>`;
+  }
+
+  function addRow(kind, values = {}) {
+    const wrap = el(`f-${kind}`);
+    const spec = ROW_SPECS[kind];
+    const div = document.createElement("div");
+    div.className = "np-row";
+    div.innerHTML = spec.map(([key, label, type]) => {
+      if (type === "select") {
+        return `<select data-k="${key}" style="flex:0 0 170px;">${memberOptions(values[key])}</select>`;
+      }
+      const list = type === "member" ? ' list="dl-members"' : "";
+      const flex = type === "member" ? "flex:0 0 150px;" : "flex:1;";
+      return `<input data-k="${key}" type="text" placeholder="${esc(label)}"${list}
+                     style="${flex}" value="${esc(values[key] || "")}">`;
+    }).join("") +
+      `<button type="button" class="btn btn-secondary btn-sm x" onclick="this.parentElement.remove()"
+               title="この行を消す"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>`;
+    wrap.appendChild(div);
+  }
+
+  function collectRows(kind) {
+    return [...el(`f-${kind}`).querySelectorAll(".np-row")].map((row) => {
+      const o = {};
+      for (const f of row.querySelectorAll("[data-k]")) o[f.dataset.k] = f.value.trim();
+      return o;
+    });
+  }
+
+  function fillForm(n) {
+    const v = (id, val) => { el(id).value = val ?? ""; };
+    mood = MOODS.includes(n?.mood) ? n.mood : "順調";
+    area = AREAS.includes(n?.purpose_area) ? n.purpose_area : null;
+    renderMoodArea();
+
+    v("f-purpose", n?.purpose);
+    v("f-kgi", n?.kgi_week);
+    v("f-done", n?.progress_done);
+    v("f-total", n?.progress_total);
+    v("f-today", n?.today_work);
+    v("f-funnel", n?.funnel);
+    v("f-miss", n?.miss_reason);
+    v("f-challenge", n?.challenge);
+    v("f-smallwin", n?.small_win);
+    v("f-contrib", n?.contribution);
+    v("f-tomorrow", n?.tomorrow_plan);
+    updatePct();
+
+    // 「誰に」の候補一覧は1つだけ置く
+    if (!document.getElementById("dl-members")) {
+      document.body.insertAdjacentHTML("beforeend", memberDatalist());
+    }
+
+    for (const kind of Object.keys(ROW_SPECS)) {
+      el(`f-${kind}`).innerHTML = "";
+      const src = kind === "thanks" ? [] : (n?.[dbKey(kind)] || []);
+      if (Array.isArray(src) && src.length) src.forEach((r) => addRow(kind, r));
+      else addRow(kind);
+    }
+  }
+
+  // 画面の名前と列名が違うものだけ変換する
+  const dbKey = (kind) => ({ team: "team_kgi", kpis: "kpis", handoff: "handoff", stuck: "stuck" }[kind] || kind);
+
+  function updatePct() {
+    const d = Number(el("f-done").value), t = Number(el("f-total").value);
+    el("f-pct").textContent = (t > 0 && Number.isFinite(d)) ? `${Math.round((d / t) * 100)}%` : "";
+  }
+
+  // --- 提出 -------------------------------------------------------------------
+  async function submit(btn) {
+    const msg = el("f-msg");
+    msg.textContent = "";
+    el("f-result").innerHTML = "";
+
+    const body = {
+      date: el("f-date").value || jstToday(),
+      mood,
+      purpose_area: area,
+      purpose: el("f-purpose").value,
+      kgi_week: el("f-kgi").value,
+      progress_done: el("f-done").value,
+      progress_total: el("f-total").value,
+      kpis: collectRows("kpis"),
+      team_kgi: collectRows("team"),
+      today_work: el("f-today").value,
+      funnel: el("f-funnel").value,
+      handoff: collectRows("handoff"),
+      stuck: collectRows("stuck"),
+      miss_reason: el("f-miss").value,
+      challenge: el("f-challenge").value,
+      small_win: el("f-smallwin").value,
+      contribution: el("f-contrib").value,
+      tomorrow_plan: el("f-tomorrow").value,
+      thanks: collectRows("thanks"),
+    };
+
+    try {
+      const res = await KPLayout.busy(btn, "送信中…", () => API.submitNippo(body));
+      // AI返信は日報の保存とは別。落ちていても提出はできている、と分かるように出す
+      const ai = res.ai || {};
+      el("f-result").innerHTML = `
+        <div class="banner ok" style="margin-top:12px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          <div>提出しました。${res.thanks?.sent ? `感謝を ${res.thanks.sent} 名へ届けました。` : ""}
+          ${ai.ok ? "AIの返信は下の「これまでの日報」に出ます。"
+                  : (ai.reason === "disabled" ? "AI自動返信は現在OFFです。担当者が内容を確認します。"
+                                              : "AI返信は準備できませんでした（提出は完了しています）。")}</div>
+        </div>`;
+      await load(body.date);
+      el("f-result").scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
+    }
+  }
+
+  // --- 受け取った感謝 ---------------------------------------------------------
+  function renderThanksReceived() {
+    const rows = data.thanks || [];
+    if (!rows.length) { el("thanks-card").classList.add("hidden"); return; }
+    el("thanks-card").classList.remove("hidden");
+    el("thanks-list").innerHTML = rows.slice(0, 10).map((t) => `
+      <div class="np-thanks">
+        <div class="who">${esc(t.from_name)} さんより<span class="muted" style="font-weight:400;margin-left:6px;">${esc(t.work_date)}</span></div>
+        <div style="font-size:13px;white-space:pre-wrap;">${esc(t.body)}</div>
+      </div>`).join("");
+  }
+
+  // --- 週次レビュー -----------------------------------------------------------
+  const EVAL_LABEL = {
+    achieve: "達成", speed: "スピード", accuracy: "正確さ",
+    priority: "優先順位", solve: "解決力", share: "共有",
+  };
+
+  function renderWeekly() {
+    const w = data.weekly;
+    el("wk-tag").textContent = `${data.weekStart} の週`;
+    el("wk-tag").className = "kp-chip";
+    for (const k of ["q1", "q2", "q3", "q4"]) el(`w-${k}`).value = w?.[k] || "";
+
+    // 評価は「本人へ提出された」ものだけ見せる。下書きのまま見えると誤解になる
+    if (w?.submitted_at && w?.eval_scores) {
+      el("wk-eval").innerHTML = `
+        <div class="banner info" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">grade</span>
+          <div>
+            <strong>担当者からの評価が届いています</strong>
+            <div style="margin-top:6px;font-size:12.5px;">
+              ${Object.entries(w.eval_scores).map(([k, v]) =>
+                `${esc(EVAL_LABEL[k] || k)} ${v}/5`).join("　")}
+            </div>
+            ${w.eval_comment ? `<div style="margin-top:8px;white-space:pre-wrap;font-size:13px;">${esc(w.eval_comment)}</div>` : ""}
+          </div>
+        </div>`;
+    } else {
+      el("wk-eval").innerHTML = "";
+    }
+  }
+
+  async function saveWeekly(btn) {
+    const msg = el("w-msg");
+    msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.saveWeeklyReview({
+        weekStart: data.weekStart,
+        q1: el("w-q1").value, q2: el("w-q2").value,
+        q3: el("w-q3").value, q4: el("w-q4").value,
+      }));
+      msg.className = "muted";
+      msg.textContent = "保存しました。";
+    } catch (e) {
+      msg.className = "err-text";
+      msg.textContent = e.detail || e.message || "保存に失敗しました";
+    }
+  }
+
+  // --- 今日の提出状況 ---------------------------------------------------------
+  function renderTeam() {
+    const done = data.team || [];
+    const yet = data.notSubmitted || [];
+    el("team").innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${yet.length ? "12px" : "0"};">
+        ${done.length
+          ? done.map((n) => `<span class="kp-chip event">${esc(n.user_name)}</span>`).join("")
+          : '<span class="muted" style="font-size:13px;">まだ誰も出していません。</span>'}
+      </div>
+      ${yet.length ? `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:5px;">未提出 ${yet.length} 名</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${yet.map((n) => `<span class="kp-chip archived">${esc(n)}</span>`).join("")}
+        </div>` : ""}`;
+  }
+
+  // --- 過去の日報と返信 -------------------------------------------------------
+  function renderPast() {
+    const rows = data.recent || [];
+    if (!rows.length) { el("past").innerHTML = `<div class="empty">まだ日報がありません。</div>`; return; }
+
+    el("past").innerHTML = rows.map((n) => {
+      const rs = (data.replies || []).filter((r) => r.nippo_id === n.id);
+      return `
+        <div class="np-past">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <strong style="font-size:13.5px;">${esc(n.work_date)}</strong>
+            <span class="kp-chip">${esc(n.mood || "")}</span>
+            ${n.confirmed ? '<span class="kp-chip event">確認済み</span>' : ""}
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                    onclick="jumpTo('${esc(n.work_date)}')">開く</button>
+          </div>
+          ${n.today_work ? `<div class="muted" style="font-size:12.5px;white-space:pre-wrap;">${esc(n.today_work)}</div>` : ""}
+          ${rs.map(replyBox).join("")}
+        </div>`;
+    }).join("");
+  }
+
+  // AIの返信は必ず「AIによる自動返信」と名乗らせる。人からの評価と読み違えないように
+  function replyBox(r) {
+    if (r.kind === "admin") {
+      return `<div class="np-reply admin"><div class="rh">
+        <span class="material-symbols-outlined" style="font-size:14px;">person</span>担当者より</div>${esc(r.body)}</div>`;
+    }
+    const st = r.status || "sent";
+    if (st === "pending") {
+      return `<div class="np-reply"><div class="rh">
+        <span class="material-symbols-outlined" style="font-size:14px;">hourglass_empty</span>AIによる自動返信</div>AIが返信を準備しています。少し待ってから画面を更新してください。</div>`;
+    }
+    if (st === "error" || !r.body) {
+      return `<div class="np-reply ng"><div class="rh">
+        <span class="material-symbols-outlined" style="font-size:14px;">error_outline</span>AIによる自動返信</div>AI返信を準備できませんでした。担当者が確認します。</div>`;
+    }
+    return `<div class="np-reply"><div class="rh">
+      <span class="material-symbols-outlined" style="font-size:14px;">auto_awesome</span>AIによる自動返信</div>${esc(r.body)}<div class="note">この返信はAIが自動で作成したものです。人事評価ではありません。</div></div>`;
+  }
+
+  function jumpTo(date) {
+    el("f-date").value = date;
+    load(date);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+</script>
+
+</body>
+</html>

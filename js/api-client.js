@@ -195,6 +195,8 @@
     api("/api/employees", { method: "POST", body: employee }).then((d) => d.employee);
   const updateEmployee = (employee) =>
     api("/api/employees", { method: "PATCH", body: employee }).then((d) => d.employee);
+  const deleteEmployee = (id) =>
+    api(`/api/employees?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
@@ -275,6 +277,27 @@
     api("/api/analytics", { method: "PATCH", body: site }).then((d) => d.project);
   const deleteAnalyticsSite = (id) =>
     api(`/api/analytics?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  // ---- 日報 ----
+  const nippo = (date) =>
+    api(`/api/nippo${date ? `?date=${encodeURIComponent(date)}` : ""}`);
+  const submitNippo = (n) => api("/api/nippo", { method: "POST", body: n });
+  const saveWeeklyReview = (w) =>
+    api("/api/nippo", { method: "POST", body: { kind: "weekly", ...w } }).then((d) => d.weekly);
+
+  const nippoAdmin = (date, days) => {
+    const q = new URLSearchParams();
+    if (date) q.set("date", date);
+    if (days) q.set("days", String(days));
+    return api(`/api/nippo/admin${q.toString() ? `?${q}` : ""}`);
+  };
+  const nippoAdminAct = (body) => api("/api/nippo/admin", { method: "POST", body });
+
+  // ---- 口コミサイト流入ブロック（8grp.co.jp） ----
+  const listBlocks = () => api("/api/blocks");
+  const createBlock = (b) => api("/api/blocks", { method: "POST", body: b }).then((d) => d.referrer);
+  const updateBlock = (b) => api("/api/blocks", { method: "PATCH", body: b }).then((d) => d.referrer);
+  const deleteBlock = (id) => api(`/api/blocks?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
   // ---- 社内文書（マニュアル・規定・様式） ----
   const listLibrary = () => api("/api/library");
@@ -542,7 +565,7 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
-    listEmployees, createEmployee, updateEmployee, setEmployeeRole, linkEmployeeAccount,
+    listEmployees, createEmployee, updateEmployee, deleteEmployee, setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
     listAssets, createAsset, updateAsset, deleteAsset,
@@ -550,6 +573,8 @@
     listBookings, createBooking, decideBooking, deleteBooking,
     schedule, createEvent, updateEvent, deleteEvent, googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
+    nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct,
+    listBlocks, createBlock, updateBlock, deleteBlock,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,
     listRequests, createRequest, decideRequest, deleteRequest,

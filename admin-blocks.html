@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>口コミサイト流入ブロック - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910c">
+  <link rel="stylesheet" href="css/layout.css?v=20260910c">
+  <script>
+    try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">口コミサイト流入ブロック</h1>
+  <p class="kp-greet-sub">
+    口コミ・評判サイトのリンクから 8grp.co.jp へ来たアクセスに、サイトを見せない設定です。
+    検索・SNS・取引先サイト・直接入力からのアクセスには影響しません。
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="kp-tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">add_circle</span>止めるサイトを足す</h2>
+    <div class="inline-controls" style="margin-bottom:10px;">
+      <div><label>サイト名</label><input id="f-name" type="text" placeholder="OpenWork"></div>
+      <div><label>ドメイン</label><input id="f-domain" type="text" placeholder="openwork.jp"></div>
+      <div style="flex:1;min-width:180px;"><label>メモ（任意）</label><input id="f-note" type="text" placeholder="2026-09 追加"></div>
+      <div>
+        <button class="btn btn-primary" onclick="add(this)">
+          <span class="material-symbols-outlined icon-inline">add</span>追加
+        </button>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0;">
+      ドメインだけを入れてください（<code>openwork.jp</code>）。<code>https://</code> や末尾の <code>/</code>、
+      先頭の <code>www.</code> は自動で外します。
+    </p>
+    <div id="f-msg" class="err-text"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">block</span>止めているサイト</h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+    <div class="banner" style="margin-top:14px;">
+      <span class="material-symbols-outlined">schedule</span>
+      <div>
+        <strong>変更はすぐには効きません。</strong>
+        ここでの追加・ON/OFF・削除は、毎時17分に走る同期が 8grp.co.jp のサーバー設定へ書き込んで反映されます（最大1時間）。
+        急ぐときは GitHub の Actions から <code>Sync referrer block list</code> を手動実行してください。
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">query_stats</span>参照元ごとの件数<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近30日</span></h2>
+    <div id="by-domain"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">history</span>止めた記録<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近30日・新しい順に100件</span></h2>
+    <div id="logs"><div class="empty">読み込み中…</div></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;">
+      IPアドレスは残していません。90日を過ぎた記録は自動で消えます。
+    </p>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910c"></script>
+<script src="js/layout.js?v=20260910c"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let data = { referrers: [], logs: [], byDomain: [], stats: { today: 0, week: 0, month: 0 } };
+
+  KPLayout.init({ active: "blocks", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.listBlocks();
+      render();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    el("notice").innerHTML = data.setupNeeded
+      ? `<div class="banner warn"><span class="material-symbols-outlined">warning</span>
+           <div>台帳のテーブルがまだありません。<code>db/023_blocked_referrers_scope.sql</code> を Supabase で実行してください。</div>
+         </div>`
+      : "";
+
+    const s = data.stats || {};
+    const on = (data.referrers || []).filter((r) => r.enabled).length;
+    el("tiles").innerHTML = [
+      ["止めた件数（今日）", s.today, "本日"],
+      ["直近7日", s.week, "この1週間で止めた数"],
+      ["直近30日", s.month, "この1か月で止めた数"],
+      ["ブロック中のサイト", on, `登録 ${(data.referrers || []).length} 件のうち`],
+    ].map(([k, v, sub]) => `
+      <div class="kp-tile">
+        <div class="k">${esc(k)}</div>
+        <div class="v">${Number(v || 0).toLocaleString()}</div>
+        <div class="s">${esc(sub)}</div>
+      </div>`).join("");
+
+    renderList();
+    renderByDomain();
+    renderLogs();
+  }
+
+  function renderList() {
+    const rows = data.referrers || [];
+    if (!rows.length) {
+      el("list").innerHTML = `<div class="empty">まだ登録がありません。</div>`;
+      return;
+    }
+    el("list").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>サイト名</th><th>ドメイン</th><th style="width:110px;">状態</th>
+            <th>メモ</th><th style="width:150px;">操作</th>
+          </tr></thead>
+          <tbody>${rows.map((r) => `
+            <tr class="${r.enabled ? "" : "done"}">
+              <td>${esc(r.service_name || "—")}</td>
+              <td><code>${esc(r.domain)}</code></td>
+              <td>${r.enabled
+                ? '<span class="kp-chip important">ブロック中</span>'
+                : '<span class="kp-chip archived">停止中</span>'}</td>
+              <td class="muted" style="font-size:12px;">${esc(r.note || "")}</td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-secondary btn-sm" onclick="toggle('${esc(r.id)}', ${!r.enabled}, this)">
+                  ${r.enabled ? "止める" : "再開する"}
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="remove('${esc(r.id)}','${esc(r.domain)}', this)">削除</button>
+              </td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function renderByDomain() {
+    const rows = data.byDomain || [];
+    if (!rows.length) {
+      el("by-domain").innerHTML = `<div class="empty">直近30日で止めたアクセスはありません。</div>`;
+      return;
+    }
+    const max = Math.max(...rows.map((r) => r.count));
+    el("by-domain").innerHTML = rows.map((r) => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div style="width:200px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.domain)}</div>
+        <div style="flex:1;background:#eef1f7;border-radius:4px;height:10px;overflow:hidden;">
+          <div style="width:${Math.round((r.count / max) * 100)}%;height:100%;background:#4a63d8;"></div>
+        </div>
+        <div style="width:60px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;">${r.count.toLocaleString()}</div>
+      </div>`).join("");
+  }
+
+  function renderLogs() {
+    const rows = data.logs || [];
+    if (!rows.length) {
+      el("logs").innerHTML = `<div class="empty">記録はありません。</div>`;
+      return;
+    }
+    el("logs").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:150px;">日時</th><th style="width:170px;">参照元</th><th>見ようとしたページ</th>
+          </tr></thead>
+          <tbody>${rows.map((r) => `
+            <tr>
+              <td class="muted" style="font-size:12px;">${esc(fmt(r.created_at))}</td>
+              <td>${esc(r.domain || "—")}</td>
+              <td class="muted" style="font-size:12px;">${esc(r.path || "—")}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  const fmt = (iso) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
+  async function add(btn) {
+    const msg = el("f-msg");
+    msg.textContent = "";
+    const domain = el("f-domain").value.trim();
+    if (!domain) { msg.textContent = "ドメインを入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "追加中…", () => API.createBlock({
+        domain,
+        serviceName: el("f-name").value.trim() || null,
+        note: el("f-note").value.trim() || null,
+      }));
+      for (const id of ["f-name", "f-domain", "f-note"]) el(id).value = "";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "追加に失敗しました";
+    }
+  }
+
+  async function toggle(id, enabled, btn) {
+    try {
+      await KPLayout.busy(btn, "変更中…", () => API.updateBlock({ id, enabled }));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "変更に失敗しました");
+    }
+  }
+
+  async function remove(id, domain, btn) {
+    if (!confirm(`${domain} を台帳から消します。よろしいですか？\n\n（一時的に止めたいだけなら「止める」を使ってください）`)) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deleteBlock(id));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "削除に失敗しました");
+    }
+  }
+</script>
+
+</body>
+</html>

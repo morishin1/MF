@@ -7,13 +7,13 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910b">
-  <link rel="stylesheet" href="css/layout.css?v=20260910b">
+  <link rel="stylesheet" href="css/app.css?v=20260910c">
+  <link rel="stylesheet" href="css/layout.css?v=20260910c">
   <script>
     try {
+      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
-      if (kpc && localStorage.getItem("kp_view") !== "member"
-          && (kpc.appRole === "admin" || kpc.appRole === "owner" || kpc.appRole === "sr")) {
+      if (kpc && kpc.appRole) {
         document.documentElement.classList.add("kp-has-sidebar");
       }
     } catch (e) { /* 読めなくても動く */ }
@@ -37,6 +37,11 @@
       <a href="notices.html">
         <span class="ico"><span class="material-symbols-outlined">campaign</span></span>
         <span><b>お知らせ・掲示板</b><small>会社や部署からの連絡事項をまとめて読む</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+      <a href="nippo.html">
+        <span class="ico"><span class="material-symbols-outlined">edit_note</span></span>
+        <span><b>日報</b><small>その日に前へ進めたこと。週次の振り返りの材料になります</small></span>
         <span class="go material-symbols-outlined">chevron_right</span>
       </a>
       <a href="schedule.html">
@@ -126,8 +131,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910b"></script>
-<script src="js/layout.js?v=20260910b"></script>
+<script src="js/api-client.js?v=20260910c"></script>
+<script src="js/layout.js?v=20260910c"></script>
 <script>
   KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] });
 </script>
