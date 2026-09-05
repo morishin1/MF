@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910f">
-  <link rel="stylesheet" href="css/layout.css?v=20260910f">
+  <link rel="stylesheet" href="css/app.css?v=20260910g">
+  <link rel="stylesheet" href="css/layout.css?v=20260910g">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -80,6 +80,12 @@
   </div>
 
   <div class="card">
+    <h2><span class="material-symbols-outlined">table_rows</span>一覧
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">全員分を細かく読む前に、ここで状況をつかむ</span></h2>
+    <div id="overview"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
     <h2><span class="material-symbols-outlined">description</span>提出された日報</h2>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
@@ -94,11 +100,24 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910f"></script>
-<script src="js/layout.js?v=20260910f"></script>
+<script src="js/api-client.js?v=20260910g"></script>
+<script src="js/layout.js?v=20260910g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
+
+  // 会社評価基準10項目。日次の○△― と週次の点数で同じキーを使う
+  const CRITERIA = [
+    ["quantity", "量"], ["report_consult", "報連相"], ["action", "行動"],
+    ["self_learning", "学習"], ["consistency", "期限"], ["results", "成果"],
+    ["feedback_improvement", "改善"], ["forward_thinking", "前進"],
+    ["team_attitude", "チーム"], ["customer_focus", "顧客"],
+  ];
+  const TAG_LABEL = {
+    self_research: "自分で調べた", new_method: "新しい方法を試した",
+    feedback: "FBを反映した", process: "やり方を改善した",
+    ai_tool: "AI・ツールを活用", other: "その他",
+  };
 
   const EVAL = [
     ["achieve", "達成"], ["speed", "スピード"], ["accuracy", "正確さ"],
@@ -141,6 +160,7 @@
     renderTiles();
     renderTrend();
     renderNotSubmitted();
+    renderOverview();
     renderList();
     renderUserPicker();
   }
@@ -182,6 +202,75 @@
       : `<div class="empty">全員提出済みです。</div>`;
   }
 
+  // --- 一覧（全員を1行ずつ） ---------------------------------------------------
+  // 全員の日報を頭から読むと時間がかかる。まずここで「誰を読むべきか」を決める
+  function renderOverview() {
+    const members = data.members || [];
+    if (!members.length) { el("overview").innerHTML = `<div class="empty">対象者がいません。</div>`; return; }
+
+    const byUser = new Map((data.nippos || []).map((n) => [n.user_id, n]));
+
+    el("overview").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>氏名</th><th>今日のKGI</th>
+            <th style="width:70px;text-align:right;">目標</th>
+            <th style="width:70px;text-align:right;">実績</th>
+            <th style="width:70px;">結果</th>
+            <th style="width:70px;text-align:right;">成果</th>
+            <th style="width:110px;">困りごと</th>
+            <th style="width:80px;">提出</th>
+            <th>要確認</th>
+          </tr></thead>
+          <tbody>${members.map((m) => overviewRow(m, byUser.get(m.userId))).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function overviewRow(m, n) {
+    const flags = checkFlags(m, n);
+    if (!n) {
+      return `<tr class="done">
+        <td>${esc(m.name)}</td><td colspan="6" class="muted">—</td>
+        <td><span class="kp-chip draft">未提出</span></td>
+        <td>${flagChips(flags)}</td></tr>`;
+    }
+    const issues = n.no_issues ? 0 : (n.issues || []).length;
+    const consulted = (n.issues || []).filter((i) => i.consulted).length;
+    return `<tr>
+      <td><a href="#dr-${esc(n.id)}" style="color:var(--primary);font-weight:600;text-decoration:none;">${esc(m.name)}</a></td>
+      <td style="font-size:12.5px;">${esc(n.goal_today || "")}</td>
+      <td style="text-align:right;">${n.kgi_target ?? "—"}</td>
+      <td style="text-align:right;">${n.kgi_actual ?? "—"}</td>
+      <td>${n.kgi_achieved === true ? '<span class="kp-chip event">達成</span>'
+           : n.kgi_achieved === false ? '<span class="kp-chip important">未達</span>' : "—"}</td>
+      <td style="text-align:right;">${(n.work_items || []).length}</td>
+      <td>${n.no_issues ? '<span class="muted">なし</span>'
+           : issues ? `${issues}件${consulted ? `<span class="muted" style="font-size:11px;">／相談${consulted}</span>`
+                                              : '<span class="kp-chip draft" style="margin-left:4px;">相談なし</span>'}`
+                    : '<span class="muted">—</span>'}</td>
+      <td><span class="kp-chip event">提出</span>${n.confirmed ? '<span class="kp-chip">確認済</span>' : ""}</td>
+      <td>${flagChips(flags)}</td></tr>`;
+  }
+
+  // 要確認フラグ。読むべき人を機械的に拾う。
+  // 「連続」の判定に要る過去ぶんは trend にしか無いので、ここで見るのは当日の内容だけ
+  function checkFlags(m, n) {
+    const f = [];
+    if (!n) { f.push("日報未提出"); return f; }
+    if (n.kgi_achieved === false) f.push("KGI未達");
+    if (!(n.work_items || []).length) f.push("成果が空欄");
+    if (!n.no_issues && (n.issues || []).some((i) => !i.consulted)) f.push("相談相手が未入力");
+    if (n.tomorrow_plan && !n.tomorrow_deadline && !n.tomorrow_target) f.push("明日の最優先が抽象的");
+    if (n.mood === "苦戦") f.push("調子が苦戦");
+    return f;
+  }
+
+  const flagChips = (f) => f.length
+    ? f.map((x) => `<span class="kp-chip important" style="margin:1px;">${esc(x)}</span>`).join("")
+    : '<span class="muted">—</span>';
+
   // --- 日報の一覧 -------------------------------------------------------------
   function renderList() {
     const rows = data.nippos || [];
@@ -194,7 +283,7 @@
     const item = (k, v) => v ? `<div class="dr-item"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>` : "";
 
     return `
-      <div class="dr-card${n.confirmed ? " confirmed" : ""}">
+      <div class="dr-card${n.confirmed ? " confirmed" : ""}" id="dr-${esc(n.id)}">
         <div class="dr-head">
           <span class="dr-name">${esc(n.user_name)}</span>
           <span class="kp-chip${n.mood === "苦戦" ? " important" : ""}">${esc(n.mood || "")}</span>
@@ -214,24 +303,19 @@
 
         <div class="dr-grid">
           <div>
-            ${item("今日進んだこと", n.today_work)}
-            ${item("困っていること", n.struggle)}
-            ${item("明日やること", n.tomorrow_plan)}
-            ${item(`今日の目的${n.purpose_area ? `（${n.purpose_area}）` : ""}`, n.purpose)}
-            ${kpiTable("今日のKPI", n.kpis)}
-            ${item("次工程へ進めた結果", n.funnel)}
+            ${kgiBlock(n)}
+            ${workTable(n.work_items)}
+            ${item("⑤ 顧客・チームのためにしたこと", n.contribution)}
           </div>
           <div>
-            ${rowTable("引き継ぎ", n.handoff, [["to_name", "誰に"], ["what", "何を"], ["state", "状態"]])}
-            ${rowTable("止まっていること", n.stuck,
-              [["item", "案件"], ["pos", "工程"], ["reason", "理由"], ["ball", "ボール"], ["next", "次の一手"]])}
-            ${item("未達の原因", n.miss_reason)}
-            ${item("挑戦・改善", n.challenge)}
-            ${item("小さな成功", n.small_win)}
-            ${item("貢献", n.contribution)}
-            ${kgiLine(n)}
+            ${issueBlock(n)}
+            ${improveBlock(n)}
+            ${tomorrowBlock(n)}
           </div>
         </div>
+
+        ${flagsRow(n.daily_flags)}
+        ${legacyBlock(n)}
 
         ${rs.map(replyBox).join("")}
 
@@ -247,28 +331,91 @@
       </div>`;
   }
 
-  function kgiLine(n) {
-    if (!n.kgi_week && n.progress_total == null) return "";
-    const pct = n.progress_total > 0 ? Math.round((n.progress_done / n.progress_total) * 100) : null;
-    return `<div class="dr-item"><div class="k">今週のKGI</div>
-      <div class="v">${esc(n.kgi_week || "")}${pct !== null
-        ? `<span class="muted" style="margin-left:8px;">${n.progress_done ?? 0} / ${n.progress_total}（${pct}%）</span>` : ""}</div></div>`;
+  function kgiBlock(n) {
+    const has = n.goal_today || n.kgi_target != null || n.kgi_actual != null;
+    if (!has) return "";
+    const nums = [
+      n.kgi_target != null ? `目標 ${n.kgi_target}` : "",
+      n.kgi_actual != null ? `実績 ${n.kgi_actual}` : "",
+    ].filter(Boolean).join(" / ");
+    const mark = n.kgi_achieved === true ? '<span class="kp-chip event">達成</span>'
+      : n.kgi_achieved === false ? '<span class="kp-chip important">未達</span>' : "";
+    return `<div class="dr-item"><div class="k">① 今日のKGI</div>
+      <div class="v">${esc(n.goal_today || "")}
+        ${nums ? `<span class="muted" style="margin-left:8px;">${esc(nums)}</span>` : ""} ${mark}</div></div>`;
   }
 
-  function kpiTable(label, rows) {
-    if (!Array.isArray(rows) || !rows.length) return "";
-    return `<div class="dr-item"><div class="k">${esc(label)}</div>
-      <table class="dr-mini"><tr><th>指標</th><th>目標</th><th>実績</th></tr>
-      ${rows.map((r) => `<tr><td>${esc(r.name || "")}</td><td>${esc(r.goal || "")}</td><td>${esc(r.actual || "")}</td></tr>`).join("")}
+  function workTable(items) {
+    if (!Array.isArray(items) || !items.length) return "";
+    return `<div class="dr-item"><div class="k">② やったこと・成果（${items.length}件）</div>
+      <table class="dr-mini"><tr><th>やったこと</th><th>結果・成果</th></tr>
+      ${items.map((r) => `<tr><td>${esc(r.task || "")}</td><td>${esc(r.result || "")}</td></tr>`).join("")}
       </table></div>`;
   }
 
-  function rowTable(label, rows, cols) {
-    if (!Array.isArray(rows) || !rows.length) return "";
-    return `<div class="dr-item"><div class="k">${esc(label)}</div>
-      <table class="dr-mini"><tr>${cols.map(([, h]) => `<th>${esc(h)}</th>`).join("")}</tr>
-      ${rows.map((r) => `<tr>${cols.map(([k]) => `<td>${esc(r[k] || "")}</td>`).join("")}</tr>`).join("")}
-      </table></div>`;
+  function issueBlock(n) {
+    if (n.no_issues) {
+      return `<div class="dr-item"><div class="k">③ 困ったこと・報告相談</div>
+        <div class="v muted">特になし</div></div>`;
+    }
+    const rows = n.issues || [];
+    if (!rows.length) return "";
+    return `<div class="dr-item"><div class="k">③ 困ったこと・報告相談（${rows.length}件）</div>
+      ${rows.map((r) => `
+        <div style="border-left:2px solid var(--border);padding-left:9px;margin-bottom:7px;">
+          <div style="font-size:13px;">${esc(r.issue || "")}</div>
+          ${r.action_taken ? `<div class="muted" style="font-size:11.5px;">自分で：${esc(r.action_taken)}</div>` : ""}
+          <div class="muted" style="font-size:11.5px;">
+            相談：${r.consulted ? esc(r.consulted) : '<span style="color:#c05621;">未記入</span>'}
+          </div>
+          <div style="font-size:12.5px;">→ ${esc(r.next_action || "")}</div>
+        </div>`).join("")}</div>`;
+  }
+
+  function improveBlock(n) {
+    const tags = (n.improve_tags || []).map((k) => TAG_LABEL[k] || k);
+    if (!tags.length && !n.challenge) return "";
+    return `<div class="dr-item"><div class="k">④ 改善・学び</div>
+      ${tags.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+        ${tags.map((t) => `<span class="kp-chip">${esc(t)}</span>`).join("")}</div>` : ""}
+      ${n.challenge ? `<div class="v">${esc(n.challenge)}</div>` : ""}</div>`;
+  }
+
+  function tomorrowBlock(n) {
+    if (!n.tomorrow_plan) return "";
+    const extra = [n.tomorrow_deadline, n.tomorrow_target].filter(Boolean).join(" / ");
+    // 期限も完了条件も無い＝「営業を頑張る」の類。目印を出す
+    return `<div class="dr-item"><div class="k">⑥ 明日の最優先</div>
+      <div class="v">${esc(n.tomorrow_plan)}
+        ${extra ? `<span class="muted" style="margin-left:8px;">${esc(extra)}</span>`
+                : '<span class="kp-chip draft" style="margin-left:8px;">期限・条件なし</span>'}</div></div>`;
+  }
+
+  // 日報から機械的に拾った「確認できた行動」。人事評価点ではない
+  function flagsRow(flags) {
+    if (!flags) return "";
+    return `<div style="display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 8px;">
+      ${CRITERIA.map(([key, short]) => {
+        const v = flags[key] || "-";
+        const color = v === "o" ? "#2f855a" : v === "d" ? "#b7791f" : "#aab4c8";
+        return `<span style="font-size:11px;color:${color};border:1px solid var(--border);
+                  border-radius:6px;padding:3px 7px;">${esc(short)} ${v === "o" ? "○" : v === "d" ? "△" : "―"}</span>`;
+      }).join("")}</div>`;
+  }
+
+  // 項目を整理する前の日報も、そのまま読めるようにしておく
+  function legacyBlock(n) {
+    const item = (k, v) => v ? `<div class="dr-item"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>` : "";
+    const old = [
+      item("今日の成果（旧）", n.today_work),
+      item("困っていること（旧）", n.struggle),
+      item("今日の目的（旧）", n.purpose),
+      item("明日試すこと（旧）", n.work_items ? "" : n.tomorrow_plan),
+    ].filter(Boolean).join("");
+    if (!old) return "";
+    return `<details style="margin-top:4px;">
+      <summary style="font-size:11.5px;color:var(--muted);cursor:pointer;">以前の形式の項目を見る</summary>
+      <div style="margin-top:8px;">${old}</div></details>`;
   }
 
   function replyBox(r) {

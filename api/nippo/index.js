@@ -1,4 +1,4 @@
-// GET  /api/nippo?date=YYYY-MM-DD … 自分の日報・受け取った感謝・週次レビュー・今日の提出状況
+// GET  /api/nippo?date=YYYY-MM-DD … 自分の日報・日次の行動確認・週次レビュー・今日の提出状況
 // POST /api/nippo                  … 自分の日報を出す（同じ日は上書き）
 // POST /api/nippo {kind:"weekly"}  … 今週の振り返り4問を保存する
 //
@@ -14,7 +14,8 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
-  jstDate, weekStart, isDate, normalizeNippo, normalizeThanks, hasContent, requestAiReply,
+  jstDate, weekStart, isDate, normalizeNippo, hasContent, requestAiReply,
+  evaluateDaily, CRITERIA, IMPROVE_TAGS,
 } from "../../lib/nippo.js";
 
 export default async function handler(req, res) {
@@ -44,9 +45,7 @@ async function read(req, res, user, ctx) {
   const date = isDate(q.get("date")) ? q.get("date") : jstDate();
   const sb = admin();
 
-  // 宛先の候補（④の引き継ぎと⑧の感謝）。
-  // タイムカードの名簿ではなく、グループウェアの社員名簿から作る。
-  // ログインアカウントが無い人は感謝を受け取れないので外す。
+  // 名簿。その日の提出状況と、未提出者の一覧を作るのに使う
   const { data: roster } = await sb
     .from("gw_employees")
     .select("id, user_id, display_name, department, employment_type")
@@ -54,10 +53,6 @@ async function read(req, res, user, ctx) {
     .in("status", ["active", "leaving"])
     .order("display_name")
     .limit(300);
-
-  const members = (roster || [])
-    .filter((e) => e.user_id)
-    .map((e) => ({ userId: e.user_id, name: e.display_name, department: e.department }));
 
   const [mine, today, thanks, weekly] = await Promise.all([
     // 自分の直近30件。過去を振り返れる範囲があればよく、全件は要らない
@@ -96,7 +91,9 @@ async function read(req, res, user, ctx) {
     replies,
     thanks: thanks.data || [],
     weekly: weekly.data || null,
-    members,
+    // 画面に出す選択肢と基準はサーバから渡す。定義を2か所に置かないため
+    improveTags: IMPROVE_TAGS,
+    criteria: CRITERIA,
     team: (today.data || []).sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     notSubmitted: (roster || [])
       .filter((e) => e.user_id && !(today.data || []).some((n) => n.user_id === e.user_id))
@@ -115,12 +112,18 @@ async function submit(res, user, ctx, body) {
 
   const fields = normalizeNippo(body);
   if (!hasContent(fields)) {
-    return json(res, 400, { error: "empty", hint: "①今日の目的、③今日の成果、⑩明日の最優先のどれかは書いてください" });
+    return json(res, 400, {
+      error: "empty",
+      hint: "① 今日のKGI、② やったこと・成果、⑥ 明日の最優先 のどれかは書いてください",
+    });
   }
 
   const sb = admin();
+  // 「今日確認できた行動」は保存時に決める。あとから基準を変えても
+  // 過去の日報の表示が勝手に変わらないようにするため
   const row = {
     ...fields,
+    daily_flags: evaluateDaily(fields),
     user_id: user.id,                                   // 画面から来た値は使わない
     user_name: ctx.employee.display_name,
     employ_type: ctx.employee.employment_type || null,
@@ -142,57 +145,17 @@ async function submit(res, user, ctx, body) {
     nippoId = data.id;
   }
 
-  const thanksResult = await saveThanks(sb, user, ctx, nippoId, date, normalizeThanks(body?.thanks));
-
   // AI の自動返信。落ちていても日報の保存はもう済んでいるので、
   // 結果は「出せたかどうか」だけ返して画面の表示に使う
   const ai = await requestAiReply(nippoId);
 
-  return json(res, 200, { ok: true, id: nippoId, thanks: thanksResult, ai });
+  return json(res, 200, { ok: true, id: nippoId, ai, dailyFlags: row.daily_flags });
 }
 
-/**
- * ⑧の感謝を相手へ届ける。
- * 日報の中に文章として置くだけでは書いた本人しか読まないので、宛先つきで別の表に入れる。
- * 同じ日・同じ相手・同じ文面の重複は DB のユニークインデックスが止める（出し直しても増えない）。
- */
-async function saveThanks(sb, user, ctx, nippoId, date, list) {
-  if (!list.length) return { sent: 0 };
-
-  const { data: roster } = await sb
-    .from("gw_employees").select("user_id, display_name")
-    .eq("tenant_id", ctx.tenantId).not("user_id", "is", null).limit(300);
-  const byUser = new Map((roster || []).map((e) => [e.user_id, e.display_name]));
-
-  const rows = [];
-  for (const t of list) {
-    const toName = byUser.get(t.toUserId);
-    if (!toName) continue;                       // 名簿にいない宛先は捨てる
-    if (t.toUserId === user.id) continue;        // 自分宛ては届ける意味がない
-    rows.push({
-      from_user_id: user.id,
-      from_name: ctx.employee.display_name,
-      to_user_id: t.toUserId,
-      to_name: toName,
-      work_date: date,
-      nippo_id: nippoId,
-      body: t.body,
-    });
-  }
-  if (!rows.length) return { sent: 0 };
-
-  // 1件ずつ入れる。重複を止めているのは (送り主, 宛先, 日付, 本文) の式インデックスで、
-  // これは PostgREST の on_conflict では指定できない。まとめて入れると、
-  // 出し直しで1件ぶつかっただけで残り全部が入らなくなる。
-  let sent = 0;
-  for (const row of rows) {
-    const { error } = await sb.from("tc_thanks").insert(row);
-    if (!error) sent++;
-    else if (error.code !== "23505") return { sent, error: error.message };
-    // 23505 = 同じ日に同じ相手へ同じ文面。日報を出し直しただけなので数えない
-  }
-  return { sent };
-}
+// ⑧「今日の感謝」は、要件の見直しで ⑤「顧客・チームのためにしたこと」に
+// 統合した（項目が多すぎて毎日書けない、というのが元の問題だったため）。
+// 過去に送られた感謝は tc_thanks に残っていて、本人の画面には出し続ける。
+// 新しく送る口はここには無い。
 
 // ---- 週次レビュー（本人の振り返り4問） ---------------------------------------
 async function saveWeekly(res, user, body) {
