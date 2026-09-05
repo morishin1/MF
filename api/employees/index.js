@@ -9,8 +9,14 @@
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
-import { userClient } from "../../lib/supabase.js";
+import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
+import {
+  readAccounts, setAccountsActive, removeAccountingAccess, attachAccount, SYSTEMS,
+} from "../../lib/accounts.js";
+
+// 退職・退職手続き中は、どのシステムにも入れない状態にする
+const LEFT = ["leaving", "left"];
 
 const EMPLOYMENT_TYPES = ["正社員", "契約社員", "パート", "アルバイト", "業務委託", "役員", "その他"];
 const STATUSES = ["invited", "active", "leaving", "left"];
@@ -48,10 +54,25 @@ export default async function handler(req, res) {
       byEmployee.get(g.employee_id).push(g.role);
     }
 
+    // どの社内システムに登録されていて、入れる状態か。
+    // 「名簿にはいるが、どこにも入れない人」を一覧で見つけられるようにする。
+    // 読めない表があっても一覧そのものは返す
+    let accounts = new Map();
+    if (canManageHr(ctx)) {
+      try {
+        accounts = await readAccounts(admin(), (data || []).map((e) => e.user_id));
+      } catch { /* 添え物なので、取れなければ空のままにする */ }
+    }
+
     return json(res, 200, {
-      employees: (data || []).map((e) => ({ ...e, roles: byEmployee.get(e.id) || [] })),
+      employees: (data || []).map((e) => ({
+        ...e,
+        roles: byEmployee.get(e.id) || [],
+        accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
+      })),
       canManage: canManageHr(ctx),
       canGrantRoles: ctx.isHr,
+      systems: SYSTEMS,
     });
   }
 
@@ -72,7 +93,31 @@ export default async function handler(req, res) {
       target: `employee:${data.id}`,
       detail: { name: data.display_name, department: data.department, employment_type: data.employment_type },
     });
-    return json(res, 200, { employee: data });
+
+    // メールを入れてあれば、ここでログインアカウントまで用意する。
+    // 名簿に足す → アカウントを作る → 紐づける、と分かれていたせいで
+    // 「名簿にはいるが、どこにも入れない人」が残っていたため1手にした。
+    let account = null;
+    if (body?.email && body?.createAccount !== false) {
+      if (!ctx.isHr) {
+        account = { ok: false, error: "forbidden", hint: "アカウントの作成には人事権限が必要です" };
+      } else {
+        const r = await attachAccount(admin(), {
+          tenantId: ctx.tenantId, employee: data, email: body.email, clientId: body.clientId,
+        });
+        account = r;
+        if (r.ok) {
+          await gwLog({
+            tenantId: ctx.tenantId, actorId: user.id,
+            action: r.createdPassword ? "account.create" : "account.link",
+            target: `employee:${data.id}`, detail: { email: body.email, name: data.display_name },
+          });
+          data.user_id = r.userId;
+        }
+      }
+    }
+
+    return json(res, 200, { employee: data, account });
   }
 
   if (req.method === "PATCH") {
@@ -81,6 +126,11 @@ export default async function handler(req, res) {
     if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
     const row = normalize(body, { partial: true });
     if (row.error) return json(res, 400, row);
+
+    // 状態が変わるかどうかを、書き換える前に見ておく
+    const { data: before } = await sb
+      .from("gw_employees").select("status, user_id")
+      .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
 
     const { data, error } = await sb
       .from("gw_employees")
@@ -91,14 +141,33 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
     if (!data) return json(res, 404, { error: "employee_not_found" });
+
     // 在籍状態は退職処理につながるので、変更を残す
+    let systems = null;
     if (row.value.status) {
       await gwLog({
         tenantId: ctx.tenantId, actorId: user.id, action: "employee.status",
         target: `employee:${data.id}`, detail: { name: data.display_name, status: row.value.status },
       });
+
+      // 退職にしたら、社内システムの入口をまとめて閉じる。
+      // ここを手作業に残すと、辞めた人が無限道場やタイムカードに入れる状態が
+      // そのまま残る。逆に在籍へ戻したら開け直す。
+      const wasOut = LEFT.includes(before?.status);
+      const isOut = LEFT.includes(data.status);
+      if (data.user_id && wasOut !== isOut) {
+        const sbAdmin = admin();
+        systems = await setAccountsActive(sbAdmin, data.user_id, !isOut);
+        // 会計は「止める」ではなく本当に外す。止まった行を残すと戻したとき気づけない
+        if (isOut) systems.accounting = await removeAccountingAccess(sbAdmin, ctx.tenantId, data.user_id);
+        await gwLog({
+          tenantId: ctx.tenantId, actorId: user.id,
+          action: isOut ? "account.suspend" : "account.resume",
+          target: `employee:${data.id}`, detail: { name: data.display_name, systems },
+        });
+      }
     }
-    return json(res, 200, { employee: data });
+    return json(res, 200, { employee: data, systems });
   }
 
   if (req.method === "DELETE") {
@@ -132,13 +201,21 @@ export default async function handler(req, res) {
       .from("gw_employees").delete().eq("id", id).eq("tenant_id", ctx.tenantId);
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
 
+    // ログインアカウント（auth.users）は消さない。同じアカウントを
+    // 無限道場・タイムカード・事務ポータルも使っていて、消すと向こうの記録まで消える。
+    // ただし名簿から外した以上、社内システムには入れないようにしておく。
+    let systems = null;
+    if (target.user_id) {
+      const sbAdmin = admin();
+      systems = await setAccountsActive(sbAdmin, target.user_id, false);
+      systems.accounting = await removeAccountingAccess(sbAdmin, ctx.tenantId, target.user_id);
+    }
+
     await gwLog({
       tenantId: ctx.tenantId, actorId: user.id, action: "employee.delete",
-      target: `employee:${id}`, detail: { name: target.display_name, had_login: !!target.user_id },
+      target: `employee:${id}`, detail: { name: target.display_name, had_login: !!target.user_id, systems },
     });
-    // ログインアカウント（auth.users）はここでは消さない。
-    // 同じアカウントを LMS・事務ポータル・タイムカードも使っているため。
-    return json(res, 200, { ok: true, id, authUserKept: !!target.user_id });
+    return json(res, 200, { ok: true, id, authUserKept: !!target.user_id, systems });
   }
 
   return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);

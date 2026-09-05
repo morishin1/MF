@@ -191,12 +191,19 @@
 
   // ---- 社員名簿 ----
   const listEmployees = () => api("/api/employees");
+  // email を渡すとログインアカウントまで作られる。その結果は d.account に入る
+  // （初回パスワードはこの応答にしか出てこない）ので、丸ごと返す
   const createEmployee = (employee) =>
-    api("/api/employees", { method: "POST", body: employee }).then((d) => d.employee);
+    api("/api/employees", { method: "POST", body: employee });
+  // 在籍状態を変えると他システムの入口も開け閉めされる。
+  // 何が起きたかを画面に出せるよう、d.systems ごと返す
   const updateEmployee = (employee) =>
-    api("/api/employees", { method: "PATCH", body: employee }).then((d) => d.employee);
+    api("/api/employees", { method: "PATCH", body: employee });
   const deleteEmployee = (id) =>
     api(`/api/employees?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  // 表計算から貼った複数行をまとめて追加する。行ごとの成否が返る
+  const bulkCreateEmployees = (rows, createAccounts = true) =>
+    api("/api/employees/bulk", { method: "POST", body: { rows, createAccounts } });
 
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
@@ -565,7 +572,8 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
-    listEmployees, createEmployee, updateEmployee, deleteEmployee, setEmployeeRole, linkEmployeeAccount,
+    listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,
+    setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
     listAssets, createAsset, updateAsset, deleteAsset,

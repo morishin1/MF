@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910c">
-  <link rel="stylesheet" href="css/layout.css?v=20260910c">
+  <link rel="stylesheet" href="css/app.css?v=20260910d">
+  <link rel="stylesheet" href="css/layout.css?v=20260910d">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -56,10 +56,39 @@
       </div>
     </div>
     <p class="muted" style="font-size:12px;margin:0;" id="e-note">
-      ここで追加した人はまだログインアカウントと紐づいていません。本人のアカウントを作った後、
-      Supabase 側で紐づけるか、下の一覧の「未連携」表示を目印に対応してください。
+      メールを入れて追加すると、ログインアカウントもここで作られ、
+      <strong>グループウェア・無限道場・タイムカード・会計</strong>にまとめて登録されます。
+      初回パスワードはこの画面に1回だけ出るので、本人へ直接お渡しください。
     </p>
     <div id="e-msg" class="err-text"></div>
+    <div id="e-account"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">upload_file</span>まとめて追加
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="toggleBulk()">
+        <span class="material-symbols-outlined icon-inline" id="bulk-caret">expand_more</span>開く
+      </button>
+    </h2>
+    <div id="bulk-body" class="hidden">
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
+        表計算からそのまま貼り付けられます。1行1人、順番は
+        <code>氏名 / メール / 部署 / 役職 / 雇用区分 / 入社日</code>。
+        タブ区切りでもカンマ区切りでも読めます。氏名だけでも足せます。
+      </p>
+      <textarea id="bulk-text" rows="6" placeholder="山田 太郎	taro@8grp.co.jp	管理部	主任	正社員	2026-04-01
+鈴木 花子	hanako@8grp.co.jp	営業部		契約社員	2026-04-01"></textarea>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-weight:500;font-size:12.5px;margin:8px 0 12px;">
+        <input id="bulk-accounts" type="checkbox" checked style="width:auto;margin:0;">
+        メールがある人はログインアカウントも作る
+      </label>
+      <div>
+        <button class="btn btn-primary" onclick="bulkImport(this)">
+          <span class="material-symbols-outlined icon-inline">playlist_add</span>取り込む
+        </button>
+      </div>
+      <div id="bulk-result"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -72,14 +101,16 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910c"></script>
-<script src="js/layout.js?v=20260910c"></script>
+<script src="js/api-client.js?v=20260910d"></script>
+<script src="js/layout.js?v=20260910d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   const ROLE_LABEL = { owner: "経営者", hr: "人事", manager: "責任者", labor_advisor: "社労士" };
   const STATUS_LABEL = { invited: "招待中", active: "在籍", leaving: "退職手続き中", left: "退職" };
+  // 同じログインアカウントを使っている社内システム。表示の並び順もこの通り
+  const SYSTEM_LABEL = { lms: "無限道場", timecard: "タイムカード", accounting: "会計" };
 
   let employees = [];
   let canGrantRoles = false;  // 社内権限の付け外し（人事のみ）
@@ -127,13 +158,60 @@
           id: editingId, ...fields, left_on: el("e-left").value || null,
         }));
       } else {
-        await KPLayout.busy(btn, "追加中…", () => API.createEmployee({ ...fields, status: "invited" }));
+        const res = await KPLayout.busy(btn, "追加中…",
+          () => API.createEmployee({ ...fields, status: "invited" }));
+        showAccountResult(res?.account, display_name);
       }
       resetForm();
       await load();
     } catch (e) {
       msg.textContent = e.detail || e.hint || e.message || "保存に失敗しました";
     }
+  }
+
+  // 初回パスワードはこの応答にしか出てこない（保存すると平文で残るため）。
+  // 消えると本人が入れなくなるので、閉じるまで画面に残す
+  function showAccountResult(account, name) {
+    const box = el("e-account");
+    if (!account) { box.innerHTML = ""; return; }
+
+    if (!account.ok) {
+      box.innerHTML = `
+        <div class="banner warn" style="margin-top:12px;">
+          <span class="material-symbols-outlined">warning</span>
+          <div>名簿には追加しましたが、ログインアカウントは作れませんでした：
+            ${esc(account.hint || account.detail || account.error || "")}<br>
+            一覧の「未連携」から、あとで作り直せます。</div>
+        </div>`;
+      return;
+    }
+
+    const sys = Object.entries(account.systems || {})
+      .filter(([k]) => k !== "note")
+      .map(([k, v]) => `${SYSTEM_LABEL[k] || k}：${v.ok ? v.action : "失敗（" + esc(v.detail || "") + "）"}`)
+      .join("　");
+
+    box.innerHTML = `
+      <div class="banner ok" style="margin-top:12px;">
+        <span class="material-symbols-outlined">check_circle</span>
+        <div>
+          <strong>${esc(name)} さんを追加しました。</strong>
+          ${account.createdPassword ? `
+            <div style="margin:8px 0;padding:10px 12px;background:#fff;border:1px solid var(--border);border-radius:8px;">
+              初回パスワード：<code style="font-size:15px;font-weight:700;">${esc(account.createdPassword)}</code>
+              <button class="btn btn-secondary btn-sm" style="margin-left:8px;"
+                      onclick="navigator.clipboard.writeText('${esc(account.createdPassword)}')">コピー</button>
+              <div class="muted" style="font-size:11.5px;margin-top:4px;">
+                この画面を離れると二度と表示できません。本人へ直接お渡しください。
+              </div>
+            </div>` : `
+            <div style="font-size:12.5px;margin-top:4px;">
+              既にあったログインアカウントに紐づけました（パスワードは変えていません）。
+            </div>`}
+          ${sys ? `<div class="muted" style="font-size:11.5px;">${sys}</div>` : ""}
+          ${account.systems?.note ? `<div class="muted" style="font-size:11.5px;">${esc(account.systems.note)}</div>` : ""}
+        </div>
+      </div>`;
   }
 
   function startEdit(id) {
@@ -201,7 +279,8 @@
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
-            <th>氏名</th><th>部署・役職</th><th>雇用区分</th><th>状態</th><th>社内権限</th><th>ログイン</th><th>操作</th>
+            <th>氏名</th><th>部署・役職</th><th>雇用区分</th><th>状態</th><th>社内権限</th>
+            <th>利用中のシステム</th><th>操作</th>
           </tr></thead>
           <tbody>${employees.map(row).join("")}</tbody>
         </table>
@@ -234,9 +313,7 @@
           </select>
         </td>
         <td style="min-width:230px;">${roleCells}</td>
-        <td>${e.user_id
-          ? '<span class="kp-chip event">連携済み</span>'
-          : '<span class="kp-chip draft">未連携</span>'}</td>
+        <td style="min-width:190px;">${systemsCell(e)}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   onclick="startEdit('${esc(e.id)}')">編集</button>
@@ -244,6 +321,43 @@
                   onclick="remove('${esc(e.id)}', this)">削除</button>
         </td>
       </tr>`;
+  }
+
+  // 「名簿にはいるが、どこにも入れない人」をここで見つけられるようにする。
+  // 4システムとも同じログインアカウント（auth.users）を使っているので、
+  // 未連携＝どこにも入れない、が一目で分かる
+  function systemsCell(e) {
+    if (!e.user_id) {
+      return `<span class="kp-chip draft">未連携</span>
+        <button class="btn btn-secondary btn-sm" style="margin-left:6px;"
+                onclick="makeAccount('${esc(e.id)}', this)">アカウントを作る</button>`;
+    }
+    const a = e.accounts || {};
+    const chips = ['<span class="kp-chip event">グループウェア</span>'];
+    for (const [key, label] of Object.entries(SYSTEM_LABEL)) {
+      const s = a[key];
+      if (!s?.exists) chips.push(`<span class="kp-chip archived" title="未登録">${label}</span>`);
+      else if (s.active) chips.push(`<span class="kp-chip event">${label}</span>`);
+      else chips.push(`<span class="kp-chip important" title="停止中">${label}（停止）</span>`);
+    }
+    return `<div style="display:flex;flex-wrap:wrap;gap:4px;">${chips.join("")}</div>`;
+  }
+
+  // 未連携の人に、あとからアカウントを作る。メールが空なら聞く
+  async function makeAccount(id, btn) {
+    const e = employees.find((x) => x.id === id);
+    if (!e) return;
+    const email = (e.email || "").trim() ||
+      (prompt(`${e.display_name} さんのメールアドレスを入れてください`) || "").trim();
+    if (!email) return;
+    try {
+      const r = await KPLayout.busy(btn, "作成中…", () => API.linkEmployeeAccount(e.id, email, null));
+      showAccountResult({ ok: true, ...r }, e.display_name);
+      await load();
+      el("e-account").scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (err) {
+      alert(err.hint || err.detail || err.message || "作成に失敗しました");
+    }
   }
 
   async function setRole(employeeId, role, grant, input) {
@@ -254,9 +368,114 @@
     }
   }
 
+  // 退職にすると、無限道場・タイムカード・会計の入口もまとめて閉じる。
+  // 黙って閉じると気づけないので、何が起きたかを必ず出す
   async function setStatus(id, status) {
-    try { await API.updateEmployee({ id, status }); await load(); }
-    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await load(); }
+    const e = employees.find((x) => x.id === id);
+    const out = ["leaving", "left"].includes(status);
+    if (out && e?.user_id &&
+        !confirm(`${e.display_name} さんを「${STATUS_LABEL[status]}」にします。\n\n` +
+                 "無限道場・タイムカード・会計にも入れなくなります。\n" +
+                 "（ログインアカウント自体は消しません。記録が残るため）\n\nよろしいですか？")) {
+      await load();
+      return;
+    }
+    try {
+      const res = await API.updateEmployee({ id, status });
+      if (res?.systems) {
+        const lines = Object.entries(res.systems)
+          .map(([k, v]) => `${SYSTEM_LABEL[k] || k}：${v.ok ? v.action : "できませんでした（" + (v.detail || "") + "）"}`);
+        alert(`${e?.display_name || ""} さんの各システム\n\n${lines.join("\n")}`);
+      }
+      await load();
+    } catch (err) {
+      alert(err.detail || err.message || "更新に失敗しました");
+      await load();
+    }
+  }
+
+  // --- まとめて追加 -----------------------------------------------------------
+  function toggleBulk() {
+    const body = el("bulk-body");
+    const open = body.classList.toggle("hidden");
+    el("bulk-caret").textContent = open ? "expand_more" : "expand_less";
+    el("bulk-caret").nextSibling.textContent = open ? "開く" : "閉じる";
+  }
+
+  // タブ区切り（Excel からの貼り付け）とカンマ区切りの両方を読む。
+  // カンマは氏名や部署に入りうるので、タブがある行はタブを優先する
+  function parseBulk(text) {
+    const COLS = ["display_name", "email", "department", "position", "employment_type", "joined_on"];
+    return text.split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((l) => !/^氏名/.test(l))          // 見出し行を貼っても弾く
+      .map((line) => {
+        const cells = (line.includes("\t") ? line.split("\t") : line.split(",")).map((c) => c.trim());
+        const row = {};
+        COLS.forEach((k, i) => { row[k] = cells[i] || ""; });
+        return row;
+      });
+  }
+
+  async function bulkImport(btn) {
+    const rows = parseBulk(el("bulk-text").value);
+    const box = el("bulk-result");
+    if (!rows.length) { box.innerHTML = `<div class="err-text">読み取れる行がありません。</div>`; return; }
+    if (!confirm(`${rows.length} 行を取り込みます。よろしいですか？`)) return;
+
+    try {
+      const r = await KPLayout.busy(btn, "取り込み中…",
+        () => API.bulkCreateEmployees(rows, el("bulk-accounts").checked));
+
+      // 初回パスワードはこの応答にしか出てこない。表にして残す
+      const pw = r.added.filter((a) => a.password);
+      box.innerHTML = `
+        <div class="banner ${r.failed.length ? "warn" : "ok"}" style="margin-top:14px;">
+          <span class="material-symbols-outlined">${r.failed.length ? "warning" : "check_circle"}</span>
+          <div>追加 ${r.added.length} 件 ／ 飛ばした ${r.skipped.length} 件 ／ 失敗 ${r.failed.length} 件</div>
+        </div>
+        ${pw.length ? `
+          <div class="card" style="margin:12px 0;">
+            <h2 style="font-size:14px;"><span class="material-symbols-outlined">key</span>初回パスワード</h2>
+            <p class="muted" style="font-size:12px;margin:0 0 10px;">
+              この画面を離れると二度と表示できません。控えてから本人へお渡しください。
+            </p>
+            <div class="table-scroll"><table class="kp-items">
+              <thead><tr><th>氏名</th><th>メール</th><th>初回パスワード</th></tr></thead>
+              <tbody>${pw.map((a) => `<tr><td>${esc(a.name)}</td><td>${esc(a.email || "")}</td>
+                <td><code style="font-weight:700;">${esc(a.password)}</code></td></tr>`).join("")}</tbody>
+            </table></div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="copyPasswords()">
+              <span class="material-symbols-outlined icon-inline">content_copy</span>まとめてコピー
+            </button>
+          </div>` : ""}
+        ${[...r.skipped, ...r.failed].length ? `
+          <div class="table-scroll" style="margin-top:12px;"><table class="kp-items">
+            <thead><tr><th>行</th><th>氏名</th><th>理由</th></tr></thead>
+            <tbody>${[...r.skipped, ...r.failed].map((x) =>
+              `<tr><td>${x.line}</td><td>${esc(x.name)}</td><td>${esc(x.reason)}</td></tr>`).join("")}</tbody>
+          </table></div>` : ""}
+        ${r.added.filter((a) => a.accountError).length ? `
+          <div class="banner warn" style="margin-top:12px;">
+            <span class="material-symbols-outlined">warning</span>
+            <div>名簿には入りましたが、アカウントを作れなかった人がいます：
+              ${r.added.filter((a) => a.accountError)
+                .map((a) => `${esc(a.name)}（${esc(a.accountError)}）`).join("、")}</div>
+          </div>` : ""}`;
+
+      bulkPasswords = pw;
+      el("bulk-text").value = "";
+      await load();
+    } catch (e) {
+      box.innerHTML = `<div class="err-text">${esc(e.hint || e.detail || e.message || "取り込みに失敗しました")}</div>`;
+    }
+  }
+
+  let bulkPasswords = [];
+  function copyPasswords() {
+    const text = bulkPasswords.map((a) => `${a.name}\t${a.email || ""}\t${a.password}`).join("\n");
+    navigator.clipboard.writeText(text);
   }
 
   function exportCsv() {
