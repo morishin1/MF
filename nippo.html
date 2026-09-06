@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911k">
-  <link rel="stylesheet" href="css/layout.css?v=20260911k">
+  <link rel="stylesheet" href="css/app.css?v=20260911l">
+  <link rel="stylesheet" href="css/layout.css?v=20260911l">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -283,10 +283,11 @@
     <div id="ai-body"></div>
   </div>
 
-  <!-- 週次レビュー -->
-  <div class="card">
+  <!-- 週次レビュー。週の最終勤務日にだけ出る -->
+  <div class="card" id="wk-card">
     <h2><span class="material-symbols-outlined">radar</span>今週の振り返り
       <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div id="wk-note"></div>
     <div id="wk-eval"></div>
     <div class="np-sec">
       <h3>① 今週、最もKGIに貢献した行動</h3><textarea id="w-q1" rows="2"></textarea>
@@ -354,9 +355,9 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260911k"></script>
-<script src="js/layout.js?v=20260911k"></script>
-<script src="js/push.js?v=20260911k"></script>
+<script src="js/api-client.js?v=20260911l"></script>
+<script src="js/layout.js?v=20260911l"></script>
+<script src="js/push.js?v=20260911l"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -891,6 +892,15 @@
       return;
     }
 
+    // 週の最終日は、振り返りを書いてから。サーバ側でも同じ判定をしているが、
+    // 往復させると「送信 → 断られる」で二度手間になる
+    const c = data.weekClosing || {};
+    if (c.isToday && !c.filled) {
+      msg.textContent = "今日は週の最終日です。先に「今週の振り返り」を書いて保存してください";
+      el("wk-card").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     // KPIの実績は、1つ目の数字を日報側にも残す（AI評価が達成率を使う）
     const firstKpi = body.kpiActuals.find((k) => k.actual !== "");
     if (firstKpi) body.kpiActual = firstKpi.actual;
@@ -1180,10 +1190,36 @@
   }
 
   // --- 週次レビュー -----------------------------------------------------------
+  // 週の振り返りは、その週の最終勤務日にだけ出す。
+  // 毎日出しておくと、毎日読み飛ばすものになる。
+  // その日は、書かないと日報を出せない（サーバ側でも同じ判定をしている）
   function renderWeekly() {
     const w = data.weekly;
-    el("wk-tag").textContent = `${data.weekStart} の週`;
-    el("wk-tag").className = "kp-chip";
+    const c = data.weekClosing || {};
+
+    // 出すのは、締め日か、もう書いてあるとき（書いたものを見返せるように）
+    const show = c.isToday || c.filled;
+    el("wk-card").classList.toggle("hidden", !show);
+
+    el("wk-tag").textContent = c.isToday ? "今日が締めの日です" : `${data.weekStart} の週`;
+    el("wk-tag").className = `kp-chip ${c.isToday && !c.filled ? "important" : c.filled ? "event" : "draft"}`;
+
+    el("wk-note").innerHTML = c.isToday && !c.filled
+      ? `<div class="banner warn" style="margin-bottom:14px;">
+           <span class="material-symbols-outlined">edit_calendar</span>
+           <div><b>今日は今週の最終日です。</b>
+           先にここを書いて「保存」を押してください。保存するまで、今日の日報は出せません。<br>
+           <span class="muted" style="font-size:11.5px;">
+             毎日の記録はたまっても、週の終わりに立ち止まらないと、次の週は同じように過ぎていきます。
+           </span></div>
+         </div>`
+      : c.isToday
+        ? `<div class="banner ok" style="margin-bottom:14px;">
+             <span class="material-symbols-outlined">check_circle</span>
+             <div>今週の振り返りは書けています。日報を出せます。</div></div>`
+        : "";
+
+    if (!show) return;
     for (const k of ["q1", "q2", "q3", "q4"]) el(`w-${k}`).value = w?.[k] || "";
 
     // 評価は「本人へ提出された」ものだけ見せる。下書きのまま見えると誤解になる
@@ -1223,6 +1259,9 @@
       }));
       msg.className = "muted";
       msg.textContent = "保存しました。";
+      // 締め日は、これで日報を出せるようになる。案内をその場で消す
+      if (data.weekClosing) data.weekClosing.filled = true;
+      renderWeekly();
     } catch (e) {
       msg.className = "err-text";
       msg.textContent = e.detail || e.message || "保存に失敗しました";

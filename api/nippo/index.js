@@ -26,6 +26,7 @@ import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
   jstDate, weekStart, isDate, normalizeNippo, hasContent,
+  lastWorkdayOfWeek, weeklyFilled,
   normalizeMorning, hasMorning, evaluateDaily, CRITERIA,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
@@ -70,7 +71,7 @@ async function read(req, res, user, ctx) {
     .order("display_name")
     .limit(300);
 
-  const [mine, today, thanks, weekly, openItems, todayKpis] = await Promise.all([
+  const [mine, today, thanks, weekly, openItems, todayKpis, prefs] = await Promise.all([
     // 自分の直近30件。過去を振り返れる範囲があればよく、全件は要らない
     sb.from("tc_nippo").select("*").eq("user_id", user.id)
       .order("work_date", { ascending: false }).limit(30),
@@ -91,6 +92,8 @@ async function read(req, res, user, ctx) {
     sb.from("gw_daily_kpis").select("id, label, unit, target, actual, sort_order")
       .eq("user_id", user.id).eq("work_date", date)
       .order("sort_order").limit(6),
+    // 勤務する曜日。週の最終日がいつかを決めるのに使う（既定は平日）
+    sb.from("gw_reminder_prefs").select("workdays").eq("employee_id", ctx.employee.id).maybeSingle(),
   ]);
 
   const rows = mine.data || [];
@@ -118,6 +121,9 @@ async function read(req, res, user, ctx) {
     replies = (data || []).filter((r) => !(r.kind === "admin" && r.draft_only));
   }
 
+  // 週の締め日。この日は、振り返りを書かないと日報を出せない
+  const closingOn = lastWorkdayOfWeek(weekStart(date), prefs.data?.workdays);
+
   return json(res, 200, {
     date,
     weekStart: weekStart(date),
@@ -132,7 +138,14 @@ async function read(req, res, user, ctx) {
     evals,
     aiConfigured: aiConfigured(),
     thanks: thanks.data || [],
+    // 週の振り返り。closingOn がその週の最終勤務日で、
+    // その日は振り返りを書かないと日報を出せない
     weekly: weekly.data || null,
+    weekClosing: {
+      on: closingOn,
+      isToday: date === closingOn,
+      filled: weeklyFilled(weekly.data),
+    },
     // 昨日までの宿題。提出時に doneActionIds で「やった」を返してもらう
     openActions: (openItems.data || []).map(shapeItem),
     // 画面に出す基準はサーバから渡す。定義を2か所に置かないため
@@ -221,6 +234,26 @@ async function submit(res, user, ctx, body) {
   }
 
   const sb = admin();
+
+  // 週の最終勤務日は、振り返りを書いてからでないと日報を出せない。
+  //
+  // 週の終わりに一度も立ち止まらないまま次の週が始まると、
+  // 毎日の記録はたまるのに、そこから何も変わらない。
+  // 止める場所は週に1日だけにして、ほかの日はこれまでどおり出せる。
+  const ws = weekStart(date);
+  const { data: prefs } = await sb.from("gw_reminder_prefs")
+    .select("workdays").eq("employee_id", ctx.employee.id).maybeSingle();
+  if (date === lastWorkdayOfWeek(ws, prefs?.workdays)) {
+    const { data: review } = await sb.from("tc_weekly_review")
+      .select("q1, q2, q3, q4").eq("user_id", user.id).eq("week_start", ws).maybeSingle();
+    if (!weeklyFilled(review)) {
+      return json(res, 400, {
+        error: "weekly_required",
+        hint: "今日は週の最終日です。先に「今週の振り返り」を書いて保存してください",
+      });
+    }
+  }
+
   // 「今日確認できた行動」は保存時に決める。あとから基準を変えても
   // 過去の日報の表示が勝手に変わらないようにするため
   const row = {
