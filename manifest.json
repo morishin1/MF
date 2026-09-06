@@ -1,0 +1,24 @@
+{
+  "name": "エイト 社内グループウェア",
+  "short_name": "エイト",
+  "description": "日報・スケジュール・申請・社内情報。1日3回の声かけで仕事のリズムを作ります。",
+  "lang": "ja",
+  "start_url": "/home.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2b6cb0",
+  "icons": [
+    {
+      "src": "/img/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    { "name": "日報", "url": "/nippo.html" },
+    { "name": "やること", "url": "/tasks.html" },
+    { "name": "スケジュール", "url": "/schedule.html" }
+  ]
+}

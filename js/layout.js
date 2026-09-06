@@ -407,6 +407,29 @@
     document.getElementById("kp-pw").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
   }
 
+  // アプリとして入れられるようにする（PWA）。
+  //
+  // manifest と theme-color を、画面ごとの HTML に書き足すのではなく
+  // ここで足す。40近いファイルに同じ2行を貼ると、必ず貼り忘れが出る。
+  //
+  // Service Worker は、通知をすでに許可している人にだけ登録する。
+  // 許可していない人に登録しても、できることが無い
+  function setupPwa() {
+    if (!document.querySelector('link[rel="manifest"]')) {
+      const l = document.createElement("link");
+      l.rel = "manifest";
+      l.href = "/manifest.json";
+      document.head.appendChild(l);
+    }
+    if (!document.querySelector('meta[name="theme-color"]')) {
+      const m = document.createElement("meta");
+      m.name = "theme-color";
+      m.content = "#2b6cb0";
+      document.head.appendChild(m);
+    }
+    if (window.KPPush) KPPush.warm();
+  }
+
   window.KPLayout = {
     /**
      * ログイン確認 → 権限確認 → レイアウト描画。
@@ -416,6 +439,7 @@
      */
     async init(opts = {}) {
       if (!API.isLoggedIn()) { clearCache(); showLogin(); return null; }
+      setupPwa();
 
       // 覚えている権限があれば、通信を待たずに先に描く。
       // この画面を開いてよい権限のときだけ描く（違えばこのあと送り返される）

@@ -55,7 +55,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (36, '036',    '日報を朝4つ・夜5つに／みんなの日報',                  'table',    'gw_nippo_shares',        null),
   (37, '037',    '入社フォーム（本人の情報・同意）',                    'table',    'gw_onboard_profiles',    null),
   (38, '038',    '社員名簿に備考',                                      'column',   'gw_employees',           'note'),
-  (39, '039',    '電子同意（版付き）／提出書類の Drive 自動整理',        'table',    'gw_consent_docs',        null)
+  (39, '039',    '電子同意（版付き）／提出書類の Drive 自動整理',        'table',    'gw_consent_docs',        null),
+  (40, '040',    '1日3回の声かけ（デスクトップ通知）',                  'table',    'gw_push_subs',           null)
 ),
 
 -- ファイルの適用状況

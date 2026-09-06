@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911g">
-  <link rel="stylesheet" href="css/layout.css?v=20260911g">
+  <link rel="stylesheet" href="css/app.css?v=20260911h">
+  <link rel="stylesheet" href="css/layout.css?v=20260911h">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -185,6 +185,26 @@
     <div id="am-msg" class="err-text" style="margin-top:10px;"></div>
   </div>
 
+  <!-- 声かけの設定。1日3回だけ -->
+  <div id="push-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">notifications_active</span>声かけ
+      <span id="push-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="kp-greet-sub" style="margin:0 0 14px;">
+      始業・勤務のまんなか・終業の少し前に、この端末へ通知します。
+      mf を開いていなくても届きます。急ぎのこと以外は、この3回だけです。
+    </p>
+    <div id="push-body"></div>
+  </div>
+
+  <!-- 昼。見るだけ。入力欄は置かない -->
+  <div id="mid-card" class="card hidden" style="border-left:4px solid #d69e2e;">
+    <h2><span class="material-symbols-outlined">timer</span>30秒チェック</h2>
+    <p class="kp-greet-sub" style="margin:0 0 14px;">
+      入力は要りません。見て、午後の最優先だけ決めてください。
+    </p>
+    <div id="mid-body"></div>
+  </div>
+
   <!-- 入力 -->
   <div class="card">
     <h2><span class="material-symbols-outlined">edit_note</span>日報を書く
@@ -334,8 +354,9 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260911g"></script>
-<script src="js/layout.js?v=20260911g"></script>
+<script src="js/api-client.js?v=20260911h"></script>
+<script src="js/layout.js?v=20260911h"></script>
+<script src="js/push.js?v=20260911h"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -379,6 +400,7 @@
     // 書きかけを自動で預かる。書いている途中で閉じても消えないように
     document.addEventListener("input", scheduleDraftSave);
     await load(jstToday());
+    loadPush();
   }
 
   async function load(date) {
@@ -399,6 +421,8 @@
 
     renderTodos();
     renderMorning();
+    renderMidday();
+    focusFromHash();
     // 提出済みならその内容を、まだなら書きかけを出す
     fillForm(data.today || loadDraft(date));
     renderFlags(data.today?.daily_flags);
@@ -445,6 +469,238 @@
     el("am-btn").innerHTML = done
       ? '<span class="material-symbols-outlined icon-inline">save</span>書き直す'
       : '<span class="material-symbols-outlined icon-inline">send</span>これで今日を始める';
+  }
+
+  // 通知から来たとき、その場所まで運ぶ。
+  // 画面を開いて自分で探させると、通知の意味が半分になる
+  function focusFromHash() {
+    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "submit-btn" }[location.hash];
+    if (!to) return;
+    const node = el(to);
+    if (node && !node.classList.contains("hidden")) {
+      setTimeout(() => node.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+    }
+  }
+
+  // --- 声かけの設定 -----------------------------------------------------------
+  //
+  // 許可を求めるのは、本人がボタンを押したときだけ。
+  // 画面を開いた瞬間に聞くと、たいてい「ブロック」を押される。
+  // いちど拒否されると、ブラウザの設定からしか戻せない
+  let push = null;
+
+  async function loadPush() {
+    if (!window.KPPush) return;
+    try {
+      push = await API.pushConfig();
+      push.state = await KPPush.state();
+    } catch (_) {
+      el("push-card").classList.add("hidden");
+      return;
+    }
+    el("push-card").classList.remove("hidden");
+    renderPush();
+  }
+
+  function renderPush() {
+    const st = push.state;
+    const on = st.subscribed && push.prefs.enabled;
+    el("push-tag").textContent = !st.supported ? "使えません"
+      : st.permission === "denied" ? "ブロック中"
+        : on ? "受け取っています" : "止まっています";
+    el("push-tag").className = `kp-chip ${on ? "event" : "draft"}`;
+
+    if (!st.supported) {
+      el("push-body").innerHTML = `<div class="empty">
+        このブラウザは通知に対応していません。Chrome・Edge・Firefox でお試しください。</div>`;
+      return;
+    }
+    if (!push.configured) {
+      el("push-body").innerHTML = `<div class="banner warn" style="margin:0;">
+        <span class="material-symbols-outlined">settings</span>
+        <div>サーバ側の通知設定がまだです。管理者にお知らせください（VAPID の鍵）。</div></div>`;
+      return;
+    }
+
+    const t = push.times;
+    const src = t.source === "manual" ? "自分で決めた時刻です"
+      : t.source === "work_hours" ? `勤務時間（${esc(push.workHours || "")}）から決めています`
+        : "勤務時間が登録されていないため、既定の時刻です";
+
+    const row = (key, label, time, onKey, what) => `
+      <div class="np-kpirow">
+        <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:160px;font-weight:600;cursor:pointer;">
+          <input type="checkbox" style="width:auto;margin:0;" ${push.prefs[onKey] ? "checked" : ""}
+                 onchange="savePush({ ${onKey}: this.checked })">
+          <span>${esc(label)}</span>
+        </label>
+        <input type="time" step="900" value="${esc(time)}" style="width:110px;margin:0;"
+               onchange="savePush({ ${key}At: this.value })">
+        <span class="muted" style="font-size:11.5px;flex-basis:100%;">${esc(what)}</span>
+      </div>`;
+
+    const days = ["月", "火", "水", "木", "金", "土", "日"];
+    el("push-body").innerHTML = `
+      ${st.permission === "denied" ? `
+        <div class="banner warn" style="margin:0 0 14px;">
+          <span class="material-symbols-outlined">block</span>
+          <div>このブラウザで通知がブロックされています。
+          アドレス欄の左のアイコンから、通知を「許可」に変えてください。</div></div>` : ""}
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        ${st.subscribed
+          ? `<button class="btn btn-secondary btn-sm" onclick="pushOff(this)">
+               <span class="material-symbols-outlined icon-inline">notifications_off</span>この端末で止める
+             </button>
+             <button class="btn btn-secondary btn-sm" onclick="pushTest(this)">
+               <span class="material-symbols-outlined icon-inline">send</span>テスト送信
+             </button>`
+          : `<button class="btn btn-primary btn-sm" onclick="pushOn(this)">
+               <span class="material-symbols-outlined icon-inline">notifications_active</span>この端末で通知を受け取る
+             </button>`}
+      </div>
+
+      <div class="np-sec">
+        <h3>いつ声をかけるか</h3>
+        <p class="lead">${esc(src)}　時刻を入れると、そちらが優先されます（15分刻み）。</p>
+        ${row("morning", "始業：今日のゴールを決める", t.morning, "morningOn", "18時に「今日は良かった」と思える状態を、先に決めます")}
+        ${row("midday", "まんなか：30秒チェック", t.midday, "middayOn", "KPIの進みと、午後の最優先。見るだけです")}
+        ${row("evening", "終業前：日報", t.evening, "eveningOn", "今日のデキタ3つ。AIが明日の最初の一手まで返します")}
+      </div>
+
+      <div class="np-sec">
+        <h3>送る曜日</h3>
+        <div class="np-tags">
+          ${days.map((d, i) => `
+            <button type="button" class="np-tag ${push.prefs.workdays.includes(i + 1) ? "on" : ""}"
+                    onclick="toggleDay(${i + 1})">${d}</button>`).join("")}
+        </div>
+      </div>
+
+      ${push.devices.length ? `
+        <div class="np-sec">
+          <h3>通知を受け取っている端末</h3>
+          <div class="np-rows">${push.devices.map((d) => `
+            <div class="np-kpirow">
+              <span class="nm">${esc(d.label || "端末")}</span>
+              <span class="muted" style="font-size:11.5px;">
+                ${d.last_ok_at ? `最終送信 ${esc(new Date(d.last_ok_at).toLocaleString("ja-JP"))}` : "まだ送っていません"}
+              </span>
+              <button class="btn btn-secondary btn-sm" onclick="dropDevice('${esc(d.id)}', this)">外す</button>
+            </div>`).join("")}</div>
+        </div>` : ""}
+
+      <p class="muted" style="font-size:11.5px;margin:0;">
+        この3回のほかに通知が出るのは、止まっていること・期限切れ・人からのメッセージ・面談だけです。
+        申請の承認待ちやお知らせは、ベルにだけ出ます。
+      </p>`;
+  }
+
+  async function pushOn(btn) {
+    try {
+      await KPLayout.busy(btn, "許可を確認中…", () => KPPush.enable());
+      await loadPush();
+    } catch (e) { alert(e.message || "通知を受け取れませんでした"); }
+  }
+  async function pushOff(btn) {
+    try {
+      await KPLayout.busy(btn, "止めています…", () => KPPush.disable());
+      await loadPush();
+    } catch (e) { alert(e.message || "止められませんでした"); }
+  }
+  async function pushTest(btn) {
+    try {
+      const r = await KPLayout.busy(btn, "送信中…", () => API.pushTest());
+      if (!r.ok) alert("送れませんでした。もう一度「この端末で通知を受け取る」を押してください。");
+    } catch (e) { alert(e.hint || e.detail || e.message || "送れませんでした"); }
+  }
+  async function dropDevice(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.pushRemoveDevice(id));
+      await loadPush();
+    } catch (e) { alert(e.hint || e.message || "外せませんでした"); }
+  }
+  async function savePush(patch) {
+    try {
+      push = { ...(await API.pushPrefs(patch)), state: push.state };
+      renderPush();
+    } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
+  }
+  function toggleDay(d) {
+    const cur = push.prefs.workdays || [];
+    const next = cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort();
+    savePush({ workdays: next });
+  }
+
+  // --- 昼。30秒チェック -------------------------------------------------------
+  //
+  // 見るだけ。入力欄は置かない。入れるものがあると30秒で終わらない。
+  // 出すのは3つ。
+  //   朝に決めたことのうち、まだ終わっていないもの
+  //   KPIの進み（目標と実績の差）
+  //   午後の最優先（残っているうちの、いちばん上）
+  //
+  // 通知（/nippo.html#midday）から来たときと、
+  // 朝の入力が済んでいて日報がまだの時間帯に出す
+  function renderMidday() {
+    const t = data.today;
+    const isToday = data.date === jstToday();
+    const asked = location.hash === "#midday";
+    const started = !!t?.morning_at;
+    const submitted = !!t?.submitted_at;
+
+    const show = isToday && started && !submitted && (asked || inMiddayWindow());
+    el("mid-card").classList.toggle("hidden", !show);
+    if (!show) return;
+
+    const items = (t?.work_items || []).filter((w) => w.task);
+    const left = items.filter((w) => !w.result);
+    const kpis = data.kpisToday || [];
+
+    el("mid-body").innerHTML = `
+      <div class="np-sec">
+        <h3>朝に決めたこと</h3>
+        ${t?.top_priority ? `<p class="lead">最優先：<b>${esc(t.top_priority)}</b></p>` : ""}
+        ${items.length
+          ? `<div class="np-rows">${items.map((w) => `
+              <div class="np-kpirow">
+                <span class="nm">${w.result ? "✔" : "○"} ${esc(w.task)}</span>
+                <span class="muted" style="font-size:12px;">${w.result ? "できた" : "まだ"}</span>
+              </div>`).join("")}</div>`
+          : `<p class="lead">やることは書かれていません。</p>`}
+      </div>
+
+      ${kpis.length ? `
+        <div class="np-sec">
+          <h3>KPIの進み</h3>
+          <div class="np-rows">${kpis.map((k) => {
+            const a = Number(k.actual ?? 0), g = Number(k.target ?? 0);
+            const diff = g ? a - g : null;
+            return `
+              <div class="np-kpirow">
+                <span class="nm">${esc(k.label)}</span>
+                <span class="muted" style="font-size:12px;">
+                  ${a}${esc(k.unit || "")} / 目標 ${k.target ?? "—"}${esc(k.unit || "")}
+                  ${diff === null ? "" : diff >= 0
+                    ? '<span style="color:#276749;font-weight:700;margin-left:6px;">達成</span>'
+                    : `<span style="color:#c53030;font-weight:700;margin-left:6px;">あと ${Math.abs(diff)}</span>`}
+                </span>
+              </div>`;
+          }).join("")}</div>
+        </div>` : ""}
+
+      <div class="np-sec">
+        <h3>午後の最優先</h3>
+        <p class="lead">${left.length
+          ? `残りは ${left.length} 件。まずは <b>${esc(left[0].task)}</b> から。`
+          : "朝に決めたことは全部終わっています。終業まで、次の一手に使えます。"}</p>
+      </div>`;
+  }
+
+  // 昼の時間帯か。11時〜16時のあいだだけ、通知が無くても出す
+  function inMiddayWindow() {
+    const h = new Date(Date.now() + 9 * 3600000).getUTCHours();
+    return h >= 11 && h < 16;
   }
 
   async function saveMorning(btn) {

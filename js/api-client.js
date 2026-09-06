@@ -652,6 +652,16 @@
     return out;
   }
 
+  // ---- デスクトップ通知（1日3回の声かけ） ----
+  const pushConfig = () => api("/api/push");
+  const pushSubscribe = (sub) => api("/api/push", { method: "POST", body: sub });
+  const pushUnsubscribe = (endpoint) =>
+    api(`/api/push?endpoint=${encodeURIComponent(endpoint)}`, { method: "DELETE" });
+  const pushRemoveDevice = (id) =>
+    api(`/api/push?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const pushPrefs = (prefs) => api("/api/push", { method: "PATCH", body: prefs });
+  const pushTest = () => api("/api/push", { method: "POST", body: { test: 1 } });
+
   // ---- Google Drive 連携 ----
   const driveStatus = (clientId) => api(`/api/drive/status?clientId=${encodeURIComponent(clientId)}`);
   const driveSync = (clientId, limit) => api("/api/drive/sync", { method: "POST", body: { clientId, limit } });
@@ -726,6 +736,7 @@
     deleteDocument,
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync, hrDriveCheck,
+    pushConfig, pushSubscribe, pushUnsubscribe, pushRemoveDevice, pushPrefs, pushTest,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,
     setEmployeeRole, linkEmployeeAccount,
