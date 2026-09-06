@@ -115,9 +115,15 @@
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
+      // hint は「人が読んで直せる説明」、detail は原因の生の文言。
+      // 画面はどこも `e.hint || e.detail || e.message` の順で出しているのに、
+      // ここで hint を写していなかったため、どの画面でも
+      // 「onboard_failed」のようなコード名しか出ていなかった。
       const err = new Error(data.error || `APIエラー (${r.status})`);
       err.status = r.status;
+      err.hint = data.hint;
       err.detail = data.detail;
+      err.body = data;
       throw err;
     }
     return data;

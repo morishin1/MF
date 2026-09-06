@@ -184,9 +184,13 @@ async function create(res, ctx, user, body) {
       source: "form",
     });
   } catch (e) {
+    // どの段で止まったかまで返す。「onboard_failed」だけでは調べようがない。
+    // 名簿は残してあるので、画面から続きをやり直せる
     return json(res, 500, {
       error: "onboard_failed",
-      hint: String(e?.message || e).slice(0, 400),
+      step: e?.step || null,
+      hint: String(e?.message || e).slice(0, 500),
+      detail: String(e?.message || e).slice(0, 500),
     });
   }
 
