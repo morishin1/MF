@@ -336,6 +336,14 @@
   const blockerAct = (action, body = {}) =>
     api("/api/blockers", { method: "POST", body: { action, ...body } });
 
+  // ---- 3か月育成計画（労働条件通知書 → 3か月KGI → 月間KGI/KPI → 今日のKPI） ----
+  // AIが作るのは案まで。確定は人が押す
+  const growthPlans = (employeeId) =>
+    api(`/api/growth${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+  const myGrowthPlan = () => api("/api/growth?scope=mine");
+  const growthAct = (action, body = {}) =>
+    api("/api/growth", { method: "POST", body: { action, ...body } });
+
   // ---- 自走レベル ----
   // 上げ下げは人が押す。AIは決めない
   const autonomy = (userId) =>
@@ -670,6 +678,7 @@
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
+    growthPlans, myGrowthPlan, growthAct,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,
     contracts, contractsAct, uploadContract,

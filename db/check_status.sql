@@ -47,7 +47,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (28, '028',    '試用期間の判定',                                      'table',    'gw_probation_reviews',   null),
   (29, '029',    '雇用契約・面談',                                      'table',    'gw_contracts',           null),
   (30, '030',    'ダッシュボード連動（KPI・次にやること・点数の内訳）',  'table',    'gw_action_items',        null),
-  (31, '031',    '止まっていること・自走レベル・デキル履歴',            'table',    'gw_blockers',            null)
+  (31, '031',    '止まっていること・自走レベル・デキル履歴',            'table',    'gw_blockers',            null),
+  (32, '032',    '3か月育成計画・月間KGI/KPI',                        'table',    'gw_growth_plans',        null)
 ),
 
 -- ファイルの適用状況

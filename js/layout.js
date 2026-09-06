@@ -76,6 +76,7 @@
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き",   icon: "badge",        ready: true  },
     { key: "contracts", href: "admin-contracts.html", label: "雇用契約・面談",     icon: "contract",     ready: true  },
     { key: "probation", href: "admin-probation.html", label: "試用期間",           icon: "how_to_reg",   ready: true  },
+    { key: "growth",    href: "admin-growth.html",    label: "3か月育成計画",      icon: "flag",         ready: true  },
     { key: "autonomy",  href: "admin-autonomy.html",  label: "自走レベル",         icon: "stairs",       ready: true  },
     { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形",         icon: "folder_copy",  ready: true  },
     { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",      ready: true  },

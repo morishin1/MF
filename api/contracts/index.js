@@ -480,6 +480,15 @@ function toColumns(v) {
     wage_type: v.wage_type,
     wage_amount: v.wage_amount,
     wage_note: v.wage_note,
+    // 労働条件通知書として読んだぶん。3か月育成計画の材料になる
+    document_type: v.document_type,
+    training_months: v.training_months,
+    weekly_hours: v.weekly_hours,
+    remote_ok: v.remote_ok,
+    work_scope: v.work_scope,
+    scope_change: v.scope_change,
+    training_programs: v.training_programs,
+    training_review_note: v.training_review_note,
   };
 }
 
@@ -508,6 +517,11 @@ function shapeContract(c) {
     workHours: c.work_hours, workDays: c.work_days, workPlace: c.work_place,
     jobContent: c.job_content,
     wageType: c.wage_type, wageAmount: c.wage_amount, wageNote: c.wage_note,
+    documentType: c.document_type,
+    trainingMonths: c.training_months, weeklyHours: c.weekly_hours,
+    remoteOk: c.remote_ok, workScope: c.work_scope || [],
+    scopeChange: c.scope_change, trainingPrograms: c.training_programs || [],
+    trainingReviewNote: c.training_review_note,
     aiStatus: c.ai_status, aiConfidence: c.ai_confidence, aiError: c.ai_error, aiModel: c.ai_model,
     unreadable: c.extracted?.unreadable || [],
     note: c.note,

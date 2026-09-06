@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910m">
-  <link rel="stylesheet" href="css/layout.css?v=20260910m">
+  <link rel="stylesheet" href="css/app.css?v=20260910n">
+  <link rel="stylesheet" href="css/layout.css?v=20260910n">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -64,6 +64,11 @@
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
 
+  <!-- 3か月の行き先。一番上に置くが、大きくはしない。
+       今日やることが「何のためか」が見えないと、ただの作業一覧になる。
+       ただし一番大きいのは TODAY。ここは細い帯にとどめる -->
+  <div id="goal-strip" class="hidden"></div>
+
   <!-- ① 今日の最優先。この画面で一番大きく出す。
        会社の評価を見る画面ではなく、仕事を前に進める画面にするため -->
   <div id="today-card" class="card hidden dash-today">
@@ -77,7 +82,8 @@
   <div id="kpi-card" class="card hidden">
     <h2><span class="material-symbols-outlined">target</span>今日のKPI
       <span id="kpi-tag" class="kp-chip" style="margin-left:6px;"></span>
-      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="openKpiTargets()">
+      <button class="btn btn-secondary btn-sm" id="kpi-target-btn"
+              style="margin-left:auto;" onclick="openKpiTargets()">
         <span class="material-symbols-outlined icon-inline">tune</span>目標を決める
       </button></h2>
     <div id="kpi-body"></div>
@@ -100,6 +106,14 @@
     <h2><span class="material-symbols-outlined">auto_awesome</span>昨日のふりかえり
       <span id="fb-date" class="kp-chip" style="margin-left:6px;"></span></h2>
     <div id="fb-body"></div>
+  </div>
+
+  <!-- THIS MONTH。3か月計画がある人だけに出る -->
+  <div id="month-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">flag</span>今月の目標
+      <span id="month-tag" class="kp-chip" style="margin-left:6px;"></span></h2>
+    <div id="month-kgi" style="font-size:14.5px;font-weight:600;line-height:1.7;margin-bottom:12px;"></div>
+    <div id="month-body"></div>
   </div>
 
   <!-- ⑤ 今週の状況／10か条（直近7日の平均）／自走レベル -->
@@ -147,8 +161,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260910m"></script>
-<script src="js/layout.js?v=20260910m"></script>
+<script src="js/api-client.js?v=20260910n"></script>
+<script src="js/layout.js?v=20260910n"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -200,12 +214,65 @@
       // 日報を使っていない人や、DBがまだ入っていない環境ではカードごと出さない
       return;
     }
+    renderGoal();
     renderToday();
     renderKpi();
     renderBlockers();
     renderFeedback();
+    renderMonth();
     renderWeek();
     renderLevel();
+  }
+
+  // 3か月の行き先。細い帯にとどめる。
+  // ここを大きくすると評価を見る画面になり、TODAY が埋もれる
+  function renderGoal() {
+    const g = dash.growth;
+    if (!g?.plan?.threeMonthKgi) return;
+    el("goal-strip").classList.remove("hidden");
+    el("goal-strip").innerHTML = `
+      <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;
+                  padding:10px 14px;margin-bottom:14px;border-radius:10px;
+                  background:var(--soft);border:1px solid var(--border);">
+        <span class="muted" style="font-size:10.5px;font-weight:700;letter-spacing:.14em;">3 MONTH GOAL</span>
+        <span style="flex:1;min-width:220px;font-size:13px;font-weight:600;line-height:1.65;">
+          ${esc(g.plan.threeMonthKgi)}
+        </span>
+        <span class="muted" style="font-size:12px;white-space:nowrap;">
+          ${g.days.over ? "期間終了" : `残り ${g.days.left} 日`}
+        </span>
+      </div>`;
+  }
+
+  // THIS MONTH。今月のKGIと、月間KPIがどこまで来ているか
+  function renderMonth() {
+    const m = dash.growth?.month;
+    if (!m) return;
+    el("month-card").classList.remove("hidden");
+    el("month-tag").textContent =
+      m.progress != null ? `KGI進捗 ${m.progress}%` : "集計中";
+    el("month-tag").className = `kp-chip${m.progress >= 80 ? " event" : ""}`;
+    el("month-kgi").textContent = m.kgi || "（今月の目標はまだ決まっていません）";
+
+    if (!m.kpis.length) {
+      el("month-body").innerHTML = `<div class="empty">今月のKPIはまだ決まっていません。</div>`;
+      return;
+    }
+
+    el("month-body").innerHTML = m.kpis.map((k) => {
+      const pct = k.rate == null ? 0 : Math.min(100, k.rate);
+      const val = k.kind === "onoff"
+        ? (k.actual ? "実施済み" : "未実施")
+        : `${k.actual ?? "—"} / ${k.target ?? "—"}${esc(k.unit || "")}`;
+      return `
+        <div class="kpi-row">
+          <div class="kpi-name">${esc(k.name)}
+            ${k.fromDaily ? "" : '<span class="muted" style="font-weight:400;font-size:11px;margin-left:6px;">月末に記録</span>'}
+          </div>
+          <div class="kpi-num"><b>${esc(val)}</b>${k.rate != null ? ` <span>${k.rate}%</span>` : ""}</div>
+          <div class="kpi-bar${k.hit ? " hit" : ""}"><span style="width:${pct}%"></span></div>
+        </div>`;
+    }).join("");
   }
 
   // 止まっていることを出す欄。責める欄ではないので、書きぶりも柔らかくする。
@@ -327,6 +394,11 @@
     const s = dash.kpiSummary;
     el("kpi-tag").textContent = s ? `${s.hit} / ${s.of} 達成` : "目標なし";
     el("kpi-tag").className = `kp-chip${s && s.rate === 100 ? " event" : ""}`;
+
+    // 3か月計画から降りてきたKPIは、ここでは目標を変えられない。
+    // 変えるのは月間KPIのほうで、日ごとに動かせると月の達成率が意味を失う
+    const fromPlan = list.some((k) => k.kpiId);
+    el("kpi-target-btn").classList.toggle("hidden", fromPlan);
 
     if (!list.length) {
       el("kpi-body").innerHTML = `<div class="empty">
@@ -528,7 +600,8 @@
 
   async function reloadDash() {
     // 追記した「そのほか」の枠が二重にならないよう、いったん消してから描き直す
-    for (const id of ["today-card", "kpi-card", "blk-card", "fb-card", "week-card"]) {
+    for (const id of ["goal-strip", "today-card", "kpi-card", "blk-card",
+                      "fb-card", "month-card", "week-card"]) {
       el(id).classList.add("hidden");
     }
     el("today-card").innerHTML = `

@@ -29,6 +29,9 @@ import {
 } from "../../lib/actions.js";
 import { shapeBlocker } from "../../lib/blockers.js";
 import { levelOf } from "../../lib/autonomy.js";
+import {
+  monthStart, kpiProgress, monthProgress, shapePlan, shapeMonth, planDays,
+} from "../../lib/growth.js";
 
 const canManage = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -71,7 +74,8 @@ async function read(req, res, user, ctx) {
   const ws = weekStart(date);
   const days = weekdaysOf(ws);
 
-  const [kpis, items, weekNippos, weekEvals, weekly, recentEvals, blockers, emp] = await Promise.all([
+  const [kpis, items, weekNippos, weekEvals, weekly, recentEvals, blockers, emp,
+         plan] = await Promise.all([
     ensureKpis(sb, userId, date),
 
     // 今日ぶんと、やり残し（期限が過ぎてまだ開いているもの）
@@ -100,6 +104,11 @@ async function read(req, res, user, ctx) {
 
     // 自走レベル。画面には「次のレベルまであと何項目」として出す
     sb.from("gw_employees").select("autonomy_level").eq("user_id", userId).maybeSingle(),
+
+    // 3か月育成計画。確定したものだけ（相談中の目標は本人に出さない）
+    sb.from("gw_growth_plans").select("*")
+      .eq("user_id", userId).eq("status", "active")
+      .lte("start_date", date).gte("end_date", date).maybeSingle(),
   ]);
 
   const open = items.data || [];
@@ -114,6 +123,11 @@ async function read(req, res, user, ctx) {
   return json(res, 200, {
     date,
     userId,
+
+    // 3か月の行き先と、今月どこまで来ているか。
+    // 今日やることが「何のためか」が見えないと、ただの作業一覧になる
+    growth: await growthOf(sb, plan.data, date),
+
     // ① 今日の最優先。ひとつだけ大きく出す
     top: open.length ? shapeItem(open[0]) : null,
     // その下に小さく並べる残り
@@ -159,6 +173,43 @@ async function read(req, res, user, ctx) {
     submittedToday: (weekNippos.data || []).some((n) => n.work_date === date),
     nextWorkday: nextWorkday(date),
   });
+}
+
+/**
+ * 3か月の行き先と、今月の進み具合（要件 §14 §15）。
+ *
+ * 今日やることが「何のためか」が見えないと、ただの作業一覧になる。
+ * 逆に、ここを大きく出しすぎると評価画面になるので、
+ * TODAY より上には置かず、数字も月のぶんだけにする。
+ */
+async function growthOf(sb, plan, date) {
+  if (!plan) return null;
+
+  const month = monthStart(date);
+  const { data: m } = await sb.from("gw_growth_months").select("*")
+    .eq("plan_id", plan.id).eq("month", month).maybeSingle();
+  if (!m) return { plan: shapePlan(plan), days: planDays(plan, date), month: null };
+
+  const { data: rows } = await sb.from("gw_growth_kpis").select("*")
+    .eq("month_id", m.id).order("sort_order");
+
+  const ids = (rows || []).map((r) => r.id);
+  let daily = [];
+  if (ids.length) {
+    const { data } = await sb.from("gw_daily_kpis")
+      .select("kpi_id, work_date, actual")
+      .in("kpi_id", ids).gte("work_date", month).limit(2000);
+    daily = data || [];
+  }
+
+  const kpis = (rows || []).map((k) =>
+    kpiProgress(k, daily.filter((d) => d.kpi_id === k.id)));
+
+  return {
+    plan: shapePlan(plan),
+    days: planDays(plan, date),
+    month: { ...shapeMonth(m), kpis, progress: monthProgress(kpis) },
+  };
 }
 
 /** 1日につき最後の評価だけを残す。再採点したぶんが二重に効かないように */
@@ -265,6 +316,18 @@ async function saveKpi(res, user, ctx, body) {
   // 目標を決める。管理者か、本人が自分のぶんを決める場合
   if (body.action === "target") {
     if (!mine && !manager) return json(res, 403, { error: "forbidden" });
+
+    // 3か月育成計画から降りてきたKPIは、ここでは触らせない。
+    // 目標は月間KGI/KPIとして決まっているもので、
+    // 日ごとに本人が書き換えられると、月の達成率が意味を失う
+    const { data: linked } = await sb.from("gw_daily_kpis").select("id")
+      .eq("user_id", targetUser).eq("work_date", date).not("kpi_id", "is", null).limit(1);
+    if (linked?.length) {
+      return json(res, 409, {
+        error: "plan_managed",
+        hint: "この日のKPIは3か月育成計画から出ています。目標を変えるときは「育成計画」の月間KPIを直してください。",
+      });
+    }
 
     const list = (body.kpis || []).slice(0, 5);
     const rows = [];
