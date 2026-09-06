@@ -12,7 +12,7 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
+import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { attachAccount } from "../../lib/accounts.js";
@@ -25,7 +25,10 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!ctx.isHr) return json(res, 403, { error: "forbidden", hint: "紐づけには人事権限が必要です" });
+  // 管理者または人事。名簿の追加・編集・削除と同じ線
+  if (!canManageHr(ctx)) {
+    return json(res, 403, { error: "forbidden", hint: "紐づけには管理者または人事の権限が必要です" });
+  }
 
   const body = await readJson(req);
   const { employeeId } = body || {};

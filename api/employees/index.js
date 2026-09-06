@@ -99,8 +99,8 @@ export default async function handler(req, res) {
     // 「名簿にはいるが、どこにも入れない人」が残っていたため1手にした。
     let account = null;
     if (body?.email && body?.createAccount !== false) {
-      if (!ctx.isHr) {
-        account = { ok: false, error: "forbidden", hint: "アカウントの作成には人事権限が必要です" };
+      if (!canManageHr(ctx)) {
+        account = { ok: false, error: "forbidden", hint: "アカウントの作成には管理者または人事の権限が必要です" };
       } else {
         const r = await attachAccount(admin(), {
           tenantId: ctx.tenantId, employee: data, email: body.email, clientId: body.clientId,

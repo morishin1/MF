@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911i">
-  <link rel="stylesheet" href="css/layout.css?v=20260911i">
+  <link rel="stylesheet" href="css/app.css?v=20260911j">
+  <link rel="stylesheet" href="css/layout.css?v=20260911j">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -102,8 +102,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911i"></script>
-<script src="js/layout.js?v=20260911i"></script>
+<script src="js/api-client.js?v=20260911j"></script>
+<script src="js/layout.js?v=20260911j"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -287,10 +287,14 @@
           <tbody>${employees.map(row).join("")}</tbody>
         </table>
       </div>
-      ${canGrantRoles ? "" :
-        `<p class="muted" style="font-size:12px;margin:12px 0 0;">
-           社内権限の変更には人事権限（hr または owner）が必要です。表示のみになっています。
-         </p>`}`;
+      <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.9;">
+        <b>利用中のシステム</b>のチップを押すと、その場で開放／停止できます
+        （グループウェアは名簿にいる方全員が使うので切れません。止めるときは状態を「退職」に）。<br>
+        <b>ログイン</b>でメールアドレスとパスワードを変えられます。
+        4つのシステムは同じログインなので、変えると全部に効きます。
+        ${canGrantRoles ? "" :
+          "<br>社内権限（経営者・人事・責任者・社労士）の変更だけは人事権限が要ります。表示のみになっています。"}
+      </p>`;
   }
 
   function row(e) {
@@ -320,7 +324,7 @@
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   onclick="startEdit('${esc(e.id)}')">編集</button>
           ${e.user_id ? `
-            <button class="btn btn-secondary btn-sm" ${canGrantRoles ? "" : "disabled"}
+            <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                     title="メールアドレスとパスワードを変える"
                     onclick="openAccount('${esc(e.id)}')">ログイン</button>` : ""}
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
@@ -350,7 +354,7 @@
       const title = !s?.exists ? "未登録。押すと使えるようにします"
         : s.active ? "使えます。押すと止めます" : "停止中。押すと使えるようにします";
       const text = !s?.exists ? label : s.active ? label : `${label}（停止）`;
-      chips.push(canGrantRoles
+      chips.push(canManage
         ? `<button type="button" class="kp-chip ${cls}" title="${esc(title)}"
                    style="border:none;cursor:pointer;font-family:inherit;"
                    onclick="toggleSystem('${esc(e.id)}','${key}',${!on},this)">${text}</button>`

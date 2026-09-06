@@ -23,7 +23,7 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
+import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { setSystemAccess, randomPassword, findUserByEmail, SYSTEMS } from "../../lib/accounts.js";
@@ -39,8 +39,11 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!ctx.isHr) {
-    return json(res, 403, { error: "forbidden", hint: "ログイン情報の変更には人事権限（hr / owner）が必要です" });
+  // 管理者または人事。名簿の追加・編集・削除と同じ線。
+  // ここだけ人事に絞ると、アカウントを作れる人がパスワードを直せない、
+  // という食い違いが起きる（追加のときは初回パスワードを出している）
+  if (!canManageHr(ctx)) {
+    return json(res, 403, { error: "forbidden", hint: "ログイン情報の変更には管理者または人事の権限が必要です" });
   }
 
   const body = await readJson(req);
@@ -54,6 +57,20 @@ export default async function handler(req, res) {
     .eq("id", employeeId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
   if (!emp) return json(res, 404, { error: "employee_not_found" });
+
+  // 経営者のアカウントは、人事権限のある人だけが触れる。
+  // 誰のパスワードでも変えられると、管理者が経営者になりすませてしまう。
+  // 社内権限（gw_role_grants）の付け外しを人事に絞っている意味が無くなる
+  if (!ctx.isHr) {
+    const { data: grants } = await sb.from("gw_role_grants")
+      .select("role").eq("employee_id", emp.id);
+    if ((grants || []).some((g) => g.role === "owner")) {
+      return json(res, 403, {
+        error: "forbidden",
+        hint: "経営者のログイン情報は、人事権限のある方だけが変えられます",
+      });
+    }
+  }
   if (!emp.user_id) {
     return json(res, 400, {
       error: "not_linked",
