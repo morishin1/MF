@@ -71,7 +71,7 @@ export default async function handler(req, res) {
         accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
       })),
       canManage: canManageHr(ctx),
-      canGrantRoles: ctx.isHr,
+      canGrantRoles: canManageHr(ctx),
       systems: SYSTEMS,
     });
   }

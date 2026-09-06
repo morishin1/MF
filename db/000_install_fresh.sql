@@ -5388,3 +5388,22 @@ create policy gw_reminder_log_own on public.gw_reminder_log
 
 
 notify pgrst, 'reload schema';
+
+
+-- =============================================================================
+-- 041_admin_is_hr.sql — 管理者を人事と同じ扱いにする
+-- =============================================================================
+create or replace function public.gw_is_hr(p_tenant uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.gw_has_role(p_tenant, 'hr')
+      or public.gw_has_role(p_tenant, 'owner')
+      or public.is_tenant_staff(p_tenant)
+$$;
+
+
+notify pgrst, 'reload schema';

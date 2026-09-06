@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     return json(res, 400, { error: "too_many_rows", hint: `一度に取り込めるのは ${MAX_ROWS} 行までです` });
   }
   // アカウントまで作るかどうか。人事権限が無い人は名簿への追加だけ
-  const withAccounts = body.createAccounts !== false && ctx.isHr;
+  const withAccounts = body.createAccounts !== false && canManageHr(ctx);
 
   const sb = admin();
 

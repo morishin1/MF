@@ -9,7 +9,7 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
+import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
@@ -23,7 +23,9 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!ctx.isHr) return json(res, 403, { error: "forbidden", hint: "社内ロールの変更は人事権限が必要です" });
+  if (!canManageHr(ctx)) {
+    return json(res, 403, { error: "forbidden", hint: "社内ロールの変更には管理者権限が必要です" });
+  }
 
   const body = await readJson(req);
   const { employeeId, role } = body || {};

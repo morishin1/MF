@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911j">
-  <link rel="stylesheet" href="css/layout.css?v=20260911j">
+  <link rel="stylesheet" href="css/app.css?v=20260911k">
+  <link rel="stylesheet" href="css/layout.css?v=20260911k">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -102,8 +102,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911j"></script>
-<script src="js/layout.js?v=20260911j"></script>
+<script src="js/api-client.js?v=20260911k"></script>
+<script src="js/layout.js?v=20260911k"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -115,7 +115,7 @@
   const SYSTEM_LABEL = { lms: "無限道場", timecard: "タイムカード", accounting: "会計" };
 
   let employees = [];
-  let canGrantRoles = false;  // 社内権限の付け外し（人事のみ）
+  let canGrantRoles = false;  // 社内権限の付け外し（管理者または人事）
   let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
   let editingId = null;      // null なら追加、id が入っていればその人の編集
 
@@ -293,7 +293,7 @@
         <b>ログイン</b>でメールアドレスとパスワードを変えられます。
         4つのシステムは同じログインなので、変えると全部に効きます。
         ${canGrantRoles ? "" :
-          "<br>社内権限（経営者・人事・責任者・社労士）の変更だけは人事権限が要ります。表示のみになっています。"}
+          "<br>いまのアカウントには管理者権限がないため、変更できる項目がありません。"}
       </p>`;
   }
 
