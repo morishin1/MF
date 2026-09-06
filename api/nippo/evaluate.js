@@ -18,6 +18,7 @@ import { evaluateNippo, isConfigured, PROMPT_VERSION } from "../../lib/nippo-eva
 import { ACTIONS as CRITERIA, score } from "../../lib/scoring.js";
 import { planFromNippo, savePlan } from "../../lib/actions.js";
 import { shapeBlocker, forPrompt } from "../../lib/blockers.js";
+import { summarizeForShare } from "../../lib/nippo-share.js";
 
 const canReview = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -111,8 +112,8 @@ async function run(res, sb, ctx, user, nippo, { force }) {
         good_points: r.result.good_points,
         improvement_points: r.result.improvement_points,
         ai_comment: r.result.ai_comment,
-        // 朝に描いた状態と、実際の差。この仕組みの中心なので独立して持つ
-        gap: r.result.gap,
+        // 達成度。本人の画面のいちばん上に出る
+        achievement: r.result.achievement,
         tomorrow_advice: r.result.tomorrow_advice,
         // 止まりそうな困りごとの候補。ここではまだ Blocker にしない。
         // 上げるかどうかは本人が押す
@@ -146,6 +147,9 @@ async function run(res, sb, ctx, user, nippo, { force }) {
       // 宿題が作れなくても評価は成立する。画面から足せる
       console.error("[nippo-eval] 次にやることを作れませんでした:", e.message);
     }
+    // みんなの日報に出すサマリー。評価とは別の呼び出しにしてある。
+    // 点数・未達理由・相談事項を渡さないためで、渡していないものは書かれない
+    await buildShare(sb, ctx, nippo);
   }
 
   if (!r.ok) {
@@ -156,6 +160,38 @@ async function run(res, sb, ctx, user, nippo, { force }) {
     });
   }
   return json(res, 200, { evaluation: shape(saved) });
+}
+
+// ---- みんなの日報に出すサマリー ------------------------------------------------
+// 公開してよい4項目（今日やったこと・成果・学び・明日やること）だけを持つ
+// 別の表に入れる。点数・未達理由・相談事項は、この表に列そのものが無い。
+// 失敗しても評価は成立させる。共有は後から作り直せる
+async function buildShare(sb, ctx, nippo) {
+  try {
+    const s = await summarizeForShare(nippo);
+    if (!s.ok) return;
+
+    // 本人が「みんなには出さない」にしていたら、その設定を引き継ぐ
+    const { data: prev } = await sb.from("gw_nippo_shares")
+      .select("visible").eq("nippo_id", nippo.id).maybeSingle();
+
+    await sb.from("gw_nippo_shares").upsert({
+      tenant_id: ctx.tenantId,
+      nippo_id: nippo.id,
+      user_id: nippo.user_id,
+      user_name: nippo.user_name,
+      work_date: nippo.work_date,
+      did: s.result.did,
+      result: s.result.result,
+      learn: s.result.learn,
+      tomorrow: s.result.tomorrow,
+      visible: prev?.visible ?? true,
+      model: s.model,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "nippo_id" });
+  } catch (e) {
+    console.error("[nippo-eval] 共有サマリーを作れませんでした:", e.message);
+  }
 }
 
 // ---- 管理者による修正 -------------------------------------------------------
@@ -221,7 +257,7 @@ export function shape(row) {
     goodPoints: row.good_points || [],
     improvementPoints: row.improvement_points || [],
     aiComment: row.ai_comment,
-    gap: row.gap,
+    achievement: row.achievement,
     tomorrowAdvice: row.tomorrow_advice,
     blockerCandidates: row.blocker_candidates || [],
     autonomyLevel: row.autonomy_level,

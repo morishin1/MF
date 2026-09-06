@@ -67,13 +67,13 @@ async function read(req, res, ctx) {
   const prevFrom = prevDays[prevDays.length - 1];
 
   const [dayRows, spanRows, setting, detailRows, kpiRows, prevRows,
-         blockerRows, itemRows] = await Promise.all([
+         blockerRows, itemRows, spanEvals] = await Promise.all([
     sb.from("tc_nippo").select("*").eq("work_date", date).limit(300),
     sb.from("tc_nippo").select("user_id, work_date")
       .gte("work_date", fromStr).lte("work_date", date).limit(20000),
     sb.from("tc_settings").select("value").eq("key", "nippo_ai_auto_reply").maybeSingle(),
     sb.from("tc_nippo")
-      .select("user_id, work_date, work_items, issues, no_issues, improve_tags, contribution")
+      .select("user_id, work_date, work_items, tomorrow_plan, consult_note, morning_note")
       .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
     sb.from("gw_daily_kpis").select("user_id, work_date, target, actual")
       .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
@@ -85,6 +85,11 @@ async function read(req, res, ctx) {
     // 期限を過ぎたまま開いている「次にやること」
     sb.from("gw_action_items").select("user_id, status, due_date")
       .lte("due_date", date).gte("due_date", spanFrom).limit(5000),
+    // 顧客価値の並びに使う。日報から「顧客・チームのためにしたこと」の欄を
+    // 外したので、文章を読んでいるAIが付けた点から数える
+    sb.from("gw_nippo_ai_evals").select("user_id, work_date, scores")
+      .eq("status", "completed")
+      .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
   ]);
 
   const nippos = dayRows.data || [];
@@ -159,6 +164,7 @@ async function read(req, res, ctx) {
       nippos: detailRows.data || [],
       kpis: kpiRows.data || [],
       prevNippos: prevRows.data || [],
+      evals: spanEvals.data || [],
     }),
 
     // その日のKPI達成状況（§12 最上部の「KPI達成」）

@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910r">
-  <link rel="stylesheet" href="css/layout.css?v=20260910r">
+  <link rel="stylesheet" href="css/app.css?v=20260910s">
+  <link rel="stylesheet" href="css/layout.css?v=20260910s">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -70,6 +70,52 @@
     .np-past { border-bottom: 1px solid var(--border); padding: 10px 0; }
     .np-past:last-child { border-bottom: none; }
     .np-draft { font-size: 11.5px; color: var(--muted); }
+    .np-sec > h3 .opt { font-size: 11px; font-weight: 400; color: var(--muted);
+                        border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+
+    .np-tabs { display: flex; gap: 6px; margin: 0 0 18px; }
+    .np-tabs button { border: 1px solid var(--border); border-radius: 999px; background: #fff;
+                      padding: 8px 17px; cursor: pointer; font-family: inherit;
+                      font-size: 13px; font-weight: 600; color: var(--muted); }
+    .np-tabs button.on { border-color: var(--primary); background: var(--primary); color: #fff; }
+
+    /* 朝に決めたことと、夜に書く欄を1行にまとめる */
+    .np-item { border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; margin-bottom: 8px; }
+    .np-item .t { display: flex; gap: 8px; align-items: center; }
+    .np-item .t input { margin: 0; }
+    .np-item .t .task { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+    .np-item .did { display: flex; gap: 6px; margin-top: 8px; }
+    .np-item .did button { border: 1px solid var(--border); border-radius: 999px; background: #fff;
+                           padding: 5px 14px; font-size: 12px; font-weight: 600;
+                           cursor: pointer; color: var(--muted); font-family: inherit; }
+    .np-item .did button.on.yes { border-color: #2f855a; background: #eaf5ec; color: #256b36; }
+    .np-item .did button.on.no  { border-color: #c05621; background: #fff5ec; color: #9c4221; }
+    .np-item .fill { margin-top: 8px; }
+    .np-item .fill input { margin: 0; }
+
+    .np-kpirow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+                 padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .np-kpirow:last-child { border-bottom: none; }
+    .np-kpirow .nm { flex: 1; min-width: 120px; font-weight: 600; }
+    .np-kpirow input { width: 92px; margin: 0; }
+
+    /* みんなの日報 */
+    .fd-card { border: 1px solid var(--border); border-radius: 11px; padding: 14px 16px; margin-bottom: 11px; }
+    .fd-card .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+    .fd-card .hd .nm { font-size: 13.5px; font-weight: 700; color: var(--primary-dark); }
+    .fd-l { display: grid; grid-template-columns: 66px 1fr; gap: 4px 12px; font-size: 13px; line-height: 1.8; }
+    .fd-l dt { color: var(--muted); font-size: 11.5px; padding-top: 3px; }
+    .fd-l dd { margin: 0; }
+    .fd-act { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 11px; }
+    .fd-act .rx { border: 1px solid var(--border); border-radius: 999px; background: #fff;
+                  padding: 5px 13px; font-size: 12px; cursor: pointer; color: var(--muted);
+                  font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
+    .fd-act .rx.on { border-color: var(--primary); background: var(--soft); color: var(--primary-dark); font-weight: 600; }
+    .fd-cm { margin-top: 10px; }
+    .fd-cm .c { font-size: 12.5px; line-height: 1.75; padding: 6px 0; border-top: 1px solid var(--border); }
+    .fd-cm .c .who { font-weight: 600; color: var(--primary-dark); margin-right: 6px; }
+    .fd-cm form { display: flex; gap: 6px; margin-top: 8px; }
+    .fd-cm form input { margin: 0; font-size: 12.5px; }
   </style>
 </head>
 <body>
@@ -77,10 +123,21 @@
 <div class="wrap">
   <h1 class="kp-greet">日報</h1>
   <p class="kp-greet-sub">
-    「頑張りました」ではなく「何を前に進めましたか」を残します。3〜5分で書ける分量です。
+    朝は1分、終業時は2〜3分。「頑張りました」ではなく「何を前に進めましたか」を残します。
   </p>
 
+  <div class="np-tabs">
+    <button type="button" id="tab-mine" class="on" onclick="showTab('mine')">
+      <span class="material-symbols-outlined icon-inline">edit_note</span>自分の日報
+    </button>
+    <button type="button" id="tab-feed" onclick="showTab('feed')">
+      <span class="material-symbols-outlined icon-inline">groups</span>みんなの日報
+    </button>
+  </div>
+
   <div id="notice"></div>
+
+<div id="pane-mine">
 
   <!-- 受け取った感謝（過去に送られたぶん） -->
   <div id="thanks-card" class="card hidden">
@@ -88,33 +145,37 @@
     <div id="thanks-list"></div>
   </div>
 
-  <!-- 朝。結果を見る前に、今日の成功した状態を描く -->
+  <!-- 朝。結果を見る前に、今日を何で判断するかを決める。1分で終わる分量 -->
   <div id="am-card" class="card hidden" style="border-left:4px solid var(--primary);">
-    <h2><span class="material-symbols-outlined">wb_twilight</span>朝の3分
+    <h2><span class="material-symbols-outlined">wb_twilight</span>朝の1分
       <span id="am-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="kp-greet-sub" style="margin:0 0 16px;">
-      先に「今日の終わりにどうなっていたら良かったと言えるか」を決めます。
-      これがあると、終業時に何を振り返ればよいかが決まります。
+      今日を何で判断するかを、先に決めます。終業時は、これと見比べるだけです。
     </p>
 
     <div class="np-sec">
-      <h3><span class="no">①</span>3か月後、どうなっていたいか</h3>
-      <p class="lead">自分の言葉で。毎日書き直す必要はありません（前回のものが入っています）。</p>
-      <textarea id="a-goal" rows="2" placeholder="例：月次の締めを一人で回せるようになっていたい"></textarea>
-      <div id="a-plan-kgi" class="hidden" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+      <h3><span class="no">①</span>今日の最優先</h3>
+      <p class="lead">今日いちばん、終わらせたいこと。1つだけ。</p>
+      <input id="a-top" type="text" placeholder="例：C社の見積を出す">
     </div>
 
     <div class="np-sec">
-      <h3><span class="no">②</span>今日の終わりに「今日は良かった」と言える状態</h3>
-      <p class="lead">やることではなく、<b>どうなっていたら</b>を書きます。終業時に、これと見比べます。</p>
-      <textarea id="a-success" rows="2"
-        placeholder="例：請求データ20件を、質問なしで最後まで処理できていたら良かったと言える"></textarea>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">③</span>今日やる3つの行動</h3>
-      <p class="lead">その状態になるために、今日やることを3つまで。</p>
+      <h3><span class="no">②</span>今日やること</h3>
+      <p class="lead">3つまで。書ききれないぶんは、明日に回して構いません。</p>
       <div class="np-rows" id="a-actions"></div>
+    </div>
+
+    <!-- KPIを持っている人だけ出る。持っていない人にこの欄は見せない -->
+    <div class="np-sec hidden" id="a-kpi-sec">
+      <h3><span class="no">③</span>今日のKPI</h3>
+      <p class="lead">今日ぶんの目標です。実績は終業時に入れます。</p>
+      <div id="a-kpis"></div>
+    </div>
+
+    <div class="np-sec">
+      <h3><span class="no">④</span>困っていること<span class="opt">任意</span></h3>
+      <p class="lead">今の時点で詰まっていることがあれば。無ければ空のままで構いません。</p>
+      <input id="a-note" type="text" placeholder="例：先方の返事待ちで着手できない">
     </div>
 
     <button class="btn btn-primary" id="am-btn" onclick="saveMorning(this)">
@@ -131,19 +192,6 @@
       <input id="f-date" type="date" style="width:auto;margin:0 0 0 auto;">
     </h2>
 
-    <!-- 朝に描いた状態。ここと見比べるのが、この画面の目的 -->
-    <div class="np-sec hidden" id="am-recall">
-      <h3>朝に描いた状態</h3>
-      <p class="lead">これと見比べて、今日を振り返ります。</p>
-      <div id="am-recall-body" style="border-left:3px solid var(--primary);background:var(--soft);
-           padding:11px 13px;border-radius:0 8px 8px 0;font-size:13.5px;line-height:1.8;"></div>
-      <div style="margin-top:12px;">
-        <label style="font-size:12px;font-weight:600;color:var(--muted);">
-          この状態になれましたか</label>
-        <div class="np-kgi" id="a-met"></div>
-      </div>
-    </div>
-
     <!-- 昨日までに決めたこと。ここで閉じないと、AIの提案は読まれて終わりになる -->
     <div class="np-sec hidden" id="todo-sec">
       <h3>前に決めたこと</h3>
@@ -151,79 +199,38 @@
       <div id="f-todos"></div>
     </div>
 
+    <!-- ① できたこと ＋ ③ 未完了と理由。朝に決めた3件の中で両方そろえる -->
     <div class="np-sec">
-      <h3>今日の調子</h3>
-      <div class="np-moods" id="f-mood"></div>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">①</span>今日のKGI</h3>
-      <p class="lead">今日、何を終わらせる日だったかを入力してください。</p>
-      <input id="f-kgi" type="text" placeholder="例：企業への提案を3社完了する">
-      <div class="np-kgi">
-        <span style="font-size:12px;color:var(--muted);">目標</span>
-        <input id="f-target" type="number" step="0.5" placeholder="3">
-        <span style="font-size:12px;color:var(--muted);">実績</span>
-        <input id="f-actual" type="number" step="0.5" placeholder="4">
-        <span id="f-auto" style="font-size:12px;color:var(--muted);"></span>
-      </div>
-      <div class="np-kgi">
-        <button type="button" class="np-result yes" id="r-yes" onclick="setAchieved(true)">達成</button>
-        <button type="button" class="np-result no"  id="r-no"  onclick="setAchieved(false)">未達</button>
-        <button type="button" class="np-result"     id="r-na"  onclick="setAchieved(null)">数値で測らない</button>
-      </div>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">②</span>今日やったこと・成果</h3>
-      <p class="lead">作業内容だけではなく、「何をして、何ができたか」を入力してください。</p>
-      <div class="np-rows" id="f-work"></div>
+      <h3><span class="no">①</span>今日できたこと</h3>
+      <p class="lead">
+        朝に決めたことが並びます。できたことを一言で。
+        できなかったものは、理由の欄が出ます。
+      </p>
+      <div id="f-work"></div>
       <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addWork()">
-        <span class="material-symbols-outlined icon-inline">add</span>追加
+        <span class="material-symbols-outlined icon-inline">add</span>行を足す
       </button>
     </div>
 
-    <div class="np-sec">
-      <h3><span class="no">③</span>困ったこと・報告相談</h3>
-      <p class="lead">止まっていることがあれば、「問題」だけでなく、ここまでやったことと次の行動まで入力してください。</p>
-      <label style="display:inline-flex;align-items:center;gap:7px;font-weight:normal;font-size:13px;margin-bottom:10px;">
-        <input id="f-noissue" type="checkbox" style="width:auto;margin:0;" onchange="onNoIssue()">
-        特になし
-      </label>
-      <div id="f-issues"></div>
-      <button class="btn btn-secondary btn-sm" id="issue-add" style="margin-top:6px;" onclick="addIssue()">
-        <span class="material-symbols-outlined icon-inline">add</span>追加
-      </button>
+    <!-- ② KPI実績。持っている人だけ -->
+    <div class="np-sec hidden" id="f-kpi-sec">
+      <h3><span class="no">②</span>KPI実績</h3>
+      <p class="lead">今日ぶんの数字を入れてください。</p>
+      <div id="f-kpis"></div>
     </div>
 
     <div class="np-sec">
-      <h3><span class="no">④</span>今日の改善・学び</h3>
-      <p class="lead">今日、昨日より良くしたこと・自分で学んだことを選んでください（複数可）。</p>
-      <div class="np-tags" id="f-tags"></div>
-      <textarea id="f-improve" rows="2" placeholder="例：Claudeで営業文を3パターン作り、より分かりやすい文章に変更した。"></textarea>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">⑤</span>顧客・チームのためにしたこと</h3>
-      <p class="lead">今日、顧客・会社・チームのために前進させたことを一つ入力してください。</p>
-      <textarea id="f-contrib" rows="2" maxlength="400"
-                placeholder="例：お客様から言われた内容だけでなく、登録作業を減らす改善案も提案した。"></textarea>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">⑥</span>明日変えること</h3>
-      <p class="lead">やり方をどう変えるか。同じ進め方のままなら、明日も同じ差が出ます。</p>
-      <textarea id="f-change" rows="2" placeholder="例：先に不明点を洗い出してから着手する"></textarea>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">⑦</span>明日の最優先</h3>
-      <p class="lead">明日、最初に終わらせることを「内容＋期限＋数値」で入力してください。</p>
+      <h3><span class="no">③</span>明日やること</h3>
+      <p class="lead">明日、最初に取りかかることを1つ。</p>
       <input id="f-tomorrow" type="text" placeholder="例：C社見積を提出する">
-      <div class="np-kgi">
-        <input id="f-deadline" type="text" placeholder="いつまで（例：12時まで）" style="flex:0 0 190px;">
-        <input id="f-tgt" type="text" placeholder="数値・完了条件（例：金額と納期を確定）" style="flex:1;min-width:200px;">
-      </div>
+    </div>
+
+    <div class="np-sec">
+      <h3><span class="no">④</span>相談事項<span class="opt">任意</span></h3>
+      <p class="lead">
+        管理担当者だけが読みます。みんなの日報には出ません。
+      </p>
+      <textarea id="f-consult" rows="2" placeholder="例：先方の条件が決まらず、来週の予定が立てられない"></textarea>
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -308,15 +315,29 @@
     <h2><span class="material-symbols-outlined">history</span>これまでの日報</h2>
     <div id="past"><div class="empty">読み込み中…</div></div>
   </div>
+
+</div><!-- /pane-mine -->
+
+<!-- みんなの日報。出るのはAIが作った共有サマリーだけ -->
+<div id="pane-feed" class="hidden">
+  <div class="card">
+    <h2><span class="material-symbols-outlined">groups</span>みんなの日報
+      <input id="fd-date" type="date" style="width:auto;margin:0 0 0 auto;" onchange="loadFeed()">
+    </h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 4px;">
+      出ているのは、AIが作った共有用のまとめだけです。
+      点数・できなかった理由・相談事項は出ません。
+    </p>
+    <div id="feed"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
 </div>
 
-<script src="js/api-client.js?v=20260910r"></script>
-<script src="js/layout.js?v=20260910r"></script>
+<script src="js/api-client.js?v=20260910s"></script>
+<script src="js/layout.js?v=20260910s"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
-
-  const MOODS = ["順調", "普通", "苦戦"];
 
   // 100点の内訳。10か条の合計ではなく、この4つで100点にする
   const CATEGORIES = [
@@ -341,10 +362,7 @@
   }
 
   let data = null;
-  let mood = "順調";
-  let met = null;      // 朝に描いた状態になれたか
-  let achieved = null;      // true=達成 / false=未達 / null=数値で測らない
-  let tags = [];
+  let feed = null;     // みんなの日報。タブを開いたときに取りに行く
 
   KPLayout.init({ active: "nippo", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(); });
@@ -355,7 +373,8 @@
     el("f-date").value = jstToday();
     el("f-date").max = jstToday();
     el("f-date").addEventListener("change", () => load(el("f-date").value));
-    for (const id of ["f-target", "f-actual"]) el(id).addEventListener("input", onNumbers);
+    el("fd-date").value = jstToday();
+    el("fd-date").max = jstToday();
     // 書きかけを自動で預かる。書いている途中で閉じても消えないように
     document.addEventListener("input", scheduleDraftSave);
     await load(jstToday());
@@ -377,8 +396,6 @@
       ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して保存'
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
 
-    renderMood();
-    renderTags();
     renderTodos();
     renderMorning();
     // 提出済みならその内容を、まだなら書きかけを出す
@@ -393,74 +410,41 @@
     renderPast();
   }
 
-  // --- 入力欄の組み立て -------------------------------------------------------
-  function renderMood() {
-    el("f-mood").innerHTML = MOODS.map((m) =>
-      `<button type="button" class="np-mood${m === mood ? " on" : ""}" onclick="setMood('${m}')">${m}</button>`).join("");
-  }
-  function setMood(m) { mood = m; renderMood(); }
-
-  function renderTags() {
-    el("f-tags").innerHTML = (data.improveTags || []).map((t) =>
-      `<button type="button" class="np-tag${tags.includes(t.key) ? " on" : ""}"
-               onclick="toggleTag('${esc(t.key)}')">${esc(t.label)}</button>`).join("");
-  }
-  function toggleTag(key) {
-    tags = tags.includes(key) ? tags.filter((k) => k !== key) : [...tags, key];
-    renderTags();
-    scheduleDraftSave();
-  }
-
   // --- 朝 ---------------------------------------------------------------------
   // 朝のカードは、今日ぶんで、まだ結果を書いていないときだけ出す。
   // 結果を見たあとに書き直せると、後付けになる
   function renderMorning() {
     const t = data.today;
     const isToday = data.date === jstToday();
-    const reported = (t?.work_items || []).some((w) => w.result);
+    const reported = (t?.work_items || []).some((w) => w.result || w.undone_reason);
     const done = !!t?.morning_at;
 
     el("am-card").classList.toggle("hidden", !isToday || reported);
-    el("am-recall").classList.toggle("hidden", !done);
+    if (!isToday || reported) return;
 
-    if (isToday && !reported) {
-      el("am-tag").textContent = done ? "書き直せます" : "まだです";
-      el("am-tag").className = `kp-chip ${done ? "event" : "draft"}`;
-      el("a-goal").value = t?.goal_image || data.lastGoalImage || "";
-      el("a-success").value = t?.success_image || "";
+    el("am-tag").textContent = done ? "書き直せます" : "まだです";
+    el("am-tag").className = `kp-chip ${done ? "event" : "draft"}`;
+    el("a-top").value = t?.top_priority || "";
+    el("a-note").value = t?.morning_note || "";
 
-      const acts = (t?.work_items || []).map((w) => w.task).filter(Boolean);
-      el("a-actions").innerHTML = [0, 1, 2].map((i) => `
-        <input type="text" class="am-act" value="${esc(acts[i] || "")}"
-               placeholder="${i + 1}つ目の行動">`).join("");
+    const acts = (t?.work_items || []).map((w) => w.task).filter(Boolean);
+    el("a-actions").innerHTML = [0, 1, 2].map((i) => `
+      <input type="text" class="am-act" value="${esc(acts[i] || "")}"
+             placeholder="${i + 1}つ目">`).join("");
 
-      el("am-btn").innerHTML = done
-        ? '<span class="material-symbols-outlined icon-inline">save</span>書き直す'
-        : '<span class="material-symbols-outlined icon-inline">send</span>これで今日を始める';
-    }
+    // KPIは、持っている人にだけ出す。無い人に空欄を見せない
+    const kpis = data.kpisToday || [];
+    el("a-kpi-sec").classList.toggle("hidden", !kpis.length);
+    el("a-kpis").innerHTML = kpis.map((k) => `
+      <div class="np-kpirow">
+        <span class="nm">${esc(k.label)}</span>
+        <span class="muted" style="font-size:12px;">目標 ${k.target ?? "—"}${esc(k.unit || "")}</span>
+      </div>`).join("");
 
-    if (!done) return;
-
-    // 夜。朝に描いたものを、書き換えられない形で出す
-    el("am-recall-body").innerHTML = `
-      ${t.goal_image ? `<div class="muted" style="font-size:12px;">3か月後：${esc(t.goal_image)}</div>` : ""}
-      <div style="font-weight:600;margin-top:${t.goal_image ? "4px" : "0"};">
-        ${esc(t.success_image || "（状態は書かれていません）")}
-      </div>
-      <div class="muted" style="font-size:11.5px;margin-top:6px;">
-        ${esc(String(t.morning_at).slice(11, 16))} に記入
-      </div>`;
-
-    met = met ?? t.success_met ?? null;
-    renderMet();
+    el("am-btn").innerHTML = done
+      ? '<span class="material-symbols-outlined icon-inline">save</span>書き直す'
+      : '<span class="material-symbols-outlined icon-inline">send</span>これで今日を始める';
   }
-
-  function renderMet() {
-    el("a-met").innerHTML = (data.successMet || []).map((m) => `
-      <button type="button" class="np-result${met === m.key ? " on " + (m.key === "o" ? "yes" : m.key === "x" ? "no" : "") : ""}"
-              onclick="setMet('${esc(m.key)}')">${esc(m.mark)} ${esc(m.label)}</button>`).join("");
-  }
-  function setMet(k) { met = met === k ? null : k; renderMet(); scheduleDraftSave(); }
 
   async function saveMorning(btn) {
     const msg = el("am-msg");
@@ -471,9 +455,9 @@
     try {
       await KPLayout.busy(btn, "保存中…", () => API.submitMorning({
         date: data.date,
-        goalImage: el("a-goal").value,
-        successImage: el("a-success").value,
+        topPriority: el("a-top").value,
         actions,
+        morningNote: el("a-note").value,
       }));
       await load(data.date);
       el("am-card").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -482,6 +466,7 @@
     }
   }
 
+  // --- 夜 ---------------------------------------------------------------------
   // 前に決めたこと（ダッシュボードの「今日やること」と同じもの）。
   // 「やった」は本人が選ぶ。文章から自動では判定しない。
   // 読み違えて勝手に閉じるほうが、閉じ忘れより害が大きい
@@ -503,73 +488,48 @@
       </label>`).join("");
   }
 
-  // ① 達成 / 未達。数字が両方あれば自動で決まるので、押さなくてよい
-  function setAchieved(v) { achieved = v; renderAchieved(); scheduleDraftSave(); }
-
-  function renderAchieved() {
-    el("r-yes").classList.toggle("on", achieved === true);
-    el("r-no").classList.toggle("on", achieved === false);
-    el("r-na").classList.toggle("on", achieved === null);
-  }
-
-  function onNumbers() {
-    const t = Number(el("f-target").value), a = Number(el("f-actual").value);
-    const both = el("f-target").value !== "" && el("f-actual").value !== "";
-    if (both && Number.isFinite(t) && Number.isFinite(a)) {
-      achieved = a >= t;
-      el("f-auto").textContent = achieved ? "→ 達成" : "→ 未達";
-    } else {
-      el("f-auto").textContent = "";
-    }
-    renderAchieved();
-    scheduleDraftSave();
-  }
-
-  // ② やったこと｜結果・成果
+  /**
+   * 朝に決めた1件ぶん。
+   * できた／できなかった を押すと、書く欄がその場で1つだけ出る。
+   * 「できたこと」と「未完了の理由」を別の欄にすると、同じことを2回書くことになる
+   */
   function addWork(v = {}) {
     const div = document.createElement("div");
-    div.className = "np-row";
+    div.className = "np-item";
+    const state = v.result ? "yes" : v.undone_reason ? "no" : "";
     div.innerHTML = `
-      <input data-k="task" type="text" placeholder="やったこと" style="flex:1;" value="${esc(v.task || "")}">
-      <input data-k="result" type="text" placeholder="結果・成果（完了・送付・獲得など）" style="flex:1;" value="${esc(v.result || "")}">
-      <button type="button" class="btn btn-secondary btn-sm" onclick="this.parentElement.remove()" title="この行を消す">
-        <span class="material-symbols-outlined" style="font-size:16px;">close</span></button>`;
+      <div class="t">
+        <input data-k="task" type="text" class="task" placeholder="やること" value="${esc(v.task || "")}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.np-item').remove()"
+                title="この行を消す"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+      </div>
+      <div class="did">
+        <button type="button" class="yes${state === "yes" ? " on" : ""}" onclick="setDone(this, true)">できた</button>
+        <button type="button" class="no${state === "no" ? " on" : ""}" onclick="setDone(this, false)">できなかった</button>
+      </div>
+      <div class="fill${state ? "" : " hidden"}">
+        <input data-k="result" type="text" placeholder="何ができたか（例：3社に送付）"
+               value="${esc(v.result || "")}" ${state === "no" ? 'class="hidden"' : ""}>
+        <input data-k="undone_reason" type="text" placeholder="できなかった理由（例：先方の返事待ち）"
+               value="${esc(v.undone_reason || "")}" ${state === "yes" ? 'class="hidden"' : ""}>
+      </div>`;
     el("f-work").appendChild(div);
   }
 
-  // ③ 困ったこと。問題だけで終わらせないため、次の行動を必須にしている
-  function addIssue(v = {}) {
-    const div = document.createElement("div");
-    div.className = "np-issue";
-    div.innerHTML = `
-      <div style="margin-bottom:8px;">
-        <label>問題・困っていること</label>
-        <input data-k="issue" type="text" placeholder="例：A社から返信がない" value="${esc(v.issue || "")}">
-      </div>
-      <div class="g">
-        <div>
-          <label>自分でやったこと</label>
-          <input data-k="action_taken" type="text" placeholder="例：メールと電話を実施" value="${esc(v.action_taken || "")}">
-        </div>
-        <div>
-          <label>誰に相談したか</label>
-          <input data-k="consulted" type="text" placeholder="例：野澤さん" list="dl-members" value="${esc(v.consulted || "")}">
-        </div>
-      </div>
-      <div style="margin-top:8px;">
-        <label>次にどうするか（必須）</label>
-        <input data-k="next_action" type="text" placeholder="例：明日午前に再度電話する" value="${esc(v.next_action || "")}">
-      </div>
-      <div style="margin-top:8px;text-align:right;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.np-issue').remove()">この件を消す</button>
-      </div>`;
-    el("f-issues").appendChild(div);
-  }
+  // できた／できなかった の切り替え。押していないほうの欄は空にする。
+  // 両方に文字が残ると、あとで数えたときに嘘になる
+  function setDone(btn, ok) {
+    const item = btn.closest(".np-item");
+    item.querySelectorAll(".did button").forEach((b) => b.classList.remove("on"));
+    btn.classList.add("on");
+    item.querySelector(".fill").classList.remove("hidden");
 
-  function onNoIssue() {
-    const off = el("f-noissue").checked;
-    el("f-issues").classList.toggle("hidden", off);
-    el("issue-add").classList.toggle("hidden", off);
+    const result = item.querySelector('[data-k="result"]');
+    const reason = item.querySelector('[data-k="undone_reason"]');
+    result.classList.toggle("hidden", !ok);
+    reason.classList.toggle("hidden", ok);
+    if (ok) reason.value = ""; else result.value = "";
+    (ok ? result : reason).focus();
     scheduleDraftSave();
   }
 
@@ -581,38 +541,27 @@
     });
 
   function fillForm(n) {
-    const v = (id, val) => { el(id).value = val ?? ""; };
-    mood = MOODS.includes(n?.mood) ? n.mood : "順調";
-    tags = Array.isArray(n?.improve_tags) ? n.improve_tags.slice() : [];
-    achieved = typeof n?.kgi_achieved === "boolean" ? n.kgi_achieved : null;
-    renderMood();
-    renderTags();
-    renderAchieved();
+    el("f-tomorrow").value = n?.tomorrow_plan ?? "";
+    el("f-consult").value = n?.consult_note ?? "";
 
-    v("f-kgi", n?.goal_today);
-    v("f-target", n?.kgi_target);
-    v("f-actual", n?.kgi_actual);
-    v("f-improve", n?.challenge);
-    v("f-contrib", n?.contribution);
-    v("f-change", n?.tomorrow_change);
-    v("f-tomorrow", n?.tomorrow_plan);
-    v("f-deadline", n?.tomorrow_deadline);
-    v("f-tgt", n?.tomorrow_target);
-    onNumbers();
-
-    // 朝に描いた状態になれたか。朝の入力がある日だけ出る
-    met = n?.success_met ?? null;
-    if (data.today?.morning_at) renderMet();
-
+    // 朝に決めたことを並べる。朝を書いていない日は、空の行を3つ出す
     el("f-work").innerHTML = "";
-    const items = Array.isArray(n?.work_items) && n.work_items.length ? n.work_items : [{}, {}, {}];
+    const items = Array.isArray(n?.work_items) && n.work_items.length
+      ? n.work_items.slice(0, 3)
+      : [{}, {}, {}];
     items.forEach(addWork);
 
-    el("f-noissue").checked = !!n?.no_issues;
-    el("f-issues").innerHTML = "";
-    (Array.isArray(n?.issues) ? n.issues : []).forEach(addIssue);
-    if (!el("f-issues").children.length && !n?.no_issues) addIssue();
-    onNoIssue();
+    // KPIの実績
+    const kpis = data.kpisToday || [];
+    el("f-kpi-sec").classList.toggle("hidden", !kpis.length);
+    el("f-kpis").innerHTML = kpis.map((k) => `
+      <div class="np-kpirow" data-kpi="${esc(k.id)}">
+        <span class="nm">${esc(k.label)}</span>
+        <span class="muted" style="font-size:12px;">目標 ${k.target ?? "—"}${esc(k.unit || "")}</span>
+        <input type="number" step="0.5" class="kpi-actual" placeholder="実績"
+               value="${k.actual ?? ""}">
+        <span style="font-size:12px;color:var(--muted);">${esc(k.unit || "")}</span>
+      </div>`).join("");
   }
 
   // --- 書きかけの預かり ------------------------------------------------------
@@ -642,11 +591,9 @@
       const d = JSON.parse(raw);
       // 画面の形（読み込み用）に合わせて詰め替える
       return {
-        mood: d.mood, goal_today: d.kgi, kgi_target: d.kgiTarget, kgi_actual: d.kgiActual,
-        kgi_achieved: d.kgiAchieved, work_items: d.workItems, no_issues: d.noIssues,
-        issues: d.issues, improve_tags: d.improveTags, challenge: d.improveNote,
-        contribution: d.contribution, tomorrow_plan: d.tomorrowPlan,
-        tomorrow_deadline: d.tomorrowDeadline, tomorrow_target: d.tomorrowTarget,
+        work_items: d.workItems,
+        tomorrow_plan: d.tomorrowPlan,
+        consult_note: d.consultNote,
       };
     } catch { return null; }
   }
@@ -657,24 +604,17 @@
   function readForm() {
     return {
       date: el("f-date").value || jstToday(),
-      mood,
-      kgi: el("f-kgi").value,
-      kgiTarget: el("f-target").value,
-      kgiActual: el("f-actual").value,
-      kgiAchieved: achieved,
-      workItems: collect("f-work", ".np-row"),
-      noIssues: el("f-noissue").checked,
-      issues: collect("f-issues", ".np-issue"),
-      improveTags: tags,
-      improveNote: el("f-improve").value,
-      contribution: el("f-contrib").value,
+      // 朝に書いたものを持ち回る。夜の画面には出さないが、消さない
+      topPriority: data.today?.top_priority || null,
+      kpiName: data.today?.goal_today || null,
+      kpiTarget: data.today?.kgi_target ?? null,
+      workItems: collect("f-work", ".np-item"),
       tomorrowPlan: el("f-tomorrow").value,
-      successMet: met,
-      goalImage: data.today?.goal_image || null,
-      successImage: data.today?.success_image || null,
-      tomorrowChange: el("f-change").value,
-      tomorrowDeadline: el("f-deadline").value,
-      tomorrowTarget: el("f-tgt").value,
+      consultNote: el("f-consult").value,
+      // KPIの実績。gw_daily_kpis へ書き戻す
+      kpiActuals: [...document.querySelectorAll("#f-kpis .np-kpirow")].map((r) => ({
+        id: r.dataset.kpi, actual: r.querySelector(".kpi-actual").value,
+      })),
       // 前に決めたことのうち、やったもの。サーバ側で閉じる
       doneActionIds: [...document.querySelectorAll(".np-todo:checked")].map((c) => c.value),
     };
@@ -688,18 +628,15 @@
 
     // 出す前に、その場で直せることだけ知らせる。
     // サーバ側でも同じ判定をしているが、往復させると直すのが面倒になる
-    const halfWork = body.workItems.filter((w) => w.task && !w.result);
-    if (halfWork.length) {
-      msg.textContent = "② やったことに「結果・成果」も入れてください（何ができたかが残りません）";
+    const half = body.workItems.filter((w) => w.task && !w.result && !w.undone_reason);
+    if (half.length) {
+      msg.textContent = "① 各行に「できた」か「できなかった」を選んで、一言だけ入れてください";
       return;
     }
-    if (!body.noIssues) {
-      const halfIssue = body.issues.filter((i) => i.issue && !i.next_action);
-      if (halfIssue.length) {
-        msg.textContent = "③ 困ったことには「次にどうするか」まで入れてください";
-        return;
-      }
-    }
+
+    // KPIの実績は、1つ目の数字を日報側にも残す（AI評価が達成率を使う）
+    const firstKpi = body.kpiActuals.find((k) => k.actual !== "");
+    if (firstKpi) body.kpiActual = firstKpi.actual;
 
     try {
       const res = await KPLayout.busy(btn, "送信中…", () => API.submitNippo(body));
@@ -709,19 +646,126 @@
         <div class="banner ok" style="margin-top:12px;">
           <span class="material-symbols-outlined">check_circle</span>
           <div>提出しました。
-          ${ai.ok ? "AIの返信は下の「これまでの日報」に出ます。"
-                  : (ai.reason === "disabled" ? "AI自動返信は現在OFFです。担当者が内容を確認します。"
-                                              : "AI返信は準備できませんでした（提出は完了しています）。")}
+          ${ai.configured ? "AIが読んで、達成度・良かった点・改善点・明日の優先事項を返します。"
+                          : "AI評価は現在使えません（提出は完了しています）。"}
           ${res.actions?.closed ? `<br>前に決めたこと ${res.actions.closed} 件を「実施済み」にしました。` : ""}
-          ${res.actions?.planned ? "<br>「明日の最優先」は、翌朝ホームの一番上に出ます。" : ""}
-          ${data.today?.morning_at ? "<br>朝に描いた状態との差は、下のAI評価に出ます。" : ""}</div>
+          <br>みんなの日報には、AIが作ったまとめ（やったこと・成果・学び・明日やること）だけが出ます。</div>
         </div>`;
       await load(body.date);
-      el("flags-card").scrollIntoView({ behavior: "smooth", block: "center" });
+      el("ai-card").scrollIntoView({ behavior: "smooth", block: "center" });
       // 提出のたびに待たせたくないので、評価はここから別に走らせる
       if (res.ai?.configured && data.today) runEval();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
+    }
+  }
+
+  // --- タブ -------------------------------------------------------------------
+  function showTab(which) {
+    const feedTab = which === "feed";
+    el("pane-mine").classList.toggle("hidden", feedTab);
+    el("pane-feed").classList.toggle("hidden", !feedTab);
+    el("tab-mine").classList.toggle("on", !feedTab);
+    el("tab-feed").classList.toggle("on", feedTab);
+    if (feedTab && !feed) loadFeed();
+  }
+
+  // --- みんなの日報 -------------------------------------------------------------
+  // ここに出るのはAIが作った共有サマリーだけ。
+  // 点数・できなかった理由・相談事項は、そもそも別の表に入っていない
+  async function loadFeed() {
+    el("feed").innerHTML = `<div class="empty">読み込み中…</div>`;
+    try {
+      feed = await API.nippoFeed(el("fd-date").value);
+    } catch (e) {
+      el("feed").innerHTML = `<div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    renderFeed();
+  }
+
+  function renderFeed() {
+    const items = feed?.items || [];
+    if (!items.length) {
+      el("feed").innerHTML = `<div class="empty">
+        この日はまだありません。日報を出してAIの評価が終わると、ここに並びます。</div>`;
+      return;
+    }
+
+    el("feed").innerHTML = items.map((s) => `
+      <div class="fd-card${s.visible ? "" : " " }" style="${s.visible ? "" : "opacity:.6;"}">
+        <div class="hd">
+          <span class="nm">${esc(s.name || "（名前なし）")}</span>
+          ${s.mine ? `<span class="kp-chip draft">自分</span>` : ""}
+          ${s.mine ? `
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                    onclick="toggleVisible('${esc(s.id)}', ${!s.visible})">
+              ${s.visible ? "みんなに出さない" : "みんなに出す"}
+            </button>` : ""}
+        </div>
+
+        <dl class="fd-l">
+          ${s.did ? `<dt>やったこと</dt><dd>${esc(s.did)}</dd>` : ""}
+          ${s.result ? `<dt>成果</dt><dd>${esc(s.result)}</dd>` : ""}
+          ${s.learn ? `<dt>学び</dt><dd>${esc(s.learn)}</dd>` : ""}
+          ${s.tomorrow ? `<dt>明日</dt><dd>${esc(s.tomorrow)}</dd>` : ""}
+        </dl>
+
+        <div class="fd-act">
+          <button type="button" class="rx${s.reacted ? " on" : ""}" onclick="react('${esc(s.id)}')"
+                  title="${esc((s.helpfulBy || []).join("、"))}">
+            <span class="material-symbols-outlined" style="font-size:15px;">lightbulb</span>
+            参考になった${s.helpful ? ` ${s.helpful}` : ""}
+          </button>
+        </div>
+
+        <div class="fd-cm">
+          ${s.comments.map((c) => `
+            <div class="c"><span class="who">${esc(c.name || "")}</span>${esc(c.body)}</div>`).join("")}
+          <form onsubmit="return sendComment(event, '${esc(s.id)}')">
+            <input type="text" placeholder="ひとこと（任意）" maxlength="400">
+            <button type="submit" class="btn btn-secondary btn-sm">送る</button>
+          </form>
+        </div>
+      </div>`).join("");
+  }
+
+  async function react(shareId) {
+    try {
+      await API.nippoReact(shareId);
+      await loadFeed();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  async function sendComment(ev, shareId) {
+    ev.preventDefault();
+    const input = ev.target.querySelector("input");
+    const body = input.value.trim();
+    if (!body) return false;
+    input.disabled = true;
+    try {
+      await API.nippoComment(shareId, body);
+      input.value = "";
+      await loadFeed();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "送れませんでした");
+    } finally {
+      input.disabled = false;
+    }
+    return false;
+  }
+
+  // 出したくない日を1日も作れないと、書く内容のほうが薄くなる
+  async function toggleVisible(shareId, visible) {
+    try {
+      await API.nippoShareVisible(shareId, visible);
+      await loadFeed();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "変えられませんでした");
     }
   }
 
@@ -781,10 +825,10 @@
     tag.textContent = "評価済み";
     tag.className = "kp-chip event";
     body.innerHTML = `
-      ${e.gap ? `
+      ${e.achievement ? `
         <div class="ai-block" style="border-left:3px solid var(--primary);">
-          <h4><span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">compare_arrows</span>朝に描いた状態との差</h4>
-          <div style="font-size:13.5px;line-height:1.85;">${esc(e.gap)}</div>
+          <h4><span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">compare_arrows</span>達成度</h4>
+          <div style="font-size:13.5px;line-height:1.85;">${esc(e.achievement)}</div>
         </div>` : ""}
 
       ${e.goodPoints.length ? `
@@ -801,7 +845,7 @@
 
       ${e.tomorrowAdvice ? `
         <div class="ai-block">
-          <h4><span class="material-symbols-outlined" style="font-size:15px;">flag</span>明日のポイント</h4>
+          <h4><span class="material-symbols-outlined" style="font-size:15px;">flag</span>明日の優先事項</h4>
           <div class="ai-tomorrow">${esc(e.tomorrowAdvice)}</div>
         </div>` : ""}
 
@@ -1054,18 +1098,19 @@
 
     el("past").innerHTML = rows.map((n) => {
       const rs = (data.replies || []).filter((r) => r.nippo_id === n.id);
-      const done = (n.work_items || []).length;
+      const items = n.work_items || [];
+      const done = items.filter((w) => w.result).length;
       // 旧い形式の日報も読めるようにしておく（今日の成果 → 旧 today_work）
-      const summary = (n.work_items || []).map((w) => w.result).filter(Boolean).join(" / ")
-        || n.goal_today || n.today_work || "";
+      const summary = items.map((w) => w.result).filter(Boolean).join(" / ")
+        || n.top_priority || n.goal_today || n.today_work || "";
       return `
         <div class="np-past">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
             <strong style="font-size:13.5px;">${esc(n.work_date)}</strong>
-            <span class="kp-chip">${esc(n.mood || "")}</span>
-            ${n.kgi_achieved === true ? '<span class="kp-chip event">KGI達成</span>'
-              : n.kgi_achieved === false ? '<span class="kp-chip important">KGI未達</span>' : ""}
-            ${done ? `<span class="muted" style="font-size:11.5px;">成果 ${done} 件</span>` : ""}
+            ${n.morning_at ? '<span class="kp-chip">朝あり</span>' : ""}
+            ${n.kgi_achieved === true ? '<span class="kp-chip event">KPI達成</span>'
+              : n.kgi_achieved === false ? '<span class="kp-chip important">KPI未達</span>' : ""}
+            ${done ? `<span class="muted" style="font-size:11.5px;">できた ${done} / ${items.length} 件</span>` : ""}
             ${n.confirmed ? '<span class="kp-chip event">確認済み</span>' : ""}
             <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
                     onclick="jumpTo('${esc(n.work_date)}')">開く</button>

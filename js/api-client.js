@@ -352,6 +352,18 @@
   const onboardCreate = (form) =>
     api("/api/employees/onboard", { method: "POST", body: { form, create: true } });
 
+  // ---- みんなの日報 ----
+  // 出るのはAIが作った共有サマリーだけ（今日やったこと・成果・学び・明日やること）。
+  // 点数・未達理由・相談事項は、そもそも別の表に入っていない
+  const nippoFeed = (date) =>
+    api(`/api/nippo/feed${date ? `?date=${encodeURIComponent(date)}` : ""}`);
+  const nippoReact = (shareId) =>
+    api("/api/nippo/feed", { method: "POST", body: { shareId, action: "react" } });
+  const nippoComment = (shareId, body) =>
+    api("/api/nippo/feed", { method: "POST", body: { shareId, action: "comment", body } });
+  const nippoShareVisible = (shareId, visible) =>
+    api("/api/nippo/feed", { method: "POST", body: { shareId, action: "visible", visible } });
+
   // 複数人をまとめて登録するときだけ使う補助。
   // こちらも2段構えで、検証（intakeCheck）→ 登録（intakeApply）
   const intakeInfo = () => api("/api/employees/intake");
@@ -703,6 +715,7 @@
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,
     onboardOptions, onboardCombine, onboardPreview, onboardCreate,
+    nippoFeed, nippoReact, nippoComment, nippoShareVisible,
     intakeInfo, intakeCheck, intakeApply,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,

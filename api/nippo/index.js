@@ -1,12 +1,17 @@
 // GET  /api/nippo?date=YYYY-MM-DD … 自分の日報・日次の行動確認・週次レビュー・今日の提出状況
-// POST /api/nippo {kind:"morning"} … 朝。今日の成功した状態を、先に描く
+// POST /api/nippo {kind:"morning"} … 朝。今日の最優先と、やること3件を決める
 // POST /api/nippo                  … 終業時。どうなったかを書く（同じ日は上書き）
 // POST /api/nippo {kind:"weekly"}  … 今週の振り返り4問を保存する
 //
+// ■ 書く項目は朝4つ・夜5つだけ
+//   朝  今日の最優先 / 今日やること（最大3件）/ 今日のKPI（対象者のみ）/ 困っていること
+//   夜  今日できたこと / KPI実績 / 未完了と理由 / 明日やること / 相談事項
+//   朝1分・夜2〜3分で終わらないと、毎日は続かない。
+//
 // ■ 朝と夜で入口を分けている理由
 //   全部を終業時に書く形だと、結果を見てから、その結果に合う
-//   「成功した状態」を書いてしまう。順番が逆になる。
-//   朝に描いたものは morning_at の時刻とともに残り、夜はそれと突き合わせる。
+//   「今日の最優先」を書いてしまう。順番が逆になる。
+//   朝に書いたものは morning_at の時刻とともに残り、夜はそれと突き合わせる。
 //
 // 8grp.co.jp/8/dr/ にあった日報を、このグループウェアへ移したもの。
 // 表（tc_nippo など）は元のまま使っている。理由は lib/nippo.js の頭に書いた。
@@ -21,8 +26,7 @@ import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
   jstDate, weekStart, isDate, normalizeNippo, hasContent,
-  normalizeMorning, hasMorning, SUCCESS_MET,
-  evaluateDaily, CRITERIA, IMPROVE_TAGS,
+  normalizeMorning, hasMorning, evaluateDaily, CRITERIA,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { planFromNippo, savePlan, closeItems, shapeItem } from "../../lib/actions.js";
@@ -66,7 +70,7 @@ async function read(req, res, user, ctx) {
     .order("display_name")
     .limit(300);
 
-  const [mine, today, thanks, weekly, openItems] = await Promise.all([
+  const [mine, today, thanks, weekly, openItems, todayKpis] = await Promise.all([
     // 自分の直近30件。過去を振り返れる範囲があればよく、全件は要らない
     sb.from("tc_nippo").select("*").eq("user_id", user.id)
       .order("work_date", { ascending: false }).limit(30),
@@ -82,6 +86,11 @@ async function read(req, res, user, ctx) {
     sb.from("gw_action_items").select("*")
       .eq("user_id", user.id).eq("status", "open").lte("due_date", date)
       .order("due_date").order("priority").limit(10),
+    // 今日のKPI。育成計画から毎朝作られる（gw_daily_kpis）。
+    // 目標を持っていない人にはこの欄を出さない
+    sb.from("gw_daily_kpis").select("id, label, unit, target, actual, sort_order")
+      .eq("user_id", user.id).eq("work_date", date)
+      .order("sort_order").limit(6),
   ]);
 
   const rows = mine.data || [];
@@ -126,12 +135,12 @@ async function read(req, res, user, ctx) {
     weekly: weekly.data || null,
     // 昨日までの宿題。提出時に doneActionIds で「やった」を返してもらう
     openActions: (openItems.data || []).map(shapeItem),
-    // 画面に出す選択肢と基準はサーバから渡す。定義を2か所に置かないため
-    improveTags: IMPROVE_TAGS,
-    successMet: SUCCESS_MET,
-    // 3か月後の像は毎日書かせない。直近に書いたものを引き継ぐ
-    lastGoalImage: (rows.find((r) => r.goal_image) || {}).goal_image || null,
+    // 画面に出す基準はサーバから渡す。定義を2か所に置かないため
     criteria: CRITERIA,
+    // 今日のKPI。目標を持っている人だけ、朝の画面にこの欄が出る
+    kpisToday: (todayKpis.data || []).map((k) => ({
+      id: k.id, label: k.label, unit: k.unit, target: k.target, actual: k.actual,
+    })),
     team: (today.data || []).sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     notSubmitted: (roster || [])
       .filter((e) => e.user_id && !(today.data || []).some((n) => n.user_id === e.user_id))
@@ -139,7 +148,7 @@ async function read(req, res, user, ctx) {
   });
 }
 
-// ---- 朝。今日の成功した状態を、先に描く ----------------------------------------
+// ---- 朝。今日の最優先と、やること3件を決める ------------------------------------
 async function morning(res, user, ctx, body) {
   const date = isDate(body?.date) ? body.date : jstDate();
   // 朝に描くのは今日ぶんだけ。過去の日を後から「描いた」ことにはできない
@@ -154,7 +163,7 @@ async function morning(res, user, ctx, body) {
   if (!hasMorning(fields)) {
     return json(res, 400, {
       error: "empty",
-      hint: "「今日は良かった」と言える状態か、今日やる行動のどちらかは書いてください",
+      hint: "今日の最優先か、今日やることのどちらかは書いてください",
     });
   }
 
@@ -180,8 +189,8 @@ async function morning(res, user, ctx, body) {
     work_date: date,
     updated_at: new Date().toISOString(),
   };
-  // 描き直しても、最初に描いた時刻は動かさない。
-  // 「結果を見る前に描いた」の証拠がその時刻だから
+  // 書き直しても、最初に書いた時刻は動かさない。
+  // 「結果を見る前に決めた」の証拠がその時刻だから
   if (existing?.morning_at) row.morning_at = existing.morning_at;
 
   const saved = existing
@@ -207,7 +216,7 @@ async function submit(res, user, ctx, body) {
   if (!hasContent(fields)) {
     return json(res, 400, {
       error: "empty",
-      hint: "できたこと・成果か、明日変えること のどちらかは書いてください",
+      hint: "できたこと（またはできなかった理由）か、明日やること のどちらかは書いてください",
     });
   }
 
@@ -225,14 +234,15 @@ async function submit(res, user, ctx, body) {
   };
 
   const { data: existing } = await sb
-    .from("tc_nippo").select("id, morning_at, success_image, goal_image")
+    .from("tc_nippo").select("id, morning_at, top_priority, morning_note, goal_today, kgi_target")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
 
-  // 朝に描いたものは、夜の保存で消さない。
+  // 朝に書いたものは、夜の保存で消さない。
   // 画面が空で送ってきても、朝の内容を上書きしないようにする
   if (existing) {
-    if (!row.success_image) row.success_image = existing.success_image;
-    if (!row.goal_image) row.goal_image = existing.goal_image;
+    if (!row.top_priority) row.top_priority = existing.top_priority;
+    if (!row.goal_today) row.goal_today = existing.goal_today;
+    if (row.kgi_target === null) row.kgi_target = existing.kgi_target;
   }
 
   let nippoId;
@@ -244,6 +254,21 @@ async function submit(res, user, ctx, body) {
     const { data, error } = await sb.from("tc_nippo").insert(row).select("id").single();
     if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
     nippoId = data.id;
+  }
+
+  // KPIの実績。日報の中で入れたものを、そのまま今日のKPIへ書き戻す。
+  // 別画面で入れ直させると、片方だけ埋まった状態が普通になってしまう
+  try {
+    for (const k of Array.isArray(body?.kpiActuals) ? body.kpiActuals.slice(0, 6) : []) {
+      const v = k?.actual === "" || k?.actual == null ? null : Number(k.actual);
+      if (!k?.id || (v !== null && !Number.isFinite(v))) continue;
+      // 自分の行だけ。id は画面から来るので、user_id でも必ず絞る
+      await sb.from("gw_daily_kpis")
+        .update({ actual: v, updated_at: new Date().toISOString() })
+        .eq("id", k.id).eq("user_id", user.id).eq("work_date", date);
+    }
+  } catch (e) {
+    console.error("[nippo] KPIの実績を書けませんでした:", e.message);
   }
 
   // 昨日までの宿題のうち、本人が「やった」を選んだものを閉じる。

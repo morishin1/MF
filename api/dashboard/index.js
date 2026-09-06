@@ -179,14 +179,14 @@ async function read(req, res, user, ctx) {
 
     // 今日の日報が出ているか。出ていなければ画面から促す
     submittedToday: (weekNippos.data || []).some((n) => n.work_date === date),
-    // 朝に「今日の成功した状態」を描いたか。
+    // 朝に「今日の最優先」を決めたか。
     // これが無いと、夜に振り返る基準そのものが無い
     morning: (() => {
       const t = (weekNippos.data || []).find((n) => n.work_date === date);
       return {
         done: Boolean(t?.morning_at),
-        successImage: t?.success_image || null,
-        reported: (t?.work_items || []).some((w) => w.result),
+        topPriority: t?.top_priority || null,
+        reported: (t?.work_items || []).some((w) => w.result || w.undone_reason),
       };
     })(),
     nextWorkday: nextWorkday(date),

@@ -68,9 +68,9 @@ async function read(req, res, user, ctx) {
   const ids = staff.map((e) => e.user_id);
   if (!ids.length) return json(res, 200, { levels: LEVELS, people: [], window: WINDOW });
 
-  const [nippos, kpis, items, blockers] = await Promise.all([
+  const [nippos, kpis, items, blockers, evals] = await Promise.all([
     sb.from("tc_nippo")
-      .select("user_id, work_date, work_items, issues, no_issues, improve_tags, contribution")
+      .select("user_id, work_date, work_items, tomorrow_plan, consult_note, morning_note, issues, no_issues")
       .in("user_id", ids).gte("work_date", from).lte("work_date", today).limit(8000),
     sb.from("gw_daily_kpis").select("user_id, work_date, target, actual")
       .in("user_id", ids).gte("work_date", from).lte("work_date", today).limit(8000),
@@ -80,6 +80,11 @@ async function read(req, res, user, ctx) {
     sb.from("gw_blockers").select("resolved_by, user_id")
       .eq("status", "resolved").in("resolved_by", ids)
       .gte("resolved_at", `${from}T00:00:00Z`).limit(2000),
+    // 「改善」と「顧客・チーム」は、文章を読まないと分からない。
+    // 日報を絞ったぶん、ここはAIが付けた点から取る（lib/autonomy.js の computeMetrics）
+    sb.from("gw_nippo_ai_evals").select("user_id, work_date, scores")
+      .in("user_id", ids).eq("status", "completed")
+      .gte("work_date", from).lte("work_date", today).limit(8000),
   ]);
 
   const by = (rows, key) => {
@@ -88,6 +93,7 @@ async function read(req, res, user, ctx) {
     return m;
   };
   const nByUser = by(nippos.data, "user_id");
+  const eByUser = by(evals.data, "user_id");
   const kByUser = by(kpis.data, "user_id");
   const iByUser = by(items.data, "user_id");
   // 他人のものを外した件数だけ数える
@@ -103,6 +109,7 @@ async function read(req, res, user, ctx) {
       kpis: kByUser.get(e.user_id) || [],
       items: iByUser.get(e.user_id) || [],
       blockers: bByUser.get(e.user_id) || [],
+      evals: eByUser.get(e.user_id) || [],
     });
     const next = checkNext(e.autonomy_level, metrics);
     return {
