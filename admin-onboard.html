@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910u">
-  <link rel="stylesheet" href="css/layout.css?v=20260910u">
+  <link rel="stylesheet" href="css/app.css?v=20260910v">
+  <link rel="stylesheet" href="css/layout.css?v=20260910v">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -269,8 +269,8 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/api-client.js?v=20260910u"></script>
-<script src="js/layout.js?v=20260910u"></script>
+<script src="js/api-client.js?v=20260910v"></script>
+<script src="js/layout.js?v=20260910v"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -530,11 +530,26 @@
         </p>
       </div>
 
-      <div class="banner info" style="margin-bottom:14px;">
-        <span class="material-symbols-outlined">info</span>
-        <div>押すと、ログインアカウントが作られます（グループウェア・無限道場・タイムカード・会計）。
-          メールアドレスに誤りがないか、もう一度ご確認ください。</div>
-      </div>
+      ${r.account?.kind === "existing" ? `
+        <div class="banner info" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">link</span>
+          <div><b>既にあるログインアカウントに紐づけます。</b>
+            <div style="margin-top:4px;">
+              新しくアカウントは作りません。パスワードも変わりません
+              （いま使っているものでログインできます）。
+              このあと、無限道場は「承認済み」に、タイムカードは「在籍」になります。
+            </div>
+          </div>
+        </div>`
+      : `
+        <div class="banner info" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">info</span>
+          <div>押すと、ログインアカウントが1つ作られ、
+            グループウェア・無限道場・タイムカード・会計の4つで使えるようになります。
+            無限道場は「承認済み」の状態で作られるので、別途の承認は要りません。
+            <div style="margin-top:4px;">メールアドレスに誤りがないか、もう一度ご確認ください。</div>
+          </div>
+        </div>`}
 
       <button class="btn btn-primary" onclick="create(this)">
         <span class="material-symbols-outlined icon-inline">rocket_launch</span>
@@ -594,7 +609,19 @@
             </div>
           </div>
         </div>` : ""}
+      ${!c.password && !c.accountError ? `
+        <div class="banner info">
+          <span class="material-symbols-outlined">link</span>
+          <div><b>既にあったログインアカウントに紐づけました。</b>
+            パスワードは変わっていません。本人がいま使っているもので入れます。</div>
+        </div>` : ""}
       ${c.accountError ? `<div class="up-err">アカウント：${esc(c.accountError)}</div>` : ""}
+      ${c.systems ? `
+        <div class="muted" style="font-size:11.5px;margin-top:10px;line-height:1.8;">
+          無限道場：${esc(c.systems.lms?.ok ? c.systems.lms.action : `作れませんでした（${c.systems.lms?.detail || ""}）`)}　/　
+          タイムカード：${esc(c.systems.timecard?.ok ? c.systems.timecard.action : `作れませんでした（${c.systems.timecard?.detail || ""}）`)}
+          <div>どちらかが作れなくても、社内アカウントは使えます。メンバー一覧からやり直せます。</div>
+        </div>` : ""}
 
       <div style="margin-top:14px;">
         <a class="btn btn-secondary btn-sm" href="admin-growth.html">育成計画を見る</a>

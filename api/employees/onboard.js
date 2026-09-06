@@ -26,6 +26,20 @@
 //   何が作られるのかを見てから押せるようにする。
 //   プレビューと登録で同じ関数（buildPlan）を使うので、
 //   「見た内容と違うものが登録された」は起きない。
+//
+// ■ アカウントの向きは「ここで作って、他システムへ配る」
+//   無限道場に先に登録してもらう必要はない。
+//   ここで登録すると auth.users を作り、そこから
+//     無限道場（profiles・承認済みで作る）
+//     タイムカード・日報（tc_profiles）
+//     会計（memberships）
+//   へ配る。逆向き（無限道場で作ってから社内アカウントにする）にすると、
+//   本人が先に自分で登録して承認待ちになり、管理者の手数が増える。
+//
+//   ただし、その人が既に無限道場やタイムカードを使っていて
+//   auth.users にアカウントがあることはある。そのときは新しく作らず、
+//   既存のアカウントに紐づける（パスワードは変えない）。
+//   それをプレビューの時点で見せる。押してから分かるのでは遅い。
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
@@ -37,6 +51,7 @@ import { jobOptions, JOB_GROUPS } from "../../lib/job-templates.js";
 import { workModeOptions, combine } from "../../lib/work-modes.js";
 import { rubric } from "../../lib/scoring.js";
 import { onboardOne, buildPlan, linkManager, nextCode } from "../../lib/onboard.js";
+import { findUserByEmail } from "../../lib/accounts.js";
 import { LEVELS } from "../../lib/autonomy.js";
 import { addMonths } from "../../lib/growth.js";
 
@@ -155,7 +170,70 @@ async function preview(res, ctx, body) {
     });
   }
 
-  return json(res, 200, { ok: true, plan: buildPlan(v.value), warnings, value: shape(v.value) });
+  // 既にログインアカウントがあるか。無限道場やタイムカードを先に
+  // 使っていた人は、ここに引っかかる。押してから分かるのでは遅い
+  const acc = await accountState(sb, ctx, v.value.login_email);
+  if (acc.blocked) {
+    return json(res, 200, { ok: false, errors: [{ field: "メールアドレス", message: acc.message }] });
+  }
+  if (acc.message) warnings.push({ field: "ログインアカウント", message: acc.message });
+
+  return json(res, 200, {
+    ok: true, plan: buildPlan(v.value), warnings,
+    value: shape(v.value), account: acc,
+  });
+}
+
+/**
+ * そのメールのログインアカウントが、いまどうなっているか。
+ *
+ *   new      … まだ無い。新しく作って初回パスワードを出す
+ *   existing … もうある（無限道場・タイムカード・会計のどれかで作られている）。
+ *              新しく作らず、そのアカウントに紐づける。パスワードは変えない
+ *   taken    … もうあるが、名簿の別の人に割り当て済み。ここは進めない
+ *
+ * 判定できないとき（listUsers が失敗など）は new 扱いにせず、
+ * 分からないことを分からないまま返す。作成側でもう一度見る
+ */
+async function accountState(sb, ctx, email) {
+  let userId;
+  try {
+    userId = await findUserByEmail(sb, email);
+  } catch (e) {
+    return {
+      kind: "unknown", blocked: false,
+      message: `既存アカウントの確認ができませんでした（${String(e.message).slice(0, 120)}）。`
+        + "登録は試せますが、途中で止まることがあります",
+    };
+  }
+
+  if (!userId) {
+    return {
+      kind: "new", blocked: false,
+      message: null,
+    };
+  }
+
+  const { data: taken } = await sb.from("gw_employees")
+    .select("display_name, employee_code")
+    .eq("tenant_id", ctx.tenantId).eq("user_id", userId).maybeSingle();
+
+  if (taken) {
+    return {
+      kind: "taken", blocked: true,
+      message: `「${email}」のログインアカウントは、${taken.display_name} さん`
+        + `（${taken.employee_code || "コード未設定"}）に割り当て済みです。`
+        + "同じ人であれば、新規登録ではなくメンバー一覧からその行を直してください。",
+    };
+  }
+
+  return {
+    kind: "existing", blocked: false,
+    message: "この方は既にログインアカウントをお持ちです"
+      + "（無限道場・タイムカードなどで作成済み）。"
+      + "新しくは作らず、そのアカウントに紐づけます。"
+      + "パスワードは変わりません（いま使っているものでログインできます）。",
+  };
 }
 
 // ---- アカウント作成＋育成開始 --------------------------------------------------
@@ -175,6 +253,13 @@ async function create(res, ctx, user, body) {
       error: "duplicate_email",
       hint: `「${m.login_email}」は ${dup[0].display_name} さんで既に登録されています`,
     });
+  }
+
+  // プレビューで見せたのと同じ確認を、押した直後にもう一度する。
+  // 見てから押すまでのあいだに、別の管理者が同じ人を入れていることがある
+  const acc = await accountState(sb, ctx, m.login_email);
+  if (acc.blocked) {
+    return json(res, 409, { error: "account_taken", hint: acc.message });
   }
 
   let created;
@@ -202,7 +287,7 @@ async function create(res, ctx, user, body) {
     detail: { job: m.job_family_code, level: m.autonomy_level_start, months: m.training_months },
   });
 
-  return json(res, 200, { ok: true, created });
+  return json(res, 200, { ok: true, created, account: acc });
 }
 
 /** プレビューに出す、確定した値 */
