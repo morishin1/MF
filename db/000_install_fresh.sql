@@ -4813,3 +4813,37 @@ notify pgrst, 'reload schema';
 --   select work_date, morning_at is not null as 朝, success_met,
 --          left(success_image, 30) as 今日の成功, left(tomorrow_change, 30) as 明日変えること
 --     from public.tc_nippo order by work_date desc limit 10;
+
+
+-- =============================================================================
+-- 035_work_mode.sql — 勤務・育成区分／給与を読める人を絞る
+-- =============================================================================
+
+-- 勤務・育成区分。どう雇うか（期間・時間・権限・開始レベル）。
+-- 何を目標にするかは job_family_code 側。2軸を掛け合わせて登録する。
+-- 値の妥当性は lib/work-modes.js で見るので、check 制約は置かない
+alter table public.gw_employees
+  add column if not exists work_mode text;
+
+comment on column public.gw_employees.work_mode is
+  '勤務・育成区分。どう雇うか（期間・時間・権限・開始レベル）。'
+  '何を目標にするかは job_family_code 側。値は lib/work-modes.js';
+
+create index if not exists idx_gw_employees_work_mode
+  on public.gw_employees(tenant_id, work_mode)
+  where work_mode is not null;
+
+-- 給与（wage_type / wage_amount / wage_note）を含む行なので、
+-- 社内の誰でもではなく、人事と本人だけにする。
+-- RLSは列を選べないので、行ごと絞る。
+-- 画面はすべて service_role のAPI経由（入口で admin/owner/人事 に限定）なので、
+-- これで見えなくなる画面は無い。塞ぐのはブラウザから直接読む経路
+drop policy if exists gw_contracts_select on public.gw_contracts;
+create policy gw_contracts_select on public.gw_contracts
+  for select to authenticated
+  using (
+    public.gw_is_hr(tenant_id)
+    or employee_id = public.gw_employee_id(tenant_id)
+  );
+
+notify pgrst, 'reload schema';

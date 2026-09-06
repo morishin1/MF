@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910q">
-  <link rel="stylesheet" href="css/layout.css?v=20260910q">
+  <link rel="stylesheet" href="css/app.css?v=20260910r">
+  <link rel="stylesheet" href="css/layout.css?v=20260910r">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -18,6 +18,9 @@
     } catch (e) { /* 読めなくても動く */ }
   </script>
   <style>
+    .ob-step { font-size:10.5px; font-weight:700; letter-spacing:.12em; color:var(--primary);
+               display:block; margin-bottom:2px; }
+
     .ob-tpl { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:9px; }
     .ob-tpl button { text-align:left; border:1px solid var(--border); border-radius:9px;
                      background:#fff; padding:11px 13px; cursor:pointer; font-family:inherit; }
@@ -25,6 +28,22 @@
     .ob-tpl button.on { border-color:var(--primary); background:var(--soft); }
     .ob-tpl b { font-size:13px; color:var(--primary-dark); display:block; }
     .ob-tpl .s { font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.65; }
+
+    .ob-group { margin-bottom:13px; }
+    .ob-group:last-child { margin-bottom:0; }
+    .ob-group > .g { font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:5px; }
+    .ob-jobs { display:flex; gap:7px; flex-wrap:wrap; }
+    .ob-jobs button { border:1px solid var(--border); border-radius:999px; background:#fff;
+                      padding:7px 15px; cursor:pointer; font-family:inherit;
+                      font-size:12.5px; color:var(--text); }
+    .ob-jobs button:hover { border-color:var(--primary); }
+    .ob-jobs button.on { border-color:var(--primary); background:var(--primary); color:#fff; }
+
+    .ob-pick { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+               background:var(--soft); border-radius:9px; padding:10px 14px;
+               font-size:13.5px; font-weight:600; margin-bottom:16px; }
+    .ob-pick .x { color:var(--muted); font-weight:400; }
+    .ob-pick .todo { color:var(--muted); font-weight:400; font-size:12.5px; }
 
     .ob-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
     @media (max-width:640px) { .ob-grid { grid-template-columns:1fr; } }
@@ -71,16 +90,29 @@
   <div id="notice"></div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">bookmarks</span>採用・育成テンプレート
-      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">選ぶと下が埋まります</span></h2>
+    <span class="ob-step">STEP 1</span>
+    <h2><span class="material-symbols-outlined">badge</span>働き方を選ぶ
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">どう雇うか</span></h2>
     <div id="tpl" class="ob-tpl"></div>
     <p class="muted" style="font-size:12px;margin:12px 0 0;">
-      当てはまるものが無ければ選ばなくて構いません。下のフォームを直接埋めても登録できます。
+      新卒か中途かは、ここでは分けません。育て方が同じなら、扱いも同じにします。
     </p>
   </div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">person_add</span>本人の情報</h2>
+    <span class="ob-step">STEP 2</span>
+    <h2><span class="material-symbols-outlined">work</span>担当業務を選ぶ
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">何を目標にするか</span></h2>
+    <div id="jobs"></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;">
+      3か月KGI・月ごとのKPIは、ここで決まります。管理者が考える必要はありません。
+    </p>
+  </div>
+
+  <div class="card">
+    <span class="ob-step">STEP 3</span>
+    <h2><span class="material-symbols-outlined">person_add</span>労働条件を入力</h2>
+    <div id="pick" class="ob-pick"></div>
     <div class="ob-grid">
       <div class="full">
         <label>氏名<span class="req">*</span></label>
@@ -112,60 +144,81 @@
         <input id="f-end" type="date" oninput="clearPreview()">
       </div>
       <div>
-        <label>育成期間（月）<span class="req">*</span></label>
-        <input id="f-training" type="number" min="1" max="24" placeholder="3" oninput="clearPreview()">
-      </div>
-      <div>
-        <label>試用期間（月）</label>
-        <input id="f-probation" type="number" min="0" max="24" placeholder="6" oninput="clearPreview()">
-      </div>
-      <div>
-        <label>職種<span class="req">*</span></label>
-        <select id="f-job" onchange="clearPreview()"></select>
-      </div>
-      <div>
-        <label>初期Role<span class="req">*</span></label>
-        <input id="f-role" type="text" placeholder="事業推進・バックオフィス担当" oninput="clearPreview()">
-      </div>
-      <div>
         <label>管理担当者<span class="req">*</span></label>
         <select id="f-manager" onchange="clearPreview()"></select>
       </div>
       <div>
-        <label>開始時の自走レベル<span class="req">*</span></label>
-        <select id="f-level" onchange="clearPreview()"></select>
+        <label>給与区分</label>
+        <select id="f-wage-type" onchange="clearPreview()"></select>
       </div>
       <div>
-        <label>勤務形態</label>
-        <select id="f-style" onchange="clearPreview()">
-          <option value="">指定なし</option>
-          <option value="リモート">リモート</option>
-          <option value="ハイブリッド">ハイブリッド</option>
-          <option value="出社">出社</option>
-        </select>
-      </div>
-      <div>
-        <label>権限</label>
-        <select id="f-account" onchange="clearPreview()">
-          <option value="member">メンバー</option>
-          <option value="manager">管理担当者（管理画面が使えます）</option>
-        </select>
+        <label>給与額
+          <span class="muted" style="font-weight:400;">人事と本人だけが見られます</span></label>
+        <input id="f-wage" type="number" min="0" step="1000" placeholder="250000" oninput="clearPreview()">
       </div>
       <div class="full">
-        <label>主な担当業務</label>
-        <input id="f-scope" type="text" placeholder="バックオフィス、事業推進、営業支援" oninput="clearPreview()">
-      </div>
-      <div class="full">
-        <label>無限道場</label>
-        <div class="ob-chips">
-          <button type="button" class="ob-chip" id="c-dojo" onclick="toggleDojo()">無限道場を受講する</button>
-        </div>
+        <label>手当など</label>
+        <input id="f-wage-note" type="text" placeholder="（任意）通勤手当・固定残業代など" oninput="clearPreview()">
       </div>
       <div class="full">
         <label>備考</label>
         <input id="f-notes" type="text" placeholder="（任意）" oninput="clearPreview()">
       </div>
     </div>
+
+    <!-- STEP1 × STEP2 で埋まる。直したい人だけ開く -->
+    <details style="margin-top:16px;">
+      <summary style="cursor:pointer;font-size:13px;color:var(--primary-dark);font-weight:600;">
+        自動で決まったこと（そのままで構いません）
+      </summary>
+      <p class="muted" style="font-size:12px;margin:11px 0 13px;">
+        働き方と担当業務の組み合わせから入れています。この人だけ違う場合は直してください。
+      </p>
+      <div class="ob-grid">
+        <div>
+          <label>育成期間（月）<span class="req">*</span></label>
+          <input id="f-training" type="number" min="1" max="24" placeholder="3" oninput="clearPreview()">
+        </div>
+        <div>
+          <label>試用期間（月）</label>
+          <input id="f-probation" type="number" min="0" max="24" placeholder="6" oninput="clearPreview()">
+        </div>
+        <div>
+          <label>初期Role<span class="req">*</span></label>
+          <input id="f-role" type="text" placeholder="事業推進・バックオフィス担当" oninput="clearPreview()">
+        </div>
+        <div>
+          <label>開始時の自走レベル<span class="req">*</span></label>
+          <select id="f-level" onchange="clearPreview()"></select>
+        </div>
+        <div>
+          <label>勤務形態</label>
+          <select id="f-style" onchange="clearPreview()">
+            <option value="">指定なし</option>
+            <option value="リモート">リモート</option>
+            <option value="ハイブリッド">ハイブリッド</option>
+            <option value="出社">出社</option>
+          </select>
+        </div>
+        <div>
+          <label>権限</label>
+          <select id="f-account" onchange="clearPreview()">
+            <option value="member">メンバー</option>
+            <option value="manager">管理担当者（管理画面が使えます）</option>
+          </select>
+        </div>
+        <div class="full">
+          <label>主な担当業務</label>
+          <input id="f-scope" type="text" placeholder="バックオフィス、事業推進、営業支援" oninput="clearPreview()">
+        </div>
+        <div class="full">
+          <label>無限道場</label>
+          <div class="ob-chips">
+            <button type="button" class="ob-chip" id="c-dojo" onclick="toggleDojo()">無限道場を受講する</button>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <div style="margin-top:18px;">
       <button class="btn btn-primary" onclick="preview(this)">
@@ -216,17 +269,20 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/api-client.js?v=20260910q"></script>
-<script src="js/layout.js?v=20260910q"></script>
+<script src="js/api-client.js?v=20260910r"></script>
+<script src="js/layout.js?v=20260910r"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  let opts = null;      // テンプレート・職種・管理担当者
+  let opts = null;      // 区分・担当業務・管理担当者
   let bulkMeta = null;  // CSVの雛形（開いたときに取りに行く）
   let checked = null;   // CSVの確認結果
   let plan = null;      // プレビュー結果
   let dojo = false;
+  let mode = "";        // STEP1 勤務・育成区分
+  let job = "";         // STEP2 担当業務
+  let combo = null;     // 掛け合わせた初期値（サーバが組み立てたもの）
 
   KPLayout.init({ active: "onboard", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -242,30 +298,78 @@
     }
     el("notice").innerHTML = "";
 
-    el("f-job").innerHTML = opts.jobs.map((j) =>
-      `<option value="${esc(j.code)}">${esc(j.label)}（${esc(j.code)}）</option>`).join("");
     el("f-level").innerHTML = opts.levels.map((l) =>
       `<option value="${l.level}">LEVEL ${l.level}　${esc(l.label)}　— ${esc(l.summary)}</option>`).join("");
     el("f-manager").innerHTML = `<option value="">選んでください</option>` +
       opts.managers.map((mg) =>
         `<option value="${esc(mg.email)}">${esc(mg.name)}${mg.position ? `（${esc(mg.position)}）` : ""}</option>`).join("");
+    el("f-wage-type").innerHTML = `<option value="">選ばない</option>` +
+      opts.wageTypes.map((w) => `<option value="${esc(w)}">${esc(w)}</option>`).join("");
 
-    el("tpl").innerHTML = opts.hireTemplates.map((t) => `
-      <button type="button" id="t-${esc(t.code)}" onclick="applyTemplate('${esc(t.code)}')">
+    // STEP1 働き方
+    el("tpl").innerHTML = opts.workModes.map((t) => `
+      <button type="button" id="m-${esc(t.code)}" onclick="pickMode('${esc(t.code)}')">
         <b>${esc(t.label)}</b>
         <span class="s">${esc(t.note)}</span>
       </button>`).join("");
+
+    // STEP2 担当業務。4つのまとまりに分けて出す
+    el("jobs").innerHTML = opts.jobGroups.map((g) => {
+      const list = opts.jobs.filter((j) => j.group === g);
+      if (!list.length) return "";
+      return `<div class="ob-group">
+        <div class="g">${esc(g)}</div>
+        <div class="ob-jobs">
+          ${list.map((j) => `<button type="button" id="j-${esc(j.code)}"
+            title="${esc(j.kgi)}" onclick="pickJob('${esc(j.code)}')">${esc(j.label)}</button>`).join("")}
+        </div>
+      </div>`;
+    }).join("");
+
+    renderPick();
   }
 
-  // --- テンプレート -----------------------------------------------------------
-  function applyTemplate(code) {
-    const t = opts.hireTemplates.find((x) => x.code === code);
-    if (!t) return;
+  // --- STEP1 × STEP2 -----------------------------------------------------------
+  function pickMode(code) {
+    mode = code;
     document.querySelectorAll("#tpl button").forEach((b) => b.classList.remove("on"));
-    el(`t-${code}`).classList.add("on");
+    el(`m-${code}`).classList.add("on");
+    applyCombo();
+  }
 
-    const v = t.values;
-    el("f-job").value = v.job_family_code;
+  function pickJob(code) {
+    job = code;
+    document.querySelectorAll("#jobs button").forEach((b) => b.classList.remove("on"));
+    el(`j-${code}`).classList.add("on");
+    applyCombo();
+  }
+
+  function renderPick() {
+    const m = opts?.workModes.find((x) => x.code === mode);
+    const j = opts?.jobs.find((x) => x.code === job);
+    el("pick").innerHTML = m && j
+      ? `<span class="material-symbols-outlined" style="font-size:19px;color:var(--primary);">check_circle</span>
+         ${esc(m.label)}<span class="x">×</span>${esc(j.label)}`
+      : `<span class="material-symbols-outlined" style="font-size:19px;color:var(--muted);">arrow_upward</span>
+         <span class="todo">${m ? "STEP 2 の担当業務" : j ? "STEP 1 の働き方" : "STEP 1 と STEP 2"}を選んでください</span>`;
+  }
+
+  // 掛け合わせた初期値はサーバで組み立てる。
+  // 同じ規則を画面にも書くと、片方だけ直されて食い違う
+  async function applyCombo() {
+    renderPick();
+    clearPreview();
+    if (!mode || !job) return;
+
+    let v;
+    try {
+      v = (await API.onboardCombine(mode, job)).values;
+    } catch (e) {
+      el("form-msg").textContent = e.hint || e.detail || e.message || "組み合わせを読めませんでした";
+      return;
+    }
+    combo = v;
+
     el("f-role").value = v.initial_role;
     el("f-training").value = v.training_months;
     el("f-probation").value = v.probation_months ?? "";
@@ -278,7 +382,7 @@
     dojo = (v.training_programs || []).includes("無限道場");
     renderDojo();
     onContract();
-    onJoin();      // 契約終了日を、入社日 + テンプレートの月数で置く
+    onJoin();      // 契約終了日を、入社日 + 区分の契約月数で置く
     clearPreview();
   }
 
@@ -292,12 +396,10 @@
     clearPreview();
   }
 
-  // 有期のとき、入社日からテンプレートの契約月数で終了日を置く。
+  // 有期のとき、入社日から区分の契約月数で終了日を置く。
   // 「入社日の1年後の前日」を毎回手で計算させない
   function onJoin() {
-    const sel = document.querySelector("#tpl button.on");
-    const t = sel && opts.hireTemplates.find((x) => `t-${x.code}` === sel.id);
-    const months = t?.values?.contract_months;
+    const months = combo?.contract_months;
     const join = el("f-join").value;
     if (months && join && el("f-contract").value === "有期" && !el("f-end").value) {
       const d = new Date(`${join}T00:00:00Z`);
@@ -325,13 +427,17 @@
       trainingMonths: el("f-training").value,
       weeklyHours: el("f-hours").value,
       workStyle: el("f-style").value,
-      jobFamilyCode: el("f-job").value,
+      workMode: mode,
+      jobFamilyCode: job,
       initialRole: el("f-role").value,
       workScope: el("f-scope").value,
       managerEmail: el("f-manager").value,
       trainingPrograms: dojo ? ["無限道場"] : [],
       autonomyLevel: el("f-level").value,
       accountType: el("f-account").value,
+      wageType: el("f-wage-type").value,
+      wageAmount: el("f-wage").value,
+      wageNote: el("f-wage-note").value,
       notes: el("f-notes").value,
     };
   }
@@ -340,6 +446,10 @@
   async function preview(btn) {
     el("form-msg").textContent = "";
     el("done-card").classList.add("hidden");
+    if (!mode || !job) {
+      el("form-msg").textContent = "STEP 1 の働き方と、STEP 2 の担当業務を選んでください";
+      return;
+    }
     let r;
     try {
       r = await KPLayout.busy(btn, "作成中…", () => API.onboardPreview(readForm()));
@@ -395,13 +505,29 @@
           <dt>試用期間</dt><dd>${esc(v.probation)}</dd>
           <dt>育成期間</dt><dd>${esc(v.training)}</dd>
           <dt>勤務</dt><dd>${esc(v.weeklyHours)}${v.workStyle !== "指定なし" ? ` ・ ${esc(v.workStyle)}` : ""}</dd>
-          <dt>職種・Role</dt><dd>${esc(v.job)} ・ ${esc(v.role)}</dd>
-          ${v.scope.length ? `<dt>担当業務</dt><dd>${esc(v.scope.join("、"))}</dd>` : ""}
+          ${v.workMode ? `<dt>働き方</dt><dd>${esc(v.workMode)}</dd>` : ""}
+          <dt>担当業務・Role</dt><dd>${esc(v.job)} ・ ${esc(v.role)}</dd>
+          ${v.scope.length ? `<dt>業務範囲</dt><dd>${esc(v.scope.join("、"))}</dd>` : ""}
           ${v.programs.length ? `<dt>研修</dt><dd>${esc(v.programs.join("、"))}</dd>` : ""}
           <dt>管理担当者</dt><dd>${esc(v.manager)}</dd>
           <dt>開始レベル</dt><dd>LEVEL ${v.level}</dd>
           <dt>権限</dt><dd>${v.accountType === "manager" ? "管理担当者" : "メンバー"}</dd>
+          ${v.wage ? `<dt>給与</dt><dd>${esc(v.wage)}</dd>` : ""}
         </dl>
+      </div>
+
+      <div style="margin:16px 0;">
+        <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:6px;">
+          毎日の日報で見るもの（担当業務にかかわらず全員共通）
+        </div>
+        <div class="pv-kpi">
+          ${(opts.commonAxes || []).map((a) =>
+            `<span title="${esc(a.label)}">${esc(a.short)}</span>`).join("")}
+        </div>
+        <p class="muted" style="font-size:11.5px;margin:7px 0 0;line-height:1.75;">
+          KPIは担当業務ごとに変わりますが、日報の評価軸は全員同じです。
+          成果40 / 行動30 / 成長20 / チーム10 で100点に換算します。
+        </p>
       </div>
 
       <div class="banner info" style="margin-bottom:14px;">

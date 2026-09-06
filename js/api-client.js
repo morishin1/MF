@@ -344,6 +344,9 @@
   // 通常はフォーム。押した瞬間にアカウントができるので、
   // 先にプレビュー（onboardPreview）を出してから登録する
   const onboardOptions = () => api("/api/employees/onboard");
+  // 「働き方 × 担当業務」を掛け合わせた初期値。組み立てはサーバ側にだけ置く
+  const onboardCombine = (mode, job) =>
+    api(`/api/employees/onboard?mode=${encodeURIComponent(mode)}&job=${encodeURIComponent(job)}`);
   const onboardPreview = (form) =>
     api("/api/employees/onboard", { method: "POST", body: { form } });
   const onboardCreate = (form) =>
@@ -699,7 +702,7 @@
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,
-    onboardOptions, onboardPreview, onboardCreate,
+    onboardOptions, onboardCombine, onboardPreview, onboardCreate,
     intakeInfo, intakeCheck, intakeApply,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,

@@ -50,7 +50,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (31, '031',    '止まっていること・自走レベル・デキル履歴',            'table',    'gw_blockers',            null),
   (32, '032',    '3か月育成計画・月間KGI/KPI',                        'table',    'gw_growth_plans',        null),
   (33, '033',    '1ファイル登録（雇用・育成マスターの取り込み）',        'table',    'gw_import_batches',      null),
-  (34, '034',    '日報を朝と夜に分ける（先に描いてから動く）',          'column',   'tc_nippo',               'success_image')
+  (34, '034',    '日報を朝と夜に分ける（先に描いてから動く）',          'column',   'tc_nippo',               'success_image'),
+  (35, '035',    '勤務・育成区分／給与を読める人を絞る',                'column',   'gw_employees',           'work_mode')
 ),
 
 -- ファイルの適用状況

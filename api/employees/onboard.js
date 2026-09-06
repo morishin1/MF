@@ -1,6 +1,15 @@
-// GET  /api/employees/onboard        … フォームの選択肢（テンプレート・職種・管理担当者）
+// GET  /api/employees/onboard        … フォームの選択肢（区分・担当業務・管理担当者）
 // POST /api/employees/onboard {form}          … 育成計画をプレビュー（登録しない）
 // POST /api/employees/onboard {form, create}  … アカウント作成＋育成開始
+//
+// ■ 登録は3段階（勤務・育成区分 × 担当業務 → 労働条件）
+//   STEP1 どう雇うか（lib/work-modes.js）… 期間・勤務時間・権限・開始レベル
+//   STEP2 何をするか（lib/job-templates.js）… KGI・月間KPI
+//   STEP3 その人ごとの条件 … 氏名・メール・入社日・契約・勤務時間・給与
+//
+//   区分と業務を掛け合わせると、STEP3 の大半が埋まる。
+//   「新卒営業」のように畳んだテンプレートを並べると、雇い方が増えるたびに
+//   職種のぶんだけ増えて 45通りになる。掛け合わせなら 5 + 9 で足りる。
 //
 // ■ 通常の登録はここ。CSV/XLSX は複数人のときだけ
 //   1人ずつ入れるのにファイルを作らせるのは、手間が逆に増える。
@@ -23,9 +32,10 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { validateRow } from "../../lib/intake.js";
-import { jobOptions } from "../../lib/job-templates.js";
-import { hireOptions } from "../../lib/hire-templates.js";
+import { validateRow, WAGE_TYPES } from "../../lib/intake.js";
+import { jobOptions, JOB_GROUPS } from "../../lib/job-templates.js";
+import { workModeOptions, combine } from "../../lib/work-modes.js";
+import { rubric } from "../../lib/scoring.js";
 import { onboardOne, buildPlan, linkManager, nextCode } from "../../lib/onboard.js";
 import { LEVELS } from "../../lib/autonomy.js";
 import { addMonths } from "../../lib/growth.js";
@@ -39,6 +49,17 @@ export default async function handler(req, res) {
   // アカウントを作る操作。社内の誰でもは通さない
   if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
 
+  // ?mode=GROWTH&job=BACKOFFICE … 掛け合わせた初期値だけを返す。
+  // 組み立ての規則をサーバに1本化する。画面にも同じ規則を書くと、
+  // 片方だけ直されて「プレビューで見た内容と違うものが登録された」が起きる
+  if (req.method === "GET") {
+    const q = new URL(req.url, "http://localhost").searchParams;
+    if (q.get("mode")) {
+      const values = combine(q.get("mode"), q.get("job"));
+      if (!values) return json(res, 400, { error: "unknown_work_mode" });
+      return json(res, 200, { values });
+    }
+  }
   if (req.method === "GET") return options(res, ctx);
   if (req.method === "POST") {
     const body = await readJson(req);
@@ -58,14 +79,20 @@ async function options(res, ctx) {
     .not("email", "is", null).order("display_name").limit(300);
 
   return json(res, 200, {
-    hireTemplates: hireOptions(),
+    workModes: workModeOptions(),
     jobs: jobOptions(),
+    jobGroups: JOB_GROUPS,
+    wageTypes: WAGE_TYPES,
     levels: LEVELS.map((l) => ({ level: l.level, label: l.label, summary: l.summary })),
+    // 担当業務が何であっても、日報で共通して見る評価軸。
+    // 職種ごとにKPIは変わるが、ここは全員同じであることを画面で示す
+    commonAxes: rubric().actions.map((a) => ({ short: a.short, label: a.label })),
     managers: (staff || []).map((e) => ({
       email: e.email, name: e.display_name, position: e.position,
     })),
   });
 }
+
 
 // ---- 入力をマスター形式にそろえる ----------------------------------------------
 // フォームとCSVで検証を1本にする。CSVだけ通る値、フォームだけ通る値を作らない
@@ -84,6 +111,7 @@ function toMaster(form) {
     training_months: form.trainingMonths,
     weekly_hours: form.weeklyHours,
     work_style: form.workStyle,
+    work_mode: form.workMode,
     job_family_code: form.jobFamilyCode,
     initial_role: form.initialRole,
     work_scope: list(form.workScope).join("、"),
@@ -93,6 +121,9 @@ function toMaster(form) {
     three_month_goal: "",                    // AIとテンプレートが作る。入力させない
     kpi_template_code: "",
     account_type: form.accountType || "member",
+    wage_type: form.wageType,
+    wage_amount: form.wageAmount,
+    wage_note: form.wageNote,
     notes: form.notes,
   };
 }
@@ -181,8 +212,15 @@ const shape = (m) => ({
   probation: m.probation_months ? `${m.probation_months}か月` : "なし",
   training: `${m.training_months}か月（${m.join_date} 〜 ${addMonths(m.join_date, m.training_months)}）`,
   weeklyHours: `週 ${m.weekly_hours} 時間`,
-  job: m.job_family_code,
+  workMode: m.work_mode ? (workModeOptions().find((w) => w.code === m.work_mode)?.label || m.work_mode) : null,
+  job: jobOptions().find((j) => j.code === m.job_family_code)?.label || m.job_family_code,
   role: m.initial_role,
+  // 給与は、この画面を開けている人（人事権限）にだけ返す。
+  // 名簿や本人の画面には出さない
+  wage: m.wage_amount
+    ? `${m.wage_type} ${Number(m.wage_amount).toLocaleString("ja-JP")}円`
+      + (m.wage_note ? `（${m.wage_note}）` : "")
+    : null,
   workStyle: m.work_style || "指定なし",
   scope: m.work_scope,
   programs: m.training_programs,
