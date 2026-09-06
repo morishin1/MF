@@ -655,6 +655,9 @@
   // ---- Google Drive 連携 ----
   const driveStatus = (clientId) => api(`/api/drive/status?clientId=${encodeURIComponent(clientId)}`);
   const driveSync = (clientId, limit) => api("/api/drive/sync", { method: "POST", body: { clientId, limit } });
+  // 人事フォルダの設定確認（人事・管理者だけ）。
+  // フォルダIDを入れただけでは動かないので、どこで止まっているかを返す
+  const hrDriveCheck = () => api("/api/drive/hr-check");
 
   // ---- MF連携 ----
   const mfStatus = (clientId) => api(`/api/mf/status?clientId=${encodeURIComponent(clientId)}`);
@@ -722,7 +725,7 @@
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,
     deleteDocument,
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
-    driveStatus, driveSync,
+    driveStatus, driveSync, hrDriveCheck,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,
     setEmployeeRole, linkEmployeeAccount,

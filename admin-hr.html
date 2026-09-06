@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911d">
-  <link rel="stylesheet" href="css/layout.css?v=20260911d">
+  <link rel="stylesheet" href="css/app.css?v=20260911e">
+  <link rel="stylesheet" href="css/layout.css?v=20260911e">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -27,6 +27,8 @@
 <div class="wrap">
   <h1 class="kp-greet">入社・退職手続き</h1>
   <p class="kp-greet-sub">対象者を登録すると、雇用区分に合わせたチェックリストが自動で用意されます。</p>
+
+  <div id="drive-check"></div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">person_add</span>手続きを始める</h2>
@@ -88,8 +90,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911d"></script>
-<script src="js/layout.js?v=20260911d"></script>
+<script src="js/api-client.js?v=20260911e"></script>
+<script src="js/layout.js?v=20260911e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -102,10 +104,39 @@
   let procedures = [];
 
   KPLayout.init({ active: "hr", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => { if (!ctx) return; load(); checkDrive(); });
 
   async function load() {
     await Promise.all([loadEmployees(), loadProcedures()]);
+  }
+
+  // Google ドライブ（人事）の設定。
+  // フォルダIDを入れただけでは動かない。そのフォルダをサービスアカウントに
+  // 「編集者」で共有する必要がある。どこで止まっているかを、ここに出す。
+  // 全部そろっているときは何も出さない（毎回読ませるものではない）
+  async function checkDrive() {
+    let r;
+    try { r = await API.hrDriveCheck(); } catch { return; }
+    const box = el("drive-check");
+    const ng = (r.steps || []).filter((s) => !s.ok);
+    if (!ng.length) { box.innerHTML = ""; return; }
+
+    box.innerHTML = `
+      <div class="banner warn" style="margin-bottom:16px;">
+        <span class="material-symbols-outlined">settings_alert</span>
+        <div>
+          <b>Googleドライブ（人事）の設定が終わっていません。</b>
+          このままでは個人フォルダを作れません。
+          <ul style="margin:8px 0 0;padding-left:18px;line-height:1.9;">
+            ${ng.map((s) => `<li><b>${esc(s.label)}</b>：${esc(s.detail)}</li>`).join("")}
+          </ul>
+          ${r.serviceAccount ? `
+            <div style="margin-top:8px;font-size:12px;">
+              共有する相手（サービスアカウント）：<code>${esc(r.serviceAccount)}</code>
+              ${r.folderUrl ? `　<a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">フォルダを開く</a>` : ""}
+            </div>` : ""}
+        </div>
+      </div>`;
   }
 
   async function loadEmployees() {
