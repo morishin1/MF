@@ -323,6 +323,26 @@
   const actionItem = (action, body = {}) =>
     api("/api/dashboard", { method: "POST", body: { kind: "action", action, ...body } });
 
+  // ---- 止まっていること（Blocker） ----
+  // 外すのは管理職に限らない。手が空いている人が外せるほうが早い
+  const listBlockers = (scope, status) => {
+    const q = new URLSearchParams();
+    if (scope) q.set("scope", scope);
+    if (status) q.set("status", status);
+    return api(`/api/blockers${q.toString() ? `?${q}` : ""}`);
+  };
+  const raiseBlocker = (body) =>
+    api("/api/blockers", { method: "POST", body: { action: "raise", ...body } });
+  const blockerAct = (action, body = {}) =>
+    api("/api/blockers", { method: "POST", body: { action, ...body } });
+
+  // ---- 自走レベル ----
+  // 上げ下げは人が押す。AIは決めない
+  const autonomy = (userId) =>
+    api(`/api/autonomy${userId ? `?userId=${encodeURIComponent(userId)}` : ""}`);
+  const setAutonomy = (body) =>
+    api("/api/autonomy", { method: "POST", body: { action: "set", ...body } });
+
   // ---- 雇用契約書 ----
   const contracts = (employeeId) =>
     api(`/api/contracts${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
@@ -649,6 +669,7 @@
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
+    listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,
     contracts, contractsAct, uploadContract,

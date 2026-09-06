@@ -102,9 +102,16 @@ async function read(req, res, ctx, user) {
   const mine = userId === user.id && !canReview(ctx);
   const summary = (!mine || row?.submitted_at) ? shape(row) : null;
 
+  // できるようになったことの積み上げ。月が変わっても消えないので、
+  // その月ぶんだけでなく、これまでのぶんを全部出す（§27）
+  const { data: growth } = await sb.from("gw_growth_history")
+    .select("happened_on, title, evidence, source")
+    .eq("user_id", userId).order("happened_on", { ascending: false }).limit(60);
+
   return json(res, 200, {
     month, userId, metrics, criteria: CRITERIA,
     summary,
+    growth: growth || [],
     // 週ごとの推移。グラフに使う
     trend: weeks.map((w) => ({
       weekStart: w.week_start,
@@ -171,6 +178,26 @@ async function act(req, res, ctx, user) {
     if (!r.ok) {
       return json(res, 502, { summary: shape(saved), error: "ai_failed", hint: "AIが応答しませんでした" });
     }
+
+    // できるようになったことを積み上げる（要件定義 §27「デキル履歴」）。
+    // 点数は月が変われば消えるが、これは消えない。
+    // 作り直しても増えないよう、(本人, 月, 内容) で一意にしてある
+    for (const title of r.result.learned || []) {
+      const { error } = await sb.from("gw_growth_history").insert({
+        user_id: body.userId,
+        happened_on: `${month}-01`,
+        title: String(title).slice(0, 300),
+        evidence: r.result.summary ? String(r.result.summary).slice(0, 1000) : null,
+        source: "monthly",
+        source_ref: month,
+        created_by: user.id,
+      });
+      // 23505 = 同じものが既にある。作り直しただけなので黙って進む
+      if (error && error.code !== "23505") {
+        console.error("[monthly] デキル履歴を残せませんでした:", error.message);
+      }
+    }
+
     return json(res, 200, { summary: shape(saved), metrics });
   }
 

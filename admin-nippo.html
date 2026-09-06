@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910l">
-  <link rel="stylesheet" href="css/layout.css?v=20260910l">
+  <link rel="stylesheet" href="css/app.css?v=20260910m">
+  <link rel="stylesheet" href="css/layout.css?v=20260910m">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -80,6 +80,16 @@
     <div id="follow-list"></div>
   </div>
 
+  <!-- 管理職の仕事は命令することではなく、止まっているものを外すこと -->
+  <div id="blk-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">block</span>止まっていること
+      <span id="blk-tag" class="kp-chip important" style="margin-left:6px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      長く止まっているものから並べています。外れたら「外れた」を押してください（誰が外したかが残ります）。
+    </p>
+    <div id="blk-body"></div>
+  </div>
+
   <div class="card">
     <h2><span class="material-symbols-outlined">trending_up</span>提出率<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近の平日</span></h2>
     <div class="dr-bar" id="trend"></div>
@@ -139,8 +149,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910l"></script>
-<script src="js/layout.js?v=20260910l"></script>
+<script src="js/api-client.js?v=20260910m"></script>
+<script src="js/layout.js?v=20260910m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -225,6 +235,7 @@
     el("wk-tag").textContent = `${data.weekStart} の週`;
     renderTiles();
     renderFollowUps();
+    renderBlockers();
     renderRankings();
     renderTrend();
     renderNotSubmitted();
@@ -261,7 +272,10 @@
     el("follow-card").classList.remove("hidden");
     el("follow-tag").textContent = `${list.length} 名`;
 
-    const COLOR = { consult: "#2b6cb0", kpi_miss: "#c05621", not_submitted: "#718096" };
+    const COLOR = {
+      blocker: "#c53030", consult: "#2b6cb0", kpi_miss: "#c05621",
+      slowdown: "#b7791f", stale: "#805ad5", not_submitted: "#718096",
+    };
 
     el("follow-list").innerHTML = list.map((u) => `
       <div class="dr-card" style="margin-bottom:10px;">
@@ -276,6 +290,41 @@
         ${u.reasons.map((r) =>
           `<div class="muted" style="font-size:12.5px;line-height:1.75;">${esc(r.detail)}</div>`).join("")}
       </div>`).join("");
+  }
+
+  // 止まっている仕事。長いものから先に出す。
+  // 外すのは管理職に限らないが、この画面では管理者が順番を決めるために使う
+  function renderBlockers() {
+    const list = data.blockers || [];
+    if (!list.length) { el("blk-card").classList.add("hidden"); return; }
+    el("blk-card").classList.remove("hidden");
+
+    const long = list.filter((b) => b.long).length;
+    el("blk-tag").textContent = long ? `${list.length} 件（${long} 件が長期化）` : `${list.length} 件`;
+    el("blk-tag").className = long ? "kp-chip important" : "kp-chip";
+
+    el("blk-body").innerHTML = list.map((b) => `
+      <div class="dr-card" style="margin-bottom:10px;
+           ${b.long ? "border-color:#f0b27a;" : ""}">
+        <div class="dr-head" style="margin-bottom:6px;">
+          <span class="dr-name">${esc(b.userName || "—")}</span>
+          <span class="kp-chip${b.long ? " important" : ""}">${b.days}日目</span>
+          <span class="kp-chip">${esc(b.escalationLabel)}</span>
+          <button class="btn btn-primary btn-sm" style="margin-left:auto;"
+                  onclick="resolveBlocker('${esc(b.id)}', this)">外れた</button>
+        </div>
+        <div style="font-size:13.5px;font-weight:600;">${esc(b.title)}</div>
+        ${b.description ? `<div class="muted" style="font-size:12.5px;margin-top:3px;white-space:pre-wrap;">${esc(b.description)}</div>` : ""}
+      </div>`).join("");
+  }
+
+  async function resolveBlocker(id, btn) {
+    const resolution = prompt("どうやって外れましたか（次に同じところで止まらないために残します）");
+    if (resolution === null) return;
+    try {
+      await KPLayout.busy(btn, "…", () => API.blockerAct("resolve", { id, resolution }));
+      await load(el("f-date").value);
+    } catch (e) { alert(e.hint || e.detail || e.message || "更新できませんでした"); }
   }
 
   // 週次評価の「対象者」を切り替えて、その人のところまで動かす

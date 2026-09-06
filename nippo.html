@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910l">
-  <link rel="stylesheet" href="css/layout.css?v=20260910l">
+  <link rel="stylesheet" href="css/app.css?v=20260910m">
+  <link rel="stylesheet" href="css/layout.css?v=20260910m">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -234,6 +234,15 @@
     <div id="month-body"></div>
   </div>
 
+  <!-- できるようになったことの積み上げ。点数は月が変われば消えるが、これは消えない -->
+  <div id="growth-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">workspace_premium</span>できるようになったこと</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      月ごとのふりかえりから積み上がります。点数と違って、ここに入ったものは消えません。
+    </p>
+    <div id="growth-body"></div>
+  </div>
+
   <!-- 今日の提出状況 -->
   <div class="card">
     <h2><span class="material-symbols-outlined">groups</span>今日の提出状況</h2>
@@ -247,8 +256,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910l"></script>
-<script src="js/layout.js?v=20260910l"></script>
+<script src="js/api-client.js?v=20260910m"></script>
+<script src="js/layout.js?v=20260910m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -655,6 +664,25 @@
 
       ${e.aiComment ? `<div style="font-size:13px;line-height:1.9;">${esc(e.aiComment)}</div>` : ""}
 
+      ${(e.blockerCandidates || []).length ? `
+        <div class="ai-block" style="border-left:3px solid #c53030;">
+          <h4><span class="material-symbols-outlined" style="font-size:15px;color:#c53030;">block</span>止まっていませんか</h4>
+          <p class="muted" style="font-size:12px;margin:0 0 8px;">
+            自分だけでは動かせなさそうなものです。出しておくと、外せる人が見に来ます。
+            出すかどうかは自分で決めてください。
+          </p>
+          ${e.blockerCandidates.map((b, i) => `
+            <div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;
+                        border-bottom:1px solid var(--border);font-size:13px;">
+              <div style="flex:1;">
+                <div>${esc(b.title)}</div>
+                <div class="muted" style="font-size:11.5px;margin-top:2px;">${esc(b.why)}</div>
+              </div>
+              <button class="btn btn-secondary btn-sm"
+                      onclick="raiseFromEval(${i}, this)">これを出す</button>
+            </div>`).join("")}
+        </div>` : ""}
+
       <p class="muted" style="font-size:11.5px;margin:14px 0 0;">
         AIが日報の記述だけを読んで書いたものです。人物評価ではありません。
         点数での評価は週次でまとめて行います。
@@ -676,6 +704,23 @@
     }
     el("ai-btn").disabled = false;
     await load(el("f-date").value);
+  }
+
+  // AIが挙げた「止まっていそうなもの」を、本人が押したときだけ出す。
+  // AIが勝手に上げると、止まっていないものまで並んで、本当に止まったものが埋もれる
+  async function raiseFromEval(i, btn) {
+    const e = currentEval();
+    const c = (e?.blockerCandidates || [])[i];
+    if (!c) return;
+    try {
+      const r = await KPLayout.busy(btn, "…", () => API.raiseBlocker({
+        title: c.title, description: c.why, nippoId: data.today?.id,
+      }));
+      alert(r.duplicate ? "同じ内容がすでに出ています。" : "出しました。ホームの「止まっていること」に並びます。");
+      await load(el("f-date").value);
+    } catch (err) {
+      alert(err.hint || err.detail || err.message || "登録できませんでした");
+    }
   }
 
   // --- 受け取った感謝 ---------------------------------------------------------
@@ -778,7 +823,24 @@
     renderMonthly();
   }
 
+  // できるようになったことは、その月の評価が出ているかとは関係なく出す。
+  // 過去のぶんも含めて、積み上がっていることが見えるほうが大事
+  function renderGrowth() {
+    const list = monthly?.growth || [];
+    if (!list.length) { el("growth-card").classList.add("hidden"); return; }
+    el("growth-card").classList.remove("hidden");
+
+    el("growth-body").innerHTML = list.map((g) => `
+      <div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);">
+        <span class="muted" style="font-size:11.5px;width:62px;flex:none;padding-top:2px;">
+          ${esc(String(g.happened_on).slice(0, 7).replace("-", "/"))}
+        </span>
+        <span style="font-size:13.5px;line-height:1.7;">${esc(g.title)}</span>
+      </div>`).join("");
+  }
+
   function renderMonthly() {
+    renderGrowth();
     const m = monthly.metrics;
     const s = monthly.summary;
     // 週次評価がまだ1件も無い月は、出しても意味がない

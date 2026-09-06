@@ -17,6 +17,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { evaluateNippo, isConfigured, PROMPT_VERSION } from "../../lib/nippo-eval.js";
 import { ACTIONS as CRITERIA, score } from "../../lib/scoring.js";
 import { planFromNippo, savePlan } from "../../lib/actions.js";
+import { shapeBlocker, forPrompt } from "../../lib/blockers.js";
 
 const canReview = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -79,12 +80,26 @@ async function run(res, sb, ctx, user, nippo, { force }) {
   if (ie) return json(res, 500, { error: "db_insert_failed", detail: ie.message });
 
   // 前日ぶんは前後関係の参考にだけ渡す。毎回過去を全部送ると高くつく
-  const { data: recent } = await sb
-    .from("tc_nippo").select("work_items, tomorrow_plan, work_date")
-    .eq("user_id", nippo.user_id).lt("work_date", nippo.work_date)
-    .order("work_date", { ascending: false }).limit(1);
+  const [{ data: recent }, { data: emp }, { data: open }] = await Promise.all([
+    sb.from("tc_nippo").select("work_items, tomorrow_plan, work_date")
+      .eq("user_id", nippo.user_id).lt("work_date", nippo.work_date)
+      .order("work_date", { ascending: false }).limit(1),
+    // 自走レベル。同じ日報でも、L1には手順を、L3には問いを返させる
+    sb.from("gw_employees").select("autonomy_level")
+      .eq("user_id", nippo.user_id).maybeSingle(),
+    // 止まったままの仕事。あるなら、明日の1件はそこから出させる
+    sb.from("gw_blockers").select("*")
+      .eq("user_id", nippo.user_id).eq("status", "open")
+      .order("blocked_since").limit(5),
+  ]);
 
-  const r = await evaluateNippo({ today: nippo, recent: recent || [] });
+  const level = emp?.autonomy_level || 1;
+  const blockers = (open || []).map((b) => shapeBlocker(b, nippo.work_date));
+
+  const r = await evaluateNippo({
+    today: nippo, recent: recent || [],
+    level, blockers: forPrompt(blockers),
+  });
 
   const patch = r.ok
     ? {
@@ -97,6 +112,10 @@ async function run(res, sb, ctx, user, nippo, { force }) {
         improvement_points: r.result.improvement_points,
         ai_comment: r.result.ai_comment,
         tomorrow_advice: r.result.tomorrow_advice,
+        // 止まりそうな困りごとの候補。ここではまだ Blocker にしない。
+        // 上げるかどうかは本人が押す
+        blocker_candidates: r.result.blocker_candidates || [],
+        autonomy_level: level,
         system_metrics: r.metrics,
         raw_response: r.raw,
         attempts: r.attempts,
@@ -201,6 +220,8 @@ export function shape(row) {
     improvementPoints: row.improvement_points || [],
     aiComment: row.ai_comment,
     tomorrowAdvice: row.tomorrow_advice,
+    blockerCandidates: row.blocker_candidates || [],
+    autonomyLevel: row.autonomy_level,
     metrics: row.system_metrics,
     managerScores: row.manager_scores,
     managerComment: row.manager_comment,

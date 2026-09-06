@@ -27,6 +27,8 @@ import { score, ACTIONS } from "../../lib/scoring.js";
 import {
   ensureKpis, kpiRate, closeItems, shapeKpi, shapeItem, nextWorkday,
 } from "../../lib/actions.js";
+import { shapeBlocker } from "../../lib/blockers.js";
+import { levelOf } from "../../lib/autonomy.js";
 
 const canManage = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -69,7 +71,7 @@ async function read(req, res, user, ctx) {
   const ws = weekStart(date);
   const days = weekdaysOf(ws);
 
-  const [kpis, items, weekNippos, weekEvals, weekly, recentEvals] = await Promise.all([
+  const [kpis, items, weekNippos, weekEvals, weekly, recentEvals, blockers, emp] = await Promise.all([
     ensureKpis(sb, userId, date),
 
     // 今日ぶんと、やり残し（期限が過ぎてまだ開いているもの）
@@ -91,6 +93,13 @@ async function read(req, res, user, ctx) {
     sb.from("gw_nippo_ai_evals").select("work_date, scores, created_at")
       .eq("user_id", userId).eq("status", "completed")
       .lte("work_date", date).order("work_date", { ascending: false }).limit(20),
+
+    // 止まっている仕事。TODAY の次に出す（§12④）
+    sb.from("gw_blockers").select("*")
+      .eq("user_id", userId).eq("status", "open").order("blocked_since").limit(10),
+
+    // 自走レベル。画面には「次のレベルまであと何項目」として出す
+    sb.from("gw_employees").select("autonomy_level").eq("user_id", userId).maybeSingle(),
   ]);
 
   const open = items.data || [];
@@ -116,7 +125,17 @@ async function read(req, res, user, ctx) {
     kpiSummary,
     canSetTarget: canManage(ctx) || userId === user.id,
 
-    // ③ 昨日のAIフィードバック
+    // ③ 止まっている仕事。放っておくと、翌日も同じところで止まる
+    blockers: (blockers.data || []).map((b) => shapeBlocker(b, date)),
+
+    // ④ 自走レベル。裁量の広さの話で、人の評価ではない。
+    //    画面では「レベルが低い」ではなく「次まであと何項目」と出す
+    autonomy: (() => {
+      const level = emp.data?.autonomy_level || 1;
+      return { level, info: levelOf(level) };
+    })(),
+
+    // ⑤ 昨日のAIフィードバック
     yesterday: prev ? {
       date: prev.work_date,
       good: (prev.good_points || []).slice(0, 2),

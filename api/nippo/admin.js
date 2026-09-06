@@ -22,6 +22,7 @@ import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { ACTIONS as CRITERIA, rubric } from "../../lib/scoring.js";
 import { findFollowUps, rankings, recentWorkdays } from "../../lib/follow.js";
 import { kpiRate } from "../../lib/actions.js";
+import { shapeBlocker } from "../../lib/blockers.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -65,7 +66,8 @@ async function read(req, res, ctx) {
   const prevDays = recentWorkdays(spanFrom, 15).slice(1);   // 直前の14営業日
   const prevFrom = prevDays[prevDays.length - 1];
 
-  const [dayRows, spanRows, setting, detailRows, kpiRows, prevRows] = await Promise.all([
+  const [dayRows, spanRows, setting, detailRows, kpiRows, prevRows,
+         blockerRows, itemRows] = await Promise.all([
     sb.from("tc_nippo").select("*").eq("work_date", date).limit(300),
     sb.from("tc_nippo").select("user_id, work_date")
       .gte("work_date", fromStr).lte("work_date", date).limit(20000),
@@ -77,6 +79,12 @@ async function read(req, res, ctx) {
       .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
     sb.from("tc_nippo").select("user_id, work_items")
       .gte("work_date", prevFrom).lt("work_date", spanFrom).limit(5000),
+    // 止まっている仕事。管理職の仕事はこれを外すこと（要件定義 §24）
+    sb.from("gw_blockers").select("*").eq("status", "open")
+      .order("blocked_since").limit(300),
+    // 期限を過ぎたまま開いている「次にやること」
+    sb.from("gw_action_items").select("user_id, status, due_date")
+      .lte("due_date", date).gte("due_date", spanFrom).limit(5000),
   ]);
 
   const nippos = dayRows.data || [];
@@ -134,7 +142,14 @@ async function read(req, res, ctx) {
       date, staff,
       nippos: detailRows.data || [],
       kpis: kpiRows.data || [],
+      blockers: blockerRows.data || [],
+      items: itemRows.data || [],
     }),
+
+    // 止まっている仕事の一覧。長いものから先に出す（§21 §24）
+    blockers: (blockerRows.data || [])
+      .map((b) => shapeBlocker(b, date, staff.find((e) => e.user_id === b.user_id)?.display_name))
+      .sort((a, b) => b.days - a.days),
 
     // 直近14営業日の並び。単純な点数順ではなく、
     // 成果 / 行動 / 改善 / 成長 / 顧客価値 で見る。

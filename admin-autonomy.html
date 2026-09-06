@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自走レベル - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910m">
+  <link rel="stylesheet" href="css/layout.css?v=20260910m">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .au-card { border:1px solid var(--border); border-radius:10px;
+               padding:14px 16px; margin-bottom:12px; }
+    .au-card.ready { border-color:#b7e0c4; background:#f7fbf8; }
+    .au-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:8px; }
+    .au-name { font-size:14.5px; font-weight:700; color:var(--primary-dark); }
+    .au-lv { font-size:12px; font-weight:700; letter-spacing:.06em;
+             border:1px solid var(--border); border-radius:6px; padding:3px 9px; }
+    .au-lv.l1 { color:#718096; }
+    .au-lv.l2 { color:#2b6cb0; border-color:#c3d6ef; }
+    .au-lv.l3 { color:#2f855a; border-color:#b7e0c4; }
+    .au-lv.l4 { color:#805ad5; border-color:#d6c5f0; }
+    .au-check { display:flex; align-items:center; gap:9px; padding:7px 0;
+                border-bottom:1px solid var(--border); font-size:12.5px; }
+    .au-check:last-child { border-bottom:none; }
+    .au-check .m { width:16px; text-align:center; font-weight:700; }
+    .au-check .l { flex:1; }
+    .au-check .v { font-variant-numeric:tabular-nums; font-weight:700; width:64px; text-align:right; }
+    .au-check .t { font-size:11px; color:var(--muted); width:72px; text-align:right; }
+    .au-check.ok .m { color:#2f855a; }
+    .au-check.ng .m { color:#c53030; }
+    .au-check.na { opacity:.55; }
+    .au-ladder { display:grid; gap:8px; }
+    .au-step { border:1px solid var(--border); border-radius:8px; padding:10px 13px; }
+    .au-step b { font-size:13px; }
+    .au-step .s { font-size:12px; color:var(--muted); margin-top:2px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">自走レベル</h1>
+  <p class="kp-greet-sub">
+    自走できる度合いに合わせて、任せる範囲を段階的に広げます。
+    <b>レベルは能力の順位ではなく、任せている範囲です。</b>
+    数字は集計しますが、上げ下げはここで人が押します。
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">stairs</span>4つの段階</h2>
+    <div id="ladder" class="au-ladder"></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;">
+      入ったばかりの人が LEVEL 1 なのは、まだ社内の進め方を知らないからです。
+      AIの返し方もレベルで変わります（L1には手順、L3には問いかけ）。点数は変わりません。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">group</span>メンバー
+      <span id="win-tag" class="kp-chip" style="margin-left:6px;"></span></h2>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910m"></script>
+<script src="js/layout.js?v=20260910m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let data = null;
+
+  KPLayout.init({ active: "autonomy", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.autonomy();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+    el("win-tag").textContent = `直近 ${data.window} 営業日で集計`;
+    renderLadder();
+    renderList();
+  }
+
+  function renderLadder() {
+    el("ladder").innerHTML = (data.levels || []).map((l) => `
+      <div class="au-step">
+        <b>LEVEL ${l.level}　${esc(l.label)}</b>
+        <div class="s">${esc(l.detail)}</div>
+      </div>`).join("");
+  }
+
+  function renderList() {
+    const people = data.people || [];
+    if (!people.length) { el("list").innerHTML = `<div class="empty">対象者がいません。</div>`; return; }
+
+    // 次のレベルの条件がそろっている人を上に出す。見落とさないように
+    const sorted = [...people].sort((a, b) =>
+      (b.next.ready ? 1 : 0) - (a.next.ready ? 1 : 0) ||
+      b.next.met - a.next.met ||
+      a.name.localeCompare(b.name, "ja"));
+
+    el("list").innerHTML = sorted.map(card).join("");
+  }
+
+  function card(p) {
+    const n = p.next;
+    const top = p.level >= 4;
+
+    return `
+      <div class="au-card${n.ready ? " ready" : ""}">
+        <div class="au-head">
+          <span class="au-name">${esc(p.name)}</span>
+          <span class="au-lv l${p.level}">LEVEL ${p.level}　${esc(p.levelInfo.label)}</span>
+          ${p.department ? `<span class="muted" style="font-size:12px;">${esc(p.department)}</span>` : ""}
+          ${n.ready ? '<span class="kp-chip event">次の条件がそろいました</span>' : ""}
+          <span style="margin-left:auto;display:flex;gap:6px;">
+            ${p.level > 1 ? `
+              <button class="btn btn-secondary btn-sm"
+                      onclick="setLevel('${esc(p.userId)}', ${p.level - 1}, this)">1つ下げる</button>` : ""}
+            ${!top ? `
+              <button class="btn ${n.ready ? "btn-primary" : "btn-secondary"} btn-sm"
+                      onclick="setLevel('${esc(p.userId)}', ${p.level + 1}, this)">1つ上げる</button>` : ""}
+          </span>
+        </div>
+
+        ${top
+          ? `<div class="muted" style="font-size:12.5px;">最上位です。この先は担当する事業の範囲で見ます。</div>`
+          : `
+            <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:2px;">
+              LEVEL ${n.target} の条件（${n.met} / ${n.of}）
+            </div>
+            ${n.checks.map((c) => {
+              const cls = c.ok === null ? "na" : (c.ok ? "ok" : "ng");
+              const mark = c.ok === null ? "—" : (c.ok ? "✓" : "×");
+              return `<div class="au-check ${cls}">
+                <span class="m">${mark}</span>
+                <span class="l">${esc(c.label)}</span>
+                <span class="v">${c.value == null ? "—" : c.value + esc(c.unit)}</span>
+                <span class="t">${c.max ? "" : ""}${c.need}${esc(c.unit)}${c.max ? "以下" : "以上"}</span>
+              </div>`;
+            }).join("")}
+            ${n.checks.some((c) => c.ok === null) ? `
+              <div class="muted" style="font-size:11.5px;margin-top:8px;">
+                「—」は判断する材料がまだ無い項目です。未達とは数えていません。
+              </div>` : ""}`}
+
+        ${p.changedAt ? `
+          <div class="muted" style="font-size:11px;margin-top:10px;">
+            前回の変更 ${esc(String(p.changedAt).slice(0, 10))}
+          </div>` : ""}
+      </div>`;
+  }
+
+  // 上げ下げは人が押す。理由を必ず残す。
+  // 理由なしで動かせると、あとから「なぜ上がった/下がった」が分からなくなる
+  async function setLevel(userId, level, btn) {
+    const p = (data.people || []).find((x) => x.userId === userId);
+    if (!p) return;
+
+    const up = level > p.level;
+    const reason = prompt(
+      `${p.name} さんを LEVEL ${p.level} → LEVEL ${level} に${up ? "上げ" : "下げ"}ます。\n` +
+      `理由を書いてください（本人には自動では通知しません。1on1で伝えてください）`);
+    if (reason === null) return;
+    if (!reason.trim()) { alert("理由が必要です。"); return; }
+
+    try {
+      await KPLayout.busy(btn, "変更中…", () => API.setAutonomy({
+        userId, level, reason: reason.trim(),
+        metrics: p.metrics, checks: p.next.checks,
+      }));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "変更できませんでした");
+    }
+  }
+</script>
+
+</body>
+</html>

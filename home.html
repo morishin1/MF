@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910l">
-  <link rel="stylesheet" href="css/layout.css?v=20260910l">
+  <link rel="stylesheet" href="css/app.css?v=20260910m">
+  <link rel="stylesheet" href="css/layout.css?v=20260910m">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -84,17 +84,29 @@
     <div id="kpi-msg" class="muted" style="font-size:12px;margin-top:8px;"></div>
   </div>
 
-  <!-- ③ 昨日のAIフィードバック。短く2つだけ -->
+  <!-- ③ 止まっている仕事。放っておくと翌日も同じところで止まる。
+       ひとりで抱えたままにしないための欄で、責める欄ではない -->
+  <div id="blk-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">block</span>止まっていること
+      <span id="blk-tag" class="kp-chip important" style="margin-left:6px;"></span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="raiseBlocker()">
+        <span class="material-symbols-outlined icon-inline">add</span>止まっていることを出す
+      </button></h2>
+    <div id="blk-body"></div>
+  </div>
+
+  <!-- ④ 昨日のAIフィードバック。短く2つだけ -->
   <div id="fb-card" class="card hidden">
     <h2><span class="material-symbols-outlined">auto_awesome</span>昨日のふりかえり
       <span id="fb-date" class="kp-chip" style="margin-left:6px;"></span></h2>
     <div id="fb-body"></div>
   </div>
 
-  <!-- ④ 今週の状況／⑤ 10か条（直近7日の平均） -->
+  <!-- ⑤ 今週の状況／10か条（直近7日の平均）／自走レベル -->
   <div id="week-card" class="card hidden">
     <h2><span class="material-symbols-outlined">insights</span>今週の状況</h2>
     <div id="week-tiles" class="kp-tiles" style="margin-bottom:14px;"></div>
+    <div id="level-box" class="hidden" style="margin-bottom:14px;"></div>
     <details id="radar-wrap">
       <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--primary-dark);">
         10か条の内訳（直近<span id="radar-days">7</span>日の平均）
@@ -135,8 +147,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260910l"></script>
-<script src="js/layout.js?v=20260910l"></script>
+<script src="js/api-client.js?v=20260910m"></script>
+<script src="js/layout.js?v=20260910m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -190,8 +202,59 @@
     }
     renderToday();
     renderKpi();
+    renderBlockers();
     renderFeedback();
     renderWeek();
+    renderLevel();
+  }
+
+  // 止まっていることを出す欄。責める欄ではないので、書きぶりも柔らかくする。
+  // ひとりで抱えたままにしないことが目的
+  function renderBlockers() {
+    const list = dash.blockers || [];
+    el("blk-card").classList.remove("hidden");
+    el("blk-tag").textContent = list.length ? `${list.length} 件` : "なし";
+    el("blk-tag").className = list.length ? "kp-chip important" : "kp-chip";
+
+    if (!list.length) {
+      el("blk-body").innerHTML = `<div class="empty">
+        いま止まっていることはありません。<br>
+        自分では動かせないこと（返事待ち・判断待ち・権限が要ること）が出てきたら、
+        ここに出しておくと誰かが外しに来ます。</div>`;
+      return;
+    }
+
+    el("blk-body").innerHTML = list.map((b) => `
+      <div class="dash-item">
+        <div class="grow">
+          <div style="font-weight:600;">${esc(b.title)}</div>
+          ${b.description ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap;">${esc(b.description)}</div>` : ""}
+          <div class="muted" style="font-size:11.5px;margin-top:3px;">
+            ${b.days}日目 ・ ${esc(b.escalationLabel)}
+            ${b.long ? '<span class="kp-chip important" style="margin-left:6px;">長くなっています</span>' : ""}
+          </div>
+        </div>
+        ${b.escalationLevel < 2 ? `
+          <button class="btn btn-secondary btn-sm" onclick="escalateBlocker('${esc(b.id)}', this)"
+                  title="上に相談する">相談する</button>` : ""}
+        <button class="btn btn-primary btn-sm" onclick="resolveBlocker('${esc(b.id)}', this)">外れた</button>
+      </div>`).join("");
+  }
+
+  // 自走レベル。「低い」ではなく「次まであと何項目」として出す。
+  // 裁量の広さの話で、人の評価ではない
+  function renderLevel() {
+    const a = dash.autonomy;
+    if (!a) return;
+    el("level-box").classList.remove("hidden");
+    el("level-box").innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+                  border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
+        <span class="muted" style="font-size:11px;font-weight:700;letter-spacing:.12em;">AUTONOMY</span>
+        <span style="font-size:15px;font-weight:700;">LEVEL ${a.level}</span>
+        <span style="font-size:13px;">${esc(a.info.label)}</span>
+        <span class="muted" style="flex:1;min-width:200px;font-size:12px;">${esc(a.info.detail)}</span>
+      </div>`;
   }
 
   function renderToday() {
@@ -436,9 +499,36 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
   }
 
+  async function raiseBlocker() {
+    const title = prompt("何が止まっていますか（自分では動かせないこと）");
+    if (!title || !title.trim()) return;
+    const description = prompt("補足があれば（空欄でも構いません）") || "";
+    try {
+      const r = await API.raiseBlocker({ title: title.trim(), description });
+      if (r.duplicate) alert("同じ内容がすでに出ています。");
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "登録できませんでした"); }
+  }
+
+  async function resolveBlocker(id, btn) {
+    const resolution = prompt("どうやって外れましたか（次に同じところで止まらないために残します）");
+    if (resolution === null) return;
+    try {
+      await KPLayout.busy(btn, "…", () => API.blockerAct("resolve", { id, resolution }));
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "更新できませんでした"); }
+  }
+
+  async function escalateBlocker(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.blockerAct("escalate", { id }));
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "更新できませんでした"); }
+  }
+
   async function reloadDash() {
     // 追記した「そのほか」の枠が二重にならないよう、いったん消してから描き直す
-    for (const id of ["today-card", "kpi-card", "fb-card", "week-card"]) {
+    for (const id of ["today-card", "kpi-card", "blk-card", "fb-card", "week-card"]) {
       el(id).classList.add("hidden");
     }
     el("today-card").innerHTML = `
