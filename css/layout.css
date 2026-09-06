@@ -470,3 +470,5 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 }
 .kp-subtab:hover { border-color: var(--primary); }
 .kp-subtab.on { border-color: var(--primary); background: var(--primary); color: #fff; }
+
+.topbar .brand a { display: inline-flex; align-items: center; }

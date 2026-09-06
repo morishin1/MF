@@ -135,7 +135,8 @@
     el.className = "topbar";
     el.innerHTML = `
       <div class="brand">
-        <a href="${home}" style="text-decoration:none;color:inherit;">エイト</a>
+        <a href="${home}" style="text-decoration:none;color:inherit;">
+          <img src="img/logo.svg" alt="" class="kp-logo">エイト</a>
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
@@ -347,9 +348,13 @@
 
   function showLogin(message) {
     document.body.innerHTML = `
-      <div class="topbar"><div class="brand">エイト</div></div>
+      <div class="topbar"><div class="brand">
+        <img src="img/logo.svg" alt="" class="kp-logo">エイト</div></div>
       <div class="wrap">
         <div class="card" style="max-width:420px;margin:40px auto;">
+          <div style="text-align:center;margin-bottom:18px;">
+            <img src="img/logo.svg" alt="エイト" style="width:64px;height:64px;">
+          </div>
           <h2>${icon("login")}ログイン</h2>
           ${message ? `<div class="banner warn">${icon("warning")}<div>${esc(message)}</div></div>` : ""}
           <div style="margin-bottom:12px;">
