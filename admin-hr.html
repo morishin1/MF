@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911a">
-  <link rel="stylesheet" href="css/layout.css?v=20260911a">
+  <link rel="stylesheet" href="css/app.css?v=20260911b">
+  <link rel="stylesheet" href="css/layout.css?v=20260911b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -88,8 +88,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911a"></script>
-<script src="js/layout.js?v=20260911a"></script>
+<script src="js/api-client.js?v=20260911b"></script>
+<script src="js/layout.js?v=20260911b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -251,6 +251,23 @@
     });
   }
 
+  const FOLDER_NAME = {
+    "01": "01_採用・履歴書", "02": "02_労働条件・契約", "03": "03_入社提出書類",
+    "04": "04_社会保険・労務", "05": "05_その他",
+  };
+
+  // 社労士に 04 だけを共有する。メールアドレスを聞いて渡す
+  async function shareAdvisor(procId, btn) {
+    const email = prompt("社労士のメールアドレス（Google アカウント）を入れてください。\n共有されるのは 04_社会保険・労務 だけです。");
+    if (!email) return;
+    try {
+      await KPLayout.busy(btn, "共有中…", () => API.updateProcedure({ id: procId, shareAdvisor: email }));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "共有できませんでした");
+    }
+  }
+
   function procCard(p) {
     const name = p.employee?.display_name || "（対象者不明）";
     const kind = p.kind === "onboarding" ? "入社" : "退職";
@@ -281,13 +298,30 @@
           </table>
         </div>
         <div id="brief-${esc(p.id)}" data-emp="${esc(p.employee?.id || "")}"></div>
+        ${p.drive_folders ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px;">
+            ${Object.entries(FOLDER_NAME).map(([k, n]) => p.drive_folders[k]
+              ? `<a class="kp-chip" href="https://drive.google.com/drive/folders/${esc(p.drive_folders[k])}"
+                    target="_blank" rel="noopener" style="text-decoration:none;">${esc(n)}</a>` : "").join("")}
+            ${p.drive_sensitive_folder_id
+              ? `<a class="kp-chip important" href="https://drive.google.com/drive/folders/${esc(p.drive_sensitive_folder_id)}"
+                    target="_blank" rel="noopener" style="text-decoration:none;">機微情報（別置き）</a>` : ""}
+          </div>
+          <div class="muted" style="font-size:11.5px;margin-bottom:8px;">
+            ${p.advisor_shared_to
+              ? `04_社会保険・労務 を ${esc(p.advisor_shared_to)} に共有済み（${esc(new Date(p.advisor_shared_at).toLocaleDateString("ja-JP"))}）`
+              : "社労士には、04_社会保険・労務 だけを共有できます。機微情報は共有されません"}
+          </div>` : ""}
         <div class="foot">
-          ${p.drive_link
+          ${p.drive_folders
             ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive_link)}" target="_blank" rel="noopener">
                  <span class="material-symbols-outlined icon-inline">folder_open</span>個人フォルダ
-               </a>`
+               </a>
+               <button class="btn btn-secondary btn-sm" onclick="shareAdvisor('${esc(p.id)}', this)">
+                 <span class="material-symbols-outlined icon-inline">share</span>社労士に04を共有
+               </button>`
             : `<button class="btn btn-secondary btn-sm" onclick="makeFolder('${esc(p.id)}', this)">
-                 <span class="material-symbols-outlined icon-inline">create_new_folder</span>個人フォルダを作る
+                 <span class="material-symbols-outlined icon-inline">create_new_folder</span>個人フォルダ一式を作る
                </button>`}
           ${p.kind === "onboarding" ? `
             <button class="btn btn-secondary btn-sm" onclick="showBrief('${esc(p.employee?.id || "")}', this)">
@@ -313,9 +347,14 @@
           <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;color:var(--muted);">
             ${CATEGORY_ICON[i.category] || "circle"}</span>
           ${esc(i.title)}${i.required ? "" : ' <span class="muted" style="font-size:11px;">任意</span>'}
+          ${i.submitted_at ? `<span class="muted" style="font-size:11px;margin-left:6px;">
+              ${esc(new Date(i.submitted_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }))} 提出</span>` : ""}
           ${(i.files || []).map((f) =>
             `<br><a href="#" style="font-size:11.5px;" onclick="openFile('${esc(f.id)}');return false;">
-               <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;">attach_file</span>${esc(f.filename)}</a>`).join("")}
+               <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;">attach_file</span>${esc(f.drive_name || f.filename)}</a>
+             ${f.drive_folder_key ? `<span class="muted" style="font-size:10.5px;margin-left:4px;">${
+               f.drive_folder_key === "sensitive" ? "機微情報" : esc(FOLDER_NAME[f.drive_folder_key] || f.drive_folder_key)}</span>` : ""}
+             ${f.drive_link ? `<a href="${esc(f.drive_link)}" target="_blank" rel="noopener" style="font-size:10.5px;margin-left:4px;">Drive</a>` : ""}`).join("")}
         </td>
         <td>${esc(OWNER_LABEL[i.owner] || i.owner)}</td>
         <td>

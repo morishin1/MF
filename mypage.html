@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911a">
-  <link rel="stylesheet" href="css/layout.css?v=20260911a">
+  <link rel="stylesheet" href="css/app.css?v=20260911b">
+  <link rel="stylesheet" href="css/layout.css?v=20260911b">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -45,7 +45,16 @@
     </p>
   </div>
 
-  <!-- 入社時に自分が出した情報と、確認したこと -->
+  <!-- 同意した書類。どの版にいつ同意したか。全文は同意した時点のもの -->
+  <div id="cd-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">verified_user</span>自分の書類</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      入社時に確認・同意した書類です。全文は、同意した時点の内容がそのまま残っています。
+    </p>
+    <div id="cd"></div>
+  </div>
+
+  <!-- 入社時に自分が出した情報 -->
   <div id="ob-card" class="card hidden">
     <h2><span class="material-symbols-outlined">how_to_reg</span>入社時に提出した情報
       <span id="ob-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
@@ -81,8 +90,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911a"></script>
-<script src="js/layout.js?v=20260911a"></script>
+<script src="js/api-client.js?v=20260911b"></script>
+<script src="js/layout.js?v=20260911b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -125,6 +134,7 @@
 
     if (ob) {
       renderConditions(ob.known || {});
+      renderConsentDocs(ob);
       renderOnboard(ob);
     }
     if (plan) renderGoal(plan);
@@ -153,9 +163,68 @@
       </tbody></table></div>`;
   }
 
+  // 「誓約書 Ver.1.0　2026/09/06 同意済み」の形で並べる。
+  // 版が上がって再同意した書類は、両方の行が残る（消さない）
+  let consentDocs = [];
+  function renderConsentDocs(ob) {
+    consentDocs = ob.consentHistory || [];
+    const current = ob.consents || [];
+    if (!consentDocs.length && !current.length) return;
+    el("cd-card").classList.remove("hidden");
+
+    const fmt = (iso) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+    };
+
+    el("cd").innerHTML = `
+      ${consentDocs.map((c, i) => `
+        <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;">
+          <span class="material-symbols-outlined" style="font-size:18px;color:#2f855a;">check_circle</span>
+          <span style="flex:1;min-width:0;">
+            <b>${esc(c.title)}</b>
+            <span class="muted" style="font-size:12px;margin-left:6px;">Ver.${esc(c.version)}</span>
+            <span class="muted" style="font-size:12px;margin-left:10px;">${esc(fmt(c.agreedAt))} 同意済み</span>
+          </span>
+          <button class="btn btn-secondary btn-sm" onclick="showConsentDoc(${i})">全文</button>
+        </div>`).join("")}
+      ${current.filter((c) => !c.agreed).map((c) => `
+        <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;">
+          <span class="material-symbols-outlined" style="font-size:18px;color:#c3cad3;">radio_button_unchecked</span>
+          <span style="flex:1;min-width:0;">
+            <b>${esc(c.title)}</b>
+            <span class="muted" style="font-size:12px;margin-left:6px;">Ver.${esc(c.version)}</span>
+            <span style="font-size:12px;margin-left:10px;color:#9c4221;">
+              ${c.needsReconsent ? "改定されました。再確認が必要です" : "未確認"}</span>
+          </span>
+          <a class="btn btn-primary btn-sm" href="onboarding.html">確認する</a>
+        </div>`).join("")}`;
+  }
+
+  function showConsentDoc(i) {
+    const c = consentDocs[i];
+    if (!c) return;
+    const m = document.createElement("div");
+    m.style.cssText = "position:fixed;inset:0;background:rgba(20,24,32,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;";
+    m.innerHTML = `
+      <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column;">
+        <div style="padding:16px 20px 10px;border-bottom:1px solid var(--border);">
+          <b style="font-size:15px;">${esc(c.title)}</b>
+          <span class="muted" style="font-size:11px;margin-left:8px;">Ver.${esc(c.version)}</span>
+          <div class="muted" style="font-size:12px;margin-top:3px;">同意した時点の内容です</div>
+        </div>
+        <div style="padding:16px 20px;overflow:auto;font-size:13.5px;line-height:1.95;white-space:pre-wrap;">${esc(c.body || "")}</div>
+        <div style="padding:12px 20px 16px;border-top:1px solid var(--border);text-align:right;">
+          <button class="btn btn-secondary" onclick="this.closest('div[style*=fixed]').remove()">閉じる</button>
+        </div>
+      </div>`;
+    m.addEventListener("click", (ev) => { if (ev.target === m) m.remove(); });
+    document.body.appendChild(m);
+  }
+
   function renderOnboard(ob) {
     const pf = ob.profile;
-    const agreed = (ob.consents || []).filter((c) => c.agreed);
+    const agreed = [];   // 同意は上の「自分の書類」に出すので、ここでは繰り返さない
     if (!pf && !agreed.length) return;
 
     el("ob-card").classList.remove("hidden");

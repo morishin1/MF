@@ -12,13 +12,19 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
-import { hrConfigured } from "../../lib/gdrive.js";
-import { ensureProcedureFolder } from "../../lib/hr-drive.js";
-import { uploadFile } from "../../lib/gdrive.js";
+import { hrConfigured, uploadFile } from "../../lib/gdrive.js";
+import { ensureProcedureFolders } from "../../lib/hr-drive.js";
+import { docOf, folderKeyOf, driveFileName } from "../../lib/onboard-docs.js";
+import { jstDate } from "../../lib/nippo.js";
 
+// 本人が記入して出すものなので、Word・Excel も受ける
 const ALLOWED_MIME = new Set([
   "application/pdf",
   "image/jpeg", "image/png", "image/heic", "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 const VIEW_TTL = 60 * 5;
@@ -94,11 +100,15 @@ async function confirmUpload(req, res, ctx) {
   const item = await loadItemForWrite(ctx, file.item_id);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
 
-  // 項目を「提出済み」にする。人事が確認済み（done/na）なら触らない
+  // 項目を「提出済み」にして、提出日時を残す。人事が確認済み（done/na）なら触らない
   if (item.status !== "done" && item.status !== "na") {
     await sb
       .from("gw_procedure_items")
-      .update({ status: "submitted", document_id: null, updated_at: new Date().toISOString() })
+      .update({
+        status: "submitted", document_id: null,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", file.item_id);
   }
 
@@ -138,7 +148,7 @@ async function loadItemForWrite(ctx, itemId) {
 
   const { data: item, error } = await admin()
     .from("gw_procedure_items")
-    .select("id, status, owner, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id)")
+    .select("id, status, owner, item_key, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
     .eq("id", itemId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
@@ -153,12 +163,19 @@ async function loadItemForWrite(ctx, itemId) {
   }
 
   return {
-    itemId, status: item.status, procedureId: item.procedure_id,
+    itemId, status: item.status, itemKey: item.item_key, procedureId: item.procedure_id,
     kind: proc.kind, targetOn: proc.target_on, employeeId: proc.employee_id,
+    driveFolders: proc.drive_folders, sensitiveFolderId: proc.drive_sensitive_folder_id,
   };
 }
 
-// 提出ファイルを人事フォルダへコピーする。失敗しても提出は取り消さない。
+// 提出ファイルを Drive の個人フォルダへ置く。失敗しても提出は取り消さない。
+//
+// ■ 置き場所と名前は、こちらで決める
+//   どの書類かは項目の鍵（item_key）で分かるので、
+//   lib/onboard-docs.js の定義から 01〜05 のどこに入れるかを引く。
+//   マイナンバー確認書類は個人フォルダの外（機微情報）へ。
+//   名前は YYYYMMDD_書類名_氏名.拡張子。本人が付けた名前は使わない。
 async function copyToDrive(sb, ctx, file, item) {
   if (!hrConfigured()) return { skipped: "not_configured" };
   if (file.drive_file_id) return { skipped: "already" };
@@ -167,25 +184,46 @@ async function copyToDrive(sb, ctx, file, item) {
     const { data: employee } = await sb
       .from("gw_employees").select("display_name").eq("id", item.employeeId).maybeSingle();
 
-    const folder = await ensureProcedureFolder({
-      kind: item.kind, targetOn: item.targetOn, displayName: employee?.display_name,
-    });
-    if (folder.skipped) return { skipped: folder.skipped };
+    // フォルダ一式。登録時に作ってあるはずだが、無ければここで作る
+    let folders = item.driveFolders;
+    let sensitiveId = item.sensitiveFolderId;
+    if (!folders || !sensitiveId) {
+      const made = await ensureProcedureFolders({
+        kind: item.kind, targetOn: item.targetOn, displayName: employee?.display_name,
+      });
+      if (made.skipped) return { skipped: made.skipped };
+      folders = made.folders;
+      sensitiveId = made.sensitiveFolderId;
+      await sb.from("gw_procedures").update({
+        drive_folder_id: made.folderId, drive_link: made.link,
+        drive_folders: folders, drive_sensitive_folder_id: sensitiveId,
+      }).eq("id", item.procedureId);
+    }
+
+    // どこに置くか。定義に無い項目（人が手で足したもの）は 05_その他
+    const doc = docOf(item.itemKey);
+    const folderKey = doc ? folderKeyOf(doc) : "05";
+    const parentId = doc?.sensitive ? sensitiveId : folders[folderKey || "05"];
+    if (!parentId) return { skipped: "no_folder" };
 
     const { data: signed } = await sb.storage.from("hr").createSignedUrl(file.storage_path, 60);
     const r = await fetch(signed.signedUrl);
     if (!r.ok) throw new Error("download_failed: " + r.status);
     const buffer = Buffer.from(await r.arrayBuffer());
 
-    const up = await uploadFile({
-      name: file.filename, mimeType: file.mime_type, buffer, parentId: folder.folderId,
-    });
+    const name = driveFileName(jstDate(), doc?.title || "提出書類", employee?.display_name, file.filename);
+    const up = await uploadFile({ name, mimeType: file.mime_type, buffer, parentId });
+
     await sb
       .from("gw_procedure_files")
-      .update({ drive_file_id: up.id, drive_link: up.webViewLink || null })
+      .update({
+        drive_file_id: up.id, drive_link: up.webViewLink || null,
+        drive_folder_key: doc?.sensitive ? "sensitive" : folderKey,
+        drive_name: name,
+      })
       .eq("id", file.id);
 
-    return { fileId: up.id, link: up.webViewLink };
+    return { fileId: up.id, link: up.webViewLink, name, folder: doc?.sensitive ? "sensitive" : folderKey };
   } catch (e) {
     console.error("[onboarding] hr drive copy failed:", e?.message || e);
     return { error: String(e?.message || e) };

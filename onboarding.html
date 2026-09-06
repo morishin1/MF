@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911a">
-  <link rel="stylesheet" href="css/layout.css?v=20260911a">
+  <link rel="stylesheet" href="css/app.css?v=20260911b">
+  <link rel="stylesheet" href="css/layout.css?v=20260911b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -48,10 +48,33 @@
     .ob-c label input { width:auto; margin:0; }
     .ob-c.done { border-color:#b7e0c4; background:#f7fbf8; }
 
-    .ob-doc { display:flex; gap:10px; align-items:flex-start; padding:11px 0;
-              border-bottom:1px solid var(--border); font-size:13.5px; }
-    .ob-doc:last-child { border-bottom:none; }
-    .ob-doc .bd { flex:1; min-width:0; }
+    .ob-doc { border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; }
+    .ob-doc.done { border-color:#b7e0c4; background:#f7fbf8; }
+    .ob-doc .hd { display:flex; gap:8px; align-items:flex-start; }
+    .ob-doc .hd .t { flex:1; min-width:0; font-size:13.5px; font-weight:700; color:var(--primary-dark); }
+    .ob-doc .s { font-size:12.5px; color:var(--muted); line-height:1.8; margin-top:3px; }
+    .ob-doc .act { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+    .ob-doc .st { font-size:12px; margin-top:8px; }
+    .ob-doc .st.ok { color:#256b36; font-weight:600; }
+
+    .ob-c .rd { font-size:12.5px; color:var(--primary); text-decoration:underline; cursor:pointer;
+                background:none; border:none; padding:0; font-family:inherit; margin-top:8px; }
+    .ob-c .ver { font-size:11px; color:var(--muted); border:1px solid var(--border);
+                 border-radius:4px; padding:1px 6px; margin-left:6px; font-weight:400; }
+    .ob-c .re { font-size:11.5px; color:#9c4221; margin-top:6px; }
+
+    /* 全文 */
+    .ob-modal { position:fixed; inset:0; background:rgba(20,24,32,.55); display:flex;
+                align-items:center; justify-content:center; padding:20px; z-index:50; }
+    .ob-modal .box { background:#fff; border-radius:12px; max-width:720px; width:100%;
+                     max-height:86vh; display:flex; flex-direction:column; }
+    .ob-modal .box .h { padding:16px 20px 10px; border-bottom:1px solid var(--border); }
+    .ob-modal .box .h b { font-size:15px; }
+    .ob-modal .box .b { padding:16px 20px; overflow:auto; font-size:13.5px; line-height:1.95;
+                        white-space:pre-wrap; }
+    .ob-modal .box .f { padding:12px 20px 16px; border-top:1px solid var(--border);
+                        display:flex; gap:8px; justify-content:flex-end; }
+    .ob-done-bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; }
   </style>
 </head>
 <body>
@@ -92,19 +115,31 @@
   </div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">verified_user</span>確認のお願い</h2>
+    <h2><span class="material-symbols-outlined">verified_user</span>確認のお願い
+      <span id="c-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
-      内容を読んで、チェックを入れてください。いつ確認したかを記録します。
+      3つの書類を読んで、チェックを入れてください。署名や日付の記入は要りません。
+      どの版にいつ同意したかは、システムが記録します。
     </p>
     <div id="consents"></div>
+    <div class="ob-done-bar">
+      <button class="btn btn-primary" id="c-btn" disabled onclick="completeConsents(this)">
+        <span class="material-symbols-outlined icon-inline">task_alt</span>すべて確認して入社手続きを完了
+      </button>
+      <span class="muted" id="c-note" style="font-size:12px;"></span>
+    </div>
+    <div id="c-msg" class="err-text" style="margin-top:8px;"></div>
   </div>
 
   <div class="card" id="docs-card">
-    <h2><span class="material-symbols-outlined">upload_file</span>ご提出いただく書類</h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 8px;">
+    <h2><span class="material-symbols-outlined">upload_file</span>ご提出いただく書類
+      <span id="d-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
       手元にあるものから順で構いません。写真でも読めれば大丈夫です。
+      出したものは、会社の保管場所に自動で整理されます。
     </p>
     <div id="docs"></div>
+    <div id="docs-extra"></div>
   </div>
 
   <div class="card">
@@ -120,8 +155,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911a"></script>
-<script src="js/layout.js?v=20260911a"></script>
+<script src="js/api-client.js?v=20260911b"></script>
+<script src="js/layout.js?v=20260911b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -250,61 +285,179 @@
     return out;
   }
 
+  // ---- 同意（3つの書類） ------------------------------------------------------
+  // チェックは押した時点では送らない。3つそろって
+  // 「すべて確認して入社手続きを完了」を押したときに、まとめて1回で記録する
+  let checked = new Set();
+
   function renderConsents() {
-    el("consents").innerHTML = (data.consents || []).map((c) => `
+    const list = data.consents || [];
+    const done = list.filter((c) => c.agreed).length;
+    el("c-tag").textContent = `${done} / ${list.length}`;
+    el("c-tag").className = `kp-chip ${done === list.length && list.length ? "event" : "draft"}`;
+
+    el("consents").innerHTML = list.map((c) => `
       <div class="ob-c${c.agreed ? " done" : ""}">
-        <div class="t">${esc(c.label)}</div>
-        <div class="s">${esc(c.summary)}</div>
+        <div class="t">${esc(c.title)}<span class="ver">Ver.${esc(c.version)}</span></div>
+        <div class="s">${esc(c.summary || c.subtitle || "")}</div>
+        <button type="button" class="rd" onclick="readFull('${esc(c.key)}')">全文を読む</button>
+        ${c.needsReconsent ? `
+          <div class="re">内容が改定されました（以前は Ver.${esc(c.agreedVersion)} に同意）。
+            読み直して、もう一度チェックしてください。</div>` : ""}
         ${c.agreed
           ? `<div style="font-size:12px;color:#256b36;font-weight:600;margin-top:9px;">
                <span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;">check_circle</span>
-               確認済み</div>`
-          : `<label><input type="checkbox" onchange="agree('${esc(c.kind)}', this)">
+               ${esc(fmtDate(c.agreedAt))} に同意済み</div>`
+          : `<label><input type="checkbox" ${checked.has(c.key) ? "checked" : ""}
+                     onchange="toggleConsent('${esc(c.key)}', this.checked)">
                読みました。内容に同意します</label>`}
       </div>`).join("");
+
+    const pending = list.filter((c) => !c.agreed);
+    const ready = pending.length > 0 && pending.every((c) => checked.has(c.key));
+    el("c-btn").disabled = !ready;
+    el("c-note").textContent = !pending.length
+      ? "3つとも確認済みです。"
+      : ready ? "" : `あと ${pending.filter((c) => !checked.has(c.key)).length} つにチェックを入れると押せます`;
   }
 
-  async function agree(kind, box) {
-    if (!box.checked) { box.checked = true; return; }   // 記録なので外せない
-    box.disabled = true;
+  function toggleConsent(key, on) {
+    if (on) checked.add(key); else checked.delete(key);
+    renderConsents();
+  }
+
+  async function completeConsents(btn) {
+    el("c-msg").textContent = "";
+    const keys = (data.consents || []).filter((c) => !c.agreed && checked.has(c.key)).map((c) => c.key);
+    if (!keys.length) return;
     try {
-      await API.myOnboardingConsent([kind]);
+      const r = await KPLayout.busy(btn, "記録しています…", () => API.myOnboardingConsent(keys));
+      checked = new Set();
       await load();
+      el("c-msg").style.color = "var(--primary-dark)";
+      el("c-msg").textContent = `${r.agreed.join("・")} への同意を記録しました。`;
     } catch (e) {
-      box.checked = false;
-      box.disabled = false;
-      alert(e.hint || e.detail || e.message || "記録できませんでした");
+      el("c-msg").style.color = "";
+      el("c-msg").textContent = e.hint || e.detail || e.message || "記録できませんでした";
     }
   }
 
-  // 書類の提出。アップロードは既存の口（api/onboarding/upload）を使う
+  // 全文。同意する前に読めるように、画面の中で開く
+  function readFull(key) {
+    const c = (data.consents || []).find((x) => x.key === key);
+    if (!c) return;
+    const m = document.createElement("div");
+    m.className = "ob-modal";
+    m.innerHTML = `
+      <div class="box">
+        <div class="h"><b>${esc(c.title)}</b>
+          <span class="ver" style="font-size:11px;color:var(--muted);margin-left:8px;">Ver.${esc(c.version)}</span>
+          ${c.subtitle ? `<div class="muted" style="font-size:12px;margin-top:3px;">${esc(c.subtitle)}</div>` : ""}
+        </div>
+        <div class="b">${esc(c.body)}</div>
+        <div class="f">
+          ${c.agreed ? "" : `<button class="btn btn-primary" onclick="toggleConsent('${esc(c.key)}', true); this.closest('.ob-modal').remove();">
+            読みました。内容に同意します</button>`}
+          <button class="btn btn-secondary" onclick="this.closest('.ob-modal').remove()">閉じる</button>
+        </div>
+      </div>`;
+    m.addEventListener("click", (ev) => { if (ev.target === m) m.remove(); });
+    document.body.appendChild(m);
+  }
+
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  // ---- 提出書類 ----------------------------------------------------------------
+  // 雛形をダウンロード → 記入 → アップロード。Drive は本人に触らせない。
+  // どこに置くか・名前をどう付けるかは、サーバが決める
   function renderDocs() {
-    const items = (data.myItems || []).filter((i) => !String(i.item_key || "").startsWith("form_"));
-    if (!items.length) { el("docs-card").classList.add("hidden"); return; }
+    const docs = data.documents || [];
+    const extra = data.myItems || [];
+    if (!docs.length && !extra.length) { el("docs-card").classList.add("hidden"); return; }
     el("docs-card").classList.remove("hidden");
 
-    el("docs").innerHTML = items.map((i) => `
-      <div class="ob-doc">
-        <div class="bd">
-          <div style="font-weight:600;">${esc(i.title)}
-            ${i.required ? "" : '<span class="muted" style="font-weight:400;font-size:11.5px;">（任意）</span>'}</div>
-          ${i.status === "done" ? '<div style="font-size:11.5px;color:#256b36;">確認済み</div>'
-            : i.status === "submitted" ? '<div style="font-size:11.5px;color:var(--muted);">提出しました。確認をお待ちください</div>'
-            : ""}
-        </div>
-        ${i.status === "done" || i.status === "na" ? '<span class="kp-chip event">完了</span>' : `
-          <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-            <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを出す
-            <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp"
-                   onchange="pickFile('${esc(i.id)}', this)">
-          </label>
-          ${i.status === "submitted"
-            ? `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', true, this)">取り消す</button>`
-            : `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', false, this)">提出しました</button>`}`}
+    const done = docs.filter((d) => d.status === "submitted" || d.status === "done" || d.status === "na").length;
+    el("d-tag").textContent = `${done} / ${docs.length}`;
+    el("d-tag").className = `kp-chip ${done === docs.length && docs.length ? "event" : "draft"}`;
+
+    el("docs").innerHTML = docs.map((d) => {
+      const finished = d.status === "done" || d.status === "na";
+      const sent = d.status === "submitted";
+      return `
+        <div class="ob-doc${finished || sent ? " done" : ""}">
+          <div class="hd">
+            <div class="t">${esc(d.title)}
+              ${d.required ? "" : '<span class="muted" style="font-weight:400;font-size:11.5px;">（任意）</span>'}
+              ${d.sensitive ? '<span class="kp-chip important" style="margin-left:6px;font-size:10.5px;">取扱注意</span>' : ""}
+            </div>
+            ${finished ? '<span class="kp-chip event">確認済み</span>'
+              : sent ? '<span class="kp-chip event">提出済み</span>'
+              : '<span class="kp-chip draft">未提出</span>'}
+          </div>
+          <div class="s">${esc(d.desc || "")}</div>
+          ${d.sensitive ? `<div class="s" style="color:#9c4221;">
+            この書類は、他の書類とは別の場所に保管され、見られる人を限っています。</div>` : ""}
+
+          <div class="act">
+            ${d.template ? `
+              <a class="btn btn-secondary btn-sm" href="${esc(d.template.url)}" target="_blank" rel="noopener">
+                <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
+              </a>` : ""}
+            ${finished ? "" : `
+              <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+                <span class="material-symbols-outlined icon-inline">upload_file</span>
+                ${sent ? "別のファイルを出す" : "記入済みファイルをアップロード"}
+                <input type="file" class="hidden"
+                       accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
+                       onchange="pickFile('${esc(d.itemId || "")}', this)">
+              </label>`}
+            ${!finished && !sent && !d.required ? `
+              <button class="btn btn-secondary btn-sm" onclick="mark('${esc(d.itemId || "")}', false, this)">
+                ありません</button>` : ""}
+          </div>
+
+          ${sent || finished ? `
+            <div class="st ok">
+              <span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;">check_circle</span>
+              ${esc(fmtDateTime(d.submittedAt))} に提出
+              ${d.files[0]?.driveName ? `<span class="muted" style="font-weight:400;margin-left:8px;">${esc(d.files[0].driveName)}</span>` : ""}
+            </div>` : ""}
+        </div>`;
+    }).join("");
+
+    // 定義に無い、人が手で足した項目
+    el("docs-extra").innerHTML = extra.map((i) => `
+      <div class="ob-doc${i.status !== "todo" ? " done" : ""}">
+        <div class="hd"><div class="t">${esc(i.title)}</div>
+          ${i.status === "done" || i.status === "na" ? '<span class="kp-chip event">確認済み</span>'
+            : i.status === "submitted" ? '<span class="kp-chip event">提出済み</span>'
+            : '<span class="kp-chip draft">未提出</span>'}</div>
+        ${i.status === "done" || i.status === "na" ? "" : `
+          <div class="act">
+            <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+              <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを出す
+              <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
+                     onchange="pickFile('${esc(i.id)}', this)">
+            </label>
+            ${i.status === "submitted"
+              ? `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', true, this)">取り消す</button>`
+              : `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', false, this)">提出しました</button>`}
+          </div>`}
       </div>`).join("");
   }
 
+  const fmtDateTime = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${fmtDate(iso)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
   async function mark(itemId, undo, btn) {
+    if (!itemId) return;
     try {
       await KPLayout.busy(btn, "…", () => API.submitProcedureItem(itemId, { undo }));
       await load();
@@ -314,19 +467,19 @@
   }
 
   // ファイルを選んだら、そのまま提出まで進める。
-  // 会計の書類アップロードとは別の保存先（人事だけが見られる）に入る
+  // 会計の書類アップロードとは別の保存先（人事だけが見られる）に入り、
+  // そこから Drive の個人フォルダの決まった場所へ、決まった名前で写される
   async function pickFile(itemId, input) {
     const file = input.files?.[0];
     input.value = "";
-    if (!file) return;
+    if (!file || !itemId) return;
     const box = el("docs");
-    const before = box.innerHTML;
-    box.insertAdjacentHTML("afterbegin", `<div class="empty">送信中…</div>`);
+    box.insertAdjacentHTML("afterbegin", `<div class="empty" id="up-wait">送信中…</div>`);
     try {
       await API.uploadProcedureFile(itemId, file);
       await load();
     } catch (e) {
-      box.innerHTML = before;
+      el("up-wait")?.remove();
       alert(e.hint || e.detail || e.message || "送信できませんでした");
     }
   }

@@ -10,15 +10,18 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { defaultChecklist } from "../../lib/onboarding.js";
-import { ensureProcedureFolder } from "../../lib/hr-drive.js";
+import { ensureProcedureFolders, shareAdvisorFolder } from "../../lib/hr-drive.js";
+import { admin } from "../../lib/supabase.js";
 
 const KINDS = ["onboarding", "offboarding"];
 const STATUSES = ["not_started", "in_progress", "done", "cancelled"];
 
 const P_FIELDS =
-  "id, tenant_id, employee_id, kind, status, target_on, note, drive_folder_id, drive_link, created_at, updated_at";
+  "id, tenant_id, employee_id, kind, status, target_on, note, drive_folder_id, drive_link, "
+  + "drive_folders, drive_sensitive_folder_id, advisor_shared_to, advisor_shared_at, created_at, updated_at";
 const I_FIELDS =
-  "id, procedure_id, title, category, owner, required, share_with_advisor, status, due_on, note, sort_order, document_id, completed_at";
+  "id, procedure_id, item_key, title, category, owner, required, share_with_advisor, status, due_on, note, "
+  + "sort_order, document_id, completed_at, submitted_at";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
     // 提出ファイル。見える範囲は RLS が決める（本人・人事・共有項目の社労士）
     const { data: files } = await sb
       .from("gw_procedure_files")
-      .select("id, procedure_id, item_id, filename, mime_type, drive_link, created_at")
+      .select("id, procedure_id, item_id, filename, mime_type, drive_link, drive_name, drive_folder_key, created_at")
       .in("procedure_id", list.map((p) => p.id))
       .order("created_at", { ascending: true });
     const byItem = new Map();
@@ -149,18 +152,19 @@ export default async function handler(req, res) {
     if (body.targetOn !== undefined) patch.target_on = body.targetOn || null;
     if (body.note !== undefined) patch.note = body.note || null;
 
-    // 後から個人フォルダを作る（作成時に Drive 未設定だった手続きの手当て）
+    // 後から個人フォルダ一式を作る（作成時に Drive 未設定だった手続きの手当て）。
+    // 既にルートだけある古い手続きでも、01〜05 と機微情報を足せる
     if (body.createFolder) {
       const { data: cur } = await sb
         .from("gw_procedures")
-        .select("id, kind, target_on, drive_folder_id, employee:gw_employees(display_name)")
+        .select("id, kind, target_on, drive_folders, employee:gw_employees(display_name)")
         .eq("id", body.id)
         .eq("tenant_id", ctx.tenantId)
         .maybeSingle();
       if (!cur) return json(res, 404, { error: "procedure_not_found" });
-      if (cur.drive_folder_id) return json(res, 409, { error: "folder_exists" });
+      if (cur.drive_folders) return json(res, 409, { error: "folder_exists" });
 
-      const made = await ensureProcedureFolder({
+      const made = await ensureProcedureFolders({
         kind: cur.kind,
         targetOn: body.targetOn !== undefined ? body.targetOn : cur.target_on,
         displayName: cur.employee?.display_name,
@@ -175,6 +179,31 @@ export default async function handler(req, res) {
       }
       patch.drive_folder_id = made.folderId;
       patch.drive_link = made.link;
+      patch.drive_folders = made.folders;
+      patch.drive_sensitive_folder_id = made.sensitiveFolderId;
+    }
+
+    // 社労士に 04_社会保険・労務 だけを共有する。
+    // 個人フォルダのルートは渡さない（渡すと全部付いてくる）。
+    // 機微情報は別の木にあるので、そもそも届かない
+    if (body.shareAdvisor) {
+      const email = String(body.shareAdvisor).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return json(res, 400, { error: "invalid_email", hint: "社労士のメールアドレスを入れてください" });
+      }
+      const { data: cur } = await admin().from("gw_procedures")
+        .select("drive_folders").eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+      if (!cur?.drive_folders) {
+        return json(res, 400, { error: "no_folders", hint: "先に個人フォルダを作ってください" });
+      }
+      try {
+        const r = await shareAdvisorFolder(cur.drive_folders, email);
+        if (r.skipped) return json(res, 400, { error: "drive_not_ready", hint: "Drive が設定されていません" });
+      } catch (e) {
+        return json(res, 502, { error: "share_failed", hint: String(e.message).slice(0, 200) });
+      }
+      patch.advisor_shared_to = email;
+      patch.advisor_shared_at = new Date().toISOString();
     }
 
     const { data, error } = await sb
@@ -213,17 +242,17 @@ export default async function handler(req, res) {
 // Drive 未設定や一時的な失敗で手続きの作成まで巻き戻さないよう、握りつぶす。
 async function attachFolder(sb, tenantId, proc, displayName) {
   try {
-    const made = await ensureProcedureFolder({
+    const made = await ensureProcedureFolders({
       kind: proc.kind, targetOn: proc.target_on, displayName,
     });
     if (made.skipped) return {};
 
-    await sb
-      .from("gw_procedures")
-      .update({ drive_folder_id: made.folderId, drive_link: made.link })
-      .eq("id", proc.id)
-      .eq("tenant_id", tenantId);
-    return { drive_folder_id: made.folderId, drive_link: made.link };
+    const patch = {
+      drive_folder_id: made.folderId, drive_link: made.link,
+      drive_folders: made.folders, drive_sensitive_folder_id: made.sensitiveFolderId,
+    };
+    await sb.from("gw_procedures").update(patch).eq("id", proc.id).eq("tenant_id", tenantId);
+    return patch;
   } catch (e) {
     console.error("[onboarding] drive folder failed:", e?.message || e);
     return {};
