@@ -238,7 +238,7 @@ async function act(req, res, ctx, user) {
       return json(res, 200, { aiAutoReply: enabled });
     }
 
-    // 週次評価は /api/nippo/weekly へ移した（10項目 × 10点 ＝ 100点）。
+    // 週次評価は /api/nippo/weekly へ移した（成果40/行動30/成長20/チーム10 ＝ 100点）。
     // 旧6項目×5点の口をここに残しておくと、同じ eval_scores に別の形が
     // 混ざって、どちらの基準の点か分からなくなる。
 

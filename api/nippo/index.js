@@ -18,6 +18,7 @@ import {
   evaluateDaily, CRITERIA, IMPROVE_TAGS,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
+import { planFromNippo, savePlan, closeItems, shapeItem } from "../../lib/actions.js";
 import { shape as shapeEval } from "./evaluate.js";
 
 export default async function handler(req, res) {
@@ -56,7 +57,7 @@ async function read(req, res, user, ctx) {
     .order("display_name")
     .limit(300);
 
-  const [mine, today, thanks, weekly] = await Promise.all([
+  const [mine, today, thanks, weekly, openItems] = await Promise.all([
     // 自分の直近30件。過去を振り返れる範囲があればよく、全件は要らない
     sb.from("tc_nippo").select("*").eq("user_id", user.id)
       .order("work_date", { ascending: false }).limit(30),
@@ -67,6 +68,11 @@ async function read(req, res, user, ctx) {
       .order("created_at", { ascending: false }).limit(30),
     sb.from("tc_weekly_review").select("*").eq("user_id", user.id)
       .eq("week_start", weekStart(date)).maybeSingle(),
+    // 昨日までに決めた「次にやること」。日報の中で「やった」を選べるようにする。
+    // これを出さないと、AIの提案は読まれて終わりになる
+    sb.from("gw_action_items").select("*")
+      .eq("user_id", user.id).eq("status", "open").lte("due_date", date)
+      .order("due_date").order("priority").limit(10),
   ]);
 
   const rows = mine.data || [];
@@ -109,6 +115,8 @@ async function read(req, res, user, ctx) {
     aiConfigured: aiConfigured(),
     thanks: thanks.data || [],
     weekly: weekly.data || null,
+    // 昨日までの宿題。提出時に doneActionIds で「やった」を返してもらう
+    openActions: (openItems.data || []).map(shapeItem),
     // 画面に出す選択肢と基準はサーバから渡す。定義を2か所に置かないため
     improveTags: IMPROVE_TAGS,
     criteria: CRITERIA,
@@ -163,6 +171,29 @@ async function submit(res, user, ctx, body) {
     nippoId = data.id;
   }
 
+  // 昨日までの宿題のうち、本人が「やった」を選んだものを閉じる。
+  // 文章から自動では判定しない。読み違えて勝手に閉じるほうが害が大きい
+  let closed = 0;
+  try {
+    closed = await closeItems(sb, {
+      userId: user.id, ids: body?.doneActionIds, nippoId, note: null,
+    });
+  } catch (e) {
+    console.error("[nippo] 宿題を閉じられませんでした:", e.message);
+  }
+
+  // 「明日の最優先」を、翌営業日のダッシュボードに出す。
+  // 日報に書いて終わりにせず、翌朝いちばん上に出てくるようにする。
+  // AIの提案ぶんは、評価が終わってから足す（api/nippo/evaluate.js）
+  let planned = 0;
+  try {
+    const plan = planFromNippo({ nippo: { ...row, id: nippoId }, evaluation: null });
+    ({ created: planned } = await savePlan(sb, plan, nippoId));
+  } catch (e) {
+    // 宿題が作れなくても日報の提出は成功。画面から足せる
+    console.error("[nippo] 次にやることを作れませんでした:", e.message);
+  }
+
   // AI評価は「待ち」の行を作るだけにして、ここでは走らせない。
   // 提出のたびに10〜20秒待たせると、日報を出すのが億劫になる。
   // 画面が提出直後に /api/nippo/evaluate を1回叩いて、結果を受け取る。
@@ -178,6 +209,7 @@ async function submit(res, user, ctx, body) {
   return json(res, 200, {
     ok: true, id: nippoId, dailyFlags: row.daily_flags,
     ai: { configured: aiConfigured(), pending: aiPending },
+    actions: { closed, planned },
   });
 }
 

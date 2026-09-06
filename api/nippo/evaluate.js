@@ -16,6 +16,7 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { evaluateNippo, isConfigured, PROMPT_VERSION } from "../../lib/nippo-eval.js";
 import { ACTIONS as CRITERIA, score } from "../../lib/scoring.js";
+import { planFromNippo, savePlan } from "../../lib/actions.js";
 
 const canReview = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -112,6 +113,19 @@ async function run(res, sb, ctx, user, nippo, { force }) {
 
   const { data: saved } = await sb
     .from("gw_nippo_ai_evals").update(patch).eq("id", row.id).select("*").single();
+
+  // AIの提案を、翌営業日のダッシュボードに出す。
+  // 評価を読んで終わりにせず、次の行動として残るようにする。
+  // 本人が書いた「明日の最優先」は提出時に入っているので、ここでは足されない
+  if (r.ok) {
+    try {
+      const plan = planFromNippo({ nippo, evaluation: saved });
+      await savePlan(sb, plan, nippo.id);
+    } catch (e) {
+      // 宿題が作れなくても評価は成立する。画面から足せる
+      console.error("[nippo-eval] 次にやることを作れませんでした:", e.message);
+    }
+  }
 
   if (!r.ok) {
     return json(res, 502, {

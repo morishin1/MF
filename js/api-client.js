@@ -308,6 +308,21 @@
   const evaluateNippo = (nippoId, opts = {}) =>
     api("/api/nippo/evaluate", { method: "POST", body: { nippoId, ...opts } });
 
+  // ---- 個人ダッシュボード（今日の最優先・KPI・次にやること） ----
+  const dashboard = (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.date) q.set("date", opts.date);
+    if (opts.userId) q.set("userId", opts.userId);
+    return api(`/api/dashboard${q.toString() ? `?${q}` : ""}`);
+  };
+  // 本人が入れるのは実績だけ。目標は事前に決めたものを使う
+  const saveKpiActuals = (date, actuals) =>
+    api("/api/dashboard", { method: "POST", body: { kind: "kpi", action: "actual", date, actuals } });
+  const saveKpiTargets = (body) =>
+    api("/api/dashboard", { method: "POST", body: { kind: "kpi", action: "target", ...body } });
+  const actionItem = (action, body = {}) =>
+    api("/api/dashboard", { method: "POST", body: { kind: "action", action, ...body } });
+
   // ---- 雇用契約書 ----
   const contracts = (employeeId) =>
     api(`/api/contracts${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
@@ -338,7 +353,7 @@
   // action: compute（集計）/ summarize（AIの所見）/ decide（人が決定）/ settings
   const probationAct = (body) => api("/api/probation", { method: "POST", body });
 
-  // 週次（10項目×10点＝100点）。action: evaluate（AIに採点させる）/ save / submit
+  // 週次（成果40/行動30/成長20/チーム10 ＝ 100点）。action: evaluate / save / submit
   const nippoWeekly = (userId, weekStart) =>
     api(`/api/nippo/weekly?userId=${encodeURIComponent(userId)}&weekStart=${encodeURIComponent(weekStart)}`);
   const nippoWeeklyAct = (body) => api("/api/nippo/weekly", { method: "POST", body });
@@ -633,6 +648,7 @@
     schedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle, googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
+    dashboard, saveKpiActuals, saveKpiTargets, actionItem,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,
     contracts, contractsAct, uploadContract,

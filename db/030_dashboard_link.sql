@@ -45,6 +45,18 @@ comment on column public.gw_nippo_ai_evals.categories is
 comment on column public.tc_weekly_review.ai_categories is
   '同上（週次）。10項目の単純合計ではない';
 
+-- 025〜027 で書いた説明が「10項目 × 10点 = 100点」のままなので直す。
+-- 中身の型は変わっていない（10か条 各0〜10点）。合計の出し方だけが変わった
+comment on column public.gw_nippo_ai_evals.total_score is
+  '総合点（0〜100）。10か条の合計ではなく 成果40/行動30/成長20/チーム10 の重み付け。'
+  '材料不足の条は分母から外して按分する';
+comment on column public.tc_weekly_review.ai_total is
+  '同上（週次・AIの点）';
+comment on column public.tc_weekly_review.eval_total is
+  '同上（週次・管理者が確定した点）。本人に見えるのは submitted_at が入ってから';
+comment on column public.tc_nippo.daily_flags is
+  '10か条それぞれについて、その日の日報から機械的に拾った ○/△/― 。点数ではない';
+
 
 -- -----------------------------------------------------------------------------
 -- 2) KPI（§3①）

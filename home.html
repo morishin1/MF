@@ -7,8 +7,45 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910k">
-  <link rel="stylesheet" href="css/layout.css?v=20260910k">
+  <link rel="stylesheet" href="css/app.css?v=20260910l">
+  <link rel="stylesheet" href="css/layout.css?v=20260910l">
+  <style>
+    /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
+       5つ並んでいる「今日やること」は、結局どれもやらない */
+    .dash-today { border-left: 4px solid var(--primary); }
+    .dash-label { font-size: 11px; font-weight: 700; letter-spacing: .14em;
+                  color: var(--primary); margin-bottom: 6px; }
+    .dash-title { font-size: 21px; font-weight: 700; line-height: 1.55; }
+    .dash-detail { font-size: 13px; color: var(--muted); margin-top: 6px; white-space: pre-wrap; }
+    .dash-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+    @media (max-width: 600px) { .dash-title { font-size: 18px; } }
+
+    /* KPI。目標に対してどこまで来たかが、数字を読まなくても分かるように */
+    .kpi-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
+               align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .kpi-row:last-child { border-bottom: 0; }
+    .kpi-name { font-size: 13.5px; font-weight: 600; }
+    .kpi-num { font-size: 13px; color: var(--muted); white-space: nowrap; }
+    .kpi-num b { font-size: 17px; color: var(--text); }
+    .kpi-bar { grid-column: 1 / -1; height: 6px; border-radius: 3px;
+               background: var(--border); overflow: hidden; }
+    .kpi-bar span { display: block; height: 100%; background: var(--primary); }
+    .kpi-bar.hit span { background: var(--green, #2f855a); }
+    .kpi-row input { width: 84px; margin: 0; padding: 4px 8px; text-align: right; }
+
+    /* 次にやることの残り。最優先の下に小さく並べる */
+    .dash-item { display: flex; gap: 8px; align-items: flex-start;
+                 padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .dash-item:last-child { border-bottom: 0; }
+    .dash-item .grow { flex: 1; min-width: 0; }
+
+    /* 10か条。円グラフは読みにくいので横棒にした */
+    .act-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+    .act-row .n { width: 52px; color: var(--muted); }
+    .act-row .b { flex: 1; height: 7px; border-radius: 4px; background: var(--border); overflow: hidden; }
+    .act-row .b span { display: block; height: 100%; background: var(--primary); }
+    .act-row .v { width: 34px; text-align: right; color: var(--muted); }
+  </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -26,6 +63,45 @@
 <div class="wrap">
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
+
+  <!-- ① 今日の最優先。この画面で一番大きく出す。
+       会社の評価を見る画面ではなく、仕事を前に進める画面にするため -->
+  <div id="today-card" class="card hidden dash-today">
+    <div class="dash-label">TODAY</div>
+    <div id="today-title" class="dash-title"></div>
+    <div id="today-detail" class="dash-detail"></div>
+    <div id="today-foot" class="dash-foot"></div>
+  </div>
+
+  <!-- ② 今日のKPI。目標は事前に決めてあり、本人は実績だけ入れる -->
+  <div id="kpi-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">target</span>今日のKPI
+      <span id="kpi-tag" class="kp-chip" style="margin-left:6px;"></span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="openKpiTargets()">
+        <span class="material-symbols-outlined icon-inline">tune</span>目標を決める
+      </button></h2>
+    <div id="kpi-body"></div>
+    <div id="kpi-msg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+
+  <!-- ③ 昨日のAIフィードバック。短く2つだけ -->
+  <div id="fb-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">auto_awesome</span>昨日のふりかえり
+      <span id="fb-date" class="kp-chip" style="margin-left:6px;"></span></h2>
+    <div id="fb-body"></div>
+  </div>
+
+  <!-- ④ 今週の状況／⑤ 10か条（直近7日の平均） -->
+  <div id="week-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">insights</span>今週の状況</h2>
+    <div id="week-tiles" class="kp-tiles" style="margin-bottom:14px;"></div>
+    <details id="radar-wrap">
+      <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--primary-dark);">
+        10か条の内訳（直近<span id="radar-days">7</span>日の平均）
+      </summary>
+      <div id="radar-body" style="margin-top:12px;"></div>
+    </details>
+  </div>
 
   <div id="tiles" class="kp-tiles"></div>
 
@@ -59,8 +135,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260910k"></script>
-<script src="js/layout.js?v=20260910k"></script>
+<script src="js/api-client.js?v=20260910l"></script>
+<script src="js/layout.js?v=20260910l"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -85,9 +161,292 @@
          </div>`);
     }
 
+    loadDashboard();
     renderTiles(await loadStats());
     loadNotices();
     loadProcedure();
+  }
+
+  // --- ① 今日の最優先 ／ ② KPI ／ ③ 昨日のふりかえり ／ ④ 今週 ---------------
+  //
+  // 上から この順番で並べる。この画面で一番見せたいのは
+  // 「何点だったか」ではなく「次に何をするか」なので、
+  // 点数（10か条）は一番下に、しかも開かないと出ない形にしてある。
+  let dash = null;
+
+  const CATEGORIES = [
+    { key: "results", label: "成果",   weight: 40 },
+    { key: "action",  label: "行動",   weight: 30 },
+    { key: "growth",  label: "成長",   weight: 20 },
+    { key: "team",    label: "チーム", weight: 10 },
+  ];
+
+  async function loadDashboard() {
+    try {
+      dash = await API.dashboard({ date: dayStr(new Date()) });
+    } catch (e) {
+      // 日報を使っていない人や、DBがまだ入っていない環境ではカードごと出さない
+      return;
+    }
+    renderToday();
+    renderKpi();
+    renderFeedback();
+    renderWeek();
+  }
+
+  function renderToday() {
+    const t = dash.top;
+    const rest = dash.actions || [];
+    if (!t && !rest.length) {
+      // 何も無い日は、日報を出していないことのほうが多い
+      if (!dash.submittedToday) {
+        el("today-card").classList.remove("hidden");
+        el("today-title").textContent = "今日の最優先はまだ決まっていません";
+        el("today-detail").textContent =
+          "日報の「明日の最優先」に書いたことが、翌朝ここに出ます。";
+        el("today-foot").innerHTML =
+          `<a class="btn btn-primary btn-sm" href="nippo.html">
+             <span class="material-symbols-outlined icon-inline">edit_note</span>日報を書く</a>
+           <button class="btn btn-secondary btn-sm" onclick="addItem()">
+             <span class="material-symbols-outlined icon-inline">add</span>自分で足す</button>`;
+      }
+      return;
+    }
+
+    el("today-card").classList.remove("hidden");
+
+    if (t) {
+      const late = t.dueDate < dash.date;
+      el("today-title").textContent = t.title;
+      el("today-detail").textContent = t.detail || "";
+      el("today-foot").innerHTML = `
+        <button class="btn btn-primary btn-sm" onclick="doneItem('${esc(t.id)}', this)">
+          <span class="material-symbols-outlined icon-inline">check</span>できた
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="dropItem('${esc(t.id)}', this)">今日はやらない</button>
+        <span class="kp-chip">${esc(t.sourceLabel)}</span>
+        ${late ? `<span class="kp-chip important">${esc(t.dueDate)} の予定</span>` : ""}`;
+    } else {
+      el("today-title").textContent = "今日の最優先を選んでください";
+      el("today-detail").textContent = "下のどれかを「これを最優先にする」で上に上げられます。";
+      el("today-foot").innerHTML = "";
+    }
+
+    if (rest.length) {
+      el("today-foot").insertAdjacentHTML("afterend", `
+        <div style="margin-top:16px;">
+          <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:2px;">
+            そのほか（${rest.length}件）
+          </div>
+          ${rest.map((a) => `
+            <div class="dash-item">
+              <div class="grow">
+                <div>${esc(a.title)}</div>
+                <div class="muted" style="font-size:11.5px;margin-top:2px;">
+                  ${esc(a.sourceLabel)}${a.dueDate < dash.date ? ` ・ ${esc(a.dueDate)} の予定` : ""}
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="topItem('${esc(a.id)}', this)"
+                      title="今日の最優先にする">↑</button>
+              <button class="btn btn-secondary btn-sm" onclick="doneItem('${esc(a.id)}', this)">できた</button>
+            </div>`).join("")}
+          <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="addItem()">
+            <span class="material-symbols-outlined icon-inline">add</span>自分で足す
+          </button>
+        </div>`);
+    }
+  }
+
+  function renderKpi() {
+    const list = dash.kpis || [];
+    el("kpi-card").classList.remove("hidden");
+
+    const s = dash.kpiSummary;
+    el("kpi-tag").textContent = s ? `${s.hit} / ${s.of} 達成` : "目標なし";
+    el("kpi-tag").className = `kp-chip${s && s.rate === 100 ? " event" : ""}`;
+
+    if (!list.length) {
+      el("kpi-body").innerHTML = `<div class="empty">
+        今日のKPIがまだありません。「目標を決める」から3〜5個まで設定してください。<br>
+        一度決めれば、次の日からは同じ目標が引き継がれます。</div>`;
+      return;
+    }
+
+    el("kpi-body").innerHTML = list.map((k) => {
+      const pct = k.target > 0 ? Math.min(100, ((k.actual || 0) / k.target) * 100) : 0;
+      const hit = k.target > 0 && (k.actual || 0) >= k.target;
+      return `
+        <div class="kpi-row">
+          <div class="kpi-name">${esc(k.label)}</div>
+          <div class="kpi-num">
+            <input type="number" min="0" step="1" id="kpi-${esc(k.id)}"
+                   value="${k.actual == null ? "" : k.actual}" placeholder="実績">
+            <span style="margin-left:4px;">/ ${k.target ?? "—"}${esc(k.unit || "")}</span>
+          </div>
+          <div class="kpi-bar${hit ? " hit" : ""}"><span style="width:${pct}%"></span></div>
+        </div>`;
+    }).join("") + `
+      <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="saveActuals(this)">
+        <span class="material-symbols-outlined icon-inline">save</span>実績を記録
+      </button>`;
+  }
+
+  function renderFeedback() {
+    const y = dash.yesterday;
+    if (!y) return;
+    el("fb-card").classList.remove("hidden");
+    el("fb-date").textContent = y.date;
+
+    el("fb-body").innerHTML = `
+      ${y.good.length ? `
+        <div style="margin-bottom:12px;">
+          <div class="muted" style="font-size:11.5px;font-weight:700;color:#2f855a;">GOOD</div>
+          ${y.good.map((g) => `<div style="font-size:13.5px;line-height:1.8;">${esc(g)}</div>`).join("")}
+        </div>` : ""}
+      ${y.next ? `
+        <div>
+          <div class="muted" style="font-size:11.5px;font-weight:700;color:var(--primary);">NEXT</div>
+          <div style="font-size:13.5px;line-height:1.8;">${esc(y.next)}</div>
+        </div>` : ""}
+      ${!y.good.length && !y.next ? `<div class="empty">まだ材料がありません。</div>` : ""}`;
+  }
+
+  function renderWeek() {
+    const w = dash.week;
+    if (!w) return;
+    el("week-card").classList.remove("hidden");
+
+    const tile = (k, v, unit, sub, cls) => `
+      <div class="kp-tile${cls ? " " + cls : ""}">
+        <div class="k">${k}</div>
+        <div class="v">${v}${unit ? `<small>${unit}</small>` : ""}</div>
+        <div class="s">${sub}</div>
+      </div>`;
+
+    el("week-tiles").innerHTML = [
+      tile("KPI達成率", w.kgiRate ?? "—", w.kgiRate != null ? "%" : "",
+           w.kgiOf ? `${w.kgiHit} / ${w.kgiOf} 日` : "記録なし"),
+      tile("成果", w.resultCount, "件", "結果まで書けたもの"),
+      tile("改善", w.improveCount, "回", "やり方を変えた日"),
+      // 週次評価は、担当者が本人へ出してから見せる。下書きのまま見えると誤解になる
+      w.weeklyTotal != null
+        ? tile("今週の評価", w.weeklyTotal, "/100", "担当者が確定したもの")
+        : tile("10か条の平均", w.avgTotal ?? "—", w.avgTotal != null ? "/100" : "",
+               "AIの参考値（確定前）"),
+    ].join("");
+
+    const r = dash.radar;
+    if (!r || !r.days) { el("radar-wrap").classList.add("hidden"); return; }
+    el("radar-days").textContent = r.days;
+
+    el("radar-body").innerHTML = `
+      <div style="margin-bottom:12px;">
+        ${CATEGORIES.map((d) => {
+          const c = (r.categories || []).find((x) => x.key === d.key);
+          const pts = c && c.points != null ? c.points : null;
+          return `<div class="act-row">
+            <span class="n" style="font-weight:700;color:var(--text);">${d.label}</span>
+            <span class="b"><span style="width:${pts == null ? 0 : (pts / d.weight) * 100}%"></span></span>
+            <span class="v">${pts == null ? "—" : pts}</span>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="muted" style="font-size:11.5px;margin-bottom:8px;">
+        総合点は 成果40 / 行動30 / 成長20 / チーム10 で出しています。
+        下の10か条は、なぜその点になったかの内訳です。
+      </div>
+      ${(r.actions || []).map((a) => `
+        <div class="act-row">
+          <span class="n">${esc(a.short)}</span>
+          <span class="b"><span style="width:${a.avg == null ? 0 : a.avg * 10}%"></span></span>
+          <span class="v">${a.avg == null ? "—" : a.avg}</span>
+        </div>`).join("")}`;
+  }
+
+  // --- 操作 -------------------------------------------------------------------
+  // inline の onclick から呼ぶので function 宣言にする
+  async function doneItem(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.actionItem("done", { id }));
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
+  }
+
+  async function dropItem(id, btn) {
+    const note = prompt("やらない理由（あとで見返せます。空欄でも構いません）");
+    if (note === null) return;   // キャンセル
+    try {
+      await KPLayout.busy(btn, "…", () => API.actionItem("drop", { id, note }));
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
+  }
+
+  async function topItem(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.actionItem("top", { id }));
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "変更できませんでした"); }
+  }
+
+  async function addItem() {
+    const title = prompt("今日やること");
+    if (!title || !title.trim()) return;
+    try {
+      await API.actionItem("add", {
+        title: title.trim(), dueDate: dash.date,
+        priority: dash.top ? 5 : 1,
+      });
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "追加できませんでした"); }
+  }
+
+  async function saveActuals(btn) {
+    const actuals = {};
+    for (const k of dash.kpis) actuals[k.id] = el(`kpi-${k.id}`).value;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.saveKpiActuals(dash.date, actuals));
+      el("kpi-msg").className = "muted";
+      el("kpi-msg").textContent = "記録しました。";
+      await reloadDash();
+    } catch (e) {
+      el("kpi-msg").className = "err-text";
+      el("kpi-msg").textContent = e.hint || e.detail || e.message || "記録できませんでした";
+    }
+  }
+
+  // 目標は事前に決めるもの。毎朝ここで決める運用にはしない
+  async function openKpiTargets() {
+    const now = (dash.kpis || []).map((k) =>
+      `${k.label}${k.target != null ? ` ${k.target}` : ""}${k.unit ? k.unit : ""}`).join("\n");
+    const text = prompt(
+      "1行に1つ、「名前 目標 単位」の形で書いてください（3〜5個まで）。\n" +
+      "例：\n営業連絡 20 件\n商談 2 件\nENGER登録 3 件",
+      now);
+    if (text === null) return;
+
+    const kpis = text.split("\n").map((line) => {
+      const m = line.trim().match(/^(.*?)[\s　]+([0-9]+(?:\.[0-9]+)?)[\s　]*(\S*)$/);
+      if (m) return { label: m[1].trim(), target: Number(m[2]), unit: m[3] || null };
+      return line.trim() ? { label: line.trim(), target: null, unit: null } : null;
+    }).filter(Boolean);
+
+    try {
+      await API.saveKpiTargets({ date: dash.date, kpis, saveTemplate: true });
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
+  }
+
+  async function reloadDash() {
+    // 追記した「そのほか」の枠が二重にならないよう、いったん消してから描き直す
+    for (const id of ["today-card", "kpi-card", "fb-card", "week-card"]) {
+      el(id).classList.add("hidden");
+    }
+    el("today-card").innerHTML = `
+      <div class="dash-label">TODAY</div>
+      <div id="today-title" class="dash-title"></div>
+      <div id="today-detail" class="dash-detail"></div>
+      <div id="today-foot" class="dash-foot"></div>`;
+    await loadDashboard();
   }
 
   // --- 入社・退職手続き（自分の分だけ） -------------------------------------

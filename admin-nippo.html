@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910k">
-  <link rel="stylesheet" href="css/layout.css?v=20260910k">
+  <link rel="stylesheet" href="css/app.css?v=20260910l">
+  <link rel="stylesheet" href="css/layout.css?v=20260910l">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -92,7 +92,7 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">radar</span>週次評価
-      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">10項目 × 10点 ＝ 100点</span>
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">成果40 / 行動30 / 成長20 / チーム10 ＝ 100点</span>
       <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <div class="inline-controls" style="margin-bottom:12px;">
       <div><label>対象者</label><select id="w-user" onchange="loadWeekly()"></select></div>
@@ -114,8 +114,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910k"></script>
-<script src="js/layout.js?v=20260910k"></script>
+<script src="js/api-client.js?v=20260910l"></script>
+<script src="js/layout.js?v=20260910l"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -728,7 +728,7 @@
     catch (e) { input.checked = !enabled; alert(e.detail || e.message || "変更に失敗しました"); }
   }
 
-  // --- 週次評価（10項目 × 10点 ＝ 100点） ---------------------------------------
+  // --- 週次評価（成果40/行動30/成長20/チーム10 ＝ 100点） -----------------------
   // 日次は行動改善、週次は評価。役割を分けている。
   // AI が付けた点をそのまま最終評価にしない。管理者が直してから本人へ出す。
   let weekSel = null;   // 表示中の週の月曜
