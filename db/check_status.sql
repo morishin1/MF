@@ -57,7 +57,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (38, '038',    '社員名簿に備考',                                      'column',   'gw_employees',           'note'),
   (39, '039',    '電子同意（版付き）／提出書類の Drive 自動整理',        'table',    'gw_consent_docs',        null),
   (40, '040',    '1日3回の声かけ（デスクトップ通知）',                  'table',    'gw_push_subs',           null),
-  (41, '041',    '管理者を人事と同じ扱いにする',                        'function', 'gw_is_hr',               null)
+  (41, '041',    '管理者を人事と同じ扱いにする',                        'function', 'gw_is_hr',               null),
+  (42, '042',    '週のゴールと、その日の行動案',                        'table',    'gw_week_goals',          null)
 ),
 
 -- ファイルの適用状況

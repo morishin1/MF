@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911l">
-  <link rel="stylesheet" href="css/layout.css?v=20260911l">
+  <link rel="stylesheet" href="css/app.css?v=20260911m">
+  <link rel="stylesheet" href="css/layout.css?v=20260911m">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -93,6 +93,26 @@
     .np-item .did button.on.no  { border-color: #c05621; background: #fff5ec; color: #9c4221; }
     .np-item .fill { margin-top: 8px; }
     .np-item .fill input { margin: 0; }
+    .np-item .wh { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+    .np-item .did .num { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+    .np-item .did { flex-wrap: wrap; align-items: center; }
+
+    /* 朝。AIが出した案をそのまま見せる。書く欄は置かない */
+    .pl-line { border-left: 3px solid var(--primary); background: var(--soft);
+               border-radius: 0 9px 9px 0; padding: 12px 14px; margin-bottom: 14px;
+               font-size: 14px; font-weight: 600; line-height: 1.8; }
+    .pl-sec { margin-bottom: 16px; }
+    .pl-sec > h3 { font-size: 12px; font-weight: 700; color: var(--muted);
+                   margin: 0 0 7px; letter-spacing: .3px; }
+    .pl-top { font-size: 14.5px; font-weight: 700; color: var(--primary-dark); }
+    .pl-do { border: 1px solid var(--border); border-radius: 9px;
+             padding: 10px 13px; margin-bottom: 7px; }
+    .pl-do .n { font-size: 13.5px; font-weight: 600; }
+    .pl-do .m { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.75; }
+    .pl-focus { border: 1px solid var(--border); border-left: 3px solid #d69e2e;
+                border-radius: 0 9px 9px 0; padding: 10px 13px; margin-bottom: 7px; }
+    .pl-focus .k { font-size: 12px; font-weight: 700; color: #975a16; }
+    .pl-focus .h { font-size: 13px; margin-top: 2px; line-height: 1.75; }
 
     .np-kpirow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
                  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
@@ -146,43 +166,11 @@
     <div id="thanks-list"></div>
   </div>
 
-  <!-- 朝。結果を見る前に、今日を何で判断するかを決める。1分で終わる分量 -->
+  <!-- 朝。AIが出した案を見て、押すだけ。書く欄は置かない -->
   <div id="am-card" class="card hidden" style="border-left:4px solid var(--primary);">
-    <h2><span class="material-symbols-outlined">wb_twilight</span>朝の1分
+    <h2><span class="material-symbols-outlined">wb_twilight</span>今日やること
       <span id="am-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
-    <p class="kp-greet-sub" style="margin:0 0 16px;">
-      今日を何で判断するかを、先に決めます。終業時は、これと見比べるだけです。
-    </p>
-
-    <div class="np-sec">
-      <h3><span class="no">①</span>今日の最優先</h3>
-      <p class="lead">今日いちばん、終わらせたいこと。1つだけ。</p>
-      <input id="a-top" type="text" placeholder="例：C社の見積を出す">
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">②</span>今日やること</h3>
-      <p class="lead">3つまで。書ききれないぶんは、明日に回して構いません。</p>
-      <div class="np-rows" id="a-actions"></div>
-    </div>
-
-    <!-- KPIを持っている人だけ出る。持っていない人にこの欄は見せない -->
-    <div class="np-sec hidden" id="a-kpi-sec">
-      <h3><span class="no">③</span>今日のKPI</h3>
-      <p class="lead">今日ぶんの目標です。実績は終業時に入れます。</p>
-      <div id="a-kpis"></div>
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">④</span>困っていること<span class="opt">任意</span></h3>
-      <p class="lead">今の時点で詰まっていることがあれば。無ければ空のままで構いません。</p>
-      <input id="a-note" type="text" placeholder="例：先方の返事待ちで着手できない">
-    </div>
-
-    <button class="btn btn-primary" id="am-btn" onclick="saveMorning(this)">
-      <span class="material-symbols-outlined icon-inline">send</span>これで今日を始める
-    </button>
-    <div id="am-msg" class="err-text" style="margin-top:10px;"></div>
+    <div id="am-body"></div>
   </div>
 
   <!-- 声かけの設定。1日3回だけ -->
@@ -247,11 +235,16 @@
     </div>
 
     <div class="np-sec">
-      <h3><span class="no">④</span>相談事項<span class="opt">任意</span></h3>
+      <h3><span class="no">④</span>困ったこと</h3>
       <p class="lead">
         管理担当者だけが読みます。みんなの日報には出ません。
       </p>
-      <textarea id="f-consult" rows="2" placeholder="例：先方の条件が決まらず、来週の予定が立てられない"></textarea>
+      <div class="np-tags">
+        <button type="button" id="c-no" class="np-tag on" onclick="setConsult(false)">なし</button>
+        <button type="button" id="c-yes" class="np-tag" onclick="setConsult(true)">あり</button>
+      </div>
+      <textarea id="f-consult" rows="2" class="hidden"
+                placeholder="例：先方の条件が決まらず、来週の予定が立てられない"></textarea>
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -355,9 +348,9 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260911l"></script>
-<script src="js/layout.js?v=20260911l"></script>
-<script src="js/push.js?v=20260911l"></script>
+<script src="js/api-client.js?v=20260911m"></script>
+<script src="js/layout.js?v=20260911m"></script>
+<script src="js/push.js?v=20260911m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -421,7 +414,7 @@
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
 
     renderTodos();
-    renderMorning();
+    loadPlan();
     renderMidday();
     focusFromHash();
     // 提出済みならその内容を、まだなら書きかけを出す
@@ -439,37 +432,127 @@
   // --- 朝 ---------------------------------------------------------------------
   // 朝のカードは、今日ぶんで、まだ結果を書いていないときだけ出す。
   // 結果を見たあとに書き直せると、後付けになる
+  // 朝。AIが出した案を見せて、押してもらうだけ。
+  //
+  // 何をやるかは、管理者が決めた今週のゴールから割ってある（gw_day_plans）。
+  // 本人に考えさせない。迷っている時間は、仕事が進んでいない時間でもある。
+  //
+  // 案がまだ無い日は、これまでどおり自分で書けるようにしておく。
+  // 「案が無いので何もできない」を作らない
+  let plan = null;
+
+  async function loadPlan() {
+    try { plan = await API.dayPlan(data.date); } catch (_) { plan = null; }
+    renderMorning();
+  }
+
   function renderMorning() {
     const t = data.today;
     const isToday = data.date === jstToday();
     const reported = (t?.work_items || []).some((w) => w.result || w.undone_reason);
-    const done = !!t?.morning_at;
 
     el("am-card").classList.toggle("hidden", !isToday || reported);
     if (!isToday || reported) return;
 
-    el("am-tag").textContent = done ? "書き直せます" : "まだです";
-    el("am-tag").className = `kp-chip ${done ? "event" : "draft"}`;
-    el("a-top").value = t?.top_priority || "";
-    el("a-note").value = t?.morning_note || "";
+    const p = plan?.plan || null;
+    const started = !!plan?.started || !!t?.morning_at;
 
-    const acts = (t?.work_items || []).map((w) => w.task).filter(Boolean);
-    el("a-actions").innerHTML = [0, 1, 2].map((i) => `
-      <input type="text" class="am-act" value="${esc(acts[i] || "")}"
-             placeholder="${i + 1}つ目">`).join("");
+    el("am-tag").textContent = started ? "始めています" : p ? "確認して始めてください" : "案がまだありません";
+    el("am-tag").className = `kp-chip ${started ? "event" : p ? "draft" : "archived"}`;
 
-    // KPIは、持っている人にだけ出す。無い人に空欄を見せない
-    const kpis = data.kpisToday || [];
-    el("a-kpi-sec").classList.toggle("hidden", !kpis.length);
-    el("a-kpis").innerHTML = kpis.map((k) => `
-      <div class="np-kpirow">
-        <span class="nm">${esc(k.label)}</span>
-        <span class="muted" style="font-size:12px;">目標 ${k.target ?? "—"}${esc(k.unit || "")}</span>
-      </div>`).join("");
+    if (!p) {
+      el("am-body").innerHTML = `
+        <div class="banner info" style="margin:0;">
+          <span class="material-symbols-outlined">schedule</span>
+          <div>今日の行動案はまだ届いていません。管理者が今週のゴールを出すと、ここに出ます。<br>
+          <span class="muted" style="font-size:11.5px;">
+            届く前でも、夜の日報は下の欄から出せます。</span></div>
+        </div>`;
+      return;
+    }
 
-    el("am-btn").innerHTML = done
-      ? '<span class="material-symbols-outlined icon-inline">save</span>書き直す'
-      : '<span class="material-symbols-outlined icon-inline">send</span>これで今日を始める';
+    const g = plan.goal;
+    el("am-body").innerHTML = `
+      ${p.success_line ? `<div class="pl-line">${esc(p.success_line)}</div>` : ""}
+
+      ${p.top_priority ? `
+        <div class="pl-sec">
+          <h3>今日の最優先</h3>
+          <div class="pl-top">${esc(p.top_priority)}</div>
+        </div>` : ""}
+
+      ${(p.actions || []).length ? `
+        <div class="pl-sec">
+          <h3>今日やること</h3>
+          ${p.actions.map((a) => `
+            <div class="pl-do">
+              <div class="n">${esc(a.task)}${a.target != null
+                ? `<span class="kp-chip" style="margin-left:8px;">${esc(a.target)}${esc(a.unit || "")}</span>` : ""}</div>
+              ${a.done_when ? `<div class="m">終わり方：${esc(a.done_when)}</div>` : ""}
+            </div>`).join("")}
+        </div>` : ""}
+
+      ${(p.focus || []).length ? `
+        <div class="pl-sec">
+          <h3>今日意識すること</h3>
+          ${p.focus.map((f) => `
+            <div class="pl-focus">
+              <div class="k">${esc(f.label || "")}</div>
+              <div class="h">${esc(f.how || "")}</div>
+            </div>`).join("")}
+        </div>` : ""}
+
+      <div class="pl-sec">
+        <h3>止まりそうなこと</h3>
+        <div class="ob-send" style="margin-top:0;">
+          <div class="np-tags" style="margin:0;">
+            <button type="button" class="np-tag ${blocked ? "" : "on"}" onclick="setBlocked(false)">なし</button>
+            <button type="button" class="np-tag ${blocked ? "on" : ""}" onclick="setBlocked(true)">あり</button>
+          </div>
+        </div>
+        <input id="a-blocked" type="text" class="${blocked ? "" : "hidden"}"
+               style="margin-top:8px;" placeholder="何で止まりそうですか（例：先方の返事待ち）"
+               value="${esc(t?.morning_note || "")}">
+      </div>
+
+      <button class="btn btn-primary" id="am-btn" onclick="startDay(this)">
+        <span class="material-symbols-outlined icon-inline">play_arrow</span>
+        ${started ? "内容を取り込み直す" : "今日を始める"}
+      </button>
+      <div id="am-msg" class="err-text" style="margin-top:10px;"></div>
+
+      ${g?.kgi ? `
+        <p class="muted" style="font-size:11.5px;margin:14px 0 0;line-height:1.8;">
+          今週のゴール：${esc(g.kgi)}
+          ${(g.kpis || []).length
+            ? `<br>KPI：${g.kpis.map((k) => `${esc(k.name)} ${esc(k.target ?? "")}${esc(k.unit || "")}`).join(" / ")}` : ""}
+        </p>` : ""}`;
+  }
+
+  // 止まりそうなこと。なし／あり だけ。
+  // 毎朝の自由記述にすると、書くこと自体が仕事になる
+  let blocked = false;
+  function setBlocked(on) {
+    blocked = on;
+    renderMorning();
+    if (on) el("a-blocked")?.focus();
+  }
+
+  // 今日を始める。案をそのまま朝の日報にする（サーバ側で写す）
+  async function startDay(btn) {
+    const msg = el("am-msg");
+    msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "取り込み中…", () => API.startDay({
+        date: data.date,
+        blocked,
+        blockedNote: el("a-blocked")?.value || "",
+      }));
+      await load(data.date);
+      await loadPlan();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "できませんでした";
+    }
   }
 
   // 通知から来たとき、その場所まで運ぶ。
@@ -704,26 +787,6 @@
     return h >= 11 && h < 16;
   }
 
-  async function saveMorning(btn) {
-    const msg = el("am-msg");
-    msg.textContent = "";
-    const actions = [...document.querySelectorAll(".am-act")]
-      .map((i) => ({ task: i.value.trim() })).filter((a) => a.task);
-
-    try {
-      await KPLayout.busy(btn, "保存中…", () => API.submitMorning({
-        date: data.date,
-        topPriority: el("a-top").value,
-        actions,
-        morningNote: el("a-note").value,
-      }));
-      await load(data.date);
-      el("am-card").scrollIntoView({ behavior: "smooth", block: "center" });
-    } catch (e) {
-      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
-    }
-  }
-
   // --- 夜 ---------------------------------------------------------------------
   // 前に決めたこと（ダッシュボードの「今日やること」と同じもの）。
   // 「やった」は本人が選ぶ。文章から自動では判定しない。
@@ -761,14 +824,26 @@
         <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.np-item').remove()"
                 title="この行を消す"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
       </div>
+      ${v.done_when ? `<div class="wh">終わり方：${esc(v.done_when)}</div>` : ""}
       <div class="did">
         <button type="button" class="yes${state === "yes" ? " on" : ""}" onclick="setDone(this, true)">できた</button>
         <button type="button" class="no${state === "no" ? " on" : ""}" onclick="setDone(this, false)">できなかった</button>
+        ${v.target != null ? `
+          <span class="num">
+            <span class="muted" style="font-size:12px;">目標 ${esc(v.target)}${esc(v.unit || "")}</span>
+            <input data-k="actual" type="number" step="0.5" placeholder="実績"
+                   value="${v.actual ?? ""}" style="width:86px;margin:0;">
+            <span class="muted" style="font-size:12px;">${esc(v.unit || "")}</span>
+          </span>` : `
+          <input data-k="actual" type="hidden" value="${v.actual ?? ""}">`}
       </div>
+      <input data-k="target" type="hidden" value="${v.target ?? ""}">
+      <input data-k="unit" type="hidden" value="${esc(v.unit || "")}">
+      <input data-k="done_when" type="hidden" value="${esc(v.done_when || "")}">
       <div class="fill${state ? "" : " hidden"}">
-        <input data-k="result" type="text" placeholder="何ができたか（例：3社に送付）"
+        <input data-k="result" type="text" placeholder="結果を一言（例：17社に送付）"
                value="${esc(v.result || "")}" ${state === "no" ? 'class="hidden"' : ""}>
-        <input data-k="undone_reason" type="text" placeholder="できなかった理由（例：先方の返事待ち）"
+        <input data-k="undone_reason" type="text" placeholder="どこまでできたか（例：1社まで完了）"
                value="${esc(v.undone_reason || "")}" ${state === "yes" ? 'class="hidden"' : ""}>
       </div>`;
     el("f-work").appendChild(div);
@@ -798,9 +873,20 @@
       return o;
     });
 
+  // 困ったこと。なし／あり だけ。「あり」を押したときだけ書く欄を出す。
+  // 空欄が毎日並んでいると、書かないことが普通になる
+  function setConsult(on) {
+    el("c-yes").classList.toggle("on", on);
+    el("c-no").classList.toggle("on", !on);
+    el("f-consult").classList.toggle("hidden", !on);
+    if (on) el("f-consult").focus(); else el("f-consult").value = "";
+    scheduleDraftSave();
+  }
+
   function fillForm(n) {
     el("f-tomorrow").value = n?.tomorrow_plan ?? "";
     el("f-consult").value = n?.consult_note ?? "";
+    setConsult(Boolean(n?.consult_note));
 
     // 朝に決めたことを並べる。朝を書いていない日は、空の行を3つ出す
     el("f-work").innerHTML = "";
@@ -922,6 +1008,9 @@
       el("ai-card").scrollIntoView({ behavior: "smooth", block: "center" });
       // 提出のたびに待たせたくないので、評価はここから別に走らせる
       if (res.ai?.configured && data.today) runEval();
+      // 今日の結果を見て、明日の行動案を作り直す。
+      // 待たせる必要は無いので投げっぱなしにする（失敗しても提出は済んでいる）
+      API.rebuildNextPlan(body.date).catch(() => {});
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
     }

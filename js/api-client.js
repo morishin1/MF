@@ -652,6 +652,24 @@
     return out;
   }
 
+  // ---- 週のゴールと、その日の行動案 ----
+  // 管理者が週のゴールを決め、AIが日ごとの行動に割る。
+  // メンバーは案を見て「今日を始める」を押すだけ
+  const weekGoals = (weekStart) =>
+    api(`/api/week-goals${weekStart ? `?weekStart=${encodeURIComponent(weekStart)}` : ""}`);
+  const draftWeekGoal = (employeeId, weekStart) =>
+    api("/api/week-goals", { method: "POST", body: { employeeId, weekStart, ai: "draft" } });
+  const saveWeekGoal = (goal) =>
+    api("/api/week-goals", { method: "POST", body: goal });
+  const splitWeekGoal = (employeeId, weekStart) =>
+    api("/api/week-goals", { method: "POST", body: { employeeId, weekStart, split: true } });
+
+  const dayPlan = (date) =>
+    api(`/api/nippo/plan${date ? `?date=${encodeURIComponent(date)}` : ""}`);
+  const startDay = (body) => api("/api/nippo/plan", { method: "POST", body });
+  const rebuildNextPlan = (date) =>
+    api("/api/nippo/plan", { method: "POST", body: { date, next: true } });
+
   // ---- メンバーのログイン情報・使えるシステム（人事権限） ----
   // 4システムは同じ auth.users を使うので、メールとパスワードは全部に効く
   const updateEmployeeAccount = (body) =>
@@ -742,6 +760,8 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync, hrDriveCheck,
     updateEmployeeAccount,
+    weekGoals, draftWeekGoal, saveWeekGoal, splitWeekGoal,
+    dayPlan, startDay, rebuildNextPlan,
     pushConfig, pushSubscribe, pushUnsubscribe, pushRemoveDevice, pushPrefs, pushTest,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,

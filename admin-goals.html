@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>今週のゴール - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260911m">
+  <link rel="stylesheet" href="css/layout.css?v=20260911m">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .gl { border:1px solid var(--border); border-radius:11px; padding:15px 17px; margin-bottom:13px; }
+    .gl.active { border-color:#b7e0c4; background:#f7fbf8; }
+    .gl .hd { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:12px; }
+    .gl .hd .nm { font-size:14.5px; font-weight:700; color:var(--primary-dark); }
+    .gl label { font-size:11.5px; font-weight:700; color:var(--muted); display:block; margin-bottom:3px; }
+    .gl input, .gl textarea { margin:0; }
+    .gl .g { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin-bottom:10px; }
+    @media (max-width:720px) { .gl .g { grid-template-columns:1fr; } }
+    .gl .wide { grid-column:1 / -1; }
+    .kpi-row { display:flex; gap:7px; align-items:center; margin-bottom:6px; }
+    .kpi-row input[type=text] { flex:1; min-width:0; }
+    .kpi-row input[type=number] { width:92px; }
+    .kpi-row input.u { width:70px; }
+    .days { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+    .day { border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+           font-size:11.5px; min-width:132px; flex:1; }
+    .day .d { font-weight:700; color:var(--muted); margin-bottom:3px; }
+    .day .t { font-weight:600; line-height:1.6; }
+    .day.started { border-color:#b7e0c4; background:#f3faf5; }
+    .foot { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">今週のゴール</h1>
+  <p class="kp-greet-sub">
+    ここで決めたゴールを、AIが月〜金の行動まで割ります。
+    メンバーの朝の画面には、その日ぶんだけが出ます。
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">date_range</span>対象の週
+      <input id="week" type="date" style="width:auto;margin:0 0 0 auto;" onchange="load()">
+    </h2>
+    <p class="muted" style="font-size:12.5px;margin:0;">
+      週の月曜を選んでください。日付を入れると、その日を含む週になります。
+    </p>
+  </div>
+
+  <div id="list"><div class="empty">読み込み中…</div></div>
+</div>
+
+<script src="js/api-client.js?v=20260911m"></script>
+<script src="js/layout.js?v=20260911m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let data = null;
+
+  KPLayout.init({ active: "goals", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.weekGoals(el("week").value || undefined);
+      el("week").value = data.weekStart;
+      render();
+    } catch (e) {
+      el("list").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    el("notice").innerHTML = data.aiReady ? "" : `
+      <div class="banner warn" style="margin-bottom:16px;">
+        <span class="material-symbols-outlined">smart_toy</span>
+        <div>AIの鍵が設定されていないため、下書きと日ごとの割り振りは使えません。
+        ゴールの保存はできます（メンバーの朝の画面には出ません）。</div>
+      </div>`;
+
+    const list = data.employees || [];
+    el("list").innerHTML = list.length
+      ? list.map(card).join("")
+      : `<div class="empty">対象のメンバーがいません。</div>`;
+  }
+
+  function card(e) {
+    const g = e.goal || {};
+    const kpis = Array.isArray(g.kpis) && g.kpis.length ? g.kpis : [{}];
+    const active = g.status === "active";
+
+    return `
+      <div class="card gl${active ? " active" : ""}" id="c-${esc(e.id)}">
+        <div class="hd">
+          <span class="nm">${esc(e.display_name)}</span>
+          ${e.department ? `<span class="muted" style="font-size:12px;">${esc(e.department)}</span>` : ""}
+          <span class="kp-chip ${active ? "event" : "draft"}">${active ? "メンバーに出ています" : "下書き"}</span>
+        </div>
+
+        <div class="g">
+          <div class="wide">
+            <label>今週のKGI（何が終わっていればよいか）</label>
+            <textarea data-f="kgi" rows="2"
+              placeholder="例：新規50社へ連絡し、5社が登録まで進んでいる">${esc(g.kgi || "")}</textarea>
+          </div>
+          <div>
+            <label>期限</label>
+            <input data-f="deadline" type="text" placeholder="例：金曜17時まで" value="${esc(g.deadline || "")}">
+          </div>
+          <div>
+            <label>優先業務</label>
+            <input data-f="priority_work" type="text" placeholder="例：新規開拓" value="${esc(g.priority_work || "")}">
+          </div>
+          <div class="wide">
+            <label>KPI（数えるもの）</label>
+            <div id="k-${esc(e.id)}">
+              ${kpis.map(kpiRow).join("")}
+            </div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:6px;"
+                    onclick="addKpi('${esc(e.id)}')">KPIを足す</button>
+          </div>
+          <div class="wide">
+            <label>本人への一言（任意）</label>
+            <input data-f="note" type="text" placeholder="例：件数より、次につながる会話を優先で"
+                   value="${esc(g.note || "")}">
+          </div>
+        </div>
+
+        ${e.days?.length ? `
+          <label>AIが割った行動</label>
+          <div class="days">
+            ${e.days.map((d) => `
+              <div class="day${d.started_at ? " started" : ""}">
+                <div class="d">${esc(String(d.work_date).slice(5))}${d.started_at ? " ・開始済み" : ""}</div>
+                <div class="t">${esc(d.top_priority || "—")}</div>
+                <div class="muted" style="margin-top:3px;">
+                  ${(d.actions || []).map((a) =>
+                    esc(a.task) + (a.target != null ? `（${esc(a.target)}${esc(a.unit || "")}）` : "")).join("<br>")}
+                </div>
+              </div>`).join("")}
+          </div>` : ""}
+
+        <div class="foot">
+          <button class="btn btn-primary btn-sm" onclick="save('${esc(e.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">save</span>保存
+          </button>
+          ${data.aiReady ? `
+            <button class="btn btn-secondary btn-sm" onclick="draft('${esc(e.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに下書きしてもらう
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="split('${esc(e.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">splitscreen</span>
+              ${e.days?.length ? "行動を作り直す" : "月〜金の行動に割る"}
+            </button>` : ""}
+          <span class="muted" style="font-size:11.5px;" id="m-${esc(e.id)}"></span>
+        </div>
+      </div>`;
+  }
+
+  function kpiRow(k = {}) {
+    return `
+      <div class="kpi-row">
+        <input data-k="name" type="text" placeholder="数えるもの（例：新規連絡社数）" value="${esc(k.name || "")}">
+        <input data-k="target" type="number" step="0.5" placeholder="目標" value="${k.target ?? ""}">
+        <input data-k="unit" type="text" class="u" placeholder="単位" value="${esc(k.unit || "")}">
+        <button class="btn btn-secondary btn-sm" onclick="this.closest('.kpi-row').remove()"
+                title="消す"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
+      </div>`;
+  }
+
+  function addKpi(id) {
+    el(`k-${id}`).insertAdjacentHTML("beforeend", kpiRow());
+  }
+
+  function readCard(id) {
+    const c = el(`c-${id}`);
+    const out = { employeeId: id, weekStart: data.weekStart, kpis: [] };
+    for (const f of c.querySelectorAll("[data-f]")) out[f.dataset.f] = f.value.trim();
+    for (const row of c.querySelectorAll(".kpi-row")) {
+      const k = {};
+      for (const f of row.querySelectorAll("[data-k]")) k[f.dataset.k] = f.value.trim();
+      if (k.name) out.kpis.push({ name: k.name, target: k.target === "" ? null : Number(k.target), unit: k.unit });
+    }
+    return out;
+  }
+
+  async function save(id, btn) {
+    const msg = el(`m-${id}`);
+    msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.saveWeekGoal(readCard(id)));
+      msg.textContent = "保存しました。";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  // AIは下書きまで。何を目指すかは人が決める。
+  // 出てきたものは、そのまま欄に入れて直せるようにする
+  async function draft(id, btn) {
+    const msg = el(`m-${id}`);
+    msg.textContent = "";
+    try {
+      const r = await KPLayout.busy(btn, "考えています…", () => API.draftWeekGoal(id, data.weekStart));
+      const c = el(`c-${id}`);
+      const d = r.draft || {};
+      for (const [k, v] of Object.entries({ kgi: d.kgi, deadline: d.deadline, priority_work: d.priority_work })) {
+        const f = c.querySelector(`[data-f="${k}"]`);
+        if (f && v) f.value = v;
+      }
+      if (d.kpis?.length) el(`k-${id}`).innerHTML = d.kpis.map(kpiRow).join("");
+      msg.textContent = d.note
+        ? `下書きです。確認して保存してください。（AIから：${d.note}）`
+        : "下書きです。確認して保存してください。";
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "作れませんでした";
+    }
+  }
+
+  // 週のゴールを日ごとに割る。ここを押すとメンバーの朝の画面に出る。
+  // すでに始めた日は上書きしない（走り出したあとに今日の行動を変えない）
+  async function split(id, btn) {
+    const msg = el(`m-${id}`);
+    msg.textContent = "";
+    try {
+      const r = await KPLayout.busy(btn, "割っています…", () => API.splitWeekGoal(id, data.weekStart));
+      msg.textContent = `${r.days} 日ぶんを作りました。`
+        + (r.kept?.length ? `（${r.kept.join("・")} は開始済みのため、そのままです）` : "");
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "割れませんでした";
+    }
+  }
+</script>
+</body>
+</html>

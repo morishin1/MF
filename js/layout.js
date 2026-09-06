@@ -86,6 +86,7 @@
     { section: "業務" },
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",     icon: "dashboard",    ready: true  },
     { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",       icon: "monitoring",   ready: true  },
+    { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",       icon: "flag",         ready: true  },
     { key: "nippo",     href: "admin-nippo.html",     label: "日報",               icon: "edit_note",    ready: true  },
     { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信",       icon: "campaign",     ready: true  },
     { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
