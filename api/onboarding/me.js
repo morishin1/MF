@@ -31,7 +31,9 @@ import {
 } from "../../lib/onboard-form.js";
 import { syncFormItems, ensureDocItems } from "../../lib/onboard-kit.js";
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
-import { DOCS, docOf, docByTitle } from "../../lib/onboard-docs.js";
+import { DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
+import { hrConfigured } from "../../lib/gdrive.js";
+import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -107,11 +109,20 @@ async function read(res, user, ctx) {
   const c = contract.data?.[0] || null;
   const pf = profile.data || null;
 
+  // 本人の Google ドライブのフォルダ。開ける状態なら、書類ごとに直リンクを返す
+  const drive = await employeeDrive(sb, ctx, proc.data).catch((e) => {
+    console.error("[onboarding/me] Driveの共有に失敗:", e.message);
+    return { ready: false, note: null, folders: null, sensitiveId: null };
+  });
+
   // 本人が出す書類。定義（lib/onboard-docs.js）と、チェックリストの状態を突き合わせる
   const byKey = new Map(items.map((i) => [i.item_key, i]));
   const documents = DOCS.map((d) => {
     const it = byKey.get(d.key) || null;
     const mine = files.filter((f) => f.item_id === it?.id);
+    // 置き場所は書類ごとに決まっている。本人にフォルダを選ばせない。
+    // マイナンバーだけは個人フォルダの外（機微情報）へ
+    const folderId = d.sensitive ? drive.sensitiveId : drive.folders?.[folderKeyOf(d)];
     return {
       key: d.key,
       itemId: it?.id || null,
@@ -120,6 +131,7 @@ async function read(res, user, ctx) {
       required: d.required !== false,
       sensitive: !!d.sensitive,
       template: d.template || null,
+      driveLink: drive.ready && folderId ? linkOf(folderId) : null,
       status: it?.status || "todo",
       submittedAt: it?.submitted_at || mine[0]?.created_at || null,
       files: mine.map((f) => ({ id: f.id, filename: f.filename, driveName: f.drive_name, at: f.created_at })),
@@ -139,6 +151,8 @@ async function read(res, user, ctx) {
       agreedAt: x.agreed_at, body: x.body_snapshot,
     })),
     documents,
+    // Googleドライブに直接あげられるか。だめなときは理由（画面の出し分けに使う）
+    drive: { ready: drive.ready, note: drive.note },
 
     procedureId: proc.data?.id || null,
     status: proc.data?.status || null,
@@ -172,12 +186,71 @@ async function read(res, user, ctx) {
     // 定義に無い、人が手で足した本人向け項目。あれば一緒に出す。
     // 題名でも突き合わせるのは、つなぎ直しに失敗した行を
     // 「ご提出いただく書類」と二重に並べないため
-    myItems: items.filter((i) => i.owner === "employee"
-                          && !docOf(i.item_key) && !docByTitle(i.title)
-                          && !String(i.item_key || "").startsWith("form_")),
+    myItems: items
+      .filter((i) => i.owner === "employee"
+                  && !docOf(i.item_key) && !docByTitle(i.title)
+                  && !String(i.item_key || "").startsWith("form_"))
+      // 定義に無いものの置き場所は 05_その他
+      .map((i) => ({
+        ...i,
+        driveLink: drive.ready && drive.folders?.["05"] ? linkOf(drive.folders["05"]) : null,
+      })),
     // 進み具合は全体で数える。「あと何%で入社準備が終わるか」を見せる
     progress: progressOf(items),
   });
+}
+
+// ---- 本人のドライブフォルダ ---------------------------------------------------
+//
+// ■ なぜ「mfに上げる」ではなく「ドライブを開く」なのか
+//   何枚も撮った写真をその場で放り込むのは、Googleドライブのほうが速い。
+//   スマホで撮って、そのまま自分のフォルダへ入れて終わりにできる。
+//
+// ■ それでも、どのフォルダに入るかは会社が決める
+//   書類ごとに開くフォルダを分けて渡す。本人にフォルダを選ばせない。
+//   選ばせると、社労士に渡す 04 に入っていない、が起きる。
+//   マイナンバーだけは個人フォルダの外（機微情報）を開く。
+//
+// ■ 共有は1回だけ
+//   済んだ相手を drive_folders の中に控えておく。
+//   列を1つ足すためだけにマイグレーションを増やしたくないので、
+//   フォルダの対応表と同じ jsonb に "_sharedWith" として持つ。
+//   この鍵は 01〜05 とぶつからない
+async function employeeDrive(sb, ctx, proc) {
+  const out = { ready: false, note: null, folders: null, sensitiveId: null };
+  if (!proc || !hrConfigured()) return out;
+
+  const folders = proc.drive_folders || null;
+  if (!folders) {
+    out.note = "保管フォルダがまだ作られていません。管理者にお知らせください。";
+    return out;
+  }
+  out.folders = folders;
+  out.sensitiveId = proc.drive_sensitive_folder_id || null;
+
+  const email = ctx.employee.email || null;
+  const done = Array.isArray(folders._sharedWith) ? folders._sharedWith : [];
+
+  if (email && done.includes(email)) { out.ready = true; return out; }
+
+  const r = await shareEmployeeFolders(
+    { folders, sensitiveFolderId: out.sensitiveId }, email);
+
+  if (r.shared?.length) {
+    out.ready = true;
+    await sb.from("gw_procedures")
+      .update({ drive_folders: { ...folders, _sharedWith: [...done, email] } })
+      .eq("id", proc.id);
+    return out;
+  }
+
+  out.note = r.skipped === "domain_not_allowed"
+    ? "会社のメールアドレス以外には、フォルダを自動で渡していません。"
+      + "ドライブを使いたい場合は管理者にお知らせください。"
+    : r.skipped === "no_email"
+      ? "メールアドレスが登録されていないため、フォルダをお渡しできません。"
+      : null;
+  return out;
 }
 
 // ---- 個人情報の保存・提出 -----------------------------------------------------

@@ -10,7 +10,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { defaultChecklist } from "../../lib/onboarding.js";
-import { ensureProcedureFolders, shareAdvisorFolder } from "../../lib/hr-drive.js";
+import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders } from "../../lib/hr-drive.js";
 import { admin } from "../../lib/supabase.js";
 
 const KINDS = ["onboarding", "offboarding"];
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const { data: procedures, error } = await sb
       .from("gw_procedures")
-      .select(`${P_FIELDS}, employee:gw_employees(id, display_name, department, position, employment_type, status)`)
+      .select(`${P_FIELDS}, employee:gw_employees(id, display_name, email, department, position, employment_type, status)`)
       .eq("tenant_id", ctx.tenantId)
       .order("target_on", { ascending: true, nullsFirst: false })
       .limit(200);
@@ -204,6 +204,39 @@ export default async function handler(req, res) {
       }
       patch.advisor_shared_to = email;
       patch.advisor_shared_at = new Date().toISOString();
+    }
+
+    // 本人に、自分のフォルダを渡す。
+    // 自動で渡すのは会社ドメインだけなので、入社前で会社アカウントがまだ無い人は
+    // ここから渡す。人が相手を見て決めるので、ドメインの制限はかけない。
+    // 渡すのは 01・03・04・05 と機微情報だけ（02_労働条件・契約 は渡さない）
+    if (body.shareEmployee) {
+      const email = String(body.shareEmployee).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return json(res, 400, { error: "invalid_email", hint: "本人のメールアドレスを入れてください" });
+      }
+      const { data: cur } = await admin().from("gw_procedures")
+        .select("drive_folders, drive_sensitive_folder_id")
+        .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+      if (!cur?.drive_folders) {
+        return json(res, 400, { error: "no_folders", hint: "先に個人フォルダを作ってください" });
+      }
+      let r;
+      try {
+        r = await shareEmployeeFolders(
+          { folders: cur.drive_folders, sensitiveFolderId: cur.drive_sensitive_folder_id },
+          email, { force: true });
+      } catch (e) {
+        return json(res, 502, { error: "share_failed", hint: String(e.message).slice(0, 200) });
+      }
+      if (!r.shared.length) {
+        return json(res, 400, {
+          error: "share_failed",
+          hint: r.skipped === "not_configured" ? "Drive が設定されていません" : "渡せるフォルダがありませんでした",
+        });
+      }
+      const done = Array.isArray(cur.drive_folders._sharedWith) ? cur.drive_folders._sharedWith : [];
+      patch.drive_folders = { ...cur.drive_folders, _sharedWith: [...new Set([...done, email])] };
     }
 
     const { data, error } = await sb

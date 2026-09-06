@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911c">
-  <link rel="stylesheet" href="css/layout.css?v=20260911c">
+  <link rel="stylesheet" href="css/app.css?v=20260911d">
+  <link rel="stylesheet" href="css/layout.css?v=20260911d">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -56,6 +56,16 @@
     .ob-doc .act { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
     .ob-doc .st { font-size:12px; margin-top:8px; }
     .ob-doc .st.ok { color:#256b36; font-weight:600; }
+
+    /* 出し方（ドライブを開く → チェック） */
+    .ob-send { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+    .ob-check { display:inline-flex; align-items:center; gap:7px; font-size:13px;
+                font-weight:600; cursor:pointer; }
+    .ob-check input { width:auto; margin:0; }
+    .ob-check input:disabled + span { opacity:.5; }
+    .ob-alt { margin-top:9px; }
+    .ob-alt summary { cursor:pointer; font-size:11.5px; color:var(--muted); }
+    .ob-alt .dz { margin-top:8px; }
 
     .ob-c .rd { font-size:12.5px; color:var(--primary); text-decoration:underline; cursor:pointer;
                 background:none; border:none; padding:0; font-family:inherit; margin-top:8px; }
@@ -136,8 +146,8 @@
       <span id="d-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
       手元にあるものから順で構いません。写真でも読めれば大丈夫です。
-      出したものは、会社の保管場所に自動で整理されます。
     </p>
+    <div id="docs-note"></div>
     <div id="docs"></div>
     <div id="docs-extra"></div>
   </div>
@@ -155,9 +165,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911c"></script>
-<script src="js/layout.js?v=20260911c"></script>
-<script src="js/dropzone.js?v=20260911c"></script>
+<script src="js/api-client.js?v=20260911d"></script>
+<script src="js/layout.js?v=20260911d"></script>
+<script src="js/dropzone.js?v=20260911d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -373,8 +383,8 @@
   };
 
   // ---- 提出書類 ----------------------------------------------------------------
-  // 雛形をダウンロード → 記入 → アップロード。Drive は本人に触らせない。
-  // どこに置くか・名前をどう付けるかは、サーバが決める
+  // 書類ごとに、決まったGoogleドライブのフォルダを開いて入れてもらう。
+  // どのフォルダを開くかはサーバが決める（本人には選ばせない）
   function renderDocs() {
     const docs = data.documents || [];
     const extra = data.myItems || [];
@@ -384,6 +394,21 @@
     const done = docs.filter((d) => d.status === "submitted" || d.status === "done" || d.status === "na").length;
     el("d-tag").textContent = `${done} / ${docs.length}`;
     el("d-tag").className = `kp-chip ${done === docs.length && docs.length ? "event" : "draft"}`;
+
+    el("docs-note").innerHTML = data.drive?.ready
+      ? `<div class="banner info" style="margin-bottom:14px;">
+           <span class="material-symbols-outlined">drive_export</span>
+           <div>書類ごとに<b>あなたのフォルダ</b>が開きます。スマホで撮った写真をそのまま入れて、
+           入れ終わったらチェックを付けてください。何枚あってもかまいません。<br>
+           <span class="muted" style="font-size:11.5px;">フォルダの場所と、社労士へ渡す範囲は会社側で決めています。
+           マイナンバー確認書類だけは別の場所に入ります。</span></div>
+         </div>`
+      : data.drive?.note
+        ? `<div class="banner warn" style="margin-bottom:14px;">
+             <span class="material-symbols-outlined">info</span>
+             <div>${esc(data.drive.note)}この画面から直接あげることもできます。</div>
+           </div>`
+        : "";
 
     el("docs").innerHTML = docs.map((d) => {
       const finished = d.status === "done" || d.status === "na";
@@ -403,20 +428,14 @@
           ${d.sensitive ? `<div class="s" style="color:#9c4221;">
             この書類は、他の書類とは別の場所に保管され、見られる人を限っています。</div>` : ""}
 
-          ${d.template || (!finished && !sent && !d.required) ? `
+          ${d.template ? `
             <div class="act">
-              ${d.template ? `
-                <a class="btn btn-secondary btn-sm" href="${esc(d.template.url)}" target="_blank" rel="noopener">
-                  <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
-                </a>` : ""}
-              ${!finished && !sent && !d.required ? `
-                <button class="btn btn-secondary btn-sm" onclick="mark('${esc(d.itemId || "")}', false, this)">
-                  ありません</button>` : ""}
+              <a class="btn btn-secondary btn-sm" href="${esc(d.template.url)}" target="_blank" rel="noopener">
+                <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
+              </a>
             </div>` : ""}
 
-          ${finished ? "" : dropzone(d.itemId, sent
-            ? "追加のファイルを落とす、または押して選ぶ"
-            : "ここにファイルを落とす、または押して選ぶ")}
+          ${finished ? "" : submitBox(d)}
 
           ${d.files.length ? `
             <div class="st ok">
@@ -436,37 +455,96 @@
           ${i.status === "done" || i.status === "na" ? '<span class="kp-chip event">確認済み</span>'
             : i.status === "submitted" ? '<span class="kp-chip event">提出済み</span>'
             : '<span class="kp-chip draft">未提出</span>'}</div>
-        ${i.status === "done" || i.status === "na" ? "" : `
-          ${dropzone(i.id, "ここにファイルを落とす、または押して選ぶ")}
-          <div class="act">
-            ${i.status === "submitted"
-              ? `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', true, this)">取り消す</button>`
-              : `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', false, this)">提出しました</button>`}
-          </div>`}
+        ${i.status === "done" || i.status === "na" ? "" : submitBox({
+          itemId: i.id, status: i.status, driveLink: i.driveLink, required: true, sensitive: false,
+        })}
       </div>`).join("");
 
     // 描き直すたびに受け口を付け直す。付いている要素には二重に付かない
     KPDrop.scan(el("docs-card"), sendFiles);
   }
 
-  // 受け口。押しても落としても同じところに入る。複数まとめてでよい。
-  // itemId が無い＝チェックリストの行に結び付いていない。
-  // 黙って何も起きないのがいちばん困るので、その場で理由を出す
-  function dropzone(itemId, label) {
-    if (!itemId) {
+  // ---- 出し方 ------------------------------------------------------------------
+  // Googleドライブのフォルダを開いて、そこに入れてもらう。
+  // 何枚も撮った写真をその場で放り込めるのは、こちらのほうが速い。
+  // どのフォルダを開くかは書類ごとに決まっていて、本人には選ばせない。
+  //
+  // 入れ終わったらチェックを入れてもらう。ドライブに入ったかどうかを
+  // こちらから見に行くことはしないので、「出した」は本人の申告で受ける。
+  //
+  // ドライブが使えない場合（会社アカウントがまだ無い等）は、
+  // この画面から直接あげる道も残す。折りたたんでおく
+  function submitBox(d) {
+    const sent = d.status === "submitted";
+    const id = esc(d.itemId || "");
+
+    if (!d.itemId) {
       return `<div class="dz sm" style="cursor:default;border-style:solid;">
         この書類は、いまのチェックリストに結び付いていません。
         画面を再読み込みしても直らないときは、管理者にお知らせください。
       </div>`;
     }
+
+    const check = `
+      <label class="ob-check">
+        <input type="checkbox" ${sent ? "checked" : ""}
+               onchange="toggleDone('${id}', this)">
+        <span>ドライブに入れました</span>
+      </label>`;
+
+    const skip = !d.required && !sent
+      ? `<button class="btn btn-secondary btn-sm" onclick="mark('${id}', false, this)">ありません</button>`
+      : "";
+
+    if (d.driveLink) {
+      return `
+        <div class="ob-send">
+          <a class="btn btn-primary btn-sm" href="${esc(d.driveLink)}" target="_blank" rel="noopener">
+            <span class="material-symbols-outlined icon-inline">drive_export</span>
+            ${d.sensitive ? "保管場所（取扱注意）を開く" : "Googleドライブのフォルダを開く"}
+          </a>
+          ${check}
+          ${skip}
+        </div>
+        <details class="ob-alt">
+          <summary>ドライブが開けないときは、ここから出せます</summary>
+          ${dropzone(d.itemId)}
+        </details>`;
+    }
+
+    // ドライブを渡せていない。この画面からのアップロードだけにする
+    return `
+      ${dropzone(d.itemId)}
+      ${skip ? `<div class="act">${skip}</div>` : ""}`;
+  }
+
+  // この画面から直接あげる受け口。押しても落としても同じ。複数まとめてでよい
+  function dropzone(itemId) {
     return `<div class="dz sm" data-drop="${esc(itemId)}"
                  data-drop-accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx">
         <div class="dz-main">
-          <span class="material-symbols-outlined icon-inline">upload_file</span>${esc(label)}
+          <span class="material-symbols-outlined icon-inline">upload_file</span>
+          ここにファイルを落とす、または押して選ぶ
         </div>
         <div class="dz-sub">PDF・画像・Word・Excel／1つ10MBまで／複数まとめてOK</div>
         <div class="dz-log" data-log></div>
       </div>`;
+  }
+
+  // チェックの付け外し。ボタンと違って文字を差し替えられないので、
+  // 押している間は触れないようにして、終わったら読み直す
+  async function toggleDone(itemId, box) {
+    if (!itemId) return;
+    const want = box.checked;
+    box.disabled = true;
+    try {
+      await API.submitProcedureItem(itemId, { undo: !want });
+      await load();
+    } catch (e) {
+      box.checked = !want;
+      box.disabled = false;
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
   }
 
   const fmtDateTime = (iso) => {
