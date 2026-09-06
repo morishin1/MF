@@ -142,7 +142,17 @@ async function act(req, res, ctx, user) {
       ai_status: "processing", ai_prompt_version: MONTHLY_PROMPT_VERSION, metrics,
     });
 
-    const r = await summarizeMonth({ metrics, weeks });
+    // 「先月までできなかった」を判断するには、先月の記録が要る。
+    // 渡さないと learned は毎月同じことを書きがちになる
+    const { data: prevMonth } = await sb.from("gw_nippo_monthly")
+      .select("ai_learned, ai_summary")
+      .eq("user_id", body.userId).lt("month", `${month}-01`)
+      .order("month", { ascending: false }).limit(1).maybeSingle();
+
+    const r = await summarizeMonth({
+      metrics, weeks,
+      prevMonth: prevMonth ? { learned: prevMonth.ai_learned || [] } : null,
+    });
     const patch = r.ok
       ? {
           ai_status: "completed",
@@ -150,6 +160,7 @@ async function act(req, res, ctx, user) {
           ai_summary: r.result.summary,
           ai_strengths: r.result.strengths,
           ai_improvements: r.result.improvements,
+          ai_learned: r.result.learned || [],
           ai_error: null,
           ai_generated_at: new Date().toISOString(),
           metrics,
@@ -205,6 +216,7 @@ function shape(r) {
     aiSummary: r.ai_summary,
     aiStrengths: r.ai_strengths || [],
     aiImprovements: r.ai_improvements || [],
+    aiLearned: r.ai_learned || [],
     aiModel: r.ai_model,
     aiError: r.ai_error,
     managerComment: r.manager_comment,

@@ -1140,6 +1140,7 @@
           </button>
         </div>
         ${s.aiSummary ? `<div style="font-size:13px;margin-bottom:10px;">${esc(s.aiSummary)}</div>` : ""}
+        ${listBlock("今月できるようになったこと", s.aiLearned, "var(--primary)")}
         ${listBlock("強み TOP3", s.aiStrengths, "#2f855a")}
         ${listBlock("改善 TOP3", s.aiImprovements, "#b7791f")}
       </div>`;
