@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
-  <link rel="stylesheet" href="css/layout.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
+  <link rel="stylesheet" href="css/layout.css?v=20260911c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -155,8 +155,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/layout.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/layout.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -402,29 +403,28 @@
           ${d.sensitive ? `<div class="s" style="color:#9c4221;">
             この書類は、他の書類とは別の場所に保管され、見られる人を限っています。</div>` : ""}
 
-          <div class="act">
-            ${d.template ? `
-              <a class="btn btn-secondary btn-sm" href="${esc(d.template.url)}" target="_blank" rel="noopener">
-                <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
-              </a>` : ""}
-            ${finished ? "" : `
-              <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-                <span class="material-symbols-outlined icon-inline">upload_file</span>
-                ${sent ? "別のファイルを出す" : "記入済みファイルをアップロード"}
-                <input type="file" class="hidden"
-                       accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
-                       onchange="pickFile('${esc(d.itemId || "")}', this)">
-              </label>`}
-            ${!finished && !sent && !d.required ? `
-              <button class="btn btn-secondary btn-sm" onclick="mark('${esc(d.itemId || "")}', false, this)">
-                ありません</button>` : ""}
-          </div>
+          ${d.template || (!finished && !sent && !d.required) ? `
+            <div class="act">
+              ${d.template ? `
+                <a class="btn btn-secondary btn-sm" href="${esc(d.template.url)}" target="_blank" rel="noopener">
+                  <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
+                </a>` : ""}
+              ${!finished && !sent && !d.required ? `
+                <button class="btn btn-secondary btn-sm" onclick="mark('${esc(d.itemId || "")}', false, this)">
+                  ありません</button>` : ""}
+            </div>` : ""}
 
-          ${sent || finished ? `
+          ${finished ? "" : dropzone(d.itemId, sent
+            ? "追加のファイルを落とす、または押して選ぶ"
+            : "ここにファイルを落とす、または押して選ぶ")}
+
+          ${d.files.length ? `
             <div class="st ok">
               <span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;">check_circle</span>
-              ${esc(fmtDateTime(d.submittedAt))} に提出
-              ${d.files[0]?.driveName ? `<span class="muted" style="font-weight:400;margin-left:8px;">${esc(d.files[0].driveName)}</span>` : ""}
+              ${esc(fmtDateTime(d.submittedAt))} に提出（${d.files.length}件）
+              <div class="muted" style="font-weight:400;margin-top:2px;">
+                ${d.files.map((f) => esc(f.driveName || f.filename)).join("<br>")}
+              </div>
             </div>` : ""}
         </div>`;
     }).join("");
@@ -437,17 +437,36 @@
             : i.status === "submitted" ? '<span class="kp-chip event">提出済み</span>'
             : '<span class="kp-chip draft">未提出</span>'}</div>
         ${i.status === "done" || i.status === "na" ? "" : `
+          ${dropzone(i.id, "ここにファイルを落とす、または押して選ぶ")}
           <div class="act">
-            <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-              <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを出す
-              <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
-                     onchange="pickFile('${esc(i.id)}', this)">
-            </label>
             ${i.status === "submitted"
               ? `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', true, this)">取り消す</button>`
               : `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', false, this)">提出しました</button>`}
           </div>`}
       </div>`).join("");
+
+    // 描き直すたびに受け口を付け直す。付いている要素には二重に付かない
+    KPDrop.scan(el("docs-card"), sendFiles);
+  }
+
+  // 受け口。押しても落としても同じところに入る。複数まとめてでよい。
+  // itemId が無い＝チェックリストの行に結び付いていない。
+  // 黙って何も起きないのがいちばん困るので、その場で理由を出す
+  function dropzone(itemId, label) {
+    if (!itemId) {
+      return `<div class="dz sm" style="cursor:default;border-style:solid;">
+        この書類は、いまのチェックリストに結び付いていません。
+        画面を再読み込みしても直らないときは、管理者にお知らせください。
+      </div>`;
+    }
+    return `<div class="dz sm" data-drop="${esc(itemId)}"
+                 data-drop-accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx">
+        <div class="dz-main">
+          <span class="material-symbols-outlined icon-inline">upload_file</span>${esc(label)}
+        </div>
+        <div class="dz-sub">PDF・画像・Word・Excel／1つ10MBまで／複数まとめてOK</div>
+        <div class="dz-log" data-log></div>
+      </div>`;
   }
 
   const fmtDateTime = (iso) => {
@@ -466,22 +485,32 @@
     }
   }
 
-  // ファイルを選んだら、そのまま提出まで進める。
+  // 落とした（選んだ）ファイルを、そのまま提出まで進める。
   // 会計の書類アップロードとは別の保存先（人事だけが見られる）に入り、
-  // そこから Drive の個人フォルダの決まった場所へ、決まった名前で写される
-  async function pickFile(itemId, input) {
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file || !itemId) return;
-    const box = el("docs");
-    box.insertAdjacentHTML("afterbegin", `<div class="empty" id="up-wait">送信中…</div>`);
-    try {
-      await API.uploadProcedureFile(itemId, file);
-      await load();
-    } catch (e) {
-      el("up-wait")?.remove();
-      alert(e.hint || e.detail || e.message || "送信できませんでした");
-    }
+  // そこから Drive の個人フォルダの決まった場所へ、決まった名前で写される。
+  //
+  // 複数あっても1つずつ順に送る。1つ失敗しても残りは続け、
+  // 最後に「何件送れて、何が駄目だったか」を出す
+  async function sendFiles(itemId, files, node) {
+    if (!itemId) return;
+    const log = node.querySelector("[data-log]");
+    node.classList.add("busy");
+    log.className = "dz-log";
+
+    const res = await KPDrop.run(
+      files,
+      (f) => API.uploadProcedureFile(itemId, f),
+      (done, total, f) => {
+        log.textContent = f
+          ? `送信中… ${done + 1}/${total}　${f.name}`
+          : "保存しています…";
+      });
+
+    node.classList.remove("busy");
+    log.textContent = "";
+    // 送れたものがあると画面を描き直すので、失敗はその前に伝える
+    if (res.ng.length) alert(KPDrop.summary(res));
+    if (res.ok.length) await load();
   }
 
   function renderSubmitState() {

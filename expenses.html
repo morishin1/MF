@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
-  <link rel="stylesheet" href="css/layout.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
+  <link rel="stylesheet" href="css/layout.css?v=20260911c">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -69,13 +69,13 @@
             インボイス登録事業者の領収書
           </label>
         </div>
-        <div>
-          <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
-            <span class="material-symbols-outlined icon-inline">attach_file</span>
-            <span id="l-file-label">領収書を付ける</span>
-            <input type="file" class="hidden" id="l-file"
-                   accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" onchange="pickReceipt(this)">
-          </label>
+        <div style="min-width:210px;flex:1;">
+          <div class="dz sm" id="l-drop">
+            <div class="dz-main">
+              <span class="material-symbols-outlined icon-inline">attach_file</span>
+              <span id="l-file-label">領収書を落とす／押して選ぶ</span>
+            </div>
+          </div>
         </div>
         <div>
           <button class="btn btn-secondary" onclick="addLine(this)">
@@ -120,8 +120,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/layout.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/layout.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -156,6 +157,13 @@
     el("l-date").value = today;
     el("f-period").value = today.slice(0, 7);
 
+    // 領収書の受け口。落としても押しても同じ。
+    // 明細1行につき1枚なので、複数落とされたら先頭だけ受ける
+    KPDrop.attach(el("l-drop"), (files) => pickReceipt(files[0]), {
+      multiple: false,
+      accept: ".pdf,.jpg,.jpeg,.png,.heic,.webp",
+    });
+
     await load();
   }
 
@@ -175,9 +183,7 @@
   }
 
   // ---- 明細 -----------------------------------------------------------------
-  async function pickReceipt(input) {
-    const file = input.files?.[0];
-    input.value = "";
+  async function pickReceipt(file) {
     if (!file) return;
     const label = el("l-file-label");
     const before = label.textContent;
@@ -217,7 +223,7 @@
     el("l-desc").value = "";
     el("l-invoice").checked = true;
     pendingReceipt = null;
-    el("l-file-label").textContent = "領収書を付ける";
+    el("l-file-label").textContent = "領収書を落とす／押して選ぶ";
     renderLines();
   }
 

@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
-  <link rel="stylesheet" href="css/layout.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
+  <link rel="stylesheet" href="css/layout.css?v=20260911c">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -68,11 +68,13 @@
     <h2><span class="material-symbols-outlined">upload_file</span>契約書を上げる</h2>
     <div class="inline-controls" style="margin-bottom:10px;">
       <div style="min-width:220px;"><label>対象者</label><select id="u-emp"></select></div>
-      <div style="align-self:flex-end;">
-        <label class="btn btn-primary" style="cursor:pointer;">
-          <span class="material-symbols-outlined icon-inline">description</span>ファイルを選ぶ
-          <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" onchange="pickFile(this)">
-        </label>
+      <div style="min-width:240px;flex:1;align-self:flex-end;">
+        <div class="dz sm" id="u-drop">
+          <div class="dz-main">
+            <span class="material-symbols-outlined icon-inline">description</span>
+            契約書を落とす／押して選ぶ
+          </div>
+        </div>
       </div>
     </div>
     <p class="muted" style="font-size:12px;margin:0;">
@@ -101,8 +103,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/layout.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/layout.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -118,7 +121,16 @@
   let detail = null;
 
   KPLayout.init({ active: "contracts", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => {
+      if (!ctx) return;
+      load();
+      // 契約書の受け口。落としても押しても同じ（js/dropzone.js）。
+      // 1人ぶんずつ読ませるので1件だけ受ける
+      KPDrop.attach(el("u-drop"), (files) => pickFile(files[0]), {
+        multiple: false,
+        accept: ".pdf,.jpg,.jpeg,.png,.heic,.webp",
+      });
+    });
 
   async function load() {
     try {
@@ -210,9 +222,7 @@
   }[c.status] || "");
 
   // --- 契約書を上げる ---------------------------------------------------------
-  async function pickFile(input) {
-    const file = input.files?.[0];
-    input.value = "";
+  async function pickFile(file) {
     if (!file) return;
     const employeeId = el("u-emp").value;
     const msg = el("u-msg");

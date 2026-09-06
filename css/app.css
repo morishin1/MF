@@ -45,7 +45,20 @@ input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--border
 .banner.err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;}
 .banner.ok{background:#f0fff4;border:1px solid #c6f6d5;color:#276749;}
 .drop{border:2px dashed #cbd5e0;border-radius:10px;padding:26px;text-align:center;color:var(--muted);background:#fafbfc;cursor:pointer;transition:.15s;}
-.drop:hover,.drop.hot{border-color:var(--primary);background:var(--soft);}
+.drop:hover,.drop.hot,.drop.is-over{border-color:var(--primary);background:var(--soft);}
+.drop.is-over{border-style:solid;}
+.drop.busy{cursor:progress;opacity:.65;pointer-events:none;}
+/* 共通の受け口（js/dropzone.js）。押して選ぶ・落とす、どちらでも同じ */
+.dz{border:2px dashed #cbd5e0;border-radius:10px;padding:16px 14px;text-align:center;color:var(--muted);background:#fafbfc;cursor:pointer;transition:.15s;font-size:12.5px;line-height:1.7;}
+.dz:hover,.dz:focus-visible,.dz.is-over{border-color:var(--primary);background:var(--soft);color:var(--primary);outline:none;}
+.dz.is-over{border-style:solid;}
+.dz .dz-main{font-weight:600;color:var(--text);font-size:13px;}
+.dz.is-over .dz-main{color:var(--primary);}
+.dz .dz-sub{font-size:11.5px;color:var(--muted);margin-top:2px;}
+.dz.sm{padding:11px 12px;}
+.dz.busy{cursor:progress;opacity:.65;pointer-events:none;}
+.dz-log{font-size:12px;margin-top:6px;white-space:pre-line;}
+.dz-log.ng{color:#c53030;}
 .steps{display:flex;gap:6px;margin:14px 0 0;flex-wrap:wrap;}
 .step{font-size:12px;padding:5px 10px;border-radius:20px;background:#edf2f7;color:var(--muted);display:flex;align-items:center;gap:5px;}
 .step.active{background:var(--primary);color:white;}

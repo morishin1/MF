@@ -7,12 +7,12 @@
   <title>書類アップロード - KessanPilot</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
 </head>
 <body>
 
 <div class="topbar">
-  <div class="brand"><img src="img/logo.svg" alt="" class="kp-logo">KessanPilot <span class="tag">書類アップロード</span><span class="tag build" title="動作中のビルド">build 20260911b</span></div>
+  <div class="brand"><img src="img/logo.svg" alt="" class="kp-logo">KessanPilot <span class="tag">書類アップロード</span><span class="tag build" title="動作中のビルド">build 20260911c</span></div>
   <div class="who">
     <a class="navlink" href="help.html"><span class="material-symbols-outlined icon-inline">help</span>使い方</a>
     <a id="admin-link" class="navlink hidden" href="admin.html"><span class="material-symbols-outlined icon-inline">admin_panel_settings</span>管理者画面</a>
@@ -58,17 +58,18 @@
         <span class="material-symbols-outlined">lightbulb</span>
         <div>請求書・領収書はもちろん、契約書・名刺など<b>会計に関係ない書類でもOK</b>。AIが「何の書類か」を判定して<b>月ごとに整理</b>します。会計書類は<b>自動で仕訳</b>され、Google Driveの月別フォルダにも<b>自動保存</b>されます。<br><a href="help.html" style="color:var(--primary);font-weight:600;">▶ 詳しい使い方ガイドを見る</a></div>
       </div>
-      <div id="drop" class="drop">
+      <div id="drop" class="drop"
+           data-drop="documents"
+           data-drop-accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.xlsx,.xls,.csv">
         <span class="material-symbols-outlined" style="font-size:32px;color:var(--primary);">upload_file</span>
-        <div style="margin-top:8px;font-weight:600;color:var(--text);">クリックして選択、またはここにドラッグ</div>
-        <div style="font-size:12px;margin-top:4px;">PDF / 画像（JPG・PNG）/ Excel（.xlsx・.xls）/ CSV ・ 10MBまで</div>
-        <input id="file-input" type="file" class="hidden"
-               accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.xlsx,.xls,.csv,application/pdf,image/*,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+        <div style="margin-top:8px;font-weight:600;color:var(--text);">ここにドラッグ、または押して選択</div>
+        <div style="font-size:12px;margin-top:4px;">PDF / 画像（JPG・PNG）/ Excel（.xlsx・.xls）/ CSV ・ 10MBまで・<b>複数まとめてOK</b></div>
       </div>
       <div id="upload-steps" class="steps hidden">
         <span class="step" data-s="uploading"><span class="material-symbols-outlined" style="font-size:14px;">cloud_upload</span>アップロード</span>
         <span class="step" data-s="recognizing"><span class="material-symbols-outlined" style="font-size:14px;">smart_toy</span>AI判定中</span>
         <span class="step" data-s="done"><span class="material-symbols-outlined" style="font-size:14px;">check</span>完了</span>
+        <span id="upload-count" class="muted" style="font-size:12px;align-self:center;"></span>
       </div>
       <div id="upload-err" class="err-text"></div>
       <div id="process-result"></div>
@@ -108,8 +109,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/preview.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/preview.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const DOC_TYPE_LABEL = {
     invoice:"請求書", receipt:"領収書", bank:"通帳・銀行", card:"カード明細", salary:"給与明細",
@@ -186,12 +188,8 @@
   function onClientChange(){ currentClientId=el("client-select").value; el("process-result").innerHTML=""; loadDocuments(); }
 
   // ---- アップロード → AI判定 ----
-  const drop=el("drop"), fileInput=el("file-input");
-  drop.addEventListener("click",()=>fileInput.click());
-  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("hot");});
-  drop.addEventListener("dragleave",()=>drop.classList.remove("hot"));
-  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("hot"); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);});
-  fileInput.addEventListener("change",()=>{ if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+  // 押しても落としても同じ。何枚まとめてでもよい（順番に1枚ずつ送る）
+  KPDrop.scan(document, (_key, files) => handleFiles(files));
 
   function markStep(phase){
     const order=["uploading","recognizing","done"]; const idx=order.indexOf(phase);
@@ -201,16 +199,27 @@
     });
   }
 
-  async function handleFile(file){
+  // 複数枚を1枚ずつ順に送る。1枚失敗しても残りは続け、最後にまとめて知らせる。
+  // 同時に投げないのは、どれが失敗したのか分からなくなるから
+  async function handleFiles(files){
     if(!currentClientId){ el("upload-err").textContent="先に取引先を選択してください"; return; }
     el("upload-err").textContent=""; el("process-result").innerHTML="";
     el("upload-steps").classList.remove("hidden");
-    try{
-      const res=await API.uploadAndProcess(currentClientId,file,markStep);
-      renderProcessResult(res.document, res.journal);
-      loadDocuments();
-    }catch(e){ el("upload-err").textContent=`失敗: ${e.message}${e.detail?`（${e.detail}）`:""}`; markStep(""); }
-    fileInput.value="";
+    const drop=el("drop");
+    drop.classList.add("busy");
+
+    const last={doc:null,journal:null};
+    const res=await KPDrop.run(
+      files,
+      async (f)=>{ const r=await API.uploadAndProcess(currentClientId,f,markStep);
+                   last.doc=r.document; last.journal=r.journal; },
+      (done,total)=>{ el("upload-count").textContent = total>1 ? `${Math.min(done+1,total)} / ${total} 枚目` : ""; });
+
+    drop.classList.remove("busy");
+    el("upload-count").textContent="";
+    if(last.doc) renderProcessResult(last.doc,last.journal);
+    if(res.ng.length){ el("upload-err").textContent=`失敗: ${res.ng.map(n=>`${n.name}（${n.message}）`).join(" / ")}`; markStep(""); }
+    if(res.ok.length) loadDocuments();
   }
 
   function renderProcessResult(doc, journal){

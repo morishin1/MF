@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
-  <link rel="stylesheet" href="css/layout.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
+  <link rel="stylesheet" href="css/layout.css?v=20260911c">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -72,12 +72,10 @@
       <div id="th-messages" class="kp-chat"><div class="empty">読み込み中…</div></div>
       <div id="th-attach" class="kp-attach hidden"></div>
       <div class="kp-compose">
-        <label class="icon-btn" title="ファイルを添付" style="cursor:pointer;flex:0 0 auto;">
+        <button class="icon-btn" type="button" id="th-attach-btn" title="ファイルを添付（ここに落としてもOK）"
+                style="flex:0 0 auto;" onclick="pickAttachment()">
           <span class="material-symbols-outlined">attach_file</span>
-          <input type="file" class="hidden" id="th-file"
-                 accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.gif,.csv,.txt,.xlsx,.xls,.docx"
-                 onchange="pickAttachment(this)">
-        </label>
+        </button>
         <textarea id="th-input" rows="2" placeholder="メッセージを入力（Ctrl+Enter で送信）"></textarea>
         <button class="btn btn-primary" id="th-send" onclick="send()">
           <span class="material-symbols-outlined icon-inline">send</span>送信
@@ -88,8 +86,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/layout.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/layout.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -199,6 +198,7 @@
     el("view-list").classList.add("hidden");
     el("view-thread").classList.remove("hidden");
     el("th-messages").innerHTML = `<div class="empty">読み込み中…</div>`;
+    wireAttach();     // やり取りの上にファイルを落とせるようにしておく
     if (push) history.pushState({}, "", `?t=${encodeURIComponent(id)}`);
 
     try {
@@ -262,9 +262,19 @@
 
   // 選んだ時点で預けておき、送信時に本文と結び付ける。
   // 先に預けることで、大きめのファイルでも送信のときに待たされない。
-  async function pickAttachment(input) {
-    const file = input.files?.[0];
-    input.value = "";
+  // 添付は1件ずつ。クリップを押す・やり取りの上にファイルを落とす、どちらでも同じ
+  let dropper = null;
+  function wireAttach() {
+    if (dropper) return;
+    dropper = KPDrop.attach(el("th-messages"), (files) => attachFile(files[0]), {
+      multiple: false,
+      clickToPick: false,        // 押したときは本文を読むためのもの。勝手に開かない
+      accept: ".pdf,.jpg,.jpeg,.png,.heic,.webp,.gif,.csv,.txt,.xlsx,.xls,.docx",
+    });
+  }
+  function pickAttachment() { wireAttach(); dropper?.pick(); }
+
+  async function attachFile(file) {
     if (!file || !current) return;
 
     el("th-attach").classList.remove("hidden");

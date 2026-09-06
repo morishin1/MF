@@ -29,9 +29,9 @@ import { admin } from "../../lib/supabase.js";
 import {
   FIELDS, GROUPS, normalizeProfile, missingFields, progressOf,
 } from "../../lib/onboard-form.js";
-import { syncFormItems } from "../../lib/onboard-kit.js";
+import { syncFormItems, ensureDocItems } from "../../lib/onboard-kit.js";
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
-import { DOCS, docOf } from "../../lib/onboard-docs.js";
+import { DOCS, docOf, docByTitle } from "../../lib/onboard-docs.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -86,6 +86,12 @@ async function read(res, user, ctx) {
   let items = [];
   let files = [];
   if (proc.data) {
+    // 古い手続きを、いまの定義につなぎ直してから読む。
+    // 鍵の無い項目はアップロード先が決まらず、ボタンを押しても何も起きない。
+    // 同じ書類が2行あるのも、ここで片付く（lib/onboard-kit.js）
+    await ensureDocItems(sb, ctx.tenantId, proc.data.id).catch((e) =>
+      console.error("[onboarding/me] チェックリストを直せませんでした:", e.message));
+
     const [{ data: its }, { data: fls }] = await Promise.all([
       sb.from("gw_procedure_items")
         .select("id, item_key, title, category, owner, required, status, due_on, note, sort_order, document_id, submitted_at")
@@ -163,8 +169,11 @@ async function read(res, user, ctx) {
     profileStatus: pf?.status || "draft",
     missing: missingFields(pf || {}),
 
-    // 定義に無い、人が手で足した本人向け項目。あれば一緒に出す
-    myItems: items.filter((i) => i.owner === "employee" && !docOf(i.item_key)
+    // 定義に無い、人が手で足した本人向け項目。あれば一緒に出す。
+    // 題名でも突き合わせるのは、つなぎ直しに失敗した行を
+    // 「ご提出いただく書類」と二重に並べないため
+    myItems: items.filter((i) => i.owner === "employee"
+                          && !docOf(i.item_key) && !docByTitle(i.title)
                           && !String(i.item_key || "").startsWith("form_")),
     // 進み具合は全体で数える。「あと何%で入社準備が終わるか」を見せる
     progress: progressOf(items),

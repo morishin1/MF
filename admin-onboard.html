@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
-  <link rel="stylesheet" href="css/layout.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
+  <link rel="stylesheet" href="css/layout.css?v=20260911c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -76,7 +76,9 @@
     .up-err { font-size:12px; color:#9c3a2e; line-height:1.75; }
     .up-warn { font-size:12px; color:#8a6112; line-height:1.75; }
     .up-drop { border:2px dashed var(--border); border-radius:12px; padding:22px 18px;
-               text-align:center; background:#fbfcfe; }
+               text-align:center; background:#fbfcfe; cursor:pointer; transition:.15s; }
+    .up-drop:hover, .up-drop.is-over { border-color:var(--primary); background:var(--soft); }
+    .up-drop.is-over { border-style:solid; }
   </style>
 </head>
 <body>
@@ -268,12 +270,11 @@
         1行が1人です。雛形をダウンロードして書き足してください。
         こちらもフォームと同じ手順で、確認してから登録します。
       </p>
-      <div class="up-drop" id="drop">
-        <input type="file" id="file" accept=".xlsx,.xls,.csv" style="display:none;"
-               onchange="pickFile(this.files[0])">
-        <button class="btn btn-secondary" onclick="document.getElementById('file').click()">
-          <span class="material-symbols-outlined icon-inline">folder_open</span>ファイルを選ぶ
-        </button>
+      <div class="up-drop" id="drop" data-drop-accept=".xlsx,.xls,.csv">
+        <div class="dz-main" style="margin-bottom:10px;">
+          <span class="material-symbols-outlined icon-inline">table_view</span>
+          ここにファイルを落とす、または押して選ぶ
+        </div>
         <button class="btn btn-secondary" style="margin-left:8px;" onclick="downloadTemplate()">
           <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
         </button>
@@ -284,8 +285,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/layout.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/layout.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -301,7 +303,14 @@
   let combo = null;     // 掛け合わせた初期値（サーバが組み立てたもの）
 
   KPLayout.init({ active: "onboard", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => {
+      if (!ctx) return;
+      load();
+      // 名簿ファイルの受け口。落としても押しても同じ（js/dropzone.js）
+      KPDrop.attach(el("drop"), (files) => pickFile(files[0]), {
+        multiple: false, accept: ".xlsx,.xls,.csv",
+      });
+    });
 
   async function load() {
     try {

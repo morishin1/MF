@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911b">
-  <link rel="stylesheet" href="css/layout.css?v=20260911b">
+  <link rel="stylesheet" href="css/app.css?v=20260911c">
+  <link rel="stylesheet" href="css/layout.css?v=20260911c">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -50,12 +50,13 @@
     <div class="inline-controls" style="margin-bottom:10px;align-items:center;">
       <div style="min-width:240px;flex:1;"><label>リンク（Googleドライブ等・任意）</label>
         <input id="d-link" type="url" placeholder="https://drive.google.com/..."></div>
-      <div>
-        <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
-          <span class="material-symbols-outlined icon-inline">attach_file</span>
-          <span id="d-file-label">ファイルを選ぶ</span>
-          <input type="file" class="hidden" id="d-file" onchange="pickLibraryFile(this)">
-        </label>
+      <div style="min-width:200px;flex:1;">
+        <div class="dz sm" id="d-drop">
+          <div class="dz-main">
+            <span class="material-symbols-outlined icon-inline">attach_file</span>
+            <span id="d-file-label">ファイルを落とす／押して選ぶ</span>
+          </div>
+        </div>
       </div>
       <div>
         <button class="btn btn-primary" onclick="addLibrary(this)">
@@ -148,8 +149,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911b"></script>
-<script src="js/layout.js?v=20260911b"></script>
+<script src="js/api-client.js?v=20260911c"></script>
+<script src="js/layout.js?v=20260911c"></script>
+<script src="js/dropzone.js?v=20260911c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -162,7 +164,15 @@
   let editingId = null;
 
   KPLayout.init({ active: "templates", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => { if (!ctx) return; load(); wireDrop(); });
+
+  // ファイルの受け口。落としても押しても同じ（js/dropzone.js）
+  function wireDrop() {
+    KPDrop.attach(el("d-drop"), (files) => pickLibraryFile(files[0]), {
+      multiple: false,
+      accept: ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.heic,.csv,.txt",
+    });
+  }
 
   async function load() {
     // 会社名は差し込みの {{会社名}} に使う
@@ -207,9 +217,7 @@
       </tr>`).join("");
   }
 
-  async function pickLibraryFile(input) {
-    const file = input.files?.[0];
-    input.value = "";
+  async function pickLibraryFile(file) {
     if (!file) return;
     const label = el("d-file-label");
     label.textContent = "アップロード中…";
@@ -217,7 +225,7 @@
       pendingFile = await API.uploadLibraryFile(file);
       label.textContent = pendingFile.name.slice(0, 24);
     } catch (e) {
-      label.textContent = "ファイルを選ぶ";
+      label.textContent = "ファイルを落とす／押して選ぶ";
       alert(e.hint || e.detail || e.message || "アップロードできませんでした");
     }
   }
@@ -244,7 +252,7 @@
       }));
       for (const id of ["d-title", "d-desc", "d-link"]) el(id).value = "";
       pendingFile = null;
-      el("d-file-label").textContent = "ファイルを選ぶ";
+      el("d-file-label").textContent = "ファイルを落とす／押して選ぶ";
       await loadLibrary();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "登録できませんでした";
