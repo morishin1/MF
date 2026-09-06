@@ -51,6 +51,8 @@
   const MEMBER_SIDE_NAV = [
     { key: "home",     href: "home.html",     label: "ホーム",       icon: "home",           ready: true },
     { key: "tasks",    href: "tasks.html",    label: "やること",     icon: "checklist",      ready: true },
+    // 入社準備のあいだだけ。入社日が来ると消える
+    { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
     { key: "nippo",    href: "nippo.html",    label: "日報",         icon: "edit_note",      ready: true },
     { key: "schedule", href: "schedule.html", label: "スケジュール", icon: "calendar_month", ready: true },
     { key: "messages", href: "messages.html", label: "メッセージ",   icon: "forum",          ready: true },
@@ -60,15 +62,19 @@
       match: ["info", "notices", "library", "directory"] },
     { key: "mypage",   href: "mypage.html",   label: "マイページ",   icon: "account_circle", ready: true },
 
-    // 入社準備のあいだだけ。入社日が来ると消える
-    { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
-    // 無限道場。同じ auth.users を使うので、ここと同じメール・パスワードで入れる。
-    // LMS_URL が未設定なら出さない（行き先の無いボタンを置かない）
-    { key: "dojo", href: "#", label: "無限道場", icon: "school", ready: true, external: true, lms: true },
-
-    // ここから下は、必要な人にだけ出す
+    // 必要な人にだけ出す
     { key: "booking", href: "booking.html", label: "設備・スペース予約", icon: "meeting_room",
       ready: true, when: "booking" },
+
+    // ここから下は別システム。
+    // どれも同じ auth.users を使うので、別のIDもパスワードも要らない。
+    // URL が設定されていないものは出さない（行き先の無いボタンを置かない）
+    { section: "つながっている仕組み" },
+    { key: "dojo", label: "無限道場", icon: "school",
+      ready: true, external: true, urlKey: "lmsUrl" },
+    { key: "timecard", label: "タイムカード", icon: "schedule",
+      ready: true, external: true, urlKey: "timecardUrl" },
+    // 会計は経理・管理担当だけ。一般メンバーには出さない
     { key: "docs", href: "app.html", label: "会計書類", icon: "receipt_long",
       ready: true, external: true, when: "accounting" },
   ];
@@ -210,13 +216,14 @@
     //   stage … いまの段階で開いている画面だけ（入社準備は5つだけ）
     //   lms   … 無限道場の URL が設定されているときだけ
     const allowed = stage?.allowed || null;
-    const items = MEMBER_SIDE_NAV
-      .filter((n) => !n.when || shows[n.when])
-      .filter((n) => !allowed || allowed.includes(n.key))
+    const items = dropEmptySections(MEMBER_SIDE_NAV
+      .filter((n) => n.section || !n.when || shows[n.when])
+      .filter((n) => n.section || !allowed || allowed.includes(n.key))
       // 入社手続きは、入社準備のあいだだけ出す
       .filter((n) => n.key !== "onboarding" || (stage?.preparingOnly || []).includes("onboarding"))
-      .filter((n) => !n.lms || shows.lmsUrl)
-      .map((n) => (n.lms ? { ...n, href: shows.lmsUrl } : n));
+      // 別システムは、行き先が設定されているものだけ
+      .filter((n) => !n.urlKey || shows[n.urlKey])
+      .map((n) => (n.urlKey ? { ...n, href: shows[n.urlKey] } : n)));
     renderSidebar(active, items, "member");
 
     const el = document.createElement("nav");
@@ -231,6 +238,19 @@
     }).join("");
     document.body.appendChild(el);
     document.body.classList.add("kp-has-tabbar");
+  }
+
+  /**
+   * 中身が1つも残らなかった見出しを落とす。
+   * 別システムがどれも未設定のとき、「つながっている仕組み」だけが
+   * 宙に浮いて残るのを防ぐ
+   */
+  function dropEmptySections(items) {
+    return items.filter((n, i) => {
+      if (!n.section) return true;
+      const next = items[i + 1];
+      return Boolean(next) && !next.section;
+    });
   }
 
   // 管理者: 左サイドメニュー。PC前提だが、狭い画面では上部の横スクロールに変わる
@@ -323,10 +343,13 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
-      // 会計は別システム。閲覧できる立場の人にだけ入口を出す
+      // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
+      // memberships の role は、登録すると全員 'client' が付くので、
+      // それでは判定にならない。admin / staff と社内ロールで見る
       accounting: staff || roles.includes("admin") || roles.includes("staff"),
-      // 無限道場の入口。同じ auth.users を使うので、別のIDもパスワードも要らない
+      // 別システムの入口。同じ auth.users を使うので、別のIDもパスワードも要らない
       lmsUrl: me?.lmsUrl || null,
+      timecardUrl: me?.timecardUrl || null,
     };
   }
 
@@ -416,7 +439,8 @@
 
       const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
       const name = me.gw?.employee?.display_name || me.email || "";
-      const shows = showsFor({ ...me, lmsUrl: (await API.config().catch(() => null))?.lmsUrl || null });
+      const cfg = await API.config().catch(() => null);
+      const shows = showsFor({ ...me, lmsUrl: cfg?.lmsUrl || null, timecardUrl: cfg?.timecardUrl || null });
       const stage = me.gw?.stage || null;
       saveCache({ appRole, name, shows, stage });
 
