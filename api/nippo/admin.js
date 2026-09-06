@@ -18,7 +18,10 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate, weekStart, isDate } from "../../lib/nippo.js";
 import { analyzeNippo } from "../../lib/ai.js";
 import { shape as shapeEval } from "./evaluate.js";
-import { isConfigured as aiConfigured, CRITERIA } from "../../lib/nippo-eval.js";
+import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
+import { ACTIONS as CRITERIA, rubric } from "../../lib/scoring.js";
+import { findFollowUps, rankings, recentWorkdays } from "../../lib/follow.js";
+import { kpiRate } from "../../lib/actions.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -55,11 +58,25 @@ async function read(req, res, ctx) {
   from.setUTCDate(from.getUTCDate() - (days - 1));
   const fromStr = from.toISOString().slice(0, 10);
 
-  const [dayRows, spanRows, setting] = await Promise.all([
+  // 要フォローとランキングの材料。直近14営業日ぶんまで見る。
+  // 「前の期間との比較（成長）」を出すため、その前の同じ長さぶんも取る
+  const spanDays = recentWorkdays(date, 14);
+  const spanFrom = spanDays[spanDays.length - 1];
+  const prevDays = recentWorkdays(spanFrom, 15).slice(1);   // 直前の14営業日
+  const prevFrom = prevDays[prevDays.length - 1];
+
+  const [dayRows, spanRows, setting, detailRows, kpiRows, prevRows] = await Promise.all([
     sb.from("tc_nippo").select("*").eq("work_date", date).limit(300),
     sb.from("tc_nippo").select("user_id, work_date")
       .gte("work_date", fromStr).lte("work_date", date).limit(20000),
     sb.from("tc_settings").select("value").eq("key", "nippo_ai_auto_reply").maybeSingle(),
+    sb.from("tc_nippo")
+      .select("user_id, work_date, work_items, issues, no_issues, improve_tags, contribution")
+      .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
+    sb.from("gw_daily_kpis").select("user_id, work_date, target, actual")
+      .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
+    sb.from("tc_nippo").select("user_id, work_items")
+      .gte("work_date", prevFrom).lt("work_date", spanFrom).limit(5000),
   ]);
 
   const nippos = dayRows.data || [];
@@ -109,7 +126,38 @@ async function read(req, res, ctx) {
     nippos: nippos.sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     replies,
     evals,
-    aiEval: { configured: aiConfigured(), criteria: CRITERIA },
+    aiEval: { configured: aiConfigured(), criteria: CRITERIA, rubric: rubric() },
+
+    // 管理者が全員の日報を読まなくて済むように、見るべき人だけ出す。
+    // 条件は「相談あり・3日連続KPI未達・日報未提出2日」の3つだけ
+    followUps: findFollowUps({
+      date, staff,
+      nippos: detailRows.data || [],
+      kpis: kpiRows.data || [],
+    }),
+
+    // 直近14営業日の並び。単純な点数順ではなく、
+    // 成果 / 行動 / 改善 / 成長 / 顧客価値 で見る。
+    // 残業時間・日報の文字数・AIとの会話量は数えない
+    rankings: rankings({
+      staff,
+      nippos: detailRows.data || [],
+      kpis: kpiRows.data || [],
+      prevNippos: prevRows.data || [],
+    }),
+
+    // その日のKPI達成状況（§12 最上部の「KPI達成」）
+    kpiToday: (() => {
+      const today = (kpiRows.data || []).filter((k) => k.work_date === date);
+      const per = new Map();
+      for (const k of today) {
+        if (!(Number(k.target) > 0)) continue;
+        per.set(k.user_id, [...(per.get(k.user_id) || []), k]);
+      }
+      let hit = 0;
+      for (const rows of per.values()) if (kpiRate(rows)?.rate === 100) hit++;
+      return { achieved: hit, of: per.size };
+    })(),
     trend,
     aiAutoReply: setting.data?.value !== false,
     members: staff.map((e) => ({

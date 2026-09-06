@@ -68,6 +68,18 @@
 
   <div id="tiles" class="kp-tiles"></div>
 
+  <!-- 全員の日報を読まなくて済むように、見るべき人だけ出す。
+       条件は「相談あり・3日連続KPI未達・日報未提出2日」の3つだけ -->
+  <div id="follow-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">priority_high</span>要フォロー
+      <span id="follow-tag" class="kp-chip important" style="margin-left:6px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      相談が来ている人・止まっている人・日報が続けて出ていない人だけを出しています。
+      ここに出ていない人は、下の一覧の数字を見れば足ります。
+    </p>
+    <div id="follow-list"></div>
+  </div>
+
   <div class="card">
     <h2><span class="material-symbols-outlined">trending_up</span>提出率<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近の平日</span></h2>
     <div class="dr-bar" id="trend"></div>
@@ -88,6 +100,19 @@
   <div class="card">
     <h2><span class="material-symbols-outlined">description</span>提出された日報</h2>
     <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- 「頑張っている人ランキング」は作らない。
+       残業時間・日報の文字数・AIとの会話量は数えない。
+       出すのは、何を前に進めたかから出る数字だけ -->
+  <div id="rank-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">leaderboard</span>直近の傾向
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近14営業日</span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      点数の順位ではありません。成果・行動・改善・成長・顧客価値を、
+      それぞれ別に見るための並びです。
+    </p>
+    <div id="rank-body"></div>
   </div>
 
   <div class="card">
@@ -199,6 +224,8 @@
     el("ai-toggle").checked = !!data.aiAutoReply;
     el("wk-tag").textContent = `${data.weekStart} の週`;
     renderTiles();
+    renderFollowUps();
+    renderRankings();
     renderTrend();
     renderNotSubmitted();
     renderOverview();
@@ -217,6 +244,86 @@
       tile("苦戦", struggling, "調子が「苦戦」の人", struggling ? "alert" : ""),
       tile("対象者", total, "在籍・ログインあり"),
     ].join("");
+
+    // §12 最上部の「KPI達成」。目標を入れている人がいない日は出さない
+    const k = data.kpiToday;
+    if (k?.of) {
+      el("tiles").insertAdjacentHTML("beforeend",
+        tile("KPI達成", `${k.achieved}<small>/${k.of}</small>`, "目標を全部達成した人",
+             k.achieved < k.of ? "alert" : ""));
+    }
+  }
+
+  // 管理者が全員の日報を読まなくて済むように、見るべき人だけ出す
+  function renderFollowUps() {
+    const list = data.followUps || [];
+    if (!list.length) { el("follow-card").classList.add("hidden"); return; }
+    el("follow-card").classList.remove("hidden");
+    el("follow-tag").textContent = `${list.length} 名`;
+
+    const COLOR = { consult: "#2b6cb0", kpi_miss: "#c05621", not_submitted: "#718096" };
+
+    el("follow-list").innerHTML = list.map((u) => `
+      <div class="dr-card" style="margin-bottom:10px;">
+        <div class="dr-head" style="margin-bottom:6px;">
+          <span class="dr-name">${esc(u.name)}</span>
+          ${u.reasons.map((r) =>
+            `<span class="kp-chip" style="border-color:${COLOR[r.kind] || "var(--border)"};
+                    color:${COLOR[r.kind] || "var(--muted)"};">${esc(r.label)}</span>`).join("")}
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="focusUser('${esc(u.userId)}')">この人を見る</button>
+        </div>
+        ${u.reasons.map((r) =>
+          `<div class="muted" style="font-size:12.5px;line-height:1.75;">${esc(r.detail)}</div>`).join("")}
+      </div>`).join("");
+  }
+
+  // 週次評価の「対象者」を切り替えて、その人のところまで動かす
+  function focusUser(userId) {
+    const sel = el("w-user");
+    if (sel && [...sel.options].some((o) => o.value === userId)) {
+      sel.value = userId;
+      loadWeekly();
+    }
+    const card = [...document.querySelectorAll(".dr-card")]
+      .find((c) => c.dataset.user === userId);
+    (card || sel).scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  // 「頑張っている人ランキング」は作らない。
+  // 残業時間・日報の文字数・AIとの会話量は数えない
+  function renderRankings() {
+    const r = data.rankings;
+    if (!r) { el("rank-card").classList.add("hidden"); return; }
+
+    const COLS = [
+      ["results",  "成果",     "結果まで書けたこと", (u) => `${u.results} 件`],
+      ["kpi",      "KPI達成",  "目標に届いた割合",   (u) => `${u.kpiRate}%`],
+      ["actions",  "行動",     "やったことの件数",   (u) => `${u.actions} 件`],
+      ["improves", "改善",     "やり方を変えた日",   (u) => `${u.improves} 日`],
+      ["growth",   "成長",     "前の14営業日との差", (u) => `${u.growth > 0 ? "+" : ""}${u.growth}`],
+      ["customer", "顧客価値", "顧客・チームに向けた記録", (u) => `${u.customer} 日`],
+    ];
+
+    const shown = COLS.filter(([k]) => (r[k] || []).length);
+    if (!shown.length) { el("rank-card").classList.add("hidden"); return; }
+    el("rank-card").classList.remove("hidden");
+
+    el("rank-body").innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;">
+        ${shown.map(([key, label, note, fmt]) => `
+          <div>
+            <div style="font-size:12.5px;font-weight:700;color:var(--primary-dark);">${label}</div>
+            <div class="muted" style="font-size:11px;margin-bottom:6px;">${note}</div>
+            ${r[key].map((u, i) => `
+              <div style="display:flex;gap:8px;font-size:12.5px;padding:4px 0;
+                          border-bottom:1px solid var(--border);">
+                <span class="muted" style="width:16px;">${i + 1}</span>
+                <span style="flex:1;">${esc(u.name)}</span>
+                <span style="font-weight:600;">${esc(fmt(u))}</span>
+              </div>`).join("")}
+          </div>`).join("")}
+      </div>`;
   }
 
   function renderTrend() {
@@ -334,7 +441,8 @@
     const item = (k, v) => v ? `<div class="dr-item"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>` : "";
 
     return `
-      <div class="dr-card${n.confirmed ? " confirmed" : ""}" id="dr-${esc(n.id)}">
+      <div class="dr-card${n.confirmed ? " confirmed" : ""}" id="dr-${esc(n.id)}"
+           data-user="${esc(n.user_id)}">
         <div class="dr-head">
           <span class="dr-name">${esc(n.user_name)}</span>
           <span class="kp-chip${n.mood === "苦戦" ? " important" : ""}">${esc(n.mood || "")}</span>
