@@ -652,6 +652,11 @@
     return out;
   }
 
+  // ---- メンバーのログイン情報・使えるシステム（人事権限） ----
+  // 4システムは同じ auth.users を使うので、メールとパスワードは全部に効く
+  const updateEmployeeAccount = (body) =>
+    api("/api/employees/account", { method: "PATCH", body });
+
   // ---- デスクトップ通知（1日3回の声かけ） ----
   const pushConfig = () => api("/api/push");
   const pushSubscribe = (sub) => api("/api/push", { method: "POST", body: sub });
@@ -736,6 +741,7 @@
     deleteDocument,
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync, hrDriveCheck,
+    updateEmployeeAccount,
     pushConfig, pushSubscribe, pushUnsubscribe, pushRemoveDevice, pushPrefs, pushTest,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,

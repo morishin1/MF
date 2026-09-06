@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911h">
-  <link rel="stylesheet" href="css/layout.css?v=20260911h">
+  <link rel="stylesheet" href="css/app.css?v=20260911i">
+  <link rel="stylesheet" href="css/layout.css?v=20260911i">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -102,8 +102,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911h"></script>
-<script src="js/layout.js?v=20260911h"></script>
+<script src="js/api-client.js?v=20260911i"></script>
+<script src="js/layout.js?v=20260911i"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -319,6 +319,10 @@
         <td style="white-space:nowrap;">
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   onclick="startEdit('${esc(e.id)}')">編集</button>
+          ${e.user_id ? `
+            <button class="btn btn-secondary btn-sm" ${canGrantRoles ? "" : "disabled"}
+                    title="メールアドレスとパスワードを変える"
+                    onclick="openAccount('${esc(e.id)}')">ログイン</button>` : ""}
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   onclick="remove('${esc(e.id)}', this)">削除</button>
         </td>
@@ -335,14 +339,149 @@
                 onclick="makeAccount('${esc(e.id)}', this)">アカウントを作る</button>`;
     }
     const a = e.accounts || {};
-    const chips = ['<span class="kp-chip event">グループウェア</span>'];
+    // グループウェアは切れない。名簿に行があること自体が利用なので、
+    // 止めたいときは在籍の状態（退職）で閉じる
+    const chips = ['<span class="kp-chip event" title="名簿にいる方は必ず使えます">グループウェア</span>'];
+
     for (const [key, label] of Object.entries(SYSTEM_LABEL)) {
       const s = a[key];
-      if (!s?.exists) chips.push(`<span class="kp-chip archived" title="未登録">${label}</span>`);
-      else if (s.active) chips.push(`<span class="kp-chip event">${label}</span>`);
-      else chips.push(`<span class="kp-chip important" title="停止中">${label}（停止）</span>`);
+      const on = !!s?.exists && s.active !== false;
+      const cls = !s?.exists ? "archived" : (s.active ? "event" : "important");
+      const title = !s?.exists ? "未登録。押すと使えるようにします"
+        : s.active ? "使えます。押すと止めます" : "停止中。押すと使えるようにします";
+      const text = !s?.exists ? label : s.active ? label : `${label}（停止）`;
+      chips.push(canGrantRoles
+        ? `<button type="button" class="kp-chip ${cls}" title="${esc(title)}"
+                   style="border:none;cursor:pointer;font-family:inherit;"
+                   onclick="toggleSystem('${esc(e.id)}','${key}',${!on},this)">${text}</button>`
+        : `<span class="kp-chip ${cls}" title="${esc(title)}">${text}</span>`);
     }
     return `<div style="display:flex;flex-wrap:wrap;gap:4px;">${chips.join("")}</div>`;
+  }
+
+  // システムの利用を切り替える。押すたびに開放／停止。
+  // 止めてもアカウントは消さない（日報・受講・経費の記録がぶら下がっている）。
+  // 会計だけは本当に外す。止まっているだけの行を残すと、戻したときに気づけない
+  async function toggleSystem(employeeId, system, on, btn) {
+    const e = employees.find((x) => x.id === employeeId);
+    const label = SYSTEM_LABEL[system] || system;
+    if (!on && !confirm(`${e?.display_name} さんの「${label}」を止めますか。\n`
+      + `記録は残ります。あとから開け直せます。`)) return;
+    try {
+      const r = await KPLayout.busy(btn, "…", () =>
+        API.updateEmployeeAccount({ employeeId, systems: { [system]: on } }));
+      const res = r.systems?.[system];
+      if (res && !res.ok) alert(`${label}：${res.detail || "できませんでした"}`);
+      await load();
+    } catch (err) {
+      alert(err.hint || err.detail || err.message || "変更できませんでした");
+    }
+  }
+
+  // ---- ログイン情報 -----------------------------------------------------------
+  //
+  // 4システムは同じログイン（auth.users）を使っている。
+  // ここで変えたメールとパスワードは、無限道場もタイムカードも会計も全部変わる。
+  // 「グループウェアのぶんだけ」は仕組み上できないので、画面にもそう書く
+  function openAccount(id) {
+    const e = employees.find((x) => x.id === id);
+    if (!e) return;
+    const box = el("e-account");
+    box.innerHTML = `
+      <div class="card" style="margin-top:12px;border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">key</span>${esc(e.display_name)} さんのログイン</h2>
+        <div class="banner warn" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">info</span>
+          <div>グループウェア・無限道場・タイムカード・会計は<b>同じログイン</b>です。
+          ここで変えると4つとも変わります。</div>
+        </div>
+        <div class="inline-controls" style="margin-bottom:12px;">
+          <div style="min-width:240px;flex:1;">
+            <label>メールアドレス（ログインID）</label>
+            <input id="ac-email" type="email" value="${esc(e.email || "")}">
+          </div>
+          <div style="align-self:flex-end;">
+            <button class="btn btn-secondary" onclick="saveAccountEmail('${esc(e.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">mail</span>メールを変える
+            </button>
+          </div>
+        </div>
+        <div class="inline-controls" style="margin-bottom:6px;">
+          <div style="min-width:240px;flex:1;">
+            <label>新しいパスワード（8文字以上）</label>
+            <input id="ac-pw" type="text" placeholder="空のまま「自動で作る」も押せます" autocomplete="off">
+          </div>
+          <div style="align-self:flex-end;display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="saveAccountPassword('${esc(e.id)}', false, this)">
+              この内容にする
+            </button>
+            <button class="btn btn-secondary" onclick="saveAccountPassword('${esc(e.id)}', true, this)">
+              自動で作る
+            </button>
+          </div>
+        </div>
+        <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
+          変えたパスワードは保存されません。この画面に1回だけ出るので、控えて本人へ直接お渡しください。
+        </p>
+        <div id="ac-msg" class="err-text"></div>
+        <div id="ac-out"></div>
+        <button class="btn btn-secondary btn-sm" onclick="closeAccount()">閉じる</button>
+      </div>`;
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function closeAccount() { el("e-account").innerHTML = ""; }
+
+  // 出したパスワードは変数で持つ。onclick の文字列に直接入れると、
+  // 記号の入ったパスワードでその場のJSが壊れる
+  let lastPassword = "";
+  function copyPassword() {
+    if (!lastPassword) return;
+    navigator.clipboard.writeText(lastPassword);
+  }
+
+  async function saveAccountEmail(employeeId, btn) {
+    el("ac-msg").textContent = "";
+    const email = el("ac-email").value.trim();
+    try {
+      await KPLayout.busy(btn, "変更中…", () => API.updateEmployeeAccount({ employeeId, email }));
+      el("ac-out").innerHTML = `<div class="banner ok" style="margin-bottom:12px;">
+        <span class="material-symbols-outlined">check_circle</span>
+        <div>メールアドレスを変えました。次回から新しいアドレスでログインします。</div></div>`;
+      await load();
+    } catch (e) {
+      el("ac-msg").textContent = e.hint || e.detail || e.message || "変更できませんでした";
+    }
+  }
+
+  async function saveAccountPassword(employeeId, generate, btn) {
+    el("ac-msg").textContent = "";
+    const pw = el("ac-pw").value;
+    if (!generate && pw.length < 8) {
+      el("ac-msg").textContent = "パスワードは8文字以上にしてください";
+      return;
+    }
+    if (!confirm("パスワードを変えると、いまのパスワードでは入れなくなります。よろしいですか。")) return;
+    try {
+      const r = await KPLayout.busy(btn, "変更中…", () => API.updateEmployeeAccount(
+        generate ? { employeeId, generatePassword: true } : { employeeId, password: pw }));
+      el("ac-pw").value = "";
+      lastPassword = r.password || "";
+      el("ac-out").innerHTML = `
+        <div class="banner ok" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          <div>新しいパスワード：
+            <code style="font-size:15px;font-weight:700;">${esc(lastPassword)}</code>
+            <button class="btn btn-secondary btn-sm" style="margin-left:8px;"
+                    onclick="copyPassword()">コピー</button>
+            <div class="muted" style="font-size:11.5px;margin-top:4px;">
+              この画面を離れると二度と表示できません。本人へ直接お渡しください。
+            </div>
+          </div>
+        </div>`;
+    } catch (e) {
+      el("ac-msg").textContent = e.hint || e.detail || e.message || "変更できませんでした";
+    }
   }
 
   // 未連携の人に、あとからアカウントを作る。メールが空なら聞く
