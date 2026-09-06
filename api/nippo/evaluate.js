@@ -111,6 +111,8 @@ async function run(res, sb, ctx, user, nippo, { force }) {
         good_points: r.result.good_points,
         improvement_points: r.result.improvement_points,
         ai_comment: r.result.ai_comment,
+        // 朝に描いた状態と、実際の差。この仕組みの中心なので独立して持つ
+        gap: r.result.gap,
         tomorrow_advice: r.result.tomorrow_advice,
         // 止まりそうな困りごとの候補。ここではまだ Blocker にしない。
         // 上げるかどうかは本人が押す
@@ -219,6 +221,7 @@ export function shape(row) {
     goodPoints: row.good_points || [],
     improvementPoints: row.improvement_points || [],
     aiComment: row.ai_comment,
+    gap: row.gap,
     tomorrowAdvice: row.tomorrow_advice,
     blockerCandidates: row.blocker_candidates || [],
     autonomyLevel: row.autonomy_level,

@@ -292,6 +292,10 @@
   const nippo = (date) =>
     api(`/api/nippo${date ? `?date=${encodeURIComponent(date)}` : ""}`);
   const submitNippo = (n) => api("/api/nippo", { method: "POST", body: n });
+  // 朝。結果を見る前に、今日の成功した状態を描く。
+  // 終業時の入力を出したあとは、サーバ側で書き換えを止めている
+  const submitMorning = (m) =>
+    api("/api/nippo", { method: "POST", body: { kind: "morning", ...m } });
   const saveWeeklyReview = (w) =>
     api("/api/nippo", { method: "POST", body: { kind: "weekly", ...w } }).then((d) => d.weekly);
 
@@ -691,7 +695,7 @@
     listBookings, createBooking, decideBooking, deleteBooking,
     schedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle, googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
-    nippo, submitNippo, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
+    nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,

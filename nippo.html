@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910p">
-  <link rel="stylesheet" href="css/layout.css?v=20260910p">
+  <link rel="stylesheet" href="css/app.css?v=20260910q">
+  <link rel="stylesheet" href="css/layout.css?v=20260910q">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -88,6 +88,41 @@
     <div id="thanks-list"></div>
   </div>
 
+  <!-- 朝。結果を見る前に、今日の成功した状態を描く -->
+  <div id="am-card" class="card hidden" style="border-left:4px solid var(--primary);">
+    <h2><span class="material-symbols-outlined">wb_twilight</span>朝の3分
+      <span id="am-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="kp-greet-sub" style="margin:0 0 16px;">
+      先に「今日の終わりにどうなっていたら良かったと言えるか」を決めます。
+      これがあると、終業時に何を振り返ればよいかが決まります。
+    </p>
+
+    <div class="np-sec">
+      <h3><span class="no">①</span>3か月後、どうなっていたいか</h3>
+      <p class="lead">自分の言葉で。毎日書き直す必要はありません（前回のものが入っています）。</p>
+      <textarea id="a-goal" rows="2" placeholder="例：月次の締めを一人で回せるようになっていたい"></textarea>
+      <div id="a-plan-kgi" class="hidden" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+    </div>
+
+    <div class="np-sec">
+      <h3><span class="no">②</span>今日の終わりに「今日は良かった」と言える状態</h3>
+      <p class="lead">やることではなく、<b>どうなっていたら</b>を書きます。終業時に、これと見比べます。</p>
+      <textarea id="a-success" rows="2"
+        placeholder="例：請求データ20件を、質問なしで最後まで処理できていたら良かったと言える"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <h3><span class="no">③</span>今日やる3つの行動</h3>
+      <p class="lead">その状態になるために、今日やることを3つまで。</p>
+      <div class="np-rows" id="a-actions"></div>
+    </div>
+
+    <button class="btn btn-primary" id="am-btn" onclick="saveMorning(this)">
+      <span class="material-symbols-outlined icon-inline">send</span>これで今日を始める
+    </button>
+    <div id="am-msg" class="err-text" style="margin-top:10px;"></div>
+  </div>
+
   <!-- 入力 -->
   <div class="card">
     <h2><span class="material-symbols-outlined">edit_note</span>日報を書く
@@ -95,6 +130,19 @@
       <span id="draft-tag" class="np-draft" style="margin-left:8px;"></span>
       <input id="f-date" type="date" style="width:auto;margin:0 0 0 auto;">
     </h2>
+
+    <!-- 朝に描いた状態。ここと見比べるのが、この画面の目的 -->
+    <div class="np-sec hidden" id="am-recall">
+      <h3>朝に描いた状態</h3>
+      <p class="lead">これと見比べて、今日を振り返ります。</p>
+      <div id="am-recall-body" style="border-left:3px solid var(--primary);background:var(--soft);
+           padding:11px 13px;border-radius:0 8px 8px 0;font-size:13.5px;line-height:1.8;"></div>
+      <div style="margin-top:12px;">
+        <label style="font-size:12px;font-weight:600;color:var(--muted);">
+          この状態になれましたか</label>
+        <div class="np-kgi" id="a-met"></div>
+      </div>
+    </div>
 
     <!-- 昨日までに決めたこと。ここで閉じないと、AIの提案は読まれて終わりになる -->
     <div class="np-sec hidden" id="todo-sec">
@@ -163,7 +211,13 @@
     </div>
 
     <div class="np-sec">
-      <h3><span class="no">⑥</span>明日の最優先</h3>
+      <h3><span class="no">⑥</span>明日変えること</h3>
+      <p class="lead">やり方をどう変えるか。同じ進め方のままなら、明日も同じ差が出ます。</p>
+      <textarea id="f-change" rows="2" placeholder="例：先に不明点を洗い出してから着手する"></textarea>
+    </div>
+
+    <div class="np-sec">
+      <h3><span class="no">⑦</span>明日の最優先</h3>
       <p class="lead">明日、最初に終わらせることを「内容＋期限＋数値」で入力してください。</p>
       <input id="f-tomorrow" type="text" placeholder="例：C社見積を提出する">
       <div class="np-kgi">
@@ -256,8 +310,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260910p"></script>
-<script src="js/layout.js?v=20260910p"></script>
+<script src="js/api-client.js?v=20260910q"></script>
+<script src="js/layout.js?v=20260910q"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -288,6 +342,7 @@
 
   let data = null;
   let mood = "順調";
+  let met = null;      // 朝に描いた状態になれたか
   let achieved = null;      // true=達成 / false=未達 / null=数値で測らない
   let tags = [];
 
@@ -325,6 +380,7 @@
     renderMood();
     renderTags();
     renderTodos();
+    renderMorning();
     // 提出済みならその内容を、まだなら書きかけを出す
     fillForm(data.today || loadDraft(date));
     renderFlags(data.today?.daily_flags);
@@ -353,6 +409,77 @@
     tags = tags.includes(key) ? tags.filter((k) => k !== key) : [...tags, key];
     renderTags();
     scheduleDraftSave();
+  }
+
+  // --- 朝 ---------------------------------------------------------------------
+  // 朝のカードは、今日ぶんで、まだ結果を書いていないときだけ出す。
+  // 結果を見たあとに書き直せると、後付けになる
+  function renderMorning() {
+    const t = data.today;
+    const isToday = data.date === jstToday();
+    const reported = (t?.work_items || []).some((w) => w.result);
+    const done = !!t?.morning_at;
+
+    el("am-card").classList.toggle("hidden", !isToday || reported);
+    el("am-recall").classList.toggle("hidden", !done);
+
+    if (isToday && !reported) {
+      el("am-tag").textContent = done ? "書き直せます" : "まだです";
+      el("am-tag").className = `kp-chip ${done ? "event" : "draft"}`;
+      el("a-goal").value = t?.goal_image || data.lastGoalImage || "";
+      el("a-success").value = t?.success_image || "";
+
+      const acts = (t?.work_items || []).map((w) => w.task).filter(Boolean);
+      el("a-actions").innerHTML = [0, 1, 2].map((i) => `
+        <input type="text" class="am-act" value="${esc(acts[i] || "")}"
+               placeholder="${i + 1}つ目の行動">`).join("");
+
+      el("am-btn").innerHTML = done
+        ? '<span class="material-symbols-outlined icon-inline">save</span>書き直す'
+        : '<span class="material-symbols-outlined icon-inline">send</span>これで今日を始める';
+    }
+
+    if (!done) return;
+
+    // 夜。朝に描いたものを、書き換えられない形で出す
+    el("am-recall-body").innerHTML = `
+      ${t.goal_image ? `<div class="muted" style="font-size:12px;">3か月後：${esc(t.goal_image)}</div>` : ""}
+      <div style="font-weight:600;margin-top:${t.goal_image ? "4px" : "0"};">
+        ${esc(t.success_image || "（状態は書かれていません）")}
+      </div>
+      <div class="muted" style="font-size:11.5px;margin-top:6px;">
+        ${esc(String(t.morning_at).slice(11, 16))} に記入
+      </div>`;
+
+    met = met ?? t.success_met ?? null;
+    renderMet();
+  }
+
+  function renderMet() {
+    el("a-met").innerHTML = (data.successMet || []).map((m) => `
+      <button type="button" class="np-result${met === m.key ? " on " + (m.key === "o" ? "yes" : m.key === "x" ? "no" : "") : ""}"
+              onclick="setMet('${esc(m.key)}')">${esc(m.mark)} ${esc(m.label)}</button>`).join("");
+  }
+  function setMet(k) { met = met === k ? null : k; renderMet(); scheduleDraftSave(); }
+
+  async function saveMorning(btn) {
+    const msg = el("am-msg");
+    msg.textContent = "";
+    const actions = [...document.querySelectorAll(".am-act")]
+      .map((i) => ({ task: i.value.trim() })).filter((a) => a.task);
+
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.submitMorning({
+        date: data.date,
+        goalImage: el("a-goal").value,
+        successImage: el("a-success").value,
+        actions,
+      }));
+      await load(data.date);
+      el("am-card").scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
   }
 
   // 前に決めたこと（ダッシュボードの「今日やること」と同じもの）。
@@ -467,10 +594,15 @@
     v("f-actual", n?.kgi_actual);
     v("f-improve", n?.challenge);
     v("f-contrib", n?.contribution);
+    v("f-change", n?.tomorrow_change);
     v("f-tomorrow", n?.tomorrow_plan);
     v("f-deadline", n?.tomorrow_deadline);
     v("f-tgt", n?.tomorrow_target);
     onNumbers();
+
+    // 朝に描いた状態になれたか。朝の入力がある日だけ出る
+    met = n?.success_met ?? null;
+    if (data.today?.morning_at) renderMet();
 
     el("f-work").innerHTML = "";
     const items = Array.isArray(n?.work_items) && n.work_items.length ? n.work_items : [{}, {}, {}];
@@ -537,6 +669,10 @@
       improveNote: el("f-improve").value,
       contribution: el("f-contrib").value,
       tomorrowPlan: el("f-tomorrow").value,
+      successMet: met,
+      goalImage: data.today?.goal_image || null,
+      successImage: data.today?.success_image || null,
+      tomorrowChange: el("f-change").value,
       tomorrowDeadline: el("f-deadline").value,
       tomorrowTarget: el("f-tgt").value,
       // 前に決めたことのうち、やったもの。サーバ側で閉じる
@@ -577,7 +713,8 @@
                   : (ai.reason === "disabled" ? "AI自動返信は現在OFFです。担当者が内容を確認します。"
                                               : "AI返信は準備できませんでした（提出は完了しています）。")}
           ${res.actions?.closed ? `<br>前に決めたこと ${res.actions.closed} 件を「実施済み」にしました。` : ""}
-          ${res.actions?.planned ? "<br>「明日の最優先」は、翌朝ホームの一番上に出ます。" : ""}</div>
+          ${res.actions?.planned ? "<br>「明日の最優先」は、翌朝ホームの一番上に出ます。" : ""}
+          ${data.today?.morning_at ? "<br>朝に描いた状態との差は、下のAI評価に出ます。" : ""}</div>
         </div>`;
       await load(body.date);
       el("flags-card").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -644,6 +781,12 @@
     tag.textContent = "評価済み";
     tag.className = "kp-chip event";
     body.innerHTML = `
+      ${e.gap ? `
+        <div class="ai-block" style="border-left:3px solid var(--primary);">
+          <h4><span class="material-symbols-outlined" style="font-size:15px;color:var(--primary);">compare_arrows</span>朝に描いた状態との差</h4>
+          <div style="font-size:13.5px;line-height:1.85;">${esc(e.gap)}</div>
+        </div>` : ""}
+
       ${e.goodPoints.length ? `
         <div class="ai-block">
           <h4><span class="material-symbols-outlined" style="font-size:15px;color:#2f855a;">thumb_up</span>良かったところ</h4>

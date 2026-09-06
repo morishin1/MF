@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910p">
-  <link rel="stylesheet" href="css/layout.css?v=20260910p">
+  <link rel="stylesheet" href="css/app.css?v=20260910q">
+  <link rel="stylesheet" href="css/layout.css?v=20260910q">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -68,6 +68,10 @@
        今日やることが「何のためか」が見えないと、ただの作業一覧になる。
        ただし一番大きいのは TODAY。ここは細い帯にとどめる -->
   <div id="goal-strip" class="hidden"></div>
+
+  <!-- 朝、まだ「今日の成功した状態」を描いていないときだけ出す。
+       ここを飛ばすと、夜に振り返る基準そのものが無い -->
+  <div id="am-nudge" class="hidden"></div>
 
   <!-- ① 今日の最優先。この画面で一番大きく出す。
        会社の評価を見る画面ではなく、仕事を前に進める画面にするため -->
@@ -161,8 +165,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260910p"></script>
-<script src="js/layout.js?v=20260910p"></script>
+<script src="js/api-client.js?v=20260910q"></script>
+<script src="js/layout.js?v=20260910q"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -215,6 +219,7 @@
       return;
     }
     renderGoal();
+    renderMorningNudge();
     renderToday();
     renderKpi();
     renderBlockers();
@@ -222,6 +227,28 @@
     renderMonth();
     renderWeek();
     renderLevel();
+  }
+
+  // 朝の入力をまだ出していないときだけ、TODAY の上に出す。
+  // 責める書き方にしない。「先に決めておくと、夜に振り返れる」という案内
+  function renderMorningNudge() {
+    const m = dash.morning;
+    if (!m || m.done || m.reported) return;
+    el("am-nudge").classList.remove("hidden");
+    el("am-nudge").innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+                  padding:14px 16px;margin-bottom:14px;border-radius:10px;
+                  background:var(--soft);border:1px solid var(--border);
+                  border-left:4px solid var(--primary);">
+        <span class="material-symbols-outlined" style="color:var(--primary);">wb_twilight</span>
+        <div style="flex:1;min-width:220px;">
+          <div style="font-size:14px;font-weight:700;">今日の終わりに「今日は良かった」と言える状態は？</div>
+          <div class="muted" style="font-size:12.5px;margin-top:2px;">
+            先に決めておくと、終業時に何を振り返ればよいかが決まります。3分で終わります。
+          </div>
+        </div>
+        <a class="btn btn-primary btn-sm" href="nippo.html">決めておく</a>
+      </div>`;
   }
 
   // 3か月の行き先。細い帯にとどめる。
@@ -600,7 +627,7 @@
 
   async function reloadDash() {
     // 追記した「そのほか」の枠が二重にならないよう、いったん消してから描き直す
-    for (const id of ["goal-strip", "today-card", "kpi-card", "blk-card",
+    for (const id of ["goal-strip", "am-nudge", "today-card", "kpi-card", "blk-card",
                       "fb-card", "month-card", "week-card"]) {
       el(id).classList.add("hidden");
     }

@@ -1,6 +1,12 @@
 // GET  /api/nippo?date=YYYY-MM-DD … 自分の日報・日次の行動確認・週次レビュー・今日の提出状況
-// POST /api/nippo                  … 自分の日報を出す（同じ日は上書き）
+// POST /api/nippo {kind:"morning"} … 朝。今日の成功した状態を、先に描く
+// POST /api/nippo                  … 終業時。どうなったかを書く（同じ日は上書き）
 // POST /api/nippo {kind:"weekly"}  … 今週の振り返り4問を保存する
+//
+// ■ 朝と夜で入口を分けている理由
+//   全部を終業時に書く形だと、結果を見てから、その結果に合う
+//   「成功した状態」を書いてしまう。順番が逆になる。
+//   朝に描いたものは morning_at の時刻とともに残り、夜はそれと突き合わせる。
 //
 // 8grp.co.jp/8/dr/ にあった日報を、このグループウェアへ移したもの。
 // 表（tc_nippo など）は元のまま使っている。理由は lib/nippo.js の頭に書いた。
@@ -15,6 +21,7 @@ import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
   jstDate, weekStart, isDate, normalizeNippo, hasContent,
+  normalizeMorning, hasMorning, SUCCESS_MET,
   evaluateDaily, CRITERIA, IMPROVE_TAGS,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
@@ -37,7 +44,9 @@ export default async function handler(req, res) {
   if (req.method === "GET") return read(req, res, user, ctx);
   if (req.method === "POST") {
     const body = await readJson(req);
-    return body?.kind === "weekly" ? saveWeekly(res, user, body) : submit(res, user, ctx, body);
+    if (body?.kind === "weekly") return saveWeekly(res, user, body);
+    if (body?.kind === "morning") return morning(res, user, ctx, body);
+    return submit(res, user, ctx, body);
   }
   return methodNotAllowed(res, ["GET", "POST"]);
 }
@@ -119,6 +128,9 @@ async function read(req, res, user, ctx) {
     openActions: (openItems.data || []).map(shapeItem),
     // 画面に出す選択肢と基準はサーバから渡す。定義を2か所に置かないため
     improveTags: IMPROVE_TAGS,
+    successMet: SUCCESS_MET,
+    // 3か月後の像は毎日書かせない。直近に書いたものを引き継ぐ
+    lastGoalImage: (rows.find((r) => r.goal_image) || {}).goal_image || null,
     criteria: CRITERIA,
     team: (today.data || []).sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     notSubmitted: (roster || [])
@@ -127,7 +139,62 @@ async function read(req, res, user, ctx) {
   });
 }
 
-// ---- 提出 -------------------------------------------------------------------
+// ---- 朝。今日の成功した状態を、先に描く ----------------------------------------
+async function morning(res, user, ctx, body) {
+  const date = isDate(body?.date) ? body.date : jstDate();
+  // 朝に描くのは今日ぶんだけ。過去の日を後から「描いた」ことにはできない
+  if (date !== jstDate()) {
+    return json(res, 400, {
+      error: "today_only",
+      hint: "朝の入力は今日ぶんだけです。過去の日は、終業時の入力から書いてください。",
+    });
+  }
+
+  const fields = normalizeMorning(body);
+  if (!hasMorning(fields)) {
+    return json(res, 400, {
+      error: "empty",
+      hint: "「今日は良かった」と言える状態か、今日やる行動のどちらかは書いてください",
+    });
+  }
+
+  const sb = admin();
+  const { data: existing } = await sb
+    .from("tc_nippo").select("id, morning_at, work_items")
+    .eq("user_id", user.id).eq("work_date", date).maybeSingle();
+
+  // 終業時の入力を出したあとで朝の欄を書き換えられると、
+  // 結果に合わせた後付けになる。そこだけは止める
+  if (existing?.work_items?.some((w) => w.result)) {
+    return json(res, 409, {
+      error: "already_reported",
+      hint: "今日はもう終業時の入力を出しています。朝の内容は書き換えられません。",
+    });
+  }
+
+  const row = {
+    ...fields,
+    user_id: user.id,                       // 画面から来た値は使わない
+    user_name: ctx.employee.display_name,
+    employ_type: ctx.employee.employment_type || null,
+    work_date: date,
+    updated_at: new Date().toISOString(),
+  };
+  // 描き直しても、最初に描いた時刻は動かさない。
+  // 「結果を見る前に描いた」の証拠がその時刻だから
+  if (existing?.morning_at) row.morning_at = existing.morning_at;
+
+  const saved = existing
+    ? await sb.from("tc_nippo").update(row).eq("id", existing.id).select("*").single()
+    : await sb.from("tc_nippo").insert(row).select("*").single();
+  if (saved.error) {
+    return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
+  }
+
+  return json(res, 200, { ok: true, morning: saved.data });
+}
+
+// ---- 終業時。どうなったかを書く -------------------------------------------------
 async function submit(res, user, ctx, body) {
   const date = isDate(body?.date) ? body.date : jstDate();
 
@@ -140,7 +207,7 @@ async function submit(res, user, ctx, body) {
   if (!hasContent(fields)) {
     return json(res, 400, {
       error: "empty",
-      hint: "① 今日のKGI、② やったこと・成果、⑥ 明日の最優先 のどれかは書いてください",
+      hint: "できたこと・成果か、明日変えること のどちらかは書いてください",
     });
   }
 
@@ -158,7 +225,15 @@ async function submit(res, user, ctx, body) {
   };
 
   const { data: existing } = await sb
-    .from("tc_nippo").select("id").eq("user_id", user.id).eq("work_date", date).maybeSingle();
+    .from("tc_nippo").select("id, morning_at, success_image, goal_image")
+    .eq("user_id", user.id).eq("work_date", date).maybeSingle();
+
+  // 朝に描いたものは、夜の保存で消さない。
+  // 画面が空で送ってきても、朝の内容を上書きしないようにする
+  if (existing) {
+    if (!row.success_image) row.success_image = existing.success_image;
+    if (!row.goal_image) row.goal_image = existing.goal_image;
+  }
 
   let nippoId;
   if (existing) {
