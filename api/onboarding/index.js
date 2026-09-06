@@ -10,7 +10,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { defaultChecklist } from "../../lib/onboarding.js";
-import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders } from "../../lib/hr-drive.js";
+import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders, folderIdFromUrl, linkOf } from "../../lib/hr-drive.js";
 import { admin } from "../../lib/supabase.js";
 
 const KINDS = ["onboarding", "offboarding"];
@@ -151,6 +151,38 @@ export default async function handler(req, res) {
     }
     if (body.targetOn !== undefined) patch.target_on = body.targetOn || null;
     if (body.note !== undefined) patch.note = body.note || null;
+
+    // 管理者がドライブで作ったフォルダのURLを貼る。
+    //
+    // サービスアカウントに作らせるには、鍵と親フォルダの共有が要る。
+    // 自分でフォルダを作って共有し、URLを貼るほうが早くて確実で、
+    // 誰に見せるかもドライブの共有画面でそのまま決められる。
+    //
+    // 貼ったら、自動で作ったフォルダの対応表（drive_folders）は外す。
+    // 2つの置き場所が並ぶと、どちらに入れたのか分からなくなる。
+    // 「個人フォルダ一式を作る」を押せば、いつでも自動のほうに戻せる
+    if (body.driveUrl !== undefined) {
+      const id = folderIdFromUrl(body.driveUrl);
+      if (body.driveUrl && !id) {
+        return json(res, 400, {
+          error: "invalid_url",
+          hint: "Google ドライブのフォルダのURLを貼ってください（…/drive/folders/… の形）",
+        });
+      }
+      patch.drive_folder_id = id;
+      patch.drive_link = id ? linkOf(id) : null;
+      patch.drive_folders = null;
+    }
+
+    // マイナンバー確認書類だけを入れる場所。任意。
+    // 貼らなければ、その書類は mf からのアップロードだけになる（人事しか見ない場所に入る）
+    if (body.driveSensitiveUrl !== undefined) {
+      const id = folderIdFromUrl(body.driveSensitiveUrl);
+      if (body.driveSensitiveUrl && !id) {
+        return json(res, 400, { error: "invalid_url", hint: "フォルダのURLを貼ってください" });
+      }
+      patch.drive_sensitive_folder_id = id;
+    }
 
     // 後から個人フォルダ一式を作る（作成時に Drive 未設定だった手続きの手当て）。
     // 既にルートだけある古い手続きでも、01〜05 と機微情報を足せる

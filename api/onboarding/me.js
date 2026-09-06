@@ -121,8 +121,13 @@ async function read(res, user, ctx) {
     const it = byKey.get(d.key) || null;
     const mine = files.filter((f) => f.item_id === it?.id);
     // 置き場所は書類ごとに決まっている。本人にフォルダを選ばせない。
-    // マイナンバーだけは個人フォルダの外（機微情報）へ
-    const folderId = d.sensitive ? drive.sensitiveId : drive.folders?.[folderKeyOf(d)];
+    // マイナンバーだけは別の場所へ。
+    // 管理者がURLを貼った運用では、通常の書類はぜんぶ同じフォルダ。
+    // マイナンバー用のURLが貼られていなければ、その書類は
+    // ドライブに置かせず mf からのアップロードだけにする（人事しか見ない場所へ）
+    const folderId = d.sensitive
+      ? drive.sensitiveId
+      : (drive.manual ? drive.mainId : drive.folders?.[folderKeyOf(d)]);
     return {
       key: d.key,
       itemId: it?.id || null,
@@ -152,7 +157,7 @@ async function read(res, user, ctx) {
     })),
     documents,
     // Googleドライブに直接あげられるか。だめなときは理由（画面の出し分けに使う）
-    drive: { ready: drive.ready, note: drive.note },
+    drive: { ready: drive.ready, manual: drive.manual, note: drive.note },
 
     procedureId: proc.data?.id || null,
     status: proc.data?.status || null,
@@ -193,7 +198,9 @@ async function read(res, user, ctx) {
       // 定義に無いものの置き場所は 05_その他
       .map((i) => ({
         ...i,
-        driveLink: drive.ready && drive.folders?.["05"] ? linkOf(drive.folders["05"]) : null,
+        driveLink: !drive.ready ? null
+          : drive.manual ? linkOf(drive.mainId)
+            : drive.folders?.["05"] ? linkOf(drive.folders["05"]) : null,
       })),
     // 進み具合は全体で数える。「あと何%で入社準備が終わるか」を見せる
     progress: progressOf(items),
@@ -217,12 +224,27 @@ async function read(res, user, ctx) {
 //   フォルダの対応表と同じ jsonb に "_sharedWith" として持つ。
 //   この鍵は 01〜05 とぶつからない
 async function employeeDrive(sb, ctx, proc) {
-  const out = { ready: false, note: null, folders: null, sensitiveId: null };
-  if (!proc || !hrConfigured()) return out;
+  const out = { ready: false, manual: false, note: null, folders: null, mainId: null, sensitiveId: null };
+  if (!proc) return out;
 
   const folders = proc.drive_folders || null;
+
+  // 管理者がURLを貼ったフォルダ。こちらが優先。
+  // 共有はドライブの画面で管理者が済ませているので、ここでは何もしない。
+  // サービスアカウントの設定が無くても使える
+  if (!folders && proc.drive_folder_id) {
+    return {
+      ...out,
+      ready: true,
+      manual: true,
+      mainId: proc.drive_folder_id,
+      sensitiveId: proc.drive_sensitive_folder_id || null,
+    };
+  }
+
+  if (!hrConfigured()) return out;
   if (!folders) {
-    out.note = "保管フォルダがまだ作られていません。管理者にお知らせください。";
+    out.note = "保管フォルダがまだ用意されていません。管理者にお知らせください。";
     return out;
   }
   out.folders = folders;
