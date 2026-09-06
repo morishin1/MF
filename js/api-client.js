@@ -336,8 +336,17 @@
   const blockerAct = (action, body = {}) =>
     api("/api/blockers", { method: "POST", body: { action, ...body } });
 
-  // ---- 社員登録・契約登録（雇用・育成マスターの1ファイル取り込み） ----
-  // 2段構え。まず検証（intakeCheck）だけ走らせ、結果を見てから登録（intakeApply）する
+  // ---- 新規メンバー登録 ----
+  // 通常はフォーム。押した瞬間にアカウントができるので、
+  // 先にプレビュー（onboardPreview）を出してから登録する
+  const onboardOptions = () => api("/api/employees/onboard");
+  const onboardPreview = (form) =>
+    api("/api/employees/onboard", { method: "POST", body: { form } });
+  const onboardCreate = (form) =>
+    api("/api/employees/onboard", { method: "POST", body: { form, create: true } });
+
+  // 複数人をまとめて登録するときだけ使う補助。
+  // こちらも2段構えで、検証（intakeCheck）→ 登録（intakeApply）
   const intakeInfo = () => api("/api/employees/intake");
   const intakeCheck = (body) => api("/api/employees/intake", { method: "POST", body });
   const intakeApply = (batchId) =>
@@ -686,6 +695,7 @@
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,
+    onboardOptions, onboardPreview, onboardCreate,
     intakeInfo, intakeCheck, intakeApply,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,

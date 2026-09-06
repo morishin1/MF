@@ -15,6 +15,14 @@
 //   10行のうち2行が駄目でも、8行は登録する。
 //   全部やり直しになると、結局手作業のほうが速くなる。
 //
+// ■ これは補助機能。通常の登録はフォーム
+//   1人ずつ入れるのにファイルを作らせるのは、手間が逆に増える。
+//   通常は api/employees/onboard.js（フォーム）を使い、
+//   ここは複数人をまとめて入れるときだけ通る。
+//
+//   登録そのものは lib/onboard.js の同じ関数を呼ぶ。
+//   2か所に同じ処理を書くと、必ず片方だけ直されて食い違う。
+//
 // ■ 既存の一括取り込みは壊さない
 //   api/employees/bulk.js は別の項目名で動いていて、
 //   admin-members.html から使われている。作り替えず、こちらを別に置く。
@@ -24,12 +32,11 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { attachAccount } from "../../lib/accounts.js";
 import {
   toRows, validateRow, FIELDS, templateHeader, templateSample,
 } from "../../lib/intake.js";
-import { jobOptions, planFromTemplate } from "../../lib/job-templates.js";
-import { addMonths, monthsOf } from "../../lib/growth.js";
+import { jobOptions } from "../../lib/job-templates.js";
+import { onboardOne, linkManager, nextCode } from "../../lib/onboard.js";
 
 const MAX_ROWS = 200;
 
@@ -175,13 +182,8 @@ async function apply(res, ctx, user, body) {
     .eq("batch_id", batch.id).eq("status", "ok").order("row_no");
   if (!rows?.length) return json(res, 400, { error: "no_valid_rows", hint: "登録できる行がありません" });
 
-  // 社員コードの自動採番（§10）。すでにある最大値の次から振る
-  const { data: coded } = await sb.from("gw_employees")
-    .select("employee_code").eq("tenant_id", ctx.tenantId).not("employee_code", "is", null);
-  let next = (coded || []).reduce((max, e) => {
-    const n = Number(String(e.employee_code).replace(/\D/g, ""));
-    return Number.isFinite(n) && n > max ? n : max;
-  }, 0);
+  // 社員コードの自動採番。この取り込みの中で何件振ったかを数えて重ならないようにする
+  let issued = 0;
 
   const created = [];
   const failed = [];
@@ -196,10 +198,12 @@ async function apply(res, ctx, user, body) {
       continue;
     }
     const m = v.value;
-    const code = m.employee_code || `E${String(++next).padStart(4, "0")}`;
+    const code = m.employee_code || await nextCode(sb, ctx.tenantId, issued++);
 
     try {
-      const entry = await createOne(sb, ctx, user, m, code, row.id);
+      const entry = await onboardOne(sb, ctx, user, m, {
+        code, importRowId: row.id, source: "import",
+      });
       created.push({ row: row.row_no, ...entry });
       await sb.from("gw_import_rows").update({
         status: "created",
@@ -213,9 +217,12 @@ async function apply(res, ctx, user, body) {
     }
   }
 
-  // 上長の引き当て。全員できてからでないと、
+  // 管理担当者の引き当て。全員できてからでないと、
   // 同じファイルの中で上長も一緒に登録した場合に当たらない
-  await linkManagers(sb, ctx.tenantId, rows.map((r) => r.raw_json));
+  for (const row of rows) {
+    const v = validateRow(row.raw_json);
+    if (v.ok) await linkManager(sb, ctx.tenantId, v.value.login_email, v.value.manager_email);
+  }
 
   const { data: done } = await sb.from("gw_import_batches").update({
     status: created.length ? "applied" : "failed",
@@ -231,167 +238,6 @@ async function apply(res, ctx, user, body) {
   });
 
   return json(res, 200, { batch: shapeBatch(done), created, failed });
-}
-
-/**
- * 1人ぶん作る。名簿 → アカウント → 労働条件 → 3か月計画 → 初日の1件。
- *
- * 途中で失敗したら、その行だけエラーにして次へ進む（§11）。
- * 作りかけの行は残るが、消すほうが危ない。
- * 名簿だけできてアカウントが無い状態は画面から直せるが、
- * 消してしまうと何が起きたか分からなくなる。
- */
-async function createOne(sb, ctx, user, m, code, importRowId) {
-  // 1) 名簿
-  const { data: emp, error } = await sb.from("gw_employees").insert({
-    tenant_id: ctx.tenantId,
-    display_name: m.name,
-    email: m.login_email,
-    employee_code: code,
-    employment_type: m.contract_type === "有期" ? "契約社員" : "正社員",
-    joined_on: m.join_date,
-    job_family_code: m.job_family_code,
-    initial_role: m.initial_role,
-    position: m.initial_role,
-    work_style: m.work_style,
-    autonomy_level: m.autonomy_level_start,
-    status: "invited",
-    note: m.notes,
-    import_row_id: importRowId,
-  }).select("*").single();
-  if (error) throw new Error(error.message);
-
-  const entry = { name: m.name, employeeId: emp.id, code };
-
-  // 2) アカウント。4システムぶんまとめて作られる
-  const acc = await attachAccount(sb, {
-    tenantId: ctx.tenantId, employee: emp, email: m.login_email,
-  });
-  if (acc.ok) {
-    entry.email = m.login_email;
-    // 初回パスワードは保存しない。平文で残るため、この応答にだけ出す
-    entry.password = acc.createdPassword;
-    entry.systems = acc.systems;
-    entry.userId = acc.userId;
-  } else {
-    entry.accountError = acc.hint || acc.detail || acc.error;
-  }
-
-  // ここから先は user_id で本人に紐づける。
-  // emp はアカウントを作る前に取った行なので user_id はまだ空。
-  // ここで取り違えると、育成計画が本人の画面に出てこない
-  const userId = acc.ok ? acc.userId : null;
-  if (!userId) {
-    throw new Error(
-      `アカウントを作れませんでした（${entry.accountError || "理由不明"}）。`
-      + "名簿には登録済みなので、メンバー画面からアカウントだけ作り直せます");
-  }
-
-  // 権限。manager なら社内ロールを付ける
-  if (m.account_type === "manager") {
-    await sb.from("gw_role_grants").insert({
-      tenant_id: ctx.tenantId, employee_id: emp.id, role: "manager", granted_by: user.id,
-    });
-  }
-
-  // 3) 労働条件。契約書のPDFは無いので、マスターの値を確定済みとして入れる。
-  //    AIが読んだわけではないので ai_status は completed にしない
-  const { data: contract } = await sb.from("gw_contracts").insert({
-    tenant_id: ctx.tenantId,
-    employee_id: emp.id,
-    status: "active",
-    document_type: "労働条件通知書",
-    contract_type: m.contract_type === "有期" ? "契約社員" : "正社員",
-    fixed_term: m.contract_type === "有期",
-    period_from: m.join_date,
-    period_to: m.contract_end_date,
-    probation_months: m.probation_months,
-    probation_end: m.probation_months ? addMonths(m.join_date, m.probation_months) : null,
-    training_months: m.training_months,
-    weekly_hours: m.weekly_hours,
-    work_style: m.work_style,
-    work_scope: m.work_scope,
-    job_content: m.initial_role,
-    training_programs: m.training_programs,
-    remote_ok: m.work_style ? m.work_style !== "出社" : null,
-    ai_status: "pending",
-    note: "雇用・育成マスターの取り込みで作成。原本の書類は別途保管してください",
-    confirmed_by: user.id,
-    confirmed_at: new Date().toISOString(),
-    uploaded_by: user.id,
-  }).select("id").single();
-
-  // 4) 3か月計画。テンプレートから作り、確定済みにする。
-  //    ここを draft にすると、本人の初回ログインで画面が空になる
-  const plan = planFromTemplate(m.job_family_code, m.weekly_hours, m.training_months);
-  const { data: gp, error: pe } = await sb.from("gw_growth_plans").insert({
-    tenant_id: ctx.tenantId,
-    employee_id: emp.id,
-    user_id: userId,
-    contract_id: contract?.id || null,
-    start_date: m.join_date,
-    end_date: addMonths(m.join_date, m.training_months),
-    // マスターに3か月目標が書いてあればそれを使う。空ならテンプレート（§5）
-    three_month_kgi: m.three_month_goal || plan.threeMonthKgi,
-    status: "active",
-    ai_draft: { source: "template", code: plan.code },
-    note: "取り込み時にテンプレートから作成。内容は本人と話して調整してください",
-    created_by: user.id,
-    approved_by: user.id,
-    approved_at: new Date().toISOString(),
-  }).select("id").single();
-  if (pe) throw new Error(`育成計画を作れませんでした: ${pe.message}`);
-
-  // 5) 月ごとのKGIとKPI
-  const months = monthsOf(m.join_date, m.training_months);
-  for (const [i, mo] of months.entries()) {
-    const src = plan.months[i] || plan.months[plan.months.length - 1];
-    const { data: gm } = await sb.from("gw_growth_months").insert({
-      plan_id: gp.id, user_id: userId,
-      month_no: mo.monthNo, month: mo.month,
-      kgi: src.kgi, target_level: src.target_level,
-      status: i === 0 ? "active" : "planned",
-    }).select("id").single();
-
-    if (gm && src.kpis.length) {
-      await sb.from("gw_growth_kpis").insert(
-        src.kpis.map((k) => ({ ...k, month_id: gm.id, user_id: userId })));
-    }
-  }
-  entry.plan = { months: months.length, kgi: m.three_month_goal || plan.threeMonthKgi };
-
-  // 6) 初日にやること。これが無いと、初回ログインで画面が空になる
-  {
-    await sb.from("gw_action_items").insert({
-      user_id: userId,
-      title: "はじめての日報を出す",
-      detail: "今日やったことと、明日いちばんに取りかかることを書いてください。"
-            + "書き方に迷ったら、上長に聞いて構いません。",
-      source: "manager",
-      due_date: m.join_date,
-      priority: 1,
-      created_by: user.id,
-    });
-  }
-
-  return entry;
-}
-
-/** 上長を引き当てる。メールで名簿を引く */
-async function linkManagers(sb, tenantId, masters) {
-  const { data: all } = await sb.from("gw_employees")
-    .select("id, email").eq("tenant_id", tenantId).not("email", "is", null).limit(2000);
-  const byMail = new Map((all || []).map((e) => [(e.email || "").toLowerCase(), e.id]));
-
-  for (const raw of masters) {
-    const v = validateRow(raw);
-    if (!v.ok) continue;
-    const me = byMail.get(v.value.login_email);
-    const boss = byMail.get(v.value.manager_email);
-    // 自分を自分の上長にしない
-    if (!me || !boss || me === boss) continue;
-    await sb.from("gw_employees").update({ manager_id: boss }).eq("id", me);
-  }
 }
 
 const shapeBatch = (b) => ({

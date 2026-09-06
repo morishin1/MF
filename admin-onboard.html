@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新規メンバー登録 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910p">
+  <link rel="stylesheet" href="css/layout.css?v=20260910p">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .ob-tpl { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:9px; }
+    .ob-tpl button { text-align:left; border:1px solid var(--border); border-radius:9px;
+                     background:#fff; padding:11px 13px; cursor:pointer; font-family:inherit; }
+    .ob-tpl button:hover { border-color:var(--primary); }
+    .ob-tpl button.on { border-color:var(--primary); background:var(--soft); }
+    .ob-tpl b { font-size:13px; color:var(--primary-dark); display:block; }
+    .ob-tpl .s { font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.65; }
+
+    .ob-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+    @media (max-width:640px) { .ob-grid { grid-template-columns:1fr; } }
+    .ob-grid .full { grid-column:1 / -1; }
+    .ob-grid label { font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:3px; }
+    .ob-grid label .req { color:#c53030; margin-left:3px; }
+    .ob-grid input, .ob-grid select, .ob-grid textarea { margin:0; }
+
+    .ob-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .ob-chip { padding:6px 12px; border:1px solid var(--border); border-radius:999px;
+               background:#fff; font-size:12.5px; cursor:pointer; color:var(--muted); }
+    .ob-chip.on { border-color:var(--primary); background:var(--primary); color:#fff; }
+
+    .pv-month { border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; }
+    .pv-month .no { font-size:10.5px; font-weight:700; letter-spacing:.12em; color:var(--primary); }
+    .pv-month .kgi { font-size:13.5px; font-weight:600; margin:3px 0 8px; line-height:1.7; }
+    .pv-kpi { display:flex; gap:6px; flex-wrap:wrap; }
+    .pv-kpi span { font-size:11.5px; border:1px solid var(--border); border-radius:6px;
+                   padding:3px 9px; color:var(--muted); }
+    .pv-fact { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:12.5px; }
+    .pv-fact dt { color:var(--muted); white-space:nowrap; }
+    .pv-fact dd { margin:0; }
+    .up-pw { font-family:ui-monospace,SFMono-Regular,monospace; font-size:12.5px;
+             background:var(--soft); padding:2px 7px; border-radius:4px; }
+    .up-row { display:flex; gap:9px; align-items:flex-start; padding:10px 0;
+              border-bottom:1px solid var(--border); font-size:13px; }
+    .up-row:last-child { border-bottom:none; }
+    .up-row .bd { flex:1; min-width:0; }
+    .up-err { font-size:12px; color:#9c3a2e; line-height:1.75; }
+    .up-warn { font-size:12px; color:#8a6112; line-height:1.75; }
+    .up-drop { border:2px dashed var(--border); border-radius:12px; padding:22px 18px;
+               text-align:center; background:#fbfcfe; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">新規メンバー登録</h1>
+  <p class="kp-greet-sub">
+    ここで1回登録すれば、あとは本人とAIで回ります。
+    3か月の目標・月ごとのKPI・初日にやることまで、まとめて作ります。
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">bookmarks</span>採用・育成テンプレート
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">選ぶと下が埋まります</span></h2>
+    <div id="tpl" class="ob-tpl"></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;">
+      当てはまるものが無ければ選ばなくて構いません。下のフォームを直接埋めても登録できます。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">person_add</span>本人の情報</h2>
+    <div class="ob-grid">
+      <div class="full">
+        <label>氏名<span class="req">*</span></label>
+        <input id="f-name" type="text" placeholder="今福 文菜" oninput="clearPreview()">
+      </div>
+      <div class="full">
+        <label>メールアドレス<span class="req">*</span>
+          <span class="muted" style="font-weight:400;">ログインに使います</span></label>
+        <input id="f-email" type="email" placeholder="fumina@example.com" oninput="clearPreview()">
+      </div>
+      <div>
+        <label>入社日<span class="req">*</span></label>
+        <input id="f-join" type="date" oninput="onJoin()">
+      </div>
+      <div>
+        <label>週の所定勤務時間<span class="req">*</span>
+          <span class="muted" style="font-weight:400;">KPIの件数を割り戻します</span></label>
+        <input id="f-hours" type="number" min="1" max="60" step="0.5" placeholder="40" oninput="clearPreview()">
+      </div>
+      <div>
+        <label>契約区分<span class="req">*</span></label>
+        <select id="f-contract" onchange="onContract()">
+          <option value="無期">無期</option>
+          <option value="有期">有期</option>
+        </select>
+      </div>
+      <div id="end-wrap" class="hidden">
+        <label>契約終了日<span class="req">*</span></label>
+        <input id="f-end" type="date" oninput="clearPreview()">
+      </div>
+      <div>
+        <label>育成期間（月）<span class="req">*</span></label>
+        <input id="f-training" type="number" min="1" max="24" placeholder="3" oninput="clearPreview()">
+      </div>
+      <div>
+        <label>試用期間（月）</label>
+        <input id="f-probation" type="number" min="0" max="24" placeholder="6" oninput="clearPreview()">
+      </div>
+      <div>
+        <label>職種<span class="req">*</span></label>
+        <select id="f-job" onchange="clearPreview()"></select>
+      </div>
+      <div>
+        <label>初期Role<span class="req">*</span></label>
+        <input id="f-role" type="text" placeholder="事業推進・バックオフィス担当" oninput="clearPreview()">
+      </div>
+      <div>
+        <label>管理担当者<span class="req">*</span></label>
+        <select id="f-manager" onchange="clearPreview()"></select>
+      </div>
+      <div>
+        <label>開始時の自走レベル<span class="req">*</span></label>
+        <select id="f-level" onchange="clearPreview()"></select>
+      </div>
+      <div>
+        <label>勤務形態</label>
+        <select id="f-style" onchange="clearPreview()">
+          <option value="">指定なし</option>
+          <option value="リモート">リモート</option>
+          <option value="ハイブリッド">ハイブリッド</option>
+          <option value="出社">出社</option>
+        </select>
+      </div>
+      <div>
+        <label>権限</label>
+        <select id="f-account" onchange="clearPreview()">
+          <option value="member">メンバー</option>
+          <option value="manager">管理担当者（管理画面が使えます）</option>
+        </select>
+      </div>
+      <div class="full">
+        <label>主な担当業務</label>
+        <input id="f-scope" type="text" placeholder="バックオフィス、事業推進、営業支援" oninput="clearPreview()">
+      </div>
+      <div class="full">
+        <label>無限道場</label>
+        <div class="ob-chips">
+          <button type="button" class="ob-chip" id="c-dojo" onclick="toggleDojo()">無限道場を受講する</button>
+        </div>
+      </div>
+      <div class="full">
+        <label>備考</label>
+        <input id="f-notes" type="text" placeholder="（任意）" oninput="clearPreview()">
+      </div>
+    </div>
+
+    <div style="margin-top:18px;">
+      <button class="btn btn-primary" onclick="preview(this)">
+        <span class="material-symbols-outlined icon-inline">visibility</span>育成計画をプレビュー
+      </button>
+      <span class="muted" style="font-size:12px;margin-left:10px;">
+        押しても、まだ何も登録されません
+      </span>
+    </div>
+    <div id="form-msg" class="err-text" style="margin-top:10px;"></div>
+  </div>
+
+  <div id="pv-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">flag</span>育成計画のプレビュー</h2>
+    <div id="pv"></div>
+  </div>
+
+  <div id="done-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">task_alt</span>登録しました</h2>
+    <div id="done"></div>
+  </div>
+
+  <!-- 複数人のときだけ。通常はフォームで足りる -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">group_add</span>複数人をまとめて登録
+      <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">CSV / XLSX</span></h2>
+    <details>
+      <summary style="cursor:pointer;font-size:13px;color:var(--primary-dark);font-weight:600;">
+        何人も同時に入社するときは、こちらを開いてください
+      </summary>
+      <p class="muted" style="font-size:12.5px;margin:12px 0;">
+        1行が1人です。雛形をダウンロードして書き足してください。
+        こちらもフォームと同じ手順で、確認してから登録します。
+      </p>
+      <div class="up-drop" id="drop">
+        <input type="file" id="file" accept=".xlsx,.xls,.csv" style="display:none;"
+               onchange="pickFile(this.files[0])">
+        <button class="btn btn-secondary" onclick="document.getElementById('file').click()">
+          <span class="material-symbols-outlined icon-inline">folder_open</span>ファイルを選ぶ
+        </button>
+        <button class="btn btn-secondary" style="margin-left:8px;" onclick="downloadTemplate()">
+          <span class="material-symbols-outlined icon-inline">download</span>雛形をダウンロード
+        </button>
+      </div>
+      <div id="bulk"></div>
+    </details>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="js/api-client.js?v=20260910p"></script>
+<script src="js/layout.js?v=20260910p"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let opts = null;      // テンプレート・職種・管理担当者
+  let bulkMeta = null;  // CSVの雛形（開いたときに取りに行く）
+  let checked = null;   // CSVの確認結果
+  let plan = null;      // プレビュー結果
+  let dojo = false;
+
+  KPLayout.init({ active: "onboard", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      opts = await API.onboardOptions();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+
+    el("f-job").innerHTML = opts.jobs.map((j) =>
+      `<option value="${esc(j.code)}">${esc(j.label)}（${esc(j.code)}）</option>`).join("");
+    el("f-level").innerHTML = opts.levels.map((l) =>
+      `<option value="${l.level}">LEVEL ${l.level}　${esc(l.label)}　— ${esc(l.summary)}</option>`).join("");
+    el("f-manager").innerHTML = `<option value="">選んでください</option>` +
+      opts.managers.map((mg) =>
+        `<option value="${esc(mg.email)}">${esc(mg.name)}${mg.position ? `（${esc(mg.position)}）` : ""}</option>`).join("");
+
+    el("tpl").innerHTML = opts.hireTemplates.map((t) => `
+      <button type="button" id="t-${esc(t.code)}" onclick="applyTemplate('${esc(t.code)}')">
+        <b>${esc(t.label)}</b>
+        <span class="s">${esc(t.note)}</span>
+      </button>`).join("");
+  }
+
+  // --- テンプレート -----------------------------------------------------------
+  function applyTemplate(code) {
+    const t = opts.hireTemplates.find((x) => x.code === code);
+    if (!t) return;
+    document.querySelectorAll("#tpl button").forEach((b) => b.classList.remove("on"));
+    el(`t-${code}`).classList.add("on");
+
+    const v = t.values;
+    el("f-job").value = v.job_family_code;
+    el("f-role").value = v.initial_role;
+    el("f-training").value = v.training_months;
+    el("f-probation").value = v.probation_months ?? "";
+    el("f-hours").value = v.weekly_hours;
+    el("f-contract").value = v.contract_type;
+    el("f-style").value = v.work_style || "";
+    el("f-level").value = v.autonomy_level_start;
+    el("f-account").value = v.account_type;
+    el("f-scope").value = (v.work_scope || []).join("、");
+    dojo = (v.training_programs || []).includes("無限道場");
+    renderDojo();
+    onContract();
+    onJoin();      // 契約終了日を、入社日 + テンプレートの月数で置く
+    clearPreview();
+  }
+
+  function toggleDojo() { dojo = !dojo; renderDojo(); clearPreview(); }
+  function renderDojo() { el("c-dojo").classList.toggle("on", dojo); }
+
+  function onContract() {
+    const fixed = el("f-contract").value === "有期";
+    el("end-wrap").classList.toggle("hidden", !fixed);
+    if (!fixed) el("f-end").value = "";
+    clearPreview();
+  }
+
+  // 有期のとき、入社日からテンプレートの契約月数で終了日を置く。
+  // 「入社日の1年後の前日」を毎回手で計算させない
+  function onJoin() {
+    const sel = document.querySelector("#tpl button.on");
+    const t = sel && opts.hireTemplates.find((x) => `t-${x.code}` === sel.id);
+    const months = t?.values?.contract_months;
+    const join = el("f-join").value;
+    if (months && join && el("f-contract").value === "有期" && !el("f-end").value) {
+      const d = new Date(`${join}T00:00:00Z`);
+      d.setUTCMonth(d.getUTCMonth() + months);
+      d.setUTCDate(d.getUTCDate() - 1);
+      el("f-end").value = d.toISOString().slice(0, 10);
+    }
+    clearPreview();
+  }
+
+  function clearPreview() {
+    plan = null;
+    el("pv-card").classList.add("hidden");
+    el("form-msg").textContent = "";
+  }
+
+  function readForm() {
+    return {
+      name: el("f-name").value,
+      email: el("f-email").value,
+      joinDate: el("f-join").value,
+      contractType: el("f-contract").value,
+      contractEndDate: el("f-end").value,
+      probationMonths: el("f-probation").value,
+      trainingMonths: el("f-training").value,
+      weeklyHours: el("f-hours").value,
+      workStyle: el("f-style").value,
+      jobFamilyCode: el("f-job").value,
+      initialRole: el("f-role").value,
+      workScope: el("f-scope").value,
+      managerEmail: el("f-manager").value,
+      trainingPrograms: dojo ? ["無限道場"] : [],
+      autonomyLevel: el("f-level").value,
+      accountType: el("f-account").value,
+      notes: el("f-notes").value,
+    };
+  }
+
+  // --- プレビュー -------------------------------------------------------------
+  async function preview(btn) {
+    el("form-msg").textContent = "";
+    el("done-card").classList.add("hidden");
+    let r;
+    try {
+      r = await KPLayout.busy(btn, "作成中…", () => API.onboardPreview(readForm()));
+    } catch (e) {
+      el("form-msg").textContent = e.hint || e.detail || e.message || "作れませんでした";
+      return;
+    }
+
+    if (!r.ok) {
+      el("pv-card").classList.add("hidden");
+      el("form-msg").innerHTML = r.errors.map((x) =>
+        `・${esc(x.field)}：${esc(x.message)}`).join("<br>");
+      return;
+    }
+
+    plan = r;
+    renderPreview(r);
+    el("pv-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderPreview(r) {
+    const p = r.plan, v = r.value;
+    el("pv-card").classList.remove("hidden");
+
+    el("pv").innerHTML = `
+      ${r.warnings.length ? `
+        <div class="banner warn" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">info</span>
+          <div>${r.warnings.map((w) => `${esc(w.field)}：${esc(w.message)}`).join("<br>")}</div>
+        </div>` : ""}
+
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--primary);">3か月KGI</div>
+      <div style="font-size:15.5px;font-weight:700;line-height:1.7;margin:4px 0 16px;">
+        ${esc(p.threeMonthKgi)}
+      </div>
+
+      ${p.months.map((m) => `
+        <div class="pv-month">
+          <div class="no">MONTH ${m.month_no}　LEVEL ${m.target_level}</div>
+          <div class="kgi">${esc(m.kgi)}</div>
+          <div class="pv-kpi">
+            ${m.kpis.map((k) => `<span>${esc(k.name)} ${k.target_value ?? "—"}${esc(k.unit || "")}</span>`).join("")}
+          </div>
+        </div>`).join("")}
+
+      <div style="margin:16px 0;">
+        <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:6px;">登録する内容</div>
+        <dl class="pv-fact">
+          <dt>氏名</dt><dd>${esc(v.name)}</dd>
+          <dt>メール</dt><dd>${esc(v.email)}</dd>
+          <dt>入社日</dt><dd>${esc(v.joinDate)}</dd>
+          <dt>契約</dt><dd>${esc(v.contract)}</dd>
+          <dt>試用期間</dt><dd>${esc(v.probation)}</dd>
+          <dt>育成期間</dt><dd>${esc(v.training)}</dd>
+          <dt>勤務</dt><dd>${esc(v.weeklyHours)}${v.workStyle !== "指定なし" ? ` ・ ${esc(v.workStyle)}` : ""}</dd>
+          <dt>職種・Role</dt><dd>${esc(v.job)} ・ ${esc(v.role)}</dd>
+          ${v.scope.length ? `<dt>担当業務</dt><dd>${esc(v.scope.join("、"))}</dd>` : ""}
+          ${v.programs.length ? `<dt>研修</dt><dd>${esc(v.programs.join("、"))}</dd>` : ""}
+          <dt>管理担当者</dt><dd>${esc(v.manager)}</dd>
+          <dt>開始レベル</dt><dd>LEVEL ${v.level}</dd>
+          <dt>権限</dt><dd>${v.accountType === "manager" ? "管理担当者" : "メンバー"}</dd>
+        </dl>
+      </div>
+
+      <div class="banner info" style="margin-bottom:14px;">
+        <span class="material-symbols-outlined">info</span>
+        <div>押すと、ログインアカウントが作られます（グループウェア・無限道場・タイムカード・会計）。
+          メールアドレスに誤りがないか、もう一度ご確認ください。</div>
+      </div>
+
+      <button class="btn btn-primary" onclick="create(this)">
+        <span class="material-symbols-outlined icon-inline">rocket_launch</span>
+        この内容でアカウント作成＋育成開始
+      </button>`;
+  }
+
+  async function create(btn) {
+    if (!plan) return;
+    try {
+      const r = await KPLayout.busy(btn, "作成中…（数秒かかります）", () =>
+        API.onboardCreate(readForm()));
+      if (!r.ok) {
+        el("form-msg").innerHTML = r.errors.map((x) =>
+          `・${esc(x.field)}：${esc(x.message)}`).join("<br>");
+        return;
+      }
+      renderDone(r.created);
+      el("pv-card").classList.add("hidden");
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "登録できませんでした");
+    }
+  }
+
+  function renderDone(c) {
+    el("done-card").classList.remove("hidden");
+    el("done").innerHTML = `
+      <div class="banner ok" style="margin-bottom:14px;">
+        <span class="material-symbols-outlined">check_circle</span>
+        <div><b>${esc(c.name)} さんを登録しました（${esc(c.code)}）。</b>
+          アカウント・労働条件・${c.plan?.months || 3}か月の育成計画・初日にやること、まで作ってあります。
+          <div style="margin-top:5px;">明日からは本人の画面に「今日やること」が出ます。管理者の操作は要りません。</div>
+        </div>
+      </div>
+
+      ${c.password ? `
+        <div class="banner warn">
+          <span class="material-symbols-outlined">key</span>
+          <div><b>初回パスワードは、この画面にしか出ません。</b>
+            保存していないので、閉じると二度と表示できません。いま控えて、本人へお渡しください。
+            <div style="margin-top:8px;">
+              ${esc(c.email)}　<span class="up-pw">${esc(c.password)}</span>
+            </div>
+          </div>
+        </div>` : ""}
+      ${c.accountError ? `<div class="up-err">アカウント：${esc(c.accountError)}</div>` : ""}
+
+      <div style="margin-top:14px;">
+        <a class="btn btn-secondary btn-sm" href="admin-growth.html">育成計画を見る</a>
+        <a class="btn btn-secondary btn-sm" href="admin-members.html" style="margin-left:6px;">メンバー一覧</a>
+        <button class="btn btn-secondary btn-sm" style="margin-left:6px;" onclick="location.reload()">
+          続けてもう1人登録する
+        </button>
+      </div>`;
+  }
+
+  // --- 複数人（CSV / XLSX） -----------------------------------------------------
+  async function ensureBulk() {
+    if (!bulkMeta) bulkMeta = await API.intakeInfo();
+    return bulkMeta;
+  }
+
+  async function pickFile(file) {
+    if (!file) return;
+    el("bulk").innerHTML = `<div class="empty">読み込んでいます…</div>`;
+    let table;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // 日付は文字列のまま受け取り、サーバ側で解釈する。
+      // ブラウザとサーバで時差の扱いが変わると、入社日が1日ずれる
+      table = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: "", raw: false });
+    } catch (e) {
+      el("bulk").innerHTML = `<div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>ファイルを読めませんでした。XLSX か CSV か確認してください。</div></div>`;
+      return;
+    }
+    try {
+      checked = await API.intakeCheck({ filename: file.name, table });
+      renderBulk();
+    } catch (e) {
+      el("bulk").innerHTML = `<div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderBulk() {
+    const b = checked.batch;
+    const rows = checked.results || [];
+    const ok = rows.filter((r) => r.status === "ok");
+
+    el("bulk").innerHTML = `
+      <div class="banner ${b.error ? "warn" : "info"}" style="margin:14px 0;">
+        <span class="material-symbols-outlined">${b.error ? "warning" : "check_circle"}</span>
+        <div><b>${b.total} 行のうち ${b.success} 行が登録できます。</b>
+          <b>まだ何も登録していません。</b></div>
+      </div>
+      ${rows.map((r) => r.status === "error" ? `
+        <div class="up-row">
+          <div class="bd">
+            <div style="font-weight:600;">${r.row}行目　${esc(r.name || "（氏名なし）")}</div>
+            ${r.errors.map((e) => `<div class="up-err">・${esc(e.field)}：${esc(e.message)}</div>`).join("")}
+          </div>
+          <span class="kp-chip important">エラー</span>
+        </div>` : `
+        <div class="up-row">
+          <div class="bd">
+            <div style="font-weight:600;">${esc(r.name)}</div>
+            <div class="muted" style="font-size:11.5px;">${esc(r.email)} ・ ${esc(r.job)} ・ LEVEL ${r.level}</div>
+            ${(r.warnings || []).map((w) => `<div class="up-warn">・${esc(w.message)}</div>`).join("")}
+          </div>
+          <span class="kp-chip event">登録できます</span>
+        </div>`).join("")}
+      ${ok.length ? `
+        <button class="btn btn-primary" style="margin-top:14px;" onclick="applyBulk(this)">
+          ${ok.length} 名を登録する
+        </button>` : ""}`;
+  }
+
+  async function applyBulk(btn) {
+    if (!confirm("登録すると、ログインアカウントが作られます。\n" +
+                 "メールアドレスに誤りがないか、もう一度ご確認ください。\n\n続けますか？")) return;
+    try {
+      const r = await KPLayout.busy(btn, "登録中…", () => API.intakeApply(checked.batch.id));
+      el("bulk").innerHTML = `
+        <div class="banner ok" style="margin:14px 0;">
+          <span class="material-symbols-outlined">check_circle</span>
+          <div><b>${r.created.length} 名を登録しました。</b>
+            初回パスワードは、この画面にしか出ません。いま控えてください。</div>
+        </div>
+        ${r.created.map((c) => `
+          <div class="up-row">
+            <div class="bd">
+              <div style="font-weight:600;">${esc(c.name)}
+                <span class="muted" style="font-weight:400;margin-left:8px;">${esc(c.code)}</span></div>
+              <div class="muted" style="font-size:11.5px;">${esc(c.email || "")}</div>
+              ${c.accountError ? `<div class="up-err">${esc(c.accountError)}</div>` : ""}
+            </div>
+            ${c.password ? `<span class="up-pw">${esc(c.password)}</span>` : ""}
+          </div>`).join("")}
+        ${r.failed.map((f) => `
+          <div class="up-row">
+            <div class="bd">
+              <div style="font-weight:600;">${f.row}行目　${esc(f.name || "")}</div>
+              ${f.errors.map((e) => `<div class="up-err">・${esc(e.message)}</div>`).join("")}
+            </div>
+          </div>`).join("")}`;
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "登録できませんでした");
+    }
+  }
+
+  async function downloadTemplate() {
+    const m = await ensureBulk();
+    const ws = XLSX.utils.aoa_to_sheet([m.template.header, m.template.sample]);
+    ws["!cols"] = m.template.header.map((h) => ({ wch: Math.max(12, h.length * 2) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "入社育成マスター");
+    XLSX.writeFile(wb, "mf8grp_入社育成マスター.xlsx");
+  }
+</script>
+
+</body>
+</html>
