@@ -33,6 +33,7 @@ import { syncFormItems, ensureDocItems } from "../../lib/onboard-kit.js";
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
 import { DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
 import { hrConfigured } from "../../lib/gdrive.js";
+import { onboardingDone } from "../../lib/stages.js";
 import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
 
 export default async function handler(req, res) {
@@ -158,6 +159,10 @@ async function read(res, user, ctx) {
     documents,
     // Googleドライブに直接あげられるか。だめなときは理由（画面の出し分けに使う）
     drive: { ready: drive.ready, manual: drive.manual, note: drive.note },
+
+    // 本人がやることが全部そろったか。
+    // そろうと、次にログインしたときに通常の画面が開く（lib/stages.js）
+    allDone: onboardingDone(items),
 
     procedureId: proc.data?.id || null,
     status: proc.data?.status || null,

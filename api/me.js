@@ -11,7 +11,7 @@
 import { json, methodNotAllowed } from "../lib/http.js";
 import { requireUser, getMemberships } from "../lib/auth.js";
 import { admin } from "../lib/supabase.js";
-import { stageInfo, shouldOpen } from "../lib/stages.js";
+import { stageInfo, shouldOpen, onboardingDone } from "../lib/stages.js";
 import { jstDate } from "../lib/nippo.js";
 
 export default async function handler(req, res) {
@@ -69,7 +69,21 @@ async function loadGroupware(userId, tenantId) {
   if (!employee) return { ...empty, available: true };
   tenantId = tenantId || employee.tenant_id;
 
-  // 入社日が来ていれば、その場で開く
+  // 入社手続きの提出が全部そろったか。
+  // そろっていれば、入社日前でも画面を開ける（在籍の状態は変えない）。
+  // 調べるのは入社準備中の人だけ（そうでない人には要らない問い合わせ）
+  let done = false;
+  if (employee.status === "invited") {
+    const { data: its } = await sb
+      .from("gw_procedure_items")
+      .select("owner, required, status, gw_procedures!inner(employee_id, kind)")
+      .eq("gw_procedures.employee_id", employee.id)
+      .eq("gw_procedures.kind", "onboarding")
+      .limit(200);
+    done = onboardingDone(its || []);
+  }
+
+  // 入社日が来ていれば、その場で在籍に切り替える
   if (shouldOpen(employee, jstDate())) {
     const { error: ue } = await sb.from("gw_employees")
       .update({ status: "active", updated_at: new Date().toISOString() })
@@ -90,7 +104,7 @@ async function loadGroupware(userId, tenantId) {
     employee,
     // いまどの段階か（入社準備 / メンバー / 退職手続き中 / 退職）と、
     // その段階で開いている画面。メニューはこれで絞る
-    stage: stageInfo(employee),
+    stage: stageInfo(employee, { onboardingDone: done }),
     roles: gwRoles,
     isHr: gwRoles.includes("hr") || gwRoles.includes("owner"),
     isOwner: gwRoles.includes("owner"),
