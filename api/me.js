@@ -11,6 +11,8 @@
 import { json, methodNotAllowed } from "../lib/http.js";
 import { requireUser, getMemberships } from "../lib/auth.js";
 import { admin } from "../lib/supabase.js";
+import { stageInfo, shouldOpen } from "../lib/stages.js";
+import { jstDate } from "../lib/nippo.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -41,6 +43,12 @@ export default async function handler(req, res) {
 }
 
 // 社員名簿と社内ロールを引く。005 未適用でも落とさない。
+//
+// ■ 入社日が来たら、ここで自動的に開く
+//   「入社準備」から「メンバー」への切り替えを人の作業にすると、
+//   必ず忘れられて、初日に何も使えない人が出る。
+//   本人が開いた最初の1回で切り替わるので、管理者の操作は要らない。
+//   （ログインしない人のぶんは api/cron/escalate.js が毎日ならす）
 async function loadGroupware(userId, tenantId) {
   const empty = { available: false, tenantId, employee: null, roles: [], isHr: false, isOwner: false };
 
@@ -61,6 +69,15 @@ async function loadGroupware(userId, tenantId) {
   if (!employee) return { ...empty, available: true };
   tenantId = tenantId || employee.tenant_id;
 
+  // 入社日が来ていれば、その場で開く
+  if (shouldOpen(employee, jstDate())) {
+    const { error: ue } = await sb.from("gw_employees")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("id", employee.id);
+    // 開けなくてもログインは通す。次に開いたときにもう一度試みる
+    if (!ue) employee.status = "active";
+  }
+
   const { data: grants } = await sb
     .from("gw_role_grants")
     .select("role")
@@ -71,6 +88,9 @@ async function loadGroupware(userId, tenantId) {
     available: true,
     tenantId,
     employee,
+    // いまどの段階か（入社準備 / メンバー / 退職手続き中 / 退職）と、
+    // その段階で開いている画面。メニューはこれで絞る
+    stage: stageInfo(employee),
     roles: gwRoles,
     isHr: gwRoles.includes("hr") || gwRoles.includes("owner"),
     isOwner: gwRoles.includes("owner"),

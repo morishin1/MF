@@ -60,6 +60,12 @@
       match: ["info", "notices", "library", "directory"] },
     { key: "mypage",   href: "mypage.html",   label: "マイページ",   icon: "account_circle", ready: true },
 
+    // 入社準備のあいだだけ。入社日が来ると消える
+    { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
+    // 無限道場。同じ auth.users を使うので、ここと同じメール・パスワードで入れる。
+    // LMS_URL が未設定なら出さない（行き先の無いボタンを置かない）
+    { key: "dojo", href: "#", label: "無限道場", icon: "school", ready: true, external: true, lms: true },
+
     // ここから下は、必要な人にだけ出す
     { key: "booking", href: "booking.html", label: "設備・スペース予約", icon: "meeting_room",
       ready: true, when: "booking" },
@@ -197,13 +203,24 @@
 
   // メンバー: PCでは左サイドメニュー、スマホでは画面下のタブ。
   // 両方を描いて CSS で出し分ける。同じ画面幅で2つ出ることはない。
-  function renderMemberNav(active, shows = {}) {
-    // when が付いている項目は、使う人にだけ出す
-    renderSidebar(active, MEMBER_SIDE_NAV.filter((n) => !n.when || shows[n.when]), "member");
+  function renderMemberNav(active, shows = {}, stage = null) {
+    // 出す・出さないの条件は3つ。
+    //   when  … 使う人にだけ（設備予約・会計）
+    //   stage … いまの段階で開いている画面だけ（入社準備は5つだけ）
+    //   lms   … 無限道場の URL が設定されているときだけ
+    const allowed = stage?.allowed || null;
+    const items = MEMBER_SIDE_NAV
+      .filter((n) => !n.when || shows[n.when])
+      .filter((n) => !allowed || allowed.includes(n.key))
+      // 入社手続きは、入社準備のあいだだけ出す
+      .filter((n) => n.key !== "onboarding" || (stage?.preparingOnly || []).includes("onboarding"))
+      .filter((n) => !n.lms || shows.lmsUrl)
+      .map((n) => (n.lms ? { ...n, href: shows.lmsUrl } : n));
+    renderSidebar(active, items, "member");
 
     const el = document.createElement("nav");
     el.className = "kp-tabbar";
-    el.innerHTML = MEMBER_NAV.map((n) => {
+    el.innerHTML = MEMBER_NAV.filter((n) => !allowed || allowed.includes(n.key)).map((n) => {
       const on = n.key === active;
       const cls = `kp-tab${on ? " on" : ""}${n.ready ? "" : " soon"}`;
       const inner = `${icon(n.icon, 22)}<span>${esc(n.label)}</span>`;
@@ -280,16 +297,17 @@
     } catch { /* 保存できなくても、その画面の中では切り替わる */ }
   };
 
-  function renderChrome({ name, appRole, shows }, active) {
+  function renderChrome({ name, appRole, shows, stage }, active) {
     clearChrome();
     const canPreview = appRole === "admin" || appRole === "owner";
     const memberView = canPreview && isMemberView();
 
     renderTopbar({ name, appRole, memberView });
-    if (memberView) renderMemberNav(active, shows);
+    // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
+    if (memberView) renderMemberNav(active, shows, stage);
     else if (canPreview) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
-    else renderMemberNav(active, shows);
+    else renderMemberNav(active, shows, stage);
   }
 
   /**
@@ -306,6 +324,8 @@
       booking: staff || gwRoles.includes("booking"),
       // 会計は別システム。閲覧できる立場の人にだけ入口を出す
       accounting: staff || roles.includes("admin") || roles.includes("staff"),
+      // 無限道場の入口。同じ auth.users を使うので、別のIDもパスワードも要らない
+      lmsUrl: me?.lmsUrl || null,
     };
   }
 
@@ -391,8 +411,17 @@
 
       const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
       const name = me.gw?.employee?.display_name || me.email || "";
-      const shows = showsFor(me);
-      saveCache({ appRole, name, shows });
+      const shows = showsFor({ ...me, lmsUrl: (await API.config().catch(() => null))?.lmsUrl || null });
+      const stage = me.gw?.stage || null;
+      saveCache({ appRole, name, shows, stage });
+
+      // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
+      // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
+      if (appRole === "member" && stage && opts.active
+          && !stage.allowed.includes(opts.active)) {
+        location.replace("home.html");
+        return null;
+      }
 
       const allowed = opts.roles;
       if (allowed && !allowed.includes(appRole)) {
@@ -409,8 +438,9 @@
 
       // 覚えていた内容と違っていたときだけ描き直す
       if (!painted || painted.appRole !== appRole || painted.name !== name
-          || JSON.stringify(painted.shows || {}) !== JSON.stringify(shows)) {
-        renderChrome({ name, appRole, shows }, opts.active);
+          || JSON.stringify(painted.shows || {}) !== JSON.stringify(shows)
+          || JSON.stringify(painted.stage || null) !== JSON.stringify(stage)) {
+        renderChrome({ name, appRole, shows, stage }, opts.active);
       }
 
       return { me, appRole };

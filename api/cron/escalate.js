@@ -1,5 +1,7 @@
 // GET /api/cron/escalate
-// 期限を過ぎた未完了タスクを拾い、担当者と「期限超過時の連絡先」に通知を作る。
+// 1日1回まわす日次の処理。
+//   ① 入社日が来た人を「入社準備」から「メンバー」へ開く
+//   ② 期限を過ぎた未完了タスクを拾い、担当者と連絡先に通知を作る
 // Vercel Cron から1日1回呼ばれる（vercel.json の crons を参照）。
 //
 // 認証:
@@ -28,6 +30,12 @@ export default async function handler(req, res) {
 
   const sb = admin();
   const today = new Date().toISOString().slice(0, 10);
+
+  // ① 入社日が来た人を開く。
+  //    本人がログインした時点でも開く（api/me.js）が、
+  //    初日にまだ開いていない人が名簿に残っていると、
+  //    管理者から見て「準備が終わっていない人」と区別が付かない
+  const opened = await openJoiners(sb);
 
   const { data: tasks, error } = await sb
     .from("gw_tasks")
@@ -83,7 +91,7 @@ export default async function handler(req, res) {
     .in("id", list.map((t) => t.id));
   if (ue) return json(res, 500, { error: "db_update_failed", detail: ue.message });
 
-  return json(res, 200, { ok: true, checked: list.length, notified });
+  return json(res, 200, { opened, ok: true, checked: list.length, notified });
 }
 
 function daysBetween(from, to) {
@@ -94,4 +102,28 @@ function daysBetween(from, to) {
 function formatDate(d) {
   const [y, m, day] = String(d).split("-");
   return `${Number(m)}月${Number(day)}日`;
+}
+
+/**
+ * 入社日が来た人を「入社準備（invited）」から「メンバー（active）」へ。
+ *
+ * 切り替えを人の作業にすると、必ず忘れられて初日に何も使えない人が出る。
+ * 入社日が入っていない人は触らない。いつ入るか決まっていない人を
+ * 在籍にしてしまうと、名簿の人数が狂う。
+ */
+async function openJoiners(sb) {
+  const jst = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
+  const { data, error } = await sb.from("gw_employees")
+    .update({ status: "active", updated_at: new Date().toISOString() })
+    .eq("status", "invited")
+    .not("joined_on", "is", null)
+    .lte("joined_on", jst)
+    .select("display_name");
+
+  if (error) {
+    console.error("[cron] 入社日の切り替えに失敗:", error.message);
+    return { count: 0, error: error.message };
+  }
+  return { count: (data || []).length, names: (data || []).map((e) => e.display_name) };
 }

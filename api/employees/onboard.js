@@ -262,11 +262,19 @@ async function create(res, ctx, user, body) {
     return json(res, 409, { error: "account_taken", hint: acc.message });
   }
 
+  // 初回パスワード。空なら自動生成する。
+  // マスターには入れない（CSVの列にもしない）ので、ここで直接受け取る
+  const password = String(body?.form?.password ?? "").trim();
+  if (password && password.length < 8) {
+    return json(res, 400, { error: "weak_password", hint: "パスワードは8文字以上にしてください" });
+  }
+
   let created;
   try {
     created = await onboardOne(sb, ctx, user, m, {
       code: await nextCode(sb, ctx.tenantId),
       source: "form",
+      password: password || null,
     });
   } catch (e) {
     // どの段で止まったかまで返す。「onboard_failed」だけでは調べようがない。
