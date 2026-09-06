@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>入社手続き - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260910t">
+  <link rel="stylesheet" href="css/layout.css?v=20260910t">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) {
+        document.documentElement.classList.add("kp-has-sidebar");
+      }
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .ob-known { display:grid; grid-template-columns:auto 1fr; gap:5px 16px; font-size:13px; }
+    .ob-known dt { color:var(--muted); white-space:nowrap; font-size:12px; padding-top:2px; }
+    .ob-known dd { margin:0; }
+
+    .ob-g { margin-bottom:24px; }
+    .ob-g > h3 { font-size:14px; font-weight:700; color:var(--primary-dark); margin:0 0 10px; }
+    .ob-f { display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+    @media (max-width:640px) { .ob-f { grid-template-columns:1fr; } }
+    .ob-f .wide { grid-column:1 / -1; }
+    .ob-f label { font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:3px; }
+    .ob-f label .req { color:#c53030; margin-left:3px; }
+    .ob-f .note { font-size:11px; color:var(--muted); margin-top:4px; line-height:1.7; }
+    .ob-f input, .ob-f select, .ob-f textarea { margin:0; }
+    .ob-f .bad input, .ob-f .bad select { border-color:#c53030; }
+
+    .ob-bool { display:flex; gap:7px; }
+    .ob-bool button { border:1px solid var(--border); border-radius:999px; background:#fff;
+                      padding:7px 17px; font-size:12.5px; font-weight:600; cursor:pointer;
+                      color:var(--muted); font-family:inherit; }
+    .ob-bool button.on { border-color:var(--primary); background:var(--primary); color:#fff; }
+
+    .ob-c { border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; }
+    .ob-c .t { font-size:13.5px; font-weight:700; color:var(--primary-dark); margin-bottom:4px; }
+    .ob-c .s { font-size:12.5px; color:var(--muted); line-height:1.85; }
+    .ob-c label { display:inline-flex; align-items:center; gap:8px; font-size:13px;
+                  font-weight:600; margin-top:10px; cursor:pointer; }
+    .ob-c label input { width:auto; margin:0; }
+    .ob-c.done { border-color:#b7e0c4; background:#f7fbf8; }
+
+    .ob-doc { display:flex; gap:10px; align-items:flex-start; padding:11px 0;
+              border-bottom:1px solid var(--border); font-size:13.5px; }
+    .ob-doc:last-child { border-bottom:none; }
+    .ob-doc .bd { flex:1; min-width:0; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">入社手続き</h1>
+  <p class="kp-greet-sub">
+    この画面だけで終わります。会社が把握している内容はすでに入っているので、
+    入力するのは住所・連絡先・振込口座と、確認のチェックだけです。
+  </p>
+
+  <div id="notice"></div>
+
+  <div class="card" id="prog-card">
+    <h2><span class="material-symbols-outlined">checklist</span>入社準備の進み具合
+      <span id="prog-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div class="kp-progress"><span id="prog-bar" style="width:0%"></span></div>
+    <p class="muted" style="font-size:12.5px;margin:10px 0 0;" id="prog-note"></p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">badge</span>会社が把握している内容</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      入力の必要はありません。違っているところがあれば、管理担当者にお知らせください。
+    </p>
+    <dl class="ob-known" id="known"></dl>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">edit_note</span>ご記入ください</h2>
+    <div id="form"></div>
+    <div style="margin-top:6px;">
+      <button class="btn btn-secondary" onclick="save(this, false)">
+        <span class="material-symbols-outlined icon-inline">save</span>途中まで保存
+      </button>
+      <span class="muted" id="save-tag" style="font-size:12px;margin-left:10px;"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">verified_user</span>確認のお願い</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+      内容を読んで、チェックを入れてください。いつ確認したかを記録します。
+    </p>
+    <div id="consents"></div>
+  </div>
+
+  <div class="card" id="docs-card">
+    <h2><span class="material-symbols-outlined">upload_file</span>ご提出いただく書類</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px;">
+      手元にあるものから順で構いません。写真でも読めれば大丈夫です。
+    </p>
+    <div id="docs"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">send</span>提出</h2>
+    <div id="submit-state"></div>
+    <button class="btn btn-primary" id="submit-btn" onclick="save(this, true)">
+      <span class="material-symbols-outlined icon-inline">send</span>この内容で提出する
+    </button>
+    <div id="f-msg" class="err-text" style="margin-top:10px;"></div>
+    <p class="muted" style="font-size:11.5px;margin:12px 0 0;">
+      提出後も、内容の修正はできます。人事が確認するまでのあいだは書き直せます。
+    </p>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260910t"></script>
+<script src="js/layout.js?v=20260910t"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let data = null;
+  let bools = {};   // true/false のボタンの状態
+
+  KPLayout.init({ active: "onboarding", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      data = await API.myOnboarding();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    el("notice").innerHTML = "";
+
+    if (!data.procedureId) {
+      el("notice").innerHTML =
+        `<div class="banner info"><span class="material-symbols-outlined">info</span>
+           <div>入社手続きがまだ作られていません。管理担当者にお知らせください。</div></div>`;
+    }
+
+    renderProgress();
+    renderKnown();
+    renderForm();
+    renderConsents();
+    renderDocs();
+    renderSubmitState();
+  }
+
+  function renderProgress() {
+    const p = data.progress || { done: 0, total: 0, pct: 0 };
+    el("prog-bar").style.width = `${p.pct}%`;
+    el("prog-tag").textContent = `${p.pct}%`;
+    el("prog-tag").className = `kp-chip ${p.pct >= 100 ? "event" : "draft"}`;
+    const mine = p.byOwner?.employee || { done: 0, total: 0 };
+    el("prog-note").textContent = p.total
+      ? `全体 ${p.done} / ${p.total} 件が完了。うち、あなたにお願いしているものは ${mine.total} 件です。`
+      : "準備中です。";
+  }
+
+  function renderKnown() {
+    const k = data.known || {};
+    const row = (label, v) => v ? `<dt>${esc(label)}</dt><dd>${esc(v)}</dd>` : "";
+    el("known").innerHTML = [
+      row("氏名", k.name),
+      row("メール", k.email),
+      row("入社日", k.joinedOn),
+      row("雇用区分", k.employmentType),
+      row("契約", k.contract),
+      row("試用期間", k.probation),
+      row("週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null),
+      row("勤務形態", k.workStyle),
+      row("担当", k.role),
+      row("業務範囲", (k.workScope || []).join("、")),
+      row("給与", k.wage),
+      row("相談先", k.manager),
+    ].join("") || `<dd class="muted">まだ登録されていません。</dd>`;
+  }
+
+  // 入力欄はサーバの定義から組み立てる。画面とサーバで項目がずれないように
+  function renderForm() {
+    const pf = data.profile || {};
+    bools = {};
+    for (const f of data.fields) if (f.type === "bool") bools[f.key] = pf[f.key] ?? null;
+
+    el("form").innerHTML = data.groups.map((g) => `
+      <div class="ob-g">
+        <h3>${esc(g)}</h3>
+        <div class="ob-f">
+          ${data.fields.filter((f) => f.group === g).map((f) => field(f, pf)).join("")}
+        </div>
+      </div>`).join("");
+  }
+
+  function field(f, pf) {
+    const v = pf[f.key];
+    const hidden = f.showIf && !bools[f.showIf];
+    const label = `<label>${esc(f.label)}${f.required ? '<span class="req">*</span>' : ""}</label>`;
+    const note = f.note ? `<div class="note">${esc(f.note)}</div>` : "";
+
+    let input;
+    if (f.type === "bool") {
+      input = `<div class="ob-bool" id="b-${esc(f.key)}">
+        <button type="button" class="${v === true ? "on" : ""}" onclick="setBool('${esc(f.key)}', true)">はい</button>
+        <button type="button" class="${v === false ? "on" : ""}" onclick="setBool('${esc(f.key)}', false)">いいえ</button>
+      </div>`;
+    } else if (f.type === "select") {
+      input = `<select id="f-${esc(f.key)}">
+        <option value="">選んでください</option>
+        ${f.options.map((o) => `<option value="${esc(o)}"${v === o ? " selected" : ""}>${esc(o)}</option>`).join("")}
+      </select>`;
+    } else if (f.rows) {
+      input = `<textarea id="f-${esc(f.key)}" rows="${f.rows}"
+                 placeholder="${esc(f.placeholder || "")}">${esc(v || "")}</textarea>`;
+    } else {
+      input = `<input id="f-${esc(f.key)}" type="${f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}"
+               value="${esc(v ?? "")}" placeholder="${esc(f.placeholder || "")}">`;
+    }
+
+    return `<div class="${f.wide ? "wide" : ""}${hidden ? " hidden" : ""}" id="w-${esc(f.key)}">
+      ${label}${input}${note}</div>`;
+  }
+
+  function setBool(key, v) {
+    bools[key] = bools[key] === v ? null : v;
+    const box = el(`b-${key}`);
+    [...box.children].forEach((b, i) => b.classList.toggle("on", bools[key] === (i === 0)));
+    // 「はい」のときだけ出る欄を切り替える
+    for (const f of data.fields) {
+      if (f.showIf === key) el(`w-${f.key}`).classList.toggle("hidden", !bools[key]);
+    }
+  }
+
+  function readForm() {
+    const out = {};
+    for (const f of data.fields) {
+      if (f.type === "bool") { out[f.key] = bools[f.key]; continue; }
+      out[f.key] = el(`f-${f.key}`)?.value ?? "";
+    }
+    return out;
+  }
+
+  function renderConsents() {
+    el("consents").innerHTML = (data.consents || []).map((c) => `
+      <div class="ob-c${c.agreed ? " done" : ""}">
+        <div class="t">${esc(c.label)}</div>
+        <div class="s">${esc(c.summary)}</div>
+        ${c.agreed
+          ? `<div style="font-size:12px;color:#256b36;font-weight:600;margin-top:9px;">
+               <span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;">check_circle</span>
+               確認済み</div>`
+          : `<label><input type="checkbox" onchange="agree('${esc(c.kind)}', this)">
+               読みました。内容に同意します</label>`}
+      </div>`).join("");
+  }
+
+  async function agree(kind, box) {
+    if (!box.checked) { box.checked = true; return; }   // 記録なので外せない
+    box.disabled = true;
+    try {
+      await API.myOnboardingConsent([kind]);
+      await load();
+    } catch (e) {
+      box.checked = false;
+      box.disabled = false;
+      alert(e.hint || e.detail || e.message || "記録できませんでした");
+    }
+  }
+
+  // 書類の提出。アップロードは既存の口（api/onboarding/upload）を使う
+  function renderDocs() {
+    const items = (data.myItems || []).filter((i) => !String(i.item_key || "").startsWith("form_"));
+    if (!items.length) { el("docs-card").classList.add("hidden"); return; }
+    el("docs-card").classList.remove("hidden");
+
+    el("docs").innerHTML = items.map((i) => `
+      <div class="ob-doc">
+        <div class="bd">
+          <div style="font-weight:600;">${esc(i.title)}
+            ${i.required ? "" : '<span class="muted" style="font-weight:400;font-size:11.5px;">（任意）</span>'}</div>
+          ${i.status === "done" ? '<div style="font-size:11.5px;color:#256b36;">確認済み</div>'
+            : i.status === "submitted" ? '<div style="font-size:11.5px;color:var(--muted);">提出しました。確認をお待ちください</div>'
+            : ""}
+        </div>
+        ${i.status === "done" || i.status === "na" ? '<span class="kp-chip event">完了</span>' : `
+          <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+            <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを出す
+            <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp"
+                   onchange="pickFile('${esc(i.id)}', this)">
+          </label>
+          ${i.status === "submitted"
+            ? `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', true, this)">取り消す</button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(i.id)}', false, this)">提出しました</button>`}`}
+      </div>`).join("");
+  }
+
+  async function mark(itemId, undo, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.submitProcedureItem(itemId, { undo }));
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  // ファイルを選んだら、そのまま提出まで進める。
+  // 会計の書類アップロードとは別の保存先（人事だけが見られる）に入る
+  async function pickFile(itemId, input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const box = el("docs");
+    const before = box.innerHTML;
+    box.insertAdjacentHTML("afterbegin", `<div class="empty">送信中…</div>`);
+    try {
+      await API.uploadProcedureFile(itemId, file);
+      await load();
+    } catch (e) {
+      box.innerHTML = before;
+      alert(e.hint || e.detail || e.message || "送信できませんでした");
+    }
+  }
+
+  function renderSubmitState() {
+    const sent = data.profileStatus === "submitted";
+    el("submit-state").innerHTML = sent
+      ? `<div class="banner ok" style="margin-bottom:14px;">
+           <span class="material-symbols-outlined">check_circle</span>
+           <div>提出済みです。人事の確認をお待ちください。内容はまだ書き直せます。</div>
+         </div>`
+      : (data.missing || []).length
+        ? `<div class="banner warn" style="margin-bottom:14px;">
+             <span class="material-symbols-outlined">info</span>
+             <div>あと ${data.missing.length} 項目です：
+               ${data.missing.map((m) => esc(m.label)).join("・")}</div>
+           </div>`
+        : "";
+    el("submit-btn").innerHTML = sent
+      ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して再提出'
+      : '<span class="material-symbols-outlined icon-inline">send</span>この内容で提出する';
+  }
+
+  async function save(btn, submit) {
+    el("f-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () =>
+        API.saveMyOnboarding({ profile: readForm(), submit }));
+      if (!submit) {
+        el("save-tag").textContent = "保存しました";
+        setTimeout(() => { el("save-tag").textContent = ""; }, 2500);
+      }
+      await load();
+      if (submit) window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      el("f-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした";
+      if (submit) el("f-msg").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+</script>
+
+</body>
+</html>

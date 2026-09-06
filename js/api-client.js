@@ -597,6 +597,18 @@
   const submitProcedureItem = (itemId, opts = {}) =>
     api("/api/onboarding/submit", { method: "POST", body: { itemId, ...opts } });
 
+  // ---- 入社フォーム（本人が使う唯一の口） ----
+  // 個人情報・書類・同意を1画面で終わらせる。
+  // 会社が既に知っていること（労働条件・担当業務）は読み取り専用で返る
+  const myOnboarding = () => api("/api/onboarding/me");
+  const saveMyOnboarding = (body) =>
+    api("/api/onboarding/me", { method: "POST", body });
+  const myOnboardingConsent = (consents) =>
+    api("/api/onboarding/me", { method: "POST", body: { consents } });
+  // 社労士連絡用のテキストと Slack投稿文（人事だけ）
+  const onboardBrief = (employeeId) =>
+    api(`/api/onboarding/brief?employeeId=${encodeURIComponent(employeeId)}`);
+
   // 提出ファイルの閲覧用URL（短時間だけ有効）
   const procedureFileUrl = (fileId) =>
     api(`/api/onboarding/upload?fileId=${encodeURIComponent(fileId)}`);
@@ -733,6 +745,7 @@
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
+    myOnboarding, saveMyOnboarding, myOnboardingConsent, onboardBrief,
     uploadProcedureFile, procedureFileUrl,
   };
 })();

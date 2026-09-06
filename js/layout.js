@@ -20,40 +20,51 @@
 
 (function () {
   // メンバー: 画面下のタブ。片手で届く5つに絞る。
-  // 「書類」は会計システムへの入口。グループウェアとは別物なので、
-  // その先の画面でも会計であることが分かる見せ方にしている。
+  //
+  // ホームの次に「やること」を置く。
+  // メンバーの動きは「ホームを見る → やることを処理する」の2手で終わるのが理想で、
+  // その2つが指の届くところに並んでいないと、結局メニューを開くことになる。
   const MEMBER_NAV = [
     { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",      ready: true },
+    { key: "tasks",    href: "tasks.html",     label: "やること",   icon: "checklist", ready: true },
     { key: "nippo",    href: "nippo.html",     label: "日報",       icon: "edit_note", ready: true },
     { key: "messages", href: "messages.html",  label: "メッセージ", icon: "forum",     ready: true },
-    { key: "tasks",    href: "tasks.html",     label: "やること",   icon: "checklist", ready: true },
     { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",      ready: true },
   ];
 
-  // メンバー: PCでの左サイドメニュー。
-  // 管理者だけがサイドメニューで、メンバーは下のタブだけ、という作りにしていたが、
-  // PCで開いたときに「どこに何があるか」が一覧できず、管理画面と別物に見えていた。
-  // 中身は menu.html と同じ並びにして、どちらから入っても迷わないようにする。
+  // メンバー: PCでの左サイドメニュー。基本は8つ。
+  //
+  // ■ 増やさない
+  //   入社手続き・研修・提出物のような「一時期だけ必要なもの」に
+  //   専用のメニューを作らない。入社した週にしか使わない項目が
+  //   その後ずっと並び続けると、毎日使うものが埋もれる。
+  //   そういうものは「やること」に出す。終われば自然に消える。
+  //
+  // ■ まとめたもの
+  //   お知らせ・掲示板 ＋ 社内文書・様式 ＋ 社員名簿 → 社内情報
+  //   どれも「調べにいく」ときに開くもので、入口が3つある必要がない。
+  //
+  // ■ 人によって出す・出さない
+  //   設備・スペース予約は、設備を使う人だけ。
+  //   会計書類は、経理・管理担当だけ。
+  //   使わない人に見えていると、押してよいのか毎回考えることになる。
   const MEMBER_SIDE_NAV = [
-    { section: "業務" },
-    { key: "home",     href: "home.html",     label: "ホーム",           icon: "home",           ready: true },
-    { key: "notices",  href: "notices.html",  label: "お知らせ・掲示板", icon: "campaign",       ready: true },
-    { key: "nippo",    href: "nippo.html",    label: "日報",             icon: "edit_note",      ready: true },
-    { key: "schedule", href: "schedule.html", label: "スケジュール",     icon: "calendar_month", ready: true },
-    { key: "booking",  href: "booking.html",  label: "設備・スペース予約", icon: "meeting_room", ready: true },
-    { key: "messages", href: "messages.html", label: "メッセージ",       icon: "forum",          ready: true },
-    { key: "tasks",    href: "tasks.html",    label: "やること",         icon: "checklist",      ready: true },
+    { key: "home",     href: "home.html",     label: "ホーム",       icon: "home",           ready: true },
+    { key: "tasks",    href: "tasks.html",    label: "やること",     icon: "checklist",      ready: true },
+    { key: "nippo",    href: "nippo.html",    label: "日報",         icon: "edit_note",      ready: true },
+    { key: "schedule", href: "schedule.html", label: "スケジュール", icon: "calendar_month", ready: true },
+    { key: "messages", href: "messages.html", label: "メッセージ",   icon: "forum",          ready: true },
+    { key: "workflow", href: "workflow.html", label: "申請・承認",   icon: "approval",       ready: true },
+    { key: "info",     href: "notices.html",  label: "社内情報",     icon: "menu_book",      ready: true,
+      // お知らせ・社内文書・社員名簿は、どれを開いていてもここが選ばれた状態にする
+      match: ["info", "notices", "library", "directory"] },
+    { key: "mypage",   href: "mypage.html",   label: "マイページ",   icon: "account_circle", ready: true },
 
-    { section: "申請・書類" },
-    { key: "workflow", href: "workflow.html", label: "申請・承認",       icon: "approval",       ready: true },
-    { key: "library",  href: "library.html",  label: "社内文書・様式",   icon: "folder_open",    ready: true },
-
-    { section: "自分・社内の人" },
-    { key: "directory", href: "directory.html", label: "社員名簿",       icon: "groups",         ready: true },
-    { key: "mypage",    href: "mypage.html",    label: "マイページ",     icon: "account_circle", ready: true },
-
-    { section: "会計（別システム）" },
-    { key: "docs", href: "app.html", label: "会計書類", icon: "receipt_long", ready: true, external: true },
+    // ここから下は、必要な人にだけ出す
+    { key: "booking", href: "booking.html", label: "設備・スペース予約", icon: "meeting_room",
+      ready: true, when: "booking" },
+    { key: "docs", href: "app.html", label: "会計書類", icon: "receipt_long",
+      ready: true, external: true, when: "accounting" },
   ];
 
   // 管理者: 左サイドメニュー。
@@ -186,8 +197,9 @@
 
   // メンバー: PCでは左サイドメニュー、スマホでは画面下のタブ。
   // 両方を描いて CSS で出し分ける。同じ画面幅で2つ出ることはない。
-  function renderMemberNav(active) {
-    renderSidebar(active, MEMBER_SIDE_NAV, "member");
+  function renderMemberNav(active, shows = {}) {
+    // when が付いている項目は、使う人にだけ出す
+    renderSidebar(active, MEMBER_SIDE_NAV.filter((n) => !n.when || shows[n.when]), "member");
 
     const el = document.createElement("nav");
     el.className = "kp-tabbar";
@@ -213,7 +225,8 @@
     el.className = `kp-sidebar${variant === "member" ? " member" : ""}`;
     el.innerHTML = items.map((n) => {
       if (n.section) return `<div class="kp-side-section">${esc(n.section)}</div>`;
-      const on = n.key === active;
+      // match が書いてあれば、そこに挙げた画面のどれでも選ばれた状態にする
+      const on = n.key === active || (n.match || []).includes(active);
       const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}${n.external ? " ext" : ""}`;
       const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>${n.ready ? "" : '<em>準備中</em>'}`;
       return n.ready
@@ -267,16 +280,33 @@
     } catch { /* 保存できなくても、その画面の中では切り替わる */ }
   };
 
-  function renderChrome({ name, appRole }, active) {
+  function renderChrome({ name, appRole, shows }, active) {
     clearChrome();
     const canPreview = appRole === "admin" || appRole === "owner";
     const memberView = canPreview && isMemberView();
 
     renderTopbar({ name, appRole, memberView });
-    if (memberView) renderMemberNav(active);
+    if (memberView) renderMemberNav(active, shows);
     else if (canPreview) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
-    else renderMemberNav(active);
+    else renderMemberNav(active, shows);
+  }
+
+  /**
+   * 人によって出す・出さないメニューを決める。
+   *   booking    … 設備を使う人。予約を1件でも持っているか、管理側の人
+   *   accounting … 会計のメンバーシップを持っている人（経理・管理担当）
+   * 判断できないときは出さない。使わないものが見えているほうが迷う
+   */
+  function showsFor(me) {
+    const gwRoles = me?.gw?.roles || [];
+    const roles = me?.roles || [];
+    const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
+    return {
+      booking: staff || gwRoles.includes("booking"),
+      // 会計は別システム。閲覧できる立場の人にだけ入口を出す
+      accounting: staff || roles.includes("admin") || roles.includes("staff"),
+    };
   }
 
   // ボタンの押し心地。押した直後に無効化して回転アイコンに差し替え、
@@ -361,7 +391,8 @@
 
       const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
       const name = me.gw?.employee?.display_name || me.email || "";
-      saveCache({ appRole, name });
+      const shows = showsFor(me);
+      saveCache({ appRole, name, shows });
 
       const allowed = opts.roles;
       if (allowed && !allowed.includes(appRole)) {
@@ -377,11 +408,28 @@
       }
 
       // 覚えていた内容と違っていたときだけ描き直す
-      if (!painted || painted.appRole !== appRole || painted.name !== name) {
-        renderChrome({ name, appRole }, opts.active);
+      if (!painted || painted.appRole !== appRole || painted.name !== name
+          || JSON.stringify(painted.shows || {}) !== JSON.stringify(shows)) {
+        renderChrome({ name, appRole, shows }, opts.active);
       }
 
       return { me, appRole };
+    },
+
+    /**
+     * 「社内情報」の中の切り替え。
+     * お知らせ・社内文書・社員名簿は、どれも「調べにいく」ときに開くもの。
+     * サイドメニューの入口は1つにして、中はこの帯で行き来する。
+     */
+    infoTabs(active) {
+      const tabs = [
+        { key: "notices",   href: "notices.html",   label: "お知らせ" },
+        { key: "library",   href: "library.html",   label: "社内文書・様式" },
+        { key: "directory", href: "directory.html", label: "社員名簿" },
+      ];
+      return `<div class="kp-subnav">${tabs.map((t) =>
+        `<a class="kp-subtab${t.key === active ? " on" : ""}" href="${t.href}">${esc(t.label)}</a>`
+      ).join("")}</div>`;
     },
 
     toggleBell() {

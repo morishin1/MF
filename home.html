@@ -7,8 +7,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910s">
-  <link rel="stylesheet" href="css/layout.css?v=20260910s">
+  <link rel="stylesheet" href="css/app.css?v=20260910t">
+  <link rel="stylesheet" href="css/layout.css?v=20260910t">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -83,6 +83,15 @@
   </div>
 
   <!-- ② 今日のKPI。目標は事前に決めてあり、本人は実績だけ入れる -->
+  <!-- ここから下は、毎日必ず見るものではない。
+       ホームで大きく出すのは 今日の予定・やること・未提出の日報・重要なお知らせ の4つ。
+       数字と振り返りは、見たい人が開く。開かなくても仕事は回る -->
+  <details id="more" style="margin-top:6px;">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary-dark);
+                    padding:10px 0;">
+      今月の数字と、これまでの振り返りを見る
+    </summary>
+
   <div id="kpi-card" class="card hidden">
     <h2><span class="material-symbols-outlined">target</span>今日のKPI
       <span id="kpi-tag" class="kp-chip" style="margin-left:6px;"></span>
@@ -135,12 +144,7 @@
 
   <div id="tiles" class="kp-tiles"></div>
 
-  <div id="hr-card" class="card hidden">
-    <h2><span class="material-symbols-outlined">badge</span><span id="hr-title">入社手続き</span></h2>
-    <p class="muted" style="font-size:13px;margin:0 0 6px;" id="hr-sub"></p>
-    <div class="kp-progress"><span id="hr-bar" style="width:0%"></span></div>
-    <div id="hr-items" style="margin-top:10px;"></div>
-  </div>
+  </details>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span>
@@ -148,25 +152,11 @@
     <div id="notices"><div class="empty">読み込み中…</div></div>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">receipt_long</span>会計書類
-      <span class="kp-chip" style="margin-left:6px;">別システム</span></h2>
-    <p class="muted" style="font-size:13px;margin:0 0 14px;">
-      請求書・領収書の提出はこちらです。AIが種別を判定して月ごとに整理し、自動で仕訳します。
-      社内の連絡や手続きとは別の仕組みで動いています。
-    </p>
-    <a class="btn btn-primary" href="app.html">
-      <span class="material-symbols-outlined icon-inline">upload_file</span>会計書類を提出する
-    </a>
-    <a class="btn btn-secondary" href="menu.html" style="margin-left:8px;">
-      <span class="material-symbols-outlined icon-inline">apps</span>ほかのメニュー
-    </a>
-  </div>
 
 </div>
 
-<script src="js/api-client.js?v=20260910s"></script>
-<script src="js/layout.js?v=20260910s"></script>
+<script src="js/api-client.js?v=20260910t"></script>
+<script src="js/layout.js?v=20260910t"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -194,7 +184,6 @@
     loadDashboard();
     renderTiles(await loadStats());
     loadNotices();
-    loadProcedure();
   }
 
   // --- ① 今日の最優先 ／ ② KPI ／ ③ 昨日のふりかえり ／ ④ 今週 ---------------
@@ -637,105 +626,6 @@
       <div id="today-detail" class="dash-detail"></div>
       <div id="today-foot" class="dash-foot"></div>`;
     await loadDashboard();
-  }
-
-  // --- 入社・退職手続き（自分の分だけ） -------------------------------------
-  let myProcedure = null;
-
-  async function loadProcedure() {
-    try {
-      const res = await API.listProcedures();
-      // 自分が対象の、まだ終わっていない手続き
-      myProcedure = (res.procedures || []).find(
-        (p) => p.employee?.id === res.me?.id && p.status !== "done" && p.status !== "cancelled"
-      ) || null;
-      renderProcedure();
-    } catch (e) {
-      // 未適用の環境やアクセス権が無い場合は、カードごと出さない
-      el("hr-card").classList.add("hidden");
-    }
-  }
-
-  function renderProcedure() {
-    if (!myProcedure) { el("hr-card").classList.add("hidden"); return; }
-
-    // 本人が出すものだけを見せる。会社側・社労士側の作業は本人の画面には出さない
-    const mine = (myProcedure.items || []).filter((i) => i.owner === "employee");
-    if (!mine.length) { el("hr-card").classList.add("hidden"); return; }
-
-    const done = mine.filter((i) => i.status === "done" || i.status === "na").length;
-    const submitted = mine.filter((i) => i.status === "submitted").length;
-    const pct = Math.round(((done + submitted) / mine.length) * 100);
-
-    el("hr-title").textContent = myProcedure.kind === "onboarding" ? "入社手続き" : "退職手続き";
-    el("hr-sub").textContent = myProcedure.target_on
-      ? `${new Date(myProcedure.target_on).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}　提出 ${done + submitted} / ${mine.length} 件`
-      : `提出 ${done + submitted} / ${mine.length} 件`;
-    el("hr-bar").style.width = `${pct}%`;
-
-    el("hr-items").innerHTML = mine.map((i) => {
-      const finished = i.status === "done" || i.status === "na";
-      const label = finished ? "確認済み" : (i.status === "submitted" ? "提出済み" : "");
-      const files = (i.files || []).map((f) =>
-        `<small><a href="#" onclick="openFile('${esc(f.id)}');return false;">${esc(f.filename)}</a></small>`).join("");
-      return `
-        <div class="kp-todo${finished ? " done" : ""}">
-          <span class="material-symbols-outlined" style="font-size:20px;color:${finished || i.status === "submitted" ? "var(--primary)" : "#c3cad3"};">
-            ${finished || i.status === "submitted" ? "check_circle" : "radio_button_unchecked"}</span>
-          <span class="t">${esc(i.title)}
-            ${i.due_on ? `<small>期限 ${esc(new Date(i.due_on).toLocaleDateString("ja-JP"))}</small>` : ""}
-            ${label ? `<small>${label}</small>` : ""}
-            ${files}
-          </span>
-          ${finished ? "" : `
-            <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-              <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを出す
-              <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp"
-                     onchange="pickFile('${esc(i.id)}', this)">
-            </label>
-            ${i.status === "submitted"
-              ? `<button class="btn btn-secondary btn-sm" onclick="submitItem('${esc(i.id)}', true, this)">取り消す</button>`
-              : `<button class="btn btn-secondary btn-sm" onclick="submitItem('${esc(i.id)}', false, this)">提出済みにする</button>`}`}
-        </div>`;
-    }).join("");
-
-    el("hr-card").classList.remove("hidden");
-  }
-
-  // ファイルを選んだらそのまま提出まで進める。
-  // 会計の書類アップロードとは別の保存先に入るので、仕訳は作られない。
-  async function pickFile(itemId, input) {
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-    const card = document.getElementById("hr-items");
-    const before = card.innerHTML;
-    card.insertAdjacentHTML("afterbegin", `<div class="empty" id="hr-uploading">送信中…</div>`);
-    try {
-      await API.uploadProcedureFile(itemId, file);
-      await loadProcedure();
-    } catch (e) {
-      card.innerHTML = before;
-      alert(e.hint || e.detail || e.message || "送信できませんでした");
-    }
-  }
-
-  async function openFile(fileId) {
-    try {
-      const { url } = await API.procedureFileUrl(fileId);
-      window.open(url, "_blank", "noopener");
-    } catch (e) {
-      alert(e.detail || e.message || "開けませんでした");
-    }
-  }
-
-  async function submitItem(itemId, undo, btn) {
-    try {
-      await KPLayout.busy(btn, "更新中…", () => API.submitProcedureItem(itemId, { undo }));
-      await loadProcedure();
-    } catch (e) {
-      alert(e.detail || e.message || "更新できませんでした");
-    }
   }
 
   // --- お知らせ -------------------------------------------------------------

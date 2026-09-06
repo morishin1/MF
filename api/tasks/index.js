@@ -1,4 +1,12 @@
 // GET    /api/tasks?scope=mine|all   … やること一覧（見える範囲は RLS が決める）
+//          scope=mine のときは、業務タスクだけでなく
+//          「日報で決めた次にやること」と「入社手続きの提出物」も混ぜて返す。
+//
+//          ■ なぜ混ぜるのか
+//            いま自分が対応すべきものが3か所に散っていると、
+//            どれかを必ず見落とす。入口を1つにする。
+//            入社手続きのように一時期しか使わないものに専用メニューを作らず、
+//            ここに出して、終われば自然に消えるようにする。
 // POST   /api/tasks                  … 作成（管理者・人事）
 // PATCH  /api/tasks {id, ...}        … 更新
 //          管理者・人事 … すべての項目
@@ -45,6 +53,8 @@ export default async function handler(req, res) {
 
     return json(res, 200, {
       tasks: data || [],
+      // 自分の画面のときだけ、他から来る「やること」も足す
+      extras: scope === "mine" ? await extrasFor(ctx, user.id) : { actions: [], onboarding: [] },
       canManage: canManageHr(ctx),
       me: ctx.employee,
     });
@@ -169,4 +179,60 @@ function normalize(body, { partial = false } = {}) {
     v.status = body.status;
   }
   return { value: v };
+}
+
+/**
+ * 業務タスク以外の「やること」。
+ *
+ *   actions    … 日報で決めた次にやること（gw_action_items）
+ *   onboarding … 入社手続きのうち、本人が出すもの（gw_procedure_items）
+ *
+ * どちらも開いているものだけ返す。
+ * 入社手続きは、手続き自体が完了になった時点で1件も返らなくなる。
+ * 「終わったら自動で消える」を、消す処理ではなく問い合わせの条件で作る。
+ * 消す処理にすると、消し忘れたときに残り続ける。
+ */
+async function extrasFor(ctx, userId) {
+  const out = { actions: [], onboarding: [] };
+  if (!ctx.employee) return out;
+
+  const sb = admin();
+
+  const [items, proc] = await Promise.all([
+    sb.from("gw_action_items")
+      .select("id, title, detail, source, due_date, priority, status")
+      .eq("user_id", userId)
+      .eq("status", "open")
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("priority")
+      .limit(30),
+    sb.from("gw_procedures")
+      .select("id, status, target_on")
+      .eq("employee_id", ctx.employee.id).eq("kind", "onboarding").maybeSingle(),
+  ]);
+
+  out.actions = (items.data || []).map((a) => ({
+    id: a.id, title: a.title, detail: a.detail,
+    dueOn: a.due_date, source: a.source,
+  }));
+
+  // 手続きが完了・中止になっていれば、もう出さない
+  if (proc.data && !["done", "cancelled"].includes(proc.data.status)) {
+    const { data } = await sb.from("gw_procedure_items")
+      .select("id, item_key, title, category, required, status, due_on")
+      .eq("procedure_id", proc.data.id)
+      .eq("owner", "employee")
+      .in("status", ["todo", "submitted"])
+      .order("sort_order").limit(50);
+
+    out.onboarding = (data || []).map((i) => ({
+      id: i.id, itemKey: i.item_key, title: i.title,
+      category: i.category, required: i.required,
+      status: i.status, dueOn: i.due_on,
+      // 入力欄がある項目は入社フォームへ、書類だけの項目もそこから出せる
+      href: "onboarding.html",
+    }));
+  }
+
+  return out;
 }
