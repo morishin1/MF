@@ -86,14 +86,14 @@ async function run(res, sb, ctx, user, nippo, { force }) {
       .order("work_date", { ascending: false }).limit(1),
     // 自走レベル。同じ日報でも、L1には手順を、L3には問いを返させる
     sb.from("gw_employees").select("autonomy_level")
-      .eq("user_id", nippo.user_id).maybeSingle(),
+      .eq("user_id", nippo.user_id).limit(1),
     // 止まったままの仕事。あるなら、明日の1件はそこから出させる
     sb.from("gw_blockers").select("*")
       .eq("user_id", nippo.user_id).eq("status", "open")
       .order("blocked_since").limit(5),
   ]);
 
-  const level = emp?.autonomy_level || 1;
+  const level = emp?.[0]?.autonomy_level || 1;
   const blockers = (open || []).map((b) => shapeBlocker(b, nippo.work_date));
 
   const r = await evaluateNippo({

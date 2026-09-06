@@ -76,7 +76,12 @@ async function read(req, res, user, ctx) {
 
   const [kpis, items, weekNippos, weekEvals, weekly, recentEvals, blockers, emp,
          plan] = await Promise.all([
-    ensureKpis(sb, userId, date),
+    // KPIの用意でこけても、ホーム画面ごと開かなくなるのは割に合わない。
+    // 「今日やること」も「止まっていること」も出せなくなるため、ここだけ握る
+    ensureKpis(sb, userId, date).catch((e) => {
+      console.error("[dashboard] KPIを用意できませんでした:", e.message);
+      return [];
+    }),
 
     // 今日ぶんと、やり残し（期限が過ぎてまだ開いているもの）
     sb.from("gw_action_items").select("*")
@@ -103,12 +108,15 @@ async function read(req, res, user, ctx) {
       .eq("user_id", userId).eq("status", "open").order("blocked_since").limit(10),
 
     // 自走レベル。画面には「次のレベルまであと何項目」として出す
-    sb.from("gw_employees").select("autonomy_level").eq("user_id", userId).maybeSingle(),
+    sb.from("gw_employees").select("autonomy_level").eq("user_id", userId).limit(1),
 
     // 3か月育成計画。確定したものだけ（相談中の目標は本人に出さない）
+    // maybeSingle は2件返ると例外になる。ここが落ちるとホーム画面ごと
+    // 開かなくなるので、期間が重なる計画があっても先頭を使って動かす
     sb.from("gw_growth_plans").select("*")
       .eq("user_id", userId).eq("status", "active")
-      .lte("start_date", date).gte("end_date", date).maybeSingle(),
+      .lte("start_date", date).gte("end_date", date)
+      .order("start_date", { ascending: false }).limit(1),
   ]);
 
   const open = items.data || [];
@@ -126,7 +134,7 @@ async function read(req, res, user, ctx) {
 
     // 3か月の行き先と、今月どこまで来ているか。
     // 今日やることが「何のためか」が見えないと、ただの作業一覧になる
-    growth: await growthOf(sb, plan.data, date),
+    growth: await growthOf(sb, plan.data?.[0], date),
 
     // ① 今日の最優先。ひとつだけ大きく出す
     top: open.length ? shapeItem(open[0]) : null,
@@ -145,7 +153,7 @@ async function read(req, res, user, ctx) {
     // ④ 自走レベル。裁量の広さの話で、人の評価ではない。
     //    画面では「レベルが低い」ではなく「次まであと何項目」と出す
     autonomy: (() => {
-      const level = emp.data?.autonomy_level || 1;
+      const level = emp.data?.[0]?.autonomy_level || 1;
       return { level, info: levelOf(level) };
     })(),
 
@@ -186,8 +194,9 @@ async function growthOf(sb, plan, date) {
   if (!plan) return null;
 
   const month = monthStart(date);
-  const { data: m } = await sb.from("gw_growth_months").select("*")
-    .eq("plan_id", plan.id).eq("month", month).maybeSingle();
+  const { data: mrows } = await sb.from("gw_growth_months").select("*")
+    .eq("plan_id", plan.id).eq("month", month).order("month_no").limit(1);
+  const m = mrows?.[0];
   if (!m) return { plan: shapePlan(plan), days: planDays(plan, date), month: null };
 
   const { data: rows } = await sb.from("gw_growth_kpis").select("*")

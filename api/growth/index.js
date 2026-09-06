@@ -343,9 +343,19 @@ async function saveMonth(res, sb, ctx, body) {
 
   const list = (body.kpis || []).slice(0, 8);
   const rows = [];
+  const names = new Set();
   for (const [i, k] of list.entries()) {
     const name = String(k.name ?? "").trim().slice(0, 60);
     if (!name) continue;
+    // 同じ名前を2つ置かせない。日々のKPIは名前で1日1行にしているので、
+    // 同名があると今日のぶんを作るところで落ちる
+    if (names.has(name)) {
+      return json(res, 400, {
+        error: "duplicate_kpi",
+        hint: `「${name}」が2つあります。KPIの名前は重ならないようにしてください。`,
+      });
+    }
+    names.add(name);
     const target = k.target === "" || k.target == null ? null : Number(k.target);
     if (target != null && (!Number.isFinite(target) || target < 0)) {
       return json(res, 400, { error: "invalid_target", hint: "目標は0以上の数字です" });
