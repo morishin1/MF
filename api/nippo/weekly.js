@@ -1,6 +1,7 @@
 // GET  /api/nippo/weekly?weekStart=YYYY-MM-DD&userId=… … その週の材料と、いまの評価
 // POST /api/nippo/weekly {weekStart, userId, action}
-//        action="evaluate" … AIに10項目100点で採点させる（保存する）
+//        action="evaluate" … AIに10か条を採点させ、成果40/行動30/成長20/チーム10 で
+//                             100点に換算して保存する（換算はシステム側で行う）
 //        action="save"     … 管理者が点と総評を確定する
 //        action="submit"   … 本人へ提出する（ここで初めて本人に見える）
 //
@@ -14,12 +15,12 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { weekStart as toWeekStart, isDate, jstDate } from "../../lib/nippo.js";
-import { CRITERIA } from "../../lib/nippo-eval.js";
+import { ACTIONS as CRITERIA, ACTION_KEYS, score, rubric } from "../../lib/scoring.js";
 import {
   weeklyMetrics, evaluateWeek, weekdaysOf, isConfigured, WEEKLY_PROMPT_VERSION,
 } from "../../lib/nippo-period.js";
 
-const KEYS = CRITERIA.map((c) => c.key);
+const KEYS = ACTION_KEYS;
 const canReview = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
 export default async function handler(req, res) {
@@ -79,6 +80,7 @@ async function read(req, res, ctx) {
     metrics: weeklyMetrics({ weekStart: ws, nippos, evals }),
     review: shape(review),
     criteria: CRITERIA,
+    rubric: rubric(),
     aiConfigured: isConfigured(),
   });
 }
@@ -126,6 +128,7 @@ async function runAi(res, sb, ctx, user, userId, ws, emp) {
         ai_model: r.model,
         ai_scores: r.result.scores,
         ai_total: r.result.total,
+        ai_categories: r.result.categories,
         ai_strengths: r.result.strengths,
         ai_improvements: r.result.improvements,
         ai_focus: r.result.focus,
@@ -168,14 +171,15 @@ async function save(res, sb, ctx, user, body, ws, emp) {
     scores[k] = n;
   }
 
-  const vals = Object.values(scores);
-  const total = vals.length
-    ? Math.round((vals.reduce((a, b) => a + b, 0) / (vals.length * 10)) * 100)
-    : null;
+  const has = Object.keys(scores).length > 0;
+  // AIと同じ重み付け（成果40/行動30/成長20/チーム10）で出す。
+  // 管理者が直したときだけ単純平均、では2つの数字の意味がずれる
+  const { total, categories } = score(scores);
 
   const patch = {
-    eval_scores: vals.length ? scores : null,
-    eval_total: total,
+    eval_scores: has ? scores : null,
+    eval_total: has ? total : null,
+    eval_categories: has ? categories : null,
     eval_comment: String(body.comment ?? "").trim().slice(0, 4000) || null,
     decided_by: user.id,
     updated_at: new Date().toISOString(),
@@ -218,6 +222,7 @@ export function shape(w) {
     aiStatus: w.ai_status,
     aiScores: w.ai_scores,
     aiTotal: w.ai_total,
+    aiCategories: w.ai_categories,
     aiStrengths: w.ai_strengths || [],
     aiImprovements: w.ai_improvements || [],
     aiFocus: w.ai_focus || [],
@@ -228,6 +233,7 @@ export function shape(w) {
     // 管理者が確定した点
     evalScores: w.eval_scores,
     evalTotal: w.eval_total,
+    evalCategories: w.eval_categories,
     evalComment: w.eval_comment,
     submittedAt: w.submitted_at,
   };

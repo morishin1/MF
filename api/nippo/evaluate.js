@@ -14,7 +14,8 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { evaluateNippo, isConfigured, PROMPT_VERSION, CRITERIA } from "../../lib/nippo-eval.js";
+import { evaluateNippo, isConfigured, PROMPT_VERSION } from "../../lib/nippo-eval.js";
+import { ACTIONS as CRITERIA, score } from "../../lib/scoring.js";
 
 const canReview = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -89,6 +90,7 @@ async function run(res, sb, ctx, user, nippo, { force }) {
         status: "completed",
         model: r.model,
         total_score: r.result.total_score,
+        categories: r.result.categories,
         scores: r.result.scores,
         good_points: r.result.good_points,
         improvement_points: r.result.improvement_points,
@@ -142,18 +144,17 @@ async function saveOverride(res, sb, ctx, user, body) {
     scores[k] = n;
   }
 
-  // 最終点は「管理者が直した点 ＋ 直していない項目のAI点」で出す
-  const merged = keys
-    .map((k) => (scores[k] !== undefined ? scores[k] : pickScore(last.scores?.[k])))
-    .filter((v) => v !== null);
-  const total = merged.length
-    ? Math.round((merged.reduce((a, b) => a + b, 0) / (merged.length * 10)) * 100)
-    : null;
+  // 最終点は「管理者が直した点 ＋ 直していない項目のAI点」を、
+  // AIと同じ重み付け（成果40/行動30/成長20/チーム10）で100点に換算して出す
+  const merged = Object.fromEntries(keys.map((k) =>
+    [k, scores[k] !== undefined ? scores[k] : pickScore(last.scores?.[k])]));
+  const { total, categories } = score(merged);
 
   const { data, error } = await sb.from("gw_nippo_ai_evals").update({
     manager_scores: Object.keys(scores).length ? scores : null,
     manager_comment: String(body.override.comment ?? "").trim().slice(0, 2000) || null,
     manager_total: total,
+    manager_categories: categories,
     decided_by: user.id,
     decided_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -180,6 +181,7 @@ export function shape(row) {
     model: row.model,
     promptVersion: row.prompt_version,
     totalScore: row.total_score,
+    categories: row.categories,
     scores: row.scores,
     goodPoints: row.good_points || [],
     improvementPoints: row.improvement_points || [],
@@ -189,6 +191,7 @@ export function shape(row) {
     managerScores: row.manager_scores,
     managerComment: row.manager_comment,
     managerTotal: row.manager_total,
+    managerCategories: row.manager_categories,
     decidedAt: row.decided_at,
     error: row.error_detail,
     createdAt: row.created_at,

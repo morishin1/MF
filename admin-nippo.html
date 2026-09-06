@@ -120,13 +120,44 @@
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  // 会社評価基準10項目。日次の○△― と週次の点数で同じキーを使う
+  // 社内行動指針の10か条。日次の○△― と週次の点数で同じキーを使う。
+  // 定義の本体は lib/scoring.js。ここは表示用の短い名前だけ
   const CRITERIA = [
     ["quantity", "量"], ["report_consult", "報連相"], ["action", "行動"],
-    ["self_learning", "学習"], ["consistency", "期限"], ["results", "成果"],
+    ["self_learning", "学習"], ["consistency", "継続"], ["results", "成果"],
     ["feedback_improvement", "改善"], ["forward_thinking", "前進"],
     ["team_attitude", "チーム"], ["customer_focus", "顧客"],
   ];
+
+  // 100点の内訳。10か条の単純合計にはしない（社内の評価の考え方）
+  const CATEGORIES = [
+    { key: "results", label: "成果",   weight: 40, color: "#2f855a" },
+    { key: "action",  label: "行動",   weight: 30, color: "#2b6cb0" },
+    { key: "growth",  label: "成長",   weight: 20, color: "#805ad5" },
+    { key: "team",    label: "チーム", weight: 10, color: "#b7791f" },
+  ];
+
+  // 総合点の内訳を横棒で出す。点そのものより「どこで取れているか」を見せる
+  function categoryBars(categories) {
+    if (!Array.isArray(categories) || !categories.length) return "";
+    const byKey = new Map(categories.map((c) => [c.key, c]));
+    return `<div style="display:grid;gap:6px;margin:2px 0 12px;">
+      ${CATEGORIES.map((def) => {
+        const c = byKey.get(def.key);
+        const pts = c && c.points != null ? c.points : null;
+        const pct = pts == null ? 0 : Math.max(0, Math.min(100, (pts / def.weight) * 100));
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;">
+          <span style="width:44px;font-weight:700;">${esc(def.label)}</span>
+          <span style="flex:1;height:8px;border-radius:4px;background:var(--border);overflow:hidden;">
+            <span style="display:block;height:100%;width:${pct}%;background:${def.color};"></span>
+          </span>
+          <span style="width:76px;text-align:right;color:var(--muted);">
+            ${pts == null ? "材料不足" : `${pts} / ${def.weight}`}
+          </span>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
   const TAG_LABEL = {
     self_research: "自分で調べた", new_method: "新しい方法を試した",
     feedback: "FBを反映した", process: "やり方を改善した",
@@ -139,7 +170,8 @@
   KPLayout.init({ active: "nippo", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) start(); });
 
-  const todayStr = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  // inline の onclick から呼ぶので function 宣言にする（const の矢印関数は window から見えない）
+  function todayStr() { return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); }
 
   function start() {
     el("f-date").value = todayStr();
@@ -490,8 +522,13 @@
           <span class="muted" style="font-weight:400;margin-left:6px;">${esc(e.model || "")}</span>
         </summary>
         <div style="margin-top:10px;">
+          ${categoryBars(e.managerCategories || e.categories)}
+          <div class="muted" style="font-size:11px;margin:0 0 6px;">
+            総合点は 成果40 / 行動30 / 成長20 / チーム10 で出しています。
+            下の10か条は、なぜその点になったかの内訳です（合計はしません）。
+          </div>
           <table class="dr-mini" style="width:100%;">
-            <tr><th style="width:80px;">項目</th><th style="width:60px;">AI</th>
+            <tr><th style="width:80px;">10か条</th><th style="width:60px;">AI</th>
                 <th style="width:90px;">修正</th><th>理由</th></tr>
             ${CRITERIA.map(([key, short]) => {
               const sc = e.scores?.[key];
@@ -760,10 +797,16 @@
 
       ${weekly.aiConfigured ? weeklyAiBlock(w, ai) : ""}
 
+      ${categoryBars(w?.evalCategories || w?.aiCategories)}
+      <div class="muted" style="font-size:11.5px;margin:0 0 10px;">
+        総合点は 成果40 / 行動30 / 成長20 / チーム10 で出しています。
+        下の10か条は、なぜその点になったかの内訳です（10項目の合計にはしません）。
+      </div>
+
       <div class="table-scroll" style="margin-bottom:12px;">
         <table class="kp-items">
           <thead><tr>
-            <th style="width:90px;">項目</th>
+            <th style="width:90px;">10か条</th>
             <th style="width:70px;text-align:right;">日次平均</th>
             <th style="width:60px;text-align:right;">AI</th>
             <th style="width:90px;">確定</th>
@@ -922,7 +965,12 @@
                m.kgiTotal ? `${m.kgiAchieved} / ${m.kgiTotal} 日` : "記録なし")}
       </div>
 
+      ${categoryBars(m.categories)}
+
       <div class="table-scroll" style="margin-bottom:14px;">
+        <div class="muted" style="font-size:11.5px;margin-bottom:4px;">
+          10か条の平均（10点満点）。上の総合点の理由として見る欄です
+        </div>
         <table class="kp-items">
           <thead><tr>${CRITERIA.map(([, short]) => `<th style="text-align:center;">${esc(short)}</th>`).join("")}</tr></thead>
           <tbody><tr>${CRITERIA.map(([key]) =>

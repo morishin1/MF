@@ -248,6 +248,28 @@
 
   const MOODS = ["順調", "普通", "苦戦"];
 
+  // 100点の内訳。10か条の合計ではなく、この4つで100点にする
+  const CATEGORIES = [
+    { key: "results", label: "成果", weight: 40 },
+    { key: "action",  label: "行動", weight: 30 },
+    { key: "growth",  label: "成長", weight: 20 },
+    { key: "team",    label: "チーム", weight: 10 },
+  ];
+
+  /** 内訳を1行のチップで出す。数字より「どこで取れたか」が分かるように */
+  function catChips(categories) {
+    if (!Array.isArray(categories) || !categories.length) return "";
+    const byKey = new Map(categories.map((c) => [c.key, c]));
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+      ${CATEGORIES.map((d) => {
+        const c = byKey.get(d.key);
+        const pts = c && c.points != null ? c.points : null;
+        return `<span class="kp-chip" title="${esc(d.label)}は${d.weight}点満点">
+          ${esc(d.label)} ${pts == null ? "—" : pts} / ${d.weight}</span>`;
+      }).join("")}
+    </div>`;
+  }
+
   let data = null;
   let mood = "順調";
   let achieved = null;      // true=達成 / false=未達 / null=数値で測らない
@@ -655,7 +677,11 @@
           <div>
             <strong>担当者からの評価が届いています</strong>
             ${w.eval_total != null ? `<span class="kp-chip" style="margin-left:8px;">${w.eval_total} 点 / 100</span>` : ""}
-            <div style="margin-top:6px;font-size:12.5px;">${rows.join("　") || legacy}</div>
+            ${catChips(w.eval_categories || w.ai_categories)}
+            <div class="muted" style="margin-top:8px;font-size:11.5px;">
+              10か条は、なぜその点になったかの内訳です（合計はしません）
+            </div>
+            <div style="margin-top:4px;font-size:12.5px;">${rows.join("　") || legacy}</div>
             ${w.eval_comment ? `<div style="margin-top:8px;white-space:pre-wrap;font-size:13px;">${esc(w.eval_comment)}</div>` : ""}
           </div>
         </div>`;

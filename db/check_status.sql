@@ -45,7 +45,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (26, '026',    '日報のAI評価',                                        'table',    'gw_nippo_ai_evals',      null),
   (27, '027',    '週次100点・月次',                                     'table',    'gw_nippo_monthly',       null),
   (28, '028',    '試用期間の判定',                                      'table',    'gw_probation_reviews',   null),
-  (29, '029',    '雇用契約・面談',                                      'table',    'gw_contracts',           null)
+  (29, '029',    '雇用契約・面談',                                      'table',    'gw_contracts',           null),
+  (30, '030',    'ダッシュボード連動（KPI・次にやること・点数の内訳）',  'table',    'gw_action_items',        null)
 ),
 
 -- ファイルの適用状況
