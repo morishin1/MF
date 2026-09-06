@@ -53,7 +53,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (34, '034',    '日報を朝と夜に分ける（先に描いてから動く）',          'column',   'tc_nippo',               'success_image'),
   (35, '035',    '勤務・育成区分／給与を読める人を絞る',                'column',   'gw_employees',           'work_mode'),
   (36, '036',    '日報を朝4つ・夜5つに／みんなの日報',                  'table',    'gw_nippo_shares',        null),
-  (37, '037',    '入社フォーム（本人の情報・同意）',                    'table',    'gw_onboard_profiles',    null)
+  (37, '037',    '入社フォーム（本人の情報・同意）',                    'table',    'gw_onboard_profiles',    null),
+  (38, '038',    '社員名簿に備考',                                      'column',   'gw_employees',           'note')
 ),
 
 -- ファイルの適用状況

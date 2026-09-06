@@ -5141,3 +5141,15 @@ notify pgrst, 'reload schema';
 --     left join public.gw_procedure_items i on i.procedure_id = p.id
 --    where p.kind = 'onboarding'
 --    group by e.display_name, p.status;
+
+
+-- =============================================================================
+-- 038_employee_note.sql — 社員名簿に備考
+-- =============================================================================
+alter table public.gw_employees
+  add column if not exists note text;
+
+comment on column public.gw_employees.note is
+  'その人についてのメモ。契約書についてのメモ（gw_contracts.note）とは別';
+
+notify pgrst, 'reload schema';
