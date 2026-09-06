@@ -336,6 +336,13 @@
   const blockerAct = (action, body = {}) =>
     api("/api/blockers", { method: "POST", body: { action, ...body } });
 
+  // ---- 社員登録・契約登録（雇用・育成マスターの1ファイル取り込み） ----
+  // 2段構え。まず検証（intakeCheck）だけ走らせ、結果を見てから登録（intakeApply）する
+  const intakeInfo = () => api("/api/employees/intake");
+  const intakeCheck = (body) => api("/api/employees/intake", { method: "POST", body });
+  const intakeApply = (batchId) =>
+    api("/api/employees/intake", { method: "POST", body: { commit: batchId } });
+
   // ---- 3か月育成計画（労働条件通知書 → 3か月KGI → 月間KGI/KPI → 今日のKPI） ----
   // AIが作るのは案まで。確定は人が押す
   const growthPlans = (employeeId) =>
@@ -679,6 +686,7 @@
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,
+    intakeInfo, intakeCheck, intakeApply,
     nippoWeekly, nippoWeeklyAct, nippoMonthly, nippoMonthlyAct,
     probation, probationAct,
     contracts, contractsAct, uploadContract,

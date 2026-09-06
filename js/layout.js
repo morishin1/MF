@@ -72,6 +72,7 @@
     { key: "requests",  href: "admin-requests.html",  label: "休暇・稟議",         icon: "approval",     ready: true  },
 
     { section: "組織・システム管理" },
+    { key: "intake",    href: "admin-intake.html",    label: "社員登録・契約登録", icon: "upload_file",  ready: true  },
     { key: "members",   href: "admin-members.html",   label: "メンバー・権限",     icon: "group",        ready: true  },
     { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き",   icon: "badge",        ready: true  },
     { key: "contracts", href: "admin-contracts.html", label: "雇用契約・面談",     icon: "contract",     ready: true  },
