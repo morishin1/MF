@@ -46,7 +46,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { validateRow, WAGE_TYPES } from "../../lib/intake.js";
+import { validateRow, WAGE_TYPES, ALLOWANCES } from "../../lib/intake.js";
 import { jobOptions, JOB_GROUPS } from "../../lib/job-templates.js";
 import { workModeOptions, combine } from "../../lib/work-modes.js";
 import { rubric } from "../../lib/scoring.js";
@@ -98,6 +98,7 @@ async function options(res, ctx) {
     jobs: jobOptions(),
     jobGroups: JOB_GROUPS,
     wageTypes: WAGE_TYPES,
+    allowances: ALLOWANCES,
     levels: LEVELS.map((l) => ({ level: l.level, label: l.label, summary: l.summary })),
     // 担当業務が何であっても、日報で共通して見る評価軸。
     // 職種ごとにKPIは変わるが、ここは全員同じであることを画面で示す
@@ -138,7 +139,12 @@ function toMaster(form) {
     account_type: form.accountType || "member",
     wage_type: form.wageType,
     wage_amount: form.wageAmount,
-    wage_note: form.wageNote,
+    // 選んだ手当と、当てはまらないぶんの自由記述をつなぐ。
+    // 知らない語が来ても弾かない（CSVから来ることがある）
+    wage_note: [
+      ...(Array.isArray(form.allowances) ? form.allowances : []),
+      form.wageNote,
+    ].map((x) => String(x ?? "").trim()).filter(Boolean).join("、") || null,
     notes: form.notes,
   };
 }

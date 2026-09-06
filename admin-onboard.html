@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260910x">
-  <link rel="stylesheet" href="css/layout.css?v=20260910x">
+  <link rel="stylesheet" href="css/app.css?v=20260910y">
+  <link rel="stylesheet" href="css/layout.css?v=20260910y">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -169,8 +169,11 @@
         <input id="f-wage" type="number" min="0" step="1000" placeholder="250000" oninput="clearPreview()">
       </div>
       <div class="full">
-        <label>手当など</label>
-        <input id="f-wage-note" type="text" placeholder="（任意）通勤手当・固定残業代など" oninput="clearPreview()">
+        <label>手当など
+          <span class="muted" style="font-weight:400;">当てはまるものを選んでください</span></label>
+        <div class="ob-chips" id="f-allow" style="margin-bottom:8px;"></div>
+        <input id="f-wage-note" type="text"
+               placeholder="上に無いものがあれば、ここに（任意）" oninput="clearPreview()">
       </div>
       <div class="full">
         <label>備考</label>
@@ -281,8 +284,8 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/api-client.js?v=20260910x"></script>
-<script src="js/layout.js?v=20260910x"></script>
+<script src="js/api-client.js?v=20260910y"></script>
+<script src="js/layout.js?v=20260910y"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -292,6 +295,7 @@
   let checked = null;   // CSVの確認結果
   let plan = null;      // プレビュー結果
   let dojo = false;
+  let allowances = [];  // 選んだ手当
   let mode = "";        // STEP1 勤務・育成区分
   let job = "";         // STEP2 担当業務
   let combo = null;     // 掛け合わせた初期値（サーバが組み立てたもの）
@@ -317,6 +321,7 @@
         `<option value="${esc(mg.email)}">${esc(mg.name)}${mg.position ? `（${esc(mg.position)}）` : ""}</option>`).join("");
     el("f-wage-type").innerHTML = `<option value="">選ばない</option>` +
       opts.wageTypes.map((w) => `<option value="${esc(w)}">${esc(w)}</option>`).join("");
+    renderAllowances();
 
     // STEP1 働き方
     el("tpl").innerHTML = opts.workModes.map((t) => `
@@ -398,6 +403,22 @@
     clearPreview();
   }
 
+  // 手当。毎回ちがう言い方で書かれると、あとで数えられないので選択式にする。
+  // 当てはまらないものだけ、下の自由記述に書いてもらう
+  function renderAllowances() {
+    el("f-allow").innerHTML = (opts.allowances || []).map((a) => `
+      <button type="button" class="ob-chip${allowances.includes(a) ? " on" : ""}"
+              onclick="toggleAllowance('${esc(a)}')">${esc(a)}</button>`).join("");
+  }
+
+  function toggleAllowance(name) {
+    allowances = allowances.includes(name)
+      ? allowances.filter((x) => x !== name)
+      : [...allowances, name];
+    renderAllowances();
+    clearPreview();
+  }
+
   function toggleDojo() { dojo = !dojo; renderDojo(); clearPreview(); }
   function renderDojo() { el("c-dojo").classList.toggle("on", dojo); }
 
@@ -451,6 +472,7 @@
       accountType: el("f-account").value,
       wageType: el("f-wage-type").value,
       wageAmount: el("f-wage").value,
+      allowances,
       wageNote: el("f-wage-note").value,
       notes: el("f-notes").value,
     };
