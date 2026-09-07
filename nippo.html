@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911w">
-  <link rel="stylesheet" href="css/layout.css?v=20260911w">
+  <link rel="stylesheet" href="css/app.css?v=20260911x">
+  <link rel="stylesheet" href="css/layout.css?v=20260911x">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -144,7 +144,7 @@
 <div class="wrap">
   <h1 class="kp-greet">日報</h1>
   <p class="kp-greet-sub">
-    朝は1分、終業時は2〜3分。「頑張りました」ではなく「何を前に進めましたか」を残します。
+    朝1分でゴールを決め、14時に30秒だけ見て、終業前の3〜5分で残します。「頑張りました」ではなく「何を前に進めましたか」を残します。
   </p>
 
   <div class="np-tabs">
@@ -208,9 +208,16 @@
       <div id="f-todos"></div>
     </div>
 
-    <!-- ① できたこと ＋ ③ 未完了と理由。朝に決めた3件の中で両方そろえる -->
+    <!-- ① KPI実績。持っている人だけ -->
+    <div class="np-sec hidden" id="f-kpi-sec">
+      <h3><span class="no">①</span>KPI実績</h3>
+      <p class="lead">今日ぶんの数字を入れてください。</p>
+      <div id="f-kpis"></div>
+    </div>
+
+    <!-- ② 今日の成果。できたこと ＋ 未完了と理由を、朝に決めた3件の中でそろえる -->
     <div class="np-sec">
-      <h3><span class="no">①</span>今日できたこと</h3>
+      <h3><span class="no">②</span>今日の成果</h3>
       <p class="lead">
         朝に決めたことが並びます。できたことを一言で。
         できなかったものは、理由の欄が出ます。
@@ -221,21 +228,36 @@
       </button>
     </div>
 
-    <!-- ② KPI実績。持っている人だけ -->
-    <div class="np-sec hidden" id="f-kpi-sec">
-      <h3><span class="no">②</span>KPI実績</h3>
-      <p class="lead">今日ぶんの数字を入れてください。</p>
-      <div id="f-kpis"></div>
+    <!-- ③ 朝のゴール。朝に書かせておいて照らし合わせないと、朝の1分が書いて終わりになる -->
+    <div class="np-sec hidden" id="f-met-sec">
+      <h3><span class="no">③</span>朝のゴールは達成できたか</h3>
+      <p class="lead" id="f-goal-line">　</p>
+      <div class="np-tags" id="f-met">
+        <button type="button" class="np-tag" data-met="o" onclick="setMet('o')">○ なれた</button>
+        <button type="button" class="np-tag" data-met="d" onclick="setMet('d')">△ 途中まで</button>
+        <button type="button" class="np-tag" data-met="x" onclick="setMet('x')">× ならなかった</button>
+      </div>
+      <p class="lead" style="margin-top:8px;">
+        点数にはしません。× が続くときは、ゴールの置き方から一緒に見直します。
+      </p>
+    </div>
+
+    <!-- ④ デキタ。成果とは別。成果が出ない日でも、できるようになったことはある -->
+    <div class="np-sec">
+      <h3><span class="no">④</span>今日の「デキタ」3つ</h3>
+      <p class="lead">
+        小さいことで構いません。仕事が終わったかではなく、
+        <b>できるようになったこと</b>を書いてください。
+      </p>
+      <div id="f-wins"></div>
+      <div id="f-wins-hint" class="hidden" style="margin-top:6px;">
+        <span class="muted" style="font-size:11.5px;">今日の中から入れる：</span>
+        <span id="f-wins-sug"></span>
+      </div>
     </div>
 
     <div class="np-sec">
-      <h3><span class="no">③</span>明日やること</h3>
-      <p class="lead">明日、最初に取りかかることを1つ。</p>
-      <input id="f-tomorrow" type="text" placeholder="例：C社見積を提出する">
-    </div>
-
-    <div class="np-sec">
-      <h3><span class="no">④</span>困ったこと</h3>
+      <h3><span class="no">⑤</span>困ったこと</h3>
       <p class="lead">
         管理担当者だけが読みます。みんなの日報には出ません。
       </p>
@@ -245,6 +267,21 @@
       </div>
       <textarea id="f-consult" rows="2" class="hidden"
                 placeholder="例：先方の条件が決まらず、来週の予定が立てられない"></textarea>
+    </div>
+
+    <!-- ⑥ 改善したこと。選ぶだけで済ませ、書きたい人だけ一言を添える -->
+    <div class="np-sec">
+      <h3><span class="no">⑥</span>改善したこと</h3>
+      <p class="lead">当てはまるものを押してください。無い日は空のままで構いません。</p>
+      <div class="np-tags" id="f-improve"></div>
+      <input id="f-improved" type="text" class="hidden" style="margin-top:8px;"
+             placeholder="何をどう変えたか、一言（任意）">
+    </div>
+
+    <div class="np-sec">
+      <h3><span class="no">⑦</span>明日の最優先</h3>
+      <p class="lead">明日、最初に取りかかることを1つ。</p>
+      <input id="f-tomorrow" type="text" placeholder="例：C社見積を提出する">
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -348,9 +385,9 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260911w"></script>
-<script src="js/layout.js?v=20260911w"></script>
-<script src="js/push.js?v=20260911w"></script>
+<script src="js/api-client.js?v=20260911x"></script>
+<script src="js/layout.js?v=20260911x"></script>
+<script src="js/push.js?v=20260911x"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -846,6 +883,8 @@
         <input data-k="undone_reason" type="text" placeholder="どこまでできたか（例：1社まで完了）"
                value="${esc(v.undone_reason || "")}" ${state === "yes" ? 'class="hidden"' : ""}>
       </div>`;
+    // できたことを書き換えたら、デキタの候補も追いかける
+    div.querySelector('[data-k="result"]').addEventListener("input", renderWinSuggestions);
     el("f-work").appendChild(div);
   }
 
@@ -863,6 +902,7 @@
     reason.classList.toggle("hidden", ok);
     if (ok) reason.value = ""; else result.value = "";
     (ok ? result : reason).focus();
+    renderWinSuggestions();
     scheduleDraftSave();
   }
 
@@ -895,6 +935,10 @@
       : [{}, {}, {}];
     items.forEach(addWork);
 
+    fillMet(n);
+    fillWins(n);
+    fillImprove(n);
+
     // KPIの実績
     const kpis = data.kpisToday || [];
     el("f-kpi-sec").classList.toggle("hidden", !kpis.length);
@@ -906,6 +950,103 @@
                value="${k.actual ?? ""}">
         <span style="font-size:12px;color:var(--muted);">${esc(k.unit || "")}</span>
       </div>`).join("");
+  }
+
+  // --- ③ 朝のゴールは達成できたか ----------------------------------------------
+  //
+  // 朝に「今日が最高に終わった状態」を描いてもらっている。
+  // 夜にそこへ戻らないと、朝の1分は書いて終わりになる。
+  // 点数にはしない。×が続くこと自体が、ゴールの置き方を見直す材料になる
+  let met = null;
+
+  function fillMet(n) {
+    const goal = n?.goal_image || n?.success_image || null;
+    // 朝を書いていない日は聞かない。照らし合わせる相手がいない
+    el("f-met-sec").classList.toggle("hidden", !goal);
+    el("f-goal-line").innerHTML = goal
+      ? `朝に書いた状態：<b>${esc(goal)}</b>` : "";
+    setMet(n?.success_met || null, true);
+  }
+
+  function setMet(v, quiet) {
+    met = met === v && !quiet ? null : v;     // もう一度押したら外れる
+    for (const b of document.querySelectorAll("#f-met .np-tag")) {
+      b.classList.toggle("on", b.dataset.met === met);
+    }
+    if (!quiet) scheduleDraftSave();
+  }
+
+  // --- ④ 今日のデキタ3つ --------------------------------------------------------
+  //
+  // 3つに限る。欄が5つあると、埋めるために薄いものを足すことになる。
+  // 空のまま出してもよい（無い日に無理やり書かせない）
+  function fillWins(n) {
+    const list = Array.isArray(n?.wins) ? n.wins.slice(0, 3) : [];
+    while (list.length < 3) list.push("");
+    el("f-wins").innerHTML = list.map((w, i) => `
+      <input type="text" data-win class="np-win" style="margin-bottom:6px;"
+             maxlength="120" placeholder="${i + 1}つ目" value="${esc(w)}">`).join("");
+    for (const node of document.querySelectorAll("[data-win]")) {
+      node.addEventListener("input", scheduleDraftSave);
+    }
+    renderWinSuggestions();
+  }
+
+  // 今日できたことから候補を出す。押すと空いている欄に入る。
+  // 一から考えさせない（考える時間は、仕事が進んでいない時間でもある）
+  function renderWinSuggestions() {
+    const done = [...document.querySelectorAll("#f-work .np-item")]
+      .map((r) => r.querySelector('[data-k="result"]')?.value?.trim())
+      .filter(Boolean).slice(0, 3);
+    el("f-wins-hint").classList.toggle("hidden", !done.length);
+    el("f-wins-sug").innerHTML = done.map((t, i) =>
+      `<button type="button" class="np-tag" style="margin:2px 4px 2px 0;"
+               onclick="useWin(${i})">${esc(t.slice(0, 24))}</button>`).join("");
+    winSuggestions = done;
+  }
+  let winSuggestions = [];
+
+  function useWin(i) {
+    const text = winSuggestions[i];
+    if (!text) return;
+    const empty = [...document.querySelectorAll("[data-win]")].find((n) => !n.value.trim());
+    if (!empty) return;
+    empty.value = text;
+    scheduleDraftSave();
+  }
+
+  // --- ⑥ 改善したこと -----------------------------------------------------------
+  const IMPROVE = [
+    { key: "self_research", label: "自分で調べた" },
+    { key: "new_method",    label: "新しい方法を試した" },
+    { key: "feedback",      label: "フィードバックを反映した" },
+    { key: "process",       label: "仕事のやり方を改善した" },
+    { key: "ai_tool",       label: "AI・ツールを活用した" },
+    { key: "other",         label: "その他" },
+  ];
+  let improve = new Set();
+
+  function fillImprove(n) {
+    improve = new Set(Array.isArray(n?.improve_tags) ? n.improve_tags : []);
+    el("f-improve").innerHTML = IMPROVE.map((t) =>
+      `<button type="button" class="np-tag${improve.has(t.key) ? " on" : ""}"
+               data-improve="${esc(t.key)}" onclick="toggleImprove('${esc(t.key)}')">${esc(t.label)}</button>`).join("");
+    el("f-improved").value = n?.improved_note ?? "";
+    syncImproveNote();
+  }
+
+  function toggleImprove(key) {
+    if (improve.has(key)) improve.delete(key); else improve.add(key);
+    for (const b of document.querySelectorAll("[data-improve]")) {
+      b.classList.toggle("on", improve.has(b.dataset.improve));
+    }
+    syncImproveNote();
+    scheduleDraftSave();
+  }
+
+  // 何も選んでいないうちは一言の欄を出さない。空欄が並ぶと、書く気が失せる
+  function syncImproveNote() {
+    el("f-improved").classList.toggle("hidden", improve.size === 0 && !el("f-improved").value);
   }
 
   // --- 書きかけの預かり ------------------------------------------------------
@@ -936,8 +1077,14 @@
       // 画面の形（読み込み用）に合わせて詰め替える
       return {
         work_items: d.workItems,
+        success_met: d.successMet,
+        wins: d.wins,
         tomorrow_plan: d.tomorrowPlan,
         consult_note: d.consultNote,
+        improve_tags: d.improveTags,
+        improved_note: d.improvedNote,
+        // 朝のゴールは書きかけには入らない。預かるのは自分が書いたものだけ
+        goal_image: d.goalImage || null,
       };
     } catch { return null; }
   }
@@ -950,11 +1097,19 @@
       date: el("f-date").value || jstToday(),
       // 朝に書いたものを持ち回る。夜の画面には出さないが、消さない
       topPriority: data.today?.top_priority || null,
+      // 書きかけを読み直したときにも、朝のゴールの行を出せるように控える
+      goalImage: data.today?.goal_image || data.today?.success_image || null,
       kpiName: data.today?.goal_today || null,
       kpiTarget: data.today?.kgi_target ?? null,
       workItems: collect("f-work", ".np-item"),
+      // 朝に描いた状態になれたか（朝を書いた日だけ）
+      successMet: met,
+      // 今日のデキタ。空欄は落として送る
+      wins: [...document.querySelectorAll("[data-win]")].map((n) => n.value.trim()).filter(Boolean),
       tomorrowPlan: el("f-tomorrow").value,
       consultNote: el("f-consult").value,
+      improveTags: [...improve],
+      improvedNote: el("f-improved").value,
       // KPIの実績。gw_daily_kpis へ書き戻す
       kpiActuals: [...document.querySelectorAll("#f-kpis .np-kpirow")].map((r) => ({
         id: r.dataset.kpi, actual: r.querySelector(".kpi-actual").value,
@@ -1413,8 +1568,9 @@
 
   function renderMonthly() {
     renderGrowth();
-    const m = monthly.metrics;
-    const s = monthly.summary;
+    // 集計が返ってこない月もある。ここで落ちると、下のカードが全部出なくなる
+    const m = monthly?.metrics || {};
+    const s = monthly?.summary || null;
     // 週次評価がまだ1件も無い月は、出しても意味がない
     if (!s && !m.scoredWeeks) { el("month-card").classList.add("hidden"); return; }
 

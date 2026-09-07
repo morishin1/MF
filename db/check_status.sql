@@ -62,7 +62,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (43, '043',    'メンバーに渡すフォルダのリンク',                      'table',    'gw_drive_links',         null),
   (44, '044',    'タスクと予定をメンバー同士でシェア',                  'column',   'gw_calendar_events',     'visibility'),
   (45, '045',    '扶養家族を書ける形にする',                            'column',   'gw_onboard_profiles',    'dependents'),
-  (46, '046',    '契約・電子署名',                                      'table',    'gw_sign_requests',       null)
+  (46, '046',    '契約・電子署名',                                      'table',    'gw_sign_requests',       null),
+  (47, '047',    '日報を1日のリズムにそろえる（デキタ・改善）',          'column',   'tc_nippo',               'wins')
 ),
 
 -- ファイルの適用状況

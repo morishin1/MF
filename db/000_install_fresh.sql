@@ -5914,3 +5914,47 @@ notify pgrst, 'reload schema';
 --     join public.gw_employees e on e.id = r.employee_id
 --    where r.status = 'sent' and r.due_on < current_date
 --    order by r.due_on;
+
+
+-- =============================================================================
+-- 047_nippo_rhythm.sql — 1日のリズムに合わせて、日報の項目をそろえる
+-- =============================================================================
+
+-- 今日の「デキタ」3つ。["先方の質問に自分で答えられた", ...]
+alter table public.tc_nippo
+  add column if not exists wins jsonb not null default '[]'::jsonb;
+
+-- 改善したこと。improve_tags（選択）に添える一言
+alter table public.tc_nippo
+  add column if not exists improved_note text;
+
+comment on column public.tc_nippo.wins is
+  '今日の「デキタ」3つ。文字列の配列（最大3件）。'
+  '成果（work_items の result）とは別で、できるようになったことを書く';
+comment on column public.tc_nippo.improved_note is
+  '改善したことの一言。分類は improve_tags（034）を使う';
+
+-- 配列以外が入らないようにしておく。
+-- jsonb は何でも入るので、文字列やオブジェクトが紛れると画面の map が落ちる
+do $$
+begin
+  alter table public.tc_nippo
+    add constraint tc_nippo_wins_is_array
+    check (jsonb_typeof(wins) = 'array');
+exception
+  when duplicate_object then null;
+end $$;
+
+
+notify pgrst, 'reload schema';
+
+-- 確認:
+--   select work_date,
+--          morning_at is not null as 朝,
+--          success_met            as ゴール,
+--          jsonb_array_length(wins) as デキタ,
+--          improved_note is not null as 改善,
+--          submitted_at is not null as 提出
+--     from public.tc_nippo
+--    where user_id = auth.uid()
+--    order by work_date desc limit 14;
