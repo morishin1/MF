@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911y">
-  <link rel="stylesheet" href="css/layout.css?v=20260911y">
+  <link rel="stylesheet" href="css/app.css?v=20260911z">
+  <link rel="stylesheet" href="css/layout.css?v=20260911z">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -66,6 +66,18 @@
     <div id="dl"></div>
   </div>
 
+  <!-- 電子署名で結んだ契約。契約書の画面と同じものを、ここからも開ける。
+       契約は「どこを見れば全部あるか」が分からないと、探すのに人に聞くことになる -->
+  <div id="sg-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">draw</span>署名した契約書
+      <span id="sg-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      あなたが署名した契約書です。署名した時点の内容がそのまま残っています。
+      未署名のものがあるときは、<a href="contracts.html">契約書</a>の画面から署名してください。
+    </p>
+    <div id="sg"></div>
+  </div>
+
   <!-- 会社から受け取った書類（雇用契約書など）。本人と会社しか見られない -->
   <div id="ct-card" class="card hidden">
     <h2><span class="material-symbols-outlined">contract</span>会社から受け取った書類</h2>
@@ -120,8 +132,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911y"></script>
-<script src="js/layout.js?v=20260911y"></script>
+<script src="js/api-client.js?v=20260911z"></script>
+<script src="js/layout.js?v=20260911z"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -156,13 +168,15 @@
   // 入社手続きが終わったあとも、出した内容と確認したことはここで読める。
   // 「やること」からは消えるので、あとから見返す場所が必要になる
   async function loadMine() {
-    const [ob, plan, dl] = await Promise.all([
+    const [ob, plan, dl, sg] = await Promise.all([
       API.myOnboarding().catch(() => null),
       API.myGrowthPlan().catch(() => null),
       API.driveLinks().catch(() => null),
+      API.myContracts().catch(() => null),
     ]);
 
     renderDriveLinks(dl);
+    renderSigned(sg);
 
     if (ob) {
       renderConditions(ob.known || {});
@@ -218,6 +232,62 @@
           </a>
         </div>
       </div>`).join("");
+  }
+
+  /**
+   * 署名した契約書。
+   *
+   * 契約書の画面（contracts.html）と同じものを、ここからも開けるようにする。
+   * 契約の一元管理を本人ができるように、というのがこの欄の目的なので、
+   * 未署名がある日は、そこへ行ける案内も出す。
+   */
+  function renderSigned(sg) {
+    const all = sg?.contracts || [];
+    const signed = all.filter((c) => c.view === "signed");
+    const waiting = all.filter((c) => c.view !== "signed");
+    if (!all.length) return;
+
+    el("sg-card").classList.remove("hidden");
+    el("sg-tag").textContent = `${signed.length}件`;
+
+    el("sg").innerHTML =
+      (waiting.length
+        ? `<div class="banner warn" style="margin:0 0 12px;">
+             <span class="material-symbols-outlined">draw</span>
+             <div>まだ署名していない契約書が ${waiting.length} 件あります。
+               <a href="contracts.html">契約書の画面</a>から署名してください。</div>
+           </div>`
+        : "")
+      + (signed.length
+        ? signed.map((c) => `
+            <div class="cd-row">
+              <div class="t">
+                <span class="material-symbols-outlined"
+                      style="font-size:18px;color:#2f855a;vertical-align:-4px;">verified</span>
+                <b>${esc(c.title)}</b>
+                <div class="muted" style="font-size:12px;margin-top:3px;">
+                  ${esc(c.kindLabel || "")}　署名 ${esc(dt(c.signedAt))}
+                </div>
+              </div>
+              <div class="a">
+                <button class="btn btn-secondary btn-sm" onclick="openSigned('${esc(c.id)}', this)">
+                  <span class="material-symbols-outlined icon-inline">open_in_new</span>PDFを開く
+                </button>
+              </div>
+            </div>`).join("")
+        : `<div class="empty">署名した契約書はまだありません。</div>`);
+  }
+
+  const dt = (s) => (s ? new Date(s).toLocaleString("ja-JP") : "—");
+
+  // 署名済みのPDF。開くためのURLは5分だけ有効なので、押したときに取る
+  async function openSigned(id, btn) {
+    try {
+      const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(id));
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "開けませんでした");
+    }
   }
 
   // 会社から受け取った書類。いまのところ雇用契約書（業務委託契約書）。

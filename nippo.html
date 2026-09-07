@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911y">
-  <link rel="stylesheet" href="css/layout.css?v=20260911y">
+  <link rel="stylesheet" href="css/app.css?v=20260911z">
+  <link rel="stylesheet" href="css/layout.css?v=20260911z">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -385,9 +385,9 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260911y"></script>
-<script src="js/layout.js?v=20260911y"></script>
-<script src="js/push.js?v=20260911y"></script>
+<script src="js/api-client.js?v=20260911z"></script>
+<script src="js/layout.js?v=20260911z"></script>
+<script src="js/push.js?v=20260911z"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -497,14 +497,27 @@
     el("am-tag").textContent = started ? "始めています" : p ? "確認して始めてください" : "案がまだありません";
     el("am-tag").className = `kp-chip ${started ? "event" : p ? "draft" : "archived"}`;
 
+    // 行動案が無い日でも、ここで自分で決められるようにする。
+    // 前は「案はまだ届いていません」と出るだけで、
+    // ホームの「決めておく」から来た人が、書く場所を見つけられなかった
     if (!p) {
       el("am-body").innerHTML = `
-        <div class="banner info" style="margin:0;">
-          <span class="material-symbols-outlined">schedule</span>
-          <div>今日の行動案はまだ届いていません。管理者が今週のゴールを出すと、ここに出ます。<br>
-          <span class="muted" style="font-size:11.5px;">
-            届く前でも、夜の日報は下の欄から出せます。</span></div>
-        </div>`;
+        <p class="lead" style="margin-top:0;">
+          今日の行動案はまだ届いていません。自分で決めて構いません。
+          ここで決めたことは、そのまま「やること」になり、夜の日報にも並びます。
+        </p>
+        <label>今日の最優先<span style="color:#c53030;">*</span></label>
+        <input id="am-top" type="text" maxlength="300" placeholder="例：A社の提案書を出しきる"
+               value="${esc(t?.top_priority || "")}">
+        <label style="margin-top:10px;">ほかに今日やること（任意・2件まで）</label>
+        <input id="am-a1" type="text" maxlength="300"
+               value="${esc(t?.work_items?.[0]?.task || "")}">
+        <input id="am-a2" type="text" maxlength="300"
+               value="${esc(t?.work_items?.[1]?.task || "")}">
+        <button class="btn btn-primary" style="margin-top:12px;" onclick="saveOwnMorning(this)">
+          <span class="material-symbols-outlined icon-inline">check</span>これで決める
+        </button>
+        <div id="am-msg" class="err-text" style="margin-top:10px;"></div>`;
       return;
     }
 
@@ -573,6 +586,24 @@
     blocked = on;
     renderMorning();
     if (on) el("a-blocked")?.focus();
+  }
+
+  // 行動案が無い日に、自分で決める。
+  // 保存すると、そのまま今日の「やること」にもなる（サーバ側で写す）
+  async function saveOwnMorning(btn) {
+    const msg = el("am-msg");
+    msg.textContent = "";
+    const top = el("am-top").value.trim();
+    if (!top) { msg.textContent = "今日の最優先を書いてください"; return; }
+    const actions = [el("am-a1").value, el("am-a2").value]
+      .map((v) => v.trim()).filter(Boolean).map((task) => ({ task }));
+    try {
+      await KPLayout.busy(btn, "決めています…",
+        () => API.submitMorning({ date: data.date, topPriority: top, actions }));
+      await load(data.date);
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "決められませんでした";
+    }
   }
 
   // 今日を始める。案をそのまま朝の日報にする（サーバ側で写す）
@@ -858,10 +889,12 @@
     div.innerHTML = `
       <div class="t">
         <input data-k="task" type="text" class="task" placeholder="やること" value="${esc(v.task || "")}">
+        ${v.from_label ? `<span class="kp-chip" style="flex:0 0 auto;">${esc(v.from_label)}</span>` : ""}
         <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.np-item').remove()"
                 title="この行を消す"><span class="material-symbols-outlined" style="font-size:16px;">close</span></button>
       </div>
       ${v.done_when ? `<div class="wh">終わり方：${esc(v.done_when)}</div>` : ""}
+      <input data-k="action_id" type="hidden" value="${esc(v.action_id || "")}">
       <div class="did">
         <button type="button" class="yes${state === "yes" ? " on" : ""}" onclick="setDone(this, true)">できた</button>
         <button type="button" class="no${state === "no" ? " on" : ""}" onclick="setDone(this, false)">できなかった</button>
@@ -923,17 +956,61 @@
     scheduleDraftSave();
   }
 
+  /**
+   * 「今日の成果」に並べる行を作る。
+   *
+   * ■ なぜ混ぜるのか
+   *   朝に決めたこと（日報の work_items）と、ホームや「やること」で足した仕事
+   *   （gw_action_items）は、本人にとっては同じ「今日やること」なのに、
+   *   別々に持っていた。しかも「やること」で できた にすると画面から消えるので、
+   *   終業時に日報へ同じことをもう一度書くことになっていた。
+   *
+   * ■ 突き合わせは題名で
+   *   朝の入力から作られた行と、そこから生まれたやることは題名が同じになる。
+   *   同じものを2行に増やさないため、題名がそろっていれば1行にまとめる。
+   *
+   * ■ できたものは、押した状態で出す
+   *   「やること」で できた にした時点で、できたことは分かっている。
+   *   もう一度選ばせる必要はない。一言だけは書き換えられるようにしておく
+   */
+  function mergeWork(workItems, todayActions) {
+    const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result));
+    const key = (s) => String(s || "").trim().toLowerCase();
+    const byTitle = new Map(rows.map((w) => [key(w.task), w]));
+
+    for (const a of todayActions || []) {
+      const hit = byTitle.get(key(a.title));
+      if (hit) {
+        // 朝の行と同じもの。行は増やさず、やること側のidと結果だけ足す
+        hit.action_id = hit.action_id || a.id;
+        if (a.status === "done" && !hit.result && !hit.undone_reason) {
+          hit.result = a.doneNote || "完了";
+        }
+        continue;
+      }
+      const row = {
+        task: a.title,
+        action_id: a.id,
+        from_label: a.priority === 1 ? "今日の最優先" : a.sourceLabel,
+      };
+      if (a.status === "done") row.result = a.doneNote || "完了";
+      rows.push(row);
+      byTitle.set(key(a.title), row);
+    }
+    return rows;
+  }
+
   function fillForm(n) {
     el("f-tomorrow").value = n?.tomorrow_plan ?? "";
     el("f-consult").value = n?.consult_note ?? "";
     setConsult(Boolean(n?.consult_note));
 
-    // 朝に決めたことを並べる。朝を書いていない日は、空の行を3つ出す
+    // 朝に決めたこと ＋ 今日の「やること」を、ひとつの表にして並べる。
+    // 「やること」で できた にしたものは、ここに済みの状態で出る。
+    // 書き直しが要らないようにするのが目的なので、行を作るだけでは足りない
     el("f-work").innerHTML = "";
-    const items = Array.isArray(n?.work_items) && n.work_items.length
-      ? n.work_items.slice(0, 3)
-      : [{}, {}, {}];
-    items.forEach(addWork);
+    const items = mergeWork(n?.work_items, data?.todayActions);
+    (items.length ? items : [{}, {}, {}]).forEach(addWork);
 
     fillMet(n);
     fillWins(n);
@@ -1114,8 +1191,16 @@
       kpiActuals: [...document.querySelectorAll("#f-kpis .np-kpirow")].map((r) => ({
         id: r.dataset.kpi, actual: r.querySelector(".kpi-actual").value,
       })),
-      // 前に決めたことのうち、やったもの。サーバ側で閉じる
-      doneActionIds: [...document.querySelectorAll(".np-todo:checked")].map((c) => c.value),
+      // やったもの。サーバ側で閉じる。
+      //   積み残しのチェック ＋ 「今日の成果」で できた にした行
+      // 「やること」側ですでに閉じているものを送っても、閉じ直すだけで害はない
+      doneActionIds: [...new Set([
+        ...[...document.querySelectorAll(".np-todo:checked")].map((c) => c.value),
+        ...[...document.querySelectorAll("#f-work .np-item")]
+          .filter((r) => r.querySelector('[data-k="result"]')?.value.trim())
+          .map((r) => r.querySelector('[data-k="action_id"]')?.value)
+          .filter(Boolean),
+      ])],
     };
   }
 

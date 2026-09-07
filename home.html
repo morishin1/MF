@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911y">
-  <link rel="stylesheet" href="css/layout.css?v=20260911y">
+  <link rel="stylesheet" href="css/app.css?v=20260911z">
+  <link rel="stylesheet" href="css/layout.css?v=20260911z">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -73,6 +73,9 @@
   <!-- 朝、まだ「今日の成功した状態」を描いていないときだけ出す。
        ここを飛ばすと、夜に振り返る基準そのものが無い -->
   <div id="am-nudge" class="hidden"></div>
+  <!-- 「決めておく」で、その場に出る入力欄。
+       声かけの帯からも、TODAY の中からも、同じここが開く -->
+  <div id="am-form" class="hidden"></div>
 
   <!-- ① 今日の最優先。この画面で一番大きく出す。
        会社の評価を見る画面ではなく、仕事を前に進める画面にするため -->
@@ -156,8 +159,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260911y"></script>
-<script src="js/layout.js?v=20260911y"></script>
+<script src="js/api-client.js?v=20260911z"></script>
+<script src="js/layout.js?v=20260911z"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -237,8 +240,64 @@
             先に決めておくと、終業時はそれと見比べるだけで終わります。1分で終わります。
           </div>
         </div>
-        <a class="btn btn-primary btn-sm" href="nippo.html">決めておく</a>
+        <button class="btn btn-primary btn-sm" onclick="openMorning()">決めておく</button>
       </div>`;
+  }
+
+  // 「決めておく」で、その場に入力欄を出す。
+  //
+  // 前は日報の画面へ飛ばしていた。飛んだ先は行動案を見る画面で、
+  // 案がまだ無い日は入力欄が出ず、どこに書けばよいのか分からなかった。
+  // 決めるのに1分もかからないことのために画面を移すと、それだけで手が止まる
+  function openMorning() {
+    const f = el("am-form");
+    f.classList.remove("hidden");
+    f.innerHTML = `
+      <div style="padding:16px;margin:-8px 0 14px;border-radius:10px;
+                  background:#fff;border:1px solid var(--border);border-left:4px solid var(--primary);">
+        <label>今日の最優先<span style="color:#c53030;">*</span></label>
+        <input id="am-top" type="text" maxlength="300"
+               placeholder="例：A社の提案書を出しきる">
+        <p class="muted" style="font-size:11.5px;margin:2px 0 12px;">
+          ひとつだけ書いてください。終業時は、これと見比べるだけで終わります。
+        </p>
+
+        <label>ほかに今日やること（任意・2件まで）</label>
+        <input id="am-a1" type="text" maxlength="300" placeholder="例：見積の回収">
+        <input id="am-a2" type="text" maxlength="300" placeholder="">
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn btn-primary btn-sm" onclick="saveMorning(this)">
+            <span class="material-symbols-outlined icon-inline">check</span>これで決める
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="closeMorning()">やめる</button>
+        </div>
+        <div id="am-msg" class="err-text"></div>
+      </div>`;
+    f.scrollIntoView({ behavior: "smooth", block: "center" });
+    el("am-top").focus();
+  }
+
+  function closeMorning() {
+    el("am-form").classList.add("hidden");
+    el("am-form").innerHTML = "";
+  }
+
+  async function saveMorning(btn) {
+    const top = el("am-top").value.trim();
+    if (!top) { el("am-msg").textContent = "今日の最優先を書いてください"; return; }
+    const actions = [el("am-a1").value, el("am-a2").value]
+      .map((v) => v.trim()).filter(Boolean).map((task) => ({ task }));
+    try {
+      // 朝の日報に残り、同時に今日の「やること」にもなる（サーバ側で写す）。
+      // だから、この1回の入力が夜の日報にもそのまま出てくる
+      await KPLayout.busy(btn, "決めています…",
+        () => API.submitMorning({ date: dash.date, topPriority: top, actions }));
+      closeMorning();
+      await reloadDash();
+    } catch (e) {
+      el("am-msg").textContent = e.hint || e.detail || e.message || "決められませんでした";
+    }
   }
 
   // 3か月の行き先。細い帯にとどめる。
@@ -351,11 +410,13 @@
         el("today-title").textContent = "今日の最優先はまだ決まっていません";
         el("today-detail").textContent =
           "日報の「明日の最優先」に書いたことが、翌朝ここに出ます。";
+        // ここでも、決めるのはこの場で。日報の画面へ送らない
         el("today-foot").innerHTML =
-          `<a class="btn btn-primary btn-sm" href="nippo.html">
-             <span class="material-symbols-outlined icon-inline">edit_note</span>日報を書く</a>
+          `<button class="btn btn-primary btn-sm" onclick="openMorning()">
+             <span class="material-symbols-outlined icon-inline">flag</span>今日の最優先を決める</button>
            <button class="btn btn-secondary btn-sm" onclick="addItem()">
-             <span class="material-symbols-outlined icon-inline">add</span>自分で足す</button>`;
+             <span class="material-symbols-outlined icon-inline">add</span>自分で足す</button>
+           <a class="btn btn-secondary btn-sm" href="nippo.html">日報を書く</a>`;
       }
       return;
     }

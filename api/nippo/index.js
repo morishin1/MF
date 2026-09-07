@@ -25,7 +25,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
-  jstDate, weekStart, isDate, normalizeNippo, hasContent,
+  jstDate, weekStart, isDate, nextDay, normalizeNippo, hasContent,
   lastWorkdayOfWeek, weeklyFilled,
   normalizeMorning, hasMorning, evaluateDaily, CRITERIA,
 } from "../../lib/nippo.js";
@@ -71,7 +71,12 @@ async function read(req, res, user, ctx) {
     .order("display_name")
     .limit(300);
 
-  const [mine, today, thanks, weekly, openItems, todayKpis, prefs] = await Promise.all([
+  // 今日ぶんの「やること」を切り出すための、日本時間の1日の区切り。
+  // done_at は timestamptz なので、日付だけでは比べられない
+  const dayFrom = `${date}T00:00:00+09:00`;
+  const dayTo = `${nextDay(date)}T00:00:00+09:00`;
+
+  const [mine, today, thanks, weekly, openItems, todayItems, todayKpis, prefs] = await Promise.all([
     // 自分の直近30件。過去を振り返れる範囲があればよく、全件は要らない
     sb.from("tc_nippo").select("*").eq("user_id", user.id)
       .order("work_date", { ascending: false }).limit(30),
@@ -82,11 +87,20 @@ async function read(req, res, user, ctx) {
       .order("created_at", { ascending: false }).limit(30),
     sb.from("tc_weekly_review").select("*").eq("user_id", user.id)
       .eq("week_start", weekStart(date)).maybeSingle(),
-    // 昨日までに決めた「次にやること」。日報の中で「やった」を選べるようにする。
-    // これを出さないと、AIの提案は読まれて終わりになる
+    // 昨日までの積み残し。今日ぶんは「今日の成果」に並べるので、ここには出さない。
+    // 同じものが画面の2か所に、別の意味で出ていると、どちらを触るのか分からなくなる
     sb.from("gw_action_items").select("*")
-      .eq("user_id", user.id).eq("status", "open").lte("due_date", date)
+      .eq("user_id", user.id).eq("status", "open").lt("due_date", date)
       .order("due_date").order("priority").limit(10),
+    // 今日ぶんの「やること」。ホームで足したものも、今日できたものも含む。
+    //   出さないと、「やること」で できた にした時点で画面から消え、
+    //   終業時に日報へ書き直すことになる（それが二重入力の正体）
+    // done_at で拾うのは、期限が昨日以前でも「今日やった」ものを落とさないため
+    sb.from("gw_action_items").select("*")
+      .eq("user_id", user.id)
+      .or(`due_date.eq.${date},and(done_at.gte.${dayFrom},done_at.lt.${dayTo})`)
+      .neq("status", "dropped")
+      .order("priority").order("created_at").limit(20),
     // 今日のKPI。育成計画から毎朝作られる（gw_daily_kpis）。
     // 目標を持っていない人にはこの欄を出さない
     sb.from("gw_daily_kpis").select("id, label, unit, target, actual, sort_order")
@@ -146,8 +160,10 @@ async function read(req, res, user, ctx) {
       isToday: date === closingOn,
       filled: weeklyFilled(weekly.data),
     },
-    // 昨日までの宿題。提出時に doneActionIds で「やった」を返してもらう
+    // 昨日までの積み残し。提出時に doneActionIds で「やった」を返してもらう
     openActions: (openItems.data || []).map(shapeItem),
+    // 今日ぶんのやること。画面はこれを「今日の成果」の行として並べる
+    todayActions: (todayItems.data || []).map(shapeItem),
     // 画面に出す基準はサーバから渡す。定義を2か所に置かないため
     criteria: CRITERIA,
     // 今日のKPI。目標を持っている人だけ、朝の画面にこの欄が出る
@@ -213,7 +229,62 @@ async function morning(res, user, ctx, body) {
     return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
   }
 
+  // 朝に決めたことを、そのまま今日の「やること」にする。
+  //
+  // ■ なぜここでやるのか
+  //   朝の入力は tc_nippo に、ホームと「やること」は gw_action_items にある。
+  //   つないでいなかったので、朝に最優先を決めてもホームには出ず、
+  //   ホームで足した仕事は日報に出なかった。同じ「今日やること」を
+  //   2か所に手で書くことになっていたのは、このためだった。
+  await syncMorningActions(sb, user.id, date, fields);
+
   return json(res, 200, { ok: true, morning: saved.data });
+}
+
+/**
+ * 朝に決めたことを、今日の「やること」に写す。
+ *
+ * 同じ題名のものは作らない（書き直すたびに増えていく）。
+ * 最優先は priority=1。ただし今日の1番がもう埋まっているときは下に入れる
+ * （1人1日ひとつという決まりがDB側にもある。勝手に入れ替えない）。
+ */
+async function syncMorningActions(sb, userId, date, fields) {
+  const wanted = [];
+  if (fields.top_priority) wanted.push({ title: fields.top_priority, top: true });
+  for (const w of fields.work_items || []) if (w.task) wanted.push({ title: w.task, top: false });
+  if (!wanted.length) return;
+
+  try {
+    const { data: existing } = await sb.from("gw_action_items")
+      .select("id, title, priority, status")
+      .eq("user_id", userId).eq("due_date", date).limit(50);
+
+    const key = (s) => String(s || "").trim().toLowerCase();
+    const have = new Set((existing || []).map((a) => key(a.title)));
+    const topTaken = (existing || []).some((a) => a.priority === 1 && a.status === "open");
+
+    const rows = [];
+    let claimTop = !topTaken;
+    for (const w of wanted) {
+      if (have.has(key(w.title))) continue;
+      have.add(key(w.title));
+      const takeTop = w.top && claimTop;
+      if (takeTop) claimTop = false;
+      rows.push({
+        user_id: userId,
+        title: w.title.slice(0, 200),
+        source: "self",
+        due_date: date,
+        priority: takeTop ? 1 : 5,
+        status: "open",
+      });
+    }
+    if (rows.length) await sb.from("gw_action_items").insert(rows);
+  } catch (e) {
+    // 写せなくても朝の入力そのものは保存できている。ここで失敗を返すと、
+    // 「保存できませんでした」と出て、書いたことをもう一度書かせることになる
+    console.error("[nippo] 朝の内容をやることに写せませんでした:", e?.message || e);
+  }
 }
 
 // ---- 終業時。どうなったかを書く -------------------------------------------------
