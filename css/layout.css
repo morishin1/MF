@@ -321,7 +321,7 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-bubble .kp-file:hover{ background:#e9eff5; }
 .kp-bubble .kp-file .material-symbols-outlined{ font-size:17px; color:var(--muted); }
 
-/* サイドメニューの区切り見出し（業務 / 組織・システム管理 / 会計） */
+/* サイドメニューの区切り見出し（社労士など、畳まない並びで使う） */
 .kp-side-section{
   font-size:10.5px; font-weight:700; letter-spacing:.06em; color:#9aa7b4;
   padding:14px 14px 6px;
@@ -329,6 +329,40 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-sidebar > .kp-side-section:first-child{ padding-top:4px; }
 /* 会計は別システム。線で切って、同じ並びに見えないようにする */
 .kp-side-item.ext{ border-top:1px dashed var(--border); }
+
+/* =============================================================================
+   管理者メニュー: 畳めるグループ
+   24項目を一列に並べると、毎日押すものと年に一度のものが同じ重さで並ぶ。
+   5つに束ね、いま見ている画面のグループだけを開く。
+   ============================================================================= */
+.kp-side-group{
+  display:flex; align-items:center; gap:10px;
+  width:100%; padding:10px 12px; margin:2px 0 0;
+  border:0; border-radius:8px; background:none;
+  font-family:inherit; font-size:13.5px; font-weight:700;
+  color:var(--primary-dark); text-align:left; cursor:pointer;
+  white-space:nowrap;
+}
+.kp-side-group:hover{ background:var(--soft); }
+/* 見出しだけを伸ばす。アイコンと矢印は幅を持たせない
+   （span をまとめて伸ばすと、アイコンまで引き伸ばされて重なる） */
+.kp-side-group .lb{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.kp-side-group > .material-symbols-outlined{ flex:0 0 auto; }
+.kp-side-group .ch{
+  font-size:20px; color:#a7b2bd; transition:transform .15s;
+}
+.kp-side-group.open .ch{ transform:rotate(180deg); }
+/* いま見ている画面が入っているグループ。畳んでも、どこにいるか分かるように */
+.kp-side-group.here{ color:var(--primary); }
+.kp-side-group.here::before{
+  content:""; width:3px; align-self:stretch; margin:2px 0 2px -6px;
+  border-radius:2px; background:var(--primary);
+}
+.kp-side-sub{ padding:0 0 4px 10px; }
+.kp-side-sub .kp-side-item{ font-size:13px; font-weight:500; padding:8px 12px; }
+.kp-side-sub .kp-side-item.on{ font-weight:600; }
+/* グループの中では、会計を切る破線は要らない（グループ自体が区切りになる） */
+.kp-side-sub .kp-side-item.ext{ border-top:none; }
 
 /* 処理中のボタン */
 .kp-spin{ animation: kp-spin 1s linear infinite; }
@@ -341,6 +375,17 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
     padding:0 4px 0 10px; display:flex; align-items:center;
     white-space:nowrap; font-size:10px; color:#b3bcc6;
   }
+
+  /* 畳めるメニューは、狭い画面でも縦のまま。
+     24項目を横スクロールに並べても、端のほうは誰も見ない。
+     開いているのは1グループだけなので、上に置いても本文をさほど押し下げない */
+  .kp-sidebar.grouped{
+    display:block; overflow-x:visible; padding:8px 10px 10px;
+  }
+  .kp-sidebar.grouped .kp-side-item{
+    margin-bottom:0; flex:none; font-size:13px; padding:8px 12px;
+  }
+  .kp-sidebar.grouped .kp-side-item em{ display:inline; }
 }
 
 /* メニュー一覧（メンバーの「メニュー」画面） */

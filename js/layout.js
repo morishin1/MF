@@ -81,37 +81,76 @@
       ready: true, external: true, when: "accounting" },
   ];
 
-  // 管理者: 左サイドメニュー。
-  // 「日々の業務」と「組織・システムの管理」を分け、会計は別システムとして
-  // 一番下に切り出す。ready:false は枠だけ用意した項目（押しても遷移しない）。
-  const ADMIN_NAV = [
-    { section: "業務" },
-    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード",     icon: "dashboard",    ready: true  },
-    { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",       icon: "monitoring",   ready: true  },
-    { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",       icon: "flag",         ready: true  },
-    { key: "nippo",     href: "admin-nippo.html",     label: "日報",               icon: "edit_note",    ready: true  },
-    { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信",       icon: "campaign",     ready: true  },
-    { key: "messages",  href: "messages.html",        label: "メッセージ",         icon: "forum",        ready: true  },
-    { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",       icon: "checklist",    ready: true  },
-    { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",       icon: "calendar_month", ready: true  },
-    { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",           icon: "receipt",      ready: true  },
-    { key: "requests",  href: "admin-requests.html",  label: "休暇・稟議",         icon: "approval",     ready: true  },
-
-    { section: "組織・システム管理" },
-    { key: "onboard",   href: "admin-onboard.html",   label: "新規メンバー登録",   icon: "person_add",   ready: true  },
-    { key: "members",   href: "admin-members.html",   label: "メンバー・権限",     icon: "group",        ready: true  },
-    { key: "hr",        href: "admin-hr.html",        label: "入社・退職手続き",   icon: "badge",        ready: true  },
-    { key: "contracts", href: "admin-contracts.html", label: "雇用契約・面談",     icon: "contract",     ready: true  },
-    { key: "probation", href: "admin-probation.html", label: "試用期間",           icon: "how_to_reg",   ready: true  },
-    { key: "growth",    href: "admin-growth.html",    label: "3か月育成計画",      icon: "flag",         ready: true  },
-    { key: "autonomy",  href: "admin-autonomy.html",  label: "自走レベル",         icon: "stairs",       ready: true  },
-    { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形",         icon: "folder_copy",  ready: true  },
-    { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",      ready: true  },
-    { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック", icon: "block",        ready: true  },
-    { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ",     icon: "settings",     ready: true  },
-
-    { section: "会計（別システム）" },
-    { key: "accounting", href: "admin.html", label: "会計書類・仕訳", icon: "receipt_long", ready: true, external: true },
+  /**
+   * 管理者: 左サイドメニュー。
+   *
+   * ■ なぜ畳むのか
+   *   24項目が一列に並んでいた。全部を見るのにスクロールが要り、
+   *   毎日押す「日報」と、半年に一度の「口コミ流入ブロック」が
+   *   同じ重さで並んでいた。どこに何があるかを覚えるまで、毎回探すことになる。
+   *
+   * ■ 5つに分ける
+   *   毎日使うものを上、管理系を下に。
+   *   開いているのは、いま見ている画面のグループだけ（あとは畳む）。
+   *   畳んだ状態なら見出し5つ＋数項目で、1画面に収まる。
+   *
+   * ■ 開け閉めは覚える
+   *   人によって使うところが違う。開いたグループは localStorage に残し、
+   *   次の画面でも開いたままにする。ただし、いま見ている画面のグループは
+   *   覚えた状態に関わらず必ず開く（自分がどこにいるか分からなくなるため）。
+   *
+   * ready:false は枠だけ用意した項目（押しても遷移しない）。
+   */
+  const ADMIN_GROUPS = [
+    {
+      key: "g-home", label: "ホーム", icon: "home",
+      items: [
+        { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard",      ready: true },
+        { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",   icon: "flag",           ready: true },
+        { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note",      ready: true },
+        { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",   icon: "checklist",      ready: true },
+        { key: "messages",  href: "messages.html",        label: "メッセージ",     icon: "forum",          ready: true },
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",       ready: true },
+      ],
+    },
+    {
+      key: "g-people", label: "人事・メンバー", icon: "group",
+      items: [
+        { key: "members",   href: "admin-members.html",   label: "メンバー管理",   icon: "badge",          ready: true },
+        { key: "onboard",   href: "admin-onboard.html",   label: "新規登録",       icon: "person_add",     ready: true },
+        { key: "hr",        href: "admin-hr.html",        label: "入退社",         icon: "swap_horiz",     ready: true },
+        { key: "contracts", href: "admin-contracts.html", label: "雇用契約・面談", icon: "contract",       ready: true },
+        { key: "probation", href: "admin-probation.html", label: "試用期間",       icon: "how_to_reg",     ready: true },
+        { key: "growth",    href: "admin-growth.html",    label: "育成計画",       icon: "trending_up",    ready: true },
+        { key: "autonomy",  href: "admin-autonomy.html",  label: "自走レベル",     icon: "stairs",         ready: true },
+        { key: "requests",  href: "admin-requests.html",  label: "休暇・稟議",     icon: "approval",       ready: true },
+      ],
+    },
+    {
+      key: "g-ops", label: "業務・運営", icon: "work",
+      items: [
+        { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",   icon: "meeting_room",   ready: true },
+        { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",       icon: "receipt",        ready: true },
+        { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",   icon: "monitoring",     ready: true },
+        { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形", icon: "folder_copy",    ready: true },
+      ],
+    },
+    {
+      key: "g-system", label: "システム管理", icon: "settings",
+      items: [
+        // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
+        { key: "roles",     href: "admin-members.html#roles", label: "権限",       icon: "key",            ready: true },
+        { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: true },
+        { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック", icon: "block",      ready: true },
+        { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ", icon: "tune",           ready: true },
+      ],
+    },
+    {
+      key: "g-accounting", label: "会計", icon: "receipt_long",
+      items: [
+        { key: "accounting", href: "admin.html", label: "会計管理・仕訳", icon: "account_balance", ready: true, external: true },
+      ],
+    },
   ];
 
   // 社労士は社外の人。会計にも社内の他の画面にも入れず、共有された手続きだけを見る
@@ -256,24 +295,90 @@
     });
   }
 
-  // 管理者: 左サイドメニュー。PC前提だが、狭い画面では上部の横スクロールに変わる
-  function renderAdminNav(active, items = ADMIN_NAV) {
-    renderSidebar(active, items, "admin");
+  // ---- 管理者メニューの開け閉め -----------------------------------------------
+  // 開いているグループの鍵を覚えておく。読めない・壊れているときは空で始める
+  const NAV_OPEN_KEY = "kp_nav_open";
+  const loadOpen = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(NAV_OPEN_KEY) || "[]");
+      return new Set(Array.isArray(v) ? v : []);
+    } catch { return new Set(); }
+  };
+  const saveOpen = (set) => {
+    try { localStorage.setItem(NAV_OPEN_KEY, JSON.stringify([...set])); }
+    catch { /* 保存できなくても、その画面のあいだは動く */ }
+  };
+
+  /** いま見ている画面が入っているグループ。ここは必ず開く */
+  const groupOf = (active) =>
+    ADMIN_GROUPS.find((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))) || null;
+
+  // 管理者: 左サイドメニュー。グループごとに畳める。
+  // 社労士のように項目が少ない相手には、いままでどおり平らに並べる
+  function renderAdminNav(active, items = null) {
+    if (items) return renderSidebar(active, items, "admin");
+
+    const open = loadOpen();
+    const here = groupOf(active);
+    // PC では、いる場所のグループを必ず開く。
+    // 狭い画面ではメニューが本文の上に積まれるので、開いたままにすると
+    // 6項目ぶん本文が下に押される。見出しに印を付けるだけにして、畳んでおく
+    const narrow = typeof matchMedia === "function" && matchMedia("(max-width: 860px)").matches;
+    if (here && !narrow) open.add(here.key);
+
+    const el = document.createElement("nav");
+    el.className = "kp-sidebar grouped";
+    el.innerHTML = ADMIN_GROUPS.map((g) => {
+      const on = open.has(g.key);
+      const hasActive = here && here.key === g.key;
+      return `
+        <button type="button" class="kp-side-group${on ? " open" : ""}${hasActive ? " here" : ""}"
+                data-group="${esc(g.key)}" aria-expanded="${on}"
+                onclick="KPLayout.toggleNavGroup('${esc(g.key)}')">
+          ${icon(g.icon, 19)}<span class="lb">${esc(g.label)}</span>
+          <span class="ch material-symbols-outlined">expand_more</span>
+        </button>
+        <div class="kp-side-sub${on ? "" : " hidden"}" data-group="${esc(g.key)}">
+          ${g.items.map((n) => sideItem(n, active)).join("")}
+        </div>`;
+    }).join("");
+    document.body.appendChild(el);
+    document.body.classList.add("kp-has-sidebar");
+    document.documentElement.classList.add("kp-has-sidebar");
+  }
+
+  /** グループを1つ開け閉めする。描き直さず、その場で切り替える */
+  function toggleNavGroup(key) {
+    const btn = document.querySelector(`.kp-side-group[data-group="${key}"]`);
+    const box = document.querySelector(`.kp-side-sub[data-group="${key}"]`);
+    if (!btn || !box) return;
+
+    const nowOpen = box.classList.toggle("hidden") === false;
+    btn.classList.toggle("open", nowOpen);
+    btn.setAttribute("aria-expanded", String(nowOpen));
+
+    const open = loadOpen();
+    if (nowOpen) open.add(key); else open.delete(key);
+    saveOpen(open);
+  }
+
+  function sideItem(n, active) {
+    // match が書いてあれば、そこに挙げた画面のどれでも選ばれた状態にする
+    const on = n.key === active || (n.match || []).includes(active);
+    const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}${n.external ? " ext" : ""}`;
+    const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>${n.ready ? "" : '<em>準備中</em>'}`;
+    return n.ready
+      ? `<a class="${cls}" href="${n.href}">${inner}</a>`
+      : `<span class="${cls}">${inner}</span>`;
   }
 
   function renderSidebar(active, items, variant) {
     const el = document.createElement("nav");
     el.className = `kp-sidebar${variant === "member" ? " member" : ""}`;
-    el.innerHTML = items.map((n) => {
-      if (n.section) return `<div class="kp-side-section">${esc(n.section)}</div>`;
-      // match が書いてあれば、そこに挙げた画面のどれでも選ばれた状態にする
-      const on = n.key === active || (n.match || []).includes(active);
-      const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}${n.external ? " ext" : ""}`;
-      const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>${n.ready ? "" : '<em>準備中</em>'}`;
-      return n.ready
-        ? `<a class="${cls}" href="${n.href}">${inner}</a>`
-        : `<span class="${cls}">${inner}</span>`;
-    }).join("");
+    el.innerHTML = items.map((n) =>
+      n.section
+        ? `<div class="kp-side-section">${esc(n.section)}</div>`
+        : sideItem(n, active)).join("");
     document.body.appendChild(el);
     // html にも付ける。次に開く画面で、最初の描画から余白を確保するため
     document.body.classList.add("kp-has-sidebar");
@@ -546,6 +651,9 @@
     },
 
     busy: withBusy,
+
+    // 管理者メニューのグループを開け閉めする（サイドメニューの中から呼ばれる）
+    toggleNavGroup,
 
     // メンバーに見える画面を、このアカウントのまま確認する／やめる
     viewAsMember() { setMemberView(true); location.href = "home.html"; },
