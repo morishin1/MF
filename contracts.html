@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>契約書 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260911w">
+  <link rel="stylesheet" href="css/layout.css?v=20260911w">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .ct-row { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;
+              padding:13px 0; border-bottom:1px solid var(--border); }
+    .ct-row:last-child { border-bottom:none; }
+    .ct-row .t { flex:1; min-width:210px; line-height:1.8; }
+    .ct-row .t b { font-size:14px; }
+    .ct-row .t small { display:block; font-size:11.5px; color:var(--muted); }
+    .ct-st { font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+    .ct-st.sent { background:#f4f0e3; color:#8a6d1f; }
+    .ct-st.signed { background:#eaf5ec; color:#256b36; }
+    .ct-st.overdue { background:#fdecec; color:#b3261e; }
+
+    /* 本文。契約書なので、読める行間で出す */
+    .ct-body {
+      border:1px solid var(--border); border-radius:10px; background:#fff;
+      padding:22px 24px; font-size:13.5px; line-height:2.05;
+      white-space:pre-wrap; word-break:break-word;
+      max-height:60vh; overflow-y:auto;
+    }
+    @media (max-width:720px) { .ct-body { padding:16px 15px; font-size:13px; } }
+
+    .ct-agree { display:flex; align-items:flex-start; gap:10px; font-size:13.5px;
+                font-weight:600; cursor:pointer; line-height:1.8; }
+    .ct-agree input { width:auto; margin:3px 0 0; flex:0 0 auto; }
+
+    .ct-hash { font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+               font-size:10.5px; color:var(--muted); word-break:break-all; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">契約書</h1>
+  <p class="kp-greet-sub" id="sub">会社から届いた契約書です。内容を読んで、署名してください。</p>
+
+  <div id="gate"></div>
+
+  <!-- 一覧 -->
+  <div id="list-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">draw</span>署名をお願いしているもの
+      <span id="open-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div id="open-list"></div>
+  </div>
+
+  <div id="done-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">verified</span>署名済み</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px;">
+      署名したあとの契約書は変えられません。いつでもPDFを取り出せます。
+    </p>
+    <div id="done-list"></div>
+  </div>
+
+  <!-- 1件を開いたところ -->
+  <div id="one" class="hidden">
+    <p style="margin:0 0 10px;">
+      <a href="#" onclick="backToList();return false;" style="font-size:13px;">
+        <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;">arrow_back</span>一覧にもどる
+      </a>
+    </p>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">description</span><span id="o-title">　</span></h2>
+      <p class="muted" style="font-size:12.5px;margin:0 0 14px;" id="o-meta"></p>
+      <div id="o-note"></div>
+      <div id="o-body" class="ct-body"></div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-secondary btn-sm" onclick="openPdf(null, this)">
+          <span class="material-symbols-outlined icon-inline">picture_as_pdf</span>PDFで読む
+        </button>
+      </div>
+    </div>
+
+    <!-- 署名 -->
+    <div id="sign-card" class="card hidden" style="border-left:4px solid var(--primary);">
+      <h2><span class="material-symbols-outlined">draw</span>署名</h2>
+
+      <div style="margin-bottom:14px;">
+        <label class="ct-agree">
+          <input id="o-agree" type="checkbox" onchange="syncSign()">
+          <span id="o-agree-text">内容を確認し、同意します。</span>
+        </label>
+      </div>
+
+      <div style="max-width:340px;margin-bottom:14px;">
+        <label>お名前（署名）</label>
+        <input id="o-name" type="text" placeholder="山田 太郎" oninput="syncSign()" autocomplete="name">
+        <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
+          名簿のお名前を入れてあります。違っていれば直してください。
+        </p>
+      </div>
+
+      <button id="o-submit" class="btn btn-primary" disabled onclick="submitSign(this)">
+        <span class="material-symbols-outlined icon-inline">check</span>署名して提出
+      </button>
+      <p class="muted" style="font-size:11.5px;margin:12px 0 0;">
+        押すと、日時・IPアドレス・利用環境が署名の記録として残り、
+        署名済みのPDFが作られます。<b>提出後は取り消せません。</b>
+      </p>
+      <div id="o-msg" class="err-text"></div>
+    </div>
+
+    <!-- 署名済みのとき -->
+    <div id="done-detail" class="card hidden">
+      <h2><span class="material-symbols-outlined">verified</span>署名の記録</h2>
+      <div id="o-record"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260911w"></script>
+<script src="js/layout.js?v=20260911w"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const ST_LABEL = { sent: "未署名", signed: "署名済", overdue: "期限切れ" };
+
+  let contracts = [];
+  let me = null;
+  let agreeText = "内容を確認し、同意します。";
+  let current = null;
+
+  KPLayout.init({ active: "contracts", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    if (!ctx.me?.gw?.employee) {
+      el("gate").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
+           <div>社員名簿にまだ登録されていないため、契約書を表示できません。管理者に登録を依頼してください。</div></div>`;
+      return;
+    }
+    // URL に id が付いていれば、その1件を開く（通知から直接来られるように）
+    const id = new URLSearchParams(location.search).get("id");
+    if (id) return openOne(id);
+    await loadList();
+  }
+
+  const d = (s) => (s ? new Date(s).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" }) : "—");
+  const dt = (s) => (s ? new Date(s).toLocaleString("ja-JP") : "—");
+
+  async function loadList() {
+    el("one").classList.add("hidden");
+    try {
+      const res = await API.myContracts();
+      contracts = res.contracts || [];
+      me = res.me || null;
+      agreeText = res.agreeText || agreeText;
+      renderList();
+    } catch (e) {
+      el("gate").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderList() {
+    const open = contracts.filter((c) => c.view !== "signed");
+    const done = contracts.filter((c) => c.view === "signed");
+
+    el("sub").textContent = open.length
+      ? `署名がまだのものが ${open.length} 件あります。`
+      : "署名をお願いしているものはありません。";
+
+    el("list-card").classList.toggle("hidden", !open.length);
+    el("open-tag").textContent = open.length ? `${open.length} 件` : "";
+    el("open-tag").className = `kp-chip ${open.some((c) => c.view === "overdue") ? "important" : "draft"}`;
+    el("open-list").innerHTML = open.map(row).join("");
+
+    el("done-card").classList.toggle("hidden", !done.length);
+    el("done-list").innerHTML = done.map(row).join("");
+
+    if (!open.length && !done.length) {
+      el("gate").innerHTML = `<div class="card"><div class="empty">
+        まだ契約書は届いていません。</div></div>`;
+    }
+  }
+
+  function row(c) {
+    const signed = c.view === "signed";
+    return `
+      <div class="ct-row">
+        <div class="t">
+          <b>${esc(c.title)}</b>
+          <small>${esc(c.kindLabel || "")}</small>
+          <small>送付日　${esc(d(c.sentAt))}${
+            signed ? `　／　署名日　${esc(d(c.signedAt))}`
+              : c.dueOn ? `　／　署名期限　${esc(d(c.dueOn))}` : ""}</small>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span class="ct-st ${esc(c.view)}">${esc(ST_LABEL[c.view] || c.view)}</span>
+          <button class="btn ${signed ? "btn-secondary" : "btn-primary"} btn-sm"
+                  onclick="openOne('${esc(c.id)}')">
+            ${signed ? "見る" : "開いて署名する"}
+          </button>
+        </div>
+      </div>`;
+  }
+
+  // ---- 1件を開く ---------------------------------------------------------------
+  async function openOne(id) {
+    el("gate").innerHTML = "";
+    for (const n of ["list-card", "done-card"]) el(n).classList.add("hidden");
+    el("one").classList.remove("hidden");
+    el("o-body").textContent = "読み込み中…";
+    el("o-note").innerHTML = "";
+    el("o-msg").textContent = "";
+    window.scrollTo({ top: 0 });
+
+    try {
+      const res = await API.myContracts(id);
+      current = res.contract;
+      me = res.me || me;
+      agreeText = res.agreeText || agreeText;
+      renderOne();
+    } catch (e) {
+      el("o-title").textContent = "契約書";
+      el("o-body").textContent = "";
+      el("o-note").innerHTML =
+        `<div class="banner err" style="margin-bottom:14px;">
+           <span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message || "開けませんでした")}</div></div>`;
+    }
+  }
+
+  function renderOne() {
+    const c = current;
+    document.title = `${c.title} - エイト`;
+    el("o-title").textContent = c.title;
+    el("o-meta").textContent = [
+      c.kindLabel,
+      c.version ? `第${c.version}版` : null,
+      `送付日 ${d(c.sentAt)}`,
+      c.view === "signed" ? `署名日 ${d(c.signedAt)}` : (c.dueOn ? `署名期限 ${d(c.dueOn)}` : null),
+    ].filter(Boolean).join("　／　");
+    el("o-body").textContent = c.body || "";
+
+    if (c.view === "overdue") {
+      el("o-note").innerHTML =
+        `<div class="banner warn" style="margin-bottom:14px;">
+           <span class="material-symbols-outlined">schedule</span>
+           <div>署名の期限（${esc(d(c.dueOn))}）を過ぎています。いまからでも署名できます。</div></div>`;
+    }
+
+    const signed = c.view === "signed";
+    el("sign-card").classList.toggle("hidden", signed);
+    el("done-detail").classList.toggle("hidden", !signed);
+
+    if (!signed) {
+      el("o-agree-text").textContent = agreeText;
+      el("o-agree").checked = false;
+      el("o-name").value = me?.name || "";
+      syncSign();
+      return;
+    }
+
+    el("o-record").innerHTML = `
+      <div class="table-scroll"><table class="kp-items"><tbody>
+        <tr><td style="width:150px;color:var(--muted);">署名者</td><td>${esc(c.signerName || "")}</td></tr>
+        <tr><td style="color:var(--muted);">署名日時</td><td>${esc(dt(c.signedAt))}</td></tr>
+        <tr><td style="color:var(--muted);">同意した文言</td><td>${esc(c.agreedText || "")}</td></tr>
+        <tr><td style="color:var(--muted);">文書ID</td><td class="ct-hash">${esc(c.id)}</td></tr>
+        <tr><td style="color:var(--muted);">文書ハッシュ</td><td class="ct-hash">${esc(c.hash || "")}</td></tr>
+      </tbody></table></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+        <button class="btn btn-primary btn-sm" onclick="openPdf('signed', this)">
+          <span class="material-symbols-outlined icon-inline">download</span>署名済みPDFを開く
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="openPdf('original', this)">
+          <span class="material-symbols-outlined icon-inline">description</span>署名前のPDF
+        </button>
+      </div>`;
+  }
+
+  // チェックと名前がそろうまで押せない。押せてしまうと、
+  // 「よく読まずに押した」が起きる
+  function syncSign() {
+    const ok = el("o-agree").checked && el("o-name").value.trim().length > 0;
+    el("o-submit").disabled = !ok;
+  }
+
+  async function submitSign(btn) {
+    const msg = el("o-msg");
+    msg.textContent = "";
+    const name = el("o-name").value.trim();
+    if (!el("o-agree").checked || !name) return;
+
+    if (!confirm(`「${current.title}」に署名して提出します。\n提出後は取り消せません。よろしいですか？`)) return;
+
+    try {
+      await KPLayout.busy(btn, "提出中…", () => API.signContract({
+        id: current.id, signerName: name, agreed: true,
+      }));
+      await openOne(current.id);
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "提出できませんでした";
+    }
+  }
+
+  async function openPdf(kind, btn) {
+    try {
+      const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(current.id, kind || undefined));
+      window.open(url, "_blank", "noopener");
+    } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
+  }
+
+  function backToList() {
+    history.replaceState(null, "", location.pathname);
+    document.title = "契約書 - エイト";
+    loadList();
+  }
+</script>
+
+</body>
+</html>

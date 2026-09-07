@@ -57,6 +57,8 @@
     { key: "schedule", href: "schedule.html", label: "スケジュール", icon: "calendar_month", ready: true },
     { key: "messages", href: "messages.html", label: "メッセージ",   icon: "forum",          ready: true },
     { key: "workflow", href: "workflow.html", label: "申請・承認",   icon: "approval",       ready: true },
+    // 会社から届いた契約書に署名する。届いていなければ空の画面が出るだけ
+    { key: "contracts", href: "contracts.html", label: "契約書",      icon: "draw",           ready: true },
     // 入口は社内文書。お知らせはホームに出ているので、ここを開く用は
     // 「就業規則はどこ」「あの様式はどこ」を調べにきたとき
     { key: "info",     href: "library.html",  label: "社内文書",     icon: "menu_book",      ready: true,
@@ -120,6 +122,7 @@
         { key: "onboard",   href: "admin-onboard.html",   label: "新規登録",       icon: "person_add",     ready: true },
         { key: "hr",        href: "admin-hr.html",        label: "入退社",         icon: "swap_horiz",     ready: true },
         { key: "contracts", href: "admin-contracts.html", label: "雇用契約・面談", icon: "contract",       ready: true },
+        { key: "esign",     href: "admin-esign.html",     label: "契約・電子署名", icon: "draw",           ready: true },
         { key: "probation", href: "admin-probation.html", label: "試用期間",       icon: "how_to_reg",     ready: true },
         { key: "growth",    href: "admin-growth.html",    label: "育成計画",       icon: "trending_up",    ready: true },
         { key: "autonomy",  href: "admin-autonomy.html",  label: "自走レベル",     icon: "stairs",         ready: true },

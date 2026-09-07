@@ -475,6 +475,32 @@
     return { path: sign.path, name: file.name, mimeType: file.type, sizeBytes: file.size };
   }
 
+  // ---- 契約・電子署名 ----
+  // 管理側
+  const signTemplates = () => api("/api/sign/templates");
+  const addSignTemplate = (t) =>
+    api("/api/sign/templates", { method: "POST", body: t }).then((d) => d.template);
+  const updateSignTemplate = (t) =>
+    api("/api/sign/templates", { method: "PATCH", body: t }).then((d) => d.template);
+  const removeSignTemplate = (id) =>
+    api(`/api/sign/templates?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  const signRequests = (status) =>
+    api(`/api/sign${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+  // 保存しない。差し込んだ本文と、PDFを base64 で返す
+  const previewSign = (p) => api("/api/sign", { method: "POST", body: { ...p, preview: true } });
+  const sendSign = (p) => api("/api/sign", { method: "POST", body: p });
+  const patchSign = (p) => api("/api/sign", { method: "PATCH", body: p });
+
+  // 本人側。id を付けると1件の中身が返る
+  const myContracts = (id) =>
+    api(`/api/sign/me${id ? `?id=${encodeURIComponent(id)}` : ""}`);
+  const signContract = (p) => api("/api/sign/me", { method: "POST", body: p });
+
+  // PDFの閲覧用URL（5分だけ有効）。kind: "signed"（既定）| "original"
+  const signPdfUrl = (id, kind) =>
+    api(`/api/sign/file?id=${encodeURIComponent(id)}${kind ? `&kind=${kind}` : ""}`);
+
   // ---- 有給・稟議の申請 ----
   // scope: "mine" | "pending" | "all"、kind: "leave" | "ringi"
   const listRequests = (scope, opts = {}) => {
@@ -807,6 +833,10 @@
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
+
+    signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
+    signRequests, previewSign, sendSign, patchSign,
+    myContracts, signContract, signPdfUrl,
     listThreads, createThread, getThread, sendMessage, markThreadRead,
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,

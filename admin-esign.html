@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>契約・電子署名 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260911w">
+  <link rel="stylesheet" href="css/layout.css?v=20260911w">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .es-cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    @media (max-width:980px) { .es-cols { grid-template-columns:1fr; } }
+
+    .es-who { max-height:230px; overflow-y:auto; border:1px solid var(--border);
+              border-radius:8px; padding:6px 4px; }
+    .es-who label { display:flex; align-items:center; gap:8px; padding:5px 9px;
+                    font-size:13px; font-weight:500; cursor:pointer; border-radius:6px; }
+    .es-who label:hover { background:var(--soft); }
+    .es-who input { width:auto; margin:0; }
+    .es-who small { color:var(--muted); font-size:11.5px; }
+
+    .es-prev { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#f7f8fa; }
+    .es-prev iframe { display:block; width:100%; height:62vh; min-height:380px; border:0; background:#fff; }
+
+    /* 差し込みの一覧。押すと本文に入る */
+    .es-chip { display:inline-block; font-size:11.5px; font-weight:600; padding:3px 9px;
+               margin:0 4px 5px 0; border:1px solid var(--border); border-radius:999px;
+               background:#fff; color:var(--primary-dark); cursor:pointer; font-family:inherit; }
+    .es-chip:hover { border-color:var(--primary); color:var(--primary); }
+
+    .es-st { font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+    .es-st.sent { background:#f4f0e3; color:#8a6d1f; }
+    .es-st.signed { background:#eaf5ec; color:#256b36; }
+    .es-st.overdue { background:#fdecec; color:#b3261e; }
+    .es-st.cancelled { background:#eee; color:#777; }
+
+    .es-hash { font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+               font-size:10.5px; color:var(--muted); word-break:break-all; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">契約・電子署名</h1>
+  <p class="kp-greet-sub">
+    契約書を作って本人に送り、画面で署名してもらいます。署名済みのPDFは、本人も会社も落とせます。
+  </p>
+
+  <div class="banner warn" style="margin-bottom:18px;">
+    <span class="material-symbols-outlined">gavel</span>
+    <div>
+      条文の中身は会社が決めるものです。下書きはあくまで骨組みなので、
+      <b>社労士の確認を受けてから</b>使ってください。
+      この仕組みの署名は mf のログインと記録によるもので、認定認証業務による電子署名ではありません。
+    </div>
+  </div>
+
+  <div class="tabs" style="margin-bottom:16px;">
+    <button id="tab-send" class="tab active" onclick="setTab('send', this)">送る</button>
+    <button id="tab-list" class="tab" onclick="setTab('list', this)">署名の状況</button>
+    <button id="tab-tpl"  class="tab" onclick="setTab('tpl', this)">雛形</button>
+  </div>
+
+  <!-- ===== 送る ===== -->
+  <div id="pane-send">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">send</span>署名依頼を送る</h2>
+
+      <div class="es-cols">
+        <div>
+          <div style="margin-bottom:12px;">
+            <label>契約書</label>
+            <select id="s-template" onchange="onTemplate()"><option value="">読み込み中…</option></select>
+          </div>
+          <div class="inline-controls" style="margin-bottom:12px;">
+            <div style="max-width:180px;"><label>署名の期限</label><input id="s-due" type="date"></div>
+          </div>
+
+          <label>誰に送るか</label>
+          <div style="margin:0 0 6px;">
+            <input id="s-find" type="search" placeholder="名前・部署で絞り込む" oninput="renderWho()"
+                   style="margin-bottom:6px;">
+          </div>
+          <div id="s-who" class="es-who"><div class="empty">読み込み中…</div></div>
+          <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
+            選んだ人数ぶん、それぞれの値を差し込んだ契約書が1通ずつ作られます。
+          </p>
+        </div>
+
+        <div>
+          <label>プレビュー</label>
+          <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
+            送る前に、実際に届くPDFをそのまま見られます（保存はされません）。
+          </p>
+          <div id="s-preview-msg"></div>
+          <div id="s-preview" class="es-prev hidden"><iframe id="s-frame" title="プレビュー"></iframe></div>
+          <div id="s-preview-empty" class="empty">
+            契約書と相手を選んで「プレビュー」を押してください。
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+        <button class="btn btn-secondary" onclick="doPreview(this)">
+          <span class="material-symbols-outlined icon-inline">visibility</span>プレビュー
+        </button>
+        <button class="btn btn-primary" onclick="doSend(this)">
+          <span class="material-symbols-outlined icon-inline">send</span>署名依頼を送る
+        </button>
+      </div>
+      <div id="s-msg" class="err-text"></div>
+      <div id="s-result"></div>
+    </div>
+  </div>
+
+  <!-- ===== 署名の状況 ===== -->
+  <div id="pane-list" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">fact_check</span>署名の状況</h2>
+      <div class="tabs">
+        <button class="tab active" onclick="setFilter('all', this)">すべて<span id="c-all"></span></button>
+        <button class="tab" onclick="setFilter('sent', this)">未署名<span id="c-sent"></span></button>
+        <button class="tab" onclick="setFilter('overdue', this)">期限切れ<span id="c-overdue"></span></button>
+        <button class="tab" onclick="setFilter('signed', this)">署名済<span id="c-signed"></span></button>
+      </div>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>相手</th><th>契約書</th><th style="width:96px;">状態</th>
+            <th style="width:110px;">送付日</th><th style="width:110px;">期限</th><th></th>
+          </tr></thead>
+          <tbody id="r-rows"><tr><td colspan="6" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="r-detail"></div>
+  </div>
+
+  <!-- ===== 雛形 ===== -->
+  <div id="pane-tpl" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">description</span><span id="t-title">雛形を作る</span></h2>
+
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div style="min-width:240px;flex:1;"><label>名前</label>
+          <input id="t-name" type="text" placeholder="労働条件通知書 兼 雇用契約書"></div>
+        <div style="min-width:220px;"><label>種類</label>
+          <select id="t-kind"></select></div>
+        <div style="max-width:150px;"><label>期限の既定（日）</label>
+          <input id="t-due" type="number" min="1" max="90" value="7"></div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label>差し込み（押すと本文に入ります）</label>
+        <div id="t-fields" style="margin-top:4px;"></div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label>本文</label>
+        <textarea id="t-body" rows="16" placeholder="{{会社名}} と {{氏名}} は、以下のとおり…"></textarea>
+        <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
+          差し込みが空の項目は <code>【未入力：住所】</code> のように残り、そのままでは送れません。
+        </p>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button id="t-save" class="btn btn-primary" onclick="saveTemplate(this)">
+          <span class="material-symbols-outlined icon-inline">save</span>保存
+        </button>
+        <button id="t-cancel" class="btn btn-secondary hidden" onclick="resetTemplate()">編集をやめる</button>
+        <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+          <span class="muted" style="font-size:12px;">下書きを入れる</span>
+          <span id="t-starters"></span>
+        </span>
+      </div>
+      <div id="t-msg" class="err-text"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">folder_copy</span>登録済みの雛形</h2>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:200px;">種類</th><th>名前</th>
+            <th style="width:70px;">版</th><th style="width:100px;"></th>
+          </tr></thead>
+          <tbody id="t-rows"><tr><td colspan="4" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260911w"></script>
+<script src="js/layout.js?v=20260911w"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const ST_LABEL = { sent: "未署名", signed: "署名済", overdue: "期限切れ", cancelled: "取り消し" };
+
+  let templates = [];
+  let employees = [];
+  let requests = [];
+  let kinds = [];
+  let mergeFields = [];
+  let starters = {};
+  let editingTpl = null;
+  let filter = "all";
+  let previewUrl = null;      // Blob URL。作り直すたびに前のを捨てる
+
+  KPLayout.init({ active: "esign", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    await Promise.all([loadTemplates(), loadEmployees(), loadRequests()]);
+  }
+
+  function setTab(name, btn) {
+    for (const b of document.querySelectorAll(".tabs > .tab")) {
+      if (b.parentElement === btn.parentElement) b.classList.toggle("active", b === btn);
+    }
+    for (const p of ["send", "list", "tpl"]) {
+      el(`pane-${p}`).classList.toggle("hidden", p !== name);
+    }
+  }
+
+  // ---- 雛形 -------------------------------------------------------------------
+  async function loadTemplates() {
+    try {
+      const res = await API.signTemplates();
+      templates = res.templates || [];
+      kinds = res.kinds || [];
+      mergeFields = res.mergeFields || [];
+      starters = res.starters || {};
+      renderKinds();
+      renderFields();
+      renderStarters();
+      renderTemplates();
+      renderTemplatePicker();
+    } catch (e) {
+      el("t-rows").innerHTML =
+        `<tr><td colspan="4" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function renderKinds() {
+    el("t-kind").innerHTML = kinds.map((k) =>
+      `<option value="${esc(k.key)}">${esc(k.label)}</option>`).join("");
+  }
+
+  // 差し込みは押して入れる。手で打つと全角の波括弧などで静かに壊れる
+  function renderFields() {
+    el("t-fields").innerHTML = mergeFields.map((f) =>
+      `<button type="button" class="es-chip" title="${esc(f.from)}から"
+               onclick="insertField('${esc(f.key)}')">${esc(f.key)}</button>`).join("");
+  }
+
+  function insertField(key) {
+    const ta = el("t-body");
+    const tag = `{{${key}}}`;
+    const s = ta.selectionStart ?? ta.value.length;
+    const e = ta.selectionEnd ?? s;
+    ta.value = ta.value.slice(0, s) + tag + ta.value.slice(e);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = s + tag.length;
+  }
+
+  function renderStarters() {
+    el("t-starters").innerHTML = Object.entries(starters).map(([k, v]) =>
+      `<button type="button" class="es-chip" onclick="useStarter('${esc(k)}')">${
+        esc(kindLabel(k))}</button>`).join("");
+  }
+
+  const kindLabel = (k) => kinds.find((x) => x.key === k)?.label || k;
+
+  function useStarter(k) {
+    const s = starters[k];
+    if (!s) return;
+    if (el("t-body").value.trim()
+        && !confirm("いま書いてある本文を、下書きで置き換えます。よろしいですか？")) return;
+    el("t-name").value = s.name;
+    el("t-kind").value = k;
+    el("t-body").value = s.body;
+    el("t-msg").textContent = "";
+  }
+
+  function renderTemplates() {
+    if (!templates.length) {
+      el("t-rows").innerHTML = `<tr><td colspan="4" class="muted">まだ雛形がありません。</td></tr>`;
+      return;
+    }
+    el("t-rows").innerHTML = templates.map((t) => `
+      <tr>
+        <td>${esc(kindLabel(t.doc_kind))}</td>
+        <td><b>${esc(t.name)}</b>${t.note ? `<small class="muted">　${esc(t.note)}</small>` : ""}</td>
+        <td>第${t.version}版</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="icon-btn" title="直す" onclick="editTemplate('${esc(t.id)}')">
+            <span class="material-symbols-outlined">edit</span></button>
+          <button class="icon-btn" title="消す" onclick="removeTemplate('${esc(t.id)}')">
+            <span class="material-symbols-outlined">delete</span></button>
+        </td>
+      </tr>`).join("");
+  }
+
+  function editTemplate(id) {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    editingTpl = id;
+    el("t-title").textContent = "雛形を直す";
+    el("t-name").value = t.name;
+    el("t-kind").value = t.doc_kind;
+    el("t-due").value = t.due_days;
+    el("t-body").value = t.body;
+    el("t-cancel").classList.remove("hidden");
+    el("t-msg").textContent = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetTemplate() {
+    editingTpl = null;
+    el("t-title").textContent = "雛形を作る";
+    for (const id of ["t-name", "t-body"]) el(id).value = "";
+    el("t-due").value = 7;
+    el("t-cancel").classList.add("hidden");
+    el("t-msg").textContent = "";
+  }
+
+  async function saveTemplate(btn) {
+    const msg = el("t-msg");
+    msg.textContent = "";
+    const name = el("t-name").value.trim();
+    const body = el("t-body").value;
+    if (!name) { msg.textContent = "名前を入れてください"; return; }
+    if (!body.trim()) { msg.textContent = "本文を入れてください"; return; }
+
+    const payload = { name, docKind: el("t-kind").value, dueDays: Number(el("t-due").value) || 7, body };
+    try {
+      if (editingTpl) await KPLayout.busy(btn, "保存中…", () => API.updateSignTemplate({ id: editingTpl, ...payload }));
+      else await KPLayout.busy(btn, "保存中…", () => API.addSignTemplate(payload));
+      resetTemplate();
+      await loadTemplates();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  async function removeTemplate(id) {
+    const t = templates.find((x) => x.id === id);
+    if (!confirm(`「${t ? t.name : ""}」を消します。\n送信済み・署名済みの契約書は残ります。よろしいですか？`)) return;
+    try { await API.removeSignTemplate(id); await loadTemplates(); }
+    catch (e) { alert(e.detail || e.message || "消せませんでした"); }
+  }
+
+  // ---- 送る -------------------------------------------------------------------
+  async function loadEmployees() {
+    try {
+      const res = await API.listEmployees();
+      employees = (res.employees || []).filter((e) => e.status !== "left" && e.user_id);
+      renderWho();
+    } catch (e) {
+      el("s-who").innerHTML = `<div class="empty">名簿を読めませんでした：${esc(e.detail || e.message)}</div>`;
+    }
+  }
+
+  function renderTemplatePicker() {
+    el("s-template").innerHTML = templates.length
+      ? `<option value="">選んでください</option>` + templates.map((t) =>
+          `<option value="${esc(t.id)}">${esc(kindLabel(t.doc_kind))}／${esc(t.name)}（第${t.version}版）</option>`).join("")
+      : `<option value="">雛形がありません（「雛形」タブで作ってください）</option>`;
+  }
+
+  // 期限は雛形の既定日数から入れる。押す人が直せる
+  function onTemplate() {
+    const t = templates.find((x) => x.id === el("s-template").value);
+    if (!t) return;
+    const d = new Date(Date.now() + (t.due_days || 7) * 86400000);
+    el("s-due").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  // ログインできる人にだけ送る。アカウントが無い人は画面を開けない
+  function renderWho() {
+    const q = el("s-find").value.trim().toLowerCase();
+    const shown = employees.filter((e) =>
+      !q || `${e.display_name} ${e.department || ""}`.toLowerCase().includes(q));
+    if (!shown.length) {
+      el("s-who").innerHTML = `<div class="empty">${
+        employees.length ? "見つかりませんでした。" : "送れる相手がいません（ログインアカウントが要ります）。"}</div>`;
+      return;
+    }
+    const checked = new Set(pickedIds());
+    el("s-who").innerHTML = shown.map((e) => `
+      <label>
+        <input type="checkbox" value="${esc(e.id)}" data-who${checked.has(e.id) ? " checked" : ""}>
+        <span>${esc(e.display_name)}${e.department ? ` <small>${esc(e.department)}</small>` : ""}</span>
+      </label>`).join("");
+  }
+
+  const pickedIds = () =>
+    [...document.querySelectorAll("[data-who]:checked")].map((n) => n.value);
+
+  async function doPreview(btn) {
+    const msg = el("s-msg");
+    msg.textContent = "";
+    el("s-preview-msg").innerHTML = "";
+    const templateId = el("s-template").value;
+    const ids = pickedIds();
+    if (!templateId) { msg.textContent = "契約書を選んでください"; return; }
+    if (!ids.length) { msg.textContent = "相手を1人以上選んでください"; return; }
+
+    try {
+      // 複数選んでいても、見るのは先頭の1人ぶん。
+      // 全員ぶん並べても、見比べるのは結局1通目になる
+      const r = await KPLayout.busy(btn, "作成中…",
+        () => API.previewSign({ templateId, employeeId: ids[0] }));
+
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const bin = atob(r.pdfBase64);
+      const buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      previewUrl = URL.createObjectURL(new Blob([buf], { type: "application/pdf" }));
+
+      el("s-preview-empty").classList.add("hidden");
+      el("s-preview").classList.remove("hidden");
+      el("s-frame").src = previewUrl;
+
+      const who = `${r.employee.name}さんぶん`;
+      el("s-preview-msg").innerHTML = r.missing.length
+        ? `<div class="banner err" style="margin-bottom:10px;">
+             <span class="material-symbols-outlined">error</span>
+             <div><b>${esc(r.missing.join("・"))}</b> が未登録です。<br>
+               このままでは送れません。名簿・入社フォーム・雇用契約のどれかを埋めてください。</div></div>`
+        : `<div class="muted" style="font-size:12px;margin-bottom:8px;">${esc(who)}${
+             ids.length > 1 ? `（ほか${ids.length - 1}名にも同じ雛形で送ります）` : ""}</div>`;
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "プレビューを作れませんでした";
+    }
+  }
+
+  async function doSend(btn) {
+    const msg = el("s-msg");
+    msg.textContent = "";
+    el("s-result").innerHTML = "";
+    const templateId = el("s-template").value;
+    const ids = pickedIds();
+    if (!templateId) { msg.textContent = "契約書を選んでください"; return; }
+    if (!ids.length) { msg.textContent = "相手を1人以上選んでください"; return; }
+
+    const t = templates.find((x) => x.id === templateId);
+    if (!confirm(`「${t ? t.name : ""}」を ${ids.length}名に送ります。\n`
+      + `送ったあと、本文は変えられません。よろしいですか？`)) return;
+
+    try {
+      const r = await KPLayout.busy(btn, "送信中…", () => API.sendSign({
+        templateId, employeeIds: ids, dueOn: el("s-due").value || null,
+      }));
+      el("s-result").innerHTML = `
+        ${r.sent.length ? `
+          <div class="banner ok" style="margin-top:12px;">
+            <span class="material-symbols-outlined">check_circle</span>
+            <div><b>${r.sent.length}名に送りました。</b>
+              ${esc(r.sent.map((x) => x.name).join("、"))}</div>
+          </div>` : ""}
+        ${r.failed.length ? `
+          <div class="banner err" style="margin-top:12px;">
+            <span class="material-symbols-outlined">error</span>
+            <div><b>送れなかった人がいます。</b>
+              <ul style="margin:6px 0 0;padding-left:18px;line-height:1.9;">
+                ${r.failed.map((x) => `<li>${esc(x.name || x.employeeId)}：${esc(x.reason)}</li>`).join("")}
+              </ul></div>
+          </div>` : ""}`;
+      for (const n of document.querySelectorAll("[data-who]:checked")) n.checked = false;
+      await loadRequests();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "送れませんでした";
+    }
+  }
+
+  // ---- 署名の状況 -------------------------------------------------------------
+  async function loadRequests() {
+    try {
+      const res = await API.signRequests();
+      requests = res.requests || [];
+      for (const [k, v] of Object.entries(res.counts || {})) {
+        const n = el(`c-${k}`);
+        if (n) n.textContent = v ? ` ${v}` : "";
+      }
+      el("c-all").textContent = requests.length ? ` ${requests.length}` : "";
+      renderRequests();
+    } catch (e) {
+      el("r-rows").innerHTML =
+        `<tr><td colspan="6" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    for (const b of btn.parentElement.children) b.classList.toggle("active", b === btn);
+    renderRequests();
+  }
+
+  const d = (s) => (s ? new Date(s).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : "—");
+
+  function renderRequests() {
+    const rows = requests.filter((r) => filter === "all" || r.view === filter);
+    if (!rows.length) {
+      el("r-rows").innerHTML = `<tr><td colspan="6" class="muted">ありません。</td></tr>`;
+      return;
+    }
+    el("r-rows").innerHTML = rows.map((r) => `
+      <tr>
+        <td><b>${esc(r.employee?.display_name || "—")}</b>
+          ${r.employee?.department ? `<small class="muted">　${esc(r.employee.department)}</small>` : ""}</td>
+        <td>${esc(r.title)}${r.doc_version ? `<small class="muted">　第${r.doc_version}版</small>` : ""}</td>
+        <td><span class="es-st ${esc(r.view)}">${esc(ST_LABEL[r.view] || r.view)}</span></td>
+        <td>${esc(d(r.sent_at))}</td>
+        <td>${esc(r.due_on ? d(r.due_on) : "—")}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="btn btn-secondary btn-sm" onclick="showDetail('${esc(r.id)}')">記録</button>
+          ${r.view === "signed"
+            ? `<button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">PDF</button>`
+            : r.view === "cancelled" ? ""
+              : `<button class="btn btn-secondary btn-sm" onclick="resend('${esc(r.id)}',this)">再送</button>
+                 <button class="icon-btn" title="取り消す" onclick="cancelReq('${esc(r.id)}')">
+                   <span class="material-symbols-outlined">close</span></button>`}
+        </td>
+      </tr>`).join("");
+  }
+
+  function showDetail(id) {
+    const r = requests.find((x) => x.id === id);
+    if (!r) return;
+    const dt = (s) => (s ? new Date(s).toLocaleString("ja-JP") : "—");
+    const row = (k, v) => (v ? `<tr><td style="width:150px;color:var(--muted);">${esc(k)}</td><td>${v}</td></tr>` : "");
+
+    el("r-detail").innerHTML = `
+      <div class="card" style="border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">receipt_long</span>${esc(r.title)}
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="closeDetail()">閉じる</button></h2>
+        <div class="table-scroll"><table class="kp-items"><tbody>
+          ${row("相手", esc(r.employee?.display_name || "—"))}
+          ${row("状態", `<span class="es-st ${esc(r.view)}">${esc(ST_LABEL[r.view] || r.view)}</span>`)}
+          ${row("送付", esc(dt(r.sent_at)))}
+          ${row("再送", r.resent_at ? esc(`${dt(r.resent_at)}（${r.resent_count}回）`) : "")}
+          ${row("本人が開いた", esc(dt(r.first_viewed_at)))}
+          ${row("署名", esc(dt(r.signed_at)))}
+          ${row("署名者", esc(r.signer_name || ""))}
+          ${row("メール", esc(r.signer_email || ""))}
+          ${row("IPアドレス", esc(r.signer_ip || ""))}
+          ${row("利用環境", `<span style="font-size:11.5px;">${esc(r.signer_ua || "")}</span>`)}
+          ${row("同意した文言", esc(r.agreed_text || ""))}
+          ${row("文書ハッシュ", `<span class="es-hash">${esc(r.pdf_sha256 || "")}</span>`)}
+          ${row("署名済ハッシュ", `<span class="es-hash">${esc(r.signed_pdf_sha256 || "")}</span>`)}
+        </tbody></table></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','original',this)">
+            <span class="material-symbols-outlined icon-inline">description</span>送った版のPDF
+          </button>
+          ${r.view === "signed" ? `
+            <button class="btn btn-primary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">
+              <span class="material-symbols-outlined icon-inline">verified</span>署名済みPDF
+            </button>` : ""}
+        </div>
+      </div>`;
+    el("r-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // インラインの onclick から呼ぶものは function 宣言にする。
+  // 上で定義した const の el(...) は window に載らないので、押しても何も起きない
+  function closeDetail() { el("r-detail").innerHTML = ""; }
+
+  async function openPdf(id, kind, btn) {
+    try {
+      const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(id, kind));
+      window.open(url, "_blank", "noopener");
+    } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
+  }
+
+  async function resend(id, btn) {
+    const r = requests.find((x) => x.id === id);
+    const due = prompt("期限を延ばす場合は日付を入れてください（YYYY-MM-DD）。\nそのままでよければ空のままOKを押してください。",
+      r?.due_on || "");
+    if (due === null) return;
+    try {
+      await KPLayout.busy(btn, "送信中…", () => API.patchSign({
+        id, action: "resend", dueOn: due.trim() || undefined,
+      }));
+      await loadRequests();
+    } catch (e) { alert(e.hint || e.detail || e.message || "再送できませんでした"); }
+  }
+
+  async function cancelReq(id) {
+    const r = requests.find((x) => x.id === id);
+    if (!confirm(`「${r ? r.title : ""}」の署名依頼を取り消します。\n本人の画面からも消えます。よろしいですか？`)) return;
+    try { await API.patchSign({ id, action: "cancel" }); await loadRequests(); }
+    catch (e) { alert(e.hint || e.detail || e.message || "取り消せませんでした"); }
+  }
+</script>
+
+</body>
+</html>

@@ -5,6 +5,11 @@
   "installCommand": null,
   "outputDirectory": ".",
   "trailingSlash": false,
+  "functions": {
+    "api/sign/*.js": {
+      "includeFiles": "assets/fonts/**"
+    }
+  },
   "redirects": [
     {
       "source": "/biz",
