@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911t">
-  <link rel="stylesheet" href="css/layout.css?v=20260911t">
+  <link rel="stylesheet" href="css/app.css?v=20260911u">
+  <link rel="stylesheet" href="css/layout.css?v=20260911u">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -176,9 +176,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911t"></script>
-<script src="js/layout.js?v=20260911t"></script>
-<script src="js/dropzone.js?v=20260911t"></script>
+<script src="js/api-client.js?v=20260911u"></script>
+<script src="js/layout.js?v=20260911u"></script>
+<script src="js/dropzone.js?v=20260911u"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -232,7 +232,6 @@
       row("氏名", k.name),
       row("メール", k.email),
       row("入社日", k.joinedOn),
-      row("雇用区分", k.employmentType),
       row("契約", k.contract),
       row("試用期間", k.probation),
       row("週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null),

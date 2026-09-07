@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911t">
-  <link rel="stylesheet" href="css/layout.css?v=20260911t">
+  <link rel="stylesheet" href="css/app.css?v=20260911u">
+  <link rel="stylesheet" href="css/layout.css?v=20260911u">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -43,7 +43,7 @@
     <h2><span class="material-symbols-outlined">badge</span>登録情報</h2>
     <div id="profile"><div class="empty">読み込み中…</div></div>
     <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
-      氏名・所属・雇用区分の変更は管理部が行います。誤りがあれば連絡してください。
+      氏名・所属・契約の内容の変更は管理部が行います。誤りがあれば連絡してください。
     </p>
   </div>
 
@@ -120,8 +120,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911t"></script>
-<script src="js/layout.js?v=20260911t"></script>
+<script src="js/api-client.js?v=20260911u"></script>
+<script src="js/layout.js?v=20260911u"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -139,7 +139,6 @@
       ["氏名", e?.display_name || "（社員名簿に未登録）"],
       ["部署", e?.department || "—"],
       ["役職", e?.position || "—"],
-      ["雇用区分", e?.employment_type || "—"],
       ["入社日", e?.joined_on ? new Date(e.joined_on).toLocaleDateString("ja-JP") : "—"],
       ["在籍状態", e ? (STATUS_JA[e.status] || e.status) : "—"],
       ["社内権限", (ctx.me?.gw?.roles || []).map((r) => ROLE_JA[r] || r).join("、") || "（なし）"],
@@ -177,7 +176,6 @@
   function renderConditions(k) {
     const rows = [
       ["入社日", k.joinedOn],
-      ["雇用区分", k.employmentType],
       ["契約", k.contract],
       ["試用期間", k.probation],
       ["週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null],

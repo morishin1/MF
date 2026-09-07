@@ -64,12 +64,26 @@ export default async function handler(req, res) {
       } catch { /* 添え物なので、取れなければ空のままにする */ }
     }
 
+    // 雇用区分は、人事・管理者以外には返さない。
+    //
+    // 名簿は社員同士で引けるようにしてある（RLS の gw_employees_peer_select）が、
+    // RLS は行しか絞れないので、列を落とすのはここの仕事。
+    // 画面から消すだけだと、開発者ツールを開けば見えてしまう。
+    //
+    // 自分の分も返さない。マイページに出さないと決めた以上、
+    // 送っておいて画面で隠すのは、隠したことにならない。
+    // 本人が自分の契約を確かめる先は、労働条件のカードと雇用契約書
+    const hideType = !canManageHr(ctx);
+
     return json(res, 200, {
-      employees: (data || []).map((e) => ({
-        ...e,
-        roles: byEmployee.get(e.id) || [],
-        accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
-      })),
+      employees: (data || []).map((e) => {
+        const { employment_type, ...rest } = e;
+        return {
+          ...(hideType ? rest : e),
+          roles: byEmployee.get(e.id) || [],
+          accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
+        };
+      }),
       canManage: canManageHr(ctx),
       canGrantRoles: canManageHr(ctx),
       systems: SYSTEMS,

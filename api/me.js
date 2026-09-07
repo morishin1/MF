@@ -57,7 +57,10 @@ async function loadGroupware(userId, tenantId) {
   // tenantId が決まっていないときは user_id だけで引く。
   let q = sb
     .from("gw_employees")
-    .select("id, tenant_id, display_name, email, department, position, employment_type, joined_on, status")
+    // 雇用区分は返さない。メンバーの画面には出さないと決めたので、
+    // 送っておいて画面で隠すのはやめる（開発者ツールで見えてしまう）。
+    // サーバ側で要るところは gwContext から直接引いている
+    .select("id, tenant_id, display_name, email, department, position, joined_on, status")
     .eq("user_id", userId);
   if (tenantId) q = q.eq("tenant_id", tenantId);
   const { data: employee, error } = await q.limit(1).maybeSingle();

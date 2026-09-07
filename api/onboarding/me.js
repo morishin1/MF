@@ -194,7 +194,6 @@ async function read(res, user, ctx) {
       name: ctx.employee.display_name,
       email: ctx.employee.email,
       joinedOn: ctx.employee.joined_on,
-      employmentType: ctx.employee.employment_type,
       role: c?.job_content || ctx.employee.initial_role,
       workScope: Array.isArray(c?.work_scope) ? c.work_scope : [],
       workStyle: c?.work_style || ctx.employee.work_style,
