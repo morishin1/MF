@@ -57,7 +57,9 @@
     { key: "schedule", href: "schedule.html", label: "スケジュール", icon: "calendar_month", ready: true },
     { key: "messages", href: "messages.html", label: "メッセージ",   icon: "forum",          ready: true },
     { key: "workflow", href: "workflow.html", label: "申請・承認",   icon: "approval",       ready: true },
-    { key: "info",     href: "notices.html",  label: "社内情報",     icon: "menu_book",      ready: true,
+    // 入口は社内文書。お知らせはホームに出ているので、ここを開く用は
+    // 「就業規則はどこ」「あの様式はどこ」を調べにきたとき
+    { key: "info",     href: "library.html",  label: "社内文書",     icon: "menu_book",      ready: true,
       // お知らせ・社内文書・社員名簿は、どれを開いていてもここが選ばれた状態にする
       match: ["info", "notices", "library", "directory"] },
     { key: "mypage",   href: "mypage.html",   label: "マイページ",   icon: "account_circle", ready: true },
@@ -507,8 +509,9 @@
      */
     infoTabs(active) {
       const tabs = [
-        { key: "notices",   href: "notices.html",   label: "お知らせ" },
+        // 社内文書を先頭に。お知らせはホームで読むものなので、ここでは控えに回す
         { key: "library",   href: "library.html",   label: "社内文書・様式" },
+        { key: "notices",   href: "notices.html",   label: "お知らせ" },
         { key: "directory", href: "directory.html", label: "社員名簿" },
       ];
       return `<div class="kp-subnav">${tabs.map((t) =>

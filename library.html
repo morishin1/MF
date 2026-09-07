@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911r">
-  <link rel="stylesheet" href="css/layout.css?v=20260911r">
+  <link rel="stylesheet" href="css/app.css?v=20260911s">
+  <link rel="stylesheet" href="css/layout.css?v=20260911s">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -24,10 +24,20 @@
 
 <div class="wrap">
   <h1 class="kp-greet">社内文書</h1>
-  <p class="kp-greet-sub">就業規則・マニュアル・申請様式などをここにまとめています。</p>
-
+  <p class="kp-greet-sub">就業規則・賃金規定・マニュアル・申請様式をここにまとめています。</p>
 
   <div id="info-tabs"></div>
+
+  <!-- 規程は「探す」ものではなく「そこにある」もの。上に固定で出す -->
+  <div id="rule-card" class="card hidden" style="border-left:4px solid var(--primary);">
+    <h2><span class="material-symbols-outlined">gavel</span>就業規則・賃金規定</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      正社員と契約社員で別の規程です。ご自分の雇用区分のものをお読みください。
+      分からないときは管理担当者にお尋ねください。
+    </p>
+    <div id="rules"></div>
+  </div>
+
   <div class="card">
     <div class="inline-controls" style="margin-bottom:6px;">
       <div style="min-width:200px;flex:1;">
@@ -39,8 +49,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911r"></script>
-<script src="js/layout.js?v=20260911r"></script>
+<script src="js/api-client.js?v=20260911s"></script>
+<script src="js/layout.js?v=20260911s"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -67,7 +77,29 @@
     }
   }
 
+  // 就業規則と賃金規定だけは、検索の外に固定で出す。
+  //
+  // この4つは「探す」ものではなく、入社したら一度は読む・困ったら開くもの。
+  // 他の文書に混ざって下のほうに並ぶと、あるのに読まれない。
+  // 題名で拾っているのは、規程かどうかを人が種類で付け間違えても
+  // ここに出したいため（付け間違いは必ず起きる）
+  const RULE_RE = /(就業規則|賃金規定|賃金規程|給与規定|給与規程)/;
+
+  function renderRules() {
+    const rules = documents.filter((d) => RULE_RE.test(d.title || ""));
+    el("rule-card").classList.toggle("hidden", !rules.length);
+    if (!rules.length) return;
+
+    // 契約社員向けを後ろに。多くの人は正社員なので、先に見えるほうを合わせる
+    const sorted = [...rules].sort((a, b) =>
+      Number(/契約社員|パート|アルバイト/.test(a.title)) - Number(/契約社員|パート|アルバイト/.test(b.title))
+      || (a.title || "").localeCompare(b.title || "", "ja"));
+
+    el("rules").innerHTML = `<div class="kp-menu">${sorted.map(row).join("")}</div>`;
+  }
+
   function render() {
+    renderRules();
     const q = el("q").value.trim().toLowerCase();
     const shown = documents.filter((d) =>
       !q || `${d.title} ${d.description || ""}`.toLowerCase().includes(q));
@@ -76,6 +108,11 @@
       el("list").innerHTML = `<div class="empty">${
         documents.length ? "見つかりませんでした。" : "まだ文書が登録されていません。"}</div>`;
       return;
+    }
+    if (!q && el("rule-card").classList.contains("hidden") === false) {
+      // 規程は上に固定で出しているので、下の一覧では繰り返さない
+      const ids = new Set(documents.filter((d) => RULE_RE.test(d.title || "")).map((d) => d.id));
+      for (let i = shown.length - 1; i >= 0; i--) if (ids.has(shown[i].id)) shown.splice(i, 1);
     }
 
     // 種類ごとにまとめる。数が増えても探しやすいように
