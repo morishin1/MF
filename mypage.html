@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911m">
-  <link rel="stylesheet" href="css/layout.css?v=20260911m">
+  <link rel="stylesheet" href="css/app.css?v=20260911n">
+  <link rel="stylesheet" href="css/layout.css?v=20260911n">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -19,6 +19,17 @@
       }
     } catch (e) { /* 読めなくても動く */ }
   </script>
+  <style>
+    /* 自分の書類。1行に「何の書類か」と「その場でできること」を並べる */
+    .cd-row { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;
+              padding:11px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
+    .cd-row:last-child { border-bottom:none; }
+    .cd-row .t { flex:1; min-width:200px; line-height:1.7; }
+    .cd-row .a { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .cd-ok { display:inline-flex; align-items:center; gap:7px; font-size:13px;
+             font-weight:600; cursor:pointer; }
+    .cd-ok input { width:auto; margin:0; }
+  </style>
 </head>
 <body>
 
@@ -45,7 +56,7 @@
     </p>
   </div>
 
-  <!-- 同意した書類。どの版にいつ同意したか。全文は同意した時点のもの -->
+  <!-- 自分の書類。読むのも、確認のチェックも、ここで完結する -->
   <div id="cd-card" class="card hidden">
     <h2><span class="material-symbols-outlined">verified_user</span>自分の書類</h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
@@ -90,8 +101,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911m"></script>
-<script src="js/layout.js?v=20260911m"></script>
+<script src="js/api-client.js?v=20260911n"></script>
+<script src="js/layout.js?v=20260911n"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -163,13 +174,21 @@
       </tbody></table></div>`;
   }
 
-  // 「誓約書 Ver.1.0　2026/09/06 同意済み」の形で並べる。
-  // 版が上がって再同意した書類は、両方の行が残る（消さない）
-  let consentDocs = [];
+  // 自分の書類。読む場所と、確認する場所を、ここ1つにする。
+  //
+  // これまでは未確認の書類に「確認する」ボタンを付けて、入社手続きの画面へ
+  // 飛ばしていた。入社手続きは新しく入る人のための画面で、
+  // すでに働いている人が押すと、身に覚えのないフォームに着く。
+  // 版が上がって再確認が要るときも同じ。
+  //
+  // 読むのも、チェックを入れるのも、この画面で完結させる。
+  let consentDocs = [];   // 同意の履歴（版ごと。消さない）
+  let consentNow = [];    // いまの版と、その全文
+
   function renderConsentDocs(ob) {
     consentDocs = ob.consentHistory || [];
-    const current = ob.consents || [];
-    if (!consentDocs.length && !current.length) return;
+    consentNow = ob.consents || [];
+    if (!consentDocs.length && !consentNow.length) return;
     el("cd-card").classList.remove("hidden");
 
     const fmt = (iso) => {
@@ -177,43 +196,101 @@
       return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
     };
 
+    // まだ確認していない書類。改定による再確認もここに入る
+    const todo = consentNow.filter((c) => !c.agreed || c.needsReconsent);
+
     el("cd").innerHTML = `
+      ${todo.length ? `
+        <div class="banner warn" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">draw</span>
+          <div>${todo.some((c) => c.needsReconsent)
+            ? "改定された書類があります。全文を読んで、チェックを入れてください。"
+            : "まだ確認していない書類があります。全文を読んで、チェックを入れてください。"}</div>
+        </div>
+        ${todo.map((c) => `
+          <div class="cd-row">
+            <div class="t">
+              <b>${esc(c.title)}</b>
+              <span class="muted" style="font-size:12px;margin-left:6px;">Ver.${esc(c.version)}</span>
+              ${c.needsReconsent
+                ? '<span class="kp-chip important" style="margin-left:8px;">改定</span>'
+                : '<span class="kp-chip draft" style="margin-left:8px;">未確認</span>'}
+              ${c.subtitle ? `<div class="muted" style="font-size:12px;margin-top:3px;">${esc(c.subtitle)}</div>` : ""}
+            </div>
+            <div class="a">
+              <button class="btn btn-secondary btn-sm" onclick="readNow('${esc(c.key)}')">全文を読む</button>
+              <label class="cd-ok">
+                <input type="checkbox" data-agree="${esc(c.key)}" onchange="syncAgree()">
+                <span>読みました。内容に同意します</span>
+              </label>
+            </div>
+          </div>`).join("")}
+        <div style="margin:12px 0 18px;">
+          <button class="btn btn-primary btn-sm" id="cd-btn" disabled onclick="saveConsents(this)">
+            <span class="material-symbols-outlined icon-inline">task_alt</span>チェックした書類を確定する
+          </button>
+          <span class="muted" id="cd-msg" style="font-size:12px;margin-left:10px;"></span>
+        </div>` : ""}
+
       ${consentDocs.map((c, i) => `
-        <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;">
-          <span class="material-symbols-outlined" style="font-size:18px;color:#2f855a;">check_circle</span>
-          <span style="flex:1;min-width:0;">
+        <div class="cd-row">
+          <div class="t">
+            <span class="material-symbols-outlined" style="font-size:18px;color:#2f855a;vertical-align:-4px;">check_circle</span>
             <b>${esc(c.title)}</b>
             <span class="muted" style="font-size:12px;margin-left:6px;">Ver.${esc(c.version)}</span>
             <span class="muted" style="font-size:12px;margin-left:10px;">${esc(fmt(c.agreedAt))} 同意済み</span>
-          </span>
-          <button class="btn btn-secondary btn-sm" onclick="showConsentDoc(${i})">全文</button>
-        </div>`).join("")}
-      ${current.filter((c) => !c.agreed).map((c) => `
-        <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;">
-          <span class="material-symbols-outlined" style="font-size:18px;color:#c3cad3;">radio_button_unchecked</span>
-          <span style="flex:1;min-width:0;">
-            <b>${esc(c.title)}</b>
-            <span class="muted" style="font-size:12px;margin-left:6px;">Ver.${esc(c.version)}</span>
-            <span style="font-size:12px;margin-left:10px;color:#9c4221;">
-              ${c.needsReconsent ? "改定されました。再確認が必要です" : "未確認"}</span>
-          </span>
-          <a class="btn btn-primary btn-sm" href="onboarding.html">確認する</a>
+          </div>
+          <div class="a">
+            <button class="btn btn-secondary btn-sm" onclick="showConsentDoc(${i})">全文</button>
+          </div>
         </div>`).join("")}`;
   }
 
+  // チェックが1つも入っていないうちは押せない
+  function syncAgree() {
+    const n = document.querySelectorAll("[data-agree]:checked").length;
+    const b = el("cd-btn");
+    if (!b) return;
+    b.disabled = n === 0;
+    el("cd-msg").textContent = n ? `${n} 件を確定します` : "";
+  }
+
+  // いまの版の全文。同意する前に読むもの
+  function readNow(key) {
+    const c = consentNow.find((x) => x.key === key);
+    if (c) openDoc({ title: c.title, version: c.version, body: c.body, note: "いまの版の全文です" });
+  }
+
+  async function saveConsents(btn) {
+    const keys = [...document.querySelectorAll("[data-agree]:checked")].map((i) => i.dataset.agree);
+    if (!keys.length) return;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.myOnboardingConsent(keys));
+      const ob = await API.myOnboarding();
+      renderConsentDocs(ob);
+    } catch (e) {
+      el("cd-msg").textContent = e.hint || e.detail || e.message || "記録できませんでした";
+    }
+  }
+
+  // 同意した時点の全文。あとから読み返せるように残してある
   function showConsentDoc(i) {
     const c = consentDocs[i];
-    if (!c) return;
+    if (c) openDoc({ title: c.title, version: c.version, body: c.body, note: "同意した時点の内容です" });
+  }
+
+  // 全文を出す枠。いまの版も、同意した時点のものも、同じ見え方にする
+  function openDoc({ title, version, body, note }) {
     const m = document.createElement("div");
     m.style.cssText = "position:fixed;inset:0;background:rgba(20,24,32,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;";
     m.innerHTML = `
       <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column;">
         <div style="padding:16px 20px 10px;border-bottom:1px solid var(--border);">
-          <b style="font-size:15px;">${esc(c.title)}</b>
-          <span class="muted" style="font-size:11px;margin-left:8px;">Ver.${esc(c.version)}</span>
-          <div class="muted" style="font-size:12px;margin-top:3px;">同意した時点の内容です</div>
+          <b style="font-size:15px;">${esc(title)}</b>
+          <span class="muted" style="font-size:11px;margin-left:8px;">Ver.${esc(version)}</span>
+          <div class="muted" style="font-size:12px;margin-top:3px;">${esc(note || "")}</div>
         </div>
-        <div style="padding:16px 20px;overflow:auto;font-size:13.5px;line-height:1.95;white-space:pre-wrap;">${esc(c.body || "")}</div>
+        <div style="padding:16px 20px;overflow:auto;font-size:13.5px;line-height:1.95;white-space:pre-wrap;">${esc(body || "")}</div>
         <div style="padding:12px 20px 16px;border-top:1px solid var(--border);text-align:right;">
           <button class="btn btn-secondary" onclick="this.closest('div[style*=fixed]').remove()">閉じる</button>
         </div>
