@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911q">
-  <link rel="stylesheet" href="css/layout.css?v=20260911q">
+  <link rel="stylesheet" href="css/app.css?v=20260911r">
+  <link rel="stylesheet" href="css/layout.css?v=20260911r">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -176,9 +176,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911q"></script>
-<script src="js/layout.js?v=20260911q"></script>
-<script src="js/dropzone.js?v=20260911q"></script>
+<script src="js/api-client.js?v=20260911r"></script>
+<script src="js/layout.js?v=20260911r"></script>
+<script src="js/dropzone.js?v=20260911r"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -250,13 +250,126 @@
     bools = {};
     for (const f of data.fields) if (f.type === "bool") bools[f.key] = pf[f.key] ?? null;
 
+    deps = Array.isArray(pf.dependents) ? pf.dependents.map((d) => ({ ...d })) : [];
+
     el("form").innerHTML = data.groups.map((g) => `
       <div class="ob-g">
         <h3>${esc(g)}</h3>
         <div class="ob-f">
-          ${data.fields.filter((f) => f.group === g).map((f) => field(f, pf)).join("")}
+          ${data.fields.filter((f) => f.group === g)
+            // 扶養家族の一覧は「扶養する家族がいますか」のすぐ下に出す。
+            // 補足欄より前でないと、書く順番が入れ替わる
+            .map((f) => field(f, pf) + (f.key === "has_dependents" ? depSlot() : ""))
+            .join("")}
         </div>
       </div>`).join("");
+    renderDeps();
+  }
+
+  // ---- 扶養家族 ---------------------------------------------------------------
+  //
+  // 前は「妻・エイト ハナコ・1995-04-01」と1行に書いてもらっていた。
+  // 子どもが2人いる人の生年月日を、あとから機械で拾えなかった。
+  // 社会保険の被扶養者届にも扶養控除等申告書にも、
+  // 氏名・続柄・生年月日は必ず要る。
+  //
+  // マイナンバーの欄は置かない。番号は扶養控除等申告書とマイナンバー確認書類の
+  // 写真で受け取り、見られる人の少ない場所（機微情報フォルダ）に置く
+  let deps = [];
+
+  function depSlot() {
+    const hidden = !bools.has_dependents;
+    return `
+      <div class="wide${hidden ? " hidden" : ""}" id="w-dependents">
+        <label>扶養する家族<span class="req">*</span></label>
+        <div id="dep-list"></div>
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="addDep()">
+          <span class="material-symbols-outlined icon-inline">person_add</span>家族を追加
+        </button>
+        <div class="note">
+          マイナンバーはここには書かないでください。扶養控除等申告書とマイナンバー確認書類でお預かりします。
+        </div>
+      </div>`;
+  }
+
+  function renderDeps() {
+    const box = el("dep-list");
+    if (!box) return;
+    if (!deps.length) {
+      box.innerHTML = `<div class="muted" style="font-size:12.5px;padding:6px 0;">
+        「家族を追加」を押して、1人ずつ入れてください。</div>`;
+      return;
+    }
+    box.innerHTML = deps.map((d, n) => `
+      <div style="border:1px solid var(--line,#e4e8ee);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <b style="font-size:12.5px;">${n + 1}人目</b>
+          <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="removeDep(${n})">外す</button>
+        </div>
+        <div class="ob-f">
+          ${(data.dependentFields || []).map((f) => depField(f, d, n)).join("")}
+        </div>
+      </div>`).join("");
+  }
+
+  function depField(f, d, n) {
+    const id = `d-${n}-${f.key}`;
+    const v = d[f.key];
+    const label = `<label>${esc(f.label)}${f.required ? '<span class="req">*</span>' : ""}</label>`;
+    const note = f.note ? `<div class="note">${esc(f.note)}</div>` : "";
+
+    let input;
+    if (f.type === "select") {
+      input = `<select id="${id}"><option value="">選んでください</option>
+        ${f.options.map((o) => `<option value="${esc(o)}"${v === o ? " selected" : ""}>${esc(o)}</option>`).join("")}
+      </select>`;
+    } else if (f.type === "bool") {
+      // 1人ぶんで7欄あるので、ここは押しボタンではなく選択にする。
+      // 画面が縦に伸びると、下の欄に気づかれない
+      input = `<select id="${id}">
+        <option value=""${v === true || v === false ? "" : " selected"}>選んでください</option>
+        <option value="true"${v === true ? " selected" : ""}>同居</option>
+        <option value="false"${v === false ? " selected" : ""}>別居</option>
+      </select>`;
+    } else {
+      input = `<input id="${id}" type="${f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}"
+               value="${esc(v ?? "")}" placeholder="${esc(f.placeholder || "")}">`;
+    }
+    return `<div class="${f.key === "note" ? "wide" : ""}">${label}${input}${note}</div>`;
+  }
+
+  // 行を足す・外す前に、いま画面に入っている値を拾っておく。
+  // 拾わずに描き直すと、書きかけが消える
+  function syncDeps() {
+    deps = deps.map((d, n) => {
+      const out = { ...d };
+      for (const f of data.dependentFields || []) {
+        const node = el(`d-${n}-${f.key}`);
+        if (!node) continue;
+        out[f.key] = f.type === "bool"
+          ? (node.value === "" ? null : node.value === "true")
+          : node.value;
+      }
+      return out;
+    });
+    return deps;
+  }
+
+  function addDep() {
+    syncDeps();
+    if (deps.length >= (data.maxDependents || 10)) {
+      alert(`ここに入れられるのは${data.maxDependents || 10}人までです。残りは補足に書いてください。`);
+      return;
+    }
+    deps.push({});
+    renderDeps();
+  }
+
+  function removeDep(n) {
+    syncDeps();
+    deps.splice(n, 1);
+    renderDeps();
   }
 
   function field(f, pf) {
@@ -296,6 +409,11 @@
     for (const f of data.fields) {
       if (f.showIf === key) el(`w-${f.key}`).classList.toggle("hidden", !bools[key]);
     }
+    // 扶養家族の一覧も同じ扱い。定義ではなく key で見ているのは、
+    // これが1つの欄ではなく行の集まりだから
+    if (key === "has_dependents") {
+      el("w-dependents")?.classList.toggle("hidden", !bools[key]);
+    }
   }
 
   function readForm() {
@@ -304,6 +422,8 @@
       if (f.type === "bool") { out[f.key] = bools[f.key]; continue; }
       out[f.key] = el(`f-${f.key}`)?.value ?? "";
     }
+    // 扶養家族。「いません」に変えたら送らない（サーバ側でも消える）
+    out.dependents = bools.has_dependents ? syncDeps() : [];
     return out;
   }
 

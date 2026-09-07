@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911q">
-  <link rel="stylesheet" href="css/layout.css?v=20260911q">
+  <link rel="stylesheet" href="css/app.css?v=20260911r">
+  <link rel="stylesheet" href="css/layout.css?v=20260911r">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -86,12 +86,18 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">checklist</span>進行中の手続き</h2>
+    <div id="upload-msg" class="muted" style="font-size:12.5px;margin-bottom:8px;"></div>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911q"></script>
-<script src="js/layout.js?v=20260911q"></script>
+<!-- 項目にファイルを付けるための口。行ごとに置くと数十個できるので、1つを使い回す -->
+<input id="pick" type="file" multiple style="display:none"
+       accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
+       onchange="onPicked(this)">
+
+<script src="js/api-client.js?v=20260911r"></script>
+<script src="js/layout.js?v=20260911r"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -388,6 +394,7 @@
             <tbody>${(p.items || []).map((i) => itemRow(p, i)).join("")}</tbody>
           </table>
         </div>
+        ${profileBlock(p)}
         <div id="brief-${esc(p.id)}" data-emp="${esc(p.employee?.id || "")}"></div>
         ${p.drive_folders ? `
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px;">
@@ -478,6 +485,11 @@
           ${esc(i.title)}${i.required ? "" : ' <span class="muted" style="font-size:11px;">任意</span>'}
           ${i.submitted_at ? `<span class="muted" style="font-size:11px;margin-left:6px;">
               ${esc(new Date(i.submitted_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }))} 提出</span>` : ""}
+          ${(i.files || []).length === 0 && (i.status === "submitted" || i.status === "done")
+            ? `<br><span class="muted" style="font-size:11px;">
+                 書類は付いていません（紙で受け取ったか、状態だけ変えたものです）。
+                 右の <span class="material-symbols-outlined" style="font-size:13px;vertical-align:-2px;">upload_file</span> から付けられます</span>`
+            : ""}
           ${(i.files || []).map((f) =>
             `<br><a href="#" style="font-size:11.5px;" onclick="openFile('${esc(f.id)}');return false;">
                <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;">attach_file</span>${esc(f.drive_name || f.filename)}</a>
@@ -496,12 +508,162 @@
           <input type="checkbox" style="width:auto;" ${i.share_with_advisor ? "checked" : ""}
                  onchange="setItemShare('${esc(i.id)}', this.checked)">
         </td>
-        <td style="text-align:right;">
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="icon-btn" title="ファイルを付ける" onclick="attach('${esc(i.id)}')">
+            <span class="material-symbols-outlined" style="font-size:18px;">upload_file</span>
+          </button>
           <button class="icon-btn" title="項目を削除" onclick="removeItem('${esc(i.id)}')">
             <span class="material-symbols-outlined" style="font-size:18px;">close</span>
           </button>
         </td>
       </tr>`;
+  }
+
+  // ---- 本人が出した届出 -------------------------------------------------------
+  //
+  // 住所・生年月日・連絡先・口座・扶養家族。
+  // 社会保険と雇用保険の資格取得届、給与の登録、年末調整の全部がここを見る。
+  // 出してもらったのに管理画面から読めないと、結局本人に聞き直すことになる。
+  //
+  // 既定では畳んでおく。開いた人だけが見る。
+  // 社労士（advisor.html）には返らない（gw_onboard_profiles の RLS）
+  const YESNO = (v) => (v === true ? "はい" : v === false ? "いいえ" : "—");
+  const val = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
+
+  function profileBlock(p) {
+    if (p.kind !== "onboarding") return "";
+    const f = p.profile;
+    if (!f) {
+      return `<p class="muted" style="font-size:12px;margin:10px 0 0;">
+                本人の届出はまだ出ていません。</p>`;
+    }
+
+    const row = (k, v) => `<tr><th style="text-align:left;white-space:nowrap;padding:3px 14px 3px 0;
+                                font-weight:500;color:var(--muted);">${k}</th>
+                             <td style="padding:3px 0;">${esc(val(v))}</td></tr>`;
+    const table = (rows) => `<table style="font-size:12.5px;border-collapse:collapse;">${rows}</table>`;
+
+    const yen = (n) => (n === null || n === undefined || n === "" ? "—"
+      : `${Number(n).toLocaleString("ja-JP")}円`);
+
+    return `
+      <details style="margin:12px 0 4px;">
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary-dark);">
+          本人が出した届出${f.status === "submitted" ? "" : "（記入中）"}
+        </summary>
+        <div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:10px;">
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">本人</div>
+            ${table(
+              row("氏名（カナ）", f.name_kana)
+              + row("生年月日", f.birth_date ? `${f.birth_date}（${age(f.birth_date)}歳）` : null)
+              + row("郵便番号", f.postal_code)
+              + row("住所", f.address)
+              + row("電話", f.phone))}
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">緊急連絡先</div>
+            ${table(row("お名前", f.emg_name) + row("続柄", f.emg_relation) + row("電話", f.emg_phone))}
+            <div style="font-size:12px;font-weight:600;margin:10px 0 4px;">通勤</div>
+            ${table(row("出発地", f.commute_from) + row("経路", f.commute_route)
+                  + row("1か月の定期代", yen(f.commute_cost)))}
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">給与の振込先</div>
+            ${table(row("銀行・支店", [f.bank_name, f.bank_branch].filter(Boolean).join(" ") || null)
+                  + row("種別・番号", [f.bank_type, f.bank_number].filter(Boolean).join(" ") || null)
+                  + row("名義", f.bank_holder))}
+            <div style="font-size:12px;font-weight:600;margin:10px 0 4px;">保険</div>
+            ${table(row("基礎年金番号", f.pension_number)
+                  + row("雇用保険番号", f.employment_ins_number))}
+          </div>
+        </div>
+        ${dependentsBlock(f)}
+        ${f.greeting ? `
+          <div style="margin-top:12px;">
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">本人からの一言</div>
+            <div style="font-size:12.5px;white-space:pre-wrap;">${esc(f.greeting)}</div>
+          </div>` : ""}
+      </details>`;
+  }
+
+  // 生年月日から今日時点の年齢。社会保険の年齢要件（40歳・65歳・75歳）の目安に使う
+  function age(birth) {
+    const b = new Date(birth + "T00:00:00");
+    if (Number.isNaN(b.getTime())) return "—";
+    const t = new Date();
+    let a = t.getFullYear() - b.getFullYear();
+    const m = t.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+    return a;
+  }
+
+  function dependentsBlock(f) {
+    const deps = Array.isArray(f.dependents) ? f.dependents : [];
+    if (!f.has_dependents && !deps.length) {
+      return `<div style="margin-top:12px;font-size:12.5px;">扶養する家族：<b>なし</b></div>`;
+    }
+    return `
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">
+          扶養する家族　${deps.length}人</div>
+        ${deps.length ? `
+          <div class="table-scroll">
+            <table class="kp-items" style="font-size:12.5px;">
+              <thead><tr>
+                <th>氏名</th><th>続柄</th><th>生年月日</th><th>年齢</th>
+                <th>同居</th><th>収入見込</th><th>備考</th>
+              </tr></thead>
+              <tbody>${deps.map((d) => `
+                <tr>
+                  <td>${esc(val(d.name))}${d.kana ? `<br><span class="muted" style="font-size:11px;">${esc(d.kana)}</span>` : ""}</td>
+                  <td>${esc(val(d.relation))}</td>
+                  <td>${esc(val(d.birth_date))}</td>
+                  <td>${d.birth_date ? esc(String(age(d.birth_date))) : "—"}</td>
+                  <td>${esc(YESNO(d.live_together))}</td>
+                  <td>${d.income === null || d.income === undefined || d.income === ""
+                        ? "—" : esc(Number(d.income).toLocaleString("ja-JP") + "円")}</td>
+                  <td>${esc(val(d.note))}</td>
+                </tr>`).join("")}</tbody>
+            </table>
+          </div>` : `<div class="muted" style="font-size:12px;">扶養ありと答えていますが、まだ1人も入っていません。</div>`}
+        ${f.dependents_note ? `<div class="muted" style="font-size:12px;margin-top:6px;">補足：${esc(f.dependents_note)}</div>` : ""}
+        <p class="muted" style="font-size:11.5px;margin:8px 0 0;">
+          マイナンバーはこの画面では扱いません。番号が要るときは、
+          扶養控除等申告書とマイナンバー確認書類（機微情報フォルダ）を見てください。
+        </p>
+      </div>`;
+  }
+
+  // ---- 項目にファイルを付ける -------------------------------------------------
+  //
+  // 「提出済みなのに中身が見えない」の受け皿。
+  // 紙で受け取った書類や、メールで送られてきたものを、ここから付けられる。
+  // 付けたものは Drive の決まったフォルダにも入る（書類ごとに置き場所が決まっている）。
+  // 雇用契約書は 02_労働条件・契約 に入り、本人と会社だけが見られる
+  let pendingItem = null;
+
+  function attach(itemId) {
+    pendingItem = itemId;
+    el("pick").value = "";        // 同じファイルをもう一度選べるように
+    el("pick").click();
+  }
+
+  async function onPicked(input) {
+    const files = [...(input.files || [])];
+    const itemId = pendingItem;
+    pendingItem = null;
+    if (!itemId || !files.length) return;
+
+    const box = el("upload-msg");
+    const fail = [];
+    for (let n = 0; n < files.length; n++) {
+      box.textContent = `${n + 1} / ${files.length} 件目を送っています…`;
+      try { await API.uploadProcedureFile(itemId, files[n]); }
+      catch (e) { fail.push(`${files[n].name}：${e.hint || e.detail || e.message}`); }
+    }
+    box.textContent = fail.length ? `送れなかったもの　${fail.join("　")}` : "";
+    await loadProcedures();
   }
 
   async function openFile(fileId) {

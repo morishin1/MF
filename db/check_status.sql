@@ -60,7 +60,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (41, '041',    '管理者を人事と同じ扱いにする',                        'function', 'gw_is_hr',               null),
   (42, '042',    '週のゴールと、その日の行動案',                        'table',    'gw_week_goals',          null),
   (43, '043',    'メンバーに渡すフォルダのリンク',                      'table',    'gw_drive_links',         null),
-  (44, '044',    'タスクと予定をメンバー同士でシェア',                  'column',   'gw_calendar_events',     'visibility')
+  (44, '044',    'タスクと予定をメンバー同士でシェア',                  'column',   'gw_calendar_events',     'visibility'),
+  (45, '045',    '扶養家族を書ける形にする',                            'column',   'gw_onboard_profiles',    'dependents')
 ),
 
 -- ファイルの適用状況

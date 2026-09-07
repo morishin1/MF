@@ -27,11 +27,12 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import {
-  FIELDS, GROUPS, normalizeProfile, missingFields, progressOf,
+  FIELDS, GROUPS, DEPENDENT_FIELDS, MAX_DEPENDENTS,
+  normalizeProfile, normalizeDependents, missingFields, progressOf,
 } from "../../lib/onboard-form.js";
 import { syncFormItems, ensureDocItems } from "../../lib/onboard-kit.js";
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
-import { DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
+import { DOCS, COMPANY_DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
 import { hrConfigured } from "../../lib/gdrive.js";
 import { onboardingDone } from "../../lib/stages.js";
 import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
@@ -92,7 +93,7 @@ async function read(res, user, ctx) {
     // 古い手続きを、いまの定義につなぎ直してから読む。
     // 鍵の無い項目はアップロード先が決まらず、ボタンを押しても何も起きない。
     // 同じ書類が2行あるのも、ここで片付く（lib/onboard-kit.js）
-    await ensureDocItems(sb, ctx.tenantId, proc.data.id).catch((e) =>
+    await ensureDocItems(sb, ctx.tenantId, proc.data.id, ctx.employee.employment_type).catch((e) =>
       console.error("[onboarding/me] チェックリストを直せませんでした:", e.message));
 
     const [{ data: its }, { data: fls }] = await Promise.all([
@@ -144,10 +145,30 @@ async function read(res, user, ctx) {
     };
   });
 
+  // 会社が用意して、本人に渡す書類（雇用契約書など）。
+  //
+  // 置き場所は 02_労働条件・契約 で、そこは本人にドライブ共有していない。
+  // 代わりに mf から本人だけが開ける（gw_procedure_files の RLS）。
+  // 本人はここへあげられない。あげるのは会社側
+  const companyDocuments = COMPANY_DOCS
+    .map((d) => ({ d, it: byKey.get(d.key) }))
+    .filter(({ it }) => it)                   // その人の手続きに無い契約書は出さない
+    .map(({ d, it }) => ({
+      key: d.key,
+      title: d.title,
+      status: it.status,
+      receivedAt: it.submitted_at || null,
+      files: files.filter((f) => f.item_id === it.id)
+        .map((f) => ({ id: f.id, filename: f.filename, driveName: f.drive_name, at: f.created_at })),
+    }));
+
   return json(res, 200, {
     // 画面の組み立てはサーバ側の定義から。2か所に同じものを書かない
     fields: FIELDS,
     groups: GROUPS,
+    dependentFields: DEPENDENT_FIELDS,
+    maxDependents: MAX_DEPENDENTS,
+    companyDocuments,
     // 同意してもらう書類。版・全文・同意の状態。
     // 全文をここで返すのは、3つとも短く、別に取りに行かせる理由が無いため
     consents: consentState(docs.data || [], consents.data || []),
@@ -285,6 +306,11 @@ async function saveProfile(res, user, ctx, body) {
   const sb = admin();
   const empId = ctx.employee.id;
   const values = normalizeProfile(body?.profile || {});
+  // 扶養家族は配列なので、他の欄とは別にそろえる。
+  // 「扶養する家族はいません」に変えたら、前に入れた家族は消す
+  values.dependents = values.has_dependents
+    ? normalizeDependents(body?.profile?.dependents)
+    : [];
 
   // 出すときだけ、必須の埋まりを見る。途中保存は何度でもできる
   if (body?.submit) {

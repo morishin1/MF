@@ -10,6 +10,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { defaultChecklist } from "../../lib/onboarding.js";
+import { FIELDS, GROUPS, DEPENDENT_FIELDS } from "../../lib/onboard-form.js";
 import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders, folderIdFromUrl, linkOf } from "../../lib/hr-drive.js";
 import { admin } from "../../lib/supabase.js";
 
@@ -70,12 +71,31 @@ export default async function handler(req, res) {
       byProc.get(it.procedure_id).push({ ...it, files: byItem.get(it.id) || [] });
     }
 
+    // 本人が出した届出（住所・生年月日・連絡先・口座・扶養家族）。
+    // 社労士には返らない。gw_onboard_profiles の RLS が
+    // 人事・管理者と本人しか通さないので、ここでは絞り込みを書かない
+    // （API の if を境界にしない。読めない人には 0 件で返ってくる）
+    const { data: profiles } = await sb
+      .from("gw_onboard_profiles")
+      .select("*")
+      .in("employee_id", list.map((p) => p.employee_id).filter(Boolean));
+    const byEmployee = new Map((profiles || []).map((p) => [p.employee_id, p]));
+
     return json(res, 200, {
       procedures: list.map((p) => {
         const its = byProc.get(p.id) || [];
         const done = its.filter((i) => i.status === "done" || i.status === "na").length;
-        return { ...p, items: its, progress: { done, total: its.length } };
+        return {
+          ...p,
+          items: its,
+          progress: { done, total: its.length },
+          profile: byEmployee.get(p.employee_id) || null,
+        };
       }),
+      // 画面の組み立てに使う定義。項目名を管理画面にも書き写さない
+      profileFields: FIELDS,
+      profileGroups: GROUPS,
+      dependentFields: DEPENDENT_FIELDS,
       canManage: canManageHr(ctx),
       isAdvisor: ctx.isAdvisor,
       me: ctx.employee,

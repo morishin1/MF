@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911q">
-  <link rel="stylesheet" href="css/layout.css?v=20260911q">
+  <link rel="stylesheet" href="css/app.css?v=20260911r">
+  <link rel="stylesheet" href="css/layout.css?v=20260911r">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -66,6 +66,15 @@
     <div id="dl"></div>
   </div>
 
+  <!-- 会社から受け取った書類（雇用契約書など）。本人と会社しか見られない -->
+  <div id="ct-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">contract</span>会社から受け取った書類</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      あなたと会社だけが見られます。ほかのメンバーには出ません。
+    </p>
+    <div id="ct"></div>
+  </div>
+
   <!-- 自分の書類。読むのも、確認のチェックも、ここで完結する -->
   <div id="cd-card" class="card hidden">
     <h2><span class="material-symbols-outlined">verified_user</span>自分の書類</h2>
@@ -111,8 +120,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911q"></script>
-<script src="js/layout.js?v=20260911q"></script>
+<script src="js/api-client.js?v=20260911r"></script>
+<script src="js/layout.js?v=20260911r"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -158,6 +167,7 @@
 
     if (ob) {
       renderConditions(ob.known || {});
+      renderCompanyDocs(ob);
       renderConsentDocs(ob);
       renderOnboard(ob);
     }
@@ -210,6 +220,47 @@
           </a>
         </div>
       </div>`).join("");
+  }
+
+  // 会社から受け取った書類。いまのところ雇用契約書（業務委託契約書）。
+  //
+  // 置き場所は Drive の 02_労働条件・契約 で、そこは本人にも共有していない。
+  // 共有すると、その人のフォルダを誰かに見せたときに契約書まで付いてくる。
+  // 代わりに、ここから本人だけが開ける。
+  // まだ入っていないときも行は出す。「もらっていない」ことが分かるように
+  function renderCompanyDocs(ob) {
+    const docs = ob.companyDocuments || [];
+    if (!docs.length) return;
+    el("ct-card").classList.remove("hidden");
+
+    el("ct").innerHTML = docs.map((d) => `
+      <div class="cd-row">
+        <div class="t">
+          <span class="material-symbols-outlined" style="font-size:18px;color:${
+            d.files.length ? "#2f855a" : "var(--muted)"};vertical-align:-4px;">
+            ${d.files.length ? "check_circle" : "hourglass_empty"}</span>
+          <b>${esc(d.title)}</b>
+          ${d.files.length
+            ? d.files.map((f) => `<div class="muted" style="font-size:12px;margin-top:3px;">${
+                esc(f.driveName || f.filename)}</div>`).join("")
+            : '<div class="muted" style="font-size:12px;margin-top:3px;">まだ届いていません。会社で用意しています。</div>'}
+        </div>
+        <div class="a">
+          ${d.files.map((f) => `
+            <button class="btn btn-secondary btn-sm" onclick="openMyFile('${esc(f.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">open_in_new</span>開く
+            </button>`).join("")}
+        </div>
+      </div>`).join("");
+  }
+
+  async function openMyFile(fileId, btn) {
+    try {
+      const { url } = await KPLayout.busy(btn, "開いています…", () => API.procedureFileUrl(fileId));
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "開けませんでした");
+    }
   }
 
   // 自分の書類。読む場所と、確認する場所を、ここ1つにする。

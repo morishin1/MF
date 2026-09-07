@@ -5710,3 +5710,38 @@ notify pgrst, 'reload schema';
 --
 --   select polname, polcmd from pg_policy
 --    where polrelid = 'public.gw_tasks'::regclass order by polname;
+
+
+-- =============================================================================
+-- 045_dependents.sql — 扶養家族を、書ける形にする
+-- =============================================================================
+
+alter table public.gw_onboard_profiles
+  add column if not exists dependents jsonb not null default '[]'::jsonb;
+
+comment on column public.gw_onboard_profiles.dependents is
+  '扶養家族。[{name, kana, relation, birth_date, live_together, income, note}] の配列。'
+  'マイナンバーは入れない（番号法。書類の画像で受け取り、機微情報フォルダに置く）';
+
+-- 配列以外が入らないようにしておく。
+-- jsonb は何でも入るので、オブジェクト1個や文字列が紛れると
+-- 画面側の map が落ちる
+do $$
+begin
+  alter table public.gw_onboard_profiles
+    add constraint gw_onboard_profiles_dependents_is_array
+    check (jsonb_typeof(dependents) = 'array');
+exception
+  when duplicate_object then null;
+end $$;
+
+
+notify pgrst, 'reload schema';
+
+-- 確認:
+--   select e.display_name,
+--          p.birth_date, p.address, p.phone,
+--          jsonb_array_length(p.dependents) as 扶養人数
+--     from public.gw_onboard_profiles p
+--     join public.gw_employees e on e.id = p.employee_id
+--    order by e.display_name;
