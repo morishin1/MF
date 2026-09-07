@@ -5610,3 +5610,103 @@ create policy gw_drive_links_read on public.gw_drive_links
 
 
 notify pgrst, 'reload schema';
+
+
+-- =============================================================================
+-- 044_share_tasks_events.sql — タスクと予定をメンバー同士でシェア
+-- =============================================================================
+
+-- 1. タスク: メンバー同士で頼めるようにする
+-- -----------------------------------------------------------------------------
+-- 009 は for all の1本だったので、insert / update / delete に分ける。
+-- 「作るのは社員なら誰でも」「直せるのは自分が作った分だけ」を書き分けるため。
+drop policy if exists gw_tasks_write on public.gw_tasks;
+
+drop policy if exists gw_tasks_insert on public.gw_tasks;
+create policy gw_tasks_insert on public.gw_tasks
+  for insert to authenticated
+  with check (
+    public.is_tenant_staff(tenant_id)
+    or public.gw_is_hr(tenant_id)
+    -- 名簿に載っている人が、自分の名前で作る場合だけ。
+    -- created_by を他人にして作れると、誰が頼んだのか分からなくなる
+    or (public.gw_employee_id(tenant_id) is not null and created_by = auth.uid())
+  );
+
+drop policy if exists gw_tasks_update on public.gw_tasks;
+create policy gw_tasks_update on public.gw_tasks
+  for update to authenticated
+  using (
+    public.is_tenant_staff(tenant_id)
+    or public.gw_is_hr(tenant_id)
+    or created_by = auth.uid()
+  )
+  with check (
+    public.is_tenant_staff(tenant_id)
+    or public.gw_is_hr(tenant_id)
+    or created_by = auth.uid()
+  );
+
+drop policy if exists gw_tasks_delete on public.gw_tasks;
+create policy gw_tasks_delete on public.gw_tasks
+  for delete to authenticated
+  using (
+    public.is_tenant_staff(tenant_id)
+    or public.gw_is_hr(tenant_id)
+    or created_by = auth.uid()
+  );
+
+-- 担当された側が状態だけ変えるのは、いままで通り
+-- api/tasks/index.js（service_role）が唯一の口。
+-- 担当者に update を許すと、担当者や期限まで書き換えられてしまう。
+
+create index if not exists idx_gw_tasks_creator
+  on public.gw_tasks(tenant_id, created_by, status);
+
+
+-- -----------------------------------------------------------------------------
+-- 2. 予定: 1件ごとの公開範囲
+-- -----------------------------------------------------------------------------
+alter table public.gw_calendar_events
+  add column if not exists visibility text not null default 'private';
+
+do $$
+begin
+  alter table public.gw_calendar_events
+    add constraint gw_calendar_events_visibility_chk
+    check (visibility in ('private', 'busy', 'shared'));
+exception
+  when duplicate_object then null;
+end $$;
+
+comment on column public.gw_calendar_events.visibility is
+  'private=自分だけ / busy=時間だけ見せる / shared=件名と場所まで見せる。'
+  'メモ（body）はどの段でも他人には返さない（api/schedule/team.js で外す）';
+
+-- 人の予定を見るときは「公開されている行」だけを日付で引く。
+-- 自分の予定を引く索引（owner）とは向きが違うので、別に置く
+create index if not exists idx_gw_calendar_events_shared
+  on public.gw_calendar_events(tenant_id, starts_at)
+  where visibility <> 'private';
+
+
+-- 参照だけを足す。017 の gw_calendar_events_own（for all）はそのまま。
+-- 直す・消すは、いままで通り本人だけ。
+drop policy if exists gw_calendar_events_peer_select on public.gw_calendar_events;
+create policy gw_calendar_events_peer_select on public.gw_calendar_events
+  for select to authenticated
+  using (
+    visibility <> 'private'
+    -- 名簿に載っている人だけ。顧問先ロールのユーザーには見せない
+    and public.gw_employee_id(tenant_id) is not null
+  );
+
+
+notify pgrst, 'reload schema';
+
+-- 確認:
+--   select visibility, count(*) from public.gw_calendar_events group by 1;
+--   -- 044 を当てた直後は private だけのはず
+--
+--   select polname, polcmd from pg_policy
+--    where polrelid = 'public.gw_tasks'::regclass order by polname;

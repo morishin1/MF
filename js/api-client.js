@@ -280,6 +280,10 @@
     api("/api/schedule", { method: "POST", body: { action, id } });
   const deleteEvent = (id) =>
     api(`/api/schedule?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  // 同僚の予定。本人が「見せる」と選んだ分だけが返る。
+  // 「時間だけ」の予定には title が入っていない（サーバで落としてある）
+  const teamSchedule = (from, to) =>
+    api(`/api/schedule/team?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
   // 自分の Google カレンダーとの連携。トークンは画面には返ってこない
   const googleLink = () => api("/api/google/connect");
@@ -781,7 +785,8 @@
     listAssets, createAsset, updateAsset, deleteAsset,
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
-    schedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle, googleLink, googleUnlink,
+    schedule, teamSchedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle,
+    googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,

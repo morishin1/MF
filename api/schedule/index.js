@@ -11,8 +11,11 @@
 // 1画面ぶんを1回の呼び出しで返しているのは、週を送るたびに3本叩くと
 // 表示が3段階でガタつくため。取得元が増えてもここで吸収する。
 //
-// 予定の中身は本人以外に見せない。RLS（017）が本人以外の行を返さないので、
-// この API に「誰の分か」を指定する口は用意していない。
+// この API が返すのは、いつでも「自分の予定」だけ。
+// 誰の分かを指定する口は用意していない。
+// 人の予定を見るのは api/schedule/team.js が別に受け持つ。
+// あちらは visibility が private でない行だけを、しかも中身を削って返す。
+// 同じ入口にすると、うっかり全項目を返してしまう余地が残る（044）。
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
@@ -22,9 +25,11 @@ import { fetchExternalEvents, pushEvent, unpushEvent, linkStatus } from "../../l
 
 const FIELDS =
   "id, title, body, location, category, all_day, starts_at, ends_at, created_at, " +
-  "gcal_event_id, gcal_synced_at";
+  "visibility, gcal_event_id, gcal_synced_at";
 
 const CATEGORIES = ["work", "meeting", "visit", "private", "other"];
+// private=自分だけ（既定） / busy=時間だけ / shared=件名と場所まで
+const VISIBILITIES = ["private", "busy", "shared"];
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -226,6 +231,13 @@ function normalize(body, { partial = false } = {}) {
   if (has("category")) {
     if (!CATEGORIES.includes(body.category)) return { error: "invalid_category", detail: CATEGORIES.join(", ") };
     v.category = body.category;
+  }
+
+  if (has("visibility")) {
+    if (!VISIBILITIES.includes(body.visibility)) {
+      return { error: "invalid_visibility", detail: VISIBILITIES.join(", ") };
+    }
+    v.visibility = body.visibility;
   }
 
   if (!partial || has("startsAt") || has("endsAt")) {

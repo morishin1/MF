@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911p">
-  <link rel="stylesheet" href="css/layout.css?v=20260911p">
+  <link rel="stylesheet" href="css/app.css?v=20260911q">
+  <link rel="stylesheet" href="css/layout.css?v=20260911q">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -55,18 +55,72 @@
     </div>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
+
+  <!-- 自分が人に頼んだ分。相手の手番なので、上の一覧とは分けて置く -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">forward_to_inbox</span>自分が頼んだこと
+      <span id="req-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      相手の「やること」に出ます。終わると、ここの表示も変わります。
+    </p>
+
+    <div id="ask-form" class="hidden" style="border:1px solid var(--line,#e4e8ee);border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div class="inline-controls" style="margin-bottom:10px;">
+        <div style="min-width:180px;flex:1;">
+          <label>誰に</label>
+          <select id="a-who"><option value="">読み込み中…</option></select>
+        </div>
+        <div style="max-width:160px;">
+          <label>期限（任意）</label>
+          <input id="a-due" type="date">
+        </div>
+        <div style="max-width:140px;">
+          <label>重さ</label>
+          <select id="a-priority">
+            <option value="normal">ふつう</option>
+            <option value="high">急ぎ</option>
+            <option value="low">あとで</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label>お願いすること</label>
+        <input id="a-title" type="text" maxlength="200" placeholder="例: A社の見積を今週中に出す">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label>補足（任意）</label>
+        <textarea id="a-body" rows="2" placeholder="どこまでやれば終わりか、参考になる資料など"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button id="a-save" class="btn btn-primary btn-sm" onclick="sendAsk(this)">
+          <span class="material-symbols-outlined icon-inline">send</span>頼む
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="closeAsk()">やめる</button>
+      </div>
+      <div id="a-msg" class="err-text"></div>
+    </div>
+
+    <button id="ask-open" class="btn btn-secondary btn-sm" onclick="openAsk()">
+      <span class="material-symbols-outlined icon-inline">add</span>人に頼む
+    </button>
+
+    <div id="req-list" style="margin-top:12px;"></div>
+  </div>
 </div>
 
-<script src="js/api-client.js?v=20260911p"></script>
-<script src="js/layout.js?v=20260911p"></script>
+<script src="js/api-client.js?v=20260911q"></script>
+<script src="js/layout.js?v=20260911q"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
   const today = () => new Date().toISOString().slice(0, 10);
 
   let tasks = [];
+  let requested = [];          // 自分が人に頼んだ分
   let extras = { actions: [], onboarding: [] };
   let filter = "open";
+  let me = null;
+  let peers = null;            // 名簿。頼む相手を選ぶときに一度だけ引く
 
   KPLayout.init({ active: "tasks", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) load(ctx); });
@@ -78,12 +132,15 @@
            <div>社員名簿にまだ登録されていないため、タスクを表示できません。管理者に登録を依頼してください。</div></div>`;
       return;
     }
+    me = ctx.me.gw.employee;
     try {
       const res = await API.listTasks("mine");
       tasks = res.tasks || [];
+      requested = res.requested || [];
       extras = res.extras || { actions: [], onboarding: [] };
       render();
       renderExtras();
+      renderRequested();
     } catch (e) {
       el("list").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -131,6 +188,7 @@
             ${done ? "check_circle" : "radio_button_unchecked"}</span>
           <span class="t">
             ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${esc(t.title)}
+            ${t.requester ? `<small>${esc(t.requester)}さんから</small>` : ""}
             ${t.body ? `<small>${esc(t.body)}</small>` : ""}
             ${due ? `<small${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>期限 ${esc(due)}${over ? "（超過）" : ""}</small>` : ""}
             ${t.category ? `<small>${esc(t.category)}</small>` : ""}
@@ -179,6 +237,112 @@
           日報を出すときに「やった」を選ぶと閉じます。
         </p>`;
     }
+  }
+
+  // ---- 自分が頼んだこと -------------------------------------------------------
+  function renderRequested() {
+    const open = requested.filter((t) => t.status === "todo" || t.status === "doing");
+    el("req-tag").textContent = open.length ? `${open.length} 件が相手待ち` : "";
+    el("req-tag").className = open.length ? "kp-chip draft" : "kp-chip";
+
+    if (!requested.length) {
+      el("req-list").innerHTML =
+        `<div class="empty">まだありません。「人に頼む」から、誰かにお願いできます。</div>`;
+      return;
+    }
+    // 相手待ちを先に、終わったものは後ろへ
+    const sorted = [...requested].sort((a, b) =>
+      Number(a.status === "done") - Number(b.status === "done"));
+
+    el("req-list").innerHTML = sorted.map((t) => {
+      const done = t.status === "done";
+      const over = t.due_on && !done && t.status !== "cancelled" && t.due_on < today();
+      const due = t.due_on
+        ? new Date(t.due_on).toLocaleDateString("ja-JP", { month: "long", day: "numeric" })
+        : null;
+      return `
+        <div class="kp-todo${done ? " done" : ""}">
+          <span class="material-symbols-outlined" style="font-size:20px;color:${done ? "var(--primary)" : "#c3cad3"};">
+            ${done ? "check_circle" : "hourglass_top"}</span>
+          <span class="t">
+            ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${esc(t.title)}
+            <small>${esc(t.assignee?.display_name || "担当なし")}${done ? "／終わりました" : "／お願い中"}</small>
+            ${due ? `<small${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>期限 ${esc(due)}${over ? "（超過）" : ""}</small>` : ""}
+          </span>
+          <button class="btn btn-secondary btn-sm" onclick="cancelAsk('${esc(t.id)}')">
+            ${done ? "消す" : "取り消す"}</button>
+        </div>`;
+    }).join("");
+  }
+
+  function openAsk() {
+    el("ask-form").classList.remove("hidden");
+    el("ask-open").classList.add("hidden");
+    el("a-msg").textContent = "";
+    el("a-title").value = "";
+    el("a-body").value = "";
+    el("a-due").value = "";
+    el("a-priority").value = "normal";
+    loadPeers();
+  }
+
+  function closeAsk() {
+    el("ask-form").classList.add("hidden");
+    el("ask-open").classList.remove("hidden");
+  }
+
+  // 名簿は開いたときに一度だけ。頼む相手を選ぶためだけに毎回引かない
+  async function loadPeers() {
+    if (peers) return;
+    try {
+      const res = await API.listEmployees();
+      peers = (res.employees || res || [])
+        .filter((e) => e.id !== me?.id && e.status !== "left")
+        .sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "", "ja"));
+      el("a-who").innerHTML = peers.length
+        ? `<option value="">選んでください</option>` + peers.map((e) =>
+            `<option value="${esc(e.id)}">${esc(e.display_name)}${e.department ? `（${esc(e.department)}）` : ""}</option>`).join("")
+        : `<option value="">頼める相手がいません</option>`;
+    } catch (e) {
+      peers = null;
+      el("a-who").innerHTML = `<option value="">名簿を読めませんでした</option>`;
+      el("a-msg").textContent = e.detail || e.message || "名簿を読めませんでした";
+    }
+  }
+
+  async function sendAsk(btn) {
+    const msg = el("a-msg");
+    msg.textContent = "";
+    const assigneeId = el("a-who").value;
+    const title = el("a-title").value.trim();
+    if (!assigneeId) { msg.textContent = "誰に頼むかを選んでください"; return; }
+    if (!title) { msg.textContent = "お願いすることを書いてください"; return; }
+
+    try {
+      await KPLayout.busy(btn, "送信中…", () => API.createTask({
+        title,
+        body: el("a-body").value.trim() || null,
+        assigneeId,
+        dueOn: el("a-due").value || null,
+        priority: el("a-priority").value,
+      }));
+      closeAsk();
+      const res = await API.listTasks("mine");
+      requested = res.requested || [];
+      renderRequested();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "送れませんでした";
+    }
+  }
+
+  async function cancelAsk(id) {
+    const t = requested.find((x) => x.id === id);
+    if (!confirm(`「${t ? t.title : ""}」を取り消します。\n相手の画面からも消えます。よろしいですか？`)) return;
+    try {
+      await API.deleteTask(id);
+      requested = requested.filter((x) => x.id !== id);
+      renderRequested();
+    } catch (e) { alert(e.hint || e.detail || e.message || "取り消せませんでした"); }
   }
 
   async function setStatus(id, status) {
