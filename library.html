@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911s">
-  <link rel="stylesheet" href="css/layout.css?v=20260911s">
+  <link rel="stylesheet" href="css/app.css?v=20260911t">
+  <link rel="stylesheet" href="css/layout.css?v=20260911t">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -19,6 +19,35 @@
       }
     } catch (e) { /* 読めなくても動く */ }
   </script>
+  <style>
+    /* 文書はカードで並べる。
+       一覧の行だと、題名の文字列だけが縦に積み上がって、
+       どれが規程でどれが様式なのか、開くまで分からない。
+       種類のアイコンを大きく出すと、探す前に見分けがつく */
+    .doc-grid { display:grid; gap:12px;
+      grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); }
+    .doc {
+      display:flex; flex-direction:column; gap:8px; padding:16px 14px;
+      border:1px solid var(--line, #e4e8ee); border-radius:12px;
+      background:#fff; text-decoration:none; color:inherit;
+      transition:border-color .12s, box-shadow .12s, transform .12s;
+    }
+    .doc:hover { border-color:var(--primary); box-shadow:0 3px 12px rgba(0,0,0,.07); transform:translateY(-1px); }
+    .doc .ic {
+      width:44px; height:44px; border-radius:10px;
+      display:flex; align-items:center; justify-content:center;
+      background:#f2f5f9; color:#5b6673;
+    }
+    .doc .ic .material-symbols-outlined { font-size:26px; }
+    .doc.pdf   .ic { background:#fdecea; color:#c5372c; }
+    .doc.word  .ic { background:#e8f0fb; color:#2a5db0; }
+    .doc.excel .ic { background:#e7f4ec; color:#1e7d43; }
+    .doc.image .ic { background:#f3edfb; color:#6b3fa0; }
+    .doc.link  .ic { background:#eef2f6; color:#48607a; }
+    .doc .ttl { font-weight:600; font-size:13.5px; line-height:1.55; }
+    .doc .mt  { font-size:11.5px; color:var(--muted, #77828f); line-height:1.7; }
+    .doc .kind { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:#8b95a1; }
+  </style>
 </head>
 <body>
 
@@ -49,15 +78,14 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911s"></script>
-<script src="js/layout.js?v=20260911s"></script>
+<script src="js/api-client.js?v=20260911t"></script>
+<script src="js/layout.js?v=20260911t"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   const CATEGORY_LABEL = { rule: "社内規定", manual: "マニュアル", form: "様式・テンプレート", other: "その他" };
   const CATEGORY_ORDER = ["rule", "manual", "form", "other"];
-  const CATEGORY_ICON = { rule: "gavel", manual: "menu_book", form: "description", other: "folder" };
 
   let documents = [];
 
@@ -95,7 +123,7 @@
       Number(/契約社員|パート|アルバイト/.test(a.title)) - Number(/契約社員|パート|アルバイト/.test(b.title))
       || (a.title || "").localeCompare(b.title || "", "ja"));
 
-    el("rules").innerHTML = `<div class="kp-menu">${sorted.map(row).join("")}</div>`;
+    el("rules").innerHTML = `<div class="doc-grid">${sorted.map(card).join("")}</div>`;
   }
 
   function render() {
@@ -123,32 +151,43 @@
         <p class="muted" style="font-size:12.5px;font-weight:700;margin:18px 0 8px;">
           ${esc(CATEGORY_LABEL[c])}
         </p>
-        <div class="kp-menu">${rows.map(row).join("")}</div>`;
+        <div class="doc-grid">${rows.map(card).join("")}</div>`;
     }).join("");
   }
 
-  function row(d) {
-    const size = d.size_bytes ? `${Math.max(1, Math.round(d.size_bytes / 1024))} KB` : "";
-    const meta = [d.description, d.link_url ? "外部リンク" : size].filter(Boolean).join("　");
-    // 外部リンクはそのまま開く。バケットのファイルは署名URLを取ってから開く
-    const open = d.link_url
-      ? `href="${esc(d.link_url)}" target="_blank" rel="noopener"`
-      : `href="#" onclick="openFile('${esc(d.file_path)}');return false;"`;
-    return `
-      <a ${open}>
-        <span class="ico"><span class="material-symbols-outlined">${esc(CATEGORY_ICON[d.category] || "folder")}</span></span>
-        <span><b>${esc(d.title)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}</span>
-        <span class="go material-symbols-outlined">${d.link_url ? "open_in_new" : "chevron_right"}</span>
-      </a>`;
+  // ---- カード -----------------------------------------------------------------
+  //
+  // 何のファイルかは、種類（社内規定/マニュアル/様式）ではなく
+  // 中身の形式で決める。PDF は PDF のアイコン。
+  // 「開く前に、開いたら何が出るか分かる」ようにするため
+  function fileKind(d) {
+    if (d.link_url) return { cls: "link", icon: "link", label: "リンク" };
+    const name = `${d.file_name || ""} ${d.mime_type || ""}`.toLowerCase();
+    if (/pdf/.test(name)) return { cls: "pdf", icon: "picture_as_pdf", label: "PDF" };
+    if (/(\.docx?|msword|wordprocessingml)/.test(name)) return { cls: "word", icon: "description", label: "WORD" };
+    if (/(\.xlsx?|\.csv|ms-excel|spreadsheetml)/.test(name)) return { cls: "excel", icon: "table", label: "EXCEL" };
+    if (/(\.png|\.jpe?g|\.webp|\.heic|image\/)/.test(name)) return { cls: "image", icon: "image", label: "画像" };
+    return { cls: "", icon: "draft", label: "ファイル" };
   }
 
-  async function openFile(path) {
-    try {
-      const { url } = await API.libraryFileUrl(path);
-      window.open(url, "_blank", "noopener");
-    } catch (e) {
-      alert(e.detail || e.message || "開けませんでした");
-    }
+  const sizeOf = (n) => (!n ? "" : n >= 1024 * 1024
+    ? `${(n / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+  function card(d) {
+    const k = fileKind(d);
+    // 外部リンクはそのまま開く。中に置いたファイルは表示用のページで開く。
+    // 署名URLを直接踏ませないのは、URLが10分で切れるため。
+    // 期限切れのURLをブックマークされると、次に開いたときに何も出ない
+    const href = d.link_url ? esc(d.link_url) : `doc.html?id=${encodeURIComponent(d.id)}`;
+    const meta = [d.description, sizeOf(d.size_bytes)].filter(Boolean).join("　");
+    return `
+      <a class="doc ${k.cls}" href="${href}" target="_blank" rel="noopener">
+        <span class="ic"><span class="material-symbols-outlined">${k.icon}</span></span>
+        <span class="kind">${esc(k.label)}</span>
+        <span class="ttl">${esc(d.title)}</span>
+        ${meta ? `<span class="mt">${esc(meta)}</span>` : ""}
+      </a>`;
   }
 </script>
 
