@@ -58,7 +58,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (39, '039',    '電子同意（版付き）／提出書類の Drive 自動整理',        'table',    'gw_consent_docs',        null),
   (40, '040',    '1日3回の声かけ（デスクトップ通知）',                  'table',    'gw_push_subs',           null),
   (41, '041',    '管理者を人事と同じ扱いにする',                        'function', 'gw_is_hr',               null),
-  (42, '042',    '週のゴールと、その日の行動案',                        'table',    'gw_week_goals',          null)
+  (42, '042',    '週のゴールと、その日の行動案',                        'table',    'gw_week_goals',          null),
+  (43, '043',    'メンバーに渡すフォルダのリンク',                      'table',    'gw_drive_links',         null)
 ),
 
 -- ファイルの適用状況

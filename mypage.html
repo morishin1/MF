@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911n">
-  <link rel="stylesheet" href="css/layout.css?v=20260911n">
+  <link rel="stylesheet" href="css/app.css?v=20260911p">
+  <link rel="stylesheet" href="css/layout.css?v=20260911p">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -54,6 +54,16 @@
     <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
       内容の変更は会社と本人の合意で行います。違いがあれば管理担当者にお知らせください。
     </p>
+  </div>
+
+  <!-- 共有フォルダ。管理者が貼ったGoogleドライブのリンク -->
+  <div id="dl-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">folder_shared</span>共有フォルダ</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      仕事で使うフォルダです。開けないときは管理者にお知らせください
+      （ドライブ側の共有が要ります）。
+    </p>
+    <div id="dl"></div>
   </div>
 
   <!-- 自分の書類。読むのも、確認のチェックも、ここで完結する -->
@@ -101,8 +111,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911n"></script>
-<script src="js/layout.js?v=20260911n"></script>
+<script src="js/api-client.js?v=20260911p"></script>
+<script src="js/layout.js?v=20260911p"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -138,10 +148,13 @@
   // 入社手続きが終わったあとも、出した内容と確認したことはここで読める。
   // 「やること」からは消えるので、あとから見返す場所が必要になる
   async function loadMine() {
-    const [ob, plan] = await Promise.all([
+    const [ob, plan, dl] = await Promise.all([
       API.myOnboarding().catch(() => null),
       API.myGrowthPlan().catch(() => null),
+      API.driveLinks().catch(() => null),
     ]);
+
+    renderDriveLinks(dl);
 
     if (ob) {
       renderConditions(ob.known || {});
@@ -172,6 +185,31 @@
         ${rows.map(([a, b]) => `
           <tr><td style="width:130px;color:var(--muted);">${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}
       </tbody></table></div>`;
+  }
+
+  // 共有フォルダ。管理者が貼ったリンクを開くだけ。
+  //
+  // mf に貼っても権限は増えない。開けるかどうかはドライブ側の共有で決まる。
+  // 開けなかったときに mf を疑わせないよう、その旨をカードに書いてある
+  function renderDriveLinks(dl) {
+    const links = dl?.links || [];
+    if (!links.length) return;
+    el("dl-card").classList.remove("hidden");
+
+    el("dl").innerHTML = links.map((l) => `
+      <div class="cd-row">
+        <div class="t">
+          <span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);vertical-align:-4px;">folder</span>
+          <b>${esc(l.label)}</b>
+          ${l.forAll ? '<span class="kp-chip" style="margin-left:8px;">全員</span>' : ""}
+          ${l.note ? `<div class="muted" style="font-size:12px;margin-top:3px;">${esc(l.note)}</div>` : ""}
+        </div>
+        <div class="a">
+          <a class="btn btn-secondary btn-sm" href="${esc(l.url)}" target="_blank" rel="noopener">
+            <span class="material-symbols-outlined icon-inline">open_in_new</span>開く
+          </a>
+        </div>
+      </div>`).join("");
   }
 
   // 自分の書類。読む場所と、確認する場所を、ここ1つにする。

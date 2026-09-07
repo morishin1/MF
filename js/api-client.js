@@ -652,6 +652,15 @@
     return out;
   }
 
+  // ---- 共有フォルダ（Googleドライブのリンク） ----
+  // 管理者がURLを貼り、本人がマイページから開く。
+  // ここに貼っても権限は増えない。共有はドライブ側で行う
+  const driveLinks = (all) => api(`/api/drive-links${all ? "?all=1" : ""}`);
+  const addDriveLink = (link) => api("/api/drive-links", { method: "POST", body: link });
+  const updateDriveLink = (link) => api("/api/drive-links", { method: "PATCH", body: link });
+  const removeDriveLink = (id) =>
+    api(`/api/drive-links?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   // ---- 週のゴールと、その日の行動案 ----
   // 管理者が週のゴールを決め、AIが日ごとの行動に割る。
   // メンバーは案を見て「今日を始める」を押すだけ
@@ -760,6 +769,7 @@
     mfStatus, mfConnectUrl, trialBalance, trialBalanceAdvice,
     driveStatus, driveSync, hrDriveCheck,
     updateEmployeeAccount,
+    driveLinks, addDriveLink, updateDriveLink, removeDriveLink,
     weekGoals, draftWeekGoal, saveWeekGoal, splitWeekGoal,
     dayPlan, startDay, rebuildNextPlan,
     pushConfig, pushSubscribe, pushUnsubscribe, pushRemoveDevice, pushPrefs, pushTest,
