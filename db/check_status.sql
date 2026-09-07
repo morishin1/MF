@@ -63,7 +63,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (44, '044',    'タスクと予定をメンバー同士でシェア',                  'column',   'gw_calendar_events',     'visibility'),
   (45, '045',    '扶養家族を書ける形にする',                            'column',   'gw_onboard_profiles',    'dependents'),
   (46, '046',    '契約・電子署名',                                      'table',    'gw_sign_requests',       null),
-  (47, '047',    '日報を1日のリズムにそろえる（デキタ・改善）',          'column',   'tc_nippo',               'wins')
+  (47, '047',    '日報を1日のリズムにそろえる（デキタ・改善）',          'column',   'tc_nippo',               'wins'),
+  (48, '048',    'タイムカード（打刻・修正申請・月締め）',              'table',    'gw_time_entries',        null)
 ),
 
 -- ファイルの適用状況

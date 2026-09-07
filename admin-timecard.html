@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>タイムカード - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260911y">
+  <link rel="stylesheet" href="css/layout.css?v=20260911y">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .tk-now { display:flex; gap:8px; flex-wrap:wrap; }
+    .tk-who { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600;
+              padding:5px 12px; border-radius:999px; background:#eaf5ec; color:#256b36; }
+    .tk-who.brk { background:#f4f0e3; color:#8a6d1f; }
+
+    .tk-person { border:1px solid var(--border); border-radius:10px; margin-bottom:10px; }
+    .tk-head { display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+               padding:12px 15px; cursor:pointer; }
+    .tk-head:hover { background:var(--soft); }
+    .tk-head .nm { font-weight:700; font-size:14px; color:var(--primary-dark); }
+    .tk-head .dp { font-size:11.5px; color:var(--muted); }
+    .tk-head .tot { margin-left:auto; font-size:12.5px; color:var(--muted);
+                    font-variant-numeric:tabular-nums; }
+    .tk-head .tot b { font-size:14px; color:var(--primary-dark); }
+    .tk-body { border-top:1px solid var(--border); padding:4px 15px 12px; }
+
+    .tk-mark { font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:4px;
+               background:#fef5e7; color:#975a16; margin-left:5px; }
+    .tk-day td { font-variant-numeric:tabular-nums; }
+    .tk-day.sat { background:#f7f9fc; }
+    .tk-day.sun { background:#fdf8f8; }
+
+    .tk-fix { border:1px solid #f0c674; background:#fffdf7; border-radius:10px;
+              padding:13px 15px; margin-bottom:10px; }
+    .tk-fix .w { font-size:12.5px; line-height:1.9; }
+    .tk-fix .w b { color:var(--primary-dark); }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">タイムカード</h1>
+  <p class="kp-greet-sub">
+    全員の打刻を見て、直して、月を締めます。締めたあとは動かせません。
+  </p>
+
+  <!-- いま出勤している人 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">group</span>いま出勤中
+      <span id="w-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div id="working" class="tk-now"><span class="muted">読み込み中…</span></div>
+  </div>
+
+  <!-- 承認待ちの修正 -->
+  <div id="fix-card" class="card hidden" style="border-left:4px solid #d69e2e;">
+    <h2><span class="material-symbols-outlined">pending_actions</span>打刻の修正
+      <span id="f-tag" class="kp-chip important" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      本人からの申請です。承認すると記録が変わり、直した理由が行に残ります。
+    </p>
+    <div id="fixes"></div>
+  </div>
+
+  <!-- 月 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">calendar_month</span><span id="m-title">今月</span>
+      <input id="m-month" type="month" style="width:auto;margin:0 0 0 auto;" onchange="load()">
+    </h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+      <button class="btn btn-secondary btn-sm" onclick="downloadCsv(this)">
+        <span class="material-symbols-outlined icon-inline">download</span>CSV（給与計算用）
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="setLock(true, this)">
+        <span class="material-symbols-outlined icon-inline">lock</span>この月を締める
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="setLock(false, this)">
+        <span class="material-symbols-outlined icon-inline">lock_open</span>締めを解く
+      </button>
+      <span id="m-msg" class="muted" style="font-size:12px;align-self:center;"></span>
+    </div>
+    <p class="muted" style="font-size:11.5px;margin:0;">
+      実労働は「出勤から退勤まで − 休憩」です。<b>割増の計算はしていません。</b>
+      法定内・法定外の区別、深夜・休日の割増、みなし残業との相殺は、
+      就業規則と賃金規定にしたがって給与計算側で行ってください。
+    </p>
+  </div>
+
+  <!-- 人ごと -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">list</span>メンバーごとの記録</h2>
+    <div id="people"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- 直す -->
+  <div id="edit-card" class="card hidden" style="border-left:4px solid var(--primary);">
+    <h2><span class="material-symbols-outlined">edit_calendar</span><span id="e-title">打刻を直す</span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+      直した内容と理由は記録に残ります。消せません。
+    </p>
+    <div class="inline-controls" style="margin-bottom:12px;">
+      <div style="max-width:150px;"><label>日付</label><input id="e-date" type="date" readonly></div>
+      <div style="max-width:120px;"><label>出勤</label><input id="e-in" type="time" step="60"></div>
+      <div style="max-width:120px;"><label>退勤</label><input id="e-out" type="time" step="60"></div>
+      <div style="max-width:150px;"><label>休憩（分）</label>
+        <input id="e-break" type="number" min="0" max="720" step="5"></div>
+      <div style="max-width:160px;">
+        <label>状態</label>
+        <select id="e-status">
+          <option value="closed">出勤した</option>
+          <option value="absent">欠勤・休暇</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label>直した理由<span style="color:#c53030;">*</span></label>
+      <input id="e-reason" type="text" maxlength="500"
+             placeholder="例：本人からの申し出。退勤の打刻漏れ（18:00 退勤を確認）">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="saveEdit(this)">
+        <span class="material-symbols-outlined icon-inline">save</span>保存
+      </button>
+      <button class="btn btn-secondary" onclick="closeEdit()">やめる</button>
+    </div>
+    <div id="e-msg" class="err-text"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260911y"></script>
+<script src="js/layout.js?v=20260911y"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const WD = ["日", "月", "火", "水", "木", "金", "土"];
+
+  let data = null;
+  let open = new Set();          // 開いている人。読み直しても開いたまま
+  let editing = null;
+
+  KPLayout.init({ active: "timecard", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) start(); });
+
+  async function start() {
+    if (!el("m-month").value) el("m-month").value = jstToday().slice(0, 7);
+    await load();
+  }
+
+  const jstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const hm = (iso) => (iso ? new Date(new Date(iso).getTime() + 9 * 3600000).toISOString().slice(11, 16) : "—");
+  const clock = (min) => {
+    const m = Math.max(0, Math.round(Number(min) || 0));
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+  };
+
+  async function load() {
+    try {
+      data = await API.timecards(el("m-month").value);
+      render();
+    } catch (e) {
+      el("people").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function render() {
+    el("m-title").textContent = `${data.month.replace("-", "年")}月`;
+    renderWorking();
+    renderFixes();
+    renderPeople();
+  }
+
+  // 朝いちばんに見るのはここ。誰が来ていて、誰が休憩中か
+  function renderWorking() {
+    const w = data.working || [];
+    el("w-tag").textContent = w.length ? `${w.length}名` : "";
+    el("working").innerHTML = w.length
+      ? w.map((p) => `
+          <span class="tk-who${p.onBreak ? " brk" : ""}">
+            <span class="material-symbols-outlined" style="font-size:16px;">${
+              p.onBreak ? "local_cafe" : "schedule"}</span>
+            ${esc(p.name)}　${esc(hm(p.since))}${p.onBreak ? "（休憩中）" : ""}
+          </span>`).join("")
+      : `<span class="muted" style="font-size:13px;">いま出勤中の人はいません。</span>`;
+  }
+
+  function renderFixes() {
+    const list = data.fixes || [];
+    el("fix-card").classList.toggle("hidden", !list.length);
+    el("f-tag").textContent = list.length ? `${list.length}件` : "";
+    if (!list.length) return;
+
+    el("fixes").innerHTML = list.map((f) => {
+      const b = f.before || {};
+      const w = f.want || {};
+      return `
+        <div class="tk-fix">
+          <div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">
+            ${esc(f.employeeName)}　${esc(f.work_date)}
+          </div>
+          <div class="w">
+            理由：${esc(f.reason)}<br>
+            いま：${esc(hm(b.clockIn))} 〜 ${esc(hm(b.clockOut))}${
+              b.status === "absent" ? "（欠勤・休暇）" : ""}<br>
+            希望：<b>${w.status === "absent" ? "欠勤・休暇にする"
+              : `${esc(hm(w.clockIn))} 〜 ${esc(hm(w.clockOut))}${
+                  (w.breaks || []).length ? `　休憩あり` : ""}`}</b>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+            <button class="btn btn-primary btn-sm" onclick="decide('${esc(f.id)}','approve',this)">
+              承認して反映</button>
+            <button class="btn btn-secondary btn-sm" onclick="decide('${esc(f.id)}','reject',this)">
+              見送る</button>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  function renderPeople() {
+    const list = data.members || [];
+    if (!list.length) {
+      el("people").innerHTML = `<div class="empty">名簿に誰もいません。</div>`;
+      return;
+    }
+    el("people").innerHTML = list.map((m) => {
+      const id = m.employee.id;
+      const on = open.has(id);
+      const t = m.totals || {};
+      return `
+        <div class="tk-person">
+          <div class="tk-head" onclick="toggle('${esc(id)}')">
+            <span class="material-symbols-outlined" style="font-size:20px;color:#a7b2bd;">
+              ${on ? "expand_less" : "expand_more"}</span>
+            <span>
+              <span class="nm">${esc(m.employee.name)}</span>
+              ${m.employee.department ? `<span class="dp">　${esc(m.employee.department)}</span>` : ""}
+              ${m.today?.open ? `<span class="tk-mark" style="background:#eaf5ec;color:#256b36;">出勤中</span>` : ""}
+              ${m.locked ? `<span class="tk-mark">締め済</span>` : ""}
+            </span>
+            <span class="tot">
+              ${t.days || 0}日　実労働 <b>${esc(clock(t.workMinutes))}</b>
+              ${t.overMinutes ? `　超過 ${esc(clock(t.overMinutes))}` : ""}
+            </span>
+          </div>
+          ${on ? `<div class="tk-body">${dayTable(m)}</div>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function dayTable(m) {
+    if (!m.entries.length) {
+      return `<p class="muted" style="font-size:12.5px;padding:10px 0;">この月の記録はありません。
+        <button class="btn btn-secondary btn-sm" style="margin-left:8px;"
+                onclick="openEdit('${esc(m.employee.id)}', '')">日を足す</button></p>`;
+    }
+    return `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:86px;">日</th><th style="width:70px;">出勤</th>
+            <th style="width:70px;">退勤</th><th style="width:70px;">休憩</th>
+            <th style="width:80px;">実労働</th><th></th><th style="width:70px;"></th>
+          </tr></thead>
+          <tbody>${m.entries.map((e) => {
+            const d = new Date(e.workDate + "T00:00:00");
+            const w = d.getDay();
+            const absent = e.status === "absent";
+            return `
+              <tr class="tk-day${w === 6 ? " sat" : w === 0 ? " sun" : ""}">
+                <td>${d.getMonth() + 1}/${d.getDate()}<span class="muted">（${WD[w]}）</span></td>
+                <td>${absent ? "—" : esc(hm(e.clockIn))}</td>
+                <td>${absent ? "—" : esc(hm(e.clockOut))}</td>
+                <td>${absent ? "—" : esc(clock(e.breakMinutes))}</td>
+                <td><b>${absent ? "—" : esc(clock(e.workMinutes))}</b></td>
+                <td class="muted" style="font-size:11.5px;">
+                  ${absent ? "欠勤・休暇" : e.open ? "出勤中" : ""}
+                  ${e.source === "admin" ? '<span class="tk-mark">会社が入力</span>' : ""}
+                  ${e.lockedAt ? '<span class="tk-mark">締め済</span>' : ""}
+                  ${e.editReason ? `<br>${esc(e.editReason)}` : ""}
+                </td>
+                <td style="text-align:right;">
+                  ${e.lockedAt ? "" :
+                    `<button class="btn btn-secondary btn-sm"
+                             onclick="openEdit('${esc(m.employee.id)}','${esc(e.workDate)}')">直す</button>`}
+                </td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:8px;"
+              onclick="openEdit('${esc(m.employee.id)}', '')">日を足す</button>`;
+  }
+
+  function toggle(id) {
+    if (open.has(id)) open.delete(id); else open.add(id);
+    renderPeople();
+  }
+
+  // ---- 修正の承認 ---------------------------------------------------------------
+  async function decide(fixId, action, btn) {
+    const note = action === "reject"
+      ? prompt("見送る理由を本人に伝えます（任意）。", "")
+      : null;
+    if (action === "reject" && note === null) return;
+    try {
+      await KPLayout.busy(btn, "処理中…", () => API.patchTimecard({ action, fixId, note }));
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "処理できませんでした"); }
+  }
+
+  // ---- 直す -------------------------------------------------------------------
+  function openEdit(employeeId, workDate) {
+    const m = (data.members || []).find((x) => x.employee.id === employeeId);
+    const e = workDate ? (m?.entries || []).find((x) => x.workDate === workDate) : null;
+    editing = { employeeId, name: m?.employee.name || "" };
+
+    el("edit-card").classList.remove("hidden");
+    el("e-title").textContent = `${m?.employee.name || ""} さんの打刻を直す`;
+    el("e-date").readOnly = Boolean(workDate);
+    el("e-date").value = workDate || jstToday();
+    el("e-in").value = e?.clockIn ? hm(e.clockIn) : "";
+    el("e-out").value = e?.clockOut ? hm(e.clockOut) : "";
+    el("e-break").value = e?.breakMinutes || "";
+    el("e-status").value = e?.status === "absent" ? "absent" : "closed";
+    el("e-reason").value = "";
+    el("e-msg").textContent = "";
+    el("edit-card").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function closeEdit() { el("edit-card").classList.add("hidden"); editing = null; }
+
+  async function saveEdit(btn) {
+    const msg = el("e-msg");
+    msg.textContent = "";
+    if (!editing) return;
+    const date = el("e-date").value;
+    const reason = el("e-reason").value.trim();
+    if (!date) { msg.textContent = "日付を入れてください"; return; }
+    if (!reason) { msg.textContent = "直した理由を書いてください"; return; }
+
+    const status = el("e-status").value;
+    const p = { action: "edit", employeeId: editing.employeeId, workDate: date, status, reason,
+                clockIn: null, clockOut: null, breaks: [] };
+
+    if (status !== "absent") {
+      const inV = el("e-in").value;
+      const outV = el("e-out").value;
+      if (!inV) { msg.textContent = "出勤の時刻を入れてください"; return; }
+      p.clockIn = `${date}T${inV}:00+09:00`;
+      if (outV) {
+        // 退勤が出勤より前なら、日をまたいだ夜勤とみなす
+        const d = outV < inV ? nextDay(date) : date;
+        p.clockOut = `${d}T${outV}:00+09:00`;
+      }
+      const br = Number(el("e-break").value || 0);
+      if (br > 0) {
+        const s = new Date(p.clockIn);
+        p.breaks = [{ start: s.toISOString(), end: new Date(s.getTime() + br * 60000).toISOString() }];
+      }
+    }
+
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.patchTimecard(p));
+      open.add(editing.employeeId);
+      closeEdit();
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  function nextDay(date) {
+    const d = new Date(date + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // ---- 締める・CSV -------------------------------------------------------------
+  async function setLock(on, btn) {
+    const month = el("m-month").value;
+    if (!confirm(on
+      ? `${month} を締めます。\n締めたあとは、解くまで誰も打刻を変えられません。よろしいですか？`
+      : `${month} の締めを解きます。\n給与計算のあとに数字が動くことになります。よろしいですか？`)) return;
+    try {
+      const r = await KPLayout.busy(btn, "処理中…",
+        () => API.patchTimecard({ action: on ? "lock" : "unlock", month }));
+      el("m-msg").textContent = `${r.rows} 件を${on ? "締めました" : "解きました"}`;
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "処理できませんでした"); }
+  }
+
+  // CSV は認証つきで取る。<a download> では Authorization が付かない
+  async function downloadCsv(btn) {
+    try {
+      await KPLayout.busy(btn, "作成中…", async () => {
+        const blob = await API.downloadTimecardCsv(el("m-month").value);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `打刻_${el("m-month").value}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      });
+    } catch (e) { alert(e.message || "CSVを作れませんでした"); }
+  }
+</script>
+
+</body>
+</html>

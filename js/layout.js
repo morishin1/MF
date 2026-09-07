@@ -56,6 +56,7 @@
     { key: "nippo",    href: "nippo.html",    label: "日報",         icon: "edit_note",      ready: true },
     { key: "schedule", href: "schedule.html", label: "スケジュール", icon: "calendar_month", ready: true },
     { key: "messages", href: "messages.html", label: "メッセージ",   icon: "forum",          ready: true },
+    { key: "timecard", href: "timecard.html", label: "タイムカード", icon: "schedule",       ready: true },
     { key: "workflow", href: "workflow.html", label: "申請・承認",   icon: "approval",       ready: true },
     // 会社から届いた契約書に署名する。届いていなければ空の画面が出るだけ
     { key: "contracts", href: "contracts.html", label: "契約書",      icon: "draw",           ready: true },
@@ -76,7 +77,10 @@
     { section: "つながっている仕組み" },
     { key: "dojo", label: "無限道場", icon: "school",
       ready: true, external: true, urlKey: "lmsUrl" },
-    { key: "timecard", label: "タイムカード", icon: "schedule",
+    // 以前から使っている外部のタイムカード。URL が設定されているあいだだけ出る。
+    // mf 側にも打刻ができたので、労働時間の記録をどちらにするかは会社が決める。
+    // 決めるまでのあいだ、どちらを開いているか分かるように別の名前にしてある
+    { key: "timecard_ext", label: "タイムカード（外部）", icon: "schedule",
       ready: true, external: true, urlKey: "timecardUrl" },
     // 会計は経理・管理担当だけ。一般メンバーには出さない
     { key: "docs", href: "app.html", label: "会計書類", icon: "receipt_long",
@@ -135,6 +139,7 @@
         { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",   icon: "meeting_room",   ready: true },
         { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",       icon: "receipt",        ready: true },
         { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",   icon: "monitoring",     ready: true },
+        { key: "timecard",  href: "admin-timecard.html",  label: "タイムカード",   icon: "schedule",       ready: true },
         { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形", icon: "folder_copy",    ready: true },
       ],
     },

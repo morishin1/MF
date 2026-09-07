@@ -475,6 +475,34 @@
     return { path: sign.path, name: file.name, mimeType: file.type, sizeBytes: file.size };
   }
 
+  // ---- タイムカード ----
+  // 本人。時刻はサーバの時計で打つので、こちらからは送らない
+  const myTimecard = (month) =>
+    api(`/api/timecard/me${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  const stamp = (action) => api("/api/timecard/me", { method: "POST", body: { action } });
+  const requestTimeFix = (p) => api("/api/timecard/me", { method: "POST", body: { ...p, fix: true } });
+
+  // 管理側
+  const timecards = (month, employeeId) => {
+    const q = new URLSearchParams();
+    if (month) q.set("month", month);
+    if (employeeId) q.set("employeeId", employeeId);
+    return api(`/api/timecard?${q.toString()}`);
+  };
+  const patchTimecard = (p) => api("/api/timecard", { method: "PATCH", body: p });
+  // CSVは認証ヘッダで取る。<a download> ではヘッダが付かないので Blob にして渡す
+  async function downloadTimecardCsv(month) {
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const q = new URLSearchParams({ csv: "1" });
+    if (month) q.set("month", month);
+    const r = await fetch(`/api/timecard?${q.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error(`CSVを取得できませんでした (${r.status})`);
+    return r.blob();
+  }
+
   // ---- 契約・電子署名 ----
   // 管理側
   const signTemplates = () => api("/api/sign/templates");
@@ -833,6 +861,8 @@
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
+
+    myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
