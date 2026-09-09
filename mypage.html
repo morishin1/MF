@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912d">
-  <link rel="stylesheet" href="css/layout.css?v=20260912d">
+  <link rel="stylesheet" href="css/app.css?v=20260912e">
+  <link rel="stylesheet" href="css/layout.css?v=20260912e">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -109,6 +109,13 @@
     <div id="goal"></div>
   </div>
 
+  <!-- 会社から借りているパソコン。
+       自分の記録と、誰が自分の記録を見たかを、本人がここで読める -->
+  <div id="dv-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">laptop_windows</span>会社のパソコン</h2>
+    <div id="dv"></div>
+  </div>
+
   <div class="card">
     <h2><span class="material-symbols-outlined">key</span>パスワードの変更</h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
@@ -132,8 +139,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912d"></script>
-<script src="js/layout.js?v=20260912d"></script>
+<script src="js/api-client.js?v=20260912e"></script>
+<script src="js/layout.js?v=20260912e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -168,15 +175,17 @@
   // 入社手続きが終わったあとも、出した内容と確認したことはここで読める。
   // 「やること」からは消えるので、あとから見返す場所が必要になる
   async function loadMine() {
-    const [ob, plan, dl, sg] = await Promise.all([
+    const [ob, plan, dl, sg, dv] = await Promise.all([
       API.myOnboarding().catch(() => null),
       API.myGrowthPlan().catch(() => null),
       API.driveLinks().catch(() => null),
       API.myContracts().catch(() => null),
+      API.myDevices().catch(() => null),
     ]);
 
     renderDriveLinks(dl);
     renderSigned(sg);
+    renderDevices(dv);
 
     if (ob) {
       renderConditions(ob.known || {});
@@ -241,6 +250,81 @@
    * 契約の一元管理を本人ができるように、というのがこの欄の目的なので、
    * 未署名がある日は、そこへ行ける案内も出す。
    */
+  // 会社のパソコン。
+  //
+  // ここは「本人が読める場所」であることに意味がある。
+  // 何を取っているか、何を取っていないか、そして
+  // 誰がいつ自分の記録を開いたか。片側だけが透明な仕組みにしない
+  let myDevices = null;
+
+  function renderDevices(dv) {
+    myDevices = dv;
+    if (!dv || !(dv.devices || []).length) return;
+    el("dv-card").classList.remove("hidden");
+
+    const n = dv.notice || {};
+    const waiting = dv.devices.filter((d) => !d.acknowledged);
+    const days = (dv.usage || []).slice(0, 7);
+
+    el("dv").innerHTML = `
+      ${waiting.length ? `
+        <div class="banner warn" style="margin:0 0 14px;">
+          <span class="material-symbols-outlined">info</span>
+          <div>まだ確認していないパソコンが ${waiting.length} 台あります。
+            <b>確認するまで、記録は取っていません。</b>
+            <div style="margin-top:8px;">
+              <a class="btn btn-primary btn-sm" href="device-consent.html">内容を読んで確認する</a>
+            </div>
+          </div>
+        </div>` : ""}
+
+      <table class="kp-items" style="margin-bottom:14px;">
+        <tbody>${dv.devices.map((d) => `
+          <tr><td style="width:150px;"><b>${esc(d.hostname)}</b>
+              <div class="muted" style="font-size:11.5px;">${esc(d.os || "")}</div></td>
+            <td>${d.acknowledged
+              ? `記録中　<span class="muted" style="font-size:12px;">最終受信 ${esc(d.lastSeen)}</span>`
+              : `<b>確認待ち</b>　<span class="muted" style="font-size:12px;">記録は取っていません</span>`}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+
+      ${days.length ? `
+        <h3 style="font-size:13px;margin:0 0 8px;">直近の稼働</h3>
+        <table class="kp-items" style="margin-bottom:14px;">
+          <tbody>${days.map((u) => `
+            <tr><td style="width:110px;color:var(--muted);">${esc(u.date)}</td>
+              <td>${esc(u.active)}${u.nightMin ? `　<span style="color:#a05a00;">深夜あり</span>` : ""}</td>
+            </tr>`).join("")}</tbody>
+        </table>` : ""}
+
+      ${(dv.web || []).length ? `
+        <h3 style="font-size:13px;margin:0 0 8px;">見たサイトの種類（14日）</h3>
+        <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
+          URLもサイト名も保存していません。種類だけです。</p>
+        <table class="kp-items" style="margin-bottom:14px;">
+          <tbody>${dv.web.map((w) => `
+            <tr><td style="width:110px;color:var(--muted);">${esc(w.label)}</td>
+              <td>${esc(w.time)}</td></tr>`).join("")}</tbody>
+        </table>` : ""}
+
+      <h3 style="font-size:13px;margin:0 0 8px;">自分の記録を見た人</h3>
+      ${(dv.views || []).length
+        ? `<table class="kp-items" style="margin-bottom:14px;"><tbody>${dv.views.map((v) => `
+             <tr><td style="width:150px;color:var(--muted);">${esc(dt(v.at))}</td>
+               <td>${esc(v.who)}　<span class="muted" style="font-size:12px;">${esc(v.what)}</span></td>
+             </tr>`).join("")}</tbody></table>`
+        : `<p class="muted" style="font-size:12.5px;">まだ誰も開いていません。</p>`}
+
+      <details style="margin-top:6px;">
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;">記録している内容</summary>
+        <div style="font-size:12.5px;line-height:1.9;margin-top:8px;">
+          <b>取っているもの</b><br>${(n.takes || []).map((s) => `・${esc(s)}`).join("<br>")}
+          <br><br><b>取っていないもの</b><br>${(n.never || []).map((s) => `・${esc(s)}`).join("<br>")}
+          <br><br>${esc(n.why || "")}
+        </div>
+      </details>`;
+  }
+
   function renderSigned(sg) {
     const all = sg?.contracts || [];
     const signed = all.filter((c) => c.view === "signed");

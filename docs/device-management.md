@@ -412,7 +412,7 @@ Authorization: Device <deviceId>:<secret>
 | GET | `/api/devices/config` | 収集の可否・間隔・カテゴリ表・未承認ソフト一覧を返す。**`notified_at` が null なら `{collect:false}`** |
 | POST | `/api/devices/ingest` | まとめて送る（下記） |
 | POST | `/api/devices/rotate` | シークレットの入れ替え（90日ごと） |
-| GET | `/api/devices/manifest` | 最新版のバージョン・URL・SHA256 |
+| GET | `/api/devices/manifest` | 最新版のバージョン・URL・SHA256（環境変数がそろうまで「更新なし」） |
 
 **ingest の本体**
 
@@ -574,8 +574,11 @@ Windows は **Session 0 Isolation** により、
 | `no_heartbeat` | 要確認 | 24時間以上受信がない（`status='active'` のみ） |
 | `agent_error` | 要確認 | エージェントが同じエラーを3回以上報告 |
 
-判定は **`api/cron/devices.js`（15分ごと）** で回す。既存の `api/cron/` と同じ作り。
-重大が出たら `lib/notify.js` で人事・経営者へ通知する。
+イベントから出るものは **受け取ったその場**（`api/devices/ingest.js`）で判定する。
+届いてから15分待つ理由がない。
+
+受信が止まったこと（`no_heartbeat`）だけは、届かないことが条件なので
+**`api/cron/devices.js`（毎日 03:20 JST）** で見る。保存期間の掃除も同じところ。
 
 > **深夜・休日を「アラート」にするのは、働かせすぎを見つけるため**であって、
 > サボりを見つけるためではない。画面の文言もそう書く。
@@ -597,18 +600,25 @@ Windows は **Session 0 Isolation** により、
 
 ## 8. 作る順番
 
-| 段階 | 中身 | 目安 |
+| 段階 | 中身 | 状態 |
 |---|---|---|
-| **0** | **就業規則・情報セキュリティ規程の改定と周知** | 実装より前 |
-| 1 | `db/053_devices.sql` ／ `lib/devices.js`（集計・判定・カテゴリ変換） | |
-| 2 | エージェント向けAPI（enroll / config / ingest）＋ 単体テスト | |
-| 3 | Go エージェント（サービス側だけ：起動終了・USB・送信・オフライン待避） | |
-| 4 | `admin-devices.html`（一覧・タイムライン・アラート） | |
-| 5 | UIプロセス（アプリ・離席・サイトカテゴリ）とタスクトレイ | |
-| 6 | `device-consent.html` と マイページの「自分のPCの記録」 | |
-| 7 | ポリシー画面・CSV・cron（アラート判定と保存期間の掃除） | |
-| 8 | MSI・自動更新・署名 | |
-| 9 | 1台で2週間の試験運用 → 全台展開 | |
+| **0** | **就業規則・情報セキュリティ規程の改定と周知** | **未着手（実装より前）** |
+| 1 | `db/053_devices.sql` ／ `lib/devices.js`（集計・判定・カテゴリ変換） | 済 |
+| 2 | エージェント向けAPI（enroll / config / ingest / rotate / manifest） | 済 |
+| 4 | `admin-devices.html`（一覧・詳細・アラート） | 済 |
+| 6 | `device-consent.html` と マイページの「会社のパソコン」 | 済 |
+| 7 | ポリシー画面・CSV・`api/cron/devices.js`（受信断の検知と保存期間の掃除） | 済 |
+| 3 | Go エージェント（サービス側：起動終了・USB・送信・オフライン待避） | **未着手** |
+| 5 | UIプロセス（アプリ・離席・サイトカテゴリ）とタスクトレイ | **未着手** |
+| 8 | MSI・自動更新・署名 | **未着手** |
+| 9 | 1台で2週間の試験運用 → 全台展開 | **未着手** |
+
+サーバ側はここまでで動く。段階3・5・8 は Windows での開発と署名が要るので、
+この環境（Linux）では書けても検証できない。
+
+`/api/devices/manifest` は先に用意してあり、
+`DEVICE_AGENT_VERSION` / `DEVICE_AGENT_URL` / `DEVICE_AGENT_SHA256` の3つが
+そろうまで「更新なし」を返す。検証できない配布物を落として実行させないため。
 
 ---
 

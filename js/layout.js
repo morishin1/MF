@@ -150,6 +150,7 @@
         // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
         { key: "roles",     href: "admin-members.html#roles", label: "権限",       icon: "key",            ready: true },
         { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: true },
+        { key: "devices",   href: "admin-devices.html",   label: "端末管理",       icon: "laptop_windows", ready: true },
         { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック", icon: "block",      ready: true },
         { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ", icon: "tune",           ready: true },
       ],

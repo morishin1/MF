@@ -530,6 +530,36 @@
     return r.blob();
   }
 
+  // ---- 端末管理 ----
+  // 管理側
+  const devices = (p = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);
+    return api(`/api/devices${q.toString() ? `?${q}` : ""}`);
+  };
+  const patchDevice = (body) => api("/api/devices", { method: "PATCH", body });
+  const deviceAlerts = (status) =>
+    api(`/api/devices/alerts${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+  const patchDeviceAlert = (body) => api("/api/devices/alerts", { method: "PATCH", body });
+  const devicePolicy = () => api("/api/devices/policy");
+  const saveDevicePolicy = (body) => api("/api/devices/policy", { method: "PATCH", body });
+  async function downloadDeviceCsv(from, to) {
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const q = new URLSearchParams({ csv: "1" });
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    const r = await fetch(`/api/devices?${q.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error(`CSVを取得できませんでした (${r.status})`);
+    return r.blob();
+  }
+  // 本人向け。自分の端末・自分の記録・自分を見た履歴
+  const myDevices = () => api("/api/devices/me");
+  const acknowledgeDevice = (deviceId) =>
+    api("/api/devices/me", { method: "POST", body: { action: "acknowledge", deviceId } });
+
   // ---- 契約・電子署名 ----
   // 管理側
   const signTemplates = () => api("/api/sign/templates");
@@ -898,6 +928,9 @@
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
+    devices, patchDevice, deviceAlerts, patchDeviceAlert,
+    devicePolicy, saveDevicePolicy, downloadDeviceCsv,
+    myDevices, acknowledgeDevice,
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,

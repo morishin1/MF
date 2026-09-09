@@ -68,7 +68,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (49, '049',    'AI提案の選別と、期日から逆算した並べ替え',            'column',   'gw_action_items',        'pinned_at'),
   (50, '050',    '承認した休暇を社内の予定表にも出す',                  'column',   'gw_calendar_events',     'source'),
   (51, '051',    'メッセージ フェーズ1（グループの持ち主）',            'column',   'gw_thread_members',      'role'),
-  (52, '052',    '月次締め',                                            'table',    'gw_month_closings',      null)
+  (52, '052',    '月次締め',                                            'table',    'gw_month_closings',      null),
+  (53, '053',    '端末管理（会社PCの利用状況と情報漏えい防止）',        'table',    'gw_devices',             null)
 ),
 
 -- ファイルの適用状況

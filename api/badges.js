@@ -46,7 +46,7 @@ export default async function handler(req, res) {
   };
   const H = { count: "exact", head: true };
 
-  const [messages, contracts, esign, expenses, requests, timefix, proposals] = await Promise.all([
+  const [messages, contracts, esign, expenses, requests, timefix, proposals, devices] = await Promise.all([
     unreadMessages(sb, me),
 
     // 自分あてで、まだ署名していない契約書
@@ -78,6 +78,12 @@ export default async function handler(req, res) {
     count(() => sb.from("gw_action_items")
       .select("id", H)
       .eq("user_id", user.id).eq("status", "proposed")),
+
+    // 端末の重大アラートだけ。
+    // 深夜・休日（要確認）まで数えると、月末はずっと数字が付いたままになる
+    hr ? count(() => sb.from("gw_device_alerts")
+      .select("id", H)
+      .eq("tenant_id", ctx.tenantId).eq("status", "open").eq("severity", "critical")) : 0,
   ]);
 
   // 0 は返さない。0を返すと、画面側で「0」と出す事故が起きる
@@ -91,6 +97,7 @@ export default async function handler(req, res) {
     put("esign", esign);
     put("requests", requests);
     put("timecard", timefix);
+    put("devices", devices);
   }
   if (expenseReviewer) put("expenses", expenses);
 
