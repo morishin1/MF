@@ -818,6 +818,17 @@
     return out; // { document, journal? }
   }
 
+  // ---- EIGHT GROWTH（growth.8grp.co.jp のデータを読む）-------------------
+  // データは growth 側にしか無い。ここは「今日の分」を読むだけ。
+  // 一覧・分析は growth.8grp.co.jp/admin へ。
+  const egToday = (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.date) q.set("date", opts.date);
+    if (opts.ai) q.set("ai", "1");
+    return api(`/api/eg${q.toString() ? `?${q}` : ""}`);
+  };
+  const egAct = (action, body = {}) => api("/api/eg", { method: "POST", body: { action, ...body } });
+
   window.API = {
     config, login, logout, refresh, getToken, changePassword,
     isLoggedIn, currentEmail,
@@ -861,6 +872,7 @@
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listTasks, createTask, updateTask, deleteTask,
+    egToday, egAct,
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
 

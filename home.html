@@ -40,6 +40,29 @@
     .dash-item:last-child { border-bottom: 0; }
     .dash-item .grow { flex: 1; min-width: 0; }
 
+    /* EIGHT GROWTH の営業。今日の数字を3つだけ、目標との差が見えるように出す。
+       一覧や分析は growth.8grp.co.jp/admin に置く。ここには持ち込まない */
+    .eg-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+               gap: 10px; margin-bottom: 14px; }
+    .eg-num { background: var(--bg, #faf8f4); border: 1px solid var(--border); padding: 10px 12px; }
+    .eg-num .l { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .eg-num .v { font-size: 20px; font-weight: 700; line-height: 1.2; }
+    .eg-num .v s { font-size: 12px; font-weight: 500; color: var(--muted); text-decoration: none; }
+    .eg-num .b { height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 7px; }
+    .eg-num .b span { display: block; height: 100%; background: var(--primary); }
+    .eg-num .b.hit span { background: var(--green, #2f855a); }
+    .eg-sec { margin-top: 14px; }
+    .eg-sec h3 { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--muted);
+                 margin: 0 0 6px; }
+    .eg-li { display: flex; gap: 8px; align-items: baseline; padding: 7px 0;
+             border-bottom: 1px solid var(--border); font-size: 13px; }
+    .eg-li:last-child { border-bottom: 0; }
+    .eg-li .g { flex: 1; min-width: 0; }
+    .eg-li .m { font-size: 11.5px; color: var(--muted); }
+    .eg-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;
+               padding-top: 14px; border-top: 1px solid var(--border); }
+    @media (max-width: 600px) { .eg-nums { grid-template-columns: 1fr; } }
+
     /* 10か条。円グラフは読みにくいので横棒にした */
     .act-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
     .act-row .n { width: 52px; color: var(--muted); }
@@ -84,6 +107,17 @@
     <div id="today-title" class="dash-title"></div>
     <div id="today-detail" class="dash-detail"></div>
     <div id="today-foot" class="dash-foot"></div>
+  </div>
+
+  <!-- EIGHT GROWTH の営業。今日やることだけを出す。
+       詳しい管理は growth.8grp.co.jp/admin -->
+  <div id="eg-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">handshake</span>今日の営業
+      <span id="eg-tag" class="kp-chip" style="margin-left:6px;"></span>
+      <a class="btn btn-secondary btn-sm" id="eg-admin" style="margin-left:auto;"
+         href="https://growth.8grp.co.jp/admin/" target="_blank" rel="noopener">管理画面へ</a>
+    </h2>
+    <div id="eg-body"></div>
   </div>
 
   <!-- ② 今日のKPI。目標は事前に決めてあり、本人は実績だけ入れる -->
@@ -186,6 +220,7 @@
     }
 
     loadDashboard();
+    loadEg();
     renderTiles(await loadStats());
     loadNotices();
   }
@@ -688,6 +723,165 @@
       <div id="today-detail" class="dash-detail"></div>
       <div id="today-foot" class="dash-foot"></div>`;
     await loadDashboard();
+  }
+
+  // --- EIGHT GROWTH の営業 ----------------------------------------------------
+  //
+  // 出すのは3つだけ。
+  //   今日の目標にどこまで来たか ／ 誰に当たるか ／ 次に何をするか
+  // 一覧・分析・全体管理は growth.8grp.co.jp/admin に置く。
+  // ここに全部載せると、毎日開く画面ではなくなる。
+  //
+  // データは growth の Supabase にしか無い（/api/eg 経由）。mf は持たない。
+  let eg = null;
+
+  async function loadEg(opts = {}) {
+    try {
+      eg = await API.egToday(opts);
+    } catch (e) {
+      return; // 営業を担当していない人や、未設定の環境ではカードごと出さない
+    }
+    if (!eg.configured) {
+      el("eg-card").classList.remove("hidden");
+      el("eg-tag").textContent = "未接続";
+      el("eg-body").innerHTML =
+        `<p class="muted" style="font-size:13px;line-height:1.9;margin:0;">
+           EIGHT GROWTH のデータにまだ繋がっていません。${esc(eg.hint || "")}
+         </p>`;
+      return;
+    }
+    renderEg();
+  }
+
+  function egNum(label, done, target) {
+    const pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : (done > 0 ? 100 : 0);
+    const hit = target > 0 && done >= target;
+    return `<div class="eg-num">
+      <div class="l">${esc(label)}</div>
+      <div class="v">${done}<s> / ${target || "—"}</s></div>
+      <div class="b${hit ? " hit" : ""}"><span style="width:${pct}%"></span></div>
+    </div>`;
+  }
+
+  function renderEg() {
+    const card = el("eg-card");
+    card.classList.remove("hidden");
+    el("eg-tag").textContent = eg.date.replace(/^\d{4}-/, "").replace("-", "/");
+
+    const t = eg.target, d = eg.done;
+    const parts = [];
+
+    parts.push(`<div class="eg-nums">
+      ${egNum("代理店開拓", d.newAgencies, t.newAgencies)}
+      ${egNum("接触", d.contacts, t.contacts)}
+      ${egNum("商談", d.meetings, t.meetings)}
+    </div>`);
+    if (t.note) parts.push(`<p class="muted" style="font-size:12px;margin:-6px 0 12px;">${esc(t.note)}</p>`);
+
+    // 次にやること。ここが一番大事なので上に置く
+    const next = (eg.next?.items || []).map((x) =>
+      `<div class="eg-li"><span class="material-symbols-outlined"
+         style="font-size:18px;color:var(--primary);">arrow_right</span>
+       <div class="g">${esc(x.text)}${x.why ? `<div class="m">${esc(x.why)}</div>` : ""}</div></div>`).join("");
+    parts.push(`<div class="eg-sec">
+      <h3>次にやること${eg.next?.source === "ai" ? "（AI）" : ""}</h3>
+      ${next || '<div class="empty">いまはありません</div>'}
+      ${eg.aiAvailable && eg.next?.source !== "ai"
+        ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;"
+             onclick="egAiSuggest(this)">AIに並べ替えてもらう</button>` : ""}
+    </div>`);
+
+    // 誰に当たるか
+    if (eg.leads.items.length) {
+      const rows = eg.leads.items.map((l) => `<div class="eg-li">
+        <div class="g"><b>${esc(l.name)}</b>
+          <div class="m">${esc(l.kind)}／${esc(l.status)}${l.on ? `／期限 ${esc(l.on)}` : ""}${
+            l.nextAction ? `／${esc(l.nextAction)}` : ""}</div></div>
+        <button class="btn btn-secondary btn-sm" onclick="egContact('${esc(l.id)}','${esc(l.name)}',this)">接触した</button>
+      </div>`).join("");
+      parts.push(`<div class="eg-sec"><h3>未対応 ${eg.leads.untouched}件${
+        eg.leads.overdue ? ` ／ フォロー期限ぎれ ${eg.leads.overdue}件` : ""}</h3>${rows}</div>`);
+    }
+
+    if (eg.meetings.length) {
+      parts.push(`<div class="eg-sec"><h3>今日の商談</h3>${eg.meetings.map((m) => `<div class="eg-li">
+        <div class="g"><b>${esc(m.title)}</b><div class="m">${esc(m.stage)}${
+          m.at ? `／${new Date(m.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}` : ""}</div></div>
+      </div>`).join("")}</div>`);
+    }
+
+    if (eg.challenges.length) {
+      parts.push(`<div class="eg-sec"><h3>新しいChallenge</h3>${eg.challenges.map((c) => `<div class="eg-li">
+        <div class="g"><b>${esc(c.title)}</b>${c.company ? `<div class="m">${esc(c.company)}</div>` : ""}</div>
+      </div>`).join("")}</div>`);
+    }
+
+    parts.push(`<div class="eg-acts">
+      <a class="btn btn-secondary btn-sm" href="https://growth.8grp.co.jp/admin/agencies/"
+         target="_blank" rel="noopener">代理店を探す</a>
+      <button class="btn btn-secondary btn-sm" onclick="egAnalyze()">企業をAI分析</button>
+      <button class="btn btn-secondary btn-sm" onclick="egMail()">営業メールをAI生成</button>
+      <button class="btn btn-primary btn-sm" onclick="egDeal()">商談登録</button>
+      <a class="btn btn-secondary btn-sm" href="library.html">営業資料</a>
+      <a class="btn btn-secondary btn-sm" href="https://growth.8grp.co.jp/admin/"
+         target="_blank" rel="noopener">EIGHT GROWTH管理画面へ</a>
+    </div>
+    <div id="eg-msg" class="muted" style="font-size:12px;margin-top:10px;white-space:pre-wrap;"></div>`);
+
+    el("eg-body").innerHTML = parts.join("");
+  }
+
+  const egMsg = (t) => { el("eg-msg").textContent = t || ""; };
+
+  async function egAiSuggest(btn) {
+    await KPLayout.busy(btn, "考え中…", async () => { await loadEg({ ai: true }); });
+  }
+
+  // 接触を1件つける。今日の接触数はこの積み上げ
+  async function egContact(leadId, name, btn) {
+    const summary = prompt(`${name} への接触内容（任意）`, "");
+    if (summary === null) return;
+    try {
+      await KPLayout.busy(btn, "記録中…", () =>
+        API.egAct("contact", { leadId, kind: "電話", summary }));
+      await loadEg();
+      egMsg(`${name} への接触を記録しました`);
+    } catch (e) { egMsg(e.message); }
+  }
+
+  async function egDeal() {
+    const title = prompt("商談名（例：○○株式会社／代理店提携）", "");
+    if (!title) return;
+    try {
+      await API.egAct("deal", { title });
+      await loadEg();
+      egMsg("商談を登録しました。詳細は管理画面で編集できます");
+    } catch (e) { egMsg(e.message); }
+  }
+
+  async function egAnalyze() {
+    const name = prompt("下調べする企業名", "");
+    if (!name) return;
+    egMsg("調べています…");
+    try {
+      const r = await API.egAct("analyze", { name });
+      const b = r.brief;
+      egMsg([`■ ${name}`, b.summary, "", `相性: ${b.fit}`, "",
+        "話のきっかけ:", ...(b.hooks || []).map((x) => `・${x}`), "",
+        "確認したいこと:", ...(b.questions || []).map((x) => `・${x}`)].join("\n"));
+    } catch (e) { egMsg(e.message); }
+  }
+
+  async function egMail() {
+    const company = prompt("宛先の企業名", "");
+    if (!company) return;
+    const purpose = prompt("目的（例：代理店提携の打診）", "代理店提携の打診") || "";
+    egMsg("下書きを作っています…");
+    try {
+      const r = await API.egAct("email", { company, purpose });
+      egMsg([`件名: ${r.mail.subject}`, "", r.mail.body, "",
+        "※ 送る前に必ず本人が読み直してください"].join("\n"));
+    } catch (e) { egMsg(e.message); }
   }
 
   // --- お知らせ -------------------------------------------------------------

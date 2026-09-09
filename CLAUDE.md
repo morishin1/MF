@@ -111,6 +111,36 @@ backup/                     月次ZIPスナップショット
 - [ ] 月次相談前: `/税理士共有 YYYY-MM` で共有パッケージ生成・送付
 - [ ] `data/periods/YYYY-MM/` を `backup/YYYY-MM.zip` にバックアップ
 
+## EIGHT GROWTH との分担（growth.8grp.co.jp）
+
+営業まわりのデータは **growth 側の Supabase にだけ** 置く。mf には持たない。
+同じ数字を2か所で管理すると、どちらが正しいか誰も分からなくなる。
+
+```
+growth.8grp.co.jp = エンジン
+  ・Supabase（代理店・リード・接触・商談・目標。定義は growth の supabase/sales.sql）
+  ・/admin  詳細管理13領域（AIマーケ／リード／代理店／企業／自治体／スタートアップ／
+            Challenge／マッチング／PoC／案件／契約／売上／KPI分析）
+
+mf.8grp.co.jp = コックピット
+  ・home.html の「今日の営業」カード。今日やることだけ
+  ・/api/eg → lib/eg.js が growth を service_role で読む
+```
+
+**mf のメンバー画面は複雑にしない。** 出すのは3つだけ。
+
+- 今日の目標にどこまで来たか（代理店開拓・接触・商談）
+- 誰に当たるか（未対応リードとフォロー期限）
+- 次に何をするか
+
+一覧・分析・全体管理は growth の管理画面に置く。ここには作らない。
+
+担当者は **メールアドレス** で突き合わせる（growth 側の `owner_email`）。
+両方でユーザーIDを揃えると、片方が変わったときに壊れるため。
+
+設定は `GROWTH_SUPABASE_URL` / `GROWTH_SUPABASE_SERVICE_ROLE_KEY`（Vercel 環境変数）。
+未設定でもカードは出るが「未接続」と表示する。
+
 ## ファイル編集時のルール
 
 - `data/` 配下の JSON を直接編集する場合は事前に該当ファイルをバックアップする
