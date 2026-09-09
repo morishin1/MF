@@ -12,7 +12,7 @@
 //   給与を計算したあとに数字が動くと、支給額と記録が合わなくなる。
 //   締めを解くのも管理者だが、解いたことも活動ログに残る。
 
-import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
@@ -54,7 +54,7 @@ async function list(req, res, ctx) {
     .order("work_date", { ascending: false });
   if (employeeId) entriesQ = entriesQ.eq("employee_id", employeeId);
 
-  const [{ data: entries }, { data: roster }, { data: fixes }, { data: contracts }] = await Promise.all([
+  const [{ data: entries, error: entriesError }, { data: roster }, { data: fixes }, { data: contracts }] = await Promise.all([
     entriesQ,
     sb.from("gw_employees").select("id, display_name, department, status")
       .eq("tenant_id", ctx.tenantId).neq("status", "left")
@@ -67,6 +67,13 @@ async function list(req, res, ctx) {
       .eq("tenant_id", ctx.tenantId).eq("status", "active")
       .order("created_at", { ascending: false }),
   ]);
+
+  // 表が無いときは、全員ぶんが空の画面ではなく、理由を返す
+  if (entriesError) {
+    const hint = dbSetupHint(entriesError, "db/048_timecard.sql");
+    if (hint) return json(res, 503, { error: "not_installed", hint });
+    return json(res, 500, { error: "db_read_failed", detail: entriesError.message });
+  }
 
   const people = new Map((roster || []).map((e) => [e.id, e]));
   const sched = new Map();
@@ -196,7 +203,7 @@ async function edit(res, sb, ctx, user, body) {
   const saved = await writeEntry(sb, ctx, { employeeId, workDate, ...patchIn }, {
     id: cur?.id, editedBy: user.id, reason,
   });
-  if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
+  if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
 
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "timecard.edit",
@@ -235,14 +242,14 @@ async function decide(res, sb, ctx, user, body) {
       breaks: normalizeBreaks(fix.want?.breaks),
       status: fix.want?.status || "closed",
     }, { id: cur?.id, editedBy: user.id, reason: `本人の申請：${fix.reason}` });
-    if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
+    if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
   }
 
   const { error } = await sb.from("gw_time_fixes").update({
     status: approve ? "approved" : "rejected",
     decided_by: user.id, decided_at: now, decided_note: note,
   }).eq("id", fix.id);
-  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message, hint: dbSetupHint(error, "db/048_timecard.sql") ?? undefined });
 
   await notify([{
     tenantId: ctx.tenantId, employeeId: fix.employee_id, kind: "request",
@@ -275,7 +282,7 @@ async function lock(res, sb, ctx, user, body) {
   if (body.employeeId) q = q.eq("employee_id", body.employeeId);
 
   const { data, error } = await q.select("id");
-  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message, hint: dbSetupHint(error, "db/048_timecard.sql") ?? undefined });
 
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id,

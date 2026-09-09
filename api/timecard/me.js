@@ -15,7 +15,7 @@
 //   出勤中にもう一度「出勤」、休憩中に「休憩」は受け付けない。
 //   連打や、複数の端末で開いている場合に起きる。
 
-import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
@@ -54,7 +54,7 @@ async function read(req, res, ctx) {
   const today = jstDate();
 
   const sb = admin();
-  const [{ data: rows }, { data: fixes }, { data: contract }] = await Promise.all([
+  const [{ data: rows, error: rowsError }, { data: fixes }, { data: contract }] = await Promise.all([
     sb.from("gw_time_entries").select(FIELDS)
       .eq("employee_id", ctx.employee.id)
       .gte("work_date", range.from).lt("work_date", range.to)
@@ -68,6 +68,14 @@ async function read(req, res, ctx) {
       .eq("employee_id", ctx.employee.id).eq("status", "active")
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
+
+  // 表が無いときは、空の画面を出さずに理由を返す。
+  // 空で出すと「打刻が消えた」ように見え、押したときだけ落ちる
+  if (rowsError) {
+    const hint = dbSetupHint(rowsError, "db/048_timecard.sql");
+    if (hint) return json(res, 503, { error: "not_installed", hint });
+    return json(res, 500, { error: "db_read_failed", detail: rowsError.message });
+  }
 
   const entries = rows || [];
   const scheduled = scheduledMinutes(contract?.work_hours);
@@ -134,7 +142,7 @@ async function stamp(res, ctx, body) {
     const saved = cur
       ? await sb.from("gw_time_entries").update(row).eq("id", cur.id).select(FIELDS).single()
       : await sb.from("gw_time_entries").insert(row).select(FIELDS).single();
-    if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
+    if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
     return json(res, 200, { ok: true, entry: shape(saved.data, new Date()) });
   }
 
@@ -167,7 +175,7 @@ async function stamp(res, ctx, body) {
 
   const { data, error } = await sb.from("gw_time_entries")
     .update(patch).eq("id", cur.id).select(FIELDS).single();
-  if (error) return json(res, 500, { error: "db_write_failed", detail: error.message });
+  if (error) return json(res, 500, { error: "db_write_failed", detail: error.message, hint: dbSetupHint(error, "db/048_timecard.sql") ?? undefined });
   return json(res, 200, { ok: true, entry: shape(data, new Date()) });
 }
 
@@ -220,7 +228,7 @@ async function requestFix(res, ctx, body) {
   const saved = open
     ? await sb.from("gw_time_fixes").update(row).eq("id", open.id).select("id").single()
     : await sb.from("gw_time_fixes").insert(row).select("id").single();
-  if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
+  if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
 
   // 承認する人に届ける。出したまま止まるのがいちばん困る
   try {
