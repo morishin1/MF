@@ -158,6 +158,23 @@ create policy gw_time_fixes_read on public.gw_time_fixes
 
 notify pgrst, 'reload schema';
 
+
+-- -----------------------------------------------------------------------------
+-- 4) ちゃんと入ったか、その場で出す
+--
+--    SQL Editor は最後の select の結果だけを表示する。
+--    ここが無いと「Success. No rows returned」としか出ず、
+--    流れたのか流れていないのかが分からない
+-- -----------------------------------------------------------------------------
+select
+  case when to_regclass('public.gw_time_entries') is null then '✗ 作れていません'
+       else '✓ gw_time_entries を作りました' end as 打刻の表,
+  case when to_regclass('public.gw_time_fixes') is null then '✗ 作れていません'
+       else '✓ gw_time_fixes を作りました' end as 修正申請の表,
+  (select count(*) from pg_policies
+    where schemaname = 'public'
+      and tablename in ('gw_time_entries', 'gw_time_fixes')) as ポリシー数;
+
 -- 確認:
 --   -- 今日の出勤状況
 --   select e.display_name, t.status, t.clock_in, t.clock_out
