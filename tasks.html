@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911z">
-  <link rel="stylesheet" href="css/layout.css?v=20260911z">
+  <link rel="stylesheet" href="css/app.css?v=20260912a">
+  <link rel="stylesheet" href="css/layout.css?v=20260912a">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -45,6 +45,18 @@
   <div id="act-card" class="card hidden">
     <h2><span class="material-symbols-outlined">flag</span>次にやると決めたこと</h2>
     <div id="act-list"></div>
+  </div>
+
+  <!-- AIが出したまま、まだ採否を決めていないもの。
+       ホームで見送っても消えないので、ここで後から処理できる -->
+  <div id="prop-card" class="card hidden" style="border-left:4px solid #b7791f;">
+    <h2><span class="material-symbols-outlined">smart_toy</span>AIからの提案
+      <span id="prop-tag" class="kp-chip important" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      採ったものだけが「やること」に入ります。いらないものは、理由を書かずに断って構いません。
+    </p>
+    <div id="prop-list"></div>
+    <div id="prop-msg" class="err-text"></div>
   </div>
 
   <div class="card">
@@ -108,8 +120,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260911z"></script>
-<script src="js/layout.js?v=20260911z"></script>
+<script src="js/api-client.js?v=20260912a"></script>
+<script src="js/layout.js?v=20260912a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -117,7 +129,7 @@
 
   let tasks = [];
   let requested = [];          // 自分が人に頼んだ分
-  let extras = { actions: [], onboarding: [] };
+  let extras = { actions: [], onboarding: [], proposed: [] };
   let filter = "open";
   let me = null;
   let peers = null;            // 名簿。頼む相手を選ぶときに一度だけ引く
@@ -137,7 +149,7 @@
       const res = await API.listTasks("mine");
       tasks = res.tasks || [];
       requested = res.requested || [];
-      extras = res.extras || { actions: [], onboarding: [] };
+      extras = res.extras || { actions: [], onboarding: [], proposed: [] };
       render();
       renderExtras();
       renderRequested();
@@ -237,6 +249,44 @@
           日報を出すときに「やった」を選ぶと閉じます。
         </p>`;
     }
+
+    renderProposals();
+  }
+
+  // ---- AIからの提案（未処理） ---------------------------------------------------
+  //
+  // ホームで「今回は見送る」を押しても消えない。
+  // 消える仕組みにすると、見送ったものが二度と見られなくなる
+  function renderProposals() {
+    const list = extras.proposed || [];
+    el("prop-card").classList.toggle("hidden", !list.length);
+    if (!list.length) return;
+
+    el("prop-tag").textContent = `${list.length}件の未確認`;
+    el("prop-list").innerHTML = list.map((p) => `
+      <div class="kp-todo" data-id="${esc(p.id)}">
+        <span class="material-symbols-outlined" style="font-size:20px;color:#b7791f;">smart_toy</span>
+        <span class="t">${esc(p.title)}
+          ${p.detail ? `<small>${esc(p.detail)}</small>` : ""}
+          ${p.dueOn ? `<small>AIの見立て：期限 ${esc(p.dueOn)}</small>` : ""}
+        </span>
+        <button class="btn btn-primary btn-sm" onclick="adoptProp('${esc(p.id)}', this)">採用</button>
+        <button class="btn btn-secondary btn-sm" onclick="rejectProp('${esc(p.id)}', this)">いらない</button>
+      </div>`).join("");
+  }
+
+  async function adoptProp(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.adoptProposals([id]));
+      await load();
+    } catch (e) { el("prop-msg").textContent = e.hint || e.detail || e.message || "採用できませんでした"; }
+  }
+
+  async function rejectProp(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.rejectProposals([id]));
+      await load();
+    } catch (e) { el("prop-msg").textContent = e.hint || e.detail || e.message || "断れませんでした"; }
   }
 
   // ---- 自分が頼んだこと -------------------------------------------------------
@@ -268,6 +318,7 @@
             ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${esc(t.title)}
             <small>${esc(t.assignee?.display_name || "担当なし")}${done ? "／終わりました" : "／お願い中"}</small>
             ${due ? `<small${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>期限 ${esc(due)}${over ? "（超過）" : ""}</small>` : ""}
+            ${t.body ? `<small style="white-space:pre-wrap;color:var(--text);opacity:.75;">${esc(t.body)}</small>` : ""}
           </span>
           <button class="btn btn-secondary btn-sm" onclick="cancelAsk('${esc(t.id)}')">
             ${done ? "消す" : "取り消す"}</button>

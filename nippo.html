@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911z">
-  <link rel="stylesheet" href="css/layout.css?v=20260911z">
+  <link rel="stylesheet" href="css/app.css?v=20260912a">
+  <link rel="stylesheet" href="css/layout.css?v=20260912a">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -250,10 +250,6 @@
         <b>できるようになったこと</b>を書いてください。
       </p>
       <div id="f-wins"></div>
-      <div id="f-wins-hint" class="hidden" style="margin-top:6px;">
-        <span class="muted" style="font-size:11.5px;">今日の中から入れる：</span>
-        <span id="f-wins-sug"></span>
-      </div>
     </div>
 
     <div class="np-sec">
@@ -282,6 +278,12 @@
       <h3><span class="no">⑦</span>明日の最優先</h3>
       <p class="lead">明日、最初に取りかかることを1つ。</p>
       <input id="f-tomorrow" type="text" placeholder="例：C社見積を提出する">
+      <!-- できなかったこと・期限が近い残りから、押すだけで入れられるようにする。
+           明日いちばん困るのは、たいてい今日できなかったこと -->
+      <div id="f-tm-hint" class="hidden" style="margin-top:8px;">
+        <span class="muted" style="font-size:11.5px;">ここから選ぶ：</span>
+        <span id="f-tm-sug"></span>
+      </div>
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -385,12 +387,16 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260911z"></script>
-<script src="js/layout.js?v=20260911z"></script>
-<script src="js/push.js?v=20260911z"></script>
+<script src="js/api-client.js?v=20260912a"></script>
+<script src="js/layout.js?v=20260912a"></script>
+<script src="js/push.js?v=20260912a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
+
+  // その行が「できた」か。サーバ（lib/nippo.js）と同じ判定。
+  // 一言を書いていなくても、できたものはできた
+  const isDone = (w) => Boolean(w?.done || w?.result);
 
   // 100点の内訳。10か条の合計ではなく、この4つで100点にする
   const CATEGORIES = [
@@ -486,7 +492,7 @@
   function renderMorning() {
     const t = data.today;
     const isToday = data.date === jstToday();
-    const reported = (t?.work_items || []).some((w) => w.result || w.undone_reason);
+    const reported = (t?.work_items || []).some((w) => isDone(w) || w.undone_reason);
 
     el("am-card").classList.toggle("hidden", !isToday || reported);
     if (!isToday || reported) return;
@@ -806,7 +812,7 @@
     if (!show) return;
 
     const items = (t?.work_items || []).filter((w) => w.task);
-    const left = items.filter((w) => !w.result);
+    const left = items.filter((w) => !isDone(w));
     const kpis = data.kpisToday || [];
 
     el("mid-body").innerHTML = `
@@ -816,8 +822,8 @@
         ${items.length
           ? `<div class="np-rows">${items.map((w) => `
               <div class="np-kpirow">
-                <span class="nm">${w.result ? "✔" : "○"} ${esc(w.task)}</span>
-                <span class="muted" style="font-size:12px;">${w.result ? "できた" : "まだ"}</span>
+                <span class="nm">${isDone(w) ? "✔" : "○"} ${esc(w.task)}</span>
+                <span class="muted" style="font-size:12px;">${isDone(w) ? "できた" : "まだ"}</span>
               </div>`).join("")}</div>`
           : `<p class="lead">やることは書かれていません。</p>`}
       </div>
@@ -885,7 +891,9 @@
   function addWork(v = {}) {
     const div = document.createElement("div");
     div.className = "np-item";
-    const state = v.result ? "yes" : v.undone_reason ? "no" : "";
+    // できた／できなかった は、書いた文字ではなく状態で持つ。
+    // 「やること」で済ませたものは、一言が無いまま できた になる
+    const state = (v.done || v.result) ? "yes" : v.undone_reason ? "no" : "";
     div.innerHTML = `
       <div class="t">
         <input data-k="task" type="text" class="task" placeholder="やること" value="${esc(v.task || "")}">
@@ -910,14 +918,13 @@
       <input data-k="target" type="hidden" value="${v.target ?? ""}">
       <input data-k="unit" type="hidden" value="${esc(v.unit || "")}">
       <input data-k="done_when" type="hidden" value="${esc(v.done_when || "")}">
+      <input data-k="done" type="hidden" value="${state === "yes" ? "1" : ""}">
       <div class="fill${state ? "" : " hidden"}">
         <input data-k="result" type="text" placeholder="結果を一言（例：17社に送付）"
                value="${esc(v.result || "")}" ${state === "no" ? 'class="hidden"' : ""}>
         <input data-k="undone_reason" type="text" placeholder="どこまでできたか（例：1社まで完了）"
                value="${esc(v.undone_reason || "")}" ${state === "yes" ? 'class="hidden"' : ""}>
       </div>`;
-    // できたことを書き換えたら、デキタの候補も追いかける
-    div.querySelector('[data-k="result"]').addEventListener("input", renderWinSuggestions);
     el("f-work").appendChild(div);
   }
 
@@ -934,8 +941,9 @@
     result.classList.toggle("hidden", !ok);
     reason.classList.toggle("hidden", ok);
     if (ok) reason.value = ""; else result.value = "";
+    item.querySelector('[data-k="done"]').value = ok ? "1" : "";
     (ok ? result : reason).focus();
-    renderWinSuggestions();
+    renderTomorrowSuggestions();
     scheduleDraftSave();
   }
 
@@ -971,7 +979,10 @@
    *
    * ■ できたものは、押した状態で出す
    *   「やること」で できた にした時点で、できたことは分かっている。
-   *   もう一度選ばせる必要はない。一言だけは書き換えられるようにしておく
+   *   もう一度選ばせる必要はない。
+   *   ただし、一言の欄に「完了」と入れて埋めることはしない。
+   *   埋めると、日報の一覧に「完了 / 完了 / 完了」と並ぶだけになる。
+   *   済んだことは done で持ち、一言は書きたい人が書く
    */
   function mergeWork(workItems, todayActions) {
     const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result));
@@ -984,7 +995,8 @@
         // 朝の行と同じもの。行は増やさず、やること側のidと結果だけ足す
         hit.action_id = hit.action_id || a.id;
         if (a.status === "done" && !hit.result && !hit.undone_reason) {
-          hit.result = a.doneNote || "完了";
+          hit.done = true;
+          if (a.doneNote) hit.result = a.doneNote;
         }
         continue;
       }
@@ -993,7 +1005,10 @@
         action_id: a.id,
         from_label: a.priority === 1 ? "今日の最優先" : a.sourceLabel,
       };
-      if (a.status === "done") row.result = a.doneNote || "完了";
+      if (a.status === "done") {
+        row.done = true;
+        if (a.doneNote) row.result = a.doneNote;
+      }
       rows.push(row);
       byTitle.set(key(a.title), row);
     }
@@ -1011,6 +1026,7 @@
     el("f-work").innerHTML = "";
     const items = mergeWork(n?.work_items, data?.todayActions);
     (items.length ? items : [{}, {}, {}]).forEach(addWork);
+    renderTomorrowSuggestions();
 
     fillMet(n);
     fillWins(n);
@@ -1066,31 +1082,63 @@
     for (const node of document.querySelectorAll("[data-win]")) {
       node.addEventListener("input", scheduleDraftSave);
     }
-    renderWinSuggestions();
   }
 
-  // 今日できたことから候補を出す。押すと空いている欄に入る。
-  // 一から考えさせない（考える時間は、仕事が進んでいない時間でもある）
-  function renderWinSuggestions() {
-    const done = [...document.querySelectorAll("#f-work .np-item")]
-      .map((r) => r.querySelector('[data-k="result"]')?.value?.trim())
-      .filter(Boolean).slice(0, 3);
-    el("f-wins-hint").classList.toggle("hidden", !done.length);
-    el("f-wins-sug").innerHTML = done.map((t, i) =>
-      `<button type="button" class="np-tag" style="margin:2px 4px 2px 0;"
-               onclick="useWin(${i})">${esc(t.slice(0, 24))}</button>`).join("");
-    winSuggestions = done;
-  }
-  let winSuggestions = [];
+  /**
+   * ⑦ 明日の最優先の候補。
+   *
+   * 明日いちばん困るのは、たいてい今日できなかったことか、
+   * 期限が来ている残りの仕事。それを一から思い出して打ち直すのは、
+   * すでに分かっていることをもう一度書く作業になる。
+   *
+   * 出す順番
+   *   1. 今日できなかったもの（理由を書いた行）
+   *   2. 期限が過ぎている・今日までの残り
+   *   3. そのほかの残り（期限が近い順）
+   *
+   * 押すと欄に入る。書き換えは自由（決めるのは本人）
+   */
+  let tomorrowSuggestions = [];
 
-  function useWin(i) {
-    const text = winSuggestions[i];
+  function renderTomorrowSuggestions() {
+    const rows = [...document.querySelectorAll("#f-work .np-item")];
+    const undone = rows
+      .filter((r) => r.querySelector('[data-k="done"]')?.value !== "1")
+      .map((r) => r.querySelector('[data-k="task"]')?.value.trim())
+      .filter(Boolean);
+
+    const today = data?.date || jstToday();
+    const left = [...(data?.openActions || []), ...(data?.todayActions || [])]
+      .filter((a) => a.status === "open")
+      .sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")))
+      .map((a) => a.title);
+
+    const seen = new Set();
+    tomorrowSuggestions = [...undone, ...left]
+      .filter((t) => t && !seen.has(t) && seen.add(t))
+      .slice(0, 5);
+
+    el("f-tm-hint").classList.toggle("hidden", !tomorrowSuggestions.length);
+    el("f-tm-sug").innerHTML = tomorrowSuggestions.map((t, i) => {
+      const over = (data?.openActions || []).some((a) => a.title === t && a.dueDate && a.dueDate < today);
+      return `<button type="button" class="np-tag" style="margin:2px 4px 2px 0;"
+                      onclick="useTomorrow(${i})" title="${esc(t)}">${
+        over ? "🔴 " : ""}${esc(t.slice(0, 28))}${t.length > 28 ? "…" : ""}</button>`;
+    }).join("");
+  }
+
+  function useTomorrow(i) {
+    const text = tomorrowSuggestions[i];
     if (!text) return;
-    const empty = [...document.querySelectorAll("[data-win]")].find((n) => !n.value.trim());
-    if (!empty) return;
-    empty.value = text;
+    el("f-tomorrow").value = text;
+    el("f-tomorrow").focus();
     scheduleDraftSave();
   }
+
+  // 「今日の中から入れる」という候補ボタンは外した。
+  // デキタは「できるようになったこと」で、今日の成果とは別のもの。
+  // 成果をそのまま写せる形にしていると、同じことが2か所に並ぶだけになる。
+  // できた／できなかったは「今日の成果」で分かるので、そこから引く必要もない
 
   // --- ⑥ 改善したこと -----------------------------------------------------------
   const IMPROVE = [
@@ -1197,7 +1245,7 @@
       doneActionIds: [...new Set([
         ...[...document.querySelectorAll(".np-todo:checked")].map((c) => c.value),
         ...[...document.querySelectorAll("#f-work .np-item")]
-          .filter((r) => r.querySelector('[data-k="result"]')?.value.trim())
+          .filter((r) => r.querySelector('[data-k="done"]')?.value === "1")
           .map((r) => r.querySelector('[data-k="action_id"]')?.value)
           .filter(Boolean),
       ])],
@@ -1212,9 +1260,12 @@
 
     // 出す前に、その場で直せることだけ知らせる。
     // サーバ側でも同じ判定をしているが、往復させると直すのが面倒になる
-    const half = body.workItems.filter((w) => w.task && !w.result && !w.undone_reason);
+    // 「できた」も「できなかった」も押していない行だけを止める。
+    // 押してあれば、一言は無くてもよい（「やること」で済ませたものは
+    // 一言が無いまま できた で入ってくる）
+    const half = body.workItems.filter((w) => w.task && !w.done && !w.result && !w.undone_reason);
     if (half.length) {
-      msg.textContent = "① 各行に「できた」か「できなかった」を選んで、一言だけ入れてください";
+      msg.textContent = "① 各行に「できた」か「できなかった」を選んでください";
       return;
     }
 
@@ -1725,10 +1776,14 @@
     el("past").innerHTML = rows.map((n) => {
       const rs = (data.replies || []).filter((r) => r.nippo_id === n.id);
       const items = n.work_items || [];
-      const done = items.filter((w) => w.result).length;
+      const done = items.filter(isDone).length;
+      // 1行で出すのは、その日の最優先。
+      // 前は「できたこと」を全部つないでいたが、一言を書いていない行が
+      // 並ぶと「完了 / 完了 / 完了」になるだけで、何の日だったか分からない。
+      // 件数は右上に出ているので、ここは日を思い出せる1行にする。
       // 旧い形式の日報も読めるようにしておく（今日の成果 → 旧 today_work）
-      const summary = items.map((w) => w.result).filter(Boolean).join(" / ")
-        || n.top_priority || n.goal_today || n.today_work || "";
+      const summary = n.top_priority || n.goal_today || n.today_work
+        || items.map((w) => w.result).filter(Boolean).join(" / ") || "";
       return `
         <div class="np-past">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">

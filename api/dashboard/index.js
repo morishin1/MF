@@ -21,11 +21,11 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { jstDate, weekStart, isDate } from "../../lib/nippo.js";
+import { jstDate, weekStart, isDate, isDone } from "../../lib/nippo.js";
 import { weekdaysOf } from "../../lib/nippo-period.js";
 import { score, ACTIONS } from "../../lib/scoring.js";
 import {
-  ensureKpis, kpiRate, closeItems, shapeKpi, shapeItem, nextWorkday,
+  ensureKpis, kpiRate, closeItems, shapeKpi, shapeItem, nextWorkday, rankToday,
 } from "../../lib/actions.js";
 import { shapeBlocker } from "../../lib/blockers.js";
 import { levelOf } from "../../lib/autonomy.js";
@@ -74,7 +74,13 @@ async function read(req, res, user, ctx) {
   const ws = weekStart(date);
   const days = weekdaysOf(ws);
 
-  const [kpis, items, weekNippos, weekEvals, weekly, recentEvals, blockers, emp,
+  // 期日から逆算するために、少し先のぶんまで見る。
+  // 2週間より先のものを今日の一覧に出しても、ただ画面が長くなるだけ
+  const ahead = new Date(`${date}T00:00:00Z`);
+  ahead.setUTCDate(ahead.getUTCDate() + 14);
+  const aheadDate = ahead.toISOString().slice(0, 10);
+
+  const [kpis, items, proposedItems, weekNippos, weekEvals, weekly, recentEvals, blockers, emp,
          plan] = await Promise.all([
     // KPIの用意でこけても、ホーム画面ごと開かなくなるのは割に合わない。
     // 「今日やること」も「止まっていること」も出せなくなるため、ここだけ握る
@@ -83,10 +89,19 @@ async function read(req, res, user, ctx) {
       return [];
     }),
 
-    // 今日ぶんと、やり残し（期限が過ぎてまだ開いているもの）
+    // 今日ぶん・やり残し・そして少し先のぶん。
+    // 先のぶんまで取るのは、時間のかかる仕事を「期限の前日」ではなく
+    // 逆算した日から出すため（rankToday が判断する）。
+    // 期限なしのものも持ち越しとして出すので、or で拾う
     sb.from("gw_action_items").select("*")
-      .eq("user_id", userId).eq("status", "open").lte("due_date", date)
-      .order("due_date").order("priority").limit(20),
+      .eq("user_id", userId).eq("status", "open")
+      .or(`due_date.lte.${aheadDate},due_date.is.null`)
+      .order("due_date").order("priority").limit(40),
+
+    // AIが出したまま、まだ本人が採否を決めていないもの
+    sb.from("gw_action_items").select("*")
+      .eq("user_id", userId).eq("status", "proposed")
+      .order("created_at", { ascending: false }).limit(20),
 
     sb.from("tc_nippo").select("*")
       .eq("user_id", userId).gte("work_date", days[0]).lte("work_date", days[4]),
@@ -119,7 +134,8 @@ async function read(req, res, user, ctx) {
       .order("start_date", { ascending: false }).limit(1),
   ]);
 
-  const open = items.data || [];
+  const open = rankToday((items.data || []).map(shapeItem), date);
+  const proposed = (proposedItems.data || []).map(shapeItem);
   const kpiSummary = kpiRate(kpis);
 
   // 昨日のフィードバック。1日ぶんにつき、最後に出た評価だけを見る
@@ -136,11 +152,17 @@ async function read(req, res, user, ctx) {
     // 今日やることが「何のためか」が見えないと、ただの作業一覧になる
     growth: await growthOf(sb, plan.data?.[0], date),
 
-    // ① 今日の最優先。ひとつだけ大きく出す
-    top: open.length ? shapeItem(open[0]) : null,
+    // ① 今日の最優先。ひとつだけ大きく出す。
+    // 順番は期日から逆算して決めてある（lib/actions.js の rankToday）。
+    // どれも「なぜ上なのか」を reason で持っている
+    top: open[0] || null,
     // その下に小さく並べる残り
-    actions: open.slice(1).map(shapeItem),
-    overdue: open.filter((a) => a.due_date < date).length,
+    actions: open.slice(1),
+    overdue: open.filter((a) => a.dueDate && a.dueDate < date).length,
+
+    // AIの提案。採用するまでは「やること」に出さない。
+    // そのまま並べると、提案を片づけること自体が仕事になる
+    proposed,
 
     // ② 今日のKPI
     kpis: kpis.map(shapeKpi),
@@ -186,7 +208,7 @@ async function read(req, res, user, ctx) {
       return {
         done: Boolean(t?.morning_at),
         topPriority: t?.top_priority || null,
-        reported: (t?.work_items || []).some((w) => w.result || w.undone_reason),
+        reported: (t?.work_items || []).some((w) => isDone(w) || w.undone_reason),
       };
     })(),
     nextWorkday: nextWorkday(date),
@@ -247,7 +269,7 @@ function weekSummary({ weekStart: ws, days, nippos, evals, review, date }) {
   // 改善回数。§9④ の「改善回数」はここ
   const improves = nippos.reduce((a, n) => a + ((n.improve_tags || []).length ? 1 : 0), 0);
   const results = nippos.reduce(
-    (a, n) => a + (n.work_items || []).filter((w) => w.result).length, 0);
+    (a, n) => a + (n.work_items || []).filter(isDone).length, 0);
 
   // 10か条の平均は、日次の点を重み付けして100点にする
   const perKey = {};
@@ -433,6 +455,11 @@ async function saveAction(res, user, ctx, body) {
       if (taken?.length) priority = 2;
     }
 
+    // 割り込みの仕事は、入れた時点で一番上に固定する。
+    // 「いま入ってきた急ぎ」を、期日の計算に埋もれさせない
+    const pinnedAt = body.pin ? new Date().toISOString() : null;
+    const est = Number(body.estimateMin);
+
     const { data, error } = await sb.from("gw_action_items").insert({
       user_id: targetUser,
       title,
@@ -440,6 +467,8 @@ async function saveAction(res, user, ctx, body) {
       source: forOther ? "manager" : "self",
       due_date: due,
       priority,
+      pinned_at: pinnedAt,
+      estimate_min: Number.isFinite(est) && est > 0 && est <= 2400 ? Math.round(est) : null,
       created_by: user.id,
     }).select("*").single();
     if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
@@ -494,5 +523,94 @@ async function saveAction(res, user, ctx, body) {
     return json(res, 200, { ok: true });
   }
 
-  return json(res, 400, { error: "invalid_action", allowed: ["add", "done", "drop", "top"] });
+  // ---- ピン留め ---------------------------------------------------------------
+  // 「今日は何があってもこれをやる」は本人にしか分からない。
+  // 期日からの自動並べ替えより上に置き、並べ直しても動かさない
+  if (body.action === "pin" || body.action === "unpin") {
+    const on = body.action === "pin";
+    const { data, error } = await sb.from("gw_action_items")
+      .update({ pinned_at: on ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+      .eq("id", body.id).eq("user_id", user.id).eq("status", "open")
+      .select("*");
+    if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    if (!data?.length) return json(res, 404, { error: "not_found" });
+    return json(res, 200, { ok: true, item: shapeItem(data[0]) });
+  }
+
+  // ---- 並べ替え ---------------------------------------------------------------
+  // 上から順に、いま並んでいるとおりにピン留めし直す。
+  // 「自動の並びは、たいてい合っているが今日は違う」を、そのまま形にする
+  if (body.action === "reorder") {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).filter(Boolean).slice(0, 40);
+    if (!ids.length) return json(res, 400, { error: "invalid_body", required: ["ids"] });
+
+    const { data: mine } = await sb.from("gw_action_items").select("id")
+      .eq("user_id", user.id).eq("status", "open").in("id", ids);
+    const okIds = new Set((mine || []).map((r) => r.id));
+
+    // 時刻を1秒ずつずらして、並べた順がそのまま残るようにする。
+    // 同じ時刻にすると、次に読んだとき順番が決まらない
+    const base = Date.now();
+    let i = 0;
+    for (const id of ids) {
+      if (!okIds.has(id)) continue;
+      await sb.from("gw_action_items")
+        .update({ pinned_at: new Date(base - i * 1000).toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", id).eq("user_id", user.id);
+      i++;
+    }
+    return json(res, 200, { ok: true, count: i });
+  }
+
+  // ---- 自動の並びに戻す ---------------------------------------------------------
+  if (body.action === "recalc") {
+    const { error } = await sb.from("gw_action_items")
+      .update({ pinned_at: null, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id).eq("status", "open").not("pinned_at", "is", null);
+    if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    return json(res, 200, { ok: true });
+  }
+
+  // ---- AIの提案を採る／断る -------------------------------------------------------
+  //
+  // 採るまでは「やること」に出さない。断った理由は聞かない。
+  // 理由を書かせると、断るほうが面倒になり、全部そのまま採ることになる
+  if (body.action === "adopt" || body.action === "reject") {
+    const ids = (Array.isArray(body.ids) ? body.ids : [body.id]).filter(Boolean).slice(0, 20);
+    if (!ids.length) return json(res, 400, { error: "invalid_body", required: ["id", "ids"] });
+
+    const now = new Date().toISOString();
+    if (body.action === "reject") {
+      const { data, error } = await sb.from("gw_action_items")
+        .update({ status: "dropped", done_at: now, updated_at: now })
+        .eq("user_id", user.id).eq("status", "proposed").in("id", ids)
+        .select("id");
+      if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+      return json(res, 200, { ok: true, count: data?.length || 0 });
+    }
+
+    // 採るときは、その場で題名と期日を直せる。
+    // AIの決めた期日のまま入れると、期日切れが増えるだけになる
+    const patch = { status: "open", updated_at: now };
+    if (typeof body.title === "string" && body.title.trim()) patch.title = body.title.trim().slice(0, 200);
+    if (isDate(body.dueOn)) patch.due_date = body.dueOn;
+    if (body.estimateMin !== undefined) {
+      const m = Number(body.estimateMin);
+      patch.estimate_min = Number.isFinite(m) && m > 0 && m <= 2400 ? Math.round(m) : null;
+    }
+    // priority=1 は1人1日ひとつ。まとめて採るときに重なるので、2番手から入れる
+    patch.priority = 3;
+
+    const { data, error } = await sb.from("gw_action_items")
+      .update(patch)
+      .eq("user_id", user.id).eq("status", "proposed").in("id", ids)
+      .select("*");
+    if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    return json(res, 200, { ok: true, count: data?.length || 0, items: (data || []).map(shapeItem) });
+  }
+
+  return json(res, 400, {
+    error: "invalid_action",
+    allowed: ["add", "done", "drop", "top", "pin", "unpin", "reorder", "recalc", "adopt", "reject"],
+  });
 }

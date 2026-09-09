@@ -27,7 +27,7 @@ import { admin } from "../../lib/supabase.js";
 import {
   jstDate, weekStart, isDate, nextDay, normalizeNippo, hasContent,
   lastWorkdayOfWeek, weeklyFilled,
-  normalizeMorning, hasMorning, evaluateDaily, CRITERIA,
+  normalizeMorning, hasMorning, evaluateDaily, CRITERIA, isDone,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { planFromNippo, savePlan, closeItems, shapeItem } from "../../lib/actions.js";
@@ -203,7 +203,7 @@ async function morning(res, user, ctx, body) {
 
   // 終業時の入力を出したあとで朝の欄を書き換えられると、
   // 結果に合わせた後付けになる。そこだけは止める
-  if (existing?.work_items?.some((w) => w.result)) {
+  if (existing?.work_items?.some(isDone)) {
     return json(res, 409, {
       error: "already_reported",
       hint: "今日はもう終業時の入力を出しています。朝の内容は書き換えられません。",

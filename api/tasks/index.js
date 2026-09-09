@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       tasks: (data || []).map((t) => shape(t, user.id, ctx, names)),
       requested: requested.map((t) => shape(t, user.id, ctx, names)),
       // 自分の画面のときだけ、他から来る「やること」も足す
-      extras: scope === "mine" ? await extrasFor(ctx, user.id) : { actions: [], onboarding: [] },
+      extras: scope === "mine" ? await extrasFor(ctx, user.id) : { actions: [], onboarding: [], proposed: [] },
       canManage: canManageHr(ctx),
       me: ctx.employee,
     });
@@ -331,12 +331,12 @@ function normalize(body, { partial = false } = {}) {
  * 消す処理にすると、消し忘れたときに残り続ける。
  */
 async function extrasFor(ctx, userId) {
-  const out = { actions: [], onboarding: [] };
+  const out = { actions: [], onboarding: [], proposed: [] };
   if (!ctx.employee) return out;
 
   const sb = admin();
 
-  const [items, proc] = await Promise.all([
+  const [items, proposed, proc] = await Promise.all([
     sb.from("gw_action_items")
       .select("id, title, detail, source, due_date, priority, status")
       .eq("user_id", userId)
@@ -344,6 +344,12 @@ async function extrasFor(ctx, userId) {
       .order("due_date", { ascending: true, nullsFirst: false })
       .order("priority")
       .limit(30),
+    // AIが出したまま、まだ採否を決めていないもの。
+    // ホームで見送っても消えないので、ここから後で処理できる
+    sb.from("gw_action_items")
+      .select("id, title, detail, source, due_date, created_at")
+      .eq("user_id", userId).eq("status", "proposed")
+      .order("created_at", { ascending: false }).limit(20),
     sb.from("gw_procedures")
       .select("id, status, target_on")
       .eq("employee_id", ctx.employee.id).eq("kind", "onboarding").maybeSingle(),
@@ -352,6 +358,9 @@ async function extrasFor(ctx, userId) {
   out.actions = (items.data || []).map((a) => ({
     id: a.id, title: a.title, detail: a.detail,
     dueOn: a.due_date, source: a.source,
+  }));
+  out.proposed = (proposed.data || []).map((a) => ({
+    id: a.id, title: a.title, detail: a.detail, dueOn: a.due_date,
   }));
 
   // 手続きが完了・中止になっていれば、もう出さない

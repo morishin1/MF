@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260911z">
-  <link rel="stylesheet" href="css/layout.css?v=20260911z">
+  <link rel="stylesheet" href="css/app.css?v=20260912a">
+  <link rel="stylesheet" href="css/layout.css?v=20260912a">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -39,6 +39,26 @@
                  padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
     .dash-item:last-child { border-bottom: 0; }
     .dash-item .grow { flex: 1; min-width: 0; }
+    .dash-item .grip { color: #c3cad3; cursor: grab; font-size: 18px; margin-top: 1px; }
+    .dash-item.dragging { opacity: .45; background: var(--soft); }
+    .dash-item .pinmark { font-size: 14px; color: #2b6cb0; vertical-align: -2px; margin-right: 3px; }
+
+    /* なぜこれが上なのか。順番だけ出しても、結局あとで並べ直すことになる */
+    .rsn { display: inline-flex; align-items: center; gap: 4px;
+           font-size: 11.5px; font-weight: 600; margin-top: 4px; }
+    .rsn .material-symbols-outlined { font-size: 14px; }
+
+    /* AIの提案。採るまでは「やること」ではない */
+    .prop { border: 1px solid var(--border); border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 10px; }
+    .prop.gone { opacity: .4; }
+    .prop .why { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+    .prop .ed { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    /* app.css の .hidden より後に書いているので、ここで打ち消さないと効かない */
+    .prop .ed.hidden { display: none; }
+    .prop .ed input { margin: 0; }
+    .prop .ed input[type="text"] { flex: 1; min-width: 180px; }
+    .prop .ed input[type="date"] { width: auto; }
 
     /* 10か条。円グラフは読みにくいので横棒にした */
     .act-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
@@ -76,6 +96,25 @@
   <!-- 「決めておく」で、その場に出る入力欄。
        声かけの帯からも、TODAY の中からも、同じここが開く -->
   <div id="am-form" class="hidden"></div>
+
+  <!-- AIの提案。採るかどうかを決めてから「やること」になる。
+       そのまま並べると、提案を片づけること自体が仕事になる -->
+  <div id="prop-card" class="card hidden" style="border-left:4px solid #b7791f;">
+    <h2><span class="material-symbols-outlined">smart_toy</span>AIからの提案
+      <span id="prop-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+      昨日の日報から出したものです。<b>採ったものだけ</b>が「やること」に入ります。
+      いらないものは、理由を書かずに断って構いません。
+    </p>
+    <div id="prop-list"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+      <button class="btn btn-primary btn-sm" onclick="adoptAll(this)">
+        <span class="material-symbols-outlined icon-inline">done_all</span>すべて採用
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="skipProposals()">今回は見送る</button>
+    </div>
+    <div id="prop-msg" class="err-text"></div>
+  </div>
 
   <!-- ① 今日の最優先。この画面で一番大きく出す。
        会社の評価を見る画面ではなく、仕事を前に進める画面にするため -->
@@ -159,8 +198,8 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260911z"></script>
-<script src="js/layout.js?v=20260911z"></script>
+<script src="js/api-client.js?v=20260912a"></script>
+<script src="js/layout.js?v=20260912a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -213,6 +252,7 @@
     }
     renderGoal();
     renderMorningNudge();
+    renderProposals();
     renderToday();
     renderKpi();
     renderBlockers();
@@ -400,6 +440,133 @@
       </div>`;
   }
 
+  // ---- AIからの提案を、採るか断るか -------------------------------------------
+  //
+  // ■ なぜ挟むのか
+  //   日報を出すたびにAIの提案がそのまま「やること」に並ぶと、
+  //   その提案を片づけること自体が仕事になる。
+  //   主導権を本人に置く。AIは下書きを作るところまで。
+  //
+  // ■ 断るのに理由は聞かない
+  //   理由を書かせると、断るほうが面倒になり、全部そのまま採ることになる。
+  //   それでは挟んだ意味が無い。
+  //
+  // ■ その場で直せる
+  //   AIが決めた期日のまま入れると、期日切れが増えるだけになる。
+  //   採る前に、題名と期日をここで直せるようにしておく。
+  //
+  // ■ 見送っても消えない
+  //   今日は見なくてもよい。「やること」の画面に未処理として残る
+
+  const PROP_SKIP_KEY = "kp_prop_skipped";
+
+  function skippedToday() {
+    try { return localStorage.getItem(PROP_SKIP_KEY) === dash.date; } catch { return false; }
+  }
+
+  function renderProposals() {
+    const list = dash.proposed || [];
+    if (!list.length || skippedToday()) { el("prop-card").classList.add("hidden"); return; }
+
+    el("prop-card").classList.remove("hidden");
+    el("prop-tag").textContent = `${list.length}件`;
+    // 直すのは押したときだけ出す。
+    // 最初から入力欄が開いていると、そのまま採ってよいものまで
+    // 「何か直さないといけないのか」と読ませることになる
+    el("prop-list").innerHTML = list.map((p) => `
+      <div class="prop" data-id="${esc(p.id)}">
+        <div style="font-size:13.5px;font-weight:600;line-height:1.7;">${esc(p.title)}</div>
+        ${p.detail ? `<div class="why">AIの理由：${esc(p.detail)}</div>` : ""}
+        <div class="why">期日の見立て：${esc(p.dueDate || dash.date)}</div>
+        <div class="ed hidden" data-edit>
+          <input type="text" data-f="title" value="${esc(p.title)}" maxlength="200"
+                 aria-label="やることの名前">
+          <input type="date" data-f="due" value="${esc(p.dueDate || dash.date)}"
+                 aria-label="期日">
+        </div>
+        <div class="ed">
+          <button class="btn btn-primary btn-sm" onclick="adoptOne('${esc(p.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">check</span>採用する
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="editProp('${esc(p.id)}')">
+            <span class="material-symbols-outlined icon-inline">edit</span>直す
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="rejectOne('${esc(p.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">close</span>いらない
+          </button>
+        </div>
+      </div>`).join("");
+  }
+
+  // 題名と期日をその場で直す。
+  // AIの決めた期日のまま入れると、期日切れが増えるだけになる
+  function editProp(id) {
+    const row = propRow(id);
+    if (!row) return;
+    row.querySelector("[data-edit]")?.classList.remove("hidden");
+    row.querySelector('[data-f="title"]')?.focus();
+  }
+
+  const propRow = (id) => el("prop-list")?.querySelector(`.prop[data-id="${CSS.escape(id)}"]`);
+
+  async function adoptOne(id, btn) {
+    const row = propRow(id);
+    const title = row?.querySelector('[data-f="title"]')?.value.trim();
+    const dueOn = row?.querySelector('[data-f="due"]')?.value || null;
+    try {
+      await KPLayout.busy(btn, "採用中…", () => API.adoptProposals([id], { title, dueOn }));
+      await reloadDash();
+    } catch (e) { el("prop-msg").textContent = e.hint || e.detail || e.message || "採用できませんでした"; }
+  }
+
+  async function rejectOne(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.rejectProposals([id]));
+      await reloadDash();
+    } catch (e) { el("prop-msg").textContent = e.hint || e.detail || e.message || "断れませんでした"; }
+  }
+
+  // 全部そのままでよい日は、1回で終わらせる。
+  // ただし、その場で直した題名と期日はちゃんと反映する
+  async function adoptAll(btn) {
+    const rows = [...(el("prop-list")?.querySelectorAll(".prop") || [])];
+    if (!rows.length) return;
+    try {
+      await KPLayout.busy(btn, "採用中…", async () => {
+        for (const row of rows) {
+          await API.adoptProposals([row.dataset.id], {
+            title: row.querySelector('[data-f="title"]')?.value.trim(),
+            dueOn: row.querySelector('[data-f="due"]')?.value || null,
+          });
+        }
+      });
+      await reloadDash();
+    } catch (e) { el("prop-msg").textContent = e.hint || e.detail || e.message || "採用できませんでした"; }
+  }
+
+  // 今日は見ない。消さずに残るので、あとから「やること」の画面で処理できる
+  function skipProposals() {
+    try { localStorage.setItem(PROP_SKIP_KEY, dash.date); } catch { /* 覚えられなくても閉じる */ }
+    el("prop-card").classList.add("hidden");
+  }
+
+  // 理由の色。なぜ上にあるのかが、色でも分かるようにする
+  const REASON_STYLE = {
+    pin:   { icon: "push_pin",       color: "#2b6cb0" },
+    over:  { icon: "error",          color: "#c53030" },
+    today: { icon: "today",          color: "#c05621" },
+    lead:  { icon: "hourglass_top",  color: "#b7791f" },
+    carry: { icon: "history",        color: "#718096" },
+    later: { icon: "schedule",       color: "#718096" },
+  };
+
+  const reasonLine = (a) => {
+    const st = REASON_STYLE[a.reasonLevel] || REASON_STYLE.later;
+    if (!a.reason) return "";
+    return `<span class="rsn" style="color:${st.color};">
+      <span class="material-symbols-outlined">${st.icon}</span>${esc(a.reason)}</span>`;
+  };
+
   function renderToday() {
     const t = dash.top;
     const rest = dash.actions || [];
@@ -424,45 +591,129 @@
     el("today-card").classList.remove("hidden");
 
     if (t) {
-      const late = t.dueDate < dash.date;
       el("today-title").textContent = t.title;
-      el("today-detail").textContent = t.detail || "";
+      el("today-detail").innerHTML =
+        (t.detail ? `<div style="white-space:pre-wrap;">${esc(t.detail)}</div>` : "")
+        + reasonLine(t);
       el("today-foot").innerHTML = `
         <button class="btn btn-primary btn-sm" onclick="doneItem('${esc(t.id)}', this)">
           <span class="material-symbols-outlined icon-inline">check</span>できた
         </button>
         <button class="btn btn-secondary btn-sm" onclick="dropItem('${esc(t.id)}', this)">今日はやらない</button>
-        <span class="kp-chip">${esc(t.sourceLabel)}</span>
-        ${late ? `<span class="kp-chip important">${esc(t.dueDate)} の予定</span>` : ""}`;
+        <button class="btn btn-secondary btn-sm" onclick="pinItem('${esc(t.id)}', ${t.pinnedAt ? "false" : "true"}, this)"
+                title="${t.pinnedAt ? "固定をやめる" : "今日はこれ、と固定する"}">
+          <span class="material-symbols-outlined icon-inline">${t.pinnedAt ? "keep_off" : "push_pin"}</span>
+          ${t.pinnedAt ? "固定をやめる" : "固定する"}
+        </button>
+        <span class="kp-chip">${esc(t.sourceLabel)}</span>`;
     } else {
       el("today-title").textContent = "今日の最優先を選んでください";
-      el("today-detail").textContent = "下のどれかを「これを最優先にする」で上に上げられます。";
+      el("today-detail").textContent = "下のどれかを「↑」で上に上げられます。";
       el("today-foot").innerHTML = "";
     }
 
+    // そのほか。期日から逆算した順に並んでいる。
+    // 掴んで動かせば、その順番がそのまま残る（ピン留めに変わる）
     if (rest.length) {
       el("today-foot").insertAdjacentHTML("afterend", `
         <div style="margin-top:16px;">
-          <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:2px;">
-            そのほか（${rest.length}件）
+          <div class="muted" style="font-size:11.5px;font-weight:700;margin-bottom:6px;">
+            そのほか（${rest.length}件）・期日から逆算した順です。掴んで入れ替えられます
           </div>
-          ${rest.map((a) => `
-            <div class="dash-item">
-              <div class="grow">
-                <div>${esc(a.title)}</div>
-                <div class="muted" style="font-size:11.5px;margin-top:2px;">
-                  ${esc(a.sourceLabel)}${a.dueDate < dash.date ? ` ・ ${esc(a.dueDate)} の予定` : ""}
+          <div id="rest-list">
+            ${rest.map((a) => `
+              <div class="dash-item" draggable="true" data-id="${esc(a.id)}">
+                <span class="material-symbols-outlined grip" title="掴んで動かす">drag_indicator</span>
+                <div class="grow">
+                  <div>${a.pinnedAt ? '<span class="material-symbols-outlined pinmark">push_pin</span>' : ""}${esc(a.title)}</div>
+                  <div class="muted" style="font-size:11.5px;margin-top:2px;">
+                    ${esc(a.sourceLabel)}${a.estimateMin ? ` ・ 約${Math.round(a.estimateMin / 60 * 10) / 10}時間` : ""}
+                  </div>
+                  ${reasonLine(a)}
                 </div>
-              </div>
-              <button class="btn btn-secondary btn-sm" onclick="topItem('${esc(a.id)}', this)"
-                      title="今日の最優先にする">↑</button>
-              <button class="btn btn-secondary btn-sm" onclick="doneItem('${esc(a.id)}', this)">できた</button>
-            </div>`).join("")}
-          <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="addItem()">
-            <span class="material-symbols-outlined icon-inline">add</span>自分で足す
-          </button>
+                <button class="btn btn-secondary btn-sm" onclick="topItem('${esc(a.id)}', this)"
+                        title="今日の最優先にする">↑</button>
+                <button class="btn btn-secondary btn-sm" onclick="doneItem('${esc(a.id)}', this)">できた</button>
+              </div>`).join("")}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn btn-secondary btn-sm" onclick="addItem()">
+              <span class="material-symbols-outlined icon-inline">add</span>自分で足す
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="addUrgent()">
+              <span class="material-symbols-outlined icon-inline">bolt</span>突発の仕事を足す
+            </button>
+            ${rest.some((a) => a.pinnedAt) || dash.top?.pinnedAt ? `
+              <button class="btn btn-secondary btn-sm" onclick="recalcOrder(this)">
+                <span class="material-symbols-outlined icon-inline">auto_awesome</span>期日から並べ直す
+              </button>` : ""}
+          </div>
         </div>`);
+      wireDrag();
     }
+  }
+
+  // ---- 掴んで入れ替える -----------------------------------------------------
+  //
+  // 自動の並びは、たいていは合っている。合わない日だけ動かせればよい。
+  // 動かした順番はピン留めとして残るので、翌日また自動に戻したければ
+  // 「期日から並べ直す」を押す
+  let dragging = null;
+
+  function wireDrag() {
+    const list = el("rest-list");
+    if (!list) return;
+    for (const row of list.querySelectorAll(".dash-item")) {
+      row.addEventListener("dragstart", () => { dragging = row; row.classList.add("dragging"); });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        dragging = null;
+        saveOrder();
+      });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragging || dragging === row) return;
+        const box = row.getBoundingClientRect();
+        const after = e.clientY > box.top + box.height / 2;
+        list.insertBefore(dragging, after ? row.nextSibling : row);
+      });
+    }
+  }
+
+  async function saveOrder() {
+    const list = el("rest-list");
+    if (!list) return;
+    const ids = [...list.querySelectorAll(".dash-item")].map((r) => r.dataset.id);
+    try {
+      await API.reorderActions(ids);
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "並べ替えられませんでした"); }
+  }
+
+  async function recalcOrder(btn) {
+    try {
+      await KPLayout.busy(btn, "並べ直しています…", () => API.recalcActions());
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "戻せませんでした"); }
+  }
+
+  async function pinItem(id, on, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.pinAction(id, on));
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "固定できませんでした"); }
+  }
+
+  // 割り込みの仕事。入れた時点で一番上に固定する
+  async function addUrgent() {
+    const title = prompt("いま入ってきた仕事（一番上に固定します）");
+    if (!title || !title.trim()) return;
+    try {
+      await API.actionItem("add", {
+        title: title.trim(), dueDate: dash.date, priority: 1, pin: true,
+      });
+      await reloadDash();
+    } catch (e) { alert(e.hint || e.detail || e.message || "追加できませんでした"); }
   }
 
   function renderKpi() {

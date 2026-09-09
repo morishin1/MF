@@ -20,7 +20,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
-import { jstDate, isDate, weekStart } from "../../lib/nippo.js";
+import { jstDate, isDate, weekStart, isDone } from "../../lib/nippo.js";
 import { nextDayPlan, aiConfigured } from "../../lib/week-plan.js";
 
 export default async function handler(req, res) {
@@ -154,7 +154,7 @@ async function makeNext(res, user, ctx, body) {
     .map((w) => `${w.task}`
       + (w.target != null ? `（目標 ${w.target}${w.unit || ""}）` : "")
       + (w.actual != null ? ` 実績 ${w.actual}` : "")
-      + (w.result ? " →できた" : w.undone_reason ? ` →未達（${w.undone_reason}）` : " →未記入"))
+      + (isDone(w) ? ` →できた${w.result ? `（${w.result}）` : ""}` : w.undone_reason ? ` →未達（${w.undone_reason}）` : " →未記入"))
     .join(" / ");
 
   const today = (nippos || []).find((n) => n.work_date === date);

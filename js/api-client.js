@@ -341,6 +341,12 @@
     api("/api/dashboard", { method: "POST", body: { kind: "kpi", action: "target", ...body } });
   const actionItem = (action, body = {}) =>
     api("/api/dashboard", { method: "POST", body: { kind: "action", action, ...body } });
+  // 並べ替え・ピン留め・AI提案の採否。どれも同じ入口を通す
+  const pinAction = (id, on) => actionItem(on ? "pin" : "unpin", { id });
+  const reorderActions = (ids) => actionItem("reorder", { ids });
+  const recalcActions = () => actionItem("recalc");
+  const adoptProposals = (ids, patch = {}) => actionItem("adopt", { ids, ...patch });
+  const rejectProposals = (ids) => actionItem("reject", { ids });
 
   // ---- 止まっていること（Blocker） ----
   // 外すのは管理職に限らない。手が空いている人が外せるほうが早い
@@ -844,6 +850,7 @@
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem,
+    pinAction, reorderActions, recalcActions, adoptProposals, rejectProposals,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,
     onboardOptions, onboardCombine, onboardPreview, onboardCreate,
