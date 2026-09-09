@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>月次締め - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260912d">
+  <link rel="stylesheet" href="css/layout.css?v=20260912d">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    /* 1行に1人。勤怠・休暇・経費・未承認を横に並べる。
+       3画面を行き来しないための表なので、横に切らない */
+    .cl-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .cl-table th, .cl-table td { padding:9px 10px; border-bottom:1px solid var(--border);
+                                 text-align:right; white-space:nowrap;
+                                 font-variant-numeric:tabular-nums; }
+    .cl-table th { font-size:11.5px; color:var(--muted); font-weight:700;
+                   background:var(--soft); position:sticky; top:0; z-index:1; }
+    .cl-table th:first-child, .cl-table td:first-child { text-align:left; }
+    .cl-table tr.warn td { background:#fffaf5; }
+    .cl-table .nm { font-weight:700; color:var(--primary-dark); }
+    .cl-table .dp { font-size:11px; color:var(--muted); display:block; }
+    .cl-table .zero { color:#c3cad3; }
+
+    /* 未承認の数。押すとその画面へ飛ぶ */
+    .cl-pend { display:inline-block; min-width:22px; padding:1px 7px; border-radius:999px;
+               background:#c53030; color:#fff; font-size:11.5px; font-weight:700; }
+    .cl-pend.none { background:transparent; color:#c3cad3; font-weight:400; }
+
+    .cl-sum { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    .cl-sum .box { flex:1 1 130px; border:1px solid var(--border); border-radius:10px;
+                   padding:11px 13px; }
+    .cl-sum .box .k { font-size:11.5px; color:var(--muted); }
+    .cl-sum .box .v { font-size:19px; font-weight:700; color:var(--primary-dark);
+                      font-variant-numeric:tabular-nums; }
+
+    .cl-block { border:1px solid #f0c674; background:#fffdf7; border-radius:10px;
+                padding:13px 15px; margin-bottom:12px; font-size:13px; line-height:1.9; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">月次締め</h1>
+  <p class="kp-greet-sub">
+    勤怠・休暇・経費を1か所で確認して、その月を締めます。
+    <b>未承認のものが残っているあいだは締められません。</b>
+  </p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">calendar_month</span><span id="c-title">　</span>
+      <span id="c-state" class="kp-chip" style="margin-left:8px;"></span>
+      <input id="c-month" type="month" style="width:auto;margin:0 0 0 auto;" onchange="load()">
+    </h2>
+
+    <div id="c-sum" class="cl-sum"></div>
+    <div id="c-block"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="c-close" onclick="closeMonth(this)">
+        <span class="material-symbols-outlined icon-inline">lock</span>この月を締める
+      </button>
+      <button class="btn btn-secondary hidden" id="c-reopen" onclick="reopenMonth(this)">
+        <span class="material-symbols-outlined icon-inline">lock_open</span>締めを解く
+      </button>
+      <button class="btn btn-secondary" onclick="downloadCsv(this)">
+        <span class="material-symbols-outlined icon-inline">download</span>CSV（給与計算用）
+      </button>
+    </div>
+    <div id="c-msg" class="err-text"></div>
+    <p class="muted" style="font-size:11.5px;margin:12px 0 0;">
+      実労働は「出勤から退勤まで − 休憩」です。<b>割増の計算はしていません。</b>
+      法定内・法定外の区別、深夜・休日の割増、みなし残業との相殺は、
+      就業規則と賃金規定にしたがって給与計算側で行ってください。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">group</span>社員ごと</h2>
+    <div class="table-scroll" style="max-height:60vh;overflow:auto;">
+      <table class="cl-table">
+        <thead>
+          <tr>
+            <th>氏名</th>
+            <th>出勤</th><th>実労働</th><th>休憩</th>
+            <th>有給</th><th>他休暇</th>
+            <th>経費</th>
+            <th>未承認<br>休暇</th><th>未承認<br>稟議</th><th>未承認<br>経費</th><th>未承認<br>打刻</th>
+          </tr>
+        </thead>
+        <tbody id="c-rows"><tr><td colspan="11">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260912d"></script>
+<script src="js/layout.js?v=20260912d"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let data = null;
+
+  KPLayout.init({ active: "closing", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) start(); });
+
+  async function start() {
+    // 締めるのはたいてい前月。開いた時点でそれを出す
+    if (!el("c-month").value) {
+      const d = new Date(Date.now() + 9 * 3600000);
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() - 1);
+      el("c-month").value = d.toISOString().slice(0, 7);
+    }
+    await load();
+  }
+
+  const clock = (min) => {
+    const m = Math.max(0, Math.round(Number(min) || 0));
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+  };
+  const yen = (n) => `${(Number(n) || 0).toLocaleString("ja-JP")}円`;
+
+  async function load() {
+    el("c-msg").textContent = "";
+    try {
+      data = await API.closing(el("c-month").value);
+      render();
+    } catch (e) {
+      el("c-rows").innerHTML =
+        `<tr><td colspan="11"><div class="banner err">
+           <span class="material-symbols-outlined">error</span>
+           <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+    }
+  }
+
+  function render() {
+    const closed = data.closing?.status === "closed";
+    el("c-title").textContent = `${data.month.replace("-", "年")}月`;
+    el("c-state").textContent = closed ? "締め済" : "未締め";
+    el("c-state").className = `kp-chip${closed ? " event" : ""}`;
+
+    const t = data.totals || {};
+    el("c-sum").innerHTML = `
+      <div class="box"><div class="k">対象</div><div class="v">${t.people || 0}名</div></div>
+      <div class="box"><div class="k">実労働の合計</div><div class="v">${clock(t.workMinutes)}</div></div>
+      <div class="box"><div class="k">有給の合計</div><div class="v">${t.paidLeave || 0}日</div></div>
+      <div class="box"><div class="k">経費の合計</div><div class="v">${yen(t.expense)}</div></div>
+      <div class="box"><div class="k">未承認</div>
+        <div class="v" style="color:${t.pending ? "#c53030" : "var(--primary-dark)"};">${t.pending || 0}件</div></div>`;
+
+    // 締められない理由。1つ直して終わりにさせないよう、全部並べる
+    const blockers = data.blockers || [];
+    el("c-block").innerHTML = blockers.length
+      ? `<div class="cl-block">
+           <b>未承認のものが ${blockers.length} 件あります。</b>先に処理してください。<br>
+           ${blockers.map((b) => `・${esc(b.name)}　${esc(b.what)} ${b.count}件`).join("<br>")}
+           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+             <a class="btn btn-secondary btn-sm" href="admin-requests.html">休暇・稟議へ</a>
+             <a class="btn btn-secondary btn-sm" href="admin-expenses.html">経費精算へ</a>
+             <a class="btn btn-secondary btn-sm" href="admin-timecard.html">タイムカードへ</a>
+           </div>
+         </div>`
+      : "";
+
+    el("c-close").disabled = closed || !data.canClose;
+    el("c-close").classList.toggle("hidden", closed);
+    el("c-reopen").classList.toggle("hidden", !closed);
+
+    if (closed) {
+      const when = data.closing.closedAt
+        ? new Date(data.closing.closedAt).toLocaleString("ja-JP") : "";
+      el("c-msg").className = "muted";
+      el("c-msg").textContent = `${when} に締めました。`;
+    } else {
+      el("c-msg").className = "err-text";
+    }
+
+    renderRows();
+  }
+
+  function renderRows() {
+    const rows = data.rows || [];
+    if (!rows.length) {
+      el("c-rows").innerHTML = `<tr><td colspan="11">対象の社員がいません。</td></tr>`;
+      return;
+    }
+    const n = (v, unit = "") => (v ? `${v}${unit}` : `<span class="zero">—</span>`);
+    const pend = (v, href) => (v
+      ? `<a class="cl-pend" href="${href}" title="この画面で処理します">${v}</a>`
+      : `<span class="cl-pend none">0</span>`);
+
+    el("c-rows").innerHTML = rows.map((r) => {
+      const p = r.pending;
+      const warn = p.leave + p.ringi + p.expense + p.timefix > 0 || r.work.openDays > 0;
+      return `
+        <tr class="${warn ? "warn" : ""}">
+          <td><span class="nm">${esc(r.employee.name)}</span>
+            <span class="dp">${esc(r.employee.department || "")}${
+              r.work.openDays ? `　⚠ 退勤の打刻が無い日 ${r.work.openDays}日` : ""}</span></td>
+          <td>${n(r.work.days, "日")}</td>
+          <td><b>${clock(r.work.workMinutes)}</b></td>
+          <td>${clock(r.work.breakMinutes)}</td>
+          <td>${n(r.leave.paid, "日")}</td>
+          <td>${n(r.leave.other, "日")}</td>
+          <td>${r.expense.total ? yen(r.expense.total) : '<span class="zero">—</span>'}</td>
+          <td>${pend(p.leave, "admin-requests.html")}</td>
+          <td>${pend(p.ringi, "admin-requests.html")}</td>
+          <td>${pend(p.expense, "admin-expenses.html")}</td>
+          <td>${pend(p.timefix, "admin-timecard.html")}</td>
+        </tr>`;
+    }).join("");
+  }
+
+  async function closeMonth(btn) {
+    const month = el("c-month").value;
+    if (!confirm(`${month.replace("-", "年")}月を締めます。\n`
+      + `この月の打刻も一緒に締まり、動かせなくなります。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "締めています…",
+        () => API.patchClosing({ action: "close", month }));
+      await load();
+    } catch (e) {
+      // 画面を開いてから締めるまでに、新しい申請が出ていることがある
+      el("c-msg").className = "err-text";
+      el("c-msg").textContent = e.hint || e.detail || e.message || "締められませんでした";
+      await load();
+    }
+  }
+
+  async function reopenMonth(btn) {
+    const reason = prompt("締めを解く理由を書いてください（記録に残ります）");
+    if (reason === null || !reason.trim()) return;
+    try {
+      await KPLayout.busy(btn, "解いています…",
+        () => API.patchClosing({ action: "reopen", month: el("c-month").value, reason: reason.trim() }));
+      await load();
+    } catch (e) {
+      el("c-msg").className = "err-text";
+      el("c-msg").textContent = e.hint || e.detail || e.message || "解けませんでした";
+    }
+  }
+
+  // CSVは認証つきで取る。<a download> ではヘッダが付かない
+  async function downloadCsv(btn) {
+    try {
+      await KPLayout.busy(btn, "作成中…", async () => {
+        const month = el("c-month").value;
+        const blob = await API.downloadClosingCsv(month);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `月次_${month}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      });
+    } catch (e) {
+      el("c-msg").className = "err-text";
+      el("c-msg").textContent = e.hint || e.detail || e.message || "CSVを作れませんでした";
+    }
+  }
+</script>
+
+</body>
+</html>

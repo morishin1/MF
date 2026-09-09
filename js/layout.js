@@ -140,6 +140,7 @@
         { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",       icon: "receipt",        ready: true },
         { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",   icon: "monitoring",     ready: true },
         { key: "timecard",  href: "admin-timecard.html",  label: "タイムカード",   icon: "schedule",       ready: true },
+        { key: "closing",   href: "admin-closing.html",   label: "月次締め",       icon: "event_available", ready: true },
         { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形", icon: "folder_copy",    ready: true },
       ],
     },

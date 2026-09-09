@@ -139,8 +139,12 @@ async function createThread(req, res, ctx, user) {
     .single();
   if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
 
+  // 作った人をグループの持ち主にする。
+  // 誰でも人を出し入れできると、業務連絡の宛先が知らないうちに変わる。
+  // 1対1に持ち主は要らない（どちらも member のまま）
   const rows = [ctx.employee.id, ...memberIds].map((employee_id) => ({
     tenant_id: ctx.tenantId, thread_id: thread.id, employee_id,
+    role: kind === "group" && employee_id === ctx.employee.id ? "owner" : "member",
   }));
   const { error: me } = await sb.from("gw_thread_members").insert(rows);
   if (me) {

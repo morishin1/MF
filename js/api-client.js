@@ -512,6 +512,24 @@
     return r.blob();
   }
 
+  // ---- 月次締め ----
+  // 勤怠・休暇・経費を1か所で確認して、その月を締める
+  const closing = (month) =>
+    api(`/api/closing${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  const patchClosing = (body) => api("/api/closing", { method: "PATCH", body });
+  // CSVは認証ヘッダで取る。<a download> ではヘッダが付かない
+  async function downloadClosingCsv(month) {
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const q = new URLSearchParams({ csv: "1" });
+    if (month) q.set("month", month);
+    const r = await fetch(`/api/closing?${q.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error(`CSVを取得できませんでした (${r.status})`);
+    return r.blob();
+  }
+
   // ---- 契約・電子署名 ----
   // 管理側
   const signTemplates = () => api("/api/sign/templates");
@@ -618,8 +636,10 @@
   const listThreads = () => api("/api/messages");
   const createThread = (kind, memberIds, title) =>
     api("/api/messages", { method: "POST", body: { kind, memberIds, title } });
-  const getThread = (threadId) =>
-    api(`/api/messages/thread?threadId=${encodeURIComponent(threadId)}`);
+  // before を渡すと、その時刻より前の50件（さかのぼって読む）
+  const getThread = (threadId, before) =>
+    api(`/api/messages/thread?threadId=${encodeURIComponent(threadId)}`
+      + (before ? `&before=${encodeURIComponent(before)}` : ""));
   const sendMessage = (threadId, body, fileId) =>
     api("/api/messages/thread", { method: "POST", body: { threadId, body, fileId } }).then((d) => d.message);
 
@@ -643,6 +663,10 @@
     if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
     return signed.fileId;
   }
+  // グループの参加者を出し入れする。action: add / remove / leave / rename / owner
+  const threadMembers = (body) =>
+    api("/api/messages/members", { method: "POST", body });
+
   const markThreadRead = (threadId) =>
     api("/api/messages/thread", { method: "PATCH", body: { threadId } });
 
@@ -873,11 +897,12 @@
     listTasks, createTask, updateTask, deleteTask,
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
+    closing, patchClosing, downloadClosingCsv,
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
     myContracts, signContract, signPdfUrl,
-    listThreads, createThread, getThread, sendMessage, markThreadRead,
+    listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,

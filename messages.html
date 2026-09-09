@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912c">
-  <link rel="stylesheet" href="css/layout.css?v=20260912c">
+  <link rel="stylesheet" href="css/app.css?v=20260912d">
+  <link rel="stylesheet" href="css/layout.css?v=20260912d">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -79,13 +79,49 @@
       <button class="icon-btn" onclick="backToList()" title="一覧へ戻る">
         <span class="material-symbols-outlined">arrow_back</span>
       </button>
-      <div>
+      <div style="flex:1;min-width:0;">
         <h1 class="kp-greet" id="th-title" style="margin:0;">　</h1>
         <p class="kp-greet-sub" id="th-sub" style="margin:2px 0 0;"></p>
       </div>
+      <button class="btn btn-secondary btn-sm hidden" id="th-members-btn" onclick="toggleMembers()">
+        <span class="material-symbols-outlined icon-inline">group</span>参加者
+      </button>
+    </div>
+
+    <!-- 参加者。グループのときだけ開ける -->
+    <div id="th-members" class="card hidden">
+      <h2><span class="material-symbols-outlined">group</span>参加者
+        <span id="mb-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+      <div id="mb-list"></div>
+      <div id="mb-add" class="hidden" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <label>追加する人</label>
+        <input id="mb-search" type="text" placeholder="名前や部署で絞り込む"
+               oninput="renderAddPeople()" style="max-width:280px;">
+        <div id="mb-people" class="ms-people"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn btn-primary btn-sm" onclick="addMembers(this)">
+            <span class="material-symbols-outlined icon-inline">person_add</span>追加する
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="renameGroup()">
+            <span class="material-symbols-outlined icon-inline">edit</span>グループ名を変える
+          </button>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-secondary btn-sm" onclick="leaveGroup(this)">
+          <span class="material-symbols-outlined icon-inline">logout</span>このグループを抜ける
+        </button>
+      </div>
+      <div id="mb-msg" class="err-text"></div>
     </div>
 
     <div class="card">
+      <!-- さかのぼって読む。1度に50件 -->
+      <div id="th-more" class="hidden" style="text-align:center;padding:6px 0 10px;">
+        <button class="btn btn-secondary btn-sm" onclick="loadOlder(this)">
+          <span class="material-symbols-outlined icon-inline">expand_less</span>もっと前を読む
+        </button>
+      </div>
       <div id="th-messages" class="kp-chat"><div class="empty">読み込み中…</div></div>
       <div id="th-attach" class="kp-attach hidden"></div>
       <div class="kp-compose">
@@ -103,9 +139,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912c"></script>
-<script src="js/layout.js?v=20260912c"></script>
-<script src="js/dropzone.js?v=20260912c"></script>
+<script src="js/api-client.js?v=20260912d"></script>
+<script src="js/layout.js?v=20260912d"></script>
+<script src="js/dropzone.js?v=20260912d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -114,6 +150,12 @@
   let threads = [];
   let current = null;      // 開いているスレッドID
   let pending = null;      // 送信待ちの添付 { fileId, name }
+  let thread = null;       // 開いているスレッドの中身（参加者・権限）
+  let loaded = [];         // 画面に出している本文。さかのぼると前に足す
+  let oldest = null;       // いま一番古い1件の時刻。これを before に渡す
+  let hasMore = false;     // さかのぼれるか
+  let unreadFrom = null;   // ここから未読、の線を引く位置
+  const addPicked = new Set();   // 参加者に足す人
 
   KPLayout.init({ active: "messages", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
@@ -256,13 +298,28 @@
     wireAttach();     // やり取りの上にファイルを落とせるようにしておく
     if (push) history.pushState({}, "", `?t=${encodeURIComponent(id)}`);
 
+    el("th-members").classList.add("hidden");
     try {
       const res = await API.getThread(id);
-      el("th-title").textContent = res.thread.displayName;
-      el("th-sub").textContent = res.thread.kind === "group"
-        ? res.thread.members.map((m) => m.display_name).join("、")
+      thread = res.thread;
+      loaded = res.messages || [];
+      oldest = res.oldest;
+      hasMore = !!res.hasMore;
+
+      // 「ここから未読」の線。既読にする前の時刻で決める。
+      // 開いた瞬間に既読にしてしまうと、どこから未読だったか分からなくなる
+      const since = res.lastReadAt;
+      const first = loaded.find((m) => m.sender_id !== me.id && since && m.created_at > since);
+      unreadFrom = first ? first.id : null;
+
+      el("th-title").textContent = thread.displayName;
+      el("th-sub").textContent = thread.kind === "group"
+        ? thread.members.map((m) => m.display_name).join("、")
         : "";
-      renderMessages(res.messages, res.thread.members);
+      el("th-members-btn").classList.toggle("hidden", thread.kind !== "group");
+      el("th-more").classList.toggle("hidden", !hasMore);
+
+      renderMessages();
       await API.markThreadRead(id).catch(() => {});
       loadThreads();   // 一覧の未読バッジを消す
     } catch (e) {
@@ -279,15 +336,23 @@
     if (push) history.pushState({}, "", location.pathname);
   }
 
-  function renderMessages(messages, members) {
-    if (!messages.length) {
-      el("th-messages").innerHTML = `<div class="empty">まだメッセージがありません。</div>`;
+  function renderMessages({ keepScroll = false } = {}) {
+    const box = el("th-messages");
+    if (!loaded.length) {
+      box.innerHTML = `<div class="empty">まだメッセージがありません。</div>`;
       return;
     }
-    const nameOf = new Map((members || []).map((m) => [m.id, m.display_name]));
+    // さかのぼったときは、いま読んでいた位置を動かさない。
+    // 上に足したぶんだけ下へずらす（勝手に一番下へ飛ばない）
+    const before = box.scrollHeight;
+
+    const nameOf = new Map((thread?.members || []).map((m) => [m.id, m.display_name]));
     let lastDay = "";
     const html = [];
-    for (const m of messages) {
+    for (const m of loaded) {
+      if (m.id === unreadFrom) {
+        html.push(`<div class="kp-chat-unread"><span>ここから未読</span></div>`);
+      }
       const d = new Date(m.created_at);
       const day = d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
       if (day !== lastDay) {
@@ -306,13 +371,156 @@
                 <span class="material-symbols-outlined">${f.mime_type?.startsWith("image/") ? "image" : "description"}</span>
                 ${esc(f.filename)}
               </a>`).join("")}
-            <div class="time">${esc(time)}</div>
+            <div class="time">${esc(time)}${readMark(m, mine)}</div>
           </div>
         </div>`);
     }
-    const box = el("th-messages");
     box.innerHTML = html.join("");
-    box.scrollTop = box.scrollHeight;
+    if (keepScroll) box.scrollTop = box.scrollHeight - before;
+    else box.scrollTop = box.scrollHeight;
+  }
+
+  /**
+   * 既読の印。
+   *
+   * 業務連絡なので「送った」だけでは足りない。「届いたか」が要る。
+   * 出すのは自分が書いたものだけ。
+   * 人のメッセージに「あなたは読みました」と出しても意味がない。
+   */
+  function readMark(m, mine) {
+    if (!mine) return "";
+    const r = m.readBy;
+    if (!r || !r.total) return "";
+    if (!r.count) return ` <span class="rd">未読</span>`;
+    // 1対1は「既読」だけでよい。何人が読んだかは、相手が1人なら自明
+    if (r.total === 1) return ` <span class="rd on">既読</span>`;
+    return ` <span class="rd on">既読 ${r.count}/${r.total}</span>`;
+  }
+
+  // さかのぼって読む。1度に50件、上に足していく
+  async function loadOlder(btn) {
+    if (!hasMore || !oldest) return;
+    try {
+      const res = await KPLayout.busy(btn, "読み込み中…", () => API.getThread(current, oldest));
+      const older = res.messages || [];
+      loaded = [...older, ...loaded];
+      oldest = res.oldest || oldest;
+      hasMore = !!res.hasMore;
+      el("th-more").classList.toggle("hidden", !hasMore);
+      renderMessages({ keepScroll: true });
+    } catch (e) {
+      el("th-msg").textContent = e.hint || e.detail || e.message || "読み込めませんでした";
+    }
+  }
+
+  // ---- 参加者 -----------------------------------------------------------------
+  function toggleMembers() {
+    const box = el("th-members");
+    const show = box.classList.contains("hidden");
+    box.classList.toggle("hidden", !show);
+    if (show) renderMembers();
+  }
+
+  function renderMembers() {
+    const list = thread?.members || [];
+    el("mb-tag").textContent = `${list.length}名`;
+    el("mb-msg").textContent = "";
+
+    el("mb-list").innerHTML = list.map((m) => `
+      <div class="kp-todo">
+        <span class="material-symbols-outlined" style="font-size:20px;color:var(--muted);">person</span>
+        <span class="t"><b>${esc(m.display_name)}</b>
+          ${m.role === "owner" ? '<span class="kp-chip" style="margin-left:6px;">持ち主</span>' : ""}
+          ${m.department ? `<small>${esc(m.department)}</small>` : ""}
+        </span>
+        ${thread.canManage && m.id !== me.id ? `
+          <button class="btn btn-secondary btn-sm" onclick="handOver('${esc(m.id)}', this)"
+                  title="このグループの持ち主を渡す">持ち主にする</button>
+          <button class="btn btn-secondary btn-sm" onclick="removeMember('${esc(m.id)}', this)">外す</button>` : ""}
+      </div>`).join("");
+
+    el("mb-add").classList.toggle("hidden", !thread.canManage);
+    if (thread.canManage) { addPicked.clear(); renderAddPeople(); }
+  }
+
+  // 追加する人の一覧。すでに入っている人は出さない
+  function renderAddPeople() {
+    const inside = new Set((thread?.members || []).map((m) => m.id));
+    const q = (el("mb-search")?.value || "").trim().toLowerCase();
+    const hit = people.filter((e) => !inside.has(e.id)
+      && (!q || `${e.display_name} ${e.department || ""}`.toLowerCase().includes(q)));
+
+    el("mb-people").innerHTML = hit.length
+      ? hit.map((e) => `
+          <label class="ms-person${addPicked.has(e.id) ? " on" : ""}">
+            <input type="checkbox" value="${esc(e.id)}" ${addPicked.has(e.id) ? "checked" : ""}
+                   onchange="toggleAddPerson(this)">
+            <span>${esc(e.display_name)}</span>
+            ${e.department ? `<small>${esc(e.department)}</small>` : ""}
+          </label>`).join("")
+      : `<div class="empty">追加できる人がいません。</div>`;
+  }
+
+  function toggleAddPerson(box) {
+    if (box.checked) addPicked.add(box.value); else addPicked.delete(box.value);
+    renderAddPeople();
+  }
+
+  const mbErr = (e) => { el("mb-msg").textContent = e.hint || e.detail || e.message || "変更できませんでした"; };
+
+  async function addMembers(btn) {
+    el("mb-msg").textContent = "";
+    if (!addPicked.size) { el("mb-msg").textContent = "追加する人を選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "追加中…",
+        () => API.threadMembers({ threadId: current, action: "add", employeeIds: [...addPicked] }));
+      await openThread(current, { push: false });
+      toggleMembers();
+    } catch (e) { mbErr(e); }
+  }
+
+  async function removeMember(employeeId, btn) {
+    const who = (thread?.members || []).find((m) => m.id === employeeId);
+    if (!confirm(`${who?.display_name || "この人"}をこのグループから外します。\n`
+      + `外すと、これまでのやりとりも見られなくなります。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "…",
+        () => API.threadMembers({ threadId: current, action: "remove", employeeId }));
+      await openThread(current, { push: false });
+      toggleMembers();
+    } catch (e) { mbErr(e); }
+  }
+
+  async function handOver(employeeId, btn) {
+    const who = (thread?.members || []).find((m) => m.id === employeeId);
+    if (!confirm(`${who?.display_name || "この人"}をこのグループの持ち主にします。\n`
+      + `あなたは参加者に戻り、人の出し入れができなくなります。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "…",
+        () => API.threadMembers({ threadId: current, action: "owner", employeeId }));
+      await openThread(current, { push: false });
+      toggleMembers();
+    } catch (e) { mbErr(e); }
+  }
+
+  async function renameGroup() {
+    const title = prompt("グループ名", thread?.title || "");
+    if (title === null || !title.trim()) return;
+    try {
+      await API.threadMembers({ threadId: current, action: "rename", title: title.trim() });
+      await openThread(current, { push: false });
+      toggleMembers();
+    } catch (e) { mbErr(e); }
+  }
+
+  async function leaveGroup(btn) {
+    if (!confirm("このグループを抜けます。\n"
+      + "抜けると、これまでのやりとりも見られなくなります。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "…", () => API.threadMembers({ threadId: current, action: "leave" }));
+      backToList();
+      await loadThreads();
+    } catch (e) { mbErr(e); }
   }
 
   // 選んだ時点で預けておき、送信時に本文と結び付ける。
@@ -377,8 +585,16 @@
         await API.sendMessage(current, text, pending?.fileId || null);
         input.value = "";
         clearAttachment();
+        // 送ったあとは最新の50件を取り直す。
+        // さかのぼって読んでいた場合、その位置には戻さない（送った直後は下を見る）
         const res = await API.getThread(current);
-        renderMessages(res.messages, res.thread.members);
+        thread = res.thread;
+        loaded = res.messages || [];
+        oldest = res.oldest;
+        hasMore = !!res.hasMore;
+        unreadFrom = null;      // 自分が書いた時点で、そこまでは全部読んでいる
+        el("th-more").classList.toggle("hidden", !hasMore);
+        renderMessages();
       });
       loadThreads();
     } catch (e) {
