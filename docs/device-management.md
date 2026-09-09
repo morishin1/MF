@@ -156,7 +156,7 @@ mf.8grp.co.jp（グループウェア）の一機能として作る。
 
 ---
 
-## 3. DB設計（`db/050_devices.sql`）
+## 3. DB設計（`db/051_devices.sql`）
 
 既存の規約に合わせる。`public` スキーマ、`gw_` 接頭辞、全表に `tenant_id` と RLS。
 
@@ -600,7 +600,7 @@ Windows は **Session 0 Isolation** により、
 | 段階 | 中身 | 目安 |
 |---|---|---|
 | **0** | **就業規則・情報セキュリティ規程の改定と周知** | 実装より前 |
-| 1 | `db/050_devices.sql` ／ `lib/devices.js`（集計・判定・カテゴリ変換） | |
+| 1 | `db/051_devices.sql` ／ `lib/devices.js`（集計・判定・カテゴリ変換） | |
 | 2 | エージェント向けAPI（enroll / config / ingest）＋ 単体テスト | |
 | 3 | Go エージェント（サービス側だけ：起動終了・USB・送信・オフライン待避） | |
 | 4 | `admin-devices.html`（一覧・タイムライン・アラート） | |

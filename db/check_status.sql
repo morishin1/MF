@@ -65,7 +65,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (46, '046',    '契約・電子署名',                                      'table',    'gw_sign_requests',       null),
   (47, '047',    '日報を1日のリズムにそろえる（デキタ・改善）',          'column',   'tc_nippo',               'wins'),
   (48, '048',    'タイムカード（打刻・修正申請・月締め）',              'table',    'gw_time_entries',        null),
-  (49, '049',    'AI提案の選別と、期日から逆算した並べ替え',            'column',   'gw_action_items',        'pinned_at')
+  (49, '049',    'AI提案の選別と、期日から逆算した並べ替え',            'column',   'gw_action_items',        'pinned_at'),
+  (50, '050',    '承認した休暇を社内の予定表にも出す',                  'column',   'gw_calendar_events',     'source')
 ),
 
 -- ファイルの適用状況

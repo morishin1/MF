@@ -339,6 +339,9 @@
     api("/api/dashboard", { method: "POST", body: { kind: "kpi", action: "actual", date, actuals } });
   const saveKpiTargets = (body) =>
     api("/api/dashboard", { method: "POST", body: { kind: "kpi", action: "target", ...body } });
+  // サイドメニューに出す「対応が要る件数」。1回で全部返る
+  const badges = () => api("/api/badges");
+
   const actionItem = (action, body = {}) =>
     api("/api/dashboard", { method: "POST", body: { kind: "action", action, ...body } });
   // 並べ替え・ピン留め・AI提案の採否。どれも同じ入口を通す
@@ -849,7 +852,7 @@
     googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
-    dashboard, saveKpiActuals, saveKpiTargets, actionItem,
+    dashboard, saveKpiActuals, saveKpiTargets, actionItem, badges,
     pinAction, reorderActions, recalcActions, adoptProposals, rejectProposals,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
     growthPlans, myGrowthPlan, growthAct,

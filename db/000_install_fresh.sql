@@ -6198,3 +6198,48 @@ create index if not exists idx_gw_action_items_proposed
 --    where pinned_at is not null and status = 'open' order by pinned_at desc;
 
 notify pgrst, 'reload schema';
+
+
+-- =============================================================================
+-- 050_leave_calendar.sql — 承認した休暇を、社内の予定表にも出す
+-- =============================================================================
+alter table public.gw_calendar_events
+  add column if not exists source text not null default 'self';
+
+alter table public.gw_calendar_events
+  add column if not exists source_id uuid;
+
+do $$
+begin
+  alter table public.gw_calendar_events
+    add constraint gw_calendar_events_source
+    check (source in ('self', 'leave', 'booking'));
+exception
+  when duplicate_object then null;
+end $$;
+
+-- 1つの申請から予定が2つできないようにする。
+-- 承認 → 取り下げ → 再承認 を繰り返しても、行は1つのまま
+create unique index if not exists uq_gw_calendar_events_source
+  on public.gw_calendar_events(source, source_id)
+  where source <> 'self' and source_id is not null;
+
+comment on column public.gw_calendar_events.source is
+  'self=本人が入れた / leave=休暇の承認から自動 / booking=予約から自動。'
+  '自動でできたものは、予定表からは直せない（直すのは申請のほう）';
+comment on column public.gw_calendar_events.source_id is
+  'もとになった申請・予約の id。取り下げのときに、これで引いて消す';
+
+
+-- 確認:
+--   select source, count(*) from public.gw_calendar_events group by source;
+--
+--   -- 承認済みの休暇と、予定表の行が対応しているか
+--   select r.id, r.starts_on, r.ends_on, e.title
+--     from public.gw_requests r
+--     left join public.gw_calendar_events e
+--            on e.source = 'leave' and e.source_id = r.id
+--    where r.kind = 'leave' and r.status = 'approved'
+--    order by r.starts_on desc;
+
+notify pgrst, 'reload schema';

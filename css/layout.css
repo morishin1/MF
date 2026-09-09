@@ -517,3 +517,37 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-subtab.on { border-color: var(--primary); background: var(--primary); color: #fff; }
 
 .topbar .brand a { display: inline-flex; align-items: center; }
+
+/* サイドメニューの「対応が要る件数」。
+   件数が0のときは器ごと隠す（js/layout.js の loadBadges）。
+   いつも数字が付いているバッジは、そこにある時点で意味を失う */
+.kp-side-badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #c53030;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+  flex: 0 0 auto;
+}
+/* 選択中の行は背景が濃いので、赤のままだと沈む */
+.kp-side-item.on .kp-side-badge { background: #fff; color: var(--primary); }
+.kp-side-badge.hidden { display: none; }
+
+/* 畳んだグループの見出しに付ける印。
+   開かないと気づけないのでは、畳んだ意味が無くなる */
+.kp-side-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c53030;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+.kp-side-dot.hidden { display: none; }
+/* 開いているあいだは、中の件数が見えているので印は要らない */
+.kp-side-group.open .kp-side-dot { display: none; }

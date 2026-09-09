@@ -98,6 +98,15 @@ export default async function handler(req, res) {
   let calendar = { skipped: "not_applicable" };
   if (r.kind === "leave") {
     const goingLive = patch.status === "approved";
+
+    // まず社内の予定表。Googleより先にこちらを書く。
+    //
+    // ここが抜けていた。承認しても mf の「スケジュール」には何も出ず、
+    // Google 側はサービスアカウントが未設定だと黙って戻るので、
+    // たいていの環境では文字どおり何も起きていなかった。
+    // 社内の予定表は mf だけで完結するので、こちらが本命
+    await syncLeaveEvent(sb, ctx, r, goingLive);
+
     calendar = await syncAllDay({
       record: r,
       action: goingLive ? "upsert" : "delete",
@@ -187,5 +196,63 @@ async function announce({ ctx, r, saved, action, note, isMine }) {
       lines: [r.title, label],
       link: "admin-requests.html",
     });
+  }
+}
+
+/**
+ * 承認した休暇を、社内の予定表（gw_calendar_events）に映す。
+ *
+ * ■ 休む理由は書かない
+ *   件名は「〇〇さん 休暇」だけにする。
+ *   有給・病気・慶弔のどれかは、同僚が知る必要のないこと。
+ *   「その日いない」ことだけが、周りに要る情報。
+ *
+ * ■ みんなの予定に出す
+ *   誰が休むかは、予定表で見えるのがいちばん早い。
+ *   ただし本文（申請の理由）は渡さない。api/schedule/team.js は
+ *   body を返さない作りだが、そもそも入れない。
+ *
+ * ■ 失敗しても承認は通す
+ *   予定表に出せなかったからといって、承認そのものを止める理由はない。
+ *   休暇が承認されたことのほうが大事で、予定はあとから直せる。
+ */
+async function syncLeaveEvent(sb, ctx, r, goingLive) {
+  const employeeId = r.employee_id || r.applicant?.id;
+  if (!employeeId || !r.starts_on || !r.ends_on) return;
+
+  try {
+    if (!goingLive) {
+      // 取り下げ・却下。承認で作った予定を消す
+      await sb.from("gw_calendar_events")
+        .delete().eq("source", "leave").eq("source_id", r.id);
+      return;
+    }
+
+    const row = {
+      tenant_id: ctx.tenantId,
+      employee_id: employeeId,
+      title: `${r.applicant?.display_name || ""}さん 休暇`.trim(),
+      // 理由は入れない。件名だけで足りる
+      body: null,
+      location: null,
+      category: "other",
+      all_day: true,
+      // 終日。日本時間の0時から、終了日の終わりまで
+      starts_at: `${r.starts_on}T00:00:00+09:00`,
+      ends_at: `${r.ends_on}T23:59:00+09:00`,
+      // 誰が休むかは社内で共有する。件名と期間だけが見える
+      visibility: "shared",
+      source: "leave",
+      source_id: r.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    // 承認 → 取り下げ → 再承認 を繰り返しても、行は1つのまま
+    // （db/050 の一意索引に任せる）
+    const { error } = await sb.from("gw_calendar_events")
+      .upsert(row, { onConflict: "source,source_id" });
+    if (error) throw error;
+  } catch (e) {
+    console.error("[requests] 休暇を予定表に出せませんでした:", e?.message || e);
   }
 }

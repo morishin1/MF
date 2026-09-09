@@ -25,7 +25,7 @@ import { fetchExternalEvents, pushEvent, unpushEvent, linkStatus } from "../../l
 
 const FIELDS =
   "id, title, body, location, category, all_day, starts_at, ends_at, created_at, " +
-  "visibility, gcal_event_id, gcal_synced_at";
+  "visibility, source, gcal_event_id, gcal_synced_at";
 
 const CATEGORIES = ["work", "meeting", "visit", "private", "other"];
 // private=自分だけ（既定） / busy=時間だけ / shared=件名と場所まで
@@ -121,6 +121,12 @@ async function update(req, res, ctx) {
   const row = normalize(body, { partial: true });
   if (row.error) return json(res, 400, row);
 
+  // 承認から自動でできた予定は、予定表からは直させない。
+  // 直せてしまうと、申請は休みなのに予定表では出社、という食い違いが起きる。
+  // 直すのは申請のほうで、予定表はその結果を映すだけ
+  const auto = await autoSource(req, ctx, body.id);
+  if (auto) return json(res, 409, { error: "auto_event", hint: auto });
+
   const { data, error } = await userClient(req)
     .from("gw_calendar_events")
     .update({ ...row.value, updated_at: new Date().toISOString() })
@@ -141,6 +147,9 @@ async function update(req, res, ctx) {
 async function remove(req, res, ctx) {
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
+
+  const auto = await autoSource(req, ctx, id);
+  if (auto) return json(res, 409, { error: "auto_event", hint: auto });
 
   // 消す前に、Google 側にも書き出してあるかを見ておく。
   // 先に消すと id が分からなくなり、向こうに幽霊が残る
@@ -253,4 +262,19 @@ function normalize(body, { partial = false } = {}) {
     v.ends_at = e.toISOString();
   }
   return { value: v };
+}
+
+/**
+ * その予定が、承認や予約から自動でできたものかを見る。
+ * 自動のものなら「どこで直すのか」を返す。null なら本人の予定
+ */
+async function autoSource(req, ctx, id) {
+  const { data } = await userClient(req)
+    .from("gw_calendar_events").select("source")
+    .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  const where = {
+    leave: "この予定は休暇の承認から自動でできたものです。取り消すときは「申請・承認」から行ってください",
+    booking: "この予定はスペース予約から自動でできたものです。変えるときは「設備・スペース予約」から行ってください",
+  };
+  return where[data?.source] || null;
 }

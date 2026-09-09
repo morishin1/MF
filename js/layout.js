@@ -344,6 +344,7 @@
                 data-group="${esc(g.key)}" aria-expanded="${on}"
                 onclick="KPLayout.toggleNavGroup('${esc(g.key)}')">
           ${icon(g.icon, 19)}<span class="lb">${esc(g.label)}</span>
+          <span class="kp-side-dot hidden" title="中に対応が必要なものがあります"></span>
           <span class="ch material-symbols-outlined">expand_more</span>
         </button>
         <div class="kp-side-sub${on ? "" : " hidden"}" data-group="${esc(g.key)}">
@@ -374,10 +375,50 @@
     // match が書いてあれば、そこに挙げた画面のどれでも選ばれた状態にする
     const on = n.key === active || (n.match || []).includes(active);
     const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}${n.external ? " ext" : ""}`;
-    const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>${n.ready ? "" : '<em>準備中</em>'}`;
+    // 件数はあとから /api/badges で入れる。ここでは器だけ置く
+    const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>`
+      + `<b class="kp-side-badge hidden" data-badge="${esc(n.key)}"></b>`
+      + `${n.ready ? "" : '<em>準備中</em>'}`;
     return n.ready
       ? `<a class="${cls}" href="${n.href}">${inner}</a>`
       : `<span class="${cls}">${inner}</span>`;
+  }
+
+  /**
+   * サイドメニューに「対応が要る件数」を出す。
+   *
+   * ■ なぜ必要か
+   *   メッセージが届いても、経費の申請が上がっても、
+   *   その画面を開くまで気づけなかった。
+   *   ベルの通知は流れていくが、こちらは「片づくまで消えない」。
+   *
+   * ■ 0 は出さない
+   *   いつも数字が付いているバッジは、そこにある時点で意味を失う。
+   *   件数が返ってこない項目は、器ごと隠したままにする。
+   *
+   * ■ 取れなくても画面は動く
+   *   バッジのために画面が止まる理由はない。
+   */
+  async function loadBadges() {
+    let badges = {};
+    try {
+      const res = await API.badges();
+      badges = res?.badges || {};
+    } catch (e) {
+      return;   // 数字が出ないだけ。黙って戻る
+    }
+    for (const node of document.querySelectorAll("[data-badge]")) {
+      const n = badges[node.dataset.badge] || 0;
+      node.textContent = n > 99 ? "99+" : String(n);
+      node.classList.toggle("hidden", !n);
+    }
+    // 畳んだグループにも、中に用があることを出す。
+    // 開かないと気づけないのでは、畳んだ意味が無くなる
+    for (const g of ADMIN_GROUPS) {
+      const sum = g.items.reduce((a, it) => a + (badges[it.key] || 0), 0);
+      const mark = document.querySelector(`.kp-side-group[data-group="${g.key}"] .kp-side-dot`);
+      if (mark) mark.classList.toggle("hidden", !sum);
+    }
   }
 
   function renderSidebar(active, items, variant) {
@@ -445,6 +486,9 @@
     else if (canPreview) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
+
+    // メニューを描いたあとで件数を入れる。取れなくても画面は動く
+    loadBadges();
   }
 
   /**
