@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
   <title>マイページ - エイト</title>
   <meta name="robots" content="noindex, nofollow">
@@ -140,6 +141,7 @@
 </div>
 
 <script src="js/api-client.js?v=20260912e"></script>
+<script src="js/device.js?v=20260912e"></script>
 <script src="js/layout.js?v=20260912e"></script>
 <script>
   const el = (id) => document.getElementById(id);
@@ -263,15 +265,16 @@
     el("dv-card").classList.remove("hidden");
 
     const n = dv.notice || {};
-    const waiting = dv.devices.filter((d) => !d.acknowledged);
+    const waiting = dv.devices.filter((d) => !d.confirmed);
     const days = (dv.usage || []).slice(0, 7);
+    const spec = (d) => [d.os, d.browser].filter(Boolean).join(" / ");
 
     el("dv").innerHTML = `
       ${waiting.length ? `
         <div class="banner warn" style="margin:0 0 14px;">
           <span class="material-symbols-outlined">info</span>
-          <div>まだ確認していないパソコンが ${waiting.length} 台あります。
-            <b>確認するまで、記録は取っていません。</b>
+          <div>まだ確認していない端末が ${waiting.length} 台あります。
+            <b>確認するまで、利用時間は数えていません。</b>
             <div style="margin-top:8px;">
               <a class="btn btn-primary btn-sm" href="device-consent.html">内容を読んで確認する</a>
             </div>
@@ -280,31 +283,24 @@
 
       <table class="kp-items" style="margin-bottom:14px;">
         <tbody>${dv.devices.map((d) => `
-          <tr><td style="width:150px;"><b>${esc(d.hostname)}</b>
-              <div class="muted" style="font-size:11.5px;">${esc(d.os || "")}</div></td>
-            <td>${d.acknowledged
-              ? `記録中　<span class="muted" style="font-size:12px;">最終受信 ${esc(d.lastSeen)}</span>`
-              : `<b>確認待ち</b>　<span class="muted" style="font-size:12px;">記録は取っていません</span>`}</td>
+          <tr><td style="width:190px;"><b>${esc(d.label)}</b>
+              <div class="muted" style="font-size:11.5px;">${esc(spec(d))}</div></td>
+            <td>${d.confirmed
+              ? `記録中　<span class="muted" style="font-size:12px;">最終利用 ${esc(d.lastSeen)}</span>`
+              : `<b>確認待ち</b>　<span class="muted" style="font-size:12px;">数えていません</span>`}</td>
           </tr>`).join("")}</tbody>
       </table>
 
       ${days.length ? `
-        <h3 style="font-size:13px;margin:0 0 8px;">直近の稼働</h3>
+        <h3 style="font-size:13px;margin:0 0 8px;">社内システムを開いていた時間</h3>
+        <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
+          パソコンの稼働時間ではありません。この画面を開いていたあいだの、おおよその合計です。</p>
         <table class="kp-items" style="margin-bottom:14px;">
           <tbody>${days.map((u) => `
             <tr><td style="width:110px;color:var(--muted);">${esc(u.date)}</td>
-              <td>${esc(u.active)}${u.nightMin ? `　<span style="color:#a05a00;">深夜あり</span>` : ""}</td>
+              <td>${esc(u.active)}${u.nightMin ? `　<span style="color:#a05a00;">深夜あり</span>` : ""}${
+                u.holidayMin ? `　<span style="color:#a05a00;">休日</span>` : ""}</td>
             </tr>`).join("")}</tbody>
-        </table>` : ""}
-
-      ${(dv.web || []).length ? `
-        <h3 style="font-size:13px;margin:0 0 8px;">見たサイトの種類（14日）</h3>
-        <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
-          URLもサイト名も保存していません。種類だけです。</p>
-        <table class="kp-items" style="margin-bottom:14px;">
-          <tbody>${dv.web.map((w) => `
-            <tr><td style="width:110px;color:var(--muted);">${esc(w.label)}</td>
-              <td>${esc(w.time)}</td></tr>`).join("")}</tbody>
         </table>` : ""}
 
       <h3 style="font-size:13px;margin:0 0 8px;">自分の記録を見た人</h3>
@@ -320,9 +316,13 @@
         <div style="font-size:12.5px;line-height:1.9;margin-top:8px;">
           <b>取っているもの</b><br>${(n.takes || []).map((s) => `・${esc(s)}`).join("<br>")}
           <br><br><b>取っていないもの</b><br>${(n.never || []).map((s) => `・${esc(s)}`).join("<br>")}
-          <br><br>${esc(n.why || "")}
+          <br><br>${esc(n.how || "")}<br>${esc(n.why || "")}
         </div>
-      </details>`;
+      </details>
+
+      <p style="margin:14px 0 0;">
+        <a class="btn btn-secondary btn-sm" href="device-consent.html">端末の設定・アプリとして入れる</a>
+      </p>`;
   }
 
   function renderSigned(sg) {

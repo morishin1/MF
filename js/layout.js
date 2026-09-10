@@ -150,7 +150,7 @@
         // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
         { key: "roles",     href: "admin-members.html#roles", label: "権限",       icon: "key",            ready: true },
         { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: true },
-        { key: "devices",   href: "admin-devices.html",   label: "端末管理",       icon: "laptop_windows", ready: true },
+        { key: "devices",   href: "admin-devices.html",   label: "端末管理",       icon: "computer",       ready: true },
         { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック", icon: "block",      ready: true },
         { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ", icon: "tune",           ready: true },
       ],
@@ -491,6 +491,10 @@
 
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く
     loadBadges();
+
+    // この端末から社内システムに入っていることを、5分ごとに知らせる。
+    // 送るのは端末の印と種類だけで、どの画面を見ていたかは送らない
+    if (window.KPDevice) KPDevice.start();
   }
 
   /**

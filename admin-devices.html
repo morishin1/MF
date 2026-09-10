@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
   <title>端末管理 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
@@ -40,16 +41,11 @@
     .dv-st.warn { background:#fff4e5; color:#a05a00; }
     .dv-st.critical { background:#fdeaea; color:#c53030; }
     .dv-st.waiting { background:#eef3fb; color:#2b5f9e; }
-    .dv-st.silent { background:#f3f4f6; color:#6b7280; }
+    .dv-st.stale { background:#f3f4f6; color:#6b7280; }
 
     .dv-note { border:1px solid #cfe0f5; background:#f7fbff; border-radius:10px;
                padding:13px 15px; margin-bottom:14px; font-size:12.5px; line-height:1.9; }
     .dv-note b { color:var(--primary-dark); }
-
-    .dv-token { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:22px;
-                font-weight:700; letter-spacing:2px; text-align:center;
-                padding:14px; border:2px dashed var(--border); border-radius:10px;
-                background:var(--soft); margin:10px 0; }
 
     .dv-bars { display:grid; gap:6px; }
     .dv-bar { display:grid; grid-template-columns:110px 1fr 64px; gap:8px; align-items:center;
@@ -64,12 +60,6 @@
     .dv-tabs button { border:1px solid var(--border); background:#fff; border-radius:999px;
                       padding:6px 14px; font-size:12.5px; cursor:pointer; font-family:inherit; }
     .dv-tabs button.on { background:var(--primary); color:#fff; border-color:var(--primary); }
-
-    .dv-chips { display:flex; gap:6px; flex-wrap:wrap; }
-    .dv-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border);
-               border-radius:999px; padding:3px 6px 3px 11px; font-size:12px; background:#fff; }
-    .dv-chip button { border:0; background:none; cursor:pointer; color:var(--muted);
-                      font-size:15px; line-height:1; padding:0 3px; font-family:inherit; }
   </style>
 </head>
 <body>
@@ -77,15 +67,19 @@
 <div class="wrap">
   <h1 class="kp-greet">端末管理</h1>
   <p class="kp-greet-sub">
-    会社が貸したパソコンの状態を見ます。情報が外に出ていないかを確かめるためのもので、
+    社内システムに、どの端末から入っているかを見ます。
+    会社のパソコン以外から社内の情報が見られていないかを確かめるためのもので、
     働きぶりを点数にするためのものではありません。
   </p>
 
   <div class="dv-note">
+    <b>パソコンに入れるソフトはありません。</b>
+    分かるのは、この社内システムを開いているあいだのことだけです。
+    ブラウザを閉じているあいだ、そのパソコンが何をしていたかは分かりません。<br>
     <b>取っていないもの</b>：キーボードで打った内容／パスワード／メールやチャットの本文／
-    画面の録画／開いていた画面のタイトル／見たページのURL（種類だけ）。<br>
-    <b>本人が告知を読むまで、記録は取りません。</b>
-    確認待ちの端末からは、1件も届きません。<br>
+    画面の録画／社内システム以外で見たページ／入っているソフト／USBメモリ／ファイル。<br>
+    <b>本人が確認するまで、利用時間は数えません。</b>
+    確認待ちの端末には、1分も入りません。<br>
     <b>あなたが誰の記録を開いたかは、本人の画面に残ります。</b>
   </div>
 
@@ -100,21 +94,21 @@
     <div id="d-sum" class="dv-sum"></div>
 
     <div class="card">
-      <h2><span class="material-symbols-outlined">laptop_windows</span>台帳
+      <h2><span class="material-symbols-outlined">devices</span>台帳
         <span style="margin-left:auto;display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="issueToken()">
-            <span class="material-symbols-outlined icon-inline">add</span>端末を登録
-          </button>
           <button class="btn btn-secondary btn-sm" onclick="downloadCsv(this)">
             <span class="material-symbols-outlined icon-inline">download</span>CSV
           </button>
         </span>
       </h2>
-      <div id="d-token"></div>
+      <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
+        端末は、その人が社内システムを開いた時点で自動で載ります。
+        本人が「このパソコンです」を押すと、確認済みになります。
+      </p>
       <div class="table-scroll" style="max-height:56vh;overflow:auto;">
         <table class="dv-table">
           <thead><tr>
-            <th>端末</th><th>使う人</th><th>状態</th><th>最終受信</th><th>アラート</th><th></th>
+            <th>端末</th><th>使う人</th><th>状態</th><th>最終利用</th><th>アラート</th><th></th>
           </tr></thead>
           <tbody id="d-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
         </table>
@@ -137,7 +131,7 @@
         </select>
       </h2>
       <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
-        深夜・休日の稼働は、働きすぎに気づくために出しています。サボりを探すためではありません。
+        深夜・休日の利用は、働きすぎに気づくために出しています。サボりを探すためではありません。
       </p>
       <div id="a-rows">読み込み中…</div>
     </div>
@@ -147,33 +141,28 @@
   <div id="p-policy" class="hidden">
     <div class="card">
       <h2><span class="material-symbols-outlined">tune</span>アラートの条件</h2>
-      <label class="check"><input type="checkbox" id="p-usb"> USBメモリの接続を知らせる</label>
+      <label class="check"><input type="checkbox" id="p-unknown"> 見慣れない端末から入られたら知らせる</label>
       <p class="muted" style="font-size:11.5px;margin:2px 0 12px 26px;">
-        マウスやキーボードは対象外です。データを持ち出せるものだけ。
+        その人が今まで使っていなかった端末から入ったときに出ます。
+        新しいパソコンに替えたときも出ます。
       </p>
-      <label class="check"><input type="checkbox" id="p-night"> 深夜・休日の稼働を知らせる</label>
+      <label class="check"><input type="checkbox" id="p-night"> 深夜・休日の利用を知らせる</label>
       <p class="muted" style="font-size:11.5px;margin:2px 0 14px 26px;">
-        深夜が1時間以上、または休日が2時間以上あった日に出ます。
+        働きすぎに気づくためのものです。
       </p>
 
-      <label>入れてはいけないソフト</label>
-      <p class="muted" style="font-size:11.5px;margin:-4px 0 6px;">
-        名前の一部で照合します（例：teamviewer）。入ると「重大」で出ます。
-      </p>
-      <div class="dv-chips" id="p-sw"></div>
-      <div style="display:flex;gap:8px;margin-top:8px;max-width:420px;">
-        <input id="p-sw-new" placeholder="teamviewer" style="margin:0;">
-        <button class="btn btn-secondary btn-sm" onclick="addSw()">追加</button>
-      </div>
-
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:18px;">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
         <div style="flex:1 1 150px;">
-          <label>離席とみなす時間（分）</label>
-          <input id="p-idle" type="number" min="1" max="120">
+          <label>深夜が何分から（分）</label>
+          <input id="p-nmin" type="number" min="5" max="720">
         </div>
         <div style="flex:1 1 150px;">
-          <label>送信の間隔（秒）</label>
-          <input id="p-send" type="number" min="60" max="3600">
+          <label>休日が何分から（分）</label>
+          <input id="p-hmin" type="number" min="5" max="720">
+        </div>
+        <div style="flex:1 1 150px;">
+          <label>何日で「使われていない」とするか</label>
+          <input id="p-stale" type="number" min="7" max="365">
         </div>
       </div>
 
@@ -183,11 +172,11 @@
       </p>
       <div style="display:flex;gap:14px;flex-wrap:wrap;">
         <div style="flex:1 1 150px;">
-          <label>イベント（日）</label>
-          <input id="p-keep-e" type="number" min="7" max="400">
+          <label>できごと（日）</label>
+          <input id="p-keep-e" type="number" min="30" max="1000">
         </div>
         <div style="flex:1 1 150px;">
-          <label>日別の集計（か月）</label>
+          <label>日別の利用時間（か月）</label>
           <input id="p-keep-d" type="number" min="1" max="60">
         </div>
       </div>
@@ -203,12 +192,13 @@
 </div>
 
 <script src="js/api-client.js?v=20260912e"></script>
+<script src="js/device.js?v=20260912e"></script>
 <script src="js/layout.js?v=20260912e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  let data = null, policy = null, blocked = [], openDetail = null;
+  let data = null, policy = null, openDetail = null;
 
   KPLayout.init({ active: "devices", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -224,6 +214,17 @@
 
   const fmt = (at) => (at ? new Date(at).toLocaleString("ja-JP",
     { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+  const clock = (min) => {
+    const m = Math.max(0, Math.round(Number(min) || 0));
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+  };
+  const hm = (at) => (at ? new Date(at).toLocaleTimeString("ja-JP",
+    { hour: "2-digit", minute: "2-digit" }) : "—");
+  const spec = (d) => [d.os, d.browser, d.screen].filter(Boolean).join(" / ");
+
+  // インラインの onclick は window から引かれる。const の矢印関数は届かない
+  function closeDetail() { el("d-detail").innerHTML = ""; openDetail = null; }
+  function closeAssign() { el("d-assign").innerHTML = ""; }
 
   // ---- 台帳 ----
   async function load() {
@@ -241,11 +242,11 @@
     const s = data.summary || {};
     el("d-sum").innerHTML = `
       <div class="box"><div class="k">台数</div><div class="v">${s.total || 0}</div></div>
-      <div class="box"><div class="k">稼働中</div><div class="v">${s.active || 0}</div></div>
+      <div class="box"><div class="k">確認済み</div><div class="v">${s.active || 0}</div></div>
       <div class="box"><div class="k">本人の確認待ち</div><div class="v">${s.waiting || 0}</div></div>
-      <div class="box"><div class="k">24時間受信なし</div><div class="v">${s.silent || 0}</div></div>
-      <div class="box${s.critical ? " bad" : ""}"><div class="k">重大</div>
-        <div class="v">${s.critical || 0}</div></div>`;
+      <div class="box"><div class="k">使われていない</div><div class="v">${s.stale || 0}</div></div>
+      <div class="box${s.unknown ? " bad" : ""}"><div class="k">見慣れない端末</div>
+        <div class="v">${s.unknown || 0}</div></div>`;
 
     const n = (data.alerts || []).length;
     el("t-alerts-n").textContent = n ? `（${n}）` : "";
@@ -253,13 +254,13 @@
     const rows = data.devices || [];
     if (!rows.length) {
       el("d-rows").innerHTML = `<tr><td colspan="6">
-        まだ登録された端末がありません。「端末を登録」で登録コードを発行してください。</td></tr>`;
+        まだ端末がありません。メンバーが社内システムを開くと、ここに載ります。</td></tr>`;
       return;
     }
     el("d-rows").innerHTML = rows.map((d) => `
       <tr class="click" onclick="showDetail('${d.id}')">
-        <td><span class="nm">${esc(d.hostname)}</span>
-          <span class="sub">${esc(d.os || "")}${d.agentVersion ? ` / v${esc(d.agentVersion)}` : ""}</span></td>
+        <td><span class="nm">${esc(d.label)}</span>
+          <span class="sub">${esc(spec(d))}${d.installed ? "　アプリとして導入済み" : ""}</span></td>
         <td>${d.employee ? `${esc(d.employee.name)}<span class="sub">${esc(d.employee.department || "")}</span>`
                          : '<span class="sub">未割り当て</span>'}</td>
         <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span></td>
@@ -269,51 +270,6 @@
               !d.openAlerts.critical && !d.openAlerts.warn ? '<span class="sub">—</span>' : ""}</td>
         <td><span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);">chevron_right</span></td>
       </tr>`).join("");
-  }
-
-  // 誰に渡すか。名前を打たせない。打たせると打ち間違いを直すところから始まる
-  function peopleOptions(selected) {
-    return `<option value="">（あとで割り当てる）</option>`
-      + (data?.people || []).map((p) =>
-          `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${
-            esc(p.name)}${p.department ? `（${esc(p.department)}）` : ""}</option>`).join("");
-  }
-
-  function issueToken() {
-    el("d-token").innerHTML = `
-      <div class="banner" style="display:block;background:var(--soft);">
-        <b>端末を登録する</b>
-        <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
-          発行したコードを、そのパソコンのエージェントの設定画面に入れてください。
-          1回だけ使えます。
-        </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <select id="d-who" style="width:auto;margin:0;">${peopleOptions(null)}</select>
-          <button class="btn btn-primary btn-sm" onclick="doIssue(this)">コードを発行</button>
-          <button class="btn btn-secondary btn-sm" onclick="closeToken()">やめる</button>
-        </div>
-      </div>`;
-  }
-
-  async function doIssue(btn) {
-    const employeeId = el("d-who").value || null;
-    try {
-      const r = await KPLayout.busy(btn, "発行中…",
-        () => API.patchDevice({ action: "issue_token", employeeId }));
-      // 平文はここでしか出せない。閉じたら二度と読めないと、はっきり書く
-      el("d-token").innerHTML = `
-        <div class="banner ok" style="display:block;">
-          <b>登録コード</b>（1回だけ使えます／7日で切れます）
-          <div class="dv-token">${esc(r.token)}</div>
-          このコードを、そのパソコンのエージェントの設定画面に入れてください。<br>
-          <b>この画面を閉じると、もう出せません。</b>必要なら今のうちに控えてください。
-          <div style="margin-top:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="closeToken()">閉じる</button>
-          </div>
-        </div>`;
-    } catch (e) {
-      el("d-msg").textContent = e.hint || e.message || "発行できませんでした";
-    }
   }
 
   async function showDetail(id) {
@@ -332,13 +288,12 @@
 
   function renderDetail(d) {
     const dev = d.device;
-    const maxApp = Math.max(1, ...d.apps.map((a) => a.minutes));
-    const maxWeb = Math.max(1, ...d.web.map((w) => w.minutes));
     const days = d.usage.slice(0, 14);
+    const maxDay = Math.max(1, ...days.map((u) => u.activeMin));
 
     el("d-detail").innerHTML = `
       <div class="card">
-        <h2><span class="material-symbols-outlined">memory</span>${esc(dev.hostname)}
+        <h2><span class="material-symbols-outlined">computer</span>${esc(dev.label)}
           <span class="dv-st ${esc(dev.state.key)}" style="margin-left:8px;">${esc(dev.state.label)}</span>
           <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
                   onclick="closeDetail()">閉じる</button>
@@ -348,9 +303,10 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
           <button class="btn btn-secondary btn-sm"
                   onclick="assign('${dev.id}', '${dev.employee ? dev.employee.id : ""}')">使う人を変える</button>
-          ${dev.status === "active"
-            ? `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','suspend')">停止する</button>`
-            : `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','resume')">再開する</button>`}
+          <button class="btn btn-secondary btn-sm" onclick="rename('${dev.id}')">名前を変える</button>
+          ${dev.status === "suspended"
+            ? `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','resume')">再開する</button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','suspend')">停止する</button>`}
           <button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','retire')">使用終了にする</button>
           <button class="btn btn-secondary btn-sm" onclick="editNote('${dev.id}')">メモ</button>
         </div>
@@ -359,71 +315,48 @@
 
         <table class="dv-table" style="margin-bottom:16px;">
           <tr><th>使う人</th><td>${dev.employee ? esc(dev.employee.name) : "未割り当て"}</td>
-              <th>本人の確認</th><td>${dev.notifiedAt ? esc(fmt(dev.notifiedAt)) : "まだ（記録は取っていません）"}</td></tr>
+              <th>本人の確認</th><td>${dev.confirmed ? esc(fmt(dev.notifiedAt))
+                : "まだ（利用時間は数えていません）"}</td></tr>
           <tr><th>OS</th><td>${esc(dev.os || "—")}</td>
-              <th>エージェント</th><td>${dev.agentVersion ? `v${esc(dev.agentVersion)}` : "—"}</td></tr>
-          <tr><th>製造番号</th><td>${esc(dev.serial || "—")}</td>
-              <th>最終受信</th><td>${esc(dev.lastSeen)}</td></tr>
+              <th>ブラウザ</th><td>${esc(dev.browser || "—")}</td></tr>
+          <tr><th>画面</th><td>${esc(dev.screen || "—")}</td>
+              <th>アプリとして導入</th><td>${dev.installed ? "済み" : "していない"}</td></tr>
+          <tr><th>はじめて使った日</th><td>${esc(fmt(dev.firstSeenAt))}</td>
+              <th>最終利用</th><td>${esc(dev.lastSeen)}</td></tr>
           ${dev.note ? `<tr><th>メモ</th><td colspan="3">${esc(dev.note)}</td></tr>` : ""}
         </table>
 
-        <h2><span class="material-symbols-outlined">schedule</span>直近14日の稼働</h2>
+        <h2><span class="material-symbols-outlined">schedule</span>社内システムを開いていた時間（直近14日）</h2>
+        <p class="muted" style="font-size:11.5px;margin:-6px 0 10px;">
+          パソコンの稼働時間ではありません。この社内システムを開いていたあいだの、おおよその合計です。
+        </p>
         ${days.length ? `<table class="dv-table"><thead><tr>
-            <th>日付</th><th>稼働</th><th>離席</th><th>深夜</th><th>休日</th><th>最初</th><th>最後</th>
+            <th>日付</th><th>利用</th><th></th><th>深夜</th><th>休日</th><th>最初</th><th>最後</th>
           </tr></thead><tbody>${days.map((u) => `
             <tr><td>${esc(u.date)}</td><td><b>${esc(u.active)}</b></td>
-              <td>${esc(clock(u.idleMin))}</td>
+              <td style="width:180px;"><span class="t" style="display:block;height:12px;border-radius:4px;
+                background:var(--primary);width:${Math.round(u.activeMin / maxDay * 100)}%;"></span></td>
               <td>${u.nightMin ? `<span class="dv-st warn">${esc(clock(u.nightMin))}</span>` : "—"}</td>
               <td>${u.holidayMin ? `<span class="dv-st warn">${esc(clock(u.holidayMin))}</span>` : "—"}</td>
               <td>${esc(hm(u.firstAt))}</td><td>${esc(hm(u.lastAt))}</td></tr>`).join("")}
           </tbody></table>`
           : `<p class="muted">この期間の記録はありません。</p>`}
 
-        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">
-          <div style="flex:1 1 300px;">
-            <h2><span class="material-symbols-outlined">apps</span>よく使ったソフト（30日）</h2>
-            ${d.apps.length ? `<div class="dv-bars">${d.apps.map((a) => `
-              <div class="dv-bar"><span title="${esc(a.product || a.exeName)}">${esc(a.exeName)}</span>
-                <span><span class="t" style="width:${Math.round(a.minutes / maxApp * 100)}%;display:block;"></span></span>
-                <span class="v">${esc(a.label)}</span></div>`).join("")}</div>`
-              : `<p class="muted">記録はありません。</p>`}
-          </div>
-          <div style="flex:1 1 300px;">
-            <h2><span class="material-symbols-outlined">public</span>サイトの種類（30日）</h2>
-            <p class="muted" style="font-size:11.5px;margin:-6px 0 8px;">
-              URLもサイト名も保存していません。種類だけです。</p>
-            ${d.web.length ? `<div class="dv-bars">${d.web.map((w) => `
-              <div class="dv-bar"><span>${esc(w.label)}</span>
-                <span><span class="t" style="width:${Math.round(w.minutes / maxWeb * 100)}%;display:block;"></span></span>
-                <span class="v">${esc(w.time)}</span></div>`).join("")}</div>`
-              : `<p class="muted">記録はありません。</p>`}
-          </div>
-        </div>
-
-        <h2 style="margin-top:18px;"><span class="material-symbols-outlined">list</span>できごと</h2>
+        <h2 style="margin-top:18px;"><span class="material-symbols-outlined">list</span>この端末に起きたこと</h2>
         <div class="dv-ev">${d.events.length ? d.events.map((e) => `
-          <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${detailText(e.detail)}</div>`).join("")
+          <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${
+            e.detail && e.detail.name ? `　<span style="color:var(--muted);">${esc(e.detail.name)}</span>` : ""}</div>`).join("")
           : `<p class="muted">記録はありません。</p>`}</div>
       </div>`;
   }
 
-  function detailText(dt) {
-    if (!dt) return "";
-    const bits = [];
-    if (dt.name) bits.push(dt.name);
-    if (dt.version) bits.push(`v${dt.version}`);
-    if (dt.label) bits.push(dt.label);
-    if (dt.class === "mass_storage") bits.push("USBメモリ");
-    if (dt.message) bits.push(dt.message);
-    return bits.length ? `　<span style="color:var(--muted);">${esc(bits.join(" / "))}</span>` : "";
+  // 誰に渡すか。名前を打たせない。打たせると打ち間違いを直すところから始まる
+  function peopleOptions(selected) {
+    return `<option value="">（割り当てない）</option>`
+      + (data && data.people || []).map((p) =>
+          `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${
+            esc(p.name)}${p.department ? `（${esc(p.department)}）` : ""}</option>`).join("");
   }
-
-  const clock = (min) => {
-    const m = Math.max(0, Math.round(Number(min) || 0));
-    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
-  };
-  const hm = (at) => (at ? new Date(at).toLocaleTimeString("ja-JP",
-    { hour: "2-digit", minute: "2-digit" }) : "—");
 
   function assign(id, current) {
     el("d-assign").innerHTML = `
@@ -431,26 +364,29 @@
         <b>使う人を変える</b>
         <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
           使う人が変わると、本人の確認はやり直しになります。
-          新しい方が確認するまで、記録は取りません。
+          新しい方が確認するまで、利用時間は数えません。
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <select id="d-assign-who" style="width:auto;margin:0;">${peopleOptions(current || null)}</select>
           <button class="btn btn-primary btn-sm" onclick="doAssign('${esc(id)}', this)">変更する</button>
-          <button class="btn btn-secondary btn-sm" onclick="el2('d-assign')">やめる</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeAssign()">やめる</button>
         </div>
       </div>`;
   }
 
-  async function doAssign(id, btn) {
+  async function doAssign(id) {
     const employeeId = el("d-assign-who").value || null;
     await run(() => API.patchDevice({ action: "assign", deviceId: id, employeeId }));
   }
 
-  // インラインの onclick から呼ぶので、関数宣言で置く
-  function el2(id) { el(id).innerHTML = ""; }
+  async function rename(id) {
+    const label = prompt("この端末の名前（例：営業部のノート）");
+    if (label === null || !label.trim()) return;
+    await run(() => API.patchDevice({ action: "rename", deviceId: id, label: label.trim() }));
+  }
 
   async function act(id, action) {
-    if (action === "retire" && !confirm("使用終了にすると、この端末からは受け取らなくなります。\n"
+    if (action === "retire" && !confirm("使用終了にすると、この端末からの利用は数えなくなります。\n"
       + "これまでの記録は残ります。よろしいですか？")) return;
     await run(() => API.patchDevice({ action, deviceId: id }));
   }
@@ -460,10 +396,6 @@
     if (note === null) return;
     await run(() => API.patchDevice({ action: "note", deviceId: id, note }));
   }
-
-  // インラインの onclick は window から引かれる。const の矢印関数は届かない
-  function closeToken() { el("d-token").innerHTML = ""; }
-  function closeDetail() { el("d-detail").innerHTML = ""; openDetail = null; }
 
   async function run(fn) {
     el("d-msg").textContent = "";
@@ -504,9 +436,10 @@
           <th>いつ</th><th>内容</th><th>端末</th><th>使う人</th><th>状態</th><th></th>
         </tr></thead><tbody>${rows.map((a) => `
           <tr><td>${esc(fmt(a.occurredAt))}</td>
-            <td><span class="dv-st ${a.severity === "critical" ? "critical" : "warn"}">${esc(a.severityLabel)}</span>
+            <td><span class="dv-st ${a.severity === "critical" ? "critical"
+                 : a.severity === "info" ? "" : "warn"}">${esc(a.severityLabel)}</span>
               ${esc(a.title)}</td>
-            <td>${esc(a.hostname)}</td>
+            <td>${esc(a.label)}</td>
             <td>${a.employee ? esc(a.employee.name) : "—"}</td>
             <td>${a.status === "open" ? "未対応"
                  : `${esc({ ack: "確認済み", resolved: "対応済み", ignored: "無視" }[a.status] || a.status)}`}
@@ -542,51 +475,33 @@
     try {
       const r = await API.devicePolicy();
       policy = r.policy;
-      blocked = [...(policy.blocked_software || [])];
-      el("p-usb").checked = policy.usb_alert !== false;
+      el("p-unknown").checked = policy.unknown_alert !== false;
       el("p-night").checked = policy.night_alert !== false;
-      el("p-idle").value = policy.idle_after_min ?? 5;
-      el("p-send").value = policy.send_interval_sec ?? 300;
-      el("p-keep-e").value = policy.keep_events_days ?? 90;
+      el("p-nmin").value = policy.night_min_minutes ?? 60;
+      el("p-hmin").value = policy.holiday_min_minutes ?? 120;
+      el("p-stale").value = policy.stale_days ?? 60;
+      el("p-keep-e").value = policy.keep_events_days ?? 400;
       el("p-keep-d").value = policy.keep_daily_months ?? 13;
-      renderSw();
     } catch (e) {
       el("p-msg").textContent = e.hint || e.message || "読み込めませんでした";
     }
   }
-
-  function renderSw() {
-    el("p-sw").innerHTML = blocked.length
-      ? blocked.map((s, i) => `<span class="dv-chip">${esc(s)}
-          <button onclick="removeSw(${i})" title="外す">×</button></span>`).join("")
-      : `<span class="muted" style="font-size:12px;">まだありません</span>`;
-  }
-
-  function addSw() {
-    const v = el("p-sw-new").value.trim().toLowerCase();
-    if (!v || blocked.includes(v)) { el("p-sw-new").value = ""; return; }
-    blocked.push(v);
-    el("p-sw-new").value = "";
-    renderSw();
-  }
-
-  function removeSw(i) { blocked.splice(i, 1); renderSw(); }
 
   async function savePolicy(btn) {
     el("p-msg").className = "err-text";
     el("p-msg").textContent = "";
     try {
       await KPLayout.busy(btn, "保存中…", () => API.saveDevicePolicy({
-        blockedSoftware: blocked,
-        usbAlert: el("p-usb").checked,
+        unknownAlert: el("p-unknown").checked,
         nightAlert: el("p-night").checked,
-        idleAfterMin: el("p-idle").value,
-        sendIntervalSec: el("p-send").value,
+        nightMinMinutes: el("p-nmin").value,
+        holidayMinMinutes: el("p-hmin").value,
+        staleDays: el("p-stale").value,
         keepEventsDays: el("p-keep-e").value,
         keepDailyMonths: el("p-keep-d").value,
       }));
       el("p-msg").className = "muted";
-      el("p-msg").textContent = "保存しました。次にエージェントが設定を読むときから効きます。";
+      el("p-msg").textContent = "保存しました。";
     } catch (e) {
       el("p-msg").textContent = e.hint || e.message || "保存できませんでした";
     }

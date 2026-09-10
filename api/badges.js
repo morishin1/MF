@@ -79,11 +79,11 @@ export default async function handler(req, res) {
       .select("id", H)
       .eq("user_id", user.id).eq("status", "proposed")),
 
-    // 端末の重大アラートだけ。
-    // 深夜・休日（要確認）まで数えると、月末はずっと数字が付いたままになる
+    // 端末は「見慣れない端末から入られた」だけ数える。
+    // 深夜・休日まで数えると、忙しい月はずっと数字が付いたままになる
     hr ? count(() => sb.from("gw_device_alerts")
       .select("id", H)
-      .eq("tenant_id", ctx.tenantId).eq("status", "open").eq("severity", "critical")) : 0,
+      .eq("tenant_id", ctx.tenantId).eq("status", "open").eq("rule", "unknown_device")) : 0,
   ]);
 
   // 0 は返さない。0を返すと、画面側で「0」と出す事故が起きる

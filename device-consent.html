@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>会社のパソコンについて - エイト</title>
+  <title>この端末について - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
@@ -26,22 +27,49 @@
     .dc-box.take h3 { color:#2b5f9e; }
     .dc-box.never h3 { color:#1f7a4c; }
     .dc-why { font-size:14px; line-height:2; }
+
+    .dc-this { border:2px solid var(--primary); border-radius:12px; padding:18px 20px;
+               background:#f7fbff; }
+    .dc-this .name { font-size:18px; font-weight:700; color:var(--primary-dark); }
+    .dc-this .spec { font-size:12.5px; color:var(--muted); margin-top:4px; }
+    .dc-this .done { color:#1f7a4c; font-weight:700; font-size:13px; }
+
     .dc-dev { display:flex; align-items:center; gap:10px; border:1px solid var(--border);
-              border-radius:10px; padding:12px 14px; margin-bottom:8px; font-size:13.5px; }
+              border-radius:10px; padding:12px 14px; margin-bottom:8px; font-size:13.5px;
+              flex-wrap:wrap; }
     .dc-dev b { color:var(--primary-dark); }
-    .dc-dev .ok { margin-left:auto; color:#1f7a4c; font-weight:700; font-size:12.5px; }
+    .dc-dev .sp { font-size:11.5px; color:var(--muted); }
+    .dc-dev .a { margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .dc-dev .ok { color:#1f7a4c; font-weight:700; font-size:12.5px; }
+
+    /* 手順。数字を大きく出す。読み飛ばしても順番だけは分かるように */
+    .dc-steps { counter-reset:s; margin:0; padding:0; list-style:none; font-size:13.5px; }
+    .dc-steps li { counter-increment:s; position:relative; padding:0 0 12px 34px; line-height:1.9; }
+    .dc-steps li::before { content:counter(s); position:absolute; left:0; top:1px;
+      width:22px; height:22px; border-radius:50%; background:var(--primary); color:#fff;
+      font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
   </style>
 </head>
 <body>
 
 <div class="wrap" style="max-width:760px;">
-  <h1 class="kp-greet">会社のパソコンで記録していること</h1>
+  <h1 class="kp-greet">この端末について</h1>
   <p class="kp-greet-sub">
-    会社が貸したパソコンには、業務の状況を記録するソフトが入っています。
-    <b>あなたが下で「読みました」を押すまで、記録は取っていません。</b>
+    いま使っているこのパソコンを、あなたの端末として登録します。
+    <b>下で「このパソコンです」を押すまで、利用時間は数えていません。</b>
   </p>
 
+  <!-- いま開いている端末。まずこれを片付けさせる -->
   <div class="card">
+    <h2><span class="material-symbols-outlined">computer</span>いま使っている端末</h2>
+    <div id="c-this">読み込み中…</div>
+    <div id="c-msg" class="err-text"></div>
+  </div>
+
+  <!-- 告知。押す前に読めるように、上のほうに置く -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">description</span>記録していること</h2>
+
     <div class="dc-box take">
       <h3><span class="material-symbols-outlined">visibility</span>取っているもの</h3>
       <ul class="dc-list" id="c-takes"></ul>
@@ -53,19 +81,34 @@
     </div>
 
     <div class="dc-why">
+      <p id="c-how" style="font-weight:600;"></p>
       <p id="c-why"></p>
       <p id="c-yours"></p>
       <p class="muted" style="font-size:13px;">
         くわしくは就業規則の該当条項をご確認ください。
-        疑問があれば、押す前に人事に聞いてください。押さないままでも、記録は始まりません。
+        疑問があれば、押す前に人事に聞いてください。押さないままでも、利用時間は数えません。
       </p>
     </div>
   </div>
 
-  <div class="card" id="c-devcard">
-    <h2><span class="material-symbols-outlined">laptop_windows</span>あなたのパソコン</h2>
-    <div id="c-devs">読み込み中…</div>
-    <div id="c-msg" class="err-text"></div>
+  <!-- アプリとして入れる。ここが「グループウェアから入れる」入口 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">install_desktop</span>アプリとして入れる</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      入れると、ブラウザのタブを探さずにデスクトップから開けます。通知も受け取りやすくなります。
+      入れても入れなくても、記録する内容は変わりません。
+    </p>
+    <div id="c-install"></div>
+  </div>
+
+  <!-- 自分の他の端末 -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">devices</span>あなたのほかの端末</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      使わなくなったパソコンは「外す」を押してください。
+      外しても、これまでの記録は消えません。
+    </p>
+    <div id="c-devs"></div>
     <p class="muted" style="font-size:12.5px;margin-top:14px;">
       自分の記録と、誰がそれを見たかは、いつでも
       <a href="mypage.html">マイページ</a>で読めます。
@@ -74,50 +117,171 @@
 </div>
 
 <script src="js/api-client.js?v=20260912e"></script>
+<script src="js/device.js?v=20260912e"></script>
 <script src="js/layout.js?v=20260912e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
+
+  let data = null;
+  let myUid = null;
+  let installEvent = null;
+
+  // ブラウザが「入れられます」と言ってきたら受け取っておく。
+  // 受け取らないと、あとから自分でインストールを促せない
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installEvent = e;
+    renderInstall();
+  });
+  window.addEventListener("appinstalled", () => {
+    installEvent = null;
+    if (myUid) API.markDeviceInstalled(myUid).catch(() => {});
+    renderInstall();
+  });
 
   KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner", "sr"] })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
     try {
-      const d = await API.myDevices();
-      const n = d.notice || {};
-      el("c-takes").innerHTML = (n.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
-      el("c-never").innerHTML = (n.never || []).map((s) => `<li>${esc(s)}</li>`).join("");
-      el("c-why").textContent = n.why || "";
-      el("c-yours").textContent = n.yours || "";
-
-      const devs = d.devices || [];
-      el("c-devs").innerHTML = devs.length
-        ? devs.map((x) => `
-            <div class="dc-dev">
-              <span class="material-symbols-outlined" style="color:var(--muted);">computer</span>
-              <span><b>${esc(x.hostname)}</b>
-                <span class="muted" style="font-size:12px;">　${esc(x.os || "")}</span></span>
-              ${x.acknowledged
-                ? `<span class="ok">確認済み</span>`
-                : `<button class="btn btn-primary btn-sm" style="margin-left:auto;"
-                      onclick="acknowledge('${esc(x.id)}', this)">読みました</button>`}
-            </div>`).join("")
-        : `<p class="muted">あなたに割り当てられたパソコンはありません。</p>`;
+      // 合図を1回送って、この端末を台帳に載せてから読む。
+      // そうしないと、はじめて開いた人の画面に何も出ない
+      await KPDevice.beat(true);
+      myUid = KPDevice.state.uid || KPDevice.uid();
+      data = await API.myDevices();
+      render();
     } catch (e) {
-      el("c-devs").innerHTML = `<div class="banner err">
+      el("c-this").innerHTML = `<div class="banner err">
         <span class="material-symbols-outlined">error</span>
         <div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
     }
   }
 
-  async function acknowledge(id, btn) {
+  const spec = (d) => [d.os, d.browser, d.screen].filter(Boolean).join(" / ");
+
+  function render() {
+    const n = data.notice || {};
+    el("c-takes").innerHTML = (n.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
+    el("c-never").innerHTML = (n.never || []).map((s) => `<li>${esc(s)}</li>`).join("");
+    el("c-how").textContent = n.how || "";
+    el("c-why").textContent = n.why || "";
+    el("c-yours").textContent = n.yours || "";
+
+    const devs = data.devices || [];
+    const here = devs.find((d) => d.uid === myUid);
+    const others = devs.filter((d) => d.uid !== myUid);
+
+    el("c-this").innerHTML = here
+      ? `<div class="dc-this">
+           <div class="name">${esc(here.label)}</div>
+           <div class="spec">${esc(spec(here))}</div>
+           <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+             ${here.confirmed
+               ? `<span class="done">
+                    <span class="material-symbols-outlined icon-inline">check_circle</span>確認済みです
+                  </span>`
+               : `<button class="btn btn-primary" onclick="confirmThis(this)">
+                    <span class="material-symbols-outlined icon-inline">check</span>このパソコンです
+                  </button>`}
+             <button class="btn btn-secondary btn-sm" onclick="renameThis()">名前を変える</button>
+           </div>
+           ${here.confirmed ? "" : `
+             <p class="muted" style="font-size:12.5px;margin:12px 0 0;">
+               押すと、この端末で社内システムを開いていた時間を数えはじめます。
+               上を読んでからで構いません。
+             </p>`}
+         </div>`
+      : `<p class="muted">この端末はまだ登録されていません。画面を開き直してください。</p>`;
+
+    el("c-devs").innerHTML = others.length
+      ? others.map((d) => `
+          <div class="dc-dev">
+            <span class="material-symbols-outlined" style="color:var(--muted);">computer</span>
+            <span><b>${esc(d.label)}</b>
+              <span class="sp">　${esc(spec(d))}　最終利用 ${esc(d.lastSeen)}</span></span>
+            <span class="a">
+              ${d.confirmed ? `<span class="ok">確認済み</span>`
+                            : `<span class="sp">確認待ち（数えていません）</span>`}
+              <button class="btn btn-secondary btn-sm" onclick="forget('${esc(d.uid)}')">外す</button>
+            </span>
+          </div>`).join("")
+      : `<p class="muted">ほかの端末はありません。</p>`;
+
+    renderInstall();
+  }
+
+  function renderInstall() {
+    const here = (data && data.devices || []).find((d) => d.uid === myUid);
+    const already = KPDevice.installed() || (here && here.installed);
+
+    if (already) {
+      el("c-install").innerHTML = `<div class="banner ok">
+        <span class="material-symbols-outlined">check_circle</span>
+        <div>この端末には、すでにアプリとして入っています。</div></div>`;
+      return;
+    }
+    if (installEvent) {
+      el("c-install").innerHTML = `
+        <button class="btn btn-primary" onclick="install(this)">
+          <span class="material-symbols-outlined icon-inline">download</span>このパソコンに入れる
+        </button>`;
+      return;
+    }
+    // ブラウザが自動の入口を出さないことがある（Safari、設定によっては Chrome）。
+    // そのときは手順を書く。「入れられません」で終わらせない
+    el("c-install").innerHTML = `
+      <ol class="dc-steps">
+        <li>ブラウザのアドレスバーの右にある<b>インストール</b>のしるしを押します。</li>
+        <li>見あたらないときは、ブラウザのメニュー（︙）から
+          <b>「アプリとしてインストール」</b>または<b>「ドックに追加」</b>を選びます。</li>
+        <li>iPhone・iPad の Safari では、共有ボタンから<b>「ホーム画面に追加」</b>を選びます。</li>
+      </ol>`;
+  }
+
+  async function confirmThis(btn) {
     el("c-msg").textContent = "";
     try {
-      await KPLayout.busy(btn, "記録中…", () => API.acknowledgeDevice(id));
+      await KPLayout.busy(btn, "記録中…", () => API.confirmDevice(myUid));
       await load();
     } catch (e) {
       el("c-msg").textContent = e.hint || e.message || "記録できませんでした";
+    }
+  }
+
+  async function renameThis() {
+    const here = (data && data.devices || []).find((d) => d.uid === myUid);
+    const label = prompt("この端末の名前（例：事務所のノート）", (here && here.label) || "");
+    if (label === null || !label.trim()) return;
+    try {
+      await API.renameMyDevice(myUid, label.trim());
+      await load();
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "変えられませんでした";
+    }
+  }
+
+  async function forget(uid) {
+    if (!confirm("この端末を外します。\nこれまでの記録は残ります。よろしいですか？")) return;
+    try {
+      await API.forgetMyDevice(uid);
+      await load();
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "外せませんでした";
+    }
+  }
+
+  async function install(btn) {
+    if (!installEvent) return;
+    btn.disabled = true;
+    try {
+      installEvent.prompt();
+      const r = await installEvent.userChoice;
+      if (r.outcome === "accepted" && myUid) await API.markDeviceInstalled(myUid).catch(() => {});
+    } finally {
+      installEvent = null;
+      btn.disabled = false;
+      await load();
     }
   }
 </script>

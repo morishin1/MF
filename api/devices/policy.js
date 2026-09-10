@@ -2,12 +2,10 @@
 // PATCH /api/devices/policy   … 更新
 //
 // ■ 何をアラートにするかは会社が決める
-//   端末側で決めさせない。端末は改ざんできるし、
-//   変えるたびに全台へ配り直すことになる。
+//   ブラウザ側で決めさせない。
 //
 // ■ 保存期間もここ
-//   イベントは90日、日別は13か月が既定。
-//   「いつまでも取ってある」状態にしないための設定で、
+//   日別は13か月が既定。「いつまでも取ってある」状態にしないための設定で、
 //   短くする方向にしか使わない想定。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
@@ -15,18 +13,15 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SITES } from "../../lib/devices.js";
 
 const SQL = "db/053_devices.sql";
 
 const DEFAULTS = {
-  blocked_software: [],
-  site_categories: {},
   night_from: "22:00", night_to: "05:00",
-  idle_after_min: 5,
-  usb_alert: true, night_alert: true,
-  send_interval_sec: 300,
-  keep_events_days: 90, keep_daily_months: 13,
+  unknown_alert: true, night_alert: true,
+  night_min_minutes: 60, holiday_min_minutes: 120,
+  stale_days: 60,
+  keep_events_days: 400, keep_daily_months: 13,
 };
 
 export default async function handler(req, res) {
@@ -47,42 +42,20 @@ export default async function handler(req, res) {
       if (hint) return json(res, 503, { error: "not_ready", message: hint });
       return json(res, 500, { error: "db_query_failed", detail: error.message });
     }
-    return json(res, 200, {
-      policy: { ...DEFAULTS, ...(data || {}) },
-      // 画面で「既定でこう分けている」を見せるため
-      defaultSites: DEFAULT_SITES,
-      categories: CATEGORIES.map((c) => ({ key: c, label: CATEGORY_LABEL[c] })),
-    });
+    return json(res, 200, { policy: { ...DEFAULTS, ...(data || {}) } });
   }
 
   if (req.method === "PATCH") {
     const body = await readJson(req);
     const row = { tenant_id: ctx.tenantId, updated_by: user.id, updated_at: new Date().toISOString() };
 
-    if (body.blockedSoftware !== undefined) {
-      if (!Array.isArray(body.blockedSoftware)) return json(res, 400, { error: "bad_request" });
-      row.blocked_software = body.blockedSoftware
-        .map((s) => String(s).trim().slice(0, 80)).filter(Boolean).slice(0, 200);
-    }
-    if (body.siteCategories !== undefined) {
-      const src = body.siteCategories;
-      if (!src || typeof src !== "object" || Array.isArray(src)) {
-        return json(res, 400, { error: "bad_request" });
-      }
-      const out = {};
-      for (const [host, cat] of Object.entries(src).slice(0, 500)) {
-        // 知らないカテゴリを入れさせない。表の側で checkに引っかかる前に止める
-        const h = String(host).toLowerCase().replace(/^www\./, "").trim();
-        if (h && CATEGORIES.includes(cat)) out[h.slice(0, 120)] = cat;
-      }
-      row.site_categories = out;
-    }
     const num = (v, lo, hi) => Math.min(Math.max(Math.round(Number(v) || 0), lo), hi);
-    if (body.idleAfterMin !== undefined) row.idle_after_min = num(body.idleAfterMin, 1, 120);
-    if (body.sendIntervalSec !== undefined) row.send_interval_sec = num(body.sendIntervalSec, 60, 3600);
-    if (body.keepEventsDays !== undefined) row.keep_events_days = num(body.keepEventsDays, 7, 400);
+    if (body.nightMinMinutes !== undefined) row.night_min_minutes = num(body.nightMinMinutes, 5, 720);
+    if (body.holidayMinMinutes !== undefined) row.holiday_min_minutes = num(body.holidayMinMinutes, 5, 720);
+    if (body.staleDays !== undefined) row.stale_days = num(body.staleDays, 7, 365);
+    if (body.keepEventsDays !== undefined) row.keep_events_days = num(body.keepEventsDays, 30, 1000);
     if (body.keepDailyMonths !== undefined) row.keep_daily_months = num(body.keepDailyMonths, 1, 60);
-    if (body.usbAlert !== undefined) row.usb_alert = Boolean(body.usbAlert);
+    if (body.unknownAlert !== undefined) row.unknown_alert = Boolean(body.unknownAlert);
     if (body.nightAlert !== undefined) row.night_alert = Boolean(body.nightAlert);
     const hhmm = (v) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : null);
     if (hhmm(body.nightFrom)) row.night_from = hhmm(body.nightFrom);

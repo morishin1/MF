@@ -557,8 +557,17 @@
   }
   // 本人向け。自分の端末・自分の記録・自分を見た履歴
   const myDevices = () => api("/api/devices/me");
-  const acknowledgeDevice = (deviceId) =>
-    api("/api/devices/me", { method: "POST", body: { action: "acknowledge", deviceId } });
+  // 画面を開いているあいだの合図。js/device.js から5分ごとに呼ばれる
+  const deviceBeat = (body) =>
+    api("/api/devices/me", { method: "POST", body: { action: "beat", ...body } });
+  const confirmDevice = (deviceUid) =>
+    api("/api/devices/me", { method: "POST", body: { action: "confirm", deviceUid } });
+  const markDeviceInstalled = (deviceUid) =>
+    api("/api/devices/me", { method: "POST", body: { action: "installed", deviceUid } });
+  const renameMyDevice = (deviceUid, label) =>
+    api("/api/devices/me", { method: "POST", body: { action: "rename", deviceUid, label } });
+  const forgetMyDevice = (deviceUid) =>
+    api("/api/devices/me", { method: "POST", body: { action: "forget", deviceUid } });
 
   // ---- 契約・電子署名 ----
   // 管理側
@@ -930,7 +939,8 @@
     closing, patchClosing, downloadClosingCsv,
     devices, patchDevice, deviceAlerts, patchDeviceAlert,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
-    myDevices, acknowledgeDevice,
+    myDevices, deviceBeat, confirmDevice, markDeviceInstalled,
+    renameMyDevice, forgetMyDevice,
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,

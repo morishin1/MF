@@ -13,7 +13,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { SEVERITY_LABEL } from "../../lib/devices.js";
+import { SEVERITY_LABEL, RULE_LABEL } from "../../lib/devices.js";
 
 const SQL = "db/053_devices.sql";
 const STATUS = ["open", "ack", "resolved", "ignored"];
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
     let query = sb.from("gw_device_alerts")
       .select("id, device_id, severity, rule, title, detail, status, occurred_at, "
-            + "decided_at, decided_note, device:gw_devices(hostname, employee_id)")
+            + "decided_at, decided_note, device:gw_devices(label, employee_id)")
       .eq("tenant_id", ctx.tenantId)
       .order("occurred_at", { ascending: false })
       .limit(200);
@@ -60,9 +60,10 @@ export default async function handler(req, res) {
       alerts: (data || []).map((a) => ({
         id: a.id, deviceId: a.device_id,
         severity: a.severity, severityLabel: SEVERITY_LABEL[a.severity] || a.severity,
-        rule: a.rule, title: a.title, detail: a.detail, status: a.status,
+        rule: a.rule, ruleLabel: RULE_LABEL[a.rule] || a.rule,
+        title: a.title, detail: a.detail, status: a.status,
         occurredAt: a.occurred_at, decidedAt: a.decided_at, decidedNote: a.decided_note,
-        hostname: a.device?.hostname || "",
+        label: a.device?.label || "",
         employee: names.get(a.device?.employee_id) || null,
       })),
     });

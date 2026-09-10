@@ -6427,20 +6427,43 @@ notify pgrst, 'reload schema';
 -- =============================================================================
 -- 053_devices.sql
 -- =============================================================================
--- 053: 端末管理（EIGHT PC Agent）
+-- 053: 端末管理（グループウェアから登録する形）
 --
--- ■ 本人が承認するまで収集しない
---   gw_devices.notified_at が null のあいだ、サーバは collect:false を返し、
---   エージェントは何も送らない。就業規則への明記と本人への周知が
---   間に合っていない状態で入れても、データは溜まらない。
+-- ■ PCに入れるソフトは作らない
+--   分かるのは「どの端末から社内システムに入ったか」と
+--   「いつ・どれだけ開いていたか」だけ。
+--   USB・インストールされたソフト・アプリ別の時間・PCの起動終了は、
+--   ブラウザからは取れない。取れないものの置き場を作らない。
 --
--- ■ 監視ではなく端末管理
---   キー入力・パスワード・メール本文・チャット本文・画面・
---   ウィンドウのタイトル・URLの全文は、どこにも入れない。
+-- ■ 本人が確認するまで、利用時間は数えない
+--   gw_devices.notified_at が null のあいだ、日別の集計は書かない。
 --
 -- ■ 管理者が見たことも残す
 --   gw_device_views。片側だけが透明な仕組みにしない。
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 0) 前の版（常駐エージェント前提）を入れてしまっていた場合の後始末
+--
+--    エージェントは作らなかったので、これらに行が入ることはない。
+--    空のときだけ落とす。1行でも入っていたら残して、人が見てから決める
+-- -----------------------------------------------------------------------------
+do $$
+declare t text;
+begin
+  foreach t in array array['gw_device_app_usage', 'gw_device_web_usage', 'gw_device_enrollments']
+  loop
+    if to_regclass('public.' || t) is not null then
+      execute format('select 1 from public.%I limit 1', t);
+      if not found then
+        execute format('drop table public.%I', t);
+        raise notice '使わなくなった % を落としました', t;
+      else
+        raise warning '% に行があるので残しました。中身を確認してから手で消してください', t;
+      end if;
+    end if;
+  end loop;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- 1) 端末台帳
@@ -6449,35 +6472,37 @@ create table if not exists public.gw_devices (
   id          uuid primary key default gen_random_uuid(),
   tenant_id   uuid not null references public.tenants(id) on delete cascade,
 
-  -- 端末が初回インストール時に作り、レジストリに残すID。
-  -- ホスト名は変わるが、これは変わらない
+  -- ブラウザの localStorage に置くID。これが端末の印
   device_uid  text not null,
+
+  employee_id uuid references public.gw_employees(id) on delete set null,
 
   -- 貸与品台帳のPCと紐づける。台帳と端末管理が別物になると、
   -- 「誰に貸したPCか」が2か所で食い違う
   asset_id    uuid references public.gw_assets(id) on delete set null,
-  employee_id uuid references public.gw_employees(id) on delete set null,
 
-  hostname      text not null,
-  os_version    text,
-  serial        text,
-  agent_version text,
+  -- 本人が付けた名前。ブラウザはPCの名前を教えてくれないので、
+  -- 既定は「Windows 11 の Chrome」のような組み立てたもの
+  label       text not null,
+  os          text,
+  os_version  text,
+  browser     text,
+  model       text,
+  screen      text,
+  user_agent  text,
 
-  -- 端末シークレットの sha256。平文は保存しない
-  secret_hash   text not null,
-  secret_set_at timestamptz not null default now(),
+  status text not null default 'unconfirmed'
+         check (status in ('unconfirmed', 'active', 'suspended', 'retired')),
 
-  status text not null default 'active'
-         check (status in ('active', 'suspended', 'retired')),
+  -- 本人が告知を読んだ時刻。null のあいだ利用時間は数えない
+  notified_at  timestamptz,
+  -- アプリとして入れた（PWA）時刻
+  installed_at timestamptz,
 
-  -- 本人が告知を読んだ時刻。null のあいだは収集しない
-  notified_at timestamptz,
-
-  last_seen_at timestamptz,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at  timestamptz,
 
   note        text,
-  enrolled_by uuid references auth.users(id) on delete set null,
-  enrolled_at timestamptz not null default now(),
   retired_at  timestamptz,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
@@ -6485,45 +6510,67 @@ create table if not exists public.gw_devices (
   constraint gw_devices_uid unique (device_uid)
 );
 
+-- 前の版から入れ替えるとき用。作り直さずに列だけ足す
+alter table public.gw_devices add column if not exists label        text;
+alter table public.gw_devices add column if not exists os           text;
+alter table public.gw_devices add column if not exists browser      text;
+alter table public.gw_devices add column if not exists model        text;
+alter table public.gw_devices add column if not exists screen       text;
+alter table public.gw_devices add column if not exists user_agent   text;
+alter table public.gw_devices add column if not exists installed_at timestamptz;
+alter table public.gw_devices add column if not exists first_seen_at timestamptz not null default now();
+
+do $$
+begin
+  -- 前の版は hostname だった。中身を label に移す
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'gw_devices'
+                and column_name = 'hostname') then
+    update public.gw_devices set label = coalesce(label, hostname) where label is null;
+    alter table public.gw_devices alter column hostname drop not null;
+  end if;
+  -- 常駐エージェント用の列。もう使わない
+  alter table public.gw_devices drop column if exists secret_hash;
+  alter table public.gw_devices drop column if exists secret_set_at;
+  alter table public.gw_devices drop column if exists agent_version;
+  alter table public.gw_devices drop column if exists serial;
+  alter table public.gw_devices drop column if exists enrolled_by;
+  alter table public.gw_devices drop column if exists enrolled_at;
+
+  update public.gw_devices set label = '名前のない端末' where label is null;
+  alter table public.gw_devices alter column label set not null;
+exception when undefined_table then null;
+end $$;
+
+-- status の許す値を、この版のものにそろえる
+do $$
+begin
+  alter table public.gw_devices drop constraint if exists gw_devices_status_check;
+  update public.gw_devices set status = 'unconfirmed' where status not in
+    ('unconfirmed', 'active', 'suspended', 'retired');
+  alter table public.gw_devices add constraint gw_devices_status_check
+    check (status in ('unconfirmed', 'active', 'suspended', 'retired'));
+exception when undefined_table then null;
+end $$;
+
 create index if not exists idx_gw_devices_tenant
   on public.gw_devices(tenant_id, status);
 create index if not exists idx_gw_devices_employee
-  on public.gw_devices(employee_id);
+  on public.gw_devices(employee_id, last_seen_at desc);
 
 comment on table public.gw_devices is
-  '会社が貸与したPC。業務利用状況の可視化と情報漏えい防止のための台帳';
+  '社内システムに入るのに使われている端末。'
+  '常駐ソフトは入れていないので、分かるのは「どの端末から入ったか」まで';
+comment on column public.gw_devices.device_uid is
+  'ブラウザの localStorage に置くID。Cookieを消せば別の端末に見える。'
+  '防ぎたいのは見慣れない端末からの利用で、本人が自分の端末を隠すことではない';
 comment on column public.gw_devices.notified_at is
-  '本人が告知を読んだ時刻。null のあいだエージェントは何も送らない。'
-  '就業規則への明記と周知が済むまで、データが溜まらないようにするための仕組み';
-comment on column public.gw_devices.secret_hash is
-  '端末シークレットの sha256。平文は持たない（漏れても端末になりすませない）';
+  '本人が告知を読んだ時刻。null のあいだ日別の利用時間は数えない';
 
 -- -----------------------------------------------------------------------------
--- 2) 登録トークン（1回だけ使える）
--- -----------------------------------------------------------------------------
-create table if not exists public.gw_device_enrollments (
-  id          uuid primary key default gen_random_uuid(),
-  tenant_id   uuid not null references public.tenants(id) on delete cascade,
-  token_hash  text not null,
-  employee_id uuid references public.gw_employees(id) on delete set null,
-  expires_at  timestamptz not null,
-  used_at     timestamptz,
-  used_by     uuid references public.gw_devices(id) on delete set null,
-  created_by  uuid references auth.users(id) on delete set null,
-  created_at  timestamptz not null default now(),
-
-  constraint gw_device_enrollments_token unique (token_hash)
-);
-
-create index if not exists idx_gw_device_enrollments_open
-  on public.gw_device_enrollments(tenant_id, expires_at)
-  where used_at is null;
-
-comment on column public.gw_device_enrollments.token_hash is
-  '登録トークンの sha256。平文は発行のときに1度だけ画面に出す';
-
--- -----------------------------------------------------------------------------
--- 3) イベント（点の記録・追記のみ）
+-- 2) 端末に起きたこと（追記のみ）
+--
+--    数は多くない。本人が「この端末に何があったか」を読むためのもの
 -- -----------------------------------------------------------------------------
 create table if not exists public.gw_device_events (
   id        uuid primary key default gen_random_uuid(),
@@ -6531,34 +6578,43 @@ create table if not exists public.gw_device_events (
   device_id uuid not null references public.gw_devices(id) on delete cascade,
 
   work_date date not null,
-  at        timestamptz not null,
+  at        timestamptz not null default now(),
 
-  kind text not null check (kind in (
-    'boot','shutdown','logon','logoff','lock','unlock','sleep','wake',
-    'usb_attach','usb_detach','app_install','app_uninstall',
-    'agent_start','agent_update','agent_error')),
-
-  -- 種類ごとの中身。USBならベンダ/製品ID、ソフトなら名前とバージョン。
-  -- 個人が特定できるもの（ファイル名・URL・ウィンドウのタイトル）は入れない
+  kind text not null,
   detail jsonb not null default '{}'::jsonb,
 
-  -- 端末側の連番。同じものを2回受けても1行にする
-  seq bigint not null,
-
-  created_at timestamptz not null default now(),
-  constraint gw_device_events_once unique (device_id, seq)
+  created_at timestamptz not null default now()
 );
 
-create index if not exists idx_gw_device_events_tenant
-  on public.gw_device_events(tenant_id, work_date desc);
+-- 前の版は常駐エージェント用の種類しか許していなかった。
+-- seq（端末側の連番）も、もう来ない
+do $$
+begin
+  alter table public.gw_device_events drop constraint if exists gw_device_events_kind_check;
+  alter table public.gw_device_events drop constraint if exists gw_device_events_once;
+  alter table public.gw_device_events alter column seq drop not null;
+exception when undefined_table or undefined_column then null;
+end $$;
+
+alter table public.gw_device_events drop column if exists seq;
+
+-- 落としてから足す。add constraint に if not exists は無い
+alter table public.gw_device_events drop constraint if exists gw_device_events_kind_check;
+alter table public.gw_device_events add constraint gw_device_events_kind_check
+  check (kind in ('first_seen', 'confirmed', 'installed', 'renamed',
+                  'suspended', 'resumed', 'retired', 'forgotten'))
+  not valid;
+
 create index if not exists idx_gw_device_events_device
-  on public.gw_device_events(device_id, work_date desc, at desc);
+  on public.gw_device_events(device_id, at desc);
+create index if not exists idx_gw_device_events_tenant
+  on public.gw_device_events(tenant_id, at desc);
 
 -- -----------------------------------------------------------------------------
--- 4) 日別の集計
+-- 3) 日別の利用時間
 --
---    生の秒単位は端末の中で捨てる。ここに来るのは日別の合計だけ。
---    「いつ何をしていたか」を分単位で持たないのは、それが監視になるから
+--    「社内システムを開いていた時間」であって、パソコンの稼働時間ではない。
+--    画面の文言もそう書く。取り違えると、数字の意味が変わる
 -- -----------------------------------------------------------------------------
 create table if not exists public.gw_device_usage (
   id          uuid primary key default gen_random_uuid(),
@@ -6567,11 +6623,13 @@ create table if not exists public.gw_device_usage (
   employee_id uuid references public.gw_employees(id) on delete set null,
   work_date   date not null,
 
+  -- 開いていた時間の合計（分）。5分ごとの合図をつなぎ合わせて数える
   active_min  integer not null default 0,
-  idle_min    integer not null default 0,
-  locked_min  integer not null default 0,
+  -- そのうち深夜・休日にあたるぶん
   night_min   integer not null default 0,
   holiday_min integer not null default 0,
+  -- 合図が届いた回数。数字の粗さを確かめるために持つ
+  beats       integer not null default 0,
 
   first_at    timestamptz,
   last_at     timestamptz,
@@ -6580,52 +6638,27 @@ create table if not exists public.gw_device_usage (
   constraint gw_device_usage_day unique (device_id, work_date)
 );
 
+alter table public.gw_device_usage add column if not exists beats integer not null default 0;
+-- 常駐エージェント用。ブラウザからは取れない
+alter table public.gw_device_usage drop column if exists idle_min;
+alter table public.gw_device_usage drop column if exists locked_min;
+
 create index if not exists idx_gw_device_usage_tenant
   on public.gw_device_usage(tenant_id, work_date desc);
+create index if not exists idx_gw_device_usage_employee
+  on public.gw_device_usage(employee_id, work_date desc);
 
-create table if not exists public.gw_device_app_usage (
-  id        uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  device_id uuid not null references public.gw_devices(id) on delete cascade,
-  work_date date not null,
-  exe_name  text not null,
-  product   text,
-  minutes   integer not null default 0,
-
-  constraint gw_device_app_day unique (device_id, work_date, exe_name)
-);
-
-create index if not exists idx_gw_device_app_tenant
-  on public.gw_device_app_usage(tenant_id, work_date desc);
-
--- サイトはカテゴリだけ。ホスト名もURLも保存しない
-create table if not exists public.gw_device_web_usage (
-  id        uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  device_id uuid not null references public.gw_devices(id) on delete cascade,
-  work_date date not null,
-  category  text not null check (category in
-            ('work','research','sns','video','shopping','other')),
-  minutes   integer not null default 0,
-
-  constraint gw_device_web_day unique (device_id, work_date, category)
-);
-
-comment on table public.gw_device_web_usage is
-  'サイトの利用時間。カテゴリ単位でしか持たない。'
-  'URLもホスト名も、端末の中で落としてから送るのでここには届かない';
+comment on table public.gw_device_usage is
+  '社内システムを開いていた時間。パソコンの稼働時間ではない。'
+  '5分ごとの合図をつなぎ合わせた、おおよその値';
 
 -- -----------------------------------------------------------------------------
--- 5) アラート
---
---    イベントは消せない記録。アラートは人が対応するもの。
---    状態を持たせる必要があるので、分ける
+-- 4) アラート
 -- -----------------------------------------------------------------------------
 create table if not exists public.gw_device_alerts (
   id        uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id) on delete cascade,
   device_id uuid not null references public.gw_devices(id) on delete cascade,
-  event_id  uuid references public.gw_device_events(id) on delete set null,
 
   severity text not null check (severity in ('info','warn','critical')),
   rule     text not null,
@@ -6642,44 +6675,56 @@ create table if not exists public.gw_device_alerts (
   created_at  timestamptz not null default now(),
 
   -- 同じ端末の同じ理由で、同じ日に何度も作らない。
-  -- 「深夜に働いた」が1晩で10件出ると、どれも読まれなくなる
+  -- 「深夜に使っていた」が1晩で10件出ると、どれも読まれなくなる
   dedupe_key text,
   constraint gw_device_alerts_dedupe unique (device_id, dedupe_key)
 );
+
+alter table public.gw_device_alerts drop column if exists event_id;
 
 create index if not exists idx_gw_device_alerts_open
   on public.gw_device_alerts(tenant_id, status, occurred_at desc);
 
 -- -----------------------------------------------------------------------------
--- 6) ポリシー（会社ごとに1行）
+-- 5) ポリシー（会社ごとに1行）
 -- -----------------------------------------------------------------------------
 create table if not exists public.gw_device_policies (
   tenant_id uuid primary key references public.tenants(id) on delete cascade,
 
-  blocked_software jsonb not null default '[]'::jsonb,
-  site_categories  jsonb not null default '{}'::jsonb,
-
   night_from time not null default '22:00',
   night_to   time not null default '05:00',
-  idle_after_min integer not null default 5,
 
-  usb_alert   boolean not null default true,
-  night_alert boolean not null default true,
+  -- 見慣れない端末から入られたときに知らせるか
+  unknown_alert boolean not null default true,
+  night_alert   boolean not null default true,
 
-  send_interval_sec integer not null default 300,
-  keep_events_days  integer not null default 90,
+  -- 何分から「深夜に使っていた」とするか
+  night_min_minutes   integer not null default 60,
+  holiday_min_minutes integer not null default 120,
+  -- 何日使われていない端末を「使われていない」とするか
+  stale_days integer not null default 60,
+
+  keep_events_days  integer not null default 400,
   keep_daily_months integer not null default 13,
 
   updated_by uuid references auth.users(id) on delete set null,
-  updated_at timestamptz not null default now(),
-
-  constraint gw_device_policies_arrays check (
-    jsonb_typeof(blocked_software) = 'array'
-    and jsonb_typeof(site_categories) = 'object')
+  updated_at timestamptz not null default now()
 );
 
+alter table public.gw_device_policies add column if not exists unknown_alert boolean not null default true;
+alter table public.gw_device_policies add column if not exists night_min_minutes integer not null default 60;
+alter table public.gw_device_policies add column if not exists holiday_min_minutes integer not null default 120;
+alter table public.gw_device_policies add column if not exists stale_days integer not null default 60;
+-- 常駐エージェント用。もう使わない
+alter table public.gw_device_policies drop column if exists blocked_software;
+alter table public.gw_device_policies drop column if exists site_categories;
+alter table public.gw_device_policies drop column if exists idle_after_min;
+alter table public.gw_device_policies drop column if exists usb_alert;
+alter table public.gw_device_policies drop column if exists send_interval_sec;
+alter table public.gw_device_policies drop constraint if exists gw_device_policies_arrays;
+
 -- -----------------------------------------------------------------------------
--- 7) 管理者の閲覧履歴
+-- 6) 管理者の閲覧履歴
 --
 --    これが無いと、この機能は片側だけが透明な仕組みになる。
 --    本人は「自分の記録を、いつ誰が見たか」を読める
@@ -6706,20 +6751,17 @@ comment on table public.gw_device_views is
   '見る側の記録が残らない仕組みは、監視になる';
 
 -- -----------------------------------------------------------------------------
--- 8) RLS
+-- 7) RLS
 --
 --    読むだけ許す。書き込みは api/devices/*（service_role）だけ。
 --    本人は自分の端末ぶん、人事・経営者は全件
 -- -----------------------------------------------------------------------------
-alter table public.gw_devices          enable row level security;
-alter table public.gw_device_events    enable row level security;
-alter table public.gw_device_usage     enable row level security;
-alter table public.gw_device_app_usage enable row level security;
-alter table public.gw_device_web_usage enable row level security;
-alter table public.gw_device_alerts    enable row level security;
-alter table public.gw_device_views     enable row level security;
-alter table public.gw_device_policies  enable row level security;
-alter table public.gw_device_enrollments enable row level security;
+alter table public.gw_devices         enable row level security;
+alter table public.gw_device_events   enable row level security;
+alter table public.gw_device_usage    enable row level security;
+alter table public.gw_device_alerts   enable row level security;
+alter table public.gw_device_policies enable row level security;
+alter table public.gw_device_views    enable row level security;
 
 drop policy if exists gw_devices_read on public.gw_devices;
 create policy gw_devices_read on public.gw_devices
@@ -6727,7 +6769,6 @@ create policy gw_devices_read on public.gw_devices
   using (public.gw_is_hr(tenant_id)
          or employee_id = public.gw_employee_id(tenant_id));
 
--- 端末に紐づく記録は、その端末を読める人が読める
 drop policy if exists gw_device_events_read on public.gw_device_events;
 create policy gw_device_events_read on public.gw_device_events
   for select to authenticated
@@ -6738,22 +6779,6 @@ create policy gw_device_events_read on public.gw_device_events
 
 drop policy if exists gw_device_usage_read on public.gw_device_usage;
 create policy gw_device_usage_read on public.gw_device_usage
-  for select to authenticated
-  using (exists (select 1 from public.gw_devices d
-                  where d.id = device_id
-                    and (public.gw_is_hr(d.tenant_id)
-                         or d.employee_id = public.gw_employee_id(d.tenant_id))));
-
-drop policy if exists gw_device_app_read on public.gw_device_app_usage;
-create policy gw_device_app_read on public.gw_device_app_usage
-  for select to authenticated
-  using (exists (select 1 from public.gw_devices d
-                  where d.id = device_id
-                    and (public.gw_is_hr(d.tenant_id)
-                         or d.employee_id = public.gw_employee_id(d.tenant_id))));
-
-drop policy if exists gw_device_web_read on public.gw_device_web_usage;
-create policy gw_device_web_read on public.gw_device_web_usage
   for select to authenticated
   using (exists (select 1 from public.gw_devices d
                   where d.id = device_id
@@ -6778,10 +6803,9 @@ create policy gw_device_policies_read on public.gw_device_policies
   for select to authenticated
   using (public.gw_is_hr(tenant_id));
 
--- 登録トークンは人事だけ。平文は入っていないが、存在自体を配らない
+-- 使わなくなった表のポリシーが残っていても害はないが、掃除しておく
+drop policy if exists gw_device_app_read on public.gw_device_app_usage;
+drop policy if exists gw_device_web_read on public.gw_device_web_usage;
 drop policy if exists gw_device_enrollments_read on public.gw_device_enrollments;
-create policy gw_device_enrollments_read on public.gw_device_enrollments
-  for select to authenticated
-  using (public.gw_is_hr(tenant_id));
 
 notify pgrst, 'reload schema';
