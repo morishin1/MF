@@ -1,6 +1,6 @@
 // GET /api/cron/devices
 //   1日1回まわす。端末管理の後始末。
-//     ① しばらく使われていない端末を知らせる
+//     ① 止まったエージェントと、しばらく使われていない端末を知らせる
 //     ② 保存期間を過ぎた記録を消す
 //     ③ 使用終了から90日を過ぎた端末を、記録ごと消す
 //
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   }
 
   const sb = admin();
-  const out = { stale: 0, events: 0, daily: 0, purged: 0, skipped: null };
+  const out = { stale: 0, silent: 0, events: 0, daily: 0, purged: 0, skipped: null };
 
   // 表がまだ無い環境（053 未適用）でも、cron 全体を落とさない
   const { error: probe } = await sb.from("gw_devices").select("id").limit(1);
@@ -42,17 +42,36 @@ export default async function handler(req, res) {
 
   // ---- ① しばらく使われていない端末 ----
   const { data: devices } = await sb.from("gw_devices")
-    .select("id, tenant_id, label, last_seen_at, notified_at, status")
+    .select("id, tenant_id, label, hostname, source, last_seen_at, notified_at, status")
     .in("status", ["active", "unconfirmed"])
     .limit(2000);
 
   const today = jstDate();
   const seeds = [];
   for (const d of devices || []) {
-    const days = Number(byTenant.get(d.tenant_id)?.stale_days) || 60;
-    const cut = Date.now() - days * 86400000;
     const seen = d.last_seen_at ? Date.parse(d.last_seen_at) : 0;
-    if (seen && seen < cut) {
+
+    // エージェントは5分ごとに送ってくるはずのもの。1日届かなければ止まっている。
+    // 会社のソフトが消されたのか、PCが起動していないだけなのかは分からない。
+    // 分からないから、気づけるようにしておく
+    if (d.source === "agent") {
+      if (d.notified_at && (!seen || Date.now() - seen > 24 * 3600000)) {
+        seeds.push({
+          tenant_id: d.tenant_id, device_id: d.id,
+          severity: "warn", rule: "agent_silent",
+          title: `${d.hostname || d.label} から24時間以上、記録が届いていません`,
+          detail: { lastSeenAt: d.last_seen_at },
+          occurred_at: new Date().toISOString(),
+          // 1日1件まで。止まっているあいだ毎日1件出る
+          dedupe_key: `silent:${today}`,
+        });
+      }
+      continue;
+    }
+
+    // ブラウザは使ったときだけ。しばらく空くのはふつうなので、日数で見る
+    const days = Number(byTenant.get(d.tenant_id)?.stale_days) || 60;
+    if (seen && seen < Date.now() - days * 86400000) {
       seeds.push({
         tenant_id: d.tenant_id, device_id: d.id,
         severity: "info", rule: "no_access",
@@ -67,7 +86,10 @@ export default async function handler(req, res) {
   if (seeds.length) {
     const { error } = await sb.from("gw_device_alerts")
       .upsert(seeds, { onConflict: "device_id,dedupe_key", ignoreDuplicates: true });
-    if (!error) out.stale = seeds.length;
+    if (!error) {
+      out.stale = seeds.filter((s) => s.rule === "no_access").length;
+      out.silent = seeds.filter((s) => s.rule === "agent_silent").length;
+    }
   }
 
   // ---- ② 保存期間 ----
@@ -85,10 +107,13 @@ export default async function handler(req, res) {
       .delete({ count: "exact" }).eq("tenant_id", t).lt("work_date", day(-keepEvents));
     out.events += ec || 0;
 
-    const { count: dc } = await sb.from("gw_device_usage")
-      .delete({ count: "exact" }).eq("tenant_id", t)
-      .lt("work_date", day(-Math.round(keepMonths * 30.4)));
-    out.daily += dc || 0;
+    const dayCut = day(-Math.round(keepMonths * 30.4));
+    for (const table of ["gw_device_usage", "gw_device_app_usage", "gw_device_web_usage"]) {
+      const { count, error } = await sb.from(table)
+        .delete({ count: "exact" }).eq("tenant_id", t).lt("work_date", dayCut);
+      // アプリ別・サイト別は 054 を流していない環境には無い。落とさない
+      if (!error) out.daily += count || 0;
+    }
   }
 
   // ---- ③ 使用終了から90日 ----

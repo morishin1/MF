@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912e">
-  <link rel="stylesheet" href="css/layout.css?v=20260912e">
+  <link rel="stylesheet" href="css/app.css?v=20260912f">
+  <link rel="stylesheet" href="css/layout.css?v=20260912f">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -42,6 +42,18 @@
     .dv-st.critical { background:#fdeaea; color:#c53030; }
     .dv-st.waiting { background:#eef3fb; color:#2b5f9e; }
     .dv-st.stale { background:#f3f4f6; color:#6b7280; }
+    .dv-st.silent { background:#fdeaea; color:#c53030; }
+
+    /* 載り方。エージェントが入っているかがひと目で分かるように */
+    .dv-src { display:inline-block; padding:1px 7px; border-radius:4px;
+              font-size:10.5px; font-weight:700; vertical-align:1px; }
+    .dv-src.browser { background:#eef3fb; color:#2b5f9e; }
+    .dv-src.agent { background:#eaf6ef; color:#1f7a4c; }
+
+    .dv-token { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:22px;
+                font-weight:700; letter-spacing:2px; text-align:center;
+                padding:14px; border:2px dashed var(--border); border-radius:10px;
+                background:var(--soft); margin:10px 0; }
 
     .dv-note { border:1px solid #cfe0f5; background:#f7fbff; border-radius:10px;
                padding:13px 15px; margin-bottom:14px; font-size:12.5px; line-height:1.9; }
@@ -60,6 +72,12 @@
     .dv-tabs button { border:1px solid var(--border); background:#fff; border-radius:999px;
                       padding:6px 14px; font-size:12.5px; cursor:pointer; font-family:inherit; }
     .dv-tabs button.on { background:var(--primary); color:#fff; border-color:var(--primary); }
+
+    .dv-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .dv-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border);
+               border-radius:999px; padding:3px 6px 3px 11px; font-size:12px; background:#fff; }
+    .dv-chip button { border:0; background:none; cursor:pointer; color:var(--muted);
+                      font-size:15px; line-height:1; padding:0 3px; font-family:inherit; }
   </style>
 </head>
 <body>
@@ -73,13 +91,17 @@
   </p>
 
   <div class="dv-note">
-    <b>パソコンに入れるソフトはありません。</b>
-    分かるのは、この社内システムを開いているあいだのことだけです。
-    ブラウザを閉じているあいだ、そのパソコンが何をしていたかは分かりません。<br>
-    <b>取っていないもの</b>：キーボードで打った内容／パスワード／メールやチャットの本文／
-    画面の録画／社内システム以外で見たページ／入っているソフト／USBメモリ／ファイル。<br>
-    <b>本人が確認するまで、利用時間は数えません。</b>
-    確認待ちの端末には、1分も入りません。<br>
+    <b>台帳には2通りの載り方があります。</b>
+    <span class="dv-src browser">ブラウザ</span> は社内システムを開くと自動で載るもので、
+    分かるのは開いているあいだのことだけ。
+    <span class="dv-src agent">エージェント</span> は本人がパソコンに入れた会社のソフトで、
+    起動終了・アプリ・サイトの種類・USB まで分かります。
+    同じパソコンの両方がつながっていれば、1行にまとめて出ます。<br>
+    <b>どちらでも取っていないもの</b>：キーボードで打った内容／パスワード／
+    メールやチャットの本文／画面の録画／開いていた画面のタイトル／
+    見たページのURL（種類だけ）／ファイルの中身。<br>
+    <b>本人が確認するまで、記録は始まりません。</b>
+    確認待ちの端末からは1件も届きません。<br>
     <b>あなたが誰の記録を開いたかは、本人の画面に残ります。</b>
   </div>
 
@@ -96,15 +118,20 @@
     <div class="card">
       <h2><span class="material-symbols-outlined">devices</span>台帳
         <span style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="issueToken()">
+            <span class="material-symbols-outlined icon-inline">add</span>登録コードを出す
+          </button>
           <button class="btn btn-secondary btn-sm" onclick="downloadCsv(this)">
             <span class="material-symbols-outlined icon-inline">download</span>CSV
           </button>
         </span>
       </h2>
       <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
-        端末は、その人が社内システムを開いた時点で自動で載ります。
-        本人が「このパソコンです」を押すと、確認済みになります。
+        ブラウザは、その人が社内システムを開いた時点で自動で載ります。
+        会社のソフトを入れるときは「登録コードを出す」で1台ぶんのコードを渡してください。
+        どちらも本人が「このパソコンです」を押すまで、記録は始まりません。
       </p>
+      <div id="d-token"></div>
       <div class="table-scroll" style="max-height:56vh;overflow:auto;">
         <table class="dv-table">
           <thead><tr>
@@ -151,6 +178,23 @@
         働きすぎに気づくためのものです。
       </p>
 
+      <label class="check"><input type="checkbox" id="p-usb"> USBメモリの接続を知らせる</label>
+      <p class="muted" style="font-size:11.5px;margin:2px 0 14px 26px;">
+        会社のソフトを入れたパソコンだけ。マウスやキーボードは対象外です。
+        データを持ち出せるものだけ知らせます。
+      </p>
+
+      <label>入れてはいけないソフト</label>
+      <p class="muted" style="font-size:11.5px;margin:-4px 0 6px;">
+        名前の一部で照合します（例：teamviewer）。入ると「重大」で出ます。
+        会社のソフトを入れたパソコンだけが分かります。
+      </p>
+      <div class="dv-chips" id="p-sw"></div>
+      <div style="display:flex;gap:8px;margin:8px 0 18px;max-width:420px;">
+        <input id="p-sw-new" placeholder="teamviewer" style="margin:0;">
+        <button class="btn btn-secondary btn-sm" onclick="addSw()">追加</button>
+      </div>
+
       <div style="display:flex;gap:14px;flex-wrap:wrap;">
         <div style="flex:1 1 150px;">
           <label>深夜が何分から（分）</label>
@@ -163,6 +207,14 @@
         <div style="flex:1 1 150px;">
           <label>何日で「使われていない」とするか</label>
           <input id="p-stale" type="number" min="7" max="365">
+        </div>
+        <div style="flex:1 1 150px;">
+          <label>離席とみなす時間（分）</label>
+          <input id="p-idle" type="number" min="1" max="120">
+        </div>
+        <div style="flex:1 1 150px;">
+          <label>送信の間隔（秒）</label>
+          <input id="p-send" type="number" min="60" max="3600">
         </div>
       </div>
 
@@ -191,14 +243,14 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912e"></script>
-<script src="js/device.js?v=20260912e"></script>
-<script src="js/layout.js?v=20260912e"></script>
+<script src="js/api-client.js?v=20260912f"></script>
+<script src="js/device.js?v=20260912f"></script>
+<script src="js/layout.js?v=20260912f"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  let data = null, policy = null, openDetail = null;
+  let data = null, policy = null, openDetail = null, blocked = [];
 
   KPLayout.init({ active: "devices", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -242,9 +294,10 @@
     const s = data.summary || {};
     el("d-sum").innerHTML = `
       <div class="box"><div class="k">台数</div><div class="v">${s.total || 0}</div></div>
-      <div class="box"><div class="k">確認済み</div><div class="v">${s.active || 0}</div></div>
+      <div class="box"><div class="k">ソフト導入済み</div><div class="v">${s.agents || 0}</div></div>
       <div class="box"><div class="k">本人の確認待ち</div><div class="v">${s.waiting || 0}</div></div>
-      <div class="box"><div class="k">使われていない</div><div class="v">${s.stale || 0}</div></div>
+      <div class="box${s.silent ? " bad" : ""}"><div class="k">受信なし</div>
+        <div class="v">${s.silent || 0}</div></div>
       <div class="box${s.unknown ? " bad" : ""}"><div class="k">見慣れない端末</div>
         <div class="v">${s.unknown || 0}</div></div>`;
 
@@ -259,8 +312,11 @@
     }
     el("d-rows").innerHTML = rows.map((d) => `
       <tr class="click" onclick="showDetail('${d.id}')">
-        <td><span class="nm">${esc(d.label)}</span>
-          <span class="sub">${esc(spec(d))}${d.installed ? "　アプリとして導入済み" : ""}</span></td>
+        <td><span class="nm">${esc(d.source === "agent" ? (d.hostname || d.label) : d.label)}</span>
+          <span class="dv-src ${esc(d.source)}">${d.source === "agent" ? "エージェント" : "ブラウザ"}</span>
+          <span class="sub">${esc(spec(d))}${
+            d.agentVersion ? ` / v${esc(d.agentVersion)}` : ""}${
+            (d.browsers || []).length ? `　ブラウザ ${d.browsers.length}` : ""}</span></td>
         <td>${d.employee ? `${esc(d.employee.name)}<span class="sub">${esc(d.employee.department || "")}</span>`
                          : '<span class="sub">未割り当て</span>'}</td>
         <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span></td>
@@ -288,8 +344,11 @@
 
   function renderDetail(d) {
     const dev = d.device;
+    const isAgent = dev.source === "agent";
     const days = d.usage.slice(0, 14);
     const maxDay = Math.max(1, ...days.map((u) => u.activeMin));
+    const maxApp = Math.max(1, ...(d.apps || []).map((a) => a.minutes));
+    const maxWeb = Math.max(1, ...(d.web || []).map((w) => w.minutes));
 
     el("d-detail").innerHTML = `
       <div class="card">
@@ -316,38 +375,132 @@
         <table class="dv-table" style="margin-bottom:16px;">
           <tr><th>使う人</th><td>${dev.employee ? esc(dev.employee.name) : "未割り当て"}</td>
               <th>本人の確認</th><td>${dev.confirmed ? esc(fmt(dev.notifiedAt))
-                : "まだ（利用時間は数えていません）"}</td></tr>
-          <tr><th>OS</th><td>${esc(dev.os || "—")}</td>
-              <th>ブラウザ</th><td>${esc(dev.browser || "—")}</td></tr>
-          <tr><th>画面</th><td>${esc(dev.screen || "—")}</td>
-              <th>アプリとして導入</th><td>${dev.installed ? "済み" : "していない"}</td></tr>
+                : "まだ（記録は始まっていません）"}</td></tr>
+          <tr><th>OS</th><td>${esc(dev.os || "—")}${
+                dev.osBuild ? `（${esc(dev.osBuild)}）` : ""}</td>
+              <th>${isAgent ? "エージェント" : "ブラウザ"}</th>
+              <td>${esc(isAgent ? (dev.agentVersion ? "v" + dev.agentVersion : "—")
+                                : (dev.browser || "—"))}</td></tr>
+          <tr><th>${isAgent ? "製造番号" : "画面"}</th>
+              <td>${esc((isAgent ? dev.serial : dev.screen) || "—")}</td>
+              <th>${isAgent ? "パソコン名" : "アプリとして導入"}</th>
+              <td>${isAgent ? esc(dev.hostname || "—") : (dev.installed ? "済み" : "していない")}</td></tr>
           <tr><th>はじめて使った日</th><td>${esc(fmt(dev.firstSeenAt))}</td>
-              <th>最終利用</th><td>${esc(dev.lastSeen)}</td></tr>
+              <th>最終${isAgent ? "受信" : "利用"}</th><td>${esc(dev.lastSeen)}</td></tr>
           ${dev.note ? `<tr><th>メモ</th><td colspan="3">${esc(dev.note)}</td></tr>` : ""}
         </table>
 
-        <h2><span class="material-symbols-outlined">schedule</span>社内システムを開いていた時間（直近14日）</h2>
+        ${(d.browsers || []).length ? `
+          <h2><span class="material-symbols-outlined">public</span>このパソコンで使われているブラウザ</h2>
+          <table class="dv-table" style="margin-bottom:16px;">
+            ${d.browsers.map((b) => `<tr>
+              <td>${esc(b.label)}</td>
+              <td>${b.confirmed ? "確認済み" : "確認待ち"}</td>
+              <td>最終利用 ${esc(b.lastSeen)}</td></tr>`).join("")}
+          </table>` : ""}
+
+        <h2><span class="material-symbols-outlined">schedule</span>${
+          isAgent ? "パソコンの稼働（直近14日）" : "社内システムを開いていた時間（直近14日）"}</h2>
         <p class="muted" style="font-size:11.5px;margin:-6px 0 10px;">
-          パソコンの稼働時間ではありません。この社内システムを開いていたあいだの、おおよその合計です。
+          ${isAgent
+            ? "会社のソフトが測った、パソコンを使っていた時間です。"
+            : "パソコンの稼働時間ではありません。この社内システムを開いていたあいだの、おおよその合計です。"}
         </p>
         ${days.length ? `<table class="dv-table"><thead><tr>
-            <th>日付</th><th>利用</th><th></th><th>深夜</th><th>休日</th><th>最初</th><th>最後</th>
+            <th>日付</th><th>${isAgent ? "稼働" : "利用"}</th><th></th>
+            ${isAgent ? "<th>離席</th>" : ""}<th>深夜</th><th>休日</th><th>最初</th><th>最後</th>
           </tr></thead><tbody>${days.map((u) => `
             <tr><td>${esc(u.date)}</td><td><b>${esc(u.active)}</b></td>
               <td style="width:180px;"><span class="t" style="display:block;height:12px;border-radius:4px;
                 background:var(--primary);width:${Math.round(u.activeMin / maxDay * 100)}%;"></span></td>
+              ${isAgent ? `<td>${esc(clock(u.idleMin))}</td>` : ""}
               <td>${u.nightMin ? `<span class="dv-st warn">${esc(clock(u.nightMin))}</span>` : "—"}</td>
               <td>${u.holidayMin ? `<span class="dv-st warn">${esc(clock(u.holidayMin))}</span>` : "—"}</td>
               <td>${esc(hm(u.firstAt))}</td><td>${esc(hm(u.lastAt))}</td></tr>`).join("")}
           </tbody></table>`
           : `<p class="muted">この期間の記録はありません。</p>`}
 
+        ${(d.apps || []).length || (d.web || []).length ? `
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">
+          <div style="flex:1 1 300px;">
+            <h2><span class="material-symbols-outlined">apps</span>よく使ったソフト（30日）</h2>
+            <div class="dv-bars">${(d.apps || []).map((a) => `
+              <div class="dv-bar"><span title="${esc(a.product || a.exeName)}">${esc(a.exeName)}</span>
+                <span><span class="t" style="display:block;width:${
+                  Math.round(a.minutes / maxApp * 100)}%;"></span></span>
+                <span class="v">${esc(a.label)}</span></div>`).join("")}</div>
+          </div>
+          <div style="flex:1 1 300px;">
+            <h2><span class="material-symbols-outlined">public</span>サイトの種類（30日）</h2>
+            <p class="muted" style="font-size:11.5px;margin:-6px 0 8px;">
+              URLもサイト名も保存していません。パソコンの中で種類に置き換えてから送っています。</p>
+            <div class="dv-bars">${(d.web || []).map((w) => `
+              <div class="dv-bar"><span>${esc(w.label)}</span>
+                <span><span class="t" style="display:block;width:${
+                  Math.round(w.minutes / maxWeb * 100)}%;"></span></span>
+                <span class="v">${esc(w.time)}</span></div>`).join("")}</div>
+          </div>
+        </div>` : ""}
+
         <h2 style="margin-top:18px;"><span class="material-symbols-outlined">list</span>この端末に起きたこと</h2>
         <div class="dv-ev">${d.events.length ? d.events.map((e) => `
-          <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${
-            e.detail && e.detail.name ? `　<span style="color:var(--muted);">${esc(e.detail.name)}</span>` : ""}</div>`).join("")
+          <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${detailText(e.detail)}</div>`).join("")
           : `<p class="muted">記録はありません。</p>`}</div>
       </div>`;
+  }
+
+  // できごとの中身。決めた鍵しか来ない（サーバ側でそう絞ってある）
+  function detailText(dt) {
+    if (!dt) return "";
+    const bits = [];
+    if (dt.name) bits.push(dt.name);
+    if (dt.version) bits.push(`v${dt.version}`);
+    if (dt.label) bits.push(dt.label);
+    if (dt.class === "mass_storage") bits.push("USBメモリ");
+    if (dt.message) bits.push(dt.message);
+    return bits.length ? `　<span style="color:var(--muted);">${esc(bits.join(" / "))}</span>` : "";
+  }
+
+  // ---- 登録コード ----
+  function issueToken() {
+    el("d-token").innerHTML = `
+      <div class="banner" style="display:block;background:var(--soft);">
+        <b>会社のソフトを入れるための登録コード</b>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
+          発行したコードを、そのパソコンで
+          <code>eight-agent-svc.exe -enroll コード</code> に渡してください。
+          1回だけ使えます。入れたあと、使う方の画面が自動で開きます。
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <select id="d-who" style="width:auto;margin:0;">${peopleOptions(null)}</select>
+          <button class="btn btn-primary btn-sm" onclick="doIssue(this)">コードを発行</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeToken()">やめる</button>
+        </div>
+      </div>`;
+  }
+
+  function closeToken() { el("d-token").innerHTML = ""; }
+
+  async function doIssue(btn) {
+    const employeeId = el("d-who").value || null;
+    try {
+      const r = await KPLayout.busy(btn, "発行中…",
+        () => API.patchDevice({ action: "issue_token", employeeId }));
+      // 平文はここでしか出せない。閉じたら二度と読めないと、はっきり書く
+      el("d-token").innerHTML = `
+        <div class="banner ok" style="display:block;">
+          <b>登録コード</b>（1回だけ使えます／7日で切れます）
+          <div class="dv-token">${esc(r.token)}</div>
+          そのパソコンで、次のように実行してください。<br>
+          <code>eight-agent-svc.exe -enroll ${esc(r.token)}</code><br>
+          <b>この画面を閉じると、もう出せません。</b>必要なら今のうちに控えてください。
+          <div style="margin-top:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="closeToken()">閉じる</button>
+          </div>
+        </div>`;
+    } catch (e) {
+      el("d-msg").textContent = e.hint || e.message || "発行できませんでした";
+    }
   }
 
   // 誰に渡すか。名前を打たせない。打たせると打ち間違いを直すところから始まる
@@ -475,17 +628,39 @@
     try {
       const r = await API.devicePolicy();
       policy = r.policy;
+      blocked = [...(policy.blocked_software || [])];
       el("p-unknown").checked = policy.unknown_alert !== false;
       el("p-night").checked = policy.night_alert !== false;
+      el("p-usb").checked = policy.usb_alert !== false;
       el("p-nmin").value = policy.night_min_minutes ?? 60;
       el("p-hmin").value = policy.holiday_min_minutes ?? 120;
       el("p-stale").value = policy.stale_days ?? 60;
+      el("p-idle").value = policy.idle_after_min ?? 5;
+      el("p-send").value = policy.send_interval_sec ?? 300;
       el("p-keep-e").value = policy.keep_events_days ?? 400;
       el("p-keep-d").value = policy.keep_daily_months ?? 13;
+      renderSw();
     } catch (e) {
       el("p-msg").textContent = e.hint || e.message || "読み込めませんでした";
     }
   }
+
+  function renderSw() {
+    el("p-sw").innerHTML = blocked.length
+      ? blocked.map((v, i) => `<span class="dv-chip">${esc(v)}
+          <button onclick="removeSw(${i})" title="外す">×</button></span>`).join("")
+      : `<span class="muted" style="font-size:12px;">まだありません</span>`;
+  }
+
+  function addSw() {
+    const v = el("p-sw-new").value.trim().toLowerCase();
+    if (!v || blocked.includes(v)) { el("p-sw-new").value = ""; return; }
+    blocked.push(v);
+    el("p-sw-new").value = "";
+    renderSw();
+  }
+
+  function removeSw(i) { blocked.splice(i, 1); renderSw(); }
 
   async function savePolicy(btn) {
     el("p-msg").className = "err-text";
@@ -494,14 +669,18 @@
       await KPLayout.busy(btn, "保存中…", () => API.saveDevicePolicy({
         unknownAlert: el("p-unknown").checked,
         nightAlert: el("p-night").checked,
+        usbAlert: el("p-usb").checked,
+        blockedSoftware: blocked,
         nightMinMinutes: el("p-nmin").value,
         holidayMinMinutes: el("p-hmin").value,
         staleDays: el("p-stale").value,
+        idleAfterMin: el("p-idle").value,
+        sendIntervalSec: el("p-send").value,
         keepEventsDays: el("p-keep-e").value,
         keepDailyMonths: el("p-keep-d").value,
       }));
       el("p-msg").className = "muted";
-      el("p-msg").textContent = "保存しました。";
+      el("p-msg").textContent = "保存しました。パソコンのソフトが次に設定を読むときから効きます。";
     } catch (e) {
       el("p-msg").textContent = e.hint || e.message || "保存できませんでした";
     }

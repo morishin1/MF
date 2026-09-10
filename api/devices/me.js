@@ -27,6 +27,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import {
   isDate, jstDate, clock, sinceLabel, deviceState, cleanUid, newDeviceUid,
   describeDevice, applyBeat, unknownDeviceAlert, timeAlerts, EVENT_LABEL, BEAT_MIN,
+  sha256,
 } from "../../lib/devices.js";
 
 const SQL = "db/053_devices.sql";
@@ -50,14 +51,46 @@ export const NOTICE = {
     "パソコンに入っているソフト、USBメモリ、ファイル",
     "パソコンの電源が入っていた時間",
   ],
+  // 会社のソフトを入れたパソコンでは、この3つは当てはまらなくなる。
+  // 入れている人には、下の AGENT_NOTICE に置き換えて出す。
+  // 「取っていません」と書いてあるものを実は取っている、が起きないようにする
+  replacedByAgent: [
+    "社内システム以外で見たページ",
+    "パソコンに入っているソフト、USBメモリ、ファイル",
+    "パソコンの電源が入っていた時間",
+  ],
   why: "会社のパソコン以外から社内の情報が見られていないかを確かめるためのものです。"
      + "働きぶりを点数にしたり、評価に使ったりはしません。"
      + "深夜や休日の利用を見ているのは、働きすぎに気づくためです。",
-  how: "パソコンに入れるソフトはありません。"
-     + "分かるのは、この画面を開いているあいだのことだけです。"
+  how: "この画面だけの場合、分かるのは画面を開いているあいだのことだけです。"
      + "ブラウザを閉じているあいだ、パソコンが何をしていたかは分かりません。",
   yours: "自分の記録は、いつでもこの画面で見られます。"
        + "管理者があなたの記録を開いたときは、それもこの画面に残ります。",
+};
+
+// 会社のソフト（エージェント）を入れたパソコンで、追加で記録すること。
+// 上の NOTICE に足して読ませる。入れていない人には出さない
+export const AGENT_NOTICE = {
+  title: "このパソコンに入れた会社のソフトで、追加で記録していること",
+  takes: [
+    "パソコンの起動・終了・ログオン・ロック・スリープの時刻",
+    "1日の稼働時間と、離席していた時間",
+    "使ったソフトの名前と、その合計時間",
+    "見たサイトの種類（業務・調べもの・SNS など）と合計時間",
+    "USBメモリをつないだこと、ソフトを入れたこと",
+  ],
+  never: [
+    "キーボードで打った内容",
+    "パスワード",
+    "メールやチャットの本文",
+    "画面の録画・スクリーンショット",
+    "開いていた画面のタイトル",
+    "見たページのURL（種類だけにして送ります）",
+    "ファイルの中身",
+  ],
+  why: "会社のパソコンから、お客様の情報が外に出ていないかを確かめるためのものです。"
+     + "URLは、パソコンの中で種類に置き換えてから送ります。"
+     + "アドレスそのものは会社に届きません。",
 };
 
 export default async function handler(req, res) {
@@ -78,8 +111,9 @@ async function read(req, res, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
 
   const { data: devices, error } = await sb.from("gw_devices")
-    .select("id, device_uid, label, os, os_version, browser, model, screen, status, "
-          + "notified_at, installed_at, first_seen_at, last_seen_at")
+    .select("id, device_uid, label, source, hostname, os, os_version, browser, model, screen, "
+          + "status, notified_at, installed_at, first_seen_at, last_seen_at, "
+          + "linked_device_id, agent_version")
     .eq("tenant_id", ctx.tenantId)
     .eq("employee_id", ctx.employee.id)
     .neq("status", "retired")
@@ -131,18 +165,26 @@ async function read(req, res, ctx) {
     .limit(30);
 
   return json(res, 200, {
-    notice: NOTICE,
     range: { from, to },
     beatSec: BEAT_MIN * 60,
+    // エージェントを入れているなら、追加で記録することも読ませる。
+    // 同時に、基本のほうから「もう当てはまらない行」を外す
+    notice: noticeFor(devices || []),
+    agentNotice: (devices || []).some((d) => d.source === "agent") ? AGENT_NOTICE : null,
     devices: (devices || []).map((d) => ({
       id: d.id, uid: d.device_uid, label: d.label,
+      source: d.source,
+      hostname: d.hostname,
       os: d.os_version ? `${d.os} ${d.os_version}` : d.os,
       browser: d.browser, model: d.model, screen: d.screen,
+      agentVersion: d.agent_version,
       status: d.status,
       confirmed: Boolean(d.notified_at), notifiedAt: d.notified_at,
       installed: Boolean(d.installed_at),
+      linkedTo: d.linked_device_id,
       firstSeenAt: d.first_seen_at,
-      lastSeen: sinceLabel(d.last_seen_at),
+      lastSeen: sinceLabel(d.last_seen_at, Date.now(),
+        d.source === "agent" ? "未受信" : "利用なし"),
       state: deviceState(d, {}),
     })),
     usage: [...byDay.values()].map((u) => ({ ...u, active: clock(u.activeMin) })),
@@ -163,13 +205,18 @@ async function act(req, res, ctx, user) {
   const sb = admin();
 
   if (action === "beat") return beat(req, res, ctx, sb, body);
+  if (action === "link") return link(req, res, ctx, user, sb, body);
 
+  // ブラウザの行は device_uid で、エージェントの行は id で来る。
+  // エージェントの印はレジストリの中にあって、ブラウザからは見えない
   const uid = cleanUid(body.deviceUid);
-  if (!uid) return json(res, 400, { error: "bad_request" });
+  const byId = String(body.deviceId || "").trim();
+  if (!uid && !byId) return json(res, 400, { error: "bad_request" });
 
-  const { data: dev } = await sb.from("gw_devices")
-    .select("id, tenant_id, employee_id, label, status, notified_at")
-    .eq("device_uid", uid).maybeSingle();
+  let q = sb.from("gw_devices")
+    .select("id, tenant_id, employee_id, label, hostname, source, status, notified_at");
+  q = uid ? q.eq("device_uid", uid) : q.eq("id", byId);
+  const { data: dev } = await q.maybeSingle();
 
   // 自分の端末しか触れない。他人のぶんを確認済みにはできない
   if (!dev || dev.tenant_id !== ctx.tenantId || dev.employee_id !== ctx.employee.id) {
@@ -217,9 +264,85 @@ async function act(req, res, ctx, user) {
   if (action === "confirm" || action === "forget") {
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
                   action: `device.${action}`, target: dev.id,
-                  detail: { label: patch.label || dev.label } });
+                  detail: { label: patch.label || dev.label, source: dev.source } });
   }
   return json(res, 200, { ok: true, notifiedAt: patch.notified_at || dev.notified_at });
+}
+
+// ---- つなぐ -----------------------------------------------------------------
+/**
+ * エージェントを入れたパソコンと、いま開いているブラウザをつなぐ。
+ *
+ * エージェントは登録のあと、既定のブラウザで
+ *   /device-consent.html?link=<合言葉>
+ * を開く。本人がログインした状態でそこを開けば、
+ *   ・そのパソコンは「この人のパソコン」になる
+ *   ・そのブラウザの行から、そのパソコンを指せる
+ * つまり、人事が名簿から割り当てなくても、本人が入れた時点で持ち主が決まる。
+ *
+ * ■ 合言葉は1回きり
+ *   使ったら消す。エージェントのログに残っていても、2回目は通らない。
+ *
+ * ■ つないだだけでは収集は始まらない
+ *   このあと本人が「このパソコンです」を押して notified_at が入る。
+ *   押させる画面へ誘導するために、ここでは何を記録するかを返す。
+ */
+async function link(req, res, ctx, user, sb, body) {
+  const code = String(body.linkCode || "").trim();
+  if (!code) return json(res, 400, { error: "bad_request" });
+
+  const { data: agent } = await sb.from("gw_devices")
+    .select("id, tenant_id, employee_id, hostname, label, status, notified_at, link_expires_at")
+    .eq("link_code_hash", sha256(code))
+    .eq("source", "agent")
+    .maybeSingle();
+
+  // 「無い」「期限切れ」を言い分けない
+  const dead = !agent || agent.tenant_id !== ctx.tenantId
+    || (agent.link_expires_at && Date.parse(agent.link_expires_at) < Date.now());
+  if (dead) {
+    return json(res, 400, { error: "invalid_link", message: "この案内は使えません" });
+  }
+
+  const now = new Date().toISOString();
+
+  // このパソコンは、いまログインしている人のものになる。
+  // 合言葉は使い切る
+  await sb.from("gw_devices").update({
+    employee_id: ctx.employee.id,
+    link_code_hash: null,
+    link_expires_at: null,
+    updated_at: now,
+  }).eq("id", agent.id);
+
+  // いま開いているブラウザの行から、このパソコンを指す
+  const uid = cleanUid(body.deviceUid);
+  if (uid) {
+    await sb.from("gw_devices")
+      .update({ linked_device_id: agent.id, updated_at: now })
+      .eq("device_uid", uid)
+      .eq("tenant_id", ctx.tenantId)
+      .eq("employee_id", ctx.employee.id);
+  }
+
+  await sb.from("gw_device_events").insert({
+    tenant_id: ctx.tenantId, device_id: agent.id,
+    work_date: jstDate(), at: now, kind: "linked",
+    detail: { name: agent.hostname || agent.label },
+  });
+
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
+                action: "device.linked", target: agent.id,
+                detail: { hostname: agent.hostname } });
+
+  return json(res, 200, {
+    ok: true,
+    device: {
+      id: agent.id,
+      hostname: agent.hostname || agent.label,
+      confirmed: Boolean(agent.notified_at),
+    },
+  });
 }
 
 // ---- 合図 -------------------------------------------------------------------
@@ -350,6 +473,26 @@ async function raise(sb, tenantId, deviceId, alerts) {
   } catch (e) {
     console.error("[devices/me] alert", e?.message || e);
   }
+}
+
+/**
+ * その人に出す告知を組み立てる。
+ *
+ * 会社のソフトを入れたパソコンがあるなら、基本のほうから
+ * 「もう当てはまらない行」を外す。
+ * 「取っていません」と書いてあるものを実は取っている、が起きてはいけない。
+ */
+function noticeFor(devices) {
+  const hasAgent = devices.some((d) => d.source === "agent");
+  if (!hasAgent) return NOTICE;
+  const drop = new Set(NOTICE.replacedByAgent);
+  return {
+    ...NOTICE,
+    never: NOTICE.never.filter((s) => !drop.has(s)),
+    how: "このパソコンには会社のソフトが入っています。下の「追加で記録していること」も"
+       + "あわせて読んでください。ソフトが入っていない端末では、"
+       + "分かるのはこの画面を開いているあいだのことだけです。",
+  };
 }
 
 function back(dateStr, n) {

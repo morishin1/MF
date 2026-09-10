@@ -3,11 +3,12 @@
 --
 -- 設計の全文は docs/device-management.md。ここには「なぜこの形か」だけ書く。
 --
--- ■ PCに入れるソフトは作らない
---   常駐エージェントをやめたので、分かるのは
---   「どの端末から社内システムに入ったか」と「いつ・どれだけ開いていたか」だけ。
---   USB・インストールされたソフト・アプリ別の時間・PCの起動終了は、
---   ブラウザからは取れない。取れないものの置き場を作らない。
+-- ■ ここはブラウザから分かるぶんだけ
+--   「どの端末から社内システムに入ったか」と「いつ・どれだけ開いていたか」。
+--   USB・インストールされたソフト・アプリ別の時間・PCの起動終了は
+--   ブラウザからは取れないので、ここには無い。
+--   それらは db/054_device_agent.sql（常駐エージェント）が足す。
+--   054 を流す予定があるなら、053 → 054 の順で流すこと。
 --
 -- ■ 端末の見分けは、ブラウザが持つIDでやる
 --   ログインした人のブラウザに device_uid を1つ置く。それが端末の印。
@@ -26,29 +27,6 @@
 --
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
 -- =============================================================================
-
--- -----------------------------------------------------------------------------
--- 0) 前の版（常駐エージェント前提）を入れてしまっていた場合の後始末
---
---    エージェントは作らなかったので、これらに行が入ることはない。
---    空のときだけ落とす。1行でも入っていたら残して、人が見てから決める
--- -----------------------------------------------------------------------------
-do $$
-declare t text;
-begin
-  foreach t in array array['gw_device_app_usage', 'gw_device_web_usage', 'gw_device_enrollments']
-  loop
-    if to_regclass('public.' || t) is not null then
-      execute format('select 1 from public.%I limit 1', t);
-      if not found then
-        execute format('drop table public.%I', t);
-        raise notice '使わなくなった % を落としました', t;
-      else
-        raise warning '% に行があるので残しました。中身を確認してから手で消してください', t;
-      end if;
-    end if;
-  end loop;
-end $$;
 
 -- -----------------------------------------------------------------------------
 -- 1) 端末台帳
@@ -114,14 +92,6 @@ begin
     update public.gw_devices set label = coalesce(label, hostname) where label is null;
     alter table public.gw_devices alter column hostname drop not null;
   end if;
-  -- 常駐エージェント用の列。もう使わない
-  alter table public.gw_devices drop column if exists secret_hash;
-  alter table public.gw_devices drop column if exists secret_set_at;
-  alter table public.gw_devices drop column if exists agent_version;
-  alter table public.gw_devices drop column if exists serial;
-  alter table public.gw_devices drop column if exists enrolled_by;
-  alter table public.gw_devices drop column if exists enrolled_at;
-
   update public.gw_devices set label = '名前のない端末' where label is null;
   alter table public.gw_devices alter column label set not null;
 exception when undefined_table then null;
@@ -181,14 +151,13 @@ begin
 exception when undefined_table or undefined_column then null;
 end $$;
 
-alter table public.gw_device_events drop column if exists seq;
-
 -- 落としてから足す。add constraint に if not exists は無い
 alter table public.gw_device_events drop constraint if exists gw_device_events_kind_check;
 alter table public.gw_device_events add constraint gw_device_events_kind_check
   check (kind in ('first_seen', 'confirmed', 'installed', 'renamed',
                   'suspended', 'resumed', 'retired', 'forgotten'))
   not valid;
+-- エージェント側の種類は db/054_device_agent.sql がここに足す
 
 create index if not exists idx_gw_device_events_device
   on public.gw_device_events(device_id, at desc);
@@ -224,10 +193,6 @@ create table if not exists public.gw_device_usage (
 );
 
 alter table public.gw_device_usage add column if not exists beats integer not null default 0;
--- 常駐エージェント用。ブラウザからは取れない
-alter table public.gw_device_usage drop column if exists idle_min;
-alter table public.gw_device_usage drop column if exists locked_min;
-
 create index if not exists idx_gw_device_usage_tenant
   on public.gw_device_usage(tenant_id, work_date desc);
 create index if not exists idx_gw_device_usage_employee
@@ -300,14 +265,6 @@ alter table public.gw_device_policies add column if not exists unknown_alert boo
 alter table public.gw_device_policies add column if not exists night_min_minutes integer not null default 60;
 alter table public.gw_device_policies add column if not exists holiday_min_minutes integer not null default 120;
 alter table public.gw_device_policies add column if not exists stale_days integer not null default 60;
--- 常駐エージェント用。もう使わない
-alter table public.gw_device_policies drop column if exists blocked_software;
-alter table public.gw_device_policies drop column if exists site_categories;
-alter table public.gw_device_policies drop column if exists idle_after_min;
-alter table public.gw_device_policies drop column if exists usb_alert;
-alter table public.gw_device_policies drop column if exists send_interval_sec;
-alter table public.gw_device_policies drop constraint if exists gw_device_policies_arrays;
-
 -- -----------------------------------------------------------------------------
 -- 6) 管理者の閲覧履歴
 --
@@ -388,11 +345,6 @@ create policy gw_device_policies_read on public.gw_device_policies
   for select to authenticated
   using (public.gw_is_hr(tenant_id));
 
--- 使わなくなった表のポリシーが残っていても害はないが、掃除しておく
-drop policy if exists gw_device_app_read on public.gw_device_app_usage;
-drop policy if exists gw_device_web_read on public.gw_device_web_usage;
-drop policy if exists gw_device_enrollments_read on public.gw_device_enrollments;
-
 notify pgrst, 'reload schema';
 
 -- ちゃんと入ったか、その場で出す
@@ -403,8 +355,6 @@ select
        else '✓ 日別の利用時間を作りました' end as 利用時間,
   case when to_regclass('public.gw_device_views') is null then '✗ 作れていません'
        else '✓ 閲覧履歴を作りました' end as 閲覧履歴,
-  case when to_regclass('public.gw_device_app_usage') is null then '✓ 使わない表は残っていません'
-       else '△ gw_device_app_usage が残っています' end as 後始末,
   (select count(*) from pg_policies
     where schemaname = 'public' and tablename like 'gw_device%') as ポリシー数;
 

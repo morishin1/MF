@@ -560,14 +560,19 @@
   // 画面を開いているあいだの合図。js/device.js から5分ごとに呼ばれる
   const deviceBeat = (body) =>
     api("/api/devices/me", { method: "POST", body: { action: "beat", ...body } });
-  const confirmDevice = (deviceUid) =>
-    api("/api/devices/me", { method: "POST", body: { action: "confirm", deviceUid } });
+  // ブラウザの行は deviceUid、エージェントの行は deviceId で指す
+  const confirmDevice = (target) =>
+    api("/api/devices/me", { method: "POST", body: { action: "confirm", ...idOf(target) } });
+  const linkAgent = (linkCode, deviceUid) =>
+    api("/api/devices/me", { method: "POST", body: { action: "link", linkCode, deviceUid } });
+  const idOf = (t) => (typeof t === "object" && t ? t
+    : /^[0-9a-f-]{36}$/i.test(String(t)) ? { deviceId: t } : { deviceUid: t });
   const markDeviceInstalled = (deviceUid) =>
     api("/api/devices/me", { method: "POST", body: { action: "installed", deviceUid } });
   const renameMyDevice = (deviceUid, label) =>
     api("/api/devices/me", { method: "POST", body: { action: "rename", deviceUid, label } });
-  const forgetMyDevice = (deviceUid) =>
-    api("/api/devices/me", { method: "POST", body: { action: "forget", deviceUid } });
+  const forgetMyDevice = (target) =>
+    api("/api/devices/me", { method: "POST", body: { action: "forget", ...idOf(target) } });
 
   // ---- 契約・電子署名 ----
   // 管理側
@@ -939,7 +944,7 @@
     closing, patchClosing, downloadClosingCsv,
     devices, patchDevice, deviceAlerts, patchDeviceAlert,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
-    myDevices, deviceBeat, confirmDevice, markDeviceInstalled,
+    myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,
     renameMyDevice, forgetMyDevice,
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,

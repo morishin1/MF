@@ -9,9 +9,11 @@
 //   本人は「自分の記録を、いつ誰が見たか」を読める。
 //   見る側の記録が残らない仕組みは、監視になる。
 //
-// ■ ここで分かるのは「どの端末から社内システムに入ったか」まで
-//   常駐ソフトは入れていない。パソコンで何をしていたかは分からないし、
-//   分かるように見せない。
+// ■ 台帳は1つ。載り方が2つある
+//   source='browser' … ブラウザが持つID。社内システムに入ると自動で載る
+//   source='agent'   … PCに入れた常駐ソフト
+//   同じPCの両方がつながっていれば、ブラウザはPCの下にたたんで出す。
+//   台帳に同じPCが2行並ぶと、何台あるのか分からなくなる。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
@@ -19,14 +21,15 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
-  isDate, jstDate, deviceState, sinceLabel, clock,
-  EVENT_LABEL, SEVERITY_LABEL, CSV_HEADER, csvRow, csvCell,
+  isDate, jstDate, deviceState, sinceLabel, clock, newEnrollToken, sha256,
+  EVENT_LABEL, SEVERITY_LABEL, RULE_LABEL, CATEGORY_LABEL,
+  CSV_HEADER, csvRow, csvCell,
 } from "../../lib/devices.js";
 
 const SQL = "db/053_devices.sql";
-const FIELDS = "id, tenant_id, device_uid, label, os, os_version, browser, model, screen, "
-  + "status, notified_at, installed_at, first_seen_at, last_seen_at, note, "
-  + "employee_id, asset_id, retired_at";
+const FIELDS = "id, tenant_id, device_uid, label, source, hostname, serial, os, os_version, "
+  + "os_build, browser, model, screen, agent_version, status, notified_at, installed_at, "
+  + "first_seen_at, last_seen_at, note, employee_id, asset_id, retired_at, linked_device_id";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -85,14 +88,17 @@ async function read(req, res, ctx, user) {
   const rows = (devices || []).map((d) => {
     const c = counts.get(d.id) || { critical: 0, warn: 0 };
     return {
-      id: d.id, label: d.label,
+      id: d.id, label: d.label, source: d.source,
+      hostname: d.hostname,
       os: d.os_version ? `${d.os} ${d.os_version}` : d.os,
       browser: d.browser, model: d.model, screen: d.screen,
+      agentVersion: d.agent_version,
       status: d.status,
       confirmed: Boolean(d.notified_at), notifiedAt: d.notified_at,
       installed: Boolean(d.installed_at),
+      linkedTo: d.linked_device_id,
       firstSeenAt: d.first_seen_at, lastSeenAt: d.last_seen_at,
-      lastSeen: sinceLabel(d.last_seen_at, now),
+      lastSeen: sinceLabel(d.last_seen_at, now, d.source === "agent" ? "未受信" : "利用なし"),
       note: d.note,
       employee: people.get(d.employee_id) || null,
       openAlerts: { critical: c.critical || 0, warn: c.warn || 0 },
@@ -100,28 +106,44 @@ async function read(req, res, ctx, user) {
     };
   });
 
+  // 同じPCのブラウザは、そのPCの下にたたむ。
+  // 台帳に同じPCが2行並ぶと、何台あるのか分からなくなる
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const r of rows) {
+    if (r.linkedTo && byId.has(r.linkedTo)) {
+      const parent = byId.get(r.linkedTo);
+      (parent.browsers = parent.browsers || []).push({
+        id: r.id, label: r.label, browser: r.browser,
+        confirmed: r.confirmed, lastSeen: r.lastSeen,
+      });
+      r.foldedInto = r.linkedTo;
+    }
+  }
+
   const { data: recent } = await sb.from("gw_device_alerts")
     .select("id, device_id, severity, rule, title, status, occurred_at")
     .eq("tenant_id", ctx.tenantId).eq("status", "open")
     .order("occurred_at", { ascending: false }).limit(30);
 
-  const byId = new Map(rows.map((r) => [r.id, r]));
-
   await logView(sb, ctx, user, { scope: "list" });
 
   return json(res, 200, {
-    devices: rows,
+    devices: rows.filter((r) => !r.foldedInto),
+    folded: rows.filter((r) => r.foldedInto).length,
     alerts: (recent || []).map((a) => ({
       id: a.id, severity: a.severity, severityLabel: SEVERITY_LABEL[a.severity] || a.severity,
-      rule: a.rule, title: a.title, occurredAt: a.occurred_at,
+      rule: a.rule, ruleLabel: RULE_LABEL[a.rule] || a.rule,
+      title: a.title, occurredAt: a.occurred_at,
       label: byId.get(a.device_id)?.label || "",
       employee: byId.get(a.device_id)?.employee || null,
     })),
     summary: {
-      total: rows.length,
+      total: rows.filter((r) => !r.foldedInto).length,
+      agents: rows.filter((r) => r.source === "agent").length,
       active: rows.filter((r) => r.status === "active").length,
       waiting: rows.filter((r) => r.state.key === "waiting").length,
       stale: rows.filter((r) => r.state.key === "stale").length,
+      silent: rows.filter((r) => r.state.key === "silent").length,
       unknown: (recent || []).filter((a) => a.rule === "unknown_device").length,
     },
     // 割り当て先の候補
@@ -137,17 +159,47 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
   const to = isDate(q.get("to")) ? q.get("to") : jstDate();
   const from = isDate(q.get("from")) ? q.get("from") : back(to, 29);
 
-  const [usage, events, alerts] = await Promise.all([
+  const isAgent = d.source === "agent";
+
+  const [usage, events, alerts, apps, web, browsers] = await Promise.all([
     sb.from("gw_device_usage")
-      .select("work_date, active_min, night_min, holiday_min, beats, first_at, last_at")
+      .select("work_date, active_min, idle_min, locked_min, night_min, holiday_min, "
+            + "beats, first_at, last_at")
       .eq("device_id", deviceId).gte("work_date", from).lte("work_date", to)
       .order("work_date", { ascending: false }).limit(120),
     sb.from("gw_device_events").select("id, at, work_date, kind, detail")
-      .eq("device_id", deviceId).order("at", { ascending: false }).limit(60),
+      .eq("device_id", deviceId).order("at", { ascending: false }).limit(120),
     sb.from("gw_device_alerts")
       .select("id, severity, rule, title, detail, status, occurred_at, decided_at, decided_note")
       .eq("device_id", deviceId).order("occurred_at", { ascending: false }).limit(60),
+    // アプリとサイトはエージェントだけが送ってくる。ブラウザの行では引かない
+    isAgent
+      ? sb.from("gw_device_app_usage").select("work_date, exe_name, product, minutes")
+          .eq("device_id", deviceId).gte("work_date", from).lte("work_date", to)
+          .order("minutes", { ascending: false }).limit(200)
+      : Promise.resolve({ data: [] }),
+    isAgent
+      ? sb.from("gw_device_web_usage").select("work_date, category, minutes")
+          .eq("device_id", deviceId).gte("work_date", from).lte("work_date", to).limit(400)
+      : Promise.resolve({ data: [] }),
+    // このPCの中で使われているブラウザ
+    isAgent
+      ? sb.from("gw_devices").select("id, label, browser, notified_at, last_seen_at")
+          .eq("linked_device_id", deviceId).limit(20)
+      : Promise.resolve({ data: [] }),
   ]);
+
+  // アプリは同じ実行ファイルを日ごとに持っているので、期間ぶんを足す
+  const appTotal = new Map();
+  for (const a of apps.data || []) {
+    const cur = appTotal.get(a.exe_name) || { exeName: a.exe_name, product: a.product, minutes: 0 };
+    cur.minutes += a.minutes;
+    appTotal.set(a.exe_name, cur);
+  }
+  const webTotal = new Map();
+  for (const w of web.data || []) {
+    webTotal.set(w.category, (webTotal.get(w.category) || 0) + w.minutes);
+  }
 
   await logView(sb, ctx, user, {
     scope: "device", deviceId, employeeId: d.employee_id, workDate: to,
@@ -155,7 +207,9 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
 
   return json(res, 200, {
     device: {
-      id: d.id, label: d.label,
+      id: d.id, label: d.label, source: d.source,
+      hostname: d.hostname, serial: d.serial, agentVersion: d.agent_version,
+      osBuild: d.os_build,
       os: d.os_version ? `${d.os} ${d.os_version}` : d.os,
       browser: d.browser, model: d.model, screen: d.screen,
       status: d.status, note: d.note,
@@ -173,9 +227,22 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
     range: { from, to },
     usage: (usage.data || []).map((u) => ({
       date: u.work_date,
-      activeMin: u.active_min, nightMin: u.night_min, holidayMin: u.holiday_min,
-      active: clock(u.active_min), night: clock(u.night_min),
+      activeMin: u.active_min, idleMin: u.idle_min, lockedMin: u.locked_min,
+      nightMin: u.night_min, holidayMin: u.holiday_min,
+      active: clock(u.active_min), idle: clock(u.idle_min), night: clock(u.night_min),
       beats: u.beats, firstAt: u.first_at, lastAt: u.last_at,
+    })),
+    // エージェントだけが送ってくるもの。ブラウザの行では空になる
+    apps: [...appTotal.values()].sort((a, b) => b.minutes - a.minutes).slice(0, 20)
+      .map((a) => ({ ...a, label: clock(a.minutes) })),
+    web: [...webTotal.entries()].sort((a, b) => b[1] - a[1])
+      .map(([category, minutes]) => ({
+        category, label: CATEGORY_LABEL[category] || category, minutes, time: clock(minutes),
+      })),
+    browsers: (browsers.data || []).map((b) => ({
+      id: b.id, label: b.label, browser: b.browser,
+      confirmed: Boolean(b.notified_at),
+      lastSeen: sinceLabel(b.last_seen_at),
     })),
     events: (events.data || []).map((e) => ({
       id: e.id, at: e.at, date: e.work_date, kind: e.kind,
@@ -183,7 +250,8 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
     })),
     alerts: (alerts.data || []).map((a) => ({
       id: a.id, severity: a.severity, severityLabel: SEVERITY_LABEL[a.severity] || a.severity,
-      rule: a.rule, title: a.title, detail: a.detail, status: a.status,
+      rule: a.rule, ruleLabel: RULE_LABEL[a.rule] || a.rule,
+      title: a.title, detail: a.detail, status: a.status,
       occurredAt: a.occurred_at, decidedAt: a.decided_at, decidedNote: a.decided_note,
     })),
   });
@@ -224,6 +292,35 @@ async function patch(req, res, ctx, user) {
   const sb = admin();
   const action = String(body.action || "");
   const now = new Date().toISOString();
+
+  // 登録コードの発行。平文はここで1度だけ返す
+  if (action === "issue_token") {
+    const token = newEnrollToken();
+    const employeeId = body.employeeId || null;
+    if (employeeId && !(await ownEmployee(sb, ctx.tenantId, employeeId))) {
+      return json(res, 400, { error: "bad_employee" });
+    }
+    const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
+    const { error } = await sb.from("gw_device_enrollments").insert({
+      tenant_id: ctx.tenantId,
+      token_hash: sha256(token),
+      employee_id: employeeId,
+      // 7日。長く生かしておく理由がない
+      expires_at: expiresAt,
+      created_by: user.id,
+    });
+    if (error) {
+      const hint = dbSetupHint(error, "db/054_device_agent.sql");
+      if (hint) return json(res, 503, { error: "not_ready", message: hint });
+      return json(res, 500, { error: "db_query_failed", detail: error.message });
+    }
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
+                  action: "device.token_issued", target: employeeId });
+    return json(res, 200, {
+      token, expiresAt,
+      note: "このコードは1回だけ使えます。この画面を閉じると、もう出せません",
+    });
+  }
 
   const deviceId = body.deviceId;
   if (!deviceId) return json(res, 400, { error: "bad_request" });

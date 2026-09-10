@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912e">
-  <link rel="stylesheet" href="css/layout.css?v=20260912e">
+  <link rel="stylesheet" href="css/app.css?v=20260912f">
+  <link rel="stylesheet" href="css/layout.css?v=20260912f">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -54,10 +54,11 @@
 
 <div class="wrap" style="max-width:760px;">
   <h1 class="kp-greet">この端末について</h1>
-  <p class="kp-greet-sub">
+  <p class="kp-greet-sub" id="c-lead">
     いま使っているこのパソコンを、あなたの端末として登録します。
-    <b>下で「このパソコンです」を押すまで、利用時間は数えていません。</b>
+    <b>下で「このパソコンです」を押すまで、記録は始まっていません。</b>
   </p>
+  <div id="c-linked"></div>
 
   <!-- いま開いている端末。まずこれを片付けさせる -->
   <div class="card">
@@ -89,6 +90,28 @@
         疑問があれば、押す前に人事に聞いてください。押さないままでも、利用時間は数えません。
       </p>
     </div>
+
+    <!-- 会社のソフトを入れている人にだけ出す。
+         入れていない人に「USBも取ります」と読ませない -->
+    <div id="c-agentnotice" class="hidden">
+      <h2 style="margin-top:26px;"><span class="material-symbols-outlined">memory</span>
+        <span id="c-an-title"></span></h2>
+      <div class="dc-box take">
+        <h3><span class="material-symbols-outlined">visibility</span>追加で取っているもの</h3>
+        <ul class="dc-list" id="c-an-takes"></ul>
+      </div>
+      <div class="dc-box never">
+        <h3><span class="material-symbols-outlined">visibility_off</span>それでも取らないもの</h3>
+        <ul class="dc-list" id="c-an-never"></ul>
+      </div>
+      <p class="dc-why" id="c-an-why"></p>
+    </div>
+  </div>
+
+  <!-- 会社のソフト。エージェントを入れると、ここに出る -->
+  <div class="card hidden" id="c-agentcard">
+    <h2><span class="material-symbols-outlined">memory</span>このパソコンに入れた会社のソフト</h2>
+    <div id="c-agent"></div>
   </div>
 
   <!-- アプリとして入れる。ここが「グループウェアから入れる」入口 -->
@@ -116,9 +139,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912e"></script>
-<script src="js/device.js?v=20260912e"></script>
-<script src="js/layout.js?v=20260912e"></script>
+<script src="js/api-client.js?v=20260912f"></script>
+<script src="js/device.js?v=20260912f"></script>
+<script src="js/layout.js?v=20260912f"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -149,6 +172,12 @@
       // そうしないと、はじめて開いた人の画面に何も出ない
       await KPDevice.beat(true);
       myUid = KPDevice.state.uid || KPDevice.uid();
+
+      // エージェントが既定のブラウザで開いたとき、?link= が付いている。
+      // ここでこのパソコンと、いま開いているブラウザがつながる
+      const code = new URLSearchParams(location.search).get("link");
+      if (code) await linkAgent(code);
+
       data = await API.myDevices();
       render();
     } catch (e) {
@@ -160,6 +189,27 @@
 
   const spec = (d) => [d.os, d.browser, d.screen].filter(Boolean).join(" / ");
 
+  // エージェントの案内から来たとき
+  async function linkAgent(code) {
+    try {
+      const r = await API.linkAgent(code, myUid);
+      el("c-linked").innerHTML = `
+        <div class="banner ok" style="margin-bottom:16px;">
+          <span class="material-symbols-outlined">link</span>
+          <div><b>${esc(r.device.hostname)}</b> をあなたのパソコンとして登録しました。<br>
+            下の内容を読んで、<b>「このパソコンです」</b>を押すと記録が始まります。</div>
+        </div>`;
+      // つないだ印はURLから消す。読み込み直しで2回目を投げない
+      history.replaceState(null, "", location.pathname);
+    } catch (e) {
+      el("c-linked").innerHTML = `<div class="banner err" style="margin-bottom:16px;">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.message || "この案内は使えませんでした")}。
+          パソコン側でもう一度「登録」をやり直してください。</div></div>`;
+      history.replaceState(null, "", location.pathname);
+    }
+  }
+
   function render() {
     const n = data.notice || {};
     el("c-takes").innerHTML = (n.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
@@ -168,9 +218,38 @@
     el("c-why").textContent = n.why || "";
     el("c-yours").textContent = n.yours || "";
 
+    // 会社のソフトを入れている人にだけ、追加の告知を出す
+    const an = data.agentNotice;
+    el("c-agentnotice").classList.toggle("hidden", !an);
+    if (an) {
+      el("c-an-title").textContent = an.title;
+      el("c-an-takes").innerHTML = (an.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
+      el("c-an-never").innerHTML = (an.never || []).map((s) => `<li>${esc(s)}</li>`).join("");
+      el("c-an-why").textContent = an.why || "";
+    }
+
     const devs = data.devices || [];
-    const here = devs.find((d) => d.uid === myUid);
-    const others = devs.filter((d) => d.uid !== myUid);
+    const agents = devs.filter((d) => d.source === "agent");
+    const browsers = devs.filter((d) => d.source !== "agent");
+    const here = browsers.find((d) => d.uid === myUid);
+    const others = browsers.filter((d) => d.uid !== myUid);
+
+    // 会社のソフトを入れたパソコン
+    el("c-agentcard").classList.toggle("hidden", !agents.length);
+    el("c-agent").innerHTML = agents.map((d) => `
+      <div class="dc-dev${d.confirmed ? "" : " now"}">
+        <span class="material-symbols-outlined" style="color:var(--muted);">memory</span>
+        <span><b>${esc(d.hostname || d.label)}</b>
+          <span class="sp">　${esc([d.os, d.agentVersion && "v" + d.agentVersion]
+            .filter(Boolean).join(" / "))}　最終受信 ${esc(d.lastSeen)}</span></span>
+        <span class="a">
+          ${d.confirmed
+            ? `<span class="ok">記録しています</span>`
+            : `<button class="btn btn-primary btn-sm"
+                  onclick="confirmAgent('${esc(d.id)}', this)">このパソコンです</button>`}
+          <button class="btn btn-secondary btn-sm" onclick="forget('${esc(d.id)}')">外す</button>
+        </span>
+      </div>`).join("");
 
     el("c-this").innerHTML = here
       ? `<div class="dc-this">
@@ -237,6 +316,17 @@
           <b>「アプリとしてインストール」</b>または<b>「ドックに追加」</b>を選びます。</li>
         <li>iPhone・iPad の Safari では、共有ボタンから<b>「ホーム画面に追加」</b>を選びます。</li>
       </ol>`;
+  }
+
+  // 会社のソフトを入れたパソコンの確認。ここを押すまで、そのソフトは何も送らない
+  async function confirmAgent(id, btn) {
+    el("c-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.confirmDevice({ deviceId: id }));
+      await load();
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "記録できませんでした";
+    }
   }
 
   async function confirmThis(btn) {
