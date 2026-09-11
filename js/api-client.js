@@ -599,8 +599,32 @@
   const signContract = (p) => api("/api/sign/me", { method: "POST", body: p });
 
   // PDFの閲覧用URL（5分だけ有効）。kind: "signed"（既定）| "original"
-  const signPdfUrl = (id, kind) =>
-    api(`/api/sign/file?id=${encodeURIComponent(id)}${kind ? `&kind=${kind}` : ""}`);
+  // download を true にすると、開かずに保存になるURLが返る
+  const signPdfUrl = (id, kind, download) =>
+    api(`/api/sign/file?id=${encodeURIComponent(id)}${kind ? `&kind=${kind}` : ""}`
+      + `${download ? "&download=1" : ""}`);
+
+  // ---- 書類の作成依頼（社労士に頼む → 届いた書面にそのまま署名依頼） ----
+  const docOrders = (employeeId) =>
+    api(`/api/sign/orders${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+  const docOrderAct = (body) => api("/api/sign/orders", { method: "POST", body });
+  const docOrderFileUrl = (id) =>
+    api(`/api/sign/orders?file=${encodeURIComponent(id)}`);
+
+  // 届いた書面を取り込む。置いてから、その場で中身を確かめて結びつける
+  async function uploadDocOrderFile(id, file) {
+    const sign = await docOrderAct({
+      action: "upload", id,
+      mimeType: file.type || "application/pdf", sizeBytes: file.size,
+    });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf", "x-upsert": "false" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return docOrderAct({ action: "attach", id, path: sign.path, filename: file.name });
+  }
 
   // ---- 有給・稟議の申請 ----
   // scope: "mine" | "pending" | "all"、kind: "leave" | "ringi"
@@ -952,6 +976,7 @@
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
     myContracts, signContract, signPdfUrl,
+    docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,

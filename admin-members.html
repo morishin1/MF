@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912f">
-  <link rel="stylesheet" href="css/layout.css?v=20260912f">
+  <link rel="stylesheet" href="css/app.css?v=20260912g">
+  <link rel="stylesheet" href="css/layout.css?v=20260912g">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -106,9 +106,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912f"></script>
-<script src="js/device.js?v=20260912f"></script>
-<script src="js/layout.js?v=20260912f"></script>
+<script src="js/api-client.js?v=20260912g"></script>
+<script src="js/device.js?v=20260912g"></script>
+<script src="js/layout.js?v=20260912g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -335,6 +335,11 @@
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   title="この方が使うGoogleドライブのフォルダ"
                   onclick="openDrive('${esc(e.id)}')">フォルダ</button>
+          <!-- 名簿からそのまま頼めるようにする。
+               別画面へ行って、もう一度この人を探し直す手間を無くす -->
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                  title="労働条件通知書などの作成を社労士に依頼する"
+                  onclick="orderDoc('${esc(e.id)}')">書類を依頼</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   onclick="remove('${esc(e.id)}', this)">削除</button>
         </td>
@@ -452,6 +457,12 @@
   // 貼る前に、そのフォルダを本人へ共有しておく必要がある。
   // 画面にもそう書く（開けなかったときに mf を疑わせないため）
   let driveFor = null;
+
+  // 契約・電子署名の「作成依頼」を、この人を選んだ状態で開く。
+  // 受け取る側は URL の employeeId を読んで、宛先を先に埋める
+  function orderDoc(id) {
+    location.href = `admin-esign.html?tab=order&employeeId=${encodeURIComponent(id)}`;
+  }
 
   async function openDrive(id) {
     const e = employees.find((x) => x.id === id);

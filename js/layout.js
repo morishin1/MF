@@ -535,6 +535,79 @@
     }
   }
 
+  // ---- 大きく見る -------------------------------------------------------------
+  //
+  // 契約書のように「細かい字を確かめる」ものは、画面の半分では読めない。
+  // 枠を広げる代わりに、画面いっぱいに出す器を1つ用意して、
+  // どの画面からも同じ形で使う。閉じ方（Esc と ✕）も1つに揃う。
+  //
+  // 中身は2つだけ。PDF（src）か、文字（text）。
+  // どちらも「元の画面はそのまま」なので、閉じれば続きから作業できる。
+  let viewerEsc = null;
+
+  function openViewer(opts = {}) {
+    closeViewer();
+
+    const box = document.createElement("div");
+    box.className = "kp-viewer";
+    box.id = "kp-viewer";
+    box.innerHTML = `
+      <div class="kp-viewer-bar">
+        <span class="t">${esc(opts.title || "")}</span>
+        ${opts.actions || ""}
+        ${opts.src ? `<button type="button" data-kp-viewer-open>
+          <span class="material-symbols-outlined">open_in_new</span>別のタブで開く</button>` : ""}
+        <button type="button" data-kp-viewer-close>
+          <span class="material-symbols-outlined">close</span>閉じる</button>
+      </div>
+      <div class="kp-viewer-body">
+        ${opts.src
+          ? `<iframe title="${esc(opts.title || "プレビュー")}" src="${esc(opts.src)}"></iframe>`
+          : `<div class="kp-viewer-text"><div></div></div>`}
+      </div>`;
+
+    // 文字は textContent で入れる。契約書の本文に < が入っていても、
+    // 消えたり壊れたりしない
+    if (!opts.src) box.querySelector(".kp-viewer-text > div").textContent = opts.text || "";
+
+    box.querySelector("[data-kp-viewer-close]").addEventListener("click", closeViewer);
+    const openBtn = box.querySelector("[data-kp-viewer-open]");
+    if (openBtn) openBtn.addEventListener("click", () => window.open(opts.src, "_blank", "noopener"));
+
+    document.body.appendChild(box);
+    // 後ろの画面が一緒に動くと、閉じたときに見ていた場所が変わる
+    document.body.style.overflow = "hidden";
+
+    viewerEsc = (e) => { if (e.key === "Escape") closeViewer(); };
+    document.addEventListener("keydown", viewerEsc);
+    return box;
+  }
+
+  // ファイルを保存させる。
+  //
+  // location.href に入れると、URLが切れていたときにJSONのエラー画面へ飛んでしまい、
+  // いま開いていた画面ごと失う。a を作って押すと、うまくいけば保存、
+  // ダメでも今の画面は残る（保存になるかは、返ってくる
+  // Content-Disposition: attachment で決まる。別のドメインなので download 属性は効かない）
+  function saveFile(url, filename) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "";
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 1000);
+  }
+
+  function closeViewer() {
+    const box = document.getElementById("kp-viewer");
+    if (box) box.remove();
+    if (viewerEsc) document.removeEventListener("keydown", viewerEsc);
+    viewerEsc = null;
+    document.body.style.overflow = "";
+  }
+
   function showLogin(message) {
     document.body.innerHTML = `
       <div class="topbar"><div class="brand">
@@ -709,6 +782,13 @@
     },
 
     busy: withBusy,
+
+    // 画面いっぱいに出す。{ title, src }（PDF）か { title, text }（本文）。
+    // actions に HTML を渡すと、閉じるボタンの左に並ぶ
+    viewer: openViewer,
+    closeViewer,
+    // 保存させる（開かずに落とす）
+    save: saveFile,
 
     // 管理者メニューのグループを開け閉めする（サイドメニューの中から呼ばれる）
     toggleNavGroup,

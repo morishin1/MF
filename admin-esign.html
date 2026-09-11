@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912f">
-  <link rel="stylesheet" href="css/layout.css?v=20260912f">
+  <link rel="stylesheet" href="css/app.css?v=20260912g">
+  <link rel="stylesheet" href="css/layout.css?v=20260912g">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -31,6 +31,27 @@
 
     .es-prev { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#f7f8fa; }
     .es-prev iframe { display:block; width:100%; height:62vh; min-height:380px; border:0; background:#fff; }
+
+    /* プレビューの上の小さなボタン。「大きく見る」がすぐ目に入る位置に置く */
+    .es-prev-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 8px; }
+    .es-prev-head .sp { flex:1; }
+
+    /* 作成依頼の条件。項目を固定にして、書く人ごとに変わらないようにする */
+    .es-cond { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+    @media (max-width:820px) { .es-cond { grid-template-columns:1fr; } }
+    .es-cond label { font-size:12px; }
+    .es-cond .req::after { content:"必須"; margin-left:6px; font-size:10.5px; font-weight:700;
+                           color:#b3261e; background:#fdecec; padding:1px 6px; border-radius:999px; }
+
+    .es-ost { font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+    .es-ost.requested { background:#eef2f7; color:#3f5878; }
+    .es-ost.uploaded { background:#f4f0e3; color:#8a6d1f; }
+    .es-ost.sent { background:#e8f0fb; color:#24559b; }
+    .es-ost.signed { background:#eaf5ec; color:#256b36; }
+    .es-ost.cancelled { background:#eee; color:#777; }
+
+    .es-src { font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:999px;
+              background:#eef2f7; color:#3f5878; margin-left:6px; white-space:nowrap; }
 
     /* 差し込みの一覧。押すと本文に入る */
     .es-chip { display:inline-block; font-size:11.5px; font-weight:600; padding:3px 9px;
@@ -66,9 +87,78 @@
   </div>
 
   <div class="tabs" style="margin-bottom:16px;">
+    <button id="tab-order" class="tab" onclick="setTab('order', this)">作成依頼<span id="c-order"></span></button>
     <button id="tab-send" class="tab active" onclick="setTab('send', this)">送る</button>
     <button id="tab-list" class="tab" onclick="setTab('list', this)">署名の状況</button>
     <button id="tab-tpl"  class="tab" onclick="setTab('tpl', this)">雛形</button>
+  </div>
+
+  <!-- ===== 作成依頼（社労士に頼む → 届いた書面にそのまま署名依頼） ===== -->
+  <div id="pane-order" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">assignment_add</span>
+        <span id="o-title">労働条件通知書の作成を依頼する</span></h2>
+      <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+        先に「誰あての書面か」を決めてから頼みます。届いたPDFはこの依頼にぶら下がるので、
+        あとで宛先を探したり、打ち直したりする必要がありません。
+      </p>
+
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div style="min-width:220px;flex:1;"><label>誰あてか</label>
+          <select id="o-emp"><option value="">読み込み中…</option></select></div>
+        <div style="min-width:200px;"><label>書類の種類</label>
+          <select id="o-kind" onchange="onOrderKind()"></select></div>
+        <div style="min-width:220px;flex:1;"><label>書類の名前</label>
+          <input id="o-name" type="text" placeholder="労働条件通知書 兼 雇用契約書"></div>
+      </div>
+
+      <div class="inline-controls" style="margin-bottom:14px;">
+        <div style="min-width:180px;"><label>依頼先（社労士など）</label>
+          <input id="o-assignee" type="text" placeholder="○○社会保険労務士事務所"></div>
+        <div style="min-width:200px;"><label>依頼先のメール</label>
+          <input id="o-assignee-mail" type="email" placeholder="記録として残すだけです"></div>
+        <div style="max-width:180px;"><label>いつまでに</label>
+          <input id="o-due" type="date"></div>
+      </div>
+
+      <label>提示する条件</label>
+      <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
+        労働基準法施行規則第5条で必ず書く項目です。ここを埋めておけば、依頼のたびに書き漏らしません。
+      </p>
+      <div id="o-cond" class="es-cond" style="margin-bottom:14px;"></div>
+
+      <div style="margin-bottom:14px;">
+        <label>そのほか伝えること</label>
+        <textarea id="o-note" rows="3" placeholder="固定残業代の扱い、入社日が動く可能性など"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button id="o-save" class="btn btn-primary" onclick="saveOrder(this)">
+          <span class="material-symbols-outlined icon-inline">send</span>依頼を作る
+        </button>
+        <button id="o-cancel" class="btn btn-secondary hidden" onclick="resetOrder()">編集をやめる</button>
+        <button class="btn btn-secondary" onclick="copyOrder(this)">
+          <span class="material-symbols-outlined icon-inline">content_copy</span>依頼文をコピー
+        </button>
+      </div>
+      <p class="muted" style="font-size:11.5px;margin:10px 0 0;">
+        メールはここからは送りません。「依頼文をコピー」でそのまま社労士へ貼って送ってください。
+      </p>
+      <div id="o-msg" class="err-text"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">inbox</span>依頼の状況</h2>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>誰あて</th><th>書類</th><th style="width:110px;">状態</th>
+            <th style="width:190px;">届いた書面</th><th></th>
+          </tr></thead>
+          <tbody id="o-rows"><tr><td colspan="5" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- ===== 送る ===== -->
@@ -98,7 +188,18 @@
         </div>
 
         <div>
-          <label>プレビュー</label>
+          <div class="es-prev-head">
+            <label style="margin:0;">プレビュー</label>
+            <span class="sp"></span>
+            <!-- 細かい条項を確かめるとき、この枠では小さすぎる。
+                 押せば画面いっぱいで読める -->
+            <button id="s-big" class="btn btn-secondary btn-sm hidden" onclick="bigPreview()">
+              <span class="material-symbols-outlined icon-inline">fullscreen</span>大きく見る
+            </button>
+            <button id="s-newtab" class="btn btn-secondary btn-sm hidden" onclick="newTabPreview()">
+              <span class="material-symbols-outlined icon-inline">open_in_new</span>別のタブ
+            </button>
+          </div>
           <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
             送る前に、実際に届くPDFをそのまま見られます（保存はされません）。
           </p>
@@ -201,9 +302,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912f"></script>
-<script src="js/device.js?v=20260912f"></script>
-<script src="js/layout.js?v=20260912f"></script>
+<script src="js/api-client.js?v=20260912g"></script>
+<script src="js/device.js?v=20260912g"></script>
+<script src="js/layout.js?v=20260912g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -219,19 +320,43 @@
   let editingTpl = null;
   let filter = "all";
   let previewUrl = null;      // Blob URL。作り直すたびに前のを捨てる
+  let previewTitle = "";
+
+  let orders = [];
+  let orderFields = [];
+  let editingOrder = null;
+
+  const PANES = ["order", "send", "list", "tpl"];
 
   KPLayout.init({ active: "esign", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
-    await Promise.all([loadTemplates(), loadEmployees(), loadRequests()]);
+    await Promise.all([loadTemplates(), loadEmployees(), loadOrders()]);
+    await loadRequests();
+    openFromUrl();
+  }
+
+  // 他の画面から「この人の労働条件通知書を頼む」で飛んでくる。
+  // ?tab=order&employeeId=… を読んで、その場で書き始められるようにする
+  function openFromUrl() {
+    const q = new URLSearchParams(location.search);
+    const tab = q.get("tab");
+    if (!PANES.includes(tab)) return;
+    const btn = el(`tab-${tab}`);
+    if (btn) setTab(tab, btn);
+    const emp = q.get("employeeId");
+    if (tab === "order" && emp) {
+      el("o-emp").value = emp;
+      el("o-emp").focus();
+    }
   }
 
   function setTab(name, btn) {
     for (const b of document.querySelectorAll(".tabs > .tab")) {
       if (b.parentElement === btn.parentElement) b.classList.toggle("active", b === btn);
     }
-    for (const p of ["send", "list", "tpl"]) {
+    for (const p of PANES) {
       el(`pane-${p}`).classList.toggle("hidden", p !== name);
     }
   }
@@ -370,6 +495,7 @@
       const res = await API.listEmployees();
       employees = (res.employees || []).filter((e) => e.status !== "left" && e.user_id);
       renderWho();
+      renderOrderEmployees();
     } catch (e) {
       el("s-who").innerHTML = `<div class="empty">名簿を読めませんでした：${esc(e.detail || e.message)}</div>`;
     }
@@ -411,6 +537,17 @@
   const pickedIds = () =>
     [...document.querySelectorAll("[data-who]:checked")].map((n) => n.value);
 
+  // 作成依頼の宛先。ログインできる人だけ。
+  // 選んだ人を消さないよう、いまの値を覚えてから描き直す
+  function renderOrderEmployees() {
+    const keep = el("o-emp").value;
+    el("o-emp").innerHTML = `<option value="">選んでください</option>`
+      + employees.map((e) =>
+        `<option value="${esc(e.id)}">${esc(e.display_name)}${
+          e.department ? `（${esc(e.department)}）` : ""}</option>`).join("");
+    if (keep) el("o-emp").value = keep;
+  }
+
   async function doPreview(btn) {
     const msg = el("s-msg");
     msg.textContent = "";
@@ -435,6 +572,8 @@
       el("s-preview-empty").classList.add("hidden");
       el("s-preview").classList.remove("hidden");
       el("s-frame").src = previewUrl;
+      previewTitle = `${r.title}（${r.employee.name}さん）`;
+      for (const id of ["s-big", "s-newtab"]) el(id).classList.remove("hidden");
 
       const who = `${r.employee.name}さんぶん`;
       el("s-preview-msg").innerHTML = r.missing.length
@@ -447,6 +586,16 @@
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "プレビューを作れませんでした";
     }
+  }
+
+  // 画面いっぱいで読む。契約書は条項の字が小さいので、半分の枠では確かめられない
+  function bigPreview() {
+    if (!previewUrl) return;
+    KPLayout.viewer({ title: previewTitle || "プレビュー", src: previewUrl });
+  }
+
+  function newTabPreview() {
+    if (previewUrl) window.open(previewUrl, "_blank", "noopener");
   }
 
   async function doSend(btn) {
@@ -523,14 +672,17 @@
       <tr>
         <td><b>${esc(r.employee?.display_name || "—")}</b>
           ${r.employee?.department ? `<small class="muted">　${esc(r.employee.department)}</small>` : ""}</td>
-        <td>${esc(r.title)}${r.doc_version ? `<small class="muted">　第${r.doc_version}版</small>` : ""}</td>
+        <td>${esc(r.title)}${r.doc_version ? `<small class="muted">　第${r.doc_version}版</small>` : ""}
+          ${r.source === "uploaded" ? `<span class="es-src" title="受け取ったPDFをそのまま送ったもの">書面</span>` : ""}</td>
         <td><span class="es-st ${esc(r.view)}">${esc(ST_LABEL[r.view] || r.view)}</span></td>
         <td>${esc(d(r.sent_at))}</td>
         <td>${esc(r.due_on ? d(r.due_on) : "—")}</td>
         <td style="text-align:right;white-space:nowrap;">
           <button class="btn btn-secondary btn-sm" onclick="showDetail('${esc(r.id)}')">記録</button>
           ${r.view === "signed"
-            ? `<button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">PDF</button>`
+            ? `<button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">PDF</button>
+               <button class="btn btn-secondary btn-sm" title="PDFを保存する"
+                       onclick="savePdf('${esc(r.id)}','signed',this)">保存</button>`
             : r.view === "cancelled" ? ""
               : `<button class="btn btn-secondary btn-sm" onclick="resend('${esc(r.id)}',this)">再送</button>
                  <button class="icon-btn" title="取り消す" onclick="cancelReq('${esc(r.id)}')">
@@ -566,12 +718,18 @@
           ${row("署名済ハッシュ", `<span class="es-hash">${esc(r.signed_pdf_sha256 || "")}</span>`)}
         </tbody></table></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="bigPdf('${esc(r.id)}','original',this)">
+            <span class="material-symbols-outlined icon-inline">fullscreen</span>大きく見る
+          </button>
           <button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','original',this)">
             <span class="material-symbols-outlined icon-inline">description</span>送った版のPDF
           </button>
           ${r.view === "signed" ? `
             <button class="btn btn-primary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">
               <span class="material-symbols-outlined icon-inline">verified</span>署名済みPDF
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="savePdf('${esc(r.id)}','signed',this)">
+              <span class="material-symbols-outlined icon-inline">download</span>保存
             </button>` : ""}
         </div>
       </div>`;
@@ -586,6 +744,15 @@
     try {
       const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(id, kind));
       window.open(url, "_blank", "noopener");
+    } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
+  }
+
+  // 画面いっぱいで読む。条項を確かめるのに、小さな枠では足りない
+  async function bigPdf(id, kind, btn) {
+    const r = requests.find((x) => x.id === id);
+    try {
+      const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(id, kind));
+      KPLayout.viewer({ title: r ? `${r.title}（${r.employee?.display_name || ""}）` : "契約書", src: url });
     } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
   }
 
@@ -606,6 +773,261 @@
     const r = requests.find((x) => x.id === id);
     if (!confirm(`「${r ? r.title : ""}」の署名依頼を取り消します。\n本人の画面からも消えます。よろしいですか？`)) return;
     try { await API.patchSign({ id, action: "cancel" }); await loadRequests(); }
+    catch (e) { alert(e.hint || e.detail || e.message || "取り消せませんでした"); }
+  }
+
+  // 労働条件を電子で渡すときは、本人が紙に出せることが要る
+  // （労働基準法施行規則第5条）。会社側からも保存できるようにしておく
+  async function savePdf(id, kind, btn) {
+    try {
+      const { url, filename } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(id, kind, true));
+      KPLayout.save(url, filename);
+    } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
+  }
+
+  // ---- 作成依頼 ---------------------------------------------------------------
+  //
+  // 頼む → 届く → そのまま送る、を1つの行で追えるようにする。
+  // 途中で人が宛先を打ち直す場面を作らないのが、この画面の目的。
+
+  async function loadOrders() {
+    try {
+      const res = await API.docOrders();
+      orders = res.orders || [];
+      orderFields = res.fields || [];
+      renderOrderKinds(res.kinds || []);
+      renderOrderFields();
+      renderOrders();
+      // 届いたのに、まだ送っていないもの。ここが溜まるのがいちばん困る
+      const wait = res.counts?.uploaded || 0;
+      el("c-order").textContent = wait ? ` ${wait}` : "";
+    } catch (e) {
+      // not_ready のときは、どのSQLを流せばよいかまで書いてある
+      el("o-rows").innerHTML =
+        `<tr><td colspan="5" class="muted">${esc(
+          e.body?.message || e.hint || e.detail || e.message || "取得に失敗しました")}</td></tr>`;
+    }
+  }
+
+  function renderOrderKinds(list) {
+    const use = list.length ? list : kinds;
+    el("o-kind").innerHTML = use.map((k) =>
+      `<option value="${esc(k.key)}"${k.key === "employment" ? " selected" : ""}>${esc(k.label)}</option>`).join("");
+  }
+
+  // 項目を固定にしてある。自由記入だけにすると、書く人ごとに項目が変わって、
+  // 抜けていても抜けていると気づけない
+  function renderOrderFields() {
+    el("o-cond").innerHTML = orderFields.map((f) => `
+      <div>
+        <label class="${f.required ? "req" : ""}">${esc(f.key)}</label>
+        <input type="text" data-cond="${esc(f.key)}" placeholder="${esc(f.placeholder || "")}">
+      </div>`).join("");
+  }
+
+  const condValues = () => {
+    const out = {};
+    for (const n of document.querySelectorAll("[data-cond]")) {
+      if (n.value.trim()) out[n.dataset.cond] = n.value.trim();
+    }
+    return out;
+  };
+
+  function onOrderKind() {
+    const label = kinds.find((x) => x.key === el("o-kind").value)?.label || "";
+    if (!el("o-name").value.trim()) el("o-name").placeholder = label;
+  }
+
+  function orderPayload() {
+    return {
+      employeeId: el("o-emp").value,
+      docKind: el("o-kind").value,
+      title: el("o-name").value.trim() || undefined,
+      assigneeName: el("o-assignee").value.trim(),
+      assigneeEmail: el("o-assignee-mail").value.trim(),
+      dueOn: el("o-due").value || null,
+      note: el("o-note").value.trim(),
+      conditions: condValues(),
+    };
+  }
+
+  async function saveOrder(btn) {
+    const msg = el("o-msg");
+    msg.textContent = "";
+    const p = orderPayload();
+    if (!p.employeeId) { msg.textContent = "誰あての書面か選んでください"; return; }
+
+    try {
+      if (editingOrder) {
+        await KPLayout.busy(btn, "保存中…",
+          () => API.docOrderAct({ action: "update", id: editingOrder, ...p }));
+      } else {
+        await KPLayout.busy(btn, "作成中…", () => API.docOrderAct({ action: "create", ...p }));
+      }
+      resetOrder();
+      await loadOrders();
+    } catch (e) {
+      // 必須が空のときは、どこが空かまで出す。押し直しの手間を減らす。
+      // api-client は data.error を message に、残りを body に入れて投げてくる
+      if (e.message === "missing_conditions" || Array.isArray(e.body?.missing)) {
+        msg.innerHTML = `${esc(e.hint || (e.body?.missing || []).join("・") || "未入力の項目があります")}　`
+          + `<button class="btn btn-secondary btn-sm" onclick="forceOrder(this)">このまま依頼する</button>`;
+        return;
+      }
+      msg.textContent = e.hint || e.detail || e.message || "作れませんでした";
+    }
+  }
+
+  // 空のまま出すのは、押す人が決める。黙って通さない
+  async function forceOrder(btn) {
+    try {
+      await KPLayout.busy(btn, "作成中…",
+        () => API.docOrderAct({ action: "create", ...orderPayload(), force: true }));
+      resetOrder();
+      await loadOrders();
+    } catch (e) {
+      el("o-msg").textContent = e.hint || e.detail || e.message || "作れませんでした";
+    }
+  }
+
+  function resetOrder() {
+    editingOrder = null;
+    el("o-title").textContent = "労働条件通知書の作成を依頼する";
+    el("o-save").innerHTML =
+      `<span class="material-symbols-outlined icon-inline">send</span>依頼を作る`;
+    for (const id of ["o-name", "o-assignee", "o-assignee-mail", "o-due", "o-note"]) el(id).value = "";
+    el("o-emp").value = "";
+    for (const n of document.querySelectorAll("[data-cond]")) n.value = "";
+    el("o-cancel").classList.add("hidden");
+    el("o-msg").textContent = "";
+  }
+
+  function editOrder(id) {
+    const o = orders.find((x) => x.id === id);
+    if (!o) return;
+    editingOrder = id;
+    el("o-title").textContent = "依頼を直す";
+    el("o-save").innerHTML =
+      `<span class="material-symbols-outlined icon-inline">save</span>保存`;
+    el("o-emp").value = o.employeeId;
+    el("o-kind").value = o.docKind;
+    el("o-name").value = o.title || "";
+    el("o-assignee").value = o.assigneeName || "";
+    el("o-assignee-mail").value = o.assigneeEmail || "";
+    el("o-due").value = o.dueOn || "";
+    el("o-note").value = o.note || "";
+    for (const n of document.querySelectorAll("[data-cond]")) {
+      n.value = (o.conditions || {})[n.dataset.cond] || "";
+    }
+    el("o-cancel").classList.remove("hidden");
+    el("o-msg").textContent = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // メールはここからは送らない。貼って送れる形にして渡す
+  async function copyOrder(btn) {
+    const p = orderPayload();
+    const emp = employees.find((e) => e.id === p.employeeId);
+    const lines = [
+      `${p.title || el("o-kind").selectedOptions[0]?.textContent || "書類"}の作成をお願いします。`,
+      "",
+      `対象者：${emp ? emp.display_name : "（未選択）"}`,
+      p.dueOn ? `希望納期：${p.dueOn}` : null,
+      "",
+      ...orderFields.map((f) => `${f.key}：${p.conditions[f.key] || "（未記入）"}`),
+      p.note ? `\nそのほか：\n${p.note}` : null,
+    ].filter((x) => x !== null);
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      await KPLayout.busy(btn, "コピーしました", () => new Promise((r) => setTimeout(r, 900)));
+    } catch (e) { alert("コピーできませんでした"); }
+  }
+
+  function renderOrders() {
+    if (!orders.length) {
+      el("o-rows").innerHTML = `<tr><td colspan="5" class="muted">まだ依頼がありません。</td></tr>`;
+      return;
+    }
+    el("o-rows").innerHTML = orders.map((o) => `
+      <tr>
+        <td><b>${esc(o.employee?.display_name || "—")}</b>
+          ${o.employee?.department ? `<small class="muted">　${esc(o.employee.department)}</small>` : ""}</td>
+        <td>${esc(o.title)}<small class="muted">　${esc(o.kindLabel)}</small>
+          ${o.assigneeName ? `<br><small class="muted">依頼先：${esc(o.assigneeName)}</small>` : ""}</td>
+        <td><span class="es-ost ${esc(o.status)}">${esc(o.statusLabel)}</span></td>
+        <td>${o.fileName
+          ? `<button class="btn btn-secondary btn-sm" onclick="viewOrderFile('${esc(o.id)}', this)">
+               <span class="material-symbols-outlined icon-inline">visibility</span>見る</button>
+             <br><small class="muted">${esc(o.fileName)}</small>`
+          : `<span class="muted" style="font-size:12px;">まだ届いていません</span>`}</td>
+        <td style="text-align:right;white-space:nowrap;">${orderActions(o)}</td>
+      </tr>`).join("");
+  }
+
+  function orderActions(o) {
+    if (o.status === "signed") {
+      return o.signRequestId
+        ? `<button class="btn btn-secondary btn-sm"
+                   onclick="savePdf('${esc(o.signRequestId)}','signed',this)">署名済PDF</button>`
+        : "";
+    }
+    if (o.status === "cancelled") return "";
+    if (o.status === "sent") {
+      return `<button class="btn btn-secondary btn-sm" onclick="goList()">署名の状況へ</button>`;
+    }
+    const up = `<label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+        <span class="material-symbols-outlined icon-inline">upload_file</span>${o.fileName ? "差し替え" : "書面を取り込む"}
+        <input type="file" accept="application/pdf" style="display:none"
+               onchange="attachOrder('${esc(o.id)}', this)">
+      </label>`;
+    // 届いているものだけ、そのまま送れる。1クリックで宛先は決まっている
+    const send = o.status === "uploaded"
+      ? `<button class="btn btn-primary btn-sm" onclick="sendOrder('${esc(o.id)}', this)">
+           <span class="material-symbols-outlined icon-inline">draw</span>この内容で署名依頼</button>`
+      : "";
+    return `${send}${up}
+      <button class="btn btn-secondary btn-sm" onclick="editOrder('${esc(o.id)}')">直す</button>
+      <button class="icon-btn" title="取り消す" onclick="cancelOrder('${esc(o.id)}')">
+        <span class="material-symbols-outlined">close</span></button>`;
+  }
+
+  function goList() { setTab("list", el("tab-list")); }
+
+  async function attachOrder(id, input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    if (file.type && file.type !== "application/pdf") { alert("PDFにしてください"); return; }
+    try {
+      await API.uploadDocOrderFile(id, file);
+      await loadOrders();
+    } catch (e) { alert(e.hint || e.detail || e.message || "取り込めませんでした"); }
+  }
+
+  async function viewOrderFile(id, btn) {
+    const o = orders.find((x) => x.id === id);
+    try {
+      const { url } = await KPLayout.busy(btn, "準備中…", () => API.docOrderFileUrl(id));
+      // 中身を確かめるための画面なので、最初から大きく出す
+      KPLayout.viewer({ title: o ? `${o.title}（${o.employee?.display_name || ""}）` : "書面", src: url });
+    } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
+  }
+
+  async function sendOrder(id, btn) {
+    const o = orders.find((x) => x.id === id);
+    if (!o) return;
+    if (!confirm(`「${o.title}」を ${o.employee?.display_name || ""}さんに送ります。\n`
+      + `届いた書面をそのまま送ります。送ったあとは差し替えられません。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "送信中…", () => API.docOrderAct({ action: "send", id }));
+      await Promise.all([loadOrders(), loadRequests()]);
+    } catch (e) { alert(e.hint || e.detail || e.message || "送れませんでした"); }
+  }
+
+  async function cancelOrder(id) {
+    const o = orders.find((x) => x.id === id);
+    if (!confirm(`「${o ? o.title : ""}」の依頼を取り消します。よろしいですか？`)) return;
+    try { await API.docOrderAct({ action: "cancel", id }); await loadOrders(); }
     catch (e) { alert(e.hint || e.detail || e.message || "取り消せませんでした"); }
   }
 </script>

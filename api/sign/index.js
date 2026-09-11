@@ -14,7 +14,7 @@
 //   status が signed の行は、再送も取り消しもできない。
 //   PDFも上書きしない（署名前と署名済みは別のパス）。
 
-import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
@@ -32,7 +32,7 @@ const R_FIELDS =
   "id, tenant_id, template_id, employee_id, title, doc_kind, doc_version, "
   + "status, due_on, pdf_path, pdf_sha256, signed_pdf_path, signed_pdf_sha256, "
   + "signed_at, signer_name, signer_email, signer_ip, signer_ua, agreed_text, "
-  + "sent_at, resent_at, resent_count, first_viewed_at, created_at";
+  + "sent_at, resent_at, resent_count, first_viewed_at, created_at, source, file_name";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -62,7 +62,12 @@ async function list(req, res, ctx) {
     .eq("tenant_id", ctx.tenantId)
     .order("sent_at", { ascending: false })
     .limit(400);
-  if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
+  if (error) {
+    // source / file_name は 056 で足した列。未適用だと列が無いと言われる
+    const hint = dbSetupHint(error, "db/056_doc_orders.sql");
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "db_query_failed", detail: error.message });
+  }
 
   const rows = (data || []).map((r) => ({ ...r, view: statusOf(r) }));
   const counts = {
@@ -223,7 +228,7 @@ async function send(req, res, ctx, user, body) {
         .upload(path, Buffer.from(bytes), { contentType: "application/pdf", upsert: false });
       if (up.error) throw new Error(up.error.message);
 
-      const { data: row, error } = await sb.from("gw_sign_requests").insert({
+      const { error } = await sb.from("gw_sign_requests").insert({
         id,
         tenant_id: ctx.tenantId,
         template_id: tpl.id,
@@ -238,7 +243,7 @@ async function send(req, res, ctx, user, body) {
         pdf_path: path,
         pdf_sha256: hash,
         sent_by: user.id,
-      }).select(R_FIELDS).single();
+      });
       if (error) throw new Error(error.message);
 
       await signEvent(ctx, id, "sent", req, { id: user.id, name: ctx.employee?.display_name },

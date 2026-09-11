@@ -20,7 +20,7 @@
 //     ・署名前PDFのSHA-256
 //   を残す。PDFの最終ページにも同じ内容を印字する（lib/pdf-jp.js）。
 
-import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
@@ -35,7 +35,7 @@ const BUCKET = "hr";
 const MINE =
   "id, title, doc_kind, doc_version, status, due_on, body_snapshot, "
   + "pdf_sha256, signed_pdf_sha256, signed_at, signer_name, agreed_text, "
-  + "sent_at, resent_at, first_viewed_at";
+  + "sent_at, resent_at, first_viewed_at, source, file_name";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -59,20 +59,26 @@ async function read(req, res, ctx, user) {
 
   if (!id) {
     const { data, error } = await sb.from("gw_sign_requests")
-      .select("id, title, doc_kind, status, due_on, sent_at, signed_at, signed_pdf_sha256")
+      .select("id, title, doc_kind, status, due_on, sent_at, signed_at, signed_pdf_sha256, source")
       .eq("tenant_id", ctx.tenantId)
       .eq("employee_id", ctx.employee.id)
       .neq("status", "cancelled")            // 取り消したものは本人に出さない
       .order("status")                        // sent が先。署名済みは下へ
       .order("due_on", { ascending: true, nullsFirst: false })
       .limit(200);
-    if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
+    if (error) {
+      // source は 056 で足した列。未適用だと「列が無い」と言われる
+      const hint = dbSetupHint(error, "db/056_doc_orders.sql");
+      if (hint) return json(res, 503, { error: "not_ready", message: hint });
+      return json(res, 500, { error: "db_query_failed", detail: error.message });
+    }
 
     return json(res, 200, {
       contracts: (data || []).map((r) => ({
         id: r.id, title: r.title,
         kind: r.doc_kind, kindLabel: kindLabel(r.doc_kind),
         view: statusOf(r),
+        source: r.source || "generated",
         sentAt: r.sent_at, dueOn: r.due_on, signedAt: r.signed_at,
       })),
       agreeText: AGREE_TEXT,
@@ -80,9 +86,16 @@ async function read(req, res, ctx, user) {
     });
   }
 
-  const { data: r } = await sb.from("gw_sign_requests").select(MINE)
+  const { data: r, error: e1 } = await sb.from("gw_sign_requests").select(MINE)
     .eq("id", id).eq("tenant_id", ctx.tenantId)
     .eq("employee_id", ctx.employee.id).maybeSingle();
+  if (e1) {
+    // 「見つからない」と「列が無い」を混ぜない。
+    // 混ぜると、本人には取り下げられたように見えてしまう
+    const hint = dbSetupHint(e1, "db/056_doc_orders.sql");
+    if (hint) return json(res, 503, { error: "not_ready", message: hint, hint });
+    return json(res, 500, { error: "db_query_failed", detail: e1.message });
+  }
   if (!r) return json(res, 404, { error: "not_found" });
   if (r.status === "cancelled") return json(res, 404, { error: "cancelled", hint: "この契約書は取り下げられました" });
 
@@ -100,6 +113,10 @@ async function read(req, res, ctx, user) {
       kind: r.doc_kind, kindLabel: kindLabel(r.doc_kind),
       version: r.doc_version,
       body: r.body_snapshot,
+      // uploaded … 社労士などが作ったPDFがそのまま届いている。
+      // 本文ではなくPDFを読んでもらう
+      source: r.source || "generated",
+      fileName: r.file_name || null,
       view: statusOf(r),
       sentAt: r.sent_at, dueOn: r.due_on,
       signedAt: r.signed_at, signerName: r.signer_name, agreedText: r.agreed_text,
@@ -212,6 +229,16 @@ async function sign(req, res, ctx, user) {
 
   await signEvent(ctx, r.id, "signed", req, { id: user.id, name: signerName },
     { hash: baseHash, signedHash: saved.signed_pdf_sha256 });
+
+  // 作成依頼から出したものなら、その依頼も締結ずみにする。
+  // ここが失敗しても署名は済んでいる。止めない（056 未適用でも動くように）
+  try {
+    await sb.from("gw_doc_orders")
+      .update({ status: "signed", updated_at: now.toISOString() })
+      .eq("sign_request_id", r.id).eq("tenant_id", ctx.tenantId);
+  } catch (e) {
+    console.error("[sign] 作成依頼の状態を直せませんでした:", e?.message || e);
+  }
 
   // 本人のベルからは、署名のお願いを下ろす
   await clearNotification(ctx.employee.id, `sign:${r.id}`);

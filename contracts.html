@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912f">
-  <link rel="stylesheet" href="css/layout.css?v=20260912f">
+  <link rel="stylesheet" href="css/app.css?v=20260912g">
+  <link rel="stylesheet" href="css/layout.css?v=20260912g">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -37,6 +37,23 @@
       max-height:60vh; overflow-y:auto;
     }
     @media (max-width:720px) { .ct-body { padding:16px 15px; font-size:13px; } }
+
+    /* PDFで届いた書類。本文の文字が無いので、そのまま埋め込んで読んでもらう */
+    .ct-pdf { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#f7f8fa; }
+    .ct-pdf iframe { display:block; width:100%; height:62vh; min-height:360px; border:0; background:#fff; }
+    @media (max-width:720px) { .ct-pdf iframe { height:56vh; min-height:300px; } }
+
+    .ct-tools { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+
+    /* 紙に出すとき。枠と高さの制限を外さないと、1画面ぶんで切れる */
+    @media print {
+      .ct-body {
+        max-height:none; overflow:visible; border:none; padding:0;
+        font-size:11pt; line-height:1.9;
+      }
+      .ct-pdf { display:none; }
+      #o-title { font-size:15pt; }
+    }
 
     .ct-agree { display:flex; align-items:flex-start; gap:10px; font-size:13.5px;
                 font-weight:600; cursor:pointer; line-height:1.8; }
@@ -67,30 +84,57 @@
       署名したあとの契約書は変えられません。いつでもPDFを取り出せます。
     </p>
     <div id="done-list"></div>
+    <!-- 退職するとログインできなくなる。そのあとで取りに来ても開けないので、
+         いま手元に残しておいてもらう -->
+    <div class="banner warn" style="margin-top:14px;">
+      <span class="material-symbols-outlined">save</span>
+      <div>
+        <b>お手元にも控えを残してください。</b>
+        退職などでログインできなくなると、この画面からは取り出せなくなります。
+        いまのうちに「PDFを保存」でご自身の端末に保存しておくことをおすすめします。
+      </div>
+    </div>
   </div>
 
   <!-- 1件を開いたところ -->
-  <div id="one" class="hidden">
-    <p style="margin:0 0 10px;">
+  <div id="one" class="hidden print-here">
+    <p style="margin:0 0 10px;" class="no-print">
       <a href="#" onclick="backToList();return false;" style="font-size:13px;">
         <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;">arrow_back</span>一覧にもどる
       </a>
     </p>
 
     <div class="card">
-      <h2><span class="material-symbols-outlined">description</span><span id="o-title">　</span></h2>
+      <h2><span class="material-symbols-outlined no-print">description</span><span id="o-title">　</span></h2>
       <p class="muted" style="font-size:12.5px;margin:0 0 14px;" id="o-meta"></p>
       <div id="o-note"></div>
+
+      <!-- 文字で届いたもの -->
       <div id="o-body" class="ct-body"></div>
-      <div style="margin-top:12px;">
+      <!-- PDFで届いたもの（社労士が作った書面など） -->
+      <div id="o-pdf" class="ct-pdf hidden"><iframe id="o-frame" title="契約書"></iframe></div>
+
+      <div class="ct-tools no-print">
+        <button class="btn btn-secondary btn-sm" onclick="openBig(this)">
+          <span class="material-symbols-outlined icon-inline">fullscreen</span>大きく読む
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="savePdf(null, this)">
+          <span class="material-symbols-outlined icon-inline">download</span>PDFを保存
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="printOne(this)">
+          <span class="material-symbols-outlined icon-inline">print</span>印刷
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="openPdf(null, this)">
           <span class="material-symbols-outlined icon-inline">picture_as_pdf</span>PDFで読む
         </button>
       </div>
+      <p class="muted no-print" style="font-size:11.5px;margin:10px 0 0;">
+        この契約書はPDFで保存でき、紙に印刷もできます。お手元に控えを残したいときにお使いください。
+      </p>
     </div>
 
     <!-- 署名 -->
-    <div id="sign-card" class="card hidden" style="border-left:4px solid var(--primary);">
+    <div id="sign-card" class="card hidden no-print" style="border-left:4px solid var(--primary);">
       <h2><span class="material-symbols-outlined">draw</span>署名</h2>
 
       <div style="margin-bottom:14px;">
@@ -119,16 +163,16 @@
     </div>
 
     <!-- 署名済みのとき -->
-    <div id="done-detail" class="card hidden">
+    <div id="done-detail" class="card hidden no-print">
       <h2><span class="material-symbols-outlined">verified</span>署名の記録</h2>
       <div id="o-record"></div>
     </div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912f"></script>
-<script src="js/device.js?v=20260912f"></script>
-<script src="js/layout.js?v=20260912f"></script>
+<script src="js/api-client.js?v=20260912g"></script>
+<script src="js/device.js?v=20260912g"></script>
+<script src="js/layout.js?v=20260912g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -209,6 +253,11 @@
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <span class="ct-st ${esc(c.view)}">${esc(ST_LABEL[c.view] || c.view)}</span>
+          ${signed ? `
+            <button class="btn btn-secondary btn-sm" title="PDFを保存する"
+                    onclick="savePdf('${esc(c.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">download</span>保存
+            </button>` : ""}
           <button class="btn ${signed ? "btn-secondary" : "btn-primary"} btn-sm"
                   onclick="openOne('${esc(c.id)}')">
             ${signed ? "見る" : "開いて署名する"}
@@ -223,6 +272,8 @@
     for (const n of ["list-card", "done-card"]) el(n).classList.add("hidden");
     el("one").classList.remove("hidden");
     el("o-body").textContent = "読み込み中…";
+    el("o-pdf").classList.add("hidden");
+    el("o-frame").removeAttribute("src");
     el("o-note").innerHTML = "";
     el("o-msg").textContent = "";
     window.scrollTo({ top: 0 });
@@ -255,6 +306,10 @@
     ].filter(Boolean).join("　／　");
     el("o-body").textContent = c.body || "";
 
+    // PDFで届いたものは、本文の文字が無い。そのまま埋め込んで読んでもらう。
+    // 「PDFを開いてください」と書いてあるだけの画面にはしない
+    showPdfInline(c.source === "uploaded");
+
     if (c.view === "overdue") {
       el("o-note").innerHTML =
         `<div class="banner warn" style="margin-bottom:14px;">
@@ -283,8 +338,11 @@
         <tr><td style="color:var(--muted);">文書ハッシュ</td><td class="ct-hash">${esc(c.hash || "")}</td></tr>
       </tbody></table></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
-        <button class="btn btn-primary btn-sm" onclick="openPdf('signed', this)">
-          <span class="material-symbols-outlined icon-inline">download</span>署名済みPDFを開く
+        <button class="btn btn-primary btn-sm" onclick="savePdf(null, this)">
+          <span class="material-symbols-outlined icon-inline">download</span>署名済みPDFを保存
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="openPdf('signed', this)">
+          <span class="material-symbols-outlined icon-inline">visibility</span>署名済みPDFを開く
         </button>
         <button class="btn btn-secondary btn-sm" onclick="openPdf('original', this)">
           <span class="material-symbols-outlined icon-inline">description</span>署名前のPDF
@@ -322,6 +380,69 @@
       const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(current.id, kind || undefined));
       window.open(url, "_blank", "noopener");
     } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
+  }
+
+  // ---- 保存・印刷・大きく読む -------------------------------------------------
+  //
+  // 労働条件を電子で渡すときは、本人が紙に出せることが要る
+  // （労働基準法施行規則第5条）。ブラウザのPDF表示に付いている
+  // 保存ボタン頼みにせず、この画面から保存と印刷ができるようにしてある。
+
+  // id を渡すと一覧からも保存できる。渡さなければ、いま開いているもの
+  async function savePdf(id, btn) {
+    const target = id || current?.id;
+    if (!target) return;
+    try {
+      // download=1 で、開かずに保存になるURLが返る。ファイル名も付く
+      const { url } = await KPLayout.busy(btn, "準備中…",
+        () => API.signPdfUrl(target, undefined, true));
+      KPLayout.save(url, "契約書.pdf");
+    } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
+  }
+
+  // 文字で届いたものは、この画面をそのまま紙にする。
+  // PDFで届いたものは、こちらから紙に出せない（別のタブの中身なので）。
+  // そのときはPDFを開いて、そこで印刷してもらう
+  async function printOne(btn) {
+    if (current?.source === "uploaded") {
+      alert("この書類はPDFで届いています。開いたPDFの画面から印刷してください。");
+      return openPdf(null, btn);
+    }
+    document.body.classList.add("kp-printing");
+    // 印刷ダイアログが閉じたら元に戻す。戻し忘れると画面が欠けたままになる
+    const done = () => {
+      document.body.classList.remove("kp-printing");
+      window.removeEventListener("afterprint", done);
+    };
+    window.addEventListener("afterprint", done);
+    window.print();
+    setTimeout(done, 1000);
+  }
+
+  // 画面いっぱいに出す。細かい字を確かめるとき、半分の枠では読めない
+  async function openBig(btn) {
+    if (current?.source === "uploaded") {
+      try {
+        const { url } = await KPLayout.busy(btn, "準備中…", () => API.signPdfUrl(current.id));
+        KPLayout.viewer({ title: current.title, src: url });
+      } catch (e) { alert(e.hint || e.detail || e.message || "開けませんでした"); }
+      return;
+    }
+    KPLayout.viewer({ title: current.title, text: current.body || "" });
+  }
+
+  // 埋め込みのPDF。開くたびにURLを取り直す（5分で切れる）
+  async function showPdfInline(on) {
+    el("o-pdf").classList.toggle("hidden", !on);
+    if (!on) { el("o-frame").removeAttribute("src"); return; }
+    try {
+      const { url } = await API.signPdfUrl(current.id);
+      el("o-frame").src = url;
+    } catch (e) {
+      el("o-pdf").classList.add("hidden");
+      el("o-body").textContent =
+        `${current.body || ""}\n\n（PDFを読み込めませんでした：${e.hint || e.detail || e.message}）`;
+    }
   }
 
   function backToList() {

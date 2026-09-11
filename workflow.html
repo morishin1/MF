@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260912f">
-  <link rel="stylesheet" href="css/layout.css?v=20260912f">
+  <link rel="stylesheet" href="css/app.css?v=20260912g">
+  <link rel="stylesheet" href="css/layout.css?v=20260912g">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -47,15 +47,35 @@
     </div>
   </div>
 
+  <!-- 人事・管理者だけに出す。
+       労働条件通知書の作成依頼は、どこから出すのか分かりにくいという声があった。
+       申請の入口に固定で置いて、探さずに始められるようにする -->
+  <div id="hr-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">badge</span>人事の手続き</h2>
+    <div class="kp-menu">
+      <a href="admin-esign.html?tab=order">
+        <span class="ico"><span class="material-symbols-outlined">assignment_add</span></span>
+        <span><b>労働条件通知書の作成依頼</b>
+          <small>対象の方を選んで社労士へ依頼。届いた書面はそのまま署名依頼に回せます</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+      <a href="admin-esign.html?tab=list">
+        <span class="ico"><span class="material-symbols-outlined">draw</span></span>
+        <span><b>署名の状況</b><small>送った契約書が署名されたかを見る</small></span>
+        <span class="go material-symbols-outlined">chevron_right</span>
+      </a>
+    </div>
+  </div>
+
   <div class="card">
     <h2><span class="material-symbols-outlined">pending_actions</span>いま進んでいる申請</h2>
     <div id="open"><div class="empty">読み込み中…</div></div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260912f"></script>
-<script src="js/device.js?v=20260912f"></script>
-<script src="js/layout.js?v=20260912f"></script>
+<script src="js/api-client.js?v=20260912g"></script>
+<script src="js/device.js?v=20260912g"></script>
+<script src="js/layout.js?v=20260912g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -71,6 +91,12 @@
     .then((ctx) => { if (ctx) load(ctx); });
 
   async function load(ctx) {
+    // メンバーを見ているあいだは出さない。人事の入口が本人に見えると混乱する
+    const roles = ctx.me?.gw?.roles || [];
+    const staff = (ctx.me?.isAdmin || roles.includes("owner") || roles.includes("hr"))
+      && !KPLayout.isMemberView();
+    el("hr-card").classList.toggle("hidden", !staff);
+
     if (!ctx.me?.gw?.employee) {
       el("open").innerHTML =
         `<div class="banner warn"><span class="material-symbols-outlined">person_alert</span>
