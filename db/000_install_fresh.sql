@@ -7061,3 +7061,68 @@ create policy gw_device_releases_read on public.gw_device_releases
 notify pgrst, 'reload schema';
 
 notify pgrst, 'reload schema';
+
+
+-- =============================================================================
+-- 055_device_admin.sql
+-- =============================================================================
+-- 055: 端末管理の運用まわり（054 の続き）
+--
+-- ■ 登録コードは消さない。取り消す
+--   消すと「誰がいつ何に使ったか」まで消えて、監査の役に立たなくなる
+--
+-- ■ 紐付け解除は、記録を消さない
+--   間違って繋いだのを直すための操作
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 1) 登録コードの取り消し
+-- -----------------------------------------------------------------------------
+alter table public.gw_device_enrollments add column if not exists revoked_at timestamptz;
+alter table public.gw_device_enrollments add column if not exists revoked_by uuid
+  references auth.users(id) on delete set null;
+
+-- 発行した人・使われた端末をたどるため。
+-- 監査で見るのはたいてい「最近のもの」なので、新しい順に引けるようにする
+create index if not exists idx_gw_device_enrollments_recent
+  on public.gw_device_enrollments(tenant_id, created_at desc);
+
+comment on column public.gw_device_enrollments.revoked_at is
+  '取り消した時刻。行は消さない。誰がいつ何に使ったかが監査の本体なので、'
+  '使用済みのコードも取り消したコードも残す';
+
+-- -----------------------------------------------------------------------------
+-- 2) 台帳に、管理者が最後に触った記録
+--
+--    所有者変更・紐付け解除は、あとから「誰がやったか」を聞かれる操作。
+--    gw_activity_log にも残すが、台帳の行を見たときにも分かるようにしておく
+-- -----------------------------------------------------------------------------
+alter table public.gw_devices add column if not exists admin_touched_at timestamptz;
+alter table public.gw_devices add column if not exists admin_touched_by uuid
+  references auth.users(id) on delete set null;
+alter table public.gw_devices add column if not exists admin_touched_what text;
+
+comment on column public.gw_devices.admin_touched_what is
+  '管理者が最後にした操作（assign / unlink / suspend / retire など）。'
+  'くわしい経緯は gw_activity_log を見る';
+
+-- -----------------------------------------------------------------------------
+-- 3) できごとに、管理者の操作を足す
+-- -----------------------------------------------------------------------------
+alter table public.gw_device_events drop constraint if exists gw_device_events_kind_check;
+alter table public.gw_device_events add constraint gw_device_events_kind_check
+  check (kind in (
+    -- 053（ブラウザ側）
+    'first_seen', 'confirmed', 'installed', 'renamed',
+    'suspended', 'resumed', 'retired', 'forgotten', 'linked',
+    -- 055（管理者の操作）
+    'assigned', 'unlinked', 'token_revoked',
+    -- 054（エージェント側）
+    'boot', 'shutdown', 'logon', 'logoff', 'lock', 'unlock', 'sleep', 'wake',
+    'usb_attach', 'usb_detach', 'app_install', 'app_uninstall',
+    'agent_start', 'agent_update', 'agent_error'))
+  not valid;
+
+notify pgrst, 'reload schema';
+
+notify pgrst, 'reload schema';

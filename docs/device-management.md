@@ -296,15 +296,46 @@ Authorization: Device <deviceId>:<secret>
 |---|---|---|
 | GET | `/api/devices` | 一覧とサマリ。`?deviceId=` で1台 |
 | GET | `/api/devices?csv=1` | 書き出し（**書き出しも閲覧履歴に残す**） |
-| PATCH | `/api/devices` | `issue_token` / `assign` / `rename` / `suspend` / `resume` / `retire` / `note` |
+| GET | `/api/devices?enrollments=1` | 登録コードの発行・使用の履歴（監査） |
+| PATCH | `/api/devices` | `issue_token` / `revoke_token` / `assign` / **`unlink`** / `rename` / `suspend` / `resume` / `retire` / `note` |
 | GET/PATCH | `/api/devices/alerts` | `ack` / `resolve` / `ignore` / `reopen` |
 | GET/PATCH | `/api/devices/policy` | 設定 |
 
 **GET のたびに `gw_device_views` に1行入れる。** これを忘れると片側だけ透明になる。
 
+**所有者変更（`assign`）**
+使う人が変わったら `notified_at` を消して「本人の確認待ち」に戻す。
+前の人が読んだことを、次の人の承認にはしない。
+同じ人に付け直したときは、やり直させない。
+
+**紐付け解除（`unlink`）**
+パソコンとブラウザの結びつきだけを外す。**記録は何も消さない。**
+間違って繋いだのを直すための操作で、消すためのものではない。
+パソコン側から外すと、ぶら下がっているブラウザをまとめて外す。
+
+**登録コード（`issue_token` / `revoke_token`）**
+有効期限は発行するときに選ぶ（1・3・7・30日。既定7日）。
+**発行も使用も監査ログに残す。**
+
+| ログ | いつ | 中身 |
+|---|---|---|
+| `device.token_issued` | 発行したとき | 発行者（actor）・宛先・期限・日数 |
+| `device.token_used` | 端末が使ったとき | どの端末・ホスト名・発行者・発行日時 |
+| `device.token_revoked` | 取り消したとき | 取り消した人（actor） |
+
+**使ったコードも取り消したコードも、行は消さない。**
+消すと「誰がいつ何に使ったか」まで消えて、監査の役に立たなくなる。
+使われてしまったコードは取り消せない（`409`）。
+そのときは端末のほうを停止する、と画面にもそう書いてある。
+
+管理者が触った操作は、`gw_devices.admin_touched_*` にも残る。
+一覧を見たときに「最近誰かが動かした」と分かるようにするため。
+くわしい経緯は `gw_activity_log`。
+
 ### 5-4. 定期処理（`api/cron/devices.js`、毎日 03:20 JST）
 
-1. 24時間届かないエージェントを `agent_silent` で知らせる（1日1件）
+1. 24時間届かないエージェントを `agent_silent` で知らせる（1日1件）。
+   管理画面では **「未通信」** として一覧のいちばん上に出て、タブで絞り込める
 2. しばらく使われていないブラウザを `no_access` で知らせる（1台1回）
 3. 保存期間を過ぎた記録を消す
 4. 使用終了から90日を過ぎた端末を、記録ごと消す
@@ -351,7 +382,7 @@ Authorization: Device <deviceId>:<secret>
 | `usb_attach` | 要確認 | USB大容量記憶装置が接続された | エージェント |
 | `night_work` / `holiday_work` | 要確認 | 深夜60分／休日120分を超えた | エージェント |
 | `agent_error` | 要確認 | エージェントがエラーを報告 | エージェント |
-| `agent_silent` | 要確認 | 24時間以上届かない | cron |
+| `agent_silent` | 要確認 | 24時間以上届かない（＝止められた／起動していない／通信できない） | cron |
 | `unknown_device` | 要確認 | その人が使っていなかった端末から入った | ブラウザ |
 | `night_access` / `holiday_access` | 要確認 | 深夜60分／休日120分を超えた | ブラウザ |
 | `no_access` | 情報 | 60日以上使われていない | cron |
@@ -391,11 +422,23 @@ Authorization: Device <deviceId>:<secret>
 
 ### エージェントで、実機でないと詰められないところ
 
-- `currentHost()`（`agent/cmd/eight-agent-ui/platform_windows.go`）
-  … UI Automation でアドレスバーを読む。**いまは空を返す**ので、
-  サイトのカテゴリだけが取れない。アプリ名と稼働時間は取れる
+- `currentHost()`（`agent/cmd/eight-agent-ui/uia_windows.go`）
+  … UI Automation（IUIAutomation）でアドレスバーを読む。**実装は入れた**が、
+  COM の vtable の番号とアドレスバーの探し方は実機でないと確かめられない。
+  取れなければ空を返すだけで、アプリ名と稼働時間はそのまま取れる。
+  **最後の関門の `collect.HostOnly()` は、この環境でテストしてある**
+  （検索語を送らない・URLをホスト名だけにする）
 - サービス登録と、Session 0 越しの名前付きパイプ
 - タスクトレイ（いまは `http://127.0.0.1:14812/` で代用）
+
+### 展開の順番
+
+```
+① 管理者PC1台で検証   … docs/device-agent-testing.md のチェックリスト
+② 社内規程・告知の整備
+③ 社員1名で2週間試験   … ここまでにコード署名証明書を用意する
+④ 全員展開            … サイトのカテゴリ（UI Automation）が取れることが必須条件
+```
 
 ---
 

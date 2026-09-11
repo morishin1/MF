@@ -108,6 +108,7 @@
   <div class="dv-tabs">
     <button id="t-list" class="on" onclick="tab('list')">端末</button>
     <button id="t-alerts" onclick="tab('alerts')">アラート<span id="t-alerts-n"></span></button>
+    <button id="t-codes" onclick="tab('codes')">登録コード</button>
     <button id="t-policy" onclick="tab('policy')">設定</button>
   </div>
 
@@ -126,11 +127,17 @@
           </button>
         </span>
       </h2>
-      <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
+      <p class="muted" style="font-size:11.5px;margin:0 0 10px;">
         ブラウザは、その人が社内システムを開いた時点で自動で載ります。
         会社のソフトを入れるときは「登録コードを出す」で1台ぶんのコードを渡してください。
         どちらも本人が「このパソコンです」を押すまで、記録は始まりません。
       </p>
+      <div class="dv-tabs" style="margin-bottom:10px;">
+        <button id="f-all" class="on" onclick="filterBy('')">すべて</button>
+        <button id="f-silent" onclick="filterBy('silent')">未通信<span id="f-silent-n"></span></button>
+        <button id="f-waiting" onclick="filterBy('waiting')">本人の確認待ち<span id="f-waiting-n"></span></button>
+        <button id="f-agent" onclick="filterBy('agent')">ソフト導入済み</button>
+      </div>
       <div id="d-token"></div>
       <div class="table-scroll" style="max-height:56vh;overflow:auto;">
         <table class="dv-table">
@@ -161,6 +168,24 @@
         深夜・休日の利用は、働きすぎに気づくために出しています。サボりを探すためではありません。
       </p>
       <div id="a-rows">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- ===== 登録コード（監査） ===== -->
+  <div id="p-codes" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">vpn_key</span>登録コードの発行と使用
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="issueToken()">
+          <span class="material-symbols-outlined icon-inline">add</span>新しく出す
+        </button>
+      </h2>
+      <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
+        <b>誰が・誰あてに・いつまでのコードを出し、いつ・どの端末に使われたか</b>を残しています。
+        使ったコードも取り消したコードも消しません。ここが監査の記録です。
+      </p>
+      <div id="c-token"></div>
+      <div id="c-rows">読み込み中…</div>
+      <div id="c-msg" class="err-text"></div>
     </div>
   </div>
 
@@ -250,17 +275,18 @@
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  let data = null, policy = null, openDetail = null, blocked = [];
+  let data = null, policy = null, openDetail = null, blocked = [], filter = "";
 
   KPLayout.init({ active: "devices", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
   function tab(which) {
-    for (const k of ["list", "alerts", "policy"]) {
+    for (const k of ["list", "alerts", "codes", "policy"]) {
       el(`p-${k}`).classList.toggle("hidden", k !== which);
       el(`t-${k}`).classList.toggle("on", k === which);
     }
     if (which === "alerts") loadAlerts();
+    if (which === "codes") loadCodes();
     if (which === "policy") loadPolicy();
   }
 
@@ -273,6 +299,11 @@
   const hm = (at) => (at ? new Date(at).toLocaleTimeString("ja-JP",
     { hour: "2-digit", minute: "2-digit" }) : "—");
   const spec = (d) => [d.os, d.browser, d.screen].filter(Boolean).join(" / ");
+
+  const ADMIN_ACT = {
+    assign: "使う人を変えた", unlink: "紐付けを外した", rename: "名前を変えた",
+    suspend: "停止した", resume: "再開した", retire: "使用終了にした", note: "メモを書いた",
+  };
 
   // インラインの onclick は window から引かれる。const の矢印関数は届かない
   function closeDetail() { el("d-detail").innerHTML = ""; openDetail = null; }
@@ -296,7 +327,7 @@
       <div class="box"><div class="k">台数</div><div class="v">${s.total || 0}</div></div>
       <div class="box"><div class="k">ソフト導入済み</div><div class="v">${s.agents || 0}</div></div>
       <div class="box"><div class="k">本人の確認待ち</div><div class="v">${s.waiting || 0}</div></div>
-      <div class="box${s.silent ? " bad" : ""}"><div class="k">受信なし</div>
+      <div class="box${s.silent ? " bad" : ""}"><div class="k">未通信</div>
         <div class="v">${s.silent || 0}</div></div>
       <div class="box${s.unknown ? " bad" : ""}"><div class="k">見慣れない端末</div>
         <div class="v">${s.unknown || 0}</div></div>`;
@@ -304,10 +335,25 @@
     const n = (data.alerts || []).length;
     el("t-alerts-n").textContent = n ? `（${n}）` : "";
 
-    const rows = data.devices || [];
+    const all = data.devices || [];
+    el("f-silent-n").textContent = s.silent ? `（${s.silent}）` : "";
+    el("f-waiting-n").textContent = s.waiting ? `（${s.waiting}）` : "";
+
+    // 未通信・重大は上に出す。一覧をスクロールしないと気づけないのでは、
+    // 出している意味がない
+    const weight = (d) => (d.state.key === "silent" ? 0
+      : d.state.key === "critical" ? 1
+      : d.state.key === "waiting" ? 2
+      : d.state.key === "warn" ? 3 : 4);
+    const rows = all
+      .filter((d) => !filter
+        || (filter === "agent" ? d.source === "agent" : d.state.key === filter))
+      .sort((a, b) => weight(a) - weight(b));
+
     if (!rows.length) {
-      el("d-rows").innerHTML = `<tr><td colspan="6">
-        まだ端末がありません。メンバーが社内システムを開くと、ここに載ります。</td></tr>`;
+      el("d-rows").innerHTML = `<tr><td colspan="6">${all.length
+        ? "この条件に当てはまる端末はありません。"
+        : "まだ端末がありません。メンバーが社内システムを開くと、ここに載ります。"}</td></tr>`;
       return;
     }
     el("d-rows").innerHTML = rows.map((d) => `
@@ -319,13 +365,24 @@
             (d.browsers || []).length ? `　ブラウザ ${d.browsers.length}` : ""}</span></td>
         <td>${d.employee ? `${esc(d.employee.name)}<span class="sub">${esc(d.employee.department || "")}</span>`
                          : '<span class="sub">未割り当て</span>'}</td>
-        <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span></td>
+        <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span>
+          ${d.state.key === "silent"
+            ? `<span class="sub">${esc(d.source === "agent"
+                ? "ソフトが止まっているかもしれません" : "")}</span>` : ""}</td>
         <td>${esc(d.lastSeen)}</td>
         <td>${d.openAlerts.critical ? `<span class="dv-st critical">重大 ${d.openAlerts.critical}</span> ` : ""}${
               d.openAlerts.warn ? `<span class="dv-st warn">要確認 ${d.openAlerts.warn}</span>` : ""}${
               !d.openAlerts.critical && !d.openAlerts.warn ? '<span class="sub">—</span>' : ""}</td>
         <td><span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);">chevron_right</span></td>
       </tr>`).join("");
+  }
+
+  function filterBy(key) {
+    filter = key;
+    for (const k of ["all", "silent", "waiting", "agent"]) {
+      el(`f-${k}`).classList.toggle("on", (k === "all" ? "" : k) === key);
+    }
+    render();
   }
 
   async function showDetail(id) {
@@ -363,6 +420,9 @@
           <button class="btn btn-secondary btn-sm"
                   onclick="assign('${dev.id}', '${dev.employee ? dev.employee.id : ""}')">使う人を変える</button>
           <button class="btn btn-secondary btn-sm" onclick="rename('${dev.id}')">名前を変える</button>
+          ${(isAgent && (d.browsers || []).length) || (!isAgent && dev.linkedTo)
+            ? `<button class="btn btn-secondary btn-sm" onclick="unlink('${dev.id}')">紐付けを解除</button>`
+            : ""}
           ${dev.status === "suspended"
             ? `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','resume')">再開する</button>`
             : `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','suspend')">停止する</button>`}
@@ -388,6 +448,11 @@
           <tr><th>はじめて使った日</th><td>${esc(fmt(dev.firstSeenAt))}</td>
               <th>最終${isAgent ? "受信" : "利用"}</th><td>${esc(dev.lastSeen)}</td></tr>
           ${dev.note ? `<tr><th>メモ</th><td colspan="3">${esc(dev.note)}</td></tr>` : ""}
+          ${dev.adminTouchedAt ? `<tr><th>管理者の操作</th><td colspan="3">
+            ${esc(fmt(dev.adminTouchedAt))}　${esc(dev.adminTouchedBy || "")}　
+            ${esc(ADMIN_ACT[dev.adminTouchedWhat] || dev.adminTouchedWhat || "")}
+            <span class="sub">くわしい経緯は 組織設定・ログ で見られます</span>
+          </td></tr>` : ""}
         </table>
 
         ${(d.browsers || []).length ? `
@@ -462,8 +527,15 @@
   }
 
   // ---- 登録コード ----
+  //
+  // 「端末」タブと「登録コード」タブの両方から出せる。
+  // 開いていないほうのタブに書くと、押したのに何も出ないように見える
+  function tokenBox() {
+    return el("p-codes").classList.contains("hidden") ? el("d-token") : el("c-token");
+  }
+
   function issueToken() {
-    el("d-token").innerHTML = `
+    tokenBox().innerHTML = `
       <div class="banner" style="display:block;background:var(--soft);">
         <b>会社のソフトを入れるための登録コード</b>
         <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
@@ -473,33 +545,97 @@
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <select id="d-who" style="width:auto;margin:0;">${peopleOptions(null)}</select>
+          <select id="d-days" style="width:auto;margin:0;">
+            <option value="1">1日で切れる</option>
+            <option value="3">3日で切れる</option>
+            <option value="7" selected>7日で切れる</option>
+            <option value="30">30日で切れる</option>
+          </select>
           <button class="btn btn-primary btn-sm" onclick="doIssue(this)">コードを発行</button>
           <button class="btn btn-secondary btn-sm" onclick="closeToken()">やめる</button>
         </div>
       </div>`;
   }
 
-  function closeToken() { el("d-token").innerHTML = ""; }
+  function closeToken() {
+    el("d-token").innerHTML = "";
+    el("c-token").innerHTML = "";
+  }
 
   async function doIssue(btn) {
     const employeeId = el("d-who").value || null;
+    const expiresInDays = Number(el("d-days").value) || 7;
     try {
       const r = await KPLayout.busy(btn, "発行中…",
-        () => API.patchDevice({ action: "issue_token", employeeId }));
+        () => API.patchDevice({ action: "issue_token", employeeId, expiresInDays }));
       // 平文はここでしか出せない。閉じたら二度と読めないと、はっきり書く
-      el("d-token").innerHTML = `
+      const html = `
         <div class="banner ok" style="display:block;">
-          <b>登録コード</b>（1回だけ使えます／7日で切れます）
+          <b>登録コード</b>（1回だけ使えます／${esc(String(r.days || 7))}日で切れます）
           <div class="dv-token">${esc(r.token)}</div>
           そのパソコンで、次のように実行してください。<br>
           <code>eight-agent-svc.exe -enroll ${esc(r.token)}</code><br>
-          <b>この画面を閉じると、もう出せません。</b>必要なら今のうちに控えてください。
+          <b>この画面を閉じると、もう出せません。</b>必要なら今のうちに控えてください。<br>
+          <span class="muted" style="font-size:11.5px;">
+            期限 ${esc(fmt(r.expiresAt))}　
+            発行したことと、使われたことは「登録コード」タブに残ります
+          </span>
           <div style="margin-top:8px;">
             <button class="btn btn-secondary btn-sm" onclick="closeToken()">閉じる</button>
           </div>
         </div>`;
+      tokenBox().innerHTML = html;
+      // 履歴を開いているなら、いま出したぶんも並べ直す
+      if (!el("p-codes").classList.contains("hidden")) loadCodes();
     } catch (e) {
-      el("d-msg").textContent = e.hint || e.message || "発行できませんでした";
+      const msg = e.hint || e.message || "発行できませんでした";
+      el("d-msg").textContent = msg;
+      el("c-msg").textContent = msg;
+    }
+  }
+
+  // ---- 登録コードの履歴（監査） ----
+  async function loadCodes() {
+    try {
+      const r = await API.deviceEnrollments();
+      const rows = r.enrollments || [];
+      if (!rows.length) {
+        el("c-rows").innerHTML = `<p class="muted">まだ発行していません。</p>`;
+        return;
+      }
+      el("c-rows").innerHTML = `<table class="dv-table"><thead><tr>
+          <th>発行</th><th>発行者</th><th>宛先</th><th>期限</th>
+          <th>状態</th><th>使用</th><th>使った端末</th><th></th>
+        </tr></thead><tbody>${rows.map((c) => `
+          <tr><td>${esc(fmt(c.issuedAt))}</td>
+            <td>${esc(c.issuedBy)}</td>
+            <td>${c.forWhom ? esc(c.forWhom) : '<span class="sub">指定なし</span>'}</td>
+            <td>${esc(fmt(c.expiresAt))}</td>
+            <td><span class="dv-st ${c.state.key === "open" ? "ok"
+                 : c.state.key === "used" ? "" : "stale"}">${esc(c.state.label)}</span>
+              ${c.revokedBy ? `<span class="sub">${esc(c.revokedBy)}</span>` : ""}</td>
+            <td>${c.usedAt ? esc(fmt(c.usedAt)) : "—"}</td>
+            <td>${c.usedBy ? esc(c.usedBy) : "—"}</td>
+            <td>${c.state.key === "open"
+              ? `<button class="btn btn-secondary btn-sm" onclick="revokeCode('${esc(c.id)}')">取り消す</button>`
+              : ""}</td>
+          </tr>`).join("")}</tbody></table>`;
+    } catch (e) {
+      el("c-rows").innerHTML = `<div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.message)}</div></div>`;
+    }
+  }
+
+  async function revokeCode(id) {
+    if (!confirm("この登録コードを使えなくします。\n"
+      + "発行した記録は残ります。よろしいですか？")) return;
+    el("c-msg").textContent = "";
+    try {
+      await API.patchDevice({ action: "revoke_token", enrollmentId: id });
+      await loadCodes();
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "取り消せませんでした";
     }
   }
 
@@ -530,6 +666,14 @@
   async function doAssign(id) {
     const employeeId = el("d-assign-who").value || null;
     await run(() => API.patchDevice({ action: "assign", deviceId: id, employeeId }));
+  }
+
+  // パソコンとブラウザの紐付けを外す。記録は何も消さない
+  async function unlink(id) {
+    if (!confirm("このパソコンとブラウザの紐付けを外します。\n"
+      + "それぞれの記録は残ります。台帳では別々の行として並びます。\n"
+      + "よろしいですか？")) return;
+    await run(() => API.patchDevice({ action: "unlink", deviceId: id }));
   }
 
   async function rename(id) {

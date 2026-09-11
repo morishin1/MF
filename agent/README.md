@@ -27,7 +27,7 @@ IT側からの一斉配布（Intune / GPO）は要らない。
 | メール・チャットの本文 | 同上 |
 | 画面の録画・スクリーンショット | 画面をキャプチャするAPIを呼んでいない |
 | **ウィンドウのタイトル** | `GetWindowText` を呼んでいない。`grep -r GetWindowText` で0件 |
-| **URLの全文** | `internal/collect/category.go` の `Of()` が返すのは6語のどれかだけ。`category_test.go` がそれを確かめている |
+| **URLの全文** | `collect.HostOnly()` がホスト名だけに落とし、`Of()` が6語のどれかに変える。`hostonly_test.go` / `category_test.go` が確かめている。**アドレスバーの検索語も送らない** |
 | ファイルの中身 | 読む口が無い |
 
 送る構造体（`internal/api/client.go` の `Event` / `Usage` / `AppUsage` / `WebUsage`）に、
@@ -66,8 +66,12 @@ Windows の **Session 0 Isolation** により、
 ### 3-1. 管理者：登録コードを出す
 
 グループウェア → **システム管理 → 端末管理 → 「登録コードを出す」**。
-渡す相手を名簿から選ぶと、`ABCD-2345-KMNP` のようなコードが1度だけ出る。
-**7日で切れる。1回しか使えない。**
+渡す相手と**有効期限（1・3・7・30日）**を選ぶと、
+`ABCD-2345-KMNP` のようなコードが1度だけ出る。**1回しか使えない。**
+
+発行したことと、いつ・どの端末に使われたかは
+「登録コード」タブと監査ログ（`device.token_issued` / `device.token_used`）に残る。
+まだ使っていないコードは取り消せる。
 
 ### 3-2. メンバー：自分のパソコンで実行する
 
@@ -156,10 +160,20 @@ schtasks /create /tn "EIGHT Agent UI" /tr "C:\Program Files\EIGHT\eight-agent-ui
 |---|---|
 | ✅ | `windows/amd64` 向けにビルドが通る（PE32+ の exe ができる） |
 | ✅ | `go vet` が通る（Linux 向け・Windows 向けの両方） |
-| ✅ | 集計・待ち行列・カテゴリ変換の単体テスト（16件） |
+| ✅ | 集計・待ち行列・カテゴリ変換の単体テスト（22件） |
 | ❌ | **Windows 実機での動作** — この環境に Windows が無い |
 | ❌ | サービスとしての登録、Session 0 越しのパイプ |
 | ❌ | Authenticode 署名 |
-| ⚠ | `currentHost()`（アドレスバーの読み取り）は**まだ空を返す**。UI Automation の COM 呼び出しは実機で詰める必要がある。そのあいだ、サイトのカテゴリだけが取れない（アプリ名と稼働時間は取れる） |
+| ✅ | `collect.HostOnly()` のテスト（検索語を送らない・URLをホスト名だけにする） |
+| ⚠ | `currentHost()`（`uia_windows.go`）は**実装したが実機で未確認**。COM の vtable の番号とアドレスバーの探し方は Windows でないと確かめられない。取れなければ空を返すだけで、アプリ名と稼働時間はそのまま取れる |
 
-**1台で2週間ためしてから、全員に配ること。**
+**展開の順番**
+
+```
+① 管理者PC1台で検証   … docs/device-agent-testing.md のチェックリスト
+② 社内規程・告知の整備
+③ 社員1名で2週間試験   … ここまでにコード署名証明書を用意する
+④ 全員展開            … サイトのカテゴリが取れることが必須条件
+```
+
+チェックリストは `docs/device-agent-testing.md`。

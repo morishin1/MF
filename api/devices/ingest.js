@@ -22,7 +22,8 @@ import {
   alertsFrom, isWeekend,
 } from "../../lib/devices.js";
 
-const SQL = "db/054_device_agent.sql";
+// 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
+const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);

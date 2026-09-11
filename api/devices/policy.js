@@ -15,7 +15,8 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SITES } from "../../lib/devices.js";
 
-const SQL = "db/053_devices.sql";
+// 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
+const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql";
 
 const DEFAULTS = {
   night_from: "22:00", night_to: "05:00",

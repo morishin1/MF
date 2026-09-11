@@ -19,9 +19,11 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 import { newSecret, newLinkCode, sha256, jstDate } from "../../lib/devices.js";
 
-const SQL = "db/054_device_agent.sql";
+// 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
+const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql";
 const str = (v, max = 200) => (v == null ? null : String(v).trim().slice(0, max) || null);
 
 export default async function handler(req, res) {
@@ -39,7 +41,7 @@ export default async function handler(req, res) {
 
   const { data: enr, error } = await sb
     .from("gw_device_enrollments")
-    .select("id, tenant_id, employee_id, expires_at, used_at, created_by")
+    .select("id, tenant_id, employee_id, expires_at, used_at, revoked_at, created_by, created_at")
     .eq("token_hash", sha256(token))
     .maybeSingle();
 
@@ -50,9 +52,10 @@ export default async function handler(req, res) {
     return json(res, 500, { error: "server_error" });
   }
 
-  // 「無い」「使用済み」「期限切れ」を言い分けない。
+  // 「無い」「使用済み」「期限切れ」「取り消し済み」を言い分けない。
   // 総当たりする側に手がかりを渡さないため
-  const dead = !enr || enr.used_at || Date.parse(enr.expires_at) < Date.now();
+  const dead = !enr || enr.used_at || enr.revoked_at
+    || Date.parse(enr.expires_at) < Date.now();
   if (dead) {
     return json(res, 400, { error: "invalid_token", message: "この登録コードは使えません" });
   }
@@ -127,10 +130,29 @@ export default async function handler(req, res) {
     });
   }
 
-  await sb.from("gw_device_enrollments")
+  // コードを使い切る。used_at が null のときだけ通るので、
+  // 同時に2台から来ても2台目は空振りする
+  const { data: consumed } = await sb.from("gw_device_enrollments")
     .update({ used_at: now, used_by: dev.id })
     .eq("id", enr.id)
-    .is("used_at", null);
+    .is("used_at", null)
+    .select("id");
+
+  // いつ・どの端末に使われたか。発行のログと対で見る。
+  // ここは端末から呼ばれる口なので、actorId は無い（人ではない）
+  if (consumed?.length) {
+    await gwLog({
+      tenantId: enr.tenant_id, actorId: null,
+      action: "device.token_used", target: enr.id,
+      detail: {
+        deviceId: dev.id,
+        hostname,
+        issuedBy: enr.created_by,
+        issuedAt: enr.created_at,
+        expiresAt: enr.expires_at,
+      },
+    });
+  }
 
   // エージェントはこのURLを既定のブラウザで開く。
   // 本人がログインした状態で開けば、そのブラウザとこのPCがつながる

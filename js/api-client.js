@@ -538,6 +538,8 @@
     return api(`/api/devices${q.toString() ? `?${q}` : ""}`);
   };
   const patchDevice = (body) => api("/api/devices", { method: "PATCH", body });
+  // 登録コードの発行・使用の履歴（監査）
+  const deviceEnrollments = () => api("/api/devices?enrollments=1");
   const deviceAlerts = (status) =>
     api(`/api/devices/alerts${status ? `?status=${encodeURIComponent(status)}` : ""}`);
   const patchDeviceAlert = (body) => api("/api/devices/alerts", { method: "PATCH", body });
@@ -942,7 +944,7 @@
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
-    devices, patchDevice, deviceAlerts, patchDeviceAlert,
+    devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
     myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,
     renameMyDevice, forgetMyDevice,

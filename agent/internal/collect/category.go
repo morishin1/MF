@@ -85,3 +85,56 @@ func ExeName(path string) string {
 	}
 	return s
 }
+
+// HostOnly は、アドレスバーから読んだ文字列をホスト名だけにする。
+//
+// ■ ここが、URL がこのPCから出ていく最後の関門
+//
+//	currentHost()（Windows側）は、返す前に必ずここを通す。
+//	パスもクエリも落とし、ホスト名に見えないものは空にする。
+//	アドレスバーには入力途中の検索語が入っていることがあるので、
+//	「URLの形をしていないものは送らない」を、ここで確実にやる。
+//
+// Windows 専用のファイルに置くと、この環境でテストできない。
+// いちばん確かめたいところなので、OSに依らないここに置く。
+func HostOnly(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	// 空白を含むものは URL ではない（検索語の入力途中）
+	if strings.ContainsAny(s, " \t　") {
+		return ""
+	}
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.Index(s, "@"); i >= 0 { // user:pass@host
+		s = s[i+1:]
+	}
+	// ポート番号を落とす（IPv6 の [::1]:8080 も考える）
+	if strings.HasPrefix(s, "[") {
+		if i := strings.Index(s, "]"); i >= 0 {
+			s = s[1:i]
+		}
+	} else if i := strings.LastIndex(s, ":"); i > 0 {
+		s = s[:i]
+	}
+	s = strings.ToLower(strings.TrimPrefix(s, "www."))
+
+	// ホスト名に見えないものは捨てる。
+	// 「.」が1つも無いもの（localhost、検索語の一部）は送らない
+	if s == "" || !strings.Contains(s, ".") {
+		return ""
+	}
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '-'
+		if !ok {
+			return ""
+		}
+	}
+	return s
+}

@@ -70,7 +70,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (51, '051',    'メッセージ フェーズ1（グループの持ち主）',            'column',   'gw_thread_members',      'role'),
   (52, '052',    '月次締め',                                            'table',    'gw_month_closings',      null),
   (53, '053',    '端末管理（どの端末から社内システムに入ったか）',        'table',    'gw_devices',             null),
-  (54, '054',    '端末管理 常駐エージェント（PCに入れる会社のソフト）',   'column',   'gw_devices',             'secret_hash')
+  (54, '054',    '端末管理 常駐エージェント（PCに入れる会社のソフト）',   'column',   'gw_devices',             'secret_hash'),
+  (55, '055',    '端末管理の運用（所有者変更・紐付け解除・コードの監査）', 'column',   'gw_device_enrollments',  'revoked_at')
 ),
 
 -- ファイルの適用状況

@@ -22,14 +22,17 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
   isDate, jstDate, deviceState, sinceLabel, clock, newEnrollToken, sha256,
+  tokenDays, tokenState, TOKEN_DAYS,
   EVENT_LABEL, SEVERITY_LABEL, RULE_LABEL, CATEGORY_LABEL,
   CSV_HEADER, csvRow, csvCell,
 } from "../../lib/devices.js";
 
-const SQL = "db/053_devices.sql";
+// 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
+const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql";
 const FIELDS = "id, tenant_id, device_uid, label, source, hostname, serial, os, os_version, "
   + "os_build, browser, model, screen, agent_version, status, notified_at, installed_at, "
-  + "first_seen_at, last_seen_at, note, employee_id, asset_id, retired_at, linked_device_id";
+  + "first_seen_at, last_seen_at, note, employee_id, asset_id, retired_at, linked_device_id, "
+  + "admin_touched_at, admin_touched_by, admin_touched_what";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -68,6 +71,9 @@ async function read(req, res, ctx, user) {
   const policy = await policyOf(sb, ctx.tenantId);
 
   if (wantCsv) return csv(req, res, ctx, user, { sb, devices, people, q });
+  if (q.get("enrollments") === "1") {
+    return enrollments(res, ctx, { sb, devices, people });
+  }
   if (deviceId) return detail(req, res, ctx, user, { sb, devices, people, deviceId, q, policy });
 
   // 開いているアラートを端末ごとに数える
@@ -100,6 +106,8 @@ async function read(req, res, ctx, user) {
       firstSeenAt: d.first_seen_at, lastSeenAt: d.last_seen_at,
       lastSeen: sinceLabel(d.last_seen_at, now, d.source === "agent" ? "未受信" : "利用なし"),
       note: d.note,
+      adminTouchedAt: d.admin_touched_at,
+      adminTouchedWhat: d.admin_touched_what,
       employee: people.get(d.employee_id) || null,
       openAlerts: { critical: c.critical || 0, warn: c.warn || 0 },
       state: deviceState(d, { critical: c.critical || 0, warn: c.warn || 0, staleDays, now }),
@@ -201,6 +209,15 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
     webTotal.set(w.category, (webTotal.get(w.category) || 0) + w.minutes);
   }
 
+  // 管理者が最後に触った人の名前
+  let adminName = null;
+  if (d.admin_touched_by) {
+    const { data: who } = await sb.from("gw_employees")
+      .select("display_name").eq("user_id", d.admin_touched_by)
+      .eq("tenant_id", ctx.tenantId).maybeSingle();
+    adminName = who?.display_name || null;
+  }
+
   await logView(sb, ctx, user, {
     scope: "device", deviceId, employeeId: d.employee_id, workDate: to,
   });
@@ -215,8 +232,13 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
       status: d.status, note: d.note,
       confirmed: Boolean(d.notified_at), notifiedAt: d.notified_at,
       installed: Boolean(d.installed_at),
+      linkedTo: d.linked_device_id,
+      adminTouchedAt: d.admin_touched_at,
+      adminTouchedBy: adminName,
+      adminTouchedWhat: d.admin_touched_what,
       firstSeenAt: d.first_seen_at, lastSeenAt: d.last_seen_at,
-      lastSeen: sinceLabel(d.last_seen_at),
+      lastSeen: sinceLabel(d.last_seen_at, Date.now(),
+        d.source === "agent" ? "未受信" : "利用なし"),
       employee: people.get(d.employee_id) || null,
       state: deviceState(d, {
         critical: (alerts.data || []).filter((a) => a.status === "open" && a.severity === "critical").length,
@@ -300,52 +322,123 @@ async function patch(req, res, ctx, user) {
     if (employeeId && !(await ownEmployee(sb, ctx.tenantId, employeeId))) {
       return json(res, 400, { error: "bad_employee" });
     }
-    const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
-    const { error } = await sb.from("gw_device_enrollments").insert({
+    // 有効期限は発行するときに選ぶ。既定は7日。長く生かしておく理由がない
+    const days = tokenDays(body.expiresInDays, 7);
+    const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
+
+    const { data: made, error } = await sb.from("gw_device_enrollments").insert({
       tenant_id: ctx.tenantId,
       token_hash: sha256(token),
       employee_id: employeeId,
-      // 7日。長く生かしておく理由がない
       expires_at: expiresAt,
       created_by: user.id,
-    });
+    }).select("id").single();
     if (error) {
-      const hint = dbSetupHint(error, "db/054_device_agent.sql");
+      const hint = dbSetupHint(error, SQL);
       if (hint) return json(res, 503, { error: "not_ready", message: hint });
       return json(res, 500, { error: "db_query_failed", detail: error.message });
     }
-    await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
-                  action: "device.token_issued", target: employeeId });
+    // 誰が・誰あてに・いつまでのコードを出したか。使われたときの記録は enroll.js が残す
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id,
+      action: "device.token_issued", target: made.id,
+      detail: {
+        forEmployeeId: employeeId,
+        forWhom: employeeId ? (await employees(sb, ctx.tenantId)).get(employeeId)?.name : null,
+        expiresAt, days,
+      },
+    });
     return json(res, 200, {
-      token, expiresAt,
+      token, expiresAt, days,
       note: "このコードは1回だけ使えます。この画面を閉じると、もう出せません",
     });
+  }
+
+  // 出したコードを取り消す。行は消さない。
+  // 消すと「誰がいつ何に使ったか」まで消えて、監査の役に立たなくなる
+  if (action === "revoke_token") {
+    if (!body.enrollmentId) return json(res, 400, { error: "bad_request" });
+    const { data: enr } = await sb.from("gw_device_enrollments")
+      .select("id, tenant_id, used_at, revoked_at")
+      .eq("id", body.enrollmentId).maybeSingle();
+    if (!enr || enr.tenant_id !== ctx.tenantId) return json(res, 404, { error: "not_found" });
+    if (enr.used_at) {
+      return json(res, 409, { error: "already_used",
+        hint: "このコードはもう使われています。取り消しても、入った端末は止まりません。"
+            + "端末のほうを停止してください" });
+    }
+    if (enr.revoked_at) return json(res, 200, { ok: true, already: true });
+
+    const { error } = await sb.from("gw_device_enrollments")
+      .update({ revoked_at: now, revoked_by: user.id }).eq("id", enr.id);
+    if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
+
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
+                  action: "device.token_revoked", target: enr.id });
+    return json(res, 200, { ok: true });
   }
 
   const deviceId = body.deviceId;
   if (!deviceId) return json(res, 400, { error: "bad_request" });
 
   const { data: dev } = await sb.from("gw_devices")
-    .select("id, tenant_id, label, employee_id, status")
+    .select("id, tenant_id, label, hostname, source, employee_id, status, linked_device_id")
     .eq("id", deviceId).maybeSingle();
   if (!dev || dev.tenant_id !== ctx.tenantId) return json(res, 404, { error: "not_found" });
 
-  const patchRow = { updated_at: now };
+  // 管理者が触ったことを、台帳の行にも残す。
+  // くわしい経緯は gw_activity_log を見るが、
+  // 一覧を見たときに「最近誰かが動かした」と分かるほうがよい
+  const patchRow = {
+    updated_at: now,
+    admin_touched_at: now,
+    admin_touched_by: user.id,
+    admin_touched_what: action,
+  };
   let event = null;
+  let extra = {};
 
   if (action === "assign") {
     const employeeId = body.employeeId || null;
     if (employeeId && !(await ownEmployee(sb, ctx.tenantId, employeeId))) {
       return json(res, 400, { error: "bad_employee" });
     }
+    const before = dev.employee_id;
     patchRow.employee_id = employeeId;
     if (body.assetId !== undefined) patchRow.asset_id = body.assetId || null;
     // 使う人が変わったら、告知はやり直し。
     // 前の人が読んだことを、次の人の承認にはしない
-    if (employeeId !== dev.employee_id) {
+    if (employeeId !== before) {
       patchRow.notified_at = null;
       patchRow.status = "unconfirmed";
+      event = "assigned";
+      const people = await employees(sb, ctx.tenantId);
+      extra = {
+        from: before ? people.get(before)?.name || null : null,
+        to: employeeId ? people.get(employeeId)?.name || null : null,
+      };
     }
+  } else if (action === "unlink") {
+    // パソコンとブラウザの紐付けを外す。
+    // 間違って繋いだのを直すための操作で、記録は何も消さない
+    if (dev.source === "agent") {
+      // このパソコンを指しているブラウザを、まとめて外す
+      const { data: kids } = await sb.from("gw_devices")
+        .select("id, label").eq("linked_device_id", dev.id).eq("tenant_id", ctx.tenantId);
+      if (kids?.length) {
+        await sb.from("gw_devices")
+          .update({ linked_device_id: null, updated_at: now })
+          .eq("linked_device_id", dev.id).eq("tenant_id", ctx.tenantId);
+      }
+      extra = { unlinked: (kids || []).map((k) => k.label) };
+    } else {
+      if (!dev.linked_device_id) {
+        return json(res, 200, { ok: true, already: true });
+      }
+      patchRow.linked_device_id = null;
+      extra = { from: dev.linked_device_id };
+    }
+    event = "unlinked";
   } else if (action === "rename") {
     const label = String(body.label || "").trim().slice(0, 60);
     if (!label) return json(res, 400, { error: "bad_request" });
@@ -375,13 +468,72 @@ async function patch(req, res, ctx, user) {
     await sb.from("gw_device_events").insert({
       tenant_id: ctx.tenantId, device_id: deviceId,
       work_date: jstDate(), at: now, kind: event,
-      detail: event === "renamed" ? { name: patchRow.label } : {},
+      detail: event === "renamed" ? { name: patchRow.label }
+        : event === "assigned" ? { name: extra.to || "（割り当てなし）" }
+        : {},
     });
   }
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
                 action: `device.${action}`, target: deviceId,
-                detail: { label: patchRow.label || dev.label } });
-  return json(res, 200, { ok: true });
+                detail: { label: patchRow.label || dev.hostname || dev.label,
+                          source: dev.source, ...extra } });
+  return json(res, 200, { ok: true, ...extra });
+}
+
+// ---- 登録コードの履歴（監査） -------------------------------------------------
+/**
+ * 誰がいつ発行して、いつ・どの端末に使われたか。
+ *
+ * 使ったコードも取り消したコードも消さない。
+ * 監査で見たいのは「コードがある」ことではなく「何に使われたか」のほう。
+ */
+async function enrollments(res, ctx, { sb, devices, people }) {
+  const { data, error } = await sb.from("gw_device_enrollments")
+    .select("id, employee_id, expires_at, used_at, used_by, revoked_at, revoked_by, "
+          + "created_by, created_at")
+    .eq("tenant_id", ctx.tenantId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    const hint = dbSetupHint(error, SQL);
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "db_query_failed", detail: error.message });
+  }
+
+  // 発行者・取り消した人は auth.users。名簿から名前を引く
+  const byUser = new Map();
+  {
+    const ids = [...new Set((data || [])
+      .flatMap((r) => [r.created_by, r.revoked_by]).filter(Boolean))];
+    if (ids.length) {
+      const { data: emp } = await sb.from("gw_employees")
+        .select("user_id, display_name").eq("tenant_id", ctx.tenantId).in("user_id", ids);
+      for (const e of emp || []) byUser.set(e.user_id, e.display_name);
+    }
+  }
+  const byDevice = new Map((devices || []).map((d) => [d.id, d]));
+  const now = Date.now();
+
+  return json(res, 200, {
+    enrollments: (data || []).map((r) => {
+      const dev = byDevice.get(r.used_by);
+      return {
+        id: r.id,
+        issuedBy: byUser.get(r.created_by) || "（不明）",
+        issuedAt: r.created_at,
+        forWhom: people.get(r.employee_id)?.name || null,
+        expiresAt: r.expires_at,
+        usedAt: r.used_at,
+        usedBy: dev ? (dev.hostname || dev.label) : null,
+        usedDeviceId: r.used_by,
+        revokedAt: r.revoked_at,
+        revokedBy: r.revoked_by ? (byUser.get(r.revoked_by) || "（不明）") : null,
+        state: tokenState(r, now),
+      };
+    }),
+    tokenDays: TOKEN_DAYS,
+  });
 }
 
 // ---- 小物 -------------------------------------------------------------------

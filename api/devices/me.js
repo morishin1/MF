@@ -30,7 +30,8 @@ import {
   sha256,
 } from "../../lib/devices.js";
 
-const SQL = "db/053_devices.sql";
+// 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
+const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql";
 
 // 本人の画面に出す文。ここが本文で、就業規則の写しではない。
 // 就業規則に書いてあることを、読める言葉にして見せる
