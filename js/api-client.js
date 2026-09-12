@@ -454,6 +454,17 @@
   const nippoMonthlyAct = (body) => api("/api/nippo/monthly", { method: "POST", body });
 
   // ---- 口コミサイト流入ブロック（8grp.co.jp） ----
+  // ---- 自社サイトのお知らせ（8grp.co.jp/news/） ----
+  // 保存先は事務ポータルと同じ表。毎朝8時の同期がサイトへ反映する
+  const siteNews = (status) =>
+    api(`/api/site-news${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+  const createSiteNews = (a) =>
+    api("/api/site-news", { method: "POST", body: a });
+  const updateSiteNews = (a) =>
+    api("/api/site-news", { method: "PATCH", body: a });
+  const deleteSiteNews = (id) =>
+    api(`/api/site-news?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   const listBlocks = () => api("/api/blocks");
   const createBlock = (b) => api("/api/blocks", { method: "POST", body: b }).then((d) => d.referrer);
   const updateBlock = (b) => api("/api/blocks", { method: "PATCH", body: b }).then((d) => d.referrer);
@@ -957,6 +968,7 @@
     probation, probationAct,
     contracts, contractsAct, uploadContract,
     listBlocks, createBlock, updateBlock, deleteBlock,
+    siteNews, createSiteNews, updateSiteNews, deleteSiteNews,
     listLibrary, createLibraryDoc, updateLibraryDoc, deleteLibraryDoc,
     libraryFileUrl, uploadLibraryFile,
     listRequests, createRequest, decideRequest, deleteRequest,

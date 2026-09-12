@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>サイトのお知らせ - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260912g">
+  <link rel="stylesheet" href="css/layout.css?v=20260912g">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .sn-st { font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+    .sn-st.draft { background:#eef2f7; color:#3f5878; }
+    .sn-st.planned { background:#f4f0e3; color:#8a6d1f; }
+    .sn-st.published { background:#eaf5ec; color:#256b36; }
+
+    .sn-src { font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:999px;
+              background:#f3efe6; color:#8a6d1f; margin-left:6px; white-space:nowrap; }
+
+    /* 書くところ。本文と、出来上がりを左右に並べる */
+    .sn-edit { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media (max-width:1080px) { .sn-edit { grid-template-columns:1fr; } }
+
+    #e-body { font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size:12.5px; line-height:1.85; min-height:380px; }
+
+    /* 出来上がり。サイトの本文（.rn-body）に近い見え方にする。
+       ここで整えておかないと、公開してから「詰まって見える」と気づくことになる */
+    .sn-prev { border:1px solid var(--border); border-radius:10px; background:#fff;
+               padding:22px 24px; max-height:60vh; overflow-y:auto;
+               font-size:14px; line-height:2.05; color:#4A4F58; }
+    .sn-prev h2 { font-size:19px; font-weight:900; line-height:1.6;
+                  margin:34px 0 14px; color:#2E3540; }
+    .sn-prev h3 { font-size:16px; font-weight:700; margin:26px 0 10px; color:#2E3540; }
+    .sn-prev h4 { font-size:14.5px; font-weight:700; margin:22px 0 8px; color:#2E3540; }
+    .sn-prev > :first-child { margin-top:0; }
+    .sn-prev p { margin:0 0 18px; }
+    .sn-prev ul, .sn-prev ol { margin:0 0 18px; padding-left:1.4em; }
+    .sn-prev li { margin-bottom:6px; }
+    .sn-prev a { color:#D9622B; }
+    .sn-prev blockquote { margin:0 0 18px; padding:10px 16px; border-left:3px solid #E0D9CA;
+                          background:#FAF7F1; }
+    .sn-prev table { border-collapse:collapse; width:100%; margin:0 0 18px; font-size:13px; }
+    .sn-prev th, .sn-prev td { border:1px solid #E0D9CA; padding:7px 10px; text-align:left; }
+    .sn-prev th { background:#FAF7F1; font-weight:700; }
+
+    .sn-tag { display:inline-block; font-size:11.5px; font-weight:600; padding:3px 9px;
+              margin:0 4px 5px 0; border:1px solid var(--border); border-radius:999px;
+              background:#fff; color:var(--primary-dark); cursor:pointer; font-family:inherit; }
+    .sn-tag:hover { border-color:var(--primary); color:var(--primary); }
+
+    .sn-url { font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size:11.5px; color:var(--muted); word-break:break-all; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">サイトのお知らせ</h1>
+  <p class="kp-greet-sub">
+    8grp.co.jp のお知らせを、ここで書いて公開します。下書きのまま置いておけます。
+  </p>
+
+  <div class="banner warn" style="margin-bottom:18px;">
+    <span class="material-symbols-outlined">schedule</span>
+    <div>
+      <b>公開にしても、サイトにはすぐ出ません。</b>
+      毎朝8時の同期でページが作られ、8grp.co.jp へ送られます。<span id="s-next"></span>
+      いま書いている内容は、この画面ではいつでも直せます。
+    </div>
+  </div>
+
+  <div class="tabs" style="margin-bottom:16px;">
+    <button id="tab-list" class="tab active" onclick="setTab('list', this)">一覧<span id="c-all"></span></button>
+    <button id="tab-edit" class="tab" onclick="setTab('edit', this)">書く</button>
+  </div>
+
+  <!-- ===== 一覧 ===== -->
+  <div id="pane-list">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">newspaper</span>お知らせ
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="newArticle()">
+          <span class="material-symbols-outlined icon-inline">add</span>新しく書く
+        </button>
+      </h2>
+
+      <div class="tabs">
+        <button class="tab active" onclick="setFilter('all', this)">すべて</button>
+        <button class="tab" onclick="setFilter('draft', this)">下書き<span id="c-draft"></span></button>
+        <button class="tab" onclick="setFilter('planned', this)">公開予定<span id="c-planned"></span></button>
+        <button class="tab" onclick="setFilter('published', this)">公開中<span id="c-published"></span></button>
+      </div>
+
+      <div style="margin:10px 0;">
+        <input id="l-find" type="search" placeholder="タイトル・URLで絞り込む" oninput="renderList()">
+      </div>
+
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th style="width:96px;">状態</th><th>タイトル</th>
+            <th style="width:140px;">種別</th><th style="width:110px;">公開日</th><th></th>
+          </tr></thead>
+          <tbody id="l-rows"><tr><td colspan="5" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 書く ===== -->
+  <div id="pane-edit" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">edit_note</span><span id="e-title">新しく書く</span>
+        <span id="e-state" style="margin-left:8px;"></span>
+      </h2>
+
+      <div class="inline-controls" style="margin-bottom:12px;">
+        <div style="min-width:280px;flex:2;"><label>タイトル</label>
+          <input id="e-t" type="text" placeholder="シフト調整に週5時間、中小企業のAI勤怠管理活用法"
+                 oninput="onTitle()"></div>
+        <div style="min-width:180px;"><label>種別</label>
+          <select id="e-kind" onchange="onKind()"></select></div>
+        <div style="max-width:170px;"><label>公開日</label>
+          <input id="e-date" type="date" onchange="renderPreview()"></div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label>URL</label>
+        <div class="inline-controls" style="gap:8px;">
+          <div style="min-width:200px;flex:1;">
+            <input id="e-slug" type="text" placeholder="blog-vol153" oninput="renderUrl()"></div>
+          <div><button class="btn btn-secondary btn-sm" onclick="autoSlug()">自動で決める</button></div>
+        </div>
+        <p class="sn-url" style="margin:6px 0 0;" id="e-url">https://8grp.co.jp/news/…/</p>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label>概要</label>
+        <textarea id="e-sum" rows="3"
+          placeholder="検索結果と一覧に出る文です。何の記事か1〜2文で。"></textarea>
+        <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
+          <span id="e-sum-n">0</span> 文字。検索結果には、はじめの80〜120文字あたりまでが出ます。
+        </p>
+      </div>
+
+      <div class="sn-edit">
+        <div>
+          <label>本文</label>
+          <div style="margin:4px 0 6px;">
+            <button type="button" class="sn-tag" onclick="wrapTag('h2')">見出し</button>
+            <button type="button" class="sn-tag" onclick="wrapTag('h3')">小見出し</button>
+            <button type="button" class="sn-tag" onclick="wrapTag('p')">段落</button>
+            <button type="button" class="sn-tag" onclick="wrapTag('strong')">太字</button>
+            <button type="button" class="sn-tag" onclick="insertList()">箇条書き</button>
+            <button type="button" class="sn-tag" onclick="insertLink()">リンク</button>
+          </div>
+          <textarea id="e-body" oninput="renderPreview()"
+            placeholder="&lt;p&gt;本文を書きます。&lt;/p&gt;&#10;&lt;h2&gt;見出し&lt;/h2&gt;&#10;&lt;p&gt;つづき。&lt;/p&gt;"></textarea>
+          <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
+            使えるのは 見出し・段落・箇条書き・太字・リンク・引用・表 だけです。
+            それ以外のタグは保存のときに外れます（サイトにそのまま出るため）。
+          </p>
+        </div>
+
+        <div>
+          <label>サイトでの見え方</label>
+          <p class="muted" style="font-size:11.5px;margin:0 0 6px;">
+            <span id="e-body-n">0</span> 文字
+            <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="bigPreview()">
+              <span class="material-symbols-outlined icon-inline">fullscreen</span>大きく見る
+            </button>
+          </p>
+          <div id="e-prev" class="sn-prev"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+        <button id="e-save" class="btn btn-secondary" onclick="save('draft', this)">
+          <span class="material-symbols-outlined icon-inline">save</span>下書きとして保存
+        </button>
+        <button id="e-pub" class="btn btn-primary" onclick="save('published', this)">
+          <span class="material-symbols-outlined icon-inline">publish</span>公開にする
+        </button>
+        <button class="btn btn-secondary" onclick="setTab('list', el('tab-list'))">やめる</button>
+        <span id="e-open" style="margin-left:auto;"></span>
+      </div>
+      <div id="e-msg" class="err-text"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260912g"></script>
+<script src="js/device.js?v=20260912g"></script>
+<script src="js/layout.js?v=20260912g"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  let items = [];
+  let kinds = [];
+  let sync = null;
+  let today = "";
+  let filter = "all";
+  let editing = null;      // 編集中の1件。null なら新規
+  let slugTouched = false; // URLを手で直したか。直していなければ題名に追従する
+
+  KPLayout.init({ active: "sitenews", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.siteNews();
+      items = res.items || [];
+      kinds = res.kinds || [];
+      sync = res.sync || null;
+      today = res.today || "";
+      renderKinds();
+      renderCounts(res.counts || {});
+      renderList();
+      if (sync) {
+        el("s-next").textContent = `次は ${sync.at}（およそ${sync.inHours}時間後）です。`;
+      }
+    } catch (e) {
+      el("l-rows").innerHTML =
+        `<tr><td colspan="5" class="muted">${esc(
+          e.body?.message || e.hint || e.detail || e.message || "取得に失敗しました")}</td></tr>`;
+    }
+  }
+
+  function setTab(name, btn) {
+    for (const b of document.querySelectorAll(".tabs > .tab")) {
+      if (b.parentElement === btn.parentElement) b.classList.toggle("active", b === btn);
+    }
+    for (const p of ["list", "edit"]) el(`pane-${p}`).classList.toggle("hidden", p !== name);
+  }
+
+  function renderKinds() {
+    el("e-kind").innerHTML = kinds.map((k) =>
+      `<option value="${esc(k.key)}">${esc(k.key)}</option>`).join("");
+  }
+
+  function renderCounts(c) {
+    el("c-all").textContent = items.length ? ` ${items.length}` : "";
+    for (const k of ["draft", "planned", "published"]) {
+      el(`c-${k}`).textContent = c[k] ? ` ${c[k]}` : "";
+    }
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    for (const b of btn.parentElement.children) b.classList.toggle("active", b === btn);
+    renderList();
+  }
+
+  const d = (s) => (s ? String(s).slice(0, 10).replace(/-/g, "/") : "—");
+
+  function renderList() {
+    const q = el("l-find").value.trim().toLowerCase();
+    const rows = items.filter((a) =>
+      (filter === "all" || a.view.key === filter)
+      && (!q || `${a.title} ${a.slug}`.toLowerCase().includes(q)));
+
+    if (!rows.length) {
+      el("l-rows").innerHTML = `<tr><td colspan="5" class="muted">${
+        items.length ? "見つかりませんでした。" : "まだお知らせがありません。"}</td></tr>`;
+      return;
+    }
+
+    el("l-rows").innerHTML = rows.map((a) => `
+      <tr>
+        <td><span class="sn-st ${esc(a.view.key)}">${esc(a.view.label)}</span></td>
+        <td><b>${esc(a.title)}</b>
+          ${a.source === "notion" ? `<span class="sn-src" title="Notion から取り込んだ記事です">Notion</span>` : ""}
+          <br><span class="sn-url">/news/${esc(a.slug)}/</span></td>
+        <td>${esc(a.kind)}</td>
+        <td>${esc(d(a.publishedOn))}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="btn btn-secondary btn-sm" onclick="edit('${esc(a.id)}')">直す</button>
+          ${a.view.key === "draft"
+            ? `<button class="btn btn-primary btn-sm" onclick="publish('${esc(a.id)}', this)">公開にする</button>
+               <button class="icon-btn" title="消す" onclick="remove('${esc(a.id)}')">
+                 <span class="material-symbols-outlined">delete</span></button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="unpublish('${esc(a.id)}', this)">下書きに戻す</button>
+               <a class="btn btn-secondary btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">サイトで見る</a>`}
+        </td>
+      </tr>`).join("");
+  }
+
+  // ---- 書く -------------------------------------------------------------------
+  function newArticle() {
+    editing = null;
+    slugTouched = false;
+    el("e-title").textContent = "新しく書く";
+    el("e-state").innerHTML = "";
+    el("e-t").value = "";
+    el("e-sum").value = "";
+    el("e-body").value = "";
+    el("e-slug").value = "";
+    el("e-date").value = today;
+    if (kinds.length) el("e-kind").value = kinds[0].key;
+    el("e-msg").textContent = "";
+    el("e-open").innerHTML = "";
+    el("e-pub").innerHTML =
+      `<span class="material-symbols-outlined icon-inline">publish</span>公開にする`;
+    renderUrl();
+    renderPreview();
+    setTab("edit", el("tab-edit"));
+    el("e-t").focus();
+  }
+
+  function edit(id) {
+    const a = items.find((x) => x.id === id);
+    if (!a) return;
+    editing = id;
+    slugTouched = true;      // 既にあるURLは勝手に変えない。変わるとリンクが切れる
+    el("e-title").textContent = "直す";
+    el("e-state").innerHTML = `<span class="sn-st ${esc(a.view.key)}">${esc(a.view.label)}</span>`;
+    el("e-t").value = a.title;
+    el("e-kind").value = a.kind;
+    el("e-sum").value = a.summary;
+    el("e-body").value = a.body;
+    el("e-slug").value = a.slug;
+    el("e-date").value = String(a.publishedOn || "").slice(0, 10);
+    el("e-msg").textContent = "";
+    el("e-open").innerHTML = a.view.key === "draft" ? ""
+      : `<a class="btn btn-secondary btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">
+           <span class="material-symbols-outlined icon-inline">open_in_new</span>サイトで見る</a>`;
+    // 公開中のものを開いたときは、押すと「公開のまま上書き」になる
+    el("e-pub").innerHTML = a.status === "published"
+      ? `<span class="material-symbols-outlined icon-inline">publish</span>公開のまま保存`
+      : `<span class="material-symbols-outlined icon-inline">publish</span>公開にする`;
+    renderUrl();
+    renderPreview();
+    setTab("edit", el("tab-edit"));
+  }
+
+  function onTitle() {
+    if (!editing && !slugTouched) autoSlug();
+    renderPreview();
+  }
+  function onKind() {
+    if (!editing && !slugTouched) autoSlug();
+  }
+
+  // URL は種別ごとに頭が決まっている。題名に vol.12 があればその番号を使う
+  function autoSlug() {
+    const kind = el("e-kind").value;
+    const pre = kinds.find((k) => k.key === kind)?.prefix || "eight-news-vol";
+    const m = /vol\.(\d+)/i.exec(el("e-t").value || "");
+    const next = Math.max(0, ...items.map((a) => Number(a.articleId) || 0)) + 1;
+    el("e-slug").value = `${pre}${m ? m[1] : next}`;
+    renderUrl();
+  }
+
+  const slugValue = () => el("e-slug").value.trim().toLowerCase();
+
+  function renderUrl() {
+    const s = slugValue();
+    el("e-url").textContent = s ? `https://8grp.co.jp/news/${s}/` : "https://8grp.co.jp/news/…/";
+    if (document.activeElement === el("e-slug")) slugTouched = true;
+  }
+
+  // 出来上がりは、保存するものと同じ形で出す。
+  // ここで見えているものが、そのままサイトに出る
+  function renderPreview() {
+    const html = clean(el("e-body").value);
+    el("e-prev").innerHTML = html
+      || `<p style="color:var(--muted)">本文を書くと、ここに出来上がりが出ます。</p>`;
+    el("e-body-n").textContent = el("e-prev").textContent.trim().length.toLocaleString("ja-JP");
+    el("e-sum-n").textContent = el("e-sum").value.trim().length;
+  }
+
+  /**
+   * 画面での掃除。許可したタグだけ残す。
+   * 本番の判断はサーバ（lib/site-news.js）が行う。ここは「出来上がりを見せる」ため。
+   */
+  const OK_TAGS = new Set(["P", "H2", "H3", "H4", "UL", "OL", "LI", "STRONG", "EM", "B", "I",
+                           "A", "BR", "BLOCKQUOTE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
+  const OK_ATTRS = { A: ["href", "target", "rel"], TH: ["colspan", "rowspan"], TD: ["colspan", "rowspan"] };
+
+  function clean(src) {
+    const doc = new DOMParser().parseFromString("<div id=r></div>", "text/html");
+    const root = doc.getElementById("r");
+    root.innerHTML = String(src || "");
+    (function walk(node) {
+      for (const n of Array.from(node.childNodes)) {
+        if (n.nodeType === 3) continue;
+        if (n.nodeType !== 1) { n.remove(); continue; }
+        const tag = n.tagName.toUpperCase();
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "IFRAME") { n.remove(); continue; }
+        walk(n);
+        if (!OK_TAGS.has(tag)) { n.replaceWith(...n.childNodes); continue; }
+        for (const a of Array.from(n.attributes)) {
+          if (!(OK_ATTRS[tag] || []).includes(a.name.toLowerCase())) n.removeAttribute(a.name);
+        }
+        if (tag === "A") {
+          const href = n.getAttribute("href") || "";
+          const m = /^\s*([a-zA-Z][a-zA-Z0-9+.\-]*):/.exec(href);
+          if (m && !["http", "https", "mailto", "tel"].includes(m[1].toLowerCase())) {
+            n.removeAttribute("href");
+          }
+        }
+      }
+    })(root);
+    return root.innerHTML.trim();
+  }
+
+  function bigPreview() {
+    KPLayout.viewer({ title: el("e-t").value || "サイトでの見え方", text: "" });
+    const box = document.querySelector(".kp-viewer-text > div");
+    if (box) {
+      box.className = "sn-prev";
+      box.style.maxHeight = "none";
+      box.style.border = "none";
+      box.innerHTML = clean(el("e-body").value) || "（本文がまだありません）";
+    }
+  }
+
+  // ---- 本文の書きやすさ -------------------------------------------------------
+  function around(open, close) {
+    const ta = el("e-body");
+    const s = ta.selectionStart ?? ta.value.length;
+    const e = ta.selectionEnd ?? s;
+    const mid = ta.value.slice(s, e);
+    ta.value = ta.value.slice(0, s) + open + mid + close + ta.value.slice(e);
+    ta.focus();
+    ta.selectionStart = s + open.length;
+    ta.selectionEnd = s + open.length + mid.length;
+    renderPreview();
+  }
+
+  function wrapTag(tag) { around(`<${tag}>`, `</${tag}>`); }
+  function insertList() { around("<ul>\n  <li>", "</li>\n</ul>"); }
+  function insertLink() {
+    const url = prompt("リンク先のURLを入れてください", "https://");
+    if (!url) return;
+    around(`<a href="${url.replace(/"/g, "&quot;")}" target="_blank">`, "</a>");
+  }
+
+  // ---- 保存 -------------------------------------------------------------------
+  async function save(status, btn) {
+    const msg = el("e-msg");
+    msg.textContent = "";
+    const payload = {
+      title: el("e-t").value.trim(),
+      kind: el("e-kind").value,
+      summary: el("e-sum").value.trim(),
+      body: el("e-body").value,
+      slug: slugValue(),
+      publishedOn: el("e-date").value || null,
+      status,
+    };
+    if (!payload.title) { msg.textContent = "タイトルを入れてください"; return; }
+    if (!payload.summary) { msg.textContent = "概要を入れてください。検索結果に出る文です"; return; }
+
+    if (status === "published") {
+      const when = payload.publishedOn > today
+        ? `公開日は ${payload.publishedOn} です。その日まで検索には出ません。`
+        : `次の同期（毎朝8時）でサイトに出ます。`;
+      if (!confirm(`「${payload.title}」を公開にします。\n${when}\n\nよろしいですか？`)) return;
+    }
+
+    try {
+      const r = editing
+        ? await KPLayout.busy(btn, "保存中…", () => API.updateSiteNews({ id: editing, ...payload }))
+        : await KPLayout.busy(btn, "保存中…", () => API.createSiteNews(payload));
+      await load();
+      // 続けて直せるよう、保存したものを開いたままにする
+      editing = r.item.id;
+      edit(r.item.id);
+      msg.className = "muted";
+      msg.style.fontSize = "12.5px";
+      msg.textContent = status === "published"
+        ? `保存しました。サイトに出るのは ${r.sync?.at || "次の同期"} です。`
+        : "下書きとして保存しました。";
+    } catch (e) {
+      msg.className = "err-text";
+      msg.style.fontSize = "";
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  async function publish(id, btn) {
+    const a = items.find((x) => x.id === id);
+    if (!a) return;
+    if (!confirm(`「${a.title}」を公開にします。\n次の同期（毎朝8時）でサイトに出ます。\n\nよろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSiteNews({ id, action: "publish" }));
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "公開にできませんでした"); }
+  }
+
+  async function unpublish(id, btn) {
+    const a = items.find((x) => x.id === id);
+    if (!a) return;
+    if (!confirm(`「${a.title}」を下書きに戻します。\n次の同期でサイトから下ります。\n\nよろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSiteNews({ id, action: "unpublish" }));
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "戻せませんでした"); }
+  }
+
+  async function remove(id) {
+    const a = items.find((x) => x.id === id);
+    if (!a) return;
+    if (!confirm(`「${a.title}」を消します。もとに戻せません。よろしいですか？`)) return;
+    try { await API.deleteSiteNews(id); await load(); }
+    catch (e) { alert(e.hint || e.detail || e.message || "消せませんでした"); }
+  }
+</script>
+
+</body>
+</html>

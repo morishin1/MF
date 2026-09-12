@@ -138,6 +138,9 @@
       items: [
         { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",   icon: "meeting_room",   ready: true },
         { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",       icon: "receipt",        ready: true },
+        // 自社サイト（8grp.co.jp）のお知らせ。書いて、公開にすると翌朝の同期でサイトに出る。
+        // アクセス分析の隣に置く。どちらも見る先が 8grp.co.jp なので、探す場所が同じになる
+        { key: "sitenews",  href: "admin-site-news.html", label: "サイトのお知らせ", icon: "newspaper",  ready: true },
         { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",   icon: "monitoring",     ready: true },
         { key: "timecard",  href: "admin-timecard.html",  label: "タイムカード",   icon: "schedule",       ready: true },
         { key: "closing",   href: "admin-closing.html",   label: "月次締め",       icon: "event_available", ready: true },
