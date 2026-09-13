@@ -26,7 +26,15 @@
 --   誰が・どの端末で・なぜ・誰が承認し・いつまで、を残す。
 --
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
--- 前提: 059 を先に流してあること
+-- 前提: 053 → 054 → 055 → 057 → 059 の順で流してあること
+--
+-- 先に db/check_status.sql を流して、053〜059 が「✅ 適用済み」か見てください。
+-- 途中が抜けていると、ここで列が見つからずに止まります。
+--
+--   -- いまの gw_devices の列を確かめる
+--   select column_name from information_schema.columns
+--    where table_schema = 'public' and table_name = 'gw_devices'
+--    order by column_name;
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -51,9 +59,25 @@ comment on column public.gw_devices.ownership is
   'company=会社貸与 / personal=私物 / unknown=まだ分からない。'
   '私物PCでの業務利用は禁止。unknown と personal は管理画面で目立たせる';
 
--- エージェントが入っているものは、会社が配ったものしかない
-update public.gw_devices set ownership = 'company'
- where source = 'agent' and ownership = 'unknown';
+-- エージェントが入っているものは、会社が配ったものしかない。
+--
+-- source は 054 で足した列。054 を流していない環境で
+-- ここだけ落ちると、あとの行がまるごと流れないので、
+-- 列があるときだけ実行する
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'gw_devices'
+       and column_name = 'source'
+  ) then
+    update public.gw_devices set ownership = 'company'
+     where source = 'agent' and ownership = 'unknown';
+  else
+    raise notice '054 がまだのようです（gw_devices.source がありません）。'
+                 'ownership の初期値は付けずに進みます';
+  end if;
+end $$;
 
 create index if not exists idx_gw_devices_ownership
   on public.gw_devices(tenant_id, ownership);

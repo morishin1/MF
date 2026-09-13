@@ -7681,9 +7681,11 @@ notify pgrst, 'reload schema';
 -- ■ 何が足りていなかったか
 --
 --   1. WEB履歴（gw_device_web_visits）を消す仕組みが無かった
---      保存期間は 90日と決めてあるのに、消すのは gw_device_web_usage
+--      保存期間を決めてあるのに、消すのは gw_device_web_usage
 --      （ドメインごとの合計）だけで、1件ずつの履歴が残り続けていた。
---      「90日で消える」と社員に言うなら、消える仕組みが要る。
+--      保存期間を決めたなら、期限が来たら消える形にしておく。
+--      人が思い出して消す運用は、いつか止まる。
+--      （日数は社内の管理基準。社員には伝えない）
 --
 --   2. 「△ 要確認」が、どこにも残らなかった
 --      画面を開いたときに計算して出すだけだったので、
@@ -7702,7 +7704,10 @@ notify pgrst, 'reload schema';
 --   ・確認待ちが何日か続いたら、同じくアラートにする
 --
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
--- 前提: 057 を先に流してあること
+-- 前提: 053 → 054 → 055 → 057 の順で流してあること
+--
+-- 先に db/check_status.sql を流して、053〜057 が「✅ 適用済み」か見てください。
+-- 途中が抜けていると、ここで列や表が見つからずに止まります。
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -7713,8 +7718,18 @@ notify pgrst, 'reload schema';
 --    「この会社の、この日より前ぜんぶ」には効かない。
 --    毎晩消しにいくので、そのための索引を足す
 -- -----------------------------------------------------------------------------
-create index if not exists idx_gw_device_web_visits_purge
-  on public.gw_device_web_visits(tenant_id, work_date);
+-- gw_device_web_visits は 057 で作った表。
+-- 057 を流していない環境でここだけ落ちると、
+-- あとの行（保存期間・確認待ち）がまるごと流れない
+do $$
+begin
+  if to_regclass('public.gw_device_web_visits') is not null then
+    create index if not exists idx_gw_device_web_visits_purge
+      on public.gw_device_web_visits(tenant_id, work_date);
+  else
+    raise notice '057 がまだのようです（gw_device_web_visits がありません）';
+  end if;
+end $$;
 
 
 -- -----------------------------------------------------------------------------
@@ -7730,9 +7745,23 @@ comment on column public.gw_device_policies.confirm_wait_days is
   '本人が「このパソコンです」を押さないまま何日たったら知らせるか。'
   '既定3日。0 にすると知らせない';
 
-comment on column public.gw_device_policies.keep_visits_days is
-  'WEB履歴（1件ずつ）を何日ぶん残すか。既定90日。'
-  '毎晩の cron（api/cron/devices.js）が、これを過ぎたぶんを消す';
+-- keep_visits_days は 057 の列。
+-- 無い環境でここだけ落ちると、あとの行が流れない
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'gw_device_policies'
+       and column_name = 'keep_visits_days'
+  ) then
+    comment on column public.gw_device_policies.keep_visits_days is
+      'WEB履歴（1件ずつ）を何日ぶん残すか。既定90日。'
+      '毎晩の cron（api/cron/devices.js）が、これを過ぎたぶんを消す。'
+      '日数は社内の管理基準。社員には伝えない';
+  else
+    raise notice '057 がまだのようです（keep_visits_days がありません）';
+  end if;
+end $$;
 
 
 -- -----------------------------------------------------------------------------
@@ -7750,9 +7779,10 @@ notify pgrst, 'reload schema';
 -- 確認:
 --   select keep_visits_days, confirm_wait_days from public.gw_device_policies;
 --
---   -- 90日より古い履歴が残っていないか（cron を1回まわしたあと）
+--   -- 保存期間より古い履歴が残っていないか（cron を1回まわしたあと）
 --   select count(*) from public.gw_device_web_visits
---    where work_date < (current_date - 90);
+--    where work_date < (current_date - (select keep_visits_days
+--                                         from public.gw_device_policies limit 1));
 --
 --   -- 未確認のアラート
 --   select rule, count(*) from public.gw_device_alerts
@@ -7788,7 +7818,15 @@ notify pgrst, 'reload schema';
 --   誰が・どの端末で・なぜ・誰が承認し・いつまで、を残す。
 --
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
--- 前提: 059 を先に流してあること
+-- 前提: 053 → 054 → 055 → 057 → 059 の順で流してあること
+--
+-- 先に db/check_status.sql を流して、053〜059 が「✅ 適用済み」か見てください。
+-- 途中が抜けていると、ここで列が見つからずに止まります。
+--
+--   -- いまの gw_devices の列を確かめる
+--   select column_name from information_schema.columns
+--    where table_schema = 'public' and table_name = 'gw_devices'
+--    order by column_name;
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -7813,9 +7851,25 @@ comment on column public.gw_devices.ownership is
   'company=会社貸与 / personal=私物 / unknown=まだ分からない。'
   '私物PCでの業務利用は禁止。unknown と personal は管理画面で目立たせる';
 
--- エージェントが入っているものは、会社が配ったものしかない
-update public.gw_devices set ownership = 'company'
- where source = 'agent' and ownership = 'unknown';
+-- エージェントが入っているものは、会社が配ったものしかない。
+--
+-- source は 054 で足した列。054 を流していない環境で
+-- ここだけ落ちると、あとの行がまるごと流れないので、
+-- 列があるときだけ実行する
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'gw_devices'
+       and column_name = 'source'
+  ) then
+    update public.gw_devices set ownership = 'company'
+     where source = 'agent' and ownership = 'unknown';
+  else
+    raise notice '054 がまだのようです（gw_devices.source がありません）。'
+                 'ownership の初期値は付けずに進みます';
+  end if;
+end $$;
 
 create index if not exists idx_gw_devices_ownership
   on public.gw_devices(tenant_id, ownership);
