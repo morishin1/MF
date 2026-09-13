@@ -20,10 +20,12 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { newSecret, newLinkCode, sha256, jstDate } from "../../lib/devices.js";
+import {
+  newSecret, newLinkCode, sha256, jstDate, normalizeBrowsers,
+} from "../../lib/devices.js";
 
-// 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
-const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql";
+// 053 → 054 → 055 → 057 の順で流す。列が足りないときも同じ案内を出す
+const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sql → 057_device_one_pc.sql";
 const str = (v, max = 200) => (v == null ? null : String(v).trim().slice(0, max) || null);
 
 export default async function handler(req, res) {
@@ -130,6 +132,12 @@ export default async function handler(req, res) {
     });
   }
 
+  // ---- そのPCのブラウザと、そのPCで社内システムを開いていたブラウザの行 ----
+  //
+  // ここで束ねておかないと、台帳に「エージェントの行」と「ブラウザの行」が
+  // 2つ並ぶ。人から見れば1台なので、登録が終わった時点で1行にする
+  await linkBrowsers(sb, enr, dev, body);
+
   // コードを使い切る。used_at が null のときだけ通るので、
   // 同時に2台から来ても2台目は空振りする
   const { data: consumed } = await sb.from("gw_device_enrollments")
@@ -165,4 +173,58 @@ export default async function handler(req, res) {
     collect: Boolean(dev.notified_at),
     linkUrl: `${base}/device-consent.html?link=${encodeURIComponent(linkCode)}`,
   });
+}
+
+/**
+ * 1台のPCを1行にする。
+ *
+ *  ① インストーラが見つけたブラウザを、そのPCの下に並べる
+ *  ② 組み立てのときに本人が開いていたブラウザの行を、そのPCに束ねる
+ *
+ * ここが落ちても登録は成功にする。台帳に載ることのほうが大事で、
+ * 束ね直しは管理画面からでもできる
+ */
+async function linkBrowsers(sb, enr, dev, body) {
+  try {
+    // ① 入っているブラウザ
+    const list = normalizeBrowsers(body.browsers);
+    if (list.length) {
+      await sb.from("gw_device_browsers").upsert(
+        list.map((b) => ({
+          tenant_id: enr.tenant_id, device_id: dev.id,
+          browser: b.browser, installed: b.installed, linked: b.linked,
+          ext_version: b.extVersion, updated_at: new Date().toISOString(),
+        })),
+        { onConflict: "device_id,browser" },
+      );
+    }
+
+    // ② 本人が「このパソコンです」を押したブラウザ。
+    //    どのブラウザで押したかは、組み立てのときの札に控えてある。
+    //    エージェントは知らないので、こちらで引く
+    const { data: pair } = await sb.from("gw_device_pairings")
+      .select("device_uid").eq("enrollment_id", enr.id).maybeSingle();
+    const deviceUid = str(pair?.device_uid, 100);
+    if (!deviceUid) return;
+
+    const { data: row } = await sb.from("gw_devices")
+      .select("id, tenant_id, source, linked_device_id")
+      .eq("device_uid", deviceUid).eq("tenant_id", enr.tenant_id).maybeSingle();
+    // 他社の行や、別のエージェントの行は動かさない
+    if (!row || row.source !== "browser" || row.linked_device_id) return;
+
+    await sb.from("gw_devices").update({
+      linked_device_id: dev.id,
+      employee_id: enr.employee_id || undefined,
+      updated_at: new Date().toISOString(),
+    }).eq("id", row.id);
+
+    await sb.from("gw_device_events").insert({
+      tenant_id: enr.tenant_id, device_id: row.id,
+      work_date: jstDate(), at: new Date().toISOString(), kind: "linked",
+      detail: { to: dev.id, by: "installer" },
+    });
+  } catch (e) {
+    console.error("[devices/enroll] ブラウザを束ねられませんでした:", e?.message || e);
+  }
 }

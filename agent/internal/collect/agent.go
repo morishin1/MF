@@ -35,6 +35,30 @@ type Agent struct {
 	cat    *Categorizer
 	tally  *Tally
 	onFlag func(bool) // 収集の可否が変わったときに知らせる（トレイの表示用）
+
+	// ブラウザの拡張から届いた滞在。次の送信でまとめて出す。
+	// 送れなかったぶんは戻ってくる（Flush を見ること）
+	visits []Visit
+	// どのブラウザから、いつ届いたか。管理画面の「●連携済」のもと
+	seen map[string]browserSeen
+}
+
+// Visit は、1回どこを見ていたか。
+//
+// この構造体に、ページの中身・題・URLの全文・入力した内容を入れる場所は無い。
+// 入れる場所を作らないのが、いちばん確実な歯止め。
+type Visit struct {
+	Host      string
+	Path      string
+	StartedAt time.Time
+	EndedAt   time.Time
+	ActiveSec int
+	Browser   string
+}
+
+type browserSeen struct {
+	At      time.Time
+	Version string
 }
 
 func NewAgent(c *api.Client, q *store.Queue, version, host, dir string) *Agent {
@@ -118,6 +142,42 @@ func (a *Agent) Minute(at time.Time, s State, exe, product, category string) {
 //
 // 1回のPOSTは500件まで。オフラインで何日ぶんも溜まっていても、
 // 一度に全部は送らない（サーバ側でも500件で切っている）。
+// Visit は、ブラウザの拡張が数えた滞在を1件溜める。
+//
+// 本人が確認するまでは溜めない。承認前のデータを端末に残さない、
+// という Minute と同じ決まりにそろえてある
+func (a *Agent) Visit(v Visit) {
+	if !a.Collecting() {
+		return
+	}
+	if v.Host == "" || v.ActiveSec <= 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// 溜めすぎない。長く送れないときは古いほうから捨てる
+	if len(a.visits) >= 2000 {
+		a.visits = a.visits[len(a.visits)-1000:]
+	}
+	a.visits = append(a.visits, v)
+}
+
+// BrowserAlive は「そのブラウザから届いた」を記録する。
+//
+// 本人の確認前でも受ける。つながっているかどうかは、
+// 記録を集めることとは別の話で、組み立てが済んだかを見るために要る
+func (a *Agent) BrowserAlive(browser, version string) {
+	if browser == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.seen == nil {
+		a.seen = map[string]browserSeen{}
+	}
+	a.seen[browser] = browserSeen{At: time.Now().UTC(), Version: version}
+}
+
 func (a *Agent) Flush(ctx context.Context) error {
 	if !a.Collecting() {
 		return nil
@@ -160,13 +220,45 @@ func (a *Agent) Flush(ctx context.Context) error {
 			})
 		}
 	}
-	if len(body.Events) == 0 && len(body.Usage) == 0 {
+	// ---- ブラウザの拡張から届いたぶん ----
+	a.mu.Lock()
+	visits := a.visits
+	a.visits = nil
+	seen := a.seen
+	a.mu.Unlock()
+
+	for _, v := range visits {
+		var end *time.Time
+		if !v.EndedAt.IsZero() {
+			e := v.EndedAt
+			end = &e
+		}
+		body.Visits = append(body.Visits, api.Visit{
+			Host: v.Host, Path: v.Path,
+			StartedAt: v.StartedAt, EndedAt: end,
+			ActiveSec: v.ActiveSec, Browser: v.Browser,
+			WorkDate: JSTDate(v.StartedAt),
+		})
+	}
+
+	// どのブラウザが入っていて、どれが繋がっているか。
+	// 入っているかは組み立てのときに見た結果を使う（Browsers に入れてある）
+	body.Browsers = a.browserStates(seen)
+
+	if len(body.Events) == 0 && len(body.Usage) == 0 && len(body.Visits) == 0 {
 		return nil
 	}
 
 	res, err := a.Client.Ingest(ctx, body)
 	if err != nil {
-		// 送れなかった。待ち行列はそのまま。次の周期でまた出す
+		// 送れなかった。待ち行列はそのまま。次の周期でまた出す。
+		// 拡張から届いたぶんは、こちらで抱えているので戻しておく
+		a.mu.Lock()
+		a.visits = append(visits, a.visits...)
+		if len(a.visits) > 2000 {
+			a.visits = a.visits[len(a.visits)-2000:]
+		}
+		a.mu.Unlock()
 		return err
 	}
 
@@ -246,4 +338,48 @@ func timeParse(s string, h, m *int) (int, error) {
 	}
 	*h, *m = t.Hour(), t.Minute()
 	return 2, nil
+}
+
+// Browsers は、このPCに入っているブラウザ。組み立てのときに見た結果を入れる。
+// サービスが上がるたびに見直す必要はない（入れ直しは滅多にない）
+var Browsers []string
+
+// browserStates は「入っている／繋がっている」を組み立てる。
+//
+// 繋がっている＝拡張から最近届いた、で判断する。
+// 入れただけで動いていない、が管理画面で分かるようにするため
+func (a *Agent) browserStates(seen map[string]browserSeen) []api.BrowserState {
+	if len(Browsers) == 0 && len(seen) == 0 {
+		return nil
+	}
+	keys := map[string]bool{}
+	for _, b := range Browsers {
+		keys[b] = true
+	}
+	for b := range seen {
+		keys[b] = true
+	}
+
+	now := time.Now().UTC()
+	out := make([]api.BrowserState, 0, len(keys))
+	for b := range keys {
+		st := api.BrowserState{Browser: b}
+		for _, k := range Browsers {
+			if k == b {
+				st.Installed = true
+			}
+		}
+		if s, ok := seen[b]; ok {
+			// この送信の周期のあいだに届いていれば、繋がっている
+			st.Linked = now.Sub(s.At) <= 30*time.Minute
+			st.ExtVersion = s.Version
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+// JSTDate は日本時間での日付。サーバと同じ切り方にする
+func JSTDate(t time.Time) string {
+	return t.UTC().Add(9 * time.Hour).Format("2006-01-02")
 }

@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "EIGHT 端末管理",
+  "version": "1.0.0",
+  "description": "会社のパソコンで、どのサイトをどれだけ見ていたかを記録します。ページの中身・入力した内容は読みません。",
+  "minimum_chrome_version": "116",
+
+  "background": { "service_worker": "background.js" },
+
+  "permissions": [
+    "tabs",
+    "idle",
+    "alarms",
+    "nativeMessaging"
+  ],
+
+  "host_permissions": [],
+
+  "icons": { "128": "icon128.png" },
+
+  "options_page": "options.html"
+}

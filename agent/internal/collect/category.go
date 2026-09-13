@@ -138,3 +138,111 @@ func HostOnly(raw string) string {
 	}
 	return s
 }
+
+// PathOnly は、残してよいパスだけを取り出す。
+//
+// ■ ここも、このPCの中で終わらせる
+//
+//	? から後ろ（検索語・メールアドレス・一度きりの鍵が入る）と
+//	# から後ろは、サーバへ出す前に捨てる。
+//	送ってから落とすと、経路とログに一度は全文が乗る。
+//
+// ■ 一度きりのリンクに見える区切りは伏せる
+//
+//	/reset/9f3c8a2bd41e77aa のような区切りは、それ自体が鍵になっている。
+//	長い英数字だけの区切りは「…」にする。
+//	/recruit/apply のような、何のページか分かるものは残す。
+//
+// 対応するサーバ側は lib/devices.js の cleanPath。両方で同じ形に削る。
+func PathOnly(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	// 完全なURLで来たら、パスから先だけ見る
+	if i := strings.Index(s, "://"); i >= 0 {
+		rest := s[i+3:]
+		if j := strings.IndexAny(rest, "/"); j >= 0 {
+			s = rest[j:]
+		} else {
+			return ""
+		}
+	}
+	// 問い合わせと断片を落とす
+	if i := strings.IndexAny(s, "?#"); i >= 0 {
+		s = s[:i]
+	}
+	if s == "" || s == "/" {
+		return ""
+	}
+
+	segs := strings.Split(s, "/")
+	out := make([]string, 0, 6)
+	for _, seg := range segs {
+		if seg == "" {
+			continue
+		}
+		if len(out) >= 6 {
+			break
+		}
+		v := seg
+		if len(v) > 40 {
+			v = v[:40]
+		}
+		// 制御文字は落とす
+		v = strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f {
+				return -1
+			}
+			return r
+		}, v)
+		if v == "" {
+			continue
+		}
+		if looksSecret(v) {
+			v = "…"
+		}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	p := "/" + strings.Join(out, "/")
+	if len(p) > 120 {
+		p = p[:120]
+	}
+	return p
+}
+
+// looksSecret は、その区切りが鍵やトークンに見えるか。
+func looksSecret(s string) bool {
+	if len(s) < 8 {
+		return false
+	}
+	var hasDigit, hasAlpha, hasOther bool
+	hexOnly := true
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'):
+			hasAlpha = true
+			if !((r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+				hexOnly = false
+			}
+		case r == '_' || r == '-':
+			// base64url に出る
+			hexOnly = false
+		default:
+			hasOther = true
+			hexOnly = false
+		}
+	}
+	if hasOther {
+		return false // 日本語や記号が混ざるものは、人が読む語
+	}
+	if hexOnly && len(s) >= 8 {
+		return true
+	}
+	return len(s) >= 16 && hasDigit && hasAlpha
+}

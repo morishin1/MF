@@ -50,6 +50,43 @@
     .dv-src.browser { background:#eef3fb; color:#2b5f9e; }
     .dv-src.agent { background:#eaf6ef; color:#1f7a4c; }
 
+    /* 1台のPCの中の状態。行を増やさずに、その下にぶら下げる */
+    .dv-links { display:block; margin-top:5px; }
+    .dv-link { display:inline-flex; align-items:center; gap:4px;
+               font-size:11.5px; font-weight:500; color:var(--muted); margin-right:12px; }
+    .dv-link b { font-weight:700; color:var(--text); }
+    .dv-dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto; background:#bbb; }
+    .dv-dot.on { background:#2f9e63; }
+    .dv-dot.wait { background:#d8a41f; }
+    .dv-dot.off { background:#c53030; }
+
+    /* ---- WEB利用 ---- */
+    /* 1日の様子。○△× は一覧にも出すので、同じ形・同じ色にする */
+    .dv-day { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;
+              padding:14px 16px; border:1px solid var(--border); border-radius:10px;
+              background:#fbfbfc; }
+    .dv-day small { display:block; color:var(--muted); font-size:11.5px; line-height:1.8; }
+    .dv-mark { width:34px; height:34px; border-radius:50%; flex:0 0 auto;
+               display:flex; align-items:center; justify-content:center;
+               font-size:18px; font-weight:700; }
+    .dv-mark.ok { background:#eaf5ec; color:#256b36; }
+    .dv-mark.check { background:#f4f0e3; color:#8a6d1f; }
+    .dv-mark.bad { background:#fdecec; color:#b3261e; }
+    .dv-facts { border-collapse:collapse; font-size:12.5px; min-width:250px; }
+    .dv-facts td { padding:3px 0; vertical-align:top; }
+    .dv-facts td:first-child { color:var(--muted); width:82px; }
+    .dv-facts .sub { color:var(--muted); font-size:11.5px; margin-left:6px; }
+
+    .dv-cats { display:flex; gap:8px; flex-wrap:wrap; }
+    .dv-cat { display:flex; flex-direction:column; gap:2px; min-width:104px;
+              padding:9px 12px; border:1px solid var(--border); border-radius:9px;
+              background:#fff; font-family:inherit; cursor:pointer; text-align:left; }
+    .dv-cat b { font-size:12px; font-weight:600; color:var(--muted); }
+    .dv-cat span { font-size:15px; font-weight:700; }
+    .dv-cat:hover { border-color:var(--primary); }
+    .dv-cat.on { border-color:var(--primary); background:var(--soft); }
+    .dv-cat.on b { color:var(--primary-dark); }
+
     .dv-token { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:22px;
                 font-weight:700; letter-spacing:2px; text-align:center;
                 padding:14px; border:2px dashed var(--border); border-radius:10px;
@@ -95,11 +132,15 @@
     <span class="dv-src browser">ブラウザ</span> は社内システムを開くと自動で載るもので、
     分かるのは開いているあいだのことだけ。
     <span class="dv-src agent">エージェント</span> は本人がパソコンに入れた会社のソフトで、
-    起動終了・アプリ・サイトの種類・USB まで分かります。
+    起動終了・アプリ・USB・<b>見たサイトのドメインとページの場所</b>まで分かります。
     同じパソコンの両方がつながっていれば、1行にまとめて出ます。<br>
     <b>どちらでも取っていないもの</b>：キーボードで打った内容／パスワード／
     メールやチャットの本文／画面の録画／開いていた画面のタイトル／
-    見たページのURL（種類だけ）／ファイルの中身。<br>
+    ページの中身／フォームに入れた内容／Cookie・ログインの鍵／
+    <b>検索したことば</b>（アドレスの <code>?</code> から後ろは端末の中で捨てます）／
+    ファイルの中身。<br>
+    <b>働き方を見るのは、原則として勤務時間内のぶんだけです。</b>
+    USBの抜き差しやソフトの出入りのような、情報漏えいに関わる記録は時間外でも残ります。<br>
     <b>本人が確認するまで、記録は始まりません。</b>
     確認待ちの端末からは1件も届きません。<br>
     <b>あなたが誰の記録を開いたかは、本人の画面に残ります。</b>
@@ -151,6 +192,7 @@
     </div>
 
     <div id="d-detail"></div>
+    <div id="d-web"></div>
   </div>
 
   <!-- ===== アラート ===== -->
@@ -361,8 +403,8 @@
         <td><span class="nm">${esc(d.source === "agent" ? (d.hostname || d.label) : d.label)}</span>
           <span class="dv-src ${esc(d.source)}">${d.source === "agent" ? "エージェント" : "ブラウザ"}</span>
           <span class="sub">${esc(spec(d))}${
-            d.agentVersion ? ` / v${esc(d.agentVersion)}` : ""}${
-            (d.browsers || []).length ? `　ブラウザ ${d.browsers.length}` : ""}</span></td>
+            d.agentVersion ? ` / v${esc(d.agentVersion)}` : ""}</span>
+          ${links(d)}</td>
         <td>${d.employee ? `${esc(d.employee.name)}<span class="sub">${esc(d.employee.department || "")}</span>`
                          : '<span class="sub">未割り当て</span>'}</td>
         <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span>
@@ -375,6 +417,50 @@
               !d.openAlerts.critical && !d.openAlerts.warn ? '<span class="sub">—</span>' : ""}</td>
         <td><span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);">chevron_right</span></td>
       </tr>`).join("");
+  }
+
+  /**
+   * 1台のパソコンの中の状態。
+   *
+   *   Agent  ●接続中
+   *   Chrome ●連携済
+   *   Edge   ●未連携
+   *
+   * 人から見れば1台なので、別の行にはしない。
+   * 「入っているのに、つながっていない」がここで分かる
+   */
+  function links(d) {
+    if (d.source !== "agent") return "";
+    const dot = (k) => `<span class="dv-dot ${esc(k)}"></span>`;
+    const agentKey = d.state.key === "silent" ? "off"
+      : d.state.key === "waiting" ? "wait" : "on";
+    const parts = [
+      `<span class="dv-link">${dot(agentKey)}Agent <b>${esc(
+        agentKey === "on" ? "接続中" : agentKey === "wait" ? "確認待ち" : "未通信")}</b></span>`,
+    ];
+    // ブラウザの状態は2か所から来る。
+    //   links    … 拡張から届いているか（gw_device_browsers）
+    //   browsers … そのPCのブラウザで社内システムを開いた行（折りたたんだぶん）
+    // 人から見れば同じ1つのブラウザなので、名前でまとめて1行にする
+    const by = new Map();
+    for (const b of d.links || []) {
+      if (b.state.key === "gone") continue;
+      by.set(b.label, {
+        label: b.label,
+        key: b.state.key === "linked" ? "on" : b.state.key === "installed" ? "wait" : "off",
+        text: b.state.label,
+      });
+    }
+    for (const b of d.browsers || []) {
+      const label = b.browser || b.label;
+      if (!label || by.has(label)) continue;
+      // 拡張は入っていないが、このPCのブラウザから社内システムに入っている
+      by.set(label, { label, key: "on", text: "連携済" });
+    }
+    for (const b of by.values()) {
+      parts.push(`<span class="dv-link">${dot(b.key)}${esc(b.label)} <b>${esc(b.text)}</b></span>`);
+    }
+    return `<span class="dv-links">${parts.join("")}</span>`;
   }
 
   function filterBy(key) {
@@ -428,7 +514,14 @@
             : `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','suspend')">停止する</button>`}
           <button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','retire')">使用終了にする</button>
           <button class="btn btn-secondary btn-sm" onclick="editNote('${dev.id}')">メモ</button>
+          ${dev.employee
+            ? `<button class="btn btn-primary btn-sm"
+                       onclick="openWeb('${dev.employee.id}','${esc(dev.employee.name)}')">
+                 <span class="material-symbols-outlined icon-inline">travel_explore</span>WEB利用</button>`
+            : ""}
         </div>
+        ${dev.employee ? `<p class="muted" style="font-size:11.5px;margin:-8px 0 12px;">
+          「WEB利用」を開くと、そのことが ${esc(dev.employee.name)} さんの画面に残ります。</p>` : ""}
 
         <div id="d-assign"></div>
 
@@ -829,6 +922,171 @@
       el("p-msg").textContent = e.hint || e.message || "保存できませんでした";
     }
   }
+
+  // ---- WEB利用 ---------------------------------------------------------------
+  //
+  // 一覧には出さない。その人を開いたときだけ読む。
+  // 毎日目に入る場所に細かい履歴を置くと、見る用が無いのに読むことになる。
+  //
+  // 開くと、そのことが本人の画面に残る（api/devices/web.js）。
+  // 見られる側から見えない記録にしない。
+
+  let webWho = null;      // { id, name }
+  let webRange = "today";
+  let webCat = "";
+  let webScope = "work";
+
+  function openWeb(employeeId, name) {
+    webWho = { id: employeeId, name };
+    webRange = "today"; webCat = ""; webScope = "work";
+    loadWeb();
+  }
+
+  function closeWeb() { webWho = null; el("d-web").innerHTML = ""; }
+
+  function setWebRange(k) { webRange = k; loadWeb(); }
+  function setWebCat(k) { webCat = webCat === k ? "" : k; loadWeb(); }
+  function setWebScope(k) { webScope = k; loadWeb(); }
+
+  async function loadWeb(date) {
+    if (!webWho) return;
+    el("d-web").innerHTML = `<div class="card"><p class="muted">読み込み中…</p></div>`;
+    el("d-web").scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      const r = await API.deviceWeb({
+        employeeId: webWho.id, range: date ? "date" : webRange,
+        date: date || undefined,
+        category: webCat || undefined, scope: webScope,
+      });
+      renderWeb(r);
+    } catch (e) {
+      el("d-web").innerHTML = `<div class="card"><div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.body?.message || e.hint || e.detail || e.message)}</div></div></div>`;
+    }
+  }
+
+  function pickWebDate() {
+    const d = prompt("日付を入れてください（YYYY-MM-DD）", new Date().toISOString().slice(0, 10));
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) loadWeb(d.trim());
+  }
+
+  const RANGE_LABEL = { today: "今日", yesterday: "昨日", week: "今週", month: "今月" };
+
+  function renderWeb(r) {
+    const day = r.day;
+    const v = day?.verdict;
+
+    el("d-web").innerHTML = `
+      <div class="card" style="border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">travel_explore</span>
+          ${esc(webWho.name)} さんの WEB利用
+          <span class="dv-st" style="margin-left:8px;">${esc(r.range.label)}</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="closeWeb()">閉じる</button></h2>
+
+        <p class="muted" style="font-size:11.5px;margin:-4px 0 12px;">
+          開いたことは本人の画面に残ります。評価に使うためのものではありません。
+        </p>
+
+        <!-- 期間 -->
+        <div class="dv-tabs" style="margin-bottom:8px;">
+          ${["today", "yesterday", "week", "month"].map((k) =>
+            `<button class="dv-tab ${webRange === k && !r.range.key.includes("-") ? "on" : ""}"
+                     onclick="setWebRange('${k}')">${RANGE_LABEL[k]}</button>`).join("")}
+          <button class="dv-tab" onclick="pickWebDate()">日付を選ぶ</button>
+        </div>
+
+        <!-- 勤務時間の内か、全部か -->
+        <div class="dv-tabs" style="margin-bottom:12px;">
+          <button class="dv-tab ${webScope === "work" ? "on" : ""}"
+                  onclick="setWebScope('work')">勤務時間内</button>
+          <button class="dv-tab ${webScope === "all" ? "on" : ""}"
+                  onclick="setWebScope('all')">時間外も含む</button>
+        </div>
+        ${webScope === "all" ? `<p class="muted" style="font-size:11.5px;margin:-6px 0 12px;">
+          勤務時間外のぶんも出しています。働き方を見るときは「勤務時間内」で見てください。</p>` : ""}
+
+        <!-- 1日の様子 -->
+        ${day ? `
+          <div class="dv-day">
+            <span class="dv-mark ${esc(v.key)}">${esc(v.mark)}</span>
+            <div style="flex:1;min-width:220px;">
+              <b>${esc(v.label)}</b>
+              ${v.note ? `<small>${esc(v.note)}</small>` : ""}
+            </div>
+            <table class="dv-facts"><tbody>
+              <tr><td>勤務</td><td>${day.work
+                ? `${esc(hm(day.work.from))}〜${day.work.to ? esc(hm(day.work.to)) : "（勤務中）"}
+                   <span class="sub">${esc(day.work.text)}</span>`
+                : '<span class="sub">打刻なし</span>'}</td></tr>
+              <tr><td>PC稼働</td><td>${day.usage.firstAt
+                ? `${esc(hm(day.usage.firstAt))}〜${esc(hm(day.usage.lastAt))}
+                   <span class="sub">${esc(day.usage.activeText)}</span>`
+                : '<span class="sub">記録なし</span>'}</td></tr>
+              <tr><td>WEB利用</td><td>${esc(r.total.label)}</td></tr>
+              <tr><td>アプリ利用</td><td>${esc(day.appText)}</td></tr>
+              <tr><td>離席</td><td>${esc(day.usage.idleText)}</td></tr>
+            </tbody></table>
+          </div>` : ""}
+
+        <!-- カテゴリごと -->
+        <div style="margin:14px 0 6px;font-weight:700;font-size:13px;">
+          WEB利用　${esc(r.total.label)}
+        </div>
+        ${r.byCategory.length ? `
+          <div class="dv-cats">
+            ${r.byCategory.map((c) => `
+              <button class="dv-cat ${webCat === c.key ? "on" : ""}"
+                      onclick="setWebCat('${esc(c.key)}')">
+                <b>${esc(c.label)}</b><span>${esc(c.text)}</span></button>`).join("")}
+          </div>`
+        : `<div class="empty">この期間の記録はありません。</div>`}
+
+        ${r.alerts.length ? `
+          <div class="banner warn" style="margin:14px 0 0;">
+            <span class="material-symbols-outlined">flag</span>
+            <div><b>確認したほうがよいこと</b>
+              <ul style="margin:6px 0 0;padding-left:18px;line-height:1.9;">
+                ${r.alerts.map((a) => `<li>${esc(a.title)}</li>`).join("")}
+              </ul>
+              <small class="muted">これは「不正」の判定ではありません。事情を本人に確かめてください。</small>
+            </div>
+          </div>` : ""}
+      </div>
+
+      ${r.visits.length ? `
+      <div class="card">
+        <h2><span class="material-symbols-outlined">history</span>履歴
+          ${webCat ? `<span class="dv-st" style="margin-left:8px;">${esc(
+            (r.categories.find((c) => c.key === webCat) || {}).label || webCat)}だけ</span>` : ""}
+        </h2>
+        <div class="table-scroll">
+          <table class="kp-items">
+            <thead><tr>
+              <th style="width:78px;">時刻</th><th>サイト</th>
+              <th style="width:110px;">種類</th><th style="width:80px;">時間</th>
+              <th style="width:80px;">ブラウザ</th>
+            </tr></thead>
+            <tbody>
+              ${r.visits.map((x) => `
+                <tr>
+                  <td>${esc(hm(x.at))}${x.workDate !== r.range.from
+                    ? `<span class="sub">${esc(x.workDate.slice(5))}</span>` : ""}</td>
+                  <td><b>${esc(x.host)}</b>${x.path
+                    ? `<span class="sub">${esc(x.path)}</span>` : ""}</td>
+                  <td>${esc(x.categoryLabel)}</td>
+                  <td>${esc(x.text)}</td>
+                  <td><span class="sub">${esc(x.browser || "—")}</span></td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+        ${r.truncated ? `<p class="muted" style="font-size:11.5px;margin:8px 0 0;">
+          件数が多いため、新しいものから1000件までを出しています。期間を狭めてください。</p>` : ""}
+      </div>` : ""}`;
+  }
+
 </script>
 
 </body>

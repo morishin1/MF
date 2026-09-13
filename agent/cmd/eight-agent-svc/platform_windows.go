@@ -127,10 +127,25 @@ func acceptOne(ctx context.Context, ag *collect.Agent) error {
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
+	// ブラウザの拡張が1回にまとめて渡してくることがある。既定の64KBでは足りない
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+
 	for sc.Scan() {
 		if ctx.Err() != nil {
 			return nil
 		}
+		// 口は1つだが、繋いでくるのは2種類。
+		//   ・同じPCの UI プロセス（いま使っているソフト・離席）
+		//   ・ブラウザの拡張（継ぎ役ごし。見ていたサイト）
+		// from で見分ける。付いていなければ、これまでどおり UI として読む
+		var head struct {
+			From string `json:"from"`
+		}
+		if err := json.Unmarshal(sc.Bytes(), &head); err == nil && head.From == "extension" {
+			fromExtension(ag, sc.Bytes())
+			continue
+		}
+
 		var r uiReport
 		if err := json.Unmarshal(sc.Bytes(), &r); err != nil {
 			continue
@@ -147,6 +162,49 @@ func acceptOne(ctx context.Context, ag *collect.Agent) error {
 		ag.Minute(r.At, st, collect.ExeName(r.Exe), r.Product, r.Category)
 	}
 	return sc.Err()
+}
+
+// fromExtension は、ブラウザの拡張が数えた滞在を受け取る。
+//
+// 継ぎ役（eight-agent-host.exe）も一度削っているが、ここでも削る。
+// 口が1つでも、通る中身は2か所で絞る。片方が緩んでも、もう片方で止まる。
+//
+// ここに来るのは ドメイン・ページの場所・時刻・秒数・ブラウザ名 だけ。
+// ページの中身や題を入れる場所が、そもそも構造体に無い
+func fromExtension(ag *collect.Agent, line []byte) {
+	var in struct {
+		Browser string `json:"browser"`
+		Version string `json:"version"`
+		Visits  []struct {
+			Host      string    `json:"host"`
+			Path      string    `json:"path"`
+			StartedAt time.Time `json:"startedAt"`
+			EndedAt   time.Time `json:"endedAt"`
+			ActiveSec int       `json:"activeSec"`
+			Browser   string    `json:"browser"`
+		} `json:"visits"`
+	}
+	if err := json.Unmarshal(line, &in); err != nil {
+		return
+	}
+
+	// 届いた＝そのブラウザは繋がっている。管理画面の「●連携済」はこれ
+	ag.BrowserAlive(in.Browser, in.Version)
+
+	for _, v := range in.Visits {
+		host := collect.HostOnly(v.Host)
+		if host == "" || v.ActiveSec <= 0 {
+			continue
+		}
+		ag.Visit(collect.Visit{
+			Host:      host,
+			Path:      collect.PathOnly(v.Path),
+			StartedAt: v.StartedAt,
+			EndedAt:   v.EndedAt,
+			ActiveSec: v.ActiveSec,
+			Browser:   v.Browser,
+		})
+	}
 }
 
 // ---- OS からの報せ -----------------------------------------------------------

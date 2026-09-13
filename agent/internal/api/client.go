@@ -79,18 +79,46 @@ type AppUsage struct {
 // サーバに送ってから落とすと、送信経路とログに一度は全文が乗る。
 type WebUsage struct {
 	WorkDate string `json:"workDate"`
+	// ドメイン。空なら、カテゴリだけの行（拡張が入っていないPC）
+	Host     string `json:"host,omitempty"`
 	Category string `json:"category"`
+	Browser  string `json:"browser,omitempty"`
 	Minutes  int    `json:"minutes"`
 }
 
+// Visit は1回の滞在。ドメインとページの場所まで。
+//
+// 問い合わせ（?…）も断片（#…）もページの中身も、ここに入れる場所が無い。
+// URL を削るのは、このPCの中（collect.HostOnly / collect.PathOnly）。
+// 送ってから落とすと、経路とサーバのログに一度は全文が乗る
+type Visit struct {
+	Host      string     `json:"host"`
+	Path      string     `json:"path,omitempty"`
+	StartedAt time.Time  `json:"startedAt"`
+	EndedAt   *time.Time `json:"endedAt,omitempty"`
+	ActiveSec int        `json:"activeSec"`
+	Browser   string     `json:"browser,omitempty"`
+	WorkDate  string     `json:"workDate,omitempty"`
+}
+
+// BrowserState は、このPCの中のブラウザ1つぶん。
+type BrowserState struct {
+	Browser    string `json:"browser"`
+	Installed  bool   `json:"installed"`
+	Linked     bool   `json:"linked"`
+	ExtVersion string `json:"extVersion,omitempty"`
+}
+
 type IngestBody struct {
-	SentAt       time.Time  `json:"sentAt"`
-	AgentVersion string     `json:"agentVersion"`
-	Hostname     string     `json:"hostname,omitempty"`
-	Events       []Event    `json:"events,omitempty"`
-	Usage        []Usage    `json:"usage,omitempty"`
-	Apps         []AppUsage `json:"apps,omitempty"`
-	Web          []WebUsage `json:"web,omitempty"`
+	SentAt       time.Time      `json:"sentAt"`
+	AgentVersion string         `json:"agentVersion"`
+	Hostname     string         `json:"hostname,omitempty"`
+	Events       []Event        `json:"events,omitempty"`
+	Usage        []Usage        `json:"usage,omitempty"`
+	Apps         []AppUsage     `json:"apps,omitempty"`
+	Web          []WebUsage     `json:"web,omitempty"`
+	Visits       []Visit        `json:"visits,omitempty"`
+	Browsers     []BrowserState `json:"browsers,omitempty"`
 }
 
 // ---- 受け取るもの -----------------------------------------------------------

@@ -1,6 +1,9 @@
 package collect
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // HostOnly は、URL がこのPCから出ていく最後の関門。
 // ここが漏れると、送信経路とサーバのログに全文が乗る。
@@ -94,5 +97,61 @@ func TestAddressBarToCategoryLeaksNothing(t *testing.T) {
 	}
 	if cat != "work" {
 		t.Fatalf("カテゴリがちがいます: %q", cat)
+	}
+}
+
+// PathOnly は、サーバへ出す前に URL を削る。
+// ここが緩むと、検索語や一度きりの鍵がそのまま会社へ届く
+func TestPathOnly(t *testing.T) {
+	cases := []struct{ in, want string }{
+		// 問い合わせと断片は必ず落ちる
+		{"https://x.jp/a/b?q=" + "ひみつ", "/a/b"},
+		{"https://www.google.com/search?q=転職", "/search"},
+		{"https://mail.google.com/mail/u/0/#inbox/FMfcgzABCD", "/mail/u/0"},
+		{"https://x.jp/a#frag", "/a"},
+		// 一度きりのリンクに見える区切りは伏せる
+		{"https://x.jp/reset/9f3c8a2bd41e77aa", "/reset/…"},
+		{"https://x.jp/i/aGVsbG8td29ybGQxMjM0", "/i/…"},
+		// 何のページかは残す
+		{"https://x.jp/recruit/apply", "/recruit/apply"},
+		{"https://x.jp/news/2026/09", "/news/2026/09"},
+		// パスが無い
+		{"https://x.jp/", ""},
+		{"https://x.jp", ""},
+		{"", ""},
+		// ホスト名だけで来ても、パスとして解釈しない
+		{"x.jp", "/x.jp"},
+	}
+	for _, c := range cases {
+		if got := PathOnly(c.in); got != c.want {
+			t.Errorf("PathOnly(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// 区切りの数と長さに上限があること。
+// 長いパスをそのまま送ると、それ自体が中身になる
+func TestPathOnlyLimits(t *testing.T) {
+	long := "https://x.jp/" + strings.Repeat("segment/", 20)
+	got := PathOnly(long)
+	if strings.Count(got, "/") > 6 {
+		t.Errorf("区切りが多すぎる: %q", got)
+	}
+	if len(got) > 120 {
+		t.Errorf("長すぎる: %d", len(got))
+	}
+	// 1区切りも切り詰める
+	one := PathOnly("https://x.jp/" + strings.Repeat("あ", 60))
+	if len([]rune(one)) > 121 {
+		t.Errorf("1区切りが切り詰められていない: %q", one)
+	}
+}
+
+// 人が読む語は伏せない。伏せすぎると、何のページか分からなくなって意味が無い
+func TestPathOnlyKeepsWords(t *testing.T) {
+	for _, s := range []string{"/about", "/採用情報", "/news", "/v2", "/2026"} {
+		if got := PathOnly("https://x.jp" + s); got != s {
+			t.Errorf("PathOnly(%q) = %q（伏せすぎ）", s, got)
+		}
 	}
 }

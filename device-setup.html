@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>このパソコンの設定 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260912g">
+  <link rel="stylesheet" href="css/layout.css?v=20260912g">
+  <style>
+    /* インストーラが開く画面。社員がここで見るのは1回きりなので、
+       ほかの画面へ行く道は出さない。いま何をしているかだけ出す */
+    .st-steps { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 20px; }
+    .st-step { flex:1; min-width:120px; padding:9px 10px; border-radius:8px;
+               background:var(--soft); color:var(--muted);
+               font-size:12px; font-weight:600; text-align:center; }
+    .st-step.on { background:var(--primary); color:#fff; }
+    .st-step.done { background:#eaf5ec; color:#256b36; }
+
+    .st-pc { display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+             padding:16px 18px; border:1px solid var(--border); border-radius:10px;
+             background:#fff; margin-bottom:16px; }
+    .st-pc .material-symbols-outlined { font-size:34px; color:var(--primary); }
+    .st-pc b { font-size:16px; }
+    .st-pc small { display:block; color:var(--muted); font-size:12px; }
+
+    .st-chip { display:inline-block; font-size:11.5px; font-weight:700;
+               padding:2px 9px; border-radius:999px; background:#eef2f7; color:#3f5878;
+               margin-right:5px; }
+
+    .st-wait { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; }
+  </style>
+</head>
+<body>
+
+<div class="wrap" style="max-width:720px;">
+  <h1 class="kp-greet">このパソコンの設定</h1>
+  <p class="kp-greet-sub" id="sub">
+    インストールしたソフトと、あなたのアカウントをつなぎます。あと1回押すだけです。
+  </p>
+
+  <div class="st-steps">
+    <div class="st-step done" id="s1">インストール</div>
+    <div class="st-step on" id="s2">このパソコンです</div>
+    <div class="st-step" id="s3">記録すること</div>
+    <div class="st-step" id="s4">完了</div>
+  </div>
+
+  <div id="gate"></div>
+
+  <!-- ① 何を登録するのか見せてから押させる -->
+  <div class="card hidden" id="card-claim">
+    <h2><span class="material-symbols-outlined">computer</span>このパソコンで合っていますか</h2>
+    <div class="st-pc" id="pc"></div>
+
+    <p class="muted" style="font-size:12.5px;line-height:1.9;">
+      押すと、このパソコンが <b id="who">あなた</b> のものとして台帳に載ります。<br>
+      このあと「何を記録するか」が出ます。そこで確認するまで、記録は始まりません。
+    </p>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+      <button class="btn btn-primary" id="go" onclick="claim(this)">
+        <span class="material-symbols-outlined icon-inline">check</span>このパソコンです
+      </button>
+      <button class="btn btn-secondary" onclick="cancel()">自分のパソコンではありません</button>
+    </div>
+    <div id="msg" class="err-text"></div>
+  </div>
+
+  <!-- ② ソフトが登録を終えるのを待つ -->
+  <div class="card hidden" id="card-wait">
+    <h2><span class="material-symbols-outlined">sync</span>設定しています</h2>
+    <div class="st-wait">
+      <span class="material-symbols-outlined kp-spin">progress_activity</span>
+      <span id="wait-text">このパソコンのソフトとつないでいます…</span>
+    </div>
+    <p class="muted" style="font-size:12px;margin:14px 0 0;">
+      この画面は閉じないでください。数十秒で終わります。
+    </p>
+    <div id="wait-msg" class="err-text"></div>
+  </div>
+
+  <!-- ③ 終わり -->
+  <div class="card hidden" id="card-done">
+    <div class="banner ok" style="margin:0 0 14px;">
+      <span class="material-symbols-outlined">check_circle</span>
+      <div><b>設定が終わりました。</b>このパソコンとブラウザが、あなたのアカウントにつながりました。</div>
+    </div>
+    <p style="font-size:13.5px;line-height:1.9;">
+      最後に、<b>何を記録して、何を記録しないか</b>を読んでください。
+      読んで確認するまで、記録は始まりません。
+    </p>
+    <a class="btn btn-primary" id="next" href="device-consent.html">
+      <span class="material-symbols-outlined icon-inline">description</span>記録することを読む
+    </a>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260912g"></script>
+<script src="js/device.js?v=20260912g"></script>
+<script src="js/layout.js?v=20260912g"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const token = new URLSearchParams(location.search).get("pair") || "";
+  let info = null;
+
+  KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) start(ctx); });
+
+  async function start(ctx) {
+    if (!token) {
+      return gate("err", "このページは、パソコンに入れたソフトから開きます。",
+        "EIGHT-Agent-Setup.exe を実行すると、自動でこの画面が開きます。");
+    }
+    el("who").textContent = ctx.me?.gw?.employee?.display_name || "あなた";
+
+    try {
+      info = await API.pairInfo(token);
+    } catch (e) {
+      return gate("err", e.body?.message || "この設定用のリンクは使えません。",
+        "時間が経つと使えなくなります。もう一度 EIGHT-Agent-Setup.exe を実行してください。");
+    }
+    if (info.used) {
+      return gate("warn", "この設定はもう済んでいます。",
+        "マイページの「端末の設定」から、いまの状態を確かめられます。");
+    }
+    renderPc();
+    el("card-claim").classList.remove("hidden");
+  }
+
+  function gate(kind, title, note) {
+    el("gate").innerHTML = `
+      <div class="banner ${esc(kind)}">
+        <span class="material-symbols-outlined">${kind === "err" ? "error" : "info"}</span>
+        <div><b>${esc(title)}</b><br>${esc(note || "")}</div>
+      </div>`;
+  }
+
+  function renderPc() {
+    const pc = info.pc || {};
+    el("pc").innerHTML = `
+      <span class="material-symbols-outlined">desktop_windows</span>
+      <span style="flex:1;min-width:180px;">
+        <b>${esc(pc.hostname || "このパソコン")}</b>
+        <small>${esc(pc.os || "Windows")}</small>
+      </span>
+      <span>${(pc.browsers || []).map((b) =>
+        `<span class="st-chip">${esc(b.label)}</span>`).join("")
+        || `<span class="muted" style="font-size:12px;">ブラウザは見つかりませんでした</span>`}</span>`;
+  }
+
+  // ---- 押す -------------------------------------------------------------------
+  async function claim(btn) {
+    el("msg").textContent = "";
+    try {
+      // いまこの画面を開いているブラウザの印も渡す。
+      // これで「エージェントの行」と「ブラウザの行」が1台にまとまる
+      const uid = (window.KPDevice && KPDevice.uid && KPDevice.uid()) || null;
+      await KPLayout.busy(btn, "設定中…", () => API.claimPair(token, uid));
+    } catch (e) {
+      el("msg").textContent = e.body?.message || e.hint || e.detail || e.message
+        || "設定できませんでした";
+      return;
+    }
+    step(3);
+    el("card-claim").classList.add("hidden");
+    el("card-wait").classList.remove("hidden");
+    waitForAgent();
+  }
+
+  function cancel() {
+    gate("warn", "設定をやめました。",
+      "心当たりがない場合は、管理者にご連絡ください。");
+    el("card-claim").classList.add("hidden");
+  }
+
+  // ---- ソフトが登録を終えるのを待つ -------------------------------------------
+  //
+  // インストーラは数秒おきにコードを取りにきている。
+  // 取りに来て登録が終わると、自分の端末の一覧にそのPCが出る。
+  // それが出たら終わり
+  async function waitForAgent() {
+    const until = Date.now() + 90000;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const mine = await API.myDevices();
+        const host = (info.pc?.hostname || "").toLowerCase();
+        const found = (mine.devices || []).some((d) =>
+          d.source === "agent" && String(d.hostname || "").toLowerCase() === host);
+        if (found) return finish();
+      } catch (e) { /* 途中の失敗は次の回に任せる */ }
+    }
+    el("wait-msg").innerHTML =
+      "時間内に終わりませんでした。パソコンのソフトが起動していない可能性があります。<br>"
+      + "もう一度 EIGHT-Agent-Setup.exe を実行してください。";
+  }
+
+  function finish() {
+    step(4);
+    el("card-wait").classList.add("hidden");
+    el("card-done").classList.remove("hidden");
+    el("sub").textContent = "設定が終わりました。最後に、記録することを読んでください。";
+  }
+
+  function step(n) {
+    for (let i = 1; i <= 4; i++) {
+      const node = el(`s${i}`);
+      node.classList.toggle("done", i < n);
+      node.classList.toggle("on", i === n);
+    }
+  }
+</script>
+
+</body>
+</html>

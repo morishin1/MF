@@ -551,6 +551,24 @@
   const patchDevice = (body) => api("/api/devices", { method: "PATCH", body });
   // 登録コードの発行・使用の履歴（監査）
   const deviceEnrollments = () => api("/api/devices?enrollments=1");
+
+  // WEB利用。その人を開いたときだけ呼ぶ（一覧では呼ばない）。
+  // 呼ぶと「見た」記録が本人の画面に残る
+  const deviceWeb = (p = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ["employeeId", "range", "date", "category", "scope"]) {
+      if (p[k]) q.set(k, p[k]);
+    }
+    return api(`/api/devices/web?${q.toString()}`);
+  };
+  // 自分のぶん。本人が「何を見られているか」を確かめるため
+  const myWeb = (p = {}) => deviceWeb({ ...p, employeeId: undefined });
+
+  // 組み立て（EIGHT-Agent-Setup.exe が開く画面から）
+  const pairInfo = (token) =>
+    api(`/api/devices/pair?token=${encodeURIComponent(token)}`);
+  const claimPair = (token, deviceUid) =>
+    api("/api/devices/pair", { method: "POST", body: { token, claim: true, deviceUid } });
   const deviceAlerts = (status) =>
     api(`/api/devices/alerts${status ? `?status=${encodeURIComponent(status)}` : ""}`);
   const patchDeviceAlert = (body) => api("/api/devices/alerts", { method: "PATCH", body });
@@ -982,6 +1000,7 @@
     closing, patchClosing, downloadClosingCsv,
     devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
+    deviceWeb, myWeb, pairInfo, claimPair,
     myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,
     renameMyDevice, forgetMyDevice,
 

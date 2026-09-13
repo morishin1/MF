@@ -25,6 +25,7 @@ import {
   tokenDays, tokenState, TOKEN_DAYS,
   EVENT_LABEL, SEVERITY_LABEL, RULE_LABEL, CATEGORY_LABEL,
   CSV_HEADER, csvRow, csvCell,
+  browserLabel, browserState,
 } from "../../lib/devices.js";
 
 // 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
@@ -126,6 +127,28 @@ async function read(req, res, ctx, user) {
       });
       r.foldedInto = r.linkedTo;
     }
+  }
+
+  // ---- 1台のPCの中の、ブラウザごとの状態 ----
+  //
+  // 人から見れば1台なので、Agent と Chrome と Edge を別の行にしない。
+  // 「入っているのに、つながっていない」が分かるようにする
+  const { data: brs } = await sb.from("gw_device_browsers")
+    .select("device_id, browser, installed, linked, ext_version, last_seen_at")
+    .eq("tenant_id", ctx.tenantId);
+  for (const b of brs || []) {
+    const row = byId.get(b.device_id);
+    if (!row) continue;
+    (row.links = row.links || []).push({
+      browser: b.browser, label: browserLabel(b.browser),
+      installed: b.installed, linked: b.linked,
+      extVersion: b.ext_version,
+      lastSeen: sinceLabel(b.last_seen_at, now, "未受信"),
+      state: browserState(b, now),
+    });
+  }
+  for (const r of rows) {
+    if (r.links) r.links.sort((a, b2) => a.browser.localeCompare(b2.browser));
   }
 
   const { data: recent } = await sb.from("gw_device_alerts")

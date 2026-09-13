@@ -105,6 +105,11 @@
         <ul class="dc-list" id="c-an-never"></ul>
       </div>
       <p class="dc-why" id="c-an-why"></p>
+      <!-- URLを取ると書いた以上、どこまで削っているかを同じ場所に出す。
+           削っていることだけ書いて、取っていることを書かない案内にはしない -->
+      <p class="dc-why" id="c-an-how"></p>
+      <p class="dc-why" id="c-an-scope"></p>
+      <p class="dc-why" id="c-an-yours"></p>
     </div>
   </div>
 
@@ -226,6 +231,11 @@
       el("c-an-takes").innerHTML = (an.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
       el("c-an-never").innerHTML = (an.never || []).map((s) => `<li>${esc(s)}</li>`).join("");
       el("c-an-why").textContent = an.why || "";
+      for (const k of ["how", "scope", "yours"]) {
+        const n2 = el(`c-an-${k}`);
+        n2.textContent = an[k] || "";
+        n2.classList.toggle("hidden", !an[k]);
+      }
     }
 
     const devs = data.devices || [];

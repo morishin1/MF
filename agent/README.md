@@ -17,7 +17,7 @@ IT側からの一斉配布（Intune / GPO）は要らない。
 | 起動・終了・ログオン・ロック・スリープ | `internal/collect/win_session.go` |
 | 1日の稼働時間・離席時間 | `internal/collect/tally.go` |
 | 使ったソフトの名前（実行ファイル名）と合計時間 | `internal/collect/win_foreground.go` |
-| 見たサイトの**カテゴリ**と合計時間 | `internal/collect/category.go` |
+| 見たサイトの**ドメイン・ページの場所**・カテゴリ・見ていた時間 | `internal/collect/category.go`（`HostOnly` / `PathOnly`）＋ `extension/` |
 | USBメモリの抜き差し・ソフトの出入り | `cmd/eight-agent-svc/platform_windows.go` |
 
 | **取らないもの** | 実装でどう塞いでいるか |
@@ -27,7 +27,8 @@ IT側からの一斉配布（Intune / GPO）は要らない。
 | メール・チャットの本文 | 同上 |
 | 画面の録画・スクリーンショット | 画面をキャプチャするAPIを呼んでいない |
 | **ウィンドウのタイトル** | `GetWindowText` を呼んでいない。`grep -r GetWindowText` で0件 |
-| **URLの全文** | `collect.HostOnly()` がホスト名だけに落とし、`Of()` が6語のどれかに変える。`hostonly_test.go` / `category_test.go` が確かめている。**アドレスバーの検索語も送らない** |
+| **URLの問い合わせ（`?…`）と断片（`#…`）** | `collect.PathOnly()` が落とす。検索語・メールアドレス・一度きりの鍵はここに入る。`hostonly_test.go` が確かめている。**アドレスバーの検索語も送らない** |
+| **ページの中身・フォーム・Cookie** | ブラウザの拡張に `host_permissions` も `content_scripts` も `cookies` も無い。読む口を持たない。`extension_test.go` が manifest を見張っている |
 | ファイルの中身 | 読む口が無い |
 
 送る構造体（`internal/api/client.go` の `Event` / `Usage` / `AppUsage` / `WebUsage`）に、
