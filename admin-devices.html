@@ -72,6 +72,15 @@
     .dv-mark.ok { background:#eaf5ec; color:#256b36; }
     .dv-mark.check { background:#f4f0e3; color:#8a6d1f; }
     .dv-mark.bad { background:#fdecec; color:#b3261e; }
+
+    /* 週1回の「やること」。放っておくと減らないので、台帳より上に出す */
+    .dv-todo { border:1px solid #fbd38d; background:#fffaf0; border-radius:10px;
+               padding:14px 16px; margin:0 0 16px; }
+    .dv-todo h3 { margin:0 0 4px; font-size:14px; display:flex; align-items:center; gap:6px; }
+    .dv-todo .who { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0; }
+    .dv-todo .who span { border:1px solid var(--border); background:#fff; border-radius:999px;
+                         padding:3px 10px; font-size:12px; }
+    .dv-todo .who span b { color:#a05a00; margin-left:4px; }
     .dv-facts { border-collapse:collapse; font-size:12.5px; min-width:250px; }
     .dv-facts td { padding:3px 0; vertical-align:top; }
     .dv-facts td:first-child { color:var(--muted); width:82px; }
@@ -155,6 +164,9 @@
 
   <!-- ===== 端末 ===== -->
   <div id="p-list">
+    <!-- 週に1回まわしてゼロにするもの。0件のときは出さない -->
+    <div id="d-todo" class="hidden"></div>
+
     <div id="d-sum" class="dv-sum"></div>
 
     <div class="card">
@@ -320,7 +332,21 @@
   let data = null, policy = null, openDetail = null, blocked = [], filter = "";
 
   KPLayout.init({ active: "devices", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => { if (ctx) load().then(openFromLink); });
+
+  /**
+   * 管理画面TOPから、やることの場所へ直接来られるようにする。
+   *
+   *   admin-devices.html?f=waiting … 確認待ちだけ出す
+   *   admin-devices.html#alerts    … アラートを開く
+   *
+   * 「TOPに件数が出ている → 押す → 探し直し」にしない
+   */
+  function openFromLink() {
+    if (location.hash === "#alerts") return tab("alerts");
+    const f = new URLSearchParams(location.search).get("f");
+    if (f && ["silent", "waiting", "agent"].includes(f)) filterBy(f);
+  }
 
   function tab(which) {
     for (const k of ["list", "alerts", "codes", "policy"]) {
@@ -363,8 +389,95 @@
     }
   }
 
+  /**
+   * 週に1回まわして、ゼロにするもの。
+   *
+   *   ・本人の確認待ち … 押すまで利用時間を1分も数えない。放置すると台帳が空のまま溜まる
+   *   ・未確認のアラート … △ が出たまま、誰も確認していない
+   *
+   * どちらも0のときは、まるごと出さない。
+   * 「0件です」を毎回置くと、そのうち読まれなくなる
+   */
+  function renderTodo(s) {
+    const box = el("d-todo");
+    const waiting = (data.devices || []).filter((d) => d.state.key === "waiting");
+    const open = s.openAlerts || 0;
+
+    if (!waiting.length && !open) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+
+    // 誰が押していないか。名前が出ていないと、声をかけようがない
+    const by = new Map();
+    for (const d of waiting) {
+      const name = d.employee?.name || "（割り当てなし）";
+      const days = d.firstSeenAt
+        ? Math.floor((Date.now() - Date.parse(d.firstSeenAt)) / 86400000) : 0;
+      const cur = by.get(name) || { n: 0, days: 0 };
+      cur.n += 1;
+      cur.days = Math.max(cur.days, days);
+      by.set(name, cur);
+    }
+
+    const lines = [];
+    if (waiting.length) {
+      lines.push(`
+        <div style="margin-top:10px;">
+          <b>本人の確認待ち ${waiting.length}台</b>
+          <span class="sub">押すまで、利用時間を1分も数えません</span>
+          <div class="who">${[...by.entries()]
+            .sort((a, b) => b[1].days - a[1].days)
+            .map(([name, v]) => `<span>${esc(name)}${v.n > 1 ? ` ×${v.n}` : ""}${
+              v.days > 0 ? `<b>${v.days}日</b>` : ""}</span>`).join("")}</div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="nudge(this)">
+              <span class="material-symbols-outlined icon-inline">campaign</span>まとめてお知らせを送る
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="filterBy('waiting')">この端末だけ見る</button>
+          </div>
+        </div>`);
+    }
+    if (open) {
+      lines.push(`
+        <div style="margin-top:${waiting.length ? 14 : 10}px;">
+          <b>未確認のアラート ${open}件</b>
+          <span class="sub">内容を見て「確認した」を押すまで残ります</span>
+          <div style="margin-top:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="tab('alerts')">アラートを見る</button>
+          </div>
+        </div>`);
+    }
+
+    box.innerHTML = `
+      <div class="dv-todo">
+        <h3><span class="material-symbols-outlined">task_alt</span>今週やること</h3>
+        <p class="muted" style="font-size:12px;margin:0;">
+          週に1回まわして、どちらも0にします。
+        </p>
+        ${lines.join("")}
+      </div>`;
+    box.classList.remove("hidden");
+  }
+
+  /** 確認待ちの人に、押してくださいと知らせる */
+  async function nudge(btn) {
+    if (!confirm("確認していない人に、お知らせを送ります。よろしいですか？")) return;
+    try {
+      const r = await KPLayout.busy(btn, "送信中…",
+        () => API.patchDevice({ action: "nudge_waiting" }));
+      el("d-msg").textContent = r.sent
+        ? `${r.sent}人にお知らせを送りました。`
+        : "送る相手がいませんでした。";
+    } catch (e) {
+      el("d-msg").textContent = e.hint || e.message || "送れませんでした";
+    }
+  }
+
   function render() {
     const s = data.summary || {};
+    renderTodo(s);
     el("d-sum").innerHTML = `
       <div class="box"><div class="k">台数</div><div class="v">${s.total || 0}</div></div>
       <div class="box"><div class="k">ソフト導入済み</div><div class="v">${s.agents || 0}</div></div>
@@ -817,6 +930,17 @@
   }
 
   // ---- アラート ----
+
+  /**
+   * 「△ 要確認」から出たもの。
+   *
+   * 事故や漏えいではなく、**人に確かめないと分からない**もの。
+   * ボタンの文言を変えて、「対応した」ではなく「本人に確認した」にする。
+   * 確かめずに閉じられると、この仕組みは数字を消すだけの作業になる
+   */
+  const CHECK_RULES = ["distract_in_work", "night_web", "no_activity",
+                       "night_work", "holiday_work", "confirm_waiting"];
+
   async function loadAlerts() {
     try {
       const r = await API.deviceAlerts(el("a-status").value);
@@ -835,8 +959,10 @@
                  : `${esc({ ack: "確認済み", resolved: "対応済み", ignored: "無視" }[a.status] || a.status)}`}
               ${a.decidedNote ? `<span class="sub">${esc(a.decidedNote)}</span>` : ""}</td>
             <td>${a.status === "open" ? `
-              <button class="btn btn-secondary btn-sm" onclick="decide('${a.id}','resolve')">対応した</button>
-              <button class="btn btn-secondary btn-sm" onclick="decide('${a.id}','ignore')">問題なし</button>`
+              <button class="btn btn-secondary btn-sm" onclick="decide('${a.id}','resolve')">${
+                CHECK_RULES.includes(a.rule) ? "本人に確認した" : "対応した"}</button>
+              <button class="btn btn-secondary btn-sm" onclick="decide('${a.id}','ignore')">${
+                CHECK_RULES.includes(a.rule) ? "見たが問題なし" : "問題なし"}</button>`
               : `<button class="btn btn-secondary btn-sm" onclick="decide('${a.id}','reopen')">戻す</button>`}</td>
           </tr>`).join("")}</tbody></table>`;
     } catch (e) {
@@ -849,7 +975,7 @@
     // 「無視」も記録に残す。見ていなかったのか、見て判断したのかを分けるため
     const note = action === "ignore"
       ? prompt("問題ないと判断した理由を書いてください（記録に残ります）")
-      : action === "resolve" ? prompt("どう対応したか（任意）") : "";
+      : action === "resolve" ? prompt("誰に、どう確かめたか（任意）") : "";
     if (action === "ignore" && (note === null || !note.trim())) return;
     try {
       await API.patchDeviceAlert({ id, action, note: note || null });

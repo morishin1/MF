@@ -46,7 +46,8 @@ export default async function handler(req, res) {
   };
   const H = { count: "exact", head: true };
 
-  const [messages, contracts, esign, expenses, requests, timefix, proposals, devices] = await Promise.all([
+  const [messages, contracts, esign, expenses, requests, timefix, proposals,
+         deviceAlerts, deviceWaiting] = await Promise.all([
     unreadMessages(sb, me),
 
     // 自分あてで、まだ署名していない契約書
@@ -79,11 +80,23 @@ export default async function handler(req, res) {
       .select("id", H)
       .eq("user_id", user.id).eq("status", "proposed")),
 
-    // 端末は「見慣れない端末から入られた」だけ数える。
-    // 深夜・休日まで数えると、忙しい月はずっと数字が付いたままになる
+    // 端末のアラートのうち、管理者が「確認した」を押していないもの。
+    //
+    // 以前は「見慣れない端末」だけ数えていた。深夜・休日まで数えると
+    // ずっと数字が付いたままになる、という理由だった。
+    // いまは open → ack の流れがあり、確認すれば消える。
+    // 「△ は管理者が確認する」と決めた以上、確認していないものを数えるのが正しい
     hr ? count(() => sb.from("gw_device_alerts")
       .select("id", H)
-      .eq("tenant_id", ctx.tenantId).eq("status", "open").eq("rule", "unknown_device")) : 0,
+      .eq("tenant_id", ctx.tenantId).eq("status", "open")
+      .in("severity", ["warn", "critical"])) : 0,
+
+    // 本人が「このパソコンです」を押していない端末。
+    // 押すまで利用時間を1分も数えないので、放置されると台帳が空のまま溜まる
+    hr ? count(() => sb.from("gw_devices")
+      .select("id", H)
+      .eq("tenant_id", ctx.tenantId).is("notified_at", null)
+      .in("status", ["active", "unconfirmed"])) : 0,
   ]);
 
   // 0 は返さない。0を返すと、画面側で「0」と出す事故が起きる
@@ -97,11 +110,18 @@ export default async function handler(req, res) {
     put("esign", esign);
     put("requests", requests);
     put("timecard", timefix);
-    put("devices", devices);
+    // メニューの数字は「未確認のアラート」と「確認待ちの端末」の合計。
+    // どちらも、管理者が動かないと減らない
+    put("devices", deviceAlerts + deviceWaiting);
   }
   if (expenseReviewer) put("expenses", expenses);
 
-  return json(res, 200, { badges });
+  // 管理画面TOPで、端末まわりだけは中身を分けて出す。
+  // 「何件あるか」だけ分かっても、どちらを先にやればよいか決められない
+  return json(res, 200, {
+    badges,
+    devices: hr ? { alerts: deviceAlerts, waiting: deviceWaiting } : null,
+  });
 }
 
 /**

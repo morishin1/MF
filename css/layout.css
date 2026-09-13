@@ -155,6 +155,13 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-tile.alert { border-color: #fbd38d; background: #fffaf0; }
 .kp-tile.alert .v { color: var(--orange); }
 
+/* 端末管理の「やること」。放っておくと減らないものなので、
+   ふつうのタイルより強く出す */
+.kp-tile.warn { border-color: #fbd38d; background: #fffaf0; }
+.kp-tile.warn .v { color: var(--orange); }
+.kp-tile.bad  { border-color: #f5b5b0; background: #fdf3f2; }
+.kp-tile.bad .v { color: #b3261e; }
+
 /* まだ実装していない領域。存在は見せるが、期待させない見た目にする */
 .kp-soon {
   border: 1px dashed var(--border);

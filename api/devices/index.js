@@ -20,6 +20,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
+import { notify } from "../../lib/notify.js";
 import {
   isDate, jstDate, deviceState, sinceLabel, clock, newEnrollToken, sha256,
   tokenDays, tokenState, TOKEN_DAYS,
@@ -156,6 +157,13 @@ async function read(req, res, ctx, user) {
     .eq("tenant_id", ctx.tenantId).eq("status", "open")
     .order("occurred_at", { ascending: false }).limit(30);
 
+  // 未確認の件数は、上の30件とは別に数える。
+  // 30件で切った数を「残り件数」として出すと、31件目から嘘になる
+  const { count: openWarn } = await sb.from("gw_device_alerts")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", ctx.tenantId).eq("status", "open")
+    .in("severity", ["warn", "critical"]);
+
   await logView(sb, ctx, user, { scope: "list" });
 
   return json(res, 200, {
@@ -176,6 +184,9 @@ async function read(req, res, ctx, user) {
       stale: rows.filter((r) => r.state.key === "stale").length,
       silent: rows.filter((r) => r.state.key === "silent").length,
       unknown: (recent || []).filter((a) => a.rule === "unknown_device").length,
+      // 管理者が「確認した」を押していないもの。
+      // 一覧を開かなくても件数だけは分かるようにする（管理画面TOPで使う）
+      openAlerts: openWarn || 0,
     },
     // 割り当て先の候補
     people: [...people.values()],
@@ -375,6 +386,59 @@ async function patch(req, res, ctx, user) {
       token, expiresAt, days,
       note: "このコードは1回だけ使えます。この画面を閉じると、もう出せません",
     });
+  }
+
+  // 確認待ちの人に、押してくださいと知らせる。
+  //
+  // 押すまで利用時間を1分も数えないので、押されないまま溜まると
+  // 台帳が空のまま増えていく。週1回ゼロにする運用の、その1回ぶん。
+  //
+  // 端末は動かさない。送るのは知らせだけ
+  if (action === "nudge_waiting") {
+    const { data: waiting, error } = await sb.from("gw_devices")
+      .select("id, employee_id, label, hostname, source, first_seen_at")
+      .eq("tenant_id", ctx.tenantId)
+      .is("notified_at", null)
+      .in("status", ["active", "unconfirmed"])
+      .limit(500);
+    if (error) {
+      const hint = dbSetupHint(error, SQL);
+      if (hint) return json(res, 503, { error: "not_ready", message: hint });
+      return json(res, 500, { error: "db_query_failed", detail: error.message });
+    }
+
+    // 1人が3台放っていても、知らせは1通。
+    // 台数ぶん届くと、読まれずに消される
+    const byEmp = new Map();
+    for (const d of waiting || []) {
+      if (!d.employee_id) continue;
+      const cur = byEmp.get(d.employee_id) || { n: 0, label: "" };
+      cur.n += 1;
+      if (!cur.label) cur.label = d.hostname || d.label || "";
+      byEmp.set(d.employee_id, cur);
+    }
+    if (!byEmp.size) return json(res, 200, { sent: 0, people: 0 });
+
+    await notify([...byEmp.entries()].map(([employeeId, v]) => ({
+      tenantId: ctx.tenantId,
+      employeeId,
+      kind: "device_confirm",
+      title: v.n > 1
+        ? `確認していない端末が ${v.n}台 あります`
+        : `${v.label || "端末"} の確認をお願いします`,
+      body: "マイページの「端末の設定」を開いて、記録することを読んでから"
+          + "「このパソコンです」を押してください。押すまで記録は始まりません。",
+      link: "device-consent.html",
+      // 1人につき1通。押すまで何度促しても、同じ1通を新しくするだけ
+      dedupeKey: "device_confirm",
+    })));
+
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id,
+      action: "device.nudge_waiting", target: null,
+      detail: { people: byEmp.size, devices: (waiting || []).length },
+    });
+    return json(res, 200, { sent: byEmp.size, people: byEmp.size, devices: (waiting || []).length });
   }
 
   // 出したコードを取り消す。行は消さない。

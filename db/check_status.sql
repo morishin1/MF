@@ -74,7 +74,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (55, '055',    '端末管理の運用（所有者変更・紐付け解除・コードの監査）', 'column',   'gw_device_enrollments',  'revoked_at'),
   (56, '056',    '書類の作成依頼（社労士へ依頼 → 届いた書面に署名依頼）', 'table',    'gw_doc_orders',          null),
   (57, '057',    '端末管理を1台1行に／WEB利用の履歴',                     'table',    'gw_device_web_visits',   null),
-  (58, '058',    '更新ファイルを自前の鍵で確かめる（署名・大きさ）',      'column',   'gw_device_releases',     'signature')
+  (58, '058',    '更新ファイルを自前の鍵で確かめる（署名・大きさ）',      'column',   'gw_device_releases',     'signature'),
+  (59, '059',    '端末管理を週1回で回す（90日で消す・確認待ち）',        'column',   'gw_device_policies',     'confirm_wait_days')
 ),
 
 -- ファイルの適用状況

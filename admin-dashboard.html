@@ -36,6 +36,10 @@
     </div>
   </div>
 
+  <!-- 端末まわりで、管理者が動かないと減らないもの。
+       件数が0のときは、まるごと出さない（毎日目に入る場所に0を置かない） -->
+  <div id="dev-todo" class="hidden"></div>
+
   <div id="tiles" class="kp-tiles"></div>
 
   <div class="card">
@@ -94,6 +98,10 @@
     el("greet-sub").textContent =
       `${name}　／　${new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}`;
 
+    // 端末の「やること」は、取引先の選択に関係なく出す。
+    // 会計の集計に失敗しても、ここだけは出したい
+    loadDeviceTodo();
+
     try {
       clients = await API.listClients();
       el("client-select").innerHTML = clients.length
@@ -103,6 +111,50 @@
       el("client-select").innerHTML = `<option value="">取得失敗</option>`;
     }
     reload();
+  }
+
+  /**
+   * 端末管理で、管理者が動かないと減らないもの。
+   *
+   *   ・未確認のアラート … △ が出たまま、誰も確認していない
+   *   ・本人の確認待ち   … 押すまで利用時間を1分も数えない
+   *
+   * どちらも週1回まわしてゼロにする、という運用にしてある。
+   * 0のときは何も出さない。0が並ぶ画面は、そのうち読まれなくなる
+   */
+  async function loadDeviceTodo() {
+    let d = null;
+    try {
+      d = (await API.badges())?.devices;
+    } catch (e) { return; }
+    if (!d || (!d.alerts && !d.waiting)) return;
+
+    const box = (href, n, k, s, cls) => `
+      <a class="kp-tile${cls ? " " + cls : ""}" href="${href}" style="min-width:190px;">
+        <div class="k"><span class="material-symbols-outlined" style="font-size:15px;">computer</span>${k}</div>
+        <div class="v">${n}<small>件</small></div>
+        <div class="s">${s}</div>
+      </a>`;
+
+    const parts = [];
+    if (d.alerts) {
+      parts.push(box("admin-devices.html#alerts", d.alerts, "未確認のアラート",
+        "内容を見て「確認した」を押す", "bad"));
+    }
+    if (d.waiting) {
+      parts.push(box("admin-devices.html?f=waiting", d.waiting, "本人の確認待ち",
+        "押すまで利用時間を数えません", "warn"));
+    }
+
+    el("dev-todo").innerHTML = `
+      <div class="card" style="margin-bottom:16px;">
+        <h2><span class="material-symbols-outlined">computer</span>端末管理でやること</h2>
+        <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+          週に1回まわして、どちらも0にします。
+        </p>
+        <div class="kp-tiles" style="margin:0;">${parts.join("")}</div>
+      </div>`;
+    el("dev-todo").classList.remove("hidden");
   }
 
   async function reload() {
