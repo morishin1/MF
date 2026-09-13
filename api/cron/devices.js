@@ -126,8 +126,11 @@ export default async function handler(req, res) {
 
     // WEB履歴（1件ずつ）は、合計より短く持つ。既定90日。
     //
-    // 「90日で消えます」と社員に言うなら、消す仕組みが要る。
-    // 人が思い出して消すのではなく、期限が来たら消える形にしておく
+    // 保存期間を決めたなら、期限が来たら消える形にしておく。
+    // 人が思い出して消す運用は、いつか止まる。
+    //
+    // 日数は社内の管理基準。社員には伝えない
+    // （期間が分かると、それに合わせた行動をとる余地が生まれる）
     const keepVisits = Number(p.keep_visits_days) || 90;
     const { count: vc, error: ve } = await sb.from("gw_device_web_visits")
       .delete({ count: "exact" }).eq("tenant_id", t).lt("work_date", day(-keepVisits));
