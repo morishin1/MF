@@ -53,6 +53,7 @@ import (
 	"crypto/rand"
 
 	"github.com/8grp/eight-agent/internal/browsers"
+	"github.com/8grp/eight-agent/internal/setup"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -175,10 +176,20 @@ func run() error {
 		warn("ブラウザ連携の設定に失敗しました: %v", err)
 	}
 
-	// ---- 6. 札を作って預ける ----
-	token, err := newToken()
-	if err != nil {
-		return err
+	// ---- 6. 札を決めて預ける ----
+	//
+	// 本人がマイページから落としたものは、ファイル名に札が入っている。
+	//   EIGHT-Agent-Setup-<札>.exe
+	// その札はもう「その人のもの」なので、あとで名前を選ばせずに済む。
+	//
+	// 名前を変えられて読めなければ、自分で作る。止めない
+	token := setup.TokenFromPath(os.Args[0])
+	if token == "" {
+		var err error
+		token, err = newToken()
+		if err != nil {
+			return err
+		}
 	}
 	if err := openPair(token, found); err != nil {
 		return fmt.Errorf("サーバにつながりません: %w", err)

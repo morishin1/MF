@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>このパソコンの設定 - エイト</title>
+  <title>会社PCのセキュリティ設定 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913c">
-  <link rel="stylesheet" href="css/layout.css?v=20260913c">
+  <link rel="stylesheet" href="css/app.css?v=20260913d">
+  <link rel="stylesheet" href="css/layout.css?v=20260913d">
   <style>
     /* インストーラが開く画面。社員がここで見るのは1回きりなので、
        ほかの画面へ行く道は出さない。いま何をしているかだけ出す */
@@ -32,24 +32,84 @@
                margin-right:5px; }
 
     .st-wait { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; }
+
+    /* 落とすところ。ここだけは大きく、ほかに押すものを置かない */
+    .st-dl { text-align:center; padding:10px 0 4px; }
+    .st-dl .btn { font-size:15px; padding:13px 26px; }
+    .st-dl .fn { display:block; margin-top:10px; font-size:11.5px; color:var(--muted);
+                 word-break:break-all; }
+    .st-how { counter-reset:st; margin:18px 0 0; padding:0; list-style:none; }
+    .st-how li { counter-increment:st; position:relative; padding:0 0 12px 34px;
+                 font-size:13.5px; line-height:1.85; }
+    .st-how li::before { content:counter(st); position:absolute; left:0; top:1px;
+                         width:22px; height:22px; border-radius:50%;
+                         background:var(--primary); color:#fff;
+                         font-size:12px; font-weight:700; text-align:center; line-height:22px; }
   </style>
 </head>
 <body>
 
 <div class="wrap" style="max-width:720px;">
-  <h1 class="kp-greet">このパソコンの設定</h1>
+  <h1 class="kp-greet">会社PCのセキュリティ設定</h1>
   <p class="kp-greet-sub" id="sub">
-    インストールしたソフトと、あなたのアカウントをつなぎます。あと1回押すだけです。
+    いま使っている会社のパソコンに、端末管理ソフトを入れます。
   </p>
 
   <div class="st-steps">
-    <div class="st-step done" id="s1">インストール</div>
-    <div class="st-step on" id="s2">このパソコンです</div>
+    <div class="st-step on" id="s1">ダウンロード</div>
+    <div class="st-step" id="s2">実行</div>
     <div class="st-step" id="s3">端末管理について</div>
     <div class="st-step" id="s4">完了</div>
   </div>
 
   <div id="gate"></div>
+
+  <!-- ⓪ まずここから。押すと落ちてくる -->
+  <div class="card hidden" id="card-start">
+    <h2><span class="material-symbols-outlined">shield_lock</span>この会社PCを設定する</h2>
+    <p class="muted" style="font-size:13px;line-height:1.9;margin:0 0 6px;">
+      <b id="st-who">あなた</b>のパソコンとして設定します。
+      打ち込むものはありません。名前を選ぶ操作もありません。
+    </p>
+
+    <div class="st-dl">
+      <button class="btn btn-primary" id="go-dl" onclick="startSetup(this)">
+        <span class="material-symbols-outlined icon-inline">download</span>この会社PCを設定する
+      </button>
+      <span class="fn" id="st-file"></span>
+    </div>
+
+    <ol class="st-how">
+      <li>上のボタンを押すと <b>EIGHT-Agent-Setup.exe</b> が落ちてきます</li>
+      <li>落ちてきたファイルを<b>そのまま実行</b>します（名前は変えないでください）</li>
+      <li>Windows の警告が出たら「詳細情報」→「実行」を押します</li>
+      <li>入り終わると、<b>この画面に自動でもどってきます</b></li>
+      <li>最後に「内容を確認しました」を押して終わりです</li>
+    </ol>
+
+    <p class="muted" style="font-size:12px;margin:14px 0 0;">
+      私物のパソコンには入れないでください。業務は会社貸与PCで行います。
+    </p>
+    <div id="st-msg" class="err-text"></div>
+  </div>
+
+  <!-- ⓪-2 落としたあと、実行されるのを待つ -->
+  <div class="card hidden" id="card-run">
+    <h2><span class="material-symbols-outlined">play_circle</span>ダウンロードしたファイルを実行してください</h2>
+    <div class="st-wait">
+      <span class="material-symbols-outlined kp-spin">progress_activity</span>
+      <span id="run-text">実行されるのを待っています…</span>
+    </div>
+    <p class="muted" style="font-size:12.5px;line-height:1.9;margin:14px 0 0;">
+      ブラウザの「ダウンロード」から <b id="run-file">EIGHT-Agent-Setup.exe</b> を開いてください。<br>
+      Windows の警告が出たら「詳細情報」→「実行」です。<br>
+      入り終わると、この画面が自動で次に進みます。
+    </p>
+    <p class="muted" style="font-size:12px;margin:10px 0 0;">
+      15分を過ぎると、やり直しになります。
+    </p>
+    <div id="run-msg" class="err-text"></div>
+  </div>
 
   <!-- ① 何を登録するのか見せてから押させる -->
   <div class="card hidden" id="card-claim">
@@ -74,7 +134,7 @@
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
       <button class="btn btn-primary" id="go" onclick="claim(this)">
-        <span class="material-symbols-outlined icon-inline">check</span>このパソコンです
+        <span class="material-symbols-outlined icon-inline">check</span>このパソコンを設定する
       </button>
       <button class="btn btn-secondary" onclick="cancel()">自分のパソコンではありません</button>
     </div>
@@ -110,9 +170,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913c"></script>
-<script src="js/device.js?v=20260913c"></script>
-<script src="js/layout.js?v=20260913c"></script>
+<script src="js/api-client.js?v=20260913d"></script>
+<script src="js/device.js?v=20260913d"></script>
+<script src="js/layout.js?v=20260913d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -123,26 +183,112 @@
   KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
 
+  /**
+   * この画面には2通りの入り方がある。
+   *
+   *   ① マイページから（?pair= 無し）
+   *        … ここで札を作り、インストーラを落とさせ、実行されるのを待つ
+   *   ② インストーラが開いた（?pair= あり）
+   *        … 本人が作った札なら、押させずにそのまま進める
+   */
   async function start(ctx) {
-    if (!token) {
-      return gate("err", "このページは、パソコンに入れたソフトから開きます。",
-        "EIGHT-Agent-Setup.exe を実行すると、自動でこの画面が開きます。");
-    }
-    el("who").textContent = ctx.me?.gw?.employee?.display_name || "あなた";
+    const name = ctx.me?.gw?.employee?.display_name || "あなた";
+    el("who").textContent = name;
+    if (el("st-who")) el("st-who").textContent = name;
+
+    if (!token) return offerDownload();
 
     try {
       info = await API.pairInfo(token);
     } catch (e) {
       return gate("err", e.body?.message || "この設定用のリンクは使えません。",
-        "時間が経つと使えなくなります。もう一度 EIGHT-Agent-Setup.exe を実行してください。");
+        "マイページの「会社PCのセキュリティ設定」から、もう一度お試しください。");
     }
     if (info.used) {
       return gate("warn", "この設定はもう済んでいます。",
         "マイページの「端末管理について」から、いまの状態を確かめられます。");
     }
+    // 本人が作った札を、別の人のブラウザで開いた。勝手に結びつけない
+    if (info.otherPerson) {
+      return gate("err", "この設定は別の方が始めたものです。",
+        "このパソコンを使う方がログインし直して、"
+        + "マイページの「会社PCのセキュリティ設定」からやり直してください。");
+    }
+
+    step(2);
     renderPc();
+
+    // 本人が作った札なら、持ち主はもう決まっている。
+    // ここで「このパソコンですか」と聞き直す意味がない
+    if (info.auto) return claim();
+
     renderPick();
     el("card-claim").classList.remove("hidden");
+  }
+
+  // ---- ① マイページから来たとき ------------------------------------------------
+
+  function offerDownload() {
+    step(1);
+    el("card-start").classList.remove("hidden");
+  }
+
+  /** 札を作って、インストーラを落とす */
+  async function startSetup(btn) {
+    el("st-msg").textContent = "";
+    let r;
+    try {
+      r = await KPLayout.busy(btn, "用意しています…", () => API.startDeviceSetup());
+    } catch (e) {
+      el("st-msg").textContent = e.hint || e.body?.hint || e.message || "用意できませんでした";
+      return;
+    }
+
+    el("st-file").textContent = r.fileName || "";
+    el("run-file").textContent = r.fileName || "EIGHT-Agent-Setup.exe";
+
+    // 落とす。押した流れの中で開くので、ブロックされない
+    KPLayout.save(r.downloadUrl, r.fileName);
+
+    step(2);
+    el("card-start").classList.add("hidden");
+    el("card-run").classList.remove("hidden");
+    waitForInstaller(r.token, r.expiresInSec || 900);
+  }
+
+  /**
+   * インストーラが実行されるのを待つ。
+   *
+   * インストーラは札をサーバに預けたあと、既定のブラウザでこの画面を
+   * ?pair=<札> つきで開く。開いたほうが先に進むので、ここは
+   * 「まだ実行されていない」ことを伝えるためだけに回している
+   */
+  async function waitForInstaller(tk, sec) {
+    const until = Date.now() + sec * 1000;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 3000));
+      let st;
+      try {
+        st = await API.deviceSetupState(tk);
+      } catch (e) {
+        // 期限切れ。やり直してもらう
+        el("run-msg").textContent =
+          "時間内に終わりませんでした。マイページからやり直してください。";
+        return;
+      }
+      if (st.state === "installing") {
+        el("run-text").textContent =
+          `${st.pc?.hostname || "このパソコン"} を設定しています…`;
+      }
+      if (st.state === "done") {
+        // ふつうはインストーラが開いた画面のほうが先に進む。
+        // こちらのタブが残っていたときのため
+        location.href = "device-consent.html";
+        return;
+      }
+    }
+    el("run-msg").textContent =
+      "時間内に終わりませんでした。マイページからやり直してください。";
   }
 
   function gate(kind, title, note) {
@@ -193,23 +339,32 @@
   }
 
   // ---- 押す -------------------------------------------------------------------
+  /**
+   * この端末を、自分のものとして確定する。
+   *
+   * btn なしで呼ばれることがある。本人が作った札のときは、
+   * 持ち主がもう決まっているので押させずにここへ来る
+   */
   async function claim(btn) {
     el("msg").textContent = "";
     try {
-      // いまこの画面を開いているブラウザの印も渡す。
-      // これで「エージェントの行」と「ブラウザの行」が1台にまとまる
+      // 選ぶ欄は installer の札のときだけ出る
       const sel = el("pick-emp");
-      const who = el("pick").classList.contains("hidden") ? null : (sel?.value || null);
+      const picking = el("pick") && !el("pick").classList.contains("hidden");
+      const who = picking ? (sel?.value || null) : null;
       const mine = !who || who === info.me?.id;
       // 自分のPCのときだけ、いま開いているブラウザの印も渡す。
+      // これで「エージェントの行」と「ブラウザの行」が1台にまとまる。
       // 管理者が代わりに設定しているなら渡さない
       // （渡すと、管理者の使ったブラウザが社員の持ち物として台帳に載る）
       const uid = mine
         ? ((window.KPDevice && KPDevice.uid && KPDevice.uid()) || null) : null;
-      await KPLayout.busy(btn, "設定中…", () => API.claimPair(token, uid, who));
+      const go = () => API.claimPair(token, uid, who);
+      await (btn ? KPLayout.busy(btn, "設定中…", go) : go());
     } catch (e) {
       el("msg").textContent = e.body?.message || e.hint || e.detail || e.message
         || "設定できませんでした";
+      el("card-claim").classList.remove("hidden");
       return;
     }
     step(3);

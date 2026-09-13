@@ -391,42 +391,19 @@ async function patch(req, res, ctx, user) {
   const action = String(body.action || "");
   const now = new Date().toISOString();
 
-  // 登録コードの発行。平文はここで1度だけ返す
+  // 登録コードの発行は、もうしない。
+  //
+  // 社員はグループウェアにログインしている。誰なのかはもう分かっている。
+  // コードを配って打たせるのは、配る手間と打ち間違いを足しているだけで、
+  // 確かめられることは増えていない。
+  //
+  // いまは本人がマイページから始める（api/devices/setup.js）。
+  // 過去に出したコードの記録（gw_device_enrollments）は監査のため残してある
   if (action === "issue_token") {
-    const token = newEnrollToken();
-    const employeeId = body.employeeId || null;
-    if (employeeId && !(await ownEmployee(sb, ctx.tenantId, employeeId))) {
-      return json(res, 400, { error: "bad_employee" });
-    }
-    // 有効期限は発行するときに選ぶ。既定は7日。長く生かしておく理由がない
-    const days = tokenDays(body.expiresInDays, 7);
-    const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
-
-    const { data: made, error } = await sb.from("gw_device_enrollments").insert({
-      tenant_id: ctx.tenantId,
-      token_hash: sha256(token),
-      employee_id: employeeId,
-      expires_at: expiresAt,
-      created_by: user.id,
-    }).select("id").single();
-    if (error) {
-      const hint = dbSetupHint(error, SQL);
-      if (hint) return json(res, 503, { error: "not_ready", message: hint });
-      return json(res, 500, { error: "db_query_failed", detail: error.message });
-    }
-    // 誰が・誰あてに・いつまでのコードを出したか。使われたときの記録は enroll.js が残す
-    await gwLog({
-      tenantId: ctx.tenantId, actorId: user.id,
-      action: "device.token_issued", target: made.id,
-      detail: {
-        forEmployeeId: employeeId,
-        forWhom: employeeId ? (await employees(sb, ctx.tenantId)).get(employeeId)?.name : null,
-        expiresAt, days,
-      },
-    });
-    return json(res, 200, {
-      token, expiresAt, days,
-      note: "このコードは1回だけ使えます。この画面を閉じると、もう出せません",
+    return json(res, 410, {
+      error: "gone",
+      hint: "登録コードは使わなくなりました。"
+          + "本人がマイページの「会社PCのセキュリティ設定」から登録します",
     });
   }
 

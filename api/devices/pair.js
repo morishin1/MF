@@ -42,6 +42,7 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
   sha256, newEnrollToken, normalizeBrowsers, browserLabel, BROWSER_KEYS,
+  PAIR_TOKEN_RE,
 } from "../../lib/devices.js";
 
 const SQL = "db/053_devices.sql → 054 → 055 → 057_device_one_pc.sql";
@@ -59,22 +60,59 @@ export default async function handler(req, res) {
 }
 
 // ---- ① インストーラが札を預ける（認証なし） ---------------------------------
+//
+// 札は2通りある。
+//   selfserve … 本人がマイページで作り、ファイル名に入って配られたもの。
+//               持ち主は既に決まっている。ここでは PC の情報を足すだけ
+//   installer … インストーラが自分で作ったもの（ファイル名から読めなかったとき）。
+//               持ち主は、本人がブラウザで押したときに決まる
 async function open(res, body) {
   const token = String(body?.token || "").trim();
-  // 短い札は当てられる。インストーラは32バイトの乱数を作る
-  if (token.length < 32 || token.length > 200) {
+  // 短い札は当てられる。どちらの作り方でも32バイトの乱数になる
+  if (!PAIR_TOKEN_RE.test(token)) {
     return json(res, 400, { error: "bad_token" });
   }
 
   const browsers = normalizeBrowsers(body?.browsers)
     .filter((b) => b.installed).map((b) => b.browser);
-
-  const sb = admin();
-  const { error } = await sb.from("gw_device_pairings").insert({
-    token_hash: sha256(token),
+  const pc = {
     hostname: str(body?.hostname, 100),
     os: str(body?.os, 60),
     browsers,
+  };
+
+  const sb = admin();
+  const hash = sha256(token);
+
+  // 本人が作った札なら、行はもうある。PC の情報だけ足す。
+  // まだ使われていないもの・切れていないものだけ
+  const { data: mine, error: e0 } = await sb.from("gw_device_pairings")
+    .select("id, kind, used_at, expires_at")
+    .eq("token_hash", hash).maybeSingle();
+  if (e0) {
+    const hint = dbSetupHint(e0, SQL);
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "server_error" });
+  }
+
+  if (mine) {
+    if (mine.used_at || Date.parse(mine.expires_at) < Date.now()) {
+      // 「無い」と「済んでいる」を言い分けない
+      return json(res, 404, { error: "expired" });
+    }
+    const { error } = await sb.from("gw_device_pairings")
+      .update({ ...pc }).eq("id", mine.id).is("used_at", null);
+    if (error) {
+      console.error("[devices/pair] open(update)", error);
+      return json(res, 500, { error: "server_error" });
+    }
+    return json(res, 200, { ok: true, expiresInSec: TTL_MIN * 60, bound: true });
+  }
+
+  const { error } = await sb.from("gw_device_pairings").insert({
+    token_hash: hash,
+    kind: "installer",
+    ...pc,
     expires_at: new Date(Date.now() + TTL_MIN * 60000).toISOString(),
   });
   if (error) {
@@ -99,7 +137,8 @@ async function read(req, res) {
 
   const sb = admin();
   const { data: p, error } = await sb.from("gw_device_pairings")
-    .select("id, tenant_id, employee_id, hostname, os, browsers, used_at, code_once, expires_at")
+    .select("id, kind, tenant_id, employee_id, hostname, os, browsers, "
+          + "used_at, code_once, expires_at")
     .eq("token_hash", sha256(token)).maybeSingle();
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -152,7 +191,18 @@ async function read(req, res) {
     }));
   }
 
+  // 本人が作った札なら、持ち主はもう決まっている。
+  // 画面は誰にも選ばせず、そのまま進めてよい
+  const ownIt = p.kind === "selfserve"
+    && Boolean(ctx.employee) && p.employee_id === ctx.employee.id;
+  // 別の人がログインしているブラウザで開かれた。勝手に結びつけない
+  const otherPerson = p.kind === "selfserve" && !ownIt;
+
   return json(res, 200, {
+    kind: p.kind || "installer",
+    // true なら、画面は押させずに進めてよい
+    auto: ownIt,
+    otherPerson,
     pc: {
       hostname: p.hostname,
       os: p.os,
@@ -161,7 +211,9 @@ async function read(req, res) {
     },
     used: Boolean(p.used_at),
     me: ctx.employee ? { id: ctx.employee.id, name: ctx.employee.display_name } : null,
-    members,
+    // 選ばせるのは installer の札のときだけ。
+    // 本人が作った札で名簿を出すと、選び直せることになってしまう
+    members: ownIt ? null : members,
   });
 }
 
@@ -199,13 +251,28 @@ async function claim(req, res, body) {
   }
 
   const { data: p } = await sb.from("gw_device_pairings")
-    .select("id, hostname, os, browsers, used_at, expires_at")
+    .select("id, kind, employee_id, hostname, os, browsers, used_at, expires_at")
     .eq("token_hash", sha256(token)).maybeSingle();
   if (!p || Date.parse(p.expires_at) < Date.now()) {
     return json(res, 404, { error: "expired", message: "この設定用のリンクは使えません" });
   }
   if (p.used_at) {
     return json(res, 409, { error: "used", message: "この設定はもう済んでいます" });
+  }
+
+  // 本人がマイページで作った札は、その人のもの。
+  // 別の人がログインしているブラウザで開かれても、付け替えない。
+  // 共用PCで前の人がログインしたままだった、が起こりうる
+  if (p.kind === "selfserve" && p.employee_id !== ctx.employee.id) {
+    return json(res, 403, {
+      error: "not_yours",
+      hint: "この設定は別の方が始めたものです。ご自身のマイページからやり直してください",
+    });
+  }
+  // 本人の札に、人事が別の社員をあてることもしない。
+  // 誰のパソコンかは、札を作った時点で決まっている
+  if (p.kind === "selfserve" && picked && picked !== ctx.employee.id) {
+    return json(res, 400, { error: "bad_employee" });
   }
 
   // 登録コードを1本出す。宛先はもう決まっている（押した人）

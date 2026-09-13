@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913c">
-  <link rel="stylesheet" href="css/layout.css?v=20260913c">
+  <link rel="stylesheet" href="css/app.css?v=20260913d">
+  <link rel="stylesheet" href="css/layout.css?v=20260913d">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -166,7 +166,6 @@
     <button id="t-list" class="on" onclick="tab('list')">端末</button>
     <button id="t-alerts" onclick="tab('alerts')">アラート<span id="t-alerts-n"></span></button>
     <button id="t-exceptions" onclick="tab('exceptions')">私物PCの承認</button>
-    <button id="t-codes" onclick="tab('codes')">登録コード</button>
     <button id="t-policy" onclick="tab('policy')">設定</button>
   </div>
 
@@ -180,9 +179,6 @@
     <div class="card">
       <h2><span class="material-symbols-outlined">devices</span>台帳
         <span style="margin-left:auto;display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="issueToken()">
-            <span class="material-symbols-outlined icon-inline">add</span>登録コードを出す
-          </button>
           <button class="btn btn-secondary btn-sm" onclick="downloadCsv(this)">
             <span class="material-symbols-outlined icon-inline">download</span>CSV
           </button>
@@ -190,8 +186,9 @@
       </h2>
       <p class="muted" style="font-size:11.5px;margin:0 0 10px;">
         ブラウザは、その人が社内システムを開いた時点で自動で載ります。
-        会社のソフトを入れるときは「登録コードを出す」で1台ぶんのコードを渡してください。
-        どちらも本人が「このパソコンです」を押すまで、記録は始まりません。
+        会社のパソコンに端末管理ソフトを入れるのは<b>本人</b>です。
+        マイページの「会社PCのセキュリティ設定」から、本人が始めます。
+        管理者がコードを発行して渡す運用はありません。
       </p>
       <div class="dv-tabs" style="margin-bottom:10px;">
         <button id="f-all" class="on" onclick="filterBy('')">すべて</button>
@@ -200,7 +197,6 @@
         <button id="f-agent" onclick="filterBy('agent')">ソフト導入済み</button>
         <button id="f-unmanaged" onclick="filterBy('unmanaged')">未登録・私物の可能性<span id="f-unmanaged-n"></span></button>
       </div>
-      <div id="d-token"></div>
       <div class="table-scroll" style="max-height:56vh;overflow:auto;">
         <table class="dv-table">
           <thead><tr>
@@ -266,24 +262,6 @@
       </div>
 
       <div id="x-rows">読み込み中…</div>
-    </div>
-  </div>
-
-  <!-- ===== 登録コード（監査） ===== -->
-  <div id="p-codes" class="hidden">
-    <div class="card">
-      <h2><span class="material-symbols-outlined">vpn_key</span>登録コードの発行と使用
-        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="issueToken()">
-          <span class="material-symbols-outlined icon-inline">add</span>新しく出す
-        </button>
-      </h2>
-      <p class="muted" style="font-size:11.5px;margin:0 0 12px;">
-        <b>誰が・誰あてに・いつまでのコードを出し、いつ・どの端末に使われたか</b>を残しています。
-        使ったコードも取り消したコードも消しません。ここが監査の記録です。
-      </p>
-      <div id="c-token"></div>
-      <div id="c-rows">読み込み中…</div>
-      <div id="c-msg" class="err-text"></div>
     </div>
   </div>
 
@@ -366,9 +344,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913c"></script>
-<script src="js/device.js?v=20260913c"></script>
-<script src="js/layout.js?v=20260913c"></script>
+<script src="js/api-client.js?v=20260913d"></script>
+<script src="js/device.js?v=20260913d"></script>
+<script src="js/layout.js?v=20260913d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -393,13 +371,12 @@
   }
 
   function tab(which) {
-    for (const k of ["list", "alerts", "exceptions", "codes", "policy"]) {
+    for (const k of ["list", "alerts", "exceptions", "policy"]) {
       el(`p-${k}`).classList.toggle("hidden", k !== which);
       el(`t-${k}`).classList.toggle("on", k === which);
     }
     if (which === "alerts") loadAlerts();
     if (which === "exceptions") loadExceptions();
-    if (which === "codes") loadCodes();
     if (which === "policy") loadPolicy();
   }
 
@@ -808,119 +785,6 @@
     if (dt.class === "mass_storage") bits.push("USBメモリ");
     if (dt.message) bits.push(dt.message);
     return bits.length ? `　<span style="color:var(--muted);">${esc(bits.join(" / "))}</span>` : "";
-  }
-
-  // ---- 登録コード ----
-  //
-  // 「端末」タブと「登録コード」タブの両方から出せる。
-  // 開いていないほうのタブに書くと、押したのに何も出ないように見える
-  function tokenBox() {
-    return el("p-codes").classList.contains("hidden") ? el("d-token") : el("c-token");
-  }
-
-  function issueToken() {
-    tokenBox().innerHTML = `
-      <div class="banner" style="display:block;background:var(--soft);">
-        <b>会社のソフトを入れるための登録コード</b>
-        <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
-          発行したコードを、そのパソコンで
-          <code>eight-agent-svc.exe -enroll コード</code> に渡してください。
-          1回だけ使えます。入れたあと、使う方の画面が自動で開きます。
-        </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <select id="d-who" style="width:auto;margin:0;">${peopleOptions(null)}</select>
-          <select id="d-days" style="width:auto;margin:0;">
-            <option value="1">1日で切れる</option>
-            <option value="3">3日で切れる</option>
-            <option value="7" selected>7日で切れる</option>
-            <option value="30">30日で切れる</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="doIssue(this)">コードを発行</button>
-          <button class="btn btn-secondary btn-sm" onclick="closeToken()">やめる</button>
-        </div>
-      </div>`;
-  }
-
-  function closeToken() {
-    el("d-token").innerHTML = "";
-    el("c-token").innerHTML = "";
-  }
-
-  async function doIssue(btn) {
-    const employeeId = el("d-who").value || null;
-    const expiresInDays = Number(el("d-days").value) || 7;
-    try {
-      const r = await KPLayout.busy(btn, "発行中…",
-        () => API.patchDevice({ action: "issue_token", employeeId, expiresInDays }));
-      // 平文はここでしか出せない。閉じたら二度と読めないと、はっきり書く
-      const html = `
-        <div class="banner ok" style="display:block;">
-          <b>登録コード</b>（1回だけ使えます／${esc(String(r.days || 7))}日で切れます）
-          <div class="dv-token">${esc(r.token)}</div>
-          そのパソコンで、次のように実行してください。<br>
-          <code>eight-agent-svc.exe -enroll ${esc(r.token)}</code><br>
-          <b>この画面を閉じると、もう出せません。</b>必要なら今のうちに控えてください。<br>
-          <span class="muted" style="font-size:11.5px;">
-            期限 ${esc(fmt(r.expiresAt))}　
-            発行したことと、使われたことは「登録コード」タブに残ります
-          </span>
-          <div style="margin-top:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="closeToken()">閉じる</button>
-          </div>
-        </div>`;
-      tokenBox().innerHTML = html;
-      // 履歴を開いているなら、いま出したぶんも並べ直す
-      if (!el("p-codes").classList.contains("hidden")) loadCodes();
-    } catch (e) {
-      const msg = e.hint || e.message || "発行できませんでした";
-      el("d-msg").textContent = msg;
-      el("c-msg").textContent = msg;
-    }
-  }
-
-  // ---- 登録コードの履歴（監査） ----
-  async function loadCodes() {
-    try {
-      const r = await API.deviceEnrollments();
-      const rows = r.enrollments || [];
-      if (!rows.length) {
-        el("c-rows").innerHTML = `<p class="muted">まだ発行していません。</p>`;
-        return;
-      }
-      el("c-rows").innerHTML = `<table class="dv-table"><thead><tr>
-          <th>発行</th><th>発行者</th><th>宛先</th><th>期限</th>
-          <th>状態</th><th>使用</th><th>使った端末</th><th></th>
-        </tr></thead><tbody>${rows.map((c) => `
-          <tr><td>${esc(fmt(c.issuedAt))}</td>
-            <td>${esc(c.issuedBy)}</td>
-            <td>${c.forWhom ? esc(c.forWhom) : '<span class="sub">指定なし</span>'}</td>
-            <td>${esc(fmt(c.expiresAt))}</td>
-            <td><span class="dv-st ${c.state.key === "open" ? "ok"
-                 : c.state.key === "used" ? "" : "stale"}">${esc(c.state.label)}</span>
-              ${c.revokedBy ? `<span class="sub">${esc(c.revokedBy)}</span>` : ""}</td>
-            <td>${c.usedAt ? esc(fmt(c.usedAt)) : "—"}</td>
-            <td>${c.usedBy ? esc(c.usedBy) : "—"}</td>
-            <td>${c.state.key === "open"
-              ? `<button class="btn btn-secondary btn-sm" onclick="revokeCode('${esc(c.id)}')">取り消す</button>`
-              : ""}</td>
-          </tr>`).join("")}</tbody></table>`;
-    } catch (e) {
-      el("c-rows").innerHTML = `<div class="banner err">
-        <span class="material-symbols-outlined">error</span>
-        <div>${esc(e.hint || e.message)}</div></div>`;
-    }
-  }
-
-  async function revokeCode(id) {
-    if (!confirm("この登録コードを使えなくします。\n"
-      + "発行した記録は残ります。よろしいですか？")) return;
-    el("c-msg").textContent = "";
-    try {
-      await API.patchDevice({ action: "revoke_token", enrollmentId: id });
-      await loadCodes();
-    } catch (e) {
-      el("c-msg").textContent = e.hint || e.message || "取り消せませんでした";
-    }
   }
 
   // 誰に渡すか。名前を打たせない。打たせると打ち間違いを直すところから始まる

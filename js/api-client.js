@@ -576,6 +576,11 @@
   const deviceAlerts = (status) =>
     api(`/api/devices/alerts${status ? `?status=${encodeURIComponent(status)}` : ""}`);
   const patchDeviceAlert = (body) => api("/api/devices/alerts", { method: "PATCH", body });
+  // 端末登録。本人がマイページから始める（管理者のコード発行は廃止）
+  const startDeviceSetup = () => api("/api/devices/setup", { method: "POST", body: {} });
+  const deviceSetupState = (token) =>
+    api(`/api/devices/setup?token=${encodeURIComponent(token)}`);
+
   // 私物PC利用の事前承認
   const deviceExceptions = () => api("/api/devices/exceptions");
   const approveDeviceException = (body) =>
@@ -1010,6 +1015,7 @@
     closing, patchClosing, downloadClosingCsv,
     devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     deviceExceptions, approveDeviceException, revokeDeviceException,
+    startDeviceSetup, deviceSetupState,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
     deviceWeb, myWeb, pairInfo, claimPair,
     myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,
