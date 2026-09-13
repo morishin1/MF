@@ -202,6 +202,8 @@ buckets(seq, mig, title, ok, marker) as (
   select 204, 'bucket', '経費の領収書',         exists(select 1 from storage.buckets where id = 'expenses'),  'expenses'
   union all
   select 205, 'bucket', '社内文書',             exists(select 1 from storage.buckets where id = 'library'),   'library'
+  union all
+  select 206, 'bucket', '端末管理ソフト',       exists(select 1 from storage.buckets where id = 'agent'),     'agent'
 )
 
 select

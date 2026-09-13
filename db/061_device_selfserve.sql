@@ -77,6 +77,27 @@ comment on table public.gw_device_enrollments is
   '過去の記録として残す';
 
 
+-- -----------------------------------------------------------------------------
+-- 3) インストーラの置き場
+--
+--    ファイル名に札を入れて渡すには、名前を指定できる置き場が要る。
+--    Supabase Storage なら、署名つきURLで名前を決められる。
+--
+--    非公開。落とせるのは、生きている札を持っている人だけ
+--    （api/devices/setup.js が、札を確かめてから署名つきURLを作る）。
+--
+--    ここに置かない場合も動く。ただしファイル名を決められないので、
+--    インストーラは自分で札を作る側に回り、社員が画面で1回押すことになる
+-- -----------------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('agent', 'agent', false)
+on conflict (id) do nothing;
+
+-- 読み書きは service_role（API）だけ。
+-- authenticated に直接触らせない（署名つきURLごしに渡す）
+drop policy if exists gw_agent_read on storage.objects;
+
+
 notify pgrst, 'reload schema';
 
 -- 確認:
@@ -86,3 +107,12 @@ notify pgrst, 'reload schema';
 --   select kind, employee_id, expires_at, used_at
 --     from public.gw_device_pairings
 --    where expires_at > now() order by created_at desc;
+--
+--   -- 置き場
+--   select id, public from storage.buckets where id = 'agent';
+--
+-- インストーラの置き方（管理者が1回だけ）:
+--   1. agent/build.sh で EIGHT-Agent-Setup.exe を作る
+--   2. Supabase の Storage → agent バケットに上げる
+--   3. 版に署名して gw_device_releases に入れる（docs/device-zero-cost.md）
+--      url は Storage のオブジェクトURLにする。そうするとファイル名に札が入る
