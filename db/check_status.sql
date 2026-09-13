@@ -5,10 +5,16 @@
 -- 「未適用」と出た番号の SQL を、上から順に流してください。
 --
 -- 判定のしかた
---   各マイグレーションが必ず作るもの（表・列・関数・バケット）が1つあるかを見る。
---   途中でエラーになって半分だけ流れた場合は、目印より前の部分は入っているのに
---   「適用済み」と出ることがある。そのときは、その番号をもう一度流せばよい
---   （どのファイルも if not exists で書いてあるので、2回流しても壊れない）。
+--   ① 各マイグレーションが必ず作るもの（表・列・関数・バケット）が1つあるかを見る
+--   ② そのうえで、**半分だけ入っていないか**を列ごとに見る
+--
+--   ① だけだと、途中でエラーになって半分流れた場合に「適用済み」と出てしまう。
+--   実際に 054 が半分だけ入っていて（secret_hash はあるのに source が無い）、
+--   ① が ✅ を返したまま端末管理が動かない、ということが起きた。
+--   だから ② を足してある。
+--
+--   どちらかで「❌」や「欠けている」と出た番号は、もう一度流してください。
+--   どのファイルも if not exists で書いてあるので、2回流しても壊れません。
 -- =============================================================================
 
 with checks(seq, mig, title, kind, obj, col) as (values
@@ -96,6 +102,74 @@ migrations as (
   from checks
 ),
 
+-- 半分だけ入っていないか。
+--
+-- 上の「目印」は1つだけなので、その手前で止まったマイグレーションを
+-- 見逃す。コードが実際に読み書きする列を、番号ごとに並べて確かめる。
+-- （全部ではない。落ちると影響が大きいところを選んである）
+parts(mig, obj, col) as (values
+  -- 053 端末管理の土台
+  ('053', 'gw_devices',            'device_uid'),
+  ('053', 'gw_devices',            'notified_at'),
+  ('053', 'gw_devices',            'status'),
+  ('053', 'gw_device_events',      'kind'),
+  ('053', 'gw_device_usage',       'active_min'),
+  ('053', 'gw_device_alerts',      'dedupe_key'),
+  ('053', 'gw_device_policies',    'stale_days'),
+  -- 054 常駐エージェント
+  ('054', 'gw_devices',            'source'),
+  ('054', 'gw_devices',            'hostname'),
+  ('054', 'gw_devices',            'secret_hash'),
+  ('054', 'gw_devices',            'agent_version'),
+  ('054', 'gw_devices',            'linked_device_id'),
+  ('054', 'gw_devices',            'link_code_hash'),
+  ('054', 'gw_device_app_usage',   'exe_name'),
+  ('054', 'gw_device_enrollments', 'token_hash'),
+  -- 055 運用
+  ('055', 'gw_devices',            'admin_touched_at'),
+  ('055', 'gw_devices',            'retired_at'),
+  ('055', 'gw_device_enrollments', 'revoked_at'),
+  ('055', 'gw_device_views',       'scope'),
+  -- 056 書類の作成依頼
+  ('056', 'gw_doc_orders',         'status'),
+  ('056', 'gw_sign_requests',      'source'),
+  -- 057 1台1行・WEB利用
+  ('057', 'gw_device_browsers',    'linked'),
+  ('057', 'gw_device_web_visits',  'active_sec'),
+  ('057', 'gw_device_web_visits',  'in_work_hours'),
+  ('057', 'gw_device_web_usage',   'host'),
+  ('057', 'gw_device_pairings',    'code_once'),
+  ('057', 'gw_device_policies',    'keep_visits_days'),
+  ('057', 'gw_device_policies',    'work_from'),
+  -- 058 更新の署名
+  ('058', 'gw_device_releases',    'signature'),
+  ('058', 'gw_device_releases',    'size_bytes'),
+  -- 059 週1回の運用
+  ('059', 'gw_device_policies',    'confirm_wait_days'),
+  -- 060 会社ルールの形
+  ('060', 'gw_devices',            'ownership'),
+  ('060', 'gw_devices',            'notified_kind'),
+  ('060', 'gw_devices',            'notified_note'),
+  ('060', 'gw_device_policies',    'unregistered_action'),
+  ('060', 'gw_device_exceptions',  'expires_on')
+),
+
+missing as (
+  select
+    900 as seq,
+    p.mig,
+    '半分だけ入っています。この番号をもう一度流してください' as title,
+    false as ok,
+    p.obj || '.' || p.col as marker
+  from parts p
+  where
+    -- 表そのものが無いなら、まるごと未適用。上の行で分かるので、ここでは出さない
+    to_regclass('public.' || p.obj) is not null
+    and not exists (
+      select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = p.obj and column_name = p.col)
+),
+
 -- 日報の土台。これは 8grp-site の 8/timecard/ が作っている（このリポジトリではない）
 foundation(seq, mig, title, ok, marker) as (
   select 101, '前提', '日報の土台（8grp-site の 8/timecard/nippo-setup.sql）',
@@ -128,7 +202,8 @@ select
   case
     when seq < 100 then lpad(seq::text, 2, '0') || '. ' || mig
     when seq < 200 then '前提'
-    else '保存先'
+    when seq < 300 then '保存先'
+    else '⚠ 欠け ' || mig
   end                                        as "区分",
   title                                      as "内容",
   case when ok then '✅ 適用済み' else '❌ 未適用' end as "状態",
@@ -137,11 +212,13 @@ select
     when ok then ''
     when seq < 100 then 'db/' || mig || '_*.sql を流す'
     when seq < 200 then '8grp-site 側の SQL を先に流す'
-    else '該当のマイグレーションを流すと作られる'
+    when seq < 300 then '該当のマイグレーションを流すと作られる'
+    else 'db/' || mig || '_*.sql をもう一度流す'
   end                                        as "やること"
 from (
   select seq, mig, title, ok, marker from migrations
   union all select seq, mig, title, ok, marker from foundation
   union all select seq, mig, title, ok, marker from buckets
+  union all select seq, mig, title, ok, marker from missing
 ) all_checks
-order by seq;
+order by seq, marker;
