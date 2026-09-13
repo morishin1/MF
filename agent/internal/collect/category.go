@@ -189,9 +189,14 @@ func PathOnly(raw string) string {
 		if len(v) > 40 {
 			v = v[:40]
 		}
-		// 制御文字は落とす
+		// 制御文字と空白は落とす。
+		//
+		// 本物のURLのパスに生の空白は入らない（%20 になる）。
+		// 空白が入っているのは、アドレスバーに打った検索語を
+		// パスとして読んでしまったとき。サーバ側（lib/devices.js の
+		// cleanPath）と同じ判断にしてある
 		v = strings.Map(func(r rune) rune {
-			if r < 0x20 || r == 0x7f {
+			if r < 0x20 || r == 0x7f || r == ' ' || r == '\t' || r == '\u3000' {
 				return -1
 			}
 			return r

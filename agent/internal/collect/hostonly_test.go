@@ -147,6 +147,29 @@ func TestPathOnlyLimits(t *testing.T) {
 	}
 }
 
+// アドレスバーに打った検索語が、パスとして残らないこと。
+//
+// 本物のURLのパスに生の空白は入らない（%20 になる）。
+// 空白が残るのは、打ちかけの検索語を読んでしまったときだけ。
+// ここが緩いと、検索語がそのまま会社へ届く
+func TestPathOnlyDropsSpaces(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://x.jp/my page/a", "/mypage/a"},
+		{"https://x.jp/新宿 ランチ おすすめ", "/新宿ランチおすすめ"},
+		{"https://x.jp/新宿　ランチ", "/新宿ランチ"},
+		{"https://x.jp/a	b", "/ab"},
+	}
+	for _, c := range cases {
+		got := PathOnly(c.in)
+		if got != c.want {
+			t.Errorf("PathOnly(%q) = %q, want %q", c.in, got, c.want)
+		}
+		if strings.ContainsAny(got, " 	　") {
+			t.Errorf("空白が残っている: %q", got)
+		}
+	}
+}
+
 // 人が読む語は伏せない。伏せすぎると、何のページか分からなくなって意味が無い
 func TestPathOnlyKeepsWords(t *testing.T) {
 	for _, s := range []string{"/about", "/採用情報", "/news", "/v2", "/2026"} {
