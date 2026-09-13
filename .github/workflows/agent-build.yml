@@ -71,8 +71,34 @@ jobs:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
 
+      # 拡張の秘密鍵は、作業場所の外に置く。
+      # Artifacts に入れるフォルダへは絶対に置かない
+      - name: 拡張の鍵を用意する
+        id: extkey
+        env:
+          EXT_KEY: ${{ secrets.AGENT_EXT_KEY }}
+        run: |
+          set -eu
+          if [ -z "${EXT_KEY:-}" ]; then
+            echo "have=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          path="$RUNNER_TEMP/eight-ext.pem"
+          umask 077
+          printf '%s\n' "$EXT_KEY" > "$path"
+          # 中身は出さない。形だけ見る
+          if ! grep -q 'BEGIN .*PRIVATE KEY' "$path"; then
+            echo "::error::AGENT_EXT_KEY が秘密鍵の形になっていません"
+            echo "::error::-----BEGIN PRIVATE KEY----- の行から、END の行まで丸ごと貼ってください"
+            exit 1
+          fi
+          echo "have=$path" >> "$GITHUB_OUTPUT"
+
       # build.sh の中で、単体テストと GOOS=windows go vet も走る。
-      # 落ちるものを配らない
+      # 落ちるものを配らない。
+      #
+      # 鍵を渡すと、拡張の ID は鍵から決まる（人が打ち直さない）。
+      # AGENT_EXT_ID も入っていれば、食い違ったところで止まる
       - name: 組み立てる
         working-directory: agent
         env:
@@ -80,6 +106,7 @@ jobs:
           BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
           # 拡張のID。入れずに組むと、ブラウザ連携だけ設定されない
           EXT_ID: ${{ inputs.ext_id || vars.AGENT_EXT_ID }}
+          EXT_KEY: ${{ steps.extkey.outputs.have }}
           # 更新を確かめる公開鍵。空だと、エージェントは自動更新をしない
           UPDATE_KEY: ${{ vars.AGENT_UPDATE_KEY }}
         run: |
@@ -93,11 +120,16 @@ jobs:
         if: always()
         env:
           EXT_ID: ${{ inputs.ext_id || vars.AGENT_EXT_ID }}
+          EXT_KEY: ${{ steps.extkey.outputs.have }}
           UPDATE_KEY: ${{ vars.AGENT_UPDATE_KEY }}
         run: |
           set -eu
-          if [ -z "${EXT_ID:-}" ]; then
-            echo "::warning::拡張のIDが空のまま組みました。ブラウザ連携（WEB利用）は設定されません"
+          if [ -z "${EXT_ID:-}" ] && [ -z "${EXT_KEY:-}" ]; then
+            echo "::warning::拡張のIDも鍵も無いまま組みました。ブラウザ連携（WEB利用）は設定されません"
+            echo "::warning::「EIGHT ブラウザ拡張を初期化」を先に1回まわしてください"
+          fi
+          if [ -z "${EXT_KEY:-}" ]; then
+            echo "::warning::拡張の秘密鍵が無いので .crx を作れません（配るには要ります）"
           fi
           if [ -z "${UPDATE_KEY:-}" ]; then
             echo "::warning::更新用の公開鍵が空のまま組みました。エージェントは自動更新をしません"
@@ -123,6 +155,16 @@ jobs:
           echo "sha=$sha"   >> "$GITHUB_OUTPUT"
           echo "size=$size" >> "$GITHUB_OUTPUT"
 
+          # 拡張まで作れたか。作れていれば、その ID を出しておく
+          # （鍵から決まるので、Variables の書き間違いはここで露見する）
+          crx=""
+          crxid=""
+          if [ -f dist/eight-ext.crx ]; then
+            crx=$(stat -c %s dist/eight-ext.crx)
+            crxid=$(sed -n "s/.*appid='\([^']*\)'.*/\1/p" dist/updates.xml)
+          fi
+          echo "crxid=$crxid" >> "$GITHUB_OUTPUT"
+
           {
             echo "## EIGHT-Agent-Setup.exe ができました"
             echo
@@ -131,8 +173,12 @@ jobs:
             echo "| 版 | \`${VERSION}\` |"
             echo "| 大きさ | ${size} バイト |"
             echo "| SHA-256 | \`${sha}\` |"
-            if [ -n "${EXT_ID:-}" ]; then
+            if [ -n "$crxid" ]; then
+              echo "| 拡張のID | \`${crxid}\`（鍵から決まったもの） |"
+              echo "| 拡張の .crx | ${crx} バイト |"
+            elif [ -n "${EXT_ID:-}" ]; then
               echo "| 拡張のID | \`${EXT_ID}\` |"
+              echo "| 拡張の .crx | （秘密鍵が無いので作れません） |"
             else
               echo "| 拡張のID | （未設定。ブラウザ連携は入りません） |"
             fi
@@ -149,13 +195,24 @@ jobs:
             echo "   \`${VERSION}/EIGHT-Agent-Setup.exe\` として上げる"
             echo "3. 署名して \`gw_device_releases\` に登録する"
             echo "   （手順: \`docs/device-release.md\`）"
+            if [ -n "$crxid" ]; then
+              echo "4. \`eight-ext.crx\` と \`updates.xml\` を"
+              echo "   \`${BASE_URL}/ext/\` に置く（ブラウザはここへ更新を見にきます）"
+            fi
             echo
             echo "> 2 と 3 は、まだ人がやります。"
             echo "> 自動にするには Supabase の鍵と更新用の秘密鍵を Secrets に入れる必要があり、"
             echo "> そこは別で決めてから足します。"
+            if [ -z "$crxid" ]; then
+              echo
+              echo "> **ブラウザ連携（WEB利用）は、まだ入りません。**"
+              echo "> 「EIGHT ブラウザ拡張を初期化」を1回まわして、"
+              echo "> \`AGENT_EXT_ID\` と \`AGENT_EXT_KEY\` を登録してください。"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
         env:
           VERSION: ${{ env.VERSION }}
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
           EXT_ID: ${{ inputs.ext_id || vars.AGENT_EXT_ID }}
           UPDATE_KEY: ${{ vars.AGENT_UPDATE_KEY }}
 
@@ -168,6 +225,8 @@ jobs:
           name: EIGHT-Agent-Setup-${{ env.VERSION }}
           path: |
             agent/dist/EIGHT-Agent-Setup.exe
+            agent/dist/eight-ext.crx
+            agent/dist/updates.xml
             agent/dist/extension/
           if-no-files-found: error
           # 置きっぱなしにしない。要るのは登録するまでのあいだだけ
@@ -180,6 +239,7 @@ jobs:
           VERSION: ${{ env.VERSION }}
           SHA: ${{ steps.facts.outputs.sha }}
           SIZE: ${{ steps.facts.outputs.size }}
+          CRXID: ${{ steps.facts.outputs.crxid }}
         run: |
           set -eu
           mkdir -p out
@@ -191,6 +251,7 @@ jobs:
             echo "size_bytes=${SIZE}"
             echo "object_path=${VERSION}/EIGHT-Agent-Setup.exe"
             echo "bucket=agent"
+            echo "extension_id=${CRXID}"
           } > out/release.txt
 
       - name: ハッシュを落とせるようにする

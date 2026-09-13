@@ -1,0 +1,211 @@
+# EIGHT ブラウザ拡張を初期化する。**最初の1回だけ**動かす。
+#
+# ■ 何をするのか
+#
+#   Chrome / Edge の拡張には、32文字の ID がある。
+#   この ID は、署名に使う鍵から決まる。鍵が同じなら ID も同じ。
+#
+#   その ID を3か所に焼き込んでいる:
+#     ・会社のポリシー（ExtensionInstallForcelist）
+#     ・継ぎ役（Native Messaging）の allowed_origins
+#     ・updates.xml の appid
+#
+#   だから ID は変わってはいけない。鍵を1本だけ作って、ずっと使う。
+#
+# ■ なぜ Actions でやるのか
+#
+#   ふつうは Chrome の「拡張機能をパッケージ化」か openssl で作る。
+#   どちらも、誰かのパソコンに何かを入れることになる。
+#   ここで作れば、ローカルには何も要らない。
+#
+# ■ 秘密鍵をどう受け取るか
+#
+#   ログには**出さない**。Actions のログは消せない場所に残るため。
+#   Artifacts に置くので、落として中身を GitHub Secrets に貼り、
+#   **そのあと Artifact を消してください**（手順は実行結果の画面に出ます）。
+#
+#   Artifact は、このリポジトリを読める人なら誰でも落とせます。
+#   だから置いておく期間を1日にしてあります。
+
+name: EIGHT ブラウザ拡張を初期化
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "作り直すと全PCで入れ直しになります。よければ INIT と入れてください"
+        required: true
+        type: string
+      replace:
+        description: "AGENT_EXT_ID が既に入っているのを承知で作り直す"
+        required: false
+        default: false
+        type: boolean
+
+# 読むだけ。Variables も Secrets も、ここからは書き換えられない
+# （GITHUB_TOKEN にその権限は無い）。最後は人が貼る
+permissions:
+  contents: read
+
+jobs:
+  init:
+    name: 鍵と ID を作る
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # 押し間違いで鍵が変わると、配った全PCで拡張が入れ直しになる。
+      # 入力は env ごしに渡す（run に ${{ }} を直接書かない）
+      - name: 本当に作ってよいか確かめる
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          REPLACE: ${{ inputs.replace }}
+          CURRENT: ${{ vars.AGENT_EXT_ID }}
+        run: |
+          set -eu
+          if [ "$CONFIRM" != "INIT" ]; then
+            echo "::error::確認の欄に INIT と入れてください"
+            exit 1
+          fi
+          if [ -n "${CURRENT:-}" ] && [ "$REPLACE" != "true" ]; then
+            echo "::error::AGENT_EXT_ID は既に入っています（$CURRENT）。"
+            echo "::error::鍵を作り直すと ID が変わり、配った全PCで拡張が入れ直しになります。"
+            echo "::error::それでもよければ「作り直す」に印を付けて実行してください。"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # 秘密鍵は out/ に置く。ここは Artifact にだけ入る。
+      # 画面にも要約にも出さない
+      - name: 鍵を作る
+        id: mk
+        working-directory: agent
+        run: |
+          set -eu
+          mkdir -p ../out
+          go run ./cmd/eight-agent-extkey -new -out ../out/eight-ext.pem >/dev/null
+          id=$(go run ./cmd/eight-agent-extkey -key ../out/eight-ext.pem -json \
+               | sed 's/.*"id":"\([^"]*\)".*/\1/')
+
+          # 出てきたものが、思った形か。ここが違えば先へ進めない
+          case "$id" in
+            [a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p]\
+          [a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p]) ;;
+            *) echo "::error::ID の形がおかしいです: $id"; exit 1 ;;
+          esac
+
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$id" > ../out/extension-id.txt
+
+      # 同じ鍵から、何度でも同じ ID が出ること。
+      # ここが揺れるなら、鍵か作り方が壊れている
+      - name: 同じ ID が出るか確かめる
+        working-directory: agent
+        env:
+          WANT: ${{ steps.mk.outputs.id }}
+        run: |
+          set -eu
+          again=$(go run ./cmd/eight-agent-extkey -key ../out/eight-ext.pem -json \
+                  | sed 's/.*"id":"\([^"]*\)".*/\1/')
+          if [ "$again" != "$WANT" ]; then
+            echo "::error::同じ鍵から違う ID が出ました（$WANT / $again）"
+            exit 1
+          fi
+          # 実際に固められるところまで通す。
+          # 「鍵はできたが配れない」を、この場で見つける
+          rm -rf ../out/try && mkdir -p ../out/try
+          cp extension/manifest.json extension/background.js \
+             extension/options.html extension/icon128.png ../out/try/
+          go run ./cmd/eight-agent-extkey -key ../out/eight-ext.pem \
+             -stamp ../out/try -pack ../out/try -out ../out/try.crx \
+             -expect "$WANT" >/dev/null
+          rm -rf ../out/try ../out/try.crx
+          echo "固めるところまで通りました"
+
+      - name: 貼りかたを書いておく
+        env:
+          EXT_ID: ${{ steps.mk.outputs.id }}
+        run: |
+          set -eu
+          cat > out/README.txt <<TXT
+          EIGHT ブラウザ拡張の鍵
+
+          拡張の ID: ${EXT_ID}
+
+          このあと、2つ登録してください。
+
+          1) Settings → Secrets and variables → Actions → Variables → New
+               名前: AGENT_EXT_ID
+               中身: ${EXT_ID}
+
+          2) 同じ画面の Secrets → New repository secret
+               名前: AGENT_EXT_KEY
+               中身: eight-ext.pem の中身を、そのまま全部
+                     （-----BEGIN PRIVATE KEY----- の行から
+                       -----END PRIVATE KEY----- の行まで）
+
+          終わったら、この Artifact を消してください。
+          Actions の実行結果の画面 → Artifacts の右のごみ箱です。
+
+          この鍵は二度と作り直さないでください。
+          作り直すと ID が変わり、配ったパソコン全部で入れ直しになります。
+          TXT
+
+      # 置いておくのは、貼るまでのあいだだけ
+      - name: 落とせるようにする
+        uses: actions/upload-artifact@v4
+        with:
+          name: eight-extension-key
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: 次にやることを出す
+        env:
+          EXT_ID: ${{ steps.mk.outputs.id }}
+        run: |
+          set -eu
+          {
+            echo "## 拡張の ID ができました"
+            echo
+            echo '```'
+            echo "${EXT_ID}"
+            echo '```'
+            echo
+            echo "この32文字が、拡張の名前にあたるものです。"
+            echo "鍵が同じなら、何度組み立てても同じ ID になります。"
+            echo
+            echo "### このあと（2つ登録すれば終わりです）"
+            echo
+            echo "**1. 上の Artifacts から \`eight-extension-key\` を落とす**"
+            echo
+            echo "**2. Settings → Secrets and variables → Actions で登録する**"
+            echo
+            echo "| どこ | 名前 | 中身 |"
+            echo "|---|---|---|"
+            echo "| Variables | \`AGENT_EXT_ID\` | \`${EXT_ID}\` |"
+            echo "| Secrets | \`AGENT_EXT_KEY\` | \`eight-ext.pem\` の中身を丸ごと |"
+            echo
+            echo "\`eight-ext.pem\` は \`-----BEGIN PRIVATE KEY-----\` の行から"
+            echo "\`-----END PRIVATE KEY-----\` の行まで、全部を貼ってください。"
+            echo
+            echo "**3. 貼り終わったら、この Artifact を消してください**"
+            echo
+            echo "> このページの Artifacts の右にあるごみ箱です。"
+            echo "> 置いたままだと、リポジトリを読める人は誰でも鍵を落とせます。"
+            echo "> 消し忘れても1日で消えます。"
+            echo
+            echo "### そのあと"
+            echo
+            echo "「EIGHT Agent を組み立てる」を押すだけで、"
+            echo "Chrome / Edge 連携まで入った EXE ができます。"
+            echo
+            echo "> **この鍵は作り直さないでください。**"
+            echo "> 作り直すと ID が変わり、配ったパソコン全部で入れ直しになります。"
+          } >> "$GITHUB_STEP_SUMMARY"

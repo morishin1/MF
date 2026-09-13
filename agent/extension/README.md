@@ -72,19 +72,64 @@ https://www.google.com/search?q=転職 エージェント#top
 
 社員に入れさせないので、**会社のポリシーで強制的に入れる**形にする。
 
-### 4-1. 鍵を作って ID を決める
+### 4-1. 鍵を作って ID を決める（最初の1回だけ）
+
+**自分のパソコンには何も入れません。** GitHub Actions でやります。
 
 ```
-# 1回だけ。この鍵は社外に出さない。無くすと ID が変わり、入れ直しになる
-openssl genrsa -out eight-ext.pem 2048
+GitHub → Actions → 「EIGHT ブラウザ拡張を初期化」→ Run workflow
+  確認の欄に INIT と入れて実行
 ```
 
-Chrome で `chrome://extensions` →「デベロッパーモード」→「拡張機能をパッケージ化」
-で `dist/extension/` とこの鍵を指定すると `.crx` ができ、**32文字の ID** が決まる。
+終わると、画面に **32文字の ID** が出ます。Artifacts から鍵を落として、
+2つ登録すれば終わりです。
 
-### 4-2. 置き場所を用意する
+| どこ | 名前 | 中身 |
+|---|---|---|
+| Variables | `AGENT_EXT_ID` | 出てきた32文字 |
+| Secrets | `AGENT_EXT_KEY` | `eight-ext.pem` の中身を丸ごと |
 
-`mf.8grp.co.jp/ext/` に2つ置く。
+登録したら、**Artifact を消してください**（このリポジトリを読める人なら
+誰でも落とせるため）。消し忘れても1日で消えます。
+
+> **この鍵は作り直さないでください。**
+> ID は鍵から決まります。鍵を替えると ID が変わり、配ったパソコン全部で
+> 拡張が入れ直しになります。
+
+<details>
+<summary>手元でやる場合（ふだんは要りません）</summary>
+
+```
+cd agent
+go run ./cmd/eight-agent-extkey -new -out eight-ext.pem   # 鍵を作る
+go run ./cmd/eight-agent-extkey -key eight-ext.pem        # ID を見る
+```
+</details>
+
+### 4-2. 組み立てる
+
+```
+GitHub → Actions → 「EIGHT Agent を組み立てる」→ Run workflow
+```
+
+4-1 が済んでいれば、これだけで次の3つができます。
+
+| できるもの | 何か |
+|---|---|
+| `EIGHT-Agent-Setup.exe` | 社員に配る1本。拡張の ID が焼き込まれている |
+| `eight-ext.crx` | ブラウザに入る拡張 |
+| `updates.xml` | ブラウザが更新を見にくる先 |
+
+**ID は鍵から決まります。** `AGENT_EXT_ID` も入っていれば突き合わせて、
+食い違っていたらそこで止まります（書き写しの間違いを配らないため）。
+
+ID も鍵も無いまま組んでも、インストーラは入ります。
+ただしブラウザ連携（WEB利用）だけ設定されません。
+PC側の記録（起動終了・ソフト・USB・離席）は、拡張が無くても動きます。
+
+### 4-3. 置き場所を用意する
+
+`mf.8grp.co.jp/ext/` に2つ置く。組み立てで出てきたものをそのまま置くだけ。
 
 - `eight-ext.crx`
 - `updates.xml`
@@ -92,24 +137,14 @@ Chrome で `chrome://extensions` →「デベロッパーモード」→「拡�
 ```xml
 <?xml version='1.0' encoding='UTF-8'?>
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
-  <app appid='ここに32文字のID'>
+  <app appid='（鍵から決まった32文字）'>
     <updatecheck codebase='https://mf.8grp.co.jp/ext/eight-ext.crx' version='1.0.0' />
   </app>
 </gupdate>
 ```
 
-> 版を上げるときは `.crx` と `updates.xml` の `version` を両方直す。
-> 片方だけ直すと、ブラウザが更新に気づかない。
-
-### 4-3. ID を入れて組み直す
-
-```
-EXT_ID=ここに32文字のID ./build.sh
-```
-
-ID を入れずに組んでも、インストーラは入る。
-ただしブラウザ連携（WEB利用）だけ設定されない。
-PC側の記録（起動終了・ソフト・USB・離席）は、拡張が無くても動く。
+> 版を上げるときは `manifest.json` の `version` を直してから組み直す。
+> `updates.xml` の版は、そこから自動で入る。
 
 ### 4-4. 配り方（商用のコード署名証明書は使わない）
 
@@ -137,6 +172,13 @@ PC側の記録（起動終了・ソフト・USB・離席）は、拡張が無く
 1. `chrome://policy` を開く → `ExtensionInstallForcelist` に ID が出ている
 2. `chrome://extensions` → 「EIGHT 端末管理」が**削除できない状態**で入っている
 3. 管理画面の端末管理 → そのPCの行に **Chrome ●連携済** が出る
+
+`manifest.json` の `icons` に書いたファイルが1つでも欠けていると、
+ブラウザは拡張を**まるごと**受け取らない（固めることすらできない）。
+`internal/crx` がそれを見ていて、欠けていれば組み立てが止まる。
+
+> `icon128.png` は `img/logo.svg` から起こしたもの。
+> 正式なロゴに差し替えるときは、こちらも作り直すこと。
 
 3が「未連携」のままなら、継ぎ役が呼べていない。
 `HKLM\SOFTWARE\Google\Chrome\NativeMessagingHosts\jp.co.eightgrp.agent` と、

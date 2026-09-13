@@ -49,6 +49,50 @@ GOOS=windows GOARCH=amd64 go vet ./...
 
 [ "${1:-}" = "test" ] && exit 0
 
+# 拡張の鍵があるなら、それが ID の出どころ。
+#
+# ID を手で書き写すと、書き間違えても誰も気づかない
+# （ブラウザは知らない ID を黙って無視する）。
+# 鍵から出せるものを、人が打ち直さない
+EXTKEY=""
+if [ -n "${EXT_KEY:-}" ]; then
+  [ -f "$EXT_KEY" ] || { echo "!! EXT_KEY のファイルがありません: $EXT_KEY"; exit 1; }
+  EXTKEY="$(mktemp -d)/extkey"
+  go build -o "$EXTKEY" ./cmd/eight-agent-extkey
+
+  from_key="$("$EXTKEY" -key "$EXT_KEY" -json | sed 's/.*"id":"\([^"]*\)".*/\1/')"
+  if [ -z "$EXT_ID" ]; then
+    EXT_ID="$from_key"
+    echo "拡張の ID は鍵から決めました: $EXT_ID"
+  elif [ "$EXT_ID" != "$from_key" ]; then
+    echo
+    echo "!! 拡張の ID が食い違っています。"
+    echo "   鍵から出た ID : $from_key"
+    echo "   渡された ID   : $EXT_ID"
+    echo "   → GitHub Variables の AGENT_EXT_ID を直すか、鍵を取り違えていないか"
+    echo "     確かめてください。食い違ったまま配ると、拡張は入りません。"
+    echo
+    exit 1
+  fi
+fi
+
+# 形が違うものは、ここで止める。
+# 「32文字のChrome拡張ID」のような書き置きが入ったまま配られると、
+# EXE はできるのにブラウザ連携だけ黙って入らない
+if [ -n "$EXT_ID" ]; then
+  case "$EXT_ID" in
+    [a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p]\
+[a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p][a-p]) ;;
+    *)
+      echo
+      echo "!! EXT_ID の形が違います: $EXT_ID"
+      echo "   a〜p だけの32文字です（例 lfhomglagbjlpkjmdpdcinkgmbmlmece）。"
+      echo "   出し方: go run ./cmd/eight-agent-extkey -key <拡張の秘密鍵>"
+      echo
+      exit 1 ;;
+  esac
+fi
+
 if [ -z "$EXT_ID" ]; then
   echo
   echo "!! EXT_ID が空です。"
@@ -92,10 +136,25 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
   -o dist/EIGHT-Agent-Setup.exe ./cmd/eight-agent-setup
 
 echo "== 拡張 =="
+rm -rf dist/extension
 mkdir -p dist/extension
-cp extension/manifest.json extension/background.js extension/options.html dist/extension/
-[ -f extension/icon128.png ] && cp extension/icon128.png dist/extension/ || \
-  echo "   （icon128.png がありません。配る前に置いてください）"
+cp extension/manifest.json extension/background.js extension/options.html \
+   extension/icon128.png dist/extension/
+
+# 鍵があれば、配る形（.crx と updates.xml）まで作る。
+#
+# manifest.json に "key" を入れておくと、.crx にしないで
+# 「パッケージ化されていない拡張機能を読み込む」で入れたときも同じ ID になる。
+# 入ったか確かめるときに要る
+if [ -n "$EXTKEY" ]; then
+  "$EXTKEY" -key "$EXT_KEY" \
+    -stamp dist/extension \
+    -pack dist/extension -out dist/eight-ext.crx \
+    -updates dist/updates.xml -crx-url "${BASE_URL}/ext/eight-ext.crx" \
+    -expect "$EXT_ID"
+else
+  echo "   （拡張の秘密鍵が無いので .crx は作りません。EXT_KEY を渡すと作ります）"
+fi
 
 # 秘密鍵の場所が渡されていれば、その場で署名まで済ませる。
 # 渡されていなければ、下の手順で手で署名する
