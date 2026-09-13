@@ -153,7 +153,8 @@ EIGHT-Agent-Setup.exe をダウンロード
 - [ ] 拡張の鍵を作り、ID を決める
 - [ ] `.crx` と `updates.xml` を `mf.8grp.co.jp/ext/` に置く
 - [ ] `EXT_ID=…` を付けて `agent/build.sh` を実行する
-- [ ] `EIGHT-Agent-Setup.exe` に**コード署名する**
+- [ ] `EIGHT-Agent-Setup.exe` を組む（商用のコード署名はしない → `docs/device-zero-cost.md`）
+- [ ] 初回は**管理者か社内IT担当が、対象PCで**実行する（SmartScreen の判断を社員にさせない）
 - [ ] Windows 実機で `docs/device-agent-testing.md` を通す
 
 ## 8. まだ確かめていないこと

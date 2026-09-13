@@ -160,11 +160,20 @@ type IngestResult struct {
 	Alerts int `json:"alerts"`
 }
 
+// Manifest は「この版に上げてよい」というサーバの言い分。
+//
+// 言い分は、そのままでは信じない。
+// Signature を、焼き込んだ公開鍵で確かめてから落としにいく。
+// 4つ（版・URL・ハッシュ・大きさ）まとめて署名されているので、
+// 同じハッシュのまま URL だけ差し替える、ということができない
 type Manifest struct {
 	Update     bool   `json:"update"`
 	Version    string `json:"version"`
 	URL        string `json:"url"`
 	SHA256     string `json:"sha256"`
+	SizeBytes  int64  `json:"sizeBytes"`
+	Signature  string `json:"signature"`
+	KeyID      string `json:"keyId"`
 	RecheckSec int    `json:"recheckSec"`
 }
 

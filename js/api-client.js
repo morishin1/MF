@@ -567,8 +567,12 @@
   // 組み立て（EIGHT-Agent-Setup.exe が開く画面から）
   const pairInfo = (token) =>
     api(`/api/devices/pair?token=${encodeURIComponent(token)}`);
-  const claimPair = (token, deviceUid) =>
-    api("/api/devices/pair", { method: "POST", body: { token, claim: true, deviceUid } });
+  // employeeId … 管理者が代わりに設定するときだけ。
+  // 省くと、押した本人のパソコンとして登録される
+  const claimPair = (token, deviceUid, employeeId) =>
+    api("/api/devices/pair", {
+      method: "POST", body: { token, claim: true, deviceUid, employeeId },
+    });
   const deviceAlerts = (status) =>
     api(`/api/devices/alerts${status ? `?status=${encodeURIComponent(status)}` : ""}`);
   const patchDeviceAlert = (body) => api("/api/devices/alerts", { method: "PATCH", body });

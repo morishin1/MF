@@ -12,16 +12,23 @@
 //
 // ■ 中でやっていること
 //
-//	 1. 必要なファイルを C:\Program Files\EIGHT に置く
-//	 2. サービスを作って動かす（起動時に自動で上がる）
-//	 3. ログオンした人の画面で動くほう（UI）を、次回から自動で上げる
-//	 4. Chrome / Edge に、継ぎ役（Native Messaging）の置き場所を教える
-//	 5. Chrome / Edge に、会社の拡張を入れる設定を書く
-//	 6. このPCの中で1回きりの札を作り、サーバへ預ける
-//	 7. 既定のブラウザで device-setup.html?pair=札 を開く
-//	 8. 本人が押すと登録コードが出るので、引き取って登録を終える
+//  1. 必要なファイルを C:\Program Files\EIGHT に置く
 //
-//	札は15分で切れる。使うと死ぬ。平文の鍵はどこにも書き出さない。
+//  2. サービスを作って動かす（起動時に自動で上がる）
+//
+//  3. ログオンした人の画面で動くほう（UI）を、次回から自動で上げる
+//
+//  4. Chrome / Edge に、継ぎ役（Native Messaging）の置き場所を教える
+//
+//  5. Chrome / Edge に、会社の拡張を入れる設定を書く
+//
+//  6. このPCの中で1回きりの札を作り、サーバへ預ける
+//
+//  7. 既定のブラウザで device-setup.html?pair=札 を開く
+//
+//  8. 本人が押すと登録コードが出るので、引き取って登録を終える
+//
+//     札は15分で切れる。使うと死ぬ。平文の鍵はどこにも書き出さない。
 //
 // ■ ここで止まったら、何も残さない
 //
@@ -66,17 +73,32 @@ var (
 var payload embed.FS
 
 const (
-	appDir      = `EIGHT`
-	svcName     = "EightAgent"
-	svcDisplay  = "EIGHT 端末管理"
-	hostName    = "jp.co.eightgrp.agent"
-	runKey      = `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`
-	runValue    = "EightAgentUI"
+	appDir     = `EIGHT`
+	svcName    = "EightAgent"
+	svcDisplay = "EIGHT 端末管理"
+	hostName   = "jp.co.eightgrp.agent"
+	runKey     = `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`
+	runValue   = "EightAgentUI"
 )
 
 func main() {
+	// -update … 版を入れ替えるだけ。常駐しているサービスから呼ばれる。
+	//
+	// 登録も同意もやり直さない。画面も出さない。
+	// ここに来るのは、署名とハッシュを確かめ終えたものだけ
+	// （eight-agent-svc の checkUpdate）
+	if len(os.Args) > 1 && os.Args[1] == "-update" {
+		if err := update(); err != nil {
+			// 入れ替えに失敗しても、古い版はそのまま動いている。
+			// 画面は出さない（誰も見ていない時間に走るため）
+			os.Exit(1)
+		}
+		return
+	}
+
 	// 管理者でなければ、管理者として上げ直す。
-	// 社員に「右クリックして管理者として実行」を覚えさせない
+	// 初回は管理者か社内IT担当が入れる想定だが、
+	// 「右クリックして管理者として実行」を覚えさせないためにここで上げ直す
 	if !amAdmin() {
 		if err := relaunchElevated(); err != nil {
 			say("このパソコンに入れるには、管理者の確認が要ります。\n\n"+
@@ -91,6 +113,35 @@ func main() {
 			"何も入れずに終わりました。管理部にご連絡ください。", err), "EIGHT 端末管理")
 		os.Exit(1)
 	}
+}
+
+// update は、入っているものを新しい版に置き換える。
+//
+// 消さないもの: 資格情報（ProgramData\EIGHT）、DeviceUid、同意の状態。
+// つまり、入れ替えても「登録し直し」や「同意し直し」にはならない。
+//
+// 失敗しても片付け（cleanup）はしない。
+// 古い版が残っているほうが、何も無いより良い
+func update() error {
+	dir := filepath.Join(os.Getenv("ProgramFiles"), appDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, name := range []string{"eight-agent-svc.exe", "eight-agent-ui.exe", "eight-agent-host.exe"} {
+		if err := put(dir, name); err != nil {
+			return err
+		}
+	}
+	if err := installService(filepath.Join(dir, "eight-agent-svc.exe")); err != nil {
+		return err
+	}
+	_ = setRun(filepath.Join(dir, "eight-agent-ui.exe"))
+	// ブラウザの設定も入れ直す。人が消していたら、ここで戻る
+	_ = setupBrowsers(dir, browsers.Installed())
+
+	_ = exec.Command("sc", "start", svcName).Run()
+	_ = exec.Command("cmd", "/c", "start", "", filepath.Join(dir, "eight-agent-ui.exe")).Start()
+	return nil
 }
 
 func run() error {
@@ -228,16 +279,21 @@ func setupBrowsers(dir string, found []browsers.Found) error {
 	hostExe := filepath.Join(dir, "eight-agent-host.exe")
 	manifest := filepath.Join(dir, hostName+".json")
 
+	// 拡張のIDが焼き込まれていなければ、ブラウザ連携だけ置いていく。
+	// PC側の記録（起動終了・ソフト・USB・離席）は、これが無くても動く。
+	// 「拡張のIDが無いから入らない」で止めると、入れ直しのたびに
+	// 管理者が全PCを回ることになる
 	if ExtensionID == "" {
-		return fmt.Errorf("拡張のIDが入っていません（組み立てのミス）")
+		return fmt.Errorf("拡張のIDが入っていないので、ブラウザ連携は設定しませんでした" +
+			"（PC側の記録は動きます。拡張を配るときに入れ直してください）")
 	}
 
 	// 継ぎ役の説明書き。どの拡張から呼ばれてよいかを、ここで縛る
 	mf := map[string]any{
-		"name":           hostName,
-		"description":    "EIGHT 端末管理",
-		"path":           hostExe,
-		"type":           "stdio",
+		"name":            hostName,
+		"description":     "EIGHT 端末管理",
+		"path":            hostExe,
+		"type":            "stdio",
 		"allowed_origins": []string{fmt.Sprintf("chrome-extension://%s/", ExtensionID)},
 	}
 	b, _ := json.MarshalIndent(mf, "", "  ")

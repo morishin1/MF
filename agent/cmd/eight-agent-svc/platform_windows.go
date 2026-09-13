@@ -8,7 +8,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/8grp/eight-agent/internal/collect"
+	"github.com/8grp/eight-agent/internal/release"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -336,28 +339,138 @@ func parseUSBName(s string) (vid, pid string) {
 
 // ---- 自動更新 ---------------------------------------------------------------
 
-// checkUpdate は新しい版があるか見る。
+// checkUpdate は新しい版があるか見て、確かめられたものだけ入れ替える。
 //
-// ■ 署名の検証は省かない
+// ■ 「落としたEXEをそのまま実行する」ことは、しない
 //
 //	更新の口は、そのまま「全PCで任意のコードを動かせる口」になる。
-//	SHA256 が合わない、または会社の証明書で署名されていないものは捨てる。
-//	ここを緩めるくらいなら、自動更新をやめて手で配るほうがまだよい。
+//	商用のコード署名証明書は買わない方針なので、Windows は確かめてくれない。
+//	そのぶん、ここで2つ確かめる。
+//
+//	  1. サーバの言い分（版・URL・ハッシュ・大きさ）が、
+//	     焼き込んだ公開鍵の署名と合うか。合わなければ URL を開きにすらいかない
+//	  2. 落ちてきた中身の SHA-256 が、署名された値と合うか
+//
+//	どちらか一方でも合わなければ、**実行しない**。ファイルは消す。
+//	公開鍵が焼き込まれていなければ、更新そのものをしない。
 func checkUpdate(ctx context.Context, ag *collect.Agent) {
 	m, err := ag.Client.Manifest(ctx)
 	if err != nil || m == nil || !m.Update {
 		return
 	}
-	if m.Version == "" || m.URL == "" || m.SHA256 == "" {
-		// 3つそろっていない版は配らない（サーバ側でもそう作ってある）
+	in := release.Info{
+		Version:   m.Version,
+		URL:       m.URL,
+		SHA256:    m.SHA256,
+		SizeBytes: m.SizeBytes,
+		Signature: m.Signature,
+		KeyID:     m.KeyID,
+	}
+
+	// ---- 1. 言い分を確かめる（ここを通らなければ落としにいかない）----
+	if err := release.Verify(UpdateKey, in); err != nil {
+		log.Printf("更新しません（確かめられませんでした）: %v", err)
+		ag.Note("agent_update_refused", time.Now(), map[string]string{
+			"version": m.Version, "reason": err.Error(),
+		})
 		return
 	}
+
 	log.Printf("新しい版 %s があります。%s", m.Version, m.URL)
-	// 実際の入れ替えはインストーラ（別）に任せる。
-	// サービス自身が自分を書き換えると、失敗したときに戻せない
+
+	// ---- 2. 落として、中身を確かめる ----
+	path, err := fetchUpdate(ctx, in)
+	if err != nil {
+		log.Printf("更新しません: %v", err)
+		ag.Note("agent_update_refused", time.Now(), map[string]string{
+			"version": m.Version, "reason": err.Error(),
+		})
+		return
+	}
+
+	// ---- 3. 入れ替えはインストーラに任せる ----
+	//
+	// サービスが自分自身を書き換えると、失敗したときに戻せない。
+	// -update はセットアップと違い、登録も同意もやり直さない
 	ag.Note("agent_update", time.Now(), map[string]string{
-		"version": m.Version, "message": "新しい版があります",
+		"version": m.Version, "message": "新しい版に入れ替えます",
 	})
+	if err := exec.Command(path, "-update").Start(); err != nil {
+		log.Printf("入れ替えを始められませんでした: %v", err)
+		_ = os.Remove(path)
+		return
+	}
+	log.Printf("入れ替えを始めました（%s）", m.Version)
+}
+
+// fetchUpdate は更新ファイルを落として、署名された中身と同じかを確かめる。
+//
+// 合わなければ消して、パスを返さない。
+// 「とりあえず置いておいて、あとで確かめる」はしない
+func fetchUpdate(ctx context.Context, in release.Info) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, in.URL, nil)
+	if err != nil {
+		return "", err
+	}
+	cl := &http.Client{Timeout: 10 * time.Minute}
+	res, err := cl.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("落とせませんでした: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("落とせませんでした: HTTP %d", res.StatusCode)
+	}
+
+	// 大きさとハッシュを、ここで確かめる。
+	// 言われた大きさを超えたらその時点で止まる（読み続けない）
+	body, err := release.CheckBytes(res.Body, in)
+	if err != nil {
+		return "", err
+	}
+
+	dir := filepath.Join(dataDir(), "update")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	// 前の版の置き土産を消す。20MB のものが何本も残ると、
+	// 台数ぶんの無駄なディスクになる
+	if ents, err := os.ReadDir(dir); err == nil {
+		for _, e := range ents {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+	// 版ごとに名前を分ける。前回の落としかけが残っていても混ざらない
+	path := filepath.Join(dir, "EIGHT-Agent-Setup-"+safeName(in.Version)+".exe")
+	// 0700 … SYSTEM だけ。ここに書けるのが増えると、
+	// そのまま「全PCで何か動かせる場所」になる
+	if err := os.WriteFile(path, body, 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// safeName は、版の文字列をファイル名に使える形にする。
+// サーバから来た文字列をそのままパスに混ぜない
+func safeName(v string) string {
+	var b strings.Builder
+	for _, r := range v {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z',
+			r == '.', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	s := b.String()
+	if len(s) > 40 {
+		s = s[:40]
+	}
+	if s == "" {
+		s = "new"
+	}
+	return s
 }
 
 var _ = windows.ComputerName

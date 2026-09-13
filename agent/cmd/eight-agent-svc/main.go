@@ -53,9 +53,16 @@ import (
 // Version はビルド時に -ldflags で入れる。
 var Version = "0.0.0-dev"
 
+// UpdateKey は、更新ファイルを確かめるための公開鍵（base64url）。
+// ビルド時に -ldflags で焼き込む（agent/cmd/eight-agent-keygen で作る）。
+//
+// ここが空のままだと、更新は一切しない。
+// 確かめられないものを落として実行するくらいなら、古い版のままでいる
+var UpdateKey = ""
+
 const (
 	defaultBaseURL = "https://mf.8grp.co.jp"
-	queueMax       = 20000            // だいたい30日ぶん
+	queueMax       = 20000 // だいたい30日ぶん
 	rotateAfter    = 90 * 24 * time.Hour
 )
 

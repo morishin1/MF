@@ -126,14 +126,27 @@ GOOS=windows go vet ./...   # Windows 向けの見直し
 
 ### 組んだあと、Windows 側でやること
 
-1. **会社の証明書で署名する**（`signtool sign /fd sha256 ...`）
-2. SHA256 を取る
-3. 管理画面の「端末管理 → 設定」に 版・URL・SHA256 を登録する
+商用のコード署名証明書は使わない（→ `docs/device-zero-cost.md`）。
+そのかわり、更新は社内の鍵で確かめる。
+
+1. 社内の秘密鍵で、配る版に署名する
+
+   ```
+   go run ./cmd/eight-agent-keygen -key <秘密鍵> \
+      -version 0.3.0 -url https://.../EIGHT-Agent-Setup.exe \
+      -file dist/EIGHT-Agent-Setup.exe
+   ```
+
+2. 出てきた 版・URL・SHA256・大きさ・署名・鍵の目印 を
+   `gw_device_releases` に入れて `published = true` にする
 
 > **署名の検証を省かない。**
 > 自動更新の口は、そのまま「全PCで任意のコードを動かせる口」になる。
-> サーバは 版・URL・SHA256 の3つがそろうまで「更新なし」を返す
-> （`api/devices/manifest.js`）。検証できない配布物を落として実行させないため。
+> サーバは 版・URL・SHA256・大きさ・署名 の5つがそろうまで
+> 「更新なし」を返す（`api/devices/manifest.js`）。
+> エージェント側も、焼き込んだ公開鍵で確かめてからでなければ
+> URL を開きにいかない。落としたあとのハッシュも確かめる。
+> **どちらか一方でも合わなければ、実行しない。**
 
 ---
 
@@ -173,7 +186,7 @@ schtasks /create /tn "EIGHT Agent UI" /tr "C:\Program Files\EIGHT\eight-agent-ui
 ```
 ① 管理者PC1台で検証   … docs/device-agent-testing.md のチェックリスト
 ② 社内規程・告知の整備
-③ 社員1名で2週間試験   … ここまでにコード署名証明書を用意する
+③ 社員1名で2週間試験   … ここまでに更新用の鍵を作る（-new）
 ④ 全員展開            … サイトのカテゴリが取れることが必須条件
 ```
 

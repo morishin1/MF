@@ -25,12 +25,19 @@
 //   管理者が誰にどのコードを渡したかを管理しなくてよい。
 //   ログインしている本人＝そのPCを使う人、として扱う。
 //
+// ■ ただし、初回は管理者が入れることがある
+//   商用のコード署名証明書を使わないので、初回だけ Windows の警告が出る。
+//   社員に「警告を無視してよい」と覚えさせないため、
+//   最初の1回は管理者か社内IT担当が対象PCで入れる（docs/device-zero-cost.md）。
+//   そのとき押すのは管理者なので、**誰のパソコンか選べる**ようにしてある。
+//   選べるのは人事権のある人だけ。ほかの人が押せば、これまでどおり自分のものになる。
+//
 // ■ 引き取りは1回だけ
 //   コードは引き取った時点で消す。あとから同じ札で覗かれても何も返らない。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
+import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
@@ -129,6 +136,22 @@ async function read(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
+  // 管理者が代わりに入れているなら、誰のPCかを選べるようにする。
+  // 選べる人だけに名簿を返す（ほかの人には、そもそも出さない）
+  const ctx = await gwContext(user.id);
+  let members = null;
+  if (ctx.tenantId && canManageHr(ctx)) {
+    const { data } = await sb.from("gw_employees")
+      .select("id, display_name, department")
+      // 在籍と、まだログインしていない内定者。
+      // 入社日より前にPCを用意することがあるので、invited も出す
+      .eq("tenant_id", ctx.tenantId).in("status", ["active", "invited"])
+      .order("display_name", { ascending: true }).limit(500);
+    members = (data || []).map((e) => ({
+      id: e.id, name: e.display_name, department: e.department || "",
+    }));
+  }
+
   return json(res, 200, {
     pc: {
       hostname: p.hostname,
@@ -137,6 +160,8 @@ async function read(req, res) {
         .map((b) => ({ key: b, label: browserLabel(b) })),
     },
     used: Boolean(p.used_at),
+    me: ctx.employee ? { id: ctx.employee.id, name: ctx.employee.display_name } : null,
+    members,
   });
 }
 
@@ -158,6 +183,21 @@ async function claim(req, res, body) {
   if (!token) return json(res, 400, { error: "bad_token" });
 
   const sb = admin();
+
+  // 誰のパソコンにするか。
+  // 既定は押した人。人事権のある人だけ、ほかの社員を選べる
+  let ownerId = ctx.employee.id;
+  let forSomeoneElse = false;
+  const picked = str(body?.employeeId, 60);
+  if (picked && picked !== ctx.employee.id) {
+    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    const { data: emp } = await sb.from("gw_employees")
+      .select("id").eq("id", picked).eq("tenant_id", ctx.tenantId).maybeSingle();
+    if (!emp) return json(res, 400, { error: "bad_employee" });
+    ownerId = emp.id;
+    forSomeoneElse = true;
+  }
+
   const { data: p } = await sb.from("gw_device_pairings")
     .select("id, hostname, os, browsers, used_at, expires_at")
     .eq("token_hash", sha256(token)).maybeSingle();
@@ -172,7 +212,7 @@ async function claim(req, res, body) {
   const plain = newEnrollToken();
   const { data: enr, error: e1 } = await sb.from("gw_device_enrollments").insert({
     tenant_id: ctx.tenantId,
-    employee_id: ctx.employee.id,
+    employee_id: ownerId,
     token_hash: sha256(plain),
     // 組み立てのあいだしか使わない。長く生かしておく理由がない
     expires_at: new Date(Date.now() + TTL_MIN * 60000).toISOString(),
@@ -186,8 +226,12 @@ async function claim(req, res, body) {
   }
 
   // ブラウザ側の端末（この画面を開いているブラウザ）も覚えておく。
-  // エージェントの登録が終わった時点で、同じPCの下に束ねる
-  const deviceUid = str(body?.deviceUid, 100);
+  // エージェントの登録が終わった時点で、同じPCの下に束ねる。
+  //
+  // ただし管理者がほかの人のPCを設定しているときは、束ねない。
+  // いま開いているのは管理者のブラウザなので、束ねると
+  // 管理者の使ったブラウザが、その社員の持ち物として台帳に載る
+  const deviceUid = forSomeoneElse ? null : str(body?.deviceUid, 100);
 
   // 札を使い切る。used_at が null のときだけ通るので、
   // 2つのタブから同時に押されても2本目は空振りする
@@ -195,7 +239,7 @@ async function claim(req, res, body) {
     .update({
       used_at: new Date().toISOString(),
       tenant_id: ctx.tenantId,
-      employee_id: ctx.employee.id,
+      employee_id: ownerId,
       enrollment_id: enr.id,
       device_uid: deviceUid,
       code_once: plain,
@@ -209,7 +253,11 @@ async function claim(req, res, body) {
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id,
     action: "device.pair_claimed", target: enr.id,
-    detail: { hostname: p.hostname, os: p.os, browsers: p.browsers || [], deviceUid },
+    detail: {
+      hostname: p.hostname, os: p.os, browsers: p.browsers || [], deviceUid,
+      // 誰のPCとして登録したか。管理者が代わりに設定したときに効く
+      employeeId: ownerId, onBehalf: forSomeoneElse,
+    },
   });
 
   return json(res, 200, {
