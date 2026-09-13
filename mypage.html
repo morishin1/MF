@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913b">
-  <link rel="stylesheet" href="css/layout.css?v=20260913b">
+  <link rel="stylesheet" href="css/app.css?v=20260913c">
+  <link rel="stylesheet" href="css/layout.css?v=20260913c">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -140,9 +140,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913b"></script>
-<script src="js/device.js?v=20260913b"></script>
-<script src="js/layout.js?v=20260913b"></script>
+<script src="js/api-client.js?v=20260913c"></script>
+<script src="js/device.js?v=20260913c"></script>
+<script src="js/layout.js?v=20260913c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -183,7 +183,10 @@
       API.myGrowthPlan().catch(() => null),
       API.driveLinks().catch(() => null),
       API.myContracts().catch(() => null),
-      API.myDevices().catch(() => null),
+      // 端末の行を作るのは合図（KPDevice）のほう。
+      // それを待たずに読むと、はじめて開いた人には0件が返る。
+      // 0件だと端末の欄をまるごと隠すので、「何も出ない」になる
+      myDevicesAfterBeat(),
     ]);
 
     renderDriveLinks(dl);
@@ -259,6 +262,23 @@
   // 何を取っているか、何を取っていないか、そして
   // 誰がいつ自分の記録を開いたか。片側だけが透明な仕組みにしない
   let myDevices = null;
+
+  /**
+   * 端末の一覧を、この端末が台帳に載ってから読む。
+   *
+   * 台帳に載せるのは KPDevice の合図で、これは KPLayout.init が始める。
+   * ここはそれと同時に走るので、待たないと「まだ0件」を読んでしまう。
+   * device-consent.html は最初からそうしてある（同じ理由）。
+   *
+   * 合図が失敗しても画面は出す。端末の欄が出ないだけで、
+   * マイページの他の中身まで巻き添えにしない
+   */
+  async function myDevicesAfterBeat() {
+    try {
+      if (window.KPDevice) await KPDevice.beat(true);
+    } catch (e) { /* 合図が届かなくても、読むだけは試す */ }
+    return API.myDevices().catch(() => null);
+  }
 
   function renderDevices(dv) {
     myDevices = dv;
