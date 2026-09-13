@@ -576,6 +576,12 @@
   const deviceAlerts = (status) =>
     api(`/api/devices/alerts${status ? `?status=${encodeURIComponent(status)}` : ""}`);
   const patchDeviceAlert = (body) => api("/api/devices/alerts", { method: "PATCH", body });
+  // 私物PC利用の事前承認
+  const deviceExceptions = () => api("/api/devices/exceptions");
+  const approveDeviceException = (body) =>
+    api("/api/devices/exceptions", { method: "POST", body });
+  const revokeDeviceException = (id, note) =>
+    api("/api/devices/exceptions", { method: "PATCH", body: { action: "revoke", id, note } });
   const devicePolicy = () => api("/api/devices/policy");
   const saveDevicePolicy = (body) => api("/api/devices/policy", { method: "PATCH", body });
   async function downloadDeviceCsv(from, to) {
@@ -1003,6 +1009,7 @@
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
     devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
+    deviceExceptions, approveDeviceException, revokeDeviceException,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
     deviceWeb, myWeb, pairInfo, claimPair,
     myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,

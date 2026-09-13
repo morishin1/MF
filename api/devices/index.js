@@ -26,7 +26,7 @@ import {
   tokenDays, tokenState, TOKEN_DAYS,
   EVENT_LABEL, SEVERITY_LABEL, RULE_LABEL, CATEGORY_LABEL,
   CSV_HEADER, csvRow, csvCell,
-  browserLabel, browserState,
+  browserLabel, browserState, ownershipState, OWNERSHIP,
 } from "../../lib/devices.js";
 
 // 053 → 054 → 055 の順で流す。列が足りないときも同じ案内を出す
@@ -34,7 +34,8 @@ const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sq
 const FIELDS = "id, tenant_id, device_uid, label, source, hostname, serial, os, os_version, "
   + "os_build, browser, model, screen, agent_version, status, notified_at, installed_at, "
   + "first_seen_at, last_seen_at, note, employee_id, asset_id, retired_at, linked_device_id, "
-  + "admin_touched_at, admin_touched_by, admin_touched_what";
+  + "admin_touched_at, admin_touched_by, admin_touched_what, "
+  + "ownership, notified_kind, notified_note";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -91,6 +92,21 @@ async function read(req, res, ctx, user) {
     }
   }
 
+  // 私物利用の承認。行ごとに「業務に使ってよいか」を出すのに要る。
+  // 060 を流していない環境でも落とさない
+  let exceptions = [];
+  try {
+    const { data } = await sb.from("gw_device_exceptions")
+      .select("id, employee_id, device_id, reason, expires_on, revoked_at")
+      .eq("tenant_id", ctx.tenantId).limit(500);
+    exceptions = data || [];
+  } catch (e) { /* 表がまだ無い */ }
+  const exByEmp = new Map();
+  for (const e of exceptions) {
+    if (!exByEmp.has(e.employee_id)) exByEmp.set(e.employee_id, []);
+    exByEmp.get(e.employee_id).push(e);
+  }
+
   const now = Date.now();
   const staleDays = Number(policy.stale_days) || 60;
   const rows = (devices || []).map((d) => {
@@ -113,6 +129,12 @@ async function read(req, res, ctx, user) {
       employee: people.get(d.employee_id) || null,
       openAlerts: { critical: c.critical || 0, warn: c.warn || 0 },
       state: deviceState(d, { critical: c.critical || 0, warn: c.warn || 0, staleDays, now }),
+      // 会社貸与か私物か。私物PCでの業務利用は禁止なので、行に出す
+      ownership: d.ownership || "unknown",
+      own: ownershipState(d, { exceptions: exByEmp.get(d.employee_id) || [] }),
+      // 周知を、本人が押したのか、管理者が対面で行ったのか
+      notifiedKind: d.notified_kind || null,
+      notifiedNote: d.notified_note || null,
     };
   });
 
@@ -187,9 +209,14 @@ async function read(req, res, ctx, user) {
       // 管理者が「確認した」を押していないもの。
       // 一覧を開かなくても件数だけは分かるようにする（管理画面TOPで使う）
       openAlerts: openWarn || 0,
+      // 会社貸与と確かめられていないパソコン。
+      // 業務は原則、会社貸与PCだけと決めてある
+      unmanaged: rows.filter((r) => !r.foldedInto && r.own?.key === "check").length,
+      banned: rows.filter((r) => !r.foldedInto && r.own?.key === "banned").length,
     },
     // 割り当て先の候補
     people: [...people.values()],
+    ownerships: OWNERSHIP,
   });
 }
 
@@ -243,6 +270,15 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
     webTotal.set(w.category, (webTotal.get(w.category) || 0) + w.minutes);
   }
 
+  // その人に出ている私物利用の承認
+  let myExceptions = [];
+  try {
+    const { data } = await sb.from("gw_device_exceptions")
+      .select("id, employee_id, device_id, reason, expires_on, revoked_at")
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", d.employee_id || "").limit(50);
+    myExceptions = data || [];
+  } catch (e) { /* 060 がまだ */ }
+
   // 管理者が最後に触った人の名前
   let adminName = null;
   if (d.admin_touched_by) {
@@ -265,6 +301,12 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
       browser: d.browser, model: d.model, screen: d.screen,
       status: d.status, note: d.note,
       confirmed: Boolean(d.notified_at), notifiedAt: d.notified_at,
+      // 周知を、本人が押したのか、管理者が対面・書面で行ったのか
+      notifiedKind: d.notified_kind || null,
+      notifiedNote: d.notified_note || null,
+      // 会社貸与か私物か。私物PCでの業務利用は禁止
+      ownership: d.ownership || "unknown",
+      own: ownershipState(d, { exceptions: myExceptions }),
       installed: Boolean(d.installed_at),
       linkedTo: d.linked_device_id,
       adminTouchedAt: d.admin_touched_at,
@@ -469,7 +511,8 @@ async function patch(req, res, ctx, user) {
   if (!deviceId) return json(res, 400, { error: "bad_request" });
 
   const { data: dev } = await sb.from("gw_devices")
-    .select("id, tenant_id, label, hostname, source, employee_id, status, linked_device_id")
+    .select("id, tenant_id, label, hostname, source, employee_id, status, linked_device_id, "
+          + "ownership, notified_at")
     .eq("id", deviceId).maybeSingle();
   if (!dev || dev.tenant_id !== ctx.tenantId) return json(res, 404, { error: "not_found" });
 
@@ -493,10 +536,13 @@ async function patch(req, res, ctx, user) {
     const before = dev.employee_id;
     patchRow.employee_id = employeeId;
     if (body.assetId !== undefined) patchRow.asset_id = body.assetId || null;
-    // 使う人が変わったら、告知はやり直し。
-    // 前の人が読んだことを、次の人の承認にはしない
+    // 使う人が変わったら、周知はやり直し。
+    // 前の人が読んだことを、次の人に周知したことにはしない
     if (employeeId !== before) {
       patchRow.notified_at = null;
+      patchRow.notified_kind = null;
+      patchRow.notified_by = null;
+      patchRow.notified_note = null;
       patchRow.status = "unconfirmed";
       event = "assigned";
       const people = await employees(sb, ctx.tenantId);
@@ -526,6 +572,37 @@ async function patch(req, res, ctx, user) {
       extra = { from: dev.linked_device_id };
     }
     event = "unlinked";
+  } else if (action === "ownership") {
+    // 会社貸与か私物か。
+    // 私物PCでの業務利用は禁止なので、ここを付けると管理画面で目立つ
+    const own = String(body.ownership || "");
+    if (!["company", "personal", "unknown"].includes(own)) {
+      return json(res, 400, { error: "bad_request" });
+    }
+    patchRow.ownership = own;
+    event = "ownership";
+    extra = { from: dev.ownership, to: own };
+  } else if (action === "mark_notified") {
+    // 管理者が対面・書面で周知したときの記録。
+    //
+    // 端末管理は会社ルールなので、本人が押さないことが拒否にはならない。
+    // ただし「周知した」と誰かが言うだけでは記録にならないので、
+    // いつ・どう周知したかを必ず書かせる
+    const note = String(body.note || "").trim().slice(0, 300);
+    if (!note) {
+      return json(res, 400, {
+        error: "bad_request",
+        hint: "いつ・どこで・どう周知したかを書いてください（記録に残ります）",
+      });
+    }
+    if (dev.notified_at) return json(res, 200, { ok: true, already: true });
+    patchRow.notified_at = now;
+    patchRow.notified_kind = "admin";
+    patchRow.notified_by = user.id;
+    patchRow.notified_note = note;
+    patchRow.status = "active";
+    event = "notified_by_admin";
+    extra = { note };
   } else if (action === "rename") {
     const label = String(body.label || "").trim().slice(0, 60);
     if (!label) return json(res, 400, { error: "bad_request" });

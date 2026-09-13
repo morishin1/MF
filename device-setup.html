@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913a">
-  <link rel="stylesheet" href="css/layout.css?v=20260913a">
+  <link rel="stylesheet" href="css/app.css?v=20260913b">
+  <link rel="stylesheet" href="css/layout.css?v=20260913b">
   <style>
     /* インストーラが開く画面。社員がここで見るのは1回きりなので、
        ほかの画面へ行く道は出さない。いま何をしているかだけ出す */
@@ -45,7 +45,7 @@
   <div class="st-steps">
     <div class="st-step done" id="s1">インストール</div>
     <div class="st-step on" id="s2">このパソコンです</div>
-    <div class="st-step" id="s3">記録すること</div>
+    <div class="st-step" id="s3">端末管理について</div>
     <div class="st-step" id="s4">完了</div>
   </div>
 
@@ -69,7 +69,7 @@
 
     <p class="muted" style="font-size:12.5px;line-height:1.9;">
       押すと、このパソコンが <b id="who">あなた</b> のものとして台帳に載ります。<br>
-      このあと「何を記録するか」が出ます。そこで確認するまで、記録は始まりません。
+      このあと「端末管理について」が出ます。内容を読んで確認してください。
     </p>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
@@ -102,17 +102,17 @@
     </div>
     <p style="font-size:13.5px;line-height:1.9;">
       最後に、<b>何を記録して、何を記録しないか</b>を読んでください。
-      読んで確認するまで、記録は始まりません。
+      会社ルールとして端末管理を行うことの周知です。読んで確認してください。
     </p>
     <a class="btn btn-primary" id="next" href="device-consent.html">
-      <span class="material-symbols-outlined icon-inline">description</span>記録することを読む
+      <span class="material-symbols-outlined icon-inline">description</span>端末管理について読む
     </a>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913a"></script>
-<script src="js/device.js?v=20260913a"></script>
-<script src="js/layout.js?v=20260913a"></script>
+<script src="js/api-client.js?v=20260913b"></script>
+<script src="js/device.js?v=20260913b"></script>
+<script src="js/layout.js?v=20260913b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -138,7 +138,7 @@
     }
     if (info.used) {
       return gate("warn", "この設定はもう済んでいます。",
-        "マイページの「端末の設定」から、いまの状態を確かめられます。");
+        "マイページの「端末管理について」から、いまの状態を確かめられます。");
     }
     renderPc();
     renderPick();
@@ -250,7 +250,7 @@
     step(4);
     el("card-wait").classList.add("hidden");
     el("card-done").classList.remove("hidden");
-    el("sub").textContent = "設定が終わりました。最後に、記録することを読んでください。";
+    el("sub").textContent = "設定が終わりました。最後に、端末管理についてお読みください。";
   }
 
   function step(n) {

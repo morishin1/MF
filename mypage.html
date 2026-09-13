@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913a">
-  <link rel="stylesheet" href="css/layout.css?v=20260913a">
+  <link rel="stylesheet" href="css/app.css?v=20260913b">
+  <link rel="stylesheet" href="css/layout.css?v=20260913b">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -140,9 +140,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913a"></script>
-<script src="js/device.js?v=20260913a"></script>
-<script src="js/layout.js?v=20260913a"></script>
+<script src="js/api-client.js?v=20260913b"></script>
+<script src="js/device.js?v=20260913b"></script>
+<script src="js/layout.js?v=20260913b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -313,16 +313,16 @@
         : `<p class="muted" style="font-size:12.5px;">まだ誰も開いていません。</p>`}
 
       <details style="margin-top:6px;">
-        <summary style="cursor:pointer;font-size:13px;font-weight:600;">記録している内容</summary>
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;">端末管理について</summary>
         <div style="font-size:12.5px;line-height:1.9;margin-top:8px;">
-          <b>取っているもの</b><br>${(n.takes || []).map((s) => `・${strong(s)}`).join("<br>")}
-          <br><br><b>取っていないもの</b><br>${(n.never || []).map((s) => `・${strong(s)}`).join("<br>")}
-          <br><br>${esc(n.how || "")}<br>${esc(n.why || "")}
+          ${esc(n.lead || "")}
+          <br><br><b>記録する範囲</b><br>${(n.areas || []).map((a) => `・${esc(a)}`).join("<br>")}
+          <br><br>${esc(n.purpose || "")}
         </div>
       </details>
 
       <p style="margin:14px 0 0;">
-        <a class="btn btn-secondary btn-sm" href="device-consent.html">端末の設定・アプリとして入れる</a>
+        <a class="btn btn-secondary btn-sm" href="device-consent.html">端末管理について・アプリとして入れる</a>
       </p>`;
   }
 

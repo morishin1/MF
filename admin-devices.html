@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913a">
-  <link rel="stylesheet" href="css/layout.css?v=20260913a">
+  <link rel="stylesheet" href="css/app.css?v=20260913b">
+  <link rel="stylesheet" href="css/layout.css?v=20260913b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -140,9 +140,11 @@
     <b>台帳には2通りの載り方があります。</b>
     <span class="dv-src browser">ブラウザ</span> は社内システムを開くと自動で載るもので、
     分かるのは開いているあいだのことだけ。
-    <span class="dv-src agent">エージェント</span> は本人がパソコンに入れた会社のソフトで、
+    <span class="dv-src agent">エージェント</span> は会社貸与PCに入れる端末管理ソフトで、
     起動終了・アプリ・USB・<b>見たサイトのドメインとページの場所</b>まで分かります。
     同じパソコンの両方がつながっていれば、1行にまとめて出ます。<br>
+    <b>業務は原則、会社貸与PCだけです。</b>
+    私物PCでの業務利用は禁止。やむを得ないときは「私物PCの承認」から期限を切って通します。<br>
     <b>どちらでも取っていないもの</b>：キーボードで打った内容／パスワード／
     メールやチャットの本文／画面の録画／開いていた画面のタイトル／
     ページの中身／フォームに入れた内容／Cookie・ログインの鍵／
@@ -150,14 +152,20 @@
     ファイルの中身。<br>
     <b>働き方を見るのは、原則として勤務時間内のぶんだけです。</b>
     USBの抜き差しやソフトの出入りのような、情報漏えいに関わる記録は時間外でも残ります。<br>
-    <b>本人が確認するまで、記録は始まりません。</b>
-    確認待ちの端末からは1件も届きません。<br>
+    <b>端末管理は会社ルールです。</b>社員に許可を求めるものではなく、
+    事前に周知して、確認した日時を残します。社員が解除することはできません。<br>
+    <b>周知が記録されるまで、記録は始まりません。</b>
+    確認待ちの端末からは1件も届きません。本人が押せないときは
+    「周知済みにする」で、いつどう周知したかを残してください。<br>
+    <b>この画面の説明は管理者向けです。</b>社員には大分類だけを伝えます
+    （検知条件や判定基準は、避ける方法になるので出しません）。<br>
     <b>あなたが誰の記録を開いたかは、本人の画面に残ります。</b>
   </div>
 
   <div class="dv-tabs">
     <button id="t-list" class="on" onclick="tab('list')">端末</button>
     <button id="t-alerts" onclick="tab('alerts')">アラート<span id="t-alerts-n"></span></button>
+    <button id="t-exceptions" onclick="tab('exceptions')">私物PCの承認</button>
     <button id="t-codes" onclick="tab('codes')">登録コード</button>
     <button id="t-policy" onclick="tab('policy')">設定</button>
   </div>
@@ -190,6 +198,7 @@
         <button id="f-silent" onclick="filterBy('silent')">未通信<span id="f-silent-n"></span></button>
         <button id="f-waiting" onclick="filterBy('waiting')">本人の確認待ち<span id="f-waiting-n"></span></button>
         <button id="f-agent" onclick="filterBy('agent')">ソフト導入済み</button>
+        <button id="f-unmanaged" onclick="filterBy('unmanaged')">未登録・私物の可能性<span id="f-unmanaged-n"></span></button>
       </div>
       <div id="d-token"></div>
       <div class="table-scroll" style="max-height:56vh;overflow:auto;">
@@ -222,6 +231,41 @@
         深夜・休日の利用は、働きすぎに気づくために出しています。サボりを探すためではありません。
       </p>
       <div id="a-rows">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- ===== 私物PCの事前承認 ===== -->
+  <div id="p-exceptions" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">rule</span>私物PCでの業務利用（事前承認）</h2>
+      <p class="muted" style="font-size:12.5px;line-height:1.9;margin:0 0 14px;">
+        業務・社内システムへのアクセス・会社データの取り扱いは、原則として<b>会社貸与PC</b>です。
+        私物PCでの業務利用は禁止しています。<br>
+        やむを得ないときだけ、ここで期限を切って承認してください。
+        <b>禁止だけを言うと、黙って使われます。</b>通る道を残して、記録に載せるほうを選びます。
+      </p>
+
+      <div class="dv-form" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin:0 0 16px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;">
+          <div><label for="x-emp">対象の社員</label>
+            <select id="x-emp"></select></div>
+          <div><label for="x-dev">端末</label>
+            <input id="x-dev" type="text" placeholder="例: 自宅の MacBook"></div>
+          <div><label for="x-until">利用期限</label>
+            <input id="x-until" type="date"></div>
+        </div>
+        <div style="margin-top:12px;"><label for="x-reason">理由（必須）</label>
+          <input id="x-reason" type="text" placeholder="例: 貸与PCの修理中。2週間だけ自宅のPCで受注処理を行うため"></div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary btn-sm" onclick="approveException(this)">
+            <span class="material-symbols-outlined icon-inline">check</span>承認する
+          </button>
+          <span class="sub" style="margin-left:10px;">承認したことは、本人にも通知されます</span>
+        </div>
+        <div id="x-msg" class="err-text"></div>
+      </div>
+
+      <div id="x-rows">読み込み中…</div>
     </div>
   </div>
 
@@ -322,9 +366,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913a"></script>
-<script src="js/device.js?v=20260913a"></script>
-<script src="js/layout.js?v=20260913a"></script>
+<script src="js/api-client.js?v=20260913b"></script>
+<script src="js/device.js?v=20260913b"></script>
+<script src="js/layout.js?v=20260913b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -349,11 +393,12 @@
   }
 
   function tab(which) {
-    for (const k of ["list", "alerts", "codes", "policy"]) {
+    for (const k of ["list", "alerts", "exceptions", "codes", "policy"]) {
       el(`p-${k}`).classList.toggle("hidden", k !== which);
       el(`t-${k}`).classList.toggle("on", k === which);
     }
     if (which === "alerts") loadAlerts();
+    if (which === "exceptions") loadExceptions();
     if (which === "codes") loadCodes();
     if (which === "policy") loadPolicy();
   }
@@ -371,6 +416,7 @@
   const ADMIN_ACT = {
     assign: "使う人を変えた", unlink: "紐付けを外した", rename: "名前を変えた",
     suspend: "停止した", resume: "再開した", retire: "使用終了にした", note: "メモを書いた",
+    ownership: "会社貸与／私物を変えた", mark_notified: "周知済みにした",
   };
 
   // インラインの onclick は window から引かれる。const の矢印関数は届かない
@@ -484,8 +530,10 @@
       <div class="box"><div class="k">本人の確認待ち</div><div class="v">${s.waiting || 0}</div></div>
       <div class="box${s.silent ? " bad" : ""}"><div class="k">未通信</div>
         <div class="v">${s.silent || 0}</div></div>
-      <div class="box${s.unknown ? " bad" : ""}"><div class="k">見慣れない端末</div>
-        <div class="v">${s.unknown || 0}</div></div>`;
+      <div class="box${s.unknown ? " bad" : ""}"><div class="k">未登録端末からの接続</div>
+        <div class="v">${s.unknown || 0}</div></div>
+      <div class="box${(s.unmanaged || s.banned) ? " bad" : ""}"><div class="k">会社貸与と未確認</div>
+        <div class="v">${(s.unmanaged || 0) + (s.banned || 0)}</div></div>`;
 
     const n = (data.alerts || []).length;
     el("t-alerts-n").textContent = n ? `（${n}）` : "";
@@ -493,6 +541,8 @@
     const all = data.devices || [];
     el("f-silent-n").textContent = s.silent ? `（${s.silent}）` : "";
     el("f-waiting-n").textContent = s.waiting ? `（${s.waiting}）` : "";
+    const un = (s.unmanaged || 0) + (s.banned || 0);
+    el("f-unmanaged-n").textContent = un ? `（${un}）` : "";
 
     // 未通信・重大は上に出す。一覧をスクロールしないと気づけないのでは、
     // 出している意味がない
@@ -502,7 +552,9 @@
       : d.state.key === "warn" ? 3 : 4);
     const rows = all
       .filter((d) => !filter
-        || (filter === "agent" ? d.source === "agent" : d.state.key === filter))
+        || (filter === "agent" ? d.source === "agent"
+          : filter === "unmanaged" ? ["check", "banned"].includes(d.own?.key)
+          : d.state.key === filter))
       .sort((a, b) => weight(a) - weight(b));
 
     if (!rows.length) {
@@ -521,6 +573,7 @@
         <td>${d.employee ? `${esc(d.employee.name)}<span class="sub">${esc(d.employee.department || "")}</span>`
                          : '<span class="sub">未割り当て</span>'}</td>
         <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span>
+          ${owned(d)}
           ${d.state.key === "silent"
             ? `<span class="sub">${esc(d.source === "agent"
                 ? "ソフトが止まっているかもしれません" : "")}</span>` : ""}</td>
@@ -576,9 +629,22 @@
     return `<span class="dv-links">${parts.join("")}</span>`;
   }
 
+  /**
+   * 業務に使ってよいパソコンか。
+   *
+   * 業務は原則、会社貸与PCだけ。私物PCでの業務利用は禁止している。
+   * 会社貸与と分かっているものには、何も出さない（全部に印が付くと読まれない）
+   */
+  function owned(d) {
+    const o = d.own;
+    if (!o || o.key === "ok") return "";
+    const cls = o.key === "banned" ? "critical" : o.key === "allowed" ? "ok" : "warn";
+    return `<span class="dv-st ${cls}" title="${esc(o.note || "")}">${esc(o.label)}</span>`;
+  }
+
   function filterBy(key) {
     filter = key;
-    for (const k of ["all", "silent", "waiting", "agent"]) {
+    for (const k of ["all", "silent", "waiting", "agent", "unmanaged"]) {
       el(`f-${k}`).classList.toggle("on", (k === "all" ? "" : k) === key);
     }
     render();
@@ -626,6 +692,9 @@
             ? `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','resume')">再開する</button>`
             : `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','suspend')">停止する</button>`}
           <button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','retire')">使用終了にする</button>
+          <button class="btn btn-secondary btn-sm" onclick="setOwnership('${dev.id}','${esc(dev.ownership || "unknown")}')">会社貸与／私物</button>
+          ${dev.confirmed ? "" : `
+            <button class="btn btn-secondary btn-sm" onclick="markNotified('${dev.id}')">周知済みにする</button>`}
           <button class="btn btn-secondary btn-sm" onclick="editNote('${dev.id}')">メモ</button>
           ${dev.employee
             ? `<button class="btn btn-primary btn-sm"
@@ -639,6 +708,15 @@
         <div id="d-assign"></div>
 
         <table class="dv-table" style="margin-bottom:16px;">
+          <tr><th>業務利用</th><td>${dev.own
+            ? `${esc(dev.own.label)}${dev.own.note ? `<span class="sub">${esc(dev.own.note)}</span>` : ""}`
+            : "—"}</td></tr>
+          <tr><th>周知</th><td>${dev.confirmed
+            ? `${esc(fmt(dev.notifiedAt))}　${
+                dev.notifiedKind === "admin" ? "管理者が周知" : "本人が確認"}${
+                dev.notifiedNote ? `<span class="sub">${esc(dev.notifiedNote)}</span>` : ""}`
+            : `<span class="dv-st waiting">まだ</span>
+               <span class="sub">本人が確認するか、管理者が「周知済みにする」を押すまで、記録は始まりません</span>`}</td></tr>
           <tr><th>使う人</th><td>${dev.employee ? esc(dev.employee.name) : "未割り当て"}</td>
               <th>本人の確認</th><td>${dev.confirmed ? esc(fmt(dev.notifiedAt))
                 : "まだ（記録は始まっていません）"}</td></tr>
@@ -888,6 +966,41 @@
     await run(() => API.patchDevice({ action: "rename", deviceId: id, label: label.trim() }));
   }
 
+  /**
+   * 会社貸与か私物か。
+   *
+   * 私物PCでの業務利用は禁止しているので、ここを付けると
+   * 一覧で目立つようになる。承認があるものは「私物（承認済み）」と出る
+   */
+  function setOwnership(id, current) {
+    const list = (data.ownerships || []).map((o) => o.key);
+    const label = { company: "会社貸与", personal: "私物", unknown: "未確認" };
+    const cur = list.indexOf(current);
+    const next = prompt(
+      "このパソコンの区分を入力してください。\n\n"
+      + "  company  … 会社貸与（業務に使ってよい）\n"
+      + "  personal … 私物（業務利用は禁止。承認があるときだけ）\n"
+      + "  unknown  … 未確認\n",
+      list[cur] || "unknown");
+    if (!next || !list.includes(next) || next === current) return;
+    if (!confirm(`${label[next]} にします。よろしいですか？`)) return;
+    run(() => API.patchDevice({ action: "ownership", deviceId: id, ownership: next }));
+  }
+
+  /**
+   * 管理者が対面・書面で周知したときの記録。
+   *
+   * 端末管理は会社ルールなので、本人が押さないことが拒否にはならない。
+   * ただし「周知した」と言うだけでは記録にならないので、内容を必ず書かせる
+   */
+  function markNotified(id) {
+    const note = prompt(
+      "いつ・どこで・どう周知したかを書いてください（記録に残ります）\n"
+      + "例: 2026-09-20 の朝礼で端末管理規程を配布し、口頭で説明した");
+    if (note === null || !note.trim()) return;
+    run(() => API.patchDevice({ action: "mark_notified", deviceId: id, note: note.trim() }));
+  }
+
   async function act(id, action) {
     if (action === "retire" && !confirm("使用終了にすると、この端末からの利用は数えなくなります。\n"
       + "これまでの記録は残ります。よろしいですか？")) return;
@@ -983,6 +1096,77 @@
       await load();
     } catch (e) {
       alert(e.hint || e.message || "変更できませんでした");
+    }
+  }
+
+  // ---- 私物PCの承認 ----
+  async function loadExceptions() {
+    // 対象の社員を選べるようにする。台帳から来た名簿を使い回す
+    if (el("x-emp") && !el("x-emp").options.length) {
+      el("x-emp").innerHTML = (data.people || [])
+        .map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${
+          p.department ? `（${esc(p.department)}）` : ""}</option>`).join("");
+    }
+    // 既定は2週間先。無期限を作らないため、必ず日付を入れる
+    if (el("x-until") && !el("x-until").value) {
+      el("x-until").value = new Date(Date.now() + 14 * 86400000 + 9 * 3600000)
+        .toISOString().slice(0, 10);
+    }
+
+    try {
+      const r = await API.deviceExceptions();
+      const rows = r.exceptions || [];
+      if (!rows.length) {
+        el("x-rows").innerHTML = `<p class="muted">承認はまだありません。</p>`;
+        return;
+      }
+      el("x-rows").innerHTML = `<table class="dv-table"><thead><tr>
+          <th>社員</th><th>端末</th><th>理由</th><th>期限</th><th>状態</th><th></th>
+        </tr></thead><tbody>${rows.map((x) => `
+          <tr>
+            <td>${x.employee ? esc(x.employee.name) : "—"}</td>
+            <td>${esc(x.deviceNote || "—")}</td>
+            <td style="max-width:280px;">${esc(x.reason)}</td>
+            <td>${esc(x.expiresOn)}</td>
+            <td><span class="dv-st ${x.state.key === "live" ? "ok" : ""}">${esc(x.state.label)}</span>
+              ${x.note ? `<span class="sub">${esc(x.note)}</span>` : ""}</td>
+            <td>${x.state.key === "live"
+              ? `<button class="btn btn-secondary btn-sm"
+                    onclick="revokeException('${x.id}')">取り消す</button>` : ""}</td>
+          </tr>`).join("")}</tbody></table>`;
+    } catch (e) {
+      el("x-rows").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.message)}</div></div>`;
+    }
+  }
+
+  async function approveException(btn) {
+    el("x-msg").textContent = "";
+    const reason = el("x-reason").value.trim();
+    if (!reason) { el("x-msg").textContent = "理由を書いてください"; return; }
+    try {
+      await KPLayout.busy(btn, "承認中…", () => API.approveDeviceException({
+        employeeId: el("x-emp").value,
+        deviceNote: el("x-dev").value.trim() || null,
+        expiresOn: el("x-until").value,
+        reason,
+      }));
+      el("x-reason").value = "";
+      el("x-dev").value = "";
+      await loadExceptions();
+    } catch (e) {
+      el("x-msg").textContent = e.hint || e.message || "承認できませんでした";
+    }
+  }
+
+  async function revokeException(id) {
+    const note = prompt("取り消す理由（任意。記録に残ります）");
+    if (note === null) return;
+    try {
+      await API.revokeDeviceException(id, note || null);
+      await loadExceptions();
+    } catch (e) {
+      el("x-msg").textContent = e.hint || e.message || "取り消せませんでした";
     }
   }
 
