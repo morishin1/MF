@@ -361,6 +361,7 @@ func checkUpdate(ctx context.Context, ag *collect.Agent) {
 	in := release.Info{
 		Version:   m.Version,
 		URL:       m.URL,
+		Locator:   m.Locator,
 		SHA256:    m.SHA256,
 		SizeBytes: m.SizeBytes,
 		Signature: m.Signature,

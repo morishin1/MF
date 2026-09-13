@@ -39,12 +39,34 @@ import (
 
 // Info は、サーバが「この版に上げてよい」と言ってきた中身。
 type Info struct {
-	Version   string
-	URL       string
+	Version string
+
+	// Locator は、署名の対象になる「置き場所」。
+	//
+	// 配布物は非公開のバケットに置いてあり、落とすためのURLは
+	// そのつど短時間だけ作られる。毎回変わるURLに署名しても合わないので、
+	// 変わらないほう（バケットの中のパス）に署名する。
+	//
+	// 外の場所に置く版では、URL がそのまま置き場所になる。
+	// 空なら URL を使う（058 までの版との行き来のため）
+	Locator string
+
+	// URL は、実際に落としにいく先。署名の対象ではない。
+	// すり替えは、落としたあとの SHA-256 で止まる
+	URL string
+
 	SHA256    string
 	SizeBytes int64
 	Signature string // base64url
 	KeyID     string
+}
+
+// At は、署名の対象になる置き場所。
+func (in Info) At() string {
+	if in.Locator != "" {
+		return in.Locator
+	}
+	return in.URL
 }
 
 var (
@@ -62,12 +84,17 @@ const MaxSize = 120 << 20
 
 // Signed は、署名の対象になる1つの文字列を作る。
 //
+//	version \n <置き場所> \n sha256 \n size
+//
 // 4つをまとめて署名するのが大事。ハッシュだけに署名すると、
-// 同じハッシュのまま URL を差し替えられる余地が残る。
-func Signed(version, url, sha string, size int64) string {
+// 同じハッシュのまま置き場所を差し替えられる余地が残る。
+//
+// 置き場所は、Storage のパスか、外に置くときの URL。
+// URL は短命の署名つきに置き換わることがあるので、そちらには署名しない
+func Signed(version, at, sha string, size int64) string {
 	return strings.Join([]string{
 		strings.TrimSpace(version),
-		strings.TrimSpace(url),
+		strings.TrimSpace(at),
 		strings.ToLower(strings.TrimSpace(sha)),
 		strconv.FormatInt(size, 10),
 	}, "\n")
@@ -110,7 +137,8 @@ func Verify(pubKey string, in Info) error {
 	if err != nil {
 		return err
 	}
-	if in.Version == "" || in.URL == "" || in.SHA256 == "" || in.SizeBytes <= 0 {
+	if in.Version == "" || in.URL == "" || in.At() == "" ||
+		in.SHA256 == "" || in.SizeBytes <= 0 {
 		return ErrBadFields
 	}
 	if in.SizeBytes > MaxSize {
@@ -135,7 +163,7 @@ func Verify(pubKey string, in Info) error {
 		return ErrBadSig
 	}
 
-	if !ed25519.Verify(pub, []byte(Signed(in.Version, in.URL, in.SHA256, in.SizeBytes)), sig) {
+	if !ed25519.Verify(pub, []byte(Signed(in.Version, in.At(), in.SHA256, in.SizeBytes)), sig) {
 		return ErrBadSig
 	}
 	return nil
@@ -166,7 +194,8 @@ func CheckBytes(r io.Reader, in Info) ([]byte, error) {
 }
 
 // Sign は、リリースのときに1行へ署名する（組み立て側で使う）。
-func Sign(priv ed25519.PrivateKey, version, url, sha string, size int64) string {
-	sig := ed25519.Sign(priv, []byte(Signed(version, url, sha, size)))
+// at は置き場所（Storage のパス、または外に置くときの URL）。
+func Sign(priv ed25519.PrivateKey, version, at, sha string, size int64) string {
+	sig := ed25519.Sign(priv, []byte(Signed(version, at, sha, size)))
 	return base64.RawURLEncoding.EncodeToString(sig)
 }

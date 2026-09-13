@@ -19,10 +19,16 @@
 //	  go run ./cmd/eight-agent-keygen \
 //	     -key ~/eight-update.key \
 //	     -version 0.3.0 \
-//	     -url https://mf.8grp.co.jp/agent/EIGHT-Agent-Setup.exe \
+//	     -locator 0.3.0/EIGHT-Agent-Setup.exe \
 //	     -file dist/EIGHT-Agent-Setup.exe
-//	    → 版・URL・SHA256・大きさ・署名・鍵の目印 が出る
-//	    → そのまま管理画面の「端末管理 → 配布」に貼る
+//	    → そのまま流せる insert 文が出る
+//
+//	■ 署名の対象は「置き場所」
+//
+//	  配布物は非公開のバケットに置き、落とすURLはそのつど短時間だけ作る。
+//	  毎回変わるURLに署名しても合わないので、変わらないほう
+//	  （バケットの中のパス）に署名する。
+//	  外の場所に置く版は -url を使う。そのときは URL が置き場所になる。
 //
 // ■ 秘密鍵の置き場所
 //
@@ -52,7 +58,8 @@ func main() {
 		out     = flag.String("out", "", "作った秘密鍵の置き場所")
 		keyPath = flag.String("key", "", "署名に使う秘密鍵")
 		version = flag.String("version", "", "配る版（例 0.3.0）")
-		url     = flag.String("url", "", "配布先のURL（https のみ）")
+		url     = flag.String("url", "", "外に置く場合の配布先URL（https のみ）")
+		locator = flag.String("locator", "", "Storage に置く場合のパス（例 0.3.0/EIGHT-Agent-Setup.exe）")
 		file    = flag.String("file", "", "配るファイル（ここから SHA256 と大きさを取る）")
 		asJSON  = flag.Bool("json", false, "JSON で出す")
 	)
@@ -63,7 +70,7 @@ func main() {
 	case *newKey:
 		err = generate(*out)
 	default:
-		err = sign(*keyPath, *version, *url, *file, *asJSON)
+		err = sign(*keyPath, *version, *url, *locator, *file, *asJSON)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "エラー:", err)
@@ -111,15 +118,25 @@ func generate(out string) error {
 
 // ---- 署名する ---------------------------------------------------------------
 
-func sign(keyPath, version, url, file string, asJSON bool) error {
+func sign(keyPath, version, url, locator, file string, asJSON bool) error {
 	switch {
 	case keyPath == "":
 		return fmt.Errorf("-key に秘密鍵を指定してください（-new で作れます）")
-	case version == "" || url == "" || file == "":
-		return fmt.Errorf("-version, -url, -file の3つが要ります")
-	case !strings.HasPrefix(strings.ToLower(url), "https://"):
+	case version == "" || file == "":
+		return fmt.Errorf("-version と -file が要ります")
+	case url == "" && locator == "":
+		return fmt.Errorf("-locator（Storage のパス）か -url のどちらかが要ります")
+	case url != "" && !strings.HasPrefix(strings.ToLower(url), "https://"):
 		// 平文で配ったものは、エージェント側でも弾く。ここで気づけるように
 		return fmt.Errorf("-url は https から始めてください")
+	}
+
+	// 署名の対象は「置き場所」。
+	// 非公開の置き場から落とすURLは、そのつど短命のものを作るので毎回変わる。
+	// 変わるものに署名しても合わない
+	at := locator
+	if at == "" {
+		at = url
 	}
 
 	priv, err := readKey(keyPath)
@@ -135,14 +152,19 @@ func sign(keyPath, version, url, file string, asJSON bool) error {
 		return fmt.Errorf("ファイルが大きすぎます（%d バイト、上限 %d）", size, release.MaxSize)
 	}
 
-	sig := release.Sign(priv, version, url, sum, size)
+	sig := release.Sign(priv, version, at, sum, size)
 	keyID := release.KeyID(priv.Public().(ed25519.PublicKey))
 
 	// 自分で作った署名が、自分で確かめて通るか。
 	// 通らないものを管理画面に貼ってしまうと、全台が黙って更新されなくなる
 	in := release.Info{
-		Version: version, URL: url, SHA256: sum,
+		Version: version, URL: url, Locator: locator, SHA256: sum,
 		SizeBytes: size, Signature: sig, KeyID: keyID,
+	}
+	// 落とす先は、Storage なら実行のたびに作られる。
+	// ここでは形だけ通せばよいので、仮のURLで確かめる
+	if in.URL == "" {
+		in.URL = "https://example.invalid/" + locator
 	}
 	pub := base64.RawURLEncoding.EncodeToString(priv.Public().(ed25519.PublicKey))
 	if err := release.Verify(pub, in); err != nil {
@@ -150,25 +172,53 @@ func sign(keyPath, version, url, file string, asJSON bool) error {
 	}
 
 	if asJSON {
-		fmt.Printf(`{"version":%q,"url":%q,"sha256":%q,"size_bytes":%d,"signature":%q,"key_id":%q}`+"\n",
-			version, url, sum, size, sig, keyID)
+		fmt.Printf(`{"version":%q,"object_path":%q,"url":%q,"sha256":%q,`+
+			`"size_bytes":%d,"signature":%q,"key_id":%q}`+"\n",
+			version, locator, url, sum, size, sig, keyID)
 		return nil
 	}
-	fmt.Printf(`管理画面の「端末管理 → 配布」に、そのまま貼ってください。
+
+	where := "URL       " + url
+	if locator != "" {
+		where = "置き場所   agent/" + locator
+	}
+	fmt.Printf(`gw_device_releases に、そのまま入れてください。
 
   版        %s
-  URL       %s
+  %s
   SHA-256   %s
   大きさ     %d
   署名      %s
   鍵の目印   %s
 
+  insert into public.gw_device_releases
+    (tenant_id, version, bucket, object_path, url, sha256, size_bytes,
+     signature, key_id, published)
+  values
+    ('<テナントのUUID>', %s, %s, %s, %s, %s, %d, %s, %s, true);
+
 このあと:
-  ・%s を上のURLに置く
-  ・管理画面で「公開する」に変える
+  ・%s を置き場所に上げる
   ・署名かハッシュが合わなければ、エージェントは実行しません
-`, version, url, sum, size, sig, keyID, file)
+`, version, where, sum, size, sig, keyID,
+		sqlVal(version), sqlVal(bucketOf(locator)), sqlVal(locator), sqlVal(url),
+		sqlVal(sum), size, sqlVal(sig), sqlVal(keyID), file)
 	return nil
+}
+
+func bucketOf(locator string) string {
+	if locator == "" {
+		return ""
+	}
+	return "agent"
+}
+
+// sqlVal は、空なら null。貼ってそのまま流せるように
+func sqlVal(s string) string {
+	if s == "" {
+		return "null"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 func readKey(path string) (ed25519.PrivateKey, error) {

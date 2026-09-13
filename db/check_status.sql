@@ -83,7 +83,8 @@ with checks(seq, mig, title, kind, obj, col) as (values
   (58, '058',    '更新ファイルを自前の鍵で確かめる（署名・大きさ）',      'column',   'gw_device_releases',     'signature'),
   (59, '059',    '端末管理を週1回で回す（90日で消す・確認待ち）',        'column',   'gw_device_policies',     'confirm_wait_days'),
   (60, '060',    '端末管理を会社ルールの形に（周知・私物PCの承認）',      'table',    'gw_device_exceptions',   null),
-  (61, '061',    '端末登録を本人がマイページから（登録コード廃止）',      'column',   'gw_device_pairings',     'kind')
+  (61, '061',    '端末登録を本人がマイページから（登録コード廃止）',      'column',   'gw_device_pairings',     'kind'),
+  (62, '062',    '配布物をStorageに置き、URLはそのつど短く出す',          'column',   'gw_device_releases',     'object_path')
 ),
 
 -- ファイルの適用状況
@@ -154,7 +155,11 @@ parts(mig, obj, col, how) as (values
   ('060', 'gw_device_policies', 'unregistered_action', 'rerun'),
   ('060', 'gw_device_exceptions', 'expires_on', 'manual'),
   -- 061 本人がマイページから登録する
-  ('061', 'gw_device_pairings', 'kind', 'rerun')
+  ('061', 'gw_device_pairings', 'kind', 'rerun'),
+  -- 062 配布物の置き場所と、誰が入れるか
+  ('062', 'gw_device_releases', 'bucket', 'rerun'),
+  ('062', 'gw_device_releases', 'object_path', 'rerun'),
+  ('062', 'gw_device_policies', 'self_install', 'rerun')
 ),
 
 missing as (

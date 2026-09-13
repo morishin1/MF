@@ -23,6 +23,15 @@
 //   名前を変えられて読めなかったときは、これまでどおり
 //   インストーラが自分で札を作る。止まらない。
 //
+// ■ 配布物のURLは、そのつど短く作る
+//
+//   置いてあるのは非公開のバケット。
+//   長く生きるURLを表に持つと、漏れたらそのまま落とせるし、
+//   消すまで有効なままになる。
+//
+//   表に持つのは「どこに置いたか」だけ。
+//   落とすときに5分だけ有効なURLを作って、そこへ送る。
+//
 // ■ 札の性質
 //   ・32バイトの乱数。保存するのはハッシュだけ
 //   ・15分で切れる
@@ -38,6 +47,9 @@ import { sha256, newPairToken } from "../../lib/devices.js";
 
 const SQL = "db/057_device_one_pc.sql → 061_device_selfserve.sql";
 const TTL_MIN = 15;
+// 落とすためのURLは短く。長く生きるURLを表に持たない、という方針の片割れ
+const DOWNLOAD_TTL_SEC = 300;
+const DEFAULT_BUCKET = "agent";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -55,6 +67,7 @@ export default async function handler(req, res) {
   if (req.method === "POST") return mint(res, ctx, user);
   if (req.method === "GET") {
     const q = new URL(req.url, "http://localhost").searchParams;
+    if (q.get("policy")) return policy(res, ctx);
     if (q.get("download")) return download(res, ctx, q.get("download"));
     return status(res, ctx, q.get("token"));
   }
@@ -107,6 +120,27 @@ async function mint(res, ctx, user) {
   });
 }
 
+// ---- 誰がインストーラを実行するか -------------------------------------------
+//
+// 既定は管理者・IT担当。
+//
+// 商用のコード署名証明書を使わないので、初回に Windows の警告が出る。
+// 「警告が出たら詳細情報→実行」を社員に覚えさせると、
+// 本物の怪しいEXEでも同じことをするようになる。
+// セキュリティ教育として割に合わないので、社員には越えさせない。
+//
+// 警告なしで配れる道ができたら、設定を true にするだけで画面が変わる
+async function policy(res, ctx) {
+  const sb = admin();
+  let selfInstall = false;
+  try {
+    const { data } = await sb.from("gw_device_policies")
+      .select("self_install").eq("tenant_id", ctx.tenantId).maybeSingle();
+    selfInstall = Boolean(data?.self_install);
+  } catch (e) { /* 062 がまだ。安全側のまま */ }
+  return json(res, 200, { selfInstall });
+}
+
 // ---- ② 進み具合を見る -------------------------------------------------------
 async function status(res, ctx, token) {
   if (!token) return json(res, 400, { error: "bad_token" });
@@ -136,6 +170,10 @@ async function status(res, ctx, token) {
 }
 
 // ---- ③ インストーラを落とす -------------------------------------------------
+//
+// 非公開のバケットに置いてあるので、長く生きるURLは持たない。
+// 落とすたびに、短時間だけ有効なURLを作る。
+// 漏れても、すぐ使えなくなる
 async function download(res, ctx, token) {
   const sb = admin();
 
@@ -147,53 +185,71 @@ async function download(res, ctx, token) {
     return json(res, 404, { error: "expired", message: "この設定用のリンクは使えません" });
   }
 
-  // 公開している版を探す。無ければ環境変数
-  let url = null;
+  // 公開している版を探す
+  let rel = null;
   try {
     const { data } = await sb.from("gw_device_releases")
-      .select("url").eq("tenant_id", ctx.tenantId).eq("published", true)
+      .select("version, bucket, object_path, url")
+      .eq("tenant_id", ctx.tenantId).eq("published", true)
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
-    url = data?.url || null;
+    rel = data || null;
   } catch (e) { /* 表がまだ無い */ }
-  url = url || process.env.DEVICE_AGENT_URL || null;
 
-  if (!url) {
+  // 表に無ければ環境変数。置き場所のほうを先に見る
+  const bucket = rel?.bucket || process.env.DEVICE_AGENT_BUCKET || DEFAULT_BUCKET;
+  const objectPath = rel?.object_path || process.env.DEVICE_AGENT_OBJECT || null;
+  const plainUrl = rel?.url || process.env.DEVICE_AGENT_URL || null;
+
+  if (!objectPath && !plainUrl) {
     return json(res, 503, {
       error: "no_release",
       hint: "配布するインストーラがまだ登録されていません。管理部にご連絡ください",
     });
   }
-  if (!/^https:\/\//i.test(url)) {
-    console.error("[devices/setup] https でない配布先:", url);
-    return json(res, 503, { error: "no_release", hint: "配布先の設定が正しくありません" });
-  }
 
   // ファイル名に札を入れて渡す。
-  //
-  // 置き場が Supabase Storage なら、署名つきURLで名前を指定できる。
-  // そうでなければ、素のURLへ送る（インストーラは自分で札を作る側に回る）。
-  const signed = await signedWithName(sb, url, `EIGHT-Agent-Setup-${token}.exe`);
+  // インストーラは自分のファイル名から読むので、打ち込ませずに済む
+  const fileName = `EIGHT-Agent-Setup-${token}.exe`;
 
+  if (objectPath) {
+    const signed = await signedUrl(sb, bucket, objectPath, fileName);
+    if (!signed) {
+      return json(res, 503, {
+        error: "no_release",
+        hint: "配布物を取り出せませんでした。管理部にご連絡ください",
+      });
+    }
+    return redirect(res, signed);
+  }
+
+  // 外の場所に置いてある版。名前は決められないので、
+  // インストーラは自分で札を作る側に回る（それでも設定はできる）
+  if (!/^https:\/\//i.test(plainUrl)) {
+    console.error("[devices/setup] https でない配布先:", plainUrl);
+    return json(res, 503, { error: "no_release", hint: "配布先の設定が正しくありません" });
+  }
+  return redirect(res, plainUrl);
+}
+
+function redirect(res, to) {
   res.statusCode = 302;
-  res.setHeader("Location", signed || url);
-  // 落とす先は人が見るものではない。中継の記録に残さない
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Location", to);
+  // 短命のURLを、途中に残さない
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Referrer-Policy", "no-referrer");
   res.end();
 }
 
 /**
- * Supabase Storage に置いてあるなら、ファイル名を指定した署名つきURLにする。
+ * Storage の中身を、短時間だけ落とせるURLにする。
  *
- * 置き場が別（自社サーバなど）なら null を返す。
- * そのときインストーラは、ファイル名から札を読めないので自分で作る。
- * 社員から見た手順は変わらない（1回多くブラウザが開くだけ）
+ * ファイル名を指定できるのがここの肝。
+ * 名前に札を入れて渡すので、社員は何も打たなくてよい
  */
-async function signedWithName(sb, url, fileName) {
-  const m = String(url).match(/\/storage\/v1\/object\/(?:public\/)?([^/]+)\/(.+)$/);
-  if (!m) return null;
+async function signedUrl(sb, bucket, objectPath, fileName) {
   try {
-    const { data, error } = await sb.storage.from(m[1])
-      .createSignedUrl(decodeURIComponent(m[2]), 600, { download: fileName });
+    const { data, error } = await sb.storage.from(bucket)
+      .createSignedUrl(objectPath, DOWNLOAD_TTL_SEC, { download: fileName });
     if (error) throw error;
     return data?.signedUrl || null;
   } catch (e) {

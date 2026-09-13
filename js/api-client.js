@@ -580,6 +580,8 @@
   const startDeviceSetup = () => api("/api/devices/setup", { method: "POST", body: {} });
   const deviceSetupState = (token) =>
     api(`/api/devices/setup?token=${encodeURIComponent(token)}`);
+  // 誰がインストーラを実行するか（既定は管理者・IT担当）
+  const deviceSetupPolicy = () => api("/api/devices/setup?policy=1");
 
   // 私物PC利用の事前承認
   const deviceExceptions = () => api("/api/devices/exceptions");
@@ -1015,7 +1017,7 @@
     closing, patchClosing, downloadClosingCsv,
     devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     deviceExceptions, approveDeviceException, revokeDeviceException,
-    startDeviceSetup, deviceSetupState,
+    startDeviceSetup, deviceSetupState, deviceSetupPolicy,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
     deviceWeb, myWeb, pairInfo, claimPair,
     myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,

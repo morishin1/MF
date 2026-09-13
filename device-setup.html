@@ -8,8 +8,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913d">
-  <link rel="stylesheet" href="css/layout.css?v=20260913d">
+  <link rel="stylesheet" href="css/app.css?v=20260913e">
+  <link rel="stylesheet" href="css/layout.css?v=20260913e">
   <style>
     /* インストーラが開く画面。社員がここで見るのは1回きりなので、
        ほかの画面へ行く道は出さない。いま何をしているかだけ出す */
@@ -57,7 +57,7 @@
 
   <div class="st-steps">
     <div class="st-step on" id="s1">ダウンロード</div>
-    <div class="st-step" id="s2">実行</div>
+    <div class="st-step" id="s2">設定</div>
     <div class="st-step" id="s3">端末管理について</div>
     <div class="st-step" id="s4">完了</div>
   </div>
@@ -79,10 +79,29 @@
       <span class="fn" id="st-file"></span>
     </div>
 
-    <ol class="st-how">
+    <!-- 管理者・IT担当が入れる運用のとき（既定）。
+         社員に Windows の警告の越え方を覚えさせない -->
+    <div id="st-byadmin">
+      <ol class="st-how">
+        <li>上のボタンを押すと、設定用のファイルが落ちてきます</li>
+        <li><b>ここからは管理者・IT担当にかわってください。</b>
+          入れる作業は、管理者が行います</li>
+        <li>入れ終わると、<b>この画面に自動でもどってきます</b></li>
+        <li>最後に、<b>あなたが</b>「内容を確認しました」を押して終わりです</li>
+      </ol>
+      <div class="banner" style="background:var(--soft);display:block;margin:14px 0 0;">
+        <b style="font-size:13px;">Windows の警告が出たときは、管理者にお任せください。</b>
+        <p class="muted" style="font-size:12.5px;line-height:1.9;margin:6px 0 0;">
+          ご自身では警告を進めないでください。<br>
+          メールやウェブで届いたファイルの警告も、無視してはいけません。
+        </p>
+      </div>
+    </div>
+
+    <!-- 警告なしで配れるようになったら、設定で切り替える -->
+    <ol class="st-how hidden" id="st-byself">
       <li>上のボタンを押すと <b>EIGHT-Agent-Setup.exe</b> が落ちてきます</li>
       <li>落ちてきたファイルを<b>そのまま実行</b>します（名前は変えないでください）</li>
-      <li>Windows の警告が出たら「詳細情報」→「実行」を押します</li>
       <li>入り終わると、<b>この画面に自動でもどってきます</b></li>
       <li>最後に「内容を確認しました」を押して終わりです</li>
     </ol>
@@ -93,17 +112,19 @@
     <div id="st-msg" class="err-text"></div>
   </div>
 
-  <!-- ⓪-2 落としたあと、実行されるのを待つ -->
+  <!-- ⓪-2 落としたあと、入れ終わるのを待つ -->
   <div class="card hidden" id="card-run">
-    <h2><span class="material-symbols-outlined">play_circle</span>ダウンロードしたファイルを実行してください</h2>
+    <h2><span class="material-symbols-outlined">play_circle</span>
+      <span id="run-title">管理者による設定を待っています</span></h2>
     <div class="st-wait">
       <span class="material-symbols-outlined kp-spin">progress_activity</span>
-      <span id="run-text">実行されるのを待っています…</span>
+      <span id="run-text">設定されるのを待っています…</span>
     </div>
-    <p class="muted" style="font-size:12.5px;line-height:1.9;margin:14px 0 0;">
-      ブラウザの「ダウンロード」から <b id="run-file">EIGHT-Agent-Setup.exe</b> を開いてください。<br>
-      Windows の警告が出たら「詳細情報」→「実行」です。<br>
-      入り終わると、この画面が自動で次に進みます。
+    <p class="muted" style="font-size:12.5px;line-height:1.9;margin:14px 0 0;"
+       id="run-how">
+      <b>この画面を開いたまま</b>、管理者・IT担当にかわってください。<br>
+      落ちてきたファイル（<b id="run-file">EIGHT-Agent-Setup.exe</b>）を、管理者が実行します。<br>
+      入れ終わると、この画面が自動で次に進みます。
     </p>
     <p class="muted" style="font-size:12px;margin:10px 0 0;">
       15分を過ぎると、やり直しになります。
@@ -170,9 +191,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913d"></script>
-<script src="js/device.js?v=20260913d"></script>
-<script src="js/layout.js?v=20260913d"></script>
+<script src="js/api-client.js?v=20260913e"></script>
+<script src="js/device.js?v=20260913e"></script>
+<script src="js/layout.js?v=20260913e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -228,8 +249,33 @@
 
   // ---- ① マイページから来たとき ------------------------------------------------
 
-  function offerDownload() {
+  /**
+   * 誰がインストーラを実行するか。
+   *
+   * 既定は管理者・IT担当。商用のコード署名証明書を使わないので、
+   * 初回に Windows の警告が出る。「警告が出たら詳細情報→実行」を
+   * 社員に覚えさせると、本物の怪しいEXEでも同じことをするようになる。
+   *
+   * 警告なしで配れる道ができたら、設定（self_install）を true にするだけで
+   * 社員向けの手順に変わる
+   */
+  let selfInstall = false;
+
+  async function offerDownload() {
     step(1);
+    try {
+      const p = await API.deviceSetupPolicy();
+      selfInstall = Boolean(p?.selfInstall);
+    } catch (e) { /* 取れなければ、安全側（管理者が入れる）のまま */ }
+
+    el("st-byadmin").classList.toggle("hidden", selfInstall);
+    el("st-byself").classList.toggle("hidden", !selfInstall);
+    if (selfInstall) {
+      el("run-title").textContent = "ダウンロードしたファイルを実行してください";
+      el("run-how").innerHTML =
+        `ブラウザの「ダウンロード」から <b id="run-file">EIGHT-Agent-Setup.exe</b> を開いてください。<br>`
+        + `入り終わると、この画面が自動で次に進みます。`;
+    }
     el("card-start").classList.remove("hidden");
   }
 

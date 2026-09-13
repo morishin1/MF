@@ -164,12 +164,15 @@ type IngestResult struct {
 //
 // 言い分は、そのままでは信じない。
 // Signature を、焼き込んだ公開鍵で確かめてから落としにいく。
-// 4つ（版・URL・ハッシュ・大きさ）まとめて署名されているので、
-// 同じハッシュのまま URL だけ差し替える、ということができない
+// 4つ（版・置き場所・ハッシュ・大きさ）まとめて署名されているので、
+// 同じハッシュのまま置き場所だけ差し替える、ということができない
 type Manifest struct {
-	Update     bool   `json:"update"`
-	Version    string `json:"version"`
+	Update  bool   `json:"update"`
+	Version string `json:"version"`
+	// URL は毎回変わることがある（非公開の置き場から、そのつど短命のURLを作る）。
+	// 署名の対象は Locator のほう
 	URL        string `json:"url"`
+	Locator    string `json:"locator"`
 	SHA256     string `json:"sha256"`
 	SizeBytes  int64  `json:"sizeBytes"`
 	Signature  string `json:"signature"`

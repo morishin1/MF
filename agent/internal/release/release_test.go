@@ -28,7 +28,25 @@ func good(t *testing.T) (pub string, in Info, body []byte) {
 		SizeBytes: int64(len(body)),
 		KeyID:     KeyID(p),
 	}
-	in.Signature = Sign(priv, in.Version, in.URL, in.SHA256, in.SizeBytes)
+	in.Signature = Sign(priv, in.Version, in.At(), in.SHA256, in.SizeBytes)
+	return base64.RawURLEncoding.EncodeToString(p), in, body
+}
+
+// 置き場所に署名する版。
+// 落とすURLは毎回変わるので、変わらないほう（Storage のパス）に署名する
+func atStorage(t *testing.T) (pub string, in Info, body []byte) {
+	t.Helper()
+	p, priv, _ := ed25519.GenerateKey(rand.Reader)
+	body = bytes.Repeat([]byte("EIGHT"), 400)
+	sum := sha256.Sum256(body)
+	in = Info{
+		Version:   "1.2.3",
+		Locator:   "0.3.0/EIGHT-Agent-Setup.exe",
+		URL:       "https://xyz.supabase.co/storage/v1/object/sign/agent/x?token=aaa",
+		SHA256:    hex.EncodeToString(sum[:]),
+		SizeBytes: int64(len(body)),
+	}
+	in.Signature = Sign(priv, in.Version, in.At(), in.SHA256, in.SizeBytes)
 	return base64.RawURLEncoding.EncodeToString(p), in, body
 }
 
@@ -104,7 +122,7 @@ func TestVerifyPlainHTTP(t *testing.T) {
 		SizeBytes: 1,
 	}
 	// 正しく署名されていても、https でなければ落としにいかない
-	in.Signature = Sign(priv, in.Version, in.URL, in.SHA256, in.SizeBytes)
+	in.Signature = Sign(priv, in.Version, in.At(), in.SHA256, in.SizeBytes)
 	if err := Verify(base64.RawURLEncoding.EncodeToString(p), in); err == nil {
 		t.Fatal("http で通った")
 	}
@@ -126,6 +144,44 @@ func TestVerifyFields(t *testing.T) {
 				t.Fatalf("通ってしまった: %v", err)
 			}
 		})
+	}
+}
+
+// 置き場所に署名しておけば、落とすURLが毎回変わっても通る。
+// 非公開バケットに置いて、そのつど短命のURLを作るため
+func TestLocatorSigned(t *testing.T) {
+	pub, in, _ := atStorage(t)
+	if err := Verify(pub, in); err != nil {
+		t.Fatalf("置き場所に署名したものが弾かれた: %v", err)
+	}
+
+	// URLが変わっても通る（短命のURLは毎回違う）
+	in.URL = "https://xyz.supabase.co/storage/v1/object/sign/agent/x?token=zzz"
+	if err := Verify(pub, in); err != nil {
+		t.Fatalf("URLが変わると通らない: %v", err)
+	}
+
+	// 置き場所を差し替えたら通らない。ここが守りたいところ
+	in.Locator = "0.3.0/evil.exe"
+	if err := Verify(pub, in); err == nil {
+		t.Fatal("置き場所を差し替えても通ってしまった")
+	}
+}
+
+// 置き場所が無いものは、URL に署名する（058 までの版）。
+// 外の場所に置く版も、この道を通る
+func TestFallsBackToURL(t *testing.T) {
+	pub, in, _ := good(t)
+	if in.Locator != "" {
+		t.Fatal("この試験は Locator 無しで作る前提")
+	}
+	if err := Verify(pub, in); err != nil {
+		t.Fatalf("URLに署名したものが弾かれた: %v", err)
+	}
+	// URLが署名の対象なので、差し替えたら通らない
+	in.URL = "https://evil.example.com/x.exe"
+	if err := Verify(pub, in); err == nil {
+		t.Fatal("URLを差し替えても通ってしまった")
 	}
 }
 
@@ -207,6 +263,15 @@ func TestKeyIDStable(t *testing.T) {
 
 // 署名の対象は、前後の空白やハッシュの大文字小文字に引きずられないこと。
 // 管理画面に貼るときに混ざっても、署名が合わなくなると困る
+// 落とす先が無ければ、置き場所が署名されていても落としにいけない
+func TestNeedsURL(t *testing.T) {
+	pub, in, _ := atStorage(t)
+	in.URL = ""
+	if err := Verify(pub, in); !errors.Is(err, ErrBadFields) {
+		t.Fatalf("落とす先なしで通った: %v", err)
+	}
+}
+
 func TestSignedNormalizes(t *testing.T) {
 	a := Signed("1.0.0", "https://x/y", "ABCDEF", 10)
 	b := Signed(" 1.0.0 ", " https://x/y ", " abcdef ", 10)
