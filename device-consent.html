@@ -150,6 +150,7 @@
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
+  const strong = KPLayout.strong;
 
   let data = null;
   let myUid = null;
@@ -217,8 +218,8 @@
 
   function render() {
     const n = data.notice || {};
-    el("c-takes").innerHTML = (n.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
-    el("c-never").innerHTML = (n.never || []).map((s) => `<li>${esc(s)}</li>`).join("");
+    el("c-takes").innerHTML = (n.takes || []).map((s) => `<li>${strong(s)}</li>`).join("");
+    el("c-never").innerHTML = (n.never || []).map((s) => `<li>${strong(s)}</li>`).join("");
     el("c-how").textContent = n.how || "";
     el("c-why").textContent = n.why || "";
     el("c-yours").textContent = n.yours || "";
@@ -228,8 +229,8 @@
     el("c-agentnotice").classList.toggle("hidden", !an);
     if (an) {
       el("c-an-title").textContent = an.title;
-      el("c-an-takes").innerHTML = (an.takes || []).map((s) => `<li>${esc(s)}</li>`).join("");
-      el("c-an-never").innerHTML = (an.never || []).map((s) => `<li>${esc(s)}</li>`).join("");
+      el("c-an-takes").innerHTML = (an.takes || []).map((s) => `<li>${strong(s)}</li>`).join("");
+      el("c-an-never").innerHTML = (an.never || []).map((s) => `<li>${strong(s)}</li>`).join("");
       el("c-an-why").textContent = an.why || "";
       for (const k of ["how", "scope", "yours"]) {
         const n2 = el(`c-an-${k}`);

@@ -174,6 +174,16 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  /**
+   * **ここ** を太字にする。それ以外の記法は解さない。
+   *
+   * 端末管理の告知で使う。踏み込んだ項目（見たサイトのドメインなど）を
+   * ほかと同じ太さで並べたくない、というだけのためのもの。
+   *
+   * 先に esc してから ** を見る。中身が < や " でも、タグにはならない
+   */
+  const strong = (s) => esc(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+
   function icon(name, size) {
     return `<span class="material-symbols-outlined"${size ? ` style="font-size:${size}px;"` : ""}>${esc(name)}</span>`;
   }
@@ -803,7 +813,7 @@
 
     logout() { API.logout(); clearCache(); setMemberView(false); location.href = "index.html"; },
     homeFor,
-    esc,
+    esc, strong,
     icon,
   };
 })();

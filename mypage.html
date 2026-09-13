@@ -146,6 +146,7 @@
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
+  const strong = KPLayout.strong;
 
   const ROLE_JA = { owner: "経営者", hr: "人事", manager: "責任者", labor_advisor: "社労士" };
   const STATUS_JA = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
@@ -314,8 +315,8 @@
       <details style="margin-top:6px;">
         <summary style="cursor:pointer;font-size:13px;font-weight:600;">記録している内容</summary>
         <div style="font-size:12.5px;line-height:1.9;margin-top:8px;">
-          <b>取っているもの</b><br>${(n.takes || []).map((s) => `・${esc(s)}`).join("<br>")}
-          <br><br><b>取っていないもの</b><br>${(n.never || []).map((s) => `・${esc(s)}`).join("<br>")}
+          <b>取っているもの</b><br>${(n.takes || []).map((s) => `・${strong(s)}`).join("<br>")}
+          <br><br><b>取っていないもの</b><br>${(n.never || []).map((s) => `・${strong(s)}`).join("<br>")}
           <br><br>${esc(n.how || "")}<br>${esc(n.why || "")}
         </div>
       </details>
