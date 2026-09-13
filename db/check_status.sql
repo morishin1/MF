@@ -107,58 +107,61 @@ migrations as (
 -- 上の「目印」は1つだけなので、その手前で止まったマイグレーションを
 -- 見逃す。コードが実際に読み書きする列を、番号ごとに並べて確かめる。
 -- （全部ではない。落ちると影響が大きいところを選んである）
-parts(mig, obj, col) as (values
+parts(mig, obj, col, how) as (values
   -- 053 端末管理の土台
-  ('053', 'gw_devices',            'device_uid'),
-  ('053', 'gw_devices',            'notified_at'),
-  ('053', 'gw_devices',            'status'),
-  ('053', 'gw_device_events',      'kind'),
-  ('053', 'gw_device_usage',       'active_min'),
-  ('053', 'gw_device_alerts',      'dedupe_key'),
-  ('053', 'gw_device_policies',    'stale_days'),
+  ('053', 'gw_devices', 'device_uid', 'manual'),
+  ('053', 'gw_devices', 'notified_at', 'manual'),
+  ('053', 'gw_devices', 'status', 'manual'),
+  ('053', 'gw_device_events', 'kind', 'manual'),
+  ('053', 'gw_device_usage', 'active_min', 'manual'),
+  ('053', 'gw_device_alerts', 'dedupe_key', 'manual'),
+  ('053', 'gw_device_policies', 'stale_days', 'rerun'),
   -- 054 常駐エージェント
-  ('054', 'gw_devices',            'source'),
-  ('054', 'gw_devices',            'hostname'),
-  ('054', 'gw_devices',            'secret_hash'),
-  ('054', 'gw_devices',            'agent_version'),
-  ('054', 'gw_devices',            'linked_device_id'),
-  ('054', 'gw_devices',            'link_code_hash'),
-  ('054', 'gw_device_app_usage',   'exe_name'),
-  ('054', 'gw_device_enrollments', 'token_hash'),
+  ('054', 'gw_devices', 'source', 'rerun'),
+  ('054', 'gw_devices', 'hostname', 'rerun'),
+  ('054', 'gw_devices', 'secret_hash', 'rerun'),
+  ('054', 'gw_devices', 'agent_version', 'rerun'),
+  ('054', 'gw_devices', 'linked_device_id', 'rerun'),
+  ('054', 'gw_devices', 'link_code_hash', 'rerun'),
+  ('054', 'gw_device_app_usage', 'exe_name', 'manual'),
+  ('054', 'gw_device_enrollments', 'token_hash', 'manual'),
   -- 055 運用
-  ('055', 'gw_devices',            'admin_touched_at'),
-  ('055', 'gw_devices',            'retired_at'),
-  ('055', 'gw_device_enrollments', 'revoked_at'),
-  ('055', 'gw_device_views',       'scope'),
+  ('055', 'gw_devices', 'admin_touched_at', 'rerun'),
+  ('055', 'gw_devices', 'retired_at', 'manual'),
+  ('055', 'gw_device_enrollments', 'revoked_at', 'rerun'),
+  ('055', 'gw_device_views', 'scope', 'manual'),
   -- 056 書類の作成依頼
-  ('056', 'gw_doc_orders',         'status'),
-  ('056', 'gw_sign_requests',      'source'),
+  ('056', 'gw_doc_orders', 'status', 'manual'),
+  ('056', 'gw_sign_requests', 'source', 'rerun'),
   -- 057 1台1行・WEB利用
-  ('057', 'gw_device_browsers',    'linked'),
-  ('057', 'gw_device_web_visits',  'active_sec'),
-  ('057', 'gw_device_web_visits',  'in_work_hours'),
-  ('057', 'gw_device_web_usage',   'host'),
-  ('057', 'gw_device_pairings',    'code_once'),
-  ('057', 'gw_device_policies',    'keep_visits_days'),
-  ('057', 'gw_device_policies',    'work_from'),
+  ('057', 'gw_device_browsers', 'linked', 'manual'),
+  ('057', 'gw_device_web_visits', 'active_sec', 'manual'),
+  ('057', 'gw_device_web_visits', 'in_work_hours', 'manual'),
+  ('057', 'gw_device_web_usage', 'host', 'rerun'),
+  ('057', 'gw_device_pairings', 'code_once', 'manual'),
+  ('057', 'gw_device_policies', 'keep_visits_days', 'rerun'),
+  ('057', 'gw_device_policies', 'work_from', 'rerun'),
   -- 058 更新の署名
-  ('058', 'gw_device_releases',    'signature'),
-  ('058', 'gw_device_releases',    'size_bytes'),
+  ('058', 'gw_device_releases', 'signature', 'rerun'),
+  ('058', 'gw_device_releases', 'size_bytes', 'rerun'),
   -- 059 週1回の運用
-  ('059', 'gw_device_policies',    'confirm_wait_days'),
+  ('059', 'gw_device_policies', 'confirm_wait_days', 'rerun'),
   -- 060 会社ルールの形
-  ('060', 'gw_devices',            'ownership'),
-  ('060', 'gw_devices',            'notified_kind'),
-  ('060', 'gw_devices',            'notified_note'),
-  ('060', 'gw_device_policies',    'unregistered_action'),
-  ('060', 'gw_device_exceptions',  'expires_on')
+  ('060', 'gw_devices', 'ownership', 'rerun'),
+  ('060', 'gw_devices', 'notified_kind', 'rerun'),
+  ('060', 'gw_devices', 'notified_note', 'rerun'),
+  ('060', 'gw_device_policies', 'unregistered_action', 'rerun'),
+  ('060', 'gw_device_exceptions', 'expires_on', 'manual')
 ),
 
 missing as (
   select
-    900 as seq,
+    case when p.how = 'rerun' then 900 else 950 end as seq,
     p.mig,
-    '半分だけ入っています。この番号をもう一度流してください' as title,
+    case p.how
+      when 'rerun'  then '半分だけ入っています。この番号をもう一度流してください'
+      else '表はあるのに列がありません。あとから消された可能性があります'
+    end as title,
     false as ok,
     p.obj || '.' || p.col as marker
   from parts p
@@ -203,7 +206,8 @@ select
     when seq < 100 then lpad(seq::text, 2, '0') || '. ' || mig
     when seq < 200 then '前提'
     when seq < 300 then '保存先'
-    else '⚠ 欠け ' || mig
+    when seq < 950 then '⚠ 欠け ' || mig
+    else '⛔ 消えた ' || mig
   end                                        as "区分",
   title                                      as "内容",
   case when ok then '✅ 適用済み' else '❌ 未適用' end as "状態",
@@ -213,7 +217,9 @@ select
     when seq < 100 then 'db/' || mig || '_*.sql を流す'
     when seq < 200 then '8grp-site 側の SQL を先に流す'
     when seq < 300 then '該当のマイグレーションを流すと作られる'
-    else 'db/' || mig || '_*.sql をもう一度流す'
+    when seq < 950 then 'db/' || mig || '_*.sql をもう一度流す'
+    -- create table の中にしかない列。流し直しても入らないので、手で足す
+    else 'db/' || mig || '_*.sql の create table を見て、alter table で足す'
   end                                        as "やること"
 from (
   select seq, mig, title, ok, marker from migrations
