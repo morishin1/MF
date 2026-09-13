@@ -60,11 +60,11 @@ type inbound struct {
 
 // toService は名前付きパイプへ流す形。サービス側の読み手と合わせてある
 type toService struct {
-	From    string  `json:"from"`
+	From    string    `json:"from"`
 	At      time.Time `json:"at"`
-	Browser string  `json:"browser"`
-	Version string  `json:"version"`
-	Visits  []visit `json:"visits,omitempty"`
+	Browser string    `json:"browser"`
+	Version string    `json:"version"`
+	Visits  []visit   `json:"visits,omitempty"`
 }
 
 func main() {

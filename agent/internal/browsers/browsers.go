@@ -70,7 +70,7 @@ var Candidates = []Candidate{
 
 // Found は1つぶんの結果。
 type Found struct {
-	Kind Kind   `json:"browser"`
+	Kind Kind `json:"browser"`
 	// 入っているか
 	Installed bool `json:"installed"`
 	// 拡張から届いているか。インストーラの時点では必ず false

@@ -47,22 +47,22 @@ func readManifest(t *testing.T) manifest {
 // 就業規則のほうを先に直すこと。順番を逆にしない
 func TestExtensionHasNoDangerousPermissions(t *testing.T) {
 	forbidden := map[string]string{
-		"<all_urls>":       "全サイトに入り込める",
-		"webRequest":       "通信の中身が読める",
+		"<all_urls>":         "全サイトに入り込める",
+		"webRequest":         "通信の中身が読める",
 		"webRequestBlocking": "同上",
-		"cookies":          "Cookie とログインの鍵が読める",
-		"history":          "閲覧履歴の全文（URL）が読める",
-		"bookmarks":        "ブックマークが読める",
-		"downloads":        "ダウンロードしたファイルが分かる",
-		"clipboardRead":    "コピーした内容が読める",
-		"debugger":         "何でもできる",
-		"management":       "ほかの拡張を触れる",
-		"proxy":            "通信を曲げられる",
-		"privacy":          "ブラウザの設定を変えられる",
-		"scripting":        "ページにコードを差し込める",
-		"pageCapture":      "ページを丸ごと保存できる",
-		"desktopCapture":   "画面を取れる",
-		"tabCapture":       "タブの中身を取れる",
+		"cookies":            "Cookie とログインの鍵が読める",
+		"history":            "閲覧履歴の全文（URL）が読める",
+		"bookmarks":          "ブックマークが読める",
+		"downloads":          "ダウンロードしたファイルが分かる",
+		"clipboardRead":      "コピーした内容が読める",
+		"debugger":           "何でもできる",
+		"management":         "ほかの拡張を触れる",
+		"proxy":              "通信を曲げられる",
+		"privacy":            "ブラウザの設定を変えられる",
+		"scripting":          "ページにコードを差し込める",
+		"pageCapture":        "ページを丸ごと保存できる",
+		"desktopCapture":     "画面を取れる",
+		"tabCapture":         "タブの中身を取れる",
 	}
 
 	m := readManifest(t)
@@ -105,15 +105,15 @@ func TestExtensionHasWhatItNeeds(t *testing.T) {
 // 「そのうち権限を足す」への一歩になる。ここで止める
 func TestExtensionCodeDoesNotReach(t *testing.T) {
 	forbidden := map[string]string{
-		`\.title`:                "ページの題（タイトル）",
-		`chrome\.cookies`:        "Cookie",
-		`chrome\.history`:        "閲覧履歴の全文",
-		`chrome\.webRequest`:     "通信の中身",
-		`chrome\.scripting`:      "ページへの差し込み",
-		`chrome\.downloads`:      "ダウンロード",
-		`executeScript`:          "ページへの差し込み",
-		`chrome\.bookmarks`:      "ブックマーク",
-		`captureVisibleTab`:      "画面のコピー",
+		`\.title`:            "ページの題（タイトル）",
+		`chrome\.cookies`:    "Cookie",
+		`chrome\.history`:    "閲覧履歴の全文",
+		`chrome\.webRequest`: "通信の中身",
+		`chrome\.scripting`:  "ページへの差し込み",
+		`chrome\.downloads`:  "ダウンロード",
+		`executeScript`:      "ページへの差し込み",
+		`chrome\.bookmarks`:  "ブックマーク",
+		`captureVisibleTab`:  "画面のコピー",
 	}
 
 	src, err := os.ReadFile(filepath.Join("..", "..", "extension", "background.js"))

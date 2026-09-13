@@ -4,6 +4,10 @@
 # 社員が触るのは EIGHT-Agent-Setup.exe の1つだけ。
 # 中に、常駐する3つと設定が入っている。
 #
+#   ふだんは GitHub Actions から組みます（docs/device-release.md）。
+#   自分のパソコンに Go を入れる必要はありません。
+#   ここを直接叩くのは、手元で試すときだけ。
+#
 #   ./build.sh          … 確かめて、dist/ に組む
 #   ./build.sh test     … 確かめるだけ
 #
@@ -109,16 +113,20 @@ echo
 echo "できました:"
 ls -la dist/
 echo
-echo "このあと Windows 側でやること:"
-echo "  1. dist/extension/ を .crx に固めて、鍵で署名する（拡張の ID が決まる）"
-echo "  2. その ID を EXT_ID に入れて、この build.sh を組み直す"
-echo "  3. .crx と updates.xml を ${UPDATE_URL} に置く"
-echo "  4. EIGHT-Agent-Setup.exe を社内の置き場に上げる"
-echo "     ※ 商用のコード署名はしない。初回は管理者が対象PCで実行する"
-echo "        （SmartScreen の警告が出るので、社員に判断させない）"
-echo "  5. 更新として配るなら、自前の鍵で署名する:"
+echo "配るまでの手順: docs/device-release.md"
+echo
+echo "  1. Supabase の Storage → agent バケットに"
+echo "     ${VERSION}/EIGHT-Agent-Setup.exe として上げる（バケットは非公開のまま）"
+echo "  2. 自前の鍵で署名する:"
 echo "       go run ./cmd/eight-agent-keygen -key <秘密鍵> \\"
-echo "          -version ${VERSION} -url <配布URL> -file dist/EIGHT-Agent-Setup.exe"
-echo "     出てきた 版・URL・SHA256・大きさ・署名・鍵の目印 を"
-echo "     Supabase の gw_device_releases に入れる（SQLは docs/device-zero-cost.md）"
-echo "     署名が無い版は published にできない（DBの制約で止まる）"
+echo "          -version ${VERSION} -locator ${VERSION}/EIGHT-Agent-Setup.exe \\"
+echo "          -file dist/EIGHT-Agent-Setup.exe"
+echo "     そのまま流せる insert 文が出る。署名が無い版は published にできない"
+echo
+echo "  拡張を配るときは、別に:"
+echo "    dist/extension/ を .crx に固めて鍵で署名し（拡張の ID が決まる）、"
+echo "    その ID を EXT_ID に入れて組み直す。.crx と updates.xml を"
+echo "    ${UPDATE_URL} に置く（agent/extension/README.md）"
+echo
+echo "  ※ 商用のコード署名はしない。会社貸与PCへの導入は管理者・IT担当が行う"
+echo "     （SmartScreen の警告を、社員に越えさせないため）"

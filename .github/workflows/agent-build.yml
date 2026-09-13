@@ -1,0 +1,217 @@
+# EIGHT Agent を組み立てる。
+#
+# ■ なぜ GitHub Actions でやるのか
+#
+#   これまでは、誰かのパソコンに Go と Git Bash を入れて ./build.sh を叩いていた。
+#   それだと「その人のパソコンでしか作れないもの」になる。
+#   入れているものの違いで、出てくる EXE が変わることもある。
+#
+#   ここで作れば、誰が押しても同じ手順で同じものが出る。
+#   ローカルに Go も Git Bash も OpenSSL も要らない。
+#
+# ■ 使い方（管理者）
+#
+#   GitHub → Actions → 「EIGHT Agent を組み立てる」→ Run workflow
+#     版: 0.3.0 のように入れて実行
+#     → 終わったら、そのページの Artifacts から EXE を落とす
+#
+# ■ まだ自動になっていないこと
+#
+#   Supabase への上げ込み・更新署名・gw_device_releases への登録は、
+#   いまは人がやる（docs/device-release.md）。
+#   このファイルの最後に、続きを足す場所を用意してある。
+
+name: EIGHT Agent を組み立てる
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版（例 0.3.0）"
+        required: true
+        type: string
+      ext_id:
+        description: "拡張のID（32文字）。空なら Variables の AGENT_EXT_ID を使う"
+        required: false
+        type: string
+
+# 読むだけ。ここから何かを書き換えることはない
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: 組み立て
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 取り出す
+        uses: actions/checkout@v4
+
+      # 版は、あとでファイル名・Storage のパス・DBの一意キーになる。
+      # 変な字が混ざったまま先へ進めない
+      # 入力は env ごしに渡す。run の中に ${{ }} を直接書くと、
+      # 入れた文字がそのままシェルの一部になる（Actions の定番の穴）
+      - name: 版の形を確かめる
+        env:
+          IN_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if ! printf '%s' "$IN_VERSION" \
+             | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::版の形が違います（例 0.3.0 / 0.3.0-rc1）"
+            exit 1
+          fi
+          echo "VERSION=$IN_VERSION" >> "$GITHUB_ENV"
+
+      - name: Go を用意する
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # build.sh の中で、単体テストと GOOS=windows go vet も走る。
+      # 落ちるものを配らない
+      - name: 組み立てる
+        working-directory: agent
+        env:
+          VERSION: ${{ env.VERSION }}
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
+          # 拡張のID。入れずに組むと、ブラウザ連携だけ設定されない
+          EXT_ID: ${{ inputs.ext_id || vars.AGENT_EXT_ID }}
+          # 更新を確かめる公開鍵。空だと、エージェントは自動更新をしない
+          UPDATE_KEY: ${{ vars.AGENT_UPDATE_KEY }}
+        run: |
+          set -eu
+          chmod +x build.sh
+          ./build.sh
+
+      # 足りないまま配ると、入れたあとに気づくことになる。
+      # 組んだ直後に、画面と要約の両方へ出す
+      - name: 足りないものを知らせる
+        if: always()
+        env:
+          EXT_ID: ${{ inputs.ext_id || vars.AGENT_EXT_ID }}
+          UPDATE_KEY: ${{ vars.AGENT_UPDATE_KEY }}
+        run: |
+          set -eu
+          if [ -z "${EXT_ID:-}" ]; then
+            echo "::warning::拡張のIDが空のまま組みました。ブラウザ連携（WEB利用）は設定されません"
+          fi
+          if [ -z "${UPDATE_KEY:-}" ]; then
+            echo "::warning::更新用の公開鍵が空のまま組みました。エージェントは自動更新をしません"
+          fi
+
+      - name: 中身を確かめて、登録に要る値を出す
+        id: facts
+        working-directory: agent
+        run: |
+          set -eu
+          exe=dist/EIGHT-Agent-Setup.exe
+          test -f "$exe" || { echo "::error::$exe ができていません"; exit 1; }
+
+          sha=$(sha256sum "$exe" | cut -d' ' -f1)
+          size=$(stat -c %s "$exe")
+
+          # 20MB 前後になるはず。極端に小さいのは、組み立てが途中で終わった印
+          if [ "$size" -lt 5000000 ]; then
+            echo "::error::EXE が小さすぎます（$size バイト）。組み立てが途中で終わっています"
+            exit 1
+          fi
+
+          echo "sha=$sha"   >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## EIGHT-Agent-Setup.exe ができました"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| 版 | \`${VERSION}\` |"
+            echo "| 大きさ | ${size} バイト |"
+            echo "| SHA-256 | \`${sha}\` |"
+            if [ -n "${EXT_ID:-}" ]; then
+              echo "| 拡張のID | \`${EXT_ID}\` |"
+            else
+              echo "| 拡張のID | （未設定。ブラウザ連携は入りません） |"
+            fi
+            if [ -n "${UPDATE_KEY:-}" ]; then
+              echo "| 更新の公開鍵 | 設定済み |"
+            else
+              echo "| 更新の公開鍵 | （未設定。自動更新をしません） |"
+            fi
+            echo
+            echo "### このあと"
+            echo
+            echo "1. 上の **Artifacts** から \`EIGHT-Agent-Setup-${VERSION}\` を落とす"
+            echo "2. Supabase の Storage → \`agent\` バケットに"
+            echo "   \`${VERSION}/EIGHT-Agent-Setup.exe\` として上げる"
+            echo "3. 署名して \`gw_device_releases\` に登録する"
+            echo "   （手順: \`docs/device-release.md\`）"
+            echo
+            echo "> 2 と 3 は、まだ人がやります。"
+            echo "> 自動にするには Supabase の鍵と更新用の秘密鍵を Secrets に入れる必要があり、"
+            echo "> そこは別で決めてから足します。"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERSION: ${{ env.VERSION }}
+          EXT_ID: ${{ inputs.ext_id || vars.AGENT_EXT_ID }}
+          UPDATE_KEY: ${{ vars.AGENT_UPDATE_KEY }}
+
+      # 落としたときに、どの版か分かる名前にしておく。
+      # EXE 自体の名前は変えない（インストーラがファイル名から札を読むため、
+      # 配るときにサーバ側で名前を付け替える）
+      - name: 落とせるようにする
+        uses: actions/upload-artifact@v4
+        with:
+          name: EIGHT-Agent-Setup-${{ env.VERSION }}
+          path: |
+            agent/dist/EIGHT-Agent-Setup.exe
+            agent/dist/extension/
+          if-no-files-found: error
+          # 置きっぱなしにしない。要るのは登録するまでのあいだだけ
+          retention-days: 14
+
+      # 中身の確かめに使う。EXE と一緒に置いておくと、
+      # 落とした人がその場で照合できる
+      - name: ハッシュも一緒に置く
+        env:
+          VERSION: ${{ env.VERSION }}
+          SHA: ${{ steps.facts.outputs.sha }}
+          SIZE: ${{ steps.facts.outputs.size }}
+        run: |
+          set -eu
+          mkdir -p out
+          printf '%s  EIGHT-Agent-Setup.exe\n' "$SHA" \
+            > out/EIGHT-Agent-Setup.exe.sha256
+          {
+            echo "version=${VERSION}"
+            echo "sha256=${SHA}"
+            echo "size_bytes=${SIZE}"
+            echo "object_path=${VERSION}/EIGHT-Agent-Setup.exe"
+            echo "bucket=agent"
+          } > out/release.txt
+
+      - name: ハッシュを落とせるようにする
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ env.VERSION }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # このあと足すもの（いまは人がやる）
+  #
+  #   5. Supabase の agent バケットへ上げる
+  #        secrets.SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY が要る
+  #   6. 更新署名（cmd/eight-agent-keygen）
+  #        secrets.AGENT_UPDATE_PRIVATE_KEY が要る
+  #   7. gw_device_releases へ登録
+  #        5 と同じ鍵で入れる
+  #
+  #   鍵を Actions に置くかどうかは、決めてから足す。
+  #   service_role の鍵は、入れれば全テーブルを書き換えられるものなので、
+  #   「便利だから置く」で決めない
+  # ---------------------------------------------------------------------------

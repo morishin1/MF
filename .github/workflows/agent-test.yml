@@ -1,0 +1,67 @@
+# エージェントを直したら、自動で確かめる。
+#
+# ■ なぜ要るのか
+#
+#   組み立てのワークフロー（agent-build.yml）は、人が押したときだけ動く。
+#   それだと「配ろうとした日に、はじめて壊れていると気づく」ことになる。
+#
+#   ここで毎回まわしておけば、直した時点で分かる。
+#   確かめるために、誰かのパソコンに Go を入れる必要もない。
+#
+# ■ 何を見るか
+#
+#   ・単体テスト（OSに依らないところ）
+#   ・Windows 向けの見直し（GOOS=windows go vet）
+#   ・書き方の揃い（gofmt）
+#
+#   組み立て（EXE を作る）まではしない。そこは配るときだけでよい。
+
+name: エージェントを確かめる
+
+on:
+  push:
+    paths:
+      - "agent/**"
+      - ".github/workflows/agent-test.yml"
+  pull_request:
+    paths:
+      - "agent/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 確かめる
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # build.sh の test は、単体テストと GOOS=windows go vet を回して止まる。
+      # 確かめるところを2か所に書かない
+      - name: テストと見直し
+        working-directory: agent
+        run: |
+          set -eu
+          chmod +x build.sh
+          ./build.sh test
+
+      # 直した人によって書き方が揺れると、差分が中身と関係なく膨らむ
+      - name: 書き方の揃い
+        working-directory: agent
+        run: |
+          set -eu
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "::error::gofmt が通っていません。gofmt -w で直してください"
+            printf '%s\n' "$out"
+            exit 1
+          fi

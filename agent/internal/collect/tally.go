@@ -161,9 +161,9 @@ func cap1440(n int) int {
 // 送る形。api パッケージの型と同じ形にしてあるが、
 // collect が api に依存しないように、こちらでも持つ
 type Usage struct {
-	WorkDate                                          string
+	WorkDate                                            string
 	ActiveMin, IdleMin, LockedMin, NightMin, HolidayMin int
-	FirstAt, LastAt                                   *time.Time
+	FirstAt, LastAt                                     *time.Time
 }
 
 type App struct {
