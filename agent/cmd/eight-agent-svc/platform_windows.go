@@ -160,6 +160,9 @@ func acceptOne(ctx context.Context, ag *collect.Agent) error {
 		case "locked":
 			st = collect.StateLocked
 		}
+		// 触っているかどうかは、自分の重さを見るときにも使う。
+		// 待機しているだけで重いのが、いちばん困る
+		markActive(st == collect.StateActive)
 		// ここに来るのは実行ファイル名とカテゴリだけ。
 		// ウィンドウのタイトルもURLも、UI側が送ってこない作りにしてある
 		ag.Minute(r.At, st, collect.ExeName(r.Exe), r.Product, r.Category)

@@ -47,6 +47,7 @@ import (
 
 	"github.com/8grp/eight-agent/internal/api"
 	"github.com/8grp/eight-agent/internal/collect"
+	"github.com/8grp/eight-agent/internal/selfload"
 	"github.com/8grp/eight-agent/internal/store"
 )
 
@@ -239,6 +240,13 @@ func doRun(baseURL, dir string) error {
 	// OS からの報せを受ける（ロック・USB・ソフトの出入り）
 	go watchSystem(ctx, ag)
 
+	// 自分がPCを重くしていないか見る。
+	// 端末管理のソフトは、入れられる側から見れば「勝手に入ってきて
+	// ずっと動いているもの」でしかない。重くしたら、何を説明しても
+	// 受け入れてもらえない。だから自分で測り続ける
+	load := newLoadWatch(ag)
+	go load.run(ctx)
+
 	sendEvery := 5 * time.Minute
 	if cfg := ag.Config(); cfg != nil && cfg.SendIntervalSec > 0 {
 		sendEvery = time.Duration(cfg.SendIntervalSec) * time.Second
@@ -248,6 +256,11 @@ func doRun(baseURL, dir string) error {
 	defer send.Stop()
 	refresh := time.NewTicker(6 * time.Hour)
 	defer refresh.Stop()
+
+	// 重いときは、送る間隔を延ばす。
+	// 取るものは変えない（何を見ているかは同じ）。まとめて送る回数が減るだけ。
+	// PC の操作感のほうを先に守る
+	sendLevel := selfload.OK
 
 	rotatedAt := time.Now()
 
@@ -264,6 +277,13 @@ func doRun(baseURL, dir string) error {
 			return nil
 
 		case <-send.C:
+			// 重さが変わっていたら、間隔を入れ替える
+			if lv := load.Level(); lv != sendLevel {
+				sendLevel = lv
+				d := selfload.Interval(sendEvery, lv, sendMax)
+				send.Reset(d)
+				log.Printf("送る間隔を %v にしました（負荷 %s）", d, lv)
+			}
 			if err := ag.Flush(ctx); err != nil {
 				if _, dead := err.(*api.Unauthorized); dead {
 					// 資格情報が通らない。管理者が端末を消したか、

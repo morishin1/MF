@@ -329,6 +329,108 @@ PC の Wi-Fi を切る。30分ほど使う（ブラウザでサイトも見る�
 
 ---
 
+## 8.5 PCを重くしていないこと（負荷測定）
+
+**ここが通らなければ、ほかが全部通っても展開しない。**
+
+端末管理のソフトは、入れられる側から見れば「勝手に入ってきて、ずっと
+動いているもの」でしかない。それがPCを重くしたら、何を説明しても
+受け入れてもらえない。**操作感を損なわないことが最優先。**
+
+### 目標
+
+| | 目標 |
+|---|---|
+| CPU（待機時・平均） | **1% 未満** |
+| CPU（通常作業中・平均） | **2〜3% 未満** |
+| メモリ（3つ合計） | **100MB 未満** |
+| ディスク書き込み | 1時間あたり数MB程度（記録の溜め込みぶん） |
+| 通信 | 既定で5分に1回、1回あたり数十KB |
+
+「3つ」は `eight-agent-svc.exe` / `eight-agent-ui.exe` / `eight-agent-host.exe`。
+
+### 測りかた（入れる前と、入れた後）
+
+**入れる前に1回、入れた後に1回**。差を見る。片方だけ測っても意味がない。
+
+PowerShell を管理者で開いて、次を **入れる前** に流す。
+
+```powershell
+# 10分間、30秒おきに記録する。何も操作せず、画面もそのままにしておく
+$out = "$env:USERPROFILE\Desktop\load-before.csv"
+"at,cpu_total,mem_avail_mb,disk_sec" | Out-File $out -Encoding utf8
+1..20 | % {
+  $c = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples[0].CookedValue
+  $m = (Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
+  $d = (Get-Counter '\PhysicalDisk(_Total)\% Disk Time').CounterSamples[0].CookedValue
+  "{0},{1:N2},{2:N0},{3:N2}" -f (Get-Date -f s),$c,$m,$d | Out-File $out -Append -Encoding utf8
+  Start-Sleep 30
+}
+```
+
+入れた後は、同じものを `load-after.csv` に。**加えて、うちの3つだけ**を測る。
+
+```powershell
+# EIGHT Agent の3つが、どれだけ使っているか
+$out = "$env:USERPROFILE\Desktop\load-agent.csv"
+"at,cpu_pct,mem_mb" | Out-File $out -Encoding utf8
+$n = [Environment]::ProcessorCount
+$prev = @{}; $prevAt = Get-Date
+1..20 | % {
+  Start-Sleep 30
+  $ps = Get-Process eight-agent-svc,eight-agent-ui,eight-agent-host -ErrorAction SilentlyContinue
+  $now = Get-Date
+  $cpu = 0; $mem = 0
+  foreach ($p in $ps) {
+    $t = $p.TotalProcessorTime.TotalSeconds
+    if ($prev.ContainsKey($p.Id)) { $cpu += ($t - $prev[$p.Id]) }
+    $prev[$p.Id] = $t
+    $mem += $p.WorkingSet64
+  }
+  $sec = ($now - $prevAt).TotalSeconds; $prevAt = $now
+  $pct = if ($sec -gt 0) { $cpu / $sec / $n * 100 } else { 0 }
+  "{0},{1:N2},{2:N1}" -f (Get-Date -f s),$pct,($mem/1MB) | Out-File $out -Append -Encoding utf8
+}
+```
+
+### 何を確かめるか
+
+| | 確かめること |
+|---|---|
+| ☐ | **待機時**（10分放置）… `load-agent.csv` の `cpu_pct` の平均が **1% 未満** |
+| ☐ | **通常作業中**（ブラウザ・Excel・Teams を普通に10分）… 平均が **3% 未満** |
+| ☐ | `mem_mb` が終始 **100 未満** |
+| ☐ | before と after で、`cpu_total` の平均の差が **3ポイント以内** |
+| ☐ | before と after で、`mem_avail_mb` の差が **100MB 以内** |
+| ☐ | 体感で、ウィンドウの切り替え・入力の引っかかりが**増えていない** |
+| ☐ | 10分で `mem_mb` が右肩上がりに増え続けていない（増え続ける＝漏れ） |
+| ☐ | 一晩（8時間）つけたまま置いて、翌朝も `mem_mb` が 100 未満 |
+
+### 越えていたら
+
+エージェント自身も同じことを測っている（`internal/selfload`）。
+目標を越えた状態が **5分続くと**、
+
+1. **自分で粗くする** … 送る間隔を2倍（大きく越えていれば4倍、上限30分）。
+   取るものは変えない。見にいく回数が減るだけ
+2. **管理画面に出す** … 端末管理 → アラートに
+   **「Agent負荷異常（このPCを重くしています）」**
+
+10分静かになれば、自分で元に戻す。行ったり来たりで何度も鳴らないように
+してある（`selfload_test.go`）。
+
+| | 確かめること |
+|---|---|
+| ☐ | 管理画面のアラートに「Agent負荷異常」が**出ていない** |
+| ☐ | （出たら）`eight-agent-svc.exe -status` と Windows のイベントログを見て、原因を潰してから展開する |
+
+> **WEB利用は毎秒見にいく作りにしていない。**
+> ブラウザの拡張からの報せ（イベント）＋ 1分ごとのまとめ、で足りている。
+> 重いときに延びるのは「まとめて送る間隔」であって、
+> 取るものが減るわけではない。
+
+---
+
 ## 9. 止まったことが分かること
 
 サービスを止める。
