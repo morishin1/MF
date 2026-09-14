@@ -207,6 +207,11 @@
             ${due ? `<small${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>期限 ${esc(due)}${over ? "（超過）" : ""}</small>` : ""}
             ${t.category ? `<small>${esc(t.category)}</small>` : ""}
           </span>
+          ${t.link && !done
+            // 行かないと終わらないものには、行き先を出す。
+            // 入退社のように「別の画面で作業する」タスクは、
+            // ここから直接開けないと、結局メニューを探すことになる
+            ? `<a class="btn btn-secondary btn-sm" href="${esc(t.link)}">開く</a>` : ""}
           ${done
             ? `<button class="btn btn-secondary btn-sm" onclick="setStatus('${esc(t.id)}','todo')">戻す</button>`
             : `<button class="btn btn-primary btn-sm" onclick="setStatus('${esc(t.id)}','done')">完了</button>`}

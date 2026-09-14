@@ -12,7 +12,7 @@ import { userClient } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
 const CATEGORIES = ["document", "task", "account", "equipment"];
-const OWNERS = ["employee", "hr", "labor_advisor"];
+const OWNERS = ["employee", "hr", "labor_advisor", "it", "manager", "finance"];
 const STATUSES = ["todo", "submitted", "done", "na"];
 
 const I_FIELDS =

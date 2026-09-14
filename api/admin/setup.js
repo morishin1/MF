@@ -27,7 +27,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 
 const MEMBERSHIP_ROLES = ["admin", "staff", "client"];
-const GW_ROLES = ["owner", "hr", "manager", "labor_advisor"];
+const GW_ROLES = ["owner", "hr", "it", "finance", "manager", "labor_advisor"];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);

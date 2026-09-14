@@ -541,6 +541,16 @@
     return r.blob();
   }
 
+  // ---- 入退社 ----
+  // 誰が・いつまでに・何をやるかを進めるための口。
+  // 画面は admin-hr.html 1つ。細かい手続き画面は増やさない
+  const hrList = () => api("/api/hr");
+  const hrOne = (id) => api(`/api/hr?id=${encodeURIComponent(id)}`);
+  const hrSoon = () => api("/api/hr?soon=1");
+  const hrStart = (body) => api("/api/hr", { method: "POST", body });
+  const hrCheck = (body) => api("/api/hr", { method: "PATCH", body });
+  const hrUpdate = (body) => api("/api/hr", { method: "PATCH", body });
+
   // ---- 端末管理 ----
   // 管理側
   const devices = (p = {}) => {
@@ -802,7 +812,7 @@
   const deleteTask = (id) =>
     api(`/api/tasks?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
-  // ---- 入社・退職手続き ----
+  // ---- 入社・退職手続き（古い口。社労士の画面と書類の保管先で使う） ----
   const listProcedures = () => api("/api/onboarding");
   const createProcedure = (p) =>
     api("/api/onboarding", { method: "POST", body: p }).then((d) => d.procedure);
@@ -1020,6 +1030,7 @@
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
+    hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
     devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     deviceExceptions, approveDeviceException, revokeDeviceException,
     startDeviceSetup, deviceSetupState, deviceSetupPolicy,

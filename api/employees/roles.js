@@ -13,7 +13,10 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
-const ROLES = ["owner", "hr", "manager", "labor_advisor"];
+// it=IT・管理（PC・アカウント・権限）、finance=経理（給与・精算）。
+// 入退社のチェックリストは、この役割から担当者を1人決める（lib/hr-flow.js）。
+// 役割が誰にも付いていないと「担当未定」のまま誰もやらない
+const ROLES = ["owner", "hr", "it", "finance", "manager", "labor_advisor"];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);

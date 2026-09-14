@@ -22,6 +22,22 @@
       }
     } catch (e) { /* 読めなくても動く */ }
   </script>
+  <style>
+    /* 今日対応する入退社。1件1ブロック。押すとその人の画面へ */
+    .hr-soon-row { display:block; border:1px solid var(--border); border-radius:10px;
+                   padding:11px 14px; margin-bottom:8px; text-decoration:none; color:inherit; }
+    .hr-soon-row:hover { border-color:var(--primary); background:var(--soft); }
+    .hr-soon-row .hd { display:flex; align-items:baseline; gap:10px; margin-bottom:5px; }
+    .hr-soon-row .hd b { font-size:14px; color:var(--primary-dark); }
+    .hr-soon-row .due { font-size:12.5px; font-weight:700; color:var(--muted); }
+    .hr-soon-row .due.soon { color:#9c4221; }
+    .hr-soon-row .due.late { color:#c53030; }
+    .hr-soon-row .n { margin-left:auto; font-size:12px; color:var(--muted);
+                      font-variant-numeric:tabular-nums; }
+    .hr-soon-row .ln { font-size:12.5px; line-height:1.9; color:var(--text); }
+    .hr-soon-row .ln.ok { color:var(--muted); }
+    .hr-soon-row .mk { margin-right:6px; }
+  </style>
 </head>
 <body>
 
@@ -35,6 +51,12 @@
       <select id="client-select" onchange="reload()"></select>
     </div>
   </div>
+
+  <!-- 今日対応する入退社。
+       入社日・退社日が近いものだけ、残っている作業と一緒に出す。
+       ここに出ていれば、入退社の画面を開きに行く必要がない。
+       対象が無ければ、まるごと出さない -->
+  <div id="hr-soon"></div>
 
   <!-- 端末まわりで、管理者が動かないと減らないもの。
        件数が0のときは、まるごと出さない（毎日目に入る場所に0を置かない） -->
@@ -52,7 +74,7 @@
         <span class="material-symbols-outlined icon-inline">calendar_month</span>スペース予約を承認
       </a>
       <a class="btn btn-secondary" href="admin-hr.html">
-        <span class="material-symbols-outlined icon-inline">badge</span>入社・退職手続き
+        <span class="material-symbols-outlined icon-inline">swap_horiz</span>入退社
       </a>
       <a class="btn btn-secondary" href="admin-members.html">
         <span class="material-symbols-outlined icon-inline">group</span>メンバー・権限
@@ -101,6 +123,7 @@
     // 端末の「やること」は、取引先の選択に関係なく出す。
     // 会計の集計に失敗しても、ここだけは出したい
     loadDeviceTodo();
+    loadHrSoon();
 
     try {
       clients = await API.listClients();
@@ -111,6 +134,50 @@
       el("client-select").innerHTML = `<option value="">取得失敗</option>`;
     }
     reload();
+  }
+
+  /**
+   * 今日対応する入退社。
+   *
+   * ■ なぜホームに出すのか
+   *
+   *   入退社の画面を開かないと、何が残っているのか分からなかった。
+   *   開かない日が続くと、入社日の前日に「PCが無い」が起きる。
+   *
+   *   ここに「山田さん 入社まで3日 / PC準備・メール発行が未完了」と
+   *   出ていれば、画面を見に行く必要がない。
+   *
+   * ■ 全部は出さない
+   *
+   *   残っているものを3件だけ。全部出すと、ホームが
+   *   チェックリストになって、他のものが押し出される
+   */
+  async function loadHrSoon() {
+    let rows = [];
+    try {
+      rows = (await API.hrSoon())?.soon || [];
+    } catch (e) { return; }        // まだ 066 を流していない等。黙って出さない
+    if (!rows.length) return;
+
+    el("hr-soon").innerHTML = `
+      <div class="card" style="margin-bottom:16px;">
+        <h2><span class="material-symbols-outlined">swap_horiz</span>今日対応する入退社</h2>
+        ${rows.map((r) => `
+          <a class="hr-soon-row" href="admin-hr.html?id=${esc(r.id)}">
+            <div class="hd">
+              <b>${esc(r.name)}</b>
+              <span class="due ${esc(r.urgency)}">${esc(r.due)}</span>
+              <span class="n">${r.progress.done}/${r.progress.total}</span>
+            </div>
+            ${r.open.map((o) => `
+              <div class="ln"><span class="mk">${
+                r.urgency === "late" || r.urgency === "soon" ? "🔴" : "🟠"
+              }</span>${esc(o.role)}：${esc(o.title)}　未完了</div>`).join("")}
+            ${r.recentDone
+              ? `<div class="ln ok"><span class="mk">✅</span>${esc(r.recentDone)}　完了</div>`
+              : ""}
+          </a>`).join("")}
+      </div>`;
   }
 
   /**

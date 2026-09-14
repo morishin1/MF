@@ -5,714 +5,496 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>入社・退職手続き - エイト</title>
+  <title>入退社 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913e">
-  <link rel="stylesheet" href="css/layout.css?v=20260913e">
+  <link rel="stylesheet" href="css/app.css?v=20260914b">
+  <link rel="stylesheet" href="css/layout.css?v=20260914b">
   <script>
-    // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
-    // これが無いと、本文が中央→左寄せへずれてから枠が出る。
     try {
-      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
-      if (kpc && kpc.appRole) {
-        document.documentElement.classList.add("kp-has-sidebar");
-      }
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
     } catch (e) { /* 読めなくても動く */ }
   </script>
+  <style>
+    /* ── 一覧 ──
+       出すのは5つだけ。氏名・日付・状態・進捗・次の担当。
+       「何が終わっていないか」が一目で分かることを優先する */
+    .hr-tabs { display:flex; gap:6px; margin:0 0 16px; flex-wrap:wrap; }
+    .hr-tabs button { border:1px solid var(--border); border-radius:999px; background:#fff;
+                      padding:7px 18px; font-size:13px; font-weight:600; color:var(--muted);
+                      cursor:pointer; font-family:inherit; }
+    .hr-tabs button.on { border-color:var(--primary); background:var(--primary); color:#fff; }
+    .hr-tabs button .n { font-weight:700; margin-left:5px; }
+
+    .hr-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .hr-table th { text-align:left; font-size:11.5px; color:var(--muted); font-weight:600;
+                   padding:0 10px 7px; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .hr-table td { padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    .hr-table tr.click { cursor:pointer; }
+    .hr-table tr.click:hover td { background:var(--soft); }
+    .hr-table .nm { font-weight:700; color:var(--primary-dark); }
+    .hr-table .sub { display:block; font-size:11.5px; color:var(--muted); font-weight:400; }
+
+    /* 急ぎかどうかは色で出す。数字だけでは伝わらない */
+    .hr-due { font-weight:700; white-space:nowrap; }
+    .hr-due.soon { color:#9c4221; }
+    .hr-due.late { color:#c53030; }
+    .hr-due.warn { color:var(--muted); }
+
+    .hr-ph { display:inline-block; border-radius:999px; padding:2px 10px; font-size:11.5px;
+             font-weight:600; background:#edf2f7; color:var(--muted); white-space:nowrap; }
+    .hr-ph.day1, .hr-ph.lastday { background:#fde8e8; color:#c53030; }
+    .hr-ph.prep { background:#fff3e0; color:#9c4221; }
+    .hr-ph.done { background:#e8f5ec; color:#256b36; }
+
+    .hr-prog { display:flex; align-items:center; gap:8px; white-space:nowrap; }
+    .hr-prog .bar { flex:0 0 56px; height:6px; border-radius:999px; background:#edf2f7; overflow:hidden; }
+    .hr-prog .bar span { display:block; height:100%; background:var(--primary); }
+    .hr-prog .n { font-variant-numeric:tabular-nums; font-size:12px; color:var(--muted); }
+
+    .hr-next { font-size:12.5px; }
+    .hr-next .who { color:var(--muted); font-size:11.5px; }
+    .hr-next.none { color:#256b36; font-weight:600; }
+
+    /* ── 詳細 ──
+       上に「いま何をすればよいか」。その下に担当別のチェックリスト。
+       長い説明は置かない */
+    .hr-head { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;
+               padding-bottom:14px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+    .hr-head .who { flex:1; min-width:200px; }
+    .hr-head .who .nm { font-size:19px; font-weight:700; color:var(--primary-dark); }
+    .hr-head .who .meta { font-size:13px; color:var(--muted); margin-top:3px; }
+    .hr-head .ops { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+
+    .hr-now { border:1px solid var(--primary); border-radius:10px; background:#f5f9ff;
+              padding:13px 16px; margin-bottom:18px; }
+    .hr-now .k { font-size:11.5px; color:var(--muted); font-weight:600; }
+    .hr-now .t { font-size:15px; font-weight:700; color:var(--primary-dark); margin-top:3px; }
+    .hr-now .w { font-size:12.5px; color:var(--muted); margin-top:3px; }
+    .hr-now.done { border-color:#b7e0c4; background:#f7fbf8; }
+    .hr-now.done .t { color:#256b36; }
+
+    .hr-grp { margin-bottom:18px; }
+    .hr-grp > .h { display:flex; align-items:baseline; gap:9px; margin:0 0 8px; }
+    .hr-grp > .h b { font-size:13.5px; color:var(--primary-dark); }
+    .hr-grp > .h .n { font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .hr-grp > .h .who { font-size:11.5px; color:var(--muted); margin-left:auto; }
+
+    .hr-row { display:flex; align-items:center; gap:10px; padding:9px 12px;
+              border:1px solid var(--border); border-radius:9px; margin-bottom:6px; }
+    .hr-row input[type="checkbox"] { width:auto; margin:0; flex:0 0 auto; cursor:pointer; }
+    .hr-row .t { flex:1; min-width:0; font-size:13.5px; font-weight:600; }
+    .hr-row .ph { font-size:11px; color:var(--muted); border:1px solid var(--border);
+                  border-radius:4px; padding:1px 6px; white-space:nowrap; }
+    .hr-row a.go { font-size:12px; color:var(--primary); text-decoration:underline; white-space:nowrap; }
+    .hr-row.done { background:#f7fbf8; border-color:#b7e0c4; }
+    .hr-row.done .t { font-weight:500; color:var(--muted); text-decoration:line-through; }
+    .hr-row .at { font-size:11px; color:var(--muted); white-space:nowrap; }
+
+    .hr-empty { color:var(--muted); font-size:13px; padding:20px 0; }
+
+    /* 書類の保管先。毎回触るものではないので畳んでおく */
+    .hr-drive { margin-top:6px; border-top:1px solid var(--border); padding-top:12px; }
+    .hr-drive summary { cursor:pointer; font-size:12.5px; color:var(--muted); }
+    .hr-drive .in { margin-top:10px; display:flex; flex-direction:column; gap:8px;
+                    align-items:flex-start; }
+    .hr-drive .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; }
+    .hr-drive .row input { flex:1; min-width:200px; max-width:340px; font-size:13px;
+                           padding:6px 9px; border:1px solid var(--border); border-radius:7px;
+                           font-family:inherit; }
+    .hr-drive .note { font-size:11.5px; color:var(--muted); }
+
+    @media (max-width:760px) {
+      .hr-table thead { display:none; }
+      .hr-table tr { display:block; border-bottom:1px solid var(--border); padding:10px 0; }
+      .hr-table td { display:block; border:0; padding:2px 0; }
+    }
+  </style>
 </head>
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">入社・退職手続き</h1>
-  <p class="kp-greet-sub">対象者を登録すると、雇用区分に合わせたチェックリストが自動で用意されます。</p>
+  <h1 class="kp-greet">入退社</h1>
 
-  <div id="drive-check"></div>
+  <div id="hr-msg" class="err-text"></div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">person_add</span>手続きを始める</h2>
-
-    <div class="inline-controls" style="margin-bottom:12px;">
-      <div style="min-width:220px;flex:1;">
-        <label>対象者</label>
-        <select id="p-employee"></select>
-      </div>
-      <div>
-        <label>種別</label>
-        <select id="p-kind">
-          <option value="onboarding">入社</option>
-          <option value="offboarding">退職</option>
-        </select>
-      </div>
-      <div>
-        <label>入社日／退職日</label>
-        <input id="p-target" type="date">
-      </div>
-      <div>
-        <button class="btn btn-primary" onclick="createProcedure(this)">
-          <span class="material-symbols-outlined icon-inline">playlist_add</span>作成
-        </button>
-      </div>
+  <!-- 一覧 -->
+  <div class="card" id="hr-list-card">
+    <div class="hr-tabs" id="hr-tabs"></div>
+    <div class="table-scroll">
+      <table class="hr-table">
+        <thead><tr>
+          <th>氏名</th><th>入社／退社日</th><th>状態</th><th>進捗</th><th>次の担当</th><th></th>
+        </tr></thead>
+        <tbody id="hr-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
+      </table>
     </div>
-    <div id="p-msg" class="err-text"></div>
-
-    <details style="margin-top:6px;">
-      <summary class="muted" style="cursor:pointer;font-size:13px;">名簿にいない人を追加する（内定者など）</summary>
-      <div class="inline-controls" style="margin-top:12px;">
-        <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
-        <div><label>メール（任意）</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
-        <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
-        <div>
-          <label>雇用区分</label>
-          <select id="e-type">
-            <option>正社員</option><option>契約社員</option><option>パート</option>
-            <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
-          </select>
-        </div>
-        <div><label>入社日</label><input id="e-joined" type="date"></div>
-        <div>
-          <button class="btn btn-secondary" onclick="addEmployee(this)">
-            <span class="material-symbols-outlined icon-inline">badge</span>名簿に追加
-          </button>
-        </div>
-      </div>
-      <p class="muted" style="font-size:12px;margin:10px 0 0;">
-        アカウントとの紐づけは、その人が初めてログインしたあとに管理設定から行います。
-      </p>
-      <div id="e-msg" class="err-text"></div>
-    </details>
+    <div style="margin-top:14px;">
+      <button class="btn btn-secondary btn-sm" onclick="openNew()">
+        <span class="material-symbols-outlined icon-inline">person_add</span>入退社を登録する
+      </button>
+    </div>
+    <div id="hr-new"></div>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">checklist</span>進行中の手続き</h2>
-    <div id="upload-msg" class="muted" style="font-size:12.5px;margin-bottom:8px;"></div>
-    <div id="list"><div class="empty">読み込み中…</div></div>
-  </div>
+  <!-- 1人ぶん -->
+  <div id="hr-detail"></div>
 </div>
 
-<!-- 項目にファイルを付けるための口。行ごとに置くと数十個できるので、1つを使い回す -->
-<input id="pick" type="file" multiple style="display:none"
-       accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
-       onchange="onPicked(this)">
-
-<script src="js/api-client.js?v=20260913e"></script>
-<script src="js/device.js?v=20260913e"></script>
-<script src="js/layout.js?v=20260913e"></script>
+<script src="js/api-client.js?v=20260914b"></script>
+<script src="js/layout.js?v=20260914b"></script>
 <script>
   const el = (id) => document.getElementById(id);
-  const esc = KPLayout.esc;
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  const OWNER_LABEL = { employee: "本人", hr: "会社", labor_advisor: "社労士" };
-  const CATEGORY_ICON = { document: "description", task: "task_alt", account: "key", equipment: "devices" };
-  const ITEM_STATUS = { todo: "未着手", submitted: "提出済み", done: "完了", na: "対象外" };
+  let data = null;
+  let tabNow = "onboarding";
+  let openId = null;
 
-  let employees = [];
-  let procedures = [];
-
-  KPLayout.init({ active: "hr", roles: ["admin", "owner"] })
-    .then((ctx) => { if (!ctx) return; load(); checkDrive(); });
+  KPLayout.init({ active: "hr", roles: ["admin", "owner"] }).then((ctx) => {
+    if (!ctx) return;
+    // 通知から直接この人を開く（api/hr が出すリンク）
+    const q = new URLSearchParams(location.search);
+    openId = q.get("id");
+    load();
+  });
 
   async function load() {
-    await Promise.all([loadEmployees(), loadProcedures()]);
-  }
-
-  // Google ドライブ（人事）の設定。
-  // フォルダIDを入れただけでは動かない。そのフォルダをサービスアカウントに
-  // 「編集者」で共有する必要がある。どこで止まっているかを、ここに出す。
-  // 全部そろっているときは何も出さない（毎回読ませるものではない）
-  async function checkDrive() {
-    let r;
-    try { r = await API.hrDriveCheck(); } catch { return; }
-    const box = el("drive-check");
-    const ng = (r.steps || []).filter((s) => !s.ok);
-    if (!ng.length) { box.innerHTML = ""; return; }
-
-    box.innerHTML = `
-      <div class="banner warn" style="margin-bottom:16px;">
-        <span class="material-symbols-outlined">settings_alert</span>
-        <div>
-          <b>Googleドライブ（人事）の自動作成は、まだ使えません。</b>
-          各手続きの「フォルダのURLを貼る」で、ご自分で作ったフォルダを指定すれば、
-          この設定が無くても本人に渡せます。自動で作りたい場合は、以下を直してください。
-          <ul style="margin:8px 0 0;padding-left:18px;line-height:1.9;">
-            ${ng.map((s) => `<li><b>${esc(s.label)}</b>：${esc(s.detail)}</li>`).join("")}
-          </ul>
-          ${r.serviceAccount ? `
-            <div style="margin-top:8px;font-size:12px;">
-              共有する相手（サービスアカウント）：<code>${esc(r.serviceAccount)}</code>
-              ${r.folderUrl ? `　<a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">フォルダを開く</a>` : ""}
-            </div>` : ""}
-        </div>
-      </div>`;
-  }
-
-  async function loadEmployees() {
     try {
-      const res = await API.listEmployees();
-      employees = res.employees || [];
-      el("p-employee").innerHTML = employees.length
-        ? employees.map((e) =>
-            `<option value="${esc(e.id)}">${esc(e.display_name)}${e.department ? `（${esc(e.department)}）` : ""}</option>`
-          ).join("")
-        : `<option value="">（名簿に誰もいません）</option>`;
-    } catch (e) {
-      el("p-employee").innerHTML = `<option value="">取得失敗</option>`;
-      el("p-msg").textContent = e.detail || e.message;
-    }
-  }
-
-  async function addEmployee(btn) {
-    const msg = el("e-msg");
-    msg.textContent = "";
-    const display_name = el("e-name").value.trim();
-    if (!display_name) { msg.textContent = "氏名を入力してください"; return; }
-    try {
-      await KPLayout.busy(btn, "追加中…", () => API.createEmployee({
-        display_name,
-        email: el("e-email").value.trim() || null,
-        department: el("e-dept").value.trim() || null,
-        employment_type: el("e-type").value,
-        joined_on: el("e-joined").value || null,
-        status: "invited",
-        // ログインアカウントの発行はメンバー画面で行う。
-        // ここで作ると、1回しか出せない初回パスワードを出す場所が無い
-        createAccount: false,
-      }));
-      for (const id of ["e-name", "e-email", "e-dept", "e-joined"]) el(id).value = "";
-      await loadEmployees();
-      msg.textContent = "";
-    } catch (e) {
-      msg.textContent = e.detail || e.message || "追加に失敗しました";
-    }
-  }
-
-  async function createProcedure(btn) {
-    const msg = el("p-msg");
-    msg.textContent = "";
-    const employeeId = el("p-employee").value;
-    if (!employeeId) { msg.textContent = "対象者を選んでください"; return; }
-    try {
-      await KPLayout.busy(btn, "作成中…", () => API.createProcedure({
-        employeeId,
-        kind: el("p-kind").value,
-        targetOn: el("p-target").value || null,
-      }));
-      el("p-target").value = "";
-      await loadProcedures();
-    } catch (e) {
-      msg.textContent = e.error === "procedure_exists"
-        ? "この方の同じ種別の手続きはすでにあります"
-        : (e.detail || e.message || "作成に失敗しました");
-    }
-  }
-
-  async function loadProcedures() {
-    try {
-      const res = await API.listProcedures();
-      procedures = res.procedures || [];
+      data = await API.hrList();
       render();
+      if (openId) await showDetail(openId);
     } catch (e) {
-      el("list").innerHTML =
-        `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+      el("hr-rows").innerHTML = `<tr><td colspan="6"><div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div></td></tr>`;
     }
   }
 
   function render() {
-    const active = procedures.filter((p) => p.status !== "cancelled");
-    if (!active.length) {
-      el("list").innerHTML = `<div class="empty">進行中の手続きはありません。</div>`;
-      return;
-    }
-    el("list").innerHTML = active.map(procCard).join("");
+    const counts = {
+      onboarding: (data.onboarding || []).length,
+      offboarding: (data.offboarding || []).length,
+      done: (data.done || []).length,
+    };
+    el("hr-tabs").innerHTML = (data.tabs || []).map((t) => `
+      <button class="${t.key === tabNow ? "on" : ""}" onclick="tab('${t.key}')">
+        ${esc(t.label)}<span class="n">${counts[t.key] || 0}</span>
+      </button>`).join("");
+    renderRows(data[tabNow] || []);
   }
 
-  // 社労士連絡用のテキストと Slack投稿文。
-  // 本人が入社フォームで1回入れたものから組み立てる。人事に打ち直させない。
-  // 送信はしない。何を渡すかを見てから、人がコピーして送る
-  async function showBrief(employeeId, btn) {
-    if (!employeeId) return;
-    const box = [...document.querySelectorAll("[id^='brief-']")]
-      .find((d) => d.dataset.emp === employeeId);
-    if (!box) return;
-    if (box.innerHTML) { box.innerHTML = ""; return; }
+  function tab(key) {
+    tabNow = key;
+    render();
+  }
 
-    let r;
-    try {
-      r = await KPLayout.busy(btn, "作成中…", () => API.onboardBrief(employeeId));
-    } catch (e) {
-      alert(e.hint || e.detail || e.message || "作れませんでした");
+  function renderRows(rows) {
+    if (!rows.length) {
+      el("hr-rows").innerHTML = `<tr><td colspan="6" class="hr-empty">
+        ${tabNow === "done" ? "完了したものはまだありません。"
+          : "いま進んでいるものはありません。"}</td></tr>`;
       return;
     }
+    el("hr-rows").innerHTML = rows.map((r) => {
+      const pct = r.progress.total ? Math.round(r.progress.done / r.progress.total * 100) : 0;
+      return `
+      <tr class="click" onclick="showDetail('${esc(r.id)}')">
+        <td><span class="nm">${esc(r.name)}</span>
+          ${r.department ? `<span class="sub">${esc(r.department)}</span>` : ""}</td>
+        <td><span class="hr-due ${esc(r.urgency)}">${esc(r.due)}</span></td>
+        <td><span class="hr-ph ${esc(r.phase)}">${esc(r.phaseLabel)}</span></td>
+        <td><span class="hr-prog">
+          <span class="bar"><span style="width:${pct}%"></span></span>
+          <span class="n">${r.progress.done}/${r.progress.total}</span></span></td>
+        <td>${r.next
+          ? `<span class="hr-next">${esc(r.next.role)}：${esc(r.next.title)}
+              ${r.next.who ? `<span class="who">（${esc(r.next.who)}）</span>` : ""}</span>`
+          : `<span class="hr-next none">すべて完了</span>`}</td>
+        <td><span class="material-symbols-outlined"
+              style="font-size:18px;color:var(--muted);">chevron_right</span></td>
+      </tr>`;
+    }).join("");
+  }
 
-    box.innerHTML = `
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:12px 0;">
-        ${r.advisor.missing.length ? `
-          <div class="banner warn" style="margin-bottom:12px;">
-            <span class="material-symbols-outlined">info</span>
-            <div>本人の入力がまだ足りません：${r.advisor.missing.map(esc).join("・")}<br>
-              このまま送ると、その項目は「（未入力）」のまま渡ります。</div>
-          </div>` : ""}
-
-        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--primary);">社労士への連絡</div>
-        <textarea rows="18" readonly style="margin:6px 0 4px;font-size:12.5px;
-                  font-family:ui-monospace,SFMono-Regular,monospace;">${esc(r.advisor.text)}</textarea>
-        <button class="btn btn-secondary btn-sm" onclick="copyNear(this)">
-          <span class="material-symbols-outlined icon-inline">content_copy</span>コピー
-        </button>
-
-        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--primary);margin-top:18px;">
-          Slackへの投稿</div>
-        <textarea rows="9" readonly style="margin:6px 0 4px;font-size:12.5px;">${esc(r.slack)}</textarea>
-        <button class="btn btn-secondary btn-sm" onclick="copyNear(this)">
-          <span class="material-symbols-outlined icon-inline">content_copy</span>コピー
-        </button>
-
-        <p class="muted" style="font-size:11.5px;margin:14px 0 0;line-height:1.8;">
-          給与額とマイナンバーは、この文面に含めていません。
-          マイナンバーは番号法の対象なので、社労士の指定する方法で別に送ってください。
+  // ---- 登録 --------------------------------------------------------------------
+  function openNew() {
+    el("hr-new").innerHTML = `
+      <div class="banner" style="display:block;background:var(--soft);margin:14px 0 0;">
+        <b>入退社を登録する</b>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
+          登録すると、担当ごとのチェックリストが作られ、担当者にお知らせと「やること」が届きます。
         </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="min-width:200px;">
+            <label style="font-size:12px;">対象の方</label>
+            <select id="n-emp" style="margin:0;">
+              ${(data.people || []).map((p) =>
+                `<option value="${esc(p.id)}">${esc(p.name)}${
+                  p.department ? `（${esc(p.department)}）` : ""}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;">種別</label>
+            <select id="n-kind" style="margin:0;width:auto;">
+              <option value="onboarding">入社</option>
+              <option value="offboarding">退社</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;">入社日／退社日</label>
+            <input id="n-date" type="date" style="margin:0;width:auto;">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="doNew(this)">登録して知らせる</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeNew()">やめる</button>
+        </div>
       </div>`;
   }
+  function closeNew() { el("hr-new").innerHTML = ""; }
 
-  // 直前の textarea をコピーする
-  function copyNear(btn) {
-    const ta = btn.previousElementSibling;
-    if (!ta) return;
-    navigator.clipboard.writeText(ta.value).then(() => {
-      const before = btn.innerHTML;
-      btn.innerHTML = '<span class="material-symbols-outlined icon-inline">check</span>コピーしました';
-      setTimeout(() => { btn.innerHTML = before; }, 1800);
-    }).catch(() => {
-      ta.select();
-      alert("コピーできませんでした。選択されているので、手でコピーしてください。");
+  async function doNew(btn) {
+    const employeeId = el("n-emp").value;
+    const kind = el("n-kind").value;
+    const targetOn = el("n-date").value || null;
+    if (!employeeId) return;
+    await run(btn, "登録中…", async () => {
+      const r = await API.hrStart({ employeeId, kind, targetOn });
+      closeNew();
+      tabNow = kind;
+      await load();
+      if (r.id) await showDetail(r.id);
+      say(r.told
+        ? `登録しました。担当 ${r.told}名 にお知らせしました。`
+        : "登録しました。担当が決まっていないため、お知らせは送っていません。");
     });
   }
 
-  const FOLDER_NAME = {
-    "01": "01_採用・履歴書", "02": "02_労働条件・契約", "03": "03_入社提出書類",
-    "04": "04_社会保険・労務", "05": "05_その他",
-  };
-
-  // 社労士に 04 だけを共有する。メールアドレスを聞いて渡す
-  async function shareAdvisor(procId, btn) {
-    const email = prompt("社労士のメールアドレス（Google アカウント）を入れてください。\n共有されるのは 04_社会保険・労務 だけです。");
-    if (!email) return;
+  // ---- 1人ぶん ------------------------------------------------------------------
+  async function showDetail(id) {
+    openId = id;
+    let d;
     try {
-      await KPLayout.busy(btn, "共有中…", () => API.updateProcedure({ id: procId, shareAdvisor: email }));
-      await load();
+      d = await API.hrOne(id);
     } catch (e) {
-      alert(e.hint || e.detail || e.message || "共有できませんでした");
+      say(e.hint || e.message || "開けませんでした", true);
+      return;
     }
-  }
+    const p = d.procedure;
+    const pct = p.progress.total ? Math.round(p.progress.done / p.progress.total * 100) : 0;
+    const next = p.groups.flatMap((g) => g.items).find((i) => !i.done);
 
-  // 本人に、自分のフォルダを渡す。
-  // 会社のメールアドレスなら、本人が入社手続きの画面を開いた時点で自動で渡っている。
-  // ここを使うのは、入社前で会社アカウントがまだ無い人に、
-  // 個人のアドレスで渡すとき。相手を見て決めるので確認を挟む
-  async function shareEmployee(procId, email, btn) {
-    const to = prompt(
-      "本人のメールアドレス（Google アカウント）を入れてください。\n"
-      + "渡すのは 01・03・04・05 と機微情報だけです。02_労働条件・契約 は渡しません。",
-      email || "");
-    if (!to) return;
-    try {
-      await KPLayout.busy(btn, "共有中…", () => API.updateProcedure({ id: procId, shareEmployee: to }));
-      await load();
-      alert(`${to} に渡しました。本人の画面から、書類ごとにフォルダを開けるようになります。`);
-    } catch (e) {
-      alert(e.hint || e.detail || e.message || "共有できませんでした");
-    }
-  }
-
-  // 管理者がドライブで作ったフォルダのURLを貼る。
-  //
-  // ドライブでフォルダを作って、本人に共有して、URLをここに貼る。
-  // これだけで本人の画面に「フォルダを開く」が出る。
-  // サービスアカウントの設定も、共有の自動化も要らない。
-  // 誰に見せるかは、ドライブの共有画面で管理者が決める
-  async function pasteFolder(procId, current, btn) {
-    const url = prompt(
-      "Google ドライブのフォルダのURLを貼ってください。\n"
-      + "（ドライブでそのフォルダを開いて、アドレス欄をコピー）\n\n"
-      + "先に、そのフォルダを本人に「編集者」で共有しておいてください。\n"
-      + "空にすると、リンクを外します。",
-      current || "");
-    if (url === null) return;
-    try {
-      await KPLayout.busy(btn, "保存中…", () => API.updateProcedure({ id: procId, driveUrl: url.trim() }));
-      await load();
-    } catch (e) {
-      alert(e.hint || e.detail || e.message || "保存できませんでした");
-    }
-  }
-
-  // マイナンバー確認書類だけを入れる場所。任意。
-  // 貼らなければ、その書類はドライブに置かせず、mf からのアップロードだけになる
-  async function pasteSensitiveFolder(procId, current, btn) {
-    const url = prompt(
-      "マイナンバー確認書類を入れるフォルダのURLを貼ってください。\n\n"
-      + "他の書類とは別のフォルダにして、見られる人を絞ってください。\n"
-      + "貼らない場合、この書類はドライブではなく mf に出してもらいます（人事だけが見られます）。\n"
-      + "空にすると、リンクを外します。",
-      current || "");
-    if (url === null) return;
-    try {
-      await KPLayout.busy(btn, "保存中…", () => API.updateProcedure({ id: procId, driveSensitiveUrl: url.trim() }));
-      await load();
-    } catch (e) {
-      alert(e.hint || e.detail || e.message || "保存できませんでした");
-    }
-  }
-
-  function procCard(p) {
-    const name = p.employee?.display_name || "（対象者不明）";
-    const kind = p.kind === "onboarding" ? "入社" : "退職";
-    const pct = p.progress.total ? Math.round((p.progress.done / p.progress.total) * 100) : 0;
-    const dateLabel = p.target_on
-      ? new Date(p.target_on).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })
-      : "日付未定";
-    const overdue = p.target_on && p.status !== "done" && new Date(p.target_on) < new Date();
-
-    return `
-      <div class="kp-notice" style="margin-bottom:14px;">
-        <div class="head">
-          <span class="kp-chip ${p.kind === "onboarding" ? "event" : "archived"}">${kind}</span>
-          ${p.status === "done" ? '<span class="kp-chip">完了</span>' : ""}
-          ${overdue ? '<span class="kp-chip important">日付超過</span>' : ""}
-          <span class="meta">${esc(dateLabel)}　${p.progress.done} / ${p.progress.total} 完了（${pct}%）</span>
-        </div>
-        <div class="title">${esc(name)}
-          ${p.employee?.employment_type ? `<span class="muted" style="font-weight:400;font-size:13px;">　${esc(p.employee.employment_type)}</span>` : ""}
-        </div>
-        <div class="kp-progress"><span style="width:${pct}%"></span></div>
-        <div class="table-scroll" style="margin-top:12px;">
-          <table class="kp-items">
-            <thead><tr>
-              <th>項目</th><th>担当</th><th>状態</th><th>社労士</th><th></th>
-            </tr></thead>
-            <tbody>${(p.items || []).map((i) => itemRow(p, i)).join("")}</tbody>
-          </table>
-        </div>
-        ${profileBlock(p)}
-        <div id="brief-${esc(p.id)}" data-emp="${esc(p.employee?.id || "")}"></div>
-        ${p.drive_folders ? `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px;">
-            ${Object.entries(FOLDER_NAME).map(([k, n]) => p.drive_folders[k]
-              ? `<a class="kp-chip" href="https://drive.google.com/drive/folders/${esc(p.drive_folders[k])}"
-                    target="_blank" rel="noopener" style="text-decoration:none;">${esc(n)}</a>` : "").join("")}
-            ${p.drive_sensitive_folder_id
-              ? `<a class="kp-chip important" href="https://drive.google.com/drive/folders/${esc(p.drive_sensitive_folder_id)}"
-                    target="_blank" rel="noopener" style="text-decoration:none;">機微情報（別置き）</a>` : ""}
-          </div>
-          <div class="muted" style="font-size:11.5px;margin-bottom:3px;">
-            ${(p.drive_folders._sharedWith || []).length
-              ? `本人に共有済み：${esc((p.drive_folders._sharedWith || []).join("、"))}`
-              : "本人にはまだ渡していません（会社のアドレスなら、本人が画面を開いた時点で自動で渡ります）"}
-          </div>
-          <div class="muted" style="font-size:11.5px;margin-bottom:8px;">
-            ${p.advisor_shared_to
-              ? `04_社会保険・労務 を ${esc(p.advisor_shared_to)} に共有済み（${esc(new Date(p.advisor_shared_at).toLocaleDateString("ja-JP"))}）`
-              : "社労士には、04_社会保険・労務 だけを共有できます。機微情報は共有されません"}
-          </div>` : ""}
-
-        ${!p.drive_folders ? `
-          <div class="kp-drive" style="margin:10px 0 4px;">
-            <div class="muted" style="font-size:11.5px;line-height:1.9;">
-              <b>提出用フォルダ</b>：
-              ${p.drive_link
-                ? `<a href="${esc(p.drive_link)}" target="_blank" rel="noopener">${esc(p.drive_link)}</a>
-                   <br>このリンクが本人の画面に出ます。本人に「編集者」で共有しておいてください。`
-                : "まだ貼られていません。ドライブでフォルダを作り、本人に共有して、URLを貼ってください。"}
-              <br>
-              <b>マイナンバー用</b>：
-              ${p.drive_sensitive_folder_id
-                ? `<a href="https://drive.google.com/drive/folders/${esc(p.drive_sensitive_folder_id)}"
-                      target="_blank" rel="noopener">別フォルダを設定済み</a>`
-                : "未設定（マイナンバー確認書類は mf に出してもらいます。人事だけが見られます）"}
+    el("hr-detail").innerHTML = `
+      <div class="card">
+        <div class="hr-head">
+          <div class="who">
+            <div class="nm">${esc(p.name)}</div>
+            <div class="meta">
+              ${esc(onDay(p))}
+              ・<span class="hr-ph ${esc(p.phase)}">${esc(p.phaseLabel)}</span>
+              ・${p.progress.done}/${p.progress.total} 完了
+              ${p.days != null
+                ? `<span class="hr-due ${esc(p.urgency)}"
+                     style="margin-left:8px;">${esc(p.due)}</span>` : ""}
             </div>
-          </div>` : ""}
-
-        <div class="foot">
-          ${p.drive_folders
-            ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive_link)}" target="_blank" rel="noopener">
-                 <span class="material-symbols-outlined icon-inline">folder_open</span>個人フォルダ
-               </a>
-               <button class="btn btn-secondary btn-sm" onclick="shareAdvisor('${esc(p.id)}', this)">
-                 <span class="material-symbols-outlined icon-inline">share</span>社労士に04を共有
-               </button>
-               ${p.kind === "onboarding" ? `
-                 <button class="btn btn-secondary btn-sm"
-                         onclick="shareEmployee('${esc(p.id)}', '${esc(p.employee?.email || "")}', this)">
-                   <span class="material-symbols-outlined icon-inline">person_add</span>本人にフォルダを渡す
-                 </button>` : ""}`
-            : `<button class="btn ${p.drive_link ? "btn-secondary" : "btn-primary"} btn-sm"
-                       onclick="pasteFolder('${esc(p.id)}', '${esc(p.drive_link || "")}', this)">
-                 <span class="material-symbols-outlined icon-inline">link</span>
-                 ${p.drive_link ? "フォルダのURLを変える" : "フォルダのURLを貼る"}
-               </button>
-               ${p.drive_link ? `
-                 <button class="btn btn-secondary btn-sm"
-                         onclick="pasteSensitiveFolder('${esc(p.id)}', '${esc(p.drive_sensitive_folder_id ? "https://drive.google.com/drive/folders/" + p.drive_sensitive_folder_id : "")}', this)">
-                   <span class="material-symbols-outlined icon-inline">lock</span>マイナンバー用のURL
-                 </button>` : ""}
-               <button class="btn btn-secondary btn-sm" onclick="makeFolder('${esc(p.id)}', this)">
-                 <span class="material-symbols-outlined icon-inline">create_new_folder</span>自動で作る
-               </button>`}
-          ${p.kind === "onboarding" ? `
-            <button class="btn btn-secondary btn-sm" onclick="showBrief('${esc(p.employee?.id || "")}', this)">
-              <span class="material-symbols-outlined icon-inline">forward_to_inbox</span>社労士連絡・Slack文
-            </button>` : ""}
-          ${p.status === "done"
-            ? `<button class="btn btn-secondary btn-sm" onclick="setProcStatus('${esc(p.id)}','in_progress',this)">進行中に戻す</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="setProcStatus('${esc(p.id)}','done',this)">
-                 <span class="material-symbols-outlined icon-inline">done_all</span>手続きを完了にする
-               </button>`}
-          <button class="btn btn-danger btn-sm" onclick="removeProc('${esc(p.id)}')">
-            <span class="material-symbols-outlined icon-inline">delete</span>削除
-          </button>
+          </div>
+          <div class="ops">
+            <button class="btn btn-secondary btn-sm" onclick="editDate('${esc(p.id)}','${esc(p.targetOn || "")}')">
+              日付を変える</button>
+            <button class="btn btn-secondary btn-sm" onclick="remind('${esc(p.id)}', this)">
+              もう一度知らせる</button>
+            <button class="btn btn-secondary btn-sm" onclick="closeDetail()">閉じる</button>
+          </div>
         </div>
+
+        <div class="hr-now ${next ? "" : "done"}">
+          <div class="k">次にやること</div>
+          ${next
+            ? `<div class="t">${esc(next.ownerLabel)}：${esc(next.title)}</div>
+               <div class="w">${next.assignee ? esc(next.assignee.name) : "担当が決まっていません"}
+                 ${next.href ? `　<a href="${esc(next.href)}">この画面で行う</a>` : ""}</div>`
+            : `<div class="t">すべて終わりました</div>`}
+        </div>
+
+        <div id="hr-date"></div>
+
+        ${p.groups.map((g) => `
+          <div class="hr-grp">
+            <div class="h">
+              <b>${esc(g.label)}</b>
+              <span class="n">${g.done}/${g.total}</span>
+              ${g.items[0]?.assignee ? `<span class="who">${esc(g.items[0].assignee.name)}</span>` : ""}
+            </div>
+            ${g.items.map((i) => `
+              <label class="hr-row ${i.done ? "done" : ""}">
+                <input type="checkbox" ${i.done ? "checked" : ""}
+                       onchange="toggle('${esc(p.id)}','${esc(i.id)}', this)">
+                <span class="t">${esc(i.title)}</span>
+                ${i.phase === "day1" ? '<span class="ph">初日</span>'
+                  : i.phase === "lastday" ? '<span class="ph">退社日</span>' : ""}
+                ${i.href ? `<a class="go" href="${esc(i.href)}"
+                   onclick="event.stopPropagation()">開く</a>` : ""}
+                ${i.done && i.completedAt
+                  ? `<span class="at">${esc(fmt(i.completedAt))}</span>` : ""}
+              </label>`).join("")}
+          </div>`).join("")}
+
+        <!-- 書類の保管先。
+             毎回触るものではないので畳んでおく。
+             ここを消すと、個人フォルダを作る場所も、社労士に渡す場所も
+             どこにも無くなる -->
+        <details class="hr-drive">
+          <summary>書類の保管先（Googleドライブ）</summary>
+          <div class="in">
+            ${p.drive?.link
+              ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive.link)}"
+                   target="_blank" rel="noopener">フォルダを開く</a>`
+              : `<button class="btn btn-secondary btn-sm"
+                   onclick="makeFolder('${esc(p.id)}', this)">個人フォルダ一式を作る</button>`}
+            <div class="row">
+              <input type="text" id="dv-url" placeholder="ドライブのフォルダURLを貼る"
+                     style="margin:0;">
+              <button class="btn btn-secondary btn-sm" onclick="setFolder('${esc(p.id)}', this)">
+                貼る</button>
+            </div>
+            <div class="row">
+              <input type="email" id="dv-sr" placeholder="社労士のメールアドレス"
+                     value="${esc(p.drive?.advisor || "")}" style="margin:0;">
+              <button class="btn btn-secondary btn-sm" onclick="shareSr('${esc(p.id)}', this)">
+                社会保険のフォルダだけ共有</button>
+            </div>
+            ${p.drive?.advisorAt
+              ? `<div class="note">${esc(fmt(p.drive.advisorAt))} に
+                   ${esc(p.drive.advisor)} へ共有済み</div>` : ""}
+          </div>
+        </details>
       </div>`;
+    // 上のバーは画面に固定されている。そのぶん引いてから寄せないと、
+    // 押した直後に、いちばん見たい氏名と期日がバーの裏に隠れる
+    const top = el("hr-detail").getBoundingClientRect().top + window.scrollY;
+    const bar = document.querySelector(".topbar")?.offsetHeight || 0;
+    window.scrollTo({ top: Math.max(0, top - bar - 12), behavior: "smooth" });
   }
 
-  function itemRow(p, i) {
-    const cls = i.status === "done" || i.status === "na" ? "done" : (i.status === "submitted" ? "submitted" : "");
-    return `
-      <tr class="${cls}">
-        <td>
-          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;color:var(--muted);">
-            ${CATEGORY_ICON[i.category] || "circle"}</span>
-          ${esc(i.title)}${i.required ? "" : ' <span class="muted" style="font-size:11px;">任意</span>'}
-          ${i.submitted_at ? `<span class="muted" style="font-size:11px;margin-left:6px;">
-              ${esc(new Date(i.submitted_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }))} 提出</span>` : ""}
-          ${(i.files || []).length === 0 && (i.status === "submitted" || i.status === "done")
-            ? `<br><span class="muted" style="font-size:11px;">
-                 書類は付いていません（紙で受け取ったか、状態だけ変えたものです）。
-                 右の <span class="material-symbols-outlined" style="font-size:13px;vertical-align:-2px;">upload_file</span> から付けられます</span>`
-            : ""}
-          ${(i.files || []).map((f) =>
-            `<br><a href="#" style="font-size:11.5px;" onclick="openFile('${esc(f.id)}');return false;">
-               <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;">attach_file</span>${esc(f.drive_name || f.filename)}</a>
-             ${f.drive_folder_key ? `<span class="muted" style="font-size:10.5px;margin-left:4px;">${
-               f.drive_folder_key === "sensitive" ? "機微情報" : esc(FOLDER_NAME[f.drive_folder_key] || f.drive_folder_key)}</span>` : ""}
-             ${f.drive_link ? `<a href="${esc(f.drive_link)}" target="_blank" rel="noopener" style="font-size:10.5px;margin-left:4px;">Drive</a>` : ""}`).join("")}
-        </td>
-        <td>${esc(OWNER_LABEL[i.owner] || i.owner)}</td>
-        <td>
-          <select onchange="setItemStatus('${esc(i.id)}', this.value)">
-            ${Object.entries(ITEM_STATUS).map(([k, v]) =>
-              `<option value="${k}"${i.status === k ? " selected" : ""}>${v}</option>`).join("")}
-          </select>
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" style="width:auto;" ${i.share_with_advisor ? "checked" : ""}
-                 onchange="setItemShare('${esc(i.id)}', this.checked)">
-        </td>
-        <td style="text-align:right;white-space:nowrap;">
-          <button class="icon-btn" title="ファイルを付ける" onclick="attach('${esc(i.id)}')">
-            <span class="material-symbols-outlined" style="font-size:18px;">upload_file</span>
-          </button>
-          <button class="icon-btn" title="項目を削除" onclick="removeItem('${esc(i.id)}')">
-            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
-          </button>
-        </td>
-      </tr>`;
+  function closeDetail() {
+    el("hr-detail").innerHTML = "";
+    openId = null;
+    history.replaceState(null, "", location.pathname);
   }
 
-  // ---- 本人が出した届出 -------------------------------------------------------
-  //
-  // 住所・生年月日・連絡先・口座・扶養家族。
-  // 社会保険と雇用保険の資格取得届、給与の登録、年末調整の全部がここを見る。
-  // 出してもらったのに管理画面から読めないと、結局本人に聞き直すことになる。
-  //
-  // 既定では畳んでおく。開いた人だけが見る。
-  // 社労士（advisor.html）には返らない（gw_onboard_profiles の RLS）
-  const YESNO = (v) => (v === true ? "はい" : v === false ? "いいえ" : "—");
-  const val = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
-
-  function profileBlock(p) {
-    if (p.kind !== "onboarding") return "";
-    const f = p.profile;
-    if (!f) {
-      return `<p class="muted" style="font-size:12px;margin:10px 0 0;">
-                本人の届出はまだ出ていません。</p>`;
+  async function toggle(id, itemId, box) {
+    const done = box.checked;
+    box.closest(".hr-row").classList.toggle("done", done);
+    try {
+      await API.hrCheck({ id, itemId, done });
+      await load();
+      await showDetail(id);
+    } catch (e) {
+      box.checked = !done;
+      say(e.hint || e.message || "変更できませんでした", true);
     }
-
-    const row = (k, v) => `<tr><th style="text-align:left;white-space:nowrap;padding:3px 14px 3px 0;
-                                font-weight:500;color:var(--muted);">${k}</th>
-                             <td style="padding:3px 0;">${esc(val(v))}</td></tr>`;
-    const table = (rows) => `<table style="font-size:12.5px;border-collapse:collapse;">${rows}</table>`;
-
-    const yen = (n) => (n === null || n === undefined || n === "" ? "—"
-      : `${Number(n).toLocaleString("ja-JP")}円`);
-
-    return `
-      <details style="margin:12px 0 4px;">
-        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary-dark);">
-          本人が出した届出${f.status === "submitted" ? "" : "（記入中）"}
-        </summary>
-        <div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:10px;">
-          <div>
-            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">本人</div>
-            ${table(
-              row("氏名（カナ）", f.name_kana)
-              + row("生年月日", f.birth_date ? `${f.birth_date}（${age(f.birth_date)}歳）` : null)
-              + row("郵便番号", f.postal_code)
-              + row("住所", f.address)
-              + row("電話", f.phone))}
-          </div>
-          <div>
-            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">緊急連絡先</div>
-            ${table(row("お名前", f.emg_name) + row("続柄", f.emg_relation) + row("電話", f.emg_phone))}
-            <div style="font-size:12px;font-weight:600;margin:10px 0 4px;">通勤</div>
-            ${table(row("出発地", f.commute_from) + row("経路", f.commute_route)
-                  + row("1か月の定期代", yen(f.commute_cost)))}
-          </div>
-          <div>
-            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">給与の振込先</div>
-            ${table(row("銀行・支店", [f.bank_name, f.bank_branch].filter(Boolean).join(" ") || null)
-                  + row("種別・番号", [f.bank_type, f.bank_number].filter(Boolean).join(" ") || null)
-                  + row("名義", f.bank_holder))}
-            <div style="font-size:12px;font-weight:600;margin:10px 0 4px;">保険</div>
-            ${table(row("基礎年金番号", f.pension_number)
-                  + row("雇用保険番号", f.employment_ins_number))}
-          </div>
-        </div>
-        ${dependentsBlock(f)}
-        ${f.greeting ? `
-          <div style="margin-top:12px;">
-            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">本人からの一言</div>
-            <div style="font-size:12.5px;white-space:pre-wrap;">${esc(f.greeting)}</div>
-          </div>` : ""}
-      </details>`;
   }
 
-  // 生年月日から今日時点の年齢。社会保険の年齢要件（40歳・65歳・75歳）の目安に使う
-  function age(birth) {
-    const b = new Date(birth + "T00:00:00");
-    if (Number.isNaN(b.getTime())) return "—";
-    const t = new Date();
-    let a = t.getFullYear() - b.getFullYear();
-    const m = t.getMonth() - b.getMonth();
-    if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
-    return a;
-  }
-
-  function dependentsBlock(f) {
-    const deps = Array.isArray(f.dependents) ? f.dependents : [];
-    if (!f.has_dependents && !deps.length) {
-      return `<div style="margin-top:12px;font-size:12.5px;">扶養する家族：<b>なし</b></div>`;
-    }
-    return `
-      <div style="margin-top:14px;">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">
-          扶養する家族　${deps.length}人</div>
-        ${deps.length ? `
-          <div class="table-scroll">
-            <table class="kp-items" style="font-size:12.5px;">
-              <thead><tr>
-                <th>氏名</th><th>続柄</th><th>生年月日</th><th>年齢</th>
-                <th>同居</th><th>収入見込</th><th>備考</th>
-              </tr></thead>
-              <tbody>${deps.map((d) => `
-                <tr>
-                  <td>${esc(val(d.name))}${d.kana ? `<br><span class="muted" style="font-size:11px;">${esc(d.kana)}</span>` : ""}</td>
-                  <td>${esc(val(d.relation))}</td>
-                  <td>${esc(val(d.birth_date))}</td>
-                  <td>${d.birth_date ? esc(String(age(d.birth_date))) : "—"}</td>
-                  <td>${esc(YESNO(d.live_together))}</td>
-                  <td>${d.income === null || d.income === undefined || d.income === ""
-                        ? "—" : esc(Number(d.income).toLocaleString("ja-JP") + "円")}</td>
-                  <td>${esc(val(d.note))}</td>
-                </tr>`).join("")}</tbody>
-            </table>
-          </div>` : `<div class="muted" style="font-size:12px;">扶養ありと答えていますが、まだ1人も入っていません。</div>`}
-        ${f.dependents_note ? `<div class="muted" style="font-size:12px;margin-top:6px;">補足：${esc(f.dependents_note)}</div>` : ""}
-        <p class="muted" style="font-size:11.5px;margin:8px 0 0;">
-          マイナンバーはこの画面では扱いません。番号が要るときは、
-          扶養控除等申告書とマイナンバー確認書類（機微情報フォルダ）を見てください。
+  function editDate(id, cur) {
+    el("hr-date").innerHTML = `
+      <div class="banner" style="display:block;background:var(--soft);margin:0 0 16px;">
+        <b>入社日／退社日を変える</b>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
+          変えると、担当者にもう一度お知らせが届きます。期限も合わせて動かします。
         </p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="date" id="d-date" value="${esc(cur)}" style="margin:0;width:auto;">
+          <button class="btn btn-primary btn-sm" onclick="doDate('${esc(id)}', this)">変更する</button>
+          <button class="btn btn-secondary btn-sm" onclick="el('hr-date').innerHTML=''">やめる</button>
+        </div>
       </div>`;
   }
 
-  // ---- 項目にファイルを付ける -------------------------------------------------
+  async function doDate(id, btn) {
+    const targetOn = el("d-date").value || null;
+    await run(btn, "変更中…", async () => {
+      const r = await API.hrUpdate({ id, targetOn });
+      await load();
+      await showDetail(id);
+      say(`日付を変えました。担当 ${r.told || 0}名 に知らせ直しました。`);
+    });
+  }
+
+  // ---- 書類の保管先 --------------------------------------------------------------
   //
-  // 「提出済みなのに中身が見えない」の受け皿。
-  // 紙で受け取った書類や、メールで送られてきたものを、ここから付けられる。
-  // 付けたものは Drive の決まったフォルダにも入る（書類ごとに置き場所が決まっている）。
-  // 雇用契約書は 02_労働条件・契約 に入り、本人と会社だけが見られる
-  let pendingItem = null;
-
-  function attach(itemId) {
-    pendingItem = itemId;
-    el("pick").value = "";        // 同じファイルをもう一度選べるように
-    el("pick").click();
-  }
-
-  async function onPicked(input) {
-    const files = [...(input.files || [])];
-    const itemId = pendingItem;
-    pendingItem = null;
-    if (!itemId || !files.length) return;
-
-    const box = el("upload-msg");
-    const fail = [];
-    for (let n = 0; n < files.length; n++) {
-      box.textContent = `${n + 1} / ${files.length} 件目を送っています…`;
-      try { await API.uploadProcedureFile(itemId, files[n]); }
-      catch (e) { fail.push(`${files[n].name}：${e.hint || e.detail || e.message}`); }
-    }
-    box.textContent = fail.length ? `送れなかったもの　${fail.join("　")}` : "";
-    await loadProcedures();
-  }
-
-  async function openFile(fileId) {
-    try {
-      const { url } = await API.procedureFileUrl(fileId);
-      window.open(url, "_blank", "noopener");
-    } catch (e) { alert(e.detail || e.message || "開けませんでした"); }
-  }
-
-  async function setItemStatus(id, status) {
-    try { await API.updateProcedureItem({ id, status }); await loadProcedures(); }
-    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadProcedures(); }
-  }
-
-  async function setItemShare(id, shareWithAdvisor) {
-    try { await API.updateProcedureItem({ id, shareWithAdvisor }); }
-    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadProcedures(); }
-  }
-
-  async function removeItem(id) {
-    if (!confirm("この項目を削除します。よろしいですか？")) return;
-    try { await API.deleteProcedureItem(id); await loadProcedures(); }
-    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
-  }
-
-  // Drive に個人フォルダを用意する。GDRIVE_HR_FOLDER_ID が未設定なら理由を出す
+  // 入退社の本筋ではない。毎回触るものでもない。
+  // それでも、ここを消すと個人フォルダを作る場所がどこにも無くなるので、
+  // 畳んだ中に残してある。中身は前からある api/onboarding を呼ぶだけ
   async function makeFolder(id, btn) {
-    try {
-      await KPLayout.busy(btn, "作成中…", () => API.updateProcedure({ id, createFolder: true }));
-      await loadProcedures();
-    } catch (e) { alert(e.hint || e.detail || e.message || "フォルダを作れませんでした"); }
+    await run(btn, "作成中…", async () => {
+      await API.updateProcedure({ id, createFolder: true });
+      await showDetail(id);
+      say("個人フォルダを作りました。");
+    });
   }
 
-  async function setProcStatus(id, status, btn) {
-    try {
-      await KPLayout.busy(btn, "更新中…", () => API.updateProcedure({ id, status }));
-      await loadProcedures();
-    } catch (e) { alert(e.detail || e.message || "更新に失敗しました"); }
+  async function setFolder(id, btn) {
+    const driveUrl = el("dv-url").value.trim();
+    if (!driveUrl) return;
+    await run(btn, "保存中…", async () => {
+      await API.updateProcedure({ id, driveUrl });
+      await showDetail(id);
+      say("保管先を設定しました。");
+    });
   }
 
-  async function removeProc(id) {
-    const p = procedures.find((x) => x.id === id);
-    if (!confirm(`${p?.employee?.display_name || ""} さんの手続きを削除します。項目もすべて消えます。よろしいですか？`)) return;
-    try { await API.deleteProcedure(id); await loadProcedures(); }
-    catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
+  async function shareSr(id, btn) {
+    const email = el("dv-sr").value.trim();
+    if (!email) return;
+    if (!confirm(`${email} に、社会保険・労務のフォルダだけを共有します。\n`
+      + "ほかの書類（労働条件・契約、マイナンバー確認書類）は渡りません。\n\nよろしいですか？")) return;
+    await run(btn, "共有中…", async () => {
+      await API.updateProcedure({ id, shareAdvisor: email });
+      await showDetail(id);
+      say("社労士に共有しました。");
+    });
+  }
+
+  async function remind(id, btn) {
+    await run(btn, "送信中…", async () => {
+      const r = await API.hrUpdate({ id, remind: true });
+      say(r.told ? `担当 ${r.told}名 に知らせました。` : "知らせる相手がいませんでした。");
+    });
+  }
+
+  // ---- 小物 ---------------------------------------------------------------------
+  const fmt = (at) => (at ? new Date(at).toLocaleDateString("ja-JP",
+    { month: "numeric", day: "numeric" }) : "");
+
+  /**
+   * 「10月1日 入社」。
+   *
+   * 一覧は「入社まで3日」で急ぎかどうかが分かればよいが、
+   * 詳細を開いた人は、その日が何日なのかを知りたい。どちらも出す
+   */
+  function onDay(p) {
+    const what = p.kind === "offboarding" ? "退社" : "入社";
+    if (!p.targetOn) return `${what}日 未定`;
+    const d = new Date(`${p.targetOn}T00:00:00Z`);
+    return `${d.toLocaleDateString("ja-JP",
+      { month: "long", day: "numeric", timeZone: "UTC" })} ${what}`;
+  }
+
+  function say(msg, bad) {
+    el("hr-msg").textContent = msg || "";
+    el("hr-msg").style.color = bad ? "#c53030" : "var(--muted)";
+  }
+
+  async function run(btn, label, fn) {
+    say("");
+    try {
+      await KPLayout.busy(btn, label, fn);
+    } catch (e) {
+      say(e.hint || e.message || "うまくいきませんでした", true);
+    }
   }
 </script>
-
 </body>
 </html>

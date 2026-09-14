@@ -38,6 +38,18 @@ const FIELDS =
 const WITH_NAMES =
   `${FIELDS}, assignee:gw_employees!gw_tasks_assignee_id_fkey(id, display_name, department)`;
 
+// link は 066 で足した列。まだ流していない環境では無い。
+// 無い列を SELECT すると、そのリクエストごと落ちて「やること」が
+// 丸ごと開かなくなるので、足したほうで引いて、だめなら元の形で引き直す
+const WITH_LINK = `${WITH_NAMES}, link`;
+
+/** 66 がまだでも開ける形で読む */
+async function readTasks(build) {
+  const first = await build(WITH_LINK);
+  if (!first.error) return first;
+  return build(WITH_NAMES);
+}
+
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -50,16 +62,18 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const scope = new URL(req.url, "http://localhost").searchParams.get("scope") || "all";
 
-    let q = sb.from("gw_tasks").select(WITH_NAMES).eq("tenant_id", ctx.tenantId);
-    // 自分の担当だけに絞る。RLS は「関係するもの」まで見せるので、ここで更に絞る
-    if (scope === "mine") {
-      if (!ctx.employee) return json(res, 200, { tasks: [], requested: [], canManage: canManageHr(ctx) });
-      q = q.eq("assignee_id", ctx.employee.id);
+    if (scope === "mine" && !ctx.employee) {
+      return json(res, 200, { tasks: [], requested: [], canManage: canManageHr(ctx) });
     }
-    const { data, error } = await q
-      .order("status", { ascending: true })
-      .order("due_on", { ascending: true, nullsFirst: false })
-      .limit(300);
+    const { data, error } = await readTasks((cols) => {
+      let q = sb.from("gw_tasks").select(cols).eq("tenant_id", ctx.tenantId);
+      // 自分の担当だけに絞る。RLS は「関係するもの」まで見せるので、ここで更に絞る
+      if (scope === "mine") q = q.eq("assignee_id", ctx.employee.id);
+      return q
+        .order("status", { ascending: true })
+        .order("due_on", { ascending: true, nullsFirst: false })
+        .limit(300);
+    });
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
 
     // 自分が人に頼んだ分。自分の担当分とは別の箱で返す。
@@ -70,15 +84,15 @@ export default async function handler(req, res) {
       // 終わったものは2週間で落とす。そうしないと、頼めば頼むほど
       // 自分の画面が過去の依頼で埋まっていく
       const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
-      const { data: mine } = await sb
-        .from("gw_tasks").select(WITH_NAMES)
+      const { data: mine } = await readTasks((cols) => sb
+        .from("gw_tasks").select(cols)
         .eq("tenant_id", ctx.tenantId)
         .eq("created_by", user.id)
         .neq("assignee_id", ctx.employee.id)
         .or(`status.in.(todo,doing),completed_at.gte.${cutoff}`)
         .order("status", { ascending: true })
         .order("due_on", { ascending: true, nullsFirst: false })
-        .limit(200);
+        .limit(200));
       requested = mine || [];
     }
 

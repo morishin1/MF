@@ -113,7 +113,8 @@
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  const ROLE_LABEL = { owner: "経営者", hr: "人事", manager: "責任者", labor_advisor: "社労士" };
+  const ROLE_LABEL = { owner: "経営者", hr: "人事", it: "IT・管理", finance: "経理",
+                     manager: "責任者", labor_advisor: "社労士" };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない
   const STATUS_LABEL = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
   // 同じログインアカウントを使っている社内システム。表示の並び順もこの通り
