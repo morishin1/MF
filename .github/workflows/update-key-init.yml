@@ -1,0 +1,199 @@
+# EIGHT Agent の更新鍵を作る。**最初の1回だけ**動かす。
+#
+# ■ 何のための鍵か
+#
+#   商用のコード署名証明書は買わない。そのぶん「配っているEXEが、
+#   うちが作ったものか」を自分で確かめる。
+#
+#   配る版に、この鍵（Ed25519）で署名する。
+#   エージェントには対になる**公開**鍵が焼き込んである。
+#   署名が合わなければ、URLを開きにすらいかない。
+#
+#   Windows の SmartScreen は、これでは黙らない（初回に警告は出る）。
+#   黙らせるためではなく、**自動更新で変なものを実行しない**ため。
+#
+# ■ 作り直さない
+#
+#   公開鍵はエージェントに焼き込まれている。鍵を替えると、
+#   既に配ったPCは新しい署名を確かめられず、**更新が止まる**。
+#   替えるなら、エージェントごと配り直すことになる。
+#
+# ■ 秘密鍵をどう受け取るか
+#
+#   ログには出さない。Artifacts に置くので、落として中身を
+#   Secrets に貼り、**そのあと Artifact を消してください**。
+#   Artifact は、このリポジトリを読める人なら誰でも落とせます。
+#   だから置いておく期間を1日にしてあります。
+
+name: EIGHT Agent 更新鍵を初期化
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "作り直すと、配った全PCの自動更新が止まります。よければ INIT と入れてください"
+        required: true
+        type: string
+      replace:
+        description: "AGENT_UPDATE_KEY が既に入っているのを承知で作り直す"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  init:
+    name: 更新鍵を作る
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 本当に作ってよいか確かめる
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          REPLACE: ${{ inputs.replace }}
+          CURRENT: ${{ vars.AGENT_UPDATE_KEY }}
+        run: |
+          set -eu
+          if [ "$CONFIRM" != "INIT" ]; then
+            echo "::error::確認の欄に INIT と入れてください"
+            exit 1
+          fi
+          if [ -n "${CURRENT:-}" ] && [ "$REPLACE" != "true" ]; then
+            echo "::error::AGENT_UPDATE_KEY は既に入っています。"
+            echo "::error::鍵を替えると、配った全PCで自動更新が止まります"
+            echo "::error::（エージェントに焼き込んだ公開鍵と合わなくなるため）。"
+            echo "::error::それでもよければ「作り直す」に印を付けて実行してください。"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: 鍵を作る
+        id: mk
+        working-directory: agent
+        run: |
+          set -eu
+          mkdir -p ../out
+          # -json は公開鍵と目印しか出さない。秘密鍵はファイルにだけ書かれる
+          out=$(go run ./cmd/eight-agent-keygen -new -out ../out/eight-update.key -json)
+          pub=$(printf '%s' "$out" | sed 's/.*"public_key":"\([^"]*\)".*/\1/')
+          kid=$(printf '%s' "$out" | sed 's/.*"key_id":"\([^"]*\)".*/\1/')
+
+          case "$pub" in
+            [A-Za-z0-9_-][A-Za-z0-9_-]*) ;;
+            *) echo "::error::公開鍵の形がおかしいです"; exit 1 ;;
+          esac
+          if [ "${#pub}" -ne 43 ]; then
+            echo "::error::公開鍵の長さが違います（${#pub} 文字）"
+            exit 1
+          fi
+
+          echo "pub=$pub" >> "$GITHUB_OUTPUT"
+          echo "kid=$kid" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$pub" > ../out/public-key.txt
+
+      # 作った鍵で実際に署名して、その署名が公開鍵で通るか。
+      # 「鍵はできたが配れない」を、この場で見つける
+      - name: 署名して確かめる
+        working-directory: agent
+        env:
+          PUB: ${{ steps.mk.outputs.pub }}
+        run: |
+          set -eu
+          head -c 6000000 /dev/zero > "$RUNNER_TEMP/sample.bin"
+          go run ./cmd/eight-agent-keygen \
+            -key ../out/eight-update.key \
+            -version 0.0.0 \
+            -locator 0.0.0/EIGHT-Agent-Setup.exe \
+            -file "$RUNNER_TEMP/sample.bin" -json > "$RUNNER_TEMP/sig.json"
+          # keygen は、作った署名を自分で確かめてから出す。
+          # ここまで来ていれば、署名と確かめの両方が通っている
+          grep -q '"signature":"' "$RUNNER_TEMP/sig.json"
+          echo "署名して、その署名を確かめるところまで通りました"
+
+      - name: 貼りかたを書いておく
+        env:
+          PUB: ${{ steps.mk.outputs.pub }}
+          KID: ${{ steps.mk.outputs.kid }}
+        run: |
+          set -eu
+          cat > out/README.txt <<TXT
+          EIGHT Agent の更新鍵
+
+          公開鍵（目印 ${KID}）:
+          ${PUB}
+
+          このあと、2つ登録してください。
+
+          1) Settings → Secrets and variables → Actions → Variables → New
+               名前: AGENT_UPDATE_KEY
+               中身: ${PUB}
+
+          2) 同じ画面の Secrets → New repository secret
+               名前: AGENT_UPDATE_PRIVATE_KEY
+               中身: eight-update.key の中身（1行）
+
+          終わったら、この Artifact を消してください。
+          Actions の実行結果の画面 → Artifacts の右のごみ箱です。
+
+          この鍵は作り直さないでください。
+          公開鍵はエージェントに焼き込まれます。替えると、既に配ったPCは
+          新しい署名を確かめられず、自動更新が止まります。
+          TXT
+
+      - name: 落とせるようにする
+        uses: actions/upload-artifact@v4
+        with:
+          name: eight-update-key
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: 次にやることを出す
+        env:
+          PUB: ${{ steps.mk.outputs.pub }}
+          KID: ${{ steps.mk.outputs.kid }}
+        run: |
+          set -eu
+          {
+            echo "## 更新鍵ができました"
+            echo
+            echo "公開鍵（目印 \`${KID}\`）:"
+            echo
+            echo '```'
+            echo "${PUB}"
+            echo '```'
+            echo
+            echo "### このあと（2つ登録すれば終わりです）"
+            echo
+            echo "**1. 上の Artifacts から \`eight-update-key\` を落とす**"
+            echo
+            echo "**2. Settings → Secrets and variables → Actions で登録する**"
+            echo
+            echo "| どこ | 名前 | 中身 |"
+            echo "|---|---|---|"
+            echo "| Variables | \`AGENT_UPDATE_KEY\` | \`${PUB}\` |"
+            echo "| Secrets | \`AGENT_UPDATE_PRIVATE_KEY\` | \`eight-update.key\` の中身（1行） |"
+            echo
+            echo "**3. 貼り終わったら、この Artifact を消してください**"
+            echo
+            echo "> このページの Artifacts の右にあるごみ箱です。"
+            echo "> 消し忘れても1日で消えます。"
+            echo
+            echo "### そのあと"
+            echo
+            echo "「EIGHT Agent を組み立てる」を押すだけで、"
+            echo "署名まで済んだ版が配れる状態になります。"
+            echo
+            echo "> **この鍵は作り直さないでください。**"
+            echo "> 公開鍵はエージェントに焼き込まれます。替えると、"
+            echo "> 既に配ったPCは新しい署名を確かめられず、自動更新が止まります。"
+          } >> "$GITHUB_STEP_SUMMARY"

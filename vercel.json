@@ -17,6 +17,16 @@
       "permanent": false
     }
   ],
+  "rewrites": [
+    {
+      "source": "/ext/updates.xml",
+      "destination": "/api/ext?f=updates.xml"
+    },
+    {
+      "source": "/ext/eight-ext.crx",
+      "destination": "/api/ext?f=eight-ext.crx"
+    }
+  ],
   "headers": [
     {
       "source": "/(js|css|img)/(.*)",

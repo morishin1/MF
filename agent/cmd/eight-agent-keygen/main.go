@@ -68,7 +68,7 @@ func main() {
 	var err error
 	switch {
 	case *newKey:
-		err = generate(*out)
+		err = generate(*out, *asJSON)
 	default:
 		err = sign(*keyPath, *version, *url, *locator, *file, *asJSON)
 	}
@@ -80,7 +80,7 @@ func main() {
 
 // ---- 鍵を作る ---------------------------------------------------------------
 
-func generate(out string) error {
+func generate(out string, asJSON bool) error {
 	if out == "" {
 		return fmt.Errorf("-out に秘密鍵の置き場所を指定してください")
 	}
@@ -97,6 +97,14 @@ func generate(out string) error {
 	body := base64.RawURLEncoding.EncodeToString(priv) + "\n"
 	if err := os.WriteFile(out, []byte(body), 0o600); err != nil {
 		return err
+	}
+
+	// 秘密鍵は、どちらの出し方でも表に出さない。
+	// 画面に出したものは、そのままログに残るため
+	if asJSON {
+		fmt.Printf("{\"public_key\":%q,\"key_id\":%q,\"path\":%q}\n",
+			base64.RawURLEncoding.EncodeToString(pub), release.KeyID(pub), out)
+		return nil
 	}
 
 	fmt.Printf(`鍵を作りました。

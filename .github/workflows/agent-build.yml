@@ -34,6 +34,11 @@ on:
         description: "拡張のID（32文字）。空なら Variables の AGENT_EXT_ID を使う"
         required: false
         type: string
+      publish:
+        description: "配れる状態にする（外すと組み立てるだけ。版は使われない）"
+        required: false
+        default: true
+        type: boolean
 
 # 読むだけ。ここから何かを書き換えることはない
 permissions:
@@ -262,17 +267,258 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # ---------------------------------------------------------------------------
-  # このあと足すもの（いまは人がやる）
-  #
-  #   5. Supabase の agent バケットへ上げる
-  #        secrets.SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY が要る
-  #   6. 更新署名（cmd/eight-agent-keygen）
-  #        secrets.AGENT_UPDATE_PRIVATE_KEY が要る
-  #   7. gw_device_releases へ登録
-  #        5 と同じ鍵で入れる
-  #
-  #   鍵を Actions に置くかどうかは、決めてから足す。
-  #   service_role の鍵は、入れれば全テーブルを書き換えられるものなので、
-  #   「便利だから置く」で決めない
-  # ---------------------------------------------------------------------------
+      # =======================================================================
+      # ここから、配れる状態にするところ
+      #
+      # ■ service_role の鍵は置かない
+      #
+      #   Storage へ上げて表に入れるだけなら、service_role の鍵を
+      #   Secrets に置けば済む。置かない。あの鍵は、持っていれば
+      #   **全テーブルを読み書きできる**（給与も健康診断も契約書も）。
+      #   「配布物を1つ置く」ためにそこまでの力を渡す理由がない。
+      #
+      #   代わりに、サーバ側に1つだけ口を開けてある
+      #   （api/devices/release.js）。GitHub が持つのは、その口の
+      #   合言葉だけ。できるのは「エージェントの版を1つ出す」に閉じる。
+      # =======================================================================
+
+      - name: 配る支度ができているか見る
+        id: ready
+        env:
+          RELEASE_TOKEN: ${{ secrets.DEVICE_RELEASE_TOKEN }}
+          UPDATE_KEY_PRIV: ${{ secrets.AGENT_UPDATE_PRIVATE_KEY }}
+          WANT: ${{ inputs.publish }}
+        run: |
+          set -eu
+          if [ "$WANT" != "true" ]; then
+            echo "::notice::「配れる状態にする」が外れているので、組み立てまでで止めます"
+            echo "go=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          miss=""
+          [ -z "${RELEASE_TOKEN:-}" ]  && miss="$miss DEVICE_RELEASE_TOKEN"
+          [ -z "${UPDATE_KEY_PRIV:-}" ] && miss="$miss AGENT_UPDATE_PRIVATE_KEY"
+          if [ -n "$miss" ]; then
+            echo "::warning::Secrets が足りないので、組み立てまでで止めます:$miss"
+            echo "::warning::AGENT_UPDATE_PRIVATE_KEY は「EIGHT Agent 更新鍵を初期化」で作れます"
+            echo "go=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "go=1" >> "$GITHUB_OUTPUT"
+
+      # 同じ版が Storage か表にあれば、ここで 409 が返って止まる。
+      # 配った版を黙って差し替えると、入れたPCとこれから入れるPCで
+      # 中身が違うことになる。しかも署名は通るので気づけない
+      - name: Storage に置く場所をもらう
+        if: steps.ready.outputs.go == '1'
+        env:
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
+          TOKEN: ${{ secrets.DEVICE_RELEASE_TOKEN }}
+          VERSION: ${{ env.VERSION }}
+        run: |
+          set -eu
+          code=$(curl -sS -o "$RUNNER_TEMP/begin.json" -w '%{http_code}' \
+            -X POST "$BASE_URL/api/devices/release" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"action\":\"begin\",\"version\":\"$VERSION\"}")
+          if [ "$code" = "409" ]; then
+            echo "::error::版 $VERSION は既にあります。上書きはしません。版を上げてください"
+            cat "$RUNNER_TEMP/begin.json"; exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::error::置き場所をもらえませんでした（HTTP $code）"
+            cat "$RUNNER_TEMP/begin.json"; exit 1
+          fi
+          # 返ってきた URL には上げるための札が入っている。画面に出さない
+          echo "もらいました: agent/$VERSION/EIGHT-Agent-Setup.exe"
+
+      - name: Storage へ上げる
+        if: steps.ready.outputs.go == '1'
+        run: |
+          set -eu
+          url=$(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/begin.json"))["uploadUrl"])')
+          code=$(curl -sS -o "$RUNNER_TEMP/up.txt" -w '%{http_code}' \
+            -X PUT "$url" \
+            -H 'Content-Type: application/octet-stream' \
+            -H 'x-upsert: false' \
+            --data-binary @agent/dist/EIGHT-Agent-Setup.exe)
+          if [ "$code" != "200" ]; then
+            echo "::error::上げられませんでした（HTTP $code）"
+            cat "$RUNNER_TEMP/up.txt"; exit 1
+          fi
+
+      # 上げ切れていないものを配ると、入れた先で黙って失敗する。
+      # 読み直して、送ったものと同じか確かめてから先へ進む
+      - name: 上げたものを読み直して確かめる
+        if: steps.ready.outputs.go == '1'
+        env:
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
+          TOKEN: ${{ secrets.DEVICE_RELEASE_TOKEN }}
+          VERSION: ${{ env.VERSION }}
+          SHA: ${{ steps.facts.outputs.sha }}
+          SIZE: ${{ steps.facts.outputs.size }}
+        run: |
+          set -eu
+          code=$(curl -sS -o "$RUNNER_TEMP/verify.json" -w '%{http_code}' \
+            -X POST "$BASE_URL/api/devices/release" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"action\":\"verify\",\"version\":\"$VERSION\",\"size_bytes\":$SIZE}")
+          if [ "$code" != "200" ]; then
+            echo "::error::確かめられませんでした（HTTP $code）"
+            cat "$RUNNER_TEMP/verify.json"; exit 1
+          fi
+          url=$(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/verify.json"))["url"])')
+          curl -sS -o "$RUNNER_TEMP/back.exe" "$url"
+
+          got=$(sha256sum "$RUNNER_TEMP/back.exe" | cut -d' ' -f1)
+          gotsize=$(stat -c %s "$RUNNER_TEMP/back.exe")
+          if [ "$got" != "$SHA" ] || [ "$gotsize" != "$SIZE" ]; then
+            echo "::error::上げたものと中身が違います"
+            echo "::error::送った $SHA ($SIZE) / 戻ってきた $got ($gotsize)"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/back.exe"
+          echo "上げたものと同じでした（$got）"
+
+      # 署名の対象は「置き場所」。落とすURLは毎回変わるので、
+      # 変わらないほう（バケットの中のパス）に署名する
+      - name: 更新の署名を作る
+        if: steps.ready.outputs.go == '1'
+        working-directory: agent
+        env:
+          UPDATE_KEY_PRIV: ${{ secrets.AGENT_UPDATE_PRIVATE_KEY }}
+          VERSION: ${{ env.VERSION }}
+        run: |
+          set -eu
+          umask 077
+          printf '%s\n' "$UPDATE_KEY_PRIV" > "$RUNNER_TEMP/update.key"
+          go run ./cmd/eight-agent-keygen \
+            -key "$RUNNER_TEMP/update.key" \
+            -version "$VERSION" \
+            -locator "$VERSION/EIGHT-Agent-Setup.exe" \
+            -file dist/EIGHT-Agent-Setup.exe \
+            -json > "$RUNNER_TEMP/sig.json"
+          rm -f "$RUNNER_TEMP/update.key"
+          # keygen は、作った署名を自分で確かめてから出す。
+          # ここまで来ていれば、署名と確かめの両方が通っている
+          echo "署名しました（目印 $(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/sig.json"))["key_id"])')）"
+
+      - name: 配れる状態にする
+        id: publish
+        if: steps.ready.outputs.go == '1'
+        env:
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
+          TOKEN: ${{ secrets.DEVICE_RELEASE_TOKEN }}
+          VERSION: ${{ env.VERSION }}
+        run: |
+          set -eu
+          python3 - <<'PY' > "$RUNNER_TEMP/publish.json"
+          import json, os
+          s = json.load(open(os.environ["RUNNER_TEMP"] + "/sig.json"))
+          print(json.dumps({
+              "action": "publish",
+              "version": os.environ["VERSION"],
+              "sha256": s["sha256"],
+              "size_bytes": s["size_bytes"],
+              "signature": s["signature"],
+              "key_id": s["key_id"],
+              "notes": "GitHub Actions",
+          }))
+          PY
+          code=$(curl -sS -o "$RUNNER_TEMP/pub.json" -w '%{http_code}' \
+            -X POST "$BASE_URL/api/devices/release" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/publish.json")
+          if [ "$code" != "200" ]; then
+            echo "::error::登録できませんでした（HTTP $code）"
+            cat "$RUNNER_TEMP/pub.json"; exit 1
+          fi
+          cat "$RUNNER_TEMP/pub.json"
+          echo "kid=$(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/sig.json"))["key_id"])')" >> "$GITHUB_OUTPUT"
+
+      # ブラウザは、ログインしていない状態でここへ取りにくる。
+      # 置き場所は非公開のまま、/ext/ だけを通す（api/ext.js）
+      - name: ブラウザ拡張を置く
+        id: extpub
+        if: steps.ready.outputs.go == '1'
+        env:
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
+          TOKEN: ${{ secrets.DEVICE_RELEASE_TOKEN }}
+        run: |
+          set -eu
+          if [ ! -f agent/dist/eight-ext.crx ]; then
+            echo "::warning::拡張の秘密鍵が無いので、.crx は置きません"
+            echo "done=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          for f in eight-ext.crx updates.xml; do
+            code=$(curl -sS -o "$RUNNER_TEMP/ext.json" -w '%{http_code}' \
+              -X POST "$BASE_URL/api/devices/release" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d "{\"action\":\"ext\",\"file\":\"$f\"}")
+            if [ "$code" != "200" ]; then
+              echo "::error::$f の置き場所をもらえませんでした（HTTP $code）"
+              cat "$RUNNER_TEMP/ext.json"; exit 1
+            fi
+            url=$(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/ext.json"))["uploadUrl"])')
+            ct=$(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/ext.json"))["contentType"])')
+            code=$(curl -sS -o "$RUNNER_TEMP/extup.txt" -w '%{http_code}' \
+              -X PUT "$url" -H "Content-Type: $ct" -H 'x-upsert: true' \
+              --data-binary @"agent/dist/$f")
+            if [ "$code" != "200" ]; then
+              echo "::error::$f を上げられませんでした（HTTP $code）"
+              cat "$RUNNER_TEMP/extup.txt"; exit 1
+            fi
+            echo "置きました: $f"
+          done
+          echo "done=1" >> "$GITHUB_OUTPUT"
+
+      - name: できあがりを出す
+        if: always() && steps.ready.outputs.go == '1'
+        env:
+          VERSION: ${{ env.VERSION }}
+          BASE_URL: ${{ vars.AGENT_BASE_URL || 'https://mf.8grp.co.jp' }}
+          CRXID: ${{ steps.facts.outputs.crxid }}
+          KID: ${{ steps.publish.outputs.kid }}
+          EXTDONE: ${{ steps.extpub.outputs.done }}
+          SHA: ${{ steps.facts.outputs.sha }}
+          SIZE: ${{ steps.facts.outputs.size }}
+          RESULT: ${{ job.status }}
+        run: |
+          set -eu
+          mark() { if [ -n "$2" ]; then echo "- ✅ $1"; else echo "- ⬜ $1（できていません）"; fi; }
+          {
+            if [ "$RESULT" = "success" ] && [ -n "${KID:-}" ]; then
+              echo "## ✅ 版 ${VERSION} を配れる状態にしました"
+            else
+              echo "## ⚠ 版 ${VERSION} は、配れる状態になっていません"
+            fi
+            echo
+            mark "EXE を作った" "$SHA"
+            mark "Chrome / Edge 拡張を作った" "${CRXID:-}"
+            mark "Storage へ上げた（agent/${VERSION}/EIGHT-Agent-Setup.exe）" "${KID:-}"
+            mark "更新の署名を付けた（鍵の目印 ${KID:-—}）" "${KID:-}"
+            mark "gw_device_releases に登録した（published）" "${KID:-}"
+            mark "拡張を ${BASE_URL}/ext/ に置いた" "${EXTDONE:-}"
+            echo
+            if [ "$RESULT" = "success" ] && [ -n "${KID:-}" ]; then
+              echo "### 社員PCへ配れます"
+              echo
+              echo "- 既に入っているPCは、次の見回り（6時間ごと）で自分で入れ替わります"
+              echo "- 新しく入れるPCは、マイページ →「会社PCのセキュリティ設定」から落とせます"
+              echo
+              echo "| | |"
+              echo "|---|---|"
+              echo "| 版 | \`${VERSION}\` |"
+              echo "| 大きさ | ${SIZE} バイト |"
+              echo "| SHA-256 | \`${SHA}\` |"
+              if [ -n "${CRXID:-}" ]; then echo "| 拡張のID | \`${CRXID}\` |"; fi
+              echo "| 署名の鍵 | \`${KID}\` |"
+              echo
+              echo "> **手でやることはもうありません。**"
+              echo "> Storage への上げ込みも、署名も、表への登録も済んでいます。"
+            else
+              echo "上のどこで止まったかは、左の手順の一覧で赤くなっているところを見てください。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
