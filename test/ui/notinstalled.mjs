@@ -1,5 +1,6 @@
 // 表がまだ無いときに、画面が何と言うか
-import { launch, BASE } from "./_browser.mjs";
+import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 const br = await launch();
 const page = await br.newPage({ viewport: { width: 1100, height: 900 } });
 await page.addInitScript(() => {
@@ -26,6 +27,6 @@ const txt = await page.locator("body").textContent();
 const okMsg = txt.includes("db/048_timecard.sql");
 console.log(okMsg ? "  ok 何をすればよいかが画面に出る" : "NG: 生のDBエラーのまま");
 console.log(okMsg ? "" : txt.slice(0, 400));
-await page.screenshot({ path: "tc-notinstalled.png", fullPage: true });
+await page.screenshot({ path: path: shotPath("tc-notinstalled.png"), fullPage: true });
 await br.close();
 process.exit(okMsg ? 0 : 1);

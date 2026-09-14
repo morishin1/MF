@@ -3,6 +3,7 @@ import { launch, BASE } from "../_browser.mjs";
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
+import { shotPath } from "../_shot.mjs";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(dirname(_HERE));
 const atRoot = (p) => _join(ROOT, p);
@@ -72,7 +73,7 @@ check(text.includes("事前に管理者の承認"), "承認の道も出ている
 check(text.includes("原則として勤務時間内"), "勤務時間の内と外が出ている");
 check(text.includes("あなたの画面に残ります"), "見たことが本人に残ると書いてある");
 
-await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/notice.png", fullPage: true });
+await page.screenshot({ path: shotPath("notice.png"), fullPage: true });
 await br.close();
 if (errs.length) { console.log("エラー:", errs); bad++; }
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");

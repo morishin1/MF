@@ -1,5 +1,6 @@
 // 会社貸与か私物か、と私物PCの事前承認。実際の画面で通す。
 import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const me = { email: "zimu@8grp.co.jp", appRole: "admin", shows: {},
   gw: { employee: { id: "emp-0", display_name: "事務" },
@@ -144,7 +145,7 @@ await page.waitForTimeout(700);
   check(p && p.deviceNote === "自宅の MacBook", "端末の説明も送る");
 }
 
-await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/owner.png", fullPage: true });
+await page.screenshot({ path: shotPath("owner.png"), fullPage: true });
 await br.close();
 if (errs.length) { console.log("エラー:", errs); bad++; }
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");

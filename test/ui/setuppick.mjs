@@ -2,7 +2,8 @@
 //
 // 初回は管理者が対象PCで入れる（商用のコード署名証明書を使わないため）。
 // そのとき押すのは管理者なので、ここが効かないと全台が管理者の持ち物になる。
-import { launch, BASE } from "./_browser.mjs";
+import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const TOKEN = "t".repeat(43);
 const me = { email: "zimu@8grp.co.jp", appRole: "admin", shows: {},
@@ -65,7 +66,7 @@ await page.waitForTimeout(200);
 check(/田中 太郎/.test(await page.locator("#who").textContent()),
   "選ぶと「誰のものになるか」の表示が変わる");
 
-await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/setup-pick-before.png", fullPage: true });
+await page.screenshot({ path: shotPath("setup-pick-before.png"), fullPage: true });
 
 await page.click("#go");
 await page.waitForTimeout(900);
@@ -74,7 +75,7 @@ check(claimed?.deviceUid === null || claimed?.deviceUid === undefined,
   "管理者のブラウザは束ねない（社員の持ち物として台帳に載ってしまう）");
 check(await page.locator("#card-wait").isVisible(), "そのまま待ちの画面に進む");
 
-await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/setup-pick.png", fullPage: true });
+await page.screenshot({ path: shotPath("setup-pick.png"), fullPage: true });
 await br.close();
 
 if (errs.length) { console.log("\nスクリプトのエラー:", errs); bad++; }

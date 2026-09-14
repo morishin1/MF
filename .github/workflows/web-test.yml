@@ -40,6 +40,10 @@ jobs:
           node-version: "22"
       - name: 用意する
         run: npm install --no-audit --no-fund
+      # テストそのものの置き方を先に見る。
+      # 手元にしか無い場所を指したまま、というのが実際に起きた
+      - name: テストの置き方
+        run: node test/selfcheck.mjs
       - name: 確かめる
         run: node test/run.mjs node
 

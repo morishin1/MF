@@ -3,6 +3,7 @@ import { launch, BASE } from "../_browser.mjs";
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
+import { shotPath } from "../_shot.mjs";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(dirname(_HERE));
 const atRoot = (p) => _join(ROOT, p);
@@ -313,7 +314,7 @@ function wire(page, me) {
 
     await pane("概要");
   }
-  await page.screenshot({ path: "/tmp/dv2-admin.png", fullPage: true });
+  await page.screenshot({ path: path: shotPath("dv2-admin.png"), fullPage: true });
 
   // 社員はログインしているので、誰なのかはもう分かっている。
   // コードを配って打たせるのは、配る手間と打ち間違いを足しているだけ
@@ -434,7 +435,7 @@ function wire(page, me) {
   await page.waitForTimeout(900);
   check(sent.some((p) => String(p.staleDays) === "30"), "保存で送られる");
   check(sent.some((p) => (p.blockedSoftware || []).includes("anydesk")), "禁止ソフトも送られる");
-  await page.screenshot({ path: "dv2-policy.png", fullPage: true });
+  await page.screenshot({ path: path: shotPath("dv2-policy.png"), fullPage: true });
   await page.close();
 }
 
@@ -486,7 +487,7 @@ function wire(page, me) {
     "ほかの端末も出る");
   check((await page.locator("#c-install").textContent()).length > 10,
     "アプリとして入れる案内が出る");
-  await page.screenshot({ path: "dv2-consent.png", fullPage: true });
+  await page.screenshot({ path: path: shotPath("dv2-consent.png"), fullPage: true });
 
   sent.length = 0;
   await page.locator("#c-this button:has-text('内容を確認しました')").click();
@@ -535,7 +536,7 @@ function wire(page, me) {
     check(t.includes("原則として勤務時間内"), "勤務時間の内と外が出る");
     check(!/90分|Cookie|しきい値/.test(t), "判定のしかたは出さない");
   }
-  await page.screenshot({ path: "dv2-linked.png", fullPage: true });
+  await page.screenshot({ path: path: shotPath("dv2-linked.png"), fullPage: true });
 
   sent.length = 0;
   await page.locator("#c-agent button:has-text('内容を確認しました')").click();
@@ -587,7 +588,7 @@ function wire(page, me) {
       "端末管理の説明を、あとからでも読める");
     check(!/90分|しきい値|Cookie/.test(t), "ここでも判定のしかたは出さない");
   }
-  await page.screenshot({ path: "/tmp/dv2-mypage.png", fullPage: true });
+  await page.screenshot({ path: path: shotPath("dv2-mypage.png"), fullPage: true });
 
   console.log("— どの画面でも合図が出る —");
   sent.length = 0;

@@ -12,6 +12,7 @@ import { launch, BASE } from "../_browser.mjs";
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
+import { shotPath } from "../_shot.mjs";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(dirname(_HERE));
 const atRoot = (p) => _join(ROOT, p);
@@ -126,7 +127,7 @@ async function wire(page, opts) {
     check(t.includes("自動でもどってきます"), "戻ってくると書いてある");
     check(!/登録コード|コマンド|拡張/.test(t), "コード・コマンド・拡張の話をしない");
   }
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/setup1.png", fullPage: true });
+  await page.screenshot({ path: shotPath("setup1.png"), fullPage: true });
 
   // 落とす
   const dl = page.waitForEvent("download").catch(() => null);
@@ -140,7 +141,7 @@ async function wire(page, opts) {
     "待ちの画面でも、誰が入れるか書いてある");
   check((await page.locator("#run-file").textContent()).includes("EIGHT-Agent-Setup-"),
     "落とすファイル名を見せる（名前を変えさせないため）");
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/setup2.png", fullPage: true });
+  await page.screenshot({ path: shotPath("setup2.png"), fullPage: true });
   check(errs.length === 0, `エラーなし${errs.length ? "：" + errs[0] : ""}`);
   await page.close();
 }
@@ -187,7 +188,7 @@ async function wire(page, opts) {
     check(c.body.deviceUid, "このブラウザの印も渡す（1台にまとまる）");
     check(!c.body.employeeId, "社員は選ばない");
   }
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/setup3.png", fullPage: true });
+  await page.screenshot({ path: shotPath("setup3.png"), fullPage: true });
   check(errs.length === 0, `エラーなし${errs.length ? "：" + errs[0] : ""}`);
   await page.close();
 }

@@ -1,5 +1,6 @@
 // 組み立ての画面と、WEB利用の画面を、実際に触って通す。
 import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const me = {
   email: "yamada@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
@@ -200,7 +201,7 @@ const asAdmin = () => {
   check(await page.locator("#next").getAttribute("href") === "device-consent.html",
     "最後に「記録すること」へ送る（読むまで記録は始まらない）");
 
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/setup-done.png" });
+  await page.screenshot({ path: shotPath("setup-done.png") });
   await page.close();
 }
 
@@ -294,7 +295,7 @@ const asAdmin = () => {
   check((await page.locator("#d-web").textContent()).includes("勤務時間内」で見てください"),
     "時間外を見ているときは、そう書く");
 
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/web-tab.png", fullPage: true });
+  await page.screenshot({ path: shotPath("web-tab.png"), fullPage: true });
 
   await page.locator("#d-web button:has-text('閉じる')").click();
   await page.waitForTimeout(400);

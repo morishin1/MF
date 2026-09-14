@@ -2,8 +2,9 @@
 //  1) プレビューを画面いっぱいで読めること
 //  2) 作成依頼 → 届いた書面 → そのまま署名依頼、が1画面で回ること
 //  3) 本人が保存・印刷できること（労基則5条）
-import { launch, BASE } from "./_browser.mjs";
+import { launch, BASE } from "../_browser.mjs";
 import fs from "node:fs";
+import { shotPath } from "../_shot.mjs";
 
 const meAdmin = {
   email: "zimu@8grp.co.jp", appRole: "admin", isAdmin: true, shows: {},
@@ -18,7 +19,7 @@ const meMember = {
 
 // 本物のPDF。プレビューの枠に出す
 const PDF_B64 = fs.readFileSync(
-  "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/base.pdf").toString("base64");
+  atRoot("test/fixtures/base.pdf")).toString("base64");
 
 const FIELDS = [
   { key: "雇用区分", placeholder: "正社員", required: true },
@@ -300,10 +301,10 @@ const memberInit = () => {
   await page.waitForTimeout(700);
   check(posted.some((p) => p.url && /download=1/.test(p.url)), "保存のURLを取りに行く");
 
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/sign-admin.png", fullPage: false });
+  await page.screenshot({ path: shotPath("sign-admin.png"), fullPage: false });
   await page.locator("#tab-order").click();
   await page.waitForTimeout(400);
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/sign-order.png", fullPage: false });
+  await page.screenshot({ path: shotPath("sign-order.png"), fullPage: false });
   await page.close();
 }
 
@@ -394,7 +395,7 @@ const memberInit = () => {
     const style = await page.locator("#o-body").evaluate((n) => getComputedStyle(n).maxHeight);
     check(style === "none", `本文の高さ制限が外れる（${style}）`);
   }
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/sign-print.png", fullPage: true });
+  await page.screenshot({ path: shotPath("sign-print.png"), fullPage: true });
   await page.emulateMedia({ media: "screen" });
   await page.close();
 }

@@ -7,6 +7,7 @@ import { launch, BASE } from "../_browser.mjs";
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
+import { shotPath } from "../_shot.mjs";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(dirname(_HERE));
 const atRoot = (p) => _join(ROOT, p);
@@ -80,7 +81,7 @@ async function run(label, { beatCreatesRow }) {
     check(hidden, "台帳に載らないときは、端末の欄を出さない");
   }
   check(errs.length === 0, `スクリプトのエラーなし${errs.length ? "：" + errs[0] : ""}`);
-  await page.screenshot({ path: `/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/firstvisit-${beatCreatesRow ? "ok" : "none"}.png`, fullPage: true });
+  await page.screenshot({ path: shotPath(`firstvisit-${beatCreatesRow ? "ok" : "none"}.png`), fullPage: true });
   await page.close();
 }
 

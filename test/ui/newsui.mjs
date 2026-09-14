@@ -1,5 +1,6 @@
 // サイトのお知らせの画面を、実際に触って通す。
 import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const meAdmin = {
   email: "zimu@8grp.co.jp", appRole: "admin", isAdmin: true, shows: {},
@@ -257,10 +258,10 @@ function wire(page) {
   check(await page.locator("#e-slug").inputValue() === "press-vol3",
     "題名を直しても、既にあるURLは変えない（リンクが切れるため）");
 
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/news-edit.png" });
+  await page.screenshot({ path: shotPath("news-edit.png") });
   await page.locator("#tab-list").click();
   await page.waitForTimeout(400);
-  await page.screenshot({ path: "/tmp/claude-0/-home-user-MF/ded29588-4821-5de3-8900-cbdd762650f3/scratchpad/news-list.png" });
+  await page.screenshot({ path: shotPath("news-list.png") });
 
   console.log("— メニュー —");
   check(await page.locator(".kp-side-item:has-text('サイトのお知らせ')").count() === 1,

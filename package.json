@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel deploy --prod",
-    "test": "node test/run.mjs node",
+    "test": "node test/selfcheck.mjs && node test/run.mjs node",
     "test:ui": "node test/run.mjs ui",
     "test:all": "node test/run.mjs all"
   },
