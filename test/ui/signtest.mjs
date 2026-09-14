@@ -5,6 +5,12 @@
 import { launch, BASE } from "../_browser.mjs";
 import fs from "node:fs";
 import { shotPath } from "../_shot.mjs";
+import { fileURLToPath } from "node:url";
+import { dirname, join as _join } from "node:path";
+
+const _HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = dirname(dirname(_HERE));
+const atRoot = (p) => _join(ROOT, p);
 
 const meAdmin = {
   email: "zimu@8grp.co.jp", appRole: "admin", isAdmin: true, shows: {},

@@ -87,7 +87,7 @@ console.log("— 件数バッジ（管理者）—");
   const dots = await p.locator(".kp-side-group:not(.open) .kp-side-dot:not(.hidden)").count();
   check(dots > 0, `畳んだグループに印が付く（${dots}個）`);
 
-  await p.screenshot({ path: path: shotPath("f3-badges-admin.png"), fullPage: false });
+  await p.screenshot({ path: shotPath("f3-badges-admin.png"), fullPage: false });
   await p.close();
 }
 
@@ -146,7 +146,7 @@ console.log("— 休暇の予定は予定表から直せない —");
   check(await mine.locator('button[title="直す"]').count() === 1, "自分の予定はこれまでどおり直せる");
   check(await mine.locator('button[title="消す"]').count() === 1, "自分の予定は消せる");
 
-  await p.screenshot({ path: path: shotPath("f3-schedule.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("f3-schedule.png"), fullPage: true });
   await p.close();
 }
 

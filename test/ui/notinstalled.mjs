@@ -27,6 +27,6 @@ const txt = await page.locator("body").textContent();
 const okMsg = txt.includes("db/048_timecard.sql");
 console.log(okMsg ? "  ok 何をすればよいかが画面に出る" : "NG: 生のDBエラーのまま");
 console.log(okMsg ? "" : txt.slice(0, 400));
-await page.screenshot({ path: path: shotPath("tc-notinstalled.png"), fullPage: true });
+await page.screenshot({ path: shotPath("tc-notinstalled.png"), fullPage: true });
 await br.close();
 process.exit(okMsg ? 0 : 1);

@@ -108,7 +108,7 @@ check(await page.locator(".cl-block").isVisible(), "止めている理由が出�
   check(t.includes("鈴木 花子") && t.includes("経費精算") && t.includes("2件"),
     "誰の何が残っているかが分かる");
 }
-await page.screenshot({ path: path: shotPath("clos-blocked.png"), fullPage: true });
+await page.screenshot({ path: shotPath("clos-blocked.png"), fullPage: true });
 
 console.log("— 未承認が無くなれば締められる —");
 state = READY;
@@ -139,7 +139,7 @@ await page.waitForTimeout(900);
   check(!!r, "解ける");
   check(r?.reason === "テストのため", "理由が送られる（理由なしでは解けない）");
 }
-await page.screenshot({ path: path: shotPath("clos-closed.png"), fullPage: true });
+await page.screenshot({ path: shotPath("clos-closed.png"), fullPage: true });
 
 await br.close();
 if (errs.length) { console.log("\n画面のエラー:"); errs.slice(0, 6).forEach((e) => console.log("  " + e)); bad += errs.length; }

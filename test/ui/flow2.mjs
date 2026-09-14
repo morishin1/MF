@@ -140,7 +140,7 @@ console.log("— ① 期日から逆算した最優先（ホーム）—");
   await p.waitForTimeout(500);
   check(posted.some((x) => x.body.action === "pin" && x.body.id === "t1"), "固定を押すとピン留めが送られる");
 
-  await p.screenshot({ path: path: shotPath("f2-home.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("f2-home.png"), fullPage: true });
   await p.close();
 }
 
@@ -175,7 +175,7 @@ console.log("— ② AI提案の選別（ホーム）—");
   await p.locator("button", { hasText: "今回は見送る" }).click();
   await p.waitForTimeout(300);
   check(!(await p.locator("#prop-card").isVisible()), "見送ると閉じる");
-  await p.screenshot({ path: path: shotPath("f2-prop.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("f2-prop.png"), fullPage: true });
   await p.close();
 }
 
@@ -186,7 +186,7 @@ console.log("— 見送っても消えない（やること）—");
   check((await p.locator("#prop-tag").textContent()).includes("1件"), "未確認の件数が出る");
   check((await p.locator("#req-list").textContent()).includes("テスト送信②です"),
     "自分が頼んだことに「補足」が出る");
-  await p.screenshot({ path: path: shotPath("f2-tasks.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("f2-tasks.png"), fullPage: true });
   await p.close();
 }
 
@@ -219,7 +219,7 @@ console.log("— 日報の直し —");
   check(await rows.nth(i).locator(".did .yes.on").count() === 1, "それでも「できた」は押された状態");
   check(await rows.nth(i).locator('[data-k="done"]').inputValue() === "1", "done として送られる");
 
-  await p.screenshot({ path: path: shotPath("f2-nippo.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("f2-nippo.png"), fullPage: true });
   await p.close();
 }
 

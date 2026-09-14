@@ -164,7 +164,7 @@ await page.locator("#mb-list button", { hasText: "持ち主にする" }).first()
 await page.waitForTimeout(700);
 check(posted.some((x) => x.body.action === "owner"), "持ち主を渡せる");
 
-await page.screenshot({ path: path: shotPath("msg-thread.png"), fullPage: true });
+await page.screenshot({ path: shotPath("msg-thread.png"), fullPage: true });
 await br.close();
 if (errs.length) { console.log("\n画面のエラー:"); errs.slice(0, 6).forEach((e) => console.log("  " + e)); bad += errs.length; }
 console.log(bad ? `\n${bad} 件 失敗` : "\nすべて通過");

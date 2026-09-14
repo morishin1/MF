@@ -61,7 +61,7 @@ check((await page.locator("#sg").textContent() || "").includes("労働条件通�
 check((await page.locator("#sg .banner.warn").textContent() || "").includes("1 件"), "未署名が残っていることも分かる");
 check(await page.locator("#sg a[href='contracts.html']").count() > 0, "契約書の画面へ行ける");
 
-await page.screenshot({ path: path: shotPath("mypage-signed.png"), fullPage: true });
+await page.screenshot({ path: shotPath("mypage-signed.png"), fullPage: true });
 await br.close();
 if (errs.length) { console.log("画面のエラー:", errs.slice(0, 5)); bad += errs.length; }
 console.log(bad ? `\n${bad} 件 失敗` : "\nすべて通過");

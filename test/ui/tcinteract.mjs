@@ -54,7 +54,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
   await p.locator("#edit-card button", { hasText: "やめる" }).click();
   await p.waitForTimeout(200);
   check(!(await p.locator("#edit-card").isVisible()), "やめるで閉じる");
-  await p.screenshot({ path: path: shotPath("tc-admin-open.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("tc-admin-open.png"), fullPage: true });
   await p.close();
 }
 
@@ -75,7 +75,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
   await p.locator("#fix-card button", { hasText: "申請" }).first().click();
   await p.waitForTimeout(300);
   check((await p.locator("#x-msg").textContent() || "").trim() !== "", "理由なしの申請は止まる");
-  await p.screenshot({ path: path: shotPath("tc-member-fix.png"), fullPage: true });
+  await p.screenshot({ path: shotPath("tc-member-fix.png"), fullPage: true });
   await p.close();
 }
 

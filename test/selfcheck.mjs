@@ -43,6 +43,25 @@ for (const g of groups) {
 console.log(`— ${files.length} 本を見る —`);
 check(files.length > 30, `本数（${files.length}）`);
 
+console.log("\n— そもそも読み込めるか —");
+{
+  // 書き換えで壊した構文は、走らせるまで分からない。
+  // 実際に path: path: という形を作ってしまい、8本が CI で落ちた。
+  // 読めるかどうかだけなら一瞬で見られる
+  const { execFileSync } = await import("node:child_process");
+  for (const x of files) {
+    let ok = true;
+    let why = "";
+    try {
+      execFileSync(process.execPath, ["--check", x.path], { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) {
+      ok = false;
+      why = String(e.stderr || e.message).split("\n").find((l) => /Error/.test(l)) || "";
+    }
+    check(ok, `${x.g.name}/${x.f}${ok ? "" : "  ← " + why.trim().slice(0, 60)}`);
+  }
+}
+
 console.log("\n— この機械にしか無い場所を指していないか —");
 {
   // 作業用の一時領域・誰かのホーム・絶対パスの決め打ち
