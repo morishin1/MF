@@ -22,7 +22,7 @@
 //   ログインしているアカウントとシステムの時計で決まる。
 //   同意した時点の全文を一緒に残す（lib/consent-docs.js）。
 
-import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
@@ -96,7 +96,7 @@ async function read(res, user, ctx) {
     await ensureDocItems(sb, ctx.tenantId, proc.data.id, ctx.employee.employment_type).catch((e) =>
       console.error("[onboarding/me] チェックリストを直せませんでした:", e.message));
 
-    const [{ data: its }, { data: fls }] = await Promise.all([
+    const [itemsRes, filesRes] = await Promise.all([
       sb.from("gw_procedure_items")
         .select("id, item_key, title, category, owner, required, status, due_on, note, sort_order, document_id, submitted_at")
         .eq("procedure_id", proc.data.id).order("sort_order").limit(200),
@@ -104,8 +104,25 @@ async function read(res, user, ctx) {
         .select("id, item_id, filename, mime_type, size_bytes, drive_name, created_at")
         .eq("procedure_id", proc.data.id).order("created_at", { ascending: false }).limit(200),
     ]);
-    items = its || [];
-    files = fls || [];
+
+    // 読めなかったときに黙って空にしない。
+    //
+    // ここを `data` だけ取って捨てていたせいで、item_key の列が無いだけで
+    // 「書類が1件も無い」ことになり、画面には
+    // 「この書類は、いまのチェックリストに結び付いていません」とだけ出ていた。
+    // 出す口が1つも出ないのに、何を直せばよいのかどこにも書かれていなかった
+    if (itemsRes.error) {
+      const hint = dbSetupHint(itemsRes.error, "db/037_onboard_form.sql");
+      if (hint) return json(res, 503, { error: "not_ready", message: hint });
+      console.error("[onboarding/me] 書類の一覧を読めません:", itemsRes.error.message);
+      return json(res, 500, { error: "db_read_failed", detail: itemsRes.error.message });
+    }
+    if (filesRes.error) {
+      console.error("[onboarding/me] 出したファイルを読めません:", filesRes.error.message);
+    }
+
+    items = itemsRes.data || [];
+    files = filesRes.data || [];
   }
 
   const c = contract.data?.[0] || null;
@@ -117,8 +134,33 @@ async function read(res, user, ctx) {
     return { ready: false, note: null, folders: null, sensitiveId: null };
   });
 
-  // 本人が出す書類。定義（lib/onboard-docs.js）と、チェックリストの状態を突き合わせる
-  const byKey = new Map(items.map((i) => [i.item_key, i]));
+  // 本人が出す書類。定義（lib/onboard-docs.js）と、チェックリストの状態を突き合わせる。
+  //
+  // ■ 鍵が無いものは、題名で引き直す
+  //
+  //   item_key を付ける前に作られたチェックリストの項目には、鍵が入っていない。
+  //   鍵だけで引くと、その項目は
+  //     ・documents では見つからない（itemId が null になる）
+  //     ・myItems からも外れる（題名が定義と一致するので、定義側の扱いになる）
+  //   のどちらにも入らず、画面から消える。
+  //
+  //   実際に「この書類は、いまのチェックリストに結び付いていません」と出て、
+  //   出す口（アップロード）が1つも出なくなっていた。
+  //   myItems 側は初めから題名で見ているので、こちらも合わせる
+  const byKey = new Map();
+  for (const i of items) {
+    if (i.item_key && !byKey.has(i.item_key)) byKey.set(i.item_key, i);
+  }
+  {
+    const used = new Set(items.filter((i) => i.item_key).map((i) => i.id));
+    for (const i of items) {
+      if (i.item_key && docOf(i.item_key)) continue;   // 鍵で引けている
+      const d = docByTitle(i.title);
+      if (!d || byKey.has(d.key) || used.has(i.id)) continue;
+      byKey.set(d.key, i);
+      used.add(i.id);
+    }
+  }
   const documents = DOCS.map((d) => {
     const it = byKey.get(d.key) || null;
     const mine = files.filter((f) => f.item_id === it?.id);
