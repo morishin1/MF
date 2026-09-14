@@ -24,7 +24,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">申請・承認</h1>
+  <h1 class="kp-greet">申請</h1>
   <p class="kp-greet-sub">経費の精算、休暇、稟議の申請はこちらから。</p>
 
   <div class="card">
@@ -87,7 +87,7 @@
   const fmtDay = (d) => new Date(`${d}T00:00:00+09:00`)
     .toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "long", day: "numeric" });
 
-  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+  KPLayout.init({ active: "workflow", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) load(ctx); });
 
   async function load(ctx) {

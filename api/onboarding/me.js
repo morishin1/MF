@@ -100,12 +100,14 @@ async function read(res, user, ctx) {
 
   let items = [];
   let files = [];
+  let fixed = null;
   if (proc.row) {
     // 古い手続きを、いまの定義につなぎ直してから読む。
     // 鍵の無い項目はアップロード先が決まらず、ボタンを押しても何も起きない。
     // 同じ書類が2行あるのも、ここで片付く（lib/onboard-kit.js）
-    await ensureDocItems(sb, ctx.tenantId, proc.row.id, ctx.employee.employment_type).catch((e) =>
-      console.error("[onboarding/me] チェックリストを直せませんでした:", e.message));
+    fixed = await ensureDocItems(sb, ctx.tenantId, proc.row.id, ctx.employee.employment_type)
+      .catch((e) => ({ error: `チェックリストを直せませんでした: ${e.message}` }));
+    if (fixed?.error) console.error("[onboarding/me]", fixed.error);
 
     const [itemsRes, filesRes] = await Promise.all([
       sb.from("gw_procedure_items")
@@ -198,6 +200,38 @@ async function read(res, user, ctx) {
     };
   });
 
+  // 1つも結び付かなかったときだけ、理由を返す。
+  //
+  // 画面には「この書類は、いまのチェックリストに結び付いていません」としか
+  // 出ていなかった。出す口が1つも無いのに、何が起きているのかは
+  // 本人にも管理者にも分からず、サーバのログにも残らなかった。
+  //
+  // 端末の設定が止まったときと同じで、止まった場所が言えないと
+  // 誰も直せない。ここで「なぜ空なのか」を1つに絞って返す
+  const docsProblem = documents.length && documents.every((d) => !d.itemId)
+    ? {
+      reason: !proc.row ? "no_procedure"
+        : fixed?.error ? "checklist_error"
+          : !items.length ? "empty_checklist"
+            : "no_match",
+      detail: !proc.row
+        ? "この方の入社手続きが作られていません（管理画面の「入退社」で作成します）"
+        : fixed?.error
+          ? fixed.error
+          : !items.length
+            ? "手続きはありますが、チェックリストが1件もありません"
+            : `チェックリストは ${items.length} 件ありますが、`
+              + `どれも書類の定義と結び付きません`
+              + `（鍵: ${items.map((i) => i.item_key || "（なし）").slice(0, 12).join(", ")}）`,
+      procedureId: proc.row?.id || null,
+      items: items.length,
+    }
+    : null;
+  if (docsProblem) {
+    console.error("[onboarding/me] 書類を出す口が1つも出ません:",
+      docsProblem.reason, docsProblem.detail);
+  }
+
   // 会社が用意して、本人に渡す書類（雇用契約書など）。
   //
   // 置き場所は 02_労働条件・契約 で、そこは本人にドライブ共有していない。
@@ -231,6 +265,8 @@ async function read(res, user, ctx) {
       agreedAt: x.agreed_at, body: x.body_snapshot,
     })),
     documents,
+    // 出す口が1つも出ないときの理由。ふつうは null
+    docsProblem,
     // Googleドライブに直接あげられるか。だめなときは理由（画面の出し分けに使う）
     drive: { ready: drive.ready, manual: drive.manual, note: drive.note },
 

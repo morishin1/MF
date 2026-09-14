@@ -21,54 +21,74 @@
 (function () {
   // メンバー: 画面下のタブ。片手で届く5つに絞る。
   //
-  // ホームの次に「やること」を置く。
-  // メンバーの動きは「ホームを見る → やることを処理する」の2手で終わるのが理想で、
+  // ホームの次に「タスク」を置く。
+  // メンバーの動きは「ホームを見る → タスクを処理する」の2手で終わるのが理想で、
   // その2つが指の届くところに並んでいないと、結局メニューを開くことになる。
   const MEMBER_NAV = [
     { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",      ready: true },
-    { key: "tasks",    href: "tasks.html",     label: "やること",   icon: "checklist", ready: true },
+    { key: "tasks",    href: "tasks.html",     label: "タスク",     icon: "checklist", ready: true },
     { key: "nippo",    href: "nippo.html",     label: "日報",       icon: "edit_note", ready: true },
     { key: "messages", href: "messages.html",  label: "メッセージ", icon: "forum",     ready: true },
     { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",      ready: true },
   ];
 
-  // メンバー: PCでの左サイドメニュー。基本は8つ。
-  //
-  // ■ 増やさない
-  //   入社手続き・研修・提出物のような「一時期だけ必要なもの」に
-  //   専用のメニューを作らない。入社した週にしか使わない項目が
-  //   その後ずっと並び続けると、毎日使うものが埋もれる。
-  //   そういうものは「やること」に出す。終われば自然に消える。
-  //
-  // ■ まとめたもの
-  //   お知らせ・掲示板 ＋ 社内文書・様式 ＋ 社員名簿 → 社内情報
-  //   どれも「調べにいく」ときに開くもので、入口が3つある必要がない。
-  //
-  // ■ 人によって出す・出さない
-  //   設備・スペース予約は、設備を使う人だけ。
-  //   会計書類は、経理・管理担当だけ。
-  //   使わない人に見えていると、押してよいのか毎回考えることになる。
+  /**
+   * メンバー: PCでの左サイドメニュー。8つ。
+   *
+   * ■ 管理者とは、完全に別の表にしてある
+   *   同じ表を権限で出し分けると、メンバーに見せない項目が
+   *   増えるたびに条件が増えて、誰に何が見えているのか分からなくなる。
+   *   メンバーが使うのは「自分のこと」だけなので、表ごと分ける。
+   *
+   * ■ 増やさない
+   *   入社手続き・研修・提出物のような「一時期だけ必要なもの」に
+   *   専用のメニューを作らない。入社した週にしか使わない項目が
+   *   その後ずっと並び続けると、毎日使うものが埋もれる。
+   *   そういうものは「タスク」に出す。終われば自然に消える。
+   *
+   * ■ 2階層目は、ページの上のタブにする（tabs）
+   *   スケジュールはタスクの中へ。契約書はマイページの中へ。
+   *   お知らせ・社内文書・社員名簿は「社内文書」の中へ。
+   *   左メニューに入口を増やさず、開いた先で行き来できるようにする。
+   *
+   * ■ 人によって出す・出さない
+   *   設備・スペース予約は、設備を使う人だけ。
+   *   会計書類は、経理・管理担当だけ。
+   *   使わない人に見えていると、押してよいのか毎回考えることになる。
+   */
   const MEMBER_SIDE_NAV = [
-    { key: "home",     href: "home.html",     label: "ホーム",       icon: "home",           ready: true },
-    { key: "tasks",    href: "tasks.html",    label: "やること",     icon: "checklist",      ready: true },
+    { key: "home",     href: "home.html",     label: "ホーム",   icon: "home",      ready: true },
+    { key: "nippo",    href: "nippo.html",    label: "日報",     icon: "edit_note", ready: true },
+    { key: "tasks",    href: "tasks.html",    label: "タスク",   icon: "checklist", ready: true,
+      tabs: [
+        { key: "tasks",    href: "tasks.html",    label: "やること" },
+        { key: "schedule", href: "schedule.html", label: "スケジュール" },
+      ] },
+    { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",    ready: true },
+    { key: "timecard", href: "timecard.html", label: "勤怠",     icon: "schedule",  ready: true },
+    { key: "workflow", href: "workflow.html", label: "申請",     icon: "approval",  ready: true,
+      tabs: [
+        { key: "workflow", href: "workflow.html", label: "申請の一覧" },
+        { key: "requests", href: "requests.html", label: "休暇・稟議" },
+        { key: "expenses", href: "expenses.html", label: "経費精算" },
+      ] },
+    { key: "library",  href: "library.html",  label: "社内文書", icon: "menu_book", ready: true,
+      tabs: [
+        { key: "library",   href: "library.html",   label: "文書・様式" },
+        { key: "notices",   href: "notices.html",   label: "お知らせ" },
+        { key: "directory", href: "directory.html", label: "社員名簿" },
+      ] },
+    { key: "mypage",   href: "mypage.html",   label: "マイページ", icon: "account_circle", ready: true,
+      tabs: [
+        { key: "mypage",    href: "mypage.html",    label: "マイページ" },
+        // 署名は期日があるので、入口を無くさない。ここから開ける
+        { key: "contracts", href: "contracts.html", label: "契約書" },
+      ] },
+
     // 入社準備のあいだだけ。入社日が来ると消える
     { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
-    { key: "nippo",    href: "nippo.html",    label: "日報",         icon: "edit_note",      ready: true },
-    { key: "schedule", href: "schedule.html", label: "スケジュール", icon: "calendar_month", ready: true },
-    { key: "messages", href: "messages.html", label: "メッセージ",   icon: "forum",          ready: true },
-    { key: "timecard", href: "timecard.html", label: "タイムカード", icon: "schedule",       ready: true },
-    { key: "workflow", href: "workflow.html", label: "申請・承認",   icon: "approval",       ready: true },
-    // 会社から届いた契約書に署名する。届いていなければ空の画面が出るだけ
-    { key: "contracts", href: "contracts.html", label: "契約書",      icon: "draw",           ready: true },
-    // 入口は社内文書。お知らせはホームに出ているので、ここを開く用は
-    // 「就業規則はどこ」「あの様式はどこ」を調べにきたとき
-    { key: "info",     href: "library.html",  label: "社内文書",     icon: "menu_book",      ready: true,
-      // お知らせ・社内文書・社員名簿は、どれを開いていてもここが選ばれた状態にする
-      match: ["info", "notices", "library", "directory"] },
-    { key: "mypage",   href: "mypage.html",   label: "マイページ",   icon: "account_circle", ready: true },
-
     // 必要な人にだけ出す
-    { key: "booking", href: "booking.html", label: "設備・スペース予約", icon: "meeting_room",
+    { key: "booking", href: "booking.html", label: "スペース予約", icon: "meeting_room",
       ready: true, when: "booking" },
 
     // ここから下は別システム。
@@ -77,10 +97,8 @@
     { section: "つながっている仕組み" },
     { key: "dojo", label: "無限道場", icon: "school",
       ready: true, external: true, urlKey: "lmsUrl" },
-    // 以前から使っている外部のタイムカード。URL が設定されているあいだだけ出る。
-    // mf 側にも打刻ができたので、労働時間の記録をどちらにするかは会社が決める。
-    // 決めるまでのあいだ、どちらを開いているか分かるように別の名前にしてある
-    { key: "timecard_ext", label: "タイムカード（外部）", icon: "schedule",
+    // 以前から使っている外部のタイムカード。URL が設定されているあいだだけ出る
+    { key: "timecard_ext", label: "外部タイムカード", icon: "schedule",
       ready: true, external: true, urlKey: "timecardUrl" },
     // 会計は経理・管理担当だけ。一般メンバーには出さない
     { key: "docs", href: "app.html", label: "会計書類", icon: "receipt_long",
@@ -88,22 +106,29 @@
   ];
 
   /**
-   * 管理者: 左サイドメニュー。
+   * 管理者: 左サイドメニュー。仕事の目的で5つに分ける。
    *
-   * ■ なぜ畳むのか
-   *   24項目が一列に並んでいた。全部を見るのにスクロールが要り、
-   *   毎日押す「日報」と、半年に一度の「口コミ流入ブロック」が
-   *   同じ重さで並んでいた。どこに何があるかを覚えるまで、毎回探すことになる。
+   * ■ なぜ作り直したか
+   *   24項目が5グループに散らばっていて、1つのグループに9項目
+   *   入っているところがあった。「人事・メンバー」を開くと、
+   *   メンバー管理・新規登録・入退社・雇用契約・電子署名・試用期間・
+   *   育成計画・自走レベル・休暇稟議 が一列に並ぶ。
+   *   どれがどれだか分からないので、結局いつも同じ1つしか押されない。
    *
-   * ■ 5つに分ける
-   *   毎日使うものを上、管理系を下に。
-   *   開いているのは、いま見ている画面のグループだけ（あとは畳む）。
-   *   畳んだ状態なら見出し5つ＋数項目で、1画面に収まる。
+   * ■ 1グループ6項目まで
+   *   畳んだ状態で見出し5つ、開いても5項目。
+   *   PCの最初の画面（スクロールなし）に主要メニューが収まる。
    *
-   * ■ 開け閉めは覚える
-   *   人によって使うところが違う。開いたグループは localStorage に残し、
-   *   次の画面でも開いたままにする。ただし、いま見ている画面のグループは
-   *   覚えた状態に関わらず必ず開く（自分がどこにいるか分からなくなるため）。
+   * ■ 2階層目は、ページの上のタブにする（tabs）
+   *   左メニューには「勤怠・休暇」1つだけ置き、開いた先で
+   *   「勤怠 / 休暇・稟議」を行き来する。
+   *   細かい機能ごとに左メニューを増やさない。
+   *   tabs に書いた鍵は、その項目が選ばれた状態になる（match は自動）。
+   *
+   * ■ 開いているのは、いま見ている画面のグループだけ
+   *   人によって使うところが違うので、開いたグループは localStorage に残す。
+   *   ただし、いま見ている画面のグループは覚えた状態に関わらず必ず開く
+   *   （自分がどこにいるか分からなくなるため）。
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
@@ -111,60 +136,83 @@
     {
       key: "g-home", label: "ホーム", icon: "home",
       items: [
-        { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard",      ready: true },
-        { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",   icon: "flag",           ready: true },
-        { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note",      ready: true },
-        { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",   icon: "checklist",      ready: true },
-        { key: "messages",  href: "messages.html",        label: "メッセージ",     icon: "forum",          ready: true },
-        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",       ready: true },
+        { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
+        { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",   icon: "flag",      ready: true },
+        { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
+        { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",   icon: "checklist", ready: true },
+        { key: "messages",  href: "messages.html",        label: "メッセージ",     icon: "forum",     ready: true },
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true },
       ],
     },
     {
-      key: "g-people", label: "人事・メンバー", icon: "group",
+      key: "g-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "members",   href: "admin-members.html",   label: "メンバー管理",   icon: "badge",          ready: true },
-        { key: "onboard",   href: "admin-onboard.html",   label: "新規登録",       icon: "person_add",     ready: true },
-        { key: "hr",        href: "admin-hr.html",        label: "入退社",         icon: "swap_horiz",     ready: true },
-        { key: "contracts", href: "admin-contracts.html", label: "雇用契約・面談", icon: "contract",       ready: true },
-        { key: "esign",     href: "admin-esign.html",     label: "契約・電子署名", icon: "draw",           ready: true },
-        { key: "probation", href: "admin-probation.html", label: "試用期間",       icon: "how_to_reg",     ready: true },
-        { key: "growth",    href: "admin-growth.html",    label: "育成計画",       icon: "trending_up",    ready: true },
-        { key: "autonomy",  href: "admin-autonomy.html",  label: "自走レベル",     icon: "stairs",         ready: true },
-        { key: "requests",  href: "admin-requests.html",  label: "休暇・稟議",     icon: "approval",       ready: true },
+        { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true },
+        { key: "hr",        href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
+        { key: "timecard",  href: "admin-timecard.html",  label: "勤怠・休暇",   icon: "schedule",   ready: true,
+          tabs: [
+            { key: "timecard", href: "admin-timecard.html", label: "勤怠" },
+            { key: "requests", href: "admin-requests.html", label: "休暇・稟議" },
+          ] },
+        { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true,
+          tabs: [
+            { key: "contracts", href: "admin-contracts.html", label: "契約・面談" },
+            { key: "esign",     href: "admin-esign.html",     label: "電子署名" },
+          ] },
+        { key: "growth",    href: "admin-growth.html",    label: "評価・育成",   icon: "trending_up", ready: true,
+          tabs: [
+            { key: "growth",   href: "admin-growth.html",   label: "育成計画" },
+            { key: "autonomy", href: "admin-autonomy.html", label: "自走レベル" },
+          ] },
       ],
     },
     {
-      key: "g-ops", label: "業務・運営", icon: "work",
+      key: "g-hire", label: "採用", icon: "person_add",
       items: [
-        { key: "bookings",  href: "admin-bookings.html",  label: "スペース予約",   icon: "meeting_room",   ready: true },
-        { key: "expenses",  href: "admin-expenses.html",  label: "経費精算",       icon: "receipt",        ready: true },
-        // 自社サイト（8grp.co.jp）のお知らせ。書いて、公開にすると翌朝の同期でサイトに出る。
-        // アクセス分析の隣に置く。どちらも見る先が 8grp.co.jp なので、探す場所が同じになる
-        { key: "sitenews",  href: "admin-site-news.html", label: "サイトのお知らせ", icon: "newspaper",  ready: true },
-        { key: "analytics", href: "admin-analytics.html", label: "アクセス分析",   icon: "monitoring",     ready: true },
-        { key: "timecard",  href: "admin-timecard.html",  label: "タイムカード",   icon: "schedule",       ready: true },
-        { key: "closing",   href: "admin-closing.html",   label: "月次締め",       icon: "event_available", ready: true },
-        { key: "templates", href: "admin-docs.html",      label: "社内文書・雛形", icon: "folder_copy",    ready: true },
+        { key: "onboard",   href: "admin-onboard.html",   label: "新規登録", icon: "person_add", ready: true },
+        { key: "probation", href: "admin-probation.html", label: "試用期間", icon: "how_to_reg", ready: true },
       ],
     },
     {
-      key: "g-system", label: "システム管理", icon: "settings",
+      key: "g-ops", label: "業務・経理", icon: "work",
+      items: [
+        { key: "bookings",   href: "admin-bookings.html", label: "スペース予約", icon: "meeting_room",    ready: true },
+        { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
+        { key: "closing",    href: "admin-closing.html",  label: "月次締め",     icon: "event_available", ready: true },
+        { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
+        { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
+      ],
+    },
+    {
+      key: "g-system", label: "管理・設定", icon: "settings",
       items: [
         // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
-        { key: "roles",     href: "admin-members.html#roles", label: "権限",       icon: "key",            ready: true },
-        { key: "assets",    href: "admin-assets.html",    label: "アカウント・貸与品", icon: "devices",    ready: true },
-        { key: "devices",   href: "admin-devices.html",   label: "端末管理",       icon: "computer",       ready: true },
-        { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック", icon: "block",      ready: true },
-        { key: "settings",  href: "admin-settings.html",  label: "組織設定・ログ", icon: "tune",           ready: true },
-      ],
-    },
-    {
-      key: "g-accounting", label: "会計", icon: "receipt_long",
-      items: [
-        { key: "accounting", href: "admin.html", label: "会計管理・仕訳", icon: "account_balance", ready: true, external: true },
+        { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
+        { key: "devices",   href: "admin-devices.html",   label: "端末管理",     icon: "computer", ready: true,
+          tabs: [
+            { key: "devices", href: "admin-devices.html", label: "端末管理" },
+            { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
+          ] },
+        { key: "analytics", href: "admin-analytics.html", label: "アクセス分析", icon: "monitoring", ready: true,
+          tabs: [
+            { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
+            { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
+          ] },
+        { key: "sitenews",  href: "admin-site-news.html", label: "サイトのお知らせ", icon: "newspaper", ready: true },
+        { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true },
       ],
     },
   ];
+
+  /**
+   * tabs を書いた項目は、その中のどの画面を開いていても選ばれた状態にする。
+   *
+   * match を手で二重に書かせない。書き忘れると、開いたときに
+   * メニューのどこも光らず「自分がどこにいるのか」が分からなくなる
+   */
+  for (const n of [...ADMIN_GROUPS.flatMap((g) => g.items), ...MEMBER_SIDE_NAV]) {
+    if (n.tabs && !n.match) n.match = n.tabs.map((t) => t.key);
+  }
 
   // 社労士は社外の人。会計にも社内の他の画面にも入れず、共有された手続きだけを見る
   const ADVISOR_NAV = [
@@ -386,6 +434,41 @@
     saveOpen(open);
   }
 
+  /**
+   * ページの上に出す切り替え帯。
+   *
+   * ■ なぜ左メニューに置かないのか
+   *   「勤怠」と「休暇・稟議」は、どちらも同じ仕事の続きで開くもの。
+   *   左メニューに2つ並べると、毎日見る一覧が1行ずつ長くなっていく。
+   *   左には「勤怠・休暇」1つだけ置き、行き来は開いた先でする。
+   *
+   * ■ 各HTMLには何も書かせない
+   *   どの画面がどのタブに属するかは、この1か所（tabs）だけで決まる。
+   *   HTML側に帯を書き写すと、増やしたときに書き忘れる画面が出る。
+   *   .wrap の最初の見出しの直後に差し込む。
+   */
+  function renderSubnav(active, navs) {
+    const owner = navs.find((n) => (n.tabs || []).some((t) => t.key === active));
+    if (!owner || owner.tabs.length < 2) return;
+
+    const wrap = document.querySelector(".wrap");
+    const head = wrap && wrap.querySelector("h1");
+    if (!head) return;
+    // 描き直しても2本にならない
+    for (const old of wrap.querySelectorAll(".kp-subnav")) old.remove();
+
+    const box = document.createElement("nav");
+    box.className = "kp-subnav";
+    box.setAttribute("aria-label", esc(owner.label));
+    box.innerHTML = owner.tabs.map((t) => {
+      const on = t.key === active;
+      return on
+        ? `<span class="kp-subtab on" aria-current="page">${esc(t.label)}</span>`
+        : `<a class="kp-subtab" href="${esc(t.href)}">${esc(t.label)}</a>`;
+    }).join("");
+    head.insertAdjacentElement("afterend", box);
+  }
+
   function sideItem(n, active) {
     // match が書いてあれば、そこに挙げた画面のどれでも選ばれた状態にする
     const on = n.key === active || (n.match || []).includes(active);
@@ -501,6 +584,11 @@
     else if (canPreview) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
+
+    // 2階層目の帯。左メニューには出さず、ページの上に出す
+    renderSubnav(active, memberView || !canPreview
+      ? MEMBER_SIDE_NAV
+      : ADMIN_GROUPS.flatMap((g) => g.items));
 
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く
     loadBadges();

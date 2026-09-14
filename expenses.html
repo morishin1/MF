@@ -24,7 +24,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">経費精算</h1>
+  <h1 class="kp-greet">申請</h1>
   <p class="kp-greet-sub">立て替えた経費を申請します。承認されると管理部が支払います。</p>
 
   <div id="gate"></div>
@@ -143,7 +143,7 @@
   let lines = [];            // 申請前の明細（送信するまでサーバには無い）
   let pendingReceipt = null; // 添付待ちの領収書 { path, name }
 
-  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+  KPLayout.init({ active: "expenses", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
 
   async function start(ctx) {

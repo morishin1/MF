@@ -96,7 +96,7 @@
   let me = null;
 
   // メンバーは「メニュー」から入ってくる。下タブはそこを点けたままにする
-  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+  KPLayout.init({ active: "booking", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
 
   async function start(ctx) {

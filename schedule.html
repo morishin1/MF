@@ -24,7 +24,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">予定</h1>
+  <h1 class="kp-greet">タスク</h1>
   <p class="kp-greet-sub">
     入れた予定は<b>既定では自分だけのもの</b>です（管理者・経営者にも見えません）。
     1件ごとに「社内に見せる」を選んだものだけ、みんなの予定に出ます。
@@ -172,7 +172,7 @@
   let view = "mine";
   let editingId = null;
 
-  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+  KPLayout.init({ active: "schedule", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
 
   async function start(ctx) {

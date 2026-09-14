@@ -535,16 +535,24 @@
     // 同じ形になったときに、伝える先と伝える言葉がその場で出るようにする
     const dead = docs.filter((d) => !d.itemId).length;
     if (dead && dead === docs.length) {
+      const p = data.docsProblem || {};
       el("docs-note").innerHTML = `
         <div class="banner err" style="margin-bottom:14px;">
           <span class="material-symbols-outlined">error</span>
           <div><b>いま書類を出せない状態になっています。</b><br>
           あなたの入社手続きと書類が結び付いていません。お手数ですが、
-          管理担当者に「入社手続きの書類が出せない」とお伝えください。<br>
-          <span class="muted" style="font-size:11.5px;">
-            管理者の方へ： db/065_onboarding_one.sql を流してください。
-            入社手続きの行が重複していると、この状態になります。
-          </span></div>
+          管理担当者に「入社手続きの書類が出せない」とお伝えください。
+          ${p.detail ? `
+            <details class="diag" style="margin-top:8px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">
+                管理者に伝える内容</summary>
+              <div class="muted" style="font-size:11.5px;margin-top:6px;line-height:1.8;">
+                ${esc(p.detail)}<br>
+                ${p.procedureId ? `手続き: ${esc(p.procedureId)}<br>` : ""}
+                種別: ${esc(p.reason || "")}
+              </div>
+            </details>` : ""}
+          </div>
         </div>`;
       el("docs").innerHTML = "";
       el("docs-extra").innerHTML = "";

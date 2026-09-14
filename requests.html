@@ -24,7 +24,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">休暇・稟議の申請</h1>
+  <h1 class="kp-greet">申請</h1>
   <p class="kp-greet-sub">申請すると管理部に通知が届きます。承認された休暇は社内カレンダーに入ります。</p>
 
   <div id="gate"></div>
@@ -132,7 +132,7 @@
   let tab = "leave";
   let balance = null;
 
-  KPLayout.init({ active: "menu", roles: ["member", "admin", "owner"] })
+  KPLayout.init({ active: "requests", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
 
   async function start(ctx) {
