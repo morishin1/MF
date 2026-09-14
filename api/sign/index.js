@@ -288,7 +288,9 @@ async function patch(req, res, ctx, user) {
 
   const sb = admin();
   const { data: r } = await sb.from("gw_sign_requests")
-    .select("id, status, title, employee_id, due_on")
+    // resent_count を落とさないこと。下で +1 している。
+    // 取り忘れると毎回 undefined → 1 になり、何度送っても「1回」のままになる
+    .select("id, status, title, employee_id, due_on, resent_count")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!r) return json(res, 404, { error: "request_not_found" });
 

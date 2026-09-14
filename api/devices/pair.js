@@ -129,6 +129,74 @@ async function open(res, body) {
   return json(res, 200, { ok: true, expiresInSec: TTL_MIN * 60 });
 }
 
+// ---- ⑤ どこで止まったのか ------------------------------------------------------
+//
+// ■ なぜ要るのか
+//
+//   実機で止まったとき、画面には「時間内に終わりませんでした。
+//   パソコンのソフトが起動していない可能性があります」としか出なかった。
+//   ところが本当の原因はサーバ側で、ソフトは動いていた。
+//
+//   「ソフトが動いていない」と書いてあると、PC側ばかり疑うことになる。
+//   どの段まで進んだのかを、そのまま出す。
+//
+// ■ 何を返すか
+//
+//   stage       … どこまで進んだか
+//   installer   … インストーラが取りに来ているか（来ていればサーバ側の話）
+//
+//   札を持っている本人にしか返さない（この前でログインを見ている）。
+//   ほかの人の設定は覗けない
+async function diag(res, sb, p) {
+  const polled = p.last_poll_at || null;
+
+  // エージェントが登録まで終えているか
+  let enrolled = false;
+  if (p.enrollment_id) {
+    const { data: enr } = await sb.from("gw_device_enrollments")
+      .select("id, used_at").eq("id", p.enrollment_id).maybeSingle();
+    enrolled = Boolean(enr?.used_at);
+  }
+
+  let stage, hint, tell;
+  if (!p.used_at) {
+    stage = "not_claimed";
+    tell = "「このパソコンです」がまだ押されていません。";
+    hint = "本人の確認が終わっていません（used_at が空）。";
+  } else if (p.code_once && !polled) {
+    stage = "installer_silent";
+    tell = "パソコンのソフトが動いていないようです。"
+         + "もう一度 EIGHT-Agent-Setup.exe を実行してください。";
+    hint = "登録コードは出ていますが、インストーラが一度も取りに来ていません"
+          + "（last_poll_at が空）。PC側でソフトが動いていない可能性が高いです。";
+  } else if (p.code_once && polled) {
+    // ここが、実際に詰まったところ。サーバ側の取りこぼし
+    stage = "code_not_handed";
+    tell = "設定が途中で止まりました。管理者にご連絡ください。";
+    hint = "インストーラは取りに来ていますが、登録コードが渡っていません"
+          + `（最後に来たのは ${polled}）。サーバ側の問題です。`
+          + "api/devices/pair.js の read() が enrollment_id を"
+          + "SELECT しているか確かめてください。";
+  } else if (!enrolled) {
+    stage = "enroll_failed";
+    tell = "設定が途中で止まりました。管理者にご連絡ください。";
+    hint = "登録コードは渡りましたが、エージェントの登録が終わっていません。"
+          + "PC側からサーバへ出られているか（プロキシ・ファイアウォール）を"
+          + "確かめてください。";
+  } else {
+    stage = "enrolled_not_shown";
+    tell = "登録は終わっています。画面を読み込み直してください。";
+    hint = "登録は済んでいます。画面に出ないのは、"
+          + "コンピュータ名の突き合わせが合っていない可能性があります。";
+  }
+
+  return json(res, 200, {
+    stage, message: tell, adminHint: hint,
+    installerSeen: Boolean(polled),
+    lastPollAt: polled,
+  });
+}
+
 // ---- ② 本人の画面が中身を見る／④ インストーラがコードを引き取る -------------
 async function read(req, res) {
   const q = new URL(req.url, "http://localhost").searchParams;
@@ -137,8 +205,12 @@ async function read(req, res) {
 
   const sb = admin();
   const { data: p, error } = await sb.from("gw_device_pairings")
+    // enrollment_id を落とさないこと。
+    // 下の ready の判定がこれを見ている。取り忘れると undefined になり、
+    // インストーラは永久に ready:false を受け取り続ける
+    // （画面には「時間内に終わりませんでした」としか出ないので、気づけない）
     .select("id, kind, tenant_id, employee_id, hostname, os, browsers, "
-          + "used_at, code_once, expires_at")
+          + "used_at, code_once, enrollment_id, last_poll_at, expires_at")
     .eq("token_hash", sha256(token)).maybeSingle();
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -153,6 +225,14 @@ async function read(req, res) {
 
   // ---- ④ インストーラが引き取りにきた（認証なし）----
   if (q.get("code") === "1") {
+    // 取りに来たことを残す。設定が終わらないときに
+    // 「ソフトが動いていない」のか「動いているのに渡っていない」のかを
+    // 見分けるため（db/063_pair_diag.sql）。
+    // 列がまだ無い環境でも、引き取りそのものは止めない
+    await sb.from("gw_device_pairings")
+      .update({ last_poll_at: new Date().toISOString() }).eq("id", p.id)
+      .then(null, () => {});
+
     if (!p.used_at || !p.enrollment_id) return json(res, 200, { ready: false });
 
     if (!p.code_once) return json(res, 200, { ready: false });
@@ -174,6 +254,9 @@ async function read(req, res) {
   // ---- ② 本人の画面。押す前に「何を登録するのか」を見せる ----
   const user = await requireUser(req, res);
   if (!user) return;
+
+  // ---- ⑤ どこで止まったのか（設定が終わらなかったときだけ呼ばれる）----
+  if (q.get("diag") === "1") return diag(res, sb, p);
 
   // 管理者が代わりに入れているなら、誰のPCかを選べるようにする。
   // 選べる人だけに名簿を返す（ほかの人には、そもそも出さない）

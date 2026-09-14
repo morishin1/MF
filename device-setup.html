@@ -41,6 +41,12 @@
     .st-how { counter-reset:st; margin:18px 0 0; padding:0; list-style:none; }
     .st-how li { counter-increment:st; position:relative; padding:0 0 12px 34px;
                  font-size:13.5px; line-height:1.85; }
+    /* 止まったときに、管理者へ渡す控え。本人は読まなくてよいので畳んでおく */
+    .diag { margin-top:12px; font-size:12.5px; color:var(--muted); font-weight:400; }
+    .diag summary { cursor:pointer; font-weight:600; color:var(--muted); }
+    .diag p { margin:8px 0 0; line-height:1.85; }
+    .diag code { background:var(--soft); padding:1px 6px; border-radius:4px; }
+
     .st-how li::before { content:counter(st); position:absolute; left:0; top:1px;
                          width:22px; height:22px; border-radius:50%;
                          background:var(--primary); color:#fff;
@@ -442,9 +448,43 @@
         if (found) return finish();
       } catch (e) { /* 途中の失敗は次の回に任せる */ }
     }
-    el("wait-msg").innerHTML =
-      "時間内に終わりませんでした。パソコンのソフトが起動していない可能性があります。<br>"
-      + "もう一度 EIGHT-Agent-Setup.exe を実行してください。";
+    await explainStall();
+  }
+
+  // ---- どこで止まったのかを出す -------------------------------------------------
+  //
+  // 前は「ソフトが起動していない可能性があります」としか出していなかった。
+  // 実際にはソフトは動いていて、詰まっていたのはサーバ側だったことがある。
+  // そう書いてあると、PC側ばかり疑うことになるので、
+  // サーバに聞いて、止まった段をそのまま出す
+  async function explainStall() {
+    const box = el("wait-msg");
+    let d = null;
+    try { d = await API.pairDiag(token); } catch (e) { /* 下で既定の文を出す */ }
+
+    if (!d) {
+      box.innerHTML = "時間内に終わりませんでした。<br>"
+        + "もう一度 EIGHT-Agent-Setup.exe を実行してください。"
+        + "（それでも終わらないときは管理者にご連絡ください）";
+      return;
+    }
+
+    // 本人に見せるのは、次にどうすればよいかだけ
+    box.innerHTML = `時間内に終わりませんでした。<br>${KPLayout.esc(d.message)}`;
+
+    // 管理者が原因を切り分けるための控え。
+    // 本人には畳んで出す（読まなくてよいが、連絡するときに要る）
+    const det = document.createElement("details");
+    det.className = "diag";
+    det.innerHTML =
+      `<summary>管理者に伝える内容</summary>`
+      + `<p>止まった段: <code>${KPLayout.esc(d.stage)}</code></p>`
+      + `<p>パソコンのソフトが取りに来たか: `
+      + `<b>${d.installerSeen ? "来ている" : "来ていない"}</b>`
+      + (d.lastPollAt ? `（最後 ${KPLayout.esc(d.lastPollAt)}）` : "")
+      + `</p>`
+      + `<p>${KPLayout.esc(d.adminHint)}</p>`;
+    box.appendChild(det);
   }
 
   function finish() {

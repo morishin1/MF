@@ -567,6 +567,11 @@
   // 組み立て（EIGHT-Agent-Setup.exe が開く画面から）
   const pairInfo = (token) =>
     api(`/api/devices/pair?token=${encodeURIComponent(token)}`);
+  // 設定が終わらなかったとき、どこで止まったのかを聞く。
+  // 前は「ソフトが起動していない可能性」としか出せず、
+  // サーバ側で詰まっていても PC を疑うことになっていた
+  const pairDiag = (token) =>
+    api(`/api/devices/pair?token=${encodeURIComponent(token)}&diag=1`);
   // employeeId … 管理者が代わりに設定するときだけ。
   // 省くと、押した本人のパソコンとして登録される
   const claimPair = (token, deviceUid, employeeId) =>
@@ -1019,7 +1024,7 @@
     deviceExceptions, approveDeviceException, revokeDeviceException,
     startDeviceSetup, deviceSetupState, deviceSetupPolicy,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,
-    deviceWeb, myWeb, pairInfo, claimPair,
+    deviceWeb, myWeb, pairInfo, pairDiag, claimPair,
     myDevices, deviceBeat, confirmDevice, linkAgent, markDeviceInstalled,
     renameMyDevice, forgetMyDevice,
 
