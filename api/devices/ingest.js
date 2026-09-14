@@ -28,13 +28,21 @@ const SQL = "db/053_devices.sql → 054_device_agent.sql → 055_device_admin.sq
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
 
-  // 失効した端末も、ここまでは通す。中身は1件も入れない。
+  // ■ 拡張（browser）も通す
   //
-  // 403 で落とさないのは、返事の本文を読ませたいから。
-  // エージェントは記録を送れているあいだ、ここへ5分おきに来る。
-  // 失効した直後にこの返事が届くので、「消せ」が最短で伝わる。
-  // 設定の口（config）は6時間おきなので、そちらを待つと半日かかる
-  const dev = await requireDevice(req, res, { allowRevoked: true });
+  //   これまで拡張は、数えた結果をパソコンの中のソフトへ渡し、
+  //   そのソフトがここへ送っていた。EXE を入れないと何も動かなかった。
+  //   いまは拡張が自分でここへ送る。
+  //
+  // ■ 失効した端末も、ここまでは通す。中身は1件も入れない
+  //
+  //   403 で落とさないのは、返事の本文を読ませたいから。
+  //   記録を送れているあいだ、ここへは5分おきに来る。
+  //   失効した直後にこの返事が届くので、「消せ」が最短で伝わる。
+  //   設定の口（config）は6時間おきなので、そちらを待つと半日かかる
+  const dev = await requireDevice(req, res, {
+    allowRevoked: true, sources: ["agent", "browser"],
+  });
   if (!dev) return;
 
   // 資格情報が失効している。受け取らない。

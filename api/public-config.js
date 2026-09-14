@@ -15,5 +15,9 @@ export default function handler(req, res) {
     // 未設定ならメニューに出さない（行き先の無いボタンを置かない）
     lmsUrl: process.env.LMS_URL || null,
     timecardUrl: process.env.TIMECARD_URL || null,
+    // ブラウザ拡張のID。画面から拡張へ話しかけるのに要る（js/device.js）。
+    // 公開してよい値（拡張のIDは、入れた人のブラウザからも見える）。
+    // 未設定なら、画面は拡張を探しにいかない
+    extensionId: process.env.AGENT_EXT_ID || null,
   });
 }

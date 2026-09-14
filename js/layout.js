@@ -469,13 +469,24 @@
     head.insertAdjacentElement("afterend", box);
   }
 
+  /**
+   * その項目が背負う件数の鍵。
+   *
+   * 2階層目をページの上のタブへ移したので、中の件数が外から見えなくなる。
+   * たとえば「契約書」をマイページの中へ入れると、未署名が1件あっても
+   * 左メニューには何も出ない。開かないと気づけないのでは、畳んだ意味が無い。
+   * 自分の鍵と、タブの鍵をまとめて背負う
+   */
+  const badgeKeys = (n) => [...new Set([n.key, ...(n.tabs || []).map((t) => t.key)])]
+    .filter(Boolean);
+
   function sideItem(n, active) {
     // match が書いてあれば、そこに挙げた画面のどれでも選ばれた状態にする
     const on = n.key === active || (n.match || []).includes(active);
     const cls = `kp-side-item${on ? " on" : ""}${n.ready ? "" : " soon"}${n.external ? " ext" : ""}`;
     // 件数はあとから /api/badges で入れる。ここでは器だけ置く
     const inner = `${icon(n.icon, 19)}<span>${esc(n.label)}</span>`
-      + `<b class="kp-side-badge hidden" data-badge="${esc(n.key)}"></b>`
+      + `<b class="kp-side-badge hidden" data-badge="${esc(badgeKeys(n).join(" "))}"></b>`
       + `${n.ready ? "" : '<em>準備中</em>'}`;
     return n.ready
       ? `<a class="${cls}" href="${n.href}">${inner}</a>`
@@ -506,14 +517,18 @@
       return;   // 数字が出ないだけ。黙って戻る
     }
     for (const node of document.querySelectorAll("[data-badge]")) {
-      const n = badges[node.dataset.badge] || 0;
+      // 「mypage contracts」のように、複数の鍵を背負っていることがある。
+      // 空白区切りにしてあるので、CSS からは [data-badge~="contracts"] で引ける
+      const n = String(node.dataset.badge).split(/\s+/).filter(Boolean)
+        .reduce((a, k) => a + (badges[k] || 0), 0);
       node.textContent = n > 99 ? "99+" : String(n);
       node.classList.toggle("hidden", !n);
     }
     // 畳んだグループにも、中に用があることを出す。
     // 開かないと気づけないのでは、畳んだ意味が無くなる
     for (const g of ADMIN_GROUPS) {
-      const sum = g.items.reduce((a, it) => a + (badges[it.key] || 0), 0);
+      const sum = g.items.reduce((a, it) =>
+        a + badgeKeys(it).reduce((b, k) => b + (badges[k] || 0), 0), 0);
       const mark = document.querySelector(`.kp-side-group[data-group="${g.key}"] .kp-side-dot`);
       if (mark) mark.classList.toggle("hidden", !sum);
     }

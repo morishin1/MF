@@ -72,9 +72,17 @@ func TestExtensionHasNoDangerousPermissions(t *testing.T) {
 				"足すなら、先に本人への告知と規程を直すこと", p, why)
 		}
 	}
+	// 通信先は、会社のグループウェアだけ。
+	//
+	// 以前はここを空にしていた（拡張はサーバへ直接つながず、
+	// パソコンの中のソフトへ渡していた）。
+	// いまは拡張が自分で送るので、送り先を1つだけ許す。
+	// ここに別のサイトが増えたら、そのサイトのページの中に入れるようになる
 	for _, h := range m.HostPermissions {
-		t.Errorf("host_permissions に %q が入っています。"+
-			"ページの中に入れるようになるので、空のままにすること", h)
+		if h != "https://mf.8grp.co.jp/*" {
+			t.Errorf("host_permissions に %q が入っています。"+
+				"会社のグループウェア以外を足さないこと", h)
+		}
 	}
 	if len(m.ContentScripts) > 0 {
 		t.Error("content_scripts が入っています。ページの中身が読めるようになります")
@@ -84,7 +92,9 @@ func TestExtensionHasNoDangerousPermissions(t *testing.T) {
 // 要る権限はそろっていること。減らしすぎると、ただ動かないだけになる
 func TestExtensionHasWhatItNeeds(t *testing.T) {
 	m := readManifest(t)
-	need := []string{"tabs", "idle", "alarms", "nativeMessaging"}
+	// storage … 端末専用の資格情報を置く。
+	// nativeMessaging は外した。EXE を必須にしないため
+	need := []string{"tabs", "idle", "alarms", "storage"}
 	have := map[string]bool{}
 	for _, p := range m.Permissions {
 		have[p] = true

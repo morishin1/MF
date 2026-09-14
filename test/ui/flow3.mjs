@@ -65,7 +65,9 @@ async function open(file, who, badges = BADGES) {
 console.log("— 件数バッジ（管理者）—");
 {
   const p = await open("home.html", meAdmin);
-  const badge = (k) => p.locator(`[data-badge="${k}"]`).first();
+  // 1つの項目が、タブの中の件数も背負う（data-badge="mypage contracts"）。
+  // だから完全一致ではなく ~= で引く
+  const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
   const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
 
   check(await shown("messages"), "メッセージに件数が出る");
@@ -94,10 +96,13 @@ console.log("— 件数バッジ（管理者）—");
 console.log("— 件数バッジ（メンバー）—");
 {
   const p = await open("home.html", meMember, { badges: { messages: 12, contracts: 1 } });
-  check((await p.locator('[data-badge="messages"]').first().textContent()) === "12", "メンバーにも出る");
-  check(await p.locator('[data-badge="contracts"]').first().isVisible(), "未署名の契約書にも出る");
+  check((await p.locator('[data-badge~="messages"]').first().textContent()) === "12", "メンバーにも出る");
+  // 契約書はマイページの中のタブになった。件数はマイページの行が背負う。
+  // 背負わないと、未署名が1件あっても開くまで気づけない
+  check(await p.locator('[data-badge~="contracts"]').first().isVisible(),
+        "未署名の契約書にも出る（マイページの行が背負う）");
   // メンバーのメニューに経費の項目そのものが無い（承認する立場でないため）
-  check(await p.locator('[data-badge="expenses"]').count() === 0,
+  check(await p.locator('.kp-sidebar.member a[href="admin-expenses.html"]').count() === 0,
     "承認する立場でない人には、経費の件数を出さない");
   await p.close();
 }

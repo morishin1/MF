@@ -15,6 +15,9 @@
     const r = await fetch("/api/public-config", { cache: "no-store" });
     if (!r.ok) throw new Error("public-config の取得に失敗しました");
     cfg = await r.json();
+    // 拡張のIDは、画面から拡張へ話しかけるのに要る（js/device.js）。
+    // 設定を読んだ時点で1回だけ置く
+    if (cfg.extensionId) window.KP_EXT_ID = cfg.extensionId;
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
       throw new Error("Supabase の公開設定が未構成です（環境変数 SUPABASE_URL / SUPABASE_ANON_KEY）");
     }
@@ -619,6 +622,11 @@
     return r.blob();
   }
   // 本人向け。自分の端末・自分の記録・自分を見た履歴
+  // ブラウザ拡張をつなぐための、1回きりの合言葉。
+  // 社員のログインは拡張へ渡さない（渡せない）。合言葉だけを渡す
+  const browserCode = (body) =>
+    api("/api/devices/browser", { method: "POST", body: { action: "code", ...body } });
+
   const myDevices = () => api("/api/devices/me");
   // 画面を開いているあいだの合図。js/device.js から5分ごとに呼ばれる
   const deviceBeat = (body) =>
@@ -1031,6 +1039,7 @@
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
+    browserCode,
     devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     deviceExceptions, approveDeviceException, revokeDeviceException,
     startDeviceSetup, deviceSetupState, deviceSetupPolicy,

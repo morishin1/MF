@@ -103,7 +103,13 @@ window.KPDevice = (function () {
   function start() {
     if (timer) return;
     state.uid = uid();
-    beat(true);
+    // 合図を1回出してから、拡張をつなぐ。
+    // 台帳にこのブラウザの行ができていないと、合言葉をもらえない
+    beat(true).then(function () {
+      // 入っていなければ何も起きない。入っていて、まだつないでいなければつなぐ。
+      // 社員に押させない。入れた時点でつながるのが、いちばん短い
+      extPair().catch(function () { /* つながらなくても画面は動く */ });
+    });
     timer = setInterval(function () {
       if (document.visibilityState === "visible") beat(false);
     }, 60 * 1000);
@@ -118,6 +124,86 @@ window.KPDevice = (function () {
     timer = null;
   }
 
+  // ---- ブラウザ拡張 ----------------------------------------------------------
+  //
+  // ■ なぜ画面の側から話しかけるのか
+  //
+  //   拡張は、社員のログイン（localStorage のトークン）を読めない。別のオリジンなので、
+  //   Cookie も見えない。読めてしまうほうが困る。
+  //
+  //   そこで、ログインしているこの画面が
+  //     1. サーバから1回きりの合言葉をもらい
+  //     2. 拡張へ渡す
+  //   だけをする。拡張はそれを端末専用の資格情報に換える。
+  //
+  //   社員がすることは「ログインする」「拡張を入れる」の2つだけ。
+  //   EXE も、登録コードの打ち込みも要らない。
+  //
+  // ■ 拡張のIDは、組み立てのときに決まる
+  //   window.KP_EXT_ID に入れておく（なければ何もしない）。
+
+  var EXT_ID = (typeof window !== "undefined" && window.KP_EXT_ID) || null;
+  var ext = { checked: false, installed: false, paired: false, version: null };
+
+  /** 拡張に話しかける。入っていなければ null が返る */
+  function ask(msg) {
+    return new Promise(function (done) {
+      if (!EXT_ID || !window.chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+        return done(null);
+      }
+      var settled = false;
+      var finish = function (v) { if (!settled) { settled = true; done(v); } };
+      // 入っていないと、返事が来ないまま終わることがある
+      setTimeout(function () { finish(null); }, 1500);
+      try {
+        chrome.runtime.sendMessage(EXT_ID, msg, function (r) {
+          // 入っていなければ lastError が立つ。読まないと警告が出る
+          void chrome.runtime.lastError;
+          finish(r || null);
+        });
+      } catch (e) { finish(null); }
+    });
+  }
+
+  /**
+   * 拡張が入っているか、つながっているか。
+   * 画面はこれを見て「拡張を入れてください」を出す
+   */
+  async function extState() {
+    var r = await ask({ type: "eight-hello" });
+    ext = {
+      checked: true,
+      installed: Boolean(r && r.ok),
+      paired: Boolean(r && r.paired),
+      version: (r && r.version) || null,
+      browser: (r && r.browser) || null,
+    };
+    return ext;
+  }
+
+  /**
+   * 拡張をつなぐ。
+   * すでにつながっていれば何もしない。入っていなければ false
+   */
+  async function extPair() {
+    var st = await extState();
+    if (!st.installed) return { ok: false, reason: "not_installed" };
+    if (st.paired) return { ok: true, already: true };
+
+    var got;
+    try {
+      got = await API.browserCode({ deviceUid: state.uid || uid() });
+    } catch (e) {
+      return { ok: false, reason: "code_failed", message: e.hint || e.message };
+    }
+    var r = await ask({ type: "eight-pair", code: got.code });
+    if (!r || !r.ok) {
+      return { ok: false, reason: (r && r.error) || "pair_failed", message: r && r.message };
+    }
+    ext.paired = true;
+    return { ok: true, collect: r.collect, consentUrl: r.consentUrl || null };
+  }
+
   /** アプリとして入っているか（PWA） */
   function installed() {
     return window.matchMedia
@@ -125,5 +211,8 @@ window.KPDevice = (function () {
           || window.navigator.standalone === true);
   }
 
-  return { uid: uid, start: start, stop: stop, beat: beat, installed: installed, state: state };
+  return {
+    uid: uid, start: start, stop: stop, beat: beat, installed: installed, state: state,
+    extState: extState, extPair: extPair, ext: ext,
+  };
 })();

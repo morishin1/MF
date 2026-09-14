@@ -90,6 +90,7 @@
       <h2 style="margin-top:26px;"><span class="material-symbols-outlined">memory</span>
         <span id="c-an-title"></span></h2>
       <p class="dc-why" id="c-an-lead"></p>
+      <ul class="dc-list" id="c-an-areas"></ul>
       <p class="dc-why" id="c-an-scope"></p>
       <p class="dc-why" id="c-an-yours"></p>
     </div>
@@ -228,6 +229,9 @@
     el("c-agentnotice").classList.toggle("hidden", !an);
     if (an) {
       el("c-an-title").textContent = an.title;
+      // EXE を入れたパソコンでだけ取れるもの。
+      // 入れていない人には、この一覧そのものが出ない（上の areas に混ぜない）
+      el("c-an-areas").innerHTML = (an.areas || []).map((x) => `<li>${esc(x)}</li>`).join("");
       for (const k of ["lead", "scope", "yours"]) {
         const n2 = el(`c-an-${k}`);
         n2.textContent = an[k] || "";

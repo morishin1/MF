@@ -2,8 +2,23 @@
 //
 // ■ 何をするものか
 //   いま見ているタブの「ドメイン」と「ページの場所」を、見ていた秒数とともに
-//   数える。数えた結果だけを、このパソコンの中のソフト（EIGHT Agent）へ渡す。
-//   サーバへは直接つながない。鍵もこの拡張には持たせない。
+//   数える。数えた結果だけを、会社のグループウェアへ送る。
+//
+// ■ EXE は要らない
+//   前は、数えた結果をパソコンの中のソフト（EIGHT Agent の EXE）へ渡し、
+//   そのソフトが送っていた。拡張を入れただけでは何も動かず、
+//   EXE を配って、SmartScreen をくぐって、入れてもらう必要があった。
+//   入れ直し・更新のたびに同じことをやる。そこが重かった。
+//
+//   いまは、この拡張が自分で送る。社員がすることは
+//   「グループウェアにログインする」「この拡張を入れる」の2つだけ。
+//
+// ■ 鍵の持ち方
+//   社員のログインは持たない（別のオリジンなので、そもそも読めない）。
+//   持つのは端末専用の資格情報だけで、できることは
+//   「自分のぶんを送る」しかない。
+//   受け取り方は、ログイン済みの画面から1回きりの合言葉をもらって換える
+//   （api/devices/browser.js）。
 //
 // ■ 読まないもの（読む口をそもそも持たない）
 //   ・ページの中身        … content_scripts が無い。host_permissions が空。
@@ -28,7 +43,9 @@
 //   ほかのウィンドウを見ているあいだ、裏のタブは数えない。
 //   何も触らなくなったら（既定5分）止める。
 
-const NATIVE_HOST = "jp.co.eightgrp.agent";
+// 送り先。会社のグループウェアだけ。
+// manifest の host_permissions にも、ここしか書いていない
+const BASE = "https://mf.8grp.co.jp";
 
 // 何分ごとに、溜めたぶんを渡すか
 const FLUSH_MIN = 1;
@@ -151,10 +168,69 @@ async function look() {
   if (current) current.activeSec += dt;
 }
 
-// ---- このパソコンのソフトへ渡す ---------------------------------------------
+// ---- グループウェアへ送る ---------------------------------------------------
 //
-// サーバへは直接つながない。鍵をこの拡張に持たせないため。
-// ソフトが止まっていれば、溜めたまま次に回す
+// つながらなければ、溜めたまま次に回す。
+// 送れなかったぶんを捨てない（オフラインの時間がそのまま消える）
+
+/** 端末専用の資格情報。無ければ、まだ画面から合言葉をもらっていない */
+async function creds() {
+  try {
+    const v = await chrome.storage.local.get(["deviceId", "secret"]);
+    return v && v.deviceId && v.secret ? v : null;
+  } catch (e) { return null; }
+}
+
+/**
+ * ログイン済みの画面から、1回きりの合言葉が届く。
+ *
+ * 社員のログインそのものは渡されない。渡せない（別のオリジン）。
+ * ここで受け取った合言葉を、端末専用の資格情報に換える。
+ *
+ * manifest の externally_connectable に書いたところ以外からは届かない。
+ */
+chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
+  if (!msg || msg.type !== "eight-pair") { reply({ ok: false }); return false; }
+  // 念のため、送り主も見る。manifest でも縛っているが、二重にしておく
+  if (!String(sender.url || "").startsWith(BASE + "/")) { reply({ ok: false }); return false; }
+
+  pairWith(String(msg.code || "")).then(reply, () => reply({ ok: false }));
+  return true;   // 返事は非同期
+});
+
+/** 画面が「入っていますか」と聞いてくる。入っていれば版を返す */
+chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
+  if (!msg || msg.type !== "eight-hello") return false;
+  creds().then((c) => reply({
+    ok: true,
+    version: chrome.runtime.getManifest().version,
+    paired: Boolean(c),
+    browser: whichBrowser(),
+  }));
+  return true;
+});
+
+async function pairWith(code) {
+  if (!code) return { ok: false, error: "no_code" };
+  const r = await fetch(`${BASE}/api/devices/browser`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "pair", code,
+      browser: whichBrowser(),
+      version: chrome.runtime.getManifest().version,
+    }),
+  });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok || !out.deviceId || !out.secret) {
+    return { ok: false, error: out.error || `http_${r.status}`, message: out.message || null };
+  }
+  await chrome.storage.local.set({ deviceId: out.deviceId, secret: out.secret });
+  // つないだ直後に1回送る。管理画面で「未通信」のまま待たせない
+  flush();
+  return { ok: true, collect: Boolean(out.collect), consentUrl: out.consentUrl || null };
+}
+
 function flush() {
   const now = Date.now();
   // 見ている途中のぶんも、いったん締めて渡す。
@@ -165,29 +241,55 @@ function flush() {
     current = { ...keepCurrent, startedAt: now, activeSec: 0 };
   }
 
-  if (!pending.length) {
-    // 何も無くても、生きていることは伝える。
-    // 伝えないと、管理画面で「未通信」になる
-    send({ kind: "alive", browser: whichBrowser(), version: chrome.runtime.getManifest().version });
-    return;
-  }
+  // 何も見ていなくても送る。
+  // 送らないと、管理画面では「未通信」と同じに見える
   const batch = pending;
   pending = [];
-  send({
-    kind: "visits", browser: whichBrowser(),
-    version: chrome.runtime.getManifest().version,
-    visits: batch,
-  }, () => { pending = batch.concat(pending).slice(-500); });
+  send(batch).catch(() => {
+    // 送れなかった。戻して次の回に回す。
+    // 溜めすぎないように、古いほうから捨てる
+    pending = batch.concat(pending).slice(-500);
+  });
 }
 
-function send(msg, onFail) {
-  try {
-    chrome.runtime.sendNativeMessage(NATIVE_HOST, msg, () => {
-      if (chrome.runtime.lastError && onFail) onFail();
-    });
-  } catch (e) {
-    if (onFail) onFail();
+async function send(visits) {
+  const c = await creds();
+  if (!c) {
+    // まだ合言葉をもらっていない。溜めたままにする。
+    // つないだ時点で、そのぶんがまとめて届く
+    if (visits.length) pending = visits.concat(pending).slice(-500);
+    return;
   }
+
+  const browser = whichBrowser();
+  const version = chrome.runtime.getManifest().version;
+  const r = await fetch(`${BASE}/api/devices/ingest`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Device ${c.deviceId}:${c.secret}`,
+    },
+    body: JSON.stringify({
+      sentAt: new Date().toISOString(),
+      visits,
+      // どのブラウザで、拡張がどの版で動いているか。
+      // 管理画面の「ブラウザ連携」に出る
+      browsers: [{ browser, installed: true, linked: true, extVersion: version }],
+    }),
+  });
+
+  if (r.status === 401 || r.status === 403) {
+    // 資格情報が通らない。管理者が端末を消したか、つなぎ直しが要る。
+    // 持っていても意味がないので捨てる。画面からつなぎ直してもらう
+    await chrome.storage.local.remove(["deviceId", "secret"]);
+    return;
+  }
+  if (!r.ok) throw new Error(`http_${r.status}`);
+
+  const out = await r.json().catch(() => ({}));
+  // 本人が「記録すること」を読むまでは、サーバは受け取らない。
+  // そのあいだ溜め続けても届かないので、捨てる
+  if (out && out.collect === false) pending = [];
 }
 
 // ---- 起こす -----------------------------------------------------------------

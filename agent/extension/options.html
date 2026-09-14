@@ -19,6 +19,10 @@
     a { color: #2b5f9e; }
     .note { font-size: 12px; color: #6b7280; margin-top: 22px;
             border-top: 1px solid #eee; padding-top: 14px; }
+    .state { border-radius: 8px; padding: 11px 14px; font-size: 13px;
+             margin: 0 0 20px; background: #f1f5f9; color: #6b7280; }
+    .state.on  { background: #e8f5ec; color: #256b36; }
+    .state.off { background: #fff3e0; color: #9c4221; }
   </style>
 </head>
 <body>
@@ -26,8 +30,10 @@
     <h1>EIGHT 端末管理</h1>
     <p class="lead">
       会社のパソコンで、どのサイトをどれだけ見ていたかを記録します。<br>
-      記録は、このパソコンに入っている EIGHT Agent を通して会社に送られます。
+      記録は、この拡張から会社のグループウェア（mf.8grp.co.jp）へ直接送られます。
     </p>
+
+    <div id="state" class="state">つながり方を確認しています…</div>
 
     <div class="take">
       <h2>記録するもの</h2>
@@ -69,5 +75,24 @@
       質問は管理部までお願いします。
     </p>
   </div>
+
+  <script>
+    // つながっているかどうかだけ出す。
+    // 「入れたのに何も起きない」ときに、どこを見ればよいか分かるように
+    (async function () {
+      var box = document.getElementById("state");
+      var v = {};
+      try { v = await chrome.storage.local.get(["deviceId"]); } catch (e) { /* 読めなくても出す */ }
+      if (v && v.deviceId) {
+        box.className = "state on";
+        box.textContent = "会社のグループウェアとつながっています。";
+        return;
+      }
+      box.className = "state off";
+      box.innerHTML = "まだつながっていません。"
+        + '<a href="https://mf.8grp.co.jp/mypage.html" target="_blank" rel="noopener">'
+        + "mf.8grp.co.jp を開いてログイン</a>すると、その場でつながります。";
+    })();
+  </script>
 </body>
 </html>
