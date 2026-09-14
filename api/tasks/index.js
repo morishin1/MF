@@ -27,6 +27,7 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { notifySlack } from "../../lib/slack.js";
 import { notify } from "../../lib/notify.js";
+import { findProcedure } from "../../lib/onboard-kit.js";
 
 const PRIORITIES = ["low", "normal", "high"];
 const STATUSES = ["todo", "doing", "done", "cancelled"];
@@ -350,9 +351,9 @@ async function extrasFor(ctx, userId) {
       .select("id, title, detail, source, due_date, created_at")
       .eq("user_id", userId).eq("status", "proposed")
       .order("created_at", { ascending: false }).limit(20),
-    sb.from("gw_procedures")
-      .select("id, status, target_on")
-      .eq("employee_id", ctx.employee.id).eq("kind", "onboarding").maybeSingle(),
+    // maybeSingle では引かない。手続きが2行あるとエラーになって
+    // data が null になり、「入社手続きは無い人」として扱われる
+    findProcedure(sb, ctx.employee.id, "onboarding", "id, status, target_on"),
   ]);
 
   out.actions = (items.data || []).map((a) => ({
@@ -364,10 +365,10 @@ async function extrasFor(ctx, userId) {
   }));
 
   // 手続きが完了・中止になっていれば、もう出さない
-  if (proc.data && !["done", "cancelled"].includes(proc.data.status)) {
+  if (proc.row && !["done", "cancelled"].includes(proc.row.status)) {
     const { data } = await sb.from("gw_procedure_items")
       .select("id, item_key, title, category, required, status, due_on")
-      .eq("procedure_id", proc.data.id)
+      .eq("procedure_id", proc.row.id)
       .eq("owner", "employee")
       .in("status", ["todo", "submitted"])
       .order("sort_order").limit(50);

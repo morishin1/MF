@@ -527,6 +527,30 @@
     el("d-tag").textContent = `${done} / ${docs.length}`;
     el("d-tag").className = `kp-chip ${done === docs.length && docs.length ? "event" : "draft"}`;
 
+    // どれ1つ出せない状態になっていたら、それを先に1回だけ言う。
+    //
+    // 以前、6つの書類ぜんぶに「結び付いていません」とだけ並んで出て、
+    // 何が起きているのか本人にも管理者にも分からなかったことがある。
+    // （原因は入社手続きの行が2つできていたこと。db/065 で直してある）
+    // 同じ形になったときに、伝える先と伝える言葉がその場で出るようにする
+    const dead = docs.filter((d) => !d.itemId).length;
+    if (dead && dead === docs.length) {
+      el("docs-note").innerHTML = `
+        <div class="banner err" style="margin-bottom:14px;">
+          <span class="material-symbols-outlined">error</span>
+          <div><b>いま書類を出せない状態になっています。</b><br>
+          あなたの入社手続きと書類が結び付いていません。お手数ですが、
+          管理担当者に「入社手続きの書類が出せない」とお伝えください。<br>
+          <span class="muted" style="font-size:11.5px;">
+            管理者の方へ： db/065_onboarding_one.sql を流してください。
+            入社手続きの行が重複していると、この状態になります。
+          </span></div>
+        </div>`;
+      el("docs").innerHTML = "";
+      el("docs-extra").innerHTML = "";
+      return;
+    }
+
     el("docs-note").innerHTML = data.drive?.ready
       ? `<div class="banner info" style="margin-bottom:14px;">
            <span class="material-symbols-outlined">drive_export</span>

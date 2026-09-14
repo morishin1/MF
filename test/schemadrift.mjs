@@ -41,9 +41,19 @@ for (const m of sql.matchAll(
     if (c) add(m[1], c[1]);
   }
 }
-for (const m of sql.matchAll(
-  /alter\s+table\s+(?:public\.)?(\w+)\s*\n?\s*add\s+column\s+(?:if\s+not\s+exists\s+)?(\w+)/gi)) {
-  add(m[1], m[2]);
+// 1つの alter table で、列をいくつも足すことがある。
+//
+//   alter table public.gw_devices
+//     add column if not exists revoked_at  timestamptz,
+//     add column if not exists lost_at     timestamptz,
+//     …
+//
+// ここを「最初の1つ」しか拾っていなかったので、2つめ以降が
+// 「SQL に無い列」として出ていた。文の終わり（;）まで読む
+for (const m of sql.matchAll(/alter\s+table\s+(?:public\.)?(\w+)([^;]*);/gi)) {
+  for (const c of m[2].matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?(\w+)/gi)) {
+    add(m[1], c[1]);
+  }
 }
 for (const m of sql.matchAll(
   /alter\s+table\s+(?:public\.)?(\w+)\s+rename\s+column\s+(\w+)\s+to\s+(\w+)/gi)) {

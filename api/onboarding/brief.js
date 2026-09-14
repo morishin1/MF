@@ -19,6 +19,7 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { advisorBrief, slackPost } from "../../lib/onboard-brief.js";
 import { progressOf } from "../../lib/onboard-form.js";
+import { findProcedure } from "../../lib/onboard-kit.js";
 
 const canManage = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -47,18 +48,18 @@ export default async function handler(req, res) {
     sb.from("gw_contracts").select("*")
       .eq("employee_id", employeeId).eq("status", "active")
       .order("created_at", { ascending: false }).limit(1),
-    sb.from("gw_procedures").select("id, status, target_on")
-      .eq("employee_id", employeeId).eq("kind", "onboarding").maybeSingle(),
+    // maybeSingle では引かない（lib/onboard-kit.js の findProcedure）
+    findProcedure(sb, employeeId, "onboarding", "id, status, target_on"),
     employee.manager_id
       ? sb.from("gw_employees").select("display_name").eq("id", employee.manager_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
   let items = [];
-  if (proc.data) {
+  if (proc.row) {
     const { data } = await sb.from("gw_procedure_items")
       .select("id, item_key, title, owner, required, status")
-      .eq("procedure_id", proc.data.id).order("sort_order").limit(200);
+      .eq("procedure_id", proc.row.id).order("sort_order").limit(200);
     items = data || [];
   }
 

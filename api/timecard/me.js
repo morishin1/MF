@@ -213,7 +213,10 @@ async function requestFix(res, ctx, body) {
   // 何度も出されると、承認する側がどれを見ればよいか分からなくなる
   const { data: open } = await sb.from("gw_time_fixes").select("id")
     .eq("employee_id", ctx.employee.id).eq("work_date", workDate)
-    .eq("status", "pending").maybeSingle();
+    .eq("status", "pending")
+    // 同じ日に申請が2つ残っていると maybeSingle はエラーを返し、
+    // data が null になる。すると「残っていない」と読んで、もう1つ作る
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
   const row = {
     tenant_id: ctx.tenantId,

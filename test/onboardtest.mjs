@@ -59,17 +59,42 @@ function table(name) {
     is() { return q; },
     not() { return q; },
     gte() { return q; }, lte() { return q; }, lt() { return q; },
-    order() { return q; },
+    order(col, opts) { q._order = [col, opts?.ascending !== false]; return q; },
     limit(n) { q._limit = n; return q; },
-    maybeSingle() { return Promise.resolve({ data: project(match(name, f)[0] || null, q._cols), error: null }); },
-    single() { return Promise.resolve({ data: project(match(name, f)[0] || null, q._cols), error: null }); },
+    // 本物の PostgREST は、2行以上あるとエラーを返して data を null にする。
+    // ここを「1件目を返す」にしていたせいで、手続きが重複したときに
+    // 本人の画面から書類を出す口が全部消えることに、テストで気づけなかった
+    maybeSingle() {
+      const rows = match(name, f);
+      if (rows.length > 1) {
+        return Promise.resolve({ data: null, error: {
+          code: "PGRST116",
+          message: "JSON object requested, multiple (or no) rows returned" } });
+      }
+      return Promise.resolve({ data: project(rows[0] || null, q._cols), error: null });
+    },
+    single() {
+      const rows = match(name, f);
+      if (rows.length !== 1) {
+        return Promise.resolve({ data: null, error: {
+          code: "PGRST116",
+          message: "JSON object requested, multiple (or no) rows returned" } });
+      }
+      return Promise.resolve({ data: project(rows[0], q._cols), error: null });
+    },
     then(fn) {
       // 無い列を SELECT したときに本物が返すもの
       if (db.fail === name) {
         return Promise.resolve({ data: null, error: {
           code: "42703", message: `column ${name}.item_key does not exist` } }).then(fn);
       }
-      let rows = match(name, f).map((r) => project(r, q._cols));
+      let rows = match(name, f);
+      if (q._order) {
+        const [col, asc] = q._order;
+        rows = [...rows].sort((a, b) =>
+          (String(a[col] ?? "") < String(b[col] ?? "") ? -1 : 1) * (asc ? 1 : -1));
+      }
+      rows = rows.map((r) => project(r, q._cols));
       if (q._limit) rows = rows.slice(0, q._limit);
       return Promise.resolve({ data: rows, error: null }).then(fn);
     },
@@ -157,7 +182,8 @@ function setup({ withKey }) {
     gw_employees: [{ id: "emp-1", tenant_id: "t1", display_name: "山内 美紀",
                      status: "active", joined_on: "2026-09-01" }],
     gw_procedures: [{ id: "pr-1", tenant_id: "t1", employee_id: "emp-1",
-                      kind: "onboarding", status: "open", drive_folder_id: null }],
+                      kind: "onboarding", status: "open", drive_folder_id: null,
+                      created_at: "2026-09-01T00:00:00Z" }],
     // 本人が出す書類。鍵が入っている／いないを切り替える
     gw_procedure_items: DOCS.map((d, n) => ({
       id: `it-${n}`, tenant_id: "t1", procedure_id: "pr-1",
@@ -235,6 +261,59 @@ await ok("ドライブが無くても itemId は付く", async () => {
   assert.equal(r.body.drive?.ready, false, "ドライブは使えない状態にしてある");
   assert.ok((r.body.documents || []).every((d) => d.itemId),
     "ドライブが無いときこそ、この画面から出せないと詰む");
+});
+
+console.log("\n— 手続きの行が2つできてしまった人 —");
+//
+//   ここが今回いちばん効く。
+//   コードは長いあいだ maybeSingle() で引いていて、コメントには
+//   「1人1つ（employee_id, kind で一意）」と書いてあったが、
+//   その一意制約はどの SQL にも無かった。
+//
+//   行が2つできると maybeSingle はエラーを返して data を null にする。
+//   呼ぶ側は error を見ていなかったので「手続きが無い人」になり、
+//   6つの書類ぜんぶが「結び付いていません」になって、
+//   出す口が1つも出なくなっていた。
+await ok("2つあっても、書類は出せる", async () => {
+  setup({ withKey: true });
+  // あとから増えたほう。中身は空（実際にこうなっていた）
+  db.rows.gw_procedures.push({
+    id: "pr-2", tenant_id: "t1", employee_id: "emp-1",
+    kind: "onboarding", status: "open", drive_folder_id: null,
+    created_at: "2026-09-10T00:00:00Z",
+  });
+  const r = await call();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body).slice(0, 200));
+  const docs = r.body.documents || [];
+  const dead = docs.filter((d) => !d.itemId);
+  assert.equal(dead.length, 0,
+    "手続きが2つあると、出す口が消えます: " + dead.map((d) => d.title).join("、"));
+});
+
+await ok("2つあっても、古いほう（中身がある方）を使う", async () => {
+  setup({ withKey: true });
+  db.rows.gw_procedures.push({
+    id: "pr-2", tenant_id: "t1", employee_id: "emp-1",
+    kind: "onboarding", status: "open", drive_folder_id: null,
+    created_at: "2026-09-10T00:00:00Z",
+  });
+  const r = await call();
+  assert.equal(r.body.procedureId, "pr-1",
+    `新しい空のほうを掴んでいます: ${r.body.procedureId}`);
+});
+
+await ok("3つ以上でも落ちない", async () => {
+  setup({ withKey: true });
+  for (const n of [2, 3, 4]) {
+    db.rows.gw_procedures.push({
+      id: `pr-${n}`, tenant_id: "t1", employee_id: "emp-1",
+      kind: "onboarding", status: "open", drive_folder_id: null,
+      created_at: `2026-09-1${n}T00:00:00Z`,
+    });
+  }
+  const r = await call();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body).slice(0, 200));
+  assert.equal((r.body.documents || []).filter((d) => !d.itemId).length, 0);
 });
 
 console.log("\n— 読めなかったときに、黙って空にしない —");

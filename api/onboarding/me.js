@@ -30,7 +30,7 @@ import {
   FIELDS, GROUPS, DEPENDENT_FIELDS, MAX_DEPENDENTS,
   normalizeProfile, normalizeDependents, missingFields, progressOf,
 } from "../../lib/onboard-form.js";
-import { syncFormItems, ensureDocItems } from "../../lib/onboard-kit.js";
+import { syncFormItems, ensureDocItems, findProcedure } from "../../lib/onboard-kit.js";
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
 import { DOCS, COMPANY_DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
 import { hrConfigured } from "../../lib/gdrive.js";
@@ -69,8 +69,12 @@ async function read(res, user, ctx) {
     console.error("[onboarding/me] 書類の版を写せませんでした:", e.message));
 
   const [proc, profile, consents, contract, manager, docs] = await Promise.all([
-    sb.from("gw_procedures").select("*")
-      .eq("employee_id", empId).eq("kind", "onboarding").maybeSingle(),
+    // maybeSingle では引かない。
+    // 手続きの行が2つできると maybeSingle はエラーを返して data を null にし、
+    // 「手続きが無い人」として扱われる。そうなると6つの書類ぜんぶが
+    // 「いまのチェックリストに結び付いていません」になって、
+    // 出す口が1つも出なくなる（lib/onboard-kit.js の findProcedure）
+    findProcedure(sb, empId, "onboarding"),
     sb.from("gw_onboard_profiles").select("*").eq("employee_id", empId).maybeSingle(),
     // 同意の記録は全部返す（版ごと）。マイページの「自分の書類」で、
     // どの版にいつ同意したかと、そのとき読んだ全文を見られるようにする
@@ -87,22 +91,29 @@ async function read(res, user, ctx) {
       .eq("tenant_id", ctx.tenantId).eq("status", "active").order("doc_key"),
   ]);
 
+  // 手続きが読めなかった。黙って「まだ何も無い人」にしない。
+  // 黙ると、画面には出す口が1つも出ないまま、理由がどこにも出ない
+  if (proc.error) {
+    console.error("[onboarding/me] 手続きを読めません:", proc.error.message);
+    return json(res, 500, { error: "db_read_failed", detail: proc.error.message });
+  }
+
   let items = [];
   let files = [];
-  if (proc.data) {
+  if (proc.row) {
     // 古い手続きを、いまの定義につなぎ直してから読む。
     // 鍵の無い項目はアップロード先が決まらず、ボタンを押しても何も起きない。
     // 同じ書類が2行あるのも、ここで片付く（lib/onboard-kit.js）
-    await ensureDocItems(sb, ctx.tenantId, proc.data.id, ctx.employee.employment_type).catch((e) =>
+    await ensureDocItems(sb, ctx.tenantId, proc.row.id, ctx.employee.employment_type).catch((e) =>
       console.error("[onboarding/me] チェックリストを直せませんでした:", e.message));
 
     const [itemsRes, filesRes] = await Promise.all([
       sb.from("gw_procedure_items")
         .select("id, item_key, title, category, owner, required, status, due_on, note, sort_order, document_id, submitted_at")
-        .eq("procedure_id", proc.data.id).order("sort_order").limit(200),
+        .eq("procedure_id", proc.row.id).order("sort_order").limit(200),
       sb.from("gw_procedure_files")
         .select("id, item_id, filename, mime_type, size_bytes, drive_name, created_at")
-        .eq("procedure_id", proc.data.id).order("created_at", { ascending: false }).limit(200),
+        .eq("procedure_id", proc.row.id).order("created_at", { ascending: false }).limit(200),
     ]);
 
     // 読めなかったときに黙って空にしない。
@@ -129,7 +140,7 @@ async function read(res, user, ctx) {
   const pf = profile.data || null;
 
   // 本人の Google ドライブのフォルダ。開ける状態なら、書類ごとに直リンクを返す
-  const drive = await employeeDrive(sb, ctx, proc.data).catch((e) => {
+  const drive = await employeeDrive(sb, ctx, proc.row).catch((e) => {
     console.error("[onboarding/me] Driveの共有に失敗:", e.message);
     return { ready: false, note: null, folders: null, sensitiveId: null };
   });
@@ -227,9 +238,9 @@ async function read(res, user, ctx) {
     // そろうと、次にログインしたときに通常の画面が開く（lib/stages.js）
     allDone: onboardingDone(items),
 
-    procedureId: proc.data?.id || null,
-    status: proc.data?.status || null,
-    targetOn: proc.data?.target_on || null,
+    procedureId: proc.row?.id || null,
+    status: proc.row?.status || null,
+    targetOn: proc.row?.target_on || null,
 
     // 会社が既に知っていること。読み取り専用で見せる
     known: {
@@ -441,9 +452,8 @@ async function saveConsents(res, user, ctx, body, req) {
  */
 async function reflect(sb, empId) {
   try {
-    const [{ data: proc }, { data: pf }, { data: cs }, { data: docs }] = await Promise.all([
-      sb.from("gw_procedures").select("id, tenant_id")
-        .eq("employee_id", empId).eq("kind", "onboarding").maybeSingle(),
+    const [{ row: proc }, { data: pf }, { data: cs }, { data: docs }] = await Promise.all([
+      findProcedure(sb, empId, "onboarding", "id, tenant_id"),
       sb.from("gw_onboard_profiles").select("status").eq("employee_id", empId).maybeSingle(),
       sb.from("gw_onboard_consents").select("kind, version, agreed_at").eq("employee_id", empId),
       sb.from("gw_consent_docs").select("*").eq("status", "active"),

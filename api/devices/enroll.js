@@ -202,8 +202,12 @@ async function linkBrowsers(sb, enr, dev, body) {
     // ② 本人が「このパソコンです」を押したブラウザ。
     //    どのブラウザで押したかは、組み立てのときの札に控えてある。
     //    エージェントは知らないので、こちらで引く
+    // limit(1) を落とさないこと。同じ登録に札が2つ付くと
+    // maybeSingle がエラーを返し、data が null になる。
+    // ここが null だと、押したブラウザとPCが永久につながらない
     const { data: pair } = await sb.from("gw_device_pairings")
-      .select("device_uid").eq("enrollment_id", enr.id).maybeSingle();
+      .select("device_uid").eq("enrollment_id", enr.id)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
     const deviceUid = str(pair?.device_uid, 100);
     if (!deviceUid) return;
 

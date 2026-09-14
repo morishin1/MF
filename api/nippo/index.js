@@ -429,7 +429,8 @@ async function saveWeekly(res, user, body) {
 
   const sb = admin();
   const { data: emp } = await sb
-    .from("gw_employees").select("display_name").eq("user_id", user.id).maybeSingle();
+    .from("gw_employees").select("display_name").eq("user_id", user.id)
+    .limit(1).maybeSingle();
 
   const cut = (v) => String(v ?? "").trim().slice(0, 4000) || null;
   const { data, error } = await sb.from("tc_weekly_review").upsert({
