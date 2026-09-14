@@ -215,6 +215,8 @@ const asAdmin = () => {
   console.log("\n— 1台を1行に —");
   await page.goto(`${BASE}/admin-devices.html`);
   await page.waitForTimeout(1500);
+  await page.click("#t-list");
+  await page.waitForTimeout(300);
 
   check(await page.locator("#d-rows tr").count() === 1, "同じPCが1行にまとまる");
   {

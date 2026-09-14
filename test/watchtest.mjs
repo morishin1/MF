@@ -324,10 +324,12 @@ console.log("\n— 登録したら、本人は外せない —");
 //   ただしブラウザから拡張を消すことまでは止められない。
 //   止められないなら、せめて **黙って消えないようにする**
 
-await ok("拡張を外したら、そう出る", async () => {
-  // グループウェアは使っている（合図は来ている）のに、拡張からだけ届かない
+await ok("届かない状態が続いたら、そう出る", async () => {
+  // グループウェアは使っている（合図は来ている）のに、拡張からだけ届かない。
+  // しかもそれが続いている（ext_missing_since は api/devices/me.js が置く）
   setup({
-    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2) },
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2),
+              ext_missing_since: ago(180) },
     browser: { last_seen_at: ago(180) },
   });
   const k = await keys();
@@ -335,17 +337,73 @@ await ok("拡張を外したら、そう出る", async () => {
   const p = await one();
   assert.equal(p.ext.key, "removed");
   assert.equal(p.ext.mark, "×");
-  assert.equal(p.mark.m, "×", "「未接続」より重く出す");
+  assert.equal(p.ext.label, "連携異常");
+  assert.equal(p.mark.m, "×", "「未設定」より重く出す");
 });
 
-await ok("外したことを、本人の言い分で消せない", async () => {
+// ここが今回の肝。一瞬で決めると、毎日どこかの誰かが赤くなる。
+// 赤が日常になると、本当に外した人が埋もれる
+await ok("立ち上げ直した直後は、× にしない", async () => {
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2),
+              ext_missing_since: ago(3) },
+    browser: { last_seen_at: ago(3) },
+  });
+  const k = await keys();
+  assert.ok(!k.includes("ext_removed"), `すぐ × にしています: ${k.join(",")}`);
+  const p = await one();
+  assert.equal(p.ext.key, "ok");
+});
+
+await ok("届かなくなった時刻が無ければ、× にしない", async () => {
+  // 067 をまだ流していない環境。ここで全員 × になるほうが困る
   setup({
     device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2) },
     browser: { last_seen_at: ago(180) },
   });
+  const k = await keys();
+  assert.ok(!k.includes("ext_removed"), k.join(","));
+});
+
+await ok("「削除された」とは書かない", async () => {
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2),
+              ext_missing_since: ago(180) },
+    browser: { last_seen_at: ago(180) },
+  });
   const p = await one();
   const i = p.issues.find((x) => x.key === "ext_removed");
-  assert.ok(/管理者しかできません/.test(i.next), `文: ${i.next}`);
+  // 分かっているのは「届いていない」ことだけ。
+  // 止めたのか、消したのか、壊れたのかまでは分からない
+  assert.equal(i.what,
+    "グループウェアへのアクセスはありますが、"
+    + "登録済みのブラウザ拡張から通信がありません。"
+    + "拡張が停止・削除されている可能性があります。");
+  assert.ok(!/削除されました|削除しました/.test(i.what), `決めつけています: ${i.what}`);
+  assert.ok(/可能性/.test(i.what), `断定しています: ${i.what}`);
+});
+
+await ok("帰ったあと時間が経っただけでは、× にしない", async () => {
+  // 合図も止まっている＝そのブラウザを使っていない。
+  // 「操作があるのに届かない」が続いたわけではないので、数えない
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(400),
+              ext_missing_since: ago(410) },
+    browser: { last_seen_at: ago(500) },
+    noClock: true, visits: [],
+  });
+  const k = await keys();
+  assert.ok(!k.includes("ext_removed"), `時間が経っただけで × です: ${k.join(",")}`);
+});
+
+await ok("いつから届いていないかは、詳細で分かる", async () => {
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2),
+              ext_missing_since: ago(180) },
+    browser: { last_seen_at: ago(180) },
+  });
+  const p = await one();
+  assert.ok(p.devices[0].extMissingFrom, "いつからかを返す");
 });
 
 await ok("ブラウザを閉じているだけなら、外れたとは言わない", async () => {
@@ -371,7 +429,8 @@ await ok("まだ一度も登録していない人は、外れたとは言わな�
 
 await ok("外れている人の数を、まとめにも出す", async () => {
   setup({
-    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2) },
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2),
+              ext_missing_since: ago(180) },
     browser: { last_seen_at: ago(180) },
   });
   const r = await get();

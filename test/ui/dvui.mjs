@@ -141,6 +141,9 @@ page.on("dialog", (d) => d.accept("テストのため"));
 
 await page.goto(`${BASE}/admin-devices.html`);
 await page.waitForTimeout(1200);
+// 入口は社員ごとの画面になった。台帳はタブの中
+await page.click("#t-list");
+await page.waitForTimeout(300);
 
 // ---- 最初に見えるもの ----------------------------------------------------------
 console.log("— 開いた瞬間に何が見えるか —");

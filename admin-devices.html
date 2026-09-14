@@ -9,8 +9,8 @@
   <meta name="robots" content="noindex, nofollow">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260913e">
-  <link rel="stylesheet" href="css/layout.css?v=20260913e">
+  <link rel="stylesheet" href="css/app.css?v=20260914c">
+  <link rel="stylesheet" href="css/layout.css?v=20260914c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -129,6 +129,7 @@
     .dv-mk.ok { color:#2f855a; }
     .dv-mk.warn { color:#b7791f; }
     .dv-mk.silent { color:#c53030; }
+    .dv-mk.bad { color:#c53030; }
     .dv-mk.none { color:var(--muted); font-weight:400; }
 
     /* 要確認。1件につき「何が」「どうする」を1行で */
@@ -185,6 +186,28 @@
                     text-decoration:underline; }
     .dv-foot .lnk:hover { color:var(--text); }
 
+    /* ---- 社員ごと ----
+       1行＝1人。正常な人は、押さなければ何も出さない。
+       開いたときだけ、その人の中身をこの行の下にぶら下げる */
+    .pp-det > td { background:#fbfbfc; padding:0 !important; }
+    .pp-box { padding:14px 16px; display:grid; gap:14px; }
+    .pp-box h4 { margin:0 0 6px; font-size:12.5px; color:var(--muted); font-weight:700; }
+    .pp-why { border:1px solid #f0c7c7; background:#fff8f8; border-radius:9px;
+              padding:11px 13px; font-size:13px; line-height:1.85; }
+    .pp-why + .pp-why { margin-top:8px; }
+    .pp-why.warn { border-color:#fbd38d; background:#fffaf0; }
+    .pp-why .nx { display:block; font-size:12px; color:var(--muted); margin-top:3px; }
+    .pp-dev { display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+              border:1px solid var(--border); border-radius:9px; background:#fff;
+              padding:9px 12px; font-size:12.5px; }
+    .pp-dev + .pp-dev { margin-top:6px; }
+    .pp-dev .nm { font-weight:700; }
+    .pp-dev .sub { color:var(--muted); font-size:11.5px; }
+    .pp-dev .ac { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+    .pp-web { display:flex; gap:8px; flex-wrap:wrap; font-size:12.5px; }
+    .pp-web span { border:1px solid var(--border); background:#fff;
+                   border-radius:999px; padding:3px 11px; }
+
     .dv-chips { display:flex; gap:6px; flex-wrap:wrap; }
     .dv-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border);
                border-radius:999px; padding:3px 6px 3px 11px; font-size:12px; background:#fff; }
@@ -199,11 +222,11 @@
     <div>
       <h1 class="kp-greet" style="margin:0;">端末管理</h1>
       <p class="kp-greet-sub" style="margin:4px 0 0;">
-        会社貸与PCの接続状況・セキュリティ状態を確認します。
+        社員ごとに、会社PCとブラウザ連携の状態を見ます。
       </p>
     </div>
     <button class="btn btn-secondary btn-sm" id="about-btn" onclick="toggleAbout()">
-      <span class="material-symbols-outlined icon-inline">help</span>端末管理について
+      <span class="material-symbols-outlined icon-inline">help</span>この画面について
     </button>
   </div>
 
@@ -232,19 +255,60 @@
     「周知済みにする」で、いつどう周知したかを残してください。<br>
     <b>この画面の説明は管理者向けです。</b>社員には大分類だけを伝えます
     （検知条件や判定基準は、避ける方法になるので出しません）。<br>
+    <b>ブラウザの ×（連携異常）は、すぐには出ません。</b>
+    グループウェアは使われているのに拡張から届かない、という状態が
+    <b>続いたときだけ</b> × にしています。立ち上げ直し・自動更新・一時的な停止で
+    毎日どこかが赤くなると、本当に外した人が埋もれるからです。
+    ×は「消された」ではなく「届いていない」という意味です。<br>
+    <b>登録を外せるのは管理者だけです。</b>
+    社員の画面に解除ボタンはありません。自分で外せると、
+    未登録のパソコンで入ったあと登録を消す、という道ができてしまいます。
+    外した・やり直しを頼んだことは、誰が・いつ・誰のぶんかまで記録に残ります。<br>
     <b>あなたが誰の記録を開いたかは、本人の画面に残ります。</b>
   </div>
 
   <div class="dv-tabs">
-    <button id="t-list" class="on" onclick="tab('list')">登録済み<span id="t-list-n"></span></button>
+    <button id="t-people" class="on" onclick="tab('people')">社員<span id="t-people-n"></span></button>
+    <button id="t-list" onclick="tab('list')">端末台帳<span id="t-list-n"></span></button>
     <button id="t-check" onclick="tab('check')">要確認<span id="t-check-n"></span></button>
     <button id="t-alerts" onclick="tab('alerts')">アラート<span id="t-alerts-n"></span></button>
     <button id="t-exceptions" onclick="tab('exceptions')">私物PCの承認</button>
     <button id="t-policy" onclick="tab('policy')">設定</button>
   </div>
 
-  <!-- ===== 端末 ===== -->
-  <div id="p-list">
+  <!-- ===== 社員 =====
+       普段見るのはここだけ。上から
+         KPI（正常 / 要確認 / 未設定）→ 要確認の社員 → 社員一覧
+       の順に並べて、開いた画面のまま「全員○か、誰か×か」が分かるようにする。
+       正常な人の中身は出さない。問題がある行だけ、押して開く -->
+  <div id="p-people">
+    <div id="pp-sum" class="dv-sum"></div>
+
+    <div class="card hidden" id="pp-check-card">
+      <h2><span class="material-symbols-outlined">report</span>要確認
+        <span id="pp-check-n" style="margin-left:auto;font-size:12px;color:var(--muted);"></span>
+      </h2>
+      <div id="pp-check"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="material-symbols-outlined">group</span>社員
+        <span id="pp-date" style="margin-left:auto;font-size:12px;color:var(--muted);"></span>
+      </h2>
+      <div class="table-scroll">
+        <table class="dv-table">
+          <thead><tr>
+            <th>社員</th><th>会社PC</th><th>ブラウザ</th><th>最終通信</th><th>状態</th><th></th>
+          </tr></thead>
+          <tbody id="pp-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+      <div id="pp-msg" class="err-text"></div>
+    </div>
+  </div>
+
+  <!-- ===== 端末台帳 ===== -->
+  <div id="p-list" class="hidden">
     <div id="d-sum" class="dv-sum"></div>
 
     <div class="card">
@@ -420,9 +484,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260913e"></script>
-<script src="js/device.js?v=20260913e"></script>
-<script src="js/layout.js?v=20260913e"></script>
+<script src="js/api-client.js?v=20260914c"></script>
+<script src="js/device.js?v=20260914c"></script>
+<script src="js/layout.js?v=20260914c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -430,7 +494,13 @@
   let data = null, policy = null, openDetail = null, blocked = [], filter = "";
 
   KPLayout.init({ active: "devices", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load().then(openFromLink); });
+    .then((ctx) => {
+      if (!ctx) return;
+      // 社員の一覧が、この画面の入口。台帳は必要なときだけ開く。
+      // 台帳のほうも一緒に読むのは、詳細・要確認・CSV がそれを使うため
+      loadPeople();
+      load().then(openFromLink);
+    });
 
   /**
    * 管理画面TOPから、やることの場所へ直接来られるようにする。
@@ -448,7 +518,7 @@
   }
 
   function tab(which) {
-    for (const k of ["list", "check", "alerts", "exceptions", "policy"]) {
+    for (const k of ["people", "list", "check", "alerts", "exceptions", "policy"]) {
       el(`p-${k}`).classList.toggle("hidden", k !== which);
       el(`t-${k}`).classList.toggle("on", k === which);
     }
@@ -481,6 +551,8 @@
     ownership: "会社貸与／私物を変えた", mark_notified: "周知済みにした",
     lost: "紛失として止めた", wipe: "端末の削除を指示した",
     cancel_wipe: "端末の削除を取り消した",
+    ext_unlink: "ブラウザ登録を解除した",
+    ext_reinvite: "ブラウザ登録を解除して、登録のやり直しを依頼した",
   };
 
   // インラインの onclick は window から引かれる。const の矢印関数は届かない
@@ -503,6 +575,279 @@
   }
 
 
+
+  // ---- 社員ごと ---------------------------------------------------------------
+  //
+  // ■ 見る単位を、端末から人に変えた
+  //
+  //   台帳は端末が1行だった。同じ人のPCとブラウザが離れて並び、
+  //   管理者は「この行とこの行が同じ人」を頭の中でつないでいた。
+  //
+  //   知りたいのは端末の調子ではなく、その人がちゃんと働けているか。
+  //   だから1行＝1人にして、普段はそれだけを見る。
+  //
+  // ■ 正常な人は、開かない
+  //
+  //   ○ が並んでいる人の中身を毎日開く運用は続かない。
+  //   問題がある人だけ、行を押して開く。
+  //
+  // ■ 判定の数字は画面に出さない
+  //
+  //   「何分から要確認か」は社内の管理基準（lib/watch.js の LIMITS）。
+  //   出せば、避ける方法を配ることになる。
+  //   API も「何が」と「次にどうするか」しか返してこない。
+
+  let people = null;
+  const openPeople = new Set();
+
+  async function loadPeople() {
+    try {
+      people = await API.devicePeople();
+      renderPeople();
+    } catch (e) {
+      el("pp-rows").innerHTML = `<tr><td colspan="6"><div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div></td></tr>`;
+    }
+  }
+
+  /** 要確認の人が先。API は2つに分けて返してくる */
+  function peopleRows() {
+    if (!people) return [];
+    return [...(people.check || []), ...(people.people || [])];
+  }
+
+  /**
+   * 会社PC。
+   *
+   * ○ 登録済 … 本人が周知を確認した端末がある（ここまでで記録が始まる）
+   * △ 確認待ち … 端末はあるが、まだ押されていない（1件も届かない）
+   * — 未登録 … まだ何も無い
+   */
+  function pcMark(p) {
+    const ds = p.devices || [];
+    if (!ds.length) return { k: "none", m: "—", t: "未登録" };
+    if (ds.some((d) => d.confirmed)) return { k: "ok", m: "○", t: "登録済" };
+    return { k: "warn", m: "△", t: "確認待ち" };
+  }
+
+  /**
+   * ブラウザ連携。× を「削除された」とは書かない。
+   *
+   * 分かっているのは「届いていない」ことだけで、
+   * 止めたのか、消したのか、壊れたのかまでは分からない。
+   * しかも一瞬で決めると、立ち上げ直し・自動更新で誤検知する。
+   * だから API 側で「続いた時間」を見てから × にしている
+   */
+  function extMark(p) {
+    const e = p.ext || { key: "none", mark: "—", label: "" };
+    const k = e.key === "ok" ? "ok" : e.key === "removed" ? "silent"
+      : e.key === "off" ? "warn" : "none";
+    return { k, m: e.mark, t: e.label };
+  }
+
+  function renderPeople() {
+    const rows = peopleRows();
+
+    // 3つに分ける。重なりを作らない。
+    //   未設定 … まだ使い始めていない人（責めるところではない）
+    //   要確認 … 使っているが、人が見たほうがよいことがある人
+    //   正常   … それ以外
+    const notSet = rows.filter((p) => ["off", "none"].includes(p.ext?.key));
+    const check = rows.filter((p) => !notSet.includes(p) && (p.issues || []).length);
+    const ok = rows.length - notSet.length - check.length;
+
+    el("pp-sum").innerHTML = `
+      <div class="box"><div class="k">社員</div><div class="v">${rows.length}</div></div>
+      <div class="box"><div class="k">正常</div><div class="v">${ok}</div></div>
+      <div class="box${check.length ? " bad" : ""}"><div class="k">要確認</div>
+        <div class="v">${check.length}</div></div>
+      <div class="box"><div class="k">未設定</div><div class="v">${notSet.length}</div></div>`;
+
+    el("t-people-n").textContent = check.length ? `（${check.length}）` : "";
+    el("pp-date").textContent = people?.date ? `${people.date} 時点` : "";
+
+    // 要確認の人。ここが空なら、カードごと出さない。
+    // 「0件です」と書いたカードが毎日あると、画面がそのぶん長くなる
+    const bad = rows.filter((p) => (p.issues || []).length);
+    el("pp-check-card").classList.toggle("hidden", !bad.length);
+    el("pp-check-n").textContent = bad.length ? `${bad.length}人` : "";
+    el("pp-check").innerHTML = bad.map((p) => `
+      <div class="dv-issue">
+        <div class="hd">
+          <span class="nm click" onclick="togglePerson('${p.employeeId}', true)"
+            >${esc(p.name)}</span>
+          ${p.department ? `<span class="sub">${esc(p.department)}</span>` : ""}
+          <span class="dv-mk ${esc(p.mark.k)}">${esc(p.mark.m)}</span>
+        </div>
+        ${(p.issues || []).map((i) => `
+          <div class="ln">
+            <span class="dv-st ${i.sev === "critical" ? "critical" : "warn"}">${
+              i.sev === "critical" ? "重大" : "要確認"}</span>
+            <span class="wt">${esc(i.what)}</span>
+          </div>`).join("")}
+      </div>`).join("");
+
+    if (!rows.length) {
+      el("pp-rows").innerHTML = `<tr><td colspan="6" class="muted">
+        社員がまだ登録されていません。</td></tr>`;
+      return;
+    }
+
+    // 手を打つものから上に。同じ重さなら名前順（API が名前順で返してくる）
+    const w = (p) => (p.mark.k === "bad" || p.mark.k === "silent" ? 0
+      : p.mark.k === "warn" ? 1 : 2);
+    el("pp-rows").innerHTML = [...rows].sort((a, b) => w(a) - w(b)).map((p) => {
+      const pc = pcMark(p);
+      const ex = extMark(p);
+      const open = openPeople.has(p.employeeId);
+      return `
+      <tr class="click" onclick="togglePerson('${p.employeeId}')">
+        <td><span class="nm">${esc(p.name)}</span>${
+          p.department ? `<span class="sub">${esc(p.department)}</span>` : ""}</td>
+        <td><span class="dv-mk ${pc.k}">${pc.m}</span> <span class="sub"
+          style="display:inline;">${esc(pc.t)}</span></td>
+        <td><span class="dv-mk ${ex.k}">${ex.m}</span> <span class="sub"
+          style="display:inline;">${esc(ex.t)}</span></td>
+        <td>${esc(p.lastSeen)}</td>
+        <td><span class="dv-mk ${esc(p.mark.k)}">${esc(p.mark.m)}</span> ${esc(p.mark.t)}</td>
+        <td><span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);"
+          >${open ? "expand_less" : "expand_more"}</span></td>
+      </tr>
+      <tr class="pp-det${open ? "" : " hidden"}" id="pp-d-${p.employeeId}">
+        <td colspan="6">${open ? personBox(p) : ""}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  /** 行を開く／閉じる。開くのは、見たい人の行だけ */
+  function togglePerson(employeeId, force) {
+    if (openPeople.has(employeeId) && !force) openPeople.delete(employeeId);
+    else openPeople.add(employeeId);
+    renderPeople();
+    if (openPeople.has(employeeId)) {
+      tab("people");
+      el(`pp-d-${employeeId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  /** 開いたときの中身。ここではじめて、その人の細かいところを出す */
+  function personBox(p) {
+    const issues = p.issues || [];
+    const devs = p.devices || [];
+    return `<div class="pp-box">
+      ${issues.length ? `<div>
+        <h4>見ておくこと</h4>
+        ${issues.map((i) => `
+          <div class="pp-why${i.sev === "critical" ? "" : " warn"}">
+            ${esc(i.what)}
+            <span class="nx">→ ${esc(i.next)}</span>
+          </div>`).join("")}
+      </div>` : ""}
+
+      <div>
+        <h4>勤務とWEB利用</h4>
+        <div class="pp-web">
+          <span>${esc(p.work.label)}</span>
+          <span>WEB利用 ${esc(p.web.label)}</span>
+          ${p.clockMin != null ? `<span>打刻 ${esc(clock(p.clockMin))}</span>` : ""}
+          ${(p.web.top || []).map((t) => `<span>${esc(t.category)} ${t.min}分</span>`).join("")}
+          <button class="btn btn-secondary btn-sm"
+            onclick="event.stopPropagation();openPersonWeb('${p.employeeId}')"
+            >WEB利用を見る</button>
+        </div>
+      </div>
+
+      <div>
+        <h4>端末</h4>
+        ${devs.length ? devs.map((d) => deviceLine(d)).join("")
+          : `<p class="muted" style="font-size:12.5px;margin:0;">
+               まだ1台もありません。本人がマイページから登録します。</p>`}
+      </div>
+    </div>`;
+  }
+
+  /**
+   * その人の端末1台ぶん。
+   *
+   * ■ 登録を外せるのは管理者だけ
+   *
+   *   社員側の画面には、登録を解除するボタンを出していない。
+   *   自分で外せると、私物や未登録のパソコンで入ったあと
+   *   登録を外して見えなくする、という道ができる。
+   *   だから「外す」はここにしかない。
+   *
+   *   押したことは、端末のできごとにも監査ログにも残る
+   *   （誰が・いつ・誰のブラウザ登録を変えたか）。
+   */
+  function deviceLine(d) {
+    const isBrowser = d.source === "browser";
+    const stopped = d.status === "suspended" || d.status === "retired";
+    return `<div class="pp-dev">
+      <span class="dv-src ${esc(d.source)}">${isBrowser ? "ブラウザ" : "PC"}</span>
+      <span class="nm">${esc(d.label || "（名前なし）")}</span>
+      <span class="sub">最終通信 ${esc(d.lastSeen)}${
+        isBrowser ? ` ／ 拡張 ${esc(d.extSeen)}` : ""}</span>
+      ${d.extMissingFrom
+        ? `<span class="dv-st critical">${esc(d.extMissingFrom)}から届いていません</span>` : ""}
+      ${stopped ? `<span class="dv-st warn">利用停止中</span>` : ""}
+      <span class="ac">
+        ${isBrowser && d.registered ? `
+          <button class="btn btn-secondary btn-sm"
+            onclick="event.stopPropagation();extAct('${d.id}','ext_reinvite',this)"
+            >再登録を依頼</button>
+          <button class="btn btn-secondary btn-sm"
+            onclick="event.stopPropagation();extAct('${d.id}','ext_unlink',this)"
+            >登録解除</button>` : ""}
+        ${stopped
+          ? `<button class="btn btn-secondary btn-sm"
+               onclick="event.stopPropagation();extAct('${d.id}','resume',this)">利用再開</button>`
+          : `<button class="btn btn-secondary btn-sm"
+               onclick="event.stopPropagation();extAct('${d.id}','suspend',this)">利用停止</button>`}
+        <button class="btn btn-secondary btn-sm"
+          onclick="event.stopPropagation();openPersonDevice('${d.id}')">記録を見る</button>
+      </span>
+    </div>`;
+  }
+
+  // 押す前に、何が起きるかを1行で言う。
+  // 「登録解除」は本人の画面から消えるだけでなく、WEB利用が取れなくなる
+  const EXT_ASK = {
+    ext_unlink: "このパソコンのブラウザ登録を解除します。"
+      + "解除すると、このパソコンからのWEB利用は記録されなくなります。"
+      + "これまでの記録は消えません。よろしいですか？",
+    ext_reinvite: "いまの登録を解除して、本人に登録のやり直しをお願いします。"
+      + "拡張をこちらから入れ直すことはできません。よろしいですか？",
+    suspend: "この端末からの記録を止めます。あとで再開できます。よろしいですか？",
+    resume: "この端末の記録を再開します。よろしいですか？",
+  };
+
+  async function extAct(deviceId, action, btn) {
+    if (!confirm(EXT_ASK[action])) return;
+    try {
+      const r = await KPLayout.busy(btn, "…", () => API.patchDevice({ deviceId, action }));
+      el("pp-msg").textContent = r.notified
+        ? "登録を解除して、本人に登録のやり直しをお願いしました。"
+        : "変更しました。";
+      await loadPeople();
+      await load();
+    } catch (e) {
+      el("pp-msg").textContent = e.hint || e.message || "変更できませんでした";
+    }
+  }
+
+  /** 台帳のほうで開く。詳細とWEB利用は、そちらの仕組みをそのまま使う */
+  function openPersonDevice(deviceId) {
+    tab("list");
+    showDetail(deviceId);
+  }
+  function openPersonWeb(employeeId) {
+    // 名前は控えから引く。onclick の中に人名を埋め込むと、
+    // 「'」の入った名前でその行だけ動かなくなる
+    const p = peopleRows().find((x) => x.employeeId === employeeId);
+    tab("list");
+    openWeb(employeeId, p?.name || "");
+  }
 
   /**
    * 登録が終わっている会社PCか。

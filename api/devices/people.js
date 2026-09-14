@@ -70,6 +70,17 @@ export default async function handler(req, res) {
           + "notified_at, ownership, last_seen_at, secret_hash, linked_device_id, installed_at")
     .eq("tenant_id", ctx.tenantId).limit(1000);
 
+  // 「拡張から届かなくなった時刻」は 067 で足した列。
+  // まだ流していない環境でも一覧そのものは出したいので、別に引く。
+  // ここが取れないときは、×（連携異常）を出さないだけにする
+  const missing = new Map();
+  {
+    const { data: ms } = await sb.from("gw_devices")
+      .select("id, ext_missing_since")
+      .eq("tenant_id", ctx.tenantId).limit(1000);
+    for (const m of ms || []) if (m.ext_missing_since) missing.set(m.id, m.ext_missing_since);
+  }
+
   // 拡張がつながっているか。gw_device_browsers の linked が正
   const linked = new Map();
   {
@@ -91,6 +102,8 @@ export default async function handler(req, res) {
       id: d.id, source: d.source,
       label: d.hostname || d.label,
       browser: d.browser,
+      // 止めてあるか。管理者の「利用停止／再開」を、どちらで出すかに要る
+      status: d.status,
       confirmed: Boolean(d.notified_at),
       ownership: d.ownership || "unknown",
       lastSeenAt: d.last_seen_at,
@@ -103,6 +116,9 @@ export default async function handler(req, res) {
       // 拡張から最後に届いた時刻。台帳の合図（last_seen_at）とは別。
       // 「そのブラウザは使っているのに、拡張からだけ届かない」を見るため
       extSeenAt: brs.map((b) => b.last_seen_at).filter(Boolean).sort().pop() || null,
+      // 届かない状態が、いつから続いているか。
+      // 一瞬で決めると、立ち上げ直し・更新・一時停止で誤検知する
+      extMissingSince: missing.get(d.id) || null,
       browsers: brs.map((b) => ({ browser: b.browser, label: browserLabel(b.browser),
                                   linked: b.linked, extVersion: b.ext_version })),
     });
@@ -191,12 +207,16 @@ export default async function handler(req, res) {
       clockMin,
       devices: mine.map((d) => ({
         id: d.id, source: d.source, label: d.label,
+        status: d.status,
         confirmed: d.confirmed, ownership: d.ownership,
         extLinked: d.extLinked && !extGone(d, now),
         registered: Boolean(d.registeredAt),
         browsers: d.browsers,
         lastSeen: sinceLabel(d.lastSeenAt, now, "なし"),
         extSeen: sinceLabel(d.extSeenAt, now, "なし"),
+        // 「いつから届かないか」。続いているときだけ出す。
+        // 何分で × にするかは出さない（避け方を配ることになる）
+        extMissingFrom: extGone(d, now) ? sinceLabel(d.extMissingSince, now, "") : null,
       })),
       // 「何が」と「次にどうするか」だけ。数字は返さない
       issues,

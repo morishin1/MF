@@ -631,6 +631,63 @@ async function patch(req, res, ctx, user) {
       extra = { from: dev.linked_device_id };
     }
     event = "unlinked";
+  } else if (action === "ext_unlink" || action === "ext_reinvite") {
+    // ブラウザ拡張の登録を、管理者が外す。
+    //
+    // ■ 社員側にこの操作は出していない
+    //
+    //   自分で外せると、私物や未登録のパソコンで入ったあと
+    //   登録を外して見えなくする、という道ができる。
+    //   だから外せるのは管理者だけ、と決めてある（api/devices/me.js の forget）。
+    //   その「管理者だけ」の実体がここ。
+    //
+    // ■ 記録は消さない
+    //
+    //   消すのは資格情報（secret_hash）と「登録済み」の印だけ。
+    //   これまでの WEB利用も、できごとも、そのまま残る。
+    //   外した事実も、下で できごと と 監査ログ の両方に残す。
+    //
+    // ■ 「再登録」は、こちらから入れ直すことはできない
+    //
+    //   拡張はブラウザの中にあって、サーバからは入れられない。
+    //   できるのは、いまの登録をきれいに外して、
+    //   本人に「マイページから登録してください」と知らせるところまで。
+    //   押した管理者に、そう分かる返事を返す
+    if (dev.source !== "browser") {
+      return json(res, 400, {
+        error: "bad_request",
+        hint: "ブラウザの登録に対する操作です。パソコン（常駐ソフト）の行では使えません",
+      });
+    }
+    patchRow.secret_hash = null;
+    patchRow.installed_at = null;
+    // 「いつから届かないか」も下ろす。外したあとまで数え続けると、
+    // 管理者が外したものが「連携異常」として赤く出続ける
+    extra = { extCleared: true };
+    event = action === "ext_unlink" ? "ext_unlinked" : "ext_reinvited";
+
+    await sb.from("gw_device_browsers")
+      .update({ linked: false, updated_at: now })
+      .eq("device_id", dev.id).eq("tenant_id", ctx.tenantId);
+
+    // 067 をまだ流していない環境でも、外すことそのものは通す
+    try {
+      await sb.from("gw_devices").update({ ext_missing_since: null }).eq("id", dev.id);
+    } catch (e) { /* 067 がまだ */ }
+
+    if (action === "ext_reinvite" && dev.employee_id) {
+      await notify([{
+        tenantId: ctx.tenantId,
+        employeeId: dev.employee_id,
+        kind: "device_confirm",
+        title: "パソコンの登録をやり直してください",
+        body: "ブラウザ拡張からの通信が確認できないため、登録を一度外しました。"
+            + "マイページを開いて、もう一度このパソコンを登録してください。",
+        link: "mypage.html",
+        dedupeKey: "device_ext_reinvite",
+      }]);
+      extra.notified = true;
+    }
   } else if (action === "ownership") {
     // 会社貸与か私物か。
     // 私物PCでの業務利用は禁止なので、ここを付けると管理画面で目立つ
@@ -769,10 +826,23 @@ async function patch(req, res, ctx, user) {
         : {},
     });
   }
+  // 誰が・いつ・**誰の**端末を変えたか。
+  // 端末のIDだけ残しても、あとから読む人には誰のことか分からない。
+  // 台帳の行が消えたり付け替わったりしても、監査ログのほうは読めるようにする
+  let whose = null;
+  if (dev.employee_id) {
+    const { data: who } = await sb.from("gw_employees")
+      .select("display_name").eq("id", dev.employee_id)
+      .eq("tenant_id", ctx.tenantId).limit(1).maybeSingle();
+    whose = who?.display_name || null;
+  }
+
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
                 action: `device.${action}`, target: deviceId,
                 detail: { label: patchRow.label || dev.hostname || dev.label,
-                          source: dev.source, ...extra } });
+                          source: dev.source,
+                          employeeId: dev.employee_id || null, employee: whose,
+                          ...extra } });
   return json(res, 200, { ok: true, ...extra });
 }
 

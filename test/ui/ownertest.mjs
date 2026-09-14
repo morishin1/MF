@@ -80,6 +80,8 @@ await page.addInitScript(() => {
 
 await page.goto(`${BASE}/admin-devices.html`);
 await page.waitForTimeout(1600);
+await page.click("#t-list");
+await page.waitForTimeout(300);
 
 console.log("— 一覧 —");
 {

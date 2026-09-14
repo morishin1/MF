@@ -247,6 +247,9 @@ function wire(page, me) {
 
   await page.goto(`${BASE}/admin-devices.html`);
   await page.waitForTimeout(1500);
+  // 入口は社員ごとの画面になった。台帳はタブの中
+  await page.click("#t-list");
+  await page.waitForTimeout(300);
 
   // 一覧そのもの（登録済みだけを1台1行で出す・要確認は別）は
   // test/ui/dvui.mjs が見る。ここでは、開けることだけ確かめる
@@ -403,11 +406,14 @@ function wire(page, me) {
   console.log("— 管理画面のタブ —");
   {
     const tabs = [];
-    for (const id of ["t-list", "t-check", "t-alerts", "t-exceptions", "t-codes", "t-policy"]) {
+    for (const id of ["t-people", "t-list", "t-check", "t-alerts", "t-exceptions",
+                      "t-codes", "t-policy"]) {
       if (await page.locator(`#${id}`).count()) tabs.push(await page.locator(`#${id}`).textContent());
     }
-    check(tabs.length === 5, `タブは5つ（いま ${tabs.length}）`);
-    check(tabs.some((t) => t.includes("登録済み")), "登録済み");
+    check(tabs.length === 6, `タブは6つ（いま ${tabs.length}）`);
+    // 入口は社員ごとの画面。端末が1行の台帳は、その下のタブに移した
+    check(tabs.some((t) => t.includes("社員")), "社員");
+    check(tabs.some((t) => t.includes("端末台帳")), "端末台帳");
     check(tabs.some((t) => t.includes("要確認")), "要確認");
     check(tabs.some((t) => t.includes("アラート")), "アラート");
     check(tabs.some((t) => t.includes("私物PCの承認")), "私物PCの承認");

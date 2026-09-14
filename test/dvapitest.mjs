@@ -324,6 +324,73 @@ await ok("深夜がたまったらアラートを立てる", async () => {
   assert.equal(a.rows[0].severity, "warn", "要確認どまり");
 });
 
+console.log("— 拡張が届かなくなったら、いつからかを置く —");
+//
+//   その場の一瞬で決めると、誤検知する。
+//   ブラウザの立ち上げ直し・拡張の自動更新・一時的な停止でも、
+//   「合図は来ているのに拡張からは届かない」は普通に起きる。
+//   毎日どこかの誰かが赤くなると、本当に外した人が埋もれる。
+//   だから合図のたびに「いつから続いているか」だけを置いて、
+//   × にするかどうかは見る側（lib/watch.js）が決める。
+
+const extUp = () => wrote("gw_devices", "update")
+  .filter((w) => Object.keys(w.row).join() === "ext_missing_since");
+
+await ok("拡張から届いていなければ、時刻を置く", async () => {
+  reset([device({ installed_at: "2026-09-01T00:00:00Z", last_seen_at: new Date(Date.now() - 60000).toISOString() })]);
+  db.rows.gw_device_browsers = [{
+    tenant_id: "t1", device_id: "d1",
+    last_seen_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+  }];
+  await me(post({ action: "beat", deviceUid: UID }), res());
+  const w = extUp();
+  assert.equal(w.length, 1, "1回だけ書く");
+  assert.ok(w[0].row.ext_missing_since, "いつからかを置く");
+});
+
+await ok("拡張から届いていれば、時刻を消す", async () => {
+  reset([device({ installed_at: "2026-09-01T00:00:00Z",
+                  ext_missing_since: "2026-09-01T00:00:00Z" })]);
+  db.rows.gw_device_browsers = [{
+    tenant_id: "t1", device_id: "d1", last_seen_at: new Date().toISOString(),
+  }];
+  await me(post({ action: "beat", deviceUid: UID }), res());
+  assert.equal(extUp()[0].row.ext_missing_since, null);
+});
+
+await ok("すでに立っていれば、いつからかを上書きしない", async () => {
+  // ここを上書きすると、いつまでも「さっきから」になって × に届かない
+  reset([device({ installed_at: "2026-09-01T00:00:00Z",
+                  last_seen_at: new Date(Date.now() - 60000).toISOString(),
+                  ext_missing_since: new Date(Date.now() - 3 * 3600000).toISOString() })]);
+  db.rows.gw_device_browsers = [{
+    tenant_id: "t1", device_id: "d1",
+    last_seen_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+  }];
+  await me(post({ action: "beat", deviceUid: UID }), res());
+  assert.equal(extUp().length, 0, "触らない");
+});
+
+await ok("合図が途切れていたら、時計を引き直す", async () => {
+  // ブラウザを閉じていた。開き直した直後は、拡張がまだ1回も送っていない。
+  // 前の時刻を引き継ぐと、開いた瞬間に × になる
+  const old = new Date(Date.now() - 5 * 3600000).toISOString();
+  reset([device({ installed_at: "2026-09-01T00:00:00Z",
+                  last_seen_at: old, ext_missing_since: old })]);
+  db.rows.gw_device_browsers = [{ tenant_id: "t1", device_id: "d1", last_seen_at: old }];
+  await me(post({ action: "beat", deviceUid: UID }), res());
+  const w = extUp();
+  assert.equal(w.length, 1);
+  assert.ok(Date.parse(w[0].row.ext_missing_since) > Date.parse(old), "引き直す");
+});
+
+await ok("一度も登録していないブラウザには、何も置かない", async () => {
+  reset([device({ installed_at: null })]);
+  db.rows.gw_device_browsers = [];
+  await me(post({ action: "beat", deviceUid: UID }), res());
+  assert.equal(extUp().length, 0, "「未設定」と「外れた」を混ぜない");
+});
+
 console.log("— 停止・使用終了の端末 —");
 await ok("使用終了にした端末からは、数えない", async () => {
   reset([device({ status: "retired" })]);

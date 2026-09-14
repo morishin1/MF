@@ -147,8 +147,12 @@ const logged = [];
 mock.module(atRoot("lib/gw-audit.js"), {
   namedExports: { gwLog: async (e) => { logged.push(e); } },
 });
+const told = [];
 mock.module(atRoot("lib/notify.js"), {
-  namedExports: { notify: async () => ({ created: 0 }), clearNotification: async () => {} },
+  namedExports: {
+    notify: async (list) => { told.push(...[].concat(list)); return { created: told.length }; },
+    clearNotification: async () => {},
+  },
 });
 
 const { default: devs } = await import(atRoot("api/devices/index.js"));
@@ -188,6 +192,7 @@ const DEV_ID = "11111111-1111-1111-1111-111111111111";
 /** まっさらな状態に戻す。登録が終わって、ふつうに動いているPC1台 */
 function setup() {
   logged.length = 0;
+  told.length = 0;
   ctxNow = {
     tenantId: "t1", isAdmin: true, isHr: true, roles: ["owner"],
     employee: { id: "emp-admin", display_name: "事務" },
@@ -489,6 +494,92 @@ await ok("削除待ちを「再開」では戻さない", async () => {
 });
 
 // ---------------------------------------------------------------------------
+console.log("\n— ブラウザ登録は、管理者しか外せない —");
+//
+//   社員の画面に「登録を外す」は出していない（api/devices/me.js の forget が 403）。
+//   自分で外せると、未登録のパソコンで入ったあと登録を消す、という道ができる。
+//   止められるのはここだけなので、ここが効いていることを確かめる。
+
+/** ブラウザの行を1つ足す。登録済み・拡張とつながっている状態 */
+function browserRow(over = {}) {
+  const id = "22222222-2222-2222-2222-222222222222";
+  db.rows.gw_devices.push({
+    id, tenant_id: "t1", device_uid: "uid-b", label: "Windows の Chrome",
+    source: "browser", hostname: null, browser: "Chrome",
+    status: "active", notified_at: "2026-09-01T00:00:00Z",
+    installed_at: "2026-09-01T00:00:00Z", ext_missing_since: "2026-09-13T00:00:00Z",
+    employee_id: "emp-1", ownership: "company", secret_hash: sha256("ext-secret"),
+    linked_device_id: null, last_seen_at: "2026-09-14T00:00:00Z",
+    revoked_at: null, lost_at: null, wipe_requested_at: null,
+    wipe_done_at: null, deleted_at: null,
+    ...over,
+  });
+  db.rows.gw_device_browsers.push({
+    tenant_id: "t1", device_id: id, browser: "chrome",
+    installed: true, linked: true, ext_version: "2.0.0",
+    last_seen_at: "2026-09-13T00:00:00Z",
+  });
+  return id;
+}
+
+await ok("登録解除で、資格情報と「登録済み」の印が消える", async () => {
+  setup();
+  const id = browserRow();
+  const r = await patch({ action: "ext_unlink", deviceId: id });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const d = db.rows.gw_devices.find((x) => x.id === id);
+  assert.equal(d.secret_hash, null, "資格情報を失効させる");
+  assert.equal(d.installed_at, null, "「登録済み」を下ろす");
+  assert.equal(db.rows.gw_device_browsers[0].linked, false);
+});
+
+await ok("解除しても、これまでの記録は消さない", async () => {
+  setup();
+  const id = browserRow();
+  await patch({ action: "ext_unlink", deviceId: id });
+  assert.equal(db.rows.gw_device_usage.length, 1);
+  assert.equal(db.rows.gw_device_web_visits.length, 1);
+});
+
+await ok("解除したら、「連携異常」の時計も下ろす", async () => {
+  // 管理者が外したものが、そのあとも赤く出続けるのはおかしい
+  setup();
+  const id = browserRow();
+  await patch({ action: "ext_unlink", deviceId: id });
+  assert.equal(db.rows.gw_devices.find((x) => x.id === id).ext_missing_since, null);
+});
+
+await ok("再登録は、解除したうえで本人にお願いする", async () => {
+  // 拡張はブラウザの中にある。サーバから入れ直すことはできない
+  setup();
+  const id = browserRow();
+  const r = await patch({ action: "ext_reinvite", deviceId: id });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.notified, true);
+  assert.equal(told.length, 1, "本人に1通");
+  assert.equal(told[0].employeeId, "emp-1");
+  assert.ok(/登録/.test(told[0].title), told[0].title);
+});
+
+await ok("解除も再登録も、誰が・誰のぶんを、が残る", async () => {
+  setup();
+  const id = browserRow();
+  await patch({ action: "ext_unlink", deviceId: id });
+  const a = logged.find((x) => x.action === "device.ext_unlink");
+  assert.ok(a, logged.map((x) => x.action).join(","));
+  assert.equal(a.actorId, "u-admin", "誰が");
+  assert.equal(a.target, id, "どの端末を");
+  assert.equal(a.detail.employee, "山田 太郎", "誰のぶんか");
+  const ev = db.rows.gw_device_events.find((e) => e.kind === "ext_unlinked");
+  assert.ok(ev, "端末のできごとにも残る");
+});
+
+await ok("パソコン（常駐ソフト）の行では使えない", async () => {
+  setup();
+  const r = await patch({ action: "ext_unlink", deviceId: DEV_ID });
+  assert.equal(r.statusCode, 400);
+});
+
 console.log("\n— 監査に残るか —");
 
 await ok("誰が・いつ・どの端末に削除を指示したか", async () => {

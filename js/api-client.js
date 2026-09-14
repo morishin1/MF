@@ -565,6 +565,12 @@
   // 登録コードの発行・使用の履歴（監査）
   const deviceEnrollments = () => api("/api/devices?enrollments=1");
 
+  // 社員ごとの様子。管理者が普段見るのはこちらで、台帳は必要なときだけ開く。
+  // 端末を1行ずつ並べると、同じ人のPCとブラウザが離れて並び、
+  // 「この行とこの行が同じ人」を管理者が頭の中でつなぐことになる
+  const devicePeople = (date) =>
+    api(`/api/devices/people${date ? `?date=${encodeURIComponent(date)}` : ""}`);
+
   // WEB利用。その人を開いたときだけ呼ぶ（一覧では呼ばない）。
   // 呼ぶと「見た」記録が本人の画面に残る
   const deviceWeb = (p = {}) => {
@@ -1040,7 +1046,7 @@
     closing, patchClosing, downloadClosingCsv,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
     browserCode,
-    devices, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
+    devices, devicePeople, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,
     deviceExceptions, approveDeviceException, revokeDeviceException,
     startDeviceSetup, deviceSetupState, deviceSetupPolicy,
     devicePolicy, saveDevicePolicy, downloadDeviceCsv,

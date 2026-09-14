@@ -460,6 +460,10 @@ async function beat(req, res, ctx, sb, body) {
   await sb.from("gw_devices")
     .update({ last_seen_at: nowIso, updated_at: nowIso }).eq("id", dev.id);
 
+  // この合図は「そのブラウザを使っている」という意味でもある。
+  // 拡張が入っているはずなのに、拡張からだけ届かないなら、そこを記録しておく
+  await markExtGap(sb, dev, nowIso);
+
   // ここが要。本人が確認するまで、利用時間は1分も数えない
   if (!dev.notified_at) {
     return json(res, 200, { ok: true, deviceUid: uid, confirmed: false, first });
@@ -487,6 +491,83 @@ async function beat(req, res, ctx, sb, body) {
     ok: true, deviceUid: uid, confirmed: true,
     today: { activeMin: u.activeMin, active: clock(u.activeMin) },
   });
+}
+
+// ---- 拡張が外れていないか ----------------------------------------------------
+/** 拡張から最近届いていると見なす時間（分）。拡張は1分ごとに送る */
+const EXT_FRESH_MIN = 10;
+
+/**
+ * 「グループウェアは使っているのに、拡張からは届かない」を、続いた時間で見る。
+ *
+ * ■ その場の一瞬で判断すると、誤検知する
+ *
+ *   合図は来ているのに拡張からは届かない、という状態は、
+ *   外していなくても普通に起きる。
+ *
+ *     ・ブラウザを立ち上げ直した直後（拡張がまだ1回も送っていない）
+ *     ・拡張の自動更新中
+ *     ・拡張が落ちて、すぐ上がった
+ *
+ *   その瞬間を見て × にすると、毎日どこかの誰かが赤くなる。
+ *   赤が日常になると、本当に外した人が埋もれる。
+ *
+ * ■ だから「いつから続いているか」だけを置く
+ *
+ *   合図が来るたびに（画面から5分おき）
+ *     拡張から最近届いている → 消す
+ *     しばらく届いていない   → 空なら立てる（立っていれば、そのまま触らない）
+ *
+ *   × にするかどうかは、ここでは決めない。見る側（lib/watch.js）が決める。
+ *   立ち上げ直しや更新なら、次の合図までに拡張が送ってきて消える。
+ *
+ * ■ ここで落ちても、合図そのものは通す
+ *
+ *   067 をまだ流していない環境で、画面の心臓が止まるほうが困る
+ */
+async function markExtGap(sb, dev, nowIso) {
+  try {
+    const { data: row, error } = await sb.from("gw_devices")
+      .select("installed_at, ext_missing_since").eq("id", dev.id).maybeSingle();
+    if (error || !row) return;
+
+    // 一度も登録していないブラウザは、そもそも外れようがない。
+    // ここを「未接続（△）」と混ぜない
+    if (!row.installed_at) {
+      if (row.ext_missing_since) {
+        await sb.from("gw_devices").update({ ext_missing_since: null }).eq("id", dev.id);
+      }
+      return;
+    }
+
+    const { data: brs } = await sb.from("gw_device_browsers")
+      .select("last_seen_at").eq("device_id", dev.id).limit(10);
+    const last = (brs || []).map((b) => b.last_seen_at).filter(Boolean).sort().pop();
+    const fresh = last
+      && (Date.parse(nowIso) - Date.parse(last)) <= EXT_FRESH_MIN * 60000;
+
+    if (fresh) {
+      // 届いている。立っていたら下ろす
+      if (row.ext_missing_since) {
+        await sb.from("gw_devices").update({ ext_missing_since: null }).eq("id", dev.id);
+      }
+      return;
+    }
+
+    // 合図そのものが途切れていたなら、ブラウザを閉じていた。
+    // 開き直した直後は、拡張がまだ1回も送っていないのが普通なので、
+    // 前に立てた時刻をそのまま引き継ぐと、開いた瞬間に × になる。
+    // 閉じていたぶんは数えない ＝ ここで時計を引き直す
+    const gap = !dev.last_seen_at
+      || (Date.parse(nowIso) - Date.parse(dev.last_seen_at)) > EXT_FRESH_MIN * 60000;
+
+    // 届いていない。すでに立っているなら「いつから」を上書きしない
+    if (!row.ext_missing_since || gap) {
+      await sb.from("gw_devices").update({ ext_missing_since: nowIso }).eq("id", dev.id);
+    }
+  } catch (e) {
+    console.error("[devices/me] extGap", e?.message || e);
+  }
 }
 
 // ---- 小物 -------------------------------------------------------------------
