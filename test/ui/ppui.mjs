@@ -86,6 +86,24 @@ const PEOPLE = {
 const LIST = { devices: [], alerts: [], people: [],
                summary: { total: 0 }, deleted: 0, canWipe: true, ownerships: [] };
 
+// 端末を1台も持たない人の WEB利用。
+// 中身は空でも、形は持っている人と同じであること（api/devices/web.js の dayShape）
+const WEB = {
+  range: { key: "today", label: "今日", from: "2026-09-14", to: "2026-09-14" },
+  scope: "work",
+  total: { seconds: 0, label: "0:00" },
+  byCategory: [], visits: [], alerts: [], hosts: [],
+  day: {
+    date: "2026-09-14", work: null,
+    usage: { firstAt: null, lastAt: null, activeMin: 0, activeText: "0:00",
+             idleMin: 0, idleText: "0:00", lockedMin: 0, nightMin: 0 },
+    appMin: 0, appText: "0:00", nightSec: 0,
+    verdict: { key: "check", mark: "△", label: "未設定",
+               note: "この方の端末がまだ登録されていません。"
+                   + "本人にマイページから登録してもらってください" },
+  },
+};
+
 const br = await launch();
 let bad = 0;
 const errs = [];
@@ -113,6 +131,7 @@ await page.route("**/api/**", (route) => {
   if (req.method() === "PATCH") { sent.push(body); return send({ ok: true, notified: true }); }
   if (/\/api\/me\b/.test(url)) return send(me);
   if (/\/api\/devices\/people/.test(url)) return send(PEOPLE);
+  if (/\/api\/devices\/web/.test(url)) return send(WEB);
   if (/\/api\/devices\/alerts/.test(url)) return send({ alerts: [] });
   if (/\/api\/devices/.test(url)) return send(LIST);
   if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
@@ -215,6 +234,22 @@ console.log("— 開いた行は閉じられる —");
   await page.locator("#pp-rows tr:not(.pp-det)", { hasText: "佐藤 花子" }).first().click();
   await page.waitForTimeout(300);
   check(!(await page.locator("#pp-d-emp-2").isVisible()), "もう一度押すと閉じる");
+}
+
+// ---- 端末を持たない人 ----------------------------------------------------------
+console.log("— 端末が1台も無い人を開いても、落ちない —");
+{
+  await page.locator("#pp-rows tr:not(.pp-det)", { hasText: "高橋 三郎" }).first().click();
+  await page.waitForTimeout(300);
+  const t = await page.locator("#pp-d-emp-4").innerText();
+  check(/まだ1台もありません/.test(t), "端末が無いと書いてある");
+
+  await page.locator("#pp-d-emp-4 button", { hasText: "WEB利用を見る" }).click();
+  await page.waitForTimeout(500);
+  const w = await page.locator("#d-web").innerText();
+  check(/高橋 三郎/.test(w), "その人の WEB利用が開く");
+  check(/記録なし/.test(w), "PC稼働は「記録なし」");
+  check(!/error|Cannot read/i.test(w), `画面が落ちていない：${w.slice(0, 80)}`);
 }
 
 check(errs.length === 0, `画面のエラーなし${errs.length ? "：" + errs[0] : ""}`);

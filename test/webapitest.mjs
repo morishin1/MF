@@ -596,6 +596,44 @@ await ok("1日の様子が、勤務・PC稼働・WEB・アプリ・離席で出�
   assert.equal(d.appText, "2:03");
   assert.ok(d.verdict.mark);
 });
+// 端末を1台も持たない人を開いても、画面が落ちないこと。
+//
+//   前はここだけ { entry, usage: null } という別の形を返していて、
+//   受け取る画面は usage がある前提で書いてあったので、
+//   その人を開いた瞬間に画面ごと落ちていた（usage の firstAt を読む）。
+//   「データが無い」と「形が違う」は別のこと
+await ok("端末が1台も無い人でも、同じ形で返す", async () => {
+  seedVisits(); ctxNow = HR;
+  db.rows.gw_devices = [];
+  db.rows.gw_device_usage = [];
+  db.rows.gw_device_app_usage = [];
+  const r = await call(web, get("/api/devices/web", "?employeeId=emp-1&range=today"));
+  assert.equal(r.statusCode, 200);
+  const d = r.body.day;
+  assert.ok(d.usage, "usage を null にしない（画面がここを読む）");
+  assert.equal(d.usage.firstAt, null);
+  assert.equal(d.usage.activeText, "0:00");
+  assert.equal(d.usage.idleText, "0:00");
+  assert.equal(d.appText, "0:00");
+  assert.ok(d.verdict.mark);
+  // 打刻は端末と関係ない。あるなら出す
+  assert.equal(d.work.text, "9:00");
+  assert.equal(d.entry, undefined, "使わない名前を混ぜない");
+});
+
+await ok("端末が無い人と、止まっている人を、同じ文で片づけない", async () => {
+  seedVisits(); ctxNow = HR;
+  db.rows.gw_devices = [];
+  db.rows.gw_device_usage = [];
+  const none = await call(web, get("/api/devices/web", "?employeeId=emp-1&range=today"));
+  assert.ok(/登録されていません/.test(none.body.day.verdict.note), none.body.day.verdict.note);
+
+  seedVisits(); ctxNow = HR;
+  db.rows.gw_device_usage = [];      // 端末はある。届いていないだけ
+  const dead = await call(web, get("/api/devices/web", "?employeeId=emp-1&range=today"));
+  assert.ok(/届いていません/.test(dead.body.day.verdict.note), dead.body.day.verdict.note);
+});
+
 await ok("履歴には、ドメインとパスと時刻と時間が出る", async () => {
   seedVisits(); ctxNow = HR;
   const r = await call(web, get("/api/devices/web", "?employeeId=emp-1&range=today"));

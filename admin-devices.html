@@ -1854,7 +1854,10 @@
 
   function renderWeb(r) {
     const day = r.day;
-    const v = day?.verdict;
+    const v = day?.verdict || { key: "ok", mark: "—", label: "", note: "" };
+    // 中身が無いことはある（端末を持たない人・記録が届いていない日）。
+    // そのときに画面ごと落とさない。出すものが無いなら「記録なし」と書く
+    const use = day?.usage || {};
 
     el("d-web").innerHTML = `
       <div class="card" style="border:1px solid var(--primary);">
@@ -1899,13 +1902,13 @@
                 ? `${esc(hm(day.work.from))}〜${day.work.to ? esc(hm(day.work.to)) : "（勤務中）"}
                    <span class="sub">${esc(day.work.text)}</span>`
                 : '<span class="sub">打刻なし</span>'}</td></tr>
-              <tr><td>PC稼働</td><td>${day.usage.firstAt
-                ? `${esc(hm(day.usage.firstAt))}〜${esc(hm(day.usage.lastAt))}
-                   <span class="sub">${esc(day.usage.activeText)}</span>`
+              <tr><td>PC稼働</td><td>${use.firstAt
+                ? `${esc(hm(use.firstAt))}〜${esc(hm(use.lastAt))}
+                   <span class="sub">${esc(use.activeText)}</span>`
                 : '<span class="sub">記録なし</span>'}</td></tr>
               <tr><td>WEB利用</td><td>${esc(r.total.label)}</td></tr>
-              <tr><td>アプリ利用</td><td>${esc(day.appText)}</td></tr>
-              <tr><td>離席</td><td>${esc(day.usage.idleText)}</td></tr>
+              <tr><td>アプリ利用</td><td>${esc(day.appText || "—")}</td></tr>
+              <tr><td>離席</td><td>${esc(use.idleText || "—")}</td></tr>
             </tbody></table>
           </div>` : ""}
 

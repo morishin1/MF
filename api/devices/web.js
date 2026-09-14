@@ -167,8 +167,34 @@ async function dayShape(sb, ctx, employeeId, from, to, { policy, distractSec }) 
       .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId),
   ]);
 
+  const workedMin = entry?.clock_in
+    ? Math.max(0, Math.round(
+        ((entry.clock_out ? Date.parse(entry.clock_out) : Date.now()) - Date.parse(entry.clock_in)) / 60000))
+    : 0;
+  const work = entry?.clock_in
+    ? { from: entry.clock_in, to: entry.clock_out, minutes: workedMin, text: clock(workedMin) }
+    : null;
+
   const ids = (devs || []).map((d) => d.id);
-  if (!ids.length) return { date: from, entry: null, usage: null, verdict: dayVerdict({ silent: true }) };
+
+  // 端末が1台も無い人。
+  //
+  // ■ ここで形を変えない
+  //
+  //   前はここだけ { entry, usage: null } という別の形を返していた。
+  //   受け取る画面は usage がある前提で書いてあるので、
+  //   端末を持たない人を開いた瞬間に画面ごと落ちていた。
+  //   「データが無い」と「形が違う」は別のこと。中身を空にして、形はそろえる
+  if (!ids.length) {
+    return {
+      date: from, work,
+      usage: { firstAt: null, lastAt: null,
+               activeMin: 0, activeText: clock(0),
+               idleMin: 0, idleText: clock(0), lockedMin: 0, nightMin: 0 },
+      appMin: 0, appText: clock(0), nightSec: 0,
+      verdict: dayVerdict({ noDevice: true }),
+    };
+  }
 
   const [{ data: usage }, { data: apps }] = await Promise.all([
     sb.from("gw_device_usage")
@@ -189,19 +215,12 @@ async function dayShape(sb, ctx, employeeId, from, to, { policy, distractSec }) 
 
   const appMin = (apps || []).reduce((a, r) => a + (r.minutes || 0), 0);
 
-  const workedMin = entry?.clock_in
-    ? Math.max(0, Math.round(
-        ((entry.clock_out ? Date.parse(entry.clock_out) : Date.now()) - Date.parse(entry.clock_in)) / 60000))
-    : 0;
-
   // その日ぶんの記録が1件も無ければ「届いていない」
   const silent = !(usage || []).length;
 
   return {
     date: from,
-    work: entry?.clock_in
-      ? { from: entry.clock_in, to: entry.clock_out, minutes: workedMin, text: clock(workedMin) }
-      : null,
+    work,
     usage: {
       firstAt: u.first_at, lastAt: u.last_at,
       activeMin: u.active_min, activeText: clock(u.active_min),
