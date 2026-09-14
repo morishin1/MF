@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "vercel dev",
-    "deploy": "vercel deploy --prod"
+    "deploy": "vercel deploy --prod",
+    "test": "node --experimental-test-module-mocks test/flowtest.mjs && node test/selectcheck.mjs && node --experimental-test-module-mocks test/reltest.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

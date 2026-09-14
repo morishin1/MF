@@ -1,0 +1,64 @@
+# サーバ側（api / lib）を、直すたびに確かめる。
+#
+# ■ なぜ要るのか
+#
+#   api/devices/pair.js が enrollment_id を SELECT し忘れていて、
+#   実機で動かすまで誰も気づかなかった。
+#   「1つずつは通るのに、つないだところで止まる」を、
+#   押す前に見つけるための場所。
+#
+# ■ 何を見るか
+#
+#   flowtest     … EXE を実行してから台帳に出るまでを、通しで
+#   selectcheck  … 使っているのに SELECT していない列がないか
+#   reltest      … 配布の口（合言葉・二重登録・署名）
+#
+#   偽の Supabase は、本物と同じで **SELECT に書いた列しか返さない**。
+#   行を丸ごと返していたせいで、取り忘れが通っていた。
+
+name: サーバ側を確かめる
+
+on:
+  push:
+    paths:
+      - "api/**"
+      - "lib/**"
+      - "db/**"
+      - "test/**"
+      - ".github/workflows/web-test.yml"
+  pull_request:
+    paths:
+      - "api/**"
+      - "lib/**"
+      - "db/**"
+      - "test/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 確かめる
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # ハンドラを読み込むだけなので、依存は要る
+      - name: 用意する
+        run: npm install --no-audit --no-fund
+
+      - name: 通しで確かめる
+        run: node --experimental-test-module-mocks test/flowtest.mjs
+
+      - name: SELECT の取り忘れを洗う
+        run: node test/selectcheck.mjs
+
+      - name: 配布の口を確かめる
+        run: node --experimental-test-module-mocks test/reltest.mjs
