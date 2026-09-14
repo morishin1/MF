@@ -85,7 +85,9 @@
       try { v = await chrome.storage.local.get(["deviceId"]); } catch (e) { /* 読めなくても出す */ }
       if (v && v.deviceId) {
         box.className = "state on";
-        box.textContent = "会社のグループウェアとつながっています。";
+        box.innerHTML = "会社のグループウェアとつながっています。<br>"
+          + "<small>この登録を外せるのは管理者だけです。"
+          + "パソコンを返すときは管理部にご連絡ください。</small>";
         return;
       }
       box.className = "state off";

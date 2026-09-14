@@ -92,7 +92,10 @@ async function wire(page, opts) {
   await page.waitForTimeout(1800);
 
   const t = await page.locator("#dv").textContent();
-  check(t.includes("会社PCのセキュリティ設定"), "入口が分かりやすい名前になっている");
+  // 標準は「ブラウザ拡張を入れる」。EXE は要らない
+  check(t.includes("会社PCの設定が終わっていません"), "入口が分かりやすい名前になっている");
+  check(/拡張/.test(t), "何を入れればよいのかが出ている");
+  check(!/EXE|インストーラ/.test(t), "EXE の話が出てこない");
   check((await page.locator("#dv a[href='device-setup.html']").count()) === 1,
     "端末設定ページへ行ける");
   check(!/登録コード/.test(await page.locator("body").innerText()),

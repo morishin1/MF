@@ -317,5 +317,66 @@ await ok("EXE が1台も無くても、ちゃんと出る", async () => {
   assert.equal(p.mark.m, "○");
 });
 
+// ---------------------------------------------------------------------------
+console.log("\n— 登録したら、本人は外せない —");
+//
+//   台帳から外せるのは管理者だけ、と API で決めてある。
+//   ただしブラウザから拡張を消すことまでは止められない。
+//   止められないなら、せめて **黙って消えないようにする**
+
+await ok("拡張を外したら、そう出る", async () => {
+  // グループウェアは使っている（合図は来ている）のに、拡張からだけ届かない
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2) },
+    browser: { last_seen_at: ago(180) },
+  });
+  const k = await keys();
+  assert.ok(k.includes("ext_removed"), k.join(","));
+  const p = await one();
+  assert.equal(p.ext.key, "removed");
+  assert.equal(p.ext.mark, "×");
+  assert.equal(p.mark.m, "×", "「未接続」より重く出す");
+});
+
+await ok("外したことを、本人の言い分で消せない", async () => {
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2) },
+    browser: { last_seen_at: ago(180) },
+  });
+  const p = await one();
+  const i = p.issues.find((x) => x.key === "ext_removed");
+  assert.ok(/管理者しかできません/.test(i.next), `文: ${i.next}`);
+});
+
+await ok("ブラウザを閉じているだけなら、外れたとは言わない", async () => {
+  // 合図も拡張も、同じように止まっている。帰宅・休みはこれ
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(300) },
+    browser: { last_seen_at: ago(300) },
+    noClock: true, visits: [],
+  });
+  const k = await keys();
+  assert.ok(!k.includes("ext_removed"), `閉じているだけで疑っています: ${k.join(",")}`);
+});
+
+await ok("まだ一度も登録していない人は、外れたとは言わない", async () => {
+  setup({
+    device: { installed_at: null, secret_hash: null, last_seen_at: ago(2) },
+    browser: { linked: false, last_seen_at: null },
+  });
+  const k = await keys();
+  assert.ok(!k.includes("ext_removed"), k.join(","));
+  assert.ok(k.includes("ext_off"), "まだ入れていない、は別に出す");
+});
+
+await ok("外れている人の数を、まとめにも出す", async () => {
+  setup({
+    device: { installed_at: "2026-09-01T00:00:00Z", last_seen_at: ago(2) },
+    browser: { last_seen_at: ago(180) },
+  });
+  const r = await get();
+  assert.equal(r.body.summary.extRemoved, 1);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) { console.log(`${fail} 件 NG`); process.exit(1); }

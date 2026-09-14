@@ -27,7 +27,8 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { isDate, jstDate, sinceLabel, browserLabel } from "../../lib/devices.js";
-import { workState, extState, issuesOf, mark, clock, OFF_TOPIC, LIMITS } from "../../lib/watch.js";
+import { workState, extState, extGone, issuesOf, mark, clock, OFF_TOPIC, LIMITS }
+  from "../../lib/watch.js";
 import { dayTotals } from "../../lib/timecard.js";
 
 const SQL = "db/053_devices.sql → 054_device_agent.sql → 057_device_one_pc.sql";
@@ -62,8 +63,11 @@ export default async function handler(req, res) {
 
   // ---- 端末 ----
   const { data: devices } = await sb.from("gw_devices")
+    // installed_at を落とさないこと。
+    // 「一度は登録した」かどうかが分からないと、
+    // 拡張を外されたのか、まだ入れていないのかを見分けられない
     .select("id, employee_id, source, label, hostname, browser, status, "
-          + "notified_at, ownership, last_seen_at, secret_hash, linked_device_id")
+          + "notified_at, ownership, last_seen_at, secret_hash, linked_device_id, installed_at")
     .eq("tenant_id", ctx.tenantId).limit(1000);
 
   // 拡張がつながっているか。gw_device_browsers の linked が正
@@ -94,6 +98,11 @@ export default async function handler(req, res) {
       // 資格情報を持っているか（secret_hash）と、拡張から届いているか。
       // 片方だけでは「入れたが動いていない」を見逃す
       extLinked: Boolean(d.secret_hash) && brs.some((b) => b.linked),
+      // 一度でも登録したか。外されたことを見分けるのに要る
+      registeredAt: d.installed_at || null,
+      // 拡張から最後に届いた時刻。台帳の合図（last_seen_at）とは別。
+      // 「そのブラウザは使っているのに、拡張からだけ届かない」を見るため
+      extSeenAt: brs.map((b) => b.last_seen_at).filter(Boolean).sort().pop() || null,
       browsers: brs.map((b) => ({ browser: b.browser, label: browserLabel(b.browser),
                                   linked: b.linked, extVersion: b.ext_version })),
     });
@@ -162,7 +171,7 @@ export default async function handler(req, res) {
       activeMin, clockMin, quietMin,
     });
 
-    const ext = extState(mine);
+    const ext = extState(mine, now);
     return {
       employeeId: e.id,
       name: e.display_name,
@@ -183,8 +192,11 @@ export default async function handler(req, res) {
       devices: mine.map((d) => ({
         id: d.id, source: d.source, label: d.label,
         confirmed: d.confirmed, ownership: d.ownership,
-        extLinked: d.extLinked, browsers: d.browsers,
+        extLinked: d.extLinked && !extGone(d, now),
+        registered: Boolean(d.registeredAt),
+        browsers: d.browsers,
         lastSeen: sinceLabel(d.lastSeenAt, now, "なし"),
+        extSeen: sinceLabel(d.extSeenAt, now, "なし"),
       })),
       // 「何が」と「次にどうするか」だけ。数字は返さない
       issues,
@@ -203,6 +215,8 @@ export default async function handler(req, res) {
       working: rows.filter((r) => r.work.key === "working").length,
       check: check.length,
       extOff: rows.filter((r) => r.ext.key === "off").length,
+      // 一度登録したのに、拡張が外れている人。ここは黙って見逃さない
+      extRemoved: rows.filter((r) => r.ext.key === "removed").length,
     },
     // 社員には出さない。管理画面の中だけ（避け方を配らない）
     limits: LIMITS,

@@ -380,7 +380,8 @@
           <div class="l">
             <div class="nm">このパソコン</div>
             <div class="st"><span class="my-mk ok">○</span> <b>登録済み</b></div>
-            <div class="sub">ブラウザ拡張がつながっています</div>
+            <div class="sub">ブラウザ拡張がつながっています。
+              解除は管理部が行います</div>
           </div>
           <button class="btn btn-secondary btn-sm" onclick="toggleMyPc()" id="mypc-btn">詳細を見る</button>
         </div>
@@ -397,7 +398,8 @@
           <div>
             <b>会社PCの設定が終わっていません。</b>
             <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
-              Chrome または Edge に「EIGHT 端末管理」を入れてください。
+              Chrome または Edge に、ブラウザ拡張「EIGHT 端末管理」を入れてください。
+              入れたあと、この画面にもどって登録を押すと終わりです。
               入れ方が分からないときは、管理部にお聞きください。
             </p>
             <a class="btn btn-primary" href="device-setup.html">
@@ -423,6 +425,10 @@
         <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
           ページの中身・入力した内容・パスワード・検索したことばは記録しません。
           <a href="device-consent.html">記録することを詳しく読む</a>
+        </p>
+        <p class="muted" style="font-size:12px;margin:0 0 10px;">
+          登録したあと、<b>この登録を外せるのは管理者だけ</b>です。
+          パソコンを返すときや使わなくなったときは、管理部にご連絡ください。
         </p>
         <button class="btn btn-primary" onclick="doExtPair(this)">
           <span class="material-symbols-outlined icon-inline">check_circle</span>

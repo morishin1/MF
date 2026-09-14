@@ -421,5 +421,77 @@ await ok("ボタンの文が、読んだことを含んでいる", async () => {
     "ただの「登録」では、何に同意したのか残らない");
 });
 
+// ---------------------------------------------------------------------------
+console.log("\n— 登録したら、本人は外せない —");
+//
+//   本人が自分で外せると、私物や未登録のパソコンで入ったあと
+//   行を消して見えなくする、という道ができる。
+//   外せるのは管理者だけ（利用停止／紛失／端末を削除 … db/064）
+
+const me = (await import(atRoot("api/devices/me.js"))).default;
+const callMe = (body) => call(me, {
+  method: "POST", url: "/api/devices/me",
+  headers: { authorization: "Bearer x" }, body,
+});
+
+await ok("本人は台帳から外せない", async () => {
+  setup();
+  const r = await callMe({ action: "forget", deviceUid: UID });
+  assert.equal(r.statusCode, 403, `いま ${r.statusCode}`);
+  assert.ok(/管理者/.test(r.body.hint || ""), `文: ${r.body.hint}`);
+});
+
+await ok("知らない操作で外す道を作らない", async () => {
+  setup();
+  for (const action of ["delete", "remove", "unlink", "unregister", "disconnect", "reset"]) {
+    const r = await callMe({ action, deviceUid: UID });
+    assert.ok(r.statusCode >= 400, `${action} が通っています（${r.statusCode}）`);
+    assert.ok(db.rows.gw_devices.length === 1, `${action} で行が消えました`);
+  }
+});
+
+await ok("本人が資格情報を消す口は無い", async () => {
+  setup();
+  const got = await post({ action: "code", deviceUid: UID });
+  await call(browser, { method: "POST", url: "/api/devices/browser", headers: {},
+                        body: { action: "pair", code: got.body.code, browser: "chrome" } });
+  assert.ok(dev().secret_hash, "つないだ");
+
+  // つなぐ口はあっても、切る口は作っていない
+  const r = await call(browser, {
+    method: "POST", url: "/api/devices/browser",
+    headers: { authorization: "Bearer x" },
+    body: { action: "unpair", deviceUid: UID },
+  });
+  assert.equal(r.statusCode, 400, `いま ${r.statusCode}`);
+  assert.ok(dev().secret_hash, "本人が切れています");
+});
+
+await ok("拡張を外しても、台帳の行は残る", async () => {
+  // ブラウザから拡張を消すことは止められない。
+  // 止められないなら、せめて行が消えないようにする
+  setup();
+  const got = await post({ action: "code", deviceUid: UID });
+  await call(browser, { method: "POST", url: "/api/devices/browser", headers: {},
+                        body: { action: "pair", code: got.body.code, browser: "chrome" } });
+  assert.equal(db.rows.gw_devices.length, 1);
+  assert.ok(dev().installed_at, "一度登録したことが残っていません");
+});
+
+await ok("拡張に「外す」ボタンを置かない", async () => {
+  const { readFileSync } = await import("node:fs");
+  const opt = readFileSync(atRoot("agent/extension/options.html"), "utf8");
+  assert.ok(!/解除する|登録を外す|切断|unpair/i.test(opt.replace(/外せるのは管理者だけ/g, "")),
+    "拡張の画面から外せるようになっています");
+  assert.ok(/管理者だけ/.test(opt), "誰が外せるのかが書いていません");
+});
+
+await ok("マイページにも、外せるのは管理者だと書く", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(atRoot("mypage.html"), "utf8");
+  assert.ok(/この登録を外せるのは管理者だけ/.test(src),
+    "押す前に、あとで自分では外せないことを伝えていません");
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) { console.log(`${fail} 件 NG`); process.exit(1); }
