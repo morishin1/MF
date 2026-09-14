@@ -319,29 +319,18 @@
         </div>
       </div>` : "";
 
-    // ---- まだ入れていない。案内はこのときだけ、大きく出す ----
+    // ---- ブラウザ拡張。いまはここが「会社PCの設定」の本体 ----
+    //
+    // ■ 自動ではつながない
+    //
+    //   画面が勝手につなげば、手順としてはいちばん短い。
+    //   ところがそれだと、本人は「いつのまにか記録が始まっていた」になる。
+    //
+    //   **押すという行為が、管理されていると分かる瞬間**になる。
+    //   何を記録するかを読んで、自分で押す。そこまでが登録。
     if (!agent) {
-      el("dv").innerHTML = waitBanner + `
-        <div class="banner warn" style="margin:0;">
-          <span class="material-symbols-outlined">shield_lock</span>
-          <div>
-            <b>会社PCのセキュリティ設定が必要です。</b>
-            <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
-              会社貸与のパソコンで、まだ設定が終わっていません。
-              入れる作業は管理者・IT担当が行います。
-            </p>
-            <a class="btn btn-primary" href="device-setup.html">
-              <span class="material-symbols-outlined icon-inline">shield_lock</span>会社PCを設定する
-            </a>
-          </div>
-        </div>
-        ${list.length ? `
-          <div style="margin-top:12px;">
-            <button class="btn btn-secondary btn-sm" onclick="toggleMyPc()" id="mypc-btn">詳細を見る</button>
-          </div>
-          <div id="mypc-more" class="hidden" style="margin-top:14px;">
-            ${detailForMe(dv, list[0], [])}
-          </div>` : ""}`;
+      el("dv").innerHTML = waitBanner + `<div id="ext-box">確認しています…</div>`;
+      renderExt(dv, list);
       return;
     }
 
@@ -369,6 +358,93 @@
       <div id="mypc-more" class="hidden" style="margin-top:14px;">
         ${detailForMe(dv, agent, pcs)}
       </div>`;
+  }
+
+  /**
+   * ブラウザ拡張の状態に合わせて出し分ける。
+   *
+   *   入っていない   … 入れ方を出す
+   *   入っているが未登録 … 何を記録するかを出して、押してもらう
+   *   登録済み       … 1行だけ
+   */
+  async function renderExt(dv, list) {
+    const box = el("ext-box");
+    if (!box) return;
+
+    let st = { installed: false, paired: false };
+    try { st = await KPDevice.extState(); } catch (e) { /* 取れなくても出す */ }
+
+    if (st.paired) {
+      box.innerHTML = `
+        <div class="my-pc">
+          <div class="l">
+            <div class="nm">このパソコン</div>
+            <div class="st"><span class="my-mk ok">○</span> <b>登録済み</b></div>
+            <div class="sub">ブラウザ拡張がつながっています</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="toggleMyPc()" id="mypc-btn">詳細を見る</button>
+        </div>
+        <div id="mypc-more" class="hidden" style="margin-top:14px;">
+          ${list.length ? detailForMe(dv, list[0], []) : ""}
+        </div>`;
+      return;
+    }
+
+    if (!st.installed) {
+      box.innerHTML = `
+        <div class="banner warn" style="margin:0;">
+          <span class="material-symbols-outlined">extension</span>
+          <div>
+            <b>会社PCの設定が終わっていません。</b>
+            <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
+              Chrome または Edge に「EIGHT 端末管理」を入れてください。
+              入れ方が分からないときは、管理部にお聞きください。
+            </p>
+            <a class="btn btn-primary" href="device-setup.html">
+              <span class="material-symbols-outlined icon-inline">extension</span>入れ方を見る
+            </a>
+          </div>
+        </div>`;
+      return;
+    }
+
+    // 入っている。ここが「押して登録する」ところ。
+    // 押す前に、何を記録するかが見えていること
+    box.innerHTML = `
+      <div class="banner warn" style="display:block;margin:0;">
+        <b>このパソコンを、会社のパソコンとして登録します。</b>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 4px;">
+          登録すると、次のことが会社に記録されます。
+        </p>
+        <ul class="muted" style="font-size:12.5px;line-height:1.9;margin:0 0 6px;padding-left:20px;">
+          <li>見たサイトのドメインとページの場所、見ていた時間</li>
+          <li>グループウェアの利用状況（ログイン・最終アクセス・操作中／離席）</li>
+        </ul>
+        <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
+          ページの中身・入力した内容・パスワード・検索したことばは記録しません。
+          <a href="device-consent.html">記録することを詳しく読む</a>
+        </p>
+        <button class="btn btn-primary" onclick="doExtPair(this)">
+          <span class="material-symbols-outlined icon-inline">check_circle</span>
+          読みました。このパソコンを登録する
+        </button>
+        <div id="ext-msg" class="err-text" style="margin-top:8px;"></div>
+      </div>`;
+  }
+
+  /** 押されて、はじめてつなぐ */
+  async function doExtPair(btn) {
+    const msg = el("ext-msg");
+    if (msg) msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "登録中…", async () => {
+        const r = await KPDevice.extPair();
+        if (!r.ok) throw new Error(r.message || "登録できませんでした");
+        await load();
+      });
+    } catch (e) {
+      if (msg) msg.textContent = e.hint || e.message || "登録できませんでした";
+    }
   }
 
   function toggleMyPc() {

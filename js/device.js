@@ -103,13 +103,7 @@ window.KPDevice = (function () {
   function start() {
     if (timer) return;
     state.uid = uid();
-    // 合図を1回出してから、拡張をつなぐ。
-    // 台帳にこのブラウザの行ができていないと、合言葉をもらえない
-    beat(true).then(function () {
-      // 入っていなければ何も起きない。入っていて、まだつないでいなければつなぐ。
-      // 社員に押させない。入れた時点でつながるのが、いちばん短い
-      extPair().catch(function () { /* つながらなくても画面は動く */ });
-    });
+    beat(true);
     timer = setInterval(function () {
       if (document.visibilityState === "visible") beat(false);
     }, 60 * 1000);
@@ -183,7 +177,18 @@ window.KPDevice = (function () {
 
   /**
    * 拡張をつなぐ。
-   * すでにつながっていれば何もしない。入っていなければ false
+   *
+   * ■ 自動ではつながない。本人に押してもらう
+   *
+   *   画面が勝手につないでしまえば、手順としてはいちばん短い。
+   *   ところがそれだと、本人は「いつのまにか記録が始まっていた」になる。
+   *
+   *   端末管理は、知らないうちに始めてよいものではない。
+   *   **押すという行為が、管理されていると分かる瞬間**になる。
+   *   何を記録するかを読んで、自分で押す。そこまでが登録。
+   *
+   *   だから、ここは画面のボタンからしか呼ばない。
+   *   すでにつながっていれば何もしない。入っていなければ false
    */
   async function extPair() {
     var st = await extState();

@@ -385,5 +385,41 @@ await ok("ページの題も、URLの全文も送らない", async () => {
   assert.ok(!/\burl\b/.test(body), `送るものに url が入っています: ${body.slice(0, 120)}`);
 });
 
+// ---------------------------------------------------------------------------
+console.log("\n— 自動ではつながない —");
+//
+//   画面が勝手につなげば、手順としてはいちばん短い。
+//   ところがそれだと、本人は「いつのまにか記録が始まっていた」になる。
+//   押すという行為が、管理されていると分かる瞬間になる。
+//   だから、つなぐのは画面のボタンからだけ
+
+await ok("画面を開いただけでは、つながない", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(atRoot("js/device.js"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  // start() の中から extPair を呼んでいないこと
+  const start = src.slice(src.indexOf("function start("), src.indexOf("function stop("));
+  assert.ok(!/extPair/.test(start),
+    "画面を開いた時点でつないでいます（本人が押す前に記録が始まります）");
+});
+
+await ok("押す前に、何を記録するかが出ている", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(atRoot("mypage.html"), "utf8");
+  const box = src.slice(src.indexOf("このパソコンを、会社のパソコンとして登録します"),
+                        src.indexOf("doExtPair(this)"));
+  assert.ok(box.length > 0, "登録のボタンが見つかりません");
+  for (const must of ["見たサイトのドメイン", "記録しません", "詳しく読む"]) {
+    assert.ok(box.includes(must), `押す前に「${must}」が出ていません`);
+  }
+});
+
+await ok("ボタンの文が、読んだことを含んでいる", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(atRoot("mypage.html"), "utf8");
+  assert.ok(/読みました。このパソコンを登録する/.test(src),
+    "ただの「登録」では、何に同意したのか残らない");
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) { console.log(`${fail} 件 NG`); process.exit(1); }
