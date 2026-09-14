@@ -148,7 +148,16 @@ async function open(res, body) {
 //   札を持っている本人にしか返さない（この前でログインを見ている）。
 //   ほかの人の設定は覗けない
 async function diag(res, sb, p) {
-  const polled = p.last_poll_at || null;
+  // 063 をまだ流していないと、この列は無い。
+  // 無ければ「分からない」として進む（診断のために設定を止めない）
+  let polled = null;
+  let canTell = true;
+  {
+    const { data, error } = await sb.from("gw_device_pairings")
+      .select("last_poll_at").eq("id", p.id).maybeSingle();
+    if (error) canTell = false;
+    else polled = data?.last_poll_at || null;
+  }
 
   // エージェントが登録まで終えているか
   let enrolled = false;
@@ -163,6 +172,13 @@ async function diag(res, sb, p) {
     stage = "not_claimed";
     tell = "「このパソコンです」がまだ押されていません。";
     hint = "本人の確認が終わっていません（used_at が空）。";
+  } else if (p.code_once && !canTell) {
+    // 取りに来たかどうかを残していない。どちらとも言えない
+    stage = "code_waiting";
+    tell = "設定が途中で止まりました。管理者にご連絡ください。";
+    hint = "登録コードは出ていますが、インストーラが引き取っていません。"
+         + "取りに来たかどうかは記録されていません（db/063_pair_diag.sql が未適用）。"
+         + "これを流すと、PC側の問題かサーバ側の問題かを見分けられます。";
   } else if (p.code_once && !polled) {
     stage = "installer_silent";
     tell = "パソコンのソフトが動いていないようです。"
@@ -209,8 +225,12 @@ async function read(req, res) {
     // 下の ready の判定がこれを見ている。取り忘れると undefined になり、
     // インストーラは永久に ready:false を受け取り続ける
     // （画面には「時間内に終わりませんでした」としか出ないので、気づけない）
+    // last_poll_at は、ここでは取らない。
+    // 063 をまだ流していない環境だと、無い列を SELECT した時点で
+    // このリクエストごと落ちる。設定そのものが動かなくなるほうが困る。
+    // あれは診断のときだけ、別に・落ちてもよい形で読む（diag）
     .select("id, kind, tenant_id, employee_id, hostname, os, browsers, "
-          + "used_at, code_once, enrollment_id, last_poll_at, expires_at")
+          + "used_at, code_once, enrollment_id, expires_at")
     .eq("token_hash", sha256(token)).maybeSingle();
   if (error) {
     const hint = dbSetupHint(error, SQL);
