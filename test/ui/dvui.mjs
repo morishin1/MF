@@ -84,6 +84,8 @@ const LIST = {
   ],
   alerts: [],
   summary: { total: 6 },
+  canWipe: true,
+  deleted: 0,
   ownerships: [{ key: "company" }, { key: "personal" }, { key: "unknown" }],
 };
 
@@ -95,6 +97,7 @@ const DETAIL = {
   web: [{ label: "業務系", minutes: 190, time: "3:10" },
         { label: "AI", minutes: 42, time: "0:42" }],
   browsers: [],
+  canWipe: true,
   events: [
     { at: ago(20), kind: "usb_attach", label: "USB接続", detail: { class: "mass_storage" } },
     { at: ago(40), kind: "logon", label: "ログオン", detail: null },
@@ -256,6 +259,38 @@ console.log("— 詳細 —");
   for (const x of ["使う人を変える", "名前を変える", "会社貸与／私物", "停止する", "使用終了にする", "メモ"]) {
     check(ops.includes(x), `操作「${x}」`);
   }
+
+  // 端末の一生。退職・PC交換・故障・紛失を、この画面だけで終わらせる
+  for (const x of ["紛失した", "端末を削除"]) {
+    check(ops.includes(x), `操作「${x}」`);
+  }
+
+  // 削除は、押した瞬間には消さない。
+  // 一覧からワンクリックでは出さず、詳細 →「…」→ 端末を削除 → 確認 の順
+  const before = sent.length;
+  await page.locator("#ops-menu button", { hasText: "端末を削除" }).click();
+  await page.waitForTimeout(150);
+  check(sent.length === before, "「端末を削除」を押しただけでは、まだ送らない");
+  const ask = await page.locator("#ops-menu").innerText();
+  check(/登録を解除します/.test(ask), "何が起きるかを、押す前に出す");
+  check(/EIGHT Agent も自動的に削除されます/.test(ask), "Agent が消えることを書く");
+  check(/記録（監査・WEB利用・セキュリティ）は消えません/.test(ask),
+        "端末の削除と、過去ログの削除は別だと書く");
+  check(await page.locator("#ops-menu button", { hasText: "キャンセル" }).isVisible(),
+        "やめられる");
+
+  await page.locator("#ops-menu button.danger", { hasText: "端末を削除" }).click();
+  await page.waitForTimeout(200);
+  const wipe = sent.find((b) => b.action === "wipe");
+  check(Boolean(wipe), "確認してはじめて送る");
+  check(wipe && wipe.deviceId === "ok1", "その端末を指している");
+
+  // 一覧からは削除できない。行にボタンを置かない
+  const listText = await page.locator("#d-rows").innerText();
+  check(!/削除/.test(listText), "一覧の行に「削除」を出さない");
+
+  await page.click("#ops-btn");
+  await page.waitForTimeout(100);
 
   // 区分は選ばせる。prompt に company と打たせない
   await page.locator("#ops-menu button", { hasText: "会社貸与／私物" }).click();

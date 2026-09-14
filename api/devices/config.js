@@ -9,6 +9,12 @@
 // ■ カテゴリ表はここから配る
 //   URL→カテゴリの変換は端末の中でやる。サーバに送ってから落とすと、
 //   送信経路とログに一度は全文が乗る。だから表のほうを配る。
+//
+// ■ 消せという命令も、ここから渡す
+//   管理者が「端末を削除」を押すと、資格情報はその場で失効する。
+//   失効した端末が使える口は、この config と /api/devices/wiped だけ。
+//   ここで uninstall:true を返し、エージェントが自分を消す。
+//   オフラインのPCは、次につながったときにこれを受け取る。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
@@ -20,10 +26,34 @@ const SQL = "db/054_device_agent.sql";
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
 
-  const dev = await requireDevice(req, res);
+  // 失効した端末も通す。ここは、そのPCが自分を消すための口でもある
+  const dev = await requireDevice(req, res, { allowRevoked: true });
   if (!dev) return;
 
   const sb = admin();
+
+  // 削除の指示が出ている。ほかの何より先に返す。
+  //
+  // ここでは会社の設定（カテゴリ表・勤務時間）を一切返さない。
+  // 手元に無いPC（紛失）でも、この口だけは開いているため。
+  // 渡してよいのは「消せ」という一言だけ
+  if (dev.wipe_requested_at && !dev.wipe_done_at) {
+    return json(res, 200, {
+      collect: false, reason: "wipe", uninstall: true,
+      message: "このパソコンの登録は解除されました。EIGHT Agent を削除します",
+      recheckSec: 600,
+    });
+  }
+
+  // 失効しているが、消せとは言われていない（紛失として止めた）。
+  // 記録は受け取らない。命令が出たら次に取りにきたときに渡る
+  if (dev.revoked_at) {
+    return json(res, 200, {
+      collect: false, reason: "revoked",
+      message: "このパソコンの資格情報は失効しています",
+      recheckSec: 3600,
+    });
+  }
 
   // 止まっている理由まで返す。エージェントのログを読む人が分かるように。
   // 「本人がまだ確認していない」と「管理者が止めた」は別のこと

@@ -36,6 +36,12 @@ type Agent struct {
 	tally  *Tally
 	onFlag func(bool) // 収集の可否が変わったときに知らせる（トレイの表示用）
 
+	// wipe は「このPCから自分を消せ」とサーバに言われたか。
+	//
+	// 設定の口（6時間おき）と、送信の返事（5分おき）の
+	// どちらからでも立つ。立ったら、常駐しているほうが片付けに入る
+	wipe bool
+
 	// ブラウザの拡張から届いた滞在。次の送信でまとめて出す。
 	// 送れなかったぶんは戻ってくる（Flush を見ること）
 	visits []Visit
@@ -66,6 +72,13 @@ func NewAgent(c *api.Client, q *store.Queue, version, host, dir string) *Agent {
 }
 
 func (a *Agent) OnCollectChange(f func(bool)) { a.onFlag = f }
+
+// Wipe は「このPCから自分を消せ」と言われているか。
+func (a *Agent) Wipe() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.wipe
+}
 
 // Collecting は、いま集めてよいか。
 func (a *Agent) Collecting() bool {
@@ -101,6 +114,9 @@ func (a *Agent) RefreshConfig(ctx context.Context) error {
 		a.tally = NewTally(WorkDate(time.Now()), hhmm(cfg.NightFrom, 22*60), hhmm(cfg.NightTo, 5*60))
 	}
 	now := cfg.Collect
+	if cfg.Uninstall {
+		a.wipe = true
+	}
 	a.mu.Unlock()
 
 	if was != now && a.onFlag != nil {
@@ -267,6 +283,9 @@ func (a *Agent) Flush(ctx context.Context) error {
 		a.mu.Lock()
 		if a.cfg != nil {
 			a.cfg.Collect = false
+		}
+		if res.Uninstall {
+			a.wipe = true
 		}
 		a.mu.Unlock()
 		if a.onFlag != nil {

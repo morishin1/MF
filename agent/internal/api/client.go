@@ -135,8 +135,19 @@ type EnrollResult struct {
 // Collect が false のあいだ、エージェントは何も送らない。
 // 本人が告知を読むまで収集しないという決まりを、ここで受け取る。
 type Config struct {
-	Collect         bool              `json:"collect"`
-	Reason          string            `json:"reason"`
+	Collect bool   `json:"collect"`
+	Reason  string `json:"reason"`
+	// Uninstall は「このPCから自分を消せ」というサーバの指示。
+	//
+	// 管理者が管理画面で「端末を削除」を押すと、資格情報はその場で失効し、
+	// この印が立つ。失効した端末に残っている力は2つだけで、
+	// どちらも自分が消えるためのものである。
+	//
+	//	GET  /api/devices/config  … これを受け取る
+	//	POST /api/devices/wiped   … 消し終わったと報せる
+	//
+	// オフラインのPCは、次にネットにつながったときにこれを受け取る。
+	Uninstall       bool              `json:"uninstall"`
 	Message         string            `json:"message"`
 	SendIntervalSec int               `json:"sendIntervalSec"`
 	IdleAfterMin    int               `json:"idleAfterMin"`
@@ -150,8 +161,15 @@ type Config struct {
 }
 
 type IngestResult struct {
-	Collect  bool `json:"collect"`
-	Accepted struct {
+	Collect bool   `json:"collect"`
+	Reason  string `json:"reason"`
+	// Uninstall は Config と同じ意味。
+	//
+	// 記録を送れているあいだ、ここへは5分おきに来ている。
+	// 設定の口は6時間おきなので、そちらを待つと消えるまで半日かかる。
+	// 失効した直後の返事でこれが立つので、最短で伝わる
+	Uninstall bool `json:"uninstall"`
+	Accepted  struct {
 		Events int `json:"events"`
 		Usage  int `json:"usage"`
 		Apps   int `json:"apps"`
@@ -223,6 +241,19 @@ func (c *Client) Rotate(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return out.Secret, nil
+}
+
+// Wiped は「このPCから自分を消し終わった」とサーバへ報せる。
+//
+// これが届いた時点でサーバは secret_hash を落とすので、
+// 以後この資格情報は本当に何もできなくなる。
+// 呼ぶのは、消す作業をやり終えたあと1回だけ。
+//
+// left には、外せなかったものを入れる（ブラウザの設定が消せなかった等）。
+// 管理画面に出て、人が手で片付ける手がかりになる。
+func (c *Client) Wiped(ctx context.Context, note string, left []string) error {
+	return c.do(ctx, http.MethodPost, "/api/devices/wiped",
+		map[string]any{"note": note, "left": left}, nil, true)
 }
 
 func (c *Client) Manifest(ctx context.Context) (*Manifest, error) {

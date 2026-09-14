@@ -17,7 +17,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageHr, canWipeDevice } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { notify } from "../../lib/notify.js";
@@ -36,6 +36,29 @@ const FIELDS = "id, tenant_id, device_uid, label, source, hostname, serial, os, 
   + "first_seen_at, last_seen_at, note, employee_id, asset_id, retired_at, linked_device_id, "
   + "admin_touched_at, admin_touched_by, admin_touched_what, "
   + "ownership, notified_kind, notified_note";
+
+// 064（端末の一生）で足した列。本体と分けてある。
+//
+// まだ 064 を流していない環境で、無い列を SELECT すると
+// そのリクエストごと落ちる。端末の一覧と詳細が丸ごと開かなくなるので、
+// まず足したほうで引いて、だめなら本体だけで引き直す
+const LIFE_FIELDS = "revoked_at, lost_at, wipe_requested_at, wipe_requested_by, "
+  + "wipe_reason, wipe_done_at, deleted_at";
+
+/**
+ * 台帳を読む。064 がまだでも開けるようにする。
+ * @returns {Promise<{data:object[]|null, error:object|null, life:boolean}>}
+ */
+async function readDevices(sb, tenantId) {
+  const q = (cols) => sb.from("gw_devices").select(cols)
+    .eq("tenant_id", tenantId)
+    .order("last_seen_at", { ascending: false, nullsFirst: false })
+    .limit(1000);
+  const first = await q(`${FIELDS}, ${LIFE_FIELDS}`);
+  if (!first.error) return { ...first, life: true };
+  const again = await q(FIELDS);
+  return { ...again, life: false };
+}
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -58,11 +81,13 @@ async function read(req, res, ctx, user) {
   const deviceId = q.get("deviceId");
   const wantCsv = q.get("csv") === "1";
 
-  const { data: devices, error } = await sb
-    .from("gw_devices").select(FIELDS)
-    .eq("tenant_id", ctx.tenantId)
-    .order("last_seen_at", { ascending: false, nullsFirst: false })
-    .limit(1000);
+  const { data: all, error } = await readDevices(sb, ctx.tenantId);
+
+  // 消え終わった端末は、台帳から外す。行は消さない（過去の記録が宙に浮く）。
+  // 「削除済みも見る」を押したときだけ出す
+  const withDeleted = q.get("deleted") === "1";
+  const devices = withDeleted ? all : (all || []).filter((d) => !d.deleted_at);
+  const deletedCount = (all || []).length - (devices || []).length;
 
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -77,7 +102,10 @@ async function read(req, res, ctx, user) {
   if (q.get("enrollments") === "1") {
     return enrollments(res, ctx, { sb, devices, people });
   }
-  if (deviceId) return detail(req, res, ctx, user, { sb, devices, people, deviceId, q, policy });
+  // 1台ぶんは、台帳から外したものも開ける。
+  // 「消えたあと、あの端末に何があったか」を見るのは監査の入口なので、
+  // 一覧に出さないことと、開けないことは別
+  if (deviceId) return detail(req, res, ctx, user, { sb, devices: all, people, deviceId, q, policy });
 
   // 開いているアラートを端末ごとに数える
   const counts = new Map();
@@ -135,6 +163,16 @@ async function read(req, res, ctx, user) {
       // 周知を、本人が押したのか、管理者が対面で行ったのか
       notifiedKind: d.notified_kind || null,
       notifiedNote: d.notified_note || null,
+      // 端末の一生（064）。画面の「…」で何を出すかを、ここで決める
+      life: {
+        revoked: Boolean(d.revoked_at),
+        lost: Boolean(d.lost_at),
+        wiping: Boolean(d.wipe_requested_at) && !d.wipe_done_at,
+        wipeRequestedAt: d.wipe_requested_at || null,
+        wipeReason: d.wipe_reason || null,
+        wipedAt: d.wipe_done_at || null,
+        deleted: Boolean(d.deleted_at),
+      },
     };
   });
 
@@ -213,7 +251,14 @@ async function read(req, res, ctx, user) {
       // 業務は原則、会社貸与PCだけと決めてある
       unmanaged: rows.filter((r) => !r.foldedInto && r.own?.key === "check").length,
       banned: rows.filter((r) => !r.foldedInto && r.own?.key === "banned").length,
+      // 消せと言ってあるが、まだそのPCから報せが来ていないもの
+      wiping: rows.filter((r) => !r.foldedInto && r.life?.wiping).length,
     },
+    // 台帳から外した端末の数。0 のときは画面に何も出さない
+    deleted: deletedCount,
+    showingDeleted: withDeleted,
+    // 削除・紛失を押せる人か。押せない人には、その項目を出さない
+    canWipe: canWipeDevice(ctx),
     // 割り当て先の候補
     people: [...people.values()],
     ownerships: OWNERSHIP,
@@ -288,6 +333,16 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
     adminName = who?.display_name || null;
   }
 
+  // 誰が削除を指示したか。監査ログにも残るが、
+  // 「削除待ち」の行を見ている人が、その場で分かるほうがよい
+  let wiperName = null;
+  if (d.wipe_requested_by) {
+    const { data: who } = await sb.from("gw_employees")
+      .select("display_name").eq("user_id", d.wipe_requested_by)
+      .eq("tenant_id", ctx.tenantId).limit(1).maybeSingle();
+    wiperName = who?.display_name || null;
+  }
+
   await logView(sb, ctx, user, {
     scope: "device", deviceId, employeeId: d.employee_id, workDate: to,
   });
@@ -321,7 +376,20 @@ async function detail(req, res, ctx, user, { sb, devices, people, deviceId, q, p
         warn: (alerts.data || []).filter((a) => a.status === "open" && a.severity === "warn").length,
         staleDays: Number(policy.stale_days) || 60,
       }),
+      // 端末の一生（064）。「…」に何を出すか、画面はここを見る
+      life: {
+        revoked: Boolean(d.revoked_at), revokedAt: d.revoked_at || null,
+        lost: Boolean(d.lost_at), lostAt: d.lost_at || null,
+        wiping: Boolean(d.wipe_requested_at) && !d.wipe_done_at,
+        wipeRequestedAt: d.wipe_requested_at || null,
+        wipeRequestedBy: wiperName,
+        wipeReason: d.wipe_reason || null,
+        wipedAt: d.wipe_done_at || null,
+        wipeNote: d.wipe_note || null,
+        deleted: Boolean(d.deleted_at),
+      },
     },
+    canWipe: canWipeDevice(ctx),
     range: { from, to },
     usage: (usage.data || []).map((u) => ({
       date: u.work_date,
@@ -493,6 +561,20 @@ async function patch(req, res, ctx, user) {
     .eq("id", deviceId).maybeSingle();
   if (!dev || dev.tenant_id !== ctx.tenantId) return json(res, 404, { error: "not_found" });
 
+  // 一生ぶんの列は別に取る。064 をまだ流していない環境で、
+  // 無い列を SELECT するとこのリクエストごと落ちる（＝画面が全部止まる）
+  const life = await lifeOf(sb, deviceId);
+
+  // 取り消せない操作だけ、権限をもう一段上げる。
+  // 一覧からワンクリックでは出していないが、API を直に叩けば同じなので、
+  // 止めるのはここ
+  if (["wipe", "cancel_wipe", "lost"].includes(action) && !canWipeDevice(ctx)) {
+    return json(res, 403, {
+      error: "forbidden",
+      hint: "端末の削除・紛失の登録は、管理者と経営者だけができます",
+    });
+  }
+
   // 管理者が触ったことを、台帳の行にも残す。
   // くわしい経緯は gw_activity_log を見るが、
   // 一覧を見たときに「最近誰かが動かした」と分かるほうがよい
@@ -586,16 +668,89 @@ async function patch(req, res, ctx, user) {
     patchRow.label = label;
     event = "renamed";
   } else if (action === "suspend") {
+    // すぐに送信を止める。資格情報はそのまま。あとで再開できる。
+    // 修理に出す・長期休職・様子を見たい、のときはこれ
     patchRow.status = "suspended";
     event = "suspended";
   } else if (action === "resume") {
     // 本人の確認がまだなら、確認待ちに戻す
     patchRow.status = "active";
+    // 紛失として止めていたなら、そこも戻す。
+    // 「見つかったので、また使う」が1回で済むように
+    if (life.lost_at || life.revoked_at) {
+      patchRow.lost_at = null;
+      patchRow.revoked_at = null;
+      patchRow.revoked_by = null;
+      extra = { lostCleared: true };
+    }
+    // 削除待ちのものを、再開では戻さない。
+    // 消えたかもしれないPCを「使える」ことにすると、台帳が嘘になる
+    if (life.wipe_requested_at && !life.wipe_done_at) {
+      return json(res, 409, {
+        error: "wipe_pending",
+        hint: "この端末は削除待ちです。使い続けるなら、先に削除を取り消してください",
+      });
+    }
     event = "resumed";
   } else if (action === "retire") {
     patchRow.status = "retired";
     patchRow.retired_at = now;
     event = "retired";
+  } else if (action === "lost") {
+    // 紛失。止めるだけでなく、資格情報をその場で失効させる。
+    //
+    // 手元に無いPCから記録が届き続けるほうが困る。
+    // 削除と違って、そのPCの中のエージェントは消さない
+    // （消せという命令を届けるには、そのPCが手元に戻るか、
+    //   ネットにつながる必要がある。戻ったときは「端末を削除」を押す）
+    patchRow.status = "suspended";
+    patchRow.lost_at = now;
+    patchRow.revoked_at = now;
+    patchRow.revoked_by = user.id;
+    event = "lost";
+  } else if (action === "wipe") {
+    // 端末を削除。資格情報を失効させ、そのPCに「自分を消せ」と置く。
+    //
+    // ここでできるのは、失効と、命令を置くところまで。
+    // 実際に消えるのは、そのPCが次にサーバへ来たとき。
+    // 消えたかどうかは api/devices/wiped が呼ばれてはじめて分かるので、
+    // それまでは「削除待ち」と出す
+    if (life.wipe_requested_at && !life.wipe_done_at) {
+      return json(res, 200, { ok: true, already: true, pending: true });
+    }
+    if (life.wipe_done_at) return json(res, 200, { ok: true, already: true });
+    patchRow.status = "retired";
+    patchRow.retired_at = now;
+    patchRow.revoked_at = now;
+    patchRow.revoked_by = user.id;
+    patchRow.wipe_requested_at = now;
+    patchRow.wipe_requested_by = user.id;
+    patchRow.wipe_reason = String(body.reason || "").trim().slice(0, 200) || null;
+    event = "wipe_requested";
+    extra = { reason: patchRow.wipe_reason };
+    // ブラウザ側の行も道連れにしない。あれは別の端末として数えている。
+    // ただし、消えるPCを指したままにしておくと、
+    // 台帳に親のいない行が残る
+    await sb.from("gw_devices")
+      .update({ linked_device_id: null, updated_at: now })
+      .eq("linked_device_id", dev.id).eq("tenant_id", ctx.tenantId);
+  } else if (action === "cancel_wipe") {
+    // 押し間違えた。まだそのPCが取りにきていなければ、戻せる。
+    // 取りにきたあとは戻らない（もう消えている）
+    if (!life.wipe_requested_at) return json(res, 200, { ok: true, already: true });
+    if (life.wipe_done_at) {
+      return json(res, 409, {
+        error: "already_wiped",
+        hint: "この端末はもう消え終わっています。使うなら、入れ直してください",
+      });
+    }
+    patchRow.wipe_requested_at = null;
+    patchRow.wipe_requested_by = null;
+    patchRow.wipe_reason = null;
+    patchRow.revoked_at = null;
+    patchRow.revoked_by = null;
+    patchRow.status = "suspended";
+    event = "wipe_canceled";
   } else if (action === "note") {
     patchRow.note = body.note ? String(body.note).slice(0, 1000) : null;
   } else {
@@ -689,6 +844,26 @@ async function employees(sb, tenantId) {
   return new Map((data || []).map((e) => [e.id, {
     id: e.id, name: e.display_name, display_name: e.display_name, department: e.department,
   }]));
+}
+
+/**
+ * 端末の一生ぶんの列（064）。
+ *
+ * 本体の SELECT に混ぜない。064 をまだ流していない環境で
+ * 無い列を SELECT すると、そのリクエストごと落ちる。
+ * 端末の一覧と詳細が全部開かなくなるので、ここは別に取って、
+ * 取れなければ「何も起きていない」として扱う
+ */
+async function lifeOf(sb, deviceId) {
+  try {
+    const { data, error } = await sb.from("gw_devices")
+      .select("revoked_at, lost_at, wipe_requested_at, wipe_done_at, deleted_at")
+      .eq("id", deviceId).maybeSingle();
+    if (error || !data) return {};
+    return data;
+  } catch (e) {
+    return {};
+  }
 }
 
 async function ownEmployee(sb, tenantId, employeeId) {

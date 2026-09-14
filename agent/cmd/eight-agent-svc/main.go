@@ -229,6 +229,15 @@ func doRun(baseURL, dir string) error {
 		log.Printf("設定を取れませんでした。しばらくして試します: %v", err)
 	}
 
+	// 消せと言われていないか、いちばん先に見る。
+	//
+	// 電源が入っていなかったあいだに管理者が「端末を削除」を押していれば、
+	// ここで受け取る。つまり「オフラインのPCは、次に起動して
+	// つながった時点で消える」。何も集めないうちに片付ける
+	if ag.Wipe() {
+		return selfUninstall(c, dir)
+	}
+
 	ag.Note("agent_start", time.Now(), map[string]string{"version": Version})
 	if at, ok := bootTime(); ok {
 		ag.Note("boot", at, nil)
@@ -286,17 +295,35 @@ func doRun(baseURL, dir string) error {
 			}
 			if err := ag.Flush(ctx); err != nil {
 				if _, dead := err.(*api.Unauthorized); dead {
-					// 資格情報が通らない。管理者が端末を消したか、
-					// シークレットが入れ替わった。人が再登録するしかない
+					// 資格情報が通らない。
+					//
+					// 「消せと言われている」のか「ただ切られた」のかは、
+					// ここでは分からない。設定の口だけは失効した端末にも
+					// 開いているので、1回だけ聞いて確かめる。
+					// 聞かずに降りると、消すはずのPCが消えないまま残る
+					if cerr := ag.RefreshConfig(ctx); cerr == nil && ag.Wipe() {
+						return selfUninstall(c, dir)
+					}
 					log.Printf("この端末は登録し直しが要ります: %v", err)
 					return err
 				}
 				log.Printf("送れませんでした（溜めておきます）: %v", err)
 			}
+			// 送った返事に「消せ」が入っていることがある。
+			// 記録を送れているあいだ、ここは5分おきに通る。
+			// 設定の口（6時間おき）を待つより、ずっと早く伝わる
+			if ag.Wipe() {
+				return selfUninstall(c, dir)
+			}
 
 		case <-refresh.C:
 			if err := ag.RefreshConfig(ctx); err != nil {
 				log.Printf("設定を取れませんでした: %v", err)
+			}
+			// 止まっている端末（本人の確認待ち・停止中）は、ここしか通らない。
+			// 記録を送っていないので、送信の返事も返ってこない
+			if ag.Wipe() {
+				return selfUninstall(c, dir)
 			}
 			if time.Since(rotatedAt) > rotateAfter {
 				if err := ag.Rotate(ctx); err != nil {

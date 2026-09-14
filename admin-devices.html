@@ -167,6 +167,23 @@
                                   cursor:pointer; color:var(--text); }
     .dv-dhead .ops .menu button:hover { background:var(--soft); }
     .dv-dhead .ops .menu button.danger { color:#c53030; }
+    /* 取り消せない操作の前に読むもの。幅を広げて、折り返しを減らす */
+    .dv-dhead .ops .menu:has(.note) { min-width:340px; }
+    .dv-dhead .ops .menu .note { font-size:12px; line-height:1.7; color:var(--text);
+                                 padding:2px 10px 8px; }
+    .dv-dhead .ops .menu .why { display:block; font-size:11.5px; color:var(--muted);
+                                padding:0 10px 6px; }
+    .dv-dhead .ops .menu .why input { width:100%; margin:4px 0 0; font-size:13px;
+                                      padding:6px 8px; border:1px solid var(--border);
+                                      border-radius:7px; font-family:inherit; }
+
+    /* 一覧の下。台帳から外した端末へ行く一行。普段は空 */
+    .dv-foot { margin-top:8px; }
+    .dv-foot:empty { display:none; }
+    .dv-foot .lnk { border:0; background:none; padding:0; cursor:pointer;
+                    font-family:inherit; font-size:12px; color:var(--muted);
+                    text-decoration:underline; }
+    .dv-foot .lnk:hover { color:var(--text); }
 
     .dv-chips { display:flex; gap:6px; flex-wrap:wrap; }
     .dv-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border);
@@ -247,6 +264,7 @@
           <tbody id="d-rows"><tr><td colspan="7">読み込み中…</td></tr></tbody>
         </table>
       </div>
+      <div id="d-deleted" class="dv-foot"></div>
       <div id="d-msg" class="err-text"></div>
     </div>
 
@@ -461,6 +479,8 @@
     assign: "使う人を変えた", unlink: "紐付けを外した", rename: "名前を変えた",
     suspend: "停止した", resume: "再開した", retire: "使用終了にした", note: "メモを書いた",
     ownership: "会社貸与／私物を変えた", mark_notified: "周知済みにした",
+    lost: "紛失として止めた", wipe: "端末の削除を指示した",
+    cancel_wipe: "端末の削除を取り消した",
   };
 
   // インラインの onclick は window から引かれる。const の矢印関数は届かない
@@ -468,9 +488,12 @@
   function closeAssign() { el("d-assign").innerHTML = ""; }
 
   // ---- 台帳 ----
+  // 削除済みも出しているか。押すたびに読み直す
+  let deletedOn = false;
+
   async function load() {
     try {
-      data = await API.devices();
+      data = await API.devices(deletedOn ? { deleted: "1" } : {});
       render();
     } catch (e) {
       el("d-rows").innerHTML = `<tr><td colspan="6"><div class="banner err">
@@ -501,6 +524,26 @@
   function issuesOf(d) {
     const out = [];
     const id = d.id;
+
+    // 削除待ち。押した人には「いつ消えるのか」が見えないと、
+    // 消えたのか失敗したのか分からないまま放置される
+    if (d.life?.wiping) {
+      out.push({
+        key: "wiping", sev: "waiting",
+        what: "削除待ちです（このPCが次にネットにつながったときに消えます）",
+        acts: [{ label: "詳しく見る", fn: `showDetail('${id}')` }],
+      });
+      return out;   // 消える端末に、ほかのことを言っても仕方がない
+    }
+    if (d.life?.lost) {
+      out.push({
+        key: "lost", sev: "critical",
+        what: "紛失として登録されています（資格情報は失効済み）",
+        acts: [{ label: "詳しく見る", fn: `showDetail('${id}')` }],
+      });
+      return out;
+    }
+
     if (d.source === "agent" && !d.confirmed) {
       out.push({
         key: "not_confirmed", sev: "waiting",
@@ -584,6 +627,14 @@
     const check = [];
     for (const d of all) {
       const iss = issuesOf(d);
+      // 消え終わったもの。「削除済みを見る」を押したときだけ届く
+      if (d.life?.deleted) { ok.push(d); continue; }
+      // 削除待ち・紛失は、通常の一覧には出さない（もう使う端末ではない）。
+      // ただし黙って消すと誰も追えないので、要確認には必ず出す
+      if (d.life?.wiping || d.life?.lost) {
+        check.push({ d, issues: iss });
+        continue;
+      }
       if (isRegistered(d)) {
         ok.push(d);
         if (iss.length) check.push({ d, issues: iss });
@@ -621,6 +672,7 @@
 
     renderList(ok);
     renderCheck(check);
+    renderDeleted();
   }
 
   /**
@@ -679,6 +731,32 @@
               style="font-size:18px;color:var(--muted);">chevron_right</span></td>
       </tr>`;
     }).join("");
+  }
+
+  /**
+   * 台帳から外した端末。
+   *
+   * 端末を削除しても、行そのものは消さない（過去の記録が宙に浮く）。
+   * 一覧には出さないが、「あの端末はいつ消えたのか」を追えるように、
+   * 数と、開くための一行だけ残す。0台のときは何も出さない
+   */
+  function renderDeleted() {
+    const n = Number(data.deleted || 0);
+    const box = el("d-deleted");
+    if (!box) return;
+    if (data.showingDeleted) {
+      box.innerHTML = `<button class="lnk" onclick="showDeleted(false)">
+        削除済みを隠す</button>`;
+      return;
+    }
+    box.innerHTML = n
+      ? `<button class="lnk" onclick="showDeleted(true)">削除済みの端末 ${n}台 を見る</button>`
+      : "";
+  }
+
+  async function showDeleted(on) {
+    deletedOn = on;
+    await load();
   }
 
   /** 要確認。1件につき「何が」「どうする」を1行で */
@@ -811,10 +889,7 @@
               ${(isAgent && brs.length) || (!isAgent && dev.linkedTo)
                 ? `<button onclick="unlink('${dev.id}')">紐付けを解除</button>` : ""}
               <button onclick="editNote('${dev.id}')">メモ</button>
-              ${dev.status === "suspended"
-                ? `<button onclick="act('${dev.id}','resume')">再開する</button>`
-                : `<button onclick="act('${dev.id}','suspend')">停止する</button>`}
-              <button class="danger" onclick="act('${dev.id}','retire')">使用終了にする</button>
+              ${opsLifecycle(dev, d)}
             </div>
           </div>
         </div>
@@ -837,6 +912,108 @@
   /** 管理操作は「…」の中。横一列に並べると、押す前に読む量が増える */
   function toggleOps() {
     el("ops-menu").classList.toggle("hidden");
+  }
+
+  /**
+   * 端末の一生に関わる操作。
+   *
+   * ■ 3つに分けてある
+   *
+   *   利用停止   すぐ送信を止める。資格情報はそのまま。あとで再開できる
+   *   紛失       利用停止に加えて、資格情報をその場で失効させる。
+   *              手元に無いPCから記録が届き続けるほうが困る
+   *   端末を削除 失効させたうえで、そのPCに「自分を消せ」と伝える。
+   *              次にそのPCがネットにつながったときに、Agent が自分を消す
+   *
+   * ■ 押せる人を分けてある
+   *
+   *   停止・再開は人事の担当者でもできる。
+   *   削除と紛失は取り消しがきかないので、管理者・経営者だけ（canWipe）。
+   *   押せない人にはボタンを出さない（API 側でも止めている）
+   */
+  function opsLifecycle(dev, d) {
+    const L = dev.life || {};
+    const canWipe = (d && d.canWipe) || (data && data.canWipe);
+
+    // もう消え終わっている。押せることは何も無い
+    if (L.wipedAt) {
+      return `<div class="hd">この端末は削除済みです</div>`;
+    }
+
+    // 削除待ち。取り消すか、待つか
+    if (L.wiping) {
+      return `<div class="hd">削除待ち（このPCがつながるのを待っています）</div>
+        ${canWipe ? `<button onclick="cancelWipe('${dev.id}')">削除を取り消す</button>` : ""}`;
+    }
+
+    const out = [];
+    if (dev.status === "suspended" || L.lost) {
+      out.push(`<button onclick="act('${dev.id}','resume')">利用を再開する</button>`);
+    } else {
+      out.push(`<button onclick="act('${dev.id}','suspend')">利用を停止する</button>`);
+    }
+    if (dev.status !== "retired") {
+      out.push(`<button onclick="act('${dev.id}','retire')">使用終了にする</button>`);
+    }
+    if (canWipe) {
+      if (!L.lost) {
+        out.push(`<button class="danger" onclick="markLost('${dev.id}')">紛失した</button>`);
+      }
+      out.push(`<button class="danger" onclick="askWipe('${dev.id}')">端末を削除</button>`);
+    }
+    return out.join("");
+  }
+
+  /**
+   * 端末の削除。押した瞬間には消さない。
+   *
+   * 一覧からワンクリックでは出していない。
+   * 端末詳細 →「…」→ 端末を削除 → この確認、の順にしてある。
+   * 取り消せない操作の前に、何が起きるかを読む時間を1回はさむ
+   */
+  function askWipe(id) {
+    const box = el("ops-menu");
+    box.innerHTML = `
+      <div class="hd">この端末の登録を解除します</div>
+      <div class="note">
+        端末がオンラインの場合、EIGHT Agent も自動的に削除されます。<br>
+        オフラインのときは「削除待ち」になり、次にネットにつながった時点で消えます。<br>
+        <b>これまでの記録（監査・WEB利用・セキュリティ）は消えません。</b>
+        保存期間が来たら、いつもどおり自動で消えます。
+      </div>
+      <label class="why">理由（任意・記録に残ります）
+        <input type="text" id="wipe-why" placeholder="退職 / PC交換 / 故障 など" maxlength="200">
+      </label>
+      <button onclick="toggleOps()">キャンセル</button>
+      <button class="danger" onclick="doWipe('${id}', this)">端末を削除</button>`;
+    box.classList.remove("hidden");
+  }
+
+  async function doWipe(id, btn) {
+    const reason = (el("wipe-why")?.value || "").trim();
+    await run(() => API.patchDevice({ action: "wipe", deviceId: id, reason }));
+  }
+
+  async function cancelWipe(id) {
+    if (!confirm("この端末の削除を取り消します。\n"
+      + "まだこのPCが取りに来ていなければ、そのまま使えます。\n"
+      + "すでに消えていた場合は取り消せません。\n\nよろしいですか？")) return;
+    await run(() => API.patchDevice({ action: "cancel_wipe", deviceId: id }));
+  }
+
+  /**
+   * 紛失。削除とは分けてある。
+   *
+   * 手元に無いPCで本当に効くのは「もう受け取らない」ことのほうで、
+   * 「消せ」はそのPCがネットにつながらないかぎり届かない
+   */
+  async function markLost(id) {
+    if (!confirm("この端末を紛失として登録します。\n\n"
+      + "・すぐに利用を停止します\n"
+      + "・資格情報を失効させ、このPCからは何も受け取らなくなります\n"
+      + "・これまでの記録は残ります\n\n"
+      + "見つかったら「利用を再開する」で戻せます。よろしいですか？")) return;
+    await run(() => API.patchDevice({ action: "lost", deviceId: id }));
   }
 
   /** 区分は選ばせる。prompt に company と打たせない */

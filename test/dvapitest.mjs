@@ -141,6 +141,7 @@ mock.module(atRoot("lib/gw.js"), {
       employee: { id: "emp-1", tenant_id: "t1", display_name: "山田 太郎" },
     }),
     canManageHr: () => true,
+    canWipeDevice: () => true,
   },
 });
 

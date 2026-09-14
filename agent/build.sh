@@ -118,7 +118,11 @@ for t in svc ui host; do
   # 公開鍵は svc にだけ要る（更新を確かめるのは svc）。
   # 他に焼いても害はないが、入れる場所は1つにしておく
   extra=""
-  [ "$t" = "svc" ] && extra="-X main.UpdateKey=${UPDATE_KEY}"
+  # 拡張のIDは svc にも要る。
+  # 端末を削除するとき、ブラウザに書いた「この拡張を入れる」設定を
+  # 外すのに要る。IDが無いと、どの行が自分のものか分からないので、
+  # 他社のポリシーを消さないために何もしないことになる
+  [ "$t" = "svc" ] && extra="-X main.UpdateKey=${UPDATE_KEY} -X main.ExtensionID=${EXT_ID}"
   GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
     go build -trimpath -ldflags "${LD} ${extra}" \
     -o "cmd/eight-agent-setup/payload/eight-agent-${t}.exe" "./cmd/eight-agent-${t}"

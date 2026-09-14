@@ -105,7 +105,12 @@ mock.module(atRoot("lib/auth.js"), {
 });
 let ctxNow = null;
 mock.module(atRoot("lib/gw.js"), {
-  namedExports: { gwContext: async () => ctxNow, canManageHr: () => ctxNow.isHr },
+  namedExports: {
+    gwContext: async () => ctxNow,
+    canManageHr: () => ctxNow.isHr,
+    // 削除・紛失は、管理者と経営者だけ
+    canWipeDevice: () => Boolean(ctxNow.isAdmin || (ctxNow.roles || []).includes("owner")),
+  },
 });
 const logged = [];
 mock.module(atRoot("lib/gw-audit.js"), {
