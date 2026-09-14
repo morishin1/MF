@@ -10,18 +10,49 @@
   let cfg = null;
 
   // ---- 公開設定 --------------------------------------------------------
-  async function config() {
-    if (cfg) return cfg;
-    const r = await fetch("/api/public-config", { cache: "no-store" });
-    if (!r.ok) throw new Error("public-config の取得に失敗しました");
-    cfg = await r.json();
+  //
+  // ■ 画面を開くたびに取りにいかない
+  //
+  //   中身は環境変数そのままで、人によって変わらないし、
+  //   デプロイしないと変わらない。なのに no-store で毎回取りにいっていた。
+  //   1画面ぶんで1往復。回線が細いほど、そのまま「読み込み中…」が伸びる。
+  //
+  //   覚えておいて、すぐ返す。正しいかどうかは裏で確かめる。
+  //   古いまま動き続けないよう、覚えておくのは短いあいだだけにする。
+  const CFG_KEY = "kp_cfg";
+  const CFG_HOURS = 6;
+
+  function applyCfg(c) {
     // 拡張のIDは、画面から拡張へ話しかけるのに要る（js/device.js）。
     // 設定を読んだ時点で1回だけ置く
-    if (cfg.extensionId) window.KP_EXT_ID = cfg.extensionId;
-    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
+    if (c?.extensionId) window.KP_EXT_ID = c.extensionId;
+    return c;
+  }
+
+  async function fetchCfg() {
+    const r = await fetch("/api/public-config");
+    if (!r.ok) throw new Error("public-config の取得に失敗しました");
+    const c = await r.json();
+    if (!c.supabaseUrl || !c.supabaseAnonKey) {
       throw new Error("Supabase の公開設定が未構成です（環境変数 SUPABASE_URL / SUPABASE_ANON_KEY）");
     }
+    cfg = applyCfg(c);
+    try { localStorage.setItem(CFG_KEY, JSON.stringify({ at: Date.now(), v: c })); }
+    catch { /* 保存できなくても動く */ }
     return cfg;
+  }
+
+  async function config() {
+    if (cfg) return cfg;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); } catch { /* 無視 */ }
+    if (saved?.v?.supabaseUrl && Date.now() - (saved.at || 0) < CFG_HOURS * 3600000) {
+      cfg = applyCfg(saved.v);
+      // 待たない。次に開くときには新しいほうが入っている
+      fetchCfg().catch(() => { /* 取れなくても、覚えているぶんで動く */ });
+      return cfg;
+    }
+    return fetchCfg();
   }
 
   // ---- セッション保管 --------------------------------------------------

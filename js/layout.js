@@ -557,9 +557,119 @@
   const saveCache = (v) => {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(v)); } catch { /* 保存できなくても動く */ }
   };
-  const clearCache = () => {
-    try { localStorage.removeItem(CACHE_KEY); } catch { /* 同上 */ }
+
+  // /api/me の答えそのものも覚えておく。
+  //
+  // ■ なぜ枠だけでは足りないのか
+  //
+  //   枠（権限・名前）を覚えて先に描いていたので、見た目はすぐ出ていた。
+  //   ところが各画面は init() の戻りを待ってから自分のデータを取りにいく。
+  //   その init() が /api/me を待っていたので、
+  //   画面の中身は結局1往復ぶん遅れて出ていた。「読み込み中…」はここ。
+  //
+  //   覚えているなら、それを先に返して、確かめるのは裏でやる。
+  //   違っていれば描き直すか、送り返す（下の verify）。
+  //
+  // ■ 覚えておくのは短いあいだだけ
+  //
+  //   毎回かならず裏で確かめるので古いままにはならないが、
+  //   何日も前のものを入口にはしない
+  const ME_KEY = "kp_me";
+  const ME_HOURS = 12;
+  const loadMe = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(ME_KEY) || "null");
+      if (!v?.me || Date.now() - (v.at || 0) > ME_HOURS * 3600000) return null;
+      // 誰のぶんかを必ず見る。
+      // ログアウトのときは消しているが、前の人のセッションが切れたところへ
+      // 別の人がそのまま入ると、消さずに入れ替わる道がある。
+      // 覚えていた人と、いま入っている人が違えば、使わない
+      if (v.email && v.email !== API.currentEmail()) return null;
+      return v.me;
+    } catch { return null; }
   };
+  const saveMe = (me) => {
+    try {
+      localStorage.setItem(ME_KEY,
+        JSON.stringify({ at: Date.now(), email: API.currentEmail(), me }));
+    } catch { /* 保存できなくても動く */ }
+  };
+  const clearCache = () => {
+    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(ME_KEY); } catch { /* 同上 */ }
+  };
+
+  /**
+   * 急がない通信を、画面のデータより後ろに回す。
+   *
+   * バッジも端末の合図も、その画面の中身より先に出す理由がない。
+   * 先に投げると、ブラウザの手が空くのを待つあいだ、本体が並んで待つことになる
+   */
+  function soon(fn) {
+    if (typeof requestIdleCallback === "function") requestIdleCallback(fn, { timeout: 1500 });
+    else setTimeout(fn, 200);
+  }
+
+  /**
+   * 身元と権限を、サーバに確かめる。
+   *
+   * 覚えているぶんで先に描いたときは、これを待たずに画面が動き出す。
+   * 違っていたら、ここで描き直すか、開けない画面から送り返す。
+   *
+   * @param {{active?:string, roles?:string[]}} opts
+   * @param {object|null} painted 先に描いた内容（描いていなければ null）
+   * @returns {Promise<{me:object, appRole:string}|null>}
+   */
+  async function verify(opts, painted) {
+    let me, cfg;
+    try {
+      // 身元と公開設定は、互いを待つ理由がない。同時に出す。
+      // 直列にしていたぶん、そのまま1往復ぶんの待ちになっていた
+      [me, cfg] = await Promise.all([API.me(), API.config().catch(() => null)]);
+    } catch (e) {
+      // トークン切れ等。ログイン画面に戻す
+      API.logout();
+      clearCache();
+      showLogin("セッションが切れました。もう一度ログインしてください。");
+      return null;
+    }
+
+    const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
+    const name = me.gw?.employee?.display_name || me.email || "";
+    const shows = showsFor({ ...me, lmsUrl: cfg?.lmsUrl || null, timecardUrl: cfg?.timecardUrl || null });
+    const stage = me.gw?.stage || null;
+    saveCache({ appRole, name, shows, stage });
+    saveMe(me);
+
+    // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
+    // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
+    if (appRole === "member" && stage && opts.active
+        && !stage.allowed.includes(opts.active)) {
+      location.replace("home.html");
+      return null;
+    }
+
+    const allowed = opts.roles;
+    if (allowed && !allowed.includes(appRole)) {
+      location.replace(homeFor(appRole));
+      return null;
+    }
+
+    // メンバーが開けない画面（管理用）を開いたら、確認モードは終わりにする。
+    // 下タブのままサイドメニューの画面に居ると、どちらの立場なのか分からなくなる
+    if (isMemberView() && allowed && !allowed.includes("member")) {
+      setMemberView(false);
+      painted = null;
+    }
+
+    // 覚えていた内容と違っていたときだけ描き直す
+    if (!painted || painted.appRole !== appRole || painted.name !== name
+        || JSON.stringify(painted.shows || {}) !== JSON.stringify(shows)
+        || JSON.stringify(painted.stage || null) !== JSON.stringify(stage)) {
+      renderChrome({ name, appRole, shows, stage }, opts.active);
+    }
+
+    return { me, appRole };
+  }
 
   function clearChrome() {
     for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar"]) {
@@ -605,12 +715,14 @@
       ? MEMBER_SIDE_NAV
       : ADMIN_GROUPS.flatMap((g) => g.items));
 
-    // メニューを描いたあとで件数を入れる。取れなくても画面は動く
-    loadBadges();
-
-    // この端末から社内システムに入っていることを、5分ごとに知らせる。
-    // 送るのは端末の印と種類だけで、どの画面を見ていたかは送らない
-    if (window.KPDevice) KPDevice.start();
+    // メニューを描いたあとで件数を入れる。取れなくても画面は動く。
+    // その画面のデータより先に投げない（バッジのために本文を待たせない）
+    soon(() => {
+      loadBadges();
+      // この端末から社内システムに入っていることを、5分ごとに知らせる。
+      // 送るのは端末の印と種類だけで、どの画面を見ていたかは送らない
+      if (window.KPDevice) KPDevice.start();
+    });
   }
 
   /**
@@ -796,62 +908,35 @@
       if (!API.isLoggedIn()) { clearCache(); showLogin(); return null; }
       setupPwa();
 
+      const cached = loadCache();
+      const cachedMe = loadMe();
+
+      // 覚えている権限で、この画面を開いてよいか。
+      // 入社準備のあいだの制限も、覚えているぶんで一度見る
+      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole));
+      const okStage = !(cached?.appRole === "member" && cached?.stage && opts.active
+                        && !cached.stage.allowed.includes(opts.active));
+
       // 覚えている権限があれば、通信を待たずに先に描く。
       // この画面を開いてよい権限のときだけ描く（違えばこのあと送り返される）
-      const cached = loadCache();
       let painted = null;
-      if (cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole))) {
+      if (okRole && okStage) {
         painted = cached;
         renderChrome(cached, opts.active);
       }
 
-      let me;
-      try {
-        me = await API.me();
-      } catch (e) {
-        // トークン切れ等。ログイン画面に戻す
-        API.logout();
-        clearCache();
-        showLogin("セッションが切れました。もう一度ログインしてください。");
-        return null;
+      // 正しいかどうかは、いつも裏で確かめる。
+      // 違っていれば描き直すか、送り返す
+      const fresh = verify(opts, painted);
+
+      // 覚えているものが使えるなら、確かめ終わるのを待たずに返す。
+      // ここで待つと、各画面が自分のデータを取りにいくのが1往復ぶん遅れる。
+      // それが「読み込み中…」の正体だった
+      if (painted && cachedMe) {
+        fresh.catch(() => { /* 送り返し・ログイン画面は verify の中で済ませる */ });
+        return { me: cachedMe, appRole: cached.appRole, remembered: true };
       }
-
-      const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
-      const name = me.gw?.employee?.display_name || me.email || "";
-      const cfg = await API.config().catch(() => null);
-      const shows = showsFor({ ...me, lmsUrl: cfg?.lmsUrl || null, timecardUrl: cfg?.timecardUrl || null });
-      const stage = me.gw?.stage || null;
-      saveCache({ appRole, name, shows, stage });
-
-      // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
-      // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
-      if (appRole === "member" && stage && opts.active
-          && !stage.allowed.includes(opts.active)) {
-        location.replace("home.html");
-        return null;
-      }
-
-      const allowed = opts.roles;
-      if (allowed && !allowed.includes(appRole)) {
-        location.replace(homeFor(appRole));
-        return null;
-      }
-
-      // メンバーが開けない画面（管理用）を開いたら、確認モードは終わりにする。
-      // 下タブのままサイドメニューの画面に居ると、どちらの立場なのか分からなくなる
-      if (isMemberView() && allowed && !allowed.includes("member")) {
-        setMemberView(false);
-        painted = null;
-      }
-
-      // 覚えていた内容と違っていたときだけ描き直す
-      if (!painted || painted.appRole !== appRole || painted.name !== name
-          || JSON.stringify(painted.shows || {}) !== JSON.stringify(shows)
-          || JSON.stringify(painted.stage || null) !== JSON.stringify(stage)) {
-        renderChrome({ name, appRole, shows, stage }, opts.active);
-      }
-
-      return { me, appRole };
+      return fresh;
     },
 
     /**

@@ -72,21 +72,28 @@ async function loadGroupware(userId, tenantId) {
   if (!employee) return { ...empty, available: true };
   tenantId = tenantId || employee.tenant_id;
 
-  // 入社手続きの提出が全部そろったか。
-  // そろっていれば、入社日前でも画面を開ける（在籍の状態は変えない）。
+  // ここは全画面の入口。往復を1本でも減らす。
+  //
+  // 社内ロール（gw_role_grants）と、入社手続きの進み具合は、
+  // どちらも employee.id だけで引けて、互いの結果を使わない。
+  // 順番に待つ理由がないので、同時に出す。
+  //
+  // 提出がそろっていれば、入社日前でも画面を開ける（在籍の状態は変えない）。
   // 調べるのは入社準備中の人だけ（そうでない人には要らない問い合わせ）
-  let done = false;
-  if (employee.status === "invited") {
-    const { data: its } = await sb
-      .from("gw_procedure_items")
-      .select("owner, required, status, gw_procedures!inner(employee_id, kind)")
-      .eq("gw_procedures.employee_id", employee.id)
-      .eq("gw_procedures.kind", "onboarding")
-      .limit(200);
-    done = onboardingDone(its || []);
-  }
+  const [grantsRes, itemsRes] = await Promise.all([
+    sb.from("gw_role_grants").select("role").eq("employee_id", employee.id),
+    employee.status === "invited"
+      ? sb.from("gw_procedure_items")
+          .select("owner, required, status, gw_procedures!inner(employee_id, kind)")
+          .eq("gw_procedures.employee_id", employee.id)
+          .eq("gw_procedures.kind", "onboarding")
+          .limit(200)
+      : Promise.resolve({ data: null }),
+  ]);
+  const done = itemsRes.data ? onboardingDone(itemsRes.data) : false;
 
-  // 入社日が来ていれば、その場で在籍に切り替える
+  // 入社日が来ていれば、その場で在籍に切り替える。
+  // これは書き込みなので、上の2本とは分ける（たいていの人は通らない）
   if (shouldOpen(employee, jstDate())) {
     const { error: ue } = await sb.from("gw_employees")
       .update({ status: "active", updated_at: new Date().toISOString() })
@@ -95,12 +102,7 @@ async function loadGroupware(userId, tenantId) {
     if (!ue) employee.status = "active";
   }
 
-  const { data: grants } = await sb
-    .from("gw_role_grants")
-    .select("role")
-    .eq("employee_id", employee.id);
-
-  const gwRoles = (grants || []).map((g) => g.role);
+  const gwRoles = (grantsRes.data || []).map((g) => g.role);
   return {
     available: true,
     tenantId,

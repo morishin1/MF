@@ -6,6 +6,14 @@ import { json, methodNotAllowed } from "../lib/http.js";
 
 export default function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
+
+  // 中身は環境変数そのままで、人によって変わらないし、デプロイしないと変わらない。
+  // それを画面を開くたびに取りにいくと、その1往復ぶん「読み込み中…」が伸びる。
+  // 誰に配っても同じものなので、共有キャッシュにも置いてよい（public）。
+  // 変えたときに古いものが残らないよう、長くは持たせない
+  res.setHeader("Cache-Control",
+    "public, max-age=600, s-maxage=600, stale-while-revalidate=86400");
+
   return json(res, 200, {
     supabaseUrl: process.env.SUPABASE_URL || null,
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || null,

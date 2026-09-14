@@ -326,7 +326,9 @@ body {
 
 /* Material Symbols 共通 */
 .material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  /* 配っている字は opsz 20 の1本だけ（4MBの可変フォントをやめた）。
+     ここで 24 を指しても効かないので、実際に配っているほうに合わせる */
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
   vertical-align: middle;
   user-select: none;
 }
