@@ -12,7 +12,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const R = (p) => _join(ROOT, p);
+const atRoot = (p) => _join(ROOT, p);
 
 
 // ---- 偽の Supabase ----------------------------------------------------------
@@ -102,7 +102,7 @@ const fakeStorage = {
   },
 };
 
-mock.module(R("lib/supabase.js"), {
+mock.module(atRoot("lib/supabase.js"), {
   namedExports: {
     admin: () => ({ from: table, storage: fakeStorage }),
     userClient: () => ({ from: table, storage: fakeStorage }),
@@ -110,12 +110,12 @@ mock.module(R("lib/supabase.js"), {
 });
 
 const audit = [];
-mock.module(R("lib/gw-audit.js"), {
+mock.module(atRoot("lib/gw-audit.js"), {
   namedExports: { gwLog: async (e) => { audit.push(e); } },
 });
 
-const { default: release } = await import(R("api/devices/release.js"));
-const { default: ext } = await import(R("api/ext.js"));
+const { default: release } = await import(atRoot("api/devices/release.js"));
+const { default: ext } = await import(atRoot("api/ext.js"));
 
 // ---- 偽の req/res -----------------------------------------------------------
 const res = () => {

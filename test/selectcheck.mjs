@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const R = (p) => _join(ROOT, p);
+const atRoot = (p) => _join(ROOT, p);
 
 
 

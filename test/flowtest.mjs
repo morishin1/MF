@@ -26,7 +26,7 @@ import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const R = (p) => _join(ROOT, p);
+const atRoot = (p) => _join(ROOT, p);
 
 
 // ---- SELECT した列だけを返す ------------------------------------------------
@@ -151,7 +151,7 @@ const fakeStorage = { from: () => ({
   createSignedUrl: () => Promise.resolve({ data: { signedUrl: "https://x/y" }, error: null }),
 }) };
 
-mock.module(R("lib/supabase.js"), {
+mock.module(atRoot("lib/supabase.js"), {
   namedExports: {
     admin: () => ({ from: table, storage: fakeStorage }),
     userClient: () => ({ from: table, storage: fakeStorage }),
@@ -164,21 +164,21 @@ let CTX = {
   tenantId: "t1", isAdmin: false, isHr: false, memberships: [], roles: [],
   employee: { id: "emp-1", tenant_id: "t1", display_name: "山田 太郎" },
 };
-mock.module(R("lib/auth.js"), {
+mock.module(atRoot("lib/auth.js"), {
   namedExports: { requireUser: async () => WHO, getMemberships: async () => [] },
 });
-mock.module(R("lib/gw.js"), {
+mock.module(atRoot("lib/gw.js"), {
   namedExports: { gwContext: async () => CTX, canManageHr: () => CTX.isHr },
 });
-mock.module(R("lib/gw-audit.js"), { namedExports: { gwLog: async () => {} } });
-mock.module(R("lib/notify.js"), {
+mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async () => {} } });
+mock.module(atRoot("lib/notify.js"), {
   namedExports: { notify: async () => {}, notifyMany: async () => {} },
 });
 
-const { default: pair } = await import(R("api/devices/pair.js"));
-const { default: enroll } = await import(R("api/devices/enroll.js"));
-const { default: me } = await import(R("api/devices/me.js"));
-const { sha256 } = await import(R("lib/devices.js"));
+const { default: pair } = await import(atRoot("api/devices/pair.js"));
+const { default: enroll } = await import(atRoot("api/devices/enroll.js"));
+const { default: me } = await import(atRoot("api/devices/me.js"));
+const { sha256 } = await import(atRoot("lib/devices.js"));
 
 // ---- 偽の req/res -----------------------------------------------------------
 const res = () => {
@@ -323,7 +323,7 @@ console.log("\n=== 取り忘れたら落ちるか（わざと壊して確かめ�
 
 await step("enrollment_id を取らなければ、⑤ が落ちる", async () => {
   const { readFileSync } = await import("node:fs");
-  const src = readFileSync(R("api/devices/pair.js"), "utf8");
+  const src = readFileSync(atRoot("api/devices/pair.js"), "utf8");
   // read() の SELECT に enrollment_id が入っていること。
   // ここが無いまま配ると、実機で「時間内に終わりませんでした」になる
   const sel = src.match(/\.select\("id, kind, tenant_id, employee_id[\s\S]{0,200}?"\)/);

@@ -30,6 +30,18 @@
     .cd-ok { display:inline-flex; align-items:center; gap:7px; font-size:13px;
              font-weight:600; cursor:pointer; }
     .cd-ok input { width:auto; margin:0; }
+  
+    /* 会社PC。ふだんはこの1行で足りる。
+       済んだ人に、毎回おなじ説明を出さない */
+    .my-pc { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .my-pc .l { flex:1 1 200px; }
+    .my-pc .nm { font-size:15px; font-weight:700; color:var(--primary-dark); }
+    .my-pc .st { font-size:14px; margin:2px 0; }
+    .my-pc .sub { font-size:12px; color:var(--muted); }
+    .my-mk { font-weight:700; }
+    .my-mk.ok { color:#2f855a; }
+    .my-mk.warn { color:#b7791f; }
+    .my-mk.silent { color:#c53030; }
   </style>
 </head>
 <body>
@@ -113,7 +125,7 @@
   <!-- 会社から借りているパソコン。
        自分の記録と、誰が自分の記録を見たかを、本人がここで読める -->
   <div id="dv-card" class="card hidden">
-    <h2><span class="material-symbols-outlined">laptop_windows</span>会社のパソコン</h2>
+    <h2><span class="material-symbols-outlined">laptop_windows</span>会社PC</h2>
     <div id="dv"></div>
   </div>
 
@@ -282,40 +294,120 @@
 
   function renderDevices(dv) {
     myDevices = dv;
-    if (!dv || !(dv.devices || []).length) return;
+    if (!dv) return;
+    const list = dv.devices || [];
+    // 台帳に1台も載っていない（表がまだ無いなど）ときは、静かに隠れる。
+    // 何も分かっていない状態で案内だけ出しても、本人は動けない
+    if (!list.length) return;
     el("dv-card").classList.remove("hidden");
 
-    const n = dv.notice || {};
-    const waiting = dv.devices.filter((d) => !d.confirmed);
-    const days = (dv.usage || []).slice(0, 7);
-    const spec = (d) => [d.os, d.browser].filter(Boolean).join(" / ");
+    // 会社PC（端末管理ソフトが入っているもの）と、ブラウザだけのものを分ける。
+    // 本人にとっての「会社PC」は前者のこと
+    const pcs = list.filter((d) => d.source === "agent");
+    const agent = pcs.find((d) => d.confirmed) || pcs[0] || null;
 
-    el("dv").innerHTML = `
-      ${waiting.length ? `
-        <div class="banner warn" style="margin:0 0 14px;">
-          <span class="material-symbols-outlined">info</span>
-          <div>まだ確認していない端末が ${waiting.length} 台あります。
-            <b>確認するまで、利用時間は数えていません。</b>
-            <div style="margin-top:8px;">
-              <a class="btn btn-primary btn-sm" href="device-consent.html">内容を読んで確認する</a>
-            </div>
+    // 押すまで記録は始まらない。会社PCの有無にかかわらず、まず出す
+    const waiting = list.filter((d) => !d.confirmed);
+    const waitBanner = waiting.length ? `
+      <div class="banner warn" style="margin:0 0 12px;">
+        <span class="material-symbols-outlined">info</span>
+        <div><b>確認待ち</b>の端末が ${waiting.length} 台あります。
+          <b>確認するまで、利用時間は数えていません。</b>
+          <div style="margin-top:8px;">
+            <a class="btn btn-primary btn-sm" href="device-consent.html">内容を読んで確認する</a>
           </div>
-        </div>` : ""}
+        </div>
+      </div>` : "";
 
+    // ---- まだ入れていない。案内はこのときだけ、大きく出す ----
+    if (!agent) {
+      el("dv").innerHTML = waitBanner + `
+        <div class="banner warn" style="margin:0;">
+          <span class="material-symbols-outlined">shield_lock</span>
+          <div>
+            <b>会社PCのセキュリティ設定が必要です。</b>
+            <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
+              会社貸与のパソコンで、まだ設定が終わっていません。
+              入れる作業は管理者・IT担当が行います。
+            </p>
+            <a class="btn btn-primary" href="device-setup.html">
+              <span class="material-symbols-outlined icon-inline">shield_lock</span>会社PCを設定する
+            </a>
+          </div>
+        </div>
+        ${list.length ? `
+          <div style="margin-top:12px;">
+            <button class="btn btn-secondary btn-sm" onclick="toggleMyPc()" id="mypc-btn">詳細を見る</button>
+          </div>
+          <div id="mypc-more" class="hidden" style="margin-top:14px;">
+            ${detailForMe(dv, list[0], [])}
+          </div>` : ""}`;
+      return;
+    }
+
+    // ---- 入っている。ふだんは1行で足りる ----
+    //
+    // 済んだ人に毎回おなじ説明を出さない。
+    // 見たい人は「詳細を見る」を押す
+    const st = agent.confirmed
+      ? (agent.state?.key === "silent"
+          ? { m: "×", t: "未通信", k: "silent" }
+          : { m: "○", t: "正常", k: "ok" })
+      : { m: "△", t: "確認待ち", k: "warn" };
+
+    el("dv").innerHTML = waitBanner + `
+      <div class="my-pc">
+        <div class="l">
+          <div class="nm">${esc(agent.hostname || agent.label)}</div>
+          <div class="st"><span class="my-mk ${st.k}">${st.m}</span> <b>${esc(st.t)}</b></div>
+          <div class="sub">最終確認：${esc(agent.lastSeen || "—")}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="toggleMyPc()" id="mypc-btn">詳細を見る</button>
+      </div>
+
+
+      <div id="mypc-more" class="hidden" style="margin-top:14px;">
+        ${detailForMe(dv, agent, pcs)}
+      </div>`;
+  }
+
+  function toggleMyPc() {
+    const box = el("mypc-more");
+    const open = box.classList.toggle("hidden");
+    el("mypc-btn").textContent = open ? "詳細を見る" : "閉じる";
+  }
+
+  /**
+   * 本人に見せるぶん。
+   *
+   * 管理者向けの判定条件・内部のしきい値・管理操作は出さない。
+   * 出すのは「自分の端末がどうなっているか」と「誰が自分の記録を見たか」
+   */
+  function detailForMe(dv, agent, pcs) {
+    const n = dv.notice || {};
+    const days = (dv.usage || []).slice(0, 7);
+    const brs = (agent.links || []).filter((b) => b.installed || b.linked);
+
+    return `
       <table class="kp-items" style="margin-bottom:14px;">
-        <tbody>${dv.devices.map((d) => `
-          <tr><td style="width:190px;"><b>${esc(d.label)}</b>
-              <div class="muted" style="font-size:11.5px;">${esc(spec(d))}</div></td>
-            <td>${d.confirmed
-              ? `記録中　<span class="muted" style="font-size:12px;">最終利用 ${esc(d.lastSeen)}</span>`
-              : `<b>確認待ち</b>　<span class="muted" style="font-size:12px;">数えていません</span>`}</td>
-          </tr>`).join("")}</tbody>
+        <tbody>
+          <tr><td style="width:150px;">パソコン</td>
+            <td>${esc(agent.hostname || agent.label)}
+              <span class="muted" style="font-size:12px;">${esc(agent.os || "")}</span></td></tr>
+          <tr><td>端末管理ソフト</td>
+            <td>${agent.state?.key === "silent" ? "つながっていません" : "つながっています"}
+              <span class="muted" style="font-size:12px;">最終 ${esc(agent.lastSeen || "—")}</span></td></tr>
+          ${brs.length ? brs.map((b) => `
+            <tr><td>${esc(b.label)}</td>
+              <td>${b.linked ? "つながっています" : "つながっていません"}</td></tr>`).join("")
+            : `<tr><td>ブラウザ</td><td class="muted">まだつながっていません</td></tr>`}
+          ${pcs.length > 1 ? `<tr><td>ほかの登録</td>
+            <td class="muted">${pcs.length - 1} 台</td></tr>` : ""}
+        </tbody>
       </table>
 
       ${days.length ? `
-        <h3 style="font-size:13px;margin:0 0 8px;">社内システムを開いていた時間</h3>
-        <p class="muted" style="font-size:11.5px;margin:0 0 8px;">
-          パソコンの稼働時間ではありません。この画面を開いていたあいだの、おおよその合計です。</p>
+        <h3 style="font-size:13px;margin:0 0 8px;">自分の利用記録</h3>
         <table class="kp-items" style="margin-bottom:14px;">
           <tbody>${days.map((u) => `
             <tr><td style="width:110px;color:var(--muted);">${esc(u.date)}</td>
@@ -339,19 +431,7 @@
           <br><br><b>記録する範囲</b><br>${(n.areas || []).map((a) => `・${esc(a)}`).join("<br>")}
           <br><br>${esc(n.purpose || "")}
         </div>
-      </details>
-
-      <p style="margin:14px 0 0;">
-        <a class="btn btn-primary btn-sm" href="device-setup.html">
-          <span class="material-symbols-outlined icon-inline">shield_lock</span>会社PCのセキュリティ設定
-        </a>
-        <span class="muted" style="display:block;font-size:11.5px;margin-top:8px;">
-          会社貸与パソコンに端末管理ソフトを入れるときは、ここから始めてください。
-          入れる作業は管理者・IT担当が行います。
-        </span>
-        <a class="btn btn-secondary btn-sm" href="device-consent.html"
-           style="margin-left:8px;">端末管理について</a>
-      </p>`;
+      </details>`;
   }
 
   function renderSigned(sg) {

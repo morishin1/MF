@@ -1,64 +1,69 @@
-# サーバ側（api / lib）を、直すたびに確かめる。
+# サーバ側と画面を、直すたびに確かめる。
 #
 # ■ なぜ要るのか
 #
 #   api/devices/pair.js が enrollment_id を SELECT し忘れていて、
 #   実機で動かすまで誰も気づかなかった。
-#   「1つずつは通るのに、つないだところで止まる」を、
-#   押す前に見つけるための場所。
+#   テストは全部通っていた（偽の Supabase が行を丸ごと返していたため）。
 #
-# ■ 何を見るか
+#   そのテストも、作業用の一時領域にしか無く、セッションが終われば
+#   消えていた。「壊れたら気づく」仕掛けが、いちばん消えやすい場所にあった。
+#   だからリポジトリに入れて、ここで毎回まわす。
 #
-#   flowtest     … EXE を実行してから台帳に出るまでを、通しで
-#   selectcheck  … 使っているのに SELECT していない列がないか
-#   reltest      … 配布の口（合言葉・二重登録・署名）
+# ■ 2つに分ける
 #
-#   偽の Supabase は、本物と同じで **SELECT に書いた列しか返さない**。
-#   行を丸ごと返していたせいで、取り忘れが通っていた。
+#   node … ブラウザが要らないもの。速いので、まずこちらで落とす
+#   ui   … 実際の画面を開くもの。Chromium を入れるぶん時間がかかる
 
 name: サーバ側を確かめる
 
 on:
   push:
-    paths:
-      - "api/**"
-      - "lib/**"
-      - "db/**"
-      - "test/**"
-      - ".github/workflows/web-test.yml"
+    paths: ["api/**", "lib/**", "db/**", "js/**", "*.html", "test/**",
+            ".github/workflows/web-test.yml"]
   pull_request:
-    paths:
-      - "api/**"
-      - "lib/**"
-      - "db/**"
-      - "test/**"
+    paths: ["api/**", "lib/**", "db/**", "js/**", "*.html", "test/**"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    name: 確かめる
+  node:
+    name: サーバ側（ブラウザなし）
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      # ハンドラを読み込むだけなので、依存は要る
       - name: 用意する
         run: npm install --no-audit --no-fund
+      - name: 確かめる
+        run: node test/run.mjs node
 
-      - name: 通しで確かめる
-        run: node --experimental-test-module-mocks test/flowtest.mjs
-
-      - name: SELECT の取り忘れを洗う
-        run: node test/selectcheck.mjs
-
-      - name: 配布の口を確かめる
-        run: node --experimental-test-module-mocks test/reltest.mjs
+  ui:
+    name: 画面（ブラウザあり）
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 用意する
+        run: npm install --no-audit --no-fund
+      - name: ブラウザを入れる
+        run: npx playwright install --with-deps chromium
+      # 画面は静的ファイル。置くだけで開ける
+      - name: 静的サーバを上げる
+        run: |
+          set -eu
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/mypage.html && break
+            sleep 0.5
+          done
+      - name: 確かめる
+        run: node test/run.mjs ui

@@ -119,6 +119,55 @@
                       padding:6px 14px; font-size:12.5px; cursor:pointer; font-family:inherit; }
     .dv-tabs button.on { background:var(--primary); color:#fff; border-color:var(--primary); }
 
+    /* 見出しと「端末管理について」を1行に */
+    .dv-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:14px; }
+    .dv-head > div { flex:1 1 auto; min-width:0; }
+    .dv-head > button { flex:0 0 auto; margin-top:4px; }
+
+    /* ○ △ × を、色と形の両方で分かるように */
+    .dv-mk { font-weight:700; font-size:15px; line-height:1; }
+    .dv-mk.ok { color:#2f855a; }
+    .dv-mk.warn { color:#b7791f; }
+    .dv-mk.silent { color:#c53030; }
+    .dv-mk.none { color:var(--muted); font-weight:400; }
+
+    /* 要確認。1件につき「何が」「どうする」を1行で */
+    .dv-issue { border:1px solid var(--border); border-radius:10px;
+                padding:12px 14px; margin-bottom:10px; background:#fff; }
+    .dv-issue .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+                    margin-bottom:8px; }
+    .dv-issue .hd .nm { font-weight:700; color:var(--primary-dark); }
+    .dv-issue .hd .nm.click { cursor:pointer; text-decoration:underline; }
+    .dv-issue .hd .sub { font-size:12px; color:var(--muted); }
+    .dv-issue .ln { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+                    padding:6px 0; font-size:13px; }
+    .dv-issue .ln .wt { flex:1 1 240px; }
+    .dv-issue .ln .ac { display:flex; gap:6px; flex-wrap:wrap; }
+
+    /* 詳細の頭。ここだけで「誰の・どれが・つながっているか」が分かる */
+    .dv-dhead { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start;
+                padding-bottom:14px; margin-bottom:14px;
+                border-bottom:1px solid var(--border); }
+    .dv-dhead .who { flex:1 1 200px; }
+    .dv-dhead .who .nm { font-size:17px; font-weight:700; color:var(--primary-dark); }
+    .dv-dhead .who .sub { font-size:12.5px; color:var(--muted); margin:2px 0 6px; }
+    .dv-dhead .conn { flex:0 1 auto; font-size:13px; line-height:1.95; }
+    .dv-dhead .conn .sub { color:var(--muted); font-size:12px; }
+    .dv-dhead .ops { flex:0 0 auto; margin-left:auto; position:relative;
+                     display:flex; gap:6px; }
+    .dv-dhead .ops .menu { position:absolute; right:0; top:36px; z-index:20;
+                           background:#fff; border:1px solid var(--border);
+                           border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+                           min-width:200px; padding:6px; }
+    .dv-dhead .ops .menu .hd { font-size:11.5px; color:var(--muted);
+                               padding:6px 10px 4px; }
+    .dv-dhead .ops .menu button { display:block; width:100%; text-align:left;
+                                  border:0; background:none; font-family:inherit;
+                                  font-size:13px; padding:8px 10px; border-radius:7px;
+                                  cursor:pointer; color:var(--text); }
+    .dv-dhead .ops .menu button:hover { background:var(--soft); }
+    .dv-dhead .ops .menu button.danger { color:#c53030; }
+
     .dv-chips { display:flex; gap:6px; flex-wrap:wrap; }
     .dv-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border);
                border-radius:999px; padding:3px 6px 3px 11px; font-size:12px; background:#fff; }
@@ -129,14 +178,21 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">端末管理</h1>
-  <p class="kp-greet-sub">
-    社内システムに、どの端末から入っているかを見ます。
-    会社のパソコン以外から社内の情報が見られていないかを確かめるためのもので、
-    働きぶりを点数にするためのものではありません。
-  </p>
+  <div class="dv-head">
+    <div>
+      <h1 class="kp-greet" style="margin:0;">端末管理</h1>
+      <p class="kp-greet-sub" style="margin:4px 0 0;">
+        会社貸与PCの接続状況・セキュリティ状態を確認します。
+      </p>
+    </div>
+    <button class="btn btn-secondary btn-sm" id="about-btn" onclick="toggleAbout()">
+      <span class="material-symbols-outlined icon-inline">help</span>端末管理について
+    </button>
+  </div>
 
-  <div class="dv-note">
+  <!-- 長い説明は、開いた人にだけ見せる。
+       毎回これを読み飛ばしてから一覧に着くのでは、画面が仕事をしていない -->
+  <div class="dv-note hidden" id="d-about">
     <b>台帳には2通りの載り方があります。</b>
     <span class="dv-src browser">ブラウザ</span> は社内システムを開くと自動で載るもので、
     分かるのは開いているあいだのことだけ。
@@ -163,7 +219,8 @@
   </div>
 
   <div class="dv-tabs">
-    <button id="t-list" class="on" onclick="tab('list')">端末</button>
+    <button id="t-list" class="on" onclick="tab('list')">登録済み<span id="t-list-n"></span></button>
+    <button id="t-check" onclick="tab('check')">要確認<span id="t-check-n"></span></button>
     <button id="t-alerts" onclick="tab('alerts')">アラート<span id="t-alerts-n"></span></button>
     <button id="t-exceptions" onclick="tab('exceptions')">私物PCの承認</button>
     <button id="t-policy" onclick="tab('policy')">設定</button>
@@ -171,38 +228,23 @@
 
   <!-- ===== 端末 ===== -->
   <div id="p-list">
-    <!-- 週に1回まわしてゼロにするもの。0件のときは出さない -->
-    <div id="d-todo" class="hidden"></div>
-
     <div id="d-sum" class="dv-sum"></div>
 
     <div class="card">
-      <h2><span class="material-symbols-outlined">devices</span>台帳
+      <h2><span class="material-symbols-outlined">devices</span>登録済みの会社PC
         <span style="margin-left:auto;display:flex;gap:8px;">
           <button class="btn btn-secondary btn-sm" onclick="downloadCsv(this)">
             <span class="material-symbols-outlined icon-inline">download</span>CSV
           </button>
         </span>
       </h2>
-      <p class="muted" style="font-size:11.5px;margin:0 0 10px;">
-        ブラウザは、その人が社内システムを開いた時点で自動で載ります。
-        会社のパソコンに端末管理ソフトを入れるのは<b>本人</b>です。
-        マイページの「会社PCのセキュリティ設定」から、本人が始めます。
-        管理者がコードを発行して渡す運用はありません。
-      </p>
-      <div class="dv-tabs" style="margin-bottom:10px;">
-        <button id="f-all" class="on" onclick="filterBy('')">すべて</button>
-        <button id="f-silent" onclick="filterBy('silent')">未通信<span id="f-silent-n"></span></button>
-        <button id="f-waiting" onclick="filterBy('waiting')">本人の確認待ち<span id="f-waiting-n"></span></button>
-        <button id="f-agent" onclick="filterBy('agent')">ソフト導入済み</button>
-        <button id="f-unmanaged" onclick="filterBy('unmanaged')">未登録・私物の可能性<span id="f-unmanaged-n"></span></button>
-      </div>
-      <div class="table-scroll" style="max-height:56vh;overflow:auto;">
+      <div class="table-scroll">
         <table class="dv-table">
           <thead><tr>
-            <th>端末</th><th>使う人</th><th>状態</th><th>最終利用</th><th>アラート</th><th></th>
+            <th>PC名</th><th>利用者</th><th>Agent</th><th>Browser</th>
+            <th>最終通信</th><th>状態</th><th></th>
           </tr></thead>
-          <tbody id="d-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
+          <tbody id="d-rows"><tr><td colspan="7">読み込み中…</td></tr></tbody>
         </table>
       </div>
       <div id="d-msg" class="err-text"></div>
@@ -210,6 +252,22 @@
 
     <div id="d-detail"></div>
     <div id="d-web"></div>
+  </div>
+
+  <!-- ===== 要確認 =====
+       登録の途中・未登録・問題のあるものは、こちらにまとめる。
+       正常なものと混ぜると、どれを見ればよいのか分からなくなる -->
+  <div id="p-check" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">report</span>要確認</h2>
+      <p class="muted" style="font-size:12px;margin:0 0 12px;">
+        登録の途中のもの、届いていないもの、区分が決まっていないものです。
+        ここを空にするのが、週に1回の仕事です。
+      </p>
+      <div id="c-rows">読み込み中…</div>
+      <div id="c-msg" class="err-text"></div>
+    </div>
+    <div id="c-detail"></div>
   </div>
 
   <!-- ===== アラート ===== -->
@@ -366,18 +424,27 @@
    */
   function openFromLink() {
     if (location.hash === "#alerts") return tab("alerts");
+    // 未通信・確認待ちは、どれも「要確認」に集めてある
     const f = new URLSearchParams(location.search).get("f");
-    if (f && ["silent", "waiting", "agent"].includes(f)) filterBy(f);
+    if (f && ["silent", "waiting", "unmanaged", "agent"].includes(f)) tab("check");
   }
 
   function tab(which) {
-    for (const k of ["list", "alerts", "exceptions", "policy"]) {
+    for (const k of ["list", "check", "alerts", "exceptions", "policy"]) {
       el(`p-${k}`).classList.toggle("hidden", k !== which);
       el(`t-${k}`).classList.toggle("on", k === which);
     }
     if (which === "alerts") loadAlerts();
     if (which === "exceptions") loadExceptions();
     if (which === "policy") loadPolicy();
+  }
+
+  /** 長い説明。読みたい人だけ開く */
+  function toggleAbout() {
+    const box = el("d-about");
+    const open = box.classList.toggle("hidden");
+    el("about-btn").classList.toggle("btn-primary", !open);
+    el("about-btn").classList.toggle("btn-secondary", open);
   }
 
   const fmt = (at) => (at ? new Date(at).toLocaleString("ja-JP",
@@ -412,199 +479,259 @@
     }
   }
 
+
+
   /**
-   * 週に1回まわして、ゼロにするもの。
+   * 登録が終わっている会社PCか。
    *
-   *   ・本人の確認待ち … 押すまで利用時間を1分も数えない。放置すると台帳が空のまま溜まる
-   *   ・未確認のアラート … △ が出たまま、誰も確認していない
-   *
-   * どちらも0のときは、まるごと出さない。
-   * 「0件です」を毎回置くと、そのうち読まれなくなる
+   * 「登録済み」＝ 端末管理ソフトが入っていて、本人が内容を確認したもの。
+   * どちらかが欠けていれば、それは登録の途中であって、完了ではない。
+   * 完了したものだけを通常の一覧に出す
    */
-  function renderTodo(s) {
-    const box = el("d-todo");
-    const waiting = (data.devices || []).filter((d) => d.state.key === "waiting");
-    const open = s.openAlerts || 0;
-
-    if (!waiting.length && !open) {
-      box.classList.add("hidden");
-      box.innerHTML = "";
-      return;
-    }
-
-    // 誰が押していないか。名前が出ていないと、声をかけようがない
-    const by = new Map();
-    for (const d of waiting) {
-      const name = d.employee?.name || "（割り当てなし）";
-      const days = d.firstSeenAt
-        ? Math.floor((Date.now() - Date.parse(d.firstSeenAt)) / 86400000) : 0;
-      const cur = by.get(name) || { n: 0, days: 0 };
-      cur.n += 1;
-      cur.days = Math.max(cur.days, days);
-      by.set(name, cur);
-    }
-
-    const lines = [];
-    if (waiting.length) {
-      lines.push(`
-        <div style="margin-top:10px;">
-          <b>本人の確認待ち ${waiting.length}台</b>
-          <span class="sub">押すまで、利用時間を1分も数えません</span>
-          <div class="who">${[...by.entries()]
-            .sort((a, b) => b[1].days - a[1].days)
-            .map(([name, v]) => `<span>${esc(name)}${v.n > 1 ? ` ×${v.n}` : ""}${
-              v.days > 0 ? `<b>${v.days}日</b>` : ""}</span>`).join("")}</div>
-          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-primary btn-sm" onclick="nudge(this)">
-              <span class="material-symbols-outlined icon-inline">campaign</span>まとめてお知らせを送る
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="filterBy('waiting')">この端末だけ見る</button>
-          </div>
-        </div>`);
-    }
-    if (open) {
-      lines.push(`
-        <div style="margin-top:${waiting.length ? 14 : 10}px;">
-          <b>未確認のアラート ${open}件</b>
-          <span class="sub">内容を見て「確認した」を押すまで残ります</span>
-          <div style="margin-top:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="tab('alerts')">アラートを見る</button>
-          </div>
-        </div>`);
-    }
-
-    box.innerHTML = `
-      <div class="dv-todo">
-        <h3><span class="material-symbols-outlined">task_alt</span>今週やること</h3>
-        <p class="muted" style="font-size:12px;margin:0;">
-          週に1回まわして、どちらも0にします。
-        </p>
-        ${lines.join("")}
-      </div>`;
-    box.classList.remove("hidden");
+  function isRegistered(d) {
+    return d.source === "agent" && Boolean(d.confirmed) && d.status !== "retired";
   }
 
-  /** 確認待ちの人に、押してくださいと知らせる */
-  async function nudge(btn) {
-    if (!confirm("確認していない人に、お知らせを送ります。よろしいですか？")) return;
-    try {
-      const r = await KPLayout.busy(btn, "送信中…",
-        () => API.patchDevice({ action: "nudge_waiting" }));
-      el("d-msg").textContent = r.sent
-        ? `${r.sent}人にお知らせを送りました。`
-        : "送る相手がいませんでした。";
-    } catch (e) {
-      el("d-msg").textContent = e.hint || e.message || "送れませんでした";
+  /**
+   * その端末で、人が何かしないといけないこと。
+   *
+   * 「何が問題か」と「次に何をすればよいか」を1つずつ返す。
+   * 返すものが無ければ、放っておいてよい端末
+   */
+  function issuesOf(d) {
+    const out = [];
+    const id = d.id;
+    if (d.source === "agent" && !d.confirmed) {
+      out.push({
+        key: "not_confirmed", sev: "waiting",
+        what: "本人の確認が終わっていません（押すまで記録は始まりません）",
+        acts: [
+          { label: "お知らせを送る", fn: `nudgeOne('${id}', this)` },
+          { label: "周知済みにする", fn: `markNotified('${id}')` },
+        ],
+      });
     }
+    // 登録されていない端末は、下でまとめて出す。
+    // 同じボタンが2行に並ぶと、どちらを押せばよいのか分からない
+    const unmanaged = d.source === "browser" && !d.linkedTo;
+    if (d.own?.key === "check" && !unmanaged) {
+      out.push({
+        key: "ownership", sev: "warn",
+        what: "会社貸与か私物か、まだ決まっていません",
+        acts: [
+          { label: "会社貸与にする", fn: `setOwn('${id}','company', this)` },
+          { label: "私物として扱う", fn: `setOwn('${id}','personal', this)` },
+        ],
+      });
+    }
+    // 私物と分かっていて、承認も無いまま業務に使われている。
+    // 「決まっていない」より重い。原則として禁止しているもの
+    if (d.own?.key === "banned") {
+      out.push({
+        key: "banned", sev: "critical",
+        what: "私物PCが業務に使われています（原則禁止）",
+        acts: [
+          { label: "事前承認を出す", fn: `tab('exceptions')` },
+          { label: "会社貸与にする", fn: `setOwn('${id}','company', this)` },
+        ],
+      });
+    }
+    if (d.state.key === "silent") {
+      out.push({
+        key: "silent", sev: "silent",
+        what: d.source === "agent"
+          ? "Agent から届いていません（ソフトが止まっているかもしれません）"
+          : "しばらく使われていません",
+        acts: [{ label: "詳しく見る", fn: `showDetail('${id}')` }],
+      });
+    }
+    if (d.source === "agent" && d.confirmed) {
+      const off = (d.links || []).filter((b) => b.installed && !b.linked);
+      if (off.length) {
+        out.push({
+          key: "browser", sev: "warn",
+          what: `${off.map((b) => b.label).join("・")} が連携していません（WEB利用が取れません）`,
+          acts: [{ label: "詳しく見る", fn: `showDetail('${id}')` }],
+        });
+      }
+    }
+    if (unmanaged) {
+      out.push({
+        key: "unmanaged", sev: "warn",
+        what: "登録されていない端末から社内システムを開いています"
+            + (d.own?.key === "check" ? "（会社貸与か私物かも決まっていません）" : ""),
+        acts: [
+          { label: "会社貸与にする", fn: `setOwn('${id}','company', this)` },
+          { label: "私物として扱う", fn: `setOwn('${id}','personal', this)` },
+          { label: "詳しく見る", fn: `showDetail('${id}')` },
+        ],
+      });
+    }
+    if (d.openAlerts.critical) {
+      out.push({
+        key: "alert", sev: "critical",
+        what: `重大なアラートが ${d.openAlerts.critical} 件あります`,
+        acts: [{ label: "アラートを見る", fn: `tab('alerts')` }],
+      });
+    }
+    return out;
+  }
+
+  /** 画面に出す2つの束。折りたたまれたブラウザの行は数えない */
+  function split() {
+    const all = (data.devices || []).filter((d) => !d.foldedInto);
+    const ok = [];
+    const check = [];
+    for (const d of all) {
+      const iss = issuesOf(d);
+      if (isRegistered(d)) {
+        ok.push(d);
+        if (iss.length) check.push({ d, issues: iss });
+      } else {
+        check.push({ d, issues: iss.length ? iss : [{
+          key: "setup", sev: "waiting",
+          what: "登録の途中です",
+          acts: [{ label: "詳しく見る", fn: `showDetail('${d.id}')` }],
+        }] });
+      }
+    }
+    return { ok, check };
   }
 
   function render() {
-    const s = data.summary || {};
-    renderTodo(s);
-    el("d-sum").innerHTML = `
-      <div class="box"><div class="k">台数</div><div class="v">${s.total || 0}</div></div>
-      <div class="box"><div class="k">ソフト導入済み</div><div class="v">${s.agents || 0}</div></div>
-      <div class="box"><div class="k">本人の確認待ち</div><div class="v">${s.waiting || 0}</div></div>
-      <div class="box${s.silent ? " bad" : ""}"><div class="k">未通信</div>
-        <div class="v">${s.silent || 0}</div></div>
-      <div class="box${s.unknown ? " bad" : ""}"><div class="k">未登録端末からの接続</div>
-        <div class="v">${s.unknown || 0}</div></div>
-      <div class="box${(s.unmanaged || s.banned) ? " bad" : ""}"><div class="k">会社貸与と未確認</div>
-        <div class="v">${(s.unmanaged || 0) + (s.banned || 0)}</div></div>`;
+    const { ok, check } = split();
 
+    // ○ 正常 / △ 要確認 / × 未通信 の3つに寄せる。
+    // 数えるのは「登録済み」だけ。登録の途中のものは要確認に入っている
+    const silent = ok.filter((d) => d.state.key === "silent").length;
+    const warn = ok.filter((d) => d.state.key !== "silent" && mark(d).k !== "ok").length;
+    el("d-sum").innerHTML = `
+      <div class="box"><div class="k">登録端末</div><div class="v">${ok.length}</div></div>
+      <div class="box"><div class="k">正常</div>
+        <div class="v">${ok.length - silent - warn}</div></div>
+      <div class="box${check.length ? " bad" : ""}"><div class="k">要確認</div>
+        <div class="v">${check.length}</div></div>
+      <div class="box${silent ? " bad" : ""}"><div class="k">未通信</div>
+        <div class="v">${silent}</div></div>`;
+
+    el("t-list-n").textContent = ok.length ? `（${ok.length}）` : "";
+    el("t-check-n").textContent = check.length ? `（${check.length}）` : "";
     const n = (data.alerts || []).length;
     el("t-alerts-n").textContent = n ? `（${n}）` : "";
 
-    const all = data.devices || [];
-    el("f-silent-n").textContent = s.silent ? `（${s.silent}）` : "";
-    el("f-waiting-n").textContent = s.waiting ? `（${s.waiting}）` : "";
-    const un = (s.unmanaged || 0) + (s.banned || 0);
-    el("f-unmanaged-n").textContent = un ? `（${un}）` : "";
-
-    // 未通信・重大は上に出す。一覧をスクロールしないと気づけないのでは、
-    // 出している意味がない
-    const weight = (d) => (d.state.key === "silent" ? 0
-      : d.state.key === "critical" ? 1
-      : d.state.key === "waiting" ? 2
-      : d.state.key === "warn" ? 3 : 4);
-    const rows = all
-      .filter((d) => !filter
-        || (filter === "agent" ? d.source === "agent"
-          : filter === "unmanaged" ? ["check", "banned"].includes(d.own?.key)
-          : d.state.key === filter))
-      .sort((a, b) => weight(a) - weight(b));
-
-    if (!rows.length) {
-      el("d-rows").innerHTML = `<tr><td colspan="6">${all.length
-        ? "この条件に当てはまる端末はありません。"
-        : "まだ端末がありません。メンバーが社内システムを開くと、ここに載ります。"}</td></tr>`;
-      return;
-    }
-    el("d-rows").innerHTML = rows.map((d) => `
-      <tr class="click" onclick="showDetail('${d.id}')">
-        <td><span class="nm">${esc(d.source === "agent" ? (d.hostname || d.label) : d.label)}</span>
-          <span class="dv-src ${esc(d.source)}">${d.source === "agent" ? "エージェント" : "ブラウザ"}</span>
-          <span class="sub">${esc(spec(d))}${
-            d.agentVersion ? ` / v${esc(d.agentVersion)}` : ""}</span>
-          ${links(d)}</td>
-        <td>${d.employee ? `${esc(d.employee.name)}<span class="sub">${esc(d.employee.department || "")}</span>`
-                         : '<span class="sub">未割り当て</span>'}</td>
-        <td><span class="dv-st ${esc(d.state.key)}">${esc(d.state.label)}</span>
-          ${owned(d)}
-          ${d.state.key === "silent"
-            ? `<span class="sub">${esc(d.source === "agent"
-                ? "ソフトが止まっているかもしれません" : "")}</span>` : ""}</td>
-        <td>${esc(d.lastSeen)}</td>
-        <td>${d.openAlerts.critical ? `<span class="dv-st critical">重大 ${d.openAlerts.critical}</span> ` : ""}${
-              d.openAlerts.warn ? `<span class="dv-st warn">要確認 ${d.openAlerts.warn}</span>` : ""}${
-              !d.openAlerts.critical && !d.openAlerts.warn ? '<span class="sub">—</span>' : ""}</td>
-        <td><span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);">chevron_right</span></td>
-      </tr>`).join("");
+    renderList(ok);
+    renderCheck(check);
   }
 
   /**
-   * 1台のパソコンの中の状態。
+   * 状態は3つだけ。○ 正常 / △ 要確認 / × 未通信。
    *
-   *   Agent  ●接続中
-   *   Chrome ●連携済
-   *   Edge   ●未連携
-   *
-   * 人から見れば1台なので、別の行にはしない。
-   * 「入っているのに、つながっていない」がここで分かる
+   * 細かい内訳を一覧に並べると、どれが手を打つべきものか分からなくなる。
+   * 細かいところは、要確認タブと詳細で見る
    */
-  function links(d) {
-    if (d.source !== "agent") return "";
-    const dot = (k) => `<span class="dv-dot ${esc(k)}"></span>`;
-    const agentKey = d.state.key === "silent" ? "off"
-      : d.state.key === "waiting" ? "wait" : "on";
-    const parts = [
-      `<span class="dv-link">${dot(agentKey)}Agent <b>${esc(
-        agentKey === "on" ? "接続中" : agentKey === "wait" ? "確認待ち" : "未通信")}</b></span>`,
-    ];
-    // ブラウザの状態は2か所から来る。
-    //   links    … 拡張から届いているか（gw_device_browsers）
-    //   browsers … そのPCのブラウザで社内システムを開いた行（折りたたんだぶん）
-    // 人から見れば同じ1つのブラウザなので、名前でまとめて1行にする
-    const by = new Map();
-    for (const b of d.links || []) {
-      if (b.state.key === "gone") continue;
-      by.set(b.label, {
-        label: b.label,
-        key: b.state.key === "linked" ? "on" : b.state.key === "installed" ? "wait" : "off",
-        text: b.state.label,
-      });
-    }
-    for (const b of d.browsers || []) {
-      const label = b.browser || b.label;
-      if (!label || by.has(label)) continue;
-      // 拡張は入っていないが、このPCのブラウザから社内システムに入っている
-      by.set(label, { label, key: "on", text: "連携済" });
-    }
-    for (const b of by.values()) {
-      parts.push(`<span class="dv-link">${dot(b.key)}${esc(b.label)} <b>${esc(b.text)}</b></span>`);
-    }
-    return `<span class="dv-links">${parts.join("")}</span>`;
+  function mark(d) {
+    if (d.state.key === "silent") return { k: "silent", m: "×", t: "未通信" };
+    if (d.state.key === "ok") return { k: "ok", m: "○", t: "正常" };
+    return { k: "warn", m: "△", t: "要確認" };
   }
+
+  /**
+   * ブラウザの印。
+   *
+   * 「入っているのに、つながっていない」ものが1つでもあれば △。
+   * 片方つながっていれば ○ にすると、WEB利用が半分しか取れていないことに
+   * 誰も気づけない
+   */
+  function browserMark(d) {
+    const bs = d.links || [];
+    if (!bs.length) return { k: "none", m: "—", t: "" };
+    const off = bs.filter((b) => b.installed && !b.linked);
+    if (off.length) {
+      return { k: "warn", m: "△", t: `${off.map((b) => b.label).join("・")} 未連携` };
+    }
+    if (bs.some((b) => b.linked)) return { k: "ok", m: "○", t: "" };
+    return { k: "none", m: "—", t: "" };
+  }
+
+  function renderList(rows) {
+    if (!rows.length) {
+      el("d-rows").innerHTML = `<tr><td colspan="7" class="muted">
+        登録が終わった会社PCはまだありません。
+        本人がマイページの「会社PCのセキュリティ設定」から始めます。</td></tr>`;
+      return;
+    }
+    // 手を打つものから上に出す
+    const w = (d) => (d.state.key === "silent" ? 0 : mark(d).k === "warn" ? 1 : 2);
+    el("d-rows").innerHTML = [...rows].sort((a, b) => w(a) - w(b)).map((d) => {
+      const st = mark(d);
+      const ag = d.state.key === "silent" ? { k: "silent", m: "×" } : { k: "ok", m: "○" };
+      const br = browserMark(d);
+      return `
+      <tr class="click" onclick="showDetail('${d.id}')">
+        <td><span class="nm">${esc(d.hostname || d.label)}</span></td>
+        <td>${d.employee ? esc(d.employee.name) : '<span class="sub">未割り当て</span>'}</td>
+        <td><span class="dv-mk ${ag.k}">${ag.m}</span></td>
+        <td><span class="dv-mk ${br.k}">${br.m}</span>${
+          br.t ? `<span class="sub">${esc(br.t)}</span>` : ""}</td>
+        <td>${esc(d.lastSeen)}</td>
+        <td><span class="dv-mk ${st.k}">${st.m}</span> ${esc(st.t)}</td>
+        <td><span class="material-symbols-outlined"
+              style="font-size:18px;color:var(--muted);">chevron_right</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  /** 要確認。1件につき「何が」「どうする」を1行で */
+  function renderCheck(list) {
+    if (!list.length) {
+      el("c-rows").innerHTML = `<p class="muted">いまはありません。</p>`;
+      return;
+    }
+    const sev = { critical: 0, silent: 1, waiting: 2, warn: 3 };
+    el("c-rows").innerHTML = list.map(({ d, issues }) => `
+      <div class="dv-issue">
+        <div class="hd">
+          <span class="nm click" onclick="showDetail('${d.id}')">${esc(d.hostname || d.label)}</span>
+          <span class="dv-src ${esc(d.source)}">${
+            d.source === "agent" ? "エージェント" : "ブラウザ"}</span>
+          ${d.employee ? `<span class="sub">${esc(d.employee.name)}</span>` : ""}
+        </div>
+        ${[...issues].sort((a, b) => (sev[a.sev] ?? 9) - (sev[b.sev] ?? 9)).map((i) => `
+          <div class="ln">
+            <span class="dv-st ${esc(i.sev)}">${esc(
+              i.sev === "critical" ? "重大" : i.sev === "silent" ? "未通信"
+              : i.sev === "waiting" ? "確認待ち" : "要確認")}</span>
+            <span class="wt">${esc(i.what)}</span>
+            <span class="ac">${i.acts.map((a) => `
+              <button class="btn btn-secondary btn-sm" onclick="${a.fn}">${esc(a.label)}</button>`)
+              .join("")}</span>
+          </div>`).join("")}
+      </div>`).join("");
+  }
+
+  /** 要確認から、その場で区分を付ける。詳細まで降りなくてよいように */
+  async function setOwn(id, kind, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.patchDevice({
+        deviceId: id, action: "ownership", ownership: kind,
+      }));
+      await load();
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "変更できませんでした";
+    }
+  }
+
+  /** その人にだけ、確認をお願いする */
+  async function nudgeOne(id, btn) {
+    try {
+      const r = await KPLayout.busy(btn, "送信中…",
+        () => API.patchDevice({ action: "nudge_waiting", deviceId: id }));
+      el("c-msg").textContent = r.sent ? "お知らせを送りました。" : "送る相手がいませんでした。";
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "送れませんでした";
+    }
+  }
+
 
   /**
    * 業務に使ってよいパソコンか。
@@ -612,20 +739,7 @@
    * 業務は原則、会社貸与PCだけ。私物PCでの業務利用は禁止している。
    * 会社貸与と分かっているものには、何も出さない（全部に印が付くと読まれない）
    */
-  function owned(d) {
-    const o = d.own;
-    if (!o || o.key === "ok") return "";
-    const cls = o.key === "banned" ? "critical" : o.key === "allowed" ? "ok" : "warn";
-    return `<span class="dv-st ${cls}" title="${esc(o.note || "")}">${esc(o.label)}</span>`;
-  }
 
-  function filterBy(key) {
-    filter = key;
-    for (const k of ["all", "silent", "waiting", "agent", "unmanaged"]) {
-      el(`f-${k}`).classList.toggle("on", (k === "all" ? "" : k) === key);
-    }
-    render();
-  }
 
   async function showDetail(id) {
     openDetail = id;
@@ -644,136 +758,225 @@
   function renderDetail(d) {
     const dev = d.device;
     const isAgent = dev.source === "agent";
-    const days = d.usage.slice(0, 14);
-    const maxDay = Math.max(1, ...days.map((u) => u.activeMin));
-    const maxApp = Math.max(1, ...(d.apps || []).map((a) => a.minutes));
-    const maxWeb = Math.max(1, ...(d.web || []).map((w) => w.minutes));
+    detail = d;
+
+    const st = mark(dev);
+    const ag = dev.state.key === "silent" ? { k: "silent", m: "×", t: "未通信" }
+             : dev.confirmed ? { k: "ok", m: "○", t: "" }
+             : { k: "warn", m: "△", t: "確認待ち" };
+
+    // ブラウザの情報は2か所から来る。
+    //   links    … 拡張から届いているか（入っている／つながっている）
+    //   browsers … そのPCのブラウザで社内システムを開いた行（折りたたんだぶん）
+    // 片方しか無いことがあるので、同じ形にそろえてから使う。
+    // 入れていないものは出さない（「—」が並んでも読む人の役に立たない）
+    const brs = ((dev.links || []).length ? dev.links : (d.browsers || []))
+      .map((b) => ({
+        label: b.label,
+        // 折りたたんだ行には installed/linked が無い。
+        // そこに行があること自体が「つながっている」という意味
+        installed: b.installed !== undefined ? b.installed : true,
+        linked: b.linked !== undefined ? b.linked : true,
+        extVersion: b.extVersion,
+      }))
+      .filter((b) => b.installed || b.linked);
 
     el("d-detail").innerHTML = `
       <div class="card">
-        <h2><span class="material-symbols-outlined">computer</span>${esc(dev.label)}
-          <span class="dv-st ${esc(dev.state.key)}" style="margin-left:8px;">${esc(dev.state.label)}</span>
-          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
-                  onclick="closeDetail()">閉じる</button>
-        </h2>
-        ${dev.state.note ? `<p class="muted" style="font-size:12px;margin:-4px 0 12px;">${esc(dev.state.note)}</p>` : ""}
-
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-          <button class="btn btn-secondary btn-sm"
-                  onclick="assign('${dev.id}', '${dev.employee ? dev.employee.id : ""}')">使う人を変える</button>
-          <button class="btn btn-secondary btn-sm" onclick="rename('${dev.id}')">名前を変える</button>
-          ${(isAgent && (d.browsers || []).length) || (!isAgent && dev.linkedTo)
-            ? `<button class="btn btn-secondary btn-sm" onclick="unlink('${dev.id}')">紐付けを解除</button>`
-            : ""}
-          ${dev.status === "suspended"
-            ? `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','resume')">再開する</button>`
-            : `<button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','suspend')">停止する</button>`}
-          <button class="btn btn-secondary btn-sm" onclick="act('${dev.id}','retire')">使用終了にする</button>
-          <button class="btn btn-secondary btn-sm" onclick="setOwnership('${dev.id}','${esc(dev.ownership || "unknown")}')">会社貸与／私物</button>
-          ${dev.confirmed ? "" : `
-            <button class="btn btn-secondary btn-sm" onclick="markNotified('${dev.id}')">周知済みにする</button>`}
-          <button class="btn btn-secondary btn-sm" onclick="editNote('${dev.id}')">メモ</button>
-          ${dev.employee
-            ? `<button class="btn btn-primary btn-sm"
-                       onclick="openWeb('${dev.employee.id}','${esc(dev.employee.name)}')">
-                 <span class="material-symbols-outlined icon-inline">travel_explore</span>WEB利用</button>`
-            : ""}
+        <!-- 上に、その場で知りたいことだけ。
+             残りはタブの中。縦に全部積むと、下まで誰も見ない -->
+        <div class="dv-dhead">
+          <div class="who">
+            <div class="nm">${esc(dev.hostname || dev.label)}</div>
+            <div class="sub">${dev.employee ? esc(dev.employee.name) : "未割り当て"}</div>
+            <div><span class="dv-mk ${st.k}">${st.m}</span> <b>${esc(st.t)}</b></div>
+          </div>
+          <div class="conn">
+            <div><span class="dv-mk ${ag.k}">${ag.m}</span> Agent
+              ${ag.t ? `<span class="sub">${esc(ag.t)}</span>` : ""}</div>
+            ${brs.map((b) => `<div><span class="dv-mk ${b.linked ? "ok" : "warn"}">${
+              b.linked ? "○" : "△"}</span> ${esc(b.label)}
+              ${b.linked ? "" : '<span class="sub">未連携</span>'}</div>`).join("")}
+            <div class="sub">最終通信 ${esc(dev.lastSeen)}</div>
+          </div>
+          <div class="ops">
+            <button class="btn btn-secondary btn-sm" onclick="toggleOps()" id="ops-btn"
+                    title="管理操作">…</button>
+            <button class="btn btn-secondary btn-sm" onclick="closeDetail()">閉じる</button>
+            <div class="menu hidden" id="ops-menu">
+              <button onclick="assign('${dev.id}', '${dev.employee ? dev.employee.id : ""}')">使う人を変える</button>
+              <button onclick="rename('${dev.id}')">名前を変える</button>
+              <button onclick="ownMenu('${dev.id}')">会社貸与／私物</button>
+              ${dev.confirmed ? "" : `<button onclick="markNotified('${dev.id}')">周知済みにする</button>`}
+              ${(isAgent && brs.length) || (!isAgent && dev.linkedTo)
+                ? `<button onclick="unlink('${dev.id}')">紐付けを解除</button>` : ""}
+              <button onclick="editNote('${dev.id}')">メモ</button>
+              ${dev.status === "suspended"
+                ? `<button onclick="act('${dev.id}','resume')">再開する</button>`
+                : `<button onclick="act('${dev.id}','suspend')">停止する</button>`}
+              <button class="danger" onclick="act('${dev.id}','retire')">使用終了にする</button>
+            </div>
+          </div>
         </div>
-        ${dev.employee ? `<p class="muted" style="font-size:11.5px;margin:-8px 0 12px;">
-          「WEB利用」を開くと、そのことが ${esc(dev.employee.name)} さんの画面に残ります。</p>` : ""}
-
+        ${dev.state.note ? `<p class="muted" style="font-size:12px;margin:0 0 10px;">${esc(dev.state.note)}</p>` : ""}
         <div id="d-assign"></div>
 
-        <table class="dv-table" style="margin-bottom:16px;">
-          <tr><th>業務利用</th><td>${dev.own
-            ? `${esc(dev.own.label)}${dev.own.note ? `<span class="sub">${esc(dev.own.note)}</span>` : ""}`
-            : "—"}</td></tr>
-          <tr><th>周知</th><td>${dev.confirmed
-            ? `${esc(fmt(dev.notifiedAt))}　${
-                dev.notifiedKind === "admin" ? "管理者が周知" : "本人が確認"}${
-                dev.notifiedNote ? `<span class="sub">${esc(dev.notifiedNote)}</span>` : ""}`
-            : `<span class="dv-st waiting">まだ</span>
-               <span class="sub">本人が確認するか、管理者が「周知済みにする」を押すまで、記録は始まりません</span>`}</td></tr>
-          <tr><th>使う人</th><td>${dev.employee ? esc(dev.employee.name) : "未割り当て"}</td>
-              <th>本人の確認</th><td>${dev.confirmed ? esc(fmt(dev.notifiedAt))
-                : "まだ（記録は始まっていません）"}</td></tr>
-          <tr><th>OS</th><td>${esc(dev.os || "—")}${
-                dev.osBuild ? `（${esc(dev.osBuild)}）` : ""}</td>
-              <th>${isAgent ? "エージェント" : "ブラウザ"}</th>
-              <td>${esc(isAgent ? (dev.agentVersion ? "v" + dev.agentVersion : "—")
-                                : (dev.browser || "—"))}</td></tr>
-          <tr><th>${isAgent ? "製造番号" : "画面"}</th>
-              <td>${esc((isAgent ? dev.serial : dev.screen) || "—")}</td>
-              <th>${isAgent ? "パソコン名" : "アプリとして導入"}</th>
-              <td>${isAgent ? esc(dev.hostname || "—") : (dev.installed ? "済み" : "していない")}</td></tr>
-          <tr><th>はじめて使った日</th><td>${esc(fmt(dev.firstSeenAt))}</td>
-              <th>最終${isAgent ? "受信" : "利用"}</th><td>${esc(dev.lastSeen)}</td></tr>
-          ${dev.note ? `<tr><th>メモ</th><td colspan="3">${esc(dev.note)}</td></tr>` : ""}
-          ${dev.adminTouchedAt ? `<tr><th>管理者の操作</th><td colspan="3">
-            ${esc(fmt(dev.adminTouchedAt))}　${esc(dev.adminTouchedBy || "")}　
-            ${esc(ADMIN_ACT[dev.adminTouchedWhat] || dev.adminTouchedWhat || "")}
-            <span class="sub">くわしい経緯は 組織設定・ログ で見られます</span>
-          </td></tr>` : ""}
-        </table>
-
-        ${(d.browsers || []).length ? `
-          <h2><span class="material-symbols-outlined">public</span>このパソコンで使われているブラウザ</h2>
-          <table class="dv-table" style="margin-bottom:16px;">
-            ${d.browsers.map((b) => `<tr>
-              <td>${esc(b.label)}</td>
-              <td>${b.confirmed ? "確認済み" : "確認待ち"}</td>
-              <td>最終利用 ${esc(b.lastSeen)}</td></tr>`).join("")}
-          </table>` : ""}
-
-        <h2><span class="material-symbols-outlined">schedule</span>${
-          isAgent ? "パソコンの稼働（直近14日）" : "社内システムを開いていた時間（直近14日）"}</h2>
-        <p class="muted" style="font-size:11.5px;margin:-6px 0 10px;">
-          ${isAgent
-            ? "会社のソフトが測った、パソコンを使っていた時間です。"
-            : "パソコンの稼働時間ではありません。この社内システムを開いていたあいだの、おおよその合計です。"}
-        </p>
-        ${days.length ? `<table class="dv-table"><thead><tr>
-            <th>日付</th><th>${isAgent ? "稼働" : "利用"}</th><th></th>
-            ${isAgent ? "<th>離席</th>" : ""}<th>深夜</th><th>休日</th><th>最初</th><th>最後</th>
-          </tr></thead><tbody>${days.map((u) => `
-            <tr><td>${esc(u.date)}</td><td><b>${esc(u.active)}</b></td>
-              <td style="width:180px;"><span class="t" style="display:block;height:12px;border-radius:4px;
-                background:var(--primary);width:${Math.round(u.activeMin / maxDay * 100)}%;"></span></td>
-              ${isAgent ? `<td>${esc(clock(u.idleMin))}</td>` : ""}
-              <td>${u.nightMin ? `<span class="dv-st warn">${esc(clock(u.nightMin))}</span>` : "—"}</td>
-              <td>${u.holidayMin ? `<span class="dv-st warn">${esc(clock(u.holidayMin))}</span>` : "—"}</td>
-              <td>${esc(hm(u.firstAt))}</td><td>${esc(hm(u.lastAt))}</td></tr>`).join("")}
-          </tbody></table>`
-          : `<p class="muted">この期間の記録はありません。</p>`}
-
-        ${(d.apps || []).length || (d.web || []).length ? `
-        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">
-          <div style="flex:1 1 300px;">
-            <h2><span class="material-symbols-outlined">apps</span>よく使ったソフト（30日）</h2>
-            <div class="dv-bars">${(d.apps || []).map((a) => `
-              <div class="dv-bar"><span title="${esc(a.product || a.exeName)}">${esc(a.exeName)}</span>
-                <span><span class="t" style="display:block;width:${
-                  Math.round(a.minutes / maxApp * 100)}%;"></span></span>
-                <span class="v">${esc(a.label)}</span></div>`).join("")}</div>
-          </div>
-          <div style="flex:1 1 300px;">
-            <h2><span class="material-symbols-outlined">public</span>サイトの種類（30日）</h2>
-            <p class="muted" style="font-size:11.5px;margin:-6px 0 8px;">
-              URLもサイト名も保存していません。パソコンの中で種類に置き換えてから送っています。</p>
-            <div class="dv-bars">${(d.web || []).map((w) => `
-              <div class="dv-bar"><span>${esc(w.label)}</span>
-                <span><span class="t" style="display:block;width:${
-                  Math.round(w.minutes / maxWeb * 100)}%;"></span></span>
-                <span class="v">${esc(w.time)}</span></div>`).join("")}</div>
-          </div>
-        </div>` : ""}
-
-        <h2 style="margin-top:18px;"><span class="material-symbols-outlined">list</span>この端末に起きたこと</h2>
-        <div class="dv-ev">${d.events.length ? d.events.map((e) => `
-          <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${detailText(e.detail)}</div>`).join("")
-          : `<p class="muted">記録はありません。</p>`}</div>
+        <div class="dv-tabs" id="dt-tabs">
+          <button class="on" onclick="dtab('sum', this)">概要</button>
+          <button onclick="dtab('use', this)">利用状況</button>
+          ${isAgent ? `<button onclick="dtab('web', this)">WEB</button>
+          <button onclick="dtab('app', this)">アプリ</button>
+          <button onclick="dtab('sec', this)">セキュリティ</button>` : ""}
+          <button onclick="dtab('log', this)">履歴</button>
+        </div>
+        <div id="dt-body"></div>
       </div>`;
+    dtab("sum");
   }
+
+  /** 管理操作は「…」の中。横一列に並べると、押す前に読む量が増える */
+  function toggleOps() {
+    el("ops-menu").classList.toggle("hidden");
+  }
+
+  /** 区分は選ばせる。prompt に company と打たせない */
+  function ownMenu(id) {
+    const box = el("ops-menu");
+    box.innerHTML = `
+      <div class="hd">このパソコンの区分</div>
+      <button onclick="setOwn('${id}','company', this)">会社貸与（業務に使ってよい）</button>
+      <button onclick="setOwn('${id}','personal', this)">私物（業務利用は禁止）</button>
+      <button onclick="setOwn('${id}','unknown', this)">未確認にもどす</button>`;
+    box.classList.remove("hidden");
+  }
+
+  let detail = null;
+  let dtabNow = "sum";
+
+  function dtab(which, btn) {
+    dtabNow = which;
+    if (btn) {
+      for (const b of el("dt-tabs").querySelectorAll("button")) b.classList.remove("on");
+      btn.classList.add("on");
+    }
+    el("dt-body").innerHTML = detailPane(which, detail);
+  }
+
+  function detailPane(which, d) {
+    if (!d) return "";
+    const dev = d.device;
+    const isAgent = dev.source === "agent";
+
+    if (which === "sum") {
+      return `<table class="dv-table">
+        <tr><th>利用者</th><td>${dev.employee ? esc(dev.employee.name) : "未割り当て"}</td>
+            <th>会社貸与／私物</th><td>${dev.own ? esc(dev.own.label) : "—"}${
+              dev.own?.note ? `<span class="sub">${esc(dev.own.note)}</span>` : ""}</td></tr>
+        <tr><th>PC名</th><td>${esc(dev.hostname || dev.label)}</td>
+            <th>状態</th><td>${esc(dev.state.label)}</td></tr>
+        <tr><th>OS</th><td>${esc(dev.os || "—")}${dev.osBuild ? `（${esc(dev.osBuild)}）` : ""}</td>
+            <th>${isAgent ? "Agent" : "ブラウザ"}</th>
+            <td>${esc(isAgent ? (dev.agentVersion ? "v" + dev.agentVersion : "—")
+                              : (dev.browser || "—"))}</td></tr>
+        <tr><th>${isAgent ? "製造番号" : "画面"}</th>
+            <td>${esc((isAgent ? dev.serial : dev.screen) || "—")}</td>
+            <th>初回登録</th><td>${esc(fmt(dev.firstSeenAt))}</td></tr>
+        <tr><th>最終通信</th><td>${esc(dev.lastSeen)}</td>
+            <th>本人の確認</th><td>${dev.confirmed
+              ? `${esc(fmt(dev.notifiedAt))}　${dev.notifiedKind === "admin" ? "管理者が周知" : "本人が確認"}`
+              : '<span class="dv-st waiting">まだ</span>'}</td></tr>
+        ${dev.note ? `<tr><th>メモ</th><td colspan="3">${esc(dev.note)}</td></tr>` : ""}
+        ${dev.adminTouchedAt ? `<tr><th>管理者の操作</th><td colspan="3">
+          ${esc(fmt(dev.adminTouchedAt))}　${esc(dev.adminTouchedBy || "")}　
+          ${esc(ADMIN_ACT[dev.adminTouchedWhat] || dev.adminTouchedWhat || "")}</td></tr>` : ""}
+      </table>`;
+    }
+
+    if (which === "use") {
+      const days = d.usage.slice(0, 14);
+      const maxDay = Math.max(1, ...days.map((u) => u.activeMin));
+      if (!days.length) return `<p class="muted">この期間の記録はありません。</p>`;
+      return `<table class="dv-table"><thead><tr>
+          <th>日付</th><th>${isAgent ? "稼働" : "利用"}</th><th></th>
+          ${isAgent ? "<th>離席</th>" : ""}<th>深夜</th><th>休日</th><th>最初</th><th>最後</th>
+        </tr></thead><tbody>${days.map((u) => `
+          <tr><td>${esc(u.date)}</td><td><b>${esc(u.active)}</b></td>
+            <td style="width:160px;"><span style="display:block;height:12px;border-radius:4px;
+              background:var(--primary);width:${Math.round(u.activeMin / maxDay * 100)}%;"></span></td>
+            ${isAgent ? `<td>${esc(clock(u.idleMin))}</td>` : ""}
+            <td>${u.nightMin ? `<span class="dv-st warn">${esc(clock(u.nightMin))}</span>` : "—"}</td>
+            <td>${u.holidayMin ? `<span class="dv-st warn">${esc(clock(u.holidayMin))}</span>` : "—"}</td>
+            <td>${esc(hm(u.firstAt))}</td><td>${esc(hm(u.lastAt))}</td></tr>`).join("")}
+        </tbody></table>`;
+    }
+
+    if (which === "web") {
+      // ここは種類の合計だけ。どのサイトを何分は「WEB利用」で見る
+      const web = d.web || [];
+      const maxWeb = Math.max(1, ...web.map((w) => w.minutes));
+      const total = web.reduce((a, w) => a + w.minutes, 0);
+      return `
+        ${web.length ? `<p class="muted" style="font-size:12.5px;margin:0 0 10px;">
+          直近30日の合計 <b>${esc(clock(total))}</b></p>
+        <div class="dv-bars">${web.map((w) => `
+          <div class="dv-bar"><span>${esc(w.label)}</span>
+            <span><span class="t" style="display:block;width:${
+              Math.round(w.minutes / maxWeb * 100)}%;"></span></span>
+            <span class="v">${esc(w.time)}</span></div>`).join("")}</div>`
+          : `<p class="muted">この期間の記録はありません。</p>`}
+        ${dev.employee ? `
+          <div style="margin-top:14px;">
+            <button class="btn btn-primary btn-sm"
+                    onclick="openWeb('${dev.employee.id}','${esc(dev.employee.name)}')">
+              <span class="material-symbols-outlined icon-inline">travel_explore</span>
+              いつ・どのサイトを見たか
+            </button>
+            <p class="muted" style="font-size:11.5px;margin:8px 0 0;">
+              開くと、そのことが ${esc(dev.employee.name)} さんの画面に残ります。</p>
+          </div>` : ""}`;
+    }
+
+    if (which === "app") {
+      const apps = d.apps || [];
+      if (!apps.length) return `<p class="muted">この期間の記録はありません。</p>`;
+      const maxApp = Math.max(1, ...apps.map((a) => a.minutes));
+      return `<div class="dv-bars">${apps.map((a) => `
+        <div class="dv-bar"><span title="${esc(a.product || a.exeName)}">${esc(a.exeName)}</span>
+          <span><span class="t" style="display:block;width:${
+            Math.round(a.minutes / maxApp * 100)}%;"></span></span>
+          <span class="v">${esc(a.label)}</span></div>`).join("")}</div>`;
+    }
+
+    if (which === "sec") {
+      // links は拡張から届いているぶん、browsers は折りたたんだブラウザの行。
+      // どちらか片方しか無いことがあるので、両方を見る
+      const brs = (dev.links || []).length ? dev.links : (d.browsers || []);
+      const sec = (d.events || []).filter((e) => SEC_KINDS.includes(e.kind));
+      return `
+        <table class="dv-table" style="margin-bottom:14px;">
+          <tr><th>会社貸与／私物</th><td>${dev.own ? esc(dev.own.label) : "—"}</td></tr>
+          <tr><th>Agent</th><td>${dev.agentVersion ? "v" + esc(dev.agentVersion) : "—"}
+            　${esc(dev.lastSeen)}</td></tr>
+          ${brs.map((b) => `<tr><th>${esc(b.label)}</th>
+            <td>${b.linked ? "連携済み" : b.installed ? "入っているが未連携" : "未導入"}
+            ${b.extVersion ? `　v${esc(b.extVersion)}` : ""}</td></tr>`).join("")}
+        </table>
+        <h2 style="font-size:14px;"><span class="material-symbols-outlined">security</span>
+          USB・ソフトの出入り</h2>
+        <div class="dv-ev">${sec.length ? sec.map((e) => `
+          <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${detailText(e.detail)}</div>`)
+          .join("") : `<p class="muted">記録はありません。</p>`}</div>`;
+    }
+
+    // 履歴
+    return `<div class="dv-ev">${(d.events || []).length ? d.events.map((e) => `
+      <div><span class="t">${esc(fmt(e.at))}</span>${esc(e.label)}${detailText(e.detail)}</div>`)
+      .join("") : `<p class="muted">記録はありません。</p>`}</div>`;
+  }
+
+  // セキュリティのタブに出すできごと。働きかたの話は混ぜない
+  const SEC_KINDS = ["usb_attach", "usb_detach", "app_install", "app_uninstall",
+                     "agent_error", "agent_load_high", "agent_update"];
 
   // できごとの中身。決めた鍵しか来ない（サーバ側でそう絞ってある）
   function detailText(dt) {
@@ -830,26 +1033,6 @@
     await run(() => API.patchDevice({ action: "rename", deviceId: id, label: label.trim() }));
   }
 
-  /**
-   * 会社貸与か私物か。
-   *
-   * 私物PCでの業務利用は禁止しているので、ここを付けると
-   * 一覧で目立つようになる。承認があるものは「私物（承認済み）」と出る
-   */
-  function setOwnership(id, current) {
-    const list = (data.ownerships || []).map((o) => o.key);
-    const label = { company: "会社貸与", personal: "私物", unknown: "未確認" };
-    const cur = list.indexOf(current);
-    const next = prompt(
-      "このパソコンの区分を入力してください。\n\n"
-      + "  company  … 会社貸与（業務に使ってよい）\n"
-      + "  personal … 私物（業務利用は禁止。承認があるときだけ）\n"
-      + "  unknown  … 未確認\n",
-      list[cur] || "unknown");
-    if (!next || !list.includes(next) || next === current) return;
-    if (!confirm(`${label[next]} にします。よろしいですか？`)) return;
-    run(() => API.patchDevice({ action: "ownership", deviceId: id, ownership: next }));
-  }
 
   /**
    * 管理者が対面・書面で周知したときの記録。
