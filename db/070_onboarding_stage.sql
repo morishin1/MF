@@ -15,10 +15,9 @@
 --        gw_activity_log は「操作」の記録で、閲覧は残していなかった。
 --        閲覧の記録が無い仕組みは、本人から見れば監視ではなく放置に見える。
 --
---   3. 役割 mynumber_handler（予約）
---        マイナンバー取扱担当。番号そのものはまだ持たない（db/037 の冒頭）。
---        持つと決めたときに、この役割だけが触れる別の表を作る。
---        役割の名前だけ先に確保して、人事・管理者と分けておく。
+--   3. gw_procedures.mynumber_status
+--        マイナンバーは番号を持たない方針を維持する（db/037 の冒頭）。
+--        番号は社労士側で収集・管理し、ここには「どこまで進んだか」だけ置く。
 --
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
 -- 前提: 008 → 037 → 046 → 056 → 066
@@ -91,12 +90,24 @@ create policy gw_sensitive_log_select on public.gw_sensitive_access_log
   );
 
 -- -----------------------------------------------------------------------------
--- 3) 役割の予約
+-- 3) マイナンバーは「進み具合」だけ持つ（番号は持たない。社労士側で収集・管理）
+--
+--    not_submitted / requested / submitted_to_advisor / confirmed
+--    社労士と管理者が進める。番号も確認書類も、この仕組みには入れない
 -- -----------------------------------------------------------------------------
-alter table public.gw_role_grants drop constraint if exists gw_role_grants_role_check;
-alter table public.gw_role_grants add constraint gw_role_grants_role_check
-  check (role in ('owner', 'hr', 'manager', 'labor_advisor', 'it', 'finance',
-                  'mynumber_handler'));
+alter table public.gw_procedures
+  add column if not exists mynumber_status    text not null default 'not_submitted',
+  add column if not exists mynumber_status_at timestamptz,
+  add column if not exists mynumber_status_by uuid references auth.users(id) on delete set null;
+
+alter table public.gw_procedures drop constraint if exists gw_procedures_mynumber_check;
+alter table public.gw_procedures add constraint gw_procedures_mynumber_check
+  check (mynumber_status in ('not_submitted', 'requested', 'submitted_to_advisor', 'confirmed'))
+  not valid;
+
+comment on column public.gw_procedures.mynumber_status is
+  'マイナンバーの進み具合。番号そのものは持たない（社労士側で収集・管理）。'
+  'not_submitted→requested→submitted_to_advisor→confirmed';
 
 notify pgrst, 'reload schema';
 

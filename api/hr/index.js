@@ -33,6 +33,8 @@ import { seed, tell } from "../../lib/hr-run.js";
 import { advance, gatherFactsBulk } from "../../lib/onboard-advance.js";
 import { computeStage, stageOf, progressPct, daysToStart, kpiOf, stuckLine }
   from "../../lib/onboard-stage.js";
+import { MYNUMBER_KEYS, mynumberLabel } from "../../lib/mynumber.js";
+import { requireMfa } from "../../lib/mfa.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -54,11 +56,19 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+
+  // 社労士が触れるのは、マイナンバーの進み具合だけ。
+  // それ以外（チェック・担当・日付）は管理者・人事
+  const body = req.method === "PATCH" ? await readJson(req) : null;
+  const advisorOnly = !canManageHr(ctx) && ctx.isAdvisor && body?.mynumber !== undefined;
+  if (!canManageHr(ctx) && !advisorOnly) return json(res, 403, { error: "forbidden" });
+
+  // 入社手続きは個人情報を扱う。対象の人は二段階認証（強制日以降）
+  if (!(await requireMfa(req, res, ctx, user))) return;
 
   if (req.method === "GET") return read(req, res, ctx);
   if (req.method === "POST") return create(req, res, ctx, user);
-  if (req.method === "PATCH") return patch(req, res, ctx, user);
+  if (req.method === "PATCH") return patch(req, res, ctx, user, body, advisorOnly);
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 }
 
@@ -90,6 +100,15 @@ async function read(req, res, ctx) {
   // 入社の段階（①作成依頼 → ②社労士確認 → ③締結 → ④情報入力・提出 → ⑤完了）。
   // 5つの表の事実から出す。表ごとに1本で引く（1人ずつ回さない）
   const facts = await gatherFactsBulk(sb, ctx.tenantId, list, items);
+
+  // マイナンバーの進み具合（070）。無い環境でも一覧は出す
+  const mn = new Map();
+  try {
+    const { data } = await sb.from("gw_procedures").select("id, mynumber_status")
+      .eq("tenant_id", ctx.tenantId).limit(300);
+    for (const r of data || []) mn.set(r.id, r.mynumber_status || "not_submitted");
+  } catch { /* 070 がまだ */ }
+  for (const p of list) p.mynumber_status = mn.get(p.id) || "not_submitted";
 
   const rows = list.map((p) => row(p, items.get(p.id) || [], people, today, facts.get(p.id)));
 
@@ -209,6 +228,9 @@ function row(p, its, people, today, facts) {
       : null,
     notifiedAt: p.notified_at,
     employmentType: people.get(p.employee_id)?.employmentType || null,
+    // 番号は持たない。進み具合だけ
+    mynumber: p.mynumber_status || "not_submitted",
+    mynumberLabel: mynumberLabel(p.mynumber_status),
     ...(stage || {}),
   };
 }
@@ -311,8 +333,7 @@ async function create(req, res, ctx, user) {
 
 
 // ---- 変える ----------------------------------------------------------------------
-async function patch(req, res, ctx, user) {
-  const body = await readJson(req);
+async function patch(req, res, ctx, user, body, advisorOnly = false) {
   const id = body?.id;
   if (!id) return json(res, 400, { error: "bad_request" });
 
@@ -324,6 +345,26 @@ async function patch(req, res, ctx, user) {
   const people = await employees(sb, ctx.tenantId);
   const emp = people.get(proc.employee_id) || { name: "（不明）" };
   const now = new Date().toISOString();
+
+  // マイナンバーの進み具合。番号は持たない。社労士と管理者が進める
+  if (body.mynumber !== undefined) {
+    const to = String(body.mynumber);
+    if (!MYNUMBER_KEYS.includes(to)) return json(res, 400, { error: "bad_request" });
+    const { error } = await sb.from("gw_procedures")
+      .update({ mynumber_status: to, mynumber_status_at: now, mynumber_status_by: user.id,
+                updated_at: now })
+      .eq("id", id);
+    if (error) {
+      const hint = /mynumber_status/.test(error.message) ? "db/070_onboarding_stage.sql をまだ流していません" : null;
+      return json(res, hint ? 503 : 500,
+        { error: hint ? "not_ready" : "db_update_failed", message: hint, detail: error.message });
+    }
+    // 番号は書かない。誰が・誰のを・どこまで進めたか、だけ
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.mynumber",
+                  target: id, detail: { name: emp.name, to, label: mynumberLabel(to) } });
+    return json(res, 200, { ok: true, mynumber: to, mynumberLabel: mynumberLabel(to) });
+  }
+  if (advisorOnly) return json(res, 403, { error: "forbidden" });
 
   // チェックを付ける・外す
   if (body.itemId && body.done !== undefined) {

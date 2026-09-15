@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915a">
-  <link rel="stylesheet" href="css/layout.css?v=20260915a">
+  <link rel="stylesheet" href="css/app.css?v=20260915b">
+  <link rel="stylesheet" href="css/layout.css?v=20260915b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -37,9 +37,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915a"></script>
-<script src="js/device.js?v=20260915a"></script>
-<script src="js/layout.js?v=20260915a"></script>
+<script src="js/api-client.js?v=20260915b"></script>
+<script src="js/device.js?v=20260915b"></script>
+<script src="js/layout.js?v=20260915b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -50,9 +50,11 @@
   KPLayout.init({ active: "hr", roles: ["sr", "admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
+  let states = [];
   async function load() {
     try {
       const res = await API.listProcedures();
+      states = res.mynumberStates || [];
       render(res.procedures || []);
     } catch (e) {
       el("list").innerHTML =
@@ -66,6 +68,11 @@
       const { url } = await API.procedureFileUrl(fileId);
       window.open(url, "_blank", "noopener");
     } catch (e) { alert(e.detail || e.message || "開けませんでした"); }
+  }
+
+  async function setMynumber(procedureId, sel) {
+    try { await API.hrUpdate({ id: procedureId, mynumber: sel.value }); }
+    catch (e) { alert(e.hint || e.message || "変えられませんでした"); await load(); }
   }
 
   function render(procedures) {
@@ -94,6 +101,15 @@
           ${p.employee?.employment_type
             ? `<span class="muted" style="font-weight:400;font-size:13px;">　${esc(p.employee.employment_type)}</span>` : ""}
         </div>
+        ${p.kind === "onboarding" ? `
+        <!-- マイナンバーは番号を持たない。貴所で収集・管理し、ここには進み具合だけ -->
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;">
+          <span class="muted">マイナンバー</span>
+          <select style="width:auto;margin:0;" onchange="setMynumber('${esc(p.id)}', this)">
+            ${states.map((st) => `<option value="${esc(st.key)}" ${st.key === p.mynumber ? "selected" : ""}>${esc(st.label)}</option>`).join("")}
+          </select>
+          <span class="muted" style="font-size:11.5px;">番号そのものは、このシステムには入れません。貴所で直接お受け取りください。</span>
+        </div>` : ""}
         <div class="table-scroll" style="margin-top:12px;">
           <table class="kp-items">
             <thead><tr><th>項目</th><th>状態</th></tr></thead>

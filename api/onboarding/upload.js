@@ -11,6 +11,7 @@
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
+import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { hrConfigured, uploadFile } from "../../lib/gdrive.js";
 import { ensureProcedureFolders } from "../../lib/hr-drive.js";
@@ -35,6 +36,8 @@ export default async function handler(req, res) {
   if (!user) return;
 
   const ctx = await gwContext(user.id);
+  // 個人情報を返す。対象の人は二段階認証（強制日以降）
+  if (!(await requireMfa(req, res, ctx, user))) return;
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
 
   if (req.method === "POST") return issueUploadUrl(req, res, ctx, user);
@@ -174,6 +177,13 @@ async function loadItemForWrite(ctx, itemId) {
   if (!isMine && !canManageHr(ctx)) return { error: "forbidden", status: 403 };
   if (isMine && !canManageHr(ctx) && item.owner !== "employee") {
     return { error: "not_your_item", status: 403, hint: "会社側で対応する項目です" };
+  }
+
+  // マイナンバー確認書類は受け取らない。番号は社労士側で収集・管理する。
+  // 「取扱注意」と書いて受け取るより、受け取らないほうが確実に安全
+  if (docOf(item.item_key)?.collect === false) {
+    return { error: "not_collected", status: 403,
+             hint: "この書類はこのシステムでは受け取りません。社労士から直接ご案内があります" };
   }
 
   return {

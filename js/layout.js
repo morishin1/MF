@@ -639,6 +639,7 @@
     const stage = me.gw?.stage || null;
     saveCache({ appRole, name, shows, stage });
     saveMe(me);
+    mfaNudge(me.mfa);
 
     // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
     // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
@@ -669,6 +670,27 @@
     }
 
     return { me, appRole };
+  }
+
+  /**
+   * 二段階認証の案内。対象で、まだ登録していない人にだけ、画面の上に1行。
+   * 期限を過ぎたら、機密の API が mfa_required を返してマイページへ送るので、
+   * ここで止めることはしない（登録の場所へ行く道を塞がない）
+   */
+  function mfaNudge(mfa) {
+    if (!mfa?.required || mfa.enrolled) return;
+    if (document.querySelector(".kp-mfa-nudge")) return;
+    if (/mypage\.html/.test(location.pathname)) return;
+    const wrap = document.querySelector(".wrap");
+    if (!wrap) return;
+    const box = document.createElement("div");
+    box.className = "banner warn kp-mfa-nudge";
+    box.style.marginBottom = "16px";
+    box.innerHTML = `${icon("verified_user", 20)}<div>${mfa.enforced
+      ? "二段階認証の登録が必要です。個人情報の画面は、登録するまで開けません。"
+      : `二段階認証を <b>${esc(mfa.enrollUntil)}</b> までに登録してください。${esc(mfa.enforceFrom)} から必須になります。`}
+      　<a href="mypage.html#mfa">マイページで登録する</a></div>`;
+    wrap.insertBefore(box, wrap.firstChild);
   }
 
   function clearChrome() {

@@ -16,6 +16,7 @@
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
+import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate, weekStart } from "../../lib/nippo.js";
@@ -39,6 +40,8 @@ export default async function handler(req, res) {
   if (!user) return;
 
   const ctx = await gwContext(user.id);
+  // 個人情報を返す。対象の人は二段階認証（強制日以降）
+  if (!(await requireMfa(req, res, ctx, user))) return;
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canManage(ctx)) return json(res, 403, { error: "forbidden" });
 

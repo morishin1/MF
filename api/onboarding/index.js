@@ -8,12 +8,14 @@
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
+import { requireMfa } from "../../lib/mfa.js";
 import { userClient } from "../../lib/supabase.js";
 import { defaultChecklist } from "../../lib/onboarding.js";
 import { FIELDS, GROUPS, DEPENDENT_FIELDS } from "../../lib/onboard-form.js";
 import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders, folderIdFromUrl, linkOf } from "../../lib/hr-drive.js";
 import { admin } from "../../lib/supabase.js";
 import { logSensitiveMany } from "../../lib/sensitive-log.js";
+import { mynumberLabel, MYNUMBER_STATES } from "../../lib/mynumber.js";
 
 const KINDS = ["onboarding", "offboarding"];
 const STATUSES = ["not_started", "in_progress", "done", "cancelled"];
@@ -30,6 +32,8 @@ export default async function handler(req, res) {
   if (!user) return;
 
   const ctx = await gwContext(user.id);
+  // 個人情報を返す。対象の人は二段階認証（強制日以降）
+  if (!(await requireMfa(req, res, ctx, user))) return;
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
 
   const sb = userClient(req);
@@ -82,6 +86,14 @@ export default async function handler(req, res) {
       .in("employee_id", list.map((p) => p.employee_id).filter(Boolean));
     const byEmployee = new Map((profiles || []).map((p) => [p.employee_id, p]));
 
+    // マイナンバーの進み具合（070）。番号は持たない。無い環境では未提出扱い
+    const mn = new Map();
+    try {
+      const { data: ms } = await admin().from("gw_procedures").select("id, mynumber_status")
+        .in("id", list.map((p) => p.id));
+      for (const r of ms || []) mn.set(r.id, r.mynumber_status || "not_submitted");
+    } catch { /* 070 がまだ */ }
+
     // 届出（住所・生年月日・口座）を他人のぶんまで開いた、を残す。
     // RLS で読めた＝人事・管理者。本人のぶんは除く
     await logSensitiveMany({
@@ -100,6 +112,8 @@ export default async function handler(req, res) {
           items: its,
           progress: { done, total: its.length },
           profile: byEmployee.get(p.employee_id) || null,
+          mynumber: mn.get(p.id) || "not_submitted",
+          mynumberLabel: mynumberLabel(mn.get(p.id)),
         };
       }),
       // 画面の組み立てに使う定義。項目名を管理画面にも書き写さない
@@ -108,6 +122,7 @@ export default async function handler(req, res) {
       dependentFields: DEPENDENT_FIELDS,
       canManage: canManageHr(ctx),
       isAdvisor: ctx.isAdvisor,
+      mynumberStates: MYNUMBER_STATES,
       me: ctx.employee,
     });
   }

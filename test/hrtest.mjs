@@ -104,13 +104,20 @@ mock.module(atRoot("lib/auth.js"), {
   namedExports: { requireUser: async () => ({ id: "u-admin", email: "zimu@8grp.co.jp" }),
                   getMemberships: async () => [] },
 });
+// 呼ぶ人。ふだんは管理者。社労士の場合を試すときだけ差し替える
+const ADMIN_CTX = {
+  tenantId: "t1", isAdmin: true, isHr: true, roles: ["owner"],
+  employee: { id: "emp-hr", display_name: "事務" },
+};
+const ADVISOR_CTX = {
+  tenantId: "t1", isAdmin: false, isHr: false, isAdvisor: true, roles: ["labor_advisor"],
+  employee: null,
+};
+let who = ADMIN_CTX;
 mock.module(atRoot("lib/gw.js"), {
   namedExports: {
-    gwContext: async () => ({
-      tenantId: "t1", isAdmin: true, isHr: true, roles: ["owner"],
-      employee: { id: "emp-hr", display_name: "事務" },
-    }),
-    canManageHr: () => true,
+    gwContext: async () => who,
+    canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
     canWipeDevice: () => true,
   },
 });
@@ -705,6 +712,78 @@ await ok("埋めたあと、その人に知らせが届く", async () => {
   }
   await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(7) });
   assert.ok(sent.some((n) => n.employeeId === "emp-it"), "IT・管理に届いていません");
+});
+
+// ---------------------------------------------------------------------------
+console.log("— マイナンバーは、進み具合だけ —");
+
+await ok("最初は「未提出」", async () => {
+  setup();
+  await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(10) });
+  const r = await get();
+  assert.equal(r.body.onboarding[0].mynumber, "not_submitted");
+  assert.equal(r.body.onboarding[0].mynumberLabel, "未提出");
+});
+
+await ok("管理者が進められて、記録には番号が無い", async () => {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(10) });
+  const r = await patch({ id: made.body.id, mynumber: "requested" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.mynumberLabel, "提出依頼済み");
+  assert.equal(proc().mynumber_status, "requested");
+  assert.equal(proc().mynumber_status_by, "u-admin");
+  const l = logged.find((e) => e.action === "hr.mynumber");
+  assert.ok(l, "操作ログが無い");
+  assert.deepEqual(Object.keys(l.detail).sort(), ["label", "name", "to"]);
+  const again = await get();
+  assert.equal(again.body.onboarding[0].mynumber, "requested");
+});
+
+await ok("知らない状態は入らない", async () => {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(10) });
+  const r = await patch({ id: made.body.id, mynumber: "123456789012" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(proc().mynumber_status, undefined);
+});
+
+await ok("マイナンバーの提出が残っていても、完了を止めない", async () => {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(5) });
+  employeeSideDone("emp-new");
+  const mn = items().find((x) => x.item_key === "doc_mynumber");
+  if (mn) mn.status = "todo";
+  for (const i of items().filter((x) => x.owner !== "employee")) {
+    await patch({ id: made.body.id, itemId: i.id, done: true });
+  }
+  const r = await get();
+  assert.equal(r.body.done.length, 1, "完了に移っていません");
+});
+
+await ok("社労士も進められる", async () => {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(10) });
+  who = ADVISOR_CTX;
+  try {
+    const r = await patch({ id: made.body.id, mynumber: "submitted_to_advisor" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(proc().mynumber_status, "submitted_to_advisor");
+  } finally { who = ADMIN_CTX; }
+});
+
+await ok("社労士は、それ以外（チェック・一覧）には触れない", async () => {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(10) });
+  const it = items().find((x) => x.owner === "hr");
+  who = ADVISOR_CTX;
+  try {
+    const c = await patch({ id: made.body.id, itemId: it.id, done: true });
+    assert.equal(c.statusCode, 403);
+    assert.equal(it.status, "todo");
+    const g = await get();
+    assert.equal(g.statusCode, 403);
+  } finally { who = ADMIN_CTX; }
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

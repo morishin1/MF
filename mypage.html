@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915a">
-  <link rel="stylesheet" href="css/layout.css?v=20260915a">
+  <link rel="stylesheet" href="css/app.css?v=20260915b">
+  <link rel="stylesheet" href="css/layout.css?v=20260915b">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -131,6 +131,11 @@
     <div id="dv"></div>
   </div>
 
+  <div class="card" id="mfa">
+    <h2><span class="material-symbols-outlined">verified_user</span>二段階認証</h2>
+    <div id="mfa-body"><span class="muted">読み込み中…</span></div>
+  </div>
+
   <div class="card">
     <h2><span class="material-symbols-outlined">key</span>パスワードの変更</h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
@@ -154,9 +159,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915a"></script>
-<script src="js/device.js?v=20260915a"></script>
-<script src="js/layout.js?v=20260915a"></script>
+<script src="js/api-client.js?v=20260915b"></script>
+<script src="js/device.js?v=20260915b"></script>
+<script src="js/layout.js?v=20260915b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -166,7 +171,104 @@
   const STATUS_JA = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
 
   KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner", "sr"] })
-    .then((ctx) => { if (ctx) { render(ctx); loadMine(); } });
+    .then((ctx) => { if (ctx) { render(ctx); loadMine(); loadMfa(ctx.me?.mfa); } });
+
+  // ---- 二段階認証 --------------------------------------------------------------
+  //
+  // 対象の人（管理者・人事・社労士）は 2026-09-30 までに登録、10-01 から強制。
+  // 対象でない人も登録できる。登録の中身は Supabase Auth の TOTP
+  let mfaInfo = null;
+  async function loadMfa(info) {
+    mfaInfo = info || null;
+    const box = el("mfa-body");
+    let factors = [];
+    try { factors = await API.mfaFactors(); }
+    catch (e) { box.innerHTML = `<span class="err-text">${esc(e.message || "確認できませんでした")}</span>`; return; }
+    const on = factors.find((f) => f.status === "verified");
+    const note = mfaInfo?.required
+      ? (mfaInfo.enforced
+          ? `<div class="banner ${on ? "ok" : "err"}" style="margin:0 0 12px;">
+               <span class="material-symbols-outlined">${on ? "check_circle" : "error"}</span>
+               <div>${on ? "登録済みです。ログインのたびに認証アプリの6桁が要ります。"
+                        : "あなたの権限では二段階認証が必須です。登録するまで、個人情報の画面は開けません。"}</div></div>`
+          : `<div class="banner ${on ? "ok" : "warn"}" style="margin:0 0 12px;">
+               <span class="material-symbols-outlined">${on ? "check_circle" : "schedule"}</span>
+               <div>${on ? "登録済みです。"
+                        : `あなたの権限では <b>${esc(mfaInfo.enrollUntil)}</b> までの登録をお願いします。
+                           ${esc(mfaInfo.enforceFrom)} から、登録していないと個人情報の画面が開けなくなります。`}</div></div>`)
+      : "";
+    box.innerHTML = note + (on ? `
+      <p class="muted" style="font-size:13px;margin:0 0 10px;">
+        認証アプリ（Google Authenticator、Microsoft Authenticator など）で登録済みです。</p>
+      <button class="btn btn-secondary btn-sm" onclick="mfaOff('${esc(on.id)}', this)">登録を外す</button>
+      <div id="mfa-msg" class="err-text"></div>` : `
+      <p class="muted" style="font-size:13px;margin:0 0 10px;">
+        ログインのとき、パスワードに加えて認証アプリの6桁を入れるようにします。
+        パスワードが漏れても、それだけでは入れなくなります。</p>
+      <button class="btn btn-primary btn-sm" onclick="mfaStart(this)">
+        <span class="material-symbols-outlined icon-inline">qr_code_2</span>登録を始める</button>
+      <div id="mfa-setup"></div>
+      <div id="mfa-msg" class="err-text"></div>`);
+    if (location.hash === "#mfa") el("mfa").scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function mfaStart(btn) {
+    const msg = el("mfa-msg"); msg.textContent = "";
+    // 前に途中でやめた未確認の登録が残っていると、Supabase は新しい登録を断る。先に片付ける
+    try {
+      for (const f of await API.mfaFactors()) if (f.status !== "verified") await API.mfaUnenroll(f.id);
+    } catch { /* 無ければよい */ }
+    let f;
+    try { f = await KPLayout.busy(btn, "…", () => API.mfaEnroll()); }
+    catch (e) {
+      msg.textContent = /not enabled|disabled|422/i.test(e.message || "")
+        ? "Supabase 側で MFA（TOTP）が有効になっていません。管理者に Authentication → MFA の設定を依頼してください"
+        : (e.message || "始められませんでした");
+      return;
+    }
+    el("mfa-setup").innerHTML = `
+      <div style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">
+        <img src="${esc(f.totp.qr_code)}" alt="QR" style="width:180px;height:180px;border:1px solid var(--border);border-radius:8px;background:#fff;">
+        <div style="flex:1;min-width:220px;">
+          <ol style="margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.9;">
+            <li>認証アプリで、左の QR を読み取る</li>
+            <li>読めないときは、この文字列を手で入れる：<code style="font-size:11.5px;word-break:break-all;">${esc(f.totp.secret)}</code></li>
+            <li>アプリに出た6桁を下に入れる</li>
+          </ol>
+          <input id="mfa-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"
+                 style="max-width:160px;letter-spacing:4px;font-size:18px;">
+          <button class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="mfaFinish('${esc(f.id)}', this)">確認して登録</button>
+        </div>
+      </div>`;
+    el("mfa-code").focus();
+  }
+
+  async function mfaFinish(factorId, btn) {
+    const msg = el("mfa-msg"); msg.textContent = "";
+    const code = el("mfa-code").value.trim();
+    if (!/^\d{6}$/.test(code)) { msg.textContent = "6桁の数字を入れてください"; return; }
+    try {
+      await KPLayout.busy(btn, "確認中…", () => API.mfaVerify(factorId, code));
+      await loadMfa(mfaInfo);
+      el("mfa-msg").style.color = "var(--primary-dark)";
+      el("mfa-msg").textContent = "登録しました。次のログインから、認証アプリの6桁が要ります。";
+    } catch (e) {
+      msg.textContent = "コードが合いません。アプリの表示が変わるのを待って、もう一度入れてください";
+    }
+  }
+
+  async function mfaOff(factorId, btn) {
+    if (!confirm("二段階認証の登録を外します。あなたの権限で必須になっている場合、個人情報の画面が開けなくなります。よろしいですか？")) return;
+    const msg = el("mfa-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "…", () => API.mfaUnenroll(factorId));
+      await loadMfa(mfaInfo);
+    } catch (e) {
+      msg.textContent = /aal2|AAL2/i.test(e.message || "")
+        ? "外すには、いちどログインし直して6桁で認証してから操作してください"
+        : (e.message || "外せませんでした");
+    }
+  }
 
   function render(ctx) {
     const e = ctx.me?.gw?.employee;

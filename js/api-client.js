@@ -131,6 +131,43 @@
     return data;
   }
 
+  // ---- 二段階認証（TOTP）---------------------------------------------------
+  //
+  // Supabase Auth の MFA をそのまま使う。秘密は自前で持たない。
+  //   登録: factors → QR を認証アプリで読む → challenge → verify（6桁）
+  //   ログイン: パスワードで aal1 → challenge → verify で aal2 のトークンに変わる
+  async function authFetch(path, { method = "GET", body } = {}) {
+    const c = await config();
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const r = await fetch(`${c.supabaseUrl}/auth/v1${path}`, {
+      method,
+      headers: { apikey: c.supabaseAnonKey, Authorization: `Bearer ${token}`,
+                 "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.msg || data.error_description || data.message || `認証エラー (${r.status})`);
+    return data;
+  }
+  /** 登録済みの要素。verified のものだけが有効 */
+  const mfaFactors = async () => {
+    const u = await authFetch("/user");
+    return (u.factors || []).filter((f) => f.factor_type === "totp");
+  };
+  /** 登録を始める。QR（データURL）と秘密の文字列が返る */
+  const mfaEnroll = () =>
+    authFetch("/factors", { method: "POST", body: { factor_type: "totp", friendly_name: "エイト" } });
+  /** 6桁を確かめる。通るとトークンが aal2 に変わるので、覚え直す */
+  const mfaVerify = async (factorId, code) => {
+    const ch = await authFetch(`/factors/${factorId}/challenge`, { method: "POST" });
+    const sess = await authFetch(`/factors/${factorId}/verify`,
+      { method: "POST", body: { challenge_id: ch.id, code: String(code).trim() } });
+    if (sess.access_token) storeToken(sess);
+    return sess;
+  };
+  const mfaUnenroll = (factorId) => authFetch(`/factors/${factorId}`, { method: "DELETE" });
+
   function isLoggedIn() { return !!loadSession(); }
   function currentEmail() { return loadSession()?.email || null; }
   function logout() { clearSession(); }
@@ -170,6 +207,11 @@
       err.hint = data.hint || data.message || null;
       err.detail = data.detail;
       err.body = data;
+      // 二段階認証が要るのに済んでいない。どの画面で起きても、登録の場所へ送る。
+      // マイページの中では送らない（そこが登録の場所なので、回り続ける）
+      if (err.code === "mfa_required" && !/mypage\.html/.test(location.pathname)) {
+        location.href = "mypage.html#mfa";
+      }
       throw err;
     }
     return data;
@@ -1045,6 +1087,7 @@
 
   window.API = {
     config, login, logout, refresh, getToken, changePassword,
+    mfaFactors, mfaEnroll, mfaVerify, mfaUnenroll,
     isLoggedIn, currentEmail,
     api, me, listClients, createClient, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,

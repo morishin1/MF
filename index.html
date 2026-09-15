@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915a">
+  <link rel="stylesheet" href="css/app.css?v=20260915b">
   <style>
     .portal{ max-width:420px; margin:0 auto; padding:56px 0 40px; }
     .portal .lead{
@@ -98,9 +98,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915a"></script>
-<script src="js/device.js?v=20260915a"></script>
-<script src="js/layout.js?v=20260915a"></script>
+<script src="js/api-client.js?v=20260915b"></script>
+<script src="js/device.js?v=20260915b"></script>
+<script src="js/layout.js?v=20260915b"></script>
 <script>
   const el = (id) => document.getElementById(id);
 
@@ -136,12 +136,45 @@
     btn.innerHTML = '<span class="material-symbols-outlined icon-inline">hourglass_top</span>ログイン中…';
     try {
       await API.login(email, pw);
+      // 二段階認証を登録している人は、ここで6桁。
+      // パスワードだけのトークン（aal1）では、機密の画面が開かない
+      const factors = await API.mfaFactors().catch(() => []);
+      const f = factors.find((x) => x.status === "verified");
+      if (f) { askTotp(f.id); return; }
       await goToHome();
     } catch (e) {
       err.textContent = e.message || "ログインに失敗しました";
       btn.disabled = false;
       btn.innerHTML = '<span class="material-symbols-outlined icon-inline">login</span>ログイン';
     }
+  }
+
+  /** 認証アプリの6桁を聞く。パスワードの欄は隠す */
+  function askTotp(factorId) {
+    el("pw").closest("div")?.classList.add("hidden");
+    el("go").classList.add("hidden");
+    el("go").insertAdjacentHTML("afterend", `
+      <div id="totp" style="margin-top:6px;">
+        <label>認証アプリの6桁</label>
+        <input id="totp-code" type="text" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="6" placeholder="123456" style="letter-spacing:4px;font-size:18px;">
+        <button id="totp-go" class="btn btn-primary" style="width:100%;margin-top:10px;">
+          <span class="material-symbols-outlined icon-inline">verified_user</span>確認する</button>
+      </div>`);
+    const go = async () => {
+      const code = el("totp-code").value.trim();
+      if (!/^\d{6}$/.test(code)) { el("err").textContent = "6桁の数字を入れてください"; return; }
+      el("err").textContent = "";
+      try {
+        await API.mfaVerify(factorId, code);
+        await goToHome();
+      } catch (e) {
+        el("err").textContent = "コードが合いません。認証アプリの表示を確かめて、もう一度入れてください";
+      }
+    };
+    el("totp-go").addEventListener("click", go);
+    el("totp-code").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    el("totp-code").focus();
   }
 
   // 権限に応じた行き先へ移動する。

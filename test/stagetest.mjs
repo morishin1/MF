@@ -109,6 +109,14 @@ ok("任意の書類は、出ていなくても完了を止めない", () => {
   assert.equal(computeStage(f).key, "complete");
 });
 
+ok("マイナンバーは、このシステムでは受け取らないので完了を止めない", () => {
+  // 社労士が直接集める。ここに項目が残っていても、段階の判定からは外す
+  const f = { ...base(), order: { status: "signed" }, sign: { status: "signed" },
+              consentsOk: true, profile: { status: "submitted" },
+              items: [{ ...item("employee", "todo"), item_key: "doc_mynumber" }, item("hr", "done")] };
+  assert.equal(computeStage(f).key, "complete");
+});
+
 ok("手続きが done なら、事実に関係なく完了", () => {
   assert.equal(computeStage({ ...base(), procedure: { status: "done" } }).key, "complete");
 });

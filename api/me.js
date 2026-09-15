@@ -13,6 +13,7 @@ import { requireUser, getMemberships } from "../lib/auth.js";
 import { admin } from "../lib/supabase.js";
 import { stageInfo, shouldOpen, onboardingDone } from "../lib/stages.js";
 import { jstDate } from "../lib/nippo.js";
+import { mfaState } from "../lib/mfa.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -39,6 +40,8 @@ export default async function handler(req, res) {
     memberships,
     gw,
     appRole: resolveAppRole({ isAdmin, gwRoles: gw.roles }),
+    // 二段階認証。要るか・登録済みか・今回の入り方で確かめたか・いつから止めるか
+    mfa: mfaState({ ctx: { isAdmin, roles: gw.roles }, user, req }),
   });
 }
 
