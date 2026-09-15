@@ -367,6 +367,52 @@ console.log("\n— ホームの「今日対応する入退社」 —");
   await p3.close();
 }
 
+// ---- 表がまだ無いとき -----------------------------------------------------------
+//
+//   SQL を流す前に開くと、サーバは
+//     { error: "not_ready", message: "…db/066_hr_flow.sql の実行を…" }
+//   と、やることまで書いて返している。
+//   それが画面に届かず、赤い枠に「not_ready」とだけ出ていた。
+//   この画面を見ているのは管理者なので、そのまま直しにいける形で出す。
+console.log("— まだ SQL を流していないとき —");
+{
+  const p4 = await br.newPage({ viewport: { width: 1280, height: 900 },
+                                timezoneId: "Asia/Tokyo" });
+  await p4.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "a@b.c" }));
+    localStorage.setItem("kp_layout", JSON.stringify({
+      appRole: "admin", name: "事務", shows: {}, stage: null }));
+  });
+  await p4.route("**/api/**", (route) => {
+    const url = route.request().url();
+    const send = (b, st = 200) => route.fulfill({ status: st, contentType: "application/json",
+                                                  body: JSON.stringify(b) });
+    if (/\/api\/hr/.test(url)) {
+      return send({ error: "not_ready",
+                    message: "この機能に必要なテーブルがまだ作られていません。"
+                           + "管理者に db/008_onboarding.sql → 066_hr_flow.sql "
+                           + "の実行を依頼してください" }, 503);
+    }
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "a@b.c", appRole: "admin", shows: {}, isAdmin: true,
+                    gw: { employee: { id: "e0", display_name: "事務" }, roles: ["hr"],
+                          isAdmin: true, tenantId: "t1", stage: null } });
+    }
+    return send({ notifications: [], unread: 0, badges: {} });
+  });
+  await p4.goto(`${BASE}/admin-hr.html`);
+  await p4.waitForTimeout(900);
+
+  const t = await p4.locator("#hr-rows").innerText();
+  check(!/not_ready/.test(t), `コード名を出さない（${t.slice(0, 60)}）`);
+  check(/066_hr_flow\.sql/.test(t), "流す SQL の名前が出る");
+  check(/まだ使える状態になっていません/.test(t), "壊れたのではなく、まだ、と書く");
+  // 壊れているのではないので、赤くしない
+  const red = await p4.locator("#hr-rows .banner.err").count();
+  check(red === 0, "赤いエラーにしない");
+  await p4.close();
+}
+
 check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
 
 await br.close();

@@ -153,9 +153,21 @@
       // 画面はどこも `e.hint || e.detail || e.message` の順で出しているのに、
       // ここで hint を写していなかったため、どの画面でも
       // 「onboard_failed」のようなコード名しか出ていなかった。
-      const err = new Error(data.error || `APIエラー (${r.status})`);
+      //
+      // ■ message も同じことになっていた
+      //
+      //   表がまだ無いときは、サーバは
+      //     { error: "not_ready", message: "…db/066_hr_flow.sql の実行を…" }
+      //   と、やることまで書いて返している（32か所ある）。
+      //   その説明が入っているのは message のほうなのに、ここで写していなかった。
+      //   結果、画面には「not_ready」とだけ出て、何をすればよいか分からなかった。
+      //
+      //   コード名は code に分けて残す。機械が見たいのはこちらで、
+      //   人が読むのは hint（＝ hint か message）のほう
+      const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
       err.status = r.status;
-      err.hint = data.hint;
+      err.code = data.error || null;
+      err.hint = data.hint || data.message || null;
       err.detail = data.detail;
       err.body = data;
       throw err;

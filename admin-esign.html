@@ -870,8 +870,8 @@
       await loadOrders();
     } catch (e) {
       // 必須が空のときは、どこが空かまで出す。押し直しの手間を減らす。
-      // api-client は data.error を message に、残りを body に入れて投げてくる
-      if (e.message === "missing_conditions" || Array.isArray(e.body?.missing)) {
+      // コード名は e.code。message は人が読む文になったので、そちらでは見ない
+      if (e.code === "missing_conditions" || Array.isArray(e.body?.missing)) {
         msg.innerHTML = `${esc(e.hint || (e.body?.missing || []).join("・") || "未入力の項目があります")}　`
           + `<button class="btn btn-secondary btn-sm" onclick="forceOrder(this)">このまま依頼する</button>`;
         return;

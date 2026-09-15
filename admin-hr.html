@@ -170,9 +170,16 @@
       render();
       if (openId) await showDetail(openId);
     } catch (e) {
-      el("hr-rows").innerHTML = `<tr><td colspan="6"><div class="banner err">
-        <span class="material-symbols-outlined">error</span>
-        <div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div></td></tr>`;
+      // 表がまだ無いのは、壊れているのではなく「まだ作っていない」。
+      // 赤くして「読み込めませんでした」と書くと、直せる人が直しにいかない。
+      // この画面を見ているのは管理者なので、やることをそのまま出す
+      const setup = e.code === "not_ready";
+      el("hr-rows").innerHTML = `<tr><td colspan="6">
+        <div class="banner ${setup ? "info" : "err"}">
+          <span class="material-symbols-outlined">${setup ? "build" : "error"}</span>
+          <div>${setup ? "<b>この機能は、まだ使える状態になっていません。</b><br>" : ""}${
+            esc(e.hint || e.message || "読み込めませんでした")}</div>
+        </div></td></tr>`;
     }
   }
 
