@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260914d">
-  <link rel="stylesheet" href="css/layout.css?v=20260914d">
+  <link rel="stylesheet" href="css/app.css?v=20260915a">
+  <link rel="stylesheet" href="css/layout.css?v=20260915a">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -123,9 +123,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260914d"></script>
-<script src="js/device.js?v=20260914d"></script>
-<script src="js/layout.js?v=20260914d"></script>
+<script src="js/api-client.js?v=20260915a"></script>
+<script src="js/device.js?v=20260915a"></script>
+<script src="js/layout.js?v=20260915a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -204,7 +204,12 @@
             ${done ? "check_circle" : "radio_button_unchecked"}</span>
           <span class="t">
             ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${esc(t.title)}
+            ${t.needsAccept ? '<span class="kp-chip important">未確認の依頼</span> ' : ""}
             ${t.requester ? `<small>${esc(t.requester)}さんから</small>` : ""}
+            ${t.done_condition
+              // 頼んだ人が書いた「どうなったら終わりか」。
+              // これが見えていないと、受けるかどうかを決められない
+              ? `<small><b>終わりの条件</b>：${esc(t.done_condition)}</small>` : ""}
             ${t.body ? `<small>${esc(t.body)}</small>` : ""}
             ${due ? `<small${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>期限 ${esc(due)}${over ? "（超過）" : ""}</small>` : ""}
             ${t.category ? `<small>${esc(t.category)}</small>` : ""}
@@ -214,9 +219,14 @@
             // 入退社のように「別の画面で作業する」タスクは、
             // ここから直接開けないと、結局メニューを探すことになる
             ? `<a class="btn btn-secondary btn-sm" href="${esc(t.link)}">開く</a>` : ""}
-          ${done
-            ? `<button class="btn btn-secondary btn-sm" onclick="setStatus('${esc(t.id)}','todo')">戻す</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="setStatus('${esc(t.id)}','done')">完了</button>`}
+          ${t.needsAccept
+            // まだ受けていない依頼。ここで完了を押させない。
+            // 期限と完了条件を見ないまま「完了」まで行けると、
+            // 頼んだ側の思っていたものと違うまま終わる
+            ? `<button class="btn btn-primary btn-sm" onclick="accept('${esc(t.id)}', this)">引き受ける</button>`
+            : done
+              ? `<button class="btn btn-secondary btn-sm" onclick="setStatus('${esc(t.id)}','todo')">戻す</button>`
+              : `<button class="btn btn-primary btn-sm" onclick="setStatus('${esc(t.id)}','done')">完了</button>`}
         </div>`;
     }).join("");
   }
@@ -405,13 +415,58 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "取り消せませんでした"); }
   }
 
+  /**
+   * 頼まれた仕事を引き受ける。
+   *
+   * ■ ここで期限を引き直せるようにしてある
+   *
+   *   「その日は無理です」を言う場所が無いと、黙って期限を過ぎる。
+   *   受けるときに直せれば、頼んだ側にもその場で伝わる。
+   */
+  async function accept(id, btn) {
+    const t = tasks.find((x) => x.id === id);
+    const now = t?.due_on || "";
+    const due = prompt(
+      `「${t ? t.title : ""}」を引き受けます。\n`
+      + (t?.done_condition ? `終わりの条件：${t.done_condition}\n` : "")
+      + "\n期限（YYYY-MM-DD）。このままでよければ OK を押してください。",
+      now);
+    if (due === null) return;                       // やめた
+    const dueOn = due.trim();
+    if (dueOn && !/^\d{4}-\d{2}-\d{2}$/.test(dueOn)) {
+      alert("期限は 2026-09-30 の形で入れてください");
+      return;
+    }
+    try {
+      const r = await KPLayout.busy(btn, "…",
+        () => API.acceptTask(id, dueOn === now ? undefined : (dueOn || null)));
+      if (r?.task && t) Object.assign(t, r.task);
+      render();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "引き受けられませんでした");
+    }
+  }
+
   async function setStatus(id, status) {
     const t = tasks.find((x) => x.id === id);
+
+    // 頼まれた仕事を終わらせるときは、何をしたかを1行もらう。
+    // 書かせないと、頼んだ人は結局チャットで「どうなりました？」と聞くことになる
+    let result;
+    if (status === "done" && t?.requestedByOther) {
+      result = prompt(
+        `「${t.title}」を完了にします。\n`
+        + (t.done_condition ? `終わりの条件：${t.done_condition}\n` : "")
+        + `\n何をしたかを1行書いてください（${t.requester || "依頼した人"}さんが読みます）`, "");
+      if (result === null) return;                  // やめた
+      if (!result.trim()) { alert("ひとことだけ書いてください"); return; }
+    }
+
     if (t) t.status = status;          // 先に反映して、押した手応えを返す
     render();
-    try { await API.updateTask({ id, status }); }
+    try { await API.updateTask({ id, status, ...(result !== undefined ? { result } : {}) }); }
     catch (e) {
-      alert(e.detail || e.message || "更新できませんでした");
+      alert(e.hint || e.detail || e.message || "更新できませんでした");
       const res = await API.listTasks("mine").catch(() => null);
       if (res) { tasks = res.tasks || []; render(); }
     }

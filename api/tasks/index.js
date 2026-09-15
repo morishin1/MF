@@ -28,6 +28,7 @@ import { userClient, admin } from "../../lib/supabase.js";
 import { notifySlack } from "../../lib/slack.js";
 import { notify } from "../../lib/notify.js";
 import { findProcedure } from "../../lib/onboard-kit.js";
+import { cleanRecur, recurLabel, needsAccept, canComplete } from "../../lib/task-flow.js";
 
 const PRIORITIES = ["low", "normal", "high"];
 const STATUSES = ["todo", "doing", "done", "cancelled"];
@@ -43,11 +44,36 @@ const WITH_NAMES =
 // 丸ごと開かなくなるので、足したほうで引いて、だめなら元の形で引き直す
 const WITH_LINK = `${WITH_NAMES}, link`;
 
-/** 66 がまだでも開ける形で読む */
+// 068（依頼 → 受諾 → 完了 と 繰り返し）で足した列。同じ理由で、外側に置く
+const FLOW_FIELDS = "done_condition, accepted_at, result, "
+  + "is_template, recur, template_id, occ_key";
+const WITH_FLOW = `${WITH_LINK}, ${FLOW_FIELDS}`;
+
+/**
+ * 066 / 068 がまだでも開ける形で読む。
+ *
+ * 足したほうから順に試す。列が無い環境で無い列を SELECT すると
+ * そのリクエストごと落ちて、「やること」が丸ごと開かなくなる。
+ * 新しい機能が使えないのと、画面が出ないのとは、別のこと
+ */
 async function readTasks(build) {
-  const first = await build(WITH_LINK);
-  if (!first.error) return first;
+  const flow = await build(WITH_FLOW);
+  if (!flow.error) return flow;
+  const link = await build(WITH_LINK);
+  if (!link.error) return link;
   return build(WITH_NAMES);
+}
+
+/**
+ * 書き換えたあとの1件を返す。068 がまだの環境でも返せるように、
+ * 足した列を付けて引いて、だめなら元の形で引き直す
+ */
+async function writeTask(sbAdmin, id, patch) {
+  const run = (cols) => sbAdmin.from("gw_tasks")
+    .update(patch).eq("id", id).select(cols).maybeSingle();
+  const flow = await run(`${FIELDS}, ${FLOW_FIELDS}`);
+  if (!flow.error) return flow;
+  return run(FIELDS);
 }
 
 export default async function handler(req, res) {
@@ -96,12 +122,19 @@ export default async function handler(req, res) {
       requested = mine || [];
     }
 
-    const all = [...(data || []), ...requested];
+    // 繰り返しの「元」は、やる仕事ではない。一覧から外す。
+    // 混ぜると、毎日の繰り返し1本で一覧の先頭が埋まる
+    const rows = (data || []).filter((t) => !t.is_template);
+    const templates = (data || []).filter((t) => t.is_template);
+
+    const all = [...rows, ...requested, ...templates];
     const names = await creatorNames(all);
 
     return json(res, 200, {
-      tasks: (data || []).map((t) => shape(t, user.id, ctx, names)),
+      tasks: rows.map((t) => shape(t, user.id, ctx, names)),
       requested: requested.map((t) => shape(t, user.id, ctx, names)),
+      // 繰り返しの設定。管理側の画面で、別の箱に出す
+      templates: templates.map((t) => shape(t, user.id, ctx, names)),
       // 自分の画面のときだけ、他から来る「やること」も足す
       extras: scope === "mine" ? await extrasFor(ctx, user.id) : { actions: [], onboarding: [], proposed: [] },
       canManage: canManageHr(ctx),
@@ -192,18 +225,69 @@ export default async function handler(req, res) {
       return json(res, 200, { task: shape(data, user.id, ctx, names) });
     }
 
-    // 担当された人は status だけ変えられる。
+    // 担当された人ができるのは、受ける・進める・終わらせる の3つだけ。
     // RLS では列を絞れないので、ここで service_role を使い、変更対象を限定する。
     if (!ctx.employee) return json(res, 403, { error: "forbidden" });
-    if (!STATUSES.includes(body.status)) return json(res, 400, { error: "invalid_status", detail: STATUSES.join(", ") });
     if (task.assignee_id !== ctx.employee.id) return json(res, 403, { error: "not_your_task" });
 
-    const { data, error } = await sbAdmin
-      .from("gw_tasks")
-      .update(withCompletion({ status: body.status }))
-      .eq("id", body.id)
-      .select(FIELDS)
-      .single();
+    const fromOther = task.created_by !== user.id;
+
+    // ---- 受ける ----
+    //
+    // 頼まれただけでは、まだ仕事になっていない。
+    // 担当者が期限と完了条件を見て「受けた」と押してはじめて、
+    // 両者の認識が同じになる。押すときに期限を引き直してよい
+    // （「その日は無理です」を、チャットではなくここで言えるように）
+    if (body.action === "accept") {
+      const patch = { accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      if (body.dueOn !== undefined) patch.due_on = body.dueOn || null;
+
+      const { data: acc, error: ae } = await writeTask(sbAdmin, body.id, patch);
+      if (ae) {
+        const hint = /accepted_at/.test(ae.message)
+          ? "db/068_task_flow.sql をまだ流していません" : null;
+        return json(res, hint ? 503 : 500,
+          { error: hint ? "not_ready" : "db_update_failed", message: hint, detail: ae.message });
+      }
+
+      // 頼んだ人に返す。期限が動いたなら、そこも伝える。
+      // 黙って引き直されると、頼んだ側はもとの日で待ち続ける
+      if (fromOther && task.created_by) {
+        const requester = await employeeOfUser(ctx.tenantId, task.created_by);
+        if (requester) {
+          await notify([{
+            tenantId: ctx.tenantId, employeeId: requester, kind: "task_assigned",
+            title: `${ctx.employee.display_name}さんが引き受けました`,
+            body: [task.title, acc?.due_on ? `期限 ${acc.due_on}` : null].filter(Boolean).join("／"),
+            link: "tasks.html", dedupeKey: `task-accept:${task.id}`,
+          }]);
+        }
+      }
+      const nm = await creatorNames([acc]);
+      return json(res, 200, { task: shape(acc, user.id, ctx, nm) });
+    }
+
+    if (!STATUSES.includes(body.status)) return json(res, 400, { error: "invalid_status", detail: STATUSES.join(", ") });
+
+    // ---- 終わらせる ----
+    //
+    // 頼まれた仕事は、何をしたかを1行書いてもらう。
+    // 書かせないと、頼んだ人は結局チャットで「どうなりました？」と聞くことになり、
+    // やりとりがタスク管理の外で起きる
+    const patch = { status: body.status };
+    if (body.status === "done") {
+      const may = canComplete({ requestedByOther: fromOther }, body.result);
+      if (!may.ok) return json(res, 400, { error: "result_required", hint: may.why });
+      if (body.result !== undefined) patch.result = String(body.result || "").trim().slice(0, 1000) || null;
+    }
+
+    let { data, error } = await writeTask(sbAdmin, body.id, withCompletion(patch));
+    // 068 がまだの環境では result 列が無い。結果を落として、完了そのものは通す。
+    // 「書いたのに完了できない」より、「完了はできたが結果が残らない」ほうがまし
+    if (error && /result/.test(error.message || "")) {
+      const { result, ...rest } = patch;
+      ({ data, error } = await writeTask(sbAdmin, body.id, withCompletion(rest)));
+    }
     if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
 
     // 頼んだ人に、終わったことを返す。
@@ -216,7 +300,9 @@ export default async function handler(req, res) {
           employeeId: requester,
           kind: "task_assigned",
           title: `${ctx.employee.display_name}さんが終わらせました`,
-          body: task.title,
+          // 何をしたかまで入れる。開かなくても読めるようにしないと、
+          // 結局「どうなりました？」がチャットに戻る
+          body: [task.title, data?.result].filter(Boolean).join("／"),
           link: "tasks.html",
           dedupeKey: `task-done:${task.id}`,
         }]);
@@ -265,13 +351,22 @@ export default async function handler(req, res) {
 function shape(t, userId, ctx, names) {
   const { created_by, ...rest } = t;
   const mine = created_by === userId;
-  return {
+  // 人から頼まれた仕事か。自分で立てたメモと同じ扱いにしない。
+  // 受諾を求めるのも、完了に結果を求めるのも、頼まれたものだけ
+  const requestedByOther = !mine && t.assignee_id === ctx.employee?.id;
+  const out = {
     ...rest,
     byMe: mine,
+    requestedByOther,
     // 直せるのは、管理者・人事か、頼んだ本人だけ
     canEdit: canManageHr(ctx) || mine,
     requester: mine ? null : (names.get(created_by) || null),
   };
+  // 068 を流していない環境では accepted_at が来ない。
+  // そのときは「未確認の依頼」を出さない（全件が未確認に見えるほうが困る）
+  out.needsAccept = t.accepted_at !== undefined && needsAccept(out);
+  if (t.recur) out.recurLabel = recurLabel(t.recur);
+  return out;
 }
 
 /** created_by（auth.users）を名簿の表示名に直す。分からない分は出さない */
@@ -323,6 +418,21 @@ function normalize(body, { partial = false } = {}) {
   if (has("escalateTo")) v.escalate_to = body.escalateTo || null;
   if (has("dueOn")) v.due_on = body.dueOn || null;
   if (has("category")) v.category = body.category ? String(body.category).trim() : null;
+  // 068: 頼んだ人が書く「どうなったら終わりか」
+  if (has("doneCondition")) {
+    v.done_condition = body.doneCondition ? String(body.doneCondition).trim().slice(0, 500) : null;
+  }
+  // 068: 繰り返しの「元」。決まりの形は先に確かめる。
+  // 形の崩れたものを jsonb に入れると、生成のたびに静かに0件になる
+  if (has("recur")) {
+    if (body.recur === null) { v.recur = null; v.is_template = false; }
+    else {
+      const r = cleanRecur(body.recur);
+      if (!r.ok) return { error: "invalid_recur", hint: r.why };
+      v.recur = r.recur;
+      v.is_template = true;
+    }
+  }
   if (has("priority")) {
     if (!PRIORITIES.includes(body.priority)) return { error: "invalid_priority", detail: PRIORITIES.join(", ") };
     v.priority = body.priority;

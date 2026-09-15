@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260914d">
-  <link rel="stylesheet" href="css/layout.css?v=20260914d">
+  <link rel="stylesheet" href="css/app.css?v=20260915a">
+  <link rel="stylesheet" href="css/layout.css?v=20260915a">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -50,13 +50,76 @@
       </div>
       <div style="min-width:150px;"><label>分類（任意）</label><input id="t-category" type="text" placeholder="月次経理"></div>
       <div style="min-width:180px;"><label>期限超過時の連絡先</label><select id="t-escalate"></select></div>
-      <div>
-        <button class="btn btn-primary" onclick="create(this)">
-          <span class="material-symbols-outlined icon-inline">add</span>追加
-        </button>
+    </div>
+
+    <!-- 終わりの条件。
+         「請求書の件よろしく」だけで渡すと、相手は何をどこまでやれば
+         終わりなのか分からないまま始める。書く欄が無いから書かれない -->
+    <div style="margin-bottom:12px;">
+      <label for="t-done">どうなったら終わりか（任意・頼むときは書く）</label>
+      <input id="t-done" type="text"
+             placeholder="例: MFに8月分が全部入って、試算表の売上が合っている">
+    </div>
+
+    <!-- 繰り返し。
+         月次の締め・支払・提出は、覚えている人が休んだ日に止まる。
+         「元」を1つ置けば、その日になれば必ず並ぶ -->
+    <div style="margin-bottom:12px;">
+      <label class="check"><input type="checkbox" id="t-recur-on" onchange="onRecur()">
+        繰り返す（決まった日に自動で出す）</label>
+      <div id="t-recur" class="inline-controls hidden" style="margin-top:8px;">
+        <div>
+          <label>繰り返し方</label>
+          <select id="t-recur-type" onchange="onRecur()">
+            <option value="dom">毎月（日にち）</option>
+            <option value="biz">毎月（第n営業日）</option>
+            <option value="weekly">毎週</option>
+            <option value="daily">毎日</option>
+          </select>
+        </div>
+        <div id="t-recur-n-box"><label>日にち / n</label>
+          <input id="t-recur-n" type="number" min="1" max="31" value="25"></div>
+        <div id="t-recur-adj-box">
+          <label>休みに当たったら</label>
+          <select id="t-recur-adj">
+            <option value="prev">前の営業日</option>
+            <option value="next">次の営業日</option>
+            <option value="">そのまま</option>
+          </select>
+        </div>
+        <div id="t-recur-wd-box" class="hidden"><label>曜日</label>
+          <select id="t-recur-wd">
+            <option value="1">月</option><option value="2">火</option>
+            <option value="3">水</option><option value="4">木</option>
+            <option value="5">金</option><option value="6">土</option>
+            <option value="0">日</option>
+          </select></div>
+        <div id="t-recur-daily-box" class="hidden"><label>対象</label>
+          <select id="t-recur-daily">
+            <option value="wd">平日のみ（土日祝を除く）</option>
+            <option value="all">毎日</option>
+          </select></div>
       </div>
+      <p class="muted hidden" id="t-recur-note" style="font-size:11.5px;margin:6px 0 0;">
+        当月と翌月ぶんを自動で作ります。先の月まで一度に作ると、
+        片付けても減らない一覧になるためです。
+      </p>
+    </div>
+
+    <div>
+      <button class="btn btn-primary" onclick="create(this)">
+        <span class="material-symbols-outlined icon-inline">add</span>追加
+      </button>
     </div>
     <div id="t-msg" class="err-text"></div>
+  </div>
+
+  <!-- 繰り返しの「元」。やる仕事ではないので、一覧とは別の箱に置く -->
+  <div class="card hidden" id="tpl-card">
+    <h2><span class="material-symbols-outlined">repeat</span>繰り返しの設定
+      <span id="tpl-n" style="margin-left:auto;font-size:12px;color:var(--muted);"></span>
+    </h2>
+    <div id="tpl-list"></div>
   </div>
 
   <div class="card">
@@ -70,9 +133,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260914d"></script>
-<script src="js/device.js?v=20260914d"></script>
-<script src="js/layout.js?v=20260914d"></script>
+<script src="js/api-client.js?v=20260915a"></script>
+<script src="js/device.js?v=20260915a"></script>
+<script src="js/layout.js?v=20260915a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -82,6 +145,7 @@
   const PRIORITY_LABEL = { low: "低", normal: "", high: "高" };
 
   let tasks = [];
+  let templates = [];        // 繰り返しの「元」
   let employees = [];
   let filter = "open";
 
@@ -118,20 +182,70 @@
         dueOn: el("t-due").value || null,
         priority: el("t-priority").value,
         category: el("t-category").value.trim() || null,
+        doneCondition: el("t-done").value.trim() || null,
+        recur: recurValue(),
       }));
       el("t-title").value = "";
       el("t-due").value = "";
+      el("t-done").value = "";
       await loadTasks();
     } catch (e) {
-      msg.textContent = e.detail || e.message || "追加に失敗しました";
+      msg.textContent = e.hint || e.detail || e.message || "追加に失敗しました";
     }
+  }
+
+  /**
+   * 繰り返しの欄を、選んだ種類に合わせて出し分ける。
+   * 使わない欄を出したままにすると、入れた値が効いているのか分からなくなる
+   */
+  function onRecur() {
+    const on = el("t-recur-on").checked;
+    el("t-recur").classList.toggle("hidden", !on);
+    el("t-recur-note").classList.toggle("hidden", !on);
+    const type = el("t-recur-type").value;
+    el("t-recur-n-box").classList.toggle("hidden", type !== "dom" && type !== "biz");
+    el("t-recur-adj-box").classList.toggle("hidden", type !== "dom");
+    el("t-recur-wd-box").classList.toggle("hidden", type !== "weekly");
+    el("t-recur-daily-box").classList.toggle("hidden", type !== "daily");
+    el("t-recur-n").max = type === "biz" ? "23" : "31";
+  }
+
+  /** 画面の値を、繰り返しの決まりにする。使わないときは null */
+  function recurValue() {
+    if (!el("t-recur-on").checked) return undefined;
+    const type = el("t-recur-type").value;
+    const n = Number(el("t-recur-n").value) || 1;
+    if (type === "daily") return { type, daily: el("t-recur-daily").value };
+    if (type === "weekly") return { type, weekday: Number(el("t-recur-wd").value) };
+    if (type === "biz") return { type, n };
+    return { type: "dom", n, adj: el("t-recur-adj").value };
+  }
+
+  /** 繰り返しの「元」。やる仕事ではないので、一覧とは別に出す */
+  function renderTemplates() {
+    const card = el("tpl-card");
+    if (!templates.length) { card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+    el("tpl-n").textContent = `${templates.length}件`;
+    el("tpl-list").innerHTML = templates.map((t) => `
+      <div class="kp-todo">
+        <span class="material-symbols-outlined"
+              style="font-size:20px;color:var(--muted);">repeat</span>
+        <span class="t">${esc(t.title)}
+          <small>${esc(t.recurLabel || "")}${
+            t.assignee ? ` ／ ${esc(t.assignee.display_name)}` : ""}</small>
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="remove('${esc(t.id)}')">やめる</button>
+      </div>`).join("");
   }
 
   async function loadTasks() {
     try {
       const res = await API.listTasks();
       tasks = res.tasks || [];
+      templates = res.templates || [];
       render();
+      renderTemplates();
     } catch (e) {
       el("list").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>

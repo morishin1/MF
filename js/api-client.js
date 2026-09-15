@@ -868,6 +868,10 @@
     api("/api/tasks", { method: "PATCH", body: task }).then((d) => d.task);
   const deleteTask = (id) =>
     api(`/api/tasks?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  // 頼まれた仕事を引き受ける。dueOn を渡すと、そこで期限を引き直す
+  const acceptTask = (id, dueOn) =>
+    api("/api/tasks", { method: "PATCH",
+                        body: { id, action: "accept", ...(dueOn !== undefined ? { dueOn } : {}) } });
 
   // ---- 入社・退職手続き（古い口。社労士の画面と書類の保管先で使う） ----
   const listProcedures = () => api("/api/onboarding");
@@ -1083,7 +1087,7 @@
     listExpenses, createExpense, decideExpense, deleteExpense,
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
-    listTasks, createTask, updateTask, deleteTask,
+    listTasks, createTask, updateTask, deleteTask, acceptTask,
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
