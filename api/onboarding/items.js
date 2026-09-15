@@ -10,6 +10,8 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
+import { admin } from "../../lib/supabase.js";
+import { advance } from "../../lib/onboard-advance.js";
 
 const CATEGORIES = ["document", "task", "account", "equipment"];
 const OWNERS = ["employee", "hr", "labor_advisor", "it", "manager", "finance"];
@@ -74,6 +76,7 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
     if (!data) return json(res, 404, { error: "item_not_found" });
+    if (row.value.status !== undefined) await advance(admin(), ctx, data.procedure_id);
     // 社外（社労士）に見せるかどうかの変更は必ず残す
     if (row.value.share_with_advisor !== undefined) {
       await gwLog({

@@ -29,6 +29,7 @@ function table(name) {
   const q = {
     select() { return q; },
     eq(k, v) { f.push([k, v]); return q; },
+    neq(k, v) { f.push(["neq:" + k, v]); return q; },
     in(k, v) { f.push([k, v]); return q; },
     is(k, v) { f.push(["is:" + k, v]); return q; },
     like(k, v) { f.push(["like:" + k, v]); return q; },
@@ -88,6 +89,7 @@ function table(name) {
 }
 const match = (name, filters) => (db.rows[name] || []).filter((r) => filters.every(([k, v]) => {
   if (k.startsWith("is:")) { const kk = k.slice(3); return v === null ? r[kk] == null : r[kk] === v; }
+  if (k.startsWith("neq:")) return r[k.slice(4)] !== v;
   if (k.startsWith("like:")) {
     const kk = k.slice(5);
     return String(r[kk] ?? "").includes(String(v).replace(/%/g, ""));
@@ -130,6 +132,7 @@ mock.module(atRoot("lib/slack.js"), {
 
 const { default: hr } = await import(atRoot("api/hr/index.js"));
 const F = await import(atRoot("lib/hr-flow.js"));
+const consentLib = await import(atRoot("lib/consent-docs.js"));
 
 // ---- 呼び出しの道具 --------------------------------------------------------
 const res = () => {
@@ -348,6 +351,55 @@ await ok("氏名・日付・状態・進捗・次の担当が出る", async () =
   assert.equal(row.next.role, "人事");
 });
 
+// 入社は5段階を持つ。作成依頼を出していなければ ①、次は管理者
+await ok("入社の段階と、止まっているものが出る", async () => {
+  setup();
+  await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(3) });
+  const r = await get();
+  const row = r.body.onboarding[0];
+  assert.equal(row.stage, "conditions");
+  assert.equal(row.stageN, 1);
+  assert.equal(row.nextActorLabel, "管理者");
+  assert.match(row.stuck, /作成依頼/);
+  assert.equal(row.daysLeft, 3);
+  assert.ok(row.internalOpen > 0, "社内準備の残りが数えられていない");
+});
+
+await ok("上に出す5つの数が返る", async () => {
+  setup();
+  await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(3) });
+  const r = await get();
+  assert.equal(r.body.kpi.planned, 1);
+  assert.equal(r.body.kpi.advisor, 0);
+  assert.equal(r.body.kpi.prep, 1, "社内準備が残っている人");
+  assert.equal(r.body.kpi.complete, 0);
+});
+
+await ok("作成依頼を出したら ② になり、社労士の番と出る", async () => {
+  setup();
+  await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(3) });
+  db.rows.gw_doc_orders = [{ id: "o1", tenant_id: "t1", employee_id: "emp-new",
+                             doc_kind: "employment", status: "requested", updated_at: "2026-09-15T00:00:00Z" }];
+  const r = await get();
+  const row = r.body.onboarding[0];
+  assert.equal(row.stage, "advisor_review");
+  assert.equal(row.nextActorLabel, "社労士");
+  assert.equal(r.body.kpi.advisor, 1);
+});
+
+await ok("社内準備が済んだだけでは、入社を完了にしない", async () => {
+  // 本人が署名も届出もしていないのに「完了」に見えるのがいちばん困る
+  setup();
+  await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(3) });
+  for (const it of items().filter((i) => i.owner !== "employee")) {
+    await patch({ id: proc().id, itemId: it.id, done: true });
+  }
+  const r = await get();
+  assert.equal(r.body.onboarding.length, 1, "完了タブに移っています");
+  assert.notEqual(proc().status, "done");
+  assert.notEqual(r.body.onboarding[0].stage, "complete");
+});
+
 await ok("3つのタブに分かれる", async () => {
   setup();
   await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(3) });
@@ -430,15 +482,50 @@ await ok("外せる（押し間違い）", async () => {
   assert.equal(first.completed_at, null);
 });
 
+/**
+ * 入社の「完了」は、社内準備だけでは決まらない。
+ * 作成依頼 → 社労士の発行 → 本人の締結・同意 → 届出 → 社内準備、が全部そろって ⑤。
+ * ここでは本人側の事実を表に置いてから、社内準備を終わらせる
+ */
+function employeeSideDone(empId) {
+  const { CONSENT_DOCS } = consentLib;
+  db.rows.gw_doc_orders = [{ id: "o1", tenant_id: "t1", employee_id: empId,
+    doc_kind: "employment", status: "signed", updated_at: "2026-09-15T00:00:00Z" }];
+  db.rows.gw_sign_requests = [{ id: "s1", tenant_id: "t1", employee_id: empId,
+    doc_kind: "employment", status: "signed", sent_at: "2026-09-15T00:00:00Z" }];
+  db.rows.gw_onboard_profiles = [{ employee_id: empId, status: "submitted" }];
+  db.rows.gw_onboard_consents = CONSENT_DOCS.map((d) => ({
+    employee_id: empId, kind: d.key, version: d.version, agreed_at: "2026-09-15T00:00:00Z" }));
+  for (const i of items().filter((x) => x.owner === "employee")) i.status = "submitted";
+}
+
 await ok("全部終わると「完了」に移る", async () => {
   setup();
   const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(5) });
   const id = made.body.id;
-  for (const i of [...items()]) await patch({ id, itemId: i.id, done: true });
+  employeeSideDone("emp-new");
+  for (const i of items().filter((x) => x.owner !== "employee")) {
+    await patch({ id, itemId: i.id, done: true });
+  }
   const r = await get();
   assert.equal(r.body.onboarding.length, 0, "まだ入社予定に残っています");
   assert.equal(r.body.done.length, 1, "完了に移っていません");
-  assert.equal(r.body.done[0].next, null);
+  assert.equal(r.body.done[0].stage, "complete");
+  assert.equal(r.body.kpi.complete, 1);
+  assert.equal(proc().status, "done", "手続き本体も done になる");
+});
+
+await ok("完了したら、本人と管理者に知らせる", async () => {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "onboarding", targetOn: day(5) });
+  employeeSideDone("emp-new");
+  sent.length = 0;
+  for (const i of items().filter((x) => x.owner !== "employee")) {
+    await patch({ id: made.body.id, itemId: i.id, done: true });
+  }
+  const done = sent.filter((n) => /完了しました/.test(n.title || ""));
+  assert.ok(done.length >= 1, sent.map((n) => n.title).join(","));
+  assert.ok(done.some((n) => n.employeeId === "emp-new"), "本人に届いていない");
 });
 
 await ok("次にやることは、段階の早いものから", async () => {

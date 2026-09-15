@@ -97,6 +97,27 @@
 
     .hr-empty { color:var(--muted); font-size:13px; padding:20px 0; }
 
+    /* 上の5つの数。ここだけ見れば「誰か止まっているか」が分かる */
+    .hr-kpi { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 14px; }
+    .hr-kpi .box { flex:1 1 120px; border:1px solid var(--border); border-radius:10px;
+                   padding:10px 13px; }
+    .hr-kpi .box .k { font-size:11.5px; color:var(--muted); }
+    .hr-kpi .box .v { font-size:20px; font-weight:700; color:var(--primary-dark);
+                      font-variant-numeric:tabular-nums; }
+    .hr-kpi .box.warn .v { color:#a05a00; }
+    .hr-kpi .box.ok .v { color:#256b36; }
+
+    /* 段階。①〜⑤ の番号と名前 */
+    .hr-st { display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+             font-size:12.5px; font-weight:600; }
+    .hr-st .n { display:inline-flex; width:20px; height:20px; border-radius:50%;
+                align-items:center; justify-content:center; font-size:11px;
+                background:var(--primary); color:#fff; }
+    .hr-st.complete .n { background:#256b36; }
+    .hr-st .sub { display:block; font-size:11px; color:var(--muted); font-weight:400; }
+    .hr-stuck { font-size:12px; color:#9c4221; }
+    .hr-stuck.none { color:#256b36; }
+
     /* 書類の保管先。毎回触るものではないので畳んでおく */
     .hr-drive { margin-top:6px; border-top:1px solid var(--border); padding-top:12px; }
     .hr-drive summary { cursor:pointer; font-size:12.5px; color:var(--muted); }
@@ -124,13 +145,15 @@
 
   <!-- 一覧 -->
   <div class="card" id="hr-list-card">
+    <div class="hr-kpi" id="hr-kpi"></div>
     <div class="hr-tabs" id="hr-tabs"></div>
     <div class="table-scroll">
       <table class="hr-table">
         <thead><tr>
-          <th>氏名</th><th>入社／退社日</th><th>状態</th><th>進捗</th><th>次の担当</th><th></th>
+          <th>氏名</th><th>入社／退社日</th><th>状態</th><th>進捗</th>
+          <th>次の担当</th><th>止まっているもの</th><th></th>
         </tr></thead>
-        <tbody id="hr-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
+        <tbody id="hr-rows"><tr><td colspan="7">読み込み中…</td></tr></tbody>
       </table>
     </div>
     <div style="margin-top:14px;">
@@ -184,6 +207,7 @@
   }
 
   function render() {
+    renderKpi(data.kpi);
     const counts = {
       onboarding: (data.onboarding || []).length,
       offboarding: (data.offboarding || []).length,
@@ -201,28 +225,62 @@
     render();
   }
 
+  /**
+   * 上の5つの数。
+   * 「全員止まっていない」なら数字を眺めるだけで済む。
+   * 誰か止まっていれば、その数が色付きになる
+   */
+  function renderKpi(k) {
+    if (!k) { el("hr-kpi").innerHTML = ""; return; }
+    const box = (label, n, cls) => `
+      <div class="box ${n ? cls : ""}"><div class="k">${esc(label)}</div><div class="v">${n}名</div></div>`;
+    el("hr-kpi").innerHTML =
+      box("入社予定", k.planned, "") + box("社労士確認待ち", k.advisor, "warn")
+      + box("本人対応待ち", k.employee, "warn") + box("社内準備未完了", k.prep, "warn")
+      + box("手続き完了", k.complete, "ok");
+  }
+
   function renderRows(rows) {
     if (!rows.length) {
-      el("hr-rows").innerHTML = `<tr><td colspan="6" class="hr-empty">
+      el("hr-rows").innerHTML = `<tr><td colspan="7" class="hr-empty">
         ${tabNow === "done" ? "完了したものはまだありません。"
           : "いま進んでいるものはありません。"}</td></tr>`;
       return;
     }
     el("hr-rows").innerHTML = rows.map((r) => {
       const pct = r.progress.total ? Math.round(r.progress.done / r.progress.total * 100) : 0;
+      // 入社は5段階、退社はこれまでどおり phase
+      const onb = r.kind === "onboarding" && r.stage;
+      const stateCell = onb
+        ? `<span class="hr-st ${esc(r.stage)}"><span class="n">${r.stageN}</span>${esc(r.stageLabel)}</span>`
+        : `<span class="hr-ph ${esc(r.phase)}">${esc(r.phaseLabel)}</span>`;
+      const barPct = onb ? r.pct : pct;
+      const nextCell = onb
+        ? (r.stage === "complete"
+            ? `<span class="hr-next none">すべて完了</span>`
+            : `<span class="hr-next"><b>${esc(r.nextActorLabel)}</b>${
+                r.next && r.nextActors?.includes("admin")
+                  ? `<span class="who">：${esc(r.next.title)}${r.next.who ? `（${esc(r.next.who)}）` : ""}</span>` : ""}</span>`)
+        : (r.next
+            ? `<span class="hr-next">${esc(r.next.role)}：${esc(r.next.title)}
+                ${r.next.who ? `<span class="who">（${esc(r.next.who)}）</span>` : ""}</span>`
+            : `<span class="hr-next none">すべて完了</span>`);
+      const stuckCell = onb
+        ? (r.stuck ? `<span class="hr-stuck">${esc(r.stuck)}</span>` : `<span class="hr-stuck none">なし</span>`)
+        : "";
       return `
       <tr class="click" onclick="showDetail('${esc(r.id)}')">
         <td><span class="nm">${esc(r.name)}</span>
-          ${r.department ? `<span class="sub">${esc(r.department)}</span>` : ""}</td>
-        <td><span class="hr-due ${esc(r.urgency)}">${esc(r.due)}</span></td>
-        <td><span class="hr-ph ${esc(r.phase)}">${esc(r.phaseLabel)}</span></td>
+          <span class="sub">${esc([r.department, r.employmentType].filter(Boolean).join("・"))}</span></td>
+        <td><span class="hr-due ${esc(r.urgency)}">${esc(r.due)}</span>${
+          onb && r.daysLeft != null && r.stage !== "complete"
+            ? `<span class="sub">${r.daysLeft >= 0 ? `あと ${r.daysLeft} 日` : `${-r.daysLeft} 日経過`}</span>` : ""}</td>
+        <td>${stateCell}</td>
         <td><span class="hr-prog">
-          <span class="bar"><span style="width:${pct}%"></span></span>
-          <span class="n">${r.progress.done}/${r.progress.total}</span></span></td>
-        <td>${r.next
-          ? `<span class="hr-next">${esc(r.next.role)}：${esc(r.next.title)}
-              ${r.next.who ? `<span class="who">（${esc(r.next.who)}）</span>` : ""}</span>`
-          : `<span class="hr-next none">すべて完了</span>`}</td>
+          <span class="bar"><span style="width:${barPct}%"></span></span>
+          <span class="n">${onb ? `${barPct}%` : `${r.progress.done}/${r.progress.total}`}</span></span></td>
+        <td>${nextCell}</td>
+        <td>${stuckCell}</td>
         <td><span class="material-symbols-outlined"
               style="font-size:18px;color:var(--muted);">chevron_right</span></td>
       </tr>`;

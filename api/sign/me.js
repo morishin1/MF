@@ -29,6 +29,7 @@ import { notifySlack } from "../../lib/slack.js";
 import { appendSignaturePage, sha256 } from "../../lib/pdf-jp.js";
 import { AGREE_TEXT, statusOf, kindLabel } from "../../lib/esign.js";
 import { signEvent, ipOf, uaOf } from "../../lib/sign-audit.js";
+import { advanceFor } from "../../lib/onboard-advance.js";
 
 const BUCKET = "hr";
 
@@ -260,6 +261,8 @@ async function sign(req, res, ctx, user) {
     lines: [ctx.employee.display_name],
     link: "admin-esign.html",
   });
+  // 入社手続きの段階を進める（誓約書の同意もそろっていれば ④ へ）
+  await advanceFor(sb, ctx, ctx.employee.id);
 
   return json(res, 200, {
     ok: true,

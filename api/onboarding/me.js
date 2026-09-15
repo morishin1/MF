@@ -36,6 +36,7 @@ import { DOCS, COMPANY_DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/on
 import { hrConfigured } from "../../lib/gdrive.js";
 import { onboardingDone } from "../../lib/stages.js";
 import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
+import { advanceFor } from "../../lib/onboard-advance.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -436,6 +437,7 @@ async function saveProfile(res, user, ctx, body) {
   if (error) return json(res, 500, { error: "db_upsert_failed", detail: error.message });
 
   await reflect(sb, empId);
+  if (body?.submit) await advanceFor(sb, ctx, empId);
   return json(res, 200, { ok: true, profile: data, submitted: data.status === "submitted" });
 }
 

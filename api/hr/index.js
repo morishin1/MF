@@ -30,6 +30,9 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate } from "../../lib/devices.js";
 import { seed, tell } from "../../lib/hr-run.js";
+import { advance, gatherFactsBulk } from "../../lib/onboard-advance.js";
+import { computeStage, stageOf, progressPct, daysToStart, kpiOf, stuckLine }
+  from "../../lib/onboard-stage.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -84,7 +87,11 @@ async function read(req, res, ctx) {
   const items = list.length ? await itemsOf(sb, list.map((p) => p.id)) : new Map();
   const people = await employees(sb, ctx.tenantId);
 
-  const rows = list.map((p) => row(p, items.get(p.id) || [], people, today));
+  // 入社の段階（①作成依頼 → ②社労士確認 → ③締結 → ④情報入力・提出 → ⑤完了）。
+  // 5つの表の事実から出す。表ごとに1本で引く（1人ずつ回さない）
+  const facts = await gatherFactsBulk(sb, ctx.tenantId, list, items);
+
+  const rows = list.map((p) => row(p, items.get(p.id) || [], people, today, facts.get(p.id)));
 
   // 1人ぶん
   const id = q.get("id");
@@ -133,15 +140,18 @@ async function read(req, res, ctx) {
           .slice(-1)
           .map((i) => i.title)[0] || null,
       }));
-    return json(res, 200, { soon, today });
+    return json(res, 200, { soon, today, kpi: kpiOf(rows) });
   }
 
   // 3つのタブ。完了は入社・退社をまとめて出す
+  const finished = (r) => (r.kind === "onboarding" ? r.stage === "complete" : r.phase === "done");
   return json(res, 200, {
     tabs: TABS,
-    onboarding: rows.filter((r) => r.kind === "onboarding" && r.phase !== "done"),
-    offboarding: rows.filter((r) => r.kind === "offboarding" && r.phase !== "done"),
-    done: rows.filter((r) => r.phase === "done"),
+    onboarding: rows.filter((r) => r.kind === "onboarding" && !finished(r)),
+    offboarding: rows.filter((r) => r.kind === "offboarding" && !finished(r)),
+    done: rows.filter(finished),
+    // 上に出す5つの数（入社予定／社労士確認待ち／本人対応待ち／社内準備未完了／完了）
+    kpi: kpiOf(rows),
     people: [...people.values()],
     roles: ROLES,
     today,
@@ -149,8 +159,30 @@ async function read(req, res, ctx) {
 }
 
 /** 一覧の1行。余計なものは出さない */
-function row(p, its, people, today) {
+function row(p, its, people, today, facts) {
   const prog = progressOf(its);
+
+  // 入社だけ、5段階を持つ。退社はこれまでどおり phase で見る
+  let stage = null;
+  if (p.kind === "onboarding") {
+    const st = computeStage(facts || { procedure: p, items: its });
+    const def = stageOf(st.key);
+    const internalOpen = its.filter((i) => i.owner !== "employee"
+      && i.status !== "done" && i.status !== "na").length;
+    stage = {
+      stage: st.key, stageN: def.n, stageLabel: def.label,
+      nextActors: st.nextActors,
+      nextActorLabel: st.nextActors.length
+        ? st.nextActors.map((a) => ({ admin: "管理者", advisor: "社労士", employee: "本人" }[a] || a)).join("・")
+        : "—",
+      blockers: st.blockers,
+      stuck: stuckLine({ stage: st.key, blockers: st.blockers }),
+      pct: progressPct(st.key, its),
+      internalOpen,
+      daysLeft: daysToStart(p.target_on, today),
+      cancelled: Boolean(st.cancelled),
+    };
+  }
   const phase = p.phase && p.phase === "done" && prog.done === prog.total
     ? "done"
     : phaseOf(p.kind, p.target_on, its, today);
@@ -176,6 +208,8 @@ function row(p, its, people, today) {
       }
       : null,
     notifiedAt: p.notified_at,
+    employmentType: people.get(p.employee_id)?.employmentType || null,
+    ...(stage || {}),
   };
 }
 
@@ -211,11 +245,11 @@ async function itemsOf(sb, ids) {
 
 async function employees(sb, tenantId) {
   const { data } = await sb.from("gw_employees")
-    .select("id, display_name, department, manager_id, user_id")
+    .select("id, display_name, department, manager_id, user_id, employment_type")
     .eq("tenant_id", tenantId).order("display_name").limit(500);
   return new Map((data || []).map((e) => [e.id, {
     id: e.id, name: e.display_name, department: e.department,
-    managerId: e.manager_id, userId: e.user_id,
+    managerId: e.manager_id, userId: e.user_id, employmentType: e.employment_type,
   }]));
 }
 
@@ -303,6 +337,8 @@ async function patch(req, res, ctx, user) {
     if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
 
     const after = await refresh(sb, proc);
+    // 入社なら、社内準備が全部済んだ時点で ⑤ に進む（本人の側も済んでいれば）
+    if (proc.kind === "onboarding") await advance(sb, ctx, proc.id);
     return json(res, 200, { ok: true, ...after });
   }
 
@@ -357,11 +393,12 @@ async function refresh(sb, proc) {
     .eq("procedure_id", proc.id).limit(300);
   const prog = progressOf(items || []);
   const phase = phaseOf(proc.kind, proc.target_on, items || [], today);
-  await sb.from("gw_procedures").update({
-    phase,
-    status: phase === "done" ? "done" : "in_progress",
-    updated_at: new Date().toISOString(),
-  }).eq("id", proc.id);
+  // 入社の「完了」は5段階（lib/onboard-stage.js）が決める。
+  // 社内準備が済んだだけで done にすると、本人が署名も届出もしていないのに
+  // 完了に見える。退社はこれまでどおり phase で決める
+  const upd = { phase, updated_at: new Date().toISOString() };
+  if (proc.kind !== "onboarding") upd.status = phase === "done" ? "done" : "in_progress";
+  await sb.from("gw_procedures").update(upd).eq("id", proc.id);
   const next = nextUp(items || []);
   return { progress: prog, phase, phaseLabel: phaseLabel(proc.kind, phase),
            next: next ? { title: next.title, role: ROLE_LABEL[next.owner] } : null };

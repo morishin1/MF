@@ -16,6 +16,7 @@ import { hrConfigured, uploadFile } from "../../lib/gdrive.js";
 import { ensureProcedureFolders } from "../../lib/hr-drive.js";
 import { docOf, folderKeyOf, driveFileName } from "../../lib/onboard-docs.js";
 import { jstDate } from "../../lib/nippo.js";
+import { logSensitive } from "../../lib/sensitive-log.js";
 
 // 本人が記入して出すものなので、Word・Excel も受ける
 const ALLOWED_MIME = new Set([
@@ -135,6 +136,19 @@ async function viewUrl(req, res, ctx) {
     .storage.from("hr")
     .createSignedUrl(file.storage_path, VIEW_TTL);
   if (error) return json(res, 500, { error: "sign_failed", detail: error.message });
+
+  // 誰が・誰の書類を開いたかを残す。本人が自分のを開いたときは残さない。
+  // 提出書類は本人確認書類や口座の写しを含む。見ただけでも残す
+  const { data: owner } = await admin().from("gw_procedure_files")
+    .select("procedure:gw_procedures(employee_id)").eq("id", fileId).maybeSingle();
+  await logSensitive({
+    tenantId: ctx.tenantId,
+    actor: { id: ctx.employee?.user_id || null, name: ctx.employee?.display_name || null },
+    subjectId: owner?.procedure?.employee_id || null,
+    selfId: ctx.employee?.id || null,
+    kind: "file", action: "view", target: `file:${fileId}`,
+    detail: { filename: file.filename }, req,
+  });
 
   return json(res, 200, { url: signed.signedUrl, filename: file.filename, expiresInSec: VIEW_TTL });
 }

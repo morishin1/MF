@@ -28,6 +28,7 @@ import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
 import { notifySlack } from "../../lib/slack.js";
 import { gwLog } from "../../lib/gw-audit.js";
+import { advanceFor } from "../../lib/onboard-advance.js";
 import { signEvent } from "../../lib/sign-audit.js";
 import { sha256 } from "../../lib/pdf-jp.js";
 import {
@@ -207,6 +208,8 @@ async function create(res, sb, ctx, user, body) {
     lines: [emp.display_name, row.assignee_name || "（依頼先未記入）"],
     link: "admin-esign.html",
   });
+  // 入社手続きの段階が ①→② に進む。次の担当（社労士）に知らせるのはこの中
+  if (row.doc_kind === "employment") await advanceFor(sb, ctx, row.employee_id);
 
   return json(res, 200, { order: shape({ ...data, employee: emp }), missing });
 }
@@ -308,6 +311,7 @@ async function attach(res, sb, ctx, user, body) {
     tenantId: ctx.tenantId, actorId: user.id, action: "doc_order.attach",
     target: `doc_order:${o.id}`, detail: { title: o.title, hash: data.file_sha256 },
   });
+  await advanceFor(sb, ctx, o.employee_id);
   return json(res, 200, { order: shape(data) });
 }
 
@@ -407,6 +411,8 @@ async function send(req, res, sb, ctx, user, body) {
     lines: [emp.display_name, `期限 ${dueOn}`],
     link: "admin-esign.html",
   });
+  // ②→③。本人に「締結してください」が届く
+  await advanceFor(sb, ctx, o.employee_id);
 
   return json(res, 200, { ok: true, signRequestId: row.id, dueOn });
 }

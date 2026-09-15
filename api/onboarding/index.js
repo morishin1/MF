@@ -13,6 +13,7 @@ import { defaultChecklist } from "../../lib/onboarding.js";
 import { FIELDS, GROUPS, DEPENDENT_FIELDS } from "../../lib/onboard-form.js";
 import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders, folderIdFromUrl, linkOf } from "../../lib/hr-drive.js";
 import { admin } from "../../lib/supabase.js";
+import { logSensitiveMany } from "../../lib/sensitive-log.js";
 
 const KINDS = ["onboarding", "offboarding"];
 const STATUSES = ["not_started", "in_progress", "done", "cancelled"];
@@ -80,6 +81,15 @@ export default async function handler(req, res) {
       .select("*")
       .in("employee_id", list.map((p) => p.employee_id).filter(Boolean));
     const byEmployee = new Map((profiles || []).map((p) => [p.employee_id, p]));
+
+    // 届出（住所・生年月日・口座）を他人のぶんまで開いた、を残す。
+    // RLS で読めた＝人事・管理者。本人のぶんは除く
+    await logSensitiveMany({
+      tenantId: ctx.tenantId,
+      actor: { id: user.id, name: ctx.employee?.display_name || null },
+      selfId: ctx.employee?.id || null,
+      kind: "profile", action: "view", target: "onboarding:list", req,
+    }, [...byEmployee.keys()]);
 
     return json(res, 200, {
       procedures: list.map((p) => {

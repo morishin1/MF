@@ -25,6 +25,17 @@
     } catch (e) { /* 読めなくても動く */ }
   </script>
   <style>
+    /* 入社手続きの5つの数 */
+    .hr-kpi { display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 6px; }
+    .hr-kpi-box { flex:1 1 110px; border:1px solid var(--border); border-radius:9px;
+                  padding:8px 11px; text-decoration:none; color:inherit; }
+    .hr-kpi-box .k { display:block; font-size:11px; color:var(--muted); }
+    .hr-kpi-box .v { font-size:19px; font-weight:700; color:var(--primary-dark);
+                     font-variant-numeric:tabular-nums; }
+    .hr-kpi-box .v small { font-size:11px; font-weight:500; margin-left:2px; }
+    .hr-kpi-box.warn .v { color:#a05a00; }
+    .hr-kpi-box.ok .v { color:#256b36; }
+
     /* 今日対応する入退社。1件1ブロック。押すとその人の画面へ */
     .hr-soon-row { display:block; border:1px solid var(--border); border-radius:10px;
                    padding:11px 14px; margin-bottom:8px; text-decoration:none; color:inherit; }
@@ -155,15 +166,31 @@
    *   チェックリストになって、他のものが押し出される
    */
   async function loadHrSoon() {
-    let rows = [];
+    let rows = [], kpi = null;
     try {
-      rows = (await API.hrSoon())?.soon || [];
+      const r = await API.hrSoon();
+      rows = r?.soon || [];
+      kpi = r?.kpi || null;
     } catch (e) { return; }        // まだ 066 を流していない等。黙って出さない
-    if (!rows.length) return;
+    if (!rows.length && !(kpi && kpi.planned)) return;
+
+    // 入社手続きの5つの数。「誰か止まっているか」がここで分かる。
+    // 一覧を開くのは、色が付いたときだけでよい
+    const box = (label, n, cls) => `
+      <a class="hr-kpi-box ${n ? cls : ""}" href="admin-hr.html">
+        <span class="k">${label}</span><span class="v">${n}<small>名</small></span></a>`;
+    const kpiHtml = kpi && kpi.planned ? `
+      <div class="hr-kpi">
+        ${box("入社予定", kpi.planned, "")}${box("社労士確認待ち", kpi.advisor, "warn")}
+        ${box("本人対応待ち", kpi.employee, "warn")}${box("社内準備未完了", kpi.prep, "warn")}
+        ${box("手続き完了", kpi.complete, "ok")}
+      </div>` : "";
 
     el("hr-soon").innerHTML = `
       <div class="card" style="margin-bottom:16px;">
-        <h2><span class="material-symbols-outlined">swap_horiz</span>今日対応する入退社</h2>
+        <h2><span class="material-symbols-outlined">swap_horiz</span>入社手続き</h2>
+        ${kpiHtml}
+        ${rows.length ? `<h3 style="font-size:13px;margin:14px 0 8px;">今日対応する入退社</h3>` : ""}
         ${rows.map((r) => `
           <a class="hr-soon-row" href="admin-hr.html?id=${esc(r.id)}">
             <div class="hd">

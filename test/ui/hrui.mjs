@@ -150,9 +150,12 @@ console.log("— 一覧 —");
   check(tabs[2].startsWith("完了"), `3つめ ${tabs[2]}`);
   check(tabs[0].includes("2"), "件数が出る");
 
+  // 氏名・日付・状態・進捗・次の担当 に「止まっているもの」を足した6つ。
+  // 「何が止まっているか」が一覧だけで分かるのが、この画面の仕事
   const heads = (await page.locator(".hr-table th").allInnerTexts()).map((s) => s.trim());
-  check(heads.filter(Boolean).length === 5,
-    `見出しは5つ（いま ${heads.filter(Boolean).join("・")}）`);
+  check(heads.filter(Boolean).length === 6,
+    `見出しは6つ（いま ${heads.filter(Boolean).join("・")}）`);
+  check(heads.includes("止まっているもの"), "「止まっているもの」の列がある");
 
   const first = await page.locator("#hr-rows tr").first().innerText();
   check(/山田 太郎/.test(first), "氏名");
