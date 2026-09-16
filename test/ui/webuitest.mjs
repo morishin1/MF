@@ -336,16 +336,20 @@ const asAdmin = () => {
   await page.goto(`${BASE}/device-consent.html`);
   await page.waitForTimeout(1400);
   {
-    // 社員には大分類だけを伝える（検知条件や判定基準は出さない）。
-    // 「WEBの利用状況を記録する」ことは、ぼかさずに書く
-    const areas = await page.locator("#c-areas, #c-notice").first().textContent();
-    check(areas.includes("WEBの利用状況"), "WEBを記録することを、ぼかさずに書く");
-    const t = await page.locator("#c-agentnotice").textContent();
+    // 記録する内容の説明は、この画面から全部外した（依頼）。
+    // 伝えるのは、管理部が送るお知らせのほう（docs/device-announce.md）。
+    const all = await page.locator("body").innerText();
+    check(!all.includes("記録する範囲"), "説明は画面に出さない");
+    check(!all.includes("内容を確認しました"),
+      "見せていない内容を「確認しました」と書かせない");
+
+    // 文そのものは残っている（マイページと、送るお知らせが使う）。
     // 何を捨てるかという「削り方」は、社員向けには出さない（避け方になる）。
     // 出すのは「何を記録するか」と「いつのぶんを見るか」
-    check(t.includes("利用状況を記録します"), "何を記録するかを書く");
-    check(t.includes("勤務時間内のぶん"), "勤務時間内が対象だと書く");
-    check(t.includes("あなたの画面に残ります"), "見られたら分かると書く");
+    const an = [AGENT_REAL.lead, AGENT_REAL.scope, AGENT_REAL.yours].join(" ");
+    check(an.includes("利用状況を記録します"), "何を記録するかを書く");
+    check(an.includes("勤務時間内のぶん"), "勤務時間内が対象だと書く");
+    check(an.includes("あなたの画面に残ります"), "見られたら分かると書く");
   }
   await page.close();
 }

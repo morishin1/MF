@@ -20,25 +20,6 @@
     } catch (e) { /* 読めなくても動く */ }
   </script>
   <style>
-    /* 読ませるための画面。字を詰めない */
-    .dc-list { font-size:14px; line-height:2.1; margin:0; padding-left:1.3em; }
-    .dc-box { border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:16px; }
-    .dc-box.take { border-color:#cfe0f5; background:#f7fbff; }
-    .dc-box.never { border-color:#d4e9dc; background:#f6fbf8; }
-    .dc-box h3 { margin:0 0 8px; font-size:15px; display:flex; align-items:center; gap:7px; }
-    .dc-box.take h3 { color:#2b5f9e; }
-    .dc-box.never h3 { color:#1f7a4c; }
-    .dc-why { font-size:14px; line-height:2; }
-
-    /* 説明は、ふだんは畳んでおく。
-       押す場所を上に出したいので、読む人が開いたときだけ広げる */
-    .dc-sum { cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;
-              font-size:14px; font-weight:600; color:var(--primary-dark); padding:2px 0; }
-    .dc-sum::-webkit-details-marker { display:none; }
-    .dc-sum .chev { margin-left:auto; transition:transform .15s; color:var(--muted); }
-    details[open] .dc-sum .chev { transform:rotate(180deg); }
-    .dc-sum-body { padding-top:16px; }
-
     .dc-this { border:2px solid var(--primary); border-radius:12px; padding:18px 20px;
                background:#f7fbff; }
     .dc-this .name { font-size:18px; font-weight:700; color:var(--primary-dark); }
@@ -64,61 +45,13 @@
 <body>
 
 <div class="wrap" style="max-width:760px;">
-  <h1 class="kp-greet">会社貸与パソコンの端末管理について</h1>
+  <h1 class="kp-greet">この端末の登録</h1>
   <p class="kp-greet-sub" id="c-lead">
     会社ルールとして端末管理を行います。
-    <b>「内容を確認しました」</b>を押してください。
-    記録する内容は、下の「端末管理について」から読めます。
+    下の<b>「この端末を登録する」</b>を押してください。
+    記録する内容は、管理部からのお知らせに書いてあります。
   </p>
   <div id="c-linked"></div>
-
-  <!-- 会社として何をしているか。押す前に読めるよう、いちばん上に置く -->
-  <div class="card">
-    <!-- ふだんは畳む。押す場所を先に見せたいので。
-         中身は消していない。押すボタンが「内容を確認しました」なので、
-         その内容がどこにも無い画面にはできない（押した記録の意味が無くなる） -->
-    <details id="c-notice-box">
-      <summary class="dc-sum">
-        <span class="material-symbols-outlined">description</span>
-        端末管理について（記録する内容を読む）
-        <span class="material-symbols-outlined chev">expand_more</span>
-      </summary>
-      <div class="dc-sum-body">
-
-    <p id="c-notice-lead" style="font-size:13.5px;line-height:1.95;margin:0 0 16px;"></p>
-
-    <div class="dc-box take">
-      <h3><span class="material-symbols-outlined">fact_check</span>記録する範囲</h3>
-      <ul class="dc-list" id="c-areas"></ul>
-    </div>
-
-    <div class="dc-why">
-      <p id="c-scope" style="font-weight:600;"></p>
-      <p id="c-purpose"></p>
-      <p id="c-yours"></p>
-    </div>
-
-    <!-- 私物PCの扱い。禁止事項なので、色を変えて出す -->
-    <div class="dc-box" id="c-rulebox"
-         style="border-color:#f0d9a8;background:#fffaf0;">
-      <h3 style="color:#a05a00;">
-        <span class="material-symbols-outlined">laptop_chromebook</span>業務に使うパソコン</h3>
-      <p id="c-rule" style="margin:0;font-size:13px;line-height:1.9;"></p>
-    </div>
-
-    <!-- 会社のソフトが入っている人にだけ出す -->
-    <div id="c-agentnotice" class="hidden">
-      <h2 style="margin-top:26px;"><span class="material-symbols-outlined">memory</span>
-        <span id="c-an-title"></span></h2>
-      <p class="dc-why" id="c-an-lead"></p>
-      <ul class="dc-list" id="c-an-areas"></ul>
-      <p class="dc-why" id="c-an-scope"></p>
-      <p class="dc-why" id="c-an-yours"></p>
-    </div>
-
-      </div>
-    </details>
-  </div>
 
   <!-- いま使っている端末と、確認の記録 -->
   <div class="card">
@@ -235,7 +168,7 @@
         <div class="banner ok" style="margin-bottom:16px;">
           <span class="material-symbols-outlined">link</span>
           <div><b>${esc(r.device.hostname)}</b> をあなたのパソコンとして登録しました。<br>
-            下の内容を読んで、<b>「内容を確認しました」</b>を押してください。</div>
+            下の<b>「この端末を登録する」</b>を押してください。</div>
         </div>`;
       // つないだ印はURLから消す。読み込み直しで2回目を投げない
       history.replaceState(null, "", location.pathname);
@@ -253,29 +186,17 @@
     { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
   function render() {
-    const n = data.notice || {};
-    el("c-notice-lead").textContent = n.lead || "";
-    el("c-areas").innerHTML = (n.areas || []).map((s) => `<li>${esc(s)}</li>`).join("");
-    el("c-scope").textContent = n.scope || "";
-    el("c-purpose").textContent = n.purpose || "";
-    el("c-yours").textContent = n.yours || "";
-    el("c-rule").textContent = n.rule || "";
-    el("c-ack").textContent = n.ack || "";
-
-    // 会社のソフトが入っている人にだけ、対象の範囲を足して出す
-    const an = data.agentNotice;
-    el("c-agentnotice").classList.toggle("hidden", !an);
-    if (an) {
-      el("c-an-title").textContent = an.title;
-      // EXE を入れたパソコンでだけ取れるもの。
-      // 入れていない人には、この一覧そのものが出ない（上の areas に混ぜない）
-      el("c-an-areas").innerHTML = (an.areas || []).map((x) => `<li>${esc(x)}</li>`).join("");
-      for (const k of ["lead", "scope", "yours"]) {
-        const n2 = el(`c-an-${k}`);
-        n2.textContent = an[k] || "";
-        n2.classList.toggle("hidden", !an[k]);
-      }
-    }
+    // 記録する内容の説明は、この画面には出さない（依頼により全部外した）。
+    //
+    // ■ そのぶん、押した記録が何を指すかは変えてある
+    //
+    //   前は「内容を確認しました」だった。読ませる文がここから消えた以上、
+    //   その文言のまま残すと、見せていないものを確認した記録になる。
+    //   いまは「この端末を登録する」で、押した日時だけを残す。
+    //
+    //   何を記録するかを伝えるのは、管理部が送るお知らせのほう
+    //   （docs/device-announce.md）。画面は登録だけを引き受ける。
+    el("c-ack").textContent = "登録した日時を記録します。";
 
     const devs = data.devices || [];
     const agents = devs.filter((d) => d.source === "agent");
@@ -293,9 +214,9 @@
             .filter(Boolean).join(" / "))}　最終受信 ${esc(d.lastSeen)}</span></span>
         <span class="a">
           ${d.confirmed
-            ? `<span class="ok">確認済み${d.notifiedAt ? `（${esc(fmtDay(d.notifiedAt))}）` : ""}</span>`
+            ? `<span class="ok">登録済み${d.notifiedAt ? `（${esc(fmtDay(d.notifiedAt))}）` : ""}</span>`
             : `<button class="btn btn-primary btn-sm"
-                  onclick="confirmAgent('${esc(d.id)}', this)">内容を確認しました</button>`}
+                  onclick="confirmAgent('${esc(d.id)}', this)">このパソコンを登録する</button>`}
         </span>
       </div>`).join("");
 
@@ -306,11 +227,11 @@
            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
              ${here.confirmed
                ? `<span class="done">
-                    <span class="material-symbols-outlined icon-inline">check_circle</span>確認済み${
+                    <span class="material-symbols-outlined icon-inline">check_circle</span>登録済み${
                       here.notifiedAt ? `（${esc(fmtDay(here.notifiedAt))}）` : ""}
                   </span>`
                : `<button class="btn btn-primary" onclick="confirmThis(this)">
-                    <span class="material-symbols-outlined icon-inline">check</span>内容を確認しました
+                    <span class="material-symbols-outlined icon-inline">check</span>この端末を登録する
                   </button>`}
              <button class="btn btn-secondary btn-sm" onclick="renameThis()">名前を変える</button>
            </div>
@@ -324,8 +245,8 @@
             <span><b>${esc(d.label)}</b>
               <span class="sp">　${esc(spec(d))}　最終利用 ${esc(d.lastSeen)}</span></span>
             <span class="a">
-              ${d.confirmed ? `<span class="ok">確認済み</span>`
-                            : `<span class="sp">確認待ち（数えていません）</span>`}
+              ${d.confirmed ? `<span class="ok">登録済み</span>`
+                            : `<span class="sp">登録待ち（数えていません）</span>`}
 
             </span>
           </div>`).join("")

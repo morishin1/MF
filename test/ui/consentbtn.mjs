@@ -2,7 +2,7 @@
 //
 // ■ なぜこのテストが要るのか
 //
-//   「リンクを開いたが『内容を確認しました』が無くて押せない」と言われた。
+//   「リンクを開いたが押すボタンが無い」と言われた。
 //   画面はこう書いていた。
 //
 //     この端末はまだ登録されていません。画面を開き直してください。
@@ -13,8 +13,8 @@
 //   この画面の用は「読んで、押してもらう」こと。
 //   だから、どの状態でも次にやることが画面にある、を守る。
 //
-//     台帳に載った          → 内容を確認しました
-//     1回目だけ載らなかった → 送り直して、内容を確認しました
+//     台帳に載った          → この端末を登録する
+//     1回目だけ載らなかった → 送り直して、この端末を登録する
 //     合図が届かない        → もう一度ためす（押すと直る）
 //     表がまだ無い          → 管理部へ、と出す（本人にはどうにもできない）
 import { launch, BASE } from "../_browser.mjs";
@@ -101,23 +101,20 @@ const textOf = (page) => page.locator("#c-this").textContent();
 console.log("— 台帳に載っているとき —");
 {
   const { page, errs } = await open({});
-  check((await page.locator("#c-this button:has-text('内容を確認しました')").count()) > 0,
-    "「内容を確認しました」が出る");
+  check((await page.locator("#c-this button:has-text('この端末を登録する')").count()) > 0,
+    "「この端末を登録する」が出る");
 
-  // 説明はふだん畳む。ただし消しはしない。
-  // 押すボタンが「内容を確認しました」なので、その内容がどこにも無い画面にすると、
-  // 押した記録が「何を確認したのか分からないもの」になる
-  check(!(await page.locator("#c-notice-box").evaluate((d) => d.open)),
-    "説明は、ふだんは畳んである");
-  await page.locator("#c-notice-box .dc-sum").click();
-  await page.waitForTimeout(300);
-  check((await page.locator("#c-areas").innerText()).includes("グループウェアの利用状況"),
-    "開けば、記録する内容がちゃんと読める");
-  await page.locator("#c-notice-box .dc-sum").click();
-  await page.waitForTimeout(200);
-  await page.locator("#c-this button:has-text('内容を確認しました')").click();
+  // 記録する内容の説明は、この画面には置かない（依頼で全部外した）。
+  // 外した以上、「内容を確認しました」という文言も残してはいけない。
+  // 見せていないものを確認した、という記録になるため
+  const body = await page.locator("body").innerText();
+  check(!body.includes("内容を確認しました"),
+    "見せていない内容を「確認しました」と書かせない");
+  check(!body.includes("記録する範囲"), "説明は出さない");
+
+  await page.locator("#c-this button:has-text('この端末を登録する')").click();
   await page.waitForTimeout(700);
-  check((await textOf(page)).includes("確認済み"), "押すと確認済みになる");
+  check((await textOf(page)).includes("登録済み"), "押すと登録済みになる");
   check(errs.length === 0, `スクリプトのエラーなし${errs.length ? "：" + errs[0] : ""}`);
   await page.close();
 }
@@ -127,7 +124,7 @@ console.log("— 1回目の合図では載らなかったとき —");
   // 本物でも起きる。載る前に読むと、押す場所の無い画面になっていた
   const { page, errs, st } = await open({ beatsUntilRow: 2 });
   check(st.beats >= 2, "台帳に出てこなければ、黙って合図を送り直す");
-  check((await page.locator("#c-this button:has-text('内容を確認しました')").count()) > 0,
+  check((await page.locator("#c-this button:has-text('この端末を登録する')").count()) > 0,
     "送り直したあと、ちゃんと押せる");
   check(errs.length === 0, `スクリプトのエラーなし${errs.length ? "：" + errs[0] : ""}`);
   await page.screenshot({ path: shotPath("consent-retry.png"), fullPage: true });

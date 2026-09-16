@@ -480,33 +480,22 @@ function wire(page, me) {
       "どの画面を見ていたかは送らない");
   }
   {
-    // 社員向けは大分類だけ。しきい値や技術仕様は出さない。
+    // 記録する内容の説明は、この画面から全部外した（依頼）。
     //
-    // 標準の形（グループウェア＋ブラウザ拡張）で、実際に取っているものだけ。
-    // USB・Windowsアプリ・ソフトの追加削除は EXE でしか取れない。
-    // 入れていない人に「記録します」と伝えない
-    const t = await page.locator("#c-areas").textContent();
-    for (const a of ["グループウェアの利用状況", "WEBの利用状況",
-                     "勤怠・日報・タスク", "セキュリティ上必要な端末情報"]) {
-      check(t.includes(a), `大分類が出る: ${a}`);
-    }
-    for (const gone of ["外部機器", "ソフトウェアの変更", "アプリケーションの利用状況"]) {
-      check(!t.includes(gone), `取っていない「${gone}」を全員に出さない`);
-    }
-    // 説明はふだん畳んである。開いたうえで、中身を読む
-    await page.locator("#c-notice-box .dc-sum").click();
-    await page.waitForTimeout(300);
+    // 外した以上、押す文言も「内容を確認しました」ではいけない。
+    // 見せていないものを確認した、という記録になる。
+    // 記録する内容を伝えるのは、管理部が送るお知らせのほう
     const all = await page.locator("body").innerText();
+    check(!all.includes("記録する範囲"), "説明は出さない");
+    check(!all.includes("内容を確認しました"),
+      "見せていない内容を「確認しました」と書かせない");
     check(!/90分|しきい値|Cookie/.test(all), "しきい値・技術仕様は出さない");
     check(!/監視/.test(all), "「監視」は使わない");
-    check(all.includes("同意を求めるものではありません"), "同意ではなく周知だと書いてある");
-    check(all.includes("私物PCでの業務利用は禁止します"), "私物PCの扱いが出る");
+    check(!/同意します|同意してください/.test(all), "同意を求める言い回しを出さない");
   }
-  check((await page.locator("#c-scope").textContent()).includes("社内システムを開いているあいだ"),
-    "常駐ソフトが無いときの範囲が本人にも出る");
   check((await page.locator("#c-this").textContent()).includes("Windows 11 の Chrome"),
     "いま使っている端末が分かる");
-  check(await page.locator("#c-this button:has-text('内容を確認しました')").count() === 1,
+  check(await page.locator("#c-this button:has-text('この端末を登録する')").count() === 1,
     "まだの端末には押すところがある");
   check((await page.locator("#c-devs").textContent()).includes("iPhone の Safari"),
     "ほかの端末も出る");
@@ -515,13 +504,13 @@ function wire(page, me) {
   await page.screenshot({ path: shotPath("dv2-consent.png"), fullPage: true });
 
   sent.length = 0;
-  await page.locator("#c-this button:has-text('内容を確認しました')").click();
+  await page.locator("#c-this button:has-text('この端末を登録する')").click();
   await page.waitForTimeout(1000);
   check(sent.some((p) => p.action === "confirm" && p.deviceUid === MY_UID),
-    "押すと周知の確認として送られる");
-  check(await page.locator("#c-this button:has-text('内容を確認しました')").count() === 0,
+    "押すと登録として送られる");
+  check(await page.locator("#c-this button:has-text('この端末を登録する')").count() === 0,
     "押したあとはボタンが消える");
-  check((await page.locator("#c-this").textContent()).includes("確認済み"), "確認済みになる");
+  check((await page.locator("#c-this").textContent()).includes("登録済み"), "登録済みになる");
 
   console.log("— 名前を変える・外す —");
   sent.length = 0;
@@ -553,24 +542,20 @@ function wire(page, me) {
     "会社のソフトの欄が出る");
   check((await page.locator("#c-agent").textContent()).includes("8GRP-PC-77"),
     "そのパソコンが出る");
-  check(await page.locator("#c-agent button:has-text('内容を確認しました')").count() === 1,
+  check(await page.locator("#c-agent button:has-text('このパソコンを登録する')").count() === 1,
     "確認するところがある");
-  {
-    const t = await page.locator("#c-agentnotice").textContent();
-    check(t.includes("このパソコンを使っているあいだ"), "対象が広がることが出る");
-    check(t.includes("原則として勤務時間内"), "勤務時間の内と外が出る");
-    check(!/90分|Cookie|しきい値/.test(t), "判定のしかたは出さない");
-  }
+  // 会社のソフトを入れると対象が広がる、という説明もこの画面からは外した。
+  // 文そのものは test/ui/noticeshot.mjs（周知の文）で見張っている
   await page.screenshot({ path: shotPath("dv2-linked.png"), fullPage: true });
 
   sent.length = 0;
-  await page.locator("#c-agent button:has-text('内容を確認しました')").click();
+  await page.locator("#c-agent button:has-text('このパソコンを登録する')").click();
   await page.waitForTimeout(1000);
   check(sent.some((p) => p.action === "confirm" && p.deviceId === "ag9"),
     "パソコンのほうは id で確認する");
-  check(await page.locator("#c-agent button:has-text('内容を確認しました')").count() === 0,
+  check(await page.locator("#c-agent button:has-text('このパソコンを登録する')").count() === 0,
     "押したあとはボタンが消える");
-  check((await page.locator("#c-agent").textContent()).includes("確認済み"),
+  check((await page.locator("#c-agent").textContent()).includes("登録済み"),
     "確認した記録として残る");
 
   console.log("— 使えない案内 —");
