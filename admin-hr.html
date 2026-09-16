@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915b">
-  <link rel="stylesheet" href="css/layout.css?v=20260915b">
+  <link rel="stylesheet" href="css/app.css?v=20260915c">
+  <link rel="stylesheet" href="css/layout.css?v=20260915c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -118,6 +118,24 @@
     .hr-stuck { font-size:12px; color:#9c4221; }
     .hr-stuck.none { color:#256b36; }
 
+    /* オリエンテーション・保存期限。一覧の下に、畳まずに並べる */
+    .hr-sec { margin-top:18px; }
+    .hr-or { border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin-bottom:8px; }
+    .hr-or .t { font-size:13.5px; font-weight:700; color:var(--primary-dark); }
+    .hr-or .s { font-size:12px; color:var(--muted); margin-top:3px; line-height:1.7; }
+    .hr-or.off { opacity:.55; }
+    .hr-or .act { display:flex; gap:8px; flex-wrap:wrap; margin-top:9px; align-items:center; }
+    .hr-form { display:grid; grid-template-columns:auto 1fr; gap:9px 14px; align-items:center;
+               font-size:13px; margin-top:10px; }
+    .hr-form label { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .hr-form input, .hr-form select, .hr-form textarea { margin:0; font-size:13px; }
+    .hr-ret { width:100%; border-collapse:collapse; font-size:13px; }
+    .hr-ret th { text-align:left; font-size:11.5px; color:var(--muted); font-weight:600;
+                 padding:0 9px 7px; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .hr-ret td { padding:9px; border-bottom:1px solid var(--border); }
+    .hr-ret td.late { color:#c53030; font-weight:700; }
+    .hr-ret input[type="number"] { width:80px; margin:0; font-size:13px; }
+
     /* 書類の保管先。毎回触るものではないので畳んでおく */
     .hr-drive { margin-top:6px; border-top:1px solid var(--border); padding-top:12px; }
     .hr-drive summary { cursor:pointer; font-size:12.5px; color:var(--muted); }
@@ -166,10 +184,46 @@
 
   <!-- 1人ぶん -->
   <div id="hr-detail"></div>
+
+  <!-- オリエンテーション（本人が入社前に読むもの） -->
+  <div class="card hr-sec" id="orientation">
+    <h2><span class="material-symbols-outlined">school</span>オリエンテーション
+      <span id="or-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      入社予定の方が、入社までに目を通すものです。動画・PDF・リンク・本文を登録できます。
+      必須にしたものは、全部の確認が済むまで入社手続きが完了しません。
+    </p>
+    <div id="or-list"><div class="muted" style="font-size:13px;">読み込み中…</div></div>
+    <div id="or-form"></div>
+    <div style="margin-top:12px;">
+      <button class="btn btn-secondary btn-sm" onclick="openOrForm()">
+        <span class="material-symbols-outlined icon-inline">add</span>教材を追加する
+      </button>
+    </div>
+    <div id="or-msg" class="err-text" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- 保存期限と削除 -->
+  <div class="card hr-sec" id="retention">
+    <h2><span class="material-symbols-outlined">auto_delete</span>個人情報の保存期限
+      <span id="ret-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      種別ごとに「いつから何か月保存するか」を決めます。期限が来たものはここに出ます。
+      自動削除を付けた種別だけ、週1回の点検で自動的に消えます。消した記録は残ります。
+    </p>
+    <div id="ret-rules"></div>
+    <h3 style="font-size:13.5px;margin:20px 0 8px;color:var(--primary-dark);">期限が来ているもの</h3>
+    <div id="ret-due"></div>
+    <details style="margin-top:16px;">
+      <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);">削除の記録</summary>
+      <div id="ret-log" style="margin-top:10px;"></div>
+    </details>
+    <div id="ret-msg" class="err-text" style="margin-top:8px;"></div>
+  </div>
 </div>
 
-<script src="js/api-client.js?v=20260915b"></script>
-<script src="js/layout.js?v=20260915b"></script>
+<script src="js/api-client.js?v=20260915c"></script>
+<script src="js/layout.js?v=20260915c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -185,6 +239,12 @@
     const q = new URLSearchParams(location.search);
     openId = q.get("id");
     load();
+    loadOrientation();
+    loadRetention();
+    if (location.hash) {
+      const box = el(location.hash.slice(1));
+      if (box) setTimeout(() => box.scrollIntoView({ behavior: "smooth" }), 300);
+    }
   });
 
   async function load() {
@@ -388,6 +448,9 @@
               日付を変える</button>
             <button class="btn btn-secondary btn-sm" onclick="remind('${esc(p.id)}', this)">
               もう一度知らせる</button>
+            ${p.kind === "onboarding" ? `
+            <button class="btn btn-secondary btn-sm" onclick="payroll('${esc(p.employeeId)}', this)">
+              MF給与の取込CSV</button>` : ""}
             <button class="btn btn-secondary btn-sm" onclick="closeDetail()">閉じる</button>
           </div>
         </div>
@@ -563,6 +626,233 @@
     const d = new Date(`${p.targetOn}T00:00:00Z`);
     return `${d.toLocaleDateString("ja-JP",
       { month: "long", day: "numeric", timeZone: "UTC" })} ${what}`;
+  }
+
+  // ---- MF給与の取込CSV ----------------------------------------------------------
+  //
+  // 本人が入れた内容から作る。電話・緊急連絡先・扶養家族の氏名・自己紹介は入れない。
+  // マイナンバーはそもそも持っていない。出したことは記録に残る
+  async function payroll(employeeId, btn) {
+    try {
+      const { blob, filename } = await run(btn, "作成中…", () => API.payrollCsv([employeeId]));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      say("CSVを作りました。MF給与の「従業員の取込」から読み込んでください");
+    } catch (e) { say(e.hint || e.detail || e.message || "作れませんでした", true); }
+  }
+
+  // ---- オリエンテーション -------------------------------------------------------
+  let orItems = [];
+  let orKinds = [];
+
+  async function loadOrientation() {
+    try {
+      const r = await API.orientation();
+      orItems = r.items || [];
+      orKinds = r.kinds || [];
+    } catch (e) {
+      el("or-list").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">info</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    renderOrientation();
+  }
+
+  function renderOrientation() {
+    const on = orItems.filter((i) => i.active !== false);
+    el("or-tag").textContent = `${on.length} 件`;
+    el("or-tag").className = `kp-chip ${on.length ? "event" : "draft"}`;
+    if (!orItems.length) {
+      el("or-list").innerHTML = `<div class="muted" style="font-size:13px;">
+        まだ登録されていません。会社説明・就業ルール・勤怠の付け方・情報セキュリティなどを入れてください。</div>`;
+      return;
+    }
+    el("or-list").innerHTML = orItems.map((i) => `
+      <div class="hr-or ${i.active === false ? "off" : ""}">
+        <div class="t">${esc(i.title)}
+          <span class="muted" style="font-weight:400;font-size:11.5px;">　${esc(i.kindLabel)}</span>
+          ${i.required ? "" : '<span class="muted" style="font-weight:400;font-size:11.5px;">（任意）</span>'}
+          ${i.active === false ? '<span class="kp-chip archived" style="margin-left:6px;">停止中</span>' : ""}
+        </div>
+        ${i.description ? `<div class="s">${esc(i.description)}</div>` : ""}
+        <div class="s">${i.url ? esc(i.url) : "本文を登録しています"}　
+          確認済み ${i.confirmedCount ?? 0} 名</div>
+        <div class="act">
+          <button class="btn btn-secondary btn-sm" onclick="openOrForm('${esc(i.id)}')">直す</button>
+          ${i.active === false
+            ? `<button class="btn btn-secondary btn-sm" onclick="setOrActive('${esc(i.id)}', true, this)">また使う</button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="setOrActive('${esc(i.id)}', false, this)">止める</button>`}
+        </div>
+      </div>`).join("");
+  }
+
+  function openOrForm(id) {
+    const i = id ? orItems.find((x) => x.id === id) : null;
+    el("or-form").innerHTML = `
+      <div class="banner" style="display:block;background:var(--soft);margin:14px 0 0;">
+        <b>${i ? "教材を直す" : "教材を追加する"}</b>
+        <div class="hr-form">
+          <label for="or-title">題名</label>
+          <input id="or-title" type="text" value="${esc(i?.title || "")}" placeholder="会社説明（動画）">
+          <label for="or-kind">種類</label>
+          <select id="or-kind" onchange="onOrKind()">
+            ${orKinds.map((k) => `<option value="${esc(k.key)}" ${k.key === (i?.kind || "link") ? "selected" : ""}>${esc(k.label)}</option>`).join("")}
+          </select>
+          <label for="or-url">URL</label>
+          <input id="or-url" type="url" value="${esc(i?.url || "")}" placeholder="https://…">
+          <label for="or-body">本文</label>
+          <textarea id="or-body" rows="5" placeholder="社内ルールなどを直接書く場合">${esc(i?.body || "")}</textarea>
+          <label for="or-desc">説明</label>
+          <input id="or-desc" type="text" value="${esc(i?.description || "")}" placeholder="入社前に一度ご覧ください">
+          <label for="or-req">必須</label>
+          <select id="or-req">
+            <option value="1" ${i?.required !== false ? "selected" : ""}>必須（確認するまで完了にしない）</option>
+            <option value="0" ${i?.required === false ? "selected" : ""}>任意</option>
+          </select>
+          <label for="or-sort">並び順</label>
+          <input id="or-sort" type="number" value="${i?.sortOrder ?? 100}">
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveOr('${esc(i?.id || "")}', this)">保存する</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeOrForm()">やめる</button>
+        </div>
+      </div>`;
+    onOrKind();
+    el("or-title").focus();
+  }
+
+  function closeOrForm() { el("or-form").innerHTML = ""; }
+
+  function onOrKind() {
+    const kind = el("or-kind")?.value;
+    if (!kind) return;
+    // 本文を書くときは URL を、リンク・動画・PDF のときは本文を、触れないようにする
+    el("or-url").disabled = kind === "text";
+    el("or-body").disabled = kind !== "text";
+  }
+
+  async function saveOr(id, btn) {
+    el("or-msg").textContent = "";
+    const body = {
+      title: el("or-title").value, kind: el("or-kind").value,
+      url: el("or-kind").value === "text" ? "" : el("or-url").value,
+      body: el("or-kind").value === "text" ? el("or-body").value : "",
+      description: el("or-desc").value,
+      required: el("or-req").value === "1",
+      sortOrder: Number(el("or-sort").value) || 100,
+    };
+    if (id) body.id = id;
+    try {
+      await run(btn, "保存中…", () => API.orientationSave(body));
+      closeOrForm();
+      await loadOrientation();
+      say("保存しました");
+    } catch (e) { el("or-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  async function setOrActive(id, active, btn) {
+    try {
+      await run(btn, "…", () => API.orientationSave({ id, active }));
+      await loadOrientation();
+    } catch (e) { el("or-msg").textContent = e.hint || e.detail || e.message || "変えられませんでした"; }
+  }
+
+  // ---- 保存期限と削除 -----------------------------------------------------------
+  let ret = null;
+
+  async function loadRetention() {
+    try { ret = await API.retention(); }
+    catch (e) {
+      el("ret-rules").innerHTML =
+        `<div class="banner warn"><span class="material-symbols-outlined">info</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    renderRetention();
+  }
+
+  function renderRetention() {
+    // 決まりが返ってこない（表がまだ・返事が別物）。黙って落ちない
+    if (!Array.isArray(ret?.rules)) {
+      el("ret-rules").innerHTML = `<div class="banner warn">
+        <span class="material-symbols-outlined">info</span>
+        <div>保存期限の設定をまだ読み込めていません。db/071_onboarding_stage2.sql を流してください。</div></div>`;
+      return;
+    }
+    el("ret-tag").textContent = ret.expired ? `期限切れ ${ret.expired} 件` : "期限切れなし";
+    el("ret-tag").className = `kp-chip ${ret.expired ? "important" : "event"}`;
+
+    el("ret-rules").innerHTML = `
+      <div class="table-scroll"><table class="hr-ret">
+        <thead><tr><th>種別</th><th>起点</th><th>保存する月数</th><th>自動削除</th><th></th></tr></thead>
+        <tbody>${ret.rules.map((r) => `
+          <tr>
+            <td><b>${esc(r.label)}</b></td>
+            <td class="muted">${esc(r.baseLabel)}から</td>
+            <td><input type="number" id="rt-${esc(r.key)}" value="${r.months}" min="1" max="240">
+              <span class="muted" style="font-size:11.5px;">か月（既定 ${r.defaultMonths}）</span></td>
+            <td><label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;">
+              <input type="checkbox" id="ra-${esc(r.key)}" ${r.autoDelete ? "checked" : ""} style="width:auto;margin:0;">
+              期限が来たら自動で消す</label></td>
+            <td><button class="btn btn-secondary btn-sm" onclick="saveRule('${esc(r.key)}', this)">保存</button></td>
+          </tr>`).join("")}
+        </tbody></table></div>`;
+
+    const due = ret.schedule || [];
+    el("ret-due").innerHTML = !due.length
+      ? `<div class="muted" style="font-size:13px;">保存期限を迎えるものはまだありません。</div>`
+      : `<div class="table-scroll"><table class="hr-ret">
+          <thead><tr><th>氏名</th><th>種別</th><th>期限</th><th>件数</th><th></th></tr></thead>
+          <tbody>${due.map((d) => `
+            <tr>
+              <td>${esc(d.name)}</td><td>${esc(d.label)}</td>
+              <td class="${d.expired ? "late" : ""}">${esc(d.dueOn)}
+                <span class="muted" style="font-size:11.5px;">${d.expired ? `（${-d.daysLeft} 日経過）` : `あと ${d.daysLeft} 日`}</span></td>
+              <td>${d.count}</td>
+              <td>${d.expired
+                ? `<button class="btn btn-secondary btn-sm"
+                     onclick="doDelete('${esc(d.employeeId)}','${esc(d.kind)}','${esc(d.name)}','${esc(d.label)}','${esc(d.dueOn)}', this)">
+                     消す</button>`
+                : ""}</td>
+            </tr>`).join("")}
+          </tbody></table></div>`;
+
+    el("ret-log").innerHTML = !(ret.log || []).length
+      ? `<div class="muted" style="font-size:12.5px;">まだありません。</div>`
+      : `<div class="table-scroll"><table class="hr-ret">
+          <thead><tr><th>日時</th><th>氏名</th><th>種別</th><th>対象</th><th>実行</th></tr></thead>
+          <tbody>${ret.log.map((l) => `
+            <tr><td>${esc(fmt(l.at))}</td><td>${esc(l.name || "—")}</td>
+              <td>${esc(l.kindLabel)}</td><td>${esc(l.label || l.target)}</td>
+              <td>${esc(l.by)}${l.reason === "expired" ? "（期限）" : ""}</td></tr>`).join("")}
+          </tbody></table></div>`;
+  }
+
+  async function saveRule(kind, btn) {
+    el("ret-msg").textContent = "";
+    try {
+      await run(btn, "…", () => API.retentionRule({
+        kind, months: Number(el(`rt-${kind}`).value),
+        autoDelete: el(`ra-${kind}`).checked,
+      }));
+      await loadRetention();
+      say("保存期限を変えました");
+    } catch (e) { el("ret-msg").textContent = e.hint || e.detail || e.message || "変えられませんでした"; }
+  }
+
+  async function doDelete(employeeId, kind, name, label, dueOn, btn) {
+    if (!confirm(`${name} さんの「${label}」を消します。\nこの操作は取り消せません。よろしいですか。`)) return;
+    el("ret-msg").textContent = "";
+    try {
+      const r = await run(btn, "削除中…", () => API.retentionDelete(employeeId, kind, dueOn));
+      await loadRetention();
+      say(`${r.deleted} 件を削除しました（記録に残しました）`);
+      if (r.errors?.length) el("ret-msg").textContent = r.errors.join(" / ");
+    } catch (e) { el("ret-msg").textContent = e.hint || e.detail || e.message || "消せませんでした"; }
   }
 
   function say(msg, bad) {

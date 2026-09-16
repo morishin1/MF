@@ -167,6 +167,7 @@ Supabase のプロジェクトは Tokyo（ap-northeast-1）。バックアップ
 ### 第1段階（済）
 
 - `db/070_onboarding_stage.sql` — stage / stage_at、閲覧ログ表、マイナンバーの進み具合（番号は持たない）
+- `db/071_onboarding_stage2.sql` — 社労士の承認、オリエンテーション、保存期限と削除の記録、MFA のリセット
 - `lib/onboard-stage.js` — 5段階の判定・進捗・KPI（純粋関数、`test/stagetest.mjs`）
 - `lib/onboard-advance.js` — 段階の再計算と通知。事実が変わる5か所から呼ぶ
 - `lib/sensitive-log.js` — 閲覧ログ。書類を開いた・他人の届出を見た
@@ -174,14 +175,27 @@ Supabase のプロジェクトは Tokyo（ap-northeast-1）。バックアップ
 - `admin-hr.html` / `admin-dashboard.html` — 5つの数と新しい列
 - `test/aiguard.mjs` — 入社系から AI を呼ばないことを毎回確かめる
 
-### 第2段階（次）
+### 第2段階（済・2026-09-16）
 
-- 社労士画面（`advisor.html`）に「労働条件のプレビュー → 修正 → 承認・発行」を1画面で。
-  発行＝書面を付けて署名依頼まで（いまは管理者が「送る」を押す2手）
-- 本人画面（`onboarding.html`）の上に STEP 1〜4 の進捗バー。「今やること」を1つだけ大きく
-- オリエンテーション（会社説明・就業ルール・勤怠・情報セキュリティ・設備・PC/Slack）。
-  `gw_consent_docs` と同じ仕組み（版付き本文＋「確認しました」）で、動画・PDF はリンク
-- 通知に「入社日が近いのに未完了」「不足書類がある」を足す（cron）
+- **社労士画面**（`advisor.html`）… 「確認 → 修正 → プレビュー → 承認・発行」を1画面で。
+  `api/sign/orders.js` に `preview` と `approve` を足した。
+  承認・発行の1回で、PDF の作成・署名依頼・本人への通知・段階 ②→③ まで進む。
+  会社が「送る」を押す手は無くなった（管理者も自分で承認・発行できる）。
+  社労士が自分で作った PDF を置いていれば、その書面のまま発行する。
+  社労士に見えるのは労働条件の依頼だけで、本人のメールアドレスは渡さない（`test/advisortest.mjs`）
+- **本人画面**（`onboarding.html`）… STEP 1〜5 の進捗バーと「いま やること」を1つだけ大きく。
+  段階の判定は `lib/onboard-steps.js`（純粋関数、`test/stepstest.mjs`）。
+  管理者の5段階とは別の軸で、本人が動ける最初の STEP を出す。待つだけの STEP は飛ばす
+- **オリエンテーション** … `gw_orientation_items` / `gw_orientation_checks`（071）。
+  動画・PDF・リンク・本文を管理者が登録し、本人が「確認しました」を押す。
+  必須が残っていると入社手続きは完了しない（`lib/onboard-stage.js` の `orientationOk`）。
+  版は持たない（読み直しが要るなら新しい項目にする）
+- **未完了の通知** … `api/cron/onboarding.js`（毎朝 9:30 JST）。入社日の7日前から、
+  本人・管理者・社労士に段階の blockers そのままで知らせる。
+  dedupe_key は手続き×宛先で固定なので、毎日走ってもベルには1件（`lib/onboard-due.js`）
+
+### 第2段階の残り
+
 - Slack 通知を、入社系だけ既定オフに
 
 ### 第1.5段階（済・2026-09-15）
@@ -190,10 +204,31 @@ Supabase のプロジェクトは Tokyo（ap-northeast-1）。バックアップ
 - `lib/mynumber.js` — 進み具合の4状態。`api/hr` の PATCH と社労士画面・入退社画面の選択
 - ログイン後の6桁入力、マイページの登録画面、期限の案内
 
-### 第3段階（残り）
+### 第3段階（済・2026-09-16）
 
-- 保存期限と削除（種別ごと。`gw_retention`＋cron）
-- MF 給与取込 CSV（社労士向け。出したことをログに残す）
+- **保存期限と削除** … `gw_retention_rules` / `gw_retention_log`（071）、`lib/retention.js`。
+  種別ごとに「起点＋月数」。既定は 履歴書=退職後3年／本人確認資料=完了後1年／
+  口座=退職後1年／契約関連=退職後5年／届出=退職後3年。
+  自動削除は既定で付けない。付けた種別だけ `api/cron/retention.js`（毎週月曜 10:00 JST）が消す。
+  付けていない種別は一覧に出るだけで、消す判断は人がする。
+  契約書は PDF だけ消して行は残す（締結した事実・日時・ハッシュは記録として要る）。
+  消した記録（誰が・何を・いつ・なぜ）は消したものより長く残す。削除の policy を作っていないので誰も消せない
+- **MF 給与取込 CSV** … `api/hr/payroll.js`、`lib/payroll-csv.js`。
+  入る列は給与計算と社会保険に要るものだけ。電話・緊急連絡先・通勤経路・
+  扶養家族の氏名・自己紹介は入れない（マイナンバーはそもそも持っていない）。
+  社労士は共有されている人のぶんだけ。出したことは `gw_activity_log` と
+  `gw_sensitive_access_log`（kind=export）に残る。ファイル名に氏名を入れない
+
+### MFA の追加（済・2026-09-16）
+
+- 強制日（2026-10-01）以降、対象の人は**自分で登録を外せない**（`lib/mfa.js` の `selfUnenroll`）。
+  外すのは管理者のリセットだけ（`api/mfa.js` action=reset、`gw_mfa_resets`）。
+  自分自身のリセットはできない（別の管理者に頼む）
+- 強制日より前でも、外すには6桁での再認証（aal2）が要る
+- 登録・解除・リセット・再登録は、すべて `gw_activity_log` に残す。
+  そのために画面から Supabase の `/auth/v1/factors` を直接叩くのをやめ、`/api/mfa` を通す
+- 守りは UI ではなく API。本人が Supabase を直接叩いて外しても、
+  そのトークンは aal1 になり、機密の API は `requireMfa` で 403 になる
 
 ## 6. 「最終的に無くしたい作業」との対応
 

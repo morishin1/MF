@@ -18,6 +18,32 @@ let bad = 0;
 const errs = [];
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
+// 保存期限とオリエンテーション。一覧と同じ画面に出る
+const RETENTION = {
+  today: "2026-09-28",
+  rules: [
+    { key: "resume", label: "履歴書・職務経歴書", base: "leave", baseLabel: "退職日",
+      months: 36, defaultMonths: 36, autoDelete: false },
+    { key: "bank", label: "口座情報", base: "leave", baseLabel: "退職日",
+      months: 12, defaultMonths: 12, autoDelete: true },
+  ],
+  schedule: [
+    { employeeId: "e9", name: "退職 太郎", kind: "bank", label: "口座情報",
+      dueOn: "2026-09-01", daysLeft: -27, expired: true, count: 1, autoDelete: true },
+  ],
+  expired: 1,
+  log: [{ id: 1, name: "退職 太郎", kind: "resume", kindLabel: "履歴書・職務経歴書",
+          label: "rireki.pdf", by: "事務 花子", reason: "manual", at: "2026-09-20T00:00:00Z" }],
+};
+const ORIENTATION = {
+  items: [{ id: "o1", title: "会社説明", kind: "video", kindLabel: "動画",
+            url: "https://example.jp/v", required: true, confirmed: false,
+            active: true, sortOrder: 10, confirmedCount: 2 }],
+  kinds: [{ key: "video", label: "動画" }, { key: "link", label: "リンク" },
+          { key: "pdf", label: "PDF" }, { key: "text", label: "本文（社内ルール等）" }],
+  done: false,
+};
+
 const LIST = {
   tabs: [
     { key: "onboarding", label: "入社予定" },
@@ -125,6 +151,9 @@ await page.route("**/api/**", (route) => {
     sent.push({ m: "PATCH", ...body });
     return send({ ok: true, told: 4, progress: { done: 8, total: 10 } });
   }
+  // 入退社の画面は、保存期限とオリエンテーションも読む。/api/hr より先に見る
+  if (/\/api\/hr\/retention/.test(url)) return send(RETENTION);
+  if (/\/api\/onboarding\/orientation/.test(url)) return send(ORIENTATION);
   if (/\/api\/hr\?id=/.test(url)) return send(ONE);
   if (/\/api\/hr/.test(url)) return send(LIST);
   if (/\/api\/me\b/.test(url)) {

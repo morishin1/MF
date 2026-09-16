@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915b">
-  <link rel="stylesheet" href="css/layout.css?v=20260915b">
+  <link rel="stylesheet" href="css/app.css?v=20260915c">
+  <link rel="stylesheet" href="css/layout.css?v=20260915c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -304,9 +304,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915b"></script>
-<script src="js/device.js?v=20260915b"></script>
-<script src="js/layout.js?v=20260915b"></script>
+<script src="js/api-client.js?v=20260915c"></script>
+<script src="js/device.js?v=20260915c"></script>
+<script src="js/layout.js?v=20260915c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -986,11 +986,32 @@
     const send = o.status === "uploaded"
       ? `<button class="btn btn-primary btn-sm" onclick="sendOrder('${esc(o.id)}', this)">
            <span class="material-symbols-outlined icon-inline">draw</span>この内容で署名依頼</button>`
-      : "";
+      // 書面が届いていない労働条件は、こちらで通知書を作って発行できる。
+      // 社労士に頼まない案件のため（社労士は advisor.html から同じことをする）
+      : o.docKind === "employment"
+        ? `<button class="btn btn-primary btn-sm" onclick="approveOrder('${esc(o.id)}', this)">
+             <span class="material-symbols-outlined icon-inline">verified</span>承認・発行</button>`
+        : "";
     return `${send}${up}
       <button class="btn btn-secondary btn-sm" onclick="editOrder('${esc(o.id)}')">直す</button>
       <button class="icon-btn" title="取り消す" onclick="cancelOrder('${esc(o.id)}')">
         <span class="material-symbols-outlined">close</span></button>`;
+  }
+
+  // 条件から労働条件通知書を作って、そのまま署名依頼まで出す。
+  // 社労士が承認・発行したときと同じ道（api/sign/orders.js の approve）
+  async function approveOrder(id, btn) {
+    const o = orders.find((x) => x.id === id);
+    const who = o?.employee?.display_name || "本人";
+    if (!confirm(`${who} さんに労働条件通知書を発行します。\n本人に署名依頼が届きます。よろしいですか。`)) return;
+    try {
+      await KPLayout.busy(btn, "発行中…", () => API.docOrderAct({ action: "approve", id }));
+      await loadOrders();
+    } catch (e) {
+      if (e.code === "missing_conditions") {
+        alert(`${(e.body?.missing || []).join("・")} が空欄です。「直す」から埋めてください`);
+      } else alert(e.hint || e.detail || e.message || "発行できませんでした");
+    }
   }
 
   function goList() { setTab("list", el("tab-list")); }

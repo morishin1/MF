@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915b">
-  <link rel="stylesheet" href="css/layout.css?v=20260915b">
+  <link rel="stylesheet" href="css/app.css?v=20260915c">
+  <link rel="stylesheet" href="css/layout.css?v=20260915c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -99,6 +99,48 @@
     .ob-modal .box .f { padding:12px 20px 16px; border-top:1px solid var(--border);
                         display:flex; gap:8px; justify-content:flex-end; }
     .ob-done-bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+
+    /* ── STEP ──
+       1〜5 のどこにいるか、何が済んでいるかを一目で。
+       押すと、その STEP のカードへ飛ぶ */
+    .ob-steps { display:flex; gap:0; flex-wrap:wrap; margin:0 0 4px; }
+    .ob-step { flex:1 1 130px; display:flex; flex-direction:column; gap:5px;
+               padding:0 4px 0 0; background:none; border:0; font-family:inherit;
+               text-align:left; cursor:pointer; }
+    .ob-step .bar { height:6px; border-radius:999px; background:#e4e8ee; }
+    .ob-step .lb { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
+    .ob-step .lb .n { display:inline-flex; width:19px; height:19px; border-radius:50%;
+                      align-items:center; justify-content:center; font-size:10.5px; font-weight:700;
+                      background:#e4e8ee; color:var(--muted); flex:0 0 auto; }
+    .ob-step.done .bar { background:#3e9c5a; }
+    .ob-step.done .lb .n { background:#3e9c5a; color:#fff; }
+    .ob-step.done .lb { color:#256b36; }
+    .ob-step.current .bar { background:var(--primary); }
+    .ob-step.current .lb { color:var(--primary-dark); font-weight:700; }
+    .ob-step.current .lb .n { background:var(--primary); color:#fff; }
+    .ob-step.waiting .bar { background:repeating-linear-gradient(90deg,#e4e8ee 0 6px,#f4f6f9 6px 12px); }
+
+    /* いま やること。1つだけ大きく */
+    .ob-now { border:1px solid var(--primary); border-radius:11px; background:#f5f9ff;
+              padding:15px 17px; margin-top:16px; }
+    .ob-now.done { border-color:#b7e0c4; background:#f7fbf8; }
+    .ob-now .k { font-size:11.5px; color:var(--muted); font-weight:600; }
+    .ob-now .t { font-size:16px; font-weight:700; color:var(--primary-dark); margin-top:3px; }
+    .ob-now.done .t { color:#256b36; }
+    .ob-now .s { font-size:13px; color:var(--muted); margin-top:5px; line-height:1.8; }
+    .ob-now ul { margin:9px 0 0; padding-left:18px; font-size:12.5px; color:var(--muted); line-height:1.9; }
+    .ob-now ul li.ok { color:#256b36; }
+    .ob-now .go { margin-top:12px; }
+
+    /* オリエンテーション */
+    .ob-or { border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; }
+    .ob-or.done { border-color:#b7e0c4; background:#f7fbf8; }
+    .ob-or .t { font-size:13.5px; font-weight:700; color:var(--primary-dark); }
+    .ob-or .s { font-size:12.5px; color:var(--muted); line-height:1.8; margin-top:3px; }
+    .ob-or .bd { font-size:13px; line-height:1.95; white-space:pre-wrap; margin-top:9px;
+                 max-height:280px; overflow:auto; border:1px solid var(--border);
+                 border-radius:8px; padding:11px 13px; background:#fff; }
+    .ob-or .act { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:10px; }
   </style>
 </head>
 <body>
@@ -113,10 +155,10 @@
   <div id="notice"></div>
 
   <div class="card" id="prog-card">
-    <h2><span class="material-symbols-outlined">checklist</span>入社準備の進み具合
+    <h2><span class="material-symbols-outlined">checklist</span>入社手続きの進み具合
       <span id="prog-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
-    <div class="kp-progress"><span id="prog-bar" style="width:0%"></span></div>
-    <p class="muted" style="font-size:12.5px;margin:10px 0 0;" id="prog-note"></p>
+    <div class="ob-steps" id="steps"></div>
+    <div id="now"></div>
   </div>
 
   <div class="card">
@@ -127,8 +169,8 @@
     <dl class="ob-known" id="known"></dl>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">edit_note</span>ご記入ください</h2>
+  <div class="card" id="step-3">
+    <h2><span class="material-symbols-outlined">edit_note</span>STEP 3　入社情報の入力</h2>
     <div id="form"></div>
     <div style="margin-top:6px;">
       <button class="btn btn-secondary" onclick="save(this, false)">
@@ -136,6 +178,23 @@
       </button>
       <span class="muted" id="save-tag" style="font-size:12px;margin-left:10px;"></span>
     </div>
+  </div>
+
+  <div class="card" id="step-1">
+    <h2><span class="material-symbols-outlined">history_edu</span>STEP 1　契約書の確認・締結</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      労働条件通知書などが届いたら、内容を確認して締結してください。
+    </p>
+    <div id="contracts"></div>
+  </div>
+
+  <div class="card" id="step-2">
+    <h2><span class="material-symbols-outlined">school</span>STEP 2　オリエンテーション
+      <span id="or-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      入社までに目を通していただくものです。読み終えたら「確認しました」を押してください。
+    </p>
+    <div id="orientation"></div>
   </div>
 
   <div class="card">
@@ -155,8 +214,8 @@
     <div id="c-msg" class="err-text" style="margin-top:8px;"></div>
   </div>
 
-  <div class="card" id="docs-card">
-    <h2><span class="material-symbols-outlined">upload_file</span>ご提出いただく書類
+  <div class="card" id="step-4">
+    <h2><span class="material-symbols-outlined">upload_file</span>STEP 4　必要書類の提出
       <span id="d-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
       手元にあるものから順で構いません。写真でも読めれば大丈夫です。
@@ -179,10 +238,10 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915b"></script>
-<script src="js/device.js?v=20260915b"></script>
-<script src="js/layout.js?v=20260915b"></script>
-<script src="js/dropzone.js?v=20260915b"></script>
+<script src="js/api-client.js?v=20260915c"></script>
+<script src="js/device.js?v=20260915c"></script>
+<script src="js/layout.js?v=20260915c"></script>
+<script src="js/dropzone.js?v=20260915c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -211,6 +270,8 @@
     }
 
     renderProgress();
+    renderContracts();
+    renderOrientation();
     renderKnown();
     renderForm();
     renderConsents();
@@ -218,15 +279,118 @@
     renderSubmitState();
   }
 
+  // ---- STEP（1〜5） ------------------------------------------------------------
+  //
+  // 「いまどこにいて、次に何をすればよいか」を、いちばん上に1つだけ出す。
+  // 下のカードを行き来しないと分からない状態にしない
   function renderProgress() {
-    const p = data.progress || { done: 0, total: 0, pct: 0 };
-    el("prog-bar").style.width = `${p.pct}%`;
-    el("prog-tag").textContent = `${p.pct}%`;
-    el("prog-tag").className = `kp-chip ${p.pct >= 100 ? "event" : "draft"}`;
-    const mine = p.byOwner?.employee || { done: 0, total: 0 };
-    el("prog-note").textContent = p.total
-      ? `全体 ${p.done} / ${p.total} 件が完了。うち、あなたにお願いしているものは ${mine.total} 件です。`
-      : "準備中です。";
+    const st = data.steps || { steps: [], current: null, pct: 0 };
+    el("prog-tag").textContent = `${st.pct}%`;
+    el("prog-tag").className = `kp-chip ${st.pct >= 100 ? "event" : "draft"}`;
+
+    el("steps").innerHTML = (st.steps || []).map((s) => `
+      <button type="button" class="ob-step ${esc(s.state)}" onclick="goStep(${s.n})">
+        <span class="bar"></span>
+        <span class="lb"><span class="n">${s.done ? "✓" : s.n}</span>${esc(s.label)}</span>
+      </button>`).join("");
+
+    const cur = (st.steps || []).find((s) => s.key === st.current);
+    if (!cur || cur.key === "complete") {
+      const done = cur?.done;
+      el("now").innerHTML = `
+        <div class="ob-now ${done ? "done" : ""}">
+          <div class="k">${done ? "完了" : "いまの状態"}</div>
+          <div class="t">${done ? "入社手続きは完了しました" : "あなたの手続きは終わりました"}</div>
+          <div class="s">${esc(cur?.todo || "")}</div>
+        </div>`;
+      return;
+    }
+    const left = (cur.items || []).filter((i) => !i.done);
+    el("now").innerHTML = `
+      <div class="ob-now">
+        <div class="k">いま やること（STEP ${cur.n}）</div>
+        <div class="t">${esc(cur.label)}</div>
+        <div class="s">${esc(cur.todo)}</div>
+        ${left.length ? `<ul>${left.slice(0, 5).map((i) =>
+          `<li>${esc(i.label)}${i.note ? `　<span style="font-size:11.5px;">${esc(i.note)}</span>` : ""}</li>`).join("")}</ul>` : ""}
+        <div class="go">
+          <button class="btn btn-primary" onclick="goStep(${cur.n})">
+            <span class="material-symbols-outlined icon-inline">arrow_downward</span>${esc(cur.label)}へ進む
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function goStep(n) {
+    const box = el(n === 1 ? "step-1" : n === 2 ? "step-2" : n === 3 ? "step-3" : "step-4");
+    if (box) box.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ---- STEP 1：契約書 -----------------------------------------------------------
+  function renderContracts() {
+    const list = data.contracts || [];
+    if (!list.length) {
+      el("contracts").innerHTML = `
+        <div class="banner info"><span class="material-symbols-outlined">schedule</span>
+          <div>労働条件通知書は会社が準備中です。届いたらお知らせします。
+          いまは STEP 2 以降を進めていただけます。</div></div>`;
+      return;
+    }
+    el("contracts").innerHTML = list.map((c) => `
+      <div class="ob-doc${c.status === "signed" ? " done" : ""}">
+        <div class="hd">
+          <div class="t">${esc(c.title)}</div>
+          ${c.status === "signed" ? '<span class="kp-chip event">締結済み</span>'
+            : c.view === "overdue" ? '<span class="kp-chip important">期限切れ</span>'
+            : '<span class="kp-chip draft">未締結</span>'}
+        </div>
+        <div class="s">${c.status === "signed"
+          ? `${esc(fmtDate(c.signedAt))} に締結しました`
+          : `内容を読んで締結してください${c.dueOn ? `（期限 ${esc(c.dueOn)}）` : ""}`}</div>
+        ${c.status === "signed" ? "" : `
+          <div class="act">
+            <a class="btn btn-primary btn-sm" href="contracts.html">
+              <span class="material-symbols-outlined icon-inline">draw</span>開いて締結する</a>
+          </div>`}
+      </div>`).join("");
+  }
+
+  // ---- STEP 2：オリエンテーション -------------------------------------------------
+  function renderOrientation() {
+    const list = data.orientation || [];
+    if (!list.length) { el("step-2").classList.add("hidden"); return; }
+    el("step-2").classList.remove("hidden");
+    const done = list.filter((o) => o.confirmed).length;
+    el("or-tag").textContent = `${done} / ${list.length}`;
+    el("or-tag").className = `kp-chip ${done === list.length ? "event" : "draft"}`;
+
+    el("orientation").innerHTML = list.map((o) => `
+      <div class="ob-or${o.confirmed ? " done" : ""}">
+        <div class="t">${esc(o.title)}
+          ${o.required ? "" : '<span class="muted" style="font-weight:400;font-size:11.5px;">（任意）</span>'}
+          <span class="muted" style="font-weight:400;font-size:11.5px;">　${esc(o.kindLabel)}</span>
+        </div>
+        ${o.description ? `<div class="s">${esc(o.description)}</div>` : ""}
+        ${o.kind === "text" && o.body ? `<div class="bd">${esc(o.body)}</div>` : ""}
+        <div class="act">
+          ${o.url ? `<a class="btn btn-secondary btn-sm" href="${esc(o.url)}" target="_blank" rel="noopener">
+            <span class="material-symbols-outlined icon-inline">${o.kind === "video" ? "play_circle" : o.kind === "pdf" ? "picture_as_pdf" : "open_in_new"}</span>
+            ${o.kind === "video" ? "動画を見る" : o.kind === "pdf" ? "PDFを開く" : "開く"}</a>` : ""}
+          ${o.confirmed
+            ? `<span style="font-size:12px;color:#256b36;font-weight:600;">
+                 <span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;">check_circle</span>
+                 ${esc(fmtDate(o.confirmedAt))} に確認済み</span>`
+            : `<button class="btn btn-primary btn-sm" onclick="confirmOrientation('${esc(o.id)}', this)">
+                 <span class="material-symbols-outlined icon-inline">task_alt</span>確認しました</button>`}
+        </div>
+      </div>`).join("");
+  }
+
+  async function confirmOrientation(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.orientationConfirm(id));
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
   }
 
   function renderKnown() {
@@ -522,8 +686,8 @@
   function renderDocs() {
     const docs = data.documents || [];
     const extra = data.myItems || [];
-    if (!docs.length && !extra.length) { el("docs-card").classList.add("hidden"); return; }
-    el("docs-card").classList.remove("hidden");
+    if (!docs.length && !extra.length) { el("step-4").classList.add("hidden"); return; }
+    el("step-4").classList.remove("hidden");
 
     const done = docs.filter((d) => d.status === "submitted" || d.status === "done" || d.status === "na").length;
     el("d-tag").textContent = `${done} / ${docs.length}`;
@@ -631,7 +795,7 @@
       </div>`).join("");
 
     // 描き直すたびに受け口を付け直す。付いている要素には二重に付かない
-    KPDrop.scan(el("docs-card"), sendFiles);
+    KPDrop.scan(el("step-4"), sendFiles);
   }
 
   // ---- 出し方 ------------------------------------------------------------------

@@ -134,39 +134,34 @@
   // ---- 二段階認証（TOTP）---------------------------------------------------
   //
   // Supabase Auth の MFA をそのまま使う。秘密は自前で持たない。
-  //   登録: factors → QR を認証アプリで読む → challenge → verify（6桁）
-  //   ログイン: パスワードで aal1 → challenge → verify で aal2 のトークンに変わる
-  async function authFetch(path, { method = "GET", body } = {}) {
-    const c = await config();
-    const token = await getToken();
-    if (!token) throw new Error("未ログインです");
-    const r = await fetch(`${c.supabaseUrl}/auth/v1${path}`, {
-      method,
-      headers: { apikey: c.supabaseAnonKey, Authorization: `Bearer ${token}`,
-                 "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.msg || data.error_description || data.message || `認証エラー (${r.status})`);
-    return data;
-  }
+  //   登録: enroll → QR を認証アプリで読む → verify（6桁）
+  //   ログイン: パスワードで aal1 → verify で aal2 のトークンに変わる
+  //
+  // ■ Supabase を画面から直接叩かない
+  //   登録・解除・リセット・再登録は、記録に残す必要がある（gw_activity_log）。
+  //   画面から直接だと、外したことがどこにも残らない。だから /api/mfa を通す
+  //   （確認の6桁も、サーバで突き合わせる）
+  const mfaStatus = () => api("/api/mfa");
   /** 登録済みの要素。verified のものだけが有効 */
   const mfaFactors = async () => {
-    const u = await authFetch("/user");
-    return (u.factors || []).filter((f) => f.factor_type === "totp");
+    const st = await api("/api/mfa");
+    return st.factors || [];
   };
   /** 登録を始める。QR（データURL）と秘密の文字列が返る */
-  const mfaEnroll = () =>
-    authFetch("/factors", { method: "POST", body: { factor_type: "totp", friendly_name: "エイト" } });
+  const mfaEnroll = () => api("/api/mfa", { method: "POST", body: { action: "enroll" } });
   /** 6桁を確かめる。通るとトークンが aal2 に変わるので、覚え直す */
   const mfaVerify = async (factorId, code) => {
-    const ch = await authFetch(`/factors/${factorId}/challenge`, { method: "POST" });
-    const sess = await authFetch(`/factors/${factorId}/verify`,
-      { method: "POST", body: { challenge_id: ch.id, code: String(code).trim() } });
-    if (sess.access_token) storeToken(sess);
-    return sess;
+    const r = await api("/api/mfa", {
+      method: "POST", body: { action: "verify", factorId, code: String(code).trim() },
+    });
+    if (r.session?.access_token) storeToken(r.session);
+    return r;
   };
-  const mfaUnenroll = (factorId) => authFetch(`/factors/${factorId}`, { method: "DELETE" });
+  const mfaUnenroll = (factorId) =>
+    api("/api/mfa", { method: "POST", body: { action: "unenroll", factorId } });
+  /** 管理者が外す。本人は登録し直す */
+  const mfaReset = (employeeId, note) =>
+    api("/api/mfa", { method: "POST", body: { action: "reset", employeeId, note } });
 
   function isLoggedIn() { return !!loadSession(); }
   function currentEmail() { return loadSession()?.email || null; }
@@ -945,6 +940,40 @@
   const onboardBrief = (employeeId) =>
     api(`/api/onboarding/brief?employeeId=${encodeURIComponent(employeeId)}`);
 
+  // ---- オリエンテーション ----
+  // 本人は「確認しました」、人事は登録・修正
+  const orientation = () => api("/api/onboarding/orientation");
+  const orientationConfirm = (id) =>
+    api("/api/onboarding/orientation", { method: "POST", body: { confirm: id } });
+  const orientationSave = (body) =>
+    api("/api/onboarding/orientation", { method: body.id ? "PATCH" : "POST", body });
+
+  // ---- 保存期限と削除 ----
+  const retention = () => api("/api/hr/retention");
+  const retentionRule = (body) => api("/api/hr/retention", { method: "PATCH", body });
+  const retentionDelete = (employeeId, kind, dueOn) =>
+    api("/api/hr/retention", { method: "POST",
+                               body: { action: "delete", employeeId, kind, dueOn, confirm: true } });
+
+  // ---- MF給与の取込CSV ----
+  // ファイルとして落とす。画面に中身を出さない（出すと、閉じるまで残る）
+  async function payrollCsv(employeeIds) {
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const r = await fetch(`/api/hr/payroll?ids=${encodeURIComponent((employeeIds || []).join(","))}`,
+      { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      const err = new Error(data.hint || data.message || data.error || `CSVを作れませんでした (${r.status})`);
+      err.code = data.error || null;
+      err.hint = data.hint || data.message || null;
+      throw err;
+    }
+    const name = /filename="([^"]+)"/.exec(r.headers.get("content-disposition") || "")?.[1]
+      || "mf_payroll.csv";
+    return { blob: await r.blob(), filename: name };
+  }
+
   // 提出ファイルの閲覧用URL（短時間だけ有効）
   const procedureFileUrl = (fileId) =>
     api(`/api/onboarding/upload?fileId=${encodeURIComponent(fileId)}`);
@@ -1087,7 +1116,7 @@
 
   window.API = {
     config, login, logout, refresh, getToken, changePassword,
-    mfaFactors, mfaEnroll, mfaVerify, mfaUnenroll,
+    mfaStatus, mfaFactors, mfaEnroll, mfaVerify, mfaUnenroll, mfaReset,
     isLoggedIn, currentEmail,
     api, me, listClients, createClient, listJournals, listDocuments,
     approveJournal, uploadAndRecognize, uploadAndProcess, reprocessDocument, documentPreviewUrl,
@@ -1153,6 +1182,8 @@
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
     myOnboarding, saveMyOnboarding, myOnboardingConsent, onboardBrief,
+    orientation, orientationConfirm, orientationSave,
+    retention, retentionRule, retentionDelete, payrollCsv,
     uploadProcedureFile, procedureFileUrl,
   };
 })();

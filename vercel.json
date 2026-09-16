@@ -98,6 +98,14 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/onboarding",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/retention",
+      "schedule": "0 1 * * 1"
+    },
+    {
       "path": "/api/cron/devices",
       "schedule": "20 18 * * *"
     },

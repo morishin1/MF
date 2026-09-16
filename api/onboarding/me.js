@@ -37,6 +37,9 @@ import { hrConfigured } from "../../lib/gdrive.js";
 import { onboardingDone } from "../../lib/stages.js";
 import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
+import { computeSteps } from "../../lib/onboard-steps.js";
+import { orientationState } from "../../lib/orientation.js";
+import { statusOf } from "../../lib/esign.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -91,6 +94,26 @@ async function read(res, user, ctx) {
     sb.from("gw_consent_docs").select("*")
       .eq("tenant_id", ctx.tenantId).eq("status", "active").order("doc_key"),
   ]);
+
+  // STEP 1（契約書）と STEP 2（オリエンテーション）の事実。
+  // 表が無くても（071 未適用）この画面は出す。読めなければ空
+  // 関数で渡す。問い合わせの組み立てで落ちても（古い環境・偽の表）、この画面は出す
+  const soft = async (fn) => { try { const r = await fn(); return r?.error ? [] : (r?.data || []); } catch { return []; } };
+  const [signRows, oriItems, oriChecks] = await Promise.all([
+    soft(() => sb.from("gw_sign_requests")
+      .select("id, title, doc_kind, status, due_on, signed_at, sent_at")
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", empId).neq("status", "cancelled")
+      .order("sent_at", { ascending: false }).limit(50)),
+    soft(() => sb.from("gw_orientation_items")
+      .select("id, title, kind, url, body, description, required, sort_order, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("active", true).limit(200)),
+    soft(() => sb.from("gw_orientation_checks").select("item_id, confirmed_at").eq("employee_id", empId)),
+  ]);
+  const contracts = signRows.map((r) => ({
+    id: r.id, title: r.title, kind: r.doc_kind, status: r.status, view: statusOf(r),
+    dueOn: r.due_on, signedAt: r.signed_at, sentAt: r.sent_at,
+  }));
+  const orientation = orientationState(oriItems, oriChecks);
 
   // 手続きが読めなかった。黙って「まだ何も無い人」にしない。
   // 黙ると、画面には出す口が1つも出ないまま、理由がどこにも出ない
@@ -319,6 +342,24 @@ async function read(res, user, ctx) {
       })),
     // 進み具合は全体で数える。「あと何%で入社準備が終わるか」を見せる
     progress: progressOf(items),
+
+    // ---- STEP（本人の5段階） ----
+    contracts,
+    orientation,
+    stage: proc.row?.stage || null,
+    steps: computeSteps({
+      contracts,
+      consents: consentState(docs.data || [], consents.data || []),
+      orientation,
+      profileStatus: pf?.status || "draft",
+      missing: missingFields(pf || {}),
+      documents: documents.map((d) => ({
+        key: d.key, title: d.title, required: d.required, status: d.status,
+        collect: d.sensitive ? false : true,
+      })),
+      stage: proc.row?.stage || null,
+      procedureStatus: proc.row?.status || null,
+    }),
   });
 }
 

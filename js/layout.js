@@ -936,7 +936,9 @@
       // 覚えている権限で、この画面を開いてよいか。
       // 入社準備のあいだの制限も、覚えているぶんで一度見る
       const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole));
-      const okStage = !(cached?.appRole === "member" && cached?.stage && opts.active
+      // 覚えている形が古いことがある（allowed を持たない頃のもの）。
+      // そこで落ちると、画面が真っ白のまま何も出ない
+      const okStage = !(cached?.appRole === "member" && cached?.stage?.allowed && opts.active
                         && !cached.stage.allowed.includes(opts.active));
 
       // 覚えている権限があれば、通信を待たずに先に描く。

@@ -11,8 +11,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915b">
-  <link rel="stylesheet" href="css/layout.css?v=20260915b">
+  <link rel="stylesheet" href="css/app.css?v=20260915c">
+  <link rel="stylesheet" href="css/layout.css?v=20260915c">
+  <style>
+    /* 労働条件。1件ぶんを、開いて直して発行するところまで1枚で */
+    .ord { border:1px solid var(--border); border-radius:11px; padding:14px 16px; margin-bottom:12px; }
+    .ord.now { border-color:var(--primary); background:#f7faff; }
+    .ord .hd { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+    .ord .hd .nm { font-size:15px; font-weight:700; color:var(--primary-dark); }
+    .ord .hd .meta { font-size:12px; color:var(--muted); }
+    .ord .hd .st { margin-left:auto; }
+    .ord-f { display:grid; grid-template-columns:auto 1fr; gap:8px 14px; margin-top:12px;
+             font-size:13px; align-items:start; }
+    .ord-f > label { color:var(--muted); font-size:12px; padding-top:8px; white-space:nowrap; }
+    .ord-f textarea, .ord-f input { margin:0; font-size:13px; }
+    .ord-f .miss input, .ord-f .miss textarea { border-color:#c53030; background:#fffafa; }
+    .ord-act { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; align-items:center; }
+    .ord-note { font-size:11.5px; color:var(--muted); }
+    .ord-prev { margin-top:12px; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
+    .ord-prev iframe { width:100%; height:520px; border:0; display:block; background:#fff; }
+    .ord-done { font-size:12.5px; color:#256b36; font-weight:600; }
+  </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -31,15 +50,28 @@
   <h1 class="kp-greet">入社・退職手続き</h1>
   <p class="kp-greet-sub">共有された項目のみ表示しています。会計情報や共有対象外の書類は参照できません。</p>
 
+  <div id="msg" class="err-text"></div>
+
+  <!-- 労働条件の確認 → 修正 → 承認・発行。1画面で終わらせる -->
+  <div class="card">
+    <h2><span class="material-symbols-outlined">history_edu</span>労働条件の確認・発行
+      <span id="ord-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+      会社が入力した労働条件です。内容を確認し、必要なら直してから「承認・発行」を押してください。
+      押すと本人に署名依頼が届きます。会社側の操作は要りません。
+    </p>
+    <div id="orders"><div class="empty">読み込み中…</div></div>
+  </div>
+
   <div class="card">
     <h2><span class="material-symbols-outlined">checklist</span>対象者</h2>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915b"></script>
-<script src="js/device.js?v=20260915b"></script>
-<script src="js/layout.js?v=20260915b"></script>
+<script src="js/api-client.js?v=20260915c"></script>
+<script src="js/device.js?v=20260915c"></script>
+<script src="js/layout.js?v=20260915c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -51,7 +83,12 @@
     .then((ctx) => { if (ctx) load(); });
 
   let states = [];
+  let orders = [];
+  let fields = [];
+  let openOrder = null;
+
   async function load() {
+    loadOrders();
     try {
       const res = await API.listProcedures();
       states = res.mynumberStates || [];
@@ -61,6 +98,20 @@
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
     }
+  }
+
+  // MF給与の取込CSV。出したことは記録に残る（誰が・誰のぶんを）
+  async function payrollCsv(employeeId, btn) {
+    if (!employeeId) return;
+    try {
+      const { blob, filename } = await KPLayout.busy(btn, "作成中…", () => API.payrollCsv([employeeId]));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      say("CSVを作りました");
+    } catch (e) { say(e.hint || e.detail || e.message || "作れませんでした", true); }
   }
 
   async function openFile(fileId) {
@@ -73,6 +124,182 @@
   async function setMynumber(procedureId, sel) {
     try { await API.hrUpdate({ id: procedureId, mynumber: sel.value }); }
     catch (e) { alert(e.hint || e.message || "変えられませんでした"); await load(); }
+  }
+
+  // ---- 労働条件（確認 → 修正 → 承認・発行） ----------------------------------
+  async function loadOrders() {
+    try {
+      const res = await API.docOrders();
+      orders = res.orders || [];
+      fields = res.fields || [];
+    } catch (e) {
+      el("orders").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    renderOrders();
+  }
+
+  function renderOrders() {
+    // 確認するもの（依頼中・書面が届いた）が上。発行済みは畳んで下に
+    const open = orders.filter((o) => o.status === "requested" || o.status === "uploaded");
+    const done = orders.filter((o) => o.status === "sent" || o.status === "signed");
+    el("ord-tag").textContent = `確認待ち ${open.length}`;
+    el("ord-tag").className = `kp-chip ${open.length ? "draft" : "event"}`;
+
+    if (!open.length && !done.length) {
+      el("orders").innerHTML = `<div class="empty">いま確認をお願いしている労働条件はありません。</div>`;
+      return;
+    }
+    el("orders").innerHTML =
+      open.map((o) => orderCard(o, true)).join("")
+      + (done.length ? `
+        <details style="margin-top:6px;">
+          <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);">
+            発行済み（${done.length}件）</summary>
+          <div style="margin-top:10px;">${done.map((o) => orderCard(o, false)).join("")}</div>
+        </details>` : "");
+  }
+
+  function orderCard(o, editable) {
+    const e = o.employee || {};
+    const joined = e.joined_on
+      ? new Date(e.joined_on).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })
+      : "入社日未定";
+    const opened = openOrder === o.id;
+
+    return `
+      <div class="ord${opened ? " now" : ""}" id="ord-${esc(o.id)}">
+        <div class="hd">
+          <span class="nm">${esc(e.display_name || "（対象者不明）")}</span>
+          <span class="meta">${esc(joined)}${e.employment_type ? `　${esc(e.employment_type)}` : ""}${e.department ? `　${esc(e.department)}` : ""}</span>
+          <span class="st kp-chip ${o.status === "requested" ? "draft" : o.status === "uploaded" ? "event" : "archived"}">${esc(o.statusLabel)}</span>
+        </div>
+        ${o.note ? `<div class="ord-note" style="margin-top:6px;">会社から：${esc(o.note)}</div>` : ""}
+        ${o.approvedAt ? `<div class="ord-done" style="margin-top:8px;">
+          ${esc(fmtDate(o.approvedAt))} に承認・発行しました</div>` : ""}
+
+        ${!editable ? "" : opened ? `
+          <div class="ord-f">
+            ${fields.map((f) => `
+              <label for="c-${esc(o.id)}-${esc(f.key)}">${esc(f.key)}${f.required ? " *" : ""}</label>
+              <div class="${(o.missing || []).includes(f.key) ? "miss" : ""}">
+                <textarea id="c-${esc(o.id)}-${esc(f.key)}" rows="2"
+                  placeholder="${esc(f.placeholder || "")}">${esc(o.conditions?.[f.key] || "")}</textarea>
+              </div>`).join("")}
+            <label for="n-${esc(o.id)}">会社への申し送り</label>
+            <div><textarea id="n-${esc(o.id)}" rows="2"
+              placeholder="直した理由や、会社に確認したいこと（本人には出ません）">${esc(o.advisorNote || "")}</textarea></div>
+          </div>
+          <div class="ord-act">
+            <button class="btn btn-secondary btn-sm" onclick="doPreview('${esc(o.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">visibility</span>通知書を見る</button>
+            <button class="btn btn-secondary btn-sm" onclick="saveOrder('${esc(o.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">save</span>修正を保存</button>
+            <button class="btn btn-primary btn-sm" onclick="approveOrder('${esc(o.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">verified</span>承認・発行</button>
+            <button class="btn btn-secondary btn-sm" onclick="closeOrder()">閉じる</button>
+            <span class="ord-note">発行すると、本人に署名依頼が届きます</span>
+          </div>
+          ${o.fileName ? `<div class="ord-note" style="margin-top:8px;">
+            貴所からの書面：${esc(o.fileName)}（この書面のまま発行します）
+            <a href="#" onclick="openOrderFile('${esc(o.id)}');return false;">開く</a></div>` : ""}
+          <div id="prev-${esc(o.id)}"></div>
+        ` : `
+          <div class="ord-act">
+            <button class="btn btn-primary btn-sm" onclick="editOrder('${esc(o.id)}')">
+              <span class="material-symbols-outlined icon-inline">edit</span>内容を確認する</button>
+            ${(o.missing || []).length
+              ? `<span class="ord-note" style="color:#9c4221;">${esc(o.missing.join("・"))} が空欄です</span>` : ""}
+          </div>`}
+      </div>`;
+  }
+
+  function editOrder(id) { openOrder = id; renderOrders(); }
+  function closeOrder() {
+    openOrder = null;
+    if (prevUrl) { URL.revokeObjectURL(prevUrl); prevUrl = null; }
+    renderOrders();
+  }
+
+  function readConditions(id) {
+    const out = {};
+    for (const f of fields) out[f.key] = el(`c-${id}-${f.key}`)?.value ?? "";
+    return out;
+  }
+
+  // 出したプレビューの置き場所。次を出すときと、閉じるときに捨てる
+  let prevUrl = null;
+
+  async function doPreview(id, btn) {
+    try {
+      const r = await KPLayout.busy(btn, "作成中…", () =>
+        API.docOrderAct({ action: "preview", id, conditions: readConditions(id) }));
+      // data: の URL で開かない。PDFの表示は別の文脈になり、
+      // そこから localStorage を読もうとして毎回エラーが出る。
+      // Blob にすれば、同じ生い立ちのまま開ける（閉じるときに捨てる）
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      const bin = Uint8Array.from(atob(r.pdfBase64), (c) => c.charCodeAt(0));
+      prevUrl = URL.createObjectURL(new Blob([bin], { type: "application/pdf" }));
+      el(`prev-${id}`).innerHTML = `
+        <div class="ord-prev">
+          <iframe title="労働条件通知書" src="${esc(prevUrl)}"></iframe>
+        </div>
+        ${r.missing?.length
+          ? `<div class="ord-note" style="color:#9c4221;margin-top:6px;">
+               ${esc(r.missing.join("・"))} が空欄のままです</div>` : ""}`;
+    } catch (e) { say(e.hint || e.detail || e.message || "作れませんでした", true); }
+  }
+
+  async function saveOrder(id, btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.docOrderAct({
+        action: "update", id, conditions: readConditions(id),
+        advisorNote: el(`n-${id}`)?.value ?? "",
+      }));
+      say("修正を保存しました");
+      await loadOrders();
+    } catch (e) { say(e.hint || e.detail || e.message || "保存できませんでした", true); }
+  }
+
+  async function approveOrder(id, btn) {
+    const o = orders.find((x) => x.id === id);
+    const who = o?.employee?.display_name || "本人";
+    if (!confirm(`${who} さんに労働条件通知書を発行します。\n本人に署名依頼が届きます。よろしいですか。`)) return;
+    try {
+      await KPLayout.busy(btn, "発行中…", () => API.docOrderAct({
+        action: "approve", id, conditions: readConditions(id),
+        advisorNote: el(`n-${id}`)?.value ?? "",
+      }));
+      openOrder = null;
+      say("承認・発行しました。本人に署名依頼が届きました");
+      await loadOrders();
+    } catch (e) {
+      if (e.code === "missing_conditions") {
+        say(`${(e.body?.missing || []).join("・")} が空欄です。埋めてから発行してください`, true);
+      } else say(e.hint || e.detail || e.message || "発行できませんでした", true);
+    }
+  }
+
+  async function openOrderFile(id) {
+    try {
+      const { url } = await API.docOrderFileUrl(id);
+      window.open(url, "_blank", "noopener");
+    } catch (e) { say(e.hint || e.message || "開けませんでした", true); }
+  }
+
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  function say(text, bad) {
+    const box = el("msg");
+    box.style.color = bad ? "" : "var(--primary-dark)";
+    box.textContent = text;
+    if (!bad) setTimeout(() => { if (box.textContent === text) box.textContent = ""; }, 4000);
   }
 
   function render(procedures) {
@@ -109,6 +336,13 @@
             ${states.map((st) => `<option value="${esc(st.key)}" ${st.key === p.mynumber ? "selected" : ""}>${esc(st.label)}</option>`).join("")}
           </select>
           <span class="muted" style="font-size:11.5px;">番号そのものは、このシステムには入れません。貴所で直接お受け取りください。</span>
+        </div>
+        <!-- MF給与の従業員取込。給与計算と社会保険に要る項目だけが入る。
+             電話・緊急連絡先・扶養家族の氏名は入っていない -->
+        <div style="margin-top:10px;">
+          <button class="btn btn-secondary btn-sm" onclick="payrollCsv('${esc(p.employee?.id || "")}', this)">
+            <span class="material-symbols-outlined icon-inline">download</span>MF給与の取込CSV
+          </button>
         </div>` : ""}
         <div class="table-scroll" style="margin-top:12px;">
           <table class="kp-items">

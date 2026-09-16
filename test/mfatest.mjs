@@ -183,5 +183,49 @@ await ok("ホーム・マイページ・タスクは止めない（登録へ行�
   }
 });
 
+console.log("— 自分で外せるか —");
+
+await ok("強制前・6桁で確かめていれば外せる", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: true }, req: req("aal2"), today: "2026-09-20" });
+  assert.equal(r.ok, true);
+});
+await ok("強制前でも、確かめていなければ外せない（再認証）", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: true }, req: req("aal1"), today: "2026-09-20" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "reauth");
+  assert.match(r.hint, /6桁/);
+});
+await ok("強制後・対象の人は、自分では外せない（管理者のリセットだけ）", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: true }, req: req("aal2"), today: "2026-10-01" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "locked");
+  assert.match(r.hint, /管理者/);
+});
+await ok("強制後でも、対象外の人は外せる", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: false, roles: ["it"] }, req: req("aal2"), today: "2027-01-01" });
+  assert.equal(r.ok, true);
+});
+
+console.log("— 出入りが記録に残るか —");
+
+await ok("登録・解除・リセット・再登録は、すべて記録する", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(ROOT, "api/mfa.js"), "utf8");
+  for (const a of ["mfa.enroll", "mfa.unenroll", "mfa.reset", "mfa.reenroll"]) {
+    assert.ok(src.includes(`"${a}"`), `${a} を残していません`);
+  }
+});
+await ok("画面から Supabase の factors を直接叩かない（記録が残らなくなる）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(ROOT, "js/api-client.js"), "utf8");
+  assert.doesNotMatch(src, /auth\/v1\/factors/, "画面から直接叩いています");
+  assert.match(src, /"\/api\/mfa"/, "/api/mfa を通していません");
+});
+await ok("自分のリセットは断る（強制の意味が無くなる）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(ROOT, "api/mfa.js"), "utf8");
+  assert.match(src, /self_reset/);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);
