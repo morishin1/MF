@@ -634,6 +634,18 @@
   const hrCheck = (body) => api("/api/hr", { method: "PATCH", body });
   const hrUpdate = (body) => api("/api/hr", { method: "PATCH", body });
 
+  // ---- タスク一覧と、右の引き出し ----
+  //
+  // 一覧は「探す場所」（list）、引き出しは「処理する場所」（detail）。
+  // 画面はこの2つだけを使う
+  const taskList = (p = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);
+    return api(`/api/tasks/list${q.toString() ? `?${q}` : ""}`);
+  };
+  const taskDetail = (id) => api(`/api/tasks/detail?id=${encodeURIComponent(id)}`);
+  const taskAct = (body) => api("/api/tasks/detail", { method: "POST", body });
+
   // ---- 毎日の実行管理（重要タスク3件） ----
   //
   // 明日の3件を決める → AIが見る → 人が確定 → 日報 → 翌朝の「今日やる3つ」→ 完了。
@@ -1189,6 +1201,7 @@
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
+    taskList, taskDetail, taskAct,
     focus, focusAct, focusAdd, focusUpdate, focusRemove, focusCheck, focusConfirm,
     focusComplete, focusReopen, focusCarryPlan, focusCarry, taskBoard,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,

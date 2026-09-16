@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916a">
-  <link rel="stylesheet" href="css/layout.css?v=20260916a">
+  <link rel="stylesheet" href="css/app.css?v=20260916b">
+  <link rel="stylesheet" href="css/layout.css?v=20260916b">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -123,9 +123,10 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916a"></script>
-<script src="js/device.js?v=20260916a"></script>
-<script src="js/layout.js?v=20260916a"></script>
+<script src="js/api-client.js?v=20260916b"></script>
+<script src="js/device.js?v=20260916b"></script>
+<script src="js/layout.js?v=20260916b"></script>
+<script src="js/task-drawer.js?v=20260916b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -173,6 +174,25 @@
   const isOverdue = (t) =>
     t.due_on && t.status !== "done" && t.status !== "cancelled" && t.due_on < today();
 
+  // 行を押すと、右から引き出しが出る（スマホでは下から）。
+  // 目的・完了条件・コメント・履歴を読み、担当や期限もそこで直せる。
+  // 別の画面へ飛ばさないので、閉じれば同じ場所に戻る
+  function openTask(id) {
+    KPTaskDrawer.open(id, { onChange: reloadAfterDrawer });
+  }
+
+  async function reloadAfterDrawer() {
+    const keep = window.scrollY;
+    try {
+      const res = await API.listTasks("mine");
+      tasks = res.tasks || [];
+      requested = res.requested || [];
+      render();
+      renderRequested();
+    } catch { /* 読み直せなくても、引き出しの中は変わっている */ }
+    window.scrollTo({ top: keep });
+  }
+
   function render() {
     const shown = tasks.filter((t) =>
       filter === "open" ? (t.status === "todo" || t.status === "doing") : t.status === "done");
@@ -199,7 +219,8 @@
         ? new Date(t.due_on).toLocaleDateString("ja-JP", { month: "long", day: "numeric" })
         : null;
       return `
-        <div class="kp-todo${done ? " done" : ""}">
+        <div class="kp-todo${done ? " done" : ""}" style="cursor:pointer;"
+             onclick="openTask('${esc(t.id)}')">
           <span class="material-symbols-outlined" style="font-size:20px;color:${done ? "var(--primary)" : "#c3cad3"};">
             ${done ? "check_circle" : "radio_button_unchecked"}</span>
           <span class="t">
@@ -218,15 +239,19 @@
             // 行かないと終わらないものには、行き先を出す。
             // 入退社のように「別の画面で作業する」タスクは、
             // ここから直接開けないと、結局メニューを探すことになる
-            ? `<a class="btn btn-secondary btn-sm" href="${esc(t.link)}">開く</a>` : ""}
+            ? `<a class="btn btn-secondary btn-sm" href="${esc(t.link)}"
+                  onclick="event.stopPropagation()">開く</a>` : ""}
           ${t.needsAccept
             // まだ受けていない依頼。ここで完了を押させない。
             // 期限と完了条件を見ないまま「完了」まで行けると、
             // 頼んだ側の思っていたものと違うまま終わる
-            ? `<button class="btn btn-primary btn-sm" onclick="accept('${esc(t.id)}', this)">引き受ける</button>`
+            ? `<button class="btn btn-primary btn-sm"
+                  onclick="event.stopPropagation();accept('${esc(t.id)}', this)">引き受ける</button>`
             : done
-              ? `<button class="btn btn-secondary btn-sm" onclick="setStatus('${esc(t.id)}','todo')">戻す</button>`
-              : `<button class="btn btn-primary btn-sm" onclick="setStatus('${esc(t.id)}','done')">完了</button>`}
+              ? `<button class="btn btn-secondary btn-sm"
+                    onclick="event.stopPropagation();setStatus('${esc(t.id)}','todo')">戻す</button>`
+              : `<button class="btn btn-primary btn-sm"
+                    onclick="event.stopPropagation();setStatus('${esc(t.id)}','done')">完了</button>`}
         </div>`;
     }).join("");
   }

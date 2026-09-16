@@ -11,12 +11,75 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916a">
-  <link rel="stylesheet" href="css/layout.css?v=20260916a">
+  <link rel="stylesheet" href="css/app.css?v=20260916b">
+  <link rel="stylesheet" href="css/layout.css?v=20260916b">
   <style>
     /* ── 毎日の実行管理 ──
        誰が何をしていて、誰が止まっているか。この1枚で分かるようにする。
        個々のタスクの中身は、その人を開いたときだけ */
+    /* ── 一覧（探す場所）──
+       1件ずつ短い行で、たくさん並べる。文章は出さない。
+       中身は行を押して、右の引き出しで読む */
+    .tk-kpi { display:flex; gap:9px; flex-wrap:wrap; margin:0 0 14px; }
+    .tk-kpi .box { flex:1 1 110px; border:1px solid var(--border); border-radius:10px;
+                   padding:9px 12px; cursor:pointer; background:#fff; text-align:left;
+                   font-family:inherit; }
+    .tk-kpi .box:hover { border-color:var(--primary); }
+    .tk-kpi .box.on { border-color:var(--primary); background:#f5f9ff; }
+    .tk-kpi .box .k { font-size:11px; color:var(--muted); white-space:nowrap; }
+    .tk-kpi .box .v { font-size:20px; font-weight:700; color:var(--primary-dark);
+                      font-variant-numeric:tabular-nums; }
+    .tk-kpi .box.bad .v { color:#c53030; }
+    .tk-kpi .box.ok .v { color:#256b36; }
+    .tk-kpi .box.warn .v { color:#a05a00; }
+
+    .tk-f { display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin:0 0 12px; }
+    .tk-f select, .tk-f input { margin:0; font-size:12.5px; width:auto; min-width:104px;
+                                padding:6px 9px; }
+    .tk-f input[type="search"] { min-width:170px; }
+    .tk-seg { display:inline-flex; border:1px solid var(--border); border-radius:999px; overflow:hidden; }
+    .tk-seg button { border:0; background:#fff; cursor:pointer; font-family:inherit;
+                     font-size:12.5px; font-weight:600; color:var(--muted); padding:6px 13px; }
+    .tk-seg button.on { background:var(--primary); color:#fff; }
+    .tk-f label.chk { display:inline-flex; align-items:center; gap:5px; font-size:12.5px;
+                      color:var(--muted); cursor:pointer; }
+    .tk-f label.chk input { width:auto; margin:0; }
+
+    .tk-row { display:flex; align-items:center; gap:10px; padding:9px 10px;
+              border-bottom:1px solid var(--border); cursor:pointer; }
+    .tk-row:hover { background:var(--soft); }
+    .tk-row.on { background:#f5f9ff; }
+    .tk-row .chk { flex:0 0 auto; }
+    .tk-row .chk input { width:auto; margin:0; cursor:pointer; }
+    .tk-row .ti { flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:600;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tk-row.done .ti { font-weight:400; color:var(--muted); text-decoration:line-through; }
+    .tk-row .bg { flex:0 0 auto; display:flex; gap:4px; }
+    .tk-row .me { flex:0 0 auto; display:flex; gap:10px; align-items:center;
+                  font-size:12px; color:var(--muted); white-space:nowrap; }
+    .tk-row .me .w { min-width:78px; }
+    .tk-row .me .d { min-width:52px; font-variant-numeric:tabular-nums; }
+    .tk-row .me .d.late { color:#c53030; font-weight:700; }
+    .tk-row .me .tag { border:1px solid var(--border); border-radius:4px; padding:1px 6px;
+                       font-size:11px; }
+
+    .tk-b { display:inline-block; border-radius:999px; padding:1px 8px; font-size:10.5px;
+            font-weight:700; white-space:nowrap; }
+    .tk-b.bad { background:#fde8e8; color:#c53030; }
+    .tk-b.now { background:#e8f0fe; color:#1a4fa0; }
+    .tk-b.ai { background:#fff3d6; color:#975a16; }
+    .tk-b.warn { background:#fff3e0; color:#9c4221; }
+    .tk-b.ok { background:#e8f5ec; color:#256b36; }
+
+    .tk-count { font-size:12px; color:var(--muted); margin:0 0 6px; }
+
+    @media (max-width:760px) {
+      .tk-row { flex-wrap:wrap; gap:6px; }
+      .tk-row .ti { flex:1 1 100%; white-space:normal; }
+      .tk-row .me { font-size:11.5px; gap:8px; }
+      .tk-row .me .w { min-width:0; }
+    }
+
     .bd-kpi { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 14px; }
     .bd-kpi .box { flex:1 1 120px; border:1px solid var(--border); border-radius:10px; padding:10px 13px; }
     .bd-kpi .box .k { font-size:11.5px; color:var(--muted); }
@@ -204,32 +267,43 @@
     <div id="tpl-list"></div>
   </div>
 
-  <div class="card">
-    <div class="tabs">
-      <button class="tab active" data-filter="open" onclick="setFilter('open', this)">未完了</button>
-      <button class="tab" data-filter="overdue" onclick="setFilter('overdue', this)">期限超過</button>
-      <button class="tab" data-filter="done" onclick="setFilter('done', this)">完了</button>
-      <button class="tab" data-filter="all" onclick="setFilter('all', this)">すべて</button>
+  <!-- 一覧。探す場所。行を押すと右から引き出しが出る -->
+  <div class="card" id="tk-card">
+    <h2><span class="material-symbols-outlined">checklist</span>タスク一覧</h2>
+
+    <div class="tk-kpi" id="tk-kpi"></div>
+
+    <div class="tk-f">
+      <span class="tk-seg" id="tk-range"></span>
+      <select id="tk-who" onchange="loadList()"></select>
+      <select id="tk-dep" onchange="loadList()"></select>
+      <select id="tk-svc" onchange="loadList()"></select>
+      <select id="tk-pri" onchange="loadList()"></select>
+      <select id="tk-st" onchange="loadList()"></select>
+      <label class="chk"><input type="checkbox" id="tk-ai" onchange="loadList()">AI提案</label>
+      <input id="tk-q" type="search" placeholder="キーワード" oninput="onSearch()">
+      <button class="btn btn-secondary btn-sm" onclick="clearFilters()">条件を消す</button>
     </div>
-    <div id="list"><div class="empty">読み込み中…</div></div>
+
+    <div class="tk-count" id="tk-count"></div>
+    <div id="tk-rows"><div class="empty">読み込み中…</div></div>
+    <div id="tk-msg" class="err-text"></div>
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916a"></script>
-<script src="js/device.js?v=20260916a"></script>
-<script src="js/layout.js?v=20260916a"></script>
+<script src="js/api-client.js?v=20260916b"></script>
+<script src="js/device.js?v=20260916b"></script>
+<script src="js/layout.js?v=20260916b"></script>
+<script src="js/task-drawer.js?v=20260916b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
   const today = () => new Date().toISOString().slice(0, 10);
 
-  const STATUS_LABEL = { todo: "未着手", doing: "着手中", done: "完了", cancelled: "取りやめ" };
-  const PRIORITY_LABEL = { low: "低", normal: "", high: "高" };
 
   let tasks = [];
   let templates = [];        // 繰り返しの「元」
   let employees = [];
-  let filter = "open";
 
   KPLayout.init({ active: "tasks", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -475,85 +549,190 @@
       </div>`).join("");
   }
 
+  // ---- 一覧（探す場所）--------------------------------------------------------
+  //
+  // 1件ずつ短い行で、たくさん並べる。中身は行を押して右の引き出しで読む。
+  // 絞り込みはサーバでかける（同じ条件を画面とサーバで2回書かない）
+  let view = null;
+  let range = "all";
+  let openId = null;
+  let searchTimer = null;
+
   async function loadTasks() {
     try {
       const res = await API.listTasks();
       tasks = res.tasks || [];
       templates = res.templates || [];
-      render();
       renderTemplates();
     } catch (e) {
-      el("list").innerHTML =
-        `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+      el("tk-msg").textContent = e.hint || e.detail || e.message || "取得に失敗しました";
     }
+    await loadList();
   }
 
-  function setFilter(f, btn) {
-    filter = f;
-    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
-    render();
-  }
-
-  const isOverdue = (t) =>
-    t.due_on && t.status !== "done" && t.status !== "cancelled" && t.due_on < today();
-
-  function render() {
-    const shown = tasks.filter((t) => {
-      if (filter === "open") return t.status === "todo" || t.status === "doing";
-      if (filter === "overdue") return isOverdue(t);
-      if (filter === "done") return t.status === "done";
-      return true;
-    });
-
-    if (!shown.length) {
-      el("list").innerHTML = `<div class="empty">該当するタスクはありません。</div>`;
+  async function loadList() {
+    const p = {
+      range,
+      assigneeId: el("tk-who")?.value || undefined,
+      department: el("tk-dep")?.value || undefined,
+      service: el("tk-svc")?.value || undefined,
+      priority: el("tk-pri")?.value || undefined,
+      status: el("tk-st")?.value || undefined,
+      ai: el("tk-ai")?.checked ? "1" : undefined,
+      overdue: overdueOnly ? "1" : undefined,
+      q: el("tk-q")?.value.trim() || undefined,
+    };
+    try { view = await API.taskList(p); }
+    catch (e) {
+      el("tk-rows").innerHTML = `<div class="banner warn" style="margin:8px 0;">
+        <span class="material-symbols-outlined">info</span>
+        <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
       return;
     }
+    fillFilters();
+    renderKpi();
+    renderList();
+  }
 
-    el("list").innerHTML = `
-      <div class="table-scroll">
-        <table class="kp-items">
-          <thead><tr>
-            <th>やること</th><th>担当</th><th>期限</th><th>状態</th><th></th>
-          </tr></thead>
-          <tbody>${shown.map(row).join("")}</tbody>
-        </table>
+  let overdueOnly = false;
+
+  function onSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadList, 300);
+  }
+
+  function setRange(key) {
+    range = key;
+    renderRange();
+    loadList();
+  }
+
+  function renderRange() {
+    el("tk-range").innerHTML = (view?.ranges || [{ key: "all", label: "すべて" }])
+      .map((r) => `<button class="${range === r.key ? "on" : ""}"
+        onclick="setRange('${esc(r.key)}')">${esc(r.label)}</button>`).join("");
+  }
+
+  function fillFilters() {
+    renderRange();
+    const fill = (id, first, list, val = (x) => x.key, lab = (x) => x.label) => {
+      const n = el(id);
+      if (n.options.length > 1) return;
+      n.innerHTML = `<option value="">${esc(first)}</option>`
+        + list.map((x) => `<option value="${esc(val(x))}">${esc(lab(x))}</option>`).join("");
+    };
+    fill("tk-who", "担当者：全員", view.people || [], (p) => p.id, (p) => p.name);
+    fill("tk-dep", "部署：すべて", (view.departments || []).map((d) => ({ key: d, label: d })));
+    fill("tk-svc", "サービス：すべて", (view.services || []).map((d) => ({ key: d, label: d })));
+    fill("tk-pri", "優先度：すべて", view.priorities || []);
+    fill("tk-st", "状態：すべて", [{ key: "open", label: "未完了" }, ...(view.statuses || [])]);
+  }
+
+  /** 上の6つ。押すとその条件で絞れる */
+  function renderKpi() {
+    const k = view.kpi || {};
+    const boxes = [
+      ["今日のタスク", k.today, "", () => setRange("today")],
+      ["完了", k.done, "ok", () => { el("tk-st").value = "done"; setRange("today"); }],
+      ["未完了", k.open, "", () => { el("tk-st").value = "open"; setRange("today"); }],
+      ["期限超過", k.overdue, k.overdue ? "bad" : "", () => toggleOverdue()],
+      ["明日の3タスク未登録", k.noTomorrow, k.noTomorrow ? "warn" : "", () => goBoard()],
+      ["AI確認待ち", k.waiting, k.waiting ? "warn" : "", () => goBoard()],
+    ];
+    el("tk-kpi").innerHTML = boxes.map(([label, v, cls], i) => `
+      <button class="box ${cls} ${i === 3 && overdueOnly ? "on" : ""}" onclick="kpiClick(${i})">
+        <div class="k">${esc(label)}</div><div class="v">${v ?? 0}</div>
+      </button>`).join("");
+    window.__kpiActions = boxes.map((b) => b[3]);
+  }
+
+  function kpiClick(i) { window.__kpiActions?.[i]?.(); }
+
+  function toggleOverdue() {
+    overdueOnly = !overdueOnly;
+    range = "all";
+    loadList();
+  }
+
+  function goBoard() {
+    el("board-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function clearFilters() {
+    for (const id of ["tk-who", "tk-dep", "tk-svc", "tk-pri", "tk-st"]) el(id).value = "";
+    el("tk-ai").checked = false;
+    el("tk-q").value = "";
+    overdueOnly = false;
+    range = "all";
+    loadList();
+  }
+
+  function renderList() {
+    const rows = view.rows || [];
+    el("tk-count").textContent = `${rows.length} 件${
+      view.total && rows.length !== view.total ? `（全 ${view.total} 件中）` : ""}`;
+    if (!rows.length) {
+      el("tk-rows").innerHTML = `<div class="empty">該当するタスクはありません。</div>`;
+      return;
+    }
+    el("tk-rows").innerHTML = rows.map(taskRow).join("");
+  }
+
+  const BADGE_TONE = { overdue: "bad", urgent: "bad", today: "now", ai: "ai", waiting: "warn", done: "ok" };
+  const BADGE_LABEL = { overdue: "期限超過", urgent: "緊急", today: "今日", ai: "AI提案",
+                        waiting: "確認待ち", done: "完了" };
+
+  function taskRow(r) {
+    const done = r.status === "done";
+    const due = r.dueOn ? String(r.dueOn).slice(5).replace("-", "/") : "—";
+    return `
+      <div class="tk-row ${done ? "done" : ""} ${openId === r.id ? "on" : ""}"
+           id="tk-${esc(r.id)}" onclick="openTask('${esc(r.id)}')">
+        <span class="chk" onclick="event.stopPropagation()">
+          <input type="checkbox" ${done ? "checked" : ""}
+                 onchange="quickDone('${esc(r.id)}', this)" title="完了にする"></span>
+        <span class="ti">${esc(r.title)}</span>
+        <span class="bg">${(r.badges || []).map((b) =>
+          `<span class="tk-b ${esc(BADGE_TONE[b] || "")}">${esc(BADGE_LABEL[b] || b)}</span>`).join("")}</span>
+        <span class="me">
+          <span class="w">${esc(r.assignee || "未割り当て")}</span>
+          <span class="d ${r.overdue ? "late" : ""}">${esc(due)}</span>
+          <span>${esc(r.priorityLabel)}</span>
+          ${r.category ? `<span class="tag">${esc(r.category)}</span>` : ""}
+          ${r.service ? `<span class="tag">${esc(r.service)}</span>` : ""}
+          ${r.kpi ? `<span class="tag">${esc(r.kpi)}</span>` : ""}
+          <span>${esc(r.statusLabel)}</span>
+        </span>
       </div>`;
   }
 
-  function row(t) {
-    const over = isOverdue(t);
-    const cls = t.status === "done" || t.status === "cancelled" ? "done" : "";
-    const due = t.due_on
-      ? new Date(t.due_on).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })
-      : "—";
-    return `
-      <tr class="${cls}">
-        <td>
-          ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}
-          ${esc(t.title)}
-          ${t.category ? `<span class="muted" style="font-size:11.5px;">　${esc(t.category)}</span>` : ""}
-        </td>
-        <td>${esc(t.assignee?.display_name || "未割り当て")}</td>
-        <td${over ? ' style="color:#b3261e;font-weight:600;"' : ""}>${esc(due)}${over ? " 超過" : ""}</td>
-        <td>
-          <select onchange="setStatus('${esc(t.id)}', this.value)">
-            ${Object.entries(STATUS_LABEL).map(([k, v]) =>
-              `<option value="${k}"${t.status === k ? " selected" : ""}>${v}</option>`).join("")}
-          </select>
-        </td>
-        <td style="text-align:right;">
-          <button class="icon-btn" title="削除" onclick="remove('${esc(t.id)}')">
-            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
-          </button>
-        </td>
-      </tr>`;
+  /** 行を押す → 右の引き出し。一覧はそのまま残る */
+  function openTask(id) {
+    openId = id;
+    for (const n of document.querySelectorAll(".tk-row")) n.classList.remove("on");
+    el(`tk-${id}`)?.classList.add("on");
+    KPTaskDrawer.open(id, { onChange: refreshRow });
   }
 
-  async function setStatus(id, status) {
-    try { await API.updateTask({ id, status }); await loadTasks(); }
-    catch (e) { alert(e.detail || e.message || "更新に失敗しました"); await loadTasks(); }
+  /** 引き出しで変えたぶんだけ描き直す。全部読み直すと、見ていた場所が飛ぶ */
+  async function refreshRow(id) {
+    const keep = window.scrollY;
+    await loadList();
+    window.scrollTo({ top: keep });
+  }
+
+  /** 一覧から直接完了。引き出しを開かずに済む */
+  async function quickDone(id, boxEl) {
+    const want = boxEl.checked;
+    boxEl.disabled = true;
+    try {
+      await API.taskAct({ id, action: "status", status: want ? "done" : "todo" });
+      await refreshRow(id);
+      if (KPTaskDrawer.openId === id) await KPTaskDrawer.reload();
+    } catch (e) {
+      boxEl.checked = !want;
+      el("tk-msg").textContent = e.hint || e.message || "変えられませんでした";
+    } finally { boxEl.disabled = false; }
   }
 
   async function remove(id) {

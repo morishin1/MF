@@ -151,3 +151,93 @@ textarea{resize:vertical;line-height:1.8;}
   vertical-align: -5px; margin-right: 7px;
   flex: none;
 }
+
+/* ===========================================================================
+   タスクの引き出し（右から出る詳細）
+   ---------------------------------------------------------------------------
+   一覧は「探す場所」、引き出しは「処理する場所」。
+   行を押しても別の画面へ飛ばさず、背面の一覧はそのまま残す。
+
+   PCは右から板が出る。スマホは下から（狭い画面で右から細い板が出ても読めない）
+   =========================================================================== */
+.td-root { position: fixed; inset: 0; z-index: 60; }
+.td-root.hidden { display: none; }
+.td-back { position: absolute; inset: 0; background: rgba(20, 24, 32, .38); }
+.td-panel {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: min(460px, 94vw); background: #fff;
+  box-shadow: -2px 0 20px rgba(20, 24, 32, .16);
+  display: flex; flex-direction: column;
+  animation: td-in .18s ease-out;
+}
+@keyframes td-in { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+body.td-open { overflow: hidden; }
+
+.td-head { display: flex; align-items: flex-start; gap: 10px;
+           padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+.td-head .td-ti { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; color: var(--primary-dark);
+                  line-height: 1.6; }
+.td-x { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0; line-height: 1; }
+
+/* いちばんよく変えるものを、上に4つ */
+.td-top { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; padding: 13px 18px; }
+.td-f label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.td-f select, .td-f input { margin: 0; font-size: 13px; width: 100%; }
+
+.td-act { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 18px 13px; }
+
+.td-ai { margin: 0 18px 13px; border: 1px solid #e2c88a; border-radius: 10px;
+         background: #fffdf7; padding: 11px 13px; }
+.td-ai b { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: #975a16; }
+.td-ai b .material-symbols-outlined { font-size: 17px; }
+.td-ai .tx { font-size: 12.5px; line-height: 1.9; margin-top: 5px; }
+.td-ai .bt { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+
+.td-tabs { display: flex; gap: 4px; padding: 0 18px; border-bottom: 1px solid var(--border); }
+.td-tabs button { border: 0; background: none; cursor: pointer; font-family: inherit;
+                  font-size: 13px; font-weight: 600; color: var(--muted);
+                  padding: 9px 12px; border-bottom: 2px solid transparent; }
+.td-tabs button.on { color: var(--primary-dark); border-bottom-color: var(--primary); }
+
+.td-body { flex: 1; overflow-y: auto; padding: 14px 18px; }
+.td-load, .td-empty { color: var(--muted); font-size: 13px; padding: 18px 0; }
+.td-lead { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; line-height: 1.8; }
+
+.td-row { margin-bottom: 11px; }
+.td-row label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+.td-row input, .td-row textarea, .td-row select { margin: 0; font-size: 13px; width: 100%; }
+
+.td-meta { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px;
+           font-size: 12px; margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.td-meta dt { color: var(--muted); white-space: nowrap; }
+.td-meta dd { margin: 0; }
+
+.td-c { border-bottom: 1px solid var(--border); padding: 9px 0; }
+.td-c:last-child { border-bottom: 0; }
+.td-c .w { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.td-c .w span { font-weight: 400; margin-left: 7px; }
+.td-c .b { font-size: 13px; line-height: 1.85; margin-top: 3px; white-space: pre-wrap; }
+.td-c.mine .b { color: var(--primary-dark); }
+.td-cin { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px;
+          padding-top: 12px; border-top: 1px solid var(--border); }
+.td-cin textarea { flex: 1; margin: 0; font-size: 13px; }
+
+.td-h { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.td-h:last-child { border-bottom: 0; }
+.td-h .k { flex: 0 0 66px; font-size: 11px; color: var(--muted); font-weight: 600; padding-top: 2px; }
+.td-h .b .t { font-size: 13px; line-height: 1.75; }
+.td-h .b .w { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+.td-cbt { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 6px; }
+
+/* スマホは下から。右から細い板が出ても読めない */
+@media (max-width: 760px) {
+  .td-panel {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: auto; height: 90vh;
+    border-radius: 16px 16px 0 0;
+    animation: td-up .2s ease-out;
+  }
+  @keyframes td-up { from { transform: translateY(30px); opacity: .7; } to { transform: none; opacity: 1; } }
+  .td-top { grid-template-columns: 1fr 1fr; }
+}
