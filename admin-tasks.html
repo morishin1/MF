@@ -11,8 +11,49 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915c">
-  <link rel="stylesheet" href="css/layout.css?v=20260915c">
+  <link rel="stylesheet" href="css/app.css?v=20260916a">
+  <link rel="stylesheet" href="css/layout.css?v=20260916a">
+  <style>
+    /* ── 毎日の実行管理 ──
+       誰が何をしていて、誰が止まっているか。この1枚で分かるようにする。
+       個々のタスクの中身は、その人を開いたときだけ */
+    .bd-kpi { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 14px; }
+    .bd-kpi .box { flex:1 1 120px; border:1px solid var(--border); border-radius:10px; padding:10px 13px; }
+    .bd-kpi .box .k { font-size:11.5px; color:var(--muted); }
+    .bd-kpi .box .v { font-size:20px; font-weight:700; color:var(--primary-dark);
+                      font-variant-numeric:tabular-nums; }
+    .bd-kpi .box.warn .v { color:#c53030; }
+    .bd-kpi .box.ok .v { color:#256b36; }
+
+    .bd-f { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin:0 0 14px; }
+    .bd-f label { display:block; font-size:11.5px; color:var(--muted); margin-bottom:3px; }
+    .bd-f select, .bd-f input { margin:0; font-size:13px; width:auto; min-width:120px; }
+
+    .bd-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .bd-table th { text-align:left; font-size:11.5px; color:var(--muted); font-weight:600;
+                   padding:0 10px 7px; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .bd-table td { padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+    .bd-table tr.click { cursor:pointer; }
+    .bd-table tr.click:hover td { background:var(--soft); }
+    .bd-table .nm { font-weight:700; color:var(--primary-dark); }
+    .bd-table .sub { display:block; font-size:11.5px; color:var(--muted); font-weight:400; }
+    .bd-table .cnt { font-variant-numeric:tabular-nums; font-weight:700; }
+    .bd-table .cnt.all { color:#256b36; }
+    .bd-table .cnt.none { color:#c53030; }
+    .bd-st { display:inline-block; border-radius:999px; padding:2px 10px; font-size:11.5px;
+             font-weight:600; white-space:nowrap; }
+    .bd-st.done { background:#e8f5ec; color:#256b36; }
+    .bd-st.warn { background:#fde8e8; color:#c53030; }
+    .bd-st.working { background:#fff3e0; color:#9c4221; }
+    .bd-stuck { font-size:12px; color:#9c4221; }
+    .bd-li { font-size:12px; color:var(--muted); line-height:1.8; }
+    .bd-li .ok { color:#256b36; }
+    @media (max-width:760px) {
+      .bd-table thead { display:none; }
+      .bd-table tr { display:block; border-bottom:1px solid var(--border); padding:10px 0; }
+      .bd-table td { display:block; border:0; padding:2px 0; }
+    }
+  </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -29,7 +70,48 @@
 
 <div class="wrap">
   <h1 class="kp-greet">タスク・予定</h1>
-  <p class="kp-greet-sub">担当者と期限を決めて割り当てます。期限を過ぎたものは赤く表示されます。</p>
+  <p class="kp-greet-sub">
+    大事なのは、たくさん登録することではなく、毎日3つ終えることです。
+    誰が何をしていて、誰が止まっているかを、ここで見ます。
+  </p>
+
+  <!-- 毎日の実行管理。いちばん上に置く -->
+  <div class="card" id="board-card">
+    <h2><span class="material-symbols-outlined">groups</span>今日の実行状況
+      <span id="bd-date-label" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div class="bd-kpi" id="bd-kpi"></div>
+    <div class="bd-f">
+      <div><label for="bd-date">日付</label><input id="bd-date" type="date" onchange="loadBoard()"></div>
+      <div><label for="bd-month">月</label><input id="bd-month" type="month" onchange="onMonth()"></div>
+      <div><label for="bd-person">担当者</label><select id="bd-person" onchange="loadBoard()"></select></div>
+      <div><label for="bd-dep">部署</label><select id="bd-dep" onchange="loadBoard()"></select></div>
+      <div><label for="bd-biz">事業・KPI</label><input id="bd-biz" type="text" placeholder="新規開拓" oninput="renderBoard()"></div>
+      <div><label for="bd-done">完了</label>
+        <select id="bd-done" onchange="loadBoard()">
+          <option value="">すべて</option>
+          <option value="1">完了のみ</option>
+          <option value="0">未完了のみ</option>
+        </select></div>
+      <div><label for="bd-state">状態</label>
+        <select id="bd-state" onchange="loadBoard()">
+          <option value="">すべて</option>
+        </select></div>
+      <div><label class="check" style="font-size:12.5px;">
+        <input type="checkbox" id="bd-ai" onchange="loadBoard()"> AI提案あり</label></div>
+    </div>
+    <div class="table-scroll">
+      <table class="bd-table">
+        <thead><tr>
+          <th>担当者</th><th>今日の3タスク</th><th>完了数</th><th>明日の3タスク</th>
+          <th>状態</th><th>止まっているもの</th>
+        </tr></thead>
+        <tbody id="bd-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+    <div id="bd-msg" class="err-text" style="margin-top:8px;"></div>
+  </div>
+
+  <div id="bd-detail"></div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">add_task</span>タスクを追加</h2>
@@ -133,9 +215,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260915c"></script>
-<script src="js/device.js?v=20260915c"></script>
-<script src="js/layout.js?v=20260915c"></script>
+<script src="js/api-client.js?v=20260916a"></script>
+<script src="js/device.js?v=20260916a"></script>
+<script src="js/layout.js?v=20260916a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -153,7 +235,161 @@
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
-    await Promise.all([loadEmployees(), loadTasks()]);
+    await Promise.all([loadEmployees(), loadTasks(), loadBoard()]);
+  }
+
+  // ---- 毎日の実行管理 ----------------------------------------------------------
+  //
+  // 出すのは3つだけ。今日の3件と完了数／明日の3件の状態／止まっていること。
+  // 個々のタスクの中身は、その人を開いたときだけ
+  let board = null;
+
+  function onMonth() {
+    // 月を選んだら、その月の1日を見る。日付で追いたい日は日付の欄で選ぶ
+    const m = el("bd-month").value;
+    if (m) el("bd-date").value = `${m}-01`;
+    loadBoard();
+  }
+
+  async function loadBoard() {
+    const p = {
+      date: el("bd-date").value || undefined,
+      employeeId: el("bd-person").value || undefined,
+      department: el("bd-dep").value || undefined,
+      state: el("bd-state").value || undefined,
+      done: el("bd-done").value || undefined,
+      ai: el("bd-ai").checked ? "1" : undefined,
+    };
+    try { board = await API.taskBoard(p); }
+    catch (e) {
+      el("bd-rows").innerHTML = `<tr><td colspan="6">
+        <div class="banner warn" style="margin:6px 0;">
+          <span class="material-symbols-outlined">info</span>
+          <div>${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+      return;
+    }
+    if (!el("bd-date").value) el("bd-date").value = board.date;
+    fillBoardFilters();
+    renderBoard();
+  }
+
+  function fillBoardFilters() {
+    const dep = el("bd-dep");
+    if (dep.options.length <= 1) {
+      dep.innerHTML = `<option value="">すべて</option>`
+        + (board.departments || []).map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+    }
+    const per = el("bd-person");
+    if (per.options.length <= 1) {
+      per.innerHTML = `<option value="">全員</option>`
+        + (board.people || []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+    }
+    const st = el("bd-state");
+    if (st.options.length <= 1) {
+      st.innerHTML = `<option value="">すべて</option>`
+        + (board.states || []).map((x) => `<option value="${esc(x.key)}">${esc(x.label)}</option>`).join("");
+    }
+  }
+
+  function renderBoard() {
+    const s = board.summary || {};
+    el("bd-date-label").textContent = `${board.date}（明日 ${board.tomorrow || "—"}）`;
+    el("bd-kpi").innerHTML = [
+      ["対象者", s.people, ""],
+      ["今日ぶん完了", s.doneAll, "ok"],
+      ["明日が未登録", s.noTomorrow, s.noTomorrow ? "warn" : ""],
+      ["確定待ち", s.waiting, ""],
+      ["注意", s.warn, s.warn ? "warn" : ""],
+    ].map(([k, v, cls]) =>
+      `<div class="box ${cls}"><div class="k">${esc(k)}</div><div class="v">${v ?? 0}</div></div>`).join("");
+
+    // 事業・KPIの絞り込みだけは、取ってきたものから画面側で行う
+    const word = el("bd-biz").value.trim();
+    const rows = (board.rows || []).filter((r) => !word
+      || (r.todayList || []).some((t) => t.title.includes(word))
+      || (r.tomorrowList || []).some((t) => t.title.includes(word)));
+
+    if (!rows.length) {
+      el("bd-rows").innerHTML = `<tr><td colspan="6" class="muted" style="padding:18px 0;">
+        該当する人はいません。</td></tr>`;
+      return;
+    }
+    el("bd-rows").innerHTML = rows.map((r) => `
+      <tr class="click" onclick="openPerson('${esc(r.employeeId)}')">
+        <td><span class="nm">${esc(r.name)}</span>
+          ${r.department ? `<span class="sub">${esc(r.department)}</span>` : ""}</td>
+        <td>${r.today.count ? `${r.today.count}件` : '<span class="bd-stuck">未登録</span>'}
+          <span class="bd-li">${(r.todayList || []).slice(0, 3).map((t) =>
+            `<br>${t.status === "done" ? '<span class="ok">✓</span>' : "・"}${esc(t.title)}`).join("")}</span></td>
+        <td><span class="cnt ${r.today.allDone ? "all" : r.today.done === 0 && r.today.count ? "none" : ""}">
+          ${esc(r.today.label)}</span></td>
+        <td>${r.tomorrow.count
+          ? `${r.tomorrow.count}件<span class="sub">${esc(r.tomorrow.label)}</span>`
+          : '<span class="bd-stuck">未登録</span>'}</td>
+        <td><span class="bd-st ${esc(r.state)}">${esc(r.stateLabel)}</span></td>
+        <td><span class="bd-stuck">${esc(r.stuck || "")}</span></td>
+      </tr>`).join("");
+  }
+
+  /** その人の重要タスクを開く。管理者はここから直接足す・確定もできる */
+  async function openPerson(employeeId) {
+    const r = (board.rows || []).find((x) => x.employeeId === employeeId);
+    let f;
+    try { f = await API.focus({ employeeId, date: board.date }); }
+    catch (e) { el("bd-msg").textContent = e.hint || e.message || "開けませんでした"; return; }
+
+    const list = (t) => t.length
+      ? t.map((x, i) => `<div class="kp-todo">
+          <span class="material-symbols-outlined" style="font-size:19px;color:${x.status === "done" ? "#3e9c5a" : "var(--muted)"};">
+            ${x.status === "done" ? "check_circle" : "radio_button_unchecked"}</span>
+          <span class="t">${i + 1}. ${esc(x.title)}
+            <small>${x.doneCondition ? `完了条件：${esc(x.doneCondition)}` : ""}
+              ${x.dueOn ? `／期限 ${esc(x.dueOn)}` : ""}
+              ${x.carryCount ? `／持ち越し ${x.carryCount}回` : ""}</small></span>
+        </div>`).join("")
+      : `<div class="empty">ありません。</div>`;
+
+    el("bd-detail").innerHTML = `
+      <div class="card" style="border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">person</span>${esc(r?.name || "")} さん
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                  onclick="closePerson()">閉じる</button></h2>
+        <h3 style="font-size:13.5px;margin:6px 0 8px;color:var(--primary-dark);">
+          今日（${esc(f.today)}）　${esc(f.todayProgress?.label || "")}</h3>
+        ${list(f.todayTasks || [])}
+        <h3 style="font-size:13.5px;margin:18px 0 8px;color:var(--primary-dark);">
+          明日（${esc(f.tomorrowDate || "")}）　<span class="kp-chip ${f.tomorrowState?.confirmed ? "event" : "draft"}">
+            ${esc(f.tomorrowState?.label || "")}</span></h3>
+        ${list(f.tomorrowTasks || [])}
+        ${f.tomorrowAi ? `<div class="banner" style="display:block;background:#fffdf7;margin-top:10px;">
+          <b style="font-size:12.5px;">AIの確認</b>
+          <div style="font-size:12.5px;margin-top:4px;">${esc(f.tomorrowAi.summary || "")}</div>
+        </div>` : ""}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+          ${f.tomorrowState?.confirmed ? "" : `
+            <button class="btn btn-primary btn-sm"
+                    onclick="confirmFor('${esc(employeeId)}', this)"
+                    ${f.tomorrowState?.ready ? "" : "disabled"}>
+              代わりに確定する</button>
+            <span class="muted" style="font-size:12px;align-self:center;">
+              ${esc(f.tomorrowState?.todo || "")}</span>`}
+        </div>
+        <div id="bd-detail-msg" class="err-text" style="margin-top:8px;"></div>
+      </div>`;
+    el("bd-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function closePerson() { el("bd-detail").innerHTML = ""; }
+
+  async function confirmFor(employeeId, btn) {
+    try {
+      await KPLayout.busy(btn, "確定中…", () =>
+        API.focusConfirm(board.tomorrow, employeeId));
+      await loadBoard();
+      await openPerson(employeeId);
+    } catch (e) {
+      el("bd-detail-msg").textContent = e.hint || e.detail || e.message || "確定できませんでした";
+    }
   }
 
   async function loadEmployees() {

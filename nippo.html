@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915c">
-  <link rel="stylesheet" href="css/layout.css?v=20260915c">
+  <link rel="stylesheet" href="css/app.css?v=20260916a">
+  <link rel="stylesheet" href="css/layout.css?v=20260916a">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -140,6 +140,33 @@
     .fd-cm .c .who { font-weight: 600; color: var(--primary-dark); margin-right: 6px; }
     .fd-cm form { display: flex; gap: 6px; margin-top: 8px; }
     .fd-cm form input { margin: 0; font-size: 12.5px; }
+  
+    /* ── 明日の重要タスク ── */
+    .fc-step { display:flex; gap:8px; align-items:center; font-size:12.5px; margin:0 0 14px;
+               flex-wrap:wrap; color:var(--muted); }
+    .fc-step b { color:var(--primary-dark); }
+    .fc-task { border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+    .fc-task .ti { font-size:14px; font-weight:700; color:var(--primary-dark); }
+    .fc-task .me { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.85; }
+    .fc-task .miss { font-size:12px; color:#9c4221; margin-top:5px; }
+    .fc-task .ai { font-size:12.5px; margin-top:8px; border-left:3px solid #b7791f;
+                   padding:6px 0 6px 10px; background:#fffdf7; line-height:1.85; }
+    .fc-task .ai.ok { border-color:#3e9c5a; background:#f7fbf8; }
+    .fc-task .ai.drop { border-color:#c53030; background:#fff7f7; }
+    .fc-task .ai b { display:block; font-size:11.5px; color:var(--muted); font-weight:600; }
+    .fc-task .act { display:flex; gap:7px; flex-wrap:wrap; margin-top:9px; }
+    .fc-form { display:grid; grid-template-columns:auto 1fr; gap:9px 12px; align-items:center;
+               font-size:13px; }
+    .fc-form label { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .fc-form input, .fc-form select, .fc-form textarea { margin:0; font-size:13px; }
+    .fc-ov { border:1px solid #b7791f; border-radius:10px; background:#fffdf7;
+             padding:12px 14px; margin-bottom:12px; font-size:13px; line-height:1.9; }
+    .fc-ov ul { margin:6px 0 0; padding-left:18px; }
+    .fc-lock { opacity:.45; pointer-events:none; }
+    .fc-today { border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin-bottom:9px; }
+    .fc-today .ti { font-size:13.5px; font-weight:700; }
+    .fc-today.done { border-color:#b7e0c4; background:#f7fbf8; }
+    .fc-today .act { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -196,8 +223,17 @@
     <div id="mid-body"></div>
   </div>
 
+  <!-- 明日の重要タスク。日報より先に、ここを決める。
+       今日を振り返ってから明日を決めると、力を使い切って
+       「引き続き頑張る」で埋まる。順番を逆にする -->
+  <div class="card" id="focus-card" style="border-left:4px solid var(--primary);">
+    <h2><span class="material-symbols-outlined">bolt</span>明日の重要タスクを決める
+      <span id="focus-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <div id="focus-body"><span class="muted">読み込み中…</span></div>
+  </div>
+
   <!-- 入力 -->
-  <div class="card">
+  <div class="card" id="write-card">
     <h2><span class="material-symbols-outlined">edit_note</span>日報を書く
       <span id="date-tag" class="kp-chip" style="margin-left:8px;"></span>
       <span id="draft-tag" class="np-draft" style="margin-left:8px;"></span>
@@ -390,10 +426,10 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260915c"></script>
-<script src="js/device.js?v=20260915c"></script>
-<script src="js/layout.js?v=20260915c"></script>
-<script src="js/push.js?v=20260915c"></script>
+<script src="js/api-client.js?v=20260916a"></script>
+<script src="js/device.js?v=20260916a"></script>
+<script src="js/layout.js?v=20260916a"></script>
+<script src="js/push.js?v=20260916a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -461,6 +497,7 @@
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
 
     renderTodos();
+    loadFocus();
     loadPlan();
     renderMidday();
     focusFromHash();
@@ -1309,6 +1346,357 @@
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
     }
+  }
+
+  // ---- 明日の重要タスク（日報より先に決める） ---------------------------------
+  //
+  //   3件そろう → AIが見る → 人が確定 → ここで日報が書けるようになる
+  //
+  // AIは案と理由を出すだけで、決めるのは人。
+  // 「AIがそう言ったから」で明日の仕事が決まる形にはしない
+  let focusData = null;
+
+  async function loadFocus() {
+    try { focusData = await API.focus({ date: el("f-date").value || jstToday() }); }
+    catch (e) {
+      // 072 をまだ流していない環境では、これまでどおりの日報にする
+      el("focus-card").classList.add("hidden");
+      setWriteLock(false);
+      return;
+    }
+    // 状態が返ってこない（この仕組みを使っていない環境）。
+    // 分からないときに日報を止めると、書けない理由も出せないまま手が止まる
+    if (!focusData?.tomorrowState) {
+      el("focus-card").classList.add("hidden");
+      setWriteLock(false);
+      return;
+    }
+    el("focus-card").classList.remove("hidden");
+    renderFocus();
+  }
+
+  /** 明日ぶんが確定するまで、日報の欄は触れないようにする */
+  function setWriteLock(locked) {
+    const card = el("write-card");
+    if (!card) return;
+    card.classList.toggle("fc-lock", locked);
+    const note = el("write-lock");
+    if (locked && !note) {
+      card.insertAdjacentHTML("beforebegin", `
+        <div class="banner warn" id="write-lock" style="margin-bottom:0;">
+          <span class="material-symbols-outlined">lock</span>
+          <div><b>先に、明日の重要タスクを決めてください。</b><br>
+          3件が確定すると、今日の日報を書けるようになります。</div>
+        </div>`);
+    } else if (!locked && note) note.remove();
+  }
+
+  function renderFocus() {
+    const st = focusData.tomorrowState || {};
+    const list = focusData.tomorrowTasks || [];
+    const date = focusData.tomorrowDate || "";
+    setWriteLock(!st.confirmed);
+
+    el("focus-tag").textContent = st.confirmed ? "確定" : `${list.length} / ${focusData.min}`;
+    el("focus-tag").className = `kp-chip ${st.confirmed ? "event" : "draft"}`;
+
+    const step = (n, label, on) =>
+      `<span>${on ? `<b>${n}. ${esc(label)}</b>` : `${n}. ${esc(label)}`}</span>`;
+    const stepbar = `
+      <div class="fc-step">
+        ${step(1, "3件決める", st.key === "draft")}　→
+        ${step(2, "AIが見る", st.key === "ready")}　→
+        ${step(3, "確定する", st.key === "ai_checked")}　→
+        ${step(4, "日報を書く", st.confirmed)}
+      </div>`;
+
+    const ai = focusData.tomorrowAi;
+    const overall = ai ? `
+      <div class="fc-ov">
+        <b>AIの確認</b>：${esc(ai.summary || "")}
+        ${(ai.warnings || []).length ? `<ul>${ai.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+        ${(ai.better || []).length
+          ? `<div style="margin-top:6px;">先にやるべきかもしれないもの：${ai.better.map(esc).join("、")}</div>` : ""}
+      </div>` : "";
+
+    el("focus-body").innerHTML = `
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
+        ${esc(date)}（次の営業日）にやることを ${focusData.min} 件決めます。
+        目的・完了条件・担当・期限まで書くと、夜に できた／できなかった を判定できます。
+      </p>
+      ${stepbar}
+      ${overall}
+      ${todayBox()}
+      ${carryBox()}
+      <div id="fc-list">${list.map(focusTask).join("")}</div>
+      ${st.confirmed ? "" : `<div id="fc-add"></div>
+        <button class="btn btn-secondary btn-sm" onclick="openFocusForm()">
+          <span class="material-symbols-outlined icon-inline">add</span>タスクを足す</button>`}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center;">
+        ${st.confirmed
+          ? `<span class="fc-done" style="color:#256b36;font-weight:700;font-size:13.5px;">
+               <span class="material-symbols-outlined" style="font-size:17px;vertical-align:-4px;">check_circle</span>
+               明日のタスクが確定しました。今日の日報を入力してください</span>`
+          : `<button class="btn btn-secondary btn-sm" onclick="runFocusCheck(this)"
+                     ${st.ready ? "" : "disabled"}>
+               <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに見てもらう</button>
+             <button class="btn btn-primary btn-sm" onclick="confirmFocus(this)"
+                     ${st.ready ? "" : "disabled"}>
+               <span class="material-symbols-outlined icon-inline">task_alt</span>この内容で確定する</button>
+             <span class="muted" style="font-size:12px;">${esc(st.todo || "")}</span>`}
+      </div>
+      <div id="fc-msg" class="err-text" style="margin-top:8px;"></div>`;
+  }
+
+  /** 今日の重要タスク。できた／できなかった を、日報を書きながら押せる */
+  function todayBox() {
+    const list = focusData.todayTasks || [];
+    if (!list.length) return "";
+    const p = focusData.todayProgress || {};
+    return `
+      <div style="margin-bottom:14px;">
+        <h3 style="font-size:13.5px;margin:0 0 8px;color:var(--primary-dark);">
+          今日のタスク　<span class="kp-chip ${p.allDone ? "event" : "draft"}">${esc(p.label || "")}</span></h3>
+        ${list.map((t) => `
+          <div class="fc-today ${t.status === "done" ? "done" : ""}">
+            <div class="ti">${esc(t.title)}</div>
+            ${t.doneCondition ? `<div class="me muted" style="font-size:12px;">完了条件：${esc(t.doneCondition)}</div>` : ""}
+            <div class="act">
+              ${t.status === "done"
+                ? `<span style="font-size:12.5px;color:#256b36;font-weight:600;">完了</span>
+                   <button class="btn btn-secondary btn-sm" onclick="undoFocusTask('${esc(t.id)}', this)">戻す</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="doneFocusTask('${esc(t.id)}', this)">完了</button>
+                   <input type="text" id="fc-why-${esc(t.id)}" placeholder="できなかった理由（ひとこと）"
+                          style="flex:1;min-width:180px;margin:0;font-size:12.5px;"
+                          value="${esc(t.notDoneReason || "")}">
+                   <button class="btn btn-secondary btn-sm" onclick="saveWhy('${esc(t.id)}', this)">記録</button>`}
+            </div>
+          </div>`).join("")}
+      </div>`;
+  }
+
+  /** 終わらなかったものは、自動で明日へ動かさない。どうするかを決めてもらう */
+  function carryBox() {
+    const list = focusData.carryOver || [];
+    if (!list.length) return "";
+    return `
+      <div style="margin-bottom:14px;">
+        <h3 style="font-size:13.5px;margin:0 0 4px;color:#9c4221;">
+          終わらなかったタスク（${list.length}件）</h3>
+        <p class="muted" style="font-size:12px;margin:0 0 8px;">
+          自動では明日へ移しません。どうするかを決めてください。
+          ${focusData.aiReady ? `<a href="#" onclick="carryPlan(this);return false;">AIに案を出してもらう</a>` : ""}
+        </p>
+        ${list.map((t) => `
+          <div class="fc-task">
+            <div class="ti">${esc(t.title)}
+              ${t.carryCount ? `<span class="kp-chip important" style="margin-left:6px;">持ち越し ${t.carryCount}回</span>` : ""}
+            </div>
+            <div class="me">${esc(t.focusDate || "")}${t.notDoneReason ? `　理由：${esc(t.notDoneReason)}` : ""}</div>
+            <div id="cp-${esc(t.id)}"></div>
+            <div class="act">
+              ${(focusData.carryChoices || []).map((c) => `
+                <button class="btn btn-secondary btn-sm" title="${esc(c.hint)}"
+                        onclick="decideCarry('${esc(t.id)}','${esc(c.key)}', this)">${esc(c.label)}</button>`).join("")}
+            </div>
+          </div>`).join("")}
+      </div>`;
+  }
+
+  function focusTask(t, i) {
+    const who = (focusData.people || []).find((p) => p.id === t.assigneeId);
+    const ai = t.aiReview;
+    const sug = t.aiAssignee ? (focusData.people || []).find((p) => p.id === t.aiAssignee) : null;
+    return `
+      <div class="fc-task">
+        <div class="ti">${i + 1}. ${esc(t.title)}</div>
+        <div class="me">
+          目的：${esc(t.purpose || "（未記入）")}<br>
+          完了条件：${esc(t.doneCondition || "（未記入）")}<br>
+          担当：${esc(who?.name || "（未定）")}　期限：${esc(t.dueOn || "—")}　
+          優先度：${esc({ high: "高", normal: "ふつう", low: "低" }[t.priority] || t.priority)}
+          ${t.kpiLink ? `<br>関連：${esc(t.kpiLink)}` : ""}
+        </div>
+        ${t.missing?.length
+          ? `<div class="miss">${t.missing.map((m) => esc(m.label)).join("・")} が空です</div>` : ""}
+        ${ai ? `
+          <div class="ai ${esc(ai.verdict)}">
+            <b>${ai.verdict === "ok" ? "AI：このままで良い" : ai.verdict === "drop" ? "AI：明日でなくてよい" : "AI：直したほうがよい"}</b>
+            ${esc(ai.reason || "")}
+            ${ai.fix ? `<br>直し方：${esc(ai.fix)}` : ""}
+            ${ai.doneCondition ? `<br>完了条件の案：${esc(ai.doneCondition)}` : ""}
+            ${ai.fix || ai.doneCondition
+              ? `<br><button class="btn btn-secondary btn-sm" style="margin-top:6px;"
+                    onclick="applyFix('${esc(t.id)}', this)">この案にする</button>` : ""}
+          </div>` : ""}
+        ${sug ? `
+          <div class="ai">
+            <b>AI：担当の案</b>${esc(sug.name)} さん
+            ${t.aiAssigneeWhy ? `<br>${esc(t.aiAssigneeWhy)}` : ""}
+            <br><button class="btn btn-secondary btn-sm" style="margin-top:6px;"
+                  onclick="applyAssignee('${esc(t.id)}','${esc(sug.id)}', this)">この担当にする</button>
+          </div>` : ""}
+        ${focusData.tomorrowState?.confirmed ? "" : `
+          <div class="act">
+            <button class="btn btn-secondary btn-sm" onclick="openFocusForm('${esc(t.id)}')">直す</button>
+            <button class="btn btn-secondary btn-sm" onclick="removeFocus('${esc(t.id)}', this)">外す</button>
+          </div>`}
+      </div>`;
+  }
+
+  function openFocusForm(id) {
+    const t = id ? (focusData.tomorrowTasks || []).find((x) => x.id === id) : null;
+    const opts = (focusData.people || []).map((p) =>
+      `<option value="${esc(p.id)}" ${t?.assigneeId === p.id ? "selected" : ""}>${esc(p.name)}${p.department ? `（${esc(p.department)}）` : ""}</option>`).join("");
+    el("fc-add").innerHTML = `
+      <div class="fc-task" style="border-color:var(--primary);">
+        <div class="fc-form">
+          <label for="fc-title">タスク名</label>
+          <input id="fc-title" type="text" value="${esc(t?.title || "")}" placeholder="A社へ提案書を送る">
+          <label for="fc-purpose">目的</label>
+          <input id="fc-purpose" type="text" value="${esc(t?.purpose || "")}" placeholder="今期の新規売上をつくるため">
+          <label for="fc-done">完了条件</label>
+          <input id="fc-done" type="text" value="${esc(t?.doneCondition || "")}" placeholder="先方へ送付が完了している">
+          <label for="fc-who">担当者</label>
+          <select id="fc-who"><option value="">（未定・AIに任せる）</option>${opts}</select>
+          <label for="fc-due">期限</label>
+          <input id="fc-due" type="date" value="${esc(t?.dueOn || focusData.tomorrowDate || "")}">
+          <label for="fc-pri">優先度</label>
+          <select id="fc-pri">
+            <option value="high" ${(t?.priority || "high") === "high" ? "selected" : ""}>高い</option>
+            <option value="normal" ${t?.priority === "normal" ? "selected" : ""}>ふつう</option>
+            <option value="low" ${t?.priority === "low" ? "selected" : ""}>低い</option>
+          </select>
+          <label for="fc-kpi">関連KPI・事業</label>
+          <input id="fc-kpi" type="text" value="${esc(t?.kpiLink || "")}" placeholder="新規開拓／ENGER">
+        </div>
+        <div class="act">
+          <button class="btn btn-primary btn-sm" onclick="saveFocus('${esc(id || "")}', this)">
+            ${id ? "保存する" : "この内容で足す"}</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeFocusForm()">やめる</button>
+        </div>
+      </div>`;
+    el("fc-title").focus();
+  }
+
+  function closeFocusForm() { el("fc-add").innerHTML = ""; }
+
+  async function saveFocus(id, btn) {
+    const body = {
+      title: el("fc-title").value,
+      purpose: el("fc-purpose").value,
+      doneCondition: el("fc-done").value,
+      assigneeId: el("fc-who").value || null,
+      dueOn: el("fc-due").value || null,
+      priority: el("fc-pri").value,
+      kpiLink: el("fc-kpi").value,
+      date: focusData.tomorrowDate,
+    };
+    if (!body.title.trim()) { el("fc-msg").textContent = "タスク名を入れてください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () =>
+        id ? API.focusUpdate({ id, ...body }) : API.focusAdd(body));
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "できませんでした"; }
+  }
+
+  async function removeFocus(id, btn) {
+    try { await KPLayout.busy(btn, "…", () => API.focusRemove(id)); await loadFocus(); }
+    catch (e) { el("fc-msg").textContent = e.hint || e.message || "外せませんでした"; }
+  }
+
+  async function applyFix(id, btn) {
+    const t = (focusData.tomorrowTasks || []).find((x) => x.id === id);
+    if (!t?.aiReview) return;
+    try {
+      await KPLayout.busy(btn, "…", () => API.focusUpdate({
+        id,
+        title: t.aiReview.fix || t.title,
+        doneCondition: t.aiReview.doneCondition || t.doneCondition,
+        kpiLink: t.aiReview.kpi || t.kpiLink,
+      }));
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.message || "できませんでした"; }
+  }
+
+  async function applyAssignee(id, assigneeId, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.focusUpdate({ id, assigneeId }));
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.message || "できませんでした"; }
+  }
+
+  async function runFocusCheck(btn) {
+    el("fc-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, "AIが見ています…", () => API.focusCheck(focusData.tomorrowDate));
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "確認できませんでした"; }
+  }
+
+  async function confirmFocus(btn) {
+    el("fc-msg").textContent = "";
+    try {
+      const r = await KPLayout.busy(btn, "確定中…", () => API.focusConfirm(focusData.tomorrowDate));
+      await loadFocus();
+      el("fc-msg").style.color = "var(--primary-dark)";
+      el("fc-msg").textContent = r.sent
+        ? `確定しました。${r.sent} 件を担当者へ配信しました。今日の日報を入力してください`
+        : "確定しました。今日の日報を入力してください";
+      el("write-card").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      el("fc-msg").style.color = "";
+      el("fc-msg").textContent = e.hint || e.detail || e.message || "確定できませんでした";
+    }
+  }
+
+  async function doneFocusTask(id, btn) {
+    try { await KPLayout.busy(btn, "…", () => API.focusComplete(id)); await loadFocus(); }
+    catch (e) { el("fc-msg").textContent = e.hint || e.message || "できませんでした"; }
+  }
+
+  async function undoFocusTask(id, btn) {
+    try { await KPLayout.busy(btn, "…", () => API.focusReopen(id)); await loadFocus(); }
+    catch (e) { el("fc-msg").textContent = e.hint || e.message || "できませんでした"; }
+  }
+
+  async function saveWhy(id, btn) {
+    const why = el(`fc-why-${id}`)?.value || "";
+    try {
+      await KPLayout.busy(btn, "…", () => API.focusCarry({ id, decision: "carry", reason: why }));
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.message || "できませんでした"; }
+  }
+
+  async function carryPlan(link) {
+    try {
+      const r = await API.focusCarryPlan(focusData.today);
+      for (const it of r.items || []) {
+        const box = el(`cp-${it.taskId}`);
+        if (!box) continue;
+        const label = (focusData.carryChoices || []).find((c) => c.key === it.decision)?.label || it.decision;
+        box.innerHTML = `<div class="ai"><b>AIの案</b>${esc(label)}：${esc(it.reason || "")}
+          ${it.assigneeName ? `（${esc(it.assigneeName)} さんへ）` : ""}</div>`;
+      }
+    } catch (e) { el("fc-msg").textContent = e.hint || e.message || "案を出せませんでした"; }
+  }
+
+  async function decideCarry(id, decision, btn) {
+    let assigneeId = null;
+    if (decision === "hand") {
+      const names = (focusData.people || []).map((p, i) => `${i + 1}. ${p.name}`).join("\n");
+      const pick = prompt(`誰に渡しますか。番号を入れてください\n${names}`);
+      const n = Number(pick);
+      assigneeId = (focusData.people || [])[n - 1]?.id || null;
+      if (!assigneeId) return;
+    }
+    const reason = el(`fc-why-${id}`)?.value || "";
+    try {
+      await KPLayout.busy(btn, "…", () => API.focusCarry({
+        id, decision, assigneeId, reason, date: focusData.tomorrowDate,
+      }));
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "できませんでした"; }
   }
 
   // --- タブ -------------------------------------------------------------------

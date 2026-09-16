@@ -634,6 +634,32 @@
   const hrCheck = (body) => api("/api/hr", { method: "PATCH", body });
   const hrUpdate = (body) => api("/api/hr", { method: "PATCH", body });
 
+  // ---- 毎日の実行管理（重要タスク3件） ----
+  //
+  // 明日の3件を決める → AIが見る → 人が確定 → 日報 → 翌朝の「今日やる3つ」→ 完了。
+  // 画面はこの口だけを使う（決める側も、終わらせる側も同じ状態を見る）
+  const focus = (p = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);
+    return api(`/api/tasks/focus${q.toString() ? `?${q}` : ""}`);
+  };
+  const focusAct = (body) => api("/api/tasks/focus", { method: "POST", body });
+  const focusAdd = (body) => focusAct({ action: "add", ...body });
+  const focusUpdate = (body) => focusAct({ action: "update", ...body });
+  const focusRemove = (id, employeeId) => focusAct({ action: "remove", id, employeeId });
+  const focusCheck = (date, employeeId) => focusAct({ action: "check", date, employeeId });
+  const focusConfirm = (date, employeeId) => focusAct({ action: "confirm", date, employeeId });
+  const focusComplete = (id, result) => focusAct({ action: "complete", id, result });
+  const focusReopen = (id) => focusAct({ action: "reopen", id });
+  const focusCarryPlan = (date, employeeId) => focusAct({ action: "carryPlan", date, employeeId });
+  const focusCarry = (body) => focusAct({ action: "carry", ...body });
+  // 管理者の一覧。誰が止まっているか
+  const taskBoard = (p = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);
+    return api(`/api/tasks/board${q.toString() ? `?${q}` : ""}`);
+  };
+
   // ---- 端末管理 ----
   // 管理側
   const devices = (p = {}) => {
@@ -1163,6 +1189,8 @@
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
+    focus, focusAct, focusAdd, focusUpdate, focusRemove, focusCheck, focusConfirm,
+    focusComplete, focusReopen, focusCarryPlan, focusCarry, taskBoard,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
     browserCode,
     devices, devicePeople, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,

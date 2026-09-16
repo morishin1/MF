@@ -31,6 +31,7 @@ import {
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { planFromNippo, savePlan, closeItems, shapeItem } from "../../lib/actions.js";
+import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focus.js";
 import { shape as shapeEval } from "./evaluate.js";
 
 export default async function handler(req, res) {
@@ -138,6 +139,10 @@ async function read(req, res, user, ctx) {
   // 週の締め日。この日は、振り返りを書かないと日報を出せない
   const closingOn = lastWorkdayOfWeek(weekStart(date), prefs.data?.workdays);
 
+  // 今日の重要タスクと、明日ぶんの状態。
+  // 日報は「明日の3件を決めてから」なので、画面はこれを見て欄を開け閉めする
+  const focus = await focusFor(sb, ctx, date);
+
   return json(res, 200, {
     date,
     weekStart: weekStart(date),
@@ -170,6 +175,8 @@ async function read(req, res, user, ctx) {
     kpisToday: (todayKpis.data || []).map((k) => ({
       id: k.id, label: k.label, unit: k.unit, target: k.target, actual: k.actual,
     })),
+    // 今日やると決めた重要タスクと、明日ぶんの状態（lib/focus.js）
+    focus,
     team: (today.data || []).sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     notSubmitted: (roster || [])
       .filter((e) => e.user_id && !(today.data || []).some((n) => n.user_id === e.user_id))
@@ -306,6 +313,20 @@ async function submit(res, user, ctx, body) {
 
   const sb = admin();
 
+  // 明日の重要タスクが決まっていないと、日報は出せない。
+  //
+  // ■ なぜ日報より先なのか
+  //
+  //   今日を振り返ってから明日を決める形にすると、
+  //   振り返りで力を使い切って、明日の欄が「引き続き頑張る」で埋まる。
+  //   順番を逆にする。明日を決めてから、今日を振り返る。
+  //
+  //   072 をまだ流していない環境では、これまでどおり出せる（止めない）。
+  const gate = await focusGate(sb, ctx, date);
+  if (gate && !gate.open) {
+    return json(res, 400, { error: "focus_required", hint: gate.hint, focusDate: gate.focusDate });
+  }
+
   // 週の最終勤務日は、振り返りを書いてからでないと日報を出せない。
   //
   // 週の終わりに一度も立ち止まらないまま次の週が始まると、
@@ -421,6 +442,78 @@ async function submit(res, user, ctx, body) {
 // 統合した（項目が多すぎて毎日書けない、というのが元の問題だったため）。
 // 過去に送られた感謝は tc_thanks に残っていて、本人の画面には出し続ける。
 // 新しく送る口はここには無い。
+
+/**
+ * 今日の重要タスクと、明日ぶんの状態。
+ *
+ * 072 をまだ流していない環境では null。画面は、これまでどおりの日報になる
+ */
+async function focusFor(sb, ctx, date) {
+  const focusDate = nextFocusDate(date);
+  const cols = "id, title, status, purpose, done_condition, assignee_id, due_on, priority, "
+    + "focus_rank, result, not_done_reason, carry_count";
+  try {
+    const [todayTasks, day, tomorrowTasks] = await Promise.all([
+      // 今日「やる」ぶん。人から回ってきたものも入る
+      sb.from("gw_tasks").select(cols)
+        .eq("tenant_id", ctx.tenantId).eq("assignee_id", ctx.employee.id).eq("focus_date", date)
+        .order("focus_rank", { ascending: true, nullsFirst: false }).limit(20),
+      focusDate
+        ? sb.from("gw_focus_days").select("*")
+            .eq("employee_id", ctx.employee.id).eq("focus_date", focusDate).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      // 明日「決めた」ぶん。人に渡したものも、決めた側に残る
+      focusDate
+        ? sb.from("gw_tasks").select(cols)
+            .eq("tenant_id", ctx.tenantId).eq("focus_for", ctx.employee.id).eq("focus_date", focusDate)
+            .order("focus_rank", { ascending: true, nullsFirst: false }).limit(20)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (todayTasks.error || day.error || tomorrowTasks.error) return null;
+
+    const tomorrow = tomorrowTasks.data || [];
+    return {
+      date, focusDate,
+      // 今日の3つ。日報は、これを できた／できなかった で埋めながら書く
+      today: (todayTasks.data || []).map((t) => ({
+        id: t.id, title: t.title, status: t.status,
+        doneCondition: t.done_condition, dueOn: t.due_on,
+        result: t.result, notDoneReason: t.not_done_reason, carryCount: t.carry_count || 0,
+      })),
+      progress: progressOf(todayTasks.data || []),
+      // 明日ぶん。確定していないと、日報の欄は開かない
+      tomorrow: tomorrow.map((t) => ({ id: t.id, title: t.title, dueOn: t.due_on })),
+      state: focusState({ day: day.data, tasks: tomorrow }),
+      gate: nippoGate({ day: day.data, tasks: tomorrow, focusDate }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 明日の重要タスクが確定しているか。
+ *
+ * 表がまだ無い環境（072 未適用）では null を返して、これまでどおり通す。
+ * 新しい決まりで、今日の日報が出せなくなるほうが困る
+ */
+async function focusGate(sb, ctx, date) {
+  const focusDate = nextFocusDate(date);
+  if (!focusDate) return null;
+  try {
+    const [day, tasks] = await Promise.all([
+      sb.from("gw_focus_days").select("*")
+        .eq("employee_id", ctx.employee.id).eq("focus_date", focusDate).maybeSingle(),
+      sb.from("gw_tasks").select("id, title, status, purpose, done_condition, assignee_id, due_on, priority")
+        .eq("tenant_id", ctx.tenantId).eq("focus_for", ctx.employee.id)
+        .eq("focus_date", focusDate).limit(20),
+    ]);
+    if (day.error || tasks.error) return null;          // 表も列もまだ無い
+    return nippoGate({ day: day.data, tasks: tasks.data || [], focusDate });
+  } catch {
+    return null;
+  }
+}
 
 // ---- 週次レビュー（本人の振り返り4問） ---------------------------------------
 async function saveWeekly(res, user, body) {

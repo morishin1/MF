@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260915c">
-  <link rel="stylesheet" href="css/layout.css?v=20260915c">
+  <link rel="stylesheet" href="css/app.css?v=20260916a">
+  <link rel="stylesheet" href="css/layout.css?v=20260916a">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -63,6 +63,36 @@
     .prop .ed input[type="text"] { flex: 1; min-width: 180px; }
     .prop .ed input[type="date"] { width: auto; }
 
+    /* ── 今日やる3つ ──
+       この画面でいちばん大きく出す。たくさん登録することではなく、
+       3つ終えることを目的にしているので、数（0/3）を常に見せる */
+    .f3 { border:2px solid var(--primary); border-radius:14px; padding:18px 20px; margin-bottom:18px;
+          background:linear-gradient(180deg,#f5f9ff 0%,#fff 60%); }
+    .f3.all { border-color:#3e9c5a; background:linear-gradient(180deg,#f2faf5 0%,#fff 60%); }
+    .f3 > .hd { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:4px; }
+    .f3 > .hd h2 { font-size:19px; font-weight:700; color:var(--primary-dark); margin:0;
+                   display:flex; align-items:center; gap:7px; }
+    .f3 > .hd .cnt { margin-left:auto; font-size:20px; font-weight:700;
+                     font-variant-numeric:tabular-nums; color:var(--primary-dark); }
+    .f3.all > .hd .cnt { color:#256b36; }
+    .f3 > .hd .cnt small { font-size:12px; font-weight:600; color:var(--muted); margin-left:4px; }
+    .f3 .bar { height:8px; border-radius:999px; background:#e4e8ee; overflow:hidden; margin:10px 0 14px; }
+    .f3 .bar span { display:block; height:100%; background:var(--primary); transition:width .3s; }
+    .f3.all .bar span { background:#3e9c5a; }
+
+    .f3-item { display:flex; gap:12px; align-items:flex-start; padding:13px 0;
+               border-top:1px solid var(--border); }
+    .f3-item .no { flex:0 0 26px; height:26px; border-radius:50%; background:var(--primary);
+                   color:#fff; font-size:13px; font-weight:700; display:flex;
+                   align-items:center; justify-content:center; }
+    .f3-item .bd { flex:1; min-width:0; }
+    .f3-item .ti { font-size:15.5px; font-weight:700; color:var(--primary-dark); }
+    .f3-item .me { font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.8; }
+    .f3-item .ac { flex:0 0 auto; }
+    .f3-item.done .no { background:#3e9c5a; }
+    .f3-item.done .ti { color:var(--muted); font-weight:500; text-decoration:line-through; }
+    .f3-done { text-align:center; padding:14px 0 2px; font-size:16px; font-weight:700; color:#256b36; }
+
     /* 10か条。円グラフは読みにくいので横棒にした */
     .act-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
     .act-row .n { width: 52px; color: var(--muted); }
@@ -87,6 +117,10 @@
 <div class="wrap">
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
+
+  <!-- 今日やる3つ。この画面でいちばん上・いちばん大きく。
+       10件あっても、まずこの3つを終わらせる -->
+  <div id="f3" class="hidden"></div>
 
   <!-- 3か月の行き先。一番上に置くが、大きくはしない。
        今日やることが「何のためか」が見えないと、ただの作業一覧になる。
@@ -201,9 +235,9 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260915c"></script>
-<script src="js/device.js?v=20260915c"></script>
-<script src="js/layout.js?v=20260915c"></script>
+<script src="js/api-client.js?v=20260916a"></script>
+<script src="js/device.js?v=20260916a"></script>
+<script src="js/layout.js?v=20260916a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -228,9 +262,99 @@
          </div>`);
     }
 
+    loadFocus();
     loadDashboard();
     renderTiles(await loadStats());
     loadNotices();
+  }
+
+  // ---- 今日やる3つ ------------------------------------------------------------
+  //
+  // 前の晩に決めて確定したものが、翌朝ここに出る。
+  // 「0 / 3 完了」を常に出して、3つ終えることを目的にする
+  let focusData = null;
+
+  async function loadFocus() {
+    try { focusData = await API.focus(); }
+    catch (e) {
+      // 072 をまだ流していない環境・名簿に無い人。カードごと出さない
+      return;
+    }
+    renderFocus();
+  }
+
+  function renderFocus() {
+    const box = el("f3");
+    const list = focusData?.todayTasks || [];
+    const p = focusData?.todayProgress || { done: 0, total: 0 };
+    // 今日ぶんが無い日は、決める場所へ案内するだけ
+    if (!list.length) {
+      box.classList.remove("hidden");
+      box.innerHTML = `
+        <div class="f3">
+          <div class="hd"><h2>
+            <span class="material-symbols-outlined">bolt</span>今日やる3つ</h2></div>
+          <p class="muted" style="font-size:13px;margin:6px 0 12px;">
+            今日の重要タスクは決まっていません。日報の画面で、次の営業日ぶんを決められます。</p>
+          <a class="btn btn-primary btn-sm" href="nippo.html#focus">
+            <span class="material-symbols-outlined icon-inline">edit_note</span>重要タスクを決める</a>
+        </div>`;
+      return;
+    }
+
+    box.classList.remove("hidden");
+    box.innerHTML = `
+      <div class="f3 ${p.allDone ? "all" : ""}">
+        <div class="hd">
+          <h2><span class="material-symbols-outlined">bolt</span>今日やる3つ</h2>
+          <span class="cnt">${p.done} / ${p.total}<small>完了</small></span>
+        </div>
+        <div class="bar"><span style="width:${p.pct}%"></span></div>
+        ${list.map(focusItem).join("")}
+        ${p.allDone
+          ? `<div class="f3-done">
+               <span class="material-symbols-outlined" style="vertical-align:-4px;">celebration</span>
+               今日の重要タスク完了</div>`
+          : ""}
+      </div>`;
+  }
+
+  function focusItem(t, i) {
+    const done = t.status === "done";
+    const due = t.dueOn ? String(t.dueOn).slice(5).replace("-", "/") : "";
+    return `
+      <div class="f3-item ${done ? "done" : ""}">
+        <span class="no">${done ? "✓" : i + 1}</span>
+        <div class="bd">
+          <div class="ti">${esc(t.title)}</div>
+          <div class="me">
+            ${due ? `期限 ${esc(due)}` : ""}
+            ${t.doneCondition ? `${due ? "　" : ""}完了条件：${esc(t.doneCondition)}` : ""}
+            ${t.carryCount ? `<br>持ち越し ${t.carryCount} 回目` : ""}
+          </div>
+        </div>
+        <div class="ac">
+          ${done
+            ? `<button class="btn btn-secondary btn-sm" onclick="undoFocus('${esc(t.id)}', this)">戻す</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="doneFocus('${esc(t.id)}', this)">
+                 <span class="material-symbols-outlined icon-inline">check</span>完了する</button>`}
+        </div>
+      </div>`;
+  }
+
+  async function doneFocus(id, btn) {
+    try {
+      const r = await KPLayout.busy(btn, "…", () => API.focusComplete(id));
+      await loadFocus();
+      if (r.done) window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+
+  async function undoFocus(id, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.focusReopen(id));
+      await loadFocus();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
   }
 
   // --- ① 今日の最優先 ／ ② KPI ／ ③ 昨日のふりかえり ／ ④ 今週 ---------------
