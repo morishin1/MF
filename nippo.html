@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916c">
-  <link rel="stylesheet" href="css/layout.css?v=20260916c">
+  <link rel="stylesheet" href="css/app.css?v=20260916d">
+  <link rel="stylesheet" href="css/layout.css?v=20260916d">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -426,10 +426,10 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20260916c"></script>
-<script src="js/device.js?v=20260916c"></script>
-<script src="js/layout.js?v=20260916c"></script>
-<script src="js/push.js?v=20260916c"></script>
+<script src="js/api-client.js?v=20260916d"></script>
+<script src="js/device.js?v=20260916d"></script>
+<script src="js/layout.js?v=20260916d"></script>
+<script src="js/push.js?v=20260916d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -497,7 +497,10 @@
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
 
     renderTodos();
-    loadFocus();
+    // メモの置き場所（#memo-box2）は renderFocus() が作る。
+    // 先に作ってから読まないと、出来上がる前に書き込もうとして消える
+    await loadFocus();
+    loadMemos();
     loadPlan();
     renderMidday();
     focusFromHash();
@@ -1355,6 +1358,7 @@
   // AIは案と理由を出すだけで、決めるのは人。
   // 「AIがそう言ったから」で明日の仕事が決まる形にはしない
   let focusData = null;
+  let memoData = null;
 
   async function loadFocus() {
     try { focusData = await API.focus({ date: el("f-date").value || jstToday() }); }
@@ -1428,6 +1432,7 @@
       ${overall}
       ${todayBox()}
       ${carryBox()}
+      ${memoBox()}
       <div id="fc-list">${list.map(focusTask).join("")}</div>
       ${st.confirmed ? "" : `<div id="fc-add"></div>
         <button class="btn btn-secondary btn-sm" onclick="openFocusForm()">
@@ -1501,6 +1506,80 @@
             </div>
           </div>`).join("")}
       </div>`;
+  }
+
+  // ---- とりあえずメモ ----------------------------------------------------------
+  //
+  // 日中に吐き出した1行を、ここで初めて「どうするか」を決める。
+  // AIは案を出すだけ（reviewMemos）。押すまでタスクは1件もできない
+  async function loadMemos() {
+    try { memoData = await API.memos(); }
+    catch (e) {
+      // 074 をまだ流していない環境では、静かに出さないだけにする
+      memoData = null;
+      return;
+    }
+    renderMemos();
+  }
+
+  function renderMemos() {
+    const box = el("memo-box2");
+    if (box) box.outerHTML = memoBox();
+  }
+
+  function memoBox() {
+    const list = memoData?.memos || [];
+    if (!list.length) return `<div id="memo-box2"></div>`;
+    return `
+      <div id="memo-box2" style="margin-bottom:14px;">
+        <h3 style="font-size:13.5px;margin:0 0 4px;color:#2b5f9e;">
+          とりあえずメモ（${list.length}件）</h3>
+        <p class="muted" style="font-size:12px;margin:0 0 8px;">
+          日中に残したメモです。どうするかを決めてください。
+          ${memoData.aiReady ? `<a href="#" onclick="memoPlan();return false;">AIに案を出してもらう</a>` : ""}
+        </p>
+        ${list.map((m) => `
+          <div class="fc-task">
+            <div class="ti">${esc(m.body)}</div>
+            ${m.aiDecision ? `
+              <div class="ai">
+                <b>AI：${esc(decisionLabel(m.aiDecision))}</b>${m.aiReason ? `　${esc(m.aiReason)}` : ""}
+              </div>` : ""}
+            <div class="act">
+              ${DECISION_CHOICES.map((c) => `
+                <button class="btn btn-secondary btn-sm" title="${esc(c.hint)}"
+                        onclick="decideMemo('${esc(m.id)}','${esc(c.key)}', this)">${esc(c.label)}</button>`).join("")}
+            </div>
+          </div>`).join("")}
+      </div>`;
+  }
+
+  const DECISION_CHOICES = [
+    { key: "task", label: "正式タスク化", hint: "期日・担当を決めて、タスクにする" },
+    { key: "self", label: "自分で対応済み", hint: "もう片付けた。タスク化は要らない" },
+    { key: "hand", label: "他の人へ依頼", hint: "担当を決めて、その人のタスクにする" },
+    { key: "drop", label: "不要だった", hint: "取りやめる" },
+  ];
+  const decisionLabel = (k) => DECISION_CHOICES.find((c) => c.key === k)?.label || k;
+
+  async function memoPlan() {
+    try { memoData = await API.memoReview(); renderMemos(); }
+    catch (e) { /* 案が出せなくても、手で決められるので止めない */ }
+  }
+
+  async function decideMemo(id, decision, btn) {
+    let assigneeId = null;
+    if (decision === "hand") {
+      const names = (focusData?.people || []).map((p, i) => `${i + 1}. ${p.name}`).join("\n");
+      const pick = prompt(`誰に渡しますか。番号を入れてください\n${names}`);
+      const n = Number(pick);
+      assigneeId = (focusData?.people || [])[n - 1]?.id || null;
+      if (!assigneeId) return;
+    }
+    try {
+      await KPLayout.busy(btn, "…", () => API.memoDecide({ id, decision, assigneeId }));
+      await loadMemos();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.message || "できませんでした"; }
   }
 
   function focusTask(t, i) {

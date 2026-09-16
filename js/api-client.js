@@ -672,6 +672,17 @@
     return api(`/api/tasks/board${q.toString() ? `?${q}` : ""}`);
   };
 
+  // ---- とりあえずメモ ----
+  //
+  // 期日・担当なしで1行だけ置く。退勤時にAIが見て、人が
+  // 正式タスク化／自分で対応／他の人へ依頼／不要 のどれかに決める
+  const memos = (employeeId) => api(`/api/tasks/memo${employeeId ? `?employeeId=${employeeId}` : ""}`);
+  const memoAdd = (body) => api("/api/tasks/memo", { method: "POST", body: { action: "add", body } });
+  const memoRemove = (id) => api("/api/tasks/memo", { method: "POST", body: { action: "remove", id } });
+  const memoReview = (employeeId) =>
+    api("/api/tasks/memo", { method: "POST", body: { action: "review", employeeId } });
+  const memoDecide = (body) => api("/api/tasks/memo", { method: "POST", body: { action: "decide", ...body } });
+
   // ---- 端末管理 ----
   // 管理側
   const devices = (p = {}) => {
@@ -1204,6 +1215,7 @@
     taskList, taskDetail, taskAct,
     focus, focusAct, focusAdd, focusUpdate, focusRemove, focusCheck, focusConfirm,
     focusComplete, focusReopen, focusCarryPlan, focusCarry, taskBoard,
+    memos, memoAdd, memoRemove, memoReview, memoDecide,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
     browserCode,
     devices, devicePeople, patchDevice, deviceEnrollments, deviceAlerts, patchDeviceAlert,

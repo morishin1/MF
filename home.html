@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916c">
-  <link rel="stylesheet" href="css/layout.css?v=20260916c">
+  <link rel="stylesheet" href="css/app.css?v=20260916d">
+  <link rel="stylesheet" href="css/layout.css?v=20260916d">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -121,6 +121,19 @@
   <!-- 今日やる3つ。この画面でいちばん上・いちばん大きく。
        10件あっても、まずこの3つを終わらせる -->
   <div id="f3" class="hidden"></div>
+
+  <!-- とりあえずメモ。期日・担当は要らない。1行だけ吐き出せる場所。
+       日中に発生した業務を、その場で1秒で残す。退勤時（日報）にAIが見て、
+       正式タスク化するかを本人が決める -->
+  <div id="memo-box" class="card" style="margin-bottom:18px;">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="material-symbols-outlined" style="color:var(--muted);">edit_note</span>
+      <input id="memo-input" type="text" placeholder="とりあえずメモ（例：A社 見積確認）"
+             maxlength="200" style="flex:1;border:none;background:transparent;font-size:14px;outline:none;">
+      <button class="btn btn-secondary btn-sm" onclick="addMemoQuick()">追加</button>
+    </div>
+    <div id="memo-msg" class="muted" style="font-size:12px;margin-top:4px;"></div>
+  </div>
 
   <!-- 3か月の行き先。一番上に置くが、大きくはしない。
        今日やることが「何のためか」が見えないと、ただの作業一覧になる。
@@ -235,9 +248,9 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260916c"></script>
-<script src="js/device.js?v=20260916c"></script>
-<script src="js/layout.js?v=20260916c"></script>
+<script src="js/api-client.js?v=20260916d"></script>
+<script src="js/device.js?v=20260916d"></script>
+<script src="js/layout.js?v=20260916d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -266,6 +279,34 @@
     loadDashboard();
     renderTiles(await loadStats());
     loadNotices();
+    wireMemoInput();
+  }
+
+  // ---- とりあえずメモ ----------------------------------------------------------
+  //
+  // 入れるのは本文だけ。期日・担当・完了条件は聞かない。
+  // 押した瞬間に保存し、Enterでも押せるようにする（考えさせない）
+  function wireMemoInput() {
+    const input = el("memo-input");
+    if (!input) return;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addMemoQuick();
+    });
+  }
+
+  async function addMemoQuick() {
+    const input = el("memo-input");
+    const msg = el("memo-msg");
+    const text = (input?.value || "").trim();
+    if (!text) return;
+    try {
+      await API.memoAdd(text);
+      input.value = "";
+      msg.textContent = "残しました。退勤時（日報）で、どうするか決められます。";
+      setTimeout(() => { if (msg.textContent.includes("残しました")) msg.textContent = ""; }, 4000);
+    } catch (e) {
+      msg.textContent = e.hint || e.message || "保存できませんでした";
+    }
   }
 
   // ---- 今日やる3つ ------------------------------------------------------------
