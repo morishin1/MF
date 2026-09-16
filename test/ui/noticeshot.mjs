@@ -7,7 +7,12 @@ import { shotPath } from "../_shot.mjs";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(dirname(_HERE));
 const atRoot = (p) => _join(ROOT, p);
-const { NOTICE, AGENT_NOTICE } = await import(atRoot("api/devices/me.js"));
+const { NOTICE: NOTICE_BASE, AGENT_NOTICE, WEB_AREA }
+  = await import(atRoot("api/devices/me.js"));
+
+// WEB利用は、ブラウザ拡張をつないだ端末にだけ付く（api/devices/me.js の noticeFor）。
+// この人は会社のソフトが入ったパソコンを使っていて、拡張もつながっている
+const NOTICE = { ...NOTICE_BASE, areas: [...NOTICE_BASE.areas, WEB_AREA] };
 
 const me = { email: "y@8grp.co.jp", appRole: "member", shows: {},
   gw: { employee: { id: "emp-1", display_name: "山田 太郎", status: "active" },

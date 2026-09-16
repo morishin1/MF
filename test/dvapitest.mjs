@@ -497,18 +497,20 @@ await ok("周知の文が付いてくる", async () => {
 
   assert.match(n.lead, /情報セキュリティ・業務管理・労務管理/);
   assert.match(n.lead, /公開していません/, "判定のしかたは出さないと、そう書く");
-  // 基本の形（グループウェア＋ブラウザ拡張）で、実際に取っているものだけ。
+  // この端末で、実際に取っているものだけ。
   //
   // 以前はここに「外部機器の接続状況」「ソフトウェアの変更状況」が入っていた。
   // どちらもパソコンに入れる常駐ソフト（EXE）でしか取れないもので、
   // 入れていない人には取っていない。
-  // 取っていないものを「記録します」と伝えるのは、多く取るのと同じくらい良くない
+  // 取っていないものを「記録します」と伝えるのは、多く取るのと同じくらい良くない。
+  //
+  // 同じ理由で WEB利用も外した。あれは拡張をつないだ端末でしか取れない。
+  // つないでいれば下の「告知に出すもの」で足して出す
   assert.deepEqual(n.areas, [
     "グループウェアの利用状況（ログイン・最終アクセス・操作中／離席）",
-    "WEBの利用状況（見たサイトの種類・ドメイン・見ていた時間）",
     "勤怠・日報・タスクの記録",
     "セキュリティ上必要な端末情報（OS・ブラウザ・端末の識別子）",
-  ], "基本の形で取っているものだけ");
+  ], "ログインするだけの端末で、実際に取っているものだけ");
   for (const gone of ["外部機器", "ソフトウェアの変更", "アプリケーション"]) {
     assert.ok(!n.areas.some((a) => a.includes(gone)),
       `EXE でしか取れない「${gone}」を、全員への案内に書いています`);
@@ -1141,5 +1143,68 @@ await ok("資格情報が通らなければ、版すら教えない", noEnv(asyn
   assert.equal(r.statusCode, 401);
   assert.equal(r.body?.version, undefined);
 }));
+
+// ---- 告知に、取っていないものを書かない ------------------------------------
+//
+// WEB利用（見たサイト）は、ブラウザ拡張をつないだ端末でしか取れない。
+// つないでいない人の画面に「記録します」と出すと、
+// 読んだ人は見たサイトが会社に渡っていると思って毎日を過ごすことになる。
+// 実際には1件も渡っていない。取りすぎと同じくらい、これも嘘になる。
+const WEB = "WEBの利用状況（見たサイトの種類・ドメイン・見ていた時間）";
+const areasOf = async (rows, browsers) => {
+  reset(rows);
+  db.rows.gw_device_browsers = browsers;
+  const r = res();
+  await me(get(), r);
+  return r.body.notice.areas;
+};
+
+console.log("— 告知に出すもの —");
+
+await ok("拡張をつないでいない人には、WEB利用を出さない", async () => {
+  const areas = await areasOf([device()], []);
+  assert.ok(!areas.includes(WEB), "取れていないものを「記録します」と書かない");
+  assert.ok(areas.some((a) => a.includes("グループウェアの利用状況")),
+    "取れているものは、ちゃんと書く");
+});
+
+await ok("拡張がつながっていれば、WEB利用も出す", async () => {
+  const areas = await areasOf([device()],
+    [{ tenant_id: "t1", device_id: "d1", browser: "chrome", linked: true }]);
+  assert.ok(areas.includes(WEB));
+});
+
+await ok("入れただけで、まだつないでいなければ出さない", async () => {
+  const areas = await areasOf([device()],
+    [{ tenant_id: "t1", device_id: "d1", browser: "chrome", linked: false }]);
+  assert.ok(!areas.includes(WEB));
+});
+
+await ok("よその人の拡張では出さない", async () => {
+  const areas = await areasOf([device()],
+    [{ tenant_id: "t1", device_id: "d-other", browser: "chrome", linked: true }]);
+  assert.ok(!areas.includes(WEB));
+});
+
+// 送っているのは拡張であって EXE ではない。
+// EXE を入れたパソコンにも拡張は入るので、入れば下の行で出る
+await ok("会社のソフトが入っていても、拡張がつながっていなければ出さない", async () => {
+  assert.ok(!(await areasOf([agent()], [])).includes(WEB));
+});
+
+await ok("会社のソフトのパソコンでも、拡張がつながれば出す", async () => {
+  const areas = await areasOf([agent()],
+    [{ tenant_id: "t1", device_id: AGENT_ID, browser: "chrome", linked: true }]);
+  assert.ok(areas.includes(WEB));
+});
+
+await ok("拡張の表がまだ無くても、画面は出る（WEB利用は出さない）", async () => {
+  reset([device()]);
+  db.missing = "gw_device_browsers";
+  const r = res();
+  await me(get(), r);
+  assert.equal(r.statusCode, 200, "表が無いだけで、確認画面を止めない");
+  assert.ok(!r.body.notice.areas.includes(WEB), "分からないときは、取っていない側に倒す");
+});
 
 console.log(`\n合計 ${n} 件 通過`);

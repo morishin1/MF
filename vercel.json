@@ -19,6 +19,10 @@
   ],
   "rewrites": [
     {
+      "source": "/pc",
+      "destination": "/device-consent.html"
+    },
+    {
       "source": "/ext/updates.xml",
       "destination": "/api/ext?f=updates.xml"
     },

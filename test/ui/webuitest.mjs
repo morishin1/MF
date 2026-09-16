@@ -154,8 +154,13 @@ function wire(page, who) {
 
 // 告知の文は、作り物ではなく本物を使う。
 // 写すと、片方だけ直ったときに気づけない
-const { NOTICE: NOTICE_REAL, AGENT_NOTICE: AGENT_REAL } =
+const { NOTICE: NOTICE_BASE, AGENT_NOTICE: AGENT_REAL, WEB_AREA } =
   await import("../../api/devices/me.js");
+
+// WEB利用は、ブラウザ拡張をつないだ端末にだけ付く（api/devices/me.js の noticeFor）。
+// ここで見ているのは会社のソフトが入ったパソコンなので、拡張もつながっている。
+// 付ける・付けないの判定そのものは test/dvapitest.mjs の「告知に出すもの」で見る
+const NOTICE_REAL = { ...NOTICE_BASE, areas: [...NOTICE_BASE.areas, WEB_AREA] };
 
 const asMember = () => {
   localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "a@b.c" }));

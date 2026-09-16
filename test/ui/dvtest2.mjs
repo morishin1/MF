@@ -136,8 +136,17 @@ const POLICY = {
 };
 
 // 文言は本物から取る。写しをここに置くと、片方だけ直って気づけなくなる
-const { NOTICE: NOTICE_BASE, AGENT_NOTICE } = await import(atRoot("api/devices/me.js"));
-const NOTICE = { ...NOTICE_BASE, scope: "この画面だけの場合、対象は社内システムを開いているあいだです。" };
+const { NOTICE: NOTICE_BASE, AGENT_NOTICE, WEB_AREA } = await import(atRoot("api/devices/me.js"));
+
+// ここで見たいのは「サーバが送った大分類を、画面がそのまま出すか」。
+// WEB利用はブラウザ拡張をつないだ端末にだけ付くので、
+// この人は拡張がつながっている端末を使っている、として組み立てる。
+// 付ける・付けないの判定そのものは test/dvapitest.mjs の「告知に出すもの」で見る
+const NOTICE = {
+  ...NOTICE_BASE,
+  areas: [...NOTICE_BASE.areas, WEB_AREA],
+  scope: "この画面だけの場合、対象は社内システムを開いているあいだです。",
+};
 
 const MY_UID = "TESTuid0123456789ab";
 

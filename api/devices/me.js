@@ -71,9 +71,13 @@ export const NOTICE = {
   //   取っていないものを「記録します」と伝えるのは、
   //   多く取るのと同じくらい良くない。信用がそこで終わる。
   //   EXE を入れた人にだけ、下の AGENT_NOTICE で足して伝える。
+  //
+  //   同じ理由で、WEB利用もここから外した（下の WEB_AREA）。
+  //   あれはブラウザ拡張をつないだ端末でしか取れない。
+  //   つないでいない人に「見たサイトを記録します」と読ませると、
+  //   取っていないものを取ると言ったことになる。
   areas: [
     "グループウェアの利用状況（ログイン・最終アクセス・操作中／離席）",
-    "WEBの利用状況（見たサイトの種類・ドメイン・見ていた時間）",
     "勤怠・日報・タスクの記録",
     "セキュリティ上必要な端末情報（OS・ブラウザ・端末の識別子）",
   ],
@@ -94,6 +98,20 @@ export const NOTICE = {
   ack: "これは会社ルールの周知です。同意を求めるものではありません。"
      + "内容を確認したことと、その日時を記録します。",
 };
+
+// WEB利用は、ブラウザ拡張をつないだ端末でしか取れない。
+//
+// ■ つないだ端末にだけ足す
+//
+//   拡張を入れていない人の画面では、ここは1件も動いていない。
+//   それでも「記録します」と読ませると、読んだ人は
+//   見たサイトが会社に渡っていると思って毎日を過ごすことになる。
+//   実際には渡っていない。取りすぎと同じくらい、これも嘘になる。
+//
+//   拡張をつなぐときには、つなぐ本人が押す画面（mypage.html）で
+//   この中身を読んでから押す。だから、つないだあとにここへ出しても
+//   「聞いていない」にはならない。
+export const WEB_AREA = "WEBの利用状況（見たサイトの種類・ドメイン・見ていた時間）";
 
 // 会社のソフト（エージェント）を入れたパソコンで、追加で伝えること。
 //
@@ -190,6 +208,16 @@ async function read(req, res, ctx) {
     byDay.set(u.work_date, cur);
   }
 
+  // この人の端末で、ブラウザ拡張が実際につながっているか。
+  // つながっていなければ WEB利用は1件も取れていないので、告知にも出さない。
+  // 表がまだ無いときは false のまま（取れていない側に倒す）
+  let hasExt = false;
+  if (ids.length) {
+    const { data: brs } = await sb.from("gw_device_browsers")
+      .select("device_id").in("device_id", ids).eq("linked", true).limit(1);
+    hasExt = Boolean(brs && brs.length);
+  }
+
   // 誰が自分の記録を見たか
   const { data: views } = await sb.from("gw_device_views")
     .select("at, viewer_name, scope, work_date")
@@ -202,7 +230,7 @@ async function read(req, res, ctx) {
     beatSec: BEAT_MIN * 60,
     // エージェントを入れているなら、追加で記録することも読ませる。
     // 同時に、基本のほうから「もう当てはまらない行」を外す
-    notice: noticeFor(devices || []),
+    notice: noticeFor(devices || [], hasExt),
     agentNotice: (devices || []).some((d) => d.source === "agent") ? AGENT_NOTICE : null,
     devices: (devices || []).map((d) => ({
       id: d.id, uid: d.device_uid, label: d.label,
@@ -604,10 +632,17 @@ async function raise(sb, tenantId, deviceId, alerts) {
  * 行を出し分けて「取っていません」と書いたものを実は取っている、
  * という作りにはしない。だから引き算をやめて、範囲の一文だけを変える
  */
-function noticeFor(devices) {
+function noticeFor(devices, hasExt) {
   const hasAgent = devices.some((d) => d.source === "agent");
   return {
     ...NOTICE,
+    // 取れている端末にだけ足す。取れていない端末には出さない。
+    //
+    // 見ているのは拡張がつながっているかどうかだけで、EXE の有無では変えない。
+    // WEB利用を送っているのは拡張であって EXE ではないからで、
+    // EXE を入れたパソコンにも拡張は入る（入れば、ここも自然に出る）。
+    // EXE で増えるぶんは、混ぜずに AGENT_NOTICE で別に伝える
+    areas: hasExt ? [...NOTICE.areas, WEB_AREA] : [...NOTICE.areas],
     scope: hasAgent
       ? "このパソコンには会社の端末管理ソフトが入っています。"
         + "ブラウザを開いているあいだだけでなく、このパソコンを使っているあいだが対象です。"
