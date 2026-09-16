@@ -6,7 +6,7 @@
 // 可視範囲・書き込み可否は RLS（db/005_groupware_core.sql）が決める。
 // ここでの分岐は入口の親切表示のため。
 
-import { json, readJson, methodNotAllowed } from "../../lib/http.js";
+import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
@@ -15,6 +15,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import {
   readAccounts, setAccountsActive, removeAccountingAccess, attachAccount, SYSTEMS,
 } from "../../lib/accounts.js";
+import { normalizeKind } from "../../lib/partner.js";
 
 // 退職・退職手続き中は、どのシステムにも入れない状態にする
 const LEFT = ["leaving", "left"];
@@ -24,6 +25,8 @@ const STATUSES = ["invited", "active", "leaving", "left"];
 
 const FIELDS =
   "id, tenant_id, user_id, display_name, email, department, position, employment_type, joined_on, left_on, work_location, status, created_at";
+// 075（BP）未適用でも一覧を落とさない。別に足して、だめなら本体だけで引く
+const KIND_FIELDS = `${FIELDS}, employee_kind, partner_company_id`;
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -37,13 +40,25 @@ export default async function handler(req, res) {
   const sb = userClient(req);
 
   if (req.method === "GET") {
-    const { data, error } = await sb
+    let kindReady = true;
+    let { data, error } = await sb
       .from("gw_employees")
-      .select(FIELDS)
+      .select(KIND_FIELDS)
       .eq("tenant_id", ctx.tenantId)
       .order("status", { ascending: true })
       .order("display_name", { ascending: true })
       .limit(500);
+    if (error && dbSetupHint(error, "db/075_partner_bp.sql")) {
+      // 075 未適用。BPの列を諦めて、これまでどおりの一覧は出す
+      kindReady = false;
+      ({ data, error } = await sb
+        .from("gw_employees")
+        .select(FIELDS)
+        .eq("tenant_id", ctx.tenantId)
+        .order("status", { ascending: true })
+        .order("display_name", { ascending: true })
+        .limit(500));
+    }
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
 
     // 社内ロールを添える。読めない立場（メンバー等）では空のまま返る
@@ -90,6 +105,7 @@ export default async function handler(req, res) {
       canManage: canManageHr(ctx),
       canGrantRoles: canManageHr(ctx),
       systems: SYSTEMS,
+      kindReady,
     });
   }
 
@@ -98,6 +114,10 @@ export default async function handler(req, res) {
     const body = await readJson(req);
     const row = normalize(body);
     if (row.error) return json(res, 400, row);
+    if (row.value.partner_company_id) {
+      const bad = await badPartner(sb, ctx.tenantId, row.value.partner_company_id);
+      if (bad) return json(res, 400, bad);
+    }
 
     const { data, error } = await sb
       .from("gw_employees")
@@ -143,6 +163,10 @@ export default async function handler(req, res) {
     if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
     const row = normalize(body, { partial: true });
     if (row.error) return json(res, 400, row);
+    if (row.value.partner_company_id) {
+      const bad = await badPartner(sb, ctx.tenantId, row.value.partner_company_id);
+      if (bad) return json(res, 400, bad);
+    }
 
     // 状態が変わるかどうかを、書き換える前に見ておく
     const { data: before } = await sb
@@ -259,6 +283,14 @@ async function relatedRecords(sb, tenantId, employeeId) {
   return out;
 }
 
+/** よそのテナントのBP企業を指定していないか。null なら問題なし */
+async function badPartner(sb, tenantId, partnerCompanyId) {
+  const { data } = await sb.from("gw_partner_companies").select("id")
+    .eq("id", partnerCompanyId).eq("tenant_id", tenantId).maybeSingle();
+  if (data) return null;
+  return { error: "unknown_partner", detail: "指定されたBP企業が見つかりません" };
+}
+
 function normalize(body, { partial = false } = {}) {
   const v = {};
   const has = (k) => body[k] !== undefined;
@@ -280,6 +312,14 @@ function normalize(body, { partial = false } = {}) {
       return { error: "invalid_employment_type", detail: EMPLOYMENT_TYPES.join(", ") };
     }
     v.employment_type = body.employment_type;
+  }
+  // 075（BP）未適用の環境や、呼び出し側が触れていないときは何もしない。
+  // create でも常には書かない。無い列に insert しようとして、
+  // 075 未適用の環境で新規登録そのものが落ちるのを避けるため
+  if (has("employee_kind") || has("partner_company_id")) {
+    const nk = normalizeKind(body.employee_kind, body.partner_company_id);
+    if (!nk.ok) return { error: "invalid_kind", detail: nk.hint };
+    Object.assign(v, nk.value);
   }
   if (has("status") && body.status) {
     if (!STATUSES.includes(body.status)) return { error: "invalid_status", detail: STATUSES.join(", ") };

@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916d">
-  <link rel="stylesheet" href="css/layout.css?v=20260916d">
+  <link rel="stylesheet" href="css/app.css?v=20260916e">
+  <link rel="stylesheet" href="css/layout.css?v=20260916e">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -45,6 +45,19 @@
           <option>正社員</option><option>契約社員</option><option>パート</option>
           <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
         </select>
+      </div>
+      <!-- プロパー（自社雇用）か、パートナー企業に所属するBPか。
+           075（db/075_partner_bp.sql）が未適用の環境では、この欄ごと隠す -->
+      <div id="e-kind-wrap" class="hidden">
+        <label>区分</label>
+        <select id="e-kind" onchange="toggleKindPartner()">
+          <option value="proper">プロパー</option>
+          <option value="bp">BP</option>
+        </select>
+      </div>
+      <div id="e-partner-wrap" class="hidden">
+        <label>所属先（BP企業）</label>
+        <select id="e-partner"><option value="">（選んでください）</option></select>
       </div>
       <div><label>入社日</label><input id="e-joined" type="date"></div>
       <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
@@ -95,6 +108,39 @@
     </div>
   </div>
 
+  <!-- BP企業（パートナー企業）の名簿。075（db/075_partner_bp.sql）が
+       未適用の環境では notReady になるので、カードごと隠す -->
+  <div class="card hidden" id="partner-card">
+    <h2><span class="material-symbols-outlined">apartment</span>BP企業（パートナー企業）
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="togglePartner()">
+        <span class="material-symbols-outlined icon-inline" id="partner-caret">expand_more</span>開く
+      </button>
+    </h2>
+    <div id="partner-body" class="hidden">
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
+        BPの名簿への追加は、先にここで所属先の会社を登録してから行います。
+      </p>
+      <div class="inline-controls" style="margin-bottom:10px;">
+        <div><label>会社名</label><input id="p-name" type="text" placeholder="株式会社サンプル"></div>
+        <div><label>インボイス登録番号</label><input id="p-invoice" type="text" placeholder="T1234567890123"></div>
+        <div><label>請求先 担当者名</label><input id="p-contact" type="text" placeholder="担当 太郎"></div>
+        <div><label>請求先 メール</label><input id="p-email" type="email" placeholder="billing@example.com"></div>
+        <div>
+          <button class="btn btn-primary" id="p-save" onclick="savePartner(this)">
+            <span class="material-symbols-outlined icon-inline">add</span>追加
+          </button>
+        </div>
+        <div id="p-cancel-wrap" class="hidden">
+          <button class="btn btn-secondary" onclick="resetPartnerForm()">
+            <span class="material-symbols-outlined icon-inline">close</span>編集をやめる
+          </button>
+        </div>
+      </div>
+      <div id="p-msg" class="err-text"></div>
+      <div id="partner-list"></div>
+    </div>
+  </div>
+
   <!-- サイドメニューの「権限」からここへ飛ぶ。
        社内権限は名簿の行ごとに渡すもので、専用の画面を作ると
        同じ人を2か所で探すことになる -->
@@ -108,9 +154,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916d"></script>
-<script src="js/device.js?v=20260916d"></script>
-<script src="js/layout.js?v=20260916d"></script>
+<script src="js/api-client.js?v=20260916e"></script>
+<script src="js/device.js?v=20260916e"></script>
+<script src="js/layout.js?v=20260916e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -126,9 +172,12 @@
   let canGrantRoles = false;  // 社内権限の付け外し（管理者または人事）
   let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
   let editingId = null;      // null なら追加、id が入っていればその人の編集
+  let kindReady = false;     // 075（BP）が適用済みか。未適用なら区分の欄ごと隠す
+  let partners = [];
+  let editingPartnerId = null;
 
   KPLayout.init({ active: "members", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => { if (ctx) { load(); loadPartners(); } });
 
   async function load() {
     try {
@@ -136,12 +185,133 @@
       employees = res.employees || [];
       canGrantRoles = !!res.canGrantRoles;
       canManage = !!res.canManage;
+      kindReady = !!res.kindReady;
+      el("e-kind-wrap").classList.toggle("hidden", !kindReady);
       render();
     } catch (e) {
       el("list").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
     }
+  }
+
+  // --- BP企業（パートナー企業） ------------------------------------------------
+  async function loadPartners() {
+    try {
+      const res = await API.listPartners();
+      if (res.notReady) { el("partner-card").classList.add("hidden"); return; }
+      partners = res.companies || [];
+      el("partner-card").classList.remove("hidden");
+      renderPartnerSelect();
+      renderPartners();
+      // load() と並行で走るので、先に名簿の行が描けていたら会社名を反映し直す
+      if (employees.length) render();
+    } catch (e) {
+      // 075未適用など。区分の欄自体を出していないので、静かに諦める
+      el("partner-card").classList.add("hidden");
+    }
+  }
+
+  function renderPartnerSelect() {
+    const sel = el("e-partner");
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">（選んでください）</option>`
+      + partners.map((p) => `<option value="${esc(p.id)}">${esc(p.company_name)}</option>`).join("");
+    sel.value = cur;
+  }
+
+  function togglePartner() {
+    const body = el("partner-body");
+    const open = body.classList.toggle("hidden");
+    el("partner-caret").textContent = open ? "expand_more" : "expand_less";
+    el("partner-caret").nextSibling.textContent = open ? "開く" : "閉じる";
+  }
+
+  function toggleKindPartner() {
+    el("e-partner-wrap").classList.toggle("hidden", el("e-kind").value !== "bp");
+  }
+
+  async function savePartner(btn) {
+    const msg = el("p-msg");
+    msg.textContent = "";
+    const company_name = el("p-name").value.trim();
+    if (!company_name) { msg.textContent = "会社名を入力してください"; return; }
+    const fields = {
+      company_name,
+      invoice_registration_number: el("p-invoice").value.trim() || null,
+      billing_contact_name: el("p-contact").value.trim() || null,
+      billing_contact_email: el("p-email").value.trim() || null,
+    };
+    try {
+      if (editingPartnerId) {
+        await KPLayout.busy(btn, "保存中…", () => API.updatePartner({ id: editingPartnerId, ...fields }));
+      } else {
+        await KPLayout.busy(btn, "追加中…", () => API.createPartner(fields));
+      }
+      resetPartnerForm();
+      await loadPartners();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存に失敗しました";
+    }
+  }
+
+  function startEditPartner(id) {
+    const p = partners.find((x) => x.id === id);
+    if (!p) return;
+    editingPartnerId = id;
+    el("p-name").value = p.company_name || "";
+    el("p-invoice").value = p.invoice_registration_number || "";
+    el("p-contact").value = p.billing_contact_name || "";
+    el("p-email").value = p.billing_contact_email || "";
+    el("p-save").innerHTML = '<span class="material-symbols-outlined icon-inline">save</span>保存';
+    el("p-cancel-wrap").classList.remove("hidden");
+    el("partner-body").classList.remove("hidden");
+  }
+
+  function resetPartnerForm() {
+    editingPartnerId = null;
+    for (const id of ["p-name", "p-invoice", "p-contact", "p-email"]) el(id).value = "";
+    el("p-save").innerHTML = '<span class="material-symbols-outlined icon-inline">add</span>追加';
+    el("p-cancel-wrap").classList.add("hidden");
+    el("p-msg").textContent = "";
+  }
+
+  async function removePartner(id, btn) {
+    const p = partners.find((x) => x.id === id);
+    if (!p || !confirm(`${p.company_name} を削除します。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deletePartner(id));
+      if (editingPartnerId === id) resetPartnerForm();
+      await loadPartners();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "削除できませんでした");
+    }
+  }
+
+  function renderPartners() {
+    if (!partners.length) {
+      el("partner-list").innerHTML = `<p class="muted" style="font-size:12.5px;">まだ登録されていません。</p>`;
+      return;
+    }
+    el("partner-list").innerHTML = `
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr><th>会社名</th><th>インボイス登録番号</th><th>請求先</th><th>操作</th></tr></thead>
+          <tbody>${partners.map((p) => `
+            <tr>
+              <td>${esc(p.company_name)}</td>
+              <td>${esc(p.invoice_registration_number || "—")}</td>
+              <td>${p.billing_contact_name ? esc(p.billing_contact_name) : "—"}
+                ${p.billing_contact_email ? `<br><span class="muted" style="font-size:11.5px;">${esc(p.billing_contact_email)}</span>` : ""}</td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                        onclick="startEditPartner('${esc(p.id)}')">編集</button>
+                <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                        onclick="removePartner('${esc(p.id)}', this)">削除</button>
+              </td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
   }
 
   // 追加と編集で同じフォームを使う。項目が同じものを2つ並べても、
@@ -161,6 +331,15 @@
       employment_type: el("e-type").value,
       joined_on: el("e-joined").value || null,
     };
+    // 075（BP）が入っている環境でだけ送る。未適用の環境では欄ごと隠しているので触らない
+    if (kindReady) {
+      fields.employee_kind = el("e-kind").value;
+      fields.partner_company_id = el("e-kind").value === "bp" ? (el("e-partner").value || null) : null;
+      if (fields.employee_kind === "bp" && !fields.partner_company_id) {
+        msg.textContent = "BPの場合は、所属先（BP企業）を選んでください";
+        return;
+      }
+    }
 
     try {
       if (editingId) {
@@ -236,6 +415,11 @@
     el("e-type").value = e.employment_type || "正社員";
     el("e-joined").value = e.joined_on || "";
     el("e-left").value = e.left_on || "";
+    if (kindReady) {
+      el("e-kind").value = e.employee_kind || "proper";
+      el("e-partner").value = e.partner_company_id || "";
+      toggleKindPartner();
+    }
 
     el("e-icon").textContent = "edit";
     el("e-title").textContent = `${e.display_name} さんを編集`;
@@ -253,6 +437,11 @@
       el(id).value = "";
     }
     el("e-type").value = "正社員";
+    if (kindReady) {
+      el("e-kind").value = "proper";
+      el("e-partner").value = "";
+      toggleKindPartner();
+    }
     el("e-icon").textContent = "person_add";
     el("e-title").textContent = "メンバーを追加";
     el("e-save").innerHTML = '<span class="material-symbols-outlined icon-inline">add</span>追加';
@@ -289,7 +478,7 @@
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
-            <th>氏名</th><th>部署・役職</th><th>雇用区分</th><th>状態</th><th>社内権限</th>
+            <th>氏名</th><th>部署・役職</th><th>雇用区分</th>${kindReady ? "<th>区分</th>" : ""}<th>状態</th><th>社内権限</th>
             <th>利用中のシステム</th><th>操作</th>
           </tr></thead>
           <tbody>${employees.map(row).join("")}</tbody>
@@ -303,6 +492,12 @@
         ${canGrantRoles ? "" :
           "<br>いまのアカウントには管理者権限がないため、変更できる項目がありません。"}
       </p>`;
+  }
+
+  function kindOf(e) {
+    if (e.employee_kind !== "bp") return "プロパー";
+    const p = partners.find((x) => x.id === e.partner_company_id);
+    return p ? `BP（${p.company_name}）` : "BP";
   }
 
   function row(e) {
@@ -320,6 +515,7 @@
         <td>${esc(e.display_name)}${e.email ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.email)}</span>` : ""}</td>
         <td>${esc(e.department || "—")}${e.position ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.position)}</span>` : ""}</td>
         <td>${esc(e.employment_type || "—")}</td>
+        ${kindReady ? `<td>${esc(kindOf(e))}</td>` : ""}
         <td>
           <select ${canManage ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>

@@ -299,6 +299,12 @@
   const bulkCreateEmployees = (rows, createAccounts = true) =>
     api("/api/employees/bulk", { method: "POST", body: { rows, createAccounts } });
 
+  // ---- BP企業（パートナー企業） ----
+  const listPartners = () => api("/api/partners");
+  const createPartner = (body) => api("/api/partners", { method: "POST", body });
+  const updatePartner = (body) => api("/api/partners", { method: "PATCH", body });
+  const deletePartner = (id) => api(`/api/partners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
 
@@ -1179,6 +1185,7 @@
     pushConfig, pushSubscribe, pushUnsubscribe, pushRemoveDevice, pushPrefs, pushTest,
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,
+    listPartners, createPartner, updatePartner, deletePartner,
     setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
