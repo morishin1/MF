@@ -30,6 +30,15 @@
     .dc-box.never h3 { color:#1f7a4c; }
     .dc-why { font-size:14px; line-height:2; }
 
+    /* 説明は、ふだんは畳んでおく。
+       押す場所を上に出したいので、読む人が開いたときだけ広げる */
+    .dc-sum { cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;
+              font-size:14px; font-weight:600; color:var(--primary-dark); padding:2px 0; }
+    .dc-sum::-webkit-details-marker { display:none; }
+    .dc-sum .chev { margin-left:auto; transition:transform .15s; color:var(--muted); }
+    details[open] .dc-sum .chev { transform:rotate(180deg); }
+    .dc-sum-body { padding-top:16px; }
+
     .dc-this { border:2px solid var(--primary); border-radius:12px; padding:18px 20px;
                background:#f7fbff; }
     .dc-this .name { font-size:18px; font-weight:700; color:var(--primary-dark); }
@@ -57,14 +66,24 @@
 <div class="wrap" style="max-width:760px;">
   <h1 class="kp-greet">会社貸与パソコンの端末管理について</h1>
   <p class="kp-greet-sub" id="c-lead">
-    会社ルールとして端末管理を行います。内容をお読みのうえ、
-    <b>下の「内容を確認しました」</b>を押してください。
+    会社ルールとして端末管理を行います。
+    <b>「内容を確認しました」</b>を押してください。
+    記録する内容は、下の「端末管理について」から読めます。
   </p>
   <div id="c-linked"></div>
 
   <!-- 会社として何をしているか。押す前に読めるよう、いちばん上に置く -->
   <div class="card">
-    <h2><span class="material-symbols-outlined">description</span>端末管理について</h2>
+    <!-- ふだんは畳む。押す場所を先に見せたいので。
+         中身は消していない。押すボタンが「内容を確認しました」なので、
+         その内容がどこにも無い画面にはできない（押した記録の意味が無くなる） -->
+    <details id="c-notice-box">
+      <summary class="dc-sum">
+        <span class="material-symbols-outlined">description</span>
+        端末管理について（記録する内容を読む）
+        <span class="material-symbols-outlined chev">expand_more</span>
+      </summary>
+      <div class="dc-sum-body">
 
     <p id="c-notice-lead" style="font-size:13.5px;line-height:1.95;margin:0 0 16px;"></p>
 
@@ -96,6 +115,9 @@
       <p class="dc-why" id="c-an-scope"></p>
       <p class="dc-why" id="c-an-yours"></p>
     </div>
+
+      </div>
+    </details>
   </div>
 
   <!-- いま使っている端末と、確認の記録 -->

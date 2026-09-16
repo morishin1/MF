@@ -493,6 +493,9 @@ function wire(page, me) {
     for (const gone of ["外部機器", "ソフトウェアの変更", "アプリケーションの利用状況"]) {
       check(!t.includes(gone), `取っていない「${gone}」を全員に出さない`);
     }
+    // 説明はふだん畳んである。開いたうえで、中身を読む
+    await page.locator("#c-notice-box .dc-sum").click();
+    await page.waitForTimeout(300);
     const all = await page.locator("body").innerText();
     check(!/90分|しきい値|Cookie/.test(all), "しきい値・技術仕様は出さない");
     check(!/監視/.test(all), "「監視」は使わない");

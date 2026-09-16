@@ -103,6 +103,18 @@ console.log("— 台帳に載っているとき —");
   const { page, errs } = await open({});
   check((await page.locator("#c-this button:has-text('内容を確認しました')").count()) > 0,
     "「内容を確認しました」が出る");
+
+  // 説明はふだん畳む。ただし消しはしない。
+  // 押すボタンが「内容を確認しました」なので、その内容がどこにも無い画面にすると、
+  // 押した記録が「何を確認したのか分からないもの」になる
+  check(!(await page.locator("#c-notice-box").evaluate((d) => d.open)),
+    "説明は、ふだんは畳んである");
+  await page.locator("#c-notice-box .dc-sum").click();
+  await page.waitForTimeout(300);
+  check((await page.locator("#c-areas").innerText()).includes("グループウェアの利用状況"),
+    "開けば、記録する内容がちゃんと読める");
+  await page.locator("#c-notice-box .dc-sum").click();
+  await page.waitForTimeout(200);
   await page.locator("#c-this button:has-text('内容を確認しました')").click();
   await page.waitForTimeout(700);
   check((await textOf(page)).includes("確認済み"), "押すと確認済みになる");

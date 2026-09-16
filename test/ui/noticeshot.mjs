@@ -50,6 +50,13 @@ await page.addInitScript(() => {
 await page.goto(`${BASE}/device-consent.html`);
 await page.waitForTimeout(1500);
 
+// 説明はふだん畳んである（押す場所を先に見せるため）。
+// 中身そのものは、開けばちゃんと読める。ここで見たいのはその中身
+check(!(await page.locator("#c-notice-box").evaluate((d) => d.open)),
+  "ふだんは畳んである");
+await page.locator("#c-notice-box .dc-sum").click();
+await page.waitForTimeout(300);
+
 const text = await page.locator("body").innerText();
 check(!text.includes("**"), "アスタリスクが生で出ていない");
 
