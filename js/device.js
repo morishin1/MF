@@ -27,7 +27,10 @@ window.KPDevice = (function () {
   var BEAT_MS = 5 * 60 * 1000;
   var timer = null;
   var last = 0;
-  var state = { uid: null, confirmed: false, notReady: false };
+  // failed … 合図が届かなかったときの理由。
+  //   落としたままにすると、確認画面は「登録されていません」としか言えず、
+  //   開き直しても直らないものを開き直させることになる
+  var state = { uid: null, confirmed: false, notReady: false, failed: null };
 
   /** この端末の印。無ければ作る */
   function uid() {
@@ -92,10 +95,13 @@ window.KPDevice = (function () {
       }
       state.confirmed = !!(r && r.confirmed);
       state.notReady = !!(r && r.notReady);
+      state.failed = null;
       // 表がまだ無い環境で5分ごとに叩き続けない
       if (state.notReady) stop();
     } catch (e) {
-      // 合図が届かないことより、画面が止まるほうが困る。黙って次に回す
+      // 合図が届かないことより、画面が止まるほうが困る。画面は止めない。
+      // ただし、なぜ届かなかったかは残す。確認画面がそれを読む
+      state.failed = (e && (e.hint || e.message)) || "送れませんでした";
     }
     return state;
   }

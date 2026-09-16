@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916b">
-  <link rel="stylesheet" href="css/layout.css?v=20260916b">
+  <link rel="stylesheet" href="css/app.css?v=20260916c">
+  <link rel="stylesheet" href="css/layout.css?v=20260916c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -140,9 +140,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916b"></script>
-<script src="js/device.js?v=20260916b"></script>
-<script src="js/layout.js?v=20260916b"></script>
+<script src="js/api-client.js?v=20260916c"></script>
+<script src="js/device.js?v=20260916c"></script>
+<script src="js/layout.js?v=20260916c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -181,12 +181,26 @@
       if (code) await linkAgent(code);
 
       data = await API.myDevices();
+
+      // 台帳にこの端末が出てこないことがある（合図が1回届かなかった、など）。
+      // そのまま描くと「登録されていません」で終わり、押す場所が無くなる。
+      // 押してもらうのがこの画面の用なので、黙ってもう一度だけ送り直す
+      if (!hereIn(data)) {
+        await KPDevice.beat(true);
+        myUid = KPDevice.state.uid || myUid;
+        data = await API.myDevices();
+      }
       render();
     } catch (e) {
       el("c-this").innerHTML = `<div class="banner err">
         <span class="material-symbols-outlined">error</span>
         <div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
     }
+  }
+
+  /** いま開いている端末が、台帳に出てきているか */
+  function hereIn(d) {
+    return ((d && d.devices) || []).some((x) => x.source !== "agent" && x.uid === myUid);
   }
 
   const spec = (d) => [d.os, d.browser, d.screen].filter(Boolean).join(" / ");
@@ -279,7 +293,7 @@
              <button class="btn btn-secondary btn-sm" onclick="renameThis()">名前を変える</button>
            </div>
          </div>`
-      : `<p class="muted">この端末はまだ登録されていません。画面を開き直してください。</p>`;
+      : noHere();
 
     el("c-devs").innerHTML = others.length
       ? others.map((d) => `
@@ -324,6 +338,54 @@
           <b>「アプリとしてインストール」</b>または<b>「ドックに追加」</b>を選びます。</li>
         <li>iPhone・iPad の Safari では、共有ボタンから<b>「ホーム画面に追加」</b>を選びます。</li>
       </ol>`;
+  }
+
+  /**
+   * この端末が台帳に出てこないとき。
+   *
+   * ■ 「開き直してください」で終わらせない
+   *
+   *   前はそう書いてあった。ところが開き直しても、
+   *   届かない理由が同じなら同じ画面がまた出る。
+   *   押す場所が無い画面を、何度も開き直させることになる。
+   *
+   *   出すのは「なぜ出せないか」と「次にどうするか」の2つ。
+   */
+  function noHere() {
+    // 表がまだ無い。これは本人にはどうにもできない
+    if (data && data.notReady) {
+      return `<div class="banner warn" style="display:block;margin:0;">
+        <b>この機能の準備が、まだ終わっていません。</b>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 0;">
+          お手数ですが、管理部にこの画面のことをお伝えください。
+          準備が終わると、ここに確認のボタンが出ます。</p>
+      </div>`;
+    }
+    const why = KPDevice.state.failed;
+    return `<div class="banner warn" style="display:block;margin:0;">
+      <b>この端末を、まだ台帳に載せられていません。</b>
+      <p class="muted" style="font-size:12.5px;margin:6px 0 10px;">
+        ${why ? esc(why) : "通信が届かなかったようです。"}
+        下のボタンを押すと、もう一度ためします。
+        何度やっても同じときは、管理部にお知らせください。</p>
+      <button class="btn btn-primary" onclick="retryHere(this)">
+        <span class="material-symbols-outlined icon-inline">refresh</span>もう一度ためす
+      </button>
+    </div>`;
+  }
+
+  async function retryHere(btn) {
+    el("c-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, "ためしています…", async () => {
+        await KPDevice.beat(true);
+        myUid = KPDevice.state.uid || KPDevice.uid();
+        data = await API.myDevices();
+      });
+      render();
+    } catch (e) {
+      el("c-msg").textContent = e.hint || e.message || "うまくいきませんでした";
+    }
   }
 
   // 会社のソフトを入れたパソコンの確認。ここを押すまで、そのソフトは何も送らない
