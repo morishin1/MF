@@ -189,7 +189,7 @@ await ok("STEPが計算されて返る", async () => {
   setup();
   const r = await call();
   assert.ok(Array.isArray(r.body.steps.steps));
-  assert.equal(r.body.steps.steps.length, 5);
+  assert.equal(r.body.steps.steps.length, 6);
 });
 
 await ok("届出が読めない相手には、入力が終わっていないように見える（危険側に倒す）", async () => {

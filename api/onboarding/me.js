@@ -343,7 +343,7 @@ async function read(res, user, ctx) {
     // 進み具合は全体で数える。「あと何%で入社準備が終わるか」を見せる
     progress: progressOf(items),
 
-    // ---- STEP（本人の5段階） ----
+    // ---- STEP（3者共通の6段階） ----
     contracts,
     orientation,
     stage: proc.row?.stage || null,
@@ -357,6 +357,12 @@ async function read(res, user, ctx) {
         key: d.key, title: d.title, required: d.required, status: d.status,
         collect: d.sensitive ? false : true,
       })),
+      // 会社側準備（STEP5）。書類ではない・人事が持つ項目だけ。
+      // 本人には内訳を出さない設計（本人の画面には見せない）が、
+      // 「会社確認が残っているか」だけは判定に使ってよい
+      internalItems: items
+        .filter((i) => i.owner === "hr" && i.category !== "document")
+        .map((i) => ({ title: i.title, required: i.required !== false, status: i.status })),
       stage: proc.row?.stage || null,
       procedureStatus: proc.row?.status || null,
     }),

@@ -132,12 +132,19 @@ export default async function handler(req, res) {
     .map((i) => ({
       key: i.item_key, title: i.title, required: i.required !== false, status: i.status,
     }));
+  // 会社側準備（STEP5）。書類ではない・人事が持つ項目だけ。
+  // 社労士セッションでは RLS が share_with_advisor の項目しか返さないので、
+  // 既定のチェックリストでは自然に空になる（会社確認は社労士には見せない）
+  const internalItems = items
+    .filter((i) => i.owner === "hr" && i.category !== "document")
+    .map((i) => ({ title: i.title, required: i.required !== false, status: i.status }));
 
   const steps = computeSteps({
     contracts, consents, orientation,
     profileStatus: pf?.status || null,
     missing: pf ? missingFields(pf) : [],
     documents: documents.map((d) => ({ ...d, collect: true })),
+    internalItems: role === "advisor" ? undefined : internalItems,
     stage: proc.row?.stage || null,
     procedureStatus: proc.row?.status || null,
   });
