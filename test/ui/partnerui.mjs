@@ -166,6 +166,172 @@ console.log("\n=== 075が未適用でも、これまでどおり動く ===");
   await page.close();
 }
 
+console.log("\n=== 名簿：現場契約を足す・直す ===");
+{
+  const posted = [];
+  const patched = [];
+  let contracts = [];
+  const employees = [
+    { id: "emp-1", display_name: "山田 太郎", email: "yamada@8grp.co.jp", department: "営業",
+      employment_type: "正社員", status: "active", employee_kind: "bp", partner_company_id: "co-1",
+      roles: [], accounts: {} },
+  ];
+
+  const page = await br.newPage({ viewport: { width: 1400, height: 1200 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+    localStorage.setItem("kp_layout", JSON.stringify({ appRole: "admin", name: "事務", shows: {}, stage: null }));
+  });
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+  page.on("dialog", (d) => d.accept());
+
+  await page.route("**/api/**", (route) => {
+    const req = route.request();
+    const url = req.url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+
+    if (/\/api\/employees\b/.test(url)) return send({ employees, canManage: true, canGrantRoles: true, systems: {}, kindReady: true });
+    if (/\/api\/partners\b/.test(url)) return send({ companies: [{ id: "co-1", company_name: "協力会社A" }], canManage: true });
+    if (/\/api\/site-contracts/.test(url)) {
+      if (req.method() === "POST") {
+        const b = JSON.parse(req.postData() || "{}");
+        posted.push(b);
+        const made = { id: `sc-${contracts.length + 1}`, employee_id: b.employeeId,
+          engagement_kind: b.engagementKind, site_company: b.siteCompany, prime_company: b.primeCompany,
+          period_from: b.periodFrom, period_to: b.periodTo, unit_price: b.unitPrice,
+          unit_price_type: b.unitPriceType, settlement_condition: b.settlementCondition,
+          renewal_status: b.renewalStatus, note: b.note };
+        contracts = [...contracts, made];
+        return send({ contract: made });
+      }
+      if (req.method() === "PATCH") {
+        const b = JSON.parse(req.postData() || "{}");
+        patched.push(b);
+        contracts = contracts.map((c) => (c.id === b.id ? { ...c, renewal_status: b.renewalStatus ?? c.renewal_status } : c));
+        return send({ contract: contracts.find((c) => c.id === b.id) });
+      }
+      return send({ contracts });
+    }
+    if (/\/api\/billing-progress/.test(url)) return send({ progress: [] });
+    if (/\/api\/me\b/.test(url)) return send(ADMIN);
+    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    if (/\/api\/badges/.test(url)) return send({ badges: {} });
+    return send({});
+  });
+
+  await page.goto(`${BASE}/admin-members.html`);
+  await page.waitForTimeout(1200);
+
+  console.log("— パネルを開ける —");
+  await page.locator("tr", { hasText: "山田 太郎" }).locator("button", { hasText: "現場契約" }).click();
+  await page.waitForTimeout(400);
+  check(await page.locator("#e-site").isVisible(), "現場契約のパネルが開く");
+  check(/まだ登録されていません/.test(await page.locator("#e-site").innerText()), "最初は空だと分かる");
+
+  console.log("— 追加できる —");
+  await page.locator("#sc-site").fill("客先B株式会社");
+  await page.locator("#sc-from").fill("2026-10-01");
+  await page.locator("#sc-price").fill("700000");
+  await page.locator("#sc-save").click();
+  await page.waitForTimeout(500);
+  const sent = posted[0];
+  check(sent?.employeeId === "emp-1", "誰のぶんかが送られる");
+  check(sent?.siteCompany === "客先B株式会社", "入れた内容がそのまま送られる");
+  check(/客先B株式会社/.test(await page.locator("#e-site").innerText()), "一覧に出る");
+
+  console.log("— 更新状態を直せる —");
+  await page.locator("#e-site button", { hasText: "編集" }).click();
+  await page.waitForTimeout(300);
+  check(await page.locator("#sc-site").inputValue() === "客先B株式会社", "いまの内容が入っている");
+  await page.locator("#sc-renewal").selectOption("confirmed");
+  await page.locator("#sc-save").click();
+  await page.waitForTimeout(500);
+  check(patched[0]?.renewalStatus === "confirmed", "更新状態が送られる");
+  check(/更新確認済み/.test(await page.locator("#e-site").innerText()), "一覧の表示も変わる");
+
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 名簿：今月の請求進捗を進める ===");
+{
+  const ensured = [];
+  const patched = [];
+  const ym = new Date().toISOString().slice(0, 7);
+  let progress = [];
+  const employees = [
+    { id: "emp-1", display_name: "山田 太郎", email: "yamada@8grp.co.jp", department: "営業",
+      employment_type: "正社員", status: "active", employee_kind: "bp", partner_company_id: "co-1",
+      roles: [], accounts: {} },
+  ];
+  const contracts = [
+    { id: "sc-1", employee_id: "emp-1", engagement_kind: "bp", site_company: "客先C株式会社",
+      prime_company: null, period_from: "2026-01-01", period_to: null,
+      unit_price: 700000, unit_price_type: "月額", renewal_status: "confirmed" },
+  ];
+
+  const page = await br.newPage({ viewport: { width: 1400, height: 1200 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+    localStorage.setItem("kp_layout", JSON.stringify({ appRole: "admin", name: "事務", shows: {}, stage: null }));
+  });
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+
+  await page.route("**/api/**", (route) => {
+    const req = route.request();
+    const url = req.url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+
+    if (/\/api\/employees\b/.test(url)) return send({ employees, canManage: true, canGrantRoles: true, systems: {}, kindReady: true });
+    if (/\/api\/partners\b/.test(url)) return send({ companies: [], canManage: true });
+    if (/\/api\/site-contracts/.test(url)) return send({ contracts });
+    if (/\/api\/billing-progress/.test(url)) {
+      if (req.method() === "POST") {
+        const b = JSON.parse(req.postData() || "{}");
+        ensured.push(b);
+        const made = { id: "bp-1", site_contract_id: b.siteContractId, billing_month: b.billingMonth,
+          timesheet_received: false, work_confirmed: false, board_created: false, sent: false, bp_invoice_received: false };
+        progress = [made];
+        return send({ progress: made, created: true });
+      }
+      if (req.method() === "PATCH") {
+        const b = JSON.parse(req.postData() || "{}");
+        patched.push(b);
+        progress = progress.map((p) => (p.id === b.id ? { ...p, [b.stage]: b.done } : p));
+        return send({ progress: progress.find((p) => p.id === b.id) });
+      }
+      return send({ progress });
+    }
+    if (/\/api\/me\b/.test(url)) return send(ADMIN);
+    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    if (/\/api\/badges/.test(url)) return send({ badges: {} });
+    return send({});
+  });
+
+  await page.goto(`${BASE}/admin-members.html`);
+  await page.waitForTimeout(1200);
+
+  await page.locator("tr", { hasText: "山田 太郎" }).locator("button", { hasText: "現場契約" }).click();
+  await page.waitForTimeout(400);
+
+  console.log("— 今月の進捗を用意する —");
+  check(new RegExp(`今月（${ym}）の請求進捗`).test(await page.locator("#e-site").innerText()), "見出しに今月が出る");
+  await page.locator("#e-site button", { hasText: "今月の進捗を用意する" }).click();
+  await page.waitForTimeout(500);
+  check(ensured[0]?.siteContractId === "sc-1" && ensured[0]?.billingMonth === ym, "対象の契約・月で用意する");
+
+  console.log("— 段を進められる —");
+  check(await page.locator("#e-site input[type=checkbox]").count() === 5, "5段のチェックが出る");
+  await page.locator("#e-site label", { hasText: "勤務表" }).locator("input").check();
+  await page.waitForTimeout(500);
+  check(patched[0]?.stage === "timesheet_received" && patched[0]?.done === true, "その段だけ送られる");
+
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");
 process.exit(bad ? 1 : 0);

@@ -16,6 +16,7 @@ import { ensureProcedureFolders, shareAdvisorFolder, shareEmployeeFolders, folde
 import { admin } from "../../lib/supabase.js";
 import { logSensitiveMany } from "../../lib/sensitive-log.js";
 import { mynumberLabel, MYNUMBER_STATES } from "../../lib/mynumber.js";
+import { buildTask, runEventTasks } from "../../lib/task-events.js";
 
 const KINDS = ["onboarding", "offboarding"];
 const STATUSES = ["not_started", "in_progress", "done", "cancelled"];
@@ -175,6 +176,26 @@ export default async function handler(req, res) {
 
     // 個人フォルダ。未設定の環境では作らない。失敗しても手続きは成立させる
     const folder = await attachFolder(sb, ctx.tenantId, proc, employee.display_name);
+
+    // 業務イベント「入社決定」→ 共通タスクへ。
+    //
+    // PC・Slack・勤怠などの会社側準備は gw_procedure_items（STEP5・会社確認）が
+    // すでに項目ごとの進み具合を持っている。ここで同じものを別のタスクとして
+    // もう1つ作ると、どちらが本当の状態か分からなくなる（二重管理）。
+    // 代わりに、まとめて1件の「入社準備を進める」タスクだけを作り、
+    // 実際のチェックはこれまでどおり admin-hr.html / onboarding.html（STEP5）で行う。
+    // 失敗してもタスクだけの話なので、手続きの作成は止めない
+    if (kind === "onboarding") {
+      await runEventTasks(admin(), [buildTask({
+        tenantId: ctx.tenantId, eventKey: "onboarding_decided", entityId: proc.id,
+        title: `${employee.display_name}さんの入社準備を進める（PC・Slack・勤怠など）`,
+        body: "会社側の準備は、入社手続きの共有ページ（STEP5）でチェックしてください。",
+        assigneeId: ctx.employee?.id || null,
+        dueOn: proc.target_on || null,
+        category: "入社手続き",
+        link: `admin-hr.html?id=${proc.id}`,
+      })]).catch((e) => console.error("[onboarding] 入社準備タスクを作れませんでした:", e.message));
+    }
 
     return json(res, 200, {
       procedure: {

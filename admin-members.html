@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916f">
-  <link rel="stylesheet" href="css/layout.css?v=20260916f">
+  <link rel="stylesheet" href="css/app.css?v=20260916h">
+  <link rel="stylesheet" href="css/layout.css?v=20260916h">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -79,6 +79,7 @@
     </p>
     <div id="e-msg" class="err-text"></div>
     <div id="e-account"></div>
+    <div id="e-site"></div>
   </div>
 
   <div class="card">
@@ -154,9 +155,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916f"></script>
-<script src="js/device.js?v=20260916f"></script>
-<script src="js/layout.js?v=20260916f"></script>
+<script src="js/api-client.js?v=20260916h"></script>
+<script src="js/device.js?v=20260916h"></script>
+<script src="js/layout.js?v=20260916h"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -534,6 +535,9 @@
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   title="この方が使うGoogleドライブのフォルダ"
                   onclick="openDrive('${esc(e.id)}')">フォルダ</button>
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                  title="現場常駐の契約（客先・単価・更新状態）"
+                  onclick="openSiteContracts('${esc(e.id)}')">現場契約</button>
           <!-- 名簿からそのまま頼めるようにする。
                別画面へ行って、もう一度この人を探し直す手間を無くす -->
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
@@ -659,6 +663,229 @@
   }
 
   function closeAccount() { el("e-account").innerHTML = ""; }
+
+  // ---- SES現場契約（社員/BP → 現場契約） ----------------------------------------
+  //
+  // 人員マスターとは別の表（gw_site_contracts）に持つが、画面は増やさない。
+  // 名簿のこの人の行から、そのまま開いて足す・直す。
+  // 単価・精算条件は機微情報なので、開けるのは管理者・人事だけ（RLSと同じ絞り）
+  const ENGAGEMENT_LABEL = { pp: "PP（自社プロパー）", bp: "BP（協力会社）" };
+  const RENEWAL_LABEL = { pending: "未確認", confirmed: "更新確認済み・継続",
+                          ending: "終了予定", renewed: "更新手続き済み" };
+  // 月次請求進捗（優先5）。勤務表受領→稼働確認→Board作成→送付→BP請求書受領
+  const BILLING_STAGE = [
+    ["timesheet_received", "勤務表"], ["work_confirmed", "稼働確認"], ["board_created", "Board作成"],
+    ["sent", "送付"], ["bp_invoice_received", "BP請求書"],
+  ];
+  const currentYm = () => new Date().toISOString().slice(0, 7);
+
+  let siteContracts = [];
+  let siteContractFor = null;
+  let editingSiteContractId = null;
+  let billingProgress = [];   // 今月ぶん。対象は siteContractFor の全契約
+
+  async function openSiteContracts(id) {
+    const e = employees.find((x) => x.id === id);
+    if (!e) return;
+    siteContractFor = e;
+    editingSiteContractId = null;
+    try {
+      const [res, bres] = await Promise.all([
+        API.listSiteContracts(id),
+        API.listBillingProgress(currentYm(), { employeeId: id }).catch(() => ({ progress: [] })),
+      ]);
+      siteContracts = res.contracts || [];
+      billingProgress = bres.progress || [];
+    } catch (err) {
+      el("e-site").innerHTML = `<div class="banner err" style="margin-top:12px;">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(err.hint || err.detail || err.message || "取得できませんでした")}</div></div>`;
+      return;
+    }
+    renderSiteContracts();
+    el("e-site").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function closeSiteContracts() { el("e-site").innerHTML = ""; siteContractFor = null; }
+
+  function renderSiteContracts() {
+    const e = siteContractFor;
+    if (!e) return;
+    const editing = siteContracts.find((c) => c.id === editingSiteContractId) || null;
+
+    el("e-site").innerHTML = `
+      <div class="card" style="margin-top:12px;border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">work_history</span>${esc(e.display_name)} さんの現場契約</h2>
+        <div class="table-scroll" style="margin-bottom:14px;">
+          ${siteContracts.length ? `
+          <table class="kp-items">
+            <thead><tr><th>区分</th><th>所属会社</th><th>上位会社</th><th>期間</th>
+              <th>単価</th><th>更新状態</th><th></th></tr></thead>
+            <tbody>${siteContracts.map((c) => `
+              <tr>
+                <td>${esc(ENGAGEMENT_LABEL[c.engagement_kind] || c.engagement_kind)}</td>
+                <td>${esc(c.site_company)}</td>
+                <td>${esc(c.prime_company || "—")}</td>
+                <td>${esc(c.period_from)} 〜 ${esc(c.period_to || "未定")}</td>
+                <td>${c.unit_price != null ? `${Number(c.unit_price).toLocaleString("ja-JP")}円／${esc(c.unit_price_type)}` : "—"}</td>
+                <td><span class="kp-chip ${c.renewal_status === "confirmed" || c.renewal_status === "renewed" ? "event"
+                    : c.renewal_status === "ending" ? "important" : "draft"}">${esc(RENEWAL_LABEL[c.renewal_status] || c.renewal_status)}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-secondary btn-sm" onclick="startEditSiteContract('${esc(c.id)}')">編集</button>
+                  <button class="btn btn-secondary btn-sm" onclick="removeSiteContract('${esc(c.id)}', this)">削除</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>` : `<p class="muted" style="font-size:12.5px;">まだ登録されていません。</p>`}
+        </div>
+
+        ${renderBillingSection()}
+
+        <div class="inline-controls">
+          <div><label>区分</label>
+            <select id="sc-kind">
+              <option value="bp"${(editing?.engagement_kind || "bp") === "bp" ? " selected" : ""}>BP（協力会社）</option>
+              <option value="pp"${editing?.engagement_kind === "pp" ? " selected" : ""}>PP（自社プロパー）</option>
+            </select></div>
+          <div><label>所属会社（常駐先）</label>
+            <input id="sc-site" type="text" placeholder="◯◯株式会社" value="${esc(editing?.site_company || "")}"></div>
+          <div><label>上位会社（任意）</label>
+            <input id="sc-prime" type="text" placeholder="多次請けのときの直上の契約相手" value="${esc(editing?.prime_company || "")}"></div>
+          <div><label>契約開始日</label>
+            <input id="sc-from" type="date" value="${esc(editing?.period_from || "")}"></div>
+          <div><label>契約終了日（任意）</label>
+            <input id="sc-to" type="date" value="${esc(editing?.period_to || "")}"></div>
+          <div><label>単価</label>
+            <input id="sc-price" type="number" min="0" placeholder="700000" value="${editing?.unit_price ?? ""}"></div>
+          <div><label>単価の種類</label>
+            <select id="sc-price-type">
+              ${["月額", "時給", "日給"].map((t) =>
+                `<option value="${t}"${(editing?.unit_price_type || "月額") === t ? " selected" : ""}>${t}</option>`).join("")}
+            </select></div>
+          <div><label>更新状態</label>
+            <select id="sc-renewal">
+              ${Object.entries(RENEWAL_LABEL).map(([k, l]) =>
+                `<option value="${k}"${(editing?.renewal_status || "pending") === k ? " selected" : ""}>${l}</option>`).join("")}
+            </select></div>
+          <div style="flex-basis:100%;"><label>精算条件（任意）</label>
+            <input id="sc-settle" type="text" placeholder="140h〜180h、超過1,500円/控除1,200円"
+                   value="${esc(editing?.settlement_condition || "")}"></div>
+          <div style="flex-basis:100%;"><label>メモ（任意）</label>
+            <input id="sc-note" type="text" value="${esc(editing?.note || "")}"></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="sc-save" onclick="saveSiteContract(this)">
+            <span class="material-symbols-outlined icon-inline">${editing ? "save" : "add"}</span>${editing ? "保存" : "追加"}
+          </button>
+          ${editing ? `<button class="btn btn-secondary" onclick="editingSiteContractId=null;renderSiteContracts();">やめる</button>` : ""}
+          <button class="btn btn-secondary" onclick="closeSiteContracts()">閉じる</button>
+        </div>
+        <div id="sc-msg" class="err-text" style="margin-top:8px;"></div>
+      </div>`;
+  }
+
+  // ---- 今月の請求進捗（優先5・最小構成） --------------------------------------------
+  //
+  // 請求書そのものはここでは作らない。勤務表受領→稼働確認→Board作成→送付→
+  // BP請求書受領の5段だけ。今月動いている契約（終了日が無いか、今月以降）だけに出す
+  function renderBillingSection() {
+    const ym = currentYm();
+    const active = siteContracts.filter((c) => c.period_from <= `${ym}-31` && (!c.period_to || c.period_to >= `${ym}-01`));
+    if (!active.length) return "";
+
+    return `
+      <div style="margin-bottom:16px;">
+        <b style="font-size:13px;">今月（${esc(ym)}）の請求進捗</b>
+        <div class="ob-final" style="margin-top:8px;">
+          ${active.map((c) => {
+            const p = billingProgress.find((x) => x.site_contract_id === c.id);
+            if (!p) {
+              return `<div class="ob-final-row">
+                <span class="l">${esc(c.site_company)}</span>
+                <span class="n"><button class="btn btn-secondary btn-sm" onclick="ensureBilling('${esc(c.id)}', this)">今月の進捗を用意する</button></span>
+              </div>`;
+            }
+            return `<div class="ob-final-row" style="cursor:default;">
+              <span class="l">${esc(c.site_company)}</span>
+              <span class="n" style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${BILLING_STAGE.map(([key, label]) => `
+                  <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;cursor:pointer;">
+                    <input type="checkbox" style="width:auto;margin:0;" ${p[key] ? "checked" : ""}
+                           onchange="toggleBillingStage('${esc(p.id)}','${key}', this.checked)">
+                    ${label}
+                  </label>`).join("")}
+              </span>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>`;
+  }
+
+  async function ensureBilling(siteContractId, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.ensureBillingProgress({
+        employeeId: siteContractFor.id, siteContractId, billingMonth: currentYm(),
+      }));
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  async function toggleBillingStage(progressId, stage, done) {
+    try {
+      await API.updateBillingProgress({ id: progressId, stage, done });
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  function startEditSiteContract(id) {
+    editingSiteContractId = id;
+    renderSiteContracts();
+  }
+
+  async function saveSiteContract(btn) {
+    const msg = el("sc-msg");
+    msg.textContent = "";
+    const fields = {
+      engagementKind: el("sc-kind").value,
+      siteCompany: el("sc-site").value.trim(),
+      primeCompany: el("sc-prime").value.trim() || null,
+      periodFrom: el("sc-from").value,
+      periodTo: el("sc-to").value || null,
+      unitPrice: el("sc-price").value === "" ? null : Number(el("sc-price").value),
+      unitPriceType: el("sc-price-type").value,
+      renewalStatus: el("sc-renewal").value,
+      settlementCondition: el("sc-settle").value.trim() || null,
+      note: el("sc-note").value.trim() || null,
+    };
+    if (!fields.siteCompany) { msg.textContent = "所属会社（常駐先）を入力してください"; return; }
+    if (!fields.periodFrom) { msg.textContent = "契約開始日を入力してください"; return; }
+    try {
+      if (editingSiteContractId) {
+        await KPLayout.busy(btn, "保存中…", () => API.updateSiteContract({ id: editingSiteContractId, ...fields }));
+      } else {
+        await KPLayout.busy(btn, "追加中…", () => API.createSiteContract({ employeeId: siteContractFor.id, ...fields }));
+      }
+      editingSiteContractId = null;
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存に失敗しました";
+    }
+  }
+
+  async function removeSiteContract(id, btn) {
+    if (!confirm("この現場契約を削除します。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deleteSiteContract(id));
+      if (editingSiteContractId === id) editingSiteContractId = null;
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "削除できませんでした");
+    }
+  }
 
   // ---- 共有フォルダ -----------------------------------------------------------
   //

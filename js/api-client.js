@@ -305,6 +305,23 @@
   const updatePartner = (body) => api("/api/partners", { method: "PATCH", body });
   const deletePartner = (id) => api(`/api/partners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
+  // ---- SES現場契約（社員/BP → 現場契約） ----
+  const listSiteContracts = (employeeId) =>
+    api(`/api/site-contracts${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+  const createSiteContract = (body) => api("/api/site-contracts", { method: "POST", body });
+  const updateSiteContract = (body) => api("/api/site-contracts", { method: "PATCH", body });
+  const deleteSiteContract = (id) => api(`/api/site-contracts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  // ---- 月次請求進捗（勤務表受領→稼働確認→Board作成→送付→BP請求書受領） ----
+  const listBillingProgress = (month, opts = {}) => {
+    const q = new URLSearchParams({ month });
+    if (opts.employeeId) q.set("employeeId", opts.employeeId);
+    if (opts.siteContractId) q.set("siteContractId", opts.siteContractId);
+    return api(`/api/billing-progress?${q.toString()}`);
+  };
+  const ensureBillingProgress = (body) => api("/api/billing-progress", { method: "POST", body });
+  const updateBillingProgress = (body) => api("/api/billing-progress", { method: "PATCH", body });
+
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
 
@@ -1191,6 +1208,8 @@
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,
     listPartners, createPartner, updatePartner, deletePartner,
+    listSiteContracts, createSiteContract, updateSiteContract, deleteSiteContract,
+    listBillingProgress, ensureBillingProgress, updateBillingProgress,
     setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
