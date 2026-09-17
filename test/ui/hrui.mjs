@@ -351,53 +351,10 @@ console.log("\n— 通知から直接ひらく —");
   await p2.close();
 }
 
-console.log("\n— ホームの「今日対応する入退社」 —");
-{
-  const p3 = await br.newPage({ viewport: { width: 1440, height: 900 }, timezoneId: "Asia/Tokyo" });
-  await p3.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "a@b.c" }));
-    localStorage.setItem("kp_layout", JSON.stringify({
-      appRole: "admin", name: "事務", shows: {}, stage: null }));
-  });
-  await p3.route("**/api/**", (route) => {
-    const url = route.request().url();
-    const send = (b) => route.fulfill({ status: 200, contentType: "application/json",
-                                        body: JSON.stringify(b) });
-    if (/\/api\/hr\?soon=1/.test(url)) {
-      return send({ today: "2026-09-28", soon: [{
-        id: "p1", kind: "onboarding", name: "山田 太郎", due: "入社まで3日",
-        days: 3, urgency: "soon", progress: { done: 7, total: 10 },
-        open: [{ title: "会社PCの準備", role: "IT・管理" },
-               { title: "メールの発行", role: "IT・管理" }],
-        recentDone: "労働条件・契約の確認",
-      }] });
-    }
-    if (/\/api\/me\b/.test(url)) {
-      return send({ email: "a@b.c", appRole: "admin", shows: {}, isAdmin: true,
-        gw: { employee: { id: "e1", display_name: "事務", status: "active" },
-              roles: ["owner"], isAdmin: true, tenantId: "t1", stage: null } });
-    }
-    return send({ notifications: [], unread: 0, badges: {}, clients: [] });
-  });
-  await p3.goto(`${BASE}/admin-dashboard.html`);
-  await p3.waitForTimeout(1300);
-
-  const box = p3.locator("#hr-soon");
-  check(await box.isVisible(), "ホームに出る");
-  const t = await box.innerText();
-  check(/今日対応する入退社/.test(t), "見出し");
-  check(/山田 太郎/.test(t), "誰の");
-  check(/入社まで3日/.test(t), "いつ");
-  check(/IT・管理：会社PCの準備/.test(t), "何が残っているか");
-  check(/労働条件・契約の確認/.test(t), "終わったものも1つ出す");
-  check(/🔴|🟠/.test(t), "急ぎが目で分かる");
-  check(/✅/.test(t), "終わったものが目で分かる");
-
-  const href = await box.locator("a").first().getAttribute("href");
-  check(href === "admin-hr.html?id=p1", `押すとその人が開く（${href}）`);
-  await p3.screenshot({ path: shotPath("hr-home.png") });
-  await p3.close();
-}
+// 「今日対応する入退社」は、以前は admin-dashboard.html にも出していたが、
+// ダッシュボードを「担当者／今日3タスク／完了数／期限超過／契約更新待ち」だけに
+// 絞ったのに伴い、そちらからは外した（admin-hr.html 自体の一覧・詳細はそのまま）。
+// ダッシュボード側のテストは test/ui/... の別ファイルへ
 
 // ---- 表がまだ無いとき -----------------------------------------------------------
 //

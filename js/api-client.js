@@ -971,6 +971,8 @@
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
     api(`/api/tasks${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`);
+  // 管理者ダッシュボード：人ごとの今日3つ・完了数・期限超過・契約更新待ち
+  const dashboardTeam = () => api("/api/dashboard/team");
   const createTask = (task) =>
     api("/api/tasks", { method: "POST", body: task }).then((d) => d.task);
   const updateTask = (task) =>
@@ -1239,7 +1241,7 @@
     listExpenses, createExpense, decideExpense, deleteExpense,
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
-    listTasks, createTask, updateTask, deleteTask, acceptTask,
+    listTasks, createTask, updateTask, deleteTask, acceptTask, dashboardTeam,
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,

@@ -53,6 +53,8 @@ create index if not exists idx_gw_billing_progress_month
 create index if not exists idx_gw_billing_progress_contract
   on public.gw_billing_progress(site_contract_id);
 
+-- 単価そのものは持たないが、どの現場・どの契約の請求が動いているかも
+-- 社外には出さない情報。db/076（gw_site_contracts）と同じ絞り方（is_tenant_staff）
 alter table public.gw_billing_progress enable row level security;
 
 drop policy if exists gw_billing_progress_staff on public.gw_billing_progress;

@@ -20,7 +20,16 @@
 -- ■ 機微情報
 --
 --   単価・精算条件は、本人には見せない情報（他の社員の給与を見せないのと同じ）。
---   読み書きとも社内スタッフ（管理者・人事）だけに絞る。本人にも社労士にも見せない。
+--   読み書きとも is_tenant_staff（memberships が admin/staff の人）だけに絞る。
+--   本人にも社労士にも見せない。
+--
+--   is_tenant_staff は「管理者・人事」限定ではなく、社内スタッフ全員（admin/staff）を通す。
+--   075（gw_partner_companies）の書き込み側は gw_is_hr を使っているが、
+--   gw_is_hr は hr/owner の権限付与 OR is_tenant_staff の合成（041_admin_is_hr.sql）で、
+--   is_tenant_staff の上位互換（緩いほう）でしかない。したがって is_tenant_staff だけに
+--   絞るここでの書き方のほうが、実効的には075よりわずかに狭い。
+--   「人事だけ」に本当に絞りたい場合は、いまの2関数では表現できず、
+--   新しいRLS関数が要る（このマイグレーションでは作っていない）
 --
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
 -- 前提: 075_partner_bp.sql（is_tenant_staff / gw_is_hr は既存のRLS関数を再利用）
@@ -80,7 +89,7 @@ create index if not exists idx_gw_site_contracts_period_to
   on public.gw_site_contracts(tenant_id, period_to) where period_to is not null;
 
 -- -----------------------------------------------------------------------------
--- RLS：単価・精算条件は機微情報。社内スタッフ（管理者・人事）だけ
+-- RLS：単価・精算条件は機微情報。社内スタッフ（admin/staff）だけ
 -- -----------------------------------------------------------------------------
 alter table public.gw_site_contracts enable row level security;
 

@@ -321,6 +321,30 @@ await ok("まとめて走ると、4種類の内訳が返る", async () => {
     r.body.deviceMissing + r.body.contractExpiry + r.body.siteContractExpiry + r.body.monthStartBp);
 });
 
+await ok("cronを続けて2回走らせても、タスクも請求進捗の行も増えない（二重起票しない）", async () => {
+  db.rows = {}; db.missingTables = new Set();
+  setupDevices(); setupContracts(); setupSiteContracts();
+  db.rows.gw_employees.push(
+    { id: "bp-9", tenant_id: "t1", display_name: "BP 九郎", employee_kind: "bp",
+      status: "active", partner_company_id: "pc-1" },
+  );
+  db.rows.gw_site_contracts.push(
+    { id: "sc-bp9", tenant_id: "t1", employee_id: "bp-9", period_from: "2026-01-01", period_to: null },
+  );
+  db.rows.gw_billing_progress = [];
+
+  await cron({ method: "GET", url: "/api/cron/task-events", headers: {} }, res());
+  const tasksAfter1 = (db.rows.gw_tasks || []).length;
+  const billingAfter1 = (db.rows.gw_billing_progress || []).length;
+  assert.ok(tasksAfter1 > 0, "前提：1回目で何かしらタスクができている");
+
+  const r2 = res();
+  await cron({ method: "GET", url: "/api/cron/task-events", headers: {} }, r2);
+  assert.equal(r2.body.made, 0, "2回目は新規タスクを作らない");
+  assert.equal((db.rows.gw_tasks || []).length, tasksAfter1, "タスクの総数が増えない");
+  assert.equal((db.rows.gw_billing_progress || []).length, billingAfter1, "請求進捗の行数も増えない");
+});
+
 console.log("— 入社手続きを作ったその場で、入社準備タスクが1件できる —");
 
 const callOnboarding = async (body) => {
