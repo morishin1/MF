@@ -983,6 +983,11 @@
   const submitProcedureItem = (itemId, opts = {}) =>
     api("/api/onboarding/submit", { method: "POST", body: { itemId, ...opts } });
 
+  // ---- 入社手続きの共通ページ（本人・管理者・社労士で共有） ----
+  // 進み具合の骨組みだけ。中身の読み書きは今までどおり別の口を使う
+  const onboardingStatus = (employeeId) =>
+    api(`/api/onboarding/status${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+
   // ---- 入社フォーム（本人が使う唯一の口） ----
   // 個人情報・書類・同意を1画面で終わらせる。
   // 会社が既に知っていること（労働条件・担当業務）は読み取り専用で返る
@@ -1241,6 +1246,7 @@
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
+    onboardingStatus,
     myOnboarding, saveMyOnboarding, myOnboardingConsent, onboardBrief,
     orientation, orientationConfirm, orientationSave,
     retention, retentionRule, retentionDelete, payrollCsv,

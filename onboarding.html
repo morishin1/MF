@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916e">
-  <link rel="stylesheet" href="css/layout.css?v=20260916e">
+  <link rel="stylesheet" href="css/app.css?v=20260916f">
+  <link rel="stylesheet" href="css/layout.css?v=20260916f">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -70,7 +70,7 @@
     .ob-alt summary { cursor:pointer; font-size:11.5px; color:var(--muted); }
     .ob-alt .dz { margin-top:8px; }
 
-    /* 最後の確認。残っているものが一目で分かるように */
+    /* 最後の確認・会社側準備の一覧。残っているものが一目で分かるように */
     .ob-final { border:1px solid var(--border); border-radius:10px; margin-bottom:14px; overflow:hidden; }
     .ob-final-row { display:flex; align-items:center; gap:10px; padding:9px 14px;
                     border-bottom:1px solid var(--border); font-size:13px; cursor:pointer; }
@@ -100,37 +100,48 @@
                         display:flex; gap:8px; justify-content:flex-end; }
     .ob-done-bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; }
 
-    /* ── STEP ──
-       1〜5 のどこにいるか、何が済んでいるかを一目で。
-       押すと、その STEP のカードへ飛ぶ */
-    .ob-steps { display:flex; gap:0; flex-wrap:wrap; margin:0 0 4px; }
-    .ob-step { flex:1 1 130px; display:flex; flex-direction:column; gap:5px;
-               padding:0 4px 0 0; background:none; border:0; font-family:inherit;
-               text-align:left; cursor:pointer; }
-    .ob-step .bar { height:6px; border-radius:999px; background:#e4e8ee; }
-    .ob-step .lb { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
-    .ob-step .lb .n { display:inline-flex; width:19px; height:19px; border-radius:50%;
-                      align-items:center; justify-content:center; font-size:10.5px; font-weight:700;
-                      background:#e4e8ee; color:var(--muted); flex:0 0 auto; }
-    .ob-step.done .bar { background:#3e9c5a; }
-    .ob-step.done .lb .n { background:#3e9c5a; color:#fff; }
-    .ob-step.done .lb { color:#256b36; }
-    .ob-step.current .bar { background:var(--primary); }
-    .ob-step.current .lb { color:var(--primary-dark); font-weight:700; }
-    .ob-step.current .lb .n { background:var(--primary); color:#fff; }
-    .ob-step.waiting .bar { background:repeating-linear-gradient(90deg,#e4e8ee 0 6px,#f4f6f9 6px 12px); }
+    /* ── 役割バナー ── */
+    .ob-role { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .ob-role .nm { font-weight:700; font-size:15px; color:var(--primary-dark); }
+    .ob-role .meta { font-size:12.5px; color:var(--muted); }
 
-    /* いま やること。1つだけ大きく */
+    /* ── STEP（6つ）──
+       誰が見ても、いま止まっている場所が3秒で分かるように。
+       完了は小さく薄く、いまは大きく強調、これからは薄く */
+    .ob-steps { display:flex; gap:2px; flex-wrap:wrap; margin:0 0 4px; align-items:flex-end; }
+    .ob-step { flex:1 1 108px; display:flex; flex-direction:column; gap:4px;
+               padding:0 4px 0 0; transition:opacity .15s; }
+    .ob-step .bar { height:5px; border-radius:999px; background:#e4e8ee; }
+    .ob-step .lb { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted);
+                   flex-wrap:wrap; line-height:1.5; }
+    .ob-step .lb .n { display:inline-flex; width:17px; height:17px; border-radius:50%;
+                      align-items:center; justify-content:center; font-size:10px; font-weight:700;
+                      background:#e4e8ee; color:var(--muted); flex:0 0 auto; }
+    .ob-step .who { font-size:9.5px; color:var(--muted); opacity:.75; }
+
+    .ob-step.done { opacity:.55; }
+    .ob-step.done .bar { background:#9fcbae; height:4px; }
+    .ob-step.done .lb .n { background:#9fcbae; color:#fff; }
+    .ob-step.done .lb { color:#3f7a51; }
+
+    .ob-step.current { opacity:1; }
+    .ob-step.current .bar { background:var(--primary); height:7px; }
+    .ob-step.current .lb { color:var(--primary-dark); font-weight:700; font-size:12.5px; }
+    .ob-step.current .lb .n { background:var(--primary); color:#fff; width:20px; height:20px; font-size:11px; }
+
+    .ob-step.todo { opacity:.4; }
+    .ob-step.todo .bar { background:repeating-linear-gradient(90deg,#e4e8ee 0 6px,#f4f6f9 6px 12px); }
+
+    /* いま どこで止まっているか。1つだけ大きく */
     .ob-now { border:1px solid var(--primary); border-radius:11px; background:#f5f9ff;
               padding:15px 17px; margin-top:16px; }
+    .ob-now.wait { border-color:var(--border); background:#f7f8fa; }
     .ob-now.done { border-color:#b7e0c4; background:#f7fbf8; }
     .ob-now .k { font-size:11.5px; color:var(--muted); font-weight:600; }
     .ob-now .t { font-size:16px; font-weight:700; color:var(--primary-dark); margin-top:3px; }
+    .ob-now.wait .t { color:var(--fg,#2b2f38); }
     .ob-now.done .t { color:#256b36; }
     .ob-now .s { font-size:13px; color:var(--muted); margin-top:5px; line-height:1.8; }
-    .ob-now ul { margin:9px 0 0; padding-left:18px; font-size:12.5px; color:var(--muted); line-height:1.9; }
-    .ob-now ul li.ok { color:#256b36; }
-    .ob-now .go { margin-top:12px; }
 
     /* オリエンテーション */
     .ob-or { border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; }
@@ -147,29 +158,98 @@
 
 <div class="wrap">
   <h1 class="kp-greet">入社手続き</h1>
-  <p class="kp-greet-sub">
-    この画面だけで終わります。会社が把握している内容はすでに入っているので、
-    入力するのは住所・連絡先・振込口座と、確認のチェックだけです。
+  <p class="kp-greet-sub" id="lead">
+    本人・管理者・社労士が、同じ画面で同じ進み具合を見ています。見える項目と操作できる範囲だけが役割で変わります。
   </p>
 
   <div id="notice"></div>
 
-  <div class="card" id="prog-card">
+  <div class="card hidden" id="role-card">
+    <div class="ob-role">
+      <span class="kp-chip event" id="role-chip"></span>
+      <span class="nm" id="who-name"></span>
+      <span class="meta" id="who-meta"></span>
+    </div>
+  </div>
+
+  <div class="card hidden" id="prog-card">
     <h2><span class="material-symbols-outlined">checklist</span>入社手続きの進み具合
       <span id="prog-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <div class="ob-steps" id="steps"></div>
     <div id="now"></div>
   </div>
 
-  <div class="card">
+  <div class="card hidden" id="known-card">
     <h2><span class="material-symbols-outlined">badge</span>会社が把握している内容</h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;" id="known-note">
       入力の必要はありません。違っているところがあれば、管理担当者にお知らせください。
     </p>
     <dl class="ob-known" id="known"></dl>
   </div>
 
-  <div class="card" id="step-3">
+  <!-- ── 管理者向け ─────────────────────────────────────────── -->
+  <div class="card hidden" id="admin-wrap">
+    <h2><span class="material-symbols-outlined">domain_verification</span>会社側の準備（STEP 5）</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      本人には見えません。済んだらチェックしてください。
+    </p>
+    <div id="admin-internal"></div>
+    <div class="ob-done-bar">
+      <a class="btn btn-secondary btn-sm" id="admin-esign-link" href="#" target="_blank" rel="noopener">
+        <span class="material-symbols-outlined icon-inline">history_edu</span>労働条件・電子契約を管理する
+      </a>
+      <a class="btn btn-secondary btn-sm" id="admin-hr-link" href="#" target="_blank" rel="noopener">
+        <span class="material-symbols-outlined icon-inline">folder_open</span>詳しい管理を開く（書類・マイナンバー・日付）
+      </a>
+    </div>
+  </div>
+
+  <!-- ── 社労士向け ─────────────────────────────────────────── -->
+  <div class="card hidden" id="advisor-wrap">
+    <h2><span class="material-symbols-outlined">history_edu</span>労働条件の確認・発行
+      <span id="adv-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      会社が入力した労働条件です。内容を確認し、必要なら直してから「承認・発行」を押してください。
+      押すと本人に署名依頼が届きます。
+    </p>
+    <div id="advisor-order"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card hidden" id="advisor-mn-wrap">
+    <h2><span class="material-symbols-outlined">badge</span>マイナンバーの進み具合</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
+      番号そのものはこのシステムには入りません。進み具合だけを記録します。
+    </p>
+    <div id="advisor-mn"></div>
+  </div>
+
+  <!-- ── 本人向け ─────────────────────────────────────────── -->
+  <div class="card hidden" id="step-1">
+    <h2><span class="material-symbols-outlined">history_edu</span>STEP 2　本人契約</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      労働条件通知書などが届いたら、内容を確認して締結してください。
+    </p>
+    <div id="contracts"></div>
+  </div>
+
+  <div class="card hidden" id="consents-card">
+    <h2><span class="material-symbols-outlined">verified_user</span>確認のお願い
+      <span id="c-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+      3つの書類を読んで、チェックを入れてください。署名や日付の記入は要りません。
+      どの版にいつ同意したかは、システムが記録します。
+    </p>
+    <div id="consents"></div>
+    <div class="ob-done-bar">
+      <button class="btn btn-primary" id="c-btn" disabled onclick="completeConsents(this)">
+        <span class="material-symbols-outlined icon-inline">task_alt</span>すべて確認して本人契約を完了
+      </button>
+      <span class="muted" id="c-note" style="font-size:12px;"></span>
+    </div>
+    <div id="c-msg" class="err-text" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card hidden" id="step-3">
     <h2><span class="material-symbols-outlined">edit_note</span>STEP 3　入社情報の入力</h2>
     <div id="form"></div>
     <div style="margin-top:6px;">
@@ -180,16 +260,8 @@
     </div>
   </div>
 
-  <div class="card" id="step-1">
-    <h2><span class="material-symbols-outlined">history_edu</span>STEP 1　契約書の確認・締結</h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
-      労働条件通知書などが届いたら、内容を確認して締結してください。
-    </p>
-    <div id="contracts"></div>
-  </div>
-
-  <div class="card" id="step-2">
-    <h2><span class="material-symbols-outlined">school</span>STEP 2　オリエンテーション
+  <div class="card hidden" id="step-2">
+    <h2><span class="material-symbols-outlined">school</span>STEP 4　オリエンテーション
       <span id="or-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
       入社までに目を通していただくものです。読み終えたら「確認しました」を押してください。
@@ -197,24 +269,7 @@
     <div id="orientation"></div>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">verified_user</span>確認のお願い
-      <span id="c-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
-      3つの書類を読んで、チェックを入れてください。署名や日付の記入は要りません。
-      どの版にいつ同意したかは、システムが記録します。
-    </p>
-    <div id="consents"></div>
-    <div class="ob-done-bar">
-      <button class="btn btn-primary" id="c-btn" disabled onclick="completeConsents(this)">
-        <span class="material-symbols-outlined icon-inline">task_alt</span>すべて確認して入社手続きを完了
-      </button>
-      <span class="muted" id="c-note" style="font-size:12px;"></span>
-    </div>
-    <div id="c-msg" class="err-text" style="margin-top:8px;"></div>
-  </div>
-
-  <div class="card" id="step-4">
+  <div class="card hidden" id="step-4">
     <h2><span class="material-symbols-outlined">upload_file</span>STEP 4　必要書類の提出
       <span id="d-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
@@ -225,7 +280,7 @@
     <div id="docs-extra"></div>
   </div>
 
-  <div class="card">
+  <div class="card hidden" id="submit-card">
     <h2><span class="material-symbols-outlined">send</span>提出</h2>
     <div id="submit-state"></div>
     <button class="btn btn-primary" id="submit-btn" onclick="save(this, true)">
@@ -238,23 +293,36 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916e"></script>
-<script src="js/device.js?v=20260916e"></script>
-<script src="js/layout.js?v=20260916e"></script>
-<script src="js/dropzone.js?v=20260916e"></script>
+<script src="js/api-client.js?v=20260916f"></script>
+<script src="js/device.js?v=20260916f"></script>
+<script src="js/layout.js?v=20260916f"></script>
+<script src="js/dropzone.js?v=20260916f"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
+  const show = (id, on) => el(id).classList.toggle("hidden", !on);
 
-  let data = null;
-  let bools = {};   // true/false のボタンの状態
+  const qs = new URLSearchParams(location.search);
+  const viewEmployeeId = qs.get("employeeId") || null;
 
-  KPLayout.init({ active: "onboarding", roles: ["member", "admin", "owner"] })
+  let data = null;    // api/onboarding/status.js（3者共通の骨組み）
+  let self_ = null;    // api/onboarding/me.js（本人のときだけ）
+  let bools = {};      // 「はい/いいえ」ボタンの状態
+  let deps = [];        // 扶養家族
+  let checked = new Set();   // 同意チェックの一時状態
+  let orders = [];       // 社労士向け：この人の労働条件オーダー
+  let orderFields = [];
+  let orderOpen = false;
+  let prevUrl = null;
+  const MN_STATES = [["not_submitted", "未提出"], ["requested", "提出依頼済み"],
+                     ["submitted_to_advisor", "社労士提出済み"], ["confirmed", "確認完了"]];
+
+  KPLayout.init({ active: "onboarding", roles: ["member", "admin", "owner", "sr"] })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
     try {
-      data = await API.myOnboarding();
+      data = await API.onboardingStatus(viewEmployeeId);
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -262,6 +330,9 @@
       return;
     }
     el("notice").innerHTML = "";
+    show("role-card", true);
+    show("prog-card", true);
+    show("known-card", true);
 
     if (!data.procedureId) {
       el("notice").innerHTML =
@@ -269,71 +340,340 @@
            <div>入社手続きがまだ作られていません。管理担当者にお知らせください。</div></div>`;
     }
 
-    renderProgress();
-    renderContracts();
-    renderOrientation();
+    renderRole();
+    renderSteps();
     renderKnown();
-    renderForm();
-    renderConsents();
-    renderDocs();
-    renderSubmitState();
+
+    show("admin-wrap", false); show("advisor-wrap", false); show("advisor-mn-wrap", false);
+    ["step-1", "consents-card", "step-3", "step-2", "step-4", "submit-card"].forEach((id) => show(id, false));
+
+    if (data.role === "self") {
+      await loadSelf();
+    } else if (data.role === "admin") {
+      renderAdminInternal();
+      el("admin-esign-link").href = `admin-esign.html?tab=order&employeeId=${encodeURIComponent(data.employeeId)}`;
+      el("admin-hr-link").href = data.procedureId
+        ? `admin-hr.html?id=${encodeURIComponent(data.procedureId)}` : "admin-hr.html";
+      show("admin-wrap", true);
+    } else if (data.role === "advisor") {
+      show("advisor-wrap", true);
+      show("advisor-mn-wrap", true);
+      renderAdvisorMn();
+      await loadAdvisorOrder();
+    }
   }
 
-  // ---- STEP（1〜5） ------------------------------------------------------------
-  //
-  // 「いまどこにいて、次に何をすればよいか」を、いちばん上に1つだけ出す。
-  // 下のカードを行き来しないと分からない状態にしない
-  function renderProgress() {
+  function renderRole() {
+    el("role-chip").textContent = `あなたの役割：${data.roleLabel}`;
+    if (data.role === "self") {
+      el("who-name").textContent = "";
+      el("who-meta").textContent = "";
+    } else {
+      const k = data.known || {};
+      el("who-name").textContent = k.name || "";
+      el("who-meta").textContent =
+        [k.department, k.position, k.employmentType].filter(Boolean).join("　");
+    }
+  }
+
+  // ---- STEP（6つ・3者共通）------------------------------------------------------
+  function renderSteps() {
     const st = data.steps || { steps: [], current: null, pct: 0 };
     el("prog-tag").textContent = `${st.pct}%`;
     el("prog-tag").className = `kp-chip ${st.pct >= 100 ? "event" : "draft"}`;
 
     el("steps").innerHTML = (st.steps || []).map((s) => `
-      <button type="button" class="ob-step ${esc(s.state)}" onclick="goStep(${s.n})">
+      <div class="ob-step ${esc(s.state)}">
         <span class="bar"></span>
         <span class="lb"><span class="n">${s.done ? "✓" : s.n}</span>${esc(s.label)}</span>
-      </button>`).join("");
+        <span class="who">${esc(s.actorLabel)}</span>
+      </div>`).join("");
 
-    const cur = (st.steps || []).find((s) => s.key === st.current);
-    if (!cur || cur.key === "complete") {
-      const done = cur?.done;
-      el("now").innerHTML = `
-        <div class="ob-now ${done ? "done" : ""}">
-          <div class="k">${done ? "完了" : "いまの状態"}</div>
-          <div class="t">${done ? "入社手続きは完了しました" : "あなたの手続きは終わりました"}</div>
-          <div class="s">${esc(cur?.todo || "")}</div>
-        </div>`;
-      return;
-    }
-    const left = (cur.items || []).filter((i) => !i.done);
+    const banner = statusBanner(st, data.role);
     el("now").innerHTML = `
-      <div class="ob-now">
-        <div class="k">いま やること（STEP ${cur.n}）</div>
-        <div class="t">${esc(cur.label)}</div>
-        <div class="s">${esc(cur.todo)}</div>
-        ${left.length ? `<ul>${left.slice(0, 5).map((i) =>
-          `<li>${esc(i.label)}${i.note ? `　<span style="font-size:11.5px;">${esc(i.note)}</span>` : ""}</li>`).join("")}</ul>` : ""}
-        <div class="go">
-          <button class="btn btn-primary" onclick="goStep(${cur.n})">
-            <span class="material-symbols-outlined icon-inline">arrow_downward</span>${esc(cur.label)}へ進む
-          </button>
-        </div>
+      <div class="ob-now ${!st.current ? "done" : banner.mine ? "" : "wait"}">
+        <div class="k">${banner.nextActorLabel && banner.nextActorLabel !== "—"
+          ? `次の担当：${esc(banner.nextActorLabel)}` : "完了"}</div>
+        <div class="t">${esc(banner.title)}</div>
+        <div class="s">${esc(banner.detail)}</div>
       </div>`;
   }
 
-  function goStep(n) {
-    const box = el(n === 1 ? "step-1" : n === 2 ? "step-2" : n === 3 ? "step-3" : "step-4");
-    if (box) box.scrollIntoView({ behavior: "smooth", block: "start" });
+  // lib/onboard-steps.js の statusBanner と同じロジック。
+  // ブラウザからサーバのモジュールは読めないので、ここに同じものを置く。
+  // 言い方を変えるときは両方を直す（テストは test/stepstest.mjs）
+  function statusBanner(r, viewerRole) {
+    const cur = (r.steps || []).find((s) => s.key === r.current);
+    if (!cur) return { title: "入社手続き完了", detail: "すべての手続きが終わりました。", nextActorLabel: "—", mine: false };
+    const myTurn = viewerRole === "self" ? cur.actor === "employee"
+      : viewerRole === "admin" ? cur.actor === "admin"
+        : viewerRole === "advisor" ? cur.actor === "advisor" : false;
+    if (myTurn) {
+      return {
+        title: cur.key === "advisor_check" ? "確認をお願いします"
+          : cur.key === "company" ? "社内準備をお願いします"
+            : "あなたの確認が必要です",
+        detail: cur.todo, nextActorLabel: cur.actorLabel, mine: true,
+      };
+    }
+    return {
+      title: `${cur.label}待ち`,
+      detail: cur.key === "advisor_check" ? "労働条件通知書を社労士が確認しています。"
+        : cur.key === "contract" ? "労働条件通知書を送付済みです。本人の契約をお待ちください。"
+          : cur.key === "company" ? "本人の手続きは完了しています。会社側の準備をお待ちください。"
+            : `${cur.actorLabel}の対応をお待ちください。`,
+      nextActorLabel: cur.actorLabel, mine: false,
+    };
   }
 
-  // ---- STEP 1：契約書 -----------------------------------------------------------
+  // ---- 共通で見えるもの ----------------------------------------------------------
+  function renderKnown() {
+    const k = (data.role === "self" && self_?.known) ? self_.known : (data.known || {});
+    const row = (label, v) => v ? `<dt>${esc(label)}</dt><dd>${esc(v)}</dd>` : "";
+    el("known-note").textContent = data.role === "advisor"
+      ? "給与などの労働条件は、社労士には表示していません。"
+      : "入力の必要はありません。違っているところがあれば、管理担当者にお知らせください。";
+    el("known").innerHTML = [
+      row("氏名", k.name),
+      row("メール", k.email),
+      row("部署", k.department),
+      row("役職", k.position),
+      row("入社日", k.joinedOn || k.targetOn),
+      row("契約", k.contract || k.contractPeriod),
+      row("試用期間", k.probation),
+      row("週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null),
+      row("勤務形態", k.workStyle),
+      row("担当", k.role),
+      row("業務範囲", (k.workScope || []).join("、")),
+      row("給与", k.wage),
+      row("相談先", k.manager),
+    ].join("") || `<dd class="muted">まだ登録されていません。</dd>`;
+  }
+
+  // ── STEPの残り物（本人が今やること）を1〜5件だけ「いま やること」に添える ──
+  const stepOf = (key) => (data.steps?.steps || []).find((s) => s.key === key) || null;
+  const stepDone = (key) => !!stepOf(key)?.done;
+
+  /* ============================================================
+   * 管理者：会社側の準備（STEP 5）
+   * ============================================================ */
+  function renderAdminInternal() {
+    const items = stepOf("company")?.items || [];
+    if (!items.length) {
+      el("admin-internal").innerHTML =
+        `<div class="muted" style="font-size:12.5px;margin-bottom:10px;">会社側の準備項目がありません。</div>`;
+      return;
+    }
+    el("admin-internal").innerHTML = `<div class="ob-final">${items.map((i) => `
+      <label class="ob-final-row${i.done ? " ok" : ""}">
+        <input type="checkbox" ${i.done ? "checked" : ""}
+               ${i.id ? `onchange="toggleInternal('${esc(i.id)}', this)"` : "disabled"}>
+        <span class="l">${esc(i.label)}</span>
+        <span class="n">${esc(i.note)}</span>
+      </label>`).join("")}</div>`;
+  }
+
+  async function toggleInternal(id, box) {
+    const done = box.checked;
+    box.disabled = true;
+    try {
+      await API.updateProcedureItem({ id, status: done ? "done" : "todo" });
+      await load();
+    } catch (e) {
+      box.checked = !done;
+      box.disabled = false;
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  /* ============================================================
+   * 社労士：労働条件の確認・発行／マイナンバー
+   * ============================================================ */
+  async function loadAdvisorOrder() {
+    try {
+      const res = await API.docOrders(data.employeeId);
+      orders = res.orders || [];
+      orderFields = res.fields || [];
+    } catch (e) {
+      el("advisor-order").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    renderAdvisorOrder();
+  }
+
+  function renderAdvisorOrder() {
+    const open = orders.filter((o) => o.status === "requested" || o.status === "uploaded");
+    const done = orders.filter((o) => o.status === "sent" || o.status === "signed");
+    el("adv-tag").textContent = open.length ? "確認待ち" : "確認済み";
+    el("adv-tag").className = `kp-chip ${open.length ? "draft" : "event"}`;
+
+    if (!open.length && !done.length) {
+      el("advisor-order").innerHTML = `<div class="empty">いま確認をお願いしている労働条件はありません。</div>`;
+      return;
+    }
+    el("advisor-order").innerHTML =
+      open.map((o) => orderCard(o, true)).join("")
+      + done.map((o) => orderCard(o, false)).join("");
+  }
+
+  function orderCard(o, editable) {
+    const opened = orderOpen === o.id;
+    return `
+      <div class="ord${opened ? " now" : ""}" id="ord-${esc(o.id)}"
+           style="border:1px solid var(--border);border-radius:11px;padding:14px 16px;margin-bottom:12px;
+                  ${opened ? "border-color:var(--primary);background:#f7faff;" : ""}">
+        <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;">
+          <span class="kp-chip ${o.status === "requested" ? "draft" : o.status === "uploaded" ? "event" : "archived"}">
+            ${esc(o.statusLabel)}</span>
+          ${o.approvedAt ? `<span style="font-size:12.5px;color:#256b36;font-weight:600;">
+            ${esc(fmtDate(o.approvedAt))} に承認・発行しました</span>` : ""}
+        </div>
+        ${o.note ? `<div class="muted" style="font-size:12px;margin-top:6px;">会社から：${esc(o.note)}</div>` : ""}
+
+        ${!editable ? "" : opened ? `
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin-top:12px;font-size:13px;">
+            ${orderFields.map((f) => `
+              <label style="color:var(--muted);font-size:12px;padding-top:8px;white-space:nowrap;"
+                     for="c-${esc(o.id)}-${esc(f.key)}">${esc(f.key)}${f.required ? " *" : ""}</label>
+              <div>
+                <textarea id="c-${esc(o.id)}-${esc(f.key)}" rows="2" style="margin:0;font-size:13px;"
+                  placeholder="${esc(f.placeholder || "")}">${esc(o.conditions?.[f.key] || "")}</textarea>
+              </div>`).join("")}
+            <label style="color:var(--muted);font-size:12px;padding-top:8px;" for="n-${esc(o.id)}">会社への申し送り</label>
+            <div><textarea id="n-${esc(o.id)}" rows="2" style="margin:0;font-size:13px;"
+              placeholder="直した理由や、会社に確認したいこと（本人には出ません）">${esc(o.advisorNote || "")}</textarea></div>
+          </div>
+          <div class="ob-done-bar">
+            <button class="btn btn-secondary btn-sm" onclick="doPreview('${esc(o.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">visibility</span>通知書を見る</button>
+            <button class="btn btn-secondary btn-sm" onclick="saveOrder('${esc(o.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">save</span>修正を保存</button>
+            <button class="btn btn-primary btn-sm" onclick="approveOrder('${esc(o.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">verified</span>承認・発行</button>
+            <button class="btn btn-secondary btn-sm" onclick="closeOrder()">閉じる</button>
+          </div>
+          <div id="prev-${esc(o.id)}"></div>
+        ` : `
+          <div class="ob-done-bar">
+            <button class="btn btn-primary btn-sm" onclick="editOrder('${esc(o.id)}')">
+              <span class="material-symbols-outlined icon-inline">edit</span>内容を確認する</button>
+            ${(o.missing || []).length
+              ? `<span class="muted" style="font-size:11.5px;color:#9c4221;">${esc(o.missing.join("・"))} が空欄です</span>` : ""}
+          </div>`}
+      </div>`;
+  }
+
+  function editOrder(id) { orderOpen = id; renderAdvisorOrder(); }
+  function closeOrder() {
+    orderOpen = null;
+    if (prevUrl) { URL.revokeObjectURL(prevUrl); prevUrl = null; }
+    renderAdvisorOrder();
+  }
+  function readOrderConditions(id) {
+    const out = {};
+    for (const f of orderFields) out[f.key] = el(`c-${id}-${f.key}`)?.value ?? "";
+    return out;
+  }
+
+  async function doPreview(id, btn) {
+    try {
+      const r = await KPLayout.busy(btn, "作成中…", () =>
+        API.docOrderAct({ action: "preview", id, conditions: readOrderConditions(id) }));
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      const bin = Uint8Array.from(atob(r.pdfBase64), (c) => c.charCodeAt(0));
+      prevUrl = URL.createObjectURL(new Blob([bin], { type: "application/pdf" }));
+      el(`prev-${id}`).innerHTML = `
+        <div style="margin-top:12px;border:1px solid var(--border);border-radius:9px;overflow:hidden;">
+          <iframe title="労働条件通知書" src="${esc(prevUrl)}" style="width:100%;height:520px;border:0;display:block;background:#fff;"></iframe>
+        </div>
+        ${r.missing?.length
+          ? `<div class="muted" style="color:#9c4221;font-size:11.5px;margin-top:6px;">
+               ${esc(r.missing.join("・"))} が空欄のままです</div>` : ""}`;
+    } catch (e) { alert(e.hint || e.detail || e.message || "作れませんでした"); }
+  }
+
+  async function saveOrder(id, btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.docOrderAct({
+        action: "update", id, conditions: readOrderConditions(id),
+        advisorNote: el(`n-${id}`)?.value ?? "",
+      }));
+      await loadAdvisorOrder();
+    } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
+  }
+
+  async function approveOrder(id, btn) {
+    if (!confirm("労働条件通知書を発行します。\n本人に署名依頼が届きます。よろしいですか。")) return;
+    try {
+      await KPLayout.busy(btn, "発行中…", () => API.docOrderAct({
+        action: "approve", id, conditions: readOrderConditions(id),
+        advisorNote: el(`n-${id}`)?.value ?? "",
+      }));
+      orderOpen = null;
+      await loadAdvisorOrder();
+      await load();
+    } catch (e) {
+      if (e.code === "missing_conditions") {
+        alert(`${(e.body?.missing || []).join("・")} が空欄です。埋めてから発行してください`);
+      } else alert(e.hint || e.detail || e.message || "発行できませんでした");
+    }
+  }
+
+  function renderAdvisorMn() {
+    el("advisor-mn").innerHTML = `
+      <select style="width:auto;margin:0;" onchange="setMynumber(this)">
+        ${MN_STATES.map(([k, l]) =>
+          `<option value="${k}" ${k === data.mynumberStatus ? "selected" : ""}>${l}</option>`).join("")}
+      </select>`;
+  }
+
+  async function setMynumber(sel) {
+    try { await API.hrUpdate({ id: data.procedureId, mynumber: sel.value }); await load(); }
+    catch (e) { alert(e.hint || e.message || "変えられませんでした"); await load(); }
+  }
+
+  /* ============================================================
+   * 本人：自己サービス（api/onboarding/me.js。今までどおり）
+   * ============================================================ */
+  async function loadSelf() {
+    try {
+      self_ = await API.myOnboarding();
+    } catch (e) {
+      el("notice").innerHTML =
+        `<div class="banner err"><span class="material-symbols-outlined">error</span>
+           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    renderKnown();
+
+    const contractOk = stepDone("contract");
+
+    show("step-1", true);
+    show("consents-card", true);
+    renderContracts();
+    renderConsents();
+
+    show("step-3", contractOk);
+    show("step-2", contractOk);
+    show("step-4", contractOk);
+    show("submit-card", contractOk);
+    if (contractOk) {
+      renderForm();
+      renderOrientation();
+      renderDocs();
+      renderSubmitState();
+    }
+  }
+
+  // ---- 本人契約：契約書 ----------------------------------------------------------
   function renderContracts() {
-    const list = data.contracts || [];
+    const list = self_.contracts || [];
     if (!list.length) {
       el("contracts").innerHTML = `
         <div class="banner info"><span class="material-symbols-outlined">schedule</span>
-          <div>労働条件通知書は会社が準備中です。届いたらお知らせします。
-          いまは STEP 2 以降を進めていただけます。</div></div>`;
+          <div>労働条件通知書は社労士が確認中です。届いたらお知らせします。</div></div>`;
       return;
     }
     el("contracts").innerHTML = list.map((c) => `
@@ -355,9 +695,9 @@
       </div>`).join("");
   }
 
-  // ---- STEP 2：オリエンテーション -------------------------------------------------
+  // ---- オリエンテーション -------------------------------------------------------
   function renderOrientation() {
-    const list = data.orientation || [];
+    const list = self_.orientation || [];
     if (!list.length) { el("step-2").classList.add("hidden"); return; }
     el("step-2").classList.remove("hidden");
     const done = list.filter((o) => o.confirmed).length;
@@ -389,60 +729,29 @@
   async function confirmOrientation(id, btn) {
     try {
       await KPLayout.busy(btn, "…", () => API.orientationConfirm(id));
-      await load();
+      await loadSelf();
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
-  }
-
-  function renderKnown() {
-    const k = data.known || {};
-    const row = (label, v) => v ? `<dt>${esc(label)}</dt><dd>${esc(v)}</dd>` : "";
-    el("known").innerHTML = [
-      row("氏名", k.name),
-      row("メール", k.email),
-      row("入社日", k.joinedOn),
-      row("契約", k.contract),
-      row("試用期間", k.probation),
-      row("週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null),
-      row("勤務形態", k.workStyle),
-      row("担当", k.role),
-      row("業務範囲", (k.workScope || []).join("、")),
-      row("給与", k.wage),
-      row("相談先", k.manager),
-    ].join("") || `<dd class="muted">まだ登録されていません。</dd>`;
   }
 
   // 入力欄はサーバの定義から組み立てる。画面とサーバで項目がずれないように
   function renderForm() {
-    const pf = data.profile || {};
+    const pf = self_.profile || {};
     bools = {};
-    for (const f of data.fields) if (f.type === "bool") bools[f.key] = pf[f.key] ?? null;
+    for (const f of self_.fields) if (f.type === "bool") bools[f.key] = pf[f.key] ?? null;
 
     deps = Array.isArray(pf.dependents) ? pf.dependents.map((d) => ({ ...d })) : [];
 
-    el("form").innerHTML = data.groups.map((g) => `
+    el("form").innerHTML = self_.groups.map((g) => `
       <div class="ob-g">
         <h3>${esc(g)}</h3>
         <div class="ob-f">
-          ${data.fields.filter((f) => f.group === g)
-            // 扶養家族の一覧は「扶養する家族がいますか」のすぐ下に出す。
-            // 補足欄より前でないと、書く順番が入れ替わる
+          ${self_.fields.filter((f) => f.group === g)
             .map((f) => field(f, pf) + (f.key === "has_dependents" ? depSlot() : ""))
             .join("")}
         </div>
       </div>`).join("");
     renderDeps();
   }
-
-  // ---- 扶養家族 ---------------------------------------------------------------
-  //
-  // 前は「妻・エイト ハナコ・1995-04-01」と1行に書いてもらっていた。
-  // 子どもが2人いる人の生年月日を、あとから機械で拾えなかった。
-  // 社会保険の被扶養者届にも扶養控除等申告書にも、
-  // 氏名・続柄・生年月日は必ず要る。
-  //
-  // マイナンバーの欄は置かない。番号は扶養控除等申告書とマイナンバー確認書類の
-  // 写真で受け取り、見られる人の少ない場所（機微情報フォルダ）に置く
-  let deps = [];
 
   function depSlot() {
     const hidden = !bools.has_dependents;
@@ -475,7 +784,7 @@
                   onclick="removeDep(${n})">外す</button>
         </div>
         <div class="ob-f">
-          ${(data.dependentFields || []).map((f) => depField(f, d, n)).join("")}
+          ${(self_.dependentFields || []).map((f) => depField(f, d, n)).join("")}
         </div>
       </div>`).join("");
   }
@@ -492,8 +801,6 @@
         ${f.options.map((o) => `<option value="${esc(o)}"${v === o ? " selected" : ""}>${esc(o)}</option>`).join("")}
       </select>`;
     } else if (f.type === "bool") {
-      // 1人ぶんで7欄あるので、ここは押しボタンではなく選択にする。
-      // 画面が縦に伸びると、下の欄に気づかれない
       input = `<select id="${id}">
         <option value=""${v === true || v === false ? "" : " selected"}>選んでください</option>
         <option value="true"${v === true ? " selected" : ""}>同居</option>
@@ -506,12 +813,10 @@
     return `<div class="${f.key === "note" ? "wide" : ""}">${label}${input}${note}</div>`;
   }
 
-  // 行を足す・外す前に、いま画面に入っている値を拾っておく。
-  // 拾わずに描き直すと、書きかけが消える
   function syncDeps() {
     deps = deps.map((d, n) => {
       const out = { ...d };
-      for (const f of data.dependentFields || []) {
+      for (const f of self_.dependentFields || []) {
         const node = el(`d-${n}-${f.key}`);
         if (!node) continue;
         out[f.key] = f.type === "bool"
@@ -525,8 +830,8 @@
 
   function addDep() {
     syncDeps();
-    if (deps.length >= (data.maxDependents || 10)) {
-      alert(`ここに入れられるのは${data.maxDependents || 10}人までです。残りは補足に書いてください。`);
+    if (deps.length >= (self_.maxDependents || 10)) {
+      alert(`ここに入れられるのは${self_.maxDependents || 10}人までです。残りは補足に書いてください。`);
       return;
     }
     deps.push({});
@@ -572,12 +877,9 @@
     bools[key] = bools[key] === v ? null : v;
     const box = el(`b-${key}`);
     [...box.children].forEach((b, i) => b.classList.toggle("on", bools[key] === (i === 0)));
-    // 「はい」のときだけ出る欄を切り替える
-    for (const f of data.fields) {
+    for (const f of self_.fields) {
       if (f.showIf === key) el(`w-${f.key}`).classList.toggle("hidden", !bools[key]);
     }
-    // 扶養家族の一覧も同じ扱い。定義ではなく key で見ているのは、
-    // これが1つの欄ではなく行の集まりだから
     if (key === "has_dependents") {
       el("w-dependents")?.classList.toggle("hidden", !bools[key]);
     }
@@ -585,22 +887,17 @@
 
   function readForm() {
     const out = {};
-    for (const f of data.fields) {
+    for (const f of self_.fields) {
       if (f.type === "bool") { out[f.key] = bools[f.key]; continue; }
       out[f.key] = el(`f-${f.key}`)?.value ?? "";
     }
-    // 扶養家族。「いません」に変えたら送らない（サーバ側でも消える）
     out.dependents = bools.has_dependents ? syncDeps() : [];
     return out;
   }
 
   // ---- 同意（3つの書類） ------------------------------------------------------
-  // チェックは押した時点では送らない。3つそろって
-  // 「すべて確認して入社手続きを完了」を押したときに、まとめて1回で記録する
-  let checked = new Set();
-
   function renderConsents() {
-    const list = data.consents || [];
+    const list = self_.consents || [];
     const done = list.filter((c) => c.agreed).length;
     el("c-tag").textContent = `${done} / ${list.length}`;
     el("c-tag").className = `kp-chip ${done === list.length && list.length ? "event" : "draft"}`;
@@ -637,7 +934,7 @@
 
   async function completeConsents(btn) {
     el("c-msg").textContent = "";
-    const keys = (data.consents || []).filter((c) => !c.agreed && checked.has(c.key)).map((c) => c.key);
+    const keys = (self_.consents || []).filter((c) => !c.agreed && checked.has(c.key)).map((c) => c.key);
     if (!keys.length) return;
     try {
       const r = await KPLayout.busy(btn, "記録しています…", () => API.myOnboardingConsent(keys));
@@ -651,9 +948,8 @@
     }
   }
 
-  // 全文。同意する前に読めるように、画面の中で開く
   function readFull(key) {
-    const c = (data.consents || []).find((x) => x.key === key);
+    const c = (self_.consents || []).find((x) => x.key === key);
     if (!c) return;
     const m = document.createElement("div");
     m.className = "ob-modal";
@@ -681,11 +977,9 @@
   };
 
   // ---- 提出書類 ----------------------------------------------------------------
-  // 書類ごとに、決まったGoogleドライブのフォルダを開いて入れてもらう。
-  // どのフォルダを開くかはサーバが決める（本人には選ばせない）
   function renderDocs() {
-    const docs = data.documents || [];
-    const extra = data.myItems || [];
+    const docs = self_.documents || [];
+    const extra = self_.myItems || [];
     if (!docs.length && !extra.length) { el("step-4").classList.add("hidden"); return; }
     el("step-4").classList.remove("hidden");
 
@@ -693,15 +987,9 @@
     el("d-tag").textContent = `${done} / ${docs.length}`;
     el("d-tag").className = `kp-chip ${done === docs.length && docs.length ? "event" : "draft"}`;
 
-    // どれ1つ出せない状態になっていたら、それを先に1回だけ言う。
-    //
-    // 以前、6つの書類ぜんぶに「結び付いていません」とだけ並んで出て、
-    // 何が起きているのか本人にも管理者にも分からなかったことがある。
-    // （原因は入社手続きの行が2つできていたこと。db/065 で直してある）
-    // 同じ形になったときに、伝える先と伝える言葉がその場で出るようにする
     const dead = docs.filter((d) => !d.itemId).length;
     if (dead && dead === docs.length) {
-      const p = data.docsProblem || {};
+      const p = self_.docsProblem || {};
       el("docs-note").innerHTML = `
         <div class="banner err" style="margin-bottom:14px;">
           <span class="material-symbols-outlined">error</span>
@@ -725,21 +1013,21 @@
       return;
     }
 
-    el("docs-note").innerHTML = data.drive?.ready
+    el("docs-note").innerHTML = self_.drive?.ready
       ? `<div class="banner info" style="margin-bottom:14px;">
            <span class="material-symbols-outlined">drive_export</span>
            <div><b>あなたの提出用フォルダ</b>が開きます。スマホで撮った写真をそのまま入れて、
            入れ終わったらチェックを付けてください。何枚あってもかまいません。<br>
            <span class="muted" style="font-size:11.5px;">
-             ${data.drive.manual
+             ${self_.drive.manual
                ? "フォルダは会社が用意しています。開けないときは管理者にお知らせください。"
                : "フォルダの場所と、社労士へ渡す範囲は会社側で決めています。マイナンバー確認書類だけは別の場所に入ります。"}
            </span></div>
          </div>`
-      : data.drive?.note
+      : self_.drive?.note
         ? `<div class="banner warn" style="margin-bottom:14px;">
              <span class="material-symbols-outlined">info</span>
-             <div>${esc(data.drive.note)}この画面から直接あげることもできます。</div>
+             <div>${esc(self_.drive.note)}この画面から直接あげることもできます。</div>
            </div>`
         : "";
 
@@ -782,7 +1070,6 @@
         </div>`;
     }).join("");
 
-    // 定義に無い、人が手で足した項目
     el("docs-extra").innerHTML = extra.map((i) => `
       <div class="ob-doc${i.status !== "todo" ? " done" : ""}">
         <div class="hd"><div class="t">${esc(i.title)}</div>
@@ -794,20 +1081,9 @@
         })}
       </div>`).join("");
 
-    // 描き直すたびに受け口を付け直す。付いている要素には二重に付かない
     KPDrop.scan(el("step-4"), sendFiles);
   }
 
-  // ---- 出し方 ------------------------------------------------------------------
-  // Googleドライブのフォルダを開いて、そこに入れてもらう。
-  // 何枚も撮った写真をその場で放り込めるのは、こちらのほうが速い。
-  // どのフォルダを開くかは書類ごとに決まっていて、本人には選ばせない。
-  //
-  // 入れ終わったらチェックを入れてもらう。ドライブに入ったかどうかを
-  // こちらから見に行くことはしないので、「出した」は本人の申告で受ける。
-  //
-  // ドライブが使えない場合（会社アカウントがまだ無い等）は、
-  // この画面から直接あげる道も残す。折りたたんでおく
   function submitBox(d) {
     const sent = d.status === "submitted";
     const id = esc(d.itemId || "");
@@ -846,15 +1122,11 @@
         </details>`;
     }
 
-    // ドライブのフォルダがまだ無い。この画面から出してもらう。
-    // チェックは常に出す。紙で渡した・郵送したなど、
-    // この画面を通らずに出したものも「出した」と印を付けられるように
     return `
       ${dropzone(d.itemId)}
       <div class="ob-send">${check}${skip}</div>`;
   }
 
-  // この画面から直接あげる受け口。押しても落としても同じ。複数まとめてでよい
   function dropzone(itemId) {
     return `<div class="dz sm" data-drop="${esc(itemId)}"
                  data-drop-accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx">
@@ -867,15 +1139,13 @@
       </div>`;
   }
 
-  // チェックの付け外し。ボタンと違って文字を差し替えられないので、
-  // 押している間は触れないようにして、終わったら読み直す
   async function toggleDone(itemId, box) {
     if (!itemId) return;
     const want = box.checked;
     box.disabled = true;
     try {
       await API.submitProcedureItem(itemId, { undo: !want });
-      await load();
+      await loadSelf();
     } catch (e) {
       box.checked = !want;
       box.disabled = false;
@@ -893,18 +1163,12 @@
     if (!itemId) return;
     try {
       await KPLayout.busy(btn, "…", () => API.submitProcedureItem(itemId, { undo }));
-      await load();
+      await loadSelf();
     } catch (e) {
       alert(e.hint || e.detail || e.message || "できませんでした");
     }
   }
 
-  // 落とした（選んだ）ファイルを、そのまま提出まで進める。
-  // 会計の書類アップロードとは別の保存先（人事だけが見られる）に入り、
-  // そこから Drive の個人フォルダの決まった場所へ、決まった名前で写される。
-  //
-  // 複数あっても1つずつ順に送る。1つ失敗しても残りは続け、
-  // 最後に「何件送れて、何が駄目だったか」を出す
   async function sendFiles(itemId, files, node) {
     if (!itemId) return;
     const log = node.querySelector("[data-log]");
@@ -922,25 +1186,20 @@
 
     node.classList.remove("busy");
     log.textContent = "";
-    // 送れたものがあると画面を描き直すので、失敗はその前に伝える
     if (res.ng.length) alert(KPDrop.summary(res));
-    if (res.ok.length) await load();
+    if (res.ok.length) await loadSelf();
   }
 
-  // 最後に、やることを1つの表で見せる。
-  // 上のカードを行き来しないと分からない状態だと、
-  // 「あと何が残っているのか」が本人にも人事にも見えない。
-  // 押せるのはチェックだけ（書類の状態はここからも変えられる）
   function renderSubmitState() {
-    const sent = data.profileStatus === "submitted";
-    const cs = data.consents || [];
+    const sent = self_.profileStatus === "submitted";
+    const cs = self_.consents || [];
     const consentDone = cs.length > 0 && cs.every((c) => c.agreed && !c.needsReconsent);
-    const docs = data.documents || [];
+    const docs = self_.documents || [];
 
     const rows = [
       { label: "ご記入いただく内容", ok: sent,
         note: sent ? "提出済み"
-          : (data.missing || []).length ? `あと ${data.missing.length} 項目：${(data.missing).map((m) => m.label).join("・")}`
+          : (self_.missing || []).length ? `あと ${self_.missing.length} 項目：${(self_.missing).map((m) => m.label).join("・")}`
             : "入力は済んでいます。下の「この内容で提出する」を押してください" },
       { label: "3つの書類の確認", ok: consentDone,
         note: consentDone ? "確認済み" : "上の「確認のお願い」で読んでチェックしてください" },
@@ -957,7 +1216,7 @@
     const left = rows.filter((r) => !r.ok).length;
 
     el("submit-state").innerHTML = `
-      ${data.allDone
+      ${self_.allDone
         ? `<div class="banner ok" style="margin-bottom:14px;">
              <span class="material-symbols-outlined">celebration</span>
              <div><b>すべてそろいました。ありがとうございました。</b><br>
@@ -992,7 +1251,7 @@
         el("save-tag").textContent = "保存しました";
         setTimeout(() => { el("save-tag").textContent = ""; }, 2500);
       }
-      await load();
+      await loadSelf();
       if (submit) window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       el("f-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした";

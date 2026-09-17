@@ -362,7 +362,7 @@ async function read(res, user, ctx) {
       // 「会社確認が残っているか」だけは判定に使ってよい
       internalItems: items
         .filter((i) => i.owner === "hr" && i.category !== "document")
-        .map((i) => ({ title: i.title, required: i.required !== false, status: i.status })),
+        .map((i) => ({ id: i.id, title: i.title, required: i.required !== false, status: i.status })),
       stage: proc.row?.stage || null,
       procedureStatus: proc.row?.status || null,
     }),
