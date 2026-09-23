@@ -167,6 +167,27 @@
   function currentEmail() { return loadSession()?.email || null; }
   function logout() { clearSession(); }
 
+  // ---- ログイン前でも呼べる口（招待URLを開いた時点では、まだセッションが無い） ----
+  async function publicApi(path, { method = "GET", body } = {}) {
+    const r = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
+      err.status = r.status; err.code = data.error || null;
+      err.hint = data.hint || data.message || null; err.detail = data.detail;
+      throw err;
+    }
+    return data;
+  }
+  const guestInvitePreview = (token) =>
+    publicApi(`/api/guests/accept?token=${encodeURIComponent(token)}`);
+  const guestRegister = (token, password) =>
+    publicApi("/api/guests/accept", { method: "POST", body: { token, password } });
+
   // ---- API 呼び出し ----------------------------------------------------
   async function api(path, { method = "GET", body } = {}) {
     const token = await getToken();
@@ -321,6 +342,18 @@
   };
   const ensureBillingProgress = (body) => api("/api/billing-progress", { method: "POST", body });
   const updateBillingProgress = (body) => api("/api/billing-progress", { method: "PATCH", body });
+
+  // ---- 外部メンバー（ゲスト）招待 ----
+  const listGuests = () => api("/api/guests");
+  const createGuest = (body) => api("/api/guests", { method: "POST", body });
+  const guestOptions = () => api("/api/guests/options");
+  const guestDetail = (id) => api(`/api/guests/detail?id=${encodeURIComponent(id)}`);
+  const guestReissue = (id) => api("/api/guests/detail", { method: "POST", body: { id, action: "reissue" } });
+  const guestDisable = (id) => api("/api/guests/detail", { method: "POST", body: { id, action: "disable" } });
+  const guestUpdateGrants = (id, grants) =>
+    api("/api/guests/detail", { method: "POST", body: { id, action: "updateGrants", grants } });
+  // 登録済みの外部メンバー本人が、自分の許可範囲を見る
+  const guestMy = () => api("/api/guests/my");
 
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
@@ -1212,6 +1245,8 @@
     listPartners, createPartner, updatePartner, deletePartner,
     listSiteContracts, createSiteContract, updateSiteContract, deleteSiteContract,
     listBillingProgress, ensureBillingProgress, updateBillingProgress,
+    listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
+    guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,

@@ -18,6 +18,15 @@ const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(_HERE);
 const atRoot = (p) => _join(ROOT, p);
 
+// cron を実際に呼ぶ（＝実行機の「いま」を使う）テストのためだけの、
+// 今日からの相対日付。固定の日付文字列だと、月をまたいだ瞬間にテストが
+// 落ちる（実際に日をまたいで起きた不具合）
+const daysAgo = (n) => {
+  const d = new Date(); d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+};
+const daysFromNow = (n) => daysAgo(-n);
+
 // ---- 偽の Supabase --------------------------------------------------------
 const db = { rows: {}, missingTables: new Set() };
 
@@ -302,13 +311,32 @@ await ok("CRON_SECRET が違えば断る", async () => {
   delete process.env.CRON_SECRET;
 });
 
-await ok("まとめて走ると、4種類の内訳が返る", async () => {
-  db.rows = {}; db.missingTables = new Set();
-  setupDevices(); setupContracts(); setupSiteContracts();
-  db.rows.gw_employees.push(...[
+// この2つ（まとめて走ると・二重起票しない）だけは、cron を実際に呼ぶので
+// jstDate() が実行機の「いま」を返す。固定の日付文字列を使うと、月をまたいだ
+//瞬間にテストが落ちる（実際に起きた）。今日からの相対日付だけを使うこと
+function setupCombined() {
+  db.rows.gw_employees = [
+    { id: "e-old", tenant_id: "t1", display_name: "古株 太郎", status: "active", joined_on: daysAgo(10) },
+    { id: "e-new", tenant_id: "t1", display_name: "新人 花子", status: "active", joined_on: daysAgo(1) },
     { id: "bp-9", tenant_id: "t1", display_name: "BP 九郎", employee_kind: "bp",
       status: "active", partner_company_id: "pc-1" },
-  ]);
+  ];
+  db.rows.gw_devices = [];
+  db.rows.gw_contracts = [
+    { id: "c-near", tenant_id: "t1", employee_id: "e1", status: "active", fixed_term: true,
+      period_to: daysFromNow(33), employee: { display_name: "有期 一郎" } },
+  ];
+  db.rows.gw_site_contracts = [
+    { id: "sc-near", tenant_id: "t1", employee_id: "e2", site_company: "A社", renewal_status: "pending",
+      period_to: daysFromNow(33), employee: { display_name: "現場 一郎" } },
+    { id: "sc-bp9", tenant_id: "t1", employee_id: "bp-9", period_from: daysAgo(180), period_to: null },
+  ];
+  db.rows.gw_billing_progress = [];
+}
+
+await ok("まとめて走ると、4種類の内訳が返る", async () => {
+  db.rows = {}; db.missingTables = new Set();
+  setupCombined();
   const r = res();
   await cron({ method: "GET", url: "/api/cron/task-events", headers: {} }, r);
   assert.equal(r.statusCode, 200);
@@ -323,15 +351,7 @@ await ok("まとめて走ると、4種類の内訳が返る", async () => {
 
 await ok("cronを続けて2回走らせても、タスクも請求進捗の行も増えない（二重起票しない）", async () => {
   db.rows = {}; db.missingTables = new Set();
-  setupDevices(); setupContracts(); setupSiteContracts();
-  db.rows.gw_employees.push(
-    { id: "bp-9", tenant_id: "t1", display_name: "BP 九郎", employee_kind: "bp",
-      status: "active", partner_company_id: "pc-1" },
-  );
-  db.rows.gw_site_contracts.push(
-    { id: "sc-bp9", tenant_id: "t1", employee_id: "bp-9", period_from: "2026-01-01", period_to: null },
-  );
-  db.rows.gw_billing_progress = [];
+  setupCombined();
 
   await cron({ method: "GET", url: "/api/cron/task-events", headers: {} }, res());
   const tasksAfter1 = (db.rows.gw_tasks || []).length;
