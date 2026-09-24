@@ -84,8 +84,9 @@ console.log("— 管理者の左メニュー —");
   const page = await open("admin-timecard.html", { admin: true });
 
   const heads = await page.locator(".kp-side-group .lb").allInnerTexts();
-  check(heads.length === 5, `見出しは5つ（いま ${heads.length}: ${heads.join("・")}）`);
-  for (const x of ["ホーム", "人事・労務", "採用", "業務・経理", "管理・設定"]) {
+  // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）
+  check(heads.length === 4, `見出しは4つ（いま ${heads.length}: ${heads.join("・")}）`);
+  for (const x of ["ホーム", "人事・労務", "業務・経理", "管理・設定"]) {
     check(heads.some((h) => h.trim() === x), `グループ「${x}」`);
   }
 
@@ -94,6 +95,9 @@ console.log("— 管理者の左メニュー —");
     .map((s) => s.trim());
   check(shown.length <= 6, `開いているのは1グループぶんだけ（いま ${shown.length} 行）`);
   check(shown.some((s) => s.includes("勤怠・休暇")), "いまいるグループが開いている");
+  check(shown.some((s) => s.includes("採用")), "「採用」は人事・労務の中の項目としてある");
+  check(await page.locator(".kp-side-sub:not(.hidden) a", { hasText: "採用" }).getAttribute("href") === "hr-dashboard.html",
+    "「採用」は /hr（hr-dashboard.html）へ行く");
 
   // ここがいちばん大事。スクロールなしで全部見えるか。
   //

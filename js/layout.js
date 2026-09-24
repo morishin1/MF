@@ -145,10 +145,19 @@
       ],
     },
     {
+      // 「採用」は独立グループから統合。/hr は既存のKPLayoutサイドメニューでは
+      // なく、専用ヘッダー（js/hr-layout.js）で動く別アプリなので、ここは
+      // 単純に入口を1つ置くだけ（tabsは持たせない）
       key: "g-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true },
-        { key: "hr",        href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
+        { key: "hr",        href: "hr-dashboard.html",    label: "採用",         icon: "person_add", ready: true },
+        { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
+          // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
+          // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
+          // 入口は消さない。見出しまで同じにする必要はないので tabs（帯）では
+          // なく match だけにする（帯を出すと、見出しをそろえる制約が働く）
+          match: ["members", "onboard"] },
+        { key: "hr_flow",   href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
         { key: "timecard",  href: "admin-timecard.html",  label: "勤怠・休暇",   icon: "schedule",   ready: true,
           tabs: [
             { key: "timecard", href: "admin-timecard.html", label: "勤怠" },
@@ -168,14 +177,11 @@
           tabs: [
             { key: "growth",   href: "admin-growth.html",   label: "育成計画" },
             { key: "autonomy", href: "admin-autonomy.html", label: "自走レベル" },
-          ] },
-      ],
-    },
-    {
-      key: "g-hire", label: "採用", icon: "person_add",
-      items: [
-        { key: "onboard",   href: "admin-onboard.html",   label: "新規登録", icon: "person_add", ready: true },
-        { key: "probation", href: "admin-probation.html", label: "試用期間", icon: "how_to_reg", ready: true },
+          ],
+          // 試用期間は採用前ではなく入社後の人事管理なので、こちらへ
+          // （既存データ・ロジックは変えず、導線だけ移す）。見出しは「試用期間」の
+          // ままでよいので帯（tabs）には入れず、選ばれた状態にするmatchだけ足す
+          match: ["growth", "autonomy", "probation"] },
       ],
     },
     {

@@ -358,6 +358,12 @@
   const submitBilling = (body) =>
     publicApi("/api/billing-submission/public", { method: "POST", body });
 
+  // ---- 採用HR（/hr） ----
+  const listHrApplicants = () => api("/api/hr/applicants");
+  const createHrApplicant = (body) => api("/api/hr/applicants", { method: "POST", body });
+  const getHrApplicant = (id) => api(`/api/hr/applicants/detail?id=${encodeURIComponent(id)}`);
+  const updateHrApplicant = (body) => api("/api/hr/applicants/detail", { method: "PATCH", body });
+
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
   const createGuest = (body) => api("/api/guests", { method: "POST", body });
@@ -1266,6 +1272,7 @@
     listBillingProgress, ensureBillingProgress, updateBillingProgress,
     listBillingSubmissions, issueSubmissionLink, revokeSubmissionLink, submissionFileUrl,
     submissionPreview, submitBilling,
+    listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

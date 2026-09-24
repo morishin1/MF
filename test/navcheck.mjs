@@ -50,9 +50,10 @@ const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * メンバー: PCでの�
 const adminItems = ADMIN_GROUPS.flatMap((g) => g.items);
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
-// ---- 1) 管理者は5グループ、1グループ6項目まで --------------------------------
+// ---- 1) 管理者は4グループ、1グループ6項目まで --------------------------------
+// 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）
 console.log("\n— 管理者 —");
-check(ADMIN_GROUPS.length === 5, `グループは5つ（いま ${ADMIN_GROUPS.length}）`);
+check(ADMIN_GROUPS.length === 4, `グループは4つ（いま ${ADMIN_GROUPS.length}）`);
 for (const g of ADMIN_GROUPS) {
   check(g.items.length <= 6, `${g.label} は6項目まで（いま ${g.items.length}）`);
 }

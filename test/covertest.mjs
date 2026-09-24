@@ -13,6 +13,10 @@ const dir = ROOT;
 const src = fs.readFileSync(path.join(dir, "js/layout.js"), "utf8");
 const groups = src.slice(src.indexOf("const ADMIN_GROUPS = ["), src.indexOf("// 社労士は社外の人"));
 const keys = new Set([...groups.matchAll(/\{ key: "([a-z_]+)",/g)].map((m) => m[1]));
+// match: [...] に書かれた鍵も、選ばれた状態になる正規の鍵（tabsの帯は出ないだけ）
+for (const m of groups.matchAll(/match:\s*\[([^\]]*)\]/g)) {
+  for (const k of m[1].matchAll(/"([a-z_]+)"/g)) keys.add(k[1]);
+}
 
 // 単純な「active: "esign"」か、「active: 何か ? "esign_order" : "esign"」の
 // どちらか。後者は三項演算の左右（実際にactiveへ入る側）だけを拾う
