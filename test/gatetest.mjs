@@ -93,6 +93,7 @@ mock.module(atRoot("lib/nippo-eval.js"), {
 
 const { default: nippo } = await import(atRoot("api/nippo/index.js"));
 const { nextFocusDate, jstToday } = await import(atRoot("lib/focus.js"));
+const { weekStart } = await import(atRoot("lib/nippo.js"));
 
 const res = () => {
   const r = { statusCode: 0, body: null };
@@ -124,7 +125,11 @@ function setup({ status = null, tasks = [], missing = [] } = {}) {
   db.missing = new Set(missing);
   db.rows = {
     gw_employees: [{ id: "emp-1", tenant_id: "t1", user_id: "u-1", display_name: "山田 太郎", status: "active" }],
-    tc_nippo: [], tc_weekly_review: [], tc_thanks: [], tc_nippo_replies: [],
+    tc_nippo: [],
+    // 週の最終勤務日に実行しても止まらないよう、今週ぶんはあらかじめ埋めておく
+    // （本題は「明日の3件」のテストで、週の振り返りの是非はここでは見ない）
+    tc_weekly_review: [{ user_id: "u-1", week_start: weekStart(TODAY), q1: "順調でした" }],
+    tc_thanks: [], tc_nippo_replies: [],
     gw_reminder_prefs: [{ employee_id: "emp-1", workdays: [1, 2, 3, 4, 5] }],
     gw_action_items: [], gw_daily_kpis: [], gw_nippo_ai_evals: [],
     gw_focus_days: status ? [{ id: "d1", tenant_id: "t1", employee_id: "emp-1",
