@@ -16,7 +16,6 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { evaluateNippo, isConfigured, PROMPT_VERSION } from "../../lib/nippo-eval.js";
 import { ACTIONS as CRITERIA, score } from "../../lib/scoring.js";
-import { planFromNippo, savePlan } from "../../lib/actions.js";
 import { shapeBlocker, forPrompt } from "../../lib/blockers.js";
 import { summarizeForShare } from "../../lib/nippo-share.js";
 
@@ -136,17 +135,10 @@ async function run(res, sb, ctx, user, nippo, { force }) {
   const { data: saved } = await sb
     .from("gw_nippo_ai_evals").update(patch).eq("id", row.id).select("*").single();
 
-  // AIの提案を、翌営業日のダッシュボードに出す。
-  // 評価を読んで終わりにせず、次の行動として残るようにする。
-  // 本人が書いた「明日の最優先」は提出時に入っているので、ここでは足されない
+  // AIの提案（tomorrow_advice・improvement_points）は評価結果として
+  // 本人の画面に出るだけで、もう gw_action_items への自動起票はしない
+  // （gw_tasks/gw_focus_days が Single Source of Truth のため）
   if (r.ok) {
-    try {
-      const plan = planFromNippo({ nippo, evaluation: saved });
-      await savePlan(sb, plan, nippo.id);
-    } catch (e) {
-      // 宿題が作れなくても評価は成立する。画面から足せる
-      console.error("[nippo-eval] 次にやることを作れませんでした:", e.message);
-    }
     // みんなの日報に出すサマリー。評価とは別の呼び出しにしてある。
     // 点数・未達理由・相談事項を渡さないためで、渡していないものは書かれない
     await buildShare(sb, ctx, nippo);
