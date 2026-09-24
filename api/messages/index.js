@@ -9,8 +9,9 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
+import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
+import { ensureAdminContactInbox, adminContactDisplayName } from "../../lib/messages-admin.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -30,10 +31,17 @@ export default async function handler(req, res) {
 async function listThreads(req, res, ctx) {
   const sb = userClient(req);
 
+  // 管理サイドの人は、開くたびに「管理サイドへ連絡」スレッド全部へ参加させておく。
+  // 新しく管理側になった人も、これで過去のやりとりごと見えるようになる。
+  // db/079 未適用でも insert 対象が空になるだけで落ちない
+  if (canManageHr(ctx)) {
+    await ensureAdminContactInbox(admin(), ctx.tenantId, ctx.employee.id).catch(() => {});
+  }
+
   // 参加しているスレッドは RLS が絞ってくれる
   const { data: threads, error } = await sb
     .from("gw_threads")
-    .select("id, kind, title, last_message_at, created_at")
+    .select("id, kind, title, contact_employee_id, last_message_at, created_at")
     .eq("tenant_id", ctx.tenantId)
     .order("last_message_at", { ascending: false })
     .limit(100);
@@ -85,10 +93,10 @@ async function listThreads(req, res, ctx) {
       return {
         ...t,
         members,
-        // 1対1は相手の名前をスレッド名として使う
-        displayName: t.kind === "group"
+        displayName: adminContactDisplayName(t, ctx, members) ?? (t.kind === "group"
+          // 1対1は相手の名前をスレッド名として使う
           ? (t.title || "グループ")
-          : (others[0]?.display_name || "（退職者）"),
+          : (others[0]?.display_name || "（退職者）")),
         lastMessage: latest.get(t.id) || null,
         unread: unread.get(t.id) || 0,
       };

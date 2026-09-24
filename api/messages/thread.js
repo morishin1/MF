@@ -20,6 +20,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { notify, clearNotification } from "../../lib/notify.js";
+import { adminContactDisplayName } from "../../lib/messages-admin.js";
 
 const MAX_BODY = 4000;
 // 1度に返す件数。増やすほど最初の表示が遅くなる
@@ -45,7 +46,7 @@ export default async function handler(req, res) {
     // 参加していなければ RLS で 0 件になる。その場合は 404 と同じ扱いにする
     const { data: thread, error } = await sb
       .from("gw_threads")
-      .select("id, kind, title, last_message_at")
+      .select("id, kind, title, contact_employee_id, last_message_at")
       .eq("id", threadId)
       .maybeSingle();
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
@@ -107,9 +108,9 @@ export default async function handler(req, res) {
       thread: {
         ...thread,
         members,
-        displayName: thread.kind === "group"
+        displayName: adminContactDisplayName(thread, ctx, members) ?? (thread.kind === "group"
           ? (thread.title || "グループ")
-          : (others[0]?.display_name || "（退職者）"),
+          : (others[0]?.display_name || "（退職者）")),
         // 自分がこのグループを動かせるか（人の出し入れ・名前の変更）
         canManage: thread.kind === "group"
           && (mine?.role === "owner" || canManageHr(ctx)),

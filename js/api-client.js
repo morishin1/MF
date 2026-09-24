@@ -1000,6 +1000,10 @@
   const markThreadRead = (threadId) =>
     api("/api/messages/thread", { method: "PATCH", body: { threadId } });
 
+  // ［管理サイドへ連絡］。相手は選ばない。本人専用の窓口を開く（無ければ作る）
+  const openAdminContact = () =>
+    api("/api/messages/admin-contact", { method: "POST" });
+
   // ---- やること（タスク・予定） ----
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
@@ -1299,6 +1303,7 @@
     myContracts, signContract, signPdfUrl,
     docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
+    openAdminContact,
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
