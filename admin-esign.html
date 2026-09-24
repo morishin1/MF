@@ -330,7 +330,10 @@
 
   const PANES = ["order", "send", "list", "tpl"];
 
-  KPLayout.init({ active: "esign", roles: ["admin", "owner"] })
+  // 上のメニューは「契約書作成依頼」と「電子署名」を別タブにしている
+  // （js/layout.js）。どちらで開いたかは ?tab=order の有無で分かる
+  const initialTab = new URLSearchParams(location.search).get("tab");
+  KPLayout.init({ active: initialTab === "order" ? "esign_order" : "esign", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {

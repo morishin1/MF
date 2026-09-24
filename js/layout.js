@@ -155,9 +155,14 @@
             { key: "requests", href: "admin-requests.html", label: "休暇・稟議" },
           ] },
         { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true,
+          // 業務順に並べる: ①契約・面談 → ②契約書作成依頼 → ③電子署名。
+          // 「作成依頼」はadmin-esign.html自身の中のタブ（PANES）の1つで、
+          // 新しい画面は作らない。?tab=order で開くと、そのタブが選ばれた
+          // 状態で開く（admin-esign.html:openFromUrl）
           tabs: [
-            { key: "contracts", href: "admin-contracts.html", label: "契約・面談" },
-            { key: "esign",     href: "admin-esign.html",     label: "電子署名" },
+            { key: "contracts",   href: "admin-contracts.html",       label: "契約・面談" },
+            { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
+            { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
         { key: "growth",    href: "admin-growth.html",    label: "評価・育成",   icon: "trending_up", ready: true,
           tabs: [
