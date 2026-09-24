@@ -184,6 +184,7 @@
         { key: "bookings",   href: "admin-bookings.html", label: "スペース予約", icon: "meeting_room",    ready: true },
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
         { key: "closing",    href: "admin-closing.html",  label: "月次締め",     icon: "event_available", ready: true },
+        { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理", icon: "fact_check",   ready: true },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
       ],

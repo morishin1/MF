@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>勤務表・請求書の提出 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260916l">
+  <style>
+    /* この画面は KPLayout を使わない（未ログインの、外部会社・BPが開く画面） */
+    body { background:var(--soft,#f4f6f9); }
+    .bs-wrap { max-width:480px; margin:0 auto; padding:48px 16px; }
+    .bs-logo { text-align:center; margin-bottom:20px; font-weight:700; font-size:15px; color:var(--primary-dark); }
+    .bs-who { font-size:13.5px; color:var(--muted); line-height:1.8; margin:0 0 18px; }
+    .bs-who b { color:var(--primary-dark); font-size:15px; }
+    .bs-done { display:flex; align-items:center; gap:8px; padding:8px 0; font-size:13px;
+               border-bottom:1px solid var(--border); }
+  </style>
+</head>
+<body>
+
+<div class="bs-wrap">
+  <div class="bs-logo">エイト グループウェア</div>
+  <div class="card" id="box">
+    <div class="empty">読み込み中…</div>
+  </div>
+  <div class="card hidden" id="hist-card">
+    <h2><span class="material-symbols-outlined">history</span>今日、この窓口から送ったもの</h2>
+    <div id="hist"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260916l"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const sent = []; // この画面を開いている間だけ覚えておく（更新すると消える）
+
+  load();
+
+  async function load() {
+    if (!token) { showError("URLが正しくありません。"); return; }
+    let info;
+    try {
+      info = await API.submissionPreview(token);
+    } catch (e) {
+      showError(e.hint || e.message || "このURLは使えません。");
+      return;
+    }
+    render(info);
+  }
+
+  function showError(msg) {
+    el("box").innerHTML = `
+      <h2><span class="material-symbols-outlined">error</span>開けません</h2>
+      <div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(msg)}</div></div>
+      <p class="muted" style="font-size:12.5px;margin-top:14px;">
+        発行した担当者に、あらためてURLの発行を依頼してください。
+      </p>`;
+  }
+
+  function render(info) {
+    const active = info.contracts.filter((c) => c.active);
+    const list = active.length ? active : info.contracts;
+    if (!list.length) {
+      showError("対象の現場契約が見つかりません。担当者にご確認ください。");
+      return;
+    }
+
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    el("box").innerHTML = `
+      <h2><span class="material-symbols-outlined">upload_file</span>勤務表・請求書の提出</h2>
+      <p class="bs-who">
+        ${info.tenantName ? `${esc(info.tenantName)} 宛て` : ""}<br>
+        <b>${esc(info.displayName)}</b> 様の分として届きます。
+      </p>
+
+      ${list.length > 1 ? `
+        <label for="s-contract">対象の現場</label>
+        <select id="s-contract">
+          ${list.map((c) => `<option value="${esc(c.id)}">${esc(c.siteCompany)}${c.primeCompany ? `（${esc(c.primeCompany)}）` : ""}</option>`).join("")}
+        </select>` : `<input type="hidden" id="s-contract" value="${esc(list[0].id)}">`}
+
+      <div style="margin-top:10px;">
+        <label for="s-month">対象年月</label>
+        <input id="s-month" type="month" value="${esc(thisMonth)}">
+      </div>
+
+      <div style="margin-top:10px;">
+        <label for="s-kind">区分</label>
+        <select id="s-kind">
+          <option value="timesheet">勤務表</option>
+          <option value="invoice">請求書</option>
+        </select>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label for="s-file">ファイル（PDF・JPEG・PNG、10MBまで）</label>
+        <input id="s-file" type="file" accept="application/pdf,image/jpeg,image/png">
+      </div>
+
+      <div id="msg" class="err-text" style="margin:10px 0;"></div>
+      <button class="btn btn-primary" id="go" onclick="submit(this)" style="width:100%;">
+        <span class="material-symbols-outlined icon-inline">upload</span>この内容で送る
+      </button>`;
+  }
+
+  async function submit(btn) {
+    const msg = el("msg");
+    msg.textContent = "";
+    const file = el("s-file").files[0];
+    const month = el("s-month").value;
+    const kind = el("s-kind").value;
+    const siteContractId = el("s-contract").value;
+    if (!file) { msg.textContent = "ファイルを選んでください"; return; }
+    if (!month) { msg.textContent = "対象年月を選んでください"; return; }
+
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = "送信しています…";
+    try {
+      const r = await API.submitBilling({
+        token, targetMonth: month, kind, siteContractId,
+        filename: file.name, mimeType: file.type, sizeBytes: file.size,
+      });
+      const put = await fetch(r.uploadUrl, {
+        method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: file,
+      });
+      if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+
+      sent.unshift({ kind, month, fileName: file.name });
+      renderHistory();
+      el("s-file").value = "";
+      msg.textContent = "";
+      msg.className = "";
+      msg.innerHTML = `<span style="color:#2f855a;">送信しました。続けて別のファイルも送れます。</span>`;
+    } catch (e) {
+      msg.className = "err-text";
+      msg.textContent = e.hint || e.message || "送信できませんでした";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+
+  function renderHistory() {
+    if (!sent.length) return;
+    el("hist-card").classList.remove("hidden");
+    el("hist").innerHTML = sent.map((s) => `
+      <div class="bs-done">
+        <span class="material-symbols-outlined" style="color:#2f855a;">check_circle</span>
+        <span class="kp-chip">${s.kind === "timesheet" ? "勤務表" : "請求書"}</span>
+        <span>${esc(s.month)}</span>
+        <span class="muted">${esc(s.fileName)}</span>
+      </div>`).join("");
+  }
+</script>
+
+</body>
+</html>

@@ -343,6 +343,21 @@
   const ensureBillingProgress = (body) => api("/api/billing-progress", { method: "POST", body });
   const updateBillingProgress = (body) => api("/api/billing-progress", { method: "PATCH", body });
 
+  // ---- 月初業務D1：外部提出フォーム（勤務表・請求書） ----
+  const listBillingSubmissions = (month) =>
+    api(`/api/billing-submission?month=${encodeURIComponent(month)}`);
+  const issueSubmissionLink = (employeeId) =>
+    api("/api/billing-submission", { method: "POST", body: { employeeId } });
+  const revokeSubmissionLink = (employeeId) =>
+    api(`/api/billing-submission?employeeId=${encodeURIComponent(employeeId)}`, { method: "DELETE" });
+  const submissionFileUrl = (id) =>
+    api(`/api/billing-submission/file?id=${encodeURIComponent(id)}`);
+  // 以下2つは未ログインでも使う（外部会社・BP向け）
+  const submissionPreview = (token) =>
+    publicApi(`/api/billing-submission/public?token=${encodeURIComponent(token)}`);
+  const submitBilling = (body) =>
+    publicApi("/api/billing-submission/public", { method: "POST", body });
+
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
   const createGuest = (body) => api("/api/guests", { method: "POST", body });
@@ -1249,6 +1264,8 @@
     listPartners, createPartner, updatePartner, deletePartner,
     listSiteContracts, createSiteContract, updateSiteContract, deleteSiteContract,
     listBillingProgress, ensureBillingProgress, updateBillingProgress,
+    listBillingSubmissions, issueSubmissionLink, revokeSubmissionLink, submissionFileUrl,
+    submissionPreview, submitBilling,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,
