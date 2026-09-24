@@ -620,17 +620,20 @@
   }
 
   /**
-   * 会社PC。
+   * 会社PC。表示だけの4区分（DBの status/source はそのまま。ここで言い換えるだけ）。
    *
-   * ○ 登録済 … 本人が周知を確認した端末がある（ここまでで記録が始まる）
-   * △ 確認待ち … 端末はあるが、まだ押されていない（1件も届かない）
-   * — 未登録 … まだ何も無い
+   * ○ Agent連携済み … 周知を確認した端末があり、そのうち1台以上がエージェント連携
+   * ○ Browserのみ   … 周知を確認した端末はあるが、エージェント連携は無い
+   * △ 登録待ち       … 端末はあるが、まだ周知確認が1件も届いていない
+   * — PC未登録       … まだ何も無い
    */
   function pcMark(p) {
     const ds = p.devices || [];
-    if (!ds.length) return { k: "none", m: "—", t: "未登録" };
-    if (ds.some((d) => d.confirmed)) return { k: "ok", m: "○", t: "登録済" };
-    return { k: "warn", m: "△", t: "確認待ち" };
+    if (!ds.length) return { k: "none", m: "—", t: "PC未登録" };
+    const confirmed = ds.filter((d) => d.confirmed);
+    if (!confirmed.length) return { k: "warn", m: "△", t: "登録待ち" };
+    if (confirmed.some((d) => d.source === "agent")) return { k: "ok", m: "○", t: "Agent連携済み" };
+    return { k: "ok", m: "○", t: "Browserのみ" };
   }
 
   /**
