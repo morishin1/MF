@@ -12,10 +12,12 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
+import { notify } from "../../../lib/notify.js";
 import {
   normalizeInterview, shapeInterview, nextStatusFromRank, interviewKindLabel, RANK_LABEL,
+  decisionMakerEmployeeIds,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql・083_hr_interview_meeting_url.sql";
@@ -41,7 +43,7 @@ async function create(req, res, sb, ctx, user) {
   const row = normalizeInterview(body);
   if (row.error) return json(res, 400, row);
 
-  const { data: applicant } = await sb.from("gw_hr_applicants").select("id, stage, status")
+  const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name, stage, status")
     .eq("id", body.applicantId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant) return json(res, 404, { error: "not_found" });
 
@@ -76,6 +78,16 @@ async function create(req, res, sb, ctx, user) {
     target: `hr_interview:${data.id}`, detail: { applicantId: applicant.id, kind: row.value.kind },
   });
 
+  // 社長面談が入ったら、判断できる人へ知らせる（通知は増やしすぎない。ここと判断待ちの2つだけ）
+  if (row.value.kind === "ceo") {
+    const targets = await decisionMakerEmployeeIds(admin(), ctx.tenantId);
+    await notify(targets.map((employeeId) => ({
+      tenantId: ctx.tenantId, employeeId, kind: "hr", title: "社長面談が入りました",
+      body: [applicant.name, row.value.scheduled_at ? fmtDateTime(row.value.scheduled_at) : null].filter(Boolean).join("\n"),
+      link: "hr-ceo-review.html", dedupeKey: `hr_ceo_meeting:${data.id}`,
+    })));
+  }
+
   return json(res, 200, { interview: shapeInterview(data) });
 }
 
@@ -101,7 +113,10 @@ async function conduct(res, sb, ctx, user, iv, body) {
     .update({ conducted_at: conductedAt }).eq("id", iv.id).select("*").single();
   if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
 
-  await sb.from("gw_hr_applicants").update({ status: "eval_pending", updated_at: now })
+  // カジュアル面談は5項目評価待ちへ。社長面談は5項目評価をせず、
+  // そのまま採用判断待ちへ（README Stage 4 §7）
+  const nextStatus = iv.kind === "ceo" ? "ceo_decision_pending" : "eval_pending";
+  await sb.from("gw_hr_applicants").update({ status: nextStatus, updated_at: now })
     .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId);
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: iv.applicant_id, event_key: "interview_done",
@@ -109,7 +124,18 @@ async function conduct(res, sb, ctx, user, iv, body) {
   });
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.interview_conduct", target: `hr_interview:${iv.id}` });
 
-  return json(res, 200, { interview: shapeInterview(data), status: "eval_pending" });
+  // 社長面談が終わったら、判断できる人へ知らせる
+  if (iv.kind === "ceo") {
+    const { data: applicant } = await sb.from("gw_hr_applicants").select("name")
+      .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+    const targets = await decisionMakerEmployeeIds(admin(), ctx.tenantId);
+    await notify(targets.map((employeeId) => ({
+      tenantId: ctx.tenantId, employeeId, kind: "hr", title: "採用判断をしてください",
+      body: applicant?.name || null, link: "hr-ceo-review.html", dedupeKey: `hr_ceo_decision:${iv.id}`,
+    })));
+  }
+
+  return json(res, 200, { interview: shapeInterview(data), status: nextStatus });
 }
 
 async function evaluate(res, sb, ctx, user, iv, body) {

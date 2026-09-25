@@ -371,6 +371,7 @@
   const evaluateHrInterview = (body) => hrInterviewAct({ ...body, action: "evaluate" });
   const updateHrInterview = (body) => hrInterviewAct({ ...body, action: "update" });
   const todayHrInterviews = () => api("/api/hr/interviews/today");
+  const ceoReview = () => api("/api/hr/ceo-review");
 
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
@@ -1283,6 +1284,7 @@
     submissionPreview, submitBilling,
     listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
     scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview, todayHrInterviews,
+    ceoReview,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

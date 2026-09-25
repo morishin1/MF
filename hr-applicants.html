@@ -127,8 +127,9 @@
   let applicants = [];
   let stageFilter = "";
   let openId = null;
+  let canDecide = false;
 
-  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) start(); });
+  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; start(); } });
 
   function start() {
     renderStageTabs();
@@ -293,7 +294,10 @@
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>${esc(a.nextAction)}</h3>
         <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
-        ${a.nextActionCta ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}
+        ${a.nextActionCta && (a.nextActionKey !== "decide" || canDecide)
+          ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
+          : a.nextActionKey === "decide"
+            ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">採用判断は社長・管理者が行います。</p>` : ""}
       </div>
 
       <div class="hr-tabs">
@@ -350,7 +354,10 @@
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${!i.done && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">面談を開く</a>` : ""}
           ${!i.done ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
-          ${i.done && !i.rank ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
+          ${i.done && !i.rank && i.kind !== "ceo"
+            ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
+          ${i.done && i.kind === "ceo"
+            ? `<span class="muted" style="font-size:12px;">採用判断はCEO REVIEWで行います。</span>` : ""}
           ${i.recordingUrl ? `<a href="${esc(i.recordingUrl)}" target="_blank" rel="noopener" style="font-size:12px;">録画を見る</a>` : ""}
         </div>
       </div>`;
@@ -382,23 +389,119 @@
       const iv = targetInterview("evaluate");
       return iv ? openEvaluateForm(iv.id) : null;
     }
-    if (key === "recommend") return confirmDecisionMove("recommend");
+    if (key === "recommend") return openRecommendForm();
     if (key === "reject") return confirmDecisionMove("reject");
+    if (key === "decide") return openDecideForm();
   }
 
-  /** 社長推薦・見送りの最終確定。ランクだけでは自動的に確定しないので、ここで人が押す */
+  /** Dランクの早期見送りだけ、ここで確定する（社長判断待ちからの見送りは openDecideForm） */
   async function confirmDecisionMove(kind) {
-    const okToGo = confirm(kind === "recommend" ? "社長推薦を確定します。よろしいですか？" : "見送りを確定します。よろしいですか？");
+    const okToGo = confirm("見送りを確定します。よろしいですか？");
     if (!okToGo) return;
     try {
-      if (kind === "recommend") {
-        await API.updateHrApplicant({ id: detail.applicant.id, stage: "ceo_recommend", status: "ceo_interview_pending" });
-      } else {
-        await API.updateHrApplicant({ id: detail.applicant.id, decision: "rejected" });
-      }
+      await API.updateHrApplicant({ id: detail.applicant.id, decision: "rejected" });
       await openDetail(detail.applicant.id);
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+
+  /**
+   * 社長推薦する。ここで短い推薦理由を書いてもらう。
+   * 社長が応募書類を最初から読まなくても、30秒で「会う理由」が分かるようにするため
+   */
+  function openRecommendForm() {
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">社長推薦する</h2>
+        <p class="hr-sub" style="margin:0 0 14px;">
+          社長が応募書類を最初から読まなくても、なぜ会う必要があるかが分かるように、短く書いてください。</p>
+        <label>推薦理由</label>
+        <textarea id="rc-note" rows="4"
+          placeholder="営業経験が強く、事業立ち上げ経験あり。カルチャーフィットも高い。報酬条件のみ社長面談で確認したい。"></textarea>
+        <div id="rc-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitRecommend(this)">社長推薦する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitRecommend(btn) {
+    const msg = el("rc-msg"); msg.textContent = "";
+    const note = el("rc-note").value.trim();
+    if (!note) { msg.textContent = "推薦理由を入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({
+        id: detail.applicant.id, stage: "ceo_recommend", status: "ceo_interview_pending", recommendNote: note,
+      }));
+      closeAction();
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
+  }
+
+  /** 採用判断（内定・保留・見送り）。社長・管理者だけ（サーバ側でも弾く） */
+  function openDecideForm() {
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">採用判断</h2>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button class="btn btn-primary btn-sm" onclick="setDecideKind('hired')">内定</button>
+          <button class="btn btn-secondary btn-sm" onclick="setDecideKind('hold')">保留</button>
+          <button class="btn btn-secondary btn-sm" onclick="setDecideKind('rejected')">見送り</button>
+        </div>
+        <div id="decide-body"></div>
+        <div id="dc-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+    setDecideKind("hired");
+  }
+
+  let decideKind = "hired";
+  function setDecideKind(kind) {
+    decideKind = kind;
+    const body = el("decide-body");
+    if (kind === "hold") {
+      body.innerHTML = `
+        <label>保留理由</label><input id="dc-reason" type="text">
+        <label style="margin-top:10px;">次に確認すること</label><input id="dc-next" type="text">
+        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date">
+        <button class="btn btn-primary" style="margin-top:14px;" onclick="submitDecide(this)">保留にする</button>`;
+    } else {
+      body.innerHTML = `
+        <label>コメント（任意）</label><textarea id="dc-note" rows="3"></textarea>
+        <button class="btn btn-primary" style="margin-top:14px;" onclick="submitDecide(this)">
+          ${kind === "hired" ? "内定にする" : "見送りを確定"}</button>`;
+    }
+  }
+
+  async function submitDecide(btn) {
+    const msg = el("dc-msg"); msg.textContent = "";
+    const body = { id: detail.applicant.id, decision: decideKind };
+    if (decideKind === "hired") {
+      body.stage = "offer"; body.status = "offer_draft_pending";
+      body.decisionNote = el("dc-note").value.trim() || undefined;
+    } else if (decideKind === "hold") {
+      const reason = el("dc-reason").value.trim();
+      const next = el("dc-next").value.trim();
+      if (!next) { msg.textContent = "次に確認することを入力してください"; return; }
+      body.holdReason = reason || undefined;
+      body.holdNextStep = next;
+      body.decisionDueOn = el("dc-due").value || undefined;
+    } else {
+      body.status = "passed";
+      body.decisionNote = el("dc-note").value.trim() || undefined;
+    }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant(body));
+      closeAction();
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
   }
 
   async function conductInterview(id) {

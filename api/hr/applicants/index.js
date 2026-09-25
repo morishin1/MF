@@ -14,6 +14,7 @@ import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
 const SQL = "db/081_hr_recruiting.sql";
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
+  + "recommend_note, decision_note, hold_reason, hold_next_step, "
   + "employment_type, contract_type, contract_end_date, join_date, probation_months, "
   + "wage_type, wage_amount, weekly_hours, work_location, employee_id, note, created_at, updated_at";
 

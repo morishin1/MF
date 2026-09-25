@@ -183,8 +183,12 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   console.log("\n— Aランク：社長推薦する —");
   check((await page.locator(".hr-next").innerText()).includes("社長に会ってほしい候補です"), "NEXT ACTION：Aランク");
   await page.locator(".hr-next button", { hasText: "社長推薦する" }).click();
+  await page.waitForTimeout(400);
+  check(await page.locator(".hr-drawer").isVisible(), "推薦理由を書く欄が開く");
+  await page.fill("#rc-note", "営業経験が強く、事業立ち上げ経験あり。報酬条件のみ社長面談で確認したい。");
+  await page.locator(".hr-drawer button", { hasText: "社長推薦する" }).click();
   await page.waitForTimeout(700);
-  check(posted.some((p) => p.stage === "ceo_recommend"), "社長推薦がサーバへ送られる");
+  check(posted.some((p) => p.stage === "ceo_recommend" && p.recommendNote), "推薦理由つきで社長推薦がサーバへ送られる");
 
   console.log("\n— GOOD CANDIDATESへ表示 —");
   await page.goto(`${BASE}/hr-dashboard.html`);

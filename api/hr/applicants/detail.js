@@ -3,17 +3,19 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { gwContext, canRecruit, canDecideHire } from "../../../lib/gw.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
+import { notify } from "../../../lib/notify.js";
 import {
   normalizeApplicant, shapeApplicant, offerStatus, shapeInterview, STAGE_LABEL, RANK_LABEL,
-  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS,
+  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
+  + "recommend_note, decision_note, hold_reason, hold_next_step, "
   + "employment_type, contract_type, contract_end_date, join_date, probation_months, "
   + "wage_type, wage_amount, weekly_hours, work_location, employee_id, note, created_at, updated_at";
 
@@ -90,6 +92,11 @@ async function one(req, res, sb, ctx) {
   });
 }
 
+// 採用判断（社長面談のあとの内定・保留・見送り）そのものは、社長・管理者だけ
+// （README Stage 4 §16）。Dランクの早期見送り（recruiter/hrでも可）とは別扱いにする。
+// 両方とも decision 列を書くので、区別は「社長判断待ちから動かすかどうか」で見る
+const CEO_DECISION_FIELDS = ["decision", "decisionNote", "holdReason", "holdNextStep"];
+
 async function update(req, res, sb, ctx, user) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
@@ -100,6 +107,10 @@ async function update(req, res, sb, ctx, user) {
   const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!before) return json(res, 404, { error: "not_found" });
+  if (before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined)
+      && !canDecideHire(ctx)) {
+    return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
+  }
 
   const { data, error } = await sb.from("gw_hr_applicants")
     .update({ ...row.value, updated_at: new Date().toISOString() })
@@ -114,16 +125,27 @@ async function update(req, res, sb, ctx, user) {
       event_key: `stage_${row.value.stage}`, label: STAGE_LABEL[row.value.stage] || row.value.stage,
       detail: data.rank ? `ランク${data.rank}` : null, created_by: user.id,
     });
+    // 社長推薦されたら、判断できる人（社長・管理者）へ知らせる。通知は増やしすぎない
+    if (row.value.stage === "ceo_recommend") {
+      const ab = admin();
+      const targets = await decisionMakerEmployeeIds(ab, ctx.tenantId);
+      await notify(targets.map((employeeId) => ({
+        tenantId: ctx.tenantId, employeeId, kind: "hr", title: "社長推薦された候補者がいます",
+        body: [data.name, data.recommend_note].filter(Boolean).join("\n"),
+        link: "hr-ceo-review.html", dedupeKey: `hr_recommend:${body.id}`,
+      })));
+    }
   }
   // 最終決定（社長推薦・見送り・保留）が動いたときも、値を直しただけとは分けて残す。
   // 「ランクだけで自動的に確定しない」の記録がここに残る
   if ("decision" in row.value && row.value.decision !== before.decision) {
     const label = row.value.decision === "rejected" ? "見送りを確定"
-      : row.value.decision === "hired" ? "採用を確定" : row.value.decision === "hold" ? "保留にした" : "決定を取り消した";
+      : row.value.decision === "hired" ? "内定" : row.value.decision === "hold" ? "保留にした" : "決定を取り消した";
+    const detail = row.value.decision === "hold" ? (data.hold_next_step || null)
+      : data.rank ? `ランク${data.rank}` : null;
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: body.id,
-      event_key: `decision_${row.value.decision || "cleared"}`, label,
-      detail: data.rank ? `ランク${data.rank}` : null, created_by: user.id,
+      event_key: `decision_${row.value.decision || "cleared"}`, label, detail, created_by: user.id,
     });
   }
 

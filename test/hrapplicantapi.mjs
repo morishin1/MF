@@ -93,6 +93,7 @@ mock.module(atRoot("lib/gw.js"), {
     gwContext: async () => who,
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
     canRecruit: (c) => Boolean(c?.isAdmin || c?.isHr || (c?.roles || []).includes("recruiter")),
+    canDecideHire: (c) => Boolean(c?.isAdmin || (c?.roles || []).includes("owner")),
   },
 });
 
