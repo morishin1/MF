@@ -11,8 +11,8 @@
 //   6. admin-onboard.html へ渡す項目は、gw_hr_applicants の列名と同じ
 import assert from "node:assert/strict";
 import {
-  STAGE_KEYS, STATUS_LABEL, isOverdue, nextStatusFromRank, offerStatus,
-  normalizeApplicant, snapshotOfferFields, shapeApplicant, ONBOARD_PREFILL_FIELDS,
+  STAGE_KEYS, STATUS_LABEL, isOverdue, nextStatusFromRank, offerStatus, offerResponseStatus,
+  normalizeApplicant, snapshotOfferFields, shapeApplicant, shapePublicOffer, ONBOARD_PREFILL_FIELDS,
   EVAL_ITEMS, EVAL_SCALE_KEYS, nextActionOf, normalizeInterview, shapeInterview, interviewKindLabel,
 } from "../lib/hr.js";
 
@@ -80,6 +80,44 @@ ok("無効化されたら revoked（承諾・辞退が無い場合）", () => {
 });
 ok("期限が過ぎたら expired", () => {
   assert.equal(offerStatus(offer({ sent_at: "2020-01-01T00:00:00Z", expires_at: "2020-02-01T00:00:00Z" })), "expired");
+});
+ok("本人が閲覧したら viewed（送付済みより優先。Stage 6）", () => {
+  assert.equal(offerStatus(offer({ sent_at: "2026-09-01T00:00:00Z", viewed_at: "2026-09-02T00:00:00Z" })), "viewed");
+});
+
+console.log("\n=== 本人の回答状況（offerResponseStatus） ===\n");
+
+ok("未回答なら pending", () => { assert.equal(offerResponseStatus(offer()), "pending"); });
+ok("承諾されたら accepted", () => {
+  assert.equal(offerResponseStatus(offer({ accepted_at: "2026-09-02T00:00:00Z" })), "accepted");
+});
+ok("辞退されたら declined", () => {
+  assert.equal(offerResponseStatus(offer({ declined_at: "2026-09-02T00:00:00Z" })), "declined");
+});
+
+console.log("\n=== 候補者向け公開ページの形（shapePublicOffer） ===\n");
+
+ok("社内向け情報を含まず、offer側のスナップショットだけを返す", () => {
+  const s = shapePublicOffer(
+    { job_title: "エンジニア", wage_amount: 400000, respond_by: "2026-10-15", accepted_at: null, declined_at: null },
+    { name: "山田 太郎" },
+    { name: "株式会社エイト" },
+    { display_name: "採用 花子", email: "recruit@example.com" },
+  );
+  assert.equal(s.candidateName, "山田 太郎");
+  assert.equal(s.tenantName, "株式会社エイト");
+  assert.equal(s.jobTitle, "エンジニア");
+  assert.equal(s.responseStatus, "pending");
+  assert.equal(s.recruiterName, "採用 花子");
+  assert.equal(s.recruiterEmail, "recruit@example.com");
+  assert.ok(!("rank" in s) && !("employeeId" in s) && !("tenantId" in s));
+});
+ok("採用担当が未定なら、連絡先はnull", () => {
+  const s = shapePublicOffer(
+    { job_title: "エンジニア", respond_by: "2026-10-15", accepted_at: null, declined_at: null },
+    { name: "山田 太郎" }, null, null,
+  );
+  assert.equal(s.recruiterEmail, null);
 });
 
 console.log("\n=== 応募者の入力チェック（normalizeApplicant） ===\n");
@@ -229,6 +267,64 @@ ok("社長面談待ちは、社長面談を設定（kind: ceo）", () => {
   const n = nextActionOf({ status: "ceo_interview_pending" });
   assert.equal(n.cta, "社長面談を設定");
   assert.equal(n.kind, "ceo");
+});
+
+console.log("— NEXT ACTION：合格通知・本人専用URL（Stage 5・6） —");
+
+ok("合格通知作成待ちは、合格通知を作成", () => {
+  const n = nextActionOf({ status: "offer_draft_pending" });
+  assert.equal(n.cta, "合格通知を作成");
+  assert.equal(n.action, "createOffer");
+});
+ok("本人送付待ちは、本人へ送る", () => {
+  const n = nextActionOf({ status: "offer_send_pending" });
+  assert.equal(n.cta, "本人へ送る");
+  assert.equal(n.action, "sendOffer");
+});
+ok("URL再送待ちは、本人へ再送", () => {
+  const n = nextActionOf({ status: "offer_resend_pending" });
+  assert.equal(n.cta, "本人へ再送");
+  assert.equal(n.action, "sendOffer");
+});
+ok("送付済み・未閲覧は、送付日時が出て、URLを再発行できる", () => {
+  const n = nextActionOf({ status: "offer_sent" }, null, { sentAt: "2026-09-25T06:00:00Z" });
+  assert.match(n.label, /送付：/);
+  assert.match(n.label, /閲覧：未確認/);
+  assert.equal(n.cta, "URLを再発行");
+  assert.equal(n.action, "reissueOffer");
+});
+ok("閲覧済みは、送付・閲覧の日時が出て、URLを再発行できる", () => {
+  const n = nextActionOf(
+    { status: "offer_viewed" }, null,
+    { sentAt: "2026-09-25T06:00:00Z", viewedAt: "2026-09-25T07:00:00Z" },
+  );
+  assert.match(n.label, /閲覧：(?!未確認)/);
+  assert.equal(n.cta, "URLを再発行");
+});
+ok("回答期限が過ぎたら、閲覧済みでも「期限を過ぎました」に切り替わる", () => {
+  const n = nextActionOf(
+    { status: "offer_viewed" }, null,
+    { sentAt: "2020-01-01T00:00:00Z", viewedAt: "2020-01-01T00:00:00Z", expiresAt: "2020-02-01T00:00:00Z" },
+  );
+  assert.match(n.label, /期限を過ぎました/);
+  assert.equal(n.cta, "URLを再発行");
+});
+ok("本人送付待ちでも、期限が過ぎていれば知らせる（一度も送らないまま期限切れ）", () => {
+  const n = nextActionOf({ status: "offer_send_pending" }, null, { expiresAt: "2020-02-01T00:00:00Z" });
+  assert.match(n.label, /期限を過ぎました/);
+});
+
+console.log("— NEXT ACTION：承諾・辞退（Stage 7） —");
+
+ok("承諾済みは、本採用へ進めてください（ボタンは次のステージ）", () => {
+  const n = nextActionOf({ status: "accepted" });
+  assert.equal(n.label, "本採用へ進めてください");
+  assert.equal(n.cta, null);
+});
+ok("辞退は、対応不要", () => {
+  const n = nextActionOf({ status: "declined" });
+  assert.equal(n.label, "対応は不要です");
+  assert.equal(n.cta, null);
 });
 
 console.log("— 画面へ渡す形（shapeInterview） —");

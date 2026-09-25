@@ -71,7 +71,7 @@ async function one(req, res, sb, ctx) {
       ...shapeApplicant(
         a,
         nextInterview && { scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
-        current && { sentAt: current.sent_at, viewedAt: current.viewed_at },
+        current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
       ),
       recruiterName: recruiter?.display_name || null,
     },

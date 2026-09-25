@@ -23,6 +23,13 @@
     .ho-fields dd { margin:0; color:#1b2440; font-weight:700; font-size:15px; }
     .ho-msg { white-space:pre-wrap; font-size:13px; color:#1b2440; line-height:1.8;
       background:#f6f6f2; border-radius:8px; padding:14px; margin-top:18px; }
+    .ho-actions { margin-top:24px; padding-top:20px; border-top:1px solid #e2e2dc; }
+    .ho-actions .due { font-size:12.5px; color:#6b7080; margin:0 0 14px; }
+    .ho-actions button { width:100%; margin-bottom:10px; }
+    .ho-actions .ask { font-size:12.5px; color:#6b7080; margin:18px 0 8px; }
+    .ho-done { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700;
+      color:#2f6f3a; background:#e5f1e2; border-radius:8px; padding:14px; margin-top:20px; }
+    .ho-done.declined { color:#4a5068; background:#efefeb; }
   </style>
 </head>
 <body>
@@ -40,6 +47,8 @@
 
   load();
 
+  let current = null;
+
   async function load() {
     if (!token) { showError("URLが正しくありません。"); return; }
     let offer;
@@ -49,6 +58,7 @@
       showError(e.hint || e.message || "このURLは開けません。");
       return;
     }
+    current = offer;
     render(offer);
   }
 
@@ -91,7 +101,74 @@
       </dl>
       ${o.messageToCandidate ? `
         <h4 style="font-size:12.5px;color:#6b7080;margin:20px 0 0;">採用担当からのメッセージ</h4>
-        <div class="ho-msg">${esc(o.messageToCandidate)}</div>` : ""}`;
+        <div class="ho-msg">${esc(o.messageToCandidate)}</div>` : ""}
+      <div id="ho-actions"></div>`;
+    renderActions(o);
+  }
+
+  // ---- 承諾・辞退・採用担当への連絡（Stage 7） ------------------------------------
+  // 本人が「承諾」しただけでは、本採用（gw_employees作成）は行わない。
+  // 人事が改めて「本採用へ進める」を押してから（次のステージ）
+  function renderActions(o) {
+    const box = el("ho-actions");
+    if (o.responseStatus === "accepted") {
+      box.innerHTML = `<div class="ho-done"><span class="material-symbols-outlined">check_circle</span>
+        承諾済みです。採用担当からのご連絡をお待ちください。</div>`;
+      return;
+    }
+    if (o.responseStatus === "declined") {
+      box.innerHTML = `<div class="ho-done declined"><span class="material-symbols-outlined">info</span>
+        辞退のご連絡を受け付けました。</div>`;
+      return;
+    }
+    const mailto = o.recruiterEmail
+      ? `mailto:${encodeURIComponent(o.recruiterEmail)}?subject=${encodeURIComponent("選考結果について")}`
+      : null;
+    box.innerHTML = `
+      <div class="ho-actions">
+        <p class="due">採用条件を確認しました。回答期限：${fmtDate(o.respondBy)}</p>
+        <button class="btn btn-primary" onclick="submitAccept(this)">承諾する</button>
+        <button class="btn btn-secondary" onclick="openDeclineForm()">辞退する</button>
+        <div id="ho-decline"></div>
+        ${mailto ? `
+          <p class="ask">条件について確認したいことがありますか？</p>
+          <a class="btn btn-secondary" href="${esc(mailto)}">採用担当へ連絡</a>` : ""}
+      </div>
+      <div id="ho-msg" class="err-text" style="margin-top:10px;"></div>`;
+  }
+
+  async function submitAccept(btn) {
+    if (!confirm("この内容で承諾します。よろしいですか？")) return;
+    const msg = el("ho-msg"); msg.textContent = "";
+    btn.disabled = true;
+    try {
+      await API.hrOfferRespond(token, "accept");
+      current.responseStatus = "accepted";
+      renderActions(current);
+    } catch (e) {
+      msg.textContent = e.hint || e.message || "承諾できませんでした";
+      btn.disabled = false;
+    }
+  }
+
+  function openDeclineForm() {
+    el("ho-decline").innerHTML = `
+      <label>辞退の理由（任意）</label>
+      <textarea id="ho-reason" rows="3"></textarea>
+      <button class="btn btn-primary" style="margin-top:8px;" onclick="submitDecline(this)">この内容で辞退する</button>`;
+  }
+
+  async function submitDecline(btn) {
+    const msg = el("ho-msg"); msg.textContent = "";
+    btn.disabled = true;
+    try {
+      await API.hrOfferRespond(token, "decline", el("ho-reason").value.trim() || undefined);
+      current.responseStatus = "declined";
+      renderActions(current);
+    } catch (e) {
+      msg.textContent = e.hint || e.message || "辞退の連絡ができませんでした";
+      btn.disabled = false;
+    }
   }
 </script>
 

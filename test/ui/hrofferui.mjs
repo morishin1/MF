@@ -1,5 +1,5 @@
-// 採用HR Stage 5・6：合格通知の作成・確認・確定 → 本人へ送る・URLを再発行
-// （hr-applicants.html）を、実際のブラウザで通す。
+// 採用HR Stage 5・6・7：合格通知の作成・確認・確定 → 本人へ送る・URLを再発行 →
+// 承諾・辞退の表示（hr-applicants.html）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //
@@ -7,6 +7,8 @@
 //     → 社内確認待ち → 内容を確認して確定 → 本人送付待ち
 //   Stage 6：本人送付待ち → URLを発行（コピーできる） → 送付済みにする
 //     → 本人送付済みへ → URLを再発行 → 再送待ちへ
+//   Stage 7：本人が承諾・辞退すると、応募者一覧・詳細にその結果が出る
+//     （辞退理由つき）。「承諾」だけでは本採用のボタンは出さない（次のステージ）
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -246,6 +248,101 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
   check(urlVal2.includes("tok-2") && urlVal2 !== urlVal, "新しいURLが発行される（前とは別のtoken）");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 承諾・辞退の結果がHR側に表示される（Stage 7） ===");
+{
+  const applicant = {
+    id: "a1", name: "山田 太郎", jobTitle: "エンジニア", source: "リファラル",
+    stage: "offer", stageLabel: "内定", status: "declined", statusLabel: "辞退",
+    nextAction: "対応は不要です", nextActionCta: null, nextActionKey: null,
+    rank: "A", decision: "hired", decisionDueOn: null,
+  };
+  const offers = [{
+    id: "of1", version: 1, status: "declined", respondBy: "2026-10-15",
+    sentAt: "2026-09-25T06:00:00Z", viewedAt: "2026-09-25T07:00:00Z",
+    declinedAt: "2026-09-26T02:00:00Z", declineReason: "他社の内定を承諾したため",
+    acceptedAt: null,
+  }];
+
+  const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
+  });
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+
+  await page.route("**/api/**", (route) => {
+    const url = route.request().url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "recruit@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
+        gw: { employee: RECRUITER, roles: ["recruiter"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/hr\/applicants\/detail/.test(url)) {
+      return send({ applicant, timeline: [
+        { id: "t1", eventKey: "decision_hired", label: "内定", occurredAt: "2026-09-24T00:00:00Z" },
+        { id: "t2", eventKey: "offer_declined", label: "本人が辞退", detail: "他社の内定を承諾したため", occurredAt: "2026-09-26T02:00:00Z" },
+      ], offers });
+    }
+    if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [applicant] });
+    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    if (/\/api\/badges/.test(url)) return send({ badges: {} });
+    return send({});
+  });
+
+  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+
+  check((await page.locator(".hr-next").innerText()).includes("対応は不要です"), "辞退は「対応は不要です」になる");
+  check(!(await page.locator(".hr-next button").count()), "辞退にはNEXT ACTIONボタンは出ない");
+  const detailText = await page.locator(".hr-detail").innerText();
+  check(detailText.includes("辞退"), "合格通知の履歴に辞退が出る");
+  check(detailText.includes("他社の内定を承諾したため"), "辞退理由が出る");
+  check(detailText.includes("本人が辞退"), "選考タイムラインに辞退が出る");
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 承諾済みは「本採用へ進めてください」だけ（ボタンは次のステージ） ===");
+{
+  const applicant = {
+    id: "a1", name: "山田 太郎", jobTitle: "エンジニア", source: "リファラル",
+    stage: "offer", stageLabel: "内定", status: "accepted", statusLabel: "承諾済み",
+    nextAction: "本採用へ進めてください", nextActionCta: null, nextActionKey: null,
+    rank: "A", decision: "hired", decisionDueOn: null,
+  };
+  const offers = [{
+    id: "of1", version: 1, status: "accepted", respondBy: "2026-10-15",
+    sentAt: "2026-09-25T06:00:00Z", viewedAt: "2026-09-25T07:00:00Z",
+    acceptedAt: "2026-09-26T02:00:00Z", declinedAt: null,
+  }];
+
+  const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
+  });
+  await page.route("**/api/**", (route) => {
+    const url = route.request().url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "recruit@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
+        gw: { employee: RECRUITER, roles: ["recruiter"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/hr\/applicants\/detail/.test(url)) {
+      return send({ applicant, timeline: [], offers });
+    }
+    if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [applicant] });
+    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    if (/\/api\/badges/.test(url)) return send({ badges: {} });
+    return send({});
+  });
+
+  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  check((await page.locator(".hr-next").innerText()).includes("本採用へ進めてください"), "承諾済みのラベルが出る");
+  check(!(await page.locator(".hr-next button").count()), "本採用へ進めるボタンはまだ出ない（次のステージ）");
   await page.close();
 }
 

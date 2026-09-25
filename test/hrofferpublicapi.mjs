@@ -27,12 +27,16 @@ function table(name) {
   const f = [];
   const rows = () => (db.rows[name] || []).filter((r) => f.every(([op, k, v]) => {
     if (op === "eq") return r[k] === v;
+    if (op === "neq") return r[k] !== v;
+    if (op === "in") return Array.isArray(v) ? v.includes(r[k]) : r[k] === v;
     return true;
   }));
   const e = () => (db.missing === name ? { code: "PGRST205", message: `Could not find the table '${name}'` } : null);
   const q = {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
+    neq(k, v) { f.push(["neq", k, v]); return q; },
+    in(k, v) { f.push(["in", k, v]); return q; },
     maybeSingle: () => Promise.resolve({ data: e() ? null : copy(rows()[0]) || null, error: e() }),
     then: (fn) => Promise.resolve({ data: e() ? null : rows().map(copy), error: e() }).then(fn),
     update(patch) {
@@ -55,6 +59,26 @@ function table(name) {
       if (!e()) (db.rows[name] = db.rows[name] || []).push(...made);
       return { then: (fn) => Promise.resolve({ data: e() ? null : made.map(copy), error: e() }).then(fn) };
     },
+    upsert(rowsIn, opts = {}) {
+      const list = [].concat(rowsIn);
+      const keyOf = (r) => (opts.onConflict || "id").split(",").map((k) => r[k]).join("|");
+      const made = [];
+      for (const r of list) {
+        const k = keyOf(r);
+        const idx = (db.rows[name] || []).findIndex((x) => keyOf(x) === k);
+        if (idx >= 0) {
+          if (opts.ignoreDuplicates) continue;
+          Object.assign(db.rows[name][idx], r);
+          made.push(db.rows[name][idx]);
+        } else {
+          const row = { id: r.id || `${name}-${(db.rows[name] || []).length + 1}`, ...r };
+          (db.rows[name] = db.rows[name] || []).push(row);
+          made.push(row);
+        }
+      }
+      const r2 = { select: () => r2, then: (fn) => Promise.resolve({ data: made.map(copy), error: null }).then(fn) };
+      return r2;
+    },
   };
   return q;
 }
@@ -73,6 +97,8 @@ const res = () => {
 };
 const call = async (req) => { const r = res(); await publicOffer({ method: "GET", ...req }, r); return r; };
 const get = (token) => call({ url: `/api/hr/offers/public?token=${encodeURIComponent(token || "")}` });
+const respond = (token, action, extra = {}) =>
+  call({ method: "POST", url: "/api/hr/offers/public", body: { token, action, ...extra } });
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -98,11 +124,12 @@ function setup() {
     }],
     gw_hr_applicants: [
       { id: "a1", tenant_id: "t1", name: "山田 太郎", status: "offer_sent", rank: "A",
-        recommend_note: "社内向けの推薦理由", decision: "hired" },
+        recommend_note: "社内向けの推薦理由", decision: "hired", recruiter_id: "e1" },
       { id: "a2", tenant_id: "t1", name: "鈴木 花子", status: "offer_sent", rank: "B" },
     ],
     tenants: [{ id: "t1", name: "株式会社エイト" }],
-    gw_hr_timeline: [],
+    gw_employees: [{ id: "e1", tenant_id: "t1", display_name: "採用 花子", email: "recruit@example.com" }],
+    gw_hr_timeline: [], gw_notifications: [],
   };
 }
 
@@ -221,6 +248,110 @@ await ok("別offerのtokenでは、その応募者自身の情報しか返らな
   assert.equal(r1.body.candidateName, "山田 太郎");
   assert.equal(r2.body.candidateName, "鈴木 花子");
   assert.notEqual(r1.body.jobTitle, r2.body.jobTitle);
+});
+
+console.log("\n=== 採用担当の連絡先（質問がある本人が連絡できるように） ===\n");
+
+await ok("採用担当の氏名・メールアドレスが返る", async () => {
+  setup();
+  const r = await get(TOKEN);
+  assert.equal(r.body.recruiterName, "採用 花子");
+  assert.equal(r.body.recruiterEmail, "recruit@example.com");
+});
+
+await ok("採用担当が未定なら、連絡先はnull（ボタンを出さない判断に使う）", async () => {
+  setup();
+  db.rows.gw_hr_applicants[0].recruiter_id = null;
+  const r = await get(TOKEN);
+  assert.equal(r.body.recruiterEmail, null);
+});
+
+await ok("回答状況（responseStatus）が返る", async () => {
+  setup();
+  const r = await get(TOKEN);
+  assert.equal(r.body.responseStatus, "pending");
+});
+
+console.log("\n=== 本人が承諾・辞退する（POST） ===\n");
+
+await ok("承諾できる。応募者の状態が「承諾済み」へ進む", async () => {
+  setup();
+  await get(TOKEN); // 先に開いておく（閲覧記録は必須ではないが、通常の流れ）
+  const r = await respond(TOKEN, "accept");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.responseStatus, "accepted");
+  assert.ok(db.rows.gw_hr_offers[0].accepted_at, "accepted_atが立つ");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "accepted");
+});
+
+await ok("承諾しただけでは gw_employees は作られない（本採用は別ステージ）", async () => {
+  setup();
+  await respond(TOKEN, "accept");
+  assert.equal((db.rows.gw_employees || []).length, 1, "元からいたrecruiterの1人だけ。増えない");
+});
+
+await ok("選考タイムライン・監査ログに残る", async () => {
+  setup();
+  await respond(TOKEN, "accept");
+  assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_accepted"));
+  assert.ok(logged.some((l) => l.action === "hr.offer_accepted"));
+});
+
+await ok("採用担当（recruiter_id）へ通知される", async () => {
+  setup();
+  await respond(TOKEN, "accept");
+  assert.ok(db.rows.gw_notifications.some((n) => n.employee_id === "e1" && n.kind === "hr"));
+});
+
+await ok("辞退できる。理由つきで記録される", async () => {
+  setup();
+  const r = await respond(TOKEN, "decline", { declineReason: "他社の内定を承諾したため" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.responseStatus, "declined");
+  assert.ok(db.rows.gw_hr_offers[0].declined_at, "declined_atが立つ");
+  assert.equal(db.rows.gw_hr_offers[0].decline_reason, "他社の内定を承諾したため");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "declined");
+});
+
+await ok("辞退理由は任意（空でもよい）", async () => {
+  setup();
+  const r = await respond(TOKEN, "decline");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_offers[0].decline_reason, null);
+});
+
+await ok("辞退も選考タイムライン・監査ログに残る", async () => {
+  setup();
+  await respond(TOKEN, "decline", { declineReason: "縁がなかった" });
+  assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_declined" && t.detail === "縁がなかった"));
+  assert.ok(logged.some((l) => l.action === "hr.offer_declined"));
+});
+
+await ok("すでに回答済みなら、二重に回答できない", async () => {
+  setup();
+  await respond(TOKEN, "accept");
+  const r = await respond(TOKEN, "decline");
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "already_responded");
+});
+
+await ok("actionが不正なら断る", async () => {
+  setup();
+  const r = await respond(TOKEN, "maybe");
+  assert.equal(r.statusCode, 400);
+});
+
+await ok("tokenが無効なら回答できない", async () => {
+  setup();
+  const r = await respond("b".repeat(43), "accept");
+  assert.equal(r.statusCode, 404);
+});
+
+await ok("期限切れなら回答できない", async () => {
+  setup();
+  db.rows.gw_hr_offers[0].expires_at = PAST;
+  const r = await respond(TOKEN, "accept");
+  assert.equal(r.statusCode, 410);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -384,6 +384,8 @@
   const markHrOfferSent = (id) => hrOfferAct({ id, action: "markSent" });
   // 候補者向け公開ページ（未ログイン）
   const hrOfferPublic = (token) => publicApi(`/api/hr/offers/public?token=${encodeURIComponent(token)}`);
+  const hrOfferRespond = (token, action, declineReason) =>
+    publicApi("/api/hr/offers/public", { method: "POST", body: { token, action, declineReason } });
 
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
@@ -1298,7 +1300,7 @@
     scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview, todayHrInterviews,
     ceoReview,
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
-    issueHrOfferLink, markHrOfferSent, hrOfferPublic,
+    issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,
