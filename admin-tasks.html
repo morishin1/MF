@@ -14,12 +14,28 @@
   <link rel="stylesheet" href="css/app.css?v=20260916m">
   <link rel="stylesheet" href="css/layout.css?v=20260916m">
   <style>
-    /* ── 毎日の実行管理 ──
-       誰が何をしていて、誰が止まっているか。この1枚で分かるようにする。
-       個々のタスクの中身は、その人を開いたときだけ */
-    /* ── 一覧（探す場所）──
-       1件ずつ短い行で、たくさん並べる。文章は出さない。
-       中身は行を押して、右の引き出しで読む */
+    /* ── この画面の役割は3つだけ ──
+       1. 今日やることを見る（サマリー）
+       2. 止まっていることを把握する（止まっている人）
+       3. 必要なときだけ全体を探す（担当者一覧／全タスク／月次タスク）
+       追加フォームと個々の中身は、右の引き出しに寄せる */
+    .tk-tabhead { display:flex; justify-content:space-between; align-items:center;
+                  gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+
+    /* ── 止まっている人。ここを最初に見せる ── */
+    .stuck-list { margin:0 0 22px; }
+    .stuck-row { display:flex; align-items:center; gap:12px; padding:10px 4px;
+                 border-bottom:1px solid var(--border); cursor:pointer; }
+    .stuck-row:last-child { border-bottom:none; }
+    .stuck-row:hover { background:var(--soft); }
+    .stuck-row .nm { font-weight:700; color:var(--primary-dark); white-space:nowrap; }
+    .stuck-row .dep { font-size:11.5px; color:var(--muted); white-space:nowrap; }
+    .stuck-row .reason { flex:1; min-width:0; font-size:12.5px; color:#9c4221; }
+    .stuck-row .chev { color:var(--muted); flex:0 0 auto; }
+    .bd-waiting-note { font-size:12px; color:var(--muted); margin:0 0 18px; }
+    .bd-sec-h { font-size:13.5px; font-weight:700; color:var(--primary-dark); margin:0 0 8px; }
+
+    /* ── 一覧（探す場所）── */
     .tk-kpi { display:flex; gap:9px; flex-wrap:wrap; margin:0 0 14px; }
     .tk-kpi .box { flex:1 1 110px; border:1px solid var(--border); border-radius:10px;
                    padding:9px 12px; cursor:pointer; background:#fff; text-align:left;
@@ -88,7 +104,7 @@
     .bd-kpi .box.warn .v { color:#c53030; }
     .bd-kpi .box.ok .v { color:#256b36; }
 
-    .bd-f { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin:0 0 14px; }
+    .bd-f { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin:0 0 18px; }
     .bd-f label { display:block; font-size:11.5px; color:var(--muted); margin-bottom:3px; }
     .bd-f select, .bd-f input { margin:0; font-size:13px; width:auto; min-width:120px; }
 
@@ -109,13 +125,15 @@
     .bd-st.warn { background:#fde8e8; color:#c53030; }
     .bd-st.working { background:#fff3e0; color:#9c4221; }
     .bd-stuck { font-size:12px; color:#9c4221; }
-    .bd-li { font-size:12px; color:var(--muted); line-height:1.8; }
-    .bd-li .ok { color:#256b36; }
     @media (max-width:760px) {
       .bd-table thead { display:none; }
       .bd-table tr { display:block; border-bottom:1px solid var(--border); padding:10px 0; }
       .bd-table td { display:block; border:0; padding:2px 0; }
     }
+
+    /* ── 追加ドロワー・引き出しの中の2〜3列グリッド ── */
+    .at-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px 12px; }
+    @media (max-width:760px) { .at-grid { grid-template-columns:1fr 1fr; } }
   </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
@@ -135,160 +153,221 @@
   <h1 class="kp-greet">タスク・予定</h1>
   <p class="kp-greet-sub">
     大事なのは、たくさん登録することではなく、毎日3つ終えることです。
-    誰が何をしていて、誰が止まっているかを、ここで見ます。
+    今どこが止まっていて、誰に対応してもらうべきかを、ここで見ます。
   </p>
 
-  <!-- 毎日の実行管理。いちばん上に置く -->
-  <div class="card" id="board-card">
-    <h2><span class="material-symbols-outlined">groups</span>今日の実行状況
-      <span id="bd-date-label" class="kp-chip" style="margin-left:8px;"></span></h2>
-    <div class="bd-kpi" id="bd-kpi"></div>
-    <div class="bd-f">
-      <div><label for="bd-date">日付</label><input id="bd-date" type="date" onchange="loadBoard()"></div>
-      <div><label for="bd-month">月</label><input id="bd-month" type="month" onchange="onMonth()"></div>
-      <div><label for="bd-person">担当者</label><select id="bd-person" onchange="loadBoard()"></select></div>
-      <div><label for="bd-dep">部署</label><select id="bd-dep" onchange="loadBoard()"></select></div>
-      <div><label for="bd-biz">事業・KPI</label><input id="bd-biz" type="text" placeholder="新規開拓" oninput="renderBoard()"></div>
-      <div><label for="bd-done">完了</label>
-        <select id="bd-done" onchange="loadBoard()">
-          <option value="">すべて</option>
-          <option value="1">完了のみ</option>
-          <option value="0">未完了のみ</option>
-        </select></div>
-      <div><label for="bd-state">状態</label>
-        <select id="bd-state" onchange="loadBoard()">
-          <option value="">すべて</option>
-        </select></div>
-      <div><label class="check" style="font-size:12.5px;">
-        <input type="checkbox" id="bd-ai" onchange="loadBoard()"> AI提案あり</label></div>
-    </div>
-    <div class="table-scroll">
-      <table class="bd-table">
-        <thead><tr>
-          <th>担当者</th><th>今日の3タスク</th><th>完了数</th><th>明日の3タスク</th>
-          <th>状態</th><th>止まっているもの</th>
-        </tr></thead>
-        <tbody id="bd-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
-      </table>
-    </div>
-    <div id="bd-msg" class="err-text" style="margin-top:8px;"></div>
+  <div class="tk-tabhead">
+    <span class="tabs">
+      <span class="tab active" id="tab-today" onclick="showTab('today')">今日の実行状況</span>
+      <span class="tab" id="tab-all" onclick="showTab('all')">全タスク</span>
+      <span class="tab" id="tab-monthly" onclick="showTab('monthly')">月次タスク</span>
+    </span>
+    <button class="btn btn-primary" onclick="openAddTask()">
+      <span class="material-symbols-outlined icon-inline">add</span>タスクを追加
+    </button>
   </div>
 
-  <div id="bd-detail"></div>
-
-  <div class="card">
-    <h2><span class="material-symbols-outlined">add_task</span>タスクを追加</h2>
-    <div style="margin-bottom:12px;">
-      <label>やること</label>
-      <input id="t-title" type="text" placeholder="例: 8月分の請求書をアップロードする">
-    </div>
-    <div class="inline-controls" style="margin-bottom:12px;">
-      <div style="min-width:180px;"><label>担当者</label><select id="t-assignee"></select></div>
-      <div><label>期限</label><input id="t-due" type="date"></div>
-      <div>
-        <label>重要度</label>
-        <select id="t-priority">
-          <option value="normal">ふつう</option>
-          <option value="high">高い</option>
-          <option value="low">低い</option>
-        </select>
-      </div>
-      <div style="min-width:150px;"><label>分類（任意）</label><input id="t-category" type="text" placeholder="月次経理"></div>
-      <div style="min-width:180px;"><label>期限超過時の連絡先</label><select id="t-escalate"></select></div>
-    </div>
-
-    <!-- 終わりの条件。
-         「請求書の件よろしく」だけで渡すと、相手は何をどこまでやれば
-         終わりなのか分からないまま始める。書く欄が無いから書かれない -->
-    <div style="margin-bottom:12px;">
-      <label for="t-done">どうなったら終わりか（任意・頼むときは書く）</label>
-      <input id="t-done" type="text"
-             placeholder="例: MFに8月分が全部入って、試算表の売上が合っている">
-    </div>
-
-    <!-- 繰り返し。
-         月次の締め・支払・提出は、覚えている人が休んだ日に止まる。
-         「元」を1つ置けば、その日になれば必ず並ぶ -->
-    <div style="margin-bottom:12px;">
-      <label class="check"><input type="checkbox" id="t-recur-on" onchange="onRecur()">
-        繰り返す（決まった日に自動で出す）</label>
-      <div id="t-recur" class="inline-controls hidden" style="margin-top:8px;">
-        <div>
-          <label>繰り返し方</label>
-          <select id="t-recur-type" onchange="onRecur()">
-            <option value="dom">毎月（日にち）</option>
-            <option value="biz">毎月（第n営業日）</option>
-            <option value="weekly">毎週</option>
-            <option value="daily">毎日</option>
-          </select>
-        </div>
-        <div id="t-recur-n-box"><label>日にち / n</label>
-          <input id="t-recur-n" type="number" min="1" max="31" value="25"></div>
-        <div id="t-recur-adj-box">
-          <label>休みに当たったら</label>
-          <select id="t-recur-adj">
-            <option value="prev">前の営業日</option>
-            <option value="next">次の営業日</option>
-            <option value="">そのまま</option>
-          </select>
-        </div>
-        <div id="t-recur-wd-box" class="hidden"><label>曜日</label>
-          <select id="t-recur-wd">
-            <option value="1">月</option><option value="2">火</option>
-            <option value="3">水</option><option value="4">木</option>
-            <option value="5">金</option><option value="6">土</option>
-            <option value="0">日</option>
+  <!-- ============================================================
+       今日の実行状況：サマリー → 止まっている人 → 担当者一覧
+       ============================================================ -->
+  <div id="panel-today">
+    <div class="card" id="board-card">
+      <h2><span class="material-symbols-outlined">groups</span>今日の実行状況
+        <span id="bd-date-label" class="kp-chip" style="margin-left:8px;"></span></h2>
+      <div class="bd-kpi" id="bd-kpi"></div>
+      <div class="bd-f">
+        <div><label for="bd-date">日付</label><input id="bd-date" type="date" onchange="loadBoard()"></div>
+        <div><label for="bd-month">月</label><input id="bd-month" type="month" onchange="onMonth()"></div>
+        <div><label for="bd-person">担当者</label><select id="bd-person" onchange="loadBoard()"></select></div>
+        <div><label for="bd-dep">部署</label><select id="bd-dep" onchange="loadBoard()"></select></div>
+        <div><label for="bd-biz">事業・KPI</label><input id="bd-biz" type="text" placeholder="新規開拓" oninput="renderBoard()"></div>
+        <div><label for="bd-done">完了</label>
+          <select id="bd-done" onchange="loadBoard()">
+            <option value="">すべて</option>
+            <option value="1">完了のみ</option>
+            <option value="0">未完了のみ</option>
           </select></div>
-        <div id="t-recur-daily-box" class="hidden"><label>対象</label>
-          <select id="t-recur-daily">
-            <option value="wd">平日のみ（土日祝を除く）</option>
-            <option value="all">毎日</option>
+        <div><label for="bd-state">状態</label>
+          <select id="bd-state" onchange="loadBoard()">
+            <option value="">すべて</option>
+          </select></div>
+        <div><label class="check" style="font-size:12.5px;">
+          <input type="checkbox" id="bd-ai" onchange="loadBoard()"> AI提案あり</label></div>
+      </div>
+
+      <div class="bd-sec-h">止まっている人</div>
+      <div class="bd-waiting-note" id="bd-waiting-note"></div>
+      <div class="stuck-list" id="bd-stuck-list"><div class="empty">読み込み中…</div></div>
+
+      <div class="bd-sec-h">担当者一覧</div>
+      <div class="table-scroll">
+        <table class="bd-table">
+          <thead><tr>
+            <th>担当者</th><th>今日の3タスク数</th><th>完了数</th><th>明日の3タスク</th><th>状態</th>
+          </tr></thead>
+          <tbody id="bd-rows"><tr><td colspan="5">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+      <div id="bd-msg" class="err-text" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       全タスク：探す場所。行を押すと右の引き出しで読む
+       ============================================================ -->
+  <div id="panel-all" class="hidden">
+    <div class="card" id="tk-card">
+      <h2><span class="material-symbols-outlined">checklist</span>全タスク</h2>
+
+      <div class="tk-kpi" id="tk-kpi"></div>
+
+      <div class="tk-f">
+        <span class="tk-seg" id="tk-range"></span>
+        <select id="tk-who" onchange="loadList()"></select>
+        <select id="tk-st" onchange="loadList()"></select>
+        <button class="btn btn-secondary btn-sm" id="tk-adv-btn" onclick="toggleTkAdv()">詳細条件</button>
+      </div>
+      <div class="hidden" id="tk-adv">
+        <div class="tk-f">
+          <select id="tk-dep" onchange="loadList()"></select>
+          <select id="tk-svc" onchange="loadList()"></select>
+          <select id="tk-pri" onchange="loadList()"></select>
+          <label class="chk"><input type="checkbox" id="tk-ai" onchange="loadList()">AI提案</label>
+          <input id="tk-q" type="search" placeholder="キーワード" oninput="onSearch()">
+          <button class="btn btn-secondary btn-sm" onclick="clearFilters()">条件を消す</button>
+        </div>
+      </div>
+
+      <div class="tk-count" id="tk-count"></div>
+      <div id="tk-rows"><div class="empty">読み込み中…</div></div>
+      <div id="tk-msg" class="err-text"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       月次タスク：繰り返しの「元」。やる仕事そのものではない
+       ============================================================ -->
+  <div id="panel-monthly" class="hidden">
+    <div class="card" id="tpl-card">
+      <h2><span class="material-symbols-outlined">repeat</span>月次タスク（繰り返しの設定）
+        <span id="tpl-n" style="margin-left:auto;font-size:12px;color:var(--muted);"></span>
+      </h2>
+      <div id="tpl-list"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     タスクを追加。押したときだけ右から出す
+     ============================================================ -->
+<div class="td-root hidden" id="at-root">
+  <div class="td-back" onclick="closeAddTask()"></div>
+  <aside class="td-panel" id="at-panel">
+    <div class="td-head">
+      <div class="td-ti">タスクを追加</div>
+      <button class="td-x" onclick="closeAddTask()" title="閉じる">
+        <span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="td-body">
+      <div class="td-row">
+        <label for="t-title">やること</label>
+        <input id="t-title" type="text" placeholder="例: 8月分の請求書をアップロードする">
+      </div>
+      <div class="at-grid" style="margin-bottom:14px;">
+        <div><label for="t-assignee" style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">担当者</label>
+          <select id="t-assignee" style="width:100%;"></select></div>
+        <div><label for="t-due" style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">期限</label>
+          <input id="t-due" type="date" style="width:100%;"></div>
+        <div><label for="t-priority" style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">重要度</label>
+          <select id="t-priority" style="width:100%;">
+            <option value="normal">ふつう</option>
+            <option value="high">高い</option>
+            <option value="low">低い</option>
           </select></div>
       </div>
-      <p class="muted hidden" id="t-recur-note" style="font-size:11.5px;margin:6px 0 0;">
-        当月と翌月ぶんを自動で作ります。先の月まで一度に作ると、
-        片付けても減らない一覧になるためです。
-      </p>
+
+      <button class="btn btn-secondary btn-sm" id="at-adv-btn" onclick="toggleAtAdv()" style="margin-bottom:12px;">詳細設定</button>
+
+      <div id="at-adv" class="hidden">
+        <div class="td-row">
+          <label for="t-category">分類（任意）</label>
+          <input id="t-category" type="text" placeholder="月次経理">
+        </div>
+        <div class="td-row">
+          <label for="t-escalate">期限超過時の連絡先</label>
+          <select id="t-escalate"></select>
+        </div>
+        <!-- 終わりの条件。
+             「請求書の件よろしく」だけで渡すと、相手は何をどこまでやれば
+             終わりなのか分からないまま始める。書く欄が無いから書かれない -->
+        <div class="td-row">
+          <label for="t-done">どうなったら終わりか（任意・頼むときは書く）</label>
+          <input id="t-done" type="text"
+                 placeholder="例: MFに8月分が全部入って、試算表の売上が合っている">
+        </div>
+
+        <!-- 繰り返し。
+             月次の締め・支払・提出は、覚えている人が休んだ日に止まる。
+             「元」を1つ置けば、その日になれば必ず並ぶ -->
+        <div class="td-row">
+          <label class="check"><input type="checkbox" id="t-recur-on" onchange="onRecur()">
+            繰り返す（決まった日に自動で出す）</label>
+          <div id="t-recur" class="inline-controls hidden" style="margin-top:8px;">
+            <div>
+              <label>繰り返し方</label>
+              <select id="t-recur-type" onchange="onRecur()">
+                <option value="dom">毎月（日にち）</option>
+                <option value="biz">毎月（第n営業日）</option>
+                <option value="weekly">毎週</option>
+                <option value="daily">毎日</option>
+              </select>
+            </div>
+            <div id="t-recur-n-box"><label>日にち / n</label>
+              <input id="t-recur-n" type="number" min="1" max="31" value="25"></div>
+            <div id="t-recur-adj-box">
+              <label>休みに当たったら</label>
+              <select id="t-recur-adj">
+                <option value="prev">前の営業日</option>
+                <option value="next">次の営業日</option>
+                <option value="">そのまま</option>
+              </select>
+            </div>
+            <div id="t-recur-wd-box" class="hidden"><label>曜日</label>
+              <select id="t-recur-wd">
+                <option value="1">月</option><option value="2">火</option>
+                <option value="3">水</option><option value="4">木</option>
+                <option value="5">金</option><option value="6">土</option>
+                <option value="0">日</option>
+              </select></div>
+            <div id="t-recur-daily-box" class="hidden"><label>対象</label>
+              <select id="t-recur-daily">
+                <option value="wd">平日のみ（土日祝を除く）</option>
+                <option value="all">毎日</option>
+              </select></div>
+          </div>
+          <p class="muted hidden" id="t-recur-note" style="font-size:11.5px;margin:6px 0 0;">
+            当月と翌月ぶんを自動で作ります。先の月まで一度に作ると、
+            片付けても減らない一覧になるためです。
+          </p>
+        </div>
+      </div>
+
+      <div style="margin-top:6px;">
+        <button class="btn btn-primary" onclick="create(this)">
+          <span class="material-symbols-outlined icon-inline">add</span>追加
+        </button>
+      </div>
+      <div id="t-msg" class="err-text"></div>
     </div>
+  </aside>
+</div>
 
-    <div>
-      <button class="btn btn-primary" onclick="create(this)">
-        <span class="material-symbols-outlined icon-inline">add</span>追加
-      </button>
-    </div>
-    <div id="t-msg" class="err-text"></div>
-  </div>
-
-  <!-- 繰り返しの「元」。やる仕事ではないので、一覧とは別の箱に置く -->
-  <div class="card hidden" id="tpl-card">
-    <h2><span class="material-symbols-outlined">repeat</span>繰り返しの設定
-      <span id="tpl-n" style="margin-left:auto;font-size:12px;color:var(--muted);"></span>
-    </h2>
-    <div id="tpl-list"></div>
-  </div>
-
-  <!-- 一覧。探す場所。行を押すと右から引き出しが出る -->
-  <div class="card" id="tk-card">
-    <h2><span class="material-symbols-outlined">checklist</span>タスク一覧</h2>
-
-    <div class="tk-kpi" id="tk-kpi"></div>
-
-    <div class="tk-f">
-      <span class="tk-seg" id="tk-range"></span>
-      <select id="tk-who" onchange="loadList()"></select>
-      <select id="tk-dep" onchange="loadList()"></select>
-      <select id="tk-svc" onchange="loadList()"></select>
-      <select id="tk-pri" onchange="loadList()"></select>
-      <select id="tk-st" onchange="loadList()"></select>
-      <label class="chk"><input type="checkbox" id="tk-ai" onchange="loadList()">AI提案</label>
-      <input id="tk-q" type="search" placeholder="キーワード" oninput="onSearch()">
-      <button class="btn btn-secondary btn-sm" onclick="clearFilters()">条件を消す</button>
-    </div>
-
-    <div class="tk-count" id="tk-count"></div>
-    <div id="tk-rows"><div class="empty">読み込み中…</div></div>
-    <div id="tk-msg" class="err-text"></div>
-  </div>
+<!-- ============================================================
+     止まっている人・担当者一覧から開く、その人の引き出し
+     ============================================================ -->
+<div class="td-root hidden" id="pd-root">
+  <div class="td-back" onclick="closePerson()"></div>
+  <aside class="td-panel" id="pd-panel"></aside>
 </div>
 
 <script src="js/api-client.js?v=20260916m"></script>
@@ -312,11 +391,21 @@
     await Promise.all([loadEmployees(), loadTasks(), loadBoard()]);
   }
 
+  // ---- タブ（今日の実行状況／全タスク／月次タスク） -----------------------------
+  const TAB_PANELS = { today: "panel-today", all: "panel-all", monthly: "panel-monthly" };
+  function showTab(key) {
+    for (const k of Object.keys(TAB_PANELS)) {
+      el(TAB_PANELS[k]).classList.toggle("hidden", k !== key);
+      el(`tab-${k}`).classList.toggle("active", k === key);
+    }
+  }
+
   // ---- 毎日の実行管理 ----------------------------------------------------------
   //
-  // 出すのは3つだけ。今日の3件と完了数／明日の3件の状態／止まっていること。
-  // 個々のタスクの中身は、その人を開いたときだけ
+  // 出すのは4つだけ。対象者／今日の完了者数／止まっている人／明日の3タスク未登録人数。
+  // 誰が止まっているかを先に出し、全員ぶんの細かい表はその下に置く
   let board = null;
+  let currentPersonId = null;
 
   function onMonth() {
     // 月を選んだら、その月の1日を見る。日付で追いたい日は日付の欄で選ぶ
@@ -336,10 +425,11 @@
     };
     try { board = await API.taskBoard(p); }
     catch (e) {
-      el("bd-rows").innerHTML = `<tr><td colspan="6">
+      el("bd-rows").innerHTML = `<tr><td colspan="5">
         <div class="banner warn" style="margin:6px 0;">
           <span class="material-symbols-outlined">info</span>
           <div>${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+      el("bd-stuck-list").innerHTML = "";
       return;
     }
     if (!el("bd-date").value) el("bd-date").value = board.date;
@@ -370,12 +460,13 @@
     el("bd-date-label").textContent = `${board.date}（明日 ${board.tomorrow || "—"}）`;
     el("bd-kpi").innerHTML = [
       ["対象者", s.people, ""],
-      ["今日ぶん完了", s.doneAll, "ok"],
-      ["明日が未登録", s.noTomorrow, s.noTomorrow ? "warn" : ""],
-      ["確定待ち", s.waiting, ""],
-      ["注意", s.warn, s.warn ? "warn" : ""],
+      ["今日の完了者数", s.doneAll, "ok"],
+      ["止まっている人", s.warn, s.warn ? "warn" : ""],
+      ["明日の3タスク未登録人数", s.noTomorrow, s.noTomorrow ? "warn" : ""],
     ].map(([k, v, cls]) =>
       `<div class="box ${cls}"><div class="k">${esc(k)}</div><div class="v">${v ?? 0}</div></div>`).join("");
+    el("bd-waiting-note").textContent = s.waiting
+      ? `ほか、明日ぶん確定待ちが ${s.waiting} 人います。` : "";
 
     // 事業・KPIの絞り込みだけは、取ってきたものから画面側で行う
     const word = el("bd-biz").value.trim();
@@ -383,8 +474,38 @@
       || (r.todayList || []).some((t) => t.title.includes(word))
       || (r.tomorrowList || []).some((t) => t.title.includes(word)));
 
+    renderStuck(rows);
+    renderRoster(rows);
+  }
+
+  /** その人・タスクの期限が、もう過ぎているか（今日／明日ぶんの中から） */
+  function overdueCountOf(r) {
+    const all = [...(r.todayList || []), ...(r.tomorrowList || [])];
+    return all.filter((t) => t.dueOn && t.dueOn < board.date && t.status !== "done").length;
+  }
+
+  /** 止まっている人を、まずここに出す。全員分の表より先 */
+  function renderStuck(rows) {
+    const stuck = rows.filter((r) => r.state === "warn");
+    if (!stuck.length) {
+      el("bd-stuck-list").innerHTML = `<div class="empty">止まっている人はいません。</div>`;
+      return;
+    }
+    el("bd-stuck-list").innerHTML = stuck.map((r) => {
+      const od = overdueCountOf(r);
+      return `<div class="stuck-row" onclick="openPerson('${esc(r.employeeId)}')">
+        <span class="nm">${esc(r.name)}</span>
+        ${r.department ? `<span class="dep">${esc(r.department)}</span>` : ""}
+        <span class="reason">${esc(r.stuck || "")}${od ? `／期限超過 ${od}件` : ""}</span>
+        <span class="material-symbols-outlined chev">chevron_right</span>
+      </div>`;
+    }).join("");
+  }
+
+  /** 担当者一覧。列はシンプルに5つだけ。中身は行を押して引き出しで見る */
+  function renderRoster(rows) {
     if (!rows.length) {
-      el("bd-rows").innerHTML = `<tr><td colspan="6" class="muted" style="padding:18px 0;">
+      el("bd-rows").innerHTML = `<tr><td colspan="5" class="muted" style="padding:18px 0;">
         該当する人はいません。</td></tr>`;
       return;
     }
@@ -392,43 +513,58 @@
       <tr class="click" onclick="openPerson('${esc(r.employeeId)}')">
         <td><span class="nm">${esc(r.name)}</span>
           ${r.department ? `<span class="sub">${esc(r.department)}</span>` : ""}</td>
-        <td>${r.today.count ? `${r.today.count}件` : '<span class="bd-stuck">未登録</span>'}
-          <span class="bd-li">${(r.todayList || []).slice(0, 3).map((t) =>
-            `<br>${t.status === "done" ? '<span class="ok">✓</span>' : "・"}${esc(t.title)}`).join("")}</span></td>
+        <td>${r.today.count ? `${r.today.count}件` : '<span class="bd-stuck">未登録</span>'}</td>
         <td><span class="cnt ${r.today.allDone ? "all" : r.today.done === 0 && r.today.count ? "none" : ""}">
           ${esc(r.today.label)}</span></td>
         <td>${r.tomorrow.count
           ? `${r.tomorrow.count}件<span class="sub">${esc(r.tomorrow.label)}</span>`
           : '<span class="bd-stuck">未登録</span>'}</td>
         <td><span class="bd-st ${esc(r.state)}">${esc(r.stateLabel)}</span></td>
-        <td><span class="bd-stuck">${esc(r.stuck || "")}</span></td>
       </tr>`).join("");
   }
 
-  /** その人の重要タスクを開く。管理者はここから直接足す・確定もできる */
+  /** その人の重要タスクを、右の引き出しで開く。管理者はここから足す・確定もできる */
   async function openPerson(employeeId) {
     const r = (board.rows || []).find((x) => x.employeeId === employeeId);
+    currentPersonId = employeeId;
+    el("pd-root").classList.remove("hidden");
+    document.body.classList.add("td-open");
+    el("pd-panel").innerHTML = `<div class="td-load">読み込み中…</div>`;
+
     let f;
     try { f = await API.focus({ employeeId, date: board.date }); }
-    catch (e) { el("bd-msg").textContent = e.hint || e.message || "開けませんでした"; return; }
+    catch (e) {
+      el("pd-panel").innerHTML = `
+        <div class="td-head"><div class="td-ti">${esc(r?.name || "")}</div>
+          <button class="td-x" onclick="closePerson()" title="閉じる">
+            <span class="material-symbols-outlined">close</span></button></div>
+        <div class="td-body"><div class="banner err" style="margin:0;">
+          <span class="material-symbols-outlined">error</span>
+          <div>${esc(e.hint || e.message || "開けませんでした")}</div></div></div>`;
+      return;
+    }
 
+    // タスクは押すと編集できる（右の引き出しの中の、もう1枚の引き出し）
     const list = (t) => t.length
-      ? t.map((x, i) => `<div class="kp-todo">
+      ? t.map((x, i) => `<div class="kp-todo" style="cursor:pointer;" onclick="openPersonTask('${esc(x.id)}')">
           <span class="material-symbols-outlined" style="font-size:19px;color:${x.status === "done" ? "#3e9c5a" : "var(--muted)"};">
             ${x.status === "done" ? "check_circle" : "radio_button_unchecked"}</span>
           <span class="t">${i + 1}. ${esc(x.title)}
             <small>${x.doneCondition ? `完了条件：${esc(x.doneCondition)}` : ""}
               ${x.dueOn ? `／期限 ${esc(x.dueOn)}` : ""}
               ${x.carryCount ? `／持ち越し ${x.carryCount}回` : ""}</small></span>
+          <span class="material-symbols-outlined" style="font-size:18px;color:var(--muted);">chevron_right</span>
         </div>`).join("")
       : `<div class="empty">ありません。</div>`;
 
-    el("bd-detail").innerHTML = `
-      <div class="card" style="border:1px solid var(--primary);">
-        <h2><span class="material-symbols-outlined">person</span>${esc(r?.name || "")} さん
-          <button class="btn btn-secondary btn-sm" style="margin-left:auto;"
-                  onclick="closePerson()">閉じる</button></h2>
-        <h3 style="font-size:13.5px;margin:6px 0 8px;color:var(--primary-dark);">
+    el("pd-panel").innerHTML = `
+      <div class="td-head">
+        <div class="td-ti">${esc(r?.name || "")} さん</div>
+        <button class="td-x" onclick="closePerson()" title="閉じる">
+          <span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="td-body">
+        <h3 style="font-size:13.5px;margin:0 0 8px;color:var(--primary-dark);">
           今日（${esc(f.today)}）　${esc(f.todayProgress?.label || "")}</h3>
         ${list(f.todayTasks || [])}
         <h3 style="font-size:13.5px;margin:18px 0 8px;color:var(--primary-dark);">
@@ -448,12 +584,26 @@
             <span class="muted" style="font-size:12px;align-self:center;">
               ${esc(f.tomorrowState?.todo || "")}</span>`}
         </div>
-        <div id="bd-detail-msg" class="err-text" style="margin-top:8px;"></div>
+        <div id="pd-msg" class="err-text" style="margin-top:8px;"></div>
       </div>`;
-    el("bd-detail").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function closePerson() { el("bd-detail").innerHTML = ""; }
+  function closePerson() {
+    currentPersonId = null;
+    el("pd-root").classList.add("hidden");
+    document.body.classList.remove("td-open");
+  }
+
+  /** 引き出しの中のタスクも、押せば編集できる（右の中に、もう1枚） */
+  function openPersonTask(id) {
+    KPTaskDrawer.open(id, { onChange: onPersonTaskChange });
+  }
+
+  /** タスク側の引き出しで変えたら、開いている人の引き出しと表を描き直す */
+  async function onPersonTaskChange() {
+    await loadBoard();
+    if (currentPersonId) await openPerson(currentPersonId);
+  }
 
   async function confirmFor(employeeId, btn) {
     try {
@@ -462,7 +612,7 @@
       await loadBoard();
       await openPerson(employeeId);
     } catch (e) {
-      el("bd-detail-msg").textContent = e.hint || e.detail || e.message || "確定できませんでした";
+      el("pd-msg").textContent = e.hint || e.detail || e.message || "確定できませんでした";
     }
   }
 
@@ -477,6 +627,21 @@
     } catch (e) {
       el("t-msg").textContent = e.detail || e.message;
     }
+  }
+
+  // ---- タスクを追加。押したときだけ右から出す ------------------------------------
+  function openAddTask() {
+    el("t-msg").textContent = "";
+    el("at-root").classList.remove("hidden");
+    document.body.classList.add("td-open");
+  }
+  function closeAddTask() {
+    el("at-root").classList.add("hidden");
+    document.body.classList.remove("td-open");
+  }
+  function toggleAtAdv() {
+    const nowHidden = el("at-adv").classList.toggle("hidden");
+    el("at-adv-btn").textContent = nowHidden ? "詳細設定" : "詳細設定を閉じる";
   }
 
   async function create(btn) {
@@ -498,6 +663,7 @@
       el("t-title").value = "";
       el("t-due").value = "";
       el("t-done").value = "";
+      closeAddTask();
       await loadTasks();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "追加に失敗しました";
@@ -531,22 +697,21 @@
     return { type: "dom", n, adj: el("t-recur-adj").value };
   }
 
-  /** 繰り返しの「元」。やる仕事ではないので、一覧とは別に出す */
+  /** 繰り返しの「元」。やる仕事ではないので、月次タスクのタブに出す */
   function renderTemplates() {
-    const card = el("tpl-card");
-    if (!templates.length) { card.classList.add("hidden"); return; }
-    card.classList.remove("hidden");
     el("tpl-n").textContent = `${templates.length}件`;
-    el("tpl-list").innerHTML = templates.map((t) => `
-      <div class="kp-todo">
-        <span class="material-symbols-outlined"
-              style="font-size:20px;color:var(--muted);">repeat</span>
-        <span class="t">${esc(t.title)}
-          <small>${esc(t.recurLabel || "")}${
-            t.assignee ? ` ／ ${esc(t.assignee.display_name)}` : ""}</small>
-        </span>
-        <button class="btn btn-secondary btn-sm" onclick="remove('${esc(t.id)}')">やめる</button>
-      </div>`).join("");
+    el("tpl-list").innerHTML = templates.length
+      ? templates.map((t) => `
+        <div class="kp-todo">
+          <span class="material-symbols-outlined"
+                style="font-size:20px;color:var(--muted);">repeat</span>
+          <span class="t">${esc(t.title)}
+            <small>${esc(t.recurLabel || "")}${
+              t.assignee ? ` ／ ${esc(t.assignee.display_name)}` : ""}</small>
+          </span>
+          <button class="btn btn-secondary btn-sm" onclick="remove('${esc(t.id)}')">やめる</button>
+        </div>`).join("")
+      : `<div class="empty">繰り返しタスクはまだありません。「タスクを追加」の詳細設定から設定できます。</div>`;
   }
 
   // ---- 一覧（探す場所）--------------------------------------------------------
@@ -613,6 +778,11 @@
         onclick="setRange('${esc(r.key)}')">${esc(r.label)}</button>`).join("");
   }
 
+  function toggleTkAdv() {
+    const nowHidden = el("tk-adv").classList.toggle("hidden");
+    el("tk-adv-btn").textContent = nowHidden ? "詳細条件" : "詳細条件を閉じる";
+  }
+
   function fillFilters() {
     renderRange();
     const fill = (id, first, list, val = (x) => x.key, lab = (x) => x.label) => {
@@ -655,6 +825,7 @@
   }
 
   function goBoard() {
+    showTab("today");
     el("board-card").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -682,6 +853,18 @@
   const BADGE_LABEL = { overdue: "期限超過", urgent: "緊急", today: "今日", ai: "AI提案",
                         waiting: "確認待ち", done: "完了" };
 
+  /**
+   * 一覧に出す状態は、まず4つだけ（未着手／進行中／完了／要対応）。
+   * 「AI提案あり」「確認待ち」などは、上のバッジで十分（重ねて長い文字は出さない）
+   */
+  function primaryStatusLabel(r) {
+    if (r.status === "done") return "完了";
+    if (r.status === "cancelled") return "取りやめ";
+    const badges = r.badges || [];
+    if (r.overdue || badges.includes("waiting") || badges.includes("urgent")) return "要対応";
+    return r.status === "doing" ? "進行中" : "未着手";
+  }
+
   function taskRow(r) {
     const done = r.status === "done";
     const due = r.dueOn ? String(r.dueOn).slice(5).replace("-", "/") : "—";
@@ -701,7 +884,7 @@
           ${r.category ? `<span class="tag">${esc(r.category)}</span>` : ""}
           ${r.service ? `<span class="tag">${esc(r.service)}</span>` : ""}
           ${r.kpi ? `<span class="tag">${esc(r.kpi)}</span>` : ""}
-          <span>${esc(r.statusLabel)}</span>
+          <span>${esc(primaryStatusLabel(r))}</span>
         </span>
       </div>`;
   }
