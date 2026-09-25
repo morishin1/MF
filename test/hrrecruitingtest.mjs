@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import {
   STAGE_KEYS, STATUS_LABEL, isOverdue, nextStatusFromRank, offerStatus,
   normalizeApplicant, snapshotOfferFields, shapeApplicant, ONBOARD_PREFILL_FIELDS,
+  EVAL_ITEMS, EVAL_SCALE_KEYS, nextActionOf, normalizeInterview, shapeInterview, interviewKindLabel,
 } from "../lib/hr.js";
 
 let pass = 0, fail = 0;
@@ -145,6 +146,103 @@ ok("ラベル・期限超過が付く", () => {
   assert.equal(shaped.stageLabel, "社長推薦");
   assert.equal(shaped.statusLabel, STATUS_LABEL.ceo_decision_pending);
   assert.equal(shaped.overdue, true);
+});
+
+console.log("\n=== 面談・評価（Stage 3） ===\n");
+
+ok("5項目評価。項目を増やしすぎない", () => {
+  assert.equal(EVAL_ITEMS.length, 5);
+  assert.equal(EVAL_SCALE_KEYS.length, 4);
+});
+
+ok("面談の種別ラベル", () => {
+  assert.equal(interviewKindLabel("casual"), "カジュアル面談");
+  assert.equal(interviewKindLabel("ceo"), "社長面談");
+});
+
+console.log("— 面談の入力チェック（normalizeInterview） —");
+
+ok("種別が不正なら断る", () => {
+  const r = normalizeInterview({ kind: "phone" });
+  assert.equal(r.error, "invalid_body");
+});
+ok("評価の値が不正なら断る", () => {
+  const r = normalizeInterview({ scores: { communication: "普通" } }, { partial: true });
+  assert.equal(r.error, "invalid_body");
+});
+ok("ランクが不正なら断る", () => {
+  const r = normalizeInterview({ rank: "S" }, { partial: true });
+  assert.equal(r.error, "invalid_body");
+});
+ok("正しい形はそのまま通る", () => {
+  const r = normalizeInterview({
+    kind: "casual", scheduledAt: "2026-09-26T05:00:00Z", interviewerId: "e1",
+    meetingUrl: "https://meet.example.com/x", scores: { communication: "great" }, rank: "A",
+  });
+  assert.equal(r.value.kind, "casual");
+  assert.equal(r.value.scores.communication, "great");
+  assert.equal(r.value.rank, "A");
+});
+
+console.log("— NEXT ACTION（nextActionOf） —");
+
+ok("面談前（未対応）は、面談を予定する", () => {
+  const n = nextActionOf({ status: "todo" });
+  assert.equal(n.cta, "面談を予定する");
+  assert.equal(n.action, "schedule");
+});
+ok("面談予定は、実施済みにするボタン", () => {
+  const n = nextActionOf({ status: "interview_scheduled" }, { scheduledAt: "2026-09-25T05:00:00Z", kind: "casual" });
+  assert.equal(n.cta, "面談を実施済みにする");
+  assert.match(n.label, /カジュアル面談/);
+});
+ok("面談終了・未評価は、評価を入力", () => {
+  const n = nextActionOf({ status: "eval_pending" });
+  assert.equal(n.cta, "評価を入力");
+  assert.equal(n.action, "evaluate");
+});
+ok("Aランクは、社長推薦する", () => {
+  const n = nextActionOf({ status: "ceo_recommend_pending", rank: "A" });
+  assert.equal(n.cta, "社長推薦する");
+  assert.equal(n.action, "recommend");
+});
+ok("Bランクは、次回面談を設定（同じstatusでもランクで変わる）", () => {
+  const n = nextActionOf({ status: "ceo_recommend_pending", rank: "B" });
+  assert.equal(n.cta, "次回面談を設定");
+  assert.equal(n.action, "schedule");
+});
+ok("Cランクは、判断を更新", () => {
+  const n = nextActionOf({ status: "next_scheduling_pending", rank: "C" });
+  assert.equal(n.cta, "判断を更新");
+  assert.equal(n.action, "evaluate");
+});
+ok("Dランクは、見送りを確定（決定前）", () => {
+  const n = nextActionOf({ status: "passed", rank: "D", decision: null });
+  assert.equal(n.cta, "見送りを確定");
+  assert.equal(n.action, "reject");
+});
+ok("見送りが確定したあとは、ボタンは出ない", () => {
+  const n = nextActionOf({ status: "passed", rank: "D", decision: "rejected" });
+  assert.equal(n.cta, null);
+});
+ok("社長面談待ちは、社長面談を設定（kind: ceo）", () => {
+  const n = nextActionOf({ status: "ceo_interview_pending" });
+  assert.equal(n.cta, "社長面談を設定");
+  assert.equal(n.kind, "ceo");
+});
+
+console.log("— 画面へ渡す形（shapeInterview） —");
+
+ok("列名から、画面向けの形にする", () => {
+  const s = shapeInterview({
+    id: "i1", applicant_id: "a1", kind: "casual", scheduled_at: "2026-09-25T05:00:00Z",
+    conducted_at: null, interviewer_id: "e1", meeting_url: "https://meet.example.com/x",
+    recording_url: null, scores: {}, rank: null, recommend_reason: null, notes: null,
+    next_due_on: null, created_at: "2026-09-24T00:00:00Z",
+  });
+  assert.equal(s.kindLabel, "カジュアル面談");
+  assert.equal(s.done, false);
+  assert.equal(s.meetingUrl, "https://meet.example.com/x");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

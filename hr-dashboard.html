@@ -47,6 +47,26 @@
     .hr-list-row:last-child { border-bottom:none; }
     .hr-list-row .nm { font-weight:700; color:#1b2440; flex:1; }
     .hr-list-row .st { color:#6b7080; font-size:12px; }
+
+    .hr-rank { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px;
+      border-radius:5px; font-size:11px; font-weight:700; padding:0 6px; }
+    .hr-rank.A { background:#1b2440; color:#fff; } .hr-rank.B { background:#e7eaf3; color:#1b2440; }
+    .hr-rank.C { background:#efefeb; color:#4a5068; } .hr-rank.D { background:#f6f6f2; color:#9aa0b4; }
+
+    .hr-good-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-bottom:26px; }
+    .hr-good-card { background:#fff; border:1px solid #e2e2dc; border-radius:9px; padding:13px 14px; cursor:pointer; }
+    .hr-good-card .nm { font-weight:700; color:#1b2440; font-size:14px; }
+    .hr-good-card .jb { font-size:11.5px; color:#6b7080; margin:2px 0 8px; }
+    .hr-good-card .row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .hr-good-card .row .st { font-size:11.5px; color:#4a5068; }
+
+    .hr-iv-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e2e2dc;
+      cursor:pointer; font-size:13px; }
+    .hr-iv-row:last-child { border-bottom:none; }
+    .hr-iv-row .tm { font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; min-width:44px; }
+    .hr-iv-row .nm { font-weight:700; color:#1b2440; }
+    .hr-iv-row .jb, .hr-iv-row .iv { color:#6b7080; font-size:12px; }
+    .hr-iv-row .st { margin-left:auto; font-size:12px; color:#4a5068; }
   </style>
 </head>
 <body>
@@ -57,6 +77,12 @@
 
   <div class="hr-sec-h">TODAY'S ACTION</div>
   <div class="hr-today" id="today"></div>
+
+  <div class="hr-sec-h">GOOD CANDIDATES</div>
+  <div class="hr-good-grid" id="good"></div>
+
+  <div class="hr-sec-h">今日の面談</div>
+  <div class="card" style="margin-bottom:26px;"><div id="todayiv"></div></div>
 
   <div class="hr-sec-h">採用ファネル</div>
   <div class="hr-funnel" id="funnel"></div>
@@ -82,13 +108,18 @@
   ];
 
   let applicants = [];
+  let todayInterviews = [];
 
   HRLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
 
   async function load() {
     try {
-      const res = await API.listHrApplicants();
+      const [res, ti] = await Promise.all([
+        API.listHrApplicants(),
+        API.todayHrInterviews().catch(() => ({ interviews: [] })),
+      ]);
       applicants = res.applicants || [];
+      todayInterviews = ti.interviews || [];
       render();
     } catch (e) {
       el("today").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -98,9 +129,43 @@
 
   function render() {
     renderToday();
+    renderGoodCandidates();
+    renderTodayInterviews();
     renderFunnel();
     renderKpi();
     renderList();
+  }
+
+  /** Aランク、または社長推薦の段階まで進んだ人だけ */
+  function renderGoodCandidates() {
+    const list = applicants.filter((a) => a.rank === "A" || a.stage === "ceo_recommend");
+    if (!list.length) { el("good").innerHTML = `<div class="empty">いまのところ対象はいません。</div>`; return; }
+    el("good").innerHTML = list.map((a) => `
+      <div class="hr-good-card" onclick="location.href='hr-applicants.html?id=${esc(a.id)}'">
+        <div class="nm">${esc(a.name)}</div>
+        <div class="jb">${esc(a.jobTitle)}</div>
+        <div class="row">${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span>` : ""}
+          <span class="st">${esc(a.stageLabel)}</span></div>
+        <button class="btn btn-secondary btn-sm">詳細</button>
+      </div>`).join("");
+  }
+
+  function renderTodayInterviews() {
+    if (!todayInterviews.length) { el("todayiv").innerHTML = `<div class="empty">本日の面談はありません。</div>`; return; }
+    el("todayiv").innerHTML = todayInterviews.map((i) => `
+      <div class="hr-iv-row" onclick="location.href='hr-applicants.html?id=${esc(i.applicantId)}'">
+        <span class="tm">${esc(fmtTime(i.scheduledAt))}</span>
+        <span class="nm">${esc(i.name)}</span>
+        <span class="jb">${esc(i.jobTitle)}</span>
+        <span class="iv">${esc(i.interviewerName || "未定")}</span>
+        <span class="st">${esc(i.statusLabel)}</span>
+        <span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span>
+      </div>`).join("");
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
 
   function renderToday() {

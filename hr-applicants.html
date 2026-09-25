@@ -98,6 +98,7 @@
 </div>
 
 <div id="modal-root"></div>
+<div id="action-root"></div>
 
 <script src="js/api-client.js?v=20260916m"></script>
 <script src="js/layout.js?v=20260916m"></script>
@@ -268,6 +269,7 @@
 
   function closeModal() {
     el("modal-root").innerHTML = "";
+    el("action-root").innerHTML = "";
     openId = null;
     history.replaceState({}, "", "hr-applicants.html");
   }
@@ -291,6 +293,7 @@
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>${esc(a.nextAction)}</h3>
         <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
+        ${a.nextActionCta ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}
       </div>
 
       <div class="hr-tabs">
@@ -320,24 +323,201 @@
             <div class="l">${esc(t.label)}${t.detail ? `　${esc(t.detail)}` : ""}${i === arr.length - 1 ? `<span class="now">← 現在</span>` : ""}</div>
           </div>`).join("") || `<p class="muted">まだ記録がありません。</p>`}</div>`;
     } else if (detailTab === "interviews") {
-      el("hr-detail-tab").innerHTML = (detail.interviews || []).length
-        ? detail.interviews.map((i) => `
-          <div class="card" style="margin-bottom:10px;">
-            <div style="font-weight:700;color:#1b2440;font-size:13px;">${i.kind === "ceo" ? "社長面談" : "カジュアル面談"}
-              ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}</div>
-            <div class="muted" style="font-size:11.5px;margin:4px 0;">${esc(fmtDate(i.conductedAt || i.scheduledAt))}</div>
-            ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
-            ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
-            ${i.recordingUrl ? `<a href="${esc(i.recordingUrl)}" target="_blank" rel="noopener" style="font-size:12px;">録画を見る</a>` : ""}
-          </div>`).join("")
-        : `<p class="muted">まだ面談の記録がありません。</p>`;
+      el("hr-detail-tab").innerHTML = `
+        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
+        ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
+          : `<p class="muted">まだ面談の記録がありません。</p>`}`;
     } else {
       el("hr-detail-tab").innerHTML = `<p class="muted">応募書類・録画リンクは面談タブから確認できます。</p>`;
     }
   }
 
+  function interviewRow(i) {
+    const scoreLine = (detail.evalItems || []).filter((e) => i.scores?.[e.key])
+      .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
+    return `
+      <div class="card" style="margin-bottom:10px;">
+        <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
+          ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
+          ${!i.done ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}</div>
+        <div class="muted" style="font-size:11.5px;margin:4px 0;">
+          ${i.done ? `実施：${esc(fmtDate(i.conductedAt))}` : `予定：${esc(fmtDate(i.scheduledAt))}`}
+          ${i.interviewerName ? `　面談担当：${esc(i.interviewerName)}` : ""}</div>
+        ${scoreLine ? `<div style="font-size:12px;margin-top:4px;">${scoreLine}</div>` : ""}
+        ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
+        ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+          ${!i.done && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">面談を開く</a>` : ""}
+          ${!i.done ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
+          ${i.done && !i.rank ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
+          ${i.recordingUrl ? `<a href="${esc(i.recordingUrl)}" target="_blank" rel="noopener" style="font-size:12px;">録画を見る</a>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function scaleLabel(k) { return (detail.evalScale || []).find((s) => s.key === k)?.label || k; }
+
   function fmtDate(s) {
     return s ? new Date(s).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  }
+
+  // ---- NEXT ACTIONのボタン --------------------------------------------------------
+  function targetInterview(action) {
+    const list = detail.interviews || [];
+    if (action === "conduct") return list.find((i) => !i.done) || null;
+    if (action === "evaluate") return list.find((i) => i.done && !i.rank) || list[0] || null;
+    return null;
+  }
+
+  function runNextAction() {
+    const a = detail.applicant;
+    const key = a.nextActionKey;
+    if (key === "schedule") return openScheduleForm(a.nextActionKind);
+    if (key === "conduct") {
+      const iv = targetInterview("conduct");
+      return iv ? conductInterview(iv.id) : openScheduleForm();
+    }
+    if (key === "evaluate") {
+      const iv = targetInterview("evaluate");
+      return iv ? openEvaluateForm(iv.id) : null;
+    }
+    if (key === "recommend") return confirmDecisionMove("recommend");
+    if (key === "reject") return confirmDecisionMove("reject");
+  }
+
+  /** 社長推薦・見送りの最終確定。ランクだけでは自動的に確定しないので、ここで人が押す */
+  async function confirmDecisionMove(kind) {
+    const okToGo = confirm(kind === "recommend" ? "社長推薦を確定します。よろしいですか？" : "見送りを確定します。よろしいですか？");
+    if (!okToGo) return;
+    try {
+      if (kind === "recommend") {
+        await API.updateHrApplicant({ id: detail.applicant.id, stage: "ceo_recommend", status: "ceo_interview_pending" });
+      } else {
+        await API.updateHrApplicant({ id: detail.applicant.id, decision: "rejected" });
+      }
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+
+  async function conductInterview(id) {
+    if (!confirm("この面談を実施済みにします。よろしいですか？")) return;
+    try {
+      await API.conductHrInterview(id);
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+
+  // ---- 面談を予定する（右ドロワー） ------------------------------------------------
+  function openScheduleForm(kind) {
+    const kinds = detail.interviewKinds || [{ key: "casual", label: "カジュアル面談" }, { key: "ceo", label: "社長面談" }];
+    const opts = (detail.interviewers || []).map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join("");
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">面談を予定する</h2>
+        <label>面談種別</label>
+        <select id="iv-kind">${kinds.map((k) =>
+          `<option value="${esc(k.key)}" ${k.key === (kind || "casual") ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
+        <label style="margin-top:10px;">予定日時</label>
+        <input id="iv-when" type="datetime-local">
+        <label style="margin-top:10px;">面談担当</label>
+        <select id="iv-who"><option value="">（未定）</option>${opts}</select>
+        <label style="margin-top:10px;">面談URL</label>
+        <input id="iv-url" type="text" placeholder="https://meet.google.com/...">
+        <div id="iv-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitSchedule(this)">予定する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  function closeAction() { el("action-root").innerHTML = ""; }
+
+  async function submitSchedule(btn) {
+    const msg = el("iv-msg"); msg.textContent = "";
+    const when = el("iv-when").value;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
+        applicantId: detail.applicant.id, kind: el("iv-kind").value,
+        scheduledAt: when ? new Date(when).toISOString() : undefined,
+        interviewerId: el("iv-who").value || undefined,
+        meetingUrl: el("iv-url").value.trim() || undefined,
+      }));
+      closeAction();
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "予定できませんでした"; }
+  }
+
+  // ---- 評価を入力（右ドロワー） ----------------------------------------------------
+  //
+  // 短時間で入力できるように、長いフォームにしない（5項目＋自由記述は3つだけ）
+  function openEvaluateForm(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    const items = detail.evalItems || [];
+    const scale = detail.evalScale || [];
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">評価を入力</h2>
+        <p class="hr-sub" style="margin:0 0 14px;">${esc(iv.kindLabel)}</p>
+        ${items.map((it) => `
+          <label style="margin-top:8px;">${esc(it.label)}</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${scale.map((s) => `
+              <label class="hr-chip" style="cursor:pointer;">
+                <input type="radio" name="ev-${esc(it.key)}" value="${esc(s.key)}"
+                       ${iv.scores?.[it.key] === s.key ? "checked" : ""} style="width:auto;margin:0 4px 0 0;">${esc(s.label)}
+              </label>`).join("")}
+          </div>`).join("")}
+        <label style="margin-top:14px;">ランク <span style="color:#b3261e;">*</span></label>
+        <select id="ev-rank">
+          <option value="">（選ぶ）</option>
+          ${(detail.ranks || []).map((r) =>
+            `<option value="${esc(r)}" ${iv.rank === r ? "selected" : ""}>${esc(r)}：${esc((detail.rankLabel || {})[r] || "")}</option>`).join("")}
+        </select>
+        <label style="margin-top:10px;">良かった点・推薦理由</label>
+        <input id="ev-reason" type="text" value="${esc(iv.recommendReason || "")}">
+        <label style="margin-top:10px;">気になる点・次に確認したいこと</label>
+        <textarea id="ev-notes" rows="3">${esc(iv.notes || "")}</textarea>
+        <label style="margin-top:10px;">次回確認事項の期限（任意）</label>
+        <input id="ev-due" type="date" value="${esc(iv.nextDueOn || "")}">
+        <div id="ev-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitEvaluate('${esc(id)}', this)">保存する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitEvaluate(id, btn) {
+    const msg = el("ev-msg"); msg.textContent = "";
+    const rank = el("ev-rank").value;
+    if (!rank) { msg.textContent = "ランクを選んでください"; return; }
+    const scores = {};
+    for (const it of detail.evalItems || []) {
+      const picked = document.querySelector(`input[name="ev-${it.key}"]:checked`);
+      if (picked) scores[it.key] = picked.value;
+    }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.evaluateHrInterview({
+        id, scores, rank,
+        recommendReason: el("ev-reason").value.trim() || undefined,
+        notes: el("ev-notes").value.trim() || undefined,
+        nextDueOn: el("ev-due").value || undefined,
+      }));
+      closeAction();
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
 </script>
 

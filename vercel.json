@@ -120,6 +120,10 @@
     {
       "path": "/api/cron/task-events",
       "schedule": "10 21 * * *"
+    },
+    {
+      "path": "/api/cron/hr-interviews",
+      "schedule": "20 * * * *"
     }
   ]
 }

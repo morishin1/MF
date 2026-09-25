@@ -364,6 +364,14 @@
   const getHrApplicant = (id) => api(`/api/hr/applicants/detail?id=${encodeURIComponent(id)}`);
   const updateHrApplicant = (body) => api("/api/hr/applicants/detail", { method: "PATCH", body });
 
+  // ---- 採用HR：面談・評価（Stage 3） ----
+  const scheduleHrInterview = (body) => api("/api/hr/interviews", { method: "POST", body });
+  const hrInterviewAct = (body) => api("/api/hr/interviews", { method: "PATCH", body });
+  const conductHrInterview = (id, conductedAt) => hrInterviewAct({ id, action: "conduct", conductedAt });
+  const evaluateHrInterview = (body) => hrInterviewAct({ ...body, action: "evaluate" });
+  const updateHrInterview = (body) => hrInterviewAct({ ...body, action: "update" });
+  const todayHrInterviews = () => api("/api/hr/interviews/today");
+
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
   const createGuest = (body) => api("/api/guests", { method: "POST", body });
@@ -1274,6 +1282,7 @@
     listBillingSubmissions, issueSubmissionLink, revokeSubmissionLink, submissionFileUrl,
     submissionPreview, submitBilling,
     listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
+    scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview, todayHrInterviews,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

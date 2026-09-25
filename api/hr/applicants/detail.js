@@ -6,7 +6,10 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { normalizeApplicant, shapeApplicant, offerStatus, STAGE_LABEL } from "../../../lib/hr.js";
+import {
+  normalizeApplicant, shapeApplicant, offerStatus, shapeInterview, STAGE_LABEL, RANK_LABEL,
+  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS,
+} from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
@@ -42,23 +45,35 @@ async function one(req, res, sb, ctx) {
   }
   if (!a) return json(res, 404, { error: "not_found" });
 
-  const [{ data: interviews }, { data: timeline }, { data: offers }, { data: recruiter }] = await Promise.all([
+  const [{ data: interviews }, { data: timeline }, { data: offers }, { data: recruiter }, { data: interviewers }] = await Promise.all([
     sb.from("gw_hr_interviews").select("*").eq("applicant_id", id).order("created_at", { ascending: false }),
     sb.from("gw_hr_timeline").select("*").eq("applicant_id", id).order("occurred_at", { ascending: true }),
     sb.from("gw_hr_offers").select("*").eq("applicant_id", id).order("version", { ascending: false }),
     a.recruiter_id
       ? sb.from("gw_employees").select("display_name").eq("id", a.recruiter_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId)
+      .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
+  const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
+
+  // 直近の、まだ実施していない面談（NEXT ACTIONの「本日14:00 カジュアル面談」に使う）
+  const nextInterview = (interviews || [])
+    .filter((i) => !i.conducted_at && i.scheduled_at)
+    .sort((x, y) => String(x.scheduled_at).localeCompare(String(y.scheduled_at)))[0] || null;
 
   return json(res, 200, {
-    applicant: { ...shapeApplicant(a), recruiterName: recruiter?.display_name || null },
+    applicant: {
+      ...shapeApplicant(a, nextInterview && { scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind }),
+      recruiterName: recruiter?.display_name || null,
+    },
+    interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
-      id: i.id, kind: i.kind, scheduledAt: i.scheduled_at, conductedAt: i.conducted_at,
-      interviewerId: i.interviewer_id, recordingUrl: i.recording_url, scores: i.scores,
-      rank: i.rank, recommendReason: i.recommend_reason, notes: i.notes,
-      nextDueOn: i.next_due_on, createdAt: i.created_at,
+      ...shapeInterview(i), interviewerName: interviewerName.get(i.interviewer_id) || null,
     })),
+    // 評価UI・面談予定フォームの元。画面側で項目を持たない（ここが正）
+    evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: RANKS, rankLabel: RANK_LABEL,
+    interviewKinds: INTERVIEW_KINDS,
     timeline: (timeline || []).map((t) => ({
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
     })),
@@ -82,7 +97,7 @@ async function update(req, res, sb, ctx, user) {
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
 
-  const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, name")
+  const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!before) return json(res, 404, { error: "not_found" });
 
@@ -97,6 +112,17 @@ async function update(req, res, sb, ctx, user) {
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: body.id,
       event_key: `stage_${row.value.stage}`, label: STAGE_LABEL[row.value.stage] || row.value.stage,
+      detail: data.rank ? `ランク${data.rank}` : null, created_by: user.id,
+    });
+  }
+  // 最終決定（社長推薦・見送り・保留）が動いたときも、値を直しただけとは分けて残す。
+  // 「ランクだけで自動的に確定しない」の記録がここに残る
+  if ("decision" in row.value && row.value.decision !== before.decision) {
+    const label = row.value.decision === "rejected" ? "見送りを確定"
+      : row.value.decision === "hired" ? "採用を確定" : row.value.decision === "hold" ? "保留にした" : "決定を取り消した";
+    await sb.from("gw_hr_timeline").insert({
+      tenant_id: ctx.tenantId, applicant_id: body.id,
+      event_key: `decision_${row.value.decision || "cleared"}`, label,
       detail: data.rank ? `ランク${data.rank}` : null, created_by: user.id,
     });
   }
