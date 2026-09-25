@@ -5,7 +5,7 @@
 //   社長推薦 → CEO REVIEWへ表示 → 社長面談設定 → 今日会う人へ表示
 //   → 面談実施 → 社長判断待ち → 内定（stage=offer, status=offer_draft_pending）
 //   まで一続きで通す。あわせて保留・見送り・owner以外は開けないことも見る。
-import { launch, BASE } from "../_browser.mjs";
+import { launch, BASE, jstToday } from "../_browser.mjs";
 
 const br = await launch();
 let bad = 0;
@@ -37,8 +37,7 @@ console.log("\n=== 社長推薦 → 社長面談設定 → 今日会う人 → �
 
   const bucketOf = () => {
     const iv = state.interviews.find((i) => i.kind === "ceo") || null;
-    const jstToday = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
-    const today = iv && !iv.done && iv.scheduledAt && iv.scheduledAt.slice(0, 10) === jstToday;
+    const today = iv && !iv.done && iv.scheduledAt && iv.scheduledAt.slice(0, 10) === jstToday();
     const card = {
       id: state.applicant.id, name: state.applicant.name, jobTitle: state.applicant.jobTitle,
       rank: state.applicant.rank, recommendNote: state.applicant.recommendNote,
@@ -103,7 +102,7 @@ console.log("\n=== 社長推薦 → 社長面談設定 → 今日会う人 → �
   await page.locator("#rec button", { hasText: "社長面談を設定" }).click();
   await page.waitForTimeout(400);
   check(await page.locator(".hr-drawer").isVisible(), "予定フォームが開く");
-  const when = new Date().toISOString().slice(0, 10) + "T14:00";
+  const when = `${jstToday()}T14:00`;
   await page.fill("#iv-when", when);
   await page.fill("#iv-url", "https://meet.google.com/xyz");
   await page.locator(".hr-drawer button", { hasText: "設定する" }).click();
