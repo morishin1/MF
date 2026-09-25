@@ -45,7 +45,7 @@ const FOCUS = {
     { id: "n3", title: "面談の準備", purpose: "採用のため", doneCondition: "資料が用意できている",
       assigneeId: "emp-1", dueOn: "2026-09-17", priority: "high", missing: [] },
   ],
-  tomorrowState: { key: "ai_checked", label: "確認待ち", ready: true, confirmed: false,
+  tomorrowState: { key: "ai_checked", label: "確認待ち", ready: true, confirmed: false, coached: true,
                    count: 3, todo: "AIの指摘を見て、確定する", incomplete: [] },
   tomorrowAi: { ok: true, summary: "明日やる内容として妥当です",
                 warnings: ["1人に3件とも寄っています"], better: [] },

@@ -182,6 +182,9 @@ async function addThree() {
   for (const n of [1, 2, 3]) await post({ action: "add", ...full(n) });
 }
 
+/** ペアコーチングを済ませておく（確定まわりのテストで、そこを見たいわけではないとき用） */
+const coachAll = (date) => { for (const t of tasksOf(date)) t.coached_at = "2026-01-01T00:00:00Z"; };
+
 console.log("\n=== 明日の3件を決める ===\n");
 console.log("— 登録 —");
 
@@ -305,6 +308,7 @@ await ok("AIの鍵が無ければ、そう言う（確定は止めない）", as
   setup();
   aiOn = false;
   await addThree();
+  coachAll(TOMORROW);
   const r = await post({ action: "check", date: TOMORROW });
   assert.equal(r.statusCode, 503);
   assert.equal(r.body.error, "ai_not_configured");
@@ -317,6 +321,7 @@ console.log("— 確定 —");
 await ok("確定すると、状態が変わって記録が残る", async () => {
   setup();
   await addThree();
+  coachAll(TOMORROW);
   const r = await post({ action: "confirm", date: TOMORROW });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.state.confirmed, true);
@@ -330,6 +335,7 @@ await ok("担当が他の人のものは、その人に配信する", async () =
   await post({ action: "add", ...full(1), assigneeId: "emp-2" });
   await post({ action: "add", ...full(2) });
   await post({ action: "add", ...full(3) });
+  coachAll(TOMORROW);
   notified.length = 0;
   const r = await post({ action: "confirm", date: TOMORROW });
   assert.equal(r.body.sent, 1);
@@ -341,6 +347,7 @@ await ok("担当が他の人のものは、その人に配信する", async () =
 await ok("自分のぶんだけなら、通知は出さない", async () => {
   setup();
   await addThree();
+  coachAll(TOMORROW);
   notified.length = 0;
   await post({ action: "confirm", date: TOMORROW });
   assert.equal(notified.length, 0);
@@ -349,6 +356,7 @@ await ok("自分のぶんだけなら、通知は出さない", async () => {
 await ok("確定したあとは足せない・直せない", async () => {
   setup();
   await addThree();
+  coachAll(TOMORROW);
   await post({ action: "confirm", date: TOMORROW });
   const a = await post({ action: "add", ...full(4) });
   assert.equal(a.statusCode, 409);
@@ -358,10 +366,66 @@ await ok("確定したあとは足せない・直せない", async () => {
 await ok("2回押しても、確定は1回", async () => {
   setup();
   await addThree();
+  coachAll(TOMORROW);
   await post({ action: "confirm", date: TOMORROW });
   const r = await post({ action: "confirm", date: TOMORROW });
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.already, true);
+});
+
+console.log("— ペアコーチング —");
+
+await ok("コーチング未実施だと、3件そろっていても確定は止まる", async () => {
+  setup();
+  await addThree();
+  const r = await post({ action: "confirm", date: TOMORROW });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "needs_coaching");
+});
+
+await ok("コーチングを終える（coach）と、確認済みの記録が残る", async () => {
+  setup();
+  await addThree();
+  const id = tasksOf(TOMORROW)[0].id;
+  const r = await post({
+    action: "coach", id, outcome: "面談候補を3名つくる", tomorrowReason: "今週中に打診したいから",
+    doneCondition: "3名の日程が確定している",
+    partners: [{ employeeId: "emp-2", name: "鈴木 次郎" }, { name: "外部 三郎" }],
+  });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.task.outcome, "面談候補を3名つくる");
+  assert.equal(r.body.task.tomorrowReason, "今週中に打診したいから");
+  assert.equal(r.body.task.qualityLevel, 4);
+  assert.ok(r.body.task.coachedAt);
+  assert.equal(r.body.task.coachedWith.length, 2);
+});
+
+await ok("相手を選ばなければ、コーチング完了にはできない", async () => {
+  setup();
+  await addThree();
+  const id = tasksOf(TOMORROW)[0].id;
+  const r = await post({ action: "coach", id, outcome: "面談候補3名" });
+  assert.equal(r.statusCode, 400);
+});
+
+await ok("3件ともコーチングを終えれば、確定できる", async () => {
+  setup();
+  await addThree();
+  for (const t of tasksOf(TOMORROW)) {
+    await post({ action: "coach", id: t.id, outcome: "成果の一言", partners: [{ name: "相手A" }] });
+  }
+  const r = await post({ action: "confirm", date: TOMORROW });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+});
+
+await ok("コーチング後にまた内容を直すと、コーチング済みが取り消される", async () => {
+  setup();
+  await addThree();
+  const id = tasksOf(TOMORROW)[0].id;
+  await post({ action: "coach", id, outcome: "成果の一言", partners: [{ name: "相手A" }] });
+  assert.ok(tasksOf(TOMORROW)[0].coached_at);
+  await post({ action: "update", id, outcome: "書き直した成果" });
+  assert.equal(tasksOf(TOMORROW)[0].coached_at, null, "古いコーチングのまま確定できてしまいます");
 });
 
 console.log("— 終わらせる —");
@@ -503,6 +567,7 @@ await ok("一般メンバーは、他人のぶんを見られない", async () =
 await ok("管理者は、他人のぶんを見て、代わりに確定できる", async () => {
   setup();
   await addThree();                                  // 山田さんのぶん
+  coachAll(TOMORROW);
   who = ADMIN;
   try {
     const g = await get("?employeeId=emp-1");

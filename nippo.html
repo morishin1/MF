@@ -167,6 +167,24 @@
     .fc-today .ti { font-size:13.5px; font-weight:700; }
     .fc-today.done { border-color:#b7e0c4; background:#f7fbf8; }
     .fc-today .act { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+
+    /* ── ペアコーチング。承認ではなく、対話で質を上げる ── */
+    .fc-coach-guide { border:1px solid #cbd8ea; border-radius:10px; background:#f5f9ff;
+                       padding:12px 14px; margin-bottom:14px; font-size:12.5px; }
+    .fc-coach-guide h4 { margin:0 0 6px; font-size:12.5px; color:var(--primary-dark);
+                          display:flex; align-items:center; gap:5px; }
+    .fc-coach-guide ol, .fc-coach-guide ul { margin:0 0 8px; padding-left:18px; line-height:1.9; }
+    .fc-coach-guide b { font-size:12px; }
+    .fc-echo { margin-top:4px; }
+    .fc-echo .ln { display:block; line-height:1.9; }
+    .fc-echo .who { font-weight:700; color:var(--primary-dark); }
+    .fc-lv { display:inline-block; border-radius:999px; padding:1px 9px; font-size:11px;
+             font-weight:700; margin-left:6px; white-space:nowrap; }
+    .fc-lv.l1 { background:#fde8e8; color:#c53030; }
+    .fc-lv.l2 { background:#fff3e0; color:#9c4221; }
+    .fc-lv.l3 { background:#fff3d6; color:#975a16; }
+    .fc-lv.l4 { background:#e8f5ec; color:#256b36; }
+    .fc-coach-form { border-color:#2b6cb0; background:#f8fafd; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -1433,6 +1451,7 @@
       ${todayBox()}
       ${carryBox()}
       ${memoBox()}
+      ${coachGuideBox()}
       <div id="fc-list">${list.map(focusTask).join("")}</div>
       ${st.confirmed ? "" : `<div id="fc-add"></div>
         <button class="btn btn-secondary btn-sm" onclick="openFocusForm()">
@@ -1446,7 +1465,7 @@
                      ${st.ready ? "" : "disabled"}>
                <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに見てもらう</button>
              <button class="btn btn-primary btn-sm" onclick="confirmFocus(this)"
-                     ${st.ready ? "" : "disabled"}>
+                     ${st.ready && st.coached ? "" : "disabled"}>
                <span class="material-symbols-outlined icon-inline">task_alt</span>この内容で確定する</button>
              <span class="muted" style="font-size:12px;">${esc(st.todo || "")}</span>`}
       </div>
@@ -1586,15 +1605,23 @@
     const who = (focusData.people || []).find((p) => p.id === t.assigneeId);
     const ai = t.aiReview;
     const sug = t.aiAssignee ? (focusData.people || []).find((p) => p.id === t.aiAssignee) : null;
+    const lv = t.qualityLevel || 1;
+    const lvLabel = (focusData.qualityLevels || []).find((q) => q.key === lv)?.label || "";
     return `
       <div class="fc-task">
-        <div class="ti">${i + 1}. ${esc(t.title)}</div>
+        <div class="ti">${i + 1}. ${esc(t.title)}
+          <span class="fc-lv l${lv}">Lv${lv}：${esc(lvLabel)}</span>
+          ${t.coachedAt ? `<span class="fc-lv l4">コーチング済み</span>` : ""}
+        </div>
         <div class="me">
           目的：${esc(t.purpose || "（未記入）")}<br>
+          得たい結果：${esc(t.outcome || "（未記入）")}<br>
+          なぜ明日やるか：${esc(t.tomorrowReason || "（未記入）")}<br>
           完了条件：${esc(t.doneCondition || "（未記入）")}<br>
-          担当：${esc(who?.name || "（未定）")}　期限：${esc(t.dueOn || "—")}　
+          担当：${esc(who?.name || "（未定）")}　期限：${esc(t.dueOn || "—")}
           優先度：${esc({ high: "高", normal: "ふつう", low: "低" }[t.priority] || t.priority)}
           ${t.kpiLink ? `<br>関連：${esc(t.kpiLink)}` : ""}
+          ${t.coachedWith?.length ? `<br>組んだ相手：${t.coachedWith.map((p) => esc(p.name)).join("・")}` : ""}
         </div>
         ${t.missing?.length
           ? `<div class="miss">${t.missing.map((m) => esc(m.label)).join("・")} が空です</div>` : ""}
@@ -1618,9 +1645,110 @@
         ${focusData.tomorrowState?.confirmed ? "" : `
           <div class="act">
             <button class="btn btn-secondary btn-sm" onclick="openFocusForm('${esc(t.id)}')">直す</button>
+            <button class="btn ${t.coachedAt ? "btn-secondary" : "btn-primary"} btn-sm"
+                    onclick="openCoachForm('${esc(t.id)}')">
+              <span class="material-symbols-outlined icon-inline">forum</span>
+              ${t.coachedAt ? "コーチングをやり直す" : "ペアコーチングをする"}</button>
             <button class="btn btn-secondary btn-sm" onclick="removeFocus('${esc(t.id)}', this)">外す</button>
           </div>`}
+        <div id="fc-coach-${esc(t.id)}"></div>
       </div>`;
+  }
+
+  /** 聞き方ガイド。承認フローではなく、対話の相手が見る手順・質問・オウム返しの例 */
+  function coachGuideBox() {
+    if (focusData.tomorrowState?.confirmed) return "";
+    const steps = focusData.coachSteps || [];
+    if (!steps.length) return "";
+    return `
+      <div class="fc-coach-guide">
+        <h4><span class="material-symbols-outlined" style="font-size:16px;">forum</span>ペアコーチング：聞き方ガイド</h4>
+        <p class="muted" style="margin:0 0 8px;">
+          承認ではありません。3人一組で、目的・得たい結果・完了条件を対話で深掘りします。
+          決めるのは常に本人です。
+        </p>
+        <ol>${steps.map((s) => `<li>${esc(s.label)}</li>`).join("")}</ol>
+        <b>質問の例</b>
+        <ul>${(focusData.coachQuestions || []).map((q) => `<li>${esc(q)}</li>`).join("")}</ul>
+        <b>オウム返しの例</b>
+        <div class="fc-echo">${(focusData.coachEcho || [])
+          .map((e) => `<span class="ln"><span class="who">${esc(e.who)}</span>「${esc(e.text)}」</span>`).join("")}
+        </div>
+      </div>`;
+  }
+
+  /** ペアコーチングの入力欄。本人が対話の結果を書き、最後に「確認済み」にする */
+  function openCoachForm(id) {
+    const t = (focusData.tomorrowTasks || []).find((x) => x.id === id);
+    if (!t) return;
+    const others = (focusData.people || []).filter((p) => p.id !== focusData.employeeId);
+    const opts = () => `<option value="">（選ぶ）</option>`
+      + others.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+    el(`fc-coach-${id}`).innerHTML = `
+      <div class="fc-task fc-coach-form">
+        <div class="fc-form">
+          <label for="fcc-outcome-${id}">得たい結果</label>
+          <input id="fcc-outcome-${id}" type="text" value="${esc(t.outcome || "")}"
+                 placeholder="面談候補を3名つくる" oninput="renderCoachLevel('${id}')">
+          <label for="fcc-reason-${id}">なぜ明日やるか</label>
+          <input id="fcc-reason-${id}" type="text" value="${esc(t.tomorrowReason || "")}"
+                 placeholder="今週中に打診したいから">
+          <label for="fcc-done-${id}">完了条件</label>
+          <input id="fcc-done-${id}" type="text" value="${esc(t.doneCondition || "")}"
+                 placeholder="3名の日程が確定している" oninput="renderCoachLevel('${id}')">
+          <label for="fcc-p1-${id}">組んだ相手</label>
+          <select id="fcc-p1-${id}">${opts()}</select>
+          <label for="fcc-p2-${id}">もう1人（任意）</label>
+          <select id="fcc-p2-${id}">${opts()}</select>
+        </div>
+        <p class="muted" style="font-size:11.5px;margin:2px 0 8px;">今の質：<span id="fcc-lv-${id}"></span>
+          （目標はLv3以上。AIは質問候補の提案や、抽象的な表現の指摘くらいの補助にとどめます）</p>
+        <div class="act">
+          <button class="btn btn-primary btn-sm" onclick="saveCoach('${esc(id)}', this)">これでコーチング完了</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeCoachForm('${esc(id)}')">やめる</button>
+        </div>
+        <div id="fcc-msg-${esc(id)}" class="err-text"></div>
+      </div>`;
+    renderCoachLevel(id);
+  }
+
+  function closeCoachForm(id) {
+    const n = el(`fc-coach-${id}`);
+    if (n) n.innerHTML = "";
+  }
+
+  /** 埋めた項目から、今の質を機械的に出すだけ。上げるかどうかは対話で本人が決める */
+  function renderCoachLevel(id) {
+    const t = (focusData.tomorrowTasks || []).find((x) => x.id === id);
+    const has = (v) => v && String(v).trim();
+    const outcome = el(`fcc-outcome-${id}`)?.value;
+    const done = el(`fcc-done-${id}`)?.value;
+    let lv = 1;
+    if (has(t?.purpose)) lv = 2;
+    if (has(t?.purpose) && has(outcome)) lv = 3;
+    if (has(t?.purpose) && has(outcome) && has(done)) lv = 4;
+    const label = (focusData.qualityLevels || []).find((q) => q.key === lv)?.label || "";
+    const el2 = el(`fcc-lv-${id}`);
+    if (el2) el2.textContent = `Lv${lv}：${label}`;
+  }
+
+  async function saveCoach(id, btn) {
+    const msg = el(`fcc-msg-${id}`);
+    msg.textContent = "";
+    const partners = [el(`fcc-p1-${id}`).value, el(`fcc-p2-${id}`).value]
+      .filter(Boolean)
+      .map((pid) => ({ employeeId: pid, name: (focusData.people || []).find((p) => p.id === pid)?.name || "" }));
+    if (!partners.length) { msg.textContent = "組んだ相手を選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.focusCoach({
+        id,
+        outcome: el(`fcc-outcome-${id}`).value,
+        tomorrowReason: el(`fcc-reason-${id}`).value,
+        doneCondition: el(`fcc-done-${id}`).value,
+        partners,
+      }));
+      await loadFocus();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
   }
 
   function openFocusForm(id) {
