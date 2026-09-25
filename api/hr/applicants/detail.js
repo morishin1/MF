@@ -8,7 +8,7 @@ import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
-  normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, STAGE_LABEL, RANK_LABEL,
+  normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, activeOffer, STAGE_LABEL, RANK_LABEL,
   RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds,
 } from "../../../lib/hr.js";
 
@@ -63,10 +63,16 @@ async function one(req, res, sb, ctx) {
   const nextInterview = (interviews || [])
     .filter((i) => !i.conducted_at && i.scheduled_at)
     .sort((x, y) => String(x.scheduled_at).localeCompare(String(y.scheduled_at)))[0] || null;
+  // いま有効な合格通知（NEXT ACTIONの「送付：.../閲覧：...」に使う。README Stage 6）
+  const current = activeOffer(offers);
 
   return json(res, 200, {
     applicant: {
-      ...shapeApplicant(a, nextInterview && { scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind }),
+      ...shapeApplicant(
+        a,
+        nextInterview && { scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
+        current && { sentAt: current.sent_at, viewedAt: current.viewed_at },
+      ),
       recruiterName: recruiter?.display_name || null,
     },
     interviewers: interviewers || [],

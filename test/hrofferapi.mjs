@@ -13,6 +13,7 @@
 //   7. recruiterロールだけの人も使える。一般メンバーは使えない
 import assert from "node:assert/strict";
 import { mock } from "node:test";
+import crypto from "node:crypto";
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
@@ -262,6 +263,151 @@ await ok("合格通知が無ければ404", async () => {
   setup();
   const r = await act({ id: "not-exists", action: "confirm" });
   assert.equal(r.statusCode, 404);
+});
+
+console.log("\n=== 本人専用URLを発行する（PATCH issueLink） ===\n");
+
+// 本人送付待ち（offer_send_pending）まで進めておく
+async function toSendPending() {
+  const c = await create({ applicantId: "a1", respondBy: "2026-10-15" });
+  await act({ id: c.body.offer.id, action: "confirm" });
+  return c.body.offer.id;
+}
+
+await ok("URLを発行できる（平文tokenが一度だけ返る）", async () => {
+  setup();
+  const offerId = await toSendPending();
+  const r = await act({ id: offerId, action: "issueLink" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(r.body.token, "平文tokenが返る");
+  assert.equal(db.rows.gw_hr_offers[0].token_hash, crypto.createHash("sha256").update(r.body.token, "utf8").digest("hex"));
+});
+
+await ok("発行しただけでは版は増えない（まだ本人へ送っていないため）", async () => {
+  setup();
+  const offerId = await toSendPending();
+  const r = await act({ id: offerId, action: "issueLink" });
+  assert.equal(r.body.offer.version, 1);
+  assert.equal(db.rows.gw_hr_offers.length, 1);
+});
+
+await ok("発行しただけでは応募者の状態は動かない（本人送付待ちのまま）", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  assert.equal(db.rows.gw_hr_applicants[0].status, "offer_send_pending");
+});
+
+await ok("選考タイムラインに残る", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_link_issued"));
+});
+
+await ok("本人送付待ち・送付済み以外からは発行できない", async () => {
+  setup();
+  const c = await create({ applicantId: "a1", respondBy: "2026-10-15" }); // まだ offer_review_pending
+  const r = await act({ id: c.body.offer.id, action: "issueLink" });
+  assert.equal(r.statusCode, 409);
+});
+
+console.log("\n=== 実際に送ったことを記録する（PATCH markSent） ===\n");
+
+await ok("送付済みにできる。応募者の状態が「本人送付済み」へ進む", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  const r = await act({ id: offerId, action: "markSent" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.status, "offer_sent");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "offer_sent");
+  assert.ok(db.rows.gw_hr_offers[0].sent_at);
+});
+
+await ok("選考タイムラインに残る", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+  assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_sent"));
+});
+
+await ok("監査ログに残る", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+  assert.ok(logged.some((l) => l.action === "hr.offer_sent"));
+});
+
+await ok("URLを発行していなくても、送付済みにする操作自体は断らない（記録が目的のため）", async () => {
+  setup();
+  const offerId = await toSendPending();
+  const r = await act({ id: offerId, action: "markSent" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+});
+
+await ok("本人送付待ち・URL再送待ち以外からは記録できない", async () => {
+  setup();
+  const c = await create({ applicantId: "a1", respondBy: "2026-10-15" });
+  const r = await act({ id: c.body.offer.id, action: "markSent" });
+  assert.equal(r.statusCode, 409);
+});
+
+console.log("\n=== URLを再発行する（送付済みからのissueLink） ===\n");
+
+await ok("送付済みから再発行すると、版が増え、旧版が失効する", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+
+  const r = await act({ id: offerId, action: "issueLink" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.offer.version, 2, "新しい版が作られる");
+  assert.notEqual(r.body.offer.id, offerId, "新しい行として作られる");
+
+  const old = db.rows.gw_hr_offers.find((o) => o.id === offerId);
+  assert.ok(old.revoked_at, "旧版は失効する");
+});
+
+await ok("再発行すると、応募者の状態が「URL再送待ち」へ進む", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+  await act({ id: offerId, action: "issueLink" });
+  assert.equal(db.rows.gw_hr_applicants[0].status, "offer_resend_pending");
+});
+
+await ok("再発行された新しい版で、送付済みにできる", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+  const reissued = await act({ id: offerId, action: "issueLink" });
+  const r = await act({ id: reissued.body.offer.id, action: "markSent" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_applicants[0].status, "offer_sent");
+});
+
+await ok("選考タイムラインに「URL再発行」が残る", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+  await act({ id: offerId, action: "issueLink" });
+  assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_link_reissued"));
+});
+
+await ok("監査ログに hr.offer_reissue が残る", async () => {
+  setup();
+  const offerId = await toSendPending();
+  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "markSent" });
+  await act({ id: offerId, action: "issueLink" });
+  assert.ok(logged.some((l) => l.action === "hr.offer_reissue"));
 });
 
 console.log("\n=== 誰が触れるか ===\n");

@@ -118,7 +118,9 @@
     ceo_recommend_pending: ["#fbf1d6", "#7d5a00", "recommend"], ceo_interview_pending: ["#e7eaf3", "#1b2440", "calendar_month"],
     ceo_decision_pending: ["#fbf1d6", "#7d5a00", "pending_actions"], next_scheduling_pending: ["#e7eaf3", "#1b2440", "calendar_month"],
     offer_draft_pending: ["#fbf1d6", "#7d5a00", "description"], offer_review_pending: ["#fbf1d6", "#7d5a00", "fact_check"],
-    offer_send_pending: ["#fbf1d6", "#7d5a00", "send"], offer_response_pending: ["#e7eaf3", "#1b2440", "hourglass_empty"],
+    offer_send_pending: ["#fbf1d6", "#7d5a00", "send"], offer_sent: ["#e7eaf3", "#1b2440", "mark_email_read"],
+    offer_viewed: ["#e5f1e2", "#2f6f3a", "visibility"], offer_resend_pending: ["#fbf1d6", "#7d5a00", "send"],
+    offer_response_pending: ["#e7eaf3", "#1b2440", "hourglass_empty"],
     accepted: ["#e5f1e2", "#2f6f3a", "check_circle"], declined: ["#efefeb", "#4a5068", "remove"],
     done: ["#e5f1e2", "#2f6f3a", "check_circle"], passed: ["#efefeb", "#4a5068", "remove"],
   };
@@ -396,6 +398,7 @@
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
+    if (key === "sendOffer" || key === "reissueOffer") return openSendOfferForm();
   }
 
   /** Dランクの早期見送りだけ、ここで確定する（社長判断待ちからの見送りは openDecideForm） */
@@ -630,7 +633,7 @@
   // ---- 合格通知を作成・確認（右ドロワー） --------------------------------------------
   // Stage 5：作成→社内確認→確定（本人送付待ち）まで。本人への実際の送付はStage 6
   const OFFER_STATUS_LABEL = {
-    none: "—", draft: "作成中", sent: "送付済み", accepted: "承諾", declined: "辞退",
+    none: "—", draft: "作成中", sent: "送付済み", viewed: "閲覧済み", accepted: "承諾", declined: "辞退",
     revoked: "無効化", expired: "期限切れ",
   };
   function offerRow(o) {
@@ -645,9 +648,10 @@
       </div>`;
   }
 
+  // いま有効な（無効化されていない）最新の合格通知。版は新しい順に並んでいる
   function currentOffer() {
     const list = detail.offers || [];
-    return list.find((o) => o.status === "draft") || list[0] || null;
+    return list.find((o) => o.status !== "revoked") || null;
   }
 
   function openOfferForm() {
@@ -730,6 +734,81 @@
       await openDetail(detail.applicant.id);
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "確定できませんでした"; }
+  }
+
+  // ---- 本人へ送る・URLを再発行（右ドロワー） -----------------------------------------
+  // Stage 6：メール送信の仕組みは無いので、URLを発行してコピーしてもらい、
+  // 実際に送り終えたら「送付済みにする」を明示的に押してもらう（README §12）
+  function openSendOfferForm() {
+    const reissuing = detail.applicant.status === "offer_sent" || detail.applicant.status === "offer_viewed";
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">${reissuing ? "URLを再発行" : "本人へ送る"}</h2>
+        <p class="hr-sub" style="margin:0 0 14px;">
+          ${reissuing ? "現在のURLは使えなくなります。新しいURLを発行しますか？" : "候補者専用のURLを発行します。メール送信の仕組みはまだ無いので、いつもお使いのメールから手動で送ってください。"}</p>
+        <div id="so-body">
+          <button class="btn btn-primary" onclick="submitIssueLink(this)">${reissuing ? "再発行する" : "URLを発行する"}</button>
+        </div>
+        <div id="so-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitIssueLink(btn) {
+    const msg = el("so-msg"); msg.textContent = "";
+    const o = currentOffer();
+    if (!o) return;
+    try {
+      const r = await KPLayout.busy(btn, "発行中…", () => API.issueHrOfferLink(o.id));
+      const url = `${location.origin}/hr-offer.html?token=${encodeURIComponent(r.token)}`;
+      const mail = offerMailTemplate(url);
+      el("so-body").innerHTML = `
+        <label>候補者専用URL（この画面を閉じると、二度と表示されません）</label>
+        <input id="so-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('so-url')">URLをコピー</button>
+        <label style="margin-top:14px;">メール文面</label>
+        <textarea id="so-mail" rows="9" readonly>${esc(mail)}</textarea>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('so-mail')">メール文面をコピー</button>
+        <p class="muted" style="font-size:12px;margin-top:12px;">
+          上のURLをメールに貼って、実際に送ってください。送り終えたら、下のボタンを押して記録してください。</p>
+        <button class="btn btn-primary" style="margin-top:6px;" onclick="submitMarkSent(this, '${esc(r.offer.id)}')">送付済みにする</button>`;
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "発行できませんでした"; }
+  }
+
+  function offerMailTemplate(url) {
+    const a = detail.applicant;
+    const o = currentOffer();
+    return `件名：選考結果のご案内
+
+${a.name} 様
+
+このたびは弊社採用選考にご参加いただき、ありがとうございました。
+
+選考結果および採用条件について、下記の専用ページよりご確認ください。
+
+${url}
+
+回答期限：${o?.respondBy || ""}
+
+ご不明点がございましたら、採用担当までご連絡ください。`;
+  }
+
+  async function copyText(id) {
+    const val = el(id).value;
+    try { await navigator.clipboard.writeText(val); } catch {}
+    el(id).select();
+  }
+
+  async function submitMarkSent(btn, offerId) {
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.markHrOfferSent(offerId));
+      closeAction();
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
   }
 </script>
 
