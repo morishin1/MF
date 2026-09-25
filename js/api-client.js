@@ -373,6 +373,12 @@
   const todayHrInterviews = () => api("/api/hr/interviews/today");
   const ceoReview = () => api("/api/hr/ceo-review");
 
+  // ---- 採用HR：合格通知作成（Stage 5） ----
+  const createHrOffer = (body) => api("/api/hr/offers", { method: "POST", body });
+  const hrOfferAct = (body) => api("/api/hr/offers", { method: "PATCH", body });
+  const updateHrOffer = (body) => hrOfferAct({ ...body, action: "update" });
+  const confirmHrOffer = (id) => hrOfferAct({ id, action: "confirm" });
+
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
   const createGuest = (body) => api("/api/guests", { method: "POST", body });
@@ -1285,6 +1291,7 @@
     listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
     scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview, todayHrInterviews,
     ceoReview,
+    createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

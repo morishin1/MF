@@ -8,7 +8,7 @@ import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
-  normalizeApplicant, shapeApplicant, offerStatus, shapeInterview, STAGE_LABEL, RANK_LABEL,
+  normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, STAGE_LABEL, RANK_LABEL,
   RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds,
 } from "../../../lib/hr.js";
 
@@ -80,15 +80,7 @@ async function one(req, res, sb, ctx) {
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
     })),
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
-    offers: (offers || []).map((o) => ({
-      id: o.id, version: o.version, status: offerStatus(o),
-      jobTitle: o.job_title, employmentType: o.employment_type, contractType: o.contract_type,
-      contractEndDate: o.contract_end_date, joinDate: o.join_date, probationMonths: o.probation_months,
-      wageType: o.wage_type, wageAmount: o.wage_amount, weeklyHours: o.weekly_hours,
-      workLocation: o.work_location, messageToCandidate: o.message_to_candidate, respondBy: o.respond_by,
-      sentAt: o.sent_at, viewedAt: o.viewed_at, acceptedAt: o.accepted_at,
-      declinedAt: o.declined_at, declineReason: o.decline_reason, expiresAt: o.expires_at,
-    })),
+    offers: (offers || []).map(shapeOffer),
   });
 }
 

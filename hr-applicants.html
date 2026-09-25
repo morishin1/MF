@@ -321,6 +321,9 @@
           <div><dt>給与</dt><dd>${a.wageAmount ? `${esc(a.wageType || "")} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : "—"}</dd></div>
           <div><dt>勤務地</dt><dd>${esc(a.workLocation || "—")}</dd></div>
         </dl>
+        ${(detail.offers || []).length ? `
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">合格通知</h4>
+        ${detail.offers.map(offerRow).join("")}` : ""}
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">選考タイムライン</h4>
         <div class="hr-tl">${(detail.timeline || []).map((t, i, arr) => `
           <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
@@ -392,6 +395,7 @@
     if (key === "recommend") return openRecommendForm();
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
+    if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
   }
 
   /** Dランクの早期見送りだけ、ここで確定する（社長判断待ちからの見送りは openDecideForm） */
@@ -621,6 +625,111 @@
       await openDetail(detail.applicant.id);
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // ---- 合格通知を作成・確認（右ドロワー） --------------------------------------------
+  // Stage 5：作成→社内確認→確定（本人送付待ち）まで。本人への実際の送付はStage 6
+  const OFFER_STATUS_LABEL = {
+    none: "—", draft: "作成中", sent: "送付済み", accepted: "承諾", declined: "辞退",
+    revoked: "無効化", expired: "期限切れ",
+  };
+  function offerRow(o) {
+    return `
+      <div class="card" style="margin-bottom:10px;">
+        <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版
+          <span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">${esc(OFFER_STATUS_LABEL[o.status] || o.status)}</span></div>
+        <div class="muted" style="font-size:11.5px;margin:4px 0;">回答期限：${esc(o.respondBy || "—")}
+          ${o.sentAt ? `　送付：${esc(fmtDate(o.sentAt))}` : ""}
+          ${o.viewedAt ? `　閲覧：${esc(fmtDate(o.viewedAt))}` : ""}</div>
+        ${o.messageToCandidate ? `<div style="font-size:12px;margin-top:4px;">${esc(o.messageToCandidate)}</div>` : ""}
+      </div>`;
+  }
+
+  function currentOffer() {
+    const list = detail.offers || [];
+    return list.find((o) => o.status === "draft") || list[0] || null;
+  }
+
+  function openOfferForm() {
+    const a = detail.applicant;
+    const reviewing = a.status === "offer_review_pending";
+    const o = reviewing ? currentOffer() : null;
+    const v = (k, fallback) => esc((o ? o[k] : null) ?? fallback ?? "");
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">合格通知を${reviewing ? "確認" : "作成"}</h2>
+        <p class="hr-sub" style="margin:0 0 14px;">候補者本人に送る、確定した条件です。本人へ送付するまでは、いつでも直せます。</p>
+        <label>雇用形態</label><input id="of-employment" type="text" value="${v("employmentType", a.employmentType)}">
+        <label style="margin-top:10px;">入社予定日</label><input id="of-join" type="date" value="${v("joinDate", a.joinDate)}">
+        <label style="margin-top:10px;">契約形態</label><input id="of-contract" type="text" value="${v("contractType", a.contractType)}">
+        <label style="margin-top:10px;">契約期間満了日（有期のみ）</label><input id="of-contractend" type="date" value="${v("contractEndDate", a.contractEndDate)}">
+        <label style="margin-top:10px;">試用期間（月）</label><input id="of-prob" type="number" value="${v("probationMonths", a.probationMonths)}">
+        <label style="margin-top:10px;">給与区分</label><input id="of-wagetype" type="text" value="${v("wageType", a.wageType)}">
+        <label style="margin-top:10px;">給与・報酬</label><input id="of-wage" type="number" value="${v("wageAmount", a.wageAmount)}">
+        <label style="margin-top:10px;">勤務時間（週）</label><input id="of-hours" type="number" step="0.5" value="${v("weeklyHours", a.weeklyHours)}">
+        <label style="margin-top:10px;">勤務地</label><input id="of-loc" type="text" value="${v("workLocation", a.workLocation)}">
+        <label style="margin-top:10px;">回答期限 <span style="color:#b3261e;">*</span></label>
+        <input id="of-respondby" type="date" value="${v("respondBy", "")}">
+        <label style="margin-top:10px;">本人向けメッセージ</label>
+        <textarea id="of-message" rows="3">${v("messageToCandidate", "")}</textarea>
+        <div id="of-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="submitOffer(this)">${reviewing ? "内容を保存" : "作成する"}</button>
+          ${reviewing ? `<button class="btn btn-primary" onclick="submitConfirmOffer(this)">確定して送付待ちにする</button>` : ""}
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  function offerFormFields() {
+    return {
+      employmentType: el("of-employment").value.trim() || undefined,
+      joinDate: el("of-join").value || undefined,
+      contractType: el("of-contract").value.trim() || undefined,
+      contractEndDate: el("of-contractend").value || undefined,
+      probationMonths: el("of-prob").value || undefined,
+      wageType: el("of-wagetype").value.trim() || undefined,
+      wageAmount: el("of-wage").value || undefined,
+      weeklyHours: el("of-hours").value || undefined,
+      workLocation: el("of-loc").value.trim() || undefined,
+      messageToCandidate: el("of-message").value.trim() || undefined,
+    };
+  }
+
+  async function submitOffer(btn) {
+    const msg = el("of-msg"); msg.textContent = "";
+    const respondBy = el("of-respondby").value;
+    if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
+    const fields = offerFormFields();
+    try {
+      if (detail.applicant.status === "offer_review_pending") {
+        const o = currentOffer();
+        await KPLayout.busy(btn, "保存中…", () => API.updateHrOffer({ id: o.id, ...fields, respondBy }));
+      } else {
+        await KPLayout.busy(btn, "作成中…", () => API.createHrOffer({ applicantId: detail.applicant.id, ...fields, respondBy }));
+      }
+      closeAction();
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  async function submitConfirmOffer(btn) {
+    const o = currentOffer();
+    if (!o) return;
+    const msg = el("of-msg"); msg.textContent = "";
+    const respondBy = el("of-respondby").value;
+    if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "確定中…", async () => {
+        await API.updateHrOffer({ id: o.id, ...offerFormFields(), respondBy });
+        await API.confirmHrOffer(o.id);
+      });
+      closeAction();
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "確定できませんでした"; }
   }
 </script>
 
