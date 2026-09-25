@@ -153,7 +153,9 @@ async function confirm(res, sb, ctx, user, offer) {
   return json(res, 200, { offer: shapeOffer(offer), status: "offer_send_pending" });
 }
 
-const LINKABLE_STATUSES = ["offer_send_pending", "offer_sent", "offer_viewed", "offer_resend_pending"];
+const LINKABLE_STATUSES = [
+  "offer_send_pending", "offer_sent", "offer_viewed", "offer_response_pending", "offer_resend_pending",
+];
 
 // 本人専用URLのtokenを発行する。平文は、ここでしか返さない
 async function issueLink(res, sb, ctx, user, offer) {

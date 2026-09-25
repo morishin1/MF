@@ -14,6 +14,7 @@ import {
   STAGE_KEYS, STATUS_LABEL, isOverdue, nextStatusFromRank, offerStatus, offerResponseStatus,
   normalizeApplicant, snapshotOfferFields, shapeApplicant, shapePublicOffer, ONBOARD_PREFILL_FIELDS,
   EVAL_ITEMS, EVAL_SCALE_KEYS, nextActionOf, normalizeInterview, shapeInterview, interviewKindLabel,
+  advancePrefill, isAdvanceClaimStale,
 } from "../lib/hr.js";
 
 let pass = 0, fail = 0;
@@ -174,6 +175,34 @@ ok("列名は gw_hr_applicants と同じ（変換しない）", () => {
   ]);
 });
 
+console.log("\n=== 本採用への事前入力（advancePrefill・Stage 8） ===\n");
+
+ok("admin-onboard.htmlの項目名（camelCase）に変換される", () => {
+  const p = advancePrefill({
+    name: "山田 太郎", email: "yamada@example.com", join_date: "2026-11-01",
+    contract_type: "無期", contract_end_date: null, probation_months: 3,
+    wage_type: "月給", wage_amount: 400000, weekly_hours: 40,
+  });
+  assert.deepEqual(p, {
+    name: "山田 太郎", email: "yamada@example.com", joinDate: "2026-11-01",
+    contractType: "無期", probationMonths: 3, wageType: "月給", wageAmount: 400000, weeklyHours: 40,
+  });
+});
+ok("空・nullの項目は入れない（初期値を壊さない）", () => {
+  const p = advancePrefill({ name: "山田 太郎", email: null, join_date: "" });
+  assert.deepEqual(p, { name: "山田 太郎" });
+});
+
+console.log("\n=== 本採用クレームの期限切れ（isAdvanceClaimStale・Stage 8） ===\n");
+
+ok("クレームが無ければ stale扱い", () => { assert.equal(isAdvanceClaimStale(null), true); });
+ok("1時間以内なら有効", () => {
+  assert.equal(isAdvanceClaimStale(new Date(Date.now() - 10 * 60000).toISOString()), false);
+});
+ok("1時間を過ぎたら stale", () => {
+  assert.equal(isAdvanceClaimStale(new Date(Date.now() - 2 * 3600000).toISOString()), true);
+});
+
 console.log("\n=== 画面へ渡す形（shapeApplicant） ===\n");
 
 ok("ラベル・期限超過が付く", () => {
@@ -293,17 +322,26 @@ ok("送付済み・未閲覧は、送付日時が出て、URLを再発行でき�
   assert.equal(n.cta, "URLを再発行");
   assert.equal(n.action, "reissueOffer");
 });
-ok("閲覧済みは、送付・閲覧の日時が出て、URLを再発行できる", () => {
+ok("承諾待ち（閲覧済み）は、送付・閲覧の日時が出て、URLを再発行できる", () => {
+  const n = nextActionOf(
+    { status: "offer_response_pending" }, null,
+    { sentAt: "2026-09-25T06:00:00Z", viewedAt: "2026-09-25T07:00:00Z" },
+  );
+  assert.equal(n.label.startsWith("本人の回答を待っています"), true);
+  assert.match(n.label, /閲覧：(?!未確認)/);
+  assert.equal(n.cta, "URLを再発行");
+});
+ok("offer_viewed（旧・後方互換）も、承諾待ちと同じ扱いになる", () => {
   const n = nextActionOf(
     { status: "offer_viewed" }, null,
     { sentAt: "2026-09-25T06:00:00Z", viewedAt: "2026-09-25T07:00:00Z" },
   );
-  assert.match(n.label, /閲覧：(?!未確認)/);
+  assert.equal(n.label.startsWith("本人の回答を待っています"), true);
   assert.equal(n.cta, "URLを再発行");
 });
-ok("回答期限が過ぎたら、閲覧済みでも「期限を過ぎました」に切り替わる", () => {
+ok("回答期限が過ぎたら、承諾待ちでも「期限を過ぎました」に切り替わる", () => {
   const n = nextActionOf(
-    { status: "offer_viewed" }, null,
+    { status: "offer_response_pending" }, null,
     { sentAt: "2020-01-01T00:00:00Z", viewedAt: "2020-01-01T00:00:00Z", expiresAt: "2020-02-01T00:00:00Z" },
   );
   assert.match(n.label, /期限を過ぎました/);
@@ -316,10 +354,21 @@ ok("本人送付待ちでも、期限が過ぎていれば知らせる（一度�
 
 console.log("— NEXT ACTION：承諾・辞退（Stage 7） —");
 
-ok("承諾済みは、本採用へ進めてください（ボタンは次のステージ）", () => {
+ok("承諾済みは、本採用へ進めてください（Stage 8：本採用へ進めるボタン）", () => {
   const n = nextActionOf({ status: "accepted" });
   assert.equal(n.label, "本採用へ進めてください");
-  assert.equal(n.cta, null);
+  assert.equal(n.cta, "本採用へ進める");
+  assert.equal(n.action, "advance");
+});
+ok("手続き中（有効なクレームあり）なら、続きを開くボタンになる", () => {
+  const n = nextActionOf({ status: "accepted", advance_claimed_at: new Date().toISOString() });
+  assert.match(n.label, /手続き中/);
+  assert.equal(n.cta, "続きを開く");
+  assert.equal(n.action, "advance");
+});
+ok("クレームが古ければ（1時間超）、やり直しとして扱う", () => {
+  const n = nextActionOf({ status: "accepted", advance_claimed_at: new Date(Date.now() - 2 * 3600000).toISOString() });
+  assert.equal(n.cta, "本採用へ進める");
 });
 ok("辞退は、対応不要", () => {
   const n = nextActionOf({ status: "declined" });

@@ -296,10 +296,12 @@
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>${esc(a.nextAction)}</h3>
         <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
-        ${a.nextActionCta && (a.nextActionKey !== "decide" || canDecide)
+        ${a.nextActionCta && (!["decide", "advance"].includes(a.nextActionKey) || canDecide)
           ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
           : a.nextActionKey === "decide"
-            ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">採用判断は社長・管理者が行います。</p>` : ""}
+            ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">採用判断は社長・管理者が行います。</p>`
+            : a.nextActionKey === "advance"
+              ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">本採用へ進めるのは社長・管理者が行います。</p>` : ""}
       </div>
 
       <div class="hr-tabs">
@@ -395,6 +397,7 @@
       return iv ? openEvaluateForm(iv.id) : null;
     }
     if (key === "recommend") return openRecommendForm();
+    if (key === "advance") return startAdvance();
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
@@ -743,7 +746,7 @@
   // Stage 6：メール送信の仕組みは無いので、URLを発行してコピーしてもらい、
   // 実際に送り終えたら「送付済みにする」を明示的に押してもらう（README §12）
   function openSendOfferForm() {
-    const reissuing = detail.applicant.status === "offer_sent" || detail.applicant.status === "offer_viewed";
+    const reissuing = ["offer_sent", "offer_viewed", "offer_response_pending"].includes(detail.applicant.status);
     el("action-root").innerHTML = `
       <div class="hr-drawer-bg" onclick="closeAction()"></div>
       <div class="hr-drawer">
@@ -812,6 +815,17 @@ ${url}
       await openDetail(detail.applicant.id);
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
+  }
+
+  // ---- 本採用へ進める（Stage 8） ---------------------------------------------------
+  // 実際の社員登録は既存のadmin-onboard.htmlで行う（作り直さない）。
+  // 二重手続きを防いでから、応募者IDだけを渡す。給与・勤務条件はURLへ載せず、
+  // admin-onboard.html側がサーバから改めて取得する（README Stage 8）
+  async function startAdvance() {
+    try {
+      await API.claimHrAdvance(detail.applicant.id);
+      location.href = `admin-onboard.html?applicantId=${encodeURIComponent(detail.applicant.id)}`;
+    } catch (e) { alert(e.hint || e.detail || e.message || "本採用の手続きを始められませんでした"); }
   }
 </script>
 

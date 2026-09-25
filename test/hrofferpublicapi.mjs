@@ -165,14 +165,14 @@ await ok("社内向け情報は一切含まれない（ランク・推薦理由�
 
 console.log("\n=== 初回閲覧の記録 ===\n");
 
-await ok("初めて開くと、viewed_atが記録され、応募者の状態が進む", async () => {
+await ok("初めて開くと、viewed_atが記録され、応募者の状態が「本人の回答を待っています（承諾待ち）」へ進む", async () => {
   setup();
   await get(TOKEN);
   assert.ok(db.rows.gw_hr_offers[0].viewed_at, "viewed_atが立つ");
-  assert.equal(db.rows.gw_hr_applicants[0].status, "offer_viewed");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "offer_response_pending");
 });
 
-await ok("選考タイムライン・監査ログに残る", async () => {
+await ok("選考タイムライン・監査ログには「閲覧した」事実として残る", async () => {
   setup();
   await get(TOKEN);
   assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_viewed"));

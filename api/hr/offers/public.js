@@ -76,7 +76,9 @@ async function view(req, res) {
   if (!offer.viewed_at) {
     const now = new Date().toISOString();
     await sb.from("gw_hr_offers").update({ viewed_at: now, sent_at: offer.sent_at || now }).eq("id", offer.id);
-    await sb.from("gw_hr_applicants").update({ status: "offer_viewed", updated_at: now })
+    // 閲覧できた＝以後は「本人の回答を待っています」（承諾待ち）。
+    // 「閲覧した」という事実そのものはoffer.viewed_at・選考タイムラインに残す
+    await sb.from("gw_hr_applicants").update({ status: "offer_response_pending", updated_at: now })
       .eq("id", applicant.id).eq("tenant_id", applicant.tenant_id);
     await sb.from("gw_hr_timeline").insert({
       tenant_id: applicant.tenant_id, applicant_id: applicant.id, event_key: "offer_viewed",

@@ -387,6 +387,14 @@
   const hrOfferRespond = (token, action, declineReason) =>
     publicApi("/api/hr/offers/public", { method: "POST", body: { token, action, declineReason } });
 
+  // ---- 採用HR：本採用へ進める（Stage 8） ----
+  const getHrAdvancePrefill = (applicantId) =>
+    api(`/api/hr/applicants/advance?applicantId=${encodeURIComponent(applicantId)}`);
+  const claimHrAdvance = (applicantId) => api("/api/hr/applicants/advance", { method: "POST", body: { applicantId } });
+  const hrAdvanceAct = (body) => api("/api/hr/applicants/advance", { method: "PATCH", body });
+  const releaseHrAdvance = (applicantId) => hrAdvanceAct({ applicantId, action: "release" });
+  const completeHrAdvance = (applicantId, employeeId) => hrAdvanceAct({ applicantId, action: "complete", employeeId });
+
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
   const createGuest = (body) => api("/api/guests", { method: "POST", body });
@@ -1301,6 +1309,7 @@
     ceoReview,
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
+    getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

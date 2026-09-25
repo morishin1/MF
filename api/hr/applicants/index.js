@@ -16,7 +16,7 @@ const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_titl
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
   + "recommend_note, decision_note, hold_reason, hold_next_step, "
   + "employment_type, contract_type, contract_end_date, join_date, probation_months, "
-  + "wage_type, wage_amount, weekly_hours, work_location, employee_id, note, created_at, updated_at";
+  + "wage_type, wage_amount, weekly_hours, work_location, employee_id, advance_claimed_at, note, created_at, updated_at";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
