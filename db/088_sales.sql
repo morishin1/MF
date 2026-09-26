@@ -16,8 +16,12 @@
 --   （prepared_at だけ立った状態）。「送信完了」を押した時点で sent_at が立つ。
 --   一覧・重複チェック・集計は sent_at のあるものだけを数える。
 --
--- ■ クリック（gw_sales_click_events）は追記だけ
---   件数・初回・最終は gw_sales_approaches 側にも持つ（一覧を速く出すため）。
+-- ■ クリック（gw_sales_click_events）は追記だけ。ログと「有効クリック」を分ける
+--   専用URLへのアクセスは、機械のもの（リンクのプレビュー・セキュリティ製品・HEAD・
+--   先読み）や短時間の連打も含めて全部残し、人のクリックと判断したものだけ
+--   is_valid=true にする。除外した理由は excluded_reason に残す（除外しすぎていたら
+--   ログから数え直せる）。件数・初回・最終は有効クリックだけを
+--   gw_sales_approaches 側にも持つ（一覧を速く出すため）。
 --   IPは保存しない。日ごとに変わる塩を混ぜたハッシュだけ持つ（同じ人の連打を
 --   見分けられればよく、個人を追いかける必要はない）。
 --
@@ -217,7 +221,10 @@ create table if not exists public.gw_sales_click_events (
   company_id      uuid not null references public.gw_sales_companies(id) on delete cascade,
   clicked_at      timestamptz not null default now(),
   destination_url text,
-  click_no        integer,     -- そのアタックで何回目のクリックか
+  method          text,        -- GET / HEAD
+  is_valid        boolean not null default true,   -- 人のクリックとして数えるか
+  excluded_reason text check (excluded_reason in ('head', 'prefetch', 'no_ua', 'bot', 'duplicate')),
+  click_no        integer,     -- そのアタックで何回目の有効クリックか（無効なものは null）
   user_agent      text,
   referrer        text,
   ip_hash         text         -- 日替わりの塩を混ぜたハッシュ。IPそのものは持たない
@@ -227,6 +234,11 @@ create index if not exists idx_gw_sales_click_events_company
   on public.gw_sales_click_events(company_id, clicked_at desc);
 create index if not exists idx_gw_sales_click_events_tenant
   on public.gw_sales_click_events(tenant_id, clicked_at desc);
+create index if not exists idx_gw_sales_click_events_approach
+  on public.gw_sales_click_events(approach_id, is_valid, clicked_at desc);
+
+comment on table public.gw_sales_click_events is
+  '専用URLへのアクセスのログ。機械・連打も含めて全部残す。数えるのは is_valid=true だけ';
 
 -- -----------------------------------------------------------------------------
 -- 6) 営業履歴（アタック・クリック以外の出来事）

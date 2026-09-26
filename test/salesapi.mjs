@@ -149,7 +149,8 @@ const { default: detail } = await import(atRoot("api/sales/companies/detail.js")
 const { default: approaches } = await import(atRoot("api/sales/approaches/index.js"));
 const { default: templates } = await import(atRoot("api/sales/templates/index.js"));
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
-const { TRACKING_RE, newTrackingToken, renderTemplate } = await import(atRoot("lib/sales.js"));
+const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
+  await import(atRoot("lib/sales.js"));
 
 const res = () => {
   const r = { statusCode: 0, body: null, headers: {} };
@@ -171,8 +172,9 @@ const patchCo = (body) => call(detail, { method: "PATCH", url: "/api/sales/compa
 const addEvent = (body) => call(detail, { method: "POST", url: "/api/sales/companies/detail", body });
 const prepare = (body) => call(approaches, { method: "POST", url: "/api/sales/approaches", body });
 const act = (body) => call(approaches, { method: "PATCH", url: "/api/sales/approaches", body });
-const click = (token, { ua = HUMAN, ip = "203.0.113.5", method = "GET" } = {}) =>
-  call(redirect, { method, url: `/api/sales/r?t=${token}`, headers: { "user-agent": ua, "x-forwarded-for": ip } });
+const click = (token, { ua = HUMAN, ip = "203.0.113.5", method = "GET", headers = {} } = {}) =>
+  call(redirect, { method, url: `/api/sales/r?t=${token}`, headers: { "user-agent": ua, "x-forwarded-for": ip, ...headers } });
+const valid = () => db.rows.gw_sales_click_events.filter((e) => e.is_valid);
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -290,7 +292,7 @@ await ok("送る前に専用URLを発行する。開き直しても同じURLを�
   assert.equal(l.body.companies[0].status, "untouched");
 });
 
-await ok("送信完了で履歴に残り、会社はアタック済・NEXTは「反応を確認」", async () => {
+await ok("送信完了で履歴に残り、会社はアタック済・NEXTは「反応確認」3営業日後", async () => {
   setup();
   const c = await newCompany();
   const { approach } = await sendAttack(c.id);
@@ -299,8 +301,8 @@ await ok("送信完了で履歴に残り、会社はアタック済・NEXTは「
   assert.match(approach.body, /営業文/);
   const co = db.rows.gw_sales_companies[0];
   assert.equal(co.status, "attacked");
-  assert.equal(co.next_action, "反応を確認");
-  assert.ok(co.next_action_on > new Date().toISOString().slice(0, 10));
+  assert.equal(co.next_action, "反応確認");
+  assert.equal(co.next_action_on, addBizDays(todayJst(), 3));
   assert.ok(logged.some((l) => l.action === "sales.attack_sent"));
   const l = await list();
   assert.equal(l.body.companies[0].attackCount, 1);
@@ -417,12 +419,17 @@ await ok("人のクリック：記録して本来のページへ。会社はク�
   assert.equal(r.headers["cache-control"], "no-store, max-age=0");
   assert.equal(db.rows.gw_sales_click_events.length, 1);
   const ev = db.rows.gw_sales_click_events[0];
+  assert.equal(ev.is_valid, true);
+  assert.equal(ev.excluded_reason, null);
+  assert.equal(ev.click_no, 1);
   assert.equal(ev.ip_hash.length, 32);
   assert.ok(!JSON.stringify(ev).includes("203.0.113.5"), "IPそのものは残さない");
   const a = db.rows.gw_sales_approaches[0];
   assert.equal(a.click_count, 1);
   assert.ok(a.first_click_at && a.last_click_at);
   assert.equal(db.rows.gw_sales_companies[0].status, "clicked");
+  assert.equal(db.rows.gw_sales_companies[0].next_action, "クリックあり・要フォロー");
+  assert.equal(db.rows.gw_sales_companies[0].next_action_on, autoNext("click").next_action_on);
   assert.equal(notified.length, 1, "送った人＝担当なので1通");
   assert.equal(notified[0].kind, "sales");
   assert.match(notified[0].title, /株式会社サンプルが営業リンクをクリックしました/);
@@ -432,7 +439,7 @@ await ok("人のクリック：記録して本来のページへ。会社はク�
   assert.match(slacked[0].text, /営業反応あり/);
 });
 
-await ok("同じ人の30秒以内の連打は1回。別の人・時間をおいたクリックは数える", async () => {
+await ok("同じ人の30秒以内の連打は1回（ログには duplicate で残る）。別の人・時間をおいたクリックは数える", async () => {
   setup();
   const c = await newCompany();
   const { url } = await sendAttack(c.id);
@@ -440,15 +447,19 @@ await ok("同じ人の30秒以内の連打は1回。別の人・時間をおい�
   await click(token);
   await click(token);
   assert.equal(db.rows.gw_sales_approaches[0].click_count, 1);
+  assert.equal(db.rows.gw_sales_click_events.length, 2, "連打もログには残す");
+  assert.equal(db.rows.gw_sales_click_events[1].is_valid, false);
+  assert.equal(db.rows.gw_sales_click_events[1].excluded_reason, "duplicate");
+  assert.equal(notified.length, 1, "連打では通知しない");
   await click(token, { ip: "198.51.100.9" });
   assert.equal(db.rows.gw_sales_approaches[0].click_count, 2);
-  assert.equal(db.rows.gw_sales_click_events[1].click_no, 2);
-  db.rows.gw_sales_click_events[0].clicked_at = new Date(Date.now() - 60000).toISOString();
+  assert.equal(valid()[1].click_no, 2);
+  valid()[0].clicked_at = new Date(Date.now() - 60000).toISOString();
   await click(token);
   assert.equal(db.rows.gw_sales_approaches[0].click_count, 3);
 });
 
-await ok("リンクのプレビュー（機械）・HEAD は数えず、飛ばすだけ", async () => {
+await ok("リンクのプレビュー（機械）・HEAD・先読みは数えず飛ばすだけ。ログには理由つきで残す", async () => {
   setup();
   const c = await newCompany();
   const { url } = await sendAttack(c.id);
@@ -459,9 +470,28 @@ await ok("リンクのプレビュー（機械）・HEAD は数えず、飛ば�
     assert.equal(r.statusCode, 302);
   }
   assert.equal((await click(token, { method: "HEAD" })).statusCode, 302);
-  assert.equal(db.rows.gw_sales_click_events.length, 0);
+  assert.equal((await click(token, { headers: { "sec-purpose": "prefetch" } })).statusCode, 302);
+  assert.equal((await click(token, { ua: "python-requests/2.31" })).statusCode, 302);
+  assert.equal(valid().length, 0, "有効クリックは0");
+  assert.deepEqual(db.rows.gw_sales_click_events.map((e) => e.excluded_reason),
+    ["bot", "bot", "bot", "no_ua", "head", "prefetch", "bot"]);
+  assert.equal(db.rows.gw_sales_approaches[0].click_count, 0);
   assert.equal(db.rows.gw_sales_companies[0].status, "attacked");
   assert.equal(notified.length, 0);
+});
+
+await ok("人のブラウザ（iPhone・Android・Edge・Outlook内・名前にbotを含む端末）は除外しない", async () => {
+  for (const ua of [
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 Edg/126.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 Edge/18 Outlook-iOS/709",
+    "Mozilla/5.0 (Linux; Android 12; CUBOT KingKong 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Line/14.9.0",
+  ]) {
+    assert.equal(isBot(ua), false, ua);
+    assert.deepEqual(classifyClick({ method: "GET", ua }), { valid: true, reason: null }, ua);
+  }
 });
 
 await ok("知らない・形の悪いトークンでも、エラーにせず会社のサイトへ飛ばす", async () => {
@@ -529,6 +559,73 @@ await ok("営業履歴は、送信・クリック・出来事が時系列に並�
   assert.equal(d.statusCode, 200);
   const labels = d.body.timeline.filter((t) => !t.planned).map((t) => t.label);
   assert.deepEqual(labels, ["フォーム送信", "リンククリック", "返信あり"]);
+});
+
+console.log("\n=== NEXT の自動更新 ===\n");
+
+await ok("返信あり → 返信対応（当日〜）。商談 → 商談準備。フォローだけなら反応確認（3営業日後）", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  await addEvent({ id: c.id, kind: "call", nextAction: null, nextActionOn: null });
+  let co = db.rows.gw_sales_companies[0];
+  assert.equal(co.next_action, "反応確認");
+  assert.equal(co.next_action_on, addBizDays(todayJst(), 3));
+  await addEvent({ id: c.id, kind: "reply" });
+  co = db.rows.gw_sales_companies[0];
+  assert.equal(co.status, "replied");
+  assert.equal(co.next_action, "返信対応");
+  assert.equal(co.next_action_on, autoNext("reply").next_action_on);
+  // 返信対応の最中にフォローを記録しても、返信対応は上書きしない
+  await addEvent({ id: c.id, kind: "follow" });
+  assert.equal(db.rows.gw_sales_companies[0].next_action, "返信対応");
+  await addEvent({ id: c.id, kind: "meeting" });
+  co = db.rows.gw_sales_companies[0];
+  assert.equal(co.status, "meeting");
+  assert.equal(co.next_action, "商談準備");
+});
+
+await ok("人が決めた NEXT は、自動より優先する", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  await addEvent({ id: c.id, kind: "reply", nextAction: "見積作成", nextActionOn: "2099-02-01" });
+  const co = db.rows.gw_sales_companies[0];
+  assert.equal(co.next_action, "見積作成");
+  assert.equal(co.next_action_on, "2099-02-01");
+});
+
+await ok("ステータスを手で「返信あり」「商談」にしたときも、NEXT を自動で入れる", async () => {
+  setup();
+  const c = await newCompany();
+  await patchCo({ id: c.id, status: "replied" });
+  assert.equal(db.rows.gw_sales_companies[0].next_action, "返信対応");
+  await patchCo({ id: c.id, status: "meeting" });
+  assert.equal(db.rows.gw_sales_companies[0].next_action, "商談準備");
+});
+
+await ok("返信・商談中の会社がクリックしても、返信対応・商談準備は残す（未対応クリックとしては出る）", async () => {
+  setup();
+  const c = await newCompany();
+  const { url } = await sendAttack(c.id);
+  await addEvent({ id: c.id, kind: "reply" });
+  db.rows.gw_sales_companies[0].followed_at = new Date(Date.now() - 5000).toISOString();
+  await click(url.split("/r/")[1]);
+  const co = db.rows.gw_sales_companies[0];
+  assert.equal(co.status, "replied");
+  assert.equal(co.next_action, "返信対応");
+  const l = await list();
+  assert.equal(l.body.companies[0].unhandledClick, true);
+  assert.equal(l.body.companies[0].next, "クリックあり・要フォロー");
+});
+
+await ok("クリック：営業日の17時前は当日、17時以降・休日は翌営業日", async () => {
+  // 2026-09-24（木）11:00 JST / 18:00 JST、2026-09-26（土）
+  assert.equal(autoNext("click", new Date("2026-09-24T02:00:00Z")).next_action_on, "2026-09-24");
+  assert.equal(autoNext("click", new Date("2026-09-24T09:00:00Z")).next_action_on, "2026-09-25");
+  assert.equal(autoNext("click", new Date("2026-09-26T02:00:00Z")).next_action_on, "2026-09-28");
+  // 送信直後：9/18（金）から3営業日＝祝日（9/21・22・23）を飛ばして 9/28（月）
+  assert.equal(autoNext("sent", new Date("2026-09-18T02:00:00Z")).next_action_on, "2026-09-28");
 });
 
 console.log("\n=== テンプレート ===\n");

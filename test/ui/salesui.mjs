@@ -36,7 +36,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null } = {}
     company({}),
     company({ id: "c2", name: "反応商事", domain: "hannou.jp", status: "clicked", statusLabel: "クリックあり",
       attackCount: 1, lastSentAt: NOW, clickCount: 2, firstClickAt: NOW, lastClickAt: NOW, unhandledClick: true,
-      next: "クリックあり → フォロー", nextKey: "follow_click", nextDue: TODAY }),
+      next: "クリックあり・要フォロー", nextKey: "follow_click", nextDue: TODAY }),
   ];
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => {
@@ -109,12 +109,18 @@ console.log("\n=== 営業担当：ダッシュボード ===");
     "ダッシュボード／企業／アタック／反応／分析");
   check((await page.locator(".sl-nav a.on").innerText()).includes("ダッシュボード"), "いま見ているタブが選ばれている");
 
-  const todo = await page.locator("#todo").innerText();
-  check(/クリックあり・未対応\s*1\s*社/.test(todo), `未対応クリックが1社（${todo.replace(/\s+/g, " ")}）`);
-  check(/今日アタック\s*1\s*社/.test(todo), "今日アタックが1社");
-  const list = await page.locator("#todo-list").innerText();
-  check(list.includes("反応商事"), "未対応クリックがあれば、最初はその一覧を開く");
-  check((await page.locator("#hot").innerText()).includes("反応商事"), "反応があった企業に出る");
+  const order = await page.locator(".db-sec .db-sec-h .t").allInnerTexts();
+  check(order.join("|") === "🔥 ① クリックあり・未対応|② 返信あり|③ 今日フォロー|④ 今日アタック|⑤ 最近の営業履歴",
+    `上から クリック→返信→フォロー→アタック→履歴（いま ${order.join(" / ")}）`);
+  check(await page.locator(".db-sec").first().evaluate((e) => e.id) === "sec-click", "いちばん上はクリックあり・未対応");
+  const bg = await page.locator("#sec-click").evaluate((e) => getComputedStyle(e).backgroundColor);
+  check(bg !== "rgba(0, 0, 0, 0)", `クリックありは色で目立たせる（${bg}）`);
+  check((await page.locator("#list-click").innerText()).includes("反応商事"), "クリックした企業が①に出る");
+  check((await page.locator(".db-sum a.hot").innerText()).includes("クリックあり"), "件数の段でもクリックありを強調");
+  check(/1\s*社/.test(await page.locator(".db-sum a.hot").innerText()), "クリックあり・未対応は1社");
+  check((await page.locator("#list-attack").innerText()).includes("株式会社サンプル"), "未アタックの企業は④に出る");
+  check(!(await page.locator("#list-attack").innerText()).includes("反応商事"), "①に出した企業は下の段に重ねて出さない");
+  check((await page.locator("#history").innerText()).includes("直近14日の送信はありません"), "最近の営業履歴の段が出る（送信なし）");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }

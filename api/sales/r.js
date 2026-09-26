@@ -12,16 +12,21 @@
 //
 // ■ 過度に追いかけない（要件 §11）
 //   IPは持たない（日替わりの塩を混ぜたハッシュだけ）。Cookie も
-//   フィンガープリントも使わない。リンクのプレビューを作りにくる機械（Slack・
-//   メールのセキュリティ製品など）はクリックとして数えない。
+//   フィンガープリントも使わない。
+//
+// ■ ログと「有効クリック」を分ける（lib/sales.js classifyClick）
+//   アクセスは全部 gw_sales_click_events に残す。回数・通知・ステータス・NEXT に
+//   効くのは、人のクリックと判断したもの（is_valid=true）だけ。数えないのは
+//     HEAD・先読み（Sec-Purpose: prefetch 等）・UAなし・機械のUA
+//     （Slack・Teams・LINE・メールのセキュリティ製品・HTTPライブラリ）・
+//     同じアタックへの30秒以内の連続（同じIPハッシュ）
 
 import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
 import { notifySlack } from "../../lib/slack.js";
-import { TRACKING_RE, isBot, ipHash, statusRank, safeUrl } from "../../lib/sales.js";
-
-// 同じ人（同じIPハッシュ）の、この秒数以内の連打は1回と数える
-const DEDUPE_SECONDS = 30;
+import {
+  TRACKING_RE, classifyClick, ipHash, statusRank, safeUrl, autoNext, DEDUPE_SECONDS,
+} from "../../lib/sales.js";
 
 function fallbackUrl() {
   return safeUrl(process.env.SALES_FALLBACK_URL) || "https://8grp.co.jp/";
@@ -67,10 +72,7 @@ export default async function handler(req, res) {
 
   const dest = safeUrl(a.destination_url) || fallbackUrl();
 
-  // プレビュー・HEAD は数えない。飛ばすだけ
   const ua = String(req.headers?.["user-agent"] || "").slice(0, 500);
-  if (req.method === "HEAD" || isBot(ua)) return redirect(res, dest);
-
   try {
     await record(sb, a, { ua, dest, req });
   } catch (e) {
@@ -81,26 +83,33 @@ export default async function handler(req, res) {
 
 async function record(sb, a, { ua, dest, req }) {
   const ip = String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || req.socket?.remoteAddress || "";
-  const hash = ipHash(ip);
+  // IPが取れないときは UA で見分ける（連打の判定にしか使わない）
+  const hash = ipHash(ip || (ua ? `ua:${ua}` : ""));
   const now = new Date();
   const nowIso = now.toISOString();
 
-  // 連打・二重読み込みを1回にまとめる
+  // 同じアタックへの、同じ人の短時間の連続（有効クリックの直後だけを見る）
+  let duplicate = false;
   if (hash) {
     const { data: recent } = await sb.from("gw_sales_click_events").select("id")
-      .eq("approach_id", a.id).eq("ip_hash", hash)
+      .eq("approach_id", a.id).eq("ip_hash", hash).eq("is_valid", true)
       .gte("clicked_at", new Date(now.getTime() - DEDUPE_SECONDS * 1000).toISOString()).limit(1);
-    if (recent?.length) return;
+    duplicate = Boolean(recent?.length);
   }
+  const { valid, reason } = classifyClick({ method: req.method, ua, headers: req.headers || {}, duplicate });
+  const clickNo = valid ? (a.click_count || 0) + 1 : null;
 
-  const clickNo = (a.click_count || 0) + 1;
+  // ログは全部残す（数えないものも）
   await sb.from("gw_sales_click_events").insert({
     tenant_id: a.tenant_id, approach_id: a.id, company_id: a.company_id,
-    clicked_at: nowIso, destination_url: dest, click_no: clickNo,
+    clicked_at: nowIso, destination_url: dest, method: String(req.method || "GET").toUpperCase(),
+    is_valid: valid, excluded_reason: reason, click_no: clickNo,
     user_agent: ua || null,
     referrer: String(req.headers?.referer || req.headers?.referrer || "").slice(0, 500) || null,
     ip_hash: hash,
   });
+  if (!valid) return;
+
   await sb.from("gw_sales_approaches").update({
     click_count: clickNo, last_click_at: nowIso, first_click_at: a.first_click_at || nowIso,
   }).eq("id", a.id);
@@ -108,8 +117,13 @@ async function record(sb, a, { ua, dest, req }) {
   const { data: c } = await sb.from("gw_sales_companies")
     .select("id, name, status, owner_id").eq("id", a.company_id).maybeSingle();
   if (!c) return;
-  if (statusRank("clicked") > statusRank(c.status)) {
-    await sb.from("gw_sales_companies").update({ status: "clicked", updated_at: nowIso }).eq("id", c.id);
+  // 返信・商談より前の会社だけ、ステータスと NEXT を「クリックあり・要フォロー」へ。
+  // 返信対応・商談準備の最中なら、そちらの NEXT を残す（クリックは未対応クリックとして別に出る）
+  if (statusRank(c.status) < statusRank("replied")) {
+    await sb.from("gw_sales_companies").update({
+      ...(statusRank("clicked") > statusRank(c.status) ? { status: "clicked" } : {}),
+      ...autoNext("click", now), updated_at: nowIso,
+    }).eq("id", c.id);
   }
 
   // 通知は、送った人と会社の担当者へ（同じ人なら1通）

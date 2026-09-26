@@ -16,7 +16,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, shapeApproach, aggregateApproaches, nextFor, hasUnhandledClick,
-  recentApproach, statusRank, todayJst, isUuid,
+  recentApproach, statusRank, todayJst, isUuid, autoNext,
   STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, SERVICES, INDUSTRIES, RECENT_DAYS,
 } from "../../../lib/sales.js";
 
@@ -62,7 +62,7 @@ async function one(req, res, sb, ctx) {
         + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count")
       .eq("company_id", id).order("prepared_at", { ascending: false }).limit(200),
     sb.from("gw_sales_click_events").select("id, approach_id, clicked_at, click_no")
-      .eq("company_id", id).order("clicked_at", { ascending: false }).limit(300),
+      .eq("company_id", id).eq("is_valid", true).order("clicked_at", { ascending: false }).limit(300),
     sb.from("gw_sales_events").select("id, event_key, label, detail, occurred_at, employee_id")
       .eq("company_id", id).order("occurred_at", { ascending: true }).limit(500),
     sb.from("gw_employees").select("id, display_name")
@@ -143,6 +143,12 @@ async function update(req, res, sb, ctx, user) {
     const row = normalizeCompany(body, { partial: true });
     if (row.error) return json(res, 400, row);
     patch = row.value;
+    // 返信あり・商談へ手で進めたときも、NEXT を決めていなければ自動で入れる
+    const nextGiven = body.nextAction !== undefined || body.nextActionOn !== undefined;
+    if (patch.status && patch.status !== before.status && !nextGiven) {
+      if (patch.status === "replied") Object.assign(patch, autoNext("reply"));
+      if (patch.status === "meeting") Object.assign(patch, autoNext("meeting"));
+    }
     if (patch.domain && patch.domain !== before.domain) {
       const { data: dup } = await sb.from("gw_sales_companies").select("id, name")
         .eq("tenant_id", ctx.tenantId).eq("domain", patch.domain).limit(2);
@@ -217,11 +223,19 @@ async function addEvent(req, res, sb, ctx, user) {
   if (body.kind !== "memo") patch.followed_at = new Date().toISOString();
   const to = EVENT_ADVANCES[body.kind];
   if (to && statusRank(to) > statusRank(c.status)) patch.status = to;
-  // その場でNEXTも決められるようにする（NEXTの無い会社を作らない）
-  if (body.nextAction !== undefined || body.nextActionOn !== undefined) {
+  // NEXT：その場で決めたものが優先。決めなければ反応に応じて自動で入れる
+  //   返信あり → 返信対応（当日）／商談 → 商談準備（当日）／フォロー・電話・メール → 反応確認（3営業日後）
+  //   ただし返信・商談中の会社にフォローを記録しても、返信対応・商談準備は上書きしない
+  const nextGiven = (body.nextAction !== undefined && body.nextAction !== null && body.nextAction !== "")
+    || (body.nextActionOn !== undefined && body.nextActionOn !== null && body.nextActionOn !== "");
+  if (nextGiven) {
     const n = normalizeCompany({ nextAction: body.nextAction, nextActionOn: body.nextActionOn }, { partial: true });
     if (n.error) return json(res, 400, n);
     Object.assign(patch, n.value);
+  } else if (body.kind === "reply" || body.kind === "meeting") {
+    if (statusRank(c.status) <= statusRank(to)) Object.assign(patch, autoNext(body.kind));
+  } else if (["follow", "call", "mail"].includes(body.kind) && statusRank(c.status) < statusRank("replied")) {
+    Object.assign(patch, autoNext("follow"));
   }
   let company = c;
   if (Object.keys(patch).length) {

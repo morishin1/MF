@@ -19,14 +19,12 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, shapeApproach, newTrackingToken, recentApproach, statusRank, safeUrl, isUuid,
-  NG_LABEL, RECENT_DAYS, todayJst,
+  NG_LABEL, RECENT_DAYS, autoNext,
 } from "../../../lib/sales.js";
 
 const SQL = "db/088_sales.sql";
 const FIELDS = "id, tenant_id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
   + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count";
-// 送った後の NEXT の既定。反応が無ければ、ここで再アタックかどうかを決める
-const FOLLOW_DAYS = 7;
 // 同じ人が同じ会社で開き直したときは、発行済みの専用URLを使い回す（捨てURLを増やさない）
 const REUSE_HOURS = 24;
 
@@ -242,16 +240,12 @@ async function act(req, res, sb, ctx, user) {
   if (e2) return json(res, e2.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: e2.message });
   if (!saved) return json(res, 409, { error: "already_sent", hint: "このアタックは送信完了として記録済みです" });
 
-  // 会社の状態を進める（後ろへは戻さない）。NEXTは「反応を確認」を1週間後に置く
+  // 会社の状態を進める（後ろへは戻さない）。NEXTは「反応確認」を3営業日後に置く。
+  // すでにクリック・返信・商談まで進んでいる会社は、そちらの NEXT を残す
   const cpatch = { updated_at: now };
   if (statusRank("attacked") > statusRank(c.status)) cpatch.status = "attacked";
   if (!c.owner_id && ctx.employee?.id) cpatch.owner_id = ctx.employee.id;
-  const today = todayJst();
-  if (!c.next_action_on || c.next_action_on <= today) {
-    const due = new Date(Date.now() + 9 * 3600000 + FOLLOW_DAYS * 86400000).toISOString().slice(0, 10);
-    cpatch.next_action = "反応を確認";
-    cpatch.next_action_on = due;
-  }
+  if (statusRank(c.status) <= statusRank("attacked")) Object.assign(cpatch, autoNext("sent"));
   await sb.from("gw_sales_companies").update(cpatch).eq("id", c.id).eq("tenant_id", ctx.tenantId);
 
   await gwLog({

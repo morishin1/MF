@@ -449,10 +449,12 @@
         <label style="margin-top:10px;">日時</label>
         <input id="ev-at" type="datetime-local">
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 6px;">NEXT（次にやること）</h4>
-        <input id="ev-next" type="text" list="dl-next" value="${esc(c.nextKey === "manual" ? c.next : "")}" placeholder="フォロー・電話・商談準備 など">
+        <input id="ev-next" type="text" list="dl-next" placeholder="空欄なら反応に合わせて自動で決まります">
         <datalist id="dl-next">${["フォロー", "再アタック", "担当者確認", "電話", "メール", "商談準備", "資料送付"].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
-        <input id="ev-next-on" type="date" style="margin-top:6px;" value="${esc(c.nextActionOn || "")}">
-        <p class="sl-muted" style="margin:6px 0 0;">「返信あり」「商談」を記録すると、ステータスも進みます。</p>
+        <input id="ev-next-on" type="date" style="margin-top:6px;">
+        <p class="sl-muted" style="margin:6px 0 0;">いまのNEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}）` : ""}<br>
+          空欄のとき：返信あり → 返信対応（当日）／商談 → 商談準備（当日）／フォロー・電話・メール → 反応確認（3営業日後）。
+          「返信あり」「商談」はステータスも進みます。</p>
         <div id="ev-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitEvent(this)">記録する</button>
