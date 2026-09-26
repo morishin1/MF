@@ -112,7 +112,7 @@ async function respond(req, res) {
       : await decisionMakerEmployeeIds(sb, applicant.tenant_id);
     await notify(targets.map((employeeId) => ({
       tenantId: applicant.tenant_id, employeeId, kind: "hr", title,
-      body: applicant.name, link: "hr-applicants.html", dedupeKey: `hr_offer_response:${offer.id}`,
+      body: applicant.name, link: "/hr/applicants.html", dedupeKey: `hr_offer_response:${offer.id}`,
     })));
   };
 

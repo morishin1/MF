@@ -96,8 +96,8 @@ console.log("— 管理者の左メニュー —");
   check(shown.length <= 6, `開いているのは1グループぶんだけ（いま ${shown.length} 行）`);
   check(shown.some((s) => s.includes("勤怠・休暇")), "いまいるグループが開いている");
   check(shown.some((s) => s.includes("採用")), "「採用」は人事・労務の中の項目としてある");
-  check(await page.locator(".kp-side-sub:not(.hidden) a", { hasText: "採用" }).getAttribute("href") === "hr-dashboard.html",
-    "「採用」は /hr（hr-dashboard.html）へ行く");
+  check(await page.locator(".kp-side-sub:not(.hidden) a", { hasText: "採用" }).getAttribute("href") === "hr/",
+    "「採用」は /hr/ へ行く");
 
   // ここがいちばん大事。スクロールなしで全部見えるか。
   //

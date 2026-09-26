@@ -1,4 +1,4 @@
-// 採用HR Stage 6・7：候補者向け公開ページ（hr-offer.html）を、実際のブラウザで通す。
+// 採用HR Stage 6・7：候補者向け公開ページ（/hr/offer.html）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //
@@ -35,7 +35,7 @@ console.log("\n=== 有効なURLで開くと、合格通知が表示される ===
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-offer.html?token=abcdef1234567890abcdef1234567890`);
+  await page.goto(`${BASE}/hr/offer.html?token=abcdef1234567890abcdef1234567890`);
   await page.waitForTimeout(800);
 
   const text = await page.locator("#box").innerText();
@@ -58,7 +58,7 @@ console.log("\n=== 有効なURLで開くと、合格通知が表示される ===
 console.log("\n=== tokenが無い・開けない場合は、案内文が出る（技術エラーは出さない） ===");
 {
   const page = await br.newPage({ viewport: { width: 900, height: 800 }, timezoneId: "Asia/Tokyo" });
-  await page.goto(`${BASE}/hr-offer.html`);
+  await page.goto(`${BASE}/hr/offer.html`);
   await page.waitForTimeout(500);
   const text = await page.locator("#box").innerText();
   check(text.includes("URLが正しくありません"), "URLが無い場合の案内が出る");
@@ -71,7 +71,7 @@ console.log("\n=== tokenが無い・開けない場合は、案内文が出る�
     status: 404, contentType: "application/json",
     body: JSON.stringify({ error: "invalid_token", hint: "このURLは開けません。採用担当までお問い合わせください。" }),
   }));
-  await page.goto(`${BASE}/hr-offer.html?token=invalidinvalidinvalidinvalidinvalid`);
+  await page.goto(`${BASE}/hr/offer.html?token=invalidinvalidinvalidinvalidinvalid`);
   await page.waitForTimeout(500);
   const text = await page.locator("#box").innerText();
   check(text.includes("開けません"), "不正tokenの案内が出る");
@@ -86,7 +86,7 @@ console.log("\n=== 期限切れは、内容を出さず、期限切れの案内�
     status: 410, contentType: "application/json",
     body: JSON.stringify({ error: "expired", hint: "このご案内の回答期限を過ぎています。恐れ入りますが、採用担当までお問い合わせください。" }),
   }));
-  await page.goto(`${BASE}/hr-offer.html?token=expiredexpiredexpiredexpiredexpired`);
+  await page.goto(`${BASE}/hr/offer.html?token=expiredexpiredexpiredexpiredexpired`);
   await page.waitForTimeout(500);
   const text = await page.locator("#box").innerText();
   check(text.includes("回答期限を過ぎています"), "期限切れの案内が出る");
@@ -120,7 +120,7 @@ console.log("\n=== 承諾する ===");
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-offer.html?token=abcdef1234567890abcdef1234567890`);
+  await page.goto(`${BASE}/hr/offer.html?token=abcdef1234567890abcdef1234567890`);
   await page.waitForTimeout(800);
 
   check(await page.locator("button", { hasText: "承諾する" }).count() === 1, "承諾するボタンが出る");
@@ -158,7 +158,7 @@ console.log("\n=== 辞退する（理由つき） ===");
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-offer.html?token=abcdef1234567890abcdef1234567890`);
+  await page.goto(`${BASE}/hr/offer.html?token=abcdef1234567890abcdef1234567890`);
   await page.waitForTimeout(800);
 
   await page.locator("button", { hasText: "辞退する" }).click();
@@ -182,7 +182,7 @@ console.log("\n=== すでに回答済みなら、ボタンではなく結果だ�
       responseStatus: "accepted", recruiterEmail: "recruit@example.com",
     }),
   }));
-  await page.goto(`${BASE}/hr-offer.html?token=abcdef1234567890abcdef1234567890`);
+  await page.goto(`${BASE}/hr/offer.html?token=abcdef1234567890abcdef1234567890`);
   await page.waitForTimeout(800);
   check((await page.locator("#box").innerText()).includes("承諾済み"), "承諾済みの案内が出る");
   check(await page.locator("button", { hasText: "承諾する" }).count() === 0, "承諾ボタンは出ない");
@@ -200,7 +200,7 @@ console.log("\n=== 採用担当の連絡先が無ければ、連絡ボタンは�
       responseStatus: "pending", recruiterEmail: null,
     }),
   }));
-  await page.goto(`${BASE}/hr-offer.html?token=abcdef1234567890abcdef1234567890`);
+  await page.goto(`${BASE}/hr/offer.html?token=abcdef1234567890abcdef1234567890`);
   await page.waitForTimeout(800);
   check(await page.locator("a", { hasText: "採用担当へ連絡" }).count() === 0, "連絡先が無ければリンクを出さない");
   await page.close();

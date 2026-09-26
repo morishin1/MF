@@ -1,4 +1,4 @@
-// 採用HR Stage 8：本採用へ進める（hr-applicants.html → admin-onboard.html）を、
+// 採用HR Stage 8：本採用へ進める（/hr/applicants.html → admin-onboard.html）を、
 // 実際のブラウザで通す。
 //
 // ■ 何を守るテストか
@@ -57,7 +57,7 @@ console.log("\n=== 承諾済みに「本採用へ進める」が出る。押す�
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
   check((await page.locator(".hr-next").innerText()).includes("本採用へ進めてください"), "ラベルが出る");
@@ -100,7 +100,7 @@ console.log("\n=== recruiterには「本採用へ進める」ボタンが出な�
     if (/\/api\/badges/.test(url)) return send({ badges: {} });
     return send({});
   });
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
   check(await page.locator(".hr-next button", { hasText: "本採用へ進める" }).count() === 0, "recruiterにはボタンが出ない");
   check((await page.locator(".hr-next").innerText()).includes("社長・管理者が行います"), "案内文が出る");

@@ -150,7 +150,7 @@
       // 単純に入口を1つ置くだけ（tabsは持たせない）
       key: "g-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "hr",        href: "hr-dashboard.html",    label: "採用",         icon: "person_add", ready: true },
+        { key: "hr",        href: "hr/",                  label: "採用",         icon: "person_add", ready: true },
         { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
           // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、

@@ -15,9 +15,9 @@
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const NAV = [
-    { key: "dashboard", href: "hr-dashboard.html", label: "ダッシュボード", icon: "dashboard" },
-    { key: "applicants", href: "hr-applicants.html", label: "応募者", icon: "group" },
-    { key: "ceo", href: "hr-ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
+    { key: "dashboard", href: "index.html", label: "ダッシュボード", icon: "dashboard" },
+    { key: "applicants", href: "applicants.html", label: "応募者", icon: "group" },
+    { key: "ceo", href: "ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
   ];
 
   function css() {
@@ -70,7 +70,7 @@
     bar.className = "hr-bar";
     bar.innerHTML = `
       <div class="hr-logo"><b>EIGHT</b> <span>/ HR</span></div>
-      <a class="hr-back" href="admin-dashboard.html" title="人事・労務 ＞ 採用">
+      <a class="hr-back" href="../admin-dashboard.html" title="人事・労務 ＞ 採用">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="hr-nav">
         ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
@@ -84,7 +84,7 @@
           <span class="material-symbols-outlined">notifications</span>
           <span class="hr-dot hidden" id="hr-bell-dot">0</span>
         </button>
-        <button class="hr-add" onclick="location.href='hr-applicants.html?new=1'">
+        <button class="hr-add" onclick="location.href='applicants.html?new=1'">
           <span class="material-symbols-outlined">person_add</span>応募者追加
         </button>
         <button class="hr-user" id="hr-user-btn" onclick="HRLayout.toggleUserMenu()" title="${esc(name)}">
@@ -103,7 +103,7 @@
     menu = document.createElement("div");
     menu.className = "hr-menu";
     menu.id = "hr-user-menu";
-    menu.innerHTML = `<button onclick="API.logout();location.href='index.html'">ログアウト</button>`;
+    menu.innerHTML = `<button onclick="API.logout();location.href='../index.html'">ログアウト</button>`;
     document.body.appendChild(menu);
     setTimeout(() => document.addEventListener("click", closeUserMenuOnce), 0);
   }
@@ -144,21 +144,21 @@
 
   async function init(opts = {}) {
     css();
-    if (!window.API || !API.isLoggedIn()) { location.href = "index.html"; return null; }
+    if (!window.API || !API.isLoggedIn()) { location.href = "../index.html"; return null; }
     let me;
     try {
       me = await API.me();
     } catch (e) {
-      location.href = "index.html";
+      location.href = "../index.html";
       return null;
     }
     const roles = me?.gw?.roles || [];
     const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
     const canRecruit = isAdmin || roles.includes("hr") || roles.includes("owner") || roles.includes("recruiter");
-    if (!canRecruit) { location.replace("home.html"); return null; }
+    if (!canRecruit) { location.replace("../home.html"); return null; }
     const canDecide = isAdmin || roles.includes("owner");
 
-    if (opts.active === "ceo" && !canDecide) { location.replace("hr-dashboard.html"); return null; }
+    if (opts.active === "ceo" && !canDecide) { location.replace("index.html"); return null; }
 
     renderHeader(opts.active, me);
     return { me, canRecruit, canDecide };

@@ -1,4 +1,4 @@
-// 採用HR：応募者管理（hr-applicants.html）を、実際のブラウザで通す。
+// 採用HR：応募者管理（/hr/applicants.html）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //
@@ -65,7 +65,7 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html`);
+  await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForTimeout(1000);
 
   console.log("— 専用ヘッダーが出る —");
@@ -139,7 +139,7 @@ console.log("\n=== 権限の無い人は home.html へ送り返される ===");
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html`);
+  await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForTimeout(900);
   check(page.url().includes("home.html"), "権限が無いと home.html へ送り返される");
 

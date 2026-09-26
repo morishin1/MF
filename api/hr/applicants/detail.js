@@ -130,7 +130,7 @@ async function update(req, res, sb, ctx, user) {
       await notify(targets.map((employeeId) => ({
         tenantId: ctx.tenantId, employeeId, kind: "hr", title: "社長推薦された候補者がいます",
         body: [data.name, data.recommend_note].filter(Boolean).join("\n"),
-        link: "hr-ceo-review.html", dedupeKey: `hr_recommend:${body.id}`,
+        link: "/hr/ceo-review.html", dedupeKey: `hr_recommend:${body.id}`,
       })));
     }
   }

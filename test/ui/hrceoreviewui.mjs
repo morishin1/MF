@@ -1,4 +1,4 @@
-// 採用HR Stage 4：CEO REVIEW（hr-ceo-review.html）を、実際のブラウザで通す。
+// 採用HR Stage 4：CEO REVIEW（/hr/ceo-review.html）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //
@@ -89,7 +89,7 @@ console.log("\n=== 社長推薦 → 社長面談設定 → 今日会う人 → �
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-ceo-review.html`);
+  await page.goto(`${BASE}/hr/ceo-review.html`);
   await page.waitForTimeout(1000);
 
   console.log("\n— 社長に会ってほしい人へ表示 —");
@@ -171,7 +171,7 @@ console.log("\n=== 保留・見送り ===");
       if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
       return send({});
     });
-    await page.goto(`${BASE}/hr-ceo-review.html`);
+    await page.goto(`${BASE}/hr/ceo-review.html`);
     await page.waitForTimeout(900);
     await page.locator("#dec button", { hasText: "採用判断" }).click();
     await page.waitForTimeout(400);
@@ -206,9 +206,9 @@ console.log("\n=== recruiterはCEO REVIEWを開けない ===");
     if (/\/api\/me\b/.test(url)) return send(RECRUITER_ME);
     return send({});
   });
-  await page.goto(`${BASE}/hr-ceo-review.html`);
+  await page.goto(`${BASE}/hr/ceo-review.html`);
   await page.waitForTimeout(900);
-  check(page.url().includes("hr-dashboard.html"), "権限が無いと、ダッシュボードへ送り返される");
+  check(page.url().includes("hr/index.html"), "権限が無いと、ダッシュボードへ送り返される");
   await page.close();
 }
 

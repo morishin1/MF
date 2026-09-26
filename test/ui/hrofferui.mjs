@@ -1,5 +1,5 @@
 // 採用HR Stage 5・6・7：合格通知の作成・確認・確定 → 本人へ送る・URLを再発行 →
-// 承諾・辞退の表示（hr-applicants.html）を、実際のブラウザで通す。
+// 承諾・辞退の表示（/hr/applicants.html）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //
@@ -88,7 +88,7 @@ console.log("\n=== 合格通知を作成する → 社内確認待ち → 確定
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
   console.log("\n— NEXT ACTIONに「合格通知を作成」が出る —");
@@ -206,7 +206,7 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
   console.log("\n— NEXT ACTIONに「本人へ送る」が出る —");
@@ -221,7 +221,7 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
   await page.waitForTimeout(500);
   check(posted.some((p) => p.action === "issueLink"), "URL発行がサーバへ送られる");
   const urlVal = await page.locator("#so-url").inputValue();
-  check(urlVal.includes("hr-offer.html?token=tok-1"), "候補者専用URLが表示される");
+  check(urlVal.includes("hr/offer.html?token=tok-1"), "候補者専用URLが表示される");
   check((await page.locator("#so-mail").inputValue()).includes(urlVal), "メール文面にもURLが入っている");
 
   console.log("\n— URLをコピーできる —");
@@ -292,7 +292,7 @@ console.log("\n=== 承諾・辞退の結果がHR側に表示される（Stage 7�
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
   check((await page.locator(".hr-next").innerText()).includes("対応は不要です"), "辞退は「対応は不要です」になる");
@@ -339,7 +339,7 @@ console.log("\n=== 承諾済みは「本採用へ進めてください」だけ�
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
   check((await page.locator(".hr-next").innerText()).includes("本採用へ進めてください"), "承諾済みのラベルが出る");
   check(!(await page.locator(".hr-next button").count()), "本採用へ進めるボタンはまだ出ない（次のステージ）");

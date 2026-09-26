@@ -84,7 +84,7 @@ async function create(req, res, sb, ctx, user) {
     await notify(targets.map((employeeId) => ({
       tenantId: ctx.tenantId, employeeId, kind: "hr", title: "社長面談が入りました",
       body: [applicant.name, row.value.scheduled_at ? fmtDateTime(row.value.scheduled_at) : null].filter(Boolean).join("\n"),
-      link: "hr-ceo-review.html", dedupeKey: `hr_ceo_meeting:${data.id}`,
+      link: "/hr/ceo-review.html", dedupeKey: `hr_ceo_meeting:${data.id}`,
     })));
   }
 
@@ -131,7 +131,7 @@ async function conduct(res, sb, ctx, user, iv, body) {
     const targets = await decisionMakerEmployeeIds(admin(), ctx.tenantId);
     await notify(targets.map((employeeId) => ({
       tenantId: ctx.tenantId, employeeId, kind: "hr", title: "採用判断をしてください",
-      body: applicant?.name || null, link: "hr-ceo-review.html", dedupeKey: `hr_ceo_decision:${iv.id}`,
+      body: applicant?.name || null, link: "/hr/ceo-review.html", dedupeKey: `hr_ceo_decision:${iv.id}`,
     })));
   }
 

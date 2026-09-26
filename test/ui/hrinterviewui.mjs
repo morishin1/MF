@@ -135,7 +135,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
     return send({});
   });
 
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
   console.log("\n— 面談前：面談を予定する —");
@@ -151,13 +151,13 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   check(posted.some((p) => p.kind === "casual" && p.applicantId === "a1"), "予定がサーバへ送られる");
 
   console.log("\n— 今日の面談へ表示 —");
-  await page.goto(`${BASE}/hr-dashboard.html`);
+  await page.goto(`${BASE}/hr/`);
   await page.waitForTimeout(1000);
   check((await page.locator("#todayiv").innerText()).includes("山田 太郎"), "今日の面談に出る");
   check((await page.locator("#todayiv").innerText()).includes("面接 一郎"), "面談担当が出る");
 
   console.log("\n— 面談を実施済みにする —");
-  await page.goto(`${BASE}/hr-applicants.html?id=a1`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
   check((await page.locator(".hr-next").innerText()).includes("面談を実施済みにする")
     || (await page.locator(".hr-next").innerText()).includes("実施してください"), "NEXT ACTION：面談前");
@@ -191,7 +191,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   check(posted.some((p) => p.stage === "ceo_recommend" && p.recommendNote), "推薦理由つきで社長推薦がサーバへ送られる");
 
   console.log("\n— GOOD CANDIDATESへ表示 —");
-  await page.goto(`${BASE}/hr-dashboard.html`);
+  await page.goto(`${BASE}/hr/`);
   await page.waitForTimeout(1000);
   check((await page.locator("#good").innerText()).includes("山田 太郎"), "GOOD CANDIDATESに出る");
 
@@ -223,7 +223,7 @@ console.log("\n=== ランクごとに NEXT ACTION のボタンが変わる ===")
       if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
       return send({});
     });
-    await page.goto(`${BASE}/hr-applicants.html?id=a2`);
+    await page.goto(`${BASE}/hr/applicants.html?id=a2`);
     await page.waitForTimeout(900);
     const box = await page.locator(".hr-next").innerText();
     check(box.includes(wantLabel), `ランク${rank}：${wantLabel}`);

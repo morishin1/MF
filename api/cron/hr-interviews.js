@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       tenantId: i.tenant_id, employeeId: target, kind: "hr",
       title: "面談結果が未入力です",
       body: `${a.name}\n${interviewKindLabel(i.kind)}`,
-      link: `hr-applicants.html?id=${i.applicant_id}`,
+      link: `/hr/applicants.html?id=${i.applicant_id}`,
       dedupeKey: `hr_interview_eval:${i.id}`,
     });
   }
