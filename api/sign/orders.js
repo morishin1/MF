@@ -40,7 +40,7 @@ import { signEvent } from "../../lib/sign-audit.js";
 import { renderContractPdf, sha256 } from "../../lib/pdf-jp.js";
 import {
   DOC_KINDS, DOC_KIND_KEYS, kindLabel,
-  ORDER_FIELDS, ORDER_STATUS, orderStatusLabel,
+  ORDER_FIELDS, ORDER_STATUS, orderStatusLabel, ACTIVE_ORDER_STATUS,
   normalizeConditions, missingConditions, noticeBody, NOTICE_TITLE,
   conditionsFromContract, reconcileOfferConditions,
 } from "../../lib/esign.js";
@@ -253,6 +253,20 @@ async function create(res, sb, ctx, user, body) {
   if (!emp) return json(res, 404, { error: "employee_not_found" });
 
   const docKind = DOC_KIND_KEYS.includes(body.docKind) ? body.docKind : "employment";
+
+  // 二重生成防止（採用HR Stage 9）。同じ社員・同じ書類種別で、まだ手続き
+  // 途中の依頼があるなら、新しく作らせない。別タブ・別端末・APIの再送でも防ぐため
+  // サーバ側で見る（ボタンの無効化だけでは防げない）。
+  // 締結ずみ・取り消し済みは対象外＝契約更新・再契約・条件変更後の再作成は塞がない
+  const { data: activeOrder } = await sb.from("gw_doc_orders")
+    .select("id").eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("doc_kind", docKind)
+    .in("status", ACTIVE_ORDER_STATUS).order("requested_at", { ascending: false }).limit(1).maybeSingle();
+  if (activeOrder) {
+    return json(res, 409, {
+      error: "doc_order_already_exists", existingOrderId: activeOrder.id,
+      hint: "この社員・この書類種別は、すでに手続き中の依頼があります",
+    });
+  }
 
   // 採用承諾条件との突き合わせ（採用HR Stage 9）。労働条件通知書だけ対象。
   // 一致しないまま、社内確認だけで正式な作成依頼を進めさせない。

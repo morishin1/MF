@@ -35,6 +35,7 @@ function table(name) {
     let out = (db.rows[name] || []).filter((r) => f.every(([op, k, v]) => {
       if (op === "eq") return r[k] === v;
       if (op === "neq") return r[k] !== v;
+      if (op === "in") return v.includes(r[k]);
       return true;
     }));
     if (order) out = [...out].sort((a, b) => (a[order] < b[order] ? 1 : a[order] > b[order] ? -1 : 0));
@@ -46,6 +47,7 @@ function table(name) {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     neq(k, v) { f.push(["neq", k, v]); return q; },
+    in(k, v) { f.push(["in", k, v]); return q; },
     order(col) { order = col; return q; },
     limit(n) { lim = n; return q; },
     maybeSingle: () => Promise.resolve({ data: e() ? null : copy(rows()[0]) || null, error: e() }),
@@ -306,6 +308,79 @@ await ok("採用HR経由でない社員は、通常どおり作成できる（�
   setup();
   db.rows.gw_hr_applicants = [];
   const r = await create({ employeeId: "e1", conditions: {}, force: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+});
+
+console.log("\n=== 二重生成防止（同じ社員・同じ書類種別。別タブ・APIの再送でも防ぐ） ===\n");
+
+for (const status of ["requested", "uploaded", "sent"]) {
+  await ok(`手続き中（${status}）の依頼があれば、新規作成できない（409）`, async () => {
+    setup();
+    db.rows.gw_doc_orders = [{
+      id: "order-existing", tenant_id: "t1", employee_id: "e1", doc_kind: "employment",
+      status, requested_at: "2026-09-01T00:00:00Z",
+    }];
+    const r = await create({ employeeId: "e1", conditions: { "雇用区分": "正社員" }, force: true });
+    assert.equal(r.statusCode, 409, JSON.stringify(r.body));
+    assert.equal(r.body.error, "doc_order_already_exists");
+    assert.equal(r.body.existingOrderId, "order-existing");
+    assert.equal(db.rows.gw_doc_orders.length, 1, "新しく増えない");
+  });
+}
+
+await ok("理由つきoverrideでも、手続き中の依頼があれば二重生成は防ぐ（overrideは条件差分のための例外であって、重複作成の例外ではない）", async () => {
+  setup();
+  db.rows.gw_contracts[0].wage_amount = 320000;
+  db.rows.gw_doc_orders = [{
+    id: "order-existing", tenant_id: "t1", employee_id: "e1", doc_kind: "employment",
+    status: "requested", requested_at: "2026-09-01T00:00:00Z",
+  }];
+  const r = await create({ employeeId: "e1", conditions: {}, force: true, overrideReason: "合意済み" });
+  assert.equal(r.statusCode, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "doc_order_already_exists");
+  assert.equal(db.rows.gw_doc_orders.length, 1);
+});
+
+await ok("締結ずみ（signed）の依頼があっても、新しい依頼は作れる（契約更新・再契約を塞がない）", async () => {
+  setup();
+  db.rows.gw_doc_orders = [{
+    id: "order-signed", tenant_id: "t1", employee_id: "e1", doc_kind: "employment",
+    status: "signed", requested_at: "2026-01-01T00:00:00Z",
+  }];
+  const r = await create({ employeeId: "e1", conditions: { "雇用区分": "正社員" }, force: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_doc_orders.length, 2);
+});
+
+await ok("取り消し済み（cancelled）の依頼があっても、新しい依頼は作れる", async () => {
+  setup();
+  db.rows.gw_doc_orders = [{
+    id: "order-cancelled", tenant_id: "t1", employee_id: "e1", doc_kind: "employment",
+    status: "cancelled", requested_at: "2026-01-01T00:00:00Z",
+  }];
+  const r = await create({ employeeId: "e1", conditions: { "雇用区分": "正社員" }, force: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_doc_orders.length, 2);
+});
+
+await ok("書類種別が違えば、重複とはみなさない", async () => {
+  setup();
+  db.rows.gw_doc_orders = [{
+    id: "order-employment", tenant_id: "t1", employee_id: "e1", doc_kind: "employment",
+    status: "requested", requested_at: "2026-09-01T00:00:00Z",
+  }];
+  const r = await create({ employeeId: "e1", docKind: "pledge", conditions: {}, force: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+});
+
+await ok("対象社員が違えば、重複とはみなさない", async () => {
+  setup();
+  db.rows.gw_employees.push({ id: "e2", tenant_id: "t1", display_name: "鈴木 花子" });
+  db.rows.gw_doc_orders = [{
+    id: "order-e1", tenant_id: "t1", employee_id: "e1", doc_kind: "employment",
+    status: "requested", requested_at: "2026-09-01T00:00:00Z",
+  }];
+  const r = await create({ employeeId: "e2", docKind: "employment", conditions: { "雇用区分": "正社員" }, force: true });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
 });
 

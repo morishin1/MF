@@ -993,6 +993,13 @@
         msg.textContent = e.hint || "採用承諾時の条件と異なります";
         return;
       }
+      // 同じ社員・同じ書類種別で、手続き中の依頼がすでにある（採用HR Stage 9：二重生成防止）
+      if (e.code === "doc_order_already_exists") {
+        const existingId = e.body?.existingOrderId;
+        msg.innerHTML = `${esc(e.hint || "この社員・この書類種別は、すでに手続き中の依頼があります")}　`
+          + (existingId ? `<button class="btn btn-secondary btn-sm" onclick="openExistingOrder('${esc(existingId)}')">既存の依頼を開く</button>` : "");
+        return;
+      }
       msg.textContent = e.hint || e.detail || e.message || "作れませんでした";
     }
   }
@@ -1023,6 +1030,13 @@
     el("o-msg").textContent = "";
     el("o-reconcile").innerHTML = "";
     el("o-override").innerHTML = "";
+  }
+
+  // 二重生成防止（採用HR Stage 9）の409で示された既存依頼を開く。
+  // まだ一覧に無ければ（別タブで作られた直後など）取り直してから開く
+  async function openExistingOrder(id) {
+    if (!orders.find((x) => x.id === id)) await loadOrders();
+    editOrder(id);
   }
 
   function editOrder(id) {
