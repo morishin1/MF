@@ -14,7 +14,7 @@ import {
   STAGE_KEYS, STATUS_LABEL, isOverdue, nextStatusFromRank, offerStatus, offerResponseStatus,
   normalizeApplicant, snapshotOfferFields, shapeApplicant, shapePublicOffer, ONBOARD_PREFILL_FIELDS,
   EVAL_ITEMS, EVAL_SCALE_KEYS, nextActionOf, normalizeInterview, shapeInterview, interviewKindLabel,
-  advancePrefill, isAdvanceClaimStale,
+  advancePrefill, isAdvanceClaimStale, schedulingUrlFor,
 } from "../lib/hr.js";
 
 let pass = 0, fail = 0;
@@ -253,9 +253,14 @@ ok("正しい形はそのまま通る", () => {
 
 console.log("— NEXT ACTION（nextActionOf） —");
 
-ok("面談前（未対応）は、面談を予定する", () => {
+ok("新規応募（未対応）は、日程調整URLを送る（TimeRex連携。README「TimeRex連携」指示書 §5）", () => {
   const n = nextActionOf({ status: "todo" });
-  assert.equal(n.cta, "面談を予定する");
+  assert.equal(n.cta, "日程調整を送る");
+  assert.equal(n.action, "sendSchedulingLink");
+});
+ok("日程調整URL送付後（候補者の予約待ち）は、手動設定が例外導線として残る（§21）", () => {
+  const n = nextActionOf({ status: "scheduling" });
+  assert.equal(n.cta, "手動で面談を設定");
   assert.equal(n.action, "schedule");
 });
 ok("面談予定は、実施済みにするボタン", () => {
@@ -388,6 +393,28 @@ ok("列名から、画面向けの形にする", () => {
   assert.equal(s.kindLabel, "カジュアル面談");
   assert.equal(s.done, false);
   assert.equal(s.meetingUrl, "https://meet.example.com/x");
+});
+
+console.log("— TimeRex日程調整URL（schedulingUrlFor） —");
+
+ok("applicant_idをクエリパラメータで付与する（名前・メール照合に頼らない。README「TimeRex連携」指示書 §11）", () => {
+  assert.equal(schedulingUrlFor("https://timerex.net/s/xxxx/casual", "a1"),
+    "https://timerex.net/s/xxxx/casual?applicant_id=a1");
+});
+ok("すでにクエリパラメータがあるURLでも壊さない", () => {
+  assert.equal(schedulingUrlFor("https://timerex.net/s/xxxx/casual?foo=bar", "a1"),
+    "https://timerex.net/s/xxxx/casual?foo=bar&applicant_id=a1");
+});
+ok("applicant_idはURLエンコードする", () => {
+  assert.equal(schedulingUrlFor("https://timerex.net/s/x/casual", "a b"),
+    "https://timerex.net/s/x/casual?applicant_id=a%20b");
+});
+ok("環境変数が未設定（空）なら、null（フロント側は手動設定へ誘導する）", () => {
+  assert.equal(schedulingUrlFor("", "a1"), null);
+  assert.equal(schedulingUrlFor(undefined, "a1"), null);
+});
+ok("applicant_idが無ければ、null", () => {
+  assert.equal(schedulingUrlFor("https://timerex.net/s/x/casual", null), null);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

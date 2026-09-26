@@ -9,7 +9,7 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
   normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, activeOffer, STAGE_LABEL, RANK_LABEL,
-  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds,
+  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql";
@@ -82,6 +82,8 @@ async function one(req, res, sb, ctx) {
     // 評価UI・面談予定フォームの元。画面側で項目を持たない（ここが正）
     evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: RANKS, rankLabel: RANK_LABEL,
     interviewKinds: INTERVIEW_KINDS,
+    // TimeRexの日程調整URL（環境変数未設定ならnull。README「TimeRex連携」指示書 §7）
+    schedulingUrl: schedulingUrlFor(process.env.TIMEREX_CASUAL_INTERVIEW_URL, a.id),
     timeline: (timeline || []).map((t) => ({
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
     })),

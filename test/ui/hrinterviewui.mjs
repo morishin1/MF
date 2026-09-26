@@ -28,7 +28,8 @@ const RANKS = ["A", "B", "C", "D"];
 const RANK_LABEL = { A: "ぜひ社長に会わせたい", B: "社長に会わせてもよい", C: "もう少し確認したい", D: "今回は見送り" };
 
 function nextActionOf(a) {
-  if (a.status === "todo") return { label: "面談を予定してください", cta: "面談を予定する", action: "schedule" };
+  if (a.status === "todo") return { label: "カジュアル面談の日程を調整してください", cta: "日程調整を送る", action: "sendSchedulingLink" };
+  if (a.status === "scheduling") return { label: "候補者の日程調整を待っています", cta: "手動で面談を設定", action: "schedule" };
   if (a.status === "interview_scheduled") return { label: "面談を実施してください", cta: "面談を実施済みにする", action: "conduct" };
   if (a.status === "eval_pending") return { label: "面談結果を入力してください", cta: "評価を入力", action: "evaluate" };
   if (a.status === "ceo_recommend_pending") {
@@ -138,11 +139,15 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
-  console.log("\n— 面談前：面談を予定する —");
-  check((await page.locator(".hr-next").innerText()).includes("面談を予定してください"), "NEXT ACTION");
-  await page.locator(".hr-next button", { hasText: "面談を予定する" }).click();
+  console.log("\n— 面談前：TimeRex未設定なら、手動で面談を設定する —");
+  check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を調整してください"), "NEXT ACTION");
+  await page.locator(".hr-next button", { hasText: "日程調整を送る" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "予定フォームが開く");
+  check(await page.locator(".hr-drawer", { hasText: "TimeRexの日程調整URLが未設定です" }).isVisible(),
+    "TimeRex未設定時は、手動設定へ誘導する");
+  await page.locator(".hr-drawer button", { hasText: "手動で面談を設定" }).click();
+  await page.waitForTimeout(400);
+  check(await page.locator(".hr-drawer", { hasText: "面談を予定する" }).isVisible(), "予定フォームが開く");
   const when = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
   await page.fill("#iv-when", when);
   await page.selectOption("#iv-who", "e2");
