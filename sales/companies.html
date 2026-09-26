@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260927-sales1">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales2">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -46,8 +46,10 @@
   <div class="co-actions">
     <button class="btn btn-primary btn-sm" onclick="openAdd()">
       <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</button>
+    <button class="btn btn-secondary btn-sm" onclick="openBulkUrls()">
+      <span class="material-symbols-outlined icon-inline">playlist_add</span>URLをまとめて追加</button>
     <button class="btn btn-secondary btn-sm" onclick="openImport()">
-      <span class="material-symbols-outlined icon-inline">upload</span>リストを取り込む</button>
+      <span class="material-symbols-outlined icon-inline">upload</span>スプレッドシートから取り込む</button>
   </div>
 
   <div class="co-filters">
@@ -83,9 +85,9 @@
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20260927-sales1"></script>
-<script src="../js/layout.js?v=20260927-sales1"></script>
-<script src="../js/sales-layout.js?v=20260927-sales1"></script>
+<script src="../js/api-client.js?v=20260927-sales2"></script>
+<script src="../js/layout.js?v=20260927-sales2"></script>
+<script src="../js/sales-layout.js?v=20260927-sales2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -233,35 +235,209 @@
     };
   }
 
-  function openAdd() {
+  // ---- 企業を追加（URL中心のクイック登録） ------------------------------------------
+  //
+  // 最初に見せるのは「URL・企業名・提案サービス」だけ（要件 §3・§25）。
+  // URL を入れると企業名・フォームURLなどを拾って埋める。取れなくても登録は止めない（§4）。
+  // 担当は登録した人（サーバで自動）。詳細は「詳細情報を入力」を開いたときだけ。
+  const SERVICE_KEY = "sales_last_service";
+  const hostOf = (u) => { try { return new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ""); } catch { return ""; } };
+  let lookSeq = 0;
+  let lookDup = null;
+  let autoName = "";
+
+  function openAdd(prefillUrl) {
     closeModal();
+    let last = "";
+    try { last = localStorage.getItem(SERVICE_KEY) || ""; } catch { /* 無くてよい */ }
+    lookDup = null; autoName = "";
     el("modal-root").innerHTML = `
       <div class="sl-drawer-bg" onclick="closeModal()"></div>
       <div class="sl-drawer">
         <h2>企業を追加</h2>
-        ${companyForm()}
-        <div id="c-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-primary" onclick="submitAdd(this)">追加する</button>
+        <label>企業サイトURL <span style="color:#b3261e;">*</span></label>
+        <input id="q-url" type="text" inputmode="url" placeholder="https://example.co.jp" value="${esc(prefillUrl || "")}"
+               onchange="lookupUrl()" onpaste="setTimeout(lookupUrl, 0)">
+        <div id="q-look" class="sl-muted" style="margin:6px 0 0;min-height:18px;"></div>
+        <label style="margin-top:10px;">企業名 <span style="color:#b3261e;">*</span></label>
+        <input id="q-name" type="text" placeholder="URLから自動で入ります">
+        <label style="margin-top:10px;">提案サービス</label>
+        <select id="q-service">${SERVICES.map((v) => `<option value="${esc(v)}" ${v === last ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+        <details id="q-more" style="margin-top:14px;">
+          <summary style="cursor:pointer;font-size:13px;color:#4a5068;">詳細情報を入力</summary>
+          <label style="margin-top:10px;">問い合わせフォームURL</label><input id="q-form" type="text">
+          <label style="margin-top:10px;">業種</label>
+          <input id="q-industry" type="text" list="dl-q-industry">
+          <datalist id="dl-q-industry">${INDUSTRIES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+          <label style="margin-top:10px;">地域</label><input id="q-region" type="text" placeholder="東京都">
+          <label style="margin-top:10px;">所在地</label><input id="q-address" type="text">
+          <label style="margin-top:10px;">電話番号</label><input id="q-phone" type="text">
+          <label style="margin-top:10px;">企業規模</label><input id="q-size" type="text" placeholder="従業員50名">
+          <label style="margin-top:10px;">メモ</label><textarea id="q-note" rows="3"></textarea>
+        </details>
+        <div id="q-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="q-go" onclick="submitAdd(this, true)">
+            <span class="material-symbols-outlined icon-inline">send</span>追加してアタックへ</button>
+          <button class="btn btn-secondary" onclick="submitAdd(this, false)">追加だけする</button>
           <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
         </div>
       </div>`;
+    setTimeout(() => { el("q-url")?.focus(); if (prefillUrl) lookupUrl(); }, 0);
   }
 
-  async function submitAdd(btn) {
-    const msg = el("c-msg"); msg.textContent = "";
-    const body = companyFields();
-    if (!body.name) { msg.textContent = "企業名を入力してください"; return; }
+  /** URL から候補を拾って、空いている欄にだけ入れる（人が打ったものは上書きしない） */
+  async function lookupUrl() {
+    const url = el("q-url")?.value.trim();
+    const info = el("q-look");
+    lookDup = null;
+    el("q-go").disabled = false;
+    if (!url) { info.textContent = ""; return; }
+    const seq = ++lookSeq;
+    info.innerHTML = `<span class="material-symbols-outlined icon-inline kp-spin">progress_activity</span>サイトを確認しています…`;
+    let r;
+    try { r = await API.lookupSalesUrl(url); }
+    catch (e) { if (seq === lookSeq) info.textContent = errText(e, "URLを確認できませんでした"); return; }
+    if (seq !== lookSeq) return;
+
+    if (r.duplicate) {
+      lookDup = r.duplicate;
+      el("q-go").disabled = true;
+      info.innerHTML = `<span class="sl-hot">登録済みです：${esc(r.duplicate.name)}</span>　
+        <a href="#" onclick="openDetail('${esc(r.duplicate.id)}');return false;">その企業を開く</a>`;
+      return;
+    }
+    const nameEl = el("q-name");
+    if (r.name && (!nameEl.value.trim() || nameEl.value === autoName)) { nameEl.value = r.name; autoName = r.name; }
+    if (!nameEl.value.trim()) nameEl.placeholder = r.domain || "企業名";
+    const fill = (id, v) => { if (v && el(id) && !el(id).value.trim()) el(id).value = v; };
+    fill("q-form", r.formUrl); fill("q-phone", r.phone); fill("q-address", r.address);
+    const got = [r.name && "企業名", r.formUrl && "フォームURL", r.phone && "電話番号", r.address && "所在地"].filter(Boolean);
+    info.textContent = r.ok
+      ? (got.length ? `取得できました：${got.join("・")}` : "サイトから情報を取れませんでした。企業名を入れれば登録できます")
+      : "サイトを開けませんでした。企業名を入れれば、URLだけで登録できます";
+  }
+
+  async function submitAdd(btn, goAttack) {
+    const msg = el("q-msg"); msg.textContent = "";
+    if (lookDup) { msg.textContent = `登録済みです（${lookDup.name}）`; return; }
+    const siteUrl = el("q-url").value.trim();
+    if (!siteUrl) { msg.textContent = "企業サイトのURLを入れてください"; return; }
+    // 企業名が取れず、入力も無ければドメイン名で登録する（あとで直せる。登録は止めない）
+    const name = el("q-name").value.trim() || hostOf(siteUrl);
+    if (!name) { msg.textContent = "URLが正しくありません"; return; }
+    const v = (id) => el(id).value.trim() || null;
+    const body = {
+      name, siteUrl, service: el("q-service").value || null,
+      formUrl: v("q-form"), industry: v("q-industry"), region: v("q-region"), address: v("q-address"),
+      phone: v("q-phone"), size: v("q-size"), note: v("q-note"),
+    };
+    try { localStorage.setItem(SERVICE_KEY, body.service || ""); } catch { /* 無くてよい */ }
     try {
       const r = await KPLayout.busy(btn, "追加中…", () => API.createSalesCompany(body));
       await load();
-      openDetail(r.company.id);
+      if (goAttack) { closeModal(); openAttack(r.company.id); } else openDetail(r.company.id);
     } catch (e) {
       if (e.body?.company?.id || e.company?.id) {
         const dup = e.body?.company || e.company;
         msg.innerHTML = `${esc(errText(e, ""))}　<a href="#" onclick="openDetail('${esc(dup.id)}');return false;">その企業を開く</a>`;
       } else msg.textContent = errText(e, "追加できませんでした");
     }
+  }
+
+  // ---- URLをまとめて追加（要件 §6） ------------------------------------------------
+  // URL → ドメインにそろえる → 重複を除く → 企業名・フォームURLを取る → 登録。
+  // 取りにいくのはブラウザから3件ずつ（サーバの1回の実行時間を超えないように）。
+  const BULK_MAX = 100;
+  function openBulkUrls() {
+    closeModal();
+    el("modal-root").innerHTML = `
+      <div class="sl-drawer-bg" onclick="closeModal()"></div>
+      <div class="sl-drawer" style="width:560px;">
+        <h2>URLをまとめて追加</h2>
+        <p class="sl-sub" style="margin:0 0 10px;">企業サイトのURLを1行に1つずつ貼り付けてください。企業名と問い合わせフォームは自動で探します。</p>
+        <textarea id="bu-text" rows="10" placeholder="https://aaa.co.jp&#10;https://bbb.jp&#10;ccc.com"></textarea>
+        <label style="margin-top:10px;">提案サービス（全件に同じものを入れます）</label>
+        <select id="bu-service">${SERVICES.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("")}</select>
+        <p class="sl-muted" style="margin:6px 0 0;">同じドメインの企業・登録済みの企業は追加しません。一度に${BULK_MAX}件まで。担当はあなたになります。</p>
+        <div id="bu-msg" class="err-text" style="margin:10px 0;"></div>
+        <div id="bu-progress"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" id="bu-go" onclick="submitBulkUrls(this)">追加する</button>
+          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  /** 貼り付けから URL を拾い、ドメインで重複を除く */
+  function parseUrlList(text) {
+    const seen = new Set(companies.map((c) => c.domain).filter(Boolean));
+    const out = [];
+    for (const raw of String(text || "").split(/[\s,、]+/)) {
+      const t = raw.trim().replace(/[)）」』>]+$/, "");
+      if (!t || !/\./.test(t)) continue;
+      const host = hostOf(t);
+      if (!host || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) continue;
+      const url = /^https?:\/\//i.test(t) ? t : `https://${t}`;
+      out.push({ url, host, known: seen.has(host) });
+      seen.add(host);
+    }
+    return out;
+  }
+
+  async function submitBulkUrls(btn) {
+    const msg = el("bu-msg"); msg.textContent = "";
+    const all = parseUrlList(el("bu-text").value);
+    const rows = all.filter((r) => !r.known);
+    const skipped = all.length - rows.length;
+    if (!all.length) { msg.textContent = "URLが見つかりません"; return; }
+    if (rows.length > BULK_MAX) { msg.textContent = `一度に追加できるのは${BULK_MAX}件までです（いま ${rows.length}件）`; return; }
+    if (!rows.length) { msg.textContent = `すべて登録済みです（${skipped}件）`; return; }
+    const service = el("bu-service").value || null;
+    btn.disabled = true;
+
+    const prog = el("bu-progress");
+    const draw = () => {
+      prog.innerHTML = `<div class="sl-muted" style="margin:6px 0;">${rows.filter((r) => r.state).length} / ${rows.length} 件確認</div>
+        <div style="max-height:240px;overflow:auto;font-size:12px;">${rows.map((r) => `
+          <div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid #efefeb;">
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.host)}</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "")}</span>
+            <span class="${r.state === "dup" ? "sl-muted" : ""}">${esc({ ok: "OK", noinfo: "名前はドメイン", dup: "登録済み" }[r.state] || "…")}</span>
+          </div>`).join("")}</div>`;
+    };
+    draw();
+
+    let i = 0;
+    const worker = async () => {
+      while (i < rows.length) {
+        const r = rows[i++];
+        try {
+          const x = await API.lookupSalesUrl(r.url);
+          if (x.duplicate) { r.state = "dup"; r.name = x.duplicate.name; }
+          else {
+            r.name = x.name || r.host; r.formUrl = x.formUrl; r.phone = x.phone; r.address = x.address;
+            r.url = x.url || r.url; r.state = x.name ? "ok" : "noinfo";
+          }
+        } catch { r.name = r.host; r.state = "noinfo"; }
+        draw();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+
+    const add = rows.filter((r) => r.state !== "dup").map((r) => ({
+      name: r.name, siteUrl: r.url, formUrl: r.formUrl || null, phone: r.phone || null, address: r.address || null, service,
+    }));
+    if (!add.length) { msg.textContent = "追加する企業はありませんでした（すべて登録済み）"; btn.disabled = false; return; }
+    try {
+      const res = await KPLayout.busy(btn, "追加中…", () => API.importSalesCompanies(add));
+      await load();
+      const dup = rows.filter((r) => r.state === "dup").length + skipped + (res.skipped || 0);
+      const noinfo = rows.filter((r) => r.state === "noinfo").length;
+      prog.insertAdjacentHTML("afterbegin", `<div class="banner info" style="margin:0 0 8px;"><span class="material-symbols-outlined">check_circle</span>
+        <div>${res.created}社を追加しました${dup ? `（登録済み ${dup}件は追加していません）` : ""}${noinfo ? `。${noinfo}社は企業名が取れなかったのでドメイン名で登録しました` : ""}</div></div>`);
+      btn.textContent = "追加しました";
+    } catch (e) { msg.textContent = errText(e, "追加できませんでした"); btn.disabled = false; }
   }
 
   // ---- リストを取り込む（貼り付け） ---------------------------------------------
@@ -392,6 +568,8 @@
             <div><dt>企業規模</dt><dd>${esc(c.size || "—")}</dd></div>
             <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
             <div><dt>キャンペーン</dt><dd>${esc(c.campaignName || "—")}</dd></div>
+            ${c.clickCount ? `<div><dt>初回クリック</dt><dd>${esc(fmt(c.firstClickAt))}</dd></div>
+            <div><dt>最終クリック</dt><dd>${esc(fmt(c.lastClickAt))}（${c.clickCount}回）</dd></div>` : ""}
           </dl>
           ${c.note ? `<div style="font-size:12.5px;color:#1b2440;white-space:pre-wrap;border-top:1px solid #e2e2dc;padding-top:10px;">${esc(c.note)}</div>` : ""}
         </div>

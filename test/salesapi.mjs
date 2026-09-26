@@ -125,6 +125,13 @@ mock.module(atRoot("lib/gw-audit.js"), {
 mock.module(atRoot("lib/notify.js"), {
   namedExports: { notify: async (rows) => { notified.push(...rows); return { created: rows.length }; } },
 });
+const looked = [];
+mock.module(atRoot("lib/sales-lookup.js"), {
+  namedExports: {
+    normalizeSiteUrl: (u) => { try { return new URL(/^https?:/.test(u) ? u : `https://${u}`).toString(); } catch { return null; } },
+    lookupCompany: async (u) => { looked.push(u); return { ok: true, url: u, name: "株式会社ルックアップ", formUrl: `${u}contact/` }; },
+  },
+});
 mock.module(atRoot("lib/slack.js"), {
   namedExports: { notifySlack: async (m) => { slacked.push(m); return { sent: true }; } },
 });
@@ -149,6 +156,7 @@ const { default: detail } = await import(atRoot("api/sales/companies/detail.js")
 const { default: approaches } = await import(atRoot("api/sales/approaches/index.js"));
 const { default: templates } = await import(atRoot("api/sales/templates/index.js"));
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
+const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -683,6 +691,33 @@ await ok("テンプレートごとの使用回数・クリック率", async () =
   const t = r.body.templates.find((x) => x.id === id);
   assert.equal(t.uses, 2);
   assert.equal(t.clickRate, 50);
+});
+
+console.log("\n=== URLから企業情報（/api/sales/lookup） ===\n");
+
+await ok("候補を返す。登録済みのドメインなら、その企業も返す", async () => {
+  setup();
+  looked.length = 0;
+  const r1 = await call(lookup, { method: "GET", url: "/api/sales/lookup?url=https%3A%2F%2Fnew.example.jp" });
+  assert.equal(r1.statusCode, 200, JSON.stringify(r1.body));
+  assert.equal(r1.body.name, "株式会社ルックアップ");
+  assert.equal(r1.body.domain, "new.example.jp");
+  assert.equal(r1.body.duplicate, null);
+  const c = await newCompany();
+  const r2 = await call(lookup, { method: "GET", url: "/api/sales/lookup?url=www.sample.co.jp" });
+  assert.equal(r2.body.duplicate.id, c.id);
+});
+
+await ok("/sales を使えない人は使えない（外のサイトを取りにいく中継にしない）", async () => {
+  setup();
+  looked.length = 0;
+  who = MEMBER;
+  const r = await call(lookup, { method: "GET", url: "/api/sales/lookup?url=https%3A%2F%2Fx.example.jp" });
+  assert.equal(r.statusCode, 403);
+  assert.equal(looked.length, 0, "取りにいっていない");
+  who = SALES;
+  const bad = await call(lookup, { method: "GET", url: "/api/sales/lookup?url=javascript%3Aalert(1)" });
+  assert.equal(bad.statusCode, 400);
 });
 
 console.log("\n=== 小さな道具 ===\n");
