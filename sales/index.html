@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>ダッシュボード - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+
+    .db-todo { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px; margin-bottom:12px; }
+    .db-todo button { text-align:left; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px;
+      cursor:pointer; font-family:inherit; }
+    .db-todo button.on { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
+    .db-todo button.hot { border-left:4px solid #e0a100; }
+    .db-todo .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
+    .db-todo .lb .material-symbols-outlined { font-size:16px; }
+    .db-todo .v { font-size:26px; font-weight:900; color:#1b2440; margin-top:4px; font-variant-numeric:tabular-nums; }
+    .db-todo .v small { font-size:13px; font-weight:700; margin-left:2px; }
+    .db-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
+
+    .db-hot { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+    .db-hot-card { background:#fff; border:1px solid #e2e2dc; border-radius:9px; padding:13px 14px; cursor:pointer; }
+    .db-hot-card:hover { border-color:#c7cad4; }
+    .db-hot-card .nm { font-weight:700; color:#1b2440; font-size:14px; }
+    .db-hot-card .why { font-size:11.5px; color:#7d5a00; font-weight:700; margin:4px 0 6px; }
+    .db-hot-card .meta { font-size:11.5px; color:#6b7080; line-height:1.6; }
+
+    .db-sec-row { display:flex; align-items:baseline; justify-content:space-between; margin:26px 0 10px; }
+    .db-sec-row .sl-sec-h { margin-bottom:0; }
+    .db-sec-row a { font-size:12px; color:#4a5068; text-decoration:none; white-space:nowrap; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">ダッシュボード</h1>
+  <p class="sl-sub">今日、どこに営業して、どこを追えばよいかが分かります。</p>
+
+  <div class="sl-sec-h">今やること</div>
+  <div class="db-todo" id="todo"></div>
+  <div class="sl-rows" id="todo-list"></div>
+
+  <div class="db-sec-row">
+    <div class="sl-sec-h">反応があった企業</div>
+    <a href="/sales/clicks.html">反応一覧を見る</a>
+  </div>
+  <div class="sl-sec-sub">今日クリック・複数回クリック・24時間以内の反応・返信あり・フォロー期限</div>
+  <div class="db-hot" id="hot"></div>
+
+  <div class="db-sec-row"><div class="sl-sec-h">営業状況</div>
+    <a href="/sales/analytics.html">分析を見る</a></div>
+  <div class="sl-funnel" id="funnel"></div>
+</div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmt, fmtDay, ago } = SalesLayout;
+
+  let companies = [];
+  let today = "";
+  let bucket = "attack";
+  let firstRender = true;
+
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listSalesCompanies();
+      if (res.notReady) {
+        el("todo").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span>
+          <div>${esc(res.message)}</div></div>`;
+        return;
+      }
+      companies = res.companies || [];
+      today = res.today || new Date().toISOString().slice(0, 10);
+      render();
+    } catch (e) {
+      el("todo").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  const open = (c) => !c.ngReason && !["won", "lost", "excluded"].includes(c.status);
+  const due = (c) => c.nextDue && c.nextDue <= today;
+
+  // 「今やること」の5つ。どれも1社は1か所にだけ入れる必要はない（見る角度が違う）
+  const BUCKETS = [
+    { key: "attack", label: "今日アタック", icon: "send", unit: "社",
+      pick: (c) => open(c) && ["untouched", "reattack_wait"].includes(c.status)
+        && (c.nextKey === "attack" || due(c)),
+      cta: "フォームアタック", go: (c) => `/sales/companies.html?attack=${encodeURIComponent(c.id)}` },
+    { key: "click", label: "クリックあり・未対応", icon: "ads_click", unit: "社", hot: true,
+      pick: (c) => c.unhandledClick,
+      cta: "フォローする", go: (c) => `/sales/companies.html?id=${encodeURIComponent(c.id)}` },
+    { key: "follow", label: "今日フォロー", icon: "call", unit: "社",
+      pick: (c) => open(c) && !c.unhandledClick && !["untouched", "reattack_wait", "meeting", "proposal"].includes(c.status) && due(c),
+      cta: "対応する", go: (c) => `/sales/companies.html?id=${encodeURIComponent(c.id)}` },
+    { key: "replied", label: "返信あり", icon: "mark_email_read", unit: "社",
+      pick: (c) => open(c) && c.status === "replied",
+      cta: "商談につなげる", go: (c) => `/sales/companies.html?id=${encodeURIComponent(c.id)}` },
+    { key: "meeting", label: "商談予定", icon: "handshake", unit: "社",
+      pick: (c) => open(c) && ["meeting", "proposal"].includes(c.status),
+      cta: "開く", go: (c) => `/sales/companies.html?id=${encodeURIComponent(c.id)}` },
+  ];
+
+  function render() {
+    // 反応があるものを先に見てほしいので、未対応クリックがあれば最初はそちらを開く
+    if (firstRender && companies.some((c) => c.unhandledClick)) bucket = "click";
+    firstRender = false;
+    renderTodo();
+    renderHot();
+    renderFunnel();
+  }
+
+  function setBucket(k) { bucket = k; renderTodo(); }
+
+  function renderTodo() {
+    el("todo").innerHTML = BUCKETS.map((b) => {
+      const n = companies.filter(b.pick).length;
+      return `<button class="${bucket === b.key ? "on" : ""}${b.hot && n ? " hot" : ""}" onclick="setBucket('${b.key}')">
+        <div class="lb"><span class="material-symbols-outlined">${b.icon}</span>${esc(b.label)}</div>
+        <div class="v">${n}<small>${esc(b.unit)}</small></div></button>`;
+    }).join("");
+
+    const b = BUCKETS.find((x) => x.key === bucket);
+    const list = companies.filter(b.pick).sort((x, y) =>
+      (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
+      || String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || ""))
+      || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9")));
+    if (!list.length) {
+      el("todo-list").innerHTML = `<div class="sl-empty">${esc(b.label)}の企業はありません</div>`;
+      return;
+    }
+    const LIMIT = 30;
+    el("todo-list").innerHTML = list.slice(0, LIMIT).map((c) => `
+      <div class="sl-row${c.unhandledClick ? " hot" : ""}${c.overdue ? " overdue" : ""}">
+        <div class="info"><b>${esc(c.name)}</b>
+          <div class="now">現在：${esc(c.statusLabel)}${c.service ? ` ／ ${esc(c.service)}` : ""}
+            ${c.lastClickAt ? ` ／ 最終クリック ${esc(fmt(c.lastClickAt))}（${c.clickCount}回）` : ""}
+            ${c.lastSentAt ? ` ／ 最終アタック ${esc(fmt(c.lastSentAt))}` : ""}</div>
+          <div class="n">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="location.href='${esc(b.go(c))}'">${esc(b.cta)}</button>
+      </div>`).join("")
+      + (list.length > LIMIT ? `<div class="db-more">ほか${list.length - LIMIT}社は企業一覧で確認してください</div>` : "");
+  }
+
+  // 注目企業：今日クリック・複数回クリック・24時間以内・返信あり・フォロー期限
+  function renderHot() {
+    const dayAgo = Date.now() - 86400000;
+    const reasons = (c) => {
+      const r = [];
+      if (c.lastClickAt && c.lastClickAt.slice(0, 10) === today) r.push("今日クリック");
+      else if (c.lastClickAt && new Date(c.lastClickAt).getTime() >= dayAgo) r.push("24時間以内に反応");
+      if (c.clickCount >= 2) r.push(`${c.clickCount}回クリック`);
+      if (c.status === "replied") r.push("返信あり");
+      if (open(c) && c.clickCount && due(c)) r.push("フォロー期限");
+      return r;
+    };
+    const list = companies.filter((c) => open(c) && reasons(c).length)
+      .sort((x, y) => String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || "")))
+      .slice(0, 12);
+    if (!list.length) { el("hot").innerHTML = `<div class="sl-empty">まだ反応はありません</div>`; return; }
+    el("hot").innerHTML = list.map((c) => `
+      <div class="db-hot-card" onclick="location.href='/sales/companies.html?id=${esc(c.id)}'">
+        <div class="nm">${esc(c.name)}</div>
+        <div class="why">${esc(reasons(c).join("・"))}</div>
+        <div class="meta">${esc(c.lastService || c.service || "")}${c.lastSentAt ? `<br>送信 ${esc(fmt(c.lastSentAt))}` : ""}
+          ${c.lastClickAt ? `<br>最終クリック ${esc(fmt(c.lastClickAt))}（${esc(ago(c.lastClickAt))}）` : ""}
+          <br>担当 ${esc(c.ownerName || "未定")}</div>
+      </div>`).join("");
+  }
+
+  function renderFunnel() {
+    const rank = { attacked: 1, clicked: 2, replied: 3, meeting: 4, proposal: 5, won: 6 };
+    const attacked = companies.filter((c) => c.attackCount > 0);
+    const reach = (k) => attacked.filter((c) => (rank[c.status] || 0) >= rank[k] || (k === "clicked" && c.clickCount > 0)).length;
+    const steps = [["アタック", attacked.length], ["クリック", reach("clicked")], ["返信", reach("replied")],
+      ["商談", reach("meeting")], ["成約", reach("won")]];
+    el("funnel").innerHTML = steps.map(([l, n], i) => {
+      const prev = i ? steps[i - 1][1] : null;
+      const rate = i && prev ? `${Math.round((n / prev) * 100)}%` : "";
+      return `${i ? `<span class="arrow">→ ${esc(rate)}</span>` : ""}${esc(l)} <span class="v">${n}社</span>`;
+    }).join(" ");
+  }
+</script>
+
+</body>
+</html>

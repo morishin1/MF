@@ -402,6 +402,26 @@
   const releaseHrAdvance = (applicantId) => hrAdvanceAct({ applicantId, action: "release" });
   const completeHrAdvance = (applicantId, employeeId) => hrAdvanceAct({ applicantId, action: "complete", employeeId });
 
+  // ---- 営業アタック管理（/sales） ----
+  const listSalesCompanies = () => api("/api/sales/companies");
+  const createSalesCompany = (body) => api("/api/sales/companies", { method: "POST", body });
+  const importSalesCompanies = (companies) => api("/api/sales/companies", { method: "POST", body: { companies } });
+  const getSalesCompany = (id) => api(`/api/sales/companies/detail?id=${encodeURIComponent(id)}`);
+  const updateSalesCompany = (body) => api("/api/sales/companies/detail", { method: "PATCH", body });
+  const markSalesFollowed = (id) => updateSalesCompany({ id, action: "followed" });
+  const addSalesEvent = (body) => api("/api/sales/companies/detail", { method: "POST", body });
+  const listSalesApproaches = (days) => api(`/api/sales/approaches${days ? `?days=${encodeURIComponent(days)}` : ""}`);
+  const prepareSalesAttack = (body) => api("/api/sales/approaches", { method: "POST", body });
+  const salesAttackAct = (body) => api("/api/sales/approaches", { method: "PATCH", body });
+  const markSalesAttackSent = (body) => salesAttackAct({ ...body, action: "sent" });
+  const discardSalesAttack = (id) => salesAttackAct({ id, action: "discard" });
+  const listSalesTemplates = () => api("/api/sales/templates");
+  const createSalesTemplate = (body) => api("/api/sales/templates", { method: "POST", body });
+  const updateSalesTemplate = (body) => api("/api/sales/templates", { method: "PATCH", body });
+  const listSalesCampaigns = () => api("/api/sales/campaigns");
+  const createSalesCampaign = (body) => api("/api/sales/campaigns", { method: "POST", body });
+  const updateSalesCampaign = (body) => api("/api/sales/campaigns", { method: "PATCH", body });
+
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
   const createGuest = (body) => api("/api/guests", { method: "POST", body });
@@ -1320,6 +1340,10 @@
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
     getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
+    listSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
+    markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
+    markSalesAttackSent, discardSalesAttack, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
+    listSalesCampaigns, createSalesCampaign, updateSalesCampaign,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

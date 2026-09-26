@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>企業 - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+
+    .co-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
+    .co-filters input, .co-filters select { margin:0; font-size:13px; padding:8px 10px; }
+    .co-count { font-size:12px; color:#6b7080; margin:0 0 8px; }
+    .co-actions { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
+
+    /* フォームアタック画面（左：企業情報・履歴 ／ 右：営業文） */
+    .atk { position:fixed; inset:0; background:#f6f6f2; z-index:42; overflow-y:auto; }
+    .atk-head { background:#fff; border-bottom:1px solid #e2e2dc; padding:12px 20px; position:sticky; top:0; z-index:1;
+      display:flex; align-items:center; gap:12px; }
+    .atk-head h2 { font-size:16px; font-weight:700; color:#1b2440; margin:0; flex:1; }
+    .atk-body { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,7fr); gap:18px; padding:18px 20px 40px;
+      max-width:1200px; margin:0 auto; }
+    .atk-col { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:16px 18px; min-width:0; }
+    .atk-col h3 { font-size:13px; color:#1b2440; margin:0 0 10px; }
+    .atk-links { display:flex; flex-direction:column; gap:8px; margin:0 0 14px; }
+    .atk-step { font-size:11.5px; color:#6b7080; margin:0 0 4px; }
+    .atk-url { font-size:12px; background:#f6f6f2; border-radius:6px; padding:8px 10px; word-break:break-all; color:#1b2440; }
+    .atk-body textarea#at-body { min-height:300px; font-size:13.5px; }
+    .atk-done { margin-top:16px; padding-top:14px; border-top:1px solid #e2e2dc; }
+    @media (max-width: 860px) { .atk-body { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">企業</h1>
+  <p class="sl-sub">営業先の企業を一覧で見て、詳細は右ドロワーで開きます。</p>
+
+  <div class="co-actions">
+    <button class="btn btn-primary btn-sm" onclick="openAdd()">
+      <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</button>
+    <button class="btn btn-secondary btn-sm" onclick="openImport()">
+      <span class="material-symbols-outlined icon-inline">upload</span>リストを取り込む</button>
+  </div>
+
+  <div class="co-filters">
+    <input type="text" id="f-q" placeholder="企業名・URLで探す" oninput="render()">
+    <select id="f-industry" onchange="render()"></select>
+    <select id="f-region" onchange="render()"></select>
+    <select id="f-service" onchange="render()"></select>
+    <select id="f-status" onchange="render()"></select>
+    <select id="f-owner" onchange="render()"></select>
+    <select id="f-attacked" onchange="render()">
+      <option value="">アタック：すべて</option>
+      <option value="yes">アタック済</option>
+      <option value="no">未アタック</option>
+    </select>
+    <select id="f-clicked" onchange="render()">
+      <option value="">クリック：すべて</option>
+      <option value="yes">クリックあり</option>
+      <option value="no">クリックなし</option>
+    </select>
+  </div>
+  <div class="co-count" id="count"></div>
+
+  <div style="overflow-x:auto;">
+    <table class="sl-table">
+      <thead><tr><th>企業</th><th>業種</th><th>フォーム</th><th>商材</th><th>状態</th><th>最終アタック</th>
+        <th>クリック</th><th>NEXT</th><th>担当</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+<div id="action-root"></div>
+<div id="attack-root"></div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmt, fmtDay, ago, statusPill } = SalesLayout;
+
+  const STATUSES = [
+    ["untouched", "未アタック"], ["attacked", "アタック済"], ["clicked", "クリックあり"], ["replied", "返信あり"],
+    ["meeting", "商談"], ["proposal", "提案"], ["won", "成約"],
+    ["reattack_wait", "再アタック待ち"], ["lost", "失注"], ["excluded", "対象外"],
+  ];
+  const INDUSTRIES = ["製造", "不動産", "士業", "医療", "小売", "その他"];
+  const SERVICES = ["AI / DX", "システム開発", "PCレンタル", "ホームページ改善", "地方創生", "ENGER", "その他"];
+
+  let companies = [];
+  let members = [];
+  let myEmployeeId = null;
+  let myName = "";
+  let canForce = false;
+
+  SalesLayout.init({ active: "companies" }).then((ctx) => {
+    if (!ctx) return;
+    canForce = ctx.canForce;
+    myName = ctx.me?.gw?.employee?.display_name || "";
+    start();
+  });
+
+  async function start() {
+    await load();
+    const q = new URLSearchParams(location.search);
+    if (q.get("new")) openAdd();
+    else if (q.get("attack")) openAttack(q.get("attack"));
+    else if (q.get("id")) openDetail(q.get("id"));
+  }
+
+  async function load() {
+    try {
+      const res = await API.listSalesCompanies();
+      if (res.notReady) {
+        el("rows").innerHTML = `<tr><td colspan="9"><div class="banner warn">
+          <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
+        return;
+      }
+      companies = res.companies || [];
+      members = res.members || [];
+      myEmployeeId = res.me || null;
+      renderFilters();
+      render();
+    } catch (e) {
+      el("rows").innerHTML = `<tr><td colspan="9"><div class="banner err">
+        <span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+    }
+  }
+
+  // 絞り込みの候補は、登録されている値から作る（決め打ちの一覧だけにしない）
+  function renderFilters() {
+    const keep = (id) => el(id).value;
+    const opts = (id, first, values) => {
+      const cur = keep(id);
+      el(id).innerHTML = `<option value="">${esc(first)}</option>`
+        + values.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    };
+    const uniq = (k) => [...new Set(companies.map((c) => c[k]).filter(Boolean))].sort();
+    opts("f-industry", "業種：すべて", uniq("industry").map((v) => [v, v]));
+    opts("f-region", "地域：すべて", uniq("region").map((v) => [v, v]));
+    opts("f-service", "商材：すべて", uniq("service").map((v) => [v, v]));
+    opts("f-status", "状態：すべて", [...STATUSES, ["ng", "営業禁止"]]);
+    opts("f-owner", "担当：すべて", [["me", "自分"], ...members.map((m) => [m.id, m.display_name])]);
+  }
+
+  function filtered() {
+    const q = (el("f-q").value || "").trim().toLowerCase();
+    const v = (id) => el(id).value;
+    return companies.filter((c) =>
+      (!q || `${c.name} ${c.domain || ""} ${c.siteUrl || ""}`.toLowerCase().includes(q))
+      && (!v("f-industry") || c.industry === v("f-industry"))
+      && (!v("f-region") || c.region === v("f-region"))
+      && (!v("f-service") || c.service === v("f-service"))
+      && (!v("f-status") || (v("f-status") === "ng" ? c.ngReason : c.status === v("f-status")))
+      && (!v("f-owner") || c.ownerId === (v("f-owner") === "me" ? myEmployeeId : v("f-owner")))
+      && (!v("f-attacked") || (v("f-attacked") === "yes" ? c.attackCount > 0 : c.attackCount === 0))
+      && (!v("f-clicked") || (v("f-clicked") === "yes" ? c.clickCount > 0 : c.clickCount === 0)));
+  }
+
+  function render() {
+    const list = filtered();
+    el("count").textContent = `${list.length}社${list.length !== companies.length ? `（全${companies.length}社）` : ""}`;
+    if (!list.length) {
+      el("rows").innerHTML = `<tr><td colspan="9" class="empty">${companies.length ? "対象がありません。" : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
+      return;
+    }
+    el("rows").innerHTML = list.slice(0, 500).map((c) => `
+      <tr class="click" onclick="openDetail('${esc(c.id)}')">
+        <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.domain || "")}${c.region ? ` ／ ${esc(c.region)}` : ""}</span></td>
+        <td>${esc(c.industry || "—")}</td>
+        <td>${c.formUrl ? `<a href="${esc(c.formUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">開く</a>` : `<span class="sl-muted">未登録</span>`}</td>
+        <td>${esc(c.service || "—")}</td>
+        <td>${c.ngReason ? statusPill("excluded", `NG：${c.ngLabel}`) : statusPill(c.status, c.statusLabel)}</td>
+        <td>${c.lastSentAt ? `${esc(fmt(c.lastSentAt))}<span class="sl-sub2">${esc(c.lastAttackerName || "")}</span>` : "—"}</td>
+        <td>${c.clickCount ? `<span class="${c.unhandledClick ? "sl-hot" : ""}">${c.clickCount}回</span>` : "—"}</td>
+        <td><span class="${c.overdue ? "sl-hot" : ""}">${esc(c.next)}</span>${c.nextDue ? `<span class="sl-sub2">${esc(fmtDay(c.nextDue))}</span>` : ""}</td>
+        <td>${esc(c.ownerName || "未定")}</td>
+      </tr>`).join("")
+      + (list.length > 500 ? `<tr><td colspan="9" class="empty">ほか${list.length - 500}社。絞り込んでください。</td></tr>` : "");
+  }
+
+  function closeModal() {
+    el("modal-root").innerHTML = "";
+    el("action-root").innerHTML = "";
+    history.replaceState({}, "", "/sales/companies.html");
+  }
+  function closeAction() { el("action-root").innerHTML = ""; }
+  function errText(e, fallback) { return e.hint || e.detail || e.message || fallback; }
+
+  // ---- 企業を追加 -------------------------------------------------------------
+  function companyForm(c = {}) {
+    const memberOpts = members.map((m) =>
+      `<option value="${esc(m.id)}" ${(c.ownerId || myEmployeeId) === m.id ? "selected" : ""}>${esc(m.display_name)}</option>`).join("");
+    return `
+      <label>企業名 <span style="color:#b3261e;">*</span></label><input id="c-name" type="text" value="${esc(c.name || "")}">
+      <label style="margin-top:10px;">企業サイトURL</label><input id="c-site" type="text" placeholder="https://example.co.jp" value="${esc(c.siteUrl || "")}">
+      <label style="margin-top:10px;">問い合わせフォームURL</label><input id="c-form" type="text" value="${esc(c.formUrl || "")}">
+      <label style="margin-top:10px;">業種</label>
+      <input id="c-industry" type="text" list="dl-industry" value="${esc(c.industry || "")}">
+      <datalist id="dl-industry">${INDUSTRIES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+      <label style="margin-top:10px;">地域</label><input id="c-region" type="text" placeholder="東京都" value="${esc(c.region || "")}">
+      <label style="margin-top:10px;">商材（何を提案するか）</label>
+      <input id="c-service" type="text" list="dl-service" value="${esc(c.service || "")}">
+      <datalist id="dl-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+      <label style="margin-top:10px;">担当</label>
+      <select id="c-owner"><option value="">（未定）</option>${memberOpts}</select>
+      <label style="margin-top:10px;">所在地</label><input id="c-address" type="text" value="${esc(c.address || "")}">
+      <label style="margin-top:10px;">電話番号</label><input id="c-phone" type="text" value="${esc(c.phone || "")}">
+      <label style="margin-top:10px;">企業規模</label><input id="c-size" type="text" placeholder="従業員50名" value="${esc(c.size || "")}">
+      <label style="margin-top:10px;">メモ</label><textarea id="c-note" rows="3">${esc(c.note || "")}</textarea>`;
+  }
+  function companyFields() {
+    return {
+      name: el("c-name").value.trim(), siteUrl: el("c-site").value.trim() || null,
+      formUrl: el("c-form").value.trim() || null, industry: el("c-industry").value.trim() || null,
+      region: el("c-region").value.trim() || null, service: el("c-service").value.trim() || null,
+      ownerId: el("c-owner").value || null, address: el("c-address").value.trim() || null,
+      phone: el("c-phone").value.trim() || null, size: el("c-size").value.trim() || null,
+      note: el("c-note").value.trim() || null,
+    };
+  }
+
+  function openAdd() {
+    closeModal();
+    el("modal-root").innerHTML = `
+      <div class="sl-drawer-bg" onclick="closeModal()"></div>
+      <div class="sl-drawer">
+        <h2>企業を追加</h2>
+        ${companyForm()}
+        <div id="c-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitAdd(this)">追加する</button>
+          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitAdd(btn) {
+    const msg = el("c-msg"); msg.textContent = "";
+    const body = companyFields();
+    if (!body.name) { msg.textContent = "企業名を入力してください"; return; }
+    try {
+      const r = await KPLayout.busy(btn, "追加中…", () => API.createSalesCompany(body));
+      await load();
+      openDetail(r.company.id);
+    } catch (e) {
+      if (e.body?.company?.id || e.company?.id) {
+        const dup = e.body?.company || e.company;
+        msg.innerHTML = `${esc(errText(e, ""))}　<a href="#" onclick="openDetail('${esc(dup.id)}');return false;">その企業を開く</a>`;
+      } else msg.textContent = errText(e, "追加できませんでした");
+    }
+  }
+
+  // ---- リストを取り込む（貼り付け） ---------------------------------------------
+  // Excel・スプレッドシートからそのまま貼れるように、タブ区切りとカンマ区切りの両方を読む
+  const IMPORT_COLS = [
+    ["name", "企業名"], ["siteUrl", "URL"], ["formUrl", "フォームURL"], ["industry", "業種"],
+    ["region", "地域"], ["service", "商材"], ["phone", "電話番号"],
+  ];
+  function openImport() {
+    closeModal();
+    el("modal-root").innerHTML = `
+      <div class="sl-drawer-bg" onclick="closeModal()"></div>
+      <div class="sl-drawer" style="width:560px;">
+        <h2>リストを取り込む</h2>
+        <p class="sl-sub" style="margin:0 0 10px;">スプレッドシートから行をコピーして貼り付けてください。1行1社、列の順番は次のとおりです（1行目が見出しなら飛ばします）。</p>
+        <div class="atk-url" style="margin-bottom:10px;">${IMPORT_COLS.map(([, l]) => esc(l)).join("　｜　")}</div>
+        <textarea id="im-text" rows="12" placeholder="株式会社サンプル	https://sample.co.jp	https://sample.co.jp/contact	製造	東京都	AI / DX"></textarea>
+        <p class="sl-muted" style="margin:6px 0 0;">同じサイト（ドメイン）の企業は登録済みとして飛ばします。一度に500社まで。</p>
+        <div id="im-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitImport(this)">取り込む</button>
+          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  function parseRows(text) {
+    const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const out = [];
+    for (const line of lines) {
+      const cells = (line.includes("\t") ? line.split("\t") : line.split(",")).map((s) => s.trim().replace(/^"|"$/g, ""));
+      if (!out.length && /企業名|会社名|name/i.test(cells[0] || "")) continue;
+      const row = {};
+      IMPORT_COLS.forEach(([k], i) => { if (cells[i]) row[k] = cells[i]; });
+      if (row.name) out.push(row);
+    }
+    return out;
+  }
+
+  async function submitImport(btn) {
+    const msg = el("im-msg"); msg.textContent = "";
+    const rows = parseRows(el("im-text").value);
+    if (!rows.length) { msg.textContent = "取り込める行がありません（1列目に企業名が必要です）"; return; }
+    try {
+      const r = await KPLayout.busy(btn, "取り込み中…", () => API.importSalesCompanies(rows));
+      closeModal();
+      await load();
+      alert(`${r.created}社を追加しました${r.skipped ? `（登録済み ${r.skipped}社は飛ばしました）` : ""}`);
+    } catch (e) { msg.textContent = errText(e, "取り込めませんでした"); }
+  }
+
+  // ---- 企業詳細（右ドロワー） ---------------------------------------------------
+  let detail = null;
+
+  async function openDetail(id) {
+    closeModal();
+    el("modal-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeModal()"></div>
+      <div class="sl-detail" id="detail-box"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+    history.replaceState({}, "", `/sales/companies.html?id=${encodeURIComponent(id)}`);
+    try {
+      detail = await API.getSalesCompany(id);
+      renderDetail();
+    } catch (e) {
+      el("detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
+        <span class="material-symbols-outlined">error</span><div>${esc(errText(e, ""))}</div></div>`;
+    }
+  }
+
+  function recentLine(r) {
+    return `${esc(ago(r.sentAt))}に${r.employeeName ? `${esc(r.employeeName)}さんが` : ""}アタック済み`
+      + `（${esc(fmt(r.sentAt))}${r.service ? `・${esc(r.service)}` : ""}）`;
+  }
+
+  function renderDetail() {
+    const c = detail.company;
+    const link = (u) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>` : "—";
+    const cta = c.ngReason ? ""
+      : c.nextKey === "follow_click"
+        ? `<button class="btn btn-primary btn-sm" onclick="openEvent('follow')">フォローを記録</button>
+           <button class="btn btn-secondary btn-sm" onclick="markFollowed(this)">対応済みにする</button>`
+        : c.nextKey === "attack"
+          ? `<button class="btn btn-primary btn-sm" onclick="openAttack('${esc(c.id)}')">フォームアタック</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="openEvent('follow')">対応を記録・NEXTを決める</button>`;
+
+    el("detail-box").innerHTML = `
+      <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="min-width:0;">
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(c.name)}</div>
+          <div style="font-size:12.5px;color:#6b7080;margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            ${c.ngReason ? statusPill("excluded", `NG：${c.ngLabel}`) : statusPill(c.status, c.statusLabel)}
+            ${esc([c.industry, c.region, c.service].filter(Boolean).join(" ／ "))}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
+      </div>
+
+      <div style="padding:14px 20px 0;">
+        ${c.ngReason ? `<div class="sl-warn"><span class="material-symbols-outlined">block</span>
+          <div>営業禁止（${esc(c.ngLabel)}）です。アタックできません。${c.ngNote ? `<br>${esc(c.ngNote)}` : ""}</div></div>` : ""}
+        ${detail.recent && !c.ngReason ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span>
+          <div>${recentLine(detail.recent)}</div></div>` : ""}
+      </div>
+
+      <div class="sl-next" style="margin:4px 20px 16px;">
+        <div class="now">現在：${esc(c.statusLabel)}${c.clickCount ? `　クリック ${c.clickCount}回（最終 ${esc(fmt(c.lastClickAt))}）` : ""}</div>
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT</div>
+        <h3>${esc(c.next)}</h3>
+        <div class="meta">担当：${esc(c.ownerName || "未定")}${c.nextDue ? `　期限：${esc(fmtDay(c.nextDue))}` : ""}${c.overdue ? "（期限超過）" : ""}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">${cta}</div>
+      </div>
+
+      <div style="padding:0 20px 24px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          ${!c.ngReason && c.nextKey !== "attack" ? `<button class="btn btn-secondary btn-sm" onclick="openAttack('${esc(c.id)}')">
+            <span class="material-symbols-outlined icon-inline">send</span>フォームアタック</button>` : ""}
+          ${c.nextKey === "attack" ? `<button class="btn btn-secondary btn-sm" onclick="openEvent('memo')">履歴を記録</button>` : ""}
+          <button class="btn btn-secondary btn-sm" onclick="openStatus()">ステータス・NEXT</button>
+          <button class="btn btn-secondary btn-sm" onclick="openEdit()">基本情報を編集</button>
+          <button class="btn btn-secondary btn-sm" onclick="openNg()">${c.ngReason ? "営業禁止を解除" : "営業禁止にする"}</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <dl class="sl-grid2">
+            <div><dt>URL</dt><dd>${link(c.siteUrl)}</dd></div>
+            <div><dt>フォームURL</dt><dd>${link(c.formUrl)}</dd></div>
+            <div><dt>所在地</dt><dd>${esc(c.address || c.region || "—")}</dd></div>
+            <div><dt>電話番号</dt><dd>${esc(c.phone || "—")}</dd></div>
+            <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
+            <div><dt>企業規模</dt><dd>${esc(c.size || "—")}</dd></div>
+            <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
+            <div><dt>キャンペーン</dt><dd>${esc(c.campaignName || "—")}</dd></div>
+          </dl>
+          ${c.note ? `<div style="font-size:12.5px;color:#1b2440;white-space:pre-wrap;border-top:1px solid #e2e2dc;padding-top:10px;">${esc(c.note)}</div>` : ""}
+        </div>
+
+        <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">営業履歴</h4>
+        ${timelineHtml(detail.timeline)}
+
+        ${(detail.approaches || []).length ? `
+          <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">送った営業文</h4>
+          ${detail.approaches.map((a) => `
+            <details class="card" style="margin-bottom:8px;">
+              <summary style="cursor:pointer;font-size:12.5px;color:#1b2440;">
+                ${esc(fmt(a.sentAt || a.preparedAt))}　${esc(a.employeeName || "")}　${esc(a.service || "")}
+                ${a.clickCount ? `<span class="sl-hot">　クリック${a.clickCount}回</span>` : ""}${a.forced ? `<span class="sl-muted">　（警告を押し切り）</span>` : ""}</summary>
+              <div style="font-size:12.5px;white-space:pre-wrap;margin-top:8px;">${esc(a.body || "")}</div>
+            </details>`).join("")}` : ""}
+      </div>`;
+  }
+
+  function timelineHtml(list) {
+    if (!(list || []).length) return `<p class="sl-muted">まだ記録がありません。</p>`;
+    return `<div class="sl-tl">${list.map((t) => `
+      <div class="row${t.kind === "click" ? " click" : ""}${t.planned ? " planned" : ""}">
+        <div class="d">${esc(t.planned ? fmtDay(String(t.at).slice(0, 10)) : fmt(t.at))}</div>
+        <div class="l">${esc(t.label)}</div>
+        ${t.detail ? `<div class="x">${esc(t.detail)}</div>` : ""}
+      </div>`).join("")}</div>`;
+  }
+
+  async function reloadDetail() {
+    const id = detail.company.id;
+    await Promise.all([openDetail(id), load()]);
+  }
+
+  async function markFollowed(btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.markSalesFollowed(detail.company.id));
+      await reloadDetail();
+    } catch (e) { alert(errText(e, "できませんでした")); }
+  }
+
+  // ---- 履歴を記録（フォロー・電話・返信あり・商談…）＋NEXT ---------------------------
+  function openEvent(kind) {
+    const c = detail.company;
+    const kinds = detail.eventKinds || [];
+    el("action-root").innerHTML = `
+      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
+      <div class="sl-drawer top">
+        <h2>履歴を記録</h2>
+        <label>何をしたか</label>
+        <div>${kinds.map((k) => `
+          <label class="sl-chip"><input type="radio" name="ev-kind" value="${esc(k.key)}" ${k.key === kind ? "checked" : ""}>${esc(k.label)}</label>`).join("")}</div>
+        <label style="margin-top:10px;">内容（任意）</label>
+        <textarea id="ev-detail" rows="3" placeholder="担当の山田様と電話。来週資料送付"></textarea>
+        <label style="margin-top:10px;">日時</label>
+        <input id="ev-at" type="datetime-local">
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 6px;">NEXT（次にやること）</h4>
+        <input id="ev-next" type="text" list="dl-next" value="${esc(c.nextKey === "manual" ? c.next : "")}" placeholder="フォロー・電話・商談準備 など">
+        <datalist id="dl-next">${["フォロー", "再アタック", "担当者確認", "電話", "メール", "商談準備", "資料送付"].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+        <input id="ev-next-on" type="date" style="margin-top:6px;" value="${esc(c.nextActionOn || "")}">
+        <p class="sl-muted" style="margin:6px 0 0;">「返信あり」「商談」を記録すると、ステータスも進みます。</p>
+        <div id="ev-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitEvent(this)">記録する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitEvent(btn) {
+    const msg = el("ev-msg"); msg.textContent = "";
+    const picked = document.querySelector('input[name="ev-kind"]:checked');
+    if (!picked) { msg.textContent = "何をしたかを選んでください"; return; }
+    const at = el("ev-at").value;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.addSalesEvent({
+        id: detail.company.id, kind: picked.value, detail: el("ev-detail").value.trim() || undefined,
+        occurredAt: at ? new Date(at).toISOString() : undefined,
+        nextAction: el("ev-next").value.trim() || null, nextActionOn: el("ev-next-on").value || null,
+      }));
+      closeAction();
+      await reloadDetail();
+    } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
+  }
+
+  // ---- ステータス・NEXT ---------------------------------------------------------
+  function openStatus() {
+    const c = detail.company;
+    el("action-root").innerHTML = `
+      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
+      <div class="sl-drawer top">
+        <h2>ステータス・NEXT</h2>
+        <label>ステータス</label>
+        <select id="st-status">${(detail.statuses || []).map((s) =>
+          `<option value="${esc(s.key)}" ${s.key === c.status ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
+        <label style="margin-top:10px;">NEXT（次にやること）</label>
+        <input id="st-next" type="text" list="dl-next2" value="${esc(c.nextKey === "manual" ? c.next : "")}">
+        <datalist id="dl-next2">${["フォロー", "再アタック", "担当者確認", "電話", "メール", "商談準備"].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+        <label style="margin-top:10px;">NEXTの日付</label>
+        <input id="st-next-on" type="date" value="${esc(c.nextActionOn || "")}">
+        <label style="margin-top:10px;">担当</label>
+        <select id="st-owner"><option value="">（未定）</option>${(detail.members || []).map((m) =>
+          `<option value="${esc(m.id)}" ${m.id === c.ownerId ? "selected" : ""}>${esc(m.display_name)}</option>`).join("")}</select>
+        <label style="margin-top:10px;">キャンペーン</label>
+        <select id="st-campaign"><option value="">（なし）</option>${(detail.campaigns || []).map((m) =>
+          `<option value="${esc(m.id)}" ${m.id === c.campaignId ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
+        <div id="st-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitStatus(this)">保存する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitStatus(btn) {
+    const msg = el("st-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSalesCompany({
+        id: detail.company.id, status: el("st-status").value,
+        nextAction: el("st-next").value.trim() || null, nextActionOn: el("st-next-on").value || null,
+        ownerId: el("st-owner").value || null, campaignId: el("st-campaign").value || null,
+      }));
+      closeAction();
+      await reloadDetail();
+    } catch (e) { msg.textContent = errText(e, "保存できませんでした"); }
+  }
+
+  // ---- 基本情報を編集 ------------------------------------------------------------
+  function openEdit() {
+    el("action-root").innerHTML = `
+      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
+      <div class="sl-drawer top">
+        <h2>基本情報を編集</h2>
+        ${companyForm(detail.company)}
+        <div id="c-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitEdit(this)">保存する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitEdit(btn) {
+    const msg = el("c-msg"); msg.textContent = "";
+    const body = companyFields();
+    if (!body.name) { msg.textContent = "企業名を入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSalesCompany({ id: detail.company.id, ...body }));
+      closeAction();
+      await reloadDetail();
+    } catch (e) { msg.textContent = errText(e, "保存できませんでした"); }
+  }
+
+  // ---- 営業禁止（NG） -------------------------------------------------------------
+  function openNg() {
+    const c = detail.company;
+    if (c.ngReason) {
+      if (!confirm("営業禁止を解除します。よろしいですか？")) return;
+      API.updateSalesCompany({ id: c.id, ngReason: null, ngNote: null })
+        .then(reloadDetail).catch((e) => alert(errText(e, "できませんでした")));
+      return;
+    }
+    el("action-root").innerHTML = `
+      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
+      <div class="sl-drawer top">
+        <h2>営業禁止にする</h2>
+        <p class="sl-sub" style="margin:0 0 12px;">営業禁止の企業には、誰もフォームアタックできなくなります。</p>
+        <label>理由</label>
+        <div>${(detail.ngReasons || []).map((r) => `
+          <label class="sl-chip"><input type="radio" name="ng-reason" value="${esc(r.key)}">${esc(r.label)}</label>`).join("")}</div>
+        <label style="margin-top:10px;">補足（任意）</label>
+        <textarea id="ng-note" rows="3" placeholder="2026/09/27 先方より配信停止のご依頼"></textarea>
+        <div id="ng-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitNg(this)">営業禁止にする</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitNg(btn) {
+    const msg = el("ng-msg"); msg.textContent = "";
+    const picked = document.querySelector('input[name="ng-reason"]:checked');
+    if (!picked) { msg.textContent = "理由を選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSalesCompany({
+        id: detail.company.id, ngReason: picked.value, ngNote: el("ng-note").value.trim() || null,
+      }));
+      closeAction();
+      await reloadDetail();
+    } catch (e) { msg.textContent = errText(e, "保存できませんでした"); }
+  }
+
+  // ---- フォームアタック ------------------------------------------------------------
+  //
+  // 1. 開いた時点で専用URL（/r/xxxx）を発行する（営業文に入れる必要があるので、送る前に）
+  // 2. テンプレートを選ぶ → 企業名・送信者・専用URLを差し込んだ営業文ができる
+  // 3. 企業サイト・フォームを開き、営業文をコピーして貼る。人が確認して送る
+  // 4. GWに戻って「送信完了」。ここではじめて履歴として残る
+  //
+  // 直近30日以内のアタック・営業禁止は、サーバが止める（ここでは理由を見せるだけ）
+  const DEFAULT_TEMPLATE = {
+    id: "", name: "標準（テンプレート未登録）", service: "", subject: "",
+    body: `{{company}}\nご担当者様\n\n突然のご連絡失礼いたします。\n\n株式会社エイトの{{sender}}と申します。\n\n貴社Webサイトを拝見し、\n{{service}}についてご支援できる可能性があると考え、\nご連絡いたしました。\n\n詳細はこちら\n{{url}}\n\nよろしくお願いいたします。`,
+    destinationUrl: "",
+  };
+  let atk = null;   // { company, detail, templates, campaigns, approach, url, force }
+
+  async function openAttack(id, force) {
+    el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
+    history.replaceState({}, "", `/sales/companies.html?attack=${encodeURIComponent(id)}`);
+    try {
+      const [d, t] = await Promise.all([
+        detail?.company?.id === id ? Promise.resolve(detail) : API.getSalesCompany(id),
+        API.listSalesTemplates().catch(() => ({ templates: [] })),
+      ]);
+      detail = d;
+      const templates = (t.templates || []).filter((x) => !x.archived);
+      atk = { company: d.company, detail: d, templates: templates.length ? templates : [DEFAULT_TEMPLATE],
+        campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force) };
+      // 企業の商材と同じサービスのテンプレートを先に選ぶ
+      atk.template = atk.templates.find((x) => x.service && x.service === d.company.service) || atk.templates[0];
+
+      if (d.company.ngReason) return renderAttackBlocked(`この企業は営業禁止です（${d.company.ngLabel}）。アタックできません。`);
+      await prepareAttack();
+    } catch (e) {
+      renderAttackBlocked(errText(e, "開けませんでした"));
+    }
+  }
+
+  async function prepareAttack() {
+    try {
+      const r = await API.prepareSalesAttack({
+        companyId: atk.company.id, templateId: atk.template.id || undefined,
+        campaignId: atk.company.campaignId || undefined,
+        destinationUrl: atk.template.destinationUrl || undefined, force: atk.force || undefined,
+      });
+      atk.approach = r.approach;
+      atk.url = r.trackingUrl;
+      renderAttack();
+    } catch (e) {
+      const body = e.body || e;
+      if (body.error === "recent_attack" || body.error === "force_forbidden") return renderAttackRecent(body.recent, body.canForce ?? canForce);
+      renderAttackBlocked(errText(e, "専用URLを発行できませんでした"));
+    }
+  }
+
+  function closeAttack() {
+    el("attack-root").innerHTML = "";
+    const id = atk?.company?.id;
+    atk = null;
+    if (id) openDetail(id); else history.replaceState({}, "", "/sales/companies.html");
+  }
+
+  function attackHead(title) {
+    return `<div class="atk-head">
+      <h2>${esc(title)}</h2>
+      <button class="btn btn-secondary btn-sm" onclick="closeAttack()">閉じる</button>
+    </div>`;
+  }
+
+  function renderAttackBlocked(text) {
+    el("attack-root").innerHTML = `<div class="atk">${attackHead(`フォームアタック：${atk?.company?.name || ""}`)}
+      <div style="max-width:640px;margin:30px auto;padding:0 20px;">
+        <div class="sl-warn"><span class="material-symbols-outlined">block</span><div>${esc(text)}</div></div>
+      </div></div>`;
+  }
+
+  function renderAttackRecent(r, allowForce) {
+    el("attack-root").innerHTML = `<div class="atk">${attackHead(`フォームアタック：${atk.company.name}`)}
+      <div style="max-width:640px;margin:30px auto;padding:0 20px;">
+        <div class="sl-warn sl-caution" style="display:block;">
+          <div style="font-weight:700;margin-bottom:6px;">⚠️ 直近${esc(r?.days || 30)}日以内にアタックされています。</div>
+          <div>前回：${esc(r?.sentAt ? new Date(r.sentAt).toLocaleDateString("ja-JP") : "")}</div>
+          <div>担当：${esc(r?.employeeName || "不明")}</div>
+          <div>サービス：${esc(r?.service || "—")}</div>
+        </div>
+        <p class="sl-muted">同じ会社に短期間で何度もフォーム営業しないため、アタックできません。</p>
+        ${allowForce ? `<button class="btn btn-secondary" onclick="forceAttack()">それでもアタックする（管理者）</button>`
+          : `<p class="sl-muted">どうしても必要な場合は、管理者に依頼してください。</p>`}
+      </div></div>`;
+  }
+
+  function forceAttack() {
+    if (!confirm("直近にアタック済みの企業です。それでもアタックしますか？")) return;
+    atk.force = true;
+    prepareAttack();
+  }
+
+  function composeBody() {
+    const c = atk.company;
+    const vars = { company: c.name, sender: myName, url: atk.url, service: atk.template.service || c.service || "" };
+    return String(atk.template.body || "").replace(/\{\{\s*(company|sender|url|service)\s*\}\}/g, (_, k) => vars[k] ?? "");
+  }
+
+  function renderAttack() {
+    const c = atk.company;
+    const d = atk.detail;
+    const body = composeBody();
+    const link = (u, label) => u
+      ? `<a class="btn btn-secondary btn-sm" href="${esc(u)}" target="_blank" rel="noopener noreferrer">
+           <span class="material-symbols-outlined icon-inline">open_in_new</span>${esc(label)}</a>`
+      : `<span class="sl-muted">${esc(label)}：未登録</span>`;
+    el("attack-root").innerHTML = `<div class="atk">${attackHead(`フォームアタック：${c.name}`)}
+      <div class="atk-body">
+        <div class="atk-col">
+          <h3>企業情報</h3>
+          ${atk.force ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span><div>直近のアタックを押し切って送ります（管理者）。</div></div>` : ""}
+          <dl class="sl-grid2" style="margin-bottom:10px;">
+            <div><dt>企業名</dt><dd>${esc(c.name)}</dd></div>
+            <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
+            <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
+            <div><dt>担当</dt><dd>${esc(c.ownerName || "未定")}</dd></div>
+          </dl>
+          <div class="atk-links">
+            <div class="atk-step">① 企業サイトを確認</div>${link(c.siteUrl, "企業サイトを開く")}
+            <div class="atk-step">② 問い合わせフォームを開く</div>${link(c.formUrl, "問い合わせフォームを開く")}
+          </div>
+          <h3>過去の営業履歴</h3>
+          ${timelineHtml((d.timeline || []).filter((t) => !t.planned))}
+        </div>
+
+        <div class="atk-col">
+          <h3>営業文</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label>テンプレート</label>
+              <select id="at-template" onchange="changeTemplate()">${atk.templates.map((t) =>
+                `<option value="${esc(t.id)}" ${t.id === atk.template.id ? "selected" : ""}>${esc(t.name)}${t.service ? `（${esc(t.service)}）` : ""}</option>`).join("")}</select></div>
+            <div><label>キャンペーン</label>
+              <select id="at-campaign"><option value="">（なし）</option>${atk.campaigns.map((m) =>
+                `<option value="${esc(m.id)}" ${m.id === c.campaignId ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></div>
+          </div>
+          <label style="margin-top:10px;">提案サービス</label>
+          <input id="at-service" type="text" list="dl-at-service" value="${esc(atk.template.service || c.service || "")}">
+          <datalist id="dl-at-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+          ${atk.template.subject ? `<label style="margin-top:10px;">件名</label>
+            <input id="at-subject" type="text" value="${esc(atk.template.subject)}">
+            <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('at-subject', this)">件名をコピー</button>` : ""}
+          <label style="margin-top:10px;">本文</label>
+          <textarea id="at-body">${esc(body)}</textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-primary btn-sm" onclick="copyText('at-body', this)">
+              <span class="material-symbols-outlined icon-inline">content_copy</span>③ 営業文をコピー</button>
+            <a href="/sales/templates.html" class="sl-muted" target="_blank" rel="noopener">テンプレートを編集</a>
+          </div>
+          <label style="margin-top:12px;">専用URL（この企業・このアタックだけのURL。本文に入っています）</label>
+          <div class="atk-url">${esc(atk.url)}</div>
+          ${!body.includes(atk.url) ? `<div class="sl-warn sl-caution" style="margin-top:8px;"><span class="material-symbols-outlined">link_off</span>
+            <div>本文に専用URLが入っていません。クリックを検知するには、本文に専用URLを入れてください。</div></div>` : ""}
+
+          <div class="atk-done">
+            <p class="sl-muted" style="margin:0 0 8px;">④ フォームに貼り付け → 内容を確認して送信 → 送り終えたら押してください。</p>
+            <div id="at-msg" class="err-text" style="margin:0 0 8px;"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="submitSent(this)">
+                <span class="material-symbols-outlined icon-inline">task_alt</span>送信完了</button>
+              <button class="btn btn-secondary" onclick="discardAttack(this)">送らなかった</button>
+            </div>
+          </div>
+        </div>
+      </div></div>`;
+  }
+
+  async function changeTemplate() {
+    const id = el("at-template").value;
+    atk.template = atk.templates.find((t) => t.id === id) || atk.templates[0];
+    // リンク先はテンプレートごとに違うので、専用URLの行き先も直す（URLそのものは変わらない）
+    await prepareAttack();
+  }
+
+  async function copyText(id, btn) {
+    const node = el(id);
+    const val = node.value;
+    try { await navigator.clipboard.writeText(val); } catch { /* 下で選択状態にする */ }
+    node.select();
+    if (btn) {
+      const before = btn.innerHTML;
+      btn.innerHTML = `<span class="material-symbols-outlined icon-inline">check</span>コピーしました`;
+      setTimeout(() => { btn.innerHTML = before; }, 1600);
+    }
+  }
+
+  async function submitSent(btn) {
+    const msg = el("at-msg"); msg.textContent = "";
+    const body = el("at-body").value.trim();
+    if (!body) { msg.textContent = "営業文が空です"; return; }
+    if (!confirm("フォームへの送信は済みましたか？\n「送信完了」として履歴に残します。")) return;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.markSalesAttackSent({
+        id: atk.approach.id, body, subject: el("at-subject")?.value.trim() || undefined,
+        service: el("at-service").value.trim() || null,
+        templateId: atk.template.id || null, campaignId: el("at-campaign").value || null,
+        force: atk.force || undefined,
+      }));
+      closeAttack();
+      load();
+    } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
+  }
+
+  async function discardAttack(btn) {
+    if (!confirm("今回は送らずに閉じます。発行した専用URLは使えなくなります。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "取り消し中…", () => API.discardSalesAttack(atk.approach.id));
+    } catch (e) { /* 送信済み・クリック済みなら残す。閉じるだけ */ }
+    closeAttack();
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>分析 - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .an-kpi { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:18px 20px; margin-bottom:26px; }
+    .an-step { display:flex; align-items:baseline; gap:10px; }
+    .an-step .n { font-size:24px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; min-width:90px; }
+    .an-step .l { font-size:13px; color:#4a5068; font-weight:700; }
+    .an-rate { font-size:12px; color:#6b7080; padding:4px 0 4px 18px; }
+    .an-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(440px,1fr)); gap:18px; }
+    .an-grid .sl-table td.num, .an-grid .sl-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .an-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
+    .an-links a { color:#4a5068; }
+    @media (max-width: 760px) { .an-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">分析</h1>
+  <p class="sl-sub">アタックから成約までの流れと、どの文章・サービス・業種・担当が反応を取れているかです。</p>
+  <div class="an-links">
+    <a href="/sales/templates.html">テンプレート比較</a>
+    <a href="/sales/campaigns.html">キャンペーン比較</a>
+  </div>
+
+  <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
+
+  <div class="an-kpi" id="kpi">読み込み中…</div>
+
+  <div class="an-grid">
+    <div><div class="sl-sec-h">営業文別</div><div id="by-template"></div></div>
+    <div><div class="sl-sec-h">サービス別</div><div id="by-service"></div></div>
+    <div><div class="sl-sec-h">業種別</div><div id="by-industry"></div></div>
+    <div><div class="sl-sec-h">担当者別</div><div id="by-employee"></div></div>
+  </div>
+</div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+
+  const PERIODS = [[30, "30日"], [90, "90日"], [365, "1年"]];
+  let days = 90;
+  let approaches = [];
+
+  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    el("period").innerHTML = PERIODS.map(([d, l]) =>
+      `<button class="${d === days ? "on" : ""}" onclick="setPeriod(${d})">${esc(l)}</button>`).join("");
+    try {
+      const res = await API.listSalesApproaches(days);
+      if (res.notReady) {
+        el("kpi").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div>`;
+        return;
+      }
+      approaches = res.approaches || [];
+      render();
+    } catch (e) {
+      el("kpi").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function setPeriod(d) { days = d; load(); }
+
+  // 会社がいまどこまで進んでいるか。アタックした会社のうち、その段階以上にいる割合で見る
+  const RANK = { attacked: 1, clicked: 2, replied: 3, meeting: 4, proposal: 5, won: 6 };
+  const reached = (status, k) => (RANK[status] || 0) >= RANK[k];
+  const pct = (n, d) => (d ? `${Math.round((n / d) * 1000) / 10}%` : "—");
+
+  function stats(list) {
+    const cos = new Map();
+    for (const a of list) {
+      const c = cos.get(a.companyId) || { status: a.companyStatus, clicked: false };
+      if (a.clickCount > 0) c.clicked = true;
+      cos.set(a.companyId, c);
+    }
+    const arr = [...cos.values()];
+    return {
+      attacks: list.length,
+      companies: arr.length,
+      clicked: arr.filter((c) => c.clicked || reached(c.status, "clicked")).length,
+      clickedAttacks: list.filter((a) => a.clickCount > 0).length,
+      replied: arr.filter((c) => reached(c.status, "replied")).length,
+      meeting: arr.filter((c) => reached(c.status, "meeting")).length,
+      won: arr.filter((c) => c.status === "won").length,
+    };
+  }
+
+  function render() {
+    const s = stats(approaches);
+    const steps = [["アタック", s.companies], ["クリック", s.clicked], ["返信", s.replied], ["商談", s.meeting], ["成約", s.won]];
+    el("kpi").innerHTML = steps.map(([l, n], i) => `
+      ${i ? `<div class="an-rate">↓ ${esc(pct(n, steps[i - 1][1]))}</div>` : ""}
+      <div class="an-step"><span class="n">${n}社</span><span class="l">${esc(l)}</span></div>`).join("")
+      + `<p class="sl-muted" style="margin:12px 0 0;">直近${days}日に送ったアタック ${s.attacks}件（${s.companies}社）が対象です。</p>`;
+
+    table("by-template", (a) => a.templateName || "（テンプレートなし）");
+    table("by-service", (a) => a.service || "（未設定）");
+    table("by-industry", (a) => a.industry || "（未設定）");
+    table("by-employee", (a) => a.employeeName || "（不明）", true);
+  }
+
+  function table(id, keyOf, byPerson) {
+    const groups = new Map();
+    for (const a of approaches) {
+      const k = keyOf(a);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(a);
+    }
+    if (!groups.size) { el(id).innerHTML = `<div class="sl-empty">まだデータがありません</div>`; return; }
+    const rows = [...groups.entries()].map(([k, list]) => ({ k, s: stats(list) }))
+      .sort((x, y) => y.s.attacks - x.s.attacks);
+    el(id).innerHTML = `<div style="overflow-x:auto;"><table class="sl-table">
+      <thead><tr><th>${byPerson ? "担当" : "項目"}</th><th class="num">アタック数</th><th class="num">クリック率</th>
+        <th class="num">返信率</th><th class="num">商談化率</th></tr></thead>
+      <tbody>${rows.map(({ k, s }) => `<tr>
+        <td>${esc(k)}</td><td class="num">${s.attacks}</td>
+        <td class="num">${esc(pct(s.clickedAttacks, s.attacks))}</td>
+        <td class="num">${esc(pct(s.replied, s.companies))}</td>
+        <td class="num">${esc(pct(s.meeting, s.companies))}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+</script>
+
+</body>
+</html>

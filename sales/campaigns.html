@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>キャンペーン - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .cp-table td.num, .cp-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">キャンペーン</h1>
+  <p class="sl-sub">営業をまとまりで追いかけます。企業は、企業詳細の「ステータス・NEXT」からキャンペーンに入れます。</p>
+
+  <div class="sl-toolbar">
+    <button class="btn btn-primary btn-sm" onclick="openEdit()">
+      <span class="material-symbols-outlined icon-inline">add</span>キャンペーンを追加</button>
+    <label class="sl-muted" style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;">
+      <input type="checkbox" id="show-archived" style="width:auto;margin:0;" onchange="render()">終わったものも出す</label>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="sl-table cp-table">
+      <thead><tr><th>キャンペーン</th><th>期間</th><th class="num">対象企業</th><th class="num">アタック</th>
+        <th class="num">クリック</th><th class="num">返信</th><th class="num">商談</th><th class="num">成約</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmtDay } = SalesLayout;
+
+  let campaigns = [];
+
+  SalesLayout.init({ active: "attack" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listSalesCampaigns();
+      if (res.notReady) {
+        el("rows").innerHTML = `<tr><td colspan="8"><div class="banner warn"><span class="material-symbols-outlined">build</span>
+          <div>${esc(res.message)}</div></div></td></tr>`;
+        return;
+      }
+      campaigns = res.campaigns || [];
+      render();
+    } catch (e) {
+      el("rows").innerHTML = `<tr><td colspan="8"><div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+    }
+  }
+
+  function render() {
+    const all = el("show-archived").checked;
+    const list = campaigns.filter((c) => all || !c.archived);
+    if (!list.length) {
+      el("rows").innerHTML = `<tr><td colspan="8" class="empty">まだキャンペーンがありません。</td></tr>`;
+      return;
+    }
+    el("rows").innerHTML = list.map((c) => `
+      <tr class="click" onclick="openEdit('${esc(c.id)}')">
+        <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.service || "")}${c.archived ? "　終了" : ""}</span></td>
+        <td style="white-space:nowrap;">${c.startsOn || c.endsOn ? `${esc(fmtDay(c.startsOn))}〜${esc(fmtDay(c.endsOn))}` : "—"}</td>
+        <td class="num">${c.companies}</td><td class="num">${c.attacks}</td><td class="num">${c.clicks}</td>
+        <td class="num">${c.replies}</td><td class="num">${c.meetings}</td><td class="num">${c.won}</td>
+      </tr>`).join("");
+  }
+
+  function closeModal() { el("modal-root").innerHTML = ""; }
+
+  function openEdit(id) {
+    const c = campaigns.find((x) => x.id === id) || {};
+    el("modal-root").innerHTML = `
+      <div class="sl-drawer-bg" onclick="closeModal()"></div>
+      <div class="sl-drawer">
+        <h2>${id ? "キャンペーンを編集" : "キャンペーンを追加"}</h2>
+        <label>キャンペーン名 <span style="color:#b3261e;">*</span></label>
+        <input id="p-name" type="text" value="${esc(c.name || "")}" placeholder="2026年9月 AI / DX営業">
+        <label style="margin-top:10px;">主な提案サービス</label>
+        <input id="p-service" type="text" value="${esc(c.service || "")}">
+        <label style="margin-top:10px;">開始日</label><input id="p-start" type="date" value="${esc(c.startsOn || "")}">
+        <label style="margin-top:10px;">終了日</label><input id="p-end" type="date" value="${esc(c.endsOn || "")}">
+        <label style="margin-top:10px;">メモ</label><textarea id="p-note" rows="3">${esc(c.note || "")}</textarea>
+        <div id="p-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="submitEdit(this, '${esc(id || '')}')">保存する</button>
+          ${id ? `<button class="btn btn-secondary" onclick="toggleArchive(this, '${esc(id)}', ${c.archived ? "false" : "true"})">${c.archived ? "再開する" : "終了にする"}</button>` : ""}
+          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitEdit(btn, id) {
+    const msg = el("p-msg"); msg.textContent = "";
+    const body = {
+      name: el("p-name").value.trim(), service: el("p-service").value.trim() || null,
+      startsOn: el("p-start").value || null, endsOn: el("p-end").value || null, note: el("p-note").value.trim() || null,
+    };
+    if (!body.name) { msg.textContent = "キャンペーン名を入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => (id ? API.updateSalesCampaign({ id, ...body }) : API.createSalesCampaign(body)));
+      closeModal();
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  async function toggleArchive(btn, id, archived) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSalesCampaign({ id, archived }));
+      closeModal();
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+</script>
+
+</body>
+</html>

@@ -43,6 +43,38 @@
       "destination": "/hr/index.html"
     },
     {
+      "source": "/sales",
+      "destination": "/sales/index.html"
+    },
+    {
+      "source": "/sales/companies",
+      "destination": "/sales/companies.html"
+    },
+    {
+      "source": "/sales/attack",
+      "destination": "/sales/attack.html"
+    },
+    {
+      "source": "/sales/clicks",
+      "destination": "/sales/clicks.html"
+    },
+    {
+      "source": "/sales/analytics",
+      "destination": "/sales/analytics.html"
+    },
+    {
+      "source": "/sales/templates",
+      "destination": "/sales/templates.html"
+    },
+    {
+      "source": "/sales/campaigns",
+      "destination": "/sales/campaigns.html"
+    },
+    {
+      "source": "/r/:token",
+      "destination": "/api/sales/r?t=:token"
+    },
+    {
       "source": "/pc",
       "destination": "/device-consent.html"
     },

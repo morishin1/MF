@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>アタック - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .at-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
+    .at-links a { color:#4a5068; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">アタック</h1>
+  <p class="sl-sub">これからアタックする企業と、送った履歴です。</p>
+  <div class="at-links">
+    <a href="/sales/templates.html">営業文テンプレート</a>
+    <a href="/sales/campaigns.html">キャンペーン</a>
+  </div>
+
+  <div class="sl-sec-h">アタックする企業</div>
+  <div class="sl-sec-sub">未アタック・再アタック待ちの企業。NEXTの期限が来ているもの、自分の担当を先に出します。営業禁止・直近30日以内にアタック済みの企業は出しません。</div>
+  <div class="sl-toolbar">
+    <div class="sl-tabs-pill" id="scope"></div>
+    <select id="f-service" onchange="renderQueue()"></select>
+    <select id="f-campaign" onchange="renderQueue()"></select>
+  </div>
+  <div class="sl-rows" id="queue" style="margin-bottom:28px;"></div>
+
+  <div class="sl-sec-h">送った履歴</div>
+  <div style="overflow-x:auto;">
+    <table class="sl-table">
+      <thead><tr><th>送信日時</th><th>企業</th><th>提案サービス</th><th>テンプレート</th><th>担当</th><th>クリック</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6" class="empty">読み込み中…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmt, fmtDay } = SalesLayout;
+
+  let companies = [];
+  let approaches = [];
+  let me = null;
+  let today = "";
+  let scope = "mine";
+
+  SalesLayout.init({ active: "attack" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const [res, ap] = await Promise.all([API.listSalesCompanies(), API.listSalesApproaches(90)]);
+      if (res.notReady) {
+        el("queue").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span>
+          <div>${esc(res.message)}</div></div>`;
+        el("rows").innerHTML = "";
+        return;
+      }
+      companies = res.companies || [];
+      approaches = ap.approaches || [];
+      me = res.me;
+      today = res.today;
+      if (!companies.some((c) => c.ownerId === me)) scope = "all";
+      renderFilters();
+      renderQueue();
+      renderHistory();
+    } catch (e) {
+      el("queue").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  function renderFilters() {
+    const opts = (id, first, values) => {
+      el(id).innerHTML = `<option value="">${esc(first)}</option>`
+        + values.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+    };
+    opts("f-service", "商材：すべて", [...new Set(companies.map((c) => c.service).filter(Boolean))].sort().map((v) => [v, v]));
+    const camps = new Map(companies.filter((c) => c.campaignId).map((c) => [c.campaignId, c.campaignName || "（名前なし）"]));
+    opts("f-campaign", "キャンペーン：すべて", [...camps.entries()]);
+  }
+
+  function setScope(s) { scope = s; renderQueue(); }
+
+  const RECENT_MS = 30 * 86400000;
+  function queue() {
+    const service = el("f-service").value;
+    const campaign = el("f-campaign").value;
+    return companies.filter((c) => !c.ngReason
+      && ["untouched", "reattack_wait"].includes(c.status)
+      && !(c.lastSentAt && Date.now() - new Date(c.lastSentAt).getTime() < RECENT_MS)
+      && (!c.nextDue || c.nextDue <= today || c.nextKey === "attack")
+      && (scope !== "mine" || c.ownerId === me || !c.ownerId)
+      && (!service || c.service === service)
+      && (!campaign || c.campaignId === campaign))
+      .sort((x, y) => (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
+        || (y.ownerId === me ? 1 : 0) - (x.ownerId === me ? 1 : 0)
+        || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9")));
+  }
+
+  function renderQueue() {
+    el("scope").innerHTML = [["mine", "自分の担当＋担当なし"], ["all", "全員"]].map(([k, l]) =>
+      `<button class="${scope === k ? "on" : ""}" onclick="setScope('${k}')">${esc(l)}</button>`).join("");
+    const list = queue();
+    if (!list.length) {
+      el("queue").innerHTML = `<div class="sl-empty">アタックする企業はありません。<a href="/sales/companies.html?new=1">企業を追加</a></div>`;
+      return;
+    }
+    const LIMIT = 30;
+    el("queue").innerHTML = `<div class="sl-muted">${list.length}社</div>` + list.slice(0, LIMIT).map((c) => `
+      <div class="sl-row${c.overdue ? " overdue" : ""}">
+        <div class="info"><b>${esc(c.name)}</b>
+          <div class="now">${esc([c.industry, c.region, c.service].filter(Boolean).join(" ／ ") || "—")}
+            ${c.formUrl ? "" : `<span class="sl-hot">　フォームURL未登録</span>`}</div>
+          <div class="n">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}）` : ""}　担当：${esc(c.ownerName || "未定")}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="location.href='/sales/companies.html?attack=${esc(c.id)}'">フォームアタック</button>
+      </div>`).join("")
+      + (list.length > LIMIT ? `<div class="sl-muted" style="text-align:center;">ほか${list.length - LIMIT}社</div>` : "");
+  }
+
+  function renderHistory() {
+    if (!approaches.length) {
+      el("rows").innerHTML = `<tr><td colspan="6" class="empty">直近90日の送信はありません。</td></tr>`;
+      return;
+    }
+    el("rows").innerHTML = approaches.slice(0, 300).map((a) => `
+      <tr class="click" onclick="location.href='/sales/companies.html?id=${esc(a.companyId)}'">
+        <td style="white-space:nowrap;">${esc(fmt(a.sentAt))}${a.forced ? `<span class="sl-sub2">警告を押し切り</span>` : ""}</td>
+        <td><span class="sl-nm">${esc(a.companyName || "—")}</span></td>
+        <td>${esc(a.service || "—")}</td>
+        <td>${esc(a.templateName || "—")}</td>
+        <td>${esc(a.employeeName || "—")}</td>
+        <td>${a.clickCount ? `<span class="sl-hot">${a.clickCount}回</span><span class="sl-sub2">最終 ${esc(fmt(a.lastClickAt))}</span>` : "—"}</td>
+      </tr>`).join("");
+  }
+</script>
+
+</body>
+</html>
