@@ -923,6 +923,9 @@
   const docOrderAct = (body) => api("/api/sign/orders", { method: "POST", body });
   const docOrderFileUrl = (id) =>
     api(`/api/sign/orders?file=${encodeURIComponent(id)}`);
+  // 採用承諾条件との突き合わせ・事前入力（採用HR Stage 9）
+  const checkHrOfferMatch = (employeeId) =>
+    api(`/api/sign/orders?employeeId=${encodeURIComponent(employeeId)}&reconcile=1`);
 
   // 届いた書面を取り込む。置いてから、その場で中身を確かめて結びつける
   async function uploadDocOrderFile(id, file) {
@@ -1362,7 +1365,7 @@
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
     myContracts, signContract, signPdfUrl,
-    docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile,
+    docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile, checkHrOfferMatch,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
     openAdminContact,
     uploadMessageFile, messageFileUrl,
