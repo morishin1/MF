@@ -75,6 +75,7 @@
 
 <div class="wrap">
   <h1 class="kp-greet">雇用契約</h1>
+  <div class="kp-crumb">人事・労務 ＞ 雇用契約 ＞ 契約書作成</div>
   <p class="kp-greet-sub">
     契約書を作って本人に送り、画面で署名してもらいます。署名済みのPDFは、本人も会社も落とせます。
   </p>
@@ -114,6 +115,7 @@
           <input id="o-name" type="text" placeholder="労働条件通知書 兼 雇用契約書"></div>
       </div>
 
+      <div id="o-nextaction"></div>
       <div id="o-reconcile"></div>
 
       <div class="inline-controls" style="margin-bottom:14px;">
@@ -845,7 +847,8 @@
     el("o-override").innerHTML = "";
     el("o-save").classList.remove("hidden");
     const empId = el("o-emp").value;
-    if (!empId || editingOrder) { renderOrderFields(); return; }
+    if (!empId || editingOrder) { renderOrderFields(); el("o-nextaction").innerHTML = ""; return; }
+    renderNextAction(empId);
     try {
       reconcileResult = await API.checkHrOfferMatch(empId);
       renderOrderFields(reconcileResult.prefillConditions);
@@ -853,6 +856,66 @@
     } catch {
       renderOrderFields();
     }
+  }
+
+  // 「現在→NEXT ACTION→1つのCTA」を、この人の契約の進み具合に合わせて出す。
+  // 実際のボタンは、下のフォームや一覧に既にあるものをそのまま使う
+  // （同じ操作のボタンを2つ増やさない）
+  function renderNextAction(empId) {
+    const box = el("o-nextaction");
+    const order = orders.find((o) => o.employeeId === empId && o.docKind === "employment" && o.status !== "cancelled");
+    if (!order) {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約書作成待ち</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>社労士へ契約書作成を依頼してください</h3>
+          <div class="meta">下の条件を入力して［依頼を作る］を押してください。</div>
+        </div>`;
+      return;
+    }
+    if (order.status === "requested") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：社労士対応中</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>社労士が契約書を作成しています</h3>
+          <div class="meta">会社側の操作は不要です。書面が届くとここに表示されます。</div>
+        </div>`;
+      return;
+    }
+    if (order.status === "uploaded") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約書完成</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>本人へ電子署名を依頼してください</h3>
+          <button class="btn btn-primary btn-sm" onclick="sendOrder('${esc(order.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">draw</span>電子署名を依頼</button>
+        </div>`;
+      return;
+    }
+    if (order.status === "sent") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約締結待ち</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>本人の署名を待っています</h3>
+        </div>`;
+      return;
+    }
+    if (order.status === "signed") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約締結済み</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>入社手続きを進めてください</h3>
+          <a class="btn btn-primary btn-sm" href="admin-hr.html">
+            <span class="material-symbols-outlined icon-inline">arrow_forward</span>入社手続きへ</a>
+        </div>`;
+      return;
+    }
+    box.innerHTML = "";
   }
 
   function renderReconcile() {
@@ -1030,6 +1093,7 @@
     el("o-msg").textContent = "";
     el("o-reconcile").innerHTML = "";
     el("o-override").innerHTML = "";
+    el("o-nextaction").innerHTML = "";
   }
 
   // 二重生成防止（採用HR Stage 9）の409で示された既存依頼を開く。
@@ -1046,6 +1110,7 @@
     reconcileResult = null;
     el("o-reconcile").innerHTML = "";
     el("o-override").innerHTML = "";
+    el("o-nextaction").innerHTML = "";
     el("o-save").classList.remove("hidden");
     el("o-title").textContent = "依頼を直す";
     el("o-save").innerHTML =

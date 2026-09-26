@@ -50,6 +50,7 @@
       z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:0; }
 
     .hr-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
+    .hr-next .now { font-size:11px; color:#4a5068; margin-bottom:2px; }
     .hr-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }
     .hr-next .lb .material-symbols-outlined { font-size:15px; }
     .hr-next h3 { font-size:18px; font-weight:700; color:#1b2440; margin:6px 0 8px; }
@@ -293,6 +294,7 @@
       </div>
 
       <div class="hr-next" style="margin:16px 20px;">
+        <div class="now">現在：${esc(a.statusLabel)}</div>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>${esc(a.nextAction)}</h3>
         <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>

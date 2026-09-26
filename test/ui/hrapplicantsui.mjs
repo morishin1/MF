@@ -101,10 +101,20 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check((await page.locator(".hr-detail").innerText()).includes("NEXT ACTION"), "NEXT ACTIONが最優先表示される");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   check((await page.locator(".hr-detail").innerText()).includes("応募"), "選考タイムラインが出る");
+  check((await page.locator(".hr-next .now").innerText()).includes("現在："), "「現在：」の状態が先に出る（迷わないUI）");
 
   await page.locator(".hr-detail button", { hasText: "閉じる" }).click();
   await page.waitForTimeout(300);
   check(!(await page.locator(".hr-detail").count()), "閉じると消える");
+
+  console.log("— 使い方（1分マニュアル）は、いつでもここから開ける —");
+  await page.locator(".hr-iconbtn[title*='使い方']").click();
+  await page.waitForTimeout(300);
+  const guide = await page.locator(".kp-viewer").innerText();
+  check(guide.includes("1分マニュアル") && guide.includes("NEXT ACTION"), "1分マニュアルが開く");
+  await page.locator("[data-kp-viewer-close]").click();
+  await page.waitForTimeout(200);
+  check(!(await page.locator(".kp-viewer").count()), "閉じると消える");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();

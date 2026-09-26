@@ -77,6 +77,9 @@
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
       </nav>
       <div class="hr-actions">
+        <button class="hr-iconbtn" onclick="HRLayout.showGuide()" title="使い方（1分マニュアル）">
+          <span class="material-symbols-outlined">help</span>
+        </button>
         <button class="hr-iconbtn" id="hr-bell-btn" onclick="HRLayout.toggleBell()" title="通知">
           <span class="material-symbols-outlined">notifications</span>
           <span class="hr-dot hidden" id="hr-bell-dot">0</span>
@@ -114,6 +117,31 @@
     // 通知の中身は Stage 9（notifications統合）で実装する。いまは枠だけ
   }
 
+  // 迷ったら、これだけ覚えていればよい。長い別ページにはしない
+  // （KPLayout.viewer を使い回す。新しい画面・モーダルは増やさない）
+  const GUIDE = `採用HR 1分マニュアル
+
+① 応募者を登録
+
+② 応募者を開いたら「NEXT ACTION」を見る
+
+③ 面談 → 評価 → 良い候補者は社長推薦
+
+④ 社長はCEO REVIEWで会う・判断する
+
+⑤ 内定したら人事が合格通知を作成・送付
+
+⑥ 本人が承諾したら「本採用へ進める」
+
+⑦ その後は既存GWで
+　社員登録 → 契約書 → 電子署名 → 入社手続き
+
+迷ったら、「NEXT ACTIONを見る」で統一してください。`;
+
+  function showGuide() {
+    if (window.KPLayout?.viewer) KPLayout.viewer({ title: "採用HR 1分マニュアル", text: GUIDE });
+  }
+
   async function init(opts = {}) {
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "index.html"; return null; }
@@ -136,5 +164,5 @@
     return { me, canRecruit, canDecide };
   }
 
-  window.HRLayout = { init, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, toggleBell };
+  window.HRLayout = { init, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, toggleBell, showGuide };
 })();

@@ -42,7 +42,7 @@ const MISMATCH_RECONCILE = {
 const OWNER = { id: "emp-o1", display_name: "社長", status: "active" };
 const ADMIN_EMP = { id: "emp-a1", display_name: "総務 次郎", status: "active" };
 
-function routeCommon(page, { appRole, gwRoles, isHr }, { reconcileCalls, posted }) {
+function routeCommon(page, { appRole, gwRoles, isHr }, { reconcileCalls, posted, orders = [] }) {
   page.route("**/api/**", (route) => {
     const req = route.request();
     const url = req.url();
@@ -70,7 +70,7 @@ function routeCommon(page, { appRole, gwRoles, isHr }, { reconcileCalls, posted 
     }
     if (/\/api\/sign\/orders/.test(path) && method === "GET") {
       return send({
-        orders: [], counts: {}, kinds: DOC_KINDS_MOCK, fields: ORDER_FIELDS_MOCK,
+        orders, counts: {}, kinds: DOC_KINDS_MOCK, fields: ORDER_FIELDS_MOCK,
         statuses: [], noticeTitle: "労働条件通知書 兼 雇用契約書", advisor: false,
       });
     }
@@ -211,6 +211,58 @@ console.log("\n=== 管理者（hrでない）：不一致でも特例導線は�
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
 }
+
+console.log("\n=== NEXT ACTION：契約の進み具合に合わせて「現在」と次の1手を出す ===");
+
+async function nextActionCase(label, order, wants) {
+  const reconcileCalls = [];
+  const posted = [];
+  const page = await br.newPage({ viewport: { width: 1300, height: 1300 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "x@8grp.co.jp" }));
+  });
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+  routeCommon(page, { appRole: "owner", gwRoles: ["owner"], isHr: true },
+    { reconcileCalls, posted, orders: order ? [order] : [] });
+
+  await page.goto(`${BASE}/admin-esign.html?tab=order`);
+  await page.waitForTimeout(1000);
+  await page.selectOption("#o-emp", "e1");
+  await page.waitForTimeout(500);
+
+  const text = await page.locator("#o-nextaction").innerText();
+  check(text.includes(wants.now), `${label}：現在の表示`);
+  check(text.includes(wants.next), `${label}：NEXT ACTIONの表示`);
+  if (wants.button) {
+    check(await page.locator("#o-nextaction button, #o-nextaction a", { hasText: wants.button }).count() === 1,
+      `${label}：CTAが出る（${wants.button}）`);
+  } else {
+    check(await page.locator("#o-nextaction button, #o-nextaction a").count() === 0, `${label}：CTAは出ない`);
+  }
+
+  check(errs.length === 0, `${label}：画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
+await nextActionCase("依頼がまだ無い", null,
+  { now: "契約書作成待ち", next: "社労士へ契約書作成を依頼してください" });
+
+await nextActionCase("社労士対応中",
+  { id: "o1", employeeId: "e1", docKind: "employment", status: "requested" },
+  { now: "社労士対応中", next: "社労士が契約書を作成しています" });
+
+await nextActionCase("契約書完成（アップロード済み）",
+  { id: "o1", employeeId: "e1", docKind: "employment", status: "uploaded" },
+  { now: "契約書完成", next: "本人へ電子署名を依頼してください", button: "電子署名を依頼" });
+
+await nextActionCase("契約締結待ち（署名依頼ずみ）",
+  { id: "o1", employeeId: "e1", docKind: "employment", status: "sent" },
+  { now: "契約締結待ち", next: "本人の署名を待っています" });
+
+await nextActionCase("契約締結済み",
+  { id: "o1", employeeId: "e1", docKind: "employment", status: "signed" },
+  { now: "契約締結済み", next: "入社手続きを進めてください", button: "入社手続きへ" });
 
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");

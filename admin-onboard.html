@@ -93,6 +93,7 @@
     3か月の目標・月ごとのKPI・初日にやることまで、まとめて作ります。
   </p>
 
+  <div id="crumb"></div>
   <div id="notice"></div>
 
   <div class="card">
@@ -381,6 +382,7 @@
       return;
     }
     advancePrefillData = r.prefill || {};
+    el("crumb").innerHTML = `<div class="kp-crumb">人事・労務 ＞ 採用 ＞ 本採用</div>`;
 
     const p = advancePrefillData;
     if (p.name) el("f-name").value = p.name;
@@ -393,8 +395,22 @@
     if (p.wageType) el("f-wage-type").value = p.wageType;
     if (p.wageAmount != null) el("f-wage").value = p.wageAmount;
 
-    el("notice").innerHTML = `<div class="banner ok"><span class="material-symbols-outlined">info</span>
-      <div>採用HRから、選考時の採用条件を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div></div>`;
+    el("notice").innerHTML = `
+      <div class="kp-next">
+        <div class="now">現在：本採用手続き</div>
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+        <h3>社内情報を確認して社員登録してください</h3>
+        <div class="meta">採用HRから、選考時の採用条件を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div>
+        <button class="btn btn-primary btn-sm" onclick="focusStep3()">
+          <span class="material-symbols-outlined icon-inline">person_add</span>社員登録</button>
+      </div>`;
+  }
+
+  // NEXT ACTIONの［社員登録］は、この下にあるSTEP3のフォームへ案内するだけ。
+  // 別の画面やボタンを増やさない
+  function focusStep3() {
+    el("f-name").scrollIntoView({ behavior: "smooth", block: "center" });
+    el("f-name").focus();
   }
 
   // 社員ができたら、応募者側（gw_hr_applicants）を確定する

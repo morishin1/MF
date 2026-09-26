@@ -173,6 +173,15 @@ console.log("\n=== admin-onboard.html：採用条件が事前入力される ===
   check(await page.locator("#f-hours").inputValue() === "40", "勤務時間が事前入力される");
   check(await page.locator("#f-wage").inputValue() === "400000", "給与額が事前入力される");
   check((await page.locator("#notice").innerText()).includes("採用HRから"), "採用HRからの案内が出る");
+  check((await page.locator("#notice").innerText()).includes("NEXT ACTION")
+    && (await page.locator("#notice").innerText()).includes("社員登録してください"),
+    "現在／NEXT ACTIONの形で統一されている（迷わないUI）");
+  check((await page.locator("#crumb").innerText()).includes("人事・労務"), "現在地（人事・労務 ＞ 採用 ＞ 本採用）が出る");
+
+  console.log("\n— NEXT ACTIONの［社員登録］は、STEP3のフォームへ案内するだけ —");
+  await page.locator("#notice button", { hasText: "社員登録" }).click();
+  await page.waitForTimeout(300);
+  check(await page.locator("#f-name").evaluate((n) => n === document.activeElement), "STEP3のフォームにフォーカスが移る");
 
   console.log("\n— STEP1×STEP2を選んでも、実際の契約条件はテンプレートに上書きされない —");
   await page.locator("#m-wm1").click();
