@@ -628,6 +628,45 @@ await ok("クリック：営業日の17時前は当日、17時以降・休日は
   assert.equal(autoNext("sent", new Date("2026-09-18T02:00:00Z")).next_action_on, "2026-09-28");
 });
 
+await ok("ステータス画面から空欄（null）のNEXTで「返信あり」にしても、返信対応が入る", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  await patchCo({ id: c.id, status: "replied", nextAction: null, nextActionOn: null, ownerId: null, campaignId: null });
+  assert.equal(db.rows.gw_sales_companies[0].next_action, "返信対応");
+});
+
+await ok("失注・対象外・営業禁止の会社は、クリックされても営業を再開しない（ログと回数は残す）", async () => {
+  for (const [field, value] of [["status", "lost"], ["status", "excluded"], ["ng_reason", "unsubscribed"]]) {
+    setup();
+    const c = await newCompany();
+    const { url } = await sendAttack(c.id);
+    db.rows.gw_sales_companies[0][field] = value;
+    const before = { ...db.rows.gw_sales_companies[0] };
+    const r = await click(url.split("/r/")[1]);
+    assert.equal(r.statusCode, 302);
+    const co = db.rows.gw_sales_companies[0];
+    assert.equal(co.status, before.status, `${field}=${value}`);
+    assert.equal(co.next_action, before.next_action, `${field}=${value}`);
+    assert.equal(db.rows.gw_sales_approaches[0].click_count, 1);
+    assert.equal(notified.length, 0);
+  }
+});
+
+await ok("同時に開かれても回数を取りこぼさない（読んだ値＋1にしない）", async () => {
+  setup();
+  const c = await newCompany();
+  const { url } = await sendAttack(c.id);
+  const a = db.rows.gw_sales_approaches[0];
+  // 別のリクエストが先に有効クリックを記録したが、まだ回数を書き戻していない状態
+  db.rows.gw_sales_click_events.push({ id: "other", tenant_id: "t1", approach_id: a.id, company_id: c.id,
+    clicked_at: new Date(Date.now() - 1000).toISOString(), is_valid: true, ip_hash: "someone-else" });
+  await click(url.split("/r/")[1]);
+  assert.equal(a.click_count, 2);
+  assert.equal(valid().find((e) => e.id !== "other").click_no, 2);
+  assert.equal(a.first_click_at, db.rows.gw_sales_click_events[0].clicked_at, "初回は早いほう");
+});
+
 console.log("\n=== テンプレート ===\n");
 
 await ok("テンプレートごとの使用回数・クリック率", async () => {

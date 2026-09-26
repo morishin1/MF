@@ -144,7 +144,8 @@ async function update(req, res, sb, ctx, user) {
     if (row.error) return json(res, 400, row);
     patch = row.value;
     // 返信あり・商談へ手で進めたときも、NEXT を決めていなければ自動で入れる
-    const nextGiven = body.nextAction !== undefined || body.nextActionOn !== undefined;
+    // 空欄（null・""）は「決めていない」。画面のフォームは空欄を null で送ってくる
+    const nextGiven = Boolean(patch.next_action || patch.next_action_on);
     if (patch.status && patch.status !== before.status && !nextGiven) {
       if (patch.status === "replied") Object.assign(patch, autoNext("reply"));
       if (patch.status === "meeting") Object.assign(patch, autoNext("meeting"));

@@ -25,7 +25,7 @@ import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
 import { notifySlack } from "../../lib/slack.js";
 import {
-  TRACKING_RE, classifyClick, ipHash, statusRank, safeUrl, autoNext, DEDUPE_SECONDS,
+  TRACKING_RE, classifyClick, ipHash, statusRank, safeUrl, autoNext, DEDUPE_SECONDS, CLOSED_STATUSES,
 } from "../../lib/sales.js";
 
 function fallbackUrl() {
@@ -97,26 +97,33 @@ async function record(sb, a, { ua, dest, req }) {
     duplicate = Boolean(recent?.length);
   }
   const { valid, reason } = classifyClick({ method: req.method, ua, headers: req.headers || {}, duplicate });
-  const clickNo = valid ? (a.click_count || 0) + 1 : null;
-
   // ログは全部残す（数えないものも）
-  await sb.from("gw_sales_click_events").insert({
+  const { data: ev } = await sb.from("gw_sales_click_events").insert({
     tenant_id: a.tenant_id, approach_id: a.id, company_id: a.company_id,
     clicked_at: nowIso, destination_url: dest, method: String(req.method || "GET").toUpperCase(),
-    is_valid: valid, excluded_reason: reason, click_no: clickNo,
+    is_valid: valid, excluded_reason: reason,
     user_agent: ua || null,
     referrer: String(req.headers?.referer || req.headers?.referrer || "").slice(0, 500) || null,
     ip_hash: hash,
-  });
+  }).select("id").single();
   if (!valid) return;
 
+  // 回数は「読んだ値＋1」にしない。同時に2人が開くと、どちらも1回目になってしまう。
+  // 記録したあとに有効クリックを数え直す（同時でも、あとから書いたほうが正しい数になる）
+  const { data: all } = await sb.from("gw_sales_click_events").select("id, clicked_at")
+    .eq("approach_id", a.id).eq("is_valid", true).limit(10000);
+  const clickNo = Math.max((all || []).length, 1);
+  const firstAt = (all || []).map((x) => x.clicked_at).sort()[0] || nowIso;
+  if (ev?.id) await sb.from("gw_sales_click_events").update({ click_no: clickNo }).eq("id", ev.id);
   await sb.from("gw_sales_approaches").update({
-    click_count: clickNo, last_click_at: nowIso, first_click_at: a.first_click_at || nowIso,
+    click_count: clickNo, last_click_at: nowIso, first_click_at: firstAt,
   }).eq("id", a.id);
 
   const { data: c } = await sb.from("gw_sales_companies")
-    .select("id, name, status, owner_id").eq("id", a.company_id).maybeSingle();
+    .select("id, name, status, owner_id, ng_reason").eq("id", a.company_id).maybeSingle();
   if (!c) return;
+  // 営業禁止・失注・対象外の会社は、古いリンクが開かれても営業を再開しない（ログと回数だけ残す）
+  if (c.ng_reason || CLOSED_STATUSES.includes(c.status)) return;
   // 返信・商談より前の会社だけ、ステータスと NEXT を「クリックあり・要フォロー」へ。
   // 返信対応・商談準備の最中なら、そちらの NEXT を残す（クリックは未対応クリックとして別に出る）
   if (statusRank(c.status) < statusRank("replied")) {
