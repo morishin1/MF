@@ -163,6 +163,12 @@
   const mfaReset = (employeeId, note) =>
     api("/api/mfa", { method: "POST", body: { action: "reset", employeeId, note } });
 
+  // サーバが db_query_failed のような技術的なコードだけを返し、hint/messageを
+  // 付け忘れたときのための最後の砦。detail（生のPostgresエラー文言）を
+  // そのまま画面に出さない（採用HR Stage 10：エラー表示の整理）
+  const FRIENDLY_FALLBACK = "処理に失敗しました。時間をおいてもう一度お試しください。";
+  const isRawTechnicalCode = (code) => typeof code === "string" && /^db_/.test(code);
+
   function isLoggedIn() { return !!loadSession(); }
   function currentEmail() { return loadSession()?.email || null; }
   function logout() { clearSession(); }
@@ -178,7 +184,8 @@
     if (!r.ok) {
       const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
       err.status = r.status; err.code = data.error || null;
-      err.hint = data.hint || data.message || null; err.detail = data.detail;
+      err.hint = data.hint || data.message || (isRawTechnicalCode(err.code) ? FRIENDLY_FALLBACK : null);
+      err.detail = data.detail;
       throw err;
     }
     return data;
@@ -220,7 +227,7 @@
       const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
       err.status = r.status;
       err.code = data.error || null;
-      err.hint = data.hint || data.message || null;
+      err.hint = data.hint || data.message || (isRawTechnicalCode(err.code) ? FRIENDLY_FALLBACK : null);
       err.detail = data.detail;
       err.body = data;
       // 二段階認証が要るのに済んでいない。どの画面で起きても、登録の場所へ送る。

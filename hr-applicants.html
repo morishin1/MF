@@ -301,7 +301,9 @@
           : a.nextActionKey === "decide"
             ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">採用判断は社長・管理者が行います。</p>`
             : a.nextActionKey === "advance"
-              ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">本採用へ進めるのは社長・管理者が行います。</p>` : ""}
+              ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">本採用へ進めるのは社長・管理者が行います。</p>`
+              : a.status === "done" && a.employeeId
+                ? `<a class="btn btn-secondary btn-sm" href="admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
       </div>
 
       <div class="hr-tabs">
@@ -685,7 +687,7 @@
         <textarea id="of-message" rows="3">${v("messageToCandidate", "")}</textarea>
         <div id="of-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="submitOffer(this)">${reviewing ? "内容を保存" : "作成する"}</button>
+          <button class="btn ${reviewing ? "btn-secondary" : "btn-primary"}" onclick="submitOffer(this)">${reviewing ? "内容を保存" : "作成する"}</button>
           ${reviewing ? `<button class="btn btn-primary" onclick="submitConfirmOffer(this)">確定して送付待ちにする</button>` : ""}
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
         </div>

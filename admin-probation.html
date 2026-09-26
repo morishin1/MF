@@ -114,6 +114,10 @@
     el("notice").innerHTML = "";
     renderList();
     renderSettings();
+    // 他画面（本採用完了など）から「この人の試用期間へ」で来たとき、
+    // そのまま詳細を開く
+    const empId = new URLSearchParams(location.search).get("employeeId");
+    if (empId) openDetail(empId);
   }
 
   // --- 一覧 -------------------------------------------------------------------

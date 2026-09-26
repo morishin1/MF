@@ -288,10 +288,16 @@
         <div>${a.holdReason ? `${esc(a.holdReason)}<br>` : ""}${a.holdNextStep ? `次に確認：${esc(a.holdNextStep)}` : ""}
           ${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
       <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">選考タイムライン</h4>
-      <div class="hr-tl">${(res.timeline || []).map((t, i, arr) => `
+      <div class="hr-tl">${ceoTimeline(res.timeline).map((t, i, arr) => `
         <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
           <div class="l">${esc(t.label)}${t.detail ? `　${esc(t.detail)}` : ""}${i === arr.length - 1 ? `<span class="hr-chip" style="margin-left:6px;">← 現在</span>` : ""}</div>
         </div>`).join("") || `<p class="muted">まだ記録がありません。</p>`}</div>`;
+  }
+
+  // 社長の画面は「会う・判断する」まで。合格通知の作成・送付・閲覧・承諾待ちは
+  // 契約準備の事務であって、社長の判断材料ではないので出さない（指示書§10）
+  function ceoTimeline(timeline) {
+    return (timeline || []).filter((t) => !String(t.eventKey || "").startsWith("offer_"));
   }
 
   function fmtDate(s) {

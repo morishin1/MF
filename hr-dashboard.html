@@ -18,16 +18,15 @@
     .hr-sub { color:#6b7080; font-size:13px; margin:0 0 22px; }
     .hr-sec-h { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
 
-    .hr-today { display:grid; gap:10px; margin-bottom:26px; }
-    .hr-today-top { background:#e6f050; border-radius:10px; padding:16px 18px; display:flex;
-      align-items:center; gap:14px; cursor:pointer; }
-    .hr-today-top .material-symbols-outlined { font-size:28px; color:#1b2440; }
-    .hr-today-top b { font-size:15px; color:#1b2440; }
-    .hr-today-top .n { font-size:12px; color:#4a5068; }
-    .hr-today-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
-    .hr-today-card { background:#fff; border:1px solid #e2e2dc; border-radius:9px; padding:12px 14px; cursor:pointer; font-size:12.5px; }
-    .hr-today-card b { display:block; color:#1b2440; font-size:13px; margin-bottom:3px; }
-    .hr-today-card .n { color:#6b7080; }
+    .hr-today { display:grid; gap:8px; margin-bottom:26px; }
+    .hr-today-count { font-size:12px; color:#6b7080; margin-bottom:2px; }
+    .hr-today-row { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px;
+      padding:12px 14px; display:flex; align-items:center; gap:14px; }
+    .hr-today-row.overdue { border-left-color:#c0392b; }
+    .hr-today-row .info { flex:1; min-width:0; }
+    .hr-today-row b { display:block; color:#1b2440; font-size:14px; }
+    .hr-today-row .n { color:#4a5068; font-size:12.5px; margin-top:2px; }
+    .hr-today-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
 
     .hr-funnel { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 6px; }
     .hr-funnel .step { flex:1; min-width:110px; background:#fff; border:1px solid #e2e2dc; border-radius:9px;
@@ -75,7 +74,7 @@
   <h1 class="hr-title">ダッシュボード</h1>
   <p class="hr-sub">今日、何をすべきかが分かります。</p>
 
-  <div class="hr-sec-h">TODAY'S ACTION</div>
+  <div class="hr-sec-h">今やること</div>
   <div class="hr-today" id="today"></div>
 
   <div class="hr-sec-h">GOOD CANDIDATES</div>
@@ -88,6 +87,7 @@
   <div class="hr-funnel" id="funnel"></div>
   <div class="hr-auto">TimeRex → Google Meet → Google Drive → Slack（自動連携）</div>
 
+  <div class="hr-sec-h">KPI</div>
   <div class="hr-kpi" id="kpi"></div>
 
   <div class="hr-sec-h">応募者一覧</div>
@@ -168,31 +168,27 @@
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
 
+  // 「いま何をすべきか」だけを、対象者ごとに1行＋1つのボタンで出す。
+  // HR側で次に動く必要が無い（本人の回答待ちなど＝nextActionCtaが無い）ものは出さない
   function renderToday() {
-    const open = applicants.filter((a) => !["accepted", "declined", "done", "passed"].includes(a.status));
-    const overdue = open.filter((a) => a.overdue);
-    const byNext = {};
-    for (const a of open) {
-      if (!a.nextAction) continue;
-      (byNext[a.nextAction] = byNext[a.nextAction] || []).push(a);
-    }
-    const cards = Object.entries(byNext).sort((a, b) => b[1].length - a[1].length);
+    const items = applicants
+      .filter((a) => !["accepted", "declined", "done", "passed"].includes(a.status) && a.nextActionCta)
+      .sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0));
 
-    if (!cards.length) {
-      el("today").innerHTML = `<div class="empty">いまのところ、対応が必要なものはありません。</div>`;
+    if (!items.length) {
+      el("today").innerHTML = `<div class="empty">対応が必要な応募者はいません。</div>`;
       return;
     }
-    const [firstLabel, firstList] = cards[0];
+    const LIMIT = 12;
+    const shown = items.slice(0, LIMIT);
     el("today").innerHTML = `
-      <div class="hr-today-top" onclick="location.href='hr-applicants.html'">
-        <span class="material-symbols-outlined">bolt</span>
-        <div><b>${esc(firstLabel)}</b><div class="n">${esc(firstList.map((a) => a.name).slice(0, 3).join("・"))}
-          ${firstList.length}件${overdue.length ? `　期限超過 ${overdue.length}件` : ""}</div></div>
-      </div>
-      <div class="hr-today-grid">${cards.slice(1).map(([label, list]) => `
-        <div class="hr-today-card" onclick="location.href='hr-applicants.html'">
-          <b>${esc(label)}</b><span class="n">${esc(list.map((a) => a.name).slice(0, 2).join("・"))} ${list.length}件</span>
-        </div>`).join("")}</div>`;
+      <div class="hr-today-count">${items.length}件</div>
+      ${shown.map((a) => `
+        <div class="hr-today-row${a.overdue ? " overdue" : ""}">
+          <div class="info"><b>${esc(a.name)}</b><span class="n">${esc(a.nextAction)}</span></div>
+          <button class="btn btn-primary btn-sm" onclick="location.href='hr-applicants.html?id=${esc(a.id)}'">${esc(a.nextActionCta)}</button>
+        </div>`).join("")}
+      ${items.length > LIMIT ? `<div class="hr-today-more">ほか${items.length - LIMIT}件は応募者一覧で確認してください</div>` : ""}`;
   }
 
   function renderFunnel() {

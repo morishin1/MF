@@ -30,6 +30,10 @@
                 display:flex; align-items:center; gap:22px; height:56px; position:sticky; top:0; z-index:20; }
       .hr-logo { font-weight:700; font-size:14px; color:#1b2440; letter-spacing:.02em; white-space:nowrap; }
       .hr-logo b { color:#1b2440; } .hr-logo span { color:#6b7080; font-weight:500; }
+      .hr-back { display:flex; align-items:center; gap:4px; color:#9aa0b4; text-decoration:none;
+                  font-size:11.5px; white-space:nowrap; }
+      .hr-back .material-symbols-outlined { font-size:16px; }
+      .hr-back:hover { color:#6b7080; }
       .hr-nav { display:flex; gap:4px; flex:1; }
       .hr-nav a { display:flex; align-items:center; gap:6px; padding:0 12px; height:56px;
                   color:#4a5068; text-decoration:none; font-size:13px; font-weight:500;
@@ -66,6 +70,8 @@
     bar.className = "hr-bar";
     bar.innerHTML = `
       <div class="hr-logo"><b>EIGHT</b> <span>/ HR</span></div>
+      <a class="hr-back" href="admin-dashboard.html" title="人事・労務 ＞ 採用">
+        <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="hr-nav">
         ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
