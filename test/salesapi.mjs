@@ -157,6 +157,7 @@ const { default: approaches } = await import(atRoot("api/sales/approaches/index.
 const { default: templates } = await import(atRoot("api/sales/templates/index.js"));
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
 const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
+const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -197,7 +198,7 @@ function setup() {
   slacked.length = 0;
   db.rows = {
     gw_sales_companies: [], gw_sales_approaches: [], gw_sales_click_events: [], gw_sales_events: [],
-    gw_sales_templates: [], gw_sales_campaigns: [],
+    gw_sales_templates: [], gw_sales_campaigns: [], gw_sales_meetings: [],
     gw_employees: [
       { id: "emp-s1", tenant_id: "t1", display_name: "営業 一郎", status: "active" },
       { id: "emp-s2", tenant_id: "t1", display_name: "営業 二郎", status: "active" },
@@ -718,6 +719,105 @@ await ok("/sales を使えない人は使えない（外のサイトを取りに
   who = SALES;
   const bad = await call(lookup, { method: "GET", url: "/api/sales/lookup?url=javascript%3Aalert(1)" });
   assert.equal(bad.statusCode, 400);
+});
+
+console.log("\n=== 営業面談（/api/sales/meetings） ===\n");
+
+const mIssue = (body) => call(meetingsApi, { method: "POST", url: "/api/sales/meetings", body });
+const mAct = (body) => call(meetingsApi, { method: "PATCH", url: "/api/sales/meetings", body });
+
+await ok("面談を設定：初回商談30分を作り、会社と面談のIDつきの TimeRex URL を返す。2回押しても1件", async () => {
+  setup();
+  process.env.TIMEREX_SALES_MEETING_URL = "https://timerex.net/s/eight/first30";
+  const c = await newCompany();
+  const r = await mIssue({ companyId: c.id });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const m = r.body.meeting;
+  assert.equal(m.kind, "first_meeting");
+  assert.equal(m.kindLabel, "初回商談");
+  assert.equal(m.durationMin, 30);
+  assert.equal(m.status, "scheduling");
+  assert.equal(m.ownerId, "emp-s1", "担当は会社の担当");
+  assert.equal(m.schedulingUrl, `https://timerex.net/s/eight/first30?sales_company_id=${c.id}&sales_meeting_id=${m.id}`);
+  const again = await mIssue({ companyId: c.id });
+  assert.equal(again.body.reused, true);
+  assert.equal(again.body.meeting.id, m.id);
+  assert.equal(db.rows.gw_sales_meetings.length, 1);
+  delete process.env.TIMEREX_SALES_MEETING_URL;
+});
+
+await ok("TimeRex の URL が未設定でも面談は作れる（URL は null、日程は手入力）", async () => {
+  setup();
+  delete process.env.TIMEREX_SALES_MEETING_URL;
+  const c = await newCompany();
+  const r = await mIssue({ companyId: c.id });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.meeting.schedulingUrl, null);
+  assert.equal(r.body.timerexConfigured, false);
+});
+
+await ok("送付済み：NEXT は「日程調整待ち（初回商談）」3営業日後。未対応クリックから外れる", async () => {
+  setup();
+  const c = await newCompany();
+  const { url } = await sendAttack(c.id);
+  db.rows.gw_sales_approaches[0].last_click_at = new Date(Date.now() - 5000).toISOString();
+  await click(url.split("/r/")[1]);
+  const { body } = await mIssue({ companyId: c.id });
+  const r = await mAct({ id: body.meeting.id, action: "sent" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(r.body.meeting.schedulingSentAt);
+  const co = db.rows.gw_sales_companies[0];
+  assert.equal(co.next_action, "日程調整待ち（初回商談）");
+  assert.equal(co.next_action_on, addBizDays(todayJst(), 3));
+  const l = await list();
+  assert.equal(l.body.companies[0].unhandledClick, false);
+  assert.equal(l.body.companies[0].meetingStatus, "scheduling");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.label.startsWith("面談の日程調整URLを送付")));
+});
+
+await ok("日程確定：面談予定・会社は商談へ・NEXT は面談の日に「商談準備」・履歴に残る", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const { body } = await mIssue({ companyId: c.id });
+  const at = "2099-10-05T05:00:00.000Z"; // JST 14:00
+  const r = await mAct({ id: body.meeting.id, action: "schedule", scheduledAt: at, meetingUrl: "https://meet.google.com/abc-defg-hij" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.meeting.status, "scheduled");
+  assert.equal(r.body.meeting.scheduledAt, at);
+  assert.equal(r.body.meeting.meetingUrl, "https://meet.google.com/abc-defg-hij");
+  const co = db.rows.gw_sales_companies[0];
+  assert.equal(co.status, "meeting");
+  assert.equal(co.next_action, "商談準備");
+  assert.equal(co.next_action_on, "2099-10-05");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.label === "面談予定：10/5 14:00（初回商談）"));
+  const d = await getOne(c.id);
+  assert.equal(d.body.meetings[0].status, "scheduled");
+  assert.equal(d.body.meetingsReady, true);
+  // 面談予定のあいだは、新しく日程調整URLを出さない
+  const again = await mIssue({ companyId: c.id });
+  assert.equal(again.body.meeting.id, body.meeting.id);
+});
+
+await ok("日時なし・変なURLは断る。取りやめたら次は新しく作れる", async () => {
+  setup();
+  const c = await newCompany();
+  const { body } = await mIssue({ companyId: c.id });
+  assert.equal((await mAct({ id: body.meeting.id, action: "schedule" })).statusCode, 400);
+  assert.equal((await mAct({ id: body.meeting.id, action: "schedule", scheduledAt: "2099-01-01T00:00:00Z", meetingUrl: "javascript:alert(1)" })).statusCode, 400);
+  assert.equal((await mAct({ id: body.meeting.id, action: "cancel" })).body.meeting.status, "canceled");
+  const next = await mIssue({ companyId: c.id });
+  assert.notEqual(next.body.meeting.id, body.meeting.id);
+});
+
+await ok("営業禁止の会社・/sales を使えない人は面談を設定できない", async () => {
+  setup();
+  const c = await newCompany();
+  await patchCo({ id: c.id, ngReason: "unsubscribed" });
+  assert.equal((await mIssue({ companyId: c.id })).statusCode, 403);
+  who = MEMBER;
+  assert.equal((await mIssue({ companyId: c.id })).statusCode, 403);
+  assert.equal(db.rows.gw_sales_meetings.length, 0);
 });
 
 console.log("\n=== 小さな道具 ===\n");

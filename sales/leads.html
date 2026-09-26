@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260927-sales2">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales3">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -40,7 +40,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">リード</h1>
-  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追ってください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談）。</p>
+  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追って、「面談を設定」で面談につなげてください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談）。</p>
 
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="stages"></div></div>
   <div class="ld-filters">
@@ -53,9 +53,9 @@
   <div class="ld-list" id="list"><div class="sl-empty">読み込み中…</div></div>
 </div>
 
-<script src="../js/api-client.js?v=20260927-sales2"></script>
-<script src="../js/layout.js?v=20260927-sales2"></script>
-<script src="../js/sales-layout.js?v=20260927-sales2"></script>
+<script src="../js/api-client.js?v=20260927-sales3"></script>
+<script src="../js/layout.js?v=20260927-sales3"></script>
+<script src="../js/sales-layout.js?v=20260927-sales3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -66,12 +66,14 @@
   let me = null;
   let stage = "all";
 
-  // 面談の「調整中／予定」を分けるのは、面談連携（Phase 2）で面談の記録ができてから
+  // 面談調整中＝日程調整URLを出して相手の予約待ち。面談予定＝日程が決まった（db/090 の面談）
+  const inMeeting = (c) => Boolean(c.meetingStatus);
   const STAGES = [
     ["all", "すべて", () => true],
-    ["clicked", "クリックあり", (c) => c.status === "clicked" || (c.clickCount > 0 && c.status === "attacked")],
-    ["replied", "返信あり", (c) => c.status === "replied"],
-    ["meeting", "面談", (c) => c.status === "meeting"],
+    ["clicked", "クリックあり", (c) => !inMeeting(c) && (c.status === "clicked" || (c.clickCount > 0 && c.status === "attacked"))],
+    ["replied", "返信あり", (c) => !inMeeting(c) && c.status === "replied"],
+    ["scheduling", "面談調整中", (c) => c.meetingStatus === "scheduling"],
+    ["scheduled", "面談予定", (c) => c.meetingStatus === "scheduled" || (!inMeeting(c) && c.status === "meeting")],
     ["proposal", "提案中", (c) => c.status === "proposal"],
     ["won", "成約", (c) => c.status === "won"],
   ];
@@ -106,6 +108,7 @@
 
   // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談 → 提案 → 成約
   function group(c) {
+    if (inMeeting(c)) return 3;
     if (c.status === "replied") return 0;
     if (isWarm(c) && c.clickCount >= 2) return 1;
     if (isWarm(c)) return 2;
@@ -142,10 +145,10 @@
       && (!v("f-campaign") || c.campaignId === v("f-campaign")));
   }
 
-  function cta(c) {
-    if (c.unhandledClick) return "フォローする";
-    if (c.status === "replied") return "返信対応";
-    return "開く";
+  // リードの Primary CTA は「面談を設定」1つ（要件 Phase 2）。成約済みは開くだけ
+  const cta = (c) => (c.status === "won" ? "開く" : "面談を設定");
+  function go(id, meeting) {
+    location.href = `/sales/companies.html?id=${encodeURIComponent(id)}${meeting ? "&meeting=1" : ""}`;
   }
 
   function render() {
@@ -162,7 +165,7 @@
     el("list").innerHTML = list.map((c) => {
       const warm = isWarm(c);
       return `
-      <div class="ld-card ${c.unhandledClick ? "hot" : warm ? "warm" : "lead"}" onclick="location.href='/sales/companies.html?id=${esc(c.id)}'">
+      <div class="ld-card ${c.unhandledClick ? "hot" : warm ? "warm" : "lead"}" onclick="go('${esc(c.id)}', false)">
         <div class="info">
           <div class="nm">${c.unhandledClick ? "🔥 " : ""}${esc(c.name)}
             <span class="ld-grade ${warm ? "warm" : "lead"}">${warm ? "ウォームリード" : "リード"}</span>
@@ -172,10 +175,11 @@
             ${c.lastClickAt ? `<span>${esc(ago(c.lastClickAt))}にクリック</span>` : ""}
             ${c.clickCount ? `<span class="${c.clickCount >= 2 ? "sl-hot" : ""}">クリック ${c.clickCount}回</span>` : ""}
             <span>担当 ${esc(c.ownerName || "未定")}</span>
+            ${c.meetingStatus ? `<span class="sl-hot">${c.meetingStatus === "scheduled" ? `面談予定 ${esc(SalesLayout.fmt(c.meetingAt))}` : "面談調整中"}</span>` : ""}
           </div>
           <div class="next">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
         </div>
-        <button class="btn ${c.unhandledClick || c.status === "replied" ? "btn-primary" : "btn-secondary"} btn-sm">${esc(cta(c))}</button>
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();go('${esc(c.id)}', ${c.status === "won" ? "false" : "true"})">${esc(cta(c))}</button>
       </div>`;
     }).join("");
   }
