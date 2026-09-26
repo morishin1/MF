@@ -208,7 +208,7 @@ console.log("\n=== recruiterはCEO REVIEWを開けない ===");
   });
   await page.goto(`${BASE}/hr/ceo-review.html`);
   await page.waitForTimeout(900);
-  check(page.url().includes("hr/index.html"), "権限が無いと、ダッシュボードへ送り返される");
+  check(/\/hr\/(index\.html)?$/.test(new URL(page.url()).pathname), "権限が無いと、ダッシュボードへ送り返される");
   await page.close();
 }
 

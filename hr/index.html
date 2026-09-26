@@ -18,28 +18,27 @@
     .hr-sub { color:#6b7080; font-size:13px; margin:0 0 22px; }
     .hr-sec-h { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
 
-    .hr-today { display:grid; gap:8px; margin-bottom:26px; }
+    .hr-empty { color:#9aa0b4; font-size:12.5px; padding:2px 0 4px; }
+
+    .hr-today { display:grid; gap:8px; margin-bottom:22px; }
     .hr-today-count { font-size:12px; color:#6b7080; margin-bottom:2px; }
     .hr-today-row { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px;
       padding:12px 14px; display:flex; align-items:center; gap:14px; }
     .hr-today-row.overdue { border-left-color:#c0392b; }
     .hr-today-row .info { flex:1; min-width:0; }
     .hr-today-row b { display:block; color:#1b2440; font-size:14px; }
-    .hr-today-row .n { color:#4a5068; font-size:12.5px; margin-top:2px; }
+    .hr-today-row .now { color:#6b7080; font-size:12px; margin-top:3px; }
+    .hr-today-row .n { color:#1b2440; font-size:12.5px; margin-top:3px; font-weight:500; }
     .hr-today-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
 
-    .hr-funnel { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 6px; }
-    .hr-funnel .step { flex:1; min-width:110px; background:#fff; border:1px solid #e2e2dc; border-radius:9px;
-      padding:12px; text-align:center; }
-    .hr-funnel .step .v { font-size:22px; font-weight:700; color:#1b2440; }
-    .hr-funnel .step .l { font-size:11px; color:#6b7080; margin-top:2px; }
-    .hr-auto { font-size:11px; color:#9aa0b4; margin:8px 0 26px; }
+    .hr-sec-sub { font-size:11.5px; color:#9aa0b4; margin:-6px 0 10px; }
 
-    .hr-kpi { display:flex; background:#fff; border:1px solid #e2e2dc; border-radius:9px; margin-bottom:26px; }
-    .hr-kpi .b { flex:1; padding:14px; text-align:center; border-right:1px solid #e2e2dc; }
-    .hr-kpi .b:last-child { border-right:none; }
-    .hr-kpi .v { font-size:20px; font-weight:700; color:#1b2440; }
-    .hr-kpi .l { font-size:11px; color:#6b7080; margin-top:3px; }
+    .hr-funnel { display:flex; flex-wrap:wrap; align-items:center; gap:4px; font-size:13px; color:#1b2440; }
+    .hr-funnel .v { font-weight:700; }
+    .hr-funnel .arrow { color:#c7cad4; margin:0 2px; }
+    .hr-auto { font-size:10.5px; color:#c2c5cf; margin:4px 0 2px; }
+
+    .hr-kpi-line { font-size:12px; color:#6b7080; margin:2px 0 22px; }
 
     .hr-list-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e2e2dc;
       cursor:pointer; font-size:13px; }
@@ -52,7 +51,7 @@
     .hr-rank.A { background:#1b2440; color:#fff; } .hr-rank.B { background:#e7eaf3; color:#1b2440; }
     .hr-rank.C { background:#efefeb; color:#4a5068; } .hr-rank.D { background:#f6f6f2; color:#9aa0b4; }
 
-    .hr-good-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-bottom:26px; }
+    .hr-good-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
     .hr-good-card { background:#fff; border:1px solid #e2e2dc; border-radius:9px; padding:13px 14px; cursor:pointer; }
     .hr-good-card .nm { font-weight:700; color:#1b2440; font-size:14px; }
     .hr-good-card .jb { font-size:11.5px; color:#6b7080; margin:2px 0 8px; }
@@ -64,8 +63,13 @@
     .hr-iv-row:last-child { border-bottom:none; }
     .hr-iv-row .tm { font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; min-width:44px; }
     .hr-iv-row .nm { font-weight:700; color:#1b2440; }
-    .hr-iv-row .jb, .hr-iv-row .iv { color:#6b7080; font-size:12px; }
+    .hr-iv-row .kd, .hr-iv-row .iv { color:#6b7080; font-size:12px; }
     .hr-iv-row .st { margin-left:auto; font-size:12px; color:#4a5068; }
+
+    .hr-sec-row { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; }
+    .hr-sec-row .hr-sec-h { margin-bottom:0; }
+    .hr-sec-row a.hr-more { font-size:12px; color:#4a5068; text-decoration:none; white-space:nowrap; }
+    .hr-sec-row a.hr-more:hover { color:#1b2440; }
   </style>
 </head>
 <body>
@@ -77,20 +81,22 @@
   <div class="hr-sec-h">今やること</div>
   <div class="hr-today" id="today"></div>
 
-  <div class="hr-sec-h">GOOD CANDIDATES</div>
-  <div class="hr-good-grid" id="good"></div>
+  <div class="hr-sec-h">注目候補者</div>
+  <div class="hr-sec-sub">社長に見てほしい人・評価の高い人</div>
+  <div class="hr-good-grid" id="good" style="margin-bottom:26px;"></div>
 
   <div class="hr-sec-h">今日の面談</div>
-  <div class="card" style="margin-bottom:26px;"><div id="todayiv"></div></div>
+  <div id="todayiv" style="margin-bottom:26px;"></div>
 
-  <div class="hr-sec-h">採用ファネル</div>
+  <div class="hr-sec-h">採用状況</div>
   <div class="hr-funnel" id="funnel"></div>
+  <div class="hr-kpi-line" id="kpi"></div>
   <div class="hr-auto">TimeRex → Google Meet → Google Drive → Slack（自動連携）</div>
 
-  <div class="hr-sec-h">KPI</div>
-  <div class="hr-kpi" id="kpi"></div>
-
-  <div class="hr-sec-h">応募者一覧</div>
+  <div class="hr-sec-row">
+    <div class="hr-sec-h">最近の応募者</div>
+    <a class="hr-more" href="/hr/applicants.html">応募者一覧を見る</a>
+  </div>
   <div class="card"><div id="list"></div></div>
 </div>
 
@@ -139,9 +145,9 @@
   /** Aランク、または社長推薦の段階まで進んだ人だけ */
   function renderGoodCandidates() {
     const list = applicants.filter((a) => a.rank === "A" || a.stage === "ceo_recommend");
-    if (!list.length) { el("good").innerHTML = `<div class="empty">いまのところ対象はいません。</div>`; return; }
+    if (!list.length) { el("good").innerHTML = `<div class="hr-empty">候補者はいません</div>`; return; }
     el("good").innerHTML = list.map((a) => `
-      <div class="hr-good-card" onclick="location.href='applicants.html?id=${esc(a.id)}'">
+      <div class="hr-good-card" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">
         <div class="nm">${esc(a.name)}</div>
         <div class="jb">${esc(a.jobTitle)}</div>
         <div class="row">${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span>` : ""}
@@ -151,16 +157,16 @@
   }
 
   function renderTodayInterviews() {
-    if (!todayInterviews.length) { el("todayiv").innerHTML = `<div class="empty">本日の面談はありません。</div>`; return; }
-    el("todayiv").innerHTML = todayInterviews.map((i) => `
-      <div class="hr-iv-row" onclick="location.href='applicants.html?id=${esc(i.applicantId)}'">
+    if (!todayInterviews.length) { el("todayiv").innerHTML = `<div class="hr-empty">本日の面談はありません</div>`; return; }
+    el("todayiv").innerHTML = `<div class="card"><div>${todayInterviews.map((i) => `
+      <div class="hr-iv-row" onclick="location.href='/hr/applicants.html?id=${esc(i.applicantId)}'">
         <span class="tm">${esc(fmtTime(i.scheduledAt))}</span>
         <span class="nm">${esc(i.name)}</span>
-        <span class="jb">${esc(i.jobTitle)}</span>
+        <span class="kd">${esc(i.kindLabel || "")}</span>
         <span class="iv">${esc(i.interviewerName || "未定")}</span>
         <span class="st">${esc(i.statusLabel)}</span>
         <span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span>
-      </div>`).join("");
+      </div>`).join("")}</div></div>`;
   }
 
   function fmtTime(iso) {
@@ -176,7 +182,7 @@
       .sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0));
 
     if (!items.length) {
-      el("today").innerHTML = `<div class="empty">対応が必要な応募者はいません。</div>`;
+      el("today").innerHTML = `<div class="hr-empty">対応が必要な応募者はいません</div>`;
       return;
     }
     const LIMIT = 12;
@@ -185,35 +191,38 @@
       <div class="hr-today-count">${items.length}件</div>
       ${shown.map((a) => `
         <div class="hr-today-row${a.overdue ? " overdue" : ""}">
-          <div class="info"><b>${esc(a.name)}</b><span class="n">${esc(a.nextAction)}</span></div>
-          <button class="btn btn-primary btn-sm" onclick="location.href='applicants.html?id=${esc(a.id)}'">${esc(a.nextActionCta)}</button>
+          <div class="info"><b>${esc(a.name)}</b>
+            <div class="now">現在：${esc(a.statusLabel)}</div>
+            <div class="n">NEXT ACTION：${esc(a.nextAction)}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">${esc(a.nextActionCta)}</button>
         </div>`).join("")}
       ${items.length > LIMIT ? `<div class="hr-today-more">ほか${items.length - LIMIT}件は応募者一覧で確認してください</div>` : ""}`;
   }
 
   function renderFunnel() {
-    el("funnel").innerHTML = STAGES.map((s) => {
+    el("funnel").innerHTML = STAGES.map((s, i) => {
       const n = applicants.filter((a) => a.stage === s.key).length;
-      return `<div class="step"><div class="v">${n}</div><div class="l">${esc(s.label)}</div></div>`;
-    }).join("");
+      return `${i > 0 ? `<span class="arrow">→</span>` : ""}${esc(s.label)} <span class="v">${n}</span>`;
+    }).join(" ");
   }
 
   function renderKpi() {
     const thisMonth = new Date().toISOString().slice(0, 7);
-    const inMonth = (a, key) => (a.createdAt || "").slice(0, 7) === thisMonth;
-    el("kpi").innerHTML = [
-      ["新規応募", applicants.filter((a) => a.createdAt?.slice(0, 7) === thisMonth).length],
-      ["カジュアル面談", applicants.filter((a) => a.stage === "casual_interview" || (a.interviewCount || 0) > 0).length],
-      ["社長推薦", applicants.filter((a) => ["ceo_recommend", "ceo_interview", "offer", "joining_scheduled"].includes(a.stage)).length],
-      ["社長面談", applicants.filter((a) => ["ceo_interview", "offer", "joining_scheduled"].includes(a.stage)).length],
-      ["今月内定", applicants.filter((a) => a.stage === "offer" && a.updatedAt?.slice(0, 7) === thisMonth).length],
-    ].map(([l, v]) => `<div class="b"><div class="v">${v}</div><div class="l">${esc(l)}</div></div>`).join("");
+    const newApplied = applicants.filter((a) => a.createdAt?.slice(0, 7) === thisMonth).length;
+    const interviewed = applicants.filter((a) => a.stage === "casual_interview" || (a.interviewCount || 0) > 0).length;
+    const hired = applicants.filter((a) => a.stage === "offer" && a.updatedAt?.slice(0, 7) === thisMonth).length;
+    el("kpi").innerHTML = `今月：新規応募 ${newApplied} / 面談 ${interviewed} / 内定 ${hired}`;
   }
 
   function renderList() {
-    if (!applicants.length) { el("list").innerHTML = `<div class="empty">まだ応募者がいません。</div>`; return; }
-    el("list").innerHTML = applicants.slice(0, 20).map((a) => `
-      <div class="hr-list-row" onclick="location.href='applicants.html?id=${esc(a.id)}'">
+    if (!applicants.length) {
+      el("list").innerHTML = `<div class="hr-empty">まだ応募者がいません</div>
+        <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?new=1'">応募者を追加</button>`;
+      return;
+    }
+    el("list").innerHTML = applicants.slice(0, 8).map((a) => `
+      <div class="hr-list-row" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">
         <span class="nm">${esc(a.name)}</span><span class="st">${esc(a.stageLabel)} ／ ${esc(a.statusLabel)}</span>
         <span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span>
       </div>`).join("");
