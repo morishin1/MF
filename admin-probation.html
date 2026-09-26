@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916e">
-  <link rel="stylesheet" href="css/layout.css?v=20260916e">
+  <link rel="stylesheet" href="css/app.css?v=20260916m">
+  <link rel="stylesheet" href="css/layout.css?v=20260916m">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -47,6 +47,7 @@
 
 <div class="wrap">
   <h1 class="kp-greet">試用期間</h1>
+  <div class="kp-crumb">人事・労務 ＞ 評価・育成 ＞ 試用期間</div>
   <p class="kp-greet-sub">
     日報とKGIの記録を集計し、決めた基準を満たしているかを出します。
     <b>本採用・延長・不採用の決定は、ここで人が押します。</b>
@@ -76,9 +77,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916e"></script>
-<script src="js/device.js?v=20260916e"></script>
-<script src="js/layout.js?v=20260916e"></script>
+<script src="js/api-client.js?v=20260916m"></script>
+<script src="js/device.js?v=20260916m"></script>
+<script src="js/layout.js?v=20260916m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -114,6 +115,10 @@
     el("notice").innerHTML = "";
     renderList();
     renderSettings();
+    // 他画面（本採用完了など）から「この人の試用期間へ」で来たとき、
+    // そのまま詳細を開く
+    const empId = new URLSearchParams(location.search).get("employeeId");
+    if (empId) openDetail(empId);
   }
 
   // --- 一覧 -------------------------------------------------------------------

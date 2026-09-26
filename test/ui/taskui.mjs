@@ -119,6 +119,17 @@ await page.route("**/api/**", (route) => {
 await page.goto(`${BASE}/admin-tasks.html`);
 await page.waitForTimeout(900);
 
+console.log("\n— 初期表示は「今日の実行状況」。タブで切り替える —");
+{
+  check(await page.locator("#panel-today").isVisible(), "最初は今日の実行状況");
+  check(!(await page.locator("#panel-all").isVisible()), "全タスクは最初は隠れている");
+  check(await page.locator("#tab-today").getAttribute("class") === "tab active", "今日の実行状況タブが選ばれている");
+  await page.locator("#tab-all").click();
+  await page.waitForTimeout(300);
+  check(await page.locator("#panel-all").isVisible(), "押すと全タスクに切り替わる");
+  check(!(await page.locator("#panel-today").isVisible()), "今日の実行状況は隠れる");
+}
+
 console.log("\n— 上の6つの数 —");
 {
   const kpi = await page.locator("#tk-kpi").innerText();
@@ -128,14 +139,22 @@ console.log("\n— 上の6つの数 —");
   check(await page.locator("#tk-kpi .box").count() === 6, "6つ");
 }
 
-console.log("\n— 絞り込み —");
+console.log("\n— 絞り込み。初期表示は少なく、詳細条件にまとめる —");
 {
   const seg = await page.locator("#tk-range button").allTextContents();
   check(seg.join("").includes("今日") && seg.join("").includes("今週") && seg.join("").includes("今月"),
     "今日・明日・今週・今月");
-  for (const id of ["tk-who", "tk-dep", "tk-svc", "tk-pri", "tk-st", "tk-ai", "tk-q"]) {
-    check(await page.locator(`#${id}`).count() === 1, `絞り込み：${id}`);
+  for (const id of ["tk-who", "tk-st"]) {
+    check(await page.locator(`#${id}`).count() === 1 && await page.locator(`#${id}`).isVisible(), `初期表示：${id}`);
   }
+  check(!(await page.locator("#tk-adv").isVisible()), "詳細条件は最初は隠れている");
+  for (const id of ["tk-dep", "tk-svc", "tk-pri", "tk-ai", "tk-q"]) {
+    check(await page.locator(`#${id}`).count() === 1, `詳細条件の中にある：${id}`);
+  }
+  await page.locator("#tk-adv-btn").click();
+  await page.waitForTimeout(300);
+  check(await page.locator("#tk-adv").isVisible(), "押すと詳細条件が開く");
+
   await page.locator("#tk-range button", { hasText: "今日" }).click();
   await page.waitForTimeout(400);
   check(asked.some((u) => /range=today/.test(u)), "期間をサーバに渡す");
@@ -251,7 +270,7 @@ console.log("\n— 持ち越しも引き出しの中 —");
 
 console.log("\n— 閉じると元の場所 —");
 {
-  await page.locator(".td-x").click();
+  await page.locator("#td-panel .td-x").click();
   await page.waitForTimeout(300);
   check(await page.locator("#td-root.hidden").count() === 1, "引き出しが閉じる");
   check(await page.locator(".tk-row").count() === 3, "一覧はそのまま");
@@ -292,6 +311,8 @@ console.log("\n— スマホでは下から —");
   });
   await sp.goto(`${BASE}/admin-tasks.html`);
   await sp.waitForTimeout(900);
+  await sp.locator("#tab-all").click();
+  await sp.waitForTimeout(300);
   await sp.locator(".tk-row").first().click();
   await sp.waitForTimeout(600);
   const r = await sp.locator("#td-panel").boundingBox();

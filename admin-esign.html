@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916e">
-  <link rel="stylesheet" href="css/layout.css?v=20260916e">
+  <link rel="stylesheet" href="css/app.css?v=20260916m">
+  <link rel="stylesheet" href="css/layout.css?v=20260916m">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -75,6 +75,7 @@
 
 <div class="wrap">
   <h1 class="kp-greet">雇用契約</h1>
+  <div class="kp-crumb">人事・労務 ＞ 雇用契約 ＞ 契約書作成</div>
   <p class="kp-greet-sub">
     契約書を作って本人に送り、画面で署名してもらいます。署名済みのPDFは、本人も会社も落とせます。
   </p>
@@ -107,12 +108,15 @@
 
       <div class="inline-controls" style="margin-bottom:12px;">
         <div style="min-width:220px;flex:1;"><label>誰あてか</label>
-          <select id="o-emp"><option value="">読み込み中…</option></select></div>
+          <select id="o-emp" onchange="onOrderEmployee()"><option value="">読み込み中…</option></select></div>
         <div style="min-width:200px;"><label>書類の種類</label>
           <select id="o-kind" onchange="onOrderKind()"></select></div>
         <div style="min-width:220px;flex:1;"><label>書類の名前</label>
           <input id="o-name" type="text" placeholder="労働条件通知書 兼 雇用契約書"></div>
       </div>
+
+      <div id="o-nextaction"></div>
+      <div id="o-reconcile"></div>
 
       <div class="inline-controls" style="margin-bottom:14px;">
         <div style="min-width:180px;"><label>依頼先（社労士など）</label>
@@ -146,6 +150,7 @@
       <p class="muted" style="font-size:11.5px;margin:10px 0 0;">
         メールはここからは送りません。「依頼文をコピー」でそのまま社労士へ貼って送ってください。
       </p>
+      <div id="o-override"></div>
       <div id="o-msg" class="err-text"></div>
     </div>
 
@@ -304,9 +309,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260916e"></script>
-<script src="js/device.js?v=20260916e"></script>
-<script src="js/layout.js?v=20260916e"></script>
+<script src="js/api-client.js?v=20260916m"></script>
+<script src="js/device.js?v=20260916m"></script>
+<script src="js/layout.js?v=20260916m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -327,11 +332,16 @@
   let orders = [];
   let orderFields = [];
   let editingOrder = null;
+  let reconcileResult = null;  // 採用承諾条件との突き合わせ（採用HR Stage 9）
+  let canOverride = false;     // owner・hrだけ、条件不一致のまま進められる
 
   const PANES = ["order", "send", "list", "tpl"];
 
-  KPLayout.init({ active: "esign", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+  // 上のメニューは「契約書作成依頼」と「電子署名」を別タブにしている
+  // （js/layout.js）。どちらで開いたかは ?tab=order の有無で分かる
+  const initialTab = new URLSearchParams(location.search).get("tab");
+  KPLayout.init({ active: initialTab === "order" ? "esign_order" : "esign", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) { canOverride = Boolean(ctx.me?.gw?.isHr); load(); } });
 
   async function load() {
     await Promise.all([loadTemplates(), loadEmployees(), loadOrders()]);
@@ -798,7 +808,7 @@
       orders = res.orders || [];
       orderFields = res.fields || [];
       renderOrderKinds(res.kinds || []);
-      renderOrderFields();
+      renderOrderFields(reconcileResult?.prefillConditions);
       renderOrders();
       // 届いたのに、まだ送っていないもの。ここが溜まるのがいちばん困る
       const wait = res.counts?.uploaded || 0;
@@ -818,13 +828,176 @@
   }
 
   // 項目を固定にしてある。自由記入だけにすると、書く人ごとに項目が変わって、
-  // 抜けていても抜けていると気づけない
-  function renderOrderFields() {
+  // 抜けていても抜けていると気づけない。
+  // prefillが渡されれば、そこから事前入力する（採用HR Stage 9：手入力を基本にしない）
+  function renderOrderFields(prefill = {}) {
     el("o-cond").innerHTML = orderFields.map((f) => `
       <div>
         <label class="${f.required ? "req" : ""}">${esc(f.key)}</label>
-        <input type="text" data-cond="${esc(f.key)}" placeholder="${esc(f.placeholder || "")}">
+        <input type="text" data-cond="${esc(f.key)}" placeholder="${esc(f.placeholder || "")}"
+               value="${esc(prefill[f.key] || "")}">
       </div>`).join("");
+  }
+
+  // 対象者を選んだら、労働条件をサーバから取得して事前入力し、
+  // 採用承諾時の条件と一致しているか確かめる（採用HR Stage 9）
+  async function onOrderEmployee() {
+    reconcileResult = null;
+    el("o-reconcile").innerHTML = "";
+    el("o-override").innerHTML = "";
+    el("o-save").classList.remove("hidden");
+    const empId = el("o-emp").value;
+    if (!empId || editingOrder) { renderOrderFields(); el("o-nextaction").innerHTML = ""; return; }
+    renderNextAction(empId);
+    try {
+      reconcileResult = await API.checkHrOfferMatch(empId);
+      renderOrderFields(reconcileResult.prefillConditions);
+      renderReconcile();
+    } catch {
+      renderOrderFields();
+    }
+  }
+
+  // 「現在→NEXT ACTION→1つのCTA」を、この人の契約の進み具合に合わせて出す。
+  // 実際のボタンは、下のフォームや一覧に既にあるものをそのまま使う
+  // （同じ操作のボタンを2つ増やさない）
+  function renderNextAction(empId) {
+    const box = el("o-nextaction");
+    const order = orders.find((o) => o.employeeId === empId && o.docKind === "employment" && o.status !== "cancelled");
+    if (!order) {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約書作成待ち</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>社労士へ契約書作成を依頼してください</h3>
+          <div class="meta">下の条件を入力して［依頼を作る］を押してください。</div>
+        </div>`;
+      return;
+    }
+    if (order.status === "requested") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：社労士対応中</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>社労士が契約書を作成しています</h3>
+          <div class="meta">会社側の操作は不要です。書面が届くとここに表示されます。</div>
+        </div>`;
+      return;
+    }
+    if (order.status === "uploaded") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約書完成</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>本人へ電子署名を依頼してください</h3>
+          <button class="btn btn-primary btn-sm" onclick="sendOrder('${esc(order.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">draw</span>電子署名を依頼</button>
+        </div>`;
+      return;
+    }
+    if (order.status === "sent") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約締結待ち</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>本人の署名を待っています</h3>
+        </div>`;
+      return;
+    }
+    if (order.status === "signed") {
+      box.innerHTML = `
+        <div class="kp-next">
+          <div class="now">現在：契約締結済み</div>
+          <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+          <h3>入社手続きを進めてください</h3>
+          <a class="btn btn-primary btn-sm" href="admin-hr.html">
+            <span class="material-symbols-outlined icon-inline">arrow_forward</span>入社手続きへ</a>
+        </div>`;
+      return;
+    }
+    box.innerHTML = "";
+  }
+
+  function renderReconcile() {
+    const r = reconcileResult;
+    el("o-override").innerHTML = "";
+    if (!r || !r.linked || !r.hasAcceptedOffer) { el("o-reconcile").innerHTML = ""; return; }
+
+    if (!r.mismatches.length) {
+      el("o-reconcile").innerHTML = `
+        <div class="banner ok" style="margin-bottom:12px;">
+          <span class="material-symbols-outlined">check_circle</span>
+          <div>採用承諾時の条件と一致しています</div>
+        </div>`;
+      el("o-save").classList.remove("hidden");
+      return;
+    }
+
+    // 一致していない：通常の［依頼を作る］は使えない
+    el("o-save").classList.add("hidden");
+    el("o-reconcile").innerHTML = `
+      <div class="banner warn" style="margin-bottom:12px;">
+        <span class="material-symbols-outlined">warning</span>
+        <div>
+          <b>採用承諾時の条件と異なります</b>
+          <div style="margin-top:6px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleReconcileDetail()">差分を見る</button>
+          </div>
+          <div id="o-reconcile-detail" class="hidden" style="margin-top:10px;font-size:12.5px;">
+            ${r.mismatches.map((m) => `
+              <div style="margin-bottom:6px;">
+                <b>${esc(m.label)}</b><br>
+                承諾時：${esc(m.offerValue)}<br>
+                現在：${esc(m.currentValue)}
+              </div>`).join("")}
+          </div>
+          <p class="muted" style="font-size:12px;margin:10px 0 0;">
+            本人と条件を再確認してください。条件が変わった場合は、合格通知を再発行して
+            あらためて本人の承諾を得てから、契約書作成を依頼してください。
+          </p>
+        </div>
+      </div>`;
+    renderOverrideAffordance();
+  }
+
+  function toggleReconcileDetail() {
+    el("o-reconcile-detail")?.classList.toggle("hidden");
+  }
+
+  // 通常の導線には出さない。owner・hrだけ、理由つきでどうしても進める場合の逃げ道
+  function renderOverrideAffordance() {
+    if (!canOverride) { el("o-override").innerHTML = ""; return; }
+    el("o-override").innerHTML = `
+      <button type="button" class="btn btn-secondary btn-sm" onclick="openOverrideForm()">
+        特別な事情がある場合（理由が必要です）
+      </button>
+      <div id="o-override-form" class="hidden" style="margin-top:10px;">
+        <label>不一致のまま進める理由 <span class="req"></span></label>
+        <textarea id="o-override-reason" rows="2" placeholder="本人・候補者と確認済みの経緯など"></textarea>
+        <button type="button" class="btn btn-primary btn-sm" style="margin-top:8px;"
+                onclick="submitOverride(this)">この理由で依頼を進める</button>
+      </div>`;
+  }
+
+  function openOverrideForm() {
+    el("o-override-form")?.classList.remove("hidden");
+  }
+
+  async function submitOverride(btn) {
+    const msg = el("o-msg");
+    msg.textContent = "";
+    const reason = el("o-override-reason").value.trim();
+    if (!reason) { msg.textContent = "理由を入力してください"; return; }
+    const p = orderPayload();
+    if (!p.employeeId) { msg.textContent = "誰あての書面か選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "作成中…",
+        () => API.docOrderAct({ action: "create", ...p, force: true, overrideReason: reason }));
+      resetOrder();
+      await loadOrders();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "作れませんでした";
+    }
   }
 
   const condValues = () => {
@@ -876,6 +1049,20 @@
           + `<button class="btn btn-secondary btn-sm" onclick="forceOrder(this)">このまま依頼する</button>`;
         return;
       }
+      // 採用承諾条件と食い違ったまま（採用HR Stage 9）。通常のボタンでは進めない
+      if (e.code === "offer_mismatch") {
+        reconcileResult = { linked: true, hasAcceptedOffer: true, mismatches: e.body?.mismatches || [] };
+        renderReconcile();
+        msg.textContent = e.hint || "採用承諾時の条件と異なります";
+        return;
+      }
+      // 同じ社員・同じ書類種別で、手続き中の依頼がすでにある（採用HR Stage 9：二重生成防止）
+      if (e.code === "doc_order_already_exists") {
+        const existingId = e.body?.existingOrderId;
+        msg.innerHTML = `${esc(e.hint || "この社員・この書類種別は、すでに手続き中の依頼があります")}　`
+          + (existingId ? `<button class="btn btn-secondary btn-sm" onclick="openExistingOrder('${esc(existingId)}')">既存の依頼を開く</button>` : "");
+        return;
+      }
       msg.textContent = e.hint || e.detail || e.message || "作れませんでした";
     }
   }
@@ -894,20 +1081,37 @@
 
   function resetOrder() {
     editingOrder = null;
+    reconcileResult = null;
     el("o-title").textContent = "労働条件通知書の作成を依頼する";
     el("o-save").innerHTML =
       `<span class="material-symbols-outlined icon-inline">send</span>依頼を作る`;
+    el("o-save").classList.remove("hidden");
     for (const id of ["o-name", "o-assignee", "o-assignee-mail", "o-due", "o-note"]) el(id).value = "";
     el("o-emp").value = "";
     for (const n of document.querySelectorAll("[data-cond]")) n.value = "";
     el("o-cancel").classList.add("hidden");
     el("o-msg").textContent = "";
+    el("o-reconcile").innerHTML = "";
+    el("o-override").innerHTML = "";
+    el("o-nextaction").innerHTML = "";
+  }
+
+  // 二重生成防止（採用HR Stage 9）の409で示された既存依頼を開く。
+  // まだ一覧に無ければ（別タブで作られた直後など）取り直してから開く
+  async function openExistingOrder(id) {
+    if (!orders.find((x) => x.id === id)) await loadOrders();
+    editOrder(id);
   }
 
   function editOrder(id) {
     const o = orders.find((x) => x.id === id);
     if (!o) return;
     editingOrder = id;
+    reconcileResult = null;
+    el("o-reconcile").innerHTML = "";
+    el("o-override").innerHTML = "";
+    el("o-nextaction").innerHTML = "";
+    el("o-save").classList.remove("hidden");
     el("o-title").textContent = "依頼を直す";
     el("o-save").innerHTML =
       `<span class="material-symbols-outlined icon-inline">save</span>保存`;

@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916e">
-  <link rel="stylesheet" href="css/layout.css?v=20260916e">
+  <link rel="stylesheet" href="css/app.css?v=20260916m">
+  <link rel="stylesheet" href="css/layout.css?v=20260916m">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -93,6 +93,7 @@
     3か月の目標・月ごとのKPI・初日にやることまで、まとめて作ります。
   </p>
 
+  <div id="crumb"></div>
   <div id="notice"></div>
 
   <div class="card">
@@ -288,10 +289,10 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/api-client.js?v=20260916e"></script>
-<script src="js/device.js?v=20260916e"></script>
-<script src="js/layout.js?v=20260916e"></script>
-<script src="js/dropzone.js?v=20260916e"></script>
+<script src="js/api-client.js?v=20260916m"></script>
+<script src="js/device.js?v=20260916m"></script>
+<script src="js/layout.js?v=20260916m"></script>
+<script src="js/dropzone.js?v=20260916m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -305,6 +306,12 @@
   let mode = "";        // STEP1 勤務・育成区分
   let job = "";         // STEP2 担当業務
   let combo = null;     // 掛け合わせた初期値（サーバが組み立てたもの）
+
+  // 採用HR「本採用へ進める」から来た場合（?applicantId=…）。給与・勤務条件は
+  // URLへ載せず、サーバ側から取得する（README Stage 8）。社員ができたら、
+  // 応募者側（gw_hr_applicants）を確定するために使う
+  const advanceApplicantId = new URLSearchParams(location.search).get("applicantId") || null;
+  let advancePrefillData = null;
 
   KPLayout.init({ active: "onboard", roles: ["admin", "owner"] })
     .then((ctx) => {
@@ -357,6 +364,66 @@
     }).join("");
 
     renderPick();
+    await applyAdvancePrefill();
+  }
+
+  // 採用HR「本採用へ進める」から来ていれば（?applicantId=…）、採用条件を
+  // サーバから取得して事前入力する（STEP1の働き方・STEP2の担当業務・育成計画
+  // などは、ここでは埋まらない。それらは選考では決まっていないので、
+  // 引き続き人が選ぶ）
+  async function applyAdvancePrefill() {
+    if (!advanceApplicantId) return;
+    let r;
+    try {
+      r = await API.getHrAdvancePrefill(advanceApplicantId);
+    } catch (e) {
+      el("notice").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>採用HRからの事前入力を取得できませんでした：${esc(e.hint || e.detail || e.message)}</div></div>`;
+      return;
+    }
+    advancePrefillData = r.prefill || {};
+    el("crumb").innerHTML = `<div class="kp-crumb">人事・労務 ＞ 採用 ＞ 本採用</div>`;
+
+    const p = advancePrefillData;
+    if (p.name) el("f-name").value = p.name;
+    if (p.email) el("f-email").value = p.email;
+    if (p.joinDate) el("f-join").value = p.joinDate;
+    if (p.contractType) { el("f-contract").value = p.contractType; onContract(); }
+    if (p.contractEndDate) el("f-end").value = p.contractEndDate;
+    if (p.probationMonths != null) el("f-probation").value = p.probationMonths;
+    if (p.weeklyHours != null) el("f-hours").value = p.weeklyHours;
+    if (p.wageType) el("f-wage-type").value = p.wageType;
+    if (p.wageAmount != null) el("f-wage").value = p.wageAmount;
+
+    el("notice").innerHTML = `
+      <div class="kp-next">
+        <div class="now">現在：本採用手続き</div>
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+        <h3>社内情報を確認して社員登録してください</h3>
+        <div class="meta">採用HRから、選考時の採用条件を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div>
+        <button class="btn btn-primary btn-sm" onclick="focusStep3()">
+          <span class="material-symbols-outlined icon-inline">person_add</span>社員登録</button>
+      </div>`;
+  }
+
+  // NEXT ACTIONの［社員登録］は、この下にあるSTEP3のフォームへ案内するだけ。
+  // 別の画面やボタンを増やさない
+  function focusStep3() {
+    el("f-name").scrollIntoView({ behavior: "smooth", block: "center" });
+    el("f-name").focus();
+  }
+
+  // 社員ができたら、応募者側（gw_hr_applicants）を確定する
+  // （failしても、社員自体はもうできているので、名簿からやり直せる旨は既存の案内のまま）
+  async function completeAdvanceIfPending(employeeId) {
+    if (!advanceApplicantId || !employeeId) return;
+    try {
+      await API.completeHrAdvance(advanceApplicantId, employeeId);
+    } catch (e) {
+      console.error("[advance] 応募者側の確定に失敗:", e.hint || e.detail || e.message);
+    } finally {
+      history.replaceState({}, "", "admin-onboard.html");
+    }
   }
 
   // --- STEP1 × STEP2 -----------------------------------------------------------
@@ -413,6 +480,16 @@
     renderDojo();
     onContract();
     onJoin();      // 契約終了日を、入社日 + 区分の契約月数で置く
+
+    // 採用HRから来ていれば、実際に合意した条件（契約区分・試用期間・勤務時間）で
+    // テンプレートの初期値を上書きする（選考で決まった条件を、汎用の初期値に戻さない）
+    if (advancePrefillData) {
+      const p = advancePrefillData;
+      if (p.contractType) { el("f-contract").value = p.contractType; onContract(); }
+      if (p.probationMonths != null) el("f-probation").value = p.probationMonths;
+      if (p.weeklyHours != null) el("f-hours").value = p.weeklyHours;
+      if (p.contractEndDate) el("f-end").value = p.contractEndDate;
+    }
     clearPreview();
   }
 
@@ -618,6 +695,7 @@
       }
       renderDone(r.created);
       el("pv-card").classList.add("hidden");
+      await completeAdvanceIfPending(r.created?.employeeId);
     } catch (e) {
       // 画面に出す。アラートは閉じると消えてしまい、内容を控えられない
       el("form-msg").innerHTML = `

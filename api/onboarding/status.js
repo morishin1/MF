@@ -137,7 +137,7 @@ export default async function handler(req, res) {
   // 既定のチェックリストでは自然に空になる（会社確認は社労士には見せない）
   const internalItems = items
     .filter((i) => i.owner === "hr" && i.category !== "document")
-    .map((i) => ({ title: i.title, required: i.required !== false, status: i.status }));
+    .map((i) => ({ id: i.id, title: i.title, required: i.required !== false, status: i.status }));
 
   const steps = computeSteps({
     contracts, consents, orientation,
@@ -180,6 +180,7 @@ export default async function handler(req, res) {
     status: proc.row?.status || null,
     stage: proc.row?.stage || null,
     mynumber: mynumberLabel(proc.row?.mynumber_status),
+    mynumberStatus: proc.row?.mynumber_status || "not_submitted",
     steps,
   });
 }

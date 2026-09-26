@@ -15,6 +15,31 @@
       "source": "/biz",
       "destination": "/biz/",
       "permanent": false
+    },
+    {
+      "source": "/hr",
+      "destination": "/hr/",
+      "permanent": false
+    },
+    {
+      "source": "/hr-dashboard.html",
+      "destination": "/hr/",
+      "permanent": false
+    },
+    {
+      "source": "/hr-applicants.html",
+      "destination": "/hr/applicants.html",
+      "permanent": false
+    },
+    {
+      "source": "/hr-ceo-review.html",
+      "destination": "/hr/ceo-review.html",
+      "permanent": false
+    },
+    {
+      "source": "/hr-offer.html",
+      "destination": "/hr/offer.html",
+      "permanent": false
     }
   ],
   "rewrites": [
@@ -116,6 +141,14 @@
     {
       "path": "/api/cron/tasks",
       "schedule": "10 15 * * *"
+    },
+    {
+      "path": "/api/cron/task-events",
+      "schedule": "10 21 * * *"
+    },
+    {
+      "path": "/api/cron/hr-interviews",
+      "schedule": "20 * * * *"
     }
   ]
 }

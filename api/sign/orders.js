@@ -40,8 +40,9 @@ import { signEvent } from "../../lib/sign-audit.js";
 import { renderContractPdf, sha256 } from "../../lib/pdf-jp.js";
 import {
   DOC_KINDS, DOC_KIND_KEYS, kindLabel,
-  ORDER_FIELDS, ORDER_STATUS, orderStatusLabel,
+  ORDER_FIELDS, ORDER_STATUS, orderStatusLabel, ACTIVE_ORDER_STATUS,
   normalizeConditions, missingConditions, noticeBody, NOTICE_TITLE,
+  conditionsFromContract, reconcileOfferConditions,
 } from "../../lib/esign.js";
 
 const BUCKET = "hr";
@@ -55,8 +56,9 @@ const FIELDS =
   "id, employee_id, doc_kind, title, assignee_name, assignee_email, conditions, note, "
   + "status, due_on, file_name, file_size, file_sha256, uploaded_at, "
   + "requested_at, sign_request_id, created_at, updated_at";
-// 071 で足した列。未適用でも一覧が出るように、別に引く
-const FIELDS_071 = "id, approved_by, approved_at, advisor_note, conditions_edited_at";
+// 071・087 で足した列。未適用でも一覧が出るように、別に引く
+const FIELDS_071 = "id, approved_by, approved_at, advisor_note, conditions_edited_at, "
+  + "override_reason, override_by, override_at";
 
 const str = (v, max = 200) => {
   const s = String(v ?? "").trim();
@@ -87,6 +89,10 @@ async function read(req, res, ctx, user, advisor) {
   const sb = admin();
 
   if (q.get("file")) return fileUrl(req, res, sb, ctx, user, q.get("file"), advisor);
+  if (q.get("reconcile") && q.get("employeeId")) {
+    if (advisor) return json(res, 403, { error: "forbidden" });
+    return json(res, 200, await loadReconciliation(sb, ctx, q.get("employeeId")));
+  }
 
   let query = sb.from("gw_doc_orders")
     .select(`${FIELDS}, employee:gw_employees!gw_doc_orders_employee_id_fkey(id, display_name, department, email, employment_type, joined_on)`)
@@ -120,6 +126,35 @@ async function read(req, res, ctx, user, advisor) {
     noticeTitle: NOTICE_TITLE,
     advisor,
   });
+}
+
+/**
+ * 採用承諾条件との突き合わせ（採用HR Stage 9）。
+ * 比較の基準は必ず「本人が承諾したoffer」（gw_hr_offers、accepted_atあり）。
+ * gw_hr_applicants の最新値ではない（本人はそれを見ていない）。
+ * 採用HR経由でない社員（gw_hr_applicantsに紐づきが無い）は比較自体をしない
+ */
+async function loadReconciliation(sb, ctx, employeeId) {
+  const [{ data: employee }, { data: contract }, { data: applicant }] = await Promise.all([
+    sb.from("gw_employees").select("id, employment_type, joined_on, position")
+      .eq("id", employeeId).eq("tenant_id", ctx.tenantId).maybeSingle(),
+    sb.from("gw_contracts").select("*").eq("employee_id", employeeId).eq("status", "active")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("gw_hr_applicants").select("id").eq("employee_id", employeeId).eq("tenant_id", ctx.tenantId).maybeSingle(),
+  ]);
+
+  const prefillConditions = conditionsFromContract(employee, contract);
+  if (!applicant) return { linked: false, hasAcceptedOffer: false, mismatches: [], prefillConditions };
+
+  const { data: offers } = await sb.from("gw_hr_offers").select("*")
+    .eq("applicant_id", applicant.id).order("version", { ascending: false }).limit(20);
+  const offer = (offers || []).find((o) => o.accepted_at) || null;
+
+  return {
+    linked: true, hasAcceptedOffer: Boolean(offer),
+    mismatches: reconcileOfferConditions(offer, employee, contract),
+    prefillConditions,
+  };
 }
 
 /** 071 の列。未適用なら空（一覧そのものは止めない） */
@@ -163,6 +198,8 @@ const shape = (o, advisor = false) => ({
   requestedAt: o.requested_at,
   approvedAt: o.approved_at || null,
   conditionsEditedAt: o.conditions_edited_at || null,
+  overrideReason: o.override_reason || null,
+  overrideAt: o.override_at || null,
   signRequestId: o.sign_request_id,
 });
 
@@ -215,6 +252,44 @@ async function create(res, sb, ctx, user, body) {
     .select("id, display_name").eq("id", employeeId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!emp) return json(res, 404, { error: "employee_not_found" });
 
+  const docKind = DOC_KIND_KEYS.includes(body.docKind) ? body.docKind : "employment";
+
+  // 二重生成防止（採用HR Stage 9）。同じ社員・同じ書類種別で、まだ手続き
+  // 途中の依頼があるなら、新しく作らせない。別タブ・別端末・APIの再送でも防ぐため
+  // サーバ側で見る（ボタンの無効化だけでは防げない）。
+  // 締結ずみ・取り消し済みは対象外＝契約更新・再契約・条件変更後の再作成は塞がない
+  const { data: activeOrder } = await sb.from("gw_doc_orders")
+    .select("id").eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("doc_kind", docKind)
+    .in("status", ACTIVE_ORDER_STATUS).order("requested_at", { ascending: false }).limit(1).maybeSingle();
+  if (activeOrder) {
+    return json(res, 409, {
+      error: "doc_order_already_exists", existingOrderId: activeOrder.id,
+      hint: "この社員・この書類種別は、すでに手続き中の依頼があります",
+    });
+  }
+
+  // 採用承諾条件との突き合わせ（採用HR Stage 9）。労働条件通知書だけ対象。
+  // 一致しないまま、社内確認だけで正式な作成依頼を進めさせない。
+  // どうしても必要なら、owner・hrだけが理由つきで進められる（override）
+  let override = null;
+  if (docKind === "employment") {
+    const recon = await loadReconciliation(sb, ctx, employeeId);
+    if (recon.mismatches.length) {
+      const reason = str(body.overrideReason, 500);
+      if (!reason) {
+        return json(res, 409, {
+          error: "offer_mismatch", mismatches: recon.mismatches,
+          hint: "採用承諾時の条件と異なります。本人と条件を再確認するか、"
+            + "必要ならoffer再発行・本人再承諾のうえで進めてください",
+        });
+      }
+      if (!ctx.isHr) {
+        return json(res, 403, { error: "forbidden", hint: "条件不一致のまま進められるのは社長・人事だけです" });
+      }
+      override = { reason, mismatches: recon.mismatches };
+    }
+  }
+
   const conditions = normalizeConditions(body.conditions);
   // 抜けたまま社労士に渡すと、そこだけ空欄の通知書が返ってくる。
   // 押す人が「承知のうえで出す」と決めたときだけ通す
@@ -226,7 +301,6 @@ async function create(res, sb, ctx, user, body) {
     });
   }
 
-  const docKind = DOC_KIND_KEYS.includes(body.docKind) ? body.docKind : "employment";
   const row = {
     tenant_id: ctx.tenantId,
     employee_id: employeeId,
@@ -238,6 +312,9 @@ async function create(res, sb, ctx, user, body) {
     note: str(body.note, 2000),
     due_on: /^\d{4}-\d{2}-\d{2}$/.test(String(body.dueOn || "")) ? body.dueOn : null,
     requested_by: user.id,
+    ...(override ? {
+      override_reason: override.reason, override_by: user.id, override_at: new Date().toISOString(),
+    } : {}),
   };
 
   const { data, error } = await sb.from("gw_doc_orders").insert(row)
@@ -253,6 +330,13 @@ async function create(res, sb, ctx, user, body) {
     target: `doc_order:${data.id}`,
     detail: { title: row.title, employee: emp.display_name, missing },
   });
+  if (override) {
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "doc_order.create_override_mismatch",
+      target: `doc_order:${data.id}`,
+      detail: { employee: emp.display_name, reason: override.reason, mismatches: override.mismatches },
+    });
+  }
   await notifySlack({
     text: `:memo: 書類の作成を依頼しました　${row.title}`,
     lines: [emp.display_name, row.assignee_name || "（依頼先未記入）"],

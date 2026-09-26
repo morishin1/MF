@@ -11,8 +11,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260916e">
-  <link rel="stylesheet" href="css/layout.css?v=20260916e">
+  <link rel="stylesheet" href="css/app.css?v=20260916m">
+  <link rel="stylesheet" href="css/layout.css?v=20260916m">
+  <style>
+    .kp-items tr.click { cursor:pointer; }
+    .kp-items tr.click:hover td { background:var(--soft); }
+  </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -31,6 +35,12 @@
   <h1 class="kp-greet">メンバー</h1>
   <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
 
+  <div class="tabs" style="margin-bottom:16px;">
+    <button class="tab active" id="tab-employees" onclick="setView('employees')">社員</button>
+    <button class="tab" id="tab-guests" onclick="setView('guests')">外部メンバー</button>
+  </div>
+
+  <div id="view-employees">
   <div class="card">
     <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
     <div class="inline-controls" style="margin-bottom:12px;">
@@ -79,6 +89,7 @@
     </p>
     <div id="e-msg" class="err-text"></div>
     <div id="e-account"></div>
+    <div id="e-site"></div>
   </div>
 
   <div class="card">
@@ -152,17 +163,47 @@
     </h2>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
+  </div>
+
+  <!-- 外部メンバー（ゲスト）。deny-by-default：招待して、許可した範囲だけ渡す。
+       admin-members.html の中に置く。専用画面を増やすと、
+       同じ「メンバー管理」を2か所で探すことになる -->
+  <div id="view-guests" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">person_add</span>外部メンバー
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="openGuestInvite()">
+          <span class="material-symbols-outlined icon-inline">mail</span>外部メンバーを招待
+        </button>
+      </h2>
+      <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+        既定では何も見えません。招待するときに、見てよい範囲（プロジェクト・チャット・資料・タスク）を選びます。
+        あとから権限の欄で変えられます。
+      </p>
+      <div id="guest-invite-form" class="hidden"></div>
+      <div id="guest-msg" class="err-text"></div>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr>
+            <th>氏名</th><th>会社名</th><th>メール</th><th>招待先</th><th>状態</th>
+            <th>招待日時</th><th>有効期限</th><th>最終ログイン</th><th></th>
+          </tr></thead>
+          <tbody id="guest-rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="guest-detail"></div>
+  </div>
 </div>
 
-<script src="js/api-client.js?v=20260916e"></script>
-<script src="js/device.js?v=20260916e"></script>
-<script src="js/layout.js?v=20260916e"></script>
+<script src="js/api-client.js?v=20260916m"></script>
+<script src="js/device.js?v=20260916m"></script>
+<script src="js/layout.js?v=20260916m"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   const ROLE_LABEL = { owner: "経営者", hr: "人事", it: "IT・管理", finance: "経理",
-                     manager: "責任者", labor_advisor: "社労士" };
+                     manager: "責任者", labor_advisor: "社労士", recruiter: "採用担当" };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない
   const STATUS_LABEL = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
   // 同じログインアカウントを使っている社内システム。表示の並び順もこの通り
@@ -534,6 +575,9 @@
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   title="この方が使うGoogleドライブのフォルダ"
                   onclick="openDrive('${esc(e.id)}')">フォルダ</button>
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+                  title="現場常駐の契約（客先・単価・更新状態）"
+                  onclick="openSiteContracts('${esc(e.id)}')">現場契約</button>
           <!-- 名簿からそのまま頼めるようにする。
                別画面へ行って、もう一度この人を探し直す手間を無くす -->
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
@@ -659,6 +703,229 @@
   }
 
   function closeAccount() { el("e-account").innerHTML = ""; }
+
+  // ---- SES現場契約（社員/BP → 現場契約） ----------------------------------------
+  //
+  // 人員マスターとは別の表（gw_site_contracts）に持つが、画面は増やさない。
+  // 名簿のこの人の行から、そのまま開いて足す・直す。
+  // 単価・精算条件は機微情報なので、開けるのは管理者・人事だけ（RLSと同じ絞り）
+  const ENGAGEMENT_LABEL = { pp: "PP（自社プロパー）", bp: "BP（協力会社）" };
+  const RENEWAL_LABEL = { pending: "未確認", confirmed: "更新確認済み・継続",
+                          ending: "終了予定", renewed: "更新手続き済み" };
+  // 月次請求進捗（優先5）。勤務表受領→稼働確認→Board作成→送付→BP請求書受領
+  const BILLING_STAGE = [
+    ["timesheet_received", "勤務表"], ["work_confirmed", "稼働確認"], ["board_created", "Board作成"],
+    ["sent", "送付"], ["bp_invoice_received", "BP請求書"],
+  ];
+  const currentYm = () => new Date().toISOString().slice(0, 7);
+
+  let siteContracts = [];
+  let siteContractFor = null;
+  let editingSiteContractId = null;
+  let billingProgress = [];   // 今月ぶん。対象は siteContractFor の全契約
+
+  async function openSiteContracts(id) {
+    const e = employees.find((x) => x.id === id);
+    if (!e) return;
+    siteContractFor = e;
+    editingSiteContractId = null;
+    try {
+      const [res, bres] = await Promise.all([
+        API.listSiteContracts(id),
+        API.listBillingProgress(currentYm(), { employeeId: id }).catch(() => ({ progress: [] })),
+      ]);
+      siteContracts = res.contracts || [];
+      billingProgress = bres.progress || [];
+    } catch (err) {
+      el("e-site").innerHTML = `<div class="banner err" style="margin-top:12px;">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(err.hint || err.detail || err.message || "取得できませんでした")}</div></div>`;
+      return;
+    }
+    renderSiteContracts();
+    el("e-site").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function closeSiteContracts() { el("e-site").innerHTML = ""; siteContractFor = null; }
+
+  function renderSiteContracts() {
+    const e = siteContractFor;
+    if (!e) return;
+    const editing = siteContracts.find((c) => c.id === editingSiteContractId) || null;
+
+    el("e-site").innerHTML = `
+      <div class="card" style="margin-top:12px;border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">work_history</span>${esc(e.display_name)} さんの現場契約</h2>
+        <div class="table-scroll" style="margin-bottom:14px;">
+          ${siteContracts.length ? `
+          <table class="kp-items">
+            <thead><tr><th>区分</th><th>所属会社</th><th>上位会社</th><th>期間</th>
+              <th>単価</th><th>更新状態</th><th></th></tr></thead>
+            <tbody>${siteContracts.map((c) => `
+              <tr>
+                <td>${esc(ENGAGEMENT_LABEL[c.engagement_kind] || c.engagement_kind)}</td>
+                <td>${esc(c.site_company)}</td>
+                <td>${esc(c.prime_company || "—")}</td>
+                <td>${esc(c.period_from)} 〜 ${esc(c.period_to || "未定")}</td>
+                <td>${c.unit_price != null ? `${Number(c.unit_price).toLocaleString("ja-JP")}円／${esc(c.unit_price_type)}` : "—"}</td>
+                <td><span class="kp-chip ${c.renewal_status === "confirmed" || c.renewal_status === "renewed" ? "event"
+                    : c.renewal_status === "ending" ? "important" : "draft"}">${esc(RENEWAL_LABEL[c.renewal_status] || c.renewal_status)}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-secondary btn-sm" onclick="startEditSiteContract('${esc(c.id)}')">編集</button>
+                  <button class="btn btn-secondary btn-sm" onclick="removeSiteContract('${esc(c.id)}', this)">削除</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>` : `<p class="muted" style="font-size:12.5px;">まだ登録されていません。</p>`}
+        </div>
+
+        ${renderBillingSection()}
+
+        <div class="inline-controls">
+          <div><label>区分</label>
+            <select id="sc-kind">
+              <option value="bp"${(editing?.engagement_kind || "bp") === "bp" ? " selected" : ""}>BP（協力会社）</option>
+              <option value="pp"${editing?.engagement_kind === "pp" ? " selected" : ""}>PP（自社プロパー）</option>
+            </select></div>
+          <div><label>所属会社（常駐先）</label>
+            <input id="sc-site" type="text" placeholder="◯◯株式会社" value="${esc(editing?.site_company || "")}"></div>
+          <div><label>上位会社（任意）</label>
+            <input id="sc-prime" type="text" placeholder="多次請けのときの直上の契約相手" value="${esc(editing?.prime_company || "")}"></div>
+          <div><label>契約開始日</label>
+            <input id="sc-from" type="date" value="${esc(editing?.period_from || "")}"></div>
+          <div><label>契約終了日（任意）</label>
+            <input id="sc-to" type="date" value="${esc(editing?.period_to || "")}"></div>
+          <div><label>単価</label>
+            <input id="sc-price" type="number" min="0" placeholder="700000" value="${editing?.unit_price ?? ""}"></div>
+          <div><label>単価の種類</label>
+            <select id="sc-price-type">
+              ${["月額", "時給", "日給"].map((t) =>
+                `<option value="${t}"${(editing?.unit_price_type || "月額") === t ? " selected" : ""}>${t}</option>`).join("")}
+            </select></div>
+          <div><label>更新状態</label>
+            <select id="sc-renewal">
+              ${Object.entries(RENEWAL_LABEL).map(([k, l]) =>
+                `<option value="${k}"${(editing?.renewal_status || "pending") === k ? " selected" : ""}>${l}</option>`).join("")}
+            </select></div>
+          <div style="flex-basis:100%;"><label>精算条件（任意）</label>
+            <input id="sc-settle" type="text" placeholder="140h〜180h、超過1,500円/控除1,200円"
+                   value="${esc(editing?.settlement_condition || "")}"></div>
+          <div style="flex-basis:100%;"><label>メモ（任意）</label>
+            <input id="sc-note" type="text" value="${esc(editing?.note || "")}"></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="sc-save" onclick="saveSiteContract(this)">
+            <span class="material-symbols-outlined icon-inline">${editing ? "save" : "add"}</span>${editing ? "保存" : "追加"}
+          </button>
+          ${editing ? `<button class="btn btn-secondary" onclick="editingSiteContractId=null;renderSiteContracts();">やめる</button>` : ""}
+          <button class="btn btn-secondary" onclick="closeSiteContracts()">閉じる</button>
+        </div>
+        <div id="sc-msg" class="err-text" style="margin-top:8px;"></div>
+      </div>`;
+  }
+
+  // ---- 今月の請求進捗（優先5・最小構成） --------------------------------------------
+  //
+  // 請求書そのものはここでは作らない。勤務表受領→稼働確認→Board作成→送付→
+  // BP請求書受領の5段だけ。今月動いている契約（終了日が無いか、今月以降）だけに出す
+  function renderBillingSection() {
+    const ym = currentYm();
+    const active = siteContracts.filter((c) => c.period_from <= `${ym}-31` && (!c.period_to || c.period_to >= `${ym}-01`));
+    if (!active.length) return "";
+
+    return `
+      <div style="margin-bottom:16px;">
+        <b style="font-size:13px;">今月（${esc(ym)}）の請求進捗</b>
+        <div class="ob-final" style="margin-top:8px;">
+          ${active.map((c) => {
+            const p = billingProgress.find((x) => x.site_contract_id === c.id);
+            if (!p) {
+              return `<div class="ob-final-row">
+                <span class="l">${esc(c.site_company)}</span>
+                <span class="n"><button class="btn btn-secondary btn-sm" onclick="ensureBilling('${esc(c.id)}', this)">今月の進捗を用意する</button></span>
+              </div>`;
+            }
+            return `<div class="ob-final-row" style="cursor:default;">
+              <span class="l">${esc(c.site_company)}</span>
+              <span class="n" style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${BILLING_STAGE.map(([key, label]) => `
+                  <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;cursor:pointer;">
+                    <input type="checkbox" style="width:auto;margin:0;" ${p[key] ? "checked" : ""}
+                           onchange="toggleBillingStage('${esc(p.id)}','${key}', this.checked)">
+                    ${label}
+                  </label>`).join("")}
+              </span>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>`;
+  }
+
+  async function ensureBilling(siteContractId, btn) {
+    try {
+      await KPLayout.busy(btn, "…", () => API.ensureBillingProgress({
+        employeeId: siteContractFor.id, siteContractId, billingMonth: currentYm(),
+      }));
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  async function toggleBillingStage(progressId, stage, done) {
+    try {
+      await API.updateBillingProgress({ id: progressId, stage, done });
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "できませんでした");
+    }
+  }
+
+  function startEditSiteContract(id) {
+    editingSiteContractId = id;
+    renderSiteContracts();
+  }
+
+  async function saveSiteContract(btn) {
+    const msg = el("sc-msg");
+    msg.textContent = "";
+    const fields = {
+      engagementKind: el("sc-kind").value,
+      siteCompany: el("sc-site").value.trim(),
+      primeCompany: el("sc-prime").value.trim() || null,
+      periodFrom: el("sc-from").value,
+      periodTo: el("sc-to").value || null,
+      unitPrice: el("sc-price").value === "" ? null : Number(el("sc-price").value),
+      unitPriceType: el("sc-price-type").value,
+      renewalStatus: el("sc-renewal").value,
+      settlementCondition: el("sc-settle").value.trim() || null,
+      note: el("sc-note").value.trim() || null,
+    };
+    if (!fields.siteCompany) { msg.textContent = "所属会社（常駐先）を入力してください"; return; }
+    if (!fields.periodFrom) { msg.textContent = "契約開始日を入力してください"; return; }
+    try {
+      if (editingSiteContractId) {
+        await KPLayout.busy(btn, "保存中…", () => API.updateSiteContract({ id: editingSiteContractId, ...fields }));
+      } else {
+        await KPLayout.busy(btn, "追加中…", () => API.createSiteContract({ employeeId: siteContractFor.id, ...fields }));
+      }
+      editingSiteContractId = null;
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存に失敗しました";
+    }
+  }
+
+  async function removeSiteContract(id, btn) {
+    if (!confirm("この現場契約を削除します。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deleteSiteContract(id));
+      if (editingSiteContractId === id) editingSiteContractId = null;
+      await openSiteContracts(siteContractFor.id);
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "削除できませんでした");
+    }
+  }
 
   // ---- 共有フォルダ -----------------------------------------------------------
   //
@@ -994,6 +1261,295 @@
     a.download = `メンバー一覧_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  // ---- 社員／外部メンバー の切り替え ----------------------------------------------
+  let guestsLoaded = false;
+  function setView(view) {
+    el("tab-employees").classList.toggle("active", view === "employees");
+    el("tab-guests").classList.toggle("active", view === "guests");
+    el("view-employees").classList.toggle("hidden", view !== "employees");
+    el("view-guests").classList.toggle("hidden", view !== "guests");
+    if (view === "guests" && !guestsLoaded) { guestsLoaded = true; loadGuests(); }
+  }
+
+  // ---- 外部メンバー（ゲスト招待） ----------------------------------------------
+  //
+  // ■ 既定では何も見えない
+  //   招待するときに、見てよい範囲（プロジェクト・チャット・資料・タスク）を
+  //   チェックボックスで選ぶ。選ばなければ、登録しても何も見えない
+  //   （UIだけでなく DB の RLS 側でも絞っている。db/078_external_guests.sql）
+  //
+  // ■ 招待URLは1回しか見せない
+  //   サーバはトークンのハッシュしか持たない。発行・再発行した直後の応答にだけ
+  //   平文が入るので、その場で「コピーしてください」と出す
+  const RESOURCE_LABEL = { project: "プロジェクト", thread: "チャット", document: "資料", task: "タスク" };
+  const GUEST_STATUS_LABEL = { invited: "招待済み", active: "登録完了", expired: "期限切れ", revoked: "無効" };
+  let guests = [];
+  let guestOptions = null;   // { projects, threads, documents, tasks }
+  let openGuestId = null;
+
+  async function loadGuests() {
+    try {
+      const res = await API.listGuests();
+      if (res.notReady) {
+        el("guest-rows").innerHTML = `<tr><td colspan="9">
+          <div class="banner warn" style="margin:8px 0;"><span class="material-symbols-outlined">info</span>
+          <div>${esc(res.message)}</div></div></td></tr>`;
+        return;
+      }
+      guests = res.guests || [];
+      renderGuestRows();
+    } catch (e) {
+      el("guest-rows").innerHTML = `<tr><td colspan="9">
+        <div class="banner err" style="margin:8px 0;"><span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.detail || e.message || "取得できませんでした")}</div></div></td></tr>`;
+    }
+  }
+
+  function renderGuestRows() {
+    if (!guests.length) {
+      el("guest-rows").innerHTML = `<tr><td colspan="9" class="empty">まだ招待していません。</td></tr>`;
+      return;
+    }
+    el("guest-rows").innerHTML = guests.map((g) => `
+      <tr class="click" onclick="openGuestDetail('${esc(g.id)}')">
+        <td>${esc(g.displayName)}</td>
+        <td>${esc(g.companyName || "—")}</td>
+        <td>${esc(g.email)}</td>
+        <td>${g.grants.length ? esc(grantsSummary(g.grants)) : `<span class="muted">未設定</span>`}</td>
+        <td><span class="kp-chip ${guestStatusClass(g.status)}">${GUEST_STATUS_LABEL[g.status] || g.status}</span></td>
+        <td>${fmtDate(g.invitedAt)}</td>
+        <td>${fmtDate(g.expiresAt)}</td>
+        <td>${g.lastLoginAt ? fmtDate(g.lastLoginAt) : "—"}</td>
+        <td><span class="material-symbols-outlined" style="color:var(--muted);">chevron_right</span></td>
+      </tr>`).join("");
+  }
+
+  function grantsSummary(grants) {
+    const labels = grants.map((g) => g.label || g.key);
+    return labels.length > 2 ? `${labels.slice(0, 2).join("・")} ほか${labels.length - 2}件` : labels.join("・");
+  }
+  function guestStatusClass(s) {
+    return s === "active" ? "event" : s === "revoked" ? "important" : s === "expired" ? "archived" : "draft";
+  }
+  const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP",
+    { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+
+  // ---- 招待フォーム -------------------------------------------------------------
+  async function openGuestInvite() {
+    const box = el("guest-invite-form");
+    const opening = box.classList.contains("hidden");
+    box.classList.toggle("hidden");
+    if (!opening) return;
+    if (!guestOptions) {
+      try { guestOptions = await API.guestOptions(); }
+      catch (e) { guestOptions = { projects: [], threads: [], documents: [], tasks: [] }; }
+    }
+    box.innerHTML = `
+      <div class="card" style="margin-bottom:14px;border:1px solid var(--primary);">
+        <h2><span class="material-symbols-outlined">mail</span>外部メンバーを招待</h2>
+        <div class="inline-controls" style="margin-bottom:14px;">
+          <div><label>氏名</label><input id="g-name" type="text" placeholder="社外 太郎"></div>
+          <div><label>会社名</label><input id="g-company" type="text" placeholder="株式会社サンプル"></div>
+          <div><label>メール</label><input id="g-email" type="email" placeholder="taro@example.com"></div>
+        </div>
+        <b style="font-size:13px;">閲覧できる範囲（選ばなければ、登録しても何も見えません）</b>
+        <div style="margin-top:8px;">${grantPicker(guestOptions, [])}</div>
+        <div class="ob-done-bar" style="margin-top:14px;display:flex;gap:8px;">
+          <button class="btn btn-primary" id="g-save" onclick="submitGuestInvite(this)">
+            <span class="material-symbols-outlined icon-inline">send</span>招待URLを発行
+          </button>
+          <button class="btn btn-secondary" onclick="openGuestInvite()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  /** 4種類の許可を、種類ごとにチェックボックスで並べる。checked は {type,key} の配列 */
+  function grantPicker(opts, checked, idPrefix = "g-grant") {
+    const has = (type, key) => checked.some((c) => c.type === type && c.key === key);
+    const group = (type, list) => {
+      if (!list.length) return "";
+      return `
+        <div style="margin-bottom:10px;">
+          <div class="muted" style="font-size:11.5px;font-weight:600;margin-bottom:4px;">${RESOURCE_LABEL[type]}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px 14px;max-height:140px;overflow:auto;">
+            ${list.map((o) => `
+              <label style="display:inline-flex;align-items:center;gap:5px;font-weight:400;font-size:12.5px;">
+                <input type="checkbox" style="width:auto;margin:0;" data-type="${type}" data-key="${esc(o.key)}"
+                       data-label="${esc(o.label)}" class="${idPrefix}" ${has(type, o.key) ? "checked" : ""}>
+                ${esc(o.label)}
+              </label>`).join("")}
+          </div>
+        </div>`;
+    };
+    return group("project", opts.projects) + group("thread", opts.threads)
+      + group("document", opts.documents) + group("task", opts.tasks)
+      || `<p class="muted" style="font-size:12.5px;">選べる対象がまだありません（プロジェクト・チャット・資料・タスクを先に作ってください）。</p>`;
+  }
+
+  function readGrants(idPrefix = "g-grant") {
+    return [...document.querySelectorAll(`.${idPrefix}:checked`)].map((el2) => ({
+      resourceType: el2.dataset.type, resourceKey: el2.dataset.key, resourceLabel: el2.dataset.label,
+    }));
+  }
+
+  async function submitGuestInvite(btn) {
+    const msg = el("guest-msg");
+    msg.textContent = "";
+    const displayName = el("g-name").value.trim();
+    const email = el("g-email").value.trim();
+    if (!displayName) { msg.textContent = "氏名を入力してください"; return; }
+    if (!email) { msg.textContent = "メールアドレスを入力してください"; return; }
+    const body = {
+      displayName, email, companyName: el("g-company").value.trim() || null,
+      grants: readGrants(),
+    };
+    try {
+      const r = await KPLayout.busy(btn, "発行中…", () => API.createGuest(body));
+      el("guest-invite-form").classList.add("hidden");
+      guestsLoaded = false;
+      await loadGuests();
+      openGuestDetail(r.guest.id, { token: r.token, expiresAt: r.expiresAt });
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "招待できませんでした";
+    }
+  }
+
+  // ---- 1人ぶん（右ドロワーと同じ考え方。td-* のCSSをそのまま使う） -------------------
+  //
+  // 招待URLの平文は、発行・再発行の直後だけ引数（freshInvite）で受け取る。
+  // それ以外（一覧から開いたとき）はサーバに残っておらず、渡ってこない
+  async function openGuestDetail(id, freshInvite) {
+    openGuestId = id;
+    const box = el("guest-detail");
+    box.innerHTML = `<div class="card" style="margin-top:12px;"><div class="empty">読み込み中…</div></div>`;
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!guestOptions) {
+      try { guestOptions = await API.guestOptions(); }
+      catch (e) { guestOptions = { projects: [], threads: [], documents: [], tasks: [] }; }
+    }
+    let d;
+    try {
+      d = await API.guestDetail(id);
+    } catch (e) {
+      box.innerHTML = `<div class="banner err" style="margin-top:12px;">
+        <span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.detail || e.message || "開けませんでした")}</div></div>`;
+      return;
+    }
+    renderGuestDetail(d, freshInvite);
+  }
+
+  function closeGuestDetail() { el("guest-detail").innerHTML = ""; openGuestId = null; }
+
+  function renderGuestDetail(d, freshInvite) {
+    const g = d.guest;
+    const inviteUrl = freshInvite ? `${location.origin}/guest-invite.html?token=${encodeURIComponent(freshInvite.token)}` : null;
+    const slackText = inviteUrl ? slackMessage(g.display_name, inviteUrl, freshInvite.expiresAt) : null;
+
+    el("guest-detail").innerHTML = `
+      <div class="card" style="margin-top:12px;border:1px solid var(--primary);">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="flex:1;">
+            <div style="font-size:16px;font-weight:700;color:var(--primary-dark);">${esc(g.display_name)}</div>
+            <div class="muted" style="font-size:12.5px;margin-top:2px;">
+              ${esc(g.company_name || "—")}　${esc(g.email)}
+            </div>
+          </div>
+          <span class="kp-chip ${guestStatusClass(d.status)}">${GUEST_STATUS_LABEL[d.status] || d.status}</span>
+          <button class="btn btn-secondary btn-sm" onclick="closeGuestDetail()">閉じる</button>
+        </div>
+
+        ${inviteUrl ? `
+          <div class="banner ok" style="margin-top:14px;">
+            <span class="material-symbols-outlined">key</span>
+            <div>
+              <b>招待URLができました。相手に渡すのはいまだけです（このあとは取り出せません）。</b>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+                <input type="text" readonly value="${esc(inviteUrl)}" style="flex:1;min-width:220px;margin:0;font-size:12px;"
+                       onclick="this.select()">
+                <button class="btn btn-secondary btn-sm" onclick="copyText('${esc(inviteUrl)}', this)">URLをコピー</button>
+                <button class="btn btn-secondary btn-sm" onclick="copyText(${JSON.stringify(slackText)}, this)">Slack用メッセージをコピー</button>
+              </div>
+            </div>
+          </div>` : ""}
+
+        <div class="ob-done-bar" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="reissueGuestInvite('${esc(g.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">autorenew</span>招待を再発行
+          </button>
+          ${d.status !== "revoked" ? `
+            <button class="btn btn-secondary btn-sm" onclick="disableGuest('${esc(g.id)}', this)">
+              <span class="material-symbols-outlined icon-inline">block</span>無効化する
+            </button>` : ""}
+        </div>
+
+        <div style="margin-top:18px;">
+          <b style="font-size:13px;">閲覧できる範囲</b>
+          <div style="margin-top:8px;" id="guest-grant-picker">${grantPicker(
+            guestOptions || { projects: [], threads: [], documents: [], tasks: [] },
+            d.grants.map((x) => ({ type: x.resource_type, key: x.resource_key })), "gd-grant")}</div>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="saveGuestGrants('${esc(g.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">save</span>権限を保存
+          </button>
+        </div>
+
+        <details style="margin-top:16px;">
+          <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);">招待の履歴（${d.invites.length}件）</summary>
+          <div style="margin-top:8px;">
+            ${d.invites.map((iv) => `
+              <div style="font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);">
+                発行 ${fmtDate(iv.created_at)}　期限 ${fmtDate(iv.expires_at)}
+                ${iv.used_at ? `　使用済み ${fmtDate(iv.used_at)}` : iv.revoked_at ? `　無効化 ${fmtDate(iv.revoked_at)}` : "　未使用"}
+              </div>`).join("")}
+          </div>
+        </details>
+      </div>`;
+  }
+
+  function slackMessage(name, url, expiresAt) {
+    const exp = new Date(expiresAt).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+    return `【エイト グループウェアへの招待】\n${name} 様\n\n下記のURLから外部メンバー登録をお願いします。\n${url}\n\n`
+      + `※このURLは1回限りです。有効期限：${exp}`;
+  }
+
+  async function copyText(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = "コピーしました";
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+    } catch (e) { alert("コピーできませんでした。手で選んでコピーしてください。"); }
+  }
+
+  async function reissueGuestInvite(id, btn) {
+    if (!confirm("招待を再発行します。まだ使われていない古いURLは無効になります。よろしいですか？")) return;
+    try {
+      const r = await KPLayout.busy(btn, "…", () => API.guestReissue(id));
+      guestsLoaded = false;
+      await loadGuests();
+      await openGuestDetail(id, { token: r.token, expiresAt: r.expiresAt });
+    } catch (e) { alert(e.hint || e.detail || e.message || "再発行できませんでした"); }
+  }
+
+  async function disableGuest(id, btn) {
+    if (!confirm("この外部メンバーを無効化します。登録済みでもログインできなくなります。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "…", () => API.guestDisable(id));
+      guestsLoaded = false;
+      await loadGuests();
+      await openGuestDetail(id);
+    } catch (e) { alert(e.hint || e.detail || e.message || "無効化できませんでした"); }
+  }
+
+  async function saveGuestGrants(id, btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.guestUpdateGrants(id, readGrants("gd-grant")));
+      guestsLoaded = false;
+      await loadGuests();
+      await openGuestDetail(id);
+    } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
   }
 </script>
 

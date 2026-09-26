@@ -6,6 +6,9 @@
 //   2. 確定していれば、これまでどおり出せる
 //   3. 表がまだ無い環境（072 未適用）では止めない
 //   4. 読み取りでも、今日の3件と明日の状態が返る
+//   5. 日報（朝・夜）は、もう gw_action_items へ何も作らない。
+//      gw_tasks/gw_focus_days が Single Source of Truth で、
+//      同じ仕事が2つの表に生まれない
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -76,7 +79,6 @@ mock.module(atRoot("lib/gw.js"), {
 // 日報の本筋ではないものは、動くだけの形にしておく
 mock.module(atRoot("lib/actions.js"), {
   namedExports: {
-    planFromNippo: () => [], savePlan: async () => ({ created: 0 }),
     closeItems: async () => 0, shapeItem: (a) => a, ensureKpis: async () => {},
     shapeKpi: (k) => k, rankToday: (x) => x, nextWorkday: (d) => d,
     SOURCE_LABEL: {}, STATUS_LABEL: {}, kpiRate: () => 0,
@@ -91,6 +93,7 @@ mock.module(atRoot("lib/nippo-eval.js"), {
 
 const { default: nippo } = await import(atRoot("api/nippo/index.js"));
 const { nextFocusDate, jstToday } = await import(atRoot("lib/focus.js"));
+const { weekStart } = await import(atRoot("lib/nippo.js"));
 
 const res = () => {
   const r = { statusCode: 0, body: null };
@@ -122,7 +125,11 @@ function setup({ status = null, tasks = [], missing = [] } = {}) {
   db.missing = new Set(missing);
   db.rows = {
     gw_employees: [{ id: "emp-1", tenant_id: "t1", user_id: "u-1", display_name: "山田 太郎", status: "active" }],
-    tc_nippo: [], tc_weekly_review: [], tc_thanks: [], tc_nippo_replies: [],
+    tc_nippo: [],
+    // 週の最終勤務日に実行しても止まらないよう、今週ぶんはあらかじめ埋めておく
+    // （本題は「明日の3件」のテストで、週の振り返りの是非はここでは見ない）
+    tc_weekly_review: [{ user_id: "u-1", week_start: weekStart(TODAY), q1: "順調でした" }],
+    tc_thanks: [], tc_nippo_replies: [],
     gw_reminder_prefs: [{ employee_id: "emp-1", workdays: [1, 2, 3, 4, 5] }],
     gw_action_items: [], gw_daily_kpis: [], gw_nippo_ai_evals: [],
     gw_focus_days: status ? [{ id: "d1", tenant_id: "t1", employee_id: "emp-1",
@@ -207,6 +214,29 @@ await ok("表が無い環境では focus は null（画面はこれまでどお�
   const r = await call({ method: "GET", url: `/api/nippo?date=${TODAY}` });
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.focus, null);
+});
+
+console.log("\n=== 日報からは、もう gw_action_items を作らない（gw_tasksがSSOT） ===\n");
+
+await ok("朝に最優先・やることを書いても、gw_action_items は増えない", async () => {
+  setup();
+  const r = await call({
+    method: "POST", url: "/api/nippo",
+    body: { kind: "morning", date: TODAY, topPriority: "C社見積を出す", actions: [{ task: "A社へ連絡" }] },
+  });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_action_items.length, 0, "朝の入力から作られてしまっています");
+});
+
+await ok("明日の3つ確定 → 日報送信 → 同じ仕事が二重生成されない", async () => {
+  setup({ status: "confirmed", tasks: [task("t1"), task("t2"), task("t3")] });
+  const r = await call({
+    method: "POST", url: "/api/nippo",
+    body: body({ tomorrow: "C社見積を出す", tomorrowDeadline: "明日中", doneActionIds: [] }),
+  });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_action_items.length, 0, "日報から別系統のタスクが生まれてしまっています");
+  assert.equal(r.body.actions.planned, undefined, "もう作らないので planned は返さない");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

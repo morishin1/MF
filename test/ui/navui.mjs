@@ -84,8 +84,9 @@ console.log("— 管理者の左メニュー —");
   const page = await open("admin-timecard.html", { admin: true });
 
   const heads = await page.locator(".kp-side-group .lb").allInnerTexts();
-  check(heads.length === 5, `見出しは5つ（いま ${heads.length}: ${heads.join("・")}）`);
-  for (const x of ["ホーム", "人事・労務", "採用", "業務・経理", "管理・設定"]) {
+  // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）
+  check(heads.length === 4, `見出しは4つ（いま ${heads.length}: ${heads.join("・")}）`);
+  for (const x of ["ホーム", "人事・労務", "業務・経理", "管理・設定"]) {
     check(heads.some((h) => h.trim() === x), `グループ「${x}」`);
   }
 
@@ -94,6 +95,9 @@ console.log("— 管理者の左メニュー —");
     .map((s) => s.trim());
   check(shown.length <= 6, `開いているのは1グループぶんだけ（いま ${shown.length} 行）`);
   check(shown.some((s) => s.includes("勤怠・休暇")), "いまいるグループが開いている");
+  check(shown.some((s) => s.includes("採用")), "「採用」は人事・労務の中の項目としてある");
+  check(await page.locator(".kp-side-sub:not(.hidden) a", { hasText: "採用" }).getAttribute("href") === "hr/",
+    "「採用」は /hr/ へ行く");
 
   // ここがいちばん大事。スクロールなしで全部見えるか。
   //
@@ -133,6 +137,31 @@ console.log("\n— 帯から、隣の画面へ行ける —");
   // 左メニューでは、まとめた側が光っている
   const lit = await page.locator(".kp-side-item.on").innerText();
   check(/勤怠・休暇/.test(lit), `左では「勤怠・休暇」が光る（いま ${lit.trim()}）`);
+  await page.close();
+}
+
+console.log("\n— 雇用契約は、業務順の3タブ —");
+{
+  const page = await open("admin-contracts.html", { admin: true });
+  const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
+  check(tabs.join("/") === "契約・面談/契約書作成依頼/電子署名",
+    `①契約・面談 ②契約書作成依頼 ③電子署名 の順（いま ${tabs.join("/")}）`);
+  check(await page.locator(".kp-subnav .kp-subtab.on").innerText() === "契約・面談",
+    "いま見ているほうが選ばれている");
+  await page.close();
+}
+{
+  // 「契約書作成依頼」は admin-esign.html 自身の中のタブへ ?tab=order で飛ぶ。
+  // 新しい画面は作らない。「電子署名」の中に埋め込まれていない（別タブ）ことを確かめる
+  const page = await open("admin-esign.html?tab=order", { admin: true });
+  const on = await page.locator(".kp-subnav .kp-subtab.on").innerText();
+  check(on.trim() === "契約書作成依頼", `?tab=order で開くと、こちらが選ばれる（いま ${on}）`);
+  await page.close();
+}
+{
+  const page = await open("admin-esign.html", { admin: true });
+  const on = await page.locator(".kp-subnav .kp-subtab.on").innerText();
+  check(on.trim() === "電子署名", `そのまま開くと「電子署名」が選ばれる（いま ${on}）`);
   await page.close();
 }
 

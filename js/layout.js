@@ -145,32 +145,43 @@
       ],
     },
     {
+      // 「採用」は独立グループから統合。/hr は既存のKPLayoutサイドメニューでは
+      // なく、専用ヘッダー（js/hr-layout.js）で動く別アプリなので、ここは
+      // 単純に入口を1つ置くだけ（tabsは持たせない）
       key: "g-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true },
-        { key: "hr",        href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
+        { key: "hr",        href: "hr/",                  label: "採用",         icon: "person_add", ready: true },
+        { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
+          // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
+          // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
+          // 入口は消さない。見出しまで同じにする必要はないので tabs（帯）では
+          // なく match だけにする（帯を出すと、見出しをそろえる制約が働く）
+          match: ["members", "onboard"] },
+        { key: "hr_flow",   href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
         { key: "timecard",  href: "admin-timecard.html",  label: "勤怠・休暇",   icon: "schedule",   ready: true,
           tabs: [
             { key: "timecard", href: "admin-timecard.html", label: "勤怠" },
             { key: "requests", href: "admin-requests.html", label: "休暇・稟議" },
           ] },
         { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true,
+          // 業務順に並べる: ①契約・面談 → ②契約書作成依頼 → ③電子署名。
+          // 「作成依頼」はadmin-esign.html自身の中のタブ（PANES）の1つで、
+          // 新しい画面は作らない。?tab=order で開くと、そのタブが選ばれた
+          // 状態で開く（admin-esign.html:openFromUrl）
           tabs: [
-            { key: "contracts", href: "admin-contracts.html", label: "契約・面談" },
-            { key: "esign",     href: "admin-esign.html",     label: "電子署名" },
+            { key: "contracts",   href: "admin-contracts.html",       label: "契約・面談" },
+            { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
+            { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
         { key: "growth",    href: "admin-growth.html",    label: "評価・育成",   icon: "trending_up", ready: true,
           tabs: [
             { key: "growth",   href: "admin-growth.html",   label: "育成計画" },
             { key: "autonomy", href: "admin-autonomy.html", label: "自走レベル" },
-          ] },
-      ],
-    },
-    {
-      key: "g-hire", label: "採用", icon: "person_add",
-      items: [
-        { key: "onboard",   href: "admin-onboard.html",   label: "新規登録", icon: "person_add", ready: true },
-        { key: "probation", href: "admin-probation.html", label: "試用期間", icon: "how_to_reg", ready: true },
+          ],
+          // 試用期間は採用前ではなく入社後の人事管理なので、こちらへ
+          // （既存データ・ロジックは変えず、導線だけ移す）。見出しは「試用期間」の
+          // ままでよいので帯（tabs）には入れず、選ばれた状態にするmatchだけ足す
+          match: ["growth", "autonomy", "probation"] },
       ],
     },
     {
@@ -179,6 +190,7 @@
         { key: "bookings",   href: "admin-bookings.html", label: "スペース予約", icon: "meeting_room",    ready: true },
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
         { key: "closing",    href: "admin-closing.html",  label: "月次締め",     icon: "event_available", ready: true },
+        { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理", icon: "fact_check",   ready: true },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
       ],

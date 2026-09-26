@@ -174,7 +174,8 @@ console.log("— 1行＝1人 —");
 
   const t = await page.locator("#pp-rows").innerText();
   check(t.includes("山田 太郎") && t.includes("佐藤 花子"), "氏名が出る");
-  check(/○.*登録済/s.test(t), "会社PCは ○ 登録済");
+  check(/○.*Browserのみ/s.test(t), "会社PCは ○ Browserのみ（source: browser のみ登録）");
+  check(t.includes("PC未登録"), "端末が1台も無い人は PC未登録（高橋さん）");
   check(t.includes("連携済み") && t.includes("連携異常") && t.includes("未設定"),
     "ブラウザは ○ △ × で書き分ける");
 

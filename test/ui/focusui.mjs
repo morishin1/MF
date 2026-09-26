@@ -45,7 +45,7 @@ const FOCUS = {
     { id: "n3", title: "面談の準備", purpose: "採用のため", doneCondition: "資料が用意できている",
       assigneeId: "emp-1", dueOn: "2026-09-17", priority: "high", missing: [] },
   ],
-  tomorrowState: { key: "ai_checked", label: "確認待ち", ready: true, confirmed: false,
+  tomorrowState: { key: "ai_checked", label: "確認待ち", ready: true, confirmed: false, coached: true,
                    count: 3, todo: "AIの指摘を見て、確定する", incomplete: [] },
   tomorrowAi: { ok: true, summary: "明日やる内容として妥当です",
                 warnings: ["1人に3件とも寄っています"], better: [] },
@@ -273,6 +273,24 @@ console.log("\n=== 管理：誰が止まっているか ===");
                                         body: JSON.stringify(b) });
     if (/\/api\/tasks\/board/.test(url)) { asked.push(url); return send(BOARD); }
     if (/\/api\/tasks\/focus/.test(url)) return send(FOCUS);
+    if (/\/api\/tasks\/detail/.test(url)) {
+      return send({
+        task: { id: "t1", title: "A社へ提案書送付", body: null, purpose: null,
+                doneCondition: "先方への送付完了", kpi: null, service: null, url: null,
+                assigneeId: "e1", assignee: "A", dueOn: "2026-09-16",
+                priority: "high", priorityLabel: "高", status: "done", statusLabel: "完了",
+                category: null, result: null, notDoneReason: null, focusDate: "2026-09-16",
+                carryCount: 0, acceptedAt: null, completedAt: "2026-09-16T01:00:00Z",
+                createdAt: "2026-09-15T01:00:00Z", createdBy: "A", madeBy: "human",
+                ai: null, aiAssigneeId: null, aiAssignee: null, aiAssigneeWhy: null },
+        comments: [], events: [],
+        people: [{ id: "e1", name: "A" }, { id: "e2", name: "B" }, { id: "e3", name: "C" }],
+        priorities: [{ key: "high", label: "高" }, { key: "normal", label: "ふつう" }, { key: "low", label: "低" }],
+        statuses: [{ key: "todo", label: "未着手" }, { key: "doing", label: "着手中" },
+                   { key: "done", label: "完了" }, { key: "cancelled", label: "取りやめ" }],
+        carryChoices: [], canEdit: true, canManage: true, me: { id: "emp-hr", name: "事務" },
+      });
+    }
     if (/\/api\/tasks/.test(url)) return send({ tasks: [], templates: [], canManage: true });
     if (/\/api\/employees/.test(url)) return send({ employees: [] });
     if (/\/api\/me\b/.test(url)) return send(ME("admin"));
@@ -285,11 +303,23 @@ console.log("\n=== 管理：誰が止まっているか ===");
 
   const board = await page.locator("#board-card").innerText();
   check(/今日の実行状況/.test(board), "見出し");
-  check(/明日が未登録/.test(board) && /確定待ち/.test(board), "上の数で、止まっている人が分かる");
+  check(/対象者/.test(board) && /今日の完了者数/.test(board)
+    && /止まっている人/.test(board) && /明日の3タスク未登録人数/.test(board),
+    "上のサマリーは4つに絞る");
+  check(await page.locator("#bd-kpi .box").count() === 4, "サマリーは4つ");
+  check(!/確定待ち/.test(await page.locator("#bd-kpi").innerText()), "確定待ちはサマリーに強く出さない");
+  check(/確定待ちが 1 人/.test(await page.locator("#bd-waiting-note").innerText()), "確定待ちは補助的に出す");
+
+  console.log("\n— 止まっている人を、まず出す —");
+  check(await page.locator("#bd-stuck-list .stuck-row").count() === 1, "止まっている人だけ（1人）");
+  const stuck = await page.locator("#bd-stuck-list").innerText();
+  check(/B/.test(stuck), "止まっている人の名前");
+  check(/明日のタスクが未登録/.test(stuck), "何が止まっているか");
+
+  console.log("\n— 担当者一覧はシンプルに5列 —");
+  const heads = await page.locator(".bd-table th").allInnerTexts();
+  check(heads.join("/") === "担当者/今日の3タスク数/完了数/明日の3タスク/状態", `列（いま ${heads.join("/")}）`);
   check(await page.locator("#bd-rows tr").count() === 3, "3人ぶん");
-  const first = await page.locator("#bd-rows tr").first().innerText();
-  check(/B/.test(first) && /注意/.test(first), "止まっている人が上に来る");
-  check(/明日のタスクが未登録/.test(first), "何が止まっているか");
   check(/1 \/ 3/.test(board) && /3 \/ 3/.test(board), "完了数が出る");
 
   console.log("\n— 絞り込み —");
@@ -300,13 +330,30 @@ console.log("\n=== 管理：誰が止まっているか ===");
   await page.waitForTimeout(500);
   check(asked.some((u) => /state=warn/.test(u)), "状態で絞ると、サーバにも渡す");
 
-  console.log("\n— その人を開く —");
-  await page.locator("#bd-rows tr").first().click();
+  console.log("\n— 止まっている人を押すと、右の引き出しで開く —");
+  await page.locator("#bd-stuck-list .stuck-row").first().click();
   await page.waitForTimeout(700);
-  const detail = await page.locator("#bd-detail").innerText();
+  check(await page.locator("#pd-panel").isVisible(), "右ドロワーが開く");
+  const detail = await page.locator("#pd-panel").innerText();
   check(/今日（2026-09-16）/.test(detail), "今日ぶん");
   check(/明日（2026-09-17）/.test(detail), "明日ぶん");
   check(/A社へ提案書送付/.test(detail), "中身は開いたときだけ");
+
+  console.log("\n— 中のタスクも押せば編集できる —");
+  await page.locator("#pd-panel .kp-todo", { hasText: "A社へ提案書送付" }).click();
+  await page.waitForTimeout(600);
+  check(await page.locator("#td-panel").isVisible(), "タスクの引き出しが、その上に開く");
+  check((await page.locator("#td-panel").innerText()).includes("A社へ提案書送付"), "同じタスクが開く");
+  await page.locator("#td-panel .td-x").click();
+  await page.waitForTimeout(400);
+  await page.locator("#pd-panel .td-x").click();
+  await page.waitForTimeout(400);
+  check(!(await page.locator("#pd-panel").isVisible()), "人の引き出しも閉じられる");
+
+  console.log("\n— 担当者一覧の行からも同じ引き出しが開く —");
+  await page.locator("#bd-rows tr").first().click();
+  await page.waitForTimeout(700);
+  check(await page.locator("#pd-panel").isVisible(), "担当者一覧からも右ドロワー");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();

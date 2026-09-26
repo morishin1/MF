@@ -20,7 +20,11 @@ const ok = (name, fn) => {
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
 };
 
-/** 項目のそろったタスク1件 */
+/**
+ * 項目のそろったタスク1件。
+ * ペアコーチングは既定で「済み」にしておく（確定まわりの既存の挙動を
+ * 変えないため）。コーチング自体を見るテストでは coached_at: null を渡す
+ */
 const task = (over = {}) => ({
   id: over.id || "t1",
   title: "A社へ提案書を送る",
@@ -31,6 +35,7 @@ const task = (over = {}) => ({
   priority: "high",
   kpi_link: "新規開拓",
   status: "todo",
+  coached_at: "2026-09-15T00:00:00Z",
   ...over,
 });
 const three = () => [task({ id: "t1" }), task({ id: "t2" }), task({ id: "t3" })];
@@ -221,6 +226,54 @@ ok("上の数は、止まっている人が分かるだけでよい", () => {
   assert.equal(s.noTomorrow, 1);
   assert.equal(s.waiting, 1);
   assert.equal(s.warn, 2);
+});
+
+console.log("— ペアコーチング —");
+
+ok("聞き方ガイドは7手順・5つの質問・オウム返しの例を持つ", () => {
+  assert.equal(F.COACH_STEPS.length, 7);
+  assert.deepEqual(F.COACH_STEPS.map((s) => s.label),
+    ["オウム返し", "目的確認", "成果確認", "明日やる理由", "完了条件確認", "本人がタスクを修正", "確認済み"]);
+  assert.equal(F.COACH_QUESTIONS.length, 5);
+  assert.ok(F.COACH_ECHO_EXAMPLE.length > 0);
+});
+
+ok("質は4段階。目的→得たい結果→完了条件の順で上がる", () => {
+  assert.equal(F.qualityLevel({}), 1);
+  assert.equal(F.qualityLevel({ purpose: "売上をつくるため" }), 2);
+  assert.equal(F.qualityLevel({ purpose: "売上をつくるため", outcome: "面談候補3名" }), 3);
+  assert.equal(F.qualityLevel({
+    purpose: "売上をつくるため", outcome: "面談候補3名", done_condition: "3名の日程が確定している",
+  }), 4);
+  assert.equal(F.QUALITY_LEVELS.find((q) => q.key === 3).label, "成果が明確");
+});
+
+ok("コーチング未実施だと、確定できる状態でも todo にそう出る", () => {
+  const notCoached = three().map((t) => ({ ...t, coached_at: null }));
+  const st = F.focusState({ day: { status: "draft" }, tasks: notCoached });
+  assert.equal(st.key, "ready");
+  assert.equal(st.ready, true, "AIに見てもらう、は塞がない");
+  assert.equal(st.coached, false);
+  assert.match(st.todo, /ペアコーチング/);
+});
+
+ok("1件でもコーチング未実施が残っていれば coached は false", () => {
+  const mix = [...three().slice(0, 2), task({ id: "t3", coached_at: null })];
+  const st = F.focusState({ day: { status: "ai_checked" }, tasks: mix });
+  assert.equal(st.coached, false);
+  assert.match(st.todo, /ペアコーチング/);
+});
+
+ok("3件ともコーチング済みなら coached は true", () => {
+  const st = F.focusState({ day: { status: "ai_checked" }, tasks: three() });
+  assert.equal(st.coached, true);
+  assert.match(st.todo, /確定/);
+});
+
+ok("確定したあとは、コーチングの有無に関わらず coached は true のまま", () => {
+  const st = F.focusState({ day: { status: "confirmed" }, tasks: [task({ coached_at: null })] });
+  assert.equal(st.coached, true);
+  assert.equal(st.confirmed, true);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

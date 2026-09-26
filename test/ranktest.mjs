@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { rankToday } from "../lib/actions.js";
+import * as actions from "../lib/actions.js";
+const { rankToday } = actions;
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
@@ -88,6 +89,12 @@ ok("空でも落ちない", () => {
 });
 ok("期限が無いものだけでも落ちない", () => {
   assert.equal(rankToday([it("x"), it("y")], T).length, 2);
+});
+
+console.log("— 日報からの自動生成（旧方式）は無い —");
+ok("planFromNippo/savePlan は、もう存在しない（gw_tasksがSSOT）", () => {
+  assert.equal(actions.planFromNippo, undefined);
+  assert.equal(actions.savePlan, undefined);
 });
 
 console.log(`\n${n} 件 すべて通りました`);

@@ -3,9 +3,10 @@
 //          あわせて「明日ぶん」と、前日の未完了も返す
 // POST /api/tasks/focus {action}
 //        "add"      … 明日の重要タスクを1件足す
-//        "update"   … 直す（担当・期限・優先度・完了条件・目的・KPI）
+//        "update"   … 直す（担当・期限・優先度・完了条件・目的・KPI・得たい結果・なぜ明日やるか）
 //        "remove"   … 重要タスクから外す（タスク自体は消さない）
 //        "check"    … AIに見てもらう
+//        "coach"    … ペアコーチングを終える（得たい結果・なぜ明日やるか・完了条件を、対話の結果で確定する）
 //        "confirm"  … 人が確定する。ここで担当者へ配信され、日報が書けるようになる
 //        "complete" … 今日の重要タスクを完了にする
 //        "reopen"   … 完了を取り消す（押し間違い）
@@ -13,6 +14,7 @@
 //
 // ■ 決めるのは人
 //   AIは案と理由を出すだけ。confirm を押すまで、担当も内容も変わらない。
+//   ペアコーチングも同じで、質を判定・修正するのはAIではなく本人（対話の相手が質問するだけ）。
 //
 // ■ 自分のぶんだけ
 //   一般のメンバーは自分の重要タスクだけ。管理者・人事は全員ぶんを見て、
@@ -26,7 +28,8 @@ import { notify } from "../../lib/notify.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
   MIN_FOCUS, MAX_FOCUS, CARRY_KEYS, CARRY_CHOICES, FOCUS_FIELDS,
-  focusState, progressOf, nextFocusDate, jstToday, missingFields,
+  focusState, progressOf, nextFocusDate, jstToday, missingFields, qualityLevel,
+  COACH_STEPS, COACH_QUESTIONS, COACH_ECHO_EXAMPLE, QUALITY_LEVELS,
 } from "../../lib/focus.js";
 import { reviewFocus, reviewCarry, aiConfigured } from "../../lib/task-ai.js";
 
@@ -36,6 +39,7 @@ const T_FIELDS =
   "id, tenant_id, title, body, purpose, done_condition, kpi_link, assignee_id, due_on, "
   + "priority, status, category, result, not_done_reason, completed_at, "
   + "focus_date, focus_rank, focus_for, ai_review, ai_assignee, ai_assignee_why, "
+  + "outcome, tomorrow_reason, coached_at, coached_with, "
   + "carried_from, carry_count, created_by, created_at, updated_at";
 
 const str = (v, max = 500) => {
@@ -106,6 +110,11 @@ async function read(req, res, ctx, user) {
     carryChoices: CARRY_CHOICES,
     fields: FOCUS_FIELDS,
     min: MIN_FOCUS, max: MAX_FOCUS,
+    // ペアコーチング（聞き方ガイド）。画面はこれを描くだけにする
+    coachSteps: COACH_STEPS,
+    coachQuestions: COACH_QUESTIONS,
+    coachEcho: COACH_ECHO_EXAMPLE,
+    qualityLevels: QUALITY_LEVELS,
     people,
     me: { id: ctx.employee.id, name: ctx.employee.display_name },
     employeeId: who.id,
@@ -203,6 +212,10 @@ const shape = (t) => ({
   carriedFrom: t.carried_from, carryCount: t.carry_count || 0,
   completedAt: t.completed_at,
   missing: missingFields(t),
+  // ペアコーチング（得たい結果・なぜ明日やるか・質・誰と組んだか）
+  outcome: t.outcome || null, tomorrowReason: t.tomorrow_reason || null,
+  coachedAt: t.coached_at || null, coachedWith: t.coached_with || null,
+  qualityLevel: qualityLevel(t),
 });
 
 // ---- 書く ---------------------------------------------------------------------
@@ -216,6 +229,7 @@ async function act(req, res, ctx, user, body) {
     case "update":   return updateTask(res, sb, ctx, user, who, body);
     case "remove":   return removeTask(res, sb, ctx, user, who, body);
     case "check":    return check(res, sb, ctx, who, body);
+    case "coach":    return coachTask(res, sb, ctx, user, who, body);
     case "confirm":  return confirm(res, sb, ctx, user, who, body);
     case "complete": return complete(res, sb, ctx, user, who, body);
     case "reopen":   return reopen(res, sb, ctx, who, body);
@@ -313,6 +327,8 @@ async function updateTask(res, sb, ctx, user, who, body) {
   if (body.title !== undefined) patch.title = str(body.title, 200) || t.title;
   if (body.purpose !== undefined) patch.purpose = str(body.purpose, 500);
   if (body.doneCondition !== undefined) patch.done_condition = str(body.doneCondition, 500);
+  if (body.outcome !== undefined) patch.outcome = str(body.outcome, 500);
+  if (body.tomorrowReason !== undefined) patch.tomorrow_reason = str(body.tomorrowReason, 500);
   if (body.kpiLink !== undefined) patch.kpi_link = str(body.kpiLink, 120);
   if (body.dueOn !== undefined) patch.due_on = isDate(body.dueOn) ? body.dueOn : null;
   if (body.priority !== undefined && PRIORITIES.includes(body.priority)) patch.priority = body.priority;
@@ -322,6 +338,13 @@ async function updateTask(res, sb, ctx, user, who, body) {
       return json(res, 400, { error: "unknown_assignee", hint: "その相手は名簿にありません" });
     }
     patch.assignee_id = body.assigneeId || null;
+  }
+  // コーチング後の中身をまた直したら、コーチング済みを取り消す。
+  // 古い対話の結果が付いたまま確定されるのを防ぐ
+  if (t.coached_at && ["title", "purpose", "doneCondition", "outcome", "tomorrowReason"]
+      .some((k) => body[k] !== undefined)) {
+    patch.coached_at = null;
+    patch.coached_with = null;
   }
 
   const { data, error } = await sb.from("gw_tasks").update(patch)
@@ -335,6 +358,39 @@ async function updateTask(res, sb, ctx, user, who, body) {
     if (day && day.status === "ai_checked") await setStatus(sb, day.id, "ready");
     await refresh(sb, ctx.tenantId, owner, t.focus_date, day);
   }
+  return json(res, 200, { task: shape(data) });
+}
+
+/**
+ * ペアコーチングを終える（聞き方ガイドの7番目「確認済み」）。
+ *
+ * 承認ではない。得たい結果・なぜ明日やるか・完了条件は、対話の中で
+ * 本人が直したものをそのまま保存し、いつ・誰と組んだかだけを記録する。
+ * Lv3（成果が明確）に届いていなくても、決めるのは本人なので止めない
+ */
+async function coachTask(res, sb, ctx, user, who, body) {
+  const t = await loadTask(sb, ctx.tenantId, body.id);
+  if (!t) return json(res, 404, { error: "not_found" });
+  if (!mayTouch(ctx, user.id, t)) return json(res, 403, { error: "forbidden" });
+
+  const partners = (Array.isArray(body.partners) ? body.partners : []).slice(0, 2)
+    .map((p) => ({ employeeId: p?.employeeId || null, name: str(p?.name, 60) }))
+    .filter((p) => p.name);
+  if (!partners.length) {
+    return json(res, 400, { error: "bad_request", hint: "誰と組んだかを選んでください" });
+  }
+
+  const now = new Date().toISOString();
+  const patch = { updated_at: now, coached_at: now, coached_with: partners };
+  if (body.outcome !== undefined) patch.outcome = str(body.outcome, 500);
+  if (body.tomorrowReason !== undefined) patch.tomorrow_reason = str(body.tomorrowReason, 500);
+  if (body.doneCondition !== undefined) patch.done_condition = str(body.doneCondition, 500);
+
+  const { data, error } = await sb.from("gw_tasks").update(patch)
+    .eq("id", t.id).select(T_FIELDS).single();
+  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+
+  if (t.focus_date) await refresh(sb, ctx.tenantId, t.focus_for || who.id, t.focus_date, null);
   return json(res, 200, { task: shape(data) });
 }
 
@@ -459,6 +515,9 @@ async function confirm(res, sb, ctx, user, who, body) {
   const st = focusState({ day, tasks });
   if (st.confirmed) return json(res, 200, { ok: true, already: true, state: st });
   if (!st.ready) return json(res, 400, { error: "not_ready_yet", hint: st.todo });
+  if (!st.coached) {
+    return json(res, 400, { error: "needs_coaching", hint: "3件のペアコーチングを終えてから確定してください" });
+  }
 
   const now = new Date().toISOString();
   const { day: row } = await ensureDay(sb, ctx.tenantId, who.id, date);

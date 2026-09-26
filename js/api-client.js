@@ -163,9 +163,37 @@
   const mfaReset = (employeeId, note) =>
     api("/api/mfa", { method: "POST", body: { action: "reset", employeeId, note } });
 
+  // サーバが db_query_failed のような技術的なコードだけを返し、hint/messageを
+  // 付け忘れたときのための最後の砦。detail（生のPostgresエラー文言）を
+  // そのまま画面に出さない（採用HR Stage 10：エラー表示の整理）
+  const FRIENDLY_FALLBACK = "処理に失敗しました。時間をおいてもう一度お試しください。";
+  const isRawTechnicalCode = (code) => typeof code === "string" && /^db_/.test(code);
+
   function isLoggedIn() { return !!loadSession(); }
   function currentEmail() { return loadSession()?.email || null; }
   function logout() { clearSession(); }
+
+  // ---- ログイン前でも呼べる口（招待URLを開いた時点では、まだセッションが無い） ----
+  async function publicApi(path, { method = "GET", body } = {}) {
+    const r = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
+      err.status = r.status; err.code = data.error || null;
+      err.hint = data.hint || data.message || (isRawTechnicalCode(err.code) ? FRIENDLY_FALLBACK : null);
+      err.detail = data.detail;
+      throw err;
+    }
+    return data;
+  }
+  const guestInvitePreview = (token) =>
+    publicApi(`/api/guests/accept?token=${encodeURIComponent(token)}`);
+  const guestRegister = (token, password) =>
+    publicApi("/api/guests/accept", { method: "POST", body: { token, password } });
 
   // ---- API 呼び出し ----------------------------------------------------
   async function api(path, { method = "GET", body } = {}) {
@@ -199,7 +227,7 @@
       const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
       err.status = r.status;
       err.code = data.error || null;
-      err.hint = data.hint || data.message || null;
+      err.hint = data.hint || data.message || (isRawTechnicalCode(err.code) ? FRIENDLY_FALLBACK : null);
       err.detail = data.detail;
       err.body = data;
       // 二段階認証が要るのに済んでいない。どの画面で起きても、登録の場所へ送る。
@@ -304,6 +332,87 @@
   const createPartner = (body) => api("/api/partners", { method: "POST", body });
   const updatePartner = (body) => api("/api/partners", { method: "PATCH", body });
   const deletePartner = (id) => api(`/api/partners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  // ---- SES現場契約（社員/BP → 現場契約） ----
+  const listSiteContracts = (employeeId) =>
+    api(`/api/site-contracts${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+  const createSiteContract = (body) => api("/api/site-contracts", { method: "POST", body });
+  const updateSiteContract = (body) => api("/api/site-contracts", { method: "PATCH", body });
+  const deleteSiteContract = (id) => api(`/api/site-contracts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  // ---- 月次請求進捗（勤務表受領→稼働確認→Board作成→送付→BP請求書受領） ----
+  const listBillingProgress = (month, opts = {}) => {
+    const q = new URLSearchParams({ month });
+    if (opts.employeeId) q.set("employeeId", opts.employeeId);
+    if (opts.siteContractId) q.set("siteContractId", opts.siteContractId);
+    return api(`/api/billing-progress?${q.toString()}`);
+  };
+  const ensureBillingProgress = (body) => api("/api/billing-progress", { method: "POST", body });
+  const updateBillingProgress = (body) => api("/api/billing-progress", { method: "PATCH", body });
+
+  // ---- 月初業務D1：外部提出フォーム（勤務表・請求書） ----
+  const listBillingSubmissions = (month) =>
+    api(`/api/billing-submission?month=${encodeURIComponent(month)}`);
+  const issueSubmissionLink = (employeeId) =>
+    api("/api/billing-submission", { method: "POST", body: { employeeId } });
+  const revokeSubmissionLink = (employeeId) =>
+    api(`/api/billing-submission?employeeId=${encodeURIComponent(employeeId)}`, { method: "DELETE" });
+  const submissionFileUrl = (id) =>
+    api(`/api/billing-submission/file?id=${encodeURIComponent(id)}`);
+  // 以下2つは未ログインでも使う（外部会社・BP向け）
+  const submissionPreview = (token) =>
+    publicApi(`/api/billing-submission/public?token=${encodeURIComponent(token)}`);
+  const submitBilling = (body) =>
+    publicApi("/api/billing-submission/public", { method: "POST", body });
+
+  // ---- 採用HR（/hr） ----
+  const listHrApplicants = () => api("/api/hr/applicants");
+  const createHrApplicant = (body) => api("/api/hr/applicants", { method: "POST", body });
+  const getHrApplicant = (id) => api(`/api/hr/applicants/detail?id=${encodeURIComponent(id)}`);
+  const updateHrApplicant = (body) => api("/api/hr/applicants/detail", { method: "PATCH", body });
+
+  // ---- 採用HR：面談・評価（Stage 3） ----
+  const scheduleHrInterview = (body) => api("/api/hr/interviews", { method: "POST", body });
+  const hrInterviewAct = (body) => api("/api/hr/interviews", { method: "PATCH", body });
+  const conductHrInterview = (id, conductedAt) => hrInterviewAct({ id, action: "conduct", conductedAt });
+  const evaluateHrInterview = (body) => hrInterviewAct({ ...body, action: "evaluate" });
+  const updateHrInterview = (body) => hrInterviewAct({ ...body, action: "update" });
+  const todayHrInterviews = () => api("/api/hr/interviews/today");
+  const ceoReview = () => api("/api/hr/ceo-review");
+
+  // ---- 採用HR：合格通知作成（Stage 5） ----
+  const createHrOffer = (body) => api("/api/hr/offers", { method: "POST", body });
+  const hrOfferAct = (body) => api("/api/hr/offers", { method: "PATCH", body });
+  const updateHrOffer = (body) => hrOfferAct({ ...body, action: "update" });
+  const confirmHrOffer = (id) => hrOfferAct({ id, action: "confirm" });
+
+  // ---- 採用HR：本人専用URLの発行・送付・閲覧確認（Stage 6） ----
+  const issueHrOfferLink = (id) => hrOfferAct({ id, action: "issueLink" });
+  const markHrOfferSent = (id) => hrOfferAct({ id, action: "markSent" });
+  // 候補者向け公開ページ（未ログイン）
+  const hrOfferPublic = (token) => publicApi(`/api/hr/offers/public?token=${encodeURIComponent(token)}`);
+  const hrOfferRespond = (token, action, declineReason) =>
+    publicApi("/api/hr/offers/public", { method: "POST", body: { token, action, declineReason } });
+
+  // ---- 採用HR：本採用へ進める（Stage 8） ----
+  const getHrAdvancePrefill = (applicantId) =>
+    api(`/api/hr/applicants/advance?applicantId=${encodeURIComponent(applicantId)}`);
+  const claimHrAdvance = (applicantId) => api("/api/hr/applicants/advance", { method: "POST", body: { applicantId } });
+  const hrAdvanceAct = (body) => api("/api/hr/applicants/advance", { method: "PATCH", body });
+  const releaseHrAdvance = (applicantId) => hrAdvanceAct({ applicantId, action: "release" });
+  const completeHrAdvance = (applicantId, employeeId) => hrAdvanceAct({ applicantId, action: "complete", employeeId });
+
+  // ---- 外部メンバー（ゲスト）招待 ----
+  const listGuests = () => api("/api/guests");
+  const createGuest = (body) => api("/api/guests", { method: "POST", body });
+  const guestOptions = () => api("/api/guests/options");
+  const guestDetail = (id) => api(`/api/guests/detail?id=${encodeURIComponent(id)}`);
+  const guestReissue = (id) => api("/api/guests/detail", { method: "POST", body: { id, action: "reissue" } });
+  const guestDisable = (id) => api("/api/guests/detail", { method: "POST", body: { id, action: "disable" } });
+  const guestUpdateGrants = (id, grants) =>
+    api("/api/guests/detail", { method: "POST", body: { id, action: "updateGrants", grants } });
+  // 登録済みの外部メンバー本人が、自分の許可範囲を見る
+  const guestMy = () => api("/api/guests/my");
 
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
@@ -664,6 +773,7 @@
   const focusAct = (body) => api("/api/tasks/focus", { method: "POST", body });
   const focusAdd = (body) => focusAct({ action: "add", ...body });
   const focusUpdate = (body) => focusAct({ action: "update", ...body });
+  const focusCoach = (body) => focusAct({ action: "coach", ...body });
   const focusRemove = (id, employeeId) => focusAct({ action: "remove", id, employeeId });
   const focusCheck = (date, employeeId) => focusAct({ action: "check", date, employeeId });
   const focusConfirm = (date, employeeId) => focusAct({ action: "confirm", date, employeeId });
@@ -820,6 +930,9 @@
   const docOrderAct = (body) => api("/api/sign/orders", { method: "POST", body });
   const docOrderFileUrl = (id) =>
     api(`/api/sign/orders?file=${encodeURIComponent(id)}`);
+  // 採用承諾条件との突き合わせ・事前入力（採用HR Stage 9）
+  const checkHrOfferMatch = (employeeId) =>
+    api(`/api/sign/orders?employeeId=${encodeURIComponent(employeeId)}&reconcile=1`);
 
   // 届いた書面を取り込む。置いてから、その場で中身を確かめて結びつける
   async function uploadDocOrderFile(id, file) {
@@ -950,10 +1063,16 @@
   const markThreadRead = (threadId) =>
     api("/api/messages/thread", { method: "PATCH", body: { threadId } });
 
+  // ［管理サイドへ連絡］。相手は選ばない。本人専用の窓口を開く（無ければ作る）
+  const openAdminContact = () =>
+    api("/api/messages/admin-contact", { method: "POST" });
+
   // ---- やること（タスク・予定） ----
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
     api(`/api/tasks${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`);
+  // 管理者ダッシュボード：人ごとの今日3つ・完了数・期限超過・契約更新待ち
+  const dashboardTeam = () => api("/api/dashboard/team");
   const createTask = (task) =>
     api("/api/tasks", { method: "POST", body: task }).then((d) => d.task);
   const updateTask = (task) =>
@@ -982,6 +1101,11 @@
   // 本人が「提出しました」を付ける。undo:true で取り消し
   const submitProcedureItem = (itemId, opts = {}) =>
     api("/api/onboarding/submit", { method: "POST", body: { itemId, ...opts } });
+
+  // ---- 入社手続きの共通ページ（本人・管理者・社労士で共有） ----
+  // 進み具合の骨組みだけ。中身の読み書きは今までどおり別の口を使う
+  const onboardingStatus = (employeeId) =>
+    api(`/api/onboarding/status${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
 
   // ---- 入社フォーム（本人が使う唯一の口） ----
   // 個人情報・書類・同意を1画面で終わらせる。
@@ -1186,6 +1310,18 @@
     listNotices, createNotice, updateNotice, deleteNotice, markNoticeRead,
     listEmployees, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees,
     listPartners, createPartner, updatePartner, deletePartner,
+    listSiteContracts, createSiteContract, updateSiteContract, deleteSiteContract,
+    listBillingProgress, ensureBillingProgress, updateBillingProgress,
+    listBillingSubmissions, issueSubmissionLink, revokeSubmissionLink, submissionFileUrl,
+    submissionPreview, submitBilling,
+    listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
+    scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview, todayHrInterviews,
+    ceoReview,
+    createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
+    issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
+    getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
+    listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
+    guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
@@ -1215,12 +1351,12 @@
     listExpenses, createExpense, decideExpense, deleteExpense,
     updateWorkflowSettings, uploadReceipt, receiptUrl, downloadExpenseCsv,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
-    listTasks, createTask, updateTask, deleteTask, acceptTask,
+    listTasks, createTask, updateTask, deleteTask, acceptTask, dashboardTeam,
 
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
     taskList, taskDetail, taskAct,
-    focus, focusAct, focusAdd, focusUpdate, focusRemove, focusCheck, focusConfirm,
+    focus, focusAct, focusAdd, focusUpdate, focusCoach, focusRemove, focusCheck, focusConfirm,
     focusComplete, focusReopen, focusCarryPlan, focusCarry, taskBoard,
     memos, memoAdd, memoRemove, memoReview, memoDecide,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
@@ -1236,11 +1372,13 @@
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
     myContracts, signContract, signPdfUrl,
-    docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile,
+    docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile, checkHrOfferMatch,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
+    openAdminContact,
     uploadMessageFile, messageFileUrl,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
+    onboardingStatus,
     myOnboarding, saveMyOnboarding, myOnboardingConsent, onboardBrief,
     orientation, orientationConfirm, orientationSave,
     retention, retentionRule, retentionDelete, payrollCsv,

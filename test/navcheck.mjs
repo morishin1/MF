@@ -50,9 +50,10 @@ const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * メンバー: PCでの�
 const adminItems = ADMIN_GROUPS.flatMap((g) => g.items);
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
-// ---- 1) 管理者は5グループ、1グループ6項目まで --------------------------------
+// ---- 1) 管理者は4グループ、1グループ6項目まで --------------------------------
+// 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）
 console.log("\n— 管理者 —");
-check(ADMIN_GROUPS.length === 5, `グループは5つ（いま ${ADMIN_GROUPS.length}）`);
+check(ADMIN_GROUPS.length === 4, `グループは4つ（いま ${ADMIN_GROUPS.length}）`);
 for (const g of ADMIN_GROUPS) {
   check(g.items.length <= 6, `${g.label} は6項目まで（いま ${g.items.length}）`);
 }
@@ -127,14 +128,26 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
   const adminLit = lit(adminItems);
   const memberLit = lit(memberItems);
 
+  // 「active: "esign"」のような単純な形だけでなく、
+  // 「active: cond ? "esign_order" : "esign"」のように、同じ画面の中で
+  // どのタブを選ぶかを実行時に決めている画面もある（admin-esign.html）。
+  // active: から roles: の手前までに出てくる文字列リテラルを全部拾い、
+  // そのすべてがナビの鍵になっていればよいとする
   const activeOf = (f) => {
-    const m = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"/.exec(readFileSync(join(ROOT, f), "utf8"));
-    return m ? m[1] : null;
+    const src = readFileSync(join(ROOT, f), "utf8");
+    // 単純な「active: "esign"」か、「active: 何か ? "esign_order" : "esign"」の
+    // どちらか。後者は三項演算の左右（実際にactiveへ入る側）だけを拾い、
+    // 条件式の中の文字列（例: "order"）は候補に入れない
+    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*roles:/.exec(src);
+    if (plain) return [plain[1]];
+    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*roles:/
+      .exec(src);
+    return ternary ? [ternary[1], ternary[2]] : null;
   };
 
   for (const f of readdirSync(ROOT).filter((x) => x.startsWith("admin-") && x.endsWith(".html"))) {
     const a = activeOf(f);
-    check(a && adminLit.has(a), `${f} → ${a || "（読めない）"}`);
+    check(a && a.every((k) => adminLit.has(k)), `${f} → ${a ? a.join(" | ") : "（読めない）"}`);
   }
 
   // メンバーが開く画面。管理画面と会計の画面は数えない
@@ -146,7 +159,7 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
   ];
   for (const f of MEMBER_PAGES) {
     const a = activeOf(f);
-    check(a && (memberLit.has(a) || a === "menu"), `${f} → ${a || "（読めない）"}`);
+    check(a && a.every((k) => memberLit.has(k) || k === "menu"), `${f} → ${a ? a.join(" | ") : "（読めない）"}`);
   }
 }
 
@@ -171,7 +184,9 @@ console.log("\n— 見出しとまとまりの名前 —");
     for (const n of navs) {
       for (const t of n.tabs || []) {
         const f = pageOf(t.key, navs);
-        if (!f || f.includes("#")) continue;
+        // #… は同じ画面の別ビュー、?… は同じ画面の別タブ（例: admin-esign.html?tab=order）。
+        // どちらも「別のHTMLファイル」ではないので、見出し比較の対象外
+        if (!f || f.includes("#") || f.includes("?")) continue;
         const h = h1Of(f);
         check(h === n.label,
           `${who} ${f} の見出しは「${n.label}」（いま「${h}」）`);

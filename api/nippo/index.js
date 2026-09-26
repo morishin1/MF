@@ -30,7 +30,7 @@ import {
   normalizeMorning, hasMorning, evaluateDaily, CRITERIA, isDone,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
-import { planFromNippo, savePlan, closeItems, shapeItem } from "../../lib/actions.js";
+import { closeItems, shapeItem } from "../../lib/actions.js";
 import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focus.js";
 import { shape as shapeEval } from "./evaluate.js";
 
@@ -225,6 +225,10 @@ async function morning(res, user, ctx, body) {
     work_date: date,
     updated_at: new Date().toISOString(),
   };
+  // 「今日の最優先」「今日やること」は、朝に書いても gw_action_items へは
+  // もう写さない。今日の3つは gw_focus_days/gw_tasks（lib/focus.js）が
+  // Single Source of Truth で、同じ仕事が2つの表に生まれるのを避けるため
+  //
   // 書き直しても、最初に書いた時刻は動かさない。
   // 「結果を見る前に決めた」の証拠がその時刻だから
   if (existing?.morning_at) row.morning_at = existing.morning_at;
@@ -236,62 +240,7 @@ async function morning(res, user, ctx, body) {
     return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
   }
 
-  // 朝に決めたことを、そのまま今日の「やること」にする。
-  //
-  // ■ なぜここでやるのか
-  //   朝の入力は tc_nippo に、ホームと「やること」は gw_action_items にある。
-  //   つないでいなかったので、朝に最優先を決めてもホームには出ず、
-  //   ホームで足した仕事は日報に出なかった。同じ「今日やること」を
-  //   2か所に手で書くことになっていたのは、このためだった。
-  await syncMorningActions(sb, user.id, date, fields);
-
   return json(res, 200, { ok: true, morning: saved.data });
-}
-
-/**
- * 朝に決めたことを、今日の「やること」に写す。
- *
- * 同じ題名のものは作らない（書き直すたびに増えていく）。
- * 最優先は priority=1。ただし今日の1番がもう埋まっているときは下に入れる
- * （1人1日ひとつという決まりがDB側にもある。勝手に入れ替えない）。
- */
-async function syncMorningActions(sb, userId, date, fields) {
-  const wanted = [];
-  if (fields.top_priority) wanted.push({ title: fields.top_priority, top: true });
-  for (const w of fields.work_items || []) if (w.task) wanted.push({ title: w.task, top: false });
-  if (!wanted.length) return;
-
-  try {
-    const { data: existing } = await sb.from("gw_action_items")
-      .select("id, title, priority, status")
-      .eq("user_id", userId).eq("due_date", date).limit(50);
-
-    const key = (s) => String(s || "").trim().toLowerCase();
-    const have = new Set((existing || []).map((a) => key(a.title)));
-    const topTaken = (existing || []).some((a) => a.priority === 1 && a.status === "open");
-
-    const rows = [];
-    let claimTop = !topTaken;
-    for (const w of wanted) {
-      if (have.has(key(w.title))) continue;
-      have.add(key(w.title));
-      const takeTop = w.top && claimTop;
-      if (takeTop) claimTop = false;
-      rows.push({
-        user_id: userId,
-        title: w.title.slice(0, 200),
-        source: "self",
-        due_date: date,
-        priority: takeTop ? 1 : 5,
-        status: "open",
-      });
-    }
-    if (rows.length) await sb.from("gw_action_items").insert(rows);
-  } catch (e) {
-    // 写せなくても朝の入力そのものは保存できている。ここで失敗を返すと、
-    // 「保存できませんでした」と出て、書いたことをもう一度書かせることになる
-    console.error("[nippo] 朝の内容をやることに写せませんでした:", e?.message || e);
-  }
 }
 
 // ---- 終業時。どうなったかを書く -------------------------------------------------
@@ -407,17 +356,10 @@ async function submit(res, user, ctx, body) {
     console.error("[nippo] 宿題を閉じられませんでした:", e.message);
   }
 
-  // 「明日の最優先」を、翌営業日のダッシュボードに出す。
-  // 日報に書いて終わりにせず、翌朝いちばん上に出てくるようにする。
-  // AIの提案ぶんは、評価が終わってから足す（api/nippo/evaluate.js）
-  let planned = 0;
-  try {
-    const plan = planFromNippo({ nippo: { ...row, id: nippoId }, evaluation: null });
-    ({ created: planned } = await savePlan(sb, plan, nippoId));
-  } catch (e) {
-    // 宿題が作れなくても日報の提出は成功。画面から足せる
-    console.error("[nippo] 次にやることを作れませんでした:", e.message);
-  }
+  // 「明日やること」は、もう gw_action_items へ写さない。
+  // 明日の3つは日報より前に gw_focus_days/gw_tasks で確定済み
+  // （focusGate が確定していない提出を止める）。ここで別の表にまた
+  // 作ると、同じ仕事が2つの表に生まれてしまう
 
   // AI評価は「待ち」の行を作るだけにして、ここでは走らせない。
   // 提出のたびに10〜20秒待たせると、日報を出すのが億劫になる。
@@ -434,7 +376,7 @@ async function submit(res, user, ctx, body) {
   return json(res, 200, {
     ok: true, id: nippoId, dailyFlags: row.daily_flags,
     ai: { configured: aiConfigured(), pending: aiPending },
-    actions: { closed, planned },
+    actions: { closed },
   });
 }
 

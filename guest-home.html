@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>ホーム - エイト（外部メンバー）</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260916m">
+  <style>
+    /* この画面も KPLayout を使わない。社内の人と見た目でも明確に区別するため、
+       通常のサイドメニュー・トップバーは出さず、専用の簡素なヘッダーだけにする */
+    body { background:var(--soft,#f4f6f9); }
+    .gh-bar { background:#fff; border-bottom:1px solid var(--border); padding:12px 20px;
+              display:flex; align-items:center; gap:12px; }
+    .gh-badge { display:inline-flex; align-items:center; gap:5px; background:#fff3e0; color:#9c4221;
+                border:1px solid #f0c896; border-radius:999px; padding:4px 12px; font-size:12px; font-weight:700; }
+    .gh-name { font-weight:700; color:var(--primary-dark); }
+    .gh-wrap { max-width:720px; margin:0 auto; padding:20px 16px 60px; }
+    .gh-row { display:block; border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+              margin-bottom:8px; text-decoration:none; color:inherit; }
+    .gh-row:hover { border-color:var(--primary); background:#fff; }
+    .gh-row .t { font-weight:700; font-size:13.5px; color:var(--primary-dark); }
+    .gh-row .s { font-size:12px; color:var(--muted); margin-top:2px; }
+  </style>
+</head>
+<body>
+
+<div class="gh-bar">
+  <span class="gh-badge"><span class="material-symbols-outlined" style="font-size:15px;">badge</span>外部メンバー</span>
+  <span class="gh-name" id="who"></span>
+  <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="doLogout()">ログアウト</button>
+</div>
+
+<div class="gh-wrap">
+  <div id="notice"></div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">task_alt</span>許可されているタスク</h2>
+    <div id="tasks"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">forum</span>許可されているチャット</h2>
+    <div id="threads"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">description</span>許可されている資料</h2>
+    <div id="documents"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  if (!API.isLoggedIn()) { location.href = "index.html"; }
+  else load();
+
+  function doLogout() { API.logout(); location.href = "index.html"; }
+
+  async function load() {
+    let data;
+    try {
+      data = await API.guestMy();
+    } catch (e) {
+      if (e.status === 401) { doLogout(); return; }
+      el("notice").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>${esc(e.hint || e.message || "取得できませんでした")}</div></div>`;
+      el("tasks").innerHTML = el("threads").innerHTML = el("documents").innerHTML = "";
+      return;
+    }
+    el("who").textContent = `${data.me.displayName} 様${data.me.companyName ? `（${data.me.companyName}）` : ""}`;
+
+    el("tasks").innerHTML = data.tasks.length
+      ? data.tasks.map((t) => `
+        <div class="gh-row">
+          <div class="t">${esc(t.title)}</div>
+          <div class="s">${esc(t.category || "")}${t.due_on ? `　期限 ${esc(t.due_on)}` : ""}${t.status === "done" ? "　完了" : ""}</div>
+        </div>`).join("")
+      : `<p class="muted" style="font-size:12.5px;">いまのところ、許可されているタスクはありません。</p>`;
+
+    el("threads").innerHTML = data.threads.length
+      ? data.threads.map((t) => `
+        <div class="gh-row">
+          <div class="t">${esc(t.title || "（無題）")}</div>
+        </div>`).join("")
+      : `<p class="muted" style="font-size:12.5px;">いまのところ、許可されているチャットはありません。</p>`;
+
+    el("documents").innerHTML = data.documents.length
+      ? data.documents.map((d) => `
+        ${d.url
+          ? `<a class="gh-row" href="${esc(d.url)}" target="_blank" rel="noopener">
+               <div class="t">${esc(d.title)}</div>
+               <div class="s">${esc(d.description || "")}</div>
+             </a>`
+          : `<div class="gh-row" style="cursor:default;">
+               <div class="t">${esc(d.title)}</div>
+               <div class="s">${esc(d.description || "")}${d.fileOnly ? "　（担当者から別途お渡しします）" : ""}</div>
+             </div>`}`).join("")
+      : `<p class="muted" style="font-size:12.5px;">いまのところ、許可されている資料はありません。</p>`;
+  }
+</script>
+
+</body>
+</html>

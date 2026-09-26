@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>招待の確認 - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260916m">
+  <style>
+    /* この画面は KPLayout を使わない（未ログインの、社外の人が最初に開く画面）。
+       サイドメニュー・トップバーは出さず、真ん中に1枚のカードだけ */
+    body { background:var(--soft,#f4f6f9); }
+    .gi-wrap { max-width:440px; margin:0 auto; padding:48px 16px; }
+    .gi-logo { text-align:center; margin-bottom:20px; font-weight:700; font-size:15px; color:var(--primary-dark); }
+    .gi-who { font-size:13.5px; color:var(--muted); line-height:1.8; margin:0 0 18px; }
+    .gi-who b { color:var(--primary-dark); font-size:15px; }
+  </style>
+</head>
+<body>
+
+<div class="gi-wrap">
+  <div class="gi-logo">エイト グループウェア</div>
+  <div class="card" id="box">
+    <div class="empty">読み込み中…</div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const token = new URLSearchParams(location.search).get("token") || "";
+
+  load();
+
+  async function load() {
+    if (!token) { showError("招待URLが正しくありません。"); return; }
+    let info;
+    try {
+      info = await API.guestInvitePreview(token);
+    } catch (e) {
+      showError(e.hint || e.message || "この招待URLは使えません。");
+      return;
+    }
+    render(info);
+  }
+
+  function showError(msg) {
+    el("box").innerHTML = `
+      <h2><span class="material-symbols-outlined">error</span>招待を確認できません</h2>
+      <div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(msg)}</div></div>
+      <p class="muted" style="font-size:12.5px;margin-top:14px;">
+        招待した方に、あらためてURLの発行を依頼してください。
+      </p>`;
+  }
+
+  function render(info) {
+    el("box").innerHTML = `
+      <h2><span class="material-symbols-outlined">how_to_reg</span>外部メンバー登録</h2>
+      <p class="gi-who">
+        ${info.tenantName ? `${esc(info.tenantName)} から、` : ""}外部メンバーとして招待されています。<br>
+        <b>${esc(info.displayName)}</b> 様${info.companyName ? `（${esc(info.companyName)}）` : ""}<br>
+        ${esc(info.email)}
+      </p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+        ログインに使うパスワードを決めてください。メールアドレスは変更できません。
+      </p>
+      <div>
+        <label for="pw">パスワード（8文字以上）</label>
+        <input id="pw" type="password" autocomplete="new-password">
+      </div>
+      <div style="margin-top:10px;">
+        <label for="pw2">もう一度</label>
+        <input id="pw2" type="password" autocomplete="new-password">
+      </div>
+      <div id="msg" class="err-text" style="margin:10px 0;"></div>
+      <button class="btn btn-primary" id="go" onclick="submit(this)" style="width:100%;">
+        <span class="material-symbols-outlined icon-inline">check</span>登録する
+      </button>`;
+  }
+
+  async function submit(btn) {
+    const pw = el("pw").value;
+    const pw2 = el("pw2").value;
+    const msg = el("msg");
+    msg.textContent = "";
+    if (pw.length < 8) { msg.textContent = "パスワードは8文字以上にしてください"; return; }
+    if (pw !== pw2) { msg.textContent = "パスワードが一致しません"; return; }
+
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = "登録しています…";
+    try {
+      const r = await API.guestRegister(token, pw);
+      await API.login(r.email, pw);
+      location.href = "guest-home.html";
+    } catch (e) {
+      msg.textContent = e.hint || e.message || "登録できませんでした";
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+</script>
+
+</body>
+</html>
