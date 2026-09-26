@@ -17,7 +17,7 @@
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
     { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
     { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
-    { key: "clicks", href: "/sales/clicks.html", label: "反応", icon: "ads_click" },
+    { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
   ];
 
@@ -204,9 +204,9 @@
 
   const GUIDE = `営業 1分マニュアル
 
-① ダッシュボードの「今やること」を上から片付ける
+① 「企業追加」に企業サイトのURLを貼る → 「追加してアタックへ」
 
-② 企業を開いて「フォームアタック」
+② フォームアタックの画面を開く
 
 ③ テンプレートを選ぶ → 営業文をコピー
 
@@ -216,7 +216,7 @@
 
 ⑥ 相手が営業文のリンクを開くと、通知が届く
 
-⑦ 反応した企業から優先してフォロー → 商談へ
+⑦ 「リード」に出た企業から優先してフォロー → 面談・商談へ
 
 迷ったら「NEXT」を見てください。
 30日以内にアタックした企業・営業禁止の企業には送れません。`;
