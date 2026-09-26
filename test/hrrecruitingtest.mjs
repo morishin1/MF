@@ -250,6 +250,22 @@ ok("正しい形はそのまま通る", () => {
   assert.equal(r.value.scores.communication, "great");
   assert.equal(r.value.rank, "A");
 });
+ok("録画URLはhttp(s)なら通す（採用HR録画URL手動登録UI 追加指示 §5・§6）", () => {
+  const r = normalizeInterview({ recordingUrl: "https://drive.google.com/file/d/abc/view" }, { partial: true });
+  assert.equal(r.value.recording_url, "https://drive.google.com/file/d/abc/view");
+});
+ok("録画URLはGoogle Driveに限定しない。http(s)であれば保存できる", () => {
+  const r = normalizeInterview({ recordingUrl: "http://intranet.example.co.jp/recordings/1" }, { partial: true });
+  assert.equal(r.value.recording_url, "http://intranet.example.co.jp/recordings/1");
+});
+ok("録画URLがhttp(s)でなければ断る", () => {
+  const r = normalizeInterview({ recordingUrl: "javascript:alert(1)" }, { partial: true });
+  assert.equal(r.error, "invalid_body");
+});
+ok("録画URLは空欄（削除）を許可する", () => {
+  const r = normalizeInterview({ recordingUrl: "" }, { partial: true });
+  assert.equal(r.value.recording_url, null);
+});
 
 console.log("— NEXT ACTION（nextActionOf） —");
 
