@@ -29,17 +29,49 @@
 --   未アタック → アタック済 → クリックあり → 返信あり → 商談 → 提案 → 成約
 --   別系統：対象外・失注・再アタック待ち
 --
--- 実行方法: Supabase の SQL Editor に貼って Run（べき等）
+-- ■ 既存のものは壊さない（本番実行前の確認で直したところ）
+--   ・既存の表・列・関数・ポリシーは drop も変更もしない。作るのは gw_sales_* と gw_is_sales だけ
+--   ・既存の表に触るのは2か所だけ。どちらも CHECK 制約の「許す値」を広げるだけで、狭めない
+--       gw_role_grants.role       … 'sales' を足す
+--       gw_notifications.kind     … 'sales' を足す
+--     いまのDBにある制約の値・表にすでに入っている値・リポジトリの一覧、の和集合に
+--     'sales' を足して張り直す。本番で制約を手で広げていた場合でも、その値を消さない
+--   ・全体を1つのトランザクションで流す。途中で失敗したら、何も変わらずに元のまま
+--
+-- 実行方法: Supabase の SQL Editor にこのファイル全体を貼って Run（べき等。2回流してもよい）
 -- 前提: 005_groupware_core.sql（gw_employees・gw_role_grants・gw_has_role）・
 --       013_notifications.sql（gw_notifications）・081_hr_recruiting.sql（recruiter ロール）
 -- =============================================================================
 
+begin;
+
 -- -----------------------------------------------------------------------------
--- 1) sales ロールを追加（081 の一覧に足すだけ。ほかの権限は増やさない）
+-- 1) sales ロールを追加（許す値を広げるだけ。ほかの権限は増やさない）
+--    いまの制約の値 ∪ 表にある値 ∪ 081までの一覧 ∪ 'sales' で張り直す（狭めない）
 -- -----------------------------------------------------------------------------
-alter table public.gw_role_grants drop constraint if exists gw_role_grants_role_check;
-alter table public.gw_role_grants add constraint gw_role_grants_role_check
-  check (role in ('owner', 'hr', 'manager', 'labor_advisor', 'it', 'finance', 'recruiter', 'sales'));
+do $$
+declare
+  cur  text;
+  vals text[];
+begin
+  select pg_get_constraintdef(oid) into cur
+    from pg_constraint
+   where conrelid = 'public.gw_role_grants'::regclass and conname = 'gw_role_grants_role_check';
+
+  select array_agg(distinct v order by v) into vals from (
+    select m[1] as v from regexp_matches(coalesce(cur, ''), '''([^'']+)''', 'g') as m
+     where m[1] !~ '[{},]'   -- 配列リテラルの丸ごと（'{a,b}'）は値として拾わない
+    union select role from public.gw_role_grants where role is not null
+    union select unnest(array['owner', 'hr', 'manager', 'labor_advisor', 'it', 'finance', 'recruiter', 'sales'])
+  ) s;
+
+  alter table public.gw_role_grants drop constraint if exists gw_role_grants_role_check;
+  -- 081 までと同じ in (…) の形で張る（Postgres は ARRAY['a'::text, …] と表示するので、
+  -- 次に流したときも上の正規表現で1つずつ読める。2回流しても値が増えない）
+  execute format(
+    'alter table public.gw_role_grants add constraint gw_role_grants_role_check check (role in (%s))',
+    (select string_agg(quote_literal(v), ', ' order by v) from unnest(vals) as v));
+end $$;
 
 comment on column public.gw_role_grants.role is
   'owner=経営者 / hr=人事 / manager=マネージャー / labor_advisor=社労士 / '
@@ -237,6 +269,12 @@ create index if not exists idx_gw_sales_click_events_tenant
 create index if not exists idx_gw_sales_click_events_approach
   on public.gw_sales_click_events(approach_id, is_valid, clicked_at desc);
 
+-- 以前の版で表だけ先にできていた場合にも、列がそろうようにする（2回目以降は何もしない）
+alter table public.gw_sales_click_events
+  add column if not exists method          text,
+  add column if not exists is_valid        boolean not null default true,
+  add column if not exists excluded_reason text;
+
 comment on table public.gw_sales_click_events is
   '専用URLへのアクセスのログ。機械・連打も含めて全部残す。数えるのは is_valid=true だけ';
 
@@ -263,14 +301,32 @@ create index if not exists idx_gw_sales_events_company
 -- -----------------------------------------------------------------------------
 -- 7) 通知の種類に 'sales' を追加（既存 gw_notifications を再利用）
 -- -----------------------------------------------------------------------------
+--    ロールと同じく、いまの制約の値 ∪ 表にある値 ∪ 081までの一覧 ∪ 'sales' で張り直す（狭めない）
 do $$
+declare
+  cur  text;
+  vals text[];
 begin
-  if to_regclass('public.gw_notifications') is not null then
-    alter table public.gw_notifications drop constraint if exists gw_notifications_kind_check;
-    alter table public.gw_notifications add constraint gw_notifications_kind_check
-      check (kind in ('general','task_overdue','task_assigned','notice','message',
-                      'booking','expense','request','blocker','meeting','hr','sales'));
-  end if;
+  if to_regclass('public.gw_notifications') is null then return; end if;
+
+  select pg_get_constraintdef(oid) into cur
+    from pg_constraint
+   where conrelid = 'public.gw_notifications'::regclass and conname = 'gw_notifications_kind_check';
+
+  select array_agg(distinct v order by v) into vals from (
+    select m[1] as v from regexp_matches(coalesce(cur, ''), '''([^'']+)''', 'g') as m
+     where m[1] !~ '[{},]'   -- 配列リテラルの丸ごと（'{a,b}'）は値として拾わない
+    union select kind from public.gw_notifications where kind is not null
+    union select unnest(array['general', 'task_overdue', 'task_assigned', 'notice', 'message',
+                              'booking', 'expense', 'request', 'blocker', 'meeting', 'hr', 'sales'])
+  ) s;
+
+  alter table public.gw_notifications drop constraint if exists gw_notifications_kind_check;
+  -- 081 までと同じ in (…) の形で張る（Postgres は ARRAY['a'::text, …] と表示するので、
+  -- 次に流したときも上の正規表現で1つずつ読める。2回流しても値が増えない）
+  execute format(
+    'alter table public.gw_notifications add constraint gw_notifications_kind_check check (kind in (%s))',
+    (select string_agg(quote_literal(v), ', ' order by v) from unnest(vals) as v));
 end $$;
 
 -- -----------------------------------------------------------------------------
@@ -308,6 +364,8 @@ create policy gw_sales_click_events_staff on public.gw_sales_click_events
 drop policy if exists gw_sales_events_staff on public.gw_sales_events;
 create policy gw_sales_events_staff on public.gw_sales_events
   for all using (public.gw_is_sales(tenant_id)) with check (public.gw_is_sales(tenant_id));
+
+commit;
 
 notify pgrst, 'reload schema';
 
