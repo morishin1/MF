@@ -59,9 +59,10 @@ async function one(req, res, sb, ctx) {
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
 
-  // 直近の、まだ実施していない面談（NEXT ACTIONの「本日14:00 カジュアル面談」に使う）
+  // 直近の、まだ実施していない・キャンセルしていない面談
+  // （NEXT ACTIONの「本日14:00 カジュアル面談」に使う）
   const nextInterview = (interviews || [])
-    .filter((i) => !i.conducted_at && i.scheduled_at)
+    .filter((i) => !i.conducted_at && !i.canceled_at && i.scheduled_at)
     .sort((x, y) => String(x.scheduled_at).localeCompare(String(y.scheduled_at)))[0] || null;
   // いま有効な合格通知（NEXT ACTIONの「送付：.../閲覧：...」に使う。README Stage 6）
   const current = activeOffer(offers);

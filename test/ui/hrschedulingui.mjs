@@ -52,7 +52,7 @@ console.log("\n=== TimeRex設定あり：日程調整URLを送る → 送付済�
         patched.push(b);
         if (b.status === "scheduling") {
           state.applicant.status = "scheduling"; state.applicant.statusLabel = "日程調整中";
-          state.applicant.nextAction = "候補者の日程調整を待っています";
+          state.applicant.nextAction = "カジュアル面談の日程を再調整してください";
           state.applicant.nextActionCta = "手動で面談を設定"; state.applicant.nextActionKey = "schedule";
         }
         return send({ applicant: state.applicant });
@@ -78,14 +78,16 @@ console.log("\n=== TimeRex設定あり：日程調整URLを送る → 送付済�
   check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を調整してください"), "ラベルが出る");
   check(await page.locator(".hr-next button", { hasText: "日程調整を送る" }).count() === 1, "ボタンが出る");
 
-  console.log("\n— 日程調整URLが表示される（applicant_idつき） —");
+  console.log("\n— 日程調整URLがモーダルで表示される（applicant_idつき、二重ドロワーにならない） —");
+  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーが開いている");
   await page.locator(".hr-next button", { hasText: "日程調整を送る" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "ドロワーが開く");
+  check(await page.locator(".hr-modal").isVisible(), "モーダルが開く（ドロワーではない）");
+  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーはモーダルの下で開いたまま（README §4）");
   const urlVal = await page.locator("#sc-url").inputValue();
   check(urlVal === "https://timerex.net/s/example/casual?applicant_id=a1", `URLにapplicant_idが付く（${urlVal}）`);
   check((await page.locator("#sc-mail").inputValue()).includes(urlVal), "メール文面にもURLが入っている");
-  check(await page.locator(".hr-drawer button", { hasText: "TimeRexを使わず、手動で面談を設定する" }).count() === 1,
+  check(await page.locator(".hr-modal button", { hasText: "TimeRexを使わず、手動で面談を設定する" }).count() === 1,
     "手動設定への例外導線が残っている（README §21）");
 
   console.log("\n— URLをコピーできる —");
@@ -94,10 +96,10 @@ console.log("\n=== TimeRex設定あり：日程調整URLを送る → 送付済�
   check((await page.evaluate(() => window.__copied)).includes(urlVal), "クリップボードにURLがコピーされる");
 
   console.log("\n— 送付済みにする（status=scheduling） —");
-  await page.locator(".hr-drawer button", { hasText: "送付済みにする" }).click();
+  await page.locator(".hr-modal button", { hasText: "送付済みにする" }).click();
   await page.waitForTimeout(700);
   check(patched.some((p) => p.status === "scheduling"), "status=schedulingがサーバへ送られる");
-  check((await page.locator(".hr-next").innerText()).includes("候補者の日程調整を待っています"), "NEXT ACTIONが進む");
+  check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"), "NEXT ACTIONが進む");
   check(await page.locator(".hr-next button", { hasText: "手動で面談を設定" }).count() === 1,
     "候補者の予約待ちの間も、手動設定は例外導線として残る");
 

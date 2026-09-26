@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
   const { data: interviews, error } = await sb.from("gw_hr_interviews")
     .select("id, applicant_id, kind, scheduled_at, interviewer_id, conducted_at, meeting_url")
-    .eq("tenant_id", ctx.tenantId)
+    .eq("tenant_id", ctx.tenantId).is("canceled_at", null)
     .gte("scheduled_at", from).lte("scheduled_at", to)
     .order("scheduled_at", { ascending: true }).limit(200);
   if (error) {

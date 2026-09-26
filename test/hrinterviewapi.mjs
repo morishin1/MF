@@ -353,6 +353,84 @@ await ok("面談担当が未定なら、採用担当へ知らせる", async () =
   assert.equal(db.rows.gw_notifications[0].employee_id, "emp-r1");
 });
 
+console.log("\n=== 面談キャンセル（cancel。応募者一覧・ドロワーUI改善指示書 §3） ===\n");
+
+await ok("カジュアル面談をキャンセルすると、応募者は日程調整のやり直しへ戻る", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  const r = await act({ id: iv.id, action: "cancel" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.status, "scheduling");
+  assert.ok(db.rows.gw_hr_interviews[0].canceled_at, "canceled_atが立つ（物理削除しない）");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "scheduling");
+});
+
+await ok("社長面談をキャンセルすると、社長面談の設定し直しへ戻る", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "ceo", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  const r = await act({ id: iv.id, action: "cancel" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.status, "ceo_interview_pending");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "ceo_interview_pending");
+});
+
+await ok("選考タイムラインに残る", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "cancel" });
+  const last = db.rows.gw_hr_timeline.at(-1);
+  assert.equal(last.event_key, "interview_canceled");
+  assert.match(last.label, /キャンセル/);
+});
+
+await ok("監査ログに残る", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "cancel" });
+  assert.ok(logged.some((l) => l.action === "hr.interview_cancel"));
+});
+
+await ok("実施済みの面談はキャンセルできない", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "conduct" });
+  const r = await act({ id: iv.id, action: "cancel" });
+  assert.equal(r.statusCode, 409);
+});
+
+await ok("すでにキャンセル済みの面談は、もう一度キャンセルできない", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "cancel" });
+  const r = await act({ id: iv.id, action: "cancel" });
+  assert.equal(r.statusCode, 409);
+});
+
+await ok("キャンセル後は、同じ種別の面談を新しく予定できる（二重登録の断りに引っかからない）", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "cancel" });
+  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T06:00:00Z` });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_interviews.length, 2);
+});
+
+await ok("今日の面談一覧には、キャンセル済みの面談を出さない", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "cancel" });
+  const r = await getToday();
+  assert.equal(r.body.interviews.length, 0);
+});
+
 console.log("\n=== 誰が触れるか ===\n");
 
 await ok("一般メンバーは使えない", async () => {

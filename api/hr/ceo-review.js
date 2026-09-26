@@ -64,6 +64,9 @@ export default async function handler(req, res) {
       ...shapeApplicant(a),
       goodPoints: evaluated?.recommend_reason || null,
       concerns: evaluated?.notes || null,
+      // カジュアル面談の録画（Google Drive等の外部リンク）があれば渡す。無ければnull
+      // のまま（社長が応募書類を読み直さなくても判断材料に辿り着けるように。README §14）
+      recordingUrl: evaluated?.recording_url || null,
       ceoInterview: ceoInterview ? shapeInterview(ceoInterview) : null,
     };
 

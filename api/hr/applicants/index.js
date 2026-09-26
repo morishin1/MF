@@ -44,13 +44,16 @@ async function list(req, res, sb, ctx) {
 
   const ids = (data || []).map((a) => a.id);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
-  const [{ data: recruiters }, { data: interviewCounts }] = await Promise.all([
+  const [{ data: recruiters }, { data: interviewCounts }, { data: employees }] = await Promise.all([
     recruiterIds.length
       ? sb.from("gw_employees").select("id, display_name").in("id", recruiterIds)
       : Promise.resolve({ data: [] }),
     ids.length
       ? sb.from("gw_hr_interviews").select("applicant_id").in("applicant_id", ids).limit(5000)
       : Promise.resolve({ data: [] }),
+    // 担当変更（一覧の複数選択操作）の選択肢。既存の面談担当ピッカーと同じ条件
+    sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId)
+      .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
   const interviewCount = new Map();
@@ -64,6 +67,7 @@ async function list(req, res, sb, ctx) {
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
     })),
+    employees: employees || [],
   });
 }
 

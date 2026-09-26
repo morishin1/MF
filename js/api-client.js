@@ -370,6 +370,11 @@
   const createHrApplicant = (body) => api("/api/hr/applicants", { method: "POST", body });
   const getHrApplicant = (id) => api(`/api/hr/applicants/detail?id=${encodeURIComponent(id)}`);
   const updateHrApplicant = (body) => api("/api/hr/applicants/detail", { method: "PATCH", body });
+  // ---- 採用HR：応募者一覧の複数選択操作 ----
+  const bulkHrApplicants = (body) => api("/api/hr/applicants/bulk", { method: "POST", body });
+  const deleteHrApplicants = (ids) => bulkHrApplicants({ ids, action: "delete" });
+  const setHrApplicantsStatus = (ids, status) => bulkHrApplicants({ ids, action: "setStatus", status });
+  const setHrApplicantsRecruiter = (ids, recruiterId) => bulkHrApplicants({ ids, action: "setRecruiter", recruiterId });
 
   // ---- 採用HR：面談・評価（Stage 3） ----
   const scheduleHrInterview = (body) => api("/api/hr/interviews", { method: "POST", body });
@@ -377,6 +382,7 @@
   const conductHrInterview = (id, conductedAt) => hrInterviewAct({ id, action: "conduct", conductedAt });
   const evaluateHrInterview = (body) => hrInterviewAct({ ...body, action: "evaluate" });
   const updateHrInterview = (body) => hrInterviewAct({ ...body, action: "update" });
+  const cancelHrInterview = (id) => hrInterviewAct({ id, action: "cancel" });
   const todayHrInterviews = () => api("/api/hr/interviews/today");
   const ceoReview = () => api("/api/hr/ceo-review");
 
@@ -1339,7 +1345,9 @@
     listBillingSubmissions, issueSubmissionLink, revokeSubmissionLink, submissionFileUrl,
     submissionPreview, submitBilling,
     listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
-    scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview, todayHrInterviews,
+    bulkHrApplicants, deleteHrApplicants, setHrApplicantsStatus, setHrApplicantsRecruiter,
+    scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview,
+    cancelHrInterview, todayHrInterviews,
     ceoReview,
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
