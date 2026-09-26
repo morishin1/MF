@@ -56,6 +56,20 @@ console.log("\n=== 承諾済みに「本採用へ進める」が出る。押す�
     }
     if (/\/api\/hr\/applicants\/detail/.test(url)) return send({ applicant, timeline: [], offers: [] });
     if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [applicant] });
+    // クリック後に遷移するadmin-onboard.htmlが読み込み時に呼ぶ。
+    // ここが無いと（他の全APIが{}を返すため）STEP1・STEP2の選択肢を
+    // opts.levels.map(...) 等で組み立てるところが必ず例外になる。
+    // ローカルの速い実行では組み立て前にテストの検証まで終わることが
+    // あり見えにくいが、実行環境が重いと確実に画面のエラーとして出る
+    if (/\/api\/employees\/onboard/.test(url)) {
+      return send({
+        levels: [{ level: 1, label: "見習い", summary: "基礎" }],
+        managers: [{ email: "m@example.com", name: "上長 太郎", position: null }],
+        wageTypes: ["月給", "年俸"], allowances: [],
+        workModes: [{ code: "wm1", label: "正社員型", note: "" }],
+        jobGroups: ["営業"], jobs: [{ code: "j1", group: "営業", label: "セールス", kgi: "受注" }],
+      });
+    }
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     if (/\/api\/badges/.test(url)) return send({ badges: {} });
     return send({});
