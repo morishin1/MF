@@ -550,9 +550,77 @@
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
           ${i.done && i.kind === "ceo"
             ? `<span class="muted" style="font-size:12px;">採用判断はCEO REVIEWで行います。</span>` : ""}
-          ${i.recordingUrl ? `<a href="${esc(i.recordingUrl)}" target="_blank" rel="noopener" style="font-size:12px;">録画を見る</a>` : ""}
+          ${i.done ? recordingActions(i) : ""}
         </div>
       </div>`;
+  }
+
+  // ---- 録画URL登録・変更（モーダル） ------------------------------------------------
+  // カジュアル・社長面談の両方、実施済みの面談だけに出す（録画URL手動登録UI 追加指示）
+  function recordingActions(i) {
+    if (i.recordingUrl) {
+      return `<a href="${esc(i.recordingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">録画を見る</a>
+        <button class="btn btn-secondary btn-sm" onclick="openRecordingModal('${esc(i.id)}')">録画URLを変更</button>`;
+    }
+    return `<span class="muted" style="font-size:12px;">録画：未登録</span>
+      <button class="btn btn-secondary btn-sm" onclick="openRecordingModal('${esc(i.id)}')">録画URLを登録</button>`;
+  }
+
+  function openRecordingModal(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談録画を登録</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">
+        ${esc(detail.applicant.name)}さん　${esc(iv.kindLabel)}　${esc(fmtDate(iv.conductedAt || iv.scheduledAt))}</p>
+      <label>Google Drive録画URL</label>
+      <input id="rec-url" type="text" value="${esc(iv.recordingUrl || "")}" placeholder="https://drive.google.com/...">
+      <div id="rec-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="submitRecordingUrl('${esc(id)}', this)">保存</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">キャンセル</button>
+      </div>
+      ${iv.recordingUrl ? `<button class="btn btn-secondary btn-sm" style="margin-top:16px;"
+        onclick="openRecordingDeleteModal('${esc(id)}')">録画URLを削除</button>` : ""}`);
+  }
+
+  async function submitRecordingUrl(id, btn) {
+    const msg = el("rec-msg"); msg.textContent = "";
+    const url = el("rec-url").value.trim();
+    if (!url) { msg.textContent = "録画URLを入力してください"; return; }
+    if (!/^https?:\/\//i.test(url)) { msg.textContent = "http:// または https:// で始まるURLを入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview({ id, recordingUrl: url }));
+      closeHrModal();
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  function openRecordingDeleteModal(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">録画URLを削除しますか？</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">
+        ${esc(iv.kindLabel)}の録画URLを削除します。Google Drive側の録画ファイル自体は消えません。</p>
+      <div id="recd-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-danger" onclick="submitDeleteRecordingUrl('${esc(id)}', this)">削除する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitDeleteRecordingUrl(id, btn) {
+    const msg = el("recd-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.updateHrInterview({ id, recordingUrl: "" }));
+      closeHrModal();
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "削除できませんでした"; }
   }
 
   function scaleLabel(k) { return (detail.evalScale || []).find((s) => s.key === k)?.label || k; }

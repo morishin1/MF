@@ -431,12 +431,69 @@ await ok("今日の面談一覧には、キャンセル済みの面談を出さ�
   assert.equal(r.body.interviews.length, 0);
 });
 
+console.log("\n=== 録画URL登録・変更（update。採用HR録画URL手動登録UI 追加指示） ===\n");
+
+await ok("実施済み面談に録画URLを登録できる", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "conduct" });
+  const r = await act({ id: iv.id, action: "update", recordingUrl: "https://drive.google.com/file/d/abc/view" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_interviews[0].recording_url, "https://drive.google.com/file/d/abc/view");
+});
+
+await ok("社長面談にも録画URLを登録できる", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "ceo", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  const r = await act({ id: iv.id, action: "update", recordingUrl: "https://drive.google.com/file/d/xyz/view" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(db.rows.gw_hr_interviews[0].recording_url, "https://drive.google.com/file/d/xyz/view");
+});
+
+await ok("http(s)以外の録画URLは断る", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  const r = await act({ id: iv.id, action: "update", recordingUrl: "javascript:alert(1)" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(db.rows.gw_hr_interviews[0].recording_url, undefined, "保存されない");
+});
+
+await ok("空文字で送ると、録画URLを削除できる", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "update", recordingUrl: "https://drive.google.com/file/d/abc/view" });
+  const r = await act({ id: iv.id, action: "update", recordingUrl: "" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(db.rows.gw_hr_interviews[0].recording_url, null);
+});
+
+await ok("録画URLだけを渡しても、面談URL等ほかの項目は変わらない", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z`, meetingUrl: "https://meet.example.com/x" });
+  const iv = db.rows.gw_hr_interviews[0];
+  await act({ id: iv.id, action: "update", recordingUrl: "https://drive.google.com/file/d/abc/view" });
+  assert.equal(db.rows.gw_hr_interviews[0].meeting_url, "https://meet.example.com/x");
+});
+
 console.log("\n=== 誰が触れるか ===\n");
 
 await ok("一般メンバーは使えない", async () => {
   setup();
   who = MEMBER;
   const r = await schedule({ applicantId: "a1", kind: "casual" });
+  assert.equal(r.statusCode, 403);
+});
+
+await ok("一般メンバーは録画URLの登録もできない", async () => {
+  setup();
+  await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  const iv = db.rows.gw_hr_interviews[0];
+  who = MEMBER;
+  const r = await act({ id: iv.id, action: "update", recordingUrl: "https://drive.google.com/file/d/abc/view" });
   assert.equal(r.statusCode, 403);
 });
 
