@@ -15,9 +15,9 @@
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const NAV = [
-    { key: "dashboard", href: "index.html", label: "ダッシュボード", icon: "dashboard" },
-    { key: "applicants", href: "applicants.html", label: "応募者", icon: "group" },
-    { key: "ceo", href: "ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
+    { key: "dashboard", href: "/hr/", label: "ダッシュボード", icon: "dashboard" },
+    { key: "applicants", href: "/hr/applicants.html", label: "応募者", icon: "group" },
+    { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
   ];
 
   function css() {
@@ -84,7 +84,7 @@
           <span class="material-symbols-outlined">notifications</span>
           <span class="hr-dot hidden" id="hr-bell-dot">0</span>
         </button>
-        <button class="hr-add" onclick="location.href='applicants.html?new=1'">
+        <button class="hr-add" onclick="location.href='/hr/applicants.html?new=1'">
           <span class="material-symbols-outlined">person_add</span>応募者追加
         </button>
         <button class="hr-user" id="hr-user-btn" onclick="HRLayout.toggleUserMenu()" title="${esc(name)}">
@@ -158,7 +158,7 @@
     if (!canRecruit) { location.replace("../home.html"); return null; }
     const canDecide = isAdmin || roles.includes("owner");
 
-    if (opts.active === "ceo" && !canDecide) { location.replace("index.html"); return null; }
+    if (opts.active === "ceo" && !canDecide) { location.replace("/hr/"); return null; }
 
     renderHeader(opts.active, me);
     return { me, canRecruit, canDecide };

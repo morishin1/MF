@@ -246,7 +246,7 @@
         note: el("a-note").value.trim() || undefined,
       }));
       closeModal();
-      history.replaceState({}, "", "applicants.html");
+      history.replaceState({}, "", "/hr/applicants.html");
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
   }
@@ -261,7 +261,7 @@
     const root = el("modal-root");
     root.innerHTML = `<div class="hr-drawer-bg" onclick="closeModal()"></div>
       <div class="hr-detail" id="hr-detail-box"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
-    history.replaceState({}, "", `applicants.html?id=${encodeURIComponent(id)}`);
+    history.replaceState({}, "", `/hr/applicants.html?id=${encodeURIComponent(id)}`);
     try {
       detail = await API.getHrApplicant(id);
       renderDetail();
@@ -275,7 +275,7 @@
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
     openId = null;
-    history.replaceState({}, "", "applicants.html");
+    history.replaceState({}, "", "/hr/applicants.html");
   }
 
   function setDetailTab(t) { detailTab = t; renderDetail(); }
