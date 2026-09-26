@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   const to = `${jstToday}T23:59:59+09:00`;
 
   const { data: interviews, error } = await sb.from("gw_hr_interviews")
-    .select("id, applicant_id, kind, scheduled_at, interviewer_id, conducted_at")
+    .select("id, applicant_id, kind, scheduled_at, interviewer_id, conducted_at, meeting_url")
     .eq("tenant_id", ctx.tenantId)
     .gte("scheduled_at", from).lte("scheduled_at", to)
     .order("scheduled_at", { ascending: true }).limit(200);
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       const a = applicantOf.get(i.applicant_id);
       return {
         id: i.id, applicantId: i.applicant_id, kind: i.kind, kindLabel: interviewKindLabel(i.kind),
-        scheduledAt: i.scheduled_at, done: Boolean(i.conducted_at),
+        scheduledAt: i.scheduled_at, done: Boolean(i.conducted_at), meetingUrl: i.meeting_url || null,
         interviewerId: i.interviewer_id, interviewerName: interviewerName.get(i.interviewer_id) || null,
         name: a?.name || "（削除済み）", jobTitle: a?.job_title || "",
         status: a?.status || "", statusLabel: a ? (STATUS_LABEL[a.status] || a.status) : "",

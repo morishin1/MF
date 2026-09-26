@@ -59,7 +59,7 @@
     .hr-good-card .row .st { font-size:11.5px; color:#4a5068; }
 
     .hr-iv-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e2e2dc;
-      cursor:pointer; font-size:13px; }
+      font-size:13px; }
     .hr-iv-row:last-child { border-bottom:none; }
     .hr-iv-row .tm { font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; min-width:44px; }
     .hr-iv-row .nm { font-weight:700; color:#1b2440; }
@@ -159,13 +159,14 @@
   function renderTodayInterviews() {
     if (!todayInterviews.length) { el("todayiv").innerHTML = `<div class="hr-empty">本日の面談はありません</div>`; return; }
     el("todayiv").innerHTML = `<div class="card"><div>${todayInterviews.map((i) => `
-      <div class="hr-iv-row" onclick="location.href='/hr/applicants.html?id=${esc(i.applicantId)}'">
+      <div class="hr-iv-row">
         <span class="tm">${esc(fmtTime(i.scheduledAt))}</span>
-        <span class="nm">${esc(i.name)}</span>
+        <span class="nm" style="cursor:pointer;" onclick="location.href='/hr/applicants.html?id=${esc(i.applicantId)}'">${esc(i.name)}</span>
         <span class="kd">${esc(i.kindLabel || "")}</span>
         <span class="iv">${esc(i.interviewerName || "未定")}</span>
-        <span class="st">${esc(i.statusLabel)}</span>
-        <span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span>
+        ${!i.done && i.meetingUrl
+          ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="margin-left:auto;">面談に参加</a>`
+          : `<span class="st">${esc(i.statusLabel)}</span>`}
       </div>`).join("")}</div></div>`;
   }
 

@@ -363,7 +363,7 @@
         ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
-          ${!i.done && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">面談を開く</a>` : ""}
+          ${!i.done && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
           ${!i.done ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
@@ -391,6 +391,7 @@
   function runNextAction() {
     const a = detail.applicant;
     const key = a.nextActionKey;
+    if (key === "sendSchedulingLink") return openSendSchedulingForm();
     if (key === "schedule") return openScheduleForm(a.nextActionKind);
     if (key === "conduct") {
       const iv = targetInterview("conduct");
@@ -526,6 +527,64 @@
       await openDetail(detail.applicant.id);
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+
+  // ---- 日程調整URLを送る（右ドロワー） ----------------------------------------------
+  // 通常導線：TimeRexの日程調整URLを送る（README「TimeRex連携」指示書 §5・§6）。
+  // 独自の日程調整UIは作らない。TimeRexが未設定なら、手動設定へ逃がす（§21）
+  function openSendSchedulingForm() {
+    const url = detail.schedulingUrl;
+    el("action-root").innerHTML = `
+      <div class="hr-drawer-bg" onclick="closeAction()"></div>
+      <div class="hr-drawer">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">日程調整URLを送ります</h2>
+        <p class="hr-sub" style="margin:0 0 14px;">${esc(detail.applicant.name)}さんへ、カジュアル面談の日程調整URLを送ってください。</p>
+        ${url ? `
+        <label>TimeRex 日程調整URL</label>
+        <input id="sc-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-url')">URLをコピー</button>
+        <label style="margin-top:14px;">メール文面</label>
+        <textarea id="sc-mail" rows="8" readonly>${esc(schedulingMailTemplate(url))}</textarea>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-mail')">メール文面をコピー</button>
+        <div id="sc-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="submitMarkScheduling(this)">送付済みにする</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:16px;"
+                onclick="closeAction();openScheduleForm()">TimeRexを使わず、手動で面談を設定する</button>` : `
+        <div class="banner warn"><span class="material-symbols-outlined">build</span>
+          <div>TimeRexの日程調整URLが未設定です（環境変数 TIMEREX_CASUAL_INTERVIEW_URL）。
+          手動で面談を設定してください。</div></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" onclick="closeAction();openScheduleForm()">手動で面談を設定</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>`}
+      </div>`;
+  }
+
+  function schedulingMailTemplate(url) {
+    const a = detail.applicant;
+    return `件名：面談日程のご調整のお願い
+
+${a.name} 様
+
+このたびは弊社採用選考にご応募いただき、ありがとうございます。
+つきましては、カジュアル面談の日程調整をお願いしたく、
+下記URLより、ご都合の良い日時をお選びください。
+
+${url}
+
+ご不明点がございましたら、採用担当までご連絡ください。`;
+  }
+
+  async function submitMarkScheduling(btn) {
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant({ id: detail.applicant.id, status: "scheduling" }));
+      closeAction();
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
   }
 
   // ---- 面談を予定する（右ドロワー） ------------------------------------------------
