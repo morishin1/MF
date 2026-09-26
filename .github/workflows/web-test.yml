@@ -19,10 +19,10 @@ name: サーバ側を確かめる
 
 on:
   push:
-    paths: ["api/**", "lib/**", "db/**", "js/**", "*.html", "test/**",
+    paths: ["api/**", "lib/**", "db/**", "js/**", "*.html", "sales/**", "test/**",
             ".github/workflows/web-test.yml"]
   pull_request:
-    paths: ["api/**", "lib/**", "db/**", "js/**", "*.html", "test/**"]
+    paths: ["api/**", "lib/**", "db/**", "js/**", "*.html", "sales/**", "test/**"]
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>ダッシュボード - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+
+    /* いちばん上の件数。押すとその段へ飛ぶ */
+    .db-sum { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:22px; }
+    .db-sum a { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; text-decoration:none; }
+    .db-sum a.hot { background:#fff4d6; border-color:#e0a100; border-width:2px; }
+    .db-sum .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
+    .db-sum a.hot .lb { color:#7d5a00; }
+    .db-sum .lb .material-symbols-outlined { font-size:16px; }
+    .db-sum .v { font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
+    .db-sum .v small { font-size:13px; font-weight:700; margin-left:2px; }
+
+    .db-sec { margin-bottom:26px; }
+    .db-sec-h { display:flex; align-items:baseline; gap:10px; margin:0 0 10px; }
+    .db-sec-h .t { font-size:15px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:6px; }
+    .db-sec-h .n { font-size:12px; color:#6b7080; }
+    .db-sec-h a { margin-left:auto; font-size:12px; color:#4a5068; text-decoration:none; white-space:nowrap; }
+
+    /* ① クリックあり・未対応 は、ほかより目立たせる */
+    .db-click { background:#fff4d6; border:2px solid #e0a100; border-radius:12px; padding:14px 16px 16px; }
+    .db-click .db-sec-h .t { color:#7d5a00; font-size:16px; }
+    .db-click .sl-row { border-left-color:#e0a100; }
+    .db-click .sl-row b { font-size:15px; }
+    .db-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
+    @media (max-width: 760px) { .db-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">ダッシュボード</h1>
+  <p class="sl-sub">今日、どこを追って、どこに営業すればよいかが分かります。上から順に片付けてください。</p>
+
+  <div class="db-sum" id="sum"></div>
+
+  <div class="db-sec db-click" id="sec-click">
+    <div class="db-sec-h"><span class="t">🔥 ① クリックあり・未対応</span><span class="n" id="n-click"></span>
+      <a href="/sales/clicks.html">反応一覧</a></div>
+    <div class="sl-rows" id="list-click"></div>
+  </div>
+
+  <div class="db-sec" id="sec-replied">
+    <div class="db-sec-h"><span class="t">② 返信あり</span><span class="n" id="n-replied"></span></div>
+    <div class="sl-rows" id="list-replied"></div>
+  </div>
+
+  <div class="db-sec" id="sec-follow">
+    <div class="db-sec-h"><span class="t">③ 今日フォロー</span><span class="n" id="n-follow"></span></div>
+    <div class="sl-rows" id="list-follow"></div>
+  </div>
+
+  <div class="db-sec" id="sec-attack">
+    <div class="db-sec-h"><span class="t">④ 今日アタック</span><span class="n" id="n-attack"></span>
+      <a href="/sales/attack.html">アタック画面へ</a></div>
+    <div class="sl-rows" id="list-attack"></div>
+  </div>
+
+  <div class="db-sec" id="sec-history">
+    <div class="db-sec-h"><span class="t">⑤ 最近の営業履歴</span>
+      <a href="/sales/attack.html">送った履歴をすべて見る</a></div>
+    <div style="overflow-x:auto;">
+      <table class="sl-table">
+        <thead><tr><th>送信日時</th><th>企業</th><th>提案サービス</th><th>担当</th><th>クリック</th></tr></thead>
+        <tbody id="history"><tr><td colspan="5" class="empty">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmt, fmtDay, ago } = SalesLayout;
+
+  let companies = [];
+  let approaches = [];
+  let today = "";
+
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const [res, ap] = await Promise.all([
+        API.listSalesCompanies(),
+        API.listSalesApproaches(14).catch(() => ({ approaches: [] })),
+      ]);
+      if (res.notReady) {
+        el("sum").innerHTML = `<div class="banner warn" style="grid-column:1/-1;"><span class="material-symbols-outlined">build</span>
+          <div>${esc(res.message)}</div></div>`;
+        return;
+      }
+      companies = res.companies || [];
+      approaches = ap.approaches || [];
+      today = res.today || new Date().toISOString().slice(0, 10);
+      render();
+    } catch (e) {
+      el("sum").innerHTML = `<div class="banner err" style="grid-column:1/-1;"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  const open = (c) => !c.ngReason && !["won", "lost", "excluded"].includes(c.status);
+  const due = (c) => c.nextDue && c.nextDue <= today;
+  const RECENT_MS = 30 * 86400000;
+  const go = (c) => `/sales/companies.html?id=${encodeURIComponent(c.id)}`;
+
+  // 1社は、上の段に入ったら下の段には出さない（同じ会社を2回見せない）
+  const SECTIONS = [
+    { key: "click", label: "クリックあり・未対応", icon: "ads_click", hot: true,
+      pick: (c) => c.unhandledClick,
+      sort: (x, y) => String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || "")) || y.clickCount - x.clickCount,
+      cta: "フォローする", href: go },
+    { key: "replied", label: "返信あり", icon: "mark_email_read",
+      pick: (c) => open(c) && c.status === "replied",
+      cta: "返信対応", href: go },
+    { key: "follow", label: "今日フォロー", icon: "call",
+      pick: (c) => open(c) && !["untouched", "reattack_wait"].includes(c.status) && due(c),
+      cta: "対応する", href: go },
+    { key: "attack", label: "今日アタック", icon: "send",
+      pick: (c) => open(c) && ["untouched", "reattack_wait"].includes(c.status)
+        && !(c.lastSentAt && Date.now() - new Date(c.lastSentAt).getTime() < RECENT_MS)
+        && (!c.nextDue || c.nextDue <= today),
+      cta: "フォームアタック", href: (c) => `/sales/companies.html?attack=${encodeURIComponent(c.id)}` },
+  ];
+  const DEFAULT_SORT = (x, y) => (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
+    || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9"));
+
+  function render() {
+    const used = new Set();
+    const lists = {};
+    for (const s of SECTIONS) {
+      lists[s.key] = companies.filter((c) => !used.has(c.id) && s.pick(c)).sort(s.sort || DEFAULT_SORT);
+      for (const c of lists[s.key]) used.add(c.id);
+    }
+
+    el("sum").innerHTML = SECTIONS.map((s) => {
+      const n = lists[s.key].length;
+      return `<a href="#sec-${s.key}" class="${s.hot && n ? "hot" : ""}">
+        <div class="lb"><span class="material-symbols-outlined">${s.icon}</span>${esc(s.label)}</div>
+        <div class="v">${n}<small>社</small></div></a>`;
+    }).join("");
+
+    for (const s of SECTIONS) renderSection(s, lists[s.key]);
+    renderHistory();
+  }
+
+  function renderSection(s, list) {
+    el(`n-${s.key}`).textContent = `${list.length}社`;
+    if (!list.length) {
+      el(`list-${s.key}`).innerHTML = `<div class="sl-empty">${esc(s.label)}の企業はありません</div>`;
+      return;
+    }
+    const LIMIT = s.key === "attack" ? 10 : 20;
+    el(`list-${s.key}`).innerHTML = list.slice(0, LIMIT).map((c) => `
+      <div class="sl-row${c.unhandledClick ? " hot" : ""}${c.overdue ? " overdue" : ""}">
+        <div class="info"><b>${esc(c.name)}</b>
+          <div class="now">${s.key === "click"
+            ? `最終クリック ${esc(fmt(c.lastClickAt))}（${esc(ago(c.lastClickAt))}・${c.clickCount}回）／ 送信 ${esc(fmt(c.lastSentAt) || "—")}${c.lastService ? ` ／ ${esc(c.lastService)}` : ""}`
+            : `現在：${esc(c.statusLabel)}${c.service ? ` ／ ${esc(c.service)}` : ""}${c.lastSentAt ? ` ／ 最終アタック ${esc(fmt(c.lastSentAt))}` : ""}`}</div>
+          <div class="n">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}　担当：${esc(c.ownerName || "未定")}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="location.href='${esc(s.href(c))}'">${esc(s.cta)}</button>
+      </div>`).join("")
+      + (list.length > LIMIT ? `<div class="db-more">ほか${list.length - LIMIT}社</div>` : "");
+  }
+
+  function renderHistory() {
+    if (!approaches.length) {
+      el("history").innerHTML = `<tr><td colspan="5" class="empty">直近14日の送信はありません。</td></tr>`;
+      return;
+    }
+    el("history").innerHTML = approaches.slice(0, 15).map((a) => `
+      <tr class="click" onclick="location.href='/sales/companies.html?id=${esc(a.companyId)}'">
+        <td style="white-space:nowrap;">${esc(fmt(a.sentAt))}</td>
+        <td><span class="sl-nm">${esc(a.companyName || "—")}</span></td>
+        <td>${esc(a.service || "—")}</td>
+        <td>${esc(a.employeeName || "—")}</td>
+        <td>${a.clickCount ? `<span class="sl-hot">${a.clickCount}回</span>` : "—"}</td>
+      </tr>`).join("");
+  }
+</script>
+
+</body>
+</html>

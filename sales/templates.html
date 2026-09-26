@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>営業文テンプレート - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260916m">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .tp-table td.num, .tp-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .tp-vars { font-size:11.5px; color:#6b7080; background:#f6f6f2; border-radius:6px; padding:8px 10px; margin-top:6px; line-height:1.7; }
+    .tp-vars code { background:#fff; border:1px solid #e2e2dc; border-radius:4px; padding:0 4px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">営業文テンプレート</h1>
+  <p class="sl-sub">フォームアタックで使う営業文です。テンプレートごとの成果を比べられます。</p>
+
+  <div class="sl-toolbar">
+    <button class="btn btn-primary btn-sm" onclick="openEdit()">
+      <span class="material-symbols-outlined icon-inline">add</span>テンプレートを追加</button>
+    <label class="sl-muted" style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;">
+      <input type="checkbox" id="show-archived" style="width:auto;margin:0;" onchange="render()">しまったものも出す</label>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="sl-table tp-table">
+      <thead><tr><th>テンプレート名</th><th>対象サービス</th><th>リンク先</th><th class="num">使用回数</th>
+        <th class="num">クリック率</th><th class="num">返信率</th><th class="num">商談率</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">読み込み中…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="../js/api-client.js?v=20260916m"></script>
+<script src="../js/layout.js?v=20260916m"></script>
+<script src="../js/sales-layout.js?v=20260916m"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+
+  let templates = [];
+  let services = [];
+
+  const SAMPLE = `{{company}}\nご担当者様\n\n突然のご連絡失礼いたします。\n\n株式会社エイトの{{sender}}と申します。\n\n貴社Webサイトを拝見し、\n{{service}}についてご支援できる可能性があると考え、\nご連絡いたしました。\n\n詳細はこちら\n{{url}}\n\nよろしくお願いいたします。`;
+
+  SalesLayout.init({ active: "attack" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listSalesTemplates();
+      if (res.notReady) {
+        el("rows").innerHTML = `<tr><td colspan="7"><div class="banner warn"><span class="material-symbols-outlined">build</span>
+          <div>${esc(res.message)}</div></div></td></tr>`;
+        return;
+      }
+      templates = res.templates || [];
+      services = res.services || [];
+      render();
+    } catch (e) {
+      el("rows").innerHTML = `<tr><td colspan="7"><div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+    }
+  }
+
+  const rate = (v) => (v === null || v === undefined ? "—" : `${v}%`);
+
+  function render() {
+    const all = el("show-archived").checked;
+    const list = templates.filter((t) => all || !t.archived);
+    if (!list.length) {
+      el("rows").innerHTML = `<tr><td colspan="7" class="empty">まだテンプレートがありません。「テンプレートを追加」から作ってください。</td></tr>`;
+      return;
+    }
+    el("rows").innerHTML = list.map((t) => `
+      <tr class="click" onclick="openEdit('${esc(t.id)}')">
+        <td><span class="sl-nm">${esc(t.name)}</span>${t.archived ? `<span class="sl-sub2">しまったもの</span>` : ""}</td>
+        <td>${esc(t.service || "—")}</td>
+        <td style="max-width:220px;word-break:break-all;">${esc(t.destinationUrl || "—")}</td>
+        <td class="num">${t.uses}</td>
+        <td class="num">${esc(rate(t.clickRate))}</td>
+        <td class="num">${esc(rate(t.replyRate))}</td>
+        <td class="num">${esc(rate(t.meetingRate))}</td>
+      </tr>`).join("");
+  }
+
+  function closeModal() { el("modal-root").innerHTML = ""; }
+
+  function openEdit(id) {
+    const t = templates.find((x) => x.id === id) || { name: "", service: "", subject: "", body: SAMPLE, destinationUrl: "" };
+    el("modal-root").innerHTML = `
+      <div class="sl-drawer-bg" onclick="closeModal()"></div>
+      <div class="sl-drawer" style="width:560px;">
+        <h2>${id ? "テンプレートを編集" : "テンプレートを追加"}</h2>
+        <label>テンプレート名 <span style="color:#b3261e;">*</span></label>
+        <input id="t-name" type="text" value="${esc(t.name)}" placeholder="AI / DX 基本">
+        <label style="margin-top:10px;">対象サービス</label>
+        <input id="t-service" type="text" list="dl-service" value="${esc(t.service || "")}">
+        <datalist id="dl-service">${services.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+        <label style="margin-top:10px;">件名（フォームに件名欄があるとき）</label>
+        <input id="t-subject" type="text" value="${esc(t.subject || "")}">
+        <label style="margin-top:10px;">本文 <span style="color:#b3261e;">*</span></label>
+        <textarea id="t-body" rows="14">${esc(t.body || "")}</textarea>
+        <div class="tp-vars">差し込み：<code>{{company}}</code> 企業名　<code>{{sender}}</code> 送る人の名前
+          <code>{{service}}</code> 提案サービス　<code>{{url}}</code> 専用URL（クリック検知用。必ず入れてください）</div>
+        <label style="margin-top:10px;">リンク先（専用URLをクリックしたときに開くページ）</label>
+        <input id="t-dest" type="text" value="${esc(t.destinationUrl || "")}" placeholder="https://8grp.co.jp/service/dx">
+        <div id="t-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="submitEdit(this, '${esc(id || '')}')">保存する</button>
+          ${id ? `<button class="btn btn-secondary" onclick="toggleArchive(this, '${esc(id)}', ${t.archived ? "false" : "true"})">${t.archived ? "元に戻す" : "しまう"}</button>` : ""}
+          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>`;
+  }
+
+  async function submitEdit(btn, id) {
+    const msg = el("t-msg"); msg.textContent = "";
+    const body = {
+      name: el("t-name").value.trim(), service: el("t-service").value.trim() || null,
+      subject: el("t-subject").value.trim() || null, body: el("t-body").value.trim(),
+      destinationUrl: el("t-dest").value.trim() || null,
+    };
+    if (!body.name) { msg.textContent = "テンプレート名を入力してください"; return; }
+    if (!body.body) { msg.textContent = "本文を入力してください"; return; }
+    if (!/\{\{\s*url\s*\}\}/.test(body.body)
+        && !confirm("本文に {{url}}（専用URL）がありません。クリックを検知できませんが、保存しますか？")) return;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => (id ? API.updateSalesTemplate({ id, ...body }) : API.createSalesTemplate(body)));
+      closeModal();
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  async function toggleArchive(btn, id, archived) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSalesTemplate({ id, archived }));
+      closeModal();
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+</script>
+
+</body>
+</html>

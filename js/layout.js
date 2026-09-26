@@ -90,6 +90,8 @@
     // 必要な人にだけ出す
     { key: "booking", href: "booking.html", label: "スペース予約", icon: "meeting_room",
       ready: true, when: "booking" },
+    // 営業担当にだけ。/sales は /hr と同じく専用ヘッダーで動く別アプリなので、入口を1つ置くだけ
+    { key: "sales", href: "sales/", label: "営業", icon: "storefront", ready: true, when: "sales" },
 
     // ここから下は別システム。
     // どれも同じ auth.users を使うので、別のIDもパスワードも要らない。
@@ -210,6 +212,9 @@
             { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
             { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
           ] },
+        // 営業アタック管理（/sales）。/hr と同じく専用ヘッダー（js/sales-layout.js）で動く
+        // 別アプリなので、入口を1つ置くだけ。ほかのグループは6項目で埋まっているのでここに置く
+        { key: "sales",     href: "sales/",               label: "営業",         icon: "storefront", ready: true },
         { key: "sitenews",  href: "admin-site-news.html", label: "サイトのお知らせ", icon: "newspaper", ready: true },
         { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true },
       ],
@@ -771,6 +776,8 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
+      // /sales の入口。サーバ側の canSell（lib/gw.js）と同じ基準
+      sales: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
       // それでは判定にならない。admin / staff と社内ロールで見る
