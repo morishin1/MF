@@ -327,7 +327,8 @@ console.log("\n=== リード ===");
   await page.locator("#stages button", { hasText: "返信あり" }).click();
   check((await page.locator(".ld-card").count()) === 1, "「返信あり」で絞ると1社");
   await page.locator(".ld-card").first().click();
-  await page.waitForTimeout(900);
+  // 画面遷移＋詳細の取得を待つ（CI は遅いので、決め打ちの待ち時間にしない）
+  await page.locator(".sl-detail").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check(/companies\.html\?id=c3/.test(page.url()) && await page.locator(".sl-detail").isVisible(), "開くと企業詳細の右ドロワー");
   const d = await page.locator(".sl-detail").innerText();
   check(d.includes("初回クリック") && d.includes("最終クリック"), "詳細に初回・最終クリックが出る");
@@ -341,7 +342,8 @@ console.log("\n=== 面談：リード → 面談を設定 → 日程確定 → �
   await page.goto(`${BASE}/sales/leads.html`);
   await page.waitForTimeout(1000);
   await page.locator(".ld-card", { hasText: "反応商事" }).locator("button", { hasText: "面談を設定" }).click();
-  await page.waitForTimeout(1200);
+  await page.locator(".sl-drawer.top h2", { hasText: "営業面談を設定" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(".sl-next .btn-primary").first().waitFor({ state: "attached", timeout: 15000 }).catch(() => {});
   check(/companies\.html\?id=c2&meeting=1/.test(page.url()) || /companies\.html\?id=c2/.test(page.url()), "リードから企業詳細へ");
   check(await page.locator(".sl-drawer.top h2", { hasText: "営業面談を設定" }).isVisible(), "そのまま「営業面談を設定」が開く");
   const primary = await page.locator(".sl-next .btn-primary").allInnerTexts();
@@ -376,7 +378,7 @@ console.log("\n=== 面談：リード → 面談を設定 → 日程確定 → �
   // TimeRex 未設定でも、面談を作って手入力で進められる
   const off = await openAs({ timerex: false });
   await off.page.goto(`${BASE}/sales/companies.html?id=c3&meeting=1`);
-  await off.page.waitForTimeout(1200);
+  await off.page.locator(".sl-drawer.top h2", { hasText: "営業面談を設定" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check((await off.page.locator(".sl-drawer.top").innerText()).includes("TIMEREX_SALES_MEETING_URL"), "未設定なら、そう出す");
   await off.page.locator("button", { hasText: "面談を作成" }).click();
   await off.page.waitForTimeout(900);
