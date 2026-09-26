@@ -17,6 +17,16 @@
       "permanent": false
     },
     {
+      "source": "/sales/clicks",
+      "destination": "/sales/leads.html",
+      "permanent": false
+    },
+    {
+      "source": "/sales/clicks.html",
+      "destination": "/sales/leads.html",
+      "permanent": false
+    },
+    {
       "source": "/hr-dashboard.html",
       "destination": "/hr/",
       "permanent": false
@@ -55,8 +65,8 @@
       "destination": "/sales/attack.html"
     },
     {
-      "source": "/sales/clicks",
-      "destination": "/sales/clicks.html"
+      "source": "/sales/leads",
+      "destination": "/sales/leads.html"
     },
     {
       "source": "/sales/analytics",

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260927-sales1">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales2">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -49,8 +49,8 @@
   <div class="db-sum" id="sum"></div>
 
   <div class="db-sec db-click" id="sec-click">
-    <div class="db-sec-h"><span class="t">🔥 ① クリックあり・未対応</span><span class="n" id="n-click"></span>
-      <a href="/sales/clicks.html">反応一覧</a></div>
+    <div class="db-sec-h"><span class="t">🔥 ① リード・未対応</span><span class="n" id="n-click"></span>
+      <a href="/sales/leads.html">リード一覧</a></div>
     <div class="sl-rows" id="list-click"></div>
   </div>
 
@@ -82,9 +82,9 @@
   </div>
 </div>
 
-<script src="../js/api-client.js?v=20260927-sales1"></script>
-<script src="../js/layout.js?v=20260927-sales1"></script>
-<script src="../js/sales-layout.js?v=20260927-sales1"></script>
+<script src="../js/api-client.js?v=20260927-sales2"></script>
+<script src="../js/layout.js?v=20260927-sales2"></script>
+<script src="../js/sales-layout.js?v=20260927-sales2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -124,7 +124,7 @@
 
   // 1社は、上の段に入ったら下の段には出さない（同じ会社を2回見せない）
   const SECTIONS = [
-    { key: "click", label: "クリックあり・未対応", icon: "ads_click", hot: true,
+    { key: "click", label: "リード・未対応", icon: "ads_click", hot: true,
       pick: (c) => c.unhandledClick,
       sort: (x, y) => String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || "")) || y.clickCount - x.clickCount,
       cta: "フォローする", href: go },

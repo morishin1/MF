@@ -105,6 +105,7 @@ async function one(req, res, sb, ctx) {
       ownerName: name.get(c.owner_id) || null,
       campaignName: (campaigns || []).find((x) => x.id === c.campaign_id)?.name || null,
       clickCount: agg?.clickCount || 0,
+      firstClickAt: agg?.first_click_at || null,
       lastClickAt: agg?.last_click_at || null,
       unhandledClick: hasUnhandledClick(c, agg),
       next: next.label, nextKey: next.key, nextDue: next.due, overdue: next.overdue,

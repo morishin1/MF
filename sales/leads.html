@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>リード - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales2">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+
+    .ld-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; margin:0 0 12px; }
+    .ld-filters select { margin:0; font-size:13px; padding:8px 10px; }
+    .ld-count { font-size:12px; color:#6b7080; margin:0 0 8px; }
+
+    .ld-card { background:#fff; border:1px solid #e2e2dc; border-left:4px solid #c7cad4; border-radius:10px;
+      padding:14px 16px; display:flex; gap:14px; align-items:center; cursor:pointer; }
+    .ld-card:hover { border-color:#c7cad4; }
+    .ld-card.warm { border-left-color:#e0a100; }
+    .ld-card.hot { border-left-color:#e0a100; background:#fffbf0; }
+    .ld-card.lead { border-left-color:#2f6f3a; }
+    .ld-card .info { flex:1; min-width:0; }
+    .ld-card .nm { font-weight:700; color:#1b2440; font-size:15px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .ld-card .meta { font-size:12px; color:#4a5068; margin-top:4px; display:flex; gap:12px; flex-wrap:wrap; }
+    .ld-card .next { font-size:12.5px; color:#1b2440; margin-top:4px; font-weight:500; }
+    .ld-grade { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; }
+    .ld-grade.warm { background:#fbf1d6; color:#7d5a00; }
+    .ld-grade.lead { background:#e5f1e2; color:#2f6f3a; }
+    .ld-list { display:grid; gap:8px; }
+    @media (max-width: 760px) { .ld-card { flex-direction:column; align-items:stretch; } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">リード</h1>
+  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追ってください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談）。</p>
+
+  <div class="sl-toolbar"><div class="sl-tabs-pill" id="stages"></div></div>
+  <div class="ld-filters">
+    <select id="f-owner" onchange="render()"></select>
+    <select id="f-service" onchange="render()"></select>
+    <select id="f-industry" onchange="render()"></select>
+    <select id="f-campaign" onchange="render()"></select>
+  </div>
+  <div class="ld-count" id="count"></div>
+  <div class="ld-list" id="list"><div class="sl-empty">読み込み中…</div></div>
+</div>
+
+<script src="../js/api-client.js?v=20260927-sales2"></script>
+<script src="../js/layout.js?v=20260927-sales2"></script>
+<script src="../js/sales-layout.js?v=20260927-sales2"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmtDay, ago, statusPill } = SalesLayout;
+
+  let leads = [];
+  let members = [];
+  let me = null;
+  let stage = "all";
+
+  // 面談の「調整中／予定」を分けるのは、面談連携（Phase 2）で面談の記録ができてから
+  const STAGES = [
+    ["all", "すべて", () => true],
+    ["clicked", "クリックあり", (c) => c.status === "clicked" || (c.clickCount > 0 && c.status === "attacked")],
+    ["replied", "返信あり", (c) => c.status === "replied"],
+    ["meeting", "面談", (c) => c.status === "meeting"],
+    ["proposal", "提案中", (c) => c.status === "proposal"],
+    ["won", "成約", (c) => c.status === "won"],
+  ];
+
+  SalesLayout.init({ active: "leads" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const res = await API.listSalesCompanies();
+      if (res.notReady) {
+        el("list").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div>`;
+        return;
+      }
+      me = res.me;
+      members = res.members || [];
+      leads = (res.companies || []).filter(isLead);
+      renderFilters();
+      render();
+    } catch (e) {
+      el("list").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  // リード＝アタックのあとに反応があった企業。営業禁止・失注・対象外は出さない
+  function isLead(c) {
+    if (c.ngReason || ["lost", "excluded"].includes(c.status)) return false;
+    return c.clickCount > 0 || ["replied", "meeting", "proposal", "won"].includes(c.status);
+  }
+  // クリックだけならウォームリード、返信から先はリード（要件 §8）
+  const isWarm = (c) => !["replied", "meeting", "proposal", "won"].includes(c.status);
+
+  // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談 → 提案 → 成約
+  function group(c) {
+    if (c.status === "replied") return 0;
+    if (isWarm(c) && c.clickCount >= 2) return 1;
+    if (isWarm(c)) return 2;
+    return { meeting: 3, proposal: 4, won: 5 }[c.status] ?? 6;
+  }
+  function sorted(list) {
+    return [...list].sort((x, y) => group(x) - group(y)
+      || (y.unhandledClick ? 1 : 0) - (x.unhandledClick ? 1 : 0)
+      || String(y.lastClickAt || y.updatedAt || "").localeCompare(String(x.lastClickAt || x.updatedAt || "")));
+  }
+
+  function renderFilters() {
+    const opts = (id, first, values) => {
+      const cur = el(id).value;
+      el(id).innerHTML = `<option value="">${esc(first)}</option>`
+        + values.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    };
+    const uniq = (k) => [...new Set(leads.map((c) => c[k]).filter(Boolean))].sort().map((v) => [v, v]);
+    opts("f-owner", "担当：すべて", [["me", "自分"], ...members.map((m) => [m.id, m.display_name])]);
+    opts("f-service", "提案サービス：すべて", uniq("service"));
+    opts("f-industry", "業種：すべて", uniq("industry"));
+    const camps = new Map(leads.filter((c) => c.campaignId).map((c) => [c.campaignId, c.campaignName || "（名前なし）"]));
+    opts("f-campaign", "キャンペーン：すべて", [...camps.entries()]);
+  }
+
+  function setStage(k) { stage = k; render(); }
+
+  function filtered() {
+    const v = (id) => el(id).value;
+    return leads.filter((c) =>
+      (!v("f-owner") || c.ownerId === (v("f-owner") === "me" ? me : v("f-owner")))
+      && (!v("f-service") || c.service === v("f-service"))
+      && (!v("f-industry") || c.industry === v("f-industry"))
+      && (!v("f-campaign") || c.campaignId === v("f-campaign")));
+  }
+
+  function cta(c) {
+    if (c.unhandledClick) return "フォローする";
+    if (c.status === "replied") return "返信対応";
+    return "開く";
+  }
+
+  function render() {
+    const base = filtered();
+    el("stages").innerHTML = STAGES.map(([k, l, f]) =>
+      `<button class="${stage === k ? "on" : ""}" onclick="setStage('${k}')">${esc(l)} ${base.filter(f).length}</button>`).join("");
+    const pick = STAGES.find(([k]) => k === stage)[2];
+    const list = sorted(base.filter(pick));
+    el("count").textContent = `${list.length}社`;
+    if (!list.length) {
+      el("list").innerHTML = `<div class="sl-empty">${leads.length ? "対象がありません。" : "まだリードはありません。アタックした企業がリンクを開くと、ここに出ます。"}</div>`;
+      return;
+    }
+    el("list").innerHTML = list.map((c) => {
+      const warm = isWarm(c);
+      return `
+      <div class="ld-card ${c.unhandledClick ? "hot" : warm ? "warm" : "lead"}" onclick="location.href='/sales/companies.html?id=${esc(c.id)}'">
+        <div class="info">
+          <div class="nm">${c.unhandledClick ? "🔥 " : ""}${esc(c.name)}
+            <span class="ld-grade ${warm ? "warm" : "lead"}">${warm ? "ウォームリード" : "リード"}</span>
+            ${statusPill(c.status, c.statusLabel)}</div>
+          <div class="meta">
+            <span>${esc(c.lastService || c.service || "—")}</span>
+            ${c.lastClickAt ? `<span>${esc(ago(c.lastClickAt))}にクリック</span>` : ""}
+            ${c.clickCount ? `<span class="${c.clickCount >= 2 ? "sl-hot" : ""}">クリック ${c.clickCount}回</span>` : ""}
+            <span>担当 ${esc(c.ownerName || "未定")}</span>
+          </div>
+          <div class="next">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
+        </div>
+        <button class="btn ${c.unhandledClick || c.status === "replied" ? "btn-primary" : "btn-secondary"} btn-sm">${esc(cta(c))}</button>
+      </div>`;
+    }).join("");
+  }
+</script>
+
+</body>
+</html>
