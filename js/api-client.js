@@ -422,6 +422,9 @@
   const createSalesCampaign = (body) => api("/api/sales/campaigns", { method: "POST", body });
   const updateSalesCampaign = (body) => api("/api/sales/campaigns", { method: "PATCH", body });
   const lookupSalesUrl = (url) => api(`/api/sales/lookup?url=${encodeURIComponent(url)}`);
+  const listSalesMeetings = (companyId) => api(`/api/sales/meetings?companyId=${encodeURIComponent(companyId)}`);
+  const issueSalesMeeting = (body) => api("/api/sales/meetings", { method: "POST", body });
+  const salesMeetingAct = (body) => api("/api/sales/meetings", { method: "PATCH", body });
 
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
@@ -1345,6 +1348,7 @@
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl,
+    listSalesMeetings, issueSalesMeeting, salesMeetingAct,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

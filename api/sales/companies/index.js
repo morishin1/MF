@@ -46,17 +46,25 @@ async function list(req, res, sb, ctx) {
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
 
-  const [{ data: approaches }, { data: members }, { data: campaigns }] = await Promise.all([
+  const [{ data: approaches }, { data: members }, { data: campaigns }, { data: meetings }] = await Promise.all([
     sb.from("gw_sales_approaches")
       .select("id, company_id, employee_id, service, prepared_at, sent_at, first_click_at, last_click_at, click_count")
       .eq("tenant_id", ctx.tenantId).limit(20000),
     sb.from("gw_employees").select("id, display_name")
       .eq("tenant_id", ctx.tenantId).in("status", ["active", "invited"]).order("display_name").limit(300),
     sb.from("gw_sales_campaigns").select("id, name").eq("tenant_id", ctx.tenantId).limit(500),
+    // 進行中の面談（db/090）。表がまだ無ければ空として扱う
+    sb.from("gw_sales_meetings").select("id, company_id, status, scheduled_at, created_at")
+      .eq("tenant_id", ctx.tenantId).in("status", ["scheduling", "scheduled"]).limit(5000),
   ]);
   const name = new Map((members || []).map((e) => [e.id, e.display_name]));
   const campaignName = new Map((campaigns || []).map((c) => [c.id, c.name]));
   const agg = aggregateApproaches(approaches);
+  const meetingOf = new Map();
+  for (const m of meetings || []) {
+    const cur = meetingOf.get(m.company_id);
+    if (!cur || String(m.created_at) > String(cur.created_at)) meetingOf.set(m.company_id, m);
+  }
   const today = todayJst();
 
   return json(res, 200, {
@@ -78,6 +86,8 @@ async function list(req, res, sb, ctx) {
         firstClickAt: g?.first_click_at || null,
         lastClickAt: g?.last_click_at || null,
         unhandledClick: hasUnhandledClick(c, g),
+        meetingStatus: meetingOf.get(c.id)?.status || null,
+        meetingAt: meetingOf.get(c.id)?.scheduled_at || null,
         next: next.label, nextKey: next.key, nextDue: next.due, overdue: next.overdue,
       };
     }),

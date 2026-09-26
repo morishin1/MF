@@ -19,6 +19,7 @@ import {
   recentApproach, statusRank, todayJst, isUuid, autoNext,
   STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, SERVICES, INDUSTRIES, RECENT_DAYS,
 } from "../../../lib/sales.js";
+import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
 
 const SQL = "db/088_sales.sql";
 
@@ -56,7 +57,7 @@ async function one(req, res, sb, ctx) {
   }
   if (!c) return json(res, 404, { error: "not_found" });
 
-  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }] = await Promise.all([
+  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }] = await Promise.all([
     sb.from("gw_sales_approaches")
       .select("id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
         + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count")
@@ -68,6 +69,8 @@ async function one(req, res, sb, ctx) {
     sb.from("gw_employees").select("id, display_name")
       .eq("tenant_id", ctx.tenantId).in("status", ["active", "invited"]).order("display_name").limit(300),
     sb.from("gw_sales_campaigns").select("id, name, archived_at").eq("tenant_id", ctx.tenantId).limit(500),
+    // 面談（db/090）。まだ表が無い環境でも企業詳細は開けるようにする（エラーは空として扱う）
+    sb.from("gw_sales_meetings").select(MEETING_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(50),
   ]);
   const name = new Map((members || []).map((e) => [e.id, e.display_name]));
   const today = todayJst();
@@ -111,6 +114,9 @@ async function one(req, res, sb, ctx) {
       next: next.label, nextKey: next.key, nextDue: next.due, overdue: next.overdue,
     },
     approaches: sent.map((a) => ({ ...shapeApproach(a), employeeName: name.get(a.employee_id) || null })),
+    meetings: (meetings || []).map((m) => shapeMeeting(m, (eid) => name.get(eid))),
+    meetingsReady: meetings !== null && meetings !== undefined,
+    timerexConfigured: Boolean((process.env.TIMEREX_SALES_MEETING_URL || "").trim()),
     timeline,
     // 直近アタックの警告（要件 §20）。企業ページにも、フォームアタックを押したときにも出す
     recent: recent ? {

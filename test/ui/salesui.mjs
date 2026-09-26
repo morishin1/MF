@@ -30,8 +30,11 @@ function company(over) {
   };
 }
 
-async function openAs({ roles = ["sales"], isAdmin = false, recent = null } = {}) {
+async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timerex = true } = {}) {
   const calls = [];
+  const meetings = [];
+  const shapeM = (m) => ({ kindLabel: "初回商談", durationMin: 30, ownerName: "営業 一郎",
+    statusLabel: { scheduling: "日程調整中", scheduled: "面談予定", canceled: "取りやめ" }[m.status], ...m });
   const companies = [
     company({}),
     company({ id: "c2", name: "反応商事", domain: "hannou.jp", status: "clicked", statusLabel: "クリックあり",
@@ -68,10 +71,27 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null } = {}
         timeline: c.lastSentAt ? [{ at: c.lastSentAt, kind: "attack", label: "フォーム送信" },
           { at: c.lastClickAt, kind: "click", label: "リンククリック" }] : [],
         canForce: isAdmin, members: [{ id: "emp-s1", display_name: "営業 一郎" }], campaigns: [],
+        meetings: meetings.filter((m) => m.companyId === id).map(shapeM), meetingsReady: true, timerexConfigured: timerex,
         statuses: [{ key: "untouched", label: "未アタック" }, { key: "attacked", label: "アタック済" }],
         ngReasons: [{ key: "no_sales", label: "営業禁止" }],
         eventKinds: [{ key: "follow", label: "フォロー" }, { key: "reply", label: "返信あり" }],
       });
+    }
+    if (/\/api\/sales\/meetings\b/.test(url)) {
+      const b = body();
+      calls.push({ kind: `meeting-${req.method()}`, body: b });
+      if (req.method() === "POST") {
+        const m = { id: `m${meetings.length + 1}`, companyId: b.companyId, ownerId: b.ownerId || "emp-s1", kind: "first_meeting",
+          status: "scheduling", schedulingUrl: timerex ? `https://timerex.net/s/eight/first30?sales_company_id=${b.companyId}&sales_meeting_id=m${meetings.length + 1}` : null,
+          schedulingSentAt: null, scheduledAt: null, meetingUrl: null };
+        meetings.push(m);
+        return send({ meeting: shapeM(m), reused: false, timerexConfigured: timerex });
+      }
+      const m = meetings.find((x) => x.id === b.id);
+      if (b.action === "sent") m.schedulingSentAt = NOW;
+      if (b.action === "schedule") { m.status = "scheduled"; m.scheduledAt = b.scheduledAt; m.meetingUrl = b.meetingUrl; }
+      if (b.action === "cancel") m.status = "canceled";
+      return send({ meeting: shapeM(m) });
     }
     if (/\/api\/sales\/lookup\b/.test(url)) {
       const u = new URL(url).searchParams.get("url");
@@ -301,7 +321,9 @@ console.log("\n=== リード ===");
   const meta = await page.locator(".ld-card").nth(1).innerText();
   check(meta.includes("クリック 2回") && meta.includes("NEXT：クリックあり・要フォロー"), "クリック回数とNEXTを出す");
   const tabs = await page.locator("#stages button").allInnerTexts();
-  check(["すべて", "クリックあり", "返信あり", "面談", "提案中", "成約"].every((l) => tabs.some((t) => t.startsWith(l))), `段階で絞れる（${tabs.join(" / ")}）`);
+  check(["すべて", "クリックあり", "返信あり", "面談調整中", "面談予定", "提案中", "成約"].every((l) => tabs.some((t) => t.startsWith(l))), `段階で絞れる（${tabs.join(" / ")}）`);
+  const btns = await page.locator(".ld-card button").allInnerTexts();
+  check(btns.length === 2 && btns.every((t) => t === "面談を設定"), `リードのボタンは「面談を設定」1つ（${btns.join(" / ")}）`);
   await page.locator("#stages button", { hasText: "返信あり" }).click();
   check((await page.locator(".ld-card").count()) === 1, "「返信あり」で絞ると1社");
   await page.locator(".ld-card").first().click();
@@ -311,6 +333,55 @@ console.log("\n=== リード ===");
   check(d.includes("初回クリック") && d.includes("最終クリック"), "詳細に初回・最終クリックが出る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
+}
+
+console.log("\n=== 面談：リード → 面談を設定 → 日程確定 → 面談予定 ===");
+{
+  const { page, calls, errs } = await openAs();
+  await page.goto(`${BASE}/sales/leads.html`);
+  await page.waitForTimeout(1000);
+  await page.locator(".ld-card", { hasText: "反応商事" }).locator("button", { hasText: "面談を設定" }).click();
+  await page.waitForTimeout(1200);
+  check(/companies\.html\?id=c2&meeting=1/.test(page.url()) || /companies\.html\?id=c2/.test(page.url()), "リードから企業詳細へ");
+  check(await page.locator(".sl-drawer.top h2", { hasText: "営業面談を設定" }).isVisible(), "そのまま「営業面談を設定」が開く");
+  const primary = await page.locator(".sl-next .btn-primary").allInnerTexts();
+  check(primary.length === 1 && primary[0].includes("面談を設定"), `リード詳細の Primary CTA は「面談を設定」1つ（${primary.join(" / ")}）`);
+  const d0 = await page.locator(".sl-drawer.top").innerText();
+  check(d0.includes("初回商談（30分）") && /担当/.test(d0), "初回商談30分・担当が出る");
+
+  await page.locator("button", { hasText: "日程調整URLを発行" }).click();
+  await page.waitForTimeout(900);
+  const sched = await page.inputValue("#mt-sched");
+  check(/^https:\/\/timerex\.net\/s\/eight\/first30\?sales_company_id=c2&sales_meeting_id=m1$/.test(sched), `TimeRex URL に会社と面談のID（${sched}）`);
+  check((await page.inputValue("#mt-mail")).includes(sched), "送る文面にもURLが入っている");
+  check(calls.some((c) => c.kind === "meeting-POST" && c.body.companyId === "c2" && c.body.ownerId === "emp-s1"), "担当つきで発行した");
+
+  await page.locator("button", { hasText: "送付済みにする" }).click();
+  await page.waitForTimeout(900);
+  check((await page.locator(".sl-drawer.top").innerText()).includes("相手の予約を待っています"), "送付済みになる");
+
+  await page.locator(".sl-drawer.top summary", { hasText: "日程が決まった" }).click();
+  await page.fill("#mt-when", "2099-10-05T14:00");
+  await page.fill("#mt-url", "https://meet.google.com/abc-defg-hij");
+  await page.locator("button", { hasText: "日程を確定" }).click();
+  await page.waitForTimeout(900);
+  const sc = calls.find((c) => c.kind === "meeting-PATCH" && c.body.action === "schedule");
+  check(sc && sc.body.scheduledAt === "2099-10-05T05:00:00.000Z" && sc.body.meetingUrl === "https://meet.google.com/abc-defg-hij", "日時（JST 14:00）とMeet URLで確定");
+  const d1 = await page.locator(".sl-drawer.top").innerText();
+  check(d1.includes("面談予定") && await page.locator(".sl-drawer.top a", { hasText: "面談に参加" }).count() === 1, "面談予定・「面談に参加」が出る");
+  check((await page.locator(".sl-detail").innerText()).includes("初回商談（30分）"), "企業詳細の「面談」にも出る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+
+  // TimeRex 未設定でも、面談を作って手入力で進められる
+  const off = await openAs({ timerex: false });
+  await off.page.goto(`${BASE}/sales/companies.html?id=c3&meeting=1`);
+  await off.page.waitForTimeout(1200);
+  check((await off.page.locator(".sl-drawer.top").innerText()).includes("TIMEREX_SALES_MEETING_URL"), "未設定なら、そう出す");
+  await off.page.locator("button", { hasText: "面談を作成" }).click();
+  await off.page.waitForTimeout(900);
+  check(await off.page.locator("#mt-when").isVisible(), "未設定なら手入力の欄を開いておく");
+  await off.page.close();
 }
 
 console.log("\n=== 権限の無い人 ===");
