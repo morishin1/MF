@@ -17,11 +17,6 @@
       "permanent": false
     },
     {
-      "source": "/hr",
-      "destination": "/hr/",
-      "permanent": false
-    },
-    {
       "source": "/hr-dashboard.html",
       "destination": "/hr/",
       "permanent": false
@@ -43,6 +38,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/hr",
+      "destination": "/hr/index.html"
+    },
     {
       "source": "/pc",
       "destination": "/device-consent.html"
