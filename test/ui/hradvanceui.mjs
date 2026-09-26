@@ -42,7 +42,11 @@ console.log("\n=== 承諾済みに「本採用へ進める」が出る。押す�
     const url = req.url();
     const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
     if (/\/api\/me\b/.test(url)) {
-      return send({ email: "ceo@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
+      // 実サーバの resolveAppRole は gwRoles に owner があれば appRole も "owner" にする。
+      // ここが "member" のままだと、admin-onboard.html 側の権限ゲート
+      // （roles:["admin","owner"]）に弾かれて home.html へ戻され、
+      // 読み込みの速さで結果がぶれる（レースコンディション）
+      return send({ email: "ceo@8grp.co.jp", appRole: "owner", isAdmin: false, shows: {},
         gw: { employee: OWNER, roles: ["owner"], isAdmin: false, tenantId: "t1", stage: null } });
     }
     if (/\/api\/hr\/applicants\/advance/.test(url) && req.method() === "POST") {
