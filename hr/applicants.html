@@ -49,6 +49,19 @@
     .hr-detail { position:fixed; top:0; right:0; bottom:0; width:560px; max-width:94vw; background:#f6f6f2;
       z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:0; }
 
+    /* モーダル＝1つの操作を実行する場所。ドロワー（詳細）の上に重ねて出す。
+       閉じてもドロワーは閉じない（採用HR応募者一覧・ドロワーUI改善指示書 §4・§5） */
+    .hr-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
+    .hr-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:440px; max-width:92vw;
+      max-height:86vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
+      box-shadow:0 20px 60px rgba(27,36,64,.28); }
+
+    .hr-bulkbar { display:flex; align-items:center; gap:10px; background:#e7eaf3; border:1px solid #c7cfe6;
+      border-radius:9px; padding:9px 14px; margin-bottom:12px; font-size:13px; color:#1b2440; flex-wrap:wrap; }
+    .hr-bulkbar .cnt { font-weight:700; white-space:nowrap; }
+    .hr-bulkbar .sp { flex:1; }
+    .hr-check-col { width:34px; }
+
     .hr-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
     .hr-next .now { font-size:11px; color:#4a5068; margin-bottom:2px; }
     .hr-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }
@@ -90,16 +103,21 @@
     <div class="hr-stage-tabs" id="stage-tabs"></div>
   </div>
 
+  <div id="bulkbar"></div>
+
   <div style="overflow-x:auto;">
     <table class="hr-table">
-      <thead><tr><th>応募者</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="6" class="empty">読み込み中…</td></tr></tbody>
+      <thead><tr>
+        <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
+        <th>応募者</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <div id="modal-root"></div>
 <div id="action-root"></div>
+<div id="hr-modal-root"></div>
 
 <script src="../js/api-client.js?v=20260916m"></script>
 <script src="../js/layout.js?v=20260916m"></script>
@@ -126,11 +144,25 @@
     done: ["#e5f1e2", "#2f6f3a", "check_circle"], passed: ["#efefeb", "#4a5068", "remove"],
   };
   const OVERDUE_COLOR = ["#fdecea", "#b3261e", "error"];
+  const STATUS_LABEL = {
+    todo: "未対応", scheduling: "日程調整中", interview_scheduled: "面談予定",
+    eval_pending: "評価入力待ち", ceo_recommend_pending: "社長推薦待ち",
+    ceo_interview_pending: "社長面談設定待ち", ceo_decision_pending: "社長判断待ち",
+    next_scheduling_pending: "次回調整待ち", offer_draft_pending: "合格通知作成待ち",
+    offer_review_pending: "社内確認待ち", offer_send_pending: "本人送付待ち",
+    offer_sent: "本人送付済み", offer_viewed: "本人が閲覧済み", offer_resend_pending: "URL再送待ち",
+    offer_response_pending: "承諾待ち", accepted: "承諾済み", declined: "辞退",
+    done: "完了", passed: "見送り",
+  };
 
   let applicants = [];
+  let employees = [];
   let stageFilter = "";
   let openId = null;
   let canDecide = false;
+  // 一覧の複数選択（ページ内表示分だけを対象にする。README §1）
+  let selectedIds = new Set();
+  let visibleIds = [];
 
   HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; start(); } });
 
@@ -152,14 +184,15 @@
     try {
       const res = await API.listHrApplicants();
       if (res.notReady) {
-        el("rows").innerHTML = `<tr><td colspan="6"><div class="banner warn">
+        el("rows").innerHTML = `<tr><td colspan="7"><div class="banner warn">
           <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
         return;
       }
       applicants = res.applicants || [];
+      employees = res.employees || [];
       render();
     } catch (e) {
-      el("rows").innerHTML = `<tr><td colspan="6"><div class="banner err">
+      el("rows").innerHTML = `<tr><td colspan="7"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
     }
@@ -170,9 +203,11 @@
     const list = applicants.filter((a) =>
       (!stageFilter || a.stage === stageFilter)
       && (!q || `${a.name} ${a.jobTitle}`.toLowerCase().includes(q)));
+    visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
-      el("rows").innerHTML = `<tr><td colspan="6" class="empty">対象がありません。</td></tr>`;
+      el("rows").innerHTML = `<tr><td colspan="7" class="empty">対象がありません。</td></tr>`;
+      renderBulkBar();
       return;
     }
     el("rows").innerHTML = list.map((a) => {
@@ -180,6 +215,8 @@
       const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
       return `
       <tr class="click" onclick="openDetail('${esc(a.id)}')">
+        <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
+          onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
@@ -189,6 +226,139 @@
         <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
       </tr>`;
     }).join("");
+    renderBulkBar();
+  }
+
+  // ---- 複数選択・一括操作 -----------------------------------------------------------
+  // 全選択は「いま表示している分（visibleIds）」だけを対象にする。
+  // 意図せず全DBを対象にしない（README §1）
+  function toggleSelectAll(checked) {
+    if (checked) visibleIds.forEach((id) => selectedIds.add(id));
+    else visibleIds.forEach((id) => selectedIds.delete(id));
+    render();
+  }
+
+  function toggleSelect(id, checked) {
+    if (checked) selectedIds.add(id); else selectedIds.delete(id);
+    renderBulkBar();
+    updateSelectAllCheckbox();
+  }
+
+  function updateSelectAllCheckbox() {
+    const box = el("chk-all");
+    if (!box) return;
+    const selectedOnPage = visibleIds.filter((id) => selectedIds.has(id)).length;
+    box.checked = visibleIds.length > 0 && selectedOnPage === visibleIds.length;
+    box.indeterminate = selectedOnPage > 0 && selectedOnPage < visibleIds.length;
+  }
+
+  function clearSelection() { selectedIds.clear(); render(); }
+
+  function renderBulkBar() {
+    updateSelectAllCheckbox();
+    const box = el("bulkbar");
+    if (!selectedIds.size) { box.innerHTML = ""; return; }
+    box.innerHTML = `
+      <div class="hr-bulkbar">
+        <span class="cnt">${selectedIds.size}名選択中</span>
+        <span class="sp"></span>
+        <button class="btn btn-secondary btn-sm" onclick="openBulkStatusModal()">ステータス変更</button>
+        <button class="btn btn-secondary btn-sm" onclick="openBulkRecruiterModal()">担当変更</button>
+        <button class="btn btn-danger btn-sm" onclick="openBulkDeleteModal()">削除</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearSelection()">選択解除</button>
+      </div>`;
+  }
+
+  // ---- モーダル（1つの操作を実行する場所）。ドロワーの上に重ねて出し、
+  // 閉じてもドロワーは閉じない（README §4・§5） ------------------------------------
+  function openHrModal(html) {
+    el("hr-modal-root").innerHTML = `<div class="hr-modal-bg" onclick="closeHrModal()"></div><div class="hr-modal">${html}</div>`;
+  }
+  function closeHrModal() { el("hr-modal-root").innerHTML = ""; }
+
+  function openBulkStatusModal() {
+    const n = selectedIds.size;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">ステータス変更</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${n}名のステータスを変更します。</p>
+      <label>変更後のステータス</label>
+      <select id="bs-status">${Object.entries(STATUS_LABEL).map(([k, l]) =>
+        `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
+      <div id="bs-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="submitBulkStatus(this)">変更する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitBulkStatus(btn) {
+    const msg = el("bs-msg"); msg.textContent = "";
+    const ids = [...selectedIds];
+    try {
+      await KPLayout.busy(btn, "変更中…", () => API.setHrApplicantsStatus(ids, el("bs-status").value));
+      closeHrModal();
+      selectedIds.clear();
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "変更できませんでした"; }
+  }
+
+  function openBulkRecruiterModal() {
+    const n = selectedIds.size;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">担当変更</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${n}名の採用担当を変更します。</p>
+      <label>担当者</label>
+      <select id="br-recruiter">
+        <option value="">（未定にする）</option>
+        ${employees.map((e) => `<option value="${esc(e.id)}">${esc(e.display_name)}</option>`).join("")}
+      </select>
+      <div id="br-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="submitBulkRecruiter(this)">変更する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitBulkRecruiter(btn) {
+    const msg = el("br-msg"); msg.textContent = "";
+    const ids = [...selectedIds];
+    try {
+      await KPLayout.busy(btn, "変更中…", () => API.setHrApplicantsRecruiter(ids, el("br-recruiter").value || null));
+      closeHrModal();
+      selectedIds.clear();
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "変更できませんでした"; }
+  }
+
+  // 削除は選考終了（見送り・辞退）とは別の操作。応募者レコードそのものを消す（README §2・§6）
+  function openBulkDeleteModal() {
+    const picked = applicants.filter((a) => selectedIds.has(a.id));
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 10px;">
+        ${picked.length === 1 ? "この応募者を削除しますか？" : `${picked.length}名の応募者を削除します`}</h2>
+      ${picked.length === 1
+        ? `<div style="font-size:14px;font-weight:700;color:#1b2440;">${esc(picked[0].name)}</div>
+           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(picked[0].email || "メール未登録")}</div>`
+        : `<ul style="margin:0;padding-left:18px;font-size:12.5px;color:#4a5068;max-height:160px;overflow-y:auto;">
+             ${picked.map((a) => `<li>${esc(a.name)}</li>`).join("")}</ul>`}
+      <p class="muted" style="font-size:12px;margin-top:14px;">
+        削除すると、面談・合格通知の記録も一緒に削除されます。元に戻せません。</p>
+      <div id="bd-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-danger" onclick="submitBulkDelete(this)">削除する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">キャンセル</button>
+      </div>`);
+  }
+
+  async function submitBulkDelete(btn) {
+    const msg = el("bd-msg"); msg.textContent = "";
+    const ids = [...selectedIds];
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deleteHrApplicants(ids));
+      closeHrModal();
+      selectedIds.clear();
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "削除できませんでした"; }
   }
 
   // ---- 応募者を追加（右ドロワー） ------------------------------------------------
@@ -256,7 +426,11 @@
   let detailTab = "overview";
 
   async function openDetail(id) {
-    openId = id; detailTab = "overview";
+    // 同じ応募者を開き直す場合（各操作後の再読み込み）は、いま見ているタブを保つ。
+    // 呼び出し側が detailTab = "interviews" を先に指定してから呼ぶケースがあるため
+    // （openIdはcloseModal()内でnullに戻るため、判定にはdetailの中身を使う）
+    if (detail?.applicant?.id !== id) detailTab = "overview";
+    openId = id;
     closeModal();
     const root = el("modal-root");
     root.innerHTML = `<div class="hr-drawer-bg" onclick="closeModal()"></div>
@@ -351,20 +525,27 @@
   function interviewRow(i) {
     const scoreLine = (detail.evalItems || []).filter((e) => i.scores?.[e.key])
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
+    // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、日時変更・キャンセルを出す
+    const pending = !i.done && !i.canceled;
     return `
-      <div class="card" style="margin-bottom:10px;">
+      <div class="card" style="margin-bottom:10px;${i.canceled ? "opacity:.6;" : ""}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
           ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
-          ${!i.done ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}</div>
+          ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}
+          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}</div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">
-          ${i.done ? `実施：${esc(fmtDate(i.conductedAt))}` : `予定：${esc(fmtDate(i.scheduledAt))}`}
+          ${i.done ? `実施：${esc(fmtDate(i.conductedAt))}`
+            : i.canceled ? `予定していた日時：${esc(fmtDate(i.scheduledAt))}（${esc(fmtDate(i.canceledAt))}にキャンセル）`
+            : `予定：${esc(fmtDate(i.scheduledAt))}`}
           ${i.interviewerName ? `　面談担当：${esc(i.interviewerName)}` : ""}</div>
         ${scoreLine ? `<div style="font-size:12px;margin-top:4px;">${scoreLine}</div>` : ""}
         ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
-          ${!i.done && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
-          ${!i.done ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
+          ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
+          ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
+          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">日時を変更</button>` : ""}
+          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
           ${i.done && i.kind === "ceo"
@@ -380,10 +561,79 @@
     return s ? new Date(s).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   }
 
+  // ---- 面談日時変更・キャンセル（モーダル） -----------------------------------------
+  // 「日時を変更」は既存のupdateアクションを使う（README §3。日時・担当・URLだけを直す）
+  function openRescheduleModal(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    const opts = (detail.interviewers || []).map((p) =>
+      `<option value="${esc(p.id)}" ${p.id === iv.interviewerId ? "selected" : ""}>${esc(p.display_name)}</option>`).join("");
+    const whenLocal = iv.scheduledAt ? new Date(iv.scheduledAt).toISOString().slice(0, 16) : "";
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談日時を変更</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${esc(iv.kindLabel)}（${esc(detail.applicant.name)}さん）</p>
+      <label>予定日時</label>
+      <input id="rs-when" type="datetime-local" value="${esc(whenLocal)}">
+      <label style="margin-top:10px;">面談担当</label>
+      <select id="rs-who"><option value="">（未定）</option>${opts}</select>
+      <label style="margin-top:10px;">面談URL</label>
+      <input id="rs-url" type="text" value="${esc(iv.meetingUrl || "")}" placeholder="https://meet.google.com/...">
+      <div id="rs-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="submitReschedule('${esc(id)}', this)">保存する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitReschedule(id, btn) {
+    const msg = el("rs-msg"); msg.textContent = "";
+    const when = el("rs-when").value;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview({
+        id, scheduledAt: when ? new Date(when).toISOString() : undefined,
+        interviewerId: el("rs-who").value || undefined,
+        meetingUrl: el("rs-url").value.trim() || undefined,
+      }));
+      closeHrModal();
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // 面談キャンセルは応募者を削除しない・面談履歴も物理削除しない（README §3・§6）。
+  // カジュアル面談なら日程調整のやり直し（status=scheduling）、社長面談なら
+  // 社長面談の設定し直し（status=ceo_interview_pending）へ戻す（サーバ側でも同じ判定）
+  function openCancelInterviewModal(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談をキャンセルしますか？</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">
+        ${esc(detail.applicant.name)}さんの${esc(iv.kindLabel)}（${esc(fmtDate(iv.scheduledAt))}）をキャンセルします。
+        ${iv.kind === "ceo" ? "社長面談を設定し直せる状態に戻します。" : "日程を調整し直せる状態に戻します。"}</p>
+      <div id="ci-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-danger" onclick="submitCancelInterview('${esc(id)}', this)">面談をキャンセルする</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる（キャンセルしない）</button>
+      </div>`);
+  }
+
+  async function submitCancelInterview(id, btn) {
+    const msg = el("ci-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "処理中…", () => API.cancelHrInterview(id));
+      closeHrModal();
+      detailTab = "interviews";
+      await openDetail(detail.applicant.id);
+      await load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "キャンセルできませんでした"; }
+  }
+
   // ---- NEXT ACTIONのボタン --------------------------------------------------------
   function targetInterview(action) {
     const list = detail.interviews || [];
-    if (action === "conduct") return list.find((i) => !i.done) || null;
+    if (action === "conduct") return list.find((i) => !i.done && !i.canceled) || null;
     if (action === "evaluate") return list.find((i) => i.done && !i.rank) || list[0] || null;
     return null;
   }
@@ -529,38 +779,37 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
   }
 
-  // ---- 日程調整URLを送る（右ドロワー） ----------------------------------------------
+  // ---- 日程調整URLを送る（モーダル） ------------------------------------------------
   // 通常導線：TimeRexの日程調整URLを送る（README「TimeRex連携」指示書 §5・§6）。
-  // 独自の日程調整UIは作らない。TimeRexが未設定なら、手動設定へ逃がす（§21）
+  // 独自の日程調整UIは作らない。TimeRexが未設定なら、手動設定へ逃がす（§21）。
+  // 応募者詳細ドロワーの上にモーダルで出す。閉じてもドロワーは閉じない（応募者一覧・
+  // ドロワーUI改善指示書 §4・§5）
   function openSendSchedulingForm() {
     const url = detail.schedulingUrl;
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
-        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">日程調整URLを送ります</h2>
-        <p class="hr-sub" style="margin:0 0 14px;">${esc(detail.applicant.name)}さんへ、カジュアル面談の日程調整URLを送ってください。</p>
-        ${url ? `
-        <label>TimeRex 日程調整URL</label>
-        <input id="sc-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
-        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-url')">URLをコピー</button>
-        <label style="margin-top:14px;">メール文面</label>
-        <textarea id="sc-mail" rows="8" readonly>${esc(schedulingMailTemplate(url))}</textarea>
-        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-mail')">メール文面をコピー</button>
-        <div id="sc-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-primary" onclick="submitMarkScheduling(this)">送付済みにする</button>
-          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-        <button class="btn btn-secondary btn-sm" style="margin-top:16px;"
-                onclick="closeAction();openScheduleForm()">TimeRexを使わず、手動で面談を設定する</button>` : `
-        <div class="banner warn"><span class="material-symbols-outlined">build</span>
-          <div>TimeRexの日程調整URLが未設定です（環境変数 TIMEREX_CASUAL_INTERVIEW_URL）。
-          手動で面談を設定してください。</div></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-primary" onclick="closeAction();openScheduleForm()">手動で面談を設定</button>
-          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>`}
-      </div>`;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">日程調整URLを送ります</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${esc(detail.applicant.name)}さんへ、カジュアル面談の日程調整URLを送ってください。</p>
+      ${url ? `
+      <label>TimeRex 日程調整URL</label>
+      <input id="sc-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-url')">URLをコピー</button>
+      <label style="margin-top:14px;">メール文面</label>
+      <textarea id="sc-mail" rows="8" readonly>${esc(schedulingMailTemplate(url))}</textarea>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-mail')">メール文面をコピー</button>
+      <div id="sc-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="submitMarkScheduling(this)">送付済みにする</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:16px;"
+              onclick="closeHrModal();openScheduleForm()">TimeRexを使わず、手動で面談を設定する</button>` : `
+      <div class="banner warn"><span class="material-symbols-outlined">build</span>
+        <div>TimeRexの日程調整URLが未設定です（環境変数 TIMEREX_CASUAL_INTERVIEW_URL）。
+        手動で面談を設定してください。</div></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="closeHrModal();openScheduleForm()">手動で面談を設定</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`}`);
   }
 
   function schedulingMailTemplate(url) {
@@ -581,7 +830,7 @@ ${url}
   async function submitMarkScheduling(btn) {
     try {
       await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant({ id: detail.applicant.id, status: "scheduling" }));
-      closeAction();
+      closeHrModal();
       await openDetail(detail.applicant.id);
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }

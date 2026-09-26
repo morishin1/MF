@@ -227,6 +227,31 @@ await ok("良かった点・気になる点は、評価済みの面談から出�
   assert.equal(r.body.recommended[0].concerns, "報酬条件のみ確認したい");
 });
 
+await ok("カジュアル面談の録画があれば、recordingUrlを渡す（応募書類を読み直さなくても判断材料に辿り着けるように）", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "山田 太郎", stage: "ceo_recommend", status: "ceo_interview_pending", rank: "A", decision: null },
+  ];
+  db.rows.gw_hr_interviews = [
+    { id: "iv1", tenant_id: "t1", applicant_id: "a1", kind: "casual", rank: "A",
+      recording_url: "https://drive.google.com/file/d/abc/view" },
+  ];
+  const r = await getCeoReview();
+  assert.equal(r.body.recommended[0].recordingUrl, "https://drive.google.com/file/d/abc/view");
+});
+
+await ok("録画が無ければ、recordingUrlはnull（空欄・エラーにしない）", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "山田 太郎", stage: "ceo_recommend", status: "ceo_interview_pending", rank: "A", decision: null },
+  ];
+  db.rows.gw_hr_interviews = [
+    { id: "iv1", tenant_id: "t1", applicant_id: "a1", kind: "casual", rank: "A" },
+  ];
+  const r = await getCeoReview();
+  assert.equal(r.body.recommended[0].recordingUrl, null);
+});
+
 await ok("recruiterはCEO REVIEWの一覧を見られない", async () => {
   setup();
   who = RECRUITER;

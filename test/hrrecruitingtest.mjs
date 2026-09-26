@@ -258,8 +258,9 @@ ok("新規応募（未対応）は、日程調整URLを送る（TimeRex連携。
   assert.equal(n.cta, "日程調整を送る");
   assert.equal(n.action, "sendSchedulingLink");
 });
-ok("日程調整URL送付後（候補者の予約待ち）は、手動設定が例外導線として残る（§21）", () => {
+ok("日程調整URL送付後（候補者の予約待ち・面談キャンセル後の両方）は、手動設定が例外導線として残る（§21）", () => {
   const n = nextActionOf({ status: "scheduling" });
+  assert.equal(n.label, "カジュアル面談の日程を再調整してください");
   assert.equal(n.cta, "手動で面談を設定");
   assert.equal(n.action, "schedule");
 });

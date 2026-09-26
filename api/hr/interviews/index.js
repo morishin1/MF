@@ -5,9 +5,14 @@
 //         "evaluate" … 5項目評価・ランク・所感を保存。ランクから対応ステータスを機械的に進める
 //                       （ただし社長推薦・見送りの最終確定はここでは行わない。README §5・§7）
 //         "update"   … 日時・面談担当・URLだけを直す（状態は動かさない）
+//         "cancel"   … 面談をキャンセルする。物理削除はせずcanceled_atを立てるだけ。
+//                       応募者は日程調整のやり直し（カジュアル面談ならstatus=scheduling、
+//                       社長面談ならstatus=ceo_interview_pending）へ戻す
+//                       （採用HR応募者一覧・ドロワーUI改善指示書 §3）
 //
 // ■ 同じ面談を二重登録しない
-//   同じ種別（カジュアル／社長）の、まだ実施していない面談が既にあれば断る。
+//   同じ種別（カジュアル／社長）の、まだ実施していない・キャンセルしていない面談が
+//   既にあれば断る。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -48,7 +53,8 @@ async function create(req, res, sb, ctx, user) {
   if (!applicant) return json(res, 404, { error: "not_found" });
 
   const { data: open } = await sb.from("gw_hr_interviews").select("id")
-    .eq("applicant_id", applicant.id).eq("kind", row.value.kind).is("conducted_at", null).limit(1);
+    .eq("applicant_id", applicant.id).eq("kind", row.value.kind)
+    .is("conducted_at", null).is("canceled_at", null).limit(1);
   if (open?.length) {
     return json(res, 409, { error: "already_scheduled", hint: "すでに予定されている面談があります" });
   }
@@ -102,6 +108,7 @@ async function act(req, res, sb, ctx, user) {
   if (body.action === "conduct") return conduct(res, sb, ctx, user, iv, body);
   if (body.action === "evaluate") return evaluate(res, sb, ctx, user, iv, body);
   if (body.action === "update") return updateInterview(res, sb, ctx, user, iv, body);
+  if (body.action === "cancel") return cancelInterview(res, sb, ctx, user, iv);
   return json(res, 400, { error: "unknown_action" });
 }
 
@@ -177,6 +184,31 @@ async function updateInterview(res, sb, ctx, user, iv, body) {
   if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
 
   return json(res, 200, { interview: shapeInterview(data) });
+}
+
+// 面談をキャンセルする。物理削除しない（履歴・監査ログは残す。README「応募者一覧・
+// ドロワーUI改善」指示書 §3・§6）。カジュアル面談ならstatus=schedulingへ、
+// 社長面談ならstatus=ceo_interview_pendingへ戻し、それぞれのNEXT ACTIONで
+// 「日程を設定し直す」ことだけを促す（採用判断そのものは動かさない）
+async function cancelInterview(res, sb, ctx, user, iv) {
+  if (iv.conducted_at) return json(res, 409, { error: "already_conducted", hint: "実施済みの面談はキャンセルできません" });
+  if (iv.canceled_at) return json(res, 409, { error: "already_canceled", hint: "すでにキャンセルされています" });
+
+  const now = new Date().toISOString();
+  const { data, error } = await sb.from("gw_hr_interviews")
+    .update({ canceled_at: now }).eq("id", iv.id).select("*").single();
+  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+
+  const nextStatus = iv.kind === "ceo" ? "ceo_interview_pending" : "scheduling";
+  await sb.from("gw_hr_applicants").update({ status: nextStatus, updated_at: now })
+    .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId);
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: iv.applicant_id, event_key: "interview_canceled",
+    label: `${interviewKindLabel(iv.kind)}をキャンセル`, created_by: user.id,
+  });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.interview_cancel", target: `hr_interview:${iv.id}` });
+
+  return json(res, 200, { interview: shapeInterview(data), status: nextStatus });
 }
 
 function fmtDateTime(iso) {
