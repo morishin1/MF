@@ -1,10 +1,11 @@
 // POST /api/hr/timerex/webhook … TimeRexからの予約確定・変更Webhookを受ける。
 //
 // ■ 認証
-//   TimeRex側の管理画面で設定する固定ヘッダー方式（TimeRex設定画面のHTTP Header欄）。
-//   署名方式は公式に確認できていないため推測実装しない（採用HR Phase 4A指示書「最重要」）。
-//     ヘッダー: X-HR-Timerex-Secret
-//     値      : TIMEREX_WEBHOOK_SECRET と同じ値
+//   TimeRex標準で送信される固定ヘッダー（TimeRex管理画面の「セキュリティトークン」）。
+//   署名方式ではなく、独自ヘッダーの追加設定も不要（採用HR Phase 4A指示書「最重要」・
+//   TimeRex Webhook認証ヘッダー修正指示で実機確認済み）。
+//     ヘッダー: x-timerex-authorization
+//     値      : TIMEREX_WEBHOOK_SECRET と同じ値（TimeRex管理画面の「セキュリティトークン」）
 //   一致しなければ401。TIMEREX_WEBHOOK_SECRET未設定なら503（安全側に倒して常に拒否）。
 //   Secret値はログへ出さない。
 //
@@ -26,7 +27,7 @@ import crypto from "node:crypto";
 import { readJson, methodNotAllowed, json } from "../../../lib/http.js";
 import { parseTimerexWebhook, applyTimerexEvent } from "../../../lib/hr-timerex.js";
 
-const AUTH_HEADER = "x-hr-timerex-secret";
+const AUTH_HEADER = "x-timerex-authorization";
 
 function verifySecret(req) {
   const configured = process.env.TIMEREX_WEBHOOK_SECRET || "";

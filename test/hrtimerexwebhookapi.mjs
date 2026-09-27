@@ -88,7 +88,7 @@ const res = () => {
   r.end = (b) => { try { r.body = JSON.parse(b); } catch { r.body = b; } };
   return r;
 };
-const AUTH = { "x-hr-timerex-secret": "test-secret-value-long-enough" };
+const AUTH = { "x-timerex-authorization": "test-secret-value-long-enough" };
 const call = (body, headers = AUTH) => {
   const r = res();
   return webhook({ method: "POST", headers, body }, r).then(() => r);
@@ -201,7 +201,7 @@ console.log("\n=== 認証 ===\n");
 
 await ok("不正なSecretは401", async () => {
   setup();
-  const r = await call(confirmedFixture(), { "x-hr-timerex-secret": "wrong" });
+  const r = await call(confirmedFixture(), { "x-timerex-authorization": "wrong" });
   assert.equal(r.statusCode, 401);
   assert.equal(db.rows.gw_hr_interviews.length, 0);
 });
