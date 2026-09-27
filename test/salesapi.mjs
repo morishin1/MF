@@ -84,6 +84,7 @@ function table(name) {
       const g = [];
       const r2 = {
         eq: (k, v) => { g.push(["eq", k, v]); return r2; },
+        in: (k, v) => { g.push(["in", k, v]); return r2; },
         is: (k, v) => { g.push(["is", k, v]); return r2; },
         select: () => r2,
         single: () => apply(),
@@ -99,12 +100,16 @@ function table(name) {
     },
     delete() {
       const g = [];
+      let want = false;
       const r2 = {
         eq: (k, v) => { g.push(["eq", k, v]); return r2; },
+        in: (k, v) => { g.push(["in", k, v]); return r2; },
+        select: () => { want = true; return r2; },
         then: (fn) => {
           const m = matcher(g);
+          const gone = (db.rows[name] || []).filter(m);
           db.rows[name] = (db.rows[name] || []).filter((x) => !m(x));
-          return Promise.resolve({ data: null, error: null }).then(fn);
+          return Promise.resolve({ data: want ? gone.map(copy) : null, error: null }).then(fn);
         },
       };
       return r2;
@@ -158,6 +163,7 @@ const { default: templates } = await import(atRoot("api/sales/templates/index.js
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
 const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
+const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -818,6 +824,144 @@ await ok("営業禁止の会社・/sales を使えない人は面談を設定で
   who = MEMBER;
   assert.equal((await mIssue({ companyId: c.id })).statusCode, 403);
   assert.equal(db.rows.gw_sales_meetings.length, 0);
+});
+
+console.log("\n=== 企業の一括操作（/api/sales/companies/bulk） ===\n");
+
+const bulk = (body) => call(bulkApi, { method: "POST", url: "/api/sales/companies/bulk", body });
+const coRow = (id) => db.rows.gw_sales_companies.find((x) => x.id === id);
+
+await ok("ステータス一括変更：同じステータスの企業は触らず、変えた企業には営業履歴と自動NEXTを残す", async () => {
+  setup();
+  const a = await newCompany({ name: "A社", siteUrl: "https://a.example.jp/" });
+  const b = await newCompany({ name: "B社", siteUrl: "https://b.example.jp/" });
+  coRow(b.id).status = "replied";
+  const r = await bulk({ ids: [a.id, b.id], action: "change_status", status: "replied" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.updated, r.body.skipped, r.body.failed, r.body.notFound], [1, 1, 0, 0]);
+  assert.equal(coRow(a.id).status, "replied");
+  assert.equal(coRow(a.id).next_action, autoNext("reply").next_action, "返信ありへ進めたら NEXT を自動で入れる");
+  const ev = db.rows.gw_sales_events.filter((e) => e.company_id === a.id);
+  assert.equal(ev.length, 1);
+  assert.match(ev[0].detail, /未アタック → 返信あり（一括変更）/);
+  assert.equal(db.rows.gw_sales_events.filter((e) => e.company_id === b.id).length, 0, "変わらない企業には履歴を残さない");
+  assert.ok(logged.some((l) => l.action === "sales.company_bulk_status" && l.detail.count === 1));
+});
+
+await ok("担当一括変更：同じテナントの社員だけ。知らない担当は断る", async () => {
+  setup();
+  const a = await newCompany({ name: "A社", siteUrl: "https://a.example.jp/" });
+  const b = await newCompany({ name: "B社", siteUrl: "https://b.example.jp/" });
+  const r = await bulk({ ids: [a.id, b.id], action: "change_owner", ownerId: "00000000-0000-4000-8000-00000000abcd" });
+  assert.equal(r.statusCode, 400);
+  db.rows.gw_employees.push({ id: "00000000-0000-4000-8000-0000000000e2", tenant_id: "t1", display_name: "営業 三郎", status: "active" });
+  const r2 = await bulk({ ids: [a.id, b.id], action: "change_owner", ownerId: "00000000-0000-4000-8000-0000000000e2" });
+  assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+  assert.equal(r2.body.updated, 2);
+  assert.ok([a.id, b.id].every((id) => coRow(id).owner_id === "00000000-0000-4000-8000-0000000000e2"));
+  const r3 = await bulk({ ids: [a.id], action: "change_owner", ownerId: null });
+  assert.equal(r3.body.updated, 1);
+  assert.equal(coRow(a.id).owner_id, null, "未定にもできる");
+});
+
+await ok("他テナント・知らない・形の悪いIDは処理せず「見つからない」に数える", async () => {
+  setup();
+  const a = await newCompany({ name: "A社", siteUrl: "https://a.example.jp/" });
+  const other = { id: "00000000-0000-4000-8000-0000000000f1", tenant_id: "t2", name: "他社", status: "untouched" };
+  db.rows.gw_sales_companies.push(other);
+  const r = await bulk({ ids: [a.id, other.id, "00000000-0000-4000-8000-0000000000f9", "not-a-uuid"], action: "change_service", service: "AI / DX" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.updated, 1);
+  assert.equal(r.body.notFound, 3);
+  assert.equal(coRow(a.id).service, "AI / DX");
+  assert.equal(other.service, undefined, "他テナントの企業は変えない");
+});
+
+await ok("使えない人・選択なし・多すぎ・知らない操作は断る", async () => {
+  setup();
+  const a = await newCompany({ name: "A社", siteUrl: "https://a.example.jp/" });
+  who = MEMBER;
+  assert.equal((await bulk({ ids: [a.id], action: "change_status", status: "lost" })).statusCode, 403);
+  who = RECRUITER;
+  assert.equal((await bulk({ ids: [a.id], action: "change_status", status: "lost" })).statusCode, 403);
+  who = SALES;
+  assert.equal((await bulk({ ids: [], action: "change_status", status: "lost" })).statusCode, 400);
+  const many = Array.from({ length: 501 }, (_, i) => `00000000-0000-4000-8000-${String(900000 + i).padStart(12, "0")}`);
+  assert.equal((await bulk({ ids: many, action: "change_status", status: "lost" })).statusCode, 400);
+  assert.equal((await bulk({ ids: [a.id], action: "wipe" })).statusCode, 400);
+  assert.equal((await bulk({ ids: [a.id], action: "change_status", status: "nope" })).statusCode, 400);
+  assert.equal(coRow(a.id).status, "untouched");
+});
+
+await ok("キャンペーン一括変更：自テナントのキャンペーンだけ", async () => {
+  setup();
+  const a = await newCompany({ name: "A社", siteUrl: "https://a.example.jp/" });
+  db.rows.gw_sales_campaigns.push({ id: "00000000-0000-4000-8000-0000000000c1", tenant_id: "t1", name: "秋の製造業" },
+    { id: "00000000-0000-4000-8000-0000000000c2", tenant_id: "t2", name: "他社の" });
+  assert.equal((await bulk({ ids: [a.id], action: "change_campaign", campaignId: "00000000-0000-4000-8000-0000000000c2" })).statusCode, 400);
+  const r = await bulk({ ids: [a.id], action: "change_campaign", campaignId: "00000000-0000-4000-8000-0000000000c1" });
+  assert.equal(r.body.updated, 1);
+  assert.equal(coRow(a.id).campaign_id, "00000000-0000-4000-8000-0000000000c1");
+});
+
+await ok("営業禁止にする：理由は必須。すでに営業禁止の企業は上書きしない。営業履歴に残す", async () => {
+  setup();
+  const a = await newCompany({ name: "A社", siteUrl: "https://a.example.jp/" });
+  const b = await newCompany({ name: "B社", siteUrl: "https://b.example.jp/" });
+  coRow(b.id).ng_reason = "competitor";
+  assert.equal((await bulk({ ids: [a.id, b.id], action: "set_ng" })).statusCode, 400);
+  const r = await bulk({ ids: [a.id, b.id], action: "set_ng", ngReason: "unsubscribed", ngNote: "配信停止のご依頼" });
+  assert.deepEqual([r.body.updated, r.body.skipped], [1, 1]);
+  assert.equal(coRow(a.id).ng_reason, "unsubscribed");
+  assert.equal(coRow(b.id).ng_reason, "competitor");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.company_id === a.id && e.label === "営業禁止に設定"));
+  // 営業禁止になった企業には、もうアタックできない
+  assert.equal((await prepare({ companyId: a.id })).statusCode, 403);
+});
+
+await ok("削除：履歴・面談・成約・営業禁止のある企業は消さず理由を返す。履歴の無い企業だけ消す", async () => {
+  setup();
+  const clean = await newCompany({ name: "誤登録社", siteUrl: "https://clean.example.jp/" });
+  const attacked = await newCompany({ name: "アタック済社", siteUrl: "https://atk.example.jp/" });
+  const noted = await newCompany({ name: "メモ社", siteUrl: "https://memo.example.jp/" });
+  const met = await newCompany({ name: "面談社", siteUrl: "https://meet.example.jp/" });
+  const won = await newCompany({ name: "成約社", siteUrl: "https://won.example.jp/" });
+  const ng = await newCompany({ name: "禁止社", siteUrl: "https://ng.example.jp/" });
+  await sendAttack(attacked.id);
+  await addEvent({ id: noted.id, kind: "memo", detail: "電話した" });
+  db.rows.gw_sales_meetings.push({ id: uuid(), tenant_id: "t1", company_id: met.id, status: "scheduling" });
+  coRow(won.id).status = "won";
+  coRow(ng.id).ng_reason = "customer";
+  const ids = [clean.id, attacked.id, noted.id, met.id, won.id, ng.id];
+
+  const dry = await bulk({ ids, action: "delete", dryRun: true });
+  assert.equal(dry.statusCode, 200, JSON.stringify(dry.body));
+  assert.deepEqual(dry.body.deletable.map((c) => c.name), ["誤登録社"]);
+  const why = Object.fromEntries(dry.body.blocked.map((b) => [b.name, b.reasons.join("・")]));
+  assert.match(why["アタック済社"], /アタック履歴あり/);
+  assert.match(why["メモ社"], /営業履歴あり/);
+  assert.match(why["面談社"], /面談あり/);
+  assert.match(why["成約社"], /成約済み/);
+  assert.match(why["禁止社"], /営業禁止/);
+  assert.equal(db.rows.gw_sales_companies.length, 6, "確認だけでは消さない");
+
+  // 画面を通さずに全部を消そうとしても、履歴のある企業は残る
+  const r = await bulk({ ids, action: "delete" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.deleted, 1);
+  assert.equal(r.body.blocked.length, 5);
+  assert.deepEqual(db.rows.gw_sales_companies.map((c) => c.name).sort(), ["アタック済社", "メモ社", "成約社", "禁止社", "面談社"].sort());
+  assert.ok(logged.some((l) => l.action === "sales.company_bulk_delete" && l.detail.deleted === 1 && l.detail.names[0] === "誤登録社"));
+});
+
+await ok("削除：クリック履歴だけがある企業も消さない", async () => {
+  setup();
+  const c = await newCompany({ name: "クリック社", siteUrl: "https://click.example.jp/" });
+  db.rows.gw_sales_click_events.push({ id: uuid(), tenant_id: "t1", company_id: c.id, is_valid: false });
+  const r = await bulk({ ids: [c.id], action: "delete" });
+  assert.equal(r.body.deleted, 0);
+  assert.match(r.body.blocked[0].reasons.join(), /クリック履歴あり/);
+  assert.equal(db.rows.gw_sales_companies.length, 1);
 });
 
 console.log("\n=== 小さな道具 ===\n");

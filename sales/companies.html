@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260927-sales3">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -74,20 +74,22 @@
 
   <div style="overflow-x:auto;">
     <table class="sl-table">
-      <thead><tr><th>企業</th><th>業種</th><th>フォーム</th><th>商材</th><th>状態</th><th>最終アタック</th>
+      <thead><tr><th class="sl-check"><input type="checkbox" id="sel-all" aria-label="表示中の企業をすべて選択"
+          onclick="toggleAll(this.checked)"></th><th>企業</th><th>業種</th><th>フォーム</th><th>商材</th><th>状態</th><th>最終アタック</th>
         <th>クリック</th><th>NEXT</th><th>担当</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
+      <tbody id="rows"><tr><td colspan="10" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <div id="modal-root"></div>
+<div id="bulk-root"></div>
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20260927-sales3"></script>
-<script src="../js/layout.js?v=20260927-sales3"></script>
-<script src="../js/sales-layout.js?v=20260927-sales3"></script>
+<script src="../js/api-client.js?v=20260927-sales4"></script>
+<script src="../js/layout.js?v=20260927-sales4"></script>
+<script src="../js/sales-layout.js?v=20260927-sales4"></script>
 <script>
   const el = (id) => document.getElementById(id);
   // 企業詳細の取得は、あとから開いたものだけを画面に出す。
@@ -112,6 +114,9 @@
   let myEmployeeId = null;
   let myName = "";
   let canForce = false;
+  // 複数選択（チェックボックス）。shown＝いま一覧に出ている企業（全選択はここだけが対象）
+  const selected = new Set();
+  let shown = [];
 
   SalesLayout.init({ active: "companies" }).then((ctx) => {
     if (!ctx) return;
@@ -132,7 +137,7 @@
     try {
       const res = await API.listSalesCompanies();
       if (res.notReady) {
-        el("rows").innerHTML = `<tr><td colspan="9"><div class="banner warn">
+        el("rows").innerHTML = `<tr><td colspan="10"><div class="banner warn">
           <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
         return;
       }
@@ -142,7 +147,7 @@
       renderFilters();
       render();
     } catch (e) {
-      el("rows").innerHTML = `<tr><td colspan="9"><div class="banner err">
+      el("rows").innerHTML = `<tr><td colspan="10"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
     }
@@ -180,13 +185,20 @@
 
   function render() {
     const list = filtered();
+    shown = list.slice(0, 500).map((c) => c.id);
+    // 見えていない企業は選択から外す（一括操作が、画面に出ていない企業に及ばないように）
+    const vis = new Set(shown);
+    for (const id of [...selected]) if (!vis.has(id)) selected.delete(id);
     el("count").textContent = `${list.length}社${list.length !== companies.length ? `（全${companies.length}社）` : ""}`;
     if (!list.length) {
-      el("rows").innerHTML = `<tr><td colspan="9" class="empty">${companies.length ? "対象がありません。" : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
+      el("rows").innerHTML = `<tr><td colspan="10" class="empty">${companies.length ? "対象がありません。" : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
+      renderSelection();
       return;
     }
     el("rows").innerHTML = list.slice(0, 500).map((c) => `
-      <tr class="click" onclick="openDetail('${esc(c.id)}')">
+      <tr class="click${selected.has(c.id) ? " sel" : ""}" data-id="${esc(c.id)}" onclick="openDetail('${esc(c.id)}')">
+        <td class="sl-check" onclick="event.stopPropagation()"><input type="checkbox" aria-label="${esc(c.name)}を選択"
+          ${selected.has(c.id) ? "checked" : ""} onclick="event.stopPropagation();toggleOne('${esc(c.id)}', this.checked)"></td>
         <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.domain || "")}${c.region ? ` ／ ${esc(c.region)}` : ""}</span></td>
         <td>${esc(c.industry || "—")}</td>
         <td>${c.formUrl ? `<a href="${esc(c.formUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">開く</a>` : `<span class="sl-muted">未登録</span>`}</td>
@@ -197,7 +209,8 @@
         <td><span class="${c.overdue ? "sl-hot" : ""}">${esc(c.next)}</span>${c.nextDue ? `<span class="sl-sub2">${esc(fmtDay(c.nextDue))}</span>` : ""}</td>
         <td>${esc(c.ownerName || "未定")}</td>
       </tr>`).join("")
-      + (list.length > 500 ? `<tr><td colspan="9" class="empty">ほか${list.length - 500}社。絞り込んでください。</td></tr>` : "");
+      + (list.length > 500 ? `<tr><td colspan="10" class="empty">ほか${list.length - 500}社。絞り込んでください。</td></tr>` : "");
+    renderSelection();
   }
 
   function closeModal() {
@@ -208,8 +221,210 @@
     el("action-root").innerHTML = "";
     history.replaceState({}, "", "/sales/companies.html");
   }
+  // 企業詳細から行う操作・一括操作は、中央モーダル（1つだけ）で開く。
+  // 背景を押しても閉じるのはモーダルだけ。背後の企業詳細ドロワーは残す（/hr と同じ操作感）
+  function openActionModal(html) {
+    closeBulkMenu();
+    el("action-root").innerHTML = `<div class="sl-modal-bg" onclick="closeAction()"></div>
+      <div class="sl-modal" role="dialog" aria-modal="true">${html}</div>`;
+  }
   function closeAction() { el("action-root").innerHTML = ""; }
   function errText(e, fallback) { return e.hint || e.detail || e.message || fallback; }
+
+  // ---- 複数選択・一括操作 ------------------------------------------------------------
+  //
+  // チェックボックス＝選ぶだけ（詳細は開かない）。行＝企業詳細（右ドロワー）。
+  // 1社以上選ぶと画面下中央にバーを出し、操作はすべて中央モーダルで行う。
+  // 更新はサーバの一括API（/api/sales/companies/bulk）で1回にまとめる。
+  const NG_REASONS = [
+    ["no_sales", "営業禁止"], ["unsubscribed", "配信停止希望"], ["no_form_sales", "問い合わせフォーム営業禁止"],
+    ["partner", "取引先"], ["customer", "既存顧客"], ["competitor", "競合"], ["other", "その他"],
+  ];
+
+  function toggleOne(id, on) {
+    if (on) selected.add(id); else selected.delete(id);
+    renderSelection();
+  }
+  function toggleAll(on) {
+    for (const id of shown) { if (on) selected.add(id); else selected.delete(id); }
+    renderSelection();
+  }
+  function clearSelection() {
+    selected.clear();
+    renderSelection();
+  }
+
+  // 行の見た目・全選択・バーだけを更新する（一覧を描き直さない）
+  function renderSelection() {
+    document.querySelectorAll("#rows tr[data-id]").forEach((tr) => {
+      const on = selected.has(tr.dataset.id);
+      tr.classList.toggle("sel", on);
+      const cb = tr.querySelector("td.sl-check input");
+      if (cb) cb.checked = on;
+    });
+    const all = el("sel-all");
+    const n = shown.filter((id) => selected.has(id)).length;
+    all.checked = Boolean(shown.length) && n === shown.length;
+    all.indeterminate = n > 0 && n < shown.length;
+    renderBulkBar();
+  }
+
+  function renderBulkBar() {
+    const n = selected.size;
+    if (!n) { el("bulk-root").innerHTML = ""; return; }
+    el("bulk-root").innerHTML = `
+      <div class="sl-bulkbar" role="toolbar" aria-label="選択した企業の操作">
+        <span class="cnt"><span class="material-symbols-outlined" style="font-size:18px;">check_box</span><span id="bulk-count">${n}社選択中</span></span>
+        <button class="btn btn-secondary btn-sm" onclick="openBulk('status')">ステータス変更</button>
+        <button class="btn btn-secondary btn-sm" onclick="openBulk('owner')">担当変更</button>
+        <span class="more">
+          <button class="btn btn-secondary btn-sm" id="bulk-more" aria-haspopup="menu" onclick="toggleBulkMenu(event)">その他 ▼</button>
+          <div class="sl-bulkmenu" id="bulk-menu" role="menu" hidden>
+            <button role="menuitem" onclick="openBulk('service')">提案サービス変更</button>
+            <button role="menuitem" onclick="openBulk('campaign')">キャンペーン変更</button>
+            <button role="menuitem" onclick="openBulk('ng')">営業禁止にする</button>
+            <hr>
+            <button role="menuitem" class="danger" onclick="openBulk('delete')">削除</button>
+          </div>
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="clearSelection()">選択解除</button>
+      </div>`;
+  }
+  function toggleBulkMenu(ev) {
+    ev.stopPropagation();
+    const m = el("bulk-menu");
+    if (m) m.hidden = !m.hidden;
+  }
+  function closeBulkMenu() { const m = el("bulk-menu"); if (m) m.hidden = true; }
+  document.addEventListener("click", (e) => { if (!e.target.closest?.(".sl-bulkbar .more")) closeBulkMenu(); });
+
+  const bulkFoot = (label, onclick, danger) => `
+    <div id="bk-msg" class="err-text" style="margin:10px 0 0;"></div>
+    <div class="sl-modal-foot">
+      <button class="btn ${danger ? "btn-danger" : "btn-primary"}" id="bk-go" onclick="${onclick}">${esc(label)}</button>
+      <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+    </div>`;
+
+  async function openBulk(kind) {
+    closeBulkMenu();
+    const n = selected.size;
+    if (!n) return;
+    if (kind === "status") {
+      openActionModal(`
+        <h2>${n}社のステータスを変更します</h2>
+        <label>変更後のステータス</label>
+        <select id="bk-status">${STATUSES.map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
+        <p class="sl-muted" style="margin:8px 0 0;">すでに同じステータスの企業はそのままです。変更は各社の営業履歴に残ります。</p>
+        ${bulkFoot(`${n}社を変更する`, "submitBulk(this, 'change_status', { status: el('bk-status').value })")}`);
+    } else if (kind === "owner") {
+      openActionModal(`
+        <h2>${n}社の担当を変更します</h2>
+        <label>担当者</label>
+        <select id="bk-owner"><option value="">（未定）</option>${members.map((m) =>
+          `<option value="${esc(m.id)}" ${m.id === myEmployeeId ? "selected" : ""}>${esc(m.display_name)}</option>`).join("")}</select>
+        ${bulkFoot(`${n}社を変更する`, "submitBulk(this, 'change_owner', { ownerId: el('bk-owner').value || null })")}`);
+    } else if (kind === "service") {
+      openActionModal(`
+        <h2>${n}社の提案サービスを変更します</h2>
+        <label>提案サービス</label>
+        <input id="bk-service" type="text" list="dl-bk-service" placeholder="空欄にすると未設定になります">
+        <datalist id="dl-bk-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+        ${bulkFoot(`${n}社を変更する`, "submitBulk(this, 'change_service', { service: el('bk-service').value.trim() || null })")}`);
+    } else if (kind === "campaign") {
+      openActionModal(`
+        <h2>${n}社のキャンペーンを変更します</h2>
+        <label>キャンペーン</label>
+        <select id="bk-campaign" disabled><option value="">読み込み中…</option></select>
+        ${bulkFoot(`${n}社を変更する`, "submitBulk(this, 'change_campaign', { campaignId: el('bk-campaign').value || null })")}`);
+      // 候補が出るまでは押せない（読み込み中に押すと「なし」で上書きしてしまう）
+      el("bk-go").disabled = true;
+      try {
+        const r = await API.listSalesCampaigns();
+        const sel = el("bk-campaign");
+        if (!sel) return;
+        sel.innerHTML = `<option value="">（なし）</option>` + (r.campaigns || []).filter((c) => !c.archived)
+          .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+        sel.disabled = false;
+        el("bk-go").disabled = false;
+      } catch (e) { const m = el("bk-msg"); if (m) m.textContent = errText(e, "キャンペーンを取得できませんでした"); }
+    } else if (kind === "ng") {
+      openActionModal(`
+        <h2>${n}社を営業禁止にします</h2>
+        <p class="sl-sub" style="margin:0 0 12px;">営業禁止の企業には、誰もフォームアタックできなくなります。すでに営業禁止の企業はそのままです。</p>
+        <label>理由</label>
+        <div>${NG_REASONS.map(([k, l]) => `
+          <label class="sl-chip"><input type="radio" name="bk-ng" value="${esc(k)}">${esc(l)}</label>`).join("")}</div>
+        <label style="margin-top:10px;">補足（任意）</label>
+        <textarea id="bk-ng-note" rows="2"></textarea>
+        ${bulkFoot(`${n}社を営業禁止にする`, "submitBulkNg(this)")}`);
+    } else if (kind === "delete") {
+      openBulkDelete();
+    }
+  }
+
+  function submitBulkNg(btn) {
+    const picked = document.querySelector('input[name="bk-ng"]:checked');
+    if (!picked) { el("bk-msg").textContent = "理由を選んでください"; return; }
+    return submitBulk(btn, "set_ng", { ngReason: picked.value, ngNote: el("bk-ng-note").value.trim() || null });
+  }
+
+  // 削除は危険操作。まずサーバで「消せる企業／消せない企業（理由つき）」を確かめてから、消せる企業だけを消す
+  async function openBulkDelete() {
+    const ids = [...selected];
+    openActionModal(`
+      <h2>選択した${ids.length}社を削除します</h2>
+      <p class="sl-sub" style="margin:0 0 10px;">営業履歴・クリック履歴・面談情報への影響を確認しています…</p>
+      <div id="bk-del"><div class="empty" style="padding:16px;">確認中…</div></div>`);
+    let r;
+    try {
+      r = await API.bulkSalesCompanies({ ids, action: "delete", dryRun: true });
+    } catch (e) {
+      const box = el("bk-del");
+      if (box) box.innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(errText(e, "確認できませんでした"))}</div></div>`;
+      return;
+    }
+    const box = el("bk-del");
+    if (!box) return;
+    const ok = r.deletable || [];
+    const ng = r.blocked || [];
+    const list = (arr, fn) => `<ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px;max-height:160px;overflow-y:auto;">${arr.map(fn).join("")}</ul>`;
+    box.previousElementSibling.textContent = "削除すると元に戻せません。履歴のある企業は削除できません。";
+    box.innerHTML = `
+      ${ng.length ? `<div class="banner warn" style="margin:0 0 10px;"><span class="material-symbols-outlined">block</span>
+        <div><b>削除できない企業：${ng.length}社</b>（履歴を残すため）。「対象外」「失注」などのステータス変更や、営業禁止を使ってください。
+        ${list(ng, (c) => `<li>${esc(c.name)}：${esc(c.reasons.join("・"))}</li>`)}</div></div>` : ""}
+      ${ok.length ? `<div><b style="font-size:13px;">削除する企業：${ok.length}社</b>
+        ${list(ok, (c) => `<li>${esc(c.name)}</li>`)}</div>` : `<p class="sl-muted" style="margin:0;">削除できる企業はありません。</p>`}
+      ${ok.length ? bulkFoot(`${ok.length}社を削除する`, `submitBulkDelete(this, ${esc(JSON.stringify(ok.map((c) => c.id)))})`, true)
+        : `<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`}`;
+  }
+
+  function submitBulkDelete(btn, ids) {
+    return submitBulk(btn, "delete", {}, ids);
+  }
+
+  // 一括更新 → モーダルを閉じる → 一覧を取り直す → 選択を解除（バーも消える）
+  async function submitBulk(btn, action, extra, onlyIds) {
+    const msg = el("bk-msg"); if (msg) msg.textContent = "";
+    const ids = onlyIds || [...selected];
+    let r;
+    try {
+      r = await KPLayout.busy(btn, "処理中…", () => API.bulkSalesCompanies({ ids, action, ...extra }));
+    } catch (e) {
+      if (msg) msg.textContent = errText(e, "できませんでした");
+      return;
+    }
+    closeAction();
+    clearSelection();
+    // 開いている企業詳細が対象なら、そちらも最新にする（一覧も一緒に取り直す）。削除したなら閉じる
+    if (detailOpenId && ids.includes(detailOpenId) && action !== "delete") reloadDetail();
+    else {
+      if (detailOpenId && ids.includes(detailOpenId)) closeModal();
+      await load();
+    }
+    const miss = (r.failed || 0) + (r.notFound || 0);
+    if (miss) alert(`${miss}社は処理できませんでした（見つからない・権限がないなど）。`);
+  }
 
   // ---- 企業を追加 -------------------------------------------------------------
   function companyForm(c = {}) {
@@ -721,9 +936,7 @@ ${url}
         <button class="btn btn-secondary btn-sm" style="margin-top:14px;" onclick="cancelMeeting(this, '${esc(m.id)}')">面談を取りやめ</button>`;
     }
 
-    el("action-root").innerHTML = `
-      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
-      <div class="sl-drawer top">
+    openActionModal(`
         <h2 style="margin-bottom:4px;">営業面談を設定</h2>
         <p class="sl-sub" style="margin:0 0 14px;">${esc(c.name)}</p>
         <dl class="sl-grid2" style="margin-bottom:10px;">
@@ -736,8 +949,7 @@ ${url}
         <div id="mt-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:10px;">
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
   async function refreshMeeting() {
@@ -791,9 +1003,20 @@ ${url}
     } catch (e) { msg.textContent = errText(e, "できませんでした"); }
   }
 
+  // 保存・更新のあと：企業詳細を取り直し、開いたままのドロワーへ反映する（開き直さない）。
+  // 一覧は裏で取り直す
   async function reloadDetail() {
     const id = detail.company.id;
-    await Promise.all([openDetail(id), load()]);
+    const seq = detailSeq;
+    load();
+    try {
+      const d = await API.getSalesCompany(id);
+      if (!detailIsCurrent(seq, id)) return;
+      detail = d;
+      renderDetail();
+    } catch (e) {
+      if (detailIsCurrent(seq, id)) alert(errText(e, "最新の状態を取得できませんでした"));
+    }
   }
 
   async function markFollowed(btn) {
@@ -807,9 +1030,7 @@ ${url}
   function openEvent(kind) {
     const c = detail.company;
     const kinds = detail.eventKinds || [];
-    el("action-root").innerHTML = `
-      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
-      <div class="sl-drawer top">
+    openActionModal(`
         <h2>履歴を記録</h2>
         <label>何をしたか</label>
         <div>${kinds.map((k) => `
@@ -829,8 +1050,7 @@ ${url}
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitEvent(this)">記録する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
   async function submitEvent(btn) {
@@ -852,9 +1072,7 @@ ${url}
   // ---- ステータス・NEXT ---------------------------------------------------------
   function openStatus() {
     const c = detail.company;
-    el("action-root").innerHTML = `
-      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
-      <div class="sl-drawer top">
+    openActionModal(`
         <h2>ステータス・NEXT</h2>
         <label>ステータス</label>
         <select id="st-status">${(detail.statuses || []).map((s) =>
@@ -874,8 +1092,7 @@ ${url}
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitStatus(this)">保存する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
   async function submitStatus(btn) {
@@ -893,17 +1110,14 @@ ${url}
 
   // ---- 基本情報を編集 ------------------------------------------------------------
   function openEdit() {
-    el("action-root").innerHTML = `
-      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
-      <div class="sl-drawer top">
+    openActionModal(`
         <h2>基本情報を編集</h2>
         ${companyForm(detail.company)}
         <div id="c-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitEdit(this)">保存する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
   async function submitEdit(btn) {
@@ -926,9 +1140,7 @@ ${url}
         .then(reloadDetail).catch((e) => alert(errText(e, "できませんでした")));
       return;
     }
-    el("action-root").innerHTML = `
-      <div class="sl-drawer-bg" style="z-index:42;" onclick="closeAction()"></div>
-      <div class="sl-drawer top">
+    openActionModal(`
         <h2>営業禁止にする</h2>
         <p class="sl-sub" style="margin:0 0 12px;">営業禁止の企業には、誰もフォームアタックできなくなります。</p>
         <label>理由</label>
@@ -940,8 +1152,7 @@ ${url}
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitNg(this)">営業禁止にする</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
   async function submitNg(btn) {
