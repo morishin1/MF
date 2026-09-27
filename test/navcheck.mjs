@@ -80,6 +80,17 @@ console.log("\n— メンバー —");
   check(MEMBER_NAV.length === 5, `スマホの下タブは5つ（いま ${MEMBER_NAV.length}）`);
 }
 
+// 採用HR（/hr/）・Sales（/sales/）の入口は共通ヘッダーの近道だけ。
+// 左メニューにも置くと二重導線になる（when で権限者だけに出す形も含めて置かない）
+for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバー"]]) {
+  const dup = navs.filter((n) => /^\/?(hr|sales)\/$/.test(String(n.href || "")));
+  check(!dup.length, `${who}の左メニューに採用HR・Salesを置かない${dup.length ? `（${dup.map((n) => n.label).join("・")}）` : ""}`);
+}
+{
+  const bookings = [...adminItems, ...memberItems].filter((n) => /booking/.test(String(n.href || "")));
+  check(!bookings.length, "スペース予約は通常の左メニューに置かない（帯・個別リンクから開く）");
+}
+
 // メンバーと管理者は別の表。同じ配列を共有していない
 check(MEMBER_SIDE_NAV !== ADMIN_GROUPS, "メンバーと管理者は別の表");
 {

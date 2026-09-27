@@ -95,9 +95,33 @@ console.log("— 管理者の左メニュー —");
     .map((s) => s.trim());
   check(shown.length <= 6, `開いているのは1グループぶんだけ（いま ${shown.length} 行）`);
   check(shown.some((s) => s.includes("勤怠・休暇")), "いまいるグループが開いている");
-  check(shown.some((s) => s.includes("採用")), "「採用」は人事・労務の中の項目としてある");
-  check(await page.locator(".kp-side-sub:not(.hidden) a", { hasText: "採用" }).getAttribute("href") === "hr/",
-    "「採用」は /hr/ へ行く");
+  // 人事・労務の最終形（採用HRはヘッダーの近道が正式な入口。左には置かない）
+  // アイコンはフォントが読めない環境では名前の文字として出るので、最後の行（項目名）だけを比べる
+  const hrItems = shown.map((t) => t.split("\n").pop().trim()).join("/");
+  check(hrItems === "メンバー管理/入退社/勤怠・休暇/雇用契約/評価・キャリア",
+    `人事・労務の並び（いま ${hrItems}）`);
+
+  // 左メニュー全体（畳まれているグループも含む）に、採用HR・Sales の入口が無い
+  const allHref = await page.locator(".kp-sidebar a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href") || ""));
+  check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "左メニューに「採用」（/hr/）は置かない");
+  check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "左メニューに「営業」（/sales/）は置かない");
+  // 最終メニュー（ホーム5・業務・経理4・管理・設定4）
+  // 項目は見出しの隣の .kp-side-sub（同じ data-group）に入っている。畳まれていても数える
+  const groupItems = await page.locator(".kp-side-group").evaluateAll((gs) => gs.map((g) => ({
+    head: g.querySelector(".lb")?.textContent.trim(),
+    items: [...document.querySelectorAll(`.kp-side-sub[data-group="${g.dataset.group}"] .kp-side-item > span:not(.material-symbols-outlined)`)]
+      .map((x) => x.textContent.trim()),
+  })));
+  const want = {
+    "ホーム": "ダッシュボード/今日のタスク/日報/メッセージ/お知らせ",
+    "業務・経理": "経費精算/月次業務/社内文書/会計",
+    "管理・設定": "権限/端末・貸与品/アクセス分析/システム設定",
+  };
+  for (const [head, list] of Object.entries(want)) {
+    const g = groupItems.find((x) => x.head === head);
+    const got = (g?.items || []).join("/");
+    check(got === list, `${head} の並び（いま ${got}）`);
+  }
 
   // ここがいちばん大事。スクロールなしで全部見えるか。
   //

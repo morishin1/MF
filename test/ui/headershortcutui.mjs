@@ -5,7 +5,7 @@
 //   ・行き先が /hr/ と /sales/
 //   ・メンバー表示・通知・ログアウトを壊さない
 //   ・狭い画面で「HR」「Sales」に縮み、通知・ログアウトを押し出さない
-//   ・左メニューの正式な入口（採用・営業）は残っている
+//   ・入口はヘッダーだけ。左メニュー（管理者・メンバーとも）には採用・営業を置かない
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
@@ -74,11 +74,11 @@ console.log("— owner：採用HR と Sales の両方 —");
   const h = await page.locator(".topbar").evaluate((n) => n.getBoundingClientRect().height);
   check(h <= 64, `ヘッダーの高さ ${Math.round(h)}px`);
 
-  // 左メニューの正式な入口は残す
+  // 正式な入口はヘッダー。左メニューには置かない（二重導線にしない）
   const side = await page.locator(".kp-sidebar").evaluate((n) =>
     [...n.querySelectorAll("a")].map((a) => a.getAttribute("href")));
-  check(side.includes("hr/"), "左メニューの「採用」は残っている");
-  check(side.includes("sales/"), "左メニューの「営業」は残っている");
+  check(!side.some((h) => /(^|\/)hr\/$/.test(h || "")), "左メニューに「採用」は置かない");
+  check(!side.some((h) => /(^|\/)sales\/$/.test(h || "")), "左メニューに「営業」は置かない");
 
   await page.screenshot({ path: shotPath("header-shortcuts-pc.png") });
   await page.close();

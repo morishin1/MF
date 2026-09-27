@@ -95,8 +95,7 @@
     { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
     // スペース予約は通常メニューに置かない（使う人が限られる）。
     // 画面（booking.html）はそのまま残し、メニュー画面とタスクから開く
-    // 営業担当にだけ。/sales は /hr と同じく専用ヘッダーで動く別アプリなので、入口を1つ置くだけ
-    { key: "sales", href: "sales/", label: "営業", icon: "storefront", ready: true, when: "sales" },
+    // Sales（/sales）は共通ヘッダーの近道から入る（権限のある人にだけ出る）。左には置かない
 
     // ここから下は別システム。
     // どれも同じ auth.users を使うので、別のIDもパスワードも要らない。
@@ -144,20 +143,27 @@
       key: "g-home", label: "ホーム", icon: "home",
       items: [
         { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
-        { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",   icon: "flag",      ready: true },
+        // 今週のゴールは、今日のタスクの帯の中へ（左メニューの行は増やさない）
+        { key: "tasks",     href: "admin-tasks.html",     label: "今日のタスク",   icon: "checklist", ready: true,
+          tabs: [
+            { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
+            { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
+          ] },
         { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
-        { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",   icon: "checklist", ready: true },
         { key: "messages",  href: "messages.html",        label: "メッセージ",     icon: "forum",     ready: true },
-        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true },
+        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true,
+          tabs: [
+            { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
+            { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
+          ] },
       ],
     },
     {
-      // 「採用」は独立グループから統合。/hr は既存のKPLayoutサイドメニューでは
-      // なく、専用ヘッダー（js/hr-layout.js）で動く別アプリなので、ここは
-      // 単純に入口を1つ置くだけ（tabsは持たせない）
+      // 採用HR（/hr）と Sales（/sales）は、共通ヘッダーの近道が正式な入口
+      // （renderTopbar の SHORTCUTS）。左メニューにも置くと入口が二重になるので置かない
       key: "g-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "hr",        href: "hr/",                  label: "採用",         icon: "person_add", ready: true },
         { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
           // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
@@ -199,10 +205,13 @@
     {
       key: "g-ops", label: "業務・経理", icon: "work",
       items: [
-        { key: "bookings",   href: "admin-bookings.html", label: "スペース予約", icon: "meeting_room",    ready: true },
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
-        { key: "closing",    href: "admin-closing.html",  label: "月次締め",     icon: "event_available", ready: true },
-        { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理", icon: "fact_check",   ready: true },
+        // 月次締めと月初作業管理は、同じ「月の区切りの仕事」なので1つにまとめる
+        { key: "closing",    href: "admin-closing.html",  label: "月次業務",     icon: "event_available", ready: true,
+          tabs: [
+            { key: "closing",    href: "admin-closing.html",     label: "月次締め" },
+            { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理" },
+          ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
       ],
@@ -212,7 +221,7 @@
       items: [
         // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
         { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
-        { key: "devices",   href: "admin-devices.html",   label: "端末管理",     icon: "computer", ready: true,
+        { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true,
           tabs: [
             { key: "devices", href: "admin-devices.html", label: "端末管理" },
             { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
@@ -222,11 +231,12 @@
             { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
             { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
           ] },
-        // 営業アタック管理（/sales）。/hr と同じく専用ヘッダー（js/sales-layout.js）で動く
-        // 別アプリなので、入口を1つ置くだけ。ほかのグループは6項目で埋まっているのでここに置く
-        { key: "sales",     href: "sales/",               label: "営業",         icon: "storefront", ready: true },
-        { key: "sitenews",  href: "admin-site-news.html", label: "サイトのお知らせ", icon: "newspaper", ready: true },
-        { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true },
+        // スペース予約（スペースの設定と予約の確認）は通常メニューに置かず、システム設定の帯の中へ
+        { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
+          tabs: [
+            { key: "settings", href: "admin-settings.html", label: "システム設定" },
+            { key: "bookings", href: "admin-bookings.html", label: "スペース予約" },
+          ] },
       ],
     },
   ];
@@ -274,8 +284,8 @@
    * 採用HR・Sales へのショートカット（ヘッダー）。
    *
    * 毎日のように行き来するので、左メニューを開かずに届くようにする。
-   * 左メニューの入口（人事・労務 ＞ 採用、管理・設定 ＞ 営業）は正式な
-   * メニュー構造としてそのまま残す。ヘッダーは近道でしかない。
+   * ここが採用HR・Sales の正式な入口。左メニュー（管理者・メンバーとも）には
+   * 置かない（入口を二重にしない）。
    *
    * 出す・出さないは showsFor の hr / sales（サーバの canRecruit / canSell と
    * 同じ基準）で決める。新しい権限は増やさない。
