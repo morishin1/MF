@@ -56,10 +56,19 @@
       max-height:86vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
       box-shadow:0 20px 60px rgba(27,36,64,.28); }
 
-    .hr-bulkbar { display:flex; align-items:center; gap:10px; background:#e7eaf3; border:1px solid #c7cfe6;
-      border-radius:9px; padding:9px 14px; margin-bottom:12px; font-size:13px; color:#1b2440; flex-wrap:wrap; }
-    .hr-bulkbar .cnt { font-weight:700; white-space:nowrap; }
+    /* 選択中バー（Selection Action Bar）。1件以上チェックすると画面下部に固定表示する。
+       ドロワー(41)・モーダル(51)より前面に出ないよう、z-indexは30〜35の範囲にとどめる */
+    .hr-bulkbar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+      width:fit-content; min-width:520px; max-width:calc(100vw - 40px);
+      display:flex; align-items:center; gap:10px; background:#fff; border:1px solid #d8dce8;
+      border-radius:13px; padding:12px 16px; font-size:13px; color:#1b2440; flex-wrap:wrap;
+      box-shadow:0 12px 32px rgba(27,36,64,.18); z-index:32; }
+    .hr-bulkbar .cnt { font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:5px; }
+    .hr-bulkbar .cnt .material-symbols-outlined { font-size:17px; color:#1b2440; }
     .hr-bulkbar .sp { flex:1; }
+    @media (max-width:600px) {
+      .hr-bulkbar { left:12px; right:12px; transform:none; width:auto; min-width:0; max-width:none; }
+    }
     .hr-check-col { width:34px; }
 
     .hr-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
@@ -260,7 +269,7 @@
     if (!selectedIds.size) { box.innerHTML = ""; return; }
     box.innerHTML = `
       <div class="hr-bulkbar">
-        <span class="cnt">${selectedIds.size}名選択中</span>
+        <span class="cnt"><span class="material-symbols-outlined">check_circle</span>${selectedIds.size}名選択中</span>
         <span class="sp"></span>
         <button class="btn btn-secondary btn-sm" onclick="openBulkStatusModal()">ステータス変更</button>
         <button class="btn btn-secondary btn-sm" onclick="openBulkRecruiterModal()">担当変更</button>
