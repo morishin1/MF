@@ -32,6 +32,8 @@ function company(over) {
 
 async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timerex = true } = {}) {
   const calls = [];
+  // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
+  const ctl = { delay: {}, fail: new Set() };
   const meetings = [];
   const shapeM = (m) => ({ kindLabel: "初回商談", durationMin: 30, ownerName: "営業 一郎",
     statusLabel: { scheduling: "日程調整中", scheduled: "面談予定", canceled: "取りやめ" }[m.status], ...m });
@@ -53,7 +55,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
   page.on("pageerror", (e) => errs.push(String(e)));
   page.on("dialog", (d) => d.accept());
 
-  await page.route("**/api/**", (route) => {
+  await page.route("**/api/**", async (route) => {
     const req = route.request();
     const url = req.url();
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
@@ -65,6 +67,9 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
     }
     if (/\/api\/sales\/companies\/detail/.test(url)) {
       const id = new URL(url).searchParams.get("id");
+      calls.push({ kind: "detail", id });
+      if (ctl.delay[id]) await new Promise((r) => setTimeout(r, ctl.delay[id]));
+      if (ctl.fail.has(id)) return send({ error: "db_failed", detail: "わざと失敗" }, 500);
       const c = companies.find((x) => x.id === id);
       return send({
         today: TODAY, company: c, approaches: [], recent,
@@ -134,7 +139,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     return send({});
   });
-  return { page, calls, errs };
+  return { page, calls, errs, ctl };
 }
 
 console.log("\n=== 営業担当：ダッシュボード ===");
@@ -384,6 +389,65 @@ console.log("\n=== 面談：リード → 面談を設定 → 日程確定 → �
   await off.page.waitForTimeout(900);
   check(await off.page.locator("#mt-when").isVisible(), "未設定なら手入力の欄を開いておく");
   await off.page.close();
+}
+
+console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古い応答を捨てる） ===");
+{
+  const { page, errs, ctl } = await openAs();
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#list tr.click").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  const box = () => page.locator("#detail-box").count();
+
+  // 1) 取得中にドロワーを閉じる → 応答が戻っても書かない・落ちない
+  ctl.delay.c1 = 1200;
+  await page.evaluate(() => { openDetail("c1"); });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => closeModal());
+  await page.waitForTimeout(1600);
+  check(await box() === 0 && !/[?&]id=/.test(page.url()), "取得中に閉じたら、あとから戻った応答で詳細を開き直さない");
+  check(!errs.length, `取得中に閉じても JSエラーなし ${errs.join(" / ")}`);
+
+  // 2) 失敗する応答でも同じ（catch 側も消えた #detail-box に書かない）
+  ctl.fail.add("c1");
+  await page.evaluate(() => { openDetail("c1"); });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => closeModal());
+  await page.waitForTimeout(1600);
+  check(await box() === 0 && !errs.length, `失敗した応答が閉じたあとに戻っても JSエラーなし ${errs.join(" / ")}`);
+  ctl.fail.delete("c1");
+
+  // 3) 遅いA → 速いB と切り替える → Aの応答がBの詳細を上書きしない
+  ctl.delay.c2 = 1500;
+  await page.evaluate(() => { openDetail("c2"); });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => { openDetail("c3"); });
+  await page.locator(".sl-detail", { hasText: "返信工業" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(1800);
+  const t = await page.locator("#detail-box").innerText().catch(() => "");
+  check(t.includes("返信工業") && !t.includes("反応商事"), "あとから開いた企業の詳細だけが出る（古い応答で上書きしない）");
+  check(/[?&]id=c3\b/.test(page.url()), `URL もあとから開いた企業のまま（${page.url()}）`);
+  check(await page.evaluate(() => detail?.company?.id) === "c3", "内部の詳細データもあとから開いた企業");
+  delete ctl.delay.c2;
+
+  // 4) 面談の操作中（再取得の途中）にドロワーを閉じる → 面談パネルを開き直さない・落ちない
+  await page.evaluate(() => { openDetail("c2"); });
+  await page.locator(".sl-detail", { hasText: "反応商事" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.evaluate(() => openMeeting());
+  await page.locator(".sl-drawer.top h2", { hasText: "営業面談を設定" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  ctl.delay.c2 = 1200;
+  await page.locator("button", { hasText: "日程調整URLを発行" }).click();
+  await page.waitForTimeout(200);
+  await page.evaluate(() => closeModal());
+  await page.waitForTimeout(1600);
+  check(await box() === 0 && await page.locator(".sl-drawer.top").count() === 0, "再取得の途中で閉じたら、詳細も面談パネルも開き直さない");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  delete ctl.delay.c2;
+
+  // 5) ふつうに開けば、これまでどおり出る
+  await page.evaluate(() => { openDetail("c1"); });
+  await page.locator(".sl-detail", { hasText: "株式会社サンプル" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await page.locator(".sl-detail", { hasText: "株式会社サンプル" }).isVisible(), "ふつうに開けば詳細が出る");
+  await page.close();
 }
 
 console.log("\n=== 権限の無い人 ===");
