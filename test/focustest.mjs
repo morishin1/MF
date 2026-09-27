@@ -99,16 +99,16 @@ ok("取りやめたタスクは数えない", () => {
   assert.equal(st.count, 3);
 });
 
-console.log("— 日報の解放 —");
+console.log("— 明日の3つの案内（日報の提出は止めない） —");
 
-ok("確定していなければ、日報は書けない。理由も出す", () => {
+ok("確定していなければ、決めるよう案内する（いつのぶんか・3件）", () => {
   const g = F.nippoGate({ day: { status: "ready" }, tasks: three(), focusDate: "2026-09-17" });
   assert.equal(g.open, false);
   assert.match(g.hint, /2026-09-17/);
   assert.match(g.hint, /3件/);
 });
 
-ok("確定していれば書ける", () => {
+ok("確定していれば open", () => {
   const g = F.nippoGate({ day: { status: "confirmed" }, tasks: three(), focusDate: "2026-09-17" });
   assert.equal(g.open, true);
   assert.match(g.hint, /日報/);

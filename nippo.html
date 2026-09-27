@@ -162,7 +162,13 @@
     .fc-ov { border:1px solid #b7791f; border-radius:10px; background:#fffdf7;
              padding:12px 14px; margin-bottom:12px; font-size:13px; line-height:1.9; }
     .fc-ov ul { margin:6px 0 0; padding-left:18px; }
-    .fc-lock { opacity:.45; pointer-events:none; }
+    /* 明日の3つが未確定のときの案内。止めない・赤くしない */
+    .fc-guide { display:flex; gap:8px; align-items:flex-start; border:1px solid #cfd8ea; background:#f6f8fc;
+                border-radius:10px; padding:10px 13px; font-size:13px; color:#1b2440; margin-bottom:12px; }
+    .fc-guide .material-symbols-outlined { font-size:18px; color:var(--primary-dark); }
+    .np-next { border:1px solid #cfd8ea; background:#f6f8fc; border-radius:10px; padding:12px 14px; margin-top:10px; }
+    .np-next .lb { font-size:11px; font-weight:700; color:#4a5068; margin-bottom:4px; }
+    .np-next .ti { font-size:14px; font-weight:700; color:#1b2440; margin-bottom:8px; }
     .fc-today { border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin-bottom:9px; }
     .fc-today .ti { font-size:13.5px; font-weight:700; }
     .fc-today.done { border-color:#b7e0c4; background:#f7fbf8; }
@@ -241,9 +247,8 @@
     <div id="mid-body"></div>
   </div>
 
-  <!-- 明日の重要タスク。日報より先に、ここを決める。
-       今日を振り返ってから明日を決めると、力を使い切って
-       「引き続き頑張る」で埋まる。順番を逆にする -->
+  <!-- 明日の重要タスク（次の日の計画）。日報（今日の記録）とは別のもの。
+       決めていなくても日報は出せる。決める習慣は残し、未確定なら案内する -->
   <div class="card" id="focus-card" style="border-left:4px solid var(--primary);">
     <h2><span class="material-symbols-outlined">bolt</span>明日の重要タスクを決める
       <span id="focus-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
@@ -1314,6 +1319,30 @@
     };
   }
 
+  /**
+   * 提出のあとの NEXT ACTION。明日の3つが未確定なら、決めるところへ案内する。
+   * 日報の提出はもう済んでいるので、止めずに次の一手だけを見せる
+   */
+  function nextActionAfterSubmit(f) {
+    if (!f || f.confirmed) return "";
+    const title = f.remaining
+      ? `明日の重要タスクがあと${f.remaining}件あります。`
+      : "明日の重要タスクを確定しましょう。";
+    const note = f.added ? "「⑦ 明日の最優先」を、明日の重要タスクの1件目の候補に入れました。"
+      : f.duplicate ? "「⑦ 明日の最優先」は、すでに明日の重要タスクに入っています。" : "";
+    return `
+      <div class="np-next" id="np-next">
+        <div class="lb">次にやること</div>
+        <div class="ti">${esc(title)}</div>
+        ${note ? `<p class="muted" style="font-size:12.5px;margin:0 0 8px;">${esc(note)}</p>` : ""}
+        <button class="btn btn-primary btn-sm" onclick="goFocus()">
+          <span class="material-symbols-outlined icon-inline">bolt</span>明日の3つを決める</button>
+      </div>`;
+  }
+  function goFocus() {
+    el("focus-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function submit(btn) {
     const msg = el("f-msg");
     msg.textContent = "";
@@ -1356,9 +1385,11 @@
                           : "AI評価は現在使えません（提出は完了しています）。"}
           ${res.actions?.closed ? `<br>前に決めたこと ${res.actions.closed} 件を「実施済み」にしました。` : ""}
           <br>みんなの日報には、AIが作ったまとめ（やったこと・成果・学び・明日やること）だけが出ます。</div>
-        </div>`;
+        </div>
+        ${nextActionAfterSubmit(res.focus)}`;
       await load(body.date);
-      el("ai-card").scrollIntoView({ behavior: "smooth", block: "center" });
+      // 明日の3つが残っていれば、まずその案内（次にやること）を見せる
+      (el("np-next") || el("ai-card")).scrollIntoView({ behavior: "smooth", block: "center" });
       // 提出のたびに待たせたくないので、評価はここから別に走らせる
       if (res.ai?.configured && data.today) runEval();
       // 今日の結果を見て、明日の行動案を作り直す。
@@ -1369,9 +1400,12 @@
     }
   }
 
-  // ---- 明日の重要タスク（日報より先に決める） ---------------------------------
+  // ---- 明日の重要タスク（次の日の計画） ---------------------------------------
   //
-  //   3件そろう → AIが見る → 人が確定 → ここで日報が書けるようになる
+  //   3件そろう → AIが見る → 人が確定
+  //
+  // 日報（今日の記録）とは分けて扱う。未確定でも日報は書けて、出せる。
+  // 決めていないときは、止めずに「あと何件」を案内するだけにする
   //
   // AIは案と理由を出すだけで、決めるのは人。
   // 「AIがそう言ったから」で明日の仕事が決まる形にはしない
@@ -1383,41 +1417,44 @@
     catch (e) {
       // 072 をまだ流していない環境では、これまでどおりの日報にする
       el("focus-card").classList.add("hidden");
-      setWriteLock(false);
+      setFocusGuide(null);
       return;
     }
-    // 状態が返ってこない（この仕組みを使っていない環境）。
-    // 分からないときに日報を止めると、書けない理由も出せないまま手が止まる
+    // 状態が返ってこない（この仕組みを使っていない環境）
     if (!focusData?.tomorrowState) {
       el("focus-card").classList.add("hidden");
-      setWriteLock(false);
+      setFocusGuide(null);
       return;
     }
     el("focus-card").classList.remove("hidden");
     renderFocus();
   }
 
-  /** 明日ぶんが確定するまで、日報の欄は触れないようにする */
-  function setWriteLock(locked) {
-    const card = el("write-card");
-    if (!card) return;
-    card.classList.toggle("fc-lock", locked);
-    const note = el("write-lock");
-    if (locked && !note) {
-      card.insertAdjacentHTML("beforebegin", `
-        <div class="banner warn" id="write-lock" style="margin-bottom:0;">
-          <span class="material-symbols-outlined">lock</span>
-          <div><b>先に、明日の重要タスクを決めてください。</b><br>
-          3件が確定すると、今日の日報を書けるようになります。</div>
-        </div>`);
-    } else if (!locked && note) note.remove();
+  /** 明日の3つの残り件数。確定済み・3件以上なら 0 */
+  const focusLeft = (st, count) => (st?.confirmed ? 0 : Math.max(0, (focusData?.min || 3) - (count || 0)));
+
+  /**
+   * 明日の3つが未確定のときの案内（日報の欄は止めない）。
+   * 警告ではなく「あと何件」を知らせるだけ。赤くしない
+   */
+  function setFocusGuide(st, count) {
+    const box = el("focus-guide");
+    if (!st || st.confirmed) { box?.remove(); return; }
+    const left = focusLeft(st, count);
+    const text = left ? `明日の重要タスクがあと${left}件あります。` : "明日の重要タスクの確定が残っています。";
+    const html = `<span class="material-symbols-outlined">info</span>
+      <div>${esc(text)}日報はこのまま提出できます。</div>`;
+    if (box) { box.innerHTML = html; return; }
+    // 見出し「日報を書く」のすぐ下に出す
+    const h = el("write-card")?.querySelector("h2");
+    h?.insertAdjacentHTML("afterend", `<div class="fc-guide" id="focus-guide">${html}</div>`);
   }
 
   function renderFocus() {
     const st = focusData.tomorrowState || {};
     const list = focusData.tomorrowTasks || [];
     const date = focusData.tomorrowDate || "";
-    setWriteLock(!st.confirmed);
+    setFocusGuide(st, list.filter((t) => t.status !== "cancelled").length);
 
     el("focus-tag").textContent = st.confirmed ? "確定" : `${list.length} / ${focusData.min}`;
     el("focus-tag").className = `kp-chip ${st.confirmed ? "event" : "draft"}`;
@@ -1428,8 +1465,7 @@
       <div class="fc-step">
         ${step(1, "3件決める", st.key === "draft")}　→
         ${step(2, "AIが見る", st.key === "ready")}　→
-        ${step(3, "確定する", st.key === "ai_checked")}　→
-        ${step(4, "日報を書く", st.confirmed)}
+        ${step(3, "確定する", st.key === "ai_checked")}
       </div>`;
 
     const ai = focusData.tomorrowAi;
@@ -1460,7 +1496,7 @@
         ${st.confirmed
           ? `<span class="fc-done" style="color:#256b36;font-weight:700;font-size:13.5px;">
                <span class="material-symbols-outlined" style="font-size:17px;vertical-align:-4px;">check_circle</span>
-               明日のタスクが確定しました。今日の日報を入力してください</span>`
+               明日のタスクが確定しました</span>`
           : `<button class="btn btn-secondary btn-sm" onclick="runFocusCheck(this)"
                      ${st.ready ? "" : "disabled"}>
                <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに見てもらう</button>
