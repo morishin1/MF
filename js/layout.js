@@ -231,12 +231,11 @@
             { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
             { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
           ] },
-        // スペース予約（スペースの設定と予約の確認）は通常メニューに置かず、システム設定の帯の中へ
+        // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
+        // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
+        // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
         { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
-          tabs: [
-            { key: "settings", href: "admin-settings.html", label: "システム設定" },
-            { key: "bookings", href: "admin-bookings.html", label: "スペース予約" },
-          ] },
+          match: ["settings", "bookings"] },
       ],
     },
   ];

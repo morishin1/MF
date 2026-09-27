@@ -87,8 +87,10 @@ for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバ�
   check(!dup.length, `${who}の左メニューに採用HR・Salesを置かない${dup.length ? `（${dup.map((n) => n.label).join("・")}）` : ""}`);
 }
 {
-  const bookings = [...adminItems, ...memberItems].filter((n) => /booking/.test(String(n.href || "")));
-  check(!bookings.length, "スペース予約は通常の左メニューに置かない（帯・個別リンクから開く）");
+  // 左メニューの行にも、ページ上部の帯（tabs）にも出さない。直接URL・タスク・個別の導線から開く
+  const bookings = [...adminItems, ...memberItems].flatMap((n) => [n, ...(n.tabs || [])])
+    .filter((n) => /booking/.test(String(n.href || "")));
+  check(!bookings.length, "スペース予約は左メニューにも帯にも置かない（直接URL・個別の導線から開く）");
 }
 
 // メンバーと管理者は別の表。同じ配列を共有していない
