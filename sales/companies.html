@@ -90,6 +90,12 @@
 <script src="../js/sales-layout.js?v=20260927-sales3"></script>
 <script>
   const el = (id) => document.getElementById(id);
+  // 企業詳細の取得は、あとから開いたものだけを画面に出す。
+  // 取得中にドロワーを閉じた・別の企業を開いたときは、古い応答を捨てる
+  // （捨てないと、消えた #detail-box に書こうとして落ちる／別の企業の詳細に上書きする）
+  let detailSeq = 0;
+  let detailOpenId = null;
+  const detailIsCurrent = (seq, id) => seq === detailSeq && detailOpenId === id && Boolean(el("detail-box"));
   const esc = SalesLayout.esc;
   const { fmt, fmtDay, ago, statusPill } = SalesLayout;
 
@@ -119,7 +125,7 @@
     const q = new URLSearchParams(location.search);
     if (q.get("new")) openAdd();
     else if (q.get("attack")) openAttack(q.get("attack"));
-    else if (q.get("id")) openDetail(q.get("id")).then(() => { if (q.get("meeting") && detail) openMeeting(); });
+    else if (q.get("id")) openDetail(q.get("id")).then((shown) => { if (shown && q.get("meeting")) openMeeting(); });
   }
 
   async function load() {
@@ -195,6 +201,9 @@
   }
 
   function closeModal() {
+    // 取得中の企業詳細があれば、その結果はもう画面に書かない（閉じたあとに戻ってきた応答を捨てる）
+    detailSeq++;
+    detailOpenId = null;
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
     history.replaceState({}, "", "/sales/companies.html");
@@ -492,17 +501,25 @@
   // ---- 企業詳細（右ドロワー） ---------------------------------------------------
   let detail = null;
 
+  /** @returns {Promise<boolean>} 詳細を出せたら true（古い応答として捨てたら false） */
   async function openDetail(id) {
     closeModal();
+    const seq = ++detailSeq;
+    detailOpenId = id;
     el("modal-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeModal()"></div>
       <div class="sl-detail" id="detail-box"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
     history.replaceState({}, "", `/sales/companies.html?id=${encodeURIComponent(id)}`);
     try {
-      detail = await API.getSalesCompany(id);
+      const d = await API.getSalesCompany(id);
+      if (!detailIsCurrent(seq, id)) return false;
+      detail = d;
       renderDetail();
+      return true;
     } catch (e) {
+      if (!detailIsCurrent(seq, id)) return false;
       el("detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
         <span class="material-symbols-outlined">error</span><div>${esc(errText(e, ""))}</div></div>`;
+      return false;
     }
   }
 
@@ -512,6 +529,8 @@
   }
 
   function renderDetail() {
+    const box = el("detail-box");
+    if (!box || !detail || detail.company.id !== detailOpenId) return;
     const c = detail.company;
     const link = (u) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>` : "—";
     const meeting = activeMeetingOf(detail.meetings);
@@ -529,7 +548,7 @@
           ? `<button class="btn btn-primary btn-sm" onclick="openAttack('${esc(c.id)}')">フォームアタック</button>`
           : `<button class="btn btn-primary btn-sm" onclick="openEvent('follow')">対応を記録・NEXTを決める</button>`;
 
-    el("detail-box").innerHTML = `
+    box.innerHTML = `
       <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
         <div style="min-width:0;">
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(c.name)}</div>
@@ -722,10 +741,15 @@ ${url}
   }
 
   async function refreshMeeting() {
-    detail = await API.getSalesCompany(detail.company.id);
+    const id = detail.company.id;
+    const seq = detailSeq;
+    const d = await API.getSalesCompany(id);
+    load();
+    // 取得中に詳細を閉じた・別の企業に切り替えたなら、画面には書かない
+    if (!detailIsCurrent(seq, id)) return;
+    detail = d;
     renderDetail();
     openMeeting();
-    load();
   }
 
   async function issueMeeting(btn) {
