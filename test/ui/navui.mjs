@@ -173,9 +173,11 @@ console.log("\n— メンバーの左メニュー —");
   const items = (await page.locator(".kp-sidebar.member .kp-side-item").allInnerTexts())
     .map((s) => s.trim());
   check(items.length <= 9, `項目は9つまで（いま ${items.length}: ${items.join("・")}）`);
-  for (const x of ["ホーム", "日報", "タスク", "メッセージ", "勤怠", "申請", "社内文書", "マイページ"]) {
+  // 評価・キャリア再設計 §37 の7つ
+  for (const x of ["ホーム", "今日やること", "メッセージ", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `「${x}」`);
   }
+  check(!items.some((i) => i.includes("スペース予約")), "スペース予約は通常メニューに出さない");
 
   // 管理側のものが1つも混ざっていないこと
   const side = await page.locator(".kp-sidebar.member").innerText();
@@ -183,9 +185,9 @@ console.log("\n— メンバーの左メニュー —");
     check(!side.includes(x), `メンバーに「${x}」を出さない`);
   }
 
-  // 予定はタスクの中のタブ
+  // タスク・日報・予定は「今日やること」の中のタブ
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
-  check(tabs.join("/") === "やること/スケジュール", `タスクの帯（いま ${tabs.join("/")}）`);
+  check(tabs.join("/") === "タスク/日報/スケジュール", `今日やることの帯（いま ${tabs.join("/")}）`);
   check(!side.includes("スケジュール"), "「スケジュール」は左メニューに出ていない");
 
   check(await fits(page, ".kp-sidebar.member"), await fitsNote(page, ".kp-sidebar.member"));
@@ -198,7 +200,7 @@ console.log("\n— 契約書は、マイページの中から開ける —");
 {
   const page = await open("mypage.html", { admin: false });
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
-  check(tabs.includes("契約書"), `署名の入口が残っている（いま ${tabs.join("/")}）`);
+  check(tabs.includes("契約・署名"), `署名の入口が残っている（いま ${tabs.join("/")}）`);
   const side = await page.locator(".kp-sidebar.member").innerText();
   check(!side.includes("契約書"), "左メニューには出さない");
   await page.close();

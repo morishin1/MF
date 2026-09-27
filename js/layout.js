@@ -33,7 +33,7 @@
   ];
 
   /**
-   * メンバー: PCでの左サイドメニュー。8つ。
+   * メンバー: PCでの左サイドメニュー。7つ（＋入社準備中の入社手続き・権限のある人の営業）。
    *
    * ■ 管理者とは、完全に別の表にしてある
    *   同じ表を権限で出し分けると、メンバーに見せない項目が
@@ -52,44 +52,49 @@
    *   左メニューに入口を増やさず、開いた先で行き来できるようにする。
    *
    * ■ 人によって出す・出さない
-   *   設備・スペース予約は、設備を使う人だけ。
+   *   スペース予約は通常メニューから外した（メニュー画面・タスクから開く）。
    *   会計書類は、経理・管理担当だけ。
    *   使わない人に見えていると、押してよいのか毎回考えることになる。
    */
   const MEMBER_SIDE_NAV = [
     { key: "home",     href: "home.html",     label: "ホーム",   icon: "home",      ready: true },
-    { key: "nippo",    href: "nippo.html",    label: "日報",     icon: "edit_note", ready: true },
-    { key: "tasks",    href: "tasks.html",    label: "タスク",   icon: "checklist", ready: true,
+    // 毎日の手を動かすところは1つにまとめる。タスク → 日報 → 予定の順に帯で行き来する
+    { key: "tasks",    href: "tasks.html",    label: "今日やること", icon: "checklist", ready: true,
       tabs: [
-        { key: "tasks",    href: "tasks.html",    label: "やること" },
+        { key: "tasks",    href: "tasks.html",    label: "タスク" },
+        { key: "nippo",    href: "nippo.html",    label: "日報" },
         { key: "schedule", href: "schedule.html", label: "スケジュール" },
-      ] },
+      ],
+      // スペース予約（booking.html）は通常メニューに置かず、ここから誘導する
+      match: ["tasks", "nippo", "schedule", "booking"] },
     { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",    ready: true },
-    { key: "timecard", href: "timecard.html", label: "勤怠",     icon: "schedule",  ready: true },
-    { key: "workflow", href: "workflow.html", label: "申請",     icon: "approval",  ready: true,
+    { key: "timecard", href: "timecard.html", label: "勤怠・申請", icon: "schedule",  ready: true,
       tabs: [
-        { key: "workflow", href: "workflow.html", label: "申請の一覧" },
-        { key: "requests", href: "requests.html", label: "休暇・稟議" },
+        { key: "timecard", href: "timecard.html", label: "勤怠" },
+        { key: "requests", href: "requests.html", label: "休暇・申請" },
         { key: "expenses", href: "expenses.html", label: "経費精算" },
-      ] },
-    { key: "library",  href: "library.html",  label: "社内文書", icon: "menu_book", ready: true,
+      ],
+      // 申請の一覧（workflow.html）も、この項目が選ばれた状態にする
+      match: ["timecard", "requests", "expenses", "workflow"] },
+    // 自分の現在地・次のLevel・次にやること（career.html）
+    { key: "career",   href: "career.html",   label: "キャリア", icon: "trending_up", ready: true },
+    { key: "notices",  href: "notices.html",  label: "社内情報", icon: "menu_book", ready: true,
       tabs: [
-        { key: "library",   href: "library.html",   label: "文書・様式" },
         { key: "notices",   href: "notices.html",   label: "お知らせ" },
+        { key: "library",   href: "library.html",   label: "社内文書" },
         { key: "directory", href: "directory.html", label: "社員名簿" },
       ] },
     { key: "mypage",   href: "mypage.html",   label: "マイページ", icon: "account_circle", ready: true,
       tabs: [
-        { key: "mypage",    href: "mypage.html",    label: "マイページ" },
+        { key: "mypage",    href: "mypage.html",    label: "基本情報" },
         // 署名は期日があるので、入口を無くさない。ここから開ける
-        { key: "contracts", href: "contracts.html", label: "契約書" },
+        { key: "contracts", href: "contracts.html", label: "契約・署名" },
       ] },
 
     // 入社準備のあいだだけ。入社日が来ると消える
     { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
-    // 必要な人にだけ出す
-    { key: "booking", href: "booking.html", label: "スペース予約", icon: "meeting_room",
-      ready: true, when: "booking" },
+    // スペース予約は通常メニューに置かない（使う人が限られる）。
+    // 画面（booking.html）はそのまま残し、メニュー画面とタスクから開く
     // 営業担当にだけ。/sales は /hr と同じく専用ヘッダーで動く別アプリなので、入口を1つ置くだけ
     { key: "sales", href: "sales/", label: "営業", icon: "storefront", ready: true, when: "sales" },
 
@@ -175,15 +180,20 @@
             { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
             { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
-        { key: "growth",    href: "admin-growth.html",    label: "評価・育成",   icon: "trending_up", ready: true,
+        // 評価・キャリア。入口は「キャリア」（admin-career.html）。
+        // 3か月育成・自走レベルは既存画面をそのままタブに並べる（作り直さない）。
+        // 自走レベル（任せられる範囲）とキャリアLevel（役割・給与レンジ）は別物
+        { key: "career",    href: "admin-career.html",    label: "評価・キャリア", icon: "trending_up", ready: true,
           tabs: [
-            { key: "growth",   href: "admin-growth.html",   label: "育成計画" },
-            { key: "autonomy", href: "admin-autonomy.html", label: "自走レベル" },
+            { key: "career",         href: "admin-career.html",             label: "キャリア" },
+            { key: "growth",         href: "admin-growth.html",             label: "3か月育成" },
+            { key: "autonomy",       href: "admin-autonomy.html",           label: "自走レベル" },
+            { key: "career_history", href: "admin-career.html?tab=history", label: "評価履歴" },
           ],
           // 試用期間は採用前ではなく入社後の人事管理なので、こちらへ
           // （既存データ・ロジックは変えず、導線だけ移す）。見出しは「試用期間」の
           // ままでよいので帯（tabs）には入れず、選ばれた状態にするmatchだけ足す
-          match: ["growth", "autonomy", "probation"] },
+          match: ["career", "growth", "autonomy", "career_history", "career_master", "probation"] },
       ],
     },
     {

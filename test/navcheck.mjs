@@ -67,14 +67,16 @@ check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItem
     `開いた状態の行数の目安 ${ADMIN_GROUPS.length + biggest}（見出し5＋最大 ${biggest}）`);
 }
 
-// ---- 2) メンバーは8つ ---------------------------------------------------------
+// ---- 2) メンバーは7つ ---------------------------------------------------------
+//   ホーム・今日やること・メッセージ・勤怠・申請・キャリア・社内情報・マイページ
+//   （評価・キャリア再設計 §3・§37。スペース予約は通常メニューから外した）
 console.log("\n— メンバー —");
 {
   // when（設備予約・会計）と urlKey（別システム）と入社手続きは、
   // 人によって出る／出ないもの。いつも出るものだけ数える
   const always = memberItems.filter((n) => !n.when && !n.urlKey && n.key !== "onboarding");
-  check(always.length === 8,
-    `いつも出るのは8つ（いま ${always.length}: ${always.map((n) => n.label).join("・")}）`);
+  check(always.length === 7,
+    `いつも出るのは7つ（いま ${always.length}: ${always.map((n) => n.label).join("・")}）`);
   check(MEMBER_NAV.length === 5, `スマホの下タブは5つ（いま ${MEMBER_NAV.length}）`);
 }
 
@@ -155,7 +157,7 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
     "home.html", "nippo.html", "tasks.html", "schedule.html", "messages.html",
     "timecard.html", "workflow.html", "requests.html", "expenses.html",
     "library.html", "notices.html", "directory.html", "mypage.html",
-    "contracts.html", "booking.html", "onboarding.html",
+    "contracts.html", "booking.html", "onboarding.html", "career.html",
   ];
   for (const f of MEMBER_PAGES) {
     const a = activeOf(f);
