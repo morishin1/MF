@@ -260,7 +260,37 @@
     return "home.html";
   }
 
-  function renderTopbar({ name, appRole, memberView }) {
+  /**
+   * 採用HR・Sales へのショートカット（ヘッダー）。
+   *
+   * 毎日のように行き来するので、左メニューを開かずに届くようにする。
+   * 左メニューの入口（人事・労務 ＞ 採用、管理・設定 ＞ 営業）は正式な
+   * メニュー構造としてそのまま残す。ヘッダーは近道でしかない。
+   *
+   * 出す・出さないは showsFor の hr / sales（サーバの canRecruit / canSell と
+   * 同じ基準）で決める。新しい権限は増やさない。
+   * メンバー表示で確認中は出さない（メンバーの見え方を確かめる場なので）。
+   *
+   * 狭い画面では「HR」「Sales」まで縮める（CSS）。通知・ログアウトは押し出さない
+   */
+  const SHORTCUTS = [
+    { key: "hr",    href: "/hr/",    label: "採用HR", short: "HR",    icon: "person_add" },
+    { key: "sales", href: "/sales/", label: "Sales",  short: "Sales", icon: "storefront" },
+  ];
+
+  function shortcutsHtml(shows = {}, path = location.pathname) {
+    const list = SHORTCUTS.filter((s) => shows[s.key]);
+    if (!list.length) return "";
+    return `<nav class="kp-shortcuts" aria-label="よく使う画面">${list.map((s) => {
+      const on = path.startsWith(s.href);
+      return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${s.href}"
+                 data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
+          ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
+        </a>`;
+    }).join("")}</nav>`;
+  }
+
+  function renderTopbar({ name, appRole, memberView, shows }) {
     const tag = memberView
       ? "メンバー表示で確認中"
       : ({ admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "");
@@ -276,7 +306,8 @@
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
-        <span>${esc(name)}</span>
+        ${memberView ? "" : shortcutsHtml(shows)}
+        <span class="kp-who-name">${esc(name)}</span>
         ${canPreview ? (memberView
           ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
                ${icon("admin_panel_settings", 18)}管理画面に戻る
@@ -742,7 +773,7 @@
     const canPreview = appRole === "admin" || appRole === "owner";
     const memberView = canPreview && isMemberView();
 
-    renderTopbar({ name, appRole, memberView });
+    renderTopbar({ name, appRole, memberView, shows });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     if (memberView) renderMemberNav(active, shows, stage);
     else if (canPreview) renderAdminNav(active);
@@ -776,6 +807,9 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
+      // /hr の入口。サーバ側の canRecruit（lib/gw.js）と同じ基準
+      // （管理者・経営者・人事・採用担当）
+      hr: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       // /sales の入口。サーバ側の canSell（lib/gw.js）と同じ基準
       sales: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。

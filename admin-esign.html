@@ -67,6 +67,38 @@
     .es-st.overdue { background:#fdecec; color:#b3261e; }
     .es-st.cancelled { background:#eee; color:#777; }
 
+    /* 会社の印鑑。一覧のカードと、送るときの選択肢 */
+    .es-seals { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:12px; }
+    .es-seal { border:1px solid var(--border); border-radius:10px; padding:14px; background:#fff;
+               display:flex; flex-direction:column; gap:8px; }
+    .es-seal.off { background:#f7f7f7; }
+    .es-seal.off .es-seal-img { opacity:.45; }
+    .es-seal-img { width:96px; height:96px; object-fit:contain; align-self:center;
+                   background:repeating-conic-gradient(#f2f2f2 0% 25%, #fff 0% 50%) 50%/14px 14px;
+                   border-radius:6px; }
+    .es-seal-name { font-weight:700; color:var(--primary-dark); font-size:14px; }
+    .es-seal-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:11.5px; color:var(--muted); }
+    .es-seal-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+    .es-st.active { background:#eaf5ec; color:#256b36; }
+    .es-st.inactive { background:#eee; color:#777; }
+
+    .es-seal-pick { display:flex; flex-wrap:wrap; gap:8px; }
+    .es-seal-opt { display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:8px;
+                   padding:6px 12px 6px 8px; cursor:pointer; background:#fff; font-size:13px; }
+    .es-seal-opt:has(input:checked) { border-color:var(--primary); background:#f3f8ff; }
+    .es-seal-opt img { width:32px; height:32px; object-fit:contain; }
+    .es-seal-opt input { margin:0; width:auto; }
+
+    /* モーダル＝1つの操作を実行する場所（採用HRと同じ作り） */
+    .es-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
+    .es-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:460px; max-width:92vw;
+      max-height:86vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
+      box-shadow:0 20px 60px rgba(27,36,64,.28); }
+    .es-modal h2 { font-size:17px; font-weight:700; color:var(--primary-dark); margin:0 0 6px; }
+    .es-modal .es-radio { display:flex; gap:16px; }
+    .es-modal .es-radio label { display:flex; align-items:center; gap:6px; font-weight:500; margin:0; }
+    .es-modal .es-radio input { width:auto; margin:0; }
+
     .es-hash { font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
                font-size:10.5px; color:var(--muted); word-break:break-all; }
   </style>
@@ -94,6 +126,8 @@
     <button id="tab-send" class="tab active" onclick="setTab('send', this)">送る</button>
     <button id="tab-list" class="tab" onclick="setTab('list', this)">署名の状況</button>
     <button id="tab-tpl"  class="tab" onclick="setTab('tpl', this)">雛形</button>
+    <!-- 印鑑の登録・変更は owner / admin だけ。それ以外の人にはタブごと出さない -->
+    <button id="tab-seal" class="tab hidden" onclick="setTab('seal', this)">印鑑</button>
   </div>
 
   <!-- ===== 作成依頼（社労士に頼む → 届いた書面にそのまま署名依頼） ===== -->
@@ -192,6 +226,15 @@
           <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
             選んだ人数ぶん、それぞれの値を差し込んだ契約書が1通ずつ作られます。
           </p>
+
+          <div style="margin-top:14px;">
+            <label>使用する印鑑</label>
+            <div id="s-seal" class="es-seal-pick"><span class="muted" style="font-size:12px;">読み込み中…</span></div>
+            <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
+              会社印は、署名済みPDFの「電子署名記録」ページに押されます。送った時点の印影が使われ、
+              あとで印鑑を差し替えても変わりません。
+            </p>
+          </div>
         </div>
 
         <div>
@@ -307,7 +350,25 @@
       </div>
     </div>
   </div>
+
+  <!-- ===== 印鑑（owner / admin だけ） ===== -->
+  <div id="pane-seal" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">approval</span>会社の印鑑
+        <button id="seal-add" class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="openSealModal()">
+          <span class="material-symbols-outlined icon-inline">add</span>印鑑を登録
+        </button></h2>
+      <p class="muted" style="font-size:12px;margin:0 0 14px;">
+        契約書・電子署名で使う印影を登録しておき、署名依頼を送るときに選びます。
+        印影は契約書上の視覚的な押印で、署名の記録（署名者・日時・IP・同意・文書ハッシュ）は別に残ります。
+      </p>
+      <div id="seal-msg" class="err-text"></div>
+      <div id="seal-list" class="es-seals"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
 </div>
+
+<div id="es-modal-root"></div>
 
 <script src="js/api-client.js?v=20260916m"></script>
 <script src="js/device.js?v=20260916m"></script>
@@ -335,16 +396,29 @@
   let reconcileResult = null;  // 採用承諾条件との突き合わせ（採用HR Stage 9）
   let canOverride = false;     // owner・hrだけ、条件不一致のまま進められる
 
-  const PANES = ["order", "send", "list", "tpl"];
+  const PANES = ["order", "send", "list", "tpl", "seal"];
+
+  let seals = [];               // 会社の印鑑。owner/admin には無効なものも来る
+  let sealTypes = [];
+  let sealLimits = { maxBytes: 2 * 1024 * 1024 };
+  let canManageSeals = false;   // 印鑑の登録・変更は owner / admin だけ（lib/gw.js canManageSeals）
+  let sealFile = null;          // モーダルで選んだ画像（WebP は PNG に描き直したもの）
+  let sealPreviewUrl = null;
 
   // 上のメニューは「契約書作成依頼」と「電子署名」を別タブにしている
   // （js/layout.js）。どちらで開いたかは ?tab=order の有無で分かる
   const initialTab = new URLSearchParams(location.search).get("tab");
   KPLayout.init({ active: initialTab === "order" ? "esign_order" : "esign", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) { canOverride = Boolean(ctx.me?.gw?.isHr); load(); } });
+    .then((ctx) => {
+      if (!ctx) return;
+      canOverride = Boolean(ctx.me?.gw?.isHr);
+      canManageSeals = Boolean(ctx.me?.isAdmin || (ctx.me?.gw?.roles || []).includes("owner"));
+      el("tab-seal").classList.toggle("hidden", !canManageSeals);
+      load();
+    });
 
   async function load() {
-    await Promise.all([loadTemplates(), loadEmployees(), loadOrders()]);
+    await Promise.all([loadTemplates(), loadEmployees(), loadOrders(), loadSeals()]);
     await loadRequests();
     openFromUrl();
   }
@@ -355,6 +429,7 @@
     const q = new URLSearchParams(location.search);
     const tab = q.get("tab");
     if (!PANES.includes(tab)) return;
+    if (tab === "seal" && !canManageSeals) return;
     const btn = el(`tab-${tab}`);
     if (btn) setTab(tab, btn);
     const emp = q.get("employeeId");
@@ -620,12 +695,16 @@
     if (!ids.length) { msg.textContent = "相手を1人以上選んでください"; return; }
 
     const t = templates.find((x) => x.id === templateId);
+    const sealId = pickedSealId();
+    const seal = seals.find((x) => x.id === sealId);
     if (!confirm(`「${t ? t.name : ""}」を ${ids.length}名に送ります。\n`
-      + `送ったあと、本文は変えられません。よろしいですか？`)) return;
+      + `使用する印鑑：${seal ? seal.name : "押印しない"}\n`
+      + `送ったあと、本文と印鑑は変えられません。よろしいですか？`)) return;
 
     try {
       const r = await KPLayout.busy(btn, "送信中…", () => API.sendSign({
         templateId, employeeIds: ids, dueOn: el("s-due").value || null,
+        sealId: sealId || undefined,
       }));
       el("s-result").innerHTML = `
         ${r.sent.length ? `
@@ -646,6 +725,204 @@
       await loadRequests();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "送れませんでした";
+    }
+  }
+
+  // ---- 会社の印鑑 -------------------------------------------------------------
+  //
+  // 印影は「視覚的な押印」。署名の証跡（署名者・日時・IP・UA・同意・ハッシュ）は
+  // これまでどおりで、印影はそこに足すだけ。
+  // 画像は非公開のバケットにあり、ここに来る imageUrl は数分だけ有効な URL。
+  async function loadSeals() {
+    try {
+      const res = await API.seals();
+      seals = res.seals || [];
+      sealTypes = res.types || [];
+      if (res.limits) sealLimits = res.limits;
+    } catch (e) {
+      seals = [];
+      // 091 未適用・権限なし … 押印しないで送れる。画面は壊さない
+      if (canManageSeals) el("seal-msg").textContent = e.message || e.hint || "印鑑を読み込めませんでした";
+    }
+    renderSealPicker();
+    renderSeals();
+  }
+
+  const typeLabel = (k) => (sealTypes.find((t) => t.key === k) || {}).label || "その他";
+
+  // 送るときの選択肢。有効な印鑑だけ
+  function renderSealPicker() {
+    const before = pickedSealId();
+    const active = seals.filter((x) => x.isActive);
+    el("s-seal").innerHTML = `
+      <label class="es-seal-opt"><input type="radio" name="s-seal" value="" ${before ? "" : "checked"}>押印しない</label>
+      ${active.map((x) => `
+        <label class="es-seal-opt" title="${esc(typeLabel(x.sealType))}">
+          <input type="radio" name="s-seal" value="${esc(x.id)}" ${before === x.id ? "checked" : ""}>
+          ${x.imageUrl ? `<img src="${esc(x.imageUrl)}" alt="">` : ""}${esc(x.name)}
+        </label>`).join("")}
+      ${!active.length && canManageSeals
+        ? `<span class="muted" style="font-size:12px;align-self:center;">
+             印鑑は<a href="#" onclick="setTab('seal', el('tab-seal'));return false;">印鑑タブ</a>で登録できます</span>`
+        : ""}`;
+  }
+
+  function pickedSealId() {
+    return document.querySelector('input[name="s-seal"]:checked')?.value || "";
+  }
+
+  function renderSeals() {
+    if (!canManageSeals) return;
+    const box = el("seal-list");
+    if (!seals.length) {
+      box.innerHTML = `<div class="empty" style="grid-column:1/-1;">
+        まだ印鑑がありません。「印鑑を登録」から代表者印・角印などを登録してください。</div>`;
+      return;
+    }
+    box.innerHTML = seals.map((x) => `
+      <div class="es-seal${x.isActive ? "" : " off"}" data-seal="${esc(x.id)}">
+        ${x.imageUrl ? `<img class="es-seal-img" src="${esc(x.imageUrl)}" alt="${esc(x.name)}">`
+                     : `<div class="es-seal-img"></div>`}
+        <div class="es-seal-name">${esc(x.name)}</div>
+        <div class="es-seal-meta">
+          <span>${esc(typeLabel(x.sealType))}</span>
+          <span class="es-st ${x.isActive ? "active" : "inactive"}">${x.isActive ? "使用中" : "無効"}</span>
+        </div>
+        <div class="es-seal-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openSealModal('${esc(x.id)}')">編集</button>
+          ${x.isActive
+            ? `<button class="btn btn-secondary btn-sm" onclick="toggleSeal('${esc(x.id)}', false, this)">無効化</button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="toggleSeal('${esc(x.id)}', true, this)">有効にする</button>`}
+        </div>
+      </div>`).join("");
+  }
+
+  function openSealModal(id) {
+    const cur = id ? seals.find((x) => x.id === id) : null;
+    sealFile = null;
+    if (sealPreviewUrl) { URL.revokeObjectURL(sealPreviewUrl); sealPreviewUrl = null; }
+    el("es-modal-root").innerHTML = `
+      <div class="es-modal-bg" onclick="closeSealModal()"></div>
+      <div class="es-modal" role="dialog" aria-modal="true" aria-labelledby="sm-title">
+        <h2 id="sm-title">${cur ? "印鑑を編集" : "印鑑を登録"}</h2>
+        <p class="muted" style="font-size:12px;margin:0 0 14px;">
+          背景透過PNGを推奨します。<br>契約書に使用する印鑑画像を登録してください。
+        </p>
+        <input type="hidden" id="sm-id" value="${esc(cur?.id || "")}">
+        <div style="margin-bottom:12px;"><label>印鑑名</label>
+          <input id="sm-name" type="text" maxlength="40" placeholder="代表者印" value="${esc(cur?.name || "")}"></div>
+        <div style="margin-bottom:12px;"><label>種類</label>
+          <select id="sm-type">${sealTypes.map((t) =>
+            `<option value="${esc(t.key)}" ${(cur?.sealType || "representative") === t.key ? "selected" : ""}>${esc(t.label)}</option>`).join("")}
+          </select></div>
+        <div style="margin-bottom:12px;"><label>印鑑画像${cur ? "（差し替えるときだけ選ぶ）" : ""}</label>
+          <input id="sm-file" type="file" accept="image/png,image/jpeg,image/webp" onchange="onSealFile(this)">
+          <p class="muted" style="font-size:11.5px;margin:4px 0 0;">PNG・JPEG・WebP、2MBまで。WebPはPNGに変換して保存します。</p>
+          <div style="margin-top:8px;text-align:center;">
+            <img id="sm-preview" class="es-seal-img${cur?.imageUrl ? "" : " hidden"}" src="${esc(cur?.imageUrl || "")}" alt="プレビュー">
+          </div>
+        </div>
+        <div style="margin-bottom:6px;"><label>状態</label>
+          <div class="es-radio">
+            <label><input type="radio" name="sm-active" value="1" ${cur && !cur.isActive ? "" : "checked"}>使用する</label>
+            <label><input type="radio" name="sm-active" value="0" ${cur && !cur.isActive ? "checked" : ""}>無効</label>
+          </div></div>
+        <div id="sm-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button id="sm-save" class="btn btn-primary" onclick="saveSeal(this)">
+            <span class="material-symbols-outlined icon-inline">save</span>${cur ? "保存" : "登録"}</button>
+          <button class="btn btn-secondary" onclick="closeSealModal()">閉じる</button>
+        </div>
+      </div>`;
+    el("sm-name").focus();
+  }
+
+  function closeSealModal() {
+    el("es-modal-root").innerHTML = "";
+    sealFile = null;
+    if (sealPreviewUrl) { URL.revokeObjectURL(sealPreviewUrl); sealPreviewUrl = null; }
+  }
+
+  /**
+   * 選んだ画像を確かめて、プレビューを出す。
+   * WebP は PDF に埋め込めないので、ここで PNG に描き直す（透過は残る）
+   */
+  async function onSealFile(input) {
+    const msg = el("sm-msg");
+    msg.textContent = "";
+    sealFile = null;
+    const f = input.files?.[0];
+    if (!f) return;
+    try {
+      sealFile = await prepareSealImage(f, sealLimits.maxBytes);
+    } catch (e) {
+      msg.textContent = e.message;
+      input.value = "";
+      return;
+    }
+    if (sealPreviewUrl) URL.revokeObjectURL(sealPreviewUrl);
+    sealPreviewUrl = URL.createObjectURL(sealFile);
+    const img = el("sm-preview");
+    img.src = sealPreviewUrl;
+    img.classList.remove("hidden");
+  }
+
+  async function prepareSealImage(f, maxBytes) {
+    const okType = ["image/png", "image/jpeg", "image/webp"];
+    if (!okType.includes(f.type)) throw new Error("PNG・JPEG・WebP の画像を選んでください");
+    if (f.size > maxBytes) throw new Error("画像は2MBまでにしてください");
+    if (f.type !== "image/webp") return f;
+    const png = await webpToPng(f);
+    if (png.size > maxBytes) throw new Error("PNGに変換すると2MBを超えます。小さい画像にしてください");
+    return png;
+  }
+
+  async function webpToPng(file) {
+    let bmp;
+    try { bmp = await createImageBitmap(file); }
+    catch { throw new Error("画像を読み込めませんでした。壊れていないか確かめてください"); }
+    const c = document.createElement("canvas");
+    c.width = bmp.width; c.height = bmp.height;
+    c.getContext("2d").drawImage(bmp, 0, 0);
+    const blob = await new Promise((ok) => c.toBlob(ok, "image/png"));
+    if (!blob) throw new Error("PNGに変換できませんでした");
+    return new File([blob], file.name.replace(/\.webp$/i, "") + ".png", { type: "image/png" });
+  }
+
+  async function saveSeal(btn) {
+    const msg = el("sm-msg");
+    msg.textContent = "";
+    const id = el("sm-id").value;
+    const name = el("sm-name").value.trim();
+    const sealType = el("sm-type").value;
+    const isActive = document.querySelector('input[name="sm-active"]:checked')?.value !== "0";
+    if (!name) { msg.textContent = "印鑑名を入れてください"; return; }
+    if (!id && !sealFile) { msg.textContent = "印鑑画像を選んでください"; return; }
+
+    try {
+      await KPLayout.busy(btn, "保存中…", async () => {
+        const path = sealFile ? await API.uploadSealImage(sealFile) : undefined;
+        if (id) await API.sealAct({ action: "update", id, name, sealType, isActive, path });
+        else await API.sealAct({ action: "create", name, sealType, isActive, path });
+      });
+      closeSealModal();
+      await loadSeals();
+    } catch (e) {
+      msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  async function toggleSeal(id, on, btn) {
+    const cur = seals.find((x) => x.id === id);
+    if (!on && !confirm(`「${cur ? cur.name : ""}」を無効にします。\n`
+      + `これからの署名依頼では選べなくなります（送付済みの契約書の印影は変わりません）。`)) return;
+    el("seal-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, on ? "有効にしています…" : "無効にしています…",
+        () => API.sealAct({ action: "update", id, isActive: on }));
+      await loadSeals();
+    } catch (e) {
+      el("seal-msg").textContent = e.hint || e.detail || e.message || "変更できませんでした";
     }
   }
 
@@ -726,6 +1003,7 @@
           ${row("IPアドレス", esc(r.signer_ip || ""))}
           ${row("利用環境", `<span style="font-size:11.5px;">${esc(r.signer_ua || "")}</span>`)}
           ${row("同意した文言", esc(r.agreed_text || ""))}
+          ${row("会社印", esc(r.seal_name || ""))}
           ${row("文書ハッシュ", `<span class="es-hash">${esc(r.pdf_sha256 || "")}</span>`)}
           ${row("署名済ハッシュ", `<span class="es-hash">${esc(r.signed_pdf_sha256 || "")}</span>`)}
         </tbody></table></div>

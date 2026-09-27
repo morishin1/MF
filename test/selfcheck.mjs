@@ -23,7 +23,7 @@ const ROOT = dirname(HERE);
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
-const SKIP = new Set(["run.mjs", "_browser.mjs", "_shot.mjs", "selfcheck.mjs", "tcdata.mjs"]);
+const SKIP = new Set(["run.mjs", "_browser.mjs", "_shot.mjs", "_img.mjs", "selfcheck.mjs", "tcdata.mjs"]);
 
 const groups = [
   { name: "node", dir: HERE, browser: false },

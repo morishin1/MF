@@ -979,6 +979,25 @@
     return docOrderAct({ action: "attach", id, path: sign.path, filename: file.name });
   }
 
+  // ---- 会社の印鑑（印影画像） ----
+  // 一覧の imageUrl は数分だけ有効な signed URL（非公開のバケット）
+  const seals = () => api("/api/sign/seals");
+  const sealAct = (body) => api("/api/sign/seals", { method: "POST", body });
+
+  // 画像を置いてから、登録（create）か差し替え（update）。
+  // file は PNG か JPEG（WebP は画面側で PNG にしてから渡す）
+  async function uploadSealImage(file) {
+    const mimeType = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
+    const sign = await sealAct({ action: "upload", mimeType, sizeBytes: file.size });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType, "x-upsert": "false" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return sign.path;
+  }
+
   // ---- 有給・稟議の申請 ----
   // scope: "mine" | "pending" | "all"、kind: "leave" | "ringi"
   const listRequests = (scope, opts = {}) => {
@@ -1408,6 +1427,7 @@
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
+    seals, sealAct, uploadSealImage,
     myContracts, signContract, signPdfUrl,
     docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile, checkHrOfferMatch,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,

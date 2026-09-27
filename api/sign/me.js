@@ -173,6 +173,12 @@ async function sign(req, res, ctx, user) {
     });
   }
 
+  // 会社印。送った時点で固めた複製を読む（印鑑マスタは見に行かない）。
+  // 選ばれていたのに読めない・中身が違うなら、署名させない。
+  // 印影の無い契約書が「押したはず」のまま締結されるのを防ぐ
+  const seal = await sealSnapshot(sb, r.id);
+  if (seal?.error) return json(res, 500, seal);
+
   const now = new Date();
   const ip = ipOf(req);
   const ua = uaOf(req);
@@ -193,6 +199,7 @@ async function sign(req, res, ctx, user) {
       title: r.title,
       agreedText: AGREE_TEXT,
       ip, userAgent: ua,
+      seal,
     });
   } catch (e) {
     console.error("[sign] 署名済みPDFを作れませんでした:", e?.message || e);
@@ -229,7 +236,8 @@ async function sign(req, res, ctx, user) {
   if (!saved) return json(res, 409, { error: "already_signed", hint: "この契約書はすでに署名済みです" });
 
   await signEvent(ctx, r.id, "signed", req, { id: user.id, name: signerName },
-    { hash: baseHash, signedHash: saved.signed_pdf_sha256 });
+    { hash: baseHash, signedHash: saved.signed_pdf_sha256,
+      ...(seal ? { sealName: seal.name, sealSha256: seal.sha256 } : {}) });
 
   // 作成依頼から出したものなら、その依頼も締結ずみにする。
   // ここが失敗しても署名は済んでいる。止めない（056 未適用でも動くように）
@@ -270,4 +278,37 @@ async function sign(req, res, ctx, user) {
     hash: baseHash,
     signedHash: saved.signed_pdf_sha256,
   });
+}
+
+/**
+ * 送付時に固めた会社印を読む。
+ *   印鑑なしで送ったもの・091 未適用の環境 … null（今までどおり押印なし）
+ *   読めない・ハッシュが合わない             … { error, hint }
+ */
+async function sealSnapshot(sb, requestId) {
+  let data = null;
+  try {
+    const q = await sb.from("gw_sign_requests")
+      .select("seal_name, seal_image_path, seal_image_sha256")
+      .eq("id", requestId).maybeSingle();
+    if (!q.error) data = q.data;
+  } catch { /* 列が無い（091 未適用）。押印なしで今までどおり */ }
+  if (!data?.seal_image_path) return null;
+
+  const dl = await sb.storage.from(BUCKET).download(data.seal_image_path);
+  if (dl.error || !dl.data) {
+    return { error: "seal_missing", hint: "会社印の画像を取り出せませんでした。管理者にご連絡ください" };
+  }
+  const bytes = Buffer.from(await dl.data.arrayBuffer());
+  const hash = sha256(bytes);
+  if (data.seal_image_sha256 && hash !== data.seal_image_sha256) {
+    console.error("[sign] 会社印のハッシュ不一致:", requestId);
+    return { error: "seal_hash_mismatch", hint: "会社印の画像が送信時と一致しません。署名を中止しました。管理者にご連絡ください" };
+  }
+  return {
+    name: data.seal_name || "会社印",
+    bytes,
+    mime: /\.jpg$/.test(data.seal_image_path) ? "image/jpeg" : "image/png",
+    sha256: hash,
+  };
 }
