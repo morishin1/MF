@@ -134,9 +134,10 @@ console.log("\n=== ホーム：今日やる3つ ===");
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n=== 日報：明日の3件を決めてから ===");
+console.log("\n=== 日報：明日の3件が未確定でも書ける・出せる ===");
 {
   const posted = [];
+  const nippoPosts = [];
   let confirmed = false;
   const page = await br.newPage({ viewport: { width: 1280, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => {
@@ -168,6 +169,16 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
       return send(f);
     }
     if (/\/api\/nippo\/plan/.test(url)) return send({ plan: null });
+    if (/\/api\/nippo\b/.test(url) && req.method() === "POST") {
+      const b = JSON.parse(req.postData() || "{}");
+      nippoPosts.push(b);
+      // 明日の3つが未確定でも、日報の提出は通る（⑦ は明日の候補として入る）
+      return send({ ok: true, id: "n1", dailyFlags: {}, ai: { configured: false }, actions: { closed: 0 },
+                    focus: confirmed
+                      ? { date: "2026-09-17", count: 3, min: 3, remaining: 0, confirmed: true, added: false }
+                      : { date: "2026-09-17", count: 1, min: 3, remaining: 2, confirmed: false,
+                          added: Boolean(b.tomorrowPlan), duplicate: false } });
+    }
     if (/\/api\/nippo\b/.test(url)) {
       return send({
         date: "2026-09-16", weekStart: "2026-09-14",
@@ -186,9 +197,29 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
   await page.goto(`${BASE}/nippo.html`);
   await page.waitForTimeout(1000);
 
-  console.log("\n— 決まるまで、日報は開かない —");
-  check(await page.locator("#write-lock").count() === 1, "先に決めるよう案内が出る");
-  check(await page.locator("#write-card.fc-lock").count() === 1, "日報の欄は触れない");
+  console.log("\n— 未確定でも、日報の欄はロックしない —");
+  check(await page.locator("#write-lock").count() === 0, "「先に決めてください」のロック表示は出ない");
+  check(await page.locator(".fc-lock").count() === 0, "日報の欄全体をロックしない");
+  check(!/確定すると、今日の日報を書けるようになります/.test(await page.content()), "「書けるようになります」の文言は無い");
+  const guide = page.locator("#write-card #focus-guide");
+  check(await guide.count() === 1, "代わりに案内を出す");
+  check(/明日の重要タスク/.test(await guide.innerText()) && /提出できます/.test(await guide.innerText()),
+    `案内の文面（${(await guide.innerText().catch(() => "")).trim()}）`);
+  check(!(await guide.evaluate((e) => e.classList.contains("banner") || e.classList.contains("err-text"))),
+    "警告（赤）ではなく案内");
+  await page.fill("#f-tomorrow", "C社見積を提出する");
+  check(await page.inputValue("#f-tomorrow") === "C社見積を提出する", "日報の欄にそのまま書ける");
+
+  console.log("\n— 未確定のまま提出できて、次にやることが出る —");
+  await page.locator("#submit-btn").click();
+  await page.waitForTimeout(800);
+  check(nippoPosts.length === 1, "日報を送る（止めない）");
+  check(nippoPosts[0]?.tomorrowPlan === "C社見積を提出する", "⑦ 明日の最優先も一緒に送る（明日の候補になる）");
+  const next = await page.locator("#np-next").innerText().catch(() => "");
+  check(/次にやること/.test(next) && /明日の重要タスクがあと2件あります/.test(next), `NEXT ACTION（${next.replace(/\s+/g, " ")}）`);
+  check(/1件目の候補に入れました/.test(next), "⑦ を明日の候補に入れたことを伝える");
+  check(await page.locator("#np-next button", { hasText: "明日の3つを決める" }).count() === 1, "決めるところへのボタン");
+  check(/提出しました/.test(await page.locator("#f-result").innerText()), "提出は済んでいる");
 
   console.log("\n— 決める画面 —");
   const box = await page.locator("#focus-card").innerText();
@@ -216,14 +247,17 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
     check(box.includes(l), `決め方：${l}`);
   }
 
-  console.log("\n— 確定すると、日報が開く —");
+  console.log("\n— 確定すると、案内が消える —");
   await page.locator("#focus-card button", { hasText: "この内容で確定する" }).click();
   await page.waitForTimeout(800);
   check(posted.some((p) => p.action === "confirm"), "確定をサーバへ送る");
-  check(await page.locator("#write-lock").count() === 0, "案内が消える");
-  check(await page.locator("#write-card.fc-lock").count() === 0, "日報の欄が開く");
-  check(/今日の日報を入力してください/.test(await page.locator("#focus-card").innerText()),
-    "次にやることを伝える");
+  check(await page.locator("#focus-guide").count() === 0, "「あと何件」の案内が消える");
+  check(/明日のタスクが確定しました/.test(await page.locator("#focus-card").innerText()), "確定したことを伝える");
+
+  // 確定済みで出したときは、NEXT ACTION は出さない
+  await page.locator("#submit-btn").click();
+  await page.waitForTimeout(800);
+  check(nippoPosts.length === 2 && await page.locator("#np-next").count() === 0, "確定済みなら NEXT ACTION は出さない");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();

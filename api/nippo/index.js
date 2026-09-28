@@ -32,7 +32,7 @@ import {
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { closeItems, shapeItem } from "../../lib/actions.js";
-import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focus.js";
+import { focusState, progressOf, nippoGate, nextFocusDate, MIN_FOCUS } from "../../lib/focus.js";
 import { shape as shapeEval } from "./evaluate.js";
 
 export default async function handler(req, res) {
@@ -265,19 +265,12 @@ async function submit(res, user, ctx, body) {
 
   const sb = admin();
 
-  // 明日の重要タスクが決まっていないと、日報は出せない。
+  // 明日の重要タスクが未確定でも、日報は出せる。
   //
-  // ■ なぜ日報より先なのか
-  //
-  //   今日を振り返ってから明日を決める形にすると、
-  //   振り返りで力を使い切って、明日の欄が「引き続き頑張る」で埋まる。
-  //   順番を逆にする。明日を決めてから、今日を振り返る。
-  //
-  //   072 をまだ流していない環境では、これまでどおり出せる（止めない）。
-  const gate = await focusGate(sb, ctx, date);
-  if (gate && !gate.open) {
-    return json(res, 400, { error: "focus_required", hint: gate.hint, focusDate: gate.focusDate });
-  }
+  //   日報＝今日の記録、明日の3つ＝次の日の計画。別のものとして扱う。
+  //   「明日の3つを決める」習慣は残すが、決めていないと今日の記録まで
+  //   保存できない、という強制はしない。提出のあとで NEXT ACTION として案内する
+  //   （下の tomorrowAfterNippo）。
 
   // 週の最終勤務日は、振り返りを書いてからでないと日報を出せない。
   //
@@ -360,9 +353,16 @@ async function submit(res, user, ctx, body) {
   }
 
   // 「明日やること」は、もう gw_action_items へ写さない。
-  // 明日の3つは日報より前に gw_focus_days/gw_tasks で確定済み
-  // （focusGate が確定していない提出を止める）。ここで別の表にまた
-  // 作ると、同じ仕事が2つの表に生まれてしまう
+  // 明日の仕事は gw_tasks/gw_focus_days だけで持つ（別の表にまた作ると、
+  // 同じ仕事が2つの表に生まれてしまう）。
+  // ⑦「明日の最優先」は、明日の重要タスクの1件目の候補として gw_tasks に入れる
+  // （同じ内容を「明日の3つ」でもう一度入力させない。同名があれば作らない）
+  let focus = null;
+  try {
+    focus = await tomorrowAfterNippo(sb, ctx, user, date, row.tomorrow_plan);
+  } catch (e) {
+    console.error("[nippo] 明日の重要タスクを確かめられませんでした:", e.message);
+  }
 
   // AI評価は「待ち」の行を作るだけにして、ここでは走らせない。
   // 提出のたびに10〜20秒待たせると、日報を出すのが億劫になる。
@@ -380,6 +380,8 @@ async function submit(res, user, ctx, body) {
     ok: true, id: nippoId, dailyFlags: row.daily_flags,
     ai: { configured: aiConfigured(), pending: aiPending },
     actions: { closed },
+    // 明日の重要タスクの状態。未確定なら、画面が NEXT ACTION として案内する
+    focus,
   });
 }
 
@@ -426,7 +428,7 @@ async function focusFor(sb, ctx, date) {
         result: t.result, notDoneReason: t.not_done_reason, carryCount: t.carry_count || 0,
       })),
       progress: progressOf(todayTasks.data || []),
-      // 明日ぶん。確定していないと、日報の欄は開かない
+      // 明日ぶん。未確定でも日報は出せる（画面が「あと何件」を案内する）
       tomorrow: tomorrow.map((t) => ({ id: t.id, title: t.title, dueOn: t.due_on })),
       state: focusState({ day: day.data, tasks: tomorrow }),
       gate: nippoGate({ day: day.data, tasks: tomorrow, focusDate }),
@@ -436,28 +438,85 @@ async function focusFor(sb, ctx, date) {
   }
 }
 
+/** 同じタスクか。空白・全角半角・大小文字の違いは同じとみなす */
+const sameTitle = (a, b) => {
+  const n = (x) => String(x || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  return Boolean(n(a)) && n(a) === n(b);
+};
+
 /**
- * 明日の重要タスクが確定しているか。
+ * 日報を出したあとの、明日の重要タスク。
  *
- * 表がまだ無い環境（072 未適用）では null を返して、これまでどおり通す。
- * 新しい決まりで、今日の日報が出せなくなるほうが困る
+ *   1. ⑦「明日の最優先」を、明日の重要タスクの候補として入れる
+ *      （確定前・まだ3件そろっていない・同名が無いときだけ。
+ *       すでに3件決めてあれば足さない。AI確認・確定のやり直しになるため）
+ *   2. いまの件数・確定しているかを返す（画面の NEXT ACTION に使う）
+ *
+ * 表がまだ無い環境（072 未適用）では null。日報の提出そのものは止めない
  */
-async function focusGate(sb, ctx, date) {
+async function tomorrowAfterNippo(sb, ctx, user, date, plan) {
   const focusDate = nextFocusDate(date);
   if (!focusDate) return null;
-  try {
-    const [day, tasks] = await Promise.all([
-      sb.from("gw_focus_days").select("*")
-        .eq("employee_id", ctx.employee.id).eq("focus_date", focusDate).maybeSingle(),
-      sb.from("gw_tasks").select("id, title, status, purpose, done_condition, assignee_id, due_on, priority")
-        .eq("tenant_id", ctx.tenantId).eq("focus_for", ctx.employee.id)
-        .eq("focus_date", focusDate).limit(20),
-    ]);
-    if (day.error || tasks.error) return null;          // 表も列もまだ無い
-    return nippoGate({ day: day.data, tasks: tasks.data || [], focusDate });
-  } catch {
-    return null;
+  const [day, tasks] = await Promise.all([
+    sb.from("gw_focus_days").select("*")
+      .eq("employee_id", ctx.employee.id).eq("focus_date", focusDate).maybeSingle(),
+    sb.from("gw_tasks").select("id, title, status, purpose, done_condition, assignee_id, due_on, priority")
+      .eq("tenant_id", ctx.tenantId).eq("focus_for", ctx.employee.id)
+      .eq("focus_date", focusDate).limit(20),
+  ]);
+  if (day.error || tasks.error) return null;          // 表も列もまだ無い
+
+  let dayRow = day.data || null;
+  const live = (tasks.data || []).filter((t) => t.status !== "cancelled");
+  const title = String(plan || "").trim().slice(0, 200);
+  let added = false;
+  const duplicate = Boolean(title) && live.some((t) => sameTitle(t.title, title));
+
+  // 過去の日付の日報を直しているときは、もう過ぎた「明日」には入れない
+  const canSeed = title && !duplicate && focusDate >= jstDate()
+    && dayRow?.status !== "confirmed" && live.length < MIN_FOCUS;
+  if (canSeed) {
+    if (!dayRow) {
+      const ins = await sb.from("gw_focus_days")
+        .insert({ tenant_id: ctx.tenantId, employee_id: ctx.employee.id, focus_date: focusDate, status: "draft" })
+        .select("*").single();
+      dayRow = ins.data || null;
+    }
+    const { data: made, error } = await sb.from("gw_tasks").insert({
+      tenant_id: ctx.tenantId,
+      title,
+      assignee_id: ctx.employee.id,
+      due_on: focusDate,
+      priority: "high",
+      focus_date: focusDate,
+      focus_rank: live.length + 1,
+      focus_for: ctx.employee.id,
+      created_by: user.id,
+    }).select("id, title, status, purpose, done_condition, assignee_id, due_on, priority").single();
+    if (!error && made) {
+      live.push(made);
+      added = true;
+      // 目的・完了条件はまだ空なので「登録中」に戻る（AI確認・確定のやり直し）
+      const st = focusState({ day: dayRow, tasks: live });
+      if (dayRow?.id && dayRow.status !== st.key) {
+        await sb.from("gw_focus_days")
+          .update({ status: st.key, updated_at: new Date().toISOString() }).eq("id", dayRow.id);
+        dayRow = { ...dayRow, status: st.key };
+      }
+    }
   }
+
+  const st = focusState({ day: dayRow, tasks: live });
+  return {
+    date: focusDate,
+    count: st.count,
+    min: MIN_FOCUS,
+    remaining: Math.max(0, MIN_FOCUS - st.count),
+    confirmed: st.confirmed,
+    state: st.key,
+    added,                      // ⑦ を明日の候補として入れた
+    duplicate,                  // ⑦ と同じタスクがすでにあった（作っていない）
+  };
 }
 
 // ---- 週次レビュー（本人の振り返り4問） ---------------------------------------

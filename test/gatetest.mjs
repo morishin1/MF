@@ -1,10 +1,12 @@
-// 日報は「明日の3件を決めてから」。
+// 日報（今日の記録）と、明日の3つ（次の日の計画）は別のもの。
 //
 // ■ 何を守るテストか
 //
-//   1. 明日ぶんが確定していないと、日報は出せない（理由も返る）
+//   1. 明日の重要タスクが 0〜2件・未確定でも、日報は出せる（focus_required で止めない）
 //   2. 確定していれば、これまでどおり出せる
-//   3. 表がまだ無い環境（072 未適用）では止めない
+//   3. 未確定なら、提出の応答に「あと何件」が返る（画面の NEXT ACTION）
+//   4. ⑦「明日の最優先」は、明日の重要タスクの1件目の候補になる。同名は作らない
+//   5. 表がまだ無い環境（072 未適用）でも止めない
 //   4. 読み取りでも、今日の3件と明日の状態が返る
 //   5. 日報（朝・夜）は、もう gw_action_items へ何も作らない。
 //      gw_tasks/gw_focus_days が Single Source of Truth で、
@@ -142,30 +144,92 @@ const body = (over = {}) => ({
   tomorrow: "明日もやる", ...over,
 });
 
-console.log("\n=== 日報は、明日の3件を決めてから ===\n");
+console.log("\n=== 明日の3つが未確定でも、日報は出せる ===\n");
 
-await ok("何も決めていなければ、出せない", async () => {
-  setup();
-  const r = await call({ method: "POST", url: "/api/nippo", body: body() });
-  assert.equal(r.statusCode, 400, JSON.stringify(r.body));
-  assert.equal(r.body.error, "focus_required");
-  assert.match(r.body.hint, /重要タスク/);
-  assert.equal(r.body.focusDate, TOMORROW);
-  assert.equal(db.rows.tc_nippo.length, 0, "日報が入ってしまっています");
-});
+const post = (over) => call({ method: "POST", url: "/api/nippo", body: body(over) });
+const tomorrowTasks = () => db.rows.gw_tasks.filter((t) => t.focus_date === TOMORROW && t.focus_for === "emp-1");
 
-await ok("3件そろっていても、確定していなければ出せない", async () => {
+for (const n of [0, 1, 2]) {
+  await ok(`明日の重要タスクが${n}件でも出せる（あと${3 - n}件と返る）`, async () => {
+    setup({ status: n ? "draft" : null, tasks: Array.from({ length: n }, (_, i) => task(`t${i + 1}`)) });
+    const r = await post();
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.notEqual(r.body.error, "focus_required");
+    assert.equal(db.rows.tc_nippo.length, 1, "日報が入っていません");
+    assert.equal(r.body.focus.confirmed, false);
+    assert.equal(r.body.focus.remaining, 3 - n);
+    assert.equal(r.body.focus.date, TOMORROW);
+  });
+}
+
+await ok("3件そろっていて確定前でも出せる（確定が残っていると返る）", async () => {
   setup({ status: "ai_checked", tasks: [task("t1"), task("t2"), task("t3")] });
-  const r = await call({ method: "POST", url: "/api/nippo", body: body() });
-  assert.equal(r.statusCode, 400);
-  assert.equal(r.body.error, "focus_required");
+  const r = await post();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.focus.remaining, 0);
+  assert.equal(r.body.focus.confirmed, false);
 });
 
-await ok("確定していれば、これまでどおり出せる", async () => {
+await ok("確定していれば、これまでどおり出せる（案内は要らない）", async () => {
   setup({ status: "confirmed", tasks: [task("t1"), task("t2"), task("t3")] });
-  const r = await call({ method: "POST", url: "/api/nippo", body: body() });
+  const r = await post();
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(db.rows.tc_nippo.length, 1);
+  assert.equal(r.body.focus.confirmed, true);
+});
+
+console.log("— ⑦ 明日の最優先は、明日の重要タスクの候補になる —");
+
+await ok("⑦ に書いた内容が、明日の重要タスクの1件目になる（二度入力させない）", async () => {
+  setup();
+  const r = await post({ tomorrowPlan: "C社見積を提出する" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const list = tomorrowTasks();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].title, "C社見積を提出する");
+  assert.equal(list[0].focus_rank, 1);
+  assert.equal(list[0].assignee_id, "emp-1");
+  assert.equal(list[0].due_on, TOMORROW);
+  assert.equal(db.rows.gw_focus_days.length, 1, "明日の日の行ができていません");
+  assert.equal(db.rows.gw_focus_days[0].status, "draft");
+  assert.equal(r.body.focus.added, true);
+  assert.equal(r.body.focus.remaining, 2, "あと2件と返る");
+  assert.equal(db.rows.gw_action_items.length, 0, "別の表には作らない");
+});
+
+await ok("同じタスクがすでにあれば作らない（全角・空白の違いも同じとみなす）", async () => {
+  setup({ status: "draft", tasks: [task("t1", { title: "Ｃ社見積を提出する" })] });
+  const r = await post({ tomorrowPlan: " C社見積を提出する " });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(tomorrowTasks().length, 1, "重複して作られています");
+  assert.equal(r.body.focus.added, false);
+  assert.equal(r.body.focus.duplicate, true);
+  assert.equal(r.body.focus.remaining, 2);
+});
+
+await ok("2回出しても、⑦ のタスクは1つだけ", async () => {
+  setup();
+  await post({ tomorrowPlan: "C社見積を提出する" });
+  await post({ tomorrowPlan: "C社見積を提出する" });
+  assert.equal(tomorrowTasks().length, 1);
+});
+
+await ok("確定済み・3件そろっているときは、⑦ を足さない（人が決めた3つを動かさない）", async () => {
+  setup({ status: "confirmed", tasks: [task("t1"), task("t2"), task("t3")] });
+  await post({ tomorrowPlan: "新しいこと" });
+  assert.equal(tomorrowTasks().length, 3);
+  setup({ status: "ai_checked", tasks: [task("t1"), task("t2"), task("t3")] });
+  const r = await post({ tomorrowPlan: "新しいこと" });
+  assert.equal(tomorrowTasks().length, 3);
+  assert.equal(db.rows.gw_focus_days[0].status, "ai_checked", "AI確認済みが戻されています");
+  assert.equal(r.body.focus.added, false);
+});
+
+await ok("⑦ が空なら、何も作らない", async () => {
+  setup();
+  const r = await post();
+  assert.equal(tomorrowTasks().length, 0);
+  assert.equal(r.body.focus.added, false);
 });
 
 await ok("表がまだ無い環境では止めない（072 未適用）", async () => {
