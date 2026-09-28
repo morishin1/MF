@@ -425,7 +425,9 @@
   const completeHrAdvance = (applicantId, employeeId) => hrAdvanceAct({ applicantId, action: "complete", employeeId });
 
   // ---- 営業アタック管理（/sales） ----
-  const listSalesCompanies = () => api("/api/sales/companies");
+  // visibility: "shown"（既定・表示中だけ）／"hidden"（非表示だけ）／"all"
+  const listSalesCompanies = (visibility) =>
+    api(`/api/sales/companies${visibility && visibility !== "shown" ? `?visibility=${encodeURIComponent(visibility)}` : ""}`);
   const createSalesCompany = (body) => api("/api/sales/companies", { method: "POST", body });
   const importSalesCompanies = (companies) => api("/api/sales/companies", { method: "POST", body: { companies } });
   const getSalesCompany = (id) => api(`/api/sales/companies/detail?id=${encodeURIComponent(id)}`);
@@ -439,6 +441,10 @@
   const salesAttackAct = (body) => api("/api/sales/approaches", { method: "PATCH", body });
   const markSalesAttackSent = (body) => salesAttackAct({ ...body, action: "sent" });
   const discardSalesAttack = (id) => salesAttackAct({ id, action: "discard" });
+  // 送信できなかった（理由必須）
+  const markSalesAttackFailed = (body) => salesAttackAct({ ...body, action: "failed" });
+  // 返信・やり取りを記録（返信元・いまの連絡手段・連絡先・メモ・NEXT）
+  const addSalesContact = (body) => api("/api/sales/companies/detail", { method: "POST", body: { ...body, action: "contact" } });
   const listSalesTemplates = () => api("/api/sales/templates");
   const createSalesTemplate = (body) => api("/api/sales/templates", { method: "POST", body });
   const updateSalesTemplate = (body) => api("/api/sales/templates", { method: "PATCH", body });
@@ -1409,7 +1415,7 @@
     getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
     listSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
-    markSalesAttackSent, discardSalesAttack, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
+    markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,
     listSalesMeetings, issueSalesMeeting, salesMeetingAct,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,

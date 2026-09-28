@@ -7,6 +7,8 @@
 //           "change_owner"    { ownerId | null }       … 担当変更（null＝未定）
 //           "change_service"  { service | null }       … 提案サービス変更
 //           "change_campaign" { campaignId | null }    … キャンペーン変更
+//           "hide"            { reason, note? }        … 非表示にする（リンク切れ・閉業など。db/096）
+//           "unhide"          {}                       … 再表示する
 //           "set_ng"          { ngReason, ngNote? }    … 営業禁止にする
 //           "delete"          { dryRun? }              … 削除（dryRun なら消さずに可否だけ返す）
 //
@@ -17,6 +19,10 @@
 // ■ 1社ずつの変更と同じ結果にする
 //   ステータス・営業禁止の変更は、企業詳細から1社ずつ変えたとき（companies/detail.js PATCH）と同じく
 //   営業履歴に残し、返信あり・商談へ進めたときは NEXT を自動で入れる。すでにその値の企業は触らない。
+//
+// ■ 非表示と削除は別（チャネル管理要件 §1・§16）
+//   非表示はデータを残し、通常の一覧・ダッシュボード・アタック対象から外すだけ。いつでも再表示できる。
+//   ドメインも残るので、同じ会社を取り込み直しても重複として止まる（また一覧に出てこない）。
 //
 // ■ 削除は、履歴の無い企業だけ（要件 §8）
 //   アタック・クリック・営業履歴・面談は企業を消すと一緒に消える（on delete cascade）。
@@ -29,9 +35,9 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { isUuid, autoNext, STATUS_KEYS, STATUS_LABEL, NG_KEYS } from "../../../lib/sales.js";
+import { isUuid, autoNext, STATUS_KEYS, STATUS_LABEL, NG_KEYS, HIDE_KEYS, HIDE_LABEL } from "../../../lib/sales.js";
 
-const SQL = "db/088_sales.sql";
+const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 export const BULK_MAX = 500;
 // .in() は URL に載るので、長くなりすぎないよう分けて問い合わせる
 const CHUNK = 100;
@@ -74,7 +80,7 @@ export default async function handler(req, res) {
   const found = [];
   for (const part of chunks(ids)) {
     const { data, error } = await sb.from("gw_sales_companies")
-      .select("id, name, status, ng_reason, next_action, next_action_on")
+      .select("id, name, status, ng_reason, next_action, next_action_on, hidden_at")
       .eq("tenant_id", ctx.tenantId).in("id", part);
     if (error) return dbFail(res, error);
     found.push(...(data || []));
@@ -192,6 +198,43 @@ const ACTIONS = {
     return result(res, { ...r, notFound });
   },
 
+  async hide({ res, sb, ctx, user, body, rows, notFound }) {
+    if (!HIDE_KEYS.includes(body.reason)) return json(res, 400, { error: "bad_hide_reason", hint: "非表示にする理由を選んでください" });
+    const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
+    // すでに非表示の企業は、理由を上書きしない
+    const targets = rows.filter((r) => !r.hidden_at);
+    const skipped = rows.length - targets.length;
+    if (!targets.length) return result(res, { skipped, notFound });
+    const ids = targets.map((r) => r.id);
+    const r = await updateMany(sb, ctx, ids, {
+      hidden_at: now(), hidden_by: user.id, hidden_reason: body.reason, hidden_note: note, updated_at: now(),
+    });
+    if (r.updated) {
+      await addEvents(sb, ctx, user, targets.map((t) => ({
+        company_id: t.id, event_key: "hide", label: `非表示：${HIDE_LABEL[body.reason]}`, detail: note,
+      })));
+      await audit(ctx, user, "sales.company_bulk_hide", ids, { reason: body.reason });
+    }
+    return result(res, { ...r, skipped, notFound });
+  },
+
+  async unhide({ res, sb, ctx, user, rows, notFound }) {
+    const targets = rows.filter((r) => r.hidden_at);
+    const skipped = rows.length - targets.length;
+    if (!targets.length) return result(res, { skipped, notFound });
+    const ids = targets.map((r) => r.id);
+    const r = await updateMany(sb, ctx, ids, {
+      hidden_at: null, hidden_by: null, hidden_reason: null, hidden_note: null, updated_at: now(),
+    });
+    if (r.updated) {
+      await addEvents(sb, ctx, user, targets.map((t) => ({
+        company_id: t.id, event_key: "hide", label: "再表示", detail: null,
+      })));
+      await audit(ctx, user, "sales.company_bulk_unhide", ids, {});
+    }
+    return result(res, { ...r, skipped, notFound });
+  },
+
   async set_ng({ res, sb, ctx, user, body, rows, notFound }) {
     if (!NG_KEYS.includes(body.ngReason)) return json(res, 400, { error: "bad_ng_reason", hint: "理由を選んでください" });
     const ngNote = typeof body.ngNote === "string" ? body.ngNote.trim().slice(0, 500) || null : null;
@@ -226,14 +269,16 @@ const ACTIONS = {
     ];
     for (const [tbl, key, required] of related) {
       for (const part of chunks(ids)) {
-        const { data, error } = await sb.from(tbl).select("company_id")
+        const { data, error } = await sb.from(tbl).select(key === "event" ? "company_id, event_key" : "company_id")
           .eq("tenant_id", ctx.tenantId).in("company_id", part).limit(10000);
         if (error) {
           if (!required && dbSetupHint(error, "")) continue;
           // 確かめられないなら消さない
           return json(res, 500, { error: "check_failed", hint: "関連する履歴を確認できませんでした", detail: error.message });
         }
-        for (const cid of new Set((data || []).map((x) => x.company_id))) {
+        // 非表示・再表示の記録だけなら、営業の履歴ではないので削除を止めない（テスト企業を隠してから消せるように）
+        const hits = (data || []).filter((x) => !(key === "event" && x.event_key === "hide"));
+        for (const cid of new Set(hits.map((x) => x.company_id))) {
           const list = reasons.get(cid);
           if (list && !list.includes(key)) list.push(key);
         }

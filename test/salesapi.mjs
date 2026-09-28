@@ -226,7 +226,7 @@ async function newCompany(over = {}) {
 async function sendAttack(companyId, extra = {}) {
   const p = await prepare({ companyId, ...extra });
   assert.equal(p.statusCode, 200, JSON.stringify(p.body));
-  const s = await act({ id: p.body.approach.id, action: "sent", body: `営業文 ${p.body.trackingUrl}`, service: "AI / DX", ...extra });
+  const s = await act({ id: p.body.approach.id, action: "sent", channel: "form", body: `営業文 ${p.body.trackingUrl}`, service: "AI / DX", ...extra });
   assert.equal(s.statusCode, 200, JSON.stringify(s.body));
   return { approach: s.body.approach, url: p.body.trackingUrl };
 }
@@ -336,7 +336,7 @@ await ok("送信完了は二度押ししても1回だけ（409）", async () => 
   setup();
   const c = await newCompany();
   const { approach } = await sendAttack(c.id);
-  const again = await act({ id: approach.id, action: "sent", body: "もう一度" });
+  const again = await act({ id: approach.id, action: "sent", channel: "form", body: "もう一度" });
   assert.equal(again.statusCode, 409);
   assert.equal(db.rows.gw_sales_approaches[0].body.startsWith("営業文"), true, "本文は最初のまま");
 });
@@ -345,7 +345,7 @@ await ok("営業文が空なら送信完了にしない", async () => {
   setup();
   const c = await newCompany();
   const p = await prepare({ companyId: c.id });
-  const r = await act({ id: p.body.approach.id, action: "sent", body: "  " });
+  const r = await act({ id: p.body.approach.id, action: "sent", channel: "form", body: "  " });
   assert.equal(r.statusCode, 400);
 });
 
@@ -399,7 +399,7 @@ await ok("準備したあとに別の人が送っていたら、送信完了の�
   who = SALES2;
   await sendAttack(c.id);
   who = SALES;
-  const r = await act({ id: p.body.approach.id, action: "sent", body: "営業文" });
+  const r = await act({ id: p.body.approach.id, action: "sent", channel: "form", body: "営業文" });
   assert.equal(r.statusCode, 409);
 });
 
@@ -581,7 +581,7 @@ await ok("営業履歴は、送信・クリック・出来事が時系列に並�
   const d = await getOne(c.id);
   assert.equal(d.statusCode, 200);
   const labels = d.body.timeline.filter((t) => !t.planned).map((t) => t.label);
-  assert.deepEqual(labels, ["フォーム送信", "リンククリック", "返信あり"]);
+  assert.deepEqual(labels, ["お問い合わせフォームから送信", "リンククリック", "返信あり"]);
 });
 
 console.log("\n=== NEXT の自動更新 ===\n");
@@ -970,6 +970,270 @@ await ok("削除：クリック履歴だけがある企業も消さない", asyn
   assert.equal(r.body.deleted, 0);
   assert.match(r.body.blocked[0].reasons.join(), /クリック履歴あり/);
   assert.equal(db.rows.gw_sales_companies.length, 1);
+});
+
+console.log("\n=== 非表示・送信チャネル・送信できなかった・返信後の連絡（db/096） ===\n");
+
+const listV = (v) => call(companies, { method: "GET", url: `/api/sales/companies?visibility=${v}` });
+const names = (r) => r.body.companies.map((c) => c.name).sort();
+
+await ok("非表示：理由は必須。通常の一覧から消え、「非表示」「すべて」では見える。再表示で戻る", async () => {
+  setup();
+  const a = await newCompany({ name: "リンク切れ社", siteUrl: "https://dead.example.jp/" });
+  const b = await newCompany({ name: "生きてる社", siteUrl: "https://alive.example.jp/" });
+  assert.equal((await bulk({ ids: [a.id], action: "hide" })).statusCode, 400, "理由なしは 400");
+  assert.equal((await bulk({ ids: [a.id], action: "hide", reason: "nope" })).statusCode, 400);
+  const r = await bulk({ ids: [a.id], action: "hide", reason: "link_broken", note: "404" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.updated, 1);
+  const row = db.rows.gw_sales_companies.find((x) => x.id === a.id);
+  assert.ok(row.hidden_at);
+  assert.equal(row.hidden_by, "u-1");
+  assert.equal(row.hidden_reason, "link_broken");
+  assert.deepEqual(names(await list()), ["生きてる社"], "既定（表示中）には出ない");
+  assert.deepEqual(names(await listV("hidden")), ["リンク切れ社"]);
+  assert.deepEqual(names(await listV("all")), ["リンク切れ社", "生きてる社"]);
+  assert.equal((await listV("nope")).statusCode, 400);
+  const shown = (await listV("hidden")).body.companies[0];
+  assert.equal(shown.hidden, true);
+  assert.equal(shown.hiddenLabel, "リンク切れ");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.company_id === a.id && e.label === "非表示：リンク切れ" && e.detail === "404"));
+  assert.ok(logged.some((l) => l.action === "sales.company_bulk_hide"));
+
+  // すでに非表示の企業は、理由を上書きしない
+  const again = await bulk({ ids: [a.id, b.id], action: "hide", reason: "closed" });
+  assert.equal(again.body.updated, 1);
+  assert.equal(again.body.skipped, 1);
+  assert.equal(db.rows.gw_sales_companies.find((x) => x.id === a.id).hidden_reason, "link_broken");
+
+  const un = await bulk({ ids: [a.id], action: "unhide" });
+  assert.equal(un.body.updated, 1);
+  const back = db.rows.gw_sales_companies.find((x) => x.id === a.id);
+  assert.equal(back.hidden_at, null);
+  assert.equal(back.hidden_reason, null);
+  assert.ok(names(await list()).includes("リンク切れ社"), "再表示で一覧に戻る");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.company_id === a.id && e.label === "再表示"));
+});
+
+await ok("非表示の企業にはアタックできない（409）。再表示すれば送れる", async () => {
+  setup();
+  const c = await newCompany();
+  await bulk({ ids: [c.id], action: "hide", reason: "not_target" });
+  const p = await prepare({ companyId: c.id });
+  assert.equal(p.statusCode, 409);
+  assert.equal(p.body.error, "hidden_company");
+  assert.match(p.body.hint, /営業対象外/);
+  await bulk({ ids: [c.id], action: "unhide" });
+  assert.equal((await prepare({ companyId: c.id })).statusCode, 200);
+});
+
+await ok("非表示でも同じサイトは取り込み直さない（重複として止まる・非表示中と分かる）", async () => {
+  setup();
+  const c = await newCompany();
+  await bulk({ ids: [c.id], action: "hide", reason: "closed" });
+  const one = await create({ name: "サンプル再取得", siteUrl: "https://sample.co.jp/" });
+  assert.equal(one.statusCode, 409);
+  assert.equal(one.body.company.hidden, true);
+  assert.match(one.body.hint, /非表示中/);
+  const many = await create({ companies: [{ name: "サンプル再取得", siteUrl: "https://sample.co.jp/" }] });
+  assert.equal(many.body.skipped, 1);
+  assert.equal(db.rows.gw_sales_companies.length, 1);
+});
+
+await ok("非表示の記録だけの企業は削除できる（テスト企業を隠してから消せる）", async () => {
+  setup();
+  const c = await newCompany({ name: "テスト社", siteUrl: "https://test.example.jp/" });
+  await bulk({ ids: [c.id], action: "hide", reason: "other", note: "テスト" });
+  const r = await bulk({ ids: [c.id], action: "delete" });
+  assert.equal(r.body.deleted, 1, JSON.stringify(r.body));
+});
+
+await ok("送信完了：送信チャネルは必須。Instagram と送信元が残り、履歴は「Instagramから送信」", async () => {
+  setup();
+  const c = await newCompany();
+  const p = await prepare({ companyId: c.id, channel: "instagram" });
+  assert.equal(p.statusCode, 200);
+  assert.equal(p.body.approach.channel, "instagram");
+  assert.equal((await act({ id: p.body.approach.id, action: "sent", body: "営業文" })).statusCode, 400, "チャネルなしは 400");
+  assert.equal((await act({ id: p.body.approach.id, action: "sent", channel: "fax", body: "営業文" })).statusCode, 400);
+  const s = await act({ id: p.body.approach.id, action: "sent", channel: "instagram", sendFrom: "@eight_xxx", body: "営業文" });
+  assert.equal(s.statusCode, 200, JSON.stringify(s.body));
+  assert.equal(s.body.approach.channel, "instagram");
+  assert.equal(s.body.approach.sendFrom, "@eight_xxx");
+  const row = db.rows.gw_sales_approaches[0];
+  assert.equal(row.form_url, null, "フォーム以外で送ったらフォームURLは残さない");
+  const d = await getOne(c.id);
+  const t = d.body.timeline.find((x) => x.kind === "attack");
+  assert.equal(t.label, "Instagramから送信");
+  assert.match(t.detail, /@eight_xxx/);
+  assert.equal(d.body.contactStatus.firstChannelLabel, "Instagram");
+  assert.ok(d.body.contactStatus.lastContactAt, "送信も最終連絡に数える");
+  const l = (await list()).body.companies[0];
+  assert.equal(l.lastChannel, "instagram");
+  assert.equal(l.attackCount, 1);
+});
+
+await ok("複数チャネル：同じチャネルは30日以内なら止める。別チャネルは直近の接触を見せ、「別チャネルで送る」を選べば送れる", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id, { channel: "instagram" });
+  db.rows.gw_sales_approaches[0].sent_at = new Date(Date.now() - 3 * 86400000).toISOString();
+  who = SALES2;
+  const same = await prepare({ companyId: c.id, channel: "instagram" });
+  assert.equal(same.statusCode, 409);
+  assert.equal(same.body.error, "recent_attack");
+  assert.equal(same.body.recent.channel, "instagram");
+  assert.match(same.body.hint, /Instagram/);
+  // 同じチャネルは、「別チャネルで送る」を選んでも通さない（押し切りは管理者の force だけ）
+  assert.equal((await prepare({ companyId: c.id, channel: "instagram", acknowledgeRecent: true })).statusCode, 409);
+
+  // 別チャネル：無警告にはしない。会社単位の直近接触を返して止める
+  const x0 = await prepare({ companyId: c.id, channel: "x" });
+  assert.equal(x0.statusCode, 409);
+  assert.equal(x0.body.error, "recent_other_channel");
+  assert.equal(x0.body.hint, "3日前にInstagramから送信済みです");
+  assert.equal(x0.body.recent.employeeName, "営業 一郎");
+  assert.equal(db.rows.gw_sales_approaches.length, 1, "確認するまで専用URLも発行しない");
+
+  const x = await prepare({ companyId: c.id, channel: "x", acknowledgeRecent: true });
+  assert.equal(x.statusCode, 200, JSON.stringify(x.body));
+  // 送信完了の時点でもサーバが確かめ直す：確認なし → 409、同じチャネルへすり替え → 409
+  assert.equal((await act({ id: x.body.approach.id, action: "sent", channel: "x", body: "営業文" })).statusCode, 409);
+  const sneaky = await act({ id: x.body.approach.id, action: "sent", channel: "instagram", body: "営業文", acknowledgeRecent: true });
+  assert.equal(sneaky.statusCode, 409);
+  assert.equal(sneaky.body.error, "recent_attack");
+  const ok2 = await act({ id: x.body.approach.id, action: "sent", channel: "x", body: "営業文", acknowledgeRecent: true });
+  assert.equal(ok2.statusCode, 200);
+  const labels = (await getOne(c.id)).body.timeline.filter((t) => t.kind === "attack").map((t) => t.label);
+  assert.deepEqual(labels, ["Instagramから送信", "Xから送信"]);
+});
+
+await ok("別チャネルの確認：管理者の押し切り（force）でも通る。31日前なら確認なしで送れる", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id, { channel: "instagram" });
+  who = ADMIN;
+  assert.equal((await prepare({ companyId: c.id, channel: "x", force: true })).statusCode, 200);
+  ageApproaches(31);
+  who = SALES;
+  assert.equal((await prepare({ companyId: c.id, channel: "email" })).statusCode, 200);
+});
+
+await ok("送信できなかった：理由は必須・「その他」はメモ必須。ステータスは動かず、NEXTは別チャネル検討", async () => {
+  setup();
+  const c = await newCompany();
+  const p = await prepare({ companyId: c.id });
+  const id = p.body.approach.id;
+  assert.equal((await act({ id, action: "failed" })).statusCode, 400, "理由なしは 400");
+  assert.equal((await act({ id, action: "failed", reason: "other" })).statusCode, 400, "その他はメモ必須");
+  const r = await act({ id, action: "failed", reason: "no_form" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.approach.failedLabel, "問い合わせフォームがない");
+  const row = db.rows.gw_sales_approaches.find((a) => a.id === id);
+  assert.ok(row.failed_at);
+  assert.equal(row.sent_at, null, "送ってはいないので sent_at は立てない");
+  const co = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  assert.equal(co.status, "untouched", "アタック済にはしない");
+  assert.equal(co.next_action, "別チャネルで再アタックを検討");
+  assert.ok(co.next_action_on);
+  assert.ok(logged.some((l) => l.action === "sales.attack_failed" && l.detail.reason === "no_form"));
+
+  const d = await getOne(c.id);
+  assert.ok(d.body.timeline.some((t) => t.kind === "attack_failed" && t.label === "送信できず：問い合わせフォームがない"));
+  assert.equal(d.body.failedApproaches.length, 1);
+  assert.equal((await list()).body.companies[0].attackCount, 0, "アタック数には数えない");
+
+  // 二重の記録・送信完了・取り消しはできない
+  assert.equal((await act({ id, action: "failed", reason: "no_form" })).statusCode, 409);
+  assert.equal((await act({ id, action: "sent", channel: "form", body: "営業文" })).statusCode, 409);
+  assert.equal((await act({ id, action: "discard" })).statusCode, 409);
+
+  // すぐ別チャネルで再アタックできる（送れなかった専用URLは使い回さない）
+  const again = await prepare({ companyId: c.id, channel: "email" });
+  assert.equal(again.statusCode, 200);
+  assert.notEqual(again.body.approach.id, id);
+  // 同じチャネル（フォーム）でも、送れていないので30日の警告には掛からない
+  assert.equal((await prepare({ companyId: c.id })).statusCode, 200);
+});
+
+await ok("送信できなかった：クリックされたアタックは「送れなかった」にしない", async () => {
+  setup();
+  const c = await newCompany();
+  const p = await prepare({ companyId: c.id });
+  await click(p.body.trackingUrl.split("/r/")[1]);
+  const r = await act({ id: p.body.approach.id, action: "failed", reason: "form_error" });
+  assert.equal(r.statusCode, 409);
+});
+
+const contact = (body) => call(detail, { method: "POST", url: "/api/sales/companies/detail", body: { action: "contact", ...body } });
+
+await ok("返信・やり取り：Instagramで返信 → メールへ。返信元・連絡手段・連絡先・メモ・NEXT が残る", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id, { channel: "instagram" });
+  assert.equal((await contact({ id: c.id, replied: true })).statusCode, 400, "返信元なしは 400");
+  assert.equal((await contact({ id: c.id, replied: true, replyChannel: "fax" })).statusCode, 400);
+  assert.equal((await contact({ id: c.id, replied: true, replyChannel: "instagram", contacts: { email: "tanaka" } })).statusCode, 400, "メールの形");
+  const r = await contact({
+    id: c.id, replied: true, replyChannel: "instagram", contactChannel: "email",
+    contacts: { email: "tanaka@example.co.jp", instagram: "@tanaka" },
+    note: "担当の田中様よりInstagramで返信。詳細資料はメールで送付。",
+    nextAction: "資料送付", nextActionOn: "2026-10-01",
+  });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.company.status, "replied", "返信なので返信ありへ進む");
+  assert.equal(r.body.company.contactChannel, "email");
+  assert.equal(r.body.company.contactValue, "tanaka@example.co.jp");
+  assert.equal(r.body.company.contacts.instagram, "@tanaka");
+  assert.equal(r.body.company.nextAction, "資料送付");
+  assert.equal(r.body.company.nextActionOn, "2026-10-01");
+
+  const ev = db.rows.gw_sales_events.filter((e) => e.company_id === c.id);
+  assert.deepEqual(ev.map((e) => e.label), ["先方返信：Instagram", "連絡手段：メール"]);
+  assert.equal(ev[0].channel, "instagram");
+  assert.match(ev[0].detail, /田中様/);
+  assert.equal(ev[1].channel, "email");
+
+  const d = await getOne(c.id);
+  assert.deepEqual(
+    { first: d.body.contactStatus.firstChannelLabel, reply: d.body.contactStatus.replyChannelLabel,
+      now: d.body.contactStatus.currentChannelLabel, value: d.body.contactStatus.currentValue },
+    { first: "Instagram", reply: "Instagram", now: "メール", value: "tanaka@example.co.jp" });
+  const labels = d.body.timeline.filter((t) => !t.planned).map((t) => t.label);
+  assert.deepEqual(labels, ["Instagramから送信", "先方返信：Instagram", "連絡手段：メール"]);
+  assert.equal((await list()).body.companies[0].contactChannelLabel, "メール", "一覧の「連絡手段」");
+  assert.ok(logged.some((l) => l.action === "sales.contact_add" && l.detail.switched));
+});
+
+await ok("返信・やり取り：連絡手段を変えただけではステータスは動かない。何も無ければ 400", async () => {
+  setup();
+  const c = await newCompany();
+  await patchCo({ id: c.id, status: "meeting" });
+  const r = await contact({ id: c.id, replied: false, contactChannel: "email", contacts: { email: "a@example.jp" } });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const r2 = await contact({ id: c.id, replied: false, contactChannel: "line", contacts: { line: "田中" }, note: "LINEへ" });
+  assert.equal(r2.body.company.status, "meeting", "商談のまま");
+  assert.equal(r2.body.company.contactChannel, "line");
+  assert.equal(r2.body.company.contactValue, "田中");
+  assert.equal(r2.body.company.contacts.email, "a@example.jp", "他の連絡先は消さない");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.label === "連絡手段をLINEへ切替" && e.detail === "LINEへ"));
+  assert.equal((await contact({ id: c.id, replied: false })).statusCode, 400);
+  assert.equal((await contact({ id: c.id, replied: false, replyChannel: "email", note: "x" })).statusCode, 400,
+    "返信元は返信のときだけ");
+  // 空欄にした連絡先は消える
+  const r3 = await contact({ id: c.id, replied: false, contacts: { email: null } });
+  assert.equal(r3.body.company.contacts.email, undefined);
+});
+
+await ok("返信・やり取り：NEXTを決めなければ、返信は「返信対応」（当日〜）", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const r = await contact({ id: c.id, replied: true, replyChannel: "form" });
+  assert.equal(r.body.company.nextAction, "返信対応");
+  assert.ok(r.body.company.nextActionOn >= todayJst());
+  const ev = db.rows.gw_sales_events.find((e) => e.company_id === c.id);
+  assert.equal(ev.label, "先方返信：お問い合わせフォーム経由");
 });
 
 console.log("\n=== 小さな道具 ===\n");
