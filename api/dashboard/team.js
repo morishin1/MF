@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     .select("id, assignee_id")
     .eq("tenant_id", ctx.tenantId).eq("status", "done").gte("completed_at", todayStartIso).limit(2000));
 
-  // 今日の重要タスク（3件）。072未適用の環境では空にする
+  // 今日の重要タスク（1〜3件）。072未適用の環境では空にする
   const focus = await soft(() => sb.from("gw_tasks")
     .select("id, title, focus_for, focus_rank, status")
     .eq("tenant_id", ctx.tenantId).eq("focus_date", today)

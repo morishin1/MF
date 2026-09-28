@@ -4,8 +4,8 @@
 //   翌朝いちばん上に「今日やる3つ」と「0 / 3 完了」。押せば進む。
 //
 // ■ 日報（nippo.html）
-//   明日の3件を決めるまで、日報の欄は開かない。
-//   AIは案と理由を出すだけで、確定するのは人。
+//   明日のタスクが未確定・0件でも、日報の欄は最初から開いている
+//   （日報提出ハードロック修正）。AIは案と理由を出すだけで、確定するのは人。
 //
 // ■ 管理（admin-tasks.html）
 //   誰が何をしていて、誰が止まっているかが1枚で分かる。
@@ -186,9 +186,9 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
   await page.goto(`${BASE}/nippo.html`);
   await page.waitForTimeout(1000);
 
-  console.log("\n— 決まるまで、日報は開かない —");
-  check(await page.locator("#write-lock").count() === 1, "先に決めるよう案内が出る");
-  check(await page.locator("#write-card.fc-lock").count() === 1, "日報の欄は触れない");
+  console.log("\n— 明日が未確定でも、日報の欄は最初から開いている（日報提出ハードロック修正） —");
+  check(await page.locator("#write-card").isVisible(), "日報の欄は最初から触れる");
+  check(!(await page.locator("#submit-btn").isDisabled()), "提出ボタンも最初から押せる");
 
   console.log("\n— 決める画面 —");
   const box = await page.locator("#focus-card").innerText();
@@ -216,12 +216,10 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
     check(box.includes(l), `決め方：${l}`);
   }
 
-  console.log("\n— 確定すると、日報が開く —");
+  console.log("\n— 確定すると、その旨が伝わる（日報はもう最初から開いている） —");
   await page.locator("#focus-card button", { hasText: "この内容で確定する" }).click();
   await page.waitForTimeout(800);
   check(posted.some((p) => p.action === "confirm"), "確定をサーバへ送る");
-  check(await page.locator("#write-lock").count() === 0, "案内が消える");
-  check(await page.locator("#write-card.fc-lock").count() === 0, "日報の欄が開く");
   check(/今日の日報を入力してください/.test(await page.locator("#focus-card").innerText()),
     "次にやることを伝える");
 

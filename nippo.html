@@ -162,7 +162,24 @@
     .fc-ov { border:1px solid #b7791f; border-radius:10px; background:#fffdf7;
              padding:12px 14px; margin-bottom:12px; font-size:13px; line-height:1.9; }
     .fc-ov ul { margin:6px 0 0; padding-left:18px; }
-    .fc-lock { opacity:.45; pointer-events:none; }
+
+    /* ── 明日の重要タスク：候補から選ぶ（日報提出ハードロック修正） ── */
+    .fc-cand-list { margin-bottom:10px; }
+    .fc-cand { display:flex; align-items:flex-start; gap:9px; padding:8px 4px; border-bottom:1px solid var(--border); }
+    .fc-cand:last-child { border-bottom:none; }
+    .fc-cand input[type="checkbox"] { margin-top:3px; flex-shrink:0; }
+    .fc-cand label { flex:1; font-size:13.5px; line-height:1.5; cursor:pointer; }
+    .fc-cand .src { display:inline-block; font-size:10.5px; color:var(--muted); font-weight:600;
+                     background:var(--bg2, #f4f4f0); border-radius:5px; padding:1px 6px; margin-right:6px; }
+    .fc-cand .due { font-size:11.5px; color:var(--muted); margin-left:6px; }
+    .fc-count { font-size:12.5px; color:var(--muted); font-weight:600; margin:6px 0 10px; }
+    .fc-quickadd { display:flex; gap:8px; margin:8px 0 14px; flex-wrap:wrap; }
+    .fc-quickadd input[type="text"] { flex:1; min-width:160px; margin:0; font-size:13px; }
+    .fc-pri-box { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:14px; background:#fafaf7; }
+    .fc-pri-box h4 { margin:0 0 8px; font-size:12.5px; color:var(--primary-dark); }
+    .fc-pri-row { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13px; }
+    .fc-pri-row label { flex:1; cursor:pointer; }
+    .fc-detail-toggle { margin-top:10px; }
     .fc-today { border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin-bottom:9px; }
     .fc-today .ti { font-size:13.5px; font-weight:700; }
     .fc-today.done { border-color:#b7e0c4; background:#f7fbf8; }
@@ -333,14 +350,12 @@
 
     <div class="np-sec">
       <h3><span class="no">⑦</span>明日の最優先</h3>
-      <p class="lead">明日、最初に取りかかることを1つ。</p>
-      <input id="f-tomorrow" type="text" placeholder="例：C社見積を提出する">
-      <!-- できなかったこと・期限が近い残りから、押すだけで入れられるようにする。
-           明日いちばん困るのは、たいてい今日できなかったこと -->
-      <div id="f-tm-hint" class="hidden" style="margin-top:8px;">
-        <span class="muted" style="font-size:11.5px;">ここから選ぶ：</span>
-        <span id="f-tm-sug"></span>
-      </div>
+      <p class="lead">
+        上の「明日の重要タスクを決める」で選んだものから、自動で入ります。
+        別に書き直す必要はありません。
+      </p>
+      <p class="lead" id="f-tomorrow-view" style="font-weight:700;color:var(--primary-dark);">（未定）</p>
+      <input id="f-tomorrow" type="text" readonly style="display:none;">
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -1005,7 +1020,6 @@
     if (ok) reason.value = ""; else result.value = "";
     item.querySelector('[data-k="done"]').value = ok ? "1" : "";
     (ok ? result : reason).focus();
-    renderTomorrowSuggestions();
     scheduleDraftSave();
   }
 
@@ -1078,7 +1092,11 @@
   }
 
   function fillForm(n) {
+    // 明日の最優先は、明日の重要タスク（focus-card）から自動で入る。
+    // 保存済みの値は、その仕組みがまだ無い環境向けのフォールバック
     el("f-tomorrow").value = n?.tomorrow_plan ?? "";
+    el("f-tomorrow-view").textContent = n?.tomorrow_plan || "（未定）";
+    syncTomorrowPlanField();
     el("f-consult").value = n?.consult_note ?? "";
     setConsult(Boolean(n?.consult_note));
 
@@ -1088,7 +1106,6 @@
     el("f-work").innerHTML = "";
     const items = mergeWork(n?.work_items, data?.todayActions);
     (items.length ? items : [{}, {}, {}]).forEach(addWork);
-    renderTomorrowSuggestions();
 
     fillMet(n);
     fillWins(n);
@@ -1146,56 +1163,9 @@
     }
   }
 
-  /**
-   * ⑦ 明日の最優先の候補。
-   *
-   * 明日いちばん困るのは、たいてい今日できなかったことか、
-   * 期限が来ている残りの仕事。それを一から思い出して打ち直すのは、
-   * すでに分かっていることをもう一度書く作業になる。
-   *
-   * 出す順番
-   *   1. 今日できなかったもの（理由を書いた行）
-   *   2. 期限が過ぎている・今日までの残り
-   *   3. そのほかの残り（期限が近い順）
-   *
-   * 押すと欄に入る。書き換えは自由（決めるのは本人）
-   */
-  let tomorrowSuggestions = [];
-
-  function renderTomorrowSuggestions() {
-    const rows = [...document.querySelectorAll("#f-work .np-item")];
-    const undone = rows
-      .filter((r) => r.querySelector('[data-k="done"]')?.value !== "1")
-      .map((r) => r.querySelector('[data-k="task"]')?.value.trim())
-      .filter(Boolean);
-
-    const today = data?.date || jstToday();
-    const left = [...(data?.openActions || []), ...(data?.todayActions || [])]
-      .filter((a) => a.status === "open")
-      .sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")))
-      .map((a) => a.title);
-
-    const seen = new Set();
-    tomorrowSuggestions = [...undone, ...left]
-      .filter((t) => t && !seen.has(t) && seen.add(t))
-      .slice(0, 5);
-
-    el("f-tm-hint").classList.toggle("hidden", !tomorrowSuggestions.length);
-    el("f-tm-sug").innerHTML = tomorrowSuggestions.map((t, i) => {
-      const over = (data?.openActions || []).some((a) => a.title === t && a.dueDate && a.dueDate < today);
-      return `<button type="button" class="np-tag" style="margin:2px 4px 2px 0;"
-                      onclick="useTomorrow(${i})" title="${esc(t)}">${
-        over ? "🔴 " : ""}${esc(t.slice(0, 28))}${t.length > 28 ? "…" : ""}</button>`;
-    }).join("");
-  }
-
-  function useTomorrow(i) {
-    const text = tomorrowSuggestions[i];
-    if (!text) return;
-    el("f-tomorrow").value = text;
-    el("f-tomorrow").focus();
-    scheduleDraftSave();
-  }
+  // ⑦ 明日の最優先は、もう自由入力させない（日報提出ハードロック修正指示）。
+  // 「明日の重要タスクを決める」（focus-card）で選んだ1〜3件のうち、
+  // 最優先の1件がそのまま入る。syncTomorrowPlanField() が同期する
 
   // 「今日の中から入れる」という候補ボタンは外した。
   // デキタは「できるようになったこと」で、今日の成果とは別のもの。
@@ -1340,6 +1310,15 @@
       return;
     }
 
+    // 明日の重要タスクが0件でも、提出は止めない（日報提出ハードロック修正）。
+    // 軽く確認だけする。「いいえ」なら、そのまま明日のタスクを決めに戻れる
+    if (focusData?.tomorrowState && !(focusData.tomorrowTasks || []).length) {
+      if (!confirm("明日やることがまだ決まっていません。このまま提出しますか？")) {
+        el("focus-card").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    }
+
     // KPIの実績は、1つ目の数字を日報側にも残す（AI評価が達成率を使う）
     const firstKpi = body.kpiActuals.find((k) => k.actual !== "");
     if (firstKpi) body.kpiActual = firstKpi.actual;
@@ -1369,12 +1348,19 @@
     }
   }
 
-  // ---- 明日の重要タスク（日報より先に決める） ---------------------------------
+  // ---- 明日の重要タスク（候補から選ぶ。日報は絶対にブロックしない） -----------
   //
-  //   3件そろう → AIが見る → 人が確定 → ここで日報が書けるようになる
+  //   日報提出ハードロック修正：明日のタスクが 0/1/2/3件・未確定でも、
+  //   今日の日報は必ず書ける。ここで決めるのは任意の下ごしらえであって、
+  //   日報提出の必須条件ではない。
   //
-  // AIは案と理由を出すだけで、決めるのは人。
-  // 「AIがそう言ったから」で明日の仕事が決まる形にはしない
+  //   候補は「今日できなかったタスク」「自分の未完了タスク」「新規入力」。
+  //   既存タスクを選んでも複製しない（API.focusSelect）。新規入力のときだけ
+  //   Taskを1件作る（API.focusAdd）。最優先は選んだ中から1件をラジオで選ぶだけ
+  //   （1件しか選んでいなければ、それが自動で最優先）。
+  //
+  //   AIレビュー・ペアコーチング・確定（confirm）は、質を上げたい人向けの
+  //   任意の詳細設定として残す（<details>の中）。使わなくても日報は書ける
   let focusData = null;
   let memoData = null;
 
@@ -1383,53 +1369,107 @@
     catch (e) {
       // 072 をまだ流していない環境では、これまでどおりの日報にする
       el("focus-card").classList.add("hidden");
-      setWriteLock(false);
       return;
     }
-    // 状態が返ってこない（この仕組みを使っていない環境）。
-    // 分からないときに日報を止めると、書けない理由も出せないまま手が止まる
+    // 状態が返ってこない（この仕組みを使っていない環境）
     if (!focusData?.tomorrowState) {
       el("focus-card").classList.add("hidden");
-      setWriteLock(false);
       return;
     }
     el("focus-card").classList.remove("hidden");
     renderFocus();
   }
 
-  /** 明日ぶんが確定するまで、日報の欄は触れないようにする */
-  function setWriteLock(locked) {
-    const card = el("write-card");
-    if (!card) return;
-    card.classList.toggle("fc-lock", locked);
-    const note = el("write-lock");
-    if (locked && !note) {
-      card.insertAdjacentHTML("beforebegin", `
-        <div class="banner warn" id="write-lock" style="margin-bottom:0;">
-          <span class="material-symbols-outlined">lock</span>
-          <div><b>先に、明日の重要タスクを決めてください。</b><br>
-          3件が確定すると、今日の日報を書けるようになります。</div>
-        </div>`);
-    } else if (!locked && note) note.remove();
+  /** 候補（今日できなかった／自分の未完了）＋ すでに選んだものを、1つの並びにする */
+  function candidateRows() {
+    const selectedIds = new Set((focusData.tomorrowTasks || []).map((t) => t.id));
+    const selected = (focusData.tomorrowTasks || [])
+      .map((t) => ({ id: t.id, title: t.title, due: t.dueOn, src: null, selected: true }));
+    const today = (focusData.todayTasks || [])
+      .filter((t) => t.status !== "done" && !selectedIds.has(t.id))
+      .map((t) => ({ id: t.id, title: t.title, due: null, src: "今日できなかった", selected: false }));
+    const open = (focusData.openTasks || [])
+      .filter((t) => !selectedIds.has(t.id))
+      .map((t) => ({ id: t.id, title: t.title, due: t.dueOn, src: "未完了", selected: false }));
+    const seen = new Set();
+    return [...selected, ...today, ...open].filter((r) => !seen.has(r.id) && seen.add(r.id));
   }
 
   function renderFocus() {
+    const list = focusData.tomorrowTasks || [];
+    const max = focusData.max || 3;
+    const count = list.length;
+    const atMax = count >= max;
+    const cands = candidateRows();
+
+    el("focus-tag").textContent = `${count} / ${max}`;
+    el("focus-tag").className = `kp-chip ${count > 0 ? "event" : "draft"}`;
+
+    const rows = cands.map((c) => `
+      <div class="fc-cand">
+        <input type="checkbox" id="fc-c-${esc(c.id)}" ${c.selected ? "checked" : ""}
+               ${!c.selected && atMax ? "disabled" : ""}
+               onchange="toggleCandidate('${esc(c.id)}', this.checked)">
+        <label for="fc-c-${esc(c.id)}">
+          ${c.src ? `<span class="src">${esc(c.src)}</span>` : ""}${esc(c.title)}
+          ${c.due ? `<span class="due">期限 ${esc(c.due)}</span>` : ""}
+        </label>
+      </div>`).join("");
+
+    const priBox = count >= 2 ? `
+      <div class="fc-pri-box">
+        <h4>この中から最優先</h4>
+        ${list.map((t) => `
+          <div class="fc-pri-row">
+            <input type="radio" name="fc-pri" id="fc-p-${esc(t.id)}" ${t.focusRank === 1 ? "checked" : ""}
+                   onchange="setFocusPriority('${esc(t.id)}')">
+            <label for="fc-p-${esc(t.id)}">${esc(t.title)}</label>
+          </div>`).join("")}
+      </div>` : "";
+
+    const warn = count === 0 ? `
+      <div class="banner warn" style="margin:0 0 12px;">
+        <span class="material-symbols-outlined">info</span>
+        <div>明日やることがまだ決まっていません。（提出は止まりません）</div>
+      </div>` : "";
+
+    el("focus-body").innerHTML = `
+      ${warn}
+      <div class="fc-cand-list" id="fc-cand-list">${rows
+        || `<p class="muted" style="font-size:12.5px;">候補はまだありません。下から新しく追加してください。</p>`}</div>
+      <div class="fc-quickadd">
+        <input type="text" id="fc-quick-title" placeholder="新しいタスク名" ${atMax ? "disabled" : ""}
+               onkeydown="if(event.key==='Enter'){event.preventDefault();quickAddFocus();}">
+        <button class="btn btn-secondary btn-sm" onclick="quickAddFocus()" ${atMax ? "disabled" : ""}>
+          <span class="material-symbols-outlined icon-inline">add</span>新しいタスクを追加</button>
+      </div>
+      <div class="fc-count">選択したもの ${count} / ${max}</div>
+      ${priBox}
+      <div id="fc-msg" class="err-text" style="margin-bottom:6px;"></div>
+      <div class="fc-detail-toggle">
+        <h3 style="font-size:12.5px;color:var(--muted);margin:4px 0 10px;
+                   border-top:1px solid var(--border);padding-top:12px;">
+          詳しく（AIレビュー・ペアコーチング・任意。使わなくても日報は書けます）</h3>
+        ${detailPanel()}
+      </div>`;
+
+    syncTomorrowPlanField();
+  }
+
+  /** 詳しい項目・AIレビュー・ペアコーチング・確定。使わなくても日報は書ける任意の仕組み */
+  function detailPanel() {
     const st = focusData.tomorrowState || {};
     const list = focusData.tomorrowTasks || [];
     const date = focusData.tomorrowDate || "";
-    setWriteLock(!st.confirmed);
-
-    el("focus-tag").textContent = st.confirmed ? "確定" : `${list.length} / ${focusData.min}`;
-    el("focus-tag").className = `kp-chip ${st.confirmed ? "event" : "draft"}`;
 
     const step = (n, label, on) =>
       `<span>${on ? `<b>${n}. ${esc(label)}</b>` : `${n}. ${esc(label)}`}</span>`;
     const stepbar = `
       <div class="fc-step">
-        ${step(1, "3件決める", st.key === "draft")}　→
+        ${step(1, "登録", st.key === "draft")}　→
         ${step(2, "AIが見る", st.key === "ready")}　→
         ${step(3, "確定する", st.key === "ai_checked")}　→
-        ${step(4, "日報を書く", st.confirmed)}
+        ${step(4, "確定ずみ", st.confirmed)}
       </div>`;
 
     const ai = focusData.tomorrowAi;
@@ -1441,10 +1481,10 @@
           ? `<div style="margin-top:6px;">先にやるべきかもしれないもの：${ai.better.map(esc).join("、")}</div>` : ""}
       </div>` : "";
 
-    el("focus-body").innerHTML = `
+    return `
       <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
-        ${esc(date)}（次の営業日）にやることを ${focusData.min} 件決めます。
-        目的・完了条件・担当・期限まで書くと、夜に できた／できなかった を判定できます。
+        ${esc(date)}（次の営業日）の重要タスクに、目的・完了条件・担当・期限まで書いて
+        AIに見てもらい、確定すると担当者へ配信されます。確定していなくても日報は書けます。
       </p>
       ${stepbar}
       ${overall}
@@ -1455,7 +1495,7 @@
       <div id="fc-list">${list.map(focusTask).join("")}</div>
       ${st.confirmed ? "" : `<div id="fc-add"></div>
         <button class="btn btn-secondary btn-sm" onclick="openFocusForm()">
-          <span class="material-symbols-outlined icon-inline">add</span>タスクを足す</button>`}
+          <span class="material-symbols-outlined icon-inline">add</span>タスクを足す（くわしく書く）</button>`}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center;">
         ${st.confirmed
           ? `<span class="fc-done" style="color:#256b36;font-weight:700;font-size:13.5px;">
@@ -1468,8 +1508,56 @@
                      ${st.ready && st.coached ? "" : "disabled"}>
                <span class="material-symbols-outlined icon-inline">task_alt</span>この内容で確定する</button>
              <span class="muted" style="font-size:12px;">${esc(st.todo || "")}</span>`}
-      </div>
-      <div id="fc-msg" class="err-text" style="margin-top:8px;"></div>`;
+      </div>`;
+  }
+
+  /** 候補にチェック／外す。既存タスクは複製しない（select）。新規はここでは作らない */
+  async function toggleCandidate(id, checked) {
+    el("fc-msg").textContent = "";
+    try {
+      if (checked) await API.focusSelect({ id, date: focusData.tomorrowDate });
+      else await API.focusRemove(id);
+      await loadFocus();
+    } catch (e) {
+      el("fc-msg").textContent = e.hint || e.detail || e.message || "できませんでした";
+      await loadFocus();   // チェックの見た目を、実際のサーバの状態へ戻す
+    }
+  }
+
+  /** 新しいタスク名だけで、明日の重要タスクを1件つくる（詳しい項目はあとから） */
+  async function quickAddFocus() {
+    const input = el("fc-quick-title");
+    const title = (input?.value || "").trim();
+    if (!title) return;
+    el("fc-msg").textContent = "";
+    try {
+      await API.focusAdd({ title, date: focusData.tomorrowDate });
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
+  }
+
+  /** 選んだ中から、最優先を1件だけにする */
+  async function setFocusPriority(id) {
+    el("fc-msg").textContent = "";
+    const list = focusData.tomorrowTasks || [];
+    try {
+      let rank = 2;
+      for (const t of list) {
+        if (t.id === id) continue;
+        await API.focusUpdate({ id: t.id, focusRank: rank++ });
+      }
+      await API.focusUpdate({ id, focusRank: 1 });
+      await loadFocus();
+    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "できませんでした"; }
+  }
+
+  /** ⑦ 明日の最優先は、選んだ重要タスクの最優先1件とそろえる（別入力させない） */
+  function syncTomorrowPlanField() {
+    if (!focusData?.tomorrowState) return;   // この仕組みが無い環境では、保存済みの値のままにする
+    const list = focusData.tomorrowTasks || [];
+    const top = list.find((t) => t.focusRank === 1) || list[0] || null;
+    el("f-tomorrow").value = top ? top.title : "";
+    el("f-tomorrow-view").textContent = top ? top.title : "（未定）";
   }
 
   /** 今日の重要タスク。できた／できなかった を、日報を書きながら押せる */

@@ -1,8 +1,8 @@
-// 日報は「明日の3件を決めてから」。
+// 日報は、明日のタスクが未確定・0件でも絶対にブロックしない（日報提出ハードロック修正）。
 //
 // ■ 何を守るテストか
 //
-//   1. 明日ぶんが確定していないと、日報は出せない（理由も返る）
+//   1. 明日ぶんが未確定でも、0件でも、日報は出せる（gate.open は常に true）
 //   2. 確定していれば、これまでどおり出せる
 //   3. 表がまだ無い環境（072 未適用）では止めない
 //   4. 読み取りでも、今日の3件と明日の状態が返る
@@ -142,23 +142,25 @@ const body = (over = {}) => ({
   tomorrow: "明日もやる", ...over,
 });
 
-console.log("\n=== 日報は、明日の3件を決めてから ===\n");
+console.log("\n=== 日報は、明日のタスクが未確定・0件でもブロックしない ===\n");
 
-await ok("何も決めていなければ、出せない", async () => {
+await ok("何も決めていなくても、出せる", async () => {
   setup();
   const r = await call({ method: "POST", url: "/api/nippo", body: body() });
-  assert.equal(r.statusCode, 400, JSON.stringify(r.body));
-  assert.equal(r.body.error, "focus_required");
-  assert.match(r.body.hint, /重要タスク/);
-  assert.equal(r.body.focusDate, TOMORROW);
-  assert.equal(db.rows.tc_nippo.length, 0, "日報が入ってしまっています");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.tc_nippo.length, 1);
 });
 
-await ok("3件そろっていても、確定していなければ出せない", async () => {
+await ok("3件そろっていて、確定していなくても出せる", async () => {
   setup({ status: "ai_checked", tasks: [task("t1"), task("t2"), task("t3")] });
   const r = await call({ method: "POST", url: "/api/nippo", body: body() });
-  assert.equal(r.statusCode, 400);
-  assert.equal(r.body.error, "focus_required");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+});
+
+await ok("1件だけでも出せる", async () => {
+  setup({ status: "draft", tasks: [task("t1")] });
+  const r = await call({ method: "POST", url: "/api/nippo", body: body() });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
 });
 
 await ok("確定していれば、これまでどおり出せる", async () => {
@@ -202,11 +204,18 @@ await ok("今日の3件と、明日の状態が返る", async () => {
   assert.equal(f.gate.open, true);
 });
 
-await ok("確定していなければ、開かない理由が返る", async () => {
+await ok("確定していなくても gate は open。参考の一言が返る", async () => {
   setup({ status: "draft", tasks: [task("t1")] });
   const r = await call({ method: "GET", url: `/api/nippo?date=${TODAY}` });
-  assert.equal(r.body.focus.gate.open, false);
-  assert.match(r.body.focus.gate.hint, /3件/);
+  assert.equal(r.body.focus.gate.open, true);
+  assert.match(r.body.focus.gate.hint, /確定していません/);
+});
+
+await ok("明日のタスクが0件でも gate は open。軽い注意だけ返る", async () => {
+  setup();
+  const r = await call({ method: "GET", url: `/api/nippo?date=${TODAY}` });
+  assert.equal(r.body.focus.gate.open, true);
+  assert.match(r.body.focus.gate.hint, /決まっていません/);
 });
 
 await ok("表が無い環境では focus は null（画面はこれまでどおり）", async () => {
