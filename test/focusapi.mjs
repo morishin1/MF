@@ -1,8 +1,8 @@
-// 明日の3件を決めて、AIが見て、人が確定して、翌日終わらせるまで。
+// 明日の重要タスクを決めて（1〜3件）、AIが見て、人が確定して、翌日終わらせるまで。
 //
 // ■ 何を守るテストか
 //
-//   1. 3件そろうまで確定できない
+//   1. 1件あれば確定に進める。3件ぴったりは要求しない。上限は3件
 //   2. AIは案を出すだけ。確定するまで担当も内容も変わらない
 //   3. 確定すると、担当者へ配信され、日報が書けるようになる
 //   4. 未完了は自動で翌日へ動かない。決めたときだけ動く
@@ -188,14 +188,14 @@ const coachAll = (date) => { for (const t of tasksOf(date)) t.coached_at = "2026
 console.log("\n=== 明日の3件を決める ===\n");
 console.log("— 登録 —");
 
-await ok("1件足すと、その日の行ができて「登録中」", async () => {
+await ok("1件足すと、その日の行ができる。1件でもう「AI確認待ち」", async () => {
   setup();
   const r = await post({ action: "add", ...full(1) });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.task.title, "やること1");
   assert.equal(r.body.task.focusDate, TOMORROW);
   assert.equal(r.body.task.focusRank, 1);
-  assert.equal(dayOf(TOMORROW)?.status, "draft");
+  assert.equal(dayOf(TOMORROW)?.status, "ready", "1件で足りる（3件必須をやめた）");
 });
 
 await ok("担当を決めなくても登録できる（AIが候補を出す）", async () => {
@@ -232,13 +232,14 @@ await ok("項目が欠けていると、そろっていても確定できない"
   assert.match(r.body.hint, /足りない項目/);
 });
 
-await ok("5件を超えては決めさせない", async () => {
+await ok("3件を超えては決めさせない（4件目は追加できない）", async () => {
   setup();
-  for (const n of [1, 2, 3, 4, 5]) await post({ action: "add", ...full(n) });
-  const r = await post({ action: "add", ...full(6) });
+  await addThree();
+  const r = await post({ action: "add", ...full(4) });
   assert.equal(r.statusCode, 400);
   assert.equal(r.body.error, "too_many");
   assert.match(r.body.hint, /どれも終わりません/);
+  assert.equal(tasksOf(TOMORROW).length, 3, "4件目は増えていない");
 });
 
 await ok("外すと、タスクは消えずに重要タスクから外れるだけ", async () => {
@@ -249,14 +250,91 @@ await ok("外すと、タスクは消えずに重要タスクから外れるだ�
   assert.equal(r.statusCode, 200);
   assert.equal(tasksOf(TOMORROW).length, 2);
   assert.equal(db.rows.gw_tasks.length, 3, "タスクそのものは残る");
-  assert.equal(dayOf(TOMORROW)?.status, "draft", "3件を切ったので登録中へ戻る");
+  assert.equal(dayOf(TOMORROW)?.status, "ready", "2件でもまだ足りている");
+});
+
+await ok("0件まで外すと、登録中へ戻る", async () => {
+  setup();
+  await post({ action: "add", ...full(1) });
+  const id = tasksOf(TOMORROW)[0].id;
+  const r = await post({ action: "remove", id });
+  assert.equal(r.statusCode, 200);
+  assert.equal(tasksOf(TOMORROW).length, 0);
+  assert.equal(dayOf(TOMORROW)?.status, "draft");
+});
+
+console.log("— 明日の重要タスクを選ぶ（既存タスクは複製しない） —");
+
+await ok("自分の未完了タスクは、明日の候補として返る", async () => {
+  setup();
+  db.rows.gw_tasks.push({ id: "open-1", tenant_id: "t1", assignee_id: "emp-1",
+    title: "見積確認", status: "todo", due_on: TOMORROW, priority: "normal", focus_date: null });
+  const r = await get();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.openTasks.length, 1);
+  assert.equal(r.body.openTasks[0].title, "見積確認");
+});
+
+await ok("すでに明日に入っているタスクは、候補（openTasks）に出ない", async () => {
+  setup();
+  await post({ action: "add", ...full(1) });
+  const r = await get();
+  assert.equal(r.body.openTasks.length, 0);
+});
+
+await ok("既存タスクを選んでも、Task件数は増えない（複製しない）", async () => {
+  setup();
+  db.rows.gw_tasks.push({ id: "open-1", tenant_id: "t1", assignee_id: "emp-1",
+    title: "見積確認", status: "todo", due_on: TOMORROW, priority: "normal", focus_date: null });
+  const before = db.rows.gw_tasks.length;
+  const r = await post({ action: "select", id: "open-1", date: TOMORROW });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_tasks.length, before, "Taskが増えていない");
+  assert.equal(tasksOf(TOMORROW).length, 1);
+  assert.equal(tasksOf(TOMORROW)[0].id, "open-1");
+});
+
+await ok("同じタスクを二度選んでも、複製・二重登録にならない（べき等）", async () => {
+  setup();
+  db.rows.gw_tasks.push({ id: "open-1", tenant_id: "t1", assignee_id: "emp-1",
+    title: "見積確認", status: "todo", due_on: TOMORROW, priority: "normal", focus_date: null });
+  await post({ action: "select", id: "open-1", date: TOMORROW });
+  const before = db.rows.gw_tasks.length;
+  const r = await post({ action: "select", id: "open-1", date: TOMORROW });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_tasks.length, before);
+  assert.equal(tasksOf(TOMORROW).length, 1);
+});
+
+await ok("選ぶときも、3件までしか入れさせない", async () => {
+  setup();
+  await addThree();
+  db.rows.gw_tasks.push({ id: "open-1", tenant_id: "t1", assignee_id: "emp-1",
+    title: "見積確認", status: "todo", due_on: TOMORROW, priority: "normal", focus_date: null });
+  const r = await post({ action: "select", id: "open-1", date: TOMORROW });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "too_many");
+  assert.equal(tasksOf(TOMORROW).length, 3);
+});
+
+await ok("他人のタスクは選べない", async () => {
+  setup();
+  db.rows.gw_tasks.push({ id: "other-1", tenant_id: "t1", assignee_id: "emp-2",
+    focus_for: "emp-2", title: "他人のタスク", status: "todo", focus_date: null });
+  const r = await post({ action: "select", id: "other-1", date: TOMORROW });
+  assert.equal(r.statusCode, 403);
+});
+
+await ok("無いタスクは選べない", async () => {
+  setup();
+  const r = await post({ action: "select", id: "does-not-exist", date: TOMORROW });
+  assert.equal(r.statusCode, 404);
 });
 
 console.log("— AIが見る —");
 
-await ok("3件そろう前は、AIに出さない", async () => {
+await ok("1件も無ければ、AIに出さない", async () => {
   setup();
-  await post({ action: "add", ...full(1) });
   const r = await post({ action: "check", date: TOMORROW });
   assert.equal(r.statusCode, 400);
   assert.equal(r.body.error, "not_ready_yet");

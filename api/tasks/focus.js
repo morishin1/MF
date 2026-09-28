@@ -2,7 +2,8 @@
 //        … その日の重要タスクと、状態（登録中／AI確認待ち／確認待ち／確定）
 //          あわせて「明日ぶん」と、前日の未完了も返す
 // POST /api/tasks/focus {action}
-//        "add"      … 明日の重要タスクを1件足す
+//        "add"      … 明日の重要タスクを1件足す（新規のタイトルのときだけ）
+//        "select"   … 既存の自分のタスクを、そのまま明日の重要タスクにする（複製しない）
 //        "update"   … 直す（担当・期限・優先度・完了条件・目的・KPI・得たい結果・なぜ明日やるか）
 //        "remove"   … 重要タスクから外す（タスク自体は消さない）
 //        "check"    … AIに見てもらう
@@ -80,13 +81,15 @@ async function read(req, res, ctx, user) {
   const tomorrow = nextFocusDate(today);
   const sb = admin();
 
-  const [todayPack, todayDoing, tomorrowPack, prev] = await Promise.all([
+  const [todayPack, todayDoing, tomorrowPack, prev, myOpen] = await Promise.all([
     load(sb, ctx.tenantId, who.id, today),
     // 今日「やる」ぶん。人から回ってきたものも入る
     doing(sb, ctx.tenantId, who.id, today),
     load(sb, ctx.tenantId, who.id, tomorrow),
     // 前の日の未完了。決めていないものが残っていたら、先にそれを片付けてもらう
     openOf(sb, ctx.tenantId, who.id, today),
+    // 明日の候補（まだ重要タスクに入れていない、自分の未完了タスク）
+    openTasksOf(sb, ctx.tenantId, who.id),
   ]);
   if (todayPack.error) {
     const hint = dbSetupHint(todayPack.error, SQL);
@@ -108,6 +111,8 @@ async function read(req, res, ctx, user) {
     // 終わらなかったもの。どうするか決めるまで残る
     carryOver: prev.map(shape),
     carryChoices: CARRY_CHOICES,
+    // 明日の重要タスクの候補（自分の未完了タスク。まだ明日に入れていないもの）
+    openTasks: myOpen.map((t) => ({ id: t.id, title: t.title, dueOn: t.due_on, priority: t.priority })),
     fields: FOCUS_FIELDS,
     min: MIN_FOCUS, max: MAX_FOCUS,
     // ペアコーチング（聞き方ガイド）。画面はこれを描くだけにする
@@ -169,6 +174,19 @@ async function openOf(sb, tenantId, employeeId, today) {
   return data || [];
 }
 
+/**
+ * 自分の未完了タスクのうち、まだ明日の重要タスクに入れていないもの。
+ *
+ * 明日の重要タスクを選ぶ画面の候補に使う（新規に書き直させない）
+ */
+async function openTasksOf(sb, tenantId, employeeId) {
+  const { data } = await sb.from("gw_tasks").select("id, title, due_on, priority")
+    .eq("tenant_id", tenantId).eq("assignee_id", employeeId)
+    .in("status", ["todo", "doing"]).is("focus_date", null)
+    .order("due_on", { ascending: true, nullsFirst: false }).limit(30);
+  return data || [];
+}
+
 /** 同僚。担当を変えるときの選択肢と、AIに渡す仕事量 */
 async function peers(sb, tenantId) {
   const { data: emps } = await sb.from("gw_employees")
@@ -226,6 +244,7 @@ async function act(req, res, ctx, user, body) {
 
   switch (body?.action) {
     case "add":      return addTask(res, sb, ctx, user, who, body);
+    case "select":   return selectTask(res, sb, ctx, who, body);
     case "update":   return updateTask(res, sb, ctx, user, who, body);
     case "remove":   return removeTask(res, sb, ctx, user, who, body);
     case "check":    return check(res, sb, ctx, who, body);
@@ -313,7 +332,56 @@ async function addTask(res, sb, ctx, user, who, body) {
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
     return json(res, 500, { error: "db_insert_failed", detail: error.message });
   }
-  // 件数が変わったので、状態を見直す（3件そろえば ready）
+  // 件数が変わったので、状態を見直す（1件そろえば ready）
+  await refresh(sb, ctx.tenantId, who.id, date, day);
+  return json(res, 200, { task: shape(data) });
+}
+
+/**
+ * すでにある自分のタスクを、そのまま明日の重要タスクにする。
+ *
+ * addTask() と違い、新しい gw_tasks 行は作らない（同じ仕事の複製防止・
+ * 日報提出ハードロック修正指示 Rule 6）。二重クリックしても、同じ行を
+ * 同じ値で書き直すだけなので複製は起きない（べき等）
+ */
+async function selectTask(res, sb, ctx, who, body) {
+  const date = isDate(body.date) ? body.date : nextFocusDate(jstToday());
+  if (!date) return json(res, 400, { error: "bad_request", hint: "日付が正しくありません" });
+
+  const t = await loadTask(sb, ctx.tenantId, body.id);
+  if (!t) return json(res, 404, { error: "not_found" });
+  if (t.assignee_id !== who.id && t.focus_for !== who.id) {
+    return json(res, 403, { error: "forbidden" });
+  }
+  // すでに同じ日に入っている（再送・二度押し）。そのまま返す
+  if (t.focus_date === date && t.focus_for === who.id) {
+    return json(res, 200, { task: shape(t) });
+  }
+
+  const { day, error: de } = await ensureDay(sb, ctx.tenantId, who.id, date);
+  if (de) {
+    const hint = dbSetupHint(de, SQL);
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "db_insert_failed", detail: de.message });
+  }
+  if (day?.status === "confirmed") {
+    return json(res, 409, { error: "already_confirmed", hint: "確定ずみです。直すには、いったん確定を取り消してください" });
+  }
+
+  const { data: have } = await sb.from("gw_tasks").select("id")
+    .eq("tenant_id", ctx.tenantId).eq("focus_for", who.id).eq("focus_date", date)
+    .neq("status", "cancelled").neq("id", t.id);
+  if ((have || []).length >= MAX_FOCUS) {
+    return json(res, 400, { error: "too_many",
+      hint: `1日に決める重要タスクは${MAX_FOCUS}件までです。多いほど、どれも終わりません` });
+  }
+
+  const { data, error } = await sb.from("gw_tasks").update({
+    focus_date: date, focus_rank: (have || []).length + 1, focus_for: who.id,
+    updated_at: new Date().toISOString(),
+  }).eq("id", t.id).select(T_FIELDS).single();
+  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+
   await refresh(sb, ctx.tenantId, who.id, date, day);
   return json(res, 200, { task: shape(data) });
 }
