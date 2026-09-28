@@ -98,6 +98,39 @@
       .sl-detail { position:fixed; top:0; right:0; bottom:0; width:560px; max-width:94vw; background:#f6f6f2;
         z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; }
 
+      /* 見るものはドロワー、操作するものは中央モーダル（/hr の .hr-modal と同じ操作感）。
+         企業詳細ドロワーの上に重ね、閉じても背後のドロワーは残す */
+      .sl-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
+      .sl-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:480px; max-width:92vw;
+        max-height:86vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
+        box-shadow:0 20px 60px rgba(27,36,64,.28); box-sizing:border-box; }
+      .sl-modal h2 { font-size:17px; font-weight:700; color:#1b2440; margin:0 0 14px; }
+      .sl-modal .sl-modal-foot { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+      @media (max-width: 560px) { .sl-modal { max-width:calc(100vw - 28px); padding:18px; } }
+
+      /* 複数選択：画面下中央のフローティングバー（一覧・詳細ドロワーより上、モーダルより下） */
+      .sl-bulkbar { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:45;
+        display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e2e2dc; border-radius:14px;
+        padding:10px 14px; box-shadow:0 10px 32px rgba(27,36,64,.22); font-size:13px; color:#1b2440;
+        max-width:calc(100vw - 28px); box-sizing:border-box; flex-wrap:wrap; }
+      .sl-bulkbar .cnt { font-weight:700; white-space:nowrap; margin-right:4px; display:flex; align-items:center; gap:4px; }
+      .sl-bulkbar .more { position:relative; }
+      .sl-bulkmenu { position:absolute; bottom:calc(100% + 8px); right:0; background:#fff; border:1px solid #e2e2dc;
+        border-radius:10px; box-shadow:0 10px 28px rgba(27,36,64,.18); min-width:190px; padding:6px; z-index:46; }
+      .sl-bulkmenu button { display:block; width:100%; text-align:left; background:none; border:none; padding:9px 10px;
+        font:inherit; font-size:13px; color:#1b2440; border-radius:7px; cursor:pointer; }
+      .sl-bulkmenu button:hover { background:#f6f6f2; }
+      .sl-bulkmenu hr { border:none; border-top:1px solid #e2e2dc; margin:4px 0; }
+      .sl-bulkmenu button.danger { color:#b3261e; }
+      .sl-bulkmenu button.danger:hover { background:#fbeceb; }
+      @media (max-width: 640px) { .sl-bulkbar { left:14px; right:14px; transform:none; bottom:14px; } }
+
+      .sl-table th.sl-check, .sl-table td.sl-check { width:34px; padding-right:0; }
+      .sl-table td.sl-check { cursor:default; }
+      .sl-table input[type=checkbox] { width:16px; height:16px; margin:2px 0 0; cursor:pointer; }
+      .sl-table tr.sel td { background:#f3f5fb; }
+      .sl-table tr.click.sel:hover td { background:#eceff8; }
+
       .sl-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
       .sl-next .now { font-size:11px; color:#4a5068; margin-bottom:2px; }
       .sl-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }

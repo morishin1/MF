@@ -431,6 +431,8 @@
   const getSalesCompany = (id) => api(`/api/sales/companies/detail?id=${encodeURIComponent(id)}`);
   const updateSalesCompany = (body) => api("/api/sales/companies/detail", { method: "PATCH", body });
   const markSalesFollowed = (id) => updateSalesCompany({ id, action: "followed" });
+  // 企業の一括操作（change_status / change_owner / change_service / change_campaign / set_ng / delete）
+  const bulkSalesCompanies = (body) => api("/api/sales/companies/bulk", { method: "POST", body });
   const addSalesEvent = (body) => api("/api/sales/companies/detail", { method: "POST", body });
   const listSalesApproaches = (days) => api(`/api/sales/approaches${days ? `?days=${encodeURIComponent(days)}` : ""}`);
   const prepareSalesAttack = (body) => api("/api/sales/approaches", { method: "POST", body });
@@ -1408,7 +1410,7 @@
     listSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
-    listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl,
+    listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,
     listSalesMeetings, issueSalesMeeting, salesMeetingAct,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
