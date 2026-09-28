@@ -161,6 +161,14 @@
         <span class="material-symbols-outlined icon-inline">download</span>CSV
       </button>
     </h2>
+    <!-- 採用HR・Sales の利用権限は、ここのチェックが正式な設定元（lib/gw.js RECRUIT_ROLES / SALES_ROLES）。
+         付け外しは再ログイン不要で、相手が画面を再読込するとヘッダーと入口に反映される -->
+    <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
+      <b>採用HR</b>（/hr/）を使える：経営者・人事・採用担当　／
+      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当<br>
+      「IT・管理」はシステム管理用で、それだけでは採用HR・Salesには入れません。
+      チェックを付け外しすると、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
+    </p>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
   </div>
@@ -204,6 +212,17 @@
 
   const ROLE_LABEL = { owner: "経営者", hr: "人事", it: "IT・管理", finance: "経理",
                      manager: "責任者", labor_advisor: "社労士", recruiter: "採用担当", sales: "営業担当" };
+  // 各権限で何ができるか（チェックにマウスを乗せると出る）。採用HR・Sales の条件は lib/gw.js と同じ
+  const ROLE_HINT = {
+    owner: "経営者：採用HR・Sales・採用判断まで使える",
+    hr: "人事：人事の台帳・入退社と、採用HR（/hr/）を使える",
+    it: "IT・管理：端末・アカウントなどシステム管理用。これだけでは採用HR・Salesには入れない",
+    finance: "経理：給与・精算",
+    manager: "責任者：Sales（/sales/）を使える",
+    labor_advisor: "社労士：共有された手続きだけを見る",
+    recruiter: "採用担当：採用HR（/hr/）だけを使える（人事の機密は見えない）",
+    sales: "営業担当：Sales（/sales/）だけを使える",
+  };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない
   const STATUS_LABEL = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
   // 同じログインアカウントを使っている社内システム。表示の並び順もこの通り
@@ -544,8 +563,9 @@
   function row(e) {
     const roles = e.roles || [];
     const roleCells = Object.keys(ROLE_LABEL).map((r) => `
-      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:11.5px;margin-right:8px;color:inherit;">
-        <input type="checkbox" style="width:auto;margin:0;" ${roles.includes(r) ? "checked" : ""}
+      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:11.5px;margin-right:8px;color:inherit;"
+             title="${esc(ROLE_HINT[r] || "")}">
+        <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
                ${canGrantRoles ? "" : "disabled"}
                onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
         ${ROLE_LABEL[r]}

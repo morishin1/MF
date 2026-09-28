@@ -20,14 +20,9 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
  * @param {string} path
  * @param {{appRole:string, isAdmin?:boolean, roles?:string[], width?:number, memberView?:boolean}} who
  */
-/** サーバ（lib/gw.js accessOf）と同じ結果を返す。/api/me の access の代わり */
-const accessOf = (w) => {
-  const r = w.roles || [];
-  return {
-    recruit: Boolean(w.isAdmin) || ["owner", "hr", "recruiter"].some((x) => r.includes(x)),
-    sell: Boolean(w.isAdmin) || ["owner", "manager", "sales"].some((x) => r.includes(x)),
-  };
-};
+// サーバ（lib/gw.js accessOf）そのもの。/api/me の access の代わりに返す
+const { accessOf: serverAccessOf } = await import("../../lib/gw.js");
+const accessOf = (w) => serverAccessOf({ isAdmin: Boolean(w.isAdmin), roles: w.roles || [] });
 
 async function open(path, who) {
   const page = await br.newPage({
@@ -98,11 +93,17 @@ console.log("— owner：採用HR と Sales の両方 —");
   await page.close();
 }
 
-console.log("\n— admin（会計の管理者）も両方 —");
+console.log("\n— 会計の管理者だけ・IT・管理だけでは出さない（社内権限が正式な設定元） —");
 {
   const page = await open("admin-dashboard.html", { appRole: "admin", isAdmin: true, roles: [] });
-  check((await shortcuts(page)).map((s) => s.key).join(",") === "hr,sales", "管理者に両方");
+  check((await shortcuts(page)).length === 0, "会計の管理者だけ（社内権限なし）には出さない");
   await page.close();
+  const it = await open("admin-dashboard.html", { appRole: "admin", isAdmin: true, roles: ["it"] });
+  check((await shortcuts(it)).length === 0, "IT・管理だけには出さない");
+  await it.close();
+  const both = await open("admin-dashboard.html", { appRole: "admin", isAdmin: true, roles: ["recruiter", "sales"] });
+  check((await shortcuts(both)).map((s) => s.key).join(",") === "hr,sales", "採用担当・営業担当を付けた管理者には両方");
+  await both.close();
 }
 
 console.log("\n— 権限に応じて出し分ける —");
@@ -112,6 +113,8 @@ for (const [roles, want, label] of [
   [["sales"], "sales", "営業 → Salesだけ"],
   [["manager"], "sales", "マネージャー → Salesだけ"],
   [[], "", "権限なし → どちらも出さない"],
+  [["it"], "", "IT・管理だけ → どちらも出さない"],
+  [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → 両方"],
 ]) {
   const page = await open("home.html", { appRole: "member", roles });
   const got = (await shortcuts(page)).map((s) => s.key).join(",");
@@ -178,6 +181,56 @@ console.log("\n— メンバー表示で確認中も、実際の権限どおり�
   check((await shortcuts(page)).map((s) => s.key).join(",") === "hr,sales",
     "メンバー表示中も、同じ権限のメンバーと同じく近道が出る");
   check(await page.locator(".topbar button:has-text('管理画面に戻る')").isVisible(), "管理画面に戻る");
+  await page.close();
+}
+
+console.log("\n— メンバー管理の社内権限チェックが、採用HR・Sales の設定元 —");
+{
+  const page = await br.newPage({ viewport: { width: 1440, height: 900 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "a@b.c" }));
+    localStorage.removeItem("kp_layout"); localStorage.removeItem("kp_me");
+  });
+  const grants = [];
+  const emp = { id: "e9", display_name: "山田 採用", status: "active", roles: [], user_id: "u9" };
+  await page.route("**/api/**", (route) => {
+    const req = route.request();
+    const url = req.url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "a@b.c", appRole: "owner", isAdmin: false, roles: [],
+        gw: { employee: { id: "e1", display_name: "森田", status: "active" }, roles: ["owner"], tenantId: "t1", stage: null },
+        access: accessOf({ roles: ["owner"] }) });
+    }
+    if (/\/api\/employees\/roles/.test(url)) {
+      const b = JSON.parse(req.postData() || "{}");
+      grants.push(b);
+      emp.roles = b.grant === false ? emp.roles.filter((r) => r !== b.role) : [...new Set([...emp.roles, b.role])];
+      return send({ ok: true });
+    }
+    if (/\/api\/employees\b/.test(url)) return send({ employees: [emp], canManage: true, canGrantRoles: true });
+    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    return send({});
+  });
+  await page.goto(`${BASE}/admin-members.html`);
+  await page.waitForTimeout(900);
+  const legend = await page.locator("#role-legend").innerText();
+  check(legend.includes("採用HR") && legend.includes("経営者・人事・採用担当"), "凡例：採用HR＝経営者・人事・採用担当");
+  check(legend.includes("Sales") && legend.includes("経営者・責任者・営業担当"), "凡例：Sales＝経営者・責任者・営業担当");
+  check(legend.includes("IT・管理") && legend.includes("入れません"), "凡例：IT・管理だけでは入れない");
+  const itTitle = await page.locator('input[data-role="it"]').first().evaluate((n) => n.closest("label").title);
+  check(/採用HR・Salesには入れない/.test(itTitle), "IT・管理のチェックに説明");
+  await page.locator('input[data-role="recruiter"]').first().check();
+  await page.waitForTimeout(300);
+  await page.locator('input[data-role="sales"]').first().check();
+  await page.waitForTimeout(300);
+  check(grants.some((g) => g.role === "recruiter" && g.grant !== false) && grants.some((g) => g.role === "sales" && g.grant !== false),
+    "「採用担当」「営業担当」のチェックで社内権限が付く");
+  await page.locator('input[data-role="sales"]').first().uncheck();
+  await page.waitForTimeout(300);
+  check(grants.some((g) => g.role === "sales" && g.grant === false), "チェックを外すと社内権限が外れる");
+  check(accessOf({ roles: emp.roles }).recruit && !accessOf({ roles: emp.roles }).sell,
+    "付け外しの結果が、そのままサーバの判定（採用HR ○ / Sales ×）になる");
   await page.close();
 }
 
