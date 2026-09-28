@@ -10,6 +10,13 @@
 //     ・そこから作ったPDFと、そのSHA-256
 //   を依頼の行に持たせる。以後、雛形を直しても消しても影響しない。
 //
+// ■ 会社印（任意）も、送る時点で固める
+//   sealId を渡すと、有効な印鑑の画像を依頼ごとの場所
+//   （hr/<tenant>/esign/<id>/seal.png|jpg）へ複製し、名前・ハッシュと一緒に
+//   依頼の行へ持たせる。署名済みPDFに押すのはこの複製（api/sign/me.js）。
+//   印鑑マスタを後から差し替えても、送付済み・締結済みの印影は変わらない。
+//   印影は視覚的な押印であり、署名の証跡は従来どおり（046）。
+//
 // ■ 署名済みには触らせない
 //   status が signed の行は、再送も取り消しもできない。
 //   PDFも上書きしない（署名前と署名済みは別のパス）。
@@ -24,6 +31,7 @@ import { notifySlack } from "../../lib/slack.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { signEvent } from "../../lib/sign-audit.js";
 import { renderContractPdf, sha256 } from "../../lib/pdf-jp.js";
+import { sealLog } from "../../lib/seal.js";
 import {
   DOC_KINDS, DOC_KIND_KEYS, MERGE_FIELDS, buildFields, merge, statusOf,
 } from "../../lib/esign.js";
@@ -59,12 +67,15 @@ async function list(req, res, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
   const want = q.get("status");            // sent | signed | overdue | all
 
-  const { data, error } = await userClient(req)
+  const query = (fields) => userClient(req)
     .from("gw_sign_requests")
-    .select(`${R_FIELDS}, employee:gw_employees!gw_sign_requests_employee_id_fkey(id, display_name, department, email)`)
+    .select(`${fields}, employee:gw_employees!gw_sign_requests_employee_id_fkey(id, display_name, department, email)`)
     .eq("tenant_id", ctx.tenantId)
     .order("sent_at", { ascending: false })
     .limit(400);
+  // 会社印の列は 091 で足した。未適用でも一覧は今までどおり出す
+  let { data, error } = await query(`${R_FIELDS}, seal_id, seal_name`);
+  if (error && dbSetupHint(error, "db/091_seals.sql")) ({ data, error } = await query(R_FIELDS));
   if (error) {
     // source / file_name は 056 で足した列。未適用だと列が無いと言われる
     const hint = dbSetupHint(error, "db/056_doc_orders.sql");
@@ -197,8 +208,16 @@ async function send(req, res, ctx, user, body) {
   // 期限。指定が無ければ雛形の既定日数を足す
   const dueOn = body?.dueOn || addDays(tpl.due_days || 7);
 
-  const { map, companyName } = await fieldsFor(ctx, ids);
   const sb = admin();
+
+  // 会社印。選ばれていれば、有効なものか確かめて画像を1回だけ読む
+  let seal = null;
+  if (body?.sealId) {
+    seal = await loadSeal(sb, ctx, body.sealId);
+    if (seal.error) return json(res, seal.status, seal);
+  }
+
+  const { map, companyName } = await fieldsFor(ctx, ids);
   const out = { sent: [], failed: [] };
 
   for (const employeeId of ids) {
@@ -231,7 +250,24 @@ async function send(req, res, ctx, user, body) {
         .upload(path, Buffer.from(bytes), { contentType: "application/pdf", upsert: false });
       if (up.error) throw new Error(up.error.message);
 
+      // 印影の複製。マスタのパスは持たせない（差し替えで変わってしまう）
+      let sealCols = {};
+      if (seal) {
+        const sealPath = `${ctx.tenantId}/esign/${id}/seal.${seal.ext}`;
+        const su = await sb.storage.from(BUCKET)
+          .upload(sealPath, seal.bytes, { contentType: seal.mime, upsert: false });
+        if (su.error) throw new Error(`会社印を保存できませんでした: ${su.error.message}`);
+        sealCols = {
+          seal_id: seal.id,
+          seal_name: seal.name,
+          seal_type: seal.seal_type,
+          seal_image_path: sealPath,
+          seal_image_sha256: seal.sha256,
+        };
+      }
+
       const { error } = await sb.from("gw_sign_requests").insert({
+        ...sealCols,
         id,
         tenant_id: ctx.tenantId,
         template_id: tpl.id,
@@ -250,7 +286,11 @@ async function send(req, res, ctx, user, body) {
       if (error) throw new Error(error.message);
 
       await signEvent(ctx, id, "sent", req, { id: user.id, name: ctx.employee?.display_name },
-        { title: tpl.name, dueOn, hash });
+        { title: tpl.name, dueOn, hash, ...(seal ? { sealId: seal.id, sealName: seal.name } : {}) });
+      if (seal) {
+        await sealLog(ctx, user.id, "esign.seal_selected", seal,
+          { requestId: id, title: tpl.name, sealSha256: seal.sha256 });
+      }
 
       await notify([{
         tenantId: ctx.tenantId,
@@ -273,7 +313,8 @@ async function send(req, res, ctx, user, body) {
     await gwLog({
       tenantId: ctx.tenantId, actorId: user.id, action: "sign.send",
       target: `sign_template:${tpl.id || "adhoc"}`,
-      detail: { title: tpl.name, count: out.sent.length, dueOn },
+      detail: { title: tpl.name, count: out.sent.length, dueOn,
+                ...(seal ? { sealId: seal.id, sealName: seal.name } : {}) },
     });
     await notifySlack({
       text: `:memo: 署名依頼を送りました　${tpl.name}`,
@@ -337,6 +378,34 @@ async function patch(req, res, ctx, user) {
   }
 
   return json(res, 400, { error: "invalid_action", detail: "resend, cancel" });
+}
+
+/**
+ * 送るときに使う会社印。有効なものだけ。画像を読んでハッシュを確かめる
+ * （マスタの行と画像の中身が食い違っていたら、押さずに止める）
+ */
+async function loadSeal(sb, ctx, sealId) {
+  const { data: s, error } = await sb.from("gw_seals")
+    .select("id, name, seal_type, image_path, image_mime, image_sha256, is_active")
+    .eq("id", sealId).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (error) {
+    const hint = dbSetupHint(error, "db/091_seals.sql");
+    return { error: hint ? "not_ready" : "db_query_failed", status: hint ? 503 : 500, message: hint || error.message };
+  }
+  if (!s || !s.is_active) {
+    return { error: "seal_not_available", status: 400, hint: "選んだ印鑑は使えません（無効か、見つかりません）" };
+  }
+  const dl = await sb.storage.from(BUCKET).download(s.image_path);
+  if (dl.error || !dl.data) {
+    return { error: "seal_image_missing", status: 500, hint: "印鑑の画像を読み出せませんでした" };
+  }
+  const bytes = Buffer.from(await dl.data.arrayBuffer());
+  const hash = sha256(bytes);
+  if (s.image_sha256 && hash !== s.image_sha256) {
+    return { error: "seal_hash_mismatch", status: 500, hint: "印鑑の画像が登録時と一致しません。印鑑を登録し直してください" };
+  }
+  const mime = s.image_mime === "image/jpeg" ? "image/jpeg" : "image/png";
+  return { ...s, bytes, sha256: hash, mime, ext: mime === "image/jpeg" ? "jpg" : "png" };
 }
 
 /** 今日から n 日後（日本時間） */

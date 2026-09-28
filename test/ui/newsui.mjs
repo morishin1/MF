@@ -264,10 +264,11 @@ function wire(page) {
   await page.screenshot({ path: shotPath("news-list.png") });
 
   console.log("— メニュー —");
-  check(await page.locator(".kp-side-item:has-text('サイトのお知らせ')").count() === 1,
-    "サイドメニューに出る");
-  check(await page.locator(".kp-side-item.on:has-text('サイトのお知らせ')").count() === 1,
-    "開いている項目として選ばれている");
+  // 最終メニューでは「ホーム ＞ お知らせ」の帯の中（社内のお知らせ / サイトのお知らせ）
+  check(await page.locator(".kp-side-item.on:has-text('お知らせ')").count() === 1,
+    "左メニューでは「お知らせ」が選ばれている");
+  check(await page.locator(".kp-subnav .kp-subtab.on:has-text('サイトのお知らせ')").count() === 1,
+    "帯では「サイトのお知らせ」が選ばれている");
 
   await page.close();
 }

@@ -67,15 +67,30 @@ check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItem
     `開いた状態の行数の目安 ${ADMIN_GROUPS.length + biggest}（見出し5＋最大 ${biggest}）`);
 }
 
-// ---- 2) メンバーは8つ ---------------------------------------------------------
+// ---- 2) メンバーは7つ ---------------------------------------------------------
+//   ホーム・今日やること・メッセージ・勤怠・申請・キャリア・社内情報・マイページ
+//   （評価・キャリア再設計 §3・§37。スペース予約は通常メニューから外した）
 console.log("\n— メンバー —");
 {
   // when（設備予約・会計）と urlKey（別システム）と入社手続きは、
   // 人によって出る／出ないもの。いつも出るものだけ数える
   const always = memberItems.filter((n) => !n.when && !n.urlKey && n.key !== "onboarding");
-  check(always.length === 8,
-    `いつも出るのは8つ（いま ${always.length}: ${always.map((n) => n.label).join("・")}）`);
+  check(always.length === 7,
+    `いつも出るのは7つ（いま ${always.length}: ${always.map((n) => n.label).join("・")}）`);
   check(MEMBER_NAV.length === 5, `スマホの下タブは5つ（いま ${MEMBER_NAV.length}）`);
+}
+
+// 採用HR（/hr/）・Sales（/sales/）の入口は共通ヘッダーの近道だけ。
+// 左メニューにも置くと二重導線になる（when で権限者だけに出す形も含めて置かない）
+for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバー"]]) {
+  const dup = navs.filter((n) => /^\/?(hr|sales)\/$/.test(String(n.href || "")));
+  check(!dup.length, `${who}の左メニューに採用HR・Salesを置かない${dup.length ? `（${dup.map((n) => n.label).join("・")}）` : ""}`);
+}
+{
+  // 左メニューの行にも、ページ上部の帯（tabs）にも出さない。直接URL・タスク・個別の導線から開く
+  const bookings = [...adminItems, ...memberItems].flatMap((n) => [n, ...(n.tabs || [])])
+    .filter((n) => /booking/.test(String(n.href || "")));
+  check(!bookings.length, "スペース予約は左メニューにも帯にも置かない（直接URL・個別の導線から開く）");
 }
 
 // メンバーと管理者は別の表。同じ配列を共有していない
@@ -155,7 +170,7 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
     "home.html", "nippo.html", "tasks.html", "schedule.html", "messages.html",
     "timecard.html", "workflow.html", "requests.html", "expenses.html",
     "library.html", "notices.html", "directory.html", "mypage.html",
-    "contracts.html", "booking.html", "onboarding.html",
+    "contracts.html", "booking.html", "onboarding.html", "career.html",
   ];
   for (const f of MEMBER_PAGES) {
     const a = activeOf(f);

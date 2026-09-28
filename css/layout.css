@@ -539,6 +539,24 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 
 .topbar .brand a { display: inline-flex; align-items: center; }
 
+/* ヘッダーの近道（採用HR・Sales）。既存の btn-secondary をそのまま使い、
+   いまいるアプリのものだけ primary と同じ色で塗る。
+   高さは btn-sm のままなので、ヘッダーの高さは変わらない */
+.kp-shortcuts { display: inline-flex; align-items: center; gap: 6px; }
+.kp-shortcut { text-decoration: none; white-space: nowrap; }
+.kp-shortcut.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.kp-shortcut .kp-sc-short { display: none; }
+/* 狭い画面では「HR」「Sales」まで縮める。通知・ログアウトを押し出さない */
+@media (max-width: 1024px) {
+  .kp-shortcut .kp-sc-long { display: none; }
+  .kp-shortcut .kp-sc-short { display: inline; }
+}
+@media (max-width: 420px) {
+  .kp-shortcuts { gap: 4px; }
+  .kp-shortcut { padding-left: 8px; padding-right: 8px; }
+  .kp-shortcut .material-symbols-outlined { display: none; }
+}
+
 /* サイドメニューの「対応が要る件数」。
    件数が0のときは器ごと隠す（js/layout.js の loadBadges）。
    いつも数字が付いているバッジは、そこにある時点で意味を失う */

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>キャリア - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260928a">
+  <link rel="stylesheet" href="css/layout.css?v=20260928a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .cv-now { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; }
+    .cv-now .k { font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--muted); }
+    .cv-now .v { font-size:15px; font-weight:700; color:var(--primary-dark); margin-top:2px; }
+    .cv-now .v.big { font-size:22px; }
+    .cv-now .s { font-size:12.5px; color:var(--muted); }
+    .cv-note { font-size:11.5px; color:var(--muted); margin:8px 0 0; line-height:1.7; }
+    .cv-todo { list-style:none; padding:0; margin:0; counter-reset:todo; }
+    .cv-todo li { display:flex; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--border);
+                  counter-increment:todo; flex-wrap:wrap; }
+    .cv-todo li:last-child { border-bottom:none; }
+    .cv-todo li::before { content:counter(todo); width:24px; height:24px; border-radius:999px; background:var(--primary);
+                          color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+    .cv-todo .t { flex:1; min-width:180px; }
+    .cv-todo .t small { display:block; color:var(--muted); font-size:11.5px; }
+    .cv-mark { display:inline-block; width:20px; text-align:center; font-weight:700; }
+    .cv-mark.achieved { color:#256b36; } .cv-mark.in_progress { color:#8a5a00; } .cv-mark.not_yet { color:#8a94a6; }
+    .cv-cat { margin:10px 0; }
+    .cv-cat .h { display:flex; justify-content:space-between; font-size:13.5px; font-weight:600; color:var(--primary-dark); }
+    .cv-cat ul { list-style:none; padding:0; margin:4px 0 0; font-size:13px; line-height:1.9; }
+    .cv-horizon { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; }
+    .cv-horizon > div { border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+    .cv-horizon .k { font-size:12px; font-weight:700; color:var(--muted); }
+    .cv-dekiru { list-style:none; padding:0; margin:0; }
+    .cv-dekiru li { display:flex; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); font-size:14px; }
+    .cv-dekiru li:last-child { border-bottom:none; }
+    .cv-dekiru time { color:var(--muted); font-size:12.5px; min-width:64px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">キャリア</h1>
+  <p class="kp-greet-sub">いまの現在地と、次のLevelに向けて何をすればよいかを確かめられます。</p>
+  <div id="body"><div class="empty">読み込み中…</div></div>
+</div>
+
+<script src="js/api-client.js?v=20260928a"></script>
+<script src="js/device.js?v=20260928a"></script>
+<script src="js/layout.js?v=20260928a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const yen = (n) => (n === null || n === undefined ? "—" : `${Number(n).toLocaleString("ja-JP")}円`);
+  const ym = (d) => (d ? String(d).slice(0, 7).replace("-", "/") : "");
+  const fmtDate = (d) => {
+    if (!d) return "未定";
+    const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number);
+    return `${y}年${m}月${dd}日`;
+  };
+  const MARK = { achieved: "✓", in_progress: "△", not_yet: "○" };
+  const MARK_LABEL = { achieved: "達成", in_progress: "取り組み中", not_yet: "まだ" };
+
+  let data = null;
+
+  KPLayout.init({ active: "career", roles: ["member", "admin", "owner"] })
+    .then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try { data = await API.myCareer(); }
+    catch (e) {
+      el("body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>${esc(e.message || e.hint || "読み込めませんでした")}</div></div>`;
+      return;
+    }
+    render();
+  }
+
+  function dekiruCard() {
+    const h = data.growthHistory || [];
+    return `<div class="card" id="sec-dekiru">
+      <h2><span class="material-symbols-outlined">emoji_events</span>できるようになったこと</h2>
+      ${h.length ? `<ul class="cv-dekiru">${h.map((x) => `<li><time>${esc(ym(x.on))}</time><span>${esc(x.title)}</span></li>`).join("")}</ul>`
+        : `<div class="empty">まだありません。月の振り返りや上長の記録から、ここに積み上がっていきます。</div>`}
+    </div>`;
+  }
+
+  function render() {
+    const d = data;
+    if (!d.career) {
+      el("body").innerHTML = `
+        <div class="card" id="sec-now"><h2><span class="material-symbols-outlined">flag</span>あなたの現在地</h2>
+          <div class="empty">${esc(d.message || "キャリアはまだ設定されていません。")}</div></div>
+        ${dekiruCard()}`;
+      return;
+    }
+    const cur = d.currentLevel;
+    const next = d.nextLevel;
+    const p = d.progress;
+    const remaining = p?.remaining || [];
+
+    el("body").innerHTML = `
+      <!-- 1. あなたの現在地 -->
+      <div class="card" id="sec-now">
+        <h2><span class="material-symbols-outlined">flag</span>あなたの現在地</h2>
+        <div class="cv-now">
+          <div><div class="k">職種</div><div class="v">${esc(d.career.trackName || "")}</div></div>
+          <div><div class="k">現在のLevel</div><div class="v big">LEVEL ${esc(cur?.levelNo ?? "-")}</div>
+            <div class="s">${esc(cur?.levelName || "")}</div></div>
+          <div><div class="k">現在の給与</div><div class="v">${d.currentWage ? `${esc(d.currentWage.wageType || "")} ${yen(d.currentWage.wageAmount)}` : "—"}</div>
+            <div class="s">雇用契約の内容です</div></div>
+          <div><div class="k">次回評価</div><div class="v">${esc(fmtDate(d.career.nextReviewOn))}</div></div>
+        </div>
+      </div>
+
+      <!-- 2. 次のLevel -->
+      <div class="card" id="sec-next">
+        <h2><span class="material-symbols-outlined">stairs</span>次のLevel</h2>
+        ${next ? `
+          <div class="cv-now">
+            <div><div class="k">次のステップ</div><div class="v big">LEVEL ${esc(next.levelNo)}</div>
+              <div class="s">${esc(next.levelName)}</div></div>
+            <div><div class="k">役割</div><div class="v" style="font-size:14px;">${esc(next.roleSummary || next.levelName)}</div>
+              ${next.expectedRole ? `<div class="s">${esc(next.expectedRole)}</div>` : ""}</div>
+            <div><div class="k">給与レンジ</div><div class="v" id="next-range">${esc(next.salaryRange || "—")}</div></div>
+          </div>
+          <p class="cv-note" id="range-note">${esc(d.rangeNote)}</p>`
+          : `<div class="empty">いまが最上位のLevelです。</div>`}
+      </div>
+
+      <!-- 3. 次にやること（最優先） -->
+      ${next ? `
+      <div class="card" id="sec-todo">
+        <h2><span class="material-symbols-outlined">directions_run</span>${remaining.length
+          ? `次のLevelまで、あと${remaining.length}つ` : "次のLevelの基準がそろっています"}</h2>
+        ${remaining.length ? `<ol class="cv-todo">${remaining.map((r) => `
+          <li><span class="t">${esc(r.title)}<small>${esc(r.category)}${r.status === "in_progress" ? "・取り組み中" : ""}${r.required ? "" : "・加点"}</small></span>
+            <button class="btn btn-secondary btn-sm" onclick="addGoal('${esc(r.id)}', this)">今期の目標に追加</button></li>`).join("")}</ol>`
+          : `<p style="font-size:13.5px;">次回の評価面談で、上長と確認しましょう。</p>`}
+        ${p && p.total ? `
+          <h3 style="font-size:13.5px;margin:16px 0 4px;">LEVEL ${esc(next.levelNo)} までの進捗</h3>
+          ${p.categories.map((g) => `
+            <div class="cv-cat"><div class="h"><span>${esc(g.category)}</span><span>${g.achieved} / ${g.total}</span></div>
+              <ul>${g.items.map((i) => `<li><span class="cv-mark ${esc(i.status)}" title="${esc(MARK_LABEL[i.status] || "")}">${MARK[i.status] || "－"}</span>
+                ${esc(i.title)}</li>`).join("")}</ul></div>`).join("")}
+          <p class="cv-note">✓ 達成　△ 取り組み中　○ まだ　／ 進捗は、確定した評価をもとに表示しています。</p>` : ""}
+      </div>` : ""}
+
+      <!-- 4. 1年後 / 3年後 -->
+      <div class="card" id="sec-horizon">
+        <h2><span class="material-symbols-outlined">route</span>1年後・3年後の目安</h2>
+        <div class="cv-horizon">
+          ${horizonBox("1年後の目安", d.horizon.oneYear, d.career.oneYearTargetNote)}
+          ${horizonBox("3年後の目安", d.horizon.threeYear, d.career.threeYearTargetNote)}
+        </div>
+        <p class="cv-note">${esc(d.horizon.note)}</p>
+      </div>
+
+      <!-- 5. できるようになったこと -->
+      ${dekiruCard()}
+
+      <!-- 6. 前回評価 -->
+      <div class="card" id="sec-last">
+        <h2><span class="material-symbols-outlined">history</span>前回の評価</h2>
+        ${d.lastReview ? `
+          <div style="font-size:13.5px;line-height:1.9;">
+            <div>${esc(fmtDate(d.lastReview.decidedAt))}　${d.lastReview.targetLevel ? `LEVEL ${esc(d.lastReview.targetLevel.levelNo)} 基準` : ""}
+              ${d.lastReview.achieved} / ${d.lastReview.total} 達成</div>
+            <div>結果：<b>${esc(labelOf(d.labels.reviewResults, d.lastReview.result))}</b></div>
+            ${d.lastReview.managerComment ? `<div>上長から：${esc(d.lastReview.managerComment)}</div>` : ""}
+          </div>` : `<div class="empty">まだ評価はありません。</div>`}
+      </div>`;
+  }
+
+  const labelOf = (list, key) => (list || []).find((x) => x.key === key)?.label || "—";
+
+  function horizonBox(title, h, note) {
+    const l = h?.level;
+    return `<div><div class="k">${esc(title)}</div>
+      ${l ? `<div style="font-weight:700;color:var(--primary-dark);margin:2px 0;">LEVEL ${esc(l.levelNo)} ${esc(l.levelName)}</div>` : ""}
+      ${h?.goal ? `<div style="font-size:13px;">${esc(h.goal)}</div>` : ""}
+      ${note ? `<div style="font-size:13px;margin-top:6px;"><b>上長と決めた方向性：</b>${esc(note)}</div>` : ""}
+      ${!l && !h?.goal && !note ? `<div class="muted" style="font-size:13px;">まだ設定されていません</div>` : ""}</div>`;
+  }
+
+  async function addGoal(id, btn) {
+    try {
+      const r = await KPLayout.busy(btn, "追加中…", () => API.myCareerAct({ action: "addGoal", criterionId: id }));
+      btn.outerHTML = `<span class="muted" style="font-size:12.5px;">${r.already ? "タスクに入っています" : "タスクに追加しました"}</span>`;
+    } catch (e) { alert(e.hint || e.message || "追加できませんでした"); }
+  }
+</script>
+</body>
+</html>

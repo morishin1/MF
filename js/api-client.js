@@ -979,6 +979,38 @@
     return docOrderAct({ action: "attach", id, path: sign.path, filename: file.name });
   }
 
+  // ---- 評価・キャリア ----
+  // 管理側（管理者・経営者・人事・マネージャー）
+  const careerList = () => api("/api/career");
+  const careerDetail = (employeeId) => api(`/api/career?employeeId=${encodeURIComponent(employeeId)}`);
+  const careerEvidence = (employeeId, from, to) => api(`/api/career?evidence=${encodeURIComponent(employeeId)}`
+    + `${from ? `&from=${encodeURIComponent(from)}` : ""}${to ? `&to=${encodeURIComponent(to)}` : ""}`);
+  const careerMaster = () => api("/api/career?master=1");
+  const careerHistory = () => api("/api/career?history=1");
+  const careerAct = (body) => api("/api/career", { method: "POST", body });
+  // 本人（自分の確定済みのキャリアだけ）
+  const myCareer = () => api("/api/career/me");
+  const myCareerAct = (body) => api("/api/career/me", { method: "POST", body });
+
+  // ---- 会社の印鑑（印影画像） ----
+  // 一覧の imageUrl は数分だけ有効な signed URL（非公開のバケット）
+  const seals = () => api("/api/sign/seals");
+  const sealAct = (body) => api("/api/sign/seals", { method: "POST", body });
+
+  // 画像を置いてから、登録（create）か差し替え（update）。
+  // file は PNG か JPEG（WebP は画面側で PNG にしてから渡す）
+  async function uploadSealImage(file) {
+    const mimeType = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
+    const sign = await sealAct({ action: "upload", mimeType, sizeBytes: file.size });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType, "x-upsert": "false" },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return sign.path;
+  }
+
   // ---- 有給・稟議の申請 ----
   // scope: "mine" | "pending" | "all"、kind: "leave" | "ringi"
   const listRequests = (scope, opts = {}) => {
@@ -1408,6 +1440,8 @@
 
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
+    seals, sealAct, uploadSealImage,
+    careerList, careerDetail, careerEvidence, careerMaster, careerHistory, careerAct, myCareer, myCareerAct,
     myContracts, signContract, signPdfUrl,
     docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile, checkHrOfferMatch,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,

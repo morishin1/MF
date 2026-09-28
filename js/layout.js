@@ -33,7 +33,7 @@
   ];
 
   /**
-   * メンバー: PCでの左サイドメニュー。8つ。
+   * メンバー: PCでの左サイドメニュー。7つ（＋入社準備中の入社手続き・権限のある人の営業）。
    *
    * ■ 管理者とは、完全に別の表にしてある
    *   同じ表を権限で出し分けると、メンバーに見せない項目が
@@ -52,46 +52,50 @@
    *   左メニューに入口を増やさず、開いた先で行き来できるようにする。
    *
    * ■ 人によって出す・出さない
-   *   設備・スペース予約は、設備を使う人だけ。
+   *   スペース予約は通常メニューから外した（メニュー画面・タスクから開く）。
    *   会計書類は、経理・管理担当だけ。
    *   使わない人に見えていると、押してよいのか毎回考えることになる。
    */
   const MEMBER_SIDE_NAV = [
     { key: "home",     href: "home.html",     label: "ホーム",   icon: "home",      ready: true },
-    { key: "nippo",    href: "nippo.html",    label: "日報",     icon: "edit_note", ready: true },
-    { key: "tasks",    href: "tasks.html",    label: "タスク",   icon: "checklist", ready: true,
+    // 毎日の手を動かすところは1つにまとめる。タスク → 日報 → 予定の順に帯で行き来する
+    { key: "tasks",    href: "tasks.html",    label: "今日やること", icon: "checklist", ready: true,
       tabs: [
-        { key: "tasks",    href: "tasks.html",    label: "やること" },
+        { key: "tasks",    href: "tasks.html",    label: "タスク" },
+        { key: "nippo",    href: "nippo.html",    label: "日報" },
         { key: "schedule", href: "schedule.html", label: "スケジュール" },
-      ] },
+      ],
+      // スペース予約（booking.html）は通常メニューに置かず、ここから誘導する
+      match: ["tasks", "nippo", "schedule", "booking"] },
     { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",    ready: true },
-    { key: "timecard", href: "timecard.html", label: "勤怠",     icon: "schedule",  ready: true },
-    { key: "workflow", href: "workflow.html", label: "申請",     icon: "approval",  ready: true,
+    { key: "timecard", href: "timecard.html", label: "勤怠・申請", icon: "schedule",  ready: true,
       tabs: [
-        { key: "workflow", href: "workflow.html", label: "申請の一覧" },
-        { key: "requests", href: "requests.html", label: "休暇・稟議" },
+        { key: "timecard", href: "timecard.html", label: "勤怠" },
+        { key: "requests", href: "requests.html", label: "休暇・申請" },
         { key: "expenses", href: "expenses.html", label: "経費精算" },
-      ] },
-    { key: "library",  href: "library.html",  label: "社内文書", icon: "menu_book", ready: true,
+      ],
+      // 申請の一覧（workflow.html）も、この項目が選ばれた状態にする
+      match: ["timecard", "requests", "expenses", "workflow"] },
+    // 自分の現在地・次のLevel・次にやること（career.html）
+    { key: "career",   href: "career.html",   label: "キャリア", icon: "trending_up", ready: true },
+    { key: "notices",  href: "notices.html",  label: "社内情報", icon: "menu_book", ready: true,
       tabs: [
-        { key: "library",   href: "library.html",   label: "文書・様式" },
         { key: "notices",   href: "notices.html",   label: "お知らせ" },
+        { key: "library",   href: "library.html",   label: "社内文書" },
         { key: "directory", href: "directory.html", label: "社員名簿" },
       ] },
     { key: "mypage",   href: "mypage.html",   label: "マイページ", icon: "account_circle", ready: true,
       tabs: [
-        { key: "mypage",    href: "mypage.html",    label: "マイページ" },
+        { key: "mypage",    href: "mypage.html",    label: "基本情報" },
         // 署名は期日があるので、入口を無くさない。ここから開ける
-        { key: "contracts", href: "contracts.html", label: "契約書" },
+        { key: "contracts", href: "contracts.html", label: "契約・署名" },
       ] },
 
     // 入社準備のあいだだけ。入社日が来ると消える
     { key: "onboarding", href: "onboarding.html", label: "入社手続き", icon: "how_to_reg", ready: true },
-    // 必要な人にだけ出す
-    { key: "booking", href: "booking.html", label: "スペース予約", icon: "meeting_room",
-      ready: true, when: "booking" },
-    // 営業担当にだけ。/sales は /hr と同じく専用ヘッダーで動く別アプリなので、入口を1つ置くだけ
-    { key: "sales", href: "sales/", label: "営業", icon: "storefront", ready: true, when: "sales" },
+    // スペース予約は通常メニューに置かない（使う人が限られる）。
+    // 画面（booking.html）はそのまま残し、メニュー画面とタスクから開く
+    // Sales（/sales）は共通ヘッダーの近道から入る（権限のある人にだけ出る）。左には置かない
 
     // ここから下は別システム。
     // どれも同じ auth.users を使うので、別のIDもパスワードも要らない。
@@ -139,20 +143,27 @@
       key: "g-home", label: "ホーム", icon: "home",
       items: [
         { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
-        { key: "goals",     href: "admin-goals.html",     label: "今週のゴール",   icon: "flag",      ready: true },
+        // 今週のゴールは、今日のタスクの帯の中へ（左メニューの行は増やさない）
+        { key: "tasks",     href: "admin-tasks.html",     label: "今日のタスク",   icon: "checklist", ready: true,
+          tabs: [
+            { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
+            { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
+          ] },
         { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
-        { key: "tasks",     href: "admin-tasks.html",     label: "タスク・予定",   icon: "checklist", ready: true },
         { key: "messages",  href: "messages.html",        label: "メッセージ",     icon: "forum",     ready: true },
-        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true },
+        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true,
+          tabs: [
+            { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
+            { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
+          ] },
       ],
     },
     {
-      // 「採用」は独立グループから統合。/hr は既存のKPLayoutサイドメニューでは
-      // なく、専用ヘッダー（js/hr-layout.js）で動く別アプリなので、ここは
-      // 単純に入口を1つ置くだけ（tabsは持たせない）
+      // 採用HR（/hr）と Sales（/sales）は、共通ヘッダーの近道が正式な入口
+      // （renderTopbar の SHORTCUTS）。左メニューにも置くと入口が二重になるので置かない
       key: "g-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "hr",        href: "hr/",                  label: "採用",         icon: "person_add", ready: true },
         { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
           // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
@@ -175,24 +186,32 @@
             { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
             { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
-        { key: "growth",    href: "admin-growth.html",    label: "評価・育成",   icon: "trending_up", ready: true,
+        // 評価・キャリア。入口は「キャリア」（admin-career.html）。
+        // 3か月育成・自走レベルは既存画面をそのままタブに並べる（作り直さない）。
+        // 自走レベル（任せられる範囲）とキャリアLevel（役割・給与レンジ）は別物
+        { key: "career",    href: "admin-career.html",    label: "評価・キャリア", icon: "trending_up", ready: true,
           tabs: [
-            { key: "growth",   href: "admin-growth.html",   label: "育成計画" },
-            { key: "autonomy", href: "admin-autonomy.html", label: "自走レベル" },
+            { key: "career",         href: "admin-career.html",             label: "キャリア" },
+            { key: "growth",         href: "admin-growth.html",             label: "3か月育成" },
+            { key: "autonomy",       href: "admin-autonomy.html",           label: "自走レベル" },
+            { key: "career_history", href: "admin-career.html?tab=history", label: "評価履歴" },
           ],
           // 試用期間は採用前ではなく入社後の人事管理なので、こちらへ
           // （既存データ・ロジックは変えず、導線だけ移す）。見出しは「試用期間」の
           // ままでよいので帯（tabs）には入れず、選ばれた状態にするmatchだけ足す
-          match: ["growth", "autonomy", "probation"] },
+          match: ["career", "growth", "autonomy", "career_history", "career_master", "probation"] },
       ],
     },
     {
       key: "g-ops", label: "業務・経理", icon: "work",
       items: [
-        { key: "bookings",   href: "admin-bookings.html", label: "スペース予約", icon: "meeting_room",    ready: true },
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
-        { key: "closing",    href: "admin-closing.html",  label: "月次締め",     icon: "event_available", ready: true },
-        { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理", icon: "fact_check",   ready: true },
+        // 月次締めと月初作業管理は、同じ「月の区切りの仕事」なので1つにまとめる
+        { key: "closing",    href: "admin-closing.html",  label: "月次業務",     icon: "event_available", ready: true,
+          tabs: [
+            { key: "closing",    href: "admin-closing.html",     label: "月次締め" },
+            { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理" },
+          ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
       ],
@@ -202,7 +221,7 @@
       items: [
         // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
         { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
-        { key: "devices",   href: "admin-devices.html",   label: "端末管理",     icon: "computer", ready: true,
+        { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true,
           tabs: [
             { key: "devices", href: "admin-devices.html", label: "端末管理" },
             { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
@@ -212,11 +231,11 @@
             { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
             { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
           ] },
-        // 営業アタック管理（/sales）。/hr と同じく専用ヘッダー（js/sales-layout.js）で動く
-        // 別アプリなので、入口を1つ置くだけ。ほかのグループは6項目で埋まっているのでここに置く
-        { key: "sales",     href: "sales/",               label: "営業",         icon: "storefront", ready: true },
-        { key: "sitenews",  href: "admin-site-news.html", label: "サイトのお知らせ", icon: "newspaper", ready: true },
-        { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true },
+        // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
+        // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
+        // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
+        { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
+          match: ["settings", "bookings"] },
       ],
     },
   ];
@@ -260,7 +279,37 @@
     return "home.html";
   }
 
-  function renderTopbar({ name, appRole, memberView }) {
+  /**
+   * 採用HR・Sales へのショートカット（ヘッダー）。
+   *
+   * 毎日のように行き来するので、左メニューを開かずに届くようにする。
+   * ここが採用HR・Sales の正式な入口。左メニュー（管理者・メンバーとも）には
+   * 置かない（入口を二重にしない）。
+   *
+   * 出す・出さないは showsFor の hr / sales（サーバの canRecruit / canSell と
+   * 同じ基準）で決める。新しい権限は増やさない。
+   * メンバー表示で確認中は出さない（メンバーの見え方を確かめる場なので）。
+   *
+   * 狭い画面では「HR」「Sales」まで縮める（CSS）。通知・ログアウトは押し出さない
+   */
+  const SHORTCUTS = [
+    { key: "hr",    href: "/hr/",    label: "採用HR", short: "HR",    icon: "person_add" },
+    { key: "sales", href: "/sales/", label: "Sales",  short: "Sales", icon: "storefront" },
+  ];
+
+  function shortcutsHtml(shows = {}, path = location.pathname) {
+    const list = SHORTCUTS.filter((s) => shows[s.key]);
+    if (!list.length) return "";
+    return `<nav class="kp-shortcuts" aria-label="よく使う画面">${list.map((s) => {
+      const on = path.startsWith(s.href);
+      return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${s.href}"
+                 data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
+          ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
+        </a>`;
+    }).join("")}</nav>`;
+  }
+
+  function renderTopbar({ name, appRole, memberView, shows }) {
     const tag = memberView
       ? "メンバー表示で確認中"
       : ({ admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "");
@@ -276,7 +325,8 @@
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
-        <span>${esc(name)}</span>
+        ${memberView ? "" : shortcutsHtml(shows)}
+        <span class="kp-who-name">${esc(name)}</span>
         ${canPreview ? (memberView
           ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
                ${icon("admin_panel_settings", 18)}管理画面に戻る
@@ -742,7 +792,7 @@
     const canPreview = appRole === "admin" || appRole === "owner";
     const memberView = canPreview && isMemberView();
 
-    renderTopbar({ name, appRole, memberView });
+    renderTopbar({ name, appRole, memberView, shows });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     if (memberView) renderMemberNav(active, shows, stage);
     else if (canPreview) renderAdminNav(active);
@@ -776,6 +826,9 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
+      // /hr の入口。サーバ側の canRecruit（lib/gw.js）と同じ基準
+      // （管理者・経営者・人事・採用担当）
+      hr: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       // /sales の入口。サーバ側の canSell（lib/gw.js）と同じ基準
       sales: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。

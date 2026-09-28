@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>評価・キャリア - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20260928a">
+  <link rel="stylesheet" href="css/layout.css?v=20260928a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .cr-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; }
+    .cr-tools > div { min-width:140px; }
+    .cr-tools input, .cr-tools select { margin:0; }
+    .cr-row { cursor:pointer; }
+    .cr-row:hover td { background:#f7faff; }
+    .cr-na { display:inline-block; font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:999px;
+             background:#eef2f7; color:var(--primary-dark); white-space:nowrap; }
+    .cr-na.setup, .cr-na.overdue { background:#fdecec; color:#b3261e; }
+    .cr-na.confirm, .cr-na.review, .cr-na.interview { background:#fff4e0; color:#8a5a00; }
+    .cr-na.ready { background:#eaf5ec; color:#256b36; }
+    .cr-lv { font-weight:700; color:var(--primary-dark); white-space:nowrap; }
+
+    /* ドロワー＝詳細。モーダル＝1つの操作 */
+    .cr-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:40; }
+    .cr-drawer { position:fixed; top:0; right:0; bottom:0; width:520px; max-width:94vw; background:#fff; z-index:41;
+                 box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:22px; }
+    .cr-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
+    .cr-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:640px; max-width:94vw;
+                max-height:88vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
+                box-shadow:0 20px 60px rgba(27,36,64,.28); }
+    .cr-modal h2, .cr-drawer h2 { font-size:17px; font-weight:700; color:var(--primary-dark); margin:0 0 6px;
+                                  display:flex; align-items:center; gap:8px; }
+    .cr-kv { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; font-size:13.5px; margin:10px 0; }
+    .cr-kv dt { color:var(--muted); }
+    .cr-kv dd { margin:0; color:var(--primary-dark); }
+    .cr-next { background:#eef5ff; border:1px solid #cfe0f7; border-radius:10px; padding:12px 14px; margin:12px 0; }
+    .cr-next .lbl { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.08em; }
+    .cr-next b { display:block; font-size:15px; color:var(--primary-dark); margin:2px 0 10px; }
+    .cr-bar { display:grid; grid-template-columns:120px 1fr 48px; gap:8px; align-items:center; font-size:13px; margin:4px 0; }
+    .cr-bar .track { height:8px; background:#edf2f7; border-radius:999px; overflow:hidden; }
+    .cr-bar .fill { height:100%; background:var(--primary); }
+    .cr-note { font-size:11.5px; color:var(--muted); margin:4px 0 0; }
+    .cr-crit { border:1px solid var(--border); border-radius:9px; padding:10px 12px; margin:8px 0; }
+    .cr-crit .t { font-weight:600; color:var(--primary-dark); font-size:13.5px; }
+    .cr-crit .cat { font-size:11px; color:var(--muted); }
+    .cr-opts { display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; }
+    .cr-opts label { display:flex; align-items:center; gap:4px; font-weight:500; margin:0; font-size:13px; }
+    .cr-opts input { width:auto; margin:0; }
+    .cr-ev { background:#f7f9fc; border-radius:8px; padding:8px 10px; font-size:12.5px; margin-top:8px; }
+    .cr-ev ul { margin:4px 0 0; padding-left:18px; }
+    .cr-judge { border:1px dashed #b7c6de; border-radius:9px; padding:10px 12px; margin:12px 0; font-size:13px; }
+    .cr-master-track { border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
+    .cr-master-level { border-top:1px solid var(--border); padding:10px 0; }
+    .cr-master-level:first-of-type { border-top:none; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">評価・キャリア</h1>
+  <div class="kp-crumb">人事・労務 ＞ 評価・キャリア</div>
+  <p class="kp-greet-sub">
+    社員の現在地・次のLevel・次回評価を確かめ、評価を行います。昇格・昇給はシステムでは決めず、評価者が確定します。
+  </p>
+  <div id="notice"></div>
+
+  <!-- ===== キャリア（一覧） ===== -->
+  <div id="pane-list">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">group</span>社員のキャリア
+        <a id="to-master" class="btn btn-secondary btn-sm" style="margin-left:auto;" href="admin-career.html?tab=master">
+          <span class="material-symbols-outlined icon-inline">tune</span>キャリアマスタ</a></h2>
+      <div class="cr-tools">
+        <div style="flex:1;min-width:180px;"><label>検索</label>
+          <input id="f-q" type="search" placeholder="名前・部署" oninput="renderList()"></div>
+        <div><label>職種</label><select id="f-track" onchange="renderList()"></select></div>
+        <div><label>Level</label><select id="f-level" onchange="renderList()"></select></div>
+        <div><label>評価時期</label>
+          <select id="f-when" onchange="renderList()">
+            <option value="">すべて</option>
+            <option value="overdue">期限超過</option>
+            <option value="soon">30日以内</option>
+            <option value="unset">未設定</option>
+          </select></div>
+      </div>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr><th>氏名</th><th>職種</th><th>現在</th><th>次回評価</th><th>次の状態</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="5" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+      <p class="cr-note">NEXT ACTION の順に並んでいます（設定が必要 → 確定待ち → 期限超過 → 評価時期 …）。</p>
+    </div>
+  </div>
+
+  <!-- ===== 評価履歴 ===== -->
+  <div id="pane-history" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">history</span>評価履歴</h2>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr><th>氏名</th><th>評価</th><th>達成</th><th>最終判断</th><th>給与</th><th>状態</th><th>確定日</th></tr></thead>
+          <tbody id="h-rows"><tr><td colspan="7" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== キャリアマスタ ===== -->
+  <div id="pane-master" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">tune</span>キャリアマスタ
+        <span id="m-actions" style="margin-left:auto;display:flex;gap:8px;"></span></h2>
+      <p class="cr-note" style="margin:0 0 12px;">
+        職種（トラック）・Level・給与レンジ・評価基準を管理します。職種もカテゴリーも固定ではありません。
+        給与レンジは目安で、保証ではありません。
+      </p>
+      <div id="m-body"><div class="empty">読み込み中…</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="drawer-root"></div>
+<div id="modal-root"></div>
+
+<script src="js/api-client.js?v=20260928a"></script>
+<script src="js/device.js?v=20260928a"></script>
+<script src="js/layout.js?v=20260928a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const yen = (n) => (n === null || n === undefined ? "—" : `${Number(n).toLocaleString("ja-JP")}円`);
+  const range = (l) => (!l || (l.salaryMin == null && l.salaryMax == null) ? "未設定"
+    : `${l.salaryMin != null ? yen(l.salaryMin) : ""}〜${l.salaryMax != null ? yen(l.salaryMax) : ""}`);
+  const lvText = (l) => (l ? `LEVEL ${l.levelNo}` : "—");
+  const fmtDate = (d) => (d ? String(d).slice(0, 10).replace(/-/g, "/") : "—");
+
+  const q = new URLSearchParams(location.search);
+  const TAB = ["history", "master"].includes(q.get("tab")) ? q.get("tab") : "list";
+
+  let listData = null;
+  let detail = null;      // いま開いている社員の詳細
+  let evidence = null;    // 評価モーダルで読んだ根拠
+
+  KPLayout.init({ active: TAB === "history" ? "career_history" : TAB === "master" ? "career_master" : "career", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) start(); });
+
+  function start() {
+    for (const p of ["list", "history", "master"]) el(`pane-${p}`).classList.toggle("hidden", p !== TAB);
+    if (TAB === "history") return loadHistory();
+    if (TAB === "master") return loadMaster();
+    return loadList().then(() => { if (q.get("employeeId")) openDrawer(q.get("employeeId")); });
+  }
+
+  function showError(e) {
+    el("notice").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+      <div>${esc(e.message || e.hint || e.detail || "読み込めませんでした")}</div></div>`;
+  }
+
+  // ---- 一覧 -------------------------------------------------------------------
+  async function loadList() {
+    try { listData = await API.careerList(); } catch (e) { showError(e); return; }
+    const tracks = listData.tracks || [];
+    el("f-track").innerHTML = `<option value="">すべて</option>` + tracks.map((t) =>
+      `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("") + `<option value="__none">未設定</option>`;
+    const nos = [...new Set((listData.levels || []).map((l) => l.levelNo))].sort((a, b) => a - b);
+    el("f-level").innerHTML = `<option value="">すべて</option>` + nos.map((n) => `<option value="${n}">L${n}</option>`).join("");
+    if (!tracks.length) {
+      el("notice").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">info</span>
+        <div>キャリアマスタがまだありません。<a href="admin-career.html?tab=master">キャリアマスタ</a>で
+        共通テンプレート（L1〜L5）を入れてから、社員のキャリアを設定してください。</div></div>`;
+    }
+    renderList();
+  }
+
+  function renderList() {
+    if (!listData) return;
+    const text = el("f-q").value.trim();
+    const track = el("f-track").value;
+    const level = el("f-level").value;
+    const when = el("f-when").value;
+    const today = listData.today;
+    const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
+    const rows = listData.people.filter((p) => {
+      if (text && !`${p.employee.name} ${p.employee.department || ""}`.includes(text)) return false;
+      if (track === "__none" && p.career) return false;
+      if (track && track !== "__none" && p.career?.trackId !== track) return false;
+      if (level && String(p.career?.currentLevel?.levelNo) !== level) return false;
+      const due = p.career?.nextReviewOn;
+      if (when === "overdue" && !(due && due < today)) return false;
+      if (when === "soon" && !(due && due >= today && due <= soon)) return false;
+      if (when === "unset" && due) return false;
+      return true;
+    });
+    el("rows").innerHTML = rows.length ? rows.map((p) => `
+      <tr class="cr-row" data-emp="${esc(p.employee.id)}" onclick="openDrawer('${esc(p.employee.id)}')">
+        <td><b>${esc(p.employee.name)}</b><br><small class="muted">${esc(p.employee.department || "")}</small></td>
+        <td>${esc(p.career?.trackName || (p.suggestion ? `（候補：${p.suggestion.trackName}）` : "—"))}</td>
+        <td class="cr-lv">${p.career ? `L${p.career.currentLevel?.levelNo ?? "-"}` : "—"}</td>
+        <td>${fmtDate(p.career?.nextReviewOn)}</td>
+        <td><span class="cr-na ${esc(p.nextAction.key)}">${esc(p.nextAction.label)}</span></td>
+      </tr>`).join("")
+      : `<tr><td colspan="5" class="muted">該当する社員はいません。</td></tr>`;
+  }
+
+  // ---- 詳細（ドロワー） -----------------------------------------------------------
+  async function openDrawer(employeeId) {
+    el("drawer-root").innerHTML = `<div class="cr-drawer-bg" onclick="closeDrawer()"></div>
+      <div class="cr-drawer"><div class="empty">読み込み中…</div></div>`;
+    try { detail = await API.careerDetail(employeeId); }
+    catch (e) { el("drawer-root").querySelector(".cr-drawer").innerHTML = `<div class="err-text">${esc(e.message)}</div>`; return; }
+    renderDrawer();
+  }
+  function closeDrawer() { el("drawer-root").innerHTML = ""; detail = null; }
+
+  function progressBars(progress) {
+    if (!progress || !progress.total) return `<p class="muted" style="font-size:12.5px;">次のLevelの評価基準がまだありません。</p>`;
+    return progress.categories.map((g) => `
+      <div class="cr-bar"><span>${esc(g.category)}</span>
+        <span class="track"><span class="fill" style="width:${g.total ? Math.round(g.achieved / g.total * 100) : 0}%"></span></span>
+        <span>${g.achieved} / ${g.total}</span></div>`).join("");
+  }
+
+  function renderDrawer() {
+    const d = detail;
+    const box = el("drawer-root").querySelector(".cr-drawer");
+    if (!box) return;
+    const c = d.career;
+    // NEXT ACTION と、Primary CTA は1つ
+    let cta;
+    if (!c) cta = `<button class="btn btn-primary" onclick="openSetup()">キャリアを設定</button>`;
+    else if (d.draft) cta = d.canDecide
+      ? `<button class="btn btn-primary" onclick="openReview()">評価を確定</button>`
+      : `<button class="btn btn-primary" onclick="openReview()">評価の下書きを開く</button>`;
+    else cta = `<button class="btn btn-primary" onclick="openReview()">評価を開始</button>`;
+
+    box.innerHTML = `
+      <h2>${esc(d.employee.name)}
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDrawer()">閉じる</button></h2>
+      <div class="muted" style="font-size:12px;">${esc(d.employee.department || "")}${d.employee.joinedOn ? `・入社 ${fmtDate(d.employee.joinedOn)}` : ""}</div>
+
+      <div class="cr-next">
+        <div class="lbl">NEXT ACTION</div>
+        <b>${esc(d.nextAction.label)}</b>
+        ${cta}
+        ${c ? `<button class="btn btn-secondary btn-sm" style="margin-left:6px;" onclick="openSetup()">キャリア設定を編集</button>` : ""}
+      </div>
+
+      ${c ? `
+      <dl class="cr-kv">
+        <dt>現在</dt><dd>${esc(d.track?.name || "")} / <b>${lvText(d.currentLevel)}</b> ${esc(d.currentLevel?.levelName || "")}</dd>
+        <dt>現在給与</dt><dd>${d.currentWage ? `${esc(d.currentWage.wageType || "")} ${yen(d.currentWage.wageAmount)}` : "有効な契約がありません"}
+          <div class="cr-note">雇用契約（active）から表示しています</div></dd>
+        <dt>次のLevel</dt><dd>${d.nextLevel ? `<b>${lvText(d.nextLevel)}</b> ${esc(d.nextLevel.levelName)}<br>${esc(range(d.nextLevel))}
+          <div class="cr-note">${esc(d.rangeNote)}</div>` : "最上位のLevelです"}</dd>
+        <dt>次回評価</dt><dd>${fmtDate(c.nextReviewOn)}</dd>
+        <dt>自走レベル</dt><dd>${d.employee.autonomyLevel ? `LEVEL ${d.employee.autonomyLevel}` : "—"}
+          <span class="cr-note">（任せられる範囲。キャリアLevelとは別）</span></dd>
+        <dt>初回面談</dt><dd>${c.agreedAt ? `合意済み（${fmtDate(c.agreedAt)}）` : "未実施"}</dd>
+      </dl>
+      <h3 style="font-size:13.5px;margin:14px 0 6px;">現在の進捗（${d.nextLevel ? lvText(d.nextLevel) : "—"} まで）</h3>
+      ${progressBars(d.progress)}
+      <p class="cr-note">進捗は確定済みの評価から作っています。</p>
+      ${c.managerNote ? `<div class="cr-ev"><b>管理者メモ（本人には表示されません）</b><br>${esc(c.managerNote)}</div>` : ""}
+      <h3 style="font-size:13.5px;margin:16px 0 6px;">評価履歴</h3>
+      ${(d.reviews || []).length ? `<ul style="padding-left:18px;font-size:13px;line-height:1.9;margin:0;">${d.reviews.map((r) => `
+        <li>${r.status === "confirmed" ? fmtDate(r.decided_at) : "下書き"}：
+          ${esc(labelOf(d.labels.reviewResults, r.result) || "未判断")}
+          ${r.salary_decision && r.salary_decision !== "none" ? `／給与 ${esc(labelOf(d.labels.salaryDecisions, r.salary_decision))}` : ""}</li>`).join("")}</ul>`
+        : `<p class="muted" style="font-size:12.5px;">まだありません。</p>`}
+      ` : `
+      <p style="font-size:13.5px;">キャリア設定が必要です。</p>
+      ${d.suggestion ? `<div class="cr-ev">職種からの候補：<b>${esc(d.suggestion.trackName)}</b> / 最初のLevel
+        <div class="cr-note">候補です。自動では確定しません。初回キャリア面談で本人と確認して設定してください。</div></div>` : ""}
+      `}`;
+  }
+
+  const labelOf = (list, key) => (list || []).find((x) => x.key === key)?.label || "";
+
+  // ---- キャリア設定（モーダル） ------------------------------------------------------
+  function openModal(html) {
+    el("modal-root").innerHTML = `<div class="cr-modal-bg" onclick="closeModal()"></div>
+      <div class="cr-modal" role="dialog" aria-modal="true">${html}</div>`;
+  }
+  function closeModal() { el("modal-root").innerHTML = ""; }
+
+  function levelOptions(trackId, selected, minNo = 0) {
+    return (detail.allLevels || []).filter((l) => l.trackId === trackId && l.levelNo > minNo)
+      .sort((a, b) => a.levelNo - b.levelNo)
+      .map((l) => `<option value="${esc(l.id)}" ${l.id === selected ? "selected" : ""}>LEVEL ${l.levelNo} ${esc(l.levelName)}</option>`).join("");
+  }
+
+  function openSetup() {
+    const d = detail;
+    const c = d.career || {};
+    const trackId = c.trackId || d.suggestion?.trackId || d.tracks[0]?.id || "";
+    const levelId = c.currentLevelId || d.suggestion?.levelId || "";
+    openModal(`
+      <h2>キャリア設定（初回キャリア面談）</h2>
+      <p class="cr-note" style="margin:0 0 12px;">職種・現在Level・1年後/3年後の方向性・本人がやりたいことを、本人と上長で確認して設定します。</p>
+      ${!d.tracks.length ? `<div class="banner warn"><div>先にキャリアマスタを作ってください。</div></div>` : ""}
+      <div class="inline-controls" style="margin-bottom:10px;">
+        <div><label>職種</label><select id="st-track" onchange="onSetupTrack()">${d.tracks.map((t) =>
+          `<option value="${esc(t.id)}" ${t.id === trackId ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>
+        <div><label>現在のLevel</label><select id="st-level" ${d.career && !d.canDecide ? "disabled" : ""}>${levelOptions(trackId, levelId)}</select></div>
+      </div>
+      ${d.career && !d.canDecide ? `<p class="cr-note">設定後のLevelの変更は、評価の確定で行います。</p>` : ""}
+      <div class="inline-controls" style="margin-bottom:10px;">
+        <div><label>開始日</label><input id="st-start" type="date" value="${esc(c.startedAt || d.employee.joinedOn || "")}"></div>
+        <div><label>次回評価日</label><input id="st-review" type="date" value="${esc(c.nextReviewOn || "")}"></div>
+      </div>
+      <div style="margin-bottom:10px;"><label>1年後の方向性</label><textarea id="st-1y" rows="2">${esc(c.oneYearTargetNote || "")}</textarea></div>
+      <div style="margin-bottom:10px;"><label>3年後の方向性</label><textarea id="st-3y" rows="2">${esc(c.threeYearTargetNote || "")}</textarea></div>
+      <div style="margin-bottom:10px;"><label>本人がやりたいこと</label><textarea id="st-wish" rows="2">${esc(c.employeeWish || "")}</textarea></div>
+      <div style="margin-bottom:10px;"><label>管理者メモ（本人には表示されません）</label><textarea id="st-note" rows="2">${esc(c.managerNote || "")}</textarea></div>
+      <label style="display:flex;gap:6px;align-items:center;font-weight:500;"><input id="st-agreed" type="checkbox" style="width:auto;margin:0;" ${c.agreedAt ? "checked" : ""}>
+        本人と上長で合意した（初回キャリア面談済み）</label>
+      <div id="st-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="saveSetup(this)">保存</button>
+        <button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`);
+  }
+  function onSetupTrack() { el("st-level").innerHTML = levelOptions(el("st-track").value, ""); }
+
+  async function saveSetup(btn) {
+    const msg = el("st-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.careerAct({
+        action: "setCareer", employeeId: detail.employee.id,
+        trackId: el("st-track").value, currentLevelId: el("st-level").value,
+        startedAt: el("st-start").value || null, nextReviewOn: el("st-review").value || null,
+        oneYearTargetNote: el("st-1y").value, threeYearTargetNote: el("st-3y").value,
+        employeeWish: el("st-wish").value, managerNote: el("st-note").value, agreed: el("st-agreed").checked,
+      }));
+      closeModal();
+      const id = detail.employee.id;
+      await loadList();
+      await openDrawer(id);
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // ---- 評価（モーダル） ------------------------------------------------------------
+  async function openReview() {
+    const d = detail;
+    const draft = d.draft;
+    const prev = new Map((draft?.criterion_results || []).map((r) => [r.criterionId, r]));
+    const to = draft?.review_period_to || d.today;
+    const from = draft?.review_period_from
+      || new Date(Date.parse(`${to}T00:00:00Z`) - 90 * 86400000).toISOString().slice(0, 10);
+    openModal(`<div class="empty">根拠を読み込み中…</div>`);
+    try { evidence = await API.careerEvidence(d.employee.id, from, to); } catch (e) { evidence = null; }
+    const opts = d.labels.criterionResults;
+    openModal(`
+      <h2>評価 ${d.nextLevel ? `— ${lvText(d.nextLevel)} 基準` : ""}</h2>
+      <p class="cr-note" style="margin:0 0 10px;">各基準を人が選びます。根拠は評価の材料で、数字がそのまま評価結果になるわけではありません。</p>
+      <div class="inline-controls" style="margin-bottom:8px;">
+        <div><label>評価期間（から）</label><input id="rv-from" type="date" value="${esc(from)}"></div>
+        <div><label>評価期間（まで）</label><input id="rv-to" type="date" value="${esc(to)}"></div>
+      </div>
+      ${(d.criteria || []).length ? d.criteria.map((c) => `
+        <div class="cr-crit" data-crit="${esc(c.id)}">
+          <div class="cat">${esc(c.category)}${c.required ? "" : "（加点）"}</div>
+          <div class="t">${esc(c.title)}</div>
+          <div class="cr-opts">${opts.map((o) => `
+            <label><input type="radio" name="rv-${esc(c.id)}" value="${esc(o.key)}" onchange="renderJudge()"
+              ${(prev.get(c.id)?.result || "") === o.key ? "checked" : ""}>${esc(o.label)}</label>`).join("")}
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="toggleEvidence('${esc(c.id)}','${esc(c.evidenceType)}')">根拠を見る</button>
+          </div>
+          <div class="cr-ev hidden" id="ev-${esc(c.id)}"></div>
+        </div>`).join("")
+        : `<div class="banner warn"><div>次のLevelの評価基準がありません。キャリアマスタで基準を足してください。</div></div>`}
+      <div id="rv-judge" class="cr-judge"></div>
+      <div style="margin-bottom:10px;"><label>上長コメント（確定後、本人に表示されます）</label>
+        <textarea id="rv-mgr" rows="2">${esc(draft?.manager_comment || "")}</textarea></div>
+      <div style="margin-bottom:10px;"><label>本人コメント</label>
+        <textarea id="rv-emp" rows="2">${esc(draft?.employee_comment || "")}</textarea></div>
+
+      ${d.canDecide ? `
+      <h3 style="font-size:14px;margin:14px 0 6px;">最終判断（人が選びます）</h3>
+      <div class="cr-opts" id="rv-result">${d.labels.reviewResults.map((o) => `
+        <label><input type="radio" name="rv-result" value="${esc(o.key)}" onchange="renderSalary()"
+          ${draft?.result === o.key ? "checked" : ""}>${esc(o.label)}</label>`).join("")}</div>
+      <div id="rv-salary"></div>` : `<p class="cr-note">最終判断（Level Up・昇給）は管理者・経営者が確定します。</p>`}
+      <div id="rv-msg" class="err-text" style="margin:10px 0;"></div>
+      <div id="rv-done"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn ${d.canDecide ? "btn-secondary" : "btn-primary"}" onclick="saveReview(this)">下書き保存</button>
+        ${d.canDecide ? `<button class="btn btn-primary" id="rv-confirm" onclick="confirmReview(this)">評価を確定</button>` : ""}
+        <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+      </div>`);
+    renderJudge();
+    renderSalary();
+  }
+
+  function pickedResults() {
+    return (detail.criteria || []).map((c) => ({
+      criterionId: c.id,
+      result: document.querySelector(`input[name="rv-${CSS.escape(c.id)}"]:checked`)?.value || null,
+    })).filter((r) => r.result);
+  }
+
+  // システム判定（参考）。サーバ（lib/career.js systemJudgement）と同じ考え方
+  function renderJudge() {
+    const crit = detail.criteria || [];
+    const got = new Map(pickedResults().map((r) => [r.criterionId, r.result]));
+    const counted = crit.filter((c) => got.get(c.id) !== "na");
+    const achieved = counted.filter((c) => got.get(c.id) === "achieved");
+    const missing = counted.filter((c) => got.get(c.id) !== "achieved");
+    const reqMissing = missing.filter((c) => c.required);
+    const name = detail.nextLevel ? `Level ${detail.nextLevel.levelNo}` : "次のLevel";
+    let label = `${name}基準にはまだ不足があります`;
+    if (!counted.length) label = "評価基準がありません";
+    else if (!missing.length) label = `${name}基準を満たしています`;
+    else if (!reqMissing.length && achieved.length / counted.length >= 0.8) label = `${name}基準を概ね満たしています`;
+    el("rv-judge").innerHTML = `
+      <b>今回の評価：${name} 基準 ${achieved.length} / ${counted.length} 達成</b>
+      ${missing.length ? `<div style="margin-top:4px;">不足：${missing.map((c) => esc(c.title)).join("・")}</div>` : ""}
+      <div style="margin-top:6px;">システム判定：${esc(label)}</div>
+      <div class="cr-note">システム判定は参考情報です。最終判断は評価者が行います。</div>`;
+  }
+
+  function renderSalary() {
+    const box = el("rv-salary");
+    if (!box) return;
+    const result = document.querySelector('input[name="rv-result"]:checked')?.value;
+    if (result !== "level_up") { box.innerHTML = ""; return; }
+    const d = detail;
+    const cur = d.draft?.salary_decision || "none";
+    box.innerHTML = `
+      <div class="cr-ev" style="margin-top:10px;">
+        <div>次の給与レンジ：<b>${esc(range(d.nextLevel))}</b></div>
+        <div>現在給与：<b>${d.currentWage ? yen(d.currentWage.wageAmount) : "—"}</b></div>
+        <div class="cr-note">${esc(d.rangeNote)}</div>
+        <div style="margin-top:8px;font-weight:600;">給与変更</div>
+        <div class="cr-opts">
+          <label><input type="radio" name="rv-salary" value="keep" ${cur !== "raise" ? "checked" : ""}>変更なし</label>
+          <label><input type="radio" name="rv-salary" value="raise" ${cur === "raise" ? "checked" : ""}>昇給を検討</label>
+        </div>
+        <div class="cr-note">「昇給を検討」を選んでも、ここでは給与を変えません。新しい給与条件は、労働条件通知書の更新と電子署名で確定します。</div>
+        <div style="margin-top:8px;"><label>給与の調整メモ（本人には表示されません）</label>
+          <textarea id="rv-salary-note" rows="2">${esc(d.draft?.salary_note || "")}</textarea></div>
+      </div>`;
+  }
+
+  function toggleEvidence(critId, type) {
+    const box = el(`ev-${critId}`);
+    if (!box) return;
+    if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+    box.innerHTML = evidenceHtml(type);
+    box.classList.remove("hidden");
+  }
+
+  function evidenceHtml(type) {
+    const ev = evidence;
+    if (!ev) return "根拠を読み込めませんでした。";
+    const li = (xs) => (xs.length ? `<ul>${xs.map((x) => `<li>${x}</li>`).join("")}</ul>` : "<div class='muted'>記録はありません</div>");
+    const parts = [];
+    const kpi = () => parts.push(`<b>3か月KPI</b>${ev.kpi ? `<div>3か月KGI：${esc(ev.kpi.threeMonthKgi || "—")}</div>` + li(ev.kpi.months.map((m) =>
+      `${m.monthNo}か月目：${esc(m.kgi || "")}${m.kpis.length ? `（${m.kpis.map((k) => esc(`${k.name} ${k.target ?? ""}${k.unit || ""}`)).join("・")}）` : ""}`)) : "<div class='muted'>育成計画はありません</div>"}`);
+    const nippo = () => parts.push(`<b>日報</b><div>${ev.nippo ? `提出 ${ev.nippo.days}日${ev.nippo.aiEvaluated != null ? `・AI評価 ${ev.nippo.aiEvaluated}件` : ""}` : "—"}</div>`);
+    const tasks = () => parts.push(`<b>タスク実績</b><div>${ev.tasks ? `完了 ${ev.tasks.done}件・期限超過 ${ev.tasks.overdue}件` : "—"}</div>${ev.tasks ? li(ev.tasks.recentDone.map(esc)) : ""}`);
+    const hist = () => parts.push(`<b>できるようになったこと</b>${li(ev.growthHistory.map((h) => `${esc(fmtDate(h.on))} ${esc(h.title)}`))}`);
+    const auto = () => parts.push(`<b>自走レベル</b><div>現在 ${ev.autonomy.level ? `LEVEL ${ev.autonomy.level}` : "—"}</div>`);
+    const prob = () => parts.push(`<b>試用期間</b>${li(ev.probation.map((p) => esc(`${p.checkpoint}：${p.verdict || "—"} ${p.decision || ""}`)))}`);
+    const mgr = () => parts.push(`<b>上長コメント</b>${li(ev.managerComments.map((m) => esc(m.comment)))}`);
+    const map = { kpi, nippo, tasks, growth_history: hist, autonomy: auto, probation: prob, manager: mgr,
+                  goals: () => parts.push(`<b>今週のゴール</b><div><a href="${esc(ev.links.goals)}">今週のゴール</a>で確認</div>`) };
+    (map[type] || mgr)();
+    // 基準の種類に関係なく、よく見る材料も添える
+    for (const k of ["kpi", "nippo", "tasks", "growth_history", "autonomy"]) if (k !== type) map[k]();
+    return `<div class="muted" style="font-size:11px;">期間 ${esc(fmtDate(ev.period.from))}〜${esc(fmtDate(ev.period.to))}</div>` + parts.join("<hr style='border:none;border-top:1px solid #e3e8ef;margin:6px 0;'>");
+  }
+
+  function reviewPayload() {
+    return {
+      employeeId: detail.employee.id, id: detail.draft?.id,
+      periodFrom: el("rv-from").value || null, periodTo: el("rv-to").value || null,
+      criterionResults: pickedResults(),
+      managerComment: el("rv-mgr").value, employeeComment: el("rv-emp").value,
+      salaryNote: el("rv-salary-note")?.value,
+      evidenceSummary: evidence ? {
+        nippoDays: evidence.nippo?.days ?? null, tasksDone: evidence.tasks?.done ?? null,
+        growthHistory: evidence.growthHistory?.length ?? 0, autonomyLevel: evidence.autonomy?.level ?? null,
+      } : null,
+    };
+  }
+
+  async function saveReview(btn) {
+    const msg = el("rv-msg"); msg.textContent = "";
+    try {
+      const r = await KPLayout.busy(btn, "保存中…", () => API.careerAct({ action: "saveReview", ...reviewPayload() }));
+      detail.draft = r.review;
+      msg.innerHTML = `<span style="color:#256b36;">下書きを保存しました（本人には表示されません）</span>`;
+      const id = detail.employee.id;
+      loadList().then(() => openDrawer(id)).then(() => {});
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  async function confirmReview(btn) {
+    const msg = el("rv-msg"); msg.textContent = "";
+    const result = document.querySelector('input[name="rv-result"]:checked')?.value;
+    if (!result) { msg.textContent = "最終判断（現Level継続・Level Up・保留）を選んでください"; return; }
+    const salaryDecision = result === "level_up"
+      ? (document.querySelector('input[name="rv-salary"]:checked')?.value || "keep") : "none";
+    const label = labelOf(detail.labels.reviewResults, result);
+    if (!confirm(`評価を「${label}」で確定します。確定後は本人に表示され、変更できません。よろしいですか？`)) return;
+    try {
+      const saved = await API.careerAct({ action: "saveReview", ...reviewPayload() });
+      const r = await KPLayout.busy(btn, "確定中…", () => API.careerAct({
+        action: "confirmReview", id: saved.review.id, result, salaryDecision,
+        salaryNote: el("rv-salary-note")?.value,
+      }));
+      const id = detail.employee.id;
+      el("rv-done").innerHTML = `
+        <div class="banner ok"><span class="material-symbols-outlined">check_circle</span><div>
+          <b>評価を確定しました。</b>${r.newLevel ? ` LEVEL ${r.newLevel.levelNo} になりました。` : ""}
+          ${r.contractNext ? `<div style="margin-top:6px;">${esc(r.contractNext.message)}</div>
+            <a class="btn btn-primary btn-sm" style="margin-top:8px;" href="${esc(r.contractNext.order)}">労働条件通知書の更新を依頼する</a>` : ""}
+        </div></div>`;
+      el("rv-confirm")?.remove();
+      await loadList();
+      await openDrawer(id);
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "確定できませんでした"; }
+  }
+
+  // ---- 評価履歴 -------------------------------------------------------------------
+  async function loadHistory() {
+    let d;
+    try { d = await API.careerHistory(); } catch (e) { showError(e); return; }
+    el("h-rows").innerHTML = d.reviews.length ? d.reviews.map((r) => `
+      <tr><td>${esc(r.employeeName || "")}</td>
+        <td>${r.fromLevel ? `L${r.fromLevel.levelNo}` : "—"} → ${r.targetLevel ? `L${r.targetLevel.levelNo}` : "—"}</td>
+        <td>${r.achieved} / ${r.total}</td>
+        <td>${esc(labelOf(d.labels.reviewResults, r.result) || "—")}</td>
+        <td>${esc(r.salaryDecision && r.salaryDecision !== "none" ? labelOf(d.labels.salaryDecisions, r.salaryDecision) : "—")}</td>
+        <td>${r.status === "confirmed" ? "確定" : "下書き"}</td>
+        <td>${fmtDate(r.decidedAt)}</td></tr>`).join("")
+      : `<tr><td colspan="7" class="muted">まだ評価はありません。</td></tr>`;
+  }
+
+  // ---- キャリアマスタ -------------------------------------------------------------
+  let master = null;
+  async function loadMaster() {
+    try { master = await API.careerMaster(); } catch (e) { showError(e); return; }
+    const canEdit = master.canEdit;
+    el("m-actions").innerHTML = canEdit ? `
+      ${master.tracks.some((t) => t.name === "共通") ? "" : `<button class="btn btn-secondary btn-sm" onclick="seed(this)">共通テンプレートを入れる</button>`}
+      <button class="btn btn-primary btn-sm" onclick="editTrack()">職種を追加</button>` : "";
+    if (!master.tracks.length) {
+      el("m-body").innerHTML = `<div class="empty">まだ職種がありません。${canEdit ? "「共通テンプレートを入れる」で L1〜L5 の型が入ります。" : ""}</div>`;
+      return;
+    }
+    el("m-body").innerHTML = master.tracks.map((t) => {
+      const levels = master.levels.filter((l) => l.track_id === t.id).sort((a, b) => a.level_no - b.level_no);
+      return `<div class="cr-master-track" data-track="${esc(t.id)}">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <b style="font-size:15px;">${esc(t.name)}</b>${t.is_active === false ? `<span class="cr-na">無効</span>` : ""}
+          ${canEdit ? `<span style="margin-left:auto;display:flex;gap:6px;">
+            <button class="btn btn-secondary btn-sm" onclick="editTrack('${esc(t.id)}')">編集</button>
+            <button class="btn btn-secondary btn-sm" onclick="editLevel(null,'${esc(t.id)}')">Levelを追加</button></span>` : ""}
+        </div>
+        ${t.one_year_goal ? `<div class="cr-note">1年後：${esc(t.one_year_goal)}</div>` : ""}
+        ${t.three_year_goal ? `<div class="cr-note">3年後：${esc(t.three_year_goal)}</div>` : ""}
+        ${levels.map((l) => {
+          const crit = master.criteria.filter((c) => c.level_id === l.id);
+          return `<div class="cr-master-level" data-level="${esc(l.id)}">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <b>LEVEL ${l.level_no}</b> ${esc(l.level_name)}
+              <span class="muted" style="font-size:12px;">${esc(l.role_summary || "")}</span>
+              <span style="font-size:12px;">${esc(range({ salaryMin: l.salary_min, salaryMax: l.salary_max }))}</span>
+              ${canEdit ? `<span style="margin-left:auto;display:flex;gap:6px;">
+                <button class="btn btn-secondary btn-sm" onclick="editLevel('${esc(l.id)}')">編集</button>
+                <button class="btn btn-secondary btn-sm" onclick="editCriterion(null,'${esc(l.id)}')">基準を追加</button></span>` : ""}
+            </div>
+            ${crit.length ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px;line-height:1.8;">${crit.map((c) => `
+              <li>${esc(c.category)}：${esc(c.title)}${c.required === false ? "（加点）" : ""}
+                <span class="muted">［${esc(labelOf(master.evidenceTypes, c.evidence_type))}］</span>
+                ${canEdit ? `<a href="#" onclick="editCriterion('${esc(c.id)}');return false;">編集</a>` : ""}</li>`).join("")}</ul>` : ""}
+          </div>`;
+        }).join("")}
+      </div>`;
+    }).join("");
+  }
+
+  async function seed(btn) {
+    try { await KPLayout.busy(btn, "入れています…", () => API.careerAct({ action: "seedStarter" })); await loadMaster(); }
+    catch (e) { showError(e); }
+  }
+
+  function field(id, label, value, { type = "text", rows = 0 } = {}) {
+    return `<div style="margin-bottom:10px;"><label>${label}</label>${rows
+      ? `<textarea id="${id}" rows="${rows}">${esc(value ?? "")}</textarea>`
+      : `<input id="${id}" type="${type}" value="${esc(value ?? "")}">`}</div>`;
+  }
+  const masterModal = (title, body, onSave) => openModal(`<h2>${title}</h2>${body}
+    <div id="mm-msg" class="err-text" style="margin:10px 0;"></div>
+    <div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="${onSave}(this)">保存</button>
+      <button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`);
+
+  let editing = null;
+  function editTrack(id) {
+    const t = master.tracks.find((x) => x.id === id) || {};
+    editing = { id, kind: "track" };
+    masterModal(id ? "職種を編集" : "職種を追加",
+      field("mt-name", "職種名", t.name) + field("mt-desc", "説明", t.description, { rows: 2 })
+      + field("mt-1y", "1年後の目安", t.one_year_goal, { rows: 2 }) + field("mt-3y", "3年後の目安", t.three_year_goal, { rows: 2 })
+      + `<label style="display:flex;gap:6px;font-weight:500;"><input id="mt-active" type="checkbox" style="width:auto;margin:0;" ${t.is_active === false ? "" : "checked"}>使用する</label>`,
+      "saveTrack");
+  }
+  async function saveTrack(btn) {
+    await masterSave(btn, { action: "saveTrack", id: editing.id, name: el("mt-name").value,
+      description: el("mt-desc").value, oneYearGoal: el("mt-1y").value, threeYearGoal: el("mt-3y").value,
+      isActive: el("mt-active").checked });
+  }
+  function editLevel(id, trackId) {
+    const l = master.levels.find((x) => x.id === id) || {};
+    const tId = l.track_id || trackId;
+    const nextNo = Math.max(0, ...master.levels.filter((x) => x.track_id === tId).map((x) => x.level_no)) + 1;
+    editing = { id, kind: "level", trackId: tId };
+    masterModal(id ? "Levelを編集" : "Levelを追加",
+      `<div class="inline-controls">${field("ml-no", "Level", l.level_no ?? nextNo, { type: "number" })}
+        ${field("ml-months", "到達の目安（入社からの月数）", l.typical_months, { type: "number" })}</div>`
+      + field("ml-name", "Level名", l.level_name) + field("ml-role", "役割（ひとこと）", l.role_summary)
+      + field("ml-exp", "期待される役割", l.expected_role, { rows: 2 })
+      + `<div class="inline-controls">${field("ml-min", "給与レンジ 下限（円）", l.salary_min, { type: "number" })}
+        ${field("ml-max", "給与レンジ 上限（円）", l.salary_max, { type: "number" })}</div>
+        <p class="cr-note">給与レンジは目安です。「達成すれば必ずこの金額」という意味にはなりません。</p>`
+      + field("ml-next", "次のLevelへ（ひとこと）", l.next_level_summary),
+      "saveLevel");
+  }
+  async function saveLevel(btn) {
+    await masterSave(btn, { action: "saveLevel", id: editing.id, trackId: editing.trackId,
+      levelNo: el("ml-no").value, typicalMonths: el("ml-months").value, levelName: el("ml-name").value,
+      roleSummary: el("ml-role").value, expectedRole: el("ml-exp").value,
+      salaryMin: el("ml-min").value, salaryMax: el("ml-max").value, nextLevelSummary: el("ml-next").value });
+  }
+  function editCriterion(id, levelId) {
+    const c = master.criteria.find((x) => x.id === id) || {};
+    editing = { id, kind: "criterion", levelId: c.level_id || levelId };
+    const cats = [...new Set(master.criteria.map((x) => x.category))];
+    masterModal(id ? "評価基準を編集" : "評価基準を追加",
+      field("mc-cat", "カテゴリー（例：業務遂行・専門スキル）", c.category || cats[0] || "")
+      + field("mc-title", "基準", c.title) + field("mc-desc", "説明", c.description, { rows: 2 })
+      + `<div class="inline-controls"><div><label>根拠の種類</label><select id="mc-ev">${master.evidenceTypes.map((e) =>
+          `<option value="${esc(e.key)}" ${c.evidence_type === e.key ? "selected" : ""}>${esc(e.label)}</option>`).join("")}</select></div>
+        ${field("mc-req", "数値の下限（自走レベル等）", c.required_level, { type: "number" })}</div>
+        <label style="display:flex;gap:6px;font-weight:500;"><input id="mc-required" type="checkbox" style="width:auto;margin:0;" ${c.required === false ? "" : "checked"}>必須（外すと加点）</label>
+        <label style="display:flex;gap:6px;font-weight:500;"><input id="mc-active" type="checkbox" style="width:auto;margin:0;" ${c.is_active === false ? "" : "checked"}>使用する</label>`,
+      "saveCriterion");
+  }
+  async function saveCriterion(btn) {
+    await masterSave(btn, { action: "saveCriterion", id: editing.id, levelId: editing.levelId,
+      category: el("mc-cat").value, title: el("mc-title").value, description: el("mc-desc").value,
+      evidenceType: el("mc-ev").value, requiredLevel: el("mc-req").value,
+      required: el("mc-required").checked, isActive: el("mc-active").checked });
+  }
+  async function masterSave(btn, payload) {
+    const msg = el("mm-msg"); msg.textContent = "";
+    try { await KPLayout.busy(btn, "保存中…", () => API.careerAct(payload)); closeModal(); await loadMaster(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+</script>
+</body>
+</html>
