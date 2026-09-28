@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260928e">
-  <link rel="stylesheet" href="css/layout.css?v=20260928e">
+  <link rel="stylesheet" href="css/app.css?v=20260928g">
+  <link rel="stylesheet" href="css/layout.css?v=20260928g">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -117,6 +117,9 @@
 <div class="wrap">
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
+
+  <!-- 会社から契約・入社手続き・キャリアの確認が届いているときだけ、いま必要なもの1つ（api/career/me?summary=1） -->
+  <div id="career-ask" class="hidden"></div>
 
   <!-- 今日やる3つ。この画面でいちばん上・いちばん大きく。
        10件あっても、まずこの3つを終わらせる -->
@@ -248,9 +251,10 @@
 
 </div>
 
-<script src="js/api-client.js?v=20260928e"></script>
-<script src="js/device.js?v=20260928e"></script>
-<script src="js/layout.js?v=20260928e"></script>
+<script src="js/api-client.js?v=20260928g"></script>
+<script src="js/device.js?v=20260928g"></script>
+<script src="js/layout.js?v=20260928g"></script>
+<script src="js/journey-bar.js?v=20260928g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -275,11 +279,39 @@
          </div>`);
     }
 
+    if (ctx.me?.gw?.employee) loadCareerAsk();
     loadFocus();
     loadDashboard();
     renderTiles(await loadStats());
     loadNotices();
     wireMemoInput();
+  }
+
+  // ---- 契約・入社手続き・キャリアの確認（会社から届いたとき） -------------------------------------
+  async function loadCareerAsk() {
+    let s;
+    try { s = await API.myCareerSummary(); } catch { return; }
+    // 入社〜キャリアの途中なら、共通ステータスバー（管理者と同じ判定。js/journey-bar.js）
+    if (s?.journey?.inProgress) {
+      const box = el("career-ask");
+      box.innerHTML = `<div class="card" id="journey-card" style="margin-bottom:18px;">
+        <h2><span class="material-symbols-outlined">route</span>入社〜キャリアの進み具合</h2>
+        ${KPJourney.panel(s.journey, { viewer: "member", here: "home.html" })}</div>`;
+      box.classList.remove("hidden");
+      return;
+    }
+    if (!s?.show) return;
+    // その時点で必要な NEXT ACTION を1つだけ（契約 → 入社情報 → 書類 → キャリアプラン）
+    const ask = s.ask || { title: "契約・キャリアの確認があります", cta: "確認する", href: s.link,
+      body: "会社から、現在の契約内容と今後のキャリアプランが届いています。" };
+    const box = el("career-ask");
+    box.innerHTML = `<div class="banner warn" style="margin-bottom:18px;align-items:center;">
+      <span class="material-symbols-outlined">assignment_ind</span>
+      <div style="flex:1;"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;">NEXT ACTION</div>
+        <b>${esc(ask.title)}</b>
+        <div style="font-size:13px;">${esc(ask.body || "")}</div></div>
+      <a class="btn btn-primary btn-sm" href="${esc(ask.href || "career.html#confirm")}">${esc(ask.cta || "確認する")}</a></div>`;
+    box.classList.remove("hidden");
   }
 
   // ---- とりあえずメモ ----------------------------------------------------------

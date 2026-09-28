@@ -8,6 +8,7 @@
 // 証憑（documents）とは別のバケット 'hr' に保存する。
 // マイナンバー確認書類などを、同じ取引先のメンバーから見えない場所に置くため。
 
+import { intakeGate } from "../../lib/onboard-gate.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
@@ -60,6 +61,11 @@ async function issueUploadUrl(req, res, ctx, user) {
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
 
   const sb = admin();
+  // 本人が出すときは、契約（署名）が済んでから（lib/onboard-gate.js）。人事の代理アップロードは止めない
+  if (item.kind === "onboarding" && ctx.employee?.id === item.employeeId && !canManageHr(ctx)) {
+    const gate = await intakeGate(sb, ctx.tenantId, item.employeeId);
+    if (!gate.ok) return json(res, 409, { error: "contract_not_signed", stage: gate.stage, hint: gate.hint });
+  }
   const ext = filename.includes(".") ? filename.split(".").pop().toLowerCase().slice(0, 8) : "bin";
   const fileId = crypto.randomUUID();
   const storagePath = `${ctx.tenantId}/${item.procedureId}/${fileId}.${ext}`;

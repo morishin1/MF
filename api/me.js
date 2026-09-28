@@ -12,6 +12,7 @@ import { json, methodNotAllowed } from "../lib/http.js";
 import { requireUser, getMemberships } from "../lib/auth.js";
 import { admin } from "../lib/supabase.js";
 import { stageInfo, shouldOpen, onboardingDone } from "../lib/stages.js";
+import { intakeGate } from "../lib/onboard-gate.js";
 import { jstDate } from "../lib/nippo.js";
 import { mfaState } from "../lib/mfa.js";
 import { accessOf } from "../lib/gw.js";
@@ -97,11 +98,15 @@ async function loadGroupware(userId, tenantId) {
           .limit(200)
       : Promise.resolve({ data: null }),
   ]);
-  const done = itemsRes.data ? onboardingDone(itemsRes.data) : false;
+  // 労働条件の署名（本人契約）が済んでいるか。入社準備中の人だけ調べる。
+  // 済むまでは、入社日が来ても在籍（active）にしないし、画面も開けない（lib/onboard-gate.js）
+  const signedOk = employee.status === "invited"
+    ? (await intakeGate(sb, tenantId, employee.id)).ok : true;
+  const done = itemsRes.data ? onboardingDone(itemsRes.data) && signedOk : false;
 
   // 入社日が来ていれば、その場で在籍に切り替える。
   // これは書き込みなので、上の2本とは分ける（たいていの人は通らない）
-  if (shouldOpen(employee, jstDate())) {
+  if (signedOk && shouldOpen(employee, jstDate())) {
     const { error: ue } = await sb.from("gw_employees")
       .update({ status: "active", updated_at: new Date().toISOString() })
       .eq("id", employee.id);
