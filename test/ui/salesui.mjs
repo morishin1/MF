@@ -9,6 +9,9 @@
 //   4. 直近30日以内にアタック済みなら、警告が出て送れない（営業担当には押し切りボタンを出さない）
 //   5. 権限の無い人は home.html へ送り返される
 //   6. スマホ幅でも横にはみ出さない
+//   7. 送信完了は送信チャネル（必須）・送信元を中央モーダルで選ぶ。「送信できなかった」は理由必須（db/096）
+//   8. 非表示：一括で非表示 → 通常の一覧から消える → 「非表示」で見える → 再表示
+//   9. 返信・やり取りを記録：返信元・いまの連絡手段・連絡先・メモ・NEXT。企業詳細に「現在の連絡状況」
 import { launch, BASE, jstToday } from "../_browser.mjs";
 
 const br = await launch();
@@ -26,7 +29,8 @@ function company(over) {
     ownerId: "emp-s1", ownerName: "営業 一郎", status: "untouched", statusLabel: "未アタック",
     ngReason: null, ngLabel: null, attackCount: 0, lastSentAt: null, clickCount: 0, firstClickAt: null,
     lastClickAt: null, unhandledClick: false, next: "フォームアタック", nextKey: "attack", nextDue: null,
-    overdue: false, campaignId: null, campaignName: null, ...over,
+    overdue: false, campaignId: null, campaignName: null, hidden: false, hiddenLabel: null,
+    contactChannel: null, contactChannelLabel: null, contactValue: null, contacts: {}, ...over,
   };
 }
 
@@ -79,7 +83,10 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
         for (const c of ok) companies.splice(companies.indexOf(c), 1);
         return send({ deleted: ok.length, failed: 0, notFound: 0, blocked });
       }
+      const HIDE = { link_broken: "リンク切れ", closed: "閉業", not_target: "営業対象外" };
       for (const c of hit) {
+        if (b.action === "hide") { c.hidden = true; c.hiddenReason = b.reason; c.hiddenLabel = HIDE[b.reason] || b.reason; }
+        if (b.action === "unhide") { c.hidden = false; c.hiddenReason = null; c.hiddenLabel = null; }
         if (b.action === "change_status") { c.status = b.status; c.statusLabel = { lost: "失注", excluded: "対象外" }[b.status] || b.status; }
         if (b.action === "change_owner") { c.ownerId = b.ownerId; c.ownerName = b.ownerId ? "営業 一郎" : null; }
       }
@@ -94,8 +101,30 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
       if (ctl.delay[id]) await new Promise((r) => setTimeout(r, ctl.delay[id]));
       if (ctl.fail.has(id)) return send({ error: "db_failed", detail: "わざと失敗" }, 500);
       const c = companies.find((x) => x.id === id);
+      if (req.method() === "POST" && body().action === "contact") {
+        const b = body();
+        calls.push({ kind: "contact", body: b });
+        const LBL = { email: "メール", instagram: "Instagram", line: "LINE" };
+        if (b.contactChannel) { c.contactChannel = b.contactChannel; c.contactChannelLabel = LBL[b.contactChannel] || b.contactChannel; }
+        c.contacts = { ...c.contacts, ...(b.contacts || {}) };
+        c.contactValue = c.contacts[c.contactChannel] || null;
+        if (b.replied) { c.status = "replied"; c.statusLabel = "返信あり"; c.replyChannel = b.replyChannel; }
+        return send({ company: c });
+      }
+      const ch = (keys) => keys.map(([key, label]) => ({ key, label }));
       return send({
         today: TODAY, company: c, approaches: [], recent,
+        contactStatus: {
+          firstChannelLabel: c.lastSentAt ? "お問い合わせフォーム" : null,
+          replyChannelLabel: c.replyChannel === "instagram" ? "Instagram" : null,
+          currentChannelLabel: c.contactChannelLabel, currentValue: c.contactValue,
+          lastContactAt: c.lastSentAt,
+        },
+        sendChannels: ch([["form", "お問い合わせフォーム"], ["email", "メール"], ["instagram", "Instagram"], ["x", "X"]]),
+        replyChannels: ch([["form", "お問い合わせフォーム経由"], ["email", "メール"], ["instagram", "Instagram"], ["phone", "電話"]]),
+        contactChannels: ch([["email", "メール"], ["line", "LINE"], ["instagram", "Instagram"], ["phone", "電話"]]),
+        sendFailReasons: ch([["no_form", "問い合わせフォームがない"], ["captcha", "CAPTCHA等で送信できない"], ["other", "その他"]]),
+        hideReasons: ch([["link_broken", "リンク切れ"], ["other", "その他"]]),
         timeline: c.lastSentAt ? [{ at: c.lastSentAt, kind: "attack", label: "フォーム送信" },
           { at: c.lastClickAt, kind: "click", label: "リンククリック" }] : [],
         canForce: isAdmin, members: [{ id: "emp-s1", display_name: "営業 一郎" }], campaigns: [],
@@ -139,7 +168,11 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
         companies.push(made);
         return send({ company: made });
       }
-      return send({ today: TODAY, me: "emp-s1", members: [{ id: "emp-s1", display_name: "営業 一郎" }], companies });
+      // 表示状態（既定は表示中だけ。本物の api/sales/companies と同じ）
+      const vis = new URL(url).searchParams.get("visibility") || "shown";
+      calls.push({ kind: "list", visibility: vis });
+      const listed = companies.filter((c) => (vis === "all" ? true : vis === "hidden" ? c.hidden : !c.hidden));
+      return send({ today: TODAY, me: "emp-s1", members: [{ id: "emp-s1", display_name: "営業 一郎" }], companies: listed });
     }
     if (/\/api\/sales\/templates\b/.test(url)) {
       return send({ services: [], templates: [{ id: "t1", name: "DX基本", service: "AI / DX", subject: null,
@@ -149,7 +182,10 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
     if (/\/api\/sales\/approaches\b/.test(url)) {
       if (req.method() === "POST") {
         calls.push({ kind: "prepare", body: body() });
-        if (recent && !body().force) return send({ error: "recent_attack", recent, canForce: isAdmin, hint: "直近30日以内にアタックされています" }, 409);
+        // 直近アタックの警告は同じチャネル（ここではフォーム）だけ。別チャネルなら準備できる
+        if (recent && !body().force && (body().channel || "form") === "form") {
+          return send({ error: "recent_attack", recent, canForce: isAdmin, hint: "直近30日以内にお問い合わせフォームでアタックされています" }, 409);
+        }
         return send({ approach: { id: "ap1", trackingToken: "X7K92PABCD", sentAt: null },
           trackingUrl: "https://gw.8grp.co.jp/r/X7K92PABCD" });
       }
@@ -218,10 +254,16 @@ console.log("\n=== 営業担当：企業 → フォームアタック → 送信
     "開いた時点で専用URLを発行している（テンプレートつき）");
   check(await page.locator(".atk a", { hasText: "問い合わせフォームを開く" }).count() === 1, "フォームを開くボタンがある");
 
+  check((await page.locator("#at-channel").inputValue()) === "form", "送信チャネルの初期値はお問い合わせフォーム");
   await page.locator("button", { hasText: "送信完了" }).click();
+  await page.locator(".sl-modal").waitFor();
+  check(await page.locator('.sl-modal input[name="sd-channel"][value="form"]').isChecked(), "送信完了モーダル：チャネルが選ばれている");
+  check(!calls.some((c) => c.kind === "act"), "モーダルで記録するまでは送らない");
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
   await page.waitForTimeout(800);
   const sent = calls.find((c) => c.kind === "act");
   check(sent && sent.body.action === "sent" && sent.body.id === "ap1", "送信完了を記録した");
+  check(sent && sent.body.channel === "form", "送信チャネル（フォーム）を送る");
   check(sent && sent.body.body.includes("/r/X7K92PABCD"), "送った本文（専用URLつき）を残す");
   check(sent && sent.body.service === "AI / DX", "提案サービスも残す");
   check(!(await page.locator(".atk").count()), "送信完了で閉じる");
@@ -231,7 +273,7 @@ console.log("\n=== 営業担当：企業 → フォームアタック → 送信
 
 console.log("\n=== 直近30日以内：警告して送らせない ===");
 {
-  const recent = { sentAt: NOW, employeeName: "営業 二郎", service: "PCレンタル", days: 30 };
+  const recent = { sentAt: NOW, employeeName: "営業 二郎", service: "PCレンタル", days: 30, channel: "form", channelLabel: "お問い合わせフォーム" };
   const { page, errs } = await openAs({ recent });
   await page.goto(`${BASE}/sales/companies.html?id=c1`);
   await page.waitForTimeout(1000);
@@ -240,10 +282,16 @@ console.log("\n=== 直近30日以内：警告して送らせない ===");
   await page.goto(`${BASE}/sales/companies.html?attack=c1`);
   await page.waitForTimeout(1000);
   const t = await page.locator(".atk").innerText();
-  check(t.includes("直近30日以内にアタックされています"), "警告が出る");
+  check(t.includes("直近30日以内にお問い合わせフォームでアタックされています"), "警告が出る（どのチャネルで送ったか）");
   check(t.includes("営業 二郎") && t.includes("PCレンタル"), "前回の担当・サービスが出る");
   check(!(await page.locator("#at-body").count()), "営業文は出さない");
   check(!(await page.locator("button", { hasText: "それでもアタックする" }).count()), "営業担当には押し切りボタンを出さない");
+  // 別のチャネル（Instagram など）なら送れる
+  check(!(await page.locator('#at-other-channel option[value="form"]').count()), "別チャネルの候補に、止められたチャネルは出さない");
+  await page.locator("#at-other-channel").selectOption("instagram");
+  await page.locator("button", { hasText: "別のチャネルで送る" }).click();
+  await page.locator("#at-body").waitFor();
+  check((await page.locator("#at-channel").inputValue()) === "instagram", "別チャネル（Instagram）の営業文画面に進める");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 
@@ -629,6 +677,131 @@ console.log("\n=== 削除：確認モーダル → 履歴の無い企業だけ�
   check(del && del.body.ids.join() === "c1", "消すのは履歴の無い企業だけ");
   check(await page.locator('#rows tr[data-id="c1"]').count() === 0 && await page.locator('#rows tr[data-id="c2"]').count() === 1,
     "一覧から消え、履歴のある企業は残る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 送信チャネル：Instagram・送信元つきで送信完了 ===");
+{
+  const { page, calls, errs } = await openAs();
+  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
+  await page.locator("#at-body").waitFor();
+  await page.locator("#at-channel").selectOption("instagram");
+  await page.waitForTimeout(500);
+  const preps = calls.filter((c) => c.kind === "prepare");
+  check(preps.at(-1)?.body.channel === "instagram", "チャネルを変えると、そのチャネルで専用URLを準備し直す（同じチャネルの30日チェック）");
+  check((await page.locator(".atk").innerText()).includes("Instagramで貼り付け"), "手順の案内がチャネルに合わせて変わる");
+  await page.locator("button", { hasText: "送信完了" }).click();
+  await page.locator(".sl-modal").waitFor();
+  check(await page.locator('.sl-modal input[name="sd-channel"][value="instagram"]').isChecked(), "選んだチャネルがモーダルで選ばれている");
+  await page.locator("#sd-from").fill("@eight_xxx");
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.waitForTimeout(800);
+  const sent = calls.find((c) => c.kind === "act");
+  check(sent && sent.body.channel === "instagram" && sent.body.sendFrom === "@eight_xxx", "Instagram・送信元を記録する");
+  // 次に開いたときは、同じチャネルの送信元を覚えている（この端末だけ）
+  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
+  await page.locator("#at-body").waitFor();
+  await page.locator("#at-channel").selectOption("instagram");
+  await page.waitForTimeout(400);
+  await page.locator("button", { hasText: "送信完了" }).click();
+  await page.locator(".sl-modal").waitFor();
+  check((await page.locator("#sd-from").inputValue()) === "@eight_xxx", "送信元は前回の値が入る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 送信できなかった：理由を選んで記録 ===");
+{
+  const { page, calls, errs } = await openAs();
+  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
+  await page.locator("#at-body").waitFor();
+  await page.locator("button", { hasText: "送信できなかった" }).click();
+  await page.locator(".sl-modal").waitFor();
+  check((await page.locator(".sl-modal").innerText()).includes("問い合わせフォームがない"), "理由の候補が出る");
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  check((await page.locator("#fl-msg").innerText()).includes("理由を選んでください"), "理由なしでは記録しない");
+  await page.locator('.sl-modal input[name="fl-reason"][value="other"]').check();
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  check((await page.locator("#fl-msg").innerText()).includes("メモ"), "「その他」はメモ必須");
+  check(!calls.some((c) => c.kind === "act"), "ここまでは送らない");
+  await page.locator('.sl-modal input[name="fl-reason"][value="no_form"]').check();
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.waitForTimeout(800);
+  const f = calls.find((c) => c.kind === "act");
+  check(f && f.body.action === "failed" && f.body.reason === "no_form" && f.body.channel === "form", "送信できなかった（理由・チャネル）を記録した");
+  check(!(await page.locator(".atk").count()), "記録するとアタック画面を閉じる");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 非表示フィルター → 再表示 ===");
+{
+  const { page, calls, errs } = await openAs();
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  const heads = await page.locator(".sl-table thead th").allInnerTexts();
+  check(heads.join("|").includes("連絡手段") && !heads.includes("業種") && !heads.includes("フォーム"),
+    `一覧の列は基本列（連絡手段あり・業種/フォームなし）：${heads.join(" ")}`);
+  await page.locator('#rows tr[data-id="c1"] td.sl-check input').check();
+  await page.locator("#bulk-more").click();
+  await page.locator("#bulk-menu button", { hasText: "非表示にする" }).click();
+  await page.locator(".sl-modal").waitFor();
+  await page.locator("#bk-go").click();
+  check((await page.locator("#bk-msg").innerText()).includes("理由"), "理由なしでは非表示にしない");
+  await page.locator('.sl-modal input[name="bk-hide"][value="link_broken"]').check();
+  await page.locator("#bk-go").click();
+  await page.waitForFunction(() => !document.querySelector('#rows tr[data-id="c1"]'));
+  const h = calls.find((c) => c.kind === "bulk-hide");
+  check(h && h.body.reason === "link_broken" && h.body.ids.join() === "c1", "一括APIで非表示（理由つき）");
+  check(!(await page.locator('#rows tr[data-id="c1"]').count()), "通常の一覧から消える");
+
+  await page.locator("#f-visible").selectOption("hidden");
+  await page.locator('#rows tr[data-id="c1"]').waitFor();
+  check(calls.some((c) => c.kind === "list" && c.visibility === "hidden"), "「非表示」で取り直す");
+  check((await page.locator('#rows tr[data-id="c1"]').innerText()).includes("非表示：リンク切れ"), "非表示の理由が状態に出る");
+  await page.locator('#rows tr[data-id="c1"] td.sl-check input').check();
+  await page.locator("#bulk-more").click();
+  await page.locator("#bulk-menu button", { hasText: "再表示する" }).click();
+  await page.locator("#bk-go").click();
+  await page.waitForFunction(() => !document.querySelector('#rows tr[data-id="c1"]'));
+  check(calls.some((c) => c.kind === "bulk-unhide"), "再表示した");
+  await page.locator("#f-visible").selectOption("shown");
+  await page.locator('#rows tr[data-id="c1"]').waitFor();
+  check(true, "表示中に戻っている");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 返信・やり取りを記録：Instagramで返信 → メールへ ===");
+{
+  const { page, calls, errs } = await openAs();
+  await page.goto(`${BASE}/sales/companies.html?id=c3`);
+  await page.locator(".sl-detail #contact-status").waitFor();
+  check((await page.locator("#contact-status").innerText()).includes("現在の連絡手段"), "企業詳細の上部に「現在の連絡状況」");
+  await page.locator(".sl-detail button", { hasText: "返信・やり取りを記録" }).first().click();
+  await page.locator(".sl-modal").waitFor();
+  check(!(await page.locator(".sl-drawer").count()), "2つ目の右ドロワーではなく中央モーダル");
+  // 返信あり（c3）の会社は「こちらから連絡」が初期値。返信に切り替える
+  await page.locator('.sl-modal input[name="ct-kind"][value="reply"]').check();
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  check((await page.locator("#ct-msg").innerText()).includes("どこから返信"), "返信元は必須");
+  await page.locator('.sl-modal input[name="ct-reply"][value="instagram"]').check();
+  check((await page.locator("#ct-channel").inputValue()) === "instagram", "返信元と同じチャネルを連絡手段に入れておく");
+  await page.locator("#ct-channel").selectOption("email");
+  await page.locator("#ct-c-email").fill("tanaka@example.co.jp");
+  await page.locator("#ct-note").fill("詳細資料はメールで送付");
+  await page.locator("#ct-next").fill("資料送付");
+  await page.locator("#ct-next-on").fill("2026-10-01");
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.waitForFunction(() => !document.querySelector(".sl-modal"));
+  const r = calls.find((c) => c.kind === "contact");
+  check(r && r.body.replied === true && r.body.replyChannel === "instagram" && r.body.contactChannel === "email",
+    "返信元・いまの連絡手段を送る");
+  check(r && r.body.contacts?.email === "tanaka@example.co.jp" && r.body.note.includes("資料"), "連絡先・メモを送る");
+  check(r && r.body.nextAction === "資料送付" && r.body.nextActionOn === "2026-10-01", "NEXT も一緒に送る");
+  await page.waitForFunction(() => (document.querySelector("#contact-status")?.innerText || "").includes("tanaka@example.co.jp"));
+  check((await page.locator("#contact-status").innerText()).includes("メール"), "現在の連絡手段がメールになる");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }

@@ -54,6 +54,11 @@
 
   <div class="co-filters">
     <input type="text" id="f-q" placeholder="企業名・URLで探す" oninput="render()">
+    <select id="f-visible" onchange="load()" aria-label="表示状態">
+      <option value="shown">表示中</option>
+      <option value="hidden">非表示</option>
+      <option value="all">すべて</option>
+    </select>
     <select id="f-industry" onchange="render()"></select>
     <select id="f-region" onchange="render()"></select>
     <select id="f-service" onchange="render()"></select>
@@ -75,9 +80,9 @@
   <div style="overflow-x:auto;">
     <table class="sl-table">
       <thead><tr><th class="sl-check"><input type="checkbox" id="sel-all" aria-label="表示中の企業をすべて選択"
-          onclick="toggleAll(this.checked)"></th><th>企業</th><th>業種</th><th>フォーム</th><th>商材</th><th>状態</th><th>最終アタック</th>
-        <th>クリック</th><th>NEXT</th><th>担当</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="10" class="empty">読み込み中…</td></tr></tbody>
+          onclick="toggleAll(this.checked)"></th><th>企業</th><th>商材</th><th>状態</th><th>最終アタック</th>
+        <th>連絡手段</th><th>クリック</th><th>NEXT</th><th>担当</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -87,9 +92,9 @@
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20260928h"></script>
-<script src="../js/layout.js?v=20260928h"></script>
-<script src="../js/sales-layout.js?v=20260928h"></script>
+<script src="../js/api-client.js?v=20260928ch1"></script>
+<script src="../js/layout.js?v=20260928ch1"></script>
+<script src="../js/sales-layout.js?v=20260928ch1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   // 企業詳細の取得は、あとから開いたものだけを画面に出す。
@@ -135,9 +140,9 @@
 
   async function load() {
     try {
-      const res = await API.listSalesCompanies();
+      const res = await API.listSalesCompanies(el("f-visible").value);
       if (res.notReady) {
-        el("rows").innerHTML = `<tr><td colspan="10"><div class="banner warn">
+        el("rows").innerHTML = `<tr><td colspan="9"><div class="banner warn">
           <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
         return;
       }
@@ -147,7 +152,7 @@
       renderFilters();
       render();
     } catch (e) {
-      el("rows").innerHTML = `<tr><td colspan="10"><div class="banner err">
+      el("rows").innerHTML = `<tr><td colspan="9"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
     }
@@ -191,7 +196,9 @@
     for (const id of [...selected]) if (!vis.has(id)) selected.delete(id);
     el("count").textContent = `${list.length}社${list.length !== companies.length ? `（全${companies.length}社）` : ""}`;
     if (!list.length) {
-      el("rows").innerHTML = `<tr><td colspan="10" class="empty">${companies.length ? "対象がありません。" : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
+      el("rows").innerHTML = `<tr><td colspan="9" class="empty">${companies.length ? "対象がありません。"
+        : el("f-visible").value === "hidden" ? "非表示の企業はありません。"
+        : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
       renderSelection();
       return;
     }
@@ -199,17 +206,17 @@
       <tr class="click${selected.has(c.id) ? " sel" : ""}" data-id="${esc(c.id)}" onclick="openDetail('${esc(c.id)}')">
         <td class="sl-check" onclick="event.stopPropagation()"><input type="checkbox" aria-label="${esc(c.name)}を選択"
           ${selected.has(c.id) ? "checked" : ""} onclick="event.stopPropagation();toggleOne('${esc(c.id)}', this.checked)"></td>
-        <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.domain || "")}${c.region ? ` ／ ${esc(c.region)}` : ""}</span></td>
-        <td>${esc(c.industry || "—")}</td>
-        <td>${c.formUrl ? `<a href="${esc(c.formUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">開く</a>` : `<span class="sl-muted">未登録</span>`}</td>
+        <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc([c.domain, c.industry, c.region].filter(Boolean).join(" ／ "))}</span></td>
         <td>${esc(c.service || "—")}</td>
-        <td>${c.ngReason ? statusPill("excluded", `NG：${c.ngLabel}`) : statusPill(c.status, c.statusLabel)}</td>
-        <td>${c.lastSentAt ? `${esc(fmt(c.lastSentAt))}<span class="sl-sub2">${esc(c.lastAttackerName || "")}</span>` : "—"}</td>
+        <td>${c.hidden ? statusPill("lost", `非表示：${c.hiddenLabel || ""}`)
+          : c.ngReason ? statusPill("excluded", `NG：${c.ngLabel}`) : statusPill(c.status, c.statusLabel)}</td>
+        <td>${c.lastSentAt ? `${esc(fmt(c.lastSentAt))}<span class="sl-sub2">${esc([c.lastChannel && c.lastChannel !== "form" ? c.lastChannelLabel : "", c.lastAttackerName].filter(Boolean).join(" ／ "))}</span>` : "—"}</td>
+        <td>${c.contactChannelLabel ? esc(c.contactChannelLabel) : `<span class="sl-muted">—</span>`}</td>
         <td>${c.clickCount ? `<span class="${c.unhandledClick ? "sl-hot" : ""}">${c.clickCount}回</span>` : "—"}</td>
         <td><span class="${c.overdue ? "sl-hot" : ""}">${esc(c.next)}</span>${c.nextDue ? `<span class="sl-sub2">${esc(fmtDay(c.nextDue))}</span>` : ""}</td>
         <td>${esc(c.ownerName || "未定")}</td>
       </tr>`).join("")
-      + (list.length > 500 ? `<tr><td colspan="10" class="empty">ほか${list.length - 500}社。絞り込んでください。</td></tr>` : "");
+      + (list.length > 500 ? `<tr><td colspan="9" class="empty">ほか${list.length - 500}社。絞り込んでください。</td></tr>` : "");
     renderSelection();
   }
 
@@ -240,6 +247,17 @@
     ["no_sales", "営業禁止"], ["unsubscribed", "配信停止希望"], ["no_form_sales", "問い合わせフォーム営業禁止"],
     ["partner", "取引先"], ["customer", "既存顧客"], ["competitor", "競合"], ["other", "その他"],
   ];
+  // 非表示の理由（lib/sales.js HIDE_REASONS と同じ）
+  const HIDE_REASONS = [
+    ["link_broken", "リンク切れ"], ["no_info", "会社情報なし"], ["closed", "閉業"],
+    ["not_target", "営業対象外"], ["duplicate", "重複"], ["other", "その他"],
+  ];
+  const hideForm = (name) => `
+    <label>理由</label>
+    <div>${HIDE_REASONS.map(([k, l]) => `
+      <label class="sl-chip"><input type="radio" name="${name}" value="${esc(k)}">${esc(l)}</label>`).join("")}</div>
+    <label style="margin-top:10px;">メモ（任意）</label>
+    <textarea id="${name}-note" rows="2"></textarea>`;
 
   function toggleOne(id, on) {
     if (on) selected.add(id); else selected.delete(id);
@@ -282,6 +300,8 @@
           <div class="sl-bulkmenu" id="bulk-menu" role="menu" hidden>
             <button role="menuitem" onclick="openBulk('service')">提案サービス変更</button>
             <button role="menuitem" onclick="openBulk('campaign')">キャンペーン変更</button>
+            <button role="menuitem" onclick="openBulk('hide')">非表示にする</button>
+            <button role="menuitem" onclick="openBulk('unhide')">再表示する</button>
             <button role="menuitem" onclick="openBulk('ng')">営業禁止にする</button>
             <hr>
             <button role="menuitem" class="danger" onclick="openBulk('delete')">削除</button>
@@ -357,6 +377,18 @@
         <label style="margin-top:10px;">補足（任意）</label>
         <textarea id="bk-ng-note" rows="2"></textarea>
         ${bulkFoot(`${n}社を営業禁止にする`, "submitBulkNg(this)")}`);
+    } else if (kind === "hide") {
+      openActionModal(`
+        <h2>${n}社を非表示にします</h2>
+        <p class="sl-sub" style="margin:0 0 12px;">削除ではありません。データは残り、通常の一覧・ダッシュボード・アタック対象から外れます。
+          「表示状態：非表示」でいつでも確認・再表示できます。すでに非表示の企業はそのままです。</p>
+        ${hideForm("bk-hide")}
+        ${bulkFoot(`${n}社を非表示にする`, "submitBulkHide(this)")}`);
+    } else if (kind === "unhide") {
+      openActionModal(`
+        <h2>${n}社を再表示します</h2>
+        <p class="sl-sub" style="margin:0 0 12px;">通常の一覧・アタック対象に戻します。非表示でない企業はそのままです。</p>
+        ${bulkFoot(`${n}社を再表示する`, "submitBulk(this, 'unhide', {})")}`);
     } else if (kind === "delete") {
       openBulkDelete();
     }
@@ -366,6 +398,18 @@
     const picked = document.querySelector('input[name="bk-ng"]:checked');
     if (!picked) { el("bk-msg").textContent = "理由を選んでください"; return; }
     return submitBulk(btn, "set_ng", { ngReason: picked.value, ngNote: el("bk-ng-note").value.trim() || null });
+  }
+
+  function hidePicked(name, msgId) {
+    const picked = document.querySelector(`input[name="${name}"]:checked`);
+    const note = el(`${name}-note`).value.trim();
+    const msg = el(msgId);
+    if (!picked) { msg.textContent = "理由を選んでください"; return null; }
+    return { reason: picked.value, note: note || null };
+  }
+  function submitBulkHide(btn) {
+    const v = hidePicked("bk-hide", "bk-msg");
+    if (v) return submitBulk(btn, "hide", v);
   }
 
   // 削除は危険操作。まずサーバで「消せる企業／消せない企業（理由つき）」を確かめてから、消せる企業だけを消す
@@ -751,10 +795,13 @@
     const meeting = activeMeetingOf(detail.meetings);
     // リード（反応があった企業）の Primary CTA は「面談を設定」1つだけ（要件 Phase 2）
     const lead = isLeadCompany(c);
-    const cta = c.ngReason ? ""
+    const cta = c.hidden
+      ? `<button class="btn btn-primary btn-sm" onclick="unhideOne(this)">再表示する</button>`
+      : c.ngReason ? ""
       : lead
         ? `<button class="btn btn-primary btn-sm" onclick="openMeeting()">
              <span class="material-symbols-outlined icon-inline">event</span>面談を設定</button>
+           <button class="btn btn-secondary btn-sm" onclick="openContact()">返信・やり取りを記録</button>
            ${c.nextKey === "follow_click" ? `<button class="btn btn-secondary btn-sm" onclick="openEvent('follow')">フォローを記録</button>` : ""}`
       : c.nextKey === "follow_click"
         ? `<button class="btn btn-primary btn-sm" onclick="openEvent('follow')">フォローを記録</button>
@@ -775,11 +822,15 @@
       </div>
 
       <div style="padding:14px 20px 0;">
+        ${c.hidden ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">visibility_off</span>
+          <div>非表示にしています（${esc(c.hiddenLabel || "理由未設定")}）。通常の一覧・アタック対象には出ません。${c.hiddenNote ? `<br>${esc(c.hiddenNote)}` : ""}</div></div>` : ""}
         ${c.ngReason ? `<div class="sl-warn"><span class="material-symbols-outlined">block</span>
           <div>営業禁止（${esc(c.ngLabel)}）です。アタックできません。${c.ngNote ? `<br>${esc(c.ngNote)}` : ""}</div></div>` : ""}
         ${detail.recent && !c.ngReason ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span>
           <div>${recentLine(detail.recent)}</div></div>` : ""}
       </div>
+
+      ${contactStatusHtml(detail.contactStatus, c)}
 
       <div class="sl-next" style="margin:4px 20px 16px;">
         <div class="now">現在：${esc(c.statusLabel)}${c.clickCount ? `　クリック ${c.clickCount}回（最終 ${esc(fmt(c.lastClickAt))}）` : ""}</div>
@@ -793,12 +844,14 @@
 
       <div style="padding:0 20px 24px;">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-          ${!c.ngReason && c.nextKey !== "attack" ? `<button class="btn btn-secondary btn-sm" onclick="openAttack('${esc(c.id)}')">
+          ${!c.ngReason && !c.hidden && c.nextKey !== "attack" ? `<button class="btn btn-secondary btn-sm" onclick="openAttack('${esc(c.id)}')">
             <span class="material-symbols-outlined icon-inline">send</span>フォームアタック</button>` : ""}
+          ${lead && !c.hidden && !c.ngReason ? "" : `<button class="btn btn-secondary btn-sm" onclick="openContact()">返信・やり取りを記録</button>`}
           ${c.nextKey === "attack" ? `<button class="btn btn-secondary btn-sm" onclick="openEvent('memo')">履歴を記録</button>` : ""}
           <button class="btn btn-secondary btn-sm" onclick="openStatus()">ステータス・NEXT</button>
           <button class="btn btn-secondary btn-sm" onclick="openEdit()">基本情報を編集</button>
           <button class="btn btn-secondary btn-sm" onclick="openNg()">${c.ngReason ? "営業禁止を解除" : "営業禁止にする"}</button>
+          ${c.hidden ? "" : `<button class="btn btn-secondary btn-sm" onclick="openHideOne()">非表示にする</button>`}
         </div>
 
         <div class="card" style="margin-bottom:16px;">
@@ -811,6 +864,7 @@
             <div><dt>企業規模</dt><dd>${esc(c.size || "—")}</dd></div>
             <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
             <div><dt>キャンペーン</dt><dd>${esc(c.campaignName || "—")}</dd></div>
+            ${contactRows(c)}
             ${c.clickCount ? `<div><dt>初回クリック</dt><dd>${esc(fmt(c.firstClickAt))}</dd></div>
             <div><dt>最終クリック</dt><dd>${esc(fmt(c.lastClickAt))}（${c.clickCount}回）</dd></div>` : ""}
           </dl>
@@ -836,11 +890,35 @@
           ${detail.approaches.map((a) => `
             <details class="card" style="margin-bottom:8px;">
               <summary style="cursor:pointer;font-size:12.5px;color:#1b2440;">
-                ${esc(fmt(a.sentAt || a.preparedAt))}　${esc(a.employeeName || "")}　${esc(a.service || "")}
+                ${esc(fmt(a.sentAt || a.preparedAt))}　${esc(a.channelLabel || "")}${a.sendFrom ? `（${esc(a.sendFrom)}）` : ""}　${esc(a.employeeName || "")}　${esc(a.service || "")}
                 ${a.clickCount ? `<span class="sl-hot">　クリック${a.clickCount}回</span>` : ""}${a.forced ? `<span class="sl-muted">　（警告を押し切り）</span>` : ""}</summary>
               <div style="font-size:12.5px;white-space:pre-wrap;margin-top:8px;">${esc(a.body || "")}</div>
             </details>`).join("")}` : ""}
       </div>`;
+  }
+
+  // 現在の連絡状況（最初の送信・返信元・いまの連絡手段・最終連絡・担当）
+  function contactStatusHtml(s, c) {
+    if (!s) return "";
+    const row = (dt, dd) => `<div><dt>${esc(dt)}</dt><dd>${dd}</dd></div>`;
+    const or = (v) => (v ? esc(v) : `<span class="sl-muted">—</span>`);
+    return `<div class="card" id="contact-status" style="margin:0 20px 12px;padding:12px 14px;">
+      <div style="font-size:12px;font-weight:700;color:#1b2440;margin-bottom:6px;">現在の連絡状況</div>
+      <dl class="sl-grid2" style="margin:0;">
+        ${row("最初の送信", or(s.firstChannelLabel))}
+        ${row("返信", or(s.replyChannelLabel))}
+        ${row("現在の連絡手段", s.currentChannelLabel ? `${esc(s.currentChannelLabel)}${s.currentValue ? `<span class="sl-sub2">${esc(s.currentValue)}</span>` : ""}` : or(null))}
+        ${row("最終連絡", or(s.lastContactAt ? fmt(s.lastContactAt) : null))}
+        ${row("担当", or(c.ownerName || "未定"))}
+      </dl></div>`;
+  }
+
+  // 連絡先（登録されているものだけ）
+  const CONTACT_LABEL = { email: "メール", line: "LINE", instagram: "Instagram", x: "X", facebook: "Facebook",
+    linkedin: "LinkedIn", phone: "電話", other: "その他連絡先" };
+  function contactRows(c) {
+    return Object.entries(c.contacts || {}).filter(([k, v]) => v && CONTACT_LABEL[k])
+      .map(([k, v]) => `<div><dt>${esc(CONTACT_LABEL[k])}</dt><dd>${esc(v)}</dd></div>`).join("");
   }
 
   function timelineHtml(list) {
@@ -1069,6 +1147,123 @@ ${url}
     } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
   }
 
+  // ---- 返信・やり取りを記録（返信元・いまの連絡手段・連絡先・メモ・NEXT） ------------------
+  //
+  // 返信元（どこから返事が来たか）と、いまの連絡手段（どこでやり取りしているか）は別に持つ。
+  // 連絡手段を変えただけでは営業ステータスは動かない。「先方から返信」のときだけ「返信あり」まで進む。
+  const CONTACT_PLACEHOLDER = { email: "tanaka@example.co.jp", line: "LINE名", instagram: "@account", x: "@account",
+    facebook: "ページ名・URL", linkedin: "氏名・URL", phone: "03-1234-5678", other: "その他の連絡先" };
+  function openContact() {
+    const c = detail.company;
+    const early = ["untouched", "attacked", "clicked", "reattack_wait"].includes(c.status);
+    const replyChannels = detail.replyChannels || [];
+    const contactChannels = detail.contactChannels || [];
+    openActionModal(`
+        <h2>返信・やり取りを記録</h2>
+        <label>種類</label>
+        <div>
+          <label class="sl-chip"><input type="radio" name="ct-kind" value="reply" ${early ? "checked" : ""} onchange="toggleContactKind()">先方から返信があった</label>
+          <label class="sl-chip"><input type="radio" name="ct-kind" value="contact" ${early ? "" : "checked"} onchange="toggleContactKind()">こちらから連絡・やり取り</label>
+        </div>
+        <div id="ct-reply-box" ${early ? "" : "hidden"}>
+          <label style="margin-top:10px;">返信元（どこから返事があったか）</label>
+          <div>${replyChannels.map((r) => `
+            <label class="sl-chip"><input type="radio" name="ct-reply" value="${esc(r.key)}" onchange="suggestContactChannel(this.value)">${esc(r.label)}</label>`).join("")}</div>
+        </div>
+        <label style="margin-top:10px;">現在の連絡手段</label>
+        <select id="ct-channel" onchange="focusContactValue()"><option value="">（${c.contactChannelLabel ? `変更しない：${esc(c.contactChannelLabel)}` : "未設定のまま"}）</option>
+          ${contactChannels.map((x) => `<option value="${esc(x.key)}">${esc(x.label)}</option>`).join("")}</select>
+        <p class="sl-muted" style="margin:4px 0 0;">連絡手段を変えても、営業ステータスは変わりません。</p>
+        <details style="margin-top:10px;" ${Object.keys(c.contacts || {}).length ? "" : "open"}>
+          <summary style="cursor:pointer;font-size:12.5px;color:#1b2440;">連絡先（任意）</summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">${contactChannels.map((x) => `
+            <div><label>${esc(x.key === "other" ? "その他連絡先" : x.label)}</label>
+              <input id="ct-c-${esc(x.key)}" type="text" value="${esc((c.contacts || {})[x.key] || "")}" placeholder="${esc(CONTACT_PLACEHOLDER[x.key] || "")}"></div>`).join("")}</div>
+        </details>
+        <label style="margin-top:10px;">メモ（任意）</label>
+        <textarea id="ct-note" rows="3" placeholder="担当の田中様よりInstagramで返信。詳細資料はメールで送付。"></textarea>
+        <label style="margin-top:10px;">日時</label>
+        <input id="ct-at" type="datetime-local">
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 6px;">NEXT（次にやること）</h4>
+        <input id="ct-next" type="text" list="dl-ct-next" placeholder="空欄のとき：返信なら「返信対応」（当日）。やり取りならいまのNEXTのまま">
+        <datalist id="dl-ct-next">${["資料送付", "日程調整", "返信対応", "電話", "フォロー", "商談準備"].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+        <input id="ct-next-on" type="date" style="margin-top:6px;">
+        <p class="sl-muted" style="margin:6px 0 0;">いまのNEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}）` : ""}</p>
+        <div id="ct-msg" class="err-text" style="margin:10px 0;"></div>
+        <div class="sl-modal-foot">
+          <button class="btn btn-primary" onclick="submitContact(this)">記録する</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>`);
+  }
+  function toggleContactKind() {
+    const reply = document.querySelector('input[name="ct-kind"]:checked')?.value === "reply";
+    el("ct-reply-box").hidden = !reply;
+  }
+  // 返信が来たチャネルで、そのままやり取りすることが多い。連絡手段が未選択なら同じものを入れておく
+  function suggestContactChannel(v) {
+    const sel = el("ct-channel");
+    if (sel && !sel.value && [...sel.options].some((o) => o.value === v)) sel.value = v;
+  }
+  function focusContactValue() {
+    const v = el("ct-channel").value;
+    const box = v && el(`ct-c-${v}`);
+    if (box && !box.value) { box.closest("details").open = true; box.focus(); }
+  }
+  async function submitContact(btn) {
+    const msg = el("ct-msg"); msg.textContent = "";
+    const c = detail.company;
+    const reply = document.querySelector('input[name="ct-kind"]:checked')?.value === "reply";
+    const replyChannel = document.querySelector('input[name="ct-reply"]:checked')?.value || null;
+    if (reply && !replyChannel) { msg.textContent = "どこから返信があったかを選んでください"; return; }
+    // 連絡先は、変わった項目だけを送る（空欄にした項目は消す）
+    const contacts = {};
+    for (const x of detail.contactChannels || []) {
+      const v = el(`ct-c-${x.key}`).value.trim();
+      if (v !== ((c.contacts || {})[x.key] || "")) contacts[x.key] = v || null;
+    }
+    const at = el("ct-at").value;
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.addSalesContact({
+        id: c.id, replied: reply, replyChannel: reply ? replyChannel : undefined,
+        contactChannel: el("ct-channel").value || undefined,
+        contacts: Object.keys(contacts).length ? contacts : undefined,
+        note: el("ct-note").value.trim() || undefined,
+        occurredAt: at ? new Date(at).toISOString() : undefined,
+        nextAction: el("ct-next").value.trim() || null, nextActionOn: el("ct-next-on").value || null,
+      }));
+      closeAction();
+      await reloadDetail();
+    } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
+  }
+
+  // ---- 非表示（1社） -------------------------------------------------------------
+  function openHideOne() {
+    openActionModal(`
+      <h2>この企業を非表示にします</h2>
+      <p class="sl-sub" style="margin:0 0 12px;">削除ではありません。データは残り、通常の一覧・アタック対象から外れます。いつでも再表示できます。</p>
+      ${hideForm("dt-hide")}
+      <div id="dt-hide-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="sl-modal-foot">
+        <button class="btn btn-primary" onclick="submitHideOne(this)">非表示にする</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+  async function submitHideOne(btn) {
+    const v = hidePicked("dt-hide", "dt-hide-msg");
+    if (!v) return;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.bulkSalesCompanies({ ids: [detail.company.id], action: "hide", ...v }));
+      closeAction();
+      await reloadDetail();
+    } catch (e) { el("dt-hide-msg").textContent = errText(e, "できませんでした"); }
+  }
+  async function unhideOne(btn) {
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.bulkSalesCompanies({ ids: [detail.company.id], action: "unhide" }));
+      await reloadDetail();
+    } catch (e) { alert(errText(e, "できませんでした")); }
+  }
+
   // ---- ステータス・NEXT ---------------------------------------------------------
   function openStatus() {
     const c = detail.company;
@@ -1173,15 +1368,28 @@ ${url}
   // 1. 開いた時点で専用URL（/r/xxxx）を発行する（営業文に入れる必要があるので、送る前に）
   // 2. テンプレートを選ぶ → 企業名・送信者・専用URLを差し込んだ営業文ができる
   // 3. 企業サイト・フォームを開き、営業文をコピーして貼る。人が確認して送る
-  // 4. GWに戻って「送信完了」。ここではじめて履歴として残る
+  // 4. GWに戻って「送信完了」（送信チャネル必須・送信元は任意）。ここではじめて履歴として残る
+  //    送れなかったときは「送信できなかった」（理由必須）。別チャネルで送り直せる
   //
-  // 直近30日以内のアタック・営業禁止は、サーバが止める（ここでは理由を見せるだけ）
+  // 同じチャネルで直近30日以内のアタック・営業禁止・非表示は、サーバが止める（ここでは理由を見せるだけ）。
+  // 別のチャネル（フォーム → Instagram など）なら送れる
   const DEFAULT_TEMPLATE = {
     id: "", name: "標準（テンプレート未登録）", service: "", subject: "",
     body: `{{company}}\nご担当者様\n\n突然のご連絡失礼いたします。\n\n株式会社エイトの{{sender}}と申します。\n\n貴社Webサイトを拝見し、\n{{service}}についてご支援できる可能性があると考え、\nご連絡いたしました。\n\n詳細はこちら\n{{url}}\n\nよろしくお願いいたします。`,
     destinationUrl: "",
   };
-  let atk = null;   // { company, detail, templates, campaigns, approach, url, force }
+  let atk = null;   // { company, detail, templates, campaigns, approach, url, force, channel }
+  // 送信チャネル（lib/sales.js SEND_CHANNELS と同じ。企業詳細の応答に無いときの予備）
+  const SEND_CHANNELS = [
+    ["form", "お問い合わせフォーム"], ["email", "メール"], ["line", "LINE"], ["instagram", "Instagram"], ["x", "X"],
+    ["facebook", "Facebook"], ["linkedin", "LinkedIn"], ["sns_other", "その他SNS"], ["other", "その他"],
+  ].map(([key, label]) => ({ key, label }));
+  const sendChannels = () => (atk?.detail?.sendChannels?.length ? atk.detail.sendChannels : SEND_CHANNELS);
+  const channelName = (k) => sendChannels().find((c) => c.key === k)?.label || k;
+  // 送信元（@eight_xxx・sales@… など）は、チャネルごとに前回の値を覚えておく（この端末だけ）
+  const fromKey = (ch) => `sales.sendFrom.${ch}`;
+  function lastFrom(ch) { try { return localStorage.getItem(fromKey(ch)) || ""; } catch { return ""; } }
+  function rememberFrom(ch, v) { try { if (v) localStorage.setItem(fromKey(ch), v); } catch { /* 保存できなくても送信には影響しない */ } }
 
   async function openAttack(id, force) {
     el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
@@ -1194,11 +1402,12 @@ ${url}
       detail = d;
       const templates = (t.templates || []).filter((x) => !x.archived);
       atk = { company: d.company, detail: d, templates: templates.length ? templates : [DEFAULT_TEMPLATE],
-        campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force) };
+        campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force), channel: "form" };
       // 企業の商材と同じサービスのテンプレートを先に選ぶ
       atk.template = atk.templates.find((x) => x.service && x.service === d.company.service) || atk.templates[0];
 
       if (d.company.ngReason) return renderAttackBlocked(`この企業は営業禁止です（${d.company.ngLabel}）。アタックできません。`);
+      if (d.company.hidden) return renderAttackBlocked(`この企業は非表示です（${d.company.hiddenLabel || "理由未設定"}）。再表示してからアタックしてください。`);
       await prepareAttack();
     } catch (e) {
       renderAttackBlocked(errText(e, "開けませんでした"));
@@ -1211,6 +1420,7 @@ ${url}
         companyId: atk.company.id, templateId: atk.template.id || undefined,
         campaignId: atk.company.campaignId || undefined,
         destinationUrl: atk.template.destinationUrl || undefined, force: atk.force || undefined,
+        channel: atk.channel,
       });
       atk.approach = r.approach;
       atk.url = r.trackingUrl;
@@ -1247,15 +1457,25 @@ ${url}
     el("attack-root").innerHTML = `<div class="atk">${attackHead(`フォームアタック：${atk.company.name}`)}
       <div style="max-width:640px;margin:30px auto;padding:0 20px;">
         <div class="sl-warn sl-caution" style="display:block;">
-          <div style="font-weight:700;margin-bottom:6px;">⚠️ 直近${esc(r?.days || 30)}日以内にアタックされています。</div>
+          <div style="font-weight:700;margin-bottom:6px;">⚠️ 直近${esc(r?.days || 30)}日以内に${esc(r?.channelLabel || "同じチャネル")}でアタックされています。</div>
           <div>前回：${esc(r?.sentAt ? new Date(r.sentAt).toLocaleDateString("ja-JP") : "")}</div>
           <div>担当：${esc(r?.employeeName || "不明")}</div>
           <div>サービス：${esc(r?.service || "—")}</div>
         </div>
-        <p class="sl-muted">同じ会社に短期間で何度もフォーム営業しないため、アタックできません。</p>
+        <p class="sl-muted">同じ会社に同じチャネルで短期間に何度も営業しないため、アタックできません。</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;">
+          <select id="at-other-channel" aria-label="別のチャネル">${sendChannels().filter((c) => c.key !== atk.channel).map((c) =>
+            `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join("")}</select>
+          <button class="btn btn-primary" onclick="switchChannel(el('at-other-channel').value)">別のチャネルで送る</button>
+        </div>
         ${allowForce ? `<button class="btn btn-secondary" onclick="forceAttack()">それでもアタックする（管理者）</button>`
           : `<p class="sl-muted">どうしても必要な場合は、管理者に依頼してください。</p>`}
       </div></div>`;
+  }
+
+  function switchChannel(ch) {
+    atk.channel = ch;
+    prepareAttack();
   }
 
   function forceAttack() {
@@ -1299,6 +1519,9 @@ ${url}
 
         <div class="atk-col">
           <h3>営業文</h3>
+          <label>送信チャネル</label>
+          <select id="at-channel" onchange="changeChannel()" style="margin-bottom:8px;">${sendChannels().map((x) =>
+            `<option value="${esc(x.key)}" ${x.key === atk.channel ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><label>テンプレート</label>
               <select id="at-template" onchange="changeTemplate()">${atk.templates.map((t) =>
@@ -1326,16 +1549,28 @@ ${url}
             <div>本文に専用URLが入っていません。クリックを検知するには、本文に専用URLを入れてください。</div></div>` : ""}
 
           <div class="atk-done">
-            <p class="sl-muted" style="margin:0 0 8px;">④ フォームに貼り付け → 内容を確認して送信 → 送り終えたら押してください。</p>
+            <p class="sl-muted" style="margin:0 0 8px;">④ ${atk.channel === "form" ? "フォームに貼り付け" : `${esc(channelName(atk.channel))}で貼り付け`} → 内容を確認して送信 → 送り終えたら押してください。</p>
             <div id="at-msg" class="err-text" style="margin:0 0 8px;"></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-primary" onclick="submitSent(this)">
+              <button class="btn btn-primary" onclick="openSent()">
                 <span class="material-symbols-outlined icon-inline">task_alt</span>送信完了</button>
+              <button class="btn btn-secondary" onclick="openFailed()">
+                <span class="material-symbols-outlined icon-inline">cancel_schedule_send</span>送信できなかった</button>
               <button class="btn btn-secondary" onclick="discardAttack(this)">送らなかった</button>
             </div>
           </div>
         </div>
       </div></div>`;
+  }
+
+  // チャネルを変える。書きかけの本文・件名・サービスは残す（専用URLは同じものを使い続ける）
+  async function changeChannel() {
+    const keep = { body: el("at-body").value, subject: el("at-subject")?.value, service: el("at-service").value };
+    atk.channel = el("at-channel").value;
+    await prepareAttack();
+    if (el("at-body")) el("at-body").value = keep.body;
+    if (keep.subject !== undefined && el("at-subject")) el("at-subject").value = keep.subject;
+    if (el("at-service")) el("at-service").value = keep.service;
   }
 
   async function changeTemplate() {
@@ -1357,18 +1592,75 @@ ${url}
     }
   }
 
-  async function submitSent(btn) {
+  // 送信完了：送信チャネル（必須）と送信元（任意）を中央モーダルで選んでから記録する
+  function openSent() {
     const msg = el("at-msg"); msg.textContent = "";
-    const body = el("at-body").value.trim();
-    if (!body) { msg.textContent = "営業文が空です"; return; }
-    if (!confirm("フォームへの送信は済みましたか？\n「送信完了」として履歴に残します。")) return;
+    if (!el("at-body").value.trim()) { msg.textContent = "営業文が空です"; return; }
+    openActionModal(`
+      <h2>送信完了として記録します</h2>
+      <p class="sl-sub" style="margin:0 0 12px;">実際に送ったチャネルを選んでください。営業履歴に「〇〇から送信」として残ります。</p>
+      <label>送信チャネル</label>
+      <div>${sendChannels().map((x) => `
+        <label class="sl-chip"><input type="radio" name="sd-channel" value="${esc(x.key)}" ${x.key === atk.channel ? "checked" : ""}
+          onchange="el('sd-from').value = lastFrom(this.value)">${esc(x.label)}</label>`).join("")}</div>
+      <label style="margin-top:10px;">送信元（任意）</label>
+      <input id="sd-from" type="text" value="${esc(lastFrom(atk.channel))}" placeholder="@eight_xxx／sales@8grp.co.jp／Eight公式 など">
+      <div id="sd-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="sl-modal-foot">
+        <button class="btn btn-primary" onclick="submitSent(this)">記録する</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitSent(btn) {
+    const msg = el("sd-msg"); msg.textContent = "";
+    const channel = document.querySelector('input[name="sd-channel"]:checked')?.value;
+    if (!channel) { msg.textContent = "送信チャネルを選んでください"; return; }
+    const sendFrom = el("sd-from").value.trim();
     try {
       await KPLayout.busy(btn, "記録中…", () => API.markSalesAttackSent({
-        id: atk.approach.id, body, subject: el("at-subject")?.value.trim() || undefined,
+        id: atk.approach.id, channel, sendFrom: sendFrom || undefined,
+        body: el("at-body").value.trim(), subject: el("at-subject")?.value.trim() || undefined,
         service: el("at-service").value.trim() || null,
         templateId: atk.template.id || null, campaignId: el("at-campaign").value || null,
         force: atk.force || undefined,
       }));
+      rememberFrom(channel, sendFrom);
+      closeAction();
+      closeAttack();
+      load();
+    } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
+  }
+
+  // 送信できなかった：理由は必須（「その他」はメモも必須）。別チャネルで再アタックできる状態で残す
+  function openFailed() {
+    const reasons = atk.detail?.sendFailReasons || [];
+    openActionModal(`
+      <h2>送信できなかったとして記録します</h2>
+      <p class="sl-sub" style="margin:0 0 12px;">送れなかったことも営業結果として履歴に残ります。ステータスは変わらず、NEXT は「別チャネルで再アタックを検討」になります。</p>
+      <label>理由</label>
+      <div>${reasons.map((r) => `
+        <label class="sl-chip"><input type="radio" name="fl-reason" value="${esc(r.key)}">${esc(r.label)}</label>`).join("")}</div>
+      <label style="margin-top:10px;">メモ（「その他」のときは必須）</label>
+      <textarea id="fl-note" rows="2"></textarea>
+      <div id="fl-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="sl-modal-foot">
+        <button class="btn btn-primary" onclick="submitFailed(this)">記録する</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitFailed(btn) {
+    const msg = el("fl-msg"); msg.textContent = "";
+    const reason = document.querySelector('input[name="fl-reason"]:checked')?.value;
+    const note = el("fl-note").value.trim();
+    if (!reason) { msg.textContent = "理由を選んでください"; return; }
+    if (reason === "other" && !note) { msg.textContent = "「その他」のときはメモに内容を書いてください"; return; }
+    try {
+      await KPLayout.busy(btn, "記録中…", () => API.markSalesAttackFailed({
+        id: atk.approach.id, reason, note: note || undefined, channel: atk.channel,
+      }));
+      closeAction();
       closeAttack();
       load();
     } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }

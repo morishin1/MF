@@ -1,4 +1,7 @@
-// GET  /api/sales/companies            … 企業一覧（ダッシュボード・企業・アタック・反応・分析で共通利用）
+// GET  /api/sales/companies[?visibility=shown|hidden|all]
+//        … 企業一覧（ダッシュボード・企業・アタック・反応・分析で共通利用）
+//          既定は「表示中」だけ。非表示にした企業（リンク切れ・閉業など。db/096）は、
+//          visibility=hidden / all を明示したときだけ返す（ダッシュボード・アタック対象に出さない）
 // POST /api/sales/companies { name, siteUrl, formUrl, ... }       … 企業を1社追加
 // POST /api/sales/companies { companies: [{...}, ...] }            … まとめて追加（リストの取り込み）
 //
@@ -8,6 +11,7 @@
 // ■ 同じ会社を2行にしない
 //   企業サイトのドメインが同じなら同じ会社として扱う。1社追加では 409 で
 //   既存の会社を返し、まとめて追加では飛ばして件数だけ返す。
+//   非表示の企業も数に入れる（リンク切れの会社を取り込み直して、また一覧に出さないため）。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -16,9 +20,11 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, aggregateApproaches, nextFor, hasUnhandledClick, todayJst,
+  channelLabel,
 } from "../../../lib/sales.js";
 
-const SQL = "db/088_sales.sql";
+const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
+const VISIBILITY = ["shown", "hidden", "all"];
 const FIELDS = COMPANY_FIELDS;
 const BULK_MAX = 500;
 
@@ -38,8 +44,12 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res, sb, ctx) {
-  const { data, error } = await sb.from("gw_sales_companies").select(FIELDS)
-    .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(5000);
+  const v = new URL(req.url || "/", "http://localhost").searchParams.get("visibility") || "shown";
+  if (!VISIBILITY.includes(v)) return json(res, 400, { error: "bad_visibility", allowed: VISIBILITY });
+  let q = sb.from("gw_sales_companies").select(FIELDS).eq("tenant_id", ctx.tenantId);
+  if (v === "shown") q = q.is("hidden_at", null);
+  if (v === "hidden") q = q.not("hidden_at", "is", null);
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(5000);
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { companies: [], notReady: true, message: hint });
@@ -48,7 +58,7 @@ async function list(req, res, sb, ctx) {
 
   const [{ data: approaches }, { data: members }, { data: campaigns }, { data: meetings }] = await Promise.all([
     sb.from("gw_sales_approaches")
-      .select("id, company_id, employee_id, service, prepared_at, sent_at, first_click_at, last_click_at, click_count")
+      .select("id, company_id, employee_id, service, prepared_at, sent_at, first_click_at, last_click_at, click_count, channel")
       .eq("tenant_id", ctx.tenantId).limit(20000),
     sb.from("gw_employees").select("id, display_name")
       .eq("tenant_id", ctx.tenantId).in("status", ["active", "invited"]).order("display_name").limit(300),
@@ -69,6 +79,7 @@ async function list(req, res, sb, ctx) {
 
   return json(res, 200, {
     today,
+    visibility: v,
     me: ctx.employee?.id || null,
     members: members || [],
     companies: (data || []).map((c) => {
@@ -82,6 +93,8 @@ async function list(req, res, sb, ctx) {
         lastSentAt: g?.lastSentAt || null,
         lastAttackerName: name.get(g?.lastEmployeeId) || null,
         lastService: g?.lastService || null,
+        lastChannel: g?.lastChannel || null,
+        lastChannelLabel: channelLabel(g?.lastChannel),
         clickCount: g?.clickCount || 0,
         firstClickAt: g?.first_click_at || null,
         lastClickAt: g?.last_click_at || null,
@@ -103,12 +116,12 @@ async function create(req, res, sb, ctx, user) {
   if (!("owner_id" in row.value) && ctx.employee?.id) row.value.owner_id = ctx.employee.id;
 
   if (row.value.domain) {
-    const { data: dup } = await sb.from("gw_sales_companies").select("id, name")
+    const { data: dup } = await sb.from("gw_sales_companies").select("id, name, hidden_at")
       .eq("tenant_id", ctx.tenantId).eq("domain", row.value.domain).limit(1);
     if (dup?.length) {
       return json(res, 409, {
-        error: "duplicate", company: { id: dup[0].id, name: dup[0].name },
-        hint: `同じサイトの企業が登録済みです（${dup[0].name}）`,
+        error: "duplicate", company: { id: dup[0].id, name: dup[0].name, hidden: Boolean(dup[0].hidden_at) },
+        hint: `同じサイトの企業が登録済みです（${dup[0].name}${dup[0].hidden_at ? "・非表示中" : ""}）`,
       });
     }
   }

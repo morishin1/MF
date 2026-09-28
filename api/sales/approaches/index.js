@@ -1,16 +1,24 @@
 // GET   /api/sales/approaches[?days=90]
 //         … 送信済みのアタック一覧（アタック画面の履歴・分析・テンプレート比較の元）
-// POST  /api/sales/approaches { companyId, templateId?, campaignId?, destinationUrl?, force? }
-//         … フォームアタックを始める。専用URL（/r/<token>）を発行して返す。
+// POST  /api/sales/approaches { companyId, channel?, templateId?, campaignId?, destinationUrl?, force? }
+//         … アタックを始める。専用URL（/r/<token>）を発行して返す。
 //           営業文に専用URLを入れてから送るので、送る前に発行しておく必要がある
-// PATCH /api/sales/approaches { id, action: "sent", body, subject?, service?, templateId?, campaignId?, force? }
-//         … 「送信完了」。ここではじめて履歴として残る（sent_at が立つ）
+// PATCH /api/sales/approaches { id, action: "sent", channel, sendFrom?, body, subject?, service?, templateId?, campaignId?, force? }
+//         … 「送信完了」。ここではじめて履歴として残る（sent_at が立つ）。送信チャネルは必須
+// PATCH /api/sales/approaches { id, action: "failed", reason, note?, channel? }
+//         … 「送信できなかった」。理由は必須（「その他」はメモも必須）。failed_at が立つ（db/096）
 // PATCH /api/sales/approaches { id, action: "discard" }
 //         … 送らなかった。発行した専用URLを捨てる（送信済みは消せない）
 //
 // ■ 送ってはいけない会社を、サーバで止める（画面の警告だけに頼らない）
 //   ・営業禁止（NG）の会社 … 誰であっても 403
-//   ・直近30日以内に送信済み … 409。管理者・経営者だけ force で押し切れる（要件 §20）
+//   ・非表示の会社 … 409（一覧・アタック対象から外したもの。再表示してから送る）
+//   ・同じチャネルで直近30日以内に送信済み … 409。管理者・経営者だけ force で押し切れる（要件 §20）
+//     別のチャネル（フォーム → Instagram など）で送るのは止めない（複数チャネル対応）
+//
+// ■ 送信できなかった
+//   sent_at は立てない。だからアタック数・直近30日の警告には数えず、別チャネルで送り直せる。
+//   会社のステータスは動かさず、NEXT を「別チャネルで再アタックを検討」にする（未対応に戻さない）。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -19,12 +27,14 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, shapeApproach, newTrackingToken, recentApproach, statusRank, safeUrl, isUuid,
-  NG_LABEL, RECENT_DAYS, autoNext,
+  NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst,
+  SEND_CHANNEL_KEYS, SEND_FAIL_KEYS, SEND_FAIL_LABEL, NEXT_AFTER_FAIL, HIDE_LABEL, channelLabel,
 } from "../../../lib/sales.js";
 
-const SQL = "db/088_sales.sql";
+const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 const FIELDS = "id, tenant_id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
-  + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count";
+  + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count, "
+  + "channel, send_from, failed_at, send_failed_reason, send_failed_note";
 // 同じ人が同じ会社で開き直したときは、発行済みの専用URLを使い回す（捨てURLを増やさない）
 const REUSE_HOURS = 24;
 
@@ -51,6 +61,12 @@ function trackingUrl(req, token) {
   const host = req.headers?.["x-forwarded-host"] || req.headers?.host || "gw.8grp.co.jp";
   const proto = req.headers?.["x-forwarded-proto"] || "https";
   return `${proto}://${host}/r/${token}`;
+}
+
+/** 画面から来たチャネル。無ければ fallback、知らない値なら false */
+function sendChannel(v, fallback) {
+  if (v === undefined || v === null || v === "") return fallback;
+  return SEND_CHANNEL_KEYS.includes(v) ? v : false;
 }
 
 async function list(req, res, sb, ctx) {
@@ -95,17 +111,23 @@ async function templateDestination(sb, ctx, templateId) {
   return safeUrl(t?.destination_url) || undefined;
 }
 
-/** NG・直近アタックを確かめる。止めるなら { status, body } を返す */
-async function guard(sb, ctx, company, { force, exceptId } = {}) {
+/** NG・非表示・直近アタック（同じチャネル）を確かめる。止めるなら { status, body } を返す */
+async function guard(sb, ctx, company, { force, exceptId, channel = "form" } = {}) {
   if (company.ng_reason) {
     return { status: 403, body: {
       error: "ng_company", hint: `この企業は営業禁止です（${NG_LABEL[company.ng_reason] || company.ng_reason}）`,
     } };
   }
-  const { data: past } = await sb.from("gw_sales_approaches").select("id, employee_id, service, sent_at")
+  if (company.hidden_at) {
+    return { status: 409, body: {
+      error: "hidden_company",
+      hint: `この企業は非表示です（${HIDE_LABEL[company.hidden_reason] || "理由未設定"}）。再表示してからアタックしてください`,
+    } };
+  }
+  const { data: past } = await sb.from("gw_sales_approaches").select("id, employee_id, service, sent_at, channel")
     .eq("company_id", company.id).gte("sent_at", new Date(Date.now() - RECENT_DAYS * 86400000).toISOString())
     .limit(50);
-  const recent = recentApproach((past || []).filter((a) => a.id !== exceptId));
+  const recent = recentApproach((past || []).filter((a) => a.id !== exceptId), new Date(), RECENT_DAYS, channel);
   if (!recent) return null;
   if (force && canForceAttack(ctx)) return null;
 
@@ -114,18 +136,23 @@ async function guard(sb, ctx, company, { force, exceptId } = {}) {
     const { data: e } = await sb.from("gw_employees").select("display_name").eq("id", recent.employee_id).maybeSingle();
     employeeName = e?.display_name || null;
   }
-  const payload = { sentAt: recent.sent_at, employeeName, service: recent.service || null, days: RECENT_DAYS };
+  const payload = {
+    sentAt: recent.sent_at, employeeName, service: recent.service || null, days: RECENT_DAYS,
+    channel: recent.channel || "form", channelLabel: channelLabel(recent.channel || "form"),
+  };
   if (force) {
     return { status: 403, body: { error: "force_forbidden", recent: payload,
       hint: "直近のアタックを押し切れるのは管理者・経営者だけです" } };
   }
   return { status: 409, body: { error: "recent_attack", recent: payload, canForce: canForceAttack(ctx),
-    hint: `直近${RECENT_DAYS}日以内にアタックされています` } };
+    hint: `直近${RECENT_DAYS}日以内に${payload.channelLabel}でアタックされています` } };
 }
 
 async function prepare(req, res, sb, ctx, user) {
   const body = await readJson(req);
   if (!isUuid(body.companyId)) return json(res, 400, { error: "invalid_body", required: ["companyId"] });
+  const channel = sendChannel(body.channel, "form");
+  if (channel === false) return json(res, 400, { error: "bad_channel", allowed: SEND_CHANNEL_KEYS });
 
   const { data: c, error } = await sb.from("gw_sales_companies").select(COMPANY_FIELDS)
     .eq("id", body.companyId).eq("tenant_id", ctx.tenantId).maybeSingle();
@@ -136,7 +163,7 @@ async function prepare(req, res, sb, ctx, user) {
   }
   if (!c) return json(res, 404, { error: "not_found" });
 
-  const stop = await guard(sb, ctx, c, { force: Boolean(body.force) });
+  const stop = await guard(sb, ctx, c, { force: Boolean(body.force), channel });
   if (stop) return json(res, stop.status, stop.body);
 
   let dest = safeUrl(body.destinationUrl);
@@ -144,11 +171,11 @@ async function prepare(req, res, sb, ctx, user) {
   // リンク先はテンプレートが正。画面から渡されなければテンプレートから引く
   if (dest === undefined && isUuid(body.templateId)) dest = await templateDestination(sb, ctx, body.templateId);
 
-  // 同じ人が同じ会社で、まだ送っていない専用URLがあれば使い回す
+  // 同じ人が同じ会社で、まだ送っていない（送れなかったとも記録していない）専用URLがあれば使い回す
   const me = ctx.employee?.id || null;
   const { data: open } = me
     ? await sb.from("gw_sales_approaches").select(FIELDS)
-      .eq("company_id", c.id).eq("employee_id", me).is("sent_at", null)
+      .eq("company_id", c.id).eq("employee_id", me).is("sent_at", null).is("failed_at", null)
       .gte("prepared_at", new Date(Date.now() - REUSE_HOURS * 3600000).toISOString())
       .order("prepared_at", { ascending: false }).limit(1)
     : { data: [] };
@@ -158,6 +185,7 @@ async function prepare(req, res, sb, ctx, user) {
     const patch = {};
     if (dest !== undefined && dest !== row.destination_url) patch.destination_url = dest;
     if (body.templateId !== undefined && isUuid(body.templateId)) patch.template_id = body.templateId;
+    if ((row.channel || "form") !== channel) patch.channel = channel;
     if (Object.keys(patch).length) {
       const { data } = await sb.from("gw_sales_approaches").update(patch).eq("id", row.id).select(FIELDS).single();
       if (data) row = data;
@@ -166,7 +194,7 @@ async function prepare(req, res, sb, ctx, user) {
     // トークンの衝突は事実上起きないが、起きたら引き直す（一意制約で止まる）
     for (let i = 0; i < 3 && !row; i++) {
       const { data, error: e2 } = await sb.from("gw_sales_approaches").insert({
-        tenant_id: ctx.tenantId, company_id: c.id, employee_id: me,
+        tenant_id: ctx.tenantId, company_id: c.id, employee_id: me, channel,
         campaign_id: isUuid(body.campaignId) ? body.campaignId : c.campaign_id || null,
         template_id: isUuid(body.templateId) ? body.templateId : null,
         form_url: c.form_url || null, service: c.service || null,
@@ -199,12 +227,20 @@ async function act(req, res, sb, ctx, user) {
 
   if (body.action === "discard") {
     if (a.sent_at) return json(res, 409, { error: "already_sent", hint: "送信済みのアタックは取り消せません" });
+    if (a.failed_at) return json(res, 409, { error: "already_failed", hint: "「送信できなかった」として記録済みです" });
     if (a.click_count > 0) return json(res, 409, { error: "already_clicked", hint: "すでにクリックされているので取り消せません" });
     await sb.from("gw_sales_approaches").delete().eq("id", a.id).eq("tenant_id", ctx.tenantId);
     return json(res, 200, { ok: true });
   }
-  if (body.action !== "sent") return json(res, 400, { error: "bad_action", allowed: ["sent", "discard"] });
+  if (body.action === "failed") return markFailed(res, sb, ctx, user, a, body);
+  if (body.action !== "sent") return json(res, 400, { error: "bad_action", allowed: ["sent", "failed", "discard"] });
   if (a.sent_at) return json(res, 409, { error: "already_sent", hint: "このアタックは送信完了として記録済みです" });
+  if (a.failed_at) return json(res, 409, { error: "already_failed", hint: "「送信できなかった」として記録済みです" });
+
+  // 送信チャネルは必須（どこから送ったかを、あとでチャネル別に数えるため）
+  if (!body.channel) return json(res, 400, { error: "channel_required", hint: "送信チャネルを選んでください" });
+  const channel = sendChannel(body.channel);
+  if (channel === false) return json(res, 400, { error: "bad_channel", allowed: SEND_CHANNEL_KEYS });
 
   const text = String(body.body || "").trim();
   if (!text) return json(res, 400, { error: "body_required", hint: "営業文が空です" });
@@ -213,16 +249,19 @@ async function act(req, res, sb, ctx, user) {
     .eq("id", a.company_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!c) return json(res, 404, { error: "company_not_found" });
 
-  const stop = await guard(sb, ctx, c, { force: Boolean(body.force), exceptId: a.id });
+  const stop = await guard(sb, ctx, c, { force: Boolean(body.force), exceptId: a.id, channel });
   if (stop) return json(res, stop.status, stop.body);
 
   const now = new Date().toISOString();
   const patch = {
     sent_at: now,
+    channel,
+    send_from: body.sendFrom ? String(body.sendFrom).trim().slice(0, 200) || null : null,
     body: text.slice(0, 20000),
     subject: body.subject ? String(body.subject).trim().slice(0, 300) || null : a.subject,
     service: body.service !== undefined ? (String(body.service || "").trim().slice(0, 100) || null) : a.service,
-    form_url: c.form_url || a.form_url,
+    // フォーム以外で送ったときは、フォームURLを残さない（送った先ではないので）
+    form_url: channel === "form" ? c.form_url || a.form_url : null,
     employee_id: a.employee_id || ctx.employee?.id || null,
     forced: Boolean(body.force && canForceAttack(ctx)),
   };
@@ -234,15 +273,15 @@ async function act(req, res, sb, ctx, user) {
   if (body.campaignId !== undefined) patch.campaign_id = isUuid(body.campaignId) ? body.campaignId : null;
 
   // 送信完了は1回だけ。二度押し・2つのタブからの同時送信で二重にならないよう、
-  // まだ送っていない行だけを更新する
+  // まだ送っていない（送れなかったとも記録していない）行だけを更新する
   const { data: saved, error: e2 } = await sb.from("gw_sales_approaches").update(patch)
-    .eq("id", a.id).is("sent_at", null).select(FIELDS).maybeSingle();
+    .eq("id", a.id).is("sent_at", null).is("failed_at", null).select(FIELDS).maybeSingle();
   if (e2) return json(res, e2.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: e2.message });
   if (!saved) return json(res, 409, { error: "already_sent", hint: "このアタックは送信完了として記録済みです" });
 
   // 会社の状態を進める（後ろへは戻さない）。NEXTは「反応確認」を3営業日後に置く。
   // すでにクリック・返信・商談まで進んでいる会社は、そちらの NEXT を残す
-  const cpatch = { updated_at: now };
+  const cpatch = { updated_at: now, last_contact_at: now };
   if (statusRank("attacked") > statusRank(c.status)) cpatch.status = "attacked";
   if (!c.owner_id && ctx.employee?.id) cpatch.owner_id = ctx.employee.id;
   if (statusRank(c.status) <= statusRank("attacked")) Object.assign(cpatch, autoNext("sent"));
@@ -251,7 +290,52 @@ async function act(req, res, sb, ctx, user) {
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "sales.attack_sent",
     target: `sales_company:${c.id}`,
-    detail: { approachId: a.id, service: patch.service, templateId: patch.template_id ?? a.template_id, forced: patch.forced },
+    detail: { approachId: a.id, channel, service: patch.service, templateId: patch.template_id ?? a.template_id, forced: patch.forced },
+  });
+  return json(res, 200, { approach: shapeApproach(saved) });
+}
+
+/** 「送信できなかった」。理由つきで残し、別チャネルで送り直せる状態にする */
+async function markFailed(res, sb, ctx, user, a, body) {
+  if (a.sent_at) return json(res, 409, { error: "already_sent", hint: "このアタックは送信完了として記録済みです" });
+  if (a.failed_at) return json(res, 409, { error: "already_failed", hint: "「送信できなかった」として記録済みです" });
+  // クリックされている＝実際には届いている。送れなかったことにはしない
+  if (a.click_count > 0) return json(res, 409, { error: "already_clicked", hint: "すでにクリックされているので、送信完了として記録してください" });
+
+  if (!SEND_FAIL_KEYS.includes(body.reason)) {
+    return json(res, 400, { error: "reason_required", hint: "送信できなかった理由を選んでください", allowed: SEND_FAIL_KEYS });
+  }
+  const note = body.note ? String(body.note).trim().slice(0, 1000) || null : null;
+  if (body.reason === "other" && !note) return json(res, 400, { error: "note_required", hint: "「その他」のときは内容を書いてください" });
+  const channel = sendChannel(body.channel, a.channel || "form");
+  if (channel === false) return json(res, 400, { error: "bad_channel", allowed: SEND_CHANNEL_KEYS });
+
+  const { data: c } = await sb.from("gw_sales_companies").select(COMPANY_FIELDS)
+    .eq("id", a.company_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!c) return json(res, 404, { error: "company_not_found" });
+
+  const now = new Date().toISOString();
+  const { data: saved, error: e2 } = await sb.from("gw_sales_approaches").update({
+    failed_at: now, channel, send_failed_reason: body.reason, send_failed_note: note,
+    employee_id: a.employee_id || ctx.employee?.id || null,
+  }).eq("id", a.id).is("sent_at", null).is("failed_at", null).select(FIELDS).maybeSingle();
+  if (e2) return json(res, e2.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: e2.message });
+  if (!saved) return json(res, 409, { error: "already_recorded", hint: "このアタックはすでに記録済みです" });
+
+  // ステータスは動かさない（送れていないので「アタック済」にもしない）。
+  // まだアタック前の会社は、NEXT を「別チャネルで再アタックを検討」にする（未対応のまま埋もれさせない）
+  const cpatch = { updated_at: now };
+  if (!c.owner_id && ctx.employee?.id) cpatch.owner_id = ctx.employee.id;
+  if (statusRank(c.status) <= statusRank("attacked")) {
+    cpatch.next_action = NEXT_AFTER_FAIL;
+    cpatch.next_action_on = bizDayOnOrAfter(todayJst());
+  }
+  await sb.from("gw_sales_companies").update(cpatch).eq("id", c.id).eq("tenant_id", ctx.tenantId);
+
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "sales.attack_failed",
+    target: `sales_company:${c.id}`,
+    detail: { approachId: a.id, channel, reason: body.reason, reasonLabel: SEND_FAIL_LABEL[body.reason] },
   });
   return json(res, 200, { approach: shapeApproach(saved) });
 }

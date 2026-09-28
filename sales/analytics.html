@@ -41,6 +41,7 @@
   <div class="an-kpi" id="kpi">読み込み中…</div>
 
   <div class="an-grid">
+    <div><div class="sl-sec-h">送信チャネル別</div><div id="by-channel"></div></div>
     <div><div class="sl-sec-h">営業文別</div><div id="by-template"></div></div>
     <div><div class="sl-sec-h">サービス別</div><div id="by-service"></div></div>
     <div><div class="sl-sec-h">業種別</div><div id="by-industry"></div></div>
@@ -48,9 +49,9 @@
   </div>
 </div>
 
-<script src="../js/api-client.js?v=20260928h"></script>
-<script src="../js/layout.js?v=20260928h"></script>
-<script src="../js/sales-layout.js?v=20260928h"></script>
+<script src="../js/api-client.js?v=20260928ch1"></script>
+<script src="../js/layout.js?v=20260928ch1"></script>
+<script src="../js/sales-layout.js?v=20260928ch1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -112,6 +113,8 @@
       <div class="an-step"><span class="n">${n}社</span><span class="l">${esc(l)}</span></div>`).join("")
       + `<p class="sl-muted" style="margin:12px 0 0;">直近${days}日に送ったアタック ${s.attacks}件（${s.companies}社）が対象です。</p>`;
 
+    // 送信チャネル別（フォーム・メール・Instagram・X …）。返信率・商談化率は会社単位で数える
+    table("by-channel", (a) => a.channelLabel || "お問い合わせフォーム");
     table("by-template", (a) => a.templateName || "（テンプレートなし）");
     table("by-service", (a) => a.service || "（未設定）");
     table("by-industry", (a) => a.industry || "（未設定）");
