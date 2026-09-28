@@ -18,6 +18,7 @@ import { notify } from "../../lib/notify.js";
 import { confirmPending } from "../../lib/career.js";
 import { memberCareerView, careerOf, pendingContractSigns } from "../../lib/career-member.js";
 import { memberAskOf } from "../../lib/journey.js";
+import { journeyForEmployee } from "../../lib/journey-load.js";
 import { computeStage } from "../../lib/onboard-stage.js";
 import { gatherFacts } from "../../lib/onboard-advance.js";
 
@@ -67,13 +68,20 @@ async function read(req, res, ctx, user) {
       }
     } catch { stage = null; }
     const ask = memberAskOf({ signPending: signs.length, confirmPending: pending, stage, facts });
+    // 入社〜キャリアの共通ステータスバー。管理者の画面と同じ計算（lib/journey-load.js）
+    const { journey } = await journeyForEmployee(sb, ctx.tenantId, ctx.employee);
     return json(res, 200, {
       confirmPending: pending, signPending: signs.length,
       show: Boolean(ask), ask,
       link: ask?.href || "career.html#confirm",
+      journey: publicJourney(journey),
     });
   }
-  return json(res, 200, await memberCareerView(sb, { tenantId: ctx.tenantId, employee: ctx.employee, userId: user.id }));
+  const [view, j] = await Promise.all([
+    memberCareerView(sb, { tenantId: ctx.tenantId, employee: ctx.employee, userId: user.id }),
+    journeyForEmployee(sb, ctx.tenantId, ctx.employee),
+  ]);
+  return json(res, 200, { ...view, journey: publicJourney(j.journey) });
 }
 
 async function act(req, res, ctx, user) {
@@ -139,3 +147,18 @@ async function confirmPlan(res, ctx, user) {
   }
   return json(res, 200, { ok: true, confirmedAt: at });
 }
+
+/**
+ * 本人に返すステータスバーの形。状態・6段階・誰の対応か・本人向けの言い方だけ。
+ * 管理画面の行き先（cta.href の admin-*.html）や担当者名は返さない
+ */
+function publicJourney(j) {
+  if (!j) return null;
+  return {
+    state: j.state, step: j.step, total: j.total,
+    phases: j.phases, phase: j.phase, who: j.who,
+    whoText: j.whoText?.member || null, member: j.member,
+    inProgress: j.state !== "active",
+  };
+}
+

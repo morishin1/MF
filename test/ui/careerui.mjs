@@ -10,6 +10,7 @@
 //   Level Up を選ぶと次の給与レンジと「昇給を検討」が出て、確定後は契約更新への導線が出る
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
+import { journeyOf } from "../../lib/journey.js";
 
 const br = await launch();
 let bad = 0;
@@ -164,8 +165,17 @@ const newDetail = () => {
 let newState = {};
 
 // 採用決定 → 育成 の進行
-const J = (state, stateLabel, label, extra = {}) => ({ state, stateLabel, label, step: extra.step || 1, total: 10, tone: extra.tone || "blue",
-  actorLabel: extra.actorLabel || null, actor: extra.actor || null, sub: extra.sub || null, cta: extra.cta || null });
+// ステータスバーの形（6段階・誰の対応か）は、サーバと同じ lib/journey.js で作る
+const REAL = {
+  hired: () => journeyOf({ applicant: { status: "accepted" }, employee: null, canAdvance: true, links: {}, today: "2026-09-28" }),
+  signing: () => journeyOf({ employee: { id: "e" }, procedure: { id: "p" }, stage: { key: "signing" }, facts: { sign: { status: "sent" } }, links: {}, today: "2026-09-28" }),
+  active: () => journeyOf({ employee: { id: "e" }, procedure: null, career: { id: "c" }, careerFlow: { state: "active" }, links: {}, today: "2026-09-28" }),
+};
+const J = (state, stateLabel, label, extra = {}) => {
+  const r = REAL[state]();
+  return { ...r, state, stateLabel, label, step: extra.step || 1, total: 10, tone: extra.tone || "blue",
+    actorLabel: extra.actorLabel || null, actor: extra.actor || null, sub: extra.sub || null, cta: extra.cta || null };
+};
 const JOURNEY = {
   today: "2026-09-28", seesApplicants: true,
   states: [{ key: "hired", label: "採用決定" }, { key: "signing", label: "本人確認・署名" }, { key: "active", label: "通常評価" }],
@@ -556,6 +566,7 @@ console.log("\n— 管理：入社〜育成（採用決定 → 契約 → 入社
   check(await page.locator("#j-rows tr[data-id]").count() === 2, "通常評価に移った人は既定で隠す");
   await page.check("#j-all");
   check(await page.locator("#j-rows tr[data-id]").count() === 3, "「通常評価に移った人も表示」");
+  check(await page.locator('#j-rows tr[data-id="e-sign"] .jb-mini i.now').count() === 1, "一覧にも小さなステータスバー");
   const sign = await page.locator('#j-rows tr[data-id="e-sign"]').innerText();
   check(sign.includes("本人署名待ち") && sign.includes("本人の署名完了を待っています") && sign.includes("本人") && sign.includes("2026/10/01"),
     "現在状態・NEXT ACTION・担当・入社予定日");
@@ -566,7 +577,13 @@ console.log("\n— 管理：入社〜育成（採用決定 → 契約 → 入社
   check(dtabs.join("/") === "概要/契約/入社手続き/キャリア/育成/履歴", `ドロワーのタブ（いま ${dtabs.join("/")}）`);
   check((await page.locator("#cr-next").innerText()).includes("本人の署名完了を待っています"), "NEXT ACTION は進行の状態");
   check(await page.locator("#cr-cta").innerText() === "署名状況を見る" && await page.locator(".cr-drawer .btn-primary").count() === 1, "Primary CTA は1つ");
-  check((await page.locator("#jr-bar li.now").innerText()) === "契約", "いまどこにいるか（契約）");
+  check((await page.locator("#jr-bar li.now .jb-l").innerText()) === "契約", "共通ステータスバー：いま「契約」");
+  check(await page.locator("#jr-bar li").count() === 6 && await page.locator("#jr-bar li.done").count() === 1, "6段階・完了は ✓（採用決定）");
+  const adm = await page.locator("#jb-admin").innerText();
+  check(adm.includes("本人の対応待ち") && adm.includes("現在の担当") && adm.includes("本人"), "管理者：いまの担当（本人の対応待ち）");
+  const order = await page.locator(".cr-drawer").evaluate((d) => ["#jr-bar", "#cr-sum", "#cr-next", ".cr-tabs"]
+    .map((q) => d.querySelector(q)?.getBoundingClientRect().top ?? -1));
+  check(order.every((y, i) => y >= 0 && (i === 0 || y > order[i - 1])), "並び：ステータスバー → 現在 → NEXT ACTION → タブ");
   await page.click('.cr-tabs button[data-tab="onboarding"]');
   const ob = await page.locator("#cr-tab-body").innerText();
   check(ob.includes("締結") && ob.includes("署名待ち") && ob.includes("署名後に入力") && ob.includes("署名後に提出"), "入社手続き：署名前は入力・提出へ進まない表示");
@@ -578,11 +595,52 @@ console.log("\n— 管理：入社〜育成（採用決定 → 契約 → 入社
   await page.waitForTimeout(400);
   const ad = await page.locator(".cr-drawer").innerText();
   check(ad.includes("契約条件を設定してください") && ad.includes("入社予定者"), "採用決定の人：NEXT ACTION");
-  check((await page.locator("#jr-bar li.now").innerText()) === "採用決定", "いまどこにいるか（採用決定）");
+  check((await page.locator("#jr-bar li.now .jb-l").innerText()) === "採用決定", "共通ステータスバー：いま「採用決定」");
   await page.click('.cr-tabs button[data-tab="contract"]');
   const cond = await page.locator("#ap-cond").innerText();
   check(cond.includes("正社員") && cond.includes("250,000円") && cond.includes("本社"), "提示する契約条件（採用HRのもの）");
   check(await page.locator("#cr-cta").innerText() === "契約条件を設定", "CTA「契約条件を設定」");
+  await page.close();
+}
+
+console.log("\n— 本人：共通ステータスバー（home / career / onboarding） —");
+{
+  const E = { id: "e-taro" }, P = { id: "p1", status: "in_progress" };
+  const full = (x) => journeyOf({ links: {}, today: "2026-09-28", employee: E, procedure: P, ...x });
+  const pub = (j) => ({ state: j.state, step: j.step, total: j.total, phases: j.phases, phase: j.phase, who: j.who,
+    whoText: j.whoText.member, member: j.member, inProgress: j.state !== "active" });
+  const DOCS = pub(full({ stage: { key: "intake" }, facts: { profile: { status: "submitted" }, items: [{ owner: "employee", status: "todo", item_key: "doc_id" }] } }));
+  const REVIEW = pub(full({ stage: { key: "intake" }, facts: { profile: { status: "submitted" }, items: [{ owner: "admin", status: "todo" }] } }));
+
+  // ホーム：本人の対応（必要書類）
+  let page = await open({ ...ME_MEMBER, __summary: { show: false, journey: DOCS } }, "home.html");
+  await page.waitForTimeout(400);
+  let t = await page.locator("#journey-card").innerText();
+  check((await page.locator("#journey-card #jr-bar li.now .jb-l").innerText()) === "本人手続き", "ホーム：いま「本人手続き」");
+  check(t.includes("あなたの対応です") && t.includes("次にすること") && t.includes("必要書類の提出"), "ホーム：現在・あなたの対応です・次にすること");
+  check((await page.locator("#jb-cta").innerText()) === "必要書類を提出する" && (await page.locator("#jb-cta").getAttribute("href")) === "onboarding.html",
+    "ホーム：CTA「必要書類を提出する」");
+  check(!t.includes("担当：") && !t.includes("社労士確認待ち"), "本人には管理用語を出さない");
+  await page.screenshot({ path: shotPath("journey-member-home.png") });
+  await page.close();
+
+  // スマホ：6段階の文字がつぶれない・ページが横にはみ出さない
+  page = await open({ ...ME_MEMBER, __summary: { show: false, journey: DOCS } }, "home.html", 390);
+  await page.waitForTimeout(400);
+  const squashed = await page.locator("#jr-bar .jb-l").evaluateAll((ns) => ns.filter((n) => n.scrollWidth > n.clientWidth + 1).length);
+  check(squashed === 0, "スマホ：6段階の文字がつぶれない");
+  check(await page.locator("#jr-bar .jb-l").count() === 6, "スマホ：6段階すべて表示（横スクロール）");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(overflow <= 0, `スマホ：ページが横にはみ出さない（${overflow}px）`);
+  await page.screenshot({ path: shotPath("journey-member-home-sp.png") });
+  await page.close();
+
+  // キャリア：会社の対応中なら、操作は要らない・CTAを出さない
+  page = await open({ ...ME_MEMBER, __career: { ...MY, journey: REVIEW } }, "career.html");
+  t = await page.locator("#journey-card").innerText();
+  check((await page.locator("#journey-card #jr-bar li.now .jb-l").innerText()) === "会社確認", "キャリア：いま「会社確認」");
+  check(t.includes("会社が対応中です") && t.includes("現在、あなたの操作は必要ありません"), "自分の対応でないときは「操作は必要ありません」");
+  check(await page.locator("#jb-cta").count() === 0, "不要なCTAは出さない");
   await page.close();
 }
 

@@ -50,7 +50,8 @@ import { memberCareerView } from "../../lib/career-member.js";
 import { LEVELS as AUTONOMY_LEVELS } from "../../lib/autonomy.js";
 import { journeyOf, intakeBreakdown, JOURNEY_STATES, ACTOR_LABELS } from "../../lib/journey.js";
 import { computeStage, STAGES as ONBOARD_STAGES, stageOf } from "../../lib/onboard-stage.js";
-import { gatherFacts, gatherFactsBulk } from "../../lib/onboard-advance.js";
+import { gatherFactsBulk } from "../../lib/onboard-advance.js";
+import { journeyForEmployee, journeyLinks } from "../../lib/journey-load.js";
 
 const EMP_FIELDS =
   "id, tenant_id, user_id, display_name, department, position, status, joined_on, "
@@ -290,13 +291,8 @@ async function detail(res, sb, ctx, employeeId) {
   const active = (contracts || []).find((x) => x.status === "active") || null;
   const autonomyLevel = AUTONOMY_LEVELS.find((l) => l.level === Number(e.autonomy_level)) || null;
   const careerFlow = flowOf({ career: c, draft, orders: openOrders, signs: sentSigns, today });
-  const onb = await onboardingOf(sb, ctx, e.id);
-  const links = journeyLinks(e.id, onb?.proc?.id);
-  const journey = journeyOf({
-    employee: e, procedure: onb?.proc || null, stage: onb?.stage || null, facts: onb?.facts || null,
-    career: c, careerFlow, growth: growth ? { status: growth.status, end_date: growth.to } : null,
-    links, today,
-  });
+  // 進み具合は本人の画面と同じ関数で（lib/journey-load.js）。管理者と本人で食い違わない
+  const { journey, onboarding: onb } = await journeyForEmployee(sb, ctx.tenantId, e, today);
 
   return json(res, 200, {
     employee: { id: e.id, userId: e.user_id || null, name: e.display_name, department: e.department, position: e.position,
@@ -399,7 +395,8 @@ async function preview(res, sb, ctx, employeeId) {
   const e = await loadEmployee(sb, ctx, employeeId);
   if (!e) return json(res, 404, { error: "not_found" });
   const view = await memberCareerView(sb, { tenantId: ctx.tenantId, employee: e, userId: e.user_id || null });
-  return json(res, 200, { ...view, preview: { employeeName: e.display_name } });
+  const { journey } = await journeyForEmployee(sb, ctx.tenantId, e);
+  return json(res, 200, { ...view, journey, preview: { employeeName: e.display_name } });
 }
 
 /**
@@ -809,31 +806,6 @@ async function requestConfirm(res, sb, ctx, user, b) {
 }
 
 // ---- 採用決定 → 契約 → 入社 → キャリア → 育成 ----------------------------------------
-
-function journeyLinks(employeeId, procId) {
-  const id = encodeURIComponent(employeeId);
-  return {
-    order: `admin-esign.html?tab=order&employeeId=${id}`,
-    signs: "admin-esign.html?tab=list",
-    hr: procId ? `admin-hr.html?id=${encodeURIComponent(procId)}` : "admin-hr.html",
-    growth: `admin-growth.html?employeeId=${id}`,
-    onboarding: `onboarding.html?employeeId=${id}`,
-  };
-}
-
-/** その社員の入社手続き（あれば）。段階は lib/onboard-stage.js で計算する */
-async function onboardingOf(sb, ctx, employeeId) {
-  const procs = await soft(sb.from("gw_procedures")
-    .select("id, tenant_id, employee_id, kind, status, target_on, stage, stage_at, updated_at, created_at")
-    .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("kind", "onboarding")
-    .order("created_at", { ascending: false }).limit(1));
-  const proc = procs?.[0];
-  if (!proc || proc.status === "cancelled") return null;
-  let facts = null;
-  try { facts = await gatherFacts(sb, ctx.tenantId, proc); } catch { facts = null; }
-  const stage = facts ? computeStage(facts) : { key: proc.stage || "conditions", blockers: [] };
-  return { proc, facts, stage };
-}
 
 function onboardingView({ proc, facts, stage }) {
   const b = intakeBreakdown(facts || {});

@@ -930,5 +930,94 @@ await ok("本人ホームの summary：署名待ち → 契約内容の確認、
   assert.equal(s.ask.title, "必要書類を提出してください");
 });
 
+console.log("\n— 共通ステータスバー（管理者と本人で同じ判定） —");
+
+const { phasesOf, PHASES } = await import(atRoot("lib/journey.js"));
+
+await ok("内部状態 → 6段階（採用決定/契約/本人手続き/会社確認/キャリア/育成）", async () => {
+  assert.deepEqual(PHASES.map((p) => p.label), ["採用決定", "契約", "本人手続き", "会社確認", "キャリア", "育成"]);
+  const now = (st) => phasesOf(st).find((p) => p.state === "now")?.label || "全部完了";
+  assert.equal(now("hired"), "採用決定");
+  for (const st of ["contract_setup", "document_preparing", "signing"]) assert.equal(now(st), "契約");
+  for (const st of ["onboarding_info", "documents_pending"]) assert.equal(now(st), "本人手続き");
+  assert.equal(now("company_review"), "会社確認");
+  assert.equal(now("career_setup"), "キャリア");
+  assert.equal(now("growth_active"), "育成");
+  assert.equal(now("active"), "全部完了");
+  assert.deepEqual(phasesOf("documents_pending").map((p) => p.state), ["done", "done", "now", "todo", "todo", "todo"]);
+  assert.ok(phasesOf("active").every((p) => p.state === "done"));
+});
+
+await ok("誰の対応か：本人ならCTAあり、会社・社労士のときは「操作は必要ありません」でCTAなし", async () => {
+  const E = { id: "e1" }, P = { id: "p1", status: "in_progress" };
+  const J = (x) => journeyOf({ links: {}, today: "2026-09-28", employee: E, procedure: P, ...x });
+  const info = J({ stage: { key: "intake" }, facts: { items: [] } });
+  assert.equal(info.who, "self");
+  assert.equal(info.whoText.member, "あなたの対応です");
+  assert.equal(info.whoText.admin, "本人の対応待ち");
+  assert.deepEqual([info.member.now, info.member.cta.label, info.member.cta.href], ["入社情報の入力", "入社情報を入力する", "onboarding.html"]);
+  const rev = J({ stage: { key: "intake" }, facts: { profile: { status: "submitted" }, items: [{ owner: "admin", status: "todo" }] } });
+  assert.equal(rev.who, "company");
+  assert.equal(rev.whoText.member, "会社が対応中です");
+  assert.equal(rev.member.cta, null);
+  assert.match(rev.member.next, /あなたの操作は必要ありません/);
+  const adv = J({ stage: { key: "advisor_review" }, facts: { order: { status: "requested" } } });
+  assert.equal(adv.whoText.member, "社労士が確認中です");
+  assert.equal(adv.member.cta, null);
+  const sign = J({ stage: { key: "signing" }, facts: { sign: { status: "sent" } } });
+  assert.deepEqual([sign.who, sign.member.cta.href], ["self", "contracts.html"]);
+  const done = journeyOf({ links: {}, today: "2026-09-28", employee: E, procedure: null, career: { id: "c" }, careerFlow: { state: "active" } });
+  assert.equal(done.whoText.member, "完了しました");
+  assert.equal(done.member.cta, null);
+});
+
+await ok("同じ人について、一覧・管理者の詳細・本人のホーム・本人のキャリア画面で進み具合が一致する", async () => {
+  setup();
+  const { trackId, l1 } = await seedAndSet();
+  onboardingFixture();
+  const NEWU = { userId: "u-e-new", tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: emp("e-new", { status: "invited" }) };
+  const pick = (j) => JSON.stringify({ state: j.state, phases: j.phases, who: j.who, member: j.member });
+  const views = async () => {
+    who = OWNER;
+    const list = (await get("?journey=1")).body.rows.find((r) => r.id === "e-new").journey;
+    const detail = (await get("?employeeId=e-new")).body.journey;
+    const preview = (await get("?preview=e-new")).body.journey;
+    who = NEWU;
+    const home = (await call(meApi, { method: "GET", url: "/api/career/me?summary=1" })).body.journey;
+    const page = (await mine()).body.journey;
+    return { list, detail, preview, home, page };
+  };
+  const steps = [
+    () => {},
+    () => db.rows.gw_doc_orders.push({ id: "o1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "requested", updated_at: "x" }),
+    () => { db.rows.gw_doc_orders[0].status = "sent"; db.rows.gw_sign_requests.push({ id: "s1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "sent", sent_at: "x" }); },
+    () => { db.rows.gw_sign_requests[0].status = "signed"; db.rows.gw_onboard_consents.push(...consentAll()); },
+    () => db.rows.gw_onboard_profiles.push({ employee_id: "e-new", status: "submitted" }),
+    () => { db.rows.gw_procedure_items[0].status = "submitted"; },
+    () => { db.rows.gw_procedure_items[1].status = "done"; },
+    async () => { who = OWNER; await act({ action: "setCareer", employeeId: "e-new", trackId, currentLevelId: l1.id, nextReviewOn: jst(90) }); },
+    async () => { who = OWNER; await act({ action: "requestConfirm", employeeId: "e-new" }); },
+    async () => { who = NEWU; await call(meApi, { method: "POST", url: "/api/career/me", body: { action: "confirmPlan" } }); },
+    () => db.rows.gw_growth_plans.push({ id: "gp", tenant_id: "t1", employee_id: "e-new", status: "active", start_date: jst(0), end_date: jst(80) }),
+  ];
+  const seen = [];
+  for (const step of steps) {
+    await step();
+    const v = await views();
+    const base = pick(v.detail);
+    for (const k of ["list", "preview", "home", "page"]) assert.equal(pick(v[k]), base, `${v.detail.state}: ${k} が管理者の詳細と違う`);
+    seen.push(`${v.detail.phases.find((p) => p.state === "now")?.label || "完了"}/${v.home.whoText}`);
+  }
+  assert.deepEqual(seen, [
+    "契約/会社が対応中です", "契約/社労士が確認中です", "契約/あなたの対応です", "本人手続き/あなたの対応です",
+    "本人手続き/あなたの対応です", "会社確認/会社が対応中です", "キャリア/会社が対応中です", "キャリア/会社が対応中です",
+    "キャリア/あなたの対応です", "育成/会社が対応中です", "育成/あなたの対応です",
+  ]);
+  // 本人に返す形に、管理画面の行き先は入れない
+  who = NEWU;
+  const home = (await call(meApi, { method: "GET", url: "/api/career/me?summary=1" })).body.journey;
+  assert.ok(!JSON.stringify(home).includes("admin-"), "本人に admin-*.html を返さない");
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

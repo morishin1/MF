@@ -10,6 +10,7 @@
 //   ・社労士は、給与などの労働条件を見せられず、労働条件の承認・発行がこの画面でできる
 //   ・社労士の一覧（advisor.html）から、確認 → 修正 → 承認・発行 が1画面で終わる
 import { launch, BASE } from "../_browser.mjs";
+import { journeyOf } from "../../lib/journey.js";
 
 const br = await launch();
 let bad = 0;
@@ -68,6 +69,13 @@ console.log("\n=== 本人の画面：社労士確認待ち ===");
     const req = route.request();
     const url = req.url();
     const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/career\/me/.test(url)) {
+      // 共通ステータスバー（サーバと同じ lib/journey.js で作る。社労士確認中）
+      const j = journeyOf({ employee: { id: "e1" }, procedure: { id: "p1" }, stage: { key: "advisor_review" },
+        facts: { order: { status: "requested" } }, links: {}, today: "2026-09-28" });
+      return send({ journey: { state: j.state, phases: j.phases, phase: j.phase, who: j.who,
+        whoText: j.whoText.member, member: j.member, inProgress: true } });
+    }
     if (/\/api\/onboarding\/status/.test(url)) {
       return send({
         role: "self", roleLabel: "本人", employeeId: "e1", known: KNOWN,
@@ -119,6 +127,12 @@ console.log("\n=== 本人の画面：社労士確認待ち ===");
   check(await page.locator("#submit-card").isVisible() === false, "提出カードも隠れている");
   const c = await page.locator("#contracts").innerText();
   check(/社労士が確認中/.test(c), "契約カードには「社労士が確認中」とだけ出る");
+
+  console.log("\n— 入社〜キャリアの共通ステータスバー —");
+  const jb = await page.locator("#journey-card").innerText().catch(() => "");
+  check((await page.locator("#journey-card #jr-bar li.now .jb-l").innerText().catch(() => "")) === "契約", "いま「契約」");
+  check(/社労士が確認中です/.test(jb) && /あなたの操作は必要ありません/.test(jb), "社労士が確認中・本人の操作は不要");
+  check(await page.locator("#jb-cta").count() === 0, "本人の番でないので CTA は出さない");
 
   console.log("\n— 画面のエラー —");
   check(errs.length === 0, `エラーなし：${errs.join(" / ")}`);

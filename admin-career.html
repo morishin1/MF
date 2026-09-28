@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260928f">
-  <link rel="stylesheet" href="css/layout.css?v=20260928f">
+  <link rel="stylesheet" href="css/app.css?v=20260928g">
+  <link rel="stylesheet" href="css/layout.css?v=20260928g">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -120,13 +120,6 @@
     .wz-check li.no { font-weight:600; color:var(--primary-dark); }
     .wz-check li.no .mk { color:#b3261e; }
 
-    /* 採用決定 → 契約 → 入社 → キャリア → 育成 のどこにいるか */
-    .jr-bar { display:flex; gap:4px; margin:10px 0 2px; list-style:none; padding:0; }
-    .jr-bar li { flex:1; text-align:center; font-size:11px; color:var(--muted); padding-top:8px; position:relative; }
-    .jr-bar li::before { content:""; position:absolute; top:0; left:0; right:0; height:5px; border-radius:999px; background:#e4e8ee; }
-    .jr-bar li.done::before { background:#3e9c5a; }
-    .jr-bar li.now::before { background:var(--primary); }
-    .jr-bar li.now { color:var(--primary-dark); font-weight:700; }
     .ob-steps { list-style:none; padding:0; margin:6px 0 10px; }
     .ob-steps li { display:flex; gap:8px; align-items:center; padding:6px 0; font-size:13px; border-bottom:1px solid var(--border); }
     .ob-steps li:last-child { border-bottom:none; }
@@ -243,9 +236,10 @@
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
 
-<script src="js/api-client.js?v=20260928f"></script>
-<script src="js/device.js?v=20260928f"></script>
-<script src="js/layout.js?v=20260928f"></script>
+<script src="js/api-client.js?v=20260928g"></script>
+<script src="js/device.js?v=20260928g"></script>
+<script src="js/layout.js?v=20260928g"></script>
+<script src="js/journey-bar.js?v=20260928g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -399,14 +393,8 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "作成できませんでした"); }
   }
 
-  // 採用決定 → 契約 → 入社 → キャリア → 育成 → 評価 の、いまいる所（lib/journey.js の step を6つにまとめる）
-  const PHASES = [["採用決定", [1]], ["契約", [2, 3, 4]], ["入社", [5, 6, 7]], ["キャリア", [8]], ["育成", [9]], ["評価", [10]]];
-  function journeyBar(j) {
-    if (!j) return "";
-    const at = PHASES.findIndex(([, steps]) => steps.includes(j.step));
-    return `<ol class="jr-bar" id="jr-bar" aria-label="進み具合">${PHASES.map(([label], i) =>
-      `<li class="${i < at ? "done" : i === at ? "now" : ""}">${esc(label)}</li>`).join("")}</ol>`;
-  }
+  // 入社〜キャリアの共通ステータスバー（js/journey-bar.js）。本人の画面と同じ部品・同じ判定
+  const journeyBar = (j) => (j ? KPJourney.panel(j, { viewer: "admin" }) : "");
 
   function renderDrawer() {
     const d = detail;
@@ -665,7 +653,7 @@
       const open = r.kind === "applicant" ? `openApplicant('${esc(r.id)}')` : `openDrawer('${esc(r.id)}')`;
       return `<tr class="cr-row" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" onclick="${open}">
         <td><b>${esc(r.name)}</b>${r.kind === "applicant" ? `<br><small class="muted">入社予定者（採用HR）</small>` : r.department ? `<br><small class="muted">${esc(r.department)}</small>` : ""}</td>
-        <td><span class="cr-tone ${esc(j.tone)}">${esc(j.stateLabel)}</span><br><small class="muted">STEP ${j.step} / ${j.total}</small></td>
+        <td><span class="cr-tone ${esc(j.tone)}">${esc(j.stateLabel)}</span><br>${KPJourney.mini(j)}</td>
         <td class="cr-na-cell"><b>${esc(j.label)}</b>${j.sub ? `<small>${esc(j.sub)}</small>` : ""}</td>
         <td>${esc(j.actorLabel || "—")}${r.managerName && j.actor === "manager" ? `<br><small class="muted">${esc(r.managerName)}</small>` : ""}</td>
         <td>${fmtDate(r.joinOn)}</td>
