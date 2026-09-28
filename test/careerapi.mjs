@@ -529,5 +529,196 @@ await ok("次回評価7日前に、上長・人事・経営者へ「キャリア
   assert.equal(to.includes("e-taro"), false);
 });
 
+console.log("\n— 契約・キャリア面談（db/095） —");
+
+const { flowOf } = await import(atRoot("lib/career.js"));
+
+await ok("状態は保存せず、既存データから計算する（未設定→面談準備→契約準備→本人確認待ち→署名待ち→評価時期→開始）", async () => {
+  const today = "2026-09-28";
+  const base = { id: "car", next_review_on: "2026-12-20" };
+  assert.equal(flowOf({ career: null, today }).state, "setup");
+  assert.equal(flowOf({ career: null, today }).cta.label, "契約・キャリア面談を開始");
+  assert.equal(flowOf({ career: base, today }).state, "meeting");
+  const agreed = { ...base, agreed_at: "2026-04-01" };
+  assert.equal(flowOf({ career: agreed, today }).state, "active", "以前の「合意済み」は確認済みとして扱う");
+  assert.equal(flowOf({ career: agreed, orders: [{ requested_at: "2026-09-01" }], today }).state, "contract_preparing");
+  const asked = { ...base, confirm_requested_at: "2026-09-28T01:00:00Z" };
+  const f = flowOf({ career: asked, today });
+  assert.equal(f.state, "employee_review");
+  assert.equal(f.label, "本人の確認待ちです");
+  assert.equal(f.sub, "送信：2026/09/28");
+  assert.equal(f.tone, "yellow");
+  const confirmed = { ...asked, employee_confirmed_at: "2026-09-29T00:00:00Z" };
+  assert.equal(flowOf({ career: confirmed, signs: [{ sent_at: "2026-09-29T00:00:00Z" }], today }).state, "signing");
+  assert.equal(flowOf({ career: confirmed, signs: [{ sent_at: "x" }], today }).cta.label, "署名状況を見る");
+  assert.equal(flowOf({ career: { ...confirmed, next_review_on: "2026-10-05" }, today }).state, "review_due");
+  assert.equal(flowOf({ career: { ...confirmed, next_review_on: "2026-10-05" }, today }).cta.label, "評価する");
+  assert.equal(flowOf({ career: { ...confirmed, next_review_on: "2026-09-01" }, today }).tone, "red");
+  assert.equal(flowOf({ career: confirmed, draft: { id: "d" }, today }).label, "Level判定待ちです");
+  const act0 = flowOf({ career: confirmed, today });
+  assert.equal(act0.state, "active");
+  assert.equal(act0.tone, "green");
+  assert.equal(flowOf({ career: { ...confirmed, next_review_on: null }, today }).label, "次回評価日を設定してください");
+  // 再依頼したら、前の確認は数えない
+  assert.equal(flowOf({ career: { ...confirmed, confirm_requested_at: "2026-10-01T00:00:00Z" }, today }).state, "employee_review");
+});
+
+await ok("一覧：現在給与（active 契約）・状態・NEXT ACTION・担当。未設定が先頭", async () => {
+  setup();
+  await seedAndSet();
+  const r = await get();
+  assert.equal(r.statusCode, 200);
+  const taro = r.body.people.find((p) => p.employee.id === "e-taro");
+  assert.equal(taro.currentWage.wageAmount, 240000, "superseded ではなく active の給与");
+  assert.equal(taro.employee.managerName, "e-mgr");
+  assert.ok(taro.flow && taro.flow.state && taro.flow.label);
+  assert.equal(r.body.people[0].flow.state, "setup");
+  assert.equal(r.body.flowStates.length, 7);
+});
+
+await ok("契約準備・署名待ちは作成依頼・署名依頼から（雇用契約だけ。誓約書などは数えない）", async () => {
+  setup();
+  await seedAndSet();
+  db.rows.gw_sign_requests = [{ id: "s-pledge", tenant_id: "t1", employee_id: "e-taro", doc_kind: "pledge", status: "sent", title: "誓約書", sent_at: "2026-09-01" }];
+  let d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.flow.state, "active");
+  db.rows.gw_doc_orders = [{ id: "o1", tenant_id: "t1", employee_id: "e-taro", doc_kind: "employment", status: "requested", title: "労働条件通知書", requested_at: "2026-09-20" }];
+  d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.flow.state, "contract_preparing");
+  assert.equal(d.flow.cta.key, "orders");
+  assert.ok(d.contractLinks.order.includes("tab=order&employeeId=e-taro"));
+  db.rows.gw_doc_orders[0].status = "sent";
+  db.rows.gw_sign_requests.push({ id: "s-emp", tenant_id: "t1", employee_id: "e-taro", doc_kind: "employment", status: "sent", title: "労働条件通知書", sent_at: "2026-09-25" });
+  d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.flow.state, "signing");
+  assert.equal(d.signs.length, 1, "契約タブには雇用契約の署名だけ");
+  const list = (await get()).body.people.find((p) => p.employee.id === "e-taro");
+  assert.equal(list.flow.state, "signing");
+});
+
+await ok("詳細：現在の契約（読むだけ）・過去の契約・自走レベル（キャリアLevelと別）・育成", async () => {
+  setup();
+  await seedAndSet();
+  Object.assign(db.rows.gw_contracts[1], { contract_type: "正社員", period_from: "2026-10-01", probation_months: 6, work_hours: "9:00〜17:00" });
+  db.rows.gw_growth_plans = [{ id: "gp1", tenant_id: "t1", employee_id: "e-taro", start_date: "2026-10-01", end_date: "2026-12-31", three_month_kgi: "小規模機能を一人で", status: "draft" }];
+  db.rows.gw_growth_months = [{ id: "gm1", plan_id: "gp1", month_no: 1, kgi: "設計を1件" }];
+  db.rows.gw_growth_kpis = [{ month_id: "gm1", name: "設計書", target_value: 1, unit: "件", sort_order: 0 }];
+  const before = writes.filter(([, t]) => t === "gw_contracts").length;
+  const d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.contract.contractType, "正社員");
+  assert.equal(d.contract.wageAmount, 240000);
+  assert.equal(d.contract.probationMonths, 6);
+  assert.equal(d.contract.workHours, "9:00〜17:00");
+  assert.equal(d.pastContracts.length, 1);
+  assert.equal(d.pastContracts[0].wageAmount, 220000);
+  assert.equal(d.autonomy.level, 2);
+  assert.equal(d.autonomy.levels.length, 4);
+  assert.match(d.autonomy.note, /キャリアLevel/);
+  assert.equal(d.growth.threeMonthKgi, "小規模機能を一人で");
+  assert.equal(d.growth.months[0].kpis[0].name, "設計書");
+  assert.ok(d.tracks[0].oneYearGoal, "STEP3 の初期表示に職種マスタの1年後");
+  assert.equal(d.employee.userId, "u-e-taro");
+  assert.equal(writes.filter(([, t]) => t === "gw_contracts").length, before, "gw_contracts には書かない");
+});
+
+await ok("STEP ごとの保存は、送った項目だけ書き換える（管理者メモ・本人の希望を消さない）。職種マスタは変わらない", async () => {
+  setup();
+  const { trackId, l1 } = await seedAndSet();
+  const trackBefore = JSON.stringify(db.rows.gw_career_tracks[0]);
+  const r = await act({ action: "setCareer", employeeId: "e-taro", trackId, currentLevelId: l1.id,
+    oneYearTargetNote: "小規模開発を一人で完結", threeYearTargetNote: "案件をリード" });
+  assert.equal(r.statusCode, 200);
+  const c = db.rows.gw_employee_careers[0];
+  assert.equal(c.one_year_target_note, "小規模開発を一人で完結");
+  assert.equal(c.manager_note, "内部メモ：来期は様子を見る", "送っていない管理者メモは残る");
+  assert.ok(c.next_review_on, "送っていない次回評価日は残る");
+  assert.equal(JSON.stringify(db.rows.gw_career_tracks[0]), trackBefore, "職種マスタは変わらない");
+  await act({ action: "setCareer", employeeId: "e-taro", trackId, currentLevelId: l1.id, nextReviewOn: "2026-12-20" });
+  assert.equal(db.rows.gw_employee_careers[0].next_review_on, "2026-12-20");
+  assert.equal(db.rows.gw_employee_careers[0].one_year_target_note, "小規模開発を一人で完結");
+});
+
+await ok("本人へ確認依頼：次回評価日が要る・本人に通知（中身は入れない）・状態は本人確認待ち", async () => {
+  setup();
+  const { trackId, l1 } = await seedAndSet();
+  assert.equal((await act({ action: "requestConfirm", employeeId: "e-hanako" })).statusCode, 409, "キャリア未設定は送れない");
+  await act({ action: "setCareer", employeeId: "e-taro", trackId, currentLevelId: l1.id, nextReviewOn: null });
+  assert.equal((await act({ action: "requestConfirm", employeeId: "e-taro" })).statusCode, 400, "次回評価日が要る");
+  await act({ action: "setCareer", employeeId: "e-taro", trackId, currentLevelId: l1.id, nextReviewOn: jst(80) });
+  notified.length = 0;
+  const r = await act({ action: "requestConfirm", employeeId: "e-taro" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(db.rows.gw_employee_careers[0].confirm_requested_at);
+  assert.equal(db.rows.gw_employee_careers[0].confirm_requested_by, "u-owner");
+  assert.equal(notified.length, 1);
+  assert.equal(notified[0].employeeId, "e-taro");
+  assert.equal(notified[0].title, "契約・キャリアの確認があります");
+  assert.ok(!JSON.stringify(notified[0]).includes("内部メモ"));
+  assert.ok(logged.some((l) => l.action === "career.confirm.request"));
+  const d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.flow.state, "employee_review");
+  assert.equal(d.career.confirmPending, true);
+  // 担当外のマネージャー・他テナントは送れない
+  who = MANAGER;
+  assert.equal((await act({ action: "requestConfirm", employeeId: "e-hanako" })).statusCode, 404);
+  who = OTHER;
+  assert.equal((await act({ action: "requestConfirm", employeeId: "e-taro" })).statusCode, 404);
+  who = TARO;
+  assert.equal((await act({ action: "requestConfirm", employeeId: "e-taro" })).statusCode, 403, "本人は依頼を出せない");
+});
+
+await ok("本人：ホームの NEXT ACTION・1画面の契約/キャリア・「内容を確認しました」（署名とは別）", async () => {
+  setup();
+  const { trackId, l1 } = await seedAndSet();
+  await act({ action: "setCareer", employeeId: "e-taro", trackId, currentLevelId: l1.id, oneYearTargetNote: "小規模開発を一人で完結" });
+  who = TARO;
+  let sum = await call(meApi, { method: "GET", url: "/api/career/me?summary=1" });
+  assert.equal(sum.body.show, false, "依頼前は出さない");
+  assert.equal((await call(meApi, { method: "POST", url: "/api/career/me", body: { action: "confirmPlan" } })).statusCode, 409);
+  who = OWNER;
+  db.rows.gw_employees.find((e) => e.id === "e-owner").user_id = "u-owner";
+  await act({ action: "requestConfirm", employeeId: "e-taro" });
+  db.rows.gw_sign_requests = [{ id: "s-emp", tenant_id: "t1", employee_id: "e-taro", doc_kind: "employment", status: "sent", title: "労働条件通知書", sent_at: "2026-09-25" }];
+  who = TARO;
+  sum = await call(meApi, { method: "GET", url: "/api/career/me?summary=1" });
+  assert.equal(sum.body.show, true);
+  assert.equal(sum.body.confirmPending, true);
+  assert.equal(sum.body.signPending, 1);
+  const me = (await mine()).body;
+  assert.equal(me.confirm.pending, true);
+  assert.equal(me.contract.wageAmount, 240000);
+  assert.equal(me.contractSign.pending.length, 1);
+  assert.equal(me.contractSign.link, "contracts.html");
+  assert.equal(me.career.oneYearTargetNote, "小規模開発を一人で完結");
+  assert.ok(!JSON.stringify(me).includes("内部メモ"), "管理者メモは本人に見せない");
+  notified.length = 0;
+  const r = await call(meApi, { method: "POST", url: "/api/career/me", body: { action: "confirmPlan" } });
+  assert.equal(r.statusCode, 200);
+  assert.ok(db.rows.gw_employee_careers[0].employee_confirmed_at);
+  assert.equal(db.rows.gw_sign_requests[0].status, "sent", "キャリアの確認で契約書は署名済みにならない");
+  assert.deepEqual(notified.map((n) => n.employeeId), ["e-owner"], "依頼した人に知らせる");
+  const again = await call(meApi, { method: "POST", url: "/api/career/me", body: { action: "confirmPlan" } });
+  assert.equal(again.body.already, true);
+  who = OWNER;
+  const d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.career.confirmPending, false);
+  assert.equal(d.flow.state, "signing", "キャリアの確認後も、契約書の署名は別に待つ");
+});
+
+await ok("本人画面のプレビュー：本人と同じ形・管理者メモなし・担当者だけ", async () => {
+  setup();
+  await seedAndSet();
+  const r = await get("?preview=e-taro");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.preview.employeeName, "e-taro");
+  assert.equal(r.body.currentLevel.levelNo, 1);
+  assert.ok(r.body.rangeNote.includes("目安"));
+  assert.ok(!JSON.stringify(r.body).includes("内部メモ"));
+  who = MANAGER;
+  assert.equal((await get("?preview=e-hanako")).statusCode, 404, "担当外は見られない");
+  who = TARO;
+  assert.equal((await get("?preview=e-taro")).statusCode, 403);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

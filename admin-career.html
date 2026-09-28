@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260928d">
-  <link rel="stylesheet" href="css/layout.css?v=20260928d">
+  <link rel="stylesheet" href="css/app.css?v=20260928e">
+  <link rel="stylesheet" href="css/layout.css?v=20260928e">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -64,6 +64,70 @@
     .cr-master-track { border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
     .cr-master-level { border-top:1px solid var(--border); padding:10px 0; }
     .cr-master-level:first-of-type { border-top:none; }
+
+    /* 状態の色は補助。必ず文字と一緒に出す（赤＝止まっている/設定不足・黄＝確認待ち・青＝進行中・緑＝開始） */
+    .cr-tone { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; padding:2px 9px;
+               border-radius:999px; white-space:nowrap; }
+    .cr-tone::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; flex:0 0 auto; }
+    .cr-tone.red { background:#fdecec; color:#b3261e; }
+    .cr-tone.yellow { background:#fff4e0; color:#8a5a00; }
+    .cr-tone.blue { background:#e8f0fc; color:#1f4f9a; }
+    .cr-tone.green { background:#eaf5ec; color:#256b36; }
+    .cr-na-cell b { display:block; font-size:13px; color:var(--primary-dark); }
+    .cr-na-cell small { color:var(--muted); font-size:11.5px; }
+    .cr-sum { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px 14px; margin:12px 0 4px; }
+    .cr-sum .k { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.06em; }
+    .cr-sum .v { font-size:15px; font-weight:700; color:var(--primary-dark); margin-top:1px; }
+    .cr-sum .v.big { font-size:20px; }
+    .cr-next .sub { font-size:12px; color:var(--muted); margin:-6px 0 10px; }
+    .cr-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin:14px 0 10px; overflow-x:auto; }
+    .cr-tabs button { background:none; border:none; border-bottom:2px solid transparent; padding:8px 12px; font-size:13.5px;
+                      font-weight:600; color:var(--muted); cursor:pointer; white-space:nowrap; font-family:inherit; }
+    .cr-tabs button.on { color:var(--primary-dark); border-bottom-color:var(--primary); }
+    .cr-sec { font-size:13.5px; font-weight:700; color:var(--primary-dark); margin:14px 0 6px; }
+    .cr-list { list-style:none; padding:0; margin:0; font-size:13px; }
+    .cr-list li { padding:7px 0; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+    .cr-list li:last-child { border-bottom:none; }
+    .cr-list time { color:var(--muted); font-size:12px; min-width:78px; }
+
+    /* 契約・キャリア面談（中央モーダル。中だけスクロール） */
+    .cr-modal.wz { width:780px; max-width:94vw; max-height:88vh; padding:0; overflow:hidden; display:flex; flex-direction:column; }
+    .wz-head { padding:18px 22px 12px; border-bottom:1px solid var(--border); }
+    .wz-body { padding:16px 22px; overflow-y:auto; flex:1 1 auto; }
+    .wz-foot { padding:12px 22px; border-top:1px solid var(--border); display:flex; gap:8px; align-items:center; }
+    .wz-steps { display:flex; gap:6px; list-style:none; padding:0; margin:12px 0 0; }
+    .wz-steps li { flex:1; display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); min-width:0; }
+    .wz-steps .n { width:24px; height:24px; border-radius:50%; border:1.5px solid #c5cfdd; display:flex; align-items:center;
+                   justify-content:center; font-weight:700; font-size:12px; flex:0 0 auto; background:#fff; }
+    .wz-steps li.on { color:var(--primary-dark); font-weight:700; }
+    .wz-steps li.on .n { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .wz-steps li.done .n { background:#eaf5ec; border-color:#3e9c5a; color:#256b36; }
+    .wz-steps .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .wz-kv { display:grid; grid-template-columns:120px 1fr; gap:8px 14px; font-size:14px; margin:4px 0 12px; }
+    .wz-kv dt { color:var(--muted); font-size:12.5px; }
+    .wz-kv dd { margin:0; font-weight:600; color:var(--primary-dark); }
+    .wz-lv { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:6px 0 10px; }
+    .wz-lv .box { border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:150px; }
+    .wz-lv .box.next { border-color:var(--primary); background:#f5f9ff; }
+    .wz-lv .k { font-size:11px; font-weight:700; color:var(--muted); }
+    .wz-lv .v { font-size:20px; font-weight:700; color:var(--primary-dark); }
+    .wz-lv .arrow { font-size:22px; color:var(--muted); }
+    .wz-check { list-style:none; padding:0; margin:6px 0; }
+    .wz-check li { display:flex; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
+    .wz-check li:last-child { border-bottom:none; }
+    .wz-check .mk { width:18px; font-weight:700; flex:0 0 auto; text-align:center; }
+    .wz-check li.ok .mk { color:#256b36; }
+    .wz-check li.no { font-weight:600; color:var(--primary-dark); }
+    .wz-check li.no .mk { color:#b3261e; }
+
+    @media (max-width: 640px) {
+      .cr-drawer { width:100vw; max-width:100vw; padding:16px; }
+      .cr-sum { grid-template-columns:repeat(2, 1fr); }
+      .cr-modal, .cr-modal.wz { width:100vw; max-width:100vw; height:100%; max-height:100%; top:0; left:0; transform:none; border-radius:0; }
+      .wz-steps .t { display:none; }
+      .wz-steps li.on .t { display:inline; }
+      .wz-kv { grid-template-columns:96px 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -72,7 +136,8 @@
   <h1 class="kp-greet">評価・キャリア</h1>
   <div class="kp-crumb">人事・労務 ＞ 評価・キャリア</div>
   <p class="kp-greet-sub">
-    社員の現在地・次のLevel・次回評価を確かめ、評価を行います。昇格・昇給はシステムでは決めず、評価者が確定します。
+    社員ごとに、現在の契約 → 現在地 → 1年後/3年後 → 次のLevel → 本人確認 → 3か月育成 → 評価 までを進めます。
+    昇格・昇給はシステムでは決めず、人が確定します。
   </p>
   <div id="notice"></div>
 
@@ -87,6 +152,7 @@
           <input id="f-q" type="search" placeholder="名前・部署" oninput="renderList()"></div>
         <div><label>職種</label><select id="f-track" onchange="renderList()"></select></div>
         <div><label>Level</label><select id="f-level" onchange="renderList()"></select></div>
+        <div><label>状態</label><select id="f-state" onchange="renderList()"></select></div>
         <div><label>評価時期</label>
           <select id="f-when" onchange="renderList()">
             <option value="">すべて</option>
@@ -97,11 +163,12 @@
       </div>
       <div class="table-scroll">
         <table class="kp-items">
-          <thead><tr><th>氏名</th><th>職種</th><th>現在</th><th>次回評価</th><th>次の状態</th></tr></thead>
-          <tbody id="rows"><tr><td colspan="5" class="muted">読み込み中…</td></tr></tbody>
+          <thead><tr><th>氏名</th><th>職種</th><th>現在</th><th>現在給与</th><th>次回評価</th><th>状態</th><th>NEXT ACTION</th><th>担当</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="8" class="muted">読み込み中…</td></tr></tbody>
         </table>
       </div>
-      <p class="cr-note">NEXT ACTION の順に並んでいます（設定が必要 → 確定待ち → 期限超過 → 評価時期 …）。</p>
+      <p class="cr-note">NEXT ACTION の順に並んでいます（未設定 → 判定待ち → 面談準備 → 契約準備 → 本人確認待ち → 署名待ち → 評価時期 …）。
+        現在給与は雇用契約（active）から表示しています。</p>
     </div>
   </div>
 
@@ -135,9 +202,9 @@
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
 
-<script src="js/api-client.js?v=20260928d"></script>
-<script src="js/device.js?v=20260928d"></script>
-<script src="js/layout.js?v=20260928d"></script>
+<script src="js/api-client.js?v=20260928e"></script>
+<script src="js/device.js?v=20260928e"></script>
+<script src="js/layout.js?v=20260928e"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -177,6 +244,10 @@
       `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("") + `<option value="__none">未設定</option>`;
     const nos = [...new Set((listData.levels || []).map((l) => l.levelNo))].sort((a, b) => a - b);
     el("f-level").innerHTML = `<option value="">すべて</option>` + nos.map((n) => `<option value="${n}">L${n}</option>`).join("");
+    const keep = el("f-state").value;
+    el("f-state").innerHTML = `<option value="">すべて</option>` + (listData.flowStates || []).map((f) =>
+      `<option value="${esc(f.key)}">${esc(f.label)}</option>`).join("");
+    el("f-state").value = keep;
     if (!tracks.length) {
       el("notice").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">info</span>
         <div>キャリアマスタがまだありません。<a href="admin-career.html?tab=master">キャリアマスタ</a>で
@@ -185,11 +256,15 @@
     renderList();
   }
 
+  const tone = (f) => (f ? `<span class="cr-tone ${esc(f.tone)}">${esc(f.stateLabel)}</span>` : "—");
+  const wageText = (w) => (w && w.wageAmount != null ? `${esc(w.wageType || "")} ${yen(w.wageAmount)}` : "—");
+
   function renderList() {
     if (!listData) return;
     const text = el("f-q").value.trim();
     const track = el("f-track").value;
     const level = el("f-level").value;
+    const state = el("f-state").value;
     const when = el("f-when").value;
     const today = listData.today;
     const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
@@ -198,32 +273,51 @@
       if (track === "__none" && p.career) return false;
       if (track && track !== "__none" && p.career?.trackId !== track) return false;
       if (level && String(p.career?.currentLevel?.levelNo) !== level) return false;
+      if (state && p.flow?.state !== state) return false;
       const due = p.career?.nextReviewOn;
       if (when === "overdue" && !(due && due < today)) return false;
       if (when === "soon" && !(due && due >= today && due <= soon)) return false;
       if (when === "unset" && due) return false;
       return true;
     });
-    el("rows").innerHTML = rows.length ? rows.map((p) => `
+    el("rows").innerHTML = rows.length ? rows.map((p) => {
+      const f = p.flow || { label: p.nextAction?.label };
+      return `
       <tr class="cr-row" data-emp="${esc(p.employee.id)}" onclick="openDrawer('${esc(p.employee.id)}')">
         <td><b>${esc(p.employee.name)}</b><br><small class="muted">${esc(p.employee.department || "")}</small></td>
         <td>${esc(p.career?.trackName || (p.suggestion ? `（候補：${p.suggestion.trackName}）` : "—"))}</td>
         <td class="cr-lv">${p.career ? `L${p.career.currentLevel?.levelNo ?? "-"}` : "—"}</td>
+        <td style="white-space:nowrap;">${wageText(p.currentWage)}</td>
         <td>${fmtDate(p.career?.nextReviewOn)}</td>
-        <td><span class="cr-na ${esc(p.nextAction.key)}">${esc(p.nextAction.label)}</span></td>
-      </tr>`).join("")
-      : `<tr><td colspan="5" class="muted">該当する社員はいません。</td></tr>`;
+        <td>${tone(p.flow)}</td>
+        <td class="cr-na-cell"><b>${esc(f.label || "")}</b>${f.sub ? `<small>${esc(f.sub)}</small>` : ""}</td>
+        <td>${esc(p.employee.managerName || "—")}</td>
+      </tr>`;
+    }).join("")
+      : `<tr><td colspan="8" class="muted">該当する社員はいません。</td></tr>`;
   }
 
-  // ---- 詳細（ドロワー） -----------------------------------------------------------
-  async function openDrawer(employeeId) {
-    el("drawer-root").innerHTML = `<div class="cr-drawer-bg" onclick="closeDrawer()"></div>
-      <div class="cr-drawer"><div class="empty">読み込み中…</div></div>`;
+  // ---- 社員詳細（右ドロワー＝見る場所。操作は中央モーダルへ） ---------------------------
+  let drawerTab = "overview";
+  async function openDrawer(employeeId, tab) {
+    if (tab) drawerTab = tab;
+    else if (detail?.employee?.id !== employeeId) drawerTab = "overview";
+    if (!el("drawer-root").querySelector(".cr-drawer")) {
+      el("drawer-root").innerHTML = `<div class="cr-drawer-bg" onclick="closeDrawer()"></div>
+        <div class="cr-drawer" role="dialog" aria-label="社員の詳細"><div class="empty">読み込み中…</div></div>`;
+    }
     try { detail = await API.careerDetail(employeeId); }
     catch (e) { el("drawer-root").querySelector(".cr-drawer").innerHTML = `<div class="err-text">${esc(e.message)}</div>`; return; }
+    growthEvidence = null;
     renderDrawer();
   }
   function closeDrawer() { el("drawer-root").innerHTML = ""; detail = null; }
+  async function refreshDetail() {
+    const id = detail?.employee?.id;
+    if (!id) return;
+    await loadList();
+    await openDrawer(id, drawerTab);
+  }
 
   function progressBars(progress) {
     if (!progress || !progress.total) return `<p class="muted" style="font-size:12.5px;">次のLevelの評価基準がまだありません。</p>`;
@@ -233,66 +327,224 @@
         <span>${g.achieved} / ${g.total}</span></div>`).join("");
   }
 
+  /** Primary CTA は1つ。何を押すかは状態で決まる（lib/career.js flowOf） */
+  function ctaButton(f) {
+    if (!f?.cta) return "";
+    return `<button class="btn btn-primary" id="cr-cta" onclick="runCta('${esc(f.cta.key)}')">${esc(f.cta.label)}</button>`;
+  }
+  function runCta(key) {
+    const d = detail;
+    if (key === "meeting") return openMeeting();
+    if (key === "review") return openReview();
+    if (key === "orders") { location.href = d.contractLinks.order; return; }
+    if (key === "signs") { location.href = d.contractLinks.signs; return; }
+  }
+
   function renderDrawer() {
     const d = detail;
     const box = el("drawer-root").querySelector(".cr-drawer");
     if (!box) return;
     const c = d.career;
-    // NEXT ACTION と、Primary CTA は1つ
-    let cta;
-    if (!c) cta = `<button class="btn btn-primary" onclick="openSetup()">キャリアを設定</button>`;
-    else if (d.draft) cta = d.canDecide
-      ? `<button class="btn btn-primary" onclick="openReview()">評価を確定</button>`
-      : `<button class="btn btn-primary" onclick="openReview()">評価の下書きを開く</button>`;
-    else cta = `<button class="btn btn-primary" onclick="openReview()">評価を開始</button>`;
-
+    const f = d.flow || { label: d.nextAction?.label };
+    const tabs = [["overview", "概要"], ["contract", "契約"], ["career", "キャリア"], ["growth", "育成"], ["history", "履歴"]];
     box.innerHTML = `
       <h2>${esc(d.employee.name)}
         <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDrawer()">閉じる</button></h2>
-      <div class="muted" style="font-size:12px;">${esc(d.employee.department || "")}${d.employee.joinedOn ? `・入社 ${fmtDate(d.employee.joinedOn)}` : ""}</div>
+      <div class="muted" style="font-size:12.5px;">${esc([d.track?.name, d.contract?.contractType].filter(Boolean).join(" / ") || d.employee.department || "")}</div>
 
-      <div class="cr-next">
-        <div class="lbl">NEXT ACTION</div>
-        <b>${esc(d.nextAction.label)}</b>
-        ${cta}
-        ${c ? `<button class="btn btn-secondary btn-sm" style="margin-left:6px;" onclick="openSetup()">キャリア設定を編集</button>` : ""}
+      <div class="cr-sum" id="cr-sum">
+        <div><div class="k">現在</div><div class="v big">${c ? `L${esc(d.currentLevel?.levelNo ?? "-")}` : "—"}</div></div>
+        <div><div class="k">次のLevel</div><div class="v big">${d.nextLevel ? `L${esc(d.nextLevel.levelNo)}` : "—"}</div></div>
+        <div><div class="k">現在給与</div><div class="v">${wageText(d.currentWage)}</div></div>
+        <div><div class="k">次回評価</div><div class="v">${fmtDate(c?.nextReviewOn)}</div></div>
+        <div><div class="k">状態</div><div class="v">${tone(d.flow)}</div></div>
       </div>
 
-      ${c ? `
+      <div class="cr-next" id="cr-next">
+        <div class="lbl">NEXT ACTION</div>
+        <b>${esc(f.label || "")}</b>
+        ${f.sub ? `<div class="sub">${esc(f.sub)}</div>` : ""}
+        ${ctaButton(d.flow)}
+      </div>
+
+      <div class="cr-tabs" role="tablist">${tabs.map(([k, label]) => `
+        <button role="tab" data-tab="${k}" class="${drawerTab === k ? "on" : ""}" onclick="setDrawerTab('${k}')">${label}</button>`).join("")}</div>
+      <div id="cr-tab-body">${tabBody()}</div>`;
+    if (drawerTab === "growth") loadGrowthEvidence();
+  }
+  function setDrawerTab(k) { drawerTab = k; renderDrawer(); }
+
+  function tabBody() {
+    const d = detail;
+    const c = d.career;
+    if (drawerTab === "contract") return contractTab();
+    if (drawerTab === "career") return careerTab();
+    if (drawerTab === "growth") return growthTab();
+    if (drawerTab === "history") return historyTab();
+    // 概要
+    return `
       <dl class="cr-kv">
-        <dt>現在</dt><dd>${esc(d.track?.name || "")} / <b>${lvText(d.currentLevel)}</b> ${esc(d.currentLevel?.levelName || "")}</dd>
-        <dt>現在給与</dt><dd>${d.currentWage ? `${esc(d.currentWage.wageType || "")} ${yen(d.currentWage.wageAmount)}` : "有効な契約がありません"}
+        <dt>雇用区分</dt><dd>${esc(d.contract?.contractType || "—")}</dd>
+        <dt>現在給与</dt><dd>${d.contract ? wageText(d.currentWage) : "有効な契約がありません"}
           <div class="cr-note">雇用契約（active）から表示しています</div></dd>
-        <dt>次のLevel</dt><dd>${d.nextLevel ? `<b>${lvText(d.nextLevel)}</b> ${esc(d.nextLevel.levelName)}<br>${esc(range(d.nextLevel))}
-          <div class="cr-note">${esc(d.rangeNote)}</div>` : "最上位のLevelです"}</dd>
-        <dt>次回評価</dt><dd>${fmtDate(c.nextReviewOn)}</dd>
-        <dt>自走レベル</dt><dd>${d.employee.autonomyLevel ? `LEVEL ${d.employee.autonomyLevel}` : "—"}
+        <dt>現在Level</dt><dd>${c ? `<b>${lvText(d.currentLevel)}</b> ${esc(d.currentLevel?.levelName || "")}` : "未設定"}</dd>
+        <dt>次のLevel</dt><dd>${d.nextLevel ? `<b>${lvText(d.nextLevel)}</b> ${esc(d.nextLevel.levelName)}` : (c ? "最上位のLevelです" : "—")}</dd>
+        <dt>次回評価</dt><dd>${fmtDate(c?.nextReviewOn)}</dd>
+        <dt>自走レベル</dt><dd>${d.employee.autonomyLevel ? `Level ${esc(d.employee.autonomyLevel)}${d.autonomy?.label ? `：${esc(d.autonomy.label)}` : ""}` : "—"}
           <span class="cr-note">（任せられる範囲。キャリアLevelとは別）</span></dd>
-        <dt>初回面談</dt><dd>${c.agreedAt ? `合意済み（${fmtDate(c.agreedAt)}）` : "未実施"}</dd>
+        <dt>本人確認</dt><dd>${confirmText(c)}</dd>
+        <dt>担当</dt><dd>${esc(d.employee.managerName || "—")}</dd>
       </dl>
-      <h3 style="font-size:13.5px;margin:14px 0 6px;">現在の進捗（${d.nextLevel ? lvText(d.nextLevel) : "—"} まで）</h3>
+      ${!c && d.suggestion ? `<div class="cr-ev">職種からの候補：<b>${esc(d.suggestion.trackName)}</b> / 最初のLevel
+        <div class="cr-note">候補です。自動では確定しません。契約・キャリア面談で本人と確認して設定してください。</div></div>` : ""}`;
+  }
+
+  function confirmText(c) {
+    if (!c) return "—";
+    if (c.confirmPending) return `本人確認待ち（送信 ${fmtDate(c.confirmRequestedAt)}）`;
+    if (c.employeeConfirmedAt) return `確認済み（${fmtDate(c.employeeConfirmedAt)}）`;
+    if (c.agreedAt) return `初回面談で合意済み（${fmtDate(c.agreedAt)}）`;
+    return "未送信";
+  }
+
+  const SIGN_LABEL = { sent: "署名待ち", signed: "署名済み", cancelled: "取り消し" };
+  const ORDER_LABEL = { requested: "作成依頼中", uploaded: "書面が届いた", sent: "本人へ送信済み", signed: "署名済み", cancelled: "取り消し" };
+  function contractRows(k) {
+    if (!k) return `<p class="muted" style="font-size:13px;">有効な契約（active）がありません。</p>`;
+    return `<dl class="cr-kv">
+      <dt>雇用区分</dt><dd>${esc(k.contractType || "—")}</dd>
+      <dt>給与</dt><dd>${k.wageAmount != null ? `${esc(k.wageType || "")} ${yen(k.wageAmount)}` : "—"}${k.wageNote ? `<div class="cr-note">${esc(k.wageNote)}</div>` : ""}</dd>
+      <dt>契約開始日</dt><dd>${fmtDate(k.periodFrom)}${k.periodTo ? `〜${fmtDate(k.periodTo)}` : ""}</dd>
+      <dt>試用期間</dt><dd>${k.probationMonths ? `${esc(k.probationMonths)}か月` : "—"}</dd>
+      <dt>勤務時間</dt><dd>${esc(k.workHours || "—")}</dd>
+    </dl>`;
+  }
+  function contractTab() {
+    const d = detail;
+    return `
+      <div class="cr-sec">現在の契約</div>${contractRows(d.contract)}
+      <div class="cr-sec">電子署名の状態</div>
+      ${(d.signs || []).length ? `<ul class="cr-list">${d.signs.map((x) => `
+        <li><time>${fmtDate(x.signedAt || x.sentAt)}</time><span>${esc(x.title)}</span>
+          <span class="cr-tone ${x.status === "signed" ? "green" : x.status === "sent" ? "yellow" : "blue"}">${esc(SIGN_LABEL[x.status] || x.status)}</span></li>`).join("")}</ul>`
+        : `<p class="muted" style="font-size:13px;">署名依頼はありません。</p>`}
+      <div class="cr-sec">契約書作成依頼</div>
+      ${(d.orders || []).length ? `<ul class="cr-list">${d.orders.map((o) => `
+        <li><time>${fmtDate(o.requestedAt)}</time><span>${esc(o.title)}</span><span class="muted">${esc(ORDER_LABEL[o.status] || o.status)}</span></li>`).join("")}</ul>`
+        : `<p class="muted" style="font-size:13px;">作成依頼はありません。</p>`}
+      <div class="cr-sec">過去の契約</div>
+      ${(d.pastContracts || []).length ? `<ul class="cr-list">${d.pastContracts.map((k) => `
+        <li><time>${fmtDate(k.periodFrom || k.createdAt)}</time><span>${esc(k.contractType || "")} ${k.wageAmount != null ? yen(k.wageAmount) : ""}</span></li>`).join("")}</ul>`
+        : `<p class="muted" style="font-size:13px;">ありません。</p>`}
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-secondary btn-sm" href="${esc(d.contractLinks.order)}">契約書作成依頼</a>
+        <a class="btn btn-secondary btn-sm" href="${esc(d.contractLinks.signs)}">署名の状況</a>
+      </div>
+      <p class="cr-note">契約の変更は、作成依頼 → 労働条件通知書 → 電子署名で行います。キャリアプランは契約書に入れません。</p>`;
+  }
+
+  function criteriaChecklist(d) {
+    const items = d.progress?.items || (d.criteria || []).map((x) => ({ ...x, status: "not_yet" }));
+    if (!items.length) return `<p class="muted" style="font-size:12.5px;">次のLevelの評価基準がまだありません。キャリアマスタで足してください。</p>`;
+    return `<ul class="wz-check" id="crit-list">${items.filter((i) => i.status !== "na").map((i) => {
+      const done = i.status === "achieved";
+      return `<li class="${done ? "ok" : "no"}"><span class="mk">${done ? "✓" : "□"}</span>
+        <span>${esc(i.title)}<span class="muted" style="font-size:11.5px;font-weight:400;"> ${esc(i.category || "")}${i.status === "in_progress" ? "・取り組み中" : ""}</span></span></li>`;
+    }).join("")}</ul>`;
+  }
+
+  function careerTab() {
+    const d = detail;
+    const c = d.career;
+    if (!c) return `<p style="font-size:13.5px;">キャリアはまだ設定されていません。「契約・キャリア面談を開始」から設定します。</p>`;
+    return `
+      <dl class="cr-kv">
+        <dt>職種</dt><dd>${esc(d.track?.name || "")}</dd>
+        <dt>現在Level</dt><dd><b>${lvText(d.currentLevel)}</b> ${esc(d.currentLevel?.levelName || "")}</dd>
+        <dt>次のLevel</dt><dd>${d.nextLevel ? `<b>${lvText(d.nextLevel)}</b> ${esc(d.nextLevel.levelName)}` : "最上位のLevelです"}</dd>
+        <dt>給与レンジ</dt><dd>${d.nextLevel ? esc(range(d.nextLevel)) : "—"}<div class="cr-note">${esc(d.rangeNote)}</div></dd>
+        <dt>1年後</dt><dd>${esc(c.oneYearTargetNote || d.track?.one_year_goal || "—")}</dd>
+        <dt>3年後</dt><dd>${esc(c.threeYearTargetNote || d.track?.three_year_goal || "—")}</dd>
+        <dt>本人の希望</dt><dd>${esc(c.employeeWish || "—")}</dd>
+      </dl>
+      <div class="cr-sec">評価基準（${d.nextLevel ? lvText(d.nextLevel) : "—"} になるために）</div>
+      ${criteriaChecklist(d)}
+      <h3 class="cr-sec">進捗</h3>
       ${progressBars(d.progress)}
       <p class="cr-note">進捗は確定済みの評価から作っています。</p>
       ${c.managerNote ? `<div class="cr-ev"><b>管理者メモ（本人には表示されません）</b><br>${esc(c.managerNote)}</div>` : ""}
-      <h3 style="font-size:13.5px;margin:16px 0 6px;">評価履歴</h3>
-      ${(d.reviews || []).length ? `<ul style="padding-left:18px;font-size:13px;line-height:1.9;margin:0;">${d.reviews.map((r) => `
-        <li>${r.status === "confirmed" ? fmtDate(r.decided_at) : "下書き"}：
-          ${esc(labelOf(d.labels.reviewResults, r.result) || "未判断")}
-          ${r.salary_decision && r.salary_decision !== "none" ? `／給与 ${esc(labelOf(d.labels.salaryDecisions, r.salary_decision))}` : ""}</li>`).join("")}</ul>`
-        : `<p class="muted" style="font-size:12.5px;">まだありません。</p>`}
-      ` : `
-      <p style="font-size:13.5px;">キャリア設定が必要です。</p>
-      ${d.suggestion ? `<div class="cr-ev">職種からの候補：<b>${esc(d.suggestion.trackName)}</b> / 最初のLevel
-        <div class="cr-note">候補です。自動では確定しません。初回キャリア面談で本人と確認して設定してください。</div></div>` : ""}
-      `}`;
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="openReview()">${d.draft ? "評価の下書きを開く" : "評価する"}</button>
+        <a class="btn btn-secondary btn-sm" href="admin-career.html?tab=master">キャリアマスタ</a>
+      </div>`;
+  }
+
+  let growthEvidence = null;
+  async function loadGrowthEvidence() {
+    if (growthEvidence || !detail) return;
+    try { growthEvidence = await API.careerEvidence(detail.employee.id); } catch { growthEvidence = { growthHistory: [] }; }
+    if (drawerTab === "growth" && el("cr-tab-body")) el("cr-tab-body").innerHTML = growthTab();
+  }
+  function growthTab() {
+    const d = detail;
+    const g = d.growth;
+    const a = d.autonomy || {};
+    const hist = growthEvidence?.growthHistory;
+    return `
+      <div class="cr-sec">3か月育成</div>
+      ${g ? `<dl class="cr-kv">
+          <dt>期間</dt><dd>${fmtDate(g.from)}〜${fmtDate(g.to)}（${g.status === "active" ? "確定" : g.status === "draft" ? "下書き" : esc(g.status || "")}）</dd>
+          <dt>3か月KGI</dt><dd>${esc(g.threeMonthKgi || "—")}</dd></dl>
+        <ul class="cr-list">${(g.months || []).map((m) => `
+          <li><time>${esc(m.monthNo)}か月目</time><span><b>${esc(m.kgi || "KGI 未設定")}</b>
+            ${m.kpis.length ? `<br><small class="muted">KPI：${m.kpis.map((k) => esc(`${k.name} ${k.target ?? ""}${k.unit || ""}`)).join("・")}</small>` : ""}</span></li>`).join("")}</ul>`
+        : `<p class="muted" style="font-size:13px;">3か月育成計画はまだありません。</p>`}
+      <div class="cr-sec">自走レベル</div>
+      <p style="font-size:13.5px;margin:0;">${a.level ? `Level ${esc(a.level)}：${esc(a.label || "")}` : "—"}</p>
+      <p class="cr-note">${esc(a.note || "")}</p>
+      ${(a.recent || []).length ? `<ul class="cr-list">${a.recent.map((r) => `
+        <li><time>${fmtDate(r.at)}</time><span>Level ${esc(r.from ?? "-")} → ${esc(r.to)}：${esc(r.reason || "")}</span></li>`).join("")}</ul>` : ""}
+      <div class="cr-sec">できるようになったこと</div>
+      ${hist === undefined ? `<p class="muted" style="font-size:13px;">読み込み中…</p>`
+        : (hist || []).length ? `<ul class="cr-list">${hist.map((h) => `<li><time>${fmtDate(h.on)}</time><span>${esc(h.title)}</span></li>`).join("")}</ul>`
+        : `<p class="muted" style="font-size:13px;">まだありません。</p>`}
+      <div style="margin-top:12px;"><a class="btn btn-secondary btn-sm" href="${esc(d.contractLinks.growth)}">3か月育成を開く</a></div>`;
+  }
+
+  /** 評価・Level変更・契約変更・本人確認・面談記録を、新しい順に1本で */
+  function historyTab() {
+    const d = detail;
+    const c = d.career;
+    const ev = [];
+    for (const r of d.reviews || []) {
+      if (r.status !== "confirmed") continue;
+      ev.push({ at: r.decided_at, kind: "評価", text: labelOf(d.labels.reviewResults, r.result) || "評価を確定" });
+      if (r.result === "level_up") {
+        const to = (d.allLevels || []).find((l) => l.id === r.target_level_id);
+        ev.push({ at: r.decided_at, kind: "Level変更", text: to ? `${lvText(to)} になりました` : "Level Up" });
+      }
+    }
+    for (const k of [d.contract, ...(d.pastContracts || [])].filter(Boolean)) {
+      ev.push({ at: k.periodFrom || k.createdAt, kind: "契約", text: `${k.contractType || "契約"} ${k.wageAmount != null ? yen(k.wageAmount) : ""}${k.status === "active" ? "（現在）" : ""}` });
+    }
+    for (const x of d.signs || []) if (x.signedAt) ev.push({ at: x.signedAt, kind: "契約", text: `${x.title} に署名` });
+    if (c?.confirmRequestedAt) ev.push({ at: c.confirmRequestedAt, kind: "本人確認", text: "確認依頼を送信" });
+    if (c?.employeeConfirmedAt) ev.push({ at: c.employeeConfirmedAt, kind: "本人確認", text: "本人が内容を確認" });
+    if (c?.agreedAt) ev.push({ at: c.agreedAt, kind: "キャリア面談", text: "初回キャリア面談で合意" });
+    ev.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+    const drafts = (d.reviews || []).filter((r) => r.status !== "confirmed").length;
+    return `${ev.length ? `<ul class="cr-list" id="cr-history">${ev.map((e) => `
+        <li><time>${fmtDate(e.at)}</time><span class="cr-tone blue">${esc(e.kind)}</span><span>${esc(e.text)}</span></li>`).join("")}</ul>`
+      : `<p class="muted" style="font-size:13px;">まだ履歴はありません。</p>`}
+      ${drafts ? `<p class="cr-note">評価の下書きが ${drafts} 件あります（本人には表示されません）。</p>` : ""}`;
   }
 
   const labelOf = (list, key) => (list || []).find((x) => x.key === key)?.label || "";
 
-  // ---- キャリア設定（モーダル） ------------------------------------------------------
-  function openModal(html) {
+  // ---- 中央モーダル（背景を押すとモーダルだけ閉じる。ドロワーは残る） ------------------------
+  function openModal(html, cls = "") {
     el("modal-root").innerHTML = `<div class="cr-modal-bg" onclick="closeModal()"></div>
-      <div class="cr-modal" role="dialog" aria-modal="true">${html}</div>`;
+      <div class="cr-modal ${cls}" role="dialog" aria-modal="true">${html}</div>`;
   }
   function closeModal() { el("modal-root").innerHTML = ""; }
 
@@ -302,52 +554,225 @@
       .map((l) => `<option value="${esc(l.id)}" ${l.id === selected ? "selected" : ""}>LEVEL ${l.levelNo} ${esc(l.levelName)}</option>`).join("");
   }
 
-  function openSetup() {
+  // ---- 契約・キャリア面談（5 STEP） --------------------------------------------------
+  //   1 現在の契約 → 2 現在地 → 3 1年後・3年後 → 4 次のLevel → 5 本人へ確認依頼
+  //   各STEPのボタンは「戻る」と「次へ」だけ。保存は「次へ」を押したときに、そのSTEPの分だけ。
+  const STEPS = ["現在の契約", "現在地", "1年後・3年後", "次のLevel", "本人へ確認依頼"];
+  let wz = null;
+
+  function openMeeting() {
+    // いつも STEP1（現在の契約）から。契約を確かめてから話を始める
+    wz = { step: 1, done: new Set() };
+    renderWizard();
+  }
+
+  function renderWizard() {
+    const d = detail;
+    const s = wz.step;
+    const steps = STEPS.map((t, i) => {
+      const n = i + 1;
+      const cls = n === s ? "on" : wz.done.has(n) ? "done" : "";
+      return `<li class="${cls}" data-step="${n}"><span class="n">${wz.done.has(n) && n !== s ? "✓" : n}</span><span class="t">${esc(t)}</span></li>`;
+    }).join("");
+    const body = [null, step1, step2, step3, step4, step5][s]();
+    const next = s < 5
+      ? `<button class="btn btn-primary" id="wz-next" onclick="wizardNext(this)">次へ</button>`
+      : `<button class="btn btn-primary" id="wz-send" onclick="sendConfirm(this)">本人へ確認依頼を送る</button>`;
+    openModal(`
+      <div class="wz-head">
+        <h2><span class="material-symbols-outlined">handshake</span>契約・キャリア面談 — ${esc(d.employee.name)}
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeModal()">閉じる</button></h2>
+        <ol class="wz-steps" aria-label="進み具合">${steps}</ol>
+      </div>
+      <div class="wz-body" id="wz-body">
+        <h3 style="font-size:15px;margin:0 0 10px;color:var(--primary-dark);">STEP ${s}　${esc(STEPS[s - 1])}</h3>
+        ${body}
+        <div id="wz-msg" class="err-text" style="margin-top:10px;"></div>
+      </div>
+      <div class="wz-foot">
+        ${s > 1 ? `<button class="btn btn-secondary" onclick="wizardBack()">戻る</button>` : ""}
+        <span style="margin-left:auto;"></span>
+        ${next}
+      </div>`, "wz");
+  }
+
+  function step1() {
+    const d = detail;
+    return `
+      <p class="cr-note" style="margin:0 0 10px;">雇用契約（active）をそのまま表示しています。ここでは変更しません。</p>
+      ${d.contract ? `<dl class="wz-kv" id="wz-contract">
+        <dt>雇用区分</dt><dd>${esc(d.contract.contractType || "—")}</dd>
+        <dt>現在給与</dt><dd>${d.contract.wageAmount != null ? `${esc(d.contract.wageType || "")} ${yen(d.contract.wageAmount)}` : "—"}</dd>
+        <dt>契約開始日</dt><dd>${fmtDate(d.contract.periodFrom)}</dd>
+        <dt>試用期間</dt><dd>${d.contract.probationMonths ? `${esc(d.contract.probationMonths)}か月` : "—"}</dd>
+        <dt>勤務時間</dt><dd>${esc(d.contract.workHours || "—")}</dd>
+      </dl>` : `<div class="banner warn" id="wz-contract"><span class="material-symbols-outlined">info</span>
+        <div>有効な契約（active）がありません。契約がまだの場合は、契約書作成依頼から始めてください。</div></div>`}
+      <a class="btn btn-secondary btn-sm" id="wz-change-contract" href="${esc(d.contractLinks.order)}" target="_blank" rel="noopener">
+        <span class="material-symbols-outlined icon-inline">edit_document</span>契約内容を変更する</a>
+      <p class="cr-note">変更するときは、既存の契約書作成依頼 → 労働条件通知書 → 電子署名で行います（別の画面が開きます）。
+        給与はキャリア側には保存しません。</p>`;
+  }
+
+  function step2() {
     const d = detail;
     const c = d.career || {};
-    const trackId = c.trackId || d.suggestion?.trackId || d.tracks[0]?.id || "";
-    const levelId = c.currentLevelId || d.suggestion?.levelId || "";
-    openModal(`
-      <h2>キャリア設定（初回キャリア面談）</h2>
-      <p class="cr-note" style="margin:0 0 12px;">職種・現在Level・1年後/3年後の方向性・本人がやりたいことを、本人と上長で確認して設定します。</p>
-      ${!d.tracks.length ? `<div class="banner warn"><div>先にキャリアマスタを作ってください。</div></div>` : ""}
-      <div class="inline-controls" style="margin-bottom:10px;">
-        <div><label>職種</label><select id="st-track" onchange="onSetupTrack()">${d.tracks.map((t) =>
+    const trackId = wz.trackId || c.trackId || d.suggestion?.trackId || d.tracks[0]?.id || "";
+    const levelId = wz.levelId || c.currentLevelId || d.suggestion?.levelId || "";
+    const locked = Boolean(d.career) && !d.canDecide;
+    const a = d.autonomy || {};
+    return `
+      ${!d.tracks.length ? `<div class="banner warn"><div>先に<a href="admin-career.html?tab=master">キャリアマスタ</a>を作ってください。</div></div>` : ""}
+      <div style="margin-bottom:12px;"><label>職種</label>
+        <select id="wz-track" onchange="onWizardTrack()" ${locked ? "disabled" : ""}>${d.tracks.map((t) =>
           `<option value="${esc(t.id)}" ${t.id === trackId ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>
-        <div><label>現在のLevel</label><select id="st-level" ${d.career && !d.canDecide ? "disabled" : ""}>${levelOptions(trackId, levelId)}</select></div>
-      </div>
-      ${d.career && !d.canDecide ? `<p class="cr-note">設定後のLevelの変更は、評価の確定で行います。</p>` : ""}
-      <div class="inline-controls" style="margin-bottom:10px;">
-        <div><label>開始日</label><input id="st-start" type="date" value="${esc(c.startedAt || d.employee.joinedOn || "")}"></div>
-        <div><label>次回評価日</label><input id="st-review" type="date" value="${esc(c.nextReviewOn || "")}"></div>
-      </div>
-      <div style="margin-bottom:10px;"><label>1年後の方向性</label><textarea id="st-1y" rows="2">${esc(c.oneYearTargetNote || "")}</textarea></div>
-      <div style="margin-bottom:10px;"><label>3年後の方向性</label><textarea id="st-3y" rows="2">${esc(c.threeYearTargetNote || "")}</textarea></div>
-      <div style="margin-bottom:10px;"><label>本人がやりたいこと</label><textarea id="st-wish" rows="2">${esc(c.employeeWish || "")}</textarea></div>
-      <div style="margin-bottom:10px;"><label>管理者メモ（本人には表示されません）</label><textarea id="st-note" rows="2">${esc(c.managerNote || "")}</textarea></div>
-      <label style="display:flex;gap:6px;align-items:center;font-weight:500;"><input id="st-agreed" type="checkbox" style="width:auto;margin:0;" ${c.agreedAt ? "checked" : ""}>
-        本人と上長で合意した（初回キャリア面談済み）</label>
-      <div id="st-msg" class="err-text" style="margin:10px 0;"></div>
-      <div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="saveSetup(this)">保存</button>
-        <button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`);
+      <div style="margin-bottom:4px;"><label>現在のキャリアLevel</label>
+        <select id="wz-level" ${locked ? "disabled" : ""}>${levelOptions(trackId, levelId)}</select></div>
+      <p class="cr-note" style="margin:0 0 14px;">キャリアLevel … 役割・期待値・給与レンジ。${locked ? "設定後のLevelの変更は、評価の確定で行います。" : ""}</p>
+      <div style="margin-bottom:4px;"><label>自走レベル</label>
+        <select id="wz-autonomy" onchange="onWizardAutonomy()" ${a.canEdit && d.employee.userId ? "" : "disabled"}>
+          <option value="">—</option>${(a.levels || []).map((l) =>
+          `<option value="${l.level}" ${Number(a.level) === l.level ? "selected" : ""}>Level ${l.level}：${esc(l.label)}</option>`).join("")}</select></div>
+      <p class="cr-note" style="margin:0 0 8px;">自走レベル … 任せられる範囲。キャリアLevelとは別に決めます。${a.canEdit ? "" : "（変更は人事・管理者が自走レベルの画面で行います）"}</p>
+      <div id="wz-autonomy-reason" class="hidden" style="margin-bottom:8px;"><label>自走レベルを変える理由（履歴に残ります）</label>
+        <textarea id="wz-autonomy-note" rows="2"></textarea></div>`;
   }
-  function onSetupTrack() { el("st-level").innerHTML = levelOptions(el("st-track").value, ""); }
+  function onWizardTrack() { el("wz-level").innerHTML = levelOptions(el("wz-track").value, ""); }
+  function onWizardAutonomy() {
+    const v = Number(el("wz-autonomy").value || 0);
+    el("wz-autonomy-reason").classList.toggle("hidden", !v || v === Number(detail.autonomy?.level || 0));
+  }
 
-  async function saveSetup(btn) {
-    const msg = el("st-msg"); msg.textContent = "";
+  function step3() {
+    const d = detail;
+    const c = d.career || {};
+    const t = d.tracks.find((x) => x.id === (c.trackId || wz.trackId)) || {};
+    const one = c.oneYearTargetNote || t.oneYearGoal || "";
+    const three = c.threeYearTargetNote || t.threeYearGoal || "";
+    return `
+      <p class="cr-note" style="margin:0 0 10px;">職種マスタの目安を初期表示しています。この社員向けに直して保存しても、職種マスタは変わりません。</p>
+      <div style="margin-bottom:12px;"><label>1年後</label><textarea id="wz-1y" rows="3">${esc(one)}</textarea></div>
+      <div style="margin-bottom:12px;"><label>3年後</label><textarea id="wz-3y" rows="3">${esc(three)}</textarea></div>
+      <div style="margin-bottom:4px;"><label>本人がやりたいこと（任意）</label><textarea id="wz-wish" rows="2">${esc(c.employeeWish || "")}</textarea></div>
+      <p class="cr-note">${esc(d.timelineNote || "")}</p>`;
+  }
+
+  function step4() {
+    const d = detail;
+    const c = d.career || {};
+    const p = d.progress;
+    const left = p ? p.remaining.length : (d.criteria || []).length;
+    return `
+      <div class="wz-lv">
+        <div class="box"><div class="k">現在</div><div class="v">${lvText(d.currentLevel)}</div><div class="cr-note">${esc(d.currentLevel?.levelName || "")}</div></div>
+        <span class="arrow material-symbols-outlined">arrow_forward</span>
+        <div class="box next"><div class="k">次のLevel</div><div class="v">${d.nextLevel ? lvText(d.nextLevel) : "—"}</div>
+          <div class="cr-note">${esc(d.nextLevel?.levelName || "最上位のLevelです")}</div></div>
+      </div>
+      ${d.nextLevel ? `<div class="cr-ev" id="wz-range"><b>給与レンジ</b>　${esc(range(d.nextLevel))}
+        <div class="cr-note">※目安であり、昇給を保証するものではありません。${esc(d.rangeNote)}</div></div>` : ""}
+      <div class="cr-sec">${d.nextLevel ? `${lvText(d.nextLevel)} になるために必要なこと` : "評価基準"}${p && p.total ? `（あと ${left} 項目）` : ""}</div>
+      ${criteriaChecklist(d)}
+      <div style="margin:10px 0 14px;">
+        ${d.growth ? `<a class="btn btn-secondary btn-sm" id="wz-growth" href="${esc(d.contractLinks.growth)}" target="_blank" rel="noopener">3か月育成計画を開く</a>`
+          : d.canGrowth ? `<button class="btn btn-secondary btn-sm" id="wz-growth" onclick="makeGrowth(this)">3か月育成計画を作る</button>`
+          : `<span class="cr-note">3か月育成計画は人事・管理者が作ります。</span>`}
+        <div class="cr-note">未達の項目を、既存の3か月育成（月次KGI・KPI）に落とし込みます。</div>
+      </div>
+      <div><label>次回評価</label><input id="wz-review" type="date" value="${esc(c.nextReviewOn || "")}" style="max-width:220px;"></div>`;
+  }
+
+  async function makeGrowth(btn) {
+    const msg = el("wz-msg"); msg.textContent = "";
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.careerAct({
-        action: "setCareer", employeeId: detail.employee.id,
-        trackId: el("st-track").value, currentLevelId: el("st-level").value,
-        startedAt: el("st-start").value || null, nextReviewOn: el("st-review").value || null,
-        oneYearTargetNote: el("st-1y").value, threeYearTargetNote: el("st-3y").value,
-        employeeWish: el("st-wish").value, managerNote: el("st-note").value, agreed: el("st-agreed").checked,
-      }));
-      closeModal();
-      const id = detail.employee.id;
-      await loadList();
-      await openDrawer(id);
+      await KPLayout.busy(btn, "作成中…", () => API.growthAct("create", { employeeId: detail.employee.id }));
+      detail = await API.careerDetail(detail.employee.id);
+      renderWizard();
+      renderDrawer();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "作成できませんでした"; }
+  }
+
+  function step5() {
+    const d = detail;
+    const c = d.career || {};
+    const k = d.contract;
+    const has = (v) => Boolean(v);
+    const items = [
+      ["現在の契約条件", has(k), k ? `${k.contractType || ""} ${k.wageAmount != null ? yen(k.wageAmount) : ""}` : "有効な契約がありません"],
+      ["新しい契約条件（変更がある場合）", true, (d.orders || []).some((o) => ["requested", "uploaded"].includes(o.status))
+        ? "作成依頼中（電子署名で届きます）" : (d.signs || []).some((x) => x.status === "sent") ? "署名依頼済み" : "変更なし"],
+      ["現在のLevel", has(d.currentLevel), lvText(d.currentLevel)],
+      ["次のLevel", has(d.nextLevel), d.nextLevel ? lvText(d.nextLevel) : "最上位"],
+      ["次の給与レンジ", has(d.nextLevel), d.nextLevel ? `${range(d.nextLevel)}（目安）` : "—"],
+      ["評価基準", (d.criteria || []).length > 0, `${(d.criteria || []).length} 項目`],
+      ["1年後", has(c.oneYearTargetNote), c.oneYearTargetNote || "未設定"],
+      ["3年後", has(c.threeYearTargetNote), c.threeYearTargetNote || "未設定"],
+      ["次回評価日", has(c.nextReviewOn), fmtDate(c.nextReviewOn)],
+      ["3か月育成目標", has(d.growth), d.growth ? (d.growth.threeMonthKgi || "計画あり") : "未作成"],
+    ];
+    return `
+      <p class="cr-note" style="margin:0 0 8px;">本人には「契約・キャリアの確認」として1つの依頼で届きます。
+        契約書は電子署名、キャリアプランは「内容を確認しました」で、別々に記録します。</p>
+      <div class="cr-sec">本人へ送る内容</div>
+      <ul class="wz-check" id="wz-summary">${items.map(([label, ok, v]) => `
+        <li class="${ok ? "ok" : "no"}"><span class="mk">${ok ? "✓" : "□"}</span><span style="flex:1;">${esc(label)}</span>
+          <span class="muted" style="font-size:12.5px;text-align:right;">${esc(v)}</span></li>`).join("")}</ul>
+      ${c.confirmPending ? `<div class="banner warn"><span class="material-symbols-outlined">schedule</span>
+        <div>${fmtDate(c.confirmRequestedAt)} に送った依頼を、本人がまだ確認していません。送り直すと最新の内容で確認をお願いします。</div></div>` : ""}
+      <a class="btn btn-secondary btn-sm" id="wz-preview" href="${esc(d.contractLinks.preview)}" target="_blank" rel="noopener">
+        <span class="material-symbols-outlined icon-inline">visibility</span>本人画面をプレビュー</a>
+      <p class="cr-note">管理者メモ・給与の調整メモ・評価の下書きは本人には表示されません。</p>`;
+  }
+
+  function wizardBack() { wz.step = Math.max(1, wz.step - 1); renderWizard(); }
+
+  async function wizardNext(btn) {
+    const d = detail;
+    const msg = el("wz-msg"); msg.textContent = "";
+    const base = () => ({ action: "setCareer", employeeId: d.employee.id,
+      trackId: d.career?.trackId || wz.trackId, currentLevelId: d.career?.currentLevelId || wz.levelId });
+    try {
+      await KPLayout.busy(btn, "保存中…", async () => {
+        if (wz.step === 2) {
+          const trackId = el("wz-track").value;
+          const levelId = el("wz-level").value;
+          if (!trackId || !levelId) throw { hint: "職種と現在のLevelを選んでください" };
+          await API.careerAct({ action: "setCareer", employeeId: d.employee.id, trackId, currentLevelId: levelId });
+          wz.trackId = trackId; wz.levelId = levelId;
+          const auto = Number(el("wz-autonomy").value || 0);
+          if (auto && auto !== Number(d.autonomy?.level || 0) && d.autonomy?.canEdit) {
+            const reason = el("wz-autonomy-note").value.trim();
+            if (!reason) throw { hint: "自走レベルを変える理由を書いてください" };
+            await API.setAutonomy({ userId: d.employee.userId, level: auto, reason });
+          }
+        } else if (wz.step === 3) {
+          await API.careerAct({ ...base(), oneYearTargetNote: el("wz-1y").value,
+            threeYearTargetNote: el("wz-3y").value, employeeWish: el("wz-wish").value });
+        } else if (wz.step === 4) {
+          const due = el("wz-review").value;
+          if (!due) throw { hint: "次回評価日を決めてください" };
+          await API.careerAct({ ...base(), nextReviewOn: due });
+        } else if (wz.step === 1 && !d.career && !d.tracks.length) {
+          throw { hint: "先にキャリアマスタを作ってください" };
+        }
+        if (wz.step >= 2) detail = await API.careerDetail(d.employee.id);
+      });
+      wz.done.add(wz.step);
+      wz.step += 1;
+      renderWizard();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  async function sendConfirm(btn) {
+    const msg = el("wz-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "送信中…", () => API.careerAct({ action: "requestConfirm", employeeId: detail.employee.id }));
+      wz.done.add(5);
+      el("wz-body").innerHTML = `<div class="banner ok" id="wz-sent"><span class="material-symbols-outlined">check_circle</span>
+        <div><b>本人へ確認依頼を送りました。</b><div style="margin-top:4px;">本人のホームとキャリア画面に「契約・キャリアの確認があります」と表示されます。</div></div></div>`;
+      el("wz-send").outerHTML = `<button class="btn btn-primary" onclick="closeModal()">閉じる</button>`;
+      await refreshDetail();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "送れませんでした"; }
   }
 
   // ---- 評価（モーダル） ------------------------------------------------------------

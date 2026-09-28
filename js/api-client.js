@@ -1005,7 +1005,9 @@
   const careerHistory = () => api("/api/career?history=1");
   const careerAct = (body) => api("/api/career", { method: "POST", body });
   // 本人（自分の確定済みのキャリアだけ）
+  const careerPreview = (employeeId) => api(`/api/career?preview=${encodeURIComponent(employeeId)}`);
   const myCareer = () => api("/api/career/me");
+  const myCareerSummary = () => api("/api/career/me?summary=1");
   const myCareerAct = (body) => api("/api/career/me", { method: "POST", body });
 
   // ---- 会社の印鑑（印影画像） ----
@@ -1458,7 +1460,7 @@
     signTemplates, addSignTemplate, updateSignTemplate, removeSignTemplate,
     signRequests, previewSign, sendSign, patchSign,
     seals, sealAct, uploadSealImage,
-    careerList, careerDetail, careerEvidence, careerMaster, careerHistory, careerAct, myCareer, myCareerAct,
+    careerList, careerDetail, careerEvidence, careerMaster, careerHistory, careerAct, careerPreview, myCareer, myCareerSummary, myCareerAct,
     myContracts, signContract, signPdfUrl,
     docOrders, docOrderAct, docOrderFileUrl, uploadDocOrderFile, checkHrOfferMatch,
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,

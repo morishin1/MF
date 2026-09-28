@@ -5,6 +5,7 @@
 // GET  /api/career?evidence=…&from&to    … 評価の根拠（既存データを読むだけ）
 // GET  /api/career?master=1              … キャリアマスタ（トラック・Level・基準）
 // GET  /api/career?history=1             … 評価履歴
+// GET  /api/career?preview=…             … 本人画面のプレビュー（本人に見える形そのもの）
 // POST /api/career {action:…}
 //        seedStarter     … 共通テンプレート（L1〜L5・L2の基準）を入れる         owner/admin
 //        saveTrack       … トラックを作る・直す                                 owner/admin
@@ -13,6 +14,12 @@
 //        setCareer       … 社員のキャリア（現在地・次回評価・1年/3年）を設定する   担当者
 //        saveReview      … 評価を下書きで保存する（本人には見えない）             担当者
 //        confirmReview   … 評価を確定する（Level Up・昇給判断）                  owner/admin
+//        requestConfirm  … 契約・キャリア面談の内容を、本人へ確認依頼する        担当者
+//
+// ■ 契約・キャリア面談（db/095）
+//   状態（未設定・面談準備・契約準備・本人確認待ち・署名待ち・開始・評価時期）は保存しない。
+//   作成依頼・署名依頼・キャリア・評価から毎回計算する（lib/career.js flowOf）。
+//   契約の変更は既存の作成依頼 → 労働条件通知書 → 電子署名で行う（ここでは作らない）。
 //
 // ■ 自動で昇給・昇格させない
 //   Level が変わるのは confirmReview だけ。人が result を選んで押したときだけ。
@@ -35,7 +42,10 @@ import {
   levelsOf, nextLevelOf, progressOf, systemJudgement, cleanResults, nextActionOf, suggestTrack,
   REVIEW_RESULT_KEYS, SALARY_DECISION_KEYS, EVIDENCE_TYPE_KEYS, CRITERION_RESULTS, REVIEW_RESULTS,
   SALARY_DECISIONS, EVIDENCE_TYPES, RANGE_NOTE_ADMIN, TIMELINE_NOTE, STARTER,
+  flowOf, confirmPending, FLOW_STATES, CONTRACT_DOC_KINDS, OPEN_ORDER_STATUSES,
 } from "../../lib/career.js";
+import { memberCareerView } from "../../lib/career-member.js";
+import { LEVELS as AUTONOMY_LEVELS } from "../../lib/autonomy.js";
 
 const EMP_FIELDS =
   "id, tenant_id, user_id, display_name, department, position, status, joined_on, "
@@ -119,6 +129,7 @@ async function read(req, res, ctx) {
   }
   if (q.get("history")) return history(res, sb, ctx);
   if (q.get("evidence")) return evidence(res, sb, ctx, q.get("evidence"), q.get("from"), q.get("to"));
+  if (q.get("preview")) return preview(res, sb, ctx, q.get("preview"));
   if (q.get("employeeId")) return detail(res, sb, ctx, q.get("employeeId"));
   return list(res, sb, ctx);
 }
@@ -131,14 +142,17 @@ async function scopedEmployees(sb, ctx) {
 
 async function list(res, sb, ctx) {
   const today = jstToday();
-  const [emps, m, careers, reviews] = await Promise.all([
+  const [emps, m, careers, reviews, contract] = await Promise.all([
     scopedEmployees(sb, ctx),
     loadMaster(sb, ctx),
     must(sb.from("gw_employee_careers").select("*").eq("tenant_id", ctx.tenantId).eq("is_active", true)),
     must(sb.from("gw_career_reviews")
       .select("id, employee_id, career_id, status, target_level_id, criterion_results, decided_at, created_at")
       .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(2000)),
+    contractState(sb, ctx),
   ]);
+  const nameById = new Map(emps.map((e) => [e.id, e.display_name]));
+  const allNames = contract.names;
   const careerOf = new Map((careers || []).map((c) => [c.employee_id, c]));
   const levelById = new Map(m.levels.map((l) => [l.id, l]));
   const trackById = new Map(m.tracks.map((t) => [t.id, t]));
@@ -155,9 +169,15 @@ async function list(res, sb, ctx) {
     const progress = next ? progressOf(crit, results) : null;
     const action = nextActionOf({ career: c, draft, progress, nextLevel: next, today });
     const suggestion = c ? null : suggestTrack(e, m.tracks);
+    const wage = contract.wageOf.get(e.id) || null;
+    const flow = flowOf({ career: c, draft, orders: contract.ordersOf.get(e.id) || [],
+      signs: contract.signsOf.get(e.id) || [], today });
     return {
       employee: { id: e.id, name: e.display_name, department: e.department, status: e.status,
-                  joinedOn: e.joined_on, autonomyLevel: e.autonomy_level },
+                  joinedOn: e.joined_on, autonomyLevel: e.autonomy_level,
+                  managerName: e.manager_id ? (nameById.get(e.manager_id) || allNames.get(e.manager_id) || null) : null },
+      currentWage: wage ? { wageType: wage.wage_type, wageAmount: wage.wage_amount, contractType: wage.contract_type } : null,
+      flow,
       career: c ? {
         id: c.id, trackId: c.track_id, trackName: trackById.get(c.track_id)?.name || null,
         currentLevel: levelView(cur), nextLevel: levelView(next),
@@ -169,7 +189,7 @@ async function list(res, sb, ctx) {
       suggestion: suggestion ? { trackId: suggestion.id, trackName: suggestion.name,
         levelId: levelsOf(m.levels, suggestion.id)[0]?.id || null } : null,
     };
-  }).sort((a, b) => (a.nextAction.rank - b.nextAction.rank)
+  }).sort((a, b) => (a.flow.rank - b.flow.rank) || (a.nextAction.rank - b.nextAction.rank)
     || String(a.career?.nextReviewOn || "9999").localeCompare(String(b.career?.nextReviewOn || "9999"))
     || String(a.employee.name).localeCompare(String(b.employee.name), "ja"));
 
@@ -180,8 +200,43 @@ async function list(res, sb, ctx) {
     canDecide: canDecideCareer(ctx),
     canEditMaster: canDecideCareer(ctx),
     seesAll: careerSeesAll(ctx),
+    flowStates: FLOW_STATES,
     today,
   });
+}
+
+/**
+ * 一覧・詳細の「契約の進み具合」と現在給与。既存の表を読むだけ（どれも無くても画面は出す）
+ *   作成依頼 … gw_doc_orders（雇用契約・まだ本人に届いていないもの）
+ *   署名依頼 … gw_sign_requests（雇用契約・sent）
+ *   現在給与 … gw_contracts（active の新しいもの）
+ */
+async function contractState(sb, ctx, employeeId = null) {
+  const scope = (q) => (employeeId ? q.eq("employee_id", employeeId) : q);
+  const [orders, signs, contracts, emps] = await Promise.all([
+    soft(scope(sb.from("gw_doc_orders").select("id, employee_id, doc_kind, title, status, requested_at, created_at")
+      .eq("tenant_id", ctx.tenantId).in("status", OPEN_ORDER_STATUSES)).limit(2000)),
+    soft(scope(sb.from("gw_sign_requests").select("id, employee_id, doc_kind, title, status, sent_at, due_on")
+      .eq("tenant_id", ctx.tenantId).eq("status", "sent")).order("sent_at", { ascending: false }).limit(2000)),
+    soft(scope(sb.from("gw_contracts").select("id, employee_id, contract_type, wage_type, wage_amount, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("status", "active")).order("created_at", { ascending: false }).limit(2000)),
+    employeeId ? null : soft(sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId).limit(2000)),
+  ]);
+  const group = (rows) => {
+    const out = new Map();
+    for (const r of rows || []) {
+      if (r.doc_kind && !CONTRACT_DOC_KINDS.includes(r.doc_kind)) continue;
+      if (!out.has(r.employee_id)) out.set(r.employee_id, []);
+      out.get(r.employee_id).push(r);
+    }
+    return out;
+  };
+  const wageOf = new Map();
+  for (const c of contracts || []) if (!wageOf.has(c.employee_id)) wageOf.set(c.employee_id, c);
+  return {
+    ordersOf: group(orders), signsOf: group(signs), wageOf,
+    names: new Map((emps || []).map((e) => [e.id, e.display_name])),
+  };
 }
 
 async function loadEmployee(sb, ctx, id) {
@@ -192,12 +247,24 @@ async function loadEmployee(sb, ctx, id) {
 async function detail(res, sb, ctx, employeeId) {
   const e = await loadEmployee(sb, ctx, employeeId);
   if (!e) return json(res, 404, { error: "not_found" });
-  const [m, careers, reviews, wage] = await Promise.all([
+  const [m, careers, reviews, wage, contracts, orders, signs, growth, autonomyLog, manager] = await Promise.all([
     loadMaster(sb, ctx),
     must(sb.from("gw_employee_careers").select("*").eq("tenant_id", ctx.tenantId).eq("employee_id", e.id).eq("is_active", true)),
     must(sb.from("gw_career_reviews").select("*").eq("tenant_id", ctx.tenantId).eq("employee_id", e.id)
       .order("created_at", { ascending: false }).limit(50)),
     currentWage(sb, ctx, e.id),
+    // 契約は読むだけ。現在給与・契約条件は常にここから（キャリアにはコピーしない）
+    soft(sb.from("gw_contracts").select("*").eq("tenant_id", ctx.tenantId).eq("employee_id", e.id)
+      .order("created_at", { ascending: false }).limit(20)),
+    soft(sb.from("gw_doc_orders").select("id, doc_kind, title, status, requested_at, created_at, due_on")
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", e.id).order("requested_at", { ascending: false }).limit(20)),
+    soft(sb.from("gw_sign_requests").select("id, doc_kind, title, status, sent_at, signed_at, due_on")
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", e.id).order("sent_at", { ascending: false }).limit(20)),
+    growthOf(sb, ctx, e.id),
+    soft(sb.from("gw_autonomy_reviews").select("from_level, to_level, reason, decided_at")
+      .eq("employee_id", e.id).order("decided_at", { ascending: false }).limit(5)),
+    e.manager_id ? soft(sb.from("gw_employees").select("id, display_name").eq("id", e.manager_id)
+      .eq("tenant_id", ctx.tenantId).maybeSingle()) : null,
   ]);
   const c = careers?.[0] || null;
   const levelById = new Map(m.levels.map((l) => [l.id, l]));
@@ -210,16 +277,42 @@ async function detail(res, sb, ctx, employeeId) {
   const results = lastConfirmed && lastConfirmed.target_level_id === next?.id ? lastConfirmed.criterion_results : [];
   const progress = next ? progressOf(crit, results) : null;
   const today = jstToday();
+  const isContract = (r) => !r.doc_kind || CONTRACT_DOC_KINDS.includes(r.doc_kind);
+  const openOrders = (orders || []).filter((o) => isContract(o) && OPEN_ORDER_STATUSES.includes(o.status));
+  const sentSigns = (signs || []).filter((x) => isContract(x) && x.status === "sent");
+  const active = (contracts || []).find((x) => x.status === "active") || null;
+  const autonomyLevel = AUTONOMY_LEVELS.find((l) => l.level === Number(e.autonomy_level)) || null;
 
   return json(res, 200, {
-    employee: { id: e.id, name: e.display_name, department: e.department, position: e.position,
-                joinedOn: e.joined_on, autonomyLevel: e.autonomy_level, initialRole: e.initial_role },
+    employee: { id: e.id, userId: e.user_id || null, name: e.display_name, department: e.department, position: e.position,
+                joinedOn: e.joined_on, autonomyLevel: e.autonomy_level, initialRole: e.initial_role,
+                managerName: manager?.display_name || null },
     career: c ? {
       id: c.id, trackId: c.track_id, currentLevelId: c.current_level_id, targetLevelId: c.target_level_id,
       startedAt: c.started_at, nextReviewOn: c.next_review_on,
       oneYearTargetNote: c.one_year_target_note, threeYearTargetNote: c.three_year_target_note,
       employeeWish: c.employee_wish, managerNote: c.manager_note, agreedAt: c.agreed_at,
+      confirmRequestedAt: c.confirm_requested_at || null, employeeConfirmedAt: c.employee_confirmed_at || null,
+      confirmPending: confirmPending(c),
     } : null,
+    flow: flowOf({ career: c, draft, orders: openOrders, signs: sentSigns, today }),
+    // 現在の契約（active）と過去の契約。読むだけ
+    contract: contractView(active),
+    pastContracts: (contracts || []).filter((x) => x.id !== active?.id && x.status !== "draft").map(contractView),
+    orders: (orders || []).filter(isContract).map((o) => ({ id: o.id, title: o.title, status: o.status,
+      requestedAt: o.requested_at || o.created_at, dueOn: o.due_on })),
+    signs: (signs || []).filter(isContract).map((x) => ({ id: x.id, title: x.title, status: x.status,
+      sentAt: x.sent_at, signedAt: x.signed_at, dueOn: x.due_on })),
+    growth,
+    autonomy: {
+      level: e.autonomy_level ?? null, label: autonomyLevel?.label || null,
+      levels: AUTONOMY_LEVELS.map((l) => ({ level: l.level, label: l.label, summary: l.summary })),
+      recent: (autonomyLog || []).map((a) => ({ from: a.from_level, to: a.to_level, reason: a.reason, at: a.decided_at })),
+      // 自走レベルを動かすのは既存の /api/autonomy（理由つき・履歴が残る）。そこと同じ人だけ
+      canEdit: Boolean(ctx.isAdmin || ctx.isHr || (ctx.roles || []).includes("owner")),
+      note: "自走レベルは任せられる範囲です。キャリアLevel（役割・期待値・給与レンジ）とは別に決めます。",
+    },
+    canGrowth: Boolean(ctx.isAdmin || ctx.isHr || (ctx.roles || []).includes("owner")),
     track: c ? m.tracks.find((t) => t.id === c.track_id) || null : null,
     currentLevel: levelView(cur),
     nextLevel: levelView(next),
@@ -237,7 +330,10 @@ async function detail(res, sb, ctx, employeeId) {
       const t = suggestTrack(e, m.tracks);
       return t ? { trackId: t.id, trackName: t.name, levelId: levelsOf(m.levels, t.id)[0]?.id || null } : null;
     })(),
-    tracks: m.tracks.filter((t) => t.is_active !== false).map((t) => ({ id: t.id, name: t.name })),
+    tracks: m.tracks.filter((t) => t.is_active !== false).map((t) => ({ id: t.id, name: t.name,
+      oneYearGoal: t.one_year_goal || null, threeYearGoal: t.three_year_goal || null })),
+    allCriteria: m.criteria.filter((x) => x.is_active !== false).map((x) => ({ id: x.id, levelId: x.level_id,
+      category: x.category, title: x.title, required: x.required !== false })),
     allLevels: m.levels.filter((l) => l.is_active !== false).map(levelView),
     labels: { criterionResults: CRITERION_RESULTS, reviewResults: REVIEW_RESULTS, salaryDecisions: SALARY_DECISIONS,
               evidenceTypes: EVIDENCE_TYPES },
@@ -246,9 +342,46 @@ async function detail(res, sb, ctx, employeeId) {
     contractLinks: {
       order: `admin-esign.html?tab=order&employeeId=${encodeURIComponent(e.id)}`,
       contracts: "admin-contracts.html",
+      signs: "admin-esign.html?tab=list",
+      growth: `admin-growth.html?employeeId=${encodeURIComponent(e.id)}`,
+      preview: `career.html?preview=${encodeURIComponent(e.id)}`,
     },
     today,
   });
+}
+
+const contractView = (c) => (c ? {
+  id: c.id, status: c.status, contractType: c.contract_type || null,
+  wageType: c.wage_type || null, wageAmount: c.wage_amount ?? null, wageNote: c.wage_note || null,
+  periodFrom: c.period_from || null, periodTo: c.period_to || null, fixedTerm: c.fixed_term ?? null,
+  probationMonths: c.probation_months ?? null, probationEnd: c.probation_end || null,
+  workHours: c.work_hours || null, createdAt: c.created_at || null,
+} : null);
+
+/** 3か月育成（既存の gw_growth_plans / months / kpis）の、いちばん新しい計画 */
+async function growthOf(sb, ctx, employeeId) {
+  const plans = await soft(sb.from("gw_growth_plans").select("id, start_date, end_date, three_month_kgi, status")
+    .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).order("start_date", { ascending: false }).limit(1));
+  const plan = plans?.[0];
+  if (!plan) return null;
+  const months = await soft(sb.from("gw_growth_months").select("id, month_no, kgi, status")
+    .eq("plan_id", plan.id).order("month_no", { ascending: true }));
+  const ids = (months || []).map((x) => x.id);
+  const kpis = ids.length ? await soft(sb.from("gw_growth_kpis").select("month_id, name, target_value, unit")
+    .in("month_id", ids).order("sort_order", { ascending: true })) : [];
+  return {
+    id: plan.id, status: plan.status, from: plan.start_date, to: plan.end_date, threeMonthKgi: plan.three_month_kgi,
+    months: (months || []).map((mo) => ({ monthNo: mo.month_no, kgi: mo.kgi, status: mo.status,
+      kpis: (kpis || []).filter((k) => k.month_id === mo.id).map((k) => ({ name: k.name, target: k.target_value, unit: k.unit })) })),
+  };
+}
+
+/** 管理者が「本人画面をプレビュー」。本人の API と同じ組み立て（lib/career-member.js） */
+async function preview(res, sb, ctx, employeeId) {
+  const e = await loadEmployee(sb, ctx, employeeId);
+  if (!e) return json(res, 404, { error: "not_found" });
+  const view = await memberCareerView(sb, { tenantId: ctx.tenantId, employee: e, userId: e.user_id || null });
+  return json(res, 200, { ...view, preview: { employeeName: e.display_name } });
 }
 
 /**
@@ -360,6 +493,7 @@ async function act(req, res, ctx, user) {
   if (a === "setCareer") return setCareer(res, sb, ctx, user, body);
   if (a === "saveReview") return saveReview(res, sb, ctx, user, body);
   if (a === "confirmReview") return confirmReview(res, sb, ctx, user, body);
+  if (a === "requestConfirm") return requestConfirm(res, sb, ctx, user, body);
   return json(res, 400, { error: "invalid_action" });
 }
 
@@ -489,12 +623,18 @@ async function setCareer(res, sb, ctx, user, b) {
     return json(res, 403, { error: "level_change_needs_review",
       hint: "設定後の Level・職種の変更は、評価の確定（管理者・経営者）で行います" });
   }
+  // 送られてきた項目だけ書き換える。面談モーダルは STEP ごとに一部だけ送るので、
+  // 送っていない項目（本人の希望・管理者メモなど）を空で上書きしない
+  const given = (k) => Object.prototype.hasOwnProperty.call(b, k);
+  const keep = (k, col, v) => (given(k) || !existing ? v : existing[col] ?? null);
   const patch = {
     track_id: track.id, current_level_id: cur.id, target_level_id: target?.id || null,
     started_at: isDate(b.startedAt) ? b.startedAt : (existing?.started_at || e.joined_on || null),
-    next_review_on: b.nextReviewOn || null,
-    one_year_target_note: str(b.oneYearTargetNote), three_year_target_note: str(b.threeYearTargetNote),
-    employee_wish: str(b.employeeWish), manager_note: str(b.managerNote),
+    next_review_on: keep("nextReviewOn", "next_review_on", b.nextReviewOn || null),
+    one_year_target_note: keep("oneYearTargetNote", "one_year_target_note", str(b.oneYearTargetNote)),
+    three_year_target_note: keep("threeYearTargetNote", "three_year_target_note", str(b.threeYearTargetNote)),
+    employee_wish: keep("employeeWish", "employee_wish", str(b.employeeWish)),
+    manager_note: keep("managerNote", "manager_note", str(b.managerNote)),
     agreed_at: b.agreed ? (existing?.agreed_at || now()) : (b.agreed === false ? null : existing?.agreed_at || null),
     updated_by: user.id, updated_at: now(),
   };
@@ -619,4 +759,33 @@ async function confirmReview(res, sb, ctx, user, b) {
       contracts: "admin-contracts.html",
     } : null,
   });
+}
+
+/**
+ * 契約・キャリア面談の内容を、本人へ確認依頼する。
+ * 本人には1つの依頼（契約・キャリアの確認）として届くが、ここで動くのはキャリアの側だけ。
+ * 契約書は既存の作成依頼 → 電子署名で本人に届く（署名は contracts.html）。
+ * 何度送ってもよい（面談をやり直したとき）。本人の「確認しました」は、最新の依頼に対して数える
+ */
+async function requestConfirm(res, sb, ctx, user, b) {
+  const e = await loadEmployee(sb, ctx, b.employeeId || "");
+  if (!e) return json(res, 404, { error: "not_found" });
+  const c = (await must(sb.from("gw_employee_careers").select("*").eq("tenant_id", ctx.tenantId)
+    .eq("employee_id", e.id).eq("is_active", true)))?.[0] || null;
+  if (!c) return json(res, 409, { error: "no_career", hint: "先に現在地（職種・Level）を設定してください" });
+  if (!c.next_review_on) return json(res, 400, { error: "no_review_date", hint: "次回評価日を決めてから送ってください" });
+  const at = now();
+  const row = await must(sb.from("gw_employee_careers").update({
+    confirm_requested_at: at, confirm_requested_by: user.id, updated_by: user.id, updated_at: at,
+  }).eq("id", c.id).eq("tenant_id", ctx.tenantId).select("*").maybeSingle());
+  await log(ctx, user, "career.confirm.request", `employee:${e.id}`, { careerId: c.id });
+  // 本人へ。中身（管理者メモなど）は通知に入れない
+  await notify([{
+    tenantId: ctx.tenantId, employeeId: e.id, kind: "general",
+    title: "契約・キャリアの確認があります",
+    body: "会社から、現在の契約内容と今後のキャリアプランが届いています。",
+    link: "career.html#confirm",
+    dedupeKey: `career-confirm:${c.id}:${at}`,
+  }]);
+  return json(res, 200, { ok: true, requestedAt: at, career: row });
 }
