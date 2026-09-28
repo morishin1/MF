@@ -10,6 +10,7 @@ import { gwContext, canRecruit } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
+import { docStatusOf } from "../../../lib/hr-docs.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
@@ -44,7 +45,7 @@ async function list(req, res, sb, ctx) {
 
   const ids = (data || []).map((a) => a.id);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
-  const [{ data: recruiters }, { data: interviewCounts }, { data: employees }] = await Promise.all([
+  const [{ data: recruiters }, { data: interviewCounts }, { data: employees }, docs] = await Promise.all([
     recruiterIds.length
       ? sb.from("gw_employees").select("id, display_name").in("id", recruiterIds)
       : Promise.resolve({ data: [] }),
@@ -54,6 +55,12 @@ async function list(req, res, sb, ctx) {
     // 担当変更（一覧の複数選択操作）の選択肢。既存の面談担当ピッカーと同じ条件
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId)
       .in("status", ["active", "invited"]).order("display_name").limit(300),
+    // 書類のそろい具合（履歴書・職務経歴書）。093 未適用なら出さないだけ
+    ids.length
+      ? Promise.resolve(sb.from("gw_hr_documents").select("applicant_id, doc_type, deleted_at, created_at")
+        .eq("tenant_id", ctx.tenantId).in("applicant_id", ids).limit(5000))
+        .then((r) => (r.error ? null : r.data || []), () => null)
+      : Promise.resolve([]),
   ]);
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
   const interviewCount = new Map();
@@ -66,6 +73,7 @@ async function list(req, res, sb, ctx) {
       ...shapeApplicant(a),
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
+      docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
     })),
     employees: employees || [],
   });

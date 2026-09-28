@@ -154,7 +154,9 @@
     }
     const roles = me?.gw?.roles || [];
     const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
-    const canRecruit = isAdmin || roles.includes("hr") || roles.includes("owner") || roles.includes("recruiter");
+    // ヘッダーの近道と同じ値（/api/me の access = サーバの canRecruit）で入口を決める
+    const canRecruit = me?.access ? Boolean(me.access.recruit)
+      : isAdmin || roles.includes("hr") || roles.includes("owner") || roles.includes("recruiter");
     if (!canRecruit) { location.replace("../home.html"); return null; }
     const canDecide = isAdmin || roles.includes("owner");
 

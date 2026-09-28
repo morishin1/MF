@@ -101,11 +101,11 @@ console.log("\n=== 社長推薦 → 社長面談設定 → 今日会う人 → �
   console.log("\n— 社長面談を設定 —");
   await page.locator("#rec button", { hasText: "社長面談を設定" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "予定フォームが開く");
+  check(await page.locator("#action-root .hr-modal").isVisible(), "予定フォームが開く");
   const when = `${jstToday()}T14:00`;
   await page.fill("#iv-when", when);
   await page.fill("#iv-url", "https://meet.google.com/xyz");
-  await page.locator(".hr-drawer button", { hasText: "設定する" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "設定する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.kind === "ceo"), "社長面談の予定がサーバへ送られる");
 
@@ -126,8 +126,8 @@ console.log("\n=== 社長推薦 → 社長面談設定 → 今日会う人 → �
   console.log("\n— 内定にする —");
   await page.locator("#dec button", { hasText: "採用判断" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "採用判断フォームが開く");
-  await page.locator(".hr-drawer button", { hasText: "内定にする" }).click();
+  check(await page.locator("#action-root .hr-modal").isVisible(), "採用判断フォームが開く");
+  await page.locator("#action-root .hr-modal button", { hasText: "内定にする" }).click();
   await page.waitForTimeout(700);
   const hired = posted.find((p) => p.decision === "hired");
   check(Boolean(hired), "内定がサーバへ送られる");
@@ -175,7 +175,7 @@ console.log("\n=== 保留・見送り ===");
     await page.waitForTimeout(900);
     await page.locator("#dec button", { hasText: "採用判断" }).click();
     await page.waitForTimeout(400);
-    if (kind !== "hired") await page.locator(".hr-drawer button", { hasText: kind === "hold" ? "保留" : "見送り" }).click();
+    if (kind !== "hired") await page.locator("#action-root .hr-modal button", { hasText: kind === "hold" ? "保留" : "見送り" }).click();
     await extra(page);
     await page.close();
     check(wantPosted(posted), `${kind} が正しく送られる`);
@@ -184,12 +184,12 @@ console.log("\n=== 保留・見送り ===");
   await decideAs("hold", async (page) => {
     await page.fill("#dc-reason", "報酬条件を確認したい");
     await page.fill("#dc-next", "人事に給与レンジを確認");
-    await page.locator(".hr-drawer button", { hasText: "保留にする" }).click();
+    await page.locator("#action-root .hr-modal button", { hasText: "保留にする" }).click();
     await page.waitForTimeout(600);
   }, (posted) => posted.some((p) => p.decision === "hold" && p.holdNextStep === "人事に給与レンジを確認"));
 
   await decideAs("rejected", async (page) => {
-    await page.locator(".hr-drawer button", { hasText: "見送りを確定" }).click();
+    await page.locator("#action-root .hr-modal button", { hasText: "見送りを確定" }).click();
     await page.waitForTimeout(600);
   }, (posted) => posted.some((p) => p.decision === "rejected" && p.status === "passed"));
 }
