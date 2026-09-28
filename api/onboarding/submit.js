@@ -14,6 +14,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
+import { intakeGate } from "../../lib/onboard-gate.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -42,6 +43,10 @@ export default async function handler(req, res) {
   if (!item) return json(res, 404, { error: "item_not_found" });
   if (item.gw_procedures?.employee_id !== ctx.employee.id) return json(res, 403, { error: "forbidden" });
   if (item.owner !== "employee") return json(res, 403, { error: "not_your_item", hint: "会社側で対応する項目です" });
+
+  // 契約（署名）が済むまでは書類の提出を受け付けない（lib/onboard-gate.js）
+  const gate = await intakeGate(sb, ctx.tenantId, ctx.employee.id);
+  if (!gate.ok) return json(res, 409, { error: "contract_not_signed", stage: gate.stage, hint: gate.hint });
 
   // 人事が完了にした項目を本人が戻せてしまわないようにする
   if (item.status === "done" || item.status === "na") {

@@ -20,6 +20,7 @@
 // そのぶん「自分の日報しか書けない」はこの API が担保する。
 // user_id には必ずログイン中の auth ユーザーの id を入れ、画面から来た値は使わない。
 
+import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
@@ -49,6 +50,8 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") return read(req, res, user, ctx);
   if (req.method === "POST") {
+    // 入社前の人は日報の対象にしない（lib/stages.js isPreJoin）
+  if (isPreJoin(ctx.employee)) return json(res, 403, { error: "not_joined", hint: PRE_JOIN_HINT });
     const body = await readJson(req);
     if (body?.kind === "weekly") return saveWeekly(res, user, body);
     if (body?.kind === "morning") return morning(res, user, ctx, body);

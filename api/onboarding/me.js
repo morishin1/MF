@@ -34,6 +34,7 @@ import { syncFormItems, ensureDocItems, findProcedure } from "../../lib/onboard-
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
 import { DOCS, COMPANY_DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
 import { hrConfigured } from "../../lib/gdrive.js";
+import { intakeGate } from "../../lib/onboard-gate.js";
 import { onboardingDone } from "../../lib/stages.js";
 import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
@@ -441,6 +442,9 @@ async function employeeDrive(sb, ctx, proc) {
 async function saveProfile(res, user, ctx, body) {
   const sb = admin();
   const empId = ctx.employee.id;
+  // 契約（署名）が済むまでは入社情報を受け付けない（lib/onboard-gate.js）
+  const gate = await intakeGate(sb, ctx.tenantId, empId);
+  if (!gate.ok) return json(res, 409, { error: "contract_not_signed", stage: gate.stage, hint: gate.hint });
   const values = normalizeProfile(body?.profile || {});
   // 扶養家族は配列なので、他の欄とは別にそろえる。
   // 「扶養する家族はいません」に変えたら、前に入れた家族は消す

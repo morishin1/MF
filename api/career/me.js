@@ -1,25 +1,26 @@
-// GET  /api/career/me                          … 自分のキャリア（現在地・次のLevel・次にやること・1年/3年・
-//                                                できるようになったこと・前回評価）
+// GET  /api/career/me                          … 自分の契約・キャリア（現在の契約・現在地・次のLevel・
+//                                                次にやること・1年/3年・できるようになったこと・前回評価・確認依頼）
+// GET  /api/career/me?summary=1                … ホームの NEXT ACTION 用。いま必要なもの1つだけ
+//                                                （契約内容の確認 → 入社情報 → 必要書類 → キャリアプランの確認）
 // POST /api/career/me {action:"addGoal", criterionId} … 次のLevelの基準を、自分のタスクに加える
+// POST /api/career/me {action:"confirmPlan"}    … 届いたキャリアプランを「内容を確認しました」
 //
-// ■ 本人に見せるもの・見せないもの（§32）
-//   見せる   … 現在のLevel・役割・次Levelの条件と給与レンジ・進捗・次回評価日・
-//              1年後/3年後の目安・できるようになったこと・確定済みの評価・次のアクション
-//   見せない … 管理者メモ（manager_note）・給与の調整メモ（salary_note）・下書きの評価・
-//              システム判定・他の社員
-//   進捗は「確定済み」の評価だけから作る。下書きは本人の画面に一切出ない。
-//
+// ■ 本人に見せるもの・見せないもの（§32）… lib/career-member.js
 // ■ 現在給与は契約（gw_contracts の active）から読む。キャリア側には持たない。
-// ■ 給与レンジは「目安」。必ず RANGE_NOTE を添える（保証ではない）。
+// ■ キャリアプランの確認は法的な電子署名ではない。契約書の署名は contracts.html（gw_sign_requests）。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
-import {
-  levelsOf, nextLevelOf, horizonLevel, progressOf, rangeText,
-  CRITERION_RESULTS, REVIEW_RESULTS, RANGE_NOTE, TIMELINE_NOTE,
-} from "../../lib/career.js";
+import { gwLog } from "../../lib/gw-audit.js";
+import { notify } from "../../lib/notify.js";
+import { confirmPending } from "../../lib/career.js";
+import { memberCareerView, careerOf, pendingContractSigns } from "../../lib/career-member.js";
+import { memberAskOf } from "../../lib/journey.js";
+import { journeyForEmployee } from "../../lib/journey-load.js";
+import { computeStage } from "../../lib/onboard-stage.js";
+import { gatherFacts } from "../../lib/onboard-advance.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!ctx.employee) return json(res, 403, { error: "not_enrolled", hint: "社員名簿に登録されていません" });
   try {
-    if (req.method === "GET") return await read(res, ctx, user);
+    if (req.method === "GET") return await read(req, res, ctx, user);
     if (req.method === "POST") return await act(req, res, ctx, user);
   } catch (e) {
     const hint = dbSetupHint(e, "db/092_career.sql");
@@ -39,113 +40,56 @@ export default async function handler(req, res) {
   return methodNotAllowed(res, ["GET", "POST"]);
 }
 
-const must = async (q) => { const { data, error } = await q; if (error) throw error; return data; };
 const soft = async (q) => { try { const { data, error } = await q; return error ? null : data; } catch { return null; } };
 
-/** 本人に見せる Level の形。役割と、給与レンジ（目安）だけ */
-const levelView = (l) => (l ? {
-  id: l.id, levelNo: l.level_no, levelName: l.level_name, roleSummary: l.role_summary,
-  expectedRole: l.expected_role, nextLevelSummary: l.next_level_summary, typicalMonths: l.typical_months,
-  salaryRange: rangeText(l),
-} : null);
-
-async function mine(sb, ctx) {
-  const careers = await must(sb.from("gw_employee_careers").select("*").eq("tenant_id", ctx.tenantId)
-    .eq("employee_id", ctx.employee.id).eq("is_active", true));
-  const c = careers?.[0] || null;
-  if (!c) return { c: null };
-  const [track, levels] = await Promise.all([
-    must(sb.from("gw_career_tracks").select("*").eq("id", c.track_id).eq("tenant_id", ctx.tenantId).maybeSingle()),
-    must(sb.from("gw_career_levels").select("*").eq("tenant_id", ctx.tenantId).eq("track_id", c.track_id)
-      .order("level_no", { ascending: true })),
-  ]);
-  const byId = new Map((levels || []).map((l) => [l.id, l]));
-  const cur = byId.get(c.current_level_id) || null;
-  const next = byId.get(c.target_level_id) || nextLevelOf(levels, cur);
-  const criteria = next ? (await must(sb.from("gw_career_criteria").select("*").eq("tenant_id", ctx.tenantId)
-    .eq("level_id", next.id).order("sort_order", { ascending: true }))).filter((x) => x.is_active !== false) : [];
-  return { c, track, levels: levels || [], cur, next, criteria };
-}
-
-async function read(res, ctx, user) {
+async function read(req, res, ctx, user) {
   const sb = admin();
-  const { c, track, levels, cur, next, criteria } = await mine(sb, ctx);
-  // できるようになったことは auth.users.id で持っている（db/031）。本人のものだけ
-  const history = await soft(sb.from("gw_growth_history").select("happened_on, title, source")
-    .eq("user_id", user.id).order("happened_on", { ascending: false }).limit(30));
-  const growthHistory = (history || []).map((h) => ({ on: h.happened_on, title: h.title }));
-
-  if (!c) {
+  const q = new URL(req.url || "/", "http://localhost").searchParams;
+  if (q.get("summary")) {
+    // ホームに出すかどうかだけ。中身は career.html で読む
+    const [careers, signs] = await Promise.all([
+      soft(sb.from("gw_employee_careers").select("id, confirm_requested_at, employee_confirmed_at")
+        .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).eq("is_active", true)),
+      pendingContractSigns(sb, ctx.tenantId, ctx.employee.id),
+    ]);
+    const c = careers?.[0] || null;
+    const pending = confirmPending(c);
+    // 入社手続きの途中なら、入社情報・書類のどちらが残っているか（lib/onboard-stage.js と同じ判定）
+    let stage = null;
+    let facts = null;
+    try {
+      const procs = await soft(sb.from("gw_procedures").select("id, tenant_id, employee_id, kind, status, target_on, stage")
+        .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).eq("kind", "onboarding")
+        .order("created_at", { ascending: false }).limit(1));
+      const proc = procs?.[0];
+      if (proc && proc.status !== "cancelled" && proc.status !== "done") {
+        facts = await gatherFacts(sb, ctx.tenantId, proc);
+        stage = computeStage(facts).key;
+      }
+    } catch { stage = null; }
+    const ask = memberAskOf({ signPending: signs.length, confirmPending: pending, stage, facts });
+    // 入社〜キャリアの共通ステータスバー。管理者の画面と同じ計算（lib/journey-load.js）
+    const { journey } = await journeyForEmployee(sb, ctx.tenantId, ctx.employee);
     return json(res, 200, {
-      career: null,
-      message: "キャリアはまだ設定されていません。上長との初回キャリア面談のあとで表示されます。",
-      growthHistory,
+      confirmPending: pending, signPending: signs.length,
+      show: Boolean(ask), ask,
+      link: ask?.href || "career.html#confirm",
+      journey: publicJourney(journey),
     });
   }
-
-  // 確定済みの評価だけ（下書きは本人に見せない）
-  const reviews = await must(sb.from("gw_career_reviews")
-    .select("id, status, result, target_level_id, from_level_id, criterion_results, manager_comment, employee_comment, review_period_from, review_period_to, decided_at")
-    .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).eq("status", "confirmed")
-    .order("decided_at", { ascending: false }).limit(10));
-  const last = (reviews || [])[0] || null;
-  const results = last && next && last.target_level_id === next.id ? last.criterion_results : [];
-  const progress = next ? progressOf(criteria, results) : null;
-
-  const contracts = await soft(sb.from("gw_contracts").select("wage_type, wage_amount, created_at")
-    .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).eq("status", "active")
-    .order("created_at", { ascending: false }).limit(1));
-  const wage = contracts?.[0] || null;
-
-  const oneYear = horizonLevel(levels, cur, 12);
-  const threeYear = horizonLevel(levels, cur, 36);
-  const levelById = new Map(levels.map((l) => [l.id, l]));
-
-  return json(res, 200, {
-    career: {
-      trackName: track?.name || null,
-      nextReviewOn: c.next_review_on,
-      oneYearTargetNote: c.one_year_target_note,
-      threeYearTargetNote: c.three_year_target_note,
-      employeeWish: c.employee_wish,
-      agreed: Boolean(c.agreed_at),
-    },
-    currentLevel: levelView(cur),
-    nextLevel: levelView(next),
-    currentWage: wage ? { wageType: wage.wage_type, wageAmount: wage.wage_amount } : null,
-    rangeNote: RANGE_NOTE,
-    progress: progress ? {
-      achieved: progress.achieved, total: progress.total,
-      categories: progress.categories.map((g) => ({ category: g.category, achieved: g.achieved, total: g.total,
-        items: g.items.map((i) => ({ id: i.id, title: i.title, status: i.status, required: i.required })) })),
-      // 次のLevelまで、あと何をすればよいか（最優先で見せる）
-      remaining: progress.remaining.map((i) => ({ id: i.id, category: i.category, title: i.title,
-        description: i.description, status: i.status, required: i.required })),
-    } : null,
-    horizon: {
-      oneYear: { level: levelView(oneYear), goal: track?.one_year_goal || null },
-      threeYear: { level: levelView(threeYear), goal: track?.three_year_goal || null },
-      note: TIMELINE_NOTE,
-    },
-    growthHistory,
-    lastReview: last ? {
-      decidedAt: last.decided_at, result: last.result,
-      periodFrom: last.review_period_from, periodTo: last.review_period_to,
-      managerComment: last.manager_comment, employeeComment: last.employee_comment,
-      fromLevel: levelView(levelById.get(last.from_level_id)),
-      targetLevel: levelView(levelById.get(last.target_level_id)),
-      achieved: (last.criterion_results || []).filter((x) => x.result === "achieved").length,
-      total: (last.criterion_results || []).filter((x) => x.result !== "na").length,
-    } : null,
-    labels: { criterionResults: CRITERION_RESULTS, reviewResults: REVIEW_RESULTS },
-  });
+  const [view, j] = await Promise.all([
+    memberCareerView(sb, { tenantId: ctx.tenantId, employee: ctx.employee, userId: user.id }),
+    journeyForEmployee(sb, ctx.tenantId, ctx.employee),
+  ]);
+  return json(res, 200, { ...view, journey: publicJourney(j.journey) });
 }
 
 async function act(req, res, ctx, user) {
   const body = await readJson(req);
+  if (body?.action === "confirmPlan") return confirmPlan(res, ctx, user);
   if (body?.action !== "addGoal") return json(res, 400, { error: "invalid_action" });
   const sb = admin();
-  const { c, next, criteria } = await mine(sb, ctx);
+  const { c, next, criteria } = await careerOf(sb, ctx.tenantId, ctx.employee.id);
   if (!c || !next) return json(res, 409, { error: "no_next_level" });
   // 自分の次のLevelの基準だけ。他人の基準・他のLevelの基準は選べない
   const crit = (criteria || []).find((x) => x.id === body.criterionId);
@@ -166,3 +110,55 @@ async function act(req, res, ctx, user) {
   if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
   return json(res, 200, { ok: true, taskId: data.id });
 }
+
+/**
+ * 本人が「内容を確認しました」。自分の active キャリアだけ。
+ * 依頼が来ていないとき・もう確認したときは何も変えない（確認の日時を上書きしない）
+ */
+async function confirmPlan(res, ctx, user) {
+  const sb = admin();
+  const careers = await soft(sb.from("gw_employee_careers").select("*").eq("tenant_id", ctx.tenantId)
+    .eq("employee_id", ctx.employee.id).eq("is_active", true));
+  const c = careers?.[0] || null;
+  if (!c) return json(res, 404, { error: "no_career" });
+  if (!confirmPending(c)) {
+    return c.confirm_requested_at
+      ? json(res, 200, { ok: true, already: true, confirmedAt: c.employee_confirmed_at })
+      : json(res, 409, { error: "not_requested", hint: "確認の依頼はまだ届いていません" });
+  }
+  const at = new Date().toISOString();
+  const { error } = await sb.from("gw_employee_careers").update({ employee_confirmed_at: at, updated_at: at })
+    .eq("id", c.id).eq("tenant_id", ctx.tenantId);
+  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "career.confirm.employee",
+    target: `employee:${ctx.employee.id}`, detail: { requestedAt: c.confirm_requested_at } });
+  // 依頼した人へ。中身は通知に入れない
+  if (c.confirm_requested_by) {
+    const reqEmp = await soft(sb.from("gw_employees").select("id").eq("tenant_id", ctx.tenantId)
+      .eq("user_id", c.confirm_requested_by).maybeSingle());
+    if (reqEmp?.id) {
+      await notify([{
+        tenantId: ctx.tenantId, employeeId: reqEmp.id, kind: "general",
+        title: `${ctx.employee.display_name || "社員"}さんがキャリアプランを確認しました`,
+        link: `admin-career.html?employeeId=${encodeURIComponent(ctx.employee.id)}`,
+        dedupeKey: `career-confirmed:${c.id}:${c.confirm_requested_at}`,
+      }]);
+    }
+  }
+  return json(res, 200, { ok: true, confirmedAt: at });
+}
+
+/**
+ * 本人に返すステータスバーの形。状態・6段階・誰の対応か・本人向けの言い方だけ。
+ * 管理画面の行き先（cta.href の admin-*.html）や担当者名は返さない
+ */
+function publicJourney(j) {
+  if (!j) return null;
+  return {
+    state: j.state, step: j.step, total: j.total,
+    phases: j.phases, phase: j.phase, who: j.who,
+    whoText: j.whoText?.member || null, member: j.member,
+    inProgress: j.state !== "active",
+  };
+}
+

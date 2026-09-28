@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260928d">
-  <link rel="stylesheet" href="css/layout.css?v=20260928d">
+  <link rel="stylesheet" href="css/app.css?v=20260928g">
+  <link rel="stylesheet" href="css/layout.css?v=20260928g">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -46,6 +46,19 @@
     .cv-dekiru li { display:flex; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); font-size:14px; }
     .cv-dekiru li:last-child { border-bottom:none; }
     .cv-dekiru time { color:var(--muted); font-size:12.5px; min-width:64px; }
+
+    /* 契約・キャリアの確認（会社から届いたときだけ、いちばん上に1画面で） */
+    .cv-ask { border:2px solid var(--primary); background:linear-gradient(180deg,#f5f9ff 0%,#fff 60%); }
+    .cv-ask .lead { font-size:13.5px; margin:0 0 12px; }
+    .cv-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px 16px; margin-bottom:10px; }
+    .cv-grid .k { font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--muted); }
+    .cv-grid .v { font-size:16px; font-weight:700; color:var(--primary-dark); margin-top:1px; }
+    .cv-left { list-style:none; padding:0; margin:4px 0 0; font-size:13.5px; line-height:1.9; }
+    .cv-acts { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+    .cv-acts > div { border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:#fff; }
+    .cv-acts .k { font-size:12px; font-weight:700; color:var(--muted); margin-bottom:6px; }
+    .cv-acts .done { color:#256b36; font-weight:700; font-size:13.5px; }
+    @media (max-width: 560px) { .cv-acts { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -53,12 +66,15 @@
 <div class="wrap">
   <h1 class="kp-greet">キャリア</h1>
   <p class="kp-greet-sub">いまの現在地と、次のLevelに向けて何をすればよいかを確かめられます。</p>
+  <div id="preview-note"></div>
+  <div id="journey-box"></div>
   <div id="body"><div class="empty">読み込み中…</div></div>
 </div>
 
-<script src="js/api-client.js?v=20260928d"></script>
-<script src="js/device.js?v=20260928d"></script>
-<script src="js/layout.js?v=20260928d"></script>
+<script src="js/api-client.js?v=20260928g"></script>
+<script src="js/device.js?v=20260928g"></script>
+<script src="js/layout.js?v=20260928g"></script>
+<script src="js/journey-bar.js?v=20260928g"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -73,18 +89,89 @@
   const MARK_LABEL = { achieved: "達成", in_progress: "取り組み中", not_yet: "まだ" };
 
   let data = null;
+  // 管理者の「本人画面をプレビュー」。本人の API と同じ組み立てで、押しても何も起きない
+  const PREVIEW = new URLSearchParams(location.search).get("preview");
 
   KPLayout.init({ active: "career", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
-    try { data = await API.myCareer(); }
+    try { data = PREVIEW ? await API.careerPreview(PREVIEW) : await API.myCareer(); }
     catch (e) {
       el("body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
         <div>${esc(e.message || e.hint || "読み込めませんでした")}</div></div>`;
       return;
     }
+    if (PREVIEW) {
+      el("preview-note").innerHTML = `<div class="banner warn" id="preview-banner"><span class="material-symbols-outlined">visibility</span>
+        <div><b>プレビュー</b>：${esc(data.preview?.employeeName || "")}さんには、この画面がこう見えます。ここでの操作は記録されません。</div></div>`;
+    }
+    // 入社〜キャリアの途中なら、共通ステータスバー（管理者と同じ判定。js/journey-bar.js）
+    el("journey-box").innerHTML = data.journey && data.journey.state !== "active"
+      ? `<div class="card" id="journey-card"><h2><span class="material-symbols-outlined">route</span>入社〜キャリアの進み具合</h2>
+          ${KPJourney.panel({ ...data.journey, whoText: data.journey.whoText?.member ?? data.journey.whoText },
+            { viewer: "member", here: "career.html" })}</div>` : "";
+    if (PREVIEW) el("journey-box").querySelectorAll("#jb-cta").forEach((a) => { a.setAttribute("aria-disabled", "true"); a.onclick = () => false; });
     render();
+    if (location.hash === "#confirm") el("sec-confirm")?.scrollIntoView({ block: "start" });
+  }
+
+  const wageLine = (w) => (w && w.wageAmount != null ? `${esc(w.wageType || "")} ${yen(w.wageAmount)}` : "—");
+
+  /**
+   * 会社から「契約・キャリアの確認」が届いているとき、いちばん上に1画面で。
+   * 契約書（電子署名）とキャリアプラン（確認しました）は別の操作
+   */
+  function confirmCard() {
+    const d = data;
+    const signs = d.contractSign?.pending || [];
+    const cf = d.confirm || {};
+    if (!cf.pending && !signs.length) return "";
+    const cur = d.currentLevel;
+    const next = d.nextLevel;
+    const p = d.progress;
+    const left = (p?.remaining || []).slice(0, 6);
+    const dis = PREVIEW ? "disabled" : "";
+    return `
+      <div class="card cv-ask" id="sec-confirm">
+        <h2><span class="material-symbols-outlined">assignment_ind</span>あなたの契約・キャリア</h2>
+        <p class="lead">会社から、現在の契約内容と今後のキャリアプランが届いています。内容を確認してください。</p>
+        <div class="cv-grid">
+          <div><div class="k">現在の契約</div><div class="v">${wageLine(d.currentWage)}</div>
+            ${d.contract?.contractType ? `<div class="s muted" style="font-size:12px;">${esc(d.contract.contractType)}</div>` : ""}</div>
+          ${d.career ? `
+          <div><div class="k">現在</div><div class="v">${esc(d.career.trackName || "")} L${esc(cur?.levelNo ?? "-")}</div></div>
+          <div><div class="k">次</div><div class="v">${next ? `L${esc(next.levelNo)}` : "—"}</div></div>
+          <div><div class="k">次の給与レンジ</div><div class="v">${esc(next?.salaryRange || "—")}</div></div>` : ""}
+        </div>
+        ${next ? `<p class="cv-note" style="margin-top:0;">※目安であり、昇給を保証するものではありません</p>` : ""}
+        ${p && p.total ? `<div class="k" style="font-size:12px;font-weight:700;color:var(--muted);margin-top:10px;">あと必要なこと　${p.achieved} / ${p.total}</div>
+          <ul class="cv-left">${left.map((r) => `<li><span class="cv-mark ${esc(r.status)}">${r.status === "in_progress" ? "△" : "□"}</span> ${esc(r.title)}</li>`).join("")}</ul>` : ""}
+        ${d.career ? `
+        <div class="cv-grid" style="margin-top:12px;">
+          <div><div class="k">1年後</div><div style="font-size:13.5px;">${esc(d.career.oneYearTargetNote || d.horizon?.oneYear?.goal || "—")}</div></div>
+          <div><div class="k">3年後</div><div style="font-size:13.5px;">${esc(d.career.threeYearTargetNote || d.horizon?.threeYear?.goal || "—")}</div></div>
+          <div><div class="k">次回評価</div><div class="v">${esc(fmtDate(d.career.nextReviewOn))}</div></div>
+        </div>` : ""}
+        <div class="cv-acts">
+          <div id="act-contract"><div class="k">契約書</div>
+            ${signs.length ? `<a class="btn btn-primary" href="${esc(d.contractSign.link || "contracts.html")}" ${PREVIEW ? `onclick="return false;" aria-disabled="true"` : ""}>内容を確認して署名</a>
+              <div class="cv-note">電子署名です。署名の記録が残ります。</div>`
+              : `<div class="muted" style="font-size:13px;">署名が必要な契約書はありません。</div>`}</div>
+          <div id="act-career"><div class="k">キャリアプラン</div>
+            ${cf.pending ? `<button class="btn btn-primary" id="btn-confirm-plan" onclick="confirmPlan(this)" ${dis}>内容を確認しました</button>
+              <div class="cv-note">法的な署名ではありません。内容を確認したことだけを会社に伝えます。</div>`
+              : `<div class="done">${cf.confirmedAt ? `確認済み（${esc(fmtDate(cf.confirmedAt))}）` : "確認の依頼はありません"}</div>`}</div>
+        </div>
+      </div>`;
+  }
+
+  async function confirmPlan(btn) {
+    if (PREVIEW) return;
+    try {
+      await KPLayout.busy(btn, "送信中…", () => API.myCareerAct({ action: "confirmPlan" }));
+      await load();
+    } catch (e) { alert(e.hint || e.message || "送れませんでした"); }
   }
 
   function dekiruCard() {
@@ -99,7 +186,7 @@
   function render() {
     const d = data;
     if (!d.career) {
-      el("body").innerHTML = `
+      el("body").innerHTML = `${confirmCard()}
         <div class="card" id="sec-now"><h2><span class="material-symbols-outlined">flag</span>あなたの現在地</h2>
           <div class="empty">${esc(d.message || "キャリアはまだ設定されていません。")}</div></div>
         ${dekiruCard()}`;
@@ -110,7 +197,7 @@
     const p = d.progress;
     const remaining = p?.remaining || [];
 
-    el("body").innerHTML = `
+    el("body").innerHTML = `${confirmCard()}
       <!-- 1. あなたの現在地 -->
       <div class="card" id="sec-now">
         <h2><span class="material-symbols-outlined">flag</span>あなたの現在地</h2>
@@ -119,7 +206,7 @@
           <div><div class="k">現在のLevel</div><div class="v big">LEVEL ${esc(cur?.levelNo ?? "-")}</div>
             <div class="s">${esc(cur?.levelName || "")}</div></div>
           <div><div class="k">現在の給与</div><div class="v">${d.currentWage ? `${esc(d.currentWage.wageType || "")} ${yen(d.currentWage.wageAmount)}` : "—"}</div>
-            <div class="s">雇用契約の内容です</div></div>
+            <div class="s">${d.contract?.contractType ? `${esc(d.contract.contractType)}・` : ""}雇用契約の内容です</div></div>
           <div><div class="k">次回評価</div><div class="v">${esc(fmtDate(d.career.nextReviewOn))}</div></div>
         </div>
       </div>
@@ -195,6 +282,7 @@
   }
 
   async function addGoal(id, btn) {
+    if (PREVIEW) return;
     try {
       const r = await KPLayout.busy(btn, "追加中…", () => API.myCareerAct({ action: "addGoal", criterionId: id }));
       btn.outerHTML = `<span class="muted" style="font-size:12.5px;">${r.already ? "タスクに入っています" : "タスクに追加しました"}</span>`;

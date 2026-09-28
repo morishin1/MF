@@ -9,6 +9,7 @@
 // 明細を後から書き換える口は用意していない。承認の途中で金額が変わると
 // 「何を承認したのか」が分からなくなるため、直すときは取り消して出し直す。
 
+import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
@@ -87,6 +88,8 @@ async function create(req, res, ctx) {
   if (!ctx.employee) {
     return json(res, 403, { error: "not_enrolled", hint: "社員名簿に登録されていません。管理者に登録を依頼してください" });
   }
+  // 入社前の人は申請・経費の対象にしない（lib/stages.js isPreJoin）
+  if (isPreJoin(ctx.employee)) return json(res, 403, { error: "not_joined", hint: PRE_JOIN_HINT });
 
   const body = await readJson(req);
   const title = String(body?.title ?? "").trim().slice(0, 200);

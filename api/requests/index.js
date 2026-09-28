@@ -6,6 +6,7 @@
 // 承認の道すじは固定。有給は管理部の1段、稟議は管理部→代表の2段。
 // 設定にしていないのは、迷いどころを増やさないため（詳細は db/019_requests.sql）。
 
+import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
@@ -72,6 +73,8 @@ async function create(req, res, ctx) {
   if (!ctx.employee) {
     return json(res, 403, { error: "not_enrolled", hint: "社員名簿に登録されていません。管理者に登録を依頼してください" });
   }
+  // 入社前の人は申請・経費の対象にしない（lib/stages.js isPreJoin）
+  if (isPreJoin(ctx.employee)) return json(res, 403, { error: "not_joined", hint: PRE_JOIN_HINT });
 
   const body = await readJson(req);
   const row = normalize(body);

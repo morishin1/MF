@@ -192,6 +192,7 @@
         { key: "career",    href: "admin-career.html",    label: "評価・キャリア", icon: "trending_up", ready: true,
           tabs: [
             { key: "career",         href: "admin-career.html",             label: "キャリア" },
+            { key: "career_journey", href: "admin-career.html?tab=journey", label: "入社〜育成" },
             { key: "growth",         href: "admin-growth.html",             label: "3か月育成" },
             { key: "autonomy",       href: "admin-autonomy.html",           label: "自走レベル" },
             { key: "career_history", href: "admin-career.html?tab=history", label: "評価履歴" },
@@ -199,7 +200,7 @@
           // 試用期間は採用前ではなく入社後の人事管理なので、こちらへ
           // （既存データ・ロジックは変えず、導線だけ移す）。見出しは「試用期間」の
           // ままでよいので帯（tabs）には入れず、選ばれた状態にするmatchだけ足す
-          match: ["career", "growth", "autonomy", "career_history", "career_master", "probation"] },
+          match: ["career", "career_journey", "growth", "autonomy", "career_history", "career_master", "probation"] },
       ],
     },
     {
