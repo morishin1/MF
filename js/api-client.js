@@ -369,6 +369,22 @@
   const listHrApplicants = () => api("/api/hr/applicants");
   const createHrApplicant = (body) => api("/api/hr/applicants", { method: "POST", body });
   const getHrApplicant = (id) => api(`/api/hr/applicants/detail?id=${encodeURIComponent(id)}`);
+  // 応募書類（履歴書・職務経歴書・その他）。個人情報なので URL は数分だけ有効（private バケット）
+  const hrDocuments = (applicantId) => api(`/api/hr/documents?applicantId=${encodeURIComponent(applicantId)}`);
+  const hrDocumentUrl = (id, download) =>
+    api(`/api/hr/documents?id=${encodeURIComponent(id)}${download ? "&download=1" : ""}`);
+  const deleteHrDocument = (id) => api(`/api/hr/documents?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  // 置き場所をもらう → PUT → 中身を確かめて登録（差し替えも同じ。前の版は残る）
+  async function uploadHrDocument(applicantId, docType, file) {
+    const sign = await api("/api/hr/documents", { method: "POST", body: {
+      action: "upload", applicantId, docType, mimeType: file.type, sizeBytes: file.size } });
+    const put = await fetch(sign.uploadUrl, {
+      method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "false" }, body: file,
+    });
+    if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+    return api("/api/hr/documents", { method: "POST", body: {
+      action: "attach", applicantId, docType, path: sign.path, filename: file.name } });
+  }
   const updateHrApplicant = (body) => api("/api/hr/applicants/detail", { method: "PATCH", body });
   // ---- 採用HR：応募者一覧の複数選択操作 ----
   const bulkHrApplicants = (body) => api("/api/hr/applicants/bulk", { method: "POST", body });
@@ -1377,6 +1393,7 @@
     listBillingSubmissions, issueSubmissionLink, revokeSubmissionLink, submissionFileUrl,
     submissionPreview, submitBilling,
     listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
+    hrDocuments, hrDocumentUrl, deleteHrDocument, uploadHrDocument,
     bulkHrApplicants, deleteHrApplicants, setHrApplicantsStatus, setHrApplicantsRecruiter,
     scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview,
     cancelHrInterview, todayHrInterviews,

@@ -147,11 +147,11 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
     "TimeRex未設定時は、手動設定へ誘導する");
   await page.locator(".hr-modal button", { hasText: "手動で面談を設定" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer", { hasText: "面談を予定する" }).isVisible(), "予定フォームが開く");
+  check(await page.locator("#action-root .hr-modal", { hasText: "面談を予定する" }).isVisible(), "予定フォームが開く");
   const when = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
   await page.fill("#iv-when", when);
   await page.selectOption("#iv-who", "e2");
-  await page.locator(".hr-drawer button", { hasText: "予定する" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "予定する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.kind === "casual" && p.applicantId === "a1"), "予定がサーバへ送られる");
 
@@ -173,15 +173,15 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   console.log("\n— 5項目評価・ランクA —");
   await page.locator(".hr-next button", { hasText: "評価を入力" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "評価フォームが開く");
-  const labels = await page.locator(".hr-drawer label").allInnerTexts();
+  check(await page.locator("#action-root .hr-modal").isVisible(), "評価フォームが開く");
+  const labels = await page.locator("#action-root .hr-modal label").allInnerTexts();
   for (const l of ["コミュニケーション", "経験・スキル", "志向性", "カルチャーフィット", "期待値／ポテンシャル"]) {
     check(labels.some((x) => x.includes(l)), `評価項目：${l}`);
   }
   await page.locator('input[name="ev-communication"][value="great"]').check();
   await page.selectOption("#ev-rank", "A");
   await page.fill("#ev-reason", "即戦力です");
-  await page.locator(".hr-drawer button", { hasText: "保存する" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "保存する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "evaluate" && p.rank === "A"), "評価がサーバへ送られる");
 
@@ -189,9 +189,9 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   check((await page.locator(".hr-next").innerText()).includes("社長に会ってほしい候補です"), "NEXT ACTION：Aランク");
   await page.locator(".hr-next button", { hasText: "社長推薦する" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "推薦理由を書く欄が開く");
+  check(await page.locator("#action-root .hr-modal").isVisible(), "推薦理由を書く欄が開く");
   await page.fill("#rc-note", "営業経験が強く、事業立ち上げ経験あり。報酬条件のみ社長面談で確認したい。");
-  await page.locator(".hr-drawer button", { hasText: "社長推薦する" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "社長推薦する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.stage === "ceo_recommend" && p.recommendNote), "推薦理由つきで社長推薦がサーバへ送られる");
 

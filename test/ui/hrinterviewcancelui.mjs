@@ -180,8 +180,12 @@ console.log("\n=== 面談キャンセル ===");
   await page.locator(".hr-modal button", { hasText: "面談をキャンセルする" }).click();
   await page.waitForTimeout(700);
   check(patched.some((p) => p.action === "cancel" && p.id === "iv1"), "cancelアクションが送られる");
+  check(await page.locator(".hr-detail").isVisible(), "保存後も応募者詳細ドロワーは開いたまま");
+  // NEXT ACTION は「概要」タブにある（ドロワーの整理：概要／面談／書類／履歴）
+  await page.locator('.hr-tabs button[data-tab="overview"]').click();
   check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"),
     "NEXT ACTIONが「再調整してください」へ戻る");
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
 
   console.log("\n— キャンセル済みの面談は、そう分かる表示になる —");
   const card = await page.locator(".hr-detail-body .card").first();

@@ -286,9 +286,11 @@
    * ここが採用HR・Sales の正式な入口。左メニュー（管理者・メンバーとも）には
    * 置かない（入口を二重にしない）。
    *
-   * 出す・出さないは showsFor の hr / sales（サーバの canRecruit / canSell と
-   * 同じ基準）で決める。新しい権限は増やさない。
-   * メンバー表示で確認中は出さない（メンバーの見え方を確かめる場なので）。
+   * 出す・出さないは showsFor の hr / sales（/api/me の access ＝ サーバの
+   * canRecruit / canSell）で決める。新しい権限は増やさない。
+   * 管理画面でも、メンバーの画面でも同じ条件で出す（権限のある一般メンバーにも出る）。
+   * 「メンバー表示で確認中」でも出す。この表示は権限を変えないので、
+   * 同じ権限を持つメンバーに実際に見えているものと同じになる。
    *
    * 狭い画面では「HR」「Sales」まで縮める（CSS）。通知・ログアウトは押し出さない
    */
@@ -325,7 +327,7 @@
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
-        ${memberView ? "" : shortcutsHtml(shows)}
+        ${shortcutsHtml(shows)}
         <span class="kp-who-name">${esc(name)}</span>
         ${canPreview ? (memberView
           ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
@@ -826,11 +828,14 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
-      // /hr の入口。サーバ側の canRecruit（lib/gw.js）と同じ基準
-      // （管理者・経営者・人事・採用担当）
-      hr: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
-      // /sales の入口。サーバ側の canSell（lib/gw.js）と同じ基準
-      sales: Boolean(me?.isAdmin || me?.gw?.isAdmin) || ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
+      // 採用HR（/hr）・Sales（/sales）の入口。
+      // サーバが判定した結果（/api/me の access = lib/gw.js の canRecruit / canSell）をそのまま使う。
+      // 役割の並びを画面側で持たない（ヘッダーに出たのに 403、を作らない）。
+      // access が無いのは、前の版の /api/me を覚えていたときだけ。そのときは同じ基準で数える
+      hr: me?.access ? Boolean(me.access.recruit)
+        : Boolean(me?.isAdmin) || ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
+      sales: me?.access ? Boolean(me.access.sell)
+        : Boolean(me?.isAdmin) || ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
       // それでは判定にならない。admin / staff と社内ロールで見る
