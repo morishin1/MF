@@ -190,6 +190,10 @@
     {
       "path": "/api/cron/hr-interviews",
       "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/career",
+      "schedule": "40 23 * * *"
     }
   ]
 }
