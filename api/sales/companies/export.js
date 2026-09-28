@@ -16,7 +16,7 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { parseListQuery, companiesCsv, todayJst, EXPORT_MAX } from "../../../lib/sales.js";
 import { exportRows } from "../../../lib/sales-list.js";
 
-const SQL = "db/097_sales_company_list.sql";
+const SQL = "db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);

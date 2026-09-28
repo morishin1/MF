@@ -920,6 +920,18 @@ console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ�
   await page.waitForFunction(() => !/sort=/.test(location.search));
   check(await page.locator("th.sort.on").count() === 0, "3回目で並べ替えを解除");
 
+  // 担当・NEXT もサーバーで並べる（担当者名順・実効NEXT順。db/098）
+  for (const key of ["owner", "next"]) {
+    await page.locator(`th[data-sort="${key}"]`).click();
+    await page.waitForFunction((k) => new URLSearchParams(location.search).get("sort") === k, key);
+    const p = calls.filter((c) => c.kind === "list").at(-1).params;
+    check(p.sort === key && p.order === "asc" && p.page === "1", `${key} の並べ替えはサーバーへ（sort=${key}）`);
+  }
+  check((await page.locator('th[data-sort="next"]').getAttribute("title")).includes("要フォロー"), "NEXT の並び方を見出しで説明");
+  await page.locator('th[data-sort="next"]').click();
+  await page.locator('th[data-sort="next"]').click();
+  await page.waitForFunction(() => !/sort=/.test(location.search));
+
   // 絞り込み → 3ページ目 → 企業詳細を開いて閉じる → 同じページ・条件のまま
   await page.locator("#f-region").selectOption("東京都");
   await page.waitForFunction(() => /region=/.test(location.search));

@@ -28,7 +28,7 @@ import {
 } from "../../../lib/sales.js";
 import { listPage, listFacets } from "../../../lib/sales-list.js";
 
-const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql";
+const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
 const FIELDS = COMPANY_FIELDS;
 const BULK_MAX = 500;

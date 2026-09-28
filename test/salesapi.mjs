@@ -42,6 +42,24 @@ function rollup(companyId) {
   const sent = mine.map((a) => a.sent_at).filter(Boolean).sort();
   c.last_sent_at = sent.length ? sent[sent.length - 1] : null;
   c.click_count = mine.reduce((n, a) => n + (a.click_count || 0), 0);
+  // db/098：最後のクリック日時の写しも
+  const clicks = mine.map((a) => a.last_click_at).filter(Boolean).sort();
+  c.last_click_at = clicks.length ? clicks[clicks.length - 1] : null;
+}
+// view gw_sales_company_list（db/098）と同じ：担当者名・実効 NEXT の並び順
+function listViewRows() {
+  const emp = new Map((db.rows.gw_employees || []).map((e) => [e.id, e.display_name]));
+  const today = todayJst();
+  return (db.rows.gw_sales_companies || []).map((c) => {
+    const closed = c.ng_reason || ["won", "lost", "excluded"].includes(c.status);
+    const unhandled = c.last_click_at && (!c.followed_at || c.followed_at < c.last_click_at);
+    const next_group = closed ? 5 : unhandled ? 0 : c.next_action_on ? 1 : c.next_action ? 2
+      : ["untouched", "reattack_wait"].includes(c.status) ? 3 : 4;
+    const next_due = closed ? null
+      : unhandled ? (c.next_action === "クリックあり・要フォロー" && c.next_action_on ? c.next_action_on : today)
+      : c.next_action_on || null;
+    return { ...c, owner_name: emp.get(c.owner_id) || null, next_group, next_due };
+  });
 }
 function afterWrite(name, rows) {
   if (name === "gw_sales_approaches") for (const id of new Set(rows.map((r) => r.company_id))) rollup(id);
@@ -88,7 +106,8 @@ function table(name) {
   let withCount = false;
   let head = false;
   const rows = () => {
-    const src = name === "gw_sales_company_facets" ? facetRows() : (db.rows[name] || []);
+    const src = name === "gw_sales_company_facets" ? facetRows()
+      : name === "gw_sales_company_list" ? listViewRows() : (db.rows[name] || []);
     let out = src.filter(matcher(f));
     if (orders.length) {
       // PostgREST と同じ：空の値は nullsFirst=false なら昇順・降順とも最後
@@ -1428,6 +1447,64 @@ await ok("並べ替え：最終アタックの新しい順（未アタックは�
   assert.ok(clicks[0].clickCount >= 1, "クリックがトリガー（の写し）で会社に反映されている");
   assert.equal(clicks[0].lastAttackerName, "営業 一郎");
   void c3;
+});
+
+await ok("並べ替え：担当は表示している担当者名の順（DB全体で。未定は最後）", async () => {
+  setup();
+  db.rows.gw_employees.push({ id: "emp-z1", tenant_id: "t1", display_name: "青木 花", status: "active" });
+  await seed(150);
+  // 担当を3人＋未定に振り分ける（ID の順と名前の順が逆になるように）
+  const owners = ["emp-s2", "emp-z1", "emp-s1", null];
+  db.rows.gw_sales_companies.forEach((c, i) => { c.owner_id = owners[i % 4]; });
+  const all = [];
+  for (let p = 1; p <= 2; p++) all.push(...(await pageOf({ page: p, sort: "owner", order: "asc" })).body.companies);
+  assert.equal(all.length, 150);
+  assert.equal(new Set(all.map((c) => c.id)).size, 150, "ページ間で重複・欠落しない");
+  const names = all.map((c) => c.ownerName);
+  const expected = [...names].sort((a, b) => (a === null) - (b === null) || (a < b ? -1 : a > b ? 1 : 0));
+  assert.deepEqual(names, expected, "担当者名の順（未定は最後）");
+  assert.equal(names[0], "営業 一郎");
+  assert.equal(names.at(-1), null);
+  assert.ok(qlog.some((q) => q.name === "gw_sales_company_list"), "担当者名つきの view から並べて取る");
+  const desc = (await pageOf({ page: 1, sort: "owner", order: "desc" })).body.companies;
+  assert.equal(desc[0].ownerName, "青木 花");
+  // ほかの並べ替えは表から（098 が無くても動く）
+  qlog.length = 0;
+  await pageOf({ page: 1, sort: "name" });
+  assert.ok(!qlog.some((q) => q.name === "gw_sales_company_list"));
+});
+
+await ok("並べ替え：NEXT は画面の実効NEXTの順。未対応クリック（要フォロー）が先頭、期限の近い順、やること無しは最後", async () => {
+  setup();
+  await seed(8);
+  const cs = db.rows.gw_sales_companies;
+  const ymd = (d) => new Date(Date.now() + 9 * 3600000 + d * 86400000).toISOString().slice(0, 10);
+  // 0: 期限なしのNEXT / 1: 期限3日後 / 2: 期限昨日（超過）/ 3: 未アタック（フォームアタック）
+  cs[0].next_action = "電話";
+  cs[1].next_action = "フォロー"; cs[1].next_action_on = ymd(3);
+  cs[2].next_action = "資料送付"; cs[2].next_action_on = ymd(-1);
+  // 4: 成約（やること無し）/ 5: 営業禁止
+  cs[4].status = "won"; cs[5].ng_reason = "no_sales";
+  // 6・7: 未対応クリック（6 は期限を5日後に手で決めていても、クリックが先）
+  cs[6].next_action = "フォロー"; cs[6].next_action_on = ymd(5);
+  await sendAttack(cs[6].id);
+  const { url } = await sendAttack(cs[7].id);
+  await click(db.rows.gw_sales_approaches.find((a) => a.company_id === cs[6].id).tracking_token);
+  await click(url.split("/r/")[1]);
+  // 7 は「クリックに対応した」ので未対応ではなくなる
+  await patchCo({ id: cs[7].id, action: "followed" });
+  const list = (await pageOf({ page: 1, sort: "next", order: "asc" })).body.companies;
+  const pos = (i) => list.findIndex((c) => c.id === cs[i].id);
+  assert.equal(list[0].id, cs[6].id, "未対応クリック（クリックあり・要フォロー）が先頭");
+  assert.equal(list[0].next, "クリックあり・要フォロー");
+  assert.ok(pos(2) < pos(1), "期限の近い（超過した）NEXT が先");
+  assert.ok(pos(1) < pos(0), "期限のある NEXT が期限なしより先");
+  assert.ok(pos(0) < pos(3), "決めた NEXT がフォームアタック待ちより先");
+  assert.ok(pos(4) > pos(3) && pos(5) > pos(3), "成約・営業禁止（やること無し）は最後");
+  // 画面の NEXT と並びが食い違わない（先頭の要フォローは、画面でも要フォロー）
+  assert.equal(list.filter((c) => c.nextKey === "follow_click").length, 1);
+  const desc = (await pageOf({ page: 1, sort: "next", order: "desc" })).body.companies;
+  assert.ok([cs[4].id, cs[5].id].includes(desc[0].id), "降順は逆（やること無しが先）");
 });
 
 await ok("絞り込みの候補（facets=1）：業種・地域・商材を件数つきで返す", async () => {

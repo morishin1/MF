@@ -161,6 +161,10 @@
     ["最終アタック", "last_sent"], ["連絡手段", "channel"], ["クリック", "clicks"], ["NEXT", "next"], ["担当", "owner"],
   ];
   const COLS = COLUMNS.length + 1;
+  const SORT_HINT = {
+    owner: "担当者名で並べ替え（未定は最後）",
+    next: "NEXTの急ぐ順で並べ替え（未対応クリックの「要フォロー」が先頭 → 期限の近い順 → 期限なし → アタック待ち）",
+  };
   let state = readState();
   let pageInfo = { page: 1, total: 0, totalPages: 1, limit: 100 };
   let facets = null;
@@ -273,7 +277,7 @@
       const icon = on ? (state.order === "asc" ? "arrow_upward" : "arrow_downward") : "unfold_more";
       const aria = on ? (state.order === "asc" ? "ascending" : "descending") : "none";
       return `<th class="sort${on ? " on" : ""}" data-sort="${esc(key)}" aria-sort="${aria}" onclick="toggleSort('${esc(key)}')"
-        title="${esc(label)}で並べ替え">${esc(label)}<span class="material-symbols-outlined" aria-hidden="true">${icon}</span></th>`;
+        title="${esc(SORT_HINT[key] || `${label}で並べ替え`)}">${esc(label)}<span class="material-symbols-outlined" aria-hidden="true">${icon}</span></th>`;
     }).join("");
   }
 
