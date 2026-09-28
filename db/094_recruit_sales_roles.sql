@@ -62,7 +62,33 @@ commit;
 
 notify pgrst, 'reload schema';
 
--- 確認（適用前に、採用HR・Sales を使っている人に社内権限が付いているか見ておく）:
---   select e.display_name, array_agg(g.role order by g.role) as roles
---     from public.gw_employees e left join public.gw_role_grants g on g.employee_id = e.id
---    group by e.display_name order by 1;
+-- 確認1（適用前）: 採用HR・Sales を今後も使う人に、社内権限が付いているか
+--   会計の管理者（memberships の admin / staff）だけの人は、094 のあと採用HR・Sales に入れなくなる。
+--   「今後も使う」人は、メンバー管理で 経営者・人事・採用担当（採用HR）／経営者・責任者・営業担当（Sales）を付ける。
+--
+--   select e.display_name,
+--          coalesce(string_agg(g.role, ', ' order by g.role), '（なし）') as 社内権限,
+--          bool_or(m.role in ('admin', 'staff'))                          as 会計の管理者
+--     from public.gw_employees e
+--     left join public.gw_role_grants g on g.employee_id = e.id
+--     left join public.memberships    m on m.user_id = e.user_id and m.tenant_id = e.tenant_id
+--    where e.status in ('active', 'leaving', 'invited')
+--    group by e.display_name
+--    order by 1;
+--
+-- 確認2（適用後）: 誰が採用HR・Sales を使える状態か（lib/gw.js の canRecruit / canSell と同じ条件）
+--
+--   select e.display_name,
+--          coalesce(string_agg(g.role, ', ' order by g.role), '（なし）')                       as 社内権限,
+--          bool_or(g.role in ('owner', 'hr', 'recruiter'))                                    as 採用HR,
+--          bool_or(g.role in ('owner', 'manager', 'sales'))                                   as Sales
+--     from public.gw_employees e
+--     left join public.gw_role_grants g on g.employee_id = e.id
+--    where e.status in ('active', 'leaving', 'invited')
+--    group by e.display_name
+--    order by 採用HR desc, Sales desc, 1;
+--
+-- 確認3（適用後）: 関数が新しい定義になっているか（is_tenant_staff が含まれていないこと）
+--
+--   select proname, pg_get_functiondef(oid) from pg_proc
+--    where proname in ('gw_is_recruiting', 'gw_is_sales');
