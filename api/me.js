@@ -2,7 +2,7 @@
 // ログインユーザーの基本情報とメンバーシップ（ロール）を返す。
 // フロントの画面出し分け（member=アップロードのみ / admin=承認・分析）に使う。
 //
-// 出力: { email, userId, isAdmin, roles, memberships, gw, appRole }
+// 出力: { email, userId, isAdmin, roles, memberships, gw, appRole, access }
 //   gw      … 社内グループウェアの所属・ロール（db/005_groupware_core.sql 適用後に値が入る）
 //              未適用の環境では available:false になるだけで、既存の会計機能には影響しない。
 //   appRole … ログイン後の振り分け先（要件セクション4）
@@ -14,6 +14,7 @@ import { admin } from "../lib/supabase.js";
 import { stageInfo, shouldOpen, onboardingDone } from "../lib/stages.js";
 import { jstDate } from "../lib/nippo.js";
 import { mfaState } from "../lib/mfa.js";
+import { accessOf } from "../lib/gw.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -40,6 +41,9 @@ export default async function handler(req, res) {
     memberships,
     gw,
     appRole: resolveAppRole({ isAdmin, gwRoles: gw.roles }),
+    // 採用HR（/hr）・Sales（/sales）に入れるか。サーバの canRecruit / canSell そのもの。
+    // ヘッダーの近道と /hr・/sales の入口は、これで出し分ける（lib/gw.js accessOf）
+    access: accessOf({ isAdmin, isHr: gw.isHr, roles: gw.roles }),
     // 二段階認証。要るか・登録済みか・今回の入り方で確かめたか・いつから止めるか
     mfa: mfaState({ ctx: { isAdmin, roles: gw.roles }, user, req }),
   });
