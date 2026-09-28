@@ -1,9 +1,10 @@
-// 毎日の実行管理。「明日の3件」から「今日やる3つ」まで。
+// 毎日の実行管理。「明日の重要タスク」から「今日やる3つ」まで。
 //
 // ■ 何を守るテストか
 //
-//   1. 3件そろい、項目が埋まるまで確定できない
-//   2. 確定するまで日報は書けない（書けない理由が、そのまま画面に出る）
+//   1. 1〜3件そろい、項目が埋まれば確定できる（3件ぴったりは要求しない）
+//   2. 確定していなくても、明日のタスクが0件でも、日報は必ず書ける
+//      （日報提出ハードロック修正。gate.open は常に true）
 //   3. 進み具合は「その日に決めた数」が分母。積んであるタスクの数ではない
 //   4. 明日＝次の営業日。金曜の夜に決めたら、土曜ではなく月曜ぶん
 //   5. 管理者の一覧で、止まっている人が分かる
@@ -43,9 +44,9 @@ const three = () => [task({ id: "t1" }), task({ id: "t2" }), task({ id: "t3" })]
 console.log("\n=== 毎日の実行管理 ===\n");
 console.log("— 決める —");
 
-ok("1日に決めるのは3件。上限は5件", () => {
-  assert.equal(F.MIN_FOCUS, 3);
-  assert.equal(F.MAX_FOCUS, 5);
+ok("1日に決めるのは1〜3件（日報提出ハードロック修正で3件必須をやめた）", () => {
+  assert.equal(F.MIN_FOCUS, 1);
+  assert.equal(F.MAX_FOCUS, 3);
 });
 
 ok("要るのは タスク名・目的・完了条件・担当・期限・優先度", () => {
@@ -60,11 +61,17 @@ ok("欠けている項目を、名前で返す", () => {
   assert.deepEqual(F.missingFields(task()), []);
 });
 
-ok("2件では確定できない。あと何件かを言う", () => {
-  const st = F.focusState({ day: null, tasks: [task({ id: "t1" }), task({ id: "t2" })] });
+ok("0件では確定できない。あと何件かを言う", () => {
+  const st = F.focusState({ day: null, tasks: [] });
   assert.equal(st.key, "draft");
   assert.equal(st.ready, false);
   assert.match(st.todo, /あと 1 件/);
+});
+
+ok("1件あれば、もう「あと何件」は要求しない", () => {
+  const st = F.focusState({ day: null, tasks: [task({ id: "t1" })] });
+  assert.equal(st.key, "ready");
+  assert.equal(st.ready, true);
 });
 
 ok("3件あっても、項目が欠けていれば確定できない", () => {
@@ -99,13 +106,18 @@ ok("取りやめたタスクは数えない", () => {
   assert.equal(st.count, 3);
 });
 
-console.log("— 日報の解放 —");
+console.log("— 日報の解放（もうブロックしない） —");
 
-ok("確定していなければ、日報は書けない。理由も出す", () => {
+ok("確定していなくても、日報は書ける", () => {
   const g = F.nippoGate({ day: { status: "ready" }, tasks: three(), focusDate: "2026-09-17" });
-  assert.equal(g.open, false);
+  assert.equal(g.open, true);
   assert.match(g.hint, /2026-09-17/);
-  assert.match(g.hint, /3件/);
+});
+
+ok("明日のタスクが0件でも、日報は書ける（軽い注意だけ）", () => {
+  const g = F.nippoGate({ day: null, tasks: [], focusDate: "2026-09-17" });
+  assert.equal(g.open, true);
+  assert.match(g.hint, /決まっていません/);
 });
 
 ok("確定していれば書ける", () => {
