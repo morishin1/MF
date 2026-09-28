@@ -114,3 +114,36 @@ alter table public.gw_sales_events add constraint gw_sales_events_channel_check
 --    and column_name in ('send_from', 'failed_at', 'send_failed_reason');
 -- select conname, pg_get_constraintdef(oid) from pg_constraint
 --  where conrelid = 'public.gw_sales_approaches'::regclass and conname = 'gw_sales_approaches_channel_check';
+
+-- =============================================================================
+-- ロールバック（戻すときだけ。普段は流さない）
+--
+--   ・先にアプリ（api/sales・sales/*.html）を 096 より前の版へ戻してから流す。
+--     アプリが新しいまま列を消すと、/sales の一覧・詳細が「列が無い」で開けなくなる。
+--   ・096 で入れた情報（非表示・送信チャネル・送信元・送れなかった理由・連絡先・返信元チャネル）は消える。
+--   ・channel の制約を 088 と同じ（form だけ）に戻すため、フォーム以外で送った記録は form に書き換える。
+--   ・「送信できなかった」の行（sent_at なし・failed_at あり）は、戻すと「専用URLを発行しただけ」に
+--     見えてしまうので消す（クリックされていないものだけ。markFailed はクリック済みを受け付けない）。
+-- =============================================================================
+-- begin;
+-- delete from public.gw_sales_approaches where failed_at is not null and sent_at is null and coalesce(click_count, 0) = 0;
+-- update public.gw_sales_approaches set channel = 'form' where channel <> 'form';
+-- alter table public.gw_sales_approaches
+--   drop constraint if exists gw_sales_approaches_sent_or_failed_check,
+--   drop constraint if exists gw_sales_approaches_send_failed_reason_check,
+--   drop constraint if exists gw_sales_approaches_channel_check;
+-- alter table public.gw_sales_approaches add constraint gw_sales_approaches_channel_check check (channel in ('form'));
+-- alter table public.gw_sales_approaches
+--   drop column if exists send_from, drop column if exists failed_at,
+--   drop column if exists send_failed_reason, drop column if exists send_failed_note;
+-- alter table public.gw_sales_events drop constraint if exists gw_sales_events_channel_check;
+-- alter table public.gw_sales_events drop column if exists channel;
+-- drop index if exists public.idx_gw_sales_companies_hidden;
+-- alter table public.gw_sales_companies
+--   drop constraint if exists gw_sales_companies_hidden_reason_check,
+--   drop constraint if exists gw_sales_companies_current_contact_channel_check;
+-- alter table public.gw_sales_companies
+--   drop column if exists hidden_at, drop column if exists hidden_by, drop column if exists hidden_reason,
+--   drop column if exists hidden_note, drop column if exists current_contact_channel,
+--   drop column if exists current_contact_value, drop column if exists contacts, drop column if exists last_contact_at;
+-- commit;

@@ -34,7 +34,7 @@ function company(over) {
   };
 }
 
-async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timerex = true } = {}) {
+async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
@@ -182,9 +182,17 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, timer
     if (/\/api\/sales\/approaches\b/.test(url)) {
       if (req.method() === "POST") {
         calls.push({ kind: "prepare", body: body() });
-        // 直近アタックの警告は同じチャネル（ここではフォーム）だけ。別チャネルなら準備できる
-        if (recent && !body().force && (body().channel || "form") === "form") {
-          return send({ error: "recent_attack", recent, canForce: isAdmin, hint: "直近30日以内にお問い合わせフォームでアタックされています" }, 409);
+        // 本物と同じ：直近に送ったチャネルと同じなら recent_attack（押し切りは管理者の force だけ）。
+        // 別チャネルなら「別チャネルで送る」（acknowledgeRecent）を選ぶまで recent_other_channel
+        const b = body();
+        const last = recent || recentOther;
+        const ch = b.channel || "form";
+        if (last && !b.force && ch === last.channel) {
+          return send({ error: "recent_attack", recent: last, canForce: isAdmin,
+            hint: `直近30日以内に${last.channelLabel}でアタックされています` }, 409);
+        }
+        if (last && !b.force && !b.acknowledgeRecent) {
+          return send({ error: "recent_other_channel", recent: last, hint: `3日前に${last.channelLabel}から送信済みです` }, 409);
         }
         return send({ approach: { id: "ap1", trackingToken: "X7K92PABCD", sentAt: null },
           trackingUrl: "https://gw.8grp.co.jp/r/X7K92PABCD" });
@@ -277,7 +285,8 @@ console.log("\n=== 直近30日以内：警告して送らせない ===");
   const { page, errs } = await openAs({ recent });
   await page.goto(`${BASE}/sales/companies.html?id=c1`);
   await page.waitForTimeout(1000);
-  check((await page.locator(".sl-detail").innerText()).includes("営業 二郎さんがアタック済み"), "企業ページに「〇〇さんがアタック済み」");
+  check((await page.locator(".sl-detail").innerText()).includes("営業 二郎さんがお問い合わせフォームから送信済みです"),
+    "企業ページに「〇〇さんが〇〇から送信済みです」");
 
   await page.goto(`${BASE}/sales/companies.html?attack=c1`);
   await page.waitForTimeout(1000);
@@ -289,9 +298,11 @@ console.log("\n=== 直近30日以内：警告して送らせない ===");
   // 別のチャネル（Instagram など）なら送れる
   check(!(await page.locator('#at-other-channel option[value="form"]').count()), "別チャネルの候補に、止められたチャネルは出さない");
   await page.locator("#at-other-channel").selectOption("instagram");
-  await page.locator("button", { hasText: "別のチャネルで送る" }).click();
+  await page.locator("button", { hasText: "別チャネルで送る" }).click();
   await page.locator("#at-body").waitFor();
   check((await page.locator("#at-channel").inputValue()) === "instagram", "別チャネル（Instagram）の営業文画面に進める");
+  check((await page.locator("#at-recent-banner").innerText()).includes("お問い合わせフォームから送信済みです"),
+    "営業文画面にも直近の接触を出したまま");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 
@@ -707,6 +718,34 @@ console.log("\n=== 送信チャネル：Instagram・送信元つきで送信完�
   await page.locator("button", { hasText: "送信完了" }).click();
   await page.locator(".sl-modal").waitFor();
   check((await page.locator("#sd-from").inputValue()) === "@eight_xxx", "送信元は前回の値が入る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 別チャネルで直近に送信済み：警告 → 「別チャネルで送る」で進める ===");
+{
+  const threeDays = new Date(Date.now() - 3 * 86400000).toISOString();
+  const recentOther = { sentAt: threeDays, employeeName: "営業 二郎", service: "AI / DX", days: 30,
+    channel: "instagram", channelLabel: "Instagram" };
+  const { page, calls, errs } = await openAs({ recentOther });
+  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
+  await page.locator("#at-recent-other").waitFor();
+  check((await page.locator("#at-recent-other").innerText()).includes("3日前にInstagramから送信済みです"),
+    "「3日前にInstagramから送信済みです」と会社単位の直近接触を出す");
+  check(!(await page.locator("#at-body").count()), "確認するまでは営業文を出さない（無自覚に送らせない）");
+  check(!(await page.locator('#at-other-channel option[value="instagram"]').count()), "直近に送ったチャネルは候補に出さない");
+  await page.locator("#at-other-channel").selectOption("x");
+  await page.locator("button", { hasText: "別チャネルで送る" }).click();
+  await page.locator("#at-body").waitFor();
+  const prep = calls.filter((c) => c.kind === "prepare").at(-1);
+  check(prep?.body.channel === "x" && prep?.body.acknowledgeRecent === true, "X・確認済みで専用URLを準備する");
+  check((await page.locator("#at-recent-banner").innerText()).includes("別チャネル（X）で送ります"), "営業文画面に確認の帯が残る");
+  await page.locator("button", { hasText: "送信完了" }).click();
+  await page.locator(".sl-modal").waitFor();
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.waitForTimeout(800);
+  const sent = calls.find((c) => c.kind === "act");
+  check(sent?.body.channel === "x" && sent?.body.acknowledgeRecent === true, "送信完了にも確認済みを付けて送る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }

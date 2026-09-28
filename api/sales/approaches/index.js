@@ -1,9 +1,9 @@
 // GET   /api/sales/approaches[?days=90]
 //         … 送信済みのアタック一覧（アタック画面の履歴・分析・テンプレート比較の元）
-// POST  /api/sales/approaches { companyId, channel?, templateId?, campaignId?, destinationUrl?, force? }
+// POST  /api/sales/approaches { companyId, channel?, templateId?, campaignId?, destinationUrl?, force?, acknowledgeRecent? }
 //         … アタックを始める。専用URL（/r/<token>）を発行して返す。
 //           営業文に専用URLを入れてから送るので、送る前に発行しておく必要がある
-// PATCH /api/sales/approaches { id, action: "sent", channel, sendFrom?, body, subject?, service?, templateId?, campaignId?, force? }
+// PATCH /api/sales/approaches { id, action: "sent", channel, sendFrom?, body, subject?, service?, templateId?, campaignId?, force?, acknowledgeRecent? }
 //         … 「送信完了」。ここではじめて履歴として残る（sent_at が立つ）。送信チャネルは必須
 // PATCH /api/sales/approaches { id, action: "failed", reason, note?, channel? }
 //         … 「送信できなかった」。理由は必須（「その他」はメモも必須）。failed_at が立つ（db/096）
@@ -13,8 +13,10 @@
 // ■ 送ってはいけない会社を、サーバで止める（画面の警告だけに頼らない）
 //   ・営業禁止（NG）の会社 … 誰であっても 403
 //   ・非表示の会社 … 409（一覧・アタック対象から外したもの。再表示してから送る）
-//   ・同じチャネルで直近30日以内に送信済み … 409。管理者・経営者だけ force で押し切れる（要件 §20）
-//     別のチャネル（フォーム → Instagram など）で送るのは止めない（複数チャネル対応）
+//   ・同じチャネルで直近30日以内に送信済み … 409 recent_attack。管理者・経営者だけ force で押し切れる（要件 §20）
+//   ・別のチャネルで直近30日以内に送信済み … 409 recent_other_channel（「3日前にInstagramから送信済みです」）。
+//     画面で直近の接触を見せ、「別チャネルで送る」を選んだとき（acknowledgeRecent）だけ通す。
+//     Instagram で反応が無いので X へ切り替える運用はできるが、同じ会社へ気づかずに多重送信はさせない
 //
 // ■ 送信できなかった
 //   sent_at は立てない。だからアタック数・直近30日の警告には数えず、別チャネルで送り直せる。
@@ -27,7 +29,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, shapeApproach, newTrackingToken, recentApproach, statusRank, safeUrl, isUuid,
-  NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst,
+  NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst, agoText,
   SEND_CHANNEL_KEYS, SEND_FAIL_KEYS, SEND_FAIL_LABEL, NEXT_AFTER_FAIL, HIDE_LABEL, channelLabel,
 } from "../../../lib/sales.js";
 
@@ -111,8 +113,8 @@ async function templateDestination(sb, ctx, templateId) {
   return safeUrl(t?.destination_url) || undefined;
 }
 
-/** NG・非表示・直近アタック（同じチャネル）を確かめる。止めるなら { status, body } を返す */
-async function guard(sb, ctx, company, { force, exceptId, channel = "form" } = {}) {
+/** NG・非表示・直近アタック（同じチャネル／別チャネル）を確かめる。止めるなら { status, body } を返す */
+async function guard(sb, ctx, company, { force, exceptId, channel = "form", acknowledgeRecent = false } = {}) {
   if (company.ng_reason) {
     return { status: 403, body: {
       error: "ng_company", hint: `この企業は営業禁止です（${NG_LABEL[company.ng_reason] || company.ng_reason}）`,
@@ -127,19 +129,30 @@ async function guard(sb, ctx, company, { force, exceptId, channel = "form" } = {
   const { data: past } = await sb.from("gw_sales_approaches").select("id, employee_id, service, sent_at, channel")
     .eq("company_id", company.id).gte("sent_at", new Date(Date.now() - RECENT_DAYS * 86400000).toISOString())
     .limit(50);
-  const recent = recentApproach((past || []).filter((a) => a.id !== exceptId), new Date(), RECENT_DAYS, channel);
-  if (!recent) return null;
+  const others = (past || []).filter((a) => a.id !== exceptId);
+  const recent = recentApproach(others, new Date(), RECENT_DAYS, channel);
+  const describe = async (a) => {
+    let employeeName = null;
+    if (a.employee_id) {
+      const { data: e } = await sb.from("gw_employees").select("display_name").eq("id", a.employee_id).maybeSingle();
+      employeeName = e?.display_name || null;
+    }
+    return {
+      sentAt: a.sent_at, employeeName, service: a.service || null, days: RECENT_DAYS,
+      channel: a.channel || "form", channelLabel: channelLabel(a.channel || "form"),
+    };
+  };
+  if (!recent) {
+    // 同じチャネルでは送っていない。別チャネルの直近接触があれば、それを見せて確認させる
+    const any = recentApproach(others, new Date(), RECENT_DAYS);
+    if (!any || acknowledgeRecent || (force && canForceAttack(ctx))) return null;
+    const payload = await describe(any);
+    return { status: 409, body: { error: "recent_other_channel", recent: payload,
+      hint: `${agoText(any.sent_at)}に${payload.channelLabel}から送信済みです` } };
+  }
   if (force && canForceAttack(ctx)) return null;
 
-  let employeeName = null;
-  if (recent.employee_id) {
-    const { data: e } = await sb.from("gw_employees").select("display_name").eq("id", recent.employee_id).maybeSingle();
-    employeeName = e?.display_name || null;
-  }
-  const payload = {
-    sentAt: recent.sent_at, employeeName, service: recent.service || null, days: RECENT_DAYS,
-    channel: recent.channel || "form", channelLabel: channelLabel(recent.channel || "form"),
-  };
+  const payload = await describe(recent);
   if (force) {
     return { status: 403, body: { error: "force_forbidden", recent: payload,
       hint: "直近のアタックを押し切れるのは管理者・経営者だけです" } };
@@ -163,7 +176,7 @@ async function prepare(req, res, sb, ctx, user) {
   }
   if (!c) return json(res, 404, { error: "not_found" });
 
-  const stop = await guard(sb, ctx, c, { force: Boolean(body.force), channel });
+  const stop = await guard(sb, ctx, c, { force: Boolean(body.force), channel, acknowledgeRecent: Boolean(body.acknowledgeRecent) });
   if (stop) return json(res, stop.status, stop.body);
 
   let dest = safeUrl(body.destinationUrl);
@@ -249,7 +262,9 @@ async function act(req, res, sb, ctx, user) {
     .eq("id", a.company_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!c) return json(res, 404, { error: "company_not_found" });
 
-  const stop = await guard(sb, ctx, c, { force: Boolean(body.force), exceptId: a.id, channel });
+  const stop = await guard(sb, ctx, c, {
+    force: Boolean(body.force), exceptId: a.id, channel, acknowledgeRecent: Boolean(body.acknowledgeRecent),
+  });
   if (stop) return json(res, stop.status, stop.body);
 
   const now = new Date().toISOString();

@@ -93,8 +93,8 @@
 <div id="attack-root"></div>
 
 <script src="../js/api-client.js?v=20260928ch1"></script>
-<script src="../js/layout.js?v=20260928ch1"></script>
-<script src="../js/sales-layout.js?v=20260928ch1"></script>
+<script src="../js/layout.js?v=20260928h"></script>
+<script src="../js/sales-layout.js?v=20260928h"></script>
 <script>
   const el = (id) => document.getElementById(id);
   // 企業詳細の取得は、あとから開いたものだけを画面に出す。
@@ -783,7 +783,7 @@
   }
 
   function recentLine(r) {
-    return `${esc(ago(r.sentAt))}に${r.employeeName ? `${esc(r.employeeName)}さんが` : ""}アタック済み`
+    return `${esc(ago(r.sentAt))}に${r.employeeName ? `${esc(r.employeeName)}さんが` : ""}${esc(r.channelLabel || "お問い合わせフォーム")}から送信済みです`
       + `（${esc(fmt(r.sentAt))}${r.service ? `・${esc(r.service)}` : ""}）`;
   }
 
@@ -1372,13 +1372,14 @@ ${url}
   //    送れなかったときは「送信できなかった」（理由必須）。別チャネルで送り直せる
   //
   // 同じチャネルで直近30日以内のアタック・営業禁止・非表示は、サーバが止める（ここでは理由を見せるだけ）。
-  // 別のチャネル（フォーム → Instagram など）なら送れる
+  // 別のチャネルで直近30日以内に送っているときも、いったん止めて「3日前にInstagramから送信済みです」を見せる。
+  // 「別チャネルで送る」を選んだときだけ進める（同じ会社へ気づかずに多重送信しないため）
   const DEFAULT_TEMPLATE = {
     id: "", name: "標準（テンプレート未登録）", service: "", subject: "",
     body: `{{company}}\nご担当者様\n\n突然のご連絡失礼いたします。\n\n株式会社エイトの{{sender}}と申します。\n\n貴社Webサイトを拝見し、\n{{service}}についてご支援できる可能性があると考え、\nご連絡いたしました。\n\n詳細はこちら\n{{url}}\n\nよろしくお願いいたします。`,
     destinationUrl: "",
   };
-  let atk = null;   // { company, detail, templates, campaigns, approach, url, force, channel }
+  let atk = null;   // { company, detail, templates, campaigns, approach, url, force, channel, ackRecent, recentOther }
   // 送信チャネル（lib/sales.js SEND_CHANNELS と同じ。企業詳細の応答に無いときの予備）
   const SEND_CHANNELS = [
     ["form", "お問い合わせフォーム"], ["email", "メール"], ["line", "LINE"], ["instagram", "Instagram"], ["x", "X"],
@@ -1402,7 +1403,8 @@ ${url}
       detail = d;
       const templates = (t.templates || []).filter((x) => !x.archived);
       atk = { company: d.company, detail: d, templates: templates.length ? templates : [DEFAULT_TEMPLATE],
-        campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force), channel: "form" };
+        campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force), channel: "form",
+        ackRecent: false, recentOther: null };
       // 企業の商材と同じサービスのテンプレートを先に選ぶ
       atk.template = atk.templates.find((x) => x.service && x.service === d.company.service) || atk.templates[0];
 
@@ -1420,7 +1422,7 @@ ${url}
         companyId: atk.company.id, templateId: atk.template.id || undefined,
         campaignId: atk.company.campaignId || undefined,
         destinationUrl: atk.template.destinationUrl || undefined, force: atk.force || undefined,
-        channel: atk.channel,
+        channel: atk.channel, acknowledgeRecent: atk.ackRecent || undefined,
       });
       atk.approach = r.approach;
       atk.url = r.trackingUrl;
@@ -1428,6 +1430,7 @@ ${url}
     } catch (e) {
       const body = e.body || e;
       if (body.error === "recent_attack" || body.error === "force_forbidden") return renderAttackRecent(body.recent, body.canForce ?? canForce);
+      if (body.error === "recent_other_channel") return renderAttackOther(body.recent);
       renderAttackBlocked(errText(e, "専用URLを発行できませんでした"));
     }
   }
@@ -1454,6 +1457,7 @@ ${url}
   }
 
   function renderAttackRecent(r, allowForce) {
+    atk.recentOther = r || null;
     el("attack-root").innerHTML = `<div class="atk">${attackHead(`フォームアタック：${atk.company.name}`)}
       <div style="max-width:640px;margin:30px auto;padding:0 20px;">
         <div class="sl-warn sl-caution" style="display:block;">
@@ -1462,19 +1466,42 @@ ${url}
           <div>担当：${esc(r?.employeeName || "不明")}</div>
           <div>サービス：${esc(r?.service || "—")}</div>
         </div>
-        <p class="sl-muted">同じ会社に同じチャネルで短期間に何度も営業しないため、アタックできません。</p>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;">
-          <select id="at-other-channel" aria-label="別のチャネル">${sendChannels().filter((c) => c.key !== atk.channel).map((c) =>
-            `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join("")}</select>
-          <button class="btn btn-primary" onclick="switchChannel(el('at-other-channel').value)">別のチャネルで送る</button>
-        </div>
+        <p class="sl-muted">同じ会社に同じチャネルで短期間に何度も営業しないため、このチャネルではアタックできません。</p>
+        ${otherChannelPicker(r || { channel: atk.channel })}
         ${allowForce ? `<button class="btn btn-secondary" onclick="forceAttack()">それでもアタックする（管理者）</button>`
           : `<p class="sl-muted">どうしても必要な場合は、管理者に依頼してください。</p>`}
       </div></div>`;
   }
 
+  // 直近の接触（どのチャネルで・いつ・誰が）を見たうえで、別のチャネルで送る
+  const recentText = (r) => `${esc(ago(r.sentAt))}に${esc(r.channelLabel || "")}から送信済みです`;
+  const recentMeta = (r) => `（${esc(r.sentAt ? new Date(r.sentAt).toLocaleDateString("ja-JP") : "")}・担当 ${esc(r.employeeName || "不明")}${r.service ? `・${esc(r.service)}` : ""}）`;
+  function otherChannelPicker(r) {
+    const opts = sendChannels().filter((c) => c.key !== r.channel);
+    const pick = opts.some((c) => c.key === atk.channel) ? atk.channel : opts[0]?.key;
+    return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;">
+      <select id="at-other-channel" aria-label="別のチャネル">${opts.map((c) =>
+        `<option value="${esc(c.key)}" ${c.key === pick ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>
+      <button class="btn btn-primary" onclick="switchChannel(el('at-other-channel').value)">別チャネルで送る</button>
+    </div>`;
+  }
+  function renderAttackOther(r) {
+    atk.recentOther = r;
+    el("attack-root").innerHTML = `<div class="atk">${attackHead(`フォームアタック：${atk.company.name}`)}
+      <div style="max-width:640px;margin:30px auto;padding:0 20px;">
+        <div class="sl-warn sl-caution" style="display:block;" id="at-recent-other">
+          <div style="font-weight:700;margin-bottom:6px;">⚠️ ${recentText(r)}</div>
+          <div class="sl-muted">${recentMeta(r)}</div>
+        </div>
+        <p class="sl-muted">この会社には直近${esc(r.days || 30)}日以内に別のチャネルで送っています。
+          反応が無いので別のチャネルに切り替える場合は、チャネルを選んで「別チャネルで送る」を押してください。
+          ${esc(r.channelLabel || "")}では直近${esc(r.days || 30)}日以内は送れません。</p>
+        ${otherChannelPicker(r)}
+      </div></div>`;
+  }
   function switchChannel(ch) {
     atk.channel = ch;
+    atk.ackRecent = true;   // 直近の接触を見て、別チャネルを選んだ
     prepareAttack();
   }
 
@@ -1503,6 +1530,8 @@ ${url}
         <div class="atk-col">
           <h3>企業情報</h3>
           ${atk.force ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span><div>直近のアタックを押し切って送ります（管理者）。</div></div>` : ""}
+          ${atk.ackRecent && atk.recentOther ? `<div class="sl-warn sl-caution" id="at-recent-banner"><span class="material-symbols-outlined">warning</span>
+            <div>${recentText(atk.recentOther)}。別チャネル（${esc(channelName(atk.channel))}）で送ります。</div></div>` : ""}
           <dl class="sl-grid2" style="margin-bottom:10px;">
             <div><dt>企業名</dt><dd>${esc(c.name)}</dd></div>
             <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
@@ -1623,7 +1652,7 @@ ${url}
         body: el("at-body").value.trim(), subject: el("at-subject")?.value.trim() || undefined,
         service: el("at-service").value.trim() || null,
         templateId: atk.template.id || null, campaignId: el("at-campaign").value || null,
-        force: atk.force || undefined,
+        force: atk.force || undefined, acknowledgeRecent: atk.ackRecent || undefined,
       }));
       rememberFrom(channel, sendFrom);
       closeAction();

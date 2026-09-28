@@ -1073,25 +1073,50 @@ await ok("送信完了：送信チャネルは必須。Instagram と送信元が
   assert.equal(l.attackCount, 1);
 });
 
-await ok("複数チャネル：同じチャネルは30日以内なら止める。別チャネル（X）なら送れる", async () => {
+await ok("複数チャネル：同じチャネルは30日以内なら止める。別チャネルは直近の接触を見せ、「別チャネルで送る」を選べば送れる", async () => {
   setup();
   const c = await newCompany();
   await sendAttack(c.id, { channel: "instagram" });
-  db.rows.gw_sales_approaches[0].sent_at = new Date(Date.now() - 3600000).toISOString();
+  db.rows.gw_sales_approaches[0].sent_at = new Date(Date.now() - 3 * 86400000).toISOString();
   who = SALES2;
   const same = await prepare({ companyId: c.id, channel: "instagram" });
   assert.equal(same.statusCode, 409);
+  assert.equal(same.body.error, "recent_attack");
   assert.equal(same.body.recent.channel, "instagram");
   assert.match(same.body.hint, /Instagram/);
-  const x = await prepare({ companyId: c.id, channel: "x" });
+  // 同じチャネルは、「別チャネルで送る」を選んでも通さない（押し切りは管理者の force だけ）
+  assert.equal((await prepare({ companyId: c.id, channel: "instagram", acknowledgeRecent: true })).statusCode, 409);
+
+  // 別チャネル：無警告にはしない。会社単位の直近接触を返して止める
+  const x0 = await prepare({ companyId: c.id, channel: "x" });
+  assert.equal(x0.statusCode, 409);
+  assert.equal(x0.body.error, "recent_other_channel");
+  assert.equal(x0.body.hint, "3日前にInstagramから送信済みです");
+  assert.equal(x0.body.recent.employeeName, "営業 一郎");
+  assert.equal(db.rows.gw_sales_approaches.length, 1, "確認するまで専用URLも発行しない");
+
+  const x = await prepare({ companyId: c.id, channel: "x", acknowledgeRecent: true });
   assert.equal(x.statusCode, 200, JSON.stringify(x.body));
-  // 準備だけ X にして、送信完了で Instagram に変えても止める（サーバが最後に確かめる）
-  const sneaky = await act({ id: x.body.approach.id, action: "sent", channel: "instagram", body: "営業文" });
+  // 送信完了の時点でもサーバが確かめ直す：確認なし → 409、同じチャネルへすり替え → 409
+  assert.equal((await act({ id: x.body.approach.id, action: "sent", channel: "x", body: "営業文" })).statusCode, 409);
+  const sneaky = await act({ id: x.body.approach.id, action: "sent", channel: "instagram", body: "営業文", acknowledgeRecent: true });
   assert.equal(sneaky.statusCode, 409);
-  const ok2 = await act({ id: x.body.approach.id, action: "sent", channel: "x", body: "営業文" });
+  assert.equal(sneaky.body.error, "recent_attack");
+  const ok2 = await act({ id: x.body.approach.id, action: "sent", channel: "x", body: "営業文", acknowledgeRecent: true });
   assert.equal(ok2.statusCode, 200);
   const labels = (await getOne(c.id)).body.timeline.filter((t) => t.kind === "attack").map((t) => t.label);
   assert.deepEqual(labels, ["Instagramから送信", "Xから送信"]);
+});
+
+await ok("別チャネルの確認：管理者の押し切り（force）でも通る。31日前なら確認なしで送れる", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id, { channel: "instagram" });
+  who = ADMIN;
+  assert.equal((await prepare({ companyId: c.id, channel: "x", force: true })).statusCode, 200);
+  ageApproaches(31);
+  who = SALES;
+  assert.equal((await prepare({ companyId: c.id, channel: "email" })).statusCode, 200);
 });
 
 await ok("送信できなかった：理由は必須・「その他」はメモ必須。ステータスは動かず、NEXTは別チャネル検討", async () => {

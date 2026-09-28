@@ -12,6 +12,11 @@
 //
 //   1. api-client.js・layout.js・layout.css は、読んでいる全画面で版が1つ
 //      （同じ共有ファイルを、画面ごとに別の版で読まない）
+//      例外：api-client.js だけは、/sales の画面が先に新しい版へ進んでよい（最大2つ：/sales とそれ以外）。
+//        Sales の変更で api-client.js に関数を足したとき、Sales と関係のない画面の ?v= まで
+//        書き換えないため（PR の差分を Sales に閉じる）。足すだけの変更なので、古い版を
+//        キャッシュしている Sales 以外の画面は、いままでの関数だけを使い続けて問題ない。
+//        それでも /sales の中・/sales 以外の中では、それぞれ版は1つ。
 //   2. 前の版（20260916m）で読んでいる画面が残っていない
 //      （評価・キャリア・印鑑でこの3つの中身を変えたため、版を上げた）
 //   3. 画面が呼ぶ API.xxx が api-client.js に実在する
@@ -52,7 +57,14 @@ for (const [file, re] of SHARED) {
   const set = new Set(vers.map(([, v]) => v));
   check(vers.length > 0, `${file} を ?v= 付きで読んでいる画面がある（${vers.length}画面）`);
   const byVer = [...set].map((v) => `${v}: ${vers.filter(([, x]) => x === v).length}画面`).join(" / ");
-  check(set.size === 1, `${file} の版は1つ（いま ${byVer}）`);
+  if (file === "api-client.js") {
+    const inSales = (p) => p.startsWith("sales/");
+    const sales = new Set(vers.filter(([p]) => inSales(p)).map(([, v]) => v));
+    const rest = new Set(vers.filter(([p]) => !inSales(p)).map(([, v]) => v));
+    check(sales.size <= 1 && rest.size === 1, `${file} の版は /sales で1つ・それ以外で1つ（いま ${byVer}）`);
+  } else {
+    check(set.size === 1, `${file} の版は1つ（いま ${byVer}）`);
+  }
   const old = vers.filter(([, v]) => v === "20260916m").map(([p]) => p);
   check(!old.length, `${file} を前の版 20260916m で読んでいる画面が無い${old.length ? `（${old.join(", ")}）` : ""}`);
 }
