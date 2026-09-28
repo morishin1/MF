@@ -426,6 +426,34 @@
 
   // ---- 営業アタック管理（/sales） ----
   // visibility: "shown"（既定・表示中だけ）／"hidden"（非表示だけ）／"all"
+  // 企業一覧（サーバー側ページング。100件ずつ）。params は page・sort・order・q・status・owner・
+  // service・industry・region・channel・visibility・facets。空の値は送らない
+  const qs = (params) => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries(params || {})) if (v !== undefined && v !== null && v !== "") u.set(k, v);
+    const s = u.toString();
+    return s ? `?${s}` : "";
+  };
+  const listSalesCompanyPage = (params) => api(`/api/sales/companies${qs({ page: 1, ...params })}`);
+  // CSV（サーバーで条件を実行し直して作る）。ids があればその企業だけ。{ blob, filename } を返す
+  async function exportSalesCompanies(params, ids) {
+    const token = await getToken();
+    if (!token) throw new Error("未ログインです");
+    const r = await fetch(`/api/sales/companies/export${ids ? "" : qs(params)}`, {
+      method: ids ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${token}`, ...(ids ? { "Content-Type": "application/json" } : {}) },
+      body: ids ? JSON.stringify({ ids, sort: params?.sort, order: params?.order }) : undefined,
+    });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      const err = new Error(data.hint || data.message || data.error || `APIエラー (${r.status})`);
+      err.status = r.status; err.code = data.error || null; err.hint = data.hint || data.message || null; err.body = data;
+      throw err;
+    }
+    const cd = r.headers.get("Content-Disposition") || "";
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/) || cd.match(/filename="([^"]+)"/);
+    return { blob: await r.blob(), filename: m ? decodeURIComponent(m[1]) : "sales_companies.csv" };
+  }
   const listSalesCompanies = (visibility) =>
     api(`/api/sales/companies${visibility && visibility !== "shown" ? `?visibility=${encodeURIComponent(visibility)}` : ""}`);
   const createSalesCompany = (body) => api("/api/sales/companies", { method: "POST", body });
@@ -1413,7 +1441,7 @@
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
     getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
-    listSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
+    listSalesCompanies, listSalesCompanyPage, exportSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,

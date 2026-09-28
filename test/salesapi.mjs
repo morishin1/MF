@@ -31,8 +31,47 @@ const uuid = () => {
 };
 const copy = (r) => (r ? { ...r } : null);
 
+// 実行したクエリの記録（一覧が「100社ぶんだけ」取っているかを確かめる）
+const qlog = [];
+
+// DB のトリガー（db/097 gw_sales_approaches_rollup）と同じ：アタックが変わったら会社の写しを取り直す
+function rollup(companyId) {
+  const c = (db.rows.gw_sales_companies || []).find((x) => x.id === companyId);
+  if (!c) return;
+  const mine = (db.rows.gw_sales_approaches || []).filter((a) => a.company_id === companyId);
+  const sent = mine.map((a) => a.sent_at).filter(Boolean).sort();
+  c.last_sent_at = sent.length ? sent[sent.length - 1] : null;
+  c.click_count = mine.reduce((n, a) => n + (a.click_count || 0), 0);
+}
+function afterWrite(name, rows) {
+  if (name === "gw_sales_approaches") for (const id of new Set(rows.map((r) => r.company_id))) rollup(id);
+}
+// view gw_sales_company_facets（db/097）と同じ集計
+function facetRows() {
+  const out = new Map();
+  for (const c of db.rows.gw_sales_companies || []) {
+    for (const kind of ["industry", "region", "service"]) {
+      if (!c[kind]) continue;
+      const key = `${c.tenant_id}|${kind}|${c[kind]}`;
+      const cur = out.get(key) || { tenant_id: c.tenant_id, kind, value: c[kind], n: 0 };
+      cur.n++;
+      out.set(key, cur);
+    }
+  }
+  return [...out.values()];
+}
+
 function matcher(f) {
   return (r) => f.every(([op, k, v]) => {
+    if (op === "or") {
+      // name.ilike.%x%,domain.ilike.%x% の形だけ
+      return v.split(",").some((part) => {
+        const [col, , pat] = part.split(".");
+        const needle = pat.replace(/%/g, "").toLowerCase();
+        return String(r[col] ?? "").toLowerCase().includes(needle);
+      });
+    }
+    if (op === "gt") return r[k] !== null && r[k] !== undefined && r[k] > v;
     if (op === "eq") return r[k] === v;
     if (op === "in") return v.includes(r[k]);
     if (op === "is") return (r[k] ?? null) === v;
@@ -44,27 +83,53 @@ function matcher(f) {
 
 function table(name) {
   const f = [];
-  let order = null;
+  const orders = [];
+  let range = null;
+  let withCount = false;
+  let head = false;
   const rows = () => {
-    let out = (db.rows[name] || []).filter(matcher(f));
-    if (order) {
-      const [col, asc] = order;
-      out = [...out].sort((a, b) => ((a[col] ?? "") < (b[col] ?? "") ? (asc ? -1 : 1) : (asc ? 1 : -1)));
+    const src = name === "gw_sales_company_facets" ? facetRows() : (db.rows[name] || []);
+    let out = src.filter(matcher(f));
+    if (orders.length) {
+      // PostgREST と同じ：空の値は nullsFirst=false なら昇順・降順とも最後
+      const cmp = (a, b) => {
+        for (const [col, asc, nullsFirst] of orders) {
+          const x = a[col] ?? null, y = b[col] ?? null;
+          if (x === y) continue;
+          if (x === null) return nullsFirst ? -1 : 1;
+          if (y === null) return nullsFirst ? 1 : -1;
+          return (x < y ? -1 : 1) * (asc ? 1 : -1);
+        }
+        return 0;
+      };
+      out = [...out].sort(cmp);
     }
     return out;
   };
+  const result = () => {
+    qlog.push({ name, f: f.map((x) => [...x]), range });
+    const all = rows();
+    if (range && all.length && range[0] >= all.length) {
+      return { data: null, count: null, error: { code: "PGRST103", message: "Requested range not satisfiable" } };
+    }
+    const data = range ? all.slice(range[0], range[1] + 1) : all;
+    return { data: head ? null : data.map(copy), count: withCount ? all.length : null, error: null };
+  };
   const q = {
-    select() { return q; },
+    select(_cols, opts) { withCount = Boolean(opts?.count); head = Boolean(opts?.head); return q; },
+    or(expr) { f.push(["or", null, expr]); return q; },
+    gt(k, v) { f.push(["gt", k, v]); return q; },
+    range(a, b) { range = [a, b]; return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
     is(k, v) { f.push(["is", k, v]); return q; },
     not(k) { f.push(["notnull", k]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
-    order(col, opts) { order = [col, opts?.ascending !== false]; return q; },
+    order(col, opts) { orders.push([col, opts?.ascending !== false, opts?.nullsFirst ?? (opts?.ascending === false)]); return q; },
     limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     single: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
-    then: (fn) => Promise.resolve({ data: rows().map(copy), error: null }).then(fn),
+    then: (fn) => Promise.resolve(result()).then(fn),
     insert(row) {
       const made = [].concat(row).map((r) => ({
         id: r.id || uuid(), created_at: new Date().toISOString(),
@@ -73,6 +138,7 @@ function table(name) {
         ...r,
       }));
       (db.rows[name] = db.rows[name] || []).push(...made);
+      afterWrite(name, made);
       const r2 = {
         select: () => r2,
         single: () => Promise.resolve({ data: copy(made[0]), error: null }),
@@ -94,6 +160,7 @@ function table(name) {
       function apply(opts) {
         const hit = (db.rows[name] || []).filter(matcher(g));
         for (const x of hit) Object.assign(x, patch);
+        afterWrite(name, hit);
         return Promise.resolve(opts?.asList ? { data: hit.map(copy), error: null } : { data: copy(hit[0]) || null, error: null });
       }
       return r2;
@@ -109,6 +176,7 @@ function table(name) {
           const m = matcher(g);
           const gone = (db.rows[name] || []).filter(m);
           db.rows[name] = (db.rows[name] || []).filter((x) => !m(x));
+          afterWrite(name, gone);
           return Promise.resolve({ data: want ? gone.map(copy) : null, error: null }).then(fn);
         },
       };
@@ -170,6 +238,7 @@ const { default: redirect } = await import(atRoot("api/sales/r.js"));
 const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
+const { default: exportApi } = await import(atRoot("api/sales/companies/export.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -1234,6 +1303,189 @@ await ok("返信・やり取り：NEXTを決めなければ、返信は「返信
   assert.ok(r.body.company.nextActionOn >= todayJst());
   const ev = db.rows.gw_sales_events.find((e) => e.company_id === c.id);
   assert.equal(ev.label, "先方返信：お問い合わせフォーム経由");
+});
+
+console.log("\n=== 企業一覧：サーバー側ページング・絞り込み・並べ替え（db/097） ===\n");
+
+const pageOf = (params) => call(companies, { method: "GET", url: `/api/sales/companies?${new URLSearchParams(params)}` });
+const exportGet = (params) => call(exportApi, { method: "GET", url: `/api/sales/companies/export?${new URLSearchParams(params)}` });
+const exportPost = (body) => call(exportApi, { method: "POST", url: "/api/sales/companies/export", body });
+async function seed(n) {
+  const rows = [];
+  for (let i = 1; i <= n; i++) {
+    rows.push({ name: `会社${String(i).padStart(3, "0")}`, siteUrl: `https://c${i}.example.jp/`,
+      industry: ["IT", "製造", "医療"][i % 3], region: ["東京都", "大阪府"][i % 2], service: "AI / DX" });
+  }
+  const r = await create({ companies: rows });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  // 登録日時をずらす（既定の並び＝登録の新しい順を確かめるため）
+  db.rows.gw_sales_companies.forEach((c, i) => { c.created_at = new Date(Date.UTC(2026, 0, 1) + i * 60000).toISOString(); });
+}
+
+await ok("ページング：1ページ100社。2・3ページ目は残り。重複・欠落なし。total・totalPages が正しい", async () => {
+  setup();
+  await seed(205);
+  const p1 = await pageOf({ page: 1 });
+  assert.equal(p1.statusCode, 200, JSON.stringify(p1.body));
+  assert.equal(p1.body.companies.length, 100);
+  assert.equal(p1.body.total, 205);
+  assert.equal(p1.body.totalPages, 3);
+  assert.equal(p1.body.limit, 100);
+  const p2 = await pageOf({ page: 2 });
+  const p3 = await pageOf({ page: 3 });
+  assert.equal(p2.body.companies.length, 100);
+  assert.equal(p3.body.companies.length, 5);
+  const ids = [...p1.body.companies, ...p2.body.companies, ...p3.body.companies].map((c) => c.id);
+  assert.equal(new Set(ids).size, 205, "ページ間で重複・欠落しない");
+  // 既定は登録の新しい順
+  assert.equal(p1.body.companies[0].name, "会社205");
+  // limit は100より大きくできない
+  assert.equal((await pageOf({ page: 1, limit: 500 })).body.companies.length, 100);
+  // 範囲外のページは最後のページを返す
+  const p9 = await pageOf({ page: 9 });
+  assert.equal(p9.body.page, 3);
+  assert.equal(p9.body.companies.length, 5);
+});
+
+await ok("ページング：DBから100社だけ取り、関連データ（アタック・面談）もその100社ぶんだけ取る", async () => {
+  setup();
+  await seed(150);
+  qlog.length = 0;
+  await pageOf({ page: 1 });
+  const co = qlog.filter((q) => q.name === "gw_sales_companies");
+  assert.ok(co.length && co.every((q) => q.range && q.range[1] - q.range[0] + 1 <= 100), "企業は range で100件に切っている");
+  for (const t of ["gw_sales_approaches", "gw_sales_meetings"]) {
+    const qs = qlog.filter((q) => q.name === t);
+    assert.ok(qs.length, `${t} を取っている`);
+    for (const q of qs) {
+      const inIds = q.f.find(([op, k]) => op === "in" && k === "company_id");
+      assert.ok(inIds && inIds[2].length <= 100, `${t} は company_id in (最大100社) でしか取らない`);
+    }
+  }
+  const body = (await pageOf({ page: 1 })).body.companies[0];
+  for (const k of ["note", "contacts", "address", "phone"]) assert.ok(!(k in body), `一覧に ${k} を返さない（詳細で取る）`);
+});
+
+await ok("絞り込み：業種・地域・検索・担当・連絡手段。total は絞り込み後の件数", async () => {
+  setup();
+  await seed(30);
+  const it = await pageOf({ page: 1, industry: "IT" });
+  assert.equal(it.body.total, 10);
+  assert.ok(it.body.companies.every((c) => c.industry === "IT"));
+  const both = await pageOf({ page: 1, industry: "IT", region: "東京都" });
+  assert.equal(both.body.total, 5);
+  assert.ok(both.body.companies.every((c) => c.industry === "IT" && c.region === "東京都"));
+  assert.equal((await pageOf({ page: 1, q: "会社02" })).body.total, 10, "企業名で検索（会社020〜029）");
+  assert.equal((await pageOf({ page: 1, q: "c7.example" })).body.total, 1, "ドメインでも探せる");
+  assert.equal((await pageOf({ page: 1, q: "%,()" })).body.total, 30, "or() を壊す記号は外す");
+  assert.equal((await pageOf({ page: 1, owner: "me" })).body.total, 30);
+  assert.equal((await pageOf({ page: 1, owner: "none" })).body.total, 0);
+  db.rows.gw_sales_companies[0].current_contact_channel = "email";
+  assert.equal((await pageOf({ page: 1, channel: "email" })).body.total, 1);
+  assert.equal((await pageOf({ page: 1, channel: "none" })).body.total, 29);
+  await bulk({ ids: [db.rows.gw_sales_companies[1].id], action: "hide", reason: "closed" });
+  assert.equal((await pageOf({ page: 1 })).body.total, 29, "既定は表示中だけ");
+  assert.equal((await pageOf({ page: 1, visibility: "hidden" })).body.total, 1);
+  assert.equal((await pageOf({ page: 1, visibility: "all" })).body.total, 30);
+  assert.equal((await pageOf({ page: 1, status: "nope" })).statusCode, 400);
+  assert.equal((await pageOf({ page: 1, sort: "drop table" })).statusCode, 400);
+});
+
+await ok("並べ替え：企業名・業種・地域はDB全体で並べ、2ページ目でも条件を保つ", async () => {
+  setup();
+  await seed(150);
+  const a1 = (await pageOf({ page: 1, sort: "name", order: "asc" })).body.companies;
+  const a2 = (await pageOf({ page: 2, sort: "name", order: "asc" })).body.companies;
+  assert.equal(a1[0].name, "会社001");
+  assert.equal(a1[99].name, "会社100");
+  assert.equal(a2[0].name, "会社101", "2ページ目は続きから（DB全体の順）");
+  const d1 = (await pageOf({ page: 1, sort: "name", order: "desc" })).body.companies;
+  assert.equal(d1[0].name, "会社150");
+  const ind = [...(await pageOf({ page: 1, sort: "industry", order: "asc" })).body.companies,
+    ...(await pageOf({ page: 2, sort: "industry", order: "asc" })).body.companies];
+  assert.deepEqual([...new Set(ind.map((c) => c.industry))], ["IT", "医療", "製造"]);
+  assert.equal(new Set(ind.map((c) => c.id)).size, 150, "同じ値が続いても id で順番を固定するので、ページ間で重複しない");
+  const reg = (await pageOf({ page: 1, sort: "region", order: "desc" })).body.companies;
+  assert.equal(reg[0].region, "東京都");
+});
+
+await ok("並べ替え：最終アタックの新しい順（未アタックは最後）・クリック数の多い順", async () => {
+  setup();
+  await seed(5);
+  const [c1, c2, c3] = db.rows.gw_sales_companies;
+  await sendAttack(c1.id);
+  const { url } = await sendAttack(c2.id);
+  db.rows.gw_sales_approaches.find((a) => a.company_id === c1.id).sent_at = new Date(Date.now() - 86400000).toISOString();
+  rollup(c1.id);
+  await click(url.split("/r/")[1]);
+  await click(url.split("/r/")[1], { ip: "203.0.113.9", ua: `${HUMAN} x` });
+  const last = (await pageOf({ page: 1, sort: "last_sent", order: "desc" })).body.companies;
+  assert.deepEqual(last.slice(0, 2).map((c) => c.id), [c2.id, c1.id]);
+  assert.ok(last.slice(2).every((c) => !c.lastSentAt), "未アタックは最後");
+  const clicks = (await pageOf({ page: 1, sort: "clicks", order: "desc" })).body.companies;
+  assert.equal(clicks[0].id, c2.id);
+  assert.equal(clicks[0].clickCount, db.rows.gw_sales_companies.find((c) => c.id === c2.id).click_count);
+  assert.ok(clicks[0].clickCount >= 1, "クリックがトリガー（の写し）で会社に反映されている");
+  assert.equal(clicks[0].lastAttackerName, "営業 一郎");
+  void c3;
+});
+
+await ok("絞り込みの候補（facets=1）：業種・地域・商材を件数つきで返す", async () => {
+  setup();
+  await seed(6);
+  const r = await pageOf({ page: 1, facets: 1 });
+  assert.deepEqual(r.body.facets.industry.map((x) => [x.value, x.n]), [["IT", 2], ["医療", 2], ["製造", 2]]);
+  assert.deepEqual(r.body.facets.region.map((x) => x.value), ["大阪府", "東京都"]);
+  assert.equal((await pageOf({ page: 1 })).body.facets, undefined, "頼んだときだけ");
+});
+
+console.log("\n=== CSV（/api/sales/companies/export） ===\n");
+
+const csvLines = (r) => String(r.body).replace(/^﻿/, "").split("\r\n").filter(Boolean);
+
+await ok("CSV：いまの検索・絞り込み結果すべて。BOMつき・業種・地域・非表示理由を含む・並び順は一覧と同じ", async () => {
+  setup();
+  await seed(150);
+  const r = await exportGet({ industry: "IT", sort: "name", order: "asc" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.match(r.headers["content-type"], /text\/csv; charset=utf-8/);
+  assert.match(r.headers["content-disposition"], /sales_companies_\d{4}-\d{2}-\d{2}\.csv/);
+  assert.ok(String(r.body).startsWith("﻿"), "UTF-8 BOM");
+  const lines = csvLines(r);
+  assert.equal(lines.length, 51, "見出し＋IT の50社（100件で切らない）");
+  assert.equal(lines[0], "企業名,URL,ドメイン,業種,地域,商材,ステータス,担当,最終アタック日時,最終アタック実行者,送信チャネル,現在の連絡手段,クリック数,NEXT,NEXT期限,非表示状態,非表示理由,登録日時");
+  assert.ok(lines[1].startsWith("会社003,https://c3.example.jp/,c3.example.jp,IT,"), lines[1]);
+  assert.ok(logged.some((l) => l.action === "sales.company_export" && l.detail.count === 50 && l.detail.mode === "filtered"));
+
+  const c = db.rows.gw_sales_companies[0];
+  await bulk({ ids: [c.id], action: "hide", reason: "link_broken" });
+  const h = csvLines(await exportGet({ visibility: "hidden" }));
+  assert.equal(h.length, 2);
+  assert.match(h[1], /,非表示,リンク切れ,/);
+});
+
+await ok("CSV：チェックした企業だけ。他テナント・知らないIDは入らない。式は実行させない", async () => {
+  setup();
+  await seed(5);
+  const [a, b] = db.rows.gw_sales_companies;
+  a.name = '=HYPERLINK("http://evil")';
+  db.rows.gw_sales_companies.push({ id: "00000000-0000-4000-8000-0000000000f1", tenant_id: "t2", name: "他社テナント", status: "untouched", click_count: 0 });
+  const r = await exportPost({ ids: [a.id, b.id, "00000000-0000-4000-8000-0000000000f1", "not-a-uuid"] });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const lines = csvLines(r);
+  assert.equal(lines.length, 3, "選んだ自テナントの2社だけ");
+  assert.ok(!String(r.body).includes("他社テナント"));
+  assert.ok(String(r.body).includes(`"'=HYPERLINK(""http://evil"")"`), "= で始まる値は ' を付けて式にしない");
+  assert.equal((await exportPost({ ids: [] })).statusCode, 400);
+  assert.ok(logged.some((l) => l.action === "sales.company_export" && l.detail.mode === "selected" && l.detail.count === 2));
+});
+
+await ok("CSV：営業の権限が無い人は 403", async () => {
+  setup();
+  await seed(2);
+  who = MEMBER;
+  assert.equal((await exportGet({})).statusCode, 403);
+  assert.equal((await exportPost({ ids: [db.rows.gw_sales_companies[0].id] })).statusCode, 403);
 });
 
 console.log("\n=== 小さな道具 ===\n");

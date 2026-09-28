@@ -1,4 +1,8 @@
-// GET  /api/sales/companies[?visibility=shown|hidden|all]
+// GET  /api/sales/companies?page=1&limit=100&sort=name&order=asc&q=&status=&owner=&service=&industry=&region=&channel=&visibility=
+//        … 企業一覧（サーバー側ページング。db/097）。DB で絞って並べて100件だけ返す。
+//          { companies, page, limit, total, totalPages, members, facets? }（facets=1 のとき絞り込みの候補も）
+// GET  /api/sales/companies[?visibility=shown|hidden|all]（page なし）
+//        … 全件（ダッシュボード・リード・アタック画面用。これらはまだ全件で集計している）
 //        … 企業一覧（ダッシュボード・企業・アタック・反応・分析で共通利用）
 //          既定は「表示中」だけ。非表示にした企業（リンク切れ・閉業など。db/096）は、
 //          visibility=hidden / all を明示したときだけ返す（ダッシュボード・アタック対象に出さない）
@@ -20,10 +24,11 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, aggregateApproaches, nextFor, hasUnhandledClick, todayJst,
-  channelLabel,
+  channelLabel, parseListQuery,
 } from "../../../lib/sales.js";
+import { listPage, listFacets } from "../../../lib/sales-list.js";
 
-const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
+const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
 const FIELDS = COMPANY_FIELDS;
 const BULK_MAX = 500;
@@ -44,7 +49,9 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res, sb, ctx) {
-  const v = new URL(req.url || "/", "http://localhost").searchParams.get("visibility") || "shown";
+  const sp = new URL(req.url || "/", "http://localhost").searchParams;
+  if (sp.has("page")) return paged(res, sb, ctx, sp);
+  const v = sp.get("visibility") || "shown";
   if (!VISIBILITY.includes(v)) return json(res, 400, { error: "bad_visibility", allowed: VISIBILITY });
   let q = sb.from("gw_sales_companies").select(FIELDS).eq("tenant_id", ctx.tenantId);
   if (v === "shown") q = q.is("hidden_at", null);
@@ -105,6 +112,21 @@ async function list(req, res, sb, ctx) {
       };
     }),
   });
+}
+
+async function paged(res, sb, ctx, sp) {
+  const f = parseListQuery(sp);
+  if (f.error) return json(res, 400, f);
+  const [r, facets] = await Promise.all([
+    listPage(sb, ctx, f),
+    sp.get("facets") === "1" ? listFacets(sb, ctx) : Promise.resolve(undefined),
+  ]);
+  if (r.error) {
+    const hint = dbSetupHint(r.error, SQL);
+    if (hint) return json(res, 200, { companies: [], notReady: true, message: hint, page: 1, total: 0, totalPages: 1 });
+    return json(res, 500, { error: "db_query_failed", detail: r.error.message });
+  }
+  return json(res, 200, { ...r, me: ctx.employee?.id || null, facets });
 }
 
 async function create(req, res, sb, ctx, user) {

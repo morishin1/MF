@@ -19,6 +19,23 @@
     .co-filters input, .co-filters select { margin:0; font-size:13px; padding:8px 10px; }
     .co-count { font-size:12px; color:#6b7080; margin:0 0 8px; }
     .co-actions { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
+    .co-actions .right { margin-left:auto; }
+    /* 並べ替えできる見出し。並べ替え中の列は矢印・色・太さで分かるように */
+    .sl-table th.sort { cursor:pointer; user-select:none; white-space:nowrap; }
+    .sl-table th.sort:hover { color:#1b2440; }
+    .sl-table th.sort .material-symbols-outlined { font-size:15px; vertical-align:-3px; opacity:.35; }
+    .sl-table th.sort.on { color:#2f6fd6; font-weight:700; }
+    .sl-table th.sort.on .material-symbols-outlined { opacity:1; }
+    /* ページを切り替えた瞬間に反応を出す（取り直している間は薄く） */
+    #rows.loading { opacity:.45; transition:opacity .08s; pointer-events:none; }
+    .co-loading { display:inline-flex; align-items:center; gap:4px; color:#2f6fd6; margin-left:8px; }
+    .co-pager { display:flex; gap:6px; align-items:center; justify-content:center; flex-wrap:wrap; margin:14px 0 4px; font-size:13px; }
+    .co-pager button { min-width:34px; padding:6px 10px; border:1px solid #d6d6cf; border-radius:6px; background:#fff;
+      color:#1b2440; cursor:pointer; font:inherit; }
+    .co-pager button.on { background:#1b2440; color:#fff; border-color:#1b2440; font-weight:700; }
+    .co-pager button:disabled { opacity:.45; cursor:default; }
+    .co-pager .gap { color:#9a9ca8; padding:0 2px; }
+    .co-range { text-align:center; font-size:12.5px; color:#6b7080; }
 
     /* フォームアタック画面（左：企業情報・履歴 ／ 右：営業文） */
     .atk { position:fixed; inset:0; background:#f6f6f2; z-index:42; overflow-y:auto; }
@@ -50,26 +67,30 @@
       <span class="material-symbols-outlined icon-inline">playlist_add</span>URLをまとめて追加</button>
     <button class="btn btn-secondary btn-sm" onclick="openImport()">
       <span class="material-symbols-outlined icon-inline">upload</span>スプレッドシートから取り込む</button>
+    <button class="btn btn-secondary btn-sm right" id="btn-download" onclick="openDownload()">
+      <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
   </div>
 
+  <!-- 検索・絞り込み・並べ替え・ページはすべてサーバー側（db/097）。変えたら1ページ目へ戻す -->
   <div class="co-filters">
-    <input type="text" id="f-q" placeholder="企業名・URLで探す" oninput="render()">
-    <select id="f-visible" onchange="load()" aria-label="表示状態">
+    <input type="text" id="f-q" placeholder="企業名・URLで探す" oninput="onSearchInput()">
+    <select id="f-visibility" onchange="onFilter()" aria-label="表示状態">
       <option value="shown">表示中</option>
       <option value="hidden">非表示</option>
       <option value="all">すべて</option>
     </select>
-    <select id="f-industry" onchange="render()"></select>
-    <select id="f-region" onchange="render()"></select>
-    <select id="f-service" onchange="render()"></select>
-    <select id="f-status" onchange="render()"></select>
-    <select id="f-owner" onchange="render()"></select>
-    <select id="f-attacked" onchange="render()">
+    <select id="f-industry" onchange="onFilter()" aria-label="業種"></select>
+    <select id="f-region" onchange="onFilter()" aria-label="地域"></select>
+    <select id="f-service" onchange="onFilter()" aria-label="商材"></select>
+    <select id="f-status" onchange="onFilter()" aria-label="状態"></select>
+    <select id="f-owner" onchange="onFilter()" aria-label="担当"></select>
+    <select id="f-channel" onchange="onFilter()" aria-label="連絡手段"></select>
+    <select id="f-attacked" onchange="onFilter()" aria-label="アタック">
       <option value="">アタック：すべて</option>
       <option value="yes">アタック済</option>
       <option value="no">未アタック</option>
     </select>
-    <select id="f-clicked" onchange="render()">
+    <select id="f-clicked" onchange="onFilter()" aria-label="クリック">
       <option value="">クリック：すべて</option>
       <option value="yes">クリックあり</option>
       <option value="no">クリックなし</option>
@@ -79,12 +100,12 @@
 
   <div style="overflow-x:auto;">
     <table class="sl-table">
-      <thead><tr><th class="sl-check"><input type="checkbox" id="sel-all" aria-label="表示中の企業をすべて選択"
-          onclick="toggleAll(this.checked)"></th><th>企業</th><th>商材</th><th>状態</th><th>最終アタック</th>
-        <th>連絡手段</th><th>クリック</th><th>NEXT</th><th>担当</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
+      <thead><tr id="head"></tr></thead>
+      <tbody id="rows"><tr><td colspan="11" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
+  <div class="co-pager" id="pager"></div>
+  <div class="co-range" id="range"></div>
 </div>
 
 <div id="modal-root"></div>
@@ -92,7 +113,7 @@
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20260928ch1"></script>
+<script src="../js/api-client.js?v=20260929pg1"></script>
 <script src="../js/layout.js?v=20260928h"></script>
 <script src="../js/sales-layout.js?v=20260928h"></script>
 <script>
@@ -123,6 +144,62 @@
   const selected = new Set();
   let shown = [];
 
+  // ---- 一覧の状態（URL に持つ） ----------------------------------------------------
+  //
+  // 検索・絞り込み・並べ替え・ページはすべてサーバー側（/api/sales/companies?page=…。db/097）。
+  // ブラウザは「いまのページの100社」しか持たない。状態は URL に書いて、
+  // 企業詳細を開いて閉じても・ブラウザで戻っても、同じページ・条件に戻れるようにする。
+  const LIST_KEYS = ["page", "q", "status", "owner", "service", "industry", "region", "channel", "visibility",
+    "attacked", "clicked", "sort", "order"];
+  const FILTER_IDS = { q: "f-q", status: "f-status", owner: "f-owner", service: "f-service", industry: "f-industry",
+    region: "f-region", channel: "f-channel", visibility: "f-visibility", attacked: "f-attacked", clicked: "f-clicked" };
+  const CONTACT_CHANNELS = [["email", "メール"], ["line", "LINE"], ["instagram", "Instagram"], ["x", "X"],
+    ["facebook", "Facebook"], ["linkedin", "LinkedIn"], ["phone", "電話"], ["other", "その他"]];
+  // 見出し（並べ替えのキーは api 側 lib/sales.js LIST_SORTS と同じ）
+  const COLUMNS = [
+    ["企業", "name"], ["業種", "industry"], ["地域", "region"], ["商材", "service"], ["状態", "status"],
+    ["最終アタック", "last_sent"], ["連絡手段", "channel"], ["クリック", "clicks"], ["NEXT", "next"], ["担当", "owner"],
+  ];
+  const COLS = COLUMNS.length + 1;
+  let state = readState();
+  let pageInfo = { page: 1, total: 0, totalPages: 1, limit: 100 };
+  let facets = null;
+  let listSeq = 0;
+
+  function readState(search = location.search) {
+    const q = new URLSearchParams(search);
+    const st = {};
+    for (const k of LIST_KEYS) st[k] = q.get(k) || "";
+    st.page = Math.max(1, Number(st.page) || 1);
+    st.visibility = st.visibility || "shown";
+    st.order = st.order === "desc" ? "desc" : "asc";
+    if (!st.sort) st.order = "";
+    return st;
+  }
+  // 一覧の状態だけの URL（extra に id・attack などを足せる）
+  function listUrl(extra = {}) {
+    const q = new URLSearchParams();
+    for (const k of LIST_KEYS) {
+      const v = state[k];
+      if (!v || (k === "page" && v === 1) || (k === "visibility" && v === "shown")) continue;
+      q.set(k, v);
+    }
+    for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v);
+    const s = q.toString();
+    return `/sales/companies.html${s ? `?${s}` : ""}`;
+  }
+  function apiParams(extra = {}) {
+    const p = {};
+    for (const k of LIST_KEYS) if (state[k]) p[k] = state[k];
+    return { ...p, ...extra };
+  }
+  function syncControls() {
+    for (const [k, id] of Object.entries(FILTER_IDS)) {
+      const node = el(id);
+      if (node && node.value !== state[k] && document.activeElement !== node) node.value = state[k];
+    }
+  }
+
   SalesLayout.init({ active: "companies" }).then((ctx) => {
     if (!ctx) return;
     canForce = ctx.canForce;
@@ -131,82 +208,183 @@
   });
 
   async function start() {
-    await load();
+    renderHead();
+    renderFilters();
+    syncControls();
+    await load({ facets: true });
     const q = new URLSearchParams(location.search);
     if (q.get("new")) openAdd();
     else if (q.get("attack")) openAttack(q.get("attack"));
     else if (q.get("id")) openDetail(q.get("id")).then((shown) => { if (shown && q.get("meeting")) openMeeting(); });
   }
 
-  async function load() {
+  // ブラウザの戻る・進む：URL の状態に合わせて一覧を取り直す。企業詳細は URL に無ければ閉じる
+  window.addEventListener("popstate", () => {
+    state = readState();
+    syncControls();
+    renderHead();
+    const q = new URLSearchParams(location.search);
+    if (!q.get("id") && !q.get("attack")) {
+      detailSeq++; detailOpenId = null;
+      el("modal-root").innerHTML = ""; el("action-root").innerHTML = ""; el("attack-root").innerHTML = "";
+    }
+    load();
+  });
+
+  // 条件を変えたら1ページ目へ戻して、履歴に積む（ブラウザの戻るで前の条件に戻れる）
+  function go(patch) {
+    state = { ...state, ...patch };
+    history.pushState({}, "", listUrl());
+    renderHead();
+    load();
+  }
+  function onFilter() {
+    const patch = { page: 1 };
+    for (const [k, id] of Object.entries(FILTER_IDS)) if (k !== "q") patch[k] = el(id).value;
+    go(patch);
+  }
+  let searchTimer = null;
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const v = el("f-q").value.trim();
+      if (v === state.q) return;
+      // 1文字ずつ履歴に積まない（検索中は置き換え）
+      state = { ...state, q: v, page: 1 };
+      history.replaceState({}, "", listUrl());
+      load();
+    }, 300);
+  }
+  function goPage(p) {
+    if (p < 1 || p > pageInfo.totalPages || p === state.page) return;
+    go({ page: p });
+  }
+  // 並べ替え：未指定 → 昇順 → 降順 → 未指定
+  function toggleSort(key) {
+    if (state.sort !== key) go({ sort: key, order: "asc", page: 1 });
+    else if (state.order === "asc") go({ order: "desc", page: 1 });
+    else go({ sort: "", order: "", page: 1 });
+  }
+
+  function renderHead() {
+    el("head").innerHTML = `<th class="sl-check"><input type="checkbox" id="sel-all" aria-label="このページの企業をすべて選択"
+        onclick="toggleAll(this.checked)"></th>` + COLUMNS.map(([label, key]) => {
+      const on = state.sort === key;
+      const icon = on ? (state.order === "asc" ? "arrow_upward" : "arrow_downward") : "unfold_more";
+      const aria = on ? (state.order === "asc" ? "ascending" : "descending") : "none";
+      return `<th class="sort${on ? " on" : ""}" data-sort="${esc(key)}" aria-sort="${aria}" onclick="toggleSort('${esc(key)}')"
+        title="${esc(label)}で並べ替え">${esc(label)}<span class="material-symbols-outlined" aria-hidden="true">${icon}</span></th>`;
+    }).join("");
+  }
+
+  // 取り直す。押した瞬間に一覧を薄くして「読み込み中」を出す（押しても無反応に見えないように）。
+  // 前の取得が遅れて返ってきても、新しいほうだけを画面に出す
+  async function load({ facets: withFacets = false } = {}) {
+    const seq = ++listSeq;
+    el("rows").classList.add("loading");
+    el("count").innerHTML = `${esc(el("count").dataset.text || "")}<span class="co-loading" id="loading">
+      <span class="material-symbols-outlined" style="font-size:15px;">progress_activity</span>読み込み中…</span>`;
+    el("pager").querySelectorAll("button").forEach((b) => { b.disabled = true; });
     try {
-      const res = await API.listSalesCompanies(el("f-visible").value);
+      const res = await API.listSalesCompanyPage(apiParams({ facets: withFacets || !facets ? 1 : undefined }));
+      if (seq !== listSeq) return;
+      el("rows").classList.remove("loading");
       if (res.notReady) {
-        el("rows").innerHTML = `<tr><td colspan="9"><div class="banner warn">
+        el("count").textContent = "";
+        el("rows").innerHTML = `<tr><td colspan="${COLS}"><div class="banner warn">
           <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
+        el("pager").innerHTML = ""; el("range").textContent = "";
         return;
       }
       companies = res.companies || [];
-      members = res.members || [];
+      members = res.members || members;
       myEmployeeId = res.me || null;
+      if (res.facets) facets = res.facets;
+      pageInfo = { page: res.page, total: res.total, totalPages: res.totalPages, limit: res.limit };
+      // 範囲外のページを頼んだときは、サーバーが最後のページを返す。URL もそれに合わせる
+      if (res.page !== state.page) { state.page = res.page; history.replaceState({}, "", listUrl(currentExtra())); }
       renderFilters();
       render();
     } catch (e) {
-      el("rows").innerHTML = `<tr><td colspan="9"><div class="banner err">
+      if (seq !== listSeq) return;
+      el("rows").classList.remove("loading");
+      el("count").textContent = "";
+      el("rows").innerHTML = `<tr><td colspan="${COLS}"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
-        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
+        <div>企業一覧を取得できませんでした：${esc(errText(e, ""))}
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="load()">再読み込み</button></div></div></td></tr>`;
+      // ページャー・絞り込みは使えるまま（別の条件で取り直せる）
+      renderPager();
     }
   }
-
-  // 絞り込みの候補は、登録されている値から作る（決め打ちの一覧だけにしない）
-  function renderFilters() {
-    const keep = (id) => el(id).value;
-    const opts = (id, first, values) => {
-      const cur = keep(id);
-      el(id).innerHTML = `<option value="">${esc(first)}</option>`
-        + values.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("");
-    };
-    const uniq = (k) => [...new Set(companies.map((c) => c[k]).filter(Boolean))].sort();
-    opts("f-industry", "業種：すべて", uniq("industry").map((v) => [v, v]));
-    opts("f-region", "地域：すべて", uniq("region").map((v) => [v, v]));
-    opts("f-service", "商材：すべて", uniq("service").map((v) => [v, v]));
-    opts("f-status", "状態：すべて", [...STATUSES, ["ng", "営業禁止"]]);
-    opts("f-owner", "担当：すべて", [["me", "自分"], ...members.map((m) => [m.id, m.display_name])]);
+  // いま URL に付いている企業詳細・アタックの指定（一覧の状態を書き換えるときに消さない）
+  function currentExtra() {
+    const q = new URLSearchParams(location.search);
+    return { id: q.get("id"), attack: q.get("attack") };
   }
 
-  function filtered() {
-    const q = (el("f-q").value || "").trim().toLowerCase();
-    const v = (id) => el(id).value;
-    return companies.filter((c) =>
-      (!q || `${c.name} ${c.domain || ""} ${c.siteUrl || ""}`.toLowerCase().includes(q))
-      && (!v("f-industry") || c.industry === v("f-industry"))
-      && (!v("f-region") || c.region === v("f-region"))
-      && (!v("f-service") || c.service === v("f-service"))
-      && (!v("f-status") || (v("f-status") === "ng" ? c.ngReason : c.status === v("f-status")))
-      && (!v("f-owner") || c.ownerId === (v("f-owner") === "me" ? myEmployeeId : v("f-owner")))
-      && (!v("f-attacked") || (v("f-attacked") === "yes" ? c.attackCount > 0 : c.attackCount === 0))
-      && (!v("f-clicked") || (v("f-clicked") === "yes" ? c.clickCount > 0 : c.clickCount === 0)));
+  // 絞り込みの候補。業種・地域・商材はサーバーの集計（件数つき）から作る（全社を画面に送らない）
+  function renderFilters() {
+    const opts = (id, first, values, key) => {
+      const cur = state[key] || "";
+      const list = values.some(([v]) => v === cur) || !cur ? values : [...values, [cur, cur]];
+      el(id).innerHTML = `<option value="">${esc(first)}</option>`
+        + list.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    };
+    const fac = (k) => (facets?.[k] || []).map((x) => [x.value, `${x.value}（${x.n}）`]);
+    opts("f-industry", "業種：すべて", fac("industry"), "industry");
+    opts("f-region", "地域：すべて", fac("region"), "region");
+    opts("f-service", "商材：すべて", fac("service"), "service");
+    opts("f-status", "状態：すべて", [...STATUSES, ["ng", "営業禁止"]], "status");
+    opts("f-owner", "担当：すべて", [["me", "自分"], ["none", "未定"], ...members.map((m) => [m.id, m.display_name])], "owner");
+    opts("f-channel", "連絡手段：すべて", [...CONTACT_CHANNELS, ["none", "未設定"]], "channel");
+  }
+
+  function renderPager() {
+    const { page, totalPages, total, limit } = pageInfo;
+    const from = total ? (page - 1) * limit + 1 : 0;
+    const to = Math.min(total, page * limit);
+    const nf = (n) => Number(n).toLocaleString("ja-JP");
+    el("range").textContent = total ? `${nf(from)}–${nf(to)} / ${nf(total)}件` : "";
+    if (totalPages <= 1) { el("pager").innerHTML = ""; return; }
+    // 1 … 3 4 5 … 13 の形（最初・最後・いまの前後だけ）
+    const nums = [...new Set([1, page - 1, page, page + 1, totalPages])].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
+    let html = `<button onclick="goPage(${page - 1})" ${page <= 1 ? "disabled" : ""} aria-label="前のページ">← 前へ</button>`;
+    let prev = 0;
+    for (const n of nums) {
+      if (n - prev > 1) html += `<span class="gap">…</span>`;
+      html += `<button class="${n === page ? "on" : ""}" onclick="goPage(${n})" ${n === page ? 'aria-current="page"' : ""}>${n}</button>`;
+      prev = n;
+    }
+    html += `<button onclick="goPage(${page + 1})" ${page >= totalPages ? "disabled" : ""} aria-label="次のページ">次へ →</button>`;
+    el("pager").innerHTML = html;
   }
 
   function render() {
-    const list = filtered();
-    shown = list.slice(0, 500).map((c) => c.id);
-    // 見えていない企業は選択から外す（一括操作が、画面に出ていない企業に及ばないように）
+    shown = companies.map((c) => c.id);
+    // このページに無い企業は選択から外す（一括操作・CSV が、画面に出ていない企業に及ばないように）
     const vis = new Set(shown);
     for (const id of [...selected]) if (!vis.has(id)) selected.delete(id);
-    el("count").textContent = `${list.length}社${list.length !== companies.length ? `（全${companies.length}社）` : ""}`;
-    if (!list.length) {
-      el("rows").innerHTML = `<tr><td colspan="9" class="empty">${companies.length ? "対象がありません。"
-        : el("f-visible").value === "hidden" ? "非表示の企業はありません。"
+    const nf = (n) => Number(n).toLocaleString("ja-JP");
+    const text = `${nf(pageInfo.total)}社`;
+    el("count").dataset.text = text;
+    el("count").textContent = text;
+    renderPager();
+    if (!companies.length) {
+      const filtered = LIST_KEYS.some((k) => !["page", "sort", "order", "visibility"].includes(k) && state[k]);
+      el("rows").innerHTML = `<tr><td colspan="${COLS}" class="empty">${filtered ? "対象がありません。"
+        : state.visibility === "hidden" ? "非表示の企業はありません。"
         : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
       renderSelection();
       return;
     }
-    el("rows").innerHTML = list.slice(0, 500).map((c) => `
+    el("rows").innerHTML = companies.map((c) => `
       <tr class="click${selected.has(c.id) ? " sel" : ""}" data-id="${esc(c.id)}" onclick="openDetail('${esc(c.id)}')">
         <td class="sl-check" onclick="event.stopPropagation()"><input type="checkbox" aria-label="${esc(c.name)}を選択"
           ${selected.has(c.id) ? "checked" : ""} onclick="event.stopPropagation();toggleOne('${esc(c.id)}', this.checked)"></td>
-        <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc([c.domain, c.industry, c.region].filter(Boolean).join(" ／ "))}</span></td>
+        <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.domain || "")}</span></td>
+        <td>${esc(c.industry || "—")}</td>
+        <td>${esc(c.region || "—")}</td>
         <td>${esc(c.service || "—")}</td>
         <td>${c.hidden ? statusPill("lost", `非表示：${c.hiddenLabel || ""}`)
           : c.ngReason ? statusPill("excluded", `NG：${c.ngLabel}`) : statusPill(c.status, c.statusLabel)}</td>
@@ -215,8 +393,7 @@
         <td>${c.clickCount ? `<span class="${c.unhandledClick ? "sl-hot" : ""}">${c.clickCount}回</span>` : "—"}</td>
         <td><span class="${c.overdue ? "sl-hot" : ""}">${esc(c.next)}</span>${c.nextDue ? `<span class="sl-sub2">${esc(fmtDay(c.nextDue))}</span>` : ""}</td>
         <td>${esc(c.ownerName || "未定")}</td>
-      </tr>`).join("")
-      + (list.length > 500 ? `<tr><td colspan="9" class="empty">ほか${list.length - 500}社。絞り込んでください。</td></tr>` : "");
+      </tr>`).join("");
     renderSelection();
   }
 
@@ -226,7 +403,8 @@
     detailOpenId = null;
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
-    history.replaceState({}, "", "/sales/companies.html");
+    // 一覧の状態（ページ・条件・並べ替え）は残したまま、詳細の指定だけ外す
+    history.replaceState({}, "", listUrl());
   }
   // 企業詳細から行う操作・一括操作は、中央モーダル（1つだけ）で開く。
   // 背景を押しても閉じるのはモーダルだけ。背後の企業詳細ドロワーは残す（/hr と同じ操作感）
@@ -295,6 +473,8 @@
         <span class="cnt"><span class="material-symbols-outlined" style="font-size:18px;">check_box</span><span id="bulk-count">${n}社選択中</span></span>
         <button class="btn btn-secondary btn-sm" onclick="openBulk('status')">ステータス変更</button>
         <button class="btn btn-secondary btn-sm" onclick="openBulk('owner')">担当変更</button>
+        <button class="btn btn-secondary btn-sm" id="bulk-csv" onclick="downloadCsv('selected', this)">
+          <span class="material-symbols-outlined icon-inline">download</span>CSV</button>
         <span class="more">
           <button class="btn btn-secondary btn-sm" id="bulk-more" aria-haspopup="menu" onclick="toggleBulkMenu(event)">その他 ▼</button>
           <div class="sl-bulkmenu" id="bulk-menu" role="menu" hidden>
@@ -310,6 +490,53 @@
         <button class="btn btn-secondary btn-sm" onclick="clearSelection()">選択解除</button>
       </div>`;
   }
+  // ---- CSV ダウンロード（サーバーで作る） ----------------------------------------------
+  //
+  // 「いまの検索・絞り込み結果すべて」か「チェックした企業だけ」。どちらもサーバーで条件を実行し直して作る
+  // （画面に出ている100件からは作らない）。UTF-8 BOM つきなので Excel でそのまま開ける
+  function openDownload() {
+    const n = selected.size;
+    const total = pageInfo.total;
+    openActionModal(`
+      <h2>CSVでダウンロード</h2>
+      <label>ダウンロードする企業</label>
+      <div>
+        <label class="sl-chip" style="display:flex;"><input type="radio" name="dl-target" value="selected" ${n ? "checked" : "disabled"}>
+          選択中 ${n}社${n ? "" : "（一覧でチェックすると選べます）"}</label>
+        <label class="sl-chip" style="display:flex;"><input type="radio" name="dl-target" value="filtered" ${n ? "" : "checked"}>
+          いまの検索・絞り込み結果すべて（${Number(total).toLocaleString("ja-JP")}社）</label>
+      </div>
+      <p class="sl-muted" style="margin:8px 0 0;">並び順は一覧と同じです。Excel でそのまま開けます（UTF-8 BOM つき）。</p>
+      <div id="dl-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="sl-modal-foot">
+        <button class="btn btn-primary" id="dl-go" onclick="downloadCsv(document.querySelector('input[name=dl-target]:checked')?.value, this)">
+          <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+
+  async function downloadCsv(target, btn) {
+    closeBulkMenu();
+    const ids = target === "selected" ? [...selected] : null;
+    if (target === "selected" && !ids.length) return;
+    try {
+      const { blob, filename } = await KPLayout.busy(btn, "作成中…",
+        () => API.exportSalesCompanies(apiParams({ page: undefined }), ids));
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if (el("dl-go")) closeAction();
+    } catch (e) {
+      const msg = el("dl-msg");
+      if (msg) msg.textContent = errText(e, "ダウンロードできませんでした");
+      else alert(errText(e, "ダウンロードできませんでした"));
+    }
+  }
+
   function toggleBulkMenu(ev) {
     ev.stopPropagation();
     const m = el("bulk-menu");
@@ -767,7 +994,7 @@
     detailOpenId = id;
     el("modal-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeModal()"></div>
       <div class="sl-detail" id="detail-box"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
-    history.replaceState({}, "", `/sales/companies.html?id=${encodeURIComponent(id)}`);
+    history.replaceState({}, "", listUrl({ id }));
     try {
       const d = await API.getSalesCompany(id);
       if (!detailIsCurrent(seq, id)) return false;
@@ -1394,7 +1621,7 @@ ${url}
 
   async function openAttack(id, force) {
     el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
-    history.replaceState({}, "", `/sales/companies.html?attack=${encodeURIComponent(id)}`);
+    history.replaceState({}, "", listUrl({ attack: id }));
     try {
       const [d, t] = await Promise.all([
         detail?.company?.id === id ? Promise.resolve(detail) : API.getSalesCompany(id),
@@ -1439,7 +1666,7 @@ ${url}
     el("attack-root").innerHTML = "";
     const id = atk?.company?.id;
     atk = null;
-    if (id) openDetail(id); else history.replaceState({}, "", "/sales/companies.html");
+    if (id) openDetail(id); else history.replaceState({}, "", listUrl());
   }
 
   function attackHead(title) {
