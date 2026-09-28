@@ -192,6 +192,10 @@
 
   let applicants = [];
   let employees = [];
+  let meEmployeeId = null;   // 応募者を追加するときの担当の初期値（登録する本人）
+  /** 担当の選択肢（一括変更・追加・詳細で同じもの） */
+  const recruiterOptions = (selected) => `<option value="">未定</option>` + employees.map((e) =>
+    `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.display_name)}</option>`).join("");
   let stageFilter = "";
   let openId = null;
   let canDecide = false;
@@ -215,7 +219,9 @@
   }
   function setStage(key) { stageFilter = key; renderStageTabs(); render(); }
 
-  async function load() {
+  let loading = null;   // 一覧の読み込み中（追加フォームが担当の選択肢を待つため）
+  function load() { loading = loadList().finally(() => { loading = null; }); return loading; }
+  async function loadList() {
     try {
       const res = await API.listHrApplicants();
       if (res.notReady) {
@@ -225,6 +231,7 @@
       }
       applicants = res.applicants || [];
       employees = res.employees || [];
+      meEmployeeId = res.meEmployeeId || null;
       render();
     } catch (e) {
       el("rows").innerHTML = `<tr><td colspan="7"><div class="banner err">
@@ -410,7 +417,9 @@
     return fromData.length ? fromData : ["リファラル", "Wantedly", "Green", "エージェント", "自社サイト"];
   }
 
-  function openAdd() {
+  async function openAdd() {
+    // 担当の選択肢（社員一覧）は一覧の読み込みで届く。まだなら待ってから開く
+    if (!employees.length && loading) await loading;
     closeModal();
     const root = el("modal-root");
     root.innerHTML = `
@@ -427,6 +436,9 @@
             <input type="radio" name="a-source" value="${esc(s)}" style="width:auto;margin:0 4px 0 0;">${esc(s)}
           </label>`).join("")}</div>
         <input id="a-source-other" type="text" placeholder="その他（自由入力）" style="margin-top:6px;">
+        <label style="margin-top:10px;">担当</label>
+        <select id="a-recruiter">${recruiterOptions(meEmployeeId)}</select>
+        <p class="muted" style="font-size:12px;margin:4px 0 0;">NEXT ACTION はこの人に届きます。あとから詳細の「担当」で変更できます。</p>
         <label style="margin-top:10px;">メール</label><input id="a-email" type="email">
         <label style="margin-top:10px;">電話</label><input id="a-phone" type="text">
         <label style="margin-top:10px;">プロフィールURL</label><input id="a-url" type="text">
@@ -452,6 +464,7 @@
     try {
       await KPLayout.busy(btn, "追加中…", () => API.createHrApplicant({
         name, jobTitle, source,
+        recruiterId: el("a-recruiter").value || null,
         email: el("a-email").value.trim() || undefined,
         phone: el("a-phone").value.trim() || undefined,
         profileUrl: el("a-url").value.trim() || undefined,
@@ -581,7 +594,8 @@
           <div><dt>応募経路</dt><dd>${esc(a.source || "—")}</dd></div>
           <div><dt>応募職種</dt><dd>${esc(a.jobTitle || "—")}</dd></div>
           <div><dt>現在ステータス</dt><dd>${esc(a.statusLabel || "—")}</dd></div>
-          <div><dt>担当</dt><dd>${esc(a.recruiterName || "未定")}</dd></div>
+          <div><dt>担当</dt><dd id="hr-recruiter">${esc(a.recruiterName || "未定")}
+            <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></dd></div>
           <div><dt>メール</dt><dd>${esc(a.email || "—")}</dd></div>
           <div><dt>電話</dt><dd>${esc(a.phone || "—")}</dd></div>
           <div><dt>ランク</dt><dd>${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span> ${esc((detail.rankLabel || {})[a.rank] || "")}` : "—"}</dd></div>
@@ -1210,6 +1224,31 @@ ${url}
    * 背景を押して閉じるのはこのモーダルだけで、後ろの応募者詳細は残る。
    * 保存したら、モーダルを閉じて refreshDetail() で開いたままのドロワーに反映する
    */
+  // ---- 担当を変更（中央モーダル。保存後もドロワーは閉じない） -------------------------
+  function openRecruiterModal() {
+    const a = detail.applicant;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 12px;">担当を変更</h2>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px;">${esc(a.name)} さんの NEXT ACTION は、担当の人に届きます。</p>
+      <label>担当</label>
+      <select id="rc-select">${recruiterOptions(a.recruiterId)}</select>
+      <div id="rc-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn btn-primary" onclick="saveRecruiter(this)">保存</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+  async function saveRecruiter(btn) {
+    const msg = el("rc-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({
+        id: detail.applicant.id, recruiterId: el("rc-select").value || null }));
+      closeAction();
+      await refreshDetail("overview");
+      load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
   function openActionModal(html, { wide = false } = {}) {
     el("action-root").innerHTML = `<div class="hr-modal-bg" onclick="closeAction()"></div>
       <div class="hr-modal${wide ? " wide" : ""}" role="dialog" aria-modal="true">${html}</div>`;
