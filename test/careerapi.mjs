@@ -27,6 +27,7 @@ function matcher(f) {
   return (r) => f.every(([op, k, v]) => {
     if (op === "eq") return r[k] === v;
     if (op === "in") return v.includes(r[k]);
+    if (op === "neq") return r[k] !== v;
     if (op === "gte") return r[k] != null && r[k] >= v;
     if (op === "lte") return r[k] != null && r[k] <= v;
     return true;
@@ -47,6 +48,7 @@ function table(name) {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
+    neq(k, v) { f.push(["neq", k, v]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
     lte(k, v) { f.push(["lte", k, v]); return q; },
     order(col, opts) { if (!order) order = [col, opts?.ascending !== false]; return q; },
@@ -105,7 +107,8 @@ const RECRUITER = { ...TARO, userId: "u-rec", roles: ["recruiter"] };
 const OTHER = { userId: "u-o2", tenantId: "t2", isAdmin: false, isHr: true, roles: ["owner"], employee: { ...emp("e-o2"), tenant_id: "t2" } };
 let who = OWNER;
 
-mock.module(atRoot("lib/gw.js"), { namedExports: { gwContext: async () => who } });
+const REAL_GW = await import(atRoot("lib/gw.js"));
+mock.module(atRoot("lib/gw.js"), { namedExports: { ...REAL_GW, gwContext: async () => who } });
 const logged = [];
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { logged.push(e); } } });
 const notified = [];
@@ -718,6 +721,213 @@ await ok("本人画面のプレビュー：本人と同じ形・管理者メモ�
   assert.equal((await get("?preview=e-hanako")).statusCode, 404, "担当外は見られない");
   who = TARO;
   assert.equal((await get("?preview=e-taro")).statusCode, 403);
+});
+
+console.log("\n— 採用決定 → 契約 → 入社 → キャリア → 育成 —");
+
+const { journeyOf, memberAskOf } = await import(atRoot("lib/journey.js"));
+const { intakeGate } = await import(atRoot("lib/onboard-gate.js"));
+
+await ok("状態遷移：採用決定→契約条件→書類作成→署名→入社情報→書類→会社確認→キャリア→育成→通常評価", async () => {
+  const today = "2026-09-28";
+  const links = { onboard: "admin-onboard.html?applicantId=a1", order: "o", signs: "s", hr: "h", growth: "g", applicant: "ap" };
+  const J = (x) => journeyOf({ links, today, ...x });
+  const waitOffer = J({ applicant: { status: "offer_response_pending" }, employee: null, canAdvance: true });
+  assert.equal(waitOffer.state, "hired");
+  assert.equal(waitOffer.label, "内定の承諾を待っています");
+  const hired = J({ applicant: { status: "accepted" }, employee: null, canAdvance: true });
+  assert.equal(hired.label, "契約条件を設定してください");
+  assert.equal(hired.cta.label, "契約条件を設定");
+  assert.equal(J({ applicant: { status: "accepted" }, employee: null, canAdvance: false }).cta, null, "経営者・管理者以外には入口を出さない");
+  const E = { id: "e1" };
+  const P = { id: "p1", status: "in_progress" };
+  const c1 = J({ employee: E, procedure: P, stage: { key: "conditions" } });
+  assert.deepEqual([c1.state, c1.label, c1.cta.label], ["contract_setup", "労働条件通知書を作成してください", "書類を作成"]);
+  const d1 = J({ employee: E, procedure: P, stage: { key: "advisor_review" }, facts: { order: { status: "requested" } } });
+  assert.deepEqual([d1.state, d1.actorLabel], ["document_preparing", "社労士"]);
+  const d2 = J({ employee: E, procedure: P, stage: { key: "advisor_review" }, facts: { order: { status: "uploaded" } } });
+  assert.equal(d2.cta.label, "本人へ送る");
+  const sg = J({ employee: E, procedure: P, stage: { key: "signing" }, facts: { sign: { status: "sent" } } });
+  assert.deepEqual([sg.state, sg.stateLabel, sg.label, sg.cta.label], ["signing", "本人署名待ち", "本人の署名完了を待っています", "署名状況を見る"]);
+  const info = J({ employee: E, procedure: P, stage: { key: "intake" }, facts: { profile: null, items: [] } });
+  assert.deepEqual([info.state, info.label, info.cta], ["onboarding_info", "入社連絡票の入力待ちです", null]);
+  const docs = J({ employee: E, procedure: P, stage: { key: "intake" },
+    facts: { profile: { status: "submitted" }, items: [{ owner: "employee", required: true, status: "todo", item_key: "doc_id" }] } });
+  assert.equal(docs.state, "documents_pending");
+  const rev = J({ employee: E, procedure: P, stage: { key: "intake" },
+    facts: { profile: { status: "submitted" }, items: [{ owner: "admin", status: "todo" }] } });
+  assert.deepEqual([rev.state, rev.cta.label], ["company_review", "手続きを確認"]);
+  const cs = J({ employee: E, procedure: P, stage: { key: "complete" }, career: null, careerFlow: { state: "setup" } });
+  assert.deepEqual([cs.state, cs.stateLabel, cs.label, cs.cta.label], ["career_setup", "入社手続き完了", "キャリアプランを設定してください", "キャリア設定"]);
+  const gs = J({ employee: E, procedure: P, stage: { key: "complete" }, career: { id: "c" }, careerFlow: { state: "active" }, growth: null });
+  assert.deepEqual([gs.state, gs.stateLabel, gs.label, gs.cta.label], ["growth_active", "キャリア設定完了", "3か月育成を開始してください", "3か月育成を開始"]);
+  const ga = J({ employee: E, procedure: P, stage: { key: "complete" }, career: { id: "c" }, careerFlow: { state: "active" },
+    growth: { status: "active", end_date: "2026-12-31" } });
+  assert.equal(ga.label, "3か月育成中です");
+  const done = J({ employee: E, procedure: P, stage: { key: "complete" }, career: { id: "c" },
+    careerFlow: { state: "review_due", label: "3か月評価を実施してください", cta: { key: "review", label: "評価する" } },
+    growth: { status: "active", end_date: "2026-09-01" } });
+  assert.deepEqual([done.state, done.label, done.cta.label], ["active", "3か月評価を実施してください", "評価する"]);
+  // 以前からの社員（入社手続き無し）に「育成を始めて」とは言わない
+  assert.equal(J({ employee: E, procedure: null, career: { id: "c" }, careerFlow: { state: "active", label: "育成中です" } }).state, "active");
+});
+
+await ok("本人のホームは、いま必要な NEXT ACTION を1つだけ（契約 → 入社情報 → 書類 → キャリア）", async () => {
+  assert.equal(memberAskOf({ signPending: 1, confirmPending: false }).title, "契約内容の確認があります");
+  assert.equal(memberAskOf({ signPending: 1, confirmPending: true }).title, "契約・キャリアの確認があります");
+  assert.equal(memberAskOf({ signPending: 0, stage: "intake", facts: { items: [] } }).title, "入社情報を入力してください");
+  assert.equal(memberAskOf({ signPending: 0, stage: "intake",
+    facts: { profile: { status: "submitted" }, items: [{ owner: "employee", status: "todo", item_key: "doc_id" }] } }).title, "必要書類を提出してください");
+  assert.equal(memberAskOf({ signPending: 0, stage: "signing", facts: { items: [] } }), null, "署名前に入社情報を求めない");
+  assert.equal(memberAskOf({ signPending: 0, confirmPending: true }).title, "キャリアプランの確認があります");
+  assert.equal(memberAskOf({ signPending: 0, confirmPending: false }), null);
+});
+
+function onboardingFixture() {
+  db.rows.gw_employees.push(emp("e-new", { status: "invited", manager_id: "e-mgr" }));
+  db.rows.gw_procedures = [{ id: "p-new", tenant_id: "t1", employee_id: "e-new", kind: "onboarding", status: "in_progress",
+    target_on: "2026-10-01", created_at: "2026-09-01" }];
+  db.rows.gw_procedure_items = [
+    { id: "i1", procedure_id: "p-new", item_key: "doc_id", owner: "employee", required: true, status: "todo" },
+    { id: "i2", procedure_id: "p-new", item_key: "insurance", owner: "admin", required: true, status: "todo" },
+  ];
+  db.rows.gw_doc_orders = []; db.rows.gw_sign_requests = []; db.rows.gw_onboard_profiles = [];
+  db.rows.gw_onboard_consents = []; db.rows.gw_consent_docs = [];
+  db.rows.gw_hr_applicants = [
+    { id: "a-ok", tenant_id: "t1", name: "承諾 済子", decision: "hired", status: "accepted", join_date: "2026-11-01",
+      employment_type: "正社員", wage_type: "月給", wage_amount: 250000, employee_id: null },
+    { id: "a-wait", tenant_id: "t1", name: "承諾 待子", decision: "hired", status: "offer_response_pending", employee_id: null },
+    { id: "a-done", tenant_id: "t1", name: "社員 済男", decision: "hired", status: "done", employee_id: "e-taro" },
+    { id: "a-no", tenant_id: "t1", name: "見送り", decision: "rejected", status: "passed", employee_id: null },
+  ];
+}
+const consentAll = () => ["pledge", "privacy", "rules"].map((k) => ({ employee_id: "e-new", kind: k, version: "1.0", agreed_at: "2026-09-10" }));
+
+await ok("進行一覧：採用決定の人（採用HR権限だけ）と、入社手続き中の社員。事実が進むと状態も進む", async () => {
+  setup();
+  await seedAndSet();
+  onboardingFixture();
+  const row = async () => (await get("?journey=1")).body.rows.find((r) => r.id === "e-new");
+  let r = await get("?journey=1");
+  assert.equal(r.statusCode, 200);
+  const apps = r.body.rows.filter((x) => x.kind === "applicant").map((x) => x.id).sort();
+  assert.deepEqual(apps, ["a-ok", "a-wait"], "社員になった人・見送りは出さない");
+  assert.equal(r.body.rows.find((x) => x.id === "a-ok").journey.cta.label, "契約条件を設定");
+  assert.equal(r.body.rows.find((x) => x.id === "a-ok").joinOn, "2026-11-01");
+  assert.equal((await row()).journey.state, "contract_setup");
+  assert.equal((await row()).joinOn, "2026-10-01");
+  db.rows.gw_doc_orders.push({ id: "o1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "requested", updated_at: "2026-09-02" });
+  assert.equal((await row()).journey.state, "document_preparing");
+  db.rows.gw_doc_orders[0].status = "sent";
+  db.rows.gw_sign_requests.push({ id: "s1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "sent", sent_at: "2026-09-03" });
+  const sg = await row();
+  assert.equal(sg.journey.state, "signing");
+  assert.equal(sg.journey.actorLabel, "本人");
+  // 署名しても、誓約書の同意がそろうまでは入社手続きへ進まない
+  db.rows.gw_sign_requests[0].status = "signed";
+  assert.equal((await row()).journey.state, "signing");
+  db.rows.gw_onboard_consents.push(...consentAll());
+  assert.equal((await row()).journey.state, "onboarding_info");
+  db.rows.gw_onboard_profiles.push({ employee_id: "e-new", status: "submitted" });
+  assert.equal((await row()).journey.state, "documents_pending");
+  db.rows.gw_procedure_items[0].status = "submitted";
+  assert.equal((await row()).journey.state, "company_review");
+  db.rows.gw_procedure_items[1].status = "done";
+  const cs = await row();
+  assert.equal(cs.journey.state, "career_setup");
+  assert.equal(cs.journey.stateLabel, "入社手続き完了");
+  // マネージャーは担当の社員だけ。応募者は見えない（採用HRの権限が無い）
+  who = MANAGER;
+  const m = (await get("?journey=1")).body;
+  assert.equal(m.rows.some((x) => x.kind === "applicant"), false);
+  assert.equal(m.seesApplicants, false);
+  assert.ok(m.rows.some((x) => x.id === "e-new"));
+});
+
+await ok("詳細：上部の NEXT ACTION は進行（journey）。入社手続きタブの中身。キャリア設定→育成開始", async () => {
+  setup();
+  const { trackId, l1 } = await seedAndSet();
+  onboardingFixture();
+  let d = (await get("?employeeId=e-new")).body;
+  assert.equal(d.journey.state, "contract_setup");
+  assert.equal(d.onboarding.stage, "conditions");
+  assert.equal(d.onboarding.steps.length, 5);
+  assert.equal(d.onboarding.targetOn, "2026-10-01");
+  assert.ok(d.onboarding.links.hr.includes("admin-hr.html?id=p-new"));
+  // 入社手続きを終えた
+  db.rows.gw_doc_orders.push({ id: "o1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "signed", updated_at: "x" });
+  db.rows.gw_sign_requests.push({ id: "s1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "signed", sent_at: "x" });
+  db.rows.gw_onboard_consents.push(...consentAll());
+  db.rows.gw_onboard_profiles.push({ employee_id: "e-new", status: "submitted" });
+  db.rows.gw_procedure_items.forEach((i) => { i.status = "done"; });
+  d = (await get("?employeeId=e-new")).body;
+  assert.equal(d.journey.state, "career_setup");
+  assert.equal(d.journey.cta.key, "meeting");
+  await act({ action: "setCareer", employeeId: "e-new", trackId, currentLevelId: l1.id, nextReviewOn: jst(90), agreed: true });
+  d = (await get("?employeeId=e-new")).body;
+  assert.equal(d.journey.state, "growth_active");
+  assert.equal(d.journey.cta.key, "growth");
+  db.rows.gw_growth_plans.push({ id: "gp", tenant_id: "t1", employee_id: "e-new", status: "active", start_date: jst(0), end_date: jst(80) });
+  d = (await get("?employeeId=e-new")).body;
+  assert.equal(d.journey.label, "3か月育成中です");
+  // 以前からの社員（入社手続き無し）は通常評価
+  assert.equal((await get("?employeeId=e-taro")).body.journey.state, "active");
+});
+
+await ok("採用決定の詳細：採用HRの権限がある人だけ。社員になった人は社員の詳細へ", async () => {
+  setup();
+  onboardingFixture();
+  const r = await get("?applicant=a-ok");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.applicant.wageAmount, 250000);
+  assert.equal(r.body.journey.cta.href, "admin-onboard.html?applicantId=a-ok");
+  assert.equal(r.body.canAdvance, true);
+  assert.equal((await get("?applicant=a-done")).statusCode, 409);
+  assert.equal((await get("?applicant=a-no")).statusCode, 404);
+  who = MANAGER;
+  assert.equal((await get("?applicant=a-ok")).statusCode, 403);
+  who = HR;
+  const h = await get("?applicant=a-ok");
+  assert.equal(h.statusCode, 200);
+  assert.equal(h.body.canAdvance, false, "契約条件の設定（社員登録）は経営者・管理者");
+  assert.equal(h.body.journey.cta, null);
+});
+
+await ok("署名が済むまで入社手続き（入社情報・書類）へ進ませない（サーバ側）", async () => {
+  setup();
+  onboardingFixture();
+  const sb = { from: table };
+  let g = await intakeGate(sb, "t1", "e-new");
+  assert.equal(g.ok, false);
+  assert.equal(g.stage, "conditions");
+  db.rows.gw_doc_orders.push({ id: "o1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "sent", updated_at: "x" });
+  db.rows.gw_sign_requests.push({ id: "s1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "sent", sent_at: "x" });
+  g = await intakeGate(sb, "t1", "e-new");
+  assert.equal(g.ok, false, "送っただけでは進まない");
+  assert.match(g.hint, /署名/);
+  db.rows.gw_sign_requests[0].status = "signed";
+  db.rows.gw_onboard_consents.push(...consentAll());
+  assert.equal((await intakeGate(sb, "t1", "e-new")).ok, true);
+  assert.equal((await intakeGate(sb, "t1", "e-taro")).ok, true, "入社手続きの無い社員は止めない");
+});
+
+await ok("本人ホームの summary：署名待ち → 契約内容の確認、署名後 → 入社情報", async () => {
+  setup();
+  onboardingFixture();
+  db.rows.gw_doc_orders.push({ id: "o1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "sent", updated_at: "x" });
+  db.rows.gw_sign_requests.push({ id: "s1", tenant_id: "t1", employee_id: "e-new", doc_kind: "employment", status: "sent", sent_at: "x" });
+  who = { userId: "u-e-new", tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: emp("e-new") };
+  let s = (await call(meApi, { method: "GET", url: "/api/career/me?summary=1" })).body;
+  assert.equal(s.ask.title, "契約内容の確認があります");
+  assert.equal(s.ask.href, "contracts.html");
+  db.rows.gw_sign_requests[0].status = "signed";
+  db.rows.gw_onboard_consents.push(...consentAll());
+  s = (await call(meApi, { method: "GET", url: "/api/career/me?summary=1" })).body;
+  assert.equal(s.ask.title, "入社情報を入力してください");
+  assert.equal(s.ask.href, "onboarding.html");
+  db.rows.gw_onboard_profiles.push({ employee_id: "e-new", status: "submitted" });
+  s = (await call(meApi, { method: "GET", url: "/api/career/me?summary=1" })).body;
+  assert.equal(s.ask.title, "必要書類を提出してください");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

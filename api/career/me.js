@@ -1,6 +1,7 @@
 // GET  /api/career/me                          … 自分の契約・キャリア（現在の契約・現在地・次のLevel・
 //                                                次にやること・1年/3年・できるようになったこと・前回評価・確認依頼）
-// GET  /api/career/me?summary=1                … ホームの NEXT ACTION 用（確認依頼・署名待ちの有無だけ）
+// GET  /api/career/me?summary=1                … ホームの NEXT ACTION 用。いま必要なもの1つだけ
+//                                                （契約内容の確認 → 入社情報 → 必要書類 → キャリアプランの確認）
 // POST /api/career/me {action:"addGoal", criterionId} … 次のLevelの基準を、自分のタスクに加える
 // POST /api/career/me {action:"confirmPlan"}    … 届いたキャリアプランを「内容を確認しました」
 //
@@ -16,6 +17,9 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { notify } from "../../lib/notify.js";
 import { confirmPending } from "../../lib/career.js";
 import { memberCareerView, careerOf, pendingContractSigns } from "../../lib/career-member.js";
+import { memberAskOf } from "../../lib/journey.js";
+import { computeStage } from "../../lib/onboard-stage.js";
+import { gatherFacts } from "../../lib/onboard-advance.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -49,10 +53,24 @@ async function read(req, res, ctx, user) {
     ]);
     const c = careers?.[0] || null;
     const pending = confirmPending(c);
+    // 入社手続きの途中なら、入社情報・書類のどちらが残っているか（lib/onboard-stage.js と同じ判定）
+    let stage = null;
+    let facts = null;
+    try {
+      const procs = await soft(sb.from("gw_procedures").select("id, tenant_id, employee_id, kind, status, target_on, stage")
+        .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).eq("kind", "onboarding")
+        .order("created_at", { ascending: false }).limit(1));
+      const proc = procs?.[0];
+      if (proc && proc.status !== "cancelled" && proc.status !== "done") {
+        facts = await gatherFacts(sb, ctx.tenantId, proc);
+        stage = computeStage(facts).key;
+      }
+    } catch { stage = null; }
+    const ask = memberAskOf({ signPending: signs.length, confirmPending: pending, stage, facts });
     return json(res, 200, {
       confirmPending: pending, signPending: signs.length,
-      show: pending || signs.length > 0,
-      link: "career.html#confirm",
+      show: Boolean(ask), ask,
+      link: ask?.href || "career.html#confirm",
     });
   }
   return json(res, 200, await memberCareerView(sb, { tenantId: ctx.tenantId, employee: ctx.employee, userId: user.id }));

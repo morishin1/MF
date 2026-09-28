@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260928e">
-  <link rel="stylesheet" href="css/layout.css?v=20260928e">
+  <link rel="stylesheet" href="css/app.css?v=20260928f">
+  <link rel="stylesheet" href="css/layout.css?v=20260928f">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -120,6 +120,23 @@
     .wz-check li.no { font-weight:600; color:var(--primary-dark); }
     .wz-check li.no .mk { color:#b3261e; }
 
+    /* 採用決定 → 契約 → 入社 → キャリア → 育成 のどこにいるか */
+    .jr-bar { display:flex; gap:4px; margin:10px 0 2px; list-style:none; padding:0; }
+    .jr-bar li { flex:1; text-align:center; font-size:11px; color:var(--muted); padding-top:8px; position:relative; }
+    .jr-bar li::before { content:""; position:absolute; top:0; left:0; right:0; height:5px; border-radius:999px; background:#e4e8ee; }
+    .jr-bar li.done::before { background:#3e9c5a; }
+    .jr-bar li.now::before { background:var(--primary); }
+    .jr-bar li.now { color:var(--primary-dark); font-weight:700; }
+    .ob-steps { list-style:none; padding:0; margin:6px 0 10px; }
+    .ob-steps li { display:flex; gap:8px; align-items:center; padding:6px 0; font-size:13px; border-bottom:1px solid var(--border); }
+    .ob-steps li:last-child { border-bottom:none; }
+    .ob-steps .n { width:22px; height:22px; border-radius:50%; border:1.5px solid #c5cfdd; display:flex; align-items:center;
+                   justify-content:center; font-size:11.5px; font-weight:700; flex:0 0 auto; }
+    .ob-steps li.done .n { background:#eaf5ec; border-color:#3e9c5a; color:#256b36; }
+    .ob-steps li.now { font-weight:700; color:var(--primary-dark); }
+    .ob-steps li.now .n { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .ob-steps .who { margin-left:auto; font-size:11.5px; color:var(--muted); font-weight:400; }
+
     @media (max-width: 640px) {
       .cr-drawer { width:100vw; max-width:100vw; padding:16px; }
       .cr-sum { grid-template-columns:repeat(2, 1fr); }
@@ -172,6 +189,30 @@
     </div>
   </div>
 
+  <!-- ===== 入社〜育成（採用決定 → 契約 → 入社 → キャリア → 育成） ===== -->
+  <div id="pane-journey" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">route</span>採用決定から育成までの進行</h2>
+      <p class="cr-note" style="margin:0 0 10px;">
+        採用決定 → 契約条件 → 書類作成 → 本人署名 → 入社情報 → 必要書類 → 会社・社労士確認 → キャリア設定 → 3か月育成。
+        署名が済むまで入社手続きには進みません。
+      </p>
+      <div class="cr-tools">
+        <div style="flex:1;min-width:180px;"><label>検索</label>
+          <input id="j-q" type="search" placeholder="名前" oninput="renderJourney()"></div>
+        <div><label>現在状態</label><select id="j-state" onchange="renderJourney()"></select></div>
+        <div><label style="display:flex;gap:6px;align-items:center;font-weight:500;margin-top:18px;">
+          <input id="j-all" type="checkbox" style="width:auto;margin:0;" onchange="renderJourney()">通常評価に移った人も表示</label></div>
+      </div>
+      <div class="table-scroll">
+        <table class="kp-items">
+          <thead><tr><th>氏名</th><th>現在状態</th><th>NEXT ACTION</th><th>担当</th><th>入社予定日</th><th>更新日</th></tr></thead>
+          <tbody id="j-rows"><tr><td colspan="6" class="muted">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== 評価履歴 ===== -->
   <div id="pane-history" class="hidden">
     <div class="card">
@@ -202,9 +243,9 @@
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
 
-<script src="js/api-client.js?v=20260928e"></script>
-<script src="js/device.js?v=20260928e"></script>
-<script src="js/layout.js?v=20260928e"></script>
+<script src="js/api-client.js?v=20260928f"></script>
+<script src="js/device.js?v=20260928f"></script>
+<script src="js/layout.js?v=20260928f"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -215,19 +256,25 @@
   const fmtDate = (d) => (d ? String(d).slice(0, 10).replace(/-/g, "/") : "—");
 
   const q = new URLSearchParams(location.search);
-  const TAB = ["history", "master"].includes(q.get("tab")) ? q.get("tab") : "list";
+  const TAB = ["history", "master", "journey"].includes(q.get("tab")) ? q.get("tab") : "list";
 
   let listData = null;
   let detail = null;      // いま開いている社員の詳細
   let evidence = null;    // 評価モーダルで読んだ根拠
 
-  KPLayout.init({ active: TAB === "history" ? "career_history" : TAB === "master" ? "career_master" : "career", roles: ["admin", "owner"] })
+  KPLayout.init({ active: TAB === "history" ? "career_history" : TAB === "master" ? "career_master" : TAB === "journey" ? "career_journey" : "career", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) start(); });
 
   function start() {
-    for (const p of ["list", "history", "master"]) el(`pane-${p}`).classList.toggle("hidden", p !== TAB);
+    for (const p of ["list", "history", "master", "journey"]) el(`pane-${p}`).classList.toggle("hidden", p !== TAB);
     if (TAB === "history") return loadHistory();
     if (TAB === "master") return loadMaster();
+    if (TAB === "journey") {
+      return loadJourney().then(() => {
+        if (q.get("employeeId")) openDrawer(q.get("employeeId"));
+        else if (q.get("applicantId")) openApplicant(q.get("applicantId"));
+      });
+    }
     return loadList().then(() => { if (q.get("employeeId")) openDrawer(q.get("employeeId")); });
   }
 
@@ -315,9 +362,11 @@
   async function refreshDetail() {
     const id = detail?.employee?.id;
     if (!id) return;
-    await loadList();
+    await reloadCurrent();
     await openDrawer(id, drawerTab);
   }
+  // いま見ている一覧を読み直す（保存しても、開いている右ドロワーは閉じない）
+  const reloadCurrent = () => (TAB === "journey" ? loadJourney() : loadList());
 
   function progressBars(progress) {
     if (!progress || !progress.total) return `<p class="muted" style="font-size:12.5px;">次のLevelの評価基準がまだありません。</p>`;
@@ -330,14 +379,33 @@
   /** Primary CTA は1つ。何を押すかは状態で決まる（lib/career.js flowOf） */
   function ctaButton(f) {
     if (!f?.cta) return "";
-    return `<button class="btn btn-primary" id="cr-cta" onclick="runCta('${esc(f.cta.key)}')">${esc(f.cta.label)}</button>`;
+    if (f.cta.href) return `<a class="btn btn-primary" id="cr-cta" href="${esc(f.cta.href)}">${esc(f.cta.label)}</a>`;
+    return `<button class="btn btn-primary" id="cr-cta" onclick="runCta('${esc(f.cta.key)}', this)">${esc(f.cta.label)}</button>`;
   }
-  function runCta(key) {
+  async function runCta(key, btn) {
     const d = detail;
     if (key === "meeting") return openMeeting();
     if (key === "review") return openReview();
     if (key === "orders") { location.href = d.contractLinks.order; return; }
     if (key === "signs") { location.href = d.contractLinks.signs; return; }
+    if (key === "growth") return startGrowth(btn);
+  }
+
+  /** 3か月育成を開始（既存の /api/growth create。枠を作ってから、KGI/KPI は3か月育成の画面で決める） */
+  async function startGrowth(btn) {
+    try {
+      await KPLayout.busy(btn, "作成中…", () => API.growthAct("create", { employeeId: detail.employee.id }));
+      await refreshDetail();
+    } catch (e) { alert(e.hint || e.detail || e.message || "作成できませんでした"); }
+  }
+
+  // 採用決定 → 契約 → 入社 → キャリア → 育成 → 評価 の、いまいる所（lib/journey.js の step を6つにまとめる）
+  const PHASES = [["採用決定", [1]], ["契約", [2, 3, 4]], ["入社", [5, 6, 7]], ["キャリア", [8]], ["育成", [9]], ["評価", [10]]];
+  function journeyBar(j) {
+    if (!j) return "";
+    const at = PHASES.findIndex(([, steps]) => steps.includes(j.step));
+    return `<ol class="jr-bar" id="jr-bar" aria-label="進み具合">${PHASES.map(([label], i) =>
+      `<li class="${i < at ? "done" : i === at ? "now" : ""}">${esc(label)}</li>`).join("")}</ol>`;
   }
 
   function renderDrawer() {
@@ -345,26 +413,29 @@
     const box = el("drawer-root").querySelector(".cr-drawer");
     if (!box) return;
     const c = d.career;
-    const f = d.flow || { label: d.nextAction?.label };
-    const tabs = [["overview", "概要"], ["contract", "契約"], ["career", "キャリア"], ["growth", "育成"], ["history", "履歴"]];
+    // 上部の NEXT ACTION は、採用決定〜育成の流れ（journey）。無ければキャリアの状態
+    const f = d.journey || d.flow || { label: d.nextAction?.label };
+    const tabs = [["overview", "概要"], ["contract", "契約"], ["onboarding", "入社手続き"], ["career", "キャリア"], ["growth", "育成"], ["history", "履歴"]];
     box.innerHTML = `
       <h2>${esc(d.employee.name)}
         <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDrawer()">閉じる</button></h2>
       <div class="muted" style="font-size:12.5px;">${esc([d.track?.name, d.contract?.contractType].filter(Boolean).join(" / ") || d.employee.department || "")}</div>
+      ${journeyBar(d.journey)}
 
       <div class="cr-sum" id="cr-sum">
         <div><div class="k">現在</div><div class="v big">${c ? `L${esc(d.currentLevel?.levelNo ?? "-")}` : "—"}</div></div>
         <div><div class="k">次のLevel</div><div class="v big">${d.nextLevel ? `L${esc(d.nextLevel.levelNo)}` : "—"}</div></div>
         <div><div class="k">現在給与</div><div class="v">${wageText(d.currentWage)}</div></div>
         <div><div class="k">次回評価</div><div class="v">${fmtDate(c?.nextReviewOn)}</div></div>
-        <div><div class="k">状態</div><div class="v">${tone(d.flow)}</div></div>
+        <div><div class="k">状態</div><div class="v">${tone(d.journey || d.flow)}</div></div>
       </div>
 
       <div class="cr-next" id="cr-next">
         <div class="lbl">NEXT ACTION</div>
         <b>${esc(f.label || "")}</b>
         ${f.sub ? `<div class="sub">${esc(f.sub)}</div>` : ""}
-        ${ctaButton(d.flow)}
+        ${f.actorLabel ? `<div class="sub">担当：${esc(f.actorLabel)}</div>` : ""}
+        ${ctaButton(f)}
       </div>
 
       <div class="cr-tabs" role="tablist">${tabs.map(([k, label]) => `
@@ -378,12 +449,15 @@
     const d = detail;
     const c = d.career;
     if (drawerTab === "contract") return contractTab();
+    if (drawerTab === "onboarding") return onboardingTab();
     if (drawerTab === "career") return careerTab();
     if (drawerTab === "growth") return growthTab();
     if (drawerTab === "history") return historyTab();
     // 概要
     return `
       <dl class="cr-kv">
+        <dt>現在状態</dt><dd>${esc((d.journey || d.flow)?.stateLabel || "—")}</dd>
+        ${d.onboarding?.targetOn ? `<dt>入社予定日</dt><dd>${fmtDate(d.onboarding.targetOn)}</dd>` : ""}
         <dt>雇用区分</dt><dd>${esc(d.contract?.contractType || "—")}</dd>
         <dt>現在給与</dt><dd>${d.contract ? wageText(d.currentWage) : "有効な契約がありません"}
           <div class="cr-note">雇用契約（active）から表示しています</div></dd>
@@ -441,6 +515,29 @@
         <a class="btn btn-secondary btn-sm" href="${esc(d.contractLinks.signs)}">署名の状況</a>
       </div>
       <p class="cr-note">契約の変更は、作成依頼 → 労働条件通知書 → 電子署名で行います。キャリアプランは契約書に入れません。</p>`;
+  }
+
+  /** 入社手続き（既存の5段階。入社連絡票・必要書類・社労士確認・会社確認）。操作は既存の入退社画面で */
+  function onboardingTab() {
+    const o = detail.onboarding;
+    if (!o) return `<p class="muted" style="font-size:13px;">入社手続きはありません（以前からの社員、または手続きを作っていません）。</p>`;
+    const yes = (v, a, b) => (v ? a : b);
+    return `
+      <ol class="ob-steps" id="ob-steps">${o.steps.map((s) => `
+        <li class="${esc(s.state)}"><span class="n">${s.state === "done" ? "✓" : s.n}</span>${esc(s.label)}<span class="who">${esc(s.actorLabel)}</span></li>`).join("")}</ol>
+      <dl class="cr-kv">
+        <dt>入社予定日</dt><dd>${fmtDate(o.targetOn)}</dd>
+        <dt>本人契約</dt><dd>${o.signStatus === "signed" ? "署名済み" : o.signStatus === "sent" ? "署名待ち" : "まだ送っていません"}${o.consentsOk === false ? "・誓約書の確認待ち" : ""}</dd>
+        <dt>入社連絡票</dt><dd>${yes(o.profileSubmitted, "提出済み", o.stageN >= 4 ? "入力待ち" : "署名後に入力")}</dd>
+        <dt>必要書類</dt><dd>${o.stageN < 4 ? "署名後に提出" : o.employeeOpen ? `残り ${o.employeeOpen} 件` : "提出済み"}</dd>
+        <dt>会社・社労士確認</dt><dd>${o.stage === "complete" ? "完了" : o.internalOpen ? `社内準備 ${o.internalOpen} 件` : o.stageN >= 4 ? "確認待ち" : "—"}</dd>
+      </dl>
+      ${o.blockers.length ? `<div class="cr-ev"><b>止まっていること</b><ul>${o.blockers.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div>` : ""}
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-secondary btn-sm" href="${esc(o.links.hr)}">入社手続きを開く</a>
+        <a class="btn btn-secondary btn-sm" href="${esc(o.links.view)}">本人の手続き画面</a>
+      </div>
+      <p class="cr-note">応募時の履歴書・職務経歴書（採用HR）とは別に管理しています。</p>`;
   }
 
   function criteriaChecklist(d) {
@@ -531,6 +628,7 @@
     if (c?.confirmRequestedAt) ev.push({ at: c.confirmRequestedAt, kind: "本人確認", text: "確認依頼を送信" });
     if (c?.employeeConfirmedAt) ev.push({ at: c.employeeConfirmedAt, kind: "本人確認", text: "本人が内容を確認" });
     if (c?.agreedAt) ev.push({ at: c.agreedAt, kind: "キャリア面談", text: "初回キャリア面談で合意" });
+    if (d.onboarding?.stageAt) ev.push({ at: d.onboarding.stageAt, kind: "入社手続き", text: `「${d.onboarding.stageLabel}」になりました` });
     ev.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
     const drafts = (d.reviews || []).filter((r) => r.status !== "confirmed").length;
     return `${ev.length ? `<ul class="cr-list" id="cr-history">${ev.map((e) => `
@@ -540,6 +638,103 @@
   }
 
   const labelOf = (list, key) => (list || []).find((x) => x.key === key)?.label || "";
+
+  // ---- 入社〜育成の一覧 -----------------------------------------------------------
+  let journeyData = null;
+  async function loadJourney() {
+    try { journeyData = await API.careerJourney(); } catch (e) { showError(e); return; }
+    const keep = el("j-state").value;
+    el("j-state").innerHTML = `<option value="">すべて</option>` + (journeyData.states || []).map((s) =>
+      `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
+    el("j-state").value = keep;
+    renderJourney();
+  }
+  function renderJourney() {
+    if (!journeyData) return;
+    const text = el("j-q").value.trim();
+    const state = el("j-state").value;
+    const all = el("j-all").checked || state === "active";
+    const rows = journeyData.rows.filter((r) => {
+      if (text && !String(r.name || "").includes(text)) return false;
+      if (state && r.journey.state !== state) return false;
+      if (!all && r.journey.state === "active") return false;
+      return true;
+    });
+    el("j-rows").innerHTML = rows.length ? rows.map((r) => {
+      const j = r.journey;
+      const open = r.kind === "applicant" ? `openApplicant('${esc(r.id)}')` : `openDrawer('${esc(r.id)}')`;
+      return `<tr class="cr-row" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" onclick="${open}">
+        <td><b>${esc(r.name)}</b>${r.kind === "applicant" ? `<br><small class="muted">入社予定者（採用HR）</small>` : r.department ? `<br><small class="muted">${esc(r.department)}</small>` : ""}</td>
+        <td><span class="cr-tone ${esc(j.tone)}">${esc(j.stateLabel)}</span><br><small class="muted">STEP ${j.step} / ${j.total}</small></td>
+        <td class="cr-na-cell"><b>${esc(j.label)}</b>${j.sub ? `<small>${esc(j.sub)}</small>` : ""}</td>
+        <td>${esc(j.actorLabel || "—")}${r.managerName && j.actor === "manager" ? `<br><small class="muted">${esc(r.managerName)}</small>` : ""}</td>
+        <td>${fmtDate(r.joinOn)}</td>
+        <td>${fmtDate(r.updatedAt)}</td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="6" class="muted">${journeyData.rows.length ? "該当する人はいません。" : "採用決定から育成中の人はいません。"}</td></tr>`;
+  }
+
+  // ---- 採用決定（まだ社員でない人）のドロワー --------------------------------------------
+  let applicant = null;
+  async function openApplicant(id) {
+    detail = null;
+    el("drawer-root").innerHTML = `<div class="cr-drawer-bg" onclick="closeDrawer()"></div>
+      <div class="cr-drawer" role="dialog" aria-label="入社予定者"><div class="empty">読み込み中…</div></div>`;
+    try { applicant = await API.careerApplicant(id); }
+    catch (e) {
+      if (e.body?.employeeId) return openDrawer(e.body.employeeId);
+      el("drawer-root").querySelector(".cr-drawer").innerHTML = `<div class="err-text">${esc(e.hint || e.message)}</div>`; return;
+    }
+    drawerTab = "overview";
+    renderApplicant();
+  }
+  function renderApplicant() {
+    const a = applicant.applicant;
+    const j = applicant.journey;
+    const box = el("drawer-root").querySelector(".cr-drawer");
+    const cta = j.cta ? (j.cta.label === "契約条件を設定"
+      ? `<button class="btn btn-primary" id="cr-cta" onclick="advanceApplicant(this)">${esc(j.cta.label)}</button>`
+      : ctaButton(j)) : "";
+    const cond = `<dl class="cr-kv" id="ap-cond">
+        <dt>雇用区分</dt><dd>${esc(a.employmentType || "—")}${a.contractType ? `（${esc(a.contractType)}）` : ""}</dd>
+        <dt>入社予定日</dt><dd>${fmtDate(a.joinDate)}</dd>
+        <dt>給与</dt><dd>${a.wageAmount != null ? `${esc(a.wageType || "")} ${yen(a.wageAmount)}` : "—"}</dd>
+        <dt>週の労働時間</dt><dd>${a.weeklyHours != null ? `${esc(a.weeklyHours)}時間` : "—"}</dd>
+        <dt>契約期間</dt><dd>${a.contractEndDate ? `〜${fmtDate(a.contractEndDate)}` : "—"}</dd>
+        <dt>試用期間</dt><dd>${a.probationMonths ? `${esc(a.probationMonths)}か月` : "—"}</dd>
+        <dt>勤務場所</dt><dd>${esc(a.workLocation || "—")}</dd>
+      </dl>`;
+    box.innerHTML = `
+      <h2>${esc(a.name)}
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDrawer()">閉じる</button></h2>
+      <div class="muted" style="font-size:12.5px;">入社予定者（採用HR）${a.recruiterName ? `・担当 ${esc(a.recruiterName)}` : ""}</div>
+      ${journeyBar(j)}
+      <div class="cr-sum">
+        <div><div class="k">現在</div><div class="v">${tone(j)}</div></div>
+        <div><div class="k">入社予定日</div><div class="v">${fmtDate(a.joinDate)}</div></div>
+        <div><div class="k">提示給与</div><div class="v">${a.wageAmount != null ? yen(a.wageAmount) : "—"}</div></div>
+      </div>
+      <div class="cr-next" id="cr-next"><div class="lbl">NEXT ACTION</div><b>${esc(j.label)}</b>
+        ${j.sub ? `<div class="sub">${esc(j.sub)}</div>` : ""}
+        ${j.actorLabel ? `<div class="sub">担当：${esc(j.actorLabel)}</div>` : ""}
+        ${cta || (j.label === "契約条件を設定してください" && !applicant.canAdvance ? `<div class="cr-note">契約条件の設定は経営者・管理者が行います。</div>` : "")}</div>
+      <div class="cr-tabs" role="tablist">
+        <button role="tab" data-tab="overview" class="${drawerTab === "overview" ? "on" : ""}" onclick="drawerTab='overview';renderApplicant()">概要</button>
+        <button role="tab" data-tab="contract" class="${drawerTab === "contract" ? "on" : ""}" onclick="drawerTab='contract';renderApplicant()">契約</button>
+      </div>
+      ${drawerTab === "contract" ? `<div class="cr-sec">提示する契約条件（採用HR）</div>${cond}
+        <p class="cr-note">この条件を初期値にして、契約条件の設定（社員登録）→ 労働条件通知書 → 電子署名へ進みます。</p>`
+      : `<p style="font-size:13.5px;">採用が決まりました。契約条件を設定して社員として登録すると、労働条件通知書の作成・本人の署名・入社手続きへ進みます。</p>
+        <p class="cr-note">入社手続き・キャリア・育成のタブは、社員として登録したあとに表示されます。</p>
+        <a class="btn btn-secondary btn-sm" href="${esc(applicant.links.applicant)}">採用HRで見る</a>`}`;
+  }
+  /** 既存の「本採用へ進める」と同じ道（二重に進まないよう確保してから、社員登録の画面へ） */
+  async function advanceApplicant(btn) {
+    try {
+      await KPLayout.busy(btn, "準備中…", () => API.claimHrAdvance(applicant.applicant.id));
+      location.href = applicant.journey.cta.href;
+    } catch (e) { alert(e.hint || e.detail || e.message || "契約条件の設定を始められませんでした"); }
+  }
 
   // ---- 中央モーダル（背景を押すとモーダルだけ閉じる。ドロワーは残る） ------------------------
   function openModal(html, cls = "") {

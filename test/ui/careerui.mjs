@@ -162,6 +162,41 @@ const newDetail = () => {
   };
 };
 let newState = {};
+
+// 採用決定 → 育成 の進行
+const J = (state, stateLabel, label, extra = {}) => ({ state, stateLabel, label, step: extra.step || 1, total: 10, tone: extra.tone || "blue",
+  actorLabel: extra.actorLabel || null, actor: extra.actor || null, sub: extra.sub || null, cta: extra.cta || null });
+const JOURNEY = {
+  today: "2026-09-28", seesApplicants: true,
+  states: [{ key: "hired", label: "採用決定" }, { key: "signing", label: "本人確認・署名" }, { key: "active", label: "通常評価" }],
+  rows: [
+    { kind: "applicant", id: "a-ok", name: "承諾 済子", joinOn: "2026-11-01", updatedAt: "2026-09-27",
+      journey: J("hired", "採用決定", "契約条件を設定してください", { actorLabel: "経営者・人事", tone: "red",
+        cta: { key: "link", label: "契約条件を設定", href: "admin-onboard.html?applicantId=a-ok" } }) },
+    { kind: "employee", id: "e-sign", name: "署名 待男", joinOn: "2026-10-01", updatedAt: "2026-09-25",
+      journey: J("signing", "本人署名待ち", "本人の署名完了を待っています", { step: 4, actorLabel: "本人", tone: "yellow" }) },
+    { kind: "employee", id: "e-old", name: "通常 評価", joinOn: "2025-04-01", updatedAt: "2026-09-01",
+      journey: J("active", "通常評価", "育成中です", { step: 10, tone: "green" }) },
+  ],
+};
+const SIGN_DETAIL = {
+  ...NEW_BASE, employee: { id: "e-sign", name: "署名 待男", autonomyLevel: 1 },
+  journey: J("signing", "本人署名待ち", "本人の署名完了を待っています", { step: 4, actorLabel: "本人", tone: "yellow",
+    cta: { key: "link", label: "署名状況を見る", href: "admin-esign.html?tab=list" } }),
+  onboarding: { procedureId: "p1", targetOn: "2026-10-01", stage: "signing", stageN: 3, stageLabel: "締結",
+    steps: [{ key: "conditions", n: 1, label: "作成依頼", actorLabel: "管理者", state: "done" },
+            { key: "advisor_review", n: 2, label: "社労士確認", actorLabel: "社労士", state: "done" },
+            { key: "signing", n: 3, label: "締結", actorLabel: "本人", state: "now" },
+            { key: "intake", n: 4, label: "情報入力・提出", actorLabel: "本人", state: "todo" },
+            { key: "complete", n: 5, label: "完了", actorLabel: "—", state: "todo" }],
+    blockers: ["労働条件通知書の締結がまだです"], profileSubmitted: false, employeeOpen: 3, internalOpen: 2,
+    signStatus: "sent", consentsOk: false, links: { hr: "admin-hr.html?id=p1", view: "onboarding.html?employeeId=e-sign" } },
+};
+const APPLICANT = {
+  applicant: { id: "a-ok", name: "承諾 済子", status: "accepted", joinDate: "2026-11-01", employmentType: "正社員",
+    wageType: "月給", wageAmount: 250000, probationMonths: 3, workLocation: "本社", recruiterName: "採用 担当" },
+  journey: JOURNEY.rows[0].journey, canAdvance: true, links: { applicant: "hr/applicants.html?id=a-ok" },
+};
 const EVIDENCE = {
   period: { from: "2026-06-29", to: "2026-09-27" }, note: "",
   kpi: { threeMonthKgi: "一人で問い合わせ対応", months: [{ monthNo: 1, kgi: "対応10件", kpis: [{ name: "対応件数", target: 10, unit: "件" }] }] },
@@ -216,6 +251,9 @@ async function open(me, path, width = 1400) {
       if (/preview=/.test(url)) return send({ ...MY, confirm: { pending: true }, contractSign: { pending: [{ id: "s9", title: "労働条件通知書" }], link: "contracts.html" },
         contract: { contractType: "正社員" }, preview: { employeeName: "森田 太郎" } });
       if (/employeeId=e-new/.test(url)) return send(newDetail());
+      if (/employeeId=e-sign/.test(url)) return send(SIGN_DETAIL);
+      if (/journey=1/.test(url)) return send(JOURNEY);
+      if (/applicant=/.test(url)) return send(APPLICANT);
       if (/employeeId=/.test(url)) return send(DETAIL);
       if (/history=1/.test(url)) return send({ reviews: [], labels: LABELS });
       return send(LIST);
@@ -294,7 +332,7 @@ console.log("\n— 管理：admin-career.html —");
   check(await page.locator("#rows tr[data-emp]").count() === 1, "状態フィルタ");
   await page.selectOption("#f-state", "");
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
-  check(tabs.join("/") === "キャリア/3か月育成/自走レベル/評価履歴", `上部タブ（いま ${tabs.join("/")}）`);
+  check(tabs.join("/") === "キャリア/入社〜育成/3か月育成/自走レベル/評価履歴", `上部タブ（いま ${tabs.join("/")}）`);
   const side = await page.locator(".kp-sidebar").innerText();
   check(side.includes("評価・キャリア") && !side.includes("評価・育成"), "左メニューは「評価・キャリア」");
 
@@ -314,7 +352,7 @@ console.log("\n— 管理：admin-career.html —");
     "ドロワー上部：現在・次のLevel・現在給与・次回評価・状態");
   check(await page.locator(".cr-drawer .btn-primary").count() === 1, "Primary CTA は1つ");
   const dtabs = (await page.locator(".cr-tabs button").allInnerTexts()).map((x) => x.trim());
-  check(dtabs.join("/") === "概要/契約/キャリア/育成/履歴", `ドロワーのタブ（いま ${dtabs.join("/")}）`);
+  check(dtabs.join("/") === "概要/契約/入社手続き/キャリア/育成/履歴", `ドロワーのタブ（いま ${dtabs.join("/")}）`);
   await page.click('.cr-tabs button[data-tab="contract"]');
   const ct = await page.locator("#cr-tab-body").innerText();
   check(ct.includes("正社員") && ct.includes("9:00〜17:00") && ct.includes("署名済み") && ct.includes("220,000円"), "契約タブ：現在の契約・電子署名・過去契約");
@@ -503,6 +541,48 @@ console.log("\n— 本人：ホームの NEXT ACTION —");
   const t = await page.locator("#career-ask").innerText().catch(() => "");
   check(t.includes("契約・キャリアの確認があります") && t.includes("現在の契約内容と今後のキャリアプラン"), "ホームに「契約・キャリアの確認があります」");
   check(await page.locator('#career-ask a:has-text("確認する")').getAttribute("href") === "career.html#confirm", "［確認する］で確認画面へ");
+  await page.close();
+}
+
+console.log("\n— 管理：入社〜育成（採用決定 → 契約 → 入社 → キャリア → 育成） —");
+{
+  posted = [];
+  const page = await open(ME_OWNER, "admin-career.html?tab=journey");
+  check(await page.locator("#pane-journey").isVisible(), "?tab=journey で進行一覧");
+  const on = await page.locator(".kp-subnav .kp-subtab.on").allInnerTexts();
+  check(on.join("").includes("入社〜育成"), "「入社〜育成」のタブが選ばれている");
+  const heads = (await page.locator("#pane-journey thead th").allInnerTexts()).map((x) => x.trim());
+  check(heads.join("/") === "氏名/現在状態/NEXT ACTION/担当/入社予定日/更新日", `列（いま ${heads.join("/")}）`);
+  check(await page.locator("#j-rows tr[data-id]").count() === 2, "通常評価に移った人は既定で隠す");
+  await page.check("#j-all");
+  check(await page.locator("#j-rows tr[data-id]").count() === 3, "「通常評価に移った人も表示」");
+  const sign = await page.locator('#j-rows tr[data-id="e-sign"]').innerText();
+  check(sign.includes("本人署名待ち") && sign.includes("本人の署名完了を待っています") && sign.includes("本人") && sign.includes("2026/10/01"),
+    "現在状態・NEXT ACTION・担当・入社予定日");
+  // 社員：右ドロワー（入社手続きタブ）
+  await page.click('#j-rows tr[data-id="e-sign"]');
+  await page.waitForTimeout(400);
+  const dtabs = (await page.locator(".cr-tabs button").allInnerTexts()).map((x) => x.trim());
+  check(dtabs.join("/") === "概要/契約/入社手続き/キャリア/育成/履歴", `ドロワーのタブ（いま ${dtabs.join("/")}）`);
+  check((await page.locator("#cr-next").innerText()).includes("本人の署名完了を待っています"), "NEXT ACTION は進行の状態");
+  check(await page.locator("#cr-cta").innerText() === "署名状況を見る" && await page.locator(".cr-drawer .btn-primary").count() === 1, "Primary CTA は1つ");
+  check((await page.locator("#jr-bar li.now").innerText()) === "契約", "いまどこにいるか（契約）");
+  await page.click('.cr-tabs button[data-tab="onboarding"]');
+  const ob = await page.locator("#cr-tab-body").innerText();
+  check(ob.includes("締結") && ob.includes("署名待ち") && ob.includes("署名後に入力") && ob.includes("署名後に提出"), "入社手続き：署名前は入力・提出へ進まない表示");
+  check(await page.locator('#cr-tab-body a[href="admin-hr.html?id=p1"]').count() === 1, "既存の入社手続き画面へ");
+  await page.screenshot({ path: shotPath("career-journey-drawer.png") });
+  await page.click(".cr-drawer button:has-text('閉じる')");
+  // 採用決定：まだ社員でない人
+  await page.click('#j-rows tr[data-id="a-ok"]');
+  await page.waitForTimeout(400);
+  const ad = await page.locator(".cr-drawer").innerText();
+  check(ad.includes("契約条件を設定してください") && ad.includes("入社予定者"), "採用決定の人：NEXT ACTION");
+  check((await page.locator("#jr-bar li.now").innerText()) === "採用決定", "いまどこにいるか（採用決定）");
+  await page.click('.cr-tabs button[data-tab="contract"]');
+  const cond = await page.locator("#ap-cond").innerText();
+  check(cond.includes("正社員") && cond.includes("250,000円") && cond.includes("本社"), "提示する契約条件（採用HRのもの）");
+  check(await page.locator("#cr-cta").innerText() === "契約条件を設定", "CTA「契約条件を設定」");
   await page.close();
 }
 

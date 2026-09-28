@@ -6,6 +6,8 @@
 // GET  /api/career?master=1              … キャリアマスタ（トラック・Level・基準）
 // GET  /api/career?history=1             … 評価履歴
 // GET  /api/career?preview=…             … 本人画面のプレビュー（本人に見える形そのもの）
+// GET  /api/career?journey=1             … 採用決定 → 契約 → 入社 → キャリア → 育成 の進行一覧
+// GET  /api/career?applicant=…           … 採用決定（まだ社員でない人）の詳細。採用HRの権限がある人だけ
 // POST /api/career {action:…}
 //        seedStarter     … 共通テンプレート（L1〜L5・L2の基準）を入れる         owner/admin
 //        saveTrack       … トラックを作る・直す                                 owner/admin
@@ -32,7 +34,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
+import { gwContext, canRecruit, canDecideHire } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -46,6 +48,9 @@ import {
 } from "../../lib/career.js";
 import { memberCareerView } from "../../lib/career-member.js";
 import { LEVELS as AUTONOMY_LEVELS } from "../../lib/autonomy.js";
+import { journeyOf, intakeBreakdown, JOURNEY_STATES, ACTOR_LABELS } from "../../lib/journey.js";
+import { computeStage, STAGES as ONBOARD_STAGES, stageOf } from "../../lib/onboard-stage.js";
+import { gatherFacts, gatherFactsBulk } from "../../lib/onboard-advance.js";
 
 const EMP_FIELDS =
   "id, tenant_id, user_id, display_name, department, position, status, joined_on, "
@@ -130,6 +135,8 @@ async function read(req, res, ctx) {
   if (q.get("history")) return history(res, sb, ctx);
   if (q.get("evidence")) return evidence(res, sb, ctx, q.get("evidence"), q.get("from"), q.get("to"));
   if (q.get("preview")) return preview(res, sb, ctx, q.get("preview"));
+  if (q.get("journey")) return journeyList(res, sb, ctx);
+  if (q.get("applicant")) return applicantDetail(res, sb, ctx, q.get("applicant"));
   if (q.get("employeeId")) return detail(res, sb, ctx, q.get("employeeId"));
   return list(res, sb, ctx);
 }
@@ -282,6 +289,14 @@ async function detail(res, sb, ctx, employeeId) {
   const sentSigns = (signs || []).filter((x) => isContract(x) && x.status === "sent");
   const active = (contracts || []).find((x) => x.status === "active") || null;
   const autonomyLevel = AUTONOMY_LEVELS.find((l) => l.level === Number(e.autonomy_level)) || null;
+  const careerFlow = flowOf({ career: c, draft, orders: openOrders, signs: sentSigns, today });
+  const onb = await onboardingOf(sb, ctx, e.id);
+  const links = journeyLinks(e.id, onb?.proc?.id);
+  const journey = journeyOf({
+    employee: e, procedure: onb?.proc || null, stage: onb?.stage || null, facts: onb?.facts || null,
+    career: c, careerFlow, growth: growth ? { status: growth.status, end_date: growth.to } : null,
+    links, today,
+  });
 
   return json(res, 200, {
     employee: { id: e.id, userId: e.user_id || null, name: e.display_name, department: e.department, position: e.position,
@@ -295,7 +310,10 @@ async function detail(res, sb, ctx, employeeId) {
       confirmRequestedAt: c.confirm_requested_at || null, employeeConfirmedAt: c.employee_confirmed_at || null,
       confirmPending: confirmPending(c),
     } : null,
-    flow: flowOf({ career: c, draft, orders: openOrders, signs: sentSigns, today }),
+    flow: careerFlow,
+    // 採用決定 → 契約 → 入社 → キャリア → 育成 のどこか（lib/journey.js）。ドロワー上部の NEXT ACTION はこれ
+    journey,
+    onboarding: onb ? onboardingView(onb) : null,
     // 現在の契約（active）と過去の契約。読むだけ
     contract: contractView(active),
     pastContracts: (contracts || []).filter((x) => x.id !== active?.id && x.status !== "draft").map(contractView),
@@ -789,3 +807,161 @@ async function requestConfirm(res, sb, ctx, user, b) {
   }]);
   return json(res, 200, { ok: true, requestedAt: at, career: row });
 }
+
+// ---- 採用決定 → 契約 → 入社 → キャリア → 育成 ----------------------------------------
+
+function journeyLinks(employeeId, procId) {
+  const id = encodeURIComponent(employeeId);
+  return {
+    order: `admin-esign.html?tab=order&employeeId=${id}`,
+    signs: "admin-esign.html?tab=list",
+    hr: procId ? `admin-hr.html?id=${encodeURIComponent(procId)}` : "admin-hr.html",
+    growth: `admin-growth.html?employeeId=${id}`,
+    onboarding: `onboarding.html?employeeId=${id}`,
+  };
+}
+
+/** その社員の入社手続き（あれば）。段階は lib/onboard-stage.js で計算する */
+async function onboardingOf(sb, ctx, employeeId) {
+  const procs = await soft(sb.from("gw_procedures")
+    .select("id, tenant_id, employee_id, kind, status, target_on, stage, stage_at, updated_at, created_at")
+    .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("kind", "onboarding")
+    .order("created_at", { ascending: false }).limit(1));
+  const proc = procs?.[0];
+  if (!proc || proc.status === "cancelled") return null;
+  let facts = null;
+  try { facts = await gatherFacts(sb, ctx.tenantId, proc); } catch { facts = null; }
+  const stage = facts ? computeStage(facts) : { key: proc.stage || "conditions", blockers: [] };
+  return { proc, facts, stage };
+}
+
+function onboardingView({ proc, facts, stage }) {
+  const b = intakeBreakdown(facts || {});
+  const cur = stageOf(stage.key);
+  return {
+    procedureId: proc.id, targetOn: proc.target_on || null, stageAt: proc.stage_at || null,
+    stage: stage.key, stageN: cur.n, stageLabel: cur.label,
+    steps: ONBOARD_STAGES.map((s) => ({ key: s.key, n: s.n, label: s.label, actorLabel: s.actorLabel,
+      state: s.n < cur.n || stage.key === "complete" ? "done" : s.n === cur.n ? "now" : "todo" })),
+    blockers: stage.blockers || [],
+    profileSubmitted: b.profileSubmitted, employeeOpen: b.employeeOpen, internalOpen: b.internalOpen,
+    orderStatus: facts?.order?.status || null, signStatus: facts?.sign?.status || null,
+    consentsOk: facts ? Boolean(facts.consentsOk) : null,
+    links: { hr: `admin-hr.html?id=${encodeURIComponent(proc.id)}`,
+             view: `onboarding.html?employeeId=${encodeURIComponent(proc.employee_id)}` },
+  };
+}
+
+const APPLICANT_FIELDS = "id, tenant_id, name, status, decision, stage, join_date, employment_type, contract_type, "
+  + "contract_end_date, probation_months, wage_type, wage_amount, weekly_hours, work_location, recruiter_id, "
+  + "employee_id, updated_at, created_at";
+
+/** 採用決定で、まだ社員になっていない人。応募者の情報は採用HRの権限がある人だけ（lib/gw.js canRecruit） */
+async function hiredApplicants(sb, ctx) {
+  if (!canRecruit(ctx)) return [];
+  const rows = await soft(sb.from("gw_hr_applicants").select(APPLICANT_FIELDS)
+    .eq("tenant_id", ctx.tenantId).eq("decision", "hired").limit(500));
+  return (rows || []).filter((a) => !a.employee_id && !["declined", "passed", "done"].includes(a.status));
+}
+
+function applicantJourney(ctx, a, today) {
+  return journeyOf({
+    applicant: a, employee: null, canAdvance: canDecideHire(ctx), today,
+    links: { onboard: `admin-onboard.html?applicantId=${encodeURIComponent(a.id)}`,
+             applicant: `hr/applicants.html?id=${encodeURIComponent(a.id)}` },
+  });
+}
+
+async function journeyList(res, sb, ctx) {
+  const today = jstToday();
+  const [emps, applicants, procs, careers, reviews, contract, plans] = await Promise.all([
+    scopedEmployees(sb, ctx),
+    hiredApplicants(sb, ctx),
+    soft(sb.from("gw_procedures").select("id, tenant_id, employee_id, kind, status, target_on, stage, stage_at, updated_at, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("kind", "onboarding").order("created_at", { ascending: false }).limit(1000)),
+    must(sb.from("gw_employee_careers").select("*").eq("tenant_id", ctx.tenantId).eq("is_active", true)),
+    must(sb.from("gw_career_reviews").select("id, employee_id, career_id, status, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("status", "draft").limit(2000)),
+    contractState(sb, ctx),
+    soft(sb.from("gw_growth_plans").select("id, employee_id, status, start_date, end_date")
+      .eq("tenant_id", ctx.tenantId).order("start_date", { ascending: false }).limit(2000)),
+  ]);
+  const empById = new Map(emps.map((e) => [e.id, e]));
+  // 1人につき、いちばん新しい入社手続き（取り消しは除く）。担当範囲の社員だけ
+  const procOf = new Map();
+  for (const p of procs || []) {
+    if (p.status === "cancelled" || !empById.has(p.employee_id) || procOf.has(p.employee_id)) continue;
+    procOf.set(p.employee_id, p);
+  }
+  const procList = [...procOf.values()];
+  const items = procList.length ? await soft(sb.from("gw_procedure_items")
+    .select("id, procedure_id, item_key, owner, required, status").in("procedure_id", procList.map((p) => p.id))) : [];
+  const itemsByProc = new Map();
+  for (const i of items || []) {
+    if (!itemsByProc.has(i.procedure_id)) itemsByProc.set(i.procedure_id, []);
+    itemsByProc.get(i.procedure_id).push(i);
+  }
+  let factsBy = new Map();
+  try { factsBy = await gatherFactsBulk(sb, ctx.tenantId, procList, itemsByProc); } catch { factsBy = new Map(); }
+  const careerOf = new Map((careers || []).map((c) => [c.employee_id, c]));
+  const draftOf = new Map((reviews || []).map((r) => [r.employee_id, r]));
+  const planOf = new Map();
+  for (const g of plans || []) if (!planOf.has(g.employee_id)) planOf.set(g.employee_id, g);
+  const nameOf = contract.names;
+
+  const rows = [];
+  for (const a of applicants) {
+    rows.push({
+      kind: "applicant", id: a.id, name: a.name, department: a.employment_type || null,
+      joinOn: a.join_date || null, updatedAt: a.updated_at || a.created_at || null,
+      journey: applicantJourney(ctx, a, today),
+    });
+  }
+  for (const p of procList) {
+    const e = empById.get(p.employee_id);
+    const c = careerOf.get(e.id) || null;
+    const facts = factsBy.get(p.id) || null;
+    const stage = facts ? computeStage(facts) : { key: p.stage || "conditions" };
+    const careerFlow = flowOf({ career: c, draft: draftOf.get(e.id) || null, orders: contract.ordersOf.get(e.id) || [],
+      signs: contract.signsOf.get(e.id) || [], today });
+    const g = planOf.get(e.id) || null;
+    const journey = journeyOf({
+      employee: e, procedure: p, stage, facts, career: c, careerFlow,
+      growth: g ? { status: g.status, end_date: g.end_date } : null, links: journeyLinks(e.id, p.id), today,
+    });
+    const updated = [p.stage_at, p.updated_at, c?.updated_at].filter(Boolean).sort().pop() || null;
+    rows.push({
+      kind: "employee", id: e.id, name: e.display_name, department: e.department || null,
+      joinOn: p.target_on || e.joined_on || null, updatedAt: updated,
+      managerName: e.manager_id ? nameOf.get(e.manager_id) || null : null,
+      journey,
+    });
+  }
+  // まだ終わっていない人を、流れの前のほうから。同じ段階なら入社日が近い順
+  rows.sort((x, y) => (Number(x.journey.state === "active") - Number(y.journey.state === "active"))
+    || (x.journey.step - y.journey.step)
+    || String(x.joinOn || "9999").localeCompare(String(y.joinOn || "9999")));
+  return json(res, 200, { rows, states: JOURNEY_STATES, actors: ACTOR_LABELS, seesApplicants: canRecruit(ctx), today });
+}
+
+async function applicantDetail(res, sb, ctx, id) {
+  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden", hint: "採用HRの権限がある人だけが見られます" });
+  const a = await soft(sb.from("gw_hr_applicants").select(APPLICANT_FIELDS).eq("id", id)
+    .eq("tenant_id", ctx.tenantId).maybeSingle());
+  if (!a || a.decision !== "hired") return json(res, 404, { error: "not_found" });
+  if (a.employee_id) return json(res, 409, { error: "already_employee", employeeId: a.employee_id });
+  const recruiter = a.recruiter_id ? await soft(sb.from("gw_employees").select("display_name")
+    .eq("id", a.recruiter_id).eq("tenant_id", ctx.tenantId).maybeSingle()) : null;
+  return json(res, 200, {
+    applicant: {
+      id: a.id, name: a.name, status: a.status, joinDate: a.join_date, employmentType: a.employment_type,
+      contractType: a.contract_type, contractEndDate: a.contract_end_date, probationMonths: a.probation_months,
+      wageType: a.wage_type, wageAmount: a.wage_amount, weeklyHours: a.weekly_hours, workLocation: a.work_location,
+      recruiterName: recruiter?.display_name || null,
+    },
+    journey: applicantJourney(ctx, a, jstToday()),
+    canAdvance: canDecideHire(ctx),
+    links: { applicant: `hr/applicants.html?id=${encodeURIComponent(a.id)}` },
+  });
+}
+
