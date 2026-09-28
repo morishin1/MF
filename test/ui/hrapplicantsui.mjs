@@ -14,6 +14,7 @@ let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
 const RECRUITER = { id: "emp-r1", display_name: "採用 花子", status: "active" };
+const EMPLOYEES = [{ id: "emp-r1", display_name: "採用 花子" }, { id: "emp-2", display_name: "面接 次郎" }];
 
 console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
 {
@@ -39,8 +40,15 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
     if (/\/api\/hr\/applicants\/detail/.test(url)) {
       const id = new URL(url).searchParams.get("id");
       const a = applicants.find((x) => x.id === id);
+      if (req.method() === "PATCH") {
+        const b = JSON.parse(req.postData() || "{}");
+        posted.push({ patch: true, ...b });
+        const t = applicants.find((x) => x.id === b.id);
+        if (t && "recruiterId" in b) { t.recruiterId = b.recruiterId; t.recruiterName = EMPLOYEES.find((e) => e.id === b.recruiterId)?.display_name || null; }
+        return send({ applicant: t });
+      }
       return send({
-        applicant: { ...a, recruiterName: null },
+        applicant: { ...a },
         interviews: [], timeline: [{ id: "t1", eventKey: "applied", label: "応募", occurredAt: "2026-09-20T00:00:00Z" }],
         offers: [],
       });
@@ -52,13 +60,14 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
         const made = {
           id: `a${applicants.length + 1}`, name: b.name, jobTitle: b.jobTitle, source: b.source,
           stage: "applied", stageLabel: "新規応募", status: "todo", statusLabel: "未対応", nextAction: "対応を進めてください",
-          rank: null, decisionDueOn: null, overdue: false, recruiterName: null, interviewCount: 0,
+          rank: null, decisionDueOn: null, overdue: false, interviewCount: 0,
+          recruiterId: b.recruiterId || null, recruiterName: EMPLOYEES.find((e) => e.id === b.recruiterId)?.display_name || null,
           createdAt: new Date().toISOString(),
         };
         applicants = [...applicants, made];
         return send({ applicant: made });
       }
-      return send({ applicants });
+      return send({ applicants, employees: EMPLOYEES, meEmployeeId: RECRUITER.id });
     }
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     if (/\/api\/badges/.test(url)) return send({ badges: {} });
@@ -87,10 +96,12 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.fill("#a-name", "田中 一郎");
   await page.fill("#a-job", "セールス");
   await page.locator('input[name="a-source"]').first().check();
+  check((await page.locator("#a-recruiter").inputValue()) === RECRUITER.id, "担当の初期値は登録する本人");
   await page.locator("button", { hasText: "追加する" }).click();
   await page.waitForTimeout(700);
 
   check(posted.length === 1 && posted[0].name === "田中 一郎", "追加が送られる");
+  check(posted[0].recruiterId === RECRUITER.id, "担当も一緒に送られる");
   check((await page.locator("#rows").innerText()).includes("田中 一郎"), "一覧に出る");
   check((await page.locator("#rows").innerText()).includes("セールス"), "職種も出る");
 
@@ -103,7 +114,19 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check((await page.locator(".hr-detail").innerText()).includes("応募"), "選考タイムラインが出る");
   check((await page.locator(".hr-next .now").innerText()).includes("現在："), "「現在：」の状態が先に出る（迷わないUI）");
 
-  await page.locator(".hr-detail button", { hasText: "閉じる" }).click();
+  console.log("— 担当を詳細から変更できる —");
+  check((await page.locator("#hr-recruiter").innerText()).includes(RECRUITER.display_name), "詳細に担当が出る");
+  await page.locator("#hr-recruiter button", { hasText: "変更" }).click();
+  await page.waitForTimeout(300);
+  check(await page.locator("#rc-select").isVisible(), "担当の変更は中央モーダル");
+  await page.selectOption("#rc-select", "emp-2");
+  await page.locator("#action-root button", { hasText: "保存" }).click();
+  await page.waitForTimeout(700);
+  check(posted.some((p) => p.patch && p.recruiterId === "emp-2"), "担当の変更が送られる");
+  check(await page.locator(".hr-detail").isVisible() && !(await page.locator("#rc-select").count()), "保存後もドロワーは開いたまま・モーダルは閉じる");
+  check((await page.locator("#hr-recruiter").innerText()).includes("面接 次郎"), "ドロワーにすぐ反映");
+
+  await page.locator(".hr-detail button", { hasText: "閉じる" }).first().click();
   await page.waitForTimeout(300);
   check(!(await page.locator(".hr-detail").count()), "閉じると消える");
 

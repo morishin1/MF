@@ -1,6 +1,7 @@
 // GET   /api/hr/applicants/detail?id=…  … 応募者1人ぶん（面談・タイムライン・合格通知つき）
 // PATCH /api/hr/applicants/detail { id, ... } … 応募者本体を更新
 
+import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canDecideHire } from "../../../lib/gw.js";
@@ -104,8 +105,12 @@ async function update(req, res, sb, ctx, user) {
   const row = normalizeApplicant(body, { partial: true });
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
+  if ("recruiter_id" in row.value) {
+    const rc = await checkRecruiter(sb, ctx.tenantId, row.value.recruiter_id);
+    if (!rc.ok) return json(res, 400, rc);
+  }
 
-  const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name")
+  const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name, recruiter_id")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!before) return json(res, 404, { error: "not_found" });
   if (before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined)
@@ -147,6 +152,17 @@ async function update(req, res, sb, ctx, user) {
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: body.id,
       event_key: `decision_${row.value.decision || "cleared"}`, label, detail, created_by: user.id,
+    });
+  }
+
+  // 担当が変わったときは、選考の履歴に残す（誰の担当だったかを後から追えるように）
+  if ("recruiter_id" in row.value && row.value.recruiter_id !== before.recruiter_id) {
+    const { data: who } = row.value.recruiter_id
+      ? await sb.from("gw_employees").select("display_name").eq("id", row.value.recruiter_id).maybeSingle()
+      : { data: null };
+    await sb.from("gw_hr_timeline").insert({
+      tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "recruiter_changed",
+      label: "担当を変更", detail: who?.display_name || "未定", created_by: user.id,
     });
   }
 
