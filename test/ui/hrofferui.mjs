@@ -98,19 +98,19 @@ console.log("\n=== 合格通知を作成する → 社内確認待ち → 確定
   console.log("\n— 合格通知を作成する（応募者の採用条件で事前入力される） —");
   await page.locator(".hr-next button", { hasText: "合格通知を作成" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "作成フォームが開く");
+  check(await page.locator("#action-root .hr-modal").isVisible(), "作成フォームが開く");
   check(await page.locator("#of-employment").inputValue() === "正社員", "雇用形態が事前入力される");
   check(await page.locator("#of-join").inputValue() === "2026-11-01", "入社予定日が事前入力される");
   check(await page.locator("#of-wage").inputValue() === "400000", "給与が事前入力される");
 
   console.log("\n— 回答期限を入れずに作成しようとすると断る —");
-  await page.locator(".hr-drawer button", { hasText: "作成する" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "作成する" }).click();
   await page.waitForTimeout(300);
   check((await page.locator("#of-msg").innerText()).includes("回答期限"), "回答期限必須のエラーが出る");
 
   await page.fill("#of-respondby", "2026-10-15");
   await page.fill("#of-message", "皆様とご一緒できることを楽しみにしています。");
-  await page.locator(".hr-drawer button", { hasText: "作成する" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "作成する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.respondBy === "2026-10-15"), "作成がサーバへ送られる");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
@@ -124,7 +124,7 @@ console.log("\n=== 合格通知を作成する → 社内確認待ち → 確定
   await page.locator(".hr-next button", { hasText: "内容を確認する" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#of-respondby").inputValue() === "2026-10-15", "既存の内容が事前入力される（確認フォーム）");
-  await page.locator(".hr-drawer button", { hasText: "確定して送付待ちにする" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "確定して送付待ちにする" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "confirm"), "確定がサーバへ送られる");
   check((await page.locator(".hr-next").innerText()).includes("合格通知を本人へ送ってください"), "本人送付待ちへ進む");
@@ -216,8 +216,8 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
   console.log("\n— URLを発行する（メール送信の仕組みは無いので、コピーして手動で送る） —");
   await page.locator(".hr-next button", { hasText: "本人へ送る" }).click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-drawer").isVisible(), "ドロワーが開く");
-  await page.locator(".hr-drawer button", { hasText: "URLを発行する" }).click();
+  check(await page.locator("#action-root .hr-modal").isVisible(), "ドロワーが開く");
+  await page.locator("#action-root .hr-modal button", { hasText: "URLを発行する" }).click();
   await page.waitForTimeout(500);
   check(posted.some((p) => p.action === "issueLink"), "URL発行がサーバへ送られる");
   const urlVal = await page.locator("#so-url").inputValue();
@@ -231,7 +231,7 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
   check(copied.includes(urlVal), "クリップボードにURLがコピーされる");
 
   console.log("\n— 送付済みにする（本人送付済みへ） —");
-  await page.locator(".hr-drawer button", { hasText: "送付済みにする" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "送付済みにする" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "markSent"), "送付済みがサーバへ送られる");
   check((await page.locator(".hr-next").innerText()).includes("本人の確認を待っています"), "NEXT ACTIONが進む");
@@ -241,8 +241,8 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
   check(await page.locator(".hr-next button", { hasText: "URLを再発行" }).count() === 1, "再発行ボタンが出る");
   await page.locator(".hr-next button", { hasText: "URLを再発行" }).click();
   await page.waitForTimeout(400);
-  check((await page.locator(".hr-drawer").innerText()).includes("現在のURLは使えなくなります"), "再発行の確認文が出る");
-  await page.locator(".hr-drawer button", { hasText: "再発行する" }).click();
+  check((await page.locator("#action-root .hr-modal").innerText()).includes("現在のURLは使えなくなります"), "再発行の確認文が出る");
+  await page.locator("#action-root .hr-modal button", { hasText: "再発行する" }).click();
   await page.waitForTimeout(500);
   const urlVal2 = await page.locator("#so-url").inputValue();
   check(urlVal2.includes("tok-2") && urlVal2 !== urlVal, "新しいURLが発行される（前とは別のtoken）");
@@ -300,7 +300,9 @@ console.log("\n=== 承諾・辞退の結果がHR側に表示される（Stage 7�
   const detailText = await page.locator(".hr-detail").innerText();
   check(detailText.includes("辞退"), "合格通知の履歴に辞退が出る");
   check(detailText.includes("他社の内定を承諾したため"), "辞退理由が出る");
-  check(detailText.includes("本人が辞退"), "選考タイムラインに辞退が出る");
+  // 選考タイムラインは「履歴」タブ（ドロワーの整理：概要／面談／書類／履歴）
+  await page.locator('.hr-tabs button[data-tab="history"]').click();
+  check((await page.locator(".hr-detail").innerText()).includes("本人が辞退"), "選考タイムラインに辞退が出る");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
 }

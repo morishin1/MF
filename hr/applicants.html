@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260928b">
+  <link rel="stylesheet" href="../css/app.css?v=20260928c">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -54,7 +54,32 @@
     .hr-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
     .hr-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:440px; max-width:92vw;
       max-height:86vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
-      box-shadow:0 20px 60px rgba(27,36,64,.28); }
+      box-shadow:0 20px 60px rgba(27,36,64,.28); overscroll-behavior:contain; }
+    /* 項目の多い操作（評価・合格通知・書類・応募者追加）。中だけスクロールする */
+    .hr-modal.wide { width:680px; max-height:88vh; }
+    /* 確認モーダル（削除など）は、書類のモーダルの上にも出せるように1段上げる */
+    .hr-modal-bg.top { z-index:60; } .hr-modal.top { z-index:61; }
+
+    /* 書類タブ */
+    .hr-doc { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+    .hr-doc .t { font-size:13px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:6px; }
+    .hr-doc .t .material-symbols-outlined { font-size:18px; color:#6b7080; }
+    .hr-doc .f { font-size:13px; margin:6px 0 2px; word-break:break-all; }
+    .hr-doc .m { font-size:11.5px; color:#6b7080; }
+    .hr-doc .acts { display:flex; gap:6px; margin-top:10px; align-items:center; position:relative; flex-wrap:wrap; }
+    .hr-doc .none { font-size:12.5px; color:#9aa0b4; margin:6px 0 0; }
+    .hr-more { position:relative; }
+    .hr-menu-pop { position:absolute; right:0; top:34px; background:#fff; border:1px solid #e2e2dc; border-radius:8px;
+      box-shadow:0 8px 24px rgba(27,36,64,.14); min-width:160px; z-index:5; padding:4px 0; }
+    .hr-menu-pop button { display:block; width:100%; text-align:left; border:none; background:none; padding:9px 14px;
+      font-size:13px; color:#1b2440; cursor:pointer; font-family:inherit; }
+    .hr-menu-pop button:hover { background:#f6f6f2; }
+    .hr-menu-pop button.danger { color:#b3261e; }
+    .hr-drop { border:2px dashed #cfd4e0; border-radius:10px; padding:22px; text-align:center; color:#6b7080;
+      font-size:13px; cursor:pointer; background:#fafaf7; }
+    .hr-drop.over { border-color:#1b2440; background:#eef0f6; color:#1b2440; }
+    .hr-docs-mini { display:inline-flex; gap:8px; margin-left:6px; font-size:10.5px; color:#9aa0b4; white-space:nowrap; }
+    .hr-docs-mini .ok { color:#256b36; }
 
     /* 選択中バー（Selection Action Bar）。1件以上チェックすると画面下部に固定表示する。
        ドロワー(41)・モーダル(51)より前面に出ないよう、z-indexは30〜35の範囲にとどめる */
@@ -127,10 +152,11 @@
 <div id="modal-root"></div>
 <div id="action-root"></div>
 <div id="hr-modal-root"></div>
+<div id="confirm-root"></div>
 
-<script src="../js/api-client.js?v=20260928b"></script>
-<script src="../js/layout.js?v=20260928b"></script>
-<script src="../js/hr-layout.js?v=20260928b"></script>
+<script src="../js/api-client.js?v=20260928c"></script>
+<script src="../js/layout.js?v=20260928c"></script>
+<script src="../js/hr-layout.js?v=20260928c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -207,6 +233,13 @@
     }
   }
 
+  // 書類のそろい具合。一覧を重くしないよう、小さく灰色で（そろっているものだけ緑）
+  function docsMini(d) {
+    if (!d) return "";
+    const one = (ok, label) => `<span class="${ok ? "ok" : ""}" title="${label}${ok ? "：登録済み" : "：未登録"}">${label} ${ok ? "✓" : "—"}</span>`;
+    return `<span class="hr-docs-mini" data-docs>${one(d.resume, "履歴書")}${one(d.workHistory, "職務経歴書")}</span>`;
+  }
+
   function render() {
     const q = (el("q").value || "").trim().toLowerCase();
     const list = applicants.filter((a) =>
@@ -226,7 +259,7 @@
       <tr class="click" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
-        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}${docsMini(a.docs)}</span></td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
           <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span></td>
@@ -381,8 +414,8 @@
     closeModal();
     const root = el("modal-root");
     root.innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeModal()"></div>
-      <div class="hr-drawer">
+      <div class="hr-modal-bg" onclick="closeModal()"></div>
+      <div class="hr-modal wide" role="dialog" aria-modal="true">
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">応募者を追加</h2>
         <label>氏名 <span style="color:#b3261e;">*</span></label>
         <input id="a-name" type="text">
@@ -446,12 +479,38 @@
       <div class="hr-detail" id="hr-detail-box"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
     history.replaceState({}, "", `/hr/applicants.html?id=${encodeURIComponent(id)}`);
     try {
-      detail = await API.getHrApplicant(id);
+      const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
+      detail = d;
       renderDetail();
     } catch (e) {
       el("hr-detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
         <span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.detail || e.message)}</div></div>`;
     }
+  }
+
+  /**
+   * 開いたままの応募者詳細を、取り直して描き直す（各操作の保存後）。
+   * ドロワーは閉じない。いま見ているタブも保つ（tab を渡したときはそのタブへ）
+   */
+  async function refreshDetail(tab) {
+    const id = detail?.applicant?.id;
+    if (!id) return;
+    if (tab) detailTab = tab;
+    try {
+      const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
+      detail = d;
+      if (el("hr-detail-box")) renderDetail();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "再読み込みできませんでした");
+    }
+  }
+
+  // ---- 書類（履歴書・職務経歴書・その他） ------------------------------------------
+  let docs = null;       // { documents:[{docType,label,icon,latest,history}], limits }
+  let docsError = null;
+  async function loadDocs(id) {
+    try { docs = await API.hrDocuments(id); docsError = null; }
+    catch (e) { docs = null; docsError = e.message || e.hint || "書類を読み込めませんでした"; }
   }
 
   function closeModal() {
@@ -466,8 +525,11 @@
   function renderDetail() {
     const a = detail.applicant;
     const box = el("hr-detail-box");
+    if (!box) return;
+    const TABS = [["overview", "概要"], ["interviews", "面談"], ["docs", "書類"], ["history", "履歴"]];
+    if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
     box.innerHTML = `
-      <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div style="padding:20px 20px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
             ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}</div>
@@ -475,8 +537,16 @@
         </div>
         <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
       </div>
+      <div class="hr-tabs">${TABS.map(([k, l]) =>
+        `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
+      <div class="hr-detail-body" id="hr-detail-tab"></div>`;
+    renderDetailTab();
+  }
 
-      <div class="hr-next" style="margin:16px 20px;">
+  /** NEXT ACTION と、その1つの CTA（原則1つ） */
+  function nextActionBox(a) {
+    return `
+      <div class="hr-next" style="margin:0 0 16px;">
         <div class="now">現在：${esc(a.statusLabel)}</div>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>${esc(a.nextAction)}</h3>
@@ -489,46 +559,255 @@
               ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">本採用へ進めるのは社長・管理者が行います。</p>`
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
-      </div>
+      </div>`;
+  }
 
-      <div class="hr-tabs">
-        <button class="${detailTab === "overview" ? "on" : ""}" onclick="setDetailTab('overview')">概要</button>
-        <button class="${detailTab === "interviews" ? "on" : ""}" onclick="setDetailTab('interviews')">面談</button>
-        <button class="${detailTab === "files" ? "on" : ""}" onclick="setDetailTab('files')">ファイル</button>
-      </div>
-      <div class="hr-detail-body" id="hr-detail-tab"></div>`;
-    renderDetailTab();
+  /** いちばん新しい、評価済みの面談 */
+  function latestEvaluation() {
+    return (detail.interviews || []).find((i) => i.rank) || null;
   }
 
   function renderDetailTab() {
     const a = detail.applicant;
+    const box = el("hr-detail-tab");
     if (detailTab === "overview") {
-      el("hr-detail-tab").innerHTML = `
+      const ev = latestEvaluation();
+      const evLine = ev ? (detail.evalItems || []).filter((e) => ev.scores?.[e.key])
+        .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
+      const missing = docMissingLabels();
+      box.innerHTML = `
+        ${nextActionBox(a)}
         <dl class="hr-grid2">
+          <div><dt>応募経路</dt><dd>${esc(a.source || "—")}</dd></div>
+          <div><dt>応募職種</dt><dd>${esc(a.jobTitle || "—")}</dd></div>
+          <div><dt>現在ステータス</dt><dd>${esc(a.statusLabel || "—")}</dd></div>
+          <div><dt>担当</dt><dd>${esc(a.recruiterName || "未定")}</dd></div>
           <div><dt>メール</dt><dd>${esc(a.email || "—")}</dd></div>
           <div><dt>電話</dt><dd>${esc(a.phone || "—")}</dd></div>
+          <div><dt>ランク</dt><dd>${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span> ${esc((detail.rankLabel || {})[a.rank] || "")}` : "—"}</dd></div>
+          <div><dt>最新評価</dt><dd>${ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : "まだありません"}</dd></div>
           <div><dt>雇用形態</dt><dd>${esc(a.employmentType || "—")}</dd></div>
           <div><dt>入社予定日</dt><dd>${esc(a.joinDate || "—")}</dd></div>
           <div><dt>給与</dt><dd>${a.wageAmount ? `${esc(a.wageType || "")} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : "—"}</dd></div>
           <div><dt>勤務地</dt><dd>${esc(a.workLocation || "—")}</dd></div>
         </dl>
+        ${missing.length ? `<p class="muted" style="font-size:12px;margin:12px 0 0;">
+          ${esc(missing.join("・"))}が未登録です。<a href="#" onclick="setDetailTab('docs');return false;">書類タブ</a>から登録できます。</p>` : ""}
         ${(detail.offers || []).length ? `
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">合格通知</h4>
-        ${detail.offers.map(offerRow).join("")}` : ""}
-        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">選考タイムライン</h4>
-        <div class="hr-tl">${(detail.timeline || []).map((t, i, arr) => `
-          <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
-            <div class="l">${esc(t.label)}${t.detail ? `　${esc(t.detail)}` : ""}${i === arr.length - 1 ? `<span class="now">← 現在</span>` : ""}</div>
-          </div>`).join("") || `<p class="muted">まだ記録がありません。</p>`}</div>`;
+        ${detail.offers.map(offerRow).join("")}` : ""}`;
     } else if (detailTab === "interviews") {
-      el("hr-detail-tab").innerHTML = `
+      box.innerHTML = `
         <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin-bottom:12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
         ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
           : `<p class="muted">まだ面談の記録がありません。</p>`}`;
+    } else if (detailTab === "docs") {
+      box.innerHTML = renderDocsTab();
     } else {
-      el("hr-detail-tab").innerHTML = `<p class="muted">応募書類・録画リンクは面談タブから確認できます。</p>`;
+      box.innerHTML = `
+        <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">選考タイムライン</h4>
+        <div class="hr-tl">${(detail.timeline || []).map((t, i, arr) => `
+          <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
+            <div class="l">${esc(t.label)}${t.detail ? `　${esc(t.detail)}` : ""}${i === arr.length - 1 ? `<span class="now">← 現在</span>` : ""}</div>
+          </div>`).join("") || `<p class="muted">まだ記録がありません。</p>`}</div>`;
     }
+  }
+
+  // ---- 書類タブ ---------------------------------------------------------------------
+  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" }) : "");
+  const fmtSize = (n) => (n ? (n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`) : "");
+  const docGroup = (type) => (docs?.documents || []).find((d) => d.docType === type) || null;
+
+  /** 履歴書・職務経歴書のうち、まだ無いもの */
+  function docMissingLabels() {
+    if (!docs) return [];
+    return ["resume", "work_history"].map(docGroup).filter((g) => g && !g.latest).map((g) => g.label);
+  }
+
+  function renderDocsTab() {
+    if (docsError) return `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(docsError)}</div></div>`;
+    if (!docs) return `<p class="muted">読み込み中…</p>`;
+    const main = ["resume", "work_history"].map(docGroup).filter(Boolean);
+    const other = docGroup("other");
+    const card = (g, d) => `
+      <div class="hr-doc" data-doc="${esc(g.docType)}">
+        <div class="t"><span class="material-symbols-outlined">${esc(g.icon)}</span>${esc(g.label)}</div>
+        ${d ? `
+          <div class="f">${esc(d.filename)}</div>
+          <div class="m">${esc(fmtDay(d.uploadedAt))} アップロード${d.sizeBytes ? `・${esc(fmtSize(d.sizeBytes))}` : ""}${d.uploadedByName ? `・${esc(d.uploadedByName)}` : ""}${g.history.length ? `・過去の版 ${g.history.length}` : ""}</div>
+          <div class="acts">
+            <button class="btn btn-secondary btn-sm" onclick="previewDoc('${esc(d.id)}')">プレビュー</button>
+            <button class="btn btn-secondary btn-sm" onclick="openUploadDoc('${esc(g.docType)}')">差し替え</button>
+            <span class="hr-more">
+              <button class="btn btn-secondary btn-sm" aria-label="その他の操作" onclick="toggleDocMenu(event, '${esc(d.id)}')">…</button>
+              <div class="hr-menu-pop hidden" id="docmenu-${esc(d.id)}">
+                <button onclick="previewDoc('${esc(d.id)}')">プレビュー</button>
+                <button onclick="downloadDoc('${esc(d.id)}')">ダウンロード</button>
+                <button onclick="openUploadDoc('${esc(g.docType)}')">差し替え</button>
+                <button onclick="openDocHistory('${esc(g.docType)}')">履歴を見る</button>
+                <button class="danger" onclick="confirmDeleteDoc('${esc(d.id)}')">削除</button>
+              </div>
+            </span>
+          </div>` : `
+          <div class="none">未登録</div>
+          <div class="acts"><button class="btn btn-primary btn-sm" onclick="openUploadDoc('${esc(g.docType)}')">アップロード</button></div>`}
+      </div>`;
+    const others = other ? [other.latest, ...other.history].filter(Boolean) : [];
+    return `
+      ${main.map((g) => card(g, g.latest)).join("")}
+      <div class="hr-doc" data-doc="other">
+        <div class="t"><span class="material-symbols-outlined">attach_file</span>その他の書類</div>
+        ${others.length ? others.map((d) => `
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+            <span class="f" style="margin:0;flex:1;min-width:160px;">${esc(d.filename)}
+              <span class="m">　${esc(fmtDay(d.uploadedAt))}</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="previewDoc('${esc(d.id)}')">プレビュー</button>
+            <span class="hr-more">
+              <button class="btn btn-secondary btn-sm" aria-label="その他の操作" onclick="toggleDocMenu(event, '${esc(d.id)}')">…</button>
+              <div class="hr-menu-pop hidden" id="docmenu-${esc(d.id)}">
+                <button onclick="previewDoc('${esc(d.id)}')">プレビュー</button>
+                <button onclick="downloadDoc('${esc(d.id)}')">ダウンロード</button>
+                <button class="danger" onclick="confirmDeleteDoc('${esc(d.id)}')">削除</button>
+              </div>
+            </span>
+          </div>`).join("") : `<div class="none">未登録</div>`}
+        <div class="acts"><button class="btn btn-secondary btn-sm" onclick="openUploadDoc('other')">アップロード</button></div>
+      </div>
+      <p class="muted" style="font-size:11.5px;margin:8px 0 0;">
+        書類は採用担当・人事・管理者だけが見られます。表示用のリンクは数分で切れます。</p>`;
+  }
+
+  function toggleDocMenu(ev, id) {
+    ev.stopPropagation();
+    const m = el(`docmenu-${id}`);
+    const open = m && m.classList.contains("hidden");
+    for (const x of document.querySelectorAll(".hr-menu-pop")) x.classList.add("hidden");
+    if (m && open) m.classList.remove("hidden");
+  }
+  document.addEventListener("click", () => {
+    for (const x of document.querySelectorAll(".hr-menu-pop")) x.classList.add("hidden");
+  });
+
+  const findDoc = (id) => (docs?.documents || []).flatMap((g) => [g.latest, ...g.history]).find((d) => d && d.id === id);
+
+  async function previewDoc(id) {
+    const d = findDoc(id);
+    try {
+      const r = await API.hrDocumentUrl(id, false);
+      // PDF・画像はその場で見る。Word はブラウザで開けないので保存にする
+      if (/pdf|image/.test(r.mimeType || "")) KPLayout.viewer({ title: d?.filename || r.filename, src: r.url });
+      else window.open((await API.hrDocumentUrl(id, true)).url, "_blank", "noopener");
+    } catch (e) { alert(e.hint || e.message || "開けませんでした"); }
+  }
+  async function downloadDoc(id) {
+    try { window.open((await API.hrDocumentUrl(id, true)).url, "_blank", "noopener"); }
+    catch (e) { alert(e.hint || e.message || "保存できませんでした"); }
+  }
+
+  // 書類のアップロード（中央モーダル）。差し替えも同じ（前の版は履歴に残る）
+  let docFile = null;
+  function openUploadDoc(type) {
+    docFile = null;
+    const types = docs?.types || [{ key: "resume", label: "履歴書" }, { key: "work_history", label: "職務経歴書" }, { key: "other", label: "その他" }];
+    const replacing = type !== "other" && docGroup(type)?.latest;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">${replacing ? "書類を差し替え" : "書類をアップロード"}</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${esc(detail.applicant.name)}さん</p>
+      <label>書類の種類</label>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;">${types.map((t) => `
+        <label style="display:flex;gap:5px;align-items:center;font-weight:500;margin:0;">
+          <input type="radio" name="doc-type" value="${esc(t.key)}" ${t.key === (type || "resume") ? "checked" : ""}
+                 style="width:auto;margin:0;">${esc(t.label)}</label>`).join("")}</div>
+      <div class="hr-drop" id="doc-drop" onclick="el('doc-file').click()">
+        <span class="material-symbols-outlined" style="font-size:28px;">upload_file</span>
+        <div id="doc-drop-text">ここにファイルをドラッグ、または押して選択</div>
+        <div style="font-size:11.5px;margin-top:4px;">PDF・DOC・DOCX・JPG・PNG／10MBまで</div>
+      </div>
+      <input id="doc-file" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="hidden" onchange="pickDocFile(this.files[0])">
+      ${replacing ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">いまのファイルは「履歴」に残ります。</p>` : ""}
+      <div id="doc-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" id="doc-save" onclick="submitUploadDoc(this)">アップロード</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`, { wide: true });
+    const drop = el("doc-drop");
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => pickDocFile(e.dataTransfer?.files?.[0]));
+  }
+
+  const DOC_MIME = ["application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/jpeg", "image/png"];
+  function pickDocFile(f) {
+    const msg = el("doc-msg");
+    msg.textContent = "";
+    docFile = null;
+    if (!f) return;
+    const max = docs?.limits?.maxBytes || 10 * 1024 * 1024;
+    if (!DOC_MIME.includes(f.type)) { msg.textContent = "PDF・Word（.doc / .docx）・JPEG・PNG を選んでください"; return; }
+    if (f.size > max) { msg.textContent = "ファイルは10MBまでにしてください"; return; }
+    docFile = f;
+    el("doc-drop-text").textContent = `${f.name}（${fmtSize(f.size)}）`;
+  }
+
+  async function submitUploadDoc(btn) {
+    const msg = el("doc-msg");
+    msg.textContent = "";
+    if (!docFile) { msg.textContent = "ファイルを選んでください"; return; }
+    const type = document.querySelector('input[name="doc-type"]:checked')?.value || "other";
+    try {
+      await KPLayout.busy(btn, "アップロード中…", () => API.uploadHrDocument(detail.applicant.id, type, docFile));
+      closeAction();
+      await refreshDetail("docs");
+      load();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "アップロードできませんでした"; }
+  }
+
+  function openDocHistory(type) {
+    const g = docGroup(type);
+    if (!g) return;
+    const list = [g.latest, ...g.history].filter(Boolean);
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">${esc(g.label)}の履歴</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${esc(detail.applicant.name)}さん・新しい順</p>
+      ${list.map((d, i) => `
+        <div class="hr-doc" style="margin-bottom:8px;">
+          <div class="f" style="margin:0;">${esc(d.filename)} ${i === 0 ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;">いまの版</span>` : ""}</div>
+          <div class="m">${esc(fmtDay(d.uploadedAt))}${d.uploadedByName ? `・${esc(d.uploadedByName)}` : ""}</div>
+          <div class="acts">
+            <button class="btn btn-secondary btn-sm" onclick="previewDoc('${esc(d.id)}')">プレビュー</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadDoc('${esc(d.id)}')">ダウンロード</button>
+          </div>
+        </div>`).join("")}
+      <div style="margin-top:14px;"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`, { wide: true });
+  }
+
+  // 削除は確認モーダルを挟む（一覧に赤い削除ボタンを常に置かない）
+  function confirmDeleteDoc(id) {
+    const d = findDoc(id);
+    if (!d) return;
+    el("confirm-root").innerHTML = `<div class="hr-modal-bg top" onclick="closeConfirm()"></div>
+      <div class="hr-modal top" role="alertdialog" aria-modal="true">
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">書類を削除しますか？</h2>
+        <p class="hr-sub" style="margin:0 0 6px;">${esc(d.docTypeLabel)}：${esc(d.filename)}</p>
+        <p class="muted" style="font-size:12px;margin:0 0 14px;">ファイルは元に戻せません。過去の版があれば、1つ前の版がいまの版になります。</p>
+        <div id="del-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" style="background:#b3261e;" onclick="submitDeleteDoc('${esc(id)}', this)">削除する</button>
+          <button class="btn btn-secondary" onclick="closeConfirm()">やめる</button>
+        </div>
+      </div>`;
+  }
+  function closeConfirm() { el("confirm-root").innerHTML = ""; }
+  async function submitDeleteDoc(id, btn) {
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.deleteHrDocument(id));
+      closeConfirm();
+      closeAction();
+      await refreshDetail("docs");
+      load();
+    } catch (e) { el("del-msg").textContent = e.hint || e.message || "削除できませんでした"; }
   }
 
   function interviewRow(i) {
@@ -601,8 +880,7 @@
     try {
       await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview({ id, recordingUrl: url }));
       closeHrModal();
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
@@ -626,8 +904,7 @@
     try {
       await KPLayout.busy(btn, "削除中…", () => API.updateHrInterview({ id, recordingUrl: "" }));
       closeHrModal();
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "削除できませんでした"; }
   }
@@ -672,8 +949,7 @@
         meetingUrl: el("rs-url").value.trim() || undefined,
       }));
       closeHrModal();
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
@@ -701,8 +977,7 @@
     try {
       await KPLayout.busy(btn, "処理中…", () => API.cancelHrInterview(id));
       closeHrModal();
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "キャンセルできませんでした"; }
   }
@@ -742,7 +1017,7 @@
     if (!okToGo) return;
     try {
       await API.updateHrApplicant({ id: detail.applicant.id, decision: "rejected" });
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
   }
@@ -752,9 +1027,7 @@
    * 社長が応募書類を最初から読まなくても、30秒で「会う理由」が分かるようにするため
    */
   function openRecommendForm() {
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
+    openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">社長推薦する</h2>
         <p class="hr-sub" style="margin:0 0 14px;">
           社長が応募書類を最初から読まなくても、なぜ会う必要があるかが分かるように、短く書いてください。</p>
@@ -765,8 +1038,7 @@
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitRecommend(this)">社長推薦する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
   async function submitRecommend(btn) {
@@ -778,16 +1050,14 @@
         id: detail.applicant.id, stage: "ceo_recommend", status: "ceo_interview_pending", recommendNote: note,
       }));
       closeAction();
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
   }
 
   /** 採用判断（内定・保留・見送り）。社長・管理者だけ（サーバ側でも弾く） */
   function openDecideForm() {
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
+    openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">採用判断</h2>
         <div style="display:flex;gap:8px;margin-bottom:16px;">
           <button class="btn btn-primary btn-sm" onclick="setDecideKind('hired')">内定</button>
@@ -798,8 +1068,7 @@
         <div id="dc-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
     setDecideKind("hired");
   }
 
@@ -841,7 +1110,7 @@
     try {
       await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant(body));
       closeAction();
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
   }
@@ -850,8 +1119,7 @@
     if (!confirm("この面談を実施済みにします。よろしいですか？")) return;
     try {
       await API.conductHrInterview(id);
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
   }
@@ -908,7 +1176,7 @@ ${url}
     try {
       await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant({ id: detail.applicant.id, status: "scheduling" }));
       closeHrModal();
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
   }
@@ -917,9 +1185,7 @@ ${url}
   function openScheduleForm(kind) {
     const kinds = detail.interviewKinds || [{ key: "casual", label: "カジュアル面談" }, { key: "ceo", label: "社長面談" }];
     const opts = (detail.interviewers || []).map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join("");
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
+    openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">面談を予定する</h2>
         <label>面談種別</label>
         <select id="iv-kind">${kinds.map((k) =>
@@ -934,10 +1200,20 @@ ${url}
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitSchedule(this)">予定する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`);
   }
 
+  /**
+   * 1つの操作をする中央モーダル（評価・面談の予定・推薦・判断・合格通知・書類など）。
+   *
+   * 応募者詳細（右ドロワー）の上に重ねる。右ドロワーの上に右ドロワーを重ねない。
+   * 背景を押して閉じるのはこのモーダルだけで、後ろの応募者詳細は残る。
+   * 保存したら、モーダルを閉じて refreshDetail() で開いたままのドロワーに反映する
+   */
+  function openActionModal(html, { wide = false } = {}) {
+    el("action-root").innerHTML = `<div class="hr-modal-bg" onclick="closeAction()"></div>
+      <div class="hr-modal${wide ? " wide" : ""}" role="dialog" aria-modal="true">${html}</div>`;
+  }
   function closeAction() { el("action-root").innerHTML = ""; }
 
   async function submitSchedule(btn) {
@@ -951,8 +1227,7 @@ ${url}
         meetingUrl: el("iv-url").value.trim() || undefined,
       }));
       closeAction();
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "予定できませんでした"; }
   }
@@ -965,9 +1240,7 @@ ${url}
     if (!iv) return;
     const items = detail.evalItems || [];
     const scale = detail.evalScale || [];
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
+    openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">評価を入力</h2>
         <p class="hr-sub" style="margin:0 0 14px;">${esc(iv.kindLabel)}</p>
         ${items.map((it) => `
@@ -995,8 +1268,7 @@ ${url}
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitEvaluate('${esc(id)}', this)">保存する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`, { wide: true });
   }
 
   async function submitEvaluate(id, btn) {
@@ -1016,8 +1288,7 @@ ${url}
         nextDueOn: el("ev-due").value || undefined,
       }));
       closeAction();
-      detailTab = "interviews";
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
@@ -1054,9 +1325,7 @@ ${url}
     const reviewing = a.status === "offer_review_pending";
     const o = reviewing ? currentOffer() : null;
     const v = (k, fallback) => esc((o ? o[k] : null) ?? fallback ?? "");
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
+    openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">合格通知を${reviewing ? "確認" : "作成"}</h2>
         <p class="hr-sub" style="margin:0 0 14px;">候補者本人に送る、確定した条件です。本人へ送付するまでは、いつでも直せます。</p>
         <label>雇用形態</label><input id="of-employment" type="text" value="${v("employmentType", a.employmentType)}">
@@ -1077,8 +1346,7 @@ ${url}
           <button class="btn ${reviewing ? "btn-secondary" : "btn-primary"}" onclick="submitOffer(this)">${reviewing ? "内容を保存" : "作成する"}</button>
           ${reviewing ? `<button class="btn btn-primary" onclick="submitConfirmOffer(this)">確定して送付待ちにする</button>` : ""}
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`, { wide: true });
   }
 
   function offerFormFields() {
@@ -1109,7 +1377,7 @@ ${url}
         await KPLayout.busy(btn, "作成中…", () => API.createHrOffer({ applicantId: detail.applicant.id, ...fields, respondBy }));
       }
       closeAction();
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
@@ -1126,7 +1394,7 @@ ${url}
         await API.confirmHrOffer(o.id);
       });
       closeAction();
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "確定できませんでした"; }
   }
@@ -1136,9 +1404,7 @@ ${url}
   // 実際に送り終えたら「送付済みにする」を明示的に押してもらう（README §12）
   function openSendOfferForm() {
     const reissuing = ["offer_sent", "offer_viewed", "offer_response_pending"].includes(detail.applicant.status);
-    el("action-root").innerHTML = `
-      <div class="hr-drawer-bg" onclick="closeAction()"></div>
-      <div class="hr-drawer">
+    openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">${reissuing ? "URLを再発行" : "本人へ送る"}</h2>
         <p class="hr-sub" style="margin:0 0 14px;">
           ${reissuing ? "現在のURLは使えなくなります。新しいURLを発行しますか？" : "候補者専用のURLを発行します。メール送信の仕組みはまだ無いので、いつもお使いのメールから手動で送ってください。"}</p>
@@ -1148,8 +1414,7 @@ ${url}
         <div id="so-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>
-      </div>`;
+        </div>`, { wide: true });
   }
 
   async function submitIssueLink(btn) {
@@ -1201,7 +1466,7 @@ ${url}
     try {
       await KPLayout.busy(btn, "記録中…", () => API.markHrOfferSent(offerId));
       closeAction();
-      await openDetail(detail.applicant.id);
+      await refreshDetail();
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
   }
