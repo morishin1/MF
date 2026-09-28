@@ -168,6 +168,16 @@ await ok("空にすると「未定」に戻せる", async () => {
   assert.equal(db.rows.gw_hr_applicants.find((x) => x.id === "a1").recruiter_id, null);
 });
 
+await ok("別の会社の人・名簿に無い人は担当にできない（400・何も変わらない）", async () => {
+  setup();
+  db.rows.gw_employees.push({ id: "emp-other", tenant_id: "t2", display_name: "他社", status: "active" });
+  for (const bad of ["emp-other", "emp-none"]) {
+    const r = await call({ ids: ["a1"], action: "setRecruiter", recruiterId: bad });
+    assert.equal(r.statusCode, 400, bad);
+  }
+  assert.notEqual(db.rows.gw_hr_applicants.find((x) => x.id === "a1").recruiter_id, "emp-other");
+});
+
 console.log("\n=== 削除（delete。選考終了とは別の操作） ===\n");
 
 await ok("選んだ応募者が削除される", async () => {

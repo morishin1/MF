@@ -13,6 +13,7 @@
 //   idsは呼び出し側（画面）が明示的に選んだものだけ。ここでは絞り込み条件を
 //   受け取らない＝「意図せず全DBを対象にしない」（同指示書 §1）。
 
+import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
@@ -82,7 +83,9 @@ async function doSetStatus(res, sb, ctx, user, rows, status) {
 }
 
 async function doSetRecruiter(res, sb, ctx, user, rows, recruiterId) {
-  const value = recruiterId || null;
+  const rc = await checkRecruiter(sb, ctx.tenantId, recruiterId);
+  if (!rc.ok) return json(res, 400, rc);
+  const value = rc.value;
   const ids = rows.map((r) => r.id);
   const { error } = await sb.from("gw_hr_applicants")
     .update({ recruiter_id: value, updated_at: new Date().toISOString() }).in("id", ids).eq("tenant_id", ctx.tenantId);

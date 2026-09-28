@@ -175,7 +175,7 @@ console.log("\n=== 一覧（GET /api/hr/applicants） ===\n");
 
 await ok("担当者名・面談件数がつく", async () => {
   setup();
-  db.rows.gw_employees.push({ id: "emp-r1", display_name: "採用 花子" });
+  db.rows.gw_employees.push({ id: "emp-r1", tenant_id: "t1", status: "active", display_name: "採用 花子" });
   const created = await create(body({ recruiterId: "emp-r1" }));
   db.rows.gw_hr_interviews.push({ id: "iv1", applicant_id: created.body.applicant.id, kind: "casual" });
   const r = await list();
@@ -236,6 +236,56 @@ await ok("無い応募者IDは404", async () => {
   setup();
   const r = await getOne("not-exists");
   assert.equal(r.statusCode, 404);
+});
+
+console.log("\n— 担当（recruiter_id） —");
+
+await ok("担当を選ばずに追加すると、登録した本人が担当になる（未定のままにしない）", async () => {
+  setup();
+  const r = await create({ name: "担当 自動", jobTitle: "エンジニア", source: "Wantedly" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_applicants[0].recruiter_id, "emp-r1");
+});
+
+await ok("追加するときに担当を選べる。別の会社の人・退職者は選べない", async () => {
+  setup();
+  db.rows.gw_employees = [
+    { id: "emp-x", tenant_id: "t1", status: "active", display_name: "選ばれた 人" },
+    { id: "emp-other", tenant_id: "t2", status: "active", display_name: "他社" },
+    { id: "emp-left", tenant_id: "t1", status: "left", display_name: "退職" },
+  ];
+  const r = await create({ name: "担当 指定", jobTitle: "営業", source: "Green", recruiterId: "emp-x" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(db.rows.gw_hr_applicants[0].recruiter_id, "emp-x");
+  assert.equal((await create({ name: "x", jobTitle: "y", source: "z", recruiterId: "emp-other" })).statusCode, 400);
+  assert.equal((await create({ name: "x", jobTitle: "y", source: "z", recruiterId: "emp-left" })).statusCode, 400);
+  const none = await create({ name: "未定で登録", jobTitle: "y", source: "z", recruiterId: null });
+  assert.equal(none.statusCode, 200, "明示的に未定も選べる");
+});
+
+await ok("詳細から担当を変更できる。変更は履歴に残る。別の会社の人は 400", async () => {
+  setup();
+  db.rows.gw_employees = [
+    { id: "emp-x", tenant_id: "t1", status: "active", display_name: "新しい 担当" },
+    { id: "emp-other", tenant_id: "t2", status: "active", display_name: "他社" },
+  ];
+  const c = await create({ name: "変更 対象", jobTitle: "営業", source: "Green" });
+  const id = c.body.applicant.id;
+  const r = await patch({ id, recruiterId: "emp-x" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_applicants[0].recruiter_id, "emp-x");
+  const t = db.rows.gw_hr_timeline.find((x) => x.event_key === "recruiter_changed");
+  assert.ok(t && t.detail === "新しい 担当", "履歴に「担当を変更：新しい 担当」");
+  assert.equal((await patch({ id, recruiterId: "emp-other" })).statusCode, 400);
+  assert.equal(db.rows.gw_hr_applicants[0].recruiter_id, "emp-x", "拒否したときは変わらない");
+  const d = await getOne(id);
+  assert.equal(d.body.applicant.recruiterName, "新しい 担当");
+});
+
+await ok("一覧は、追加フォームの担当の初期値（自分）を返す", async () => {
+  setup();
+  const r = await list();
+  assert.equal(r.body.meEmployeeId, "emp-r1");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

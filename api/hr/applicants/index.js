@@ -4,6 +4,7 @@
 // ダッシュボード・採用ファネル・通知の元ネタは、すべてこの一覧から
 // 画面側で組み立てる（別に集計テーブルは作らない。README「State Management」の方針と同じ）。
 
+import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
@@ -76,6 +77,8 @@ async function list(req, res, sb, ctx) {
       docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
     })),
     employees: employees || [],
+    // 応募者を追加するとき、担当の初期値（登録する本人）
+    meEmployeeId: ctx.employee?.id || null,
   });
 }
 
@@ -83,6 +86,14 @@ async function create(req, res, sb, ctx, user) {
   const body = await readJson(req);
   const row = normalizeApplicant(body);
   if (row.error) return json(res, 400, row);
+  // 担当：選ばれていなければ、登録した本人（lib/hr-recruiter.js）。選ばれていれば同じ会社の在籍者か確かめる
+  if (row.value.recruiter_id === undefined) {
+    row.value.recruiter_id = ctx.employee?.id || null;
+  } else {
+    const rc = await checkRecruiter(sb, ctx.tenantId, row.value.recruiter_id);
+    if (!rc.ok) return json(res, 400, rc);
+    row.value.recruiter_id = rc.value;
+  }
 
   const { data, error } = await sb.from("gw_hr_applicants")
     .insert({ ...row.value, tenant_id: ctx.tenantId, created_by: user.id })
