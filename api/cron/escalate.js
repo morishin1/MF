@@ -14,6 +14,7 @@
 //   同じタスクについて何度実行しても通知は増えない。
 //   タスク側にも escalated_at を立てて、処理済みが分かるようにする。
 
+import { intakeGate } from "../../lib/onboard-gate.js";
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 
@@ -111,19 +112,36 @@ function formatDate(d) {
  * 入社日が入っていない人は触らない。いつ入るか決まっていない人を
  * 在籍にしてしまうと、名簿の人数が狂う。
  */
-async function openJoiners(sb) {
+export async function openJoiners(sb) {
   const jst = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 
-  const { data, error } = await sb.from("gw_employees")
-    .update({ status: "active", updated_at: new Date().toISOString() })
+  const { data: due, error: de } = await sb.from("gw_employees")
+    .select("id, tenant_id, display_name")
     .eq("status", "invited")
     .not("joined_on", "is", null)
     .lte("joined_on", jst)
+    .limit(500);
+  if (de) {
+    console.error("[cron] 入社日の切り替えに失敗:", de.message);
+    return { count: 0, error: de.message };
+  }
+  // 労働条件の署名（本人契約）が済んでいない人は、入社日が来ても在籍にしない（lib/onboard-gate.js）。
+  // 署名前に在籍にすると、契約を結んでいない人が勤怠・日報・名簿の対象になる
+  const ready = [];
+  const held = [];
+  for (const e of due || []) ((await intakeGate(sb, e.tenant_id, e.id)).ok ? ready : held).push(e);
+  if (!ready.length) return { count: 0, names: [], held: held.map((e) => e.display_name) };
+
+  const { data, error } = await sb.from("gw_employees")
+    .update({ status: "active", updated_at: new Date().toISOString() })
+    .in("id", ready.map((e) => e.id))
+    .eq("status", "invited")
     .select("display_name");
 
   if (error) {
     console.error("[cron] 入社日の切り替えに失敗:", error.message);
     return { count: 0, error: error.message };
   }
-  return { count: (data || []).length, names: (data || []).map((e) => e.display_name) };
+  return { count: (data || []).length, names: (data || []).map((e) => e.display_name),
+           held: held.map((e) => e.display_name) };
 }

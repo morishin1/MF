@@ -15,6 +15,7 @@
 //   出勤中にもう一度「出勤」、休憩中に「休憩」は受け付けない。
 //   連打や、複数の端末で開いている場合に起きる。
 
+import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
@@ -40,6 +41,8 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") return read(req, res, ctx);
   if (req.method === "POST") {
+    // 入社前の人は打刻の対象にしない（lib/stages.js isPreJoin）
+  if (isPreJoin(ctx.employee)) return json(res, 403, { error: "not_joined", hint: PRE_JOIN_HINT });
     const body = await readJson(req);
     return body?.fix ? requestFix(res, ctx, body) : stamp(res, ctx, body);
   }
