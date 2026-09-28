@@ -138,16 +138,22 @@ mock.module(atRoot("lib/slack.js"), {
 
 const SALES = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["sales"], employee: { id: "emp-s1", display_name: "営業 一郎" } };
 const SALES2 = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["sales"], employee: { id: "emp-s2", display_name: "営業 二郎" } };
-const ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, roles: [], employee: { id: "emp-a1", display_name: "管理 花子" } };
+// 経営者（社内権限 owner）。押し切り（強行アタック）もできる
+const ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, roles: ["owner"], employee: { id: "emp-a1", display_name: "管理 花子" } };
+// 会計側の管理者だけ（社内権限なし）。Sales には入れない
+const ACCOUNTING_ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, roles: [], employee: { id: "emp-a2", display_name: "会計 管理" } };
+const IT_ONLY = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["it"], employee: { id: "emp-it", display_name: "情シス" } };
 const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: { id: "emp-m1", display_name: "一般 次郎" } };
 const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["recruiter"], employee: { id: "emp-r1", display_name: "採用 三郎" } };
 let who = SALES;
+// 判定は本物（lib/gw.js）を使う。テストで条件を書き直すと、本番とずれても気づけない
+const REAL_GW = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     // lib/gw.js の canSell・canForceAttack と同じ判定
-    canSell: (c) => Boolean(c.isAdmin || ["owner", "manager", "sales"].some((r) => (c.roles || []).includes(r))),
-    canForceAttack: (c) => Boolean(c.isAdmin || (c.roles || []).includes("owner")),
+    canSell: REAL_GW.canSell,
+    canForceAttack: REAL_GW.canForceAttack,
   },
 });
 
@@ -273,13 +279,15 @@ await ok("取り込みで1行でも形が悪ければ、何も入れず行番号
   assert.equal(db.rows.gw_sales_companies.length, 0);
 });
 
-await ok("使えるのは営業担当・管理者。一般メンバー・採用担当は 403", async () => {
+await ok("使えるのは経営者・責任者・営業担当（社内権限）。一般メンバー・採用担当・会計の管理者だけ・IT・管理だけは 403", async () => {
   setup();
-  who = MEMBER;
-  assert.equal((await list()).statusCode, 403);
-  who = RECRUITER;
-  assert.equal((await list()).statusCode, 403);
+  for (const p of [MEMBER, RECRUITER, ACCOUNTING_ADMIN, IT_ONLY]) {
+    who = p;
+    assert.equal((await list()).statusCode, 403, p.employee.display_name);
+  }
   who = ADMIN;
+  assert.equal((await list()).statusCode, 200);
+  who = SALES;
   assert.equal((await list()).statusCode, 200);
 });
 

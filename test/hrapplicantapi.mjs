@@ -88,12 +88,14 @@ const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["recrui
 const HR = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], employee: { id: "emp-hr", display_name: "人事 太郎" } };
 const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: { id: "emp-m1", display_name: "一般 次郎" } };
 let who = RECRUITER;
+// 判定は本物（lib/gw.js）を使う。テストで条件を書き直すと、本番とずれても気づけない
+const REAL_GW = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
-    canRecruit: (c) => Boolean(c?.isAdmin || c?.isHr || (c?.roles || []).includes("recruiter")),
-    canDecideHire: (c) => Boolean(c?.isAdmin || (c?.roles || []).includes("owner")),
+    canRecruit: REAL_GW.canRecruit,
+    canDecideHire: REAL_GW.canDecideHire,
   },
 });
 
