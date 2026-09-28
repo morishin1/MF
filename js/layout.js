@@ -832,10 +832,11 @@
       // サーバが判定した結果（/api/me の access = lib/gw.js の canRecruit / canSell）をそのまま使う。
       // 役割の並びを画面側で持たない（ヘッダーに出たのに 403、を作らない）。
       // access が無いのは、前の版の /api/me を覚えていたときだけ。そのときは同じ基準で数える
+      // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない
       hr: me?.access ? Boolean(me.access.recruit)
-        : Boolean(me?.isAdmin) || ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
+        : ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
-        : Boolean(me?.isAdmin) || ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
+        : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
       // それでは判定にならない。admin / staff と社内ロールで見る

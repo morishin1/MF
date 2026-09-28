@@ -104,7 +104,10 @@ mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { l
 
 const RECRUITER = { userId: "u-rec", tenantId: "t1", isAdmin: false, isHr: false, roles: ["recruiter"], employee: { id: "e-rec" } };
 const HR = { userId: "u-hr", tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], employee: { id: "e-hr" } };
-const ADMIN = { userId: "u-ad", tenantId: "t1", isAdmin: true, isHr: false, roles: [], employee: { id: "e-ad" } };
+// 会計側の管理者だけ（社内権限なし）。採用書類は見られない
+const ADMIN = { userId: "u-ad", tenantId: "t1", isAdmin: true, isHr: true, roles: [], employee: { id: "e-ad" } };
+const OWNER = { userId: "u-ow", tenantId: "t1", isAdmin: false, isHr: true, roles: ["owner"], employee: { id: "e-ow" } };
+const IT = { userId: "u-it", tenantId: "t1", isAdmin: false, isHr: false, roles: ["it"], employee: { id: "e-it" } };
 const SALES = { userId: "u-s", tenantId: "t1", isAdmin: false, isHr: false, roles: ["sales"], employee: { id: "e-s" } };
 const MANAGER = { userId: "u-m", tenantId: "t1", isAdmin: false, isHr: false, roles: ["manager"], employee: { id: "e-m" } };
 const MEMBER = { userId: "u-x", tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: { id: "e-x" } };
@@ -167,20 +170,20 @@ function setup() {
 }
 
 console.log("— 権限 —");
-await ok("採用担当・人事・管理者は使える", async () => {
+await ok("採用担当・人事・経営者は使える（社内権限で決まる）", async () => {
   setup();
-  for (const p of [RECRUITER, HR, ADMIN]) {
+  for (const p of [RECRUITER, HR, OWNER]) {
     who = p;
     assert.equal((await get("applicantId=ap1")).statusCode, 200, String(p.roles));
   }
 });
-await ok("営業だけの人・マネージャー・一般メンバーには採用書類を見せない（403）", async () => {
+await ok("営業・責任者・一般メンバー・会計の管理者だけ・IT・管理だけの人には採用書類を見せない（403）", async () => {
   setup();
   await upload("ap1", "resume", PDF, MIME.pdf, "山田太郎_履歴書.pdf");
   const id = db.rows.gw_hr_documents[0].id;
-  for (const p of [SALES, MANAGER, MEMBER]) {
+  for (const p of [SALES, MANAGER, MEMBER, ADMIN, IT]) {
     who = p;
-    assert.equal((await get("applicantId=ap1")).statusCode, 403, `${p.roles} 一覧`);
+    assert.equal((await get("applicantId=ap1")).statusCode, 403, `${p.roles}${p.isAdmin ? "（会計の管理者）" : ""} 一覧`);
     assert.equal((await get(`id=${id}`)).statusCode, 403, `${p.roles} URL`);
     assert.equal((await post({ action: "upload", applicantId: "ap1", docType: "resume", mimeType: MIME.pdf, sizeBytes: 10 })).statusCode, 403);
     assert.equal((await del(id)).statusCode, 403);

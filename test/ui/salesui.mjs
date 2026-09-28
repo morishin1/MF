@@ -224,7 +224,8 @@ console.log("\n=== 直近30日以内：警告して送らせない ===");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 
-  const admin = await openAs({ recent, isAdmin: true, roles: [] });
+  // 押し切りできるのは Sales を使える人の中の経営者・管理者（社内権限 owner）
+  const admin = await openAs({ recent, isAdmin: true, roles: ["owner"] });
   await admin.page.goto(`${BASE}/sales/companies.html?attack=c1`);
   await admin.page.waitForTimeout(1000);
   check(await admin.page.locator("button", { hasText: "それでもアタックする" }).count() === 1, "管理者には押し切りボタンが出る");

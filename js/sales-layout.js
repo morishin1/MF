@@ -239,7 +239,7 @@
     const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
     // ヘッダーの近道と同じ値（/api/me の access = サーバの canSell）で入口を決める
     const canSell = me?.access ? Boolean(me.access.sell)
-      : isAdmin || ["owner", "manager", "sales"].some((r) => roles.includes(r));
+      : ["owner", "manager", "sales"].some((r) => roles.includes(r));
     if (!canSell) { location.replace("../home.html"); return null; }
     const canForce = isAdmin || roles.includes("owner");
 

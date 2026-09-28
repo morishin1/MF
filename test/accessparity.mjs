@@ -9,7 +9,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { accessOf, canRecruit, canSell } from "../lib/gw.js";
+import { accessOf, canRecruit, canSell, canDecideHire, canForceAttack, RECRUIT_ROLES, SALES_ROLES } from "../lib/gw.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -17,9 +17,15 @@ let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
 console.log("— 指示どおりの条件 —");
-// 採用HR: owner / admin / hr / recruiter、Sales: owner / admin / manager / sales
+// 正式な設定元はメンバー管理の「社内権限」（gw_role_grants）。
+// 採用HR: owner / hr / recruiter、Sales: owner / manager / sales。
+// 会計側の管理者（isAdmin）・IT・管理（it）だけでは、どちらにも入れない
 const cases = [
-  [{ isAdmin: true, roles: [] }, true, true, "admin（会計側の管理者）"],
+  [{ isAdmin: true, roles: [] }, false, false, "会計側の管理者だけ（社内権限なし）"],
+  [{ isAdmin: true, isHr: true, roles: [] }, false, false, "会計側の管理者（isHr 扱い）でも社内権限なしなら入れない"],
+  [{ roles: ["it"] }, false, false, "IT・管理だけ"],
+  [{ isAdmin: true, roles: ["it"] }, false, false, "会計の管理者＋IT・管理"],
+  [{ isAdmin: true, roles: ["recruiter"] }, true, false, "会計の管理者＋採用担当 → 採用HRだけ"],
   [{ roles: ["owner"], isHr: true }, true, true, "owner"],
   [{ roles: ["hr"], isHr: true }, true, false, "hr"],
   [{ roles: ["recruiter"] }, true, false, "recruiter（採用担当）"],
@@ -37,6 +43,13 @@ for (const [ctx, recruit, sell, label] of cases) {
   check(a.recruit === Boolean(canRecruit(full)) && a.sell === Boolean(canSell(full)),
     `${label}: accessOf は canRecruit / canSell と同じ`);
 }
+
+console.log("\n— 採用判断・強行は、使える人の中の上乗せ権限 —");
+check(!canDecideHire({ isAdmin: true, roles: [] }), "会計の管理者だけでは採用判断もできない");
+check(canDecideHire({ isAdmin: false, roles: ["owner"] }), "経営者は採用判断ができる");
+check(!canDecideHire({ isAdmin: false, roles: ["recruiter"] }), "採用担当だけでは採用判断はできない");
+check(!canForceAttack({ isAdmin: true, roles: [] }), "会計の管理者だけでは強行アタックもできない");
+check(canForceAttack({ isAdmin: false, roles: ["owner"] }), "経営者は強行アタックができる");
 
 console.log("\n— /api/me がサーバの判定をそのまま返す —");
 {
@@ -68,11 +81,16 @@ console.log("\n— DB の関数も同じ役割 —");
   const isHr = last("gw_is_hr");
   const rec = last("gw_is_recruiting");
   const sales = last("gw_is_sales");
-  check(/'hr'/.test(isHr) && /'owner'/.test(isHr) && /is_tenant_staff/.test(isHr), "gw_is_hr = hr・owner・管理者");
-  check(/gw_is_hr\(p_tenant\)/.test(rec) && /'recruiter'/.test(rec), "gw_is_recruiting = gw_is_hr ＋ recruiter");
-  check(["is_tenant_staff", "'owner'", "'manager'", "'sales'"].every((k) => sales.includes(k)),
-    "gw_is_sales = 管理者・owner・manager・sales");
-  check(!/'hr'|'recruiter'/.test(sales), "gw_is_sales に hr・recruiter は入っていない");
+  // 最新の定義（db/094）が、lib/gw.js の RECRUIT_ROLES / SALES_ROLES と同じ役割の並び
+  const rolesIn = (body) => [...body.matchAll(/gw_has_role\(p_tenant,\s*'(\w+)'\)/g)].map((m) => m[1]).sort();
+  check(/'hr'/.test(isHr) && /'owner'/.test(isHr) && /is_tenant_staff/.test(isHr), "gw_is_hr（人事の台帳など）は変えていない");
+  check(rolesIn(rec).join(",") === [...RECRUIT_ROLES].sort().join(","),
+    `gw_is_recruiting = ${RECRUIT_ROLES.join("・")}（いま ${rolesIn(rec).join("・")}）`);
+  check(rolesIn(sales).join(",") === [...SALES_ROLES].sort().join(","),
+    `gw_is_sales = ${SALES_ROLES.join("・")}（いま ${rolesIn(sales).join("・")}）`);
+  check(!/is_tenant_staff|gw_is_hr/.test(rec), "gw_is_recruiting に会計の管理者（is_tenant_staff）を含めない");
+  check(!/is_tenant_staff/.test(sales), "gw_is_sales に会計の管理者（is_tenant_staff）を含めない");
+  check(!/'it'/.test(rec + sales), "IT・管理（it）はどちらにも入っていない");
 }
 
 console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られている —");

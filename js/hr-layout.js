@@ -7,7 +7,7 @@
 //   esc・busy は KPLayout のものをそのまま使う（作り直さない）。
 //
 // ■ 権限
-//   /hr を開けるのは canRecruit（管理者・経営者・人事・採用担当）だけ。
+//   /hr を開けるのは canRecruit（社内権限の 経営者・人事・採用担当）だけ。会計の管理者・IT・管理だけでは入れない。
 //   CEO REVIEW（判断そのもの）は canDecideHire（経営者・管理者）のみ。
 //   どちらもサーバ側（lib/gw.js・RLS）と同じ基準（lib/hr.js API 経由で判定）。
 (function () {
@@ -156,7 +156,7 @@
     const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
     // ヘッダーの近道と同じ値（/api/me の access = サーバの canRecruit）で入口を決める
     const canRecruit = me?.access ? Boolean(me.access.recruit)
-      : isAdmin || roles.includes("hr") || roles.includes("owner") || roles.includes("recruiter");
+      : roles.includes("hr") || roles.includes("owner") || roles.includes("recruiter");
     if (!canRecruit) { location.replace("../home.html"); return null; }
     const canDecide = isAdmin || roles.includes("owner");
 
