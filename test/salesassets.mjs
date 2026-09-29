@@ -33,7 +33,7 @@ let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
 const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")).sort();
-check(pages.length === 7, `/sales の画面は7つ（いま ${pages.length}: ${pages.join(", ")}）`);
+check(pages.length === 8, `/sales の画面は8つ（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
