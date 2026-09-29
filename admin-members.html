@@ -214,7 +214,7 @@
                      manager: "責任者", labor_advisor: "社労士", recruiter: "採用担当", sales: "営業担当" };
   // 各権限で何ができるか（チェックにマウスを乗せると出る）。採用HR・Sales の条件は lib/gw.js と同じ
   const ROLE_HINT = {
-    owner: "経営者：採用HR・Sales・採用判断まで使える",
+    owner: "経営者：最上位の権限（採用HR・Sales・経営を使え、全員の給与も見られる）。付け外しできるのは経営者だけ",
     hr: "人事：人事の台帳・入退社と、採用HR（/hr/）を使える",
     it: "IT・管理：端末・アカウントなどシステム管理用。これだけでは採用HR・Salesには入れない",
     finance: "経理：給与・精算",
@@ -230,6 +230,7 @@
 
   let employees = [];
   let canGrantRoles = false;  // 社内権限の付け外し（管理者または人事）
+  let canGrantOwner = false;  // 経営者（owner）の付け外しと、経営者の名簿・ログインの変更（いまの経営者だけ）
   let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
   let editingId = null;      // null なら追加、id が入っていればその人の編集
   let kindReady = false;     // 075（BP）が適用済みか。未適用なら区分の欄ごと隠す
@@ -244,6 +245,7 @@
       const res = await API.listEmployees();
       employees = res.employees || [];
       canGrantRoles = !!res.canGrantRoles;
+      canGrantOwner = !!res.canGrantOwner;
       canManage = !!res.canManage;
       kindReady = !!res.kindReady;
       el("e-kind-wrap").classList.toggle("hidden", !kindReady);
@@ -562,23 +564,26 @@
 
   function row(e) {
     const roles = e.roles || [];
+    // 経営者の名簿・ログイン・在籍状態は、経営者以外は変えられない（サーバでも止める）
+    const lockedOwner = roles.includes("owner") && !canGrantOwner;
+    const canEdit = canManage && !lockedOwner;
     const roleCells = Object.keys(ROLE_LABEL).map((r) => `
       <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:11.5px;margin-right:8px;color:inherit;"
              title="${esc(ROLE_HINT[r] || "")}">
         <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
-               ${canGrantRoles ? "" : "disabled"}
+               ${canGrantRoles && (r !== "owner" || canGrantOwner) ? "" : "disabled"}
                onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
         ${ROLE_LABEL[r]}
       </label>`).join("");
 
     return `
       <tr class="${e.status === "left" ? "done" : ""}">
-        <td>${esc(e.display_name)}${e.email ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.email)}</span>` : ""}</td>
+        <td>${esc(e.display_name)}${e.email ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.email)}</span>` : ""}${lockedOwner ? `<br><span class="muted" style="font-size:11px;" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
         <td>${esc(e.department || "—")}${e.position ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.position)}</span>` : ""}</td>
         <td>${esc(e.employment_type || "—")}</td>
         ${kindReady ? `<td>${esc(kindOf(e))}</td>` : ""}
         <td>
-          <select ${canManage ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
+          <select ${canEdit ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
               `<option value="${k}"${e.status === k ? " selected" : ""}>${v}</option>`).join("")}
           </select>
@@ -586,10 +591,10 @@
         <td style="min-width:230px;">${roleCells}</td>
         <td style="min-width:190px;">${systemsCell(e)}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+          <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
                   onclick="startEdit('${esc(e.id)}')">編集</button>
           ${e.user_id ? `
-            <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+            <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
                     title="メールアドレスとパスワードを変える"
                     onclick="openAccount('${esc(e.id)}')">ログイン</button>` : ""}
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
@@ -603,7 +608,7 @@
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
                   title="労働条件通知書などの作成を社労士に依頼する"
                   onclick="orderDoc('${esc(e.id)}')">書類を依頼</button>
-          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
+          <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
                   onclick="remove('${esc(e.id)}', this)">削除</button>
         </td>
       </tr>`;
