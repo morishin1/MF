@@ -294,6 +294,14 @@ function diffFields(before, patch) {
 /**
  * 確定して、予定を並べる。
  * 契約を直して確定し直すと作り直すが、人が消した予定は復活させない。
+ *
+ * ■ 今のconfirmContract()は「新規締結」の形のまま（Phase 2は未着手）
+ *   ここは新しい契約をそのまま active にし、同じ人の前の active を即 superseded にしている。
+ *   契約"条件変更"（本来は 旧active → 変更draft → 書面作成 → 本人署名 → 新active → 旧superseded
+ *   という手順を踏むべきもの）も、今はこの同じ関数を通って即座に置き換わってしまう。
+ *   本人の署名を挟まない置き換えを許してよいのは新規締結のときだけで、条件変更もここを
+ *   通している今の状態は、まだ「契約条件変更フローが完成した」とは言えない。
+ *   その専用フロー（変更用のdraft作成〜本人署名を経てからのみ active 化する）は Phase 2 で別途対応する。
  */
 async function confirmContract(res, sb, ctx, user, body) {
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
