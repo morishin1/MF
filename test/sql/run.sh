@@ -10,7 +10,7 @@
 #
 # ■ 流す順番
 #   db/schema.sql → db/005 → db/041 → db/081 → db/099 → db/100 → test/sql/*.sql のシナリオ
-#   （db/101・db/102 は、シナリオの中で流す。安全装置が止めるところ・表が無いときから確かめるため）
+#   （db/101・db/102・db/103 は、シナリオの中で流す。安全装置が止めるところ・表が無いときから確かめるため）
 #   新しい migration を足したら、ここに足して、対応するシナリオも test/sql/ に置く。
 set -euo pipefail
 
@@ -44,7 +44,7 @@ run "$ROOT/db/100_hr_pay.sql"       # べき等（2回流しても、行が増�
 # シナリオは、それぞれ別の DB の上で流す（お互いの行に影響されない）
 OUT=""
 export SCEN_ROOT="$ROOT"   # 101 のシナリオが、db/101 を読むために使う
-for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls; do
+for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access; do
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done

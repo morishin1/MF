@@ -160,8 +160,8 @@
       ],
     },
     {
-      // 採用HR（/hr）と Sales（/sales）は、共通ヘッダーの近道が正式な入口
-      // （renderTopbar の SHORTCUTS）。左メニューにも置くと入口が二重になるので置かない
+      // HR（/hr）・Sales（/sales）・経営（/keiei）は、共通ヘッダーの切替が正式な入口
+      // （renderTopbar の TOOLS）。左メニューにも置くと入口が二重になるので置かない
       key: "g-hr", label: "人事・労務", icon: "group",
       items: [
         { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
@@ -287,23 +287,32 @@
    * ここが採用HR・Sales の正式な入口。左メニュー（管理者・メンバーとも）には
    * 置かない（入口を二重にしない）。
    *
-   * 出す・出さないは showsFor の hr / sales（/api/me の access ＝ サーバの
-   * canRecruit / canSell）で決める。新しい権限は増やさない。
+   * 出す・出さないは showsFor の hr / sales / office / keiei（/api/me の access ＝ サーバの
+   * canRecruit / canSell / canOffice / canKeiei）で決める。新しい権限は増やさない。
+   * 経営者（owner）には全ツールが出る。経営は経営者だけ。
    * 管理画面でも、メンバーの画面でも同じ条件で出す（権限のある一般メンバーにも出る）。
    * 「メンバー表示で確認中」でも出す。この表示は権限を変えないので、
    * 同じ権限を持つメンバーに実際に見えているものと同じになる。
    *
-   * 狭い画面では「HR」「Sales」まで縮める（CSS）。通知・ログアウトは押し出さない
+   * 狭い画面では「HR」「Sales」「経営」まで縮める（CSS）。通知・ログアウトは押し出さない
    */
-  const SHORTCUTS = [
-    { key: "hr",    href: "/hr/",    label: "採用HR", short: "HR",    icon: "person_add" },
-    { key: "sales", href: "/sales/", label: "Sales",  short: "Sales", icon: "storefront" },
+  //
+  // ■ ツールの定義（データ）
+  //   ツールを増やすときは、ここに1行足すだけ（lib/gw.js の accessOf にも1行）。
+  //   key   … /api/me の access のキー（サーバの判定）と、showsFor の shows のキー
+  //   ready … false のあいだは、権限があっても出さない。まだ実装されていないツールの
+  //           リンク（存在しない画面）を出さないため。Office は実装されたら true にする
+  const TOOLS = [
+    { key: "hr",     href: "/hr/",     label: "HR",     short: "HR",     icon: "person_add",       ready: true },
+    { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
+    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: false },
+    { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true },
   ];
 
   function shortcutsHtml(shows = {}, path = location.pathname) {
-    const list = SHORTCUTS.filter((s) => shows[s.key]);
+    const list = TOOLS.filter((t) => t.ready && shows[t.key]);
     if (!list.length) return "";
-    return `<nav class="kp-shortcuts" aria-label="よく使う画面">${list.map((s) => {
+    return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
       const on = path.startsWith(s.href);
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${s.href}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
@@ -835,9 +844,14 @@
       // access が無いのは、前の版の /api/me を覚えていたときだけ。そのときは同じ基準で数える
       // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない
       hr: me?.access ? Boolean(me.access.recruit)
-        : ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
+        : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
+      // Office（未実装。TOOLS の ready が true になるまで、ヘッダーには出ない）
+      office: me?.access ? Boolean(me.access.office)
+        : ["owner", "manager", "finance"].some((r) => gwRoles.includes(r)),
+      // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
+      keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
       // それでは判定にならない。admin / staff と社内ロールで見る
@@ -1106,5 +1120,7 @@
     homeFor,
     esc, strong,
     icon,
+    // 業務ツールの定義（HR・Sales・Office・経営）。/keiei など、別アプリの画面が切替を出すときに使う
+    tools: TOOLS,
   };
 })();
