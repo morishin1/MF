@@ -34,6 +34,8 @@ import { monthRange, jstDate } from "../../lib/timecard.js";
 import {
   deriveRow, sortRows, summarize, timesheetDeadline, STAGES, FILTERS,
 } from "../../lib/office.js";
+import { normalizeTerms, termsForMonth, settle } from "../../lib/office-calc.js";
+import { sheetState, classifyFiles, latestSubmission } from "../../lib/office-timesheet.js";
 
 // 読む列。単価・精算条件・メモは入れない
 const CONTRACT_FIELDS = "id, employee_id, engagement_kind, site_company, prime_company, "
@@ -42,6 +44,15 @@ const PROGRESS_FIELDS = "id, employee_id, site_contract_id, "
   + STAGE_KEYS.map((k) => `${k}, ${k}_at`).join(", ");
 const SUBMISSION_FIELDS = "id, employee_id, site_contract_id, kind, file_name, submitted_at";
 const EMPLOYEE_FIELDS = "id, display_name, department, employee_kind, partner_company_id, status";
+
+// Phase 3（db/101〜103）。未適用でも、Phase 2 の一覧は出す
+const SHEET_FIELDS = "id, employee_id, site_contract_id, submission_id, status, read_state, read_warnings, "
+  + "work_days, unresolved_count, flagged_count, total_minutes";
+const SHEET_FILE_FIELDS = "id, employee_id, site_contract_id, target_month, submitted_at, sha256";
+const TERMS_FIELDS = "id, site_contract_id, valid_from, valid_to, pricing_type, sales_unit_price, purchase_unit_price, "
+  + "settlement_mode, settle_min_minutes, settle_max_minutes, settle_unit_minutes, rounding_mode, rounding_scope, "
+  + "over_rate_per_hour, under_rate_per_hour, prorate, amount_rounding";
+const PHASE3_SQL = "db/101_office_timesheet_base.sql・db/102_office_contract_terms.sql・db/103_office_timesheets.sql";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -126,6 +137,24 @@ export default async function handler(req, res) {
     filesByKey.get(k).push({ id: s.id, kind: s.kind, fileName: s.file_name, submittedAt: s.submitted_at });
   }
 
+  // Phase 3：勤務表の状態・確定した稼働時間・契約条件。表が未作成なら、この部分だけ省く
+  const p3 = await loadPhase3(sb, ctx, month, range);
+  if (p3.error) return json(res, 500, { error: "db_query_failed", detail: p3.error });
+  const sheetByKey = new Map((p3.sheets || []).map((t) => [`${t.employee_id}:${t.site_contract_id}`, t]));
+  const termsByContract = new Map();
+  for (const t of p3.terms || []) {
+    if (!termsByContract.has(t.site_contract_id)) termsByContract.set(t.site_contract_id, []);
+    termsByContract.get(t.site_contract_id).push(normalizeTerms(t));
+  }
+  // 同じファイルの検知は、この月に届いたものの中だけ（別の月にまたがる照合は、勤務表の画面で行う）
+  const dup = classifyFiles((p3.files || []).map((f) => ({ ...f, target_month: month })));
+  const sheetFilesByKey = new Map();
+  for (const f of p3.files || []) {
+    const k = `${f.employee_id}:${f.site_contract_id}`;
+    if (!sheetFilesByKey.has(k)) sheetFilesByKey.set(k, []);
+    sheetFilesByKey.get(k).push(f);
+  }
+
   const deadline = timesheetDeadline(month);
   const rows = active
     .filter((c) => empById.has(c.employee_id))       // 名簿に無い契約は、その行だけ出さない（全体は止めない）
@@ -135,7 +164,9 @@ export default async function handler(req, res) {
       const p = progressByKey.get(key) || null;
       const marks = {};
       for (const k of STAGE_KEYS) { marks[k] = !!p?.[k]; marks[`${k}_at`] = p?.[`${k}_at`] || null; }
+      const extra = p3.ready ? phase3Of(c, key, { sheetByKey, sheetFilesByKey, dup, termsByContract, month }) : {};
       return deriveRow({
+        ...extra,
         siteContractId: c.id, progressId: p?.id || null, employeeId: c.employee_id,
         employeeName: e.display_name, department: e.department || null,
         employeeKind: e.employee_kind || "proper", employeeStatus: e.status || null,
@@ -146,7 +177,7 @@ export default async function handler(req, res) {
       }, { today, deadline });
     });
 
-  return json(res, 200, payload(month, today, rows, deadline));
+  return json(res, 200, { ...payload(month, today, rows, deadline), phase3: p3.ready ? { ready: true } : { ready: false, message: p3.message } });
 }
 
 function payload(month, today, rows, deadline = timesheetDeadline(month)) {
@@ -155,5 +186,51 @@ function payload(month, today, rows, deadline = timesheetDeadline(month)) {
     rows: sortRows(rows),
     summary: summarize(rows),
     stages: STAGES, filters: FILTERS,
+  };
+}
+
+/** Phase 3 の表を読む（RLS）。表・列が無ければ ready:false（一覧そのものは止めない） */
+async function loadPhase3(sb, ctx, month, range) {
+  const [sheets, terms, files] = await Promise.all([
+    sb.from("gw_timesheets").select(SHEET_FIELDS).eq("tenant_id", ctx.tenantId).eq("target_month", month).limit(2000),
+    // この月にかかる条件は、開始が翌月より前のもの。終了日の絞り込みは、月の判定（termsForMonth）に任せる
+    sb.from("gw_site_contract_terms").select(TERMS_FIELDS).eq("tenant_id", ctx.tenantId).lt("valid_from", range.to).limit(5000),
+    sb.from("gw_submissions").select(SHEET_FILE_FIELDS).eq("tenant_id", ctx.tenantId).eq("target_month", month)
+      .eq("kind", "timesheet").limit(5000),
+  ]);
+  for (const r of [sheets, terms, files]) {
+    if (!r.error) continue;
+    const hint = dbSetupHint(r.error, PHASE3_SQL);
+    if (hint) return { ready: false, message: hint };
+    return { ready: false, error: r.error.message };
+  }
+  return { ready: true, sheets: sheets.data || [], terms: terms.data || [], files: files.data || [] };
+}
+
+/** 1行ぶんの Phase 3 の材料（deriveRow が、印と合わせて状態を導く） */
+function phase3Of(c, key, { sheetByKey, sheetFilesByKey, dup, termsByContract, month }) {
+  const ts = sheetByKey.get(key) || null;
+  const files = sheetFilesByKey.get(key) || [];
+  const state = sheetState({ submissions: files, timesheet: ts });
+  const warnings = [];
+  if (files.some((f) => dup.get(f.id)?.state === "cross")) {
+    warnings.push("同じファイルが、別の人・別の契約の勤務表としても提出されています");
+  }
+  const latest = latestSubmission(files);
+  if (ts?.submission_id && latest && latest.id !== ts.submission_id) warnings.push("読み取り後に、新しい勤務表のファイルが届いています");
+  if (Array.isArray(ts?.read_warnings) && ts.read_warnings.some((w) => w?.code === "name_mismatch")) {
+    warnings.push("勤務表の氏名が、登録の氏名と一致しません（別の人の勤務表の可能性）");
+  }
+  const confirmed = ts?.status === "confirmed";
+  const terms = termsForMonth(termsByContract.get(c.id) || [], month);
+  const st = confirmed ? settle({ terms, minutes: ts.total_minutes }) : null;
+  return {
+    sheet: {
+      state, totalMinutes: confirmed ? ts.total_minutes : null, workDays: ts ? ts.work_days : null,
+      unresolved: ts ? ts.unresolved_count : 0, review: ts ? ts.flagged_count : 0,
+      readState: ts?.read_state || null, warnings,
+    },
+    terms: { status: terms.status, partial: terms.partial },
+    settle: st ? { status: st.status, amount: st.amount, band: st.band, reasons: st.reasons } : null,
   };
 }

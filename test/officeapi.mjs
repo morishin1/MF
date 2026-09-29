@@ -29,7 +29,8 @@ const selects = [];           // 読もうとした列（単価を読んでい�
 const admin_calls = { employees: 0 };
 let who = null;
 
-const OFFICE_TABLES = ["gw_site_contracts", "gw_billing_progress", "gw_submissions", "gw_partner_companies"];
+const OFFICE_TABLES = ["gw_site_contracts", "gw_billing_progress", "gw_submissions", "gw_partner_companies",
+  "gw_timesheets", "gw_site_contract_terms"];
 const hasOfficeRole = (c) => ["owner", "manager", "finance"].some((r) => (c?.roles || []).includes(r));
 /** 実DBの RLS の再現：既存ポリシーは is_tenant_staff、db/100 は gw_is_office の読み取り */
 const rlsAllows = (name, c) => {
@@ -278,10 +279,14 @@ await ok("他社の契約・提出は出ない", async () => {
 await ok("単価・精算条件・メモを select しない・返さない", async () => {
   setup();
   const r = await list("2026-09");
-  const asked = selects.map((s) => s.cols).join(",");
-  for (const w of ["unit_price", "settlement_condition", "note", "*"]) {
-    assert.ok(!asked.includes(w), `${w} を読もうとしている: ${asked}`);
+  // 既存の gw_site_contracts.unit_price / settlement_condition / note は、どの表からも読まない。
+  // （Phase 3 の契約条件 gw_site_contract_terms の sales_unit_price・purchase_unit_price は別の列）
+  const askedOf = (tables) => selects.filter((s) => !tables || tables.includes(s.table)).map((s) => s.cols).join(",");
+  for (const w of [/(^|[^a-z_])unit_price/, /settlement_condition/, /\*/]) {
+    assert.ok(!w.test(askedOf()), `${w} を読もうとしている: ${askedOf()}`);
   }
+  assert.ok(!/(^|[^a-z_])note\b/.test(askedOf(["gw_site_contracts", "gw_employees", "gw_billing_progress", "gw_submissions"])),
+    "契約・名簿・進捗・提出の note を読まない");
   const text = JSON.stringify(r.body);
   for (const w of [UNIT, "650000", "unit_price", "settlement", "140h", "契約メモ", "人事メモ"]) {
     assert.ok(!text.includes(w), `${w} が応答に入っている`);
@@ -409,6 +414,149 @@ await ok("表がまだ無い環境（076/077/080 未適用）では、落ちず�
     assert.match(r.body.message, /db\/0(76|77|80)_/);
     assert.equal(r.body.summary.total, 0, "空の一覧と同じ形（画面が summary を前提に描く）");
     assert.ok(Array.isArray(r.body.filters));
+  }
+});
+
+console.log("\n— Phase 3：勤務表の状態・稼働時間・契約条件を、一覧に足す —");
+
+const P3 = () => {
+  setup();
+  const mk = (id, emp, contract, sha, at) => ({ id, tenant_id: "t1", employee_id: emp, site_contract_id: contract, target_month: "2026-09",
+    kind: "timesheet", file_name: "x.pdf", storage_path: "t1/x", submitted_at: at, sha256: sha });
+  db.rows.gw_submissions = [
+    mk("11111111-1111-4111-8111-111111111111", "e-pp", "sc-pp", "a".repeat(64), "2026-09-30T01:00:00Z"),
+    mk("44444444-4444-4444-8444-444444444444", "e-bp", "sc-bp", "b".repeat(64), "2026-09-30T02:00:00Z"),
+  ];
+  db.rows.gw_billing_progress = [
+    { id: "bp-pp", tenant_id: "t1", employee_id: "e-pp", site_contract_id: "sc-pp", billing_month: "2026-09",
+      timesheet_received: true, timesheet_received_at: "2026-09-30T01:00:00Z", work_confirmed: true, work_confirmed_at: "2026-10-01T01:00:00Z",
+      board_created: false, sent: false, bp_invoice_received: false },
+    { id: "bp-bp", tenant_id: "t1", employee_id: "e-bp", site_contract_id: "sc-bp", billing_month: "2026-09",
+      timesheet_received: true, work_confirmed: true, board_created: false, sent: false, bp_invoice_received: false },
+  ];
+  db.rows.gw_timesheets = [
+    { id: "ts-pp", tenant_id: "t1", employee_id: "e-pp", site_contract_id: "sc-pp", target_month: "2026-09",
+      submission_id: "11111111-1111-4111-8111-111111111111", status: "confirmed", read_state: "ok", read_warnings: [],
+      work_days: 20, unresolved_count: 0, flagged_count: 0, total_minutes: 9750 },
+    { id: "ts-bp", tenant_id: "t1", employee_id: "e-bp", site_contract_id: "sc-bp", target_month: "2026-09",
+      submission_id: "44444444-4444-4444-8444-444444444444", status: "confirmed", read_state: "ok", read_warnings: [],
+      work_days: 20, unresolved_count: 0, flagged_count: 0, total_minutes: 9600 },
+  ];
+  db.rows.gw_site_contract_terms = [
+    { id: "tm-pp", tenant_id: "t1", site_contract_id: "sc-pp", valid_from: "2026-04-01", valid_to: null, pricing_type: "hourly", sales_unit_price: 4500, purchase_unit_price: 3800 },
+  ];
+};
+const rowOf = (r, name) => r.body.rows.find((x) => x.employeeName === name);
+
+await ok("確定した稼働時間が、稼働確認の欄に出る（確認済 162.5h）。印と勤務表の確定が一致していれば、要確認にならない", async () => {
+  P3();
+  const r = await list("2026-09");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.phase3, { ready: true });
+  const pp = rowOf(r, "田中 太郎");
+  assert.equal(pp.cols.work.label, "確認済 162.5h");
+  assert.equal(pp.cols.work.state, "confirmed");
+  assert.equal(pp.sheetInfo.state, "confirmed");
+  assert.equal(pp.sheetInfo.hours, "162.5");
+  assert.equal(pp.check, false);
+  assert.equal(pp.stage, "invoice_create", "確定したので、請求作成へ進む");
+});
+await ok("契約条件（時給 4,500円）から、売上の精算を返す：162.5h × 4,500 = 731,250円", async () => {
+  P3();
+  const pp = rowOf(await list("2026-09"), "田中 太郎");
+  assert.equal(pp.settle.status, "calculated");
+  assert.equal(pp.settle.amount, 731250);
+  assert.equal(pp.terms.status, "ok");
+  assert.ok(!pp.tags.includes("terms"));
+});
+await ok("稼働を確定したのに契約条件が無い行は「契約条件の確認」。今日やることにも出る", async () => {
+  P3();
+  const r = await list("2026-09");
+  const bp = rowOf(r, "鈴木 花子");
+  assert.equal(bp.settle.status, "none");
+  assert.equal(bp.settle.amount, null);
+  assert.ok(bp.tags.includes("terms"));
+  assert.equal(bp.check, false, "要確認（警告）にはしない。別の絞り込みで見せる");
+  const t = r.body.summary.today.find((x) => x.key === "terms");
+  assert.equal(t.count, 1);
+  assert.ok(r.body.filters.some((f) => f.key === "terms"));
+});
+await ok("下書き（確認待ち）は、時間を出さず「確認待ち」。要確認・入力が必要な日の数が、次にやることに入る", async () => {
+  P3();
+  db.rows.gw_billing_progress.find((p) => p.employee_id === "e-pp").work_confirmed = false;
+  Object.assign(db.rows.gw_timesheets.find((t) => t.employee_id === "e-pp"), { status: "draft", unresolved_count: 2, flagged_count: 3, total_minutes: 4800 });
+  const r = await list("2026-09");
+  const pp = rowOf(r, "田中 太郎");
+  assert.equal(pp.cols.work.label, "確認待ち");
+  assert.equal(pp.sheetInfo.hours, null, "確定していない時間は出さない");
+  assert.equal(pp.settle, null);
+  assert.equal(pp.stage, "work");
+  assert.match(pp.action.text, /入力が必要な日 2日/);
+  assert.match(pp.action.text, /要確認 3日/);
+  const work = r.body.summary.today.find((x) => x.key === "work");
+  assert.match(work.note, /確認待ち 1件/);
+});
+await ok("ファイルだけ届いて未読取なら「未読取」。手で付けた稼働確認の印（勤務表の行なし）は「確認済（手動）」で、警告にしない", async () => {
+  P3();
+  db.rows.gw_timesheets = [];
+  db.rows.gw_billing_progress.find((p) => p.employee_id === "e-bp").work_confirmed = false;
+  const r = await list("2026-09");
+  assert.equal(rowOf(r, "鈴木 花子").cols.work.label, "未読取");
+  const pp = rowOf(r, "田中 太郎");
+  assert.equal(pp.cols.work.label, "確認済（手動）");
+  assert.equal(pp.check, false, "既存の月初作業管理で付けた印は、食い違いではない");
+});
+await ok("印と勤務表が食い違えば要確認：確定しているのに印が無い／印があるのに下書き", async () => {
+  P3();
+  db.rows.gw_billing_progress.find((p) => p.employee_id === "e-pp").work_confirmed = false;     // 確定しているのに、印が無い
+  Object.assign(db.rows.gw_timesheets.find((t) => t.employee_id === "e-bp"), { status: "draft" });  // 印はあるのに、下書き
+  const r = await list("2026-09");
+  assert.match(rowOf(r, "田中 太郎").warnings.join(), /勤務表は確定していますが、稼働確認の印がありません/);
+  assert.match(rowOf(r, "鈴木 花子").warnings.join(), /稼働確認の印はありますが、勤務表は確定していません/);
+});
+await ok("同じファイルが別の人にも出ていれば、両方に要確認。読取後に新しいファイルが届いても要確認", async () => {
+  P3();
+  db.rows.gw_submissions[1].sha256 = "a".repeat(64);                    // 田中さんと鈴木さんが、同じ中身
+  db.rows.gw_submissions.push({ id: "55555555-5555-4555-8555-555555555555", tenant_id: "t1", employee_id: "e-pp", site_contract_id: "sc-pp",
+    target_month: "2026-09", kind: "timesheet", file_name: "new.pdf", storage_path: "t1/n", submitted_at: "2026-10-02T00:00:00Z", sha256: "c".repeat(64) });
+  const r = await list("2026-09");
+  const pp = rowOf(r, "田中 太郎"), bp = rowOf(r, "鈴木 花子");
+  assert.match(pp.warnings.join(), /同じファイルが、別の人・別の契約/);
+  assert.match(bp.warnings.join(), /同じファイルが、別の人・別の契約/);
+  assert.match(pp.warnings.join(), /新しい勤務表のファイルが届いています/);
+  assert.ok(!/新しい勤務表/.test(bp.warnings.join()));
+});
+await ok("勤務表の氏名が登録と違うと、要確認（read_warnings の name_mismatch）", async () => {
+  P3();
+  db.rows.gw_timesheets.find((t) => t.employee_id === "e-pp").read_warnings = [{ code: "name_mismatch", text: "…" }];
+  assert.match(rowOf(await list("2026-09"), "田中 太郎").warnings.join(), /氏名が、登録の氏名と一致しません/);
+});
+await ok("差し戻し中は、再提出を待つ表示（勤務表待ち）。受領の印が外れていれば工程は勤務表待ち", async () => {
+  P3();
+  Object.assign(db.rows.gw_timesheets.find((t) => t.employee_id === "e-pp"), { status: "returned" });
+  Object.assign(db.rows.gw_billing_progress.find((p) => p.employee_id === "e-pp"), { timesheet_received: false, work_confirmed: false });
+  const pp = rowOf(await list("2026-09"), "田中 太郎");
+  assert.equal(pp.stage, "timesheet");
+  assert.match(pp.action.text, /再提出を待っています/);
+});
+await ok("Phase 3 の表が未作成（db/101〜103 未適用）でも、Phase 2 の一覧は出す。phase3.ready=false と案内", async () => {
+  for (const t of ["gw_timesheets", "gw_site_contract_terms"]) {
+    P3(); db.missing = t;
+    const r = await list("2026-09");
+    assert.equal(r.statusCode, 200, t);
+    assert.equal(r.body.rows.length, 2);
+    assert.equal(r.body.phase3.ready, false);
+    assert.match(r.body.phase3.message, /db\/10[123]_/);
+    assert.equal(r.body.notReady, undefined);
+    assert.equal(rowOf(r, "田中 太郎").cols.work.label, "確認済", "印だけの、従来の表示");
+    assert.equal(rowOf(r, "田中 太郎").sheetInfo, null);
+  }
+});
+await ok("一覧の応答に、置き場所・単価（仕入を含む）・精算条件・メモを含めない。金額は確定した行の売上だけ", async () => {
+  P3();
+  const text = JSON.stringify((await list("2026-09")).body);
+  for (const w of ["storage_path", "t1/x", "purchase_unit_price", "3800", "sales_unit_price", "settlement_condition", "契約メモ", "人事メモ"]) {
+    assert.ok(!text.includes(w), `${w} が一覧に入っている`);
   }
 });
 

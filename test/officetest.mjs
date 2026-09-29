@@ -300,5 +300,90 @@ await ok("単価（unit_price）を読まない・出さない（意味が確認
   assert.ok(!r.searchText.includes("700000"));
 });
 
+console.log("— Phase 3：勤務表の状態・稼働時間・契約条件（任意の入力）—");
+
+const SH = (o = {}) => ({ state: "confirmed", totalMinutes: 9750, workDays: 20, unresolved: 0, review: 0, warnings: [], ...o });
+const d3 = (marks, sheet, extra = {}) => derive(marks, { sheet, ...extra });
+const RC = { timesheet_received: true };
+const RCC = { timesheet_received: true, work_confirmed: true };
+
+await ok("勤務表の情報が無ければ、従来どおり（印だけ）。sheetInfo は null", async () => {
+  const r = derive(RCC);
+  assert.equal(r.cols.work.label, "確認済");
+  assert.equal(r.sheetInfo, null);
+  assert.ok(!r.tags.includes("terms"));
+});
+await ok("確定した稼働時間（9750分）→ 確認済 162.5h。印と一致していれば警告なし", async () => {
+  const r = d3(RCC, SH());
+  assert.equal(r.cols.work.label, "確認済 162.5h");
+  assert.equal(r.cols.work.state, "confirmed", "state は従来と同じ（画面の判定を変えない）");
+  assert.equal(r.sheetInfo.hours, "162.5");
+  assert.equal(r.sheetInfo.label, "確定");
+  assert.equal(r.check, false);
+});
+await ok("勤務表の行が無い稼働確認の印は「確認済（手動）」。警告にしない（月初作業管理の既存の運用）", async () => {
+  const r = d3(RCC, SH({ state: "none", totalMinutes: null }));
+  assert.equal(r.cols.work.label, "確認済（手動）");
+  assert.equal(r.check, false);
+});
+await ok("印だけあって勤務表が確定していないなら、時間は出さない（確認済（手動））", async () => {
+  assert.equal(d3(RCC, SH({ state: "draft", totalMinutes: 4800 })).cols.work.label, "確認済（手動）");
+});
+await ok("未確定の勤務表は、時間を出さない：提出済み→未読取／下書き→確認待ち／差し戻し→差し戻し", async () => {
+  assert.equal(d3(RC, SH({ state: "submitted", totalMinutes: null })).cols.work.label, "未読取");
+  assert.equal(d3(RC, SH({ state: "draft", totalMinutes: 4800 })).cols.work.label, "確認待ち");
+  assert.equal(d3(RC, SH({ state: "draft", totalMinutes: 4800 })).sheetInfo.hours, null);
+  assert.equal(d3({}, SH({ state: "returned", totalMinutes: null })).cols.work.label, "差し戻し");
+});
+await ok("次にやること：未読取→読み取りを促す／下書き→入力が必要な日・要確認の日の数／差し戻し中→再提出待ち", async () => {
+  assert.match(d3(RC, SH({ state: "submitted", totalMinutes: null })).action.text, /読み取って/);
+  const d = d3(RC, SH({ state: "draft", unresolved: 2, review: 3 }));
+  assert.match(d.action.text, /入力が必要な日 2日/);
+  assert.match(d.action.text, /要確認 3日/);
+  assert.equal(d3(RC, SH({ state: "draft", unresolved: 0, review: 3 })).action.text, "勤務表の確認待ちです（要確認 3日）");
+  assert.equal(d3(RC, SH({ state: "draft", unresolved: 2, review: 0 })).action.text, "勤務表の確認待ちです（入力が必要な日 2日）");
+  const r = d3({}, SH({ state: "returned", totalMinutes: null }));
+  assert.equal(r.stage, "timesheet");
+  assert.match(r.action.text, /再提出を待っています/);
+  assert.equal(r.action.section, "timesheet");
+  assert.equal(d3(RC, SH({ state: "draft" })).action.section, "timesheet", "詳細で開く場所は従来どおり");
+});
+await ok("印と勤務表が食い違えば要確認：確定しているのに印が無い／印があるのに下書き・差し戻し", async () => {
+  assert.match(d3(RC, SH()).warnings.join(), /勤務表は確定していますが、稼働確認の印がありません/);
+  assert.match(d3(RCC, SH({ state: "draft" })).warnings.join(), /稼働確認の印はありますが、勤務表は確定していません/);
+  assert.match(d3(RCC, SH({ state: "returned" })).warnings.join(), /稼働確認の印はありますが/);
+  assert.equal(d3(RCC, SH({ state: "submitted", totalMinutes: null })).check, false, "ファイルだけ届いて印が先にある（手動）は、食い違いにしない");
+});
+await ok("API が付けた注意（別の人と同じファイル・氏名の不一致など）は、そのまま要確認に入る", async () => {
+  const r = d3(RCC, SH({ warnings: ["同じファイルが、別の人・別の契約の勤務表としても提出されています"] }));
+  assert.equal(r.check, true);
+  assert.ok(r.tags.includes("check"));
+  assert.match(r.warnings.join(), /同じファイル/);
+});
+await ok("稼働を確定したのに精算できない（条件なし・要確認）行は terms の印。計算できた行・下書きの行は付けない", async () => {
+  assert.ok(d3(RCC, SH(), { settle: { status: "none" } }).tags.includes("terms"));
+  assert.ok(d3(RCC, SH(), { settle: { status: "review" } }).tags.includes("terms"));
+  assert.ok(!d3(RCC, SH(), { settle: { status: "calculated", amount: 1 } }).tags.includes("terms"));
+  assert.ok(!d3(RC, SH({ state: "draft" }), { settle: { status: "none" } }).tags.includes("terms"));
+  assert.ok(!d3(RCC, SH()).tags.includes("terms"), "settle が無ければ付けない");
+});
+await ok("絞り込みに「契約条件の確認」がある。今日やることに、稼働確認待ちの内訳（未読取・確認待ち）と契約条件の確認が出る", async () => {
+  assert.ok(O.FILTERS.some((f) => f.key === "terms"));
+  const rows = [
+    d3(RC, SH({ state: "submitted", totalMinutes: null }), { employeeName: "A" }),
+    d3(RC, SH({ state: "draft" }), { employeeName: "B" }),
+    d3(RC, SH({ state: "draft" }), { employeeName: "C" }),
+    d3(RCC, SH(), { employeeName: "D", settle: { status: "none" } }),
+  ];
+  const t = O.summarize(rows).today;
+  assert.equal(t.find((x) => x.key === "work").count, 3);
+  assert.equal(t.find((x) => x.key === "work").note, "未読取 1件・確認待ち 2件");
+  assert.equal(t.find((x) => x.key === "terms").count, 1);
+});
+await ok("勤務表の情報が無い行だけなら、稼働確認待ちの内訳（note）は付けない（従来どおり）", async () => {
+  const t = O.summarize([derive(RC, { employeeName: "A" })]).today;
+  assert.equal(t.find((x) => x.key === "work").note ?? null, null);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);
