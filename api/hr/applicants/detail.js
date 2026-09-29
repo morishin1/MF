@@ -6,6 +6,7 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
+import { paySplit, splitWage, attachPay, savePay } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
@@ -15,6 +16,8 @@ import {
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql";
+// 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない
+const columns = (salary) => (salary && !paySplit() ? FIELDS : withoutColumns(FIELDS));
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
   + "recommend_note, decision_note, hold_reason, hold_next_step, "
@@ -42,7 +45,7 @@ async function one(req, res, sb, ctx, salary) {
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
 
-  const { data: a, error } = await sb.from("gw_hr_applicants").select(salary ? FIELDS : withoutColumns(FIELDS))
+  const { data: a, error } = await sb.from("gw_hr_applicants").select(columns(salary))
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -62,6 +65,11 @@ async function one(req, res, sb, ctx, salary) {
       .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
+  if (salary) {
+    await attachPay(ctx.tenantId, a, "applicant");
+    await attachPay(ctx.tenantId, offers || [], "offer");
+  }
 
   // 直近の、まだ実施していない・キャンセルしていない面談
   // （NEXT ACTIONの「本日14:00 カジュアル面談」に使う）
@@ -125,10 +133,13 @@ async function update(req, res, sb, ctx, user, salary) {
   }
 
   const { data, error } = await sb.from("gw_hr_applicants")
-    .update({ ...row.value, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(salary ? FIELDS : withoutColumns(FIELDS)).maybeSingle();
+    .update({ ...splitWage(row.value).base, updated_at: new Date().toISOString() })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(columns(salary)).maybeSingle();
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   if (!data) return json(res, 404, { error: "not_found" });
+  // 給与は、分けている設定なら専用の表へ（見られない人の入力は、ここまで来ない）
+  await savePay(ctx.tenantId, { applicantId: body.id, wage: splitWage(row.value).wage });
+  if (salary) await attachPay(ctx.tenantId, data, "applicant");
 
   // ステージが動いたときだけ、選考タイムラインに足す（値を直しただけでは足さない）
   if (row.value.stage && row.value.stage !== before.stage) {

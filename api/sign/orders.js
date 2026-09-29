@@ -35,6 +35,7 @@ import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
 import { notifySlack } from "../../lib/slack.js";
 import { gwLog } from "../../lib/gw-audit.js";
+import { attachPay } from "../../lib/hr-pay.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
 import { signEvent } from "../../lib/sign-audit.js";
 import { renderContractPdf, sha256 } from "../../lib/pdf-jp.js";
@@ -149,6 +150,8 @@ async function loadReconciliation(sb, ctx, employeeId) {
   const { data: offers } = await sb.from("gw_hr_offers").select("*")
     .eq("applicant_id", applicant.id).order("version", { ascending: false }).limit(20);
   const offer = (offers || []).find((o) => o.accepted_at) || null;
+  // 承諾した合格通知の給与（分けている設定 HR_PAY_SPLIT=1 では専用の表から）。サーバの中での突き合わせに使う
+  if (offer) await attachPay(ctx.tenantId, offer, "offer");
 
   return {
     linked: true, hasAcceptedOffer: Boolean(offer),

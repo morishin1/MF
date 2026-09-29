@@ -22,6 +22,7 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput } from "../../../lib/salary.js";
+import { paySplit, splitWage, attachPay, savePay, copyPayToOffer, WAGE_COLUMNS } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
@@ -66,6 +67,8 @@ async function create(req, res, sb, ctx, user, salary) {
   if (applicant.status !== "offer_draft_pending") {
     return json(res, 409, { error: "invalid_state", hint: "いまは合格通知を作成できる状態ではありません" });
   }
+  // 給与が見えない人の操作でも、応募者の条件は、サーバの中でそのまま引き継ぐ（応答には載らない）
+  await attachPay(ctx.tenantId, applicant, "applicant");
 
   // 給与を見られない人は、給与の欄を書き換えられない。応募者に入っている条件は、そのまま引き継ぐ
   const row = normalizeOffer(salary ? body : dropSalaryInput(body), applicant);
@@ -76,9 +79,11 @@ async function create(req, res, sb, ctx, user, salary) {
   const version = (existing?.[0]?.version || 0) + 1;
   const token = newOfferToken();
 
+  // 給与は、分けている設定なら専用の表へ（元の行には入れない）
+  const { base, wage } = splitWage(row.value);
   const { data, error } = await sb.from("gw_hr_offers")
     .insert({
-      ...row.value, tenant_id: ctx.tenantId, applicant_id: applicant.id, version,
+      ...base, tenant_id: ctx.tenantId, applicant_id: applicant.id, version,
       token_hash: sha256(token), created_by: user.id,
     })
     .select("*").single();
@@ -87,6 +92,8 @@ async function create(req, res, sb, ctx, user, salary) {
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
   }
+
+  await savePay(ctx.tenantId, { applicantId: applicant.id, offerId: data.id, wage });
 
   const now = new Date().toISOString();
   await sb.from("gw_hr_applicants").update({ status: "offer_review_pending", updated_at: now })
@@ -100,7 +107,7 @@ async function create(req, res, sb, ctx, user, salary) {
     target: `hr_offer:${data.id}`, detail: { applicantId: applicant.id, version },
   });
 
-  return json(res, 200, { offer: shapeOffer(data), status: "offer_review_pending" });
+  return json(res, 200, { offer: await shape(ctx, data, salary), status: "offer_review_pending" });
 }
 
 async function act(req, res, sb, ctx, user, salary) {
@@ -111,14 +118,14 @@ async function act(req, res, sb, ctx, user, salary) {
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!offer) return json(res, 404, { error: "not_found" });
 
-  if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body));
-  if (body.action === "confirm") return confirm(res, sb, ctx, user, offer);
-  if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer);
-  if (body.action === "markSent") return markSent(res, sb, ctx, user, offer);
+  if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body), salary);
+  if (body.action === "confirm") return confirm(res, sb, ctx, user, offer, salary);
+  if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary);
+  if (body.action === "markSent") return markSent(res, sb, ctx, user, offer, salary);
   return json(res, 400, { error: "unknown_action" });
 }
 
-async function update(res, sb, ctx, user, offer, body) {
+async function update(res, sb, ctx, user, offer, body, salary) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, status")
     .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant || applicant.status !== "offer_review_pending") {
@@ -129,14 +136,20 @@ async function update(res, sb, ctx, user, offer, body) {
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
 
-  const { data, error } = await sb.from("gw_hr_offers")
-    .update(row.value).eq("id", offer.id).select("*").single();
-  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+  // 給与は、分けている設定なら専用の表へ。元の行に残る項目がなければ、行そのものは触らない
+  const { base, wage } = splitWage(row.value);
+  let data = offer;
+  if (Object.keys(base).length) {
+    const r = await sb.from("gw_hr_offers").update(base).eq("id", offer.id).select("*").single();
+    if (r.error) return json(res, 500, { error: "db_update_failed", detail: r.error.message });
+    data = r.data;
+  }
+  await savePay(ctx.tenantId, { applicantId: offer.applicant_id, offerId: offer.id, wage });
 
-  return json(res, 200, { offer: shapeOffer(data) });
+  return json(res, 200, { offer: await shape(ctx, data, salary) });
 }
 
-async function confirm(res, sb, ctx, user, offer) {
+async function confirm(res, sb, ctx, user, offer, salary) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name, status")
     .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant || applicant.status !== "offer_review_pending") {
@@ -155,7 +168,13 @@ async function confirm(res, sb, ctx, user, offer) {
     target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id },
   });
 
-  return json(res, 200, { offer: shapeOffer(offer), status: "offer_send_pending" });
+  return json(res, 200, { offer: await shape(ctx, offer, salary), status: "offer_send_pending" });
+}
+
+// 応答用の形にする。給与を見られる人にだけ、給与（分けている設定では専用の表から）を足す
+async function shape(ctx, offer, salary) {
+  if (salary) await attachPay(ctx.tenantId, offer, "offer");
+  return shapeOffer(offer);
 }
 
 const LINKABLE_STATUSES = [
@@ -163,7 +182,7 @@ const LINKABLE_STATUSES = [
 ];
 
 // 本人専用URLのtokenを発行する。平文は、ここでしか返さない
-async function issueLink(res, sb, ctx, user, offer) {
+async function issueLink(res, sb, ctx, user, offer, salary) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, status")
     .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant || !LINKABLE_STATUSES.includes(applicant.status)) {
@@ -191,11 +210,13 @@ async function issueLink(res, sb, ctx, user, offer) {
       tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_issue",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version },
     });
-    return json(res, 200, { offer: shapeOffer(data), token });
+    return json(res, 200, { offer: await shape(ctx, data, salary), token });
   }
 
   const nextVersion = offer.version + 1;
-  const snapshot = Object.fromEntries(OFFER_SNAPSHOT_COLUMNS.map((k) => [k, offer[k]]));
+  // 給与を分けている設定では、元の行には給与を入れない（新しい版へは、専用の表から引き継ぐ）
+  const snapshot = Object.fromEntries(OFFER_SNAPSHOT_COLUMNS
+    .filter((k) => !(paySplit() && WAGE_COLUMNS.includes(k))).map((k) => [k, offer[k]]));
   const { data: made, error } = await sb.from("gw_hr_offers")
     .insert({
       ...snapshot, tenant_id: ctx.tenantId, applicant_id: applicant.id, version: nextVersion,
@@ -204,6 +225,7 @@ async function issueLink(res, sb, ctx, user, offer) {
     .select("*").single();
   if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
 
+  await copyPayToOffer(ctx.tenantId, { applicantId: applicant.id, fromOfferId: offer.id, toOfferId: made.id });
   await sb.from("gw_hr_offers").update({ revoked_at: now }).eq("id", offer.id);
   await sb.from("gw_hr_applicants").update({ status: "offer_resend_pending", updated_at: now })
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
@@ -216,11 +238,11 @@ async function issueLink(res, sb, ctx, user, offer) {
     target: `hr_offer:${made.id}`, detail: { applicantId: applicant.id, revokedOfferId: offer.id, version: nextVersion },
   });
 
-  return json(res, 200, { offer: shapeOffer(made), token, status: "offer_resend_pending" });
+  return json(res, 200, { offer: await shape(ctx, made, salary), token, status: "offer_resend_pending" });
 }
 
 // 実際に本人へ送ったことを、HRが明示的に記録する（URLを発行しただけではsent_atにしない）
-async function markSent(res, sb, ctx, user, offer) {
+async function markSent(res, sb, ctx, user, offer, salary) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name, status")
     .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant || !["offer_send_pending", "offer_resend_pending"].includes(applicant.status)) {
@@ -244,5 +266,5 @@ async function markSent(res, sb, ctx, user, offer) {
     target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id },
   });
 
-  return json(res, 200, { offer: shapeOffer(data), status: "offer_sent" });
+  return json(res, 200, { offer: await shape(ctx, data, salary), status: "offer_sent" });
 }

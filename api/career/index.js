@@ -35,7 +35,8 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../lib/gw.js";
-import { guardSalaryOutput } from "../../lib/salary.js";
+import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
+import { paySplit, attachPay } from "../../lib/hr-pay.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -861,10 +862,14 @@ const APPLICANT_FIELDS = "id, tenant_id, name, status, decision, stage, join_dat
   + "contract_end_date, probation_months, wage_type, wage_amount, weekly_hours, work_location, recruiter_id, "
   + "employee_id, updated_at, created_at";
 
+// 応募者の給与の列。給与を見られない人には選ばない。給与を専用の表（gw_hr_pay）へ分けている設定
+// （HR_PAY_SPLIT=1）では、元の列は読まない（見られる人には、attachPay で専用の表から足す）
+const applicantFields = (ctx) => (canSeeSalary(ctx) && !paySplit() ? APPLICANT_FIELDS : withoutColumns(APPLICANT_FIELDS));
+
 /** 採用決定で、まだ社員になっていない人。応募者の情報は採用HRの権限がある人だけ（lib/gw.js canRecruit） */
 async function hiredApplicants(sb, ctx) {
   if (!canRecruit(ctx)) return [];
-  const rows = await soft(sb.from("gw_hr_applicants").select(APPLICANT_FIELDS)
+  const rows = await soft(sb.from("gw_hr_applicants").select(applicantFields(ctx))
     .eq("tenant_id", ctx.tenantId).eq("decision", "hired").limit(500));
   return (rows || []).filter((a) => !a.employee_id && !["declined", "passed", "done"].includes(a.status));
 }
@@ -951,9 +956,10 @@ async function journeyList(res, sb, ctx) {
 
 async function applicantDetail(res, sb, ctx, id) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden", hint: "採用HRの権限がある人だけが見られます" });
-  const a = await soft(sb.from("gw_hr_applicants").select(APPLICANT_FIELDS).eq("id", id)
+  const a = await soft(sb.from("gw_hr_applicants").select(applicantFields(ctx)).eq("id", id)
     .eq("tenant_id", ctx.tenantId).maybeSingle());
   if (!a || a.decision !== "hired") return json(res, 404, { error: "not_found" });
+  if (canSeeSalary(ctx)) await attachPay(ctx.tenantId, a, "applicant");
   if (a.employee_id) return json(res, 409, { error: "already_employee", employeeId: a.employee_id });
   const recruiter = a.recruiter_id ? await soft(sb.from("gw_employees").select("display_name")
     .eq("id", a.recruiter_id).eq("tenant_id", ctx.tenantId).maybeSingle()) : null;

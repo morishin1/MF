@@ -11,6 +11,7 @@ import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canDecideHire, canSeeSalary } from "../../lib/gw.js";
 import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
+import { paySplit, attachPay } from "../../lib/hr-pay.js";
 import { userClient } from "../../lib/supabase.js";
 import { shapeApplicant, shapeInterview } from "../../lib/hr.js";
 
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
   const sb = userClient(req);
   // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す
   const salary = guardSalaryOutput(res, canSeeSalary(ctx));
-  const { data, error } = await sb.from("gw_hr_applicants").select(salary ? FIELDS : withoutColumns(FIELDS))
+  const { data, error } = await sb.from("gw_hr_applicants").select(salary && !paySplit() ? FIELDS : withoutColumns(FIELDS))
     .eq("tenant_id", ctx.tenantId).in("stage", RELEVANT_STAGES).limit(500);
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -43,6 +44,8 @@ export default async function handler(req, res) {
   }
 
   const applicants = data || [];
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
+  if (salary) await attachPay(ctx.tenantId, applicants, "applicant");
   if (!applicants.length) return json(res, 200, { todayMeetings: [], recommended: [], decisionPending: [] });
 
   const ids = applicants.map((a) => a.id);

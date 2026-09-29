@@ -9,12 +9,16 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
+import { paySplit, splitWage, attachPay, savePay } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
 
 const SQL = "db/081_hr_recruiting.sql";
+// 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
+// 給与を見られない人には、どちらの設定でも、給与の列を選ばない
+const columns = (salary) => (salary && !paySplit() ? FIELDS : withoutColumns(FIELDS));
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
   + "recommend_note, decision_note, hold_reason, hold_next_step, "
@@ -39,13 +43,16 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res, sb, ctx, salary) {
-  const { data, error } = await sb.from("gw_hr_applicants").select(salary ? FIELDS : withoutColumns(FIELDS))
+  const { data, error } = await sb.from("gw_hr_applicants").select(columns(salary))
     .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(1000);
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { applicants: [], notReady: true, message: hint });
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
+
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
+  if (salary) await attachPay(ctx.tenantId, data || [], "applicant");
 
   const ids = (data || []).map((a) => a.id);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
@@ -101,15 +108,19 @@ async function create(req, res, sb, ctx, user, salary) {
     row.value.recruiter_id = rc.value;
   }
 
+  // 給与は、分けている設定なら専用の表へ（元の行には入れない）
+  const { base, wage } = splitWage(row.value);
   const { data, error } = await sb.from("gw_hr_applicants")
-    .insert({ ...row.value, tenant_id: ctx.tenantId, created_by: user.id })
-    .select(salary ? FIELDS : withoutColumns(FIELDS)).single();
+    .insert({ ...base, tenant_id: ctx.tenantId, created_by: user.id })
+    .select(columns(salary)).single();
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
   }
 
+  await savePay(ctx.tenantId, { applicantId: data.id, wage });
+  if (salary) await attachPay(ctx.tenantId, data, "applicant");
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: data.id, event_key: "applied", label: "応募", created_by: user.id,
   });

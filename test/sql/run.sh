@@ -9,7 +9,8 @@
 #   ・Supabase 固有の部品（auth.uid() など）は test/sql/000_supabase_stub.sql の最小の代用品
 #
 # ■ 流す順番
-#   db/schema.sql → db/005 → db/041 → db/099 → test/sql/099_owner_only.sql
+#   db/schema.sql → db/005 → db/041 → db/081 → db/099 → db/100 → test/sql/*.sql のシナリオ
+#   （db/101 は、シナリオの中で流す。安全装置が止めるところから確かめるため）
 #   新しい migration を足したら、ここに足して、対応するシナリオも test/sql/ に置く。
 set -euo pipefail
 
@@ -32,12 +33,25 @@ run "$ROOT/test/sql/000_supabase_stub.sql"
 run "$ROOT/db/schema.sql"
 run "$ROOT/db/005_groupware_core.sql"
 run "$ROOT/db/041_admin_is_hr.sql"
-"${PSQL[@]}" -d kp -c "grant all on all tables in schema public to authenticated, service_role; grant execute on all functions in schema public to authenticated, service_role;" >/dev/null
+run "$ROOT/db/081_hr_recruiting.sql"
 run "$ROOT/db/099_owner_only.sql"
 run "$ROOT/db/099_owner_only.sql"   # べき等（2回流しても同じ）
+run "$ROOT/db/100_hr_pay.sql"
+run "$ROOT/db/100_hr_pay.sql"       # べき等（2回流しても、行が増えない）
+# Supabase は、新しい表に authenticated / service_role の権限を自動で付ける。その代わり（RLS は別に効く）
+"${PSQL[@]}" -d kp -c "grant all on all tables in schema public to authenticated, service_role; grant execute on all functions in schema public to authenticated, service_role;" >/dev/null
 
-OUT="$("${PSQL[@]}" -d kp -f "$ROOT/test/sql/099_owner_only.sql" 2>&1 || true)"
+# シナリオは、それぞれ別の DB の上で流す（お互いの行に影響されない）
+OUT=""
+export SCEN_ROOT="$ROOT"   # 101 のシナリオが、db/101 を読むために使う
+for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear; do
+  "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
+  OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
+done
 echo "$OUT" | grep -E "NOTICE:  (PASS|FAIL)" | sed 's/^.*NOTICE:  //'
+# シナリオの途中で SQL がエラーになったら（PASS / FAIL の行が出ないまま止まるので）、それも失敗にする
+ERRORS="$(echo "$OUT" | grep -c "ERROR:" || true)"
+[ "$ERRORS" = "0" ] || { echo "$OUT" | grep -B1 -A3 "ERROR:" | head -30; echo "シナリオの途中でエラー: ${ERRORS} 件"; exit 1; }
 FAILS="$(echo "$OUT" | grep -c "NOTICE:  FAIL" || true)"
 PASSES="$(echo "$OUT" | grep -c "NOTICE:  PASS" || true)"
 echo "PASS ${PASSES} / FAIL ${FAILS}"
