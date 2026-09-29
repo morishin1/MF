@@ -258,6 +258,7 @@ const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
 const { default: exportApi } = await import(atRoot("api/sales/companies/export.js"));
+const { default: dealsApi } = await import(atRoot("api/sales/deals/index.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -1563,6 +1564,168 @@ await ok("CSV：営業の権限が無い人は 403", async () => {
   who = MEMBER;
   assert.equal((await exportGet({})).statusCode, 403);
   assert.equal((await exportPost({ ids: [db.rows.gw_sales_companies[0].id] })).statusCode, 403);
+});
+
+console.log("\n=== 案件（db/100） ===\n");
+
+const newDeal = (body) => call(dealsApi, { method: "POST", url: "/api/sales/deals", body });
+const patchDeal = (body) => call(dealsApi, { method: "PATCH", url: "/api/sales/deals", body });
+const listDeals = (companyId) => call(dealsApi, { method: "GET", url: `/api/sales/deals${companyId ? `?companyId=${companyId}` : ""}` });
+const dealRow = (id) => db.rows.gw_sales_deals.find((d) => d.id === id);
+const coOf = (id) => db.rows.gw_sales_companies.find((c) => c.id === id);
+
+await ok("案件を作ると、もとのアタックは最後に送ったもの・会社は商談へ進む・履歴に残る", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  ageApproaches(40);
+  const { approach: latest } = await sendAttack(c.id, { service: "PCレンタル" });
+  const r = await newDeal({ companyId: c.id, title: "AI/DX 導入支援", amount: "1,200,000" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const d = dealRow(r.body.deal.id);
+  assert.equal(d.approach_id, latest.id, "最後に送ったアタック");
+  assert.equal(d.amount, 1200000);
+  assert.equal(d.stage, "meeting");
+  assert.equal(d.owner_id, coOf(c.id).owner_id, "担当は会社の担当");
+  assert.equal(r.body.deal.probabilityUsed, 20);
+  assert.equal(r.body.deal.expected, 240000);
+  assert.equal(coOf(c.id).status, "meeting");
+  assert.equal(r.body.companyStatus, "meeting");
+  assert.ok(coOf(c.id).next_action, "NEXT が空なら自動で入る");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.event_key === "deal" && /案件を追加：AI\/DX 導入支援（1,200,000円）/.test(e.label)));
+  assert.ok(db.rows.gw_sales_events.some((e) => e.event_key === "status" && /商談/.test(e.label)));
+  assert.ok(logged.some((l) => l.action === "sales.deal_create"));
+});
+
+await ok("案件：入力のチェック（案件名・金額・確率・作るときの段階）", async () => {
+  setup();
+  const c = await newCompany();
+  assert.equal((await newDeal({ companyId: c.id, title: "" })).body.error, "bad_title");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", amount: -1 })).body.error, "bad_amount");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", amount: 1.5 })).body.error, "bad_amount");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", amount: 100000000001 })).body.error, "bad_amount");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", probability: 101 })).body.error, "bad_probability");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", stage: "won", amount: 1 })).body.error, "bad_stage", "作るときに成約にはしない");
+  assert.equal((await newDeal({ companyId: "nope", title: "x" })).statusCode, 400);
+  assert.equal((db.rows.gw_sales_deals || []).length, 0);
+  // アタックの無い会社にも作れる（紹介など）。もとのアタックは null
+  const r = await newDeal({ companyId: c.id, title: "紹介案件" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(dealRow(r.body.deal.id).approach_id, null);
+});
+
+await ok("案件の段階：提案・最終調整で会社は提案、成約は金額が要る、成約で会社も成約", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const { body } = await newDeal({ companyId: c.id, title: "案件A" });
+  const id = body.deal.id;
+  let r = await patchDeal({ id, stage: "proposal" });
+  assert.equal(coOf(c.id).status, "proposal");
+  r = await patchDeal({ id, stage: "negotiation", probability: 70 });
+  assert.equal(r.body.deal.probabilityUsed, 70, "個別の確率を優先");
+  assert.equal(coOf(c.id).status, "proposal");
+  r = await patchDeal({ id, stage: "won" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "amount_required");
+  r = await patchDeal({ id, stage: "won", amount: 800000 });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(dealRow(id).won_on, todayJst());
+  assert.equal(r.body.deal.expected, 0, "成約は見込に入れない");
+  assert.equal(coOf(c.id).status, "won");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.event_key === "deal" && /最終調整 → 成約/.test(e.label) && e.detail === "800,000円"));
+  // 取り消して進行中へ戻すと、成約日は消える（会社は戻さない）
+  r = await patchDeal({ id, stage: "proposal" });
+  assert.equal(dealRow(id).won_on, null);
+  assert.equal(coOf(c.id).status, "won");
+});
+
+await ok("1件の失注で会社を失注にしない。全部失注になったら聞くだけ（会社は変えない）", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const a = (await newDeal({ companyId: c.id, title: "案件A", amount: 100000 })).body.deal;
+  const b = (await newDeal({ companyId: c.id, title: "案件B" })).body.deal;
+  let r = await patchDeal({ id: a.id, stage: "lost", lostReason: "予算なし" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.suggestCompanyLost, false);
+  assert.equal(coOf(c.id).status, "meeting");
+  assert.equal(dealRow(a.id).lost_on, todayJst());
+  assert.equal(dealRow(a.id).lost_reason, "予算なし");
+  r = await patchDeal({ id: b.id, stage: "lost" });
+  assert.equal(r.body.suggestCompanyLost, true);
+  assert.equal(coOf(c.id).status, "meeting", "会社のステータスは人が決める");
+  // 失注から戻すと、失注日・理由は消える
+  await patchDeal({ id: a.id, stage: "meeting" });
+  assert.equal(dealRow(a.id).lost_on, null);
+  assert.equal(dealRow(a.id).lost_reason, null);
+});
+
+await ok("もとのアタック・会社は、作ったあとは変えられない", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const d = (await newDeal({ companyId: c.id, title: "案件A" })).body.deal;
+  const before = dealRow(d.id).approach_id;
+  const other = await newCompany({ name: "別社", siteUrl: "https://other.example.jp/" });
+  const { approach } = await sendAttack(other.id);
+  assert.equal((await patchDeal({ id: d.id, approachId: approach.id })).body.error, "fixed_fields");
+  assert.equal((await patchDeal({ id: d.id, companyId: other.id })).body.error, "fixed_fields");
+  // あとから別のアタックを送っても、案件のもとのアタックは変わらない
+  ageApproaches(40);
+  await sendAttack(c.id);
+  await patchDeal({ id: d.id, stage: "proposal" });
+  assert.equal(dealRow(d.id).approach_id, before);
+});
+
+await ok("会社のステータスは戻さない・営業禁止や対象外の会社は案件で動かさない", async () => {
+  setup();
+  const won = await newCompany({ name: "成約社", siteUrl: "https://won.example.jp/" });
+  coOf(won.id).status = "won";
+  await newDeal({ companyId: won.id, title: "追加案件" });
+  assert.equal(coOf(won.id).status, "won");
+  const ng = await newCompany({ name: "既存顧客社", siteUrl: "https://ng.example.jp/" });
+  coOf(ng.id).ng_reason = "customer";
+  const r = await newDeal({ companyId: ng.id, title: "追加発注" });
+  assert.equal(r.statusCode, 200, "営業禁止（既存顧客など）でも案件は作れる");
+  assert.equal(coOf(ng.id).status, "untouched");
+  const lost = await newCompany({ name: "失注社", siteUrl: "https://lost.example.jp/" });
+  coOf(lost.id).status = "lost";
+  await newDeal({ companyId: lost.id, title: "再提案" });
+  assert.equal(coOf(lost.id).status, "meeting", "失注の会社に新しい案件が立ったら商談へ");
+});
+
+await ok("案件：他テナントのものは見えない・直せない。営業でない人は使えない", async () => {
+  setup();
+  const c = await newCompany();
+  const d = (await newDeal({ companyId: c.id, title: "案件A", amount: 5 })).body.deal;
+  db.rows.gw_sales_deals.push({ id: uuid(), tenant_id: "t2", company_id: "c-other", title: "他社", stage: "meeting", amount: 9 });
+  const all = await listDeals();
+  assert.deepEqual(all.body.deals.map((x) => x.title), ["案件A"]);
+  const other = db.rows.gw_sales_deals.find((x) => x.tenant_id === "t2");
+  assert.equal((await patchDeal({ id: other.id, amount: 1 })).statusCode, 404);
+  assert.equal(other.amount, 9);
+  who = MEMBER;
+  assert.equal((await listDeals()).statusCode, 403);
+  assert.equal((await newDeal({ companyId: c.id, title: "x" })).statusCode, 403);
+  assert.equal((await patchDeal({ id: d.id, amount: 1 })).statusCode, 403);
+});
+
+await ok("企業詳細に案件が出る。案件のある企業は削除できない", async () => {
+  setup();
+  const c = await newCompany();
+  await newDeal({ companyId: c.id, title: "案件A", amount: 300000 });
+  const g = await getOne(c.id);
+  assert.equal(g.statusCode, 200);
+  assert.equal(g.body.dealsReady, true);
+  assert.equal(g.body.deals[0].title, "案件A");
+  assert.equal(g.body.deals[0].amount, 300000);
+  // 案件の記録は「最終連絡」に数えない
+  assert.equal(g.body.contactStatus?.lastContactAt ?? null, null);
+  db.rows.gw_sales_events = [];   // 営業履歴を消しても、案件があれば止まる
+  const r = await bulk({ ids: [c.id], action: "delete" });
+  assert.equal(r.body.deleted, 0);
+  assert.match(r.body.blocked[0].reasons.join(), /案件あり/);
 });
 
 console.log("\n=== 小さな道具 ===\n");

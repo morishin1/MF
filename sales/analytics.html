@@ -14,23 +14,54 @@
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
-    .an-kpi { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:18px 20px; margin-bottom:26px; }
-    .an-step { display:flex; align-items:baseline; gap:10px; }
-    .an-step .n { font-size:24px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; min-width:90px; }
-    .an-step .l { font-size:13px; color:#4a5068; font-weight:700; }
-    .an-rate { font-size:12px; color:#6b7080; padding:4px 0 4px 18px; }
     .an-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(440px,1fr)); gap:18px; }
     .an-grid .sl-table td.num, .an-grid .sl-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .an-grid .sl-table td.key, .an-grid .sl-table th.key { background:#f8f9fc; font-weight:700; }
     .an-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
     .an-links a { color:#4a5068; }
     @media (max-width: 760px) { .an-grid { grid-template-columns:1fr; } }
+
+    /* 上部ファネル：アイコン＋四角いマスの6枚（アタック・クリック・返信・商談・成約・売上）。
+       数字を主役にし、率は「分子 / 分母」つきで下に小さく。押すと対象の企業・案件を右に出す */
+    .an2-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:14px; margin:0 0 14px; }
+    .an2-card { background:#fff; border:1px solid #ececE6; border-radius:12px; padding:18px 10px 14px;
+      display:flex; flex-direction:column; align-items:center; text-align:center; box-sizing:border-box;
+      justify-content:flex-start; min-height:112px; cursor:pointer; font-family:inherit; color:inherit; }
+    .an2-card:hover { border-color:#c7cadb; box-shadow:0 4px 14px rgba(27,36,64,.08); }
+    .an2-card .ic { width:26px; height:26px; border-radius:7px; background:#f3f3ef;
+      display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
+    .an2-card .ic .material-symbols-outlined { font-size:15px; color:#9aa0b4; }
+    .an2-card .v { font-size:27px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; line-height:1.1; white-space:nowrap; }
+    .an2-card .v small { font-size:13px; font-weight:700; color:#6b7080; margin-left:1px; }
+    .an2-card .l { font-size:11.5px; font-weight:700; color:#4a5068; margin-top:4px; }
+    .an2-card .r { font-size:10.5px; color:#6b7080; margin-top:5px; font-variant-numeric:tabular-nums; }
+    .an2-card .r.weak { color:#9aa0b4; }
+    .an2-card.money .v { font-size:22px; }
+    .an2-ref { display:inline-block; background:#fbf1d6; color:#7d5a00; border-radius:999px; padding:0 6px; font-size:9.5px; font-weight:700; margin-left:3px; }
+
+    /* 売上・見込売上・パイプライン（いまの時点）を1行で */
+    .an-money { display:flex; gap:10px; flex-wrap:wrap; background:#fff; border:1px solid #ececE6; border-radius:12px;
+      padding:12px 16px; margin:0 0 26px; font-size:12.5px; color:#4a5068; align-items:center; }
+    .an-money .it { display:flex; align-items:baseline; gap:6px; padding-right:14px; border-right:1px solid #efefeb; }
+    .an-money .it:last-of-type { border-right:none; }
+    .an-money b { font-size:17px; color:#1b2440; font-variant-numeric:tabular-nums; }
+    .an-money .n { font-size:11px; color:#9aa0b4; }
+    .an-money .note { margin-left:auto; font-size:11px; color:#9aa0b4; }
+
+    @media (max-width: 900px) { .an2-grid { grid-template-columns:repeat(3, 1fr); } }
+    @media (max-width: 560px) {
+      .an2-grid { grid-template-columns:repeat(2, 1fr); gap:10px; }
+      .an2-card { min-height:104px; padding:16px 8px 12px; }
+      .an-money .it { border-right:none; padding-right:0; width:100%; }
+      .an-money .note { margin-left:0; }
+    }
   </style>
 </head>
 <body>
 
 <div class="wrap">
   <h1 class="sl-title">分析</h1>
-  <p class="sl-sub">アタックから成約までの流れと、どの文章・サービス・業種・担当が反応を取れているかです。</p>
+  <p class="sl-sub">アタックから成約・売上までの流れと、どの文章・サービス・業種・担当が売上につながっているかです。</p>
   <div class="an-links">
     <a href="/sales/templates.html">テンプレート比較</a>
     <a href="/sales/campaigns.html">キャンペーン比較</a>
@@ -38,7 +69,7 @@
 
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
 
-  <div class="an-kpi" id="kpi">読み込み中…</div>
+  <div id="kpi"><div class="sl-empty">読み込み中…</div></div>
 
   <div class="an-grid">
     <div><div class="sl-sec-h">送信チャネル別</div><div id="by-channel"></div></div>
@@ -49,16 +80,25 @@
   </div>
 </div>
 
-<script src="../js/api-client.js?v=20260929pg1"></script>
+<div id="drawer-root"></div>
+
+<script src="../js/api-client.js?v=20260930dl1"></script>
 <script src="../js/layout.js?v=20260929b"></script>
 <script src="../js/sales-layout.js?v=20260928h"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
+  const { fmt, fmtDay, statusPill } = SalesLayout;
 
   const PERIODS = [[30, "30日"], [90, "90日"], [365, "1年"]];
+  const MIN_SAMPLE = 10;   // これ未満の分母は「参考値」
+  const DEAL_OPEN = ["meeting", "proposal", "negotiation"];
   let days = 90;
   let approaches = [];
+  let deals = [];
+  let dealsReady = true;
+  let dealsMsg = "";
+  let cohort = null;
 
   SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) load(); });
 
@@ -66,12 +106,21 @@
     el("period").innerHTML = PERIODS.map(([d, l]) =>
       `<button class="${d === days ? "on" : ""}" onclick="setPeriod(${d})">${esc(l)}</button>`).join("");
     try {
-      const res = await API.listSalesApproaches(days);
+      const [res, dl] = await Promise.all([
+        API.listSalesApproaches(days),
+        // 案件（db/100）がまだ無くても、活動の分析は出す
+        API.listSalesDeals().catch((e) => ({ failed: true, notReady: e.code === "not_ready", error: e })),
+      ]);
       if (res.notReady) {
         el("kpi").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div>`;
         return;
       }
       approaches = res.approaches || [];
+      dealsReady = !dl.failed;
+      dealsMsg = dl.failed ? (dl.notReady
+        ? "案件（金額・段階）の表がまだありません。管理者に db/100_sales_deals.sql の実行を依頼すると、売上・見込売上が出ます。"
+        : `案件を取得できませんでした：${dl.error?.hint || dl.error?.message || ""}（活動の数字は出ています）`) : "";
+      deals = dealsReady ? dl.deals || [] : [];
       render();
     } catch (e) {
       el("kpi").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -81,38 +130,65 @@
 
   function setPeriod(d) { days = d; load(); }
 
-  // 会社がいまどこまで進んでいるか。アタックした会社のうち、その段階以上にいる割合で見る
-  const RANK = { attacked: 1, clicked: 2, replied: 3, meeting: 4, proposal: 5, won: 6 };
-  const reached = (status, k) => (RANK[status] || 0) >= RANK[k];
+  const yen = (n) => `¥${Math.round(n || 0).toLocaleString("ja-JP")}`;
+  const man = (n) => {                      // 表で使う短い金額（「120万円」「3.4万円」「8,000円」）
+    n = Math.round(n || 0);
+    if (n < 10000) return `${n.toLocaleString("ja-JP")}円`;
+    const m = n / 10000;
+    return m >= 100 ? `${Math.round(m).toLocaleString("ja-JP")}万円` : `${Math.round(m * 10) / 10}万円`;
+  };
   const pct = (n, d) => (d ? `${Math.round((n / d) * 1000) / 10}%` : "—");
+  const expectedOf = (d) => (DEAL_OPEN.includes(d.stage) && d.amount != null ? d.expected || 0 : 0);
 
-  function stats(list) {
+  // 会社がどこまで進んだか。今のステータスだけでなく、案件の有無も見る
+  // （失注した会社も、商談まで進んだなら商談に数える。後ろまで進んだ会社は前の段階も通ったものとする）
+  const RANK = { attacked: 1, clicked: 2, replied: 3, meeting: 4, proposal: 5, won: 6 };
+  function levelOf(c) {
+    let lv = RANK[c.status] || 0;
+    if (c.clicked) lv = Math.max(lv, 2);
+    if (c.deals.length) lv = Math.max(lv, 4);
+    if (c.deals.some((d) => d.stage === "won")) lv = Math.max(lv, 6);
+    return lv;
+  }
+
+  /** 期間内にアタックした会社（会社単位）と、その会社の案件 */
+  function companiesOf(list) {
+    const dealsBy = new Map();
+    for (const d of deals) {
+      if (!dealsBy.has(d.companyId)) dealsBy.set(d.companyId, []);
+      dealsBy.get(d.companyId).push(d);
+    }
     const cos = new Map();
     for (const a of list) {
-      const c = cos.get(a.companyId) || { status: a.companyStatus, clicked: false };
+      const c = cos.get(a.companyId) || { id: a.companyId, name: a.companyName, status: a.companyStatus, clicked: false,
+        first: a, deals: dealsBy.get(a.companyId) || [] };
       if (a.clickCount > 0) c.clicked = true;
+      if (a.sentAt < c.first.sentAt) c.first = a;
       cos.set(a.companyId, c);
     }
-    const arr = [...cos.values()];
+    return [...cos.values()].map((c) => ({ ...c, level: levelOf(c) }));
+  }
+
+  /** 表の1行ぶん。案件は、もとのアタック（approachId）がこの行のアタックに入っているものだけ */
+  function stats(list) {
+    const cos = companiesOf(list);
+    const ids = new Set(list.map((a) => a.id));
+    const ds = deals.filter((d) => d.approachId && ids.has(d.approachId));
+    const revenue = ds.filter((d) => d.stage === "won").reduce((s, d) => s + (d.amount || 0), 0);
+    const forecast = ds.reduce((s, d) => s + expectedOf(d), 0);
     return {
       attacks: list.length,
-      companies: arr.length,
-      clicked: arr.filter((c) => c.clicked || reached(c.status, "clicked")).length,
+      companies: cos.length,
       clickedAttacks: list.filter((a) => a.clickCount > 0).length,
-      replied: arr.filter((c) => reached(c.status, "replied")).length,
-      meeting: arr.filter((c) => reached(c.status, "meeting")).length,
-      won: arr.filter((c) => c.status === "won").length,
+      replied: cos.filter((c) => c.level >= 3).length,
+      meeting: cos.filter((c) => c.level >= 4).length,
+      revenue, forecast,
+      fpa: list.length ? forecast / list.length : 0,
     };
   }
 
   function render() {
-    const s = stats(approaches);
-    const steps = [["アタック", s.companies], ["クリック", s.clicked], ["返信", s.replied], ["商談", s.meeting], ["成約", s.won]];
-    el("kpi").innerHTML = steps.map(([l, n], i) => `
-      ${i ? `<div class="an-rate">↓ ${esc(pct(n, steps[i - 1][1]))}</div>` : ""}
-      <div class="an-step"><span class="n">${n}社</span><span class="l">${esc(l)}</span></div>`).join("")
-      + `<p class="sl-muted" style="margin:12px 0 0;">直近${days}日に送ったアタック ${s.attacks}件（${s.companies}社）が対象です。</p>`;
-
+    renderKpi();
     // 送信チャネル別（フォーム・メール・Instagram・X …）。返信率・商談化率は会社単位で数える
     table("by-channel", (a) => a.channelLabel || "お問い合わせフォーム");
     table("by-template", (a) => a.templateName || "（テンプレートなし）");
@@ -121,6 +197,94 @@
     table("by-employee", (a) => a.employeeName || "（不明）", true);
   }
 
+  // ---- 上部：6枚のファネル ＋ 売上・見込売上・パイプライン ------------------------------------
+  function renderKpi() {
+    const cos = companiesOf(approaches);
+    const reach = (lv) => cos.filter((c) => c.level >= lv);
+    const clicked = reach(2), replied = reach(3), meeting = reach(4), won = reach(6);
+    const cohortDeals = cos.flatMap((c) => c.deals);
+    const wonDeals = cohortDeals.filter((d) => d.stage === "won");
+    const revenue = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
+    cohort = { cos, clicked, replied, meeting, won, cohortDeals, wonDeals };
+
+    const rate = (n, d) => (d ? `<div class="r ${d < MIN_SAMPLE ? "weak" : ""}">${esc(pct(n, d))}（${n} / ${d}）${d < MIN_SAMPLE
+      ? `<span class="an2-ref" title="母数が10件未満のため、傾向判断にはまだ十分ではありません">参考値</span>` : ""}</div>` : "");
+    const card = (key, icon, label, value, unit, extra = "", cls = "") => `
+      <button class="an2-card ${cls}" onclick="openTile('${key}')" aria-label="${esc(label)}の内訳を見る">
+        <div class="ic"><span class="material-symbols-outlined">${icon}</span></div>
+        <div class="v">${value}${unit ? `<small>${esc(unit)}</small>` : ""}</div>
+        <div class="l">${esc(label)}</div>${extra}
+      </button>`;
+
+    // いまの時点の見込売上・パイプラインと、期間内（成約日）の売上
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const openDeals = deals.filter((d) => DEAL_OPEN.includes(d.stage));
+    const periodWon = deals.filter((d) => d.stage === "won" && d.wonOn && d.wonOn >= since);
+    const forecast = openDeals.reduce((s, d) => s + expectedOf(d), 0);
+    const pipeline = openDeals.reduce((s, d) => s + (d.amount || 0), 0);
+    const noAmount = openDeals.filter((d) => d.amount == null).length;
+
+    el("kpi").innerHTML = `<div class="an2-grid" id="funnel">
+        ${card("attack", "send", "アタック", cos.length, "社")}
+        ${card("click", "ads_click", "クリック", clicked.length, "社", rate(clicked.length, cos.length))}
+        ${card("reply", "mail", "返信", replied.length, "社", rate(replied.length, clicked.length))}
+        ${card("meeting", "handshake", "商談", meeting.length, "社",
+          (rate(meeting.length, replied.length) || "") + (cohortDeals.length ? `<div class="r">${cohortDeals.length}案件</div>` : ""))}
+        ${card("won", "paid", "成約", won.length, "社", rate(won.length, meeting.length))}
+        ${card("revenue", "payments", "売上", dealsReady ? esc(yen(revenue)) : "—", "",
+          `<div class="r">${dealsReady ? `成約 ${wonDeals.length}案件` : "案件を取得できません"}</div>`, "money")}
+      </div>
+      ${dealsReady ? `<div class="an-money">
+        <span class="it">期間内の売上（成約日） <b>${esc(yen(periodWon.reduce((s, d) => s + (d.amount || 0), 0)))}</b><span class="n">${periodWon.length}案件</span></span>
+        <span class="it">見込売上 <b>${esc(yen(forecast))}</b><span class="n">${openDeals.length}案件</span></span>
+        <span class="it">パイプライン <b>${esc(yen(pipeline))}</b><span class="n">確率を掛ける前</span></span>
+        <span class="note">見込売上＝進行中の案件の 金額×成約確率（商談20%・提案50%・最終調整80%。個別の設定を優先）${noAmount ? `／金額未定 ${noAmount}件は0円で数えています` : ""}</span>
+      </div>` : `<div class="banner warn" style="margin:0 0 26px;"><span class="material-symbols-outlined">build</span>
+        <div>${esc(dealsMsg)}</div></div>`}
+      <p class="sl-muted" style="margin:-14px 0 22px;">直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象です。社数は会社単位、率は1つ前のマスに対する割合です。</p>`;
+  }
+
+  // ---- マスを押したときの内訳（右ドロワー） ---------------------------------------------------
+  const DEAL_PILL = { meeting: "attacked", proposal: "proposal", negotiation: "clicked", won: "won", lost: "lost" };
+  function openTile(key) {
+    if (!cohort) return;
+    const coRows = (list, note) => `<p class="sl-muted" style="margin:-8px 0 12px;">${esc(note)}</p>` + (list.length
+      ? `<table class="sl-table"><thead><tr><th>企業</th><th>最初の送信</th><th>営業文・チャネル</th><th>いま</th></tr></thead><tbody>${list
+          .sort((a, b) => String(b.first.sentAt).localeCompare(String(a.first.sentAt))).slice(0, 200).map((c) => `
+          <tr class="click" onclick="location.href='/sales/companies.html?id=${encodeURIComponent(c.id)}'">
+            <td><span class="sl-nm">${esc(c.name || "（名称なし）")}</span></td>
+            <td>${esc(fmt(c.first.sentAt))}</td>
+            <td>${esc(c.first.templateName || "—")}<span class="sl-sub2">${esc(c.first.channelLabel || "")}・${esc(c.first.employeeName || "")}</span></td>
+            <td>${c.status ? statusPill(c.status, "") : ""}${c.deals.length ? `<span class="sl-sub2">案件 ${c.deals.length}件</span>` : ""}</td>
+          </tr>`).join("")}</tbody></table>${list.length > 200 ? `<p class="sl-muted">ほか ${list.length - 200}社</p>` : ""}`
+      : `<div class="sl-empty">対象の企業はありません</div>`);
+    const dealRows = (list, note) => `<p class="sl-muted" style="margin:-8px 0 12px;">${esc(note)}</p>` + (list.length
+      ? `<table class="sl-table"><thead><tr><th>企業・案件</th><th>段階</th><th class="num">金額</th><th>日付</th></tr></thead><tbody>${list.map((d) => `
+          <tr class="click" onclick="location.href='/sales/companies.html?id=${encodeURIComponent(d.companyId)}'">
+            <td><span class="sl-nm">${esc(cohort.cos.find((c) => c.id === d.companyId)?.name || "")}</span><span class="sl-sub2">${esc(d.title)}</span></td>
+            <td>${statusPill(DEAL_PILL[d.stage] || "attacked", d.stageLabel)}</td>
+            <td class="num">${d.amount == null ? "未定" : esc(yen(d.amount))}</td>
+            <td>${esc(fmtDay(d.wonOn || d.lostOn || String(d.createdAt).slice(0, 10)))}</td></tr>`).join("")}</tbody></table>`
+      : `<div class="sl-empty">${dealsReady ? "対象の案件はありません" : "案件の表がまだありません（db/100）"}</div>`);
+    const T = {
+      attack: ["アタックした企業", () => coRows(cohort.cos, `直近${days}日にアタックした会社です（1社に複数回送っても1社）`)],
+      click: ["クリックした企業", () => coRows(cohort.clicked, "専用URLをクリックした会社（返信・商談まで進んだ会社を含む）")],
+      reply: ["返信があった企業", () => coRows(cohort.replied, "返信があった会社（商談まで進んだ会社を含む）")],
+      meeting: ["商談した企業", () => coRows(cohort.meeting, "商談まで進んだ会社（案件がある会社を含む。失注した会社も数えます）")],
+      won: ["成約した企業", () => coRows(cohort.won, "成約した会社")],
+      revenue: ["売上の内訳", () => dealRows(cohort.wonDeals, "期間内にアタックした会社の、成約した案件の金額の合計です")],
+    };
+    const [title, body] = T[key] || [];
+    if (!title) return;
+    el("drawer-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeDrawer()"></div>
+      <div class="sl-drawer" role="dialog" aria-label="${esc(title)}" style="width:620px;">
+        <h2>${esc(title)}</h2>${body()}
+        <div style="margin-top:14px;"><button class="btn btn-secondary btn-sm" onclick="closeDrawer()">閉じる</button></div></div>`;
+  }
+  function closeDrawer() { el("drawer-root").innerHTML = ""; }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  // ---- 軸別の表（これまでの列に 売上・見込売上・1アタック期待売上 を足す） ------------------------
   function table(id, keyOf, byPerson) {
     const groups = new Map();
     for (const a of approaches) {
@@ -131,14 +295,19 @@
     if (!groups.size) { el(id).innerHTML = `<div class="sl-empty">まだデータがありません</div>`; return; }
     const rows = [...groups.entries()].map(([k, list]) => ({ k, s: stats(list) }))
       .sort((x, y) => y.s.attacks - x.s.attacks);
+    const money = (v) => (dealsReady ? esc(man(v)) : "—");
     el(id).innerHTML = `<div style="overflow-x:auto;"><table class="sl-table">
       <thead><tr><th>${byPerson ? "担当" : "項目"}</th><th class="num">アタック数</th><th class="num">クリック率</th>
-        <th class="num">返信率</th><th class="num">商談化率</th></tr></thead>
+        <th class="num">返信率</th><th class="num">商談化率</th><th class="num">売上</th><th class="num">見込売上</th>
+        <th class="num key" title="見込売上 ÷ アタック数">1アタック期待売上</th></tr></thead>
       <tbody>${rows.map(({ k, s }) => `<tr>
         <td>${esc(k)}</td><td class="num">${s.attacks}</td>
         <td class="num">${esc(pct(s.clickedAttacks, s.attacks))}</td>
         <td class="num">${esc(pct(s.replied, s.companies))}</td>
-        <td class="num">${esc(pct(s.meeting, s.companies))}</td></tr>`).join("")}</tbody></table></div>`;
+        <td class="num">${esc(pct(s.meeting, s.companies))}</td>
+        <td class="num">${money(s.revenue)}</td>
+        <td class="num">${money(s.forecast)}</td>
+        <td class="num key">${money(s.fpa)}</td></tr>`).join("")}</tbody></table></div>`;
   }
 </script>
 

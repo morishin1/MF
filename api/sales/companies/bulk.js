@@ -47,6 +47,7 @@ export const DELETE_BLOCK_LABEL = {
   click: "クリック履歴あり",
   event: "営業履歴あり",
   meeting: "面談あり",
+  deal: "案件あり",
   won: "成約済み",
   ng: "営業禁止",
 };
@@ -266,6 +267,7 @@ const ACTIONS = {
       ["gw_sales_click_events", "click", true],
       ["gw_sales_events", "event", true],
       ["gw_sales_meetings", "meeting", false],   // db/090 が未実行なら、無いものとして扱う
+      ["gw_sales_deals", "deal", false],         // db/100 が未実行なら、無いものとして扱う
     ];
     for (const [tbl, key, required] of related) {
       for (const part of chunks(ids)) {
