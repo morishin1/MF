@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260929a">
+  <link rel="stylesheet" href="../css/app.css?v=20260929b">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -154,9 +154,9 @@
 <div id="hr-modal-root"></div>
 <div id="confirm-root"></div>
 
-<script src="../js/api-client.js?v=20260929a"></script>
-<script src="../js/layout.js?v=20260929a"></script>
-<script src="../js/hr-layout.js?v=20260929a"></script>
+<script src="../js/api-client.js?v=20260929b"></script>
+<script src="../js/layout.js?v=20260929b"></script>
+<script src="../js/hr-layout.js?v=20260929b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -705,14 +705,14 @@
 
   const findDoc = (id) => (docs?.documents || []).flatMap((g) => [g.latest, ...g.history]).find((d) => d && d.id === id);
 
-  async function previewDoc(id) {
+  // プレビューは別タブの書類専用ページ（hr/document.html）で開く。
+  // この画面の中には PDF を出さない（ドロワー・一覧・スクロール位置・選考の状態はそのまま）。
+  // 別タブ側で、採用HRの権限を確かめてから短時間の signed URL を取り直す（公開URLにしない）
+  function previewDoc(id) {
     const d = findDoc(id);
-    try {
-      const r = await API.hrDocumentUrl(id, false);
-      // PDF・画像はその場で見る。Word はブラウザで開けないので保存にする
-      if (/pdf|image/.test(r.mimeType || "")) KPLayout.viewer({ title: d?.filename || r.filename, src: r.url });
-      else window.open((await API.hrDocumentUrl(id, true)).url, "_blank", "noopener");
-    } catch (e) { alert(e.hint || e.message || "開けませんでした"); }
+    const applicantId = d?.applicantId || detail?.applicant?.id;
+    const url = `/hr/document.html?applicant=${encodeURIComponent(applicantId || "")}&doc=${encodeURIComponent(id)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
   async function downloadDoc(id) {
     try { window.open((await API.hrDocumentUrl(id, true)).url, "_blank", "noopener"); }

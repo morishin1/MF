@@ -52,20 +52,23 @@ function docsBody() {
 }
 
 const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
-await page.addInitScript(() => {
+// プレビューは別タブ（window.open）で開くので、ログイン状態と API の差し替えはタブ全体（context）に掛ける
+const ctxB = page.context();
+await ctxB.addInitScript(() => {
   localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
 });
 const errs = [];
 page.on("pageerror", (e) => errs.push(String(e)));
 page.on("dialog", (d) => d.accept());
-await page.route("**/__upload/**", (route) => { calls.push({ put: route.request().headers()["content-type"] }); return route.fulfill({ status: 200, body: "{}" }); });
-await page.route("**/__file/**", (route) => route.fulfill({ status: 200, contentType: "application/pdf", body: PDF }));
-await page.route("**/api/**", (route) => {
+await ctxB.route("**/__upload/**", (route) => { calls.push({ put: route.request().headers()["content-type"] }); return route.fulfill({ status: 200, body: "{}" }); });
+await ctxB.route("**/__file/**", (route) => route.fulfill({ status: 200, contentType: "application/pdf", body: PDF }));
+let viewAs = ME;   // 別タブでの /api/me（権限の無い人で直接開くテスト用）
+await ctxB.route("**/api/**", (route) => {
   const req = route.request();
   const url = req.url();
   const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
   const body = req.postData() ? JSON.parse(req.postData()) : {};
-  if (/\/api\/me\b/.test(url)) return send(ME);
+  if (/\/api\/me\b/.test(url)) return send(viewAs);
   if (/\/api\/hr\/documents/.test(url)) {
     if (req.method() === "POST") {
       calls.push(body);
@@ -84,7 +87,13 @@ await page.route("**/api/**", (route) => {
       return send({ ok: true });
     }
     const id = new URL(url).searchParams.get("id");
-    if (id) return send({ url: `${BASE}/__file/${id}.pdf`, mimeType: "application/pdf", filename: "x.pdf" });
+    if (id) {
+      calls.push({ fileUrl: id, applicantId: new URL(url).searchParams.get("applicantId"), download: /download=1/.test(url) });
+      if (viewAs !== ME) return send({ error: "forbidden" }, 403);
+      const d = state.docs.find((x) => x.id === id);
+      return send({ url: `${BASE}/__file/${id}.pdf`, mimeType: "application/pdf", filename: d?.filename || "x.pdf",
+        applicantId: "a1", applicantName: "山田 太郎", docType: d?.docType || "resume", docTypeLabel: d?.docTypeLabel || "履歴書" });
+    }
     return send(docsBody());
   }
   if (/\/api\/hr\/interviews\b/.test(url)) {
@@ -249,20 +258,63 @@ console.log("\n— … メニュー・プレビュー・削除の確認 —");
   check((await page.locator('.hr-doc[data-doc="resume"]').innerText()).includes("未登録"), "削除が書類タブに反映");
   check(await page.locator(".hr-detail").isVisible(), "ドロワーは開いたまま");
 
-  // プレビューは画面いっぱいのビューア（PDF）
+  // プレビューは別タブの書類専用ページ。この画面には PDF を出さない
   await page.locator('.hr-doc[data-doc="work_history"] button', { hasText: "アップロード" }).click();
   await page.setInputFiles("#doc-file", { name: "山田太郎_職務経歴書.pdf", mimeType: "application/pdf", buffer: PDF });
   await page.locator("#doc-save").click();
   await page.waitForTimeout(700);
-  await page.locator('.hr-doc[data-doc="work_history"] button', { hasText: "プレビュー" }).first().click();
-  await page.waitForTimeout(500);
-  check(await page.locator(".kp-viewer, .kp-viewer-frame, iframe[src*='__file']").count() >= 1, "プレビューを開く");
+  const wh = state.docs.filter((d) => d.docType === "work_history").pop();
+  await page.evaluate(() => { window.scrollTo(0, 0); });
+  const before = { tab: await page.locator(".hr-tabs button.on").innerText(), status: state.applicant.statusLabel };
+  const [tab] = await Promise.all([
+    ctxB.waitForEvent("page"),
+    page.locator('.hr-doc[data-doc="work_history"] button', { hasText: "プレビュー" }).first().click(),
+  ]);
+  await tab.waitForLoadState();
+  await tab.waitForTimeout(900);
+  check(new URL(tab.url()).pathname === "/hr/document.html"
+    && new URL(tab.url()).searchParams.get("doc") === wh.id && new URL(tab.url()).searchParams.get("applicant") === "a1",
+    `別タブで書類プレビューを開く（${new URL(tab.url()).pathname}?applicant=…&doc=…）`);
+  check(await page.locator(".kp-viewer, .kp-viewer-frame, iframe").count() === 0, "元の画面には PDF ビューア・iframe を出さない");
+  check(await page.locator(".hr-detail").isVisible(), "応募者ドロワーは閉じない");
+  check((await page.locator(".hr-tabs button.on").innerText()) === before.tab, "書類タブのまま");
+  check(state.applicant.statusLabel === before.status, "選考ステータスは変わらない");
+  const head = await tab.locator("#dp-head").innerText();
+  check(head.includes("山田 太郎") && head.includes("職務経歴書") && head.includes("ダウンロード"), "プレビュー：氏名・書類の種類・ダウンロード");
+  check((await tab.locator(".hr-logo").innerText()).includes("HR"), "プレビュー：EIGHT / HR の帯");
+  const frame = await tab.locator("#dp-frame").boundingBox();
+  check(frame && frame.width >= 1300 && frame.height >= 600, `PDF を画面いっぱいに（${Math.round(frame?.width)}×${Math.round(frame?.height)}）`);
+  check((await tab.locator("#dp-frame").getAttribute("src")).includes("__file"), "短時間の signed URL で表示");
+  check(calls.some((c) => c.fileUrl === wh.id && c.applicantId === "a1"), "別タブ側で応募者IDつきで URL を取り直す");
+  await tab.screenshot({ path: shotPath("hr-doc-preview.png") });
+  await tab.close();
+
+  // 履歴書でも同じ
+  const rs = state.docs.filter((d) => d.docType === "resume" && !d.deleted).pop();
+  if (rs) {
+    const [tab2] = await Promise.all([ctxB.waitForEvent("page"),
+      page.locator('.hr-doc[data-doc="resume"] button', { hasText: "プレビュー" }).first().click()]);
+    await tab2.waitForLoadState();
+    await tab2.waitForTimeout(700);
+    check((await tab2.locator("#dp-head").innerText()).includes("履歴書"), "履歴書も別タブで開く");
+    await tab2.close();
+  }
+
+  // 権限の無い人が URL を直接開いても見られない
+  viewAs = { ...ME, gw: { ...ME.gw, roles: ["sales"] }, access: { recruit: false, sell: true } };
+  const fetchedBefore = calls.filter((c) => c.fileUrl).length;
+  const [intruder] = await Promise.all([ctxB.waitForEvent("page"),
+    page.evaluate((u) => window.open(u, "_blank"), `${BASE}/hr/document.html?applicant=a1&doc=${wh.id}`)]);
+  await intruder.waitForTimeout(1200);
+  check(!/\/hr\/document\.html/.test(new URL(intruder.url()).pathname), `権限の無い人は入れない（${new URL(intruder.url()).pathname} へ）`);
+  check(calls.filter((c) => c.fileUrl).length === fetchedBefore, "権限の無い人には signed URL を取りに行かない");
+  await intruder.close();
+  viewAs = ME;
 }
 
 console.log("\n— 履歴タブ —");
 {
   await page.keyboard.press("Escape").catch(() => {});
-  await page.evaluate(() => window.KPLayout?.closeViewer?.());
   await page.locator('.hr-tabs button[data-tab="history"]').click();
   check((await page.locator("#hr-detail-tab").innerText()).includes("カジュアル面談を実施"), "選考タイムラインは履歴タブ");
 }
