@@ -58,12 +58,22 @@ await ok("休憩：「なし」「0」は 0（取っていない）。空・「-
   for (const s of ["", "-", "—", "不明", null, undefined]) assert.deepEqual(T.parseBreak(s), { value: null }, String(s));
 });
 await ok("休憩：読めない書き方は、値を入れずにエラーを返す", async () => {
-  for (const s of ["1:75", "たくさん", "1.5"]) {
+  for (const s of ["1:75", "たくさん", "60.5分", "3000分"]) {
     const r = T.parseBreak(s);
     assert.equal(r.value, null, s);
     assert.ok(r.error, s);
   }
   assert.ok(T.parseBreak(-5).error);
+});
+await ok("休憩：単位のない「1」「1.5」「0.75」は、分か時間か分からないので読まない（1分と読み違えない）", async () => {
+  for (const s of ["1", "1.5", "0.75", "5", "9"]) {
+    const r = T.parseBreak(s);
+    assert.equal(r.value, null, s);
+    assert.match(r.error, /分か時間か分かりません/, s);
+  }
+  assert.deepEqual(T.parseBreak("10"), { value: 10 }, "10〜1440 の整数は分");
+  assert.deepEqual(T.parseBreak("90"), { value: 90 });
+  assert.deepEqual(T.parseBreak("1.5時間"), { value: 90 }, "単位があれば読む");
 });
 
 console.log("— 日別の実働（拘束 − 休憩） —");
