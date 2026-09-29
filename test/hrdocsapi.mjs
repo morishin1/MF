@@ -303,6 +303,32 @@ await ok("private バケットの短時間 signed URL。保存はファイル名
   for (const l of logged) assert.equal(/https?:|sign\?token/.test(JSON.stringify(l)), false, "ログに URL を入れない");
 });
 
+await ok("別タブのプレビュー：応募者名・書類の種類を返す。違う応募者の組み合わせは 404。見た記録を残す（URL は残さない）", async () => {
+  setup();
+  await upload("ap1", "resume", PDF, MIME.pdf, "山田太郎_履歴書.pdf");
+  const id = db.rows.gw_hr_documents[0].id;
+  logged.length = 0;
+  const v = await get(`id=${id}&applicantId=ap1`);
+  assert.equal(v.statusCode, 200, JSON.stringify(v.body));
+  assert.equal(v.body.applicantName, "山田 太郎");
+  assert.equal(v.body.docTypeLabel, "履歴書");
+  assert.equal(v.body.applicantId, "ap1");
+  assert.equal((await get(`id=${id}&applicantId=ap2`)).statusCode, 404, "URL の応募者と書類が食い違えば出さない");
+  assert.ok(logged.some((l) => l.action === "hr.document.view" && l.detail.documentId === id));
+  await get(`id=${id}&applicantId=ap1&download=1`);
+  assert.ok(logged.some((l) => l.action === "hr.document.download"));
+  for (const l of logged) assert.equal(/https?:|sign\?token/.test(JSON.stringify(l)), false, "ログに URL を入れない");
+  // 採用HRの権限が無い人は、URL を直接叩いても見られない
+  for (const p of [SALES, MANAGER, MEMBER, ADMIN, IT]) {
+    who = p;
+    const r = await get(`id=${id}&applicantId=ap1`);
+    assert.equal(r.statusCode, 403, `${p.roles.join(",") || (p.isAdmin ? "admin" : "member")} は 403`);
+    assert.equal(r.body.url, undefined);
+  }
+  who = OTHER;
+  assert.equal((await get(`id=${id}&applicantId=ap1`)).statusCode, 404, "他社は 404");
+});
+
 console.log("\n— 応募者一覧 —");
 await ok("履歴書・職務経歴書のそろい具合が一覧に出る", async () => {
   setup();
