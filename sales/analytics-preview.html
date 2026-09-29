@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>分析（上部ファネル プレビュー） - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+
+    .an2-note { background:#fbf1d6; color:#7d5a00; border-radius:9px; padding:10px 12px; font-size:12.5px;
+      display:flex; gap:8px; align-items:flex-start; margin:0 0 20px; }
+    .an2-note .material-symbols-outlined { font-size:18px; }
+
+    /* 上部ファネル：縦のフローをやめて、アイコン＋四角いマスの横並びカードにする。
+       6枚は同じ幅（grid）・同じ高さ（grid の stretch）。数字を主役にし、アイコンは
+       控えめに。中身の行数が違っても（率の補足がある/ない）数字の位置がそろうよう、
+       上寄せにしている（center だと「0件」で行数が減るカードだけ数字が上下にずれる） */
+    .an2-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:14px; margin:0 0 28px; }
+    .an2-card { background:#fff; border:1px solid #ececE6; border-radius:12px; padding:18px 10px 14px;
+      display:flex; flex-direction:column; align-items:center; text-align:center; box-sizing:border-box;
+      justify-content:flex-start; min-height:112px; }
+    .an2-card .ic { width:26px; height:26px; border-radius:7px; background:#f3f3ef;
+      display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
+    .an2-card .ic .material-symbols-outlined { font-size:15px; color:#9aa0b4; }
+    .an2-card .v { font-size:27px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; line-height:1.1; white-space:nowrap; }
+    .an2-card .l { font-size:11.5px; font-weight:700; color:#4a5068; margin-top:4px; }
+    .an2-card .r { font-size:10px; color:#9aa0b4; margin-top:5px; font-variant-numeric:tabular-nums; }
+    .an2-card.click { cursor:pointer; }
+    .an2-card.click:hover { border-color:#c7cadb; box-shadow:0 4px 14px rgba(27,36,64,.08); }
+
+    @media (max-width: 900px) { .an2-grid { grid-template-columns:repeat(3, 1fr); } }
+    @media (max-width: 560px) { .an2-grid { grid-template-columns:repeat(2, 1fr); gap:10px; } .an2-card { min-height:104px; padding:16px 8px 12px; } }
+
+    .an2-below { color:#9aa0b4; font-size:12px; border:1px dashed #e2e2dc; border-radius:10px; padding:16px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">分析<span style="color:#9aa0b4;font-weight:500;font-size:14px;margin-left:8px;">プレビュー：上部ファネルのコンパクト化</span></h1>
+  <p class="sl-sub">アタックから成約・売上までを、横並びのKPIカードで素早く読めるようにします。</p>
+
+  <div class="an2-note">
+    <span class="material-symbols-outlined">visibility</span>
+    <div>これはUI確認用のプレビューです。モックデータを表示しています（DB・APIの変更なし）。
+      本実装は <a href="/sales/analytics.html">分析</a> ページへ反映します。</div>
+  </div>
+
+  <div class="an2-grid" id="funnel"></div>
+
+  <div class="an2-below">下部の分析表・期間切替・既存ナビゲーションは今回変更しません（このプレビューでは省略しています）。</div>
+</div>
+
+<script src="../js/api-client.js?v=20260929pg1"></script>
+<script src="../js/layout.js?v=20260929b"></script>
+<script src="../js/sales-layout.js?v=20260928h"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+
+  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) render(); });
+
+  // モックデータ（要件書のサンプルどおり）
+  const FUNNEL = [
+    { key: "attack",  icon: "send",        label: "アタック", value: 4, unit: "社" },
+    { key: "click",   icon: "ads_click",   label: "クリック", value: 2, unit: "社",
+      drawer: { title: "クリックした企業", rows: ["株式会社サンプル商事", "テスト興業株式会社"] } },
+    { key: "reply",   icon: "mail",        label: "返信",     value: 0, unit: "社" },
+    { key: "meeting", icon: "handshake",   label: "商談",     value: 0, unit: "社",
+      drawer: { title: "商談中の企業", rows: [] } },
+    { key: "won",     icon: "paid",        label: "成約",     value: 0, unit: "社",
+      drawer: { title: "成約した案件", rows: [] } },
+    { key: "revenue", icon: "payments",    label: "売上",     value: 0, unit: "¥", currency: true,
+      drawer: { title: "売上の内訳", rows: [] } },
+  ];
+
+  const pct = (n, d) => (d ? `${Math.round((n / d) * 1000) / 10}%` : null);
+
+  function render() {
+    el("funnel").innerHTML = FUNNEL.map((step, i) => {
+      const prev = i > 0 && !step.currency ? FUNNEL[i - 1] : null;
+      const rate = prev && prev.value ? pct(step.value, prev.value) : null;
+      const val = step.currency ? `¥${step.value.toLocaleString("ja-JP")}` : `${step.value}${esc(step.unit)}`;
+      const clickable = Boolean(step.drawer);
+      return `
+        <div class="an2-card${clickable ? " click" : ""}"
+             ${clickable ? `onclick="openDrawer('${step.key}')" role="button" tabindex="0"` : ""}>
+          <div class="ic"><span class="material-symbols-outlined">${esc(step.icon)}</span></div>
+          <div class="v">${val}</div>
+          <div class="l">${esc(step.label)}</div>
+          ${rate ? `<div class="r">${esc(rate)}（${step.value} / ${prev.value}）</div>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function openDrawer(key) {
+    const step = FUNNEL.find((s) => s.key === key);
+    if (!step?.drawer) return;
+    closeDrawer();
+    const bg = document.createElement("div");
+    bg.className = "sl-drawer-bg";
+    bg.id = "an2-drawer-bg";
+    bg.onclick = closeDrawer;
+    const dr = document.createElement("div");
+    dr.className = "sl-drawer";
+    dr.id = "an2-drawer";
+    const rows = step.drawer.rows;
+    dr.innerHTML = `<h2>${esc(step.drawer.title)}</h2>` + (rows.length
+      ? `<div class="sl-rows">${rows.map((r) => `<div class="sl-row"><div class="info"><b>${esc(r)}</b></div></div>`).join("")}</div>`
+      : `<div class="sl-empty">対象の企業はまだありません（プレビュー用のモックデータです）</div>`);
+    document.body.appendChild(bg);
+    document.body.appendChild(dr);
+  }
+  function closeDrawer() {
+    el("an2-drawer-bg")?.remove();
+    el("an2-drawer")?.remove();
+  }
+</script>
+
+</body>
+</html>
