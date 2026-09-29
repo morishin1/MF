@@ -111,7 +111,8 @@ for (const [roles, want, label] of [
   [["recruiter"], "hr", "採用担当 → 採用HRだけ"],
   [["hr"], "hr", "人事 → 採用HRだけ"],
   [["sales"], "sales", "営業 → Salesだけ"],
-  [["manager"], "sales", "マネージャー → Salesだけ"],
+  [["manager"], "hr,sales", "責任者 → 採用HR と Sales（経営者と責任者は全部使える）"],
+  [["finance"], "", "経理 → 採用HR・Sales は出さない（Office の近道は Phase 2 で足す）"],
   [[], "", "権限なし → どちらも出さない"],
   [["it"], "", "IT・管理だけ → どちらも出さない"],
   [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → 両方"],
@@ -215,11 +216,12 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(900);
   const legend = await page.locator("#role-legend").innerText();
-  check(legend.includes("採用HR") && legend.includes("経営者・人事・採用担当"), "凡例：採用HR＝経営者・人事・採用担当");
+  check(legend.includes("採用HR") && legend.includes("経営者・責任者・人事・採用担当"), "凡例：採用HR＝経営者・責任者・人事・採用担当");
   check(legend.includes("Sales") && legend.includes("経営者・責任者・営業担当"), "凡例：Sales＝経営者・責任者・営業担当");
+  check(legend.includes("Office") && legend.includes("経営者・責任者・経理"), "凡例：Office＝経営者・責任者・経理");
   check(legend.includes("IT・管理") && legend.includes("入れません"), "凡例：IT・管理だけでは入れない");
   const itTitle = await page.locator('input[data-role="it"]').first().evaluate((n) => n.closest("label").title);
-  check(/採用HR・Salesには入れない/.test(itTitle), "IT・管理のチェックに説明");
+  check(/採用HR・Sales・Officeには入れない/.test(itTitle), "IT・管理のチェックに説明");
   await page.locator('input[data-role="recruiter"]').first().check();
   await page.waitForTimeout(300);
   await page.locator('input[data-role="sales"]').first().check();

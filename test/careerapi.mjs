@@ -881,12 +881,19 @@ await ok("進行一覧：採用決定の人（採用HR権限だけ）と、入�
   const cs = await row();
   assert.equal(cs.journey.state, "career_setup");
   assert.equal(cs.journey.stateLabel, "入社手続き完了");
-  // マネージャーは担当の社員だけ。応募者は見えない（採用HRの権限が無い）
+  // 責任者（manager）は採用HRにも入れる（経営者と責任者は HR・Sales・Office のすべて）。
+  // 担当の社員に加えて、応募者も見える
   who = MANAGER;
   const m = (await get("?journey=1")).body;
-  assert.equal(m.rows.some((x) => x.kind === "applicant"), false);
-  assert.equal(m.seesApplicants, false);
+  assert.equal(m.seesApplicants, true);
+  assert.deepEqual(m.rows.filter((x) => x.kind === "applicant").map((x) => x.id).sort(), ["a-ok", "a-wait"]);
   assert.ok(m.rows.some((x) => x.id === "e-new"));
+  // 採用HRの権限が無い人（会計の管理者だけ）には、社員は見えても応募者は見えない
+  who = ADMIN;
+  const ad = (await get("?journey=1")).body;
+  assert.equal(ad.seesApplicants, false);
+  assert.equal(ad.rows.some((x) => x.kind === "applicant"), false);
+  assert.ok(ad.rows.some((x) => x.id === "e-new"));
 });
 
 await ok("詳細：上部の NEXT ACTION は進行（journey）。入社手続きタブの中身。キャリア設定→育成開始", async () => {
@@ -929,7 +936,13 @@ await ok("採用決定の詳細：採用HRの権限がある人だけ。社員�
   assert.equal(r.body.canAdvance, true);
   assert.equal((await get("?applicant=a-done")).statusCode, 409);
   assert.equal((await get("?applicant=a-no")).statusCode, 404);
+  // 責任者は採用HRに入れるので見られる。ただし社員登録（契約条件の設定）は経営者・管理者だけ
   who = MANAGER;
+  const mg = await get("?applicant=a-ok");
+  assert.equal(mg.statusCode, 200);
+  assert.equal(mg.body.canAdvance, false);
+  // 採用HRの権限が無い人（会計の管理者だけ）は見られない
+  who = ADMIN;
   assert.equal((await get("?applicant=a-ok")).statusCode, 403);
   who = HR;
   const h = await get("?applicant=a-ok");
