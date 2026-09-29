@@ -53,6 +53,10 @@
       "destination": "/hr/index.html"
     },
     {
+      "source": "/office",
+      "destination": "/office/index.html"
+    },
+    {
       "source": "/sales",
       "destination": "/sales/index.html"
     },
