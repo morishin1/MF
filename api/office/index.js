@@ -41,7 +41,7 @@ const CONTRACT_FIELDS = "id, employee_id, engagement_kind, site_company, prime_c
 const PROGRESS_FIELDS = "id, employee_id, site_contract_id, "
   + STAGE_KEYS.map((k) => `${k}, ${k}_at`).join(", ");
 const SUBMISSION_FIELDS = "id, employee_id, site_contract_id, kind, file_name, submitted_at";
-const EMPLOYEE_FIELDS = "id, display_name, department, employee_kind, partner_company_id";
+const EMPLOYEE_FIELDS = "id, display_name, department, employee_kind, partner_company_id, status";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -138,7 +138,7 @@ export default async function handler(req, res) {
       return deriveRow({
         siteContractId: c.id, progressId: p?.id || null, employeeId: c.employee_id,
         employeeName: e.display_name, department: e.department || null,
-        employeeKind: e.employee_kind || "proper",
+        employeeKind: e.employee_kind || "proper", employeeStatus: e.status || null,
         partnerName: e.partner_company_id ? (partnerById.get(e.partner_company_id) || null) : null,
         engagementKind: c.engagement_kind, siteCompany: c.site_company, primeCompany: c.prime_company || null,
         periodFrom: c.period_from, periodTo: c.period_to || null, renewalStatus: c.renewal_status,

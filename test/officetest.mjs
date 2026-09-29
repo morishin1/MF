@@ -158,6 +158,16 @@ await ok("BP区分だがBP会社が空 → 要確認", async () => {
   const r = derive({}, { engagementKind: "bp", employeeKind: "bp", partnerName: null });
   assert.match(r.warnings.join(), /BP会社が登録されていません/);
 });
+await ok("退職済みの要員の契約 → 要確認（隠さない。当月に退職した人の最後の月次を見落とさない）", async () => {
+  const r = derive({}, { employeeStatus: "left" });
+  assert.equal(r.check, true);
+  assert.match(r.warnings.join(), /退職済み/);
+  assert.equal(r.stage, "timesheet", "工程の判定は変えない");
+  // 在籍中・退職手続き中は印をつけない
+  for (const st of ["active", "leaving", "invited", null, undefined]) {
+    assert.equal(derive({}, { employeeStatus: st }).check, false, String(st));
+  }
+});
 await ok("正常な行は要確認にならない", async () => {
   assert.equal(derive({ timesheet_received: true }).check, false);
   assert.equal(derive({}, BP).check, false);

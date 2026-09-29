@@ -303,6 +303,17 @@ await ok("印が1つも無い月でも、契約があれば行が出る（進捗
   assert.equal(r.body.rows.length, 2);
   assert.ok(r.body.rows.every((x) => x.stage === "timesheet"));
 });
+await ok("退職済みの要員の契約は、隠さず「要確認」で出す（他の行はそのまま）", async () => {
+  setup();
+  db.rows.gw_employees.find((e) => e.id === "e-pp").status = "left";
+  const r = await list("2026-09");
+  const pp = r.body.rows.find((x) => x.employeeName === "田中 太郎");
+  const bp = r.body.rows.find((x) => x.employeeName === "鈴木 花子");
+  assert.equal(pp.check, true);
+  assert.match(pp.warnings.join(), /退職済み/);
+  assert.equal(bp.check, false);
+  assert.equal(r.body.rows.length, 2, "隠さない");
+});
 await ok("名簿に無い契約は、その行だけ出さない（全体は止めない）", async () => {
   setup();
   db.rows.gw_employees = db.rows.gw_employees.filter((e) => e.id !== "e-bp");
