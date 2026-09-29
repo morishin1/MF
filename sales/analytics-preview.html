@@ -227,7 +227,10 @@
       .pv-tbl { display:none; }
       .pv-cards { display:block; }
       .pv-bar { padding:0 12px; gap:12px; }
-      .pv-dev { border-radius:12px; flex-wrap:wrap; justify-content:center; }
+      .pv-dev { left:12px; right:12px; transform:none; border-radius:12px; justify-content:center; padding:6px 8px; }
+      .pv-dev .pv-pills button { white-space:nowrap; padding:4px 8px; }
+      .pv-rate { flex-wrap:wrap; row-gap:2px; }
+      .pv-rate > * { white-space:nowrap; }
     }
     @media (max-width: 420px) { .pv-kpis { grid-template-columns:1fr; } }
   </style>
@@ -909,7 +912,7 @@
       const r = F.rates[i];
       const isJam = J && J.i === i;
       return `<div class="pv-link"><button class="pv-rate ${isJam ? "jam" : ""}" onclick="drill('rate',${i})" title="押すと、進んだ・進まなかった${r.unit === "社" ? "会社" : "案件"}を出します">
-        <span class="material-symbols-outlined arr">south</span>${esc(r.label)} <b class="${r.d < MIN_SAMPLE ? "weak" : ""}">${pctTxt(r.n, r.d)}</b>
+        <span class="material-symbols-outlined arr">south</span><span>${esc(r.label)}</span> <b class="${r.d < MIN_SAMPLE ? "weak" : ""}">${pctTxt(r.n, r.d)}</b>
         <span class="nd">${r.n} / ${r.d}${r.unit}</span>${refBadge(r.d)}
         ${isJam ? `<span class="pv-jam"><span class="material-symbols-outlined">warning</span>いちばん詰まっている（前期間 ${Math.round(J.prevRate * 100)}%）</span>` : ""}
       </button></div>`;
