@@ -12,7 +12,7 @@
 --        Office … owner（経営者）・manager（責任者）・finance（経理）
 --      新しいロールは作らない。メンバー管理にある既存の「経理」（finance）を使う。
 --      gw_role_grants.role の CHECK は、finance・manager とも db/088 で許可済みなので変えない。
---      Office の新しい表は、この関数で読み書きを絞る（表を作る 100 番台の migration 側で使う）。
+--      Office の新しい表は、この関数で読み書きを絞る（表を作る 101 以降の migration 側で使う）。
 --
 -- ■ API と同じ条件
 --   lib/gw.js の HR_ROLES / SALES_ROLES / OFFICE_ROLES（canAccessHr / canAccessSales /
