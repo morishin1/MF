@@ -577,6 +577,12 @@ await ok("一覧：現在給与（active 契約）・状態・NEXT ACTION・担�
   assert.ok(taro.flow && taro.flow.state && taro.flow.label);
   assert.equal(r.body.people[0].flow.state, "setup");
   assert.equal(r.body.flowStates.length, 7);
+  // 契約・キャリアの完了状態（§2・§3・§17）。active契約はあるが署名済み書面が無いので未完了
+  assert.equal(taro.contractStatus.key, "unsigned");
+  assert.equal(taro.contractStatus.warn, true);
+  assert.equal(taro.careerStatus.key, "confirmed", "agreed:true は確認済み扱い");
+  assert.equal(taro.overallStatus.key, "contract_pending");
+  assert.equal(r.body.overallStates.length, 5);
 });
 
 await ok("契約準備・署名待ちは作成依頼・署名依頼から（雇用契約だけ。誓約書などは数えない）", async () => {
@@ -597,6 +603,45 @@ await ok("契約準備・署名待ちは作成依頼・署名依頼から（雇�
   assert.equal(d.signs.length, 1, "契約タブには雇用契約の署名だけ");
   const list = (await get()).body.people.find((p) => p.employee.id === "e-taro");
   assert.equal(list.flow.state, "signing");
+});
+
+await ok("契約締結済み＋キャリア確認済みで、全体状態が completed になる（§2・§3・§17）", async () => {
+  setup();
+  await seedAndSet();
+  db.rows.gw_sign_requests = [{ id: "s-emp", tenant_id: "t1", employee_id: "e-taro", doc_kind: "employment",
+    status: "signed", title: "雇用契約書", sent_at: "2026-04-01", signed_at: "2026-04-02", contract_id: "c-now" }];
+  const d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.contractStatus.key, "signed");
+  assert.equal(d.careerStatus.key, "confirmed");
+  assert.equal(d.overallStatus.key, "completed");
+  assert.match(d.overallStatus.nextAction.label, /次回評価/);
+  assert.equal(d.signs[0].contractId, "c-now");
+  assert.equal(d.signs[0].currentContract, true, "[現在契約]チップの判定に使う");
+  // 同じ判定関数を、管理者の本人プレビューでも使う（§17：管理者・本人で食い違わない）
+  const preview = (await get("?preview=e-taro")).body;
+  assert.equal(preview.overallStatus.key, "completed");
+});
+
+await ok("署名済み書面が別の契約のものなら、完了扱いにしない（§8）", async () => {
+  setup();
+  await seedAndSet();
+  db.rows.gw_sign_requests = [{ id: "s-old", tenant_id: "t1", employee_id: "e-taro", doc_kind: "employment",
+    status: "signed", title: "旧・雇用契約書", sent_at: "2026-01-01", signed_at: "2026-01-02", contract_id: "c-old" }];
+  const d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.contractStatus.key, "unsigned");
+  assert.equal(d.contractStatus.warn, true);
+  assert.equal(d.overallStatus.key, "contract_pending");
+});
+
+await ok("署名済み書面はあるが active 契約が無いと、完了扱いにしない（§8）", async () => {
+  setup();
+  db.rows.gw_contracts = [];
+  db.rows.gw_sign_requests = [{ id: "s-orphan", tenant_id: "t1", employee_id: "e-taro", doc_kind: "employment",
+    status: "signed", title: "雇用契約書", sent_at: "2026-04-01", signed_at: "2026-04-02" }];
+  const d = (await get("?employeeId=e-taro")).body;
+  assert.equal(d.contractStatus.key, "orphan_signed");
+  assert.equal(d.contractStatus.warn, true);
+  assert.equal(d.contract, null);
 });
 
 await ok("詳細：現在の契約（読むだけ）・過去の契約・自走レベル（キャリアLevelと別）・育成", async () => {

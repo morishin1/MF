@@ -331,8 +331,8 @@ console.log("\n— 管理：admin-career.html —");
   const first = await page.locator("#rows tr").first().innerText();
   check(first.includes("契約・キャリア面談を設定してください") && first.includes("候補：エンジニア") && first.includes("未設定"),
     "未設定・NEXT ACTION・職種の候補");
-  const heads = (await page.locator("thead th").allInnerTexts()).map((x) => x.trim()).slice(0, 8);
-  check(heads.join("/") === "氏名/職種/現在/現在給与/次回評価/状態/NEXT ACTION/担当", `一覧の列（いま ${heads.join("/")}）`);
+  const heads = (await page.locator("thead th").allInnerTexts()).map((x) => x.trim()).slice(0, 10);
+  check(heads.join("/") === "氏名/職種/現在/現在給与/契約/キャリア/次回評価/状態/NEXT ACTION/担当", `一覧の列（いま ${heads.join("/")}）`);
   const taroRow = await page.locator('#rows tr[data-emp="e-taro"]').innerText();
   check(taroRow.includes("240,000円") && taroRow.includes("評価時期") && taroRow.includes("上長 一郎"), "現在給与・状態・担当");
   check(await page.locator('#rows tr[data-emp="e-yama"] .cr-tone.yellow').count() === 1
