@@ -34,7 +34,7 @@ function company(over) {
   };
 }
 
-async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true } = {}) {
+async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
@@ -51,6 +51,12 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       attackCount: 1, lastSentAt: NOW, clickCount: 1, firstClickAt: NOW, lastClickAt: NOW, unhandledClick: false,
       next: "返信対応", nextKey: "manual", nextDue: TODAY }),
   ];
+  // ページングを見るための企業（many 社）
+  for (let i = 1; i <= many; i++) {
+    companies.push(company({ id: `m${i}`, name: `企業${String(i).padStart(3, "0")}`, domain: `m${i}.jp`,
+      industry: ["IT", "製造"][i % 2], region: ["東京都", "大阪府", "福岡県"][i % 3] }));
+  }
+  const ctlList = { fail: failList, delay: 0 };
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => {
     localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp" }));
@@ -68,6 +74,13 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
     if (/\/api\/me\b/.test(url)) {
       return send({ email: "sales@8grp.co.jp", appRole: isAdmin ? "admin" : "member", isAdmin, shows: {},
         gw: { employee: SALES, roles, isAdmin, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/sales\/companies\/export/.test(url)) {
+      const sp = new URL(url).searchParams;
+      calls.push({ kind: "export", method: req.method(), params: Object.fromEntries(sp.entries()), body: req.method() === "POST" ? body() : null });
+      return route.fulfill({ status: 200, contentType: "text/csv; charset=utf-8",
+        headers: { "Content-Disposition": `attachment; filename="sales_companies_2026-09-29.csv"; filename*=UTF-8''sales_companies_2026-09-29.csv` },
+        body: "\ufeff企業名,URL\r\n株式会社サンプル,https://sample.co.jp/\r\n" });
     }
     if (/\/api\/sales\/companies\/bulk/.test(url)) {
       const b = body();
@@ -168,11 +181,33 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         companies.push(made);
         return send({ company: made });
       }
-      // 表示状態（既定は表示中だけ。本物の api/sales/companies と同じ）
-      const vis = new URL(url).searchParams.get("visibility") || "shown";
-      calls.push({ kind: "list", visibility: vis });
-      const listed = companies.filter((c) => (vis === "all" ? true : vis === "hidden" ? c.hidden : !c.hidden));
-      return send({ today: TODAY, me: "emp-s1", members: [{ id: "emp-s1", display_name: "営業 一郎" }], companies: listed });
+      // 本物（api/sales/companies?page=…）と同じ：サーバーで絞って並べて100件に切る
+      const sp = new URL(url).searchParams;
+      const vis = sp.get("visibility") || "shown";
+      const params = Object.fromEntries(sp.entries());
+      calls.push({ kind: "list", visibility: vis, params });
+      if (ctlList.delay) await new Promise((r) => setTimeout(r, ctlList.delay));
+      if (ctlList.fail) return send({ error: "db_failed", detail: "わざと失敗" }, 500);
+      let listed = companies.filter((c) => (vis === "all" ? true : vis === "hidden" ? c.hidden : !c.hidden));
+      const q = (sp.get("q") || "").toLowerCase();
+      if (q) listed = listed.filter((c) => `${c.name} ${c.domain}`.toLowerCase().includes(q));
+      for (const k of ["industry", "region", "service", "status"]) if (sp.get(k)) listed = listed.filter((c) => c[k] === sp.get(k));
+      const sortKey = { name: "name", industry: "industry", region: "region", clicks: "clickCount" }[sp.get("sort")];
+      if (sortKey) {
+        const dir = sp.get("order") === "desc" ? -1 : 1;
+        listed = [...listed].sort((a, b) => (a[sortKey] < b[sortKey] ? -dir : a[sortKey] > b[sortKey] ? dir : (a.id < b.id ? -1 : 1)));
+      }
+      const members = [{ id: "emp-s1", display_name: "営業 一郎" }];
+      if (!sp.has("page")) return send({ today: TODAY, me: "emp-s1", members, companies: listed });
+      const limit = 100;
+      const total = listed.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const page = Math.min(Math.max(1, Number(sp.get("page")) || 1), totalPages);
+      const facet = (k) => [...new Set(companies.map((c) => c[k]).filter(Boolean))].sort()
+        .map((value) => ({ value, n: companies.filter((c) => c[k] === value).length }));
+      return send({ today: TODAY, me: "emp-s1", members, page, limit, total, totalPages,
+        companies: listed.slice((page - 1) * limit, page * limit),
+        facets: sp.get("facets") === "1" ? { industry: facet("industry"), region: facet("region"), service: facet("service") } : undefined });
     }
     if (/\/api\/sales\/templates\b/.test(url)) {
       return send({ services: [], templates: [{ id: "t1", name: "DX基本", service: "AI / DX", subject: null,
@@ -206,7 +241,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     return send({});
   });
-  return { page, calls, errs, ctl };
+  return { page, calls, errs, ctl, ctlList };
 }
 
 console.log("\n=== 営業担当：ダッシュボード ===");
@@ -645,13 +680,13 @@ console.log("\n=== 全選択は、いま表示している企業だけ ===");
   await page.goto(`${BASE}/sales/companies.html`);
   await page.locator("#rows tr[data-id]").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.fill("#f-q", "hannou");
-  await page.waitForTimeout(200);
-  check(await page.locator("#rows tr[data-id]").count() === 1, "絞り込むと1社");
+  await page.waitForFunction(() => document.querySelectorAll("#rows tr[data-id]").length === 1);
+  check(await page.locator("#rows tr[data-id]").count() === 1, "絞り込むと1社（サーバーで検索）");
   await page.locator("#sel-all").click();
   await page.waitForTimeout(200);
   check((await page.locator(".sl-bulkbar").innerText()).includes("1社選択中"), "全選択で選ばれるのは表示中の1社だけ");
   await page.fill("#f-q", "");
-  await page.waitForTimeout(200);
+  await page.waitForFunction(() => document.querySelectorAll("#rows tr[data-id]").length === 3);
   check(await page.locator("#rows input:checked").count() === 1 && await page.locator('#rows tr[data-id="c2"] td.sl-check input').isChecked(),
     "非表示だった企業は選ばれていない");
   await page.locator(".sl-bulkbar button", { hasText: "担当変更" }).click();
@@ -661,7 +696,7 @@ console.log("\n=== 全選択は、いま表示している企業だけ ===");
   // 絞り込みで見えなくなった企業は、選択から外す（見えない企業に一括操作が及ばない）
   await page.locator('#rows tr[data-id="c2"] td.sl-check input').click();
   await page.fill("#f-q", "サンプル");
-  await page.waitForTimeout(200);
+  await page.waitForFunction(() => document.querySelectorAll("#rows tr[data-id]").length === 1);
   check(await page.locator(".sl-bulkbar").count() === 0, "絞り込みで見えなくなった企業は選択から外れる");
   await page.close();
 }
@@ -780,8 +815,9 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   await page.goto(`${BASE}/sales/companies.html`);
   await page.locator("#rows tr[data-id]").first().waitFor();
   const heads = await page.locator(".sl-table thead th").allInnerTexts();
-  check(heads.join("|").includes("連絡手段") && !heads.includes("業種") && !heads.includes("フォーム"),
-    `一覧の列は基本列（連絡手段あり・業種/フォームなし）：${heads.join(" ")}`);
+  const H = heads.map((h) => h.replace(/unfold_more|arrow_upward|arrow_downward/gi, "").trim());
+  check(JSON.stringify(H) === JSON.stringify(["", "企業", "業種", "地域", "商材", "状態", "最終アタック", "連絡手段", "クリック", "NEXT", "担当"]),
+    `一覧の列（業種・地域は独立した列）：${H.join(" ")}`);
   await page.locator('#rows tr[data-id="c1"] td.sl-check input').check();
   await page.locator("#bulk-more").click();
   await page.locator("#bulk-menu button", { hasText: "非表示にする" }).click();
@@ -795,7 +831,7 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   check(h && h.body.reason === "link_broken" && h.body.ids.join() === "c1", "一括APIで非表示（理由つき）");
   check(!(await page.locator('#rows tr[data-id="c1"]').count()), "通常の一覧から消える");
 
-  await page.locator("#f-visible").selectOption("hidden");
+  await page.locator("#f-visibility").selectOption("hidden");
   await page.locator('#rows tr[data-id="c1"]').waitFor();
   check(calls.some((c) => c.kind === "list" && c.visibility === "hidden"), "「非表示」で取り直す");
   check((await page.locator('#rows tr[data-id="c1"]').innerText()).includes("非表示：リンク切れ"), "非表示の理由が状態に出る");
@@ -805,7 +841,7 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   await page.locator("#bk-go").click();
   await page.waitForFunction(() => !document.querySelector('#rows tr[data-id="c1"]'));
   check(calls.some((c) => c.kind === "bulk-unhide"), "再表示した");
-  await page.locator("#f-visible").selectOption("shown");
+  await page.locator("#f-visibility").selectOption("shown");
   await page.locator('#rows tr[data-id="c1"]').waitFor();
   check(true, "表示中に戻っている");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -841,6 +877,145 @@ console.log("\n=== 返信・やり取りを記録：Instagramで返信 → メ�
   check(r && r.body.nextAction === "資料送付" && r.body.nextActionOn === "2026-10-01", "NEXT も一緒に送る");
   await page.waitForFunction(() => (document.querySelector("#contact-status")?.innerText || "").includes("tanaka@example.co.jp"));
   check((await page.locator("#contact-status").innerText()).includes("メール"), "現在の連絡手段がメールになる");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ）・並べ替え・URLの状態 ===");
+{
+  const { page, calls, errs, ctlList } = await openAs({ many: 250 });   // 3 + 250 = 253社
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  const first = calls.find((c) => c.kind === "list");
+  check(first?.params.page === "1" && first?.params.facets === "1", "1ページ目を頼む（絞り込みの候補も最初に1回だけ）");
+  check(await page.locator("#rows tr[data-id]").count() === 100, "1ページに100社");
+  check((await page.locator("#range").innerText()).trim() === "1–100 / 253件", `件数の表示（${await page.locator("#range").innerText()}）`);
+  check((await page.locator("#pager").innerText()).includes("次へ"), "ページャーが出る");
+  check((await page.locator("#f-industry").innerText()).includes("IT（"), "業種の候補は件数つき（サーバーの集計）");
+
+  // ページ移動：押した瞬間に反応（薄く・読み込み中）→ 次の100件だけ取る
+  ctlList.delay = 600;   // サーバーが遅いときでも、押した瞬間に反応が出るか
+  await page.locator("#pager button", { hasText: "次へ" }).click();
+  const reacted = await page.evaluate(() => document.getElementById("rows").classList.contains("loading")
+    && Boolean(document.getElementById("loading")) && [...document.querySelectorAll("#pager button")].every((b) => b.disabled));
+  check(reacted, "押した瞬間に反応する（一覧を薄く・読み込み中・ページャーは押せない）");
+  ctlList.delay = 0;
+  await page.waitForFunction(() => (document.getElementById("range")?.innerText || "").startsWith("101–200"));
+  check(calls.filter((c) => c.kind === "list").at(-1).params.page === "2", "2ページ目の100件だけを取り直す");
+  check(/[?&]page=2/.test(page.url()), "URL にページを書く");
+  check(await page.locator("#pager button.on").innerText() === "2", "いまのページが分かる");
+
+  // 並べ替え：見出しを押す → 昇順 → 降順 → 解除。変えたら1ページ目へ
+  await page.locator('th[data-sort="name"]').click();
+  await page.waitForFunction(() => /sort=name/.test(location.search));
+  const s1 = calls.filter((c) => c.kind === "list").at(-1).params;
+  check(s1.sort === "name" && s1.order === "asc" && s1.page === "1", "企業名で昇順・1ページ目へ戻る（サーバーで並べる）");
+  check(await page.locator('th[data-sort="name"]').getAttribute("aria-sort") === "ascending"
+    && await page.locator('th[data-sort="name"].on').count() === 1, "並べ替え中の列が分かる（矢印・色・太さ）");
+  await page.locator('th[data-sort="name"]').click();
+  await page.waitForFunction(() => /order=desc/.test(location.search));
+  await page.waitForFunction(() => document.querySelector("#rows tr[data-id] .sl-nm")?.textContent === "返信工業");
+  check(true, "降順で並び直す");
+  await page.locator('th[data-sort="name"]').click();
+  await page.waitForFunction(() => !/sort=/.test(location.search));
+  check(await page.locator("th.sort.on").count() === 0, "3回目で並べ替えを解除");
+
+  // 担当・NEXT もサーバーで並べる（担当者名順・実効NEXT順。db/098）
+  for (const key of ["owner", "next"]) {
+    await page.locator(`th[data-sort="${key}"]`).click();
+    await page.waitForFunction((k) => new URLSearchParams(location.search).get("sort") === k, key);
+    const p = calls.filter((c) => c.kind === "list").at(-1).params;
+    check(p.sort === key && p.order === "asc" && p.page === "1", `${key} の並べ替えはサーバーへ（sort=${key}）`);
+  }
+  check((await page.locator('th[data-sort="next"]').getAttribute("title")).includes("要フォロー"), "NEXT の並び方を見出しで説明");
+  await page.locator('th[data-sort="next"]').click();
+  await page.locator('th[data-sort="next"]').click();
+  await page.waitForFunction(() => !/sort=/.test(location.search));
+
+  // 絞り込み → 3ページ目 → 企業詳細を開いて閉じる → 同じページ・条件のまま
+  await page.locator("#f-region").selectOption("東京都");
+  await page.waitForFunction(() => /region=/.test(location.search));
+  const f = calls.filter((c) => c.kind === "list").at(-1).params;
+  check(f.region === "東京都" && f.page === "1", "絞り込みはサーバーへ渡し、1ページ目へ戻る");
+  await page.locator('th[data-sort="industry"]').click();
+  await page.waitForFunction(() => /sort=industry/.test(location.search));
+  await page.locator("#f-region").selectOption("");
+  await page.waitForFunction(() => !/region=/.test(location.search));
+  await page.locator("#pager button", { hasText: "3" }).first().click();
+  await page.waitForFunction(() => (document.getElementById("range")?.innerText || "").startsWith("201–"));
+  const listUrl = page.url();
+  await page.locator("#rows tr[data-id]").first().click();
+  await page.locator(".sl-detail #contact-status, .sl-detail .sl-next").first().waitFor();
+  check(/[?&]id=/.test(page.url()) && /page=3/.test(page.url()) && /sort=industry/.test(page.url()),
+    "企業詳細を開いても一覧の状態は URL に残る");
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  check(page.url() === listUrl, "閉じると元の URL（3ページ目・並べ替え）に戻る");
+  check((await page.locator("#range").innerText()).startsWith("201–"), "元のページのまま");
+
+  // ブラウザの戻る：1つ前の状態（2ページ目ではなく、直前の操作）へ
+  await page.goBack();
+  await page.waitForFunction(() => !/page=3/.test(location.search));
+  check(!/page=3/.test(page.url()), "戻るで1つ前の一覧の状態に戻る");
+  // URL を直接開いても復元する
+  await page.goto(`${BASE}/sales/companies.html?page=2&industry=IT&sort=name&order=desc`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  const r = calls.filter((c) => c.kind === "list").at(-1).params;
+  check(r.page === "2" && r.industry === "IT" && r.sort === "name" && r.order === "desc", "URL の状態でそのまま取る");
+  check(await page.locator("#f-industry").inputValue() === "IT", "絞り込みの欄にも反映");
+
+  // 全選択はこのページの企業だけ
+  await page.locator("#sel-all").click();
+  const n = await page.locator("#rows tr[data-id]").count();
+  check((await page.locator(".sl-bulkbar").innerText()).includes(`${n}社選択中`), `全選択はこのページの${n}社だけ`);
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== CSV：検索結果すべて／チェックした企業だけ（サーバーで作る） ===");
+{
+  const { page, calls, errs } = await openAs({ many: 120 });
+  await page.goto(`${BASE}/sales/companies.html?industry=IT&sort=name&order=asc`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  await page.locator("#btn-download").click();
+  await page.locator(".sl-modal").waitFor();
+  check(await page.locator('input[name="dl-target"][value="selected"]').isDisabled(), "何も選んでいなければ「選択中」は選べない");
+  check((await page.locator(".sl-modal").innerText()).includes("いまの検索・絞り込み結果すべて（60社）"), "検索結果すべて（件数つき）");
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#dl-go").click()]);
+  const ex = calls.find((c) => c.kind === "export");
+  check(ex?.method === "GET" && ex.params.industry === "IT" && ex.params.sort === "name" && !ex.params.page,
+    "いまの条件をそのままサーバーへ渡す（ページは渡さない＝全件）");
+  check(dl.suggestedFilename() === "sales_companies_2026-09-29.csv", `ファイル名（${dl.suggestedFilename()}）`);
+  const { readFile } = await import("node:fs/promises");
+  const buf = await readFile(await dl.path());
+  check(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, "BOM つきのまま保存");
+
+  await page.locator("#rows tr[data-id] td.sl-check input").nth(0).check();
+  await page.locator("#rows tr[data-id] td.sl-check input").nth(1).check();
+  await page.locator("#btn-download").click();
+  await page.locator(".sl-modal").waitFor();
+  check(await page.locator('input[name="dl-target"][value="selected"]').isChecked(), "選択があれば「選択中 2社」を先に選ぶ");
+  check((await page.locator(".sl-modal").innerText()).includes("選択中 2社"), "選択中の件数");
+  await Promise.all([page.waitForEvent("download"), page.locator("#dl-go").click()]);
+  const ex2 = calls.filter((c) => c.kind === "export").at(-1);
+  check(ex2?.method === "POST" && ex2.body.ids.length === 2 && ex2.body.sort === "name", "チェックした企業だけ（ID を POST。並び順つき）");
+  // 画面下のバーからも
+  await Promise.all([page.waitForEvent("download"), page.locator("#bulk-csv").click()]);
+  check(calls.filter((c) => c.kind === "export").length === 3, "画面下のバーの CSV からも選択中をダウンロード");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 一覧の取得に失敗しても画面は壊さない（再読み込みで戻る） ===");
+{
+  const { page, errs, ctlList } = await openAs({ failList: true });
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#rows .banner.err").waitFor();
+  check((await page.locator("#rows").innerText()).includes("企業一覧を取得できませんでした"), "失敗を一覧の中に出す");
+  check(await page.locator("#f-industry").isEnabled() && await page.locator("#btn-download").isEnabled(), "絞り込み・ボタンは使えるまま");
+  ctlList.fail = false;
+  await page.locator("#rows button", { hasText: "再読み込み" }).click();
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  check(await page.locator("#rows tr[data-id]").count() === 3, "再読み込みで一覧が戻る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
