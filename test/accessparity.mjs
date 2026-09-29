@@ -120,6 +120,27 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
     "/hr の入口は access.recruit");
   check(/const canSell = me\?\.access \? Boolean\(me\.access\.sell\)/.test(read("js/sales-layout.js")),
     "/sales の入口は access.sell");
+
+  // Office：ヘッダーの近道も /office の入口も、access.office だけで決める（役割名を画面に持たない）。
+  // 金額を扱うので、access が無い古い応答では入れない側に倒す
+  check(/office:\s*Boolean\(me\?\.access\?\.office\)/.test(layout), "ヘッダーの Office は access.office だけ（予備の役割判定を持たない）");
+  const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  check(/!me\?\.access\?\.office/.test(officeLayout) && /location\.replace\("\/home\.html"\)/.test(officeLayout),
+    "/office の入口は access.office だけで決め、無ければ home.html へ");
+  check(!/["'](owner|manager|finance|hr|sales|recruiter)["']/.test(officeLayout), "/office の画面に役割名を書かない");
+
+  // 予備の判定（access が無い古い応答のときだけ使う）が、サーバの役割の並びとずれていない
+  // （責任者が HR に入れる、という変更のあとに、画面だけ旧仕様のまま残さない）
+  const fallback = (key) => {
+    const m = layout.match(new RegExp(`${key}:\\s*me\\?\\.access \\? Boolean\\(me\\.access\\.\\w+\\)\\s*:\\s*\\[([^\\]]*)\\]`));
+    return m ? [...m[1].matchAll(/"(\w+)"/g)].map((x) => x[1]).sort().join(",") : null;
+  };
+  check(fallback("hr") === [...HR_ROLES].sort().join(","), `layout.js の予備判定（HR）= ${HR_ROLES.join("・")}（いま ${fallback("hr")}）`);
+  check(fallback("sales") === [...SALES_ROLES].sort().join(","), `layout.js の予備判定（Sales）= ${SALES_ROLES.join("・")}（いま ${fallback("sales")}）`);
+  const hrLayout = read("js/hr-layout.js");
+  const hrFb = (hrLayout.match(/const canRecruit = me\?\.access \? Boolean\(me\.access\.recruit\)\s*:([^;]*);/) || [])[1] || "";
+  check(HR_ROLES.every((r) => hrFb.includes(`"${r}"`)) && [...hrFb.matchAll(/"(\w+)"/g)].length === HR_ROLES.length,
+    `hr-layout.js の予備判定 = ${HR_ROLES.join("・")}（いま ${[...hrFb.matchAll(/"(\w+)"/g)].map((x) => x[1]).join("・")}）`);
 }
 
 console.log("\n— DB の関数も同じ役割 —");
