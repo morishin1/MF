@@ -12,8 +12,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   accessOf, canRecruit, canSell, canDecideHire, canForceAttack,
-  canAccessHr, canAccessSales, canAccessOffice,
-  HR_ROLES, SALES_ROLES, OFFICE_ROLES, RECRUIT_ROLES,
+  canAccessHr, canAccessSales, canAccessOffice, canAccessKeiei,
+  HR_ROLES, SALES_ROLES, OFFICE_ROLES, KEIEI_ROLES, RECRUIT_ROLES,
 } from "../lib/gw.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -69,6 +69,32 @@ check(!OFFICE_ROLES.includes("it") && !OFFICE_ROLES.includes("hr") && !OFFICE_RO
 check(OFFICE_ROLES.includes("finance") && !OFFICE_ROLES.includes("office"),
   "Office 専用のロールは作らない（既存の「経理」= finance を使う）");
 
+console.log("\n— 経営 /keiei は経営者だけ（責任者にも公開しない） —");
+// 4つの条件を混同しない：責任者は HR・Sales・Office を使えるが、/keiei には入れない
+for (const [ctx, want, label] of [
+  [{ roles: ["owner"], isHr: true },               true,  "経営者"],
+  [{ roles: ["manager"] },                         false, "責任者（HR・Sales・Office は使えるが /keiei は不可）"],
+  [{ roles: ["finance"] },                         false, "経理"],
+  [{ roles: ["hr"], isHr: true },                  false, "人事"],
+  [{ roles: ["sales"] },                           false, "営業担当"],
+  [{ roles: ["it", "labor_advisor"] },             false, "IT・社労士"],
+  [{ isAdmin: true, roles: [] },                   false, "会計側の管理者だけ"],
+  [{ roles: [] },                                  false, "一般メンバー"],
+]) {
+  const a = accessOf(ctx);
+  check(a.keiei === want, `${label} → /keiei ${mark(want)}（いま ${mark(a.keiei)}）`);
+  check(Boolean(canAccessKeiei({ isAdmin: false, roles: [], ...ctx })) === a.keiei, `${label}: accessOf.keiei は canAccessKeiei と同じ`);
+}
+check(KEIEI_ROLES.length === 1 && KEIEI_ROLES[0] === "owner", "KEIEI_ROLES は owner だけ");
+check(!KEIEI_ROLES.includes("manager"), "責任者（manager）を KEIEI_ROLES に入れない");
+{
+  // 責任者は3つ使えて /keiei だけ使えない、という組を、1つの表として固定する
+  const m = accessOf({ roles: ["manager"] });
+  check(m.recruit && m.sell && m.office && !m.keiei, "責任者：HR・Sales・Office ○、/keiei ×");
+  const o = accessOf({ roles: ["owner"] });
+  check(o.recruit && o.sell && o.office && o.keiei, "経営者：HR・Sales・Office・/keiei すべて ○");
+}
+
 console.log("\n— 採用判断・強行は、使える人の中の上乗せ権限 —");
 check(!canDecideHire({ isAdmin: true, roles: [] }), "会計の管理者だけでは採用判断もできない");
 check(canDecideHire({ isAdmin: false, roles: ["owner"] }), "経営者は採用判断ができる");
@@ -121,6 +147,19 @@ console.log("\n— DB の関数も同じ役割 —");
   check(!/is_tenant_staff/.test(sales), "gw_is_sales に会計の管理者（is_tenant_staff）を含めない");
   check(!/is_tenant_staff|gw_is_hr/.test(office), "gw_is_office に会計の管理者・人事（is_tenant_staff / gw_is_hr）を含めない");
   check(!/'it'|'labor_advisor'/.test(rec + sales + office), "IT・管理（it）・社労士はどの入口にも入っていない");
+  const keiei = last("gw_is_keiei");
+  check(keiei !== "" && rolesIn(keiei).join(",") === [...KEIEI_ROLES].sort().join(","),
+    `gw_is_keiei = ${KEIEI_ROLES.join("・")}（いま ${rolesIn(keiei).join("・") || "未定義"}）`);
+  check(!/is_tenant_staff|gw_is_hr|gw_is_office|'manager'/.test(keiei), "gw_is_keiei に責任者・人事・会計の管理者を含めない");
+
+  // Office（/api/office）が読む表：Office 権限の読み取りだけが足されている（書き込み・人事は足さない）
+  const office100 = read("db/100_office_access.sql").replace(/--.*$/gm, "");
+  for (const t of ["gw_site_contracts", "gw_billing_progress", "gw_submissions", "gw_partner_companies"]) {
+    const re = new RegExp(`create policy ${t}_office_select on public\\.${t}\\s+for select using \\(public\\.gw_is_office\\(tenant_id\\)\\);`);
+    check(re.test(office100), `${t}：Office 権限（gw_is_office）の読み取りポリシーがある`);
+  }
+  check(!/for (all|insert|update|delete)/i.test(office100), "db/100 は書き込みのポリシーを足さない（読み取りだけ）");
+  check(!/gw_is_hr|is_tenant_staff|gw_is_recruiting/.test(office100), "db/100 は人事・会計の管理者に広げない（方針A）");
 }
 
 console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られている —");
@@ -150,7 +189,15 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
   // api/office/ はこれから作るので、無いあいだは何も見ない（作った瞬間から全ファイルが対象になる）
   if (existsSync(join(ROOT, "api/office"))) {
     for (const f of walk("api/office")) {
-      check(/canAccessOffice/.test(read(f)), `${f} は canAccessOffice で判定（例外なし）`);
+      const src = read(f);
+      check(/canAccessOffice/.test(src), `${f} は canAccessOffice で判定（例外なし）`);
+      // 単価・請求額・支払を扱うので、強制日を待たず最初から二段階認証（lib/mfa.js の strict）
+      check(/requireMfa\(req, res, ctx, user, \{ strict: true \}\)/.test(src), `${f} は requireMfa(…, { strict: true }) を通る`);
+      // 権限の判定が、MFA より先（権限のない人を、MFA の登録画面へ誘導しない）
+      check(src.indexOf("canAccessOffice(ctx)") !== -1 && src.indexOf("canAccessOffice(ctx)") < src.indexOf("requireMfa("),
+        `${f} は権限判定（canAccessOffice）のあとに MFA を見る`);
+      // 何が許可されているかの読み方：他の系統の判定（HR・Sales・管理者）で通していない
+      check(!/canRecruit|canSell|canAccessHr|canAccessSales|canManageHr/.test(src), `${f} は HR・Sales・人事の判定を混ぜない`);
     }
   }
 }

@@ -2,11 +2,13 @@
 //
 // ■ 何を守るテストか
 //
-//   1. 対象が 管理者・経営者・人事・社労士 に限られること（一般社員は止めない）
+//   1. 対象が 管理者・経営者・責任者・経理・人事・社労士 に限られること（一般社員は止めない）
+//      Office（経営者・責任者・経理）と /keiei（経営者）に入れる人は、必ず対象に入っていること
 //   2. 登録期間（〜2026-09-30）は止めず、強制日（2026-10-01〜）から止めること
 //   3. 止めるのは、今回の入り方が aal2 でないときだけ（6桁で確かめた人は通す）
 //   4. 止めたとき、登録済みか未登録かで、画面に出す言葉が変わること
 //   5. サーバは秘密を持たず、トークンの aal だけを見ること
+//   6. Office・/keiei の API は strict：強制日を待たず、最初から aal2 でないと通さないこと
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -44,15 +46,21 @@ console.log("— 誰に要るか —");
 await ok("管理者（会計側）は対象", async () => {
   assert.equal(M.needsMfa({ isAdmin: true, roles: [] }), true);
 });
-await ok("経営者・人事・社労士は対象", async () => {
-  for (const r of ["owner", "hr", "labor_advisor"]) {
+await ok("経営者・責任者・経理・人事・社労士は対象（Office と /keiei に入れる人を含む）", async () => {
+  for (const r of ["owner", "manager", "finance", "hr", "labor_advisor"]) {
     assert.equal(M.needsMfa({ isAdmin: false, roles: [r] }), true, r);
   }
 });
-await ok("一般社員・IT・経理だけの人は対象外", async () => {
+await ok("一般社員・IT・営業・採用担当だけの人は対象外", async () => {
   assert.equal(M.needsMfa({ isAdmin: false, roles: [] }), false);
-  assert.equal(M.needsMfa({ isAdmin: false, roles: ["it", "finance"] }), false);
+  assert.equal(M.needsMfa({ isAdmin: false, roles: ["it", "sales", "recruiter"] }), false);
   assert.equal(M.needsMfa(null), false);
+});
+await ok("Office・/keiei に入れる役割は、すべて二段階認証の対象に入っている", async () => {
+  const { OFFICE_ROLES, KEIEI_ROLES } = await import(join(ROOT, "lib/gw.js"));
+  for (const r of [...OFFICE_ROLES, ...KEIEI_ROLES]) {
+    assert.ok(M.REQUIRED_ROLES.includes(r), `${r} が REQUIRED_ROLES に無い`);
+  }
 });
 
 console.log("— いつから止めるか —");
@@ -155,6 +163,44 @@ await ok("強制後でも、対象外の一般社員は通す", async () => {
   await withDates("2000-01-01", async (m) => {
     const r = res();
     assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles: [] }, none), true);
+  });
+});
+
+console.log("— Office・/keiei は strict（強制日を待たない） —");
+
+await ok("strict：強制日の前でも、対象の人が aal1 なら止める", async () => {
+  const st = M.mfaState({ ctx: { roles: ["finance"] }, user: enrolled, req: req("aal1"), today: "2026-09-29", strict: true });
+  assert.equal(st.enforced, false, "画面に出す強制日の判定は日付のまま");
+  assert.equal(st.blocked, true);
+});
+await ok("strict でも、aal2 なら通す／対象外の人は止めない", async () => {
+  const a = M.mfaState({ ctx: { roles: ["finance"] }, user: enrolled, req: req("aal2"), today: "2026-09-29", strict: true });
+  assert.equal(a.blocked, false);
+  const b = M.mfaState({ ctx: { roles: [] }, user: none, req: req("aal1"), today: "2026-09-29", strict: true });
+  assert.equal(b.blocked, false);
+});
+await ok("strict でなければ、これまでどおり強制日までは止めない", async () => {
+  const st = M.mfaState({ ctx: { roles: ["finance"] }, user: enrolled, req: req("aal1"), today: "2026-09-29" });
+  assert.equal(st.blocked, false);
+});
+await ok("requireMfa({ strict: true })：強制日の前でも、未登録・aal1 は 403 mfa_required", async () => {
+  await withDates("2999-01-01", async (m) => {
+    for (const roles of [["owner"], ["manager"], ["finance"]]) {
+      const r = res();
+      assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles }, none, { strict: true }), false, String(roles));
+      assert.equal(r.statusCode, 403);
+      assert.equal(r.body.error, "mfa_required");
+      assert.match(r.body.hint, /登録/);
+    }
+    const ok2 = res();
+    assert.equal(await m.requireMfa(req("aal2"), ok2, { isAdmin: false, roles: ["finance"] }, enrolled, { strict: true }), true);
+    assert.equal(ok2.statusCode, 0);
+  });
+});
+await ok("requireMfa（strict なし）は、強制日の前なら通す（既存の API は変わらない）", async () => {
+  await withDates("2999-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles: ["finance"] }, none), true);
   });
 });
 
