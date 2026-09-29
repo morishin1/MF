@@ -75,6 +75,19 @@
     .cr-tone.green { background:#eaf5ec; color:#256b36; }
     .cr-na-cell b { display:block; font-size:13px; color:var(--primary-dark); }
     .cr-na-cell small { color:var(--muted); font-size:11.5px; }
+
+    /* 契約・キャリア状況（GW「契約締結×キャリア設定」完了状態 §4）。ドロワー最上部の点検 */
+    .cc-status { border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin:10px 0 12px; background:#fbfbf9; }
+    .cc-row { display:flex; align-items:center; gap:10px; font-size:13.5px; padding:2px 0; }
+    .cc-row .lbl { width:64px; flex:0 0 auto; color:var(--muted); font-weight:700; font-size:12px; }
+    .mk { font-weight:700; }
+    .mk.ok { color:#256b36; }
+    .mk.warn { color:#b3261e; }
+    .mk.pending { color:#8a5a00; }
+    .cc-now { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+    .cc-now .k { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.06em; }
+    .cc-now b { display:block; font-size:15px; color:var(--primary-dark); margin-top:2px; }
+    .cc-now b.ok { color:#256b36; }
     .cr-sum { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px 14px; margin:12px 0 4px; }
     .cr-sum .k { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.06em; }
     .cr-sum .v { font-size:15px; font-weight:700; color:var(--primary-dark); margin-top:1px; }
@@ -173,8 +186,8 @@
       </div>
       <div class="table-scroll">
         <table class="kp-items">
-          <thead><tr><th>氏名</th><th>職種</th><th>現在</th><th>現在給与</th><th>次回評価</th><th>状態</th><th>NEXT ACTION</th><th>担当</th></tr></thead>
-          <tbody id="rows"><tr><td colspan="8" class="muted">読み込み中…</td></tr></tbody>
+          <thead><tr><th>氏名</th><th>職種</th><th>現在</th><th>現在給与</th><th>契約</th><th>キャリア</th><th>次回評価</th><th>状態</th><th>NEXT ACTION</th><th>担当</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="10" class="muted">読み込み中…</td></tr></tbody>
         </table>
       </div>
       <p class="cr-note">NEXT ACTION の順に並んでいます（未設定 → 判定待ち → 面談準備 → 契約準備 → 本人確認待ち → 署名待ち → 評価時期 …）。
@@ -329,13 +342,23 @@
         <td>${esc(p.career?.trackName || (p.suggestion ? `（候補：${p.suggestion.trackName}）` : "—"))}</td>
         <td class="cr-lv">${p.career ? `L${p.career.currentLevel?.levelNo ?? "-"}` : "—"}</td>
         <td style="white-space:nowrap;">${wageText(p.currentWage)}</td>
+        <td>${ccMark(p.contractStatus)}</td>
+        <td>${ccMark(p.careerStatus)}</td>
         <td>${fmtDate(p.career?.nextReviewOn)}</td>
         <td>${tone(p.flow)}</td>
         <td class="cr-na-cell"><b>${esc(f.label || "")}</b>${f.sub ? `<small>${esc(f.sub)}</small>` : ""}</td>
         <td>${esc(p.employee.managerName || "—")}</td>
       </tr>`;
     }).join("")
-      : `<tr><td colspan="8" class="muted">該当する社員はいません。</td></tr>`;
+      : `<tr><td colspan="10" class="muted">該当する社員はいません。</td></tr>`;
+  }
+
+  /** 一覧の ✓/●/⚠ 表示（§16）。contractStatus()/careerStatus() の結果をそのまま出す */
+  function ccMark(st) {
+    if (!st) return "—";
+    const cls = st.ok ? "ok" : st.warn ? "warn" : "pending";
+    const mk = st.ok ? "✓" : st.warn ? "⚠" : "●";
+    return `<span class="mk ${cls}" title="${esc(st.label)}">${mk}</span>`;
   }
 
   // ---- 社員詳細（右ドロワー＝見る場所。操作は中央モーダルへ） ---------------------------
@@ -396,6 +419,29 @@
   // 入社〜キャリアの共通ステータスバー（js/journey-bar.js）。本人の画面と同じ部品・同じ判定
   const journeyBar = (j) => (j ? KPJourney.panel(j, { viewer: "admin" }) : "");
 
+  /** 契約・キャリア状況（§4）。ドロワー最上部の点検。journey（採用〜育成）とは別の、いまの完了チェック */
+  function contractCareerSummary() {
+    const d = detail;
+    const cs = d.contractStatus, ks = d.careerStatus, ov = d.overallStatus;
+    if (!cs || !ks || !ov) return "";
+    const cls = (st) => (st.ok ? "ok" : st.warn ? "warn" : "pending");
+    const mark = (st) => (st.ok ? "✓" : st.warn ? "⚠" : "●");
+    return `
+      <div class="cc-status" id="cc-status">
+        <div class="cc-row"><span class="lbl">契約</span><span class="mk ${cls(cs)}">${mark(cs)} ${esc(cs.label)}</span></div>
+        <div class="cc-row"><span class="lbl">キャリア</span><span class="mk ${cls(ks)}">${mark(ks)} ${esc(ks.label)}</span></div>
+        <div class="cc-now">
+          <div class="k">現在</div>
+          <b class="${ov.key === "completed" ? "ok" : ""}">${ov.key === "completed" ? "✓ " : ""}${esc(ov.label)}</b>
+        </div>
+        <div class="cr-next" style="margin:10px 0 0;">
+          <div class="lbl">NEXT ACTION</div>
+          <b style="margin-bottom:0;">${esc(ov.nextAction.label)}</b>
+          ${ov.key === "completed" ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="setDrawerTab('career')">評価を見る</button>` : ""}
+        </div>
+      </div>`;
+  }
+
   function renderDrawer() {
     const d = detail;
     const box = el("drawer-root").querySelector(".cr-drawer");
@@ -408,6 +454,7 @@
       <h2>${esc(d.employee.name)}
         <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="closeDrawer()">閉じる</button></h2>
       <div class="muted" style="font-size:12.5px;">${esc([d.track?.name, d.contract?.contractType].filter(Boolean).join(" / ") || d.employee.department || "")}</div>
+      ${contractCareerSummary()}
       ${journeyBar(d.journey)}
 
       <div class="cr-sum" id="cr-sum">
@@ -483,11 +530,15 @@
   }
   function contractTab() {
     const d = detail;
+    const cs = d.contractStatus;
     return `
+      ${cs && cs.warn ? `<div class="banner warn"><span class="material-symbols-outlined">warning</span>
+        <div>${esc(cs.label)}。自動では直しません。契約情報と締結済み書面をご確認ください。</div></div>` : ""}
       <div class="cr-sec">現在の契約</div>${contractRows(d.contract)}
       <div class="cr-sec">電子署名の状態</div>
       ${(d.signs || []).length ? `<ul class="cr-list">${d.signs.map((x) => `
-        <li><time>${fmtDate(x.signedAt || x.sentAt)}</time><span>${esc(x.title)}</span>
+        <li><time>${fmtDate(x.signedAt || x.sentAt)}</time><span>${esc(x.title)}
+          ${x.status === "signed" && x.currentContract ? `<span class="cr-tone blue" style="margin-left:6px;">現在契約</span>` : ""}</span>
           <span class="cr-tone ${x.status === "signed" ? "green" : x.status === "sent" ? "yellow" : "blue"}">${esc(SIGN_LABEL[x.status] || x.status)}</span></li>`).join("")}</ul>`
         : `<p class="muted" style="font-size:13px;">署名依頼はありません。</p>`}
       <div class="cr-sec">契約書作成依頼</div>

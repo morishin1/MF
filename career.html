@@ -59,6 +59,14 @@
     .cv-acts .k { font-size:12px; font-weight:700; color:var(--muted); margin-bottom:6px; }
     .cv-acts .done { color:#256b36; font-weight:700; font-size:13.5px; }
     @media (max-width: 560px) { .cv-acts { grid-template-columns:1fr; } }
+
+    /* 契約・キャリア状況（GW「契約締結×キャリア設定」完了状態 §12）。常に出す点検 */
+    .mk { font-weight:700; }
+    .mk.ok { color:#256b36; }
+    .mk.warn { color:#b3261e; }
+    .mk.pending { color:#8a5a00; }
+    .cv-status-note { font-size:13px; margin:10px 0 0; color:var(--muted); }
+    .cv-status-note.ok { color:#256b36; font-weight:700; }
   </style>
 </head>
 <body>
@@ -166,6 +174,24 @@
       </div>`;
   }
 
+  /** 契約・キャリア状況（§12）。会社から確認依頼が届いていない日常時にも、いまの状態を確かめられる */
+  function statusSummary() {
+    const d = data;
+    const cs = d.contractStatus, ks = d.careerStatus, ov = d.overallStatus;
+    if (!cs || !ks || !ov) return "";
+    const cls = (st) => (st.ok ? "ok" : st.warn ? "warn" : "pending");
+    const mark = (st) => (st.ok ? "✓" : st.warn ? "⚠" : "●");
+    return `
+      <div class="card" id="sec-status">
+        <h2><span class="material-symbols-outlined">verified</span>あなたの契約・キャリア</h2>
+        <div class="cv-grid">
+          <div><div class="k">契約</div><div class="v"><span class="mk ${cls(cs)}">${mark(cs)} ${esc(cs.label)}</span></div></div>
+          <div><div class="k">キャリア</div><div class="v"><span class="mk ${cls(ks)}">${mark(ks)} ${esc(ks.label)}</span></div></div>
+        </div>
+        <p class="cv-status-note ${ov.key === "completed" ? "ok" : ""}">${ov.key === "completed" ? "✓ 契約・キャリア完了　" : ""}${esc(ov.nextAction.label)}</p>
+      </div>`;
+  }
+
   async function confirmPlan(btn) {
     if (PREVIEW) return;
     try {
@@ -186,7 +212,7 @@
   function render() {
     const d = data;
     if (!d.career) {
-      el("body").innerHTML = `${confirmCard()}
+      el("body").innerHTML = `${statusSummary()}${confirmCard()}
         <div class="card" id="sec-now"><h2><span class="material-symbols-outlined">flag</span>あなたの現在地</h2>
           <div class="empty">${esc(d.message || "キャリアはまだ設定されていません。")}</div></div>
         ${dekiruCard()}`;
@@ -197,7 +223,7 @@
     const p = d.progress;
     const remaining = p?.remaining || [];
 
-    el("body").innerHTML = `${confirmCard()}
+    el("body").innerHTML = `${statusSummary()}${confirmCard()}
       <!-- 1. あなたの現在地 -->
       <div class="card" id="sec-now">
         <h2><span class="material-symbols-outlined">flag</span>あなたの現在地</h2>

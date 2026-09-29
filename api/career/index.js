@@ -45,6 +45,7 @@ import {
   REVIEW_RESULT_KEYS, SALARY_DECISION_KEYS, EVIDENCE_TYPE_KEYS, CRITERION_RESULTS, REVIEW_RESULTS,
   SALARY_DECISIONS, EVIDENCE_TYPES, RANGE_NOTE_ADMIN, TIMELINE_NOTE, STARTER,
   flowOf, confirmPending, FLOW_STATES, CONTRACT_DOC_KINDS, OPEN_ORDER_STATUSES,
+  contractStatus, careerStatus, overallStatus, OVERALL_STATES,
 } from "../../lib/career.js";
 import { memberCareerView } from "../../lib/career-member.js";
 import { LEVELS as AUTONOMY_LEVELS } from "../../lib/autonomy.js";
@@ -180,12 +181,17 @@ async function list(res, sb, ctx) {
     const wage = contract.wageOf.get(e.id) || null;
     const flow = flowOf({ career: c, draft, orders: contract.ordersOf.get(e.id) || [],
       signs: contract.signsOf.get(e.id) || [], today });
+    // 契約・キャリアの完了状態（§2・§3・§17）。flow とは別の、独立した2軸の点検
+    const cSt = contractStatus({ contract: wage ? { id: wage.id } : null, signs: contract.signsAllOf.get(e.id) || [] });
+    const kSt = careerStatus({ career: c });
+    const overall = overallStatus({ contractStatus: cSt, careerStatus: kSt });
     return {
       employee: { id: e.id, name: e.display_name, department: e.department, status: e.status,
                   joinedOn: e.joined_on, autonomyLevel: e.autonomy_level,
                   managerName: e.manager_id ? (nameById.get(e.manager_id) || allNames.get(e.manager_id) || null) : null },
       currentWage: wage ? { wageType: wage.wage_type, wageAmount: wage.wage_amount, contractType: wage.contract_type } : null,
       flow,
+      contractStatus: cSt, careerStatus: kSt, overallStatus: overall,
       career: c ? {
         id: c.id, trackId: c.track_id, trackName: trackById.get(c.track_id)?.name || null,
         currentLevel: levelView(cur), nextLevel: levelView(next),
@@ -209,6 +215,7 @@ async function list(res, sb, ctx) {
     canEditMaster: canDecideCareer(ctx),
     seesAll: careerSeesAll(ctx),
     flowStates: FLOW_STATES,
+    overallStates: OVERALL_STATES,
     today,
   });
 }
@@ -216,16 +223,19 @@ async function list(res, sb, ctx) {
 /**
  * 一覧・詳細の「契約の進み具合」と現在給与。既存の表を読むだけ（どれも無くても画面は出す）
  *   作成依頼 … gw_doc_orders（雇用契約・まだ本人に届いていないもの）
- *   署名依頼 … gw_sign_requests（雇用契約・sent）
+ *   署名依頼 … gw_sign_requests（雇用契約・sent。flowOf() 用）
+ *   署名済み含む … gw_sign_requests（雇用契約・sent/signed。contractStatus() の「締結済みか」用）
  *   現在給与 … gw_contracts（active の新しいもの）
  */
 async function contractState(sb, ctx, employeeId = null) {
   const scope = (q) => (employeeId ? q.eq("employee_id", employeeId) : q);
-  const [orders, signs, contracts, emps] = await Promise.all([
+  const [orders, signs, allSigns, contracts, emps] = await Promise.all([
     soft(scope(sb.from("gw_doc_orders").select("id, employee_id, doc_kind, title, status, requested_at, created_at")
       .eq("tenant_id", ctx.tenantId).in("status", OPEN_ORDER_STATUSES)).limit(2000)),
     soft(scope(sb.from("gw_sign_requests").select("id, employee_id, doc_kind, title, status, sent_at, due_on")
       .eq("tenant_id", ctx.tenantId).eq("status", "sent")).order("sent_at", { ascending: false }).limit(2000)),
+    soft(scope(sb.from("gw_sign_requests").select("id, employee_id, doc_kind, title, status, sent_at, signed_at, due_on, contract_id")
+      .eq("tenant_id", ctx.tenantId).in("status", ["sent", "signed"])).order("sent_at", { ascending: false }).limit(2000)),
     soft(scope(sb.from("gw_contracts").select("id, employee_id, contract_type, wage_type, wage_amount, created_at")
       .eq("tenant_id", ctx.tenantId).eq("status", "active")).order("created_at", { ascending: false }).limit(2000)),
     employeeId ? null : soft(sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId).limit(2000)),
@@ -242,7 +252,7 @@ async function contractState(sb, ctx, employeeId = null) {
   const wageOf = new Map();
   for (const c of contracts || []) if (!wageOf.has(c.employee_id)) wageOf.set(c.employee_id, c);
   return {
-    ordersOf: group(orders), signsOf: group(signs), wageOf,
+    ordersOf: group(orders), signsOf: group(signs), signsAllOf: group(allSigns), wageOf,
     names: new Map((emps || []).map((e) => [e.id, e.display_name])),
   };
 }
@@ -266,7 +276,7 @@ async function detail(res, sb, ctx, employeeId) {
       .order("created_at", { ascending: false }).limit(20)),
     soft(sb.from("gw_doc_orders").select("id, doc_kind, title, status, requested_at, created_at, due_on")
       .eq("tenant_id", ctx.tenantId).eq("employee_id", e.id).order("requested_at", { ascending: false }).limit(20)),
-    soft(sb.from("gw_sign_requests").select("id, doc_kind, title, status, sent_at, signed_at, due_on")
+    soft(sb.from("gw_sign_requests").select("id, doc_kind, title, status, sent_at, signed_at, due_on, contract_id")
       .eq("tenant_id", ctx.tenantId).eq("employee_id", e.id).order("sent_at", { ascending: false }).limit(20)),
     growthOf(sb, ctx, e.id),
     soft(sb.from("gw_autonomy_reviews").select("from_level, to_level, reason, decided_at")
@@ -291,6 +301,11 @@ async function detail(res, sb, ctx, employeeId) {
   const active = (contracts || []).find((x) => x.status === "active") || null;
   const autonomyLevel = AUTONOMY_LEVELS.find((l) => l.level === Number(e.autonomy_level)) || null;
   const careerFlow = flowOf({ career: c, draft, orders: openOrders, signs: sentSigns, today });
+  // 契約・キャリアの完了状態（§2・§3・§17）。flow とは別の、独立した2軸の点検
+  const signedOrSent = (signs || []).filter((x) => isContract(x) && ["sent", "signed"].includes(x.status));
+  const cSt = contractStatus({ contract: active ? { id: active.id } : null, signs: signedOrSent });
+  const kSt = careerStatus({ career: c });
+  const overall = overallStatus({ contractStatus: cSt, careerStatus: kSt });
   // 進み具合は本人の画面と同じ関数で（lib/journey-load.js）。管理者と本人で食い違わない
   const { journey, onboarding: onb } = await journeyForEmployee(sb, ctx.tenantId, e, today);
 
@@ -307,6 +322,8 @@ async function detail(res, sb, ctx, employeeId) {
       confirmPending: confirmPending(c),
     } : null,
     flow: careerFlow,
+    // 契約・キャリアの完了状態（§2・§3・§17。管理者・本人共通の判定）
+    contractStatus: cSt, careerStatus: kSt, overallStatus: overall,
     // 採用決定 → 契約 → 入社 → キャリア → 育成 のどこか（lib/journey.js）。ドロワー上部の NEXT ACTION はこれ
     journey,
     onboarding: onb ? onboardingView(onb) : null,
@@ -316,7 +333,9 @@ async function detail(res, sb, ctx, employeeId) {
     orders: (orders || []).filter(isContract).map((o) => ({ id: o.id, title: o.title, status: o.status,
       requestedAt: o.requested_at || o.created_at, dueOn: o.due_on })),
     signs: (signs || []).filter(isContract).map((x) => ({ id: x.id, title: x.title, status: x.status,
-      sentAt: x.sent_at, signedAt: x.signed_at, dueOn: x.due_on })),
+      sentAt: x.sent_at, signedAt: x.signed_at, dueOn: x.due_on,
+      // active契約に紐づくか（db/097）。無い古いデータは contractId が null のまま（§6の[現在契約]チップ判定に使う）
+      contractId: x.contract_id || null, currentContract: Boolean(active) && (!x.contract_id || x.contract_id === active.id) })),
     growth,
     autonomy: {
       level: e.autonomy_level ?? null, label: autonomyLevel?.label || null,

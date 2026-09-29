@@ -3,7 +3,8 @@
 // POST /api/contracts {action}
 //        "upload"    … 契約書を置くための署名URLを発行する
 //        "read"      … 置いたファイルをAIに読ませ、draft の契約を作る
-//        "update"    … 読み取った内容を人が直す
+//        "update"    … 読み取った内容を人が直す（draft のみ自由に直せる。締結済みは
+//                       correction:true + reason が無いと断る。§9）
 //        "confirm"   … 確定する（ここで初めて予定が並ぶ）
 //        "compute"   … その予定の期間を集計し、基準に当てはめる
 //        "summarize" … AIに面談の所見を書かせる
@@ -117,7 +118,7 @@ async function act(req, res, ctx, user) {
   switch (body?.action) {
     case "upload":    return issueUploadUrl(res, ctx, body);
     case "read":      return readFile(res, sb, ctx, user, body);
-    case "update":    return updateContract(res, sb, ctx, body);
+    case "update":    return updateContract(res, sb, ctx, user, body);
     case "confirm":   return confirmContract(res, sb, ctx, user, body);
     case "compute":   return computeOne(res, sb, ctx, body);
     case "summarize": return summarizeOne(res, sb, ctx, user, body);
@@ -220,8 +221,19 @@ async function readFile(res, sb, ctx, user, body) {
   return json(res, 200, { contract: shapeContract(saved) });
 }
 
-/** 読み取った内容を人が直す */
-async function updateContract(res, sb, ctx, body) {
+/**
+ * 読み取った内容を人が直す。
+ *
+ * ★ 署名済み（active・superseded）の契約は、直接の上書きを許さない
+ *   （GW「契約締結×キャリア設定」完了状態 §9）。本人との合意内容そのものが
+ *   変わる場合は、新しい契約書を作って署名し直す（upload → read → confirm。
+ *   confirm() が旧契約を自動で superseded にする＝既存の仕組みのまま）。
+ *
+ *   署名書面は正しいのに GW側の登録値だけが違う「登録情報の訂正」だけは、
+ *   body.correction:true + body.reason を必須にしたうえで許可し、
+ *   変更前・変更後・理由・操作者・操作日時を監査ログへ残す（自動修正はしない）
+ */
+async function updateContract(res, sb, ctx, user, body) {
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
   const v = normalize(body.contract || {});
 
@@ -231,12 +243,52 @@ async function updateContract(res, sb, ctx, body) {
     note: String(body.contract?.note ?? "").trim().slice(0, 2000) || null,
   };
 
+  const { data: before } = await sb.from("gw_contracts").select("*")
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!before) return json(res, 404, { error: "contract_not_found" });
+
+  let correction = null;
+  if (before.status !== "draft") {
+    const reason = String(body.reason ?? "").trim();
+    if (!body.correction || !reason) {
+      return json(res, 409, {
+        error: "signed_contract_locked",
+        hint: "締結済みの契約は直接直せません。合意内容そのものが変わる場合は新しい契約書を作って署名し直してください。"
+          + "GW側の登録値だけが違う場合は、訂正理由を添えて「登録情報の訂正」から直してください。",
+      });
+    }
+    correction = { reason, changes: diffFields(before, patch) };
+    if (!correction.changes.length) {
+      return json(res, 400, { error: "no_changes", hint: "変わった項目がありません" });
+    }
+  }
+
   const { data, error } = await sb.from("gw_contracts")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).select("*").maybeSingle();
   if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
   if (!data) return json(res, 404, { error: "contract_not_found" });
+
+  if (correction) {
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "contract.correct",
+      target: `employee:${data.employee_id}`,
+      detail: { contractId: data.id, status: data.status, reason: correction.reason, changes: correction.changes },
+    });
+  }
   return json(res, 200, { contract: shapeContract(data) });
+}
+
+/** 変更前・変更後を、履歴に残せる形で拾う（同じ値は含めない） */
+function diffFields(before, patch) {
+  const out = [];
+  for (const [key, next] of Object.entries(patch)) {
+    const prev = before[key] ?? null;
+    const nextV = next ?? null;
+    if (JSON.stringify(prev) === JSON.stringify(nextV)) continue;
+    out.push({ field: key, before: prev, after: nextV });
+  }
+  return out;
 }
 
 /**
