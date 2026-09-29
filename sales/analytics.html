@@ -14,12 +14,13 @@
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
-    .an-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(440px,1fr)); gap:18px; }
-    .an-grid .sl-table td.num, .an-grid .sl-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    /* 表は売上の3列を足して8列になったので、1段に1つ（横幅いっぱい）にする。数字は折り返さない */
+    .an-grid { display:grid; grid-template-columns:1fr; gap:22px; }
+    .an-grid .sl-table td.num, .an-grid .sl-table th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .an-grid .sl-table td:first-child { min-width:9em; }
     .an-grid .sl-table td.key, .an-grid .sl-table th.key { background:#f8f9fc; font-weight:700; }
     .an-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
     .an-links a { color:#4a5068; }
-    @media (max-width: 760px) { .an-grid { grid-template-columns:1fr; } }
 
     /* 上部ファネル：アイコン＋四角いマスの6枚（アタック・クリック・返信・商談・成約・売上）。
        数字を主役にし、率は「分子 / 分母」つきで下に小さく。押すと対象の企業・案件を右に出す */
