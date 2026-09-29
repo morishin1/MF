@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>書類プレビュー - EIGHT HR</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260929b">
+  <style>
+    /* 書類をじっくり読むための別タブ。応募者の情報（HR画面）とは役割を分ける */
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .dp-head { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:12px 20px;
+      border-bottom:1px solid #e2e2dc; background:#fff; }
+    .dp-head .who { font-size:18px; font-weight:700; color:#1b2440; }
+    .dp-head .what { font-size:13px; color:#4a5068; }
+    .dp-head .what b { display:inline-block; background:#1b2440; color:#fff; border-radius:999px; padding:2px 10px;
+      font-size:12px; margin-right:8px; }
+    .dp-head .act { margin-left:auto; display:flex; gap:8px; }
+    .dp-body { height:calc(100vh - var(--dp-top, 140px)); background:#525659; }
+    .dp-body iframe, .dp-body embed { width:100%; height:100%; border:0; display:block; }
+    .dp-body.img { overflow:auto; background:#f2f2ee; display:flex; justify-content:center; }
+    .dp-body.img img { max-width:100%; height:auto; align-self:flex-start; }
+    .dp-msg { max-width:640px; margin:40px auto; padding:0 20px; }
+    .dp-note { font-size:12px; color:#6b7080; padding:6px 20px; background:#fff; border-top:1px solid #e2e2dc; }
+  </style>
+</head>
+<body>
+
+<div id="dp-head" class="dp-head hidden">
+  <div>
+    <div class="who" id="dp-name"></div>
+    <div class="what" id="dp-what"></div>
+  </div>
+  <div class="act">
+    <button class="btn btn-secondary btn-sm" id="dp-download" onclick="download(this)">
+      <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
+  </div>
+</div>
+<div id="dp-body"><div class="dp-msg"><div class="empty">読み込み中…</div></div></div>
+<div class="dp-note hidden" id="dp-note">
+  履歴書・職務経歴書は個人情報です。このページのURLは採用HRの権限がある人だけが開けます（表示用のリンクは数分で切れます）。
+</div>
+
+<script src="../js/api-client.js?v=20260929b"></script>
+<script src="../js/layout.js?v=20260929b"></script>
+<script src="../js/hr-layout.js?v=20260929b"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // /hr/document.html?applicant=<応募者ID>&doc=<書類ID>
+  const q = new URLSearchParams(location.search);
+  const applicantId = q.get("applicant");
+  const docId = q.get("doc");
+  let info = null;
+
+  // 採用HRの権限（経営者・人事・採用担当）が無い人は、HR画面と同じくここで入れない
+  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) load(); });
+
+  function fail(text) {
+    el("dp-body").innerHTML = `<div class="dp-msg"><div class="banner err"><span class="material-symbols-outlined">error</span>
+      <div>${esc(text)}</div></div></div>`;
+  }
+
+  async function load() {
+    if (!applicantId || !docId) return fail("書類が指定されていません。応募者の「書類」タブから開いてください。");
+    try { info = await API.hrDocumentUrl(docId, false, applicantId); }
+    catch (e) {
+      return fail(e.status === 403 ? "この書類を見る権限がありません。"
+        : e.status === 404 ? "書類が見つかりません（削除された可能性があります）。" : (e.hint || e.message || "開けませんでした"));
+    }
+    document.title = `${info.docTypeLabel} ${info.applicantName || ""} - EIGHT HR`;
+    el("dp-name").textContent = info.applicantName || "";
+    el("dp-what").innerHTML = `<b>${esc(info.docTypeLabel)}</b>${esc(info.filename || "")}`;
+    el("dp-head").classList.remove("hidden");
+    el("dp-note").classList.remove("hidden");
+    // EIGHT / HR の帯と見出しの下から、画面の下まで（注記の分を引く）
+    const top = el("dp-head").getBoundingClientRect().bottom + el("dp-note").offsetHeight;
+    document.documentElement.style.setProperty("--dp-top", `${Math.ceil(top)}px`);
+
+    const body = el("dp-body");
+    const mime = info.mimeType || "";
+    if (/pdf/.test(mime)) {
+      // ブラウザ標準のPDFビューアで、画面いっぱいに
+      body.className = "dp-body";
+      body.innerHTML = `<iframe id="dp-frame" title="${esc(info.docTypeLabel)}" src="${esc(info.url)}" referrerpolicy="no-referrer"></iframe>`;
+    } else if (/image/.test(mime)) {
+      body.className = "dp-body img";
+      body.innerHTML = `<img id="dp-img" alt="${esc(info.docTypeLabel)}" src="${esc(info.url)}" referrerpolicy="no-referrer">`;
+    } else {
+      // Word はブラウザで表示できない
+      body.className = "";
+      body.innerHTML = `<div class="dp-msg"><div class="banner info"><span class="material-symbols-outlined">description</span>
+        <div>この形式（Word）はブラウザで表示できません。「ダウンロード」から保存して開いてください。</div></div></div>`;
+    }
+  }
+
+  async function download(btn) {
+    try {
+      const r = await KPLayout.busy(btn, "準備中…", () => API.hrDocumentUrl(docId, true, applicantId));
+      location.href = r.url;
+    } catch (e) { alert(e.hint || e.message || "保存できませんでした"); }
+  }
+</script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 // 採用の応募書類（履歴書・職務経歴書・その他）
 //
 // GET    /api/hr/documents?applicantId=…            … 種類ごとの最新と、過去の版
-// GET    /api/hr/documents?id=…[&download=1]        … 見る・保存するための URL（数分だけ有効）
+// GET    /api/hr/documents?id=…[&applicantId=…][&download=1]
+//                                                  … 見る・保存するための URL（数分だけ有効）。
+//                                                    書類プレビュー（hr/document.html・別タブ）もこれを使う
 // POST   /api/hr/documents {action:"upload", applicantId, docType, mimeType, sizeBytes}
 //                                                  … 置き場所（signed upload URL）を出す
 // POST   /api/hr/documents {action:"attach", applicantId, docType, path, filename}
@@ -44,7 +46,7 @@ export default async function handler(req, res) {
 
   const sb = admin();
   try {
-    if (req.method === "GET") return await read(req, res, sb, ctx);
+    if (req.method === "GET") return await read(req, res, sb, ctx, user);
     if (req.method === "POST") return await act(req, res, sb, ctx, user);
     if (req.method === "DELETE") return await remove(req, res, sb, ctx, user);
   } catch (e) {
@@ -70,9 +72,9 @@ const view = (r, names) => ({
   uploadedAt: r.created_at, uploadedByName: names.get(r.uploaded_by) || null,
 });
 
-async function read(req, res, sb, ctx) {
+async function read(req, res, sb, ctx, user) {
   const q = new URL(req.url, "http://localhost").searchParams;
-  if (q.get("id")) return fileUrl(res, sb, ctx, q.get("id"), q.get("download") === "1");
+  if (q.get("id")) return fileUrl(res, sb, ctx, user, q.get("id"), q.get("download") === "1", q.get("applicantId"));
 
   const a = await loadApplicant(sb, ctx, q.get("applicantId"));
   if (!a) return json(res, 404, { error: "not_found" });
@@ -98,13 +100,25 @@ async function read(req, res, sb, ctx) {
   });
 }
 
-async function fileUrl(res, sb, ctx, id, download) {
+async function fileUrl(res, sb, ctx, user, id, download, applicantId) {
   const r = await must(sb.from("gw_hr_documents").select(FIELDS).eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle());
   if (!r || r.deleted_at) return json(res, 404, { error: "not_found" });
+  // プレビューのURL（?applicant=…&doc=…）で、別の応募者の書類を指していないか
+  if (applicantId && r.applicant_id !== applicantId) return json(res, 404, { error: "not_found" });
+  const a = await loadApplicant(sb, ctx, r.applicant_id);
   const { data, error } = await sb.storage.from(BUCKET)
     .createSignedUrl(r.storage_path, TTL, download ? { download: r.filename } : undefined);
   if (error) return json(res, 404, { error: "file_missing", detail: error.message });
-  return json(res, 200, { url: data.signedUrl, filename: r.filename, mimeType: r.mime_type, download, expiresIn: TTL });
+  // 誰がいつ見た・保存したか（URL は残さない）
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: download ? "hr.document.download" : "hr.document.view",
+    target: `hr_applicant:${r.applicant_id}`, detail: { documentId: r.id, docType: r.doc_type },
+  });
+  return json(res, 200, {
+    url: data.signedUrl, filename: r.filename, mimeType: r.mime_type, download, expiresIn: TTL,
+    applicantId: r.applicant_id, applicantName: a?.name || null,
+    docType: r.doc_type, docTypeLabel: docTypeLabel(r.doc_type),
+  });
 }
 
 async function act(req, res, sb, ctx, user) {
