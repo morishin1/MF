@@ -54,6 +54,8 @@ create table if not exists public.gw_timesheets (
   ai_model            text,
   ai_read_at          timestamptz,
   ai_message          text,
+  sheet_employee_name text,
+  read_warnings       jsonb not null default '[]'::jsonb,
   sheet_total_min     integer
     check (sheet_total_min is null or (sheet_total_min >= 0 and sheet_total_min <= 44640)),
 
@@ -91,6 +93,8 @@ create table if not exists public.gw_timesheets (
 comment on table public.gw_timesheets is
   '月 × 人 × 現場契約の勤務表。AI読取は下書き（draft）を作るだけで、確定（confirmed）は人が確認したあと。'
   '月の集計は日別（gw_timesheet_days）から API が計算して保存する';
+comment on column public.gw_timesheets.read_warnings is
+  'AI読取のときの注意 [{code, text}]（休憩欄が無い・氏名が違う・締め日が月末ではない、など）。確認画面の上に出す';
 comment on column public.gw_timesheets.review_seconds is
   '人が確認画面に費やした秒数（AIの精度ではなく、確認にかかる時間を測るため）';
 comment on column public.gw_timesheets.edit_count is
