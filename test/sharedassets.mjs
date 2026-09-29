@@ -20,6 +20,11 @@
 //   2. 前の版（20260916m）で読んでいる画面が残っていない
 //      （評価・キャリア・印鑑でこの3つの中身を変えたため、版を上げた）
 //   3. 画面が呼ぶ API.xxx が api-client.js に実在する
+//   4. 画面が呼ぶ API.xxx が「その画面が読んでいる版」に入っている（test/asset-versions.json）
+//      PR #31 で API.focusSelect を足したのに、日報（nippo.html）は ?v=20260928h のままだった。
+//      20260928h をキャッシュしているブラウザでは「API.focusSelect is not a function」になる。
+//      3 は「いまのファイルにあるか」しか見ないので、これを見逃した。
+//      本番に出た版ごとの関数一覧を test/asset-versions.json に残し、画面ごとに照らし合わせる
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
@@ -90,6 +95,39 @@ for (const p of pages) {
 }
 const missing = [...called].filter(([fn]) => typeof API?.[fn] !== "function").map(([fn, p]) => `${fn}（${p}）`);
 check(!missing.length, `画面が呼ぶ ${called.size} 個の API が全部ある${missing.length ? `（無い: ${missing.join(", ")}）` : ""}`);
+
+
+console.log("\n— 画面が呼ぶ API.xxx が、その画面の読んでいる版に入っているか（test/asset-versions.json） —");
+{
+  const reg = JSON.parse(read("test/asset-versions.json"))["api-client.js"];
+  const current = new Set(Object.keys(API || {}).filter((k) => typeof API[k] === "function"));
+  const re = /[/"]api-client\.js\?v=([^"&]+)"/;
+  const stale = [];
+  const unknown = new Set();
+  for (const p of pages) {
+    const src = read(p);
+    const ver = (src.match(re) || [])[1];
+    if (!ver) continue;
+    const known = reg[ver];
+    if (!known) { unknown.add(`${ver}（${p}）`); continue; }
+    const have = new Set(known.functions);
+    const uses = [...new Set([...src.matchAll(/\bAPI\.([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))];
+    const missing = uses.filter((fn) => !have.has(fn));
+    if (missing.length) stale.push(`${p}（?v=${ver}）: ${missing.join(", ")}`);
+  }
+  check(!unknown.size, `画面が読む api-client.js の版は、すべて test/asset-versions.json にある`
+    + (unknown.size ? `（無い: ${[...unknown].join(", ")}。新しい版なら、その版の関数一覧を足してください）` : ""));
+  check(!stale.length, `画面が呼ぶ API.xxx は、その画面が読んでいる版に入っている（古い版のキャッシュで is not a function にならない）`
+    + (stale.length ? `\n     版の古い画面: ${stale.join(" / ")}\n     → その画面の ?v= を、関数を含む新しい版へ上げてください` : ""));
+  // 一覧に書いた関数は、いまの api-client.js からも消えていない（消すと、その版の画面が壊れる）
+  const gone = Object.entries(reg).flatMap(([v, x]) => x.functions.filter((fn) => !current.has(fn)).map((fn) => `${fn}（${v}）`));
+  check(!gone.length, `記録した版の関数は、いまの api-client.js にも残っている${gone.length ? `（消えた: ${gone.slice(0, 10).join(", ")}）` : ""}`);
+  // 最新の版の一覧は、いまの api-client.js と同じ（関数を足したのに一覧を足し忘れていない）
+  const latest = Object.entries(reg).at(-1);
+  const extra = [...current].filter((fn) => !latest[1].functions.includes(fn));
+  check(!extra.length, `いちばん新しい版（${latest[0]}）の一覧が、いまの api-client.js と同じ`
+    + (extra.length ? `（一覧に無い関数: ${extra.join(", ")}。新しい版を足して、使う画面の ?v= を上げてください）` : ""));
+}
 
 console.log(bad ? `\n${bad} 件 NG` : "\n共有ファイルの版と API はそろっています");
 process.exit(bad ? 1 : 0);
