@@ -181,6 +181,26 @@ console.log("\n— DB の関数も同じ役割 —");
   }
   check(!/for (all|insert|update|delete)/i.test(office100), "db/100 は書き込みのポリシーを足さない（読み取りだけ）");
   check(!/gw_is_hr|is_tenant_staff|gw_is_recruiting/.test(office100), "db/100 は人事・会計の管理者に広げない（方針A）");
+
+  // Phase 3 の新しい表（101〜103）：読み取りだけを Office 権限に絞る。書き込みは API（service_role）だけ
+  const phase3 = {
+    "db/101_office_timesheet_base.sql": ["gw_office_events"],
+    "db/102_office_contract_terms.sql": ["gw_site_contract_terms"],
+    "db/103_office_timesheets.sql": ["gw_timesheets", "gw_timesheet_days"],
+  };
+  for (const [file, tables] of Object.entries(phase3)) {
+    // コメント（「--」と「comment on … '説明文';」）は SQL の実体ではないので外して見る
+    const sql = read(file).replace(/--.*$/gm, "").replace(/comment\s+on\s[^;]*;/gi, "");
+    for (const t of tables) {
+      check(new RegExp(`alter table public\\.${t}\\s+enable row level security;`).test(sql), `${file}：${t} の RLS を有効にしている`);
+      const re = new RegExp(`create policy ${t}_office_select on public\\.${t}\\s+for select using \\(public\\.gw_is_office\\(tenant_id\\)\\);`);
+      check(re.test(sql), `${file}：${t} は Office 権限（gw_is_office）の読み取りポリシーだけ`);
+    }
+    check(!/for (all|insert|update|delete)/i.test(sql), `${file} は書き込みのポリシーを足さない（書き込みは API だけ）`);
+    check(!/gw_is_hr|is_tenant_staff|gw_is_recruiting|gw_is_sales|gw_is_keiei/.test(sql), `${file} は人事・営業・経営・会計の管理者に広げない`);
+    check(!/\bunit_price\b|settlement_condition|alter table public\.gw_site_contracts/i.test(sql),
+      `${file} は gw_site_contracts（unit_price・settlement_condition）に触れない`);
+  }
 }
 
 console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られている —");
