@@ -34,7 +34,8 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canRecruit, canDecideHire } from "../../lib/gw.js";
+import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../lib/gw.js";
+import { guardSalaryOutput } from "../../lib/salary.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -74,6 +75,9 @@ export default async function handler(req, res) {
   if (!(await requireMfa(req, res, ctx, user))) return;
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canManageCareer(ctx)) return json(res, 403, { error: "forbidden" });
+  // 給与（現在給与・給与レンジ・昇給の判断）は、見られる人（lib/gw.js canSeeSalary）にだけ返す。
+  // 責任者は、部下の評価・キャリアは扱えるが、給与は見えない（この応答から外れる）
+  guardSalaryOutput(res, canSeeSalary(ctx));
 
   try {
     if (req.method === "GET") return await read(req, res, ctx);
@@ -607,7 +611,9 @@ async function saveLevel(res, sb, ctx, user, b) {
   const row = await upsert(sb, "gw_career_levels", ctx, b.id, {
     track_id: track.id, level_no: levelNo, level_name: levelName,
     role_summary: str(b.roleSummary, 200), expected_role: str(b.expectedRole), typical_months: int(b.typicalMonths),
-    salary_min: salaryMin, salary_max: salaryMax, next_level_summary: str(b.nextLevelSummary, 300),
+    // 給与レンジは、見られない人は書き換えない（見えていない値を null で上書きしてしまわないため）
+    ...(canSeeSalary(ctx) ? { salary_min: salaryMin, salary_max: salaryMax } : {}),
+    next_level_summary: str(b.nextLevelSummary, 300),
     is_active: b.isActive !== false, sort_order: int(b.sortOrder) ?? levelNo,
   });
   if (!row) return json(res, 404, { error: "not_found" });
@@ -710,9 +716,14 @@ async function saveReview(res, sb, ctx, user, b) {
     criterion_results: results,
     evidence_summary: b.evidenceSummary && typeof b.evidenceSummary === "object" ? b.evidenceSummary : null,
     system_judgement: judgement,
-    employee_comment: str(b.employeeComment), manager_comment: str(b.managerComment), salary_note: str(b.salaryNote),
+    employee_comment: str(b.employeeComment), manager_comment: str(b.managerComment),
     result: REVIEW_RESULT_KEYS.includes(b.result) ? b.result : null,
-    salary_decision: SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none",
+    // 給与の調整（メモ・昇給の判断）は、見られる人だけが書ける。
+    // 見られない人（責任者）が保存しても、すでに入っている値は消えない
+    ...(canSeeSalary(ctx) ? {
+      salary_note: str(b.salaryNote),
+      salary_decision: SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none",
+    } : {}),
     updated_at: now(),
   };
   let row;
@@ -748,15 +759,18 @@ async function confirmReview(res, sb, ctx, user, b) {
   if (!REVIEW_RESULT_KEYS.includes(result)) {
     return json(res, 400, { error: "no_result", hint: "最終判断（現Level継続・Level Up・保留）を選んでください" });
   }
-  const salaryDecision = SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none";
+  // 昇給の判断は、給与を見られる人だけが決める。見られない人が確定しても、値は動かさない
+  const salaryOk = canSeeSalary(ctx);
+  const salaryDecision = salaryOk && SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none";
   if (result === "level_up" && !target) return json(res, 400, { error: "no_target", hint: "上の Level がありません" });
 
   const decidedAt = now();
   const saved = await must(sb.from("gw_career_reviews").update({
-    status: "confirmed", result, salary_decision: salaryDecision,
+    status: "confirmed", result,
+    ...(salaryOk ? { salary_decision: salaryDecision } : {}),
     decided_by: user.id, decided_at: decidedAt, updated_at: decidedAt,
     ...(b.managerComment !== undefined ? { manager_comment: str(b.managerComment) } : {}),
-    ...(b.salaryNote !== undefined ? { salary_note: str(b.salaryNote) } : {}),
+    ...(salaryOk && b.salaryNote !== undefined ? { salary_note: str(b.salaryNote) } : {}),
   }).eq("id", rv.id).eq("status", "draft").select("*").maybeSingle());
   if (!saved) return json(res, 409, { error: "already_confirmed" });
 

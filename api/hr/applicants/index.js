@@ -7,7 +7,8 @@
 import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
+import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
@@ -29,14 +30,16 @@ export default async function handler(req, res) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す。採用担当・責任者には返さない
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
 
-  if (req.method === "GET") return list(req, res, sb, ctx);
-  if (req.method === "POST") return create(req, res, sb, ctx, user);
+  if (req.method === "GET") return list(req, res, sb, ctx, salary);
+  if (req.method === "POST") return create(req, res, sb, ctx, user, salary);
   return methodNotAllowed(res, ["GET", "POST"]);
 }
 
-async function list(req, res, sb, ctx) {
-  const { data, error } = await sb.from("gw_hr_applicants").select(FIELDS)
+async function list(req, res, sb, ctx, salary) {
+  const { data, error } = await sb.from("gw_hr_applicants").select(salary ? FIELDS : withoutColumns(FIELDS))
     .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(1000);
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -79,12 +82,15 @@ async function list(req, res, sb, ctx) {
     employees: employees || [],
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
+    // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
+    salaryVisible: salary,
   });
 }
 
-async function create(req, res, sb, ctx, user) {
+async function create(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
-  const row = normalizeApplicant(body);
+  // 給与を見られない人は、給与の欄を書き込めない
+  const row = normalizeApplicant(salary ? body : dropSalaryInput(body));
   if (row.error) return json(res, 400, row);
   // 担当：選ばれていなければ、登録した本人（lib/hr-recruiter.js）。選ばれていれば同じ会社の在籍者か確かめる
   if (row.value.recruiter_id === undefined) {
@@ -97,7 +103,7 @@ async function create(req, res, sb, ctx, user) {
 
   const { data, error } = await sb.from("gw_hr_applicants")
     .insert({ ...row.value, tenant_id: ctx.tenantId, created_by: user.id })
-    .select(FIELDS).single();
+    .select(salary ? FIELDS : withoutColumns(FIELDS)).single();
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 503, { error: "not_ready", message: hint });

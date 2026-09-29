@@ -22,10 +22,11 @@
 
 import { json, readJson, methodNotAllowed } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canDecideHire } from "../../../lib/gw.js";
+import { gwContext, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { advancePrefill, isAdvanceClaimStale } from "../../../lib/hr.js";
+import { guardSalaryOutput } from "../../../lib/salary.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -36,6 +37,8 @@ export default async function handler(req, res) {
   if (!canDecideHire(ctx)) return json(res, 403, { error: "forbidden", hint: "本採用へ進められるのは社長・管理者だけです" });
 
   const sb = userClient(req);
+  // 事前入力に給与が入る。見られる人（lib/gw.js canSeeSalary）にだけ返す
+  guardSalaryOutput(res, canSeeSalary(ctx));
 
   if (req.method === "GET") return prefill(req, res, sb, ctx);
   if (req.method === "POST") return claim(req, res, sb, ctx, user);

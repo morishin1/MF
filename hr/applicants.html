@@ -602,7 +602,7 @@
           <div><dt>最新評価</dt><dd>${ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : "まだありません"}</dd></div>
           <div><dt>雇用形態</dt><dd>${esc(a.employmentType || "—")}</dd></div>
           <div><dt>入社予定日</dt><dd>${esc(a.joinDate || "—")}</dd></div>
-          <div><dt>給与</dt><dd>${a.wageAmount ? `${esc(a.wageType || "")} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : "—"}</dd></div>
+          ${detail.salaryVisible === false ? "" : `<div><dt>給与</dt><dd>${a.wageAmount ? `${esc(a.wageType || "")} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : "—"}</dd></div>`}
           <div><dt>勤務地</dt><dd>${esc(a.workLocation || "—")}</dd></div>
         </dl>
         ${missing.length ? `<p class="muted" style="font-size:12px;margin:12px 0 0;">
@@ -1372,8 +1372,10 @@ ${url}
         <label style="margin-top:10px;">契約形態</label><input id="of-contract" type="text" value="${v("contractType", a.contractType)}">
         <label style="margin-top:10px;">契約期間満了日（有期のみ）</label><input id="of-contractend" type="date" value="${v("contractEndDate", a.contractEndDate)}">
         <label style="margin-top:10px;">試用期間（月）</label><input id="of-prob" type="number" value="${v("probationMonths", a.probationMonths)}">
+        ${detail.salaryVisible === false ? `
+        <p class="hr-sub" style="margin:10px 0 0;">給与・報酬は、権限のある方が入力・確認します（応募者に入っている条件が、そのまま合格通知に入ります）。</p>` : `
         <label style="margin-top:10px;">給与区分</label><input id="of-wagetype" type="text" value="${v("wageType", a.wageType)}">
-        <label style="margin-top:10px;">給与・報酬</label><input id="of-wage" type="number" value="${v("wageAmount", a.wageAmount)}">
+        <label style="margin-top:10px;">給与・報酬</label><input id="of-wage" type="number" value="${v("wageAmount", a.wageAmount)}">`}
         <label style="margin-top:10px;">勤務時間（週）</label><input id="of-hours" type="number" step="0.5" value="${v("weeklyHours", a.weeklyHours)}">
         <label style="margin-top:10px;">勤務地</label><input id="of-loc" type="text" value="${v("workLocation", a.workLocation)}">
         <label style="margin-top:10px;">回答期限 <span style="color:#b3261e;">*</span></label>
@@ -1395,8 +1397,9 @@ ${url}
       contractType: el("of-contract").value.trim() || undefined,
       contractEndDate: el("of-contractend").value || undefined,
       probationMonths: el("of-prob").value || undefined,
-      wageType: el("of-wagetype").value.trim() || undefined,
-      wageAmount: el("of-wage").value || undefined,
+      // 給与の欄が無い（給与を見られない）ときは送らない
+      wageType: el("of-wagetype")?.value.trim() || undefined,
+      wageAmount: el("of-wage")?.value || undefined,
       weeklyHours: el("of-hours").value || undefined,
       workLocation: el("of-loc").value.trim() || undefined,
       messageToCandidate: el("of-message").value.trim() || undefined,

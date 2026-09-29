@@ -9,7 +9,8 @@
 
 import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canDecideHire } from "../../lib/gw.js";
+import { gwContext, canDecideHire, canSeeSalary } from "../../lib/gw.js";
+import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
 import { userClient } from "../../lib/supabase.js";
 import { shapeApplicant, shapeInterview } from "../../lib/hr.js";
 
@@ -31,7 +32,9 @@ export default async function handler(req, res) {
   if (!canDecideHire(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
-  const { data, error } = await sb.from("gw_hr_applicants").select(FIELDS)
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
+  const { data, error } = await sb.from("gw_hr_applicants").select(salary ? FIELDS : withoutColumns(FIELDS))
     .eq("tenant_id", ctx.tenantId).in("stage", RELEVANT_STAGES).limit(500);
   if (error) {
     const hint = dbSetupHint(error, SQL);

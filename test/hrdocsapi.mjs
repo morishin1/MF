@@ -115,7 +115,7 @@ const OTHER = { userId: "u-o", tenantId: "t2", isAdmin: true, isHr: true, roles:
 let who = RECRUITER;
 const real = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
-  namedExports: { gwContext: async () => who, canRecruit: real.canRecruit, canManageHr: real.canManageHr },
+  namedExports: { gwContext: async () => who, canRecruit: real.canRecruit, canManageHr: real.canManageHr, canSeeSalary: real.canSeeSalary },
 });
 
 const { default: docsApi } = await import(atRoot("api/hr/documents.js"));

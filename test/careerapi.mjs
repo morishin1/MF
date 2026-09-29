@@ -1064,5 +1064,100 @@ await ok("同じ人について、一覧・管理者の詳細・本人のホー�
   assert.ok(!JSON.stringify(home).includes("admin-"), "本人に admin-*.html を返さない");
 });
 
+console.log("\n— 給与は、見られる人にだけ（責任者には見せない・書かせない） —");
+
+// 応答のどこかに、給与のキーがあるか（キー名の完全一致で見る。labels.salaryDecisions のような、
+// 選択肢の名前の表は給与の値ではない）
+const SALARY_KEY_NAMES = new Set(["wageAmount", "wageType", "wageNote", "currentWage", "salaryMin", "salaryMax",
+  "salaryDecision", "salaryNote", "salary_decision", "salary_note", "salary_min", "salary_max", "wage_amount", "wage_type"]);
+const hasSalaryKey = (o) => {
+  if (Array.isArray(o)) return o.some(hasSalaryKey);
+  if (o && typeof o === "object") return Object.entries(o).some(([k, v]) => SALARY_KEY_NAMES.has(k) || hasSalaryKey(v));
+  return false;
+};
+
+await ok("責任者は、部下の評価・キャリアは扱えるが、給与（現在給与・給与レンジ・給与メモ）は返らない", async () => {
+  setup();
+  await seedAndSet();
+  who = OWNER;
+  await draftAll("achieved");                       // 給与の調整メモ「+2万を想定」つきの下書き
+  db.rows.gw_career_reviews[0].salary_decision = "raise";
+  who = MANAGER;
+  const list = await get();
+  assert.equal(list.statusCode, 200, JSON.stringify(list.body));
+  assert.deepEqual(list.body.people.map((p) => p.employee.id), ["e-taro"], "自分が上長の人は、これまでどおり見える");
+  assert.equal(hasSalaryKey(list.body), false, "一覧に給与が無い");
+  const d = await get("?employeeId=e-taro");
+  assert.equal(d.statusCode, 200, JSON.stringify(d.body));
+  assert.equal(hasSalaryKey(d.body), false, "詳細に給与が無い（現在給与・次のレンジ・給与メモ・昇給の判断）");
+  assert.ok(d.body.nextLevel && d.body.nextLevel.levelNo === 2, "給与以外の Level・基準は、これまでどおり見える");
+  const m = await get("?master=1");
+  assert.equal(hasSalaryKey(m.body), false, "マスタに給与レンジが無い");
+  const h = await get("?history=1");
+  assert.equal(hasSalaryKey(h.body), false, "評価履歴に昇給の判断が無い");
+  const raw = JSON.stringify([list.body, d.body, m.body, h.body]);
+  for (const n of ["240000", "260000", "300000", "+2万"]) assert.ok(!raw.includes(n), `${n} がどこにも出ていない`);
+});
+
+await ok("人事・経営者・管理者（段階1）には、これまでどおり給与が返る", async () => {
+  setup();
+  await seedAndSet();
+  for (const c of [HR, OWNER, ADMIN]) {
+    who = c;
+    const d = await get("?employeeId=e-taro");
+    assert.equal(d.body.currentWage.wageAmount, 240000, JSON.stringify(c.roles));
+    assert.equal(d.body.nextLevel.salaryMin, 260000);
+  }
+});
+
+await ok("責任者が評価の下書きを保存しても、すでに入っている昇給の判断・給与メモは消えない", async () => {
+  setup();
+  await seedAndSet();
+  who = HR;
+  await draftAll("achieved");
+  const rv = db.rows.gw_career_reviews[0];
+  rv.salary_decision = "raise";
+  rv.salary_note = "社内：+2万を想定";
+  who = MANAGER;
+  const r = await act({ action: "saveReview", id: rv.id, employeeId: "e-taro", managerComment: "上長のコメントを直しました",
+    salaryDecision: "none", salaryNote: "書き換えようとした" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const after = db.rows.gw_career_reviews.find((x) => x.id === rv.id);
+  assert.equal(after.manager_comment, "上長のコメントを直しました", "給与以外は保存できる");
+  assert.equal(after.salary_decision, "raise", "見えていない昇給の判断を、上書きしない");
+  assert.equal(after.salary_note, "社内：+2万を想定");
+  assert.equal(hasSalaryKey(r.body), false);
+});
+
+await ok("段階2（SALARY_OWNER_ONLY=1）: 経営者だけに返る。人事・管理者には返らず、Level を直しても給与レンジは消えない", async () => {
+  setup();
+  const { trackId, l1 } = await seedAndSet();
+  process.env.SALARY_OWNER_ONLY = "1";
+  try {
+    who = HR;
+    assert.equal(hasSalaryKey((await get("?employeeId=e-taro")).body), false);
+    who = ADMIN;
+    assert.equal(hasSalaryKey((await get()).body), false);
+    // 管理者が Level の名前を直す。給与レンジは見えていないので、null で上書きされてはいけない
+    const r = await act({ action: "saveLevel", id: l1.id, trackId, levelNo: 1, levelName: "新しい名前" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    const row = db.rows.gw_career_levels.find((x) => x.id === l1.id);
+    assert.equal(row.level_name, "新しい名前");
+    assert.equal(row.salary_min, 220000);
+    assert.equal(row.salary_max, 250000);
+    who = OWNER;
+    const d = await get("?employeeId=e-taro");
+    assert.equal(d.body.currentWage.wageAmount, 240000, "経営者には、段階2でも返る");
+  } finally { delete process.env.SALARY_OWNER_ONLY; }
+});
+
+await ok("本人は、これまでどおり自分の現在給与だけを見られる", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const r = await mine();
+  assert.equal(r.body.currentWage.wageAmount, 240000);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

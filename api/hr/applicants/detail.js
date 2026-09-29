@@ -4,7 +4,8 @@
 import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit, canDecideHire } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
+import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
@@ -29,17 +30,19 @@ export default async function handler(req, res) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す。採用担当・責任者には返さない
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
 
-  if (req.method === "GET") return one(req, res, sb, ctx);
-  if (req.method === "PATCH") return update(req, res, sb, ctx, user);
+  if (req.method === "GET") return one(req, res, sb, ctx, salary);
+  if (req.method === "PATCH") return update(req, res, sb, ctx, user, salary);
   return methodNotAllowed(res, ["GET", "PATCH"]);
 }
 
-async function one(req, res, sb, ctx) {
+async function one(req, res, sb, ctx, salary) {
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
 
-  const { data: a, error } = await sb.from("gw_hr_applicants").select(FIELDS)
+  const { data: a, error } = await sb.from("gw_hr_applicants").select(salary ? FIELDS : withoutColumns(FIELDS))
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -90,7 +93,9 @@ async function one(req, res, sb, ctx) {
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
     })),
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
-    offers: (offers || []).map(shapeOffer),
+    offers: (offers || []).map((o) => shapeOffer(o)),
+    // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
+    salaryVisible: salary,
   });
 }
 
@@ -99,10 +104,11 @@ async function one(req, res, sb, ctx) {
 // 両方とも decision 列を書くので、区別は「社長判断待ちから動かすかどうか」で見る
 const CEO_DECISION_FIELDS = ["decision", "decisionNote", "holdReason", "holdNextStep"];
 
-async function update(req, res, sb, ctx, user) {
+async function update(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
-  const row = normalizeApplicant(body, { partial: true });
+  // 給与を見られない人は、給与の欄を書き換えられない（見えていない値を上書きしてしまわないため）
+  const row = normalizeApplicant(salary ? body : dropSalaryInput(body), { partial: true });
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
   if ("recruiter_id" in row.value) {
@@ -120,7 +126,7 @@ async function update(req, res, sb, ctx, user) {
 
   const { data, error } = await sb.from("gw_hr_applicants")
     .update({ ...row.value, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(FIELDS).maybeSingle();
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(salary ? FIELDS : withoutColumns(FIELDS)).maybeSingle();
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   if (!data) return json(res, 404, { error: "not_found" });
 

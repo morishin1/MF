@@ -20,7 +20,8 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
+import { guardSalaryOutput, dropSalaryInput } from "../../../lib/salary.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
@@ -46,13 +47,16 @@ export default async function handler(req, res) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す・書かせる。
+  // 採用担当・責任者は、給与が見えないまま合格通知を作れる（応募者の条件は、サーバ側でそのまま引き継ぐ）
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
 
-  if (req.method === "POST") return create(req, res, sb, ctx, user);
-  if (req.method === "PATCH") return act(req, res, sb, ctx, user);
+  if (req.method === "POST") return create(req, res, sb, ctx, user, salary);
+  if (req.method === "PATCH") return act(req, res, sb, ctx, user, salary);
   return methodNotAllowed(res, ["POST", "PATCH"]);
 }
 
-async function create(req, res, sb, ctx, user) {
+async function create(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.applicantId) return json(res, 400, { error: "invalid_body", required: ["applicantId"] });
 
@@ -63,7 +67,8 @@ async function create(req, res, sb, ctx, user) {
     return json(res, 409, { error: "invalid_state", hint: "いまは合格通知を作成できる状態ではありません" });
   }
 
-  const row = normalizeOffer(body, applicant);
+  // 給与を見られない人は、給与の欄を書き換えられない。応募者に入っている条件は、そのまま引き継ぐ
+  const row = normalizeOffer(salary ? body : dropSalaryInput(body), applicant);
   if (row.error) return json(res, 400, row);
 
   const { data: existing } = await sb.from("gw_hr_offers").select("version")
@@ -98,7 +103,7 @@ async function create(req, res, sb, ctx, user) {
   return json(res, 200, { offer: shapeOffer(data), status: "offer_review_pending" });
 }
 
-async function act(req, res, sb, ctx, user) {
+async function act(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
 
@@ -106,7 +111,7 @@ async function act(req, res, sb, ctx, user) {
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!offer) return json(res, 404, { error: "not_found" });
 
-  if (body.action === "update") return update(res, sb, ctx, user, offer, body);
+  if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body));
   if (body.action === "confirm") return confirm(res, sb, ctx, user, offer);
   if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer);
   if (body.action === "markSent") return markSent(res, sb, ctx, user, offer);
