@@ -233,7 +233,7 @@
       // 二段階認証が要るのに済んでいない。どの画面で起きても、登録の場所へ送る。
       // マイページの中では送らない（そこが登録の場所なので、回り続ける）
       if (err.code === "mfa_required" && !/mypage\.html/.test(location.pathname)) {
-        location.href = "mypage.html#mfa";
+        location.href = "/mypage.html#mfa";   // 絶対パス。/keiei/ など、サブディレクトリの画面から呼ばれても届く
       }
       throw err;
     }

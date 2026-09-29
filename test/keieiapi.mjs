@@ -10,6 +10,7 @@
 //   5. 取れるもの（経費・請求進捗・契約更新・在籍・成約件数）は正確に数える。人件費は「暫定」と明示
 //   6. 元データの表が未作成でも、落とさない。その項目だけ「データ未連携」になり、0 にはならない
 //   7. 全員の給与を返す人件費の閲覧は、履歴に残る（金額は残さない）
+//   8. 入社準備は、既存の入社手続きの段階を6ステップに並べたもの（金額は返さない・読めない表は「データ未連携」）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -30,6 +31,7 @@ function table(name) {
   const rows = () => (db.rows[name] || []).filter((r) => f.every(([op, k, v]) => {
     if (op === "eq") return r[k] === v;
     if (op === "in") return Array.isArray(v) && v.includes(r[k]);
+    if (op === "neq") return r[k] !== v;
     if (op === "gte") return r[k] != null && r[k] >= v;
     return true;
   }));
@@ -37,6 +39,7 @@ function table(name) {
     select(_cols, opts) { wantCount = Boolean(opts?.count); return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
+    neq(k, v) { f.push(["neq", k, v]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
     order() { return q; },
     limit() { return q; },
@@ -358,6 +361,173 @@ await ok("会計の画面は、このアプリの承認済み仕訳だけ（暫�
   assert.equal(r.body.journals.latestApprovedOn, "2026-09-10");
   assert.match(r.body.note, /このアプリで承認した仕訳だけ/);
   assert.equal(r.body.links.accounting, "/admin.html");
+});
+
+console.log("\n=== 入社準備（6ステップ。既存の段階の写像） ===\n");
+
+function setupOnboarding() {
+  setup();
+  const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  const emp = (id, name, status = "invited") => ({ id, tenant_id: "t1", display_name: name, department: "開発", position: "エンジニア", employment_type: "正社員", status, employee_kind: "proper", joined_on: null });
+  db.rows.gw_employees.push(
+    emp("e10", "山田 依頼前"), emp("e11", "佐藤 書類待ち", "active"), emp("e12", "鈴木 完了", "active"),
+    emp("e13", "高橋 昔に完了", "active"), emp("e14", "退職 者", "left"), emp("e15", "取消 者"),
+    { ...emp("e20", "他社 人"), tenant_id: "t2" },
+  );
+  const proc = (id, employee_id, extra = {}) => ({ id, tenant_id: "t1", employee_id, kind: "onboarding", status: "in_progress",
+    target_on: null, stage: null, stage_at: null, updated_at: daysAgo(1), created_at: daysAgo(10), ...extra });
+  db.rows.gw_procedures = [
+    proc("p10", "e10", { target_on: "2026-10-01" }),
+    proc("p11", "e11", { target_on: "2026-10-15" }),
+    proc("p12", "e12", { status: "done", stage_at: daysAgo(5) }),
+    proc("p13", "e13", { status: "done", stage_at: daysAgo(100), updated_at: daysAgo(100) }),
+    proc("p14", "e14"), proc("p15", "e15", { status: "cancelled" }),
+    { ...proc("p20", "e20"), tenant_id: "t2" },
+  ];
+  db.rows.gw_procedure_items = [
+    { id: "i1", procedure_id: "p11", item_key: "doc_id", owner: "employee", required: true, status: "todo" },
+    { id: "i2", procedure_id: "p11", item_key: "pc", owner: "hr", required: true, status: "todo" },
+  ];
+  // 金額は、どの表にあっても返らない（6ステップは状態だけ）
+  db.rows.gw_doc_orders = [
+    { employee_id: "e11", doc_kind: "employment", status: "signed", updated_at: daysAgo(3), wage_amount: 777777 },
+    { employee_id: "e12", doc_kind: "employment", status: "signed", updated_at: daysAgo(30), wage_amount: 777777 },
+  ];
+  db.rows.gw_sign_requests = [
+    { employee_id: "e11", doc_kind: "employment", status: "signed", sent_at: daysAgo(4) },
+    { employee_id: "e12", doc_kind: "employment", status: "signed", sent_at: daysAgo(30) },
+  ];
+  db.rows.gw_consent_docs = [{ id: "d1", tenant_id: "t1", doc_key: "pledge", title: "誓約書", version: "1.0", status: "active", major: true }];
+  db.rows.gw_onboard_consents = [
+    { employee_id: "e11", kind: "pledge", version: "1.0", agreed_at: daysAgo(3) },
+    { employee_id: "e12", kind: "pledge", version: "1.0", agreed_at: daysAgo(20) },
+  ];
+  db.rows.gw_onboard_profiles = [{ employee_id: "e11", status: "draft" }, { employee_id: "e12", status: "submitted" }];
+  db.rows.gw_orientation_items = [];
+  db.rows.gw_orientation_checks = [];
+  const career = (employee_id) => ({ employee_id, tenant_id: "t1", is_active: true, track_id: "t", current_level_id: "l",
+    one_year_target_note: "a", three_year_target_note: "b", next_review_on: "2027-04-01", agreed_at: daysAgo(2) });
+  // e13（昔に完了）はキャリアも済んでいる。済んでいなければ、⑤ が残っているので「完了」ではない
+  db.rows.gw_employee_careers = [career("e12"), career("e13")];
+  db.rows.gw_contracts.push({ employee_id: "e11", tenant_id: "t1", status: "active", wage_type: "月給", wage_amount: 777777, created_at: "2026-09-01" });
+}
+const row = (d, id) => d.rows.find((r) => r.employeeId === id);
+const stepOfRow = (r, key) => r.six.steps.find((s) => s.key === key);
+
+await ok("入社準備: 6ステップを、既存の段階から並べる（依頼前・本人の書類待ち・完了）", async () => {
+  setupOnboarding();
+  const r = await call("onboarding");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const d = r.body;
+  assert.equal(d.status, "exact");
+  assert.deepEqual(d.steps.map((s) => s.label), ["入社案内", "労働条件・契約", "本人情報・必要書類", "アカウント準備", "キャリア設計", "最終確認"]);
+
+  const a = row(d, "e10");
+  assert.equal(stepOfRow(a, "contract").state, "current");
+  assert.equal(stepOfRow(a, "contract").actor, "owner");
+  assert.equal(a.six.next.label, "労働条件の作成依頼待ち");
+  assert.equal(a.joinOn, "2026-10-01");
+
+  const b = row(d, "e11");
+  assert.equal(stepOfRow(b, "contract").state, "done");
+  assert.equal(stepOfRow(b, "info_docs").state, "current");
+  assert.equal(stepOfRow(b, "account").state, "current");
+  assert.equal(b.six.next.actor, "employee");
+  assert.equal(b.six.needsCompany, true);
+
+  const c = row(d, "e12");
+  assert.equal(c.six.complete, true);
+  assert.equal(stepOfRow(c, "final").state, "done");
+  assert.equal(c.six.next.label, "入社準備完了");
+});
+
+await ok("入社準備: ① 入社案内は、全員「データ未連携」。数に入れない", async () => {
+  setupOnboarding();
+  const d = (await call("onboarding")).body;
+  for (const rw of d.rows) assert.equal(stepOfRow(rw, "guide").state, "unlinked");
+  assert.deepEqual(d.unlinked, ["guide"]);
+});
+
+await ok("入社準備: 退職者・取り消し・他社は出ない。完了して30日を過ぎた人は外し、数だけ返す", async () => {
+  setupOnboarding();
+  const d = (await call("onboarding")).body;
+  assert.deepEqual(d.rows.map((x) => x.employeeId).sort(), ["e10", "e11", "e12"]);
+  assert.equal(d.hiddenComplete, 1);
+  assert.deepEqual(d.summary, { total: 3, inProgress: 2, company: 2, employee: 1, advisor: 0, complete: 1 });
+});
+
+await ok("入社準備: 手続きは昔に完了でも、キャリアが未設定なら残す（⑤ が要対応のまま）", async () => {
+  setupOnboarding();
+  db.rows.gw_employee_careers = db.rows.gw_employee_careers.filter((c) => c.employee_id !== "e13");
+  const d = (await call("onboarding")).body;
+  const r = row(d, "e13");
+  assert.ok(r, "外さない");
+  assert.equal(r.six.complete, false);
+  assert.equal(stepOfRow(r, "career").state, "current");
+  assert.equal(stepOfRow(r, "career").actor, "manager");
+  assert.match(stepOfRow(r, "career").href, /^\/admin-career\.html\?employeeId=e13$/);
+  assert.equal(d.hiddenComplete, 0);
+});
+
+await ok("入社準備: 完了した人は最後。入社日の近い順", async () => {
+  setupOnboarding();
+  const d = (await call("onboarding")).body;
+  assert.deepEqual(d.rows.map((x) => x.employeeId), ["e10", "e11", "e12"]);
+});
+
+await ok("入社準備: 各ステップの「開く」は、要対応のときだけ。既存の画面へ（作り直さない）", async () => {
+  setupOnboarding();
+  const d = (await call("onboarding")).body;
+  const a = stepOfRow(row(d, "e10"), "contract");
+  assert.match(a.href, /^\/admin-esign\.html\?tab=order&employeeId=e10$/);
+  const b = stepOfRow(row(d, "e11"), "info_docs");
+  assert.match(b.href, /^\/admin-hr\.html\?id=p11$/);
+  assert.equal(stepOfRow(row(d, "e11"), "contract").href, null, "完了したステップに押す先は出さない");
+  assert.equal(stepOfRow(row(d, "e12"), "career").href, null);
+});
+
+await ok("入社準備: 給与・手当の金額は、どこにも返らない", async () => {
+  setupOnboarding();
+  const text = JSON.stringify((await call("onboarding")).body);
+  assert.ok(!text.includes("777777"), "金額が漏れている");
+  assert.ok(!/wage|salary/i.test(text), "賃金の項目が漏れている");
+});
+
+await ok("入社準備: 入社手続きの表が読めなければ「データ未連携」。空の一覧を「完了」とは言わない", async () => {
+  setupOnboarding();
+  db.missing = new Set(["gw_procedures"]);
+  const d = (await call("onboarding")).body;
+  assert.equal(d.status, "missing");
+  assert.equal(d.missingLabel, "データ未連携");
+  assert.equal(d.rows, undefined);
+});
+
+await ok("入社準備: キャリアの表が読めなければ、⑤⑥ だけ「データ未連携」（未設定とは言わない）", async () => {
+  setupOnboarding();
+  db.missing = new Set(["gw_employee_careers"]);
+  const d = (await call("onboarding")).body;
+  const c = row(d, "e12");
+  assert.equal(stepOfRow(c, "career").state, "unlinked");
+  assert.equal(stepOfRow(c, "final").state, "unlinked");
+  assert.equal(c.six.complete, false);
+  assert.equal(stepOfRow(c, "contract").state, "done", "入社手続きのほうは読めている");
+});
+
+await ok("入社準備: 入社準備中の人がいなければ、空の一覧（エラーにしない）", async () => {
+  setup();
+  db.rows.gw_procedures = [];
+  const d = (await call("onboarding")).body;
+  assert.equal(d.status, "exact");
+  assert.deepEqual(d.rows, []);
+  assert.equal(d.summary.total, 0);
+});
+
+await ok("入社準備: 経営者以外は 403（他の view と同じ入口）", async () => {
+  setupOnboarding();
+  who = ctxOf(["hr"], { isHr: true });
+  const r = await call("onboarding");
+  assert.equal(r.statusCode, 403);
+  assert.equal(r.body.rows, undefined);
 });
 
 console.log("\n=== 部品（lib/keiei.js） ===\n");

@@ -137,6 +137,16 @@ const ok = async (name, fn) => {
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
 };
 
+// 応答のどこかに、給与のキーがあるか（キー名の完全一致で見る。labels.salaryDecisions のような、
+// 選択肢の名前の表は給与の値ではない）
+const SALARY_KEY_NAMES = new Set(["wageAmount", "wageType", "wageNote", "currentWage", "salaryMin", "salaryMax",
+  "salaryDecision", "salaryNote", "salary_decision", "salary_note", "salary_min", "salary_max", "wage_amount", "wage_type"]);
+const hasSalaryKey = (o) => {
+  if (Array.isArray(o)) return o.some(hasSalaryKey);
+  if (o && typeof o === "object") return Object.entries(o).some(([k, v]) => SALARY_KEY_NAMES.has(k) || hasSalaryKey(v));
+  return false;
+};
+
 const jst = (n = 0) => new Date(Date.now() + 9 * 3600000 + n * 86400000).toISOString().slice(0, 10);
 
 function setup() {
@@ -881,12 +891,18 @@ await ok("進行一覧：採用決定の人（採用HR権限だけ）と、入�
   const cs = await row();
   assert.equal(cs.journey.state, "career_setup");
   assert.equal(cs.journey.stateLabel, "入社手続き完了");
-  // マネージャーは担当の社員だけ。応募者は見えない（採用HRの権限が無い）
+  // 採用HRの権限が無い人（会計の管理者だけ）には、応募者は見えない
+  who = ADMIN;
+  const a = (await get("?journey=1")).body;
+  assert.equal(a.rows.some((x) => x.kind === "applicant"), false);
+  assert.equal(a.seesApplicants, false);
+  assert.ok(a.rows.some((x) => x.id === "e-new"));
+  // 責任者は HR を使える（経営者・責任者・人事・採用担当）ので、応募者も見える。ただし給与は見えない
   who = MANAGER;
   const m = (await get("?journey=1")).body;
-  assert.equal(m.rows.some((x) => x.kind === "applicant"), false);
-  assert.equal(m.seesApplicants, false);
-  assert.ok(m.rows.some((x) => x.id === "e-new"));
+  assert.equal(m.seesApplicants, true);
+  assert.ok(m.rows.some((x) => x.kind === "applicant"), "責任者は採用HRを使えるので、応募者が見える");
+  assert.equal(hasSalaryKey(m), false, "給与は、責任者には返らない");
 });
 
 await ok("詳細：上部の NEXT ACTION は進行（journey）。入社手続きタブの中身。キャリア設定→育成開始", async () => {
@@ -929,8 +945,13 @@ await ok("採用決定の詳細：採用HRの権限がある人だけ。社員�
   assert.equal(r.body.canAdvance, true);
   assert.equal((await get("?applicant=a-done")).statusCode, 409);
   assert.equal((await get("?applicant=a-no")).statusCode, 404);
+  who = ADMIN;
+  assert.equal((await get("?applicant=a-ok")).statusCode, 403, "採用HRの権限が無い人（会計の管理者だけ）は見られない");
   who = MANAGER;
-  assert.equal((await get("?applicant=a-ok")).statusCode, 403);
+  const mg = await get("?applicant=a-ok");
+  assert.equal(mg.statusCode, 200, "責任者は採用HRを使える");
+  assert.equal(hasSalaryKey(mg.body), false, "ただし給与は返らない（採用条件の給与は、責任者には見えない）");
+  assert.equal(mg.body.applicant.joinDate, r.body.applicant.joinDate, "給与以外の採用条件は見える");
   who = HR;
   const h = await get("?applicant=a-ok");
   assert.equal(h.statusCode, 200);
@@ -1065,16 +1086,6 @@ await ok("同じ人について、一覧・管理者の詳細・本人のホー�
 });
 
 console.log("\n— 給与は、見られる人にだけ（責任者には見せない・書かせない） —");
-
-// 応答のどこかに、給与のキーがあるか（キー名の完全一致で見る。labels.salaryDecisions のような、
-// 選択肢の名前の表は給与の値ではない）
-const SALARY_KEY_NAMES = new Set(["wageAmount", "wageType", "wageNote", "currentWage", "salaryMin", "salaryMax",
-  "salaryDecision", "salaryNote", "salary_decision", "salary_note", "salary_min", "salary_max", "wage_amount", "wage_type"]);
-const hasSalaryKey = (o) => {
-  if (Array.isArray(o)) return o.some(hasSalaryKey);
-  if (o && typeof o === "object") return Object.entries(o).some(([k, v]) => SALARY_KEY_NAMES.has(k) || hasSalaryKey(v));
-  return false;
-};
 
 await ok("責任者は、部下の評価・キャリアは扱えるが、給与（現在給与・給与レンジ・給与メモ）は返らない", async () => {
   setup();

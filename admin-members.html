@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260929b">
-  <link rel="stylesheet" href="css/layout.css?v=20260929b">
+  <link rel="stylesheet" href="css/app.css?v=20260929c">
+  <link rel="stylesheet" href="css/layout.css?v=20260929c">
   <style>
     .kp-items tr.click { cursor:pointer; }
     .kp-items tr.click:hover td { background:var(--soft); }
@@ -161,12 +161,15 @@
         <span class="material-symbols-outlined icon-inline">download</span>CSV
       </button>
     </h2>
-    <!-- 採用HR・Sales の利用権限は、ここのチェックが正式な設定元（lib/gw.js RECRUIT_ROLES / SALES_ROLES）。
+    <!-- 業務ツールの利用権限は、ここのチェックが正式な設定元（lib/gw.js RECRUIT_ROLES / SALES_ROLES / OFFICE_ROLES / KEIEI_ROLES）。
          付け外しは再ログイン不要で、相手が画面を再読込するとヘッダーと入口に反映される -->
     <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
-      <b>採用HR</b>（/hr/）を使える：経営者・人事・採用担当　／
-      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当<br>
-      「IT・管理」はシステム管理用で、それだけでは採用HR・Salesには入れません。
+      <b>HR</b>（/hr/）を使える：経営者・責任者・人事・採用担当　／
+      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当　／
+      <b>Office</b>を使える：経営者・責任者・経理（画面は準備中）　／
+      <b>経営</b>（/keiei/）を使える：経営者だけ<br>
+      経営者は全ツールを使えます。責任者・採用担当などが経営者の権限を引き継ぐことはありません（給与も見えません）。
+      「IT・管理」はシステム管理用で、それだけではどのツールにも入れません。
       チェックを付け外しすると、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
     </p>
     <div id="list"><div class="empty">読み込み中…</div></div>
@@ -203,9 +206,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260929b"></script>
-<script src="js/device.js?v=20260929b"></script>
-<script src="js/layout.js?v=20260929b"></script>
+<script src="js/api-client.js?v=20260929c"></script>
+<script src="js/device.js?v=20260929c"></script>
+<script src="js/layout.js?v=20260929c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -214,13 +217,13 @@
                      manager: "責任者", labor_advisor: "社労士", recruiter: "採用担当", sales: "営業担当" };
   // 各権限で何ができるか（チェックにマウスを乗せると出る）。採用HR・Sales の条件は lib/gw.js と同じ
   const ROLE_HINT = {
-    owner: "経営者：最上位の権限（採用HR・Sales・経営を使え、全員の給与も見られる）。付け外しできるのは経営者だけ",
-    hr: "人事：人事の台帳・入退社と、採用HR（/hr/）を使える",
-    it: "IT・管理：端末・アカウントなどシステム管理用。これだけでは採用HR・Salesには入れない",
-    finance: "経理：給与・精算",
-    manager: "責任者：Sales（/sales/）を使える",
+    owner: "経営者：最上位の権限（HR・Sales・Office・経営を使え、全員の給与も見られる）。付け外しできるのは経営者だけ",
+    hr: "人事：人事の台帳・入退社と、HR（/hr/）を使える",
+    it: "IT・管理：端末・アカウントなどシステム管理用。これだけではどのツールにも入れない",
+    finance: "経理：Officeを使える（画面は準備中）。給与は見えない",
+    manager: "責任者：HR（/hr/）・Sales（/sales/）・Officeを使える。給与は見えない",
     labor_advisor: "社労士：共有された手続きだけを見る",
-    recruiter: "採用担当：採用HR（/hr/）だけを使える（人事の機密は見えない）",
+    recruiter: "採用担当：HR（/hr/）だけを使える（人事の機密・給与は見えない）",
     sales: "営業担当：Sales（/sales/）だけを使える",
   };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない

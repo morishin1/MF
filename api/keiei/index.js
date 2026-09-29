@@ -26,6 +26,10 @@ import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstMonth, isMonth } from "../../lib/closing.js";
 import { STAGE_KEYS } from "../../lib/billing-progress.js";
+import { gatherFactsBulk } from "../../lib/onboard-advance.js";
+import { daysToStart } from "../../lib/onboard-stage.js";
+import { journeyLinks } from "../../lib/journey-load.js";
+import { SIX_STEPS, mapSix, summarizeSix } from "../../lib/onboard-six.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
@@ -214,7 +218,102 @@ async function accounting(sb, ctx) {
   };
 }
 
-async function onboarding() {
-  // 入社準備の6ステップは、既存の判定への写像として作る（次の段階）。いまは枠だけ
-  return { status: STATUS.MISSING, missingLabel: "準備中", reason: "入社準備は、既存の入社手続きの判定を6ステップに並べ替える形で追加します。" };
+// ---- 入社準備（6ステップ）--------------------------------------------------------
+//
+// 判定は既存の 1 か所（lib/onboard-stage.js の段階 ＋ lib/career.js のキャリア状態）。
+// ここは事実をまとめて読み、lib/onboard-six.js で6ステップに並べるだけ。
+// 給与・手当の金額と給与入りの書面は、この画面に出さない（状態だけ）。
+
+/** 完了してから、この日数を過ぎた人は一覧から外す（数だけ返す） */
+const ONBOARD_KEEP_DAYS = 30;
+const CAREER_COLS = "employee_id, track_id, current_level_id, one_year_target_note, three_year_target_note, "
+  + "next_review_on, agreed_at, updated_at";
+
+/** 6ステップの「押す先」。実際の作業は既存の画面で行う（作り直さない） */
+function hrefOf(stepKey, stage, links) {
+  if (stepKey === "contract") return stage === "signing" ? links.signs : links.order;
+  if (stepKey === "info_docs" || stepKey === "account") return links.hr;
+  if (stepKey === "career") return links.career;
+  return null;
+}
+
+async function onboarding(sb, ctx) {
+  const today = todayJst();
+  const procs = await soft(sb.from("gw_procedures")
+    .select("id, tenant_id, employee_id, kind, status, target_on, stage, stage_at, updated_at, created_at")
+    .eq("tenant_id", ctx.tenantId).eq("kind", "onboarding").order("created_at", { ascending: false }).limit(1000));
+  if (procs === null) {
+    return { status: STATUS.MISSING, missingLabel: MISSING_LABEL, steps: SIX_STEPS,
+      reason: "入社手続きの表が読めません（db/070 が未適用の可能性があります）" };
+  }
+
+  // 1人につき、いちばん新しい手続き（取り消しは除く）
+  const latest = new Map();
+  for (const p of procs) {
+    if (p.status === "cancelled" || latest.has(p.employee_id)) continue;
+    latest.set(p.employee_id, p);
+  }
+  const empIds = [...latest.keys()].slice(0, 300);
+  if (!empIds.length) {
+    return { status: STATUS.EXACT, steps: SIX_STEPS, summary: summarizeSix([]), rows: [], hiddenComplete: 0,
+      unlinked: ["guide"], links: { start: "/admin-onboard.html" } };
+  }
+
+  const [emps, careers] = await Promise.all([
+    soft(sb.from("gw_employees").select("id, display_name, department, position, employment_type, status, joined_on")
+      .eq("tenant_id", ctx.tenantId).in("id", empIds)),
+    // 095 の列が無い環境でも、基本の列で読む（本人確認の列だけ諦める）
+    soft(sb.from("gw_employee_careers").select(`${CAREER_COLS}, confirm_requested_at, employee_confirmed_at`)
+      .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", empIds))
+      .then((r) => r ?? soft(sb.from("gw_employee_careers").select(CAREER_COLS)
+        .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", empIds))),
+  ]);
+  const empBy = new Map((emps || []).map((e) => [e.id, e]));
+  const careerBy = new Map((careers || []).map((c) => [c.employee_id, c]));
+
+  const procList = empIds.map((id) => latest.get(id)).filter((p) => empBy.has(p.employee_id) && empBy.get(p.employee_id).status !== "left");
+  const items = procList.length ? await soft(sb.from("gw_procedure_items")
+    .select("id, procedure_id, item_key, owner, required, status").in("procedure_id", procList.map((p) => p.id))) : [];
+  const itemsBy = new Map();
+  for (const i of items || []) {
+    if (!itemsBy.has(i.procedure_id)) itemsBy.set(i.procedure_id, []);
+    itemsBy.get(i.procedure_id).push(i);
+  }
+  let factsBy = new Map();
+  try { factsBy = await gatherFactsBulk(sb, ctx.tenantId, procList, itemsBy); } catch { factsBy = new Map(); }
+
+  const cutoff = Date.parse(`${today}T00:00:00Z`) - ONBOARD_KEEP_DAYS * 86400000;
+  let hiddenComplete = 0;
+  const rows = [];
+  for (const p of procList) {
+    const e = empBy.get(p.employee_id);
+    const six = mapSix({ facts: factsBy.get(p.id) || null, career: careerBy.get(e.id) || null, careerLinked: careers !== null });
+    if (six.complete) {
+      const at = Date.parse(p.stage_at || p.updated_at || p.created_at || "");
+      if (Number.isFinite(at) && at < cutoff) { hiddenComplete += 1; continue; }
+    }
+    // journeyLinks は GW の画面（相対）を返す。/keiei からは絶対パスで開く
+    const links = Object.fromEntries(Object.entries(journeyLinks(e.id, p.id)).map(([k, v]) => [k, `/${v}`]));
+    links.career = `/admin-career.html?employeeId=${encodeURIComponent(e.id)}`;
+    for (const st of six.steps) st.href = st.state === "current" ? hrefOf(st.key, six.stage, links) : null;
+    const joinOn = p.target_on || e.joined_on || null;
+    rows.push({
+      employeeId: e.id, procedureId: p.id, name: e.display_name, department: e.department || null,
+      position: e.position || null, employmentType: e.employment_type || null,
+      joinOn, daysToStart: daysToStart(joinOn, today), six,
+      links: { hr: links.hr, onboarding: links.onboarding },
+    });
+  }
+  // まだ終わっていない人を先に。同じなら入社日が近い順
+  rows.sort((x, y) => (Number(x.six.complete) - Number(y.six.complete))
+    || String(x.joinOn || "9999").localeCompare(String(y.joinOn || "9999"))
+    || String(x.name || "").localeCompare(String(y.name || ""), "ja"));
+
+  return {
+    status: STATUS.EXACT, steps: SIX_STEPS, today,
+    summary: summarizeSix(rows), rows, hiddenComplete,
+    // 案内の作成・送信・本人確認は、これから作る（表が無い）。画面は「データ未連携」と出す
+    unlinked: ["guide"],
+    links: { start: "/admin-onboard.html", hr: "/admin-hr.html" },
+  };
 }
