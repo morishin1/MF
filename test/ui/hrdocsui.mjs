@@ -139,7 +139,7 @@ await page.waitForTimeout(700);
   const tabs = (await page.locator(".hr-tabs button").allInnerTexts()).map((s) => s.trim());
   check(tabs.join("/") === "概要/面談/書類/履歴", `タブ（いま ${tabs.join("/")}）`);
   const ov = await page.locator("#hr-detail-tab").innerText();
-  for (const x of ["NEXT ACTION", "面談評価を入力してください", "応募経路", "応募職種", "選考", "状態", "選考段階", "担当", "メール", "最新評価", "ランク"]) {
+  for (const x of ["NEXT ACTION", "面談評価を入力してください", "応募経路", "応募職種", "現在ステータス", "担当", "メール", "最新評価", "ランク"]) {
     check(ov.includes(x), `概要に「${x}」`);
   }
   check(await page.locator("#hr-detail-tab .btn-primary").count() === 1, "概要の CTA は1つ");

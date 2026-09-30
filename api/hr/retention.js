@@ -9,7 +9,6 @@
 //   期限が来ても、auto_delete を付けていない種別は消さない。一覧に出るだけ。
 //   消す判断は人がする。自動で消すと決めた種別だけ cron が消す。
 
-import { ymd as jstYmd } from "../../lib/jst.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
@@ -39,7 +38,7 @@ export default async function handler(req, res) {
   return methodNotAllowed(res, ["GET", "PATCH", "POST"]);
 }
 
-const today = () => jstYmd();
+const today = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 
 async function read(res, ctx) {
   const sb = admin();

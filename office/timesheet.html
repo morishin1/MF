@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>勤務表の確認 - EIGHT OFFICE</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260929d">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    [hidden] { display:none !important; }   /* display を指定した部品でも、hidden で隠れるように */
+
+    .ts-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+    .ts-head h1 { margin:0; }
+    .ts-back { display:inline-flex; align-items:center; gap:3px; font-size:12px; color:#6b7080; text-decoration:none; margin-bottom:6px; }
+    .ts-back:hover { color:#1b2440; }
+    .ts-back .material-symbols-outlined { font-size:16px; }
+
+    /* 左：勤務表のファイル／右：読取結果。並べて見比べる */
+    .ts-grid { display:grid; grid-template-columns:minmax(340px,5fr) minmax(520px,7fr); gap:14px; align-items:start; }
+    .ts-left { position:sticky; top:68px; display:grid; gap:10px; }
+    .ts-view { background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; height:calc(100vh - 250px); min-height:320px; display:flex; flex-direction:column; }
+    .ts-view iframe { flex:1; width:100%; border:0; background:#f6f6f2; }
+    .ts-view .imgbox { flex:1; overflow:auto; background:#f6f6f2; }
+    .ts-view img { display:block; max-width:100%; margin:0 auto; }
+    .ts-view .none { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; color:#6b7080; font-size:13px; padding:20px; }
+    .ts-files { display:grid; gap:6px; }
+    .ts-file { display:flex; align-items:center; gap:8px; justify-content:space-between; background:#fff; border:1px solid #e2e2dc; border-radius:8px; padding:7px 10px; font-size:12.5px; }
+    .ts-file.sel { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
+    .ts-file .nm { min-width:0; flex:1; text-align:left; background:none; border:none; cursor:pointer; font:inherit; color:#1b2440; font-weight:600; padding:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ts-file .at { display:block; color:#6b7080; font-size:11px; font-weight:400; }
+    .ts-file .bd { display:flex; gap:4px; flex-wrap:wrap; margin-top:3px; }
+    .ts-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:4px; padding:1px 6px; }
+    .ts-tag.warn { background:#fbf1d6; color:#7d5a00; }
+    .ts-tag.src { background:#e7eaf3; color:#1b2440; }
+
+    .ts-card { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+    .ts-card h2 { font-size:14px; margin:0 0 6px; color:#1b2440; display:flex; align-items:center; gap:6px; }
+    .ts-card p { margin:0 0 8px; font-size:12.5px; color:#1b2440; line-height:1.6; }
+    .ts-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .of-btn.big { padding:9px 16px; font-size:13px; }
+    .of-btn.danger { background:#fff; color:#b3261e; border-color:#e3b3ae; }
+
+    .ts-kpi { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+    .ts-kpi > div { background:#fff; border:1px solid #e2e2dc; border-radius:9px; padding:8px 10px; }
+    .ts-kpi .lb { font-size:11px; color:#6b7080; font-weight:700; }
+    .ts-kpi .v { font-size:19px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; margin-top:1px; }
+    .ts-kpi .v small { font-size:11px; font-weight:700; color:#6b7080; }
+    .ts-kpi .bad { background:#fdecea; border-color:#e3b3ae; }
+    .ts-kpi .bad .v, .ts-kpi .bad .lb { color:#b3261e; }
+    .ts-kpi .warn { background:#fbf1d6; border-color:#e0a100; }
+    .ts-kpi .good .v { color:#2f6f3a; }
+    .ts-range { font-size:12.5px; color:#1b2440; margin:-4px 0 12px; }
+
+    .ts-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+    .ts-tools .seg { display:inline-flex; border:1px solid #c7cad4; border-radius:7px; overflow:hidden; }
+    .ts-tools .seg button { border:none; background:#fff; padding:6px 11px; font:inherit; font-size:12px; font-weight:700; color:#4a5068; cursor:pointer; }
+    .ts-tools .seg button.on { background:#1b2440; color:#fff; }
+    .ts-tools .sp { margin-left:auto; }
+
+    table.ts-days { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
+    .ts-days th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:8px 6px; background:#f6f6f2; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
+    .ts-days td { padding:5px 6px; border-bottom:1px solid #efefeb; font-size:12.5px; vertical-align:top; }
+    .ts-days tr.blocking td:first-child { box-shadow:3px 0 0 #c0392b inset; }
+    .ts-days tr.review td:first-child { box-shadow:3px 0 0 #e0a100 inset; }
+    .ts-days tr.blocking { background:#fff8f7; }
+    .ts-days tr.review { background:#fffdf3; }
+    .ts-days td.dt { white-space:nowrap; font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; padding-left:10px; }
+    .ts-days td.dt small { font-weight:500; color:#6b7080; margin-left:2px; }
+    .ts-days td.dt.sat small { color:#2b62c0; } .ts-days td.dt.sun small { color:#b3261e; }
+    .ts-days input, .ts-days select { margin:0; width:100%; box-sizing:border-box; font:inherit; font-size:12.5px; padding:5px 6px; border:1px solid #d8dae2; border-radius:6px; background:#fff; }
+    .ts-days select { min-width:76px; }
+    .ts-days input.t { width:64px; text-align:center; font-variant-numeric:tabular-nums; }
+    .ts-days tr[data-kind="off"] input::placeholder { color:transparent; }   /* 休みの日には、時刻の例（9:00 など）を出さない */
+    .ts-days input:disabled, .ts-days select:disabled { background:#f6f6f2; color:#4a5068; border-color:#efefeb; }
+    .ts-days input[aria-invalid="true"] { border-color:#c0392b; background:#fdecea; }
+    .ts-days td.w { white-space:nowrap; font-weight:700; font-variant-numeric:tabular-nums; color:#1b2440; padding-top:9px; }
+    .ts-days td.w small { display:block; font-weight:500; color:#6b7080; font-size:10.5px; }
+    .ts-days td.fl { min-width:150px; }
+    .ts-fl { font-size:11.5px; line-height:1.5; margin-bottom:3px; }
+    .ts-fl.b { color:#b3261e; font-weight:700; }
+    .ts-fl.w { color:#7d5a00; }
+    .ts-fl.err { color:#b3261e; font-weight:700; }
+    .ts-cf { display:inline-block; font-size:10.5px; font-weight:700; border-radius:4px; padding:0 5px; margin-right:4px; }
+    .ts-cf.high { background:#e5f1e2; color:#2f6f3a; } .ts-cf.mid { background:#fbf1d6; color:#7d5a00; } .ts-cf.low { background:#fdecea; color:#b3261e; }
+    .ts-days .ok-btn { font-size:11px; padding:3px 8px; }
+    .ts-hidden-note { font-size:12px; color:#6b7080; padding:8px 4px; }
+
+    .ts-foot { position:sticky; bottom:0; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:10px 14px; margin-top:12px; box-shadow:0 -4px 14px rgba(27,36,64,.08); }
+    .ts-foot ul { margin:0 0 8px; padding-left:18px; font-size:12.5px; color:#b3261e; }
+    .ts-foot .ok { color:#2f6f3a; font-size:12.5px; font-weight:700; margin:0 0 8px; }
+    .ts-foot label { display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:#1b2440; margin:0 0 8px; }
+    .ts-foot label input { width:auto; margin-top:3px; }
+    .ts-foot .t { font-size:11.5px; color:#6b7080; margin-left:auto; }
+
+    .ts-dlg-bg { position:fixed; inset:0; background:rgba(27,36,64,.4); z-index:60; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .ts-dlg { background:#fff; border-radius:12px; padding:18px; width:440px; max-width:100%; box-shadow:0 12px 40px rgba(27,36,64,.25); }
+    .ts-dlg h2 { font-size:15px; margin:0 0 6px; color:#1b2440; }
+    .ts-dlg p { font-size:12.5px; color:#4a5068; margin:0 0 10px; line-height:1.6; }
+    .ts-dlg textarea, .ts-dlg input[type="text"] { width:100%; box-sizing:border-box; font:inherit; font-size:13px; padding:8px; border:1px solid #c7cad4; border-radius:8px; margin:0 0 6px; }
+    .ts-dlg .er { color:#b3261e; font-size:12px; min-height:16px; margin-bottom:6px; }
+
+    @media (max-width: 1100px) {
+      .ts-grid { grid-template-columns:1fr; }
+      .ts-left { position:static; }
+      .ts-view { height:60vh; }
+      .ts-kpi { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width: 720px) {
+      /* 狭い画面は、日ごとの行をカードにする */
+      table.ts-days, .ts-days tbody, .ts-days tr, .ts-days td { display:block; width:100%; box-sizing:border-box; }
+      .ts-days thead { display:none; }
+      .ts-days tr { border:1px solid #e2e2dc; border-radius:10px; margin-bottom:8px; padding:6px 8px; background:#fff; }
+      .ts-days td { display:flex; gap:8px; align-items:center; border:none; padding:3px 0; }
+      .ts-days td::before { content:attr(data-label); flex:none; width:44px; font-size:11px; color:#6b7080; font-weight:700; }
+      .ts-days td.dt { padding-left:0; }
+      .ts-days input.t { width:100%; text-align:left; }
+      .ts-days td.fl { min-width:0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="ts-back" id="back" href="/office/"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>月次業務へ戻る</a>
+  <div class="ts-head">
+    <div>
+      <h1 class="of-title" id="title">勤務表の確認</h1>
+      <p class="of-sub" id="sub" style="margin:0;"></p>
+    </div>
+    <div id="stateBadge"></div>
+  </div>
+
+  <div id="banner" aria-live="polite"></div>
+
+  <div class="ts-grid">
+    <div class="ts-left">
+      <div class="ts-view" id="view"><div class="none">読み込み中…</div></div>
+      <div class="ts-files" id="files"></div>
+      <div class="ts-actions">
+        <label class="of-btn sec" style="cursor:pointer;" for="upfile"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>勤務表を追加</label>
+        <input type="file" id="upfile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
+        <span class="of-muted">PDF・JPEG・PNG（10MBまで）</span>
+      </div>
+    </div>
+
+    <div class="ts-right">
+      <div id="top"></div>
+      <div id="kpi"></div>
+      <div id="tools"></div>
+      <div id="days"></div>
+      <div id="foot"></div>
+    </div>
+  </div>
+</div>
+
+<div id="dlg-root"></div>
+
+<script src="../js/api-client.js?v=20260929d"></script>
+<script src="../js/office-layout.js?v=20260929d"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const O = window.OfficeLayout;
+  const esc = O.esc, pill = O.pill, fmt = O.fmt;
+
+  const qs = new URLSearchParams(location.search);
+  const CONTRACT = qs.get("contract") || "";
+  const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/.test(qs.get("month") || "") ? qs.get("month") : "";
+  // 一覧の「AIで読み取る」から来たとき（&read=1）は、開いてすぐ読み取りを始める（届いているだけで、まだ読み取っていないときだけ）
+  const AUTOREAD = qs.get("read") === "1";
+  let autoReadDone = false;
+
+  const state = { d: null, fileId: null, filter: "attention", pinned: new Set(), busy: false, pending: 0, urlCache: new Map(), errors: {} };
+
+  // ---- 小さな整形 ---------------------------------------------------------------
+  const pad = (n) => String(n).padStart(2, "0");
+  const clock = (m) => (m == null ? "" : `${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
+  const brk = (m) => (m == null ? "" : `${Math.floor(m / 60)}:${pad(m % 60)}`);
+  const hours = (m) => String(Math.round((m / 60) * 100) / 100);
+  const WD = ["日", "月", "火", "水", "木", "金", "土"];
+  const wday = (ymd) => { const [y, m, d] = ymd.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
+  const md = (ymd) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
+  const jpMonth = (m) => `${m.slice(0, 4)}年${Number(m.slice(5, 7))}月`;
+  const CONF = { high: "高", mid: "中", low: "低" };
+
+  O.init({ active: "monthly" }).then((ctx) => {
+    if (!ctx) return;
+    if (!CONTRACT || !MONTH) { banner("err", "対象（現場契約・月）が指定されていません。月次業務の一覧から開いてください。"); return; }
+    el("back").href = `/office/?month=${encodeURIComponent(MONTH)}&id=${encodeURIComponent(CONTRACT)}`;
+    wire();
+    load();
+    // 確認にかかった時間（人が画面を見ている時間）。AI の精度ではなく、確認の手間を測るために残す
+    setInterval(() => { if (document.visibilityState === "visible" && state.d?.timesheet?.status === "draft") state.pending++; }, 1000);
+  });
+
+  function banner(kind, text, html) {
+    el("banner").innerHTML = text || html
+      ? `<div class="of-banner ${kind === "err" ? "err" : ""}" role="${kind === "err" ? "alert" : "status"}"><span class="material-symbols-outlined" aria-hidden="true">${kind === "err" ? "error" : "info"}</span><div>${html || esc(text)}</div></div>`
+      : "";
+  }
+
+  // ---- 通信 ------------------------------------------------------------------------
+  const url = () => `/api/office/timesheet?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}`;
+  const takePending = () => { const n = state.pending; state.pending = 0; return n; };
+  let chain = Promise.resolve();
+  const enqueue = (fn) => { chain = chain.then(fn, fn); return chain; };
+
+  async function post(action, extra = {}) {
+    const reviewSeconds = takePending();
+    try {
+      return await API.api("/api/office/timesheet", { method: "POST", body: { action, siteContractId: CONTRACT, month: MONTH, reviewSeconds, ...extra } });
+    } catch (e) { state.pending += reviewSeconds; throw e; }
+  }
+
+  async function load() {
+    try {
+      const d = await API.api(url());
+      state.d = d;
+      if (!state.fileId || !d.files.some((f) => f.id === state.fileId)) {
+        state.fileId = (d.files.find((f) => f.isSource) || d.files.find((f) => f.isLatest) || d.files[0] || {}).id || null;
+      }
+      renderAll();
+      if (AUTOREAD && !autoReadDone) {
+        autoReadDone = true;
+        history.replaceState(null, "", `${location.pathname}?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}`);   // 再読込で、もう一度読み取らない
+        // 1件だけ届いていて、同じファイルの疑い（二重提出・別の人・月への流用）が無いときだけ。複数・重複は、人がどれを読むか選ぶ
+        if (d.state === "submitted" && d.files.length === 1 && !["duplicate", "cross"].includes(d.files[0].dup.state) && state.fileId) readFile(state.fileId);
+      }
+    } catch (e) {
+      banner("err", "取得に失敗しました：" + (e.hint || e.detail || e.message));
+    }
+  }
+
+  // ---- 描画 ------------------------------------------------------------------------
+  function renderAll() {
+    const d = state.d;
+    document.title = `${d.contract.employeeName} ${jpMonth(d.month)}の勤務表 - EIGHT OFFICE`;
+    el("title").textContent = `${d.contract.employeeName}さんの勤務表`;
+    el("sub").textContent = `${d.contract.siteCompany} ／ ${jpMonth(d.month)}分`;
+    renderBadge();
+    renderBanners();
+    renderFiles();
+    renderViewer();
+    renderTop();
+    renderKpi();
+    renderTools();
+    renderDays();
+    renderFoot();
+  }
+
+  function renderBadge() {
+    const d = state.d;
+    el("stateBadge").innerHTML = pill(d.stateLabel, { good: "ok", warn: "attention", bad: "danger" }[d.stateTone] || "neutral",
+      { confirmed: "check_circle", draft: "edit_note", returned: "undo", submitted: "inbox", none: "upload_file" }[d.state]);
+  }
+
+  function renderBanners() {
+    const d = state.d, t = d.timesheet;
+    const msgs = [];
+    if (t) for (const w of t.readWarnings || []) msgs.push(w.text);
+    if (t && t.nameMatch === false && !(t.readWarnings || []).some((w) => w.code === "name_mismatch")) msgs.push(`勤務表の氏名（${t.sheetEmployeeName}）が登録と一致しません。`);
+    if (d.newerFile) msgs.push(`読み取り後に、新しい勤務表のファイル（${d.newerFile.fileName}）が届いています。読み取り直すには、そのファイルを選んで「このファイルを読み取る」を押してください。`);
+    for (const f of d.files) if (f.dup.state === "cross") msgs.push(`「${f.fileName}」：${f.dup.label}。別のファイルではありませんか？`);
+    if (d.terms.changedAfterConfirm) msgs.push("確定したあとに、契約条件が変わりました。確定した稼働時間はそのままです。条件に合わせて計算し直すには、確定を取り消してから、もう一度確定してください。");
+    if (state.errText) { banner("err", state.errText); return; }
+    banner("warn", "", msgs.length ? msgs.map(esc).join("<br>") : "");
+  }
+
+  function renderFiles() {
+    const d = state.d;
+    el("files").innerHTML = d.files.map((f) => `
+      <div class="ts-file${f.id === state.fileId ? " sel" : ""}">
+        <div style="min-width:0;flex:1;">
+          <button type="button" class="nm" data-pick="${esc(f.id)}" title="${esc(f.fileName)}">${esc(f.fileName)}</button>
+          <span class="at">${esc(fmt(f.submittedAt))} に届きました</span>
+          <div class="bd">
+            <span class="ts-tag src">${f.source === "office" ? "Officeから" : "外部フォーム"}</span>
+            ${f.isSource ? `<span class="ts-tag">読取元</span>` : ""}
+            ${f.isLatest && d.files.length > 1 ? `<span class="ts-tag">最新</span>` : ""}
+            ${f.dup.state === "cross" || f.dup.state === "duplicate" || f.dup.state === "original" ? `<span class="ts-tag warn">${esc(f.dup.state === "cross" ? "別の月・人と同じ" : "同じファイルが複数")}</span>` : ""}
+            ${f.verified ? "" : `<span class="ts-tag">未確認</span>`}
+          </div>
+        </div>
+        ${d.timesheet?.status === "confirmed" ? "" : `<button type="button" class="of-btn sec" data-read="${esc(f.id)}"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>このファイルを読み取る</button>`}
+      </div>`).join("");
+  }
+
+  async function renderViewer() {
+    const d = state.d, box = el("view");
+    const f = d.files.find((x) => x.id === state.fileId);
+    if (!f) { box.innerHTML = `<div class="none">勤務表のファイルが届いていません。<br>「勤務表を追加」から、受け取った勤務表を登録してください。<br>ファイルが無くても、手入力で始められます。</div>`; return; }
+    box.innerHTML = `<div class="none">開いています…</div>`;
+    const id = f.id;
+    try {
+      let hit = state.urlCache.get(id);
+      if (!hit || Date.now() - hit.at > 4 * 60 * 1000) {
+        const r = await API.api(`/api/office/file?id=${encodeURIComponent(id)}`);
+        hit = { url: r.url, at: Date.now() };
+        state.urlCache.set(id, hit);
+      }
+      if (state.fileId !== id) return;                       // 待つあいだに、別のファイルを選ばれた
+      box.innerHTML = f.mimeType === "application/pdf"
+        ? `<iframe title="勤務表（${esc(f.fileName)}）" src="${esc(hit.url)}"></iframe>`
+        : `<div class="imgbox"><img alt="勤務表（${esc(f.fileName)}）" src="${esc(hit.url)}"></div>`;
+    } catch (e) {
+      if (state.fileId !== id) return;
+      box.innerHTML = `<div class="none">ファイルを開けませんでした。<br>${esc(e.hint || e.detail || e.message)}<br>（アップロードが完了していない可能性があります）</div>`;
+    }
+  }
+
+  // 状態ごとの、いちばん上のカード（次に押すもの）
+  function renderTop() {
+    const d = state.d, t = d.timesheet, hasFile = d.files.length > 0;
+    let h = "";
+    const noDays = !d.days.length;
+    if (d.state === "confirmed") {
+      const c = t.confirmed;
+      h = `<div class="ts-card"><h2><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>確定済みです</h2>
+        <p>稼働時間 <b>${esc(hours(c.totalMinutes))}h</b>（稼働 ${c.workDays}日）で確定しています。${t.confirmedAt ? `（${esc(fmt(t.confirmedAt))}）` : ""}</p>
+        ${settlementHtml()}
+        <div class="ts-actions"><button type="button" class="of-btn danger" data-act="reopen"><span class="material-symbols-outlined" aria-hidden="true">undo</span>確定を取り消す</button></div></div>`;
+    } else if (d.state === "returned") {
+      h = `<div class="ts-card"><h2><span class="material-symbols-outlined" aria-hidden="true">undo</span>差し戻し中です</h2>
+        <p>理由：${esc(t.returnReason || "")}</p>
+        <p class="of-muted">再提出を待っています。新しい勤務表が届いたら、左のファイルから読み取ってください。連絡は、これまでの方法で行ってください（この画面からはメールを送りません）。</p>
+        <div class="ts-actions"><button type="button" class="of-btn sec" data-act="blank"><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>手入力で始める</button></div></div>`;
+    } else if (!t || noDays) {
+      const failed = t && t.readState === "failed";
+      h = `<div class="ts-card"><h2><span class="material-symbols-outlined" aria-hidden="true">${failed ? "error" : "auto_awesome"}</span>${failed ? "AI が読み取れませんでした" : hasFile ? "勤務表を読み取ります" : "勤務表を待っています"}</h2>
+        ${failed ? `<p>${esc(t.aiMessage || "")}</p>` : `<p>${hasFile ? "AI が読み取った内容は下書きになります。人が確認して、確定するまで、稼働時間には使われません。" : "勤務表のファイルが届いていません。ファイルを追加するか、手入力で始めてください。"}</p>`}
+        <div class="ts-actions">
+          ${hasFile ? `<button type="button" class="of-btn big" data-read="${esc(state.fileId || "")}" id="readMain"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>${failed ? "もう一度読み取る" : "AI で読み取る"}</button>` : ""}
+          <button type="button" class="of-btn sec" data-act="blank"><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>手入力で始める</button>
+          ${hasFile ? `<button type="button" class="of-btn danger" data-act="return"><span class="material-symbols-outlined" aria-hidden="true">undo</span>差し戻す</button>` : ""}
+        </div></div>`;
+    } else if (t.status === "draft") {
+      h = `<div class="ts-card"><h2><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>下書き：内容を確認してください</h2>
+        <p>${t.readState === "ok" ? `AI が読み取った下書きです（${esc(fmt(t.aiReadAt))}）。左の勤務表と見比べて、色のついた日から確認してください。` : "手入力の下書きです。"}
+        AI が読めなかった所は、推測で埋めずに空にしてあります。</p>
+        <div class="ts-actions"><button type="button" class="of-btn danger" data-act="return"><span class="material-symbols-outlined" aria-hidden="true">undo</span>差し戻す</button></div></div>`;
+    }
+    el("top").innerHTML = h;
+  }
+
+  function settlementHtml() {
+    const d = state.d, s = d.settlement, tm = d.terms;
+    const link = `<a href="terms.html?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}" class="of-btn sec">契約条件を${tm.status === "none" ? "登録する" : "見る・直す"}</a>`;
+    if (!s) return "";
+    const yen = (v) => `${Number(v).toLocaleString("ja-JP")}円`;
+    if (s.status === "calculated") {
+      const band = { within: "精算幅の中", over: "精算幅の超過", under: "精算幅の不足" }[s.band] || "";
+      return `<p>契約条件：${esc(tm.description)}${band ? `（${esc(band)}）` : ""}<br>売上の精算：<b>${esc(yen(s.amount))}</b>
+        ${s.adjustment ? `<span class="of-muted">（単価から ${s.adjustment > 0 ? "+" : ""}${esc(yen(s.adjustment))}）</span>` : ""}</p><div class="ts-actions" style="margin-bottom:10px;">${link}</div>`;
+    }
+    return `<p>売上の精算：<b>${s.status === "none" ? "契約条件が未登録です" : "自動では計算できません"}</b></p>
+      ${s.reasons.length ? `<ul style="margin:0 0 8px;padding-left:18px;font-size:12.5px;">${s.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+      <div class="ts-actions" style="margin-bottom:10px;">${link}</div>`;
+  }
+
+  function renderKpi() {
+    const d = state.d, s = d.summary;
+    if (!s || !d.days.length) { el("kpi").innerHTML = ""; return; }
+    const tc = s.totalCheck;
+    const chk = tc.status === "match" ? `<div class="good"><div class="lb">勤務表の合計と照合</div><div class="v">一致</div></div>`
+      : tc.status === "mismatch" ? `<div class="warn"><div class="lb">勤務表の合計と照合</div><div class="v">${tc.diffMinutes > 0 ? "+" : "−"}${esc(clock(Math.abs(tc.diffMinutes)))}<small> 計算−表</small></div></div>`
+      : `<div><div class="lb">勤務表の合計と照合</div><div class="v"><small>${tc.status === "incomplete" ? "確認が終わると照合" : "合計の記載なし"}</small></div></div>`;
+    const range = d.terms.range;
+    let rangeHtml = "";
+    if (range) {
+      const m = s.totalMinutes;
+      const band = m > range.maxMinutes ? "over" : m < range.minMinutes ? "under" : "within";
+      rangeHtml = `<div class="ts-range">契約の精算幅：${esc(hours(range.minMinutes))}〜${esc(hours(range.maxMinutes))}h ／ 現在 <b>${esc(hours(m))}h</b>（${{ within: "幅の中", over: "超過", under: "不足" }[band]}）${s.unresolvedCount ? "　※入力が必要な日を除いた合計です" : ""}</div>`;
+    } else if (d.terms.status === "none") {
+      rangeHtml = `<div class="ts-range of-muted">契約条件が未登録です（<a href="terms.html?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}">登録する</a>）。精算幅との照合・精算の計算には、契約条件が要ります。</div>`;
+    }
+    el("kpi").innerHTML = `<div class="ts-kpi" role="group" aria-label="集計">
+      <div><div class="lb">合計${s.rounding ? "（丸め後）" : ""}</div><div class="v">${esc(hours(s.totalMinutes))}<small> h</small></div></div>
+      <div><div class="lb">稼働日数</div><div class="v">${s.workDays}<small> 日</small></div></div>
+      <div class="${s.unresolvedCount ? "bad" : "good"}"><div class="lb">入力が必要な日</div><div class="v">${s.unresolvedCount}<small> 日</small></div></div>
+      <div class="${s.reviewCount ? "warn" : "good"}"><div class="lb">要確認の日</div><div class="v">${s.reviewCount}<small> 日</small></div></div>
+      ${chk}</div>${rangeHtml}`;
+  }
+
+  // 日ごとの表の上：絞り込みと、まとめて直す操作（人が押したときだけ動く）
+  const isDraft = () => state.d?.timesheet?.status === "draft";
+  function bulkCounts() {
+    const days = state.d.days;
+    return {
+      unread: days.filter((x) => x.kind == null && x.startMin == null && x.endMin == null && x.breakMin == null).length,
+      weekend: days.filter((x) => x.kind == null && [0, 6].includes(wday(x.workDate))).length,
+      brk: days.filter((x) => x.kind === "work" && x.breakMin == null && x.startMin != null && x.endMin != null).length,
+      review: days.filter((x) => x.needsReview).length,
+    };
+  }
+  function renderTools() {
+    const d = state.d;
+    if (!d.days.length) { el("tools").innerHTML = ""; return; }
+    const att = d.days.filter((x) => x.blocking || x.needsReview).length;
+    const b = bulkCounts();
+    const dis = (n) => (isDraft() && n > 0 ? "" : " disabled");
+    el("tools").innerHTML = `<div class="ts-tools">
+      ${isDraft() ? `<div class="seg" role="group" aria-label="表示">
+        <button type="button" data-filter="attention" class="${state.filter === "attention" ? "on" : ""}" aria-pressed="${state.filter === "attention"}">要対応のみ（${att}）</button>
+        <button type="button" data-filter="all" class="${state.filter === "all" ? "on" : ""}" aria-pressed="${state.filter === "all"}">すべての日（${d.days.length}）</button>
+      </div>` : `<span class="of-muted">全${d.days.length}日の記録</span>`}
+      <span class="sp"></span>
+      ${isDraft() ? `
+      <button type="button" class="of-btn sec" data-bulk="mark_off_unread"${dis(b.unread)}>読めなかった日を休みに（${b.unread}）</button>
+      <button type="button" class="of-btn sec" data-bulk="weekend"${dis(b.weekend)}>未確認の土日を休みに（${b.weekend}）</button>
+      <button type="button" class="of-btn sec" data-bulk="fill_break"${dis(b.brk)}>休憩を一括入力（${b.brk}）</button>
+      <button type="button" class="of-btn sec" data-bulk="review_flagged"${dis(b.review)}>要確認をまとめて確認済みに（${b.review}）</button>` : ""}
+    </div>`;
+  }
+
+  // ---- 日ごとの表 ----------------------------------------------------------------------
+  function visibleDays() {
+    const days = state.d.days;
+    if (state.filter === "all" || !isDraft()) return days;            // 確定・差し戻しのあとは、全日を記録として見せる
+    return days.filter((x) => x.blocking || x.needsReview || state.pinned.has(x.workDate));
+  }
+  const rowClass = (x) => (x.blocking ? "blocking" : x.needsReview ? "review" : "ok");
+
+  function flagsHtml(x) {
+    const err = state.errors[x.workDate];
+    let h = "";
+    if (err) h += err.map((m) => `<div class="ts-fl err">${esc(m)}</div>`).join("");
+    if (x.source === "ai" && x.confidence) h += `<span class="ts-cf ${esc(x.confidence)}" title="AI の自信度">AI ${esc(CONF[x.confidence] || "")}</span>`;
+    h += x.flags.map((f) => `<div class="ts-fl ${f.blocking ? "b" : "w"}">${esc(f.text)}</div>`).join("");
+    if (x.needsReview && isDraft()) h += `<button type="button" class="of-btn sec ok-btn" data-review="${esc(x.workDate)}">確認した</button>`;
+    else if (x.reviewed && x.flags.length) h += `<span class="of-muted">確認済み</span>`;
+    return h;
+  }
+
+  function rowHtml(x) {
+    const dis = isDraft() ? "" : " disabled";
+    const wd = wday(x.workDate);
+    const worked = x.kind === "off" ? "休み" : x.worked != null ? clock(x.worked) : "—";
+    const inv = (f) => (state.errors[x.workDate] && state.errors[x.workDate].__f === f ? ' aria-invalid="true"' : "");
+    return `<tr data-date="${esc(x.workDate)}" data-kind="${esc(x.kind || "")}" class="${rowClass(x)}">
+      <td class="dt ${wd === 6 ? "sat" : wd === 0 ? "sun" : ""}" data-label="日付">${esc(md(x.workDate))}<small>(${WD[wd]})</small></td>
+      <td data-label="区分"><select data-f="kind" aria-label="${esc(md(x.workDate))} 区分"${dis}>
+        <option value=""${x.kind == null ? " selected" : ""}>未確認</option>
+        <option value="work"${x.kind === "work" ? " selected" : ""}>勤務</option>
+        <option value="off"${x.kind === "off" ? " selected" : ""}>休み</option></select></td>
+      <td data-label="開始"><input class="t" data-f="start"${inv("start")} value="${esc(clock(x.startMin))}" placeholder="9:00" inputmode="numeric" autocomplete="off" aria-label="${esc(md(x.workDate))} 開始"${dis}></td>
+      <td data-label="終了"><input class="t" data-f="end"${inv("end")} value="${esc(clock(x.endMin))}" placeholder="18:00" inputmode="numeric" autocomplete="off" aria-label="${esc(md(x.workDate))} 終了"${dis}></td>
+      <td data-label="休憩"><input class="t" data-f="break"${inv("break")} value="${esc(brk(x.breakMin))}" placeholder="1:00" inputmode="numeric" autocomplete="off" aria-label="${esc(md(x.workDate))} 休憩"${dis}></td>
+      <td class="w" data-label="実働">${esc(worked)}${x.sheetWorkedMin != null ? `<small>表 ${esc(clock(x.sheetWorkedMin))}</small>` : ""}</td>
+      <td data-label="備考"><input data-f="note"${inv("note")} value="${esc(x.note || "")}" aria-label="${esc(md(x.workDate))} 備考" autocomplete="off"${dis}></td>
+      <td class="fl" data-label="確認">${flagsHtml(x)}</td>
+    </tr>`;
+  }
+
+  function renderDays() {
+    const d = state.d;
+    if (!d.days.length) { el("days").innerHTML = ""; return; }
+    const rows = visibleDays();
+    const hidden = d.days.length - rows.length;
+    el("days").innerHTML = `<table class="ts-days" aria-label="日ごとの勤務">
+      <thead><tr><th>日付</th><th>区分</th><th>開始</th><th>終了</th><th>休憩</th><th>実働</th><th>備考</th><th>AI・確認</th></tr></thead>
+      <tbody id="dayrows">${rows.map(rowHtml).join("")}</tbody></table>
+      ${state.filter === "attention" && !rows.length ? `<div class="ts-hidden-note">要対応の日はありません。「すべての日」で、全体を見比べられます。</div>` : ""}
+      ${state.filter === "attention" && hidden > 0 && rows.length ? `<div class="ts-hidden-note">問題のない ${hidden}日は表示していません（「すべての日」で表示）。</div>` : ""}`;
+  }
+
+  // 保存のあと：入力欄は作り直さず、計算された所だけを更新する（Tab で次の欄へ進んでいても、フォーカスが消えない）
+  function patchRows() {
+    for (const x of state.d.days) {
+      const tr = document.querySelector(`#dayrows tr[data-date="${x.workDate}"]`);
+      if (!tr) continue;
+      tr.className = rowClass(x);
+      tr.dataset.kind = x.kind || "";
+      const set = (f, v) => { const i = tr.querySelector(`[data-f="${f}"]`); if (i && document.activeElement !== i) i.value = v; };
+      set("kind", x.kind || ""); set("start", clock(x.startMin)); set("end", clock(x.endMin)); set("break", brk(x.breakMin)); set("note", x.note || "");
+      tr.querySelector("td.w").innerHTML = `${esc(x.kind === "off" ? "休み" : x.worked != null ? clock(x.worked) : "—")}${x.sheetWorkedMin != null ? `<small>表 ${esc(clock(x.sheetWorkedMin))}</small>` : ""}`;
+      tr.querySelector("td.fl").innerHTML = flagsHtml(x);
+      for (const i of tr.querySelectorAll("[aria-invalid]")) i.removeAttribute("aria-invalid");
+    }
+  }
+
+  function renderFoot() {
+    const d = state.d, c = d.confirm;
+    if (!d.timesheet || d.timesheet.status !== "draft" || !c || !d.days.length) { el("foot").innerHTML = ""; return; }
+    const secs = (d.timesheet.reviewSeconds || 0) + state.pending;
+    const time = secs >= 60 ? `${Math.floor(secs / 60)}分${secs % 60}秒` : `${secs}秒`;
+    el("foot").innerHTML = `<div class="ts-foot">
+      ${c.ok ? `<p class="ok"><span class="material-symbols-outlined" aria-hidden="true" style="vertical-align:-4px;">check_circle</span>確定できます。</p>`
+        : `<ul aria-label="確定できない理由">${c.blockers.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`}
+      ${c.acks.map((a) => `<label><input type="checkbox" data-ack="${esc(a)}"><span>${esc(c.ackLabels[a] || a)}</span></label>`).join("")}
+      <div class="ts-actions">
+        <button type="button" class="of-btn big" id="confirmBtn" data-act="confirm"${c.ok ? "" : " disabled"}><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>この内容で確定する</button>
+        <span class="t" id="reviewTime" title="確認にかかった時間の目安（AI の精度ではなく、確認の手間を測っています）">確認にかけた時間：${esc(time)}</span>
+      </div></div>`;
+    syncConfirm();
+  }
+  function syncConfirm() {
+    const c = state.d?.confirm; const b = el("confirmBtn");
+    if (!c || !b) return;
+    const acks = [...document.querySelectorAll("[data-ack]")];
+    b.disabled = !(c.ok && acks.every((a) => a.checked));
+  }
+  setInterval(() => {
+    const t = el("reviewTime"); if (!t || !state.d) return;
+    const secs = (state.d.timesheet?.reviewSeconds || 0) + state.pending;
+    t.textContent = `確認にかけた時間：${secs >= 60 ? `${Math.floor(secs / 60)}分${secs % 60}秒` : `${secs}秒`}`;
+  }, 5000);
+
+  // ---- 操作 ------------------------------------------------------------------------------
+  function wire() {
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      const pick = t.closest?.("[data-pick]");
+      if (pick) { state.fileId = pick.dataset.pick; renderFiles(); renderViewer(); return; }
+      const rd = t.closest?.("[data-read]");
+      if (rd) { readFile(rd.dataset.read); return; }
+      const f = t.closest?.("[data-filter]");
+      if (f) { state.filter = f.dataset.filter; renderTools(); renderDays(); return; }
+      const bk = t.closest?.("[data-bulk]");
+      if (bk) { bulk(bk.dataset.bulk); return; }
+      const rv = t.closest?.("[data-review]");
+      if (rv) { enqueue(() => saveDays([{ workDate: rv.dataset.review, reviewed: true }])); return; }
+      const act = t.closest?.("[data-act]");
+      if (act) { doAct(act.dataset.act); return; }
+    });
+    // 入力欄：変えて欄を離れたら、その日だけ保存する
+    document.addEventListener("change", (e) => {
+      const i = e.target;
+      if (i.matches?.("[data-ack]")) { syncConfirm(); return; }
+      if (i.id === "upfile") { upload(i.files[0]); i.value = ""; return; }
+      const tr = i.closest?.("#dayrows tr");
+      if (!tr || !i.dataset.f) return;
+      const date = tr.dataset.date;
+      state.pinned.add(date);
+      delete state.errors[date];
+      enqueue(() => saveDays([{ workDate: date, [i.dataset.f]: i.value }], i));
+    });
+    // Enter で、次の日の同じ欄へ（Tab で右へ、Enter で下へ。表と見比べながら続けて打てる）
+    document.addEventListener("keydown", (e) => {
+      const i = e.target;
+      if (e.key !== "Enter" || !i.matches?.("#dayrows input[data-f]") || e.isComposing) return;
+      e.preventDefault();
+      const next = i.closest("tr").nextElementSibling?.querySelector(`[data-f="${i.dataset.f}"]`);
+      i.blur();
+      if (next) next.focus();
+    });
+  }
+
+  function apply(d, { rows = false } = {}) {
+    state.d = d;
+    if (rows) { renderAll(); return; }
+    renderBadge(); renderBanners(); renderFiles(); renderTop(); renderKpi(); renderTools(); patchRows(); renderFoot();
+  }
+
+  async function saveDays(days, input) {
+    try {
+      const d = await post("save", { days });
+      state.errText = "";
+      apply(d);
+    } catch (e) {
+      if (e.code === "invalid_input" && e.body?.errors) {
+        for (const [date, msgs] of Object.entries(e.body.errors)) {
+          state.errors[date] = Object.assign([...msgs], { __f: input?.dataset.f });
+          const tr = document.querySelector(`#dayrows tr[data-date="${date}"]`);
+          if (tr) { tr.querySelector("td.fl").innerHTML = flagsHtml(state.d.days.find((x) => x.workDate === date) || { workDate: date, flags: [] }); if (input) input.setAttribute("aria-invalid", "true"); }
+        }
+      } else fail(e);
+    }
+  }
+
+  const fail = (e) => { state.errText = "操作できませんでした：" + (e.hint || e.detail || e.message); renderBanners(); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+  async function withBusy(fn) {
+    if (state.busy) return;
+    state.busy = true;
+    for (const b of document.querySelectorAll(".ts-right .of-btn, .ts-file .of-btn")) b.disabled = true;
+    try { await fn(); } finally { state.busy = false; if (state.d) { renderTop(); renderTools(); renderFiles(); renderFoot(); } }
+  }
+
+  async function readFile(id, overwrite) {
+    if (!id) return;
+    await withBusy(async () => {
+      state.errText = "";
+      el("top").innerHTML = `<div class="ts-card" role="status"><h2><span class="material-symbols-outlined" aria-hidden="true">hourglass_top</span>AI が読み取っています…</h2><p>30秒〜1分ほどかかることがあります。このまま待ってください。</p></div>`;
+      try {
+        const d = await post("read", { submissionId: id, overwrite: overwrite === true });
+        state.pinned.clear(); state.errors = {}; state.filter = "attention";
+        state.fileId = id;
+        apply(d, { rows: true });
+      } catch (e) {
+        if (e.code === "has_edits" && confirm("人が確認・入力した内容があります。読み取り直すと、その内容は消えます。読み取り直しますか？")) { state.busy = false; return readFile(id, true); }
+        if (e.code === "read_failed") { await load(); state.errText = e.body?.message || e.message; renderBanners(); return; }
+        fail(e); renderTop();
+      }
+    });
+  }
+
+  async function bulk(op) {
+    let extra = { op };
+    const days = state.d.days;
+    if (op === "weekend") {
+      const dates = days.filter((x) => x.kind == null && [0, 6].includes(wday(x.workDate))).map((x) => x.workDate);
+      if (!dates.length) return;
+      extra = { op: "mark_off_dates", dates };
+    } else if (op === "fill_break") {
+      const v = await askText("休憩を一括入力", "勤務の日で、休憩が空の日に入れます（開始・終了が入っている日だけ）。勤務表に書かれている休憩を入れてください。", "1:00", "例：1:00・60分・1時間");
+      if (v == null) return;
+      extra = { op, minutes: v };
+    }
+    await withBusy(async () => {
+      try { const d = await post("bulk", extra); state.pinned.clear(); apply(d, { rows: true }); }
+      catch (e) { fail(e); }
+    });
+  }
+
+  async function doAct(a) {
+    if (a === "blank") {
+      return withBusy(async () => { try { apply(await post("blank"), { rows: true }); } catch (e) { fail(e); } });
+    }
+    if (a === "confirm") {
+      const ack = [...document.querySelectorAll("[data-ack]:checked")].map((x) => x.dataset.ack);
+      return withBusy(async () => {
+        try { state.errText = ""; state.d = await post("confirm", { ack }); state.pinned.clear(); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+        catch (e) { if (e.code === "not_ready" || e.code === "ack_required") await load(); fail(e); if (e.body?.blockers) { state.errText = e.body.blockers.join(" ／ "); renderBanners(); } }
+      });
+    }
+    if (a === "reopen") {
+      const reason = await askText("確定を取り消す", "確定を取り消して、下書きに戻します（請求書を作成・送付済みのときは取り消せません）。理由を入れてください。", "", "例：休憩の入力ミス", true);
+      if (reason == null) return;
+      return withBusy(async () => { try { state.errText = ""; apply(await post("reopen", { reason }), { rows: true }); } catch (e) { fail(e); } });
+    }
+    if (a === "return") {
+      const reason = await askText("勤務表を差し戻す", "提出物に問題があるとして、再提出を待つ状態にします。再提出をお願いする内容を入れてください（連絡は、これまでの方法で行ってください。この画面からはメールを送りません）。", "", "例：10/15〜10/20 の記入が抜けています", true);
+      if (reason == null) return;
+      return withBusy(async () => { try { state.errText = ""; apply(await post("return", { reason }), { rows: true }); } catch (e) { fail(e); } });
+    }
+  }
+
+  // ---- 入力ダイアログ --------------------------------------------------------------------
+  function askText(title, body, initial, placeholder, multiline) {
+    return new Promise((resolve) => {
+      const root = el("dlg-root");
+      root.innerHTML = `<div class="ts-dlg-bg" data-dlg-bg><div class="ts-dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+        <h2 id="dlg-t">${esc(title)}</h2><p>${esc(body)}</p>
+        ${multiline ? `<textarea id="dlg-in" rows="3" maxlength="200" placeholder="${esc(placeholder || "")}" aria-label="${esc(title)}"></textarea>`
+          : `<input type="text" id="dlg-in" value="${esc(initial || "")}" placeholder="${esc(placeholder || "")}" aria-label="${esc(title)}">`}
+        <div class="er" id="dlg-er" role="alert"></div>
+        <div class="ts-actions" style="justify-content:flex-end;"><button type="button" class="of-btn sec" id="dlg-no">キャンセル</button><button type="button" class="of-btn" id="dlg-ok">実行</button></div></div></div>`;
+      const inp = el("dlg-in"); inp.focus(); if (!multiline) inp.select();
+      const done = (v) => { root.innerHTML = ""; resolve(v); };
+      el("dlg-no").onclick = () => done(null);
+      el("dlg-ok").onclick = () => { const v = inp.value.trim(); if (!v) { el("dlg-er").textContent = "入力してください"; return; } done(v); };
+      root.querySelector("[data-dlg-bg]").onclick = (e) => { if (e.target.hasAttribute("data-dlg-bg")) done(null); };
+      root.onkeydown = (e) => { if (e.key === "Escape") done(null); else if (e.key === "Enter" && !multiline) el("dlg-ok").click(); };
+    });
+  }
+
+  // ---- アップロード ------------------------------------------------------------------------
+  async function upload(file, allow, sid) {
+    if (!file) return;
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { state.errText = "PDF・JPEG・PNG のファイルを選んでください"; renderBanners(); return; }
+    if (file.size > 10 * 1024 * 1024) { state.errText = "ファイルは 10MB までです"; renderBanners(); return; }
+    await withBusy(async () => {
+      state.errText = "";
+      try {
+        let submissionId = sid;
+        if (!submissionId) {
+          const r = await post("upload", { mimeType: file.type, sizeBytes: file.size, filename: file.name });
+          const put = await fetch(r.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: file });
+          if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+          submissionId = r.submissionId;
+        }
+        const d = await post("attach", { submissionId, filename: file.name, allowDuplicate: allow === true });
+        state.fileId = d.attached || submissionId;
+        apply(d, { rows: true });
+      } catch (e) {
+        if (e.code === "duplicate") { state.errText = e.hint || "同じファイルが、すでに届いています。登録しませんでした"; renderBanners(); }
+        else if (e.code === "duplicate_other" && confirm("同じファイルが、別の月・別の人の勤務表としても提出されています。別のファイルではありませんか？\n\nそれでもこの月の勤務表として登録しますか？")) {
+          state.busy = false; return upload(file, true, e.body?.submissionId);
+        } else if (e.code !== "duplicate_other") fail(e);
+      }
+    });
+  }
+</script>
+
+</body>
+</html>

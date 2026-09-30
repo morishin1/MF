@@ -112,7 +112,7 @@ function setup() {
 }
 
 const booked = (over = {}) => ({
-  type: "booked", kind: "casual", eventId: "ev1", applicantId: "a1",
+  type: "booked", eventId: "ev1", applicantId: "a1",
   scheduledAt: "2026-10-01T05:00:00Z", meetingUrl: "https://meet.example.com/x", ...over,
 });
 
@@ -167,7 +167,7 @@ await ok("旧event_idの行を、新event_idへ引き継ぐ（複製しない）
   setup();
   await applyTimerexEvent(booked());
   const r = await applyTimerexEvent({
-    type: "rescheduled", kind: "casual", eventId: "ev2", previousEventId: "ev1", applicantId: "a1",
+    type: "rescheduled", eventId: "ev2", previousEventId: "ev1", applicantId: "a1",
     scheduledAt: "2026-10-02T05:00:00Z", meetingUrl: "https://meet.example.com/x",
   });
   assert.equal(r.action, "rescheduled", JSON.stringify(r));
@@ -181,7 +181,7 @@ console.log("\n=== キャンセル ===\n");
 await ok("面談を物理削除せず、canceled_atを立てる", async () => {
   setup();
   await applyTimerexEvent(booked());
-  const r = await applyTimerexEvent({ type: "canceled", kind: "casual", eventId: "ev1", applicantId: "a1" });
+  const r = await applyTimerexEvent({ type: "canceled", eventId: "ev1", applicantId: "a1" });
   assert.equal(r.action, "canceled", JSON.stringify(r));
   assert.equal(db.rows.gw_hr_interviews.length, 1, "物理削除しない");
   assert.ok(db.rows.gw_hr_interviews[0].canceled_at);
@@ -190,29 +190,29 @@ await ok("面談を物理削除せず、canceled_atを立てる", async () => {
 await ok("応募者はscheduling（日程調整のやり直し）へ戻る", async () => {
   setup();
   await applyTimerexEvent(booked());
-  await applyTimerexEvent({ type: "canceled", kind: "casual", eventId: "ev1", applicantId: "a1" });
+  await applyTimerexEvent({ type: "canceled", eventId: "ev1", applicantId: "a1" });
   assert.equal(db.rows.gw_hr_applicants.find((x) => x.id === "a1").status, "scheduling");
 });
 
 await ok("キャンセルのタイムライン・監査ログが残る", async () => {
   setup();
   await applyTimerexEvent(booked());
-  await applyTimerexEvent({ type: "canceled", kind: "casual", eventId: "ev1", applicantId: "a1" });
+  await applyTimerexEvent({ type: "canceled", eventId: "ev1", applicantId: "a1" });
   assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "interview_canceled"));
   assert.ok(logged.some((l) => l.action === "hr.timerex_interview_cancel"));
 });
 
 await ok("対象の面談が見つからなければエラー（存在しないevent_id）", async () => {
   setup();
-  const r = await applyTimerexEvent({ type: "canceled", kind: "casual", eventId: "not-exists", applicantId: "a1" });
+  const r = await applyTimerexEvent({ type: "canceled", eventId: "not-exists", applicantId: "a1" });
   assert.equal(r.error, "interview_not_found");
 });
 
 await ok("すでにキャンセル済みなら、もう一度は何もしない", async () => {
   setup();
   await applyTimerexEvent(booked());
-  await applyTimerexEvent({ type: "canceled", kind: "casual", eventId: "ev1", applicantId: "a1" });
-  const r = await applyTimerexEvent({ type: "canceled", kind: "casual", eventId: "ev1", applicantId: "a1" });
+  await applyTimerexEvent({ type: "canceled", eventId: "ev1", applicantId: "a1" });
+  const r = await applyTimerexEvent({ type: "canceled", eventId: "ev1", applicantId: "a1" });
   assert.equal(r.action, "already_canceled");
 });
 
@@ -222,7 +222,7 @@ await ok("同じevent_idでも、テナントが違えば別々に扱う（衝�
   setup();
   await applyTimerexEvent(booked({ applicantId: "a1", eventId: "ev-shared" }));
   const r = await applyTimerexEvent({
-    type: "booked", kind: "casual", eventId: "ev-shared", applicantId: "a2",
+    type: "booked", eventId: "ev-shared", applicantId: "a2",
     scheduledAt: "2026-10-01T05:00:00Z",
   });
   assert.equal(r.action, "created", "t2の新規予約として作られる（t1のresyncにならない）");
@@ -264,24 +264,24 @@ await ok("実施済み・キャンセル済みの古い面談は引き継ぎ対�
 console.log("\n=== 壊れた入力 ===\n");
 
 await ok("applicant_idが無ければ断る", async () => {
-  const r = await applyTimerexEvent({ type: "booked", kind: "casual", eventId: "ev1", scheduledAt: "2026-10-01T05:00:00Z" });
+  const r = await applyTimerexEvent({ type: "booked", eventId: "ev1", scheduledAt: "2026-10-01T05:00:00Z" });
   assert.equal(r.error, "missing_applicant_id");
 });
 
 await ok("event_idが無ければ断る", async () => {
-  const r = await applyTimerexEvent({ type: "booked", kind: "casual", applicantId: "a1", scheduledAt: "2026-10-01T05:00:00Z" });
+  const r = await applyTimerexEvent({ type: "booked", applicantId: "a1", scheduledAt: "2026-10-01T05:00:00Z" });
   assert.equal(r.error, "missing_event_id");
 });
 
 await ok("予約確定なのにscheduledAtが無ければ断る", async () => {
   setup();
-  const r = await applyTimerexEvent({ type: "booked", kind: "casual", eventId: "ev1", applicantId: "a1" });
+  const r = await applyTimerexEvent({ type: "booked", eventId: "ev1", applicantId: "a1" });
   assert.equal(r.error, "missing_scheduled_at");
 });
 
 await ok("不明なtypeは断る", async () => {
   setup();
-  const r = await applyTimerexEvent({ type: "unknown_type", kind: "casual", eventId: "ev1", applicantId: "a1" });
+  const r = await applyTimerexEvent({ type: "unknown_type", eventId: "ev1", applicantId: "a1" });
   assert.equal(r.error, "unknown_event_type");
 });
 

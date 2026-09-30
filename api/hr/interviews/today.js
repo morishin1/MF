@@ -2,7 +2,6 @@
 //
 // 時刻・氏名・応募職種・面談担当・現在ステータスだけを返す。押すと応募者詳細へ
 
-import { ymd as jstYmd } from "../../../lib/jst.js";
 import { json, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
@@ -22,7 +21,7 @@ export default async function handler(req, res) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
-  const jstToday = jstYmd();
+  const jstToday = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
   const from = `${jstToday}T00:00:00+09:00`;
   const to = `${jstToday}T23:59:59+09:00`;
 

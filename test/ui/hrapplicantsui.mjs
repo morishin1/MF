@@ -112,11 +112,7 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check((await page.locator(".hr-detail").innerText()).includes("NEXT ACTION"), "NEXT ACTIONが最優先表示される");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   check((await page.locator(".hr-detail").innerText()).includes("応募"), "選考タイムラインが出る");
-  {
-    // 選考（どこまで進んだか）・状態（いま何待ちか）が NEXT ACTION の前に出る（迷わないUI）
-    const now = await page.locator(".hr-next .now").innerText();
-    check(now.includes("選考") && now.includes("状態"), "「選考」「状態」が NEXT ACTION の前に出る（迷わないUI）");
-  }
+  check((await page.locator(".hr-next .now").innerText()).includes("現在："), "「現在：」の状態が先に出る（迷わないUI）");
 
   console.log("— 担当を詳細から変更できる —");
   check((await page.locator("#hr-recruiter").innerText()).includes(RECRUITER.display_name), "詳細に担当が出る");

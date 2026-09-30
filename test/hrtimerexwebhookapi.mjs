@@ -79,8 +79,6 @@ mock.module(atRoot("lib/gw-audit.js"), {
 });
 
 process.env.TIMEREX_WEBHOOK_SECRET = "test-secret-value-long-enough";
-// カジュアル面談の予約枠（現行の設定と同じく、予約ページの URL から calendar_url_path を取る）
-process.env.TIMEREX_CASUAL_INTERVIEW_URL = "https://timerex.net/s/eight_hr/c0a1b2c3";
 
 const { default: webhook } = await import(atRoot("api/hr/timerex/webhook.js"));
 
@@ -115,7 +113,6 @@ function setup() {
 // 個人情報を匿名化した、実際に確認できたpayload構造そのままのfixture
 const confirmedFixture = (over = {}) => ({
   webhook_type: "event_confirmed",
-  calendar_url_path: "c0a1b2c3",   // 実 payload では body 直下
   event: {
     id: "ev_abc123",
     start_datetime: "2026-10-01T05:00:00Z",

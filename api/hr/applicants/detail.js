@@ -10,8 +10,7 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
   normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, activeOffer, STAGE_LABEL, RANK_LABEL,
-  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor, pickNextInterview,
-  STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
+  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql";
@@ -61,9 +60,11 @@ async function one(req, res, sb, ctx) {
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
 
-  // NEXT ACTION が指す面談（いまの選考段階の種類で、実施前・キャンセルでない、直近のもの）。
-  // NEXT ACTIONの「本日 14:00 カジュアル面談」と「面談を実施済みにする」の対象（nextInterviewId）
-  const nextInterview = pickNextInterview(a, interviews);
+  // 直近の、まだ実施していない・キャンセルしていない面談
+  // （NEXT ACTIONの「本日14:00 カジュアル面談」に使う）
+  const nextInterview = (interviews || [])
+    .filter((i) => !i.conducted_at && !i.canceled_at && i.scheduled_at)
+    .sort((x, y) => String(x.scheduled_at).localeCompare(String(y.scheduled_at)))[0] || null;
   // いま有効な合格通知（NEXT ACTIONの「送付：.../閲覧：...」に使う。README Stage 6）
   const current = activeOffer(offers);
 
@@ -71,7 +72,7 @@ async function one(req, res, sb, ctx) {
     applicant: {
       ...shapeApplicant(
         a,
-        nextInterview && { id: nextInterview.id, scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
+        nextInterview && { scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
         current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
       ),
       recruiterName: recruiter?.display_name || null,
@@ -83,8 +84,6 @@ async function one(req, res, sb, ctx) {
     // 評価UI・面談予定フォームの元。画面側で項目を持たない（ここが正）
     evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: RANKS, rankLabel: RANK_LABEL,
     interviewKinds: INTERVIEW_KINDS,
-    // 状態プルダウンの選択肢（lib/hr.js の STATUSES / STATUS_LABEL が正）
-    statusOptions: STATUS_OPTIONS,
     // TimeRexの日程調整URL（環境変数未設定ならnull。README「TimeRex連携」指示書 §7）
     schedulingUrl: schedulingUrlFor(process.env.TIMEREX_CASUAL_INTERVIEW_URL, a.id),
     timeline: (timeline || []).map((t) => ({
@@ -103,7 +102,6 @@ const CEO_DECISION_FIELDS = ["decision", "decisionNote", "holdReason", "holdNext
 async function update(req, res, sb, ctx, user) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
-  if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
   const row = normalizeApplicant(body, { partial: true });
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
@@ -174,56 +172,4 @@ async function update(req, res, sb, ctx, user) {
   });
 
   return json(res, 200, { applicant: shapeApplicant(data) });
-}
-
-// ---- 状態（status）の手動変更 -------------------------------------------------------
-// PATCH { id, action: "setStatus", status, dryRun?, acknowledgeWarnings? }
-//   dryRun=true        … 変更せず、注意（warnings）だけ返す。画面の確認ダイアログに出す
-//   注意があるのに acknowledgeWarnings が無ければ 409（画面で確認してから送り直す）
-// 変えるのは status だけ。選考段階（stage）・面談（日時・取消・Meet URL）は変えない
-// （TimeRex 連携の面談は TimeRex が正）。必ず選考タイムラインと監査ログに残す（誰が・何から何へ）。
-async function setStatus(res, sb, ctx, user, body) {
-  const to = body.status;
-  if (!STATUSES.includes(to)) return json(res, 400, { error: "invalid_body", detail: "status が不正です" });
-
-  const { data: before } = await sb.from("gw_hr_applicants").select(FIELDS)
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
-  if (!before) return json(res, 404, { error: "not_found" });
-  if (before.status === to) return json(res, 400, { error: "no_change", hint: "いまと同じ状態です" });
-  // 社長判断待ちから動かすのは採用判断と同じ重さ。社長・管理者だけ
-  if ((before.status === "ceo_decision_pending" || to === "ceo_decision_pending") && !canDecideHire(ctx)) {
-    return json(res, 403, { error: "forbidden", hint: "社長判断待ちの状態を変えられるのは社長・管理者だけです" });
-  }
-
-  const { data: interviews } = await sb.from("gw_hr_interviews")
-    .select("id, kind, scheduled_at, conducted_at, canceled_at, timerex_event_id")
-    .eq("applicant_id", body.id).eq("tenant_id", ctx.tenantId);
-  const warnings = statusChangeWarnings(before, interviews, to);
-  const labels = { from: STATUS_LABEL[before.status] || before.status, to: STATUS_LABEL[to] };
-  if (body.dryRun) return json(res, 200, { dryRun: true, warnings, ...labels });
-  if (warnings.length && !body.acknowledgeWarnings) {
-    return json(res, 409, { error: "status_change_warning", warnings, ...labels, hint: warnings.join("\n") });
-  }
-
-  const { data, error } = await sb.from("gw_hr_applicants")
-    .update({ status: to, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(FIELDS).maybeSingle();
-  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
-  if (!data) return json(res, 404, { error: "not_found" });
-
-  await sb.from("gw_hr_timeline").insert({
-    tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "status_manual",
-    label: "状態を手動変更", detail: `${labels.from} → ${labels.to}`, created_by: user.id,
-  });
-  await gwLog({
-    tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_status_manual",
-    target: `hr_applicant:${body.id}`,
-    detail: { from: before.status, to, warnings: warnings.length, acknowledged: Boolean(body.acknowledgeWarnings) },
-  });
-
-  const next = pickNextInterview(data, interviews);
-  return json(res, 200, {
-    applicant: shapeApplicant(data, next && { id: next.id, scheduledAt: next.scheduled_at, kind: next.kind }),
-    warnings,
-  });
 }
