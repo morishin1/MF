@@ -72,6 +72,7 @@ mock.module(atRoot("lib/gw.js"), { namedExports: { ...REAL_GW, gwContext: async 
 const { default: detailApi } = await import(atRoot("api/hr/applicants/detail.js"));
 const { default: interviewsApi } = await import(atRoot("api/hr/interviews/index.js"));
 const { default: ceoReviewApi } = await import(atRoot("api/hr/ceo-review.js"));
+const { default: listApi } = await import(atRoot("api/hr/applicants/index.js"));
 const { STATUSES, STATUS_LABEL } = await import(atRoot("lib/hr.js"));
 const JST = await import(atRoot("lib/jst.js"));
 
@@ -82,6 +83,7 @@ const getDetail = (id) => call(detailApi, { method: "GET", url: `/api/hr/applica
 const patchDetail = (body) => call(detailApi, { method: "PATCH", url: "/api/hr/applicants/detail", body });
 const patchIv = (body) => call(interviewsApi, { method: "PATCH", url: "/api/hr/interviews", body });
 const ceoReview = () => call(ceoReviewApi, { method: "GET", url: "/api/hr/ceo-review" });
+const listAll = () => call(listApi, { method: "GET", url: "/api/hr/applicants" });
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -144,6 +146,37 @@ await ok("CEO REVIEW と応募者詳細で、社長面談の日時が同じ（�
   assert.equal(card.ceoInterview.scheduledAt, detailIv.scheduledAt);
   assert.equal(JST.dateTime(card.ceoInterview.scheduledAt), "2026/10/1 16:15");
   assert.equal(JST.dateTime(detailIv.scheduledAt), "2026/10/1 16:15");
+});
+
+await ok("一覧と詳細で NEXT ACTION が同じ（面談予定・有効な社長面談あり → 実施済みにする）", async () => {
+  setup();
+  const l = (await listAll()).body.applicants.find((a) => a.id === "a-ceo");
+  const d = (await getDetail("a-ceo")).body.applicant;
+  assert.deepEqual([l.nextActionKey, l.nextActionCta, l.nextInterviewId], ["conduct", "面談を実施済みにする", "iv-ceo"]);
+  assert.deepEqual([d.nextActionKey, d.nextActionCta, d.nextInterviewId], ["conduct", "面談を実施済みにする", "iv-ceo"]);
+});
+
+await ok("面談予定なのに有効な面談が無い（社長面談の段階で古いカジュアル面談だけ）→「実施済みにする」を出さない", async () => {
+  setup();
+  db.rows.gw_hr_interviews = db.rows.gw_hr_interviews.filter((i) => i.id !== "iv-ceo");
+  for (const a of [(await getDetail("a-ceo")).body.applicant, (await listAll()).body.applicants.find((x) => x.id === "a-ceo")]) {
+    assert.equal(a.nextInterviewId, null);
+    assert.equal(a.nextAction, "面談予定の記録を確認してください");
+    assert.equal(a.nextActionCta, "面談タブを確認");
+    assert.equal(a.nextActionKey, "checkInterviews");
+  }
+  // 古いカジュアル面談を直接実施済みにしようとしても 409（状態は変わらない）
+  const r = await patchIv({ id: "iv-old-casual", action: "conduct" });
+  assert.equal(r.statusCode, 409);
+  assert.equal(iv("iv-old-casual").conducted_at, null);
+  assert.equal(app("a-ceo").status, "interview_scheduled");
+});
+
+await ok("社長面談がキャンセル済みでも同じ（有効な面談として数えない）", async () => {
+  setup();
+  iv("iv-ceo").canceled_at = "2026-09-29T00:00:00Z";
+  const a = (await getDetail("a-ceo")).body.applicant;
+  assert.deepEqual([a.nextInterviewId, a.nextActionKey], [null, "checkInterviews"]);
 });
 
 console.log("\n— 社長面談の実施済み —");

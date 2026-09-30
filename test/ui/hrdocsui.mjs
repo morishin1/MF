@@ -8,7 +8,7 @@
 //   4. 書類タブ：履歴書・職務経歴書。未登録なら「未登録」「アップロード」
 //      アップロードは中央モーダル（応募者名・種類・ドラッグ&ドロップ）。登録後すぐ反映
 //      … メニュー：プレビュー／ダウンロード／差し替え／履歴を見る／削除。削除は確認モーダル。赤い削除ボタンを常時置かない
-//   5. 一覧に「履歴書 ✓ 職務経歴書 —」が小さく出る
+//   5. 一覧の書類列：登録済みの書類だけアイコンで出る（未登録は何も出さない）
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
@@ -76,8 +76,10 @@ await ctxB.route("**/api/**", (route) => {
       const d = { id: `d${state.docs.length + 1}`, docType: body.docType, docTypeLabel: body.docType === "resume" ? "履歴書" : "職務経歴書",
         filename: body.filename, mimeType: "application/pdf", sizeBytes: 2048, uploadedAt: "2026-09-28T01:00:00Z", uploadedByName: "採用 花子" };
       state.docs.push(d);
-      state.applicant.docs = { resume: state.docs.some((x) => x.docType === "resume" && !x.deleted),
-        workHistory: state.docs.some((x) => x.docType === "work_history" && !x.deleted) };
+      // 本物の一覧 API と同じ形（そろい具合＋最新版の書類ID）
+      const latest = (t) => state.docs.filter((x) => x.docType === t && !x.deleted).at(-1) || null;
+      state.applicant.docs = { resume: Boolean(latest("resume")), resumeId: latest("resume")?.id || null,
+        workHistory: Boolean(latest("work_history")), workHistoryId: latest("work_history")?.id || null };
       return send({ document: d });
     }
     if (req.method() === "DELETE") {
@@ -127,8 +129,9 @@ await page.waitForTimeout(900);
 
 console.log("— 一覧：書類のそろい具合 —");
 {
-  const t = await page.locator("#rows [data-docs]").first().innerText();
-  check(t.includes("履歴書 —") && t.includes("職務経歴書 —"), `未登録が小さく出る（いま ${t}）`);
+  // 未登録の書類は何も出さない（「なし」「—」やグレーのアイコンも出さない）
+  check(await page.locator("#rows [data-docs] a").count() === 0, "未登録ならアイコンを出さない");
+  check(!(await page.locator("#rows [data-docs]").first().innerText()).trim(), "「なし」「—」も出さない");
 }
 
 console.log("\n— 応募者詳細は右ドロワー1枚・タブは4つ —");
@@ -234,8 +237,10 @@ await page.waitForTimeout(300);
   check(r.includes("山田太郎_履歴書.pdf") && r.includes("アップロード"), "書類タブへすぐ反映（ファイル名・日付）");
   check(await page.locator('.hr-doc[data-doc="resume"] button', { hasText: "プレビュー" }).count() >= 1
     && await page.locator('.hr-doc[data-doc="resume"] button', { hasText: "差し替え" }).count() >= 1, "［プレビュー］［差し替え］");
-  const listDocs = await page.locator("#rows [data-docs]").first().innerText();
-  check(listDocs.includes("履歴書 ✓"), "一覧も「履歴書 ✓」に変わる");
+  const icon = page.locator('#rows [data-doc-link="description"]');
+  check(await icon.count() === 1, "一覧の書類列に履歴書アイコンが出る");
+  check(/applicant=a1&doc=d\d+/.test(await icon.getAttribute("href") || ""), "アイコンは登録した書類のプレビューを指す");
+  check(await page.locator('#rows [data-doc-link="work_history"]').count() === 0, "職務経歴書は未登録なので出さない");
 }
 
 console.log("\n— … メニュー・プレビュー・削除の確認 —");
