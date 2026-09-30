@@ -21,6 +21,8 @@
 --     ・入力の誤りは、同じ適用開始日の「次の版」を足して直す（kind=correction、revision+1）。
 --       前の版も残り、訂正の前後が監査できる。
 --     ・変更前の値（before）と、変更した人・日時・理由を、行そのものに持つ。
+--     ・初回給与を「候補」（契約・内定・本人の届出から作る。自動では登録しない）から登録したときは、
+--       どのデータを基準にしたか・経営者がどの項目を直したかを basis に持つ。
 --     ・いつからその給与か = effective_from。いまの給与は、適用開始日が今日以前で、いちばん新しい行の、最新の版。
 --     ・社員の削除は止める（履歴を残すため。退職にする）。テナントごと消えるときだけ、一緒に消える。
 --
@@ -112,6 +114,10 @@ create table if not exists public.gw_compensations (
   -- 変更前（記録した時点で有効だった値の写し）。初回は null
   before  jsonb,
 
+  -- 初回給与の「候補」（契約・内定・本人の届出から作る。自動では登録しない）から登録したとき、
+  -- どのデータを基準に候補を作り、経営者がどの項目を直したか（lib/compensation-candidate.js）。候補を使わなければ null
+  basis   jsonb,
+
   created_by      uuid references auth.users(id) on delete set null,
   created_by_name text,
   created_at      timestamptz not null default now(),
@@ -120,6 +126,16 @@ create table if not exists public.gw_compensations (
   -- 訂正（revision>1）と、そうでないもの（初回・変更）がずれないように
   check ((revision = 1 and kind in ('initial', 'change')) or (revision > 1 and kind = 'correction'))
 );
+-- 候補の基準の列は、後から足した。古い版の 105 を流した環境でも、もう一度流せば足される（べき等）
+alter table public.gw_compensations add column if not exists basis jsonb;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'gw_compensations_basis_shape' and conrelid = 'public.gw_compensations'::regclass) then
+    alter table public.gw_compensations add constraint gw_compensations_basis_shape
+      check (basis is null or (jsonb_typeof(basis) = 'object' and octet_length(basis::text) <= 4000));
+  end if;
+end
+$$;
 create index if not exists idx_gw_compensations_employee on public.gw_compensations(employee_id, effective_from desc, revision desc);
 create index if not exists idx_gw_compensations_tenant on public.gw_compensations(tenant_id);
 
@@ -193,7 +209,7 @@ begin
     case when new.kind = 'correction' then 'correct' else 'create' end,
     new.employee_id, new.id,
     jsonb_build_object('kind', new.kind, 'source', new.source, 'effective_from', new.effective_from,
-                       'revision', new.revision, 'reason', new.reason));
+                       'revision', new.revision, 'reason', new.reason, 'candidate', new.basis is not null));
   return new;
 end
 $$;

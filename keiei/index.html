@@ -316,15 +316,16 @@
       return;
     }
     // 給与管理（#pay 一覧 / #pay/<社員ID> 1人 / #pay-audit 監査ログ）は、keiei/pay.js
-    const payOne = /^pay\/(.+)$/.exec(view);
-    if (payOne || view === "pay" || view === "pay-audit") {
+    const payOne = /^pay\/([^/]+?)(\/candidate)?$/.exec(view);
+    if (payOne || view === "pay" || view === "pay-audit" || view === "pay-candidates") {
       KeieiLayout.setActive("pay");
       const mine = ++seq;
       const main = el("kei-main");
       main.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
       const stale = () => mine !== seq;
-      if (payOne) await window.KeieiPay.open(decodeURIComponent(payOne[1]), main, stale);
+      if (payOne) await window.KeieiPay.open(decodeURIComponent(payOne[1]), main, stale, { candidate: Boolean(payOne[2]) });
       else if (view === "pay") await window.KeieiPay.list(main, stale);
+      else if (view === "pay-candidates") await window.KeieiPay.candidates(main, stale);
       else await window.KeieiPay.audit(main, stale);
       return;
     }

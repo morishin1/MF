@@ -71,7 +71,7 @@ RLS は列を隠せない。`gw_hr_applicants` / `gw_hr_offers` に給与の列�
 
 1. アプリ: 環境変数 `SALARY_OWNER_ONLY=1`（`canSeeSalary` が経営者だけになる）
 2. DB: `create or replace function public.gw_can_see_salary(uuid) ... select public.gw_is_owner(p_tenant)`
-3. **先に、下の「未完了」を終える**（そうしないと、人事・管理者の業務が止まる）。とくに、`/keiei` の給与管理への記録と、`db/check_pay_reconcile.sql` の差分が 0 になったことの確認（`docs/keiei-pay-management.md` §8）
+3. **先に、`docs/keiei-pay-management.md` §12「給与の段階2へ進むための完成条件」を満たし、下の「未完了」を終える**（そうしないと、人事・管理者の業務が止まる）。とくに、`/keiei` の給与管理への記録と、`db/check_pay_reconcile.sql` の差分が 0 になったことの確認（`docs/keiei-pay-management.md` §8）
 
 `test/salaryguardapi.mjs`・`test/careerapi.mjs`・`test/sql/*.sql` が、段階1と段階2の両方を確かめている。
 

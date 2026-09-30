@@ -136,3 +136,35 @@ insert into public.gw_compensations(tenant_id,employee_id,effective_from,wage_ty
 select pg_temp.try('E3 deleting a whole tenant removes its history with it (the only exception)', $q$delete from public.tenants where id='66666666-6666-6666-6666-666666666666'$q$, 'ok');
 select pg_temp.expect('E4 ...records and audit of that tenant are gone', (select count(*)::int from public.gw_compensations where tenant_id='66666666-6666-6666-6666-666666666666') + (select count(*)::int from public.gw_pay_audit where tenant_id='66666666-6666-6666-6666-666666666666'), 0);
 select pg_temp.expect('E5 ...and the other tenant is untouched', (select count(*)::int from public.gw_compensations where tenant_id='55555555-5555-5555-5555-555555555555'), 4);
+
+-- ---- 初回給与の「候補」の基準（basis）---------------------------------------------------
+select pg_temp.try('K1 a record made from a candidate keeps its basis', $q$
+  insert into public.gw_compensations(tenant_id,employee_id,effective_from,revision,wage_type,base_amount,commute_amount,kind,source,reason,basis,created_by,created_by_name)
+  values ('55555555-5555-5555-5555-555555555555','a5a00007-0000-0000-0000-000000000000','2026-07-01',1,'月給',300000,12000,'change','contract_import','契約から',
+          '{"version":1,"kind":"candidate","candidate":{"wageType":"月給","baseAmount":300000,"commuteAmount":12000},"sources":[{"type":"contract","id":"k1"},{"type":"commute_declared","amount":12000}],"edited":[],"allowancesAdded":0}',
+          'a5a00001-0000-0000-0000-000000000000','経営者')$q$, 'ok');
+select pg_temp.expect('K2 the basis is stored as written', (select count(*)::int from public.gw_compensations where basis -> 'sources' -> 0 ->> 'type' = 'contract' and basis ->> 'kind' = 'candidate'), 1);
+select pg_temp.expect('K3 the audit row says it came from a candidate (and has no amounts)', (select count(*)::int from public.gw_pay_audit
+  where (detail ->> 'candidate')::boolean and detail::text !~ '[0-9]{5,}' and action = 'create'), 1);
+select pg_temp.expect('K4 a record without a basis is audited as not from a candidate', (select count(*)::int from public.gw_pay_audit where action = 'create' and not (detail ->> 'candidate')::boolean), 3);
+select pg_temp.try('K5 a basis that is not an object is refused', $q$
+  insert into public.gw_compensations(tenant_id,employee_id,effective_from,wage_type,base_amount,kind,reason,basis)
+  values ('55555555-5555-5555-5555-555555555555','a5a00007-0000-0000-0000-000000000000','2026-08-01','月給',1,'change','x','"text"')$q$, 'check constraint');
+select pg_temp.try('K6 a basis that is an array is refused', $q$
+  insert into public.gw_compensations(tenant_id,employee_id,effective_from,wage_type,base_amount,kind,reason,basis)
+  values ('55555555-5555-5555-5555-555555555555','a5a00007-0000-0000-0000-000000000000','2026-08-01','月給',1,'change','x','[1,2]')$q$, 'check constraint');
+select pg_temp.try('K7 an oversized basis is refused', $q$
+  insert into public.gw_compensations(tenant_id,employee_id,effective_from,wage_type,base_amount,kind,reason,basis)
+  select '55555555-5555-5555-5555-555555555555','a5a00007-0000-0000-0000-000000000000','2026-08-01','月給',1,'change','x', jsonb_build_object('x', repeat('a', 5000))$q$, 'check constraint');
+select pg_temp.try('K8 the basis cannot be rewritten afterwards', $q$update public.gw_compensations set basis = null$q$, 'immutable');
+select pg_temp.expect('K9 the owner reads the basis; the browser sees only its own rows', pg_temp.count_as('a5a00001-0000-0000-0000-000000000000','public.gw_compensations'), 5);
+
+-- 古い版の 105（basis 列なし）を流した環境を再現して、もう一度流すと、列と制約が足される（べき等）
+alter table public.gw_compensations drop constraint gw_compensations_basis_shape;
+alter table public.gw_compensations drop column basis;
+select pg_temp.try('K10 105 on the old shape (no basis column) upgrades it', :'c105', 'ok');
+select pg_temp.expect('K11 the shape constraint exists exactly once', (select count(*)::int from pg_constraint where conname = 'gw_compensations_basis_shape'), 1);
+select pg_temp.expect('K12 the basis column is back', (select count(*)::int from information_schema.columns where table_name = 'gw_compensations' and column_name = 'basis'), 1);
+select pg_temp.try('K13 ...and it is checked again', $q$
+  insert into public.gw_compensations(tenant_id,employee_id,effective_from,wage_type,base_amount,kind,reason,basis)
+  values ('55555555-5555-5555-5555-555555555555','a5a00007-0000-0000-0000-000000000000','2026-09-01','月給',1,'change','x','"text"')$q$, 'check constraint');

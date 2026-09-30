@@ -7,7 +7,11 @@
 //   ・契約・内定・入社情報は「参照」。ここから書き換わらない。食い違いは見せるだけ（直すのは経営者の判断）
 //   ・判定（いまの給与・状態・種別・版）は、サーバが返したものをそのまま出す。ここで計算し直さない
 //
-// index.html（/keiei）から window.KeieiPay.list(main, isStale) / open(id, main, isStale) / audit(main, isStale) で呼ばれる。
+// ■ 初回給与の「候補」（#pay-candidates / #pay/<社員>/candidate）
+//   契約・内定・本人の届出から作った案を見せる。自動では登録しない。入力欄に写して、経営者が
+//   確認 → 修正 → 理由入力 → 登録 する（適用開始日と理由は、必ず経営者が入れる）。基準は、サーバが記録に残す。
+//
+// index.html（/keiei）から window.KeieiPay.list(main, isStale) / open(id, main, isStale, opts) / candidates(main, isStale) / audit(main, isStale) で呼ばれる。
 (function () {
   const esc = window.KeieiLayout ? window.KeieiLayout.esc
     : (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -118,6 +122,7 @@
           <label>表示 <select id="pay-scope">${opt("service", "在籍中", L.scope)}${opt("invited", "入社準備中", L.scope)}${opt("left", "退職者", L.scope)}${opt("all", "全員", L.scope)}</select></label>
           <label>状態 <select id="pay-flag"><option value="">すべて</option>${["unregistered", "future_only", "upcoming", "mismatch"].map((f) => opt(f, FLAG[f][0], L.flag)).join("")}</select></label>
           <label>氏名・所属 <input id="pay-q" type="search" value="${esc(L.q)}" placeholder="絞り込み"></label>
+          <a class="kei-btn sm" href="#pay-candidates" data-role="to-candidates">初回給与の候補を見る</a>
           <a class="kei-btn sec sm" href="#pay-audit" data-role="to-audit">監査ログを見る</a>
         </div>
         <div class="kei-tw"><table class="kei-t" data-role="pay-table"><thead><tr>
@@ -139,26 +144,41 @@
   let empId = null;
   let F = null;                        // 入力フォームの値
   let P = null;                        // プレビュー { plan, sig }
-  let T = { msg: null, err: null };    // 完了メッセージ・エラー
+  let T = { msg: null, err: null, next: false };    // 完了メッセージ・エラー・「次の候補へ」
 
   const blankForm = (mode = "change") => ({
-    mode, effectiveFrom: "", wageType: "月給", baseAmount: "", allowances: [], commuteAmount: "", commuteNote: "", reason: "", source: "owner", importRef: null,
+    mode, effectiveFrom: "", wageType: "月給", baseAmount: "", allowances: [], commuteAmount: "", commuteNote: "", reason: "", source: "owner", importRef: null, candidate: false,
   });
   const formFrom = (rec, mode) => ({
     mode, effectiveFrom: mode === "correct" ? rec.effectiveFrom : "", wageType: rec.wageType, baseAmount: String(rec.baseAmount),
     allowances: rec.allowances.map((a) => ({ name: a.name, amount: String(a.amount) })),
-    commuteAmount: rec.commuteAmount == null ? "" : String(rec.commuteAmount), commuteNote: rec.commuteNote || "", reason: "", source: "owner", importRef: null,
+    commuteAmount: rec.commuteAmount == null ? "" : String(rec.commuteAmount), commuteNote: rec.commuteNote || "", reason: "", source: "owner", importRef: null, candidate: false,
   });
 
-  async function open(id, mount, isStale) {
+  async function open(id, mount, isStale, opts = {}) {
     empId = id;
     const d = await load(`/api/keiei/pay?view=detail&employeeId=${encodeURIComponent(id)}`, mount, isStale, "#pay");
     if (!d) return;
     if (!d.linked) { main.innerHTML = notLinked(d); return; }
-    D = d; P = null; T = { msg: null, err: null };
+    D = d; P = null; T = { msg: null, err: null, next: false };
     F = D.current ? formFrom(D.current, "change") : blankForm("change");
+    // 候補の一覧から来たときは、候補を入力欄に写しておく（登録はしない。確認 → 修正 → 理由入力 → 登録は経営者）
+    if (opts.candidate && D.candidate) { applyCandidate(); T.msg = "候補を入力欄に写しました。まだ登録されていません。内容を確かめ、適用開始日と理由を入れてください。"; }
     renderDetail();
     window.scrollTo(0, 0);
+  }
+
+  /** 候補を入力欄に写す（値を入れるだけ。適用開始日と理由は空のまま＝経営者が決める） */
+  function applyCandidate() {
+    const c = D.candidate;
+    if (!c) return;
+    F = blankForm("change");
+    if (c.wageType) F.wageType = c.wageType;
+    if (c.baseAmount != null) F.baseAmount = String(c.baseAmount);
+    if (c.commuteAmount != null) F.commuteAmount = String(c.commuteAmount);
+    F.candidate = true; F.source = c.source;
+    F.importRef = c.baseAmount != null ? { wageType: c.wageType, amount: c.baseAmount } : null;
+    P = null;
   }
 
   function currentPanel() {
@@ -205,6 +225,29 @@
     </div>`;
   }
 
+  const SRC_LABEL = { contract: "契約", offer: "内定", commute_declared: "本人の届出" };
+  function candidatePanel() {
+    if (D.groups.length) return "";
+    const c = D.candidate;
+    if (!c) {
+      return `<div class="kei-panel" data-section="candidate"><h3 class="kei-h3">初回給与の候補</h3>
+        <div class="kei-empty" data-role="no-candidate">候補を作れませんでした。${D.candidateWhy.map((w) => esc(w)).join("／")}　下の「給与を記録する」から、手で入力してください。</div></div>`;
+    }
+    const srcs = c.sources.map((x) => `${esc(SRC_LABEL[x.type] || x.label)}：${x.type === "commute_declared" ? esc(yen(x.amount)) : `${esc(x.wageType || "")} ${esc(yen(x.wageAmount))}`}${x.from ? `（${esc(x.from)}）` : ""}`);
+    return `<div class="kei-panel" data-section="candidate"><h3 class="kei-h3">初回給与の候補</h3>
+      <div class="kei-note">既存のデータから作った<b>案</b>です。<b>自動では登録されません</b>。入力欄に写し、内容を確かめて、直すところは直し、適用開始日と理由を入れて、記録してください。</div>
+      <dl class="kei-dl" data-role="candidate">
+        <dt>賃金の種別</dt><dd>${c.wageType ? esc(c.wageType) : `<span class="kei-mute">候補なし（経営者が入力）</span>`}</dd>
+        <dt>基本給</dt><dd>${c.baseAmount != null ? esc(yen(c.baseAmount)) : `<span class="kei-mute">候補なし（経営者が入力）</span>`}</dd>
+        <dt>通勤手当（月）</dt><dd>${c.commuteAmount != null ? esc(yen(c.commuteAmount)) : `<span class="kei-mute">候補なし</span>`}</dd>
+        <dt>基準にしたデータ</dt><dd data-role="candidate-basis">${srcs.map((t) => `<div>${t}</div>`).join("") || `<span class="kei-mute">なし</span>`}</dd>
+        <dt>手当</dt><dd><span class="kei-mute">候補にできません（契約の注記は文章です）。金額を確かめて入力してください</span></dd>
+      </dl>
+      ${c.warnings.map((w) => `<div class="kei-note" data-role="candidate-warning" style="color:#8a5a00;">⚠ ${esc(w)}</div>`).join("")}
+      <button class="kei-btn" data-act="use-candidate" data-role="use-candidate">この候補を入力欄に写す</button>
+      <span class="kei-mute">${F.candidate ? "入力欄に写してあります" : "写しただけでは、登録されません"}</span></div>`;
+  }
+
   // ---- 入力フォーム ---------------------------------------------------------------
   function allowRows() {
     return F.allowances.map((a, i) => `<div class="pay-arow" data-i="${i}">
@@ -229,6 +272,8 @@
       <div class="kei-note">${correct
         ? "訂正しても、前の版は履歴に残ります。誤りの前後が、あとから確認できます。給与そのものを変えるときは、「給与を変える」で新しい適用開始日を入れてください。"
         : "「いつから、この給与か」を必ず入れます。過去の日付からの適用（遡及）や、これからの日付（予定）も入れられます。前の記録は、そのまま残ります。"}</div>
+      ${F.candidate ? `<div class="kei-note" data-role="candidate-on" style="color:#1f6f3a;">候補から入力しています（基準は記録に残ります）。適用開始日と理由は、経営者が入れてください。${
+        D.candidate && D.candidate.dateHints.length ? `<br>参考の日付：${D.candidate.dateHints.map((h) => `<button type="button" class="kei-btn sec sm" data-act="date-hint" data-date="${esc(h.date)}">${esc(h.label)} ${esc(jpDay(h.date))}</button>`).join(" ")}` : ""}</div>` : ""}
       <form id="pay-form" class="kei-form" autocomplete="off">
         <label class="kei-f"><span>適用開始日（いつから）${correct ? "　※訂正する記録の日付" : ""}</span>${dateCtl}</label>
         <label class="kei-f"><span>賃金の種別</span><select name="wageType">${wt}</select></label>
@@ -262,6 +307,7 @@
       <div class="kei-tw"><table class="kei-t"><thead><tr><th>項目</th><th class="n">変更前</th><th class="n">変更後</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="kei-note">月額の見立て：<b>${p.monthly.total != null ? esc(yen(p.monthly.total)) : "月額に直せません（時給・日給）"}</b>　${p.before ? `（変更前 ${esc(jpDay(p.before.effectiveFrom))} からの記録と比べています）` : "（最初の記録です）"}</div>
       ${cc && cc.contract ? `<div class="kei-note">契約上の賃金：${esc(cc.contract.wageType || "")} ${esc(yen(cc.contract.wageAmount))}　${pill(CHECK[cc.state] || cc.state, cc.state === "match" ? "ok" : cc.state === "type" || cc.state === "amount" ? "warn" : "miss")}</div>` : ""}
+      ${p.basis ? `<div class="kei-note" data-role="basis">${esc(p.basis.text)}。この基準は記録に残ります。</div>` : ""}
       ${p.warnings.map((w) => `<div class="kei-note" data-role="warning" style="color:#8a5a00;">⚠ ${esc(w)}</div>`).join("")}
       <div style="margin-top:10px;"><button class="kei-btn" data-act="record" data-role="record-btn">この内容で記録する</button>
         <button class="kei-btn sec" data-act="cancel-preview">やめる</button></div>
@@ -287,7 +333,7 @@
         <td class="n">${r.commuteAmount == null ? "—" : esc(yen(r.commuteAmount))}</td>
         <td>${r.changes.length ? r.changes.map((c) => `<div>${changeText(c)}</div>`).join("") : `<span class="kei-mute">—</span>`}</td>
         <td>${esc(r.createdBy || "")}<div class="kei-mute">${esc(jp(r.createdAt))}</div></td>
-        <td>${esc(r.reason)}<div class="kei-mute">${esc(SOURCE[r.source] || r.source)}</div></td></tr>`;
+        <td>${esc(r.reason)}<div class="kei-mute">${esc(SOURCE[r.source] || r.source)}</div>${r.basisText ? `<div class="kei-mute" data-role="basis-text">${esc(r.basisText)}</div>` : ""}</td></tr>`;
     }).join("")).join("");
     return `<div class="kei-panel" data-section="history"><h3 class="kei-h3">給与の履歴（適用開始日ごと・新しい順）</h3>
       <div class="kei-tw"><table class="kei-t" data-role="history"><thead><tr><th>適用開始日</th><th>種類</th><th class="n">基本給</th><th>手当（月）</th><th class="n">通勤手当（月）</th><th>変更前 → 変更後</th><th>変更者・日時</th><th>理由・取り込み元</th></tr></thead><tbody>${body}</tbody></table></div>
@@ -310,8 +356,8 @@
     const sub = [e.department, e.position].filter(Boolean).join("・") + `　${STATUS[e.status] || e.status}` + (e.joinedOn ? `　${jpDay(e.joinedOn)} 入社` : "");
     main.innerHTML = `<a class="kei-back2" href="#pay">← 給与管理の一覧へ</a>
       ${head(e.name, sub)}
-      ${T.msg ? `<div class="kei-okmsg" data-role="msg">${esc(T.msg)}</div>` : ""}
-      ${currentPanel()}${referencePanel()}${formPanel()}${historyPanel()}${auditPanel()}`;
+      ${T.msg ? `<div class="kei-okmsg" data-role="msg">${esc(T.msg)}${T.next ? ` <a href="#pay-candidates" data-role="next-candidate">次の候補へ →</a>` : ""}</div>` : ""}
+      ${currentPanel()}${referencePanel()}${candidatePanel()}${formPanel()}${historyPanel()}${auditPanel()}`;
     bindDetail();
   }
 
@@ -337,6 +383,7 @@
   const payload = () => ({
     effectiveFrom: F.effectiveFrom, wageType: F.wageType, baseAmount: F.baseAmount, commuteAmount: F.commuteAmount,
     commuteNote: F.commuteNote, allowances: F.allowances, reason: F.reason, source: F.source, correct: F.mode === "correct",
+    ...(F.candidate ? { candidate: true } : {}),
   });
   const call = (action, extra = {}) => API.api("/api/keiei/pay", { method: "POST", body: { action, employeeId: empId, ...payload(), ...extra } });
   const errText = (e) => (e && (e.hint || e.detail || e.message)) || "できませんでした";
@@ -353,6 +400,8 @@
   const actions = {
     "add-allow": () => { collect(); F.allowances.push({ name: "", amount: "" }); rerenderForm(); const rows = main.querySelectorAll(".pay-arow"); rows[rows.length - 1].querySelector("input").focus(); },
     "rm-allow": (btn) => { collect(); F.allowances.splice(Number(btn.dataset.i), 1); P = null; rerenderForm(); },
+    "use-candidate": () => { collect(); const keep = F.effectiveFrom; applyCandidate(); F.effectiveFrom = keep; T.err = null; renderDetail(); const f = main.querySelector('[data-section="form"]'); if (f) f.scrollIntoView({ block: "start" }); },
+    "date-hint": (btn) => { collect(); F.effectiveFrom = btn.dataset.date; P = null; rerenderForm(); },
     "import-contract": () => importFrom(D.references.contract.view && { wageType: D.references.contract.view.wageType, amount: D.references.contract.view.wageAmount }, "contract_import"),
     "import-offer": () => importFrom(D.references.offer && { wageType: D.references.offer.wageType, amount: D.references.offer.wageAmount }, "offer_import"),
     "cancel-preview": () => { P = null; T.err = null; main.querySelector("#pay-preview").innerHTML = ""; },
@@ -379,11 +428,13 @@
       try {
         const r = await call("record", { basisId: P.plan.basisId });
         const res = r.result;
+        const wasCandidate = Boolean(F.candidate);
         // 記録は済んでいる。記録後の読み直しに失敗して詳細が付いていないときは、開き直して読む
         D = r.groups ? r : await API.api(`/api/keiei/pay?view=detail&employeeId=${encodeURIComponent(empId)}`);
         P = null;
         F = D.current ? formFrom(D.current, "change") : blankForm("change");
         T.msg = `${KIND[res.kind]}として記録しました（${jpDay(res.effectiveFrom)} から${res.revision > 1 ? `・版${res.revision}` : ""}）。履歴と監査ログに残りました`;
+        T.next = wasCandidate;
         renderDetail();
         window.scrollTo(0, 0);
       } catch (e) {
@@ -449,6 +500,41 @@
   }
 
   // =====================================================================================
+  // 初回給与の候補（一覧）
+  // =====================================================================================
+  async function candidates(mount, isStale) {
+    const d = await load("/api/keiei/pay?view=candidates", mount, isStale, "#pay");
+    if (!d) return;
+    if (!d.linked) { main.innerHTML = notLinked(d); return; }
+    const sm = d.summary;
+    const line = (r) => {
+      const c = r.candidate;
+      const basis = c ? c.sources.map((x) => SRC_LABEL[x.type] || x.label).join("・") : "";
+      const note = c ? r.warnings : r.why;
+      return `<tr data-employee="${esc(r.id)}" class="${c ? "" : "dim"}">
+        <td><b>${esc(r.name)}</b><div class="kei-mute">${esc(STATUS[r.status] || r.status)}${r.joinedOn ? `・${esc(jpDay(r.joinedOn))} 入社` : ""}</div></td>
+        <td>${esc([r.department, r.position].filter(Boolean).join("・"))}</td>
+        <td>${c ? `${c.wageType ? `${esc(c.wageType)} ${esc(yen(c.baseAmount))}` : "—"}${c.commuteAmount != null ? `<div class="kei-mute">通勤手当 ${esc(yen(c.commuteAmount))}</div>` : ""}` : `<span class="kei-mute">候補なし</span>`}</td>
+        <td>${esc(basis)}</td>
+        <td>${(note || []).map((w) => `<div class="kei-mute">${esc(w)}</div>`).join("")}</td>
+        <td><a class="kei-btn sm${c ? "" : " sec"}" href="#pay/${encodeURIComponent(r.id)}${c ? "/candidate" : ""}" data-role="${c ? "review" : "manual"}">${c ? "確認して登録 →" : "手入力で登録 →"}</a></td></tr>`;
+    };
+    main.innerHTML = `<a class="kei-back2" href="#pay">← 給与管理の一覧へ</a>
+      ${head("初回給与の候補", "給与管理にまだ記録がない人の、初回給与の案です。契約・内定・本人の届出から作っています。")}
+      ${banner("自動では登録しません。「確認して登録」を開くと、候補が入力欄に入ります。内容を確かめ、直すところは直し、適用開始日（いつから）と変更理由を入れて、1人ずつ記録してください。"
+        + "どのデータを基準にしたか、どの項目を直したかは、記録に残ります。手当は候補にできません（契約の注記は文章のため）。", "")}
+      <div class="kei-grid sm" data-role="summary">
+        ${card("記録がない人", `${sm.total}<small>人</small>`, "在籍・退職手続き中・入社準備中", "c-total")}
+        ${card("候補あり", `${sm.withCandidate}<small>人</small>`, "確認 → 修正 → 理由入力 → 登録", "c-with")}
+        ${card("候補なし（手入力）", `${sm.withoutCandidate}<small>人</small>`, "契約・内定・届出から作れない人", "c-without")}
+      </div>
+      <div class="kei-panel" style="margin-top:14px;"><div class="kei-tw"><table class="kei-t" data-role="candidates"><thead><tr>
+        <th>氏名</th><th>所属・役職</th><th>候補</th><th>基準</th><th>注意・理由</th><th></th></tr></thead>
+        <tbody>${d.rows.length ? d.rows.map(line).join("") : `<tr><td colspan="6" class="kei-empty">記録がない人はいません。</td></tr>`}</tbody></table></div></div>`;
+    window.scrollTo(0, 0);
+  }
+
+  // =====================================================================================
   // 全員の監査ログ
   // =====================================================================================
   let A = null;
@@ -479,5 +565,5 @@
     });
   }
 
-  window.KeieiPay = { list, open, audit };
+  window.KeieiPay = { list, open, audit, candidates };
 })();

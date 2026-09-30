@@ -77,7 +77,7 @@ function table(name) {
         (db.rows.gw_pay_audit ||= []).push({ id: ++db.seq, ts: row.created_at, tenant_id: row.tenant_id, actor_id: row.created_by,
           actor_name: row.created_by_name || (row.created_by ? null : "db"), action: row.kind === "correction" ? "correct" : "create",
           employee_id: row.employee_id, record_id: row.id,
-          detail: { kind: row.kind, source: row.source, effective_from: row.effective_from, revision: row.revision, reason: row.reason } });
+          detail: { kind: row.kind, source: row.source, effective_from: row.effective_from, revision: row.revision, reason: row.reason, candidate: row.basis != null } });
       }
       out.push(row);
     }
@@ -210,7 +210,7 @@ function setup() {
       { id: "o2", tenant_id: "t1", applicant_id: "a1", version: 2, wage_type: "月給", wage_amount: 280000 },
     ],
     gw_hr_pay: [],
-    gw_onboard_profiles: [{ id: "p1", tenant_id: "t1", employee_id: "e1", commute_cost: 12000 }],
+    gw_onboard_profiles: [{ id: "p1", tenant_id: "t1", employee_id: "e1", commute_cost: 12000 }, { id: "p7", tenant_id: "t1", employee_id: "e7", commute_cost: 9000 }],
     gw_pay_audit: [],
   };
 }
@@ -233,7 +233,7 @@ await ok("経営者以外は、すべて 403。金額は一切返らない（読
     ["責任者＋経理＋人事＋採用担当＋営業＋管理者", ctxOf(["manager", "finance", "hr", "recruiter", "sales"], { isAdmin: true })],
   ];
   for (const [label, c] of others) {
-    for (const q of ["view=list", "view=detail&employeeId=e1", "view=audit"]) {
+    for (const q of ["view=list", "view=detail&employeeId=e1", "view=audit", "view=candidates"]) {
       setup(); who = c;
       const r = await get(q);
       assert.equal(r.statusCode, 403, `${label} / ${q}`);
@@ -582,6 +582,148 @@ await ok("BP は対象外（現場単価は給与ではない）。退職者の�
   assert.equal(db.writes.length, 0);
   const left = await post({ ...FIELDS, employeeId: "e6", effectiveFrom: PAST1, baseAmount: 210000, reason: "入力ミスの訂正", correct: true });
   assert.equal(left.statusCode, 200, JSON.stringify(left.body));
+});
+
+console.log("\n=== 初回給与の候補（自動登録はしない）===\n");
+
+const candBody = (o = {}) => ({ action: "record", employeeId: "e7", effectiveFrom: day(0), wageType: "月給", baseAmount: 250000, commuteAmount: 9000,
+  reason: "候補から登録", candidate: true, ...o });
+
+await ok("個人の画面: 記録がない人には候補が付く（契約が基準・届出の定期代が通勤手当）。適用開始日は入らない", async () => {
+  setup();
+  const b = (await get("view=detail&employeeId=e7")).body;
+  assert.equal(b.current, null);
+  assert.equal(b.candidate.wageType, "月給"); assert.equal(b.candidate.baseAmount, 250000);
+  assert.equal(b.candidate.commuteAmount, 9000); assert.equal(b.candidate.source, "contract_import");
+  assert.deepEqual(b.candidate.sources.map((x) => x.type), ["contract", "commute_declared"]);
+  assert.equal(b.candidate.sources[0].id, "k7");
+  assert.ok(!("effectiveFrom" in b.candidate), "適用開始日は決めない");
+  assert.ok(b.candidate.warnings.some((w) => /会社が決めた額ではありません/.test(w)));
+  assert.equal(db.rows.gw_compensations.filter((r) => r.employee_id === "e7").length, 0, "見せただけで、登録していない");
+});
+
+await ok("候補を作れない人には、理由が付く。すでに記録がある人には、候補が付かない", async () => {
+  setup();
+  const none = (await get("view=detail&employeeId=e4")).body;
+  assert.equal(none.candidate, null); assert.ok(none.candidateWhy.some((w) => /有効な契約がありません/.test(w)));
+  const has = (await get("view=detail&employeeId=e1")).body;
+  assert.equal(has.candidate, null); assert.deepEqual(has.candidateWhy, []);
+  // 契約の種別が「その他」だけ → 候補なし。内定があれば内定を基準にする
+  setup(); db.rows.gw_contracts.find((c) => c.employee_id === "e7").wage_type = "その他";
+  const other = (await get("view=detail&employeeId=e7")).body;
+  assert.equal(other.candidate.baseAmount, null, "基本給の候補は無い（届出の定期代だけ）");
+  assert.equal(other.candidate.commuteAmount, 9000);
+  assert.ok(other.candidateWhy.some((w) => /その他/.test(w)));
+});
+
+await ok("候補の一覧: 記録がない在籍者・退職手続き中・入社準備中だけ。BP・退職者・記録がある人・他社は出ない。候補がある人が先", async () => {
+  setup();
+  const r = await get("view=candidates");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.rows.map((x) => x.id), ["e7", "e4"]);
+  assert.equal(r.body.rows[0].candidate.baseAmount, 250000);
+  assert.equal(r.body.rows[1].candidate, null); assert.ok(r.body.rows[1].why.length > 0);
+  assert.deepEqual(r.body.summary, { total: 2, withCandidate: 1, withoutCandidate: 1 });
+  assert.equal(db.writes.filter((w) => w.table === "gw_compensations").length, 0, "一覧で登録しない");
+});
+
+await ok("候補の一覧: 開いたことが監査に残る。残せなければ返さない", async () => {
+  setup();
+  await get("view=candidates");
+  const a = db.rows.gw_pay_audit.at(-1);
+  assert.deepEqual([a.action, a.detail.via], ["view_list", "candidates"]);
+  setup(); db.failInsert.gw_pay_audit = { code: "XX000", message: "boom" };
+  const r = await get("view=candidates");
+  assert.equal(r.statusCode, 503); assert.ok(!/250000/.test(JSON.stringify(r.body)));
+});
+
+await ok("候補の一覧: 1000人を超えても切り捨てない。契約は100件ずつ読む", async () => {
+  setup();
+  for (let i = 0; i < 1100; i++) {
+    db.rows.gw_employees.push({ id: `n${i}`, tenant_id: "t1", display_name: `新規 ${String(i).padStart(4, "0")}`, status: "active", employee_kind: "proper" });
+    db.rows.gw_contracts.push({ id: `nk${i}`, employee_id: `n${i}`, tenant_id: "t1", status: "active", wage_type: "月給", wage_amount: 200000 + i, created_at: "2026-04-01" });
+  }
+  const r = await get("view=candidates");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.rows.length, 1102);
+  assert.equal(r.body.summary.withCandidate, 1101, "1000人目以降にも、契約から候補が付いている");
+});
+
+await ok("契約や届出を読み切れないときは、候補なしと言わずに止める", async () => {
+  setup(); db.missing = new Set(["gw_contracts"]);
+  const r = await get("view=candidates");
+  assert.equal(r.statusCode, 500); assert.equal(r.body.error, "db_read_failed");
+});
+
+await ok("候補のプレビュー: 基準と、直した項目が出る。書かない", async () => {
+  setup();
+  const same = (await post(candBody({ action: "preview_record" }))).body.preview;
+  assert.match(same.basis.text, /候補から登録（基準: 有効な契約の賃金・本人が届け出た定期代）／候補のまま/);
+  assert.deepEqual(same.basis.edited, []); assert.deepEqual(same.basis.sources, ["contract", "commute_declared"]);
+  const edited = (await post(candBody({ action: "preview_record", baseAmount: 260000 }))).body.preview;
+  assert.deepEqual(edited.basis.edited, ["baseAmount"]);
+  assert.equal(db.writes.length, 0);
+});
+
+await ok("候補から登録: 基準がサーバの作り直しで basis に残る。取り込み元は契約。自動では登録されていない", async () => {
+  setup();
+  const r = await post(candBody());
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_compensations.find((x) => x.employee_id === "e7");
+  assert.equal(row.kind, "initial"); assert.equal(row.source, "contract_import");
+  assert.equal(row.basis.kind, "candidate"); assert.deepEqual(row.basis.edited, []);
+  assert.deepEqual(row.basis.candidate, { wageType: "月給", baseAmount: 250000, commuteAmount: 9000 });
+  assert.deepEqual(row.basis.sources.map((x) => [x.type, x.id || null]), [["contract", "k7"], ["commute_declared", null]]);
+  assert.equal(row.contract_id, "k7", "契約の写しも残る");
+  assert.match(r.body.groups[0].revisions[0].basisText, /候補から登録/);
+  assert.equal(db.rows.gw_pay_audit.at(-1).detail.candidate, true, "監査ログにも「候補から」と残る");
+});
+
+await ok("経営者が候補を直したら、直した項目が残り、取り込み元は経営者の入力。候補そのものは直す前の値で残る", async () => {
+  setup();
+  const r = await post(candBody({ baseAmount: 260000, commuteAmount: 5000, allowances: [{ name: "役職手当", amount: 10000 }], reason: "契約より高く決まっていたため" }));
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_compensations.find((x) => x.employee_id === "e7");
+  assert.equal(row.source, "owner"); assert.equal(row.base_amount, 260000);
+  assert.deepEqual(row.basis.edited, ["baseAmount", "commuteAmount"]);
+  assert.equal(row.basis.allowancesAdded, 1);
+  assert.equal(row.basis.candidate.baseAmount, 250000, "候補は、直す前の値");
+  // 通勤手当だけ直したなら、基本給は候補のまま → 取り込み元は契約
+  setup();
+  await post(candBody({ commuteAmount: 5000 }));
+  assert.equal(db.rows.gw_compensations.find((x) => x.employee_id === "e7").source, "contract_import");
+});
+
+await ok("画面の申告は信じない: source を偽っても、サーバが決める。basis も画面からは受け取らない", async () => {
+  setup();
+  await post(candBody({ source: "offer_import", basis: { kind: "candidate", sources: [{ type: "fake" }], edited: [] } }));
+  const row = db.rows.gw_compensations.find((x) => x.employee_id === "e7");
+  assert.equal(row.source, "contract_import");
+  assert.ok(!JSON.stringify(row.basis).includes("fake"));
+  // candidate を付けなければ、basis は無い（候補から入れたことにならない）
+  setup();
+  await post(candBody({ candidate: undefined }));
+  assert.equal(db.rows.gw_compensations.find((x) => x.employee_id === "e7").basis, null);
+});
+
+await ok("候補は最初の記録にだけ。記録がある人・候補を作れない人・BP は断る（何も書かれない）", async () => {
+  setup();
+  const has = await post(candBody({ employeeId: "e1", effectiveFrom: day(2) }));
+  assert.equal(has.statusCode, 409); assert.equal(has.body.error, "candidate_not_initial");
+  const none = await post(candBody({ employeeId: "e4" }));
+  assert.equal(none.statusCode, 409); assert.equal(none.body.error, "no_candidate"); assert.match(none.body.hint, /契約/);
+  const bp = await post(candBody({ employeeId: "e5" }));
+  assert.equal(bp.statusCode, 409); assert.equal(bp.body.error, "bp_not_supported");
+  assert.equal(db.writes.length, 0);
+});
+
+await ok("候補を使っても、理由は必須・適用開始日は経営者が入れる（省けない）", async () => {
+  setup();
+  const noReason = await post(candBody({ reason: "" }));
+  assert.equal(noReason.statusCode, 400); assert.equal(noReason.body.field, "reason");
+  const noDate = await post(candBody({ effectiveFrom: "" }));
+  assert.equal(noDate.statusCode, 400); assert.equal(noDate.body.field, "effectiveFrom");
+  assert.equal(db.writes.length, 0);
 });
 
 console.log("\n=== 監査ログ ===\n");

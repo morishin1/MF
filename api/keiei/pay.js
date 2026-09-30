@@ -1,13 +1,15 @@
 // GET  /api/keiei/pay?view=list                       … 社員ごとの、いまの給与（一覧）
 // GET  /api/keiei/pay?view=detail&employeeId=…        … 1人の、いまの給与・履歴・契約などとの突き合わせ・監査ログ
 // GET  /api/keiei/pay?view=audit[&employeeId=…][&before=…]  … 給与管理の監査ログ（新しい順）
+// GET  /api/keiei/pay?view=candidates                 … 初回給与の候補（未登録の人ごとに、契約・内定・届出から作る。登録はしない）
 // POST /api/keiei/pay {action, employeeId, …}         … 給与を記録する（追記だけ）
 //
 //   preview_record  {…fields}   記録したらどうなるか（種別・版・変更前後・注意）を返す。書かない
 //   record          {…fields, basisId?}   記録する。変更（新しい適用開始日）か、訂正（correct:true）
 //
 //   fields: effectiveFrom, wageType, baseAmount, allowances[{name,amount}], commuteAmount, commuteNote,
-//           reason（必須）, source（owner / contract_import / offer_import）, correct
+//           reason（必須）, source（owner / contract_import / offer_import）, correct,
+//           candidate（true … 初回給与の「候補」から入れた。サーバが基準を作り直して basis に残す）
 //
 // ■ 権限
 //   経営者（owner）だけ・二段階認証つき（lib/keiei-gate.js）。人事・管理者・責任者・採用担当・経理などは 403。
@@ -27,6 +29,11 @@
 //   契約（gw_contracts）・内定（gw_hr_pay 等）・入社情報の届出は「参照」だけ。読んで、食い違いを見せる。
 //   給与の額を直す場所は、この画面ひとつ。契約の賃金は、契約書のほうで更新する。
 //
+// ■ 初回給与の「候補」（自動登録はしない）
+//   契約・内定・本人の届出から、候補を作って見せるだけ（lib/compensation-candidate.js）。経営者が
+//   確認 → 修正 → 理由入力 → 登録 する。登録のとき、どのデータを基準にしたか・どの項目を直したかを basis に残す。
+//   候補は最初の記録にだけ使える（すでに記録がある人には使えない）。適用開始日は決めない。
+//
 // ■ unit_price は扱わない
 //   PP・BP の現場単価は、給与ではない。BP（employee_kind=bp）は対象外にする。
 
@@ -35,6 +42,7 @@ import { requireKeiei } from "../../lib/keiei-gate.js";
 import { admin } from "../../lib/supabase.js";
 import { readAll, readIn } from "../../lib/pg-read.js";
 import { paySplit } from "../../lib/hr-pay.js";
+import { buildCandidate, basisOf, sourceOf, describeBasis } from "../../lib/compensation-candidate.js";
 import {
   normalizeRecordInput, planRecord, viewOf, snapshotOf, diffSnapshots, currentAt, upcomingAfter, historyGroups,
   contractCheck, statusFlags, auditView, todayJst, WAGE_TYPES, KIND_LABEL, SOURCE_LABEL,
@@ -42,11 +50,11 @@ import {
 } from "../../lib/compensation.js";
 
 const SQL = "db/105_compensation.sql";
-const VIEWS = ["list", "detail", "audit"];
+const VIEWS = ["list", "detail", "audit", "candidates"];
 const ACTIONS = ["preview_record", "record"];
 const CURRENT = ["active", "leaving"];
 const REC_COLS = "id, employee_id, effective_from, revision, kind, source, wage_type, base_amount, allowances, commute_amount, "
-  + "commute_note, contract_id, contract_wage_type, contract_wage_amount, reason, before, created_by_name, created_at";
+  + "commute_note, contract_id, contract_wage_type, contract_wage_amount, reason, before, basis, created_by_name, created_at";
 const AUDIT_COLS = "id, ts, action, actor_name, employee_id, record_id, detail";
 const AUDIT_PAGE = 200;
 
@@ -71,6 +79,7 @@ export default async function handler(req, res) {
       const view = q.get("view") || "list";
       if (!VIEWS.includes(view)) return json(res, 400, { error: "invalid_view", views: VIEWS });
       if (view === "list") return await listView({ sb, res, ctx, user });
+      if (view === "candidates") return await candidatesView({ sb, res, ctx, user });
       if (view === "audit") return await auditPage({ sb, res, ctx, user, employeeId: q.get("employeeId") || null, before: q.get("before") || null });
       const employeeId = String(q.get("employeeId") || "");
       if (!employeeId) return json(res, 400, { error: "invalid_query", required: ["employeeId"] });
@@ -129,42 +138,82 @@ const recordsOf = async (sb, ctx, employeeId) => {
   return rows ? rows.map(viewOf) : null;
 };
 
-/** 有効な契約（人件費の集計と同じ選び方: 有効なもののうち、いちばん新しい） */
-async function contractOf(sb, ctx, employeeId) {
-  const rows = await soft(sb.from("gw_contracts")
-    .select("id, contract_type, period_from, period_to, wage_type, wage_amount, wage_note, created_at")
-    .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("status", "active")
-    .order("created_at", { ascending: false }).limit(1));
-  if (rows === null) return { unknown: true, row: null };
-  return { unknown: false, row: rows[0] || null };
+/**
+ * 有効な契約（社員ごとに、いちばん新しい1件と、有効な契約の件数。人件費・給与CSVと同じ選び方）。
+ * 読み切れなければ null（一部だけで「契約が無い」と言わない）
+ */
+async function contractsOf(sb, ctx, ids) {
+  const rows = await readIn((part) => sb.from("gw_contracts")
+    .select("id, employee_id, contract_type, period_from, period_to, wage_type, wage_amount, wage_note, created_at")
+    .eq("tenant_id", ctx.tenantId).eq("status", "active").in("employee_id", part)
+    .order("created_at", { ascending: false }).order("id"), ids);
+  if (rows === null) return null;
+  const out = new Map();
+  for (const r of rows) {
+    const cur = out.get(r.employee_id);
+    if (!cur) out.set(r.employee_id, { row: r, count: 1 }); else cur.count += 1;   // 新しい順なので、最初の1件がいちばん新しい
+  }
+  return out;
 }
 
-/** 内定時の給与（参照のみ）。分離の設定（HR_PAY_SPLIT）に合わせて、元の列か gw_hr_pay から読む */
-async function offerRefOf(sb, ctx, employeeId) {
+async function contractOf(sb, ctx, employeeId) {
+  const m = await contractsOf(sb, ctx, [employeeId]);
+  if (m === null) return { unknown: true, row: null, count: 0 };
+  const e = m.get(employeeId);
+  return { unknown: false, row: e?.row || null, count: e?.count || 0 };
+}
+
+/** 本人が届け出た定期代（社員ごと）。読み切れなければ null */
+async function declaredCommutes(sb, ctx, ids) {
+  const rows = await readIn((part) => sb.from("gw_onboard_profiles").select("employee_id, commute_cost")
+    .eq("tenant_id", ctx.tenantId).in("employee_id", part).order("employee_id"), ids);
+  if (rows === null) return null;
+  return new Map(rows.map((r) => [r.employee_id, num(r.commute_cost)]));
+}
+
+/**
+ * 内定時の給与（社員ごと。参照のみ）。分離の設定（HR_PAY_SPLIT）に合わせて、元の列か gw_hr_pay から読む。
+ * オファー単位の給与を優先し、無ければ応募者の条件。読めなかった社員は、載せない（参照は補助なので、止めない）
+ */
+async function offerRefsOf(sb, ctx, ids) {
+  const out = new Map();
   const split = paySplit();
   const wageCols = split ? "" : ", wage_type, wage_amount";
-  const app = await soft(sb.from("gw_hr_applicants").select(`id${wageCols}`).eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).limit(1));
-  const a = (app || [])[0];
-  if (!a) return null;
-  const offers = await soft(sb.from("gw_hr_offers").select(`id, version${wageCols}`)
-    .eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id).order("version", { ascending: false }).limit(1));
-  const offer = (offers || [])[0] || null;
-  let pay = null;
+  const apps = await readIn((part) => sb.from("gw_hr_applicants").select(`id, employee_id${wageCols}`)
+    .eq("tenant_id", ctx.tenantId).in("employee_id", part).order("id"), ids);
+  if (!apps || !apps.length) return out;
+  const appIds = apps.map((a) => a.id);
+  const offers = (await readIn((part) => sb.from("gw_hr_offers").select(`id, applicant_id, version${wageCols}`)
+    .eq("tenant_id", ctx.tenantId).in("applicant_id", part).order("id"), appIds)) || [];
+  const newest = new Map();
+  for (const o of offers) { const cur = newest.get(o.applicant_id); if (!cur || o.version > cur.version) newest.set(o.applicant_id, o); }
+  let pays = null;
   if (split) {
-    const rows = await soft(sb.from("gw_hr_pay").select("offer_id, wage_type, wage_amount").eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id).limit(50));
-    if (rows === null) return null;
-    pay = (offer && rows.find((r) => r.offer_id === offer.id)) || rows.find((r) => !r.offer_id) || null;
-    if (pay && offer && pay.offer_id !== offer.id) pay = { ...pay, from: "applicant" };
-  } else {
-    pay = offer && (offer.wage_type || offer.wage_amount != null) ? offer : (a.wage_type || a.wage_amount != null ? { ...a, from: "applicant" } : null);
+    pays = await readIn((part) => sb.from("gw_hr_pay").select("applicant_id, offer_id, wage_type, wage_amount")
+      .eq("tenant_id", ctx.tenantId).in("applicant_id", part).order("id"), appIds);
+    if (pays === null) return out;
   }
-  if (!pay || (pay.wage_type == null && pay.wage_amount == null)) return null;
-  return { wageType: pay.wage_type ?? null, wageAmount: num(pay.wage_amount), from: pay.from === "applicant" ? "応募者の条件" : "内定（合格通知）" };
+  for (const a of apps) {
+    const offer = newest.get(a.id) || null;
+    let pay = null;
+    if (split) {
+      const mine = pays.filter((p) => p.applicant_id === a.id);
+      const hit = (offer && mine.find((p) => p.offer_id === offer.id)) || null;
+      pay = hit || mine.find((p) => !p.offer_id) || null;
+      if (pay && !hit) pay = { ...pay, from: "applicant" };
+    } else {
+      pay = offer && (offer.wage_type || offer.wage_amount != null) ? offer : (a.wage_type || a.wage_amount != null ? { ...a, from: "applicant" } : null);
+    }
+    if (!pay || (pay.wage_type == null && pay.wage_amount == null)) continue;
+    out.set(a.employee_id, { wageType: pay.wage_type ?? null, wageAmount: num(pay.wage_amount), from: pay.from === "applicant" ? "応募者の条件" : "内定（合格通知）" });
+  }
+  return out;
 }
 
+const offerRefOf = async (sb, ctx, employeeId) => (await offerRefsOf(sb, ctx, [employeeId])).get(employeeId) || null;
 const declaredCommute = async (sb, ctx, employeeId) => {
-  const rows = await soft(sb.from("gw_onboard_profiles").select("commute_cost").eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).limit(1));
-  return rows ? num((rows[0] || {}).commute_cost) : null;
+  const m = await declaredCommutes(sb, ctx, [employeeId]);
+  return m ? m.get(employeeId) ?? null : null;
 };
 
 const contractView = (c) => (c ? {
@@ -265,8 +314,19 @@ async function detailData(sb, ctx, emp) {
   const chk = contract.unknown ? null : contractCheck(cur, contract.row);
   const groups = historyGroups(recs).map((g) => ({
     effectiveFrom: g.effectiveFrom, latestRevision: g.latest.revision,
-    revisions: g.revisions.map((r) => ({ ...r, changes: diffSnapshots(r.before, snapshotOf(r)) })),
+    revisions: g.revisions.map((r) => ({ ...r, changes: diffSnapshots(r.before, snapshotOf(r)), basisText: describeBasis(r.basis) })),
   }));
+  // 初回給与の候補（記録がまだ無い人だけ。見せるだけで、登録はしない）
+  let candidate = null;
+  let candidateWhy = [];
+  if (!recs.length) {
+    if (contract.unknown) candidateWhy = ["契約を読めなかったため、候補を作れません"];
+    else {
+      const b = buildCandidate({ contract: contractView(contract.row), contractCount: contract.count, offer, commuteDeclared, employee: { joinedOn: emp.joined_on } });
+      candidate = b.candidate ? { ...b.candidate, warnings: b.warnings, dateHints: b.dateHints } : null;
+      candidateWhy = b.why;
+    }
+  }
   const auditRows = await soft(sb.from("gw_pay_audit").select(AUDIT_COLS)
     .eq("tenant_id", ctx.tenantId).eq("employee_id", emp.id).order("id", { ascending: false }).limit(50));
 
@@ -281,6 +341,7 @@ async function detailData(sb, ctx, emp) {
       offer: offer || null,
       commuteDeclared,
     },
+    candidate, candidateWhy,
     audit: (auditRows || []).map(auditView),
     auditUnavailable: auditRows === null,
     meta: meta(),
@@ -295,6 +356,42 @@ async function detailView({ sb, res, ctx, user, employeeId }) {
   const a = await audit(sb, ctx, user, { action: "view_detail", employeeId: emp.id });
   if (!a.ok) return auditRefused(res, a.error);
   return json(res, 200, { linked: true, ...d });
+}
+
+// ---- 初回給与の候補（一覧）---------------------------------------------------------------
+
+const CANDIDATE_STATUS = ["active", "leaving", "invited"];
+
+async function candidatesView({ sb, res, ctx, user }) {
+  const employees = await readAll(() => sb.from("gw_employees").select("id, display_name, department, position, employment_type, employee_kind, status, joined_on")
+    .eq("tenant_id", ctx.tenantId).order("id"))
+    ?? await readAll(() => sb.from("gw_employees").select("id, display_name, department, position, employment_type, status, joined_on")
+      .eq("tenant_id", ctx.tenantId).order("id"));
+  const records = await readAll(() => sb.from("gw_compensations").select("id, employee_id").eq("tenant_id", ctx.tenantId).order("id"));
+  if (!employees || !records) return json(res, 500, { error: "db_read_failed", hint: "社員名簿または給与の履歴を読み切れませんでした。件数が合わないまま表示しないため、いったん止めています" });
+
+  const has = new Set(records.map((r) => r.employee_id));
+  const targets = employees.filter((e) => CANDIDATE_STATUS.includes(e.status) && e.employee_kind !== "bp" && !has.has(e.id));
+  const ids = targets.map((e) => e.id);
+  const [contracts, declared, offers] = ids.length
+    ? await Promise.all([contractsOf(sb, ctx, ids), declaredCommutes(sb, ctx, ids), offerRefsOf(sb, ctx, ids)])
+    : [new Map(), new Map(), new Map()];
+  // 契約や届出を読み切れないまま「候補なし」と言わない（参照が読めないだけなのに、手入力へ誘導しない）
+  if (contracts === null || declared === null) {
+    return json(res, 500, { error: "db_read_failed", hint: "契約または入社情報の届出を読み切れませんでした。候補を作れないため、いったん止めています" });
+  }
+
+  const rows = targets.map((e) => {
+    const c = contracts.get(e.id);
+    const b = buildCandidate({ contract: c ? contractView(c.row) : null, contractCount: c?.count || 0, offer: offers.get(e.id) || null,
+      commuteDeclared: declared.get(e.id) ?? null, employee: { joinedOn: e.joined_on } });
+    return { ...empView(e), candidate: b.candidate, warnings: b.warnings, why: b.why, dateHints: b.dateHints };
+  }).sort((a, b) => Number(Boolean(b.candidate)) - Number(Boolean(a.candidate)) || String(a.name || "").localeCompare(String(b.name || ""), "ja"));
+
+  const a = await audit(sb, ctx, user, { action: "view_list", detail: { via: "candidates", rows: rows.length } });
+  if (!a.ok) return auditRefused(res, a.error);
+  return json(res, 200, { linked: true, rows, summary: { total: rows.length, withCandidate: rows.filter((r) => r.candidate).length,
+    withoutCandidate: rows.filter((r) => !r.candidate).length }, meta: meta() });
 }
 
 // ---- 監査ログ ---------------------------------------------------------------------
@@ -344,6 +441,20 @@ async function recordAction({ sb, res, ctx, user, body, employeeId, dry }) {
   if (recs === null) return json(res, 500, { error: "db_read_failed", hint: "履歴を読み切れませんでした。もう一度お試しください" });
   const contract = await contractOf(sb, ctx, emp.id);
 
+  // 初回給与の「候補」から入れたとき: 基準はサーバが作り直す（画面の申告を信じない）。最初の記録にだけ使える。
+  // 取り込み元（source）も、サーバが決める（基本給と種別が候補のままなら候補の元、直していれば経営者の入力）
+  let candidate = null;
+  if (body.candidate === true) {
+    if (recs.length) return json(res, 409, { error: "candidate_not_initial", hint: "候補は、最初の記録にだけ使えます。この人には、すでに記録があります" });
+    if (contract.unknown) return json(res, 500, { error: "db_read_failed", hint: "契約を読み切れませんでした。もう一度お試しください" });
+    const built = buildCandidate({ contract: contractView(contract.row), contractCount: contract.count, offer: await offerRefOf(sb, ctx, emp.id),
+      commuteDeclared: await declaredCommute(sb, ctx, emp.id), employee: { joinedOn: emp.joined_on } });
+    if (!built.candidate) return json(res, 409, { error: "no_candidate", hint: built.why.join("／") || "候補を作れるデータがありません" });
+    candidate = built.candidate;
+    input.source = sourceOf(candidate, input);
+  }
+  const basis = candidate ? basisOf(candidate, input) : null;
+
   // 「契約から」「内定から」と名乗るなら、元が実在すること
   if (input.source === "contract_import" && (contract.unknown || !contract.row || contract.row.wage_amount == null)) {
     return json(res, 409, { error: "no_contract_wage", hint: "取り込める契約の賃金がありません" });
@@ -356,7 +467,7 @@ async function recordAction({ sb, res, ctx, user, body, employeeId, dry }) {
   if (planned.error) return json(res, CONFLICT[planned.error] || 400, { error: planned.error, hint: planned.hint });
   const plan = planned.plan;
 
-  if (dry) return json(res, 200, { preview: publicPlan(plan, input, contract) });
+  if (dry) return json(res, 200, { preview: publicPlan(plan, input, contract, basis) });
 
   // 画面が見ていた「いまの記録」と違う（別の人が先に記録した）。変更前が食い違うので、記録しない
   if (body.basisId !== undefined && (body.basisId || null) !== plan.basisId) {
@@ -369,7 +480,7 @@ async function recordAction({ sb, res, ctx, user, body, employeeId, dry }) {
     commute_amount: input.commuteAmount, commute_note: input.commuteNote,
     contract_id: contract.row?.id ?? null, contract_wage_type: contract.row?.wage_type ?? null,
     contract_wage_amount: contract.row?.wage_amount ?? null,
-    kind: plan.kind, source: input.source, reason: input.reason, before: plan.before,
+    kind: plan.kind, source: input.source, reason: input.reason, before: plan.before, basis,
     created_by: user.id, created_by_name: actorName(ctx, user),
   };
   const { data, error } = await sb.from("gw_compensations").insert(row).select("id").single();
@@ -383,7 +494,8 @@ async function recordAction({ sb, res, ctx, user, body, employeeId, dry }) {
   return json(res, 200, { linked: true, ...(out.error ? {} : out), result: { recordId: data.id, kind: plan.kind, revision: plan.revision, effectiveFrom: input.effectiveFrom } });
 }
 
-const publicPlan = (plan, input, contract) => ({
+const publicPlan = (plan, input, contract, basis = null) => ({
+  basis: basis ? { text: describeBasis(basis), edited: basis.edited, sources: basis.sources.map((x) => x.type) } : null,
   kind: plan.kind, kindLabel: KIND_LABEL[plan.kind], revision: plan.revision, effectiveFrom: plan.after.effectiveFrom,
   before: plan.before, after: plan.after, changes: plan.changes, warnings: plan.warnings, basisId: plan.basisId,
   monthly: viewOf({ wage_type: input.wageType, base_amount: input.baseAmount, allowances: input.allowances, commute_amount: input.commuteAmount }).monthly,

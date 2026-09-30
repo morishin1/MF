@@ -21,6 +21,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
 
 const { accessOf: serverAccessOf } = await import("../../lib/gw.js");
 const C = await import("../../lib/compensation.js");
+const K = await import("../../lib/compensation-candidate.js");
 
 const TODAY = C.todayJst();
 const day = (n) => new Date(Date.parse(`${TODAY}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
@@ -33,11 +34,14 @@ function makeServer({ linked = true, evil = false } = {}) {
     { id: "p2", name: "佐藤 未登録", department: "営業", position: null, status: "active", joinedOn: "2026-09-01" },
     { id: "p3", name: "鈴木 契約違い", department: "開発", position: null, status: "active", joinedOn: "2025-04-01" },
     { id: "p4", name: "高橋 退職", department: null, position: null, status: "left", joinedOn: "2024-04-01" },
+    { id: "p5", name: "田中 候補なし", department: "総務", position: null, status: "active", joinedOn: "2026-08-01" },
+    { id: "p6", name: "伊藤 入社準備", department: "開発", position: null, status: "invited", joinedOn: "2026-10-15" },
   ];
   const contracts = {
     p1: { id: "k1", type: "正社員", periodFrom: "2025-04-01", periodTo: null, wageType: "月給", wageAmount: 300000, wageNote: "役職手当 20000円" },
     p2: { id: "k2", type: "正社員", periodFrom: "2026-09-01", periodTo: null, wageType: "月給", wageAmount: 280000, wageNote: null },
     p3: { id: "k3", type: "正社員", periodFrom: "2025-04-01", periodTo: null, wageType: "月給", wageAmount: 260000, wageNote: null },
+    p6: { id: "k6", type: "正社員", periodFrom: "2026-10-15", periodTo: null, wageType: "年俸", wageAmount: 4800000, wageNote: "資格手当 5000円" },
   };
   const offers = { p2: { wageType: "月給", wageAmount: 270000, from: "内定（合格通知）" } };
   const declared = { p2: 9000 };
@@ -59,6 +63,24 @@ function makeServer({ linked = true, evil = false } = {}) {
   const meta = { wageTypes: C.WAGE_TYPES, allowancePresets: C.ALLOWANCE_PRESETS, kindLabel: C.KIND_LABEL, sourceLabel: C.SOURCE_LABEL, limits: C.LIMITS };
   const contractRow = (id) => (contracts[id] ? { id: contracts[id].id, wage_type: contracts[id].wageType, wage_amount: contracts[id].wageAmount } : null);
 
+  const buildFor = (id) => {
+    const e = emps.find((x) => x.id === id);
+    return K.buildCandidate({ contract: contracts[id] || null, contractCount: contracts[id] ? 1 : 0, offer: offers[id] || null,
+      commuteDeclared: declared[id] ?? null, employee: { joinedOn: e.joinedOn } });
+  };
+  const candidateOf = (id, e, recs) => {
+    if (recs.length) return { candidate: null, candidateWhy: [] };
+    const b = buildFor(id);
+    return { candidate: b.candidate ? { ...b.candidate, warnings: b.warnings, dateHints: b.dateHints } : null, candidateWhy: b.why };
+  };
+  const candidates = () => {
+    const rows = emps.filter((e) => ["active", "leaving", "invited"].includes(e.status) && !st.rows.some((r) => r.employee_id === e.id)).map((e) => {
+      const b = buildFor(e.id);
+      return { ...e, isBp: false, candidate: b.candidate, warnings: b.warnings, why: b.why, dateHints: b.dateHints };
+    }).sort((a, b) => Number(Boolean(b.candidate)) - Number(Boolean(a.candidate)));
+    log("view_list", null, { via: "candidates", rows: rows.length });
+    return { linked: true, rows, meta, summary: { total: rows.length, withCandidate: rows.filter((r) => r.candidate).length, withoutCandidate: rows.filter((r) => !r.candidate).length } };
+  };
   const list = () => {
     const rows = emps.map((e) => {
       const recs = recsOf(e.id);
@@ -86,17 +108,26 @@ function makeServer({ linked = true, evil = false } = {}) {
     return { linked: true, today: TODAY, employee: { id: e.id, name: e.name, department: e.department, position: e.position, employmentType: null, status: e.status, joinedOn: e.joinedOn, isBp: false },
       current: cur, upcoming: C.upcomingAfter(recs, TODAY),
       groups: C.historyGroups(recs).map((g) => ({ effectiveFrom: g.effectiveFrom, latestRevision: g.latest.revision,
-        revisions: g.revisions.map((r) => ({ ...r, changes: C.diffSnapshots(r.before, C.snapshotOf(r)) })) })),
+        revisions: g.revisions.map((r) => ({ ...r, changes: C.diffSnapshots(r.before, C.snapshotOf(r)), basisText: K.describeBasis(r.basis) })) })),
       recordCount: recs.length, flags: C.statusFlags(recs, contractRow(id), TODAY),
+      ...candidateOf(id, e, recs),
       references: { contract: { view: contracts[id] || null, check: chk.state }, offer: offers[id] || null, commuteDeclared: declared[id] ?? null },
       audit: st.audit.filter((a) => a.employee_id === id).slice(0, 50).map(C.auditView), auditUnavailable: false, meta };
   };
   const plan = (post) => {
     const norm = C.normalizeRecordInput(post);
     if (norm.error) return { status: 400, body: { error: norm.error, field: norm.field, hint: norm.hint } };
+    let basis = null;
+    if (post.candidate === true) {
+      if (recsOf(post.employeeId).length) return { status: 409, body: { error: "candidate_not_initial", hint: "候補は、最初の記録にだけ使えます。この人には、すでに記録があります" } };
+      const built = buildFor(post.employeeId);
+      if (!built.candidate) return { status: 409, body: { error: "no_candidate", hint: built.why.join("／") } };
+      norm.value.source = K.sourceOf(built.candidate, norm.value);
+      basis = K.basisOf(built.candidate, norm.value);
+    }
     const planned = C.planRecord(recsOf(post.employeeId), norm.value, { today: TODAY, contract: contractRow(post.employeeId) });
     if (planned.error) return { status: 409, body: { error: planned.error, hint: planned.hint } };
-    return { norm: norm.value, plan: planned.plan };
+    return { norm: norm.value, plan: planned.plan, basis };
   };
   const handle = (method, url, post) => {
     if (!linked) return { body: { linked: false, hint: "この機能に必要なテーブルがまだ作られていません。管理者に db/105_compensation.sql の実行を依頼してください" } };
@@ -105,6 +136,7 @@ function makeServer({ linked = true, evil = false } = {}) {
       const view = q.get("view") || "list";
       if (view === "list") return { body: list() };
       if (view === "detail") return { body: detail(q.get("employeeId")) };
+      if (view === "candidates") return { body: candidates() };
       // audit: 2 ページ（新しい順）
       log("view_audit", null);
       const before = Number(q.get("before") || 0);
@@ -118,7 +150,7 @@ function makeServer({ linked = true, evil = false } = {}) {
     const p = plan(post);
     if (p.status) return p;
     if (post.action === "preview_record") {
-      return { body: { preview: { kind: p.plan.kind, kindLabel: C.KIND_LABEL[p.plan.kind], revision: p.plan.revision, effectiveFrom: p.plan.after.effectiveFrom,
+      return { body: { preview: { basis: p.basis ? { text: K.describeBasis(p.basis), edited: p.basis.edited, sources: p.basis.sources.map((x) => x.type) } : null, kind: p.plan.kind, kindLabel: C.KIND_LABEL[p.plan.kind], revision: p.plan.revision, effectiveFrom: p.plan.after.effectiveFrom,
         before: p.plan.before, after: p.plan.after, changes: p.plan.changes, warnings: p.plan.warnings, basisId: p.plan.basisId,
         monthly: C.viewOf({ wage_type: p.norm.wageType, base_amount: p.norm.baseAmount, allowances: p.norm.allowances, commute_amount: p.norm.commuteAmount }).monthly,
         contractCheck: (() => { const c = C.contractCheck({ wageType: p.norm.wageType, baseAmount: p.norm.baseAmount }, contractRow(post.employeeId)); return { state: c.state, contract: c.contract }; })() } } };
@@ -128,8 +160,8 @@ function makeServer({ linked = true, evil = false } = {}) {
     st.rows.push(dbRow(id, post.employeeId, p.norm.effectiveFrom, {
       revision: p.plan.revision, kind: p.plan.kind, source: p.norm.source, wage_type: p.norm.wageType, base_amount: p.norm.baseAmount,
       allowances: p.norm.allowances, commute_amount: p.norm.commuteAmount, commute_note: p.norm.commuteNote, reason: p.norm.reason,
-      before: p.plan.before, created_at: new Date().toISOString() }));
-    log(p.plan.kind === "correction" ? "correct" : "create", post.employeeId, { kind: p.plan.kind, source: p.norm.source, effective_from: p.norm.effectiveFrom, revision: p.plan.revision, reason: p.norm.reason });
+      before: p.plan.before, basis: p.basis, created_at: new Date().toISOString() }));
+    log(p.plan.kind === "correction" ? "correct" : "create", post.employeeId, { kind: p.plan.kind, source: p.norm.source, effective_from: p.norm.effectiveFrom, revision: p.plan.revision, reason: p.norm.reason, candidate: p.basis != null });
     return { body: { ...detail(post.employeeId, { quiet: true }), result: { recordId: id, kind: p.plan.kind, revision: p.plan.revision, effectiveFrom: p.norm.effectiveFrom } } };
   };
   return { st, handle };
@@ -334,6 +366,105 @@ console.log("\n— サーバの断りは、押したボタンの近くに出る 
   await page.click('[data-role="preview-btn"]');
   await page.waitForTimeout(400);
   check((await text(page, '[data-role="form-err"]')).includes("すでにあります"), "同じ適用開始日は「訂正として」と案内される");
+  await page.close();
+}
+
+console.log("\n— 初回給与の候補：確認 → 修正 → 理由入力 → 登録（自動では登録しない）—");
+{
+  const server = makeServer();
+  const page = await open({}, { server, hash: "#pay" });
+  check(await page.locator('[data-role="to-candidates"]').count() === 1, "一覧から「初回給与の候補」へ行ける");
+  await page.click('[data-role="to-candidates"]');
+  await page.waitForTimeout(500);
+  check((await text(page, '[data-role="title"]')).includes("初回給与の候補"), "候補の一覧が開く");
+  check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "pay", "メニューは「給与管理」のまま");
+  const t = await text(page);
+  check(t.includes("自動では登録しません"), "自動では登録しないと明記");
+  check((await text(page, '[data-role="c-total"]')).includes("3") && (await text(page, '[data-role="c-with"]')).includes("2") && (await text(page, '[data-role="c-without"]')).includes("1"),
+    "記録がない人 3（佐藤・田中・伊藤）／候補あり 2／候補なし 1");
+  const rows = await page.locator('[data-role="candidates"] tbody tr').evaluateAll((ns) => ns.map((n) => ({ id: n.dataset.employee, t: n.innerText, dim: n.classList.contains("dim") })));
+  check(rows.length === 3 && rows[2].id === "p5" && rows[2].dim, "候補がある人が先、候補なしは最後（薄い行）");
+  check(rows.find((r) => r.id === "p2").t.includes("280,000円") && rows.find((r) => r.id === "p2").t.includes("契約") && rows.find((r) => r.id === "p2").t.includes("本人の届出"),
+    "佐藤: 候補（契約の基本給・届出の定期代）と基準が出る");
+  check(rows.find((r) => r.id === "p2").t.includes("内定時の給与が、契約の賃金と違います"), "佐藤: 契約と内定の食い違いの注意が出る");
+  check(rows.find((r) => r.id === "p6").t.includes("年俸") && rows.find((r) => r.id === "p6").t.includes("手当は候補にできない"), "伊藤: 契約の注記に文章があると、手当は候補にできないと出る");
+  check(rows.find((r) => r.id === "p5").t.includes("有効な契約がありません"), "田中: 候補なしの理由が出る");
+  check(server.st.rows.filter((r) => ["p2", "p5", "p6"].includes(r.employee_id)).length === 0, "一覧を開いただけでは、何も登録されない");
+  await page.screenshot({ path: shotPath("keiei-pay-candidates-pc.png"), fullPage: true });
+
+  // 確認して登録 → 候補が入力欄に入る（登録はまだ）
+  await page.click('tr[data-employee="p2"] [data-role="review"]');
+  await page.waitForTimeout(600);
+  check((await text(page, '[data-role="title"]')) === "佐藤 未登録", "1人の画面が開く");
+  check(await page.inputValue('[name="baseAmount"]') === "280000" && await page.inputValue('[name="wageType"]') === "月給" && await page.inputValue('[name="commuteAmount"]') === "9000",
+    "候補が入力欄に入っている（基本給・種別・通勤手当）");
+  check(await page.inputValue('[name="effectiveFrom"]') === "", "適用開始日は空（経営者が決める）");
+  check(await page.inputValue('[name="reason"]') === "", "変更理由は空（経営者が入れる）");
+  check((await text(page, '[data-role="msg"]')).includes("まだ登録されていません"), "「まだ登録されていません」と出る");
+  check(await page.locator('[data-role="candidate-on"]').count() === 1 && (await text(page, '[data-role="candidate-on"]')).includes("契約の開始日"), "参考の日付（契約の開始日）が出る");
+  check((await text(page, '[data-role="candidate-basis"]')).includes("契約") && (await text(page, '[data-role="candidate-basis"]')).includes("本人の届出"), "基準にしたデータが出る");
+  check(server.st.rows.filter((r) => r.employee_id === "p2").length === 0, "写しただけでは、登録されない");
+  await page.screenshot({ path: shotPath("keiei-pay-candidate-form-pc.png"), fullPage: true });
+
+  // 理由なし → 断られる
+  await page.fill('[name="effectiveFrom"]', "2026-09-01");
+  await page.click('[data-role="preview-btn"]');
+  await page.waitForTimeout(400);
+  check((await text(page, '[data-role="form-err"]')).includes("変更理由"), "理由を入れないと、確認に進めない");
+  // 修正（基本給を直す）→ 理由入力 → 確認
+  await page.fill('[name="baseAmount"]', "290000");
+  await page.fill('[name="reason"]', "入社時の合意額に合わせて修正");
+  await page.click('[data-role="preview-btn"]');
+  await page.waitForTimeout(400);
+  const bt = await text(page, '[data-role="basis"]');
+  check(bt.includes("候補から登録（基準: 有効な契約の賃金・本人が届け出た定期代）") && bt.includes("候補から直した項目: 基本給"), "確認: 基準と、直した項目が出る");
+  // 登録
+  await page.click('[data-role="record-btn"]');
+  await page.waitForTimeout(600);
+  check((await text(page, '[data-role="msg"]')).includes("初回として記録しました"), "登録される");
+  check(await page.locator('[data-role="next-candidate"]').count() === 1, "「次の候補へ」が出る");
+  const row = server.st.rows.find((r) => r.employee_id === "p2");
+  check(row.basis && row.basis.kind === "candidate" && row.basis.edited.join() === "baseAmount" && row.source === "owner", "基準（候補・直した項目）が記録に残り、基本給を直したので取り込み元は経営者の入力");
+  check(server.st.posts.at(-1).candidate === true, "候補から入れたことがサーバに伝わる");
+  check((await text(page, '[data-role="basis-text"]')).includes("候補から直した項目: 基本給"), "履歴に、基準と直した項目が出る");
+  check(await page.locator('[data-role="candidate-on"]').count() === 0 && await page.locator('[data-section="candidate"]').count() === 0, "登録後は、候補の欄が消える");
+
+  // 次の候補へ → 一覧から消えている
+  await page.click('[data-role="next-candidate"]');
+  await page.waitForTimeout(500);
+  check(await page.locator('[data-role="candidates"] tbody tr[data-employee="p2"]').count() === 0, "登録した人は、候補の一覧から外れる");
+  check((await text(page, '[data-role="c-total"]')).includes("2"), "残りは 2 人");
+
+  // 候補なしの人: 手入力へ。候補の欄に理由が出る
+  await page.click('tr[data-employee="p5"] [data-role="manual"]');
+  await page.waitForTimeout(500);
+  check(await page.locator('[data-role="no-candidate"]').count() === 1, "候補なしの人: 理由が出て、手入力へ案内される");
+  check(await page.inputValue('[name="baseAmount"]') === "", "入力欄は空のまま");
+  await page.close();
+}
+{
+  // 候補の欄から「入力欄に写す」ボタンで写す（一覧を経由しない）。写したあとに手動で全部消しても、登録できるのは経営者の入力だけ
+  const server = makeServer();
+  const page = await open({}, { server, hash: "#pay/p6" });
+  check(await page.locator('[data-role="use-candidate"]').count() === 1, "個人の画面に「この候補を入力欄に写す」がある");
+  check(await page.inputValue('[name="baseAmount"]') === "", "開いただけでは、入力欄は空");
+  await page.click('[data-role="use-candidate"]');
+  check(await page.inputValue('[name="baseAmount"]') === "4800000" && await page.inputValue('[name="wageType"]') === "年俸", "写すと入力欄に入る（年俸）");
+  await page.click('[data-act="date-hint"]');
+  check(await page.inputValue('[name="effectiveFrom"]') === "2026-10-15", "参考の日付を押すと、適用開始日に入る（経営者が押した場合だけ）");
+  await page.fill('[name="reason"]', "契約どおりに登録");
+  await page.click('[data-role="preview-btn"]');
+  await page.waitForTimeout(400);
+  const pv = await text(page, '[data-role="preview"]');
+  check(pv.includes("初回") && pv.includes("4,800,000円") && pv.includes("候補のまま"), "確認: 候補のまま");
+  check(pv.includes("これから適用される給与です"), "確認: 入社前（未来の適用開始日）の注意");
+  await page.close();
+}
+{
+  // すでに記録がある人には、候補の欄が無い。サーバが断った場合の表示
+  const server = makeServer();
+  const page = await open({}, { server, hash: "#pay/p1" });
+  check(await page.locator('[data-section="candidate"]').count() === 0, "記録がある人には、候補の欄が無い");
   await page.close();
 }
 
