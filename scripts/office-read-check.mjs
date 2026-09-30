@@ -77,11 +77,16 @@ export function compareWithExpected(days, expected) {
   const byDate = new Map(days.map((d) => [d.workDate, d]));
   const tally = { match: 0, missed: 0, wrong: 0, guessed: 0 };
   const items = [];
+  const hidden = [];   // 書かれていない・読めない所（勤務表は空白・染みで、本当の値は書いた人だけが知っている）
   for (const e of expected.days) {
     const d = byDate.get(e.date);
     for (const [key, label, pick, want] of FIELDS) {
       const got = d ? pick(d) : null;
       const exp = want(e.printed);
+      const truth = want(e.truth || {});
+      if ((exp === null || exp === undefined) && truth !== null && truth !== undefined) {
+        hidden.push({ date: e.date, field: label, got: got ?? null, kept: got === null || got === undefined });
+      }
       let result;
       if (exp === null || exp === undefined) result = got === null || got === undefined ? "match" : "guessed";
       else if (got === null || got === undefined) result = "missed";
@@ -92,7 +97,7 @@ export function compareWithExpected(days, expected) {
     }
   }
   const total = Object.values(tally).reduce((a, b) => a + b, 0);
-  return { tally, total, items };
+  return { tally, total, items, hidden };
 }
 
 /** 突き合わせの結果を、人が読む形にする（分は h:mm） */
@@ -102,6 +107,32 @@ function showCompare(cmp, out) {
   out(`\n■ 正解との突き合わせ（勤務表に書かれているとおり・全${total}項目）`);
   out(`  一致 ${tally.match} ／ 読み落とし ${tally.missed} ／ 誤読 ${tally.wrong} ／ 推測（書かれていない所を埋めた）${tally.guessed}${tally.guessed ? "  ← 0 であるべきです" : ""}`);
   for (const i of cmp.items) out(`  ${{ missed: "読み落とし", wrong: "誤読", guessed: "推測" }[i.result]}  ${i.date.slice(5)} ${i.field}：正解 ${v(i.field, i.expected)} → AI ${v(i.field, i.got)}`);
+}
+
+/**
+ * 「実 AI 確認」で報告してほしい項目を、そのままの並びで出す。
+ * 実行した人が、このブロックだけを知らせれば足りる（キー・個人情報は含まない）
+ */
+export function checklist({ model, sec, cmp, problems }) {
+  const { tally, total, hidden } = cmp;
+  const yn = (b) => (b ? "はい" : "いいえ");
+  const list = (arr) => arr.map((h) => `${h.date.slice(5)} ${h.field}`).join("・") || "なし";
+  const blankBreak = hidden.filter((h) => h.field === "休憩");
+  const filled = hidden.filter((h) => !h.kept);
+  return [
+    "",
+    "■ 報告項目（実 AI 確認）",
+    `  使用モデル名：${model}`,
+    "  読取：成功",
+    `  所要秒数：${sec} 秒（Vercel の上限は 60 秒。読取の待ち時間は ${READ_TIMEOUT_MS / 1000} 秒）`,
+    `  正しく読めた項目数：${tally.match} ／ 全${total}項目`,
+    `  誤読数：${tally.wrong}`,
+    `  読み落とし数：${tally.missed}`,
+    `  推測して埋めた件数：${tally.guessed}${tally.guessed ? "  ← 1件でもあれば本番投入は止めて修正" : ""}`,
+    `  休憩が空欄の日を、空欄のまま扱えたか：${blankBreak.length ? `${yn(blankBreak.every((h) => h.kept))}（${list(blankBreak)}）` : "（この勤務表には該当なし）"}`,
+    `  判読不能な箇所を、勝手に補完しなかったか：${hidden.length ? `${yn(!filled.length)}（対象：${list(hidden)}${filled.length ? `／補完された：${list(filled)}` : ""}）` : "（この勤務表には該当なし）"}`,
+    `  JSON が画面でそのまま使える形か：${yn(!problems.length)}（DB の範囲内・日別の評価まで計算できた）`,
+  ].join("\n");
 }
 
 /** 引数と環境から、実行する。out は出力先（テストで差し替える）。終了コードを返す */
@@ -167,6 +198,7 @@ export async function main(argv, { env = process.env, out = (s) => console.log(s
   if (expected) {
     cmp = compareWithExpected(r.days, expected);
     showCompare(cmp, out);
+    out(checklist({ model: r.model, sec, cmp, problems }));
   }
   if (jsonPath) {
     writeJson(jsonPath, {

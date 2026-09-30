@@ -166,6 +166,30 @@ await ok("compareWithExpected：休みの日に時刻が付いたら「推測」
   assert.equal(c.tally.wrong, 1);
 });
 
+await ok("報告項目のブロック：モデル・成否・秒数・一致/誤読/読み落とし/推測・休憩空欄・判読不能・画面で使える形 を、依頼の並びで出す（正常系）", async () => {
+  const r = await run([SHEET, "--month", EXPECTED.month, "--expect", EXPECTED_PATH], { client: fake(aiFromPrinted()), env: {}, now: (() => { let i = 0; return () => 1000 + 7400 * i++; })() });
+  assert.equal(r.code, 0, r.text);
+  const blk = r.text.slice(r.text.indexOf("■ 報告項目"));
+  assert.match(blk, /使用モデル名：claude-test\n/);
+  assert.match(blk, /読取：成功\n/);
+  assert.match(blk, /所要秒数：7\.4 秒/);
+  assert.match(blk, /正しく読めた項目数：155 ／ 全155項目/);
+  assert.match(blk, /誤読数：0\n/);
+  assert.match(blk, /読み落とし数：0\n/);
+  assert.match(blk, /推測して埋めた件数：0\n/);
+  assert.match(blk, /休憩が空欄の日を、空欄のまま扱えたか：はい（10-14 休憩）/);
+  assert.match(blk, /判読不能な箇所を、勝手に補完しなかったか：はい（対象：10-14 休憩・10-14 実働・10-21 終了・10-21 実働）/);
+  assert.match(blk, /JSON が画面でそのまま使える形か：はい/);
+});
+await ok("報告項目のブロック：休憩空欄を1:00で埋めたら「いいえ」・補完された箇所を名指し・推測は「本番投入は止めて修正」", async () => {
+  const input = aiFromPrinted((row) => { if (row.day === 14) row.break = "1:00"; if (row.day === 21) row.end = "18:00"; });
+  const r = await run([SHEET, "--month", EXPECTED.month, "--expect", EXPECTED_PATH], { client: fake(input), env: {} });
+  assert.equal(r.code, 1);
+  const blk = r.text.slice(r.text.indexOf("■ 報告項目"));
+  assert.match(blk, /推測して埋めた件数：2  ← 1件でもあれば本番投入は止めて修正/);
+  assert.match(blk, /休憩が空欄の日を、空欄のまま扱えたか：いいえ（10-14 休憩）/);
+  assert.match(blk, /勝手に補完しなかったか：いいえ.*補完された：10-14 休憩・10-21 終了/);
+});
 await ok("DB・Storage に触れない（supabase を import していない）", async () => {
   const src = fs.readFileSync(join(ROOT, "scripts/office-read-check.mjs"), "utf8");
   assert.ok(!/supabase|createClient|\.from\(|storage/i.test(src.replace(/\/\/.*$/gm, "")), "supabase に触れていない");
