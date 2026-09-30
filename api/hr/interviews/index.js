@@ -63,6 +63,9 @@ async function create(req, res, sb, ctx, user) {
   if (!body?.applicantId) return json(res, 400, { error: "invalid_body", required: ["applicantId"] });
   const row = normalizeInterview(body);
   if (row.error) return json(res, 400, row);
+  // 面談担当は、同じ会社の社員だけ（編集と同じ規則。未定＝空は通す）
+  const bad = await checkInterviewer(sb, ctx.tenantId, row.value.interviewer_id);
+  if (bad) return json(res, 400, bad);
 
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name, stage, status")
     .eq("id", body.applicantId).eq("tenant_id", ctx.tenantId).maybeSingle();
@@ -222,12 +225,9 @@ async function updateInterview(res, sb, ctx, user, iv, body) {
   if (!changed.length) return json(res, 200, { interview: shapeInterview(iv), changed: [] });
   const patch = Object.fromEntries(changed.map((c) => [c, row.value[c]]));
 
-  // 面談担当は、同じ会社の社員だけ（別の会社の人を指定させない）
-  if (patch.interviewer_id) {
-    const { data: emp } = await sb.from("gw_employees").select("id")
-      .eq("id", patch.interviewer_id).eq("tenant_id", ctx.tenantId).maybeSingle();
-    if (!emp) return json(res, 400, { error: "invalid_interviewer", hint: "面談担当は、この会社の社員から選んでください" });
-  }
+  // 面談担当は、同じ会社の社員だけ（別の会社の人を指定させない。作成と同じ規則）
+  const bad = await checkInterviewer(sb, ctx.tenantId, patch.interviewer_id);
+  if (bad) return json(res, 400, bad);
 
   const { data, error } = await sb.from("gw_hr_interviews")
     .update(patch).eq("id", iv.id).eq("tenant_id", ctx.tenantId).select("*").single();
@@ -308,6 +308,18 @@ async function cancelInterview(res, sb, ctx, user, iv) {
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.interview_cancel", target: `hr_interview:${iv.id}` });
 
   return json(res, 200, { interview: shapeInterview(data), status: nextStatus });
+}
+
+/**
+ * 面談担当の確認（作成・編集の両方で使う）。空（未定）は通す。
+ * 値があれば同じテナントの社員か確かめ、違えば返すエラー本文、問題なければnull。
+ * 在籍状態までは見ない（過去の面談の担当が退職していても、他の項目の編集を止めないため）
+ */
+async function checkInterviewer(sb, tenantId, interviewerId) {
+  if (!interviewerId) return null;
+  const { data: emp } = await sb.from("gw_employees").select("id")
+    .eq("id", interviewerId).eq("tenant_id", tenantId).maybeSingle();
+  return emp ? null : { error: "invalid_interviewer", hint: "面談担当は、この会社の社員から選んでください" };
 }
 
 // 選考タイムライン・通知の日時はJSTで出す（サーバはUTCで動くため。lib/hr.js fmtJstDateTime）

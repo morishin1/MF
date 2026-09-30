@@ -13,6 +13,9 @@
 //   8. TimeRex同期済みの面談：日時・面談URLはTimeRex側が正（409で断る）。
 //      面談担当・面談方法・メモは直せる。TimeRexへは何も送らない（fetchを呼ばない）。
 //      そのあとWebhookが再送されても、アプリで直した面談担当・面談方法・メモは消えない
+//   9. TimeRex Webhookは、Google MeetのURLなら面談方法が未設定のときだけ「オンライン」を入れる。
+//      設定済みの面談方法は上書きしない。Meet以外・URLなしは触らない。109未適用でも止まらない
+//  10. 面談を予定するときも、面談担当は同じ会社の社員だけ（編集と同じ規則）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -60,6 +63,10 @@ function table(name) {
     single: () => Promise.resolve({ data: e() ? null : copy(rows()[0]) || null, error: e() }),
     then: (fn) => Promise.resolve({ data: e() ? null : rows().map(copy), error: e() }).then(fn),
     insert(row) {
+      if (db.noMethodColumn && name === "gw_hr_interviews" && [].concat(row).some((r) => "method" in r)) {
+        const r3 = { select: () => r3, single: missingMethod, then: (fn) => missingMethod().then(fn) };
+        return r3;
+      }
       const made = [].concat(row).map((r, n) => ({
         id: r.id || `${name}-${(db.rows[name] || []).length + n + 1}`,
         created_at: r.created_at || new Date().toISOString(), ...r,
@@ -82,6 +89,7 @@ function table(name) {
         then: (fn) => apply({ asList: true }).then(fn),
       };
       function apply(opts) {
+        if (db.noMethodColumn && name === "gw_hr_interviews" && "method" in patch) return missingMethod();
         // 109未適用（列が無い）ときの PostgREST の返し方をまねる
         if (db.failUpdate === name) {
           return Promise.resolve({ data: null, error: { code: "42703", message: `column "memo" of relation "${name}" does not exist` } });
@@ -119,6 +127,9 @@ function table(name) {
   return q;
 }
 const copy = (r) => (r ? { ...r } : null);
+// 109未適用の環境で method 列へ書こうとしたときの PostgREST のエラー
+const missingMethod = () => Promise.resolve({ data: null, error: { code: "PGRST204",
+  message: "Could not find the 'method' column of 'gw_hr_interviews' in the schema cache" } });
 
 mock.module(atRoot("lib/supabase.js"), {
   namedExports: { admin: () => ({ from: table }), userClient: () => ({ from: table }) },
@@ -175,6 +186,7 @@ function setup() {
   who = RECRUITER;
   db.missing = null;
   db.failUpdate = null;
+  db.noMethodColumn = false;
   logged.length = 0;
   fetched.length = 0;
   db.rows = {
@@ -551,7 +563,7 @@ await ok("TimeRex同期済みの面談は、面談URLも変えられない", asy
 await ok("TimeRex同期済みでも、面談担当・面談方法は直せる（同じ日時・URLを一緒に送っても通る）", async () => {
   setup();
   const iv = await timerexInterview();
-  const r = await edit({ id: iv.id, interviewerId: "e2", method: "online",
+  const r = await edit({ id: iv.id, interviewerId: "e2", method: "phone",
     scheduledAt: "2026-10-06T10:00:00+09:00", meetingUrl: "https://meet.google.com/abc-defg-hij" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.deepEqual([...r.body.changed].sort(), ["interviewer_id", "method"]);
@@ -581,7 +593,7 @@ await ok("編集・メモ保存のどれでも、TimeRex等の外部へは何も
 await ok("そのあとTimeRexから日程変更が届くと、日時・URLはTimeRexの値になり、面談担当・面談方法・メモは残る", async () => {
   setup();
   const iv = await timerexInterview();
-  await edit({ id: iv.id, interviewerId: "e2", method: "online" });
+  await edit({ id: iv.id, interviewerId: "e2", method: "onsite" });
   await memo(iv.id, "残したいメモ");
   const r = await applyTimerexEvent({ type: "booked", eventId: "ev1", applicantId: "a1",
     scheduledAt: "2026-10-10T02:00:00Z", meetingUrl: "https://meet.google.com/new-room" });
@@ -590,7 +602,7 @@ await ok("そのあとTimeRexから日程変更が届くと、日時・URLはTim
   assert.equal(row.scheduled_at, "2026-10-10T02:00:00Z");
   assert.equal(row.meeting_url, "https://meet.google.com/new-room");
   assert.equal(row.interviewer_id, "e2");
-  assert.equal(row.method, "online");
+  assert.equal(row.method, "onsite", "HRが入れた面談方法はWebhookで上書きしない");
   assert.equal(row.memo, "残したいメモ");
 });
 
@@ -608,6 +620,143 @@ await ok("手入力の面談をTimeRexが引き継いだあとは、日時はTim
   assert.equal(row.interviewer_id, "e1");
   const r2 = await edit({ id: iv.id, scheduledAt: "2026-10-12T01:00:00Z" });
   assert.equal(r2.statusCode, 409, "引き継いだあとはTimeRex側で変える");
+});
+
+console.log("\n=== TimeRex Webhookと面談方法（Google Meetなら未設定のときだけオンライン） ===\n");
+
+const MEET = "https://meet.google.com/abc-defg-hij";
+const tx = (over = {}) => applyTimerexEvent({ type: "booked", eventId: "ev1", applicantId: "a1",
+  scheduledAt: "2026-10-06T01:00:00Z", meetingUrl: MEET, ...over });
+const txRow = (eventId = "ev1") => db.rows.gw_hr_interviews.find((i) => i.timerex_event_id === eventId);
+
+await ok("Google MeetのURLで新しく予約されると、面談方法がオンラインになる", async () => {
+  setup();
+  const r = await tx();
+  assert.equal(r.action, "created");
+  assert.equal(txRow().method, "online");
+});
+
+await ok("Meet以外のURLなら、面談方法は未設定のまま", async () => {
+  setup();
+  await tx({ meetingUrl: "https://zoom.us/j/123" });
+  assert.equal(txRow().method, undefined);
+  setup();
+  await tx({ meetingUrl: "http://meet.google.com/abc" });
+  assert.equal(txRow().method, undefined, "httpsでなければMeetとみなさない");
+  setup();
+  await tx({ meetingUrl: "https://meet.google.com.evil.example/abc" });
+  assert.equal(txRow().method, undefined, "ホストが完全一致しなければMeetとみなさない");
+});
+
+await ok("URLなしなら、面談方法は未設定のまま", async () => {
+  setup();
+  await tx({ meetingUrl: undefined });
+  assert.equal(txRow().method, undefined);
+});
+
+await ok("面談方法が対面に設定済みなら、再送（resynced）でも上書きしない", async () => {
+  setup();
+  await tx();
+  const row = txRow();
+  row.method = "onsite";
+  const r = await tx({ scheduledAt: "2026-10-07T01:00:00Z" });
+  assert.equal(r.action, "resynced");
+  assert.equal(txRow().method, "onsite");
+  assert.equal(txRow().scheduled_at, "2026-10-07T01:00:00Z");
+});
+
+await ok("面談方法が対面に設定済みなら、日程変更（rescheduled）でも上書きしない", async () => {
+  setup();
+  await tx();
+  txRow().method = "onsite";
+  const r = await tx({ eventId: "ev2", previousEventId: "ev1", scheduledAt: "2026-10-08T01:00:00Z" });
+  assert.equal(r.action, "rescheduled");
+  assert.equal(txRow("ev2").method, "onsite");
+});
+
+await ok("未設定（null）の既存TimeRex面談は、再送でMeetならオンラインになる", async () => {
+  setup();
+  await tx({ meetingUrl: undefined });
+  txRow().method = null;   // 109適用済みで未設定
+  await tx();
+  assert.equal(txRow().method, "online");
+});
+
+await ok("手入力の面談を引き継ぐ（adopted_manual）とき、面談方法が未設定ならオンラインになる", async () => {
+  setup();
+  const iv = await manualInterview({ meetingUrl: "" });
+  iv.method = null;        // 109適用済みの列（未設定）
+  const r = await tx();
+  assert.equal(r.action, "adopted_manual");
+  assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).method, "online");
+});
+
+await ok("手入力の面談を引き継ぐとき、面談方法が設定済みなら変えない", async () => {
+  setup();
+  const iv = await manualInterview({ method: "phone" });
+  const r = await tx();
+  assert.equal(r.action, "adopted_manual");
+  assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).method, "phone");
+});
+
+await ok("109未適用（method列が無い）でも、新規予約・再送・引き継ぎのWebhookは成功する", async () => {
+  setup();
+  db.noMethodColumn = true;
+  const r1 = await tx();
+  assert.equal(r1.action, "created", JSON.stringify(r1));
+  assert.equal(txRow().method, undefined);
+  assert.equal(txRow().meeting_url, MEET);
+  const r2 = await tx({ scheduledAt: "2026-10-07T01:00:00Z" });
+  assert.equal(r2.action, "resynced", JSON.stringify(r2));
+  assert.equal(txRow().scheduled_at, "2026-10-07T01:00:00Z");
+  setup();
+  db.noMethodColumn = true;
+  const iv = await manualInterview();
+  const r3 = await tx({ eventId: "ev-a" });
+  assert.equal(r3.action, "adopted_manual", JSON.stringify(r3));
+  assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).timerex_event_id, "ev-a");
+});
+
+console.log("\n=== 面談を予定するときの面談担当（編集と同じ規則） ===\n");
+
+await ok("別の会社の社員を面談担当にして予定しようとすると断る", async () => {
+  setup();
+  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: "2026-10-05T05:00:00Z", interviewerId: "e9" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "invalid_interviewer");
+  assert.equal(db.rows.gw_hr_interviews.filter((i) => i.tenant_id === "t1").length, 0, "面談は作られない");
+  assert.equal(db.rows.gw_hr_applicants.find((a) => a.id === "a1").status, "todo", "応募者の状態も動かない");
+});
+
+await ok("存在しない社員を面談担当にして予定しようとすると断る", async () => {
+  setup();
+  const r = await schedule({ applicantId: "a1", kind: "casual", interviewerId: "no-such" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "invalid_interviewer");
+});
+
+await ok("同じ会社の社員なら予定できる", async () => {
+  setup();
+  const r = await schedule({ applicantId: "a1", kind: "casual", interviewerId: "e2" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.interview.interviewerId, "e2");
+});
+
+await ok("面談担当が空（未定）でも予定できる", async () => {
+  setup();
+  const r1 = await schedule({ applicantId: "a1", kind: "casual" });
+  assert.equal(r1.statusCode, 200, JSON.stringify(r1.body));
+  const r2 = await schedule({ applicantId: "a1", kind: "ceo", interviewerId: "" });
+  assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+  assert.equal(r2.body.interview.interviewerId, null);
+});
+
+await ok("編集でも、存在しない社員は面談担当にできない", async () => {
+  setup();
+  const iv = await manualInterview();
+  const r = await edit({ id: iv.id, interviewerId: "no-such" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "invalid_interviewer");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
