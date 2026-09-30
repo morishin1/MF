@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260929b">
+  <link rel="stylesheet" href="../css/app.css?v=20260930a">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -100,9 +100,10 @@
   <div class="card"><div id="list"></div></div>
 </div>
 
-<script src="../js/api-client.js?v=20260929b"></script>
-<script src="../js/layout.js?v=20260929b"></script>
-<script src="../js/hr-layout.js?v=20260929b"></script>
+<script src="../js/api-client.js?v=20260930a"></script>
+<script src="../js/layout.js?v=20260930a"></script>
+<script src="../js/hr-layout.js?v=20260930a"></script>
+<script src="../js/jst.js?v=20260930a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -170,10 +171,7 @@
       </div>`).join("")}</div></div>`;
   }
 
-  function fmtTime(iso) {
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
+  function fmtTime(iso) { return JST.time(iso); }   // 日本時間（js/jst.js）
 
   // 「いま何をすべきか」だけを、対象者ごとに1行＋1つのボタンで出す。
   // HR側で次に動く必要が無い（本人の回答待ちなど＝nextActionCtaが無い）ものは出さない
@@ -209,10 +207,12 @@
   }
 
   function renderKpi() {
-    const thisMonth = new Date().toISOString().slice(0, 7);
-    const newApplied = applicants.filter((a) => a.createdAt?.slice(0, 7) === thisMonth).length;
+    // 「今月」は日本の暦で（UTC で切ると月初 0〜9 時の応募が前月になる）
+    const thisMonth = JST.ymd().slice(0, 7);
+    const monthOf = (iso) => (iso ? JST.ymd(iso).slice(0, 7) : "");
+    const newApplied = applicants.filter((a) => monthOf(a.createdAt) === thisMonth).length;
     const interviewed = applicants.filter((a) => a.stage === "casual_interview" || (a.interviewCount || 0) > 0).length;
-    const hired = applicants.filter((a) => a.stage === "offer" && a.updatedAt?.slice(0, 7) === thisMonth).length;
+    const hired = applicants.filter((a) => a.stage === "offer" && monthOf(a.updatedAt) === thisMonth).length;
     el("kpi").innerHTML = `今月：新規応募 ${newApplied} / 面談 ${interviewed} / 内定 ${hired}`;
   }
 

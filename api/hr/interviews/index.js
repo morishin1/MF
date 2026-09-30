@@ -25,9 +25,10 @@ import { gwContext, canRecruit } from "../../../lib/gw.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
+import { dateTime as jstDateTime } from "../../../lib/jst.js";
 import {
   normalizeInterview, shapeInterview, nextStatusFromRank, interviewKindLabel, RANK_LABEL,
-  decisionMakerEmployeeIds,
+  decisionMakerEmployeeIds, interviewKindForStage,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql・083_hr_interview_meeting_url.sql";
@@ -118,6 +119,19 @@ async function act(req, res, sb, ctx, user) {
 }
 
 async function conduct(res, sb, ctx, user, iv, body) {
+  if (iv.canceled_at) return json(res, 409, { error: "interview_canceled", hint: "キャンセル済みの面談は実施済みにできません" });
+  if (iv.conducted_at) return json(res, 409, { error: "already_conducted", hint: "この面談はすでに実施済みです" });
+  // いまの選考段階と違う種類の面談（社長面談の段階で残っている古いカジュアル面談など）を実施済みにすると、
+  // 応募者の状態が「評価入力待ち」へ戻ってしまう。段階に合う面談だけを実施済みにする
+  const { data: at } = await sb.from("gw_hr_applicants").select("stage")
+    .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  const stageKind = interviewKindForStage(at?.stage);
+  if (stageKind && iv.kind !== stageKind) {
+    return json(res, 409, {
+      error: "interview_kind_mismatch",
+      hint: `いまの選考段階は${interviewKindLabel(stageKind)}です。この${interviewKindLabel(iv.kind)}は実施済みにできません（不要ならキャンセルしてください）`,
+    });
+  }
   const now = new Date().toISOString();
   const conductedAt = body.conductedAt || now;
 
@@ -225,7 +239,5 @@ async function cancelInterview(res, sb, ctx, user, iv) {
   return json(res, 200, { interview: shapeInterview(data), status: nextStatus });
 }
 
-function fmtDateTime(iso) {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+// 通知・タイムラインの日時は日本時間（サーバは UTC）
+const fmtDateTime = (iso) => jstDateTime(iso);
