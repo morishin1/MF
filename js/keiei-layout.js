@@ -14,16 +14,17 @@
   const esc = window.KPLayout ? window.KPLayout.esc
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  // 初期メニュー。将来、資金繰り・予実管理・部門別分析・サービス別分析・案件別採算を足せる
+  // メニュー。/keiei は「見る → 気付く → 判断する → 元システムへ行く」ための経営ハブで、
+  // 売上・案件・請求（Board）、採用・社員（HR）、経費・会計（Office/管理画面）、営業（Sales）は、それぞれが正本。
+  // ここに置くのは、経営者だけが持つ機能（入社案内・給与管理）とホームだけ。増やさない
   const MENU = [
-    { key: "dashboard",  label: "ダッシュボード", icon: "dashboard" },
-    { key: "onboarding", label: "入社準備",       icon: "how_to_reg" },
-    { key: "pay",        label: "給与管理",       icon: "request_quote" },
-    { key: "revenue",    label: "売上・利益",     icon: "trending_up" },
-    { key: "cash",       label: "入金・支払",     icon: "payments" },
-    { key: "payroll",    label: "人件費",         icon: "groups" },
-    { key: "expenses",   label: "経費",           icon: "receipt_long" },
-    { key: "accounting", label: "会計",           icon: "account_balance" },
+    { key: "home",       label: "ホーム",   icon: "home" },
+    { key: "onboarding", label: "入社準備", icon: "how_to_reg" },
+    { key: "pay",        label: "給与管理", icon: "request_quote" },
+  ];
+  // 小さな入口（経営設定・セキュリティ）。日々使うものではないので、メニューの下に控えめに置く
+  const SUB = [
+    { key: "security",   label: "設定・セキュリティ", icon: "shield_person" },
   ];
 
   function css() {
@@ -48,6 +49,10 @@
       .kei-side a .material-symbols-outlined { font-size:20px; }
       .kei-side a:hover { background:#ecece6; }
       .kei-side a.on { background:#1b2440; color:#fff; font-weight:700; }
+      .kei-side .kei-sub-nav { margin-top:14px; padding-top:10px; border-top:1px solid #e2e2dc; }
+      .kei-side .kei-sub-nav a { font-size:12px; font-weight:400; color:#6b7080; padding:7px 12px; }
+      .kei-side .kei-sub-nav a .material-symbols-outlined { font-size:17px; }
+      .kei-side .kei-sub-nav a.on { color:#fff; font-weight:700; }
       .kei-main { padding:24px 20px 60px; min-width:0; }
       @media (max-width: 820px) {
         .kei-bar { padding:0 12px; gap:12px; }
@@ -55,6 +60,7 @@
         .kei-shell { grid-template-columns:1fr; }
         .kei-side { position:static; display:flex; gap:4px; overflow-x:auto; padding:8px 10px; border-bottom:1px solid #e2e2dc; background:#fff; }
         .kei-side a { white-space:nowrap; margin:0; padding:8px 12px; }
+        .kei-side .kei-sub-nav { display:flex; margin:0 0 0 auto; padding:0 0 0 6px; border-top:0; border-left:1px solid #e2e2dc; }
         .kei-main { padding:16px 12px 48px; }
       }
     `;
@@ -77,8 +83,9 @@
     const side = document.getElementById("kei-side");
     if (side) {
       side.className = "kei-side";
-      side.innerHTML = MENU.map((m) => `<a href="#${m.key}" data-view="${m.key}" class="${m.key === active ? "on" : ""}">
-        <span class="material-symbols-outlined">${m.icon}</span>${esc(m.label)}</a>`).join("");
+      const link = (m) => `<a href="#${m.key}" data-view="${m.key}" class="${m.key === active ? "on" : ""}">
+        <span class="material-symbols-outlined">${m.icon}</span>${esc(m.label)}</a>`;
+      side.innerHTML = MENU.map(link).join("") + `<div class="kei-sub-nav">${SUB.map(link).join("")}</div>`;
     }
   }
 
@@ -95,9 +102,9 @@
     // サーバの判定（canKeiei）そのもの。役割の並びを画面で持たない
     const canKeiei = me?.access ? Boolean(me.access.keiei) : (me?.gw?.roles || []).includes("owner");
     if (!canKeiei) { location.replace("/home.html"); return null; }
-    render(opts.active || "dashboard", me);
+    render(opts.active || "home", me);
     return { me };
   }
 
-  window.KeieiLayout = { init, setActive, esc, MENU };
+  window.KeieiLayout = { init, setActive, esc, MENU, SUB };
 })();

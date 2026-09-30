@@ -1,4 +1,6 @@
-// GET /api/keiei?view=dashboard|expenses|payroll|revenue|cash|accounting|onboarding[&month=YYYY-MM]
+// GET /api/keiei?view=hub|security|payroll|onboarding[&month=YYYY-MM]   … 画面（/keiei）が呼ぶもの
+// GET /api/keiei?view=dashboard|expenses|revenue|cash|accounting         … 旧ダッシュボード用。画面（/keiei）は呼ばない
+//   旧 view は後方互換のために残している。物理削除は、呼び出しが 0 件と確かめてから別に行う（docs/keiei-hub.md §6）
 //   経営（/keiei）が読む集計。経営者（owner）だけが使える。
 //
 // ■ 権限（3層を同じ条件にそろえる）
@@ -30,13 +32,16 @@ import { journeyLinks } from "../../lib/journey-load.js";
 import { SIX_STEPS, mapSix, summarizeSix } from "../../lib/onboard-six.js";
 import { guideFact } from "../../lib/onboard-guide.js";
 import { readAll, readIn, chunks } from "../../lib/pg-read.js";
+import { buildHub, buildSecurity } from "../../lib/keiei-hub.js";
+import { readHubFacts, readSecurity, onboardingFact } from "../../lib/keiei-hub-read.js";
+import { ENFORCE_FROM, ENROLL_UNTIL } from "../../lib/mfa.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
   EXPENSE_CONFIRMED, EXPENSE_PENDING,
 } from "../../lib/keiei.js";
 
-const VIEWS = ["dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding"];
+const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding"];
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -53,6 +58,8 @@ export default async function handler(req, res) {
 
   try {
     const sb = admin();
+    if (view === "hub") return json(res, 200, await hub(sb, ctx));
+    if (view === "security") return json(res, 200, await security(sb, ctx));
     if (view === "dashboard") return json(res, 200, await dashboard(sb, ctx, month));
     if (view === "expenses") return json(res, 200, { month, expense: await expenseOf(sb, ctx, month) });
     if (view === "payroll") return await payroll(res, sb, ctx, user, month);
@@ -148,6 +155,27 @@ async function salesOf(sb, ctx) {
 }
 
 // ---- 画面ごと ------------------------------------------------------------------
+
+/**
+ * 経営ホーム（4ブロック）。集計と優先度づけは lib/keiei-hub.js、元データの読み出しは lib/keiei-hub-read.js。
+ * 入社準備の判定は、下の onboarding()（既存の段階の写像）をそのまま使う。
+ * 読めなかった元データは、0 にせず unreadable に並べる。給与の金額は、この画面のどこにも出さない
+ */
+async function hub(sb, ctx) {
+  const today = todayJst();
+  let ob = null;
+  try { ob = onboardingFact(await onboarding(sb, ctx)); } catch { ob = null; }
+  const facts = await readHubFacts(sb, ctx, { today, onboarding: ob });
+  return { ...buildHub({ today, facts }), missingLabel: MISSING_LABEL };
+}
+
+/** 経営設定・セキュリティ: 経営者の一覧・二段階認証・変更の履歴 */
+async function security(sb, ctx) {
+  const { people, owners, events } = await readSecurity(sb, ctx);
+  if (!owners) return { status: STATUS.MISSING, missingLabel: MISSING_LABEL, reason: "経営者の一覧を読めませんでした" };
+  return { status: STATUS.EXACT, ...buildSecurity({ owners, events, people, today: todayJst(), mfaPolicy: { enforceFrom: ENFORCE_FROM, enrollUntil: ENROLL_UNTIL } }),
+    historyReadable: events !== null };
+}
 
 async function dashboard(sb, ctx, month) {
   // 名簿は1回だけ読む（在籍数と人件費で使い回す）

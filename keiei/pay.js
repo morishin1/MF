@@ -124,6 +124,7 @@
           <label>氏名・所属 <input id="pay-q" type="search" value="${esc(L.q)}" placeholder="絞り込み"></label>
           <a class="kei-btn sm" href="#pay-candidates" data-role="to-candidates">初回給与の候補を見る</a>
           <a class="kei-btn sec sm" href="#pay-audit" data-role="to-audit">監査ログを見る</a>
+          <a class="kei-btn sec sm" href="#payroll" data-role="to-payroll">人件費の集計を見る</a>
         </div>
         <div class="kei-tw"><table class="kei-t" data-role="pay-table"><thead><tr>
           <th>氏名</th><th>所属・役職</th><th>種別</th><th class="n">基本給</th><th class="n">手当（月）</th><th class="n">通勤手当（月）</th><th class="n">月額の見立て</th><th>適用開始日</th><th>状態</th><th class="n">契約上の賃金（参照）</th>
