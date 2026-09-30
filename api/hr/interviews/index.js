@@ -10,6 +10,11 @@
 //         "memo"     … その面談に紐づくメモを保存する（db/109。応募者全体のメモとは別）。
 //                       実施前・実施後・キャンセル済み、どの面談にも書ける
 //         "cancel"   … 面談をキャンセルする。物理削除はせずcanceled_atを立てるだけ。
+//
+// ■ TimeRex 連携の面談（timerex_event_id がある）は、HR 側で日時・Meet URL・キャンセルを直接変えない
+//   TimeRex を正とする。日程変更・取消は TimeRex の導線（面談タブの［日程変更］［取消］）から行い、
+//   Webhook で反映する（lib/hr-timerex.js）。ここでは 409 timerex_managed で止める。
+//   評価・実施済み・面談担当・録画URL・メモは、TimeRex 連携の面談でも HR で入力できる。
 //                       応募者は日程調整のやり直し（カジュアル面談ならstatus=scheduling、
 //                       社長面談ならstatus=ceo_interview_pending）へ戻す
 //                       （採用HR応募者一覧・ドロワーUI改善指示書 §3）
@@ -32,9 +37,10 @@ import { gwContext, canRecruit } from "../../../lib/gw.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
+import { dateTime as jstDateTime } from "../../../lib/jst.js";
 import {
   normalizeInterview, shapeInterview, nextStatusFromRank, interviewKindLabel, RANK_LABEL,
-  decisionMakerEmployeeIds, fmtJstDateTime, isTimerexInterview, TIMEREX_MANAGED_COLUMNS,
+  decisionMakerEmployeeIds, interviewKindForStage, isTimerexInterview, TIMEREX_MANAGED_COLUMNS,
   INTERVIEW_MEMO_MAX,
 } from "../../../lib/hr.js";
 
@@ -133,6 +139,19 @@ async function act(req, res, sb, ctx, user) {
 }
 
 async function conduct(res, sb, ctx, user, iv, body) {
+  if (iv.canceled_at) return json(res, 409, { error: "interview_canceled", hint: "キャンセル済みの面談は実施済みにできません" });
+  if (iv.conducted_at) return json(res, 409, { error: "already_conducted", hint: "この面談はすでに実施済みです" });
+  // いまの選考段階と違う種類の面談（社長面談の段階で残っている古いカジュアル面談など）を実施済みにすると、
+  // 応募者の状態が「評価入力待ち」へ戻ってしまう。段階に合う面談だけを実施済みにする
+  const { data: at } = await sb.from("gw_hr_applicants").select("stage")
+    .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  const stageKind = interviewKindForStage(at?.stage);
+  if (stageKind && iv.kind !== stageKind) {
+    return json(res, 409, {
+      error: "interview_kind_mismatch",
+      hint: `いまの選考段階は${interviewKindLabel(stageKind)}です。この${interviewKindLabel(iv.kind)}は実施済みにできません（不要ならキャンセルしてください）`,
+    });
+  }
   const now = new Date().toISOString();
   const conductedAt = body.conductedAt || now;
 
@@ -194,32 +213,31 @@ async function evaluate(res, sb, ctx, user, iv, body) {
   return json(res, 200, { interview: shapeInterview(data), status: nextStatus });
 }
 
+const TIMEREX_MANAGED = {
+  error: "timerex_managed",
+  hint: "TimeRex連携済みの面談です。日程変更・取消はTimeRexから行ってください（HRへは自動で反映されます）",
+};
+
 async function updateInterview(res, sb, ctx, user, iv, body) {
-  // 種別・評価・実施日時はここでは直さない（それぞれ専用の操作がある）
-  const picked = {};
-  for (const k of ["scheduledAt", "interviewerId", "meetingUrl", "method", "recordingUrl"]) {
-    if (body[k] !== undefined) picked[k] = body[k];
-  }
-  const row = normalizeInterview(picked, { partial: true });
+  // 受け付ける項目は main と同じ（lib/hr.js normalizeInterview が読むもの。評価の所感などもここで入力できる）
+  const row = normalizeInterview(body, { partial: true });
   if (row.error) return json(res, 400, row);
   const cols = Object.keys(row.value);
   if (!cols.length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
 
   // 値が変わらないものは「変更」として扱わない（画面は全項目を送ってくるため。
   // 109未適用の環境でも、面談方法を触らない保存はこれまでどおり通る）
-  const same = (c) => String(iv[c] ?? "") === String(row.value[c] ?? "")
+  const norm = (v) => (v && typeof v === "object" ? JSON.stringify(v) : String(v ?? ""));
+  const same = (c) => norm(iv[c]) === norm(row.value[c])
     || (c === "scheduled_at" && iv[c] && row.value[c] && Date.parse(iv[c]) === Date.parse(row.value[c]));
   if (iv.canceled_at && cols.some((c) => SCHEDULE_COLUMNS.includes(c) && !same(c))) {
     return json(res, 409, { error: "already_canceled", hint: "キャンセル済みの面談は編集できません" });
   }
+  // TimeRex 連携の面談は、日時・面談URLを TimeRex が正とする（変えようとしたら 409。
+  // 同じ値のまま送られてきたもの＝画面の読み取り専用欄は、変更ではないので通す）
   if (isTimerexInterview(iv)) {
     const locked = TIMEREX_MANAGED_COLUMNS.filter((c) => c in row.value && !same(c));
-    if (locked.length) {
-      return json(res, 409, {
-        error: "timerex_managed", fields: locked,
-        hint: "TimeRexで確定した面談の日時・面談URLは、TimeRex側で変更してください（このアプリからTimeRexへは送りません）",
-      });
-    }
+    if (locked.length) return json(res, 409, { ...TIMEREX_MANAGED, fields: locked });
   }
   const changed = cols.filter((c) => !same(c));
   if (!changed.length) return json(res, 200, { interview: shapeInterview(iv), changed: [] });
@@ -242,7 +260,7 @@ async function updateInterview(res, sb, ctx, user, iv, body) {
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: iv.applicant_id, event_key: "interview_rescheduled",
       label: `${interviewKindLabel(iv.kind)}の日時を変更`,
-      detail: patch.scheduled_at ? fmtJstDateTime(patch.scheduled_at) : "日時未定", created_by: user.id,
+      detail: patch.scheduled_at ? fmtDateTime(patch.scheduled_at) : "日時未定", created_by: user.id,
     });
   }
   // 監査ログには「どの項目を変えたか」と日時の前後だけ。URL等の値そのものは残さない
@@ -290,6 +308,7 @@ async function saveMemo(res, sb, ctx, user, iv, body) {
 // 社長面談ならstatus=ceo_interview_pendingへ戻し、それぞれのNEXT ACTIONで
 // 「日程を設定し直す」ことだけを促す（採用判断そのものは動かさない）
 async function cancelInterview(res, sb, ctx, user, iv) {
+  if (iv.timerex_event_id) return json(res, 409, TIMEREX_MANAGED);
   if (iv.conducted_at) return json(res, 409, { error: "already_conducted", hint: "実施済みの面談はキャンセルできません" });
   if (iv.canceled_at) return json(res, 409, { error: "already_canceled", hint: "すでにキャンセルされています" });
 
@@ -322,5 +341,5 @@ async function checkInterviewer(sb, tenantId, interviewerId) {
   return emp ? null : { error: "invalid_interviewer", hint: "面談担当は、この会社の社員から選んでください" };
 }
 
-// 選考タイムライン・通知の日時はJSTで出す（サーバはUTCで動くため。lib/hr.js fmtJstDateTime）
-const fmtDateTime = fmtJstDateTime;
+// 通知・タイムラインの日時は日本時間（サーバは UTC）
+const fmtDateTime = (iso) => jstDateTime(iso);

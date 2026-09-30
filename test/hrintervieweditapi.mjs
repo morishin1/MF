@@ -220,7 +220,7 @@ async function manualInterview(over = {}) {
 
 /** TimeRex Webhook（正規化済みイベント）で面談を1件作って、その行を返す */
 async function timerexInterview() {
-  const r = await applyTimerexEvent({ type: "booked", eventId: "ev1", applicantId: "a1",
+  const r = await applyTimerexEvent({ kind: "casual", type: "booked", eventId: "ev1", applicantId: "a1",
     scheduledAt: "2026-10-06T01:00:00Z", meetingUrl: "https://meet.google.com/abc-defg-hij" });
   assert.equal(r.action, "created", JSON.stringify(r));
   logged.length = 0;
@@ -269,7 +269,7 @@ await ok("日時を変えると、選考タイムラインにJSTの新しい日�
   const t = db.rows.gw_hr_timeline.at(-1);
   assert.equal(t.event_key, "interview_rescheduled");
   assert.equal(t.label, "カジュアル面談の日時を変更");
-  assert.equal(t.detail, "10/7 15:30", "UTC 06:30 = JST 15:30");
+  assert.equal(t.detail, "2026/10/7 15:30", "UTC 06:30 = JST 15:30");
 });
 
 await ok("監査ログに、変えた項目と日時の前後が残る（URL等の値そのものは残さない）", async () => {
@@ -308,15 +308,17 @@ await ok("応募者の状態・選考ステージは動かさない", async () =
   assert.equal(a.stage, "casual_interview");
 });
 
-await ok("種別・評価・実施日時は update では直らない（専用の操作がある）", async () => {
+await ok("update で受け付ける項目は main と同じ（評価の所感なども入力できる）。面談方法も一緒に保存できる", async () => {
   setup();
   const iv = await manualInterview();
-  const r = await edit({ id: iv.id, kind: "ceo", rank: "A", conductedAt: "2026-10-01T00:00:00Z", method: "online" });
+  const r = await edit({ id: iv.id, notes: "当日の確認事項", method: "online" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const row = db.rows.gw_hr_interviews.find((i) => i.id === iv.id);
-  assert.equal(row.kind, "casual");
-  assert.equal(row.rank, undefined);
-  assert.equal(row.conducted_at, undefined);
+  assert.equal(row.notes, "当日の確認事項");
+  assert.equal(row.method, "online");
+  // 同じ値をもう一度送っても「変更」にならない
+  const again = await edit({ id: iv.id, notes: "当日の確認事項", method: "online" });
+  assert.deepEqual(again.body.changed, []);
 });
 
 console.log("\n=== 入力チェック ===\n");
@@ -423,7 +425,7 @@ await ok("応募者詳細：面談の日時とNEXT ACTIONが新しい日時に�
   const got = r.body.interviews.find((i) => i.id === iv.id);
   assert.equal(got.scheduledAt, "2026-10-07T06:30:00Z");
   assert.equal(got.methodLabel, "オンライン");
-  assert.equal(r.body.applicant.nextAction, "10/7 15:30 カジュアル面談", "JSTで出す");
+  assert.equal(r.body.applicant.nextAction, "2026/10/7 15:30 カジュアル面談", "JSTで出す");
 });
 
 await ok("応募者一覧：直近の面談日時とNEXT ACTIONが新しい日時になる", async () => {
@@ -434,7 +436,7 @@ await ok("応募者一覧：直近の面談日時とNEXT ACTIONが新しい日�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const a = r.body.applicants.find((x) => x.id === "a1");
   assert.equal(a.nextInterviewAt, "2026-10-07T06:30:00Z");
-  assert.equal(a.nextAction, "10/7 15:30 カジュアル面談");
+  assert.equal(a.nextAction, "2026/10/7 15:30 カジュアル面談");
 });
 
 await ok("応募者一覧：キャンセル済み・実施済みの面談は直近の面談に数えない", async () => {
@@ -547,7 +549,7 @@ await ok("TimeRex同期済みの面談は、日時を変えられない（409・
   assert.equal(r.statusCode, 409);
   assert.equal(r.body.error, "timerex_managed");
   assert.deepEqual(r.body.fields, ["scheduled_at"]);
-  assert.match(r.body.hint, /TimeRex側で変更/);
+  assert.match(r.body.hint, /TimeRexから行ってください/);
   assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).scheduled_at, "2026-10-06T01:00:00Z");
   assert.equal(logged.length, 0);
 });
@@ -595,7 +597,7 @@ await ok("そのあとTimeRexから日程変更が届くと、日時・URLはTim
   const iv = await timerexInterview();
   await edit({ id: iv.id, interviewerId: "e2", method: "onsite" });
   await memo(iv.id, "残したいメモ");
-  const r = await applyTimerexEvent({ type: "booked", eventId: "ev1", applicantId: "a1",
+  const r = await applyTimerexEvent({ kind: "casual", type: "booked", eventId: "ev1", applicantId: "a1",
     scheduledAt: "2026-10-10T02:00:00Z", meetingUrl: "https://meet.google.com/new-room" });
   assert.equal(r.action, "resynced");
   const row = db.rows.gw_hr_interviews.find((i) => i.id === iv.id);
@@ -612,7 +614,7 @@ await ok("手入力の面談をTimeRexが引き継いだあとは、日時はTim
   await memo(iv.id, "手入力のときに書いたメモ");
   // 手入力のうちは、日時を直せる
   assert.equal((await edit({ id: iv.id, scheduledAt: "2026-10-08T01:00:00Z" })).statusCode, 200);
-  const r = await applyTimerexEvent({ type: "booked", eventId: "ev-adopt", applicantId: "a1",
+  const r = await applyTimerexEvent({ kind: "casual", type: "booked", eventId: "ev-adopt", applicantId: "a1",
     scheduledAt: "2026-10-11T01:00:00Z", meetingUrl: "https://meet.google.com/adopted" });
   assert.equal(r.action, "adopted_manual");
   const row = db.rows.gw_hr_interviews.find((i) => i.id === iv.id);
@@ -625,7 +627,7 @@ await ok("手入力の面談をTimeRexが引き継いだあとは、日時はTim
 console.log("\n=== TimeRex Webhookと面談方法（Google Meetなら未設定のときだけオンライン） ===\n");
 
 const MEET = "https://meet.google.com/abc-defg-hij";
-const tx = (over = {}) => applyTimerexEvent({ type: "booked", eventId: "ev1", applicantId: "a1",
+const tx = (over = {}) => applyTimerexEvent({ kind: "casual", type: "booked", eventId: "ev1", applicantId: "a1",
   scheduledAt: "2026-10-06T01:00:00Z", meetingUrl: MEET, ...over });
 const txRow = (eventId = "ev1") => db.rows.gw_hr_interviews.find((i) => i.timerex_event_id === eventId);
 

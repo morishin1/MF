@@ -184,7 +184,8 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   await reloadAndOpen(page);
   txt = await card(page).innerText();
   const [m, d] = today.slice(5).split("-").map(Number);
-  check(txt.includes(`${m}/${d} 16:30`), `面談カードが新しい日時（${m}/${d} 16:30）`);
+  // 日時の書き方は HR 共通（js/jst.js JST.when）：今日なら「本日 16:30」
+  check(txt.includes("本日 16:30"), `面談カードが新しい日時（本日 16:30）`);
   check(!txt.includes("10/5 14:00"), "古い日時は出ない");
   check(txt.includes("面談担当：面接 一郎") && txt.includes("面談方法：対面"), "面談担当・面談方法も残る");
   await page.locator("button", { hasText: "面談情報を編集" }).click();
@@ -226,7 +227,7 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   const memo2 = await page.locator(".hr-iv-memo-body").first().innerText();
   check(memo2.includes("年収は希望どおりで合意") && !memo2.includes("志望動機"), "編集後のメモだけが残る");
   txt = await card(page).innerText();
-  check(txt.includes(`${m}/${d} 16:30`), "メモ保存で日時は変わらない");
+  check(txt.includes("本日 16:30"), "メモ保存で日時は変わらない");
 
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
 

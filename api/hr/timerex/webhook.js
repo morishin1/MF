@@ -1,4 +1,6 @@
 // POST /api/hr/timerex/webhook … TimeRexからの予約確定・変更Webhookを受ける。
+//   カジュアル面談・社長面談の両方。どちらかは予約枠（calendar_url_path）で決める
+//   （lib/hr-timerex-calendars.js。知らない予約枠は 422 unknown_timerex_calendar で止める）。
 //
 // ■ 認証
 //   TimeRex標準で送信される固定ヘッダー（TimeRex管理画面の「セキュリティトークン」）。
@@ -19,15 +21,38 @@
 //   成功時は必ず200を返す。
 //
 // ■ DEBUGログ
-//   TIMEREX_WEBHOOK_DEBUG_LOG=1 のときだけ、届いたpayloadをログへ出す
-//   （実payload確認用。認証ヘッダーの値は常に除いてログする）。
-//   実payloadの確認は完了したため、通常運用ではこの環境変数を外しておくこと。
+//   TIMEREX_WEBHOOK_DEBUG_LOG=1 のときだけ、payloadの「形」をログへ出す（debugSummary）。
+//   出すのは webhook_type・calendar_url_path・event.id・is_changed・old/new_event_id・
+//   form の field_type 一覧だけ。payload全体・ヘッダーは出さない。
+//   メールアドレス・氏名・Meet URL・取消/リスケURL・Webhook Secret は DEBUG 時も絶対に出さない。
 
 import crypto from "node:crypto";
 import { readJson, methodNotAllowed, json } from "../../../lib/http.js";
 import { parseTimerexWebhook, applyTimerexEvent } from "../../../lib/hr-timerex.js";
 
 const AUTH_HEADER = "x-timerex-authorization";
+
+// ログに出してよい ID・フラグだけ（英数字と記号の短い値。URL・メールらしいものは落とす）
+const safeId = (v) => {
+  if (v == null || v === "") return null;
+  const s = String(v).slice(0, 80);
+  return /^[A-Za-z0-9_.:-]+$/.test(s) ? s : "(redacted)";
+};
+
+/** DEBUG用：payload の形だけ。個人情報・URL・トークンを含めない */
+export function debugSummary(body) {
+  const b = body && typeof body === "object" && !Array.isArray(body) ? body : {};
+  const ev = b.event && typeof b.event === "object" ? b.event : {};
+  return {
+    webhook_type: safeId(b.webhook_type),
+    calendar_url_path: safeId(b.calendar_url_path ?? ev.calendar_url_path),
+    event_id: safeId(ev.id),
+    is_changed: typeof ev.is_changed === "boolean" ? ev.is_changed : null,
+    old_event_id: safeId(ev.old_event_id),
+    new_event_id: safeId(ev.new_event_id),
+    form_field_types: Array.isArray(ev.form) ? ev.form.map((f) => safeId(f && f.field_type)) : null,
+  };
+}
 
 function verifySecret(req) {
   const configured = process.env.TIMEREX_WEBHOOK_SECRET || "";
@@ -45,7 +70,7 @@ function verifySecret(req) {
 const ERROR_STATUS = {
   invalid_body: 400, unsupported_webhook_type: 400, missing_applicant_id: 400,
   missing_event_id: 400, missing_scheduled_at: 400, unknown_event_type: 400, invalid_event: 400,
-  applicant_not_found: 404, interview_not_found: 404,
+  applicant_not_found: 404, interview_not_found: 404, unknown_timerex_calendar: 422,
   ambiguous_applicant: 409, already_conducted: 409,
 };
 
@@ -58,14 +83,16 @@ export default async function handler(req, res) {
   const body = await readJson(req);
 
   if (process.env.TIMEREX_WEBHOOK_DEBUG_LOG === "1") {
-    // 実payload確認用の一時ログ。Secretは絶対に出さない
-    const headers = { ...(req.headers || {}) };
-    delete headers[AUTH_HEADER];
-    console.log("[timerex-webhook][debug] headers:", JSON.stringify(headers));
-    console.log("[timerex-webhook][debug] body:", JSON.stringify(body));
+    // payload全体・ヘッダーは出さない（メール・氏名・URL・Secretを残さない）
+    console.log("[timerex-webhook][debug]", JSON.stringify(debugSummary(body)));
   }
 
   const parsed = await parseTimerexWebhook(body);
+  if (parsed.error === "unsupported_webhook_type") {
+    // キャンセル等、まだ実ログで確認していない event。名前だけ残す（payload・URL・メールは出さない）。
+    // 実際の event 名が分かったら TIMEREX_CANCEL_WEBHOOK_TYPES に入れる（lib/hr-timerex.js）
+    console.warn("[timerex-webhook] unsupported webhook_type:", parsed.webhookType);
+  }
   if (parsed.error) {
     return json(res, ERROR_STATUS[parsed.error] || 500, { ok: false, error: parsed.error, detail: parsed.detail });
   }
