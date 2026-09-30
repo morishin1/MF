@@ -1,21 +1,16 @@
-// 営業（Sales）の TimeRex Webhook の DEBUG 受信（api/sales/timerex/webhook.js・lib/sales-timerex-debug.js）。
+// 営業（Sales）の TimeRex Webhook の DEBUG まとめ（lib/sales-timerex-debug.js）。
+// TIMEREX_SALES_WEBHOOK_DEBUG_LOG=1 のときに Webhook がログへ出すもの。受信口そのもののテストは salestimerexapi.mjs
 //
 // ■ 何を守るテストか
-//   1. Sales 専用の Secret（TIMEREX_SALES_WEBHOOK_SECRET）だけで通す。採用HRの Secret では通らない。未設定は 503
-//   2. DB に一切書かない（Supabase を呼んだら落とす）
-//   3. ログに個人情報・URL・日時の値・payload 全文・Secret・sales_*_id の値を出さない
-//   4. 確かめたいこと（webhook の種類・event.id・予約枠・start_datetime の形・Meet の構造・form の field_type・
-//      sales_company_id / sales_meeting_id が返ってくるか・日程変更の old/new id）が、ログから読める
+//   1. まとめに個人情報・URL・日時の値・payload 全文・Secret・sales_*_id の値を入れない
+//   2. 確かめたいこと（webhook の種類・event.id・予約枠・start_datetime の形・Meet の構造・form の field_type・
+//      sales_company_id / sales_meeting_id が返ってくるか・日程変更の old/new id）が読める
 import assert from "node:assert/strict";
-import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const atRoot = (p) => join(ROOT, p);
 
-let dbCalls = 0;
-const boom = () => { dbCalls++; throw new Error("DEBUG 受信口が DB を呼んだ"); };
-mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: boom, userClient: boom } });
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -27,19 +22,7 @@ process.env.TIMEREX_SALES_WEBHOOK_SECRET = SECRET;
 process.env.TIMEREX_WEBHOOK_SECRET = "hr-secret-value-long-enough";
 process.env.TIMEREX_SALES_MEETING_URL = "https://timerex.net/s/its_8888/b6915742";
 
-const { default: handler } = await import(atRoot("api/sales/timerex/webhook.js"));
 const { salesDebugSummary, findSalesParams } = await import(atRoot("lib/sales-timerex-debug.js"));
-
-const logs = [];
-const origLog = console.log;
-const call = async (body, headers = { "x-timerex-authorization": SECRET }, method = "POST") => {
-  const r = { statusCode: 0, headers: {}, body: null };
-  r.setHeader = (k, v) => { r.headers[k.toLowerCase()] = v; };
-  r.end = (b) => { r.body = JSON.parse(b); };
-  console.log = (...a) => { logs.push(a.join(" ")); };
-  try { await handler({ method, headers, body }, r); } finally { console.log = origLog; }
-  return r;
-};
 
 const COMPANY = "11111111-2222-4333-8444-555555555555";
 const MEETING = "66666666-7777-4888-9999-000000000000";
@@ -76,41 +59,7 @@ const PII = ["株式会社テスト商事", "営業 花子", "hanako@test-shoji.
   "meet.google.com", "SECRET_CANCEL_TOKEN", "SECRET_RESCHEDULE_TOKEN", "SECRET_HOST_TOKEN",
   "2026-10-05", "10:00", COMPANY, MEETING, SECRET, "hr-secret-value"];
 
-console.log("\n=== 認証（Sales 専用の Secret） ===\n");
-
-await ok("Sales の Secret なら 200・DEBUG。DB は一度も呼ばない", async () => {
-  logs.length = 0;
-  const r = await call(booked());
-  assert.equal(r.statusCode, 200);
-  assert.deepEqual(r.body, { ok: true, mode: "debug", webhookType: "event_confirmed" });
-  assert.equal(dbCalls, 0);
-  assert.equal(logs.length, 1);
-});
-
-await ok("採用HRの Secret・ヘッダー無し・違う値は 401。POST 以外は 405", async () => {
-  assert.equal((await call(booked(), { "x-timerex-authorization": "hr-secret-value-long-enough" })).statusCode, 401);
-  assert.equal((await call(booked(), {})).statusCode, 401);
-  assert.equal((await call(booked(), { "x-timerex-authorization": SECRET + "x" })).statusCode, 401);
-  assert.equal((await call(null, {}, "GET")).statusCode, 405);
-});
-
-await ok("TIMEREX_SALES_WEBHOOK_SECRET が未設定なら 503（常に拒否）", async () => {
-  delete process.env.TIMEREX_SALES_WEBHOOK_SECRET;
-  try { assert.equal((await call(booked())).statusCode, 503); }
-  finally { process.env.TIMEREX_SALES_WEBHOOK_SECRET = SECRET; }
-});
-
-console.log("\n=== ログに出すもの・出さないもの ===\n");
-
-await ok("個人情報・URL・日時の値・sales_*_id の値・Secret はログに出ない", async () => {
-  logs.length = 0;
-  await call(booked());
-  await call(booked({}, { is_changed: true, old_event_id: "evt_sales_0001", new_event_id: "evt_sales_0002", id: "evt_sales_0002" }));
-  await call({ webhook_type: "event_canceled", calendar_url_path: "b6915742", event: booked().event });
-  const text = logs.join("\n");
-  for (const s of PII) assert.ok(!text.includes(s), `ログに出ている：${s}`);
-  assert.ok(text.includes("[sales-timerex-webhook][debug]"));
-});
+console.log("\n=== DEBUG のまとめ（lib/sales-timerex-debug.js） ===\n");
 
 await ok("確かめたいことが読める：種類・event.id・予約枠（営業のカレンダーか）・日時の形・Meet の構造・form の field_type", async () => {
   const s = salesDebugSummary(booked());
@@ -154,16 +103,18 @@ await ok("採用HRの予約枠（社長面談など）なら matches_sales_calen
   assert.equal(salesDebugSummary(booked(), {}).sales_calendar_configured, false, "TIMEREX_SALES_MEETING_URL 未設定なら false");
 });
 
-await ok("識別子に見えない値（メール・URL・日本語）は (redacted)。壊れた body でも 200", async () => {
+await ok("識別子に見えない値（メール・URL・日本語）は (redacted)。壊れた body でも落ちない", async () => {
   const s = salesDebugSummary({ webhook_type: "a@b.example", event: { id: "https://x", old_event_id: "予約" } });
   assert.equal(s.webhook_type, "(redacted)");
   assert.equal(s.event_id, "(redacted)");
   assert.equal(s.old_event_id, "(redacted)");
-  for (const body of [null, [], "text", { event: [] }]) {
-    const r = await call(body);
-    assert.equal(r.statusCode, 200, JSON.stringify(body));
-  }
-  assert.equal(dbCalls, 0);
+  for (const body of [null, [], "text", { event: [] }]) assert.equal(typeof salesDebugSummary(body), "object");
+});
+
+await ok("まとめに個人情報・URL・日時の値・sales_*_id の値が入らない", async () => {
+  const text = JSON.stringify([salesDebugSummary(booked()),
+    salesDebugSummary(booked({}, { is_changed: true, old_event_id: "evt_sales_0001", new_event_id: "evt_sales_0002" }))]);
+  for (const x of PII) assert.ok(!text.includes(x), `まとめに出ている：${x}`);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
