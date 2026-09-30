@@ -827,26 +827,28 @@
   function interviewRow(i) {
     const scoreLine = (detail.evalItems || []).filter((e) => i.scores?.[e.key])
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
-    // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、日時変更・キャンセルを出す
+    // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、面談情報の編集・キャンセルを出す
     const pending = !i.done && !i.canceled;
     return `
       <div class="card" style="margin-bottom:10px;${i.canceled ? "opacity:.6;" : ""}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
           ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
           ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}
-          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}</div>
+          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}
+          ${i.fromTimerex ? `<span class="hr-pill" style="background:#e3f1ea;color:#1d6b43;margin-left:6px;" title="日時・面談URLはTimeRex側が正です">TimeRex</span>` : ""}</div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">
           ${i.done ? `実施：${esc(fmtDate(i.conductedAt))}`
             : i.canceled ? `予定していた日時：${esc(fmtDate(i.scheduledAt))}（${esc(fmtDate(i.canceledAt))}にキャンセル）`
             : `予定：${esc(fmtDate(i.scheduledAt))}`}
-          ${i.interviewerName ? `　面談担当：${esc(i.interviewerName)}` : ""}</div>
+          ${i.interviewerName ? `　面談担当：${esc(i.interviewerName)}` : ""}
+          ${i.methodLabel ? `　面談方法：${esc(i.methodLabel)}` : ""}</div>
         ${scoreLine ? `<div style="font-size:12px;margin-top:4px;">${scoreLine}</div>` : ""}
         ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
-          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">日時を変更</button>` : ""}
+          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">面談情報を編集</button>` : ""}
           ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
@@ -854,7 +856,51 @@
             ? `<span class="muted" style="font-size:12px;">採用判断はCEO REVIEWで行います。</span>` : ""}
           ${i.done ? recordingActions(i) : ""}
         </div>
+        ${memoBlock(i)}
       </div>`;
+  }
+
+  // ---- 面談メモ（db/109。その面談に紐づくメモ。応募者全体のメモとは別） ---------------
+  // 実施前・実施後・キャンセル済み、どの面談にも書ける。TimeRex同期済みの面談でも書ける
+  function memoBlock(i) {
+    return `
+      <div class="hr-iv-memo" data-memo-for="${esc(i.id)}" style="margin-top:10px;padding-top:8px;border-top:1px dashed #e3e5ec;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span style="font-size:12px;font-weight:700;color:#1b2440;">面談メモ</span>
+          <button class="btn btn-secondary btn-sm" onclick="openMemoModal('${esc(i.id)}')">${i.memo ? "メモを編集" : "メモを書く"}</button>
+        </div>
+        ${i.memo
+          ? `<div class="hr-iv-memo-body" style="font-size:12.5px;margin-top:4px;white-space:pre-wrap;word-break:break-word;">${esc(i.memo)}</div>
+             ${i.memoUpdatedAt ? `<div class="muted" style="font-size:11px;margin-top:2px;">${esc(fmtDate(i.memoUpdatedAt))} 保存</div>` : ""}`
+          : `<div class="muted hr-iv-memo-body" style="font-size:12px;margin-top:4px;">まだメモはありません</div>`}
+      </div>`;
+  }
+
+  function openMemoModal(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談メモ</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">
+        ${esc(detail.applicant.name)}さん　${esc(iv.kindLabel)}　${esc(fmtDate(iv.conductedAt || iv.scheduledAt))}</p>
+      <textarea id="ivm-text" rows="8" maxlength="4000" placeholder="この面談で話したこと・次回確認したいことなど">${esc(iv.memo || "")}</textarea>
+      <p class="muted" style="font-size:11.5px;margin:4px 0 0;">この面談だけに紐づくメモです（4000文字まで）。空にして保存すると消えます。</p>
+      <div id="ivm-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="submitMemo('${esc(id)}', this)">保存する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+
+  async function submitMemo(id, btn) {
+    const msg = el("ivm-msg"); msg.textContent = "";
+    const memo = el("ivm-text").value;
+    if (memo.trim().length > 4000) { msg.textContent = "メモは4000文字以内にしてください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.hrInterviewAct({ id, action: "memo", memo }));
+      closeHrModal();
+      await refreshDetail("interviews");
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
 
   // ---- 録画URL登録・変更（モーダル） ------------------------------------------------
@@ -929,23 +975,42 @@
     return s ? new Date(s).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   }
 
-  // ---- 面談日時変更・キャンセル（モーダル） -----------------------------------------
-  // 「日時を変更」は既存のupdateアクションを使う（README §3。日時・担当・URLだけを直す）
+  // ---- 面談情報の編集・キャンセル（モーダル） -----------------------------------------
+  // 「面談情報を編集」は既存のupdateアクションを使う（日時・面談担当・面談方法・面談URL）。
+  // TimeRex同期済みの面談は、日時・面談URLをTimeRex側が正とする（lib/hr-timerex.js が
+  // Webhookのたびに上書きし、このアプリからTimeRexへは送らない）ので、読み取り専用で見せる
+  const METHODS = [["", "（未設定）"], ["online", "オンライン"], ["onsite", "対面"], ["phone", "電話"]];
+
+  /** datetime-local の値（ブラウザのローカル時刻。toISOString() はUTCになるので使わない） */
+  function toLocalInput(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   function openRescheduleModal(id) {
     const iv = (detail.interviews || []).find((x) => x.id === id);
     if (!iv) return;
     const opts = (detail.interviewers || []).map((p) =>
       `<option value="${esc(p.id)}" ${p.id === iv.interviewerId ? "selected" : ""}>${esc(p.display_name)}</option>`).join("");
-    const whenLocal = iv.scheduledAt ? new Date(iv.scheduledAt).toISOString().slice(0, 16) : "";
+    const lock = iv.fromTimerex ? "disabled" : "";
     openHrModal(`
-      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談日時を変更</h2>
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談情報を編集</h2>
       <p class="hr-sub" style="margin:0 0 14px;">${esc(iv.kindLabel)}（${esc(detail.applicant.name)}さん）</p>
+      ${iv.fromTimerex ? `<div class="banner warn" id="rs-timerex" style="margin:0 0 12px;">
+        <span class="material-symbols-outlined">info</span>
+        <div>TimeRexで確定した面談です。日時・面談URLはTimeRex側で変更してください（変更はTimeRexから自動で反映されます）。
+          面談担当・面談方法はここで変更できます。</div></div>` : ""}
       <label>予定日時</label>
-      <input id="rs-when" type="datetime-local" value="${esc(whenLocal)}">
+      <input id="rs-when" type="datetime-local" value="${esc(toLocalInput(iv.scheduledAt))}" ${lock}>
       <label style="margin-top:10px;">面談担当</label>
       <select id="rs-who"><option value="">（未定）</option>${opts}</select>
+      <label style="margin-top:10px;">面談方法</label>
+      <select id="rs-method">${METHODS.map(([k, l]) =>
+        `<option value="${k}" ${k === (iv.method || "") ? "selected" : ""}>${l}</option>`).join("")}</select>
       <label style="margin-top:10px;">面談URL</label>
-      <input id="rs-url" type="text" value="${esc(iv.meetingUrl || "")}" placeholder="https://meet.google.com/...">
+      <input id="rs-url" type="text" value="${esc(iv.meetingUrl || "")}" placeholder="https://meet.google.com/..." ${lock}>
       <div id="rs-msg" class="err-text" style="margin:10px 0;"></div>
       <div style="display:flex;gap:8px;margin-top:14px;">
         <button class="btn btn-primary" onclick="submitReschedule('${esc(id)}', this)">保存する</button>
@@ -954,14 +1019,19 @@
   }
 
   async function submitReschedule(id, btn) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
     const msg = el("rs-msg"); msg.textContent = "";
-    const when = el("rs-when").value;
+    const url = el("rs-url").value.trim();
+    if (url && !/^https?:\/\//i.test(url)) { msg.textContent = "面談URLは http:// または https:// で始まるURLを入力してください"; return; }
+    // 空欄は「未定・未設定に戻す」（null）。TimeRex同期済みなら日時・URLは送らない
+    const body = { id, interviewerId: el("rs-who").value || null, method: el("rs-method").value || null };
+    if (!iv?.fromTimerex) {
+      const when = el("rs-when").value;
+      body.scheduledAt = when ? new Date(when).toISOString() : null;
+      body.meetingUrl = url || null;
+    }
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview({
-        id, scheduledAt: when ? new Date(when).toISOString() : undefined,
-        interviewerId: el("rs-who").value || undefined,
-        meetingUrl: el("rs-url").value.trim() || undefined,
-      }));
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview(body));
       closeHrModal();
       await refreshDetail();
       await load();
@@ -1208,6 +1278,8 @@ ${url}
         <input id="iv-when" type="datetime-local">
         <label style="margin-top:10px;">面談担当</label>
         <select id="iv-who"><option value="">（未定）</option>${opts}</select>
+        <label style="margin-top:10px;">面談方法</label>
+        <select id="iv-method">${METHODS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
         <label style="margin-top:10px;">面談URL</label>
         <input id="iv-url" type="text" placeholder="https://meet.google.com/...">
         <div id="iv-msg" class="err-text" style="margin:10px 0;"></div>
@@ -1263,6 +1335,7 @@ ${url}
         applicantId: detail.applicant.id, kind: el("iv-kind").value,
         scheduledAt: when ? new Date(when).toISOString() : undefined,
         interviewerId: el("iv-who").value || undefined,
+        method: el("iv-method").value || undefined,
         meetingUrl: el("iv-url").value.trim() || undefined,
       }));
       closeAction();

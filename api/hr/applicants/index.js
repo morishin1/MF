@@ -51,7 +51,10 @@ async function list(req, res, sb, ctx) {
       ? sb.from("gw_employees").select("id, display_name").in("id", recruiterIds)
       : Promise.resolve({ data: [] }),
     ids.length
-      ? sb.from("gw_hr_interviews").select("applicant_id").in("applicant_id", ids).limit(5000)
+      // 件数に加えて、一覧のNEXT ACTIONに出す「直近の面談日時」もここから出す
+      // （面談日時を変更したら一覧にもそのまま反映される。詳細と同じ規則）
+      ? sb.from("gw_hr_interviews").select("applicant_id, kind, scheduled_at, conducted_at, canceled_at")
+        .in("applicant_id", ids).limit(5000)
       : Promise.resolve({ data: [] }),
     // 担当変更（一覧の複数選択操作）の選択肢。既存の面談担当ピッカーと同じ条件
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId)
@@ -65,13 +68,19 @@ async function list(req, res, sb, ctx) {
   ]);
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
   const interviewCount = new Map();
+  const nextInterview = new Map();
   for (const i of interviewCounts || []) {
     interviewCount.set(i.applicant_id, (interviewCount.get(i.applicant_id) || 0) + 1);
+    // 直近の、まだ実施していない・キャンセルしていない面談（api/hr/applicants/detail.js と同じ）
+    if (i.conducted_at || i.canceled_at || !i.scheduled_at) continue;
+    const cur = nextInterview.get(i.applicant_id);
+    if (!cur || String(i.scheduled_at).localeCompare(String(cur.scheduled_at)) < 0) nextInterview.set(i.applicant_id, i);
   }
 
   return json(res, 200, {
     applicants: (data || []).map((a) => ({
-      ...shapeApplicant(a),
+      ...shapeApplicant(a, nextOf(nextInterview.get(a.id))),
+      nextInterviewAt: nextInterview.get(a.id)?.scheduled_at || null,
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
       docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
@@ -114,3 +123,5 @@ async function create(req, res, sb, ctx, user) {
 
   return json(res, 200, { applicant: shapeApplicant(data) });
 }
+
+const nextOf = (i) => (i ? { scheduledAt: i.scheduled_at, kind: i.kind } : null);

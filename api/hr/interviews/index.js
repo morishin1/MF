@@ -1,10 +1,14 @@
-// POST  /api/hr/interviews { applicantId, kind, scheduledAt, interviewerId, meetingUrl }
+// POST  /api/hr/interviews { applicantId, kind, scheduledAt, interviewerId, meetingUrl, method }
 //         … 面談を予定する。応募者の状態を「面談予定」へ進める
 // PATCH /api/hr/interviews { id, action }
 //         "conduct"  … 実施済みにする。応募者の状態を「評価入力待ち」へ
 //         "evaluate" … 5項目評価・ランク・所感を保存。ランクから対応ステータスを機械的に進める
 //                       （ただし社長推薦・見送りの最終確定はここでは行わない。README §5・§7）
-//         "update"   … 日時・面談担当・URLだけを直す（状態は動かさない）
+//         "update"   … 面談情報（日時・面談担当・面談方法・面談URL・録画URL）を直す（状態は動かさない）。
+//                       日時を変えたら選考タイムラインに残す。監査ログには「どの項目を変えたか」だけを残す。
+//                       TimeRex同期済みの面談は、日時・面談URLを変えられない（下の「TimeRexとの両立」）
+//         "memo"     … その面談に紐づくメモを保存する（db/109。応募者全体のメモとは別）。
+//                       実施前・実施後・キャンセル済み、どの面談にも書ける
 //         "cancel"   … 面談をキャンセルする。物理削除はせずcanceled_atを立てるだけ。
 //                       応募者は日程調整のやり直し（カジュアル面談ならstatus=scheduling、
 //                       社長面談ならstatus=ceo_interview_pending）へ戻す
@@ -13,6 +17,14 @@
 // ■ 同じ面談を二重登録しない
 //   同じ種別（カジュアル／社長）の、まだ実施していない・キャンセルしていない面談が
 //   既にあれば断る。
+//
+// ■ TimeRexとの両立（db/089・lib/hr-timerex.js）
+//   TimeRex由来の面談（timerex_event_id あり）は、日時・面談URLをTimeRex側が正とする。
+//   Webhook（予約確定の再送・日程変更）が届くたびに lib/hr-timerex.js が scheduled_at・
+//   meeting_url を無条件に上書きし、このアプリからTimeRexへは何も送らない（APIを持たない）。
+//   アプリで日時だけを変えると、候補者のカレンダー・Google Meet・TimeRexとずれたうえ、
+//   次のWebhookで黙って元に戻る。だからこの2つは409で断り、TimeRex側での変更を案内する。
+//   面談担当・面談方法・録画URL・メモはアプリ側だけの情報で、Webhookも触らないので編集できる。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -22,10 +34,14 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
   normalizeInterview, shapeInterview, nextStatusFromRank, interviewKindLabel, RANK_LABEL,
-  decisionMakerEmployeeIds,
+  decisionMakerEmployeeIds, fmtJstDateTime, isTimerexInterview, TIMEREX_MANAGED_COLUMNS,
+  INTERVIEW_MEMO_MAX,
 } from "../../../lib/hr.js";
 
-const SQL = "db/081_hr_recruiting.sql・083_hr_interview_meeting_url.sql";
+const SQL = "db/081_hr_recruiting.sql・083_hr_interview_meeting_url.sql・109_hr_interview_edit.sql";
+const SQL_EDIT = "db/109_hr_interview_edit.sql";
+// 面談の予定そのもの（キャンセル済みの面談では直させない）
+const SCHEDULE_COLUMNS = ["scheduled_at", "interviewer_id", "meeting_url", "method"];
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -108,6 +124,7 @@ async function act(req, res, sb, ctx, user) {
   if (body.action === "conduct") return conduct(res, sb, ctx, user, iv, body);
   if (body.action === "evaluate") return evaluate(res, sb, ctx, user, iv, body);
   if (body.action === "update") return updateInterview(res, sb, ctx, user, iv, body);
+  if (body.action === "memo") return saveMemo(res, sb, ctx, user, iv, body);
   if (body.action === "cancel") return cancelInterview(res, sb, ctx, user, iv);
   return json(res, 400, { error: "unknown_action" });
 }
@@ -175,14 +192,96 @@ async function evaluate(res, sb, ctx, user, iv, body) {
 }
 
 async function updateInterview(res, sb, ctx, user, iv, body) {
-  const row = normalizeInterview(body, { partial: true });
+  // 種別・評価・実施日時はここでは直さない（それぞれ専用の操作がある）
+  const picked = {};
+  for (const k of ["scheduledAt", "interviewerId", "meetingUrl", "method", "recordingUrl"]) {
+    if (body[k] !== undefined) picked[k] = body[k];
+  }
+  const row = normalizeInterview(picked, { partial: true });
   if (row.error) return json(res, 400, row);
-  if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
+  const cols = Object.keys(row.value);
+  if (!cols.length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
+
+  // 値が変わらないものは「変更」として扱わない（画面は全項目を送ってくるため。
+  // 109未適用の環境でも、面談方法を触らない保存はこれまでどおり通る）
+  const same = (c) => String(iv[c] ?? "") === String(row.value[c] ?? "")
+    || (c === "scheduled_at" && iv[c] && row.value[c] && Date.parse(iv[c]) === Date.parse(row.value[c]));
+  if (iv.canceled_at && cols.some((c) => SCHEDULE_COLUMNS.includes(c) && !same(c))) {
+    return json(res, 409, { error: "already_canceled", hint: "キャンセル済みの面談は編集できません" });
+  }
+  if (isTimerexInterview(iv)) {
+    const locked = TIMEREX_MANAGED_COLUMNS.filter((c) => c in row.value && !same(c));
+    if (locked.length) {
+      return json(res, 409, {
+        error: "timerex_managed", fields: locked,
+        hint: "TimeRexで確定した面談の日時・面談URLは、TimeRex側で変更してください（このアプリからTimeRexへは送りません）",
+      });
+    }
+  }
+  const changed = cols.filter((c) => !same(c));
+  if (!changed.length) return json(res, 200, { interview: shapeInterview(iv), changed: [] });
+  const patch = Object.fromEntries(changed.map((c) => [c, row.value[c]]));
+
+  // 面談担当は、同じ会社の社員だけ（別の会社の人を指定させない）
+  if (patch.interviewer_id) {
+    const { data: emp } = await sb.from("gw_employees").select("id")
+      .eq("id", patch.interviewer_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+    if (!emp) return json(res, 400, { error: "invalid_interviewer", hint: "面談担当は、この会社の社員から選んでください" });
+  }
 
   const { data, error } = await sb.from("gw_hr_interviews")
-    .update(row.value).eq("id", iv.id).select("*").single();
-  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    .update(patch).eq("id", iv.id).eq("tenant_id", ctx.tenantId).select("*").single();
+  if (error) {
+    const hint = dbSetupHint(error, SQL_EDIT);
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "db_update_failed", detail: error.message });
+  }
 
+  // 日時の変更は選考の経過なので、タイムラインにも残す（録画URL等の付け替えは残さない）
+  if (changed.includes("scheduled_at")) {
+    await sb.from("gw_hr_timeline").insert({
+      tenant_id: ctx.tenantId, applicant_id: iv.applicant_id, event_key: "interview_rescheduled",
+      label: `${interviewKindLabel(iv.kind)}の日時を変更`,
+      detail: patch.scheduled_at ? fmtJstDateTime(patch.scheduled_at) : "日時未定", created_by: user.id,
+    });
+  }
+  // 監査ログには「どの項目を変えたか」と日時の前後だけ。URL等の値そのものは残さない
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.interview_update", target: `hr_interview:${iv.id}`,
+    detail: {
+      applicantId: iv.applicant_id, fields: changed, timerex: isTimerexInterview(iv),
+      ...(changed.includes("scheduled_at") ? { scheduledFrom: iv.scheduled_at || null, scheduledTo: patch.scheduled_at } : {}),
+    },
+  });
+
+  return json(res, 200, { interview: shapeInterview(data), changed });
+}
+
+// 面談メモ（db/109）。その面談に紐づくメモで、応募者全体のメモ（gw_hr_applicants.note）とは別。
+// 空で保存すると消える。TimeRex同期済みの面談でも書ける（Webhookはmemoを触らない）
+async function saveMemo(res, sb, ctx, user, iv, body) {
+  if (body.memo !== null && body.memo !== undefined && typeof body.memo !== "string") {
+    return json(res, 400, { error: "invalid_body", detail: "メモは文字列で送ってください" });
+  }
+  if (body.memo === undefined) return json(res, 400, { error: "invalid_body", required: ["memo"] });
+  const text = String(body.memo ?? "").replace(/\r\n/g, "\n").trim();
+  if (text.length > INTERVIEW_MEMO_MAX) {
+    return json(res, 400, { error: "invalid_body", detail: `メモは${INTERVIEW_MEMO_MAX}文字以内にしてください` });
+  }
+  const now = new Date().toISOString();
+  const { data, error } = await sb.from("gw_hr_interviews")
+    .update({ memo: text || null, memo_updated_at: now, memo_updated_by: user.id })
+    .eq("id", iv.id).eq("tenant_id", ctx.tenantId).select("*").single();
+  if (error) {
+    const hint = dbSetupHint(error, SQL_EDIT);
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "db_update_failed", detail: error.message });
+  }
+  // メモの中身は監査ログに残さない（面談の所感は機微になりうる）。文字数だけ
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.interview_memo", target: `hr_interview:${iv.id}`,
+    detail: { applicantId: iv.applicant_id, length: text.length, cleared: !text },
+  });
   return json(res, 200, { interview: shapeInterview(data) });
 }
 
@@ -211,7 +310,5 @@ async function cancelInterview(res, sb, ctx, user, iv) {
   return json(res, 200, { interview: shapeInterview(data), status: nextStatus });
 }
 
-function fmtDateTime(iso) {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+// 選考タイムライン・通知の日時はJSTで出す（サーバはUTCで動くため。lib/hr.js fmtJstDateTime）
+const fmtDateTime = fmtJstDateTime;
