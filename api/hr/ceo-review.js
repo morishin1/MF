@@ -7,6 +7,7 @@
 // canDecideHire（社長・管理者）だけが見られる。recruiterは社長推薦はできるが、
 // この画面自体は開けない（js/hr-layout.js のページ側ガードと同じ基準）
 
+import { ymd as jstYmd } from "../../lib/jst.js";
 import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canDecideHire } from "../../lib/gw.js";
@@ -51,14 +52,18 @@ export default async function handler(req, res) {
     byApplicant.get(i.applicant_id).push(i);
   }
 
-  const jstToday = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const jstToday = jstYmd();
   const todayMeetings = [], recommended = [], decisionPending = [];
 
   for (const a of applicants) {
     const list = byApplicant.get(a.id) || [];
     // 良かった点・気になる点は、評価が付いた面談（カジュアル面談）のものをそのまま出す
     const evaluated = list.find((i) => i.rank) || null;
-    const ceoInterview = list.find((i) => i.kind === "ceo") || null;
+    // 社長面談は「いま有効なもの」（実施前・キャンセルでない）を優先。無ければ実施済みの直近。
+    // キャンセル済みの古い行を拾わない
+    const ceoList = list.filter((i) => i.kind === "ceo");
+    const ceoInterview = ceoList.find((i) => !i.conducted_at && !i.canceled_at)
+      || ceoList.find((i) => !i.canceled_at) || null;
 
     const card = {
       ...shapeApplicant(a),
@@ -71,7 +76,7 @@ export default async function handler(req, res) {
     };
 
     const scheduledToday = ceoInterview && !ceoInterview.conducted_at && ceoInterview.scheduled_at
-      && String(ceoInterview.scheduled_at).slice(0, 10) === jstToday;
+      && jstYmd(ceoInterview.scheduled_at) === jstToday;   // 日本の日付で比べる（UTC の日付で切らない）
     if (scheduledToday) todayMeetings.push(card);
     else if (a.status === "ceo_decision_pending") decisionPending.push(card);
     else recommended.push(card);
