@@ -113,6 +113,12 @@ await ok("一覧：期間の新しい順。単価は Office 権限の人にだ�
   assert.deepEqual(r.body.terms.map((t) => t.validFrom), ["2026-10-01", "2026-04-01"]);
   assert.equal(r.body.terms[0].salesUnitPrice, 750000);
 });
+await ok("一覧の見出し用に、要員名と客先を返す（名簿は必要な列だけ）。ほかの契約の情報は入らない", async () => {
+  setup();
+  const r = await list();
+  assert.deepEqual(r.body.contract, { siteCompany: "顧客A社", engagementKind: "pp", employeeName: "田中 太郎" });
+  assert.ok(!JSON.stringify(r.body).includes("他社"));
+});
 await ok("更新：id を指定。値が変わり、他社の・他の契約の id は更新できない（404）", async () => {
   setup();
   const c = (await save(MONTHLY)).body.term;

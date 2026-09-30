@@ -65,7 +65,7 @@ const view = (r) => {
 
 async function contractOf(req, ctx, id) {
   if (!id || !UUID.test(String(id))) return null;
-  return must(userClient(req).from("gw_site_contracts").select("id, employee_id")
+  return must(userClient(req).from("gw_site_contracts").select("id, employee_id, site_company, engagement_kind")
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle());
 }
 
@@ -75,7 +75,14 @@ async function list(req, res, ctx) {
   if (!c) return json(res, 404, { error: "contract_not_found" });
   const rows = await must(userClient(req).from("gw_site_contract_terms").select(FIELDS)
     .eq("tenant_id", ctx.tenantId).eq("site_contract_id", c.id).order("valid_from", { ascending: false }).limit(200));
-  return json(res, 200, { siteContractId: c.id, terms: (rows || []).map(view) });
+  // 画面の見出し用（氏名は、名簿から判定のあとに読む。人事の機微の列は読まない）
+  const emp = await must(admin().from("gw_employees").select("id, display_name")
+    .eq("id", c.employee_id).eq("tenant_id", ctx.tenantId).maybeSingle());
+  return json(res, 200, {
+    siteContractId: c.id,
+    contract: { siteCompany: c.site_company, engagementKind: c.engagement_kind, employeeName: emp?.display_name || "" },
+    terms: (rows || []).map(view),
+  });
 }
 
 const overlaps = (a, b) => a.valid_from <= (b.valid_to || "9999-12-31") && b.valid_from <= (a.valid_to || "9999-12-31");

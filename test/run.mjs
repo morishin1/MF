@@ -24,7 +24,7 @@ const groups = {
   // ブラウザの要らないもの。ハンドラを直に呼ぶものと、静的な検査
   node: { dir: HERE, node: ["--experimental-test-module-mocks"], timeout: 300 },
   // 実際の画面を開くもの。先に静的サーバを上げておくこと
-  ui: { dir: join(HERE, "ui"), node: [], timeout: 400 },
+  ui: { dir: join(HERE, "ui"), node: ["--experimental-test-module-mocks"], timeout: 400 },
   // GitHub Actions の手順を、その場で走らせるもの。Go が要る
   wf: { dir: join(HERE, "wf"), node: [], timeout: 900 },
 };

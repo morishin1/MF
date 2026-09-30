@@ -193,6 +193,16 @@
   ];
 
   const state = { month: null, data: null, tag: "", q: "", kind: "", incompleteOnly: true, openId: null, seq: 0 };
+
+  // ---- Phase 3（勤務表の確認・確定）：応答に phase3.ready があるときだけ、増えた表示を出す ----
+  const p3 = () => Boolean(state.data?.phase3?.ready);
+  const sheetUrl = (r) => `timesheet.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
+  const termsUrl = (r) => `terms.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
+  const TONE = { good: "ok", warn: "attention", bad: "danger" };
+  const SHEET_ICON = { confirmed: "check_circle", draft: "edit_note", returned: "undo", submitted: "inbox", none: "radio_button_unchecked" };
+  // 稼働確認の欄のラベルから、時間を除いたもの（時間は別に大きく出す）
+  const workLabel = (r) => r.cols.work.label.replace(/\s[\d.]+h$/, "");
+  const WORK_TONE = { "確認待ち": ["attention", "edit_note"], "差し戻し": ["danger", "undo"], "未読取": ["neutral", "inbox"] };
   let lastFocus = null;
 
   const qsParams = new URLSearchParams(location.search);
@@ -286,6 +296,7 @@
     el("month").value = state.month;
     el("sub").textContent = `${state.month.replace("-", "年").replace(/^(\d{4}年)0?/, "$1")}月分。勤務表の提出期限は ${d.deadline ? fmtDay(d.deadline) : "—"} です。`;
     if (d.notReady || d.accessNotReady) banner("warn", d.message);
+    else if (d.phase3 && d.phase3.ready === false) banner("warn", "勤務表の確認・稼働時間の機能は、まだ使えません。" + (d.phase3.message || ""));
     renderSummary();
     renderControls();
     renderList();
@@ -348,7 +359,7 @@
     const all = state.data?.rows || [];
     const rows = visibleRows();
     el("count").textContent = all.length ? `${all.length}件中 ${rows.length}件を表示` : "";
-    el("listNote").textContent = "稼働時間の自動計算は、次の段階で追加します";
+    el("listNote").textContent = p3() ? "勤務表を確定すると、稼働時間と売上の精算が出ます" : "稼働時間の自動計算は、次の段階で追加します";
     el("rows").innerHTML = rows.map(rowHtml).join("");
     const empty = el("empty");
     empty.hidden = rows.length > 0 || !state.data;
@@ -375,16 +386,37 @@
       <td data-label="客先"><div class="cell"><span class="of-nm">${esc(r.siteCompany)}</span>${r.primeCompany ? `<span class="of-sub2">上位：${esc(r.primeCompany)}</span>` : ""}</div></td>
       <td data-label="案件"><div class="cell"><span class="of-nm">現場契約<span class="of-tag">${esc(r.kindLabel)}</span></span><span class="of-sub2">${esc(period)}</span></div></td>
       <td data-label="要員"><div class="cell"><span class="of-nm">${esc(r.employeeName)}</span>${r.usesVendor ? `<span class="of-sub2">${esc(r.partnerName || "BP会社 未登録")}</span>` : (r.department ? `<span class="of-sub2">${esc(r.department)}</span>` : "")}</div></td>
-      <td data-label="勤務表"><div class="cell">${tsPill}${tsNote}${files("timesheet") ? `<span class="of-sub2">ファイル ${files("timesheet")}件</span>` : ""}</div></td>
-      <td data-label="稼働時間"><div class="cell"><div class="of-hours" title="稼働時間の計算は次の段階で追加します">—</div>${c.work.state === "confirmed" ? pill("確認済", "ok", "check_circle") : pill("未確認", "neutral", "radio_button_unchecked")}</div></td>
+      <td data-label="勤務表"><div class="cell">${sheetCell(r, tsPill)}${tsNote}${files("timesheet") ? `<span class="of-sub2">ファイル ${files("timesheet")}件</span>` : ""}</div></td>
+      <td data-label="稼働時間"><div class="cell">${workCell(r)}</div></td>
       <td data-label="売上請求"><div class="cell">${c.salesInvoice.state === "sent" ? pill("送付済", "ok", "check_circle") : c.salesInvoice.state === "created" ? pill("作成済", "progress", "description") : pill("未作成", "neutral", "radio_button_unchecked")}</div></td>
       <td data-label="仕入請求"><div class="cell">${c.vendorInvoice.state === "not_applicable" ? pill("対象外", "muted", "remove") : c.vendorInvoice.state === "received" ? pill("受領済", "ok", "check_circle") : pill("未受領", "neutral", "radio_button_unchecked")}</div></td>
       <td data-label="支払"><div class="cell">${c.payment.state === "not_applicable" ? pill("対象外", "muted", "remove") : pill("未管理", "muted", "help")}</div></td>
       <td data-label="現在工程"><div class="cell">${pill(r.stageLabel, stageTone, stageIcon)}${r.check ? `<span class="of-sub2">${pill("要確認", "attention", "flag")}</span>` : ""}</div></td>
       <td data-label="要対応"><div class="cell">${r.action
-        ? `<div class="of-act">${esc(r.action.text)}</div><button type="button" class="of-btn sec" data-open="${esc(r.siteContractId)}" data-section="${esc(r.action.section)}">${esc(r.action.cta)}</button>`
+        ? `<div class="of-act">${esc(r.action.text)}</div><button type="button" class="of-btn sec" data-open="${esc(r.siteContractId)}" data-section="${esc(r.action.section)}">${esc(r.action.cta)}</button>${sheetLink(r)}`
         : `<span class="of-muted">対応は不要です</span>`}</div></td>
     </tr>`;
+  }
+
+  // 勤務表・稼働時間の欄（Phase 3 の情報があれば、状態を細かく。無ければ、従来どおり印だけ）
+  function sheetCell(r, legacy) {
+    const si = r.sheetInfo;
+    if (!p3() || !si || si.state === "none") return legacy;
+    return pill(si.label, TONE[si.tone] || "neutral", SHEET_ICON[si.state]);
+  }
+  function workCell(r) {
+    const c = r.cols, si = r.sheetInfo;
+    const hours = p3() && si?.hours ? `${si.hours}h` : "—";
+    const hoursHtml = p3() && si?.hours ? `<div class="of-hours" style="color:#1b2440;">${esc(hours)}</div>` : `<div class="of-hours" title="稼働時間は、勤務表を確定すると出ます">—</div>`;
+    if (!p3()) return `${hoursHtml}${c.work.state === "confirmed" ? pill("確認済", "ok", "check_circle") : pill("未確認", "neutral", "radio_button_unchecked")}`;
+    const label = workLabel(r);
+    const [tone, icon] = c.work.state === "confirmed" ? ["ok", "check_circle"] : (WORK_TONE[label] || ["neutral", "radio_button_unchecked"]);
+    return `${hoursHtml}${pill(label, tone, icon)}`;
+  }
+  // 勤務表の確認・登録へ（勤務表待ち・稼働確認待ちの行）
+  function sheetLink(r) {
+    if (!p3() || !["timesheet", "work"].includes(r.stage)) return "";
+    return `<a class="of-btn" style="margin-top:6px;text-decoration:none;" href="${esc(sheetUrl(r))}">${r.stage === "work" ? "勤務表を確認・確定" : "勤務表を登録・確認"}</a>`;
   }
 
   // ---- 右ドロワー ------------------------------------------------------------------
@@ -453,15 +485,16 @@
               <div><dt>契約期間</dt><dd>${esc(r.periodFrom.replaceAll("-", "/"))} 〜 ${esc(r.periodTo ? r.periodTo.replaceAll("-", "/") : "未定")}</dd></div>
               <div><dt>更新状態</dt><dd>${esc(RENEWAL[r.renewalStatus] || r.renewalStatus || "—")}</dd></div>
             </dl>
-            <p class="of-muted">単価・精算条件は、この画面ではまだ扱いません。</p></section>
+            ${p3() ? termsBlock(r) : `<p class="of-muted">単価・精算条件は、この画面ではまだ扱いません。</p>`}</section>
 
           <section class="of-sec" id="dr-timesheet"><h3><span class="material-symbols-outlined" aria-hidden="true">description</span>勤務表</h3>
             <p>${c.timesheet.state === "submitted" ? `提出済み${at("timesheet_received")}` : `未提出です${r.deadline ? `（期限 ${esc(fmtDay(r.deadline))}）` : ""}`}</p>
-            ${fileList(files("timesheet"), "まだファイルが届いていません。")}</section>
+            ${fileList(files("timesheet"), "まだファイルが届いていません。")}
+            ${p3() ? `<div class="of-actions" style="margin-top:8px;"><a class="of-btn" style="text-decoration:none;" href="${esc(sheetUrl(r))}"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>勤務表を開いて確認・確定</a></div>` : ""}</section>
 
           <section class="of-sec" id="dr-work"><h3><span class="material-symbols-outlined" aria-hidden="true">schedule</span>稼働計算</h3>
             <p>稼働の確認：${c.work.state === "confirmed" ? `確認済み${at("work_confirmed")}` : "未確認"}</p>
-            <p class="of-muted">勤務表からの稼働時間の読取・計算は、次の段階で追加します。</p></section>
+            ${p3() ? workBlock(r) : `<p class="of-muted">勤務表からの稼働時間の読取・計算は、次の段階で追加します。</p>`}</section>
 
           <section class="of-sec" id="dr-sales"><h3><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>売上請求</h3>
             <p>請求書の作成：${r.marks.board_created ? `作成済み${at("board_created")}` : "未作成"}</p>
@@ -485,6 +518,31 @@
             <p class="of-muted">印を付けた日時だけを表示しています。担当者名は、次の段階から記録します。</p></section>
         </div>
       </aside>`;
+  }
+
+  // 契約条件（単価そのものは、この一覧では出さない。条件の画面で見る）
+  function termsBlock(r) {
+    const t = r.terms || { status: "none" };
+    const txt = t.status === "none" ? "この月に効く契約条件は、まだ登録されていません。"
+      : t.status === "multiple" ? "この月は、条件が2件以上あります（月の途中で条件が変わる）。自動では選びません。"
+        : t.partial ? "契約条件は登録済みです（この月の一部だけ有効）。" : "契約条件は登録済みです。";
+    return `<p>${esc(txt)}</p><div class="of-actions" style="margin-top:6px;"><a class="of-btn sec" style="text-decoration:none;" href="${esc(termsUrl(r))}">契約条件を${t.status === "none" ? "登録する" : "見る・直す"}</a></div>`;
+  }
+  // 稼働計算：勤務表の状態、確定した時間、精算の結果
+  function workBlock(r) {
+    const si = r.sheetInfo;
+    if (!si) return "";
+    const yen = (v) => `${Number(v).toLocaleString("ja-JP")}円`;
+    let h = `<p>勤務表の状態：${pill(si.label, TONE[si.tone] || "neutral", SHEET_ICON[si.state])}</p>`;
+    if (si.state === "confirmed") h += `<p>確定した稼働時間：<b>${esc(si.hours)}h</b>${si.workDays != null ? `（稼働 ${si.workDays}日）` : ""}</p>`;
+    else if (si.state === "draft") h += `<p class="of-muted">下書きです。${si.unresolved ? `入力が必要な日 ${si.unresolved}日。` : ""}${si.review ? `要確認 ${si.review}日。` : ""}確定すると、稼働時間が出ます。</p>`;
+    const st = r.settle;
+    if (st) {
+      h += st.status === "calculated"
+        ? `<p>売上の精算：<b>${esc(yen(st.amount))}</b>${st.band ? `<span class="of-muted">（${{ within: "精算幅の中", over: "精算幅の超過", under: "精算幅の不足" }[st.band]}）</span>` : ""}</p>`
+        : `<p>売上の精算：${st.status === "none" ? "契約条件が未登録のため、計算できません。" : "自動では計算できません。"}</p>${(st.reasons || []).length ? `<ul style="margin:0 0 6px;padding-left:18px;font-size:12px;">${st.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}`;
+    }
+    return h;
   }
 
   // ---- 提出ファイルを開く ------------------------------------------------------------
