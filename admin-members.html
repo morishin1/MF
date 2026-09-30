@@ -718,6 +718,8 @@
           <p class="muted" style="font-size:11.5px;margin:4px 0 8px;">
             認証アプリを入れた端末を失くした・機種変更したときに外します。
             外すと本人に通知が届き、マイページから登録し直してもらいます。記録に残ります。
+            ${(e.roles || []).includes("owner") ? `<br><b>経営者の二段階認証は、ほかの経営者だけがリセットできます</b>（自分のはできません。
+            経営者が1人だけで認証アプリを失ったときは、緊急復旧の手順になります）。ほかの経営者にも通知が届きます。` : ""}
           </p>
           <button class="btn btn-secondary btn-sm" onclick="resetMfa('${esc(e.id)}', '${esc(e.display_name)}', this)">
             <span class="material-symbols-outlined icon-inline">lock_reset</span>二段階認証をリセット

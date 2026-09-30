@@ -2,7 +2,8 @@
 // POST /api/mfa {action:"enroll"}     … 登録を始める（QR と手入力キーが返る）
 // POST /api/mfa {action:"verify", factorId, code} … 6桁で確かめて登録を終える（aal2 のトークンが返る）
 // POST /api/mfa {action:"unenroll", factorId}     … 自分で外す（再認証つき。強制期間中の対象者は不可）
-// POST /api/mfa {action:"reset", employeeId}      … 管理者が外す（本人は登録し直す）
+// POST /api/mfa {action:"reset", employeeId}      … 管理者・経営者が外す（本人は登録し直す）。
+//                                                   経営者（owner）のぶんは、経営者だけが外せる
 //
 // ■ なぜ Supabase を直接ではなく、ここを通すのか
 //
@@ -19,14 +20,27 @@
 //
 // ■ リセットは管理者だけ・自分のはできない
 //   自分で自分をリセットできると、強制の意味が無い。別の管理者に頼む。
+//
+// ■ 経営者（owner）の二段階認証は、経営者だけがリセットできる
+//   管理者・人事が owner の認証を外せると、パスワードを知っている人が、
+//   管理者を経由して自分の認証アプリに差し替えられる（経営の画面は認証さえ通れば開く）。
+//   だから
+//     経営者 → 一般ユーザー    可
+//     経営者 → ほかの経営者    可（実行する経営者は、今回 aal2 で確かめていること）
+//     管理者・人事 → 経営者    不可（403 owner_only）。試みたことは記録に残す
+//     経営者 → 自分            不可（自分では外せない）
+//   経営者が1人だけで、その人が認証アプリを失ったときは、画面からは復旧できない。
+//   Supabase の SQL による緊急復旧（docs/keiei-owner-recovery.md）で行う。
+//   通常の画面に、経営者を乗っ取れる経路は残さない。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
-import { gwContext, canManageHr } from "../lib/gw.js";
+import { gwContext, canManageHr, isOwner } from "../lib/gw.js";
 import { admin } from "../lib/supabase.js";
 import { gwLog } from "../lib/gw-audit.js";
 import { notify } from "../lib/notify.js";
-import { mfaState, selfUnenroll, requireMfa, enrolledOf } from "../lib/mfa.js";
+import { mfaState, selfUnenroll, requireMfa, requireMfaStrict, enrolledOf } from "../lib/mfa.js";
+import { isOwnerEmployee, guardOwnerTarget, INACTIVE } from "../lib/owner-guard.js";
 
 const RESET_WINDOW_DAYS = 7;
 const SQL = "db/071_onboarding_stage2.sql";
@@ -160,7 +174,22 @@ async function reset(req, res, ctx, user, body) {
   if (!emp) return json(res, 404, { error: "employee_not_found" });
   if (!emp.user_id) return json(res, 400, { error: "not_linked", hint: "ログインアカウントがありません" });
   if (emp.user_id === user.id) {
-    return json(res, 403, { error: "self_reset", hint: "自分の二段階認証は自分でリセットできません。別の管理者に依頼してください" });
+    return json(res, 403, { error: "self_reset", hint: isOwner(ctx)
+      ? "自分の二段階認証は自分でリセットできません。ほかの経営者に依頼してください（経営者が1人だけのときは docs/keiei-owner-recovery.md の緊急復旧）"
+      : "自分の二段階認証は自分でリセットできません。別の管理者に依頼してください" });
+  }
+
+  // 経営者の認証は、経営者だけが外せる。管理者・人事は、試みた記録だけを残して断る
+  const targetIsOwner = await isOwnerEmployee(sb, ctx.tenantId, emp.id);
+  if (targetIsOwner) {
+    const blocked = await guardOwnerTarget(sb, ctx, emp.id, "二段階認証のリセット");
+    if (blocked) {
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "mfa.reset_denied",
+                    target: `employee:${emp.id}`, detail: { name: emp.display_name, reason: "owner_only" } });
+      return json(res, blocked.status, blocked.body);
+    }
+    // 経営者どうしのリセットは、実行する側が今回 aal2 で確かめていること（強制日を待たない）
+    if (!(await requireMfaStrict(req, res, ctx, user))) return;
   }
 
   const { data: fl, error: le } = await sb.auth.admin.mfa.listFactors({ userId: emp.user_id });
@@ -185,17 +214,42 @@ async function reset(req, res, ctx, user, body) {
   }
 
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "mfa.reset",
-                target: `employee:${emp.id}`, detail: { name: emp.display_name, removed, expiresAt: expires } });
-  await notify([{
+                target: `employee:${emp.id}`,
+                detail: { name: emp.display_name, removed, expiresAt: expires, ownerTarget: targetIsOwner } });
+  const notices = [{
     tenantId: ctx.tenantId, employeeId: emp.id, kind: "blocker",
     title: "二段階認証をリセットしました",
-    body: "管理者がリセットしました。マイページから、認証アプリで登録し直してください。",
+    body: targetIsOwner
+      ? "経営者がリセットしました。心当たりがない場合は、すぐに別の経営者へ連絡してください。マイページから、認証アプリで登録し直してください。"
+      : "管理者がリセットしました。マイページから、認証アプリで登録し直してください。",
     link: "mypage.html#mfa", dedupeKey: `mfa-reset:${emp.id}`,
-  }]);
+  }];
+  // 経営者のリセットは、ほかの在籍中の経営者にも知らせる（なりすましに気づけるように）
+  if (targetIsOwner) notices.push(...(await otherOwnerNotices(sb, ctx, emp)));
+  await notify(notices);
   return json(res, 200, { ok: true, removed, expiresAt: expires });
 }
 
 // ---- 小物 ---------------------------------------------------------------------
+
+/** 対象の経営者と、実行した人を除く、在籍中の経営者への知らせ */
+async function otherOwnerNotices(sb, ctx, target) {
+  try {
+    const { data: grants } = await sb.from("gw_role_grants").select("employee_id")
+      .eq("tenant_id", ctx.tenantId).eq("role", "owner");
+    const ids = [...new Set((grants || []).map((g) => g.employee_id))]
+      .filter((id) => id && id !== target.id && id !== ctx.employee?.id);
+    if (!ids.length) return [];
+    const { data: emps } = await sb.from("gw_employees").select("id, status")
+      .eq("tenant_id", ctx.tenantId).in("id", ids);
+    return (emps || []).filter((e) => !INACTIVE.includes(e.status)).map((e) => ({
+      tenantId: ctx.tenantId, employeeId: e.id, kind: "blocker",
+      title: "経営者の二段階認証がリセットされました",
+      body: `${target.display_name} さんの二段階認証を、${ctx.employee?.display_name || "経営者"} さんがリセットしました。心当たりがない場合は確認してください。`,
+      link: "admin-members.html", dedupeKey: `mfa-reset-owner:${target.id}:${e.id}`,
+    }));
+  } catch { return []; }
+}
 
 /** GoTrue を、本人のトークンで呼ぶ */
 async function gotrue(req, path, { method = "GET", body } = {}) {
