@@ -2,7 +2,7 @@
 //
 // ■ 何を守るテストか
 //
-//   1. 入れるのは 経営者・責任者・経理 だけ。他は 403（表にも Storage にも触れない）。二段階認証は最初から必須
+//   1. 入れるのは 経営者・責任者・経理 だけ。他は 403（表にも Storage にも触れない）。二段階認証（MFA）は要求しない
 //   2. ファイル：置き場所は、サーバーが決めた形だけ。形式・大きさ・sha256 を確かめて登録する。
 //      同じファイルは二重に登録しない／別の月・人に出ていたら承知のうえで
 //   3. AI読取は下書きを作るだけ。確認済み・確定にならない。失敗は理由つきで、手入力に進める
@@ -11,7 +11,7 @@
 //   6. 操作は履歴に残す。書き込みは service_role だけ（userClient で書くと RLS で落ちる）
 //   7. ファイルの置き場所・単価・精算条件を、応答に含めない
 //
-// 判定関数（canAccessOffice・requireMfa）は本物。AI は、本物の readTimesheet に偽の client を差し込む
+// 判定関数（canAccessOffice）は本物。AI は、本物の readTimesheet に偽の client を差し込む
 import assert from "node:assert/strict";
 import {
   atRoot, mem, ctl, asked, logged, ai, call, OWNER, MANAGER, FINANCE, DENIED, P,
@@ -102,7 +102,7 @@ async function readIt(input = sheetInput(), extra = {}) {
   return post("read", extra);
 }
 
-console.log("— 入れる人：経営者・責任者・経理だけ。二段階認証は最初から必須 —");
+console.log("— 入れる人：経営者・責任者・経理だけ。二段階認証（MFA）は要求しない —");
 
 for (const [label, p] of [["経営者", OWNER], ["責任者", MANAGER], ["経理", FINANCE]]) {
   await ok(`${label} は見られる`, async () => {
@@ -129,20 +129,25 @@ for (const [label, p] of Object.entries(DENIED)) {
     assert.equal(ai.calls.length, 0, "AI を呼んでいない");
   });
 }
-await ok("aal1（6桁で確かめていない）は 403 mfa_required。表にも AI にも触れない", async () => {
-  setup(); ctl.who = { ...FINANCE, factors: [] };
-  const r = await call(sheetApi, `/api/office/timesheet?contract=${C_PP}&month=${M}`, { aal: "aal1" });
-  assert.equal(r.statusCode, 403);
-  assert.equal(r.body.error, "mfa_required");
-  const w = await call(sheetApi, "/api/office/timesheet", { aal: "aal1", method: "POST", body: { action: "confirm", siteContractId: C_PP, month: M } });
-  assert.equal(w.body.error, "mfa_required");
-  assert.equal(asked.length, 0);
-  assert.equal(mem.state.log.length, 0);
+await ok("MFA 未登録・aal1 でも通る：表示・アップロード・AI読取・修正・確定・確定の取消し・差し戻し（どれも 403 mfa_required にならない）", async () => {
+  for (const [label, p] of [["経営者", OWNER], ["責任者", MANAGER], ["経理", FINANCE]]) {
+    setup(); ctl.who = { ...p, factors: [] }; ctl.aal = "aal1";
+    assert.equal((await get()).statusCode, 200, `${label} GET`);
+    assert.equal((await post("upload", { mimeType: "application/pdf", sizeBytes: PDF.length })).statusCode, 200, `${label} upload`);
+    const rd = await readIt();
+    assert.equal(rd.statusCode, 200, `${label} read: ${JSON.stringify(rd.body)}`);
+    assert.equal((await post("save", { days: [{ workDate: `${M}-01`, note: "確認" }] })).statusCode, 200, `${label} save`);
+    assert.equal((await post("confirm")).statusCode, 200, `${label} confirm`);
+    assert.equal((await post("reopen", { reason: "テスト" })).statusCode, 200, `${label} reopen`);
+    assert.equal((await post("return", { reason: "テスト" })).statusCode, 200, `${label} return`);
+  }
 });
-await ok("権限のない人は、MFA より先に 403 forbidden", async () => {
-  setup(); ctl.who = P(["sales"]);
-  const r = await call(sheetApi, `/api/office/timesheet?contract=${C_PP}&month=${M}`, { aal: "aal1" });
-  assert.equal(r.body.error, "forbidden");
+await ok("権限のない人は、aal1 でも aal2 でも 403 forbidden（MFA を求めない）", async () => {
+  for (const aal of ["aal1", "aal2"]) {
+    setup(); ctl.who = P(["sales"]);
+    const r = await call(sheetApi, `/api/office/timesheet?contract=${C_PP}&month=${M}`, { aal });
+    assert.equal(r.body.error, "forbidden", aal);
+  }
 });
 await ok("GET・POST 以外は 405", async () => {
   setup();

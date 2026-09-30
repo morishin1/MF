@@ -4,15 +4,15 @@
 //
 //   1. 入れるのは 経営者・責任者・経理 だけ。人事・営業・採用担当・IT・社労士・
 //      会計の管理者だけの人・一般メンバーは 403（データには一切触れない）
-//   2. 二段階認証は、強制日を待たず最初から必須（aal1 は 403 mfa_required）。
-//      権限の判定が先（権限のない人は、MFA の登録画面ではなく 403 forbidden）
+//   2. 二段階認証（MFA）は要求しない。MFA 未登録・aal1 でも、経営者・責任者・経理は通る。
+//      権限のない人は、aal1 でも aal2 でも 403 forbidden（MFA の登録画面へ誘導しない）
 //   3. ログインした人の権限（RLS）で読む。DB（gw_is_office、db/100）が未適用なら、
 //      「0件」と見間違えないよう、画面に知らせる
 //   4. 単価・精算条件・メモを select しない・返さない（単価の意味が確認できるまで）
 //   5. 30日までの月・2月・月末日/翌月1日の境界。名簿に無い契約は、その行だけ出さない
 //   6. 提出ファイルの閲覧：署名URLだけ返し、置き場所（storage_path）は返さない。閲覧ログを残す
 //
-// 判定関数（lib/gw.js の canAccessOffice、lib/mfa.js の requireMfa）は、モックせず本物を通す
+// 判定関数（lib/gw.js の canAccessOffice）は、モックせず本物を通す
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -218,34 +218,39 @@ await ok("POST など GET 以外は 405", async () => {
   assert.equal((await call(fileApi, "/api/office/file?id=x", { method: "DELETE" })).statusCode, 405);
 });
 
-console.log("\n— 二段階認証：強制日を待たず、最初から必須 —");
+console.log("\n— 二段階認証（MFA）は要求しない：権限だけで通す —");
 
+// 2026-09-30 の決定：Office の閲覧・一覧・勤務表・契約条件は MFA なしで通す。MFA を残すのは、支払・振込・給与・請求書送信・権限変更・
+// MFA/パスワードのリセット・金融/会計サービスへの確定送信（lib/mfa.js）。Office には、そのどれも無い。
+// requireMfa は強制日（2026-10-01）から、strict でなくても aal2 を求めるので、Office の API は、そもそも呼ばない
+// （test/mfatest.mjs が、api/office/*.js に requireMfa・lib/mfa.js の参照が無いことを見張る）
 for (const [label, p] of [["経営者", OWNER], ["責任者", MANAGER], ["経理", FINANCE]]) {
-  await ok(`${label}：aal1（6桁で確かめていない）は 403 mfa_required。登録前なら「登録して」`, async () => {
+  await ok(`${label}：MFA を登録していない・6桁で確かめていない（aal1）でも、一覧もファイルも見られる`, async () => {
     setup(); who = { ...p, factors: [] };
     const r = await list("2026-09", { aal: "aal1" });
-    assert.equal(r.statusCode, 403);
-    assert.equal(r.body.error, "mfa_required");
-    assert.match(r.body.hint, /登録/);
-    assert.equal(selects.length, 0, "データに触れていない");
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.ok(r.body.rows.length > 0);
     const f = await file("11111111-1111-4111-8111-111111111111", { aal: "aal1" });
-    assert.equal(f.body.error, "mfa_required");
-    assert.equal(signed.length, 0);
+    assert.equal(f.statusCode, 200, JSON.stringify(f.body));
+    assert.equal(signed.length, 1);
   });
 }
-await ok("登録済みで aal1 なら「確かめて」の案内。aal2 なら通す", async () => {
+await ok("登録済みで aal1 でも、aal2 と同じ結果を返す（MFA の状態は、結果を変えない）", async () => {
   setup(); who = { ...FINANCE, factors: ENROLLED };
   const a = await list("2026-09", { aal: "aal1" });
-  assert.equal(a.body.error, "mfa_required");
-  assert.equal(a.body.enrolled, true);
-  assert.match(a.body.hint, /確かめ/);
-  assert.equal((await list("2026-09", { aal: "aal2" })).statusCode, 200);
+  const b = await list("2026-09", { aal: "aal2" });
+  assert.equal(a.statusCode, 200);
+  assert.deepEqual(a.body, b.body);
 });
-await ok("権限のない人は、MFA より先に 403 forbidden（MFA の登録画面へ誘導しない）", async () => {
-  setup(); who = P(["sales"]);
-  const r = await list("2026-09", { aal: "aal1" });
-  assert.equal(r.statusCode, 403);
-  assert.equal(r.body.error, "forbidden");
+await ok("権限のない人は、aal1 でも aal2 でも 403 forbidden（MFA を求めない・MFA の登録画面へ誘導しない）", async () => {
+  for (const aal of ["aal1", "aal2"]) {
+    for (const [label, p] of Object.entries(DENIED)) {
+      setup(); who = { ...p, factors: [] };
+      const r = await list("2026-09", { aal });
+      assert.equal(r.statusCode, 403, `${label} ${aal}`);
+      assert.equal(r.body.error, "forbidden", `${label} ${aal}`);
+    }
+  }
 });
 
 console.log("\n— 一覧の中身 —");

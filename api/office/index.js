@@ -5,8 +5,10 @@
 //
 //   経営者 OR 責任者 OR 経理（lib/gw.js canAccessOffice。DB は gw_is_office、db/099・100）。
 //   会計側の管理者・人事・IT・営業・一般メンバーは入れない（403）。
-//   単価・請求額・支払を扱うので、二段階認証は強制日を待たず最初から必須（requireMfa の strict）。
-//   権限の判定を先にする（権限のない人を、二段階認証の登録画面へ誘導しない）。
+//   二段階認証（MFA）は要求しない。Office の閲覧・勤務表の受領・AI読取・修正・確定・契約条件は、
+//   権限（上の3つ）だけで通す。MFA を残すのは、支払・振込の実行、給与・人件費、外部への請求書送信、権限変更、
+//   MFA／パスワードのリセット、金融・会計サービスへの確定送信（lib/mfa.js）。Office には、いまそのどれも無い。
+//   ここに requireMfa を足さない（強制日 2026-10-01 を過ぎると、経営者・責任者・経理が入れなくなる）。test/mfatest.mjs が見張る。
 //
 // ■ ログインした人の権限（RLS）で読む
 //
@@ -27,7 +29,6 @@
 import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canAccessOffice } from "../../lib/gw.js";
-import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { isBillingMonth, STAGE_KEYS } from "../../lib/billing-progress.js";
 import { monthRange, jstDate } from "../../lib/timecard.js";
@@ -63,7 +64,6 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canAccessOffice(ctx)) return json(res, 403, { error: "forbidden" });
-  if (!(await requireMfa(req, res, ctx, user, { strict: true }))) return;
 
   const today = jstDate();
   const month = new URL(req.url, "http://localhost").searchParams.get("month") || today.slice(0, 7);

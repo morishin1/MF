@@ -165,7 +165,8 @@ const PDF = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(300, 7)]);
 
 function seedLikeSql() {
   mem.reset();
-  ctl.who = OWNER; ctl.aal = "aal2";
+  // 本番で経営者が操作する状況：MFA は未登録・6桁の確認もしていない（aal1）。Office は MFA を要求しない
+  ctl.who = { ...OWNER, factors: [] }; ctl.aal = "aal1";
   ai.calls.length = 0; ai.reply = null;
   mem.rows.gw_employees = [
     { id: EMP, tenant_id: T1, display_name: `${TAG}テスト 太郎`, department: "Office Phase3 TEST", status: "active", employee_kind: "proper", partner_company_id: null },

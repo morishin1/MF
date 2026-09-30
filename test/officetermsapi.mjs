@@ -2,7 +2,7 @@
 //
 // ■ 何を守るテストか
 //
-//   1. 入れるのは 経営者・責任者・経理 だけ（単価は機微情報）。二段階認証は最初から必須
+//   1. 入れるのは 経営者・責任者・経理 だけ（単価は機微情報）。二段階認証（MFA）は要求しない
 //   2. 検査：読めない入力は 400 と理由。期間が重なる条件は登録させない（月の途中の変更は、重ならない期間で）
 //   3. 書き込みは service_role だけ。gw_site_contracts.unit_price / settlement_condition は、読まない・書かない
 //   4. 操作は履歴に残す（単価・金額は入れない）
@@ -45,7 +45,7 @@ function setup() {
   ];
 }
 
-console.log("— 入れる人・二段階認証 —");
+console.log("— 入れる人・二段階認証（MFA は要求しない）—");
 
 for (const [label, p] of [["経営者", OWNER], ["責任者", MANAGER], ["経理", FINANCE]]) {
   await ok(`${label} は見られる・登録できる`, async () => {
@@ -65,13 +65,18 @@ for (const [label, p] of Object.entries(DENIED)) {
     assert.equal(logged.length, 0);
   });
 }
-await ok("aal1 は 403 mfa_required。権限のない人は、MFA より先に 403 forbidden", async () => {
-  setup(); ctl.who = { ...FINANCE, factors: [] };
-  const r = await call(termsApi, `/api/office/terms?contract=${C_PP}`, { aal: "aal1" });
-  assert.equal(r.body.error, "mfa_required");
-  assert.equal(asked.length, 0);
-  ctl.who = P(["sales"]);
-  assert.equal((await call(termsApi, `/api/office/terms?contract=${C_PP}`, { aal: "aal1" })).body.error, "forbidden");
+await ok("MFA 未登録・aal1 でも、契約条件を見られる・登録・更新・削除できる。権限のない人は aal1 でも aal2 でも 403 forbidden", async () => {
+  for (const [label, p] of [["経営者", OWNER], ["責任者", MANAGER], ["経理", FINANCE]]) {
+    setup(); ctl.who = { ...p, factors: [] }; ctl.aal = "aal1";
+    assert.equal((await list()).statusCode, 200, `${label} GET`);
+    const c = await save(MONTHLY);
+    assert.equal(c.statusCode, 200, `${label} POST: ${JSON.stringify(c.body)}`);
+    assert.equal((await del(rows("gw_site_contract_terms")[0].id)).statusCode, 200, `${label} DELETE`);
+  }
+  for (const aal of ["aal1", "aal2"]) {
+    setup(); ctl.who = P(["sales"]);
+    assert.equal((await call(termsApi, `/api/office/terms?contract=${C_PP}`, { aal })).body.error, "forbidden", aal);
+  }
 });
 await ok("GET・POST・DELETE 以外は 405", async () => {
   setup();

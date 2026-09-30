@@ -1,7 +1,6 @@
 // GET /api/office/file?id=…  … 届いた勤務表・請求書の1件を見るための、短い署名付きURL
 //
-// 入れる人・二段階認証・DB の条件は api/office/index.js と同じ
-// （経営者 OR 責任者 OR 経理。強制日を待たず最初から aal2）。
+// 入れる人・DB の条件は api/office/index.js と同じ（経営者 OR 責任者 OR 経理）。二段階認証（MFA）は要求しない。
 //
 // ■ 誰がいつ何を見たかを残す
 //
@@ -16,7 +15,6 @@
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canAccessOffice } from "../../lib/gw.js";
-import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
@@ -33,7 +31,6 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canAccessOffice(ctx)) return json(res, 403, { error: "forbidden" });
-  if (!(await requireMfa(req, res, ctx, user, { strict: true }))) return;
 
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });

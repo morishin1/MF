@@ -14,8 +14,8 @@
 //        return   … 提出物に問題があるとして、差し戻す（再提出の依頼。メールは送らない）
 //
 // ■ 入れる人（画面・API・DB を同じ条件にする）
-//   経営者 OR 責任者 OR 経理（canAccessOffice）。二段階認証は最初から必須（strict）。
-//   権限の判定を先にする。api/office/index.js と同じ。
+//   経営者 OR 責任者 OR 経理（canAccessOffice）。二段階認証（MFA）は要求しない（受領・AI読取・修正・確定も、権限だけで通す）。
+//   api/office/index.js と同じ。
 //
 // ■ 読むのは、ログインした人の権限（RLS）で。書くのは、権限を確かめたあとの service_role で
 //   新しい表（gw_timesheets・gw_timesheet_days・gw_site_contract_terms・gw_office_events）は、
@@ -38,7 +38,6 @@ import crypto from "node:crypto";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canAccessOffice } from "../../lib/gw.js";
-import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { detectDoc } from "../../lib/hr-docs.js";
@@ -88,7 +87,6 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canAccessOffice(ctx)) return json(res, 403, { error: "forbidden" });
-  if (!(await requireMfa(req, res, ctx, user, { strict: true }))) return;
 
   res.setHeader("Cache-Control", "no-store");
   try {

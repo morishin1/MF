@@ -232,11 +232,10 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
     for (const f of walk("api/office")) {
       const src = read(f);
       check(/canAccessOffice/.test(src), `${f} は canAccessOffice で判定（例外なし）`);
-      // 単価・請求額・支払を扱うので、強制日を待たず最初から二段階認証（lib/mfa.js の strict）
-      check(/requireMfa\(req, res, ctx, user, \{ strict: true \}\)/.test(src), `${f} は requireMfa(…, { strict: true }) を通る`);
-      // 権限の判定が、MFA より先（権限のない人を、MFA の登録画面へ誘導しない）
-      check(src.indexOf("canAccessOffice(ctx)") !== -1 && src.indexOf("canAccessOffice(ctx)") < src.indexOf("requireMfa("),
-        `${f} は権限判定（canAccessOffice）のあとに MFA を見る`);
+      // 二段階認証（MFA）は要求しない（2026-09-30 の決定）。権限（canAccessOffice）だけで通す。
+      // requireMfa は強制日（2026-10-01）から strict でなくても aal2 を求めるので、置かない（lib/mfa.js の説明）
+      check(!/requireMfa|lib\/mfa\.js/.test(src.replace(/^\s*\/\/.*$/gm, "")), `${f} は MFA を要求しない（requireMfa を使わない）`);
+      check(/if \(!canAccessOffice\(ctx\)\) return json\(res, 403, \{ error: "forbidden" \}\)/.test(src), `${f} は権限が無ければ 403 forbidden`);
       // 何が許可されているかの読み方：他の系統の判定（HR・Sales・管理者）で通していない
       check(!/canRecruit|canSell|canAccessHr|canAccessSales|canManageHr/.test(src), `${f} は HR・Sales・人事の判定を混ぜない`);
     }

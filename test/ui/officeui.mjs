@@ -12,7 +12,8 @@
 //      URL（?id=）で、開いた状態を再現できる
 //   5. 単価・精算条件は、どこにも出ない（意味が確認できるまで）
 //   6. Office 権限の無い人は home.html へ、未ログインは index.html へ送る。
-//      MFA が必要なら /mypage.html#mfa へ（階層の違う画面から、行き止まりにならない）
+//      サーバが mfa_required を返したときの共通の遷移（js/api-client.js）は、/mypage.html#mfa へ（階層の違う画面から、行き止まりにならない）。
+//      Office の API は MFA を要求しなくなった（2026-09-30）ので、通常は起きない。経営者が MFA なしで入れることは test/ui/officeownerui.mjs
 //   7. 権限の設定が未適用・表が無い・取得失敗は、画面に理由が出る
 //   8. スマホ幅で、横スクロールが要らない（表はカードになる）
 //
@@ -327,7 +328,7 @@ console.log("\n=== 権限・MFA・エラー ===");
     officeResponse: () => ({ status: 403, body: { error: "mfa_required", hint: "登録してください", enrolled: false } }),
   });
   await d.page.waitForURL(/\/mypage\.html/);
-  check(new URL(d.page.url()).pathname === "/mypage.html" && new URL(d.page.url()).hash === "#mfa", "MFA が必要なら /mypage.html#mfa へ（/office/mypage.html にならない）");
+  check(new URL(d.page.url()).pathname === "/mypage.html" && new URL(d.page.url()).hash === "#mfa", "（共通の遷移）サーバが mfa_required を返したら /mypage.html#mfa へ（/office/mypage.html にならない）");
   await d.page.close();
 
   const e = await open("/office/index.html?month=2026-09", {

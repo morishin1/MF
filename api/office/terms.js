@@ -4,8 +4,8 @@
 //   POST   { siteContractId, id?, month?, …条件 }  … 登録（id なし）／更新（id あり）
 //   DELETE ?id=<条件id>&month=YYYY-MM         … 削除
 //
-// ■ 入れる人・二段階認証・DB の条件は api/office/index.js と同じ
-//   経営者 OR 責任者 OR 経理。単価は機微情報なので、二段階認証は最初から必須（strict）。
+// ■ 入れる人・DB の条件は api/office/index.js と同じ
+//   経営者 OR 責任者 OR 経理。二段階認証（MFA）は要求しない（契約条件の閲覧・編集も、権限だけで通す）。
 //
 // ■ gw_site_contracts.unit_price / settlement_condition は、読まない・書かない
 //   意味が確定していない（売上か仕入か）。新しい条件は sales_unit_price / purchase_unit_price（gw_site_contract_terms）。
@@ -19,7 +19,6 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canAccessOffice } from "../../lib/gw.js";
-import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { isBillingMonth } from "../../lib/billing-progress.js";
@@ -41,7 +40,6 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canAccessOffice(ctx)) return json(res, 403, { error: "forbidden" });
-  if (!(await requireMfa(req, res, ctx, user, { strict: true }))) return;
 
   res.setHeader("Cache-Control", "no-store");
   try {
