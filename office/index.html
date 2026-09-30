@@ -74,6 +74,60 @@
     .of-act { font-size:12.5px; color:#1b2440; margin-bottom:6px; line-height:1.5; }
     .of-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:1px; }
 
+    /* 複数選択：左端のチェック列。押してもドロワーは開かない（セル全体がチェックの当たり判定） */
+    .of-table th.of-sel, .of-table td.of-sel { width:44px; padding:0; }
+    .of-sel label { display:flex; align-items:center; justify-content:center; width:100%; min-height:44px; cursor:pointer; margin:0; }
+    .of-table td.of-sel { vertical-align:top; }
+    .of-table td.of-sel label { min-height:0; height:100%; padding-top:11px; align-items:flex-start; }
+    .of-sel input[type="checkbox"], .of-selall-m input[type="checkbox"] { width:18px; height:18px; margin:0; cursor:pointer; accent-color:#1b2440; }
+    .of-table tbody tr.sel td { background:#eef2fb; }
+    .of-table tbody tr.sel:hover td { background:#e6ecf9; }
+    .of-selall-m { display:none; }
+
+    /* 選択したときの操作バー：画面の下に固定。「3件選択中 ｜ 更新 ｜ 削除 ｜ 選択解除」 */
+    .of-bulk { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:35; display:flex; align-items:center; gap:14px;
+      background:#1b2440; color:#fff; border-radius:12px; padding:10px 16px; box-shadow:0 8px 28px rgba(27,36,64,.35); max-width:calc(100vw - 24px); }
+    .of-bulk[hidden] { display:none; }
+    .of-bulk .n { font-size:14px; font-weight:700; white-space:nowrap; }
+    .of-bulk .n b { font-size:18px; font-weight:900; font-variant-numeric:tabular-nums; margin-right:2px; }
+    .of-bulk .sep { width:1px; align-self:stretch; background:rgba(255,255,255,.3); }
+    .of-bulk .of-btn { background:#fff; color:#1b2440; border-color:#fff; padding:8px 14px; font-size:13px; }
+    .of-bulk .of-btn.danger { background:#c0392b; border-color:#c0392b; color:#fff; }
+    .of-bulk .of-btn.ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.45); }
+    .of-bulk .of-btn:focus-visible { outline-color:#e6f050; }
+    .wrap.has-bulk { padding-bottom:110px; }
+
+    /* 更新・削除の確認モーダル */
+    .of-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:60; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .of-modal { background:#fff; border-radius:14px; width:560px; max-width:100%; max-height:calc(100vh - 32px); overflow-y:auto; box-shadow:0 16px 48px rgba(27,36,64,.35); }
+    .of-modal-h { padding:18px 20px 10px; }
+    .of-modal-h h2 { margin:0; font-size:18px; font-weight:900; color:#1b2440; }
+    .of-modal-h p { margin:6px 0 0; font-size:12.5px; color:#4a5068; line-height:1.6; }
+    .of-modal-b { padding:4px 20px 8px; display:grid; gap:12px; }
+    .of-modal-f { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; flex-wrap:wrap; }
+    .of-modal-f .of-btn { padding:10px 18px; font-size:14px; }
+    .of-btn.danger { background:#c0392b; border-color:#c0392b; color:#fff; }
+    .of-btn.danger:disabled { background:#c0392b; }
+    .of-targets { border:1px solid #e2e2dc; border-radius:10px; max-height:200px; overflow-y:auto; }
+    .of-targets .t { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px 12px; border-bottom:1px solid #efefeb; font-size:13px; color:#1b2440; }
+    .of-targets .t:last-child { border-bottom:none; }
+    .of-targets .t small { display:block; color:#6b7080; font-size:11.5px; margin-top:2px; }
+    .of-targets .t b { font-weight:700; }
+    .of-warnbox { background:#fdecea; color:#8f1d15; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.7; }
+    .of-warnbox b { font-weight:900; }
+    .of-warnbox ul { margin:4px 0 0; padding-left:18px; }
+    .of-okbox { background:#f6f6f2; border-radius:10px; padding:10px 12px; font-size:12.5px; color:#4a5068; line-height:1.6; }
+    .of-field { border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; display:grid; gap:8px; }
+    .of-field.on { border-color:#1b2440; background:#f7f8fc; }
+    .of-field > label.use { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
+    .of-field > label.use input { width:auto; margin:0; }
+    .of-field select, .of-field input[type="date"] { margin:0; width:100%; font-family:inherit; font-size:14px; }
+    .of-field label.inline { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#1b2440; margin:0; cursor:pointer; }
+    .of-field label.inline input { width:auto; margin:0; }
+    .of-confirm { display:flex; align-items:flex-start; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
+    .of-confirm input { width:auto; margin:3px 0 0; }
+    .of-modal .er { white-space:pre-line; color:#b3261e; font-size:12.5px; font-weight:700; line-height:1.6; }
+
     @media (max-width: 1080px) { .of-sum { grid-template-columns:repeat(3,minmax(0,1fr)); } .of-two { grid-template-columns:1fr; } }
     /* 狭い画面は、表をやめてカードにする（横スクロールを前提にしない） */
     @media (max-width: 980px) {
@@ -85,8 +139,15 @@
       .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; width:64px; padding-top:3px; }
       .of-table td > div, .of-table td > span:not(.of-pill) { text-align:right; }
       .of-table td .cell { flex:1; min-width:0; text-align:right; }
+      /* カードでは、見出しの行が無い。選択は、カードの右上の行（「選択」＋チェック）と、検索の横の「表示中をすべて選択」 */
+      .of-table td.of-sel { width:100%; padding:0 0 4px; border-bottom:1px solid #efefeb; margin-bottom:4px; }
+      .of-table td.of-sel::before { padding:0 0 0 0; width:auto; align-self:center; }
+      .of-table td.of-sel label { width:auto; height:auto; padding:6px 0; margin-left:auto; min-height:32px; align-items:center; gap:8px; }
+      .of-selall-m { display:flex; }
+      .of-bulk { gap:10px; padding:8px 12px; }
+      .of-bulk .sep { display:none; }
     }
-    @media (max-width: 560px) { .of-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } .of-prog .row { grid-template-columns:96px 1fr 56px; } }
+    @media (max-width: 560px) { .of-bulk { flex-wrap:wrap; justify-content:center; bottom:8px; width:calc(100vw - 16px); } .of-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } .of-prog .row { grid-template-columns:96px 1fr 56px; } }
 
     /* 右ドロワー */
     .of-dr-head { position:sticky; top:0; background:#fff; border-bottom:1px solid #e2e2dc; padding:16px 18px 12px; z-index:1; }
@@ -171,7 +232,7 @@
 </head>
 <body>
 
-<div class="wrap">
+<div class="wrap" id="wrap">
   <div class="of-head">
     <div>
       <h1 class="of-title">月次業務</h1>
@@ -212,12 +273,14 @@
       <option value="bp">BP</option>
     </select>
     <label class="chk"><input type="checkbox" id="fopen" checked>未完了のみ</label>
+    <label class="chk of-selall-m"><input type="checkbox" id="selAllM" aria-label="表示中の案件をすべて選択">表示中をすべて選択</label>
     <button type="button" class="of-btn sec" id="reset">条件をリセット</button>
     <span class="count" id="count" aria-live="polite"></span>
   </div>
 
   <table class="of-table" aria-label="月次案件一覧">
     <thead><tr>
+      <th class="of-sel"><label><input type="checkbox" id="selAll" aria-label="表示中の案件をすべて選択"></label></th>
       <th>客先</th><th>案件</th><th>要員</th><th>勤務表</th><th>稼働時間</th>
       <th>売上請求</th><th>仕入請求</th><th>支払</th><th>現在工程</th><th>次にやること</th>
     </tr></thead>
@@ -227,6 +290,17 @@
 </div>
 
 <div id="drawer-root"></div>
+<div id="modal-root"></div>
+<!-- 案件を選んだときの操作バー（1件以上で、画面の下に固定表示） -->
+<div class="of-bulk" id="bulkbar" role="region" aria-label="選択中の案件の操作" hidden>
+  <span class="n" id="bulkN" aria-live="polite"></span>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" class="of-btn" id="bulkUpdate"><span class="material-symbols-outlined" aria-hidden="true">edit</span>更新</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" class="of-btn danger" id="bulkDelete"><span class="material-symbols-outlined" aria-hidden="true">delete</span>削除</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" class="of-btn ghost" id="bulkClear">選択解除</button>
+</div>
 <!-- 勤務表を追加するときのファイル選択。「勤務表を追加」を押すと、すぐ開く（PDF・JPEG・PNG） -->
 <input type="file" id="sheetPick" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
 
@@ -244,7 +318,7 @@
     ["sent", "売上請求書を送付"], ["bp_invoice_received", "BP請求書を受領"],
   ];
 
-  const state = { month: null, data: null, tag: "", q: "", kind: "", incompleteOnly: true, openId: null, seq: 0, pickFor: null, busy: null, errs: {} };
+  const state = { month: null, data: null, tag: "", q: "", kind: "", incompleteOnly: true, openId: null, seq: 0, pickFor: null, busy: null, errs: {}, sel: new Set(), modal: null };
 
   // ---- Phase 3（勤務表の確認・確定）：応答に phase3.ready があるときだけ、増えた表示を出す ----
   const p3 = () => Boolean(state.data?.phase3?.ready);
@@ -304,6 +378,7 @@
   function setMonth(m) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m || "")) return;
     state.month = m; state.openId = null;
+    state.sel.clear();                                   // 月を替えたら、選択は持ち越さない
     closeDrawer(true);
     load();
   }
@@ -324,11 +399,24 @@
     el("fkind").onchange = (e) => { state.kind = e.target.value; renderList(); };
     el("fopen").onchange = (e) => { state.incompleteOnly = e.target.checked; renderList(); };
     el("reset").onclick = () => { state.tag = ""; state.q = ""; state.kind = ""; state.incompleteOnly = true; renderControls(); renderList(); };
+    el("selAll").onchange = (e) => toggleAll(e.target.checked);
+    el("selAllM").onchange = (e) => toggleAll(e.target.checked);
+    el("bulkClear").onclick = () => { state.sel.clear(); renderSelection(); };
+    el("bulkUpdate").onclick = () => openUpdateModal();
+    el("bulkDelete").onclick = () => openDeleteModal();
     el("sheetPick").onchange = (e) => {
       const f = e.target.files[0]; e.target.value = "";
       if (f && state.pickFor) uploadSheet(state.pickFor, f);
     };
+    // 行のチェック：change で受ける（キーボード＝Space でも同じ）。ドロワーは開かない
+    document.addEventListener("change", (e) => {
+      const b = e.target.closest?.("[data-sel]");
+      if (!b) return;
+      if (b.checked) state.sel.add(b.dataset.sel); else state.sel.delete(b.dataset.sel);
+      renderSelection();
+    });
     document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.modal) { if (!state.modal.busy) closeModal(); return; }
       if (e.key === "Escape" && state.openId) { closeDrawer(); return; }
       // 行はキーボードでも開ける（Tab で選んで Enter / Space）
       const tr = e.target.matches?.("tr[data-id]") ? e.target : null;
@@ -337,6 +425,8 @@
     // クリックは、ここでまとめて受ける（画面の部品ごとに onclick を持たない）
     document.addEventListener("click", (e) => {
       const t = e.target;
+      // 選択のチェック（セルのどこを押しても）：チェックを切り替えるだけ。行（ドロワー）は開かない
+      if (t.closest?.(".of-sel")) return;
       // リンク（AIで読み取る・内容を確認する など）は、そのまま移動する。行を開かない
       if (t.closest?.("a[href]")) return;
       // 次にやること：ボタンでも、カード全体でも動く
@@ -358,7 +448,7 @@
   async function load() {
     const seq = ++state.seq;
     el("banner").innerHTML = "";
-    el("rows").innerHTML = `<tr><td colspan="10" class="of-empty">読み込み中…</td></tr>`;
+    el("rows").innerHTML = `<tr><td colspan="11" class="of-empty">読み込み中…</td></tr>`;
     try {
       const data = await API.api(`/api/office${state.month ? `?month=${encodeURIComponent(state.month)}` : ""}`);
       if (seq !== state.seq) return;                // 月を素早く切り替えたとき、古い応答を捨てる
@@ -451,9 +541,13 @@
   function renderList() {
     const all = state.data?.rows || [];
     const rows = visibleRows();
+    // 選べるのは、いま一覧に見えている案件だけ（絞り込みで消えた案件を、見えないまま更新・削除しない）
+    const shown = new Set(rows.map((r) => r.siteContractId));
+    for (const id of [...state.sel]) if (!shown.has(id)) state.sel.delete(id);
     el("count").textContent = all.length ? `${all.length}件中 ${rows.length}件を表示` : "";
     el("listNote").textContent = p3() ? "勤務表を確定すると、稼働時間と売上の精算が出ます" : "稼働時間の自動計算は、次の段階で追加します";
     el("rows").innerHTML = rows.map(rowHtml).join("");
+    renderSelection();
     const empty = el("empty");
     empty.hidden = rows.length > 0 || !state.data;
     if (!rows.length && state.data) {
@@ -475,7 +569,9 @@
     const waiting = c.timesheet.state !== "submitted" && (!isSheetRow(r) || ["none", "returned"].includes(r.sheetInfo.state));
     const tsNote = r.overdue ? `<span class="of-sub2 of-hot">期限超過（${fmtDay(r.deadline)}）</span>`
       : (waiting && r.deadline ? `<span class="of-sub2">期限 ${fmtDay(r.deadline)}</span>` : "");
-    return `<tr data-id="${esc(r.siteContractId)}" tabindex="0" class="${state.openId === r.siteContractId ? "open" : ""}">
+    const on = state.sel.has(r.siteContractId);
+    return `<tr data-id="${esc(r.siteContractId)}" tabindex="0" class="${state.openId === r.siteContractId ? "open" : ""}${on ? " sel" : ""}">
+      <td class="of-sel" data-label="選択"><label><input type="checkbox" data-sel="${esc(r.siteContractId)}"${on ? " checked" : ""} aria-label="${esc(r.employeeName)}（${esc(r.siteCompany)}）を選択"></label></td>
       <td data-label="客先"><div class="cell"><span class="of-nm">${esc(r.siteCompany)}</span>${r.primeCompany ? `<span class="of-sub2">上位：${esc(r.primeCompany)}</span>` : ""}</div></td>
       <td data-label="案件"><div class="cell"><span class="of-nm">現場契約<span class="of-tag">${esc(r.kindLabel)}</span></span><span class="of-sub2">${esc(period)}</span></div></td>
       <td data-label="要員"><div class="cell"><span class="of-nm">${esc(r.employeeName)}</span>${r.usesVendor ? `<span class="of-sub2">${esc(r.partnerName || "BP会社 未登録")}</span>` : (r.department ? `<span class="of-sub2">${esc(r.department)}</span>` : "")}</div></td>
@@ -780,6 +876,220 @@
         : `<p>売上の精算：${st.status === "none" ? "契約条件が未登録のため、計算できません。" : "自動では計算できません。"}</p>${(st.reasons || []).length ? `<ul style="margin:0 0 6px;padding-left:18px;font-size:12px;">${st.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}`;
     }
     return h;
+  }
+
+  // ---- 複数選択・一括更新・一括削除 ------------------------------------------------------------
+  // 選べるのは、いま一覧に見えている案件だけ。選ぶと、画面の下に操作バーが出る（更新・削除・選択解除）。
+  // 更新：複数の案件に共通して安全な項目（更新確認状況・契約終了予定・契約開始日）だけ。単価・精算条件・勤務時間は、案件ごとに違うので、ここでは変えない。
+  // 削除：必ず確認のモーダルを通す（件数・要員名・客先名・いっしょに消える関連データを見せ、確認のチェックを入れるまで押せない）。
+  // どちらも、Office 専用の /api/office/contracts を使う（権限・履歴はサーバ側）
+  const rowById = (id) => (state.data?.rows || []).find((r) => r.siteContractId === id);
+  const visibleIds = () => visibleRows().map((r) => r.siteContractId);
+  const selectedRows = () => [...state.sel].map(rowById).filter(Boolean);
+
+  function toggleAll(on) {
+    for (const id of visibleIds()) { if (on) state.sel.add(id); else state.sel.delete(id); }
+    renderSelection();
+  }
+  function renderSelection() {
+    const ids = visibleIds(), n = state.sel.size;
+    const all = ids.length > 0 && ids.every((i) => state.sel.has(i));
+    for (const b of [el("selAll"), el("selAllM")]) { b.checked = all; b.indeterminate = n > 0 && !all; b.disabled = !ids.length; }
+    for (const tr of document.querySelectorAll("#rows tr[data-id]")) {
+      const on = state.sel.has(tr.dataset.id);
+      tr.classList.toggle("sel", on);
+      const cb = tr.querySelector("[data-sel]");
+      if (cb) cb.checked = on;
+    }
+    el("bulkbar").hidden = n === 0;
+    el("bulkN").innerHTML = `<b>${n}</b>件選択中`;
+    el("wrap").classList.toggle("has-bulk", n > 0);
+  }
+
+  const postContracts = (action, ids, extra = {}) =>
+    API.api("/api/office/contracts", { method: "POST", body: { action, ids, month: state.month, ...extra } });
+
+  // モーダル：開くと中にフォーカス。Esc・キャンセルで閉じる（処理中は閉じない）。背景を押しても閉じない（誤操作防止）
+  let modalFocus = null;
+  function openModal(html) {
+    modalFocus = document.activeElement;
+    state.modal = { busy: false };
+    el("modal-root").innerHTML = `<div class="of-modal-bg"><div class="of-modal" role="dialog" aria-modal="true" aria-labelledby="md-title" tabindex="-1">${html}</div></div>`;
+    el("modal-root").querySelector(".of-modal").focus();
+    return el("modal-root");
+  }
+  function closeModal() {
+    el("modal-root").innerHTML = ""; state.modal = null;
+    if (modalFocus?.focus && document.contains(modalFocus)) { try { modalFocus.focus(); } catch { /* 消えた要素には戻さない */ } }
+    modalFocus = null;
+  }
+  function setModalBusy(on) {
+    if (!state.modal) return;
+    state.modal.busy = on;
+    for (const b of el("modal-root").querySelectorAll("button, input, select")) b.disabled = on || b.dataset.off === "1";
+  }
+  const nameLine = (r) => `<div class="t"><div><b>${esc(r.employeeName || "（要員名なし）")}</b></div><div>${esc(r.siteCompany)}</div></div>`;
+
+  // ---- 更新 ----
+  function openUpdateModal() {
+    const rows = selectedRows();
+    if (!rows.length) return;
+    const n = rows.length;
+    const root = openModal(`
+      <div class="of-modal-h"><h2 id="md-title">選択した${n}件を更新</h2>
+        <p>複数の案件に共通して変えてよい項目だけを、まとめて変更できます。変えたい項目にチェックを入れてください。</p></div>
+      <div class="of-modal-b">
+        <div class="of-targets" aria-label="更新する案件">${rows.map((r) => `<div class="t"><div><b>${esc(r.employeeName)}</b></div><div>${esc(r.siteCompany)}</div></div>`).join("")}</div>
+        <div class="of-field" id="uf-renewal-box">
+          <label class="use"><input type="checkbox" id="uf-renewal-use">更新確認状況を変更する</label>
+          <select id="uf-renewal" aria-label="更新確認状況" disabled>${Object.entries(RENEWAL).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
+        </div>
+        <div class="of-field" id="uf-to-box">
+          <label class="use"><input type="checkbox" id="uf-to-use">契約終了予定を変更する</label>
+          <input type="date" id="uf-to" aria-label="契約終了予定" disabled>
+          <label class="inline"><input type="checkbox" id="uf-to-none" disabled>未定にする（終了予定を空にする）</label>
+        </div>
+        <div class="of-field" id="uf-from-box">
+          <label class="use"><input type="checkbox" id="uf-from-use">契約期間（開始日）を変更する</label>
+          <input type="date" id="uf-from" aria-label="契約期間の開始日" disabled>
+        </div>
+        <div class="of-okbox">単価・精算条件・勤務時間は、案件ごとに違うことが多いため、一括では変更できません。案件ごとに変更してください。</div>
+        <div class="er" id="mdErr" role="alert"></div>
+      </div>
+      <div class="of-modal-f">
+        <button type="button" class="of-btn sec" id="mdCancel">キャンセル</button>
+        <button type="button" class="of-btn" id="mdOk" disabled data-off="1">選択した${n}件を更新</button>
+      </div>`);
+    const $ = (id) => root.querySelector(`#${id}`);
+    const read = () => {
+      const f = {};
+      if ($("uf-renewal-use").checked) f.renewalStatus = $("uf-renewal").value;
+      if ($("uf-to-use").checked) f.periodTo = $("uf-to-none").checked ? null : $("uf-to").value;
+      if ($("uf-from-use").checked) f.periodFrom = $("uf-from").value;
+      let error = "";
+      if (!Object.keys(f).length) error = "";
+      else if ("periodTo" in f && f.periodTo === "") error = "契約終了予定の日付を入れてください（空にするときは「未定にする」）";
+      else if ("periodFrom" in f && !f.periodFrom) error = "契約開始日の日付を入れてください";
+      else if (f.periodTo && f.periodFrom && f.periodTo < f.periodFrom) error = "契約終了予定が、開始日より前になっています";
+      return { f, error, ready: Object.keys(f).length > 0 && !error };
+    };
+    let srvErr = "";                                   // サーバに断られた理由（入力を変えたら消す）
+    const sync = () => {
+      $("uf-renewal").disabled = !$("uf-renewal-use").checked;
+      $("uf-to-none").disabled = !$("uf-to-use").checked;
+      $("uf-to").disabled = !$("uf-to-use").checked || $("uf-to-none").checked;
+      $("uf-from").disabled = !$("uf-from-use").checked;
+      for (const [box, use] of [["uf-renewal-box", "uf-renewal-use"], ["uf-to-box", "uf-to-use"], ["uf-from-box", "uf-from-use"]]) $(box).classList.toggle("on", $(use).checked);
+      const r = read();
+      $("mdErr").textContent = r.error || srvErr;
+      $("mdOk").disabled = !r.ready; $("mdOk").dataset.off = r.ready ? "0" : "1";
+    };
+    root.querySelector(".of-modal").addEventListener("input", () => { srvErr = ""; sync(); });
+    root.querySelector(".of-modal").addEventListener("change", () => { srvErr = ""; sync(); });
+    $("mdCancel").onclick = () => closeModal();
+    $("mdOk").onclick = async () => {
+      const r = read();
+      if (!r.ready || state.modal?.busy) return;
+      const ids = rows.map((x) => x.siteContractId);
+      setModalBusy(true); $("mdOk").textContent = "更新中…"; $("mdErr").textContent = "";
+      try {
+        const res = await postContracts("update", ids, { fields: r.f });
+        const what = [r.f.renewalStatus ? "更新確認状況" : null, "periodTo" in r.f ? "契約終了予定" : null, r.f.periodFrom ? "契約開始日" : null].filter(Boolean).join("・");
+        closeModal(); state.sel.clear();
+        await load();
+        banner("ok", `${res.updated}件の案件を更新しました（${what}）`);
+      } catch (e) {
+        setModalBusy(false); $("mdOk").textContent = `選択した${n}件を更新`;
+        srvErr = contractError(e, "更新できませんでした");
+        sync();
+      }
+    };
+    sync();
+  }
+
+  // 削除・更新の失敗を、人が読む文にする（期間の食い違い・請求済み・ファイルを消せない、など）
+  function contractError(e, fallback) {
+    const b = e.body || {};
+    if (e.code === "period_conflict" && Array.isArray(b.conflicts)) {
+      return `${fallback}。1件も変更していません。\n` + b.conflicts.map((c) => `・${c.employeeName}（${c.siteCompany}）：${c.reason}`).join("\n");
+    }
+    if (e.code === "has_billing" && Array.isArray(b.contracts)) {
+      return `${b.hint}\n` + b.contracts.map((c) => `・${c.employeeName}（${c.siteCompany}）`).join("\n");
+    }
+    if (e.code === "contract_not_found") return "選んだ案件のうち、すでに無くなっているものがあります。画面を読み込み直して、選び直してください";
+    return e.hint || e.detail || e.message || fallback;
+  }
+
+  // ---- 削除 ----
+  async function openDeleteModal() {
+    const rows = selectedRows();
+    if (!rows.length) return;
+    const n = rows.length, ids = rows.map((r) => r.siteContractId);
+    const root = openModal(`
+      <div class="of-modal-h"><h2 id="md-title">案件を削除します</h2>
+        <p>選択件数：<b id="mdCount">${n}件</b>　この操作は元に戻せません。</p></div>
+      <div class="of-modal-b">
+        <div class="of-targets" id="mdTargets" aria-label="削除する案件">${rows.map((r) => `<div class="t" data-id="${esc(r.siteContractId)}"><div><b>${esc(r.employeeName || "（要員名なし）")}</b><small>要員</small></div><div>${esc(r.siteCompany)}<small>客先</small></div></div>`).join("")}</div>
+        <div class="of-warnbox">
+          <b>選択した案件に関連する、勤務表・月次進捗・契約条件も、あわせて削除されます。</b>
+          <ul>
+            <li>勤務表（提出されたファイル・読取結果・確定した稼働時間）</li>
+            <li>月次進捗（受領・確認・請求などの記録）</li>
+            <li>契約条件（単価・精算条件）</li>
+          </ul>
+          <div id="mdRel" style="margin-top:6px;">削除される件数を確認しています…</div>
+          <div style="margin-top:4px;">要員（社員名簿）は、削除されません。</div>
+        </div>
+        <label class="of-confirm"><input type="checkbox" id="mdConfirm" disabled>上の内容を確認しました。関連データも削除されることを了解します</label>
+        <div class="er" id="mdErr" role="alert"></div>
+      </div>
+      <div class="of-modal-f">
+        <button type="button" class="of-btn sec" id="mdCancel">キャンセル</button>
+        <button type="button" class="of-btn danger" id="mdOk" disabled data-off="1">選択した${n}件を削除</button>
+      </div>`);
+    const $ = (id) => root.querySelector(`#${id}`);
+    const me = state.modal;                            // このモーダル（閉じて開き直されたら、古い応答は捨てる）
+    let ready = false;                                 // 関連データの件数を読み終えて、削除できる状態か
+    const sync = () => {
+      const can = ready && $("mdConfirm").checked;
+      $("mdOk").disabled = !can; $("mdOk").dataset.off = can ? "0" : "1";
+    };
+    $("mdCancel").onclick = () => closeModal();        // 何も削除しない
+    $("mdConfirm").onchange = sync;
+    $("mdOk").onclick = async () => {
+      if (!ready || !$("mdConfirm").checked || state.modal?.busy) return;
+      setModalBusy(true); $("mdOk").textContent = "削除中…"; $("mdErr").textContent = "";
+      try {
+        const res = await postContracts("delete", ids, { confirm: true, confirmCount: n });
+        closeModal(); state.sel.clear();
+        if (state.openId && ids.includes(state.openId)) { state.openId = null; closeDrawer(true); }
+        await load();
+        banner("ok", `${res.deleted}件の案件を削除しました${res.storageRemoved ? `（勤務表のファイル ${res.storageRemoved}件も削除）` : ""}`);
+      } catch (e) {
+        setModalBusy(false); $("mdOk").textContent = `選択した${n}件を削除`;
+        $("mdErr").textContent = contractError(e, "削除できませんでした");
+        sync();
+      }
+    };
+    try {
+      const pv = await postContracts("preview", ids);
+      if (state.modal !== me) return;                  // 読んでいる間に閉じられた
+      for (const c of pv.contracts) {
+        const t = root.querySelector(`#mdTargets [data-id="${c.id}"]`);
+        if (t) t.lastElementChild.insertAdjacentHTML("beforeend", `<small>勤務表ファイル ${c.counts.files}件・勤務表 ${c.counts.sheets}件・月次進捗 ${c.counts.progress}件・契約条件 ${c.counts.terms}件</small>`);
+      }
+      const tt = pv.totals;
+      $("mdRel").innerHTML = `削除されるもの：勤務表のファイル <b>${tt.files}件</b>（保存先のファイルも削除）／勤務表 <b>${tt.sheets}件</b>${tt.confirmedSheets ? `（確定済み ${tt.confirmedSheets}件を含む）` : ""}／月次進捗 <b>${tt.progress}件</b>／契約条件 <b>${tt.terms}件</b>`;
+      if (pv.blocked.length) {
+        const names = pv.contracts.filter((c) => c.blocked).map((c) => `・${c.employeeName}（${c.siteCompany}）`).join("\n");
+        $("mdErr").textContent = `請求書の作成・送付、BP請求書の受領の印が付いている案件は、削除できません。選択から外してください。\n${names}`;
+      } else { ready = true; $("mdConfirm").disabled = false; }
+      sync();
+    } catch (e) {
+      if (state.modal !== me) return;
+      $("mdRel").textContent = "";
+      $("mdErr").textContent = contractError(e, "削除の内容を確認できませんでした");
+    }
   }
 
   // ---- 提出ファイルを開く ------------------------------------------------------------

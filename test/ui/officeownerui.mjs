@@ -136,7 +136,7 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
 
   // 応答：すべて 200。403 mfa_required は1つも無い
   const office = seen.filter((s) => s.path.startsWith("/api/office"));
-  check(office.length >= 3, `Office の API を呼んだ（${office.length}回）`);
+  check(office.length >= 2, `Office の API を呼んだ（${office.length}回。月が替わる日でも通るよう、2回以上）`);
   check(office.every((s) => s.status === 200), `Office の API の応答が、すべて 200（${office.map((s) => s.status).join(",")}）`);
   check(!seen.some((s) => s.error === "mfa_required" || s.status === 403), "403・mfa_required は1つも無い");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" | ").slice(0, 200)}`);

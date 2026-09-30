@@ -3,7 +3,7 @@
 // ■ 何を守るテストか
 //
 //   1. 経理（access.office）でログインすると、専用ヘッダー（EIGHT/OFFICE）・数字カード6つ・
-//      今日やること・月次進捗・案件一覧（10列）が出る
+//      今日やること・月次進捗・案件一覧（左端のチェック列＋10列）が出る
 //   2. カード・今日やること・選択肢のどれから絞っても、同じ結果になる（一覧の tags で答える）。
 //      検索・区分・「未完了のみ」・リセット
 //   3. 月を切り替えると、その月を読み直す。「今月」で今月へ戻る
@@ -130,7 +130,7 @@ console.log("\n=== 経理：ダッシュボード ===");
   check((await page.locator("#prog .row").first().locator('[role="progressbar"]').getAttribute("aria-valuenow")) === "6", "進捗バーは、数字も読み上げ用に持つ");
 
   const heads = await page.locator(".of-table thead th").allInnerTexts();
-  check(heads.join("|") === "客先|案件|要員|勤務表|稼働時間|売上請求|仕入請求|支払|現在工程|次にやること", `一覧は要件の10列（いま ${heads.join("|")}）`);
+  check(heads.join("|") === "|客先|案件|要員|勤務表|稼働時間|売上請求|仕入請求|支払|現在工程|次にやること", `一覧は、左端の選択（チェック）の列＋要件の10列（いま ${heads.join("|")}）`);
 
   const names = await rowsText(page);
   check(names.length === 6 && !names.includes("伊藤 四郎"), `既定は未完了のみ（完了の伊藤さんは出ない）: ${names.join(",")}`);
@@ -237,7 +237,7 @@ console.log("\n=== 右ドロワー ===");
 {
   const { page, requests } = await open("/office/index.html?month=2026-09");
   await page.waitForSelector("#rows tr[data-id]");
-  await page.locator('#rows tr:has-text("田中 太郎") td').first().click();
+  await page.locator('#rows tr:has-text("田中 太郎") td[data-label="要員"]').click();
   await page.waitForSelector(".of-drawer");
   const head = await page.locator(".of-dr-head").innerText();
   check(head.includes("田中 太郎") && head.includes("PP") && head.includes("顧客A社") && head.includes("2026年9月"), "ドロワーの上部：氏名・区分・客先・対象月");
@@ -278,7 +278,7 @@ console.log("\n=== 右ドロワー ===");
   check(await page.locator(".of-drawer").count() === 0, "背景を押しても閉じる");
 
   // BP：仕入請求・ファイル
-  await page.locator('#rows tr:has-text("渡辺 五郎") td').first().click();
+  await page.locator('#rows tr:has-text("渡辺 五郎") td[data-label="要員"]').click();
   await page.waitForSelector(".of-drawer");
   const bpText = await page.locator("#dr-vendor").innerText();
   check(bpText.includes("株式会社ビーピー") && bpText.includes("受領済み") && bpText.includes("BP請求書.pdf"), "BP：仕入請求は受領済みで、請求書のファイルが見える");
@@ -370,7 +370,7 @@ console.log("\n=== スマホ幅 ===");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(over <= 1, `横にはみ出さない（はみ出し ${over}px）`);
   check(await page.locator(".of-table thead").evaluate((e) => getComputedStyle(e).display) === "none", "表はカードになる（見出し行を隠す）");
-  check((await page.locator("#rows tr").first().locator("td").first().evaluate((e) => getComputedStyle(e, "::before").content)).includes("客先"), "各項目に見出しが付く");
+  check((await page.locator("#rows tr").first().locator('td[data-label="客先"]').evaluate((e) => getComputedStyle(e, "::before").content)).includes("客先"), "各項目に見出しが付く");
   const cards = await page.locator("#sum .of-card").evaluateAll((c) => c.map((x) => x.getBoundingClientRect().width));
   check(cards.every((w) => w > 100), "数字カードは2列で、潰れない");
   await page.locator('#rows tr:has-text("田中 太郎")').first().click();
