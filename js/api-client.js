@@ -460,6 +460,8 @@
     api(`/api/sales/companies${visibility && visibility !== "shown" ? `?visibility=${encodeURIComponent(visibility)}` : ""}`);
   const createSalesCompany = (body) => api("/api/sales/companies", { method: "POST", body });
   const importSalesCompanies = (companies) => api("/api/sales/companies", { method: "POST", body: { companies } });
+  // CSV 取込。commit=false で確認（プレビュー）、true で登録（画面は50行ずつ送る）
+  const importSalesCsv = (body) => api("/api/sales/companies/import", { method: "POST", body });
   const getSalesCompany = (id) => api(`/api/sales/companies/detail?id=${encodeURIComponent(id)}`);
   const updateSalesCompany = (body) => api("/api/sales/companies/detail", { method: "PATCH", body });
   const markSalesFollowed = (id) => updateSalesCompany({ id, action: "followed" });
@@ -1444,7 +1446,7 @@
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
     getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
-    listSalesCompanies, listSalesCompanyPage, exportSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
+    listSalesCompanies, listSalesCompanyPage, exportSalesCompanies, createSalesCompany, importSalesCompanies, importSalesCsv, getSalesCompany, updateSalesCompany,
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,

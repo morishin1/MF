@@ -34,7 +34,20 @@ function company(over) {
   };
 }
 
-async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false } = {}) {
+// 本物（lib/sales-master.js・lib/sales-csv-import.js）と同じ値。画面はこれを API の応答で受け取る
+const MASTERS = {
+  industries: ["製造", "不動産", "士業", "医療", "小売", "その他"],
+  services: ["AI / DX", "システム開発", "PCレンタル", "ホームページ改善", "地方創生", "ENGER", "その他"],
+  prefectures: ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県",
+    "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県",
+    "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県",
+    "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"],
+};
+const CSV_COLUMNS = [["name", "企業名", true], ["siteUrl", "企業サイトURL"], ["formUrl", "問い合わせフォームURL"], ["industry", "業種"],
+  ["region", "都道府県"], ["address", "所在地"], ["service", "提案サービス"], ["phone", "電話番号"], ["size", "企業規模"], ["note", "メモ"]]
+  .map(([key, label, required]) => ({ key, label, ...(required ? { required } : {}) }));
+
+async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0 } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
@@ -54,7 +67,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
   // ページングを見るための企業（many 社）
   for (let i = 1; i <= many; i++) {
     companies.push(company({ id: `m${i}`, name: `企業${String(i).padStart(3, "0")}`, domain: `m${i}.jp`,
-      industry: ["IT", "製造"][i % 2], region: ["東京都", "大阪府", "福岡県"][i % 3] }));
+      industry: ["士業", "製造"][i % 2], region: ["東京都", "大阪府", "福岡県"][i % 3] }));
   }
   const ctlList = { fail: failList, delay: 0 };
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
@@ -104,6 +117,40 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         if (b.action === "change_owner") { c.ownerId = b.ownerId; c.ownerName = b.ownerId ? "営業 一郎" : null; }
       }
       return send({ updated: hit.length, skipped: 0, failed: 0, notFound: 0 });
+    }
+    // CSV取込（本物は api/sales/companies/import.js）：業種・商材はマスターだけ、都道府県は先頭一致、ドメインで重複
+    if (/\/api\/sales\/companies\/import/.test(url)) {
+      const b = body();
+      calls.push({ kind: b.commit ? "csv-commit" : "csv-preview", body: b });
+      if (b.commit && importFailChunk && calls.filter((c) => c.kind === "csv-commit").length === importFailChunk) {
+        return send({ error: "db_failed", detail: "わざと失敗" }, 500);
+      }
+      const dom = (u) => { try { return new URL(/^https?:/.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ""); } catch { return null; } };
+      const seen = new Map();
+      const results = b.rows.map((r) => {
+        const reasons = [];
+        if (!r.name) reasons.push("企業名がありません");
+        if (r.industry && !MASTERS.industries.includes(r.industry)) reasons.push(`業種「${r.industry}」はマスターにありません`);
+        if (r.service && !MASTERS.services.includes(r.service)) reasons.push(`提案サービス「${r.service}」はマスターにありません`);
+        const pref = r.region ? MASTERS.prefectures.find((p) => r.region.startsWith(p) || r.region.startsWith(p.replace(/[都府県]$/, ""))) : null;
+        if (r.region && !pref) reasons.push(`都道府県「${r.region}」を判定できません`);
+        const d = r.siteUrl ? dom(r.siteUrl) : null;
+        const show = { name: r.name, siteUrl: r.siteUrl, industry: r.industry, region: pref || r.region, service: r.service, domain: d };
+        if (reasons.length) return { row: r.row, status: "error", reasons, ...show };
+        const ex = companies.find((c) => c.domain === d);
+        if (d && ex) return { row: r.row, status: "duplicate", reasons: [`登録済みのためスキップ（${ex.name}）`], ...show };
+        if (d && seen.has(d)) return { row: r.row, status: "duplicate", reasons: [`CSV内で重複（${seen.get(d)}行目と同じサイト）`], ...show };
+        if (d) seen.set(d, r.row);
+        if (b.commit) {
+          companies.push(company({ id: `csv${r.row}`, name: r.name, domain: d, siteUrl: r.siteUrl, industry: r.industry || null,
+            region: pref, service: r.service || null }));
+          return { row: r.row, status: "created", reasons: [], ...show };
+        }
+        return { row: r.row, status: "ok", reasons: [], ...show };
+      });
+      const counts = { read: results.length };
+      for (const k of b.commit ? ["created", "duplicate", "error"] : ["ok", "duplicate", "error"]) counts[k] = results.filter((x) => x.status === k).length;
+      return send({ results, counts });
     }
     if (/\/api\/sales\/campaigns\b/.test(url)) {
       return send({ campaigns: [{ id: "cp1", name: "秋の製造業", archived: false }] });
@@ -177,7 +224,8 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         const b = body();
         calls.push({ kind: b.companies ? "bulk" : "create", body: b });
         if (b.companies) return send({ created: b.companies.length, skipped: 0 });
-        const made = company({ id: "c-new", name: b.name, siteUrl: b.siteUrl, formUrl: b.formUrl, service: b.service });
+        const made = company({ id: "c-new", name: b.name, siteUrl: b.siteUrl, formUrl: b.formUrl, service: b.service,
+          industry: b.industry ?? null, region: b.region ?? null, domain: b.siteUrl ? new URL(b.siteUrl).hostname.replace(/^www\./, "") : null });
         companies.push(made);
         return send({ company: made });
       }
@@ -188,10 +236,12 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       calls.push({ kind: "list", visibility: vis, params });
       if (ctlList.delay) await new Promise((r) => setTimeout(r, ctlList.delay));
       if (ctlList.fail) return send({ error: "db_failed", detail: "わざと失敗" }, 500);
-      let listed = companies.filter((c) => (vis === "all" ? true : vis === "hidden" ? c.hidden : !c.hidden));
+      const base = companies.filter((c) => (vis === "all" ? true : vis === "hidden" ? c.hidden : !c.hidden));
       const q = (sp.get("q") || "").toLowerCase();
-      if (q) listed = listed.filter((c) => `${c.name} ${c.domain}`.toLowerCase().includes(q));
-      for (const k of ["industry", "region", "service", "status"]) if (sp.get(k)) listed = listed.filter((c) => c[k] === sp.get(k));
+      const inQ = base.filter((c) => !q || `${c.name} ${c.domain}`.toLowerCase().includes(q));
+      const hit = (c, k) => !sp.get(k) || (k === "region" ? String(c.region || "").startsWith(sp.get(k)) : c[k] === sp.get(k));
+      const FK = ["industry", "region", "service", "status"];
+      let listed = inQ.filter((c) => FK.every((k) => hit(c, k)));
       const sortKey = { name: "name", industry: "industry", region: "region", clicks: "clickCount" }[sp.get("sort")];
       if (sortKey) {
         const dir = sp.get("order") === "desc" ? -1 : 1;
@@ -203,11 +253,17 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       const total = listed.length;
       const totalPages = Math.max(1, Math.ceil(total / limit));
       const page = Math.min(Math.max(1, Number(sp.get("page")) || 1), totalPages);
-      const facet = (k) => [...new Set(companies.map((c) => c[k]).filter(Boolean))].sort()
-        .map((value) => ({ value, n: companies.filter((c) => c[k] === value).length }));
+      // 本物（db/101）と同じ：各項目の件数は「その項目以外の条件（検索語を含む）」で数える。並べ替え・ページは関係しない
+      const facet = (k) => {
+        const rows = inQ.filter((c) => FK.every((o) => o === k || hit(c, o)));
+        const m = new Map();
+        for (const c of rows) if (c[k]) m.set(c[k], (m.get(c[k]) || 0) + 1);
+        return [...m].map(([value, n]) => ({ value, n }));
+      };
       return send({ today: TODAY, me: "emp-s1", members, page, limit, total, totalPages,
-        companies: listed.slice((page - 1) * limit, page * limit),
-        facets: sp.get("facets") === "1" ? { industry: facet("industry"), region: facet("region"), service: facet("service") } : undefined });
+        companies: listed.slice((page - 1) * limit, page * limit), masters: MASTERS, csvColumns: CSV_COLUMNS,
+        facets: sp.get("facets") === "1" ? { dynamic: true, total, industry: facet("industry"), region: facet("region"),
+          service: facet("service"), status: facet("status"), owner: facet("ownerId") } : undefined });
     }
     if (/\/api\/sales\/templates\b/.test(url)) {
       return send({ services: [], templates: [{ id: "t1", name: "DX基本", service: "AI / DX", subject: null,
@@ -887,11 +943,11 @@ console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ�
   await page.goto(`${BASE}/sales/companies.html`);
   await page.locator("#rows tr[data-id]").first().waitFor();
   const first = calls.find((c) => c.kind === "list");
-  check(first?.params.page === "1" && first?.params.facets === "1", "1ページ目を頼む（絞り込みの候補も最初に1回だけ）");
+  check(first?.params.page === "1" && first?.params.facets === "1", "1ページ目を頼む（絞り込みの件数もサーバーで数える）");
   check(await page.locator("#rows tr[data-id]").count() === 100, "1ページに100社");
   check((await page.locator("#range").innerText()).trim() === "1–100 / 253件", `件数の表示（${await page.locator("#range").innerText()}）`);
   check((await page.locator("#pager").innerText()).includes("次へ"), "ページャーが出る");
-  check((await page.locator("#f-industry").innerText()).includes("IT（"), "業種の候補は件数つき（サーバーの集計）");
+  check((await page.locator("#f-industry").innerText()).includes("士業（"), "業種の候補は件数つき（サーバーの集計）");
 
   // ページ移動：押した瞬間に反応（薄く・読み込み中）→ 次の100件だけ取る
   ctlList.delay = 600;   // サーバーが遅いときでも、押した瞬間に反応が出るか
@@ -957,11 +1013,11 @@ console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ�
   await page.waitForFunction(() => !/page=3/.test(location.search));
   check(!/page=3/.test(page.url()), "戻るで1つ前の一覧の状態に戻る");
   // URL を直接開いても復元する
-  await page.goto(`${BASE}/sales/companies.html?page=2&industry=IT&sort=name&order=desc`);
+  await page.goto(`${BASE}/sales/companies.html?page=2&industry=士業&sort=name&order=desc`);
   await page.locator("#rows tr[data-id]").first().waitFor();
   const r = calls.filter((c) => c.kind === "list").at(-1).params;
-  check(r.page === "2" && r.industry === "IT" && r.sort === "name" && r.order === "desc", "URL の状態でそのまま取る");
-  check(await page.locator("#f-industry").inputValue() === "IT", "絞り込みの欄にも反映");
+  check(r.page === "2" && r.industry === "士業" && r.sort === "name" && r.order === "desc", "URL の状態でそのまま取る");
+  check(await page.locator("#f-industry").inputValue() === "士業", "絞り込みの欄にも反映");
 
   // 全選択はこのページの企業だけ
   await page.locator("#sel-all").click();
@@ -974,7 +1030,7 @@ console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ�
 console.log("\n=== CSV：検索結果すべて／チェックした企業だけ（サーバーで作る） ===");
 {
   const { page, calls, errs } = await openAs({ many: 120 });
-  await page.goto(`${BASE}/sales/companies.html?industry=IT&sort=name&order=asc`);
+  await page.goto(`${BASE}/sales/companies.html?industry=士業&sort=name&order=asc`);
   await page.locator("#rows tr[data-id]").first().waitFor();
   await page.locator("#btn-download").click();
   await page.locator(".sl-modal").waitFor();
@@ -982,7 +1038,7 @@ console.log("\n=== CSV：検索結果すべて／チェックした企業だけ�
   check((await page.locator(".sl-modal").innerText()).includes("いまの検索・絞り込み結果すべて（60社）"), "検索結果すべて（件数つき）");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#dl-go").click()]);
   const ex = calls.find((c) => c.kind === "export");
-  check(ex?.method === "GET" && ex.params.industry === "IT" && ex.params.sort === "name" && !ex.params.page,
+  check(ex?.method === "GET" && ex.params.industry === "士業" && ex.params.sort === "name" && !ex.params.page,
     "いまの条件をそのままサーバーへ渡す（ページは渡さない＝全件）");
   check(dl.suggestedFilename() === "sales_companies_2026-09-29.csv", `ファイル名（${dl.suggestedFilename()}）`);
   const { readFile } = await import("node:fs/promises");
@@ -1003,6 +1059,202 @@ console.log("\n=== CSV：検索結果すべて／チェックした企業だけ�
   check(calls.filter((c) => c.kind === "export").length === 3, "画面下のバーの CSV からも選択中をダウンロード");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
+}
+
+console.log("\n=== 共通マスター：企業追加は選ぶだけ（業種・都道府県・提案サービス）。件数はいまの条件に連動 ===");
+{
+  const { page, calls, errs } = await openAs({ many: 12 });
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  const optTexts = (sel) => page.locator(`${sel} option`).allInnerTexts();
+  // 一覧の絞り込み：業種・地域・商材はマスター（件数0も出す。自由データから作らない）
+  const ind = await optTexts("#f-industry");
+  check(ind.length === 7 && ind[1].startsWith("製造（") && ind.some((t) => t === "不動産（0）"), `業種はマスターの6つ＋すべて（${ind.join("/")}）`);
+  const reg = await optTexts("#f-region");
+  check(reg.length === 48 && reg[1].startsWith("北海道") && reg.at(-1).startsWith("沖縄県"), `地域は47都道府県（${reg.length - 1}）`);
+  check((await optTexts("#f-service")).length === 8, "商材はマスターの7つ");
+  const tokyo0 = reg.find((t) => t.startsWith("東京都"));
+  check(tokyo0 === "東京都（7）", `東京都の件数（${tokyo0}）`);
+  // 業種を変えると地域の件数も変わる。総件数とも一致
+  await page.locator("#f-industry").selectOption("製造");
+  await page.waitForFunction(() => /industry=/.test(location.search) && !document.getElementById("loading"));
+  const tokyo1 = (await optTexts("#f-region")).find((t) => t.startsWith("東京都"));
+  check(tokyo1 === "東京都（5）", `業種＝製造にすると東京都の件数が変わる（${tokyo0} → ${tokyo1}）`);
+  const mfg = (await optTexts("#f-industry")).find((t) => t.startsWith("製造"));
+  const range = (await page.locator("#range").innerText()).trim();
+  check(mfg === "製造（9）" && range === "1–9 / 9件", `絞り込みの件数と一覧の件数が一致（${mfg}・${range}）`);
+  // 並べ替えでは件数は変わらない
+  const before = await optTexts("#f-region");
+  await page.locator('th[data-sort="name"]').click();
+  await page.waitForFunction(() => /sort=name/.test(location.search) && !document.getElementById("loading"));
+  check(JSON.stringify(await optTexts("#f-region")) === JSON.stringify(before), "並べ替えても件数は同じ");
+  const last = calls.filter((c) => c.kind === "list").at(-1).params;
+  check(last.facets === "1" && last.industry === "製造", "件数はいまの条件でサーバーに数えさせる");
+  // 検索語でも件数が変わる
+  await page.fill("#f-q", "企業001");
+  await page.locator("#f-q").dispatchEvent("input");
+  await page.waitForFunction(() => /q=/.test(location.search) && !document.getElementById("loading"));
+  await page.waitForTimeout(300);
+  const mfgQ = (await optTexts("#f-industry")).find((t) => t.startsWith("製造"));
+  check(mfgQ === "製造（1）", `検索語も件数に効く（${mfgQ}）`);
+
+  // 企業追加：業種・地域・提案サービスはマスターの select（自由入力なし）
+  await page.goto(`${BASE}/sales/companies.html?new=1`);
+  await page.locator("#q-url").waitFor();
+  check(await page.locator("#q-region").evaluate((e) => e.tagName) === "SELECT"
+    && await page.locator("#q-industry").evaluate((e) => e.tagName) === "SELECT", "業種・地域は select");
+  check((await page.locator("#q-region option").count()) === 48, "地域は47都道府県（＋未設定）");
+  check(!(await page.locator("#q-more input[list]").count()), "datalist の自由入力は残っていない");
+  await page.fill("#q-url", "https://kagoshima-seizo.jp/");
+  await page.locator("#q-url").dispatchEvent("change");
+  await page.waitForTimeout(600);
+  await page.locator("#q-more summary").click();
+  await page.selectOption("#q-industry", "製造");
+  await page.selectOption("#q-region", "鹿児島県");
+  await page.locator("button", { hasText: "追加だけする" }).click();
+  await page.waitForFunction(() => !document.querySelector(".sl-drawer #q-url"));
+  const made = calls.filter((c) => c.kind === "create").at(-1);
+  check(made?.body.region === "鹿児島県" && made.body.industry === "製造", "「鹿児島県」を選んで登録");
+  await page.waitForFunction(() => [...document.querySelectorAll("#f-region option")].some((o) => o.textContent === "鹿児島県（1）"));
+  check(true, "登録後、地域の絞り込みに鹿児島県（1）が出る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（UTF-8・Shift_JIS） ===");
+{
+  const { writeFile, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  // Shift_JIS（Excel の「CSV」保存）を作る：TextDecoder の逆引き
+  const sjisTable = new Map();
+  const dec = new TextDecoder("shift_jis");
+  for (let a = 0x81; a <= 0xfc; a++) {
+    if (a > 0x9f && a < 0xe0) continue;
+    for (let b = 0x40; b <= 0xfc; b++) {
+      const ch = dec.decode(Uint8Array.from([a, b]));
+      if (ch.length === 1 && ch !== "�" && !sjisTable.has(ch)) sjisTable.set(ch, [a, b]);
+    }
+  }
+  const toSjis = (str) => Buffer.from([...str].flatMap((ch) => (ch.charCodeAt(0) < 0x80 ? [ch.charCodeAt(0)] : sjisTable.get(ch) || [0x3f])));
+  const HEAD = "企業名,企業サイトURL,問い合わせフォームURL,業種,都道府県,所在地,提案サービス,電話番号,企業規模,メモ";
+  const body = [
+    HEAD,
+    "株式会社かごしま製作所,https://www.kago-ss.jp/,,製造,鹿児島県鹿屋市,,AI / DX,,,",
+    "\"株式会社サンプル（既存）\",https://sample.co.jp/,,不動産,東京都,,PCレンタル,,,",
+    "株式会社ミチ,https://michi.jp,,未知の業種,千葉県,,AI / DX,,,",
+    "株式会社かごしま製作所 支店,https://kago-ss.jp/branch,,製造,鹿児島県,,,,,",
+    "\"株式会社カンマ, 改行\",https://comma.jp,,医療,大阪,,,,,\"1行目\n2行目\"",
+  ].join("\r\n") + "\r\n";
+  const dir = tmpdir();
+  const utf8 = join(dir, "sales_utf8.csv"), bom = join(dir, "sales_bom.csv"), sjis = join(dir, "sales_sjis.csv"), txt = join(dir, "sales.txt");
+  await writeFile(utf8, body, "utf8");
+  await writeFile(bom, "﻿" + body, "utf8");
+  await writeFile(sjis, toSjis(body));
+  await writeFile(txt, body, "utf8");
+
+  const { page, calls, errs } = await openAs({ importFailChunk: 0 });
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  const btn = page.locator("button", { hasText: "CSVから取り込む" });
+  check(await btn.count() === 1 && (await btn.innerText()).includes("upload_file"), "「CSVから取り込む」（upload_file）");
+  check(!(await page.locator("button", { hasText: "スプレッドシート" }).count()), "「スプレッドシートから取り込む」は無くなった");
+  await btn.click();
+  const modal = page.locator(".sl-modal");
+  await modal.waitFor();
+  check((await modal.innerText()).includes("CSVで営業先企業をまとめて登録できます。"), "補足文");
+  check(await page.locator(".sl-modal-bg").count() === 1 && !(await page.locator(".sl-drawer").count()), "中央モーダルで開く");
+  check(await page.locator("#csv-drop").isVisible(), "ドラッグ&ドロップの枠");
+
+  // テンプレート
+  const [tpl] = await Promise.all([page.waitForEvent("download"), page.locator("button", { hasText: "CSVテンプレートをダウンロード" }).click()]);
+  const tbuf = await readFile(await tpl.path());
+  const ttext = tbuf.toString("utf8");
+  check(tbuf[0] === 0xef && tbuf[1] === 0xbb && tbuf[2] === 0xbf, "テンプレートは BOM つき UTF-8");
+  check(ttext.replace(/^﻿/, "").split("\r\n")[0] === HEAD, `テンプレートの見出し（${ttext.split("\r\n")[0]}）`);
+  check(/,製造,鹿児島県,/.test(ttext) && ttext.includes("AI / DX"), "例の行はマスターの値");
+
+  // .csv 以外は受けない
+  await page.locator("#csv-file").setInputFiles(txt);
+  await page.waitForFunction(() => (document.getElementById("csv-msg")?.textContent || "").includes(".csv"));
+  check(!calls.some((c) => c.kind === "csv-preview"), ".csv 以外は送らない");
+
+  for (const [file, enc] of [[sjis, "Shift_JIS"], [bom, "UTF-8（BOMあり）"], [utf8, "UTF-8"]]) {
+    await page.locator(".sl-modal-foot button", { hasText: "閉じる" }).click();
+    await page.locator("button", { hasText: "CSVから取り込む" }).click();
+    await page.locator("#csv-file").setInputFiles(file);
+    await page.locator(".csv-tiles").waitFor();
+    const txt2 = await page.locator("#csv-body").innerText();
+    check(txt2.includes(enc), `${enc} として読める`);
+    const p = calls.filter((c) => c.kind === "csv-preview").at(-1).body;
+    check(p.commit === false && p.rows.length === 5 && p.rows[0].name === "株式会社かごしま製作所" && p.rows[0].region === "鹿児島県鹿屋市",
+      `${enc}：文字化けせず5行を見出しで読む`);
+    check(p.rows[4].name === "株式会社カンマ, 改行" && p.rows[4].note === "1行目\n2行目" && p.rows[4].row === 6, `${enc}："…" の中のカンマ・改行`);
+  }
+  check(calls.filter((c) => c.kind === "csv-commit").length === 0, "確認だけでは登録しない");
+  const tiles = await page.locator(".csv-tiles").innerText();
+  check(/読み込み\s*5件/.test(tiles) && /登録予定\s*2件/.test(tiles) && /重複\s*2件/.test(tiles) && /エラー\s*1件/.test(tiles),
+    `件数（${tiles.replace(/\s+/g, " ")}）`);
+  const rowText = (n) => page.locator(`#csv-body tr[data-row="${n}"]`).innerText();
+  check((await rowText(2)).includes("鹿児島県") && !(await rowText(2)).includes("鹿屋市") && (await rowText(2)).includes("登録できる"), "鹿児島県鹿屋市 → 鹿児島県");
+  check((await rowText(3)).includes("登録済みのためスキップ"), "既存のドメインは重複（スキップ）");
+  check((await rowText(4)).includes("要修正") && (await rowText(4)).includes("未知の業種"), "マスター外の業種は要修正");
+  check((await rowText(5)).includes("CSV内で重複"), "CSVの中の同じドメインは重複");
+  check((await rowText(6)).includes("大阪府"), "「大阪」も大阪府に");
+
+  // エラー行のダウンロード
+  const [edl] = await Promise.all([page.waitForEvent("download"), page.locator("button", { hasText: "エラー行をCSVでダウンロード" }).click()]);
+  const etext = (await readFile(await edl.path())).toString("utf8").replace(/^﻿/, "");
+  const elines = etext.trim().split("\r\n");
+  check(elines.length === 2 && elines[0].startsWith(HEAD) && elines[1].startsWith("株式会社ミチ,") && elines[1].includes("未知の業種"),
+    `エラー行だけ（見出しはテンプレートと同じ＋理由）：${elines.length - 1}行`);
+
+  await page.locator("#csv-go").click();
+  await page.waitForFunction(() => (document.getElementById("csv-body")?.innerText || "").includes("件を登録しました"));
+  const commits = calls.filter((c) => c.kind === "csv-commit");
+  check(commits.length === 1 && commits[0].body.rows.map((r) => r.row).join() === "2,6", "登録は「登録できる」行だけを送る");
+  const done = await page.locator("#csv-body").innerText();
+  check(done.includes("5件中、2件を登録しました。重複2件、エラー1件です。"), "結果の件数");
+  check(!(await page.locator("#csv-go").count()), "登録後は「登録する」を出さない（二重に押せない）");
+  await page.waitForFunction(() => [...document.querySelectorAll("#f-region option")].some((o) => o.textContent === "鹿児島県（1）"));
+  check((await page.locator("#range").innerText()).includes("/ 5件"), "登録後、一覧の件数と絞り込みの件数に反映");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+
+  // 大量：50行ずつ送る。途中の1回が失敗しても、ほかは登録し、失敗した行が分かる
+  const big = [HEAD, ...Array.from({ length: 130 }, (_, i) => `企業${i + 1},https://big${i + 1}.example.jp,,製造,福岡県,,,,,`)].join("\r\n");
+  const bigFile = join(dir, "sales_big.csv");
+  await writeFile(bigFile, big, "utf8");
+  const b2 = await openAs({ importFailChunk: 2 });
+  await b2.page.goto(`${BASE}/sales/companies.html`);
+  await b2.page.locator("#rows tr[data-id]").first().waitFor();
+  await b2.page.locator("button", { hasText: "CSVから取り込む" }).click();
+  await b2.page.locator("#csv-file").setInputFiles(bigFile);
+  await b2.page.locator("#csv-go").waitFor();
+  await b2.page.locator("#csv-go").click();
+  await b2.page.waitForFunction(() => (document.getElementById("csv-body")?.innerText || "").includes("件を登録しました"));
+  const sizes = b2.calls.filter((c) => c.kind === "csv-commit").map((c) => c.body.rows.length);
+  check(sizes.join() === "50,50,30", `50行ずつ送る（${sizes.join()}）`);
+  const bt = await b2.page.locator("#csv-body").innerText();
+  check(bt.includes("130件中、80件を登録しました。重複0件、エラー50件です。"), "失敗した50行はエラー、ほかは登録");
+  check((await b2.page.locator('#csv-body tr[data-row="52"]').innerText()).includes("登録できませんでした")
+    && (await b2.page.locator('#csv-body tr[data-row="2"]').innerText()).includes("登録しました"), "どの行が失敗したか分かる");
+  check((await b2.page.locator("#csv-msg").innerText()).includes("送信に失敗"), "途中の失敗を知らせる");
+  check(!b2.errs.length, `JSエラーなし ${b2.errs.join(" / ")}`);
+  await b2.page.close();
+
+  // スマホ幅でもはみ出さない
+  const m = await openAs();
+  await m.page.setViewportSize({ width: 375, height: 800 });
+  await m.page.goto(`${BASE}/sales/companies.html`);
+  await m.page.locator("#rows tr[data-id]").first().waitFor();
+  await m.page.locator("button", { hasText: "CSVから取り込む" }).click();
+  await m.page.locator("#csv-file").setInputFiles(utf8);
+  await m.page.locator(".csv-tiles").waitFor();
+  const over = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const box = await m.page.locator(".sl-modal").boundingBox();
+  check(over <= 1 && box.width <= 375, `スマホ幅：モーダルがはみ出さない（${Math.round(box.width)}px）`);
+  await m.page.close();
 }
 
 console.log("\n=== 一覧の取得に失敗しても画面は壊さない（再読み込みで戻る） ===");

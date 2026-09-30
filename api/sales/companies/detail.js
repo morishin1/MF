@@ -197,7 +197,8 @@ async function update(req, res, sb, ctx, user) {
   if (body.action === "followed") {
     patch = { followed_at: new Date().toISOString() };
   } else {
-    const row = normalizeCompany(body, { partial: true });
+    // マスターに無い昔の値（業種・商材・地域）は、変えていなければそのまま通す
+    const row = normalizeCompany(body, { partial: true, before });
     if (row.error) return json(res, 400, row);
     patch = row.value;
     // 返信あり・商談へ手で進めたときも、NEXT を決めていなければ自動で入れる
