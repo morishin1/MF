@@ -23,6 +23,9 @@
     .hr-stage-tabs button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px;
       font-size:12px; font-weight:500; color:#4a5068; cursor:pointer; font-family:inherit; }
     .hr-stage-tabs button.on { background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+    /* 選考パイプライン：段階ごとの人数。0人の段階は薄く（押せるがレイアウトは変えない） */
+    .hr-stage-tabs button .n { display:inline-block; min-width:1.4em; margin-left:6px; font-weight:700; text-align:center; }
+    .hr-stage-tabs button.zero:not(.on) { opacity:.45; }
 
     .hr-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
     .hr-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px 14px;
@@ -78,8 +81,12 @@
     .hr-drop { border:2px dashed #cfd4e0; border-radius:10px; padding:22px; text-align:center; color:#6b7080;
       font-size:13px; cursor:pointer; background:#fafaf7; }
     .hr-drop.over { border-color:#1b2440; background:#eef0f6; color:#1b2440; }
-    .hr-docs-mini { display:inline-flex; gap:8px; margin-left:6px; font-size:10.5px; color:#9aa0b4; white-space:nowrap; }
-    .hr-docs-mini .ok { color:#256b36; }
+    /* 書類列：登録済みの書類だけアイコンで。押すとプレビューを別タブで（行は開かない） */
+    .hr-docs { display:inline-flex; gap:6px; white-space:nowrap; }
+    .hr-docs a { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:7px;
+      color:#1b2440; text-decoration:none; overflow:hidden; }   /* アイコンの字が読み込み前でも隣へはみ出さない */
+    .hr-docs a:hover { background:#eef0f6; }
+    .hr-docs a .material-symbols-outlined { font-size:20px; }
 
     /* 選択中バー（Selection Action Bar）。1件以上チェックすると画面下部に固定表示する。
        ドロワー(41)・モーダル(51)より前面に出ないよう、z-indexは30〜35の範囲にとどめる */
@@ -103,7 +110,6 @@
     .hr-state dt { font-size:11px; font-weight:700; color:#4a5068; }
     .hr-state dd { margin:0; font-size:14px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .hr-state dd small { font-size:11px; font-weight:400; color:#6b7080; }
-    .hr-state select { font-size:13px; font-weight:700; padding:3px 8px; border-radius:6px; border:1px solid #b9bfa0; background:#fff; max-width:100%; }
     .hr-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }
     .hr-next .lb .material-symbols-outlined { font-size:15px; }
     .hr-next h3 { font-size:18px; font-weight:700; color:#1b2440; margin:6px 0 8px; }
@@ -149,8 +155,8 @@
     <table class="hr-table">
       <thead><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>応募者</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="7" class="empty">読み込み中…</td></tr></tbody>
+        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -220,9 +226,16 @@
     if (q.get("id")) openDetail(q.get("id"));
   }
 
+  // 選考パイプライン：「採用フロー上のどこに人が溜まっているか」。人数は取得済みの応募者から数える
+  // （固定値を持たない）。細かい状態（status）は上に出さない
   function renderStageTabs() {
-    el("stage-tabs").innerHTML = `<button class="${!stageFilter ? "on" : ""}" onclick="setStage('')">すべて</button>`
-      + STAGES.map((s) => `<button class="${stageFilter === s.key ? "on" : ""}" onclick="setStage('${s.key}')">${esc(s.label)}</button>`).join("");
+    const count = (key) => (key ? applicants.filter((a) => a.stage === key).length : applicants.length);
+    const tab = (key, label) => {
+      const n = count(key);
+      return `<button class="${stageFilter === key ? "on" : ""}${n ? "" : " zero"}" data-stage="${esc(key || "all")}"
+        onclick="setStage('${esc(key)}')">${esc(label)}<span class="n">${n}</span></button>`;
+    };
+    el("stage-tabs").innerHTML = tab("", "すべて") + STAGES.map((s) => tab(s.key, s.label)).join("");
   }
   function setStage(key) { stageFilter = key; renderStageTabs(); render(); }
 
@@ -232,26 +245,32 @@
     try {
       const res = await API.listHrApplicants();
       if (res.notReady) {
-        el("rows").innerHTML = `<tr><td colspan="7"><div class="banner warn">
+        el("rows").innerHTML = `<tr><td colspan="8"><div class="banner warn">
           <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
         return;
       }
       applicants = res.applicants || [];
       employees = res.employees || [];
       meEmployeeId = res.meEmployeeId || null;
+      renderStageTabs();
       render();
     } catch (e) {
-      el("rows").innerHTML = `<tr><td colspan="7"><div class="banner err">
+      el("rows").innerHTML = `<tr><td colspan="8"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div></td></tr>`;
     }
   }
 
-  // 書類のそろい具合。一覧を重くしないよう、小さく灰色で（そろっているものだけ緑）
-  function docsMini(d) {
+  // 書類列。登録済みの書類（最新版）だけアイコンで出す。未登録は何も出さない。
+  // 押すと既存のプレビュー（hr/document.html）を別タブで開く。行のクリック（詳細ドロワー）は発火させない。
+  // 表示用の URL はここでは持たない（document.html が権限を確かめてから短時間の URL を取る）
+  function docsCell(a) {
+    const d = a.docs;
     if (!d) return "";
-    const one = (ok, label) => `<span class="${ok ? "ok" : ""}" title="${label}${ok ? "：登録済み" : "：未登録"}">${label} ${ok ? "✓" : "—"}</span>`;
-    return `<span class="hr-docs-mini" data-docs>${one(d.resume, "履歴書")}${one(d.workHistory, "職務経歴書")}</span>`;
+    const link = (docId, icon, label) => (docId ? `<a href="/hr/document.html?applicant=${encodeURIComponent(a.id)}&doc=${encodeURIComponent(docId)}"
+      target="_blank" rel="noopener noreferrer" title="${label}をプレビュー" aria-label="${label}をプレビュー" data-doc-link="${icon}"
+      onclick="event.stopPropagation()"><span class="material-symbols-outlined">${icon}</span></a>` : "");
+    return `<span class="hr-docs" data-docs>${link(d.resumeId, "description", "履歴書")}${link(d.workHistoryId, "work_history", "職務経歴書")}</span>`;
   }
 
   function render() {
@@ -262,7 +281,7 @@
     visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
-      el("rows").innerHTML = `<tr><td colspan="7" class="empty">対象がありません。</td></tr>`;
+      el("rows").innerHTML = `<tr><td colspan="8" class="empty">対象がありません。</td></tr>`;
       renderBulkBar();
       return;
     }
@@ -273,7 +292,8 @@
       <tr class="click" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
-        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}${docsMini(a.docs)}</span></td>
+        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td>${docsCell(a)}</td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
           <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span></td>
@@ -565,11 +585,16 @@
 
   /** NEXT ACTION と、その1つの CTA（原則1つ） */
   function nextActionBox(a) {
+    // 「面談を実施済みにする」は、実施する面談（nextInterviewId）があるときだけ出す。
+    // 無ければ面談の記録を確かめてもらう（API も同じ判定。古いデータへの保険）
+    if (a.nextActionKey === "conduct" && !a.nextInterviewId) {
+      a = { ...a, nextAction: "面談予定の記録を確認してください", nextActionCta: "面談タブを確認", nextActionKey: "checkInterviews" };
+    }
     return `
       <div class="hr-next" style="margin:0 0 16px;">
         <dl class="hr-state now">
           <dt>選考</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
-          <dt>状態</dt><dd>${statusSelect(a)}<small>いま何待ちか</small></dd>
+          <dt>状態</dt><dd id="hr-status">${esc(a.statusLabel || "—")}<small>いま何待ちか</small></dd>
         </dl>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION<small style="font-weight:400;margin-left:6px;">次にすること</small></div>
         <h3>${esc(a.nextAction)}</h3>
@@ -583,38 +608,6 @@
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
       </div>`;
-  }
-
-  /** 状態のプルダウン。選択肢は API（lib/hr.js の STATUSES / STATUS_LABEL）から。画面では定義しない */
-  function statusSelect(a) {
-    const opts = detail.statusOptions || [];
-    if (!opts.length) return esc(a.statusLabel || "—");
-    // 社長判断待ちから動かす／へ動かすのは社長・管理者だけ（API でも同じ判定）
-    const locked = a.status === "ceo_decision_pending" && !canDecide;
-    return `<select id="hr-status" aria-label="状態" onchange="changeStatus(this)" ${locked ? "disabled title=\"社長・管理者だけが変更できます\"" : ""}>
-      ${opts.map((o) => `<option value="${esc(o.key)}" ${o.key === a.status ? "selected" : ""}
-        ${o.key === "ceo_decision_pending" && !canDecide && a.status !== o.key ? "disabled" : ""}>${esc(o.label)}</option>`).join("")}
-    </select>`;
-  }
-
-  // 状態の手動変更。変更前に API で注意（データの食い違い）を確かめ、確認ダイアログに出す。
-  // 変えるのは状態だけ。面談の日時・取消・Meet URL（TimeRex 連携は TimeRex が正）は変えない
-  async function changeStatus(sel) {
-    const a = detail.applicant;
-    const to = sel.value;
-    const reset = () => { sel.value = a.status; };
-    if (to === a.status) return;
-    let pre;
-    try { pre = await API.updateHrApplicant({ id: a.id, action: "setStatus", status: to, dryRun: true }); }
-    catch (e) { reset(); return alert(e.hint || e.detail || e.message || "変更できませんでした"); }
-    const warn = (pre.warnings || []).length ? `\n\n【注意】\n・${pre.warnings.join("\n・")}` : "";
-    if (!confirm(`状態を\n「${pre.from}」→「${pre.to}」\nに変更しますか？${warn}\n\n面談の日時・予約は変わりません。`)) return reset();
-    try {
-      await API.updateHrApplicant({ id: a.id, action: "setStatus", status: to, acknowledgeWarnings: (pre.warnings || []).length > 0 });
-    } catch (e) { reset(); return alert(e.hint || e.detail || e.message || "変更できませんでした"); }
-    // 右ドロワー（NEXT ACTION を含む）と応募者一覧を読み直す。CEO REVIEW を別タブで開いていれば知らせる
-    await Promise.all([refreshDetail(), load()]);
-    try { new BroadcastChannel("hr-applicants").postMessage({ type: "status_changed", id: a.id }); } catch { /* 古いブラウザ */ }
   }
 
   /** いちばん新しい、評価済みの面談 */
@@ -1090,10 +1083,14 @@
     const key = a.nextActionKey;
     if (key === "sendSchedulingLink") return openSendSchedulingForm();
     if (key === "schedule") return openScheduleForm(a.nextActionKind);
+    // 実施する面談が無い（NEXT ACTION は「面談タブを確認」と出している）ときは、面談タブへ
+    if (key === "conduct" && !a.nextInterviewId) return setDetailTab("interviews");
     if (key === "conduct") {
+      // 実施する面談は API が決めたもの（nextInterviewId）だけ。見つからなくても「面談を予定する」は開かない
       const iv = targetInterview("conduct");
-      return iv ? conductInterview(iv.id) : openScheduleForm(a.nextInterviewKind || a.nextActionKind);
+      return iv ? conductInterview(iv.id) : showNoInterviewToConduct();
     }
+    if (key === "checkInterviews") return setDetailTab("interviews");
     if (key === "evaluate") {
       const iv = targetInterview("evaluate");
       return iv ? openEvaluateForm(iv.id) : null;
@@ -1208,6 +1205,17 @@
       await refreshDetail();
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
+  }
+
+  // 「面談を実施済みにする」の対象が見つからないとき。面談の予定は作らず、面談タブで確かめてもらう
+  function showNoInterviewToConduct() {
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 10px;">実施する面談が見つかりません</h2>
+      <p id="no-iv-msg" style="font-size:13px;color:#1b2440;margin:0 0 16px;">実施対象の面談が見つかりません。<br>面談タブで予定を確認してください。</p>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="closeAction();setDetailTab('interviews')">面談タブを確認</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
   }
 
   async function conductInterview(id) {

@@ -85,8 +85,6 @@
   let employees = [];
 
   HRLayout.init({ active: "ceo" }).then((ctx) => { if (ctx) load(); });
-  // 応募者詳細で状態を変えたら、開いている CEO REVIEW も読み直す
-  try { new BroadcastChannel("hr-applicants").onmessage = () => load(); } catch { /* 古いブラウザ */ }
 
   async function load() {
     try {
