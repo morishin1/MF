@@ -355,18 +355,26 @@
       return hit ? hit.n : 0;
     };
     // 件数が数えられている項目だけ「（n）」を付ける（db/101 が未実行なら、業種・地域・商材だけ以前の件数）
-    const label = (kind, v, l) => (dynamic || ["industry", "region", "service"].includes(kind) && facets
-      ? `${l}（${countOf(kind, v)}）` : l);
+    const counted = (kind) => dynamic || (["industry", "region", "service"].includes(kind) && facets);
+    // legacy：マスター外の旧データ（「イベント企画・制作・運営（1・旧データ）」）
+    const label = (kind, v, l, legacy) => (counted(kind)
+      ? `${l}（${countOf(kind, v)}${legacy ? "・旧データ" : ""}）` : legacy ? `${l}（旧データ）` : l);
     const opts = (id, first, kind, values, key = kind) => {
       const cur = state[key] || "";
-      const list = values.some(([v]) => v === cur) || !cur ? values : [...values, [cur, cur]];
+      const list = values.some(([v]) => v === cur) || !cur ? values : [...values, [cur, cur, kind === "industry" || kind === "service"]];
       el(id).innerHTML = `<option value="">${esc(first)}</option>`
-        + list.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(label(kind, v, l))}</option>`).join("");
+        + list.map(([v, l, legacy]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(label(kind, v, l, legacy))}</option>`).join("");
     };
     const m = (arr) => arr.map((v) => [v, v]);
-    opts("f-industry", "業種：すべて", "industry", m(masters.industries));
+    // 業種・商材：共通マスター＋件数の集計に出てきたマスター外の値（旧データ。絞り込めるように残す。新規登録では選べない）
+    // 地域：47都道府県だけ（「鹿児島県鹿屋市」はサーバーで鹿児島県にまとめて数えるので、旧値は足さない）
+    const withLegacy = (kind, master) => [...m(master), ...(facets?.[kind] || [])
+      .filter((x) => x.value && !master.includes(x.value))
+      .sort((a, b) => b.n - a.n || (a.value < b.value ? -1 : 1))
+      .map((x) => [x.value, x.value, true])];
+    opts("f-industry", "業種：すべて", "industry", withLegacy("industry", masters.industries));
     opts("f-region", "地域：すべて", "region", m(masters.prefectures));
-    opts("f-service", "商材：すべて", "service", m(masters.services));
+    opts("f-service", "商材：すべて", "service", withLegacy("service", masters.services));
     opts("f-status", "状態：すべて", "status", [...STATUSES, ["ng", "営業禁止"]]);
     // 「自分」の件数は、自分の社員IDの件数
     const ownerList = [["me", "自分"], ["none", "未定"], ...members.map((x) => [x.id, x.display_name])];

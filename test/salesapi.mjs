@@ -1869,6 +1869,27 @@ await ok("CSV取込：権限・件数の上限・空。別テナントの同じ�
   assert.equal(db.rows.gw_sales_companies.length, 1);
 });
 
+await ok("旧データ：マスター外の業種（イベント企画・制作・運営）は件数に出て絞り込める。新規・編集・CSVでは作れない", async () => {
+  setup();
+  const LEGACY = "イベント企画・制作・運営";
+  await seed(3);
+  const c = await newCompany({ name: "株式会社イベントワークス", siteUrl: "https://event-works.jp" });
+  const row = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  row.industry = LEGACY; row.region = "鹿児島県鹿屋市";   // 以前に自由入力で入ったデータ
+  const all = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.ok(all.companies.some((x) => x.id === c.id && x.industry === LEGACY && x.region === "鹿児島県"), "一覧に出る（地域は都道府県）");
+  assert.deepEqual(all.facets.industry.find((x) => x.value === LEGACY), { value: LEGACY, n: 1 }, "業種の件数に旧データも出る");
+  assert.ok(!all.facets.region.some((x) => x.value.includes("鹿屋市")), "地域は都道府県だけ");
+  const only = (await pageOf({ page: 1, facets: 1, industry: LEGACY })).body;
+  assert.deepEqual(only.companies.map((x) => x.id), [c.id], "選ぶとその企業だけ");
+  assert.equal(only.facets.total, 1);
+  assert.equal((await create({ name: "新規", industry: LEGACY })).body.error, "bad_industry", "新規では作れない");
+  const other = db.rows.gw_sales_companies.find((x) => x.id !== c.id);
+  assert.equal((await patchCo({ id: other.id, industry: LEGACY })).body.error, "bad_industry", "別の会社を旧データに変えられない");
+  const csv = await csvImport({ fileName: "x.csv", rows: [{ row: 2, name: "CSV社", industry: LEGACY }], commit: false });
+  assert.equal(csv.body.results[0].status, "error", "CSVでも要修正");
+});
+
 console.log("\n=== CSV（/api/sales/companies/export） ===\n");
 
 const csvLines = (r) => String(r.body).replace(/^﻿/, "").split("\r\n").filter(Boolean);

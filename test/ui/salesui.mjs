@@ -47,7 +47,7 @@ const CSV_COLUMNS = [["name", "企業名", true], ["siteUrl", "企業サイトUR
   ["region", "都道府県"], ["address", "所在地"], ["service", "提案サービス"], ["phone", "電話番号"], ["size", "企業規模"], ["note", "メモ"]]
   .map(([key, label, required]) => ({ key, label, ...(required ? { required } : {}) }));
 
-async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0 } = {}) {
+async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0, extra = [] } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
@@ -69,6 +69,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
     companies.push(company({ id: `m${i}`, name: `企業${String(i).padStart(3, "0")}`, domain: `m${i}.jp`,
       industry: ["士業", "製造"][i % 2], region: ["東京都", "大阪府", "福岡県"][i % 3] }));
   }
+  for (const c of extra) companies.push(company(c));
   const ctlList = { fail: failList, delay: 0 };
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => {
@@ -254,14 +255,20 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       const totalPages = Math.max(1, Math.ceil(total / limit));
       const page = Math.min(Math.max(1, Number(sp.get("page")) || 1), totalPages);
       // 本物（db/101）と同じ：各項目の件数は「その項目以外の条件（検索語を含む）」で数える。並べ替え・ページは関係しない
+      // 地域は都道府県にまとめる（本物は gw_sales_prefecture）
+      const pref = (r) => MASTERS.prefectures.find((p) => String(r || "").startsWith(p)) || null;
       const facet = (k) => {
         const rows = inQ.filter((c) => FK.every((o) => o === k || hit(c, o)));
         const m = new Map();
-        for (const c of rows) if (c[k]) m.set(c[k], (m.get(c[k]) || 0) + 1);
+        for (const c of rows) {
+          const v = k === "region" ? pref(c.region) : c[k];
+          if (v) m.set(v, (m.get(v) || 0) + 1);
+        }
         return [...m].map(([value, n]) => ({ value, n }));
       };
       return send({ today: TODAY, me: "emp-s1", members, page, limit, total, totalPages,
-        companies: listed.slice((page - 1) * limit, page * limit), masters: MASTERS, csvColumns: CSV_COLUMNS,
+        companies: listed.slice((page - 1) * limit, page * limit).map((c) => ({ ...c, region: pref(c.region) || c.region })),
+        masters: MASTERS, csvColumns: CSV_COLUMNS,
         facets: sp.get("facets") === "1" ? { dynamic: true, total, industry: facet("industry"), region: facet("region"),
           service: facet("service"), status: facet("status"), owner: facet("ownerId") } : undefined });
     }
@@ -1117,6 +1124,49 @@ console.log("\n=== 共通マスター：企業追加は選ぶだけ（業種・�
   check(made?.body.region === "鹿児島県" && made.body.industry === "製造", "「鹿児島県」を選んで登録");
   await page.waitForFunction(() => [...document.querySelectorAll("#f-region option")].some((o) => o.textContent === "鹿児島県（1）"));
   check(true, "登録後、地域の絞り込みに鹿児島県（1）が出る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 旧データ（マスター外の業種・市区町村つきの地域）：一覧・絞り込みには出す／新規では選べない ===");
+{
+  const LEGACY = "イベント企画・制作・運営";
+  const { page, calls, errs } = await openAs({ extra: [
+    { id: "old1", name: "株式会社イベントワークス", domain: "event-works.jp", industry: LEGACY, region: "鹿児島県鹿屋市", service: "旧商材A" },
+    { id: "k2", name: "鹿児島製作所", domain: "kago-seisaku.jp", industry: "製造", region: "鹿児島県" },
+  ] });
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.locator("#rows tr[data-id]").first().waitFor();
+  const optTexts = (sel) => page.locator(`${sel} option`).allInnerTexts();
+  const row = page.locator('#rows tr[data-id="old1"]');
+  check(await row.count() === 1 && (await row.innerText()).includes(LEGACY), "旧業種の企業が一覧に出る");
+  check((await row.innerText()).includes("鹿児島県") && !(await row.innerText()).includes("鹿屋市"), "地域は都道府県だけ表示（鹿児島県鹿屋市 → 鹿児島県）");
+  const ind = await optTexts("#f-industry");
+  check(ind.includes(`${LEGACY}（1・旧データ）`), `業種の絞り込みに旧データが件数つきで出る（${ind.join("/")}）`);
+  check(ind.indexOf(`${LEGACY}（1・旧データ）`) > ind.indexOf("その他（0）"), "旧データはマスターの後ろ");
+  check((await optTexts("#f-service")).includes("旧商材A（1・旧データ）"), "商材も同じ（旧データを件数つきで）");
+  const reg = await optTexts("#f-region");
+  check(reg.length === 48 && !reg.some((t) => t.includes("鹿屋市")), "地域は47都道府県だけ（旧値は足さない）");
+  check(reg.includes("鹿児島県（2）"), `鹿児島県鹿屋市は鹿児島県に合算（${reg.find((t) => t.startsWith("鹿児島県"))}）`);
+
+  await page.locator("#f-industry").selectOption(LEGACY);
+  await page.waitForFunction(() => /industry=/.test(location.search) && !document.getElementById("loading"));
+  const ids = await page.locator("#rows tr[data-id]").evaluateAll((trs) => trs.map((t) => t.dataset.id));
+  check(ids.length === 1 && ids[0] === "old1", `選ぶとその企業だけに絞れる（${ids.join(",")}）`);
+  check(calls.filter((c) => c.kind === "list").at(-1).params.industry === LEGACY, "旧データの値のままサーバーへ渡す");
+  check((await page.locator("#f-industry").inputValue()) === LEGACY
+    && (await optTexts("#f-industry")).includes(`${LEGACY}（1・旧データ）`), "選んだ後も旧データの表示のまま");
+  check((await page.locator("#range").innerText()).trim() === "1–1 / 1件", "件数も一致");
+
+  // 新規追加では旧値を選べない（業種・地域・提案サービスはマスターだけ）
+  await page.goto(`${BASE}/sales/companies.html?new=1`);
+  await page.locator("#q-url").waitFor();
+  const qi = await page.locator("#q-industry option").evaluateAll((os) => os.map((o) => o.value));
+  const qs = await page.locator("#q-service option").evaluateAll((os) => os.map((o) => o.value));
+  const qr = await page.locator("#q-region option").evaluateAll((os) => os.map((o) => o.value));
+  check(!qi.includes(LEGACY) && qi.length === 7, `新規の業種に旧データは出ない（${qi.filter(Boolean).join("/")}）`);
+  check(!qs.includes("旧商材A") && qs.length === 7, "新規の提案サービスに旧データは出ない");
+  check(!qr.some((v) => v.includes("鹿屋市")) && qr.length === 48, "新規の地域は47都道府県だけ");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
