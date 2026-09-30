@@ -77,6 +77,7 @@
     .ts-days input, .ts-days select { margin:0; width:100%; box-sizing:border-box; font:inherit; font-size:12.5px; padding:5px 6px; border:1px solid #d8dae2; border-radius:6px; background:#fff; }
     .ts-days select { min-width:76px; }
     .ts-days input.t { width:64px; text-align:center; font-variant-numeric:tabular-nums; }
+    .ts-days tr[data-kind="off"] input::placeholder { color:transparent; }   /* 休みの日には、時刻の例（9:00 など）を出さない */
     .ts-days input:disabled, .ts-days select:disabled { background:#f6f6f2; color:#4a5068; border-color:#efefeb; }
     .ts-days input[aria-invalid="true"] { border-color:#c0392b; background:#fdecea; }
     .ts-days td.w { white-space:nowrap; font-weight:700; font-variant-numeric:tabular-nums; color:#1b2440; padding-top:9px; }
@@ -432,7 +433,7 @@
     const wd = wday(x.workDate);
     const worked = x.kind === "off" ? "休み" : x.worked != null ? clock(x.worked) : "—";
     const inv = (f) => (state.errors[x.workDate] && state.errors[x.workDate].__f === f ? ' aria-invalid="true"' : "");
-    return `<tr data-date="${esc(x.workDate)}" class="${rowClass(x)}">
+    return `<tr data-date="${esc(x.workDate)}" data-kind="${esc(x.kind || "")}" class="${rowClass(x)}">
       <td class="dt ${wd === 6 ? "sat" : wd === 0 ? "sun" : ""}" data-label="日付">${esc(md(x.workDate))}<small>(${WD[wd]})</small></td>
       <td data-label="区分"><select data-f="kind" aria-label="${esc(md(x.workDate))} 区分"${dis}>
         <option value=""${x.kind == null ? " selected" : ""}>未確認</option>
@@ -465,6 +466,7 @@
       const tr = document.querySelector(`#dayrows tr[data-date="${x.workDate}"]`);
       if (!tr) continue;
       tr.className = rowClass(x);
+      tr.dataset.kind = x.kind || "";
       const set = (f, v) => { const i = tr.querySelector(`[data-f="${f}"]`); if (i && document.activeElement !== i) i.value = v; };
       set("kind", x.kind || ""); set("start", clock(x.startMin)); set("end", clock(x.endMin)); set("break", brk(x.breakMin)); set("note", x.note || "");
       tr.querySelector("td.w").innerHTML = `${esc(x.kind === "off" ? "休み" : x.worked != null ? clock(x.worked) : "—")}${x.sheetWorkedMin != null ? `<small>表 ${esc(clock(x.sheetWorkedMin))}</small>` : ""}`;
