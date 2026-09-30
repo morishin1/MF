@@ -78,7 +78,7 @@ export const schema = {
   },
 };
 
-// ---- RLS の再現（db/099・100・101〜103）-----------------------------------------
+// ---- RLS の再現（db/099・100・105〜107）-----------------------------------------
 //   既存の4表は、既存ポリシー（is_tenant_staff＝会計の管理者）＋ db/100 の Office 権限の読み取り。
 //   新しい4表は、Office 権限（経営者・責任者・経理）の読み取りだけ。名簿は会計の管理者だけ
 const LEGACY = ["gw_site_contracts", "gw_billing_progress", "gw_submissions", "gw_partner_companies"];

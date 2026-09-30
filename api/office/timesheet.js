@@ -53,7 +53,7 @@ import {
 } from "../../lib/office-timesheet.js";
 
 const BUCKET = "billing-submissions";
-const SQL = "db/101_office_timesheet_base.sql・db/102_office_contract_terms.sql・db/103_office_timesheets.sql";
+const SQL = "db/105_office_timesheet_base.sql・db/106_office_contract_terms.sql・db/107_office_timesheets.sql";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EXT = { pdf: "pdf", jpeg: "jpg", png: "png" };
 const MIME_EXT = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };

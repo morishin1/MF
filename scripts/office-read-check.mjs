@@ -7,6 +7,12 @@
 //
 // ■ 使い方
 //   ANTHROPIC_API_KEY=sk-ant-... node scripts/office-read-check.mjs <勤務表.pdf|.jpg|.png> [--month 2026-10]
+//                                   [--expect 正解.json] [--json 結果.json]
+//
+//   ・--expect … 正解（scripts/office-sample-timesheet.mjs が作る expected.json）と突き合わせる。
+//                「勤務表に書かれているとおり」（printed）と比べて、一致・読み落とし・誤読・推測を数える。
+//                推測（書かれていない・読めない所を AI が埋めた）は 0 でなければならない
+//   ・--json   … 読取の結果（画面が使う日別データ・評価・突き合わせ）を JSON で書き出す。保存先は指定した所だけ
 //
 //   ・対応するのは PDF・JPEG・PNG だけ（外部提出フォームと同じ）。それ以外は、読まずに断る
 //   ・モデルは lib/claude.js の MODEL（環境変数 ANTHROPIC_MODEL で変えられる。本番と同じ設定で試すこと）
@@ -28,17 +34,93 @@ import { formatClock, formatHours } from "../lib/office-time.js";
 
 const pad = (n) => String(n).padStart(2, "0");
 
+/** 値つきの引数（--name 値）を取り出す。見つからなければ undefined。args は破壊的に縮める */
+function takeOpt(args, name) {
+  const i = args.indexOf(name);
+  if (i < 0) return undefined;
+  const v = args[i + 1] ?? "";
+  args.splice(i, 2);
+  return v;
+}
+
+/**
+ * AI が返した日別（readTimesheet の days）が、そのまま DB（gw_timesheet_days）に入り、画面が評価できる形か。
+ * db/107_office_timesheets.sql の check 制約と同じ範囲を確かめる。違反があれば、その内容を返す
+ */
+export function dbShapeProblems(days) {
+  const bad = [];
+  const isInt = (v) => Number.isInteger(v);
+  for (const d of days) {
+    const at = d.workDate;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(at))) bad.push(`${at}: 日付の形`);
+    if (d.kind !== null && d.kind !== "work" && d.kind !== "off") bad.push(`${at}: kind=${d.kind}`);
+    const rng = [["startMin", d.startMin, 0, 1439], ["endMin", d.endMin, 0, 2879], ["breakMin", d.breakMin, 0, 1440], ["sheetWorkedMin", d.sheetWorkedMin, 0, 1440]];
+    for (const [n, v, lo, hi] of rng) if (v !== null && !(isInt(v) && v >= lo && v <= hi)) bad.push(`${at}: ${n}=${v}（${lo}〜${hi}の整数のみ）`);
+    if (d.confidence !== null && !["high", "mid", "low"].includes(d.confidence)) bad.push(`${at}: confidence=${d.confidence}`);
+    if (!Array.isArray(d.flags)) bad.push(`${at}: flags が配列でない`);
+  }
+  return bad;
+}
+
+const FIELDS = [["kind", "区分", (d) => d.kind, (p) => p.kind], ["start", "開始", (d) => d.startMin, (p) => p.start],
+  ["end", "終了", (d) => d.endMin, (p) => p.end], ["break", "休憩", (d) => d.breakMin, (p) => p.break], ["worked", "実働", (d) => d.sheetWorkedMin, (p) => p.worked]];
+
+/**
+ * AI の読取を、正解（expected.json の printed＝勤務表に書かれているとおり）と比べる。
+ *   match   … 同じ
+ *   missed  … 書かれているのに、AI が空（読み落とし）
+ *   wrong   … 書かれているのと違う値（誤読）
+ *   guessed … 書かれていない・読めない所（printed が空）に、AI が値を入れた（推測。0 でなければならない）
+ * 「休み」の日の開始・終了などは、どちらも空なら一致。夜間の終了などは endAccept のどちらでも一致
+ */
+export function compareWithExpected(days, expected) {
+  const byDate = new Map(days.map((d) => [d.workDate, d]));
+  const tally = { match: 0, missed: 0, wrong: 0, guessed: 0 };
+  const items = [];
+  for (const e of expected.days) {
+    const d = byDate.get(e.date);
+    for (const [key, label, pick, want] of FIELDS) {
+      const got = d ? pick(d) : null;
+      const exp = want(e.printed);
+      let result;
+      if (exp === null || exp === undefined) result = got === null || got === undefined ? "match" : "guessed";
+      else if (got === null || got === undefined) result = "missed";
+      else if (got === exp || (key === "end" && Array.isArray(e.endAccept) && e.endAccept.includes(got))) result = "match";
+      else result = "wrong";
+      tally[result]++;
+      if (result !== "match") items.push({ date: e.date, field: label, expected: exp ?? null, got: got ?? null, result });
+    }
+  }
+  const total = Object.values(tally).reduce((a, b) => a + b, 0);
+  return { tally, total, items };
+}
+
+/** 突き合わせの結果を、人が読む形にする（分は h:mm） */
+function showCompare(cmp, out) {
+  const v = (field, x) => (x == null ? "（空）" : field === "区分" ? ({ work: "勤務", off: "休み" }[x] || x) : formatClock(x));
+  const { tally, total } = cmp;
+  out(`\n■ 正解との突き合わせ（勤務表に書かれているとおり・全${total}項目）`);
+  out(`  一致 ${tally.match} ／ 読み落とし ${tally.missed} ／ 誤読 ${tally.wrong} ／ 推測（書かれていない所を埋めた）${tally.guessed}${tally.guessed ? "  ← 0 であるべきです" : ""}`);
+  for (const i of cmp.items) out(`  ${{ missed: "読み落とし", wrong: "誤読", guessed: "推測" }[i.result]}  ${i.date.slice(5)} ${i.field}：正解 ${v(i.field, i.expected)} → AI ${v(i.field, i.got)}`);
+}
+
 /** 引数と環境から、実行する。out は出力先（テストで差し替える）。終了コードを返す */
 export async function main(argv, { env = process.env, out = (s) => console.log(s), client = null, now = () => Date.now() } = {}) {
   const args = argv.slice();
-  const mi = args.indexOf("--month");
-  let month = new Date(now() + 9 * 3600000).toISOString().slice(0, 7);
-  if (mi >= 0) { month = args[mi + 1] || ""; args.splice(mi, 2); }
+  const monthOpt = takeOpt(args, "--month");
+  const expectPath = takeOpt(args, "--expect");
+  const jsonPath = takeOpt(args, "--json");
+  let month = monthOpt ?? new Date(now() + 9 * 3600000).toISOString().slice(0, 7);
   const file = args[0];
 
-  if (!file) { out("使い方: ANTHROPIC_API_KEY=... node scripts/office-read-check.mjs <勤務表.pdf|.jpg|.png> [--month YYYY-MM]"); return 2; }
+  if (!file) { out("使い方: ANTHROPIC_API_KEY=... node scripts/office-read-check.mjs <勤務表.pdf|.jpg|.png> [--month YYYY-MM] [--expect 正解.json] [--json 結果.json]"); return 2; }
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) { out(`--month は YYYY-MM で指定してください（いま「${month}」）`); return 2; }
   if (!fs.existsSync(file)) { out(`ファイルが見つかりません：${file}`); return 2; }
+  let expected = null;
+  if (expectPath !== undefined) {
+    try { expected = JSON.parse(fs.readFileSync(expectPath, "utf8")); } catch (e) { out(`--expect のファイルを読めません：${expectPath}（${e.code || e.message}）`); return 2; }
+    if (!Array.isArray(expected?.days)) { out(`--expect のファイルの形が違います：${expectPath}（days が必要です）`); return 2; }
+  }
   if (!client && !env.ANTHROPIC_API_KEY) { out("ANTHROPIC_API_KEY が設定されていません。本番と同じキーで試してください。"); return 2; }
 
   const buffer = fs.readFileSync(file);
@@ -52,6 +134,7 @@ export async function main(argv, { env = process.env, out = (s) => console.log(s
   if (!r.ok) {
     out(`\n✘ 読み取れませんでした（${sec}秒）：${r.code}\n  ${r.message}`);
     if (r.detail) out(`  （API の返答：${r.detail}）`);
+    if (jsonPath) writeJson(jsonPath, { ok: false, month, model: MODEL, elapsedSec: Number(sec), code: r.code, message: r.message }, out);
     return 1;
   }
 
@@ -75,8 +158,32 @@ export async function main(argv, { env = process.env, out = (s) => console.log(s
   out(`\n合計 ${formatHours(s.totalMinutes)}h（稼働 ${s.workDays}日）`);
   out(`人が見る量：入力が必要な日 ${s.unresolvedCount}日 ／ 要確認の日 ${s.reviewCount}日 ／ 問題のない日 ${ev.days.length - ev.days.filter((d) => d.blocking || d.needsReview).length}日（全${ev.days.length}日）`);
   out(`勤務表の合計との照合：${{ match: "一致", mismatch: `差あり（計算−表 ${formatClock(Math.abs(s.totalCheck.diffMinutes || 0))}）`, incomplete: "入力が必要な日があるので、まだ照合できない", none: "合計の記載なし" }[s.totalCheck.status]}`);
+
+  // 画面（確認画面）が使える形か：DB の範囲に収まり、評価（実働・要確認の印）が計算できたか
+  const problems = dbShapeProblems(r.days);
+  out(`画面での利用：${problems.length ? `✘ DB に入らない値があります（${problems.length}件）\n  ${problems.join("\n  ")}` : "✔ 日別データはそのまま DB に入る形です（範囲内・評価も計算できました）"}`);
+
+  let cmp = null;
+  if (expected) {
+    cmp = compareWithExpected(r.days, expected);
+    showCompare(cmp, out);
+  }
+  if (jsonPath) {
+    writeJson(jsonPath, {
+      ok: true, month, model: r.model, elapsedSec: Number(sec), usage: r.usage, sheet: r.sheet, warnings: r.warnings,
+      days: r.days, evaluation: { summary: ev.summary, days: ev.days.map((d) => ({ workDate: d.workDate, worked: d.worked, blocking: d.blocking, needsReview: d.needsReview, flags: d.flags })) },
+      dbShapeProblems: problems, comparison: cmp,
+    }, out);
+  }
   out("\n※ 読めない所は空のまま出ています（推測で埋めない）。実際の勤務表と見比べて、誤読・見落としがどれだけあるかを確かめてください。");
-  return 0;
+  return problems.length || (cmp && cmp.tally.guessed > 0) ? 1 : 0;
+}
+
+// 結果を、指定された1か所にだけ書く（データベースにも保管庫にも書かない）
+function writeJson(file, obj, out) {
+  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(obj, null, 2) + "\n");
+  out(`結果の JSON を書き出しました：${file}`);
 }
 const brk = (m) => (m == null ? "" : `${Math.floor(m / 60)}:${pad(m % 60)}`);
 

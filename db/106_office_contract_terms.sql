@@ -1,5 +1,5 @@
 -- =============================================================================
--- 102: 契約条件（単価・精算条件）— gw_site_contract_terms
+-- 106: 契約条件（単価・精算条件）— gw_site_contract_terms
 --
 -- ■ なぜ新しい表か（gw_site_contracts.unit_price は使わない）
 --   gw_site_contracts.unit_price / settlement_condition は、いま入っている値の意味が確定していない
@@ -33,7 +33,7 @@
 --   gw_is_hr（人事）・会計側の管理者には読ませない。
 --
 -- ■ 適用の順番（重要）
---   099 → 100 → 101 → この 102 → 103 → アプリのデプロイ。
+--   099 → 100 → 105 → この 106 → 107 → アプリのデプロイ。
 --
 -- 実行方法: Supabase の SQL Editor にこのファイル全体を貼って Run（べき等。2回流してもよい）
 -- 前提: 076_site_contracts.sql、099_access_hr_office.sql（gw_is_office）
@@ -88,7 +88,7 @@ create table if not exists public.gw_site_contract_terms (
 
 comment on table public.gw_site_contract_terms is
   '現場契約ごとの契約条件（期間つき）。売上単価・仕入単価・精算幅・超過／控除単価・丸め。'
-  'gw_site_contracts.unit_price は意味が未確定のため使わない（db/102）';
+  'gw_site_contracts.unit_price は意味が未確定のため使わない（db/106）';
 comment on column public.gw_site_contract_terms.sales_unit_price is
   '客先への売上単価（月額なら月の単価、時給なら1時間あたり）';
 comment on column public.gw_site_contract_terms.purchase_unit_price is

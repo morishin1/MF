@@ -45,14 +45,14 @@ const PROGRESS_FIELDS = "id, employee_id, site_contract_id, "
 const SUBMISSION_FIELDS = "id, employee_id, site_contract_id, kind, file_name, submitted_at";
 const EMPLOYEE_FIELDS = "id, display_name, department, employee_kind, partner_company_id, status";
 
-// Phase 3（db/101〜103）。未適用でも、Phase 2 の一覧は出す
+// Phase 3（db/105〜107）。未適用でも、Phase 2 の一覧は出す
 const SHEET_FIELDS = "id, employee_id, site_contract_id, submission_id, status, read_state, read_warnings, "
   + "work_days, unresolved_count, flagged_count, total_minutes";
 const SHEET_FILE_FIELDS = "id, employee_id, site_contract_id, target_month, submitted_at, sha256";
 const TERMS_FIELDS = "id, site_contract_id, valid_from, valid_to, pricing_type, sales_unit_price, purchase_unit_price, "
   + "settlement_mode, settle_min_minutes, settle_max_minutes, settle_unit_minutes, rounding_mode, rounding_scope, "
   + "over_rate_per_hour, under_rate_per_hour, prorate, amount_rounding";
-const PHASE3_SQL = "db/101_office_timesheet_base.sql・db/102_office_contract_terms.sql・db/103_office_timesheets.sql";
+const PHASE3_SQL = "db/105_office_timesheet_base.sql・db/106_office_contract_terms.sql・db/107_office_timesheets.sql";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);

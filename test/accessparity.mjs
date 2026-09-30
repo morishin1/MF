@@ -182,11 +182,11 @@ console.log("\n— DB の関数も同じ役割 —");
   check(!/for (all|insert|update|delete)/i.test(office100), "db/100 は書き込みのポリシーを足さない（読み取りだけ）");
   check(!/gw_is_hr|is_tenant_staff|gw_is_recruiting/.test(office100), "db/100 は人事・会計の管理者に広げない（方針A）");
 
-  // Phase 3 の新しい表（101〜103）：読み取りだけを Office 権限に絞る。書き込みは API（service_role）だけ
+  // Phase 3 の新しい表（105〜107）：読み取りだけを Office 権限に絞る。書き込みは API（service_role）だけ
   const phase3 = {
-    "db/101_office_timesheet_base.sql": ["gw_office_events"],
-    "db/102_office_contract_terms.sql": ["gw_site_contract_terms"],
-    "db/103_office_timesheets.sql": ["gw_timesheets", "gw_timesheet_days"],
+    "db/105_office_timesheet_base.sql": ["gw_office_events"],
+    "db/106_office_contract_terms.sql": ["gw_site_contract_terms"],
+    "db/107_office_timesheets.sql": ["gw_timesheets", "gw_timesheet_days"],
   };
   for (const [file, tables] of Object.entries(phase3)) {
     // コメント（「--」と「comment on … '説明文';」）は SQL の実体ではないので外して見る

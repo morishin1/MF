@@ -539,14 +539,14 @@ await ok("差し戻し中は、再提出を待つ表示（勤務表待ち）。�
   assert.equal(pp.stage, "timesheet");
   assert.match(pp.action.text, /再提出を待っています/);
 });
-await ok("Phase 3 の表が未作成（db/101〜103 未適用）でも、Phase 2 の一覧は出す。phase3.ready=false と案内", async () => {
+await ok("Phase 3 の表が未作成（db/105〜107 未適用）でも、Phase 2 の一覧は出す。phase3.ready=false と案内", async () => {
   for (const t of ["gw_timesheets", "gw_site_contract_terms"]) {
     P3(); db.missing = t;
     const r = await list("2026-09");
     assert.equal(r.statusCode, 200, t);
     assert.equal(r.body.rows.length, 2);
     assert.equal(r.body.phase3.ready, false);
-    assert.match(r.body.phase3.message, /db\/10[123]_/);
+    assert.match(r.body.phase3.message, /db\/10[567]_/);
     assert.equal(r.body.notReady, undefined);
     assert.equal(rowOf(r, "田中 太郎").cols.work.label, "確認済", "印だけの、従来の表示");
     assert.equal(rowOf(r, "田中 太郎").sheetInfo, null);

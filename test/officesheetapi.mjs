@@ -206,7 +206,7 @@ await ok("Phase 3 の表が未作成なら 503 not_ready（SQL の案内つき�
   const r = await get();
   assert.equal(r.statusCode, 503);
   assert.equal(r.body.error, "not_ready");
-  assert.match(r.body.message, /db\/103_office_timesheets\.sql/);
+  assert.match(r.body.message, /db\/107_office_timesheets\.sql/);
 });
 
 console.log("\n— ファイルの受け付け（upload → attach） —");

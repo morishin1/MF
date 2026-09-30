@@ -469,9 +469,9 @@ console.log("\n=== 一覧（/office）：勤務表の状態・稼働時間・リ
   await page.close();
 
   // Phase 3 が未適用なら、案内を出し、従来の表示のまま
-  const legacy = await open("/office/index.html?month=2026-09", { list: (m) => ({ ...list(m), phase3: { ready: false, message: "管理者に db/101 の実行を依頼してください" } }) });
+  const legacy = await open("/office/index.html?month=2026-09", { list: (m) => ({ ...list(m), phase3: { ready: false, message: "管理者に db/105 の実行を依頼してください" } }) });
   await legacy.page.waitForSelector("#rows tr[data-id]");
-  check((await legacy.page.locator("#banner").innerText()).includes("db/101"), "未適用なら、理由を出す");
+  check((await legacy.page.locator("#banner").innerText()).includes("db/105"), "未適用なら、理由を出す");
   check(await legacy.page.locator('a:has-text("勤務表を確認・確定")').count() === 0, "未適用なら、勤務表の確認へのリンクは出さない");
   await legacy.page.close();
 }

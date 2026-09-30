@@ -228,12 +228,12 @@ await ok("ログインした人の権限で書こうとすると、RLS が止め
   assert.equal(w.error?.code, "42501");
   assert.equal(rows("gw_site_contract_terms")[0].sales_unit_price, 700000);
 });
-await ok("表が未作成なら 503 not_ready（db/102 の案内）", async () => {
+await ok("表が未作成なら 503 not_ready（db/106 の案内）", async () => {
   setup();
   mem.state.missing = "gw_site_contract_terms";
   const r = await list();
   assert.equal(r.statusCode, 503);
-  assert.match(r.body.message, /db\/102_office_contract_terms\.sql/);
+  assert.match(r.body.message, /db\/106_office_contract_terms\.sql/);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

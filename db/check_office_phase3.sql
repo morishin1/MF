@@ -1,16 +1,17 @@
 -- =============================================================================
 -- /office Phase 3（勤務表 → 稼働時間の確定）の、適用前・適用後のチェック
+--   099・100 は本番適用済み。これから流すのは 105・106・107 の3本
 --
 -- Supabase の SQL Editor に貼って Run するだけ。**何も書き換えない（読むだけ）**。
 -- 適用の前に1回、適用の途中（1本流すごと）に1回、適用のあとに1回、流してください。
 --
 -- 見るもの
---   A. 前提（099〜103 を流すのに要るもの）… ❌ があれば、そこが先。流すと途中で止まる
---   B. 099〜103 の状態                     … 未適用／適用済み／⚠ 半分だけ（もう一度流す）
+--   A. 前提（105〜107 を流すのに要るもの。099・100 を含む）… ❌ があれば、そこが先。流すと途中で止まる
+--   B. 105〜107 の状態                     … 未適用／適用済み／⚠ 半分だけ（もう一度流す）
 --   C. 権限の安全確認                       … 新しい表は「読み取りだけ・Office 権限」になっているか
 --   D. 既存データへの影響                   … 件数の目安（適用の前後で、同じであるべき数字）
 --
--- 適用の順番：099 → 100 → 101 → 102 → 103 → アプリのデプロイ
+-- 適用の順番：（099 → 100 は適用済み）→ 105 → 106 → 107 → アプリのデプロイ
 --   （どのファイルも if not exists / create or replace で書いてあり、2回流しても壊れません）
 --
 -- 読み方
@@ -64,7 +65,7 @@ pre(seq, area, title, ok, marker, todo) as (
            and pg_get_functiondef(to_regprocedure('public.gw_is_office(uuid)')) like '%finance%'
            and pg_get_functiondef(to_regprocedure('public.gw_is_office(uuid)')) not like '%is_tenant_staff%'
            and pg_get_functiondef(to_regprocedure('public.gw_is_office(uuid)')) not like '%gw_is_hr%', false),
-      'gw_is_office', 'db/099_access_hr_office.sql を流す（101〜103 の RLS が、この関数を使います）'),
+      'gw_is_office', 'db/099_access_hr_office.sql を流す（105〜107 の RLS が、この関数を使います）'),
   (17, 'A. 前提', '100：経営の判定 gw_is_keiei(uuid)（経営者だけ）',
       to_regprocedure('public.gw_is_keiei(uuid)') is not null, 'gw_is_keiei', 'db/100_office_access.sql を流す'),
   (18, 'A. 前提', '100：既存4表に、Office 権限の読み取りポリシーがある',
@@ -75,28 +76,28 @@ pre(seq, area, title, ok, marker, todo) as (
       '*_office_select ×4', 'db/100_office_access.sql を流す（無いと、経理・責任者の /office 一覧が空になります）')
 ),
 
--- ---- B. 101〜103 の状態 -----------------------------------------------------------
+-- ---- B. 105〜107 の状態 -----------------------------------------------------------
 parts(mig, kind, obj, col) as (
   values
-  ('101', 'table',  'gw_office_events',       null),
-  ('101', 'policy', 'gw_office_events',       'gw_office_events_office_select'),
-  ('101', 'column', 'gw_submissions',         'sha256'),
-  ('101', 'column', 'gw_submissions',         'verified_at'),
-  ('101', 'column', 'gw_submissions',         'uploaded_by'),
-  ('101', 'column', 'gw_submissions',         'source'),
-  ('101', 'index',  'idx_gw_submissions_sha256', null),
-  ('102', 'table',  'gw_site_contract_terms', null),
-  ('102', 'policy', 'gw_site_contract_terms', 'gw_site_contract_terms_office_select'),
-  ('102', 'column', 'gw_site_contract_terms', 'sales_unit_price'),
-  ('102', 'column', 'gw_site_contract_terms', 'purchase_unit_price'),
-  ('103', 'table',  'gw_timesheets',          null),
-  ('103', 'table',  'gw_timesheet_days',      null),
-  ('103', 'policy', 'gw_timesheets',          'gw_timesheets_office_select'),
-  ('103', 'policy', 'gw_timesheet_days',      'gw_timesheet_days_office_select'),
-  ('103', 'column', 'gw_timesheets',          'read_warnings'),
-  ('103', 'column', 'gw_timesheets',          'sheet_employee_name'),
-  ('103', 'column', 'gw_timesheets',          'review_seconds'),
-  ('103', 'column', 'gw_timesheet_days',      'ai_flags')
+  ('105', 'table',  'gw_office_events',       null),
+  ('105', 'policy', 'gw_office_events',       'gw_office_events_office_select'),
+  ('105', 'column', 'gw_submissions',         'sha256'),
+  ('105', 'column', 'gw_submissions',         'verified_at'),
+  ('105', 'column', 'gw_submissions',         'uploaded_by'),
+  ('105', 'column', 'gw_submissions',         'source'),
+  ('105', 'index',  'idx_gw_submissions_sha256', null),
+  ('106', 'table',  'gw_site_contract_terms', null),
+  ('106', 'policy', 'gw_site_contract_terms', 'gw_site_contract_terms_office_select'),
+  ('106', 'column', 'gw_site_contract_terms', 'sales_unit_price'),
+  ('106', 'column', 'gw_site_contract_terms', 'purchase_unit_price'),
+  ('107', 'table',  'gw_timesheets',          null),
+  ('107', 'table',  'gw_timesheet_days',      null),
+  ('107', 'policy', 'gw_timesheets',          'gw_timesheets_office_select'),
+  ('107', 'policy', 'gw_timesheet_days',      'gw_timesheet_days_office_select'),
+  ('107', 'column', 'gw_timesheets',          'read_warnings'),
+  ('107', 'column', 'gw_timesheets',          'sheet_employee_name'),
+  ('107', 'column', 'gw_timesheets',          'review_seconds'),
+  ('107', 'column', 'gw_timesheet_days',      'ai_flags')
 ),
 part_state as (
   select p.mig, p.kind, p.obj, p.col,
@@ -121,9 +122,9 @@ mig_state as (
 b(seq, area, title, ok, marker, todo) as (
   select 100 + row_number() over (order by mig)::int, 'B. 適用状態',
          case mig
-           when '101' then '101：操作履歴（gw_office_events）・提出ファイルの確認列（sha256 など）'
-           when '102' then '102：契約条件（gw_site_contract_terms）'
-           when '103' then '103：勤務表・日別データ（gw_timesheets / gw_timesheet_days）'
+           when '105' then '105：操作履歴（gw_office_events）・提出ファイルの確認列（sha256 など）'
+           when '106' then '106：契約条件（gw_site_contract_terms）'
+           when '107' then '107：勤務表・日別データ（gw_timesheets / gw_timesheet_days）'
          end,
          all_ok,
          case when all_ok then '全部そろっている'
@@ -135,13 +136,13 @@ b(seq, area, title, ok, marker, todo) as (
     from mig_state
 ),
 
--- ---- C. 権限の安全確認（101〜103 を流したあとに意味がある）----------------------------
+-- ---- C. 権限の安全確認（105〜107 を流したあとに意味がある）----------------------------
 new_tables(t) as (values ('gw_office_events'), ('gw_site_contract_terms'), ('gw_timesheets'), ('gw_timesheet_days')),
 c(seq, area, title, ok, marker, todo) as (
   select 200, 'C. 権限', '新しい4表は RLS が有効',
          (select count(*) from new_tables n join pg_class k on k.oid = to_regclass('public.' || n.t) where k.relrowsecurity) = 4,
          (select count(*) from new_tables n join pg_class k on k.oid = to_regclass('public.' || n.t) where k.relrowsecurity)::text || ' / 4 表',
-         '101〜103 を流す（流し済みなら、db/ の該当ファイルをもう一度流す）'
+         '105〜107 を流す（流し済みなら、db/ の該当ファイルをもう一度流す）'
   union all
   select 201, 'C. 権限', '新しい4表のポリシーは、読み取り（SELECT）だけ。書き込みのポリシーは無い',
          (select count(*) from pg_policies where schemaname = 'public' and tablename in (select t from new_tables)) = 4
@@ -187,10 +188,10 @@ d(seq, area, title, ok, marker, todo) as (
               else (xpath('/row/n/text()', query_to_xml('select count(*) as n from public.gw_submissions', false, true, '')))[1]::text || ' 件' end,
          'ℹ 適用の前後で同じ数になる'
   union all
-  select 303, 'D. 既存データ', '提出ファイルのうち、sha256 が空（未確認）の件数（101 のあと、既存の行はすべて空）', true,
+  select 303, 'D. 既存データ', '提出ファイルのうち、sha256 が空（未確認）の件数（105 のあと、既存の行はすべて空）', true,
          case when to_regclass('public.gw_submissions') is null then '（表なし）'
               when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'gw_submissions' and column_name = 'sha256')
-                then '（101 の前）'
+                then '（105 の前）'
               else (xpath('/row/n/text()', query_to_xml('select count(*) as n from public.gw_submissions where sha256 is null', false, true, '')))[1]::text || ' 件' end,
          'ℹ 画面を開く・AI読取のときに、中身を確かめて埋まっていく'
   union all

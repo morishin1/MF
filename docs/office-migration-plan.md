@@ -1,6 +1,8 @@
 # /office（月末月初業務管理）migration 案と Phase 3 の設計
 
-**どの SQL も、まだ本番に適用していません。** `db/099`〜`db/103` は作成済み（未適用）、104 以降は案です。
+**本番適用済み**：`db/099_access_hr_office.sql`・`db/100_office_access.sql`。
+**これから適用（本番未適用）**：`db/105_office_timesheet_base.sql`・`db/106_office_contract_terms.sql`・`db/107_office_timesheets.sql`（Phase 3）。108 以降は案です。
+（Phase 3 は当初 101〜103 で作ったが、main と他の PR が 099〜104 を使っていたため、未使用の 105〜107 に採番し直した。099・100 は本番適用済みなので変えていない）
 要件は `office_monthly_operations_requirements.md`、調査結果は Phase 1 のレポートにあります。
 **適用前のチェックは `db/check_office_phase3.sql`（読むだけ）、本番投入前の手順・1人分のE2E・後始末は `docs/office-phase3-runbook.md`** にあります。
 
@@ -48,23 +50,26 @@
 
 | 番号 | Phase | 内容 | 状態 |
 |---|---|---|---|
-| 099 | 0 | `gw_is_recruiting` に責任者を追加、`gw_is_office` を新設 | 作成済み・未適用 |
-| 100 | 2 | `gw_is_keiei` を新設。`/office` 一覧が読む4表に、`gw_is_office` の**読み取りだけ**のポリシーを足す | 作成済み・未適用 |
-| 101 | 3 | `gw_office_events`（履歴）、`gw_submissions` に `sha256`・`verified_at`・`uploaded_by`・`source` | 作成済み・未適用 |
-| 102 | 3 | `gw_site_contract_terms`（契約条件。有効期間つき） | 作成済み・未適用 |
-| 103 | 3 | `gw_timesheets`・`gw_timesheet_days`（勤務表と日別データ） | 作成済み・未適用 |
-| 104 | 5 | 売上請求書（ヘッダ＋明細） | 案（§4） |
-| 105 | 6 | 発注（ヘッダ＋明細）・仕入請求書（ヘッダ＋明細） | 案（§5） |
-| 106 | 7 | 支払 | 案 |
-| 107 | 8 | 月次確定（任意） | 案 |
+| 099 | 0 | `gw_is_recruiting` に責任者を追加、`gw_is_office` を新設 | **本番適用済み** |
+| 100 | 2 | `gw_is_keiei` を新設。`/office` 一覧が読む4表に、`gw_is_office` の**読み取りだけ**のポリシーを足す | **本番適用済み** |
+| 105 | 3 | `gw_office_events`（履歴）、`gw_submissions` に `sha256`・`verified_at`・`uploaded_by`・`source` | 作成済み・**未適用（これから）** |
+| 106 | 3 | `gw_site_contract_terms`（契約条件。有効期間つき） | 作成済み・**未適用（これから）** |
+| 107 | 3 | `gw_timesheets`・`gw_timesheet_days`（勤務表と日別データ） | 作成済み・**未適用（これから）** |
+| 未定 | 5 | 売上請求書（ヘッダ＋明細） | 案（§4）。番号は着手時に、main と他の PR を見て採番する |
+| 未定 | 6 | 発注（ヘッダ＋明細）・仕入請求書（ヘッダ＋明細） | 案（§5） |
+| 未定 | 7 | 支払 | 案 |
+| 未定 | 8 | 月次確定（任意） | 案 |
 
-**適用の順番**：099 → 100 → 101 → 102 → 103 → アプリのデプロイ。**1本流すごとに `db/check_office_phase3.sql` で確認する**（前提が足りないと、途中で止まる）。
+**番号を 105〜107 にした理由**：main と全 OPEN PR（#41・#39・#38・#35 ほか）を調べると、099〜104 が他の PR に使われていた（099 は #39・#35、100 は #39・#38、101 は #39・#41、102〜104 は #39）。105 以降はどこにも使われていない。
+Phase 5 以降の番号は、着手するときに、もう一度 main と OPEN PR を確認して決める。
+
+**適用の順番**：（099 → 100 は適用済み）→ 105 → 106 → 107 → アプリのデプロイ。**1本流すごとに `db/check_office_phase3.sql` で確認する**（前提が足りないと、途中で止まる）。
 
 - 100 を先に流さないと、責任者・経理は `/office` を開けても一覧が空になる（`/api/office` は「権限の設定が未適用」と画面に出す）
-- 101〜103 を流さずにデプロイしても、`/office` の一覧は Phase 2 のまま出る（`phase3.ready = false` と案内を出す）。勤務表の画面・契約条件の画面は、表が無ければ 503 と SQL の案内を返す
-- **検証**：099〜103 を、実際の PostgreSQL 16 で、2回適用（べき等）・制約の拒否（不正な時刻・状態・期間・単価など15件）・ロール別の RLS（経理は読める／人事・一般メンバー・他テナントは読めない／経理でも直接の書き込みは拒否）を確認した
+- 105〜107 を流さずにデプロイしても、`/office` の一覧は Phase 2 のまま出る（`phase3.ready = false` と案内を出す）。勤務表の画面・契約条件の画面は、表が無ければ 503 と SQL の案内を返す
+- **検証**：099・100・105〜107 を、実際の PostgreSQL 16 で、2回適用（べき等）・制約の拒否（不正な時刻・状態・期間・単価など15件）・ロール別の RLS（経理は読める／人事・一般メンバー・他テナントは読めない／経理でも直接の書き込みは拒否）を確認した
 
-## 4. 売上請求書：ヘッダ＋明細。「客先ごとに1枚」に固定しない（104・Phase 5）
+## 4. 売上請求書：ヘッダ＋明細。「客先ごとに1枚」に固定しない（Phase 5）
 
 ```
 売上請求書ヘッダ
@@ -85,7 +90,7 @@
 - 明細の金額は、Phase 3 の精算計算（`lib/office-calc.js` の `settle`）の結果を写す。**自動計算できないもの（日給・日割り・月の途中で条件が変わる・条件未設定）は、明細を作らず「要確認」に戻す**
 - 実メール送信は入れない（P1）。「送付済みにする」＋送付先・送付者・件名・日時の記録のみ
 
-## 5. 発注：ヘッダ＋明細。「1発注書＝1要員」にしない（105・Phase 6）
+## 5. 発注：ヘッダ＋明細。「1発注書＝1要員」にしない（Phase 6）
 
 ```
 発注ヘッダ
@@ -102,8 +107,8 @@
 - 発注額と請求額の差は**保存せず、明細ごと・請求書ごとに計算**して表示する。自動で否認・修正しない。請求書の合計と明細の合計が合わないときは「要確認」（その請求書だけ）
 - **仕入側の精算ルール（BP・外注への支払の、精算幅・超過・控除）は、まだ決まっていない**ので、Phase 3 では計算しない（§8）。単価（`purchase_unit_price`）を持つだけ
 
-支払（106）：`gw_office_payments`。`vendor_invoice_id`（請求書**ヘッダ**に対して1件。要員ごとではない）, `amount`, `scheduled_on`, `status`, `paid_on`, `paid_by`。BP 会社の振込口座は持たない（機微。入れるときに別途設計）。
-月次確定（107）：`gw_office_month_closes`。`gw_month_closings` とは別。
+支払（Phase 7）：`gw_office_payments`。`vendor_invoice_id`（請求書**ヘッダ**に対して1件。要員ごとではない）, `amount`, `scheduled_on`, `status`, `paid_on`, `paid_by`。BP 会社の振込口座は持たない（機微。入れるときに別途設計）。
+月次確定（Phase 8）：`gw_office_month_closes`。`gw_month_closings` とは別。
 
 ## 6. Phase 3：勤務表 → 稼働時間の確定（実装済み）
 
@@ -197,10 +202,10 @@ confirmed（人が「確定する」を押したときだけ）
 
 ### 6.9 テスト
 
-Node：`officetimetest`（33）・`officecalctest`（41）・`officeaitest`（36）・`officetimesheettest`（43）・`officesheetapi`（75）・`officetermsapi`（27）・`officetest`（47）・`officeapi`（52）・`officereadcheck`（7）。
+Node：`officetimetest`（33）・`officecalctest`（41）・`officeaitest`（36）・`officetimesheettest`（43）・`officesheetapi`（75）・`officetermsapi`（27）・`officetest`（47）・`officeapi`（52）・`officereadcheck`（13）。
 UI：`officesheetui`（本物の API ハンドラ＋偽DB＋偽AIにつないで、勤務表の確認・確定・アップロード・契約条件・一覧を通す）、
 **`officee2e`（Phase 3 の完成条件：アップロード → 重複チェック → AI読取 → 左右で確認 → 誤読を修正 → 稼働確定 → 月間稼働時間 → `/office` 一覧が「請求作成待ち」へ進む。外部提出フォーム経由の二重提出、PDF・JPEG・PNG も通す）**。
-実 PostgreSQL 16 での migration 検証（前提なし／099・100 適用済み＋既存データ／101〜103 適用後）は `db/check_office_phase3.sql` と `docs/office-phase3-runbook.md` §1。
+実 PostgreSQL 16 での migration 検証（前提なし／099・100 適用済み＋既存データ／105〜107 適用後）は `db/check_office_phase3.sql` と `docs/office-phase3-runbook.md` §1。
 すべて手計算の期待値。**変異テスト**（コードを壊して、テストが落ちるかを確認）で検出力を確かめた。`test/_memdb.mjs` は、一意制約・NOT NULL・CHECK・RLS（ユーザー権限の書き込みは拒否）・Storage を真似た偽DB。
 
 ## 7. 既存の月初作業（admin-month-start・cron・提出フォーム）への影響
@@ -225,8 +230,8 @@ UI：`officesheetui`（本物の API ハンドラ＋偽DB＋偽AIにつないで
 - 契約行の相手は「所属会社（常駐先）」＝客先と上位会社。BP 会社は契約行ではなく要員にぶら下がる。BP 契約の単価が「客先への売上単価」か「BP 会社への仕入単価」かは、構造からは決まらない
 - 契約によって意味が混在していても、**システムには検出する列が無い**
 
-**したがって**：Phase 3 の計算は `unit_price` を使わない（一覧・確認画面・契約条件の API のどれも select しない。`test/accessparity.mjs` が、101〜103 の SQL が `gw_site_contracts` に触れないことを、`test/officeapi.mjs` などが読まないことを固定している）。
-新しい条件は `sales_unit_price` / `purchase_unit_price`（102）。既存値からの移行は、**実データで意味が特定できたものだけ、後から**行う。
+**したがって**：Phase 3 の計算は `unit_price` を使わない（一覧・確認画面・契約条件の API のどれも select しない。`test/accessparity.mjs` が、105〜107 の SQL が `gw_site_contracts` に触れないことを、`test/officeapi.mjs` などが読まないことを固定している）。
+新しい条件は `sales_unit_price` / `purchase_unit_price`（106）。既存値からの移行は、**実データで意味が特定できたものだけ、後から**行う。
 
 確認のための SQL（Supabase の SQL Editor。読み取りのみ。件数と分布だけで、氏名は出さない）：
 

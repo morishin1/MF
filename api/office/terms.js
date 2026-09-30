@@ -26,7 +26,7 @@ import { isBillingMonth } from "../../lib/billing-progress.js";
 import { jstDate } from "../../lib/timecard.js";
 import { parseTermsInput, normalizeTerms, describeTerms } from "../../lib/office-calc.js";
 
-const SQL = "db/102_office_contract_terms.sql";
+const SQL = "db/106_office_contract_terms.sql";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FIELDS = "id, site_contract_id, valid_from, valid_to, pricing_type, sales_unit_price, purchase_unit_price, "
   + "settlement_mode, settle_min_minutes, settle_max_minutes, settle_unit_minutes, rounding_mode, rounding_scope, "
