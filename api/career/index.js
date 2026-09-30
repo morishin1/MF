@@ -41,7 +41,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { notify } from "../../lib/notify.js";
 import {
   canManageCareer, canDecideCareer, careerSeesAll, inCareerScope,
-  levelsOf, nextLevelOf, progressOf, systemJudgement, cleanResults, nextActionOf, suggestTrack,
+  levelsOf, nextLevelOf, progressOf, systemJudgement, cleanResults, nextActionOf, suggestTrack, selfCheckView,
   REVIEW_RESULT_KEYS, SALARY_DECISION_KEYS, EVIDENCE_TYPE_KEYS, CRITERION_RESULTS, REVIEW_RESULTS,
   SALARY_DECISIONS, EVIDENCE_TYPES, RANGE_NOTE_ADMIN, TIMELINE_NOTE, STARTER,
   flowOf, confirmPending, FLOW_STATES, CONTRACT_DOC_KINDS, OPEN_ORDER_STATUSES,
@@ -294,6 +294,8 @@ async function detail(res, sb, ctx, employeeId) {
   const lastConfirmed = mine.find((r) => r.status === "confirmed") || null;
   const results = lastConfirmed && lastConfirmed.target_level_id === next?.id ? lastConfirmed.criterion_results : [];
   const progress = next ? progressOf(crit, results) : null;
+  // 本人の自己チェック（db/110）。閲覧のみ（ここから書き込む経路は無い。書くのは本人だけ・api/career/me.js）
+  const selfCheck = next && c ? selfCheckView(crit, c.self_check_results, results) : null;
   const today = jstToday();
   const isContract = (r) => !r.doc_kind || CONTRACT_DOC_KINDS.includes(r.doc_kind);
   const openOrders = (orders || []).filter((o) => isContract(o) && OPEN_ORDER_STATUSES.includes(o.status));
@@ -353,6 +355,7 @@ async function detail(res, sb, ctx, employeeId) {
     criteria: crit.map((x) => ({ id: x.id, category: x.category, title: x.title, description: x.description,
       required: x.required !== false, evidenceType: x.evidence_type, requiredLevel: x.required_level })),
     progress,
+    selfCheck,
     currentWage: wage,
     rangeNote: RANGE_NOTE_ADMIN,
     timelineNote: TIMELINE_NOTE,

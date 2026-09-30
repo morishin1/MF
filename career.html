@@ -36,6 +36,20 @@
     .cv-todo .t small { display:block; color:var(--muted); font-size:11.5px; }
     .cv-mark { display:inline-block; width:20px; text-align:center; font-weight:700; }
     .cv-mark.achieved { color:#256b36; } .cv-mark.in_progress { color:#8a5a00; } .cv-mark.not_yet { color:#8a94a6; }
+
+    /* 本人の自己チェック（正式評価とは別。db/110） */
+    .cv-sc-count { font-size:12px; font-weight:700; color:var(--muted); margin:0 0 10px; }
+    .cv-sc-count b { color:var(--primary-dark); font-size:14px; }
+    .cv-sc { list-style:none; padding:0; margin:0; }
+    .cv-sc li { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;
+                padding:10px 0; border-bottom:1px solid var(--border); }
+    .cv-sc li:last-child { border-bottom:none; }
+    .cv-sc label { display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px; cursor:pointer; }
+    .cv-sc input[type="checkbox"] { width:19px; height:19px; margin-top:1px; flex:0 0 auto; cursor:pointer; }
+    .cv-sc .t { font-size:14px; color:var(--primary-dark); }
+    .cv-sc .t small { display:block; color:var(--muted); font-size:11.5px; font-weight:400; }
+    .cv-sc .co { font-size:12px; color:var(--muted); white-space:nowrap; padding-left:29px; }
+    @media (min-width:481px) { .cv-sc .co { padding-left:0; } }
     .cv-cat { margin:10px 0; }
     .cv-cat .h { display:flex; justify-content:space-between; font-size:13.5px; font-weight:600; color:var(--primary-dark); }
     .cv-cat ul { list-style:none; padding:0; margin:4px 0 0; font-size:13px; line-height:1.9; }
@@ -138,7 +152,8 @@
     const cur = d.currentLevel;
     const next = d.nextLevel;
     const p = d.progress;
-    const left = (p?.remaining || []).slice(0, 6);
+    // 「0 / 10」なのに一部しか見えない、という状態を禁止（GWキャリア基準改善 §3）。全件出す
+    const left = p?.remaining || [];
     const dis = PREVIEW ? "disabled" : "";
     return `
       <div class="card cv-ask" id="sec-confirm">
@@ -200,6 +215,43 @@
     } catch (e) { alert(e.hint || e.message || "送れませんでした"); }
   }
 
+  /**
+   * 次のLevelの基準ぜんぶに、本人が自己チェックできるようにする（正式評価とは別）。
+   * 6件などに切り詰めない。チェック・解除ともAPIへ保存し、リロード後も残る
+   */
+  function selfCheckCard() {
+    const sc = data.selfCheck;
+    if (!sc || !sc.total) return "";
+    return `
+      <div class="card" id="sec-selfcheck">
+        <h2><span class="material-symbols-outlined">checklist</span>次のLevelまでの自己チェック</h2>
+        <p class="cv-note" style="margin:0 0 10px;">自分で「できるようになった」と思う項目にチェックしてください。</p>
+        <p class="cv-sc-count">本人自己チェック　<b>${sc.checked} / ${sc.total}</b></p>
+        <ul class="cv-sc">${sc.items.map((i) => `
+          <li>
+            <label><input type="checkbox" ${i.checked ? "checked" : ""} ${PREVIEW ? "disabled" : ""}
+              onchange="toggleSelfCheck('${esc(i.id)}', this.checked, this)">
+              <span class="t">${esc(i.title)}<small>${esc(i.category)}${i.required ? "" : "・加点"}</small></span>
+            </label>
+            <span class="co">会社評価：${esc(i.confirmedLabel)}</span>
+          </li>`).join("")}</ul>
+        <p class="cv-note">※これは本人の自己チェックです。正式なLevel判定は、評価面談で上長が確定します。</p>
+      </div>`;
+  }
+
+  async function toggleSelfCheck(id, checked, input) {
+    if (PREVIEW) return;
+    input.disabled = true;
+    try {
+      await API.myCareerAct({ action: "selfCheck", criterionId: id, checked });
+      await load();
+    } catch (e) {
+      input.checked = !checked;
+      input.disabled = false;
+      alert(e.hint || e.message || "保存できませんでした");
+    }
+  }
+
   function dekiruCard() {
     const h = data.growthHistory || [];
     return `<div class="card" id="sec-dekiru">
@@ -252,7 +304,10 @@
           : `<div class="empty">いまが最上位のLevelです。</div>`}
       </div>
 
-      <!-- 3. 次にやること（最優先） -->
+      <!-- 3. 本人の自己チェック（正式評価とは別。db/110） -->
+      ${next ? selfCheckCard() : ""}
+
+      <!-- 4. 次にやること（最優先） -->
       ${next ? `
       <div class="card" id="sec-todo">
         <h2><span class="material-symbols-outlined">directions_run</span>${remaining.length
