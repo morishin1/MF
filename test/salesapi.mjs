@@ -1628,6 +1628,10 @@ await ok("案件の段階：提案・最終調整で会社は提案、成約は�
   r = await patchDeal({ id, stage: "won" });
   assert.equal(r.statusCode, 400);
   assert.equal(r.body.error, "amount_required");
+  r = await patchDeal({ id, stage: "won", amount: 0 });
+  assert.equal(r.statusCode, 400, "0円の成約は作らない（DB の制約と同じ）");
+  assert.equal(r.body.error, "amount_required");
+  assert.equal(dealRow(id).stage, "negotiation");
   r = await patchDeal({ id, stage: "won", amount: 800000 });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(dealRow(id).won_on, todayJst());
@@ -1702,6 +1706,7 @@ await ok("案件：他テナントのものは見えない・直せない。営�
   db.rows.gw_sales_deals.push({ id: uuid(), tenant_id: "t2", company_id: "c-other", title: "他社", stage: "meeting", amount: 9 });
   const all = await listDeals();
   assert.deepEqual(all.body.deals.map((x) => x.title), ["案件A"]);
+  assert.equal(all.body.deals[0].companyName, "株式会社サンプル", "全体の一覧には会社名もつける");
   const other = db.rows.gw_sales_deals.find((x) => x.tenant_id === "t2");
   assert.equal((await patchDeal({ id: other.id, amount: 1 })).statusCode, 404);
   assert.equal(other.amount, 9);
@@ -1726,6 +1731,16 @@ await ok("企業詳細に案件が出る。案件のある企業は削除でき�
   const r = await bulk({ ids: [c.id], action: "delete" });
   assert.equal(r.body.deleted, 0);
   assert.match(r.body.blocked[0].reasons.join(), /案件あり/);
+});
+
+await ok("成約確率の既定値：DB（db/100 の関数）と画面・API（lib/sales-deals.js）が同じ", async () => {
+  const { DEFAULT_PROBABILITY } = await import(atRoot("lib/sales-deals.js"));
+  const sql = (await import("node:fs")).readFileSync(atRoot("db/100_sales_deals.sql"), "utf8");
+  const fn = sql.slice(sql.indexOf("function public.gw_sales_deal_default_probability"));
+  const inSql = Object.fromEntries([...fn.slice(0, fn.indexOf("$$;")).matchAll(/when '(\w+)'\s+then (\d+)/g)].map((m) => [m[1], Number(m[2])]));
+  for (const [k, v] of Object.entries(DEFAULT_PROBABILITY)) assert.equal(inSql[k], v, `${k}: SQL ${inSql[k]} / JS ${v}`);
+  assert.equal(inSql.won, 100);
+  assert.equal(inSql.lost, 0);
 });
 
 console.log("\n=== 小さな道具 ===\n");

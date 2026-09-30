@@ -1071,7 +1071,7 @@ console.log("\n=== 案件（企業詳細） ===");
   await page.goto(`${BASE}/sales/companies.html?id=c2`);
   await page.waitForSelector("#detail-box .deal-row");
   const row = await page.locator("#detail-box .deal-row").first().innerText();
-  check(/既存案件/.test(row) && /提案/.test(row) && /500,000円/.test(row) && /見込 250,000円（50%）/.test(row), `案件が段階・金額・見込つきで出る（${row.replace(/\s+/g, " ")}）`);
+  check(/既存案件/.test(row) && /提案/.test(row) && /500,000円/.test(row) && /見込受注額 250,000円（50%）/.test(row), `案件が段階・金額・見込つきで出る（${row.replace(/\s+/g, " ")}）`);
 
   // 追加：金額と段階を入れる
   await page.click("text=案件を追加");
@@ -1096,7 +1096,10 @@ console.log("\n=== 案件（企業詳細） ===");
   check(await page.locator("#dl-prob-box").isHidden(), "成約では確率の欄を隠す");
   await page.fill("#dl-amount", "");
   await page.click(".sl-modal-foot >> text=保存");
-  check(/金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "金額なしの成約は送らない");
+  check(/0円より大きい受注額を入れてください/.test(await page.locator("#dl-msg").innerText()), "金額なしの成約は送らない");
+  await page.fill("#dl-amount", "0");
+  await page.click(".sl-modal-foot >> text=保存");
+  check(/0円より大きい受注額を入れてください/.test(await page.locator("#dl-msg").innerText()), "0円の成約も送らない");
   await page.click(".sl-modal-foot >> text=閉じる");
 
   // 2件とも失注 → 「会社も失注にしますか」（はい）→ 会社の更新を送る
@@ -1139,6 +1142,10 @@ console.log("\n=== 分析（上部6マス） ===");
     { id: "d1", companyId: "k3", approachId: "a3", title: "失注案件", stage: "lost", amount: 900000 },
     { id: "d2", companyId: "k4", approachId: "a4", title: "成約案件", stage: "won", amount: 1500000, wonOn: TODAY },
     { id: "d3", companyId: "k1", approachId: "a1", title: "進行中", stage: "proposal", amount: 1000000 },
+    // 期間内にアタックしていない会社の成約（上部の受注額には入る・要因分析には入らない）
+    { id: "d4", companyId: "old", approachId: "a-old", companyName: "昔からの取引先", title: "追加発注", stage: "won", amount: 200000, wonOn: TODAY },
+    // 成約日が期間より前（上部の受注額には入らない）
+    { id: "d5", companyId: "k4", approachId: "a4", title: "去年の成約", stage: "won", amount: 5000000, wonOn: "2020-01-01" },
   ] });
   await page.goto(`${BASE}/sales/analytics.html`);
   await page.waitForSelector("#funnel .an2-card");
@@ -1148,20 +1155,22 @@ console.log("\n=== 分析（上部6マス） ===");
   check(/^send 4社 アタック$/.test(flat[0]), `アタック 4社（${flat[0]}）`);
   check(/4社 クリック 100%（4 \/ 4）/.test(flat[1]), `クリック：後ろまで進んだ会社も通ったものとして数える（${flat[1]}）`);
   check(/3社 返信/.test(flat[2]), `返信 3社（${flat[2]}）`);
-  check(/3社 商談 100%（3 \/ 3）.*3案件/.test(flat[3]), `商談 3社・3案件（失注の会社も数える）（${flat[3]}）`);
+  check(/3社 商談 100%（3 \/ 3）.*4案件/.test(flat[3]), `商談 3社・4案件（1社に2案件・失注の会社も数える）（${flat[3]}）`);
   check(/1社 成約 33\.3%（1 \/ 3）/.test(flat[4]), `成約 1社（${flat[4]}）`);
-  check(/¥1,500,000 売上 成約 1案件/.test(flat[5]), `売上＝成約案件の金額（${flat[5]}）`);
+  check(/¥1,700,000 受注額 成約日が期間内の 2案件/.test(flat[5]), `受注額＝成約日が期間内の成約案件の金額（アタックの時期は問わない）（${flat[5]}）`);
   check(/参考値/.test(flat[1]), "母数10未満は参考値");
   const money = (await page.locator(".an-money").innerText()).replace(/\s+/g, " ");
-  check(/期間内の売上（成約日） ¥1,500,000/.test(money) && /見込売上 ¥500,000 1案件/.test(money) && /パイプライン ¥1,000,000/.test(money),
-    `売上・見込売上・パイプライン（${money}）`);
+  check(/見込受注額 ¥500,000 進行中 1案件/.test(money) && /パイプライン ¥1,000,000/.test(money) && !/売上（/.test(money),
+    `見込受注額・パイプライン（${money}）`);
+  check(/会計上の売上ではありません/.test(money), "受注額は会計上の売上ではないと書く");
   const heads = await page.locator("#by-template thead th").allInnerTexts();
-  check(heads.join("|") === "項目|アタック数|クリック率|返信率|商談化率|売上|見込売上|1アタック期待売上", `既存の列に売上の3列を足す（${heads.join("|")}）`);
+  check(heads.join("|") === "項目|アタック数|クリック率|返信率|商談化率|受注額|見込受注額|1アタック見込受注額", `既存の列に受注額の3列を足す（${heads.join("|")}）`);
   const tpl = (await page.locator("#by-template tbody tr", { hasText: "PCレンタル" }).innerText()).replace(/\s+/g, " ");
-  check(/150万円/.test(tpl), `営業文別の売上はもとのアタックで数える（${tpl}）`);
+  check(/650万円/.test(tpl), `営業文別の受注額はもとのアタックで数える（成約日を問わない attribution）（${tpl}）`);
   await page.click("#funnel .an2-card >> nth=5");
   await page.waitForSelector(".sl-drawer");
-  check(/成約案件/.test(await page.locator(".sl-drawer").innerText()), "売上のマスを押すと、成約した案件を出す");
+  const dr = await page.locator(".sl-drawer").innerText();
+  check(/成約案件/.test(dr) && /昔からの取引先/.test(dr) && !/去年の成約/.test(dr), "受注額のマスを押すと、成約日が期間内の案件を出す");
   await page.keyboard.press("Escape");
   await page.click("#funnel .an2-card >> nth=3");
   check(/会社k3/.test(await page.locator(".sl-drawer").innerText()), "商談のマスを押すと、商談した企業を出す");

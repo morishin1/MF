@@ -14,7 +14,7 @@
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
-    /* 表は売上の3列を足して8列になったので、1段に1つ（横幅いっぱい）にする。数字は折り返さない */
+    /* 表は受注額の3列を足して8列になったので、1段に1つ（横幅いっぱい）にする。数字は折り返さない */
     .an-grid { display:grid; grid-template-columns:1fr; gap:22px; }
     .an-grid .sl-table td.num, .an-grid .sl-table th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .an-grid .sl-table td:first-child { min-width:9em; }
@@ -22,7 +22,7 @@
     .an-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
     .an-links a { color:#4a5068; }
 
-    /* 上部ファネル：アイコン＋四角いマスの6枚（アタック・クリック・返信・商談・成約・売上）。
+    /* 上部ファネル：アイコン＋四角いマスの6枚（アタック・クリック・返信・商談・成約・受注額）。
        数字を主役にし、率は「分子 / 分母」つきで下に小さく。押すと対象の企業・案件を右に出す */
     .an2-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:14px; margin:0 0 14px; }
     .an2-card { background:#fff; border:1px solid #ececE6; border-radius:12px; padding:18px 10px 14px;
@@ -40,7 +40,7 @@
     .an2-card.money .v { font-size:22px; }
     .an2-ref { display:inline-block; background:#fbf1d6; color:#7d5a00; border-radius:999px; padding:0 6px; font-size:9.5px; font-weight:700; margin-left:3px; }
 
-    /* 売上・見込売上・パイプライン（いまの時点）を1行で */
+    /* 見込受注額・パイプライン（いまの時点）を1行で */
     .an-money { display:flex; gap:10px; flex-wrap:wrap; background:#fff; border:1px solid #ececE6; border-radius:12px;
       padding:12px 16px; margin:0 0 26px; font-size:12.5px; color:#4a5068; align-items:center; }
     .an-money .it { display:flex; align-items:baseline; gap:6px; padding-right:14px; border-right:1px solid #efefeb; }
@@ -62,7 +62,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">分析</h1>
-  <p class="sl-sub">アタックから成約・売上までの流れと、どの文章・サービス・業種・担当が売上につながっているかです。</p>
+  <p class="sl-sub">アタックから成約・受注までの流れと、どの文章・サービス・業種・担当が受注につながっているかです。</p>
   <div class="an-links">
     <a href="/sales/templates.html">テンプレート比較</a>
     <a href="/sales/campaigns.html">キャンペーン比較</a>
@@ -119,7 +119,7 @@
       approaches = res.approaches || [];
       dealsReady = !dl.failed;
       dealsMsg = dl.failed ? (dl.notReady
-        ? "案件（金額・段階）の表がまだありません。管理者に db/100_sales_deals.sql の実行を依頼すると、売上・見込売上が出ます。"
+        ? "案件（金額・段階）の表がまだありません。管理者に db/100_sales_deals.sql の実行を依頼すると、受注額・見込受注額が出ます。"
         : `案件を取得できませんでした：${dl.error?.hint || dl.error?.message || ""}（活動の数字は出ています）`) : "";
       deals = dealsReady ? dl.deals || [] : [];
       render();
@@ -170,7 +170,10 @@
     return [...cos.values()].map((c) => ({ ...c, level: levelOf(c) }));
   }
 
-  /** 表の1行ぶん。案件は、もとのアタック（approachId）がこの行のアタックに入っているものだけ */
+  /**
+   * 表の1行ぶん（要因分析）。案件は、もとのアタック（approachId）がこの行のアタックに入っているものだけ。
+   * ＝「この期間に送ったアタックから、あとでいくら受注したか」（attribution）。上部の受注額（成約日で数える）とは別
+   */
   function stats(list) {
     const cos = companiesOf(list);
     const ids = new Set(list.map((a) => a.id));
@@ -198,14 +201,21 @@
     table("by-employee", (a) => a.employeeName || "（不明）", true);
   }
 
-  // ---- 上部：6枚のファネル ＋ 売上・見込売上・パイプライン ------------------------------------
+  // ---- 上部：6枚のファネル ＋ 見込受注額・パイプライン -------------------------------------------
+  //
+  // ■ 受注額（6枚目）＝ 選んだ期間に成約日（won_on）がある成約案件の金額の合計。
+  //   会計上の売上ではなく、案件の成約金額。「その期間にアタックした会社があとでいくら成約したか」は
+  //   下の表（要因分析）で見る。上部のKPIには混ぜない
   function renderKpi() {
     const cos = companiesOf(approaches);
     const reach = (lv) => cos.filter((c) => c.level >= lv);
     const clicked = reach(2), replied = reach(3), meeting = reach(4), won = reach(6);
     const cohortDeals = cos.flatMap((c) => c.deals);
-    const wonDeals = cohortDeals.filter((d) => d.stage === "won");
-    const revenue = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
+    // 期間の始まり（日本時間の日付）。won_on はこの日以降のもの
+    const since = new Date(Date.now() + 9 * 3600000 - days * 86400000).toISOString().slice(0, 10);
+    const wonDeals = deals.filter((d) => d.stage === "won" && d.wonOn && d.wonOn >= since)
+      .sort((a, b) => String(b.wonOn).localeCompare(String(a.wonOn)));
+    const orders = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
     cohort = { cos, clicked, replied, meeting, won, cohortDeals, wonDeals };
 
     const rate = (n, d) => (d ? `<div class="r ${d < MIN_SAMPLE ? "weak" : ""}">${esc(pct(n, d))}（${n} / ${d}）${d < MIN_SAMPLE
@@ -217,10 +227,8 @@
         <div class="l">${esc(label)}</div>${extra}
       </button>`;
 
-    // いまの時点の見込売上・パイプラインと、期間内（成約日）の売上
-    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    // いまの時点の見込受注額・パイプライン
     const openDeals = deals.filter((d) => DEAL_OPEN.includes(d.stage));
-    const periodWon = deals.filter((d) => d.stage === "won" && d.wonOn && d.wonOn >= since);
     const forecast = openDeals.reduce((s, d) => s + expectedOf(d), 0);
     const pipeline = openDeals.reduce((s, d) => s + (d.amount || 0), 0);
     const noAmount = openDeals.filter((d) => d.amount == null).length;
@@ -232,17 +240,16 @@
         ${card("meeting", "handshake", "商談", meeting.length, "社",
           (rate(meeting.length, replied.length) || "") + (cohortDeals.length ? `<div class="r">${cohortDeals.length}案件</div>` : ""))}
         ${card("won", "paid", "成約", won.length, "社", rate(won.length, meeting.length))}
-        ${card("revenue", "payments", "売上", dealsReady ? esc(yen(revenue)) : "—", "",
-          `<div class="r">${dealsReady ? `成約 ${wonDeals.length}案件` : "案件を取得できません"}</div>`, "money")}
+        ${card("revenue", "payments", "受注額", dealsReady ? esc(yen(orders)) : "—", "",
+          `<div class="r">${dealsReady ? `成約日が期間内の ${wonDeals.length}案件` : "案件を取得できません"}</div>`, "money")}
       </div>
       ${dealsReady ? `<div class="an-money">
-        <span class="it">期間内の売上（成約日） <b>${esc(yen(periodWon.reduce((s, d) => s + (d.amount || 0), 0)))}</b><span class="n">${periodWon.length}案件</span></span>
-        <span class="it">見込売上 <b>${esc(yen(forecast))}</b><span class="n">${openDeals.length}案件</span></span>
+        <span class="it">見込受注額 <b>${esc(yen(forecast))}</b><span class="n">進行中 ${openDeals.length}案件</span></span>
         <span class="it">パイプライン <b>${esc(yen(pipeline))}</b><span class="n">確率を掛ける前</span></span>
-        <span class="note">見込売上＝進行中の案件の 金額×成約確率（商談20%・提案50%・最終調整80%。個別の設定を優先）${noAmount ? `／金額未定 ${noAmount}件は0円で数えています` : ""}</span>
+        <span class="note">受注額＝成約日が期間内の成約案件の金額（会計上の売上ではありません）／見込受注額＝進行中の案件の 金額×成約確率（商談20%・提案50%・最終調整80%。個別の設定を優先）${noAmount ? `／金額未定 ${noAmount}件は0円で数えています` : ""}</span>
       </div>` : `<div class="banner warn" style="margin:0 0 26px;"><span class="material-symbols-outlined">build</span>
         <div>${esc(dealsMsg)}</div></div>`}
-      <p class="sl-muted" style="margin:-14px 0 22px;">直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象です。社数は会社単位、率は1つ前のマスに対する割合です。</p>`;
+      <p class="sl-muted" style="margin:-14px 0 22px;">アタック〜成約：直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象。社数は会社単位、率は1つ前のマスに対する割合です。受注額：直近${days}日に成約した案件です。</p>`;
   }
 
   // ---- マスを押したときの内訳（右ドロワー） ---------------------------------------------------
@@ -262,7 +269,7 @@
     const dealRows = (list, note) => `<p class="sl-muted" style="margin:-8px 0 12px;">${esc(note)}</p>` + (list.length
       ? `<table class="sl-table"><thead><tr><th>企業・案件</th><th>段階</th><th class="num">金額</th><th>日付</th></tr></thead><tbody>${list.map((d) => `
           <tr class="click" onclick="location.href='/sales/companies.html?id=${encodeURIComponent(d.companyId)}'">
-            <td><span class="sl-nm">${esc(cohort.cos.find((c) => c.id === d.companyId)?.name || "")}</span><span class="sl-sub2">${esc(d.title)}</span></td>
+            <td><span class="sl-nm">${esc(d.companyName || cohort.cos.find((c) => c.id === d.companyId)?.name || "")}</span><span class="sl-sub2">${esc(d.title)}</span></td>
             <td>${statusPill(DEAL_PILL[d.stage] || "attacked", d.stageLabel)}</td>
             <td class="num">${d.amount == null ? "未定" : esc(yen(d.amount))}</td>
             <td>${esc(fmtDay(d.wonOn || d.lostOn || String(d.createdAt).slice(0, 10)))}</td></tr>`).join("")}</tbody></table>`
@@ -273,7 +280,7 @@
       reply: ["返信があった企業", () => coRows(cohort.replied, "返信があった会社（商談まで進んだ会社を含む）")],
       meeting: ["商談した企業", () => coRows(cohort.meeting, "商談まで進んだ会社（案件がある会社を含む。失注した会社も数えます）")],
       won: ["成約した企業", () => coRows(cohort.won, "成約した会社")],
-      revenue: ["売上の内訳", () => dealRows(cohort.wonDeals, "期間内にアタックした会社の、成約した案件の金額の合計です")],
+      revenue: ["受注額の内訳", () => dealRows(cohort.wonDeals, `成約日が直近${days}日以内の成約案件です（いつアタックした会社かは問いません）`)],
     };
     const [title, body] = T[key] || [];
     if (!title) return;
@@ -285,7 +292,8 @@
   function closeDrawer() { el("drawer-root").innerHTML = ""; }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 
-  // ---- 軸別の表（これまでの列に 売上・見込売上・1アタック期待売上 を足す） ------------------------
+  // ---- 軸別の表（これまでの列に 受注額・見込受注額・1アタック見込受注額 を足す） ------------------
+  //   要因分析なので、受注額は「この期間に送ったアタックから生まれた案件」（もとのアタック）で数える
   function table(id, keyOf, byPerson) {
     const groups = new Map();
     for (const a of approaches) {
@@ -299,8 +307,8 @@
     const money = (v) => (dealsReady ? esc(man(v)) : "—");
     el(id).innerHTML = `<div style="overflow-x:auto;"><table class="sl-table">
       <thead><tr><th>${byPerson ? "担当" : "項目"}</th><th class="num">アタック数</th><th class="num">クリック率</th>
-        <th class="num">返信率</th><th class="num">商談化率</th><th class="num">売上</th><th class="num">見込売上</th>
-        <th class="num key" title="見込売上 ÷ アタック数">1アタック期待売上</th></tr></thead>
+        <th class="num">返信率</th><th class="num">商談化率</th><th class="num" title="この期間のアタックから生まれ、成約した案件の金額">受注額</th><th class="num">見込受注額</th>
+        <th class="num key" title="見込受注額 ÷ アタック数">1アタック見込受注額</th></tr></thead>
       <tbody>${rows.map(({ k, s }) => `<tr>
         <td>${esc(k)}</td><td class="num">${s.attacks}</td>
         <td class="num">${esc(pct(s.clickedAttacks, s.attacks))}</td>

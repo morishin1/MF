@@ -1319,7 +1319,7 @@ ${url}
   // ---- 案件（db/100） ----------------------------------------------------------------
   //
   // 1社に複数の案件を持てる。金額・段階（商談 → 提案 → 最終調整 → 成約／失注）を記録し、
-  // 分析の 売上・見込売上・パイプライン はここから数える。
+  // 分析の 受注額・見込受注額・パイプライン はここから数える（金額は受注額。会計上の売上ではない）。
   // 会社のステータスはサーバが案件に合わせて進める（戻さない）。失注は会社に写さず、
   // その会社の案件がすべて失注になったときだけ「会社も失注にしますか」と聞く。
   const DEAL_STAGES = [["meeting", "商談"], ["proposal", "提案"], ["negotiation", "最終調整"], ["won", "成約"], ["lost", "失注"]];
@@ -1340,7 +1340,7 @@ ${url}
       <span class="material-symbols-outlined icon-inline">add</span>案件を追加</button>`;
     if (!list.length) {
       return head(add) + `<div class="card" style="margin-bottom:16px;"><div class="sl-empty">
-        まだ案件がありません。商談になったら金額と段階を登録すると、分析の売上・見込売上に入ります。</div></div>`;
+        まだ案件がありません。商談になったら金額と段階を登録すると、分析の受注額・見込受注額に入ります。</div></div>`;
     }
     return head(add) + `<div class="card" style="margin-bottom:16px;">${list.map((d) => `
       <div class="deal-row" onclick="openDeal('${esc(d.id)}')" role="button" tabindex="0"
@@ -1349,7 +1349,7 @@ ${url}
         ${statusPill(DEAL_PILL[d.stage] || "attacked", d.stageLabel)}
         <span style="font-variant-numeric:tabular-nums;">${esc(yen(d.amount))}</span>
         <span class="sl-muted">${d.open
-          ? (d.amount != null ? `見込 ${esc(yen(d.expected))}（${d.probabilityUsed}%${d.probability != null ? "・個別" : ""}）` : "")
+          ? (d.amount != null ? `見込受注額 ${esc(yen(d.expected))}（${d.probabilityUsed}%${d.probability != null ? "・個別" : ""}）` : "")
           : d.stage === "won" ? `成約 ${esc(fmtDay(d.wonOn))}` : `失注 ${esc(fmtDay(d.lostOn))}${d.lostReason ? `（${esc(d.lostReason)}）` : ""}`}</span>
         <span class="sl-muted" style="margin-left:auto;">担当 ${esc(d.ownerName || "未定")}</span>
       </div>`).join("")}</div>`;
@@ -1369,7 +1369,7 @@ ${url}
       <label style="margin-top:10px;">段階</label>
       <select id="dl-stage" onchange="dealStageChanged()">${stages.map(([k, l]) =>
         `<option value="${k}" ${k === stage ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
-      <label style="margin-top:10px;">金額（円・税抜）</label>
+      <label style="margin-top:10px;">受注額（円・税抜）</label>
       <input id="dl-amount" type="text" inputmode="numeric" placeholder="例：1200000（未定なら空欄）" value="${d?.amount ?? ""}">
       <div id="dl-prob-box">
         <label style="margin-top:10px;">成約確率（%）</label>
@@ -1413,7 +1413,9 @@ ${url}
     };
     if (stage === "lost") body.lostReason = el("dl-lost").value.trim() || null;
     if (!body.title) { msg.textContent = "案件名を入れてください"; return; }
-    if (stage === "won" && body.amount === null) { msg.textContent = "成約にするには金額を入れてください"; return; }
+    if (stage === "won" && (body.amount === null || Number(String(body.amount).replace(/[,，円¥\s]/g, "")) <= 0)) {
+      msg.textContent = "成約にするには0円より大きい受注額を入れてください"; return;
+    }
     try {
       const r = await KPLayout.busy(btn, "保存中…", () => (id
         ? API.updateSalesDeal({ id, ...body })

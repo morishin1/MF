@@ -1,25 +1,35 @@
 -- =============================================================================
 -- 100: /sales 案件（金額・ステージ）と、その履歴
 --
--- 番号：097 は本番で2つ（097_sales_company_list・097_sign_contract_link）使われ、
+-- 番号：097 は main に2つ（097_sales_company_list・097_sign_contract_link）あり、
 --       099 は 097_sign_contract_link の付け直し（別PR）で使う予定のため、100 にする。
 --
 --   1) gw_sales_deals        … 案件。1社に複数あってよい
 --        stage   … meeting（商談）→ proposal（提案）→ negotiation（最終調整）→ won（成約）／ lost（失注）
---        amount  … 案件金額（円・税抜の想定）。未定なら null。成約には必須
+--        amount  … 受注額（案件の成約金額。円・税抜の想定）。未定なら null。成約には 0円より大きい値が必須
 --        probability … 成約確率（0〜100）を案件ごとに上書きするとき。null なら画面の既定値
 --                      （商談20%・提案50%・最終調整80%）を使う
 --        approach_id … この案件のもとになったアタック（案件を作った時点で、その会社に最後に送ったもの）。
---                      作ったあとは変えられない（トリガーで止める。アタックが消えたときの null だけは通す）
---   2) gw_sales_deal_history … 段階・金額・確率が変わるたびに1行（トリガーが書く。画面・APIからは書けない）
---        過去のある時点の見込売上・パイプラインを出すのと、段階ごとの実績成約率を出すのに使う
+--                      作ったあとは一切変えられない（トリガーで止める。null にする更新も止める）。
+--                      もとのアタックも消せない（FK は既定の NO ACTION。アプリが消すのは未送信のアタックだけで、
+--                      案件が指すのは送信済みのアタックだけなので、ふだんの操作とはぶつからない）
+--   2) gw_sales_deal_history … 作成時と、段階・金額・確率が変わるたびに1行（トリガーが書く。画面・APIからは書けない）
+--        effective_probability … その時点で実際に使った成約確率（個別の設定、無ければその時点の既定値。
+--                                成約は100・失注は0）。既定値をあとで変えても、過去の見込受注額を再現できる
+--        過去のある時点の見込受注額・パイプラインを出すのと、段階ごとの実績成約率を出すのに使う
 --
 -- ■ 会社のステータス（gw_sales_companies.status）はここでは触らない
 --   案件の段階に合わせて会社を「商談」「提案」「成約」へ進めるのは API（後ろへは戻さない）。
 --   案件が失注しても、会社は失注にしない（ほかの案件・次の提案があるため。会社の失注は人が決める）
 --
+-- ■ 案件は消さない
+--   案件の表には DELETE の権限が無い。会社（company_id）も NO ACTION なので、案件のある会社は DB でも消せない
+--   （API の「案件のある企業は削除できない」と同じ）。テナントごと消すときだけ、案件も一緒に消える。
+--
+-- ■ 金額は「受注額」（会計上の売上ではない）。成約は 0円より大きい金額が要る
+--
 -- ■ 既存データは埋めない
---   いま「商談」「提案」「成約」の会社があっても、案件は作らない（金額が分からないものを売上にしない）。
+--   いま「商談」「提案」「成約」の会社があっても、案件は作らない（金額が分からないものを受注額にしない）。
 --
 -- 何度流しても同じ結果になる。088・090・096・097・098 の後に流す。
 -- =============================================================================
@@ -32,8 +42,8 @@ begin;
 create table if not exists public.gw_sales_deals (
   id           uuid primary key default gen_random_uuid(),
   tenant_id    uuid not null references public.tenants(id) on delete cascade,
-  company_id   uuid not null references public.gw_sales_companies(id) on delete cascade,
-  approach_id  uuid references public.gw_sales_approaches(id) on delete set null,
+  company_id   uuid not null references public.gw_sales_companies(id),    -- 既定の NO ACTION：案件のある会社は消せない
+  approach_id  uuid references public.gw_sales_approaches(id),            -- 同上：もとのアタックは消せない
   owner_id     uuid references public.gw_employees(id) on delete set null,   -- 担当
 
   title        text not null check (char_length(title) between 1 and 200),  -- 「AI/DX 導入支援」
@@ -45,7 +55,7 @@ create table if not exists public.gw_sales_deals (
   probability  smallint check (probability is null or probability between 0 and 100),  -- %
   expected_close_on date,                                                   -- 成約見込み日
 
-  won_on       date,        -- 成約日（売上はこの日で数える）
+  won_on       date,        -- 成約日（受注額はこの日で数える）
   lost_on      date,        -- 失注日
   lost_reason  text check (lost_reason is null or char_length(lost_reason) <= 500),
   note         text check (note is null or char_length(note) <= 2000),
@@ -58,8 +68,9 @@ create table if not exists public.gw_sales_deals (
   -- 成約日は成約のときだけ・成約なら必ず。失注日も同じ
   constraint gw_sales_deals_won_on check ((stage = 'won') = (won_on is not null)),
   constraint gw_sales_deals_lost_on check ((stage = 'lost') = (lost_on is not null)),
-  -- 金額の分からない成約は作らない（売上に「0円の成約」を混ぜない）
-  constraint gw_sales_deals_won_amount check (stage <> 'won' or amount is not null)
+  -- 金額の分からない成約・0円の成約は作らない（通常の営業案件の受注額に 0円を混ぜない）
+  -- （amount > 0 だけだと null のとき CHECK が通ってしまうので、is not null も書く）
+  constraint gw_sales_deals_won_amount check (stage <> 'won' or (amount is not null and amount > 0))
 );
 
 create index if not exists idx_gw_sales_deals_company
@@ -72,9 +83,9 @@ create index if not exists idx_gw_sales_deals_approach
   on public.gw_sales_deals(approach_id) where approach_id is not null;
 
 comment on table public.gw_sales_deals is
-  '営業の案件（金額・段階）。1社に複数可。売上＝成約案件の金額（won_on で数える）';
+  '営業の案件（金額・段階）。1社に複数可。受注額＝成約案件の金額（won_on で数える。会計上の売上ではない）';
 comment on column public.gw_sales_deals.approach_id is
-  '案件のもとになったアタック（作成時点でその会社に最後に送ったもの）。作成後は変えない';
+  '案件のもとになったアタック（作成時点でその会社に最後に送ったもの）。作成後は変えられない（null にもできない）';
 
 -- -----------------------------------------------------------------------------
 -- 2) 案件の履歴（段階・金額・確率が変わるたび）
@@ -83,10 +94,12 @@ create table if not exists public.gw_sales_deal_history (
   id          uuid primary key default gen_random_uuid(),
   tenant_id   uuid not null references public.tenants(id) on delete cascade,
   deal_id     uuid not null references public.gw_sales_deals(id) on delete cascade,
-  company_id  uuid not null references public.gw_sales_companies(id) on delete cascade,
+  company_id  uuid not null references public.gw_sales_companies(id),
   stage       text not null check (stage in ('meeting', 'proposal', 'negotiation', 'won', 'lost')),
   amount      bigint,
-  probability smallint,
+  probability smallint,                               -- 案件に個別に設定した確率（無ければ null）
+  effective_probability smallint not null
+    check (effective_probability between 0 and 100),  -- その時点で実際に使った確率
   changed_at  timestamptz not null default now(),
   changed_by  uuid references auth.users(id) on delete set null
 );
@@ -117,8 +130,8 @@ begin
     if new.tenant_id is distinct from old.tenant_id or new.company_id is distinct from old.company_id then
       raise exception 'gw_sales_deals: tenant_id / company_id は変えられません' using errcode = '23514';
     end if;
-    -- もとのアタックは固定。アタックが消えて null になる（on delete set null）ときだけ通す
-    if new.approach_id is not null and new.approach_id is distinct from old.approach_id then
+    -- もとのアタックは固定（別のアタックにも null にも変えられない）
+    if new.approach_id is distinct from old.approach_id then
       raise exception 'gw_sales_deals: approach_id は案件を作ったあとは変えられません' using errcode = '23514';
     end if;
     new.updated_at := now();
@@ -144,6 +157,23 @@ create trigger gw_sales_deals_guard
   before insert or update on public.gw_sales_deals
   for each row execute function public.gw_sales_deals_guard();
 
+-- 段階ごとの既定の成約確率（%）。lib/sales-deals.js の DEFAULT_PROBABILITY と同じ値にする
+-- （test/salesapi.mjs で突き合わせている）。変えるときは、この関数とJSの両方を変える。
+-- 変えても、過去の履歴の effective_probability はその時点の値のまま残る
+create or replace function public.gw_sales_deal_default_probability(p_stage text)
+returns smallint
+language sql
+immutable
+as $$
+  select (case p_stage
+    when 'meeting'     then 20
+    when 'proposal'    then 50
+    when 'negotiation' then 80
+    when 'won'         then 100
+    when 'lost'        then 0
+  end)::smallint
+$$;
+
 -- 履歴を書く。履歴の表には画面・APIからの書き込み権限が無いので、ここだけ security definer
 create or replace function public.gw_sales_deals_history_trg()
 returns trigger
@@ -156,8 +186,12 @@ begin
      or new.stage is distinct from old.stage
      or new.amount is distinct from old.amount
      or new.probability is distinct from old.probability then
-    insert into public.gw_sales_deal_history (tenant_id, deal_id, company_id, stage, amount, probability, changed_by)
+    insert into public.gw_sales_deal_history
+      (tenant_id, deal_id, company_id, stage, amount, probability, effective_probability, changed_by)
     values (new.tenant_id, new.id, new.company_id, new.stage, new.amount, new.probability,
+            -- 成約・失注は 100・0。進行中は個別の設定、無ければその時点の既定値
+            case when new.stage in ('won', 'lost') then public.gw_sales_deal_default_probability(new.stage)
+                 else coalesce(new.probability, public.gw_sales_deal_default_probability(new.stage)) end,
             coalesce(new.updated_by, new.created_by));
   end if;
   return null;
@@ -209,4 +243,5 @@ notify pgrst, 'reload schema';
 -- drop table if exists public.gw_sales_deals;
 -- drop function if exists public.gw_sales_deals_history_trg();
 -- drop function if exists public.gw_sales_deals_guard();
+-- drop function if exists public.gw_sales_deal_default_probability(text);
 -- commit;

@@ -11,7 +11,8 @@
 //   案件の段階に合わせて「商談」「提案」「成約」へ進める（後ろへは戻さない）。失注は会社に写さない。
 //   その会社の案件がすべて失注になったら suggestCompanyLost: true を返す（会社を失注にするかは人が決める）
 //
-// ■ 消す API は無い（DB でも消せない）。間違えた案件は「失注」にするか、金額を直す
+// ■ 消す API は無い（DB でも消せない。案件のある会社も DB で消せない）。間違えた案件は「失注」にするか、金額を直す
+// ■ amount は「受注額」（案件の成約金額）。会計上の売上ではない
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -68,7 +69,20 @@ async function list(req, res, sb, ctx) {
   const { data, error } = await q.order("created_at", { ascending: false }).limit(companyId ? 100 : ALL_LIMIT);
   if (error) return fail(res, error);
   const nameOf = await names(sb, ctx);
-  return json(res, 200, { deals: (data || []).map((d) => shapeDeal(d, nameOf)), truncated: !companyId && (data || []).length >= ALL_LIMIT });
+  // 分析のドロワーに会社名を出すため、テナント全体のときは会社名もつける（100社ずつ）
+  const coName = new Map();
+  if (!companyId) {
+    const ids = [...new Set((data || []).map((d) => d.company_id))];
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data: cs } = await sb.from("gw_sales_companies").select("id, name")
+        .eq("tenant_id", ctx.tenantId).in("id", ids.slice(i, i + 100));
+      for (const c of cs || []) coName.set(c.id, c.name);
+    }
+  }
+  return json(res, 200, {
+    deals: (data || []).map((d) => ({ ...shapeDeal(d, nameOf), ...(companyId ? {} : { companyName: coName.get(d.company_id) || null }) })),
+    truncated: !companyId && (data || []).length >= ALL_LIMIT,
+  });
 }
 
 /** 案件に合わせて会社のステータスを進める。進めたら新しいステータスを返す */
