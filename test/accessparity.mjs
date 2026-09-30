@@ -112,8 +112,9 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
     }
     check(/canRecruit/.test(s), `${f} は canRecruit で判定`);
   }
-  // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト（公開）は対象外
-  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p))) {
+  // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト（公開）と、
+  // TimeRex の Webhook（ログインではなく TIMEREX_SALES_WEBHOOK_SECRET で確かめる。採用HRの Webhook と同じ）は対象外
+  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p))) {
     check(/canSell/.test(read(f)), `${f} は canSell で判定`);
   }
 }
