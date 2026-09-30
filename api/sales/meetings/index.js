@@ -1,9 +1,9 @@
-// 営業面談（/sales Phase 2）
+// 営業の商談（/sales Phase 2）
 //
-// GET   /api/sales/meetings?companyId=…          … その会社の面談（新しい順）
+// GET   /api/sales/meetings?companyId=…          … その会社の商談（新しい順）
 // POST  /api/sales/meetings { companyId, ownerId? }
-//         … 「面談を設定」。初回商談（30分）の面談を作り、TimeRex の日程調整URLを返す。
-//           進行中（日程調整中・面談予定）の面談があれば、新しく作らずにそれを返す
+//         … 「商談を予定する」。初回商談（30分）の商談を作り、TimeRex の日程調整URLを返す。
+//           進行中（日程調整中・商談予定）の商談があれば、新しく作らずにそれを返す
 // PATCH /api/sales/meetings { id, action: "sent" }
 //         … 日程調整URLを相手に送った。NEXT を「日程調整待ち」（3営業日後）にする
 // PATCH /api/sales/meetings { id, action: "schedule", scheduledAt, meetingUrl? }
@@ -83,7 +83,7 @@ async function issue(req, res, sb, ctx, user) {
   if (e1) return fail(res, e1);
   const nameOf = await names(sb, ctx);
 
-  // 進行中の面談があれば、それを返す（二重に日程調整URLを出さない）
+  // 進行中の商談があれば、それを返す（二重に日程調整URLを出さない）
   const open = activeMeeting(existing);
   if (open) {
     return json(res, 200, { meeting: shapeMeeting(open, nameOf), reused: true, timerexConfigured: configured() });
@@ -96,7 +96,7 @@ async function issue(req, res, sb, ctx, user) {
   }).select(MEETING_FIELDS).single();
   if (e2) return fail(res, e2);
 
-  // URL には会社と面談のIDを載せる（Webhook で「どの会社のどの面談か」を決めるため）
+  // URL には会社と商談のIDを載せる（Webhook で「どの会社のどの商談か」を決めるため）
   const url = salesSchedulingUrl(process.env.TIMEREX_SALES_MEETING_URL, c.id, made.id);
   let meeting = made;
   if (url) {
@@ -122,14 +122,14 @@ async function act(req, res, sb, ctx, user) {
   const nameOf = await names(sb, ctx);
 
   if (body.action === "sent") {
-    if (m.status !== "scheduling") return json(res, 409, { error: "not_scheduling", hint: "日程調整中の面談ではありません" });
+    if (m.status !== "scheduling") return json(res, 409, { error: "not_scheduling", hint: "日程調整中の商談ではありません" });
     const { data } = await sb.from("gw_sales_meetings").update({ scheduling_sent_at: now, updated_at: now })
       .eq("id", m.id).eq("tenant_id", ctx.tenantId).select(MEETING_FIELDS).single();
     // リードに対応した（未対応クリックから外す）。NEXT は相手の予約待ち
     await sb.from("gw_sales_companies").update({ ...waitingNext(), followed_at: now, updated_at: now })
       .eq("id", c.id).eq("tenant_id", ctx.tenantId);
     await sb.from("gw_sales_events").insert({
-      tenant_id: ctx.tenantId, company_id: c.id, event_key: "meeting", label: "面談の日程調整URLを送付（初回商談 30分）",
+      tenant_id: ctx.tenantId, company_id: c.id, event_key: "meeting", label: "商談の日程調整URLを送付（初回商談 30分）",
       detail: null, employee_id: ctx.employee?.id || null, created_by: user.id,
     });
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "sales.meeting_sent", target: `sales_company:${c.id}`, detail: { meetingId: m.id } });
@@ -137,12 +137,16 @@ async function act(req, res, sb, ctx, user) {
   }
 
   if (body.action === "schedule") {
-    if (!["scheduling", "scheduled"].includes(m.status)) return json(res, 409, { error: "closed", hint: "この面談は終わっています" });
+    if (!["scheduling", "scheduled"].includes(m.status)) return json(res, 409, { error: "closed", hint: "この商談は終わっています" });
+    // TimeRex の予約で確定した日時・Meet URL は TimeRex が正（手入力で上書きして食い違いを作らない）
+    if (m.timerex_event_id) {
+      return json(res, 409, { error: "timerex_managed", hint: "TimeRexで予約が確定した商談です。日時の変更はTimeRexで行ってください" });
+    }
     if (!body.scheduledAt || Number.isNaN(new Date(body.scheduledAt).getTime())) {
-      return json(res, 400, { error: "bad_date", hint: "面談の日時を入れてください" });
+      return json(res, 400, { error: "bad_date", hint: "商談の日時を入れてください" });
     }
     const meetingUrl = safeUrl(body.meetingUrl);
-    if (meetingUrl === false) return json(res, 400, { error: "bad_url", hint: "面談URLが正しくありません" });
+    if (meetingUrl === false) return json(res, 400, { error: "bad_url", hint: "商談URLが正しくありません" });
     try {
       const r = await applyScheduled(sb, {
         meeting: m, company: c, scheduledAt: body.scheduledAt,
@@ -161,7 +165,7 @@ async function act(req, res, sb, ctx, user) {
     const { data } = await sb.from("gw_sales_meetings").update({ status: "canceled", updated_at: now })
       .eq("id", m.id).eq("tenant_id", ctx.tenantId).select(MEETING_FIELDS).single();
     await sb.from("gw_sales_events").insert({
-      tenant_id: ctx.tenantId, company_id: c.id, event_key: "meeting", label: "面談を取りやめ",
+      tenant_id: ctx.tenantId, company_id: c.id, event_key: "meeting", label: "商談を取りやめ",
       detail: null, employee_id: ctx.employee?.id || null, created_by: user.id,
     });
     return json(res, 200, { meeting: shapeMeeting(data || m, nameOf) });

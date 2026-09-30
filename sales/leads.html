@@ -40,7 +40,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">リード</h1>
-  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追って、「面談を設定」で面談につなげてください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談）。</p>
+  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追って、「商談を予定する」で商談につなげてください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談）。</p>
 
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="stages"></div></div>
   <div class="ld-filters">
@@ -66,14 +66,14 @@
   let me = null;
   let stage = "all";
 
-  // 面談調整中＝日程調整URLを出して相手の予約待ち。面談予定＝日程が決まった（db/090 の面談）
+  // 日程調整中＝日程調整URLを出して相手の予約待ち。商談予定＝日程が決まった（db/090 の商談）
   const inMeeting = (c) => Boolean(c.meetingStatus);
   const STAGES = [
     ["all", "すべて", () => true],
     ["clicked", "クリックあり", (c) => !inMeeting(c) && (c.status === "clicked" || (c.clickCount > 0 && c.status === "attacked"))],
     ["replied", "返信あり", (c) => !inMeeting(c) && c.status === "replied"],
-    ["scheduling", "面談調整中", (c) => c.meetingStatus === "scheduling"],
-    ["scheduled", "面談予定", (c) => c.meetingStatus === "scheduled" || (!inMeeting(c) && c.status === "meeting")],
+    ["scheduling", "日程調整中", (c) => c.meetingStatus === "scheduling"],
+    ["scheduled", "商談予定", (c) => c.meetingStatus === "scheduled" || (!inMeeting(c) && c.status === "meeting")],
     ["proposal", "提案中", (c) => c.status === "proposal"],
     ["won", "成約", (c) => c.status === "won"],
   ];
@@ -106,7 +106,7 @@
   // クリックだけならウォームリード、返信から先はリード（要件 §8）
   const isWarm = (c) => !["replied", "meeting", "proposal", "won"].includes(c.status);
 
-  // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談 → 提案 → 成約
+  // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談 → 提案 → 成約
   function group(c) {
     if (inMeeting(c)) return 3;
     if (c.status === "replied") return 0;
@@ -145,8 +145,8 @@
       && (!v("f-campaign") || c.campaignId === v("f-campaign")));
   }
 
-  // リードの Primary CTA は「面談を設定」1つ（要件 Phase 2）。成約済みは開くだけ
-  const cta = (c) => (c.status === "won" ? "開く" : "面談を設定");
+  // リードの Primary CTA は「商談を予定する」1つ（要件 Phase 2）。成約済みは開くだけ
+  const cta = (c) => (c.status === "won" ? "開く" : "商談を予定する");
   function go(id, meeting) {
     location.href = `/sales/companies.html?id=${encodeURIComponent(id)}${meeting ? "&meeting=1" : ""}`;
   }
@@ -175,7 +175,7 @@
             ${c.lastClickAt ? `<span>${esc(ago(c.lastClickAt))}にクリック</span>` : ""}
             ${c.clickCount ? `<span class="${c.clickCount >= 2 ? "sl-hot" : ""}">クリック ${c.clickCount}回</span>` : ""}
             <span>担当 ${esc(c.ownerName || "未定")}</span>
-            ${c.meetingStatus ? `<span class="sl-hot">${c.meetingStatus === "scheduled" ? `面談予定 ${esc(SalesLayout.fmt(c.meetingAt))}` : "面談調整中"}</span>` : ""}
+            ${c.meetingStatus ? `<span class="sl-hot">${c.meetingStatus === "scheduled" ? `商談予定 ${esc(SalesLayout.fmt(c.meetingAt))}` : "日程調整中"}</span>` : ""}
           </div>
           <div class="next">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
         </div>
