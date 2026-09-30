@@ -2,10 +2,10 @@
 // TimeRex 連携済みの面談を HR 側で直接書き換えないこと（api/hr/interviews）を、Webhook から通す。
 //
 // ■ fixture（test/fixtures/timerex-event-confirmed.json）
-//   社長最終面談の event_confirmed。氏名・メール・URL のトークンは匿名化した値。
-//   構造（webhook_type / event.id / start_datetime / google_meet_meeting.join_url / form /
-//   is_changed / old_event_id / calendar_url_path / guest_reschedule_url / guest_cancel_url /
-//   host_cancel_url）に合わせてある。
+//   実際に TimeRex から届いた社長最終面談の event_confirmed と同じ構造。
+//   氏名・メール・event ID・Meet URL・取消／リスケ URL は匿名化した値。
+//   calendar_url_path は event の中ではなく body 直下（実 payload のとおり）。
+//   guest_reschedule_url / guest_cancel_url / host_cancel_url は event の中。
 //
 // ■ キャンセルの Webhook は event 名が未確認。ここでは「実際の名前を環境変数で有効にしたら
 //   受け付けられる」ことだけを確かめる（名前は仮の TEST_CANCEL_TYPE。本番の名前を推測しない）。
@@ -99,7 +99,7 @@ const payload = (over = {}, evOver = {}) => {
   Object.assign(p.event, evOver);
   return p;
 };
-const casualPayload = (evOver = {}) => payload({}, { id: "evt_casual_1", calendar_url_path: "c0a1b2c3",
+const casualPayload = (evOver = {}) => payload({ calendar_url_path: "c0a1b2c3" }, { id: "evt_casual_1",
   start_datetime: "2026-10-02T01:00:00Z", ...evOver });
 
 function setup() {
@@ -148,7 +148,7 @@ await ok("社長面談予約（実 payload の形）：kind=ceo・stage=ceo_inte
   const iv = ivs()[0];
   assert.equal(iv.kind, "ceo");
   assert.equal(iv.applicant_id, "a-ceo");
-  assert.equal(iv.scheduled_at, "2026-10-01T07:15:00Z");
+  assert.equal(Date.parse(iv.scheduled_at), Date.parse("2026-10-01T07:15:00Z"));
   assert.deepEqual([app("a-ceo").stage, app("a-ceo").status], ["ceo_interview", "interview_scheduled"]);
   assert.deepEqual(notified.map((n) => [n.employeeId, n.title, n.link]), [["e-owner", "社長面談が入りました", "/hr/ceo-review.html"]]);
   assert.ok(notified[0].body.includes("10/1 16:15"), "日時は日本時間");
@@ -181,7 +181,7 @@ await ok("同じメールの候補が2名いれば自動で決めない（ambigu
 
 await ok("payload に applicant_id があれば最優先", async () => {
   setup();
-  const r = await hook(payload({ applicant_id: "a-cas" }, { calendar_url_path: "c0a1b2c3", form: [] }));
+  const r = await hook(payload({ applicant_id: "a-cas", calendar_url_path: "c0a1b2c3" }, { form: [] }));
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(ivs()[0].applicant_id, "a-cas");
 });
@@ -190,10 +190,10 @@ await ok("Google Meet URL・日程変更・取消の導線を保存（ログ・�
   setup();
   await hook(payload());
   const iv = ivs()[0];
-  assert.equal(iv.meeting_url, "https://meet.google.com/aaa-bbbb-ccc");
-  assert.equal(iv.timerex_reschedule_url, "https://timerex.net/reschedule/ANON_RESCHEDULE_TOKEN");
-  assert.equal(iv.timerex_guest_cancel_url, "https://timerex.net/cancel/ANON_GUEST_CANCEL_TOKEN");
-  assert.equal(iv.timerex_host_cancel_url, "https://timerex.net/host/cancel/ANON_HOST_CANCEL_TOKEN");
+  assert.equal(iv.meeting_url, "https://meet.google.com/anon");
+  assert.equal(iv.timerex_reschedule_url, "https://timerex.net/anon/guest_reschedule/ANON_RESCHEDULE_TOKEN");
+  assert.equal(iv.timerex_guest_cancel_url, "https://timerex.net/anon/guest_cancel/ANON_GUEST_CANCEL_TOKEN");
+  assert.equal(iv.timerex_host_cancel_url, "https://timerex.net/anon/host_cancel/ANON_HOST_CANCEL_TOKEN");
   assert.equal(iv.timerex_calendar_path, "98b26445");
   assert.ok(iv.timerex_synced_at);
   const leaked = JSON.stringify([logged, notified, warned]);
@@ -263,12 +263,46 @@ console.log("\n— 知らない予約枠 —");
 await ok("不明な calendar_url_path は安全に停止（422 unknown_timerex_calendar・何も書かない）", async () => {
   setup();
   for (const path of ["zzzz9999", null]) {
-    const r = await hook(payload({}, { calendar_url_path: path }));
+    const r = await hook(payload({ calendar_url_path: path }));
     assert.equal(r.statusCode, 422, JSON.stringify(r.body));
     assert.equal(r.body.error, "unknown_timerex_calendar");
   }
   assert.equal(ivs().length, 0);
   assert.equal(app("a-ceo").status, "ceo_interview_pending");
+});
+
+console.log("\n— 実 payload の構造 —");
+await ok("fixture は実 payload と同じ階層（calendar_url_path は body 直下）で、社長面談待ち → 面談予定になる", async () => {
+  assert.equal(FIXTURE.calendar_url_path, "98b26445");
+  assert.equal("calendar_url_path" in FIXTURE.event, false, "event の中には無い");
+  for (const k of ["guest_reschedule_url", "guest_cancel_url", "host_cancel_url"]) assert.ok(FIXTURE.event[k], `event.${k}`);
+  setup();
+  assert.equal(app("a-ceo").status, "ceo_interview_pending");
+  const r = await hook(copy(FIXTURE));
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual([app("a-ceo").stage, app("a-ceo").status], ["ceo_interview", "interview_scheduled"]);
+  const iv = ivs()[0];
+  assert.deepEqual([iv.kind, iv.timerex_event_id, iv.meeting_url, iv.timerex_calendar_path],
+    ["ceo", "evt_anon_ceo_0001", "https://meet.google.com/anon", "98b26445"]);
+});
+
+console.log("\n— DEBUG ログ —");
+await ok("TIMEREX_WEBHOOK_DEBUG_LOG=1 でも payload 全体は出さない（メール・氏名・URL・Secret なし）", async () => {
+  setup();
+  const lines = [];
+  const origLog = console.log;
+  process.env.TIMEREX_WEBHOOK_DEBUG_LOG = "1";
+  console.log = (...a) => { lines.push(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" ")); };
+  try { await hook(copy(FIXTURE)); } finally { console.log = origLog; delete process.env.TIMEREX_WEBHOOK_DEBUG_LOG; }
+  const out = lines.join("\n");
+  const dbg = lines.find((l) => l.startsWith("[timerex-webhook][debug]"));
+  assert.ok(dbg, "DEBUG の1行は出る");
+  const j = JSON.parse(dbg.replace("[timerex-webhook][debug] ", ""));
+  assert.deepEqual(j, { webhook_type: "event_confirmed", calendar_url_path: "98b26445", event_id: "evt_anon_ceo_0001",
+    is_changed: false, old_event_id: null, new_event_id: null,
+    form_field_types: ["company_name", "guest_name", "guest_email", "guest_comment"] });
+  assert.equal(/candidate@example|匿名候補者|https?:|TOKEN|meet\.google|test-secret-value/.test(out), false,
+    "メール・氏名・URL・トークン・Secret を出さない");
 });
 
 console.log("\n— HR 画面からの操作（手動面談と TimeRex 面談を分ける） —");
@@ -298,8 +332,8 @@ await ok("TimeRex 面談は HR から日時・Meet URL・キャンセルを直�
   const notes = await patchIv({ id, action: "update", notes: "当日の確認事項" });
   assert.equal(notes.statusCode, 200, JSON.stringify(notes.body));
   assert.equal(notes.body.interview.timerex.linked, true);
-  assert.equal(notes.body.interview.timerex.rescheduleUrl, "https://timerex.net/reschedule/ANON_RESCHEDULE_TOKEN");
-  assert.equal(notes.body.interview.timerex.cancelUrl, "https://timerex.net/host/cancel/ANON_HOST_CANCEL_TOKEN", "取消は主催者用を優先");
+  assert.equal(notes.body.interview.timerex.rescheduleUrl, "https://timerex.net/anon/guest_reschedule/ANON_RESCHEDULE_TOKEN");
+  assert.equal(notes.body.interview.timerex.cancelUrl, "https://timerex.net/anon/host_cancel/ANON_HOST_CANCEL_TOKEN", "取消は主催者用を優先");
 });
 
 console.warn = origWarn;

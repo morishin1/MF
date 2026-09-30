@@ -115,6 +115,7 @@ function setup() {
 // 個人情報を匿名化した、実際に確認できたpayload構造そのままのfixture
 const confirmedFixture = (over = {}) => ({
   webhook_type: "event_confirmed",
+  calendar_url_path: "c0a1b2c3",   // 実 payload では body 直下
   event: {
     id: "ev_abc123",
     start_datetime: "2026-10-01T05:00:00Z",
@@ -126,7 +127,6 @@ const confirmedFixture = (over = {}) => ({
       { field_type: "company_name", value: "" },
       { field_type: "guest_comment", value: "" },
     ],
-    calendar_url_path: "c0a1b2c3",
     is_changed: false, old_event_id: null, new_event_id: null,
     ...over,
   },

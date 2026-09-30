@@ -21,15 +21,38 @@
 //   成功時は必ず200を返す。
 //
 // ■ DEBUGログ
-//   TIMEREX_WEBHOOK_DEBUG_LOG=1 のときだけ、届いたpayloadをログへ出す
-//   （実payload確認用。認証ヘッダーの値は常に除いてログする）。
-//   実payloadの確認は完了したため、通常運用ではこの環境変数を外しておくこと。
+//   TIMEREX_WEBHOOK_DEBUG_LOG=1 のときだけ、payloadの「形」をログへ出す（debugSummary）。
+//   出すのは webhook_type・calendar_url_path・event.id・is_changed・old/new_event_id・
+//   form の field_type 一覧だけ。payload全体・ヘッダーは出さない。
+//   メールアドレス・氏名・Meet URL・取消/リスケURL・Webhook Secret は DEBUG 時も絶対に出さない。
 
 import crypto from "node:crypto";
 import { readJson, methodNotAllowed, json } from "../../../lib/http.js";
 import { parseTimerexWebhook, applyTimerexEvent } from "../../../lib/hr-timerex.js";
 
 const AUTH_HEADER = "x-timerex-authorization";
+
+// ログに出してよい ID・フラグだけ（英数字と記号の短い値。URL・メールらしいものは落とす）
+const safeId = (v) => {
+  if (v == null || v === "") return null;
+  const s = String(v).slice(0, 80);
+  return /^[A-Za-z0-9_.:-]+$/.test(s) ? s : "(redacted)";
+};
+
+/** DEBUG用：payload の形だけ。個人情報・URL・トークンを含めない */
+export function debugSummary(body) {
+  const b = body && typeof body === "object" && !Array.isArray(body) ? body : {};
+  const ev = b.event && typeof b.event === "object" ? b.event : {};
+  return {
+    webhook_type: safeId(b.webhook_type),
+    calendar_url_path: safeId(b.calendar_url_path ?? ev.calendar_url_path),
+    event_id: safeId(ev.id),
+    is_changed: typeof ev.is_changed === "boolean" ? ev.is_changed : null,
+    old_event_id: safeId(ev.old_event_id),
+    new_event_id: safeId(ev.new_event_id),
+    form_field_types: Array.isArray(ev.form) ? ev.form.map((f) => safeId(f && f.field_type)) : null,
+  };
+}
 
 function verifySecret(req) {
   const configured = process.env.TIMEREX_WEBHOOK_SECRET || "";
@@ -60,11 +83,8 @@ export default async function handler(req, res) {
   const body = await readJson(req);
 
   if (process.env.TIMEREX_WEBHOOK_DEBUG_LOG === "1") {
-    // 実payload確認用の一時ログ。Secretは絶対に出さない
-    const headers = { ...(req.headers || {}) };
-    delete headers[AUTH_HEADER];
-    console.log("[timerex-webhook][debug] headers:", JSON.stringify(headers));
-    console.log("[timerex-webhook][debug] body:", JSON.stringify(body));
+    // payload全体・ヘッダーは出さない（メール・氏名・URL・Secretを残さない）
+    console.log("[timerex-webhook][debug]", JSON.stringify(debugSummary(body)));
   }
 
   const parsed = await parseTimerexWebhook(body);
