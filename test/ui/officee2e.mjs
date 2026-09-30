@@ -217,7 +217,7 @@ console.log("\n=== E2E 1：Office から勤務表を登録して、稼働確定�
   await page.waitForSelector(".of-drawer");
   const dr = await page.locator(".of-drawer").innerText();
   check(dr.includes("確定した稼働時間") && dr.includes("168.5h") && dr.includes("700,000円"), "7. 戻ると、右ドロワーに確定した稼働時間と売上の精算が出る");
-  check(await page.locator('.of-drawer a[href^="timesheet.html?contract="]').count() >= 1, "7. ドロワーから、勤務表の画面へ戻れる");
+  check(await page.locator('.of-drawer a[href^="/office/timesheet.html?contract="]').count() >= 1, "7. ドロワーから、勤務表の画面へ戻れる");
   await page.keyboard.press("Escape");
   const tr2 = page.locator('#rows tr:has-text("田中 太郎")');
   check((await tr2.locator('[data-label="稼働時間"]').innerText()).includes("168.5h") && (await tr2.locator('[data-label="稼働時間"]').innerText()).includes("確定済"), "7. 一覧：稼働時間 168.5h・確認済");

@@ -273,7 +273,7 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
   const cta = cell(page, "次にやること");
   const t = await cta.innerText();
   check(t.includes("勤務表が届いています") && t.includes("AIで読み取る") && !t.includes("勤務表を追加"), `次にやること：勤務表が届いています／AIで読み取る（${t.replace(/\s+/g, " ")}）`);
-  check(await cta.locator("a.of-btn").getAttribute("href") === `timesheet.html?contract=${CON}&month=${M}&read=1`, "「AIで読み取る」は、確認画面（&read=1）へ");
+  check(await cta.locator("a.of-btn").getAttribute("href") === `/office/timesheet.html?contract=${CON}&month=${M}&read=1`, "「AIで読み取る」は、確認画面（&read=1）へ");
   await noCircle(page, "未読取の一覧");
   const nt4 = await page.locator("#now .of-now").innerText();
   check(nt4.includes("勤務表が届いています") && nt4.includes("AIで読み取る"), "ページの一番上も「AIで読み取る」");
