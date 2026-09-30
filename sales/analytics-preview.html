@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>営業分析（プレビュー） - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <!--
+    営業分析のプレビュー（sales_analytics_revenue_requirements.md ／ sales_analytics_uiux_requirements.md）
+    ■ モックデータだけで動く。DB・API には触らない（読みも書きもしない）。/sales/analytics.html も変えない
+      データはこのファイルの中で決まった種から作る（開くたびに同じ数字）。会社名・担当者名はすべて架空
+    ■ 計算式は、本実装（db/099・lib/sales-analytics.js）で使う予定の式と同じ
+      売上         = 成約した案件の金額（成約日で数える）
+      見込売上     = 進行中の案件の 金額 × 成約確率（商談20%・提案50%・最終調整80%。案件ごとの上書きを優先）
+      パイプライン = 進行中の案件の金額の合計
+    ■ ログインしていれば /sales のヘッダー、していなければ同じ見た目の簡易ヘッダー
+    ■ 画面下の「表示確認」で、読み込み中・データなし・エラーの見え方を切り替えられる（プレビュー専用）
+  -->
+  <style>
+    :root { --navy:#1b2440; --ink:#4a5068; --mute:#6b7080; --faint:#9aa0b4; --line:#e2e2dc; --bg:#f6f6f2;
+      --lime:#e6f050; --green:#2f6f3a; --green-bg:#e5f1e2; --amber:#7d5a00; --amber-bg:#fbf1d6; --red:#b3261e; }
+    body { font-family:'Zen Kaku Gothic New', sans-serif; background:var(--bg); margin:0; color:var(--navy); }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; font-weight:normal; font-style:normal;
+      line-height:1; display:inline-block; vertical-align:middle; }
+    button { font-family:inherit; }
+
+    /* ログインしていないときの簡易ヘッダー（js/sales-layout.js の .sl-bar と同じ見た目） */
+    .pv-bar { background:#fff; border-bottom:1px solid var(--line); padding:0 20px; display:flex; align-items:center;
+      gap:22px; height:56px; position:sticky; top:0; z-index:20; }
+    .pv-bar .logo { font-weight:700; font-size:14px; letter-spacing:.02em; white-space:nowrap; }
+    .pv-bar .logo span { color:var(--mute); font-weight:500; }
+    .pv-bar nav { display:flex; gap:4px; flex:1; min-width:0; overflow-x:auto; }
+    .pv-bar nav a { display:flex; align-items:center; gap:6px; padding:0 12px; height:56px; white-space:nowrap;
+      color:var(--ink); text-decoration:none; font-size:13px; font-weight:500; border-bottom:3px solid transparent; }
+    .pv-bar nav a .material-symbols-outlined { font-size:19px; }
+    .pv-bar nav a.on { color:var(--navy); font-weight:700; border-bottom-color:var(--navy); }
+
+    .pv-wrap { max-width:1240px; margin:0 auto; padding:22px 16px 90px; }
+
+    /* A. ヘッダー */
+    .pv-head { display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin:0 0 18px; }
+    .pv-head .t { flex:1; min-width:220px; }
+    .pv-head h1 { font-size:24px; font-weight:700; margin:0 0 3px; display:flex; align-items:center; gap:8px; }
+    .pv-head p { color:var(--mute); font-size:13px; margin:0; }
+    .pv-tag { font-size:10.5px; font-weight:700; background:var(--amber-bg); color:var(--amber); border-radius:999px; padding:2px 9px; }
+    .pv-head .r { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+    .pv-updated { font-size:11px; color:var(--faint); display:flex; align-items:center; gap:4px; }
+    .pv-updated .material-symbols-outlined { font-size:14px; }
+    .pv-pills { display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:999px; padding:3px; }
+    .pv-pills button { border:none; background:none; border-radius:999px; padding:6px 14px; font-size:12.5px;
+      font-weight:500; color:var(--ink); cursor:pointer; }
+    .pv-pills button.on { background:var(--navy); color:#fff; font-weight:700; }
+    .pv-pills.sm button { padding:4px 11px; font-size:11.5px; }
+
+    .pv-sec { margin:0 0 26px; }
+    .pv-sec-h { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; margin:0 0 10px; flex-wrap:wrap; }
+    .pv-sec-h .q { font-size:11.5px; color:var(--faint); font-weight:500; }
+    .pv-sec-h .sp { flex:1; }
+    .pv-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+
+    /* B. KPI（数値がいちばん大きい・3行まで） */
+    .pv-kpis { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; }
+    .pv-kpi { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 18px 15px; text-align:left;
+      cursor:pointer; color:inherit; display:flex; flex-direction:column; gap:6px; min-width:0; position:relative; }
+    .pv-kpi:hover { border-color:var(--navy); box-shadow:0 4px 16px rgba(27,36,64,.08); }
+    .pv-kpi .k { font-size:12px; font-weight:700; color:var(--mute); display:flex; align-items:center; gap:5px; }
+    .pv-kpi .k .material-symbols-outlined { font-size:17px; }
+    .pv-kpi .k .go { margin-left:auto; color:#c7cad6; font-size:16px; }
+    .pv-kpi:hover .k .go { color:var(--navy); }
+    .pv-kpi .v { font-size:27px; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pv-kpi .d { font-size:12px; color:var(--mute); font-variant-numeric:tabular-nums; }
+    .pv-kpi.main { border-color:var(--navy); }
+    .pv-kpi.main::before { content:""; position:absolute; left:0; top:14px; bottom:14px; width:4px; border-radius:0 3px 3px 0; background:var(--lime); }
+    .up { color:var(--green); font-weight:700; }
+    .down { color:var(--red); font-weight:700; }
+    .flat { color:var(--mute); font-weight:700; }
+
+    .nd { font-size:11.5px; color:var(--mute); font-variant-numeric:tabular-nums; }
+    .ref { display:inline-flex; align-items:center; gap:2px; background:var(--amber-bg); color:var(--amber); border-radius:999px;
+      padding:1px 7px; font-size:10.5px; font-weight:700; white-space:nowrap; vertical-align:middle; cursor:help; }
+    .ref .material-symbols-outlined { font-size:12px; }
+    .weak { color:var(--faint) !important; }
+
+    /* C. 数字からの営業判断 */
+    .pv-judge { display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--line);
+      border-left:5px solid var(--navy); border-radius:12px; padding:16px 18px; }
+    .pv-judge > .material-symbols-outlined { font-size:26px; color:var(--navy); background:var(--lime); border-radius:10px; padding:7px; }
+    .pv-judge .txt { flex:1; font-size:14.5px; font-weight:700; line-height:1.75; }
+    .pv-judge .txt .s2 { font-weight:500; color:var(--ink); }
+    .pv-cta { display:inline-flex; align-items:center; gap:5px; background:var(--navy); color:#fff; border:none;
+      border-radius:8px; padding:9px 14px; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .pv-cta .material-symbols-outlined { font-size:17px; }
+    .pv-cta.ghost { background:#fff; color:var(--navy); border:1px solid var(--line); }
+
+    /* D・E. グラフ */
+    .pv-charts { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .pv-chart { position:relative; height:270px; }
+    .pv-chart-note { margin-top:10px; font-size:12.5px; font-weight:700; display:flex; align-items:center; gap:6px; }
+    .pv-chart-note .material-symbols-outlined { font-size:17px; }
+    .pv-chart-foot { font-size:11px; color:var(--faint); margin-top:4px; }
+
+    /* F. ファネル */
+    .pv-funnel { display:grid; grid-template-columns:1fr; gap:0; }
+    .pv-stage { display:grid; grid-template-columns:120px 150px 1fr; gap:14px; align-items:center; padding:8px 10px;
+      border-radius:9px; }
+    .pv-stage .l { font-size:13.5px; font-weight:700; display:flex; align-items:center; gap:6px; }
+    .pv-stage .l .material-symbols-outlined { font-size:18px; color:var(--mute); }
+    .pv-stage .n { font-size:22px; font-weight:900; font-variant-numeric:tabular-nums; }
+    .pv-stage .n small { font-size:12px; font-weight:700; color:var(--mute); margin-left:2px; }
+    .pv-stage .n .alt { display:block; font-size:11.5px; font-weight:500; color:var(--mute); }
+    .pv-stage .bar { height:12px; background:#efefeb; border-radius:6px; overflow:hidden; }
+    .pv-stage .bar i { display:block; height:100%; background:var(--navy); border-radius:6px; }
+    .pv-stage.money { background:#fafbe6; }
+    .pv-stage.money .bar i { background:var(--lime); }
+    .pv-link { display:grid; grid-template-columns:120px 1fr; gap:14px; padding:2px 10px; }
+    .pv-rate { grid-column:2; display:inline-flex; align-items:center; gap:8px; justify-self:start; border:1px solid transparent;
+      background:none; border-radius:8px; padding:5px 10px 5px 6px; cursor:pointer; color:var(--ink); font-size:12.5px; text-align:left; }
+    .pv-rate:hover { background:var(--bg); border-color:var(--line); }
+    .pv-rate .arr { font-size:18px; color:var(--faint); }
+    .pv-rate b { font-size:15px; color:var(--navy); font-variant-numeric:tabular-nums; }
+    .pv-rate.jam { background:var(--amber-bg); border-color:#f0dca3; }
+    .pv-rate.jam .arr { color:var(--amber); }
+    .pv-jam { font-size:11px; font-weight:700; color:var(--amber); display:inline-flex; align-items:center; gap:3px; }
+    .pv-jam .material-symbols-outlined { font-size:14px; }
+    .pv-unit { font-size:10.5px; color:var(--faint); padding:6px 10px 2px; border-top:1px dashed var(--line); margin-top:4px; }
+
+    /* G. 要因分析 */
+    table.pv-t { width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
+    .pv-t th { text-align:right; font-size:11px; color:var(--mute); font-weight:700; padding:10px 12px; background:var(--bg);
+      border-bottom:1px solid var(--line); white-space:nowrap; cursor:pointer; user-select:none; }
+    .pv-t th:first-child, .pv-t td:first-child { text-align:left; }
+    .pv-t th.sorted { color:var(--navy); }
+    .pv-t th .material-symbols-outlined { font-size:14px; margin-left:2px; }
+    .pv-t th.key { background:#eef0f6; color:var(--navy); }
+    .pv-t td { padding:11px 12px; border-bottom:1px solid #efefeb; text-align:right; font-variant-numeric:tabular-nums; vertical-align:middle; }
+    .pv-t td.key { background:#f8f9fc; font-weight:900; font-size:14px; }
+    .pv-t tbody tr { cursor:pointer; }
+    .pv-t tbody tr:hover td { background:var(--bg); }
+    .pv-t tr:last-child td { border-bottom:none; }
+    .pv-t .nm { font-weight:700; }
+    .pv-t .best { display:inline-block; background:var(--lime); color:var(--navy); font-size:10px; font-weight:700;
+      border-radius:999px; padding:1px 7px; margin-left:6px; vertical-align:middle; }
+    .pv-t .sub { display:block; font-size:10.5px; color:var(--faint); font-weight:500; }
+    .pv-t tfoot td { background:var(--bg); font-weight:700; border-top:1px solid var(--line); cursor:default; }
+    .pv-tbl { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+    .pv-defs { font-size:11px; color:var(--faint); margin:8px 2px 0; line-height:1.7; }
+    .pv-cards { display:none; }
+    .pv-gcard { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; cursor:pointer; }
+    .pv-gcard .h { display:flex; align-items:center; gap:6px; font-weight:700; margin-bottom:8px; }
+    .pv-gcard .big { font-size:20px; font-weight:900; font-variant-numeric:tabular-nums; }
+    .pv-gcard .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px 10px; margin-top:8px; font-size:12px; }
+    .pv-gcard .grid b { display:block; font-size:14px; font-variant-numeric:tabular-nums; }
+
+    /* 空・読み込み・エラー */
+    .pv-empty { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:#fff; border:1px dashed #c9ccd6;
+      border-radius:12px; padding:18px 20px; color:var(--ink); font-size:13.5px; line-height:1.7; }
+    .pv-empty > .material-symbols-outlined { font-size:26px; color:var(--faint); }
+    .pv-empty .txt { flex:1; min-width:220px; }
+    .pv-err { display:flex; align-items:center; gap:12px; background:#fdecea; color:var(--red); border-radius:12px;
+      padding:14px 16px; font-size:13px; }
+    .pv-err .txt { flex:1; }
+    .pv-err button { background:#fff; border:1px solid #efc6c2; color:var(--red); border-radius:8px; padding:7px 12px;
+      font-size:12.5px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px; }
+    .pv-err button .material-symbols-outlined { font-size:16px; }
+    .sk { background:linear-gradient(90deg, #efefeb 0%, #f7f7f4 50%, #efefeb 100%); background-size:200% 100%;
+      animation:sk 1.2s ease-in-out infinite; border-radius:6px; }
+    @keyframes sk { 0% { background-position:100% 0; } 100% { background-position:-100% 0; } }
+    .sk-kpi { height:116px; border-radius:12px; }
+    .sk-line { height:12px; margin:8px 0; }
+    .sk-chart { height:270px; border-radius:10px; }
+    .pv-loading-row td { padding:14px 12px; }
+
+    /* H. 根拠ドロワー（見るものは右ドロワー。閉じても一覧・グラフの状態とスクロール位置はそのまま） */
+    .pv-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.3); z-index:40; }
+    .pv-drawer { position:fixed; top:0; right:0; bottom:0; width:600px; max-width:94vw; background:#fff; z-index:41;
+      box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:22px; box-sizing:border-box; }
+    .pv-drawer h2 { font-size:18px; font-weight:700; margin:0 36px 2px 0; }
+    .pv-drawer .x { position:absolute; top:14px; right:14px; border:none; background:none; cursor:pointer; color:var(--ink);
+      padding:6px; border-radius:8px; }
+    .pv-drawer .x:hover { background:var(--bg); }
+    .pv-drawer .formula { background:var(--bg); border-radius:10px; padding:11px 13px; font-size:12.5px; line-height:1.75; margin:12px 0 14px; }
+    .pv-drawer .formula b { font-variant-numeric:tabular-nums; }
+    .pv-drawer h3 { font-size:13px; font-weight:700; margin:18px 0 8px; display:flex; align-items:center; gap:6px; }
+    .pv-drawer h3 .c { font-size:11.5px; color:var(--mute); font-weight:500; }
+    .pv-drawer .opt { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mute); margin:0 0 6px; }
+    table.pv-dt { width:100%; border-collapse:collapse; font-size:12px; }
+    .pv-dt th { text-align:left; font-size:10.5px; color:var(--mute); font-weight:700; padding:6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    .pv-dt td { padding:7px 6px; border-bottom:1px solid #efefeb; vertical-align:top; }
+    .pv-dt td.num, .pv-dt th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .pv-dt tfoot td { font-weight:700; border-top:1px solid var(--line); border-bottom:none; }
+    .pv-dt .co { font-weight:700; }
+    .pv-dt .s2 { display:block; font-size:10.5px; color:var(--faint); }
+    .pv-more { font-size:11.5px; color:var(--faint); margin-top:6px; }
+    .stage { display:inline-block; border-radius:999px; padding:1px 8px; font-size:10.5px; font-weight:700; white-space:nowrap; }
+    .stage.meeting { background:#e7eaf3; color:var(--navy); }
+    .stage.proposal { background:var(--green-bg); color:var(--green); }
+    .stage.negotiation { background:var(--amber-bg); color:var(--amber); }
+    .stage.won { background:var(--navy); color:#fff; }
+    .stage.lost { background:var(--bg); color:var(--faint); }
+    .yes { color:var(--green); font-weight:700; }
+    .no { color:var(--faint); }
+    .ovr { font-size:10px; color:var(--amber); }
+
+    /* プレビュー専用：表示の切り替え */
+    .pv-dev { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:30; display:flex; align-items:center; gap:8px;
+      background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 6px 5px 14px; box-shadow:0 8px 24px rgba(27,36,64,.14);
+      font-size:11.5px; color:var(--mute); max-width:calc(100vw - 24px); box-sizing:border-box; }
+    .pv-dev b { color:var(--amber); white-space:nowrap; }
+
+    @media (max-width: 1100px) { .pv-kpis { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 920px) { .pv-charts { grid-template-columns:1fr; } }
+    @media (max-width: 720px) {
+      .pv-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      .pv-kpi .v { font-size:22px; }
+      .pv-head .r { align-items:flex-start; }
+      .pv-judge { flex-direction:column; align-items:flex-start; }
+      .pv-stage { grid-template-columns:84px 1fr; }
+      .pv-stage .bar { grid-column:1 / 3; }
+      .pv-link { grid-template-columns:0 1fr; gap:0; }
+      .pv-tbl { display:none; }
+      .pv-cards { display:block; }
+      .pv-bar { padding:0 12px; gap:12px; }
+      .pv-dev { left:12px; right:12px; transform:none; border-radius:12px; justify-content:center; padding:6px 8px; }
+      .pv-dev .pv-pills button { white-space:nowrap; padding:4px 8px; }
+      .pv-rate { flex-wrap:wrap; row-gap:2px; }
+      .pv-rate > * { white-space:nowrap; }
+    }
+    @media (max-width: 420px) { .pv-kpis { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div id="pv-fallback-bar"></div>
+
+<div class="wrap pv-wrap">
+  <!-- A. ヘッダー -->
+  <div class="pv-head">
+    <div class="t">
+      <h1>営業分析 <span class="pv-tag">プレビュー・モックデータ</span></h1>
+      <p>営業活動が売上につながっているかを確認</p>
+    </div>
+    <div class="r">
+      <div class="pv-pills" id="period" role="tablist" aria-label="期間"></div>
+      <div class="pv-updated"><span class="material-symbols-outlined">schedule</span><span id="updated"></span></div>
+    </div>
+  </div>
+
+  <!-- B. 売上KPI -->
+  <section class="pv-sec" aria-label="売上KPI">
+    <div class="pv-kpis" id="kpis"></div>
+  </section>
+
+  <!-- C. 数字からの営業判断 -->
+  <section class="pv-sec" aria-label="数字からの営業判断" id="judge"></section>
+
+  <!-- D・E. 推移 -->
+  <div class="pv-charts">
+    <section class="pv-sec">
+      <div class="pv-sec-h">売上・見込売上の推移 <span class="q" id="rev-q"></span></div>
+      <div class="pv-card" id="rev-card"></div>
+    </section>
+    <section class="pv-sec">
+      <div class="pv-sec-h">営業活動・成果の推移 <span class="q" id="act-q"></span></div>
+      <div class="pv-card" id="act-card"></div>
+    </section>
+  </div>
+
+  <!-- F. 営業ファネル -->
+  <section class="pv-sec">
+    <div class="pv-sec-h">営業ファネル <span class="q" id="funnel-q"></span></div>
+    <div class="pv-card" id="funnel"></div>
+  </section>
+
+  <!-- G. 要因分析 -->
+  <section class="pv-sec">
+    <div class="pv-sec-h">何が売上につながっているか
+      <span class="q">1アタック期待売上（見込売上 ÷ アタック）で比べます。行を押すと根拠を出します</span>
+      <span class="sp"></span>
+      <button class="pv-cta ghost" id="detail-btn" onclick="toggleDetail()"></button>
+    </div>
+    <div class="pv-toolbar" style="margin:0 0 10px;"><div class="pv-pills sm" id="dims" role="tablist" aria-label="分析軸"></div></div>
+    <div id="table"></div>
+    <div class="pv-defs">
+      商談＝案件の数（1社に案件が2つあれば2）。案件は、商談になる前にその会社へ最後に送ったアタックの営業文・チャネル・担当に結びつけます。<br>
+      売上＝成約した案件の金額／見込売上＝進行中の案件の 金額 × 成約確率／1アタック期待売上＝見込売上 ÷ アタック
+      <span class="ref" title="母数が10件未満のため、傾向判断にはまだ十分ではありません"><span class="material-symbols-outlined">info</span>参考値</span>＝母数10件未満
+    </div>
+  </section>
+</div>
+
+<div id="drawer-root"></div>
+
+<div class="pv-dev" aria-label="プレビュー用の表示切り替え">
+  <b>表示確認</b>
+  <div class="pv-pills sm" id="devmode"></div>
+</div>
+
+<script src="../js/api-client.js?v=20260929pg1"></script>
+<script src="../js/layout.js?v=20260929b"></script>
+<script src="../js/sales-layout.js?v=20260928h"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // =====================================================================
+  // 表示の道具
+  // =====================================================================
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const DAY = 86400000;
+  const JST = 9 * 3600000;
+  const NOW = Date.now();
+  const MIN_SAMPLE = 10;   // これ未満の母数は「参考値」
+  const REF_TIP = "母数が10件未満のため、傾向判断にはまだ十分ではありません";
+
+  const yen = (n) => `¥${Math.round(n).toLocaleString("ja-JP")}`;
+  /** 「120万円」「3.4万円」「8,000円」 */
+  const man = (n) => {
+    n = Math.round(n || 0);
+    if (Math.abs(n) < 10000) return `${n.toLocaleString("ja-JP")}円`;
+    const m = n / 10000;
+    return Math.abs(m) >= 100 ? `${Math.round(m).toLocaleString("ja-JP")}万円` : `${(Math.round(m * 10) / 10).toLocaleString("ja-JP")}万円`;
+  };
+  const pctTxt = (n, d) => (d ? `${(Math.round((n / d) * 1000) / 10).toLocaleString("ja-JP")}%` : "—");
+  const refBadge = (d) => (d > 0 && d < MIN_SAMPLE
+    ? ` <span class="ref" title="${REF_TIP}"><span class="material-symbols-outlined">info</span>参考値</span>` : "");
+  const jst = (t) => new Date(t + JST);
+  const p2 = (n) => String(n).padStart(2, "0");
+  const fmtDT = (t) => { if (t == null) return "—"; const d = jst(t); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`; };
+  const fmtD = (t) => { if (t == null) return "—"; const d = jst(t); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+  /** 前と比べた変化。色だけでなく「+18%」「−2件」の文字も出す */
+  const change = (cur, prev, { unit = "%", count = false } = {}) => {
+    if (count) {
+      const diff = cur - prev;
+      const cls = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+      return `<span class="${cls}">${diff > 0 ? "+" : diff < 0 ? "−" : "±"}${Math.abs(diff)}${unit}</span>`;
+    }
+    if (!prev) return cur ? `<span class="up">新規</span>` : `<span class="flat">±0</span>`;
+    const r = Math.round(((cur - prev) / prev) * 100);
+    const cls = r > 0 ? "up" : r < 0 ? "down" : "flat";
+    return `<span class="${cls}">${r > 0 ? "+" : r < 0 ? "−" : "±"}${Math.abs(r)}${unit}</span>`;
+  };
+
+  // =====================================================================
+  // モックデータ（決まった種から作る。開くたびに同じ数字になる）
+  // =====================================================================
+  function seeded(seed) {
+    return function () {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const R = seeded(20260929);
+  const chance = (p) => R() < Math.min(Math.max(p, 0), 0.97);
+  const between = (a, b) => a + R() * (b - a);
+  const pickW = (arr) => { let x = R() * arr.reduce((s, a) => s + a.w, 0); for (const a of arr) { x -= a.w; if (x <= 0) return a; } return arr[arr.length - 1]; };
+  const pick = (arr) => arr[Math.floor(R() * arr.length)];
+  const round1 = (n) => Math.round(n / 10000) * 10000;
+
+  // 営業文ごとの「効き方」。補助金は、クリックは多いが商談・売上につながりにくい例
+  const TEMPLATES = [
+    { id: "t1", name: "AI/DX診断のご案内", service: "AI / DX", w: 3, click: 0.30, reply: 0.34, meet: 0.55, prop: 0.72, nego: 0.6, win: 0.55,
+      amount: [1200000, 3200000], deals: ["AI/DX 導入支援", "業務自動化 PoC", "社内データ活用診断"] },
+    { id: "t2", name: "PCレンタル 法人プラン", service: "PCレンタル", w: 3, click: 0.22, reply: 0.32, meet: 0.5, prop: 0.78, nego: 0.5, win: 0.62,
+      amount: [480000, 1500000], deals: ["PCレンタル 20台", "PCレンタル 入替", "新入社員用PC一式"] },
+    { id: "t3", name: "補助金活用セミナーのご招待", service: "補助金支援", w: 2.5, click: 0.44, reply: 0.13, meet: 0.3, prop: 0.5, nego: 0.35, win: 0.3,
+      amount: [300000, 800000], deals: ["IT導入補助金 申請支援", "ものづくり補助金 申請"] },
+    { id: "t4", name: "Webサイト リニューアル提案", service: "Web制作", w: 1.5, click: 0.18, reply: 0.22, meet: 0.45, prop: 0.62, nego: 0.5, win: 0.45,
+      amount: [800000, 2400000], deals: ["コーポレートサイト刷新", "採用サイト制作"] },
+  ];
+  const CHANNELS = [
+    { key: "form", label: "お問い合わせフォーム", w: 0.55, click: 1.0, reply: 1.0 },
+    { key: "mail", label: "メール", w: 0.2, click: 0.8, reply: 1.25 },
+    { key: "instagram", label: "Instagram", w: 0.15, click: 1.25, reply: 0.7 },
+    { key: "x", label: "X", w: 0.1, click: 0.95, reply: 0.55 },
+  ];
+  const INDUSTRIES = [
+    { name: "製造", w: 1.3, m: 1.2, suffix: "工業" }, { name: "不動産", w: 1, m: 0.9, suffix: "不動産" },
+    { name: "士業", w: 0.8, m: 0.8, suffix: "法律事務所" }, { name: "医療", w: 0.9, m: 1.0, suffix: "クリニック" },
+    { name: "小売", w: 1, m: 0.85, suffix: "商店" }, { name: "IT", w: 1, m: 1.1, suffix: "システムズ" },
+    { name: "建設", w: 1, m: 1.05, suffix: "建設" },
+  ];
+  const EMPLOYEES = [
+    { id: "e1", name: "佐藤", w: 1.2, m: 1.15 }, { id: "e2", name: "鈴木", w: 1, m: 1.0 },
+    { id: "e3", name: "高橋", w: 1, m: 0.8 }, { id: "e4", name: "田中", w: 0.8, m: 0.95 },
+  ];
+  const HEADS = ["青葉", "桜丘", "北斗", "若葉", "東雲", "瑞穂", "白石", "大和", "朝日", "翠山", "葵", "柏木", "黒潮", "三笠", "湊",
+    "紅葉", "千歳", "浜風", "陽光", "丸山", "星野", "藤波", "銀河", "有明", "早瀬", "楓", "峰岸", "月見", "流星", "若草"];
+  const MIDS = ["", "総合", "中央", "ネクスト", "プラス", "ワークス", "テック"];
+
+  const STAGES = { meeting: "商談", proposal: "提案", negotiation: "最終調整", won: "成約", lost: "失注" };
+  const OPEN = ["meeting", "proposal", "negotiation"];
+  const PROB = { meeting: 0.2, proposal: 0.5, negotiation: 0.8 };
+
+  const MOCK = { approaches: [], deals: [] };
+  (function build() {
+    const names = new Map();
+    let cid = 0, aid = 0, did = 0;
+    for (let d = 400; d >= 0; d--) {
+      const dayStart = NOW - d * DAY;
+      const wd = jst(dayStart).getUTCDay();
+      if (wd === 0 || wd === 6) continue;
+      const growth = 1 - d / 400;                              // 最近ほどアタックが多い
+      const n = Math.round(1.2 + 2.6 * growth + R() * 2);
+      for (let i = 0; i < n; i++) {
+        const sent = dayStart - (d === 0 ? between(0.5, 6) * 3600000 : between(-6, 3) * 3600000);
+        if (sent > NOW) continue;
+        const ind = pickW(INDUSTRIES);
+        let name = `株式会社${pick(HEADS)}${pick(MIDS)}${ind.suffix}`;
+        const k = (names.get(name) || 0) + 1; names.set(name, k);
+        if (k > 1) name += `（${k}）`;
+        const company = { id: `c${++cid}`, name, industry: ind.name };
+        const t = pickW(TEMPLATES), ch = pickW(CHANNELS), e = pickW(EMPLOYEES);
+        const a = { id: `a${++aid}`, company, template: t, channel: ch, employee: e, service: t.service, industry: ind.name, sent,
+          clickAt: null, replyAt: null, deal: null };
+        MOCK.approaches.push(a);
+
+        if (chance(t.click * ch.click * ind.m)) {
+          const c = sent + between(0.2, 60) * 3600000;
+          if (c < NOW) a.clickAt = c;
+        }
+        const replyP = a.clickAt ? t.reply * 1.45 * ch.reply * e.m : 0.02 * ch.reply;
+        if (chance(replyP)) {
+          const r = (a.clickAt || sent) + between(0.3, 6) * DAY;
+          if (r < NOW) a.replyAt = r;
+        }
+        if (!a.replyAt || !chance(t.meet * 1.35 * e.m)) continue;
+        const created = a.replyAt + between(2, 10) * DAY;
+        if (created >= NOW) continue;
+
+        // 案件（商談 → 提案 → 最終調整 → 成約／失注）。段階・金額が変わるたびに履歴を残す（db/099 の deal_history と同じ考え方）
+        const makeDeal = (createdAt, title) => {
+          let amount = round1(between(t.amount[0], t.amount[1]) * ind.m);
+          const deal = { id: `d${++did}`, title, company, approach: a, template: t, channel: ch, employee: e, service: t.service,
+            industry: ind.name, createdAt, hist: [{ at: createdAt, stage: "meeting", amount }], probOverride: null };
+          a.deals = a.deals || [];
+          a.deals.push(deal);
+          MOCK.deals.push(deal);
+          let at = createdAt;
+          const step = (stage, lo, hi, amt) => {
+            const next = at + between(lo, hi) * DAY;
+            if (next >= NOW) return false;
+            at = next;
+            if (amt) amount = amt;
+            deal.hist.push({ at, stage, amount });
+            return true;
+          };
+          if (chance(t.prop * e.m)) {
+            if (!step("proposal", 5, 20, round1(amount * between(0.85, 1.25)))) return;
+            const nego = chance(t.nego);
+            if (nego && !step("negotiation", 5, 15)) return;
+            step(chance(t.win * e.m * (nego ? 1.35 : 0.7)) ? "won" : "lost", 5, 25);
+          } else if (chance(0.75)) {
+            step("lost", 15, 60);
+          }
+        };
+        const titles = [...t.deals].sort(() => R() - 0.5);
+        makeDeal(created, titles[0]);
+        // 1割ほどは、同じ会社で2つ目の案件が立つ（企業数と案件数がずれる例）
+        if (chance(0.12)) {
+          const c2 = created + between(3, 20) * DAY;
+          if (c2 < NOW) makeDeal(c2, titles[1] || `${titles[0]}（追加）`);
+        }
+      }
+    }
+    for (const dl of MOCK.deals) {
+      const last = dl.hist[dl.hist.length - 1];
+      dl.stage = last.stage;
+      dl.amount = last.amount;
+      dl.updatedAt = last.at;
+      dl.wonAt = last.stage === "won" ? last.at : null;
+      dl.lostAt = last.stage === "lost" ? last.at : null;
+      dl.reached = new Set(dl.hist.map((h) => h.stage));
+      // 1割ほどは、担当者が成約確率を個別に上書きしている
+      if (OPEN.includes(last.stage) && chance(0.12)) {
+        dl.probOverride = { stage: last.stage, p: Math.min(0.95, PROB[last.stage] + (chance(0.6) ? 0.15 : -0.1)) };
+      }
+    }
+  })();
+
+  let approaches = MOCK.approaches;
+  let deals = MOCK.deals;
+
+  // =====================================================================
+  // 計算（本実装の lib/sales-analytics.js で使う予定の式）
+  // =====================================================================
+  let days = 90;
+  let dim = "template";
+  let sortKey = "fpa";
+  let sortDesc = true;
+  let detail = false;
+  let devMode = "ok";      // プレビュー専用：ok / loading / empty / error
+  const charts = {};
+
+  const dealsOf = (a) => a.deals || [];
+  function probOf(deal, stage) {
+    if (deal.probOverride && deal.probOverride.stage === stage) return { p: deal.probOverride.p, override: true };
+    return { p: PROB[stage], override: false };
+  }
+  /** 時刻 t の時点で、その案件がどの段階・金額だったか（まだ無ければ null） */
+  function stateAt(deal, t) {
+    let s = null;
+    for (const h of deal.hist) { if (h.at <= t) s = h; else break; }
+    return s;
+  }
+  /** 時刻 t の時点で進行中だった案件の、パイプライン総額と見込売上 */
+  function openAt(t) {
+    let pipeline = 0, forecast = 0;
+    const list = [];
+    for (const d of deals) {
+      const s = stateAt(d, t);
+      if (!s || !OPEN.includes(s.stage)) continue;
+      const pr = probOf(d, s.stage);
+      pipeline += s.amount;
+      forecast += s.amount * pr.p;
+      list.push({ d, stage: s.stage, amount: s.amount, p: pr.p, override: pr.override, expected: s.amount * pr.p });
+    }
+    return { pipeline, forecast, list };
+  }
+  const inRange = (t, a, b) => t != null && t >= a && t < b;
+  function monthStartJst(t, back = 0) {
+    const d = jst(t);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - back, 1) - JST;
+  }
+
+  function kpis() {
+    const mStart = monthStartJst(NOW), pStart = monthStartJst(NOW, 1);
+    const pSame = Math.min(pStart + (NOW - mStart), mStart);
+    const wonIn = (a, b) => deals.filter((d) => inRange(d.wonAt, a, b));
+    const revNow = wonIn(mStart, NOW), revPrev = wonIn(pStart, pSame);
+    const periodStart = NOW - days * DAY, prevStart = NOW - 2 * days * DAY;
+    const openNow = openAt(NOW);
+    const newDeals = deals.filter((d) => inRange(d.createdAt, periodStart, NOW));
+    const newPrev = deals.filter((d) => inRange(d.createdAt, prevStart, periodStart));
+    const closed = deals.filter((d) => inRange(d.wonAt ?? d.lostAt, periodStart, NOW));
+    const sum = (arr) => arr.reduce((s, d) => s + d.amount, 0);
+    return {
+      mStart, pStart, pSame, periodStart,
+      revenue: sum(revNow), revenuePrev: sum(revPrev), revDeals: revNow,
+      forecast: openNow.forecast, pipeline: openNow.pipeline, open: openNow.list,
+      newDeals, newPrev, closed, won: closed.filter((d) => d.stage === "won").length,
+    };
+  }
+
+  /** 期間内に送ったアタック（＝この期間の営業活動） */
+  const cohortOf = (from, to) => approaches.filter((a) => a.sent >= from && a.sent < to);
+
+  /**
+   * ファネル。アタック〜商談は会社の数、商談〜成約は案件の数（混ぜない）。
+   * 後ろの段階まで進んだ会社は、前の段階も通ったものとして数える（返信はクリックなしでも来るため）
+   */
+  function funnel(list) {
+    const byCo = new Map();
+    for (const a of list) {
+      const c = byCo.get(a.company.id) || { company: a.company, first: a, clickAt: null, replyAt: null, deals: [] };
+      if (a.sent < c.first.sent) c.first = a;
+      if (a.clickAt && (!c.clickAt || a.clickAt < c.clickAt)) c.clickAt = a.clickAt;
+      if (a.replyAt && (!c.replyAt || a.replyAt < c.replyAt)) c.replyAt = a.replyAt;
+      c.deals.push(...dealsOf(a));
+      byCo.set(a.company.id, c);
+    }
+    const cos = [...byCo.values()];
+    const level = (c) => (c.deals.length ? 3 : c.replyAt ? 2 : c.clickAt ? 1 : 0);
+    const reachCo = (lv) => cos.filter((c) => level(c) >= lv);
+    const allDeals = cos.flatMap((c) => c.deals);
+    const proposed = allDeals.filter((d) => d.reached.has("proposal") || d.reached.has("negotiation") || d.stage === "won");
+    const won = allDeals.filter((d) => d.stage === "won");
+    const coSteps = [
+      { key: "attack", label: "アタック", icon: "send", list: cos },
+      { key: "click", label: "クリック", icon: "ads_click", list: reachCo(1), rate: "クリック率" },
+      { key: "reply", label: "返信", icon: "forum", list: reachCo(2), rate: "返信率" },
+      { key: "meeting", label: "商談", icon: "handshake", list: reachCo(3), rate: "商談化率" },
+    ];
+    return {
+      cos, coSteps, allDeals, proposed, won,
+      revenue: won.reduce((s, d) => s + d.amount, 0),
+      rates: [
+        { key: "click", label: "クリック率", n: coSteps[1].list.length, d: cos.length, unit: "社", from: 0 },
+        { key: "reply", label: "返信率", n: coSteps[2].list.length, d: coSteps[1].list.length, unit: "社", from: 1 },
+        { key: "meeting", label: "商談化率", n: coSteps[3].list.length, d: coSteps[2].list.length, unit: "社", from: 2 },
+        { key: "proposal", label: "提案率", n: proposed.length, d: allDeals.length, unit: "案件", from: 3 },
+        { key: "won", label: "成約率", n: won.length, d: proposed.length, unit: "案件", from: 4 },
+      ],
+    };
+  }
+
+  /**
+   * いちばん詰まっている段階：前の期間より通過率が最も下がった段階（母数10以上）。下がった段階が無ければ無し。
+   * 提案・成約は、最近の案件ほど「まだ進む時間が無い」ので下がって見える。比べるのは会社の段階（クリック・返信・商談）だけ
+   */
+  function jam(cur, prev) {
+    let best = null;
+    cur.rates.forEach((r, i) => {
+      if (r.unit !== "社") return;
+      const p = prev.rates[i];
+      if (r.d < MIN_SAMPLE || p.d < MIN_SAMPLE) return;
+      const drop = p.n / p.d - r.n / r.d;
+      if (drop > 0.03 && (!best || drop > best.drop)) best = { i, drop, prevRate: p.n / p.d, curRate: r.n / r.d };
+    });
+    return best;
+  }
+
+  const DIMS = [
+    { key: "template", label: "営業文", of: (a) => a.template.name },
+    { key: "service", label: "サービス", of: (a) => a.service },
+    { key: "industry", label: "業種", of: (a) => a.industry },
+    { key: "channel", label: "送信チャネル", of: (a) => a.channel.label },
+    { key: "employee", label: "担当者", of: (a) => a.employee.name },
+  ];
+  function groupStats(list) {
+    const ds = list.flatMap(dealsOf);
+    const won = ds.filter((d) => d.stage === "won");
+    const lost = ds.filter((d) => d.stage === "lost");
+    const open = ds.filter((d) => OPEN.includes(d.stage));
+    const revenue = won.reduce((s, d) => s + d.amount, 0);
+    const forecast = open.reduce((s, d) => s + d.amount * probOf(d, d.stage).p, 0);
+    const attacks = list.length;
+    return {
+      attacks, clicks: list.filter((a) => a.clickAt).length, replies: list.filter((a) => a.replyAt).length,
+      meetings: ds.length, won: won.length, closed: won.length + lost.length, revenue, forecast,
+      rpa: attacks ? revenue / attacks : 0, fpa: attacks ? forecast / attacks : 0, deals: ds,
+    };
+  }
+  function byDim(list, key) {
+    const d = DIMS.find((x) => x.key === key);
+    const groups = new Map();
+    for (const a of list) { const k = d.of(a); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(a); }
+    return [...groups.entries()].map(([k, l]) => ({ k, list: l, s: groupStats(l) }));
+  }
+
+  /** 推移の区切り（30日・90日は週、1年は月） */
+  function buckets() {
+    const out = [];
+    if (days === 365) {
+      for (let i = 11; i >= 0; i--) {
+        const a = monthStartJst(NOW, i), b = Math.min(monthStartJst(NOW, i - 1), NOW);
+        out.push({ a, b, label: `${jst(a).getUTCMonth() + 1}月` });
+      }
+    } else {
+      const n = days === 30 ? 5 : 13;
+      for (let i = n - 1; i >= 0; i--) { const b = NOW - i * 7 * DAY, a = b - 7 * DAY; out.push({ a, b, label: `${fmtD(a)}〜` }); }
+    }
+    return out;
+  }
+
+  // =====================================================================
+  // 描画（期間を変えても画面全体は消さず、各セクションだけ入れ替える）
+  // =====================================================================
+  const PERIODS = [[30, "30日"], [90, "90日"], [365, "1年"]];
+  let state = {};
+
+  function compute() {
+    const since = NOW - days * DAY;
+    const list = cohortOf(since, NOW);
+    const F = funnel(list);
+    const Fprev = funnel(cohortOf(since - days * DAY, since));
+    return { K: kpis(), list, F, J: jam(F, Fprev), B: buckets() };
+  }
+
+  function renderAll() {
+    $("period").innerHTML = PERIODS.map(([d, l]) =>
+      `<button role="tab" aria-selected="${d === days}" class="${d === days ? "on" : ""}" onclick="setPeriod(${d})">${esc(l)}</button>`).join("");
+    $("updated").textContent = `更新 ${fmtDT(NOW)}（モック）`;
+    $("devmode").innerHTML = [["ok", "通常"], ["loading", "読み込み中"], ["empty", "データなし"], ["error", "エラー"]].map(([k, l]) =>
+      `<button class="${k === devMode ? "on" : ""}" onclick="setDev('${k}')">${esc(l)}</button>`).join("");
+    $("dims").innerHTML = DIMS.map((d) =>
+      `<button role="tab" aria-selected="${d.key === dim}" class="${d.key === dim ? "on" : ""}" onclick="setDim('${d.key}')">${esc(d.label)}</button>`).join("");
+    $("detail-btn").innerHTML = `<span class="material-symbols-outlined">${detail ? "unfold_less" : "unfold_more"}</span>${detail ? "率を隠す" : "詳細を見る（率）"}`;
+    const periodTxt = days === 365 ? "直近1年・月ごと" : `直近${days}日・週ごと`;
+    $("rev-q").textContent = periodTxt;
+    $("act-q").textContent = periodTxt;
+    $("funnel-q").textContent = `直近${days}日にアタックした会社が、いまどこまで進んだか`;
+
+    if (devMode === "loading") return renderLoading();
+    if (devMode === "error") return renderError();
+    state = compute();
+    renderKpis(state.K);
+    renderJudge(state);
+    renderCharts(state);
+    renderFunnel(state);
+    renderTable(state);
+  }
+
+  // 期間切替：各セクションを骨組みにしてから入れ替える（プレビューでは読み込みの見え方を短く再現）
+  function setPeriod(d) {
+    days = d;
+    if (devMode !== "ok" && devMode !== "empty") return renderAll();
+    renderLoading(true);
+    setTimeout(renderAll, 350);
+  }
+  function setDim(k) { dim = k; renderTable(state); $("dims").querySelectorAll("button").forEach((b, i) => b.classList.toggle("on", DIMS[i].key === k)); }
+  function setSort(k) { if (sortKey === k) sortDesc = !sortDesc; else { sortKey = k; sortDesc = true; } renderTable(state); }
+  function toggleDetail() { detail = !detail; renderAll(); }
+  function setDev(m) {
+    devMode = m;
+    approaches = m === "empty" ? [] : MOCK.approaches;
+    deals = m === "empty" ? [] : MOCK.deals;
+    closeDrawer();
+    renderAll();
+  }
+
+  function renderLoading(keepHeads) {
+    $("kpis").innerHTML = Array.from({ length: 5 }, () => `<div class="sk sk-kpi"></div>`).join("");
+    $("judge").innerHTML = `<div class="pv-judge"><span class="material-symbols-outlined">insights</span>
+      <div class="txt"><div class="sk sk-line" style="width:80%"></div><div class="sk sk-line" style="width:55%"></div></div></div>`;
+    for (const id of ["rev-card", "act-card"]) $(id).innerHTML = `<div class="sk sk-chart"></div>`;
+    $("funnel").innerHTML = Array.from({ length: 5 }, () => `<div class="sk sk-line" style="height:26px;margin:10px 0"></div>`).join("");
+    $("table").innerHTML = `<div class="pv-tbl"><table class="pv-t"><thead><tr>${tableCols().map((c, i) =>
+      `<th>${i ? esc(c.label) : esc(DIMS.find((d) => d.key === dim).label)}</th>`).join("")}</tr></thead>
+      <tbody>${Array.from({ length: 4 }, () => `<tr class="pv-loading-row"><td colspan="${tableCols().length}"><div class="sk sk-line"></div></td></tr>`).join("")}</tbody></table></div>`;
+    if (!keepHeads) return;
+  }
+
+  // エラー：セクションごとに出す。ここでは、KPI・ファネルは表示できていて、グラフと表の取得だけ失敗した例
+  function renderError() {
+    state = compute();
+    renderKpis(state.K);
+    renderJudge(state);
+    const err = (what) => `<div class="pv-err"><span class="material-symbols-outlined">error</span>
+      <div class="txt">${esc(what)}のデータを取得できませんでした。</div>
+      <button onclick="setDev('ok')"><span class="material-symbols-outlined">refresh</span>再読み込み</button></div>`;
+    for (const c of Object.values(charts)) c.destroy();
+    $("rev-card").innerHTML = err("売上推移");
+    $("act-card").innerHTML = err("活動推移");
+    renderFunnel(state);
+    $("table").innerHTML = err("要因分析");
+  }
+
+  function emptyBox(text, cta) {
+    return `<div class="pv-empty"><span class="material-symbols-outlined">inventory_2</span><div class="txt">${text}</div>
+      ${cta ? `<a class="pv-cta" href="${cta[1]}"><span class="material-symbols-outlined">${cta[2]}</span>${esc(cta[0])}</a>` : ""}</div>`;
+  }
+  const NO_DEALS = ["まだ成約データがありません。案件に金額とステージを登録すると、売上・見込売上を分析できます。", ["案件を登録", "/sales/companies.html", "add_business"]];
+  const NO_ATTACKS = ["この期間のアタックがまだありません。アタックを送ると、反応から成約までの流れを追えます。", ["アタックする", "/sales/attack.html", "send"]];
+
+  // ---- B. KPI -------------------------------------------------------------------------------
+  function renderKpis(K) {
+    const noDeals = !deals.length;
+    const cards = [
+      { id: "revenue", icon: "payments", k: "今月売上", v: yen(K.revenue), main: true,
+        d: noDeals ? `<span class="weak">未確定（案件の登録待ち）</span>` : `前月同期比 ${change(K.revenue, K.revenuePrev)}` },
+      { id: "forecast", icon: "trending_up", k: "見込売上", v: yen(K.forecast), d: `${K.open.length}案件` },
+      { id: "pipeline", icon: "stacked_line_chart", k: "パイプライン", v: yen(K.pipeline), d: `${K.open.length}案件・確率を掛ける前` },
+      { id: "meetings", icon: "handshake", k: "新規商談", v: `${K.newDeals.length}件`,
+        d: `前期間 ${change(K.newDeals.length, K.newPrev.length, { unit: "", count: true })}` },
+      { id: "winrate", icon: "emoji_events", k: "成約率", v: K.closed.length ? pctTxt(K.won, K.closed.length) : "—",
+        d: `${K.won} / ${K.closed.length}案件${refBadge(K.closed.length)}` },
+    ];
+    $("kpis").innerHTML = cards.map((c) => `
+      <button class="pv-kpi ${c.main ? "main" : ""}" onclick="drill('kpi','${c.id}')" aria-label="${esc(c.k)}の根拠を見る">
+        <span class="k"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.k)}<span class="material-symbols-outlined go">chevron_right</span></span>
+        <span class="v">${esc(c.v)}</span>
+        <span class="d">${c.d}</span>
+      </button>`).join("");
+  }
+
+  // ---- C. 数字からの営業判断（決まったルールだけ。1〜2文・CTAは1つ） -------------------------
+  let judgeCta = null;
+  function renderJudge({ F, J, list }) {
+    judgeCta = null;
+    if (!list.length) { $("judge").innerHTML = emptyBox(...NO_ATTACKS); return; }
+    const s = [];
+    const tpl = byDim(list, "template").filter((g) => g.s.attacks >= MIN_SAMPLE && g.s.fpa > 0).sort((a, b) => b.s.fpa - a.s.fpa);
+    if (F.coSteps[1].list.length >= 5 && F.coSteps[3].list.length === 0) {
+      s.push(`直近${days}日はクリック反応は出ていますが、商談化0件のため売上への転換が止まっています。次に改善すべきはクリック後のフォローです。`);
+      judgeCta = ["funnel", 2];
+    } else if (J) {
+      const r = F.rates[J.i];
+      s.push(`直近${days}日は${r.label}が前の期間より下がっています（${Math.round(J.prevRate * 100)}% → ${Math.round(J.curRate * 100)}%）。`);
+      judgeCta = ["rate", J.i];
+    } else {
+      s.push(`直近${days}日は、前の期間より大きく落ちている段階はありません。`);
+    }
+    if (tpl[0]) {
+      s.push(`特に「${tpl[0].k}」は1アタックあたり期待売上が最も高いため（${man(tpl[0].s.fpa)}）、今週はこの営業文へのアタックを増やす余地があります。`);
+      if (!judgeCta) judgeCta = ["group-template", tpl[0].k];
+    }
+    $("judge").innerHTML = `<div class="pv-judge"><span class="material-symbols-outlined">insights</span>
+      <div class="txt">${esc(s[0])}${s[1] ? `<br><span class="s2">${esc(s[1])}</span>` : ""}</div>
+      ${judgeCta ? `<button class="pv-cta" onclick="openJudge()"><span class="material-symbols-outlined">domain</span>該当企業を見る</button>` : ""}</div>`;
+  }
+  function openJudge() {
+    if (!judgeCta) return;
+    const [k, v] = judgeCta;
+    if (k === "rate") return drill("rate", v);
+    if (k === "funnel") return drill("rate", v);
+    if (k === "group-template") {
+      const g = byDim(state.list, "template").find((x) => x.k === v);
+      return drillGroup(g, "営業文");
+    }
+  }
+
+  // ---- D・E. 推移 ------------------------------------------------------------------------------
+  function trendSentence(values, noun, unitWord) {
+    let up = 0, down = 0;
+    for (let i = values.length - 1; i > 0; i--) { if (values[i] > values[i - 1]) up++; else break; }
+    for (let i = values.length - 1; i > 0; i--) { if (values[i] < values[i - 1]) down++; else break; }
+    if (up >= 2) return ["up", "trending_up", `${noun}は${up}${unitWord}連続で増加しています`];
+    if (down >= 2) return ["down", "trending_down", `${noun}は${down}${unitWord}連続で減少しています`];
+    return null;
+  }
+  function renderCharts({ B }) {
+    for (const c of Object.values(charts)) c.destroy();
+    if (!deals.length) {
+      $("rev-card").innerHTML = emptyBox(...NO_DEALS);
+    } else {
+      $("rev-card").innerHTML = `<div class="pv-chart"><canvas id="chart-rev" aria-label="売上・見込売上の推移"></canvas></div>
+        <div class="pv-chart-note" id="rev-note"></div>
+        <div class="pv-chart-foot">凡例を押すと表示・非表示を切り替えられます。見込売上・パイプラインは各期間の終わり時点の値です。</div>`;
+    }
+    if (!approaches.length) {
+      $("act-card").innerHTML = emptyBox(...NO_ATTACKS);
+    } else {
+      $("act-card").innerHTML = `<div class="pv-chart"><canvas id="chart-act" aria-label="営業活動・成果の推移"></canvas></div>
+        <div class="pv-chart-note" id="act-note"></div>
+        <div class="pv-chart-foot">アタックは左の目盛り、商談・成約・返信は右の目盛り（件数の桁が違うため）。返信は凡例から表示できます。</div>`;
+    }
+    if (!window.Chart) {
+      for (const id of ["chart-rev", "chart-act"]) if ($(id)) $(id).parentElement.innerHTML = `<div class="pv-err"><div class="txt">グラフの部品を読み込めませんでした。</div></div>`;
+      return;
+    }
+    Chart.defaults.font.family = "'Zen Kaku Gothic New', sans-serif";
+    Chart.defaults.color = "#6b7080";
+    const unitWord = days === 365 ? "か月" : "週";
+    const manTick = (v) => (v === 0 ? "0" : man(v));
+    const legend = { position: "bottom", labels: { boxWidth: 12, usePointStyle: true } };
+
+    if ($("chart-rev")) {
+      const rev = B.map((b) => deals.filter((d) => inRange(d.wonAt, b.a, b.b)).reduce((s, d) => s + d.amount, 0));
+      const open = B.map((b) => openAt(b.b));
+      const fc = open.map((o) => Math.round(o.forecast));
+      charts.rev = new Chart($("chart-rev"), {
+        data: {
+          labels: B.map((b) => b.label),
+          datasets: [
+            { type: "bar", label: "実売上", data: rev, backgroundColor: "#1b2440", borderRadius: 4, order: 3 },
+            { type: "line", label: "見込売上", data: fc, borderColor: "#c99a2e", backgroundColor: "#c99a2e", cubicInterpolationMode: "monotone", pointRadius: 2, order: 1 },
+            { type: "line", label: "パイプライン", data: open.map((o) => o.pipeline), borderColor: "#9aa0b4", backgroundColor: "#9aa0b4",
+              borderDash: [5, 4], cubicInterpolationMode: "monotone", pointRadius: 2, order: 2 },
+          ],
+        },
+        options: {
+          maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+          plugins: { legend, tooltip: { callbacks: { label: (c) => `${c.dataset.label}：${man(c.parsed.y)}` } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: manTick } }, x: { grid: { display: false } } },
+        },
+      });
+      const t = trendSentence(fc, "見込売上", unitWord);
+      const last = rev.length >= 2 ? [rev[rev.length - 1], rev[rev.length - 2]] : null;
+      $("rev-note").innerHTML = t
+        ? `<span class="material-symbols-outlined ${t[0]}">${t[1]}</span><span>${esc(t[2])}</span>`
+        : `<span class="material-symbols-outlined flat">trending_flat</span><span>見込売上は横ばいです。直近の実売上は ${esc(man(last ? last[0] : 0))}（その前 ${esc(man(last ? last[1] : 0))}）</span>`;
+    }
+
+    if ($("chart-act")) {
+      const cnt = (fn) => B.map((b) => fn(b));
+      const act = {
+        attacks: cnt((b) => approaches.filter((a) => inRange(a.sent, b.a, b.b)).length),
+        replies: cnt((b) => approaches.filter((a) => inRange(a.replyAt, b.a, b.b)).length),
+        meetings: cnt((b) => deals.filter((d) => inRange(d.createdAt, b.a, b.b)).length),
+        won: cnt((b) => deals.filter((d) => inRange(d.wonAt, b.a, b.b)).length),
+      };
+      charts.act = new Chart($("chart-act"), {
+        data: {
+          labels: B.map((b) => b.label),
+          datasets: [
+            { type: "bar", label: "アタック", data: act.attacks, backgroundColor: "#dfe2ec", borderRadius: 4, yAxisID: "y", order: 4 },
+            { type: "line", label: "商談", data: act.meetings, borderColor: "#2f6f3a", backgroundColor: "#2f6f3a", cubicInterpolationMode: "monotone", pointRadius: 2, yAxisID: "y2", order: 2 },
+            { type: "line", label: "成約", data: act.won, borderColor: "#1b2440", backgroundColor: "#1b2440", borderWidth: 3, cubicInterpolationMode: "monotone", pointRadius: 3, yAxisID: "y2", order: 1 },
+            { type: "line", label: "返信", data: act.replies, borderColor: "#7d8bb3", backgroundColor: "#7d8bb3", cubicInterpolationMode: "monotone", pointRadius: 2, yAxisID: "y2", order: 3, hidden: true },
+          ],
+        },
+        options: {
+          maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+          plugins: { legend, tooltip: { callbacks: { label: (c) => `${c.dataset.label}：${c.parsed.y}件` } } },
+          scales: {
+            y: { beginAtZero: true, position: "left", title: { display: true, text: "アタック（件）" }, ticks: { precision: 0 } },
+            y2: { beginAtZero: true, position: "right", grid: { display: false }, title: { display: true, text: "商談・成約（件）" }, ticks: { precision: 0 } },
+            x: { grid: { display: false } },
+          },
+        },
+      });
+      const half = Math.floor(B.length / 2);
+      const s = (arr, a, b) => arr.slice(a, b).reduce((x, y) => x + y, 0);
+      const aF = s(act.attacks, 0, half), aL = s(act.attacks, B.length - half);
+      const mF = s(act.meetings, 0, half), mL = s(act.meetings, B.length - half);
+      const good = aL >= aF && mL >= mF;
+      $("act-note").innerHTML = `<span class="material-symbols-outlined ${good ? "up" : mL < mF ? "down" : "flat"}">${good ? "trending_up" : "sync_alt"}</span>
+        <span>後半は前半に比べてアタック ${change(aL, aF)}、商談 ${change(mL, mF)}。${aL > aF && mL <= mF ? "営業量は増えていますが、商談は増えていません。" : good ? "営業量に合わせて商談も増えています。" : ""}</span>
+        ${mF + mL < MIN_SAMPLE ? `<span class="ref" title="${REF_TIP}"><span class="material-symbols-outlined">info</span>参考値</span>` : ""}`;
+    }
+  }
+
+  // ---- F. 営業ファネル --------------------------------------------------------------------------
+  function renderFunnel({ F, J }) {
+    if (!F.cos.length) { $("funnel").innerHTML = emptyBox(...NO_ATTACKS); return; }
+    const top = F.cos.length || 1;
+    const stage = (label, icon, n, unit, alt, width, cls = "", onclick = "") => `
+      <div class="pv-stage ${cls}">
+        <span class="l"><span class="material-symbols-outlined">${icon}</span>${esc(label)}</span>
+        <span class="n">${n}${unit ? `<small>${unit}</small>` : ""}${alt ? `<span class="alt">${alt}</span>` : ""}</span>
+        <span class="bar"><i style="width:${width}%"></i></span>
+      </div>`;
+    const rate = (i) => {
+      const r = F.rates[i];
+      const isJam = J && J.i === i;
+      return `<div class="pv-link"><button class="pv-rate ${isJam ? "jam" : ""}" onclick="drill('rate',${i})" title="押すと、進んだ・進まなかった${r.unit === "社" ? "会社" : "案件"}を出します">
+        <span class="material-symbols-outlined arr">south</span><span>${esc(r.label)}</span> <b class="${r.d < MIN_SAMPLE ? "weak" : ""}">${pctTxt(r.n, r.d)}</b>
+        <span class="nd">${r.n} / ${r.d}${r.unit}</span>${refBadge(r.d)}
+        ${isJam ? `<span class="pv-jam"><span class="material-symbols-outlined">warning</span>いちばん詰まっている（前期間 ${Math.round(J.prevRate * 100)}%）</span>` : ""}
+      </button></div>`;
+    };
+    const w = (n) => Math.max((n / top) * 100, n ? 1.5 : 0);
+    const cs = F.coSteps;
+    $("funnel").innerHTML = `<div class="pv-funnel">
+      ${stage("アタック", "send", cs[0].list.length, "社", "", 100)}
+      ${rate(0)}${stage("クリック", "ads_click", cs[1].list.length, "社", "", w(cs[1].list.length))}
+      ${rate(1)}${stage("返信", "forum", cs[2].list.length, "社", "", w(cs[2].list.length))}
+      ${rate(2)}${stage("商談", "handshake", cs[3].list.length, "社", `${F.allDeals.length}案件`, w(cs[3].list.length))}
+      <div class="pv-unit">ここから下は案件の数です（1社に案件が複数あることがあります）</div>
+      ${rate(3)}${stage("提案", "description", F.proposed.length, "案件", "", w(F.proposed.length))}
+      ${rate(4)}${stage("成約", "emoji_events", F.won.length, "案件", "", w(F.won.length))}
+      <div class="pv-link"><span></span></div>
+      ${stage("売上", "payments", esc(man(F.revenue)), "", `成約 ${F.won.length}案件の金額の合計`, F.revenue ? 100 : 0, "money")}
+    </div>`;
+  }
+
+  // ---- G. 要因分析 ------------------------------------------------------------------------------
+  const BASE_COLS = [
+    { key: "attacks", label: "アタック" }, { key: "replies", label: "返信" }, { key: "meetings", label: "商談", title: "案件の数" },
+    { key: "won", label: "成約" }, { key: "revenue", label: "売上", money: true }, { key: "forecast", label: "見込売上", money: true },
+    { key: "fpa", label: "1アタック期待売上", money: true, hl: true },
+  ];
+  const RATE_COLS = [
+    { key: "clickRate", label: "クリック率", rate: ["clicks", "attacks"] }, { key: "replyRate", label: "返信率", rate: ["replies", "attacks"] },
+    { key: "meetingRate", label: "商談化率", rate: ["meetings", "attacks"] }, { key: "winRate", label: "成約率", rate: ["won", "closed"] },
+    { key: "rpa", label: "1アタック売上", money: true },
+  ];
+  const tableCols = () => [{ key: "name", label: "" }, ...BASE_COLS, ...(detail ? RATE_COLS : [])];
+  const valOf = (s, c) => (c.rate ? (s[c.rate[1]] ? s[c.rate[0]] / s[c.rate[1]] : -1) : s[c.key]);
+
+  let lastGroups = [];
+  function renderTable({ list }) {
+    if (!list.length) { $("table").innerHTML = emptyBox(...NO_ATTACKS); return; }
+    const groups = byDim(list, dim);
+    const cols = tableCols().slice(1);
+    const col = cols.find((c) => c.key === sortKey) || BASE_COLS[6];
+    groups.sort((a, b) => (valOf(a.s, col) - valOf(b.s, col)) * (sortDesc ? -1 : 1));
+    lastGroups = groups;
+    const eligible = groups.filter((g) => g.s.attacks >= MIN_SAMPLE);
+    const best = eligible.length ? Math.max(...eligible.map((g) => g.s.fpa)) : 0;
+    const total = groupStats(list);
+    const dimLabel = DIMS.find((d) => d.key === dim).label;
+    const cell = (s, c, isBest) => {
+      if (c.rate) {
+        const [n, d] = c.rate;
+        return `<td><span class="${s[d] < MIN_SAMPLE ? "weak" : ""}">${pctTxt(s[n], s[d])}</span><span class="sub">${s[n]} / ${s[d]}</span></td>`;
+      }
+      if (c.money) return `<td class="${c.hl ? "key" : ""}">${esc(man(s[c.key]))}${isBest && c.hl ? `<span class="best">最高</span>` : ""}</td>`;
+      return `<td>${s[c.key]}</td>`;
+    };
+    $("table").innerHTML = `<div class="pv-tbl"><table class="pv-t">
+      <thead><tr><th>${esc(dimLabel)}</th>${cols.map((c) => `<th class="${c.hl ? "key" : ""} ${sortKey === c.key ? "sorted" : ""}"
+        onclick="setSort('${c.key}')" title="${esc(c.title || "")}">${esc(c.label)}<span class="material-symbols-outlined" aria-hidden="true">${sortKey === c.key
+          ? (sortDesc ? "arrow_downward" : "arrow_upward") : "unfold_more"}</span></th>`).join("")}</tr></thead>
+      <tbody>${groups.map((g, i) => `<tr onclick="drillGroup(lastGroups[${i}])">
+        <td><span class="nm">${esc(g.k)}</span>${g.s.attacks < MIN_SAMPLE ? ` <span class="ref" title="${REF_TIP}"><span class="material-symbols-outlined">info</span>参考値</span>` : ""}</td>
+        ${cols.map((c) => cell(g.s, c, g.s.attacks >= MIN_SAMPLE && g.s.fpa === best && best > 0)).join("")}</tr>`).join("")}</tbody>
+      <tfoot><tr><td>合計</td>${cols.map((c) => cell(total, c, false)).join("")}</tr></tfoot></table></div>
+      <div class="pv-cards">${groups.map((g, i) => `<div class="pv-gcard" onclick="drillGroup(lastGroups[${i}])">
+        <div class="h">${esc(g.k)}${g.s.attacks >= MIN_SAMPLE && g.s.fpa === best && best > 0 ? `<span class="pv-t"><span class="best">最高</span></span>` : ""}
+          ${g.s.attacks < MIN_SAMPLE ? `<span class="ref" title="${REF_TIP}">参考値</span>` : ""}</div>
+        <div class="nd">1アタック期待売上</div><div class="big">${esc(man(g.s.fpa))}</div>
+        <div class="grid"><div>アタック<b>${g.s.attacks}</b></div><div>商談<b>${g.s.meetings}</b></div><div>成約<b>${g.s.won}</b></div>
+          <div>売上<b>${esc(man(g.s.revenue))}</b></div><div>見込売上<b>${esc(man(g.s.forecast))}</b></div><div>返信<b>${g.s.replies}</b></div></div>
+      </div>`).join("")}</div>`;
+  }
+
+  // =====================================================================
+  // H. 根拠ドロワー（開いても閉じても、一覧・グラフ・スクロール位置はそのまま）
+  // =====================================================================
+  function openDrawer(title, html) {
+    $("drawer-root").innerHTML = `<div class="pv-drawer-bg" onclick="closeDrawer()"></div>
+      <div class="pv-drawer" role="dialog" aria-label="${esc(title)}">
+        <button class="x" onclick="closeDrawer()" title="閉じる"><span class="material-symbols-outlined">close</span></button>
+        <h2>${esc(title)}</h2>${html}</div>`;
+  }
+  function closeDrawer() { $("drawer-root").innerHTML = ""; }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  const stagePill = (s) => `<span class="stage ${s}">${esc(STAGES[s])}</span>`;
+  const LIMIT = 50;
+  const moreNote = (n) => (n > LIMIT ? `<div class="pv-more">ほか ${n - LIMIT}件（本実装では全件を出します）</div>` : "");
+
+  /** 案件の一覧：企業名・案件名・ステージ・金額・成約確率・見込金額・担当・最終更新日 */
+  function dealTable(rows, { expected = false } = {}) {
+    if (!rows.length) return `<div class="pv-more">該当する案件はありません</div>`;
+    const sumAmt = rows.reduce((s, r) => s + r.amount, 0);
+    const sumExp = rows.reduce((s, r) => s + (r.expected || 0), 0);
+    return `<table class="pv-dt"><thead><tr><th>企業・案件</th><th>ステージ</th><th class="num">金額</th>
+        ${expected ? `<th class="num">成約確率</th><th class="num">見込金額</th>` : ""}<th>担当</th><th>最終更新</th></tr></thead>
+      <tbody>${rows.slice(0, LIMIT).map((r) => `<tr>
+        <td><span class="co">${esc(r.d.company.name)}</span><span class="s2">${esc(r.d.title)}</span></td>
+        <td>${stagePill(r.stage)}</td><td class="num">${esc(man(r.amount))}</td>
+        ${expected ? `<td class="num">${Math.round(r.p * 100)}%${r.override ? `<span class="s2 ovr">個別に設定</span>` : ""}</td>
+          <td class="num">${esc(man(r.expected))}</td>` : ""}
+        <td>${esc(r.d.employee.name)}</td><td>${esc(fmtD(r.d.updatedAt))}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="2">合計 ${rows.length}件</td><td class="num">${esc(man(sumAmt))}</td>
+        ${expected ? `<td></td><td class="num">${esc(man(sumExp))}</td>` : ""}<td colspan="2"></td></tr></tfoot></table>${moreNote(rows.length)}`;
+  }
+
+  /** 会社の一覧（率を押したとき）：対象企業・進んだか・営業文・チャネル・担当・送信日時・反応日時 */
+  function companyTable(rows, hitSet, reactLabel, reactAt) {
+    if (!rows.length) return `<div class="pv-more">該当する会社はありません</div>`;
+    return `<table class="pv-dt"><thead><tr><th>企業</th><th>${esc(reactLabel)}</th><th>営業文</th><th>チャネル</th><th>担当</th>
+        <th>送信日時</th><th>${esc(reactLabel)}日時</th></tr></thead>
+      <tbody>${rows.slice(0, LIMIT).map((c) => { const hit = hitSet.has(c); return `<tr>
+        <td class="co">${esc(c.company.name)}</td><td>${hit ? `<span class="yes">あり</span>` : `<span class="no">なし</span>`}</td>
+        <td>${esc(c.first.template.name)}</td><td>${esc(c.first.channel.label)}</td><td>${esc(c.first.employee.name)}</td>
+        <td>${esc(fmtDT(c.first.sent))}</td><td>${hit ? esc(fmtDT(reactAt(c))) : "—"}</td></tr>`; }).join("")}</tbody></table>${moreNote(rows.length)}`;
+  }
+
+  const dealRow = (d) => {
+    const open = OPEN.includes(d.stage);
+    const pr = open ? probOf(d, d.stage) : { p: d.stage === "won" ? 1 : 0, override: false };
+    return { d, stage: d.stage, amount: d.amount, p: pr.p, override: pr.override, expected: open ? d.amount * pr.p : 0 };
+  };
+
+  function drill(kind, arg) {
+    if (kind === "kpi") return drillKpi(arg);
+    if (kind === "rate") return drillRate(arg);
+  }
+
+  function drillKpi(id) {
+    const K = state.K;
+    if (!deals.length && id !== "meetings") return openDrawer("まだ案件がありません", emptyBox(...NO_DEALS));
+    if (id === "revenue") {
+      return openDrawer(`今月売上 ${yen(K.revenue)}`, `
+        <div class="formula">今月（${fmtD(K.mStart)}〜今日）に<b>成約</b>した案件の金額の合計です。<br>
+          前月同期（${fmtD(K.pStart)}〜${fmtD(K.pSame - 1)}）は <b>${yen(K.revenuePrev)}</b>、比べて ${change(K.revenue, K.revenuePrev)}。</div>
+        <h3>今月成約した案件 <span class="c">${K.revDeals.length}件</span></h3>${dealTable(K.revDeals.map(dealRow))}`);
+    }
+    if (id === "forecast" || id === "pipeline") {
+      const rows = [...K.open].sort((a, b) => (id === "forecast" ? b.expected - a.expected : b.amount - a.amount));
+      const by = OPEN.map((s) => {
+        const r = rows.filter((x) => x.stage === s);
+        return `<tr><td>${stagePill(s)}</td><td class="num">${r.length}件</td><td class="num">${esc(man(r.reduce((t, x) => t + x.amount, 0)))}</td>
+          <td class="num">${Math.round(PROB[s] * 100)}%</td><td class="num">${esc(man(r.reduce((t, x) => t + x.expected, 0)))}</td></tr>`;
+      }).join("");
+      return openDrawer(id === "forecast" ? `見込売上 ${yen(K.forecast)}` : `パイプライン ${yen(K.pipeline)}`, `
+        <div class="formula">${id === "forecast"
+          ? `進行中の案件ごとに <b>金額 × 成約確率</b> を出して合計しています。成約確率は 商談20%・提案50%・最終調整80%。
+             担当者が案件ごとに設定した確率があれば、そちらを使います。`
+          : `進行中（商談・提案・最終調整）の案件の<b>金額の合計</b>です。成約確率は掛けていません。`}</div>
+        <h3>ステージごと</h3>
+        <table class="pv-dt"><thead><tr><th>ステージ</th><th class="num">案件</th><th class="num">金額</th><th class="num">成約確率</th><th class="num">見込金額</th></tr></thead>
+          <tbody>${by}</tbody></table>
+        <h3>進行中の案件 <span class="c">${rows.length}件・${id === "forecast" ? "見込金額の大きい順" : "金額の大きい順"}</span></h3>
+        ${dealTable(rows, { expected: true })}`);
+    }
+    if (id === "meetings") {
+      const rows = [...K.newDeals].sort((a, b) => b.createdAt - a.createdAt);
+      return openDrawer(`新規商談 ${rows.length}件`, `
+        <div class="formula">直近${days}日に<b>商談になった</b>案件です（前の${days}日は ${K.newPrev.length}件）。どのアタックから生まれたかも出します。</div>
+        ${rows.length ? `<table class="pv-dt"><thead><tr><th>企業・案件</th><th>商談日</th><th>営業文</th><th>チャネル</th><th>担当</th><th>いま</th></tr></thead>
+        <tbody>${rows.slice(0, LIMIT).map((d) => `<tr><td><span class="co">${esc(d.company.name)}</span><span class="s2">${esc(d.title)}</span></td>
+          <td>${esc(fmtD(d.createdAt))}</td><td>${esc(d.template.name)}</td><td>${esc(d.channel.label)}</td><td>${esc(d.employee.name)}</td>
+          <td>${stagePill(d.stage)}</td></tr>`).join("")}</tbody></table>${moreNote(rows.length)}` : emptyBox(...NO_DEALS)}`);
+    }
+    if (id === "winrate") {
+      const won = K.closed.filter((d) => d.stage === "won").map(dealRow);
+      const lost = K.closed.filter((d) => d.stage === "lost").map(dealRow);
+      return openDrawer(`成約率 ${K.closed.length ? pctTxt(K.won, K.closed.length) : "—"}（${K.won} / ${K.closed.length}）`, `
+        <div class="formula">直近${days}日に<b>決着</b>した案件のうち、成約した割合です。<br>
+          <b>成約 ${K.won}件 ÷（成約 ${K.won}件 ＋ 失注 ${K.closed.length - K.won}件）</b>${refBadge(K.closed.length)}</div>
+        <h3>成約 <span class="c">${won.length}件</span></h3>${dealTable(won)}
+        <h3>失注 <span class="c">${lost.length}件</span></h3>${dealTable(lost)}`);
+    }
+  }
+
+  function drillRate(i) {
+    const F = state.F;
+    const r = F.rates[i];
+    const title = `${r.label} ${pctTxt(r.n, r.d)}（${r.n} / ${r.d}${r.unit}）`;
+    if (r.unit === "社") {
+      const base = F.coSteps[r.from].list;
+      const hit = new Set(F.coSteps[r.from + 1].list);
+      const [lab, at] = [["クリック", (c) => c.clickAt], ["返信", (c) => c.replyAt], ["商談", (c) => Math.min(...c.deals.map((d) => d.createdAt))]][i];
+      const rows = [...base].sort((a, b) => Number(hit.has(b)) - Number(hit.has(a)) || b.first.sent - a.first.sent);
+      return openDrawer(title, `
+        <div class="formula">「${esc(F.coSteps[r.from].label)}」まで進んだ <b>${r.d}社</b> のうち、「${esc(lab)}」まで進んだのが <b>${r.n}社</b> です。${refBadge(r.d)}<br>
+          後ろの段階まで進んだ会社は、前の段階も通ったものとして数えています。</div>
+        <h3>対象の会社 <span class="c">${lab}あり ${r.n}社・なし ${r.d - r.n}社</span></h3>
+        ${companyTable(rows, hit, lab, at)}`);
+    }
+    const base = i === 3 ? F.allDeals : F.proposed;
+    const hitSet = new Set(i === 3 ? F.proposed : F.won);
+    const hit = base.filter((d) => hitSet.has(d)).map(dealRow);
+    const not = base.filter((d) => !hitSet.has(d)).map(dealRow);
+    return openDrawer(title, `
+      <div class="formula">「${i === 3 ? "商談" : "提案"}」まで進んだ <b>${r.d}案件</b> のうち、「${i === 3 ? "提案" : "成約"}」まで進んだのが <b>${r.n}案件</b> です。${refBadge(r.d)}
+        ${i === 4 ? "<br>まだ進行中の案件も分母に入っています（決着した案件だけの成約率は、上の「成約率」カードで見られます）。" : ""}</div>
+      <h3>進んだ案件 <span class="c">${hit.length}件</span></h3>${dealTable(hit, { expected: true })}
+      <h3>進んでいない案件 <span class="c">${not.length}件</span></h3>${dealTable(not, { expected: true })}`);
+  }
+
+  function drillGroup(g, labelOverride) {
+    if (!g) return;
+    const s = g.s;
+    const rows = s.deals.map(dealRow).sort((a, b) => b.expected - a.expected || b.amount - a.amount);
+    const recent = [...g.list].sort((a, b) => b.sent - a.sent);
+    const dimLabel = labelOverride || DIMS.find((d) => d.key === dim).label;
+    openDrawer(`${dimLabel}：${g.k}`, `
+      <div class="formula">
+        アタック <b>${s.attacks}件</b> → 返信 <b>${s.replies}</b>（${pctTxt(s.replies, s.attacks)}） → 商談 <b>${s.meetings}案件</b> → 成約 <b>${s.won}案件</b><br>
+        見込売上 <b>${yen(s.forecast)}</b> ÷ アタック ${s.attacks}件 ＝ 1アタック期待売上 <b>${yen(s.fpa)}</b>${refBadge(s.attacks)}<br>
+        売上 <b>${yen(s.revenue)}</b> ÷ アタック ${s.attacks}件 ＝ 1アタック売上 <b>${yen(s.rpa)}</b></div>
+      <h3>この${esc(dimLabel)}から生まれた案件 <span class="c">${rows.length}件・見込金額の大きい順</span></h3>
+      ${dealTable(rows, { expected: true })}
+      <h3>アタック <span class="c">新しい順 ${recent.length}件</span></h3>
+      <table class="pv-dt"><thead><tr><th>企業</th><th>送信日時</th><th>クリック</th><th>チャネル</th><th>担当</th><th>いま</th></tr></thead>
+      <tbody>${recent.slice(0, LIMIT).map((a) => `<tr><td class="co">${esc(a.company.name)}</td><td>${esc(fmtDT(a.sent))}</td>
+        <td>${a.clickAt ? `<span class="yes">${esc(fmtDT(a.clickAt))}</span>` : `<span class="no">なし</span>`}</td>
+        <td>${esc(a.channel.label)}</td><td>${esc(a.employee.name)}</td>
+        <td>${dealsOf(a).length ? stagePill(dealsOf(a)[0].stage) : a.replyAt ? "返信" : `<span class="no">—</span>`}</td></tr>`).join("")}</tbody></table>
+      ${moreNote(recent.length)}`);
+  }
+
+  // =====================================================================
+  // 起動：ログインしていれば /sales のヘッダー、していなければ同じ見た目の簡易ヘッダー
+  // =====================================================================
+  const NAV = [
+    ["/sales/", "dashboard", "ダッシュボード"], ["/sales/companies.html", "domain", "企業"], ["/sales/attack.html", "send", "アタック"],
+    ["/sales/leads.html", "local_fire_department", "リード"], ["/sales/analytics.html", "monitoring", "分析"],
+  ];
+  function fallbackBar() {
+    $("pv-fallback-bar").innerHTML = `<div class="pv-bar"><div class="logo">EIGHT <span>/ SALES</span></div>
+      <nav>${NAV.map(([h, i, l]) => `<a class="${l === "分析" ? "on" : ""}" href="${h}"><span class="material-symbols-outlined">${i}</span>${esc(l)}</a>`).join("")}</nav></div>`;
+  }
+  if (window.API && window.SalesLayout && API.isLoggedIn()) {
+    SalesLayout.init({ active: "analytics" }).catch(() => {});
+  } else {
+    fallbackBar();
+  }
+  renderAll();
+</script>
+
+</body>
+</html>
