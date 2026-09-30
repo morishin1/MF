@@ -470,8 +470,9 @@ console.log("\n=== リード ===");
   await page.locator("#stages button", { hasText: "返信あり" }).click();
   check((await page.locator(".ld-card").count()) === 1, "「返信あり」で絞ると1社");
   await page.locator(".ld-card").first().click();
-  // 詳細の取得を待つ（CI は遅いので、決め打ちの待ち時間にしない）
-  await page.locator(".sl-detail").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  // 詳細の取得を待つ（ドロワーは「読み込み中…」で先に出る。中身＝NEXT ACTION が出るまで待つ。
+  // CI は遅いので、決め打ちの待ち時間にしない）
+  await page.locator(".sl-detail #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(".sl-detail").isVisible(),
     `開くとリード一覧のまま右ドロワー（画面遷移しない）（${page.url()}）`);
   const d = await page.locator(".sl-detail").innerText();
