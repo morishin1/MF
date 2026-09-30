@@ -127,10 +127,21 @@ alter table public.gw_submissions
 
 ### 5-0. 準備
 
-- テスト用の要員：`【E2Eテスト】田中 太郎`（メンバー管理で登録。区分はプロパー）
-- テスト用の現場契約：客先 `E2Eテスト株式会社`、契約開始 対象月の月初以前、終了日は空
-- 勤務表：**本物に近い1人分**（社内で扱ってよいもの。個人情報を含むなら、社内の取り決めに従う）。PDF・JPEG・PNG のどれか
-- 対象月：直近で勤務表が出ている月（未来の月でもよいが、期限超過の表示は出ない）
+**テストデータは、SQL で1件だけ作ります**（`db/office_phase3_test_seed.sql`。追加だけで、既存の行には触れません）。
+
+| 作るもの | 内容 |
+|---|---|
+| 社員名簿 1行 | `【Office Phase3 TEST】テスト 太郎`（プロパー・在籍。メール・ログイン・入社日は無し） |
+| 現場契約 1行 | 客先 `【Office Phase3 TEST】テスト客先`（2026-04-01〜、終了日なし、単価なし） |
+| 契約条件 1行 | 月額 700,000円・精算幅 140〜180時間・超過 4,000円／控除 3,500円・円未満切捨て（画面で試すための架空の数字） |
+
+- id は固定なので、後から正確に消せます（`db/office_phase3_test_cleanup.sql`。5-5）
+- メール・Slack・通知は送りません。実請求・実支払・MF への送信にはつながりません（Phase 3 には、その機能がありません）
+- 社員行は「入社日なし・メールなし・ログインなし」、契約は「終了日なし」なので、定期処理（端末未登録の催促・入社日の切替・リマインド・
+  契約更新の 45 日前タスク・BP 勤務表の回収）の対象になりません
+- `/office` は、**対象月を 2026年10月**にして開く（サンプルの勤務表が 10 月分のため。別の月だと「別の月の勤務表」として取り込みません）
+- 勤務表：`test/fixtures/office-timesheet/sample-2026-10.pdf`（架空。PNG・JPEG も同じ内容）と、正解 `expected.json`
+  （休憩が空白の日 10/14、終了が染みで隠れた日 10/21、夜間作業 10/29 入り。合計は隠れた所も含めて 154:45）
 - 二段階認証を済ませた、経理・責任者・経営者のアカウント
 
 ### 5-0b. Vercel の環境変数（`ANTHROPIC_API_KEY`）を足したら
@@ -178,6 +189,7 @@ ANTHROPIC_API_KEY=<キー> node scripts/office-read-check.mjs test/fixtures/offi
 
 ### 5-2. 契約条件を登録する
 
+**5-0 のテストデータには、契約条件がすでに入っています**（この節は飛ばせます）。画面から登録・変更する手順を試すときは、
 `/office` → 対象の行 → ドロワー「契約条件を登録する」（または `/office/terms.html?contract=…`）。
 例：月額 700,000円・精算幅 140〜180時間・超過 4,000円／控除 3,500円・円未満は切捨て。**売上単価・仕入単価は別の欄**（既存の「単価」欄は使わない）。
 
@@ -213,23 +225,17 @@ select target_month, status, total_minutes / 60.0 as hours, work_days, review_se
 
 ### 5-5. 後始末（テストデータの削除）
 
-`【E2Eテスト】` の要員を消すと、契約・進捗・勤務表・日別・契約条件・履歴が連動して消えます（先に、削除する行を確認）。
+**順番**：① Storage のファイルを消す → ② `db/office_phase3_test_cleanup.sql` を Run。
 
-```sql
--- 1) 消すものを確認
-select id, display_name from public.gw_employees where display_name like '【E2Eテスト】%';
+1. **Storage**（SQL からは消せません）：Supabase の Storage → `billing-submissions` → `<tenant の id>/e13db73f-3d85-45ca-ac0a-7f26a5d53610/`
+   のフォルダ（seed の確認表「後片付けの目印」に、そのままの場所が出ます）を開き、中のファイルを削除する
+2. **`db/office_phase3_test_cleanup.sql`** を Run。消すのは、固定 id のテスト行だけです：
+   操作ログ（`gw_activity_log`）→ Office の操作履歴（`gw_office_events`）→ 社員名簿の1行（連鎖して、現場契約・契約条件・月次進捗・
+   提出ファイルの記録・勤務表・日別が消える）
+3. 最後の確認表が**すべて 0** であること
 
--- 2) 提出ファイルの実体（Storage）の場所を控える（DB の行を消す前に）
-select storage_path from public.gw_submissions
- where employee_id in (select id from public.gw_employees where display_name like '【E2Eテスト】%');
-
--- 3) 削除（履歴 gw_office_events は employee_id が null になるだけなので、先に消す）
-delete from public.gw_office_events
- where employee_id in (select id from public.gw_employees where display_name like '【E2Eテスト】%');
-delete from public.gw_employees where display_name like '【E2Eテスト】%';
-```
-
-Storage のファイル（`billing-submissions` バケット、手順2で控えた場所）は、Supabase の Storage 画面から削除してください。
+安全装置：名前が `【Office Phase3 TEST】` で始まらない／社員行にログインが紐づいている／テスト用以外の契約がぶら下がっている／
+Storage にファイルが残っている、のどれかなら、**何も消さずに止まります**。何度 Run しても安全です。
 
 ## 6. うまくいかないとき
 
