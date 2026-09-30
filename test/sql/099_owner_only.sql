@@ -104,3 +104,15 @@ insert into auth.users(id,email) values ('f0000000-0000-0000-0000-000000000006',
 insert into public.gw_employees(id,tenant_id,user_id,display_name,status) values ('f0000000-0000-0000-0000-000000000006','22222222-2222-2222-2222-222222222222','f0000000-0000-0000-0000-000000000006','f','active');
 insert into public.gw_role_grants(tenant_id,employee_id,role) values ('22222222-2222-2222-2222-222222222222','f0000000-0000-0000-0000-000000000006','owner');
 select pg_temp.try('T20 tenant delete cascades past guard', $$delete from public.tenants where id='22222222-2222-2222-2222-222222222222'$$, 'ok');
+
+-- T21〜T23: ログインできない owner の行（user_id なし）は、残りの経営者に数えない
+--   数えると、実際に入れる経営者が1人だけでも、その人を外せてしまい、誰も経営画面に入れなくなる
+insert into public.gw_employees(id,tenant_id,display_name,email,status) values ('f1000000-0000-0000-0000-000000000007','11111111-1111-1111-1111-111111111111','未連携の経営者','unlinked@x','active');
+insert into public.gw_role_grants(tenant_id,employee_id,role) values ('11111111-1111-1111-1111-111111111111','f1000000-0000-0000-0000-000000000007','owner');
+set role authenticated; select pg_temp.as_user((select erin from ids));
+select pg_temp.try('T21 last real owner cannot revoke self although an unlinked owner row exists', $$delete from public.gw_role_grants where employee_id='e0000000-0000-0000-0000-000000000005' and role='owner'$$, 'last_owner');
+select pg_temp.try('T22 last real owner cannot unlink own login', $$update public.gw_employees set user_id=null where id='e0000000-0000-0000-0000-000000000005'$$, 'last_owner');
+reset role;
+select pg_temp.as_user(null);
+-- 未連携の行を外しても、入れる経営者の数は減らないので許可
+select pg_temp.try('T23 revoke the unlinked owner row (allowed)', $$delete from public.gw_role_grants where employee_id='f1000000-0000-0000-0000-000000000007' and role='owner'$$, 'ok');

@@ -232,7 +232,7 @@
       return head("会計", "既存の会計画面はそのまま使えます。ここは入口と、このアプリが捕捉している分の確認です。")
         + bannerHtml(d.note, "warn")
         + `<div class="kei-grid">${
-            j ? [card({ label: "仕訳（このアプリで承認済み）", status: "provisional", unit: "count", suffix: "件", value: j.approved, sub: `直近の取引日 ${j.latestApprovedOn || "—"}` }),
+            j ? [card({ label: "仕訳（このアプリで承認済み）", status: "provisional", unit: "count", suffix: "件", value: j.approvedTotal ?? j.approved, sub: `うちMF送信済み ${num(j.sent || 0)}件・直近の取引日 ${j.latestApprovedOn || "—"}` }),
                  card({ label: "確認待ちの仕訳", status: "exact", unit: "count", suffix: "件", value: j.draft, sub: "承認前" })].join("")
               : card({ label: "仕訳", status: "missing", reason: "仕訳のデータを読めませんでした" })}</div>`
         + `<div class="kei-h">既存の会計</div><div class="kei-panel">

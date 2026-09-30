@@ -37,6 +37,7 @@ create temp table exp as :body;
 select pg_temp.expect('E1 the script returns rows', (select case when count(*) > 20 then 1 else 0 end from exp), 1);
 select pg_temp.expect('E2 099 is applied', (select case when pg_temp.state_of('099') like '✅%' then 1 else 0 end), 1);
 select pg_temp.expect('E3 100 is applied', (select case when pg_temp.state_of('100') like '✅%' then 1 else 0 end), 1);
+select pg_temp.expect('E3b 035 (contracts limited to HR) is applied', (select case when pg_temp.state_of('035') like '✅%' then 1 else 0 end), 1);
 select pg_temp.expect('E4 101 is NOT applied yet', (select case when pg_temp.state_of('101') like '❌%' then 1 else 0 end), 1);
 select pg_temp.expect('E5 102 is NOT applied yet', (select case when pg_temp.state_of('102') like '❌%' then 1 else 0 end), 1);
 select pg_temp.expect('E6 103 is NOT applied yet', (select case when pg_temp.state_of('103') like '❌%' then 1 else 0 end), 1);
@@ -52,6 +53,7 @@ select pg_temp.expect('E8 the check wrote nothing (no new tables from it)', (sel
 drop table exp;
 create temp table exp as :body;
 select pg_temp.expect('F1 101 is applied', (select case when pg_temp.state_of('101') like '✅%' then 1 else 0 end), 1);
+select pg_temp.expect('F1b 035 stays "applied" after 102 (the condition is stricter, not gone)', (select case when pg_temp.state_of('035') like '✅%' then 1 else 0 end), 1);
 select pg_temp.expect('F2 102 is applied', (select case when pg_temp.state_of('102') like '✅%' then 1 else 0 end), 1);
 select pg_temp.expect('F3 103 is applied', (select case when pg_temp.state_of('103') like '✅%' then 1 else 0 end), 1);
 select pg_temp.expect('F4 104 is applied', (select case when pg_temp.state_of('104') like '✅%' then 1 else 0 end), 1);

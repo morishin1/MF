@@ -17,7 +17,8 @@
 //   送信元は環境変数 HR_ONBOARDING_FROM。未設定なら実送信せず、案内URLを画面からコピーして渡す
 //   （send_mail・test_mail は 409 mail_not_configured。履歴も作らない）。
 //   本文にパスワードは書かない。期限つきのURLだけ（lib/onboard-guide.js renderInviteMail）。
-//   履歴に残す本文は確定版だが、URLのトークンだけは保存しない（DB にはハッシュでしか持たない）
+//   履歴に残す本文は確定版だが、URLのトークンだけは保存しない（DB にはハッシュでしか持たない）。
+//   送信が成功したあとで、前のURLを失効させる（失敗したときは、すでに届いているURLを生かす）
 //
 // ■ 金額は載せない
 //   案内にも、案内メールにも、給与・手当の金額は入れない（金額らしい表記は保存の時点で断る）
@@ -68,7 +69,10 @@ export default async function handler(req, res) {
     if (!employeeId) return json(res, 400, { error: "invalid_body", required: ["employeeId"] });
     const emp = await loadEmployee(sb, ctx, employeeId);
     if (!emp) return json(res, 404, { error: "not_found", hint: "この方の情報を開けません" });
-    if (emp.status === "left") return json(res, 409, { error: "employee_left", hint: "退職済みの方には、入社案内を作れません" });
+    // 退職済み（入社が取り消された）の方には、案内を作らない・送らない。ただし、出したURLの失効はできる
+    if (emp.status === "left" && action !== "revoke_invite") {
+      return json(res, 409, { error: "employee_left", hint: "退職済みの方には、入社案内を作れません" });
+    }
 
     const act = { sb, res, req, ctx, user, emp, body };
     switch (action) {
@@ -275,11 +279,14 @@ async function makeInvite(sb, ctx, user, emp, guide, { days, revokeOthers }) {
     expires_at: expiresAt, created_by: user.id,
   }).select("id").single();
   if (error) return { error };
-  if (revokeOthers) {
-    await sb.from("gw_onboarding_invites").update({ revoked_at: new Date().toISOString() })
-      .eq("tenant_id", ctx.tenantId).eq("employee_id", emp.id).is("revoked_at", null).neq("id", data.id);
-  }
+  if (revokeOthers) await revokeOtherInvites(sb, ctx, emp.id, data.id);
   return { token, expiresAt, id: data.id };
+}
+
+/** exceptId 以外の、有効な案内URLを失効させる */
+async function revokeOtherInvites(sb, ctx, employeeId, exceptId) {
+  await sb.from("gw_onboarding_invites").update({ revoked_at: new Date().toISOString() })
+    .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).is("revoked_at", null).neq("id", exceptId);
 }
 
 /** 発行済みの案内が無いと、URLは作れない */
@@ -390,10 +397,13 @@ async function sendReal({ sb, res, req, ctx, user, emp }) {
   if (!cfg.configured) return json(res, 409, { error: "mail_not_configured", hint: notConfiguredHint(cfg) });
   if (!isEmail(emp.email)) return json(res, 409, { error: "no_recipient", hint: "本人のメールアドレスが名簿にありません（または形式が正しくありません）" });
 
-  const inv = await makeInvite(sb, ctx, user, emp, guide, { days: undefined, revokeOthers: true });
+  // 前のURLは、新しいメールが「送れた」あとで失効させる。先に失効させると、送信に失敗したとき
+  // すでに届いているURLまで使えなくなり、本人は開けず、新しいURLも届いていない状態になる
+  const inv = await makeInvite(sb, ctx, user, emp, guide, { days: undefined, revokeOthers: false });
   if (inv.error) return json(res, 500, { error: "db_insert_failed", detail: inv.error.message });
   const m = await mailParts(sb, ctx, user, emp, inviteUrl(publicBaseUrl(req), inv.token), inv.expiresAt);
   const r = await sendMail({ purpose: "onboarding", to: emp.email, subject: m.subject, text: m.text });
+  if (r.status === "sent") await revokeOtherInvites(sb, ctx, emp.id, inv.id);
   await recordMail(sb, ctx, user, emp, { kind: "send", inviteId: inv.id, guideVersion: guide.version, to: emp.email, r, subject: m.subject, text: m.text, token: inv.token });
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "onboarding.mail_send", target: `employee:${emp.id}`,
     detail: { status: r.status, provider: r.provider, inviteId: inv.id, guideVersion: guide.version } });

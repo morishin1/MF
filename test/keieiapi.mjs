@@ -20,14 +20,17 @@ const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(_HERE);
 const atRoot = (p) => _join(ROOT, p);
 
-const db = { rows: {}, missing: new Set() };
+const db = { rows: {}, missing: new Set(), reads: [], firstPages: [] };
+const MAX_ROWS = 1000;        // Supabase の応答の行数の上限（max-rows）。.limit(5000) と書いても、ここで切られる
 const logged = [];
 
 function table(name) {
+  db.reads.push(name);
   const f = [];
   let wantCount = false;
   const copy = (r) => (r ? JSON.parse(JSON.stringify(r)) : null);
   const err = () => (db.missing.has(name) ? { code: "PGRST205", message: `Could not find the table '${name}'` } : null);
+  let span = null;      // range(from, to)
   const rows = () => (db.rows[name] || []).filter((r) => f.every(([op, k, v]) => {
     if (op === "eq") return r[k] === v;
     if (op === "in") return Array.isArray(v) && v.includes(r[k]);
@@ -43,9 +46,10 @@ function table(name) {
     gte(k, v) { f.push(["gte", k, v]); return q; },
     order() { return q; },
     limit() { return q; },
+    range(a, b) { span = [a, b]; if (a === 0) db.firstPages.push(name); return q; },
     then: (fn, rej) => Promise.resolve(
       wantCount ? { data: null, count: err() ? null : rows().length, error: err() }
-        : { data: err() ? null : rows().map(copy), error: err() },
+        : { data: err() ? null : (span ? rows().slice(span[0], Math.min(span[1] + 1, span[0] + MAX_ROWS)) : rows().slice(0, MAX_ROWS)).map(copy), error: err() },
     ).then(fn, rej),
   };
   return q;
@@ -554,6 +558,84 @@ await ok("入社準備: 経営者以外は 403（他の view と同じ入口）"
   const r = await call("onboarding");
   assert.equal(r.statusCode, 403);
   assert.equal(r.body.rows, undefined);
+});
+
+console.log("\n=== 1000件を超えても切り捨てない・読めないものを 0 や空にしない ===\n");
+
+await ok("経費: 応答の上限（1000件）を超えても、切り捨てずに全件を数える", async () => {
+  setup();
+  db.rows.gw_expense_reports = db.rows.gw_expense_reports.filter((r) => r.tenant_id === "t1");
+  const line = (n) => [{ spent_on: "2026-09-03", category: "旅費交通費", amount: 100 + (n % 3) }];
+  for (let i = 0; i < 2500; i++) {
+    db.rows.gw_expense_reports.push({ id: `bulk${i}`, tenant_id: "t1", status: "approved", payment_method: "corporate_card", total_amount: 100,
+      created_at: "2026-09-05T00:00:00Z", gw_expense_lines: line(i) });
+  }
+  const want = 2500 * 100 + [...Array(2500).keys()].reduce((a, i) => a + (i % 3), 0);
+  const r = await call("expenses");
+  const before = 5000 + 10000 + 7000 - 0;      // setup の確定分（r1・r2・r3。却下・承認待ち・古いものを除く）
+  assert.equal(r.body.expense.confirmed.thisMonth, before + want, "2500件ぶんを全部数えている");
+});
+
+await ok("仕訳: 承認した仕訳は MF へ送ると sent になる。承認済み＝approved と sent の合計。1000件を超えても数える", async () => {
+  setup();
+  db.rows.journals = [];
+  for (let i = 0; i < 1200; i++) db.rows.journals.push({ tenant_id: "t1", status: i % 2 ? "sent" : "approved", txn_date: `2026-08-${String(1 + (i % 28)).padStart(2, "0")}` });
+  db.rows.journals.push({ tenant_id: "t1", status: "sent", txn_date: "2026-09-20" }, { tenant_id: "t1", status: "draft", txn_date: "2026-09-25" });
+  const j = (await call("accounting")).body.journals;
+  assert.equal(j.total, 1202, "1000件で切れていない");
+  assert.equal(j.approved, 600);
+  assert.equal(j.sent, 601);
+  assert.equal(j.approvedTotal, 1201, "承認済み＝approved と sent の合計");
+  assert.equal(j.latestApprovedOn, "2026-09-20", "送信済みの仕訳の日付も、直近に数える");
+  assert.equal(j.draft, 1);
+});
+
+await ok("経費: 元の表が読めないときは、経費全体を「データ未連携」にする（一部だけの合計・支払待ち 0円 を出さない）", async () => {
+  setup();
+  const orig = db.rows.gw_expense_reports;
+  // 1回目（確定・承認待ち）は読め、2回目（支払待ち）だけ失敗する状況を、列名の違いで再現する
+  db.rows.gw_expense_reports = orig;
+  db.missing = new Set(["gw_expense_reports"]);
+  const r = await call("expenses");
+  assert.equal(r.body.expense, null);
+  db.missing = new Set();
+});
+
+await ok("入社準備: 名簿が読めないときは「データ未連携」。「入社準備中の人はいません」にしない", async () => {
+  setupOnboarding();
+  db.missing = new Set(["gw_employees"]);
+  const d = (await call("onboarding")).body;
+  assert.equal(d.status, "missing");
+  assert.equal(d.rows, undefined);
+  assert.match(d.reason, /社員名簿/);
+});
+
+await ok("入社準備: チェックリストが読めないときは「データ未連携」。全部済んでいる（残り0件）にしない", async () => {
+  setupOnboarding();
+  db.missing = new Set(["gw_procedure_items"]);
+  const d = (await call("onboarding")).body;
+  assert.equal(d.status, "missing");
+  assert.match(d.reason, /チェックリスト/);
+  assert.equal(d.summary, undefined);
+});
+
+await ok("入社準備: チェックリストが1000件を超えても、切り捨てない（本人の残りを 0 件にしない）", async () => {
+  setupOnboarding();
+  // e11 の本人の書類（未提出）が、1000件のあとに1件ある
+  db.rows.gw_procedure_items = [];
+  for (let i = 0; i < 1100; i++) db.rows.gw_procedure_items.push({ id: `f${i}`, procedure_id: "p12", item_key: `k${i}`, owner: "employee", required: true, status: "done" });
+  db.rows.gw_procedure_items.push({ id: "last", procedure_id: "p11", item_key: "doc_id", owner: "employee", required: true, status: "todo" });
+  const d = (await call("onboarding")).body;
+  const docs = row(d, "e11").six.steps.find((s) => s.key === "docs");
+  assert.equal(docs.state, "current", "1100件のあとにある未提出の書類を、見落とさない");
+});
+
+await ok("ダッシュボード: 名簿は1回だけ読む（在籍数と人件費で使い回す）", async () => {
+  setup();
+  db.firstPages.length = 0;
+  await call("dashboard");
+  const n = db.firstPages.filter((x) => x === "gw_employees").length;
+  assert.equal(n, 1, `gw_employees を頭から読んだ回数: ${n}回（ページ送りの2ページ目以降は数えない）`);
 });
 
 console.log("\n=== 部品（lib/keiei.js） ===\n");

@@ -37,8 +37,9 @@ applied(seq, item, ok, detail) as (
   select 1, '035 給与を含む契約を、人事と本人だけに（gw_contracts の RLS）',
          case when to_regclass('public.gw_contracts') is null then null
               else exists (select 1 from pol where tbl = 'gw_contracts' and polname = 'gw_contracts_select'
-                              and using_expr ilike '%gw_is_hr%') end,
-         coalesce((select 'いまの条件: ' || using_expr from pol where tbl = 'gw_contracts' and polname = 'gw_contracts_select'),
+                              and (using_expr ilike '%gw_is_hr%' or using_expr ilike '%gw_can_see_salary%')) end,
+         coalesce((select 'いまの条件: ' || using_expr || case when using_expr ilike '%gw_can_see_salary%' then '（102 で、さらに絞ってある）' else '' end
+                     from pol where tbl = 'gw_contracts' and polname = 'gw_contracts_select'),
                   'gw_contracts なし')
   union all
   select 2, '041 管理者を人事と同じ扱いに（gw_is_hr が is_tenant_staff を含む）',

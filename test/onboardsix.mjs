@@ -327,6 +327,14 @@ ok("summarizeSix: 誰の番かで数える。本人と会社が同時なら両�
   assert.deepEqual(summarizeSix(rows), { total: 4, inProgress: 3, company: 2, employee: 1, advisor: 1, complete: 1 });
 });
 
+ok("summarizeSix: 入社準備が終わっていても、キャリアが上長の番なら「会社の対応待ち」に数える（完了の数にも入る）", () => {
+  const rows = [{ six: mapSix({ facts: done(), career: null }) }, { six: mapSix({ facts: done(), career: CAREER_OK }) }];
+  const s = summarizeSix(rows);
+  assert.equal(s.complete, 2);
+  assert.equal(s.inProgress, 0);
+  assert.equal(s.company, 1, "キャリア未設定の1人");
+});
+
 ok("給与・手当の金額を、どの状態でも返さない", () => {
   const f = { ...atIntake(), wage_amount: 999999, order: { status: "signed", wage_amount: 999999 } };
   for (const audience of ["company", "self"]) {

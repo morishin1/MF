@@ -29,6 +29,7 @@ import { daysToStart } from "../../lib/onboard-stage.js";
 import { journeyLinks } from "../../lib/journey-load.js";
 import { SIX_STEPS, mapSix, summarizeSix } from "../../lib/onboard-six.js";
 import { guideFact } from "../../lib/onboard-guide.js";
+import { readAll, readIn, chunks } from "../../lib/pg-read.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
@@ -65,10 +66,6 @@ export default async function handler(req, res) {
   }
 }
 
-/** 無くても困らない材料。表が未作成・列が無いなどで失敗したら null（その項目だけ「データ未連携」になる） */
-const soft = async (q) => {
-  try { const { data, error } = await q; return error ? null : data; } catch { return null; }
-};
 const count = async (q) => {
   try { const { count: n, error } = await q; return error ? null : (n ?? 0); } catch { return null; }
 };
@@ -81,45 +78,46 @@ async function expenseOf(sb, ctx, month) {
   const months = lastMonths(month, 12);
   const since = new Date(Date.parse(`${months[0]}-01T00:00:00Z`) - 60 * 86400000).toISOString();
   const [reports, payable] = await Promise.all([
-    soft(sb.from("gw_expense_reports")
+    readAll(() => sb.from("gw_expense_reports")
       .select("id, status, payment_method, total_amount, gw_expense_lines(spent_on, category, amount)")
       .eq("tenant_id", ctx.tenantId).in("status", [...EXPENSE_CONFIRMED, ...EXPENSE_PENDING])
-      .gte("created_at", since).limit(5000)),
+      .gte("created_at", since).order("id")),
     // 支払待ちは、古い承認済みも漏らさないよう、期間で絞らない
-    soft(sb.from("gw_expense_reports").select("id, status, payment_method, total_amount")
-      .eq("tenant_id", ctx.tenantId).eq("status", "approved").eq("payment_method", "personal").limit(5000)),
+    readAll(() => sb.from("gw_expense_reports").select("id, status, payment_method, total_amount")
+      .eq("tenant_id", ctx.tenantId).eq("status", "approved").eq("payment_method", "personal").order("id")),
   ]);
-  if (reports === null) return null;
-  return summarizeExpenses(reports, { month, payableReports: payable || [] });
+  // どちらかが読めなければ、一部だけの合計を「正確」と言わない（支払待ちを 0円 と出さない）
+  if (reports === null || payable === null) return null;
+  return summarizeExpenses(reports, { month, payableReports: payable });
 }
 
 async function employeesOf(sb, ctx) {
   // 075（BP）未適用でも、名簿の一覧は出す（区分の列だけ諦める）
-  const full = await soft(sb.from("gw_employees").select("id, display_name, status, employee_kind")
-    .eq("tenant_id", ctx.tenantId).limit(2000));
+  const full = await readAll(() => sb.from("gw_employees").select("id, display_name, status, employee_kind")
+    .eq("tenant_id", ctx.tenantId).order("id"));
   if (full) return full;
-  return soft(sb.from("gw_employees").select("id, display_name, status").eq("tenant_id", ctx.tenantId).limit(2000));
+  return readAll(() => sb.from("gw_employees").select("id, display_name, status").eq("tenant_id", ctx.tenantId).order("id"));
 }
 
-async function payrollOf(sb, ctx) {
+async function payrollOf(sb, ctx, preloaded) {
   const [employees, contracts] = await Promise.all([
-    employeesOf(sb, ctx),
-    soft(sb.from("gw_contracts").select("employee_id, wage_type, wage_amount, created_at")
-      .eq("tenant_id", ctx.tenantId).eq("status", "active").order("created_at", { ascending: false }).limit(3000)),
+    preloaded === undefined ? employeesOf(sb, ctx) : preloaded,
+    readAll(() => sb.from("gw_contracts").select("employee_id, wage_type, wage_amount, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("status", "active").order("created_at", { ascending: false }).order("id")),
   ]);
   if (!employees || !contracts) return null;
   return summarizePayroll({ employees, contracts });
 }
 
 async function billingOf(sb, ctx, month) {
-  const rows = await soft(sb.from("gw_billing_progress").select(["id", ...STAGE_KEYS].join(", "))
-    .eq("tenant_id", ctx.tenantId).eq("billing_month", month).limit(3000));
+  const rows = await readAll(() => sb.from("gw_billing_progress").select(["id", ...STAGE_KEYS].join(", "))
+    .eq("tenant_id", ctx.tenantId).eq("billing_month", month).order("id"));
   return rows ? summarizeBilling(rows) : null;
 }
 
 async function renewalsOf(sb, ctx) {
-  const rows = await soft(sb.from("gw_site_contracts").select("id, period_from, period_to, renewal_status, engagement_kind")
-    .eq("tenant_id", ctx.tenantId).limit(3000));
+  const rows = await readAll(() => sb.from("gw_site_contracts").select("id, period_from, period_to, renewal_status, engagement_kind")
+    .eq("tenant_id", ctx.tenantId).order("id"));
   return rows ? { ...summarizeRenewals(rows, { today: todayJst() }), rows } : null;
 }
 
@@ -136,8 +134,10 @@ async function salesOf(sb, ctx) {
 // ---- 画面ごと ------------------------------------------------------------------
 
 async function dashboard(sb, ctx, month) {
+  // 名簿は1回だけ読む（在籍数と人件費で使い回す）
+  const employeesP = employeesOf(sb, ctx);
   const [expense, payroll, employees, billing, renewals, sales] = await Promise.all([
-    expenseOf(sb, ctx, month), payrollOf(sb, ctx), employeesOf(sb, ctx),
+    expenseOf(sb, ctx, month), employeesP.then((e) => payrollOf(sb, ctx, e)), employeesP,
     billingOf(sb, ctx, month), renewalsOf(sb, ctx), salesOf(sb, ctx),
   ]);
   return {
@@ -197,16 +197,18 @@ async function cash(sb, ctx, month) {
 }
 
 async function accounting(sb, ctx) {
-  const rows = await soft(sb.from("journals").select("status, txn_date").eq("tenant_id", ctx.tenantId).limit(10000));
+  // 1000 件を超えても、切り捨てない（読み切れなければ「データ未連携」）
+  const rows = await readAll(() => sb.from("journals").select("id, status, txn_date").eq("tenant_id", ctx.tenantId).order("id"));
   const by = { draft: 0, approved: 0, sent: 0, rejected: 0, error: 0 };
   let latest = null;
   for (const r of rows || []) {
     if (r.status in by) by[r.status] += 1;
-    if (r.status === "approved" && r.txn_date && (!latest || r.txn_date > latest)) latest = r.txn_date;
+    // 承認した仕訳は、MF へ送ると sent になる。承認済み＝approved と sent の合計
+    if ((r.status === "approved" || r.status === "sent") && r.txn_date && (!latest || r.txn_date > latest)) latest = r.txn_date;
   }
   return {
     status: rows ? STATUS.PROVISIONAL : STATUS.MISSING,
-    journals: rows ? { total: rows.length, ...by, latestApprovedOn: latest } : null,
+    journals: rows ? { total: rows.length, ...by, approvedTotal: by.approved + by.sent, latestApprovedOn: latest } : null,
     missingLabel: MISSING_LABEL,
     note: "このアプリで承認した仕訳だけです（書類のアップロード分）。期首残高・他システムの取引は含みません。MFの会計実績との照合は、これから連携します。",
     links: { accounting: "/admin.html", documents: "/app.html" },
@@ -234,9 +236,12 @@ function hrefOf(stepKey, stage, links) {
 
 async function onboarding(sb, ctx) {
   const today = todayJst();
-  const procs = await soft(sb.from("gw_procedures")
+  const unreadable = (what) => ({ status: STATUS.MISSING, missingLabel: MISSING_LABEL, steps: SIX_STEPS,
+    reason: `${what}を読めませんでした（表が未適用か、件数が多すぎて読み切れませんでした）` });
+
+  const procs = await readAll(() => sb.from("gw_procedures")
     .select("id, tenant_id, employee_id, kind, status, target_on, stage, stage_at, updated_at, created_at")
-    .eq("tenant_id", ctx.tenantId).eq("kind", "onboarding").order("created_at", { ascending: false }).limit(1000));
+    .eq("tenant_id", ctx.tenantId).eq("kind", "onboarding").order("created_at", { ascending: false }).order("id"));
   if (procs === null) {
     return { status: STATUS.MISSING, missingLabel: MISSING_LABEL, steps: SIX_STEPS,
       reason: "入社手続きの表が読めません（db/070 が未適用の可能性があります）" };
@@ -248,38 +253,50 @@ async function onboarding(sb, ctx) {
     if (p.status === "cancelled" || latest.has(p.employee_id)) continue;
     latest.set(p.employee_id, p);
   }
-  const empIds = [...latest.keys()].slice(0, 300);
+  const empIds = [...latest.keys()];
   if (!empIds.length) {
     return { status: STATUS.EXACT, steps: SIX_STEPS, summary: summarizeSix([]), rows: [], hiddenComplete: 0,
       links: { start: "/admin-onboard.html", hr: "/admin-hr.html" } };
   }
 
+  // 条件（in）は 100 件ずつに分ける（URL が長すぎて断られないように）
   const [emps, careers, guides] = await Promise.all([
-    soft(sb.from("gw_employees").select("id, display_name, department, position, employment_type, status, joined_on")
-      .eq("tenant_id", ctx.tenantId).in("id", empIds)),
+    readIn((part) => sb.from("gw_employees").select("id, display_name, department, position, employment_type, status, joined_on")
+      .eq("tenant_id", ctx.tenantId).in("id", part).order("id"), empIds),
     // 095 の列が無い環境でも、基本の列で読む（本人確認の列だけ諦める）
-    soft(sb.from("gw_employee_careers").select(`${CAREER_COLS}, confirm_requested_at, employee_confirmed_at`)
-      .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", empIds))
-      .then((r) => r ?? soft(sb.from("gw_employee_careers").select(CAREER_COLS)
-        .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", empIds))),
+    readIn((part) => sb.from("gw_employee_careers").select(`${CAREER_COLS}, confirm_requested_at, employee_confirmed_at`)
+      .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", part).order("id"), empIds)
+      .then((r) => r ?? readIn((part) => sb.from("gw_employee_careers").select(CAREER_COLS)
+        .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", part).order("id"), empIds)),
     // 入社案内（db/104）。表が無ければ null → ① だけ「データ未連携」
-    soft(sb.from("gw_onboarding_guides")
-      .select("employee_id, version, confirmed_version, confirmed_at").eq("tenant_id", ctx.tenantId).in("employee_id", empIds)),
+    readIn((part) => sb.from("gw_onboarding_guides")
+      .select("employee_id, version, confirmed_version, confirmed_at").eq("tenant_id", ctx.tenantId).in("employee_id", part).order("id"), empIds),
   ]);
-  const empBy = new Map((emps || []).map((e) => [e.id, e]));
+  // 名簿が読めないまま「入社準備中の人はいません」と出さない
+  if (emps === null) return unreadable("社員名簿");
+  const empBy = new Map(emps.map((e) => [e.id, e]));
   const careerBy = new Map((careers || []).map((c) => [c.employee_id, c]));
   const guideBy = new Map((guides || []).map((g) => [g.employee_id, g]));
 
   const procList = empIds.map((id) => latest.get(id)).filter((p) => empBy.has(p.employee_id) && empBy.get(p.employee_id).status !== "left");
-  const items = procList.length ? await soft(sb.from("gw_procedure_items")
-    .select("id, procedure_id, item_key, owner, required, status").in("procedure_id", procList.map((p) => p.id))) : [];
+  // チェックリストが読めないまま「全部済んでいる」（残り0件）にしない
+  const items = procList.length
+    ? await readIn((part) => sb.from("gw_procedure_items")
+      .select("id, procedure_id, item_key, owner, required, status").in("procedure_id", part).order("id"), procList.map((p) => p.id))
+    : [];
+  if (items === null) return unreadable("入社手続きのチェックリスト");
   const itemsBy = new Map();
-  for (const i of items || []) {
+  for (const i of items) {
     if (!itemsBy.has(i.procedure_id)) itemsBy.set(i.procedure_id, []);
     itemsBy.get(i.procedure_id).push(i);
   }
+  // 事実の一括読み出し（署名・届出・同意・オリエンテーション）も 100 人ずつ
   let factsBy = new Map();
-  try { factsBy = await gatherFactsBulk(sb, ctx.tenantId, procList, itemsBy); } catch { factsBy = new Map(); }
+  try {
+    for (const part of chunks(procList)) {
+      for (const [k, v] of await gatherFactsBulk(sb, ctx.tenantId, part, itemsBy)) factsBy.set(k, v);
+    }
+  } catch { factsBy = new Map(); }
 
   const cutoff = Date.parse(`${today}T00:00:00Z`) - ONBOARD_KEEP_DAYS * 86400000;
   let hiddenComplete = 0;

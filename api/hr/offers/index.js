@@ -22,7 +22,7 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput } from "../../../lib/salary.js";
-import { paySplit, splitWage, attachPay, savePay, copyPayToOffer, WAGE_COLUMNS } from "../../../lib/hr-pay.js";
+import { paySplit, splitWage, attachPay, savePay, copyPayToOffer, payFailed, WAGE_COLUMNS } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
@@ -93,7 +93,12 @@ async function create(req, res, sb, ctx, user, salary) {
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
   }
 
-  await savePay(ctx.tenantId, { applicantId: applicant.id, offerId: data.id, wage });
+  try {
+    await savePay(ctx.tenantId, { applicantId: applicant.id, offerId: data.id, wage });
+  } catch (e) {
+    // 給与の無い合格通知の版を残さない
+    return payFailed(res, e, () => sb.from("gw_hr_offers").delete().eq("id", data.id));
+  }
 
   const now = new Date().toISOString();
   await sb.from("gw_hr_applicants").update({ status: "offer_review_pending", updated_at: now })
@@ -144,7 +149,11 @@ async function update(res, sb, ctx, user, offer, body, salary) {
     if (r.error) return json(res, 500, { error: "db_update_failed", detail: r.error.message });
     data = r.data;
   }
-  await savePay(ctx.tenantId, { applicantId: offer.applicant_id, offerId: offer.id, wage });
+  try {
+    await savePay(ctx.tenantId, { applicantId: offer.applicant_id, offerId: offer.id, wage });
+  } catch (e) {
+    return payFailed(res, e);
+  }
 
   return json(res, 200, { offer: await shape(ctx, data, salary) });
 }
@@ -225,7 +234,12 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
     .select("*").single();
   if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
 
-  await copyPayToOffer(ctx.tenantId, { applicantId: applicant.id, fromOfferId: offer.id, toOfferId: made.id });
+  try {
+    await copyPayToOffer(ctx.tenantId, { applicantId: applicant.id, fromOfferId: offer.id, toOfferId: made.id });
+  } catch (e) {
+    // 給与を引き継げなかった新しい版は残さない（前の版は、有効のまま）
+    return payFailed(res, e, () => sb.from("gw_hr_offers").delete().eq("id", made.id));
+  }
   await sb.from("gw_hr_offers").update({ revoked_at: now }).eq("id", offer.id);
   await sb.from("gw_hr_applicants").update({ status: "offer_resend_pending", updated_at: now })
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);

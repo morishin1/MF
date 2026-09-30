@@ -263,6 +263,19 @@ await ok("退職済みの owner は人数に数えない（在籍中が1人な�
   assert.equal(r.body.error, "last_owner");
 });
 
+await ok("ログインできない owner の行（アカウント未連携）は、残りの経営者に数えない。実際に入れる1人は外せない", async () => {
+  setup(); who = OWNER;
+  db.rows.gw_employees.push({ id: "emp-u", tenant_id: "t1", user_id: null, display_name: "未連携", email: "u@x", status: "active" });
+  db.rows.gw_role_grants.push({ id: "g9", tenant_id: "t1", employee_id: "emp-u", role: "owner" });
+  const r = await setRole("emp-a", "owner", false);
+  assert.equal(r.statusCode, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "last_owner");
+  assert.deepEqual(owners(), ["emp-a", "emp-u"]);
+  // 未連携の行を外すのは、入れる経営者の数が減らないので許可
+  const r2 = await setRole("emp-u", "owner", false);
+  assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+});
+
 await ok("退職済みの owner なら、外しても在籍中の人数は減らないので外せる", async () => {
   setup(); who = OWNER;
   db.rows.gw_role_grants.push({ id: "g8", tenant_id: "t1", employee_id: "emp-l", role: "owner" });

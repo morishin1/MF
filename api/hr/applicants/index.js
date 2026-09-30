@@ -9,7 +9,7 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
-import { paySplit, splitWage, attachPay, savePay } from "../../../lib/hr-pay.js";
+import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
@@ -119,8 +119,13 @@ async function create(req, res, sb, ctx, user, salary) {
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
   }
 
-  await savePay(ctx.tenantId, { applicantId: data.id, wage });
-  if (salary) await attachPay(ctx.tenantId, data, "applicant");
+  try {
+    await savePay(ctx.tenantId, { applicantId: data.id, wage });
+    if (salary) await attachPay(ctx.tenantId, data, "applicant");
+  } catch (e) {
+    // 給与だけが無い応募者を残さない（残すと、やり直しで二重に登録される）
+    return payFailed(res, e, () => sb.from("gw_hr_applicants").delete().eq("id", data.id).eq("tenant_id", ctx.tenantId));
+  }
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: data.id, event_key: "applied", label: "応募", created_by: user.id,
   });

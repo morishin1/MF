@@ -348,6 +348,19 @@ await ok("新しいURLを作ると、前のURLは失効する。失効したURL�
   assert.equal(db.rows.gw_onboarding_invites.filter((i) => !i.revoked_at).length, 1);
 });
 
+await ok("入社が取り消された（退職済み）方: 案内は作れない・URLは開けない。ただし、出したURLの失効はできる", async () => {
+  setup(); await save(F); await issue();
+  const t = tokenOf((await invite()).body.invite.url);
+  db.rows.gw_employees.find((e) => e.id === "e1").status = "left";
+  assert.equal((await save(F)).statusCode, 409);
+  assert.equal((await invite()).statusCode, 409);
+  assert.equal((await openPublic(t)).statusCode, 404, "期限内でも、開けない");
+  const id = db.rows.gw_onboarding_invites[0].id;
+  const r = await owner({ action: "revoke_invite", employeeId: "e1", inviteId: id });
+  assert.equal(r.statusCode, 200, "失効はできる");
+  assert.equal(db.rows.gw_onboarding_invites[0].revoked_at != null, true);
+});
+
 await ok("URLを失効させる（revoke_invite）。ほかの人のURLは失効させない", async () => {
   setup(); await save(F); await issue();
   const t = tokenOf((await invite()).body.invite.url);
@@ -458,6 +471,21 @@ await ok("再送: 新しいURL・1通ずつ履歴。前のURLは失効。2通目
   assert.deepEqual(r.body.mail.history.map((h) => h.label), ["再送", "送信"], "新しい順");
   assert.equal((await openPublic(first)).statusCode, 404, "前のメールのURLは失効している");
   assert.equal(db.rows.gw_onboarding_invites.filter((i) => !i.revoked_at).length, 1);
+});
+
+await ok("再送に失敗しても、すでに届いているURLは失効させない（成功したあとで、前のURLを失効させる）", async () => {
+  setup(); await save(F); await issue(); setMail(true);
+  await owner({ action: "send_mail", employeeId: "e1" });
+  const delivered = fetchCalls[0].init.body.match(/t=([A-Za-z0-9_-]+)/)[1];
+  assert.equal((await openPublic(delivered)).statusCode, 200);
+  setMail(true, { fail: true });
+  const r = await owner({ action: "send_mail", employeeId: "e1" });
+  assert.equal(r.statusCode, 502);
+  assert.equal((await openPublic(delivered)).statusCode, 200, "届いているURLは、生きている");
+  setMail(true);
+  const ok2 = await owner({ action: "send_mail", employeeId: "e1" });
+  assert.equal(ok2.statusCode, 200);
+  assert.equal((await openPublic(delivered)).statusCode, 404, "新しいメールが送れたので、前のURLは失効");
 });
 
 await ok("送信に失敗: 502。履歴に failed と理由が残る。URLは有効のまま（届いている可能性があるため）", async () => {

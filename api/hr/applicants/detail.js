@@ -6,7 +6,7 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
-import { paySplit, splitWage, attachPay, savePay } from "../../../lib/hr-pay.js";
+import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
@@ -138,8 +138,12 @@ async function update(req, res, sb, ctx, user, salary) {
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   if (!data) return json(res, 404, { error: "not_found" });
   // 給与は、分けている設定なら専用の表へ（見られない人の入力は、ここまで来ない）
-  await savePay(ctx.tenantId, { applicantId: body.id, wage: splitWage(row.value).wage });
-  if (salary) await attachPay(ctx.tenantId, data, "applicant");
+  try {
+    await savePay(ctx.tenantId, { applicantId: body.id, wage: splitWage(row.value).wage });
+    if (salary) await attachPay(ctx.tenantId, data, "applicant");
+  } catch (e) {
+    return payFailed(res, e);
+  }
 
   // ステージが動いたときだけ、選考タイムラインに足す（値を直しただけでは足さない）
   if (row.value.stage && row.value.stage !== before.stage) {

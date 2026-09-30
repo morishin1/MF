@@ -134,7 +134,7 @@ begin
   end if;
 
   -- 外れる人が在籍中か。名簿の行が既に無い（社員削除の cascade）ときは在籍中とみなす
-  select (e.status not in ('leaving', 'left')) into v_active
+  select (e.status not in ('leaving', 'left') and e.user_id is not null) into v_active
     from public.gw_employees e where e.id = old.employee_id;
   if v_active is false then
     -- もともと在籍していない人を外しても、在籍中の人数は減らない
@@ -147,7 +147,8 @@ begin
    where g.tenant_id = old.tenant_id
      and g.role = 'owner'
      and g.id <> old.id
-     and e.status not in ('leaving', 'left');
+     and e.status not in ('leaving', 'left')
+     and e.user_id is not null;      -- ログインできない行（アカウント未連携）は、残りの経営者に数えない
 
   if v_remaining = 0 then
     raise exception 'last_owner: 在籍中の経営者（owner）を0人にはできません。先に、ほかの人に owner を付けてください'
@@ -251,15 +252,17 @@ begin
     end if;
   end if;
 
-  -- 最後の（在籍中の）owner を、退職にして締め出さない
-  if new.status in ('leaving', 'left') and old.status not in ('leaving', 'left') then
+  -- 最後の（ログインできる在籍中の）owner を、退職にする・ログインの紐づけを外すことで、締め出さない
+  if (new.status in ('leaving', 'left') and old.status not in ('leaving', 'left'))
+     or (new.user_id is null and old.user_id is not null) then
     select count(*) into v_remaining
       from public.gw_role_grants g
       join public.gw_employees e on e.id = g.employee_id
      where g.tenant_id = old.tenant_id
        and g.role = 'owner'
        and g.employee_id <> old.id
-       and e.status not in ('leaving', 'left');
+       and e.status not in ('leaving', 'left')
+       and e.user_id is not null;
     if v_remaining = 0 then
       raise exception 'last_owner: 在籍中の経営者（owner）を0人にはできません。先に、ほかの人に owner を付けてください'
         using errcode = 'P0001';

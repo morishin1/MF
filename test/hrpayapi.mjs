@@ -22,7 +22,7 @@ const atRoot = (p) => _join(ROOT, p);
 
 process.env.HR_PAY_SPLIT = "1";
 
-const db = { rows: {}, missing: null };
+const db = { rows: {}, missing: null, failInsert: null, inSizes: [] };
 
 function table(name) {
   const f = [];
@@ -37,14 +37,31 @@ function table(name) {
   const q = {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
-    in(k, v) { f.push(["in", k, v]); return q; },
+    in(k, v) { f.push(["in", k, v]); if (name === "gw_hr_pay" && Array.isArray(v)) db.inSizes.push(v.length); return q; },
     is(k, v) { f.push(["is", k, v]); return q; },
     order() { return q; },
     limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: err() ? null : copy(rows()[0]) || null, error: err() }),
     single: () => Promise.resolve({ data: err() ? null : copy(rows()[0]) || null, error: err() }),
     then: (fn) => Promise.resolve({ data: err() ? null : rows().map(copy), error: err() }).then(fn),
+    delete() {
+      const g = [];
+      const r2 = {
+        eq: (k, v) => { g.push([k, v]); return r2; },
+        then: (fn) => {
+          db.rows[name] = (db.rows[name] || []).filter((x) => !g.every(([k, v]) => x[k] === v));
+          return Promise.resolve({ error: null }).then(fn);
+        },
+      };
+      return r2;
+    },
     insert(row) {
+      // 書き込みの失敗を再現する（表はあるが、値が大きすぎる・一意制約など）
+      if (db.failInsert === name) {
+        const e = { code: "22003", message: "numeric field overflow" };
+        const r3 = { select: () => r3, single: () => Promise.resolve({ data: null, error: e }), then: (fn) => Promise.resolve({ data: null, error: e }).then(fn) };
+        return r3;
+      }
       const made = [].concat(row).map((r, n) => ({
         id: r.id || `${name}-${(db.rows[name] || []).length + n + 1}`, created_at: r.created_at || new Date().toISOString(), ...r,
       }));
@@ -124,7 +141,7 @@ const pay = (o) => (db.rows.gw_hr_pay || []).find((p) => Object.entries(o).every
 
 function setup() {
   who = RECRUITER;
-  db.missing = null;
+  db.missing = null; db.failInsert = null; db.inSizes = [];
   db.rows = {
     gw_hr_applicants: [
       { id: "a1", tenant_id: "t1", name: "山田 太郎", job_title: "エンジニア", stage: "offer", status: "offer_draft_pending",
@@ -298,6 +315,65 @@ await ok("候補者本人の公開ページに、本人の合格通知どおり�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.wageAmount, 450000, "本人には、合格通知どおりの給与が見える");
   assert.ok(!JSON.stringify(r.body).includes(String(STALE)));
+});
+
+console.log("\n=== 大きな一覧・書き込みの失敗 ===\n");
+
+await ok("gw_hr_pay の問い合わせは 100 件ずつ（数百件の応募者でも、URL が長すぎて断られない）", async () => {
+  setup(); who = HR;
+  for (let i = 0; i < 250; i++) {
+    db.rows.gw_hr_applicants.push({ id: `x${i}`, tenant_id: "t1", name: `応募${i}`, stage: "applied", status: "new", created_at: "2026-09-23T00:00:00Z" });
+    db.rows.gw_hr_pay.push({ id: `px${i}`, tenant_id: "t1", applicant_id: `x${i}`, offer_id: null, wage_type: "月給", wage_amount: 200000 + i });
+  }
+  db.inSizes = [];
+  const r = await list();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(db.inSizes.length >= 3, `複数回に分けた（${db.inSizes}）`);
+  assert.ok(db.inSizes.every((n) => n <= 100), `1回の in は 100 件まで（${db.inSizes}）`);
+  assert.equal(r.body.applicants.find((a) => a.id === "x249").wageAmount, 200249, "分けても、全員の給与が付く");
+  assert.equal(r.body.applicants.filter((a) => a.wageAmount != null).length, 253);
+});
+
+await ok("応募者の登録: 給与だけ保存に失敗したら、応募者を残さず（二重登録を防ぐ）、db/100 とは言わない", async () => {
+  setup(); who = HR;
+  db.failInsert = "gw_hr_pay";
+  const before = db.rows.gw_hr_applicants.length;
+  const r = await create({ name: "新しい人", source: "リファラル", jobTitle: "エンジニア", wageType: "月給", wageAmount: 300000 });
+  assert.equal(r.statusCode, 500, JSON.stringify(r.body));
+  assert.equal(r.body.error, "hr_pay_failed");
+  assert.ok(!/db\/100/.test(JSON.stringify(r.body)), "表が無いわけではないので、db/100 を流せとは言わない");
+  assert.match(r.body.hint, /取り消しました/);
+  assert.equal(db.rows.gw_hr_applicants.length, before, "給与の無い応募者が残っていない");
+});
+
+await ok("応募者の更新: 給与だけ保存に失敗したら、そう伝える（ほかの項目は保存済み）", async () => {
+  setup(); who = HR;
+  db.failInsert = "gw_hr_pay";
+  db.rows.gw_hr_pay = [];                       // 更新ではなく新規の書き込みになる
+  const r = await patch({ id: "a1", jobTitle: "リーダー", wageAmount: 500000 });
+  assert.equal(r.statusCode, 500, JSON.stringify(r.body));
+  assert.equal(r.body.error, "hr_pay_failed");
+  assert.match(r.body.hint, /給与以外の項目は保存されました/);
+  assert.equal(db.rows.gw_hr_applicants.find((a) => a.id === "a1").job_title, "リーダー");
+});
+
+await ok("合格通知の作成: 給与の保存に失敗したら、給与の無い版を残さない", async () => {
+  setup(); who = HR;
+  db.failInsert = "gw_hr_pay";
+  db.rows.gw_hr_pay = db.rows.gw_hr_pay.filter((p) => p.applicant_id !== "a1");
+  const r = await mkOffer({ applicantId: "a1", respondBy: "2099-10-15", wageAmount: 450000 });
+  assert.equal(r.statusCode, 500, JSON.stringify(r.body));
+  assert.equal(r.body.error, "hr_pay_failed");
+  assert.equal(db.rows.gw_hr_offers.length, 0, "給与の無い合格通知を残していない");
+});
+
+await ok("gw_hr_pay が無い（db/100 未適用）ときだけ、db/100 を案内して 503", async () => {
+  setup(); who = HR;
+  db.missing = "gw_hr_pay";
+  const r = await create({ name: "新しい人", source: "リファラル", jobTitle: "エンジニア", wageType: "月給", wageAmount: 300000 });
+  assert.equal(r.statusCode, 503, JSON.stringify(r.body));
+  assert.equal(r.body.error, "hr_pay_not_ready");
+  assert.match(r.body.hint, /db\/100_hr_pay\.sql/);
 });
 
 console.log("\n=== 設定の誤り ===\n");

@@ -619,7 +619,7 @@ async function saveLevel(res, sb, ctx, user, b) {
   });
   if (!row) return json(res, 404, { error: "not_found" });
   await log(ctx, user, "career.level.save", `career_level:${row.id}`,
-    { trackId: track.id, levelNo, salaryMin, salaryMax });
+    { trackId: track.id, levelNo, ...(canSeeSalary(ctx) ? { salaryMin, salaryMax } : {}) });
   return json(res, 200, { level: levelView(row) });
 }
 
@@ -762,6 +762,12 @@ async function confirmReview(res, sb, ctx, user, b) {
   }
   // 昇給の判断は、給与を見られる人だけが決める。見られない人が確定しても、値は動かさない
   const salaryOk = canSeeSalary(ctx);
+  // 昇給の判断がすでに入っている評価は、給与を見られない人が確定しない（確定すると評価は動かせなくなり、
+  // 判断を見られる人が、契約の更新へ進む機会を失う）。見られる人（経営者・人事）が確定する
+  if (!salaryOk && rv.salary_decision && rv.salary_decision !== "none") {
+    return json(res, 403, { error: "salary_decision_pending",
+      hint: "この評価には、給与に関する判断が入っています。給与を見られる人（経営者・人事）が確定してください" });
+  }
   const salaryDecision = salaryOk && SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none";
   if (result === "level_up" && !target) return json(res, 400, { error: "no_target", hint: "上の Level がありません" });
 
@@ -786,7 +792,9 @@ async function confirmReview(res, sb, ctx, user, b) {
   await must(sb.from("gw_employee_careers").update(careerPatch).eq("id", c.id).select("id").maybeSingle());
 
   await log(ctx, user, "career.review.confirm", `career_review:${rv.id}`, {
-    employeeId: e.id, result, salaryDecision,
+    employeeId: e.id, result,
+    // 給与を見られない人が確定したときは、判断に触れていない（操作ログに、給与の値を残さない）
+    ...(salaryOk ? { salaryDecision } : { salaryUntouched: true }),
     ...(newLevel ? { newLevelNo: newLevel.level_no } : {}),
   });
   // 本人へ。中身（管理者メモ・給与の調整メモ）は通知に入れない

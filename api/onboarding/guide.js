@@ -43,6 +43,10 @@ export default async function handler(req, res) {
   if (!inv || inv.revoked_at || !inv.guide_id) return json(res, 404, CANT_OPEN);
   if (Date.parse(inv.expires_at) < Date.now()) return json(res, 410, EXPIRED);
 
+  // 入社が取り消された（退職済みになった）方のURLは、期限内でも開けない
+  const { data: emp } = await sb.from("gw_employees").select("status").eq("id", inv.employee_id).eq("tenant_id", inv.tenant_id).maybeSingle();
+  if (!emp || emp.status === "left") return json(res, 404, CANT_OPEN);
+
   const { data: guide } = await sb.from("gw_onboarding_guides").select("id, version")
     .eq("id", inv.guide_id).eq("tenant_id", inv.tenant_id).maybeSingle();
   if (!guide || !(guide.version > 0)) return json(res, 404, CANT_OPEN);

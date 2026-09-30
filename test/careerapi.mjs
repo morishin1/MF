@@ -496,6 +496,47 @@ await ok("昇給を検討で確定しても gw_contracts は書き換えず、�
   assert.match(r.body.contractNext.message, /電子署名/);
 });
 
+// 評価を確定できるのは管理者・経営者。段階1では管理者も給与を見られるので、給与を見られない確定者が
+// 現れるのは、段階2（SALARY_OWNER_ONLY=1。管理者は給与を見られない）になってから
+await ok("段階2: 給与を見られない管理者は、昇給の判断が入った評価を確定できない（403）。経営者が確定できる", async () => {
+  process.env.SALARY_OWNER_ONLY = "1";
+  try {
+    setup();
+    await seedAndSet();
+    await draftAll("achieved");
+    db.rows.gw_career_reviews[0].salary_decision = "raise";      // 判断が下書きに入っている
+    who = ADMIN;
+    const id = db.rows.gw_career_reviews[0].id;
+    const r = await act({ action: "confirmReview", id, result: "level_up" });
+    assert.equal(r.statusCode, 403, JSON.stringify(r.body));
+    assert.equal(r.body.error, "salary_decision_pending");
+    assert.equal(db.rows.gw_career_reviews[0].status, "draft", "確定されていない（評価は動かせるまま）");
+    assert.equal(db.rows.gw_career_reviews[0].salary_decision, "raise", "判断は残っている");
+    who = OWNER;
+    const r2 = await act({ action: "confirmReview", id, result: "level_up", salaryDecision: "raise" });
+    assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+    assert.ok(r2.body.contractNext, "見られる人には、契約更新への行き先が出る");
+  } finally { delete process.env.SALARY_OWNER_ONLY; }
+});
+
+await ok("段階2: 給与を見られない管理者が、判断の入っていない評価を確定するとき、操作ログに給与の値を残さず、入力も反映しない", async () => {
+  process.env.SALARY_OWNER_ONLY = "1";
+  try {
+    setup();
+    await seedAndSet();
+    await draftAll("achieved");
+    who = ADMIN;
+    logged.length = 0;
+    const r = await act({ action: "confirmReview", id: db.rows.gw_career_reviews[0].id, result: "level_up", salaryDecision: "raise" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    const l = logged.find((x) => x.action === "career.review.confirm");
+    assert.ok(!("salaryDecision" in l.detail), "給与の判断をログに書かない");
+    assert.equal(l.detail.salaryUntouched, true);
+    assert.notEqual(db.rows.gw_career_reviews[0].salary_decision, "raise", "入力された昇給の判断は、反映されない");
+    assert.equal(r.body.contractNext, null);
+  } finally { delete process.env.SALARY_OWNER_ONLY; }
+});
+
 await ok("管理者の詳細に次のレンジ・現在給与・注記が出る", async () => {
   setup();
   await seedAndSet();
