@@ -829,12 +829,16 @@
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
     // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、日時変更・キャンセルを出す
     const pending = !i.done && !i.canceled;
+    // TimeRex 連携済みの面談は TimeRex を正とする。日程変更・取消は TimeRex の導線から（HR で日時を直さない）
+    const tr = i.timerex;
     return `
       <div class="card" style="margin-bottom:10px;${i.canceled ? "opacity:.6;" : ""}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
           ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
           ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}
-          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}</div>
+          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}
+          ${tr ? `<span class="hr-pill hr-timerex" style="background:#e6f4ea;color:#256b36;margin-left:6px;">TimeRex連携済み</span>` : ""}
+          ${i.meetingUrl && pending ? `<span class="muted" style="font-size:11.5px;font-weight:500;margin-left:6px;">Google Meet</span>` : ""}</div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">
           ${i.done ? `実施：${esc(fmtDate(i.conductedAt))}`
             : i.canceled ? `予定していた日時：${esc(fmtDate(i.scheduledAt))}（${esc(fmtDate(i.canceledAt))}にキャンセル）`
@@ -846,8 +850,10 @@
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
-          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">日時を変更</button>` : ""}
-          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
+          ${pending && !tr ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">日時を変更</button>` : ""}
+          ${pending && !tr ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
+          ${pending && tr ? `<button class="btn btn-secondary btn-sm" data-timerex="reschedule" onclick="openTimerexReschedule('${esc(i.id)}')">日程変更</button>` : ""}
+          ${pending && tr ? `<button class="btn btn-secondary btn-sm" data-timerex="cancel" onclick="openTimerexCancel('${esc(i.id)}')">取消</button>` : ""}
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
           ${i.done && i.kind === "ceo"
@@ -855,6 +861,37 @@
           ${i.done ? recordingActions(i) : ""}
         </div>
       </div>`;
+  }
+
+  // ---- TimeRex 連携済みの面談：日程変更・取消は TimeRex で（HR の日時は Webhook で自動反映） -----------
+  const findInterview = (id) => (detail.interviews || []).find((x) => x.id === id);
+  function openTimerexReschedule(id) {
+    const iv = findInterview(id);
+    const url = iv?.timerex?.rescheduleUrl;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 8px;">日程変更（TimeRex）</h2>
+      <p style="font-size:13px;line-height:1.8;margin:0 0 12px;">
+        ${esc(detail.applicant.name)}さんの${esc(iv?.kindLabel || "面談")}（${esc(fmtDate(iv?.scheduledAt))}）は TimeRex で予約された面談です。
+        日程は TimeRex で変更してください。変更すると、この画面の日時も自動で更新されます。</p>
+      ${url ? "" : `<p class="muted" style="font-size:12.5px;">日程変更のリンクがまだ届いていません。TimeRex の管理画面から変更してください。</p>`}
+      <div style="display:flex;gap:8px;">
+        ${url ? `<a class="btn btn-primary" id="tr-open" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="closeAction()">TimeRexで日程変更</a>` : ""}
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+  function openTimerexCancel(id) {
+    const iv = findInterview(id);
+    const url = iv?.timerex?.cancelUrl;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 8px;">面談を取り消しますか？（TimeRex）</h2>
+      <p style="font-size:13px;line-height:1.8;margin:0 0 12px;">
+        ${esc(detail.applicant.name)}さんの${esc(iv?.kindLabel || "面談")}（${esc(fmtDate(iv?.scheduledAt))}）は TimeRex で予約された面談です。
+        取消は TimeRex で行ってください。TimeRex で取り消すと、この画面にも反映されます（面談の記録は残ります）。</p>
+      ${url ? "" : `<p class="muted" style="font-size:12.5px;">取消のリンクがまだ届いていません。TimeRex の管理画面から取り消してください。</p>`}
+      <div style="display:flex;gap:8px;">
+        ${url ? `<a class="btn btn-danger" id="tr-open" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="closeAction()">TimeRexで取り消す</a>` : ""}
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる（取り消さない）</button>
+      </div>`);
   }
 
   // ---- 録画URL登録・変更（モーダル） ------------------------------------------------

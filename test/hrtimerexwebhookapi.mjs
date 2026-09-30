@@ -79,6 +79,8 @@ mock.module(atRoot("lib/gw-audit.js"), {
 });
 
 process.env.TIMEREX_WEBHOOK_SECRET = "test-secret-value-long-enough";
+// カジュアル面談の予約枠（現行の設定と同じく、予約ページの URL から calendar_url_path を取る）
+process.env.TIMEREX_CASUAL_INTERVIEW_URL = "https://timerex.net/s/eight_hr/c0a1b2c3";
 
 const { default: webhook } = await import(atRoot("api/hr/timerex/webhook.js"));
 
@@ -124,6 +126,7 @@ const confirmedFixture = (over = {}) => ({
       { field_type: "company_name", value: "" },
       { field_type: "guest_comment", value: "" },
     ],
+    calendar_url_path: "c0a1b2c3",
     is_changed: false, old_event_id: null, new_event_id: null,
     ...over,
   },

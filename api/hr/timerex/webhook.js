@@ -1,4 +1,6 @@
 // POST /api/hr/timerex/webhook … TimeRexからの予約確定・変更Webhookを受ける。
+//   カジュアル面談・社長面談の両方。どちらかは予約枠（calendar_url_path）で決める
+//   （lib/hr-timerex-calendars.js。知らない予約枠は 422 unknown_timerex_calendar で止める）。
 //
 // ■ 認証
 //   TimeRex標準で送信される固定ヘッダー（TimeRex管理画面の「セキュリティトークン」）。
@@ -45,7 +47,7 @@ function verifySecret(req) {
 const ERROR_STATUS = {
   invalid_body: 400, unsupported_webhook_type: 400, missing_applicant_id: 400,
   missing_event_id: 400, missing_scheduled_at: 400, unknown_event_type: 400, invalid_event: 400,
-  applicant_not_found: 404, interview_not_found: 404,
+  applicant_not_found: 404, interview_not_found: 404, unknown_timerex_calendar: 422,
   ambiguous_applicant: 409, already_conducted: 409,
 };
 
@@ -66,6 +68,11 @@ export default async function handler(req, res) {
   }
 
   const parsed = await parseTimerexWebhook(body);
+  if (parsed.error === "unsupported_webhook_type") {
+    // キャンセル等、まだ実ログで確認していない event。名前だけ残す（payload・URL・メールは出さない）。
+    // 実際の event 名が分かったら TIMEREX_CANCEL_WEBHOOK_TYPES に入れる（lib/hr-timerex.js）
+    console.warn("[timerex-webhook] unsupported webhook_type:", parsed.webhookType);
+  }
   if (parsed.error) {
     return json(res, ERROR_STATUS[parsed.error] || 500, { ok: false, error: parsed.error, detail: parsed.detail });
   }
