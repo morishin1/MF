@@ -18,6 +18,7 @@
   const MENU = [
     { key: "dashboard",  label: "ダッシュボード", icon: "dashboard" },
     { key: "onboarding", label: "入社準備",       icon: "how_to_reg" },
+    { key: "pay",        label: "給与管理",       icon: "request_quote" },
     { key: "revenue",    label: "売上・利益",     icon: "trending_up" },
     { key: "cash",       label: "入金・支払",     icon: "payments" },
     { key: "payroll",    label: "人件費",         icon: "groups" },

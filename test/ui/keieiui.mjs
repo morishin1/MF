@@ -2,7 +2,7 @@
 //
 // ■ 何を守りたいのか
 //   ・経営者（owner）だけが開ける。それ以外は、ホームへ送り返される（画面には何も出ない）
-//   ・サイドメニューは、ダッシュボード・入社準備・売上・利益・入金・支払・人件費・経費・会計
+//   ・サイドメニューは、ダッシュボード・入社準備・給与管理・売上・利益・入金・支払・人件費・経費・会計
 //   ・取れないデータは「データ未連携」と出し、0円とは出さない。条件つきの数字は「暫定」と出る
 //   ・画面を切り替えても、最後に押した画面だけが出る
 //   ・二段階認証が済んでいない経営者には、案内が出る（画面の中身は出ない）
@@ -154,8 +154,10 @@ async function open(who, { width = 1280, detail = null, hash = "" } = {}) {
       if (view === "expenses") return send({ month: "2026-09", expense });
       if (view === "payroll") {
         return send({ month: "2026-09", payroll: { status: "provisional", monthlyTotal: 800000, counted: 2, employeeCount: 4, excludedCount: 2,
-          rows: [{ name: "月給 太郎", wageType: "月給", wageAmount: 300000, monthly: 300000, included: true, reason: null },
-                 { name: "時給 次郎", wageType: "時給", wageAmount: 2000, monthly: null, included: false, reason: "時給は実稼働が未確定のため含めていません" }],
+          counted: 2, countedFromPay: 1, countedFromContract: 1,
+          rows: [{ id: "e1", name: "月給 太郎", wageType: "月給", wageAmount: 300000, monthly: 300000, included: true, reason: null, source: "pay" },
+                 { id: "e2", name: "契約 花子", wageType: "月給", wageAmount: 500000, monthly: 500000, included: true, reason: null, source: "contract" },
+                 { id: "e3", name: "時給 次郎", wageType: "時給", wageAmount: 2000, monthly: null, included: false, reason: "時給は実稼働が未確定のため含めていません", source: "contract" }],
           note: "契約に登録された基本給ベースの暫定値です。" } });
       }
       if (view === "revenue") {
@@ -194,10 +196,10 @@ console.log("— 経営者は開ける —");
   check(pathOf(page) === "/keiei/index.html", "経営者は /keiei/ にとどまる");
   const menu = await page.locator("#kei-side a").allInnerTexts();
   check(menu.map((t) => t.replace(/^\S+\s*/, "").trim()).join("|").includes("ダッシュボード")
-        && menu.length === 7, `サイドメニューは7つ（いま ${menu.length}）`);
+        && menu.length === 8, `サイドメニューは8つ（いま ${menu.length}）`);
   const labels = (await page.locator("#kei-side a").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
-  check(labels === "dashboard,onboarding,revenue,cash,payroll,expenses,accounting",
-    `メニューの並び: ダッシュボード・入社準備・売上・利益・入金・支払・人件費・経費・会計（いま ${labels}）`);
+  check(labels === "dashboard,onboarding,pay,revenue,cash,payroll,expenses,accounting",
+    `メニューの並び: ダッシュボード・入社準備・給与管理・売上・利益・入金・支払・人件費・経費・会計（いま ${labels}）`);
   check(await page.locator(".kei-bar").isVisible(), "専用ヘッダーが出る");
   check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "dashboard", "初期はダッシュボード");
   const t = await bodyText(page);
@@ -229,6 +231,8 @@ console.log("\n— メニューで画面を切り替える —");
   await page.waitForTimeout(500);
   t = await bodyText(page);
   check(t.includes("暫定") && t.includes("800,000円") && t.includes("時給は実稼働が未確定"), "人件費：暫定・含めない人の理由");
+  check(t.includes("給与管理1人＋契約1人"), "人件費：何人が給与管理で、何人が契約か");
+  check(await page.locator('table.kei-t a[href="#pay/e1"]').count() === 1, "人件費：給与管理の人は、給与管理へのリンク（契約の人にはリンクなし）");
 
   await page.click('#kei-side a[data-view="revenue"]');
   await page.waitForTimeout(500);
@@ -468,7 +472,7 @@ for (const width of [390, 360]) {
   const page = await open({ appRole: "owner", roles: ["owner"] }, { width });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 0, `${width}px: 横スクロールが出ない（はみ出し ${overflow}px）`);
-  check(await page.locator("#kei-side a").count() === 7, `${width}px: メニューが7つある`);
+  check(await page.locator("#kei-side a").count() === 8, `${width}px: メニューが8つある`);
   await page.click('#kei-side a[data-view="expenses"]');
   await page.waitForTimeout(500);
   const overflow2 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

@@ -20,7 +20,8 @@ const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(_HERE);
 const atRoot = (p) => _join(ROOT, p);
 
-const db = { rows: {}, missing: new Set(), reads: [], firstPages: [] };
+// payLinked … 給与管理（db/105）の表を「ある」ことにする。既定は未適用（表が無い）
+const db = { rows: {}, missing: new Set(), reads: [], firstPages: [], payLinked: false, failInsert: null };
 const MAX_ROWS = 1000;        // Supabase の応答の行数の上限（max-rows）。.limit(5000) と書いても、ここで切られる
 const logged = [];
 
@@ -29,7 +30,10 @@ function table(name) {
   const f = [];
   let wantCount = false;
   const copy = (r) => (r ? JSON.parse(JSON.stringify(r)) : null);
-  const err = () => (db.missing.has(name) ? { code: "PGRST205", message: `Could not find the table '${name}'` } : null);
+  const gone = () => db.missing.has(name) || (!db.payLinked && (name === "gw_compensations" || name === "gw_pay_audit"));
+  const err = () => (gone() ? { code: "PGRST205", message: `Could not find the table '${name}'` }
+    : db.readFail?.has(name) ? { code: "XX000", message: "boom" } : null);
+  let inserting = null;
   let span = null;      // range(from, to)
   const rows = () => (db.rows[name] || []).filter((r) => f.every(([op, k, v]) => {
     if (op === "eq") return r[k] === v;
@@ -40,6 +44,7 @@ function table(name) {
   }));
   const q = {
     select(_cols, opts) { wantCount = Boolean(opts?.count); return q; },
+    insert(v) { inserting = v; return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
     neq(k, v) { f.push(["neq", k, v]); return q; },
@@ -48,6 +53,8 @@ function table(name) {
     limit() { return q; },
     range(a, b) { span = [a, b]; if (a === 0) db.firstPages.push(name); return q; },
     then: (fn, rej) => Promise.resolve(
+      inserting ? (err() || db.failInsert ? { data: null, error: err() || db.failInsert }
+        : ((db.rows[name] ||= []).push(...[].concat(inserting)), { data: null, error: null })) :
       wantCount ? { data: null, count: err() ? null : rows().length, error: err() }
         : { data: err() ? null : (span ? rows().slice(span[0], Math.min(span[1] + 1, span[0] + MAX_ROWS)) : rows().slice(0, MAX_ROWS)).map(copy), error: err() },
     ).then(fn, rej),
@@ -94,7 +101,7 @@ const OWNER = ctxOf(["owner"]);
 const MONTH = "2026-09";
 function setup() {
   who = OWNER; userFactors = [{ status: "verified", factor_type: "totp" }];
-  logged.length = 0; db.missing = new Set();
+  logged.length = 0; db.missing = new Set(); db.payLinked = false; db.failInsert = null; db.readFail = new Set();
   const line = (spent_on, category, amount) => ({ spent_on, category, amount });
   db.rows = {
     gw_expense_reports: [
@@ -314,6 +321,91 @@ await ok("人件費（暫定）: 月給はそのまま、年俸は12で割る。
   assert.match(byName["契約なし"].reason, /未登録/);
   assert.ok(!byName["BP 三郎"] && !byName["退職済み"]);
   assert.match(p.note, /社会保険料・賞与・残業割増/);
+});
+
+console.log("\n=== 人件費と給与管理（db/105）の接続 ===\n");
+
+const compRow = (id, employee, extra = {}) => ({ id, tenant_id: "t1", employee_id: employee, effective_from: "2026-04-01", revision: 1, kind: "change",
+  source: "owner", wage_type: "月給", base_amount: 250000, allowances: [], commute_amount: null, ...extra });
+function linkPay() {
+  setup(); db.payLinked = true;
+  db.rows.gw_pay_audit = [];
+  db.rows.gw_compensations = [
+    compRow("c1", "e1", { base_amount: 320000, allowances: [{ name: "役職手当", amount: 20000 }], commute_amount: 10000 }),   // 契約は 300000
+    compRow("c2", "e4", { base_amount: 250000 }),                                                                            // 契約なし
+    compRow("c3", "e3", { wage_type: "時給", base_amount: 2500 }),
+    compRow("c4", "e2", { effective_from: "2099-01-01", wage_type: "年俸", base_amount: 9000000 }),                            // まだ適用前 → 契約
+    { ...compRow("cx", "e1", { base_amount: 999999 }), tenant_id: "t2" },                                                     // 他社
+  ];
+}
+
+await ok("給与管理に記録がある人は、その記録（基本給＋手当＋通勤手当）で数える。記録がない人・適用前は契約。二重に足さない", async () => {
+  linkPay();
+  const p = (await call("payroll")).body.payroll;
+  const by = Object.fromEntries(p.rows.map((x) => [x.name, x]));
+  assert.equal(by["月給 太郎"].monthly, 350000, "320000＋手当20000＋通勤10000（契約の300000は使わない）");
+  assert.equal(by["月給 太郎"].source, "pay");
+  assert.equal(by["契約なし"].monthly, 250000, "契約が無くても、記録があれば数える");
+  assert.equal(by["契約なし"].source, "pay");
+  assert.equal(by["年俸 花子"].monthly, 500000, "適用が始まっていない記録は使わない（契約の年俸÷12）");
+  assert.equal(by["年俸 花子"].source, "contract");
+  assert.equal(by["時給 次郎"].included, false);
+  assert.match(by["時給 次郎"].reason, /実稼働/);
+  assert.equal(p.monthlyTotal, 350000 + 250000 + 500000);
+  assert.equal(p.counted, 3); assert.equal(p.countedFromPay, 2); assert.equal(p.countedFromContract, 1);
+  assert.equal(p.employeeCount, 4);
+  assert.match(p.note, /給与管理に記録がある人/);
+  assert.ok(!("payLinked" in p), "内部の印は返さない");
+  assert.ok(!JSON.stringify(p).includes("999999"), "他社の記録は混ざらない");
+});
+
+await ok("給与管理の記録を含めて返す閲覧は、給与管理の監査ログに残る（金額は残さない）。ダッシュボード（合計だけ）は残さない", async () => {
+  linkPay();
+  await call("dashboard");
+  assert.equal(db.rows.gw_pay_audit.length, 0, "合計だけのダッシュボードは、監査の対象にしない");
+  await call("payroll");
+  assert.equal(db.rows.gw_pay_audit.length, 1);
+  const a = db.rows.gw_pay_audit[0];
+  assert.deepEqual([a.tenant_id, a.actor_id, a.action, a.detail.via], ["t1", "u-x", "view_list", "payroll"]);
+  assert.ok(!/\d{5,}/.test(JSON.stringify(a.detail)), "金額は残さない");
+  assert.ok(logged.some((x) => x.action === "keiei.view"), "従来の閲覧の履歴も残る");
+});
+
+await ok("監査ログを残せなければ、人件費（全員の給与）は返さない", async () => {
+  linkPay(); db.failInsert = { code: "XX000", message: "boom" };
+  const r = await call("payroll");
+  assert.equal(r.statusCode, 503); assert.equal(r.body.error, "audit_unavailable");
+  assert.ok(!/350000|320000|250000/.test(JSON.stringify(r.body)));
+});
+
+await ok("給与管理の表があるのに読めないときは、契約だけに黙って切り替えず「データ未連携」", async () => {
+  linkPay(); db.readFail = new Set(["gw_compensations"]);
+  const r = await call("payroll");
+  assert.equal(r.statusCode, 200); assert.equal(r.body.payroll, null);
+  assert.match(r.body.reason, /給与管理/);
+  const d = (await call("dashboard")).body;
+  const card = d.cards.find((c) => c.key === "payroll");
+  assert.equal(card.status, "missing", "ダッシュボードの人件費も、未連携（違う合計を出さない）");
+});
+
+await ok("給与管理の表が無い（db/105 未適用）ときは、これまでどおり契約だけ。監査ログにも触れない", async () => {
+  setup();
+  const r = await call("payroll");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.payroll.monthlyTotal, 800000);
+  assert.equal(r.body.payroll.countedFromPay, 0);
+  assert.match(r.body.payroll.note, /契約に登録された基本給ベース/);
+  assert.equal((db.rows.gw_pay_audit || []).length, 0);
+});
+
+await ok("ダッシュボードのカードは、何ベースかを出す（給与管理＋契約 / 契約）", async () => {
+  linkPay();
+  const c1 = (await call("dashboard")).body.cards.find((c) => c.key === "payroll");
+  assert.equal(c1.value, 1100000);
+  assert.match(c1.sub, /給与管理＋契約ベース（暫定）・3\/4人分/);
+  setup();
+  const c2 = (await call("dashboard")).body.cards.find((c) => c.key === "payroll");
+  assert.match(c2.sub, /^契約ベース（暫定）/);
 });
 
 await ok("人件費の閲覧は履歴に残る（誰が・いつ。金額は残さない）", async () => {

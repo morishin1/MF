@@ -78,6 +78,8 @@ function table(name) {
       const r2 = {
         eq: (k, v) => { g.push([k, v]); return r2; },
         then: (fn) => {
+          // db.deleteError … 外部キーなどで、DB が削除を断ったことにする（db/105: 給与の履歴がある社員は消せない）
+          if (db.deleteError && db.deleteError.table === name) return Promise.resolve({ error: db.deleteError.error }).then(fn);
           db.rows[name] = (db.rows[name] || []).filter((x) => !g.every(([k, v]) => x[k] === v));
           return Promise.resolve({ error: null }).then(fn);
         },
@@ -311,6 +313,19 @@ await ok("人事は、これまでどおり owner 以外の名簿を編集・退
   r = await delEmp("emp-l");
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.ok(!hasEmployee("emp-l"));
+});
+
+await ok("給与の履歴などで DB が削除を断ったら、技術的なエラーではなく「退職にしてください」と案内する（何の記録かは言わない）", async () => {
+  setup(); who = HR;
+  db.deleteError = { table: "gw_employees", error: { code: "23503", message: 'update or delete on table "gw_employees" violates foreign key constraint "gw_compensations_employee_id_fkey" on table "gw_compensations"' } };
+  const r = await delEmp("emp-l");
+  db.deleteError = null;
+  assert.equal(r.statusCode, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "employee_has_records");
+  assert.match(r.body.hint, /退職/);
+  assert.ok(!/給与|compensation|gw_/.test(JSON.stringify(r.body)), "何の記録かは言わない（人事にも、給与の存在を知らせない）");
+  assert.ok(hasEmployee("emp-l"), "消えていない");
+  assert.ok(!logged.some((x) => x.action === "employee.delete"), "削除の履歴も残らない（消していない）");
 });
 
 await ok("最後の owner は、owner 自身でも退職にできない", async () => {

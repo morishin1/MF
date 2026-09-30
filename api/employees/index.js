@@ -259,6 +259,12 @@ export default async function handler(req, res) {
 
     const { error } = await sb
       .from("gw_employees").delete().eq("id", id).eq("tenant_id", ctx.tenantId);
+    // 外部キーが止めた（給与の履歴など、消してはいけない記録が残っている: db/105）。
+    // 何の記録かは言わない（ここで開く人は、その記録を読める人とは限らない）。退職にすれば、記録は残る
+    if (error?.code === "23503") {
+      return json(res, 409, { error: "employee_has_records", blockers: [],
+        hint: "消してはいけない記録が残っているため、名簿から消せません。状態を「退職」に変えてください（記録はそのまま残ります）。" });
+    }
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
 
     // ログインアカウント（auth.users）は消さない。同じアカウントを

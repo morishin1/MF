@@ -71,20 +71,25 @@ RLS は列を隠せない。`gw_hr_applicants` / `gw_hr_offers` に給与の列�
 
 1. アプリ: 環境変数 `SALARY_OWNER_ONLY=1`（`canSeeSalary` が経営者だけになる）
 2. DB: `create or replace function public.gw_can_see_salary(uuid) ... select public.gw_is_owner(p_tenant)`
-3. **先に、下の「未完了」を終える**（そうしないと、人事・管理者の業務が止まる）
+3. **先に、下の「未完了」を終える**（そうしないと、人事・管理者の業務が止まる）。とくに、`/keiei` の給与管理への記録と、`db/check_pay_reconcile.sql` の差分が 0 になったことの確認（`docs/keiei-pay-management.md` §8）
 
 `test/salaryguardapi.mjs`・`test/careerapi.mjs`・`test/sql/*.sql` が、段階1と段階2の両方を確かめている。
 
 ## 4. 未完了（段階2の前に必要）
 
+> **`/keiei` の給与管理を作った**（`db/105`・`docs/keiei-pay-management.md`）。現在の給与額の正は `gw_compensations`（履歴つき・追記だけ・監査つき・経営者専用）になった。
+> 下の表のうち、1・4・6 は、この表を使って進められるようになった。ただし**既存データの移行と、読み先の切り替えは、まだしていない**（突き合わせのあとに、別の承認で行う: `docs/keiei-pay-management.md` §8）。
+> **段階2は、この工程では行わない**（人事・管理者の既存の給与閲覧権限は変えていない）。
+
+
 | # | 内容 | 場所 | 状態 |
 |---|---|---|---|
-| 1 | 契約（`gw_contracts`）の賃金を、専用の表（`gw_compensations`。履歴つき）へ。`api/contracts`・`admin-contracts.html`・`api/career`・`api/onboarding/*`・`lib/onboard.js`・`lib/career-member.js`（本人の自己参照） | `db/029`・`api/contracts/index.js` ほか | **未着手**。RLS だけ 102 で絞った |
+| 1 | 契約（`gw_contracts`）の賃金を、専用の表（`gw_compensations`。履歴つき）へ。**表は作った（`db/105`）。契約からの移行・読み先の切り替えは未着手。**`api/contracts`・`admin-contracts.html`・`api/career`・`api/onboarding/*`・`lib/onboard.js`・`lib/career-member.js`（本人の自己参照） | `db/029`・`api/contracts/index.js` ほか | 移行・切り替えは**未着手**。RLS だけ 102 で絞った。契約の賃金は「参照」に位置づけた（給与の正ではない） |
 | 2 | 労働条件通知書の賃金欄（`gw_doc_orders.conditions`）・署名依頼の本文（`body_snapshot`・`merged_fields`）・PDF | `api/sign/*`・`lib/esign.js` | **未着手**。賃金入りの署名済み PDF は不変の証跡で、過去分は人事が読める状態が残る |
 | 3 | 給与入り PDF の置き場所。いまは単一バケット `hr` を、テナント単位の policy で守っている。専用バケットと、経営者・本人だけの Storage policy が要る | `db/012` | **未着手** |
-| 4 | 通勤手当（`gw_onboard_profiles.commute_cost`）・給与 CSV（`lib/payroll-csv.js`、社労士の個別権限） | `api/hr/payroll.js` | **未着手** |
+| 4 | 通勤手当（`gw_onboard_profiles.commute_cost`）・給与 CSV（`lib/payroll-csv.js`、社労士の個別権限） | `api/hr/payroll.js` | 会社が決める通勤手当は `gw_compensations.commute_amount` に持てる。CSV の読み先（基本給＝契約、通勤手当＝届出）の切り替えは**未着手**（食い違いは `db/check_pay_reconcile.sql` が見張る） |
 | 5 | 操作ログの差分に賃金が混ざる（`gw_activity_log.detail`）。管理者が `/api/settings` で読める | `api/contracts`・`api/sign/orders.js` | **未着手** |
-| 6 | 登録・CSV 取込（`admin-onboard.html`・`lib/intake.js`）の給与欄。経営者が入力する導線を `/keiei` に作る | `api/employees/onboard.js` ほか | **未着手**（入社準備の設計で扱う） |
+| 6 | 登録・CSV 取込（`admin-onboard.html`・`lib/intake.js`）の給与欄。経営者が入力する導線を `/keiei` に作る | `api/employees/onboard.js` ほか | 経営者が入力する導線は `/keiei#pay` にできた。登録・CSV取込の給与欄を外すのは**未着手** |
 | 7 | 給与レンジ（`gw_career_levels.salary_min/max`）・昇給判断（`gw_career_reviews.salary_decision/note`） | `db/092` | RLS は `gw_is_hr`。専用の表へは未着手 |
 
 **落とし穴**: `updateContract`（`api/contracts/index.js`）は、body に賃金のキーが無いと `wage_*` を `null` で上書きする。賃金欄を UI から外して呼ぶと、賃金が消える。1 を進めるときは、まずここを直す。

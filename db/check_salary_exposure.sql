@@ -84,6 +84,15 @@ applied(seq, item, ok, detail) as (
                 and (select count(*) from pol where tbl in ('gw_onboarding_guides','gw_onboarding_guide_issues','gw_onboarding_invites','gw_mail_messages')
                         and using_expr ilike '%gw_is_owner%') = 4 end,
          '4つの表とも、RLS は経営者（gw_is_owner）だけ。099 が前提'
+  union all
+  select 10, '105 給与の履歴・監査ログ（gw_compensations / gw_pay_audit）。給与管理（/keiei）。既存の給与の権限は変えない',
+         case when to_regclass('public.gw_compensations') is null then false
+              else to_regclass('public.gw_pay_audit') is not null
+                and exists (select 1 from pg_trigger where tgname = 'gw_comp_immutable_trg')
+                and exists (select 1 from pg_trigger where tgname = 'gw_pay_audit_immutable_trg')
+                and (select count(*) from pol where tbl in ('gw_compensations','gw_pay_audit')
+                        and using_expr ilike '%gw_is_owner%') = 2 end,
+         '履歴は追記だけ（変更・削除はトリガが止める）。RLS は経営者だけ（本人は自分の行だけ）。099 が前提。独立して流せる'
 ),
 
 -- ---- B. 給与の露出（件数） ---------------------------------------------------

@@ -109,6 +109,18 @@
     .kei-btn.sm { padding:4px 10px; font-size:11.5px; margin:0; }
     .kei-btn[disabled] { opacity:.45; cursor:default; }
     @media (max-width: 820px) { .kei-form { grid-template-columns:1fr; } }
+    /* 給与管理 */
+    .kei-pill.warn { background:#fdeceb; color:#b3261e; }
+    .pay-arow { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto; gap:8px; margin-bottom:6px; align-items:center; }
+    .pay-arow input { border:1px solid #c7cad4; border-radius:7px; padding:8px 10px; font-size:13.5px; font-family:inherit; color:#1b2440; background:#fff; width:100%; box-sizing:border-box; }
+    .kei-f select { border:1px solid #c7cad4; border-radius:7px; padding:8px 10px; font-size:13.5px; font-family:inherit; color:#1b2440; background:#fff; width:100%; box-sizing:border-box; }
+    .pay-filters { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin-bottom:12px; }
+    .pay-filters label, .pay-modes label { display:flex; gap:6px; align-items:center; margin:0; font-size:12.5px; color:#4a5068; }
+    .pay-modes { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+    .pay-modes input[type=radio] { width:auto; margin:0; }
+    .pay-filters select { border:1px solid #c7cad4; border-radius:7px; padding:6px 8px; font-size:13px; font-family:inherit; background:#fff; color:#1b2440; width:auto; }
+    .pay-filters input[type=search] { border:1px solid #c7cad4; border-radius:7px; padding:6px 8px; font-size:13px; font-family:inherit; width:150px; }
+    .pay-pv > div { margin:2px 0; } .pay-pv b { color:#1b2440; }
   </style>
 </head>
 <body>
@@ -120,6 +132,7 @@
 <script src="../js/api-client.js?v=20260929c"></script>
 <script src="../js/keiei-layout.js?v=20260929c"></script>
 <script src="/keiei/onboarding.js?v=20260929c"></script>
+<script src="/keiei/pay.js?v=20260929c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -189,13 +202,15 @@
       return head("人件費", "経営者だけが見られます。全員分の給与を含みます。")
         + bannerHtml(p.note, "warn")
         + `<div class="kei-grid">
-            ${card({ label: "今月の人件費", status: "provisional", unit: "yen", value: p.monthlyTotal, sub: `契約ベース・${p.counted}/${p.employeeCount}人分` })}
+            ${card({ label: "今月の人件費", status: "provisional", unit: "yen", value: p.monthlyTotal, sub: `${p.countedFromPay ? `給与管理${p.countedFromPay}人＋契約${p.countedFromContract}人` : "契約ベース"}・${p.counted}/${p.employeeCount}人分` })}
             ${card({ label: "含めていない人", status: "exact", unit: "count", suffix: "人", value: p.excludedCount, sub: "下の表に理由があります" })}
           </div>`
-        + `<div class="kei-h">社員別</div><div class="kei-panel"><table class="kei-t"><thead><tr><th>氏名</th><th>賃金の種類</th><th class="n">契約上の賃金</th><th class="n">月額換算</th><th>備考</th></tr></thead><tbody>${
+        + `<div class="kei-h">社員別</div><div class="kei-panel"><table class="kei-t"><thead><tr><th>氏名</th><th>賃金の種類</th><th class="n">基本給</th><th class="n">月額換算</th><th>元</th><th>備考</th></tr></thead><tbody>${
             p.rows.map((r) => `<tr class="${r.included ? "" : "dim"}"><td>${esc(r.name)}</td><td>${esc(r.wageType || "—")}</td>
               <td class="n">${r.wageAmount == null ? "—" : yen(r.wageAmount)}</td><td class="n">${r.included ? yen(r.monthly) : "—"}</td>
-              <td>${esc(r.reason || "")}</td></tr>`).join("")}</tbody></table></div>`;
+              <td>${r.source === "pay" ? `<a href="#pay/${encodeURIComponent(r.id)}">給与管理</a>` : "契約"}</td>
+              <td>${esc(r.reason || "")}</td></tr>`).join("")}</tbody></table></div>
+          <div class="kei-sub">「給与管理」の人は、給与管理の記録（基本給＋手当＋通勤手当）で、「契約」の人は、契約の基本給で数えています。給与管理に記録すると、記録のほうに切り替わります。</div>`;
     },
 
     revenue(d) {
@@ -298,6 +313,19 @@
       const main = el("kei-main");
       main.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
       await window.KeieiOnb.open(decodeURIComponent(one[1]), main, () => mine !== seq);
+      return;
+    }
+    // 給与管理（#pay 一覧 / #pay/<社員ID> 1人 / #pay-audit 監査ログ）は、keiei/pay.js
+    const payOne = /^pay\/(.+)$/.exec(view);
+    if (payOne || view === "pay" || view === "pay-audit") {
+      KeieiLayout.setActive("pay");
+      const mine = ++seq;
+      const main = el("kei-main");
+      main.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
+      const stale = () => mine !== seq;
+      if (payOne) await window.KeieiPay.open(decodeURIComponent(payOne[1]), main, stale);
+      else if (view === "pay") await window.KeieiPay.list(main, stale);
+      else await window.KeieiPay.audit(main, stale);
       return;
     }
     if (!RENDER[view]) view = "dashboard";

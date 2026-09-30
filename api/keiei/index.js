@@ -18,7 +18,7 @@
 // ■ 1本の関数にまとめる（view で切り替え）
 //   api/ は 1 ファイル = 1 関数。増やしすぎないため、既存の api/career/index.js と同じ作り
 
-import { json, methodNotAllowed } from "../../lib/http.js";
+import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireKeiei } from "../../lib/keiei-gate.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -99,14 +99,30 @@ async function employeesOf(sb, ctx) {
   return readAll(() => sb.from("gw_employees").select("id, display_name, status").eq("tenant_id", ctx.tenantId).order("id"));
 }
 
+/**
+ * 給与管理（gw_compensations, db/105）の記録。
+ * 表が無いなら { rows: null }（契約だけで数える）。表があるのに読めなければ { error: true }
+ * （読めた一部だけ、あるいは契約だけに黙って切り替えて、違う合計を出さない）
+ */
+async function compensationsOf(sb, ctx) {
+  let probe;
+  try { probe = await sb.from("gw_compensations").select("id").eq("tenant_id", ctx.tenantId).limit(1); } catch { return { error: true }; }
+  if (probe?.error) return dbSetupHint(probe.error, "db/105_compensation.sql") ? { rows: null } : { error: true };
+  const rows = await readAll(() => sb.from("gw_compensations")
+    .select("id, employee_id, effective_from, revision, kind, source, wage_type, base_amount, allowances, commute_amount")
+    .eq("tenant_id", ctx.tenantId).order("id"));
+  return rows ? { rows } : { error: true };
+}
+
 async function payrollOf(sb, ctx, preloaded) {
-  const [employees, contracts] = await Promise.all([
+  const [employees, contracts, comp] = await Promise.all([
     preloaded === undefined ? employeesOf(sb, ctx) : preloaded,
     readAll(() => sb.from("gw_contracts").select("employee_id, wage_type, wage_amount, created_at")
       .eq("tenant_id", ctx.tenantId).eq("status", "active").order("created_at", { ascending: false }).order("id")),
+    compensationsOf(sb, ctx),
   ]);
-  if (!employees || !contracts) return null;
-  return summarizePayroll({ employees, contracts });
+  if (!employees || !contracts || comp.error) return null;
+  return { ...summarizePayroll({ employees, contracts, compensations: comp.rows }), payLinked: comp.rows !== null };
 }
 
 async function billingOf(sb, ctx, month) {
@@ -153,8 +169,18 @@ async function payroll(res, sb, ctx, user, month) {
   const p = await payrollOf(sb, ctx);
   // 全員の給与を返すので、誰がいつ開いたかを残す（金額そのものは残さない）
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "keiei.view", target: "payroll", detail: { month } });
-  if (!p) return json(res, 200, { month, payroll: null, missingLabel: MISSING_LABEL, reason: "契約または名簿のデータを読めませんでした" });
-  return json(res, 200, { month, payroll: p });
+  if (!p) return json(res, 200, { month, payroll: null, missingLabel: MISSING_LABEL, reason: "契約・名簿・給与管理のデータを読めませんでした" });
+  // 給与管理の記録を含めて返すときは、給与管理の監査ログにも残す。残せなければ、給与は返さない
+  if (p.payLinked) {
+    const { error } = await sb.from("gw_pay_audit").insert({ tenant_id: ctx.tenantId, actor_id: user.id,
+      actor_name: ctx.employee?.display_name || user.email || null, action: "view_list", detail: { via: "payroll", month } });
+    if (error) {
+      console.error("[keiei] 給与の監査ログを残せませんでした:", error.message);
+      return json(res, 503, { error: "audit_unavailable", hint: "監査ログを残せないため、給与は表示しません。しばらくしてからもう一度お試しください（続く場合は管理者へ）" });
+    }
+  }
+  const { payLinked, ...out } = p;
+  return json(res, 200, { month, payroll: out });
 }
 
 async function revenue(sb, ctx, month) {
