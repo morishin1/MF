@@ -248,8 +248,8 @@
 
   // ---- Phase 3（勤務表の確認・確定）：応答に phase3.ready があるときだけ、増えた表示を出す ----
   const p3 = () => Boolean(state.data?.phase3?.ready);
-  const sheetUrl = (r) => `timesheet.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
-  const termsUrl = (r) => `terms.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
+  const sheetUrl = (r) => `/office/timesheet.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
+  const termsUrl = (r) => `/office/terms.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
   let lastFocus = null;
 
   // ---- 状態の表示 ----------------------------------------------------------------------
