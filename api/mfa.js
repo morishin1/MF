@@ -24,9 +24,10 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
 import { gwContext, canManageHr } from "../lib/gw.js";
 import { admin } from "../lib/supabase.js";
+import { enrollBody } from "../lib/mfa.js";
 import { gwLog } from "../lib/gw-audit.js";
 import { notify } from "../lib/notify.js";
-import { mfaState, selfUnenroll, requireMfa, enrolledOf, enrollBody } from "../lib/mfa.js";
+import { mfaState, selfUnenroll, requireMfa, enrolledOf } from "../lib/mfa.js";
 
 const RESET_WINDOW_DAYS = 7;
 const SQL = "db/071_onboarding_stage2.sql";
