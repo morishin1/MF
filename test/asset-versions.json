@@ -789,7 +789,7 @@
         "weekGoals"
       ]
     },
-    "20260930a": {
+    "20260929b": {
       "published": "8ca5839（PR #33 のマージ。API.focusSelect を含む。PR #31 で足された関数）",
       "functions": [
         "acceptTask",

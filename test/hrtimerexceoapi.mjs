@@ -130,6 +130,23 @@ await ok("calendar_url_path → 面談の種類。カジュアルは現行の予
   assert.deepEqual([m.x1, m.x2, m.x3], ["casual", "ceo", undefined]);
 });
 
+await ok("本番のカジュアル予約URL（…/bo_43ba_dabf/b4da552f）→ b4da552f=casual、98b26445=ceo", async () => {
+  const env = { TIMEREX_CASUAL_INTERVIEW_URL: "https://timerex.net/s/bo_43ba_dabf/b4da552f" };
+  assert.equal(kindForCalendar("b4da552f", env), "casual");
+  assert.equal(kindForCalendar("98b26445", env), "ceo");
+  // Webhook を通しても、body 直下の calendar_url_path=b4da552f はカジュアル面談として入る
+  const prev = process.env.TIMEREX_CASUAL_INTERVIEW_URL;
+  process.env.TIMEREX_CASUAL_INTERVIEW_URL = env.TIMEREX_CASUAL_INTERVIEW_URL;
+  try {
+    setup();
+    const r = await hook(payload({ calendar_url_path: "b4da552f" }, { id: "evt_casual_prod",
+      form: [{ field_type: "guest_email", value: "casual@example.test" }] }));
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(ivs()[0].kind, "casual");
+    assert.deepEqual([app("a-cas").stage, app("a-cas").status], ["casual_interview", "interview_scheduled"]);
+  } finally { process.env.TIMEREX_CASUAL_INTERVIEW_URL = prev; }
+});
+
 console.log("\n— 予約 —");
 await ok("カジュアル面談予約：kind=casual・stage=casual_interview・status=interview_scheduled", async () => {
   setup();
