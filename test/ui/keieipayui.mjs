@@ -200,7 +200,9 @@ console.log("— 一覧 —");
   const server = makeServer();
   const page = await open({}, { server });
   const labels = (await page.locator("#kei-side a").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
-  check(labels.includes("pay") && labels.split(",").length === 8, `メニューに「給与管理」がある（${labels}）`);
+  // メニューは、ホーム・入社準備・給与管理の3つ＋小さな入口（経営設定・セキュリティ）。旧: ダッシュボード〜会計の8つ
+  check(labels === "home,onboarding,pay,security", `メニューに「給与管理」がある（${labels}）`);
+  check((await page.locator('[data-role="to-payroll"]').getAttribute("href")) === "#payroll", "人件費の集計への入口（メニューから外したので、給与管理の一覧から入る）");
   check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "pay", "メニューの強調は「給与管理」");
   const t = await text(page);
   check(t.includes("給与管理") && t.includes("山田 月給") && t.includes("佐藤 未登録") && t.includes("鈴木 契約違い"), "在籍の人が並ぶ");
