@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260929d">
+  <link rel="stylesheet" href="../css/app.css?v=20260929b">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -98,6 +98,12 @@
 
     .hr-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
     .hr-next .now { font-size:11px; color:#4a5068; margin-bottom:2px; }
+    /* 選考（どこまで進んだか）・状態（いま何待ちか）・NEXT ACTION（次に何をするか）を上から並べる */
+    .hr-state { display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; margin:0 0 10px; }
+    .hr-state dt { font-size:11px; font-weight:700; color:#4a5068; }
+    .hr-state dd { margin:0; font-size:14px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .hr-state dd small { font-size:11px; font-weight:400; color:#6b7080; }
+    .hr-state select { font-size:13px; font-weight:700; padding:3px 8px; border-radius:6px; border:1px solid #b9bfa0; background:#fff; max-width:100%; }
     .hr-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }
     .hr-next .lb .material-symbols-outlined { font-size:15px; }
     .hr-next h3 { font-size:18px; font-weight:700; color:#1b2440; margin:6px 0 8px; }
@@ -154,9 +160,10 @@
 <div id="hr-modal-root"></div>
 <div id="confirm-root"></div>
 
-<script src="../js/api-client.js?v=20260929d"></script>
-<script src="../js/layout.js?v=20260929d"></script>
-<script src="../js/hr-layout.js?v=20260929d"></script>
+<script src="../js/api-client.js?v=20260929b"></script>
+<script src="../js/layout.js?v=20260929b"></script>
+<script src="../js/hr-layout.js?v=20260929b"></script>
+<script src="../js/jst.js?v=20260929b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -560,8 +567,11 @@
   function nextActionBox(a) {
     return `
       <div class="hr-next" style="margin:0 0 16px;">
-        <div class="now">現在：${esc(a.statusLabel)}</div>
-        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
+        <dl class="hr-state now">
+          <dt>選考</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
+          <dt>状態</dt><dd>${statusSelect(a)}<small>いま何待ちか</small></dd>
+        </dl>
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION<small style="font-weight:400;margin-left:6px;">次にすること</small></div>
         <h3>${esc(a.nextAction)}</h3>
         <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
         ${a.nextActionCta && (!["decide", "advance"].includes(a.nextActionKey) || canDecide)
@@ -573,6 +583,38 @@
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
       </div>`;
+  }
+
+  /** 状態のプルダウン。選択肢は API（lib/hr.js の STATUSES / STATUS_LABEL）から。画面では定義しない */
+  function statusSelect(a) {
+    const opts = detail.statusOptions || [];
+    if (!opts.length) return esc(a.statusLabel || "—");
+    // 社長判断待ちから動かす／へ動かすのは社長・管理者だけ（API でも同じ判定）
+    const locked = a.status === "ceo_decision_pending" && !canDecide;
+    return `<select id="hr-status" aria-label="状態" onchange="changeStatus(this)" ${locked ? "disabled title=\"社長・管理者だけが変更できます\"" : ""}>
+      ${opts.map((o) => `<option value="${esc(o.key)}" ${o.key === a.status ? "selected" : ""}
+        ${o.key === "ceo_decision_pending" && !canDecide && a.status !== o.key ? "disabled" : ""}>${esc(o.label)}</option>`).join("")}
+    </select>`;
+  }
+
+  // 状態の手動変更。変更前に API で注意（データの食い違い）を確かめ、確認ダイアログに出す。
+  // 変えるのは状態だけ。面談の日時・取消・Meet URL（TimeRex 連携は TimeRex が正）は変えない
+  async function changeStatus(sel) {
+    const a = detail.applicant;
+    const to = sel.value;
+    const reset = () => { sel.value = a.status; };
+    if (to === a.status) return;
+    let pre;
+    try { pre = await API.updateHrApplicant({ id: a.id, action: "setStatus", status: to, dryRun: true }); }
+    catch (e) { reset(); return alert(e.hint || e.detail || e.message || "変更できませんでした"); }
+    const warn = (pre.warnings || []).length ? `\n\n【注意】\n・${pre.warnings.join("\n・")}` : "";
+    if (!confirm(`状態を\n「${pre.from}」→「${pre.to}」\nに変更しますか？${warn}\n\n面談の日時・予約は変わりません。`)) return reset();
+    try {
+      await API.updateHrApplicant({ id: a.id, action: "setStatus", status: to, acknowledgeWarnings: (pre.warnings || []).length > 0 });
+    } catch (e) { reset(); return alert(e.hint || e.detail || e.message || "変更できませんでした"); }
+    // 右ドロワー（NEXT ACTION を含む）と応募者一覧を読み直す。CEO REVIEW を別タブで開いていれば知らせる
+    await Promise.all([refreshDetail(), load()]);
+    try { new BroadcastChannel("hr-applicants").postMessage({ type: "status_changed", id: a.id }); } catch { /* 古いブラウザ */ }
   }
 
   /** いちばん新しい、評価済みの面談 */
@@ -593,7 +635,7 @@
         <dl class="hr-grid2">
           <div><dt>応募経路</dt><dd>${esc(a.source || "—")}</dd></div>
           <div><dt>応募職種</dt><dd>${esc(a.jobTitle || "—")}</dd></div>
-          <div><dt>現在ステータス</dt><dd>${esc(a.statusLabel || "—")}</dd></div>
+          <div><dt>選考段階</dt><dd>${esc(a.stageLabel || "—")}</dd></div>
           <div><dt>担当</dt><dd id="hr-recruiter">${esc(a.recruiterName || "未定")}
             <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></dd></div>
           <div><dt>メール</dt><dd>${esc(a.email || "—")}</dd></div>
@@ -629,7 +671,7 @@
   }
 
   // ---- 書類タブ ---------------------------------------------------------------------
-  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" }) : "");
+  const fmtDay = (iso) => JST.date(iso);   // 日本時間の日付（js/jst.js）
   const fmtSize = (n) => (n ? (n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`) : "");
   const docGroup = (type) => (docs?.documents || []).find((d) => d.docType === type) || null;
 
@@ -829,12 +871,16 @@
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
     // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、日時変更・キャンセルを出す
     const pending = !i.done && !i.canceled;
+    // TimeRex 連携済みの面談は TimeRex を正とする。日程変更・取消は TimeRex の導線から（HR で日時を直さない）
+    const tr = i.timerex;
     return `
       <div class="card" style="margin-bottom:10px;${i.canceled ? "opacity:.6;" : ""}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
           ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
           ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}
-          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}</div>
+          ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}
+          ${tr ? `<span class="hr-pill hr-timerex" style="background:#e6f4ea;color:#256b36;margin-left:6px;">TimeRex連携済み</span>` : ""}
+          ${i.meetingUrl && pending ? `<span class="muted" style="font-size:11.5px;font-weight:500;margin-left:6px;">Google Meet</span>` : ""}</div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">
           ${i.done ? `実施：${esc(fmtDate(i.conductedAt))}`
             : i.canceled ? `予定していた日時：${esc(fmtDate(i.scheduledAt))}（${esc(fmtDate(i.canceledAt))}にキャンセル）`
@@ -846,8 +892,10 @@
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
-          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">日時を変更</button>` : ""}
-          ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
+          ${pending && !tr ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">日時を変更</button>` : ""}
+          ${pending && !tr ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
+          ${pending && tr ? `<button class="btn btn-secondary btn-sm" data-timerex="reschedule" onclick="openTimerexReschedule('${esc(i.id)}')">日程変更</button>` : ""}
+          ${pending && tr ? `<button class="btn btn-secondary btn-sm" data-timerex="cancel" onclick="openTimerexCancel('${esc(i.id)}')">取消</button>` : ""}
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
           ${i.done && i.kind === "ceo"
@@ -855,6 +903,37 @@
           ${i.done ? recordingActions(i) : ""}
         </div>
       </div>`;
+  }
+
+  // ---- TimeRex 連携済みの面談：日程変更・取消は TimeRex で（HR の日時は Webhook で自動反映） -----------
+  const findInterview = (id) => (detail.interviews || []).find((x) => x.id === id);
+  function openTimerexReschedule(id) {
+    const iv = findInterview(id);
+    const url = iv?.timerex?.rescheduleUrl;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 8px;">日程変更（TimeRex）</h2>
+      <p style="font-size:13px;line-height:1.8;margin:0 0 12px;">
+        ${esc(detail.applicant.name)}さんの${esc(iv?.kindLabel || "面談")}（${esc(fmtDate(iv?.scheduledAt))}）は TimeRex で予約された面談です。
+        日程は TimeRex で変更してください。変更すると、この画面の日時も自動で更新されます。</p>
+      ${url ? "" : `<p class="muted" style="font-size:12.5px;">日程変更のリンクがまだ届いていません。TimeRex の管理画面から変更してください。</p>`}
+      <div style="display:flex;gap:8px;">
+        ${url ? `<a class="btn btn-primary" id="tr-open" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="closeAction()">TimeRexで日程変更</a>` : ""}
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+  function openTimerexCancel(id) {
+    const iv = findInterview(id);
+    const url = iv?.timerex?.cancelUrl;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 8px;">面談を取り消しますか？（TimeRex）</h2>
+      <p style="font-size:13px;line-height:1.8;margin:0 0 12px;">
+        ${esc(detail.applicant.name)}さんの${esc(iv?.kindLabel || "面談")}（${esc(fmtDate(iv?.scheduledAt))}）は TimeRex で予約された面談です。
+        取消は TimeRex で行ってください。TimeRex で取り消すと、この画面にも反映されます（面談の記録は残ります）。</p>
+      ${url ? "" : `<p class="muted" style="font-size:12.5px;">取消のリンクがまだ届いていません。TimeRex の管理画面から取り消してください。</p>`}
+      <div style="display:flex;gap:8px;">
+        ${url ? `<a class="btn btn-danger" id="tr-open" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="closeAction()">TimeRexで取り消す</a>` : ""}
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる（取り消さない）</button>
+      </div>`);
   }
 
   // ---- 録画URL登録・変更（モーダル） ------------------------------------------------
@@ -925,9 +1004,8 @@
 
   function scaleLabel(k) { return (detail.evalScale || []).find((s) => s.key === k)?.label || k; }
 
-  function fmtDate(s) {
-    return s ? new Date(s).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-  }
+  // HR の日時はすべて日本時間（js/jst.js）。「本日 16:15」/「2026/10/1 16:15」
+  function fmtDate(s) { return JST.when(s); }
 
   // ---- 面談日時変更・キャンセル（モーダル） -----------------------------------------
   // 「日時を変更」は既存のupdateアクションを使う（README §3。日時・担当・URLだけを直す）
@@ -936,7 +1014,8 @@
     if (!iv) return;
     const opts = (detail.interviewers || []).map((p) =>
       `<option value="${esc(p.id)}" ${p.id === iv.interviewerId ? "selected" : ""}>${esc(p.display_name)}</option>`).join("");
-    const whenLocal = iv.scheduledAt ? new Date(iv.scheduledAt).toISOString().slice(0, 16) : "";
+    // datetime-local には日本時間の年月日時分を入れる（UTC を入れると 9 時間ずれる）
+    const whenLocal = JST.toInput(iv.scheduledAt);
     openHrModal(`
       <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談日時を変更</h2>
       <p class="hr-sub" style="margin:0 0 14px;">${esc(iv.kindLabel)}（${esc(detail.applicant.name)}さん）</p>
@@ -958,7 +1037,7 @@
     const when = el("rs-when").value;
     try {
       await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview({
-        id, scheduledAt: when ? new Date(when).toISOString() : undefined,
+        id, scheduledAt: when ? JST.fromInput(when) : undefined,
         interviewerId: el("rs-who").value || undefined,
         meetingUrl: el("rs-url").value.trim() || undefined,
       }));
@@ -999,7 +1078,9 @@
   // ---- NEXT ACTIONのボタン --------------------------------------------------------
   function targetInterview(action) {
     const list = detail.interviews || [];
-    if (action === "conduct") return list.find((i) => !i.done && !i.canceled) || null;
+    // NEXT ACTION が指す面談は API が決める（nextInterviewId）。未完了の先頭を推測で探さない
+    // （古いカジュアル面談と社長面談が両方残っていても、いまの段階の面談だけを実施済みにする）
+    if (action === "conduct") return list.find((i) => i.id === detail.applicant.nextInterviewId) || null;
     if (action === "evaluate") return list.find((i) => i.done && !i.rank) || list[0] || null;
     return null;
   }
@@ -1011,7 +1092,7 @@
     if (key === "schedule") return openScheduleForm(a.nextActionKind);
     if (key === "conduct") {
       const iv = targetInterview("conduct");
-      return iv ? conductInterview(iv.id) : openScheduleForm();
+      return iv ? conductInterview(iv.id) : openScheduleForm(a.nextInterviewKind || a.nextActionKind);
     }
     if (key === "evaluate") {
       const iv = targetInterview("evaluate");
@@ -1261,7 +1342,7 @@ ${url}
     try {
       await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
         applicantId: detail.applicant.id, kind: el("iv-kind").value,
-        scheduledAt: when ? new Date(when).toISOString() : undefined,
+        scheduledAt: when ? JST.fromInput(when) : undefined,
         interviewerId: el("iv-who").value || undefined,
         meetingUrl: el("iv-url").value.trim() || undefined,
       }));
