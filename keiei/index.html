@@ -81,6 +81,34 @@
     .kei-st.todo .g { color:#9aa0b4; } .kei-st.todo .t { color:#6b7080; }
     .kei-st.unlinked { background:#fafaf7; border-style:dashed; } .kei-st.unlinked .g, .kei-st.unlinked .t { color:#9aa0b4; }
     @media (max-width: 820px) { .kei-six { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .kei-after { font-size:12px; color:#6b7080; margin-top:8px; } .kei-after a { color:#1b2440; font-weight:700; }
+    .kei-st.na { background:#fafaf7; border-style:dashed; } .kei-st.na .g, .kei-st.na .t { color:#9aa0b4; }
+    /* 入社準備の詳細（案内・URL・メール） */
+    .kei-back2 { display:inline-block; font-size:12.5px; color:#6b7080; text-decoration:none; margin-bottom:10px; }
+    .kei-back2:hover { color:#1b2440; }
+    h3.kei-h3 { font-size:15px; font-weight:700; margin:0 0 8px; color:#1b2440; }
+    .kei-pill.ok { background:#e3f4e7; color:#1f6f3a; }
+    .kei-mute { font-size:12px; color:#9aa0b4; }
+    .kei-note { font-size:11.5px; color:#6b7080; line-height:1.8; margin:6px 0; }
+    .kei-err { color:#b3261e; font-size:12.5px; line-height:1.7; margin:6px 0; }
+    .kei-okmsg { color:#1f6f3a; font-size:13px; font-weight:700; margin:10px 0; }
+    dl.kei-dl { display:grid; grid-template-columns:minmax(64px,auto) 1fr; gap:6px 14px; margin:0 0 6px; font-size:13px; }
+    dl.kei-dl dt { color:#6b7080; font-size:12px; } dl.kei-dl dd { margin:0; }
+    .kei-form { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin:12px 0; }
+    .kei-f { display:flex; flex-direction:column; gap:4px; font-size:12px; color:#6b7080; min-width:0; }
+    .kei-f.wide { grid-column:1 / -1; }
+    .kei-f input, .kei-f textarea, .kei-inline select { border:1px solid #c7cad4; border-radius:7px; padding:8px 10px; font-size:13.5px; font-family:inherit; color:#1b2440; background:#fff; width:100%; box-sizing:border-box; }
+    .kei-inline select { width:auto; }
+    .kei-inline { font-size:12.5px; color:#6b7080; margin-right:8px; }
+    .kei-urlbox { margin:12px 0; padding:12px; background:#f3faf5; border:1px solid #cfe8d6; border-radius:8px; }
+    .kei-urlbox input { border:1px solid #c7cad4; border-radius:7px; padding:8px 10px; font-size:12.5px; width:100%; box-sizing:border-box; margin-bottom:6px; }
+    .kei-mailbox { margin:12px 0; padding:12px; background:#fafaf7; border:1px solid #e2e2dc; border-radius:8px; font-size:13px; line-height:1.8; }
+    .kei-mailbox span { display:inline-block; min-width:52px; color:#6b7080; font-size:12px; }
+    .kei-mailbox pre { white-space:pre-wrap; word-break:break-all; font-family:inherit; margin:8px 0 0; }
+    .kei-tw { overflow-x:auto; margin-top:8px; }
+    .kei-btn.sm { padding:4px 10px; font-size:11.5px; margin:0; }
+    .kei-btn[disabled] { opacity:.45; cursor:default; }
+    @media (max-width: 820px) { .kei-form { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -91,6 +119,7 @@
 
 <script src="../js/api-client.js?v=20260929c"></script>
 <script src="../js/keiei-layout.js?v=20260929c"></script>
+<script src="/keiei/onboarding.js?v=20260929c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -215,13 +244,13 @@
     onboarding(d) {
       if (d.status === "missing") return head("入社準備", "") + bannerHtml(`${MISSING}。${d.reason || ""}`, "warn");
       const sm = d.summary;
-      const GLYPH = { done: "✓", current: "△", todo: "○", unlinked: "—" };
-      const STATE = { done: "完了", current: "要対応", todo: "これから", unlinked: MISSING };
+      const GLYPH = { done: "✓", current: "△", todo: "○", na: "–", unlinked: "—" };
+      const STATE = { done: "完了", current: "要対応", todo: "これから", na: "対象外", unlinked: MISSING };
       const stepHtml = (s) => `<div class="kei-st ${esc(s.state)}" data-step="${esc(s.key)}" data-state="${esc(s.state)}">
           <div class="t"><span class="g" title="${esc(STATE[s.state] || "")}">${GLYPH[s.state] || "○"}</span>${s.n}. ${esc(s.label)}</div>
           <div class="nt">${s.state === "unlinked" ? `<b>${MISSING}</b><br>${esc(s.note || "")}` : esc(s.note || "")}</div>
           ${s.state === "current" && s.actorLabel ? `<div class="who">担当：${esc(s.actorLabel)}</div>` : ""}
-          ${s.href ? `<a href="${esc(s.href)}">開く →</a>` : ""}</div>`;
+          ${s.href ? `<a href="${esc(s.href)}">${s.key === "guide" ? (s.state === "na" ? "案内を作る →" : "案内を開く →") : "開く →"}</a>` : ""}</div>`;
       const dayText = (r) => {
         if (!r.joinOn) return "入社日は未定";
         const dt = String(r.joinOn).replace(/-/g, "/");
@@ -234,9 +263,11 @@
             <span class="mt">${esc([r.department, r.position].filter(Boolean).join("・"))}</span>
             <span class="mt">${esc(dayText(r))}</span><span class="sp"></span>
             <span class="kei-next ${esc(r.six.next.tone)}">${esc(r.six.next.label)}${r.six.next.actorLabel ? `（${esc(r.six.next.actorLabel)}）` : ""}</span></div>
-          <div class="kei-six">${r.six.steps.map(stepHtml).join("")}</div></div>`;
+          <div class="kei-six">${r.six.steps.map(stepHtml).join("")}</div>
+          ${r.six.after ? `<div class="kei-after" data-role="after">このあと：${esc(r.six.after.label)}${r.six.after.actorLabel ? `（${esc(r.six.after.actorLabel)}）` : ""}${r.six.after.href ? ` <a href="${esc(r.six.after.href)}">開く →</a>` : ""}</div>` : ""}
+          <div class="kei-after"><a href="${esc(r.links.detail)}" data-role="detail">案内・URL・メールを開く →</a></div></div>`;
       return head("入社準備", "入社が決まった人の準備を、6つのステップで見ます。完了率より、次に誰が何をするかを先に出しています。")
-        + bannerHtml("① 入社案内（案内の作成・送信・本人の確認）は、これから作ります。それまでは「" + MISSING + "」と出し、進み具合には数えません。"
+        + bannerHtml("① 入社案内確認は、経営者が作って発行した案内を、本人が確認したかどうかです。案内が無い人は「対象外」で、ほかのステップは止まりません。"
           + "給与・手当の金額と、給与入りの書面の中身はここには出しません（状態だけです）。", "")
         + `<div class="kei-grid sm">
             ${card({ label: "入社準備中", status: "exact", unit: "count", suffix: "人", value: sm.inProgress })}
@@ -249,7 +280,7 @@
         + (d.rows.length ? d.rows.map(person).join("") : `<div class="kei-panel"><div class="kei-empty">入社準備中の人はいません。</div></div>`)
         + `<div class="kei-panel"><a class="kei-btn" href="${esc(d.links.start)}">新規メンバー登録</a>
              <a class="kei-btn sec" href="${esc(d.links.hr)}">入退社の手続き</a>
-             <div class="kei-sub" style="margin:8px 0 0;">労働条件の作成・署名・書類の確認は、これまでの画面で行います（各ステップの「開く」から移れます）。</div></div>`;
+             <div class="kei-sub" style="margin:8px 0 0;">労働条件の作成・署名・書類の確認は、これまでの画面で行います（各ステップの「開く」から移れます）。入社案内・案内URL・メールは、各人の「案内・URL・メールを開く」から。</div></div>`;
     },
   };
 
@@ -259,6 +290,16 @@
 
   let seq = 0;
   async function show(view) {
+    // 入社準備の1人ぶん（#onboarding/<社員ID>）は、keiei/onboarding.js
+    const one = /^onboarding\/(.+)$/.exec(view);
+    if (one) {
+      KeieiLayout.setActive("onboarding");
+      const mine = ++seq;
+      const main = el("kei-main");
+      main.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
+      await window.KeieiOnb.open(decodeURIComponent(one[1]), main, () => mine !== seq);
+      return;
+    }
     if (!RENDER[view]) view = "dashboard";
     KeieiLayout.setActive(view);
     const mine = ++seq;

@@ -163,6 +163,9 @@
   </p>
 
   <div id="notice"></div>
+  <p class="hidden" id="hub-link" style="margin:0 0 12px;font-size:13px;">
+    <a href="/onboarding/"><span class="material-symbols-outlined icon-inline">route</span>入社準備の全体（6ステップ・入社案内）を見る</a>
+  </p>
   <div id="journey-box"></div>
 
   <div class="card hidden" id="role-card">
@@ -349,6 +352,7 @@
     show("admin-wrap", false); show("advisor-wrap", false); show("advisor-mn-wrap", false);
     ["step-1", "consents-card", "step-3", "step-2", "step-4", "submit-card"].forEach((id) => show(id, false));
 
+    show("hub-link", data.role === "self");
     if (data.role === "self") {
       loadJourneyBar();
       await loadSelf();

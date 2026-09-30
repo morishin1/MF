@@ -57,6 +57,10 @@
       "destination": "/keiei/index.html"
     },
     {
+      "source": "/onboarding",
+      "destination": "/onboarding/index.html"
+    },
+    {
       "source": "/sales",
       "destination": "/sales/index.html"
     },

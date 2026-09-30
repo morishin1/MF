@@ -63,6 +63,26 @@ applied(seq, item, ok, detail) as (
   select 6, '101 元の列の給与を空にして、書けなくする',
          exists (select 1 from pg_constraint where conname in ('gw_hr_applicants_wage_moved','gw_hr_offers_wage_moved')),
          'ここで初めて、採用担当が DB から給与を読めなくなる'
+  union all
+  select 7, '102 契約（gw_contracts）の賃金を、給与を見られる人と本人だけに',
+         case when to_regclass('public.gw_contracts') is null then null
+              else exists (select 1 from pol where tbl = 'gw_contracts' and polname = 'gw_contracts_select'
+                              and using_expr ilike '%gw_can_see_salary%') end,
+         '責任者が、契約の賃金を DB から直接読めなくなる。101 のあとに流す'
+  union all
+  select 8, '103 責任者（manager）を HR に加え、Office（gw_is_office）を作る',
+         (select d.def is not null and d.def ilike '%manager%' from def_of d where d.name = 'gw_is_recruiting')
+           and to_regprocedure('public.gw_is_office(uuid)') is not null,
+         '101 が済んでいないと、この SQL は安全装置で止まる（責任者が応募者の給与を読めるようになるため）'
+  union all
+  select 9, '104 入社案内・案内URL・メール履歴（gw_onboarding_* / gw_mail_messages）。給与とは独立',
+         case when to_regclass('public.gw_onboarding_guides') is null then false
+              else to_regclass('public.gw_onboarding_guide_issues') is not null
+                and to_regclass('public.gw_onboarding_invites') is not null
+                and to_regclass('public.gw_mail_messages') is not null
+                and (select count(*) from pol where tbl in ('gw_onboarding_guides','gw_onboarding_guide_issues','gw_onboarding_invites','gw_mail_messages')
+                        and using_expr ilike '%gw_is_owner%') = 4 end,
+         '4つの表とも、RLS は経営者（gw_is_owner）だけ。099 が前提'
 ),
 
 -- ---- B. 給与の露出（件数） ---------------------------------------------------

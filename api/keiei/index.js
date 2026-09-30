@@ -19,9 +19,7 @@
 //   api/ は 1 ファイル = 1 関数。増やしすぎないため、既存の api/career/index.js と同じ作り
 
 import { json, methodNotAllowed } from "../../lib/http.js";
-import { requireUser } from "../../lib/auth.js";
-import { gwContext, canKeiei } from "../../lib/gw.js";
-import { requireMfaStrict } from "../../lib/mfa.js";
+import { requireKeiei } from "../../lib/keiei-gate.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstMonth, isMonth } from "../../lib/closing.js";
@@ -30,6 +28,7 @@ import { gatherFactsBulk } from "../../lib/onboard-advance.js";
 import { daysToStart } from "../../lib/onboard-stage.js";
 import { journeyLinks } from "../../lib/journey-load.js";
 import { SIX_STEPS, mapSix, summarizeSix } from "../../lib/onboard-six.js";
+import { guideFact } from "../../lib/onboard-guide.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
@@ -41,14 +40,10 @@ const VIEWS = ["dashboard", "expenses", "payroll", "revenue", "cash", "accountin
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
 
-  const user = await requireUser(req, res);
-  if (!user) return;
-
-  const ctx = await gwContext(user.id);
-  if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  // 経営者だけ。二段階認証の案内より先に断る（権限のない人に、登録を促さない）
-  if (!canKeiei(ctx)) return json(res, 403, { error: "forbidden", hint: "経営は、経営者だけが使えます" });
-  if (!(await requireMfaStrict(req, res, ctx, user))) return;
+  // 経営者だけ・二段階認証つき（lib/keiei-gate.js）。権限のない人には、認証の登録を促さず 403
+  const gate = await requireKeiei(req, res);
+  if (!gate) return;
+  const { user, ctx } = gate;
 
   const q = new URL(req.url, "http://localhost").searchParams;
   const view = q.get("view") || "dashboard";
@@ -224,16 +219,16 @@ async function accounting(sb, ctx) {
 // ここは事実をまとめて読み、lib/onboard-six.js で6ステップに並べるだけ。
 // 給与・手当の金額と給与入りの書面は、この画面に出さない（状態だけ）。
 
-/** 完了してから、この日数を過ぎた人は一覧から外す（数だけ返す） */
+/** 完了してから、この日数を過ぎた人は一覧から外す（数だけ返す）。次の一手が残っていれば外さない */
 const ONBOARD_KEEP_DAYS = 30;
 const CAREER_COLS = "employee_id, track_id, current_level_id, one_year_target_note, three_year_target_note, "
   + "next_review_on, agreed_at, updated_at";
 
-/** 6ステップの「押す先」。実際の作業は既存の画面で行う（作り直さない） */
+/** 6ステップの「押す先」。実際の作業は既存の画面で行う（作り直さない）。案内だけは、経営の詳細画面 */
 function hrefOf(stepKey, stage, links) {
+  if (stepKey === "guide") return links.detail;
   if (stepKey === "contract") return stage === "signing" ? links.signs : links.order;
-  if (stepKey === "info_docs" || stepKey === "account") return links.hr;
-  if (stepKey === "career") return links.career;
+  if (stepKey === "info" || stepKey === "docs" || stepKey === "company") return links.hr;
   return null;
 }
 
@@ -256,10 +251,10 @@ async function onboarding(sb, ctx) {
   const empIds = [...latest.keys()].slice(0, 300);
   if (!empIds.length) {
     return { status: STATUS.EXACT, steps: SIX_STEPS, summary: summarizeSix([]), rows: [], hiddenComplete: 0,
-      unlinked: ["guide"], links: { start: "/admin-onboard.html" } };
+      links: { start: "/admin-onboard.html", hr: "/admin-hr.html" } };
   }
 
-  const [emps, careers] = await Promise.all([
+  const [emps, careers, guides] = await Promise.all([
     soft(sb.from("gw_employees").select("id, display_name, department, position, employment_type, status, joined_on")
       .eq("tenant_id", ctx.tenantId).in("id", empIds)),
     // 095 の列が無い環境でも、基本の列で読む（本人確認の列だけ諦める）
@@ -267,9 +262,13 @@ async function onboarding(sb, ctx) {
       .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", empIds))
       .then((r) => r ?? soft(sb.from("gw_employee_careers").select(CAREER_COLS)
         .eq("tenant_id", ctx.tenantId).eq("is_active", true).in("employee_id", empIds))),
+    // 入社案内（db/104）。表が無ければ null → ① だけ「データ未連携」
+    soft(sb.from("gw_onboarding_guides")
+      .select("employee_id, version, confirmed_version, confirmed_at").eq("tenant_id", ctx.tenantId).in("employee_id", empIds)),
   ]);
   const empBy = new Map((emps || []).map((e) => [e.id, e]));
   const careerBy = new Map((careers || []).map((c) => [c.employee_id, c]));
+  const guideBy = new Map((guides || []).map((g) => [g.employee_id, g]));
 
   const procList = empIds.map((id) => latest.get(id)).filter((p) => empBy.has(p.employee_id) && empBy.get(p.employee_id).status !== "left");
   const items = procList.length ? await soft(sb.from("gw_procedure_items")
@@ -287,21 +286,28 @@ async function onboarding(sb, ctx) {
   const rows = [];
   for (const p of procList) {
     const e = empBy.get(p.employee_id);
-    const six = mapSix({ facts: factsBy.get(p.id) || null, career: careerBy.get(e.id) || null, careerLinked: careers !== null });
-    if (six.complete) {
+    const six = mapSix({
+      facts: factsBy.get(p.id) || null, career: careerBy.get(e.id) || null, careerLinked: careers !== null,
+      guide: guideFact(guideBy.get(e.id) || null), guideLinked: guides !== null,
+    });
+    // 完了して30日を過ぎても、次の一手（キャリア）が会社側に残っていれば外さない
+    if (six.complete && !six.after?.actor) {
       const at = Date.parse(p.stage_at || p.updated_at || p.created_at || "");
       if (Number.isFinite(at) && at < cutoff) { hiddenComplete += 1; continue; }
     }
     // journeyLinks は GW の画面（相対）を返す。/keiei からは絶対パスで開く
     const links = Object.fromEntries(Object.entries(journeyLinks(e.id, p.id)).map(([k, v]) => [k, `/${v}`]));
     links.career = `/admin-career.html?employeeId=${encodeURIComponent(e.id)}`;
-    for (const st of six.steps) st.href = st.state === "current" ? hrefOf(st.key, six.stage, links) : null;
+    links.detail = `#onboarding/${encodeURIComponent(e.id)}`;
+    for (const st of six.steps) st.href = ["current", "na"].includes(st.state) && st.key === "guide" ? links.detail
+      : st.state === "current" ? hrefOf(st.key, six.stage, links) : null;
+    if (six.after && six.after.actor) six.after.href = links.career;
     const joinOn = p.target_on || e.joined_on || null;
     rows.push({
       employeeId: e.id, procedureId: p.id, name: e.display_name, department: e.department || null,
       position: e.position || null, employmentType: e.employment_type || null,
       joinOn, daysToStart: daysToStart(joinOn, today), six,
-      links: { hr: links.hr, onboarding: links.onboarding },
+      links: { hr: links.hr, onboarding: links.onboarding, detail: links.detail },
     });
   }
   // まだ終わっていない人を先に。同じなら入社日が近い順
@@ -312,8 +318,6 @@ async function onboarding(sb, ctx) {
   return {
     status: STATUS.EXACT, steps: SIX_STEPS, today,
     summary: summarizeSix(rows), rows, hiddenComplete,
-    // 案内の作成・送信・本人確認は、これから作る（表が無い）。画面は「データ未連携」と出す
-    unlinked: ["guide"],
     links: { start: "/admin-onboard.html", hr: "/admin-hr.html" },
   };
 }

@@ -420,7 +420,7 @@ await ok("入社準備: 6ステップを、既存の段階から並べる（依�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const d = r.body;
   assert.equal(d.status, "exact");
-  assert.deepEqual(d.steps.map((s) => s.label), ["入社案内", "労働条件・契約", "本人情報・必要書類", "アカウント準備", "キャリア設計", "最終確認"]);
+  assert.deepEqual(d.steps.map((s) => s.label), ["入社案内確認", "雇用契約", "入社情報入力", "必要書類提出", "会社確認", "入社準備完了"]);
 
   const a = row(d, "e10");
   assert.equal(stepOfRow(a, "contract").state, "current");
@@ -430,22 +430,50 @@ await ok("入社準備: 6ステップを、既存の段階から並べる（依�
 
   const b = row(d, "e11");
   assert.equal(stepOfRow(b, "contract").state, "done");
-  assert.equal(stepOfRow(b, "info_docs").state, "current");
-  assert.equal(stepOfRow(b, "account").state, "current");
+  assert.equal(stepOfRow(b, "info").state, "current");
+  assert.equal(stepOfRow(b, "docs").state, "current");
+  assert.equal(stepOfRow(b, "company").state, "current");
   assert.equal(b.six.next.actor, "employee");
   assert.equal(b.six.needsCompany, true);
 
   const c = row(d, "e12");
   assert.equal(c.six.complete, true);
-  assert.equal(stepOfRow(c, "final").state, "done");
+  assert.equal(stepOfRow(c, "complete").state, "done");
   assert.equal(c.six.next.label, "入社準備完了");
 });
 
-await ok("入社準備: ① 入社案内は、全員「データ未連携」。数に入れない", async () => {
+await ok("入社準備: ① 入社案内確認は、案内が無ければ「対象外」・発行済みで未確認なら本人の番・確認済みなら完了", async () => {
   setupOnboarding();
+  db.rows.gw_onboarding_guides = [
+    { employee_id: "e10", tenant_id: "t1", version: 0, confirmed_version: null, confirmed_at: null },              // 下書き
+    { employee_id: "e11", tenant_id: "t1", version: 1, confirmed_version: null, confirmed_at: null },              // 発行済み・未確認
+    { employee_id: "e12", tenant_id: "t1", version: 1, confirmed_version: 1, confirmed_at: "2026-09-20T01:00:00Z" }, // 確認済み
+  ];
   const d = (await call("onboarding")).body;
+  assert.equal(stepOfRow(row(d, "e10"), "guide").state, "na");
+  assert.match(stepOfRow(row(d, "e10"), "guide").note, /下書き/);
+  const g11 = stepOfRow(row(d, "e11"), "guide");
+  assert.equal(g11.state, "current");
+  assert.equal(g11.actor, "employee");
+  assert.equal(g11.href, "#onboarding/e11", "案内の押す先は、経営の詳細画面");
+  assert.equal(stepOfRow(row(d, "e12"), "guide").state, "done");
+  assert.equal(row(d, "e12").six.complete, true);
+  // 案内が無い人は、案内なしで進められる
+  db.rows.gw_onboarding_guides = [];
+  const d2 = (await call("onboarding")).body;
+  assert.equal(stepOfRow(row(d2, "e12"), "guide").state, "na");
+  assert.equal(stepOfRow(row(d2, "e12"), "guide").href, "#onboarding/e12", "案内が無い人は、作る画面へ");
+  assert.equal(row(d2, "e12").six.complete, true);
+});
+
+await ok("入社準備: 案内の表（db/104）が無ければ、① だけ「データ未連携」。ほかは止まらない", async () => {
+  setupOnboarding();
+  db.missing = new Set(["gw_onboarding_guides"]);
+  const d = (await call("onboarding")).body;
+  assert.equal(d.status, "exact");
   for (const rw of d.rows) assert.equal(stepOfRow(rw, "guide").state, "unlinked");
-  assert.deepEqual(d.unlinked, ["guide"]);
+  assert.equal(row(d, "e12").six.complete, true, "案内が読めなくても、手続きが終われば完了");
+  assert.equal(stepOfRow(row(d, "e11"), "info").state, "current");
 });
 
 await ok("入社準備: 退職者・取り消し・他社は出ない。完了して30日を過ぎた人は外し、数だけ返す", async () => {
@@ -456,16 +484,16 @@ await ok("入社準備: 退職者・取り消し・他社は出ない。完了�
   assert.deepEqual(d.summary, { total: 3, inProgress: 2, company: 2, employee: 1, advisor: 0, complete: 1 });
 });
 
-await ok("入社準備: 手続きは昔に完了でも、キャリアが未設定なら残す（⑤ が要対応のまま）", async () => {
+await ok("入社準備: 手続きは昔に完了でも、キャリアが未設定（上長の番）なら残す", async () => {
   setupOnboarding();
   db.rows.gw_employee_careers = db.rows.gw_employee_careers.filter((c) => c.employee_id !== "e13");
   const d = (await call("onboarding")).body;
   const r = row(d, "e13");
   assert.ok(r, "外さない");
-  assert.equal(r.six.complete, false);
-  assert.equal(stepOfRow(r, "career").state, "current");
-  assert.equal(stepOfRow(r, "career").actor, "manager");
-  assert.match(stepOfRow(r, "career").href, /^\/admin-career\.html\?employeeId=e13$/);
+  assert.equal(r.six.complete, true, "キャリアは入社準備の完了を止めない");
+  assert.equal(r.six.after.key, "career");
+  assert.equal(r.six.after.actor, "manager");
+  assert.match(r.six.after.href, /^\/admin-career\.html\?employeeId=e13$/);
   assert.equal(d.hiddenComplete, 0);
 });
 
@@ -480,10 +508,10 @@ await ok("入社準備: 各ステップの「開く」は、要対応のとき�
   const d = (await call("onboarding")).body;
   const a = stepOfRow(row(d, "e10"), "contract");
   assert.match(a.href, /^\/admin-esign\.html\?tab=order&employeeId=e10$/);
-  const b = stepOfRow(row(d, "e11"), "info_docs");
+  const b = stepOfRow(row(d, "e11"), "info");
   assert.match(b.href, /^\/admin-hr\.html\?id=p11$/);
   assert.equal(stepOfRow(row(d, "e11"), "contract").href, null, "完了したステップに押す先は出さない");
-  assert.equal(stepOfRow(row(d, "e12"), "career").href, null);
+  assert.equal(stepOfRow(row(d, "e12"), "docs").href, null);
 });
 
 await ok("入社準備: 給与・手当の金額は、どこにも返らない", async () => {
@@ -502,15 +530,13 @@ await ok("入社準備: 入社手続きの表が読めなければ「データ�
   assert.equal(d.rows, undefined);
 });
 
-await ok("入社準備: キャリアの表が読めなければ、⑤⑥ だけ「データ未連携」（未設定とは言わない）", async () => {
+await ok("入社準備: キャリアの表が読めなければ、次の一手（after）を出さない。未設定とは言わない", async () => {
   setupOnboarding();
   db.missing = new Set(["gw_employee_careers"]);
   const d = (await call("onboarding")).body;
   const c = row(d, "e12");
-  assert.equal(stepOfRow(c, "career").state, "unlinked");
-  assert.equal(stepOfRow(c, "final").state, "unlinked");
-  assert.equal(c.six.complete, false);
-  assert.equal(stepOfRow(c, "contract").state, "done", "入社手続きのほうは読めている");
+  assert.equal(c.six.after, null);
+  assert.equal(c.six.complete, true, "入社準備そのものは読めている");
 });
 
 await ok("入社準備: 入社準備中の人がいなければ、空の一覧（エラーにしない）", async () => {

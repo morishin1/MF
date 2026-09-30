@@ -184,7 +184,14 @@
     const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
     const name = me.gw?.employee?.display_name || me.email || "";
     try { localStorage.setItem("kp_layout", JSON.stringify({ appRole, name })); } catch (e) { /* 任意 */ }
-    location.replace(KPLayout.homeFor(appRole));
+    location.replace(nextPath() || KPLayout.homeFor(appRole));
+  }
+
+  // 戻り先（?next=）。入社案内のURLなど、ログイン後に元の画面へ戻すため。
+  // このサイトの中のパスだけ。//example.com や https://… のような外へのリンクは受けない（オープンリダイレクト対策）
+  function nextPath() {
+    const n = new URLSearchParams(location.search).get("next") || "";
+    return /^\/(?![\/\\])[A-Za-z0-9\-._~!$&'()*+,;=:@%\/?#]*$/.test(n) ? n : null;
   }
 </script>
 
