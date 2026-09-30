@@ -130,7 +130,7 @@ console.log("\n=== 経理：ダッシュボード ===");
   check((await page.locator("#prog .row").first().locator('[role="progressbar"]').getAttribute("aria-valuenow")) === "6", "進捗バーは、数字も読み上げ用に持つ");
 
   const heads = await page.locator(".of-table thead th").allInnerTexts();
-  check(heads.join("|") === "客先|案件|要員|勤務表|稼働時間|売上請求|仕入請求|支払|現在工程|要対応", `一覧は要件の10列（いま ${heads.join("|")}）`);
+  check(heads.join("|") === "客先|案件|要員|勤務表|稼働時間|売上請求|仕入請求|支払|現在工程|次にやること", `一覧は要件の10列（いま ${heads.join("|")}）`);
 
   const names = await rowsText(page);
   check(names.length === 6 && !names.includes("伊藤 四郎"), `既定は未完了のみ（完了の伊藤さんは出ない）: ${names.join(",")}`);
@@ -141,6 +141,14 @@ console.log("\n=== 経理：ダッシュボード ===");
   check(t.includes("期限超過") && t.includes("勤務表待ち") && t.includes("提出状況を見る"), "期限超過の行：期限超過・現在工程・要対応ボタン");
   check(t.includes("株式会社ビーピー") && t.includes("上位：上位商事") && t.includes("BP"), "BP：BP会社・上位会社・区分");
   check(t.includes("未管理") && t.includes("未受領"), "BP：仕入請求は未受領、支払は未管理");
+  // 状態は 色＋文字＋アイコン。未完了に ○ は使わない。チェックは完了（緑）だけ
+  check(await suzuki.locator('[data-label="勤務表"] .of-st.red').count() === 1, "未提出は赤");
+  check(await suzuki.locator('[data-label="仕入請求"] .of-st.orange').count() === 1 && await suzuki.locator('[data-label="売上請求"] .of-st.orange').count() === 1, "未受領・未作成は橙");
+  check(await suzuki.locator('[data-label="支払"] .of-st.gray').count() === 1, "未管理は灰");
+  check(await page.locator('#rows tr:has-text("田中 太郎") [data-label="仕入請求"] .of-st.gray').count() === 1, "対象外は灰");
+  check(!(await page.content()).includes("radio_button_unchecked"), "一覧のどこにも ○（radio_button_unchecked）を使っていない");
+  const checkPills = await page.locator("#rows .of-st").evaluateAll((ns) => ns.filter((n) => n.textContent.includes("check_circle")).map((n) => n.className));
+  check(checkPills.length > 0 && checkPills.every((c) => c.includes("green")), `チェックのアイコンは、完了（緑）のラベルだけ（${checkPills.length}個）`);
   const tanaka = await page.locator('#rows tr:has-text("田中 太郎")').innerText();
   check(tanaka.includes("提出済") && tanaka.includes("ファイル 1件") && tanaka.includes("稼働確認待ち"), "PP：勤務表 提出済・ファイル1件・現在工程");
   check((await page.locator('#rows tr:has-text("田中 太郎")').innerText()).includes("対象外"), "PP：仕入請求・支払は対象外");
@@ -255,7 +263,7 @@ console.log("\n=== 右ドロワー ===");
   // 「要対応」ボタン → 該当の場所へ。低い画面（内容がスクロールしないと見えない）で、
   // 固定の見出し（氏名の帯）の下に隠れず、見える位置に来ること
   await page.setViewportSize({ width: 1400, height: 520 });
-  await page.locator('#rows tr:has-text("佐藤 次郎") button[data-open]').click();
+  await page.locator('#rows tr:has-text("佐藤 次郎") button[data-cta="drawer"]').click();
   await page.waitForSelector(".of-drawer");
   await page.waitForTimeout(400);
   const pos = await page.evaluate(() => {

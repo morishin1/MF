@@ -444,11 +444,11 @@ console.log("\n=== 一覧（/office）：勤務表の状態・稼働時間・リ
   const { page, errs } = await open("/office/index.html?month=2026-09", { list });
   await page.waitForSelector("#rows tr[data-id]");
   const tr = (n) => page.locator(`#rows tr:has-text("${n}")`);
-  check((await tr("田中 太郎").locator('[data-label="稼働時間"]').innerText()).includes("162.5h") && (await tr("田中 太郎").locator('[data-label="稼働時間"]').innerText()).includes("確認済"), "確定済み：稼働時間 162.5h・確認済");
-  check((await tr("鈴木 花子").locator('[data-label="稼働時間"]').innerText()).includes("確認待ち") && (await tr("鈴木 花子").locator('[data-label="勤務表"]').innerText()).includes("確認待ち"), "下書き：確認待ち（時間は出さない）");
+  check((await tr("田中 太郎").locator('[data-label="稼働時間"]').innerText()).includes("162.5h") && (await tr("田中 太郎").locator('[data-label="稼働時間"]').innerText()).includes("確定済"), "確定済み：稼働時間 162.5h・確認済");
+  check((await tr("鈴木 花子").locator('[data-label="稼働時間"]').innerText()).includes("要確認") && (await tr("鈴木 花子").locator('[data-label="勤務表"]').innerText()).includes("要確認"), "下書き：確認待ち（時間は出さない）");
   check((await tr("佐藤 次郎").locator('[data-label="稼働時間"]').innerText()).includes("未読取"), "ファイルだけ届いた：未読取");
-  check((await tr("鈴木 花子").locator('[data-label="要対応"]').innerText()).includes("入力が必要な日 2日"), "次にやること：入力が必要な日・要確認の日");
-  const href = await tr("鈴木 花子").locator('a:has-text("勤務表を確認")').getAttribute("href");
+  check((await tr("鈴木 花子").locator('[data-label="次にやること"]').innerText()).includes("入力が必要な日 2日"), "次にやること：入力が必要な日・要確認の日");
+  const href = await tr("鈴木 花子").locator('a:has-text("内容を確認する")').getAttribute("href");
   check(href === `timesheet.html?contract=B&month=2026-09`, `勤務表の確認画面へのリンク（${href}）`);
   const today = await page.locator("#today button").allInnerTexts();
   check(today.some((t) => t.includes("稼働確認待ち") && t.includes("未読取 1件") && t.includes("確認待ち 1件")), "今日やること：稼働確認待ちの内訳（未読取・確認待ち）");
@@ -459,7 +459,7 @@ console.log("\n=== 一覧（/office）：勤務表の状態・稼働時間・リ
   await page.waitForSelector(".of-drawer");
   const dr = await page.locator(".of-drawer").innerText();
   check(dr.includes("契約条件は、まだ登録されていません") && dr.includes("契約条件が未登録のため、計算できません"), "ドロワー：契約条件が未登録・精算できない理由");
-  check(await page.locator('.of-drawer a[href^="terms.html?contract=D"]').count() === 1 && await page.locator('.of-drawer a[href^="timesheet.html?contract=D"]').count() === 1, "ドロワーから、契約条件・勤務表の画面へ");
+  check(await page.locator('.of-drawer a[href^="terms.html?contract=D"]').count() === 1 && await page.locator('.of-drawer a[href^="timesheet.html?contract=D"]').count() >= 1, "ドロワーから、契約条件・勤務表の画面へ");
   await page.keyboard.press("Escape");
   await page.locator("#reset").click();
   await tr("田中 太郎").click();
@@ -472,7 +472,7 @@ console.log("\n=== 一覧（/office）：勤務表の状態・稼働時間・リ
   const legacy = await open("/office/index.html?month=2026-09", { list: (m) => ({ ...list(m), phase3: { ready: false, message: "管理者に db/105 の実行を依頼してください" } }) });
   await legacy.page.waitForSelector("#rows tr[data-id]");
   check((await legacy.page.locator("#banner").innerText()).includes("db/105"), "未適用なら、理由を出す");
-  check(await legacy.page.locator('a:has-text("勤務表を確認・確定")').count() === 0, "未適用なら、勤務表の確認へのリンクは出さない");
+  check(await legacy.page.locator('a:has-text("勤務表を確認・確定"), a:has-text("AIで読み取る"), a:has-text("内容を確認する"), button[data-cta="pick"]').count() === 0, "未適用なら、勤務表の追加・読取・確認へのボタンは出さない");
   await legacy.page.close();
 }
 

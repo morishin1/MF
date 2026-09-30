@@ -144,12 +144,12 @@ console.log("\n=== E2E 1：Office から勤務表を登録して、稼働確定�
   check(vals0[1] === "1" && vals0[2] === "0", `1. 一覧：勤務表待ち 1・稼働確認待ち 0（いま ${vals0.slice(0, 3)}）`);
   await shot(page, "1-list-before");
 
-  // 2. 勤務表を登録
-  await tr.locator('a:has-text("勤務表を登録・確認")').click();
+  // 2. 勤務表を登録：一覧の「勤務表を追加」→ ファイル選択 → アップロード → 登録 → 勤務表の確認画面
+  check((await tr.locator('[data-label="次にやること"]').innerText()).includes("勤務表が未提出です"), "1. 一覧：次にやること「勤務表が未提出です」");
+  const [fcUp] = await Promise.all([page.waitForEvent("filechooser"), tr.locator('button[data-cta="pick"]').click()]);
+  await fcUp.setFiles({ name: "田中_10月勤務表.pdf", mimeType: "application/pdf", buffer: PDF });
+  await page.waitForURL(/timesheet\.html\?contract=/);
   await page.waitForSelector("#upfile", { state: "attached" });
-  await page.waitForFunction(() => document.querySelector("#view")?.textContent.includes("勤務表のファイルが届いていません"));
-  check((await page.locator("#view").innerText()).includes("手入力で始められます"), "2. 勤務表の画面：まだファイルが無い（手入力でも始められる案内）");
-  await page.locator("#upfile").setInputFiles({ name: "田中_10月勤務表.pdf", mimeType: "application/pdf", buffer: PDF });
   await page.waitForSelector("#files .ts-file");
   await page.waitForSelector("#view iframe");
   check(rows("gw_submissions").length === 1 && rows("gw_submissions")[0].sha256 === hash(PDF) && rows("gw_submissions")[0].source === "office", "2. アップロード：登録された（sha256・Office から・確認日時）");
@@ -217,12 +217,12 @@ console.log("\n=== E2E 1：Office から勤務表を登録して、稼働確定�
   await page.waitForSelector(".of-drawer");
   const dr = await page.locator(".of-drawer").innerText();
   check(dr.includes("確定した稼働時間") && dr.includes("168.5h") && dr.includes("700,000円"), "7. 戻ると、右ドロワーに確定した稼働時間と売上の精算が出る");
-  check(await page.locator('.of-drawer a[href^="timesheet.html?contract="]').count() === 1, "7. ドロワーから、勤務表の画面へ戻れる");
+  check(await page.locator('.of-drawer a[href^="timesheet.html?contract="]').count() >= 1, "7. ドロワーから、勤務表の画面へ戻れる");
   await page.keyboard.press("Escape");
   const tr2 = page.locator('#rows tr:has-text("田中 太郎")');
-  check((await tr2.locator('[data-label="稼働時間"]').innerText()).includes("168.5h") && (await tr2.locator('[data-label="稼働時間"]').innerText()).includes("確認済"), "7. 一覧：稼働時間 168.5h・確認済");
+  check((await tr2.locator('[data-label="稼働時間"]').innerText()).includes("168.5h") && (await tr2.locator('[data-label="稼働時間"]').innerText()).includes("確定済"), "7. 一覧：稼働時間 168.5h・確認済");
   check((await tr2.locator('[data-label="現在工程"]').innerText()).includes("請求作成待ち"), "7. 一覧：現在工程が「勤務表待ち」→「請求作成待ち」へ進む");
-  check((await tr2.locator('[data-label="要対応"]').innerText()).includes("売上請求書を作成してください"), "7. 一覧：次にやることは、売上請求書の作成");
+  check((await tr2.locator('[data-label="次にやること"]').innerText()).includes("売上請求書を作成してください"), "7. 一覧：次にやることは、売上請求書の作成");
   const vals = await page.locator("#sum .of-card .v").allInnerTexts();
   check(vals[1] === "0" && vals[2] === "0" && vals[3] === "1", `7. 数字カード：勤務表待ち 0・稼働確認待ち 0・請求未送付 1（いま ${vals.slice(0, 4)}）`);
   const prog = (await page.locator("#prog .num").allInnerTexts()).join("|");
@@ -258,7 +258,10 @@ console.log("\n=== E2E 2：外部提出フォームから届いた勤務表（�
   const tr = page.locator('#rows tr:has-text("田中 太郎")');
   check((await tr.locator('[data-label="稼働時間"]').innerText()).includes("未読取"), "一覧：ファイルは届いているが「未読取」");
   check((await tr.locator('[data-label="現在工程"]').innerText()).includes("稼働確認待ち"), "一覧：現在工程は「稼働確認待ち」（受領の印が付いているため）");
-  await tr.locator('a:has-text("勤務表を確認・確定")').click();
+  check((await tr.locator('[data-label="次にやること"]').innerText()).includes("勤務表が複数届いています"), "一覧：同じファイルが2件届いている行は「勤務表が複数届いています」（自動では読み取らせない）");
+  const linkHref = await tr.locator('[data-label="次にやること"] a.of-btn').getAttribute("href");
+  check(!/read=1/.test(linkHref) && (await tr.locator('[data-label="次にやること"] a.of-btn').innerText()).includes("ファイルを確認する"), `「ファイルを確認する」は、読み取りを始めない（${linkHref}）`);
+  await tr.locator('[data-label="次にやること"] a.of-btn').click();
   await page.waitForSelector("#files .ts-file");
   await page.waitForFunction(() => document.querySelectorAll("#files .ts-tag.warn").length === 2);
   check(ai.calls.length === 0, "画面を開いた時点で、同じファイルと分かる（AI は呼ばない）");

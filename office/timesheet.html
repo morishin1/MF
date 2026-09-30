@@ -172,6 +172,9 @@
   const qs = new URLSearchParams(location.search);
   const CONTRACT = qs.get("contract") || "";
   const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/.test(qs.get("month") || "") ? qs.get("month") : "";
+  // 一覧の「AIで読み取る」から来たとき（&read=1）は、開いてすぐ読み取りを始める（届いているだけで、まだ読み取っていないときだけ）
+  const AUTOREAD = qs.get("read") === "1";
+  let autoReadDone = false;
 
   const state = { d: null, fileId: null, filter: "attention", pinned: new Set(), busy: false, pending: 0, urlCache: new Map(), errors: {} };
 
@@ -223,6 +226,12 @@
         state.fileId = (d.files.find((f) => f.isSource) || d.files.find((f) => f.isLatest) || d.files[0] || {}).id || null;
       }
       renderAll();
+      if (AUTOREAD && !autoReadDone) {
+        autoReadDone = true;
+        history.replaceState(null, "", `${location.pathname}?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}`);   // 再読込で、もう一度読み取らない
+        // 1件だけ届いていて、同じファイルの疑い（二重提出・別の人・月への流用）が無いときだけ。複数・重複は、人がどれを読むか選ぶ
+        if (d.state === "submitted" && d.files.length === 1 && !["duplicate", "cross"].includes(d.files[0].dup.state) && state.fileId) readFile(state.fileId);
+      }
     } catch (e) {
       banner("err", "取得に失敗しました：" + (e.hint || e.detail || e.message));
     }
@@ -248,7 +257,7 @@
   function renderBadge() {
     const d = state.d;
     el("stateBadge").innerHTML = pill(d.stateLabel, { good: "ok", warn: "attention", bad: "danger" }[d.stateTone] || "neutral",
-      { confirmed: "check_circle", draft: "edit_note", returned: "undo", submitted: "inbox", none: "radio_button_unchecked" }[d.state]);
+      { confirmed: "check_circle", draft: "edit_note", returned: "undo", submitted: "inbox", none: "upload_file" }[d.state]);
   }
 
   function renderBanners() {
