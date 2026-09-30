@@ -1,4 +1,4 @@
-// 採用HR：日本時間の表示・NEXT ACTION の面談を ID で実施済みにする・状態プルダウンを、実際のブラウザで通す。
+// 採用HR：日本時間の表示・NEXT ACTION の面談を ID で実施済みにする・状態の表示を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //   1. 端末が日本以外のタイムゾーン（ここでは米国西海岸）でも、HR の日時は日本時間
@@ -6,8 +6,9 @@
 //   2. 日付またぎ（UTC 9/30 16:30 = 日本 10/1 01:30＝日本では「本日」）と、datetime-local の編集前後で 9 時間ずれない
 //   3. 古いカジュアル面談が残っていても、NEXT ACTION の「実施済みにする」は nextInterviewId（社長面談）を送る
 //      実施後は NEXT ACTION「社長判断をしてください」・CTA「採用判断」
-//   4. 「選考」「状態（プルダウン）」「NEXT ACTION」を並べて出す。状態の変更は確認ダイアログ（注意つき）→
-//      保存 → 応募者一覧・右ドロワーを読み直す。キャンセルしたら何も送らない
+//   4. 「選考」「状態（表示だけ）」「NEXT ACTION」を並べて出す。状態のプルダウンは出さない
+//      （状態は NEXT ACTION を実行したときにシステムが進める）
+//   5. 実施する面談（nextInterviewId）が無ければ「面談を実施済みにする」を出さず、「面談を予定する」も開かない
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -121,7 +122,7 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
   const next = await page.locator(".hr-next").innerText();
   check(next.includes("本日 16:15 社長面談"), "NEXT ACTION：本日 16:15 社長面談");
   check(/選考\s*社長面談/.test(next), "選考：社長面談（どこまで進んでいるか）");
-  check(await page.locator(".hr-next #hr-status").inputValue() === "interview_scheduled", "状態：プルダウンで「面談予定」");
+  check((await page.locator(".hr-next #hr-status").innerText()).includes("面談予定"), "状態：面談予定（表示だけ）");
   check(next.indexOf("選考") < next.indexOf("状態") && next.indexOf("状態") < next.indexOf("NEXT ACTION"), "選考 → 状態 → NEXT ACTION の順");
 
   await page.locator('.hr-tabs button[data-tab="interviews"]').click();
@@ -174,47 +175,42 @@ console.log("\n=== NEXT ACTION の「実施済みにする」は社長面談だ�
   check(next.includes("社長判断をしてください"), "NEXT ACTION：社長判断をしてください");
   check(await page.locator(".hr-next button", { hasText: "採用判断" }).count() === 1, "CTA：採用判断");
   check(!/社長面談を設定|面談を予定する/.test(next), "面談の設定へ戻らない");
-  check(await page.locator(".hr-next #hr-status").inputValue() === "ceo_decision_pending", "状態：社長判断待ち");
+  check((await page.locator(".hr-next #hr-status").innerText()).includes("社長判断待ち"), "状態：社長判断待ち");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();
 }
 
-console.log("\n=== 状態のプルダウン ===");
+console.log("\n=== 状態は表示だけ（プルダウンは出さない） ===");
 {
   const state = makeState(); const calls = [];
   const { ctx, page, errs } = await open(state, calls);
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  const opts = await page.locator("#hr-status option").allInnerTexts();
-  check(opts.map((s) => s.trim()).join("/") === STATUS_OPTIONS.map((o) => o.label).join("/"), "選択肢は API（lib/hr.js）のとおり");
+  check(await page.locator(".hr-next select").count() === 0 && await page.locator(".hr-state select").count() === 0, "選考・状態・NEXT ACTION の領域にプルダウンが無い");
+  check(await page.locator("#hr-status").evaluate((n) => n.tagName) === "DD", "状態は文字で表示（選べない）");
+  check((await page.locator("#hr-status").innerText()).includes("面談予定"), "状態：面談予定");
+  check(!calls.some(([k, b]) => k === "applicant" && b.action === "setStatus"), "状態を変える API は呼ばない");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
+  await ctx.close();
+}
 
-  console.log("— 確認ダイアログでやめる → 何も変えない —");
-  let msg = "";
-  page.once("dialog", (d) => { msg = d.message(); d.dismiss(); });
-  await page.selectOption("#hr-status", "ceo_decision_pending");
-  await page.waitForTimeout(600);
-  check(msg.includes("状態を") && msg.includes("「面談予定」→「社長判断待ち」") && msg.includes("に変更しますか？"), "確認：「面談予定」→「社長判断待ち」に変更しますか？");
-  check(msg.includes("実施済みの社長面談がありません"), "データの食い違いの注意も出す");
-  check(msg.includes("面談の日時・予約は変わりません"), "面談（TimeRex）は変わらないことを伝える");
-  check(!calls.some(([k, b]) => k === "applicant" && !b.dryRun), "やめたら保存しない");
-  check(await page.locator("#hr-status").inputValue() === "interview_scheduled", "プルダウンは元に戻る");
-
-  console.log("— 確認して変更 → 一覧・ドロワーを読み直す —");
-  calls.length = 0;
-  page.once("dialog", (d) => d.accept());
-  await page.selectOption("#hr-status", "ceo_decision_pending");
-  await page.waitForTimeout(900);
-  const saved = calls.find(([k, b]) => k === "applicant" && b.action === "setStatus" && !b.dryRun)?.[1];
-  check(saved?.status === "ceo_decision_pending" && saved.acknowledgeWarnings === true, "注意を確認したうえで保存する");
-  check(calls.some(([k]) => k === "detail-get") && calls.some(([k]) => k === "list-get"), "右ドロワーと応募者一覧を読み直す");
-  check((await page.locator(".hr-next").innerText()).includes("社長判断をしてください"), "NEXT ACTION もすぐ変わる");
-  check(await page.locator(".hr-next button", { hasText: "採用判断" }).count() === 1, "CTA：採用判断");
-  check((await page.locator("#rows").innerText()).includes("社長判断待ち"), "応募者一覧の状態もすぐ変わる");
-  await page.locator('.hr-tabs button[data-tab="history"]').click();
-  await page.waitForTimeout(300);
-  const hist = await page.locator("#hr-detail-tab").innerText();
-  check(hist.includes("状態を手動変更") && hist.includes("面談予定 → 社長判断待ち"), "履歴に「状態を手動変更 面談予定 → 社長判断待ち」");
-  check(!calls.some(([k]) => k === "interview"), "面談（日時・取消・Meet URL）は操作しない");
+console.log("\n=== 実施する面談が無い（nextInterviewId なし） ===");
+{
+  const state = makeState(); const calls = [];
+  // 社長面談の段階で、古いカジュアル面談だけが残っている（API は conduct を返さないが、古い応答でも守る）
+  state.interviews = state.interviews.filter((i) => i.id !== "iv-ceo");
+  Object.assign(state.applicant, { nextInterviewId: null, nextInterviewKind: null, nextAction: "面談を実施してください" });
+  const { ctx, page, errs } = await open(state, calls);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  const next = await page.locator(".hr-next").innerText();
+  check(await page.locator(".hr-next button", { hasText: "面談を実施済みにする" }).count() === 0, "「面談を実施済みにする」を出さない");
+  check(next.includes("面談予定の記録を確認してください"), "NEXT ACTION：面談予定の記録を確認してください");
+  await page.locator(".hr-next button", { hasText: "面談タブを確認" }).click();
+  await page.waitForTimeout(400);
+  check(await page.locator('.hr-tabs button[data-tab="interviews"].on').count() === 1, "［面談タブを確認］で面談タブへ");
+  check(await page.locator("#iv-kind").count() === 0 && await page.locator("#action-root .hr-modal").count() === 0, "「面談を予定する」モーダルは開かない");
+  check(!calls.some(([k, b]) => k === "interview" && b.action === "conduct"), "どの面談も実施済みにしない");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();
 }

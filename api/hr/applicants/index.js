@@ -10,7 +10,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
+import { normalizeApplicant, shapeApplicant, pickNextInterview } from "../../../lib/hr.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
 
 const SQL = "db/081_hr_recruiting.sql";
@@ -51,9 +51,7 @@ async function list(req, res, sb, ctx) {
       ? sb.from("gw_employees").select("id, display_name").in("id", recruiterIds)
       : Promise.resolve({ data: [] }),
     ids.length
-      // 件数に加えて、一覧のNEXT ACTIONに出す「直近の面談日時」もここから出す
-      // （面談日時を変更したら一覧にもそのまま反映される。詳細と同じ規則）
-      ? sb.from("gw_hr_interviews").select("applicant_id, kind, scheduled_at, conducted_at, canceled_at")
+      ? sb.from("gw_hr_interviews").select("id, applicant_id, kind, scheduled_at, conducted_at, canceled_at")
         .in("applicant_id", ids).limit(5000)
       : Promise.resolve({ data: [] }),
     // 担当変更（一覧の複数選択操作）の選択肢。既存の面談担当ピッカーと同じ条件
@@ -61,26 +59,31 @@ async function list(req, res, sb, ctx) {
       .in("status", ["active", "invited"]).order("display_name").limit(300),
     // 書類のそろい具合（履歴書・職務経歴書）。093 未適用なら出さないだけ
     ids.length
-      ? Promise.resolve(sb.from("gw_hr_documents").select("applicant_id, doc_type, deleted_at, created_at")
+      ? Promise.resolve(sb.from("gw_hr_documents").select("id, applicant_id, doc_type, deleted_at, created_at")
         .eq("tenant_id", ctx.tenantId).in("applicant_id", ids).limit(5000))
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
   const interviewCount = new Map();
-  const nextInterview = new Map();
+  const interviewsOf = new Map();
   for (const i of interviewCounts || []) {
     interviewCount.set(i.applicant_id, (interviewCount.get(i.applicant_id) || 0) + 1);
-    // 直近の、まだ実施していない・キャンセルしていない面談（api/hr/applicants/detail.js と同じ）
-    if (i.conducted_at || i.canceled_at || !i.scheduled_at) continue;
-    const cur = nextInterview.get(i.applicant_id);
-    if (!cur || String(i.scheduled_at).localeCompare(String(cur.scheduled_at)) < 0) nextInterview.set(i.applicant_id, i);
+    if (!interviewsOf.has(i.applicant_id)) interviewsOf.set(i.applicant_id, []);
+    interviewsOf.get(i.applicant_id).push(i);
   }
+  // NEXT ACTION が指す面談（詳細と同じ判定）。面談予定なのに有効な面談が無い応募者は、
+  // 一覧でも「面談予定の記録を確認してください」になる（「実施済みにする」を出さない）
+  const nextOf = (a) => {
+    const n = pickNextInterview(a, interviewsOf.get(a.id) || []);
+    return n ? { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind } : null;
+  };
 
   return json(res, 200, {
     applicants: (data || []).map((a) => ({
-      ...shapeApplicant(a, nextOf(nextInterview.get(a.id))),
-      nextInterviewAt: nextInterview.get(a.id)?.scheduled_at || null,
+      ...shapeApplicant(a, nextOf(a)),
+      // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
+      nextInterviewAt: nextOf(a)?.scheduledAt || null,
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
       docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
@@ -123,5 +126,3 @@ async function create(req, res, sb, ctx, user) {
 
   return json(res, 200, { applicant: shapeApplicant(data) });
 }
-
-const nextOf = (i) => (i ? { scheduledAt: i.scheduled_at, kind: i.kind } : null);

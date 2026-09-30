@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260929b">
+  <link rel="stylesheet" href="../css/app.css?v=20260929d">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -73,10 +73,10 @@
 <div id="modal-root"></div>
 <div id="action-root"></div>
 
-<script src="../js/api-client.js?v=20260929b"></script>
-<script src="../js/layout.js?v=20260929b"></script>
-<script src="../js/hr-layout.js?v=20260929b"></script>
-<script src="../js/jst.js?v=20260929b"></script>
+<script src="../js/api-client.js?v=20260929d"></script>
+<script src="../js/layout.js?v=20260929d"></script>
+<script src="../js/hr-layout.js?v=20260929d"></script>
+<script src="../js/jst.js?v=20260929d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -85,8 +85,6 @@
   let employees = [];
 
   HRLayout.init({ active: "ceo" }).then((ctx) => { if (ctx) load(); });
-  // 応募者詳細で状態を変えたら、開いている CEO REVIEW も読み直す
-  try { new BroadcastChannel("hr-applicants").onmessage = () => load(); } catch { /* 古いブラウザ */ }
 
   async function load() {
     try {

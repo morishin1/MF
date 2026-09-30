@@ -15,7 +15,7 @@
 //   normalizeInterview / shapeInterview / shapeApplicant）を使う。
 //   テスト用に書き直すと、本番の形とずれても気づけないため
 import { launch, BASE, jstToday } from "../_browser.mjs";
-import { normalizeInterview, shapeInterview, shapeApplicant } from "../../lib/hr.js";
+import { normalizeInterview, shapeInterview, shapeApplicant, pickNextInterview } from "../../lib/hr.js";
 
 const br = await launch();
 let bad = 0;
@@ -38,13 +38,11 @@ function newState() {
   };
 }
 
-/** api/hr/applicants/detail.js・index.js と同じ「直近の、実施前・キャンセル前の面談」 */
-const nextOf = (st) => st.interviews
-  .filter((i) => !i.conducted_at && !i.canceled_at && i.scheduled_at)
-  .sort((x, y) => String(x.scheduled_at).localeCompare(String(y.scheduled_at)))[0] || null;
+/** api/hr/applicants/detail.js・index.js と同じ NEXT ACTION が指す面談（pickNextInterview） */
+const nextOf = (st) => pickNextInterview(st.applicant, st.interviews);
 const applicantOut = (st) => {
   const n = nextOf(st);
-  return { ...shapeApplicant(st.applicant, n && { scheduledAt: n.scheduled_at, kind: n.kind }), recruiterName: null };
+  return { ...shapeApplicant(st.applicant, n && { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind }), recruiterName: null };
 };
 const interviewOut = (i) => ({ ...shapeInterview(i), interviewerName: nameOf(i.interviewer_id) });
 
