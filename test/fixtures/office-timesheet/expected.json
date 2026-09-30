@@ -1,0 +1,604 @@
+{
+  "month": "2026-10",
+  "employee": "テスト 太郎",
+  "totalWorkedMin": 9285,
+  "unreadable": [
+    "2026-10-14",
+    "2026-10-21"
+  ],
+  "days": [
+    {
+      "day": 1,
+      "date": "2026-10-01",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 2,
+      "date": "2026-10-02",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 570,
+        "end": 1110,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 570,
+        "end": 1110,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 3,
+      "date": "2026-10-03",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 4,
+      "date": "2026-10-04",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 5,
+      "date": "2026-10-05",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1050,
+        "break": 45,
+        "worked": 465
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1050,
+        "break": 45,
+        "worked": 465
+      }
+    },
+    {
+      "day": 6,
+      "date": "2026-10-06",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 7,
+      "date": "2026-10-07",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 8,
+      "date": "2026-10-08",
+      "note": "客先打合せ",
+      "truth": {
+        "kind": "work",
+        "start": 600,
+        "end": 1140,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 600,
+        "end": 1140,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 9,
+      "date": "2026-10-09",
+      "note": "障害対応",
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1290,
+        "break": 60,
+        "worked": 690
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1290,
+        "break": 60,
+        "worked": 690
+      }
+    },
+    {
+      "day": 10,
+      "date": "2026-10-10",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 11,
+      "date": "2026-10-11",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 12,
+      "date": "2026-10-12",
+      "note": "スポーツの日",
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 13,
+      "date": "2026-10-13",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 14,
+      "date": "2026-10-14",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 15,
+      "date": "2026-10-15",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 16,
+      "date": "2026-10-16",
+      "note": "有給休暇",
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 17,
+      "date": "2026-10-17",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 18,
+      "date": "2026-10-18",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 19,
+      "date": "2026-10-19",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 20,
+      "date": "2026-10-20",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 21,
+      "date": "2026-10-21",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": null,
+        "break": 60,
+        "worked": null
+      }
+    },
+    {
+      "day": 22,
+      "date": "2026-10-22",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 23,
+      "date": "2026-10-23",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1110,
+        "break": 60,
+        "worked": 510
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1110,
+        "break": 60,
+        "worked": 510
+      }
+    },
+    {
+      "day": 24,
+      "date": "2026-10-24",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 25,
+      "date": "2026-10-25",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 26,
+      "date": "2026-10-26",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 27,
+      "date": "2026-10-27",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 28,
+      "date": "2026-10-28",
+      "note": null,
+      "truth": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      },
+      "printed": {
+        "kind": "work",
+        "start": 540,
+        "end": 1080,
+        "break": 60,
+        "worked": 480
+      }
+    },
+    {
+      "day": 29,
+      "date": "2026-10-29",
+      "note": "夜間作業（翌日6:00終了）",
+      "truth": {
+        "kind": "work",
+        "start": 1320,
+        "end": 1800,
+        "break": 60,
+        "worked": 420
+      },
+      "printed": {
+        "kind": "work",
+        "start": 1320,
+        "end": 1800,
+        "break": 60,
+        "worked": 420
+      },
+      "endAccept": [
+        1800,
+        360
+      ]
+    },
+    {
+      "day": 30,
+      "date": "2026-10-30",
+      "note": "明け休み",
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    },
+    {
+      "day": 31,
+      "date": "2026-10-31",
+      "note": null,
+      "truth": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      },
+      "printed": {
+        "kind": "off",
+        "start": null,
+        "end": null,
+        "break": null,
+        "worked": null
+      }
+    }
+  ]
+}

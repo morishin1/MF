@@ -105,6 +105,7 @@ console.log("— 管理者の左メニュー —");
   const allHref = await page.locator(".kp-sidebar a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href") || ""));
   check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "左メニューに「採用」（/hr/）は置かない");
   check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "左メニューに「営業」（/sales/）は置かない");
+  check(!allHref.some((h) => /(^|\/)office\/$/.test(h)), "左メニューに「Office」（/office/）は置かない");
   // 最終メニュー（ホーム5・業務・経理4・管理・設定4）
   // 項目は見出しの隣の .kp-side-sub（同じ data-group）に入っている。畳まれていても数える
   const groupItems = await page.locator(".kp-side-group").evaluateAll((gs) => gs.map((g) => ({
