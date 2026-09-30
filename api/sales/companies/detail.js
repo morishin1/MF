@@ -24,11 +24,12 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, shapeApproach, aggregateApproaches, nextFor, hasUnhandledClick,
   recentApproach, statusRank, todayJst, isUuid, autoNext,
-  STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, SERVICES, INDUSTRIES, RECENT_DAYS,
+  STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, RECENT_DAYS,
   SEND_CHANNELS, REPLY_CHANNELS, CONTACT_CHANNELS, REPLY_CHANNEL_KEYS, CONTACT_CHANNEL_KEYS, HIDE_REASONS,
   SEND_FAIL_REASONS, channelLabel, normalizeContacts, mergeContacts,
 } from "../../../lib/sales.js";
 import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
+import { loadMasters } from "../../../lib/sales-master.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 // 「最終連絡」に数えない出来事（こちらの記録の整理で、相手とのやり取りではないもの）
@@ -68,7 +69,7 @@ async function one(req, res, sb, ctx) {
   }
   if (!c) return json(res, 404, { error: "not_found" });
 
-  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }] = await Promise.all([
+  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }, masters] = await Promise.all([
     sb.from("gw_sales_approaches")
       .select("id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
         + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count, "
@@ -83,6 +84,7 @@ async function one(req, res, sb, ctx) {
     sb.from("gw_sales_campaigns").select("id, name, archived_at").eq("tenant_id", ctx.tenantId).limit(500),
     // 面談（db/090）。まだ表が無い環境でも企業詳細は開けるようにする（エラーは空として扱う）
     sb.from("gw_sales_meetings").select(MEETING_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(50),
+    loadMasters(sb, ctx.tenantId),
   ]);
   const name = new Map((members || []).map((e) => [e.id, e.display_name]));
   const today = todayJst();
@@ -175,7 +177,8 @@ async function one(req, res, sb, ctx) {
     members: members || [],
     campaigns: (campaigns || []).filter((x) => !x.archived_at).map((x) => ({ id: x.id, name: x.name })),
     // 画面側で項目を持たない（ここが正）
-    statuses: STATUSES, ngReasons: NG_REASONS, eventKinds: EVENT_KINDS, services: SERVICES, industries: INDUSTRIES,
+    statuses: STATUSES, ngReasons: NG_REASONS, eventKinds: EVENT_KINDS,
+    services: masters.services, industries: masters.industries,
     sendChannels: SEND_CHANNELS, replyChannels: REPLY_CHANNELS, contactChannels: CONTACT_CHANNELS,
     hideReasons: HIDE_REASONS, sendFailReasons: SEND_FAIL_REASONS,
   });
@@ -197,8 +200,9 @@ async function update(req, res, sb, ctx, user) {
   if (body.action === "followed") {
     patch = { followed_at: new Date().toISOString() };
   } else {
-    // マスターに無い昔の値（業種・商材・地域）は、変えていなければそのまま通す
-    const row = normalizeCompany(body, { partial: true, before });
+    // マスターに無い昔の値（業種・提案サービス・地域）は、変えていなければそのまま通す。
+    // 選べるのはテナントの表示中の選択肢（db/108）だけ
+    const row = normalizeCompany(body, { partial: true, before, masters: await loadMasters(sb, ctx.tenantId) });
     if (row.error) return json(res, 400, row);
     patch = row.value;
     // 返信あり・商談へ手で進めたときも、NEXT を決めていなければ自動で入れる

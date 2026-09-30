@@ -79,16 +79,46 @@ function facetRows() {
   return [...out.values()];
 }
 
+// PostgREST の or()/and() の式（or=(…) の中身）を行に当てる。ネスト・not・like/ilike の * % に対応
+function splitTop(str) {
+  const out = [];
+  let depth = 0, cur = "";
+  for (const ch of str) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+const likeRe = (pat, flags) => new RegExp(`^${pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[%*]/g, ".*")}$`, flags);
+function logic(r, expr) {
+  const m = expr.match(/^(and|or)\((.*)\)$/s);
+  if (m) {
+    const parts = splitTop(m[2]);
+    return m[1] === "and" ? parts.every((p) => logic(r, p)) : parts.some((p) => logic(r, p));
+  }
+  const c = expr.match(/^([a-z_]+)\.(not\.)?([a-z]+)\.(.*)$/s);
+  if (!c) throw new Error(`mock: 読めない条件 ${expr}`);
+  const [, col, not, op, val] = c;
+  const x = r[col] ?? null;
+  let hit;
+  if (op === "is") hit = val === "null" ? x === null : String(x) === val;
+  else if (x === null) hit = false;
+  else if (op === "eq") hit = String(x) === val;
+  else if (op === "lt") hit = x < val;
+  else if (op === "lte") hit = x <= val;
+  else if (op === "gt") hit = x > val;
+  else if (op === "gte") hit = x >= val;
+  else if (op === "like") hit = likeRe(val, "").test(String(x));
+  else if (op === "ilike") hit = likeRe(val, "i").test(String(x));
+  else throw new Error(`mock: 知らない演算子 ${op}`);
+  return not ? (x === null ? false : !hit) : hit;
+}
+
 function matcher(f) {
   return (r) => f.every(([op, k, v]) => {
-    if (op === "or") {
-      // name.ilike.%x%,domain.ilike.%x% の形だけ
-      return v.split(",").some((part) => {
-        const [col, , pat] = part.split(".");
-        const needle = pat.replace(/%/g, "").toLowerCase();
-        return String(r[col] ?? "").toLowerCase().includes(needle);
-      });
-    }
+    if (op === "or") return logic(r, `or(${v})`);
     if (op === "gt") return r[k] !== null && r[k] !== undefined && r[k] > v;
     if (op === "eq") return r[k] === v;
     if (op === "in") return v.includes(r[k]);
@@ -220,7 +250,8 @@ const PREFS = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", 
   "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県",
   "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
 let insertFail = null;          // (表名, 行[]) => error | null。登録の途中失敗を作る
-let rpcMissing = false;          // true：101 が未実行（関数が無い）
+let rpcMissing = false;
+let rpcNoNone = false;           // true：101 の版の関数（地域に none を返さない）          // true：101 が未実行（関数が無い）
 const rpcCalls = [];
 function facetCountsRpc(a) {
   const has = (s) => s !== null && s !== undefined && s !== "";
@@ -234,7 +265,8 @@ function facetCountsRpc(a) {
         owner: !has(a.p_owner) || (a.p_owner === "none" && !c.owner_id) || c.owner_id === a.p_owner,
         service: !has(a.p_service) || c.service === a.p_service,
         industry: !has(a.p_industry) || c.industry === a.p_industry,
-        region: !has(a.p_region) || String(c.region ?? "").startsWith(a.p_region),
+        region: !has(a.p_region) || (a.p_region === "none" ? !PREFS.some((p) => String(c.region ?? "").startsWith(p))
+          : String(c.region ?? "").startsWith(a.p_region)),
         channel: !has(a.p_channel) || (a.p_channel === "none" && !c.current_contact_channel) || c.current_contact_channel === a.p_channel,
         attacked: !has(a.p_attacked) || (a.p_attacked === "yes") === Boolean(c.last_sent_at),
         clicked: !has(a.p_clicked) || (a.p_clicked === "yes") === ((c.click_count || 0) > 0),
@@ -253,7 +285,7 @@ function facetCountsRpc(a) {
     for (const [value, n] of m) out.push({ kind, value, n });
   };
   group("industry", (x) => x.c.industry ?? null);
-  group("region", (x) => x.pref);
+  group("region", (x) => x.pref || "none");   // db/108：都道府県が取れない企業は none（未設定）
   group("service", (x) => x.c.service ?? null);
   group("status", (x) => x.c.status);
   const ng = base.filter((x) => but(x, "status") && x.c.ng_reason).length;
@@ -269,7 +301,8 @@ function rpc(name, args) {
   if (rpcMissing || name !== "gw_sales_company_facet_counts") {
     return Promise.resolve({ data: null, error: { code: "PGRST202", message: `Could not find the function public.${name}` } });
   }
-  return Promise.resolve({ data: facetCountsRpc(args), error: null });
+  const rows = facetCountsRpc(args);
+  return Promise.resolve({ data: rpcNoNone ? rows.filter((r) => !(r.kind === "region" && r.value === "none")) : rows, error: null });
 }
 
 mock.module(atRoot("lib/supabase.js"), {
@@ -326,6 +359,7 @@ const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.j
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
 const { default: exportApi } = await import(atRoot("api/sales/companies/export.js"));
 const { default: importApi } = await import(atRoot("api/sales/companies/import.js"));
+const { default: mastersApi } = await import(atRoot("api/sales/masters/index.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -362,6 +396,7 @@ const ok = async (name, fn) => {
 function setup() {
   who = SALES;
   rpcMissing = false;
+  rpcNoNone = false;
   insertFail = null;
   rpcCalls.length = 0;
   logged.length = 0;
@@ -1592,7 +1627,7 @@ await ok("絞り込みの候補（facets=1）：業種・地域・商材を件�
   assert.equal(r.body.masters.prefectures.length, 47);
   assert.ok(r.body.masters.services.includes("AI / DX"));
   assert.deepEqual(r.body.csvColumns.map((c) => c.label),
-    ["企業名", "企業サイトURL", "問い合わせフォームURL", "業種", "都道府県", "所在地", "提案サービス", "電話番号", "企業規模", "メモ"]);
+    ["企業名", "企業サイトURL", "問い合わせフォームURL", "業種", "都道府県", "所在地", "提案サービス", "電話番号", "メールアドレス", "企業規模", "メモ"]);
 });
 
 // 要件 2〜6・11・13：地域は都道府県にまとめる／件数はいまの条件に連動／並べ替えでは変わらない／総件数・ページャーと一致
@@ -1890,6 +1925,204 @@ await ok("旧データ：マスター外の業種（イベント企画・制作�
   assert.equal(csv.body.results[0].status, "error", "CSVでも要修正");
 });
 
+console.log("\n=== 分類マスター（db/108）・複数メールアドレス・地域「未設定」・アタック画面の絞り込み ===\n");
+
+const masterGet = () => call(mastersApi, { method: "GET", url: "/api/sales/masters" });
+const masterAdd = (body) => call(mastersApi, { method: "POST", url: "/api/sales/masters", body });
+const masterPatch = (body) => call(mastersApi, { method: "PATCH", url: "/api/sales/masters", body });
+
+await ok("分類マスター：初回は既定値を入れる。追加・重複・名前変更（企業もそろう）・非表示（新規では選べない・旧データとして絞れる）・再表示", async () => {
+  setup();
+  db.rows.gw_sales_master_options = [];
+  const g = await masterGet();
+  assert.equal(g.statusCode, 200, JSON.stringify(g.body));
+  assert.deepEqual(g.body.options.filter((o) => o.kind === "industry").map((o) => o.label), ["製造", "不動産", "士業", "医療", "小売", "その他"]);
+  assert.equal(g.body.options.filter((o) => o.kind === "service").length, 7);
+  assert.ok(db.rows.gw_sales_master_options.every((o) => o.tenant_id === "t1"));
+  assert.equal((await masterGet()).body.options.length, 13, "2回目は増やさない");
+
+  // 追加 → 企業追加で選べる
+  const add = await masterAdd({ kind: "service", label: "  Web広告  " });
+  assert.equal(add.statusCode, 200, JSON.stringify(add.body));
+  assert.equal(add.body.option.label, "Web広告");
+  assert.equal((await masterAdd({ kind: "service", label: "Web広告" })).statusCode, 409, "同じ名前は足せない");
+  assert.equal((await masterAdd({ kind: "nope", label: "x" })).statusCode, 400);
+  assert.equal((await masterAdd({ kind: "service", label: " " })).statusCode, 400);
+  const c = await newCompany({ service: "Web広告", industry: "製造" });
+  assert.equal(c.service, "Web広告");
+  const list = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.ok(list.masters.services.includes("Web広告"), "一覧の選択肢にも出る");
+
+  // 名前変更：その名前の企業もそろう
+  const opt = db.rows.gw_sales_master_options.find((o) => o.label === "Web広告");
+  const rn = await masterPatch({ id: opt.id, label: "Web広告運用" });
+  assert.equal(rn.statusCode, 200, JSON.stringify(rn.body));
+  assert.equal(rn.body.companies, 1);
+  assert.equal(db.rows.gw_sales_companies.find((x) => x.id === c.id).service, "Web広告運用");
+  const mfg = db.rows.gw_sales_master_options.find((o) => o.label === "製造");
+  assert.equal((await masterPatch({ id: mfg.id, label: "不動産" })).statusCode, 409, "既にある名前には変えられない");
+  assert.ok(logged.some((l) => l.action === "sales.master_rename" && l.detail.from === "Web広告" && l.detail.companies === 1));
+
+  // 非表示：企業のデータは変えない。新規では選べない。一覧の絞り込みでは旧データとして出る
+  assert.equal((await masterPatch({ id: mfg.id, archived: true })).statusCode, 200);
+  assert.equal(db.rows.gw_sales_companies.find((x) => x.id === c.id).industry, "製造", "既存企業はそのまま");
+  assert.equal((await create({ name: "新規", industry: "製造" })).body.error, "bad_industry", "非表示の値は新規で選べない");
+  const after = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.ok(!after.masters.industries.includes("製造"), "表示中の選択肢から消える");
+  assert.deepEqual(after.facets.industry.find((x) => x.value === "製造"), { value: "製造", n: 1 }, "件数には旧データとして出る");
+  assert.equal((await pageOf({ page: 1, industry: "製造" })).body.total, 1, "旧データでも絞り込める");
+  assert.equal((await patchCo({ id: c.id, industry: "製造", name: "名前だけ変更" })).statusCode, 200, "変えていなければ編集は通る");
+  assert.equal((await masterAdd({ kind: "industry", label: "製造" })).body.hint, "「製造」は非表示にしてあります。再表示してください");
+  assert.equal((await masterPatch({ id: mfg.id, archived: false })).statusCode, 200);
+  assert.equal((await create({ name: "新規2", industry: "製造" })).statusCode, 200, "再表示で選べる");
+  assert.equal((await masterGet()).body.options.find((o) => o.id === mfg.id).used, 2, "使っている企業数");
+
+  // 営業でない人は触れない
+  who = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["staff"], employee: { id: "emp-x" } };
+  assert.equal((await masterGet()).statusCode, 403);
+  assert.equal((await masterAdd({ kind: "industry", label: "x" })).statusCode, 403);
+});
+
+await ok("分類マスター：CSV取込・一括の提案サービス変更もテナントの選択肢でチェックする", async () => {
+  setup();
+  db.rows.gw_sales_master_options = [];
+  await masterGet();
+  await masterAdd({ kind: "industry", label: "イベント" });
+  const svc = db.rows.gw_sales_master_options.find((o) => o.label === "ENGER");
+  await masterPatch({ id: svc.id, archived: true });
+  const r = await csvImport({ fileName: "m.csv", commit: false, rows: [
+    { row: 2, name: "A", industry: "イベント" }, { row: 3, name: "B", service: "ENGER" }] });
+  assert.deepEqual(r.body.results.map((x) => x.status), ["ok", "error"]);
+  assert.match(r.body.results[1].reasons[0], /提案サービス「ENGER」はマスターにありません/);
+  const c = await newCompany();
+  assert.equal((await bulk({ ids: [c.id], action: "change_service", service: "ENGER" })).body.error, "bad_service");
+});
+
+await ok("メールアドレス：カンマ区切りで複数。前後空白・小文字・空・重複を整える。形式が違えば登録しない", async () => {
+  setup();
+  const r = await create({ name: "メール社", emails: " Info@Example.jp, sales@example.jp ,, info@example.jp，support@example.jp" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.company.emails, ["info@example.jp", "sales@example.jp", "support@example.jp"]);
+  const row = db.rows.gw_sales_companies.at(-1);
+  assert.deepEqual(row.emails, ["info@example.jp", "sales@example.jp", "support@example.jp"]);
+  assert.equal(row.size, undefined, "企業規模に入れない");
+  const bad = await create({ name: "x", emails: "info@example.jp, not-an-email, a@b" });
+  assert.equal(bad.statusCode, 400);
+  assert.equal(bad.body.error, "bad_email");
+  assert.deepEqual(bad.body.invalid, ["not-an-email", "a@b"]);
+  assert.equal(db.rows.gw_sales_companies.length, 1, "不正なら登録しない");
+  // 編集：配列でも送れる。空にもできる。企業規模は残る
+  row.size = "従業員50名";
+  assert.equal((await patchCo({ id: row.id, emails: ["NEW@example.jp"] })).statusCode, 200);
+  assert.deepEqual(row.emails, ["new@example.jp"]);
+  assert.equal((await patchCo({ id: row.id, emails: "" })).statusCode, 200);
+  assert.deepEqual(row.emails, []);
+  assert.equal(row.size, "従業員50名", "既存の企業規模は消さない");
+  assert.equal((await patchCo({ id: row.id, emails: Array.from({ length: 21 }, (_, i) => `u${i}@example.jp`) })).body.error, "bad_email");
+  // 詳細で返す
+  row.emails = ["a@example.jp", "b@example.jp"];
+  assert.deepEqual((await getOne(row.id)).body.company.emails, ["a@example.jp", "b@example.jp"]);
+  // CSV：同じ正規化・チェック
+  const csv = await csvImport({ fileName: "e.csv", commit: true, rows: [
+    { row: 2, name: "CSVメール社", siteUrl: "https://mail.example.jp", emails: "A@mail.example.jp,b@mail.example.jp" },
+    { row: 3, name: "CSV不正", emails: "x@y" }] });
+  assert.deepEqual(csv.body.results.map((x) => x.status), ["created", "error"]);
+  assert.match(csv.body.results[1].reasons[0], /メールアドレスが正しくありません：x@y/);
+  assert.deepEqual(db.rows.gw_sales_companies.find((x) => x.name === "CSVメール社").emails, ["a@mail.example.jp", "b@mail.example.jp"]);
+});
+
+await ok("地域「未設定」：null・空・都道府県で始まらない値を未設定にまとめる。47都道府県＋未設定＝総件数。未設定で絞れる", async () => {
+  setup();
+  await seed(6);
+  const cs = db.rows.gw_sales_companies;
+  cs[0].region = null; cs[1].region = ""; cs[2].region = "鹿屋市"; cs[3].region = "鹿児島県鹿屋市";
+  const all = (await pageOf({ page: 1, facets: 1 })).body;
+  const sum = all.facets.region.reduce((a, x) => a + x.n, 0);
+  assert.equal(sum, all.total, "地域の件数の合計＝総件数");
+  assert.deepEqual(all.facets.region.find((x) => x.value === "none"), { value: "none", n: 3 });
+  assert.equal(all.facets.region.find((x) => x.value === "鹿児島県").n, 1);
+  const none = (await pageOf({ page: 1, facets: 1, region: "none" })).body;
+  assert.equal(none.total, 3, "未設定で絞れる（null・空・鹿屋市）");
+  assert.deepEqual(none.companies.map((c) => c.region), [null, null, null], "一覧の地域は空（画面で「未設定」）");
+  assert.equal(none.facets.total, 3);
+  // 業種と組み合わせても合計が合う
+  const ind = (await pageOf({ page: 1, facets: 1, industry: "製造" })).body;
+  assert.equal(ind.facets.region.reduce((a, x) => a + x.n, 0), ind.total);
+  // 101 の版の関数（none を返さない）でも、全件－都道府県で未設定を出す
+  rpcNoNone = true;
+  const old = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.deepEqual(old.facets.region.find((x) => x.value === "none"), { value: "none", n: 3 });
+  rpcNoNone = false;
+  assert.equal((await pageOf({ page: 1, region: "どこか" })).statusCode, 400);
+  // 企業追加で地域を未設定にできる
+  assert.equal((await create({ name: "地域なし", region: "" })).statusCode, 200);
+  assert.equal(db.rows.gw_sales_companies.at(-1).region ?? null, null);
+});
+
+await ok("アタック画面（queue=attack）：営業禁止・30日以内・期限前・対象外の状態を除く。地域・NEXT・キャンペーン・自分＋担当なしで絞れる。100社超もページ送り", async () => {
+  setup();
+  db.rows.gw_sales_campaigns = [{ id: "00000000-0000-4000-8000-0000000000c1", tenant_id: "t1", name: "秋の製造業" }];
+  await seed(130);
+  const cs = db.rows.gw_sales_companies;
+  const ymd = (d) => new Date(Date.now() + 9 * 3600000 + d * 86400000).toISOString().slice(0, 10);
+  cs[0].ng_reason = "no_sales";                                               // 営業禁止
+  cs[1].status = "won";                                                       // 対象外の状態
+  cs[2].last_sent_at = new Date(Date.now() - 5 * 86400000).toISOString();    // 30日以内に送った
+  cs[3].last_sent_at = new Date(Date.now() - 40 * 86400000).toISOString(); cs[3].status = "reattack_wait";  // 40日前 → 出す
+  cs[4].next_action = "電話"; cs[4].next_action_on = ymd(3);                  // 期限がまだ先
+  cs[5].next_action = "電話"; cs[5].next_action_on = ymd(-1);                 // 期限切れ → 出す（manual）
+  cs[6].region = "鹿屋市";                                                    // 未設定
+  cs[7].campaign_id = "00000000-0000-4000-8000-0000000000c1";
+  cs[8].owner_id = "emp-s2";                                                  // 他の人の担当
+  cs[9].owner_id = null;                                                      // 担当なし
+  const q = (params) => pageOf({ page: 1, queue: "attack", ...params });
+  const all = (await q({})).body;
+  assert.equal(all.total, 126, "130社から 営業禁止・成約・30日以内・期限前 の4社を除く");
+  assert.equal(all.companies.length, 100, "100社ずつ");
+  assert.equal(all.totalPages, 2);
+  const p2 = (await q({ page: 2 })).body;
+  assert.equal(p2.companies.length, 26, "2ページ目で残りを見られる（「ほか」に隠さない）");
+  const ids = new Set([...all.companies, ...p2.companies].map((c) => c.id));
+  assert.equal(ids.size, 126);
+  for (const i of [0, 1, 2, 4]) assert.ok(!ids.has(cs[i].id), `除外 ${i}`);
+  for (const i of [3, 5]) assert.ok(ids.has(cs[i].id), `対象 ${i}`);
+  assert.equal(all.facets, undefined, "件数（facets）はアタック画面の条件では数えない");
+
+  assert.deepEqual((await q({ region: "none" })).body.companies.map((c) => c.id), [cs[6].id], "地域：未設定");
+  const kc = (await q({ campaign: "00000000-0000-4000-8000-0000000000c1" })).body;
+  assert.deepEqual(kc.companies.map((c) => c.id), [cs[7].id], "キャンペーンで絞る");
+  assert.equal(kc.companies[0].campaignName, "秋の製造業", "キャンペーン名を返す");
+  assert.equal((await q({ campaign: "none" })).body.total, 125);
+  assert.deepEqual((await q({ next: "manual" })).body.companies.map((c) => c.id), [cs[5].id], "NEXT：決めたNEXT");
+  assert.equal((await q({ next: "attack" })).body.total, 125, "NEXT：フォームアタック");
+  const mine = (await q({ owner: "mine" })).body;
+  assert.equal(mine.total, 125, "自分の担当＋担当なし（他の人の担当を除く）");
+  assert.ok(mine.companies.every((c) => c.ownerId === "emp-s1" || c.ownerId === null));
+  const combo = (await q({ owner: "mine", q: "会社01", region: "東京都" })).body;
+  assert.ok(combo.total > 0 && combo.companies.every((c) => c.name.startsWith("会社01") && c.region === "東京都"),
+    "検索語・自分＋担当なし・地域を同時に（and(or…)）");
+  assert.ok(all.nextFilters.some((x) => x.key === "follow_click"), "NEXT の選択肢を返す");
+  assert.ok(all.campaigns.some((x) => x.name === "秋の製造業"));
+  // 企業一覧の NEXT の意味と同じ：一覧の nextKey と絞り込みが食い違わない
+  for (const [key] of [["manual"], ["attack"]]) {
+    const r = (await pageOf({ page: 1, next: key })).body;
+    assert.ok(r.companies.every((c) => c.nextKey === key), `NEXT=${key} は一覧の nextKey と同じ`);
+  }
+  for (const bad of [{ queue: "x" }, { next: "x" }, { campaign: "x" }, { owner: "x" }]) {
+    assert.equal((await pageOf({ page: 1, ...bad })).statusCode, 400, JSON.stringify(bad));
+  }
+});
+
+await ok("企業一覧：キャンペーン列（名前）を返す", async () => {
+  setup();
+  db.rows.gw_sales_campaigns = [{ id: "00000000-0000-4000-8000-0000000000c2", tenant_id: "t1", name: "冬の不動産" }];
+  await seed(2);
+  db.rows.gw_sales_companies[0].campaign_id = "00000000-0000-4000-8000-0000000000c2";
+  const r = (await pageOf({ page: 1 })).body.companies;
+  assert.equal(r.find((c) => c.id === db.rows.gw_sales_companies[0].id).campaignName, "冬の不動産");
+  assert.equal(r.find((c) => c.id === db.rows.gw_sales_companies[1].id).campaignName, null);
+});
+
 console.log("\n=== CSV（/api/sales/companies/export） ===\n");
 
 const csvLines = (r) => String(r.body).replace(/^﻿/, "").split("\r\n").filter(Boolean);
@@ -1904,7 +2137,7 @@ await ok("CSV：いまの検索・絞り込み結果すべて。BOMつき・業�
   assert.ok(String(r.body).startsWith("﻿"), "UTF-8 BOM");
   const lines = csvLines(r);
   assert.equal(lines.length, 51, "見出し＋士業 の50社（100件で切らない）");
-  assert.equal(lines[0], "企業名,URL,ドメイン,業種,地域,商材,ステータス,担当,最終アタック日時,最終アタック実行者,送信チャネル,現在の連絡手段,クリック数,NEXT,NEXT期限,非表示状態,非表示理由,登録日時");
+  assert.equal(lines[0], "企業名,URL,ドメイン,業種,地域,提案サービス,キャンペーン,ステータス,担当,最終アタック日時,最終アタック実行者,送信チャネル,現在の連絡手段,クリック数,NEXT,NEXT期限,非表示状態,非表示理由,登録日時");
   assert.ok(lines[1].startsWith("会社003,https://c3.example.jp/,c3.example.jp,士業,"), lines[1]);
   assert.ok(logged.some((l) => l.action === "sales.company_export" && l.detail.count === 50 && l.detail.mode === "filtered"));
 

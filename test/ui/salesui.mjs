@@ -44,8 +44,10 @@ const MASTERS = {
     "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"],
 };
 const CSV_COLUMNS = [["name", "企業名", true], ["siteUrl", "企業サイトURL"], ["formUrl", "問い合わせフォームURL"], ["industry", "業種"],
-  ["region", "都道府県"], ["address", "所在地"], ["service", "提案サービス"], ["phone", "電話番号"], ["size", "企業規模"], ["note", "メモ"]]
+  ["region", "都道府県"], ["address", "所在地"], ["service", "提案サービス"], ["phone", "電話番号"], ["emails", "メールアドレス"], ["size", "企業規模"], ["note", "メモ"]]
   .map(([key, label, required]) => ({ key, label, ...(required ? { required } : {}) }));
+
+const CAMPAIGNS = [{ id: "cp1", name: "秋の製造業" }, { id: "cp2", name: "冬の不動産" }];
 
 async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0, extra = [] } = {}) {
   const calls = [];
@@ -70,6 +72,16 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       industry: ["士業", "製造"][i % 2], region: ["東京都", "大阪府", "福岡県"][i % 3] }));
   }
   for (const c of extra) companies.push(company(c));
+  // 業種・提案サービスの選択肢（本物は db/108 gw_sales_master_options・api/sales/masters）
+  const options = [
+    ...MASTERS.industries.map((label, i) => ({ id: `mi${i}`, kind: "industry", label, sortOrder: i, archived: false })),
+    ...MASTERS.services.map((label, i) => ({ id: `ms${i}`, kind: "service", label, sortOrder: i, archived: false })),
+  ];
+  const masterLists = () => ({
+    industries: options.filter((o) => o.kind === "industry" && !o.archived).map((o) => o.label),
+    services: options.filter((o) => o.kind === "service" && !o.archived).map((o) => o.label),
+    prefectures: MASTERS.prefectures,
+  });
   const ctlList = { fail: failList, delay: 0 };
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => {
@@ -153,6 +165,27 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       for (const k of b.commit ? ["created", "duplicate", "error"] : ["ok", "duplicate", "error"]) counts[k] = results.filter((x) => x.status === k).length;
       return send({ results, counts });
     }
+    if (/\/api\/sales\/masters\b/.test(url)) {
+      const b = req.method() === "GET" ? {} : body();
+      calls.push({ kind: `masters-${req.method()}`, body: b });
+      if (req.method() === "POST") {
+        if (options.some((o) => o.kind === b.kind && o.label === b.label)) return send({ error: "duplicate", hint: `「${b.label}」はもうあります` }, 409);
+        const o = { id: `mo${options.length}`, kind: b.kind, label: b.label.trim(), sortOrder: 99, archived: false };
+        options.push(o);
+        return send({ option: o });
+      }
+      if (req.method() === "PATCH") {
+        const o = options.find((x) => x.id === b.id);
+        if (typeof b.archived === "boolean") o.archived = b.archived;
+        if (b.label) {
+          for (const c of companies) if (c[o.kind] === o.label) c[o.kind] = b.label;
+          o.label = b.label;
+        }
+        return send({ ok: true });
+      }
+      return send({ kinds: [{ key: "industry", label: "業種" }, { key: "service", label: "提案サービス" }],
+        options: options.map((o) => ({ ...o, used: companies.filter((c) => c[o.kind] === o.label).length })) });
+    }
     if (/\/api\/sales\/campaigns\b/.test(url)) {
       return send({ campaigns: [{ id: "cp1", name: "秋の製造業", archived: false }] });
     }
@@ -226,7 +259,9 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         calls.push({ kind: b.companies ? "bulk" : "create", body: b });
         if (b.companies) return send({ created: b.companies.length, skipped: 0 });
         const made = company({ id: "c-new", name: b.name, siteUrl: b.siteUrl, formUrl: b.formUrl, service: b.service,
-          industry: b.industry ?? null, region: b.region ?? null, domain: b.siteUrl ? new URL(b.siteUrl).hostname.replace(/^www\./, "") : null });
+          industry: b.industry ?? null, region: b.region ?? null, domain: b.siteUrl ? new URL(b.siteUrl).hostname.replace(/^www\./, "") : null,
+          // 本物（lib/sales.js parseEmails）と同じ：区切って小文字・重複なし
+          emails: [...new Set(String(b.emails || "").split(/[,，、;；\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean))] });
         companies.push(made);
         return send({ company: made });
       }
@@ -240,9 +275,18 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       const base = companies.filter((c) => (vis === "all" ? true : vis === "hidden" ? c.hidden : !c.hidden));
       const q = (sp.get("q") || "").toLowerCase();
       const inQ = base.filter((c) => !q || `${c.name} ${c.domain}`.toLowerCase().includes(q));
-      const hit = (c, k) => !sp.get(k) || (k === "region" ? String(c.region || "").startsWith(sp.get(k)) : c[k] === sp.get(k));
+      const prefOf = (r) => MASTERS.prefectures.find((p) => String(r || "").startsWith(p)) || null;
+      const hit = (c, k) => !sp.get(k) || (k === "region"
+        ? (sp.get(k) === "none" ? !prefOf(c.region) : String(c.region || "").startsWith(sp.get(k))) : c[k] === sp.get(k));
       const FK = ["industry", "region", "service", "status"];
-      let listed = inQ.filter((c) => FK.every((k) => hit(c, k)));
+      // アタック画面（本物は lib/sales.js applyListFilters の queue=attack・owner=mine・campaign・next）
+      const cutoff = Date.now() - 30 * 86400000;
+      const extra = (c) => (sp.get("queue") !== "attack" || (!c.ngReason && ["untouched", "reattack_wait"].includes(c.status)
+          && (!c.lastSentAt || new Date(c.lastSentAt).getTime() < cutoff) && (!c.nextDue || c.nextDue <= TODAY)))
+        && (sp.get("owner") !== "mine" || c.ownerId === "emp-s1" || !c.ownerId)
+        && (!sp.get("campaign") || (sp.get("campaign") === "none" ? !c.campaignId : c.campaignId === sp.get("campaign")))
+        && (!sp.get("next") || c.nextKey === sp.get("next"));
+      let listed = inQ.filter((c) => FK.every((k) => hit(c, k)) && extra(c));
       const sortKey = { name: "name", industry: "industry", region: "region", clicks: "clickCount" }[sp.get("sort")];
       if (sortKey) {
         const dir = sp.get("order") === "desc" ? -1 : 1;
@@ -256,19 +300,21 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       const page = Math.min(Math.max(1, Number(sp.get("page")) || 1), totalPages);
       // 本物（db/101）と同じ：各項目の件数は「その項目以外の条件（検索語を含む）」で数える。並べ替え・ページは関係しない
       // 地域は都道府県にまとめる（本物は gw_sales_prefecture）
-      const pref = (r) => MASTERS.prefectures.find((p) => String(r || "").startsWith(p)) || null;
+      const pref = prefOf;
       const facet = (k) => {
         const rows = inQ.filter((c) => FK.every((o) => o === k || hit(c, o)));
         const m = new Map();
         for (const c of rows) {
-          const v = k === "region" ? pref(c.region) : c[k];
+          const v = k === "region" ? pref(c.region) || "none" : c[k];
           if (v) m.set(v, (m.get(v) || 0) + 1);
         }
         return [...m].map(([value, n]) => ({ value, n }));
       };
       return send({ today: TODAY, me: "emp-s1", members, page, limit, total, totalPages,
-        companies: listed.slice((page - 1) * limit, page * limit).map((c) => ({ ...c, region: pref(c.region) || c.region })),
-        masters: MASTERS, csvColumns: CSV_COLUMNS,
+        companies: listed.slice((page - 1) * limit, page * limit).map((c) => ({ ...c, region: pref(c.region) })),
+        masters: masterLists(), csvColumns: CSV_COLUMNS, campaigns: CAMPAIGNS,
+        nextFilters: [["follow_click", "クリックあり・要フォロー"], ["manual", "決めたNEXT"], ["attack", "フォームアタック"],
+          ["decide", "NEXTを決める"], ["none", "やること無し"]].map(([key, label]) => ({ key, label })),
         facets: sp.get("facets") === "1" ? { dynamic: true, total, industry: facet("industry"), region: facet("region"),
           service: facet("service"), status: facet("status"), owner: facet("ownerId") } : undefined });
     }
@@ -879,7 +925,7 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   await page.locator("#rows tr[data-id]").first().waitFor();
   const heads = await page.locator(".sl-table thead th").allInnerTexts();
   const H = heads.map((h) => h.replace(/unfold_more|arrow_upward|arrow_downward/gi, "").trim());
-  check(JSON.stringify(H) === JSON.stringify(["", "企業", "業種", "地域", "商材", "状態", "最終アタック", "連絡手段", "クリック", "NEXT", "担当"]),
+  check(JSON.stringify(H) === JSON.stringify(["", "企業", "業種", "地域", "提案サービス", "キャンペーン", "状態", "最終アタック", "連絡手段", "クリック", "NEXT", "担当"]),
     `一覧の列（業種・地域は独立した列）：${H.join(" ")}`);
   await page.locator('#rows tr[data-id="c1"] td.sl-check input').check();
   await page.locator("#bulk-more").click();
@@ -1078,7 +1124,8 @@ console.log("\n=== 共通マスター：企業追加は選ぶだけ（業種・�
   const ind = await optTexts("#f-industry");
   check(ind.length === 7 && ind[1].startsWith("製造（") && ind.some((t) => t === "不動産（0）"), `業種はマスターの6つ＋すべて（${ind.join("/")}）`);
   const reg = await optTexts("#f-region");
-  check(reg.length === 48 && reg[1].startsWith("北海道") && reg.at(-1).startsWith("沖縄県"), `地域は47都道府県（${reg.length - 1}）`);
+  check(reg.length === 49 && reg[1].startsWith("北海道") && reg[47].startsWith("沖縄県") && reg[48].startsWith("未設定"),
+    `地域は47都道府県＋未設定（${reg.length - 1}）`);
   check((await optTexts("#f-service")).length === 8, "商材はマスターの7つ");
   const tokyo0 = reg.find((t) => t.startsWith("東京都"));
   check(tokyo0 === "東京都（7）", `東京都の件数（${tokyo0}）`);
@@ -1146,7 +1193,7 @@ console.log("\n=== 旧データ（マスター外の業種・市区町村つき�
   check(ind.indexOf(`${LEGACY}（1・旧データ）`) > ind.indexOf("その他（0）"), "旧データはマスターの後ろ");
   check((await optTexts("#f-service")).includes("旧商材A（1・旧データ）"), "商材も同じ（旧データを件数つきで）");
   const reg = await optTexts("#f-region");
-  check(reg.length === 48 && !reg.some((t) => t.includes("鹿屋市")), "地域は47都道府県だけ（旧値は足さない）");
+  check(reg.length === 49 && !reg.some((t) => t.includes("鹿屋市")) && reg[48].startsWith("未設定"), "地域は47都道府県＋未設定だけ（旧値は足さない）");
   check(reg.includes("鹿児島県（2）"), `鹿児島県鹿屋市は鹿児島県に合算（${reg.find((t) => t.startsWith("鹿児島県"))}）`);
 
   await page.locator("#f-industry").selectOption(LEGACY);
@@ -1167,6 +1214,177 @@ console.log("\n=== 旧データ（マスター外の業種・市区町村つき�
   check(!qi.includes(LEGACY) && qi.length === 7, `新規の業種に旧データは出ない（${qi.filter(Boolean).join("/")}）`);
   check(!qs.includes("旧商材A") && qs.length === 7, "新規の提案サービスに旧データは出ない");
   check(!qr.some((v) => v.includes("鹿屋市")) && qr.length === 48, "新規の地域は47都道府県だけ");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 追加要件：新規登録（業種・提案サービス・複数メール・地域未設定）→ 一覧・絞り込み・キャンペーン列・分類の管理 ===");
+{
+  const { page, calls, errs } = await openAs({ many: 6, extra: [
+    { id: "cp-a", name: "キャンペーン商事", domain: "camp.jp", campaignId: "cp1", campaignName: "秋の製造業" },
+  ] });
+  // 1〜5：企業新規登録（業種・提案サービス・複数メール・地域は未設定のまま）
+  await page.goto(`${BASE}/sales/companies.html?new=1`);
+  await page.locator("#q-url").waitFor();
+  check((await page.locator(".sl-drawer").innerText()).includes("提案サービス"), "「提案サービス」の表記");
+  await page.fill("#q-url", "https://mail-seizo.jp/");
+  await page.fill("#q-name", "メール製造株式会社");
+  await page.selectOption("#q-service", "PCレンタル");
+  await page.locator("#q-more summary").click();
+  check(!(await page.locator("#q-size").count()) && await page.locator("#q-emails").isVisible(), "企業規模ではなくメールアドレスの欄");
+  await page.selectOption("#q-industry", "製造");
+  await page.fill("#q-emails", "Info@Mail-Seizo.jp, sales@mail-seizo.jp, info@mail-seizo.jp");
+  check(await page.locator("#q-region").inputValue() === "", "地域は未設定のまま");
+  await page.locator("button", { hasText: "追加だけする" }).click();
+  await page.waitForFunction(() => !document.querySelector(".sl-drawer #q-url"));
+  const made = calls.filter((c) => c.kind === "create").at(-1)?.body;
+  check(made?.industry === "製造" && made.service === "PCレンタル" && made.region === null
+    && made.emails === "Info@Mail-Seizo.jp, sales@mail-seizo.jp, info@mail-seizo.jp", "業種・提案サービス・メール（入力のまま）・地域なしで送る");
+
+  // 6：一覧に出る（地域は「未設定」）。追加後に開く企業詳細は閉じておく
+  const row = page.locator('#rows tr[data-id="c-new"]');
+  await row.waitFor();
+  await page.evaluate(() => closeModal());
+  check((await row.innerText()).includes("未設定"), "地域が無い企業は一覧で「未設定」");
+  // 10：キャンペーン列
+  check((await page.locator('#rows tr[data-id="cp-a"]').innerText()).includes("秋の製造業"), "キャンペーン列に名前");
+  // 7：地域「未設定」で絞る（件数つき）
+  const reg = await page.locator("#f-region option").allInnerTexts();
+  check(reg.at(-1) === "未設定（1）", `地域の最後に「未設定（1）」（${reg.at(-1)}）`);
+  const tokyo = reg.find((t) => t.startsWith("東京都"));
+  const total0 = Number((await page.locator("#count").innerText()).replace(/\D/g, ""));
+  const sumRegion = reg.slice(1).reduce((a, t) => a + Number((t.match(/（(\d+)/) || [0, 0])[1]), 0);
+  check(sumRegion === total0, `47都道府県＋未設定の件数の合計＝総件数（${sumRegion}／${total0}・${tokyo}）`);
+  await page.locator("#f-region").selectOption("none");
+  await page.waitForFunction(() => /region=none/.test(location.search) && !document.getElementById("loading"));
+  const ids = () => page.locator("#rows tr[data-id]").evaluateAll((trs) => trs.map((t) => t.dataset.id));
+  check(JSON.stringify(await ids()) === JSON.stringify(["c-new"]), "未設定で絞るとその企業だけ");
+  // 8・9：業種・提案サービスで絞る
+  await page.locator("#f-region").selectOption("");
+  await page.locator("#f-service").selectOption("PCレンタル");
+  await page.waitForFunction(() => /service=/.test(location.search) && !document.getElementById("loading"));
+  check((await ids()).includes("c-new") && (await ids()).length === 1, "提案サービスで絞れる");
+  check((await page.locator("#f-service option").first().innerText()) === "提案サービス：すべて", "フィルタも「提案サービス」");
+  await page.locator("#f-service").selectOption("");
+  await page.locator("#f-industry").selectOption("製造");
+  await page.waitForFunction(() => /industry=/.test(location.search) && !/service=/.test(location.search) && !document.getElementById("loading"));
+  check((await ids()).includes("c-new"), "業種で絞れる");
+
+  // 企業詳細：メールアドレス（複数）
+  await page.locator('#rows tr[data-id="c-new"]').click();
+  await page.locator(".sl-detail").waitFor();
+  await page.waitForFunction(() => (document.querySelector(".sl-detail")?.innerText || "").includes("メールアドレス"));
+  const dtl = await page.locator(".sl-detail").innerText();
+  check(dtl.includes("info@mail-seizo.jp") && dtl.includes("sales@mail-seizo.jp") && !dtl.includes("企業規模"),
+    "企業詳細にメールアドレス（小文字・重複なし）。企業規模は出さない");
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+
+  // 分類の管理：追加 → 新規登録で選べる。非表示 → 選べない
+  await page.locator("button", { hasText: "分類の管理" }).click();
+  await page.locator("#mo-body .sl-table").first().waitFor();
+  await page.fill("#mo-new-service", "Web広告");
+  await page.locator(".mo-add button").nth(1).click();
+  await page.waitForFunction(() => (document.getElementById("mo-body")?.innerText || "").includes("Web広告"));
+  check(calls.some((c) => c.kind === "masters-POST" && c.body.kind === "service" && c.body.label === "Web広告"), "提案サービスを追加");
+  await page.locator('#mo-body tr', { hasText: "ENGER" }).locator("button", { hasText: "非表示" }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll("#mo-body tr")].some((t) => t.innerText.includes("ENGER") && t.innerText.includes("再表示")));
+  check(calls.some((c) => c.kind === "masters-PATCH" && c.body.archived === true), "非表示にする（物理削除しない）");
+  await page.locator('#mo-body tr', { hasText: "不動産" }).locator("button", { hasText: "名前を変更" }).click();
+  await page.fill("#mo-edit", "不動産・建設");
+  await page.locator("#mo-body button", { hasText: "保存" }).click();
+  await page.waitForFunction(() => (document.getElementById("mo-body")?.innerText || "").includes("不動産・建設"));
+  check(calls.some((c) => c.kind === "masters-PATCH" && c.body.label === "不動産・建設"), "名前を変更");
+  await page.locator(".sl-modal-foot button", { hasText: "閉じる" }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll("#f-service option")].some((o) => o.value === "Web広告"));
+  check(true, "閉じると一覧の選択肢に反映");
+  await page.goto(`${BASE}/sales/companies.html?new=1`);
+  await page.locator("#q-url").waitFor();
+  const svc = await page.locator("#q-service option").evaluateAll((os) => os.map((o) => o.value));
+  const ind = await page.locator("#q-industry option").evaluateAll((os) => os.map((o) => o.value));
+  check(svc.includes("Web広告") && !svc.includes("ENGER") && ind.includes("不動産・建設") && !ind.includes("不動産"),
+    "新規登録：追加した値は選べ、非表示にした値は選べない");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 追加要件：アタック画面（地域・NEXT・キャンペーン・ページ送り・フォームアタックは別タブ・状態の保持） ===");
+{
+  const { page, calls, errs } = await openAs({ many: 130, extra: [
+    { id: "a-none", name: "地域なし工業", domain: "none.jp", region: null },
+    { id: "a-camp", name: "キャンペーン工業", domain: "camp2.jp", campaignId: "cp2", campaignName: "冬の不動産" },
+    { id: "a-next", name: "電話する工業", domain: "tel.jp", next: "電話", nextKey: "manual", nextDue: TODAY },
+    { id: "a-recent", name: "先週送った工業", domain: "recent.jp", lastSentAt: new Date(Date.now() - 7 * 86400000).toISOString(), status: "attacked" },
+  ] });
+  await page.goto(`${BASE}/sales/attack.html`);
+  await page.locator("#queue .sl-row").first().waitFor();
+  const first = calls.find((c) => c.kind === "list");
+  check(first?.params.queue === "attack" && first.params.page === "1" && first.params.owner === "mine", "サーバーに queue=attack・1ページ目・自分＋担当なし");
+  check(await page.locator("#queue .sl-row").count() === 100, "1ページ100社（「ほか○社」に隠さない）");
+  const range = (await page.locator("#range").innerText()).trim();
+  check(/^1–100 \/ 13\d件$/.test(range), `件数の表示（${range}）`);
+  check(!(await page.locator("#queue").innerText()).includes("先週送った工業"), "30日以内にアタックした企業は出ない");
+  // 14：次のページ
+  await page.locator("#pager button", { hasText: "次へ" }).click();
+  await page.waitForFunction(() => /page=2/.test(location.search) && (document.getElementById("range")?.innerText || "").startsWith("101–"));
+  check(calls.filter((c) => c.kind === "list").at(-1).params.page === "2", "2ページ目はサーバーから取る");
+  // 11：地域（未設定）
+  await page.locator("#f-region").selectOption("none");
+  await page.waitForFunction(() => /region=none/.test(location.search) && !document.querySelector("#queue.loading"));
+  let names = await page.locator("#queue .sl-row b").allInnerTexts();
+  check(JSON.stringify(names) === JSON.stringify(["地域なし工業"]), `地域「未設定」で絞る（${names.join("/")}）`);
+  check((await page.locator("#f-region option").last().innerText()) === "未設定", "地域の選択肢に未設定");
+  await page.locator("#f-region").selectOption("");
+  // 12：NEXT
+  await page.locator("#f-next").selectOption("manual");
+  await page.waitForFunction(() => /next=manual/.test(location.search) && !/region=/.test(location.search) && !document.querySelector("#queue.loading"));
+  names = await page.locator("#queue .sl-row b").allInnerTexts();
+  check(JSON.stringify(names) === JSON.stringify(["電話する工業"]), `NEXTで絞る（${names.join("/")}）`);
+  await page.locator("#f-next").selectOption("");
+  // 13：キャンペーン
+  await page.locator("#f-campaign").selectOption("cp2");
+  await page.waitForFunction(() => /campaign=cp2/.test(location.search) && !/next=/.test(location.search) && !document.querySelector("#queue.loading"));
+  names = await page.locator("#queue .sl-row b").allInnerTexts();
+  check(JSON.stringify(names) === JSON.stringify(["キャンペーン工業"]), `キャンペーンで絞る（${names.join("/")}）`);
+  check((await page.locator("#queue .sl-row").innerText()).includes("冬の不動産"), "キャンペーン名を出す");
+  // 15・16：フォームアタックは別タブ。元のタブの条件・ページ・並び順はそのまま
+  await page.locator("#f-campaign").selectOption("");
+  await page.fill("#f-q", "企業1");
+  await page.waitForFunction(() => /q=/.test(location.search) && !document.querySelector("#queue.loading"));
+  await page.locator("#f-sort").selectOption("name:asc");
+  await page.waitForFunction(() => /sort=name/.test(location.search) && !document.querySelector("#queue.loading"));
+  await page.locator("#f-industry").selectOption("製造");
+  await page.waitForFunction(() => /industry=/.test(location.search) && !document.querySelector("#queue.loading"));
+  await page.locator("#pager button", { hasText: "2" }).first().click().catch(() => {});
+  await page.waitForTimeout(300);
+  const before = page.url();
+  const firstId = await page.locator("#queue .sl-row").first().getAttribute("data-id");
+  // window.open の引数を記録（新しいタブの中はモックが無いので、開いた URL と noopener をこちら側で見る）
+  await page.evaluate(() => {
+    const open = window.open.bind(window);
+    window.__opened = [];
+    window.open = (...args) => { window.__opened.push(args); return open(...args); };
+  });
+  const [tab] = await Promise.all([page.context().waitForEvent("page"), page.locator("#queue .sl-row button").first().click()]);
+  const opened = await page.evaluate(() => window.__opened);
+  check(tab.url().includes(`/sales/companies.html?attack=${firstId}`) || opened[0]?.[0] === `/sales/companies.html?attack=${firstId}`,
+    `新しいタブでフォームアタック（${opened[0]?.[0]}）`);
+  check(opened[0]?.[1] === "_blank" && /noopener/.test(opened[0]?.[2] || ""), "新しいタブ（_blank）・noopener で開く");
+  await tab.close().catch(() => {});
+  check(page.url() === before, "元のタブは同じ画面のまま（URL が変わらない）");
+  const st = new URL(page.url()).searchParams;
+  check(st.get("q") === "企業1" && st.get("sort") === "name" && st.get("industry") === "製造", "検索語・並び順・業種を URL に保持");
+  check(await page.locator("#f-q").inputValue() === "企業1" && await page.locator("#f-industry").inputValue() === "製造", "入力欄もそのまま");
+  const n0 = calls.filter((c) => c.kind === "list").length;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.waitForTimeout(500);
+  const again = calls.filter((c) => c.kind === "list");
+  check(again.length > n0 && again.at(-1).params.q === "企業1" && again.at(-1).params.industry === "製造" && again.at(-1).params.sort === "name",
+    "戻ってきたら同じ条件で取り直す（送信した企業が外れる）");
+  // URL を直接開いても復元
+  await page.goto(`${BASE}/sales/attack.html?scope=all&region=none&page=1`);
+  await page.locator("#queue .sl-row, #queue .sl-empty").first().waitFor();
+  const r = calls.filter((c) => c.kind === "list").at(-1).params;
+  check(r.region === "none" && !r.owner && await page.locator("#scope button.on").innerText() === "全員", "URL から条件（全員・未設定）を復元");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
@@ -1221,7 +1439,9 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   const tbuf = await readFile(await tpl.path());
   const ttext = tbuf.toString("utf8");
   check(tbuf[0] === 0xef && tbuf[1] === 0xbb && tbuf[2] === 0xbf, "テンプレートは BOM つき UTF-8");
-  check(ttext.replace(/^﻿/, "").split("\r\n")[0] === HEAD, `テンプレートの見出し（${ttext.split("\r\n")[0]}）`);
+  const TPL_HEAD = "企業名,企業サイトURL,問い合わせフォームURL,業種,都道府県,所在地,提案サービス,電話番号,メールアドレス,企業規模,メモ";
+  check(ttext.replace(/^\ufeff/, "").split("\r\n")[0] === TPL_HEAD, `テンプレートの見出し（${ttext.split("\r\n")[0]}）`);
+  check(ttext.includes('"info@example.co.jp,sales@example.co.jp"'), "例の行に複数メールアドレス（カンマ区切り）");
   check(/,製造,鹿児島県,/.test(ttext) && ttext.includes("AI / DX"), "例の行はマスターの値");
 
   // .csv 以外は受けない
@@ -1256,7 +1476,7 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   const [edl] = await Promise.all([page.waitForEvent("download"), page.locator("button", { hasText: "エラー行をCSVでダウンロード" }).click()]);
   const etext = (await readFile(await edl.path())).toString("utf8").replace(/^﻿/, "");
   const elines = etext.trim().split("\r\n");
-  check(elines.length === 2 && elines[0].startsWith(HEAD) && elines[1].startsWith("株式会社ミチ,") && elines[1].includes("未知の業種"),
+  check(elines.length === 2 && elines[0].startsWith(TPL_HEAD) && elines[1].startsWith("株式会社ミチ,") && elines[1].includes("未知の業種"),
     `エラー行だけ（見出しはテンプレートと同じ＋理由）：${elines.length - 1}行`);
 
   await page.locator("#csv-go").click();

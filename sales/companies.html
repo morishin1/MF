@@ -28,6 +28,15 @@
     .sl-pill.ok { background:#e3f1e7; color:#1f6b3a; }
     .sl-pill.ng { background:#fbe7e5; color:#a3261b; }
     @media (max-width:560px) { .csv-tiles { grid-template-columns:repeat(2,1fr); } }
+    /* 分類の管理 */
+    .mo-kind { font-size:13px; font-weight:700; color:#1b2440; margin:14px 0 6px; }
+    .mo-list .sl-table td { padding:7px 10px; font-size:13px; vertical-align:middle; }
+    .mo-list tr.off td:first-child { color:#9a9eab; }
+    .mo-list input { margin:0; font-size:13px; padding:6px 8px; }
+    .mo-add { display:flex; gap:6px; margin-top:8px; }
+    .mo-add input { flex:1; margin:0; font-size:13px; padding:7px 9px; }
+    .mo-btns { text-align:right; white-space:nowrap; }
+    .mo-btns .btn { margin-left:4px; }
 
     .co-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
     .co-filters input, .co-filters select { margin:0; font-size:13px; padding:8px 10px; }
@@ -81,6 +90,8 @@
       <span class="material-symbols-outlined icon-inline">playlist_add</span>URLをまとめて追加</button>
     <button class="btn btn-secondary btn-sm" onclick="openCsvImport()" title="CSVで営業先企業をまとめて登録できます">
       <span class="material-symbols-outlined icon-inline">upload_file</span>CSVから取り込む</button>
+    <button class="btn btn-secondary btn-sm" onclick="openMasters()" title="業種・提案サービスの選択肢を追加・名前変更・非表示">
+      <span class="material-symbols-outlined icon-inline">tune</span>分類の管理</button>
     <button class="btn btn-secondary btn-sm right" id="btn-download" onclick="openDownload()">
       <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
   </div>
@@ -95,7 +106,7 @@
     </select>
     <select id="f-industry" onchange="onFilter()" aria-label="業種"></select>
     <select id="f-region" onchange="onFilter()" aria-label="地域"></select>
-    <select id="f-service" onchange="onFilter()" aria-label="商材"></select>
+    <select id="f-service" onchange="onFilter()" aria-label="提案サービス"></select>
     <select id="f-status" onchange="onFilter()" aria-label="状態"></select>
     <select id="f-owner" onchange="onFilter()" aria-label="担当"></select>
     <select id="f-channel" onchange="onFilter()" aria-label="連絡手段"></select>
@@ -127,7 +138,7 @@
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20260930cm1"></script>
+<script src="../js/api-client.js?v=20260930sx1"></script>
 <script src="../js/layout.js?v=20260929b"></script>
 <script src="../js/sales-layout.js?v=20260928h"></script>
 <script>
@@ -173,7 +184,7 @@
     ["facebook", "Facebook"], ["linkedin", "LinkedIn"], ["phone", "電話"], ["other", "その他"]];
   // 見出し（並べ替えのキーは api 側 lib/sales.js LIST_SORTS と同じ）
   const COLUMNS = [
-    ["企業", "name"], ["業種", "industry"], ["地域", "region"], ["商材", "service"], ["状態", "status"],
+    ["企業", "name"], ["業種", "industry"], ["地域", "region"], ["提案サービス", "service"], ["キャンペーン", null], ["状態", "status"],
     ["最終アタック", "last_sent"], ["連絡手段", "channel"], ["クリック", "clicks"], ["NEXT", "next"], ["担当", "owner"],
   ];
   const COLS = COLUMNS.length + 1;
@@ -289,6 +300,7 @@
   function renderHead() {
     el("head").innerHTML = `<th class="sl-check"><input type="checkbox" id="sel-all" aria-label="このページの企業をすべて選択"
         onclick="toggleAll(this.checked)"></th>` + COLUMNS.map(([label, key]) => {
+      if (!key) return `<th>${esc(label)}</th>`;   // 並べ替えない列（キャンペーン）
       const on = state.sort === key;
       const icon = on ? (state.order === "asc" ? "arrow_upward" : "arrow_downward") : "unfold_more";
       const aria = on ? (state.order === "asc" ? "ascending" : "descending") : "none";
@@ -346,7 +358,7 @@
     return { id: q.get("id"), attack: q.get("attack") };
   }
 
-  // 絞り込みの選択肢。業種・地域・商材は共通マスター、件数はサーバーの集計（いまの条件で数えたもの）。
+  // 絞り込みの選択肢。業種・地域・提案サービスは共通マスター、件数はサーバーの集計（いまの条件で数えたもの）。
   // 各項目の件数は「その項目以外の、いま選んでいる条件」での件数（例：業種＝製造なら、地域は製造の中での件数）
   function renderFilters() {
     const dynamic = Boolean(facets?.dynamic);
@@ -354,7 +366,7 @@
       const hit = (facets?.[kind] || []).find((x) => x.value === v);
       return hit ? hit.n : 0;
     };
-    // 件数が数えられている項目だけ「（n）」を付ける（db/101 が未実行なら、業種・地域・商材だけ以前の件数）
+    // 件数が数えられている項目だけ「（n）」を付ける（db/101 が未実行なら、業種・地域・提案サービスだけ以前の件数）
     const counted = (kind) => dynamic || (["industry", "region", "service"].includes(kind) && facets);
     // legacy：マスター外の旧データ（「イベント企画・制作・運営（1・旧データ）」）
     const label = (kind, v, l, legacy) => (counted(kind)
@@ -366,15 +378,17 @@
         + list.map(([v, l, legacy]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(label(kind, v, l, legacy))}</option>`).join("");
     };
     const m = (arr) => arr.map((v) => [v, v]);
-    // 業種・商材：共通マスター＋件数の集計に出てきたマスター外の値（旧データ。絞り込めるように残す。新規登録では選べない）
-    // 地域：47都道府県だけ（「鹿児島県鹿屋市」はサーバーで鹿児島県にまとめて数えるので、旧値は足さない）
+    // 業種・提案サービス：共通マスター＋件数の集計に出てきたマスター外の値（旧データ・非表示にした値。絞り込めるように残す。
+    // 新規登録では選べない）
+    // 地域：47都道府県＋未設定（「鹿児島県鹿屋市」はサーバーで鹿児島県にまとめて数えるので、旧値は足さない。
+    // 都道府県が取れない企業は「未設定」。47都道府県の件数＋未設定＝総件数）
     const withLegacy = (kind, master) => [...m(master), ...(facets?.[kind] || [])
       .filter((x) => x.value && !master.includes(x.value))
       .sort((a, b) => b.n - a.n || (a.value < b.value ? -1 : 1))
       .map((x) => [x.value, x.value, true])];
     opts("f-industry", "業種：すべて", "industry", withLegacy("industry", masters.industries));
-    opts("f-region", "地域：すべて", "region", m(masters.prefectures));
-    opts("f-service", "商材：すべて", "service", withLegacy("service", masters.services));
+    opts("f-region", "地域：すべて", "region", [...m(masters.prefectures), ["none", "未設定"]]);
+    opts("f-service", "提案サービス：すべて", "service", withLegacy("service", masters.services));
     opts("f-status", "状態：すべて", "status", [...STATUSES, ["ng", "営業禁止"]]);
     // 「自分」の件数は、自分の社員IDの件数
     const ownerList = [["me", "自分"], ["none", "未定"], ...members.map((x) => [x.id, x.display_name])];
@@ -432,8 +446,9 @@
           ${selected.has(c.id) ? "checked" : ""} onclick="event.stopPropagation();toggleOne('${esc(c.id)}', this.checked)"></td>
         <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.domain || "")}</span></td>
         <td>${esc(c.industry || "—")}</td>
-        <td>${esc(c.region || "—")}</td>
+        <td>${c.region ? esc(c.region) : `<span class="sl-muted">未設定</span>`}</td>
         <td>${esc(c.service || "—")}</td>
+        <td>${c.campaignName ? esc(c.campaignName) : `<span class="sl-muted">—</span>`}</td>
         <td>${c.hidden ? statusPill("lost", `非表示：${c.hiddenLabel || ""}`)
           : c.ngReason ? statusPill("excluded", `NG：${c.ngLabel}`) : statusPill(c.status, c.statusLabel)}</td>
         <td>${c.lastSentAt ? `${esc(fmt(c.lastSentAt))}<span class="sl-sub2">${esc([c.lastChannel && c.lastChannel !== "form" ? c.lastChannelLabel : "", c.lastAttackerName].filter(Boolean).join(" ／ "))}</span>` : "—"}</td>
@@ -756,13 +771,15 @@
       <select id="c-industry">${masterOptions(masters.industries, c.industry)}</select>
       <label style="margin-top:10px;">地域（都道府県）</label>
       <select id="c-region">${masterOptions(masters.prefectures, c.region)}</select>
-      <label style="margin-top:10px;">商材（何を提案するか）</label>
+      <label style="margin-top:10px;">提案サービス（何を提案するか）</label>
       <select id="c-service">${masterOptions(masters.services, c.service)}</select>
       <label style="margin-top:10px;">担当</label>
       <select id="c-owner"><option value="">（未定）</option>${memberOpts}</select>
       <label style="margin-top:10px;">所在地</label><input id="c-address" type="text" value="${esc(c.address || "")}">
       <label style="margin-top:10px;">電話番号</label><input id="c-phone" type="text" value="${esc(c.phone || "")}">
-      <label style="margin-top:10px;">企業規模</label><input id="c-size" type="text" placeholder="従業員50名" value="${esc(c.size || "")}">
+      <label style="margin-top:10px;">メールアドレス</label>
+      <input id="c-emails" type="text" inputmode="email" placeholder="info@example.jp, sales@example.jp" value="${esc((c.emails || []).join(", "))}">
+      <p class="sl-muted" style="margin:4px 0 0;">複数はカンマ区切り。保存時に小文字にして、重複を除きます</p>
       <label style="margin-top:10px;">メモ</label><textarea id="c-note" rows="3">${esc(c.note || "")}</textarea>`;
   }
   /**
@@ -780,7 +797,7 @@
       formUrl: el("c-form").value.trim() || null, industry: el("c-industry").value || null,
       region: el("c-region").value || null, service: el("c-service").value || null,
       ownerId: el("c-owner").value || null, address: el("c-address").value.trim() || null,
-      phone: el("c-phone").value.trim() || null, size: el("c-size").value.trim() || null,
+      phone: el("c-phone").value.trim() || null, emails: el("c-emails").value,
       note: el("c-note").value.trim() || null,
     };
   }
@@ -822,7 +839,9 @@
           <select id="q-region">${masterOptions(masters.prefectures, "")}</select>
           <label style="margin-top:10px;">所在地</label><input id="q-address" type="text">
           <label style="margin-top:10px;">電話番号</label><input id="q-phone" type="text">
-          <label style="margin-top:10px;">企業規模</label><input id="q-size" type="text" placeholder="従業員50名">
+          <label style="margin-top:10px;">メールアドレス</label>
+          <input id="q-emails" type="text" inputmode="email" placeholder="info@example.jp, sales@example.jp">
+          <p class="sl-muted" style="margin:4px 0 0;">複数はカンマ区切り</p>
           <label style="margin-top:10px;">メモ</label><textarea id="q-note" rows="3"></textarea>
         </details>
         <div id="q-msg" class="err-text" style="margin:10px 0;"></div>
@@ -880,7 +899,7 @@
     const body = {
       name, siteUrl, service: el("q-service").value || null,
       formUrl: v("q-form"), industry: v("q-industry"), region: v("q-region"), address: v("q-address"),
-      phone: v("q-phone"), size: v("q-size"), note: v("q-note"),
+      phone: v("q-phone"), emails: el("q-emails").value, note: v("q-note"),
     };
     try { localStorage.setItem(SERVICE_KEY, body.service || ""); } catch { /* 無くてよい */ }
     try {
@@ -990,6 +1009,97 @@
     } catch (e) { msg.textContent = errText(e, "追加できませんでした"); btn.disabled = false; }
   }
 
+  // ---- 業種・提案サービスの管理（db/108 gw_sales_master_options） ------------------------
+  //
+  // 追加・名前変更・非表示・再表示。物理削除はしない。非表示にしても、その値を持つ企業はそのまま
+  // （一覧の絞り込みでは「旧データ」として選べる。新規登録・編集では選べなくなる）。
+  // 名前を変えると、その名前を使っている企業も新しい名前になる（件数を先に見せる）
+  let moOptions = [];
+  let moEditing = null;
+  let moChanged = false;
+
+  async function openMasters() {
+    moEditing = null;
+    moChanged = false;
+    openActionModal(`
+      <h2>業種・提案サービスの管理</h2>
+      <p class="sl-sub" style="margin:0 0 4px;">企業追加・編集・一覧の絞り込み・CSV取込で使う選択肢です。</p>
+      <div id="mo-body" class="mo-list"><div class="empty" style="padding:20px;">読み込み中…</div></div>
+      <div id="mo-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="sl-modal-foot"><button class="btn btn-secondary" onclick="closeMasters()">閉じる</button></div>`, 640);
+    await loadMasterOptions();
+  }
+  function closeMasters() {
+    closeAction();
+    if (moChanged) load();   // 選択肢が変わったら一覧（絞り込み・件数）を取り直す
+  }
+  async function loadMasterOptions() {
+    try {
+      const r = await API.getSalesMasters();
+      moOptions = r.options || [];
+      renderMasters(r.kinds || []);
+    } catch (e) {
+      el("mo-body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>${esc(errText(e, "読み込めませんでした"))}</div></div>`;
+    }
+  }
+  function renderMasters(kinds) {
+    el("mo-body").innerHTML = kinds.map((k) => `
+      <div class="mo-kind">${esc(k.label)}</div>
+      <table class="sl-table"><tbody>${moOptions.filter((o) => o.kind === k.key).map((o) => moEditing === o.id ? `
+        <tr data-mo="${esc(o.id)}">
+          <td colspan="2"><input id="mo-edit" type="text" value="${esc(o.label)}" maxlength="100">
+            ${o.used ? `<div class="sl-muted" style="margin-top:4px;">この名前の企業 ${o.used}社も、新しい名前になります</div>` : ""}</td>
+          <td class="mo-btns"><button class="btn btn-primary btn-sm" onclick="saveMasterName('${esc(o.id)}', this)">保存</button>
+            <button class="btn btn-secondary btn-sm" onclick="editMaster(null)">やめる</button></td>
+        </tr>` : `
+        <tr data-mo="${esc(o.id)}" class="${o.archived ? "off" : ""}">
+          <td>${esc(o.label)}${o.archived ? `<span class="sl-sub2">非表示（新規登録では選べません）</span>` : ""}</td>
+          <td class="sl-muted" style="white-space:nowrap;">${o.used}社</td>
+          <td class="mo-btns"><button class="btn btn-secondary btn-sm" onclick="editMaster('${esc(o.id)}')">名前を変更</button>
+            <button class="btn btn-secondary btn-sm" onclick="archiveMaster('${esc(o.id)}', ${!o.archived}, this)">${o.archived ? "再表示" : "非表示"}</button></td>
+        </tr>`).join("")}</tbody></table>
+      <div class="mo-add"><input id="mo-new-${esc(k.key)}" type="text" maxlength="100" placeholder="${esc(k.label)}を追加"
+          onkeydown="if(event.key==='Enter')addMaster('${esc(k.key)}', this.nextElementSibling)">
+        <button class="btn btn-secondary btn-sm" onclick="addMaster('${esc(k.key)}', this)">追加</button></div>`).join("");
+    moKinds = kinds;
+  }
+  let moKinds = [];
+  function editMaster(id) {
+    moEditing = id;
+    el("mo-msg").textContent = "";
+    renderMasters(moKinds);
+    el("mo-edit")?.focus();
+  }
+  async function addMaster(kind, btn) {
+    const input = el(`mo-new-${kind}`);
+    const label = input.value.trim();
+    el("mo-msg").textContent = "";
+    if (!label) { el("mo-msg").textContent = "名前を入力してください"; return; }
+    try {
+      await KPLayout.busy(btn, "追加中…", () => API.addSalesMaster(kind, label));
+      moChanged = true;
+      await loadMasterOptions();
+    } catch (e) { el("mo-msg").textContent = errText(e, "追加できませんでした"); }
+  }
+  async function saveMasterName(id, btn) {
+    el("mo-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateSalesMaster({ id, label: el("mo-edit").value }));
+      moChanged = true;
+      moEditing = null;
+      await loadMasterOptions();
+    } catch (e) { el("mo-msg").textContent = errText(e, "保存できませんでした"); }
+  }
+  async function archiveMaster(id, archived, btn) {
+    el("mo-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, archived ? "非表示中…" : "再表示中…", () => API.updateSalesMaster({ id, archived }));
+      moChanged = true;
+      await loadMasterOptions();
+    } catch (e) { el("mo-msg").textContent = errText(e, "変更できませんでした"); }
+  }
+
   // ---- CSVから取り込む ----------------------------------------------------------
   //
   // 中央モーダル。① CSVを選ぶ（ドラッグ&ドロップ可）→ ② 確認（行ごとに 登録できる／重複／要修正）→ ③「登録する」で登録。
@@ -1001,7 +1111,7 @@
   const CSV_MAX_ROWS = 5000;
   // 見出しの別名（以前の貼り付け取込・一覧CSVの見出しでも読めるように）
   const CSV_ALIASES = { "会社名": "name", "URL": "siteUrl", "サイトURL": "siteUrl", "フォームURL": "formUrl",
-    "地域": "region", "商材": "service" };
+    "地域": "region", "商材": "service", "メール": "emails" };
   let csvImp = null;   // { fileName, encoding, rows, results, counts, committed }
 
   function openCsvImport() {
@@ -1144,7 +1254,7 @@
       ${summary ? `<div class="banner info" style="margin:0 0 10px;"><span class="material-symbols-outlined">check_circle</span><div>${esc(summary)}</div></div>` : ""}
       <div class="csv-tiles">${tiles.map(([l, v]) => `<div><span>${l}</span><b>${num(v)}件</b></div>`).join("")}</div>
       <div class="csv-rows"><table class="sl-table">
-        <thead><tr><th>行</th><th>企業名</th><th>URL</th><th>業種</th><th>都道府県</th><th>商材</th><th>判定</th></tr></thead>
+        <thead><tr><th>行</th><th>企業名</th><th>URL</th><th>業種</th><th>都道府県</th><th>提案サービス</th><th>判定</th></tr></thead>
         <tbody>${shown.map((r) => {
           const [label, cls] = CSV_STATUS[r.status] || [r.status, "sl-pill"];
           return `<tr data-row="${r.row}" data-status="${esc(r.status)}"><td>${r.row}</td><td>${esc(r.name || "")}</td>
@@ -1212,7 +1322,8 @@
     const sample = {
       name: "株式会社サンプル", siteUrl: "https://example.co.jp", formUrl: "https://example.co.jp/contact",
       industry: masters.industries[0] || "", region: "鹿児島県", address: "鹿児島県鹿屋市○○町1-2-3",
-      service: masters.services[0] || "", phone: "0994-00-0000", size: "従業員50名", note: "",
+      service: masters.services[0] || "", phone: "0994-00-0000", emails: "info@example.co.jp,sales@example.co.jp",
+      size: "従業員50名", note: "",
     };
     saveCsv("営業先企業_取込テンプレート.csv", [csvColumns.map((c) => c.label), csvColumns.map((c) => sample[c.key] ?? "")]);
   }
@@ -1334,8 +1445,8 @@
             <div><dt>所在地</dt><dd>${esc(c.address || c.region || "—")}</dd></div>
             <div><dt>電話番号</dt><dd>${esc(c.phone || "—")}</dd></div>
             <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
-            <div><dt>企業規模</dt><dd>${esc(c.size || "—")}</dd></div>
-            <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
+            <div><dt>メールアドレス</dt><dd>${(c.emails || []).length ? c.emails.map((e) => esc(e)).join("<br>") : "—"}</dd></div>
+            <div><dt>提案サービス</dt><dd>${esc(c.service || "—")}</dd></div>
             <div><dt>キャンペーン</dt><dd>${esc(c.campaignName || "—")}</dd></div>
             ${contactRows(c)}
             ${c.clickCount ? `<div><dt>初回クリック</dt><dd>${esc(fmt(c.firstClickAt))}</dd></div>
@@ -1878,7 +1989,7 @@ ${url}
       atk = { company: d.company, detail: d, templates: templates.length ? templates : [DEFAULT_TEMPLATE],
         campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force), channel: "form",
         ackRecent: false, recentOther: null };
-      // 企業の商材と同じサービスのテンプレートを先に選ぶ
+      // 企業の提案サービスと同じサービスのテンプレートを先に選ぶ
       atk.template = atk.templates.find((x) => x.service && x.service === d.company.service) || atk.templates[0];
 
       if (d.company.ngReason) return renderAttackBlocked(`この企業は営業禁止です（${d.company.ngLabel}）。アタックできません。`);
@@ -2008,7 +2119,7 @@ ${url}
           <dl class="sl-grid2" style="margin-bottom:10px;">
             <div><dt>企業名</dt><dd>${esc(c.name)}</dd></div>
             <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
-            <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
+            <div><dt>提案サービス</dt><dd>${esc(c.service || "—")}</dd></div>
             <div><dt>担当</dt><dd>${esc(c.ownerName || "未定")}</dd></div>
           </dl>
           <div class="atk-links">
