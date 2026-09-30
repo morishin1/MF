@@ -116,7 +116,7 @@ async function open(url, { access = { office: true }, viewport = { width: 1440, 
       if (m) mem.put(m[1], m[2], req.postDataBuffer());
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     }
-    return route.fulfill({ status: 200, contentType: "text/html", body: "<html><body style='font-family:sans-serif'>勤務表（テスト用の表示）</body></html>" });
+    return route.fulfill({ status: 200, contentType: "text/html", body: "<html><head><meta charset='utf-8'></head><body style='font-family:sans-serif'>勤務表（テスト用の表示）</body></html>" });
   });
   await page.goto(`${BASE}${url}`);
   return { page, posts, errs, dialogs };

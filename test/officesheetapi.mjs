@@ -181,8 +181,8 @@ await ok("何も無い → none（未提出）。ファイルだけ → submitte
   const b = await get();
   assert.equal(b.body.state, "submitted");
   assert.equal(b.body.files.length, 1);
-  assert.equal(b.body.files[0].verified, false);
-  assert.equal(b.body.files[0].dup.state, "unchecked");
+  assert.equal(b.body.files[0].verified, true, "外部フォームの行は、開いたときに中身を確かめる");
+  assert.equal(b.body.files[0].dup.state, "unique");
   assert.equal(b.body.contract.employeeName, "田中 太郎");
 });
 await ok("他の月・他の人のファイルは、この月のファイルに混ざらない", async () => {
@@ -346,15 +346,48 @@ await ok("同じファイルが別の人・別の月にもある → 409 duplica
   assert.match(ok2.body.files[0].dup.label, /別の月・別の人/);
   assert.equal(events("timesheet.upload")[0].detail.duplicateOther, 1);
 });
-await ok("外部フォームの二重提出（sha256 が空）は、AI読取のとき中身を確かめて、二重を検知できるようになる", async () => {
+await ok("外部フォームの二重提出（sha256 が空）は、画面を開いたとき（AI読取の前）に中身を確かめて検知する", async () => {
   setup();
-  const a = seedFile(); const b = seedFile();
-  withAi(sheetInput());
-  await post("read", { submissionId: a });
-  await post("read", { submissionId: b, overwrite: true });
+  seedFile(); seedFile();
+  assert.ok(rows("gw_submissions").every((s) => !s.sha256), "届いた時点では、どちらも未確認");
   const r = await get();
+  assert.equal(ai.calls.length, 0, "AI は呼んでいない（費用がかからない）");
   assert.deepEqual(r.body.files.map((f) => f.dup.state).sort(), ["duplicate", "original"]);
   assert.ok(r.body.files.every((f) => f.verified));
+  assert.ok(rows("gw_submissions").every((s) => s.sha256 === hashSync(PDF) && s.verified_at));
+});
+await ok("外部フォームの別々のファイルは、それぞれ unique。別の人に同じ中身があれば cross（開いた時点で分かる）", async () => {
+  setup();
+  seedFile(); seedFile({ bytes: PDF2 });
+  assert.deepEqual((await get()).body.files.map((f) => f.dup.state), ["unique", "unique"]);
+  setup();
+  seedFile(); seedFile({ contract: C_BP, employee: E_BP });          // 鈴木さんの10月として、同じ中身
+  const g = await get();
+  assert.equal(g.body.files[0].dup.state, "cross", "開いたとき、同じ月の他の人のファイルも確かめるので、流用がすぐ分かる");
+  assert.equal(g.body.files[0].dup.crossCount, 1);
+  assert.equal((await get(C_BP)).body.files[0].dup.state, "cross", "相手側にも印が付く");
+});
+await ok("確かめられないファイル（置かれていない・PDF／画像でない）は、未確認のまま。画面は開く", async () => {
+  setup();
+  seedFile({ put: false }); seedFile({ bytes: Buffer.from("ただの文字") });
+  const r = await get();
+  assert.equal(r.statusCode, 200);
+  assert.ok(r.body.files.every((f) => !f.verified && f.dup.state === "unchecked"));
+  assert.ok(rows("gw_submissions").every((s) => !s.sha256));
+});
+await ok("確かめるのは、この月の勤務表だけ（他の月のファイルは触らない）。1回に10件まで。確かめ済みは読み直さない", async () => {
+  setup();
+  seedFile({ month: "2026-09" });
+  for (let i = 0; i < 12; i++) seedFile({ bytes: Buffer.concat([PDF, Buffer.from([i])]) });
+  const before = mem.state.log.filter((l) => l.table === "gw_submissions" && l.op === "update").length;
+  await get();
+  const verified = rows("gw_submissions").filter((s) => s.sha256);
+  assert.equal(verified.length, 10, "10件まで");
+  assert.ok(!rows("gw_submissions").find((s) => s.target_month === "2026-09").sha256, "他の月は確かめない");
+  await get();
+  assert.equal(rows("gw_submissions").filter((s) => s.sha256).length, 12, "残りは次に開いたときに確かめる");
+  const n = mem.state.log.filter((l) => l.table === "gw_submissions" && l.op === "update").length - before;
+  assert.equal(n, 12, "確かめ済みの行を、もう一度書かない");
 });
 
 console.log("\n— AI読取（下書きを作るだけ） —");

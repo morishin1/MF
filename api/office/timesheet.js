@@ -95,6 +95,7 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const q = new URL(req.url, "http://localhost").searchParams;
       const k = await keyOf(req, ctx, { siteContractId: q.get("contract"), month: q.get("month") });
+      await verifyPending(req, ctx, k);
       return json(res, 200, await payload(req, ctx, k));
     }
     const body = (await readJson(req)) || {};
@@ -165,6 +166,33 @@ async function loadState(req, ctx, k) {
     carryIn = evaluateSheet((pd || []).map(normalizeDayRow), { month: prevMonth }).summary.spillMinutes;
   }
   return { subs: subs || [], sheet, days: days || [], termsRows: termsRows || [], dup, carryIn };
+}
+
+/**
+ * 外部提出フォームの行は、sha256 が空（未確認）で届く。画面を開いたときに、中身を確かめて埋める。
+ * 費用のかかる AI読取の前に、同じファイルの二重提出・流用に気づけるようにするため。
+ * 置かれていない・PDF／JPEG／PNG でない・10MB超のファイルは、そのまま（未確認のまま）。失敗しても画面は開く
+ */
+async function verifyPending(req, ctx, k) {
+  try {
+    // この月の、未確認の勤務表。開いている本人のぶんを先に、あとは同じ月の他の人のぶんも（別の人への流用に気づくため）。
+    // 1回に確かめるのは10件まで。確かめたファイルは、二度と読み直さない
+    const all = await must(userClient(req).from("gw_submissions").select("id, storage_path, employee_id, site_contract_id")
+      .eq("tenant_id", ctx.tenantId).eq("target_month", k.month).eq("kind", "timesheet").is("sha256", null).limit(40));
+    const mine = (r) => r.employee_id === k.employeeId && r.site_contract_id === k.siteContractId;
+    const pending = [...(all || []).filter(mine), ...(all || []).filter((r) => !mine(r))].slice(0, 10);
+    const sb = admin();
+    for (const s of pending) {
+      const dl = await sb.storage.from(BUCKET).download(s.storage_path);
+      if (dl.error || !dl.data) continue;
+      const bytes = Buffer.from(await dl.data.arrayBuffer());
+      if (!EXT[detectDoc(bytes)] || bytes.length > MAX_BYTES) continue;
+      await must(sb.from("gw_submissions").update({ sha256: crypto.createHash("sha256").update(bytes).digest("hex"), verified_at: nowIso() })
+        .eq("id", s.id).eq("tenant_id", ctx.tenantId));
+    }
+  } catch (e) {
+    console.error("[office/timesheet] verify failed:", e?.message || e);
+  }
 }
 
 const dedupeById = (rows) => [...new Map(rows.map((r) => [r.id, r])).values()];

@@ -2,6 +2,7 @@
 
 **どの SQL も、まだ本番に適用していません。** `db/099`〜`db/103` は作成済み（未適用）、104 以降は案です。
 要件は `office_monthly_operations_requirements.md`、調査結果は Phase 1 のレポートにあります。
+**適用前のチェックは `db/check_office_phase3.sql`（読むだけ）、本番投入前の手順・1人分のE2E・後始末は `docs/office-phase3-runbook.md`** にあります。
 
 - Phase 0（権限・MFA・月末日の不具合）：完了
 - Phase 2（`/office` の月次ダッシュボード）：完了
@@ -57,7 +58,7 @@
 | 106 | 7 | 支払 | 案 |
 | 107 | 8 | 月次確定（任意） | 案 |
 
-**適用の順番**：099 → 100 → 101 → 102 → 103 → アプリのデプロイ。
+**適用の順番**：099 → 100 → 101 → 102 → 103 → アプリのデプロイ。**1本流すごとに `db/check_office_phase3.sql` で確認する**（前提が足りないと、途中で止まる）。
 
 - 100 を先に流さないと、責任者・経理は `/office` を開けても一覧が空になる（`/api/office` は「権限の設定が未適用」と画面に出す）
 - 101〜103 を流さずにデプロイしても、`/office` の一覧は Phase 2 のまま出る（`phase3.ready = false` と案内を出す）。勤務表の画面・契約条件の画面は、表が無ければ 503 と SQL の案内を返す
@@ -186,13 +187,20 @@ confirmed（人が「確定する」を押したときだけ）
 ### 6.7 同じファイルの検知
 
 - 中身の sha256 で見つける。同じ人・月・契約に同じ中身が2つ → 二重提出（Office のアップロードでは登録しない）。別の人・別の月・別の契約にも同じ中身 → 流用の疑い（承知のうえで登録し、両方に警告）
-- 外部フォームの行は sha256 が空（未確認）。AI読取・ファイル閲覧のときに、中身を確かめて埋める。外部フォームは「行を作ってからアップロードする」順なので、ファイルが届いていない行もあり得る（読取のとき `file_missing` と案内）
+- 外部フォームの行は sha256 が空（未確認）で届く。**勤務表の画面を開いたとき**（AI読取の前）と、AI読取のときに、中身を確かめて埋める（同じ月の未確認の勤務表を、1回に10件まで。確かめたものは読み直さない）。これで、費用のかかる AI読取の前に、二重提出・流用に気づける
+- 外部フォームは「行を作ってからアップロードする」順なので、ファイルが届いていない行もあり得る（そのまま未確認。読取のとき `file_missing` と案内）
 - 一覧では、その月に届いたものの中だけで判定する（月をまたぐ照合は、勤務表の画面で行う）
 
-### 6.8 テスト
+### 6.8 対応するファイル
 
-Node：`officetimetest`（33）・`officecalctest`（41）・`officeaitest`（36）・`officetimesheettest`（43）・`officesheetapi`（72）・`officetermsapi`（27）・`officetest`（47）・`officeapi`（52）。
-UI：`officesheetui`（本物の API ハンドラ＋偽DB＋偽AIにつないで、勤務表の確認・確定・アップロード・契約条件・一覧を通す）。
+**PDF・JPEG・PNG だけ**（外部提出フォームと同じ。**HEIC などには対応せず、増やさない**）。形式は拡張子ではなく先頭のバイト列で決める。登録は 10MB まで。AI読取は、PDF は `document`、JPEG・PNG は `image` として渡す（画像は 5MB まで＝AI 側の上限。超えると案内して手入力へ）。
+
+### 6.9 テスト
+
+Node：`officetimetest`（33）・`officecalctest`（41）・`officeaitest`（36）・`officetimesheettest`（43）・`officesheetapi`（75）・`officetermsapi`（27）・`officetest`（47）・`officeapi`（52）・`officereadcheck`（7）。
+UI：`officesheetui`（本物の API ハンドラ＋偽DB＋偽AIにつないで、勤務表の確認・確定・アップロード・契約条件・一覧を通す）、
+**`officee2e`（Phase 3 の完成条件：アップロード → 重複チェック → AI読取 → 左右で確認 → 誤読を修正 → 稼働確定 → 月間稼働時間 → `/office` 一覧が「請求作成待ち」へ進む。外部提出フォーム経由の二重提出、PDF・JPEG・PNG も通す）**。
+実 PostgreSQL 16 での migration 検証（前提なし／099・100 適用済み＋既存データ／101〜103 適用後）は `db/check_office_phase3.sql` と `docs/office-phase3-runbook.md` §1。
 すべて手計算の期待値。**変異テスト**（コードを壊して、テストが落ちるかを確認）で検出力を確かめた。`test/_memdb.mjs` は、一意制約・NOT NULL・CHECK・RLS（ユーザー権限の書き込みは拒否）・Storage を真似た偽DB。
 
 ## 7. 既存の月初作業（admin-month-start・cron・提出フォーム）への影響
