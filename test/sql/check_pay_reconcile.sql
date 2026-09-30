@@ -127,8 +127,8 @@ select pg_temp.expect('A3 BP are counted separately: 社員11', pg_temp.n_of('r1
 select pg_temp.expect('A4 contract has wage (= CSV base reference exists): 1,2,3,4,6,7,12 = 7', pg_temp.n_of('r1', '契約に給与あり'), 7);
 select pg_temp.expect('A5 contract has no wage (= CSV base is empty): 社員5, 社員9', pg_temp.n_of('r1', '契約に給与なし'), 2);
 select pg_temp.ok('A5b the names are shown', pg_temp.detail_of('r1', '契約に給与なし') like '社員5、社員9%');
-select pg_temp.expect('A6 hr_pay present: 社員2, 社員3', pg_temp.n_of('r1', '内定の給与（gw_hr_pay）あり'), 2);
-select pg_temp.expect('A7 hr_pay absent: 9 - 2 = 7', pg_temp.n_of('r1', '内定の給与（gw_hr_pay）なし'), 7);
+select pg_temp.expect('A6 hr_pay present: 社員2, 社員3', pg_temp.n_of('r1', '内定の給与あり'), 2);
+select pg_temp.expect('A7 hr_pay absent: 9 - 2 = 7', pg_temp.n_of('r1', '内定の給与なし'), 7);
 select pg_temp.expect('A8 declared commute (= CSV commute reference exists): 社員1, 社員2', pg_temp.n_of('r1', '通勤手当の届出あり'), 2);
 select pg_temp.expect('A9 no declared commute: 9 - 2 = 7', pg_temp.n_of('r1', '通勤手当の届出なし'), 7);
 select pg_temp.expect('A10 registered in pay management (current record): 社員2,3,4,12', pg_temp.n_of('r1', '給与管理に登録済み'), 4);
@@ -145,7 +145,7 @@ select pg_temp.ok('B22b reasons are shown, not amounts', pg_temp.detail_of('r1',
   and pg_temp.detail_of('r1', '給与管理の基本給が') like '%社員3（金額が違う）%');
 select pg_temp.expect('B23 commute differs from declared: 社員2', pg_temp.n_of('r1', '給与管理の通勤手当が'), 1);
 select pg_temp.ok('B23b reason', pg_temp.detail_of('r1', '給与管理の通勤手当が') like '社員2（金額が違う）%');
-select pg_temp.expect('B24 hr_pay differs from contract: 社員3', pg_temp.n_of('r1', '内定の給与（gw_hr_pay）が'), 1);
+select pg_temp.expect('B24 hr_pay differs from contract: 社員3', pg_temp.n_of('r1', '内定の給与が、契約'), 1);
 select pg_temp.expect('B25 two or more active contracts: 社員6', pg_temp.n_of('r1', '有効な契約が2件以上'), 1);
 select pg_temp.expect('B26 contract type unsupported: 社員7', pg_temp.n_of('r1', '契約の賃金の種別が'), 1);
 select pg_temp.expect('B27 wage_note has text: 社員7, 社員9', pg_temp.n_of('r1', '契約の「手当・控除など」'), 2);
@@ -216,3 +216,25 @@ begin read only;
 :detail
 rollback;
 select pg_temp.ok('RO1 both scripts ran inside read-only transactions (an error above would be counted by the runner)', true);
+
+-- ---- db/100 の前（gw_hr_pay が無い）でも、内定の給与を「元の列」から数える -----------------------------
+-- 社員2: 応募者の列に給与（契約と同じ）。社員3: 合格通知の列に給与（契約と違う）
+drop table public.gw_hr_pay;
+update public.gw_hr_applicants set wage_type = '月給', wage_amount = 300000 where id = 'b6b00002-0000-0000-0000-000000000000';
+insert into public.gw_hr_offers(tenant_id,applicant_id,version,wage_type,wage_amount,token_hash,expires_at)
+values ('66666666-6666-6666-6666-666666666666','b6b00003-0000-0000-0000-000000000000',1,'月給',270000,'h1', now() + interval '7 days'),
+       ('66666666-6666-6666-6666-666666666666','b6b00003-0000-0000-0000-000000000000',2,'月給',280000,'h2', now() + interval '7 days');
+create temp table r5 as :body;
+select pg_temp.expect('H1 without gw_hr_pay: the 内定 rows are not 表なし; 内定あり: 社員2 (applicant column), 社員3 (offer column)', pg_temp.n_of('r5', '内定の給与あり'), 2);
+select pg_temp.expect('H2 内定なし = (9 + 35 added above) - 2', pg_temp.n_of('r5', '内定の給与なし'), 42);
+select pg_temp.expect('H3 the newest offer (v2) is compared with the contract: 社員3 differs', pg_temp.n_of('r5', '内定の給与が、契約'), 1);
+select pg_temp.ok('H3b the name and reason, no amounts', pg_temp.detail_of('r5', '内定の給与が、契約') like '社員3（金額が違う）%');
+select pg_temp.ok('H4 no amounts anywhere (also in this state)', (select count(*) = 0 from r5 where ("項目" || ' ' || "状態" || ' ' || "詳細") ~ '[0-9]{4,}'));
+select pg_temp.ok('H5 the gw_hr_pay reference row says 表なし (it is not there)', pg_temp.state_of('r5', '内定の給与専用の表') = '（表なし）');
+create temp table d5 as :detail;
+select pg_temp.ok('H6 the detail shows the original-column amounts: 社員2 300000 (applicant), 社員3 280000 (newest offer)',
+  (select "内定の給与の金額" = 300000 from d5 where "氏名" = '社員2') and (select "内定の給与の金額" = 280000 from d5 where "氏名" = '社員3'));
+begin read only;
+:body
+rollback;
+select pg_temp.ok('H7 also runs read-only without gw_hr_pay', true);

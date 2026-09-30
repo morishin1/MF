@@ -9,7 +9,7 @@
 -- ■ 出るもの（1人1行。BP・退職者は除く。入社準備中は含む）
 --   氏名・在籍状態
 --   契約: 種別・金額・注記の有無・有効な契約の件数（いちばん新しい1件を見る）
---   内定の給与（gw_hr_pay）: 種別・金額（オファー単位を優先）
+--   内定の給与: 種別・金額（gw_hr_pay があればそれ、無ければ元の列＝合格通知の新しい版 → 応募者の条件）
 --   本人の届出の定期代
 --   給与管理（いま適用中の記録）: 適用開始日・種別・基本給・手当の合計・通勤手当
 --   判定: 未登録 / 適用前のみ / 一致 / 基本給が契約と違う / 通勤手当が届出と違う
@@ -23,7 +23,9 @@ has as (
   select
     to_regclass('public.gw_contracts')        is not null as contracts,
     to_regclass('public.gw_onboard_profiles') is not null as profiles,
-    to_regclass('public.gw_hr_applicants')    is not null and to_regclass('public.gw_hr_pay') is not null as hr_pay,
+    to_regclass('public.gw_hr_applicants')    is not null as applicants,
+    to_regclass('public.gw_hr_offers')        is not null as offers,
+    to_regclass('public.gw_hr_pay')           is not null as hr_pay,
     to_regclass('public.gw_compensations')    is not null as comp,
     exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'gw_hr_applicants'
              and column_name = 'employee_id') as applicant_link,
@@ -54,11 +56,20 @@ q as (
                                 from public.gw_contracts k where k.employee_id = e.id and k.status = 'active'
                                order by k.created_at desc limit 1) c on true $s$
        else $s$left join (select null::text as wage_type, null::numeric as wage_amount, null::boolean as has_note, null::bigint as n where false) c on false $s$ end
-    -- 内定の給与（gw_hr_pay。オファー単位を優先）
-    || case when h.hr_pay and h.applicant_link then
+    -- 内定の給与（gw_hr_pay があればそれ、無ければ元の列＝合格通知の新しい版 → 応募者の条件）
+    || case when h.applicants and h.applicant_link then
          $s$left join public.gw_hr_applicants a on a.employee_id = e.id
-            left join lateral (select p.wage_type, p.wage_amount from public.gw_hr_pay p where p.applicant_id = a.id
-                                order by (p.offer_id is not null) desc, p.updated_at desc limit 1) o on true $s$
+            left join lateral (select w.wage_type, w.wage_amount from (
+                 select null::text as wage_type, null::numeric as wage_amount, 9 as pr, 0 as sub where false$s$
+         || case when h.hr_pay then $s$
+                 union all select p.wage_type, p.wage_amount, 1, (p.offer_id is not null)::int from public.gw_hr_pay p
+                            where p.applicant_id = a.id and (p.wage_type is not null or p.wage_amount is not null)$s$ else '' end
+         || case when h.offers then $s$
+                 union all select oo.wage_type, oo.wage_amount, 2, oo.version from public.gw_hr_offers oo
+                            where oo.applicant_id = a.id and (oo.wage_type is not null or oo.wage_amount is not null)$s$ else '' end
+         || $s$
+                 union all select a.wage_type, a.wage_amount, 3, 0 where a.wage_type is not null or a.wage_amount is not null
+               ) w order by w.pr, w.sub desc limit 1) o on true $s$
        else $s$left join (select null::text as wage_type, null::numeric as wage_amount where false) o on false $s$ end
     -- 本人の届出の定期代
     || case when h.profiles then

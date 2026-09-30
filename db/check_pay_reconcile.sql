@@ -60,6 +60,28 @@ parts as (
          from (select label, row_number() over (order by label) as rn from ( %s ) q(label)) r$p$ as wrap
   from has h
 ),
+-- 内定の給与の読み先（応募者 a に対して）。gw_hr_pay（db/100 のあと）と、元の列（応募者・合格通知）の、どちらも見る。
+--   have   … 給与が「ある」条件（どれかにあれば ある）
+--   newest … 給与を1件に絞る（gw_hr_pay のオファー単位 → 元のオファー列の新しい版 → 応募者の条件、の順）
+ofr as (
+  select
+    'false'
+      || case when h.hr_pay then $o$ or exists (select 1 from public.gw_hr_pay p where p.applicant_id = a.id and (p.wage_type is not null or p.wage_amount is not null))$o$ else '' end
+      || case when h.offers then $o$ or exists (select 1 from public.gw_hr_offers o where o.applicant_id = a.id and (o.wage_type is not null or o.wage_amount is not null))$o$ else '' end
+      || $o$ or a.wage_type is not null or a.wage_amount is not null$o$ as have,
+    $o$select w.wage_type, w.wage_amount from (
+         select null::text as wage_type, null::numeric as wage_amount, 9 as pr, 0 as sub where false$o$
+      || case when h.hr_pay then $o$
+         union all select p.wage_type, p.wage_amount, 1, (p.offer_id is not null)::int from public.gw_hr_pay p
+                    where p.applicant_id = a.id and (p.wage_type is not null or p.wage_amount is not null)$o$ else '' end
+      || case when h.offers then $o$
+         union all select o.wage_type, o.wage_amount, 2, o.version from public.gw_hr_offers o
+                    where o.applicant_id = a.id and (o.wage_type is not null or o.wage_amount is not null)$o$ else '' end
+      || $o$
+         union all select a.wage_type, a.wage_amount, 3, 0 where a.wage_type is not null or a.wage_amount is not null
+       ) w order by w.pr, w.sub desc limit 1$o$ as newest
+  from has h
+),
 -- 定義: (番号, 区分, 項目, 種類, 必要な表が揃っているか, 中身の SQL, 表が無いときの言い方, 注記)
 --   種類 i … 参考の件数（ℹ）／ w … 0 件が正常（✅ / ⚠）
 --   中身の SQL は、{SC}（対象社員の条件）と {TODAY}（今日）を使える。1行 = 1人。1列だけ返す（氏名、または 氏名（理由）。件数だけなら空文字）
@@ -95,17 +117,16 @@ def(seq, sect, item, kind, need, q_sql, missing_text, note) as (
          '有効な契約が無い、または賃金が未入力'
     from has h
   union all
-  select 6, 'A', '内定の給与（gw_hr_pay）あり', 'i', h.emp and h.hr_pay and h.applicants and h.applicant_link,
+  select 6, 'A', '内定の給与あり（gw_hr_pay または、元の列＝応募者・合格通知）', 'i', h.emp and h.applicants and h.applicant_link,
          $q$select ''::text from public.gw_employees e join public.gw_hr_applicants a on a.employee_id = e.id
-             where {SC} and exists (select 1 from public.gw_hr_pay p where p.applicant_id = a.id and (p.wage_type is not null or p.wage_amount is not null))$q$,
-         '（表なし）', '入社前の条件。応募者から入社した人だけにある'
+             where {SC} and ($q$ || (select ofr.have from ofr) || $q$)$q$,
+         '（表なし）', '入社前の条件。応募者から入社した人だけにある。db/100 の前は元の列（応募者・合格通知）、あとは gw_hr_pay を見る（どちらかにあれば「あり」）'
     from has h
   union all
-  select 7, 'A', '内定の給与（gw_hr_pay）なし', 'i', h.emp and h.hr_pay and h.applicants and h.applicant_link,
+  select 7, 'A', '内定の給与なし（gw_hr_pay にも、元の列にも無い）', 'i', h.emp and h.applicants and h.applicant_link,
          $q$select ''::text from public.gw_employees e
-             where {SC} and not exists (select 1 from public.gw_hr_applicants a join public.gw_hr_pay p on p.applicant_id = a.id
-                                         where a.employee_id = e.id and (p.wage_type is not null or p.wage_amount is not null))$q$,
-         '（表なし）', '応募者を経ずに登録された人・db/100 のあと gw_hr_pay へ移っていない人は「なし」になる（参考）'
+             where {SC} and not exists (select 1 from public.gw_hr_applicants a where a.employee_id = e.id and ($q$ || (select ofr.have from ofr) || $q$))$q$,
+         '（表なし）', '応募者を経ずに登録された人は「なし」になる（参考）'
     from has h
   union all
   select 8, 'A', '通勤手当の届出あり（＝給与CSVの「通勤手当（月額）」の参照元あり）', 'i', h.emp and h.profiles,
@@ -182,12 +203,11 @@ def(seq, sect, item, kind, need, q_sql, missing_text, note) as (
          '（給与管理の表なし）', '上限・非課税枠・定額支給などで違うことは普通にある。確認のうえ、給与管理の値を正とする（給与CSVの「通勤手当」は届出から出る）'
     from has h
   union all
-  select 24, 'B', '内定の給与（gw_hr_pay）が、契約の賃金と違う（参考）', 'w', h.emp and h.contracts and h.hr_pay and h.applicants and h.applicant_link,
+  select 24, 'B', '内定の給与が、契約の賃金と違う（参考。gw_hr_pay または元の列）', 'w', h.emp and h.contracts and h.applicants and h.applicant_link,
          $q$select e.display_name || '（' || case when hp.wage_type is distinct from c.wage_type then '種別が違う' else '金額が違う' end || '）'
               from public.gw_employees e
               join public.gw_hr_applicants a on a.employee_id = e.id
-              join lateral (select p.wage_type, p.wage_amount from public.gw_hr_pay p where p.applicant_id = a.id
-                             order by (p.offer_id is not null) desc, p.updated_at desc limit 1) hp on true
+              join lateral ($q$ || (select ofr.newest from ofr) || $q$) hp on true
               join lateral (select k.wage_type, k.wage_amount from public.gw_contracts k where k.employee_id = e.id and k.status = 'active'
                              order by k.created_at desc limit 1) c on c.wage_amount is not null
              where {SC} and hp.wage_amount is not null
@@ -271,7 +291,7 @@ ref(seq, item, n, note) as (
 c(seq, item, state, detail) as (values
   (61, '現在の給与額（基本給・手当・通勤手当）', '正: gw_compensations（給与管理）', '適用開始日つきの履歴。追記だけ。/keiei だけが書く'),
   (62, '契約上の賃金', '参照: gw_contracts / 署名済みPDF', '書面が言っていること。記録のたびに写しを残し、食い違いを見せる。/keiei は契約へ書かない'),
-  (63, '内定時の給与', '参照: gw_hr_pay（入社前）', '自動では移さない。入社時に、経営者が確認して取り込む'),
+  (63, '内定時の給与', '参照: gw_hr_pay（入社前。db/100 の前は元の列）', '自動では移さない。入社時に、経営者が確認して取り込む'),
   (64, '本人が届け出た定期代', '参照: gw_onboard_profiles.commute_cost', '会社が決めた通勤手当ではない'),
   (65, '労働条件通知書の「賃金」欄・署名済みPDF', '参照: gw_doc_orders / gw_sign_requests', '文字列。過去の書面は不変の証跡'),
   (66, '給与CSV（MF給与の取込用）', '出力: lib/payroll-csv.js', 'いまは契約（基本給）と届出（通勤手当）を読む。給与管理を読む形への切り替えは、差分が 0 になってから、別の承認で'),
