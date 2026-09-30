@@ -168,8 +168,14 @@
           <div><div class="k">次の給与レンジ</div><div class="v">${esc(next?.salaryRange || "—")}</div></div>` : ""}
         </div>
         ${next ? `<p class="cv-note" style="margin-top:0;">※目安であり、昇給を保証するものではありません</p>` : ""}
-        ${p && p.total ? `<div class="k" style="font-size:12px;font-weight:700;color:var(--muted);margin-top:10px;">あと必要なこと　${p.achieved} / ${p.total}</div>
-          <ul class="cv-left">${left.map((r) => `<li><span class="cv-mark ${esc(r.status)}">${r.status === "in_progress" ? "△" : "□"}</span> ${esc(r.title)}</li>`).join("")}</ul>` : ""}
+        ${p && p.total ? `
+          <div class="cv-grid" style="margin-top:10px;">
+            <div><div class="k">正式評価</div><div class="v">${p.achieved} / ${p.total}</div></div>
+            ${d.selfCheck ? `<div><div class="k">本人自己チェック</div><div class="v">${d.selfCheck.checked} / ${d.selfCheck.total}</div></div>` : ""}
+          </div>
+          <div class="k" style="font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 2px;">あと必要なこと（正式評価）</div>
+          <ul class="cv-left">${left.map((r) => `<li>・${esc(r.title)}${r.status === "in_progress" ? "<small>（取り組み中）</small>" : ""}</li>`).join("")}</ul>
+          ${d.selfCheck ? `<p class="cv-note" style="margin-top:8px;"><a href="#sec-selfcheck">自分では、できると思う項目にチェックする →</a></p>` : ""}` : ""}
         ${d.career ? `
         <div class="cv-grid" style="margin-top:12px;">
           <div><div class="k">1年後</div><div style="font-size:13.5px;">${esc(d.career.oneYearTargetNote || d.horizon?.oneYear?.goal || "—")}</div></div>
