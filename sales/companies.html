@@ -422,7 +422,7 @@
       const filtered = LIST_KEYS.some((k) => !["page", "sort", "order", "visibility"].includes(k) && state[k]);
       el("rows").innerHTML = `<tr><td colspan="${COLS}" class="empty">${filtered ? "対象がありません。"
         : state.visibility === "hidden" ? "非表示の企業はありません。"
-        : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
+        : "まだ企業がありません。「企業を追加」か「CSVから取り込む」から始めてください。"}</td></tr>`;
       renderSelection();
       return;
     }
