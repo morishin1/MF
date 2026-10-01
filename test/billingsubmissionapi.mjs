@@ -18,6 +18,7 @@ import { dirname, join as _join } from "node:path";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(_HERE);
 const atRoot = (p) => _join(ROOT, p);
+const { pgDateError } = await import("./_pgdate.mjs");
 
 // ---- 偽の Supabase --------------------------------------------------------
 const db = { rows: {} };
@@ -32,18 +33,21 @@ function table(name) {
       if (op === "in") return Array.isArray(v) ? v.includes(r[k]) : r[k] === v;
       if (op === "is") return v === null ? r[k] == null : r[k] === v;
       if (op === "lte") return r[k] <= v;
+      if (op === "lt") return r[k] < v;
       return true;
     }));
     if (order) out = [...out].sort((a, b) => (a[order] < b[order] ? 1 : -1));
     return out;
   };
-  const e = () => (db.missing === name ? { code: "PGRST205", message: `Could not find the table '${name}'` } : null);
+  // 実DBと同じく、実在しない日付（2026-09-31 など）の比較は 22008 で落ちる
+  const e = () => (db.missing === name ? { code: "PGRST205", message: `Could not find the table '${name}'` } : pgDateError(f));
   const q = {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
     is(k, v) { f.push(["is", k, v]); return q; },
     lte(k, v) { f.push(["lte", k, v]); return q; },
+    lt(k, v) { f.push(["lt", k, v]); return q; },
     order(col) { order = col; return q; },
     limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: e() ? null : copy(rows()[0]) || null, error: e() }),
@@ -220,6 +224,43 @@ await ok("契約期間が終わっていれば対象外", async () => {
   db.rows.gw_site_contracts[0].period_to = "2026-08-31";
   const r = await getList("2026-09");
   assert.equal(r.body.rows.length, 0);
+});
+
+// 月末日の境界。「その月の31日」を日付として DB に渡すと、30日までの月・2月は
+// 実DBが 22008 で落とす（偽DBも _pgdate.mjs で同じ落ち方をする）
+for (const month of ["2026-09", "2026-11", "2027-02", "2028-02"]) {
+  await ok(`31日が無い月（${month}）でも、一覧が出る`, async () => {
+    setup();
+    const r = await getList(month);
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(r.body.rows.length, 1);
+  });
+}
+
+await ok("月末日に始まる契約は対象、翌月1日に始まる契約は対象外（9月）", async () => {
+  setup();
+  db.rows.gw_site_contracts = [
+    { id: "sc-last", tenant_id: "t1", employee_id: "emp-member", engagement_kind: "bp",
+      site_company: "顧客A社", period_from: "2026-09-30", period_to: null },
+    { id: "sc-next", tenant_id: "t1", employee_id: "emp-member", engagement_kind: "bp",
+      site_company: "顧客B社", period_from: "2026-10-01", period_to: null },
+  ];
+  const r = await getList("2026-09");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.rows.map((x) => x.siteContractId), ["sc-last"]);
+});
+
+await ok("12月は翌年1月1日を境に絞る（年をまたぐ）", async () => {
+  setup();
+  db.rows.gw_site_contracts = [
+    { id: "sc-dec", tenant_id: "t1", employee_id: "emp-member", engagement_kind: "bp",
+      site_company: "顧客A社", period_from: "2026-12-31", period_to: null },
+    { id: "sc-jan", tenant_id: "t1", employee_id: "emp-member", engagement_kind: "bp",
+      site_company: "顧客B社", period_from: "2027-01-01", period_to: null },
+  ];
+  const r = await getList("2026-12");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.rows.map((x) => x.siteContractId), ["sc-dec"]);
 });
 
 await ok("一般メンバーは使えない", async () => {

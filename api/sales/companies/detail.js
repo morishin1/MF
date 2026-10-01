@@ -2,6 +2,7 @@
 // PATCH /api/sales/companies/detail { id, ... }
 //         … 企業本体を更新（基本情報・ステータス・NEXT・担当・NG）
 //         { id, action: "followed" } … クリックに対応した（未対応クリックから外す）
+//         { id, contacts: { email, … } } … 連絡先だけを直す（営業履歴は増やさない。例：商談の予約照合用メール）
 // POST  /api/sales/companies/detail { id, kind, detail?, occurredAt? }
 //         … 営業履歴に出来事を足す（フォロー・電話・メール・返信あり・商談・メモ）
 // POST  /api/sales/companies/detail { id, action: "contact", replied, replyChannel?, contactChannel?,
@@ -24,12 +25,14 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, shapeApproach, aggregateApproaches, nextFor, hasUnhandledClick,
   recentApproach, statusRank, todayJst, isUuid, autoNext,
-  STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, SERVICES, INDUSTRIES, RECENT_DAYS,
+  STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, RECENT_DAYS,
   SEND_CHANNELS, REPLY_CHANNELS, CONTACT_CHANNELS, REPLY_CHANNEL_KEYS, CONTACT_CHANNEL_KEYS, HIDE_REASONS,
   SEND_FAIL_REASONS, channelLabel, normalizeContacts, mergeContacts,
 } from "../../../lib/sales.js";
 import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
 import { DEAL_FIELDS, shapeDeal } from "../../../lib/sales-deals.js";
+import { loadMasters } from "../../../lib/sales-master.js";
+import { companyEmails } from "../../../lib/sales-timerex.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 // 「最終連絡」に数えない出来事（こちらの記録の整理で、相手とのやり取りではないもの）
@@ -69,7 +72,7 @@ async function one(req, res, sb, ctx) {
   }
   if (!c) return json(res, 404, { error: "not_found" });
 
-  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }, { data: deals }] = await Promise.all([
+  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }, { data: deals }, masters] = await Promise.all([
     sb.from("gw_sales_approaches")
       .select("id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
         + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count, "
@@ -84,8 +87,9 @@ async function one(req, res, sb, ctx) {
     sb.from("gw_sales_campaigns").select("id, name, archived_at").eq("tenant_id", ctx.tenantId).limit(500),
     // 面談（db/090）。まだ表が無い環境でも企業詳細は開けるようにする（エラーは空として扱う）
     sb.from("gw_sales_meetings").select(MEETING_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(50),
-    // 案件（db/100）。まだ表が無い環境でも企業詳細は開けるようにする
+    // 案件（db/115）。まだ表が無い環境でも企業詳細は開けるようにする
     sb.from("gw_sales_deals").select(DEAL_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(100),
+    loadMasters(sb, ctx.tenantId),
   ]);
   const name = new Map((members || []).map((e) => [e.id, e.display_name]));
   const today = todayJst();
@@ -169,6 +173,8 @@ async function one(req, res, sb, ctx) {
     deals: (deals || []).map((d) => shapeDeal(d, (eid) => name.get(eid) || null)),
     dealsReady: deals !== null && deals !== undefined,
     timerexConfigured: Boolean((process.env.TIMEREX_SALES_MEETING_URL || "").trim()),
+    // TimeRex の予約（guest_email）と照合するメールアドレス。Webhook（lib/sales-timerex.js）と同じ判定
+    matchEmails: [...companyEmails(c)],
     timeline,
     // 直近アタックの警告（要件 §20）。企業ページにも、フォームアタックを押したときにも出す
     recent: recent ? {
@@ -180,7 +186,11 @@ async function one(req, res, sb, ctx) {
     members: members || [],
     campaigns: (campaigns || []).filter((x) => !x.archived_at).map((x) => ({ id: x.id, name: x.name })),
     // 画面側で項目を持たない（ここが正）
-    statuses: STATUSES, ngReasons: NG_REASONS, eventKinds: EVENT_KINDS, services: SERVICES, industries: INDUSTRIES,
+    // masters … このテナントの業種・提案サービス（非表示は除く）と47都道府県。
+    // 基本情報の編集の選択肢（企業一覧・リード一覧の詳細で共通。js/sales-detail.js）
+    masters: { industries: masters.industries, services: masters.services, prefectures: masters.prefectures },
+    statuses: STATUSES, ngReasons: NG_REASONS, eventKinds: EVENT_KINDS,
+    services: masters.services, industries: masters.industries,
     sendChannels: SEND_CHANNELS, replyChannels: REPLY_CHANNELS, contactChannels: CONTACT_CHANNELS,
     hideReasons: HIDE_REASONS, sendFailReasons: SEND_FAIL_REASONS,
   });
@@ -202,9 +212,19 @@ async function update(req, res, sb, ctx, user) {
   if (body.action === "followed") {
     patch = { followed_at: new Date().toISOString() };
   } else {
-    const row = normalizeCompany(body, { partial: true });
+    // マスターに無い昔の値（業種・提案サービス・地域）は、変えていなければそのまま通す。
+    // 選べるのはテナントの表示中の選択肢（db/108）だけ
+    const row = normalizeCompany(body, { partial: true, before, masters: await loadMasters(sb, ctx.tenantId) });
     if (row.error) return json(res, 400, row);
     patch = row.value;
+    // 連絡先（変わった項目だけ。null は消す）。いまの連絡手段の連絡先も合わせて直す
+    const contacts = normalizeContacts(body.contacts);
+    if (contacts.error) return json(res, 400, contacts);
+    if (contacts.value && Object.keys(contacts.value).length) {
+      patch.contacts = mergeContacts(before.contacts, contacts.value);
+      const ch = before.current_contact_channel;
+      if (ch && ch in contacts.value) patch.current_contact_value = patch.contacts[ch] || (ch === "phone" ? before.phone : null) || null;
+    }
     // 返信あり・商談へ手で進めたときも、NEXT を決めていなければ自動で入れる
     // 空欄（null・""）は「決めていない」。画面のフォームは空欄を null で送ってくる
     const nextGiven = Boolean(patch.next_action || patch.next_action_on);

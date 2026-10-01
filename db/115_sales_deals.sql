@@ -1,8 +1,9 @@
 -- =============================================================================
--- 100: /sales 案件（金額・ステージ）と、その履歴
+-- 115: /sales 案件（金額・ステージ）と、その履歴
 --
--- 番号：097 は main に2つ（097_sales_company_list・097_sign_contract_link）あり、
---       099 は 097_sign_contract_link の付け直し（別PR）で使う予定のため、100 にする。
+-- 番号：main の db/ は 114（114_ai_assistant_seed）まで使っている（099 は3つ、100・101・105 は2つずつ、111 は欠番）。
+--       open PR では #45 が 110_career_self_check を使う。111 はかつて社内AI（いまの 113・114）が使っていた番号のため避け、
+--       どれとも重ならない 115 にする（旧名 db/100_sales_deals.sql。本番には未適用）。
 --
 --   1) gw_sales_deals        … 案件。1社に複数あってよい
 --        stage   … meeting（商談）→ proposal（提案）→ negotiation（最終調整）→ won（成約）／ lost（失注）
@@ -13,10 +14,11 @@
 --                      作ったあとは一切変えられない（トリガーで止める。null にする更新も止める）。
 --                      もとのアタックも消せない（FK は既定の NO ACTION。アプリが消すのは未送信のアタックだけで、
 --                      案件が指すのは送信済みのアタックだけなので、ふだんの操作とはぶつからない）
+--        owner_id … 担当。同じテナントの社員だけ（トリガーで止める。別テナントの社員・存在しない社員は入れられない）
 --   2) gw_sales_deal_history … 作成時と、段階・金額・確率が変わるたびに1行（トリガーが書く。画面・APIからは書けない）
 --        effective_probability … その時点で実際に使った成約確率（個別の設定、無ければその時点の既定値。
---                                成約は100・失注は0）。既定値をあとで変えても、過去の見込受注額を再現できる
---        過去のある時点の見込受注額・パイプラインを出すのと、段階ごとの実績成約率を出すのに使う
+--                                成約は100・失注は0）。既定値をあとで変えても、過去の見込額を再現できる
+--        過去のある時点の見込額・パイプラインを出すのと、段階ごとの実績成約率を出すのに使う
 --
 -- ■ 会社のステータス（gw_sales_companies.status）はここでは触らない
 --   案件の段階に合わせて会社を「商談」「提案」「成約」へ進めるのは API（後ろへは戻さない）。
@@ -26,12 +28,13 @@
 --   案件の表には DELETE の権限が無い。会社（company_id）も NO ACTION なので、案件のある会社は DB でも消せない
 --   （API の「案件のある企業は削除できない」と同じ）。テナントごと消すときだけ、案件も一緒に消える。
 --
--- ■ 金額は「受注額」（会計上の売上ではない）。成約は 0円より大きい金額が要る
+-- ■ 金額は営業の案件金額（会計上の売上ではない）。成約は 0円より大きい金額が要る
+--   受注額＝期間内に成約した案件の金額の合計／見込額＝進行中の案件の 金額×成約確率／パイプライン＝進行中の案件の金額の合計
 --
 -- ■ 既存データは埋めない
 --   いま「商談」「提案」「成約」の会社があっても、案件は作らない（金額が分からないものを受注額にしない）。
 --
--- 何度流しても同じ結果になる。088・090・096・097・098 の後に流す。
+-- 何度流しても同じ結果になる。088・090・096・097・098 の後に流す（main の 114 までを流した本番に、そのまま流せる）。
 -- =============================================================================
 
 begin;
@@ -51,11 +54,11 @@ create table if not exists public.gw_sales_deals (
 
   stage        text not null default 'meeting'
     check (stage in ('meeting', 'proposal', 'negotiation', 'won', 'lost')),
-  amount       bigint check (amount is null or amount between 0 and 100000000000),   -- 円。上限 1,000億円
+  amount       bigint check (amount is null or amount between 0 and 100000000000),   -- 円。上限 1,000億円（案件金額。会計上の売上ではない）
   probability  smallint check (probability is null or probability between 0 and 100),  -- %
   expected_close_on date,                                                   -- 成約見込み日
 
-  won_on       date,        -- 成約日（受注額はこの日で数える）
+  won_on       date,        -- 成約日（受注額はこの日で数える。日付は日本時間）
   lost_on      date,        -- 失注日
   lost_reason  text check (lost_reason is null or char_length(lost_reason) <= 500),
   note         text check (note is null or char_length(note) <= 2000),
@@ -83,7 +86,9 @@ create index if not exists idx_gw_sales_deals_approach
   on public.gw_sales_deals(approach_id) where approach_id is not null;
 
 comment on table public.gw_sales_deals is
-  '営業の案件（金額・段階）。1社に複数可。受注額＝成約案件の金額（won_on で数える。会計上の売上ではない）';
+  '営業の案件（金額・段階）。1社に複数可。受注額＝成約案件の金額（won_on で数える）。金額は営業の案件金額で、会計上の売上ではない';
+comment on column public.gw_sales_deals.owner_id is
+  '担当。同じテナントの社員だけ（gw_sales_deals_guard で止める）';
 comment on column public.gw_sales_deals.approach_id is
   '案件のもとになったアタック（作成時点でその会社に最後に送ったもの）。作成後は変えられない（null にもできない）';
 
@@ -115,8 +120,27 @@ comment on table public.gw_sales_deal_history is
 -- -----------------------------------------------------------------------------
 -- 3) 書き込みの見張り（呼び出した人の権限で動く＝他テナントの会社・アタックは見えないので通らない）
 --    ・会社とアタックが、案件と同じテナント・同じ会社のものか
+--    ・担当（owner_id）が、案件と同じテナントの社員か（作るとき・担当を変えるとき）
 --    ・作ったあとは テナント・会社・もとのアタック を変えられない
 -- -----------------------------------------------------------------------------
+
+-- 担当が案件と同じテナントの社員か。社員名簿（gw_employees）の RLS は is_tenant_staff なので、
+-- 営業の権限だけの人は名簿を読めないことがある。そのため、この判定だけ security definer で名簿を見る。
+-- 返すのは true / false だけ（名前などは返さない）。呼べるのはログインした人とサーバだけ
+create or replace function public.gw_sales_deal_owner_ok(p_owner uuid, p_tenant uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_owner is not null and p_tenant is not null and exists (
+    select 1 from public.gw_employees e where e.id = p_owner and e.tenant_id = p_tenant)
+$$;
+revoke all on function public.gw_sales_deal_owner_ok(uuid, uuid) from public;
+revoke all on function public.gw_sales_deal_owner_ok(uuid, uuid) from anon;
+grant execute on function public.gw_sales_deal_owner_ok(uuid, uuid) to authenticated, service_role;
+
 create or replace function public.gw_sales_deals_guard()
 returns trigger
 language plpgsql
@@ -134,8 +158,17 @@ begin
     if new.approach_id is distinct from old.approach_id then
       raise exception 'gw_sales_deals: approach_id は案件を作ったあとは変えられません' using errcode = '23514';
     end if;
+    -- 担当を変えるときは、同じテナントの社員だけ（null＝未定にするのはよい。社員が消えたときの on delete set null もここを通る）
+    if new.owner_id is not null and new.owner_id is distinct from old.owner_id
+       and not public.gw_sales_deal_owner_ok(new.owner_id, new.tenant_id) then
+      raise exception 'gw_sales_deals: 担当が同じテナントの社員ではありません' using errcode = '23503';
+    end if;
     new.updated_at := now();
     return new;
+  end if;
+
+  if new.owner_id is not null and not public.gw_sales_deal_owner_ok(new.owner_id, new.tenant_id) then
+    raise exception 'gw_sales_deals: 担当が同じテナントの社員ではありません' using errcode = '23503';
   end if;
 
   select tenant_id into v_tenant from public.gw_sales_companies where id = new.company_id;
@@ -234,14 +267,17 @@ notify pgrst, 'reload schema';
 -- -----------------------------------------------------------------------------
 -- select stage, count(*), sum(amount) from public.gw_sales_deals group by stage order by 1;
 -- select count(*) from public.gw_sales_deal_history;
+-- 担当が別テナントの社員になっている案件（0件のはず）
+-- select count(*) from public.gw_sales_deals d join public.gw_employees e on e.id = d.owner_id where e.tenant_id <> d.tenant_id;
 
 -- =============================================================================
--- ロールバック（戻すときだけ。先にアプリを 100 より前の版へ戻してから。案件と履歴は消えます）
+-- ロールバック（戻すときだけ。先にアプリを 115 より前の版へ戻してから。案件と履歴は消えます）
 -- =============================================================================
 -- begin;
 -- drop table if exists public.gw_sales_deal_history;
 -- drop table if exists public.gw_sales_deals;
 -- drop function if exists public.gw_sales_deals_history_trg();
 -- drop function if exists public.gw_sales_deals_guard();
+-- drop function if exists public.gw_sales_deal_owner_ok(uuid, uuid);
 -- drop function if exists public.gw_sales_deal_default_probability(text);
 -- commit;

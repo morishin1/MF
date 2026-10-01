@@ -68,7 +68,7 @@ check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItem
 }
 
 // ---- 2) メンバーは7つ ---------------------------------------------------------
-//   ホーム・今日やること・メッセージ・勤怠・申請・キャリア・社内情報・マイページ
+//   ホーム・今日やること・社内AI・勤怠・申請・キャリア・社内情報・マイページ
 //   （評価・キャリア再設計 §3・§37。スペース予約は通常メニューから外した）
 console.log("\n— メンバー —");
 {
@@ -80,10 +80,10 @@ console.log("\n— メンバー —");
   check(MEMBER_NAV.length === 5, `スマホの下タブは5つ（いま ${MEMBER_NAV.length}）`);
 }
 
-// 採用HR（/hr/）・Sales（/sales/）の入口は共通ヘッダーの近道だけ。
+// 採用HR（/hr/）・Sales（/sales/）・Office（/office/）の入口は共通ヘッダーの近道だけ。
 // 左メニューにも置くと二重導線になる（when で権限者だけに出す形も含めて置かない）
 for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバー"]]) {
-  const dup = navs.filter((n) => /^\/?(hr|sales)\/$/.test(String(n.href || "")));
+  const dup = navs.filter((n) => /^\/?(hr|sales|office)\/$/.test(String(n.href || "")));
   check(!dup.length, `${who}の左メニューに採用HR・Salesを置かない${dup.length ? `（${dup.map((n) => n.label).join("・")}）` : ""}`);
 }
 {
@@ -153,9 +153,10 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
     // 単純な「active: "esign"」か、「active: 何か ? "esign_order" : "esign"」の
     // どちらか。後者は三項演算の左右（実際にactiveへ入る側）だけを拾い、
     // 条件式の中の文字列（例: "order"）は候補に入れない
-    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*roles:/.exec(src);
+    // roles（appRole）か access（canManageHr 等、roles では表せない権限）のどちらかで入口を絞る
+    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*(?:roles|access):/.exec(src);
     if (plain) return [plain[1]];
-    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*roles:/
+    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*(?:roles|access):/
       .exec(src);
     return ternary ? [ternary[1], ternary[2]] : null;
   };

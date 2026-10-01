@@ -4,16 +4,21 @@
 import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit, canDecideHire } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
+import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
+import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
   normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, activeOffer, STAGE_LABEL, RANK_LABEL,
-  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor,
+  RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor, pickNextInterview,
+  STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql";
+// 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない
+const columns = (salary) => (salary && !paySplit() ? FIELDS : withoutColumns(FIELDS));
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
   + "recommend_note, decision_note, hold_reason, hold_next_step, "
@@ -29,17 +34,19 @@ export default async function handler(req, res) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す。採用担当・責任者には返さない
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
 
-  if (req.method === "GET") return one(req, res, sb, ctx);
-  if (req.method === "PATCH") return update(req, res, sb, ctx, user);
+  if (req.method === "GET") return one(req, res, sb, ctx, salary);
+  if (req.method === "PATCH") return update(req, res, sb, ctx, user, salary);
   return methodNotAllowed(res, ["GET", "PATCH"]);
 }
 
-async function one(req, res, sb, ctx) {
+async function one(req, res, sb, ctx, salary) {
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
 
-  const { data: a, error } = await sb.from("gw_hr_applicants").select(FIELDS)
+  const { data: a, error } = await sb.from("gw_hr_applicants").select(columns(salary))
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -59,12 +66,15 @@ async function one(req, res, sb, ctx) {
       .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
+  if (salary) {
+    await attachPay(ctx.tenantId, a, "applicant");
+    await attachPay(ctx.tenantId, offers || [], "offer");
+  }
 
-  // 直近の、まだ実施していない・キャンセルしていない面談
-  // （NEXT ACTIONの「本日14:00 カジュアル面談」に使う）
-  const nextInterview = (interviews || [])
-    .filter((i) => !i.conducted_at && !i.canceled_at && i.scheduled_at)
-    .sort((x, y) => String(x.scheduled_at).localeCompare(String(y.scheduled_at)))[0] || null;
+  // NEXT ACTION が指す面談（いまの選考段階の種類で、実施前・キャンセルでない、直近のもの）。
+  // NEXT ACTIONの「本日 14:00 カジュアル面談」と「面談を実施済みにする」の対象（nextInterviewId）
+  const nextInterview = pickNextInterview(a, interviews);
   // いま有効な合格通知（NEXT ACTIONの「送付：.../閲覧：...」に使う。README Stage 6）
   const current = activeOffer(offers);
 
@@ -72,7 +82,7 @@ async function one(req, res, sb, ctx) {
     applicant: {
       ...shapeApplicant(
         a,
-        nextInterview && { scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
+        nextInterview && { id: nextInterview.id, scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
         current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
       ),
       recruiterName: recruiter?.display_name || null,
@@ -84,13 +94,17 @@ async function one(req, res, sb, ctx) {
     // 評価UI・面談予定フォームの元。画面側で項目を持たない（ここが正）
     evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: RANKS, rankLabel: RANK_LABEL,
     interviewKinds: INTERVIEW_KINDS,
+    // 状態プルダウンの選択肢（lib/hr.js の STATUSES / STATUS_LABEL が正）
+    statusOptions: STATUS_OPTIONS,
     // TimeRexの日程調整URL（環境変数未設定ならnull。README「TimeRex連携」指示書 §7）
     schedulingUrl: schedulingUrlFor(process.env.TIMEREX_CASUAL_INTERVIEW_URL, a.id),
     timeline: (timeline || []).map((t) => ({
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
     })),
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
-    offers: (offers || []).map(shapeOffer),
+    offers: (offers || []).map((o) => shapeOffer(o)),
+    // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
+    salaryVisible: salary,
   });
 }
 
@@ -99,10 +113,12 @@ async function one(req, res, sb, ctx) {
 // 両方とも decision 列を書くので、区別は「社長判断待ちから動かすかどうか」で見る
 const CEO_DECISION_FIELDS = ["decision", "decisionNote", "holdReason", "holdNextStep"];
 
-async function update(req, res, sb, ctx, user) {
+async function update(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
-  const row = normalizeApplicant(body, { partial: true });
+  if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
+  // 給与を見られない人は、給与の欄を書き換えられない（見えていない値を上書きしてしまわないため）
+  const row = normalizeApplicant(salary ? body : dropSalaryInput(body), { partial: true });
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
   if ("recruiter_id" in row.value) {
@@ -119,10 +135,17 @@ async function update(req, res, sb, ctx, user) {
   }
 
   const { data, error } = await sb.from("gw_hr_applicants")
-    .update({ ...row.value, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(FIELDS).maybeSingle();
+    .update({ ...splitWage(row.value).base, updated_at: new Date().toISOString() })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(columns(salary)).maybeSingle();
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   if (!data) return json(res, 404, { error: "not_found" });
+  // 給与は、分けている設定なら専用の表へ（見られない人の入力は、ここまで来ない）
+  try {
+    await savePay(ctx.tenantId, { applicantId: body.id, wage: splitWage(row.value).wage });
+    if (salary) await attachPay(ctx.tenantId, data, "applicant");
+  } catch (e) {
+    return payFailed(res, e);
+  }
 
   // ステージが動いたときだけ、選考タイムラインに足す（値を直しただけでは足さない）
   if (row.value.stage && row.value.stage !== before.stage) {
@@ -172,4 +195,56 @@ async function update(req, res, sb, ctx, user) {
   });
 
   return json(res, 200, { applicant: shapeApplicant(data) });
+}
+
+// ---- 状態（status）の手動変更 -------------------------------------------------------
+// PATCH { id, action: "setStatus", status, dryRun?, acknowledgeWarnings? }
+//   dryRun=true        … 変更せず、注意（warnings）だけ返す。画面の確認ダイアログに出す
+//   注意があるのに acknowledgeWarnings が無ければ 409（画面で確認してから送り直す）
+// 変えるのは status だけ。選考段階（stage）・面談（日時・取消・Meet URL）は変えない
+// （TimeRex 連携の面談は TimeRex が正）。必ず選考タイムラインと監査ログに残す（誰が・何から何へ）。
+async function setStatus(res, sb, ctx, user, body) {
+  const to = body.status;
+  if (!STATUSES.includes(to)) return json(res, 400, { error: "invalid_body", detail: "status が不正です" });
+
+  const { data: before } = await sb.from("gw_hr_applicants").select(FIELDS)
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!before) return json(res, 404, { error: "not_found" });
+  if (before.status === to) return json(res, 400, { error: "no_change", hint: "いまと同じ状態です" });
+  // 社長判断待ちから動かすのは採用判断と同じ重さ。社長・管理者だけ
+  if ((before.status === "ceo_decision_pending" || to === "ceo_decision_pending") && !canDecideHire(ctx)) {
+    return json(res, 403, { error: "forbidden", hint: "社長判断待ちの状態を変えられるのは社長・管理者だけです" });
+  }
+
+  const { data: interviews } = await sb.from("gw_hr_interviews")
+    .select("id, kind, scheduled_at, conducted_at, canceled_at, timerex_event_id")
+    .eq("applicant_id", body.id).eq("tenant_id", ctx.tenantId);
+  const warnings = statusChangeWarnings(before, interviews, to);
+  const labels = { from: STATUS_LABEL[before.status] || before.status, to: STATUS_LABEL[to] };
+  if (body.dryRun) return json(res, 200, { dryRun: true, warnings, ...labels });
+  if (warnings.length && !body.acknowledgeWarnings) {
+    return json(res, 409, { error: "status_change_warning", warnings, ...labels, hint: warnings.join("\n") });
+  }
+
+  const { data, error } = await sb.from("gw_hr_applicants")
+    .update({ status: to, updated_at: new Date().toISOString() })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(FIELDS).maybeSingle();
+  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  if (!data) return json(res, 404, { error: "not_found" });
+
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "status_manual",
+    label: "状態を手動変更", detail: `${labels.from} → ${labels.to}`, created_by: user.id,
+  });
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_status_manual",
+    target: `hr_applicant:${body.id}`,
+    detail: { from: before.status, to, warnings: warnings.length, acknowledged: Boolean(body.acknowledgeWarnings) },
+  });
+
+  const next = pickNextInterview(data, interviews);
+  return json(res, 200, {
+    applicant: shapeApplicant(data, next && { id: next.id, scheduledAt: next.scheduled_at, kind: next.kind }),
+    warnings,
+  });
 }

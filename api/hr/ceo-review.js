@@ -7,9 +7,12 @@
 // canDecideHire（社長・管理者）だけが見られる。recruiterは社長推薦はできるが、
 // この画面自体は開けない（js/hr-layout.js のページ側ガードと同じ基準）
 
+import { ymd as jstYmd } from "../../lib/jst.js";
 import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canDecideHire } from "../../lib/gw.js";
+import { gwContext, canDecideHire, canSeeSalary } from "../../lib/gw.js";
+import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
+import { paySplit, attachPay } from "../../lib/hr-pay.js";
 import { userClient } from "../../lib/supabase.js";
 import { shapeApplicant, shapeInterview } from "../../lib/hr.js";
 
@@ -31,7 +34,9 @@ export default async function handler(req, res) {
   if (!canDecideHire(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
-  const { data, error } = await sb.from("gw_hr_applicants").select(FIELDS)
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
+  const { data, error } = await sb.from("gw_hr_applicants").select(salary && !paySplit() ? FIELDS : withoutColumns(FIELDS))
     .eq("tenant_id", ctx.tenantId).in("stage", RELEVANT_STAGES).limit(500);
   if (error) {
     const hint = dbSetupHint(error, SQL);
@@ -40,6 +45,8 @@ export default async function handler(req, res) {
   }
 
   const applicants = data || [];
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
+  if (salary) await attachPay(ctx.tenantId, applicants, "applicant");
   if (!applicants.length) return json(res, 200, { todayMeetings: [], recommended: [], decisionPending: [] });
 
   const ids = applicants.map((a) => a.id);
@@ -51,14 +58,18 @@ export default async function handler(req, res) {
     byApplicant.get(i.applicant_id).push(i);
   }
 
-  const jstToday = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const jstToday = jstYmd();
   const todayMeetings = [], recommended = [], decisionPending = [];
 
   for (const a of applicants) {
     const list = byApplicant.get(a.id) || [];
     // 良かった点・気になる点は、評価が付いた面談（カジュアル面談）のものをそのまま出す
     const evaluated = list.find((i) => i.rank) || null;
-    const ceoInterview = list.find((i) => i.kind === "ceo") || null;
+    // 社長面談は「いま有効なもの」（実施前・キャンセルでない）を優先。無ければ実施済みの直近。
+    // キャンセル済みの古い行を拾わない
+    const ceoList = list.filter((i) => i.kind === "ceo");
+    const ceoInterview = ceoList.find((i) => !i.conducted_at && !i.canceled_at)
+      || ceoList.find((i) => !i.canceled_at) || null;
 
     const card = {
       ...shapeApplicant(a),
@@ -71,7 +82,7 @@ export default async function handler(req, res) {
     };
 
     const scheduledToday = ceoInterview && !ceoInterview.conducted_at && ceoInterview.scheduled_at
-      && String(ceoInterview.scheduled_at).slice(0, 10) === jstToday;
+      && jstYmd(ceoInterview.scheduled_at) === jstToday;   // 日本の日付で比べる（UTC の日付で切らない）
     if (scheduledToday) todayMeetings.push(card);
     else if (a.status === "ceo_decision_pending") decisionPending.push(card);
     else recommended.push(card);

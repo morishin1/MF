@@ -41,6 +41,8 @@ import { advanceFor } from "../../lib/onboard-advance.js";
 import { computeSteps } from "../../lib/onboard-steps.js";
 import { orientationState } from "../../lib/orientation.js";
 import { statusOf } from "../../lib/esign.js";
+import { loadNoticeRows } from "../../lib/labor-notice-db.js";
+import { noticeFact, selfState } from "../../lib/labor-notice.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -115,6 +117,8 @@ async function read(res, user, ctx) {
     dueOn: r.due_on, signedAt: r.signed_at, sentAt: r.sent_at,
   }));
   const orientation = orientationState(oriItems, oriChecks);
+  const { rows: noticeRows, linked: noticeLinked } = await loadNoticeRows(sb, ctx.tenantId, empId)
+    .catch(() => ({ rows: [], linked: false }));
 
   // 手続きが読めなかった。黙って「まだ何も無い人」にしない。
   // 黙ると、画面には出す口が1つも出ないまま、理由がどこにも出ない
@@ -346,10 +350,17 @@ async function read(res, user, ctx) {
 
     // ---- STEP（3者共通の6段階） ----
     contracts,
+    // 労働条件通知書（db/110）。電子署名の依頼（労働条件）があるときは mode: "esign"（確認の入口は出さない）
+    notice: noticeLinked
+      ? (({ mode, state, version, publishedAt, confirmedAt }) => ({ linked: true, mode, state, version, publishedAt, confirmedAt }))(
+        selfState(noticeRows, { esign: contracts.some((c) => c.kind === "employment" || !c.kind) }))
+      : { linked: false },
     orientation,
     stage: proc.row?.stage || null,
     steps: computeSteps({
       contracts,
+      // 労働条件通知書（db/110）。電子署名の依頼があれば、computeSteps が使わない
+      notice: noticeLinked ? noticeFact(noticeRows) : null,
       consents: consentState(docs.data || [], consents.data || []),
       orientation,
       profileStatus: pf?.status || "draft",

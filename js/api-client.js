@@ -232,8 +232,11 @@
       err.body = data;
       // 二段階認証が要るのに済んでいない。どの画面で起きても、登録の場所へ送る。
       // マイページの中では送らない（そこが登録の場所なので、回り続ける）
+      //
+      // 絶対パスで送る。相対（mypage.html#mfa）だと、/hr/ や /sales/ や /office/ の画面からは
+      // /hr/mypage.html のような存在しない場所へ飛び、登録できないまま行き止まりになる
       if (err.code === "mfa_required" && !/mypage\.html/.test(location.pathname)) {
-        location.href = "mypage.html#mfa";
+        location.href = "/mypage.html#mfa";   // 絶対パス。/keiei/ など、サブディレクトリの画面から呼ばれても届く
       }
       throw err;
     }
@@ -460,6 +463,12 @@
     api(`/api/sales/companies${visibility && visibility !== "shown" ? `?visibility=${encodeURIComponent(visibility)}` : ""}`);
   const createSalesCompany = (body) => api("/api/sales/companies", { method: "POST", body });
   const importSalesCompanies = (companies) => api("/api/sales/companies", { method: "POST", body: { companies } });
+  // CSV 取込。commit=false で確認（プレビュー）、true で登録（画面は50行ずつ送る）
+  const importSalesCsv = (body) => api("/api/sales/companies/import", { method: "POST", body });
+  // 業種・提案サービスの選択肢（db/108）。追加・名前変更・非表示・再表示
+  const getSalesMasters = () => api("/api/sales/masters");
+  const addSalesMaster = (kind, label) => api("/api/sales/masters", { method: "POST", body: { kind, label } });
+  const updateSalesMaster = (body) => api("/api/sales/masters", { method: "PATCH", body });
   const getSalesCompany = (id) => api(`/api/sales/companies/detail?id=${encodeURIComponent(id)}`);
   const updateSalesCompany = (body) => api("/api/sales/companies/detail", { method: "PATCH", body });
   const markSalesFollowed = (id) => updateSalesCompany({ id, action: "followed" });
@@ -485,7 +494,7 @@
   const listSalesMeetings = (companyId) => api(`/api/sales/meetings?companyId=${encodeURIComponent(companyId)}`);
   const issueSalesMeeting = (body) => api("/api/sales/meetings", { method: "POST", body });
   const salesMeetingAct = (body) => api("/api/sales/meetings", { method: "PATCH", body });
-  // 営業の案件（db/100）。companyId なしならテナントの案件すべて（分析用）
+  // 営業の案件（db/115）。companyId なしならテナントの案件すべて（分析用）
   const listSalesDeals = (companyId) => api(`/api/sales/deals${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`);
   const createSalesDeal = (body) => api("/api/sales/deals", { method: "POST", body });
   const updateSalesDeal = (body) => api("/api/sales/deals", { method: "PATCH", body });
@@ -1192,6 +1201,33 @@
   const openAdminContact = () =>
     api("/api/messages/admin-contact", { method: "POST" });
 
+  // ---- 社内AI ----
+  // threadId を渡すと同じ相談の続き。省略すると新しい相談を始める
+  const askAssistant = (question, threadId, category) =>
+    api("/api/ai/ask", { method: "POST", body: { question, threadId, category } });
+  const listAiThreads = () => api("/api/ai/threads");
+  const getAiThread = (threadId) =>
+    api(`/api/ai/thread?threadId=${encodeURIComponent(threadId)}`);
+  const rateAiMessage = (messageId, rating, comment) =>
+    api("/api/ai/feedback", { method: "POST", body: { messageId, rating, comment } });
+
+  // 管理部への問い合わせ。threadId があればそのAI相談を要約して引き継ぐ
+  const listAiInquiries = () => api("/api/ai/inquiries");
+  const createAiInquiry = (threadId, note, category) =>
+    api("/api/ai/inquiries", { method: "POST", body: { threadId, note, category } });
+  const getAiInquiry = (id) => api(`/api/ai/inquiry?id=${encodeURIComponent(id)}`);
+  const replyAiInquiry = (id, content) =>
+    api("/api/ai/inquiry", { method: "POST", body: { id, content } });
+  const updateAiInquiry = (id, patch) =>
+    api("/api/ai/inquiry", { method: "PATCH", body: { id, ...patch } });
+
+  // 管理画面: AIナレッジ
+  const listAiKnowledge = () => api("/api/ai/knowledge").then((d) => d.knowledge || []);
+  const createAiKnowledge = (k) =>
+    api("/api/ai/knowledge", { method: "POST", body: k }).then((d) => d.knowledge);
+  const updateAiKnowledge = (id, patch) =>
+    api(`/api/ai/knowledge-item?id=${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+
   // ---- やること（タスク・予定） ----
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
@@ -1448,7 +1484,7 @@
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
     getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
-    listSalesCompanies, listSalesCompanyPage, exportSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
+    listSalesCompanies, listSalesCompanyPage, exportSalesCompanies, createSalesCompany, importSalesCompanies, importSalesCsv, getSalesMasters, addSalesMaster, updateSalesMaster, getSalesCompany, updateSalesCompany,
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,
@@ -1511,6 +1547,9 @@
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
     openAdminContact,
     uploadMessageFile, messageFileUrl,
+    askAssistant, listAiThreads, getAiThread, rateAiMessage,
+    listAiInquiries, createAiInquiry, getAiInquiry, replyAiInquiry, updateAiInquiry,
+    listAiKnowledge, createAiKnowledge, updateAiKnowledge,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
     onboardingStatus,

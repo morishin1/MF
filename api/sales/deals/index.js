@@ -1,4 +1,4 @@
-// 営業の案件（db/100_sales_deals.sql）
+// 営業の案件（db/115_sales_deals.sql）
 //
 // GET   /api/sales/deals?companyId=…   … その会社の案件（新しい順）
 // GET   /api/sales/deals                … テナントの案件すべて（分析用。最大5,000件）
@@ -12,7 +12,7 @@
 //   その会社の案件がすべて失注になったら suggestCompanyLost: true を返す（会社を失注にするかは人が決める）
 //
 // ■ 消す API は無い（DB でも消せない。案件のある会社も DB で消せない）。間違えた案件は「失注」にするか、金額を直す
-// ■ amount は「受注額」（案件の成約金額）。会計上の売上ではない
+// ■ amount は営業の案件金額（会計上の売上ではない）。受注額＝成約案件の金額の合計・見込額＝進行中の 金額×成約確率・パイプライン＝進行中の金額の合計
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -24,7 +24,7 @@ import {
   DEAL_FIELDS, DEAL_STAGE_LABEL, shapeDeal, normalizeDeal, stageDates, advanceCompanyStatus, allLost,
 } from "../../../lib/sales-deals.js";
 
-const SQL = "db/100_sales_deals.sql";
+const SQL = "db/115_sales_deals.sql";
 const ALL_LIMIT = 5000;
 
 export default async function handler(req, res) {
@@ -55,6 +55,18 @@ async function names(sb, ctx) {
   return (id) => m.get(id) || null;
 }
 
+/**
+ * 担当は同じテナントの社員だけ。DB のトリガー（gw_sales_deals_guard）が必ず止めるので、ここは分かりやすい 400 にするため。
+ * 社員名簿の RLS は営業の人に読めないことがあるので、DB の判定（gw_sales_deal_owner_ok。true/false だけ返す）を呼ぶ。
+ * 判定を呼べなかったときは通して、DB のトリガーに任せる（409 になる）
+ */
+async function ownerOk(sb, ctx, ownerId) {
+  if (!ownerId) return true;
+  const { data, error } = await sb.rpc("gw_sales_deal_owner_ok", { p_owner: ownerId, p_tenant: ctx.tenantId });
+  return error ? true : data === true;
+}
+const BAD_OWNER = { error: "bad_owner", hint: "担当は同じ会社の社員から選んでください" };
+
 async function loadCompany(sb, ctx, id) {
   const { data } = await sb.from("gw_sales_companies").select(COMPANY_FIELDS)
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
@@ -66,8 +78,11 @@ async function list(req, res, sb, ctx) {
   if (companyId && !isUuid(companyId)) return json(res, 400, { error: "invalid_query" });
   let q = sb.from("gw_sales_deals").select(DEAL_FIELDS).eq("tenant_id", ctx.tenantId);
   if (companyId) q = q.eq("company_id", companyId);
-  const { data, error } = await q.order("created_at", { ascending: false }).limit(companyId ? 100 : ALL_LIMIT);
+  // テナント全体は1件多く読み、5,000件を超えたかを確かめる（ちょうど5,000件で「省略あり」と言わない）
+  const { data: rows, error } = await q.order("created_at", { ascending: false }).limit(companyId ? 100 : ALL_LIMIT + 1);
   if (error) return fail(res, error);
+  const truncated = !companyId && (rows || []).length > ALL_LIMIT;
+  const data = truncated ? rows.slice(0, ALL_LIMIT) : rows;
   const nameOf = await names(sb, ctx);
   // 分析のドロワーに会社名を出すため、テナント全体のときは会社名もつける（100社ずつ）
   const coName = new Map();
@@ -81,7 +96,8 @@ async function list(req, res, sb, ctx) {
   }
   return json(res, 200, {
     deals: (data || []).map((d) => ({ ...shapeDeal(d, nameOf), ...(companyId ? {} : { companyName: coName.get(d.company_id) || null }) })),
-    truncated: !companyId && (data || []).length >= ALL_LIMIT,
+    // true なら新しい順に5,000件だけ。分析の画面は「5,000件超で集計が一部省略されている」と出す
+    truncated,
   });
 }
 
@@ -111,6 +127,7 @@ async function create(req, res, sb, ctx, user) {
   if (n.error) return json(res, 400, n);
   const c = await loadCompany(sb, ctx, body.companyId);
   if (!c) return json(res, 404, { error: "not_found" });
+  if (n.value.owner_id && !(await ownerOk(sb, ctx, n.value.owner_id))) return json(res, 400, BAD_OWNER);
 
   // もとのアタック＝その会社に最後に送ったアタック（送信完了したもの）
   const { data: last, error: e1 } = await sb.from("gw_sales_approaches").select("id, sent_at")
@@ -154,6 +171,9 @@ async function update(req, res, sb, ctx, user) {
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (e0) return fail(res, e0);
   if (!before) return json(res, 404, { error: "not_found" });
+  if (n.value.owner_id && n.value.owner_id !== before.owner_id && !(await ownerOk(sb, ctx, n.value.owner_id))) {
+    return json(res, 400, BAD_OWNER);
+  }
 
   const dates = stageDates(before, n.value);
   if (dates.error) return json(res, 400, dates);

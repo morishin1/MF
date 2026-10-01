@@ -24,6 +24,7 @@ import { admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { sha256, TOKEN_RE, shapePublicOffer, decisionMakerEmployeeIds } from "../../../lib/hr.js";
+import { attachPay } from "../../../lib/hr-pay.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 const CANT_OPEN = { error: "invalid_token", hint: "このURLは開けません。採用担当までお問い合わせください。" };
@@ -91,6 +92,8 @@ async function view(req, res) {
     offer.viewed_at = now; // レスポンスにも反映する
   }
 
+  // 本人に届く合格通知の給与。分けている設定（HR_PAY_SPLIT=1）では、専用の表から読む
+  await attachPay(applicant.tenant_id, offer, "offer");
   return json(res, 200, shapePublicOffer(offer, applicant, tenant, recruiter));
 }
 

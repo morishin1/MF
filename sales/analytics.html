@@ -40,7 +40,7 @@
     .an2-card.money .v { font-size:22px; }
     .an2-ref { display:inline-block; background:#fbf1d6; color:#7d5a00; border-radius:999px; padding:0 6px; font-size:9.5px; font-weight:700; margin-left:3px; }
 
-    /* 見込受注額・パイプライン（いまの時点）を1行で */
+    /* 見込額・パイプライン（いまの時点）を1行で */
     .an-money { display:flex; gap:10px; flex-wrap:wrap; background:#fff; border:1px solid #ececE6; border-radius:12px;
       padding:12px 16px; margin:0 0 26px; font-size:12.5px; color:#4a5068; align-items:center; }
     .an-money .it { display:flex; align-items:baseline; gap:6px; padding-right:14px; border-right:1px solid #efefeb; }
@@ -83,9 +83,9 @@
 
 <div id="drawer-root"></div>
 
-<script src="../js/api-client.js?v=20260930dl1"></script>
-<script src="../js/layout.js?v=20260929b"></script>
-<script src="../js/sales-layout.js?v=20260928h"></script>
+<script src="../js/api-client.js?v=20261001dl1"></script>
+<script src="../js/layout.js?v=20261001b"></script>
+<script src="../js/sales-layout.js?v=20261001a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -99,6 +99,8 @@
   let deals = [];
   let dealsReady = true;
   let dealsMsg = "";
+  let dealsTruncated = false;   // 案件が5,000件を超え、一部を読めていない（API の truncated）
+  let since = "";               // 期間の始まり（日本時間の YYYY-MM-DD）。API の since を使う
   let cohort = null;
 
   SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) load(); });
@@ -109,7 +111,7 @@
     try {
       const [res, dl] = await Promise.all([
         API.listSalesApproaches(days),
-        // 案件（db/100）がまだ無くても、活動の分析は出す
+        // 案件（db/115）がまだ無くても、活動の分析は出す
         API.listSalesDeals().catch((e) => ({ failed: true, notReady: e.code === "not_ready", error: e })),
       ]);
       if (res.notReady) {
@@ -117,9 +119,11 @@
         return;
       }
       approaches = res.approaches || [];
+      since = res.since || periodStartJst(days);
       dealsReady = !dl.failed;
+      dealsTruncated = dealsReady && dl.truncated === true;
       dealsMsg = dl.failed ? (dl.notReady
-        ? "案件（金額・段階）の表がまだありません。管理者に db/100_sales_deals.sql の実行を依頼すると、受注額・見込受注額が出ます。"
+        ? "案件（金額・段階）の表がまだありません。管理者に db/115_sales_deals.sql の実行を依頼すると、受注額・見込額が出ます。"
         : `案件を取得できませんでした：${dl.error?.hint || dl.error?.message || ""}（活動の数字は出ています）`) : "";
       deals = dealsReady ? dl.deals || [] : [];
       render();
@@ -130,6 +134,14 @@
   }
 
   function setPeriod(d) { days = d; load(); }
+
+  // 「直近 days 日」の始まり（日本時間。今日を1日目に数える）。lib/sales.js periodStartJst と同じ。
+  // API が since を返さない古い版のときだけ使う
+  function periodStartJst(n) {
+    const d = new Date(`${new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - (Math.max(1, Math.floor(n)) - 1));
+    return d.toISOString().slice(0, 10);
+  }
 
   const yen = (n) => `¥${Math.round(n || 0).toLocaleString("ja-JP")}`;
   const man = (n) => {                      // 表で使う短い金額（「120万円」「3.4万円」「8,000円」）
@@ -201,7 +213,7 @@
     table("by-employee", (a) => a.employeeName || "（不明）", true);
   }
 
-  // ---- 上部：6枚のファネル ＋ 見込受注額・パイプライン -------------------------------------------
+  // ---- 上部：6枚のファネル ＋ 見込額・パイプライン -------------------------------------------
   //
   // ■ 受注額（6枚目）＝ 選んだ期間に成約日（won_on）がある成約案件の金額の合計。
   //   会計上の売上ではなく、案件の成約金額。「その期間にアタックした会社があとでいくら成約したか」は
@@ -211,8 +223,7 @@
     const reach = (lv) => cos.filter((c) => c.level >= lv);
     const clicked = reach(2), replied = reach(3), meeting = reach(4), won = reach(6);
     const cohortDeals = cos.flatMap((c) => c.deals);
-    // 期間の始まり（日本時間の日付）。won_on はこの日以降のもの
-    const since = new Date(Date.now() + 9 * 3600000 - days * 86400000).toISOString().slice(0, 10);
+    // 期間の始まり（日本時間の日付。アタックの期間と同じ日）。won_on はこの日以降のもの
     const wonDeals = deals.filter((d) => d.stage === "won" && d.wonOn && d.wonOn >= since)
       .sort((a, b) => String(b.wonOn).localeCompare(String(a.wonOn)));
     const orders = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
@@ -227,13 +238,19 @@
         <div class="l">${esc(label)}</div>${extra}
       </button>`;
 
-    // いまの時点の見込受注額・パイプライン
+    // いまの時点の見込額・パイプライン
     const openDeals = deals.filter((d) => DEAL_OPEN.includes(d.stage));
     const forecast = openDeals.reduce((s, d) => s + expectedOf(d), 0);
     const pipeline = openDeals.reduce((s, d) => s + (d.amount || 0), 0);
     const noAmount = openDeals.filter((d) => d.amount == null).length;
 
-    el("kpi").innerHTML = `<div class="an2-grid" id="funnel">
+    // 案件が5,000件を超えると、APIは新しい順に5,000件までしか返さない。黙って小さい数字を出さない
+    const truncBanner = dealsTruncated ? `<div class="banner warn" id="deals-truncated" style="margin:0 0 14px;">
+        <span class="material-symbols-outlined">warning</span>
+        <div>案件が5,000件を超えているため、新しい順に5,000件だけで集計しています（5,000件超で集計が一部省略されています）。
+        受注額・見込額・パイプライン・表の金額は、実際より小さく出ている可能性があります。</div></div>` : "";
+
+    el("kpi").innerHTML = `${truncBanner}<div class="an2-grid" id="funnel">
         ${card("attack", "send", "アタック", cos.length, "社")}
         ${card("click", "ads_click", "クリック", clicked.length, "社", rate(clicked.length, cos.length))}
         ${card("reply", "mail", "返信", replied.length, "社", rate(replied.length, clicked.length))}
@@ -244,12 +261,12 @@
           `<div class="r">${dealsReady ? `成約日が期間内の ${wonDeals.length}案件` : "案件を取得できません"}</div>`, "money")}
       </div>
       ${dealsReady ? `<div class="an-money">
-        <span class="it">見込受注額 <b>${esc(yen(forecast))}</b><span class="n">進行中 ${openDeals.length}案件</span></span>
+        <span class="it">見込額 <b>${esc(yen(forecast))}</b><span class="n">進行中 ${openDeals.length}案件</span></span>
         <span class="it">パイプライン <b>${esc(yen(pipeline))}</b><span class="n">確率を掛ける前</span></span>
-        <span class="note">受注額＝成約日が期間内の成約案件の金額（会計上の売上ではありません）／見込受注額＝進行中の案件の 金額×成約確率（商談20%・提案50%・最終調整80%。個別の設定を優先）${noAmount ? `／金額未定 ${noAmount}件は0円で数えています` : ""}</span>
+        <span class="note">受注額＝成約日が期間内の成約案件の金額（会計上の売上ではありません）／見込額＝進行中の案件の 金額×成約確率（商談20%・提案50%・最終調整80%。個別の設定を優先）${noAmount ? `／金額未定 ${noAmount}件は0円で数えています` : ""}</span>
       </div>` : `<div class="banner warn" style="margin:0 0 26px;"><span class="material-symbols-outlined">build</span>
         <div>${esc(dealsMsg)}</div></div>`}
-      <p class="sl-muted" style="margin:-14px 0 22px;">アタック〜成約：直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象。社数は会社単位、率は1つ前のマスに対する割合です。受注額：直近${days}日に成約した案件です。</p>`;
+      <p class="sl-muted" style="margin:-14px 0 22px;">期間：${esc(since)} 〜 今日（日本時間）。アタック〜成約：直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象。社数は会社単位、率は1つ前のマスに対する割合です。受注額：直近${days}日に成約した案件です。</p>`;
   }
 
   // ---- マスを押したときの内訳（右ドロワー） ---------------------------------------------------
@@ -273,7 +290,7 @@
             <td>${statusPill(DEAL_PILL[d.stage] || "attacked", d.stageLabel)}</td>
             <td class="num">${d.amount == null ? "未定" : esc(yen(d.amount))}</td>
             <td>${esc(fmtDay(d.wonOn || d.lostOn || String(d.createdAt).slice(0, 10)))}</td></tr>`).join("")}</tbody></table>`
-      : `<div class="sl-empty">${dealsReady ? "対象の案件はありません" : "案件の表がまだありません（db/100）"}</div>`);
+      : `<div class="sl-empty">${dealsReady ? "対象の案件はありません" : "案件の表がまだありません（db/115）"}</div>`);
     const T = {
       attack: ["アタックした企業", () => coRows(cohort.cos, `直近${days}日にアタックした会社です（1社に複数回送っても1社）`)],
       click: ["クリックした企業", () => coRows(cohort.clicked, "専用URLをクリックした会社（返信・商談まで進んだ会社を含む）")],
@@ -292,7 +309,7 @@
   function closeDrawer() { el("drawer-root").innerHTML = ""; }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 
-  // ---- 軸別の表（これまでの列に 受注額・見込受注額・1アタック見込受注額 を足す） ------------------
+  // ---- 軸別の表（これまでの列に 受注額・見込額・1アタック見込額 を足す） ------------------
   //   要因分析なので、受注額は「この期間に送ったアタックから生まれた案件」（もとのアタック）で数える
   function table(id, keyOf, byPerson) {
     const groups = new Map();
@@ -307,8 +324,8 @@
     const money = (v) => (dealsReady ? esc(man(v)) : "—");
     el(id).innerHTML = `<div style="overflow-x:auto;"><table class="sl-table">
       <thead><tr><th>${byPerson ? "担当" : "項目"}</th><th class="num">アタック数</th><th class="num">クリック率</th>
-        <th class="num">返信率</th><th class="num">商談化率</th><th class="num" title="この期間のアタックから生まれ、成約した案件の金額">受注額</th><th class="num">見込受注額</th>
-        <th class="num key" title="見込受注額 ÷ アタック数">1アタック見込受注額</th></tr></thead>
+        <th class="num">返信率</th><th class="num">商談化率</th><th class="num" title="この期間のアタックから生まれ、成約した案件の金額">受注額</th><th class="num">見込額</th>
+        <th class="num key" title="見込額 ÷ アタック数">1アタック見込額</th></tr></thead>
       <tbody>${rows.map(({ k, s }) => `<tr>
         <td>${esc(k)}</td><td class="num">${s.attacks}</td>
         <td class="num">${esc(pct(s.clickedAttacks, s.attacks))}</td>

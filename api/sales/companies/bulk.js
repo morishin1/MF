@@ -25,7 +25,7 @@
 //   ドメインも残るので、同じ会社を取り込み直しても重複として止まる（また一覧に出てこない）。
 //
 // ■ 削除は、履歴の無い企業だけ（要件 §8）
-//   アタック・クリック・営業履歴・面談は企業を消すと一緒に消える（on delete cascade）。
+//   アタック・クリック・営業履歴・商談は企業を消すと一緒に消える（on delete cascade）。
 //   だから、それらが1件でもある企業・成約・営業禁止の企業は消さずに「消せない理由」を返す。
 //   営業禁止の企業を消すと、次に同じ会社を取り込んだときにまた営業してしまうので残す。
 //   消せないものは「対象外」「営業禁止」などのステータスで扱う。
@@ -36,6 +36,7 @@ import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { isUuid, autoNext, STATUS_KEYS, STATUS_LABEL, NG_KEYS, HIDE_KEYS, HIDE_LABEL } from "../../../lib/sales.js";
+import { loadMasters } from "../../../lib/sales-master.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 export const BULK_MAX = 500;
@@ -46,7 +47,7 @@ export const DELETE_BLOCK_LABEL = {
   approach: "アタック履歴あり",
   click: "クリック履歴あり",
   event: "営業履歴あり",
-  meeting: "面談あり",
+  meeting: "商談あり",
   deal: "案件あり",
   won: "成約済み",
   ng: "営業禁止",
@@ -179,6 +180,11 @@ const ACTIONS = {
 
   async change_service({ res, sb, ctx, user, body, rows, notFound }) {
     const service = typeof body.service === "string" ? body.service.trim().slice(0, 100) || null : null;
+    // 共通マスター（テナントの表示中の選択肢。db/108）の値だけ。空（null）は「未設定に戻す」
+    const { services } = await loadMasters(sb, ctx.tenantId);
+    if (service && !services.includes(service)) {
+      return json(res, 400, { error: "bad_service", hint: `提案サービスは「${services.join("・")}」から選んでください` });
+    }
     const ids = rows.map((r) => r.id);
     const r = await updateMany(sb, ctx, ids, { service, updated_at: now() });
     if (r.updated) await audit(ctx, user, "sales.company_bulk_service", ids, { service });
@@ -267,7 +273,7 @@ const ACTIONS = {
       ["gw_sales_click_events", "click", true],
       ["gw_sales_events", "event", true],
       ["gw_sales_meetings", "meeting", false],   // db/090 が未実行なら、無いものとして扱う
-      ["gw_sales_deals", "deal", false],         // db/100 が未実行なら、無いものとして扱う
+      ["gw_sales_deals", "deal", false],         // db/115 が未実行なら、無いものとして扱う
     ];
     for (const [tbl, key, required] of related) {
       for (const part of chunks(ids)) {

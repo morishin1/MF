@@ -29,7 +29,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, shapeApproach, newTrackingToken, recentApproach, statusRank, safeUrl, isUuid,
-  NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst, agoText,
+  NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst, periodStartJst, agoText,
   SEND_CHANNEL_KEYS, SEND_FAIL_KEYS, SEND_FAIL_LABEL, NEXT_AFTER_FAIL, HIDE_LABEL, channelLabel,
 } from "../../../lib/sales.js";
 
@@ -74,7 +74,9 @@ function sendChannel(v, fallback) {
 async function list(req, res, sb, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
   const days = Math.min(Math.max(Number(q.get("days")) || 365, 1), 3650);
-  const since = new Date(Date.now() - days * 86400000).toISOString();
+  // 期間の始まりは日本時間の日付で決める（今日を1日目に days 日ぶん。lib/sales.js periodStartJst）
+  const period = periodStartJst(days);
+  const since = period.iso;
 
   const { data, error } = await sb.from("gw_sales_approaches").select(FIELDS)
     .eq("tenant_id", ctx.tenantId).gte("sent_at", since).order("sent_at", { ascending: false }).limit(10000);
@@ -96,6 +98,8 @@ async function list(req, res, sb, ctx) {
   const tname = new Map((templates || []).map((t) => [t.id, t.name]));
 
   return json(res, 200, {
+    // 分析の画面が、成約日（won_on）の期間を同じ始まりの日で切るために返す
+    since: period.date,
     approaches: (data || []).map((a) => {
       const c = company.get(a.company_id);
       return {

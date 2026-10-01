@@ -7,13 +7,18 @@
 import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
+import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
+import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { normalizeApplicant, shapeApplicant } from "../../../lib/hr.js";
+import { normalizeApplicant, shapeApplicant, pickNextInterview } from "../../../lib/hr.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
 
 const SQL = "db/081_hr_recruiting.sql";
+// 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
+// 給与を見られない人には、どちらの設定でも、給与の列を選ばない
+const columns = (salary) => (salary && !paySplit() ? FIELDS : withoutColumns(FIELDS));
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
   + "stage, status, rank, recruiter_id, decision, decision_due_on, "
   + "recommend_note, decision_note, hold_reason, hold_next_step, "
@@ -29,20 +34,25 @@ export default async function handler(req, res) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
+  // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す。採用担当・責任者には返さない
+  const salary = guardSalaryOutput(res, canSeeSalary(ctx));
 
-  if (req.method === "GET") return list(req, res, sb, ctx);
-  if (req.method === "POST") return create(req, res, sb, ctx, user);
+  if (req.method === "GET") return list(req, res, sb, ctx, salary);
+  if (req.method === "POST") return create(req, res, sb, ctx, user, salary);
   return methodNotAllowed(res, ["GET", "POST"]);
 }
 
-async function list(req, res, sb, ctx) {
-  const { data, error } = await sb.from("gw_hr_applicants").select(FIELDS)
+async function list(req, res, sb, ctx, salary) {
+  const { data, error } = await sb.from("gw_hr_applicants").select(columns(salary))
     .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(1000);
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { applicants: [], notReady: true, message: hint });
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
+
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
+  if (salary) await attachPay(ctx.tenantId, data || [], "applicant");
 
   const ids = (data || []).map((a) => a.id);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
@@ -51,27 +61,39 @@ async function list(req, res, sb, ctx) {
       ? sb.from("gw_employees").select("id, display_name").in("id", recruiterIds)
       : Promise.resolve({ data: [] }),
     ids.length
-      ? sb.from("gw_hr_interviews").select("applicant_id").in("applicant_id", ids).limit(5000)
+      ? sb.from("gw_hr_interviews").select("id, applicant_id, kind, scheduled_at, conducted_at, canceled_at")
+        .in("applicant_id", ids).limit(5000)
       : Promise.resolve({ data: [] }),
     // 担当変更（一覧の複数選択操作）の選択肢。既存の面談担当ピッカーと同じ条件
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId)
       .in("status", ["active", "invited"]).order("display_name").limit(300),
     // 書類のそろい具合（履歴書・職務経歴書）。093 未適用なら出さないだけ
     ids.length
-      ? Promise.resolve(sb.from("gw_hr_documents").select("applicant_id, doc_type, deleted_at, created_at")
+      ? Promise.resolve(sb.from("gw_hr_documents").select("id, applicant_id, doc_type, deleted_at, created_at")
         .eq("tenant_id", ctx.tenantId).in("applicant_id", ids).limit(5000))
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
   const interviewCount = new Map();
+  const interviewsOf = new Map();
   for (const i of interviewCounts || []) {
     interviewCount.set(i.applicant_id, (interviewCount.get(i.applicant_id) || 0) + 1);
+    if (!interviewsOf.has(i.applicant_id)) interviewsOf.set(i.applicant_id, []);
+    interviewsOf.get(i.applicant_id).push(i);
   }
+  // NEXT ACTION が指す面談（詳細と同じ判定）。面談予定なのに有効な面談が無い応募者は、
+  // 一覧でも「面談予定の記録を確認してください」になる（「実施済みにする」を出さない）
+  const nextOf = (a) => {
+    const n = pickNextInterview(a, interviewsOf.get(a.id) || []);
+    return n ? { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind } : null;
+  };
 
   return json(res, 200, {
     applicants: (data || []).map((a) => ({
-      ...shapeApplicant(a),
+      ...shapeApplicant(a, nextOf(a)),
+      // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
+      nextInterviewAt: nextOf(a)?.scheduledAt || null,
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
       docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
@@ -79,12 +101,15 @@ async function list(req, res, sb, ctx) {
     employees: employees || [],
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
+    // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
+    salaryVisible: salary,
   });
 }
 
-async function create(req, res, sb, ctx, user) {
+async function create(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
-  const row = normalizeApplicant(body);
+  // 給与を見られない人は、給与の欄を書き込めない
+  const row = normalizeApplicant(salary ? body : dropSalaryInput(body));
   if (row.error) return json(res, 400, row);
   // 担当：選ばれていなければ、登録した本人（lib/hr-recruiter.js）。選ばれていれば同じ会社の在籍者か確かめる
   if (row.value.recruiter_id === undefined) {
@@ -95,15 +120,24 @@ async function create(req, res, sb, ctx, user) {
     row.value.recruiter_id = rc.value;
   }
 
+  // 給与は、分けている設定なら専用の表へ（元の行には入れない）
+  const { base, wage } = splitWage(row.value);
   const { data, error } = await sb.from("gw_hr_applicants")
-    .insert({ ...row.value, tenant_id: ctx.tenantId, created_by: user.id })
-    .select(FIELDS).single();
+    .insert({ ...base, tenant_id: ctx.tenantId, created_by: user.id })
+    .select(columns(salary)).single();
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
   }
 
+  try {
+    await savePay(ctx.tenantId, { applicantId: data.id, wage });
+    if (salary) await attachPay(ctx.tenantId, data, "applicant");
+  } catch (e) {
+    // 給与だけが無い応募者を残さない（残すと、やり直しで二重に登録される）
+    return payFailed(res, e, () => sb.from("gw_hr_applicants").delete().eq("id", data.id).eq("tenant_id", ctx.tenantId));
+  }
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: data.id, event_key: "applied", label: "応募", created_by: user.id,
   });
