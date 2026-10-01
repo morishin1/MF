@@ -10,15 +10,14 @@
 //   画面から Supabase を直接叩くと、外したことがどこにも残らない。
 //   ログインのときの6桁の確認だけは、画面から直接（記録が要るのは登録の出入りだけ）。
 //
-// ■ 守りは UI ではなく API
+// ■ 二段階認証は任意（lib/mfa.js）
 //
-//   本人が Supabase を直接叩いて外すことはできる（それを止める設定は無い）。
-//   ただ、外した瞬間からその人のトークンは aal1 になり、
-//   機密の API は requireMfa（lib/mfa.js）で止まる。「外しても何も見られない」が守り。
-//   ここで 403 を返すのは、正しい道（管理者のリセット）を案内するため。
+//   必須にしない・強制もしない。ここは、使いたい人が登録・解除でき、管理者がリセットできるための入口。
+//   自分で解除するときだけ、直前に6桁で確かめた aal2 を要る（パスワードだけで、登録を外されないように）。
 //
 // ■ リセットは管理者だけ・自分のはできない
-//   自分で自分をリセットできると、強制の意味が無い。別の管理者に頼む。
+//   リセットは、認証アプリを失った人のための操作。自分で自分のをリセットできると、
+//   パスワードだけで登録を外せてしまう。別の管理者に頼む。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
@@ -149,7 +148,7 @@ async function unenroll(req, res, ctx, user, body) {
 async function reset(req, res, ctx, user, body) {
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden", hint: "管理者だけができます" });
-  // 管理者自身が二段階認証を済ませていること（強制日以降）
+  // （二段階認証は任意。requireMfa は何も止めない。権限は、この下の canManageHr の判定）
   if (!(await requireMfa(req, res, ctx, user))) return;
 
   const employeeId = String(body?.employeeId || "");
