@@ -36,6 +36,7 @@ console.log("\n=== 管理者：ナレッジの追加・編集、問い合わせ�
 
     if (/\/api\/me\b/.test(url)) {
       return send({ email: "admin@8grp.co.jp", appRole: "admin", isAdmin: true, shows: {},
+        access: { recruit: true, sell: true, office: true, keiei: true, aiInquiries: true },
         gw: { employee: ADMIN, roles: ["owner"], isAdmin: true, tenantId: "t1", stage: null } });
     }
     if (/\/api\/ai\/knowledge-item/.test(url)) {
@@ -136,6 +137,35 @@ console.log("\n=== 一般メンバーは入れない ===");
   await page.goto(`${BASE}/admin-ai.html`);
   await page.waitForTimeout(900);
   check(page.url().includes("home.html"), `home.html へ送り返される（いま ${page.url()}）`);
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 経理/Office（人事ロールは無いが canManageAiInquiries は true）も入れる ===");
+{
+  const page = await br.newPage({ viewport: { width: 1100, height: 1000 }, timezoneId: "Asia/Tokyo" });
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "finance@8grp.co.jp" }));
+    // appRole は owner/admin/sr/member の4値しか無いため、経理ロールだけの人は member になる
+    localStorage.setItem("kp_layout", JSON.stringify({ appRole: "member", name: "経理 三郎", shows: {}, stage: null }));
+  });
+  await page.route("**/api/**", (route) => {
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    const url = route.request().url();
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "finance@8grp.co.jp", appRole: "member", shows: {},
+        access: { recruit: false, sell: false, office: true, keiei: false, aiInquiries: true },
+        gw: { employee: { id: "emp-fin", display_name: "経理 三郎" }, roles: ["finance"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/ai\/inquiries\b/.test(url)) return send({ inquiries: [] });
+    return send({});
+  });
+  await page.goto(`${BASE}/admin-ai.html`);
+  await page.waitForTimeout(900);
+  check(page.url().includes("admin-ai.html"), `home.htmlへ送り返されない（appRoleはmemberのまま。いま ${page.url()}）`);
+  check(await page.locator("#iq-list").isVisible(), "問い合わせ一覧が開ける");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
 }

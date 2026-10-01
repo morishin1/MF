@@ -1,5 +1,7 @@
 // GET /api/ai/inquiries … 問い合わせの一覧。
-//   管理サイド（canManageHr）… テナント内すべて（共通受信箱。要件 §12）
+//   管理サイド（canManageAiInquiries＝owner/admin・人事・責任者・経理）… テナント内
+//   すべて（共通受信箱。要件 §12）。canManageHr だけに絞らない（PCの紛失はIT・総務、
+//   経費精算は経理の話題で、人事の話題とは限らないため）
 //   それ以外 … 自分が出した分だけ
 // POST /api/ai/inquiries … 管理部へ問い合わせる。
 //   threadId あり … そのAI相談を要約して引き継ぐ（要件 §11）
@@ -7,7 +9,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageAiInquiries } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { CATEGORY_CODES } from "../../lib/ai-knowledge.js";
 import { buildEscalationSummary } from "../../lib/ai-escalate.js";
@@ -30,7 +32,7 @@ export default async function handler(req, res) {
       let q = sb.from("gw_ai_inquiries")
         .select("id, employee_id, ai_thread_id, category, subject, status, assigned_employee_id, created_at, updated_at")
         .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(200);
-      if (!canManageHr(ctx)) q = q.eq("employee_id", ctx.employee.id);
+      if (!canManageAiInquiries(ctx)) q = q.eq("employee_id", ctx.employee.id);
       const { data: inquiries, error } = await q;
       if (error) throw error;
 

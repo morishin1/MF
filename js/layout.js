@@ -728,9 +728,17 @@
       return null;
     }
 
+    // roles（appRole）では表せない権限（例：人事・経理など、複数ロールにまたがるもの）は
+    // access で見る。appRole は owner/admin/sr/member の4値しか無く、それ単体の人も
+    // "member" になる。roles だけで入口を絞ると、API は通るのに画面へ入れない食い違いが起きる
+    if (opts.access && !me.access?.[opts.access]) {
+      location.replace(homeFor(appRole));
+      return null;
+    }
+
     // メンバーが開けない画面（管理用）を開いたら、確認モードは終わりにする。
     // 下タブのままサイドメニューの画面に居ると、どちらの立場なのか分からなくなる
-    if (isMemberView() && allowed && !allowed.includes("member")) {
+    if (isMemberView() && ((allowed && !allowed.includes("member")) || opts.access)) {
       setMemberView(false);
       painted = null;
     }
@@ -1008,7 +1016,7 @@
     /**
      * ログイン確認 → 権限確認 → レイアウト描画。
      * 権限が無ければ本来の画面へ送り返し、null を返す（呼び出し側は何もしない）。
-     * @param {{active?:string, roles?:string[]}} opts
+     * @param {{active?:string, roles?:string[], access?:string}} opts
      * @returns {Promise<{me:object, appRole:string}|null>}
      */
     async init(opts = {}) {
@@ -1019,8 +1027,10 @@
       const cachedMe = loadMe();
 
       // 覚えている権限で、この画面を開いてよいか。
-      // 入社準備のあいだの制限も、覚えているぶんで一度見る
-      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole));
+      // 入社準備のあいだの制限も、覚えているぶんで一度見る。
+      // access（roles では表せない権限）を使う画面は、access を覚えていないので
+      // 先描きはせず、毎回 verify() の確認を待つ
+      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && !opts.access;
       // 覚えている形が古いことがある（allowed を持たない頃のもの）。
       // そこで落ちると、画面が真っ白のまま何も出ない
       const okStage = !(cached?.appRole === "member" && cached?.stage?.allowed && opts.active

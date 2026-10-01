@@ -5,7 +5,13 @@
 --   ナレッジが0件のままでは、社内AIを開いても何も答えられない。
 --   運用しながら各社の実情に合わせて書き換えてもらう前提の、
 --   たたき台（messages.html のよくある質問と対応する内容）を入れておく。
---   内容は一般的な案内文なので、管理画面（admin-ai.html）で自由に編集・無効化してよい。
+--
+-- ■ 無効（is_active=false）のまま入れる
+--   内容はこの会社の実際のルールではなく、一般的な案内文のたたき台にすぎない。
+--   有効のまま入れると、AIが「一般論」を「この会社のルール」として断定回答して
+--   しまう（§22「根拠のないことを断定しない」に反する）。管理者が内容を確認して
+--   実際の運用に合わせて書き換えたうえで、管理画面（admin-ai.html）から
+--   有効化するまでは、AIの回答には使われない。
 --
 -- ■ べき等性
 --   同じ tenant_id・title の行が無いときだけ入れる（二重に流しても増えない）。
@@ -21,7 +27,7 @@
 
 insert into public.gw_ai_knowledge
   (tenant_id, title, category, content, source_type, access_scope, link_url, link_label, is_active)
-select t.id, v.title, v.category, v.content, 'manual', v.access_scope, v.link_url, v.link_label, true
+select t.id, v.title, v.category, v.content, 'manual', v.access_scope, v.link_url, v.link_label, false
   from public.tenants t
   cross join (values
     ('有給休暇の申請方法', 'hr',
@@ -64,6 +70,7 @@ select t.id, v.title, v.category, v.content, 'manual', v.access_scope, v.link_ur
 notify pgrst, 'reload schema';
 
 -- 確認:
+--   -- is_active が false（未確認のたたき台）のまま入っていることを確認
 --   select tenant_id, title, category, access_scope, is_active
 --     from public.gw_ai_knowledge
 --    order by tenant_id, category, title;

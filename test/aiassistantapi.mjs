@@ -3,14 +3,18 @@
 // ■ 何を守るテストか
 //
 //   1. 誰でもAIに質問でき、相談（スレッド）・メッセージ・出典が保存される
-//   2. ナレッジの検索は access_scope で絞られる（一般社員には hr/finance/admin のナレッジを渡さない）
-//   3. 評価（役に立った／違っている）は本人の分だけ、押し直すと上書き
-//   4. 管理部への問い合わせ：本人は自分の分だけ、管理サイド（canManageHr）は全部見える
-//   5. 同じAI相談を2回エスカレーションしても、問い合わせは1本のまま
-//   6. 問い合わせへの返信は、本人なら employee、管理サイドなら admin として記録される
-//   7. 状態変更・担当者アサインは管理サイドのみ
-//   8. ナレッジの追加・編集は管理サイドのみ
-//   9. テナント分離：他テナントの相談・問い合わせ・ナレッジは触れない
+//   2. ナレッジの公開範囲は scope ごとに独立：一般社員=all、人事=all+hr、
+//      経理/Office=all+finance、経営者/会計側管理者=all+hr+finance+admin。
+//      「人事だから経理限定・管理者限定まで見える」にはならない
+//   3. 会話履歴（直近分）が askAssistant に渡り、追質問が成立する
+//   4. 評価（役に立った／違っている）は本人の分だけ、押し直すと上書き
+//   5. 管理部への問い合わせ：本人は自分の分だけ、管理サイド（canManageAiInquiries＝
+//      canManageHr or canAccessOffice。人事だけでなく経理/Officeも拾える）は全部見える
+//   6. 同じAI相談を2回エスカレーションしても、問い合わせは1本のまま
+//   7. 問い合わせへの返信は、本人なら employee、管理サイドなら admin として記録される
+//   8. 状態変更・担当者アサインは管理サイドのみ
+//   9. ナレッジの追加・編集は管理サイドのみ
+//   10. テナント分離：他テナントの相談・問い合わせ・ナレッジは触れない
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -95,16 +99,29 @@ mock.module(atRoot("lib/auth.js"), {
 mock.module(atRoot("lib/gw-audit.js"), {
   namedExports: { gwLog: async (e) => { logged.push(e); } },
 });
+const askAssistantCalls = [];
 mock.module(atRoot("lib/ai-assistant.js"), {
   namedExports: {
     aiConfigured: () => true,
-    askAssistant: async ({ question, knowledgeRows }) => ({
-      answer: knowledgeRows.length ? `回答: ${knowledgeRows[0].title}` : "確認できません",
-      category: knowledgeRows[0]?.category || "other",
-      usedKnowledgeIds: knowledgeRows.slice(0, 1).map((k) => k.id),
-      confident: knowledgeRows.length > 0,
-      model: "fake-model",
-    }),
+    askAssistant: async ({ question, knowledgeRows, history }) => {
+      askAssistantCalls.push({ question, knowledgeRows, history });
+      // 「それ」で始まる追質問は、直前の会話（最後のuserメッセージ）を見て答える
+      // ふりをする（本物のAIの代わりに、履歴が渡っていることをテストで確認するため）
+      if (/^それ/.test(question) && history?.length) {
+        const prevUser = [...history].reverse().find((m) => m.role === "user");
+        return {
+          answer: `（${prevUser?.content || "直前の質問"}の続き）について：詳細はrequests.htmlから`,
+          category: "hr", usedKnowledgeIds: [], confident: true, model: "fake-model",
+        };
+      }
+      return {
+        answer: knowledgeRows.length ? `回答: ${knowledgeRows[0].title}` : "確認できません",
+        category: knowledgeRows[0]?.category || "other",
+        usedKnowledgeIds: knowledgeRows.slice(0, 1).map((k) => k.id),
+        confident: knowledgeRows.length > 0,
+        model: "fake-model",
+      };
+    },
   },
 });
 
@@ -115,17 +132,25 @@ const HR = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"],
   employee: { id: "emp-hr", display_name: "事務 花子" } };
 const FINANCE = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["finance"],
   employee: { id: "emp-finance", display_name: "経理 三郎" } };
+const OWNER = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["owner"],
+  employee: { id: "emp-owner", display_name: "経営 一郎" } };
+const ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, roles: [],
+  employee: { id: "emp-admin", display_name: "会計 管理" } };
 const OTHER_TENANT = { tenantId: "t2", isAdmin: false, isHr: false, roles: [],
   employee: { id: "emp-other", display_name: "他社 次郎" } };
 
 let who = MEMBER;
 let whoUserId = "u-member";
+// canManageHr / canAccessOffice は lib/gw.js の実際の定義どおりに（偽でも同じ形で）動かす。
+// canManageAiInquiries はその合成（lib/gw.js の実装と同じ式）
+const canManageHr = (c) => Boolean(c?.isAdmin || c?.isHr);
+const canAccessOffice = (c) => Boolean((c?.roles || []).some((r) => ["owner", "manager", "finance"].includes(r)));
 mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
-    canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
-    canAccessOffice: (c) => Boolean(c?.isAdmin || (c?.roles || []).includes("owner")
-      || (c?.roles || []).includes("manager") || (c?.roles || []).includes("finance")),
+    canManageHr,
+    canAccessOffice,
+    canManageAiInquiries: (c) => canManageHr(c) || canAccessOffice(c),
   },
 });
 
@@ -156,11 +181,14 @@ const patch = (h, url, body) => call(h, { method: "PATCH", url, body });
 function setup() {
   who = MEMBER; whoUserId = "u-member";
   logged.length = 0;
+  askAssistantCalls.length = 0;
   db.rows = {
     gw_employees: [
       { id: "emp-member", user_id: "u-member", tenant_id: "t1", status: "active", display_name: "現場 太郎" },
       { id: "emp-hr", user_id: "u-hr", tenant_id: "t1", status: "active", display_name: "事務 花子" },
       { id: "emp-finance", user_id: "u-finance", tenant_id: "t1", status: "active", display_name: "経理 三郎" },
+      { id: "emp-owner", user_id: "u-owner", tenant_id: "t1", status: "active", display_name: "経営 一郎" },
+      { id: "emp-admin", user_id: "u-admin", tenant_id: "t1", status: "active", display_name: "会計 管理" },
       { id: "emp-other", user_id: "u-other", tenant_id: "t2", status: "active", display_name: "他社 次郎" },
     ],
     gw_ai_threads: [], gw_ai_messages: [], gw_ai_sources: [], gw_ai_feedback: [],
@@ -187,6 +215,28 @@ const ok = async (name, fn) => {
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
 };
 
+console.log("\n=== allowedKnowledgeScopes（lib/ai-knowledge.js）単体 ===\n");
+{
+  const { allowedKnowledgeScopes } = await import(atRoot("lib/ai-knowledge.js"));
+  const scopesFor = (ctx) => allowedKnowledgeScopes(ctx, canManageHr, canAccessOffice).sort();
+
+  await ok("一般社員: all だけ", () => {
+    assert.deepEqual(scopesFor(MEMBER), ["all"]);
+  });
+  await ok("人事: all + hr", () => {
+    assert.deepEqual(scopesFor(HR), ["all", "hr"]);
+  });
+  await ok("経理/Office: all + finance", () => {
+    assert.deepEqual(scopesFor(FINANCE), ["all", "finance"]);
+  });
+  await ok("経営者（owner）: all + hr + finance + admin", () => {
+    assert.deepEqual(scopesFor(OWNER), ["admin", "all", "finance", "hr"]);
+  });
+  await ok("会計側管理者（isAdmin）: all + hr + admin（finance はロール未付与なので無し）", () => {
+    assert.deepEqual(scopesFor(ADMIN), ["admin", "all", "hr"]);
+  });
+}
+
 console.log("\n=== 質問できる・ナレッジの公開範囲で絞られる（api/ai/ask.js） ===\n");
 
 await ok("一般社員は all のナレッジだけ参照できる", async () => {
@@ -209,13 +259,84 @@ await ok("経理担当には finance のナレッジが渡る", async () => {
   assert.equal(r.body.assistantMessage.sources[0]?.knowledge_id, "k-finance");
 });
 
-await ok("人事（canManageHr）には hr・finance・admin すべて見える", async () => {
+// 「入退社の内部手順を教えて」のような質問は、文字2-gramの素朴な採点だと
+// 許可されている別のナレッジ（例：内容に「内部」を含むもの）に偶然ヒットすることがある
+// （これはスコア方式の精度の限界であって、権限の不具合ではない）。
+// scopeの境界そのものは searchKnowledge が返す knowledge_id の集合で確認する
+const sourceIdsOf = (r) => (r.body.assistantMessage.sources || []).map((s) => s.knowledge_id);
+
+await ok("人事には hr のナレッジは見えるが、finance・admin 限定までは見えない", async () => {
   setup();
   who = HR; whoUserId = "u-hr";
   const r1 = await post(ask, "/api/ai/ask", { question: "給与計算の内規を教えて" });
+  assert.equal(r1.body.assistantMessage.sources[0]?.knowledge_id, "k-hr", "hr scopeは見える");
+  const r2 = await post(ask, "/api/ai/ask", { question: "振込承認フローを教えて" });
+  assert.ok(!sourceIdsOf(r2).includes("k-finance"), "finance限定ナレッジは出典に出ない");
+  const r3 = await post(ask, "/api/ai/ask", { question: "入退社の内部手順を教えて" });
+  assert.ok(!sourceIdsOf(r3).includes("k-admin"), "admin限定ナレッジは出典に出ない");
+});
+
+await ok("経理担当には finance のナレッジは見えるが、hr・admin 限定までは見えない", async () => {
+  setup();
+  who = FINANCE; whoUserId = "u-finance";
+  const r1 = await post(ask, "/api/ai/ask", { question: "給与計算の内規を教えて" });
+  assert.ok(!sourceIdsOf(r1).includes("k-hr"), "hr限定ナレッジは出典に出ない");
+  const r2 = await post(ask, "/api/ai/ask", { question: "入退社の内部手順を教えて" });
+  assert.ok(!sourceIdsOf(r2).includes("k-admin"), "admin限定ナレッジは出典に出ない");
+});
+
+await ok("経営者（owner）には hr・finance・admin すべて見える", async () => {
+  setup();
+  who = OWNER; whoUserId = "u-owner";
+  const r1 = await post(ask, "/api/ai/ask", { question: "給与計算の内規を教えて" });
   assert.equal(r1.body.assistantMessage.sources[0]?.knowledge_id, "k-hr");
-  const r2 = await post(ask, "/api/ai/ask", { question: "入退社の内部手順を教えて", threadId: r1.body.threadId });
+  const r2 = await post(ask, "/api/ai/ask", { question: "振込承認フローを教えて" });
+  assert.equal(r2.body.assistantMessage.sources[0]?.knowledge_id, "k-finance");
+  const r3 = await post(ask, "/api/ai/ask", { question: "入退社の内部手順を教えて" });
+  assert.equal(r3.body.assistantMessage.sources[0]?.knowledge_id, "k-admin");
+});
+
+await ok("会計側管理者（isAdmin）には hr・admin は見えるが、ロール未付与の finance までは見えない", async () => {
+  setup();
+  who = ADMIN; whoUserId = "u-admin";
+  const r1 = await post(ask, "/api/ai/ask", { question: "給与計算の内規を教えて" });
+  assert.equal(r1.body.assistantMessage.sources[0]?.knowledge_id, "k-hr");
+  const r2 = await post(ask, "/api/ai/ask", { question: "入退社の内部手順を教えて" });
   assert.equal(r2.body.assistantMessage.sources[0]?.knowledge_id, "k-admin");
+  const r3 = await post(ask, "/api/ai/ask", { question: "振込承認フローを教えて" });
+  assert.equal(r3.body.assistantMessage.sources.length, 0,
+    "canAccessOffice は社内権限（gw_role_grants）だけで決める方針。isAdmin単体では経理ロール扱いにしない");
+});
+
+await ok("会話履歴が渡り、追質問（指示語）が成立する", async () => {
+  setup();
+  const r1 = await post(ask, "/api/ai/ask", { question: "有給休暇はどう申請しますか" });
+  const r2 = await post(ask, "/api/ai/ask", { question: "それはどこから申請しますか", threadId: r1.body.threadId });
+  assert.ok(askAssistantCalls.length >= 2);
+  const lastCall = askAssistantCalls.at(-1);
+  assert.equal(lastCall.history.length, 2, "直前のuser・assistantの2件が渡る");
+  assert.equal(lastCall.history[0].role, "user");
+  assert.equal(lastCall.history[0].content, "有給休暇はどう申請しますか");
+  assert.match(r2.body.assistantMessage.content, /有給休暇はどう申請しますか/,
+    "履歴を見て、直前の質問の続きとして答えている");
+});
+
+await ok("新しい相談には会話履歴を渡さない（空）", async () => {
+  setup();
+  await post(ask, "/api/ai/ask", { question: "有給休暇はどう申請しますか" });
+  assert.deepEqual(askAssistantCalls.at(-1).history, []);
+});
+
+await ok("会話履歴は直近8件まで（それより前は切り捨てる）", async () => {
+  setup();
+  let threadId;
+  for (let i = 0; i < 6; i++) {
+    const r = await post(ask, "/api/ai/ask", { question: `質問${i}`, threadId });
+    threadId = r.body.threadId;
+  }
+  // ここまでで user3問+assistant3回=6件が履歴に存在するはずの7問目を送る
+  const r = await post(ask, "/api/ai/ask", { question: "質問6", threadId });
+  assert.ok(askAssistantCalls.at(-1).history.length <= 8, "8件を超えない");
 });
 
 await ok("無効化したナレッジは渡らない", async () => {
@@ -329,6 +450,31 @@ await ok("管理サイド（人事）はテナント内すべての問い合わ�
   await post(inquiriesApi, "/api/ai/inquiries", { note: "相談B" });
   const r = await get(inquiriesApi, "/api/ai/inquiries");
   assert.equal(r.body.inquiries.length, 2);
+});
+
+await ok("経理/Office（canManageHrではない）も共通受信箱を見られる・返信もadmin扱い", async () => {
+  setup();
+  await post(inquiriesApi, "/api/ai/inquiries", { note: "PCを紛失しました" });
+  who = FINANCE; whoUserId = "u-finance";
+  const list = await get(inquiriesApi, "/api/ai/inquiries");
+  assert.equal(list.body.inquiries.length, 1, "人事の話題でなくても経理/Officeは共通受信箱が見える");
+
+  const id = list.body.inquiries[0].id;
+  await post(inquiryApi, "/api/ai/inquiry", { id, content: "新しいPCを手配します" });
+  const msgs = db.rows.gw_ai_inquiry_messages.filter((m) => m.inquiry_id === id);
+  assert.equal(msgs.at(-1).sender_type, "admin");
+});
+
+await ok("採用担当だけ・営業担当だけは共通受信箱を見られない（他人の問い合わせが見えない）", async () => {
+  setup();
+  db.rows.gw_employees.push({ id: "emp-recruiter", user_id: "u-recruiter", tenant_id: "t1",
+    status: "active", display_name: "採用 四郎" });
+  const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["recruiter"],
+    employee: { id: "emp-recruiter", display_name: "採用 四郎" } };
+  await post(inquiriesApi, "/api/ai/inquiries", { note: "現場からの相談" }); // MEMBERが出す
+  who = RECRUITER; whoUserId = "u-recruiter";
+  const r = await get(inquiriesApi, "/api/ai/inquiries");
+  assert.equal(r.body.inquiries.length, 0, "他人の問い合わせは共通受信箱として見えない");
 });
 
 await ok("本人の返信は employee、管理サイドの返信は admin として記録される", async () => {

@@ -120,7 +120,9 @@
   let editingId = null;
   let currentInquiry = null;
 
-  KPLayout.init({ active: "ai_admin", roles: ["admin", "owner"] })
+  // 入口は「管理部問い合わせ」を扱える人（owner/admin・人事・責任者・経理。lib/gw.js
+  // canManageAiInquiries）に合わせる。appRole だけでは人事・経理を表せないので access で見る
+  KPLayout.init({ active: "ai_admin", access: "aiInquiries" })
     .then((ctx) => { if (ctx) start(); });
 
   async function start() {

@@ -34,11 +34,13 @@
 --   it(IT) / sales(営業) / rules(社内ルール) / other(その他)。
 --   「社内システムの使い方」はIT、または該当する担当カテゴリに割り当てる。
 --
--- ■ 公開範囲（access_scope）— 要件定義書 §9 の4段階
+-- ■ 公開範囲（access_scope）— 要件定義書 §9 の4段階（scopeごとに独立して判定。修正版）
 --   all      … 一般社員も含め全員
---   hr       … 人事情報（gw_is_hr と同じ判定が必要）
---   finance  … 経理情報（gw_is_office と同じ判定が必要。db/099）
---   admin    … 管理者限定（is_tenant_staff）
+--   hr       … 人事情報。gw_is_hr（人事・経営者・会計側管理者）
+--   finance  … 経理情報。gw_is_office（経営者・責任者・経理。db/099）
+--   admin    … 管理者限定。経営者・会計側管理者だけ（is_tenant_staff or owner）
+--   「人事」だからといって経理限定・管理者限定のナレッジまで読めるわけではない
+--   （以前は gw_is_hr が true なら全scope素通りだったが、scopeごとの判定に直した）。
 --   「個人の給与・評価・マイナンバー・銀行口座・パスワード」等（要件 §10）は
 --   そもそもナレッジとして登録しない運用とする（表の制約では縛れないため、
 --   管理画面側の注意書きと運用でカバーする）。
@@ -47,12 +49,15 @@
 --   書き込みは既存の gw_threads / gw_quick_memos と同じ方針で、すべて
 --   サーバ側（service_role）のみ。RLS に insert/update ポリシーは置かない
 --   （参照のみ）。
---     gw_ai_threads/messages/sources/feedback … 本人だけが読める
+--     gw_ai_threads/messages/sources … 本人だけが読める
 --       （AIとの相談は個人の相談であり、人事・管理者であっても覗かない。
 --        解決しなかった分だけ、要約して gw_ai_inquiries へ本人の操作で渡す）
---     gw_ai_knowledge … 公開範囲に応じて全社員 + 管理者/人事は無効行も含め全部
---     gw_ai_inquiries/inquiry_messages … 本人 + 管理サイド（gw_is_hr。
---       db/041 で管理者＝人事と同じ扱いになっているので canManageHr と同じ基準）
+--     gw_ai_knowledge … 公開範囲に応じて全社員 + 経営者/会計側管理者は無効行も含め全部
+--     gw_ai_feedback … 本人 + gw_is_hr（将来のKPI集計用。今回の修正の対象外）
+--     gw_ai_inquiries/inquiry_messages … 本人 + 管理部側で問い合わせを扱える人
+--       （gw_is_hr or gw_is_office。lib/gw.js の canManageAiInquiries と同じ基準。
+--        canManageHr だけに絞らない — PCの紛失はIT・総務、経費精算は経理の話題で、
+--        人事の話題とは限らないため）
 --
 -- ■ 既存データへの影響
 --   新しい表の追加のみ。既存表・既存ポリシーは一切変更しない。
@@ -265,7 +270,10 @@ as $$
   )
 $$;
 
--- 自分の問い合わせ、または管理サイド（gw_is_hr＝db/041で管理者も含む）か
+-- 自分の問い合わせ、または管理部側で問い合わせを扱える人
+-- （gw_is_hr＝経営者・会計側管理者・人事、または gw_is_office＝経営者・責任者・経理。
+--  lib/gw.js canManageAiInquiries と同じ基準。PCの紛失はIT・総務、経費精算は経理の
+--  話題で人事の話題とは限らないため、canManageHr だけに絞らない）
 create or replace function public.gw_visible_ai_inquiry(p_inquiry uuid)
 returns boolean
 language sql
@@ -276,7 +284,11 @@ as $$
   select exists (
     select 1 from public.gw_ai_inquiries i
      where i.id = p_inquiry
-       and (i.employee_id = public.gw_employee_id(i.tenant_id) or public.gw_is_hr(i.tenant_id))
+       and (
+         i.employee_id = public.gw_employee_id(i.tenant_id)
+         or public.gw_is_hr(i.tenant_id)
+         or public.gw_is_office(i.tenant_id)
+       )
   )
 $$;
 
@@ -300,18 +312,28 @@ drop policy if exists gw_ai_messages_select on public.gw_ai_messages;
 create policy gw_ai_messages_select on public.gw_ai_messages
   for select using (public.gw_owns_ai_thread(thread_id));
 
--- ナレッジ: 管理者・人事は無効行も含め全部。それ以外は公開範囲に応じて有効行だけ
+-- ナレッジ: scopeごとに独立して判定する（修正版）。
+--
+-- 以前は gw_is_hr(tenant_id) を満たせば finance・admin も含めて全scopeを
+-- 素通りさせていたが、それだと「人事」が経理限定・管理者限定のナレッジまで
+-- 読めてしまっていた。要件の4段階に合わせて scope ごとに見る:
+--   all     … 全員
+--   hr      … gw_is_hr（人事・経営者・会計側管理者。db/041で管理者含む）
+--   finance … gw_is_office（経営者・責任者・経理。db/099）
+--   admin   … 経営者・会計側管理者だけ（gw_is_office の manager/finance は含めない）
+-- 管理者・経営者は、無効化した行も含めて全部見える（管理画面の一覧用）。
+-- 人事・経理だけの人は、無効行までは見せない（自分の scope の有効行だけ）
 drop policy if exists gw_ai_knowledge_select on public.gw_ai_knowledge;
 create policy gw_ai_knowledge_select on public.gw_ai_knowledge
   for select using (
-    public.gw_is_hr(tenant_id)
+    public.gw_has_role(tenant_id, 'owner') or public.is_tenant_staff(tenant_id)
     or (
       public.gw_employee_id(tenant_id) is not null
       and is_active
       and (
         access_scope = 'all'
+        or (access_scope = 'hr' and public.gw_is_hr(tenant_id))
         or (access_scope = 'finance' and public.gw_is_office(tenant_id))
-        or (access_scope = 'admin' and public.is_tenant_staff(tenant_id))
       )
     )
   );
@@ -324,9 +346,15 @@ drop policy if exists gw_ai_feedback_select on public.gw_ai_feedback;
 create policy gw_ai_feedback_select on public.gw_ai_feedback
   for select using (employee_id = public.gw_employee_id(tenant_id) or public.gw_is_hr(tenant_id));
 
+-- 本人、または管理部側で問い合わせを扱える人（gw_is_hr or gw_is_office。
+-- gw_visible_ai_inquiry と同じ基準。canManageHr だけに絞らない）
 drop policy if exists gw_ai_inquiries_select on public.gw_ai_inquiries;
 create policy gw_ai_inquiries_select on public.gw_ai_inquiries
-  for select using (employee_id = public.gw_employee_id(tenant_id) or public.gw_is_hr(tenant_id));
+  for select using (
+    employee_id = public.gw_employee_id(tenant_id)
+    or public.gw_is_hr(tenant_id)
+    or public.gw_is_office(tenant_id)
+  );
 
 drop policy if exists gw_ai_inquiry_messages_select on public.gw_ai_inquiry_messages;
 create policy gw_ai_inquiry_messages_select on public.gw_ai_inquiry_messages

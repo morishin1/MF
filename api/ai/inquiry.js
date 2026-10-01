@@ -1,10 +1,10 @@
 // GET /api/ai/inquiry?id=...   問い合わせの中身（やりとり込み）
-// POST /api/ai/inquiry         返信を送る（本人、または管理サイド）
-// PATCH /api/ai/inquiry        状態変更・担当者アサイン（管理サイドのみ）
+// POST /api/ai/inquiry         返信を送る（本人、または管理サイド＝canManageAiInquiries）
+// PATCH /api/ai/inquiry        状態変更・担当者アサイン（管理サイドのみ。canManageAiInquiries）
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageAiInquiries } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
@@ -17,7 +17,7 @@ async function loadInquiry(sb, ctx, id) {
     .eq("id", id).maybeSingle();
   if (!inquiry || inquiry.tenant_id !== ctx.tenantId) return null;
   const isOwner = inquiry.employee_id === ctx.employee.id;
-  if (!isOwner && !canManageHr(ctx)) return null;
+  if (!isOwner && !canManageAiInquiries(ctx)) return null;
   return { inquiry, isOwner };
 }
 
@@ -80,7 +80,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "PATCH") {
-    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    if (!canManageAiInquiries(ctx)) return json(res, 403, { error: "forbidden" });
     const body = await readJson(req);
     if (!body.id) return json(res, 400, { error: "id_required" });
     const patch = {};
