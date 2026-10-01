@@ -17,6 +17,7 @@ import { dirname, join as _join } from "node:path";
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(_HERE);
 const atRoot = (p) => _join(ROOT, p);
+const { pgDateError } = await import("./_pgdate.mjs");
 
 // cron を実際に呼ぶ（＝実行機の「いま」を使う）テストのためだけの、
 // 今日からの相対日付。固定の日付文字列だと、月をまたいだ瞬間にテストが
@@ -39,11 +40,13 @@ function table(name) {
     not(k, _op, v) { f.push(["not", k, v]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
     lte(k, v) { f.push(["lte", k, v]); return q; },
+    lt(k, v) { f.push(["lt", k, v]); return q; },
     order() { return q; },
     limit() { return q; },
     then(fn) {
+      // 実DBと同じく、実在しない日付（2026-09-31 など）の比較は 22008 で落ちる
       const err = db.missingTables.has(name)
-        ? { code: "42703", message: `column ${name}.x does not exist` } : null;
+        ? { code: "42703", message: `column ${name}.x does not exist` } : pgDateError(f);
       const rows = err ? null : match(name, f);
       return Promise.resolve({ data: rows, error: err }).then(fn);
     },
@@ -95,6 +98,7 @@ const match = (name, filters) => (db.rows[name] || []).filter((r) => filters.eve
   if (op === "not") return r[k] != null;
   if (op === "gte") return String(r[k] ?? "") >= String(v);
   if (op === "lte") return String(r[k] ?? "") <= String(v);
+  if (op === "lt") return String(r[k] ?? "") < String(v);
   return true;
 }));
 
@@ -279,6 +283,28 @@ await ok("動いている現場契約ぶん、今月の請求進捗の行も用�
   const r2 = await monthStartBpEvents({ from: table }, "2026-09-04");
   assert.equal(r2.billingRowsMade, 0, "もう一度走っても増えない");
   assert.equal(db.rows.gw_billing_progress.length, 1);
+});
+
+// 月末日の境界。「その月の31日」を日付として DB に渡すと、30日までの月・2月は
+// 実DBが 22008 で落とし、cron は `if (!sce)` で黙って請求進捗の行を作らなくなる
+for (const today of ["2026-09-03", "2026-11-02", "2027-02-04", "2028-02-01"]) {
+  await ok(`31日が無い月（${today.slice(0, 7)}）でも、請求進捗の行が用意される`, async () => {
+    setupBp();
+    const r = await monthStartBpEvents({ from: table }, today);
+    assert.equal(r.billingRowsMade, 1, "実在しない日付でDBが落ちると 0 になる");
+    assert.equal(db.rows.gw_billing_progress[0].billing_month, today.slice(0, 7));
+  });
+}
+
+await ok("月末日に始まる契約は対象、翌月1日に始まる契約は対象外", async () => {
+  setupBp();
+  db.rows.gw_site_contracts = [
+    { id: "sc-last", tenant_id: "t1", employee_id: "bp-1", period_from: "2026-09-30", period_to: null },
+    { id: "sc-next", tenant_id: "t1", employee_id: "bp-1", period_from: "2026-10-01", period_to: null },
+  ];
+  const r = await monthStartBpEvents({ from: table }, "2026-09-03");
+  assert.equal(r.billingRowsMade, 1);
+  assert.deepEqual(db.rows.gw_billing_progress.map((p) => p.site_contract_id), ["sc-last"]);
 });
 
 await ok("6日以降は対象にしない（毎日は流さない）", async () => {

@@ -8,6 +8,9 @@
   "functions": {
     "api/sign/*.js": {
       "includeFiles": "assets/fonts/**"
+    },
+    "api/office/timesheet.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
@@ -55,6 +58,10 @@
     {
       "source": "/keiei",
       "destination": "/keiei/index.html"
+    },
+    {
+      "source": "/office",
+      "destination": "/office/index.html"
     },
     {
       "source": "/onboarding",

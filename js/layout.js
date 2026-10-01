@@ -281,31 +281,32 @@
   }
 
   /**
-   * 採用HR・Sales へのショートカット（ヘッダー）。
+   * 採用HR・Sales・Office へのショートカット（ヘッダー）。
    *
    * 毎日のように行き来するので、左メニューを開かずに届くようにする。
-   * ここが採用HR・Sales の正式な入口。左メニュー（管理者・メンバーとも）には
+   * ここが採用HR・Sales・Office の正式な入口。左メニュー（管理者・メンバーとも）には
    * 置かない（入口を二重にしない）。
    *
    * 出す・出さないは showsFor の hr / sales / office / keiei（/api/me の access ＝ サーバの
-   * canRecruit / canSell / canOffice / canKeiei）で決める。新しい権限は増やさない。
+   * canAccessHr / canAccessSales / canAccessOffice / canAccessKeiei）で決める。新しい権限は増やさない。
+   * 並びは ホーム｜採用HR｜Sales｜Office｜経営。複数の権限があれば、使えるものをすべて出す。
    * 経営者（owner）には全ツールが出る。経営は経営者だけ。
    * 管理画面でも、メンバーの画面でも同じ条件で出す（権限のある一般メンバーにも出る）。
    * 「メンバー表示で確認中」でも出す。この表示は権限を変えないので、
    * 同じ権限を持つメンバーに実際に見えているものと同じになる。
    *
-   * 狭い画面では「HR」「Sales」「経営」まで縮める（CSS）。通知・ログアウトは押し出さない
+   * 狭い画面では「HR」「Sales」「Office」「経営」まで縮める（CSS）。通知・ログアウトは押し出さない
    */
   //
   // ■ ツールの定義（データ）
   //   ツールを増やすときは、ここに1行足すだけ（lib/gw.js の accessOf にも1行）。
   //   key   … /api/me の access のキー（サーバの判定）と、showsFor の shows のキー
   //   ready … false のあいだは、権限があっても出さない。まだ実装されていないツールの
-  //           リンク（存在しない画面）を出さないため。Office は実装されたら true にする
+  //           リンク（存在しない画面）を出さないため
   const TOOLS = [
-    { key: "hr",     href: "/hr/",     label: "HR",     short: "HR",     icon: "person_add",       ready: true },
+    { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add",       ready: true },
     { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
-    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: false },
+    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true },
     { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true },
   ];
 
@@ -838,19 +839,19 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
-      // 採用HR（/hr）・Sales（/sales）の入口。
-      // サーバが判定した結果（/api/me の access = lib/gw.js の canRecruit / canSell）をそのまま使う。
-      // 役割の並びを画面側で持たない（ヘッダーに出たのに 403、を作らない）。
-      // access が無いのは、前の版の /api/me を覚えていたときだけ。そのときは同じ基準で数える
-      // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない
+      // 採用HR（/hr）・Sales（/sales）・Office（/office）の入口。
+      // サーバが判定した結果（/api/me の access = lib/gw.js の canAccessHr / canAccessSales /
+      // canAccessOffice）をそのまま使う。役割の並びを画面側で持たない
+      // （ヘッダーに出たのに 403、を作らない）。
+      // access が無いのは、前の版の /api/me を覚えていたときだけ。採用HR・Sales は同じ基準で数える
+      // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない。
+      // Office は金額を扱うので、access が無いときは出さない（入れない側に倒す）
       hr: me?.access ? Boolean(me.access.recruit)
         : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
-      // Office（未実装。TOOLS の ready が true になるまで、ヘッダーには出ない）
-      office: me?.access ? Boolean(me.access.office)
-        : ["owner", "manager", "finance"].some((r) => gwRoles.includes(r)),
-      // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
+      office: Boolean(me?.access?.office),
+      // 経営（/keiei）は経営者だけ。サーバの判定（canAccessKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
