@@ -31,6 +31,7 @@ import { daysToStart } from "../../lib/onboard-stage.js";
 import { journeyLinks } from "../../lib/journey-load.js";
 import { SIX_STEPS, mapSix, summarizeSix } from "../../lib/onboard-six.js";
 import { guideFact } from "../../lib/onboard-guide.js";
+import { listStatus } from "../../lib/labor-notice.js";
 import { readAll, readIn, chunks } from "../../lib/pg-read.js";
 import { buildHub, buildSecurity } from "../../lib/keiei-hub.js";
 import { readHubFacts, readSecurity, onboardingFact } from "../../lib/keiei-hub-read.js";
@@ -373,11 +374,16 @@ async function onboarding(sb, ctx) {
       : st.state === "current" ? hrefOf(st.key, six.stage, links) : null;
     if (six.after && six.after.actor) six.after.href = links.career;
     const joinOn = p.target_on || e.joined_on || null;
+    // 労働条件通知書（db/110）の状態。経営ハブに件数だけ出す（アップロード・公開は、入社管理＝admin-hr.html）。
+    // 電子署名・作成依頼の流れにいる人は、通知書の対象に数えない（na）。表が読めなければ unlinked
+    const fx = factsBy.get(p.id) || null;
+    const notice = listStatus(fx?.notice ?? null, { esign: Boolean(fx?.sign), order: Boolean(fx?.order) });
+    links.notice = `/admin-hr.html?id=${encodeURIComponent(p.id)}#labor-notice`;
     rows.push({
       employeeId: e.id, procedureId: p.id, name: e.display_name, department: e.department || null,
       position: e.position || null, employmentType: e.employment_type || null,
-      joinOn, daysToStart: daysToStart(joinOn, today), six,
-      links: { hr: links.hr, onboarding: links.onboarding, detail: links.detail },
+      joinOn, daysToStart: daysToStart(joinOn, today), six, notice,
+      links: { hr: links.hr, onboarding: links.onboarding, detail: links.detail, notice: links.notice },
     });
   }
   // まだ終わっていない人を先に。同じなら入社日が近い順

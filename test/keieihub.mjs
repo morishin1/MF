@@ -249,6 +249,42 @@ ok("経営者の二段階認証が不明（管理用の取得に失敗）でも�
   assert.deepEqual(h.unreadable, []);
 });
 
+console.log("\n— 労働条件通知書（件数だけ。アップロード・公開は、入社管理）—");
+
+ok("通知書が未公開・本人未確認の人がいれば、①に件数だけ出る。押すと入社管理（/admin-hr.html）へ", () => {
+  const h = hub({ onboarding: { inProgress: 3, company: 0, notice: { unpublished: 2, unconfirmed: 1 }, rows: [] } });
+  const un = h.attention.find((i) => i.key === "notice_unpublished");
+  const cf = h.attention.find((i) => i.key === "notice_unconfirmed");
+  assert.equal(un.count, 2);
+  assert.equal(un.label, "労働条件通知書 未公開");
+  assert.equal(un.href, "/admin-hr.html");
+  assert.equal(un.block, "today");
+  assert.equal(cf.count, 1);
+  assert.equal(cf.label, "労働条件通知書 本人未確認");
+  assert.equal(cf.href, "/admin-hr.html");
+  assert.equal(un.linkLabel, "入社管理を開く");
+  assert.ok(!/アップロード|差し替え|公開する/.test(JSON.stringify([un, cf])), "経営ハブは、状況を見るだけ（操作の文言を出さない）");
+});
+
+ok("0件なら出ない（件数が0の項目を並べない）。持たない（古い形）なら、何も出さず、未読込にもしない", () => {
+  assert.deepEqual(hub({ onboarding: { inProgress: 1, company: 0, notice: { unpublished: 0, unconfirmed: 0 }, rows: [] } }).attention, []);
+  const old = hub({ onboarding: { inProgress: 1, company: 0, rows: [] } });
+  assert.deepEqual(old.attention, []);
+  assert.deepEqual(old.unreadable, []);
+});
+
+ok("表が読めなかった（null）ときは、0件とは言わず、「労働条件通知書」を未読込に出す。ほかのブロックは出る", () => {
+  const h = hub({ onboarding: { inProgress: 2, company: 1, notice: null, rows: [] } });
+  assert.deepEqual(h.unreadable, ["労働条件通知書"]);
+  assert.equal(h.attention.some((i) => i.key.startsWith("notice_")), false);
+  assert.ok(h.attention.some((i) => i.key === "onboarding_company"), "入社準備（会社の対応）は出る");
+});
+
+ok("入社準備の件数（入社準備 未完了）は、これまでどおり。通知書の項目は、人数に足さない", () => {
+  const h = hub({ onboarding: { inProgress: 4, company: 0, notice: { unpublished: 4, unconfirmed: 0 }, rows: [] } });
+  assert.equal(h.people.tiles.find((t) => t.key === "onboarding_open").value, 4);
+});
+
 console.log("\n— ②人数と③社内の数字 —");
 
 ok("採用選考中・内定・入社予定・入社準備未完了の数え方", () => {

@@ -378,6 +378,56 @@ await ok("入社準備: 会社の対応待ちは①、入社日が近く準備�
   assert.ok(!JSON.stringify(d).includes("777777"), "給与入りの書面の金額は出ない");
 });
 
+await ok("労働条件通知書: 未公開・本人未確認の人数だけが①に出る。電子署名の流れの人は数えない。ファイルの場所・名前・給与は読まない", async () => {
+  setup();
+  const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  const proc = (id, emp) => ({ id, tenant_id: "t1", employee_id: emp, kind: "onboarding", status: "in_progress", target_on: dayOff(30), stage: null, stage_at: null, updated_at: daysAgo(1), created_at: daysAgo(5) });
+  db.rows.gw_employees.push(
+    { id: "e7", tenant_id: "t1", user_id: "u7", display_name: "下書き 七郎", status: "invited", employee_kind: "proper" },
+    { id: "e8", tenant_id: "t1", user_id: "u8", display_name: "未確認 八郎", status: "invited", employee_kind: "proper" },
+    { id: "e9", tenant_id: "t1", user_id: "u9", display_name: "確認済 九郎", status: "invited", employee_kind: "proper" });
+  // e6=通知書なし（未公開に数える）/ e3=電子署名済み（数えない）/ e7=下書きだけ（未公開）/ e8=公開済み・未確認 / e9=確認済み
+  db.rows.gw_procedures = [proc("p6", "e6"), proc("p3", "e3"), proc("p7", "e7"), proc("p8", "e8"), proc("p9", "e9")];
+  db.rows.gw_procedure_items = [];
+  db.rows.gw_sign_requests = [{ employee_id: "e3", doc_kind: "employment", status: "signed", sent_at: daysAgo(4) }];
+  db.rows.gw_doc_orders = [{ employee_id: "e3", doc_kind: "employment", status: "signed", updated_at: daysAgo(3) }];
+  db.rows.gw_labor_notices = [
+    { id: "n7", tenant_id: "t1", employee_id: "e7", version: 1, published_at: null, confirmed_at: null, filename: "秘密_七郎.pdf", storage_path: "t1/labor-notice/e7/a.pdf", sha256: "x" },
+    { id: "n8", tenant_id: "t1", employee_id: "e8", version: 1, published_at: daysAgo(1), confirmed_at: null, filename: "秘密_八郎.pdf", storage_path: "t1/labor-notice/e8/a.pdf", sha256: "x" },
+    { id: "n9", tenant_id: "t1", employee_id: "e9", version: 1, published_at: daysAgo(2), confirmed_at: daysAgo(1), filename: "秘密_九郎.pdf", storage_path: "t1/labor-notice/e9/a.pdf", sha256: "x" },
+    { id: "nx", tenant_id: "t2", employee_id: "ex", version: 1, published_at: null, confirmed_at: null },
+  ];
+  db.rows.gw_consent_docs = []; db.rows.gw_onboard_consents = []; db.rows.gw_onboard_profiles = []; db.rows.gw_orientation_items = []; db.rows.gw_orientation_checks = [];
+  db.rows.gw_employee_careers = [];
+  const r = await call("hub");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const d = r.body;
+  const un = by(d, "notice_unpublished");
+  const cf = by(d, "notice_unconfirmed");
+  assert.equal(un.count, 2, "e6（通知書なし）と e7（下書きだけ）。e3 は電子署名の流れ");
+  assert.equal(cf.count, 1, "e8 だけ");
+  assert.equal(un.href, "/admin-hr.html");
+  assert.equal(cf.href, "/admin-hr.html");
+  assert.deepEqual([...db.selects.gw_labor_notices], ["employee_id, version, published_at, confirmed_at"], "読むのは、版・公開・確認の列だけ");
+  const s = JSON.stringify(d);
+  assert.ok(!/秘密_|storage_path|labor-notice\/|a\.pdf/.test(s), "ファイル名・置き場所は、ハブに出ない");
+  assert.equal(db.writes.length, 0, "書き込み0回");
+});
+
+await ok("労働条件通知書の表が無い（未適用）: 0件とは出さず、未読込に「労働条件通知書」。入社準備ほかの項目は出る", async () => {
+  setup();
+  const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  db.rows.gw_procedures = [{ id: "p6", tenant_id: "t1", employee_id: "e6", kind: "onboarding", status: "in_progress", target_on: dayOff(3), stage: null, stage_at: null, updated_at: daysAgo(1), created_at: daysAgo(5) }];
+  db.rows.gw_procedure_items = []; db.rows.gw_sign_requests = []; db.rows.gw_doc_orders = [];
+  db.rows.gw_consent_docs = []; db.rows.gw_onboard_consents = []; db.rows.gw_onboard_profiles = []; db.rows.gw_orientation_items = []; db.rows.gw_orientation_checks = [];
+  db.rows.gw_employee_careers = [];
+  db.missing.add("gw_labor_notices");
+  const d = (await call("hub")).body;
+  assert.ok(d.unreadable.includes("労働条件通知書"), d.unreadable.join());
+  assert.equal(by(d, "notice_unpublished"), undefined);
+  assert.equal(tile(d, "onboarding_open").value, 1, "入社準備の数は出る");
+});
+
 console.log("\n=== 旧 view は、後方互換のためまだ動く（画面は呼ばない）===\n");
 
 await ok("dashboard / expenses / revenue / cash / accounting / payroll / onboarding は、これまでどおり 200", async () => {
