@@ -1,4 +1,4 @@
-// 管理者ダッシュボード（admin-dashboard.html）を、実際のブラウザで通す。
+// チーム状況（admin-team.html。旧 管理者ダッシュボード）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
 //
@@ -57,7 +57,7 @@ console.log("\n=== ダッシュボード：今日のチーム状況 ===");
     return send({});
   });
 
-  await page.goto(`${BASE}/admin-dashboard.html`);
+  await page.goto(`${BASE}/admin-team.html`);
   await page.waitForTimeout(1000);
 
   console.log("— 5つの項目だけが出る —");
@@ -80,7 +80,7 @@ console.log("\n=== ダッシュボード：今日のチーム状況 ===");
   await page.locator(".dt-today a", { hasText: "見積を出す" }).click();
   await page.waitForTimeout(500);
   check(await page.locator("#td-root").isVisible(), "ドロワーが開く");
-  check(page.url().endsWith("admin-dashboard.html"), "ページ遷移していない");
+  check(page.url().endsWith("admin-team.html"), "ページ遷移していない");
   const drawerText = await page.locator("#td-panel").innerText();
   check(/見積を出す/.test(drawerText), "そのタスクの詳細が出る");
 
@@ -108,7 +108,7 @@ console.log("\n=== 何も無いとき ===");
     return send({});
   });
 
-  await page.goto(`${BASE}/admin-dashboard.html`);
+  await page.goto(`${BASE}/admin-team.html`);
   await page.waitForTimeout(900);
   check(/期限超過も契約更新待ちもありません/.test(await page.locator("#dt-body").innerText()), "空のときの言葉が出る");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
@@ -138,7 +138,7 @@ console.log("\n=== 076・077未適用（表がまだ無い）でも、cronベー
     return send({});
   });
 
-  await page.goto(`${BASE}/admin-dashboard.html`);
+  await page.goto(`${BASE}/admin-team.html`);
   await page.waitForTimeout(900);
   check(/068_task_flow\.sql/.test(await page.locator("#notice").innerText()), "何を流せばよいかが出る");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
