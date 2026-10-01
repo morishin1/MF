@@ -48,7 +48,7 @@ const fitsNote = async (page, sel) => {
 };
 
 /** ログイン済みの画面を1つ開く */
-async function open(path, { admin }) {
+async function open(path, { admin, access }) {
   const page = await br.newPage({ viewport: { width: 1440, height: 900 }, timezoneId: "Asia/Tokyo" });
   const role = admin ? "admin" : "member";
   await page.addInitScript((r) => {
@@ -68,7 +68,7 @@ async function open(path, { admin }) {
         email: "a@b.c", appRole: role, shows: {}, isAdmin: admin,
         // access（roles では表せない権限）。admin は owner 相当で全部 true にしておく
         // （admin-ai.html の access:"aiInquiries" のような画面もこのモックで開けるように）
-        access: { recruit: admin, sell: admin, office: admin, keiei: admin, aiInquiries: admin },
+        access: access || { recruit: admin, sell: admin, office: admin, keiei: admin, aiInquiries: admin },
         gw: { employee: { id: "e1", display_name: "テスト", status: "active" },
               roles: admin ? ["owner"] : [], isAdmin: admin, tenantId: "t1", stage: null },
       });
@@ -90,7 +90,7 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
 
   // ヘッダーに Office・⚙管理 のショートカットが出て、いま Office を見ている。
   // ⚙管理は幅を取らないよう、通知ベルと同じアイコン＋ドロップダウン（#kp-admin-menu-btn）
-  const office = page.locator('.kp-shortcut[data-shortcut="area-office"]');
+  const office = page.locator('.kp-shortcut[data-shortcut="office"]');
   const settings = page.locator('#kp-admin-menu-btn');
   check(await office.isVisible(), "ヘッダーに「Office」が出る");
   check(await settings.isVisible(), "ヘッダーに「管理」（⚙）が出る");
@@ -178,7 +178,7 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
 {
   // admin-dashboard.html は Office 領域（先頭のダッシュボード）
   const d = await open("admin-dashboard.html", { admin: true });
-  check(await d.locator('.kp-shortcut[data-shortcut="area-office"].on').count() === 1, "ダッシュボードにいるときは「Office」が選ばれて見える");
+  check(await d.locator('.kp-shortcut[data-shortcut="office"].on').count() === 1, "ダッシュボードにいるときは「Office」が選ばれて見える");
   check((await d.locator(".kp-app").innerText()).includes("OFFICE"), "ヘッダーに「/ OFFICE」と出る");
   check((await d.locator(".kp-side-item.on").innerText()).includes("ダッシュボード"), "Officeの左でダッシュボードが光る");
   await d.close();
@@ -228,6 +228,28 @@ console.log("\n— 経営：全員のタスク・日報・チーム状況 —");
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
   check(tabs.join("/") === "タスク・予定/今週のゴール", `全員のタスクの帯（いま ${tabs.join("/")}）`);
   await page.close();
+}
+
+console.log("\n— 管理者（経営者・経理の権限なし）：入れる入口だけが出る —");
+{
+  // 会計側の管理者だけ（access.keiei・access.office なし）。管理画面は開けるが、/keiei と /office は入れない
+  const only = { recruit: false, sell: false, office: false, keiei: false, aiInquiries: true };
+  const t = await open("admin-tasks.html", { admin: true, access: only });
+  const items = (await t.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
+  check(items.join("/") === "チーム状況/全員のタスク/全員の日報", `経営ホーム（/keiei）は経営者だけ。管理者はチーム管理の3つ（いま ${items.join("/")}）`);
+  check((await t.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("href")) === "admin-team.html", "管理者の「経営」は、チーム状況から入る（導線がある）");
+  check((await t.locator('.kp-shortcut[data-shortcut="office"]').getAttribute("href")) === "admin-dashboard.html", "管理者の「Office」は Officeのダッシュボードから入る");
+  await t.close();
+  const c = await open("admin-closing.html", { admin: true, access: only });
+  const tabs = (await c.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
+  check(tabs.join("/") === "月次締め/月初作業管理", `/office に入れない人には「月末月初業務」を出さない（いま ${tabs.join("/")}）`);
+  await c.close();
+
+  // access.office のある管理者（経営者・責任者・経理を兼ねる）には、Officeの月次業務の中に /office/ が出る
+  const c2 = await open("admin-closing.html", { admin: true });
+  const tabs2 = await c2.locator(".kp-subnav .kp-subtab").evaluateAll((ns) => ns.map((n) => `${n.textContent.trim()}|${n.getAttribute("href") || ""}`));
+  check(tabs2.join(",") === "月次締め|,月初作業管理|admin-month-start.html,月末月初業務|/office/", `月次業務の帯に /office/（いま ${tabs2.join(",")}）`);
+  await c2.close();
 }
 
 console.log("\n— 同じ鍵でもメンバー画面は本人用（管理者でもOfficeの左メニューにしない） —");

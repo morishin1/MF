@@ -309,15 +309,19 @@ console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、ac
   const tools = [...block.matchAll(/\{\s*key:\s*"(\w+)",\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*short:\s*"([^"]+)",\s*icon:\s*"(\w+)",\s*ready:\s*(true|false)/g)]
     .map((m) => ({ key: m[1], href: m[2], label: m[3], ready: m[6] === "true" }));
   check(tools.map((t) => t.key).join(",") === "hr,sales,office,keiei", `ツールの並びは HR・Sales・Office・経営（いま ${tools.map((t) => t.key)}）`);
-  // 「Office」の表示名は、ナビ再設計（ヘッダーの管理画面向けOfficeエリア）との名前衝突を避けるため
-  // 「月次業務」に改称した（URL・access.office のキーは変えていない。下の各チェックが見ているのはそちら）
-  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,月次業務,経営", `表示は「採用HR ｜ Sales ｜ 月次業務 ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
+  // ヘッダーは「採用HR｜Sales｜Office｜経営（＋⚙管理）」。Office は1つの名前に1つだけ
+  // （月次業務は Office の中の機能で、ヘッダーに別名で出さない）
+  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,Office,経営", `表示は「採用HR ｜ Sales ｜ Office ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
+  check(!/月次業務/.test(block), "ヘッダーのツール定義に「月次業務」を置かない（Officeの中の機能）");
   const accessKeys = new Set(Object.keys(accessOf({ roles: [] })));
   const keyOfAccess = { hr: "recruit", sales: "sell", office: "office", keiei: "keiei" };
   check(tools.every((t) => accessKeys.has(keyOfAccess[t.key])), "TOOLS の各ツールに、サーバの access（accessOf）のキーがある");
   // Office は実装された（/office/）ので ready:true。未実装のツールを足すときは ready:false で足す（存在しないリンクを出さない）
   check(tools.every((t) => t.ready), "HR・Sales・Office・経営は ready:true（実装済み）");
-  check(/TOOLS\.filter\(\(t\) => t\.ready && shows\[t\.key\]\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
+  check(/TOOLS\.filter\(\(t\) => t\.ready && toolVisible\(t, shows\)\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
+  // Office：/office に入れる人（access.office）か、管理画面を開ける管理者。入口は人によって変える（押して403を作らない）
+  check(/office: Boolean\(me\?\.access\?\.office\) \|\| adminApp/.test(layout), "Office の表示は access.office か管理者（adminApp）");
+  check(/if \(t\.key === "office"\) return shows\.adminApp \? t\.altHref : t\.href;/.test(layout), "Office の行き先: 管理者は管理画面（ダッシュボード）、それ以外（access.office）は /office/");
   check(tools.find((t) => t.key === "keiei")?.href === "/keiei/", "経営 → /keiei/");
 }
 

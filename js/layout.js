@@ -192,9 +192,12 @@
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
         // 月次締めと月初作業管理は、同じ「月の区切りの仕事」なので1つにまとめる
         { key: "closing",    href: "admin-closing.html",  label: "月次業務",     icon: "event_available", ready: true,
+          // 月末月初業務（勤務表・稼働・請求。/office/）も Office の「月次業務」の中。
+          // /office/ に入れるのは access.office の人だけなので、when で出し分ける（入れない人に出さない）
           tabs: [
             { key: "closing",    href: "admin-closing.html",     label: "月次締め" },
             { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理" },
+            { key: "office_monthly", href: "/office/",           label: "月末月初業務", when: "officeApp" },
           ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
@@ -212,7 +215,8 @@
   // 既存の管理画面（admin-*.html）をそのまま使う。URL・API は変えず、左メニューと導線だけ経営側へ寄せた。
   // 管理者がこの画面を開いたときの左メニューはここ（先頭は経営ホームへ戻る入口）
   const KEIEI_ITEMS = [
-    { key: "keiei_home", href: "/keiei/", label: "経営ホーム", icon: "monitoring", ready: true },
+    // 経営アプリそのものは経営者だけ（when）。管理者はチーム状況から入る
+    { key: "keiei_home", href: "/keiei/", label: "経営ホーム", icon: "monitoring", ready: true, when: "keiei" },
     { key: "team", href: "admin-team.html", label: "チーム状況", icon: "groups", ready: true },
     // 今週のゴールは、全員のタスクの帯の中へ（左メニューの行は増やさない）
     { key: "tasks", href: "admin-tasks.html", label: "全員のタスク", icon: "checklist", ready: true,
@@ -324,39 +328,49 @@
   //   key   … /api/me の access のキー（サーバの判定）と、showsFor の shows のキー
   //   ready … false のあいだは、権限があっても出さない。まだ実装されていないツールの
   //           リンク（存在しない画面）を出さないため
-  const TOOLS = [
-    { key: "hr",     href: "/hr/",     label: "採用HR",   short: "HR",     icon: "person_add",       ready: true },
-    { key: "sales",  href: "/sales/",  label: "Sales",    short: "Sales",  icon: "storefront",       ready: true },
-    // 旧ラベルは「Office」だったが、今回のナビ再設計で「Office」は管理画面側の
-    // 業務領域（admin-members.html 等）を指す名前になったため、こちらは実体（月末月初業務）に
-    // 合わせて改称した。URL・権限（access.office = canAccessOffice）は変えていない
-    { key: "office", href: "/office/", label: "月次業務", short: "月次",   icon: "calendar_month",   ready: true },
-    { key: "keiei",  href: "/keiei/",  label: "経営",     short: "経営",   icon: "monitoring",       ready: true },
-  ];
-
-  // 管理者・経営者だけに出すヘッダーの業務領域切替（Office）。
-  // 上の TOOLS（採用HR・Sales・月次業務・経営）は access フラグ（member でも持ちうる権限）で
-  // 出し分けるが、こちらは appRole（admin/owner）で出し分ける。areaOf(active) と対にして、
-  // 「いまどの領域を見ているか」をハイライトする（href の前方一致ではなく area で判定する）。
   //
-  // ⚙管理（権限・端末・アクセス分析・システム設定）はここに並べない。
-  // ヘッダーの横幅はすでに4ツール＋氏名・通知・ログアウトでほぼ一杯（1440px 幅で確認済み）。
-  // フルサイズのボタンをもう1つ足すと折り返して縦に伸びる。小さいアイコン＋
-  // ドロップダウン（adminMenuHtml・toggleAdminMenu）にして、通知ベルと同じ形にする
-  const ADMIN_TOOLS = [
-    { areaKey: "office", href: "admin-dashboard.html", label: "Office", short: "Office", icon: "domain" },
+  // ■ ヘッダーは「採用HR｜Sales｜Office｜経営｜⚙管理」の5つ。担当業務は1つの名前に1つだけ
+  //   （同じ Office を「Office」と「月次業務」で二重に出さない。月次業務は Office の中の機能）
+  //   altHref … 管理者（admin/owner）が開くときの入口。管理画面（admin-*.html）はそちらが正本で、
+  //             /office・/keiei は access（canAccessOffice・canKeiei）の人だけが入れる別アプリ。
+  //             入れない入口を出さない（出たのに押すと 403、を作らない）ため、人によって行き先を変える
+  const TOOLS = [
+    { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add",       ready: true },
+    { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
+    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true,
+      altHref: "admin-dashboard.html" },
+    { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true,
+      altHref: "admin-team.html" },
   ];
 
-  function shortcutsHtml(shows = {}, path = location.pathname, showAdminTools = false, area = null) {
-    const list = [
-      ...TOOLS.filter((t) => t.ready && shows[t.key]),
-      ...(showAdminTools ? ADMIN_TOOLS : []),
-    ];
+  /**
+   * このツールを出すか／どこへ行くか。
+   *   office … /api/me の access.office（経営者・責任者・経理）か、管理者（admin/owner）。
+   *            管理者は管理画面（人事・労務・経理・事務）を開けるので Office に入れる。
+   *            access.office の人は /office/（月次業務）、管理者は admin-dashboard.html から入る
+   *   keiei  … 経営者（access.keiei）は /keiei/。管理者はチーム状況（admin-team.html）から
+   *            （全員のタスク・日報・チーム状況は管理者も使う。経営アプリそのものは経営者だけ）
+   * 権限の判定は showsFor（サーバの判定そのもの）に集めてある。ここでは並べ直さない
+   */
+  function toolVisible(t, shows) {
+    if (t.key === "office") return Boolean(shows.office);
+    if (t.key === "keiei") return Boolean(shows.keiei || shows.team);
+    return Boolean(shows[t.key]);
+  }
+  function toolHref(t, shows) {
+    if (t.key === "office") return shows.adminApp ? t.altHref : t.href;
+    if (t.key === "keiei") return shows.keiei ? t.href : t.altHref;
+    return t.href;
+  }
+
+  function shortcutsHtml(shows = {}, path = location.pathname, area = null) {
+    const list = TOOLS.filter((t) => t.ready && toolVisible(t, shows));
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
-      const on = s.areaKey ? area === s.areaKey : (path.startsWith(s.href) || (s.key === "keiei" && area === "keiei"));
-      return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${s.href}"
-                 data-shortcut="${s.key || `area-${s.areaKey}`}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
+      // /office・/keiei の中にいるとき、または管理画面でその領域（Office・経営）を開いているとき
+      const on = path.startsWith(s.href) || (s.key === "office" && area === "office") || (s.key === "keiei" && area === "keiei");
+      return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
+                 data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
         </a>`;
     }).join("")}</nav>`;
@@ -382,7 +396,7 @@
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
-        ${shortcutsHtml(shows, location.pathname, showAdminTools, area)}
+        ${shortcutsHtml(shows, location.pathname, area)}
         <span class="kp-who-name">${esc(name)}</span>
         ${canPreview ? (memberView
           ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
@@ -535,13 +549,13 @@
    * ホーム・管理は項目が少ないので平らに並べる。Office だけ人事・労務／経理・事務の
    * 2グループに畳める（社労士のように項目が少ない相手には、従来どおり平らに並べる＝items引数）
    */
-  function renderAdminNav(active, items = null) {
+  function renderAdminNav(active, items = null, shows = {}) {
     if (items) return renderSidebar(active, items, "admin");
 
     // ホーム領域（全員と同じ左メニュー）は renderChrome が renderMemberNav で描く。ここは Office・管理だけ
     const area = areaOf(active);
     if (area === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
-    if (area === "keiei") return renderSidebar(active, KEIEI_ITEMS, "admin");
+    if (area === "keiei") return renderSidebar(active, KEIEI_ITEMS.filter((n) => !n.when || shows[n.when]), "admin");
 
     const open = loadOpen();
     const here = groupOf(active);
@@ -601,9 +615,11 @@
    *   HTML側に帯を書き写すと、増やしたときに書き忘れる画面が出る。
    *   .wrap の最初の見出しの直後に差し込む。
    */
-  function renderSubnav(active, navs) {
+  function renderSubnav(active, navs, shows = {}) {
     const owner = navs.find((n) => (n.tabs || []).some((t) => t.key === active));
-    if (!owner || owner.tabs.length < 2) return;
+    // when が付いたタブは、その権限（shows）のある人にだけ出す
+    const tabs = owner ? owner.tabs.filter((t) => !t.when || shows[t.when]) : [];
+    if (!owner || tabs.length < 2) return;
 
     const wrap = document.querySelector(".wrap");
     const head = wrap && wrap.querySelector("h1");
@@ -614,7 +630,7 @@
     const box = document.createElement("nav");
     box.className = "kp-subnav";
     box.setAttribute("aria-label", esc(owner.label));
-    box.innerHTML = owner.tabs.map((t) => {
+    box.innerHTML = tabs.map((t) => {
       const on = t.key === active;
       return on
         ? `<span class="kp-subtab on" aria-current="page">${esc(t.label)}</span>`
@@ -891,7 +907,7 @@
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     // 管理者もホーム領域は全員と同じ左メニュー。Office・管理（⚙）に入ったときだけ専用の左メニュー
     const adminArea = canPreview && !memberView && areaOf(active) !== "home";
-    if (adminArea) renderAdminNav(active);
+    if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
 
@@ -900,7 +916,7 @@
     // （領域をまたいで active を特定できるようにする。表示するサイドメニューとは別）
     renderSubnav(active, !adminArea
       ? MEMBER_SIDE_NAV
-      : [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS]);
+      : [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS], shows);
 
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く。
     // その画面のデータより先に投げない（バッジのために本文を待たせない）
@@ -922,22 +938,29 @@
     const gwRoles = me?.gw?.roles || [];
     const roles = me?.roles || [];
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
+    // 管理画面（admin-*.html）を開ける人（appRole が admin / owner）
+    const adminApp = ["admin", "owner"].includes(me?.appRole || (me?.isAdmin ? "admin" : ""));
     return {
       booking: staff || gwRoles.includes("booking"),
-      // 採用HR（/hr）・Sales（/sales）・Office（/office）の入口。
-      // サーバが判定した結果（/api/me の access = lib/gw.js の canAccessHr / canAccessSales /
-      // canAccessOffice）をそのまま使う。役割の並びを画面側で持たない
-      // （ヘッダーに出たのに 403、を作らない）。
+      adminApp,
+      // 採用HR（/hr）・Sales（/sales）の入口。
+      // サーバが判定した結果（/api/me の access = lib/gw.js の canAccessHr / canAccessSales）をそのまま使う。
+      // 役割の並びを画面側で持たない（ヘッダーに出たのに 403、を作らない）。
       // access が無いのは、前の版の /api/me を覚えていたときだけ。採用HR・Sales は同じ基準で数える
       // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない。
-      // Office は金額を扱うので、access が無いときは出さない（入れない側に倒す）
       hr: me?.access ? Boolean(me.access.recruit)
         : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
-      office: Boolean(me?.access?.office),
-      // 経営（/keiei）は経営者だけ。サーバの判定（canAccessKeiei）そのもの
+      // Office。/office（月次業務）に入れる人は access.office だけ（金額を扱うので、access が無いときは出さない）。
+      // 管理者（admin/owner）は管理画面の人事・労務・経理・事務に入れるので、Office の入口も出す。
+      // 入口は人によって変える（toolHref）ので、押して 403 になる人は出ない
+      officeApp: Boolean(me?.access?.office),
+      office: Boolean(me?.access?.office) || adminApp,
+      // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
+      // 全員のタスク・日報・チーム状況（管理画面）を開ける人。経営の入口（管理者はここから）
+      team: adminApp,
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
       // それでは判定にならない。admin / staff と社内ロールで見る

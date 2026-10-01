@@ -220,7 +220,8 @@ console.log("\n— 見出しとまとまりの名前 —");
         const f = pageOf(t.key, navs);
         // #… は同じ画面の別ビュー、?… は同じ画面の別タブ（例: admin-esign.html?tab=order）。
         // どちらも「別のHTMLファイル」ではないので、見出し比較の対象外
-        if (!f || f.includes("#") || f.includes("?")) continue;
+        // "/office/" のような別アプリへの入口も、別のHTMLファイルではないので対象外
+        if (!f || f.includes("#") || f.includes("?") || f.startsWith("/")) continue;
         const h = h1Of(f);
         check(h === n.label,
           `${who} ${f} の見出しは「${n.label}」（いま「${h}」）`);
