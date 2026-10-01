@@ -12,8 +12,8 @@
 // ■ 守る形
 //
 //   ・左は自分の仕事（全員同じ）、上は担当業務（ヘッダー）。管理者も左メニューはメンバーと同じ
-//   ・Office（管理画面）に入ったときだけ専用の左メニュー: ダッシュボード＋3グループ・1グループ6項目まで
-//   ・管理（⚙）は4項目
+//   ・Office（人事・労務・経理・事務だけ）は 専用の左メニュー: ダッシュボード＋2グループ・1グループ6項目まで
+//   ・経営（チーム状況・全員のタスク・全員の日報）と管理（⚙。AIナレッジを含む）は平らな別の表
 //   ・メンバーは8項目（条件付きで出るものを除く）
 //   ・2階層目は左メニューに出さず、ページの上のタブ（tabs）にする
 //   ・メンバーと管理者は、別の表にする（権限で出し分けない）
@@ -46,12 +46,13 @@ function tableOf(name, endMark) {
 }
 
 const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // Office: 人事・労務");
-const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 管理（⚙）");
-const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /** active（いま開いている画面）");
+const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会社全体の管理、判断）");
+const KEIEI_ITEMS = tableOf("KEIEI_ITEMS", "\n  // 管理（⚙）");
+const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /**\n   * いま開いている画面が");
 const MEMBER_SIDE_NAV = tableOf("MEMBER_SIDE_NAV", "\n  /**\n   * 「左は自分の仕事、上は担当業務」");
 const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * メンバー: PCでの左サイドメニュー");
 
-const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS];
+const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS];
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
 // ---- 1) ホーム5・Office2グループ（各6項目まで）・管理4 ------------------------
@@ -60,7 +61,17 @@ const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 console.log("\n— 管理者 —");
 check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "dashboard", "Officeの先頭はダッシュボード1つ");
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
-check(OFFICE_GROUPS.length === 3, `Officeは3グループ（人事・労務／経理・事務／全社運営。いま ${OFFICE_GROUPS.length}）`);
+check(OFFICE_GROUPS.length === 2, `Officeは2グループ（人事・労務／経理・事務。いま ${OFFICE_GROUPS.length}）`);
+{
+  // 新方針にない分類（全社運営など）で、Officeを何でも置く場所にしない
+  const labels = OFFICE_GROUPS.map((g) => g.label).join("/");
+  check(labels === "人事・労務/経理・事務", `Officeのグループは人事・労務と経理・事務だけ（いま ${labels}）`);
+  const keys = OFFICE_GROUPS.flatMap((g) => g.items.map((i) => i.key));
+  for (const k of ["tasks", "nippo", "ai_admin", "team"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
+  check(keys.includes("notices"), "お知らせ配信は経理・事務（Office）");
+}
+check(KEIEI_ITEMS.map((i) => i.key).join(",") === "keiei_home,team,tasks,nippo", `経営の表（いま ${KEIEI_ITEMS.map((i) => i.key)}）`);
+check(SETTINGS_ITEMS.some((i) => i.key === "ai_admin"), "AIナレッジは⚙管理");
 for (const g of OFFICE_GROUPS) {
   check(g.items.length <= 6, `Office「${g.label}」は6項目まで（いま ${g.items.length}）`);
 }

@@ -98,9 +98,10 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   check(!/\bon\b/.test((await settings.getAttribute("class")) || ""), "「管理」は選ばれていない");
 
   const heads = await page.locator(".kp-side-group .lb").allInnerTexts();
-  // Office は3グループだけ（ホーム＝全員と同じ左メニュー・管理は領域が別なので、ここには出ない）
-  check(heads.length === 3, `見出しは3つ（いま ${heads.length}: ${heads.join("・")}）`);
-  for (const x of ["人事・労務", "経理・事務", "全社運営"]) {
+  // Office は2グループだけ（人事・労務・経理・事務に限る）（ホーム＝全員と同じ左メニュー・管理は領域が別なので、ここには出ない）
+  check(heads.length === 2, `見出しは2つ（いま ${heads.length}: ${heads.join("・")}）`);
+  check(!heads.some((h) => /全社運営/.test(h)), "新方針にない「全社運営」は作らない");
+  for (const x of ["人事・労務", "経理・事務"]) {
     check(heads.some((h) => h.trim() === x), `グループ「${x}」`);
   }
 
@@ -123,7 +124,7 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   // 先頭のダッシュボードは、グループの外の1行
   const top = (await page.locator(".kp-sidebar > .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
   check(top.join("/") === "ダッシュボード", `Officeの先頭（いま ${top.join("/")}）`);
-  // Office の最終メニュー（人事・労務5・経理・事務4・全社運営4）
+  // Office の最終メニュー（人事・労務5・経理・事務5）
   // 項目は見出しの隣の .kp-side-sub（同じ data-group）に入っている。畳まれていても数える
   const groupItems = await page.locator(".kp-side-group").evaluateAll((gs) => gs.map((g) => ({
     head: g.querySelector(".lb")?.textContent.trim(),
@@ -132,8 +133,7 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   })));
   const want = {
     "人事・労務": "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア",
-    "経理・事務": "経費精算/月次業務/社内文書/会計",
-    "全社運営": "全員のタスク/全員の日報/お知らせ配信/AIナレッジ",
+    "経理・事務": "経費精算/月次業務/社内文書/会計/お知らせ配信",
   };
   for (const [head, list] of Object.entries(want)) {
     const g = groupItems.find((x) => x.head === head);
@@ -149,6 +149,9 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
 
   // 2階層目は左に出さない。ページの上の帯に出す
   const side = await page.locator(".kp-sidebar").innerText();
+  for (const x of ["全員のタスク", "全員の日報", "AIナレッジ", "チーム状況"]) {
+    check(!side.includes(x), `Officeの左メニューに「${x}」を置かない（経営・⚙管理の側）`);
+  }
   check(!/休暇・稟議/.test(side), "「休暇・稟議」は左メニューに出ていない");
   check(!/自走レベル/.test(side), "「自走レベル」は左メニューに出ていない");
   check(!/電子署名/.test(side), "「電子署名」は左メニューに出ていない");
@@ -201,11 +204,12 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
   await page.close();
 }
 
-console.log("\n— AIナレッジは Office（全社運営）の中。社内AIは左メニュー —");
+console.log("\n— AIナレッジは⚙管理。社内AIは左メニュー —");
 {
   const page = await open("admin-ai.html", { admin: true });
   const lit = await page.locator(".kp-side-item.on").innerText();
-  check(/AIナレッジ/.test(lit), `Officeの左では「AIナレッジ」が光る（いま ${lit.trim()}）`);
+  check(/AIナレッジ/.test(lit), `⚙管理の左では「AIナレッジ」が光る（いま ${lit.trim()}）`);
+  check(/\bon\b/.test((await page.locator("#kp-admin-menu-btn").getAttribute("class")) || ""), "ヘッダーの⚙管理が選ばれて見える");
   check(await page.locator(".kp-subnav").count() === 0, "AIチャットとの切替帯は出さない（本人用と管理用を混ぜない）");
   await page.close();
   const chat = await open("messages.html", { admin: true });
@@ -214,14 +218,36 @@ console.log("\n— AIナレッジは Office（全社運営）の中。社内AI�
   await chat.close();
 }
 
-console.log("\n— 管理者：⚙管理 領域は平らな4項目 —");
+console.log("\n— 経営：全員のタスク・日報・チーム状況 —");
+{
+  const page = await open("admin-tasks.html", { admin: true });
+  const items = (await page.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
+  check(items.join("/") === "経営ホーム/チーム状況/全員のタスク/全員の日報", `経営の並び（いま ${items.join("/")}）`);
+  check(/\bon\b/.test((await page.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("class")) || ""), "ヘッダーの「経営」が選ばれて見える");
+  check((await page.locator(".kp-app").innerText()).includes("経営"), "ヘッダーに「/ 経営」と出る");
+  const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
+  check(tabs.join("/") === "タスク・予定/今週のゴール", `全員のタスクの帯（いま ${tabs.join("/")}）`);
+  await page.close();
+}
+
+console.log("\n— 同じ鍵でもメンバー画面は本人用（管理者でもOfficeの左メニューにしない） —");
+{
+  for (const f of ["timecard.html", "expenses.html", "tasks.html", "nippo.html", "notices.html", "career.html"]) {
+    const page = await open(f, { admin: true });
+    check(await page.locator(".kp-sidebar.member").count() === 1, `${f}: 管理者でもメンバーと同じ左メニュー`);
+    check(await page.locator(".kp-side-group").count() === 0, `${f}: Officeのグループは出ない`);
+    await page.close();
+  }
+}
+
+console.log("\n— 管理者：⚙管理 領域は平らな5項目 —");
 {
   const page = await open("admin-devices.html", { admin: true });
 
   check(await page.locator(".kp-side-group").count() === 0, "管理はグループに畳まない");
   const items = (await page.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts())
     .map((s) => s.trim());
-  check(items.join("/") === "権限/端末・貸与品/アクセス分析/システム設定",
+  check(items.join("/") === "権限/端末・貸与品/アクセス分析/AIナレッジ/システム設定",
     `管理の並び（いま ${items.join("/")}）`);
 
   const settings = page.locator('#kp-admin-menu-btn');

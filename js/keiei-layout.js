@@ -21,6 +21,11 @@
     { key: "home",       label: "ホーム",   icon: "home" },
     { key: "onboarding", label: "入社準備", icon: "how_to_reg" },
     { key: "pay",        label: "給与管理", icon: "request_quote" },
+    // チーム・会社全体の管理（全員のタスク・日報・チーム状況）。既存の管理画面（admin-*.html）へそのまま行く。
+    // href があるものはこの画面の中のビューではなく、別の画面への入口
+    { key: "team",       label: "チーム状況",   icon: "groups",     href: "/admin-team.html" },
+    { key: "tasks",      label: "全員のタスク", icon: "checklist",  href: "/admin-tasks.html" },
+    { key: "nippo",      label: "全員の日報",   icon: "edit_note",  href: "/admin-nippo.html" },
   ];
   // 小さな入口（経営設定・セキュリティ）。日々使うものではないので、メニューの下に控えめに置く
   const SUB = [
@@ -74,7 +79,7 @@
     bar.className = "kei-bar";
     bar.innerHTML = `
       <div class="kei-logo"><b>EIGHT</b> <span>/ 経営</span></div>
-      <a class="kei-back" href="/admin-dashboard.html" title="グループウェアへ戻る">
+      <a class="kei-back" href="/home.html" title="グループウェアへ戻る">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <div class="kei-spacer"></div>
       <div class="kei-user" title="${esc(name)}">${esc(name)}</div>`;
@@ -83,7 +88,7 @@
     const side = document.getElementById("kei-side");
     if (side) {
       side.className = "kei-side";
-      const link = (m) => `<a href="#${m.key}" data-view="${m.key}" class="${m.key === active ? "on" : ""}">
+      const link = (m) => `<a href="${m.href || `#${m.key}`}" ${m.href ? "" : `data-view="${m.key}" `}class="${!m.href && m.key === active ? "on" : ""}">
         <span class="material-symbols-outlined">${m.icon}</span>${esc(m.label)}</a>`;
       side.innerHTML = MENU.map(link).join("") + `<div class="kei-sub-nav">${SUB.map(link).join("")}</div>`;
     }

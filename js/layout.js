@@ -120,10 +120,11 @@
    *
    * ■ 担当業務はヘッダーから入る。入ったら、その業務だけの専用の左メニューになる。
    *   採用HR（/hr）・Sales（/sales）・経営（/keiei）・月次業務（/office）は別アプリ。
-   *   管理者が使う管理画面（admin-*.html）は URL を変えず、次の2つの領域に分ける
+   *   管理者が使う管理画面（admin-*.html）は URL を変えず、次の3つの領域に分ける
    *   （areaOf が active から判定する）。
-   *     office   … ダッシュボード／人事・労務／経理・事務／全社運営
-   *     settings … 権限・端末・アクセス分析・システム設定（ヘッダー右の⚙管理から）
+   *     office   … ダッシュボード／人事・労務／経理・事務（人事・労務・経理・事務だけ）
+   *     keiei    … チーム状況・全員のタスク・全員の日報（チーム・会社全体の管理）
+   *     settings … 権限・端末・アクセス分析・AIナレッジ・システム設定（ヘッダー右の⚙管理から）
    *   上のどちらにも属さない画面は、ホーム領域＝全員と同じ左メニュー。
    *
    * ■ 同じ名前でも「本人用」と「管理用」を分ける
@@ -197,30 +198,29 @@
           ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
-      ],
-    },
-    {
-      // 旧「ホーム」にあった管理者向けの画面。全員の仕事を見る・全社へ発信する側なので、
-      // 左の「自分の仕事」には置かず、Officeの中に置く（本人用の同名画面とは別物）
-      key: "office-company", label: "全社運営", icon: "domain",
-      items: [
-        // 今週のゴールは、全員のタスクの帯の中へ（左メニューの行は増やさない）
-        { key: "tasks",     href: "admin-tasks.html",     label: "全員のタスク", icon: "checklist", ready: true,
-          tabs: [
-            { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
-            { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
-          ] },
-        { key: "nippo",     href: "admin-nippo.html",     label: "全員の日報",   icon: "edit_note", ready: true },
-        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
+        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に。社内事務・運営なのでOffice
         { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true,
           tabs: [
             { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
             { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
           ] },
-        // 社内AI（本人が使うチャット）は左メニュー。ここは資料の管理と問い合わせ対応の側
-        { key: "ai_admin",  href: "admin-ai.html",        label: "AIナレッジ",   icon: "psychology", ready: true },
       ],
     },
+  ];
+
+  // 経営（チーム・会社全体の管理、判断）。経営は別アプリ（/keiei）だが、全社員のタスク・日報・チーム状況は
+  // 既存の管理画面（admin-*.html）をそのまま使う。URL・API は変えず、左メニューと導線だけ経営側へ寄せた。
+  // 管理者がこの画面を開いたときの左メニューはここ（先頭は経営ホームへ戻る入口）
+  const KEIEI_ITEMS = [
+    { key: "keiei_home", href: "/keiei/", label: "経営ホーム", icon: "monitoring", ready: true },
+    { key: "team", href: "admin-team.html", label: "チーム状況", icon: "groups", ready: true },
+    // 今週のゴールは、全員のタスクの帯の中へ（左メニューの行は増やさない）
+    { key: "tasks", href: "admin-tasks.html", label: "全員のタスク", icon: "checklist", ready: true,
+      tabs: [
+        { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
+        { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
+      ] },
+    { key: "nippo", href: "admin-nippo.html", label: "全員の日報", icon: "edit_note", ready: true },
   ];
 
   // 管理（⚙）: 毎日使わない設定系だけ。ヘッダー右のアイコンが正式な入口
@@ -240,15 +240,25 @@
     // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
     // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
     // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
+    // 社内AI（本人が使うチャット）は左メニュー。ここは資料の管理と問い合わせ対応＝システム管理の側
+    { key: "ai_admin",  href: "admin-ai.html",        label: "AIナレッジ",   icon: "psychology", ready: true },
     { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
       match: ["settings", "bookings"] },
   ];
 
-  /** active（いま開いている画面）が、Office／管理（⚙）／ホーム（全員と同じ左メニュー）のどれか */
-  function areaOf(active) {
-    if (!active) return "home";
+  /**
+   * いま開いている画面が、Office／経営／管理（⚙）／ホーム（全員と同じ左メニュー）のどれか。
+   *
+   * 管理画面（admin-*.html）のときだけ、active の鍵で領域を決める。
+   * メンバー画面（timecard.html など）は、同じ鍵（timecard・expenses・career…）を使っていても
+   * 本人用なので、必ずホーム。鍵だけで見ると、管理者が自分の勤怠を開いたとき Office の左メニューになってしまう
+   */
+  function areaOf(active, path = location.pathname) {
+    const file = String(path || "").split("/").pop();
+    if (!active || !/^admin-/.test(file)) return "home";
     const hit = (i) => i.key === active || (i.match || []).includes(active);
     if (OFFICE_TOP.some(hit) || OFFICE_GROUPS.some((g) => g.items.some(hit))) return "office";
+    if (KEIEI_ITEMS.some(hit)) return "keiei";
     if (SETTINGS_ITEMS.some(hit)) return "settings";
     return "home";
   }
@@ -259,7 +269,7 @@
    * match を手で二重に書かせない。書き忘れると、開いたときに
    * メニューのどこも光らず「自分がどこにいるのか」が分からなくなる
    */
-  for (const n of [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS, ...MEMBER_SIDE_NAV]) {
+  for (const n of [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS, ...MEMBER_SIDE_NAV]) {
     if (n.tabs && !n.match) n.match = n.tabs.map((t) => t.key);
   }
 
@@ -344,7 +354,7 @@
     ];
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
-      const on = s.areaKey ? area === s.areaKey : path.startsWith(s.href);
+      const on = s.areaKey ? area === s.areaKey : (path.startsWith(s.href) || (s.key === "keiei" && area === "keiei"));
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${s.href}"
                  data-shortcut="${s.key || `area-${s.areaKey}`}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
@@ -368,7 +378,7 @@
       <div class="brand">
         <a href="${home}" style="text-decoration:none;color:inherit;">
           <img src="img/logo.svg" alt="" class="kp-logo">エイト</a>
-        ${area === "office" || area === "settings" ? `<span class="kp-app">/ ${area === "office" ? "OFFICE" : "管理"}</span>` : ""}
+        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "OFFICE", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
@@ -529,7 +539,9 @@
     if (items) return renderSidebar(active, items, "admin");
 
     // ホーム領域（全員と同じ左メニュー）は renderChrome が renderMemberNav で描く。ここは Office・管理だけ
-    if (areaOf(active) === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
+    const area = areaOf(active);
+    if (area === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
+    if (area === "keiei") return renderSidebar(active, KEIEI_ITEMS, "admin");
 
     const open = loadOpen();
     const here = groupOf(active);
@@ -888,7 +900,7 @@
     // （領域をまたいで active を特定できるようにする。表示するサイドメニューとは別）
     renderSubnav(active, !adminArea
       ? MEMBER_SIDE_NAV
-      : [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS]);
+      : [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS]);
 
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く。
     // その画面のデータより先に投げない（バッジのために本文を待たせない）
