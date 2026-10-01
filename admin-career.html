@@ -589,6 +589,27 @@
     }).join("")}</ul>`;
   }
 
+  /**
+   * 本人自己チェックの状況（db/110）。上長・管理者は閲覧だけ。書き込みは本人（api/career/me.js）
+   * 「本人はできると思っているが、会社の正式評価はまだ」の認識差を、面談の材料として出す
+   */
+  function selfCheckSection(d) {
+    const sc = d.selfCheck;
+    if (!sc || !sc.total) return "";
+    const mismatches = sc.mismatches || [];
+    return `
+      <h3 class="cr-sec">本人自己チェック</h3>
+      <dl class="cr-kv">
+        <dt>本人自己チェック</dt><dd>${sc.checked} / ${sc.total}</dd>
+        <dt>正式評価</dt><dd>${d.progress?.achieved ?? 0} / ${d.progress?.total ?? 0}</dd>
+        <dt>認識差</dt><dd>${mismatches.length}件</dd>
+      </dl>
+      ${mismatches.length ? `<div class="cr-ev"><b>認識差がある項目</b><ul>${mismatches.map((m) => `
+        <li>${esc(m.title)}<br><span class="muted" style="font-size:12px;">本人：できる ／ 会社：${esc(m.confirmedLabel)}</span></li>`).join("")}</ul></div>`
+        : `<p class="cr-note">認識差はありません。</p>`}
+      ${sc.updatedAt ? `<p class="cr-note">本人の最終更新：${fmtDate(sc.updatedAt)}</p>` : ""}`;
+  }
+
   function careerTab() {
     const d = detail;
     const c = d.career;
@@ -608,6 +629,7 @@
       <h3 class="cr-sec">進捗</h3>
       ${progressBars(d.progress)}
       <p class="cr-note">進捗は確定済みの評価から作っています。</p>
+      ${selfCheckSection(d)}
       ${c.managerNote ? `<div class="cr-ev"><b>管理者メモ（本人には表示されません）</b><br>${esc(c.managerNote)}</div>` : ""}
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="openReview()">${d.draft ? "評価の下書きを開く" : "評価する"}</button>

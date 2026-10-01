@@ -130,6 +130,7 @@ const call = async (h, req) => { const r = res(); await h({ headers: { authoriza
 const get = (qs = "") => call(careerApi, { method: "GET", url: `/api/career${qs}` });
 const act = (body) => call(careerApi, { method: "POST", url: "/api/career", body });
 const mine = () => call(meApi, { method: "GET", url: "/api/career/me" });
+const meAct = (body) => call(meApi, { method: "POST", url: "/api/career/me", body });
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -1075,6 +1076,125 @@ await ok("同じ人について、一覧・管理者の詳細・本人のホー�
   who = NEWU;
   const home = (await call(meApi, { method: "GET", url: "/api/career/me?summary=1" })).body.journey;
   assert.ok(!JSON.stringify(home).includes("admin-"), "本人に admin-*.html を返さない");
+});
+
+console.log("\n— 本人の自己チェック（正式評価とは別。db/110） —\n");
+
+await ok("基準が10件なら10件、切り詰めずに本人の自己チェックとして返る", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const r = await mine();
+  assert.equal(r.body.selfCheck.total, 10);
+  assert.equal(r.body.selfCheck.items.length, 10, "6件などに切り詰めない");
+  assert.equal(r.body.selfCheck.checked, 0);
+  assert.equal(r.body.progress.remaining.length, 10, "「0/10」の場面でも自己チェックは10件見える");
+});
+
+await ok("チェックできる・保存される・リロード後も残る", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const id = (await mine()).body.selfCheck.items[0].id;
+  const r = await meAct({ action: "selfCheck", criterionId: id, checked: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.checked, true);
+  // 別の GET（＝リロード）でも残っている
+  const after = await mine();
+  assert.equal(after.body.selfCheck.checked, 1);
+  const item = after.body.selfCheck.items.find((i) => i.id === id);
+  assert.equal(item.checked, true);
+  assert.ok(item.checkedAt, "最終更新日時が付く");
+});
+
+await ok("チェックを解除できる", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const id = (await mine()).body.selfCheck.items[0].id;
+  await meAct({ action: "selfCheck", criterionId: id, checked: true });
+  const r = await meAct({ action: "selfCheck", criterionId: id, checked: false });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.checked, false);
+  const after = await mine();
+  assert.equal(after.body.selfCheck.checked, 0);
+  assert.equal(after.body.selfCheck.items.find((i) => i.id === id).checked, false);
+});
+
+await ok("本人がチェックしても、正式評価（gw_career_reviews・進捗）は変わらない", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const id = (await mine()).body.selfCheck.items[0].id;
+  await meAct({ action: "selfCheck", criterionId: id, checked: true });
+  assert.equal(db.rows.gw_career_reviews.length, 0, "評価そのものは作らない");
+  const after = await mine();
+  assert.equal(after.body.progress.achieved, 0);
+  assert.equal(after.body.progress.total, 10);
+  assert.equal(after.body.selfCheck.checked, 1, "自己チェックとは別の値のまま");
+});
+
+await ok("正式評価が確定しても、本人の自己チェックは勝手に変わらない", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const id = (await mine()).body.selfCheck.items[0].id;
+  await meAct({ action: "selfCheck", criterionId: id, checked: true });
+  who = OWNER;
+  await draftAll("achieved");
+  const reviewId = db.rows.gw_career_reviews[0].id;
+  // level_up ではなく continue（Levelそのものは動かさない。同じ基準のまま比べたいので）
+  const c = await act({ action: "confirmReview", id: reviewId, result: "continue" });
+  assert.equal(c.statusCode, 200, JSON.stringify(c.body));
+  who = TARO;
+  const after = await mine();
+  const item = after.body.selfCheck.items.find((i) => i.id === id);
+  assert.equal(item.checked, true, "確定後も本人チェックは残る");
+  assert.equal(item.confirmedStatus, "achieved", "正式評価は別の値として反映される");
+});
+
+await ok("知らない基準IDは選べない（他Levelの基準・でたらめなIDを渡しても404）", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const r = await meAct({ action: "selfCheck", criterionId: "no-such-criterion", checked: true });
+  assert.equal(r.statusCode, 404);
+  assert.equal(r.body.error, "not_found");
+});
+
+await ok("他人の自己チェックは変更できない（本人の career からしか書けない）", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const id = (await mine()).body.selfCheck.items[0].id;
+  who = HANAKO; // 花子はキャリア未設定
+  const r = await meAct({ action: "selfCheck", criterionId: id, checked: true });
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "no_next_level");
+  who = TARO;
+  const after = await mine();
+  assert.equal(after.body.selfCheck.items.find((i) => i.id === id).checked, false, "太郎の分は変わっていない");
+});
+
+await ok("管理者は本人の自己チェックを閲覧できる。認識差がある項目も分かる", async () => {
+  setup();
+  await seedAndSet();
+  who = TARO;
+  const items = (await mine()).body.selfCheck.items;
+  await meAct({ action: "selfCheck", criterionId: items[0].id, checked: true });
+  await meAct({ action: "selfCheck", criterionId: items[1].id, checked: true });
+  who = OWNER;
+  await draftAll("achieved", { criterionResults: [
+    { criterionId: items[0].id, result: "in_progress" }, // 本人はできる、会社はまだ → 認識差
+    { criterionId: items[1].id, result: "achieved" },    // 一致
+  ] });
+  await act({ action: "confirmReview", id: db.rows.gw_career_reviews[0].id, result: "continue" });
+  const d = await get("?employeeId=e-taro");
+  assert.equal(d.statusCode, 200, JSON.stringify(d.body));
+  assert.equal(d.body.selfCheck.checked, 2);
+  assert.equal(d.body.selfCheck.total, 10);
+  assert.equal(d.body.selfCheck.mismatches.length, 1);
+  assert.equal(d.body.selfCheck.mismatches[0].id, items[0].id);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -61,6 +61,21 @@ const MY = {
   lastReview: { decidedAt: "2026-07-31T00:00:00Z", result: "continue", achieved: 1, total: 4,
                 targetLevel: { levelNo: 2 }, managerComment: "よく頑張っています" },
   labels: LABELS,
+  // 本人の自己チェック（db/110）。8件にして「6件で切れない」ことを実際の画面で確かめる
+  selfCheck: {
+    checked: 1, total: 8, updatedAt: "2026-09-20T01:00:00Z",
+    items: [
+      { id: "sc1", category: "業務遂行", title: "担当タスクを期限内に完了できる", required: true, checked: true, checkedAt: "2026-09-20T01:00:00Z", confirmedStatus: "achieved", confirmedLabel: "達成" },
+      { id: "sc2", category: "業務遂行", title: "指示された内容を正しく実行できる", required: true, checked: false, checkedAt: null, confirmedStatus: "in_progress", confirmedLabel: "取り組み中" },
+      { id: "sc3", category: "顧客・品質", title: "顧客対応を1案件担当する", required: true, checked: false, checkedAt: null, confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+      { id: "sc4", category: "顧客・品質", title: "品質基準を守れる", required: true, checked: false, checkedAt: null, confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+      { id: "sc5", category: "専門スキル", title: "基本設計を一人でできる", required: true, checked: false, checkedAt: null, confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+      { id: "sc6", category: "専門スキル", title: "レビュー指摘を修正できる", required: true, checked: false, checkedAt: null, confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+      { id: "sc7", category: "改善・AI活用", title: "AIを日常業務に使える", required: false, checked: false, checkedAt: null, confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+      { id: "sc8", category: "チーム貢献", title: "後輩の質問に答えられる", required: false, checked: false, checkedAt: null, confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+    ],
+    mismatches: [],
+  },
 };
 
 const LEVELS = [
@@ -132,6 +147,15 @@ DETAIL.progress.items = [
   { id: "c2", category: "改善・AI活用", title: "AIを日常業務に使える", status: "not_yet" },
 ];
 DETAIL.progress.remaining = [DETAIL.progress.items[1]];
+// 本人の自己チェック（db/110）。管理者は閲覧のみ。認識差（本人「できる」・会社「まだ」）が1件ある形
+DETAIL.selfCheck = {
+  checked: 1, total: 2, updatedAt: "2026-09-25T02:00:00Z",
+  items: [
+    { id: "c1", category: "業務遂行", title: "担当タスクを期限内に完了できる", required: true, checked: true, checkedAt: "2026-09-25T02:00:00Z", confirmedStatus: "achieved", confirmedLabel: "達成" },
+    { id: "c2", category: "改善・AI活用", title: "AIを日常業務に使える", required: true, checked: true, checkedAt: "2026-09-24T02:00:00Z", confirmedStatus: "not_yet", confirmedLabel: "まだ" },
+  ],
+  mismatches: [{ id: "c2", category: "改善・AI活用", title: "AIを日常業務に使える", required: true, checked: true, checkedAt: "2026-09-24T02:00:00Z", confirmedStatus: "not_yet", confirmedLabel: "まだ" }],
+};
 
 // キャリア未設定の新人（面談を始める前 → STEP2 のあとはキャリアあり）
 const NEW_BASE = {
@@ -279,8 +303,8 @@ console.log("— 本人：career.html —");
 {
   const page = await open(ME_MEMBER, "career.html");
   const order = await page.locator(".card[id^='sec-']").evaluateAll((ns) => ns.map((n) => n.id));
-  check(order.join(",") === "sec-now,sec-next,sec-todo,sec-horizon,sec-dekiru,sec-last",
-    `並び：現在地→次のLevel→次にやること→1年/3年→できるようになったこと→前回評価（いま ${order}）`);
+  check(order.join(",") === "sec-now,sec-next,sec-selfcheck,sec-todo,sec-horizon,sec-dekiru,sec-last",
+    `並び：現在地→次のLevel→自己チェック→次にやること→1年/3年→できるようになったこと→前回評価（いま ${order}）`);
   const now = await page.locator("#sec-now").innerText();
   check(now.includes("エンジニア") && now.includes("LEVEL 1") && now.includes("240,000円") && now.includes("2027年1月31日"),
     "現在地：職種・Level・現在給与・次回評価");
@@ -300,6 +324,17 @@ console.log("— 本人：career.html —");
   await page.locator("#sec-todo button:has-text('今期の目標に追加')").first().click();
   await page.waitForTimeout(300);
   check(posted.some((p) => p.action === "addGoal" && p.criterionId === "c2"), "押すと addGoal が届く");
+  const sc = await page.locator("#sec-selfcheck").innerText();
+  check(sc.includes("本人自己チェック") && sc.includes("1 / 8"), "本人自己チェックのカウント");
+  check(await page.locator("#sec-selfcheck input[type=checkbox]").count() === 8,
+    "8件とも本物のチェックボックスとして出る（6件で切れない）");
+  check(sc.includes("会社評価：達成") && sc.includes("会社評価：取り組み中") && sc.includes("会社評価：まだ"), "項目ごとに会社評価も見える");
+  check(await page.locator("#sec-selfcheck input[type=checkbox]").nth(0).isChecked(), "チェック済みの項目は最初からチェックが入っている");
+  posted = [];
+  await page.locator("#sec-selfcheck input[type=checkbox]").nth(2).click();
+  await page.waitForTimeout(300);
+  check(posted.some((p) => p.action === "selfCheck" && p.criterionId === "sc3" && p.checked === true),
+    "自己チェックを押すと selfCheck が届く（本人だけの値。正式評価とは別のAPI呼び出し）");
   const side = await page.locator(".kp-sidebar").innerText().catch(() => "");
   check(side.includes("キャリア"), "左メニューに「キャリア」");
   await page.screenshot({ path: shotPath("career-member.png"), fullPage: true });
@@ -319,6 +354,7 @@ console.log("\n— 本人：スマホ幅 —");
   const page = await open(ME_MEMBER, "career.html", 390);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 0, `横スクロールが出ない（はみ出し ${overflow}px）`);
+  check(await page.locator("#sec-selfcheck input[type=checkbox]").count() === 8, "スマホ幅でも自己チェックが8件とも見える");
   await page.close();
 }
 
@@ -371,6 +407,10 @@ console.log("\n— 管理：admin-career.html —");
   const cct = await page.locator("#cr-tab-body").innerText();
   check(cct.includes("260,000円〜300,000円") && cct.includes("実際の昇給・昇格は") && cct.includes("AIを日常業務に使える"),
     "キャリアタブ：給与レンジ（注記つき）・評価基準");
+  check(cct.includes("本人自己チェック") && cct.includes("1 / 2") && cct.includes("認識差") && cct.includes("1件"),
+    "キャリアタブ：本人自己チェックと正式評価の件数（db/110）");
+  check(cct.includes("認識差がある項目") && cct.includes("本人：できる") && cct.includes("会社：まだ"),
+    "認識差がある項目が具体的に分かる");
   await page.click('.cr-tabs button[data-tab="growth"]');
   await page.waitForTimeout(300);
   const gt = await page.locator("#cr-tab-body").innerText();
@@ -510,16 +550,31 @@ console.log("\n— 管理：スマホ幅のドロワー —");
 console.log("\n— 本人：契約・キャリアの確認 —");
 {
   posted = [];
+  // 「0 / 10」なのに6件しか見えない、という報告された不具合と同じ形を再現する（8件・remaining全部）
+  const remaining8 = [
+    ...MY.progress.remaining,
+    { id: "c5", category: "専門スキル", title: "基本設計を一人でできる", status: "not_yet", required: true },
+    { id: "c6", category: "専門スキル", title: "レビュー指摘を修正できる", status: "not_yet", required: true },
+    { id: "c7", category: "改善・AI活用", title: "AIを日常業務に使える", status: "not_yet", required: false },
+    { id: "c8", category: "チーム貢献", title: "後輩の質問に答えられる", status: "not_yet", required: false },
+    { id: "c9", category: "チーム貢献", title: "議事録を書ける", status: "not_yet", required: false },
+  ];
   const ask = { ...MY, confirm: { pending: true, requestedAt: "2026-09-28T01:00:00Z" },
     contract: { contractType: "正社員", wageType: "月給", wageAmount: 240000 },
-    contractSign: { pending: [{ id: "s9", title: "労働条件通知書" }], link: "contracts.html" } };
+    contractSign: { pending: [{ id: "s9", title: "労働条件通知書" }], link: "contracts.html" },
+    progress: { ...MY.progress, total: 10, remaining: remaining8 } };
   const page = await open({ ...ME_MEMBER, __career: ask }, "career.html#confirm", 390);
   const first = await page.locator(".card[id^='sec-']").first().getAttribute("id");
   check(first === "sec-confirm", "確認依頼があるとき、いちばん上に「あなたの契約・キャリア」");
   const t = await page.locator("#sec-confirm").innerText();
   check(t.includes("240,000円") && t.includes("L1") && t.includes("L2") && t.includes("260,000円〜300,000円"), "現在の契約・現在・次・次の給与レンジ");
   check(t.includes("目安であり、昇給を保証するものではありません"), "レンジは目安の注記");
-  check(t.includes("あと必要なこと") && t.includes("1 / 4") && t.includes("顧客対応を1案件担当する"), "あと必要なこと（未達）");
+  check(t.includes("正式評価") && t.includes("1 / 10"), "正式評価 1 / 10");
+  check(remaining8.every((r) => t.includes(r.title)), "「0/10」なのに6件で切れる、を再現しない（8件とも出る）");
+  check(!(await page.locator("#sec-confirm").innerHTML()).includes("□"), "押せない□をチェックボックスのように出さない（本来のcheckboxは#sec-selfcheckだけ）");
+  check(await page.locator("#sec-confirm input[type=checkbox]").count() === 0, "確認カードに本物でない checkbox 風の要素を置かない");
+  check(t.includes("本人自己チェック") && t.includes("1 / 8"), "本人自己チェックの件数も、正式評価とは別の値として並べて出す");
+  check(await page.locator('#sec-confirm a[href="#sec-selfcheck"]').count() === 1, "自己チェックカードへの導線がある");
   check(t.includes("1年後") && t.includes("3年後") && t.includes("2027年1月31日"), "1年後・3年後・次回評価");
   check(await page.locator('#act-contract a:has-text("内容を確認して署名")').getAttribute("href") === "contracts.html", "契約書：内容を確認して署名（電子署名へ）");
   check(t.includes("法的な署名ではありません"), "キャリアプランは法的な署名ではない");

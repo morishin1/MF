@@ -15,7 +15,7 @@ import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { notify } from "../../lib/notify.js";
-import { confirmPending } from "../../lib/career.js";
+import { confirmPending, upsertSelfCheck } from "../../lib/career.js";
 import { memberCareerView, careerOf, pendingContractSigns } from "../../lib/career-member.js";
 import { memberAskOf } from "../../lib/journey.js";
 import { journeyForEmployee } from "../../lib/journey-load.js";
@@ -87,6 +87,7 @@ async function read(req, res, ctx, user) {
 async function act(req, res, ctx, user) {
   const body = await readJson(req);
   if (body?.action === "confirmPlan") return confirmPlan(res, ctx, user);
+  if (body?.action === "selfCheck") return selfCheckAct(res, ctx, user, body);
   if (body?.action !== "addGoal") return json(res, 400, { error: "invalid_action" });
   const sb = admin();
   const { c, next, criteria } = await careerOf(sb, ctx.tenantId, ctx.employee.id);
@@ -109,6 +110,33 @@ async function act(req, res, ctx, user) {
   }).select("id").single();
   if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
   return json(res, 200, { ok: true, taskId: data.id });
+}
+
+/**
+ * 本人の自己チェック（db/110）。自分の次のLevelの基準だけ、チェック・解除できる。
+ * ここでは gw_employee_careers.self_check_results だけを書く。
+ * gw_career_reviews（正式評価）には一切触らない（本人チェック ≠ 正式評価）
+ */
+async function selfCheckAct(res, ctx, user, body) {
+  const sb = admin();
+  const { c, next, criteria } = await careerOf(sb, ctx.tenantId, ctx.employee.id);
+  if (!c || !next) return json(res, 409, { error: "no_next_level" });
+  // 自分の次のLevelの基準だけ。他人の基準・他のLevelの基準は選べない（addGoalと同じ考え方）
+  const crit = (criteria || []).find((x) => x.id === body.criterionId);
+  if (!crit) return json(res, 404, { error: "not_found" });
+
+  const at = new Date().toISOString();
+  const checked = Boolean(body.checked);
+  const list = upsertSelfCheck(c.self_check_results, crit.id, checked, at);
+  const { error } = await sb.from("gw_employee_careers")
+    .update({ self_check_results: list, self_check_updated_at: at, updated_at: at })
+    .eq("id", c.id).eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id);
+  if (error) {
+    const hint = dbSetupHint(error, "db/110_career_self_check.sql");
+    if (hint) return json(res, 503, { error: "not_ready", message: hint });
+    return json(res, 500, { error: "db_update_failed", detail: error.message });
+  }
+  return json(res, 200, { ok: true, criterionId: crit.id, checked, checkedAt: at });
 }
 
 /**
