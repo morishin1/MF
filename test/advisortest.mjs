@@ -7,6 +7,7 @@
 //   4. 空欄のままでは発行できない
 //   5. 発行したら、本人と会社の両方に届く
 //   6. 発行済みは二度と発行できない
+import { MFA_AUTH } from "./_mfa.mjs";
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -167,7 +168,7 @@ const res = () => {
 };
 const call = async (req) => {
   const r = res();
-  await orders({ headers: { authorization: "Bearer x" }, ...req }, r);
+  await orders({ headers: { authorization: MFA_AUTH }, ...req }, r);
   return r;
 };
 const get = (qs = "") => call({ method: "GET", url: `/api/sign/orders${qs}` });

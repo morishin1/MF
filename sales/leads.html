@@ -40,7 +40,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">リード</h1>
-  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追って、「面談を設定」で面談につなげてください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談）。</p>
+  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追って、「商談を予定する」で商談につなげてください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談）。</p>
 
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="stages"></div></div>
   <div class="ld-filters">
@@ -53,32 +53,49 @@
   <div class="ld-list" id="list"><div class="sl-empty">読み込み中…</div></div>
 </div>
 
-<script src="../js/api-client.js?v=20260930sx1"></script>
-<script src="../js/layout.js?v=20260929b"></script>
-<script src="../js/sales-layout.js?v=20260928h"></script>
-<script>
-  const el = (id) => document.getElementById(id);
-  const esc = SalesLayout.esc;
-  const { fmtDay, ago, statusPill } = SalesLayout;
+<div id="modal-root"></div>
+<div id="action-root"></div>
 
+<script src="../js/api-client.js?v=20260930sx1"></script>
+<script src="../js/layout.js?v=20260929d"></script>
+<script src="../js/sales-layout.js?v=20261001a"></script>
+<script src="../js/sales-detail.js?v=20261001sx1"></script>
+<script>
   let leads = [];
-  let members = [];
-  let me = null;
   let stage = "all";
 
-  // 面談調整中＝日程調整URLを出して相手の予約待ち。面談予定＝日程が決まった（db/090 の面談）
+  // リードを開く＝右ドロワー（企業一覧と同じ js/sales-detail.js）。この画面から遷移しない。
+  // ドロワー・モーダルを閉じても、段階タブ・絞り込み・スクロール位置はそのまま（一覧は描き直さない）。
+  // 保存したあとは一覧を裏で取り直す（条件とスクロール位置は残す）
+  detailHost.onChange = () => load();
+  detailHost.urlFor = (id) => {
+    const q = new URLSearchParams(location.search);
+    q.delete("meeting");
+    if (id) q.set("id", id); else q.delete("id");
+    const qs = q.toString();
+    return `${location.pathname}${qs ? `?${qs}` : ""}`;
+  };
+
+  // 予約待ち＝日程調整URLを出して相手の予約待ち。商談予定＝日程が決まった（db/090 の商談）
   const inMeeting = (c) => Boolean(c.meetingStatus);
   const STAGES = [
     ["all", "すべて", () => true],
     ["clicked", "クリックあり", (c) => !inMeeting(c) && (c.status === "clicked" || (c.clickCount > 0 && c.status === "attacked"))],
     ["replied", "返信あり", (c) => !inMeeting(c) && c.status === "replied"],
-    ["scheduling", "面談調整中", (c) => c.meetingStatus === "scheduling"],
-    ["scheduled", "面談予定", (c) => c.meetingStatus === "scheduled" || (!inMeeting(c) && c.status === "meeting")],
+    ["scheduling", "予約待ち", (c) => c.meetingStatus === "scheduling"],
+    ["scheduled", "商談予定", (c) => c.meetingStatus === "scheduled" || (!inMeeting(c) && c.status === "meeting")],
     ["proposal", "提案中", (c) => c.status === "proposal"],
     ["won", "成約", (c) => c.status === "won"],
   ];
 
-  SalesLayout.init({ active: "leads" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "leads" }).then(async (ctx) => {
+    if (!ctx) return;
+    myName = ctx.me?.gw?.employee?.display_name || "";
+    await load();
+    // ?id=…（&meeting=1）で開いたときは、そのリードのドロワー（と商談モーダル）を開く
+    const q = new URLSearchParams(location.search);
+    if (q.get("id")) openLead(q.get("id"), Boolean(q.get("meeting")));
+  });
 
   async function load() {
     try {
@@ -87,11 +104,14 @@
         el("list").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div>`;
         return;
       }
-      me = res.me;
+      myEmployeeId = res.me || null;
       members = res.members || [];
       leads = (res.companies || []).filter(isLead);
+      // 取り直しても、見ていた位置から動かさない
+      const y = window.scrollY;
       renderFilters();
       render();
+      window.scrollTo(0, y);
     } catch (e) {
       el("list").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
@@ -106,7 +126,7 @@
   // クリックだけならウォームリード、返信から先はリード（要件 §8）
   const isWarm = (c) => !["replied", "meeting", "proposal", "won"].includes(c.status);
 
-  // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 面談 → 提案 → 成約
+  // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談 → 提案 → 成約
   function group(c) {
     if (inMeeting(c)) return 3;
     if (c.status === "replied") return 0;
@@ -139,16 +159,18 @@
   function filtered() {
     const v = (id) => el(id).value;
     return leads.filter((c) =>
-      (!v("f-owner") || c.ownerId === (v("f-owner") === "me" ? me : v("f-owner")))
+      (!v("f-owner") || c.ownerId === (v("f-owner") === "me" ? myEmployeeId : v("f-owner")))
       && (!v("f-service") || c.service === v("f-service"))
       && (!v("f-industry") || c.industry === v("f-industry"))
       && (!v("f-campaign") || c.campaignId === v("f-campaign")));
   }
 
-  // リードの Primary CTA は「面談を設定」1つ（要件 Phase 2）。成約済みは開くだけ
-  const cta = (c) => (c.status === "won" ? "開く" : "面談を設定");
-  function go(id, meeting) {
-    location.href = `/sales/companies.html?id=${encodeURIComponent(id)}${meeting ? "&meeting=1" : ""}`;
+  // リードの Primary CTA は「商談を予定する」1つ（要件 Phase 2）。商談予定なら「商談予定を見る」、成約済みは開くだけ
+  const cta = (c) => (c.status === "won" ? "開く" : c.meetingStatus === "scheduled" ? "商談予定を見る" : "商談を予定する");
+  // リード一覧 → 右ドロワー →（商談を予定する）→ 中央モーダル。モーダルを閉じると同じドロワーに戻る
+  async function openLead(id, meeting) {
+    const shown = await openDetail(id);
+    if (shown && meeting) openMeeting();
   }
 
   function render() {
@@ -165,7 +187,7 @@
     el("list").innerHTML = list.map((c) => {
       const warm = isWarm(c);
       return `
-      <div class="ld-card ${c.unhandledClick ? "hot" : warm ? "warm" : "lead"}" onclick="go('${esc(c.id)}', false)">
+      <div class="ld-card ${c.unhandledClick ? "hot" : warm ? "warm" : "lead"}" data-id="${esc(c.id)}" onclick="openLead('${esc(c.id)}', false)">
         <div class="info">
           <div class="nm">${c.unhandledClick ? "🔥 " : ""}${esc(c.name)}
             <span class="ld-grade ${warm ? "warm" : "lead"}">${warm ? "ウォームリード" : "リード"}</span>
@@ -175,11 +197,11 @@
             ${c.lastClickAt ? `<span>${esc(ago(c.lastClickAt))}にクリック</span>` : ""}
             ${c.clickCount ? `<span class="${c.clickCount >= 2 ? "sl-hot" : ""}">クリック ${c.clickCount}回</span>` : ""}
             <span>担当 ${esc(c.ownerName || "未定")}</span>
-            ${c.meetingStatus ? `<span class="sl-hot">${c.meetingStatus === "scheduled" ? `面談予定 ${esc(SalesLayout.fmt(c.meetingAt))}` : "面談調整中"}</span>` : ""}
+            ${c.meetingStatus ? `<span class="sl-hot">${c.meetingStatus === "scheduled" ? `商談予定 ${esc(fmt(c.meetingAt))}` : "予約待ち"}</span>` : ""}
           </div>
           <div class="next">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();go('${esc(c.id)}', ${c.status === "won" ? "false" : "true"})">${esc(cta(c))}</button>
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openLead('${esc(c.id)}', ${c.status === "won" ? "false" : "true"})">${esc(cta(c))}</button>
       </div>`;
     }).join("");
   }

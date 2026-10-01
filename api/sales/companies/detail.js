@@ -2,6 +2,7 @@
 // PATCH /api/sales/companies/detail { id, ... }
 //         … 企業本体を更新（基本情報・ステータス・NEXT・担当・NG）
 //         { id, action: "followed" } … クリックに対応した（未対応クリックから外す）
+//         { id, contacts: { email, … } } … 連絡先だけを直す（営業履歴は増やさない。例：商談の予約照合用メール）
 // POST  /api/sales/companies/detail { id, kind, detail?, occurredAt? }
 //         … 営業履歴に出来事を足す（フォロー・電話・メール・返信あり・商談・メモ）
 // POST  /api/sales/companies/detail { id, action: "contact", replied, replyChannel?, contactChannel?,
@@ -30,6 +31,7 @@ import {
 } from "../../../lib/sales.js";
 import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
 import { loadMasters } from "../../../lib/sales-master.js";
+import { companyEmails } from "../../../lib/sales-timerex.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 // 「最終連絡」に数えない出来事（こちらの記録の整理で、相手とのやり取りではないもの）
@@ -166,6 +168,8 @@ async function one(req, res, sb, ctx) {
     meetings: (meetings || []).map((m) => shapeMeeting(m, (eid) => name.get(eid))),
     meetingsReady: meetings !== null && meetings !== undefined,
     timerexConfigured: Boolean((process.env.TIMEREX_SALES_MEETING_URL || "").trim()),
+    // TimeRex の予約（guest_email）と照合するメールアドレス。Webhook（lib/sales-timerex.js）と同じ判定
+    matchEmails: [...companyEmails(c)],
     timeline,
     // 直近アタックの警告（要件 §20）。企業ページにも、フォームアタックを押したときにも出す
     recent: recent ? {
@@ -177,6 +181,9 @@ async function one(req, res, sb, ctx) {
     members: members || [],
     campaigns: (campaigns || []).filter((x) => !x.archived_at).map((x) => ({ id: x.id, name: x.name })),
     // 画面側で項目を持たない（ここが正）
+    // masters … このテナントの業種・提案サービス（非表示は除く）と47都道府県。
+    // 基本情報の編集の選択肢（企業一覧・リード一覧の詳細で共通。js/sales-detail.js）
+    masters: { industries: masters.industries, services: masters.services, prefectures: masters.prefectures },
     statuses: STATUSES, ngReasons: NG_REASONS, eventKinds: EVENT_KINDS,
     services: masters.services, industries: masters.industries,
     sendChannels: SEND_CHANNELS, replyChannels: REPLY_CHANNELS, contactChannels: CONTACT_CHANNELS,
@@ -205,6 +212,14 @@ async function update(req, res, sb, ctx, user) {
     const row = normalizeCompany(body, { partial: true, before, masters: await loadMasters(sb, ctx.tenantId) });
     if (row.error) return json(res, 400, row);
     patch = row.value;
+    // 連絡先（変わった項目だけ。null は消す）。いまの連絡手段の連絡先も合わせて直す
+    const contacts = normalizeContacts(body.contacts);
+    if (contacts.error) return json(res, 400, contacts);
+    if (contacts.value && Object.keys(contacts.value).length) {
+      patch.contacts = mergeContacts(before.contacts, contacts.value);
+      const ch = before.current_contact_channel;
+      if (ch && ch in contacts.value) patch.current_contact_value = patch.contacts[ch] || (ch === "phone" ? before.phone : null) || null;
+    }
     // 返信あり・商談へ手で進めたときも、NEXT を決めていなければ自動で入れる
     // 空欄（null・""）は「決めていない」。画面のフォームは空欄を null で送ってくる
     const nextGiven = Boolean(patch.next_action || patch.next_action_on);

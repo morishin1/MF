@@ -12,6 +12,7 @@
 //   gw_activity_log（誰が・何人ぶん）と gw_sensitive_access_log（誰のぶんを・export）。
 //   CSV は手元に残りやすい。出した記録が無いと、どこに何人ぶんが散ったか追えない。
 
+import { ymd as jstYmd } from "../../lib/jst.js";
 import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
@@ -94,7 +95,7 @@ export default async function handler(req, res) {
   if (!rows.length) return json(res, 404, { error: "not_found", hint: "名簿に見つかりません" });
 
   const csv = buildCsv(rows);
-  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const today = jstYmd();
   const filename = csvFileName(today, rows.length);
 
   await gwLog({
