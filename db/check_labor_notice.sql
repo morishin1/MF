@@ -15,6 +15,11 @@
 --   NG   … 無い。通知書の機能が動かない。先に、対応するファイルを流す
 --   任意  … 無いと、その分の機能（電子署名を優先する判定など）だけが止まる。通知書そのものは動く
 --   済み  … db/110_labor_notices.sql の分。まだなら「未適用」（これから流す）
+--
+-- ■ 通知書を見られる人（給与・個人情報を含むため）
+--   owner ロール・hr ロールを持つ人だけ。DB の RLS も、API も、同じ条件。
+--   gw_is_hr（会計側の管理者 admin / staff も含む）は使わない。管理者・経理・責任者・採用担当・営業・社労士は、見られない。
+--   92 と 94 が、いま入っているポリシーが owner・hr だけのものか（前の版のままではないか）を見る。
 -- =============================================================================
 
 with
@@ -29,12 +34,9 @@ checks(ord, kind, target, file_hint, ok, detail) as (
   (11, 'NG', 'gw_employees（表）と user_id・tenant_id・status の列', 'db/005_groupware_core.sql',
      to_regclass('public.gw_employees') is not null
        and (select count(*) from col where tbl = 'gw_employees' and c in ('user_id', 'tenant_id', 'status', 'display_name')) = 4, null),
-  (12, 'NG', 'gw_is_hr(uuid)（関数）。人事として扱う人', 'db/005_groupware_core.sql・db/041_admin_is_hr.sql',
-     to_regprocedure('public.gw_is_hr(uuid)') is not null,
-     (select case when pg_get_functiondef(to_regprocedure('public.gw_is_hr(uuid)')) ~ 'is_tenant_staff'
-                  then '管理者（会計側 admin/staff）も人事として扱う定義です（db/041 の内容）'
-                  else '管理者は人事として扱われない定義です（人事・経営者ロールだけ）' end
-        where to_regprocedure('public.gw_is_hr(uuid)') is not null)),
+  (12, 'NG', 'gw_has_role(uuid, text)（関数）と gw_role_grants（表）。owner・hr ロールの判定', 'db/005_groupware_core.sql',
+     to_regprocedure('public.gw_has_role(uuid, text)') is not null and to_regclass('public.gw_role_grants') is not null,
+     '通知書の RLS は、この関数で owner と hr だけに絞ります（gw_is_hr は、会計側の管理者も含むので使いません）'),
   (13, 'NG', 'gw_activity_log（表）。操作の記録', 'db/005_groupware_core.sql',
      to_regclass('public.gw_activity_log') is not null, null),
   (14, 'NG', 'Storage バケット hr が、非公開で存在する', 'db/012_hr_files.sql',
@@ -70,8 +72,16 @@ checks(ord, kind, target, file_hint, ok, detail) as (
      to_regclass('public.gw_labor_notices') is not null, case when to_regclass('public.gw_labor_notices') is null then '未適用（これから流す）' end),
   (91, '済み', 'gw_labor_notices の RLS が有効', 'db/110_labor_notices.sql',
      coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.gw_labor_notices')), false), null),
-  (92, '済み', 'gw_labor_notices の読み取りポリシー（gw_labor_notices_read）', 'db/110_labor_notices.sql',
-     exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gw_labor_notices' and policyname = 'gw_labor_notices_read'), null),
+  (92, '済み', 'gw_labor_notices の読み取りポリシー（gw_labor_notices_read）。owner・hr ロールだけ', 'db/110_labor_notices.sql',
+     exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gw_labor_notices' and policyname = 'gw_labor_notices_read'
+               and qual ~ 'gw_has_role' and qual ~ 'owner' and qual ~ 'hr'
+               and qual !~ 'gw_is_hr' and qual !~ 'is_tenant_staff'),
+     case when to_regclass('public.gw_labor_notices') is null then '未適用（これから流す）' end),
+  -- 前の版（gw_is_hr で読める）を流していたら、管理者も読めてしまう。その場合は NG（db/110 をもう一度流す）
+  (94, 'NG', 'gw_labor_notices の読み取りポリシーが、管理者（admin / staff）も読める古い定義ではない', 'db/110_labor_notices.sql',
+     not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gw_labor_notices' and policyname = 'gw_labor_notices_read'
+                   and (qual ~ 'gw_is_hr' or qual ~ 'is_tenant_staff')),
+     '古い定義です（管理者も読めます）。db/110_labor_notices.sql をもう一度流してください。owner・hr だけに置き換わります（べき等）'),
   (93, '済み', 'gw_labor_notices の更新ガード（トリガ）', 'db/110_labor_notices.sql',
      exists (select 1 from pg_trigger where tgrelid = to_regclass('public.gw_labor_notices') and tgname = 'gw_labor_notices_guard_trg' and not tgisinternal), null)
 )

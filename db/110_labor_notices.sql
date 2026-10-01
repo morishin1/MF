@@ -20,13 +20,18 @@
 -- ■ 電子署名との関係
 --   gw_sign_requests（電子署名）は、この表とは別。ここで確認しても、署名依頼の status は変わらない。
 --
--- ■ 見られる人
---   DB から直接読めるのは、人事として扱う人（gw_is_hr: 人事・経営者・管理者）だけ。書き込みの方針は無い。
+-- ■ 見られる人（給与・個人情報を含む書類なので、owner と hr だけ）
+--   DB から直接読めるのは、owner ロール・hr ロールを持つ人だけ（gw_has_role(tenant_id, 'owner') or 'hr'）。書き込みの方針は無い。
+--   gw_is_hr は使わない。gw_is_hr は、会計側の管理者（admin / staff）も含む定義（db/041）で、広すぎる。
+--   管理者・経理（finance）・責任者（manager）・採用担当（recruiter）・営業（sales）・社労士は、読めない。
 --   本人は、API（service_role）を通して、自分の「公開済みの最新版」だけを見る。
+--   API（api/onboarding/notice.js）も、同じ条件（lib/labor-notice.js canManageNotice）。
 --
 -- ■ 前提
---   tenants・gw_employees（005）と、gw_is_hr（005・041）。
+--   tenants・gw_employees・gw_role_grants・gw_has_role（005）。
 --   新しい表だけを作る。既存の表・列・ポリシーは変えない（流しても、いまの動きは変わらない）。
+--   すでに前の版（gw_is_hr で読める）を流してしまっているときも、このファイルをもう一度流せば、
+--   ポリシー gw_labor_notices_read が owner / hr だけのものに置き換わる（べき等）。
 --
 -- ■ 適用の順序
 --   ① db/check_labor_notice.sql（読み取り専用）で、前提を確かめる
@@ -118,13 +123,17 @@ create trigger gw_labor_notices_guard_trg
   before update on public.gw_labor_notices
   for each row execute function public.gw_labor_notices_guard();
 
--- RLS: DB から直接読めるのは人事として扱う人だけ。書き込みの方針は置かない（API の service_role だけ）
+-- RLS: DB から直接読めるのは owner・hr ロールの人だけ。書き込みの方針は置かない（API の service_role だけ）。
+--   gw_is_hr は、会計側の管理者（is_tenant_staff）を含むので使わない
 alter table public.gw_labor_notices enable row level security;
 
 drop policy if exists gw_labor_notices_read on public.gw_labor_notices;
 create policy gw_labor_notices_read on public.gw_labor_notices
   for select to authenticated
-  using (public.gw_is_hr(tenant_id));
+  using (
+    public.gw_has_role(tenant_id, 'owner')
+    or public.gw_has_role(tenant_id, 'hr')
+  );
 
 comment on table public.gw_labor_notices is
   '労働条件通知書。1行＝1版。差し替えは新しい版を足す（旧版は消さない）。本人の確認（confirmed_at）はその版に付く。電子署名（gw_sign_requests）とは別';

@@ -8,7 +8,9 @@
 //        "publish" … いちばん新しい版を、本人に公開する（公開した版は、本人が未確認から始まる）
 //
 // ■ 誰が使えるか
-//   経営者（owner）・人事（hr）・管理者。入社は日常の運用なので、経営（/keiei）ではなく入社管理（admin-hr.html）に置く。
+//   owner ロール・hr ロールを持つ人だけ（canManageNotice）。給与・個人情報を含む書類なので、
+//   会計側の管理者（admin / staff）・経理・責任者・採用担当・営業・社労士は、見ることも管理することもできない（403）。
+//   入社は日常の運用なので、経営（/keiei）ではなく入社管理（admin-hr.html）に置く。
 //   本人は、ここを使わない（api/onboarding/start.js で、自分の「公開済みの最新版」だけを見る）。
 //   二段階認証は要らない（任意のセキュリティ設定）。
 //
@@ -24,7 +26,7 @@
 import crypto from "node:crypto";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { notify } from "../../lib/notify.js";
@@ -32,7 +34,7 @@ import { logSensitive } from "../../lib/sensitive-log.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
 import {
   NOTICE_BUCKET, NOTICE_MAX_BYTES, NOTICE_TITLE, noticePrefix, isNoticePath, checkDeclared, checkBytes, cleanFilename,
-  adminState, canPublish, nextVersion,
+  adminState, canPublish, nextVersion, canManageNotice,
 } from "../../lib/labor-notice.js";
 import {
   NOTICE_SQL, NOTICE_COLS, NOTICE_COLS_FILE, loadNoticeRows, esignState, signedNoticeUrl,
@@ -49,8 +51,9 @@ export default async function handler(req, res) {
   if (!user) return;
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  // 経営者・人事・管理者だけ。給与を含む書類なので、ほかの役割（責任者・採用担当・営業・経理など）には何も返さない
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden", hint: "労働条件通知書は、経営者・人事だけが扱えます" });
+  // owner・hr ロールだけ。給与・個人情報を含む書類なので、管理者（admin / staff）を含め、ほかの人には何も返さない。
+  // canManageHr（管理者を含む）は使わない
+  if (!canManageNotice(ctx)) return json(res, 403, { error: "forbidden", hint: "労働条件通知書は、経営者・人事だけが扱えます" });
 
   try {
     const sb = admin();

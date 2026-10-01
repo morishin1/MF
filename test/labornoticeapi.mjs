@@ -1,10 +1,11 @@
-// 労働条件通知書：管理側（api/onboarding/notice.js・経営者と人事）と、本人側（api/onboarding/start.js）。
-// 同じ DB・同じ Storage（偽物）の上で、管理者のアップロード → 公開 → 本人の閲覧・確認 → 差し替え、まで通す。
+// 労働条件通知書：管理側（api/onboarding/notice.js・owner と hr ロールだけ）と、本人側（api/onboarding/start.js）。
+// 同じ DB・同じ Storage（偽物）の上で、人事のアップロード → 公開 → 本人の閲覧・確認 → 差し替え、まで通す。
 //
 // ■ 何を守るテストか
 //   管理側
-//   1. 経営者・人事・管理者だけ。ほかの役割（責任者・採用担当・営業・経理・社労士・一般）は 403。二段階認証は要らない
-//   2. 他社の人・他社の版は 404。置き場所は、この会社・この人の専用の場所だけ（他人・他社のパスを掴めない）
+//   1. owner ロール・hr ロールの人だけ（給与・個人情報を含むため）。会計側の管理者（admin / staff）・責任者・採用担当・営業・経理・社労士・一般・
+//      他の社員は 403（取得・プレビュー・アップロード・登録・公開、どれも）。二段階認証は要らない
+//   2. 他社の人・他社の版は 404（他社の owner・hr でも）。置き場所は、この会社・この人の専用の場所だけ（他人・他社のパスを掴めない）
 //   3. PDFのみ（中身で確かめる）・15MBまで。違うものは断り、置いたファイルも消す。同じファイルの再登録は新しい版にならない
 //   4. 差し替えは、新しい版を足す（旧版の行も、旧版のファイルも消さない・書き換えない）。公開は、いちばん新しい版を一度だけ
 //   5. 公開すると、本人に通知が届き、入社手続きの段階が進む。署名付きURLは、DB・監査ログ・通知のどこにも残らない
@@ -27,35 +28,101 @@ const ok = async (name, fn) => {
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
 };
 
-console.log("\n=== 管理側：権限（経営者・人事・管理者だけ。二段階認証は要らない）===\n");
+console.log("\n=== 管理側：権限（owner・hr ロールだけ。管理者（admin・staff）ほかは 403。二段階認証は要らない）===\n");
 
-await ok("経営者・人事・管理者は読める・登録できる（パスワードだけのログイン aal1 で）", async () => {
+// 管理側の入口の、全部の操作（取得・プレビュー・アップロード・登録・公開）
+const allOps = async (note) => [
+  ["取得", (await admGet("employeeId=e1")).statusCode],
+  ["プレビュー", (await admGet(`file=${note}`)).statusCode],
+  ["アップロード", (await adm({ action: "upload", employeeId: "e1", mimeType: "application/pdf", sizeBytes: 10 })).statusCode],
+  ["登録", (await adm({ action: "attach", employeeId: "e1", path: "t1/labor-notice/e1/00000000-0000-0000-0000-000000000000.pdf", filename: "x.pdf" })).statusCode],
+  ["公開", (await adm({ action: "publish", employeeId: "e1", id: note })).statusCode],
+];
+
+await ok("owner は読める・登録できる（パスワードだけのログイン aal1 で）", async () => {
+  setup(); asAdmin(OWNER);
+  const r = await admGet("employeeId=e1");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.notice.status, "none");
+  assert.equal(r.headers["cache-control"], "no-store");
+});
+
+await ok("hr は読める・登録できる（パスワードだけのログイン aal1 で）", async () => {
+  setup(); asAdmin(HR);
+  const r = await admGet("employeeId=e1");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.notice.status, "none");
+  assert.equal(r.headers["cache-control"], "no-store");
+});
+
+await ok("owner・hr のロールを持つ人は、会計側の管理者でもあっても使える（見るのは、ロールのほう）", async () => {
   setup();
-  for (const c of [OWNER, HR, ctxOf("a1", [], { isAdmin: true })]) {
-    asAdmin(c);
-    const r = await admGet("employeeId=e1");
-    assert.equal(r.statusCode, 200, `${c.roles.join() || "admin"}: ${JSON.stringify(r.body)}`);
-    assert.equal(r.body.notice.status, "none");
-    assert.equal(r.headers["cache-control"], "no-store");
+  for (const roles of [["owner"], ["hr"], ["owner", "hr"], ["hr", "finance"]]) {
+    asAdmin(ctxOf("a2", roles, { isAdmin: true }));
+    assert.equal((await admGet("employeeId=e1")).statusCode, 200, roles.join());
   }
 });
 
-await ok("責任者・採用担当・営業・経理・社労士・一般メンバー・未ログインは、読めない・書けない（403 / 401）", async () => {
+await ok("会計側の管理者（admin / staff）は、ロールを持たなければ 403。取得・プレビュー・アップロード・登録・公開の全部", async () => {
   setup();
-  for (const roles of [["manager"], ["recruiter"], ["sales"], ["finance"], ["labor_advisor"], ["it"], []]) {
-    asAdmin(ctxOf("x", roles));
-    assert.equal((await admGet("employeeId=e1")).statusCode, 403, roles.join() || "一般");
-    assert.equal((await adm({ action: "upload", employeeId: "e1", mimeType: "application/pdf", sizeBytes: 10 })).statusCode, 403);
-    assert.equal((await adm({ action: "publish", employeeId: "e1", id: "n" })).statusCode, 403);
+  const v = await put("e1", pdf(1));                       // 通知書がある状態で試す（見えないことの確認）
+  const id = v.row.id;
+  for (const c of [ctxOf("a1", [], { isAdmin: true }), ctxOf("a1", [], { isAdmin: true, isHr: false, roles: [] })]) {
+    asAdmin(c);
+    for (const [name, code] of await allOps(id)) assert.equal(code, 403, `管理者・${name}`);
   }
-  assert.deepEqual(db.rows.gw_labor_notices, []);
+  assert.equal(db.rows.gw_labor_notices.length, 1, "何も増えない・変わらない");
+  assert.equal(db.rows.gw_labor_notices[0].published_at ?? null, null, "公開もされていない");
+});
+
+await ok("経理（finance）・責任者（manager）・採用担当（recruiter）・営業（sales）・社労士・IT・一般は、403（全部の操作）。何も書き換わらない", async () => {
+  setup();
+  const v = await put("e1", pdf(1));
+  const id = v.row.id;
+  const before = JSON.stringify([db.rows.gw_labor_notices, db.rows.gw_activity_log ?? []]);
+  for (const roles of [["finance"], ["manager"], ["recruiter"], ["sales"], ["labor_advisor"], ["it"], ["manager", "finance"], []]) {
+    asAdmin(ctxOf("x", roles));
+    for (const [name, code] of await allOps(id)) assert.equal(code, 403, `${roles.join() || "一般"}・${name}`);
+  }
+  assert.equal(JSON.stringify([db.rows.gw_labor_notices, db.rows.gw_activity_log ?? []]), before, "DB は1文字も変わらない");
+  assert.equal(storage.signed.length, 0, "署名付きURLは作られていない");
   setPersona(null, null);
   assert.equal((await admGet("employeeId=e1")).statusCode, 401);
 });
 
-await ok("本人（入社予定者）は、管理側の入口を使えない（自分の通知書も、本人の入口から見る）", async () => {
-  setup(); asHire();
+await ok("403 の応答に、通知書の中身（ファイル名・場所・版・URL）は入らない", async () => {
+  setup();
+  const v = await put("e1", pdf(1), "秘密_山田.pdf");
+  const id = v.row.id;
+  asAdmin(ctxOf("a1", [], { isAdmin: true }));
+  for (const r of [await admGet("employeeId=e1"), await admGet(`file=${id}`), await adm({ action: "publish", employeeId: "e1", id })]) {
+    assert.equal(r.statusCode, 403);
+    const t = JSON.stringify(r.body);
+    assert.ok(!/秘密_|labor-notice|storage\.test|token|versions|notice"/.test(t), t);
+  }
+});
+
+await ok("本人（入社予定者）は、管理側の入口を使えない（自分の通知書も、本人の入口から見る）。他の社員も、他人の通知書を取れない", async () => {
+  setup();
+  const v = await put("e1", pdf(1));
+  const id = v.row.id;
+  asHire();
   assert.equal((await admGet("employeeId=e1")).statusCode, 403);
+  asHire(HIRE2);                                           // 別の社員（e2）が、e1 の通知書を取ろうとする
+  for (const [name, code] of await allOps(id)) assert.equal(code, 403, `他の社員・${name}`);
+});
+
+await ok("他テナントの owner・hr は、この会社の人・版・置き場所に 404（取得・プレビュー・アップロード・登録・公開）", async () => {
+  setup();
+  const v = await put("e1", pdf(1));
+  const id = v.row.id;
+  for (const roles of [["owner"], ["hr"]]) {
+    asAdmin(ctxOf("z1", roles, { tenantId: "t2" }));
+    for (const [name, code] of await allOps(id)) assert.equal(code, 404, `他社の ${roles[0]}・${name}`);
+  }
+  assert.equal(db.rows.gw_labor_notices.length, 1, "他社からは何も増えない・変わらない");
+  assert.equal(db.rows.gw_labor_notices[0].published_at ?? null, null);
+  assert.equal(storage.signed.length, 0, "署名付きURLも作られていない");
 });
 
 await ok("他社の人は 404。他社の版のプレビューも 404。employeeId なしは 400。知らない action は 400", async () => {

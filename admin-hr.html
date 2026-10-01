@@ -492,8 +492,7 @@
 
         <div id="hr-date"></div>
 
-        ${p.kind === "onboarding" ? `<div class="hr-ln" id="labor-notice" data-employee="${esc(p.employeeId)}">
-          <div class="muted" style="font-size:13px;">労働条件通知書を読み込み中…</div></div>` : ""}
+        ${p.kind === "onboarding" ? `<div class="hr-ln" id="labor-notice" data-employee="${esc(p.employeeId)}" hidden></div>` : ""}
 
         ${p.groups.map((g) => `
           <div class="hr-grp">
@@ -658,12 +657,20 @@
   let lnData = null;
   let lnScrolled = false;
 
+  // 労働条件通知書は、給与・個人情報を含むので、owner ロール・hr ロールの人だけ（API が決める）。
+  // 欄は最初は隠しておき、API が通った人にだけ出す。403（会計側の管理者・経理・責任者ほか）の人には、欄そのものを出さない
+  let lnDenied = false;
   async function loadNotice(employeeId) {
     const box = el("labor-notice");
     if (!box) return;
+    if (lnDenied) { box.remove(); return; }
     try {
-      renderNotice(await API.api(`/api/onboarding/notice?employeeId=${encodeURIComponent(employeeId)}`));
+      const d = await API.api(`/api/onboarding/notice?employeeId=${encodeURIComponent(employeeId)}`);
+      box.hidden = false;
+      renderNotice(d);
     } catch (e) {
+      if (e.status === 403 || e.code === "forbidden") { lnDenied = true; box.remove(); return; }
+      box.hidden = false;
       box.innerHTML = `<h3>労働条件通知書</h3><div class="err" data-role="ln-err">${esc(e.hint || e.message || "読み込めませんでした")}</div>`;
     }
   }

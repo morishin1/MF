@@ -7,10 +7,12 @@
 //   4. 電子署名との関係: 有効な電子署名依頼があるあいだは、通知書の確認で STEP2（雇用契約）を完了にしない
 //      電子署名がなく、通知書だけのときは、「確認しました」で STEP2 が完了し、入社情報の入力へ進む
 //   5. 段階判定（computeStage・6ステップ・旧6STEP）が、同じ答えを出す（判定を2か所に書かない）
+//   6. 管理できるのは owner・hr ロールだけ。会計側の管理者（isAdmin）・canManageHr は使わない
 import assert from "node:assert/strict";
 import {
   isNoticePath, noticePrefix, isPdfBytes, checkDeclared, checkBytes, cleanFilename, NOTICE_MAX_BYTES,
   sortVersions, currentOf, pendingOf, nextVersion, canPublish, adminState, selfState, canConfirm, noticeFact, listStatus,
+  canManageNotice, NOTICE_MANAGER_ROLES,
 } from "../lib/labor-notice.js";
 import { computeStage, stageFlags } from "../lib/onboard-stage.js";
 import { mapSix } from "../lib/onboard-six.js";
@@ -28,6 +30,31 @@ const U = "33333333-3333-3333-3333-333333333333.pdf";
 const row = (version, extra = {}) => ({ id: `n${version}`, version, filename: `v${version}.pdf`, ...extra });
 const PUB = "2026-10-01T01:00:00Z";
 const CONF = "2026-10-02T02:00:00Z";
+
+console.log("— 管理できる人（owner・hr ロールだけ）—");
+
+ok("owner・hr のロールを持つ人だけが管理できる", () => {
+  assert.deepEqual(NOTICE_MANAGER_ROLES, ["owner", "hr"]);
+  assert.equal(canManageNotice({ roles: ["owner"] }), true);
+  assert.equal(canManageNotice({ roles: ["hr"] }), true);
+  assert.equal(canManageNotice({ roles: ["finance", "hr"] }), true, "ほかのロールを持っていても、hr があれば");
+});
+
+ok("会計側の管理者（isAdmin）は、ロールが無ければ管理できない。isHr の旗にも頼らない", () => {
+  assert.equal(canManageNotice({ isAdmin: true, roles: [] }), false);
+  assert.equal(canManageNotice({ isAdmin: true, isHr: false, roles: ["finance"] }), false);
+  assert.equal(canManageNotice({ isAdmin: false, isHr: true, roles: [] }), false, "旗だけでは通らない（ロールの中身を見る）");
+  assert.equal(canManageNotice({ isAdmin: true, roles: ["hr"] }), true, "管理者でも、hr ロールを持てば管理できる（ロールを見ている）");
+});
+
+ok("経理・責任者・採用担当・営業・社労士・IT・一般・未ログインは管理できない", () => {
+  for (const r of ["finance", "manager", "recruiter", "sales", "labor_advisor", "it"]) assert.equal(canManageNotice({ roles: [r] }), false, r);
+  assert.equal(canManageNotice({ roles: [] }), false);
+  assert.equal(canManageNotice({}), false);
+  assert.equal(canManageNotice(null), false);
+  assert.equal(canManageNotice(undefined), false);
+  assert.equal(canManageNotice({ roles: "owner" }), false, "配列でなければ通さない");
+});
 
 console.log("— 置き場所・ファイル —");
 

@@ -11,6 +11,7 @@
 //   ・本人の3つの状態（準備中 / 確認してください＋書類を見る・確認しました / 確認済み＋日付・もう一度見る）と、最上部の「次にやること」
 //   ・別タブで開く。署名付きURLは、画面にも DB にも残らない（iframe にだけ入る）。他人の通知書は出ない
 //   ・電子署名の依頼がある人には、確認の入口を出さない（電子署名のほうを優先する）
+//   ・会計側の管理者（admin / staff。owner・hr のロールを持たない人）には、通知書の欄そのものを出さない。API は 403
 //   ・経営ハブ（/keiei）は件数だけ。操作は入社管理（admin-hr.html）
 //   ・スマホ幅（390px）で、横にはみ出さない
 import { launch, BASE } from "../_browser.mjs";
@@ -28,6 +29,8 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
 const PERSONAS = {
   "tok-owner": { ctx: OWNER, user: { id: "u-own1", email: "owner@example.com" }, appRole: "owner" },
   "tok-hr": { ctx: HR, user: { id: "u-hr1", email: "hr1@example.com" }, appRole: "admin" },
+  // 会計側の管理者（admin / staff）。社内ロール（owner・hr）は持たない
+  "tok-admin": { ctx: ctxOf("adm1", [], { isAdmin: true }), user: { id: "u-adm1", email: "admin1@example.com" }, appRole: "admin" },
   "tok-e1": { ctx: HIRE, user: { id: "u-e1", email: "hire@example.com" }, appRole: "member" },
   "tok-e2": { ctx: HIRE2, user: { id: "u-e2", email: "e2@example.com" }, appRole: "member" },
 };
@@ -361,6 +364,41 @@ console.log("\n=== 電子署名の依頼がある人：確認の入口を出さ�
   check((await text(admin, '[data-role="ln-warning"]')).includes("電子署名"), "管理側には、「電子署名の依頼があります」と出る");
   db.rows.gw_sign_requests = [];
   db.rows.gw_doc_orders = [];
+}
+
+// =================================================================================================
+console.log("\n=== 会計側の管理者（admin / staff）：通知書の欄そのものを出さない（API は 403）===");
+{
+  const noticeId = db.rows.gw_labor_notices[0].id;     // 通知書は、いま DB にある（見えないことの確認）
+  const a = await session("tok-admin");
+  const calls = [];
+  a.page.on("response", (r) => { if (r.url().includes("/api/onboarding/notice")) calls.push([r.request().method(), r.status()]); });
+  await a.page.goto(`${BASE}/admin-hr.html?id=p1#labor-notice`);
+  await a.page.waitForSelector("#hr-date", { state: "attached" });
+  await a.page.waitForTimeout(900);
+  check(await a.page.locator("#labor-notice").count() === 0, "労働条件通知書の欄そのものが無い");
+  check(!(await a.page.locator("body").innerText()).includes("労働条件通知書"), "画面のどこにも、「労働条件通知書」の文字が出ない");
+  check(await a.page.locator('[data-role="ln-upload"], #ln-file, [data-role="ln-publish"]').count() === 0, "アップロード・公開の操作も無い");
+  check(await a.page.locator("text=会社PCの準備").count() > 0, "ほかの入社管理の表示は、これまでどおり出る");
+  check(calls.length >= 1 && calls.every(([, st]) => st === 403), `API は 403（いま ${JSON.stringify(calls)}）`);
+  await a.page.screenshot({ path: shotPath("labor-notice-admin-denied.png"), fullPage: true });
+
+  // 画面を通さず、プレビューの URL を直接開いても、中身は出ない
+  const hits = viewerHits.length;
+  const p2 = await a.ctx.newPage();
+  await p2.goto(`${BASE}/onboarding/notice.html?file=${noticeId}`);
+  await p2.waitForTimeout(900);
+  check(await p2.locator("iframe").count() === 0, "プレビューを直接開いても、PDF は出ない");
+  check(viewerHits.length === hits, "署名付きURLは、作られても開かれてもいない");
+  check(!(await p2.locator("body").innerText()).includes("山田太郎_労働条件通知書"), "ファイル名も出ない");
+  await a.ctx.close();
+
+  // 同じ画面を owner・hr の人が開けば、欄は出る（権限で分かれている）
+  const h = await session("tok-hr");
+  await h.page.goto(`${BASE}/admin-hr.html?id=p1#labor-notice`);
+  await h.page.waitForSelector('#labor-notice [data-role="ln-status"]');
+  check(await h.page.locator("#labor-notice").isVisible(), "hr には、通知書の欄が出る");
+  await h.ctx.close();
 }
 
 // =================================================================================================

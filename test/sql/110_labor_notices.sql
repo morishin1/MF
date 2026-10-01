@@ -1,7 +1,9 @@
 -- db/110_labor_notices.sql（労働条件通知書）の検証。実際の PostgreSQL で流す。
 --
 -- ■ 何を確かめるか
---   ・DB から直接読めるのは、人事として扱う人（経営者・人事・管理者）だけ。本人も、他の役割も、他社の人事も読めない
+--   ・DB から直接読めるのは、owner ロール・hr ロールの人だけ（gw_has_role）。給与・個人情報を含むため
+--     会計側の管理者（admin / staff）・経理・責任者・採用担当・営業・社労士・本人・他社の人事は、読めない（gw_is_hr は使わない）
+--   ・前の版（gw_is_hr で読める）が入っていても、もう一度流せば owner・hr だけに置き換わる。前提チェックは、その古い定義を NG と言う
 --   ・誰も（人事・経営者でも）、画面から直接は書けない（書き込みのポリシーが無い）。書くのは API の service_role だけ
 --   ・版の中身（ファイルの場所・名前・ハッシュ・版番号・アップロード）は、あとから書き換えられない
 --   ・公開した日時・確認した日時は、一度入ったら書き換えられない。確認は1回だけ。同じ値の再送（二重押し）は通る
@@ -48,21 +50,26 @@ create table if not exists storage.buckets (id text primary key, name text, publ
 insert into storage.buckets(id, name, public) values ('hr', 'hr', false) on conflict do nothing;
 
 insert into public.tenants(id,name) values ('77777777-7777-7777-7777-777777777777','T7'), ('66666666-6666-6666-6666-666666666666','T6');
-insert into auth.users(id,email) select ('a7a0000' || n || '-0000-0000-0000-000000000000')::uuid, 'v' || n || '@x' from generate_series(1,8) n;
+insert into auth.users(id,email) select ('a7a000' || lpad(n::text, 2, '0') || '-0000-0000-0000-000000000000')::uuid, 'v' || n || '@x' from generate_series(1,10) n;
 insert into auth.users(id,email) values ('a7a000f0-0000-0000-0000-000000000000', 'uploader@x'), ('b7a00001-0000-0000-0000-000000000000', 'other-hr@x');
 insert into public.gw_employees(id,tenant_id,user_id,display_name,email,status)
- select u.id, '77777777-7777-7777-7777-777777777777', u.id, split_part(u.email,'@',1), u.email, 'active' from auth.users u where u.email ~ '^v[1-8]@x$';
+ select u.id, '77777777-7777-7777-7777-777777777777', u.id, split_part(u.email,'@',1), u.email, 'active' from auth.users u where u.email ~ '^v([1-9]|10)@x$';
 insert into public.gw_employees(id,tenant_id,user_id,display_name,email,status)
  values ('b7a00001-0000-0000-0000-000000000000','66666666-6666-6666-6666-666666666666','b7a00001-0000-0000-0000-000000000000','other-hr','other-hr@x','active');
--- v1=owner v2=hr v3=manager v4=recruiter v5=（役割なし）v6=finance v7=member（通知書の本人）v8=staff(admin)
+-- v1=owner v2=hr v3=manager v4=recruiter v5=（役割なし）v6=finance v7=member（通知書の本人）v8=staff v9=it v10=admin（会計側の管理者）
+-- 社労士（labor_advisor）は v5 に付ける。営業（sales）のロールは db/088 で足されるので、ここでは別の役割（it）で代わりにする（API のテストで sales も確かめる）
 insert into public.gw_role_grants(tenant_id,employee_id,role) values
  ('77777777-7777-7777-7777-777777777777','a7a00001-0000-0000-0000-000000000000','owner'),
  ('77777777-7777-7777-7777-777777777777','a7a00002-0000-0000-0000-000000000000','hr'),
  ('77777777-7777-7777-7777-777777777777','a7a00003-0000-0000-0000-000000000000','manager'),
  ('77777777-7777-7777-7777-777777777777','a7a00004-0000-0000-0000-000000000000','recruiter'),
  ('77777777-7777-7777-7777-777777777777','a7a00006-0000-0000-0000-000000000000','finance'),
+ ('77777777-7777-7777-7777-777777777777','a7a00009-0000-0000-0000-000000000000','it'),
+ ('77777777-7777-7777-7777-777777777777','a7a00005-0000-0000-0000-000000000000','labor_advisor'),
  ('66666666-6666-6666-6666-666666666666','b7a00001-0000-0000-0000-000000000000','hr');
-insert into public.memberships(tenant_id,user_id,role) values ('77777777-7777-7777-7777-777777777777','a7a00008-0000-0000-0000-000000000000','staff');
+insert into public.memberships(tenant_id,user_id,role) values
+ ('77777777-7777-7777-7777-777777777777','a7a00008-0000-0000-0000-000000000000','staff'),
+ ('77777777-7777-7777-7777-777777777777','a7a00010-0000-0000-0000-000000000000','admin');
 
 -- 前提チェック（読み取り専用）。適用前: 必須の NG は 0、この SQL の分は「未適用」4 件
 select pg_temp.expect('K1 check sql: no NG before applying 110', (select count(*)::int from (:chk) t where "結果" = 'NG'), 0);
@@ -75,6 +82,17 @@ grant all on all tables in schema public to authenticated, service_role;
 select pg_temp.expect('K3 check sql: after applying, nothing is reported as not applied', (select count(*)::int from (:chk) t where "結果" = '未適用'), 0);
 select pg_temp.expect('K4 check sql: still no NG', (select count(*)::int from (:chk) t where "結果" = 'NG'), 0);
 
+-- 前の版（gw_is_hr で読める。管理者も読めてしまう）を流していた会社を作る。前提チェックが NG と言う → もう一度流して置き換える
+drop policy gw_labor_notices_read on public.gw_labor_notices;
+create policy gw_labor_notices_read on public.gw_labor_notices for select to authenticated using (public.gw_is_hr(tenant_id));
+select pg_temp.expect('K5 check sql: the old gw_is_hr policy is reported as NG (admins could read)', (select count(*)::int from (:chk) t where "結果" = 'NG'), 1);
+select pg_temp.expect('K5b ...and the row for the policy is not "done"', (select count(*)::int from (:chk) t where "結果" = '未適用'), 1);
+select pg_temp.try('A3 applying 110 again replaces the old policy with the owner/hr one', :'c110', 'ok');
+select pg_temp.expect('K6 check sql: after re-applying, no NG and nothing unapplied',
+  (select count(*)::int from (:chk) t where "結果" in ('NG', '未適用')), 0);
+select pg_temp.expect('K7 the policy no longer mentions gw_is_hr / is_tenant_staff',
+  (select count(*)::int from pg_policies where tablename = 'gw_labor_notices' and (qual ~ 'gw_is_hr' or qual ~ 'is_tenant_staff')), 0);
+
 -- 行を入れる（RLS を通らない管理者として）。v7 の v1（公開済み）・v2（下書き）
 insert into public.gw_labor_notices(id,tenant_id,employee_id,version,storage_path,filename,size_bytes,sha256,uploaded_by,published_by,published_at)
  values ('d7000000-0000-0000-0000-000000000001','77777777-7777-7777-7777-777777777777','a7a00007-0000-0000-0000-000000000000',1,
@@ -83,19 +101,20 @@ insert into public.gw_labor_notices(id,tenant_id,employee_id,version,storage_pat
  values ('d7000000-0000-0000-0000-000000000002','77777777-7777-7777-7777-777777777777','a7a00007-0000-0000-0000-000000000000',2,
          '77777777-7777-7777-7777-777777777777/labor-notice/a7a00007-0000-0000-0000-000000000000/f2.pdf','通知書_v2.pdf',2000,'bb','a7a000f0-0000-0000-0000-000000000000');
 
--- 読める人: 人事として扱う人（経営者・人事・管理者）だけ
+-- 読める人: owner ロール・hr ロールの人だけ。会計側の管理者（admin / staff）も読めない
 select pg_temp.expect('R1 owner reads', pg_temp.count_as('a7a00001-0000-0000-0000-000000000000','public.gw_labor_notices'), 2);
 select pg_temp.expect('R2 hr reads', pg_temp.count_as('a7a00002-0000-0000-0000-000000000000','public.gw_labor_notices'), 2);
-select pg_temp.expect('R3 admin (staff) reads', pg_temp.count_as('a7a00008-0000-0000-0000-000000000000','public.gw_labor_notices'), 2);
+select pg_temp.expect('R3 staff (accounting-side admin) reads nothing', pg_temp.count_as('a7a00008-0000-0000-0000-000000000000','public.gw_labor_notices'), 0);
+select pg_temp.expect('R3b admin (accounting-side admin) reads nothing', pg_temp.count_as('a7a00010-0000-0000-0000-000000000000','public.gw_labor_notices'), 0);
 do $$
 declare u text; n int; bad int := 0;
 begin
-  -- manager / recruiter / 役割なし / finance / 通知書の本人（v7）
-  foreach u in array array['a7a00003','a7a00004','a7a00005','a7a00006','a7a00007'] loop
+  -- manager / recruiter / 社労士ロール / finance / 通知書の本人（v7） / it
+  foreach u in array array['a7a00003','a7a00004','a7a00005','a7a00006','a7a00007','a7a00009'] loop
     n := pg_temp.count_as((u || '-0000-0000-0000-000000000000')::uuid, 'public.gw_labor_notices');
     if n <> 0 then bad := bad + 1; raise notice 'FAIL % sees % rows', u, n; end if;
   end loop;
-  perform pg_temp.expect('R4 manager/recruiter/no-role/finance and the employee himself read nothing directly (the API serves him)', bad, 0);
+  perform pg_temp.expect('R4 manager/recruiter/labor-advisor/finance/it and the employee himself read nothing directly (the API serves him)', bad, 0);
 end $$;
 select pg_temp.expect('R5 another company''s hr reads nothing', pg_temp.count_as('b7a00001-0000-0000-0000-000000000000','public.gw_labor_notices'), 0);
 
