@@ -28,7 +28,7 @@
     { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",      ready: true },
     { key: "tasks",    href: "tasks.html",     label: "タスク",     icon: "checklist", ready: true },
     { key: "nippo",    href: "nippo.html",     label: "日報",       icon: "edit_note", ready: true },
-    { key: "messages", href: "messages.html",  label: "メッセージ", icon: "forum",     ready: true },
+    { key: "messages", href: "messages.html",  label: "社内AI",     icon: "smart_toy", ready: true },
     { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",      ready: true },
   ];
 
@@ -67,7 +67,7 @@
       ],
       // スペース予約（booking.html）は通常メニューに置かず、ここから誘導する
       match: ["tasks", "nippo", "schedule", "booking"] },
-    { key: "messages", href: "messages.html", label: "メッセージ", icon: "forum",    ready: true },
+    { key: "messages", href: "messages.html", label: "社内AI",     icon: "smart_toy", ready: true },
     { key: "timecard", href: "timecard.html", label: "勤怠・申請", icon: "schedule",  ready: true,
       tabs: [
         { key: "timecard", href: "timecard.html", label: "勤怠" },
@@ -150,7 +150,8 @@
             { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
           ] },
         { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
-        { key: "messages",  href: "messages.html",        label: "メッセージ",     icon: "forum",     ready: true },
+        { key: "messages",  href: "messages.html",        label: "社内AI",         icon: "smart_toy", ready: true },
+        { key: "ai_admin",  href: "admin-ai.html",        label: "AIナレッジ",     icon: "psychology", ready: true },
         // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
         { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true,
           tabs: [

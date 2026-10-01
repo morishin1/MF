@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>AIナレッジ - エイト</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261001a">
+  <link rel="stylesheet" href="css/layout.css?v=20261001a">
+  <script>
+    try {
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
+  <style>
+    .ai-form label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+    .ai-form input, .ai-form select, .ai-form textarea { width:100%; font-family:inherit; font-size:13.5px;
+      padding:8px 10px; border:1px solid var(--border); border-radius:8px; }
+    .ai-form textarea { min-height:100px; resize:vertical; }
+    .ai-row-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .ai-status { font-size:11px; padding:3px 9px; border-radius:999px; background:var(--soft); color:var(--primary-dark); }
+    .ai-inactive { opacity:.55; }
+    .ai-bubble-system { max-width:92%; margin:0 auto 14px; padding:12px 14px; border-radius:10px;
+      background:var(--soft); font-size:12.5px; color:var(--muted); white-space:pre-wrap; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="kp-greet">AIナレッジ</h1>
+  <p class="kp-greet-sub">社内AIが参照する資料の管理と、AIで解決しなかった問い合わせの対応です。</p>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">library_books</span>ナレッジを<span id="form-mode">追加</span></h2>
+    <div class="ai-form">
+      <label>タイトル</label>
+      <input id="k-title" type="text" placeholder="例：有給休暇の申請方法">
+      <label>カテゴリ</label>
+      <select id="k-category"></select>
+      <label>本文</label>
+      <textarea id="k-content" placeholder="AIが回答の根拠にする内容を書いてください"></textarea>
+      <label>公開範囲</label>
+      <select id="k-scope">
+        <option value="all">全員</option>
+        <option value="hr">人事情報（人事・管理者のみ）</option>
+        <option value="finance">経理情報（経理・管理者のみ）</option>
+        <option value="admin">管理者限定</option>
+      </select>
+      <label>関連画面（任意）</label>
+      <div style="display:flex;gap:8px;">
+        <input id="k-link-label" type="text" placeholder="例：勤怠・申請を開く" style="flex:1;">
+        <input id="k-link-url" type="text" placeholder="例：timecard.html" style="flex:1;">
+      </div>
+      <div class="ai-row-actions" style="margin-top:14px;">
+        <button class="btn btn-primary" id="k-save" onclick="saveKnowledge(this)">保存する</button>
+        <button class="btn btn-secondary hidden" id="k-cancel" onclick="resetForm()">キャンセル</button>
+      </div>
+      <div id="k-msg" class="err-text"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">menu_book</span>ナレッジ一覧</h2>
+    <div id="k-list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="material-symbols-outlined">support_agent</span>問い合わせ（共通受信箱）</h2>
+    <div id="iq-list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <div class="card hidden" id="iq-detail-card">
+    <h2><span class="material-symbols-outlined">forum</span><span id="iq-d-subject"></span>
+      <span class="ai-status" id="iq-d-status" style="margin-left:10px;"></span></h2>
+    <div class="ai-row-actions" style="margin-bottom:12px;">
+      <select id="iq-d-status-select"></select>
+      <select id="iq-d-assign"></select>
+      <button class="btn btn-secondary btn-sm" onclick="updateInquiry()">更新する</button>
+    </div>
+    <div id="iq-d-messages" class="kp-chat"></div>
+    <div class="kp-compose">
+      <textarea id="iq-d-input" rows="2" placeholder="返信する（Ctrl+Enter で送信）"></textarea>
+      <button class="btn btn-primary" onclick="replyInquiry()">
+        <span class="material-symbols-outlined icon-inline">send</span>送信
+      </button>
+    </div>
+    <div id="iq-d-msg" class="err-text"></div>
+  </div>
+</div>
+
+<script src="js/api-client.js?v=20261001a"></script>
+<script src="js/device.js?v=20261001a"></script>
+<script src="js/layout.js?v=20261001a"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+
+  const CATEGORIES = [
+    { code: "general_affairs", label: "総務" }, { code: "hr", label: "人事・労務" },
+    { code: "accounting", label: "経理" }, { code: "it", label: "IT" },
+    { code: "sales", label: "営業" }, { code: "rules", label: "社内ルール" }, { code: "other", label: "その他" },
+  ];
+  const categoryLabel = (code) => CATEGORIES.find((c) => c.code === code)?.label || "その他";
+  const SCOPE_LABEL = { all: "全員", hr: "人事情報", finance: "経理情報", admin: "管理者限定" };
+  const STATUS = [
+    { v: "new", label: "受付済み" }, { v: "in_progress", label: "対応中" },
+    { v: "waiting_user", label: "返信待ち" }, { v: "resolved", label: "解決済み" }, { v: "closed", label: "完了" },
+  ];
+
+  let knowledge = [];
+  let inquiries = [];
+  let employees = [];
+  let editingId = null;
+  let currentInquiry = null;
+
+  KPLayout.init({ active: "ai_admin", roles: ["admin", "owner"] })
+    .then((ctx) => { if (ctx) start(); });
+
+  async function start() {
+    el("k-category").innerHTML = CATEGORIES.map((c) => `<option value="${c.code}">${esc(c.label)}</option>`).join("");
+    el("iq-d-status-select").innerHTML = STATUS.map((s) => `<option value="${s.v}">${esc(s.label)}</option>`).join("");
+    await Promise.all([loadKnowledge(), loadInquiries(), loadEmployees()]);
+  }
+
+  async function loadEmployees() {
+    try {
+      const res = await API.listEmployees();
+      employees = (res.employees || []).filter((e) => e.status !== "left");
+      el("iq-d-assign").innerHTML = `<option value="">（担当者未定）</option>`
+        + employees.map((e) => `<option value="${esc(e.id)}">${esc(e.display_name)}</option>`).join("");
+    } catch (e) { /* 担当者の割り当てができないだけ。他は動く */ }
+  }
+
+  // ---- ナレッジ -----------------------------------------------------------
+  async function loadKnowledge() {
+    try {
+      knowledge = await API.listAiKnowledge();
+      renderKnowledge();
+    } catch (e) {
+      el("k-list").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+  function renderKnowledge() {
+    if (!knowledge.length) { el("k-list").innerHTML = `<div class="empty">まだ登録されていません。</div>`; return; }
+    el("k-list").innerHTML = knowledge.map((k) => `
+      <div class="kp-todo${k.is_active ? "" : " ai-inactive"}">
+        <span class="material-symbols-outlined" style="font-size:20px;color:var(--muted);">description</span>
+        <span class="t"><b>${esc(k.title)}</b>
+          <span class="kp-chip" style="margin-left:6px;">${esc(categoryLabel(k.category))}</span>
+          <span class="kp-chip" style="margin-left:4px;">${esc(SCOPE_LABEL[k.access_scope] || k.access_scope)}</span>
+          ${k.is_active ? "" : `<span class="kp-chip" style="margin-left:4px;">無効</span>`}
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="editKnowledge('${esc(k.id)}')">編集</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleActive('${esc(k.id)}', ${k.is_active})">${k.is_active ? "無効にする" : "有効にする"}</button>
+      </div>`).join("");
+  }
+
+  function editKnowledge(id) {
+    const k = knowledge.find((x) => x.id === id);
+    if (!k) return;
+    editingId = id;
+    el("form-mode").textContent = "編集";
+    el("k-title").value = k.title;
+    el("k-category").value = k.category;
+    el("k-content").value = k.content;
+    el("k-scope").value = k.access_scope;
+    el("k-link-label").value = k.link_label || "";
+    el("k-link-url").value = k.link_url || "";
+    el("k-cancel").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetForm() {
+    editingId = null;
+    el("form-mode").textContent = "追加";
+    el("k-title").value = "";
+    el("k-category").value = CATEGORIES[0].code;
+    el("k-content").value = "";
+    el("k-scope").value = "all";
+    el("k-link-label").value = "";
+    el("k-link-url").value = "";
+    el("k-cancel").classList.add("hidden");
+    el("k-msg").textContent = "";
+  }
+
+  async function saveKnowledge(btn) {
+    const msg = el("k-msg");
+    msg.textContent = "";
+    const title = el("k-title").value.trim();
+    const content = el("k-content").value.trim();
+    if (!title || !content) { msg.textContent = "タイトルと本文を入力してください"; return; }
+    const payload = {
+      title, content, category: el("k-category").value, accessScope: el("k-scope").value,
+      linkLabel: el("k-link-label").value.trim() || null, linkUrl: el("k-link-url").value.trim() || null,
+    };
+    try {
+      await KPLayout.busy(btn, "保存中…", () => editingId
+        ? API.updateAiKnowledge(editingId, payload)
+        : API.createAiKnowledge(payload));
+      resetForm();
+      await loadKnowledge();
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  async function toggleActive(id, isActive) {
+    try {
+      await API.updateAiKnowledge(id, { isActive: !isActive });
+      await loadKnowledge();
+    } catch (e) {
+      alert(e.detail || e.message || "変更できませんでした");
+    }
+  }
+
+  // ---- 問い合わせ -----------------------------------------------------------
+  async function loadInquiries() {
+    try {
+      const res = await API.listAiInquiries();
+      inquiries = res.inquiries || [];
+      renderInquiries();
+    } catch (e) {
+      el("iq-list").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+  const STATUS_LABEL = Object.fromEntries(STATUS.map((s) => [s.v, s.label]));
+  function renderInquiries() {
+    if (!inquiries.length) { el("iq-list").innerHTML = `<div class="empty">問い合わせはありません。</div>`; return; }
+    el("iq-list").innerHTML = inquiries.map((i) => `
+      <div class="kp-todo" style="cursor:pointer;" onclick="openInquiry('${esc(i.id)}')">
+        <span class="material-symbols-outlined" style="font-size:20px;color:var(--muted);">support_agent</span>
+        <span class="t"><b>${esc(i.subject)}</b>
+          <small>${esc(i.employeeName || "")}${i.assignedName ? ` ・ 担当：${esc(i.assignedName)}` : ""}</small>
+        </span>
+        <span class="ai-status">${esc(STATUS_LABEL[i.status] || i.status)}</span>
+      </div>`).join("");
+  }
+
+  async function openInquiry(id) {
+    currentInquiry = id;
+    el("iq-detail-card").classList.remove("hidden");
+    el("iq-d-messages").innerHTML = `<div class="empty">読み込み中…</div>`;
+    try {
+      const res = await API.getAiInquiry(id);
+      el("iq-d-subject").textContent = res.inquiry.subject;
+      el("iq-d-status").textContent = STATUS_LABEL[res.inquiry.status] || res.inquiry.status;
+      el("iq-d-status-select").value = res.inquiry.status;
+      el("iq-d-assign").value = res.inquiry.assigned_employee_id || "";
+      el("iq-d-messages").innerHTML = (res.messages || []).map((m) => {
+        if (m.sender_type === "system") return `<div class="ai-bubble-system">${esc(m.content)}</div>`;
+        const mine = m.sender_type === "admin";
+        return `<div class="kp-bubble-row${mine ? " mine" : ""}">
+          <div class="kp-bubble">
+            <div class="who">${m.sender_type === "admin" ? "管理部" : "本人"}</div>
+            <div class="body" style="white-space:pre-wrap;">${esc(m.content)}</div>
+          </div></div>`;
+      }).join("") || `<div class="empty">まだやりとりがありません。</div>`;
+      el("iq-detail-card").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      el("iq-d-messages").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>読み込めませんでした：${esc(e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  async function replyInquiry() {
+    const input = el("iq-d-input");
+    const content = input.value.trim();
+    if (!content || !currentInquiry) return;
+    const msg = el("iq-d-msg");
+    msg.textContent = "";
+    try {
+      await API.replyAiInquiry(currentInquiry, content);
+      input.value = "";
+      await openInquiry(currentInquiry);
+      await loadInquiries();
+    } catch (e) {
+      msg.textContent = e.detail || e.message || "送信できませんでした";
+    }
+  }
+
+  async function updateInquiry() {
+    if (!currentInquiry) return;
+    try {
+      await API.updateAiInquiry(currentInquiry, {
+        status: el("iq-d-status-select").value,
+        assignedEmployeeId: el("iq-d-assign").value || null,
+      });
+      await openInquiry(currentInquiry);
+      await loadInquiries();
+    } catch (e) {
+      alert(e.detail || e.message || "更新できませんでした");
+    }
+  }
+
+  resetForm();
+</script>
+
+</body>
+</html>
