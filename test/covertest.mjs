@@ -11,7 +11,8 @@ const atRoot = (p) => _join(ROOT, p);
 
 const dir = ROOT;
 const src = fs.readFileSync(path.join(dir, "js/layout.js"), "utf8");
-const groups = src.slice(src.indexOf("const ADMIN_GROUPS = ["), src.indexOf("// 社労士は社外の人"));
+// ホーム／Office／管理（⚙）の3つの表ぶんをまとめて見る（旧 ADMIN_GROUPS を分割した）
+const groups = src.slice(src.indexOf("const HOME_ITEMS = ["), src.indexOf("// 社労士は社外の人"));
 const keys = new Set([...groups.matchAll(/\{ key: "([a-z_]+)",/g)].map((m) => m[1]));
 // match: [...] に書かれた鍵も、選ばれた状態になる正規の鍵（tabsの帯は出ないだけ）
 for (const m of groups.matchAll(/match:\s*\[([^\]]*)\]/g)) {

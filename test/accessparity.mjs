@@ -136,7 +136,7 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // access が無い古い応答のときの代替（役割で数える）も、サーバと同じ並び
   check(/\["owner", "manager", "hr", "recruiter"\]\.some/.test(layout), "access が無いときの HR の代替も owner / manager / hr / recruiter");
   check(/keiei:[^\n]*: gwRoles\.includes\("owner"\)/.test(layout), "access が無いときの経営の代替も owner だけ");
-  check(/\$\{shortcutsHtml\(shows\)\}/.test(layout), "メンバーの画面・メンバー表示でも同じ条件で出す");
+  check(/\$\{shortcutsHtml\(shows,/.test(layout), "メンバーの画面・メンバー表示でも同じ条件で出す");
   check(/const canRecruit = me\?\.access \? Boolean\(me\.access\.recruit\)/.test(read("js/hr-layout.js")),
     "/hr の入口は access.recruit");
   check(/const canSell = me\?\.access \? Boolean\(me\.access\.sell\)/.test(read("js/sales-layout.js")),
@@ -309,7 +309,9 @@ console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、ac
   const tools = [...block.matchAll(/\{\s*key:\s*"(\w+)",\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*short:\s*"([^"]+)",\s*icon:\s*"(\w+)",\s*ready:\s*(true|false)/g)]
     .map((m) => ({ key: m[1], href: m[2], label: m[3], ready: m[6] === "true" }));
   check(tools.map((t) => t.key).join(",") === "hr,sales,office,keiei", `ツールの並びは HR・Sales・Office・経営（いま ${tools.map((t) => t.key)}）`);
-  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,Office,経営", `表示は「採用HR ｜ Sales ｜ Office ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
+  // 「Office」の表示名は、ナビ再設計（ヘッダーの管理画面向けOfficeエリア）との名前衝突を避けるため
+  // 「月次業務」に改称した（URL・access.office のキーは変えていない。下の各チェックが見ているのはそちら）
+  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,月次業務,経営", `表示は「採用HR ｜ Sales ｜ 月次業務 ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
   const accessKeys = new Set(Object.keys(accessOf({ roles: [] })));
   const keyOfAccess = { hr: "recruit", sales: "sell", office: "office", keiei: "keiei" };
   check(tools.every((t) => accessKeys.has(keyOfAccess[t.key])), "TOOLS の各ツールに、サーバの access（accessOf）のキーがある");

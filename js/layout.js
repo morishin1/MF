@@ -112,60 +112,56 @@
   ];
 
   /**
-   * 管理者: 左サイドメニュー。仕事の目的で5つに分ける。
+   * 管理者: ヘッダー＝業務領域（ホーム／Office／⚙管理）の切替、
+   *         左サイドメニュー＝選んでいる業務領域の中だけ。
    *
    * ■ なぜ作り直したか
-   *   24項目が5グループに散らばっていて、1つのグループに9項目
-   *   入っているところがあった。「人事・メンバー」を開くと、
-   *   メンバー管理・新規登録・入退社・雇用契約・電子署名・試用期間・
-   *   育成計画・自走レベル・休暇稟議 が一列に並ぶ。
-   *   どれがどれだか分からないので、結局いつも同じ1つしか押されない。
+   *   以前は24項目が1つのサイドメニューの中で4グループに畳まれていて、
+   *   「いまどの仕事をしているか」と「サイドメニューの中身」が常に一致しなかった。
+   *   ヘッダーで領域を選び、サイドメニューはその領域だけを映す形にそろえる
+   *   （採用HR／Sales／経営が、すでにヘッダー切替＋専用画面という形になっているのと同じ）。
    *
-   * ■ 1グループ6項目まで
-   *   畳んだ状態で見出し5つ、開いても5項目。
-   *   PCの最初の画面（スクロールなし）に主要メニューが収まる。
+   * ■ 3つの領域（areaOf が active から判定する）
+   *   home     … ダッシュボード・今日のタスク・日報・社内AI・お知らせ（毎日使うものだけ）
+   *   office   … 人事・労務／経理・事務の管理画面（旧 g-hr・g-ops）
+   *   settings … 権限・端末・アクセス分析・システム設定（旧 g-system）。ヘッダー右の⚙から
    *
    * ■ 2階層目は、ページの上のタブにする（tabs）
-   *   左メニューには「勤怠・休暇」1つだけ置き、開いた先で
-   *   「勤怠 / 休暇・稟議」を行き来する。
-   *   細かい機能ごとに左メニューを増やさない。
    *   tabs に書いた鍵は、その項目が選ばれた状態になる（match は自動）。
-   *
-   * ■ 開いているのは、いま見ている画面のグループだけ
-   *   人によって使うところが違うので、開いたグループは localStorage に残す。
-   *   ただし、いま見ている画面のグループは覚えた状態に関わらず必ず開く
-   *   （自分がどこにいるか分からなくなるため）。
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
-  const ADMIN_GROUPS = [
+  const HOME_ITEMS = [
+    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
+    // 今週のゴールは、今日のタスクの帯の中へ（左メニューの行は増やさない）
+    { key: "tasks",     href: "admin-tasks.html",     label: "今日のタスク",   icon: "checklist", ready: true,
+      tabs: [
+        { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
+        { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
+      ] },
+    { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
+    // 「社内AI」1つにまとめる。AIナレッジの管理はその中のタブ（ページ内）に置く
+    { key: "messages",  href: "messages.html",        label: "社内AI",         icon: "smart_toy", ready: true,
+      tabs: [
+        { key: "messages", href: "messages.html",  label: "AIチャット" },
+        { key: "ai_admin", href: "admin-ai.html",   label: "AIナレッジ" },
+      ] },
+    // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
+    { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true,
+      tabs: [
+        { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
+        { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
+      ] },
+  ];
+
+  // Office: 人事・労務／経理・事務。今回は admin/owner のままに限定する
+  // （経理ロール等への開放はバックエンドAPI側の権限拡張も要るため、別タスクで扱う）。
+  // HR（/hr）・Sales（/sales）・経営（/keiei）と同じく、ヘッダー切替が正式な入口
+  const OFFICE_GROUPS = [
     {
-      key: "g-home", label: "ホーム", icon: "home",
+      key: "office-hr", label: "人事・労務", icon: "group",
       items: [
-        { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
-        // 今週のゴールは、今日のタスクの帯の中へ（左メニューの行は増やさない）
-        { key: "tasks",     href: "admin-tasks.html",     label: "今日のタスク",   icon: "checklist", ready: true,
-          tabs: [
-            { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
-            { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
-          ] },
-        { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
-        { key: "messages",  href: "messages.html",        label: "社内AI",         icon: "smart_toy", ready: true },
-        { key: "ai_admin",  href: "admin-ai.html",        label: "AIナレッジ",     icon: "psychology", ready: true },
-        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
-        { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true,
-          tabs: [
-            { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
-            { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
-          ] },
-      ],
-    },
-    {
-      // HR（/hr）・Sales（/sales）・経営（/keiei）は、共通ヘッダーの切替が正式な入口
-      // （renderTopbar の TOOLS）。左メニューにも置くと入口が二重になるので置かない
-      key: "g-hr", label: "人事・労務", icon: "group",
-      items: [
-        { key: "members",   href: "admin-members.html",   label: "メンバー管理", icon: "badge",      ready: true,
+        { key: "members",   href: "admin-members.html",   label: "メンバー",     icon: "badge",      ready: true,
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
           // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
           // 入口は消さない。見出しまで同じにする必要はないので tabs（帯）では
@@ -205,7 +201,7 @@
       ],
     },
     {
-      key: "g-ops", label: "業務・経理", icon: "work",
+      key: "office-ops", label: "経理・事務", icon: "work",
       items: [
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
         // 月次締めと月初作業管理は、同じ「月の区切りの仕事」なので1つにまとめる
@@ -218,29 +214,38 @@
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
       ],
     },
-    {
-      key: "g-system", label: "管理・設定", icon: "settings",
-      items: [
-        // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
-        { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
-        { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true,
-          tabs: [
-            { key: "devices", href: "admin-devices.html", label: "端末管理" },
-            { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
-          ] },
-        { key: "analytics", href: "admin-analytics.html", label: "アクセス分析", icon: "monitoring", ready: true,
-          tabs: [
-            { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
-            { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
-          ] },
-        // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
-        // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
-        // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
-        { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
-          match: ["settings", "bookings"] },
-      ],
-    },
   ];
+
+  // 管理（⚙）: 毎日使わない設定系だけ。ヘッダー右のアイコンが正式な入口
+  const SETTINGS_ITEMS = [
+    // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
+    { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
+    { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true,
+      tabs: [
+        { key: "devices", href: "admin-devices.html", label: "端末管理" },
+        { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
+      ] },
+    { key: "analytics", href: "admin-analytics.html", label: "アクセス分析", icon: "monitoring", ready: true,
+      tabs: [
+        { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
+        { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
+      ] },
+    // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
+    // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
+    // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
+    { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
+      match: ["settings", "bookings"] },
+  ];
+
+  /** active（いま開いている画面）が、ホーム／Office／管理のどの領域に属するか */
+  function areaOf(active) {
+    if (!active) return "home";
+    if (OFFICE_GROUPS.some((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))))
+      return "office";
+    if (SETTINGS_ITEMS.some((i) => i.key === active || (i.match || []).includes(active)))
+      return "settings";
+    return "home";
+  }
 
   /**
    * tabs を書いた項目は、その中のどの画面を開いていても選ばれた状態にする。
@@ -248,7 +253,7 @@
    * match を手で二重に書かせない。書き忘れると、開いたときに
    * メニューのどこも光らず「自分がどこにいるのか」が分からなくなる
    */
-  for (const n of [...ADMIN_GROUPS.flatMap((g) => g.items), ...MEMBER_SIDE_NAV]) {
+  for (const n of [...HOME_ITEMS, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS, ...MEMBER_SIDE_NAV]) {
     if (n.tabs && !n.match) n.match = n.tabs.map((t) => t.key);
   }
 
@@ -305,30 +310,48 @@
   //   ready … false のあいだは、権限があっても出さない。まだ実装されていないツールの
   //           リンク（存在しない画面）を出さないため
   const TOOLS = [
-    { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add",       ready: true },
-    { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
-    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true },
-    { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true },
+    { key: "hr",     href: "/hr/",     label: "採用HR",   short: "HR",     icon: "person_add",       ready: true },
+    { key: "sales",  href: "/sales/",  label: "Sales",    short: "Sales",  icon: "storefront",       ready: true },
+    // 旧ラベルは「Office」だったが、今回のナビ再設計で「Office」は管理画面側の
+    // 業務領域（admin-members.html 等）を指す名前になったため、こちらは実体（月末月初業務）に
+    // 合わせて改称した。URL・権限（access.office = canAccessOffice）は変えていない
+    { key: "office", href: "/office/", label: "月次業務", short: "月次",   icon: "calendar_month",   ready: true },
+    { key: "keiei",  href: "/keiei/",  label: "経営",     short: "経営",   icon: "monitoring",       ready: true },
   ];
 
-  function shortcutsHtml(shows = {}, path = location.pathname) {
-    const list = TOOLS.filter((t) => t.ready && shows[t.key]);
+  // 管理者・経営者だけに出すヘッダーの業務領域切替（Office・⚙管理）。
+  // 上の TOOLS（採用HR・Sales・月次業務・経営）は access フラグ（member でも持ちうる権限）で
+  // 出し分けるが、こちらは appRole（admin/owner）で出し分ける。areaOf(active) と対にして、
+  // 「いまどの領域を見ているか」をハイライトする（href の前方一致ではなく area で判定する）
+  const ADMIN_TOOLS = [
+    { areaKey: "office",   href: "admin-members.html", label: "Office", short: "Office", icon: "business_center" },
+    { areaKey: "settings", href: "admin-devices.html",  label: "管理",   short: "管理",   icon: "settings" },
+  ];
+
+  function shortcutsHtml(shows = {}, path = location.pathname, showAdminTools = false, area = null) {
+    const list = [
+      ...TOOLS.filter((t) => t.ready && shows[t.key]),
+      ...(showAdminTools ? ADMIN_TOOLS : []),
+    ];
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
-      const on = path.startsWith(s.href);
+      const on = s.areaKey ? area === s.areaKey : path.startsWith(s.href);
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${s.href}"
-                 data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
+                 data-shortcut="${s.key || `area-${s.areaKey}`}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
         </a>`;
     }).join("")}</nav>`;
   }
 
-  function renderTopbar({ name, appRole, memberView, shows }) {
+  function renderTopbar({ name, appRole, memberView, shows, active }) {
     const tag = memberView
       ? "メンバー表示で確認中"
       : ({ admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "");
     const home = memberView ? "home.html" : homeFor(appRole);
     const canPreview = appRole === "admin" || appRole === "owner";
+    // Office・⚙管理 は admin/owner だけ（メンバー表示で確認中は出さない。管理者機能を隠す意味が崩れるため）
+    const showAdminTools = canPreview && !memberView;
+    const area = showAdminTools ? areaOf(active) : null;
 
     const el = document.createElement("div");
     el.className = "topbar";
@@ -339,7 +362,7 @@
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
-        ${shortcutsHtml(shows)}
+        ${shortcutsHtml(shows, location.pathname, showAdminTools, area)}
         <span class="kp-who-name">${esc(name)}</span>
         ${canPreview ? (memberView
           ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
@@ -461,26 +484,33 @@
     catch { /* 保存できなくても、その画面のあいだは動く */ }
   };
 
-  /** いま見ている画面が入っているグループ。ここは必ず開く */
+  /** いま見ている画面が入っている Office サブグループ。ここは必ず開く */
   const groupOf = (active) =>
-    ADMIN_GROUPS.find((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))) || null;
+    OFFICE_GROUPS.find((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))) || null;
 
-  // 管理者: 左サイドメニュー。グループごとに畳める。
-  // 社労士のように項目が少ない相手には、いままでどおり平らに並べる
+  /**
+   * 管理者: 左サイドメニュー。いま選んでいる業務領域（ホーム／Office／管理）の中だけを出す。
+   * ホーム・管理は項目が少ないので平らに並べる。Office だけ人事・労務／経理・事務の
+   * 2グループに畳める（社労士のように項目が少ない相手には、従来どおり平らに並べる＝items引数）
+   */
   function renderAdminNav(active, items = null) {
     if (items) return renderSidebar(active, items, "admin");
+
+    const area = areaOf(active);
+    if (area === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
+    if (area !== "office") return renderSidebar(active, HOME_ITEMS, "admin");
 
     const open = loadOpen();
     const here = groupOf(active);
     // PC では、いる場所のグループを必ず開く。
     // 狭い画面ではメニューが本文の上に積まれるので、開いたままにすると
-    // 6項目ぶん本文が下に押される。見出しに印を付けるだけにして、畳んでおく
+    // 本文が下に押される。見出しに印を付けるだけにして、畳んでおく
     const narrow = typeof matchMedia === "function" && matchMedia("(max-width: 860px)").matches;
     if (here && !narrow) open.add(here.key);
 
     const el = document.createElement("nav");
     el.className = "kp-sidebar grouped";
-    el.innerHTML = ADMIN_GROUPS.map((g) => {
+    el.innerHTML = OFFICE_GROUPS.map((g) => {
       const on = open.has(g.key);
       const hasActive = here && here.key === g.key;
       return `
@@ -605,9 +635,9 @@
       node.textContent = n > 99 ? "99+" : String(n);
       node.classList.toggle("hidden", !n);
     }
-    // 畳んだグループにも、中に用があることを出す。
+    // 畳んだグループにも、中に用があることを出す（畳めるのは Office の2グループだけ）。
     // 開かないと気づけないのでは、畳んだ意味が無くなる
-    for (const g of ADMIN_GROUPS) {
+    for (const g of OFFICE_GROUPS) {
       const sum = g.items.reduce((a, it) =>
         a + badgeKeys(it).reduce((b, k) => b + (badges[k] || 0), 0), 0);
       const mark = document.querySelector(`.kp-side-group[data-group="${g.key}"] .kp-side-dot`);
@@ -814,17 +844,19 @@
     const canPreview = appRole === "admin" || appRole === "owner";
     const memberView = canPreview && isMemberView();
 
-    renderTopbar({ name, appRole, memberView, shows });
+    renderTopbar({ name, appRole, memberView, shows, active });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     if (memberView) renderMemberNav(active, shows, stage);
     else if (canPreview) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
 
-    // 2階層目の帯。左メニューには出さず、ページの上に出す
+    // 2階層目の帯。左メニューには出さず、ページの上に出す。
+    // 管理者側は、いまどの領域を見ているかに関わらず全領域ぶんのタブ定義から探す
+    // （領域をまたいで active を特定できるようにする。表示するサイドメニューとは別）
     renderSubnav(active, memberView || !canPreview
       ? MEMBER_SIDE_NAV
-      : ADMIN_GROUPS.flatMap((g) => g.items));
+      : [...HOME_ITEMS, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS]);
 
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く。
     // その画面のデータより先に投げない（バッジのために本文を待たせない）
