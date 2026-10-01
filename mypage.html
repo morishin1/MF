@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260929b">
-  <link rel="stylesheet" href="css/layout.css?v=20260929b">
+  <link rel="stylesheet" href="css/app.css?v=20260929d">
+  <link rel="stylesheet" href="css/layout.css?v=20260929d">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -159,9 +159,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260929b"></script>
-<script src="js/device.js?v=20260929b"></script>
-<script src="js/layout.js?v=20260929b"></script>
+<script src="js/api-client.js?v=20260929d"></script>
+<script src="js/device.js?v=20260929d"></script>
+<script src="js/layout.js?v=20260929d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -177,6 +177,7 @@
   //
   // 対象の人（管理者・人事・社労士）は 2026-09-30 までに登録、10-01 から強制。
   // 対象でない人も登録できる。登録の中身は Supabase Auth の TOTP
+  // MFA の一時停止中（MFA_ENABLED が true でない）は、この欄を出さない
   let mfaInfo = null;
   async function loadMfa(info) {
     const box = el("mfa-body");
@@ -184,6 +185,10 @@
     try { st = await API.mfaStatus(); }
     catch (e) { box.innerHTML = `<span class="err-text">${esc(e.hint || e.message || "確認できませんでした")}</span>`; return; }
     mfaInfo = st || info || null;
+    // MFA の一時停止中（MFA_ENABLED が true でない。lib/mfa.js）は、設定欄ごと出さない。
+    // 登録済みの factor やこの画面のコードは残す（MFA_ENABLED=true に戻せば、また出る）
+    if (mfaInfo?.enabled === false) { el("mfa").hidden = true; return; }
+    el("mfa").hidden = false;
     const factors = st.factors || [];
     const on = factors.find((f) => f.status === "verified");
     const note = mfaInfo?.required

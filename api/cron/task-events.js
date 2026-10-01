@@ -27,6 +27,7 @@ import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { jstDate } from "../../lib/devices.js";
 import { buildTask, runEventTasks } from "../../lib/task-events.js";
+import { monthRange } from "../../lib/timecard.js";
 
 const DEVICE_GRACE_DAYS = 3;     // 入社から、これだけ経っても端末が無ければ知らせる
 const CONTRACT_LEAD_DAYS = 45;   // 契約終了の、これだけ前から知らせる
@@ -187,11 +188,15 @@ export async function monthStartBpEvents(sb, today) {
   // 優先5（月次請求進捗）の行も、ここで一緒に用意する。
   // 「今月の請求が動いている現場契約」ごとに1行。
   // 対象月×メンバー×契約で一意（db/077）なので、毎月・何度cronが走っても増えない
-  const monthStart = `${ym}-01`;
+  //
+  // 「月末」を `${ym}-31` と書かない。30日までの月・2月では実在しない日付になり、
+  // DB が 22008 で落ちる（しかも下の `if (!sce)` で黙って行が作られなくなる）。
+  // 「翌月1日より前」で絞れば、どの月でも正しい
+  const { from: monthStart, to: nextMonthStart } = monthRange(ym);
   const { data: contracts, error: sce } = await sb.from("gw_site_contracts")
     .select("id, tenant_id, employee_id, period_from, period_to")
     .in("employee_id", emps.map((e) => e.id))
-    .lte("period_from", `${ym}-31`)
+    .lt("period_from", nextMonthStart)
     .limit(2000);
   let billingRowsMade = 0;
   if (!sce) {

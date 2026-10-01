@@ -16,6 +16,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import {
   isBillingMonth, sha256, newSubmissionToken, LINK_TTL_DAYS, linkStatus,
 } from "../../lib/billing-submission.js";
+import { monthRange } from "../../lib/timecard.js";
 
 const SQL = "db/080_billing_submission.sql";
 
@@ -41,11 +42,14 @@ async function list(req, res, sb, ctx) {
 
   // 今月動いている現場契約。cron（api/cron/task-events.js）が毎月1〜5日に
   // gw_billing_progress の行を用意しているのと同じ絞り方
-  const monthStart = `${month}-01`;
+  //
+  // 「月末」を `${month}-31` と書かない。30日までの月・2月では実在しない日付になり、
+  // DB が 22008 で落とす。「翌月1日より前」で絞れば、どの月でも正しい
+  const { from: monthStart, to: nextMonthStart } = monthRange(month);
   const [contractsRes, progressRes, linksRes, submissionsRes] = await Promise.all([
     sb.from("gw_site_contracts")
       .select("id, employee_id, engagement_kind, site_company, prime_company, period_from, period_to")
-      .eq("tenant_id", ctx.tenantId).lte("period_from", `${month}-31`).limit(2000),
+      .eq("tenant_id", ctx.tenantId).lt("period_from", nextMonthStart).limit(2000),
     sb.from("gw_billing_progress").select("*")
       .eq("tenant_id", ctx.tenantId).eq("billing_month", month).limit(2000),
     sb.from("gw_submission_links").select("*").eq("tenant_id", ctx.tenantId).limit(2000),

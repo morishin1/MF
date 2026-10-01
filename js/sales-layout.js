@@ -137,6 +137,10 @@
       .sl-next .lb .material-symbols-outlined { font-size:15px; }
       .sl-next h3 { font-size:18px; font-weight:700; color:#1b2440; margin:6px 0 8px; }
       .sl-next .meta { font-size:12px; color:#4a5068; margin-bottom:10px; }
+      /* NEXT ACTION の Primary（大きく1つ）と Secondary（小さく横並び）。同じ強さにしない */
+      .sl-next .sl-cta-main { font-size:15px; padding:11px 18px; }
+      .sl-next .sl-cta-sub { display:flex; gap:8px; flex-wrap:wrap; flex-basis:100%; }
+      .sl-next .sl-cta-sub .btn { background:transparent; }
 
       .sl-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; font-size:12.5px; margin:0; }
       .sl-grid2 dt { color:#6b7080; margin-bottom:2px; }
