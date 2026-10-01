@@ -137,10 +137,10 @@
     try {
       await API.login(email, pw);
       // 二段階認証を登録している人は、ここで6桁。
-      // パスワードだけのトークン（aal1）では、機密の画面が開かない。
-      // MFA の一時停止中（/api/mfa の enabled=false。lib/mfa.js の MFA_ENABLED）は聞かない（パスワードだけで入れる）
+      // 二段階認証は任意（lib/mfa.js）。登録していない人は、パスワードだけで入れる。
+      // 登録した人は、本人が選んだ設定なので、MFA の必須を止めている間（MFA_ENABLED が true でない）も、6桁を聞く
       const st = await API.mfaStatus().catch(() => null);
-      const factors = st?.enabled === false ? [] : (st?.factors || []);
+      const factors = st?.factors || [];
       const f = factors.find((x) => x.status === "verified");
       if (f) { askTotp(f.id); return; }
       await goToHome();
