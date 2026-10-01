@@ -16,6 +16,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
+import { loadMasters } from "../../../lib/sales-master.js";
 import { checkImportRows, countResults, CSV_PREVIEW_MAX, CSV_COMMIT_MAX } from "../../../lib/sales-csv-import.js";
 
 const SQL = "db/088_sales.sql";
@@ -40,7 +41,8 @@ export default async function handler(req, res) {
   }
 
   // 既存の会社（このCSVに出てくるドメインだけ、100件ずつ）。非表示の会社も重複に数える
-  const pre = checkImportRows(rows, new Map());
+  const masters = await loadMasters(sb, ctx.tenantId);
+  const pre = checkImportRows(rows, new Map(), masters);
   const domains = [...new Set(pre.map((r) => r.value?.domain).filter(Boolean))];
   const existing = new Map();
   for (let i = 0; i < domains.length; i += 100) {
@@ -53,7 +55,7 @@ export default async function handler(req, res) {
     }
     for (const c of data || []) existing.set(c.domain, c.name);
   }
-  const results = checkImportRows(rows, existing);
+  const results = checkImportRows(rows, existing, masters);
 
   if (!commit) {
     const counts = countResults(results);
