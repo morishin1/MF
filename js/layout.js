@@ -319,13 +319,17 @@
     { key: "keiei",  href: "/keiei/",  label: "経営",     short: "経営",   icon: "monitoring",       ready: true },
   ];
 
-  // 管理者・経営者だけに出すヘッダーの業務領域切替（Office・⚙管理）。
+  // 管理者・経営者だけに出すヘッダーの業務領域切替（Office）。
   // 上の TOOLS（採用HR・Sales・月次業務・経営）は access フラグ（member でも持ちうる権限）で
   // 出し分けるが、こちらは appRole（admin/owner）で出し分ける。areaOf(active) と対にして、
-  // 「いまどの領域を見ているか」をハイライトする（href の前方一致ではなく area で判定する）
+  // 「いまどの領域を見ているか」をハイライトする（href の前方一致ではなく area で判定する）。
+  //
+  // ⚙管理（権限・端末・アクセス分析・システム設定）はここに並べない。
+  // ヘッダーの横幅はすでに4ツール＋氏名・通知・ログアウトでほぼ一杯（1440px 幅で確認済み）。
+  // フルサイズのボタンをもう1つ足すと折り返して縦に伸びる。小さいアイコン＋
+  // ドロップダウン（adminMenuHtml・toggleAdminMenu）にして、通知ベルと同じ形にする
   const ADMIN_TOOLS = [
-    { areaKey: "office",   href: "admin-members.html", label: "Office", short: "Office", icon: "business_center" },
-    { areaKey: "settings", href: "admin-devices.html",  label: "管理",   short: "管理",   icon: "settings" },
+    { areaKey: "office", href: "admin-members.html", label: "Office", short: "Office", icon: "domain" },
   ];
 
   function shortcutsHtml(shows = {}, path = location.pathname, showAdminTools = false, area = null) {
@@ -372,6 +376,14 @@
                      title="メンバーに見える画面を、このアカウントのまま確認します">
                ${icon("visibility", 18)}メンバー表示
              </button>`) : ""}
+        ${showAdminTools ? `
+        <div class="kp-bell kp-admin-menu">
+          <button class="icon-btn${area === "settings" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
+                  data-shortcut="area-settings" onclick="KPLayout.toggleAdminMenu()">
+            ${icon("settings", 20)}
+          </button>
+          <div class="kp-bell-panel hidden" id="kp-admin-menu-panel">${adminMenuHtml()}</div>
+        </div>` : ""}
         <div class="kp-bell">
           <button class="icon-btn" id="kp-bell-btn" title="通知" onclick="KPLayout.toggleBell()">
             ${icon("notifications", 20)}
@@ -385,6 +397,20 @@
       </div>`;
     document.body.prepend(el);
     loadNotifications();
+  }
+
+  /**
+   * ⚙管理のドロップダウン中身。通知ベル（kp-bell-panel）と同じ器を使い回す。
+   * SETTINGS_ITEMS（権限・端末・貸与品・アクセス分析・システム設定）への直リンクだけ。
+   * サーバへ確かめに行く必要が無いので、通知と違って毎回その場で組み立てるだけでよい
+   */
+  function adminMenuHtml() {
+    return `
+      <div class="kp-bell-head"><b>管理</b></div>
+      ${SETTINGS_ITEMS.map((n) => `
+        <a class="kp-bell-item" href="${esc(n.href)}">
+          ${icon(n.icon, 18)}<b style="display:inline;margin-left:8px;">${esc(n.label)}</b>
+        </a>`).join("")}`;
   }
 
   // ---- 通知 ---------------------------------------------------------------
@@ -1123,6 +1149,12 @@
       const opening = panel.classList.contains("hidden");
       if (opening) renderBell();
       panel.classList.toggle("hidden", !opening);
+    },
+
+    // ⚙管理のドロップダウン開閉。中身は固定なので、通知と違って毎回組み立て直す必要はない
+    toggleAdminMenu() {
+      const panel = document.getElementById("kp-admin-menu-panel");
+      if (panel) panel.classList.toggle("hidden");
     },
 
     // リンク先へ移動しつつ既読にする。移動が先に走ってもよいよう待たない

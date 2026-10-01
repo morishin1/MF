@@ -62,34 +62,46 @@ async function open(file, who, badges = BADGES) {
   return page;
 }
 
-console.log("— 件数バッジ（管理者）—");
+console.log("— 件数バッジ（管理者・ホーム領域）—");
 {
+  // home.html は管理者が開くとホーム領域のサイドメニュー（ダッシュボード・今日のタスク・
+  // 日報・社内AI・お知らせ）になる。Officeの項目（経費精算・勤怠など）はここには無い
+  // （ヘッダーで領域を切り替えた先・Officeのサイドメニューにある。下のブロックで見る）
   const p = await open("home.html", meAdmin);
-  // 1つの項目が、タブの中の件数も背負う（data-badge="mypage contracts"）。
-  // だから完全一致ではなく ~= で引く
   const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
   const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
 
-  check(await shown("messages"), "メッセージに件数が出る");
+  check(await shown("messages"), "社内AIに件数が出る");
   check((await badge("messages").textContent()) === "3", "件数が合っている");
-  check(await shown("expenses"), "経費精算に件数が出る");
-  check((await badge("expenses").textContent()) === "2", "経費の件数が合っている");
-  check(await shown("timecard"), "タイムカード（打刻の修正）にも出る");
 
   // 0 のものは出さない
   check(!(await shown("nippo")), "件数が無いものは出さない");
   check(!(await shown("notices")), "お知らせにも出ない");
 
-  // グループを開けば、実際に目に見える
-  await p.locator('.kp-side-group[data-group="g-ops"]').click();
-  await p.waitForTimeout(300);
-  check(await badge("expenses").isVisible(), "グループを開くと件数が見える");
+  await p.screenshot({ path: shotPath("f3-badges-admin.png"), fullPage: false });
+  await p.close();
+}
 
-  // 畳んだグループには印が付く
+console.log("— 件数バッジ（管理者・Office領域）—");
+{
+  // admin-expenses.html は Office領域・「経理・事務」グループの画面。
+  // いま見ているグループ（経理・事務）は自動で開く。「人事・労務」は畳まれたまま
+  const p = await open("admin-expenses.html", meAdmin);
+  const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
+  const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
+
+  check(await shown("expenses"), "経費精算に件数が出る");
+  check((await badge("expenses").textContent()) === "2", "経費の件数が合っている");
+
+  // 畳んだグループ（人事・労務）にも印が付く
   const dots = await p.locator(".kp-side-group:not(.open) .kp-side-dot:not(.hidden)").count();
   check(dots > 0, `畳んだグループに印が付く（${dots}個）`);
 
-  await p.screenshot({ path: shotPath("f3-badges-admin.png"), fullPage: false });
+  // グループを開けば、実際に目に見える
+  await p.locator('.kp-side-group[data-group="office-hr"]').click();
+  await p.waitForTimeout(300);
+  check(await badge("timecard").isVisible(), "「人事・労務」を開くとタイムカードの件数が見える");
+
   await p.close();
 }
 
