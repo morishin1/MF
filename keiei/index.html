@@ -42,18 +42,41 @@
     table.kei-t td { padding:8px; border-bottom:1px solid #f0f0ea; vertical-align:top; }
     table.kei-t td.n, table.kei-t th.n { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
     table.kei-t tr.dim td { color:#9aa0b4; }
-    .kei-bars { display:flex; align-items:flex-end; gap:6px; height:150px; padding-top:8px; }
-    .kei-bar-col { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
-    .kei-bar-col .bar { width:100%; max-width:34px; background:#1b2440; border-radius:4px 4px 0 0; min-height:2px; }
-    .kei-bar-col .bar.pend { background:#c7cad4; }
-    .kei-bar-col .ml { font-size:10px; color:#9aa0b4; margin-top:4px; white-space:nowrap; }
-    .kei-bar-col .mv { font-size:9.5px; color:#6b7080; margin-bottom:2px; white-space:nowrap; }
-    .kei-prog { height:8px; background:#ecece6; border-radius:999px; overflow:hidden; }
-    .kei-prog > i { display:block; height:100%; background:#1b2440; }
-    .kei-row { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px; }
-    .kei-row .nm { flex:0 0 120px; color:#4a5068; }
-    .kei-row .pg { flex:1; }
-    .kei-row .n { flex:0 0 40px; text-align:right; color:#1b2440; font-weight:700; }
+    /* 経営ハブ（ホーム）: 今日の確認 / 人・組織 / お金 / リスク・未処理 */
+    .hub-sec { margin:0 0 22px; }
+    .hub-h { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
+    .hub-count { font-size:11.5px; font-weight:700; color:#6b7080; background:#ecece6; border-radius:999px; padding:1px 9px; }
+    .hub-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:4px 16px; }
+    .hub-sec.today .hub-panel { border-left:4px solid #1b2440; }
+    .hub-list { list-style:none; margin:0; padding:0; }
+    .hub-it { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:4px 12px; align-items:center; padding:11px 0; border-top:1px solid #f0f0ea; }
+    .hub-it:first-child { border-top:0; }
+    .hub-tx { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .hub-tx b { font-size:14px; color:#1b2440; }
+    .hub-tx span { font-size:12.5px; color:#4a5068; line-height:1.6; }
+    .hub-go { font-size:12.5px; font-weight:700; color:#1b2440; text-decoration:none; white-space:nowrap; border:1px solid #c7cad4; border-radius:7px; padding:6px 11px; background:#fff; }
+    .hub-go:hover { background:#f3f3ee; }
+    .hub-sev { font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+    .hub-sev.high { background:#fdeceb; color:#b3261e; }
+    .hub-sev.mid { background:#fff2d6; color:#8a5a00; }
+    .hub-sev.low { background:#ecece6; color:#6b7080; }
+    .hub-none { font-size:12.5px; color:#6b7080; padding:10px 0; }
+    .hub-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+    .hub-tile { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; text-decoration:none; color:inherit; display:block; }
+    .hub-tile:hover { border-color:#b8bccb; }
+    .hub-tile .lb { font-size:12px; color:#6b7080; }
+    .hub-tile .val { font-size:24px; font-weight:700; color:#1b2440; margin:4px 0 2px; letter-spacing:.01em; }
+    .hub-tile .val small { font-size:12px; font-weight:500; color:#6b7080; margin-left:2px; }
+    .hub-tile .val.miss { font-size:13px; color:#9aa0b4; margin:9px 0 7px; }
+    .hub-tile .sub { font-size:11.5px; color:#6b7080; line-height:1.5; min-height:1.5em; }
+    .hub-board { border:1px dashed #c7cad4; background:#fafaf7; border-radius:10px; padding:12px 14px; font-size:12.5px; color:#6b7080; margin-bottom:10px; }
+    .hub-foot { margin-top:6px; font-size:12px; color:#9aa0b4; }
+    .hub-foot a { color:#6b7080; }
+    @media (max-width: 820px) {
+      .hub-it { grid-template-columns:auto minmax(0,1fr); }
+      .hub-go { grid-column:1 / -1; justify-self:start; }
+      .hub-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
     .kei-btn { display:inline-block; background:#1b2440; color:#fff; border-radius:7px; padding:8px 14px; font-size:12.5px;
                font-weight:700; text-decoration:none; margin:4px 8px 4px 0; }
     .kei-btn.sec { background:#fff; color:#1b2440; border:1px solid #c7cad4; }
@@ -139,8 +162,6 @@
   const MISSING = "データ未連携";
   const yen = (n) => `${Math.round(Number(n) || 0).toLocaleString("ja-JP")}円`;
   const num = (n) => Number(n || 0).toLocaleString("ja-JP");
-  const ym = (m) => `${String(m).slice(0, 4)}年${Number(String(m).slice(5, 7))}月`;
-  const short = (n) => (n >= 10000 ? `${Math.round(n / 1000) / 10}万` : num(n));
 
   // ---- 部品 ------------------------------------------------------------------
   // 数値カード。取れないもの（status: missing）は、値を持たず「データ未連携」と出す。0円とは出さない
@@ -157,43 +178,35 @@
   }
   const bannerHtml = (text, kind = "") => `<div class="kei-banner ${kind}">${esc(text)}</div>`;
   const head = (title, sub) => `<h1 class="kei-title">${esc(title)}</h1><p class="kei-sub">${esc(sub || "")}</p>`;
-  const progress = (done, total) => `<div class="kei-prog"><i style="width:${total ? Math.round((done / total) * 100) : 0}%"></i></div>`;
 
   // ---- 画面 ------------------------------------------------------------------
   const RENDER = {
-    dashboard(d) {
-      const money = d.cards.filter((c) => c.group === "money");
-      const ops = d.cards.filter((c) => c.group === "ops");
-      return head("ダッシュボード", `${ym(d.month)}の会社の状態です。取れている数字だけを出しています。`)
-        + bannerHtml("数字は、元のデータ（経費・契約・請求進捗・営業）をその場で数えたものです。元データが無い項目は「" + MISSING + "」と出し、0円とは出しません。", "")
-        + `<div class="kei-h">お金</div><div class="kei-grid">${money.map(card).join("")}</div>`
-        + `<div class="kei-h">稼働・営業</div><div class="kei-grid">${ops.map(card).join("")}</div>`;
-    },
-
-    expenses(d) {
-      const e = d.expense;
-      if (!e) return head("経費", "") + bannerHtml("経費のデータを読めませんでした（" + MISSING + "）。", "warn");
-      const max = Math.max(1, ...e.monthly.map((m) => m.confirmed + m.pending));
-      const bars = e.monthly.map((m) => `<div class="kei-bar-col" title="${esc(ym(m.month))}：確定 ${yen(m.confirmed)}／承認待ち ${yen(m.pending)}">
-          <div class="mv">${m.confirmed ? short(m.confirmed) : ""}</div>
-          <div class="bar pend" style="height:${Math.round((m.pending / max) * 100)}%"></div>
-          <div class="bar" style="height:${Math.round((m.confirmed / max) * 100)}%"></div>
-          <div class="ml">${Number(m.month.slice(5))}月</div></div>`).join("");
-      const diff = e.confirmed.diffPct == null ? "前月は経費なし" : `前月比 ${e.confirmed.diff >= 0 ? "+" : ""}${e.confirmed.diffPct}%（${e.confirmed.diff >= 0 ? "+" : ""}${yen(e.confirmed.diff)}）`;
-      return head("経費", `${ym(d.month)}。申請・承認は Office 側（経費精算）で行います。ここは集計です。`)
-        + `<div class="kei-grid">
-            ${card({ label: "今月の経費（確定）", status: "exact", unit: "yen", value: e.confirmed.thisMonth, sub: diff })}
-            ${card({ label: "承認待ち（見込み）", status: "exact", unit: "yen", value: e.pending.thisMonth, sub: `${e.pending.count}件` })}
-            ${card({ label: "支払待ち（立替・承認済み）", status: "exact", unit: "yen", value: e.payable.amount, sub: `${e.payable.count}件` })}
-            ${card({ label: "内訳（確定）", status: "exact", unit: "text", value: `立替 ${yen(e.byMethod.personal)}`, sub: `法人カード ${yen(e.byMethod.corporate_card)}` })}
-          </div>`
-        + `<div class="kei-h">月別の推移（12か月）</div><div class="kei-panel"><div class="kei-bars">${bars}</div>
-             <div class="kei-sub" style="margin:8px 0 0;">濃い色＝確定、薄い色＝承認待ち。発生日（明細の日付）の月で数えています。</div></div>`
-        + `<div class="kei-h">科目別（今月・確定）</div><div class="kei-panel">${
-            e.byCategory.length ? `<table class="kei-t"><thead><tr><th>科目</th><th class="n">金額</th></tr></thead><tbody>${
-              e.byCategory.map((c) => `<tr><td>${esc(c.category)}</td><td class="n">${yen(c.amount)}</td></tr>`).join("")}</tbody></table>`
-              : `<div class="kei-empty">今月の確定した経費はありません。</div>`}</div>`
-        + bannerHtml(e.note);
+    // ---- 経営ハブ（ホーム）。見る → 気付く → 判断する → 元システムへ。ここでは処理を終わらせない ----
+    home(d) {
+      const SEV = { high: "重要", mid: "注意", low: "確認" };
+      const go = (i) => `<a class="hub-go" href="${esc(i.href)}" data-role="go">${esc(i.linkLabel)} →</a>`;
+      const row = (i) => `<li class="hub-it" data-key="${esc(i.key)}" data-severity="${esc(i.severity)}">
+          <span class="hub-sev ${esc(i.severity)}">${esc(SEV[i.severity] || "")}</span>
+          <div class="hub-tx"><b>${esc(i.label)}</b><span>${esc(i.detail)}</span></div>${go(i)}</li>`;
+      const tile = (t) => `<a class="hub-tile" href="${esc(t.href)}" data-key="${esc(t.key)}" title="${esc(t.linkLabel)}">
+          <div class="lb">${esc(t.label)}</div>
+          ${t.value == null ? `<div class="val miss">取得できません</div>` : `<div class="val">${num(t.value)}<small>${esc(t.suffix || "")}</small></div>`}
+          <div class="sub">${esc(t.sub || "")}</div></a>`;
+      const sec = (block, title, count, inner) => `<section class="hub-sec ${block}" data-block="${block}">
+          <h2 class="hub-h">${title}${count == null ? "" : `<span class="hub-count" data-role="count">${count}件</span>`}</h2>${inner}</section>`;
+      const wd = ["日", "月", "火", "水", "木", "金", "土"];
+      const t = new Date(`${d.today}T00:00:00Z`);
+      const dateText = `${t.getUTCFullYear()}年${t.getUTCMonth() + 1}月${t.getUTCDate()}日（${wd[t.getUTCDay()]}）`;
+      const list = (items, none) => items.length ? `<div class="hub-panel"><ul class="hub-list">${items.map(row).join("")}</ul></div>`
+        : `<div class="hub-none" data-role="none">${none}</div>`;
+      return head("ホーム", `${dateText}。見る → 気付く → 判断する → 元のシステムへ。処理は、それぞれのシステムで行います。`)
+        + (d.unreadable.length ? `<div data-role="unreadable">${bannerHtml(`一部の元データを読み込めませんでした：${d.unreadable.join("・")}。該当する判定・数字は出していません（問題がないという意味ではありません）。`, "warn")}</div>` : "")
+        + sec("today", "今日の確認", d.attention.length, list(d.attention, "今日、経営者が対応するものはありません。"))
+        + sec("people", "人・組織", null, `<div class="hub-tiles">${d.people.tiles.map(tile).join("")}</div>`)
+        + sec("money", "お金", null, `<div class="hub-board" data-role="board">${esc(d.money.board.message)}</div>
+            <div class="hub-tiles">${d.money.internal.map(tile).join("")}</div>`)
+        + sec("risk", "リスク・未処理", d.risks.length, list(d.risks, "気付くべき異常はありません。"))
+        + `<div class="hub-foot"><a href="#security" data-role="to-security">経営設定・セキュリティ</a>（経営者・二段階認証・変更履歴・給与の監査ログ）</div>`;
     },
 
     payroll(d) {
@@ -213,47 +226,29 @@
           <div class="kei-sub">「給与管理」の人は、給与管理の記録（基本給＋手当＋通勤手当）で、「契約」の人は、契約の基本給で数えています。給与管理に記録すると、記録のほうに切り替わります。</div>`;
     },
 
-    revenue(d) {
-      const b = d.billing;
-      const stageMax = b ? Math.max(1, b.total) : 1;
-      return head("売上・利益", `${ym(d.month)}。`)
-        + bannerHtml(d.reason, "warn")
-        + `<div class="kei-grid">${d.money.map((m) => card({ label: m.label, status: "missing", reason: "" })).join("")}</div>`
-        + `<div class="kei-h">今月の請求進捗（金額ではなく、進み具合）</div><div class="kei-panel">${
-            b ? `<div class="kei-sub" style="margin:0 0 8px;">対象 ${b.total}件・5段階すべて完了 ${b.complete}件・未着手 ${b.notStarted}件</div>${
-              b.byStage.map((s) => `<div class="kei-row"><div class="nm">${esc(s.label)}</div><div class="pg">${progress(s.done, stageMax)}</div><div class="n">${s.done}</div></div>`).join("")}`
-              : `<div class="kei-empty">${MISSING}</div>`}</div>`
-        + `<div class="kei-h">契約更新（${d.renewals ? d.renewals.days : 45}日以内）</div><div class="kei-panel">${
-            d.renewals && d.renewals.upcoming.length ? `<table class="kei-t"><thead><tr><th>終了日</th><th>区分</th><th>更新の状態</th></tr></thead><tbody>${
-              d.renewals.upcoming.map((c) => `<tr><td>${esc(c.periodTo)}</td><td>${c.kind === "bp" ? "BP" : "プロパー"}</td><td>${esc(c.renewalStatus || "")}</td></tr>`).join("")}</tbody></table>`
-              : `<div class="kei-empty">${d.renewals ? "近く終わる契約はありません。" : MISSING}</div>`}</div>`
-        + `<div class="kei-h">営業</div><div class="kei-grid">${
-            d.sales ? card({ label: "成約（累計）", status: "exact", unit: "count", suffix: "件", value: d.sales.won, sub: `商談中 ${d.sales.negotiating}件`, note: "営業の成約は件数のみです（金額の列がありません）" })
-                    : card({ label: "成約（累計）", status: "missing", reason: "" })}</div>`;
-    },
-
-    cash(d) {
-      const pay = d.payable;
-      return head("入金・支払", `${ym(d.month)}。処理そのものは Office、ここは集計と確認です。`)
-        + bannerHtml(d.reason, "warn")
-        + `<div class="kei-grid">${
-            pay ? card({ label: "支払予定（立替経費）", status: "exact", unit: "yen", value: pay.amount, sub: `${pay.count}件`, note: pay.note })
-                : card({ label: "支払予定（立替経費）", status: "missing", reason: "経費のデータを読めませんでした" })}
-            ${d.items.map((m) => card({ label: m.label, status: "missing", reason: "" })).join("")}</div>`;
-    },
-
-    accounting(d) {
-      const j = d.journals;
-      return head("会計", "既存の会計画面はそのまま使えます。ここは入口と、このアプリが捕捉している分の確認です。")
-        + bannerHtml(d.note, "warn")
-        + `<div class="kei-grid">${
-            j ? [card({ label: "仕訳（このアプリで承認済み）", status: "provisional", unit: "count", suffix: "件", value: j.approvedTotal ?? j.approved, sub: `うちMF送信済み ${num(j.sent || 0)}件・直近の取引日 ${j.latestApprovedOn || "—"}` }),
-                 card({ label: "確認待ちの仕訳", status: "exact", unit: "count", suffix: "件", value: j.draft, sub: "承認前" })].join("")
-              : card({ label: "仕訳", status: "missing", reason: "仕訳のデータを読めませんでした" })}</div>`
-        + `<div class="kei-h">既存の会計</div><div class="kei-panel">
-             <a class="kei-btn" href="${esc(d.links.accounting)}">会計（仕訳の承認・試算表）を開く</a>
-             <a class="kei-btn sec" href="${esc(d.links.documents)}">会計書類のアップロード</a>
-             <div class="kei-sub" style="margin:10px 0 0;">MF（マネーフォワード）の会計実績・残高との照合は、Office の請求・仕入・支払が揃ってから連携します。</div></div>`;
+    // ---- 経営設定・セキュリティ（経営者・二段階認証・変更履歴・給与の監査ログ） ----
+    security(d) {
+      if (d.status === "missing") return head("経営設定・セキュリティ", "") + bannerHtml(`${MISSING}。${d.reason || ""}`, "warn");
+      const ST = { active: "在籍", leaving: "退職手続き中", left: "退職", invited: "入社準備中" };
+      const MFA = { enrolled: `<span class="kei-pill ok">登録済み</span>`, none: `<span class="kei-pill warn">未登録</span>`, unknown: `<span class="kei-pill miss">確認できません</span>` };
+      const when = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? "" : new Date(t.getTime() + 9 * 3600000).toISOString().slice(0, 16).replace("T", " ").replace(/-/g, "/"); };
+      const pol = d.mfaPolicy;
+      return head("経営設定・セキュリティ", "経営画面に入れるのは経営者（owner）だけで、二段階認証が済んでいないと開けません。")
+        + d.warnings.map((w) => `<div data-role="warning" data-key="${esc(w.key)}">${bannerHtml(`${w.label}。${w.detail}`, "warn")}</div>`).join("")
+        + (d.mfaUnknown ? bannerHtml("一部の経営者の二段階認証の登録状況を確認できませんでした（未登録とは限りません）。", "") : "")
+        + `<div class="kei-h">経営者（owner）</div><div class="kei-panel"><table class="kei-t" data-role="owners"><thead><tr><th>氏名</th><th>在籍</th><th>ログイン</th><th>二段階認証</th></tr></thead><tbody>${
+            d.owners.map((o) => `<tr class="${o.active ? "" : "dim"}"><td>${esc(o.name)}</td><td>${esc(ST[o.status] || o.status || "")}</td>
+              <td>${o.canLogin ? "できる" : `<span class="kei-mute">アカウント未連携</span>`}</td><td>${MFA[o.mfa] || ""}</td></tr>`).join("")}</tbody></table>
+           <div class="kei-note">経営者の追加・削除は、経営者だけができます。最後の経営者は、画面からも DB からも外せません。経営者は2人以上にしておくのが安全です。
+             ${pol ? `二段階認証は、経営画面では常に必要です。全員への強制は ${esc(pol.enforceFrom)} からです。` : ""}</div></div>`
+        + `<div class="kei-h">経営者の変更履歴（新しい順・20件まで）</div><div class="kei-panel">${
+            d.historyReadable === false ? `<div class="kei-empty">${MISSING}（履歴を読めませんでした）</div>`
+            : d.history.length ? `<table class="kei-t" data-role="history"><thead><tr><th>日時</th><th>内容</th><th>実行した人</th><th>対象</th></tr></thead><tbody>${
+                d.history.map((h) => `<tr><td style="white-space:nowrap">${esc(when(h.at))}</td><td>${esc(h.label)}</td><td>${esc(h.actor || "—")}</td><td>${esc(h.target || "—")}</td></tr>`).join("")}</tbody></table>`
+            : `<div class="kei-empty">経営者に関する変更の記録は、まだありません。</div>`}</div>`
+        + `<div class="kei-h">給与の監査ログ</div><div class="kei-panel"><a class="kei-btn sec" href="${esc(d.links.payAudit)}" data-role="to-pay-audit">給与の監査ログを見る</a>
+             <div class="kei-note">誰が、いつ、誰の給与を見て・変えたかの記録です（追記だけで、消せません）。</div></div>
+           <div class="kei-note">経営者が全員ログインできなくなったときの復旧手順は、リポジトリの docs/keiei-owner-recovery.md にあります。</div>`;
     },
 
     onboarding(d) {
@@ -329,13 +324,13 @@
       else await window.KeieiPay.audit(main, stale);
       return;
     }
-    if (!RENDER[view]) view = "dashboard";
-    KeieiLayout.setActive(view);
+    if (!RENDER[view]) view = "home";
+    KeieiLayout.setActive(MENU_OF[view] || view);
     const mine = ++seq;
     const main = el("kei-main");
     main.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
     try {
-      const d = await API.api(`/api/keiei?view=${encodeURIComponent(view)}`);
+      const d = await API.api(`/api/keiei?view=${encodeURIComponent(API_VIEW[view])}`);
       if (mine !== seq) return;        // 速く切り替えたときは、最後に押した画面だけを出す
       main.innerHTML = RENDER[view](d);
       window.scrollTo(0, 0);
@@ -346,7 +341,18 @@
       else main.innerHTML = errBox(e);
     }
   }
-  const viewOf = () => (location.hash || "#dashboard").slice(1);
+  // 旧ダッシュボード・売上・入金・経費・会計の画面は、ホームに統合した（数字はホーム、詳細は元のシステムで見る）。
+  // ブックマークが残っていても開けるよう、ホームへ送る。API の旧 view は、後方互換のためまだ残している
+  const LEGACY = new Set(["dashboard", "revenue", "cash", "expenses", "accounting"]);
+  // 画面 → /api/keiei の view。画面が呼ぶ view は、ここに書いたものだけ（docs/keiei-hub.md §6）
+  const API_VIEW = { home: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" };
+  // 人件費（給与管理から開く）は、メニューでは給与管理を強調する
+  const MENU_OF = { payroll: "pay" };
+  const viewOf = () => {
+    const v = (location.hash || "#home").slice(1) || "home";
+    if (LEGACY.has(v)) { history.replaceState(null, "", "#home"); return "home"; }
+    return v;
+  };
 
   KeieiLayout.init({ active: viewOf() }).then((ctx) => {
     if (!ctx) return;
