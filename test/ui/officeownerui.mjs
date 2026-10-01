@@ -1,7 +1,7 @@
 // 経営者（owner）が、二段階認証（MFA）なしで、Office に入れること。実際のブラウザで見る。
 //
 //   経営者でログイン（MFA は未登録・6桁の確認もしていない＝aal1）
-//     → ヘッダーの「Office」をクリック
+//     → ヘッダーの「Office」（管理画面のダッシュボード）から、「経理・事務 → 月次業務 → 月末月初業務」で進む
 //     → /office が開く（マイページの MFA 登録へ飛ばされない）
 //     → 対象月を 2026年10月 にすると、テスト案件（【Office Phase3 TEST】）が1行出る
 //     → 勤務表の画面（/office/timesheet.html）も開く
@@ -100,9 +100,15 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
   check(true, "ダッシュボードのヘッダーに「Office」が出ている（access.office のとおり）");
   check(await page.locator(".kp-mfa-nudge").count() === 1, "MFA の登録を促す帯は出ている（案内だけ。Office を止めない）");
 
-  // Office をクリック
-  await Promise.all([page.waitForURL(/\/office\/?(index\.html)?(\?.*)?$/), page.click(".topbar [data-shortcut='office']")]);
-  check(new URL(page.url()).pathname.startsWith("/office"), `クリックで /office が開く（いま ${new URL(page.url()).pathname}）`);
+  // Office に入る。管理者・経営者の Office は、管理画面のダッシュボードから入る（ヘッダーの Office）。
+  // 月次業務（/office）は、Office の「経理・事務 → 月次業務」の帯にある「月末月初業務」から開く
+  check((await page.locator(".topbar [data-shortcut='office']").getAttribute("href")) === "admin-dashboard.html",
+    "経営者の Office は、管理画面のダッシュボードから入る");
+  await page.click(".kp-side-group[data-group='office-ops']");
+  await Promise.all([page.waitForURL(/admin-closing\.html/), page.click(".kp-side-sub[data-group='office-ops'] a[href='admin-closing.html']")]);
+  check(!/mypage\.html/.test(page.url()), "月次業務へ進んでも、マイページの MFA 登録へは飛ばされない");
+  await Promise.all([page.waitForURL(/\/office\/?(index\.html)?(\?.*)?$/), page.click(".kp-subnav .kp-subtab:has-text('月末月初業務')")]);
+  check(new URL(page.url()).pathname.startsWith("/office"), `「月末月初業務」で /office が開く（いま ${new URL(page.url()).pathname}）`);
   errs.length = 0;      // ここまでは開始地点（ダッシュボード。疑似 API は空を返すだけ）。Office に入ってからのエラーを見る
   const shown = await page.waitForSelector("#month", { timeout: 8000 }).then(() => true, () => false);
   await page.waitForTimeout(600);
