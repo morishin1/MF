@@ -14,6 +14,8 @@ let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
 const ADMIN = { email: "hr@8grp.co.jp", appRole: "admin", isAdmin: true, shows: {}, roles: [], memberships: [],
+  // admin-members.html の入口は access.hr で見る（P0修正）
+  access: { recruit: false, sell: false, office: false, keiei: false, hr: true },
   gw: { employee: { id: "emp-hr", display_name: "事務 花子", status: "active" },
         roles: ["hr"], tenantId: "t1", stage: null } };
 

@@ -238,7 +238,9 @@
   let partners = [];
   let editingPartnerId = null;
 
-  KPLayout.init({ active: "members", roles: ["admin", "owner"] })
+  // 入口は正式なメンバー管理権限（管理者・経営者・人事）と一致させる。appRole だけでは
+  // 人事を表せない（owner/admin/sr/member の4値しか無い）ので access で見る（P0修正）
+  KPLayout.init({ active: "members", access: "hr" })
     .then((ctx) => { if (ctx) { load(); loadPartners(); } });
 
   async function load() {
