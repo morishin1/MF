@@ -28,8 +28,9 @@ const detailIsCurrent = (seq, id) => seq === detailSeq && detailOpenId === id &&
 const esc = SalesLayout.esc;
 const { fmt, fmtDay, ago, statusPill } = SalesLayout;
 
-const INDUSTRIES = ["製造", "不動産", "士業", "医療", "小売", "その他"];
-const SERVICES = ["AI / DX", "システム開発", "PCレンタル", "ホームページ改善", "地方創生", "ENGER", "その他"];
+// 業種・提案サービス・都道府県の共通マスター（lib/sales-master.js）。画面側には同じ一覧を書かない。
+// 企業一覧は一覧APIの masters、リード一覧は企業詳細の masters で埋める（企業追加・編集・絞り込み・CSV取込が同じものを使う）
+let masters = { industries: [], services: [], prefectures: [] };
 
 let members = [];
 let myEmployeeId = null;
@@ -46,10 +47,10 @@ function closeModal() {
 }
 // 企業詳細から行う操作・一括操作は、中央モーダル（1つだけ）で開く。
 // 背景を押しても閉じるのはモーダルだけ。背後の企業詳細ドロワーは残す（/hr と同じ操作感）
-function openActionModal(html) {
+function openActionModal(html, width) {
   detailHost.beforeAction();
   el("action-root").innerHTML = `<div class="sl-modal-bg" onclick="closeAction()"></div>
-    <div class="sl-modal" role="dialog" aria-modal="true">${html}</div>`;
+    <div class="sl-modal" role="dialog" aria-modal="true"${width ? ` style="width:${width}px;"` : ""}>${html}</div>`;
 }
 function closeAction() { el("action-root").innerHTML = ""; }
 function errText(e, fallback) { return e.hint || e.detail || e.message || fallback; }
@@ -83,12 +84,11 @@ function companyForm(c = {}) {
     <label style="margin-top:10px;">企業サイトURL</label><input id="c-site" type="text" placeholder="https://example.co.jp" value="${esc(c.siteUrl || "")}">
     <label style="margin-top:10px;">問い合わせフォームURL</label><input id="c-form" type="text" value="${esc(c.formUrl || "")}">
     <label style="margin-top:10px;">業種</label>
-    <input id="c-industry" type="text" list="dl-industry" value="${esc(c.industry || "")}">
-    <datalist id="dl-industry">${INDUSTRIES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
-    <label style="margin-top:10px;">地域</label><input id="c-region" type="text" placeholder="東京都" value="${esc(c.region || "")}">
+    <select id="c-industry">${masterOptions(masters.industries, c.industry)}</select>
+    <label style="margin-top:10px;">地域（都道府県）</label>
+    <select id="c-region">${masterOptions(masters.prefectures, c.region)}</select>
     <label style="margin-top:10px;">商材（何を提案するか）</label>
-    <input id="c-service" type="text" list="dl-service" value="${esc(c.service || "")}">
-    <datalist id="dl-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+    <select id="c-service">${masterOptions(masters.services, c.service)}</select>
     <label style="margin-top:10px;">担当</label>
     <select id="c-owner"><option value="">（未定）</option>${memberOpts}</select>
     <label style="margin-top:10px;">所在地</label><input id="c-address" type="text" value="${esc(c.address || "")}">
@@ -96,11 +96,20 @@ function companyForm(c = {}) {
     <label style="margin-top:10px;">企業規模</label><input id="c-size" type="text" placeholder="従業員50名" value="${esc(c.size || "")}">
     <label style="margin-top:10px;">メモ</label><textarea id="c-note" rows="3">${esc(c.note || "")}</textarea>`;
 }
+/**
+ * 共通マスターの select。いまの値がマスターに無い（昔の自由入力）ときは、その値も「（マスター外）」として残す
+ * （保存しても消えない。サーバーも変えていなければ通す）
+ */
+function masterOptions(list, cur) {
+  const extra = cur && !list.includes(cur) ? [[cur, `${cur}（マスター外）`]] : [];
+  return `<option value="">（未設定）</option>` + [...extra, ...list.map((v) => [v, v])]
+    .map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
+}
 function companyFields() {
   return {
     name: el("c-name").value.trim(), siteUrl: el("c-site").value.trim() || null,
-    formUrl: el("c-form").value.trim() || null, industry: el("c-industry").value.trim() || null,
-    region: el("c-region").value.trim() || null, service: el("c-service").value.trim() || null,
+    formUrl: el("c-form").value.trim() || null, industry: el("c-industry").value || null,
+    region: el("c-region").value || null, service: el("c-service").value || null,
     ownerId: el("c-owner").value || null, address: el("c-address").value.trim() || null,
     phone: el("c-phone").value.trim() || null, size: el("c-size").value.trim() || null,
     note: el("c-note").value.trim() || null,
@@ -122,6 +131,7 @@ async function openDetail(id) {
     const d = await API.getSalesCompany(id);
     if (!detailIsCurrent(seq, id)) return false;
     detail = d;
+    if (d.masters) masters = d.masters;
     renderDetail();
     return true;
   } catch (e) {

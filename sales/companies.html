@@ -15,6 +15,20 @@
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
 
+    /* CSVから取り込む */
+    .csv-drop { border:2px dashed #c9ccd6; border-radius:12px; padding:22px 16px; text-align:center; display:flex;
+      flex-direction:column; align-items:center; gap:8px; color:#1b2440; font-size:13px; background:#fafaf7; }
+    .csv-drop.over { border-color:#1b2440; background:#eef1f8; }
+    .csv-tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 0 10px; }
+    .csv-tiles div { border:1px solid #e2e2dc; border-radius:10px; padding:8px 10px; }
+    .csv-tiles span { display:block; font-size:11px; color:#6b7080; }
+    .csv-tiles b { font-size:17px; color:#1b2440; }
+    .csv-rows { max-height:340px; overflow:auto; }
+    .csv-rows .sl-table td { padding:7px 10px; font-size:12px; }
+    .sl-pill.ok { background:#e3f1e7; color:#1f6b3a; }
+    .sl-pill.ng { background:#fbe7e5; color:#a3261b; }
+    @media (max-width:560px) { .csv-tiles { grid-template-columns:repeat(2,1fr); } }
+
     .co-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
     .co-filters input, .co-filters select { margin:0; font-size:13px; padding:8px 10px; }
     .co-count { font-size:12px; color:#6b7080; margin:0 0 8px; }
@@ -65,8 +79,8 @@
       <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</button>
     <button class="btn btn-secondary btn-sm" onclick="openBulkUrls()">
       <span class="material-symbols-outlined icon-inline">playlist_add</span>URLをまとめて追加</button>
-    <button class="btn btn-secondary btn-sm" onclick="openImport()">
-      <span class="material-symbols-outlined icon-inline">upload</span>スプレッドシートから取り込む</button>
+    <button class="btn btn-secondary btn-sm" onclick="openCsvImport()" title="CSVで営業先企業をまとめて登録できます">
+      <span class="material-symbols-outlined icon-inline">upload_file</span>CSVから取り込む</button>
     <button class="btn btn-secondary btn-sm right" id="btn-download" onclick="openDownload()">
       <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
   </div>
@@ -113,10 +127,10 @@
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20260929pg1"></script>
+<script src="../js/api-client.js?v=20260930cm1"></script>
 <script src="../js/layout.js?v=20260929d"></script>
 <script src="../js/sales-layout.js?v=20261001a"></script>
-<script src="../js/sales-detail.js?v=20261001a"></script>
+<script src="../js/sales-detail.js?v=20261001cm1"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
   detailHost.onChange = () => load();
@@ -129,6 +143,9 @@
     ["meeting", "商談"], ["proposal", "提案"], ["won", "成約"],
     ["reattack_wait", "再アタック待ち"], ["lost", "失注"], ["excluded", "対象外"],
   ];
+  // 業種・提案サービス・都道府県の共通マスター（masters）は js/sales-detail.js にある（企業詳細の編集と共通）。
+  // 一覧APIの応答（masters）で受け取る。画面側には同じ一覧を書かない
+  let csvColumns = [];
 
   let companies = [];
   let canForce = false;
@@ -282,7 +299,8 @@
       <span class="material-symbols-outlined" style="font-size:15px;">progress_activity</span>読み込み中…</span>`;
     el("pager").querySelectorAll("button").forEach((b) => { b.disabled = true; });
     try {
-      const res = await API.listSalesCompanyPage(apiParams({ facets: withFacets || !facets ? 1 : undefined }));
+      // 絞り込みの件数は、いまの条件（検索語を含む）で毎回数え直す（サーバー側。db/101）
+      const res = await API.listSalesCompanyPage(apiParams({ facets: 1 }));
       if (seq !== listSeq) return;
       el("rows").classList.remove("loading");
       if (res.notReady) {
@@ -296,6 +314,8 @@
       members = res.members || members;
       myEmployeeId = res.me || null;
       if (res.facets) facets = res.facets;
+      if (res.masters) masters = res.masters;
+      if (res.csvColumns) csvColumns = res.csvColumns;
       pageInfo = { page: res.page, total: res.total, totalPages: res.totalPages, limit: res.limit };
       // 範囲外のページを頼んだときは、サーバーが最後のページを返す。URL もそれに合わせる
       if (res.page !== state.page) { state.page = res.page; history.replaceState({}, "", listUrl(currentExtra())); }
@@ -319,21 +339,46 @@
     return { id: q.get("id"), attack: q.get("attack") };
   }
 
-  // 絞り込みの候補。業種・地域・商材はサーバーの集計（件数つき）から作る（全社を画面に送らない）
+  // 絞り込みの選択肢。業種・地域・商材は共通マスター、件数はサーバーの集計（いまの条件で数えたもの）。
+  // 各項目の件数は「その項目以外の、いま選んでいる条件」での件数（例：業種＝製造なら、地域は製造の中での件数）
   function renderFilters() {
-    const opts = (id, first, values, key) => {
-      const cur = state[key] || "";
-      const list = values.some(([v]) => v === cur) || !cur ? values : [...values, [cur, cur]];
-      el(id).innerHTML = `<option value="">${esc(first)}</option>`
-        + list.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    const dynamic = Boolean(facets?.dynamic);
+    const countOf = (kind, v) => {
+      const hit = (facets?.[kind] || []).find((x) => x.value === v);
+      return hit ? hit.n : 0;
     };
-    const fac = (k) => (facets?.[k] || []).map((x) => [x.value, `${x.value}（${x.n}）`]);
-    opts("f-industry", "業種：すべて", fac("industry"), "industry");
-    opts("f-region", "地域：すべて", fac("region"), "region");
-    opts("f-service", "商材：すべて", fac("service"), "service");
-    opts("f-status", "状態：すべて", [...STATUSES, ["ng", "営業禁止"]], "status");
-    opts("f-owner", "担当：すべて", [["me", "自分"], ["none", "未定"], ...members.map((m) => [m.id, m.display_name])], "owner");
-    opts("f-channel", "連絡手段：すべて", [...CONTACT_CHANNELS, ["none", "未設定"]], "channel");
+    // 件数が数えられている項目だけ「（n）」を付ける（db/101 が未実行なら、業種・地域・商材だけ以前の件数）
+    const counted = (kind) => dynamic || (["industry", "region", "service"].includes(kind) && facets);
+    // legacy：マスター外の旧データ（「イベント企画・制作・運営（1・旧データ）」）
+    const label = (kind, v, l, legacy) => (counted(kind)
+      ? `${l}（${countOf(kind, v)}${legacy ? "・旧データ" : ""}）` : legacy ? `${l}（旧データ）` : l);
+    const opts = (id, first, kind, values, key = kind) => {
+      const cur = state[key] || "";
+      const list = values.some(([v]) => v === cur) || !cur ? values : [...values, [cur, cur, kind === "industry" || kind === "service"]];
+      el(id).innerHTML = `<option value="">${esc(first)}</option>`
+        + list.map(([v, l, legacy]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(label(kind, v, l, legacy))}</option>`).join("");
+    };
+    const m = (arr) => arr.map((v) => [v, v]);
+    // 業種・商材：共通マスター＋件数の集計に出てきたマスター外の値（旧データ。絞り込めるように残す。新規登録では選べない）
+    // 地域：47都道府県だけ（「鹿児島県鹿屋市」はサーバーで鹿児島県にまとめて数えるので、旧値は足さない）
+    const withLegacy = (kind, master) => [...m(master), ...(facets?.[kind] || [])
+      .filter((x) => x.value && !master.includes(x.value))
+      .sort((a, b) => b.n - a.n || (a.value < b.value ? -1 : 1))
+      .map((x) => [x.value, x.value, true])];
+    opts("f-industry", "業種：すべて", "industry", withLegacy("industry", masters.industries));
+    opts("f-region", "地域：すべて", "region", m(masters.prefectures));
+    opts("f-service", "商材：すべて", "service", withLegacy("service", masters.services));
+    opts("f-status", "状態：すべて", "status", [...STATUSES, ["ng", "営業禁止"]]);
+    // 「自分」の件数は、自分の社員IDの件数
+    const ownerList = [["me", "自分"], ["none", "未定"], ...members.map((x) => [x.id, x.display_name])];
+    const cur = state.owner || "";
+    el("f-owner").innerHTML = `<option value="">担当：すべて</option>` + ownerList.map(([v, l]) => {
+      const n = dynamic ? countOf("owner", v === "me" ? myEmployeeId || "" : v) : null;
+      return `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(n === null ? l : `${l}（${n}）`)}</option>`;
+    }).join("");
+    opts("f-channel", "連絡手段：すべて", "channel", [...CONTACT_CHANNELS, ["none", "未設定"]]);
+    opts("f-attacked", "アタック：すべて", "attacked", [["yes", "アタック済"], ["no", "未アタック"]]);
+    opts("f-clicked", "クリック：すべて", "clicked", [["yes", "クリックあり"], ["no", "クリックなし"]]);
   }
 
   function renderPager() {
@@ -370,7 +415,7 @@
       const filtered = LIST_KEYS.some((k) => !["page", "sort", "order", "visibility"].includes(k) && state[k]);
       el("rows").innerHTML = `<tr><td colspan="${COLS}" class="empty">${filtered ? "対象がありません。"
         : state.visibility === "hidden" ? "非表示の企業はありません。"
-        : "まだ企業がありません。「企業を追加」か「リストを取り込む」から始めてください。"}</td></tr>`;
+        : "まだ企業がありません。「企業を追加」か「CSVから取り込む」から始めてください。"}</td></tr>`;
       renderSelection();
       return;
     }
@@ -540,9 +585,8 @@
       openActionModal(`
         <h2>${n}社の提案サービスを変更します</h2>
         <label>提案サービス</label>
-        <input id="bk-service" type="text" list="dl-bk-service" placeholder="空欄にすると未設定になります">
-        <datalist id="dl-bk-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
-        ${bulkFoot(`${n}社を変更する`, "submitBulk(this, 'change_service', { service: el('bk-service').value.trim() || null })")}`);
+        <select id="bk-service">${masterOptions(masters.services, "").replace("（未設定）", "（未設定に戻す）")}</select>
+        ${bulkFoot(`${n}社を変更する`, "submitBulk(this, 'change_service', { service: el('bk-service').value || null })")}`);
     } else if (kind === "campaign") {
       openActionModal(`
         <h2>${n}社のキャンペーンを変更します</h2>
@@ -683,14 +727,14 @@
         <label style="margin-top:10px;">企業名 <span style="color:#b3261e;">*</span></label>
         <input id="q-name" type="text" placeholder="URLから自動で入ります">
         <label style="margin-top:10px;">提案サービス</label>
-        <select id="q-service">${SERVICES.map((v) => `<option value="${esc(v)}" ${v === last ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+        <select id="q-service">${masters.services.map((v) => `<option value="${esc(v)}" ${v === last ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
         <details id="q-more" style="margin-top:14px;">
           <summary style="cursor:pointer;font-size:13px;color:#4a5068;">詳細情報を入力</summary>
           <label style="margin-top:10px;">問い合わせフォームURL</label><input id="q-form" type="text">
           <label style="margin-top:10px;">業種</label>
-          <input id="q-industry" type="text" list="dl-q-industry">
-          <datalist id="dl-q-industry">${INDUSTRIES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
-          <label style="margin-top:10px;">地域</label><input id="q-region" type="text" placeholder="東京都">
+          <select id="q-industry">${masterOptions(masters.industries, "")}</select>
+          <label style="margin-top:10px;">地域（都道府県）</label>
+          <select id="q-region">${masterOptions(masters.prefectures, "")}</select>
           <label style="margin-top:10px;">所在地</label><input id="q-address" type="text">
           <label style="margin-top:10px;">電話番号</label><input id="q-phone" type="text">
           <label style="margin-top:10px;">企業規模</label><input id="q-size" type="text" placeholder="従業員50名">
@@ -779,7 +823,7 @@
         <p class="sl-sub" style="margin:0 0 10px;">企業サイトのURLを1行に1つずつ貼り付けてください。企業名と問い合わせフォームは自動で探します。</p>
         <textarea id="bu-text" rows="10" placeholder="https://aaa.co.jp&#10;https://bbb.jp&#10;ccc.com"></textarea>
         <label style="margin-top:10px;">提案サービス（全件に同じものを入れます）</label>
-        <select id="bu-service">${SERVICES.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("")}</select>
+        <select id="bu-service">${masters.services.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("")}</select>
         <p class="sl-muted" style="margin:6px 0 0;">同じドメインの企業・登録済みの企業は追加しません。一度に${BULK_MAX}件まで。担当はあなたになります。</p>
         <div id="bu-msg" class="err-text" style="margin:10px 0;"></div>
         <div id="bu-progress"></div>
@@ -861,53 +905,244 @@
     } catch (e) { msg.textContent = errText(e, "追加できませんでした"); btn.disabled = false; }
   }
 
-  // ---- リストを取り込む（貼り付け） ---------------------------------------------
-  // Excel・スプレッドシートからそのまま貼れるように、タブ区切りとカンマ区切りの両方を読む
-  const IMPORT_COLS = [
-    ["name", "企業名"], ["siteUrl", "URL"], ["formUrl", "フォームURL"], ["industry", "業種"],
-    ["region", "地域"], ["service", "商材"], ["phone", "電話番号"],
-  ];
-  function openImport() {
-    closeModal();
-    el("modal-root").innerHTML = `
-      <div class="sl-drawer-bg" onclick="closeModal()"></div>
-      <div class="sl-drawer" style="width:560px;">
-        <h2>リストを取り込む</h2>
-        <p class="sl-sub" style="margin:0 0 10px;">スプレッドシートから行をコピーして貼り付けてください。1行1社、列の順番は次のとおりです（1行目が見出しなら飛ばします）。</p>
-        <div class="atk-url" style="margin-bottom:10px;">${IMPORT_COLS.map(([, l]) => esc(l)).join("　｜　")}</div>
-        <textarea id="im-text" rows="12" placeholder="株式会社サンプル	https://sample.co.jp	https://sample.co.jp/contact	製造	東京都	AI / DX"></textarea>
-        <p class="sl-muted" style="margin:6px 0 0;">同じサイト（ドメイン）の企業は登録済みとして飛ばします。一度に500社まで。</p>
-        <div id="im-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-primary" onclick="submitImport(this)">取り込む</button>
-          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+  // ---- CSVから取り込む ----------------------------------------------------------
+  //
+  // 中央モーダル。① CSVを選ぶ（ドラッグ&ドロップ可）→ ② 確認（行ごとに 登録できる／重複／要修正）→ ③「登録する」で登録。
+  // ■ 列・業種・提案サービス・都道府県は API の応答（csvColumns・masters＝lib/sales-master.js）を使う。画面に一覧を持たない
+  // ■ 文字コード：UTF-8（BOMあり・なし）を先に試し、UTF-8として読めなければ Shift_JIS（CP932。Excelの「CSV」保存）で読む
+  // ■ 判定はサーバ（/api/sales/companies/import）。登録は50行ずつ送り、途中で失敗してもどこまで入ったかを行ごとに出す
+  // ■ ファイルはサーバに保存しない（行のデータだけ送る）
+  const CSV_CHUNK = 50;
+  const CSV_MAX_ROWS = 5000;
+  // 見出しの別名（以前の貼り付け取込・一覧CSVの見出しでも読めるように）
+  const CSV_ALIASES = { "会社名": "name", "URL": "siteUrl", "サイトURL": "siteUrl", "フォームURL": "formUrl",
+    "地域": "region", "商材": "service" };
+  let csvImp = null;   // { fileName, encoding, rows, results, counts, committed }
+
+  function openCsvImport() {
+    csvImp = null;
+    const cols = csvColumns.map((c) => `${esc(c.label)}${c.required ? "（必須）" : ""}`).join("・");
+    openActionModal(`
+      <h2>CSVから取り込む</h2>
+      <p class="sl-sub" style="margin:0 0 12px;">CSVで営業先企業をまとめて登録できます。</p>
+      <div id="csv-step1">
+        <div class="csv-drop" id="csv-drop" ondragover="csvDrag(event, true)" ondragleave="csvDrag(event, false)" ondrop="csvDrop(event)">
+          <span class="material-symbols-outlined" style="font-size:32px;color:#6b7080;">upload_file</span>
+          <div>CSVファイルをここにドラッグ&ドロップ</div>
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer;">CSVファイルを選択
+            <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none;" onchange="csvPicked(this.files[0])"></label>
         </div>
-      </div>`;
+        <p class="sl-muted" style="margin:10px 0 6px;">列：${cols}<br>
+          文字コードは UTF-8（BOMあり・なし）と Shift_JIS に対応しています（Excelの「CSV UTF-8」「CSV」どちらの保存でも読めます）。<br>
+          同じサイト（ドメイン）の企業は登録済みとしてスキップします（上書きしません）。担当はあなたになります。</p>
+        <details class="sl-muted" style="margin:0 0 8px;"><summary style="cursor:pointer;">使える値（業種・提案サービス・都道府県）</summary>
+          <div style="margin-top:6px;">業種：${masters.industries.map(esc).join("・")}</div>
+          <div>提案サービス：${masters.services.map(esc).join("・")}</div>
+          <div>都道府県：47都道府県（「鹿児島県鹿屋市」のように市区町村まで入っていても都道府県にします）</div>
+        </details>
+        <button class="btn btn-secondary btn-sm" onclick="downloadCsvTemplate()">
+          <span class="material-symbols-outlined icon-inline">download</span>CSVテンプレートをダウンロード</button>
+      </div>
+      <div id="csv-body"></div>
+      <div id="csv-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="sl-modal-foot" id="csv-foot">
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`, 860);
   }
 
-  function parseRows(text) {
-    const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const out = [];
-    for (const line of lines) {
-      const cells = (line.includes("\t") ? line.split("\t") : line.split(",")).map((s) => s.trim().replace(/^"|"$/g, ""));
-      if (!out.length && /企業名|会社名|name/i.test(cells[0] || "")) continue;
-      const row = {};
-      IMPORT_COLS.forEach(([k], i) => { if (cells[i]) row[k] = cells[i]; });
-      if (row.name) out.push(row);
+  function csvDrag(ev, on) {
+    ev.preventDefault();
+    el("csv-drop")?.classList.toggle("over", on);
+  }
+  function csvDrop(ev) {
+    ev.preventDefault();
+    el("csv-drop")?.classList.remove("over");
+    const f = ev.dataTransfer?.files?.[0];
+    if (f) csvPicked(f);
+  }
+
+  /** バイト列を文字にする。BOM → UTF-8、UTF-8として正しい → UTF-8、それ以外 → Shift_JIS */
+  function decodeCsvBytes(buf) {
+    const u8 = new Uint8Array(buf);
+    if (u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+      return { text: new TextDecoder("utf-8").decode(u8.subarray(3)), encoding: "UTF-8（BOMあり）" };
     }
-    return out;
+    try { return { text: new TextDecoder("utf-8", { fatal: true }).decode(u8), encoding: "UTF-8" }; }
+    catch { return { text: new TextDecoder("shift_jis").decode(u8), encoding: "Shift_JIS" }; }
   }
 
-  async function submitImport(btn) {
-    const msg = el("im-msg"); msg.textContent = "";
-    const rows = parseRows(el("im-text").value);
-    if (!rows.length) { msg.textContent = "取り込める行がありません（1列目に企業名が必要です）"; return; }
+  /** RFC 4180 の CSV（"…" の中のカンマ・改行・"" を扱う）。空行は捨てる */
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], f = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+        else f += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ",") { row.push(f); f = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        row.push(f); rows.push(row); row = []; f = "";
+      } else f += ch;
+    }
+    if (f !== "" || row.length) { row.push(f); rows.push(row); }
+    return rows.filter((r) => r.some((c) => c.trim() !== ""));
+  }
+
+  /** 1行目の見出しで列を当てる。@returns {{ rows, unknown } | { error }} */
+  function csvToRows(records) {
+    if (!records.length) return { error: "CSVに行がありません" };
+    const byLabel = new Map(csvColumns.map((c) => [c.label, c.key]));
+    const head = records[0].map((h) => h.trim());
+    const keys = head.map((h) => byLabel.get(h) || CSV_ALIASES[h] || null);
+    if (!keys.includes("name")) {
+      return { error: `1行目に見出し「企業名」が必要です（テンプレートの見出し：${csvColumns.map((c) => c.label).join("・")}）` };
+    }
+    const unknown = head.filter((h, i) => h && !keys[i]);
+    const rows = records.slice(1).map((cells, i) => {
+      const r = { row: i + 2 };
+      keys.forEach((k, j) => { if (k && r[k] === undefined) r[k] = (cells[j] ?? "").trim(); });
+      return r;
+    });
+    if (!rows.length) return { error: "見出しの下に行がありません" };
+    return { rows, unknown };
+  }
+
+  async function csvPicked(file) {
+    const msg = el("csv-msg");
+    msg.textContent = "";
+    if (!file) return;
+    if (!/\.csv$/i.test(file.name)) { msg.textContent = "CSVファイル（.csv）を選んでください"; return; }
+    let parsed;
     try {
-      const r = await KPLayout.busy(btn, "取り込み中…", () => API.importSalesCompanies(rows));
-      closeModal();
-      await load();
-      alert(`${r.created}社を追加しました${r.skipped ? `（登録済み ${r.skipped}社は飛ばしました）` : ""}`);
-    } catch (e) { msg.textContent = errText(e, "取り込めませんでした"); }
+      const { text, encoding } = decodeCsvBytes(await file.arrayBuffer());
+      parsed = csvToRows(parseCsv(text));
+      if (parsed.error) { msg.textContent = parsed.error; return; }
+      if (parsed.rows.length > CSV_MAX_ROWS) {
+        msg.textContent = `1つのCSVで読めるのは${CSV_MAX_ROWS.toLocaleString("ja-JP")}行までです（${parsed.rows.length.toLocaleString("ja-JP")}行あります）。分けて取り込んでください`;
+        return;
+      }
+      parsed.encoding = encoding;
+    } catch (e) { msg.textContent = "CSVを読めませんでした"; return; }
+    el("csv-body").innerHTML = `<div class="empty" style="padding:24px;">確認中…（${parsed.rows.length.toLocaleString("ja-JP")}行）</div>`;
+    try {
+      const res = await API.importSalesCsv({ fileName: file.name, rows: parsed.rows, commit: false });
+      csvImp = { fileName: file.name, encoding: parsed.encoding, unknown: parsed.unknown, rows: parsed.rows,
+        results: res.results, counts: res.counts, committed: false };
+      el("csv-step1").hidden = true;
+      renderCsvPreview();
+    } catch (e) {
+      el("csv-body").innerHTML = "";
+      msg.textContent = errText(e, "確認できませんでした");
+    }
+  }
+
+  const CSV_STATUS = {
+    ok: ["登録できる", "sl-pill ok"], created: ["登録しました", "sl-pill ok"],
+    duplicate: ["重複（スキップ）", "sl-pill"], error: ["要修正", "sl-pill ng"],
+  };
+  const CSV_SHOW_MAX = 1000;
+
+  function renderCsvPreview(summary) {
+    const { results, fileName, encoding, unknown, committed } = csvImp;
+    const n = (s) => results.filter((r) => r.status === s).length;
+    const read = results.length, ok = n("ok"), created = n("created"), dup = n("duplicate"), err = n("error");
+    const num = (v) => Number(v).toLocaleString("ja-JP");
+    const tiles = committed
+      ? [["読み込み", read], ["登録成功", created], ["重複スキップ", dup], ["エラー", err]]
+      : [["読み込み", read], ["登録予定", ok], ["重複", dup], ["エラー", err]];
+    const shown = results.slice(0, CSV_SHOW_MAX);
+    el("csv-body").innerHTML = `
+      <div class="sl-muted" style="margin:0 0 8px;">${esc(fileName)}（${esc(encoding)}）${unknown?.length ? `　使わない列：${unknown.map(esc).join("・")}` : ""}</div>
+      ${summary ? `<div class="banner info" style="margin:0 0 10px;"><span class="material-symbols-outlined">check_circle</span><div>${esc(summary)}</div></div>` : ""}
+      <div class="csv-tiles">${tiles.map(([l, v]) => `<div><span>${l}</span><b>${num(v)}件</b></div>`).join("")}</div>
+      <div class="csv-rows"><table class="sl-table">
+        <thead><tr><th>行</th><th>企業名</th><th>URL</th><th>業種</th><th>都道府県</th><th>商材</th><th>判定</th></tr></thead>
+        <tbody>${shown.map((r) => {
+          const [label, cls] = CSV_STATUS[r.status] || [r.status, "sl-pill"];
+          return `<tr data-row="${r.row}" data-status="${esc(r.status)}"><td>${r.row}</td><td>${esc(r.name || "")}</td>
+            <td>${esc(r.domain || r.siteUrl || "")}</td><td>${esc(r.industry || "")}</td><td>${esc(r.region || "")}</td>
+            <td>${esc(r.service || "")}</td>
+            <td><span class="${cls}">${label}</span>${r.reasons?.length ? `<div class="sl-sub2">${r.reasons.map(esc).join("<br>")}</div>` : ""}</td></tr>`;
+        }).join("")}</tbody></table></div>
+      ${read > CSV_SHOW_MAX ? `<p class="sl-muted" style="margin:6px 0 0;">先頭${num(CSV_SHOW_MAX)}行を表示しています</p>` : ""}
+      <div id="csv-progress" class="sl-muted" style="margin:8px 0 0;"></div>`;
+    el("csv-foot").innerHTML = `
+      ${committed ? "" : `<button class="btn btn-primary" id="csv-go" ${ok ? "" : "disabled"} onclick="commitCsvImport(this)">
+        登録する（${num(ok)}件）</button>`}
+      ${err ? `<button class="btn btn-secondary" onclick="downloadCsvErrors()">
+        <span class="material-symbols-outlined icon-inline">download</span>エラー行をCSVでダウンロード</button>` : ""}
+      ${committed ? "" : `<button class="btn btn-secondary" onclick="openCsvImport()">別のファイルを選ぶ</button>`}
+      <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>`;
+  }
+
+  async function commitCsvImport(btn) {
+    if (!csvImp || csvImp.committed) return;
+    const msg = el("csv-msg");
+    msg.textContent = "";
+    const inputByRow = new Map(csvImp.rows.map((r) => [r.row, r]));
+    const resultByRow = new Map(csvImp.results.map((r) => [r.row, r]));
+    const targets = csvImp.results.filter((r) => r.status === "ok").map((r) => inputByRow.get(r.row));
+    btn.disabled = true;
+    el("csv-foot").querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    let failedChunks = 0;
+    for (let i = 0; i < targets.length; i += CSV_CHUNK) {
+      const chunk = targets.slice(i, i + CSV_CHUNK);
+      el("csv-progress").textContent = `登録中… ${Math.min(i + CSV_CHUNK, targets.length).toLocaleString("ja-JP")} / ${targets.length.toLocaleString("ja-JP")}件`;
+      try {
+        const res = await API.importSalesCsv({ fileName: csvImp.fileName, rows: chunk, commit: true });
+        for (const r of res.results) resultByRow.set(r.row, { ...resultByRow.get(r.row), ...r });
+      } catch (e) {
+        failedChunks += 1;
+        const why = `登録できませんでした（${errText(e, "通信エラー")}）。もう一度取り込むと、登録済みの行は重複としてスキップされます`;
+        for (const r of chunk) resultByRow.set(r.row, { ...resultByRow.get(r.row), status: "error", reasons: [why] });
+      }
+    }
+    csvImp.results = csvImp.results.map((r) => resultByRow.get(r.row));
+    csvImp.committed = true;
+    const c = (s) => csvImp.results.filter((r) => r.status === s).length;
+    const summary = `${csvImp.results.length.toLocaleString("ja-JP")}件中、${c("created").toLocaleString("ja-JP")}件を登録しました。`
+      + `重複${c("duplicate").toLocaleString("ja-JP")}件、エラー${c("error").toLocaleString("ja-JP")}件です。`;
+    renderCsvPreview(summary);
+    if (failedChunks) msg.textContent = `${failedChunks}回分（最大${failedChunks * CSV_CHUNK}件）の送信に失敗しました。エラー行をダウンロードして確認してください`;
+    await load();
+  }
+
+  const csvCell = (v) => { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  function saveCsv(name, lines) {
+    // UTF-8 BOM つき（Excel でそのまま開ける）
+    const blob = new Blob(["﻿" + lines.map((l) => l.map(csvCell).join(",")).join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function downloadCsvTemplate() {
+    const sample = {
+      name: "株式会社サンプル", siteUrl: "https://example.co.jp", formUrl: "https://example.co.jp/contact",
+      industry: masters.industries[0] || "", region: "鹿児島県", address: "鹿児島県鹿屋市○○町1-2-3",
+      service: masters.services[0] || "", phone: "0994-00-0000", size: "従業員50名", note: "",
+    };
+    saveCsv("営業先企業_取込テンプレート.csv", [csvColumns.map((c) => c.label), csvColumns.map((c) => sample[c.key] ?? "")]);
+  }
+
+  // エラー行だけ。元の列（テンプレートと同じ見出し）＋行番号・理由。直してそのまま取り込み直せる（余分な列は読み飛ばす）
+  function downloadCsvErrors() {
+    if (!csvImp) return;
+    const inputByRow = new Map(csvImp.rows.map((r) => [r.row, r]));
+    const errs = csvImp.results.filter((r) => r.status === "error");
+    const lines = [[...csvColumns.map((c) => c.label), "元の行", "エラー内容"]];
+    for (const r of errs) {
+      const src = inputByRow.get(r.row) || {};
+      lines.push([...csvColumns.map((c) => src[c.key] ?? ""), r.row, (r.reasons || []).join(" / ")]);
+    }
+    saveCsv(`${csvImp.fileName.replace(/\.csv$/i, "")}_エラー行.csv`, lines);
   }
 
   // ---- フォームアタック ------------------------------------------------------------
@@ -1108,7 +1343,7 @@
           </div>
           <label style="margin-top:10px;">提案サービス</label>
           <input id="at-service" type="text" list="dl-at-service" value="${esc(atk.template.service || c.service || "")}">
-          <datalist id="dl-at-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+          <datalist id="dl-at-service">${masters.services.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
           ${atk.template.subject ? `<label style="margin-top:10px;">件名</label>
             <input id="at-subject" type="text" value="${esc(atk.template.subject)}">
             <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('at-subject', this)">件名をコピー</button>` : ""}
