@@ -56,8 +56,16 @@
       "destination": "/hr/index.html"
     },
     {
+      "source": "/keiei",
+      "destination": "/keiei/index.html"
+    },
+    {
       "source": "/office",
       "destination": "/office/index.html"
+    },
+    {
+      "source": "/onboarding",
+      "destination": "/onboarding/index.html"
     },
     {
       "source": "/sales",

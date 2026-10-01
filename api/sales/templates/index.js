@@ -12,7 +12,8 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { safeUrl, isUuid, statusRank, SERVICES } from "../../../lib/sales.js";
+import { safeUrl, isUuid, statusRank } from "../../../lib/sales.js";
+import { loadMasters, DEFAULT_SERVICES } from "../../../lib/sales-master.js";
 
 const SQL = "db/088_sales.sql";
 const FIELDS = "id, tenant_id, name, service, subject, body, destination_url, archived_at, created_at, updated_at";
@@ -46,14 +47,15 @@ async function list(req, res, sb, ctx) {
     .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: true }).limit(500);
   if (error) {
     const hint = dbSetupHint(error, SQL);
-    if (hint) return json(res, 200, { templates: [], services: SERVICES, notReady: true, message: hint });
+    if (hint) return json(res, 200, { templates: [], services: DEFAULT_SERVICES, notReady: true, message: hint });
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
 
-  const [{ data: approaches }, { data: companies }] = await Promise.all([
+  const [{ data: approaches }, { data: companies }, masters] = await Promise.all([
     sb.from("gw_sales_approaches").select("template_id, company_id, sent_at, click_count")
       .eq("tenant_id", ctx.tenantId).not("sent_at", "is", null).limit(20000),
     sb.from("gw_sales_companies").select("id, status").eq("tenant_id", ctx.tenantId).limit(20000),
+    loadMasters(sb, ctx.tenantId),
   ]);
   const status = new Map((companies || []).map((c) => [c.id, c.status]));
   const stats = new Map();
@@ -67,7 +69,8 @@ async function list(req, res, sb, ctx) {
   }
 
   return json(res, 200, {
-    services: SERVICES,
+    // 提案サービス（テナントの表示中の選択肢。db/108）
+    services: masters.services,
     templates: (data || []).map((t) => {
       const s = stats.get(t.id);
       const cos = s ? [...s.companies] : [];

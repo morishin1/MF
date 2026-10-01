@@ -93,6 +93,9 @@ mock.module(atRoot("lib/gw-audit.js"), {
 });
 const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["recruiter"], employee: { id: "emp-r1", display_name: "採用 花子" } };
 const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: { id: "emp-m1", display_name: "一般 次郎" } };
+// 給与を見られる人（人事）。給与のスナップショット・上書きは、この立場でだけ確かめる。
+// 採用担当・責任者が給与を見られない・書けないことは test/salaryguardapi.mjs
+const HR_USER = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], employee: { id: "emp-h1", display_name: "人事 太郎" } };
 let who = RECRUITER;
 // 判定は本物（lib/gw.js）を使う。テストで条件を書き直すと、本番とずれても気づけない
 const REAL_GW = await import(atRoot("lib/gw.js"));
@@ -100,6 +103,7 @@ mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     canRecruit: REAL_GW.canRecruit,
+    canSeeSalary: REAL_GW.canSeeSalary,
   },
 });
 
@@ -140,7 +144,7 @@ function setup() {
 console.log("\n=== 合格通知を作成する（POST /api/hr/offers） ===\n");
 
 await ok("作成すると、応募者の採用条件がスナップショットされる", async () => {
-  setup();
+  setup(); who = HR_USER;
   const r = await create({ applicantId: "a1", respondBy: "2026-10-15" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.offer.employmentType, "正社員");
@@ -157,7 +161,7 @@ await ok("応募者の状態が「社内確認待ち」へ進む", async () => {
 });
 
 await ok("渡した項目は、応募者の現在値を上書きする", async () => {
-  setup();
+  setup(); who = HR_USER;
   const r = await create({ applicantId: "a1", respondBy: "2026-10-15", wageAmount: 450000 });
   assert.equal(r.body.offer.wageAmount, 450000);
 });
@@ -213,7 +217,7 @@ await ok("2回目は版（version）が積み上がる", async () => {
 console.log("\n=== 社内確認待ちの間に、内容を直す（PATCH update） ===\n");
 
 await ok("内容を直せる", async () => {
-  setup();
+  setup(); who = HR_USER;
   const c = await create({ applicantId: "a1", respondBy: "2026-10-15" });
   const r = await act({ id: c.body.offer.id, action: "update", wageAmount: 420000 });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));

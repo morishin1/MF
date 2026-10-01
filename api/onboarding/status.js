@@ -26,10 +26,12 @@ import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
-import { userClient } from "../../lib/supabase.js";
+import { admin, userClient } from "../../lib/supabase.js";
 import { resolveViewer, roleLabel } from "../../lib/onboard-viewer.js";
 import { findProcedure } from "../../lib/onboard-kit.js";
 import { computeSteps } from "../../lib/onboard-steps.js";
+import { loadNoticeRows } from "../../lib/labor-notice-db.js";
+import { noticeFact } from "../../lib/labor-notice.js";
 import { orientationState } from "../../lib/orientation.js";
 import { consentState } from "../../lib/consent-docs.js";
 import { missingFields } from "../../lib/onboard-form.js";
@@ -139,8 +141,16 @@ export default async function handler(req, res) {
     .filter((i) => i.owner === "hr" && i.category !== "document")
     .map((i) => ({ id: i.id, title: i.title, required: i.required !== false, status: i.status }));
 
+  // 労働条件通知書（db/110）。表が無ければ、無いものとして進む。電子署名の依頼があれば、computeSteps が使わない。
+  // ここだけは userClient ではなく service_role で読む。通知書の表の RLS は owner・hr だけ（給与・個人情報を含むため）。
+  // 本人・管理者・社労士は読めないので、そのまま読むと、見る人によって STEP2 の進み具合が変わってしまう。
+  // 使うのは「公開済みか・確認済みか」の事実（noticeFact）だけ。ファイル名・場所・日時は、応答に載せない。
+  // 手続きを開いてよい人かは、上の resolveViewer で確かめ済み
+  const nr = await loadNoticeRows(admin(), ctx.tenantId, employeeId).catch(() => ({ rows: [], linked: false }));
+  const notice = nr.linked ? noticeFact(nr.rows) : null;
+
   const steps = computeSteps({
-    contracts, consents, orientation,
+    contracts, consents, orientation, notice,
     profileStatus: pf?.status || null,
     missing: pf ? missingFields(pf) : [],
     documents: documents.map((d) => ({ ...d, collect: true })),
