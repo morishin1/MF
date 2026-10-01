@@ -2,9 +2,10 @@
 //
 // ■ 何を守るテストか
 //   1. TimeRex 連携済みの面談には「TimeRex連携済み」「Google Meet」「面談に参加」「日程変更」「取消」が出る
-//   2. 手動の「日時を変更」「面談をキャンセル」は出ない（日時は TimeRex が正。HR から直接書き換えない）
+//   2. 手動の「面談をキャンセル」は出ない。「面談情報を編集」は出るが、日時・面談URLは読み取り専用
+//      （日時は TimeRex が正。HR から直接書き換えない。面談担当・面談方法・メモは HR で直せる）
 //   3. 「日程変更」「取消」は TimeRex のリンクを新しいタブで開くだけ。HR の API は呼ばない
-//   4. 手動で登録した面談は、これまでどおり「日時を変更」「面談をキャンセル」が出る
+//   4. 手動で登録した面談は、これまでどおり「面談情報を編集」（旧「日時を変更」）「面談をキャンセル」が出る
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -76,6 +77,7 @@ console.log("\n=== TimeRex 連携済みの社長面談 ===");
   check(await card.locator('button[data-timerex="reschedule"]', { hasText: "日程変更" }).count() === 1, "日程変更ボタン");
   check(await card.locator('button[data-timerex="cancel"]', { hasText: "取消" }).count() === 1, "取消ボタン");
   check(await card.locator("button", { hasText: "日時を変更" }).count() === 0, "手動の「日時を変更」は出ない");
+  check(await card.locator("button", { hasText: "面談情報を編集" }).count() === 1, "「面談情報を編集」は出る（日時・URLは読み取り専用）");
   check(await card.locator("button", { hasText: "面談をキャンセル" }).count() === 0, "手動の「面談をキャンセル」は出ない");
 
   await card.locator('button[data-timerex="reschedule"]').click();
@@ -113,7 +115,7 @@ console.log("\n=== 手動で登録した面談 ===");
   const { page, errs } = await openWith({ ...base, kind: "casual", kindLabel: "カジュアル面談", timerex: null });
   const card = page.locator(".hr-detail-body .card").first();
   check(!(await card.innerText()).includes("TimeRex連携済み"), "「TimeRex連携済み」は出ない");
-  check(await card.locator("button", { hasText: "日時を変更" }).count() === 1, "日時を変更ボタン（従来どおり）");
+  check(await card.locator("button", { hasText: "面談情報を編集" }).count() === 1, "面談情報を編集ボタン（旧「日時を変更」）");
   check(await card.locator("button", { hasText: "面談をキャンセル" }).count() === 1, "面談をキャンセルボタン（従来どおり）");
   check(await card.locator("button[data-timerex]").count() === 0, "TimeRex 用のボタンは出ない");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
