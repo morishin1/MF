@@ -88,9 +88,10 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   // admin-timecard.html は Office 領域（人事・労務グループ）の画面
   const page = await open("admin-timecard.html", { admin: true });
 
-  // ヘッダーに Office・⚙管理 のショートカットが出て、いま Office を見ている
+  // ヘッダーに Office・⚙管理 のショートカットが出て、いま Office を見ている。
+  // ⚙管理は幅を取らないよう、通知ベルと同じアイコン＋ドロップダウン（#kp-admin-menu-btn）
   const office = page.locator('.kp-shortcut[data-shortcut="area-office"]');
-  const settings = page.locator('.kp-shortcut[data-shortcut="area-settings"]');
+  const settings = page.locator('#kp-admin-menu-btn');
   check(await office.isVisible(), "ヘッダーに「Office」が出る");
   check(await settings.isVisible(), "ヘッダーに「管理」（⚙）が出る");
   check(/\bon\b/.test((await office.getAttribute("class")) || ""), "Officeにいるときは「Office」が選ばれて見える");
@@ -179,7 +180,7 @@ console.log("\n— 管理者：ホーム領域は平らな5項目 —");
 
   // Office・管理のどちらもいまは選ばれていない
   const office = page.locator('.kp-shortcut[data-shortcut="area-office"]');
-  const settings = page.locator('.kp-shortcut[data-shortcut="area-settings"]');
+  const settings = page.locator('#kp-admin-menu-btn');
   check(!/\bon\b/.test((await office.getAttribute("class")) || ""), "ホームでは「Office」は選ばれていない");
   check(!/\bon\b/.test((await settings.getAttribute("class")) || ""), "ホームでは「管理」は選ばれていない");
 
@@ -209,7 +210,7 @@ console.log("\n— 管理者：⚙管理 領域は平らな4項目 —");
   check(items.join("/") === "権限/端末・貸与品/アクセス分析/システム設定",
     `管理の並び（いま ${items.join("/")}）`);
 
-  const settings = page.locator('.kp-shortcut[data-shortcut="area-settings"]');
+  const settings = page.locator('#kp-admin-menu-btn');
   check(/\bon\b/.test((await settings.getAttribute("class")) || ""), "管理にいるときは「管理」が選ばれて見える");
 
   await page.close();
