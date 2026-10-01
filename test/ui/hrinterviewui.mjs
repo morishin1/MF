@@ -44,9 +44,12 @@ function nextActionOf(a) {
   return { label: "対応を進めてください", cta: null, action: null };
 }
 
-function shape(a) {
+// 本物の API と同じく、NEXT ACTION が指す面談（実施前・キャンセルでない）を nextInterviewId で渡す
+function shape(a, interviews = []) {
   const n = nextActionOf(a);
-  return { ...a, nextAction: n.label, nextActionCta: n.cta, nextActionKey: n.action, overdue: false, recruiterName: null };
+  const next = interviews.find((i) => !i.done && !i.canceled) || null;
+  return { ...a, nextAction: n.label, nextActionCta: n.cta, nextActionKey: n.action, overdue: false, recruiterName: null,
+    nextInterviewId: next?.id || null, nextInterviewKind: next?.kind || null };
 }
 
 console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通す ===");
@@ -119,7 +122,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
         return send({ applicant: shape(state.applicant) });
       }
       return send({
-        applicant: shape(state.applicant),
+        applicant: shape(state.applicant, state.interviews),
         interviews: state.interviews.map((i) => ({
           ...i, applicantId: "a1", scoresLabel: null, createdAt: "2026-09-24T00:00:00Z",
         })),

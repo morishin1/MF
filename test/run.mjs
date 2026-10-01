@@ -18,7 +18,7 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // 道具であってテストではないもの
-const SKIP = new Set(["run.mjs", "_browser.mjs", "_img.mjs", "_mfa.mjs", "_noticeharness.mjs", "tcdata.mjs"]);
+const SKIP = new Set(["run.mjs", "_browser.mjs", "_img.mjs", "_pgdate.mjs", "_memdb.mjs", "_officeharness.mjs", "_mfa.mjs", "_noticeharness.mjs", "tcdata.mjs"]);
 
 const groups = {
   // ブラウザの要らないもの。ハンドラを直に呼ぶものと、静的な検査

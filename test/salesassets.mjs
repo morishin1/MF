@@ -74,9 +74,19 @@ const REQUIRED = [
 ];
 for (const fn of REQUIRED) check(typeof API?.[fn] === "function", `API.${fn} がある`);
 
-// 画面と sales-layout.js が実際に呼んでいるもの全部
+// 企業詳細（右ドロワー）と操作モーダルは js/sales-detail.js（企業一覧・リード一覧で共通）。
+// 読んでいる画面は、同じ版で読む
+{
+  const vers = pages.map((p) => [p, verOf(read(`sales/${p}`), "sales-detail.js")]).filter(([, v]) => v);
+  check(vers.some(([p]) => p === "companies.html") && vers.some(([p]) => p === "leads.html"),
+    `sales-detail.js は企業一覧とリード一覧の両方が読む（いま ${vers.map(([p]) => p).join(", ")}）`);
+  const set = new Set(vers.map(([, v]) => v));
+  check(set.size === 1, `sales-detail.js の版は読んでいる全画面で1つ（いま ${[...set].join(" / ")}）`);
+}
+
+// 画面と sales-layout.js・sales-detail.js が実際に呼んでいるもの全部
 const called = new Set();
-for (const src of [...pages.map((p) => read(`sales/${p}`)), read("js/sales-layout.js")]) {
+for (const src of [...pages.map((p) => read(`sales/${p}`)), read("js/sales-layout.js"), read("js/sales-detail.js")]) {
   for (const m of src.matchAll(/\bAPI\.([A-Za-z_$][\w$]*)\s*\(/g)) called.add(m[1]);
 }
 const missing = [...called].filter((fn) => typeof API?.[fn] !== "function").sort();

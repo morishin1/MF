@@ -25,7 +25,7 @@
 //   ドメインも残るので、同じ会社を取り込み直しても重複として止まる（また一覧に出てこない）。
 //
 // ■ 削除は、履歴の無い企業だけ（要件 §8）
-//   アタック・クリック・営業履歴・面談は企業を消すと一緒に消える（on delete cascade）。
+//   アタック・クリック・営業履歴・商談は企業を消すと一緒に消える（on delete cascade）。
 //   だから、それらが1件でもある企業・成約・営業禁止の企業は消さずに「消せない理由」を返す。
 //   営業禁止の企業を消すと、次に同じ会社を取り込んだときにまた営業してしまうので残す。
 //   消せないものは「対象外」「営業禁止」などのステータスで扱う。
@@ -35,7 +35,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { isUuid, autoNext, STATUS_KEYS, STATUS_LABEL, NG_KEYS, HIDE_KEYS, HIDE_LABEL } from "../../../lib/sales.js";
+import { isUuid, autoNext, STATUS_KEYS, STATUS_LABEL, NG_KEYS, HIDE_KEYS, HIDE_LABEL, SERVICES } from "../../../lib/sales.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 export const BULK_MAX = 500;
@@ -46,7 +46,7 @@ export const DELETE_BLOCK_LABEL = {
   approach: "アタック履歴あり",
   click: "クリック履歴あり",
   event: "営業履歴あり",
-  meeting: "面談あり",
+  meeting: "商談あり",
   won: "成約済み",
   ng: "営業禁止",
 };
@@ -178,6 +178,10 @@ const ACTIONS = {
 
   async change_service({ res, sb, ctx, user, body, rows, notFound }) {
     const service = typeof body.service === "string" ? body.service.trim().slice(0, 100) || null : null;
+    // 共通マスター（lib/sales-master.js）の値だけ。空（null）は「未設定に戻す」
+    if (service && !SERVICES.includes(service)) {
+      return json(res, 400, { error: "bad_service", hint: `提案サービスは「${SERVICES.join("・")}」から選んでください` });
+    }
     const ids = rows.map((r) => r.id);
     const r = await updateMany(sb, ctx, ids, { service, updated_at: now() });
     if (r.updated) await audit(ctx, user, "sales.company_bulk_service", ids, { service });
