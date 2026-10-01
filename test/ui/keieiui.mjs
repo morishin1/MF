@@ -5,7 +5,7 @@
 //   ・サイドメニューは、ホーム・入社準備・給与管理の3つ＋小さな「経営設定・セキュリティ」
 //   ・旧ダッシュボード・売上・入金・経費・会計の入口は無い（ブックマークはホームへ送る）。ホームの中身は keieihubui.mjs
 //   ・画面を切り替えても、最後に押した画面だけが出る
-//   ・二段階認証が済んでいない経営者には、案内が出る（画面の中身は出ない）
+//   ・二段階認証は要らない。未登録・パスワードだけ（aal1）の経営者でも、ホームがそのまま開く（案内帯も、マイページへの転送も無い）
 //   ・スマホ幅で横スクロールしない
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
@@ -122,6 +122,10 @@ async function open(who, { width = 1280, detail = null, hash = "" } = {}) {
         email: "a@b.c", appRole: who.appRole || "member", isAdmin: Boolean(who.isAdmin), roles: [],
         gw: { employee: { id: "e1", display_name: "森田 経営", status: "active" }, roles: who.roles || [], tenantId: "t1", stage: null },
         access: serverAccessOf({ isAdmin: Boolean(who.isAdmin), roles: who.roles || [] }),
+        // 二段階認証の状態。いまのサーバは、いつも「必須ではない」を返す。who.mfaLegacy は、昔のサーバの「必須・期限つき・止める」を返した場合
+        mfa: who.mfaLegacy
+          ? { required: true, enrolled: false, verified: false, enforced: true, enrollUntil: "2026-09-30", enforceFrom: "2026-10-01", blocked: true }
+          : { required: false, enrolled: false, verified: false, enforced: false, enrollUntil: null, enforceFrom: null, blocked: false },
       });
     }
     if (/\/api\/keiei\/onboarding/.test(url)) {
@@ -132,7 +136,6 @@ async function open(who, { width = 1280, detail = null, hash = "" } = {}) {
     if (/\/api\/keiei/.test(url)) {
       const view = new URL(url).searchParams.get("view");
       calls.push(view);
-      if (who.mfa === "required") return send({ error: "mfa_required", hint: "経営の画面を開くには、二段階認証の登録が必要です。", enrolled: false }, 403);
       if (view === "hub") return send(hubBusy());
       if (view === "security") return send(securityBody());
       if (view === "payroll") {
@@ -405,15 +408,14 @@ for (const [label, who] of [
   await page.close();
 }
 
-console.log("\n— 二段階認証が済んでいない経営者には、案内が出る —");
-{
-  const page = await open({ appRole: "owner", roles: ["owner"], mfa: "required" });
-  await page.waitForTimeout(500);
-  // api-client が mfa_required を受けて、マイページの登録へ送る（絶対パス）。テストでは遷移先の有無で見る
-  const at = pathOf(page);
+console.log("\n— 二段階認証は要らない：未登録の経営者も、そのまま開ける —");
+for (const [label, extra] of [["未登録（いまのサーバ）", {}], ["昔の「必須・期限つき」状態をサーバが返しても", { mfaLegacy: true }]]) {
+  const page = await open({ appRole: "owner", roles: ["owner"], ...extra });
+  await page.waitForTimeout(700);
   const t = await bodyText(page);
-  check(at === "/mypage.html" || t.includes("二段階認証"), `二段階認証の登録へ案内される（いま ${at}）`);
-  check(!t.includes("今日の確認") && !t.includes("経費 承認待ち"), "案内が出ているとき、経営の数字は出ていない");
+  check(pathOf(page).startsWith("/keiei"), `${label}: マイページへ送られない（いま ${pathOf(page)}）`);
+  check(t.includes("今日の確認") || t.includes("経費 承認待ち"), `${label}: ホームの中身が出る`);
+  check(await page.locator(".kp-mfa-nudge").count() === 0 && !/二段階認証が必要です|二段階認証を .*登録してください|二段階認証が未登録/.test(t), `${label}: 二段階認証の案内・警告は出ない`);
   await page.close();
 }
 

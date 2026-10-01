@@ -3,7 +3,7 @@
 // ■ 何を守るテストか
 //
 //   1. 経営者（owner）だけが使える。人事・管理者・責任者・採用担当・経理・IT・営業・社労士・一般は 403（金額は一切返らない）。
-//      二段階認証が済んでいなければ、経営者でも 403。権限のない人には、認証の案内より先に断る
+//      二段階認証は要らない（任意）。経営者なら、通常ログイン（aal1）だけで開ける。権限のない人は 403
 //   2. 表（db/105）が無いときは、落とさず「未連携」。0 円とは言わない。書き込みは 503
 //   3. 一覧: いまの給与（適用開始日が今日以前でいちばん新しい）・予定・適用前・未登録・契約との不一致・BP 対象外。
 //      他社は出ない。1000 件を超えても切り捨てない
@@ -260,16 +260,17 @@ await ok("所属（テナント）が無い人は 403。GET・POST 以外は 405
   assert.equal((await get("view=detail")).statusCode, 400);
 });
 
-await ok("二段階認証（aal2）が済んでいない経営者は開けない。権限のない人には、認証を促さない", async () => {
+await ok("二段階認証（aal2）は要らない。経営者なら、通常ログイン（aal1）だけで開ける。権限のない人は、aal2 でも 403", async () => {
   setup();
   const r = await get("view=list", { aal: "aal1" });
-  assert.equal(r.statusCode, 403); assert.equal(r.body.error, "mfa_required");
-  assert.ok(!/300000/.test(JSON.stringify(r.body)));
-  const w = await post({ action: "record", employeeId: "e4" }, { aal: "aal1" });
-  assert.equal(w.statusCode, 403); assert.equal(db.writes.length, 0);
+  assert.equal(r.statusCode, 200); assert.notEqual(r.body.error, "mfa_required");
   setup(); who = ctxOf(["hr"]);
-  const h = await get("view=list", { aal: "aal1" });
-  assert.equal(h.body.error, "forbidden", "人事には、二段階認証の案内より先に、権限で断る");
+  for (const aal of ["aal1", "aal2"]) {
+    const h = await get("view=list", { aal });
+    assert.equal(h.statusCode, 403); assert.equal(h.body.error, "forbidden", `人事は、二段階認証の有無に関わらず、権限で断る（${aal}）`);
+    assert.ok(!/300000/.test(JSON.stringify(h.body)));
+  }
+  assert.equal(db.writes.length, 0, "権限のない人は、何も書けない");
 });
 
 console.log("\n=== 表が無いとき ===\n");

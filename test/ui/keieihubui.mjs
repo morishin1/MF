@@ -107,12 +107,12 @@ console.log("— 忙しい日（PC）—");
   // ④
   const risk = page.locator('[data-block="risk"]');
   const rkeys = await risk.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.key));
-  check(["join_near", "mfa_missing", "blocker_long", "billing_stale", "recruit_overdue", "renewal_watch"].every((k) => rkeys.includes(k)), `④のリスク（いま ${rkeys.join()}）`);
+  check(["join_near", "blocker_long", "billing_stale", "recruit_overdue", "renewal_watch"].every((k) => rkeys.includes(k)), `④のリスク（いま ${rkeys.join()}）`);
+  check(!rkeys.includes("mfa_missing") && !/二段階認証/.test(await risk.innerText()), "二段階認証が未登録の経営者がいても、④に警告を出さない（任意）");
   const rs = await risk.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
   check(rs.every((s, i) => i === 0 || rank[s] >= rank[rs[i - 1]]), `④は重要度の高い順（${rs.join(",")}）`);
-  check(rs[0] === "high", "④の先頭は「重要」");
+  check(rs[0] === rs.slice().sort((a, b) => rank[a] - rank[b])[0], "④の先頭は、いちばん重要なもの");
   check(!keys.some((k) => rkeys.includes(k)), "同じ項目が①と④の両方に出ない");
-  check((await risk.locator('[data-key="mfa_missing"] a').getAttribute("href")) === "#security", "二段階認証の警告は、経営設定・セキュリティへ");
 
   // 給与
   const all = await page.locator("#kei-main").innerText();
@@ -163,9 +163,9 @@ console.log("\n— 押した先（元システム）—");
   await page.goBack();
   await page.waitForTimeout(500);
   check(page.url().endsWith("#home") || !page.url().includes("#onboarding"), "戻るでホームに戻る");
-  await page.click('[data-block="risk"] [data-key="mfa_missing"] a');
+  await page.click('[data-role="to-security"]');
   await page.waitForTimeout(500);
-  check(page.url().endsWith("#security") && (await text(page)).includes("経営者（owner）"), "二段階認証の警告から、経営設定・セキュリティへ");
+  check(page.url().endsWith("#security") && (await text(page)).includes("経営者（owner）"), "ホーム下の小さな入口から、経営設定・セキュリティへ");
   await page.close();
 }
 
@@ -206,13 +206,14 @@ console.log("\n— 経営設定・セキュリティ —");
   check(page.calls.join() === "security", "security だけを呼ぶ");
   check(t.includes("経営設定・セキュリティ") && (await page.locator("#kei-side a.on").getAttribute("data-view")) === "security", "見出しとメニューの強調");
   const rows = await page.locator('[data-role="owners"] tbody tr').evaluateAll((ns) => ns.map((n) => n.innerText.replace(/\s+/g, " ").trim()));
-  check(rows.length === 3 && rows[0].includes("森田 経営") && rows[0].includes("登録済み") && rows[1].includes("未登録") && rows[2].includes("退職"), `経営者と二段階認証の状態（${rows.join(" / ")}）`);
-  check(await page.locator('[data-role="warning"][data-key="mfa_missing"]').count() === 1, "未登録の経営者の警告");
+  check(rows.length === 3 && rows[0].includes("森田 経営") && rows[0].includes("登録済み") && rows[1].includes("未設定（任意）") && rows[2].includes("退職"), `経営者と二段階認証の状態（${rows.join(" / ")}）`);
+  check(await page.locator('[data-role="warning"]').count() === 0 && await page.locator("#kei-main .kei-pill.warn").count() === 0, "二段階認証が未設定の経営者がいても、警告にしない（黄色の警告も、警告の色の印も出ない）");
   const hist = await page.locator('[data-role="history"] tbody tr').evaluateAll((ns) => ns.map((n) => n.innerText.replace(/\s+/g, " ").trim()));
   check(hist.length === 2 && hist[0].includes("経営者に追加") && hist[0].includes("2026/09/29") && hist[0].includes("経営 二郎"), `経営者の変更履歴（${hist[0]}）`);
   check(hist[1].includes("経営者の二段階認証リセットを断った"), "断った記録も出る");
   check(await page.locator('[data-role="to-pay-audit"]').getAttribute("href") === "#pay-audit", "給与の監査ログへの入口");
-  check(t.includes("docs/keiei-owner-recovery.md") && t.includes("2026-10-01"), "復旧手順の案内・強制日");
+  check(t.includes("docs/keiei-owner-recovery.md"), "復旧手順の案内");
+  check(t.includes("二段階認証は任意のセキュリティ設定です") && !/必須|強制|2026-10-01|開けません/.test(t), "二段階認証は任意と書いてある。必須・強制・強制日の文言は無い");
   check(!/給与の額|基本給|月給/.test(t), "給与の金額は出ない");
   await page.screenshot({ path: shotPath("keiei-security-pc.png"), fullPage: true });
   await page.click('[data-role="to-pay-audit"]');

@@ -1,5 +1,7 @@
 # /keiei 新設・入社オンボーディング Phase 0 調査報告
 
+> **更新（2026-10-01）**: 二段階認証は**必須にしない（任意）**。下の「2026-10-01 から owner に二段階認証が強制」「`/keiei` の API に `requireMfa`」「経営者アカウントを 9/30 までに登録」は、変更前の調査の記録。いまは `/keiei` の入口は owner のロールだけで通す（[`mfa-optional.md`](mfa-optional.md)）。
+>
 > **更新（実装後）**: この報告は着手前の調査。決定を受けた実装の現在地・決めていただきたいこと・本番へ反映する前の確認は
 > [`keiei-implementation-status.md`](keiei-implementation-status.md) にある。権限・給与・ヘッダーに関する記述は、そちらが新しい。
 > `gw_site_contracts.unit_price` の確認方法は [`keiei-unit-price.md`](keiei-unit-price.md)。

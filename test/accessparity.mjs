@@ -273,7 +273,7 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
   }
 }
 
-console.log("\n— /keiei が呼ぶ API は、経営者だけ・二段階認証つき —");
+console.log("\n— /keiei が呼ぶ API は、経営者だけ（二段階認証は要らない）—");
 {
   const walk = (d) => readdirSync(join(ROOT, d)).flatMap((f) => {
     const p = `${d}/${f}`;
@@ -282,19 +282,18 @@ console.log("\n— /keiei が呼ぶ API は、経営者だけ・二段階認証�
   const files = walk("api/keiei");
   check(files.length > 0, `api/keiei に API がある（${files.length}本）`);
 
-  // 入口は lib/keiei-gate.js ただ1つ。canKeiei（owner だけ）→ requireMfaStrict の順
+  // 入口は lib/keiei-gate.js ただ1つ。canKeiei（owner だけ）だけ。二段階認証（aal2）は要らない（任意のセキュリティ設定）
   const gate = read("lib/keiei-gate.js");
   check(/canKeiei\(ctx\)/.test(gate), "lib/keiei-gate.js は canKeiei（owner だけ）で判定");
-  check(/requireMfaStrict\(req, res, ctx, user\)/.test(gate), "lib/keiei-gate.js は requireMfaStrict（強制日を待たず二段階認証を求める）");
-  // 権限のない人に、二段階認証の案内を先に見せない（登録を促さない）
-  check(gate.indexOf("canKeiei(ctx)") < gate.indexOf("requireMfaStrict("), "lib/keiei-gate.js は、権限の確認のあとに二段階認証を確かめる");
+  check(!/requireMfa|lib\/mfa\.js|aal2|aalOf/.test(gate.replace(/\/\/.*$/gm, "")), "lib/keiei-gate.js は、二段階認証（aal2）を求めない（経営者のロールだけで通す）");
+  check(/if \(!canKeiei\(ctx\)\)[^\n]*403/.test(gate), "lib/keiei-gate.js は、経営者でない人に 403 を返す");
   check(!/isAdmin|canManageHr|canRecruit|canSell|canOffice/.test(gate.replace(/\/\/.*$/gm, "")),
     "lib/keiei-gate.js は、経営者以外の判定を混ぜない（下位の権限を継承しない）");
 
   for (const f of files) {
     const s = read(f);
     const code = s.replace(/\/\/.*$/gm, "");
-    check(/await requireKeiei\(req, res\)/.test(code), `${f} は入口 requireKeiei（経営者だけ・二段階認証つき）を通る`);
+    check(/await requireKeiei\(req, res\)/.test(code), `${f} は入口 requireKeiei（経営者だけ）を通る`);
     // 入口より前に、データを読まない（応答を返す前に、何かを読む・書くことがない）
     const head = code.slice(0, code.indexOf("requireKeiei(req, res)"));
     check(!/\.from\(|admin\(\)|userClient\(/.test(head.slice(head.indexOf("export default"))), `${f} は、入口より前に DB へ触れない`);

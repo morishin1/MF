@@ -1,14 +1,14 @@
 // 経営ハブ（/api/keiei?view=hub|security）。
 //
 // ■ 何を守るテストか
-//   1. 経営者（owner）だけ・二段階認証つき（ほかの view と同じ入口）
+//   1. 経営者（owner）だけ（ほかの view と同じ入口。二段階認証は要らない）
 //   2. 4ブロックの数字が、元データから正しく出る。他社（別テナント）の行は数えない
 //   3. 読み取りだけ。書き込み（insert / update / delete / upsert）は1回も起きない
 //   4. 給与・手当・単価の表も列も読まない（応募者は id・段階・状態・期限だけ。契約・給与管理・給与の表に触れない）
 //   5. 読めなかった元データは、0 にせず unreadable に出る（表が無い・読み込み失敗・認証の取得失敗）
 //   6. 1000件を超えても切り捨てない
 //   7. 旧 view（dashboard / expenses / revenue / cash / accounting）は、後方互換のためまだ動く
-//   8. 経営設定・セキュリティ: 経営者の一覧・二段階認証・変更の履歴（この会社の、経営者に関する記録だけ）
+//   8. 経営設定・セキュリティ: 経営者の一覧・二段階認証の登録状況（参考。警告にしない）・変更の履歴（この会社の、経営者に関する記録だけ）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -174,7 +174,7 @@ const items = (d) => [...d.attention, ...d.risks];
 const by = (d, key) => items(d).find((i) => i.key === key);
 const tile = (d, key) => [...d.people.tiles, ...d.money.internal].find((t) => t.key === key);
 
-console.log("\n=== 経営者だけ・二段階認証 ===\n");
+console.log("\n=== 経営者だけ（二段階認証は要らない） ===\n");
 
 for (const view of ["hub", "security"]) {
   await ok(`${view}: 経営者だけ。ほかの役割は 403`, async () => {
@@ -188,12 +188,12 @@ for (const view of ["hub", "security"]) {
     assert.equal(db.reads.length, 0, "断った人には、何も読まない");
   });
 
-  await ok(`${view}: 二段階認証（aal2）が済んでいない経営者は、開けない`, async () => {
+  await ok(`${view}: 経営者なら、二段階認証（aal2）が済んでいなくても（aal1）、開ける。mfa_required は返らない`, async () => {
     setup();
     const r = await call(view, { aal: "aal1" });
-    assert.equal(r.statusCode, 403);
-    assert.equal(r.body.error, "mfa_required");
-    assert.equal(db.reads.length, 0);
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.notEqual(r.body.error, "mfa_required");
+    assert.ok(db.reads.length > 0);
   });
 }
 
@@ -215,19 +215,20 @@ await ok("①今日の確認: 代表の承認待ち・稟議・社長判断・Bl
   assert.ok(d.attention.every((i) => i.block === "today"));
 });
 
-await ok("④リスク・未処理: 長期Blocker・契約更新（先）・採用の期限超過・請求の滞留・二段階認証が未登録の経営者", async () => {
+await ok("④リスク・未処理: 長期Blocker・契約更新（先）・採用の期限超過・請求の滞留。二段階認証が未登録の経営者は、リスクに出さない", async () => {
   setup();
   const d = (await call("hub")).body;
   assert.equal(by(d, "blocker_long").count, 1);
   assert.equal(by(d, "renewal_watch").count, 1);
   assert.equal(by(d, "recruit_overdue").count, 1, "見送り済みの応募者の期限は数えない");
   assert.equal(by(d, "billing_stale").count, 1, "5段階が済んだ行は数えない");
-  const mfa = by(d, "mfa_missing");
-  assert.match(mfa.detail, /経営 二郎/);
-  assert.equal(mfa.href, "#security");
+  assert.equal(by(d, "mfa_missing"), undefined, "二段階認証は任意。経営 二郎 が未登録でも、リスクにしない");
+  assert.ok(!JSON.stringify(d).includes("二段階認証が未登録"), "どこにも、未登録の警告が出ない");
   assert.equal(by(d, "owner_single"), undefined, "経営者は2人いる");
   assert.ok(d.risks.every((i) => i.block === "risk"));
-  assert.equal(d.risks[0].severity, "high", "重要なものが先");
+  const rank = { high: 0, mid: 1, low: 2 };
+  assert.deepEqual(d.risks.map((i) => rank[i.severity]), d.risks.map((i) => rank[i.severity]).sort((a, b) => a - b), "重要なものが先");
+  assert.ok(d.risks.length >= 4);
   assert.deepEqual(d.unreadable, []);
 });
 
@@ -322,11 +323,11 @@ await ok("読み込みの失敗（表はあるが読めない）も、同じ。0
   assert.ok(d.unreadable.includes("止まっている仕事"));
 });
 
-await ok("二段階認証の取得に失敗: 「未登録」と決めつけず、unreadable に出す", async () => {
+await ok("二段階認証の取得に失敗しても、ホームは何も警告せず、unreadable にも出さない（二段階認証は任意）", async () => {
   setup();
   db.factorsFail = true;
   const d = (await call("hub")).body;
-  assert.ok(d.unreadable.includes("二段階認証の登録状況"));
+  assert.ok(!d.unreadable.includes("二段階認証の登録状況"));
   assert.equal(by(d, "mfa_missing"), undefined);
 });
 
@@ -398,14 +399,14 @@ await ok("知らない view は 400。views の一覧に hub・security が入�
 
 console.log("\n=== 経営設定・セキュリティ ===\n");
 
-await ok("経営者の一覧（在籍中のみ・他社を含まない）と、二段階認証の登録状況", async () => {
+await ok("経営者の一覧（在籍中のみ・他社を含まない）と、二段階認証の登録状況（参考。警告にしない）", async () => {
   setup();
   const d = (await call("security")).body;
   assert.equal(d.status, "exact");
   assert.deepEqual(d.owners.map((o) => [o.name, o.mfa]), [["経営 一郎", "enrolled"], ["経営 二郎", "none"]]);
   assert.equal(d.loginableCount, 2);
-  assert.deepEqual(d.warnings.map((w) => w.key), ["mfa_missing"]);
-  assert.deepEqual(d.mfaPolicy, { enforceFrom: "2026-10-01", enrollUntil: "2026-09-30" });
+  assert.deepEqual(d.warnings, [], "経営 二郎 が二段階認証を未登録でも、警告にしない（任意）");
+  assert.ok(!("mfaPolicy" in d) && !("mfaUnknown" in d), "強制日・不明の警告は返さない");
   assert.equal(d.links.payAudit, "#pay-audit");
 });
 
@@ -433,7 +434,7 @@ await ok("経営者が1人だけなら、警告。ログインできない経営
   assert.equal(by((await call("hub")).body, "owner_single").href, "#security");
 });
 
-await ok("履歴の表が読めなくても、経営者の一覧は出る（historyReadable:false・履歴は空）。認証の取得失敗は「不明」", async () => {
+await ok("履歴の表が読めなくても、経営者の一覧は出る（historyReadable:false・履歴は空）。認証の取得失敗は「不明」で、警告にしない", async () => {
   setup();
   db.missing = new Set(["gw_activity_log"]);
   db.factorsFail = true;
@@ -441,7 +442,6 @@ await ok("履歴の表が読めなくても、経営者の一覧は出る（hist
   assert.equal(d.historyReadable, false);
   assert.deepEqual(d.history, []);
   assert.deepEqual(d.owners.map((o) => o.mfa), ["unknown", "unknown"]);
-  assert.equal(d.mfaUnknown, true);
   assert.deepEqual(d.warnings, [], "不明を「未登録」と警告しない");
 });
 

@@ -182,11 +182,17 @@ ok("採用の対応期限超過は④（注意）。終わった応募者は数�
   assert.equal(h.risks.find((i) => i.key === "recruit_overdue").count, 1);
 });
 
-ok("経営者が1人だけ・二段階認証が未登録の経営者は、④（重要）で、押すと経営設定・セキュリティへ", () => {
+ok("経営者が1人だけなら、④（重要）で、押すと経営設定・セキュリティへ。二段階認証が未登録でも、警告にしない（任意）", () => {
   const h = hub({ owners: [{ name: "経営A", active: true, canLogin: true, mfa: "none" }] });
-  assert.deepEqual(keys(h.risks).sort(), ["mfa_missing", "owner_single"]);
+  assert.deepEqual(keys(h.risks), ["owner_single"], "二段階認証の未登録は、リスクに出ない");
   assert.ok(h.risks.every((i) => i.severity === "high" && i.href === "#security"));
-  assert.match(h.risks.find((i) => i.key === "mfa_missing").detail, /経営A/);
+  assert.ok(!JSON.stringify(h).includes("mfa_missing") && !/二段階認証が未登録/.test(JSON.stringify(h)), "未登録の警告が、どこにも出ない");
+});
+
+ok("経営者が2人いて、全員が二段階認証を未登録でも、警告なし（二段階認証は任意）", () => {
+  const h = hub({ owners: [{ name: "経営A", active: true, canLogin: true, mfa: "none" }, { name: "経営B", active: true, canLogin: true, mfa: "none" }] });
+  assert.deepEqual(h.risks, []);
+  assert.deepEqual(h.unreadable, []);
 });
 
 ok("経営者が2人いて全員登録済みなら、警告なし。退職・ログインできない経営者は、人数に数えない", () => {
@@ -237,10 +243,10 @@ ok("すべて null でも落ちない（何も出さず、全部を未読込に�
   assert.ok(h.unreadable.length >= 10, h.unreadable.join());
 });
 
-ok("経営者の二段階認証が不明（管理用の取得に失敗）なら、警告を作らず「未読込」にする", () => {
+ok("経営者の二段階認証が不明（管理用の取得に失敗）でも、警告にも「未読込」にもしない（二段階認証は任意）", () => {
   const h = hub({ owners: [{ name: "A", active: true, canLogin: true, mfa: "unknown" }, { name: "B", active: true, canLogin: true, mfa: "enrolled" }] });
   assert.deepEqual(h.risks, []);
-  assert.deepEqual(h.unreadable, ["二段階認証の登録状況"]);
+  assert.deepEqual(h.unreadable, []);
 });
 
 console.log("\n— ②人数と③社内の数字 —");
@@ -311,10 +317,11 @@ ok("LINKS の相対パスは、リポジトリに実在する画面", () => {
 
 console.log("\n— 経営設定・セキュリティ —");
 
-ok("securityRisks: 人数・登録状況から警告を作る（ホームと同じ判定）", () => {
+ok("securityRisks: 人数から警告を作る（ホームと同じ判定）。二段階認証の登録状況は、警告に使わない", () => {
   const r = securityRisks([{ name: "A", active: true, canLogin: true, mfa: "enrolled" }, { name: "B", active: true, canLogin: true, mfa: "none" }]);
-  assert.deepEqual(r.risks.map((x) => x.key), ["mfa_missing"]);
+  assert.deepEqual(r.risks, [], "経営者が2人。未登録の人がいても警告なし");
   assert.equal(r.loginable, 2);
+  assert.deepEqual(securityRisks([{ name: "A", active: true, canLogin: true, mfa: "none" }]).risks.map((x) => x.key), ["owner_single"]);
 });
 
 ok("buildSecurity: 履歴は実行者・対象の名前に直る。名簿に無ければ detail の名前", () => {
@@ -327,7 +334,6 @@ ok("buildSecurity: 履歴は実行者・対象の名前に直る。名簿に無�
       { ts: "2026-09-20T00:00:00Z", action: "owner.revoke", actor_id: "u1", target: "employee:gone", detail: { name: "退職した人" } },
       { ts: "2026-09-10T00:00:00Z", action: "mfa.reset_denied", actor_id: "ux", target: "employee:e1", detail: {} },
     ],
-    mfaPolicy: { enforceFrom: "2026-10-01", enrollUntil: "2026-09-30" },
   });
   assert.deepEqual(s.history.map((h) => [h.label, h.actor, h.target]), [
     ["経営者に追加", "経営A", "経営B"],
@@ -336,6 +342,7 @@ ok("buildSecurity: 履歴は実行者・対象の名前に直る。名簿に無�
   ]);
   assert.equal(s.links.payAudit, "#pay-audit");
   assert.equal(s.warnings.length, 1, "経営者が1人だけ");
+  assert.ok(!("mfaUnknown" in s) && !("mfaPolicy" in s), "二段階認証の強制日・不明の警告は、返さない");
 });
 
 console.log(`\n${pass} passed / ${fail} failed`);

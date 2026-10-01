@@ -26,10 +26,11 @@
 //   管理者を経由して自分の認証アプリに差し替えられる（経営の画面は認証さえ通れば開く）。
 //   だから
 //     経営者 → 一般ユーザー    可
-//     経営者 → ほかの経営者    可（実行する経営者は、今回 aal2 で確かめていること）
+//     経営者 → ほかの経営者    可（二段階認証は任意。実行する経営者に aal2 は要らない。owner のロールの判定だけ）
 //     管理者・人事 → 経営者    不可（403 owner_only）。試みたことは記録に残す
 //     経営者 → 自分            不可（自分では外せない）
-//   経営者が1人だけで、その人が認証アプリを失ったときは、画面からは復旧できない。
+//   経営者が1人だけで、その人が認証アプリを失ったときは、画面からは復旧できない
+//   （二段階認証は任意なので、登録していなければ、パスワードで入れる）。
 //   Supabase の SQL による緊急復旧（docs/keiei-owner-recovery.md）で行う。
 //   通常の画面に、経営者を乗っ取れる経路は残さない。
 
@@ -39,7 +40,7 @@ import { gwContext, canManageHr, isOwner } from "../lib/gw.js";
 import { admin } from "../lib/supabase.js";
 import { gwLog } from "../lib/gw-audit.js";
 import { notify } from "../lib/notify.js";
-import { mfaState, selfUnenroll, requireMfa, requireMfaStrict, enrolledOf } from "../lib/mfa.js";
+import { mfaState, selfUnenroll, requireMfa, enrolledOf } from "../lib/mfa.js";
 import { isOwnerEmployee, guardOwnerTarget, INACTIVE } from "../lib/owner-guard.js";
 
 const RESET_WINDOW_DAYS = 7;
@@ -188,8 +189,6 @@ async function reset(req, res, ctx, user, body) {
                     target: `employee:${emp.id}`, detail: { name: emp.display_name, reason: "owner_only" } });
       return json(res, blocked.status, blocked.body);
     }
-    // 経営者どうしのリセットは、実行する側が今回 aal2 で確かめていること（強制日を待たない）
-    if (!(await requireMfaStrict(req, res, ctx, user))) return;
   }
 
   const { data: fl, error: le } = await sb.auth.admin.mfa.listFactors({ userId: emp.user_id });

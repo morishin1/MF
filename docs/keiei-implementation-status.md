@@ -15,7 +15,7 @@ Phase 0 の記述のうち、権限・給与・ヘッダーに関するものは
 | 項目 | 決定 | 状態 |
 |---|---|---|
 | 管理画面（`admin.html`）の「会計」 | **外さない。** 既存の管理者が行っている仕訳承認・試算表の実務は残す。`/keiei` へ会計を統合できた段階で整理する | 変更なし（`/keiei` の「会計」は入口・確認として併存） |
-| owner の二段階認証のリセット | owner → 一般ユーザー 可 / owner → 他の owner 可 / **管理者・人事 → owner 不可** / 最後の owner が入れなくなったら緊急復旧（break-glass） | 実装済み（`api/mfa.js`）。手順は `docs/keiei-owner-recovery.md`（SQL は PostgreSQL 上で文書のまま実行して確認） |
+| owner の二段階認証のリセット | owner → 一般ユーザー 可 / owner → 他の owner 可（二段階認証は要らない） / **管理者・人事 → owner 不可** / 最後の owner が入れなくなったら緊急復旧（break-glass） | 実装済み（`api/mfa.js`）。手順は `docs/keiei-owner-recovery.md`（SQL は PostgreSQL 上で文書のまま実行して確認） |
 | `unit_price` | **変更・移行・改名しない。** 実データを確認できる状態だけ。PP・BP それぞれ、売上単価・仕入単価・支払単価・粗利計算用単価のどれかを確定してから変更する。推測によるマイグレーションは禁止 | `docs/keiei-unit-price.md`（読み取り専用の SQL・確定表） |
 | 入社案内・本人側オンボーディング | `/onboarding/` を作る。6ステップ（入社案内確認 / 雇用契約 / 入社情報入力 / 必要書類提出 / 会社確認 / 入社準備完了）。新しい状態判定は作らず、既存の判定を使う。本人に金額を出さない | 実装済み（§3） |
 | 入社案内メール | 送信サービスは **Resend**。今の抽象化（`lib/mail/index.js` の `ADAPTERS`）を維持し、必要になったら送信サービスを足せる構造だけ残す（Google Workspace は今は不要）。送信元は環境変数 `HR_ONBOARDING_FROM`。未設定なら実送信せず、案内URLをコピー | 実装済み（§3）。**本番では有効にしない・本番メール送信はしない**（`MAIL_SEND_ENABLED` が既定で止めている） |
@@ -28,7 +28,7 @@ Phase 0 の記述のうち、権限・給与・ヘッダーに関するものは
 |---|---|---|---|
 | ① | owner の付与・剥奪を現 owner だけに。履歴・最後の owner の保護・乗っ取り経路の遮断。**owner の MFA リセットも owner だけ** | 完了 | `lib/owner-guard.js`・`api/employees/*`・`api/mfa.js`・`db/099` |
 | ② | 給与の漏えい対策（段階1: 採用担当・責任者に見せない） | 完了（API は即有効。DB は段階適用） | `lib/salary.js`・`lib/hr-pay.js`・`db/100`〜`103`・`docs/keiei-salary-separation.md` |
-| ③ | `/keiei` の owner 専用権限（画面・API・DB） | 完了 | `lib/gw.js`（`canKeiei`）・`lib/keiei-gate.js`・`lib/mfa.js`（`requireMfaStrict`） |
+| ③ | `/keiei` の owner 専用権限（画面・API・DB） | 完了 | `lib/gw.js`（`canKeiei`）・`lib/keiei-gate.js`（owner だけ。二段階認証は要らない。2026-10-01 に必須→任意へ。`docs/mfa-optional.md`） |
 | ④ | ヘッダー「経営」（データ駆動のツール切替） | 完了 | `js/layout.js`（`TOOLS`） |
 | ⑤⑥ | `/keiei` の基本画面。経費・会計を接続 | 完了（売上・粗利・入金・残高は「データ未連携」） | `keiei/index.html`・`api/keiei/index.js` |
 | ⑦ | 入社準備6ステップ | 完了 | `lib/onboard-six.js` |
@@ -45,7 +45,7 @@ Phase 0 の記述のうち、権限・給与・ヘッダーに関するものは
 | HR | `owner` or `manager` or `hr` or `recruiter` |
 | Sales | `owner` or `manager` or `sales` |
 | Office | `owner` or `manager` or `finance`（画面はまだ無いので、ヘッダーに出さない） |
-| 経営 | `owner` のみ。さらに二段階認証（aal2）が**いつでも**必要 |
+| 経営 | `owner` のみ。二段階認証は要らない（任意のセキュリティ設定。2026-10-01 の方針変更） |
 
 判定は `lib/gw.js` の1か所。ヘッダー・画面の入口・API・DB の RLS が同じ条件を使い、`test/accessparity.mjs` が食い違いを検出する。
 owner は HR・Sales・Office から締め出されない。ほかのロールに、owner の閲覧権限は引き継がれない。

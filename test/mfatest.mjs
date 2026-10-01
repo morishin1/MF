@@ -306,6 +306,33 @@ await ok("強制後でも、対象外の人は外せる", async () => {
   assert.equal(r.ok, true);
 });
 
+console.log("— /keiei（経営）は、二段階認証を見ない（ロール＝経営者だけ。2026-10-01 に必須→任意）—");
+
+{
+  const { readFileSync } = await import("node:fs");
+  const read = (f) => readFileSync(join(ROOT, f), "utf8");
+  /** コメントを除いたコード（// の行と、行末の空白つき //。文字列の中の http:// は消さない） */
+  const code = (f) => read(f).replace(/(^|[ \t])\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  await ok("経営の入口（lib/keiei-gate.js）は、ロール（canKeiei）だけで通す。二段階認証・aal を見ない", async () => {
+    const src = code("lib/keiei-gate.js");
+    assert.match(src, /canKeiei\(ctx\)/, "経営者の判定が無い");
+    assert.doesNotMatch(src, /requireMfa|lib\/mfa\.js|mfaState|aalOf|aal2|enrolledOf/, "経営の入口が MFA を見ている");
+  });
+  await ok("api/mfa.js のリセットは、aal2 を求める入口（requireMfaStrict）を呼ばない。owner の保護（owner_only・self_reset）は残る", async () => {
+    const src = code("api/mfa.js");
+    assert.doesNotMatch(src, /requireMfaStrict|aal2/, "api/mfa.js が aal2 を要求している");
+    assert.match(src, /guardOwnerTarget/);
+    assert.match(src, /self_reset/);
+  });
+  await ok("経営の画面・API に、「二段階認証が必要です」「未登録」の警告・案内が残っていない", async () => {
+    for (const f of ["keiei/index.html", "api/keiei/index.js", "lib/keiei-hub.js", "lib/keiei-hub-read.js"]) {
+      assert.doesNotMatch(code(f), /mfa_missing|mfaUnknown|mfaPolicy|mfaBox|二段階認証が必要です|二段階認証が未登録/, `${f} に、MFA 必須の名残がある`);
+    }
+    assert.doesNotMatch(code("keiei/index.html"), /kei-pill warn">未登録|mfa_required/, "経営画面が、未登録を警告にしている");
+    assert.doesNotMatch(code("api/keiei/index.js"), /ENFORCE_FROM|ENROLL_UNTIL/, "経営の API が強制日を見ている");
+  });
+}
+
 console.log("— 出入りが記録に残るか —");
 
 await ok("登録・解除・リセット・再登録は、すべて記録する", async () => {

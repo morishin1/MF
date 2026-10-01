@@ -1,11 +1,11 @@
-// 経営（/api/keiei）：経営者だけ・二段階認証・「データ未連携」を0にしない・集計の正しさ。
+// 経営（/api/keiei）：経営者だけ（二段階認証は要らない）・「データ未連携」を0にしない・集計の正しさ。
 //
 // ■ 何を守るテストか
 //
 //   1. 経営者（owner）だけが開ける。会計の管理者・人事・責任者・採用担当・経理・IT・営業・
 //      社労士・一般メンバーは 403（ヘッダー・画面・API・DB のうち、API の入口）
-//   2. 二段階認証（aal2）が済んでいない経営者も、開けない。強制日（2026-10-01）を待たない
-//   3. 権限のない人には、二段階認証の案内より先に断る（登録を促さない）
+//   2. 二段階認証（aal2）は要らない。経営者なら、通常ログイン（aal1）だけで開ける（2026-10-01 の方針変更。二段階認証は任意）
+//   3. 権限のない人は、二段階認証の有無に関わらず 403
 //   4. 取れないもの（売上・粗利・入金・キャッシュ残高など）は「データ未連携」。value を持たず、0 にしない
 //   5. 取れるもの（経費・請求進捗・契約更新・在籍・成約件数）は正確に数える。人件費は「暫定」と明示
 //   6. 元データの表が未作成でも、落とさない。その項目だけ「データ未連携」になり、0 にはならない
@@ -191,7 +191,7 @@ await ok("経営者以外は、すべて 403。データは一切返らない", 
       setup(); who = c;
       const r = await call(view);
       assert.equal(r.statusCode, 403, `${label} / ${view}`);
-      assert.equal(r.body.error, "forbidden", `${label} / ${view}: 二段階認証の案内ではなく、権限で断る`);
+      assert.equal(r.body.error, "forbidden", `${label} / ${view}: 権限で断る`);
       assert.ok(!JSON.stringify(r.body).includes("300000"), "給与が漏れていない");
     }
   }
@@ -210,35 +210,48 @@ await ok("GET 以外は 405。知らない view は 400", async () => {
   assert.equal(r.body.error, "invalid_view");
 });
 
-console.log("\n=== 二段階認証（強制日を待たない） ===\n");
+console.log("\n=== 二段階認証は要らない（任意のセキュリティ設定） ===\n");
 
-await ok("経営者でも、二段階認証（aal2）が済んでいなければ開けない。未登録なら登録へ案内する", async () => {
+await ok("経営者なら、二段階認証が未登録で、パスワードだけ（aal1）でも開ける。mfa_required は返らない", async () => {
   setup(); userFactors = [];
-  const r = await call("dashboard", { aal: "aal1" });
-  assert.equal(r.statusCode, 403);
-  assert.equal(r.body.error, "mfa_required");
-  assert.equal(r.body.enrolled, false);
-  assert.match(r.body.hint, /登録/);
-  assert.ok(!JSON.stringify(r.body).includes("cards"));
+  for (const view of ["hub", "dashboard", "payroll", "security", "onboarding"]) {
+    const r = await call(view, { aal: "aal1" });
+    assert.equal(r.statusCode, 200, `${view}: 経営者は、通常ログイン（aal1）だけで入れる`);
+    assert.notEqual(r.body.error, "mfa_required");
+  }
 });
 
-await ok("登録済みで今回 aal1（6桁を確かめていない）なら、6桁の確認へ案内する", async () => {
+await ok("登録済みで今回 aal1（6桁を確かめていない）でも、経営者なら開ける", async () => {
   setup();
   const r = await call("payroll", { aal: "aal1" });
-  assert.equal(r.statusCode, 403);
-  assert.equal(r.body.enrolled, true);
-  assert.match(r.body.hint, /6桁/);
+  assert.equal(r.statusCode, 200);
+  assert.ok(!("enrolled" in r.body) || r.body.error !== "mfa_required");
 });
 
-await ok("強制日より前でも要る（requireMfa と違い、日付で緩めない）", async () => {
-  const M = await import(atRoot("lib/mfa.js"));
-  assert.ok(M.todayJst() < M.ENFORCE_FROM || true);
+await ok("トークンから aal が読めなくても（aal なし）、経営者なら開ける", async () => {
   setup();
-  process.env.MFA_ENFORCE_FROM = "2999-01-01";
-  try {
-    const r = await call("dashboard", { aal: "aal1" });
-    assert.equal(r.statusCode, 403, "強制日が遠い先でも、経営は止める");
-  } finally { delete process.env.MFA_ENFORCE_FROM; }
+  const r = await call("dashboard", { aal: undefined });
+  assert.equal(r.statusCode, 200);
+});
+
+await ok("2026-10-01 以降のMFA強制もない（強制日をどう変えても、経営は止まらない）", async () => {
+  setup(); userFactors = [];
+  for (const d of ["2000-01-01", "2026-10-01", "2999-01-01"]) {
+    process.env.MFA_ENFORCE_FROM = d;
+    try {
+      const r = await call("dashboard", { aal: "aal1" });
+      assert.equal(r.statusCode, 200, `MFA_ENFORCE_FROM=${d}`);
+    } finally { delete process.env.MFA_ENFORCE_FROM; }
+  }
+});
+
+await ok("権限（経営者）は、二段階認証の有無に関わらない。経営者でない人は、aal2 でも 403", async () => {
+  setup(); who = ctxOf(["hr"]);
+  for (const aal of ["aal1", "aal2"]) {
+    const r = await call("payroll", { aal });
+    assert.equal(r.statusCode, 403, aal);
+    assert.equal(r.body.error, "forbidden");
+  }
 });
 
 console.log("\n=== 「データ未連携」を0にしない ===\n");
