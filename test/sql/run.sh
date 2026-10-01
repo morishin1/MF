@@ -45,9 +45,37 @@ run "$ROOT/db/100_hr_pay.sql"       # べき等（2回流しても、行が増�
 # シナリオは、それぞれ別の DB の上で流す（お互いの行に影響されない）
 OUT=""
 export SCEN_ROOT="$ROOT"   # 101 のシナリオが、db/101 を読むために使う
-for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices check_pay_reconcile check_exposure; do
+for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices check_onboarding_ready check_pay_reconcile check_exposure; do
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
+done
+# 入社管理＋通知書の最小の流し方（docs/onboarding-db-prereq.md）。土台の上に、8つを順に流すと必須の不足が 0 になり、
+# 1つ抜くと、必ず必須の不足が出る（1つも余計ではない）。SQL Editor と同じく、ファイルごとに1つのトランザクション・エラーで止まる
+CHAIN="006_storage_policies 008_onboarding 009_tasks 012_hr_files 037_onboard_form 039_consent_and_drive 066_hr_flow 110_labor_notices"
+CHK_SQL="$(sed 's/;[[:space:]]*$//' "$ROOT/db/check_onboarding_ready.sql")"
+for drop in none $CHAIN; do
+  DBN="kp_chain_$drop"
+  "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "$DBN"
+  "${PSQL[@]}" -d "$DBN" -f "$ROOT/test/sql/onboarding_storage_stub.sql" >/dev/null 2>&1
+  "${PSQL[@]}" -d "$DBN" -f "$ROOT/test/sql/onboarding_base.sql" >/dev/null 2>&1
+  # データの行（owner・hr がいる）は、流し方とは別のこと。1人入れておく
+  "${PSQL[@]}" -d "$DBN" >/dev/null 2>&1 <<'SQLX'
+insert into public.tenants(id, name) values ('99999999-9999-9999-9999-999999999999', 'T9');
+insert into auth.users(id, email) values ('a9a00001-0000-0000-0000-000000000000', 'owner9@x');
+insert into public.gw_employees(id, tenant_id, user_id, display_name, email, status) values ('a9a00001-0000-0000-0000-000000000000', '99999999-9999-9999-9999-999999999999', 'a9a00001-0000-0000-0000-000000000000', 'owner9', 'owner9@x', 'active');
+insert into public.gw_role_grants(tenant_id, employee_id, role) values ('99999999-9999-9999-9999-999999999999', 'a9a00001-0000-0000-0000-000000000000', 'owner');
+SQLX
+  for f in $CHAIN; do
+    [ "$f" = "$drop" ] && continue
+    "${PSQL[@]}" -d "$DBN" -v ON_ERROR_STOP=1 --single-transaction -f "$ROOT/db/$f.sql" >/dev/null 2>&1 || true
+  done
+  "${PSQL[@]}" -d "$DBN" -c "grant all on all tables in schema public to authenticated, service_role;" >/dev/null 2>&1
+  N="$("${PSQL[@]}" -d "$DBN" -At -c "select count(*) from ($CHK_SQL) t where \"判定\" = '不足'")"
+  if [ "$drop" = "none" ]; then
+    [ "$N" = "0" ] && OUT+="NOTICE:  PASS chain: the 8 files in order leave no 必須 missing"$'\n' || OUT+="NOTICE:  FAIL chain: the 8 files in order leave $N 必須 missing"$'\n'
+  else
+    [ "${N:-0}" -ge 1 ] && OUT+="NOTICE:  PASS chain: without $drop, 必須 is missing ($N)"$'\n' || OUT+="NOTICE:  FAIL chain: without $drop, nothing is reported missing"$'\n'
+  fi
 done
 # 緊急復旧の手順（docs/keiei-owner-recovery.md）の SQL を、文書のまま流して確かめる
 export SCEN_BLOCKS="$TMP/recovery_blocks.sql"

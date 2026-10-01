@@ -131,7 +131,14 @@ DB の RLS（`gw_has_role`）の、両方で同じ条件。`canManageHr`（会�
 
 ## 7. 本番への反映
 
-**まだ何も適用していない。** 順番は次のとおり。
+**`db/110` は本番適用済み。アプリのコードは未デプロイ（#58 までを main にマージした。デプロイは別）。**
+
+> **先に、入社管理に要る DB を確かめる。** `db/110` が入っていても、`gw_procedures`（入社手続き）ほかが無いと、
+> 入社管理の画面（`GET /api/hr` が 503）も、本人の `/onboarding/` の通知書も、**使えない**。
+> `db/check_onboarding_ready.sql`（読み取り専用）を Run して、「必須の不足」を見る。不足したときの最小の流し方は **`docs/onboarding-db-prereq.md`**。
+> （前の版の `check_labor_notice.sql` は、`gw_procedures` を「任意」としていた。誤りだったので、NG に直した。）
+
+以下は、110 を最初に流すときの順番（記録として残す）。
 
 1. **読み取り専用の確認**: `db/check_labor_notice.sql` を Supabase の SQL Editor に貼って Run。
    何も書き換えない。前提（`tenants`・`gw_employees`・`gw_has_role` と `gw_role_grants`・`gw_activity_log`・Storage の非公開バケット `hr`・`gw_sign_requests`・`gw_doc_orders` ほか）を、

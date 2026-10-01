@@ -15,6 +15,9 @@
 \set c110 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/110_labor_notices.sql"`
 \set chk `sed 's/;[[:space:]]*$//' "$SCEN_ROOT/db/check_labor_notice.sql"`
 
+-- 入社手続き（db/008）。通知書は、本人の /onboarding/ に出すのに、入社手続きの行が要る。前提チェックは、これが無いと NG と言う（行 40）
+\set p008 `echo "$SCEN_ROOT/db/008_onboarding.sql"`
+\i :p008
 create or replace function pg_temp.expect(label text, got int, want int) returns void language plpgsql as $$
 begin raise notice '% : %', case when got = want then 'PASS' else 'FAIL' end || ' ' || label, 'got ' || got || ' / want ' || want; end $$;
 create or replace function pg_temp.try(label text, stmt text, expect text) returns void language plpgsql as $$
@@ -73,6 +76,11 @@ insert into public.memberships(tenant_id,user_id,role) values
 
 -- 前提チェック（読み取り専用）。適用前: 必須の NG は 0、この SQL の分は「未適用」4 件
 select pg_temp.expect('K1 check sql: no NG before applying 110', (select count(*)::int from (:chk) t where "結果" = 'NG'), 0);
+begin;
+  drop table public.gw_procedures cascade;
+  select pg_temp.expect('K1b without gw_procedures the check says NG (row 40: the employee cannot see the notice without a procedure)', (select count(*)::int from (:chk) t where "結果" = 'NG'), 1);
+rollback;
+select pg_temp.expect('K1c ...and the stage column (070) is only optional', (select count(*)::int from (:chk) t where "結果" = '任意（無い）' and "確認する対象" like 'gw_procedures.stage%'), 1);
 select pg_temp.expect('K2 check sql: 110 objects are reported as not applied yet (4 rows)', (select count(*)::int from (:chk) t where "結果" = '未適用'), 4);
 
 -- 適用（1回目）と、べき等（2回目）

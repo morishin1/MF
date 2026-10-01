@@ -14,6 +14,7 @@
 --   OK   … ある（要る・使う）
 --   NG   … 無い。通知書の機能が動かない。先に、対応するファイルを流す
 --   任意  … 無いと、その分の機能（電子署名を優先する判定など）だけが止まる。通知書そのものは動く
+--   ※ 入社管理（admin-hr.html）と通知書の一連の動きに要る表・列・制約の全体は、db/check_onboarding_ready.sql が見る（こちらは通知書の分だけ）
 --   済み  … db/110_labor_notices.sql の分。まだなら「未適用」（これから流す）
 --
 -- ■ 通知書を見られる人（給与・個人情報を含むため）
@@ -60,11 +61,15 @@ checks(ord, kind, target, file_hint, ok, detail) as (
      (select count(*) from col where tbl = 'gw_doc_orders' and c in ('approved_by', 'advisor_note', 'conditions_edited_at')) = 3, null),
   (35, '任意', 'gw_doc_orders.override_reason / override_by / override_at（列）', 'db/087_hr_offer_contract_check.sql',
      (select count(*) from col where tbl = 'gw_doc_orders' and c in ('override_reason', 'override_by', 'override_at')) = 3, null),
-  -- ---- 入社手続き・本人の画面 ----
-  (40, '任意', 'gw_procedures（表）と kind・stage・target_on の列。入社手続き', 'db/008_onboarding.sql・db/070_onboarding_stage.sql',
+  -- ---- 入社手続き（本人の /onboarding/ に通知書を出すのに、要る）----
+  -- 手続きの行が無い人は、本人の画面で「入社手続きの無い人」として扱われ、通知書のカードが出ない（api/onboarding/start.js の hasProcedure）
+  (40, 'NG', 'gw_procedures（表）と employee_id・kind・status・target_on の列。入社手続き', 'db/008_onboarding.sql',
      to_regclass('public.gw_procedures') is not null
-       and (select count(*) from col where tbl = 'gw_procedures' and c in ('kind', 'stage', 'target_on')) = 3,
-     '無いと、入社手続きの段階（STEP2 の完了判定）が動きません'),
+       and (select count(*) from col where tbl = 'gw_procedures' and c in ('employee_id', 'kind', 'status', 'target_on')) = 4,
+     '無いと、本人の /onboarding/ に通知書が出ません。入社管理（admin-hr.html）に要る表・列は、db/check_onboarding_ready.sql で全体を確かめてください'),
+  (42, '任意', 'gw_procedures.stage・stage_at（列）。段階の写し', 'db/070_onboarding_stage.sql',
+     (select count(*) from col where tbl = 'gw_procedures' and c in ('stage', 'stage_at')) = 2,
+     '無くても、通知書は動きます。段階が進んだときの、次の担当者への知らせだけが止まります（画面の段階は、事実から計算するので正しく出ます）'),
   (41, '任意', 'gw_onboarding_guides（表）。入社案内（/onboarding/ の STEP1）', 'db/104_onboarding_guide.sql（PR #39 の系統）',
      to_regclass('public.gw_onboarding_guides') is not null, '無くても、通知書は動きます（STEP1 だけ「データ未連携」）'),
   -- ---- この SQL の分 ----
