@@ -14,6 +14,8 @@ const atRoot = (p) => _join(ROOT, p);
 
 const meAdmin = {
   email: "zimu@8grp.co.jp", appRole: "admin", isAdmin: true, shows: {},
+  // admin-members.html の入口は access.hr で見る（P0修正）
+  access: { recruit: false, sell: false, office: false, keiei: false, hr: true },
   gw: { employee: { id: "emp-0", display_name: "事務", status: "active" },
         roles: ["hr"], isAdmin: true, tenantId: "t1", stage: null },
 };
