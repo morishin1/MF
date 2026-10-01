@@ -18,13 +18,14 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // 道具であってテストではないもの
-const SKIP = new Set(["run.mjs", "_browser.mjs", "_img.mjs", "_mfa.mjs", "tcdata.mjs"]);
+const SKIP = new Set(["run.mjs", "_browser.mjs", "_img.mjs", "_mfa.mjs", "_noticeharness.mjs", "tcdata.mjs"]);
 
 const groups = {
   // ブラウザの要らないもの。ハンドラを直に呼ぶものと、静的な検査
   node: { dir: HERE, node: ["--experimental-test-module-mocks"], timeout: 300 },
   // 実際の画面を開くもの。先に静的サーバを上げておくこと
-  ui: { dir: join(HERE, "ui"), node: [], timeout: 400 },
+  // （本物のハンドラを画面につなぐテストが、偽の認証・保存先を差し込むので、同じ指定を付ける）
+  ui: { dir: join(HERE, "ui"), node: ["--experimental-test-module-mocks"], timeout: 400 },
   // GitHub Actions の手順を、その場で走らせるもの。Go が要る
   wf: { dir: join(HERE, "wf"), node: [], timeout: 900 },
 };

@@ -78,6 +78,15 @@ console.log("— 忙しい日（PC）—");
   const keys = await today.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.key));
   check(["expense_approval", "request_approval", "ceo_decision", "onboarding_company", "blocker_owner", "renewal_soon", "closing"].every((k) => keys.includes(k)),
     `①に、承認・社長判断・会社の対応待ち・経営判断待ち・契約期限・月次締めが出る（いま ${keys.join()}）`);
+  // 労働条件通知書は、件数と状況だけ。アップロード・公開の操作は、入社管理（admin-hr.html）に置く
+  check(keys.includes("notice_unpublished") && keys.includes("notice_unconfirmed"), `①に、労働条件通知書の「未公開」「本人未確認」が出る（いま ${keys.join()}）`);
+  const nu = today.locator('[data-key="notice_unpublished"]'), nc = today.locator('[data-key="notice_unconfirmed"]');
+  check((await nu.innerText()).includes("労働条件通知書 未公開") && (await nu.innerText()).includes("1人"), "「労働条件通知書 未公開」1人");
+  check((await nc.innerText()).includes("本人未確認") && (await nc.innerText()).includes("2人"), "「本人未確認」2人");
+  check((await nu.locator("a").getAttribute("href")) === "/admin-hr.html" && (await nc.locator("a").getAttribute("href")) === "/admin-hr.html",
+    "押す先は入社管理（/keiei の中でアップロードはしない）");
+  check((await nu.innerText()).includes("入社管理を開く"), "押す先の名前が「入社管理を開く」");
+  check(await today.locator('input[type="file"], button:has-text("アップロード")').count() === 0, "/keiei にはアップロードの操作が無い");
   const sevs = await today.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
   const rank = { high: 0, mid: 1, low: 2 };
   check(sevs.every((s, i) => i === 0 || rank[s] >= rank[sevs[i - 1]]), `①は重要度の高い順（${sevs.join(",")}）`);

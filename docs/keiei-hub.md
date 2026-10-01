@@ -45,9 +45,14 @@
 | 稟議の承認（代表）`request_approval` | 重要 | 稟議・休暇申請の `pending_owner` の件数 | `gw_requests` | `/admin-requests.html` |
 | 採用の社長判断 `ceo_decision` | 重要 | 応募者の状態が `ceo_decision_pending` | `gw_hr_applicants`（id・段階・状態・期限だけを選ぶ） | `/hr/ceo-review.html` |
 | 入社準備（会社の対応）`onboarding_company` | 重要 | 6ステップの判定で「会社の対応待ち」の人数 | 既存の入社準備の判定（`api/keiei` の `onboarding()`＝`lib/onboard-six.js`） | `#onboarding`（/keiei 内） |
+| 労働条件通知書 未公開 `notice_unpublished` | 注意 | 入社準備が未完了の人のうち、本人に公開した通知書が無い人数（電子署名の流れの人は数えない） | `gw_labor_notices`（版・公開・確認の列だけ。ファイル名・置き場所は読まない） | `/admin-hr.html`（入社管理。アップロード・公開はそこで行う） |
+| 労働条件通知書 本人未確認 `notice_unconfirmed` | 注意 | 公開済みで、本人がまだ「確認しました」を押していない人数 | 同上 | `/admin-hr.html` |
 | 経営判断待ちの止まっている仕事 `blocker_owner` | 重要 | 止まっている仕事のうち、経営者へ上がっている（`escalation_level = 2`）もの | `gw_blockers`（会社の社員のものだけ） | `/admin-nippo.html` |
 | 契約更新の期限が近い `renewal_soon` | 重要 | 現場契約の終了日が **14日以内**で、更新済み・終了予定でないもの | `gw_site_contracts` | `/admin-members.html` |
 | 前月の月次締め `closing` | 5日まで「注意」、6日以降「重要」 | 前月の `gw_month_closings` が `closed` でない | `gw_month_closings` | `/admin-closing.html` |
+
+通知書の2項目は**件数と状況だけ**。アップロード・公開・差し替えの操作は `/keiei` に置かず、人事も使える入社管理に置く（[`onboarding-labor-notice.md`](./onboarding-labor-notice.md)）。
+`gw_labor_notices` が無い（`db/110` が未適用）ときは、0件とは出さず、未読込に「労働条件通知書」と出す。
 
 ### ② 人・組織
 

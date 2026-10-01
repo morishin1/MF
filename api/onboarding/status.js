@@ -30,6 +30,8 @@ import { userClient } from "../../lib/supabase.js";
 import { resolveViewer, roleLabel } from "../../lib/onboard-viewer.js";
 import { findProcedure } from "../../lib/onboard-kit.js";
 import { computeSteps } from "../../lib/onboard-steps.js";
+import { loadNoticeRows } from "../../lib/labor-notice-db.js";
+import { noticeFact } from "../../lib/labor-notice.js";
 import { orientationState } from "../../lib/orientation.js";
 import { consentState } from "../../lib/consent-docs.js";
 import { missingFields } from "../../lib/onboard-form.js";
@@ -139,8 +141,12 @@ export default async function handler(req, res) {
     .filter((i) => i.owner === "hr" && i.category !== "document")
     .map((i) => ({ id: i.id, title: i.title, required: i.required !== false, status: i.status }));
 
+  // 労働条件通知書（db/110）。表が無ければ、無いものとして進む。電子署名の依頼があれば、computeSteps が使わない
+  const nr = await loadNoticeRows(sb, ctx.tenantId, employeeId).catch(() => ({ rows: [], linked: false }));
+  const notice = nr.linked ? noticeFact(nr.rows) : null;
+
   const steps = computeSteps({
-    contracts, consents, orientation,
+    contracts, consents, orientation, notice,
     profileStatus: pf?.status || null,
     missing: pf ? missingFields(pf) : [],
     documents: documents.map((d) => ({ ...d, collect: true })),

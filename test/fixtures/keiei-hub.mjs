@@ -30,7 +30,7 @@ export const busyFacts = () => ({
     { name: "佐藤 花子", joinOn: plus(3), daysToStart: 3, complete: false },
     { name: "鈴木 一郎", joinOn: plus(20), daysToStart: 20, complete: false },
     { name: "高橋 次郎", joinOn: plus(-10), daysToStart: -10, complete: true },
-  ] },
+  ], notice: { unpublished: 1, unconfirmed: 2 } },
   blockers: [{ escalation_level: 2, blocked_since: plus(-6) }, { escalation_level: 0, blocked_since: plus(-9) }, { escalation_level: 1, blocked_since: plus(-5) }],
   renewals: [{ period_to: plus(9), renewal_status: "pending" }, { period_to: plus(33), renewal_status: "confirmed" }],
   closing: { closed: false },
