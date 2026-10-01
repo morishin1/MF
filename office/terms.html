@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>契約条件 - EIGHT OFFICE</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260929d">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    [hidden] { display:none !important; }   /* display を指定した部品でも、hidden で隠れるように */
+    .tm-back { display:inline-flex; align-items:center; gap:3px; font-size:12px; color:#6b7080; text-decoration:none; margin-bottom:6px; }
+    .tm-back .material-symbols-outlined { font-size:16px; }
+    .tm-grid { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:14px; align-items:start; }
+    .tm-card { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+    .tm-card .hd { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .tm-card h3 { font-size:14px; margin:0 0 3px; color:#1b2440; }
+    .tm-card .pd { font-size:12px; color:#6b7080; }
+    .tm-card dl { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:12.5px; margin:8px 0 0; }
+    .tm-card dt { color:#6b7080; } .tm-card dd { margin:0; color:#1b2440; font-weight:600; }
+    .tm-form { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
+    .tm-form h2 { font-size:15px; margin:0 0 10px; color:#1b2440; }
+    .tm-form fieldset { border:none; border-top:1px solid #efefeb; margin:12px 0 0; padding:10px 0 0; min-width:0; }
+    .tm-form legend { font-size:12px; font-weight:700; color:#6b7080; padding:0 6px 0 0; }
+    .tm-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px; }
+    .tm-form label.f { display:block; font-size:12px; color:#4a5068; font-weight:700; }
+    .tm-form label.f input, .tm-form label.f select { display:block; width:100%; box-sizing:border-box; margin:3px 0 0; font:inherit; font-size:13px; padding:7px 8px; border:1px solid #c7cad4; border-radius:7px; background:#fff; font-weight:400; }
+    .tm-form .hint { font-size:11.5px; color:#6b7080; margin:2px 0 0; font-weight:400; }
+    .tm-form label.chk { display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:#1b2440; }
+    .tm-form label.chk input { width:auto; margin-top:3px; }
+    .tm-err { color:#b3261e; font-size:12.5px; margin:8px 0 0; }
+    .tm-err ul { margin:0; padding-left:18px; }
+    .tm-note { background:#fbf1d6; color:#5c4300; border-radius:8px; padding:8px 10px; font-size:12px; margin-top:8px; }
+    @media (max-width: 900px) { .tm-grid { grid-template-columns:1fr; } .tm-row { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="tm-back" id="back" href="/office/"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>戻る</a>
+  <h1 class="of-title">契約条件</h1>
+  <p class="of-sub" id="sub"></p>
+  <div id="banner" aria-live="polite"></div>
+
+  <div class="tm-grid">
+    <div>
+      <div class="of-sec-h">登録済みの条件 <small>期間ごと。月の途中で条件が変わるときは、期間が重ならないように分けて登録します</small></div>
+      <div id="list"></div>
+    </div>
+    <form class="tm-form" id="form" novalidate autocomplete="off">
+      <h2 id="formTitle">条件を登録する</h2>
+
+      <div class="tm-row">
+        <label class="f">有効開始日<input type="date" id="validFrom" required></label>
+        <label class="f">有効終了日（空なら期限なし）<input type="date" id="validTo"></label>
+      </div>
+      <div class="tm-row">
+        <label class="f">単価の種類
+          <select id="pricingType"><option value="">選んでください</option><option value="monthly">月額</option><option value="hourly">時給</option><option value="daily">日給</option></select></label>
+        <div></div>
+      </div>
+
+      <fieldset><legend>単価（円）</legend>
+        <div class="tm-row">
+          <label class="f">売上単価（客先への請求）<input type="text" id="salesUnitPrice" inputmode="decimal" placeholder="700000"><span class="hint">月額なら月の額、時給なら1時間あたり</span></label>
+          <label class="f">仕入単価（BP・外注への支払）<input type="text" id="purchaseUnitPrice" inputmode="decimal" placeholder="600000"><span class="hint">売上の精算には使いません</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="fsRange"><legend>精算（月額のとき）</legend>
+        <div class="tm-row">
+          <label class="f">精算の方法
+            <select id="settlementMode"><option value="">選んでください</option><option value="range">精算幅あり</option><option value="fixed">精算なし（固定）</option></select></label>
+          <div></div>
+        </div>
+        <div class="tm-row" id="rowRange">
+          <label class="f">精算幅の下限（時間）<input type="text" id="settleMinHours" inputmode="decimal" placeholder="140"></label>
+          <label class="f">精算幅の上限（時間）<input type="text" id="settleMaxHours" inputmode="decimal" placeholder="180"></label>
+        </div>
+        <div class="tm-row" id="rowRates">
+          <label class="f">超過単価（円／時間）<input type="text" id="overRatePerHour" inputmode="decimal" placeholder="4000"><span class="hint">超過分を精算しないときは 0。空だと、金額を出しません</span></label>
+          <label class="f">控除単価（円／時間）<input type="text" id="underRatePerHour" inputmode="decimal" placeholder="3500"><span class="hint">控除しないときは 0。空だと、金額を出しません</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>時間の丸め・金額の端数</legend>
+        <div class="tm-row">
+          <label class="f">精算の単位（分）
+            <select id="settleUnitMinutes"><option value="">丸めない</option><option value="5">5分</option><option value="10">10分</option><option value="15">15分</option><option value="30">30分</option><option value="60">60分</option></select></label>
+          <label class="f">丸めの方向
+            <select id="roundingMode"><option value="">—</option><option value="floor">切捨て</option><option value="ceil">切上げ</option><option value="round">四捨五入</option></select></label>
+        </div>
+        <div class="tm-row">
+          <label class="f">丸める単位
+            <select id="roundingScope"><option value="">—</option><option value="day">日ごと</option><option value="month">月の合計</option></select></label>
+          <label class="f">円未満の丸め
+            <select id="amountRounding"><option value="">端数が出たら金額を出さない</option><option value="floor">切捨て</option><option value="ceil">切上げ</option><option value="round">四捨五入</option></select></label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>その他</legend>
+        <label class="chk"><input type="checkbox" id="prorate"><span>月の一部だけ有効な条件は、日割りにする<br><span class="hint">日割りの計算は、まだ自動では行いません（確認のお知らせが出ます）</span></span></label>
+      </fieldset>
+
+      <div class="tm-err" id="err" role="alert"></div>
+      <div class="of-actions" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        <button type="submit" class="of-btn" id="save"><span class="material-symbols-outlined" aria-hidden="true">save</span>保存する</button>
+        <button type="button" class="of-btn sec" id="cancel" hidden>編集をやめる</button>
+      </div>
+      <div class="tm-note">この画面の単価は、既存の契約の「単価」（意味が未確認のもの）とは別です。売上単価・仕入単価として、新しく入れてください。</div>
+    </form>
+  </div>
+</div>
+
+<script src="../js/api-client.js?v=20260929d"></script>
+<script src="../js/office-layout.js?v=20260929d"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const O = window.OfficeLayout;
+  const esc = O.esc;
+  const qs = new URLSearchParams(location.search);
+  const CONTRACT = qs.get("contract") || "";
+  const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/.test(qs.get("month") || "") ? qs.get("month") : "";
+  const state = { terms: [], editing: null };
+  const FIELDS = ["validFrom", "validTo", "pricingType", "salesUnitPrice", "purchaseUnitPrice", "settlementMode", "settleMinHours", "settleMaxHours",
+    "overRatePerHour", "underRatePerHour", "settleUnitMinutes", "roundingMode", "roundingScope", "amountRounding"];
+  const ROUND = { floor: "切捨て", ceil: "切上げ", round: "四捨五入" };
+
+  O.init({ active: "monthly" }).then((ctx) => {
+    if (!ctx) return;
+    if (!CONTRACT) { banner("err", "対象の現場契約が指定されていません。"); el("form").hidden = true; return; }
+    el("back").href = MONTH ? `timesheet.html?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}` : "/office/";
+    wire(); load(); syncType();
+  });
+
+  function banner(kind, text) {
+    el("banner").innerHTML = text ? `<div class="of-banner ${kind === "err" ? "err" : ""}" role="${kind === "err" ? "alert" : "status"}"><span class="material-symbols-outlined" aria-hidden="true">${kind === "err" ? "error" : "info"}</span><div>${esc(text)}</div></div>` : "";
+  }
+
+  async function load() {
+    try {
+      const d = await API.api(`/api/office/terms?contract=${encodeURIComponent(CONTRACT)}`);
+      state.terms = d.terms;
+      el("sub").textContent = `${d.contract.employeeName}さん ／ ${d.contract.siteCompany}`;
+      renderList();
+    } catch (e) { banner("err", "取得に失敗しました：" + (e.hint || e.detail || e.message)); }
+  }
+
+  const yen = (v) => (v == null ? "未設定" : `${Number(v).toLocaleString("ja-JP")}円`);
+  const h = (m) => String(Math.round((m / 60) * 100) / 100);
+  function renderList() {
+    el("list").innerHTML = state.terms.length ? state.terms.map((t) => `
+      <div class="tm-card" data-id="${esc(t.id)}">
+        <div class="hd"><div><h3>${esc(t.description)}</h3><div class="pd">${esc(t.validFrom.replaceAll("-", "/"))} 〜 ${esc(t.validTo ? t.validTo.replaceAll("-", "/") : "期限なし")}</div></div>
+          <div style="display:flex;gap:6px;"><button type="button" class="of-btn sec" data-edit="${esc(t.id)}">編集</button><button type="button" class="of-btn sec" data-del="${esc(t.id)}">削除</button></div></div>
+        <dl><dt>売上単価</dt><dd>${esc(yen(t.salesUnitPrice))}</dd><dt>仕入単価</dt><dd>${esc(yen(t.purchaseUnitPrice))}</dd>
+          ${t.pricingType === "monthly" && t.settlementMode === "range" ? `<dt>超過／控除</dt><dd>${esc(t.overRatePerHour == null ? "未設定" : yen(t.overRatePerHour))} ／ ${esc(t.underRatePerHour == null ? "未設定" : yen(t.underRatePerHour))}（1時間）</dd>` : ""}
+          ${t.settleUnitMinutes ? `<dt>時間の丸め</dt><dd>${t.settleUnitMinutes}分・${esc(ROUND[t.roundingMode] || "")}・${t.roundingScope === "month" ? "月の合計" : "日ごと"}</dd>` : ""}
+          <dt>円未満</dt><dd>${esc(ROUND[t.amountRounding] || "未設定")}</dd></dl>
+      </div>`).join("")
+      : `<div class="of-empty">まだ条件が登録されていません。右のフォームから登録してください。</div>`;
+  }
+
+  // 単価の種類に合わせて、要る欄だけを出す
+  function syncType() {
+    const t = el("pricingType").value;
+    el("fsRange").hidden = t !== "monthly";
+    const range = t === "monthly" && el("settlementMode").value === "range";
+    el("rowRange").hidden = !range; el("rowRates").hidden = !range;
+  }
+
+  function wire() {
+    el("pricingType").onchange = syncType;
+    el("settlementMode").onchange = syncType;
+    el("form").onsubmit = (e) => { e.preventDefault(); save(); };
+    el("cancel").onclick = reset;
+    document.addEventListener("click", (e) => {
+      const ed = e.target.closest?.("[data-edit]"); if (ed) { edit(ed.dataset.edit); return; }
+      const dl = e.target.closest?.("[data-del]"); if (dl) remove(dl.dataset.del);
+    });
+  }
+
+  function edit(id) {
+    const t = state.terms.find((x) => x.id === id); if (!t) return;
+    state.editing = id;
+    const v = { ...t, settleMinHours: t.settleMinMinutes == null ? "" : h(t.settleMinMinutes), settleMaxHours: t.settleMaxMinutes == null ? "" : h(t.settleMaxMinutes) };
+    for (const f of FIELDS) el(f).value = v[f] == null ? "" : String(v[f]);
+    el("prorate").checked = !!t.prorate;
+    el("formTitle").textContent = "条件を直す";
+    el("cancel").hidden = false;
+    el("err").innerHTML = "";
+    syncType();
+    el("form").scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  function reset() {
+    state.editing = null;
+    for (const f of FIELDS) el(f).value = "";
+    el("prorate").checked = false;
+    el("formTitle").textContent = "条件を登録する";
+    el("cancel").hidden = true; el("err").innerHTML = "";
+    syncType();
+  }
+
+  async function save() {
+    const body = { siteContractId: CONTRACT, month: MONTH || undefined, prorate: el("prorate").checked };
+    for (const f of FIELDS) body[f] = el(f).value.trim();
+    if (state.editing) body.id = state.editing;
+    // 月額でない条件では、精算の項目を送らない（画面で隠しているものは、送らない）
+    if (body.pricingType !== "monthly") { body.settlementMode = ""; body.settleMinHours = ""; body.settleMaxHours = ""; }
+    if (body.settlementMode !== "range") { body.settleMinHours = ""; body.settleMaxHours = ""; body.overRatePerHour = ""; body.underRatePerHour = ""; }
+    el("save").disabled = true; el("err").innerHTML = "";
+    try {
+      await API.api("/api/office/terms", { method: "POST", body });
+      banner("ok", "保存しました。");
+      reset(); await load();
+    } catch (e) {
+      const errs = e.body?.errors;
+      el("err").innerHTML = errs ? `<ul>${errs.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>` : esc(e.hint || e.detail || e.message);
+    } finally { el("save").disabled = false; }
+  }
+
+  async function remove(id) {
+    const t = state.terms.find((x) => x.id === id); if (!t) return;
+    if (!confirm(`この条件を削除しますか？\n${t.description}（${t.validFrom}〜${t.validTo || "期限なし"}）\n\n確定済みの勤務表の稼働時間は変わりません。`)) return;
+    try {
+      await API.api(`/api/office/terms?id=${encodeURIComponent(id)}${MONTH ? `&month=${encodeURIComponent(MONTH)}` : ""}`, { method: "DELETE" });
+      if (state.editing === id) reset();
+      banner("ok", "削除しました。"); await load();
+    } catch (e) { banner("err", "削除できませんでした：" + (e.hint || e.detail || e.message)); }
+  }
+</script>
+
+</body>
+</html>

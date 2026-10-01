@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20260929b">
+  <link rel="stylesheet" href="../css/app.css?v=20260929d">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -73,9 +73,10 @@
 <div id="modal-root"></div>
 <div id="action-root"></div>
 
-<script src="../js/api-client.js?v=20260929b"></script>
-<script src="../js/layout.js?v=20260929b"></script>
-<script src="../js/hr-layout.js?v=20260929b"></script>
+<script src="../js/api-client.js?v=20260929d"></script>
+<script src="../js/layout.js?v=20260929d"></script>
+<script src="../js/hr-layout.js?v=20260929d"></script>
+<script src="../js/jst.js?v=20260929d"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -118,15 +119,14 @@
       : `<div class="hr-cv-empty">いまのところ対象はいません。</div>`;
   }
 
-  function fmtTime(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return `本日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
+  // 日本時間で「本日 16:15」（今日でなければ「2026/10/1 16:15」）。js/jst.js
+  function fmtTime(iso) { return JST.when(iso); }
 
   /** 1カード。出すのは判断に要る情報だけ（面談履歴全部・応募情報の細部は出さない） */
   function card(a, bucket) {
     const iv = a.ceoInterview;
+    // 予定中（実施前・キャンセルでない）の社長面談。予約済みなら「社長面談を設定」は出さない
+    const booked = iv && !iv.done && !iv.canceled && iv.scheduledAt ? iv : null;
     return `
       <div class="hr-cv-card">
         <div class="hd" onclick="openApplicantDetail('${esc(a.id)}')">
@@ -134,7 +134,7 @@
             <div class="nm">${esc(a.name)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:7px;">${esc(a.rank)}</span>` : ""}</div>
             <div class="jb">${esc(a.jobTitle)}</div>
           </div>
-          ${bucket === "today" && iv?.scheduledAt ? `<span class="tm">${esc(fmtTime(iv.scheduledAt))}</span>` : ""}
+          ${booked ? `<span class="tm">${esc(fmtTime(booked.scheduledAt))}</span>` : ""}
         </div>
         ${a.recommendNote ? `<div class="sec"><b>推薦理由</b>${esc(a.recommendNote)}</div>` : ""}
         ${a.goodPoints ? `<div class="sec"><b>良かった点</b>${esc(a.goodPoints)}</div>` : ""}
@@ -145,6 +145,9 @@
           ${bucket === "today" ? `
             ${iv?.meetingUrl ? `<a href="${esc(iv.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">面談を開く</a>` : ""}
             <button class="btn btn-primary btn-sm" onclick="conductCeoInterview('${esc(iv?.id || "")}', '${esc(a.id)}')">実施済みにする</button>
+          ` : bucket === "rec" && booked ? `
+            <span class="muted" style="font-size:12px;">社長面談 予定：${esc(fmtTime(booked.scheduledAt))}</span>
+            ${booked.meetingUrl ? `<a href="${esc(booked.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">面談を開く</a>` : ""}
           ` : bucket === "rec" ? `
             <button class="btn btn-primary btn-sm" onclick="openScheduleForm('${esc(a.id)}')">社長面談を設定</button>
           ` : `
@@ -184,7 +187,7 @@
     try {
       await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
         applicantId, kind: "ceo",
-        scheduledAt: when ? new Date(when).toISOString() : undefined,
+        scheduledAt: when ? JST.fromInput(when) : undefined,
         interviewerId: el("iv-who").value || undefined,
         meetingUrl: el("iv-url").value.trim() || undefined,
       }));
@@ -307,9 +310,7 @@
     return (timeline || []).filter((t) => !String(t.eventKey || "").startsWith("offer_"));
   }
 
-  function fmtDate(s) {
-    return s ? new Date(s).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-  }
+  function fmtDate(s) { return JST.when(s); }
 </script>
 
 </body>

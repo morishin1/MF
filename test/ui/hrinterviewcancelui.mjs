@@ -1,8 +1,8 @@
-// 採用HR：面談の「日時を変更」「面談をキャンセル」を、実際のブラウザで通す。
+// 採用HR：面談の「面談情報を編集」「面談をキャンセル」を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（採用HR応募者一覧・ドロワーUI改善指示書 §3・§4・§5）
 //
-//   1. 予定中の面談カードに「日時を変更」「面談をキャンセル」が出る
+//   1. 予定中の面談カードに「面談情報を編集」「面談をキャンセル」が出る
 //   2. どちらもモーダルで実行する。応募者詳細ドロワーは閉じない（二重ドロワーにしない）
 //   3. キャンセルすると、応募者はNEXT ACTION「カジュアル面談の日程を再調整してください」へ戻る
 //   4. キャンセル済みの面談はそう分かる表示になり、参加・実施・変更・再キャンセルはできない
@@ -79,11 +79,11 @@ console.log("\n=== 面談日時の変更 ===");
   await page.waitForTimeout(300);
 
   console.log("\n— 予定中の面談には、日時変更・キャンセルのボタンが出る —");
-  check(await page.locator("button", { hasText: "日時を変更" }).count() === 1, "日時を変更ボタン");
+  check(await page.locator("button", { hasText: "面談情報を編集" }).count() === 1, "面談情報を編集ボタン");
   check(await page.locator("button", { hasText: "面談をキャンセル" }).count() === 1, "面談をキャンセルボタン");
 
-  console.log("\n— 日時を変更（モーダル。ドロワーは閉じない） —");
-  await page.locator("button", { hasText: "日時を変更" }).click();
+  console.log("\n— 面談情報を編集（モーダル。ドロワーは閉じない） —");
+  await page.locator("button", { hasText: "面談情報を編集" }).click();
   await page.waitForTimeout(300);
   check(await page.locator(".hr-modal").isVisible(), "モーダルで開く");
   check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま（README §4）");
@@ -193,7 +193,7 @@ console.log("\n=== 面談キャンセル ===");
   check(await card.locator("button", { hasText: "面談に参加" }).count()
     + await card.locator("a", { hasText: "面談に参加" }).count() === 0, "参加ボタンは出ない");
   check(await card.locator("button", { hasText: "実施済みにする" }).count() === 0, "実施済みにするボタンは出ない");
-  check(await card.locator("button", { hasText: "日時を変更" }).count() === 0, "日時変更ボタンは出ない");
+  check(await card.locator("button", { hasText: "面談情報を編集" }).count() === 0, "面談情報の編集ボタンは出ない");
   check(await card.locator("button", { hasText: "面談をキャンセル" }).count() === 0, "再キャンセルはできない");
 
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);

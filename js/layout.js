@@ -281,23 +281,25 @@
   }
 
   /**
-   * 採用HR・Sales へのショートカット（ヘッダー）。
+   * 採用HR・Sales・Office へのショートカット（ヘッダー）。
    *
    * 毎日のように行き来するので、左メニューを開かずに届くようにする。
-   * ここが採用HR・Sales の正式な入口。左メニュー（管理者・メンバーとも）には
+   * ここが採用HR・Sales・Office の正式な入口。左メニュー（管理者・メンバーとも）には
    * 置かない（入口を二重にしない）。
    *
-   * 出す・出さないは showsFor の hr / sales（/api/me の access ＝ サーバの
-   * canRecruit / canSell）で決める。新しい権限は増やさない。
+   * 出す・出さないは showsFor の hr / sales / office（/api/me の access ＝ サーバの
+   * canAccessHr / canAccessSales / canAccessOffice）で決める。新しい権限は増やさない。
+   * 並びは ホーム｜HR｜Sales｜Office。複数の権限があれば、使えるものをすべて出す。
    * 管理画面でも、メンバーの画面でも同じ条件で出す（権限のある一般メンバーにも出る）。
    * 「メンバー表示で確認中」でも出す。この表示は権限を変えないので、
    * 同じ権限を持つメンバーに実際に見えているものと同じになる。
    *
-   * 狭い画面では「HR」「Sales」まで縮める（CSS）。通知・ログアウトは押し出さない
+   * 狭い画面では「HR」「Sales」「Office」まで縮める（CSS）。通知・ログアウトは押し出さない
    */
   const SHORTCUTS = [
-    { key: "hr",    href: "/hr/",    label: "採用HR", short: "HR",    icon: "person_add" },
-    { key: "sales", href: "/sales/", label: "Sales",  short: "Sales", icon: "storefront" },
+    { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add" },
+    { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront" },
+    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center" },
   ];
 
   function shortcutsHtml(shows = {}, path = location.pathname) {
@@ -829,15 +831,18 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     return {
       booking: staff || gwRoles.includes("booking"),
-      // 採用HR（/hr）・Sales（/sales）の入口。
-      // サーバが判定した結果（/api/me の access = lib/gw.js の canRecruit / canSell）をそのまま使う。
-      // 役割の並びを画面側で持たない（ヘッダーに出たのに 403、を作らない）。
-      // access が無いのは、前の版の /api/me を覚えていたときだけ。そのときは同じ基準で数える
-      // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない
+      // 採用HR（/hr）・Sales（/sales）・Office（/office）の入口。
+      // サーバが判定した結果（/api/me の access = lib/gw.js の canAccessHr / canAccessSales /
+      // canAccessOffice）をそのまま使う。役割の並びを画面側で持たない
+      // （ヘッダーに出たのに 403、を作らない）。
+      // access が無いのは、前の版の /api/me を覚えていたときだけ。採用HR・Sales は同じ基準で数える
+      // 社内権限（メンバー管理のチェック）だけで決まる。会計の管理者・IT・管理だけでは出さない。
+      // Office は金額を扱うので、access が無いときは出さない（入れない側に倒す）
       hr: me?.access ? Boolean(me.access.recruit)
-        : ["owner", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
+        : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
+      office: Boolean(me?.access?.office),
       // 会計は経理・管理担当だけ。一般メンバーには入口を出さない。
       // memberships の role は、登録すると全員 'client' が付くので、
       // それでは判定にならない。admin / staff と社内ロールで見る

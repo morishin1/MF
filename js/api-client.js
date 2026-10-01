@@ -232,8 +232,11 @@
       err.body = data;
       // 二段階認証が要るのに済んでいない。どの画面で起きても、登録の場所へ送る。
       // マイページの中では送らない（そこが登録の場所なので、回り続ける）
+      //
+      // 絶対パスで送る。相対（mypage.html#mfa）だと、/hr/ や /sales/ や /office/ の画面からは
+      // /hr/mypage.html のような存在しない場所へ飛び、登録できないまま行き止まりになる
       if (err.code === "mfa_required" && !/mypage\.html/.test(location.pathname)) {
-        location.href = "mypage.html#mfa";
+        location.href = "/mypage.html#mfa";
       }
       throw err;
     }

@@ -170,18 +170,18 @@ function setup() {
 }
 
 console.log("— 権限 —");
-await ok("採用担当・人事・経営者は使える（社内権限で決まる）", async () => {
+await ok("採用担当・人事・責任者・経営者は使える（社内権限で決まる）", async () => {
   setup();
-  for (const p of [RECRUITER, HR, OWNER]) {
+  for (const p of [RECRUITER, HR, MANAGER, OWNER]) {
     who = p;
     assert.equal((await get("applicantId=ap1")).statusCode, 200, String(p.roles));
   }
 });
-await ok("営業・責任者・一般メンバー・会計の管理者だけ・IT・管理だけの人には採用書類を見せない（403）", async () => {
+await ok("営業・一般メンバー・会計の管理者だけ・IT・管理だけの人には採用書類を見せない（403）", async () => {
   setup();
   await upload("ap1", "resume", PDF, MIME.pdf, "山田太郎_履歴書.pdf");
   const id = db.rows.gw_hr_documents[0].id;
-  for (const p of [SALES, MANAGER, MEMBER, ADMIN, IT]) {
+  for (const p of [SALES, MEMBER, ADMIN, IT]) {
     who = p;
     assert.equal((await get("applicantId=ap1")).statusCode, 403, `${p.roles}${p.isAdmin ? "（会計の管理者）" : ""} 一覧`);
     assert.equal((await get(`id=${id}`)).statusCode, 403, `${p.roles} URL`);
@@ -319,7 +319,7 @@ await ok("別タブのプレビュー：応募者名・書類の種類を返す�
   assert.ok(logged.some((l) => l.action === "hr.document.download"));
   for (const l of logged) assert.equal(/https?:|sign\?token/.test(JSON.stringify(l)), false, "ログに URL を入れない");
   // 採用HRの権限が無い人は、URL を直接叩いても見られない
-  for (const p of [SALES, MANAGER, MEMBER, ADMIN, IT]) {
+  for (const p of [SALES, MEMBER, ADMIN, IT]) {
     who = p;
     const r = await get(`id=${id}&applicantId=ap1`);
     assert.equal(r.statusCode, 403, `${p.roles.join(",") || (p.isAdmin ? "admin" : "member")} は 403`);
@@ -338,8 +338,27 @@ await ok("履歴書・職務経歴書のそろい具合が一覧に出る", asyn
   const r = await call(listApi, { method: "GET", url: "/api/hr/applicants" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const by = new Map(r.body.applicants.map((a) => [a.id, a.docs]));
-  assert.deepEqual(by.get("ap1"), { resume: true, workHistory: true });
-  assert.deepEqual(by.get("ap2"), { resume: true, workHistory: false });
+  const docId = (ap, t) => db.rows.gw_hr_documents.find((d) => d.applicant_id === ap && d.doc_type === t && !d.deleted_at).id;
+  assert.deepEqual(by.get("ap1"), { resume: true, resumeId: docId("ap1", "resume"),
+    workHistory: true, workHistoryId: docId("ap1", "work_history") });
+  assert.deepEqual(by.get("ap2"), { resume: true, resumeId: docId("ap2", "resume"), workHistory: false, workHistoryId: null });
+});
+
+await ok("一覧の書類ID：複数版なら最新版・削除済みは出さない・表示用URLは返さない", async () => {
+  setup();
+  await upload("ap1", "resume", PDF, MIME.pdf, "old.pdf");
+  await upload("ap1", "resume", PDF, MIME.pdf, "new.pdf");
+  await upload("ap2", "work_history", PDF, MIME.pdf, "w.pdf");
+  const rows = db.rows.gw_hr_documents;
+  const oldR = rows.find((d) => d.filename === "old.pdf"), newR = rows.find((d) => d.filename === "new.pdf");
+  oldR.created_at = "2026-09-01T00:00:00Z"; newR.created_at = "2026-09-20T00:00:00Z";
+  rows.find((d) => d.applicant_id === "ap2").deleted_at = "2026-09-25T00:00:00Z";
+  const r = await call(listApi, { method: "GET", url: "/api/hr/applicants" });
+  const by = new Map(r.body.applicants.map((a) => [a.id, a.docs]));
+  assert.equal(by.get("ap1").resumeId, newR.id, "最新版");
+  assert.deepEqual(by.get("ap2"), { resume: false, resumeId: null, workHistory: false, workHistoryId: null }, "削除済みは出さない");
+  assert.equal(/sign|token=|https?:/.test(JSON.stringify(r.body.applicants)), false, "一覧に表示用URLを入れない");
+  assert.equal(signed.length, 0, "一覧では署名付きURLを作らない");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

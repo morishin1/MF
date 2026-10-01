@@ -903,6 +903,7 @@ await ok("面談を設定：初回商談30分を作り、会社と面談のIDつ
   setup();
   process.env.TIMEREX_SALES_MEETING_URL = "https://timerex.net/s/eight/first30";
   const c = await newCompany();
+  await patchCo({ id: c.id, contacts: { email: "tanaka@sample.co.jp" } });
   const r = await mIssue({ companyId: c.id });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const m = r.body.meeting;
@@ -917,6 +918,52 @@ await ok("面談を設定：初回商談30分を作り、会社と面談のIDつ
   assert.equal(again.body.meeting.id, m.id);
   assert.equal(db.rows.gw_sales_meetings.length, 1);
   delete process.env.TIMEREX_SALES_MEETING_URL;
+});
+
+await ok("TimeRex を使うとき、予約照合に使うメールが無い企業は日程調整を開始できない（400 email_required・商談を作らない）", async () => {
+  setup();
+  process.env.TIMEREX_SALES_MEETING_URL = "https://timerex.net/s/eight/first30";
+  const c = await newCompany();
+  const r = await mIssue({ companyId: c.id });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "email_required");
+  assert.equal(db.rows.gw_sales_meetings.length, 0, "商談を作らない");
+  // いまの連絡手段がメールなら、その連絡先でも照合できる（Webhook と同じ判定）
+  const co = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  Object.assign(co, { current_contact_channel: "email", current_contact_value: "Info@Sample.co.jp" });
+  const d = await getOne(c.id);
+  assert.deepEqual(d.body.matchEmails, ["info@sample.co.jp"]);
+  assert.equal((await mIssue({ companyId: c.id })).statusCode, 200);
+  delete process.env.TIMEREX_SALES_MEETING_URL;
+});
+
+await ok("企業詳細は共通マスター（業種・提案サービス・47都道府県）を返す（リード一覧の基本情報の編集で使う）", async () => {
+  setup();
+  const c = await newCompany();
+  const d = await getOne(c.id);
+  assert.equal(d.statusCode, 200);
+  assert.equal(d.body.masters.prefectures.length, 47);
+  assert.ok(d.body.masters.industries.includes("製造") && d.body.masters.services.includes("AI / DX"));
+});
+
+await ok("予約照合用のメールをその場で登録：PATCH contacts は連絡先だけ直し、営業履歴は増やさない。詳細の matchEmails に出る", async () => {
+  setup();
+  const c = await newCompany();
+  const before = db.rows.gw_sales_events.length;
+  assert.deepEqual((await getOne(c.id)).body.matchEmails, []);
+  assert.equal((await patchCo({ id: c.id, contacts: { email: "tanaka" } })).statusCode, 400, "メールの形");
+  const r = await patchCo({ id: c.id, contacts: { email: "tanaka@sample.co.jp" } });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.company.contacts.email, "tanaka@sample.co.jp");
+  assert.equal(db.rows.gw_sales_events.length, before, "営業履歴は増やさない");
+  assert.deepEqual((await getOne(c.id)).body.matchEmails, ["tanaka@sample.co.jp"]);
+  // 他の連絡先は消さない。いまの連絡手段がメールなら、その連絡先も合わせて直す
+  const co = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  co.contacts = { ...co.contacts, line: "sample_line" };
+  co.current_contact_channel = "email";
+  await patchCo({ id: c.id, contacts: { email: "sato@sample.co.jp" } });
+  assert.equal(co.contacts.line, "sample_line");
+  assert.equal(co.current_contact_value, "sato@sample.co.jp");
 });
 
 await ok("TimeRex の URL が未設定でも面談は作れる（URL は null、日程は手入力）", async () => {
@@ -945,7 +992,7 @@ await ok("送付済み：NEXT は「日程調整待ち（初回商談）」3営�
   const l = await list();
   assert.equal(l.body.companies[0].unhandledClick, false);
   assert.equal(l.body.companies[0].meetingStatus, "scheduling");
-  assert.ok(db.rows.gw_sales_events.some((e) => e.label.startsWith("面談の日程調整URLを送付")));
+  assert.ok(db.rows.gw_sales_events.some((e) => e.label.startsWith("商談の日程調整URLを送付")));
 });
 
 await ok("日程確定：面談予定・会社は商談へ・NEXT は面談の日に「商談準備」・履歴に残る", async () => {
@@ -963,7 +1010,7 @@ await ok("日程確定：面談予定・会社は商談へ・NEXT は面談の�
   assert.equal(co.status, "meeting");
   assert.equal(co.next_action, "商談準備");
   assert.equal(co.next_action_on, "2099-10-05");
-  assert.ok(db.rows.gw_sales_events.some((e) => e.label === "面談予定：10/5 14:00（初回商談）"));
+  assert.ok(db.rows.gw_sales_events.some((e) => e.label === "商談予定：10/5 14:00（初回商談）"));
   const d = await getOne(c.id);
   assert.equal(d.body.meetings[0].status, "scheduled");
   assert.equal(d.body.meetingsReady, true);
@@ -981,6 +1028,26 @@ await ok("日時なし・変なURLは断る。取りやめたら次は新しく�
   assert.equal((await mAct({ id: body.meeting.id, action: "cancel" })).body.meeting.status, "canceled");
   const next = await mIssue({ companyId: c.id });
   assert.notEqual(next.body.meeting.id, body.meeting.id);
+});
+
+await ok("TimeRex の予約で確定した商談は、手入力で日時を変えられない（409 timerex_managed）。失注の会社は手入力でも戻さない", async () => {
+  setup();
+  const c = await newCompany();
+  const { body } = await mIssue({ companyId: c.id });
+  const row = db.rows.gw_sales_meetings.find((x) => x.id === body.meeting.id);
+  Object.assign(row, { status: "scheduled", scheduled_at: "2026-10-05T01:00:00.000Z", timerex_event_id: "evt_x", timerex_synced_at: new Date().toISOString() });
+  const r = await mAct({ id: row.id, action: "schedule", scheduledAt: "2026-10-09T05:00:00Z" });
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "timerex_managed");
+  assert.equal(row.scheduled_at, "2026-10-05T01:00:00.000Z");
+  // 手入力の商談なら従来どおり。ただし失注・対象外の会社を「商談」へ戻さない
+  const c2 = await newCompany({ name: "失注社", siteUrl: "https://lost.example.jp/" });
+  const co = db.rows.gw_sales_companies.find((x) => x.id === c2.id);
+  const { body: b2 } = await mIssue({ companyId: c2.id });
+  co.status = "lost";
+  const r2 = await mAct({ id: b2.meeting.id, action: "schedule", scheduledAt: "2026-10-09T05:00:00Z" });
+  assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+  assert.equal(co.status, "lost", "失注を商談へ戻さない");
 });
 
 await ok("営業禁止の会社・/sales を使えない人は面談を設定できない", async () => {
@@ -1107,7 +1174,7 @@ await ok("削除：履歴・面談・成約・営業禁止のある企業は消�
   const why = Object.fromEntries(dry.body.blocked.map((b) => [b.name, b.reasons.join("・")]));
   assert.match(why["アタック済社"], /アタック履歴あり/);
   assert.match(why["メモ社"], /営業履歴あり/);
-  assert.match(why["面談社"], /面談あり/);
+  assert.match(why["面談社"], /商談あり/);
   assert.match(why["成約社"], /成約済み/);
   assert.match(why["禁止社"], /営業禁止/);
   assert.equal(db.rows.gw_sales_companies.length, 6, "確認だけでは消さない");
