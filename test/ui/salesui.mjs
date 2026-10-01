@@ -39,6 +39,9 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
   const meetings = [];
+  // lib/sales-timerex.js companyEmails と同じ：連絡先のメール・連絡手段がメールのときの連絡先
+  const emailsOf = (c) => [...new Set([c?.contacts?.email, c?.contactChannel === "email" ? c?.contactValue : null]
+    .filter(Boolean).map((v) => String(v).toLowerCase()))];
   const shapeM = (m) => ({ kindLabel: "初回商談", durationMin: 30, ownerName: "営業 一郎",
     statusLabel: { scheduling: "日程調整中", scheduled: "商談予定", canceled: "取りやめ" }[m.status], ...m });
   const companies = [
@@ -114,6 +117,11 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       if (ctl.delay[id]) await new Promise((r) => setTimeout(r, ctl.delay[id]));
       if (ctl.fail.has(id)) return send({ error: "db_failed", detail: "わざと失敗" }, 500);
       const c = companies.find((x) => x.id === id);
+      if (req.method() === "PATCH" && body().contacts) {
+        calls.push({ kind: "patch-contacts", body: body() });
+        c.contacts = { ...c.contacts, ...body().contacts };
+        return send({ company: c });
+      }
       if (req.method() === "POST" && body().action === "contact") {
         const b = body();
         calls.push({ kind: "contact", body: b });
@@ -142,6 +150,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
           { at: c.lastClickAt, kind: "click", label: "リンククリック" }] : [],
         canForce: isAdmin, members: [{ id: "emp-s1", display_name: "営業 一郎" }], campaigns: [],
         meetings: meetings.filter((m) => m.companyId === id).map(shapeM), meetingsReady: true, timerexConfigured: timerex,
+        matchEmails: emailsOf(c),
         statuses: [{ key: "untouched", label: "未アタック" }, { key: "attacked", label: "アタック済" }],
         ngReasons: [{ key: "no_sales", label: "営業禁止" }],
         eventKinds: [{ key: "follow", label: "フォロー" }, { key: "reply", label: "返信あり" }],
@@ -151,6 +160,12 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       const b = body();
       calls.push({ kind: `meeting-${req.method()}`, body: b });
       if (req.method() === "POST") {
+        // 本物と同じ：進行中の商談があれば新しく作らない。TimeRex を使うのにメールが無ければ断る
+        const open = meetings.find((x) => x.companyId === b.companyId && ["scheduling", "scheduled"].includes(x.status));
+        if (open) return send({ meeting: shapeM(open), reused: true, timerexConfigured: timerex });
+        if (timerex && !emailsOf(companies.find((x) => x.id === b.companyId)).length) {
+          return send({ error: "email_required", hint: "予約の照合に使うメールアドレスを先に登録してください" }, 400);
+        }
         const m = { id: `m${meetings.length + 1}`, companyId: b.companyId, ownerId: b.ownerId || "emp-s1", kind: "first_meeting",
           status: "scheduling", schedulingUrl: timerex ? `https://timerex.net/s/eight/first30?sales_company_id=${b.companyId}&sales_meeting_id=m${meetings.length + 1}` : null,
           schedulingSentAt: null, scheduledAt: null, meetingUrl: null };
@@ -198,6 +213,11 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         listed = [...listed].sort((a, b) => (a[sortKey] < b[sortKey] ? -dir : a[sortKey] > b[sortKey] ? dir : (a.id < b.id ? -1 : 1)));
       }
       const members = [{ id: "emp-s1", display_name: "営業 一郎" }];
+      // 一覧には進行中の商談の段階（本物の meetingStatus・meetingAt）を載せる
+      listed = listed.map((c) => {
+        const m = meetings.find((x) => x.companyId === c.id && ["scheduling", "scheduled"].includes(x.status));
+        return m ? { ...c, meetingStatus: m.status, meetingAt: m.scheduledAt || null } : c;
+      });
       if (!sp.has("page")) return send({ today: TODAY, me: "emp-s1", members, companies: listed });
       const limit = 100;
       const total = listed.length;
@@ -241,7 +261,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     return send({});
   });
-  return { page, calls, errs, ctl, ctlList, meetings };
+  return { page, calls, errs, ctl, ctlList, meetings, companies };
 }
 
 console.log("\n=== 営業担当：ダッシュボード ===");
@@ -444,43 +464,121 @@ console.log("\n=== リード ===");
   const meta = await page.locator(".ld-card").nth(1).innerText();
   check(meta.includes("クリック 2回") && meta.includes("NEXT：クリックあり・要フォロー"), "クリック回数とNEXTを出す");
   const tabs = await page.locator("#stages button").allInnerTexts();
-  check(["すべて", "クリックあり", "返信あり", "日程調整中", "商談予定", "提案中", "成約"].every((l) => tabs.some((t) => t.startsWith(l))), `段階で絞れる（${tabs.join(" / ")}）`);
+  check(["すべて", "クリックあり", "返信あり", "予約待ち", "商談予定", "提案中", "成約"].every((l) => tabs.some((t) => t.startsWith(l))), `段階で絞れる（${tabs.join(" / ")}）`);
   const btns = await page.locator(".ld-card button").allInnerTexts();
   check(btns.length === 2 && btns.every((t) => t === "商談を予定する"), `リードのボタンは「商談を予定する」1つ（${btns.join(" / ")}）`);
   await page.locator("#stages button", { hasText: "返信あり" }).click();
   check((await page.locator(".ld-card").count()) === 1, "「返信あり」で絞ると1社");
   await page.locator(".ld-card").first().click();
-  // 画面遷移＋詳細の取得を待つ（CI は遅いので、決め打ちの待ち時間にしない）
-  await page.locator(".sl-detail").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(/companies\.html\?id=c3/.test(page.url()) && await page.locator(".sl-detail").isVisible(), "開くと企業詳細の右ドロワー");
+  // 詳細の取得を待つ（ドロワーは「読み込み中…」で先に出る。中身＝NEXT ACTION が出るまで待つ。
+  // CI は遅いので、決め打ちの待ち時間にしない）
+  await page.locator(".sl-detail #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(".sl-detail").isVisible(),
+    `開くとリード一覧のまま右ドロワー（画面遷移しない）（${page.url()}）`);
   const d = await page.locator(".sl-detail").innerText();
   check(d.includes("初回クリック") && d.includes("最終クリック"), "詳細に初回・最終クリックが出る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
 
-console.log("\n=== 面談：リード → 商談を予定する → 日程確定 → 商談予定 ===");
+console.log("\n=== 商談：リード一覧 → 右ドロワー → 商談を予定する → 中央モーダル → 閉じると同じドロワー ===");
 {
   const { page, calls, errs } = await openAs();
+  // 一覧の条件・スクロール位置が残ることを見るため、画面を低くして絞り込み・段階を選んでおく
+  await page.setViewportSize({ width: 1300, height: 420 });
   await page.goto(`${BASE}/sales/leads.html`);
-  await page.waitForTimeout(1000);
-  await page.locator(".ld-card", { hasText: "反応商事" }).locator("button", { hasText: "商談を予定する" }).click();
+  await page.locator(".ld-card").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.selectOption("#f-owner", "me");
+  await page.locator("#stages button", { hasText: "返信あり" }).click();
+  await page.locator("#stages button", { hasText: "すべて" }).click();
+  // 一覧が短いとスクロールできないので、ページの下に余白を足してから少し下へ
+  await page.evaluate(() => { document.body.style.paddingBottom = "1200px"; window.scrollTo(0, 80); });
+  const y0 = await page.evaluate(() => window.scrollY);
+
+  // 1) リードを開く → 右ドロワー（NEXT ACTION が先頭。Primary は「商談を予定する」、Secondary は2つ）
+  await page.locator(".ld-card", { hasText: "反応商事" }).click();
+  await page.locator(".sl-detail #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(/\/sales\/leads\.html\?id=c2$/.test(page.url()), `画面遷移しない（${page.url()}）`);
+  const firstBlock = await page.locator(".sl-detail > div").nth(1).getAttribute("id");
+  check(firstBlock === "dt-next", `ドロワーは見出しのすぐ下に NEXT ACTION（${firstBlock}）`);
+  check((await page.locator("#dt-next .lb").innerText()).includes("NEXT ACTION"), "「NEXT ACTION」と出す");
+  const prim = await page.locator("#dt-next .btn-primary").allInnerTexts();
+  const sec = await page.locator("#dt-next .sl-cta-sub .btn-secondary").allInnerTexts();
+  check(prim.length === 1 && prim[0].includes("商談を予定する"), `Primary は「商談を予定する」1つ（${prim.join(" / ")}）`);
+  check(sec.length === 2 && sec[0].includes("返信・やり取りを記録") && sec[1].includes("フォローを記録"),
+    `Secondary は「返信・やり取りを記録」「フォローを記録」（${sec.join(" / ")}）`);
+  check(await page.locator(".sl-detail button", { hasText: "フォームアタック" }).count() === 0, "リード一覧のドロワーからはフォームアタックを開かない");
+
+  // 2) 商談を予定する → 中央モーダル（会社名・商談種類・担当・予約照合メール・営業状態）
+  await page.locator("#dt-meeting").click();
   await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  await page.locator(".sl-next .btn-primary").first().waitFor({ state: "attached", timeout: 15000 }).catch(() => {});
-  check(/companies\.html\?id=c2&meeting=1/.test(page.url()) || /companies\.html\?id=c2/.test(page.url()), "リードから企業詳細へ");
-  check(await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).isVisible(), "そのまま「商談を予定する」が開く");
-  const primary = await page.locator(".sl-next .btn-primary").allInnerTexts();
-  check(primary.length === 1 && primary[0].includes("商談を予定する"), `リード詳細の Primary CTA は「商談を予定する」1つ（${primary.join(" / ")}）`);
-  const d0 = await page.locator(".sl-modal").innerText();
-  check(d0.includes("初回商談（30分）") && /担当/.test(d0), "初回商談30分・担当が出る");
+  check(await page.locator(".sl-detail").isVisible() && await page.locator(".sl-modal").isVisible(), "ドロワーの上に中央モーダル");
+  const info = await page.locator("#mt-info").innerText();
+  check(info.includes("反応商事") && info.includes("初回商談（30分）") && info.includes("担当"), `会社名・商談種類・担当（${info.replace(/\s+/g, " ")}）`);
+  check((await page.locator("#mt-stage").innerText()).trim() === "未送信", "営業状態は「未送信」（「状態：未設定」と出さない）");
+  check(!(await page.locator(".sl-modal").innerText()).includes("未設定"), "「未設定」という曖昧な表示が無い");
+  check((await page.locator(".sl-modal").innerText()).includes("予約照合に使うメールアドレス"), "予約照合に使うメールアドレスの欄");
+  check(await page.locator("#mt-start").isDisabled(), "メールが無い間は「日程調整を開始」を押せない");
 
-  await page.locator("button", { hasText: "日程調整URLを発行" }).click();
-  await page.waitForTimeout(900);
+  // 3) メールをその場で登録 → 日程調整を開始
+  await page.fill("#mt-email-input", "tanaka@hannou.jp");
+  await page.locator("#mt-email-save").click();
+  await page.locator("#mt-email").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(calls.some((c) => c.kind === "patch-contacts" && c.body.id === "c2" && c.body.contacts.email === "tanaka@hannou.jp"),
+    "メールは企業の連絡先として登録（企業一覧と同じ API）");
+  check((await page.locator("#mt-email").innerText()).includes("tanaka@hannou.jp"), "照合に使うメールアドレスを明示");
+  check(!(await page.locator("#mt-start").isDisabled()), "メールを登録すると押せる");
+  check((await page.locator("#mt-start").innerText()).includes("日程調整を開始"), "ボタンは「日程調整を開始」");
+  await page.locator("#mt-start").click();
+  await page.locator("#mt-sched").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   const sched = await page.inputValue("#mt-sched");
-  check(/^https:\/\/timerex\.net\/s\/eight\/first30\?sales_company_id=c2&sales_meeting_id=m1$/.test(sched), `TimeRex URL に会社と面談のID（${sched}）`);
-  check((await page.inputValue("#mt-mail")).includes(sched), "送る文面にもURLが入っている");
-  check(calls.some((c) => c.kind === "meeting-POST" && c.body.companyId === "c2" && c.body.ownerId === "emp-s1"), "担当つきで発行した");
+  check(/^https:\/\/timerex\.net\/s\/eight\/first30\?sales_company_id=c2&sales_meeting_id=m1$/.test(sched), `TimeRex URL に会社と商談のID（${sched}）`);
+  check(calls.some((c) => c.kind === "meeting-POST" && c.body.companyId === "c2" && c.body.ownerId === "emp-s1"),
+    "企業一覧と同じ API（POST /api/sales/meetings）で、担当つきで作る");
+  check((await page.locator("#mt-stage").innerText()).trim() === "予約待ち", "作成後は「予約待ち」");
+  check(await page.locator("#mt-copy", { hasText: "URLをコピー" }).isVisible(), "「URLをコピー」");
+  check(await page.locator("#mt-open", { hasText: "予約ページを開く" }).getAttribute("href") === sched, "「予約ページを開く」は日程調整URLへ");
+  check((await page.inputValue("#mt-mail")).includes("tanaka@hannou.jp"), "案内文に予約時のメールアドレスを入れる");
 
+  // もう一度開いても新しい商談を作らない（予約待ちのまま）
+  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
+  await page.locator("#dt-meeting").click();
+  await page.locator("#mt-stage").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check((await page.locator("#mt-stage").innerText()).trim() === "予約待ち" && await page.locator("#mt-start").count() === 0,
+    "発行済みなら「予約待ち」。日程調整を開始をもう一度出さない");
+  check(calls.filter((c) => c.kind === "meeting-POST").length === 1, "新しい商談は1件だけ");
+
+  // 4) 閉じる → 同じリードのドロワーに戻る。一覧の条件・スクロール位置はそのまま
+  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
+  await page.waitForTimeout(300);
+  check(await page.locator(".sl-modal").count() === 0, "モーダルが閉じる");
+  check(await page.locator(".sl-detail").isVisible() && (await page.locator(".sl-detail").innerText()).includes("反応商事"), "同じリードのドロワーに戻る");
+  check(/\/sales\/leads\.html\?id=c2$/.test(page.url()), `リード一覧のまま（${page.url()}）`);
+  check((await page.locator(".sl-detail").innerText()).includes("予約待ち"), "ドロワーにも「予約待ち」");
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.waitForTimeout(300);
+  check(await page.locator(".sl-detail").count() === 0 && /\/sales\/leads\.html$/.test(page.url()), "ドロワーを閉じると一覧だけ（id を外す）");
+  check(await page.inputValue("#f-owner") === "me", "絞り込み（担当）が残る");
+  const onTab = await page.locator("#stages button.on").innerText();
+  check(onTab.startsWith("すべて"), `段階タブが残る（${onTab}）`);
+  check(await page.evaluate(() => window.scrollY) === y0, `スクロール位置が残る（${y0}）`);
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 商談：一覧のボタン → 日程確定 → 商談予定（手入力） ===");
+{
+  const { page, calls, errs, companies } = await openAs();
+  // いまの連絡手段がメール（その連絡先も照合に使う。lib/sales-timerex.js companyEmails と同じ）
+  Object.assign(companies.find((c) => c.id === "c3"), { contactChannel: "email", contactChannelLabel: "メール", contactValue: "info@henshin.jp" });
+  await page.goto(`${BASE}/sales/leads.html`);
+  await page.locator(".ld-card").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(".ld-card", { hasText: "返信工業" }).locator("button", { hasText: "商談を予定する" }).click();
+  await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(".sl-detail").isVisible(), "一覧のボタンでも、ドロワー＋中央モーダル（遷移しない）");
+  check((await page.locator("#mt-email").innerText()).includes("info@henshin.jp"), "登録済みのメールを照合に使う");
+  await page.locator("#mt-start").click();
+  await page.locator("#mt-sched").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.locator("button", { hasText: "送付済みにする" }).click();
   await page.waitForTimeout(900);
   check((await page.locator(".sl-modal").innerText()).includes("相手の予約を待っています"), "送付済みになる");
@@ -493,8 +591,14 @@ console.log("\n=== 面談：リード → 商談を予定する → 日程確定
   const sc = calls.find((c) => c.kind === "meeting-PATCH" && c.body.action === "schedule");
   check(sc && sc.body.scheduledAt === "2099-10-05T05:00:00.000Z" && sc.body.meetingUrl === "https://meet.google.com/abc-defg-hij", "日時（JST 14:00）とMeet URLで確定");
   const d1 = await page.locator(".sl-modal").innerText();
-  check(d1.includes("商談予定") && await page.locator(".sl-modal a", { hasText: "商談に参加" }).count() === 1, "商談予定・「商談に参加」が出る");
-  check((await page.locator(".sl-detail").innerText()).includes("初回商談（30分）"), "企業詳細の「面談」にも出る");
+  check((await page.locator("#mt-stage").innerText()).trim() === "商談予定" && await page.locator(".sl-modal a", { hasText: "商談に参加" }).count() === 1, "商談予定・「商談に参加」が出る");
+  check(d1.includes("商談予定"), "見出しも「商談予定」");
+  check((await page.locator(".sl-detail").innerText()).includes("初回商談（30分）"), "ドロワーの「商談」にも出る");
+  check((await page.locator("#dt-meeting").innerText()).includes("商談予定を見る"), "ドロワーの CTA は「商談予定を見る」に変わる");
+  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.waitForTimeout(600);
+  check((await page.locator(".ld-card", { hasText: "返信工業" }).locator("button").innerText()).includes("商談予定を見る"), "一覧のボタンも「商談予定を見る」");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 
@@ -511,7 +615,8 @@ console.log("\n=== 面談：リード → 商談を予定する → 日程確定
 
 console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古い応答を捨てる） ===");
 {
-  const { page, errs, ctl } = await openAs();
+  const { page, errs, ctl, companies } = await openAs();
+  companies.find((c) => c.id === "c2").contacts = { email: "tanaka@hannou.jp" };
   await page.goto(`${BASE}/sales/companies.html`);
   await page.locator("#list tr.click").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   const box = () => page.locator("#detail-box").count();
@@ -553,7 +658,7 @@ console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古�
   await page.evaluate(() => openMeeting());
   await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   ctl.delay.c2 = 1200;
-  await page.locator("button", { hasText: "日程調整URLを発行" }).click();
+  await page.locator("button", { hasText: "日程調整を開始" }).click();
   await page.waitForTimeout(200);
   await page.evaluate(() => closeModal());
   await page.waitForTimeout(1600);
@@ -1028,8 +1133,10 @@ console.log("\n=== TimeRex で予約確定した商談：日時・Google Meet �
     scheduledAt: "2026-10-05T01:00:00.000Z", meetingUrl: "https://meet.google.com/abc-defg-hij", fromTimerex: true });
   await page.goto(`${BASE}/sales/leads.html`);
   await page.waitForTimeout(900);
-  await page.locator(".ld-card", { hasText: "反応商事" }).locator("button", { hasText: "商談を予定する" }).click();
-  await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(".ld-card", { hasText: "反応商事" }).locator("button", { hasText: "商談予定を見る" }).click();
+  await page.locator(".sl-modal h2", { hasText: "商談予定" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check((await page.locator("#dt-meeting").innerText()).includes("商談予定を見る"), "TimeRex 予約済みなら CTA は「商談予定を見る」");
+  check((await page.locator("#mt-stage").innerText()).trim() === "商談予定", "営業状態は「商談予定」");
   const txt = await page.locator(".sl-modal").innerText();
   check(txt.includes("商談予定：") && txt.includes("10:00"), `商談予定と日時（日本時間）を出す（${txt.replace(/\s+/g, " ").slice(0, 80)}）`);
   check(txt.includes("TimeRexで予約確定"), "TimeRex で予約確定した印");

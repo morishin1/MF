@@ -1,26 +1,31 @@
-// 二段階認証（TOTP）は**任意**。決めたとおりに効くか（2026-10-01 に「必須」から変更）。
+// 二段階認証（TOTP）の決まりが、決めたとおりに効くか。
 //
 // ■ 何を守るテストか
 //
-//   1. 誰にも必須にしない。どの役割でも、どの日付でも（2026-10-01 以降も）、どのトークン（aal1・aal2・なし）でも、
-//      未登録でも登録済みでも、止めない（requireMfa は常に通す。mfaState の blocked / required / enforced は false）
-//   2. 登録していないことを、エラー・警告にしない（共通ヘッダの案内帯・マイページの赤/黄の警告・期限の文言が無い）
-//   3. 登録する機能は残っている（マイページ・/api/mfa の登録・確認・解除・リセット・ログインの6桁）
-//   4. 自分で解除するときだけ、直前に6桁で確かめた（aal2）ことを要る（パスワードだけで、登録を外されないように）。
-//      「強制期間中は外せない」はない
-//   5. 機密の API を守るのは、ロールの判定（canManageHr など）。二段階認証には頼らない
-//   6. サーバは秘密を持たず、トークンの aal だけを見ること。出入りは、すべて記録に残ること
-//   7. Office（/office・/api/office/*）は、二段階認証を見ないこと
+//   1. 対象が 管理者・経営者・責任者・経理・人事・社労士 に限られること（一般社員は止めない）
+//      Office（経営者・責任者・経理）と /keiei（経営者）に入れる人は、対象に入っていること
+//      （Office は MFA を要求しない。対象に残すのは、支払・給与・請求書送信など、MFA を残す機能のため）
+//   2. 登録期間（〜2026-09-30）は止めず、強制日（2026-10-01〜）から止めること
+//   3. 止めるのは、今回の入り方が aal2 でないときだけ（6桁で確かめた人は通す）
+//   4. 止めたとき、登録済みか未登録かで、画面に出す言葉が変わること
+//   5. サーバは秘密を持たず、トークンの aal だけを見ること
+//   6. strict（/keiei・これから作る支払・給与用）：強制日を待たず、最初から aal2 でないと通さないこと
+//   7. Office（/office・/api/office/*）は MFA を要求しない（2026-09-30 の決定）。requireMfa を置かない
+//      置くと、強制日（2026-10-01）から、strict でなくても経営者・責任者・経理が入れなくなる
+//      MFA を残すもの（給与・権限変更・MFA/パスワードのリセットなど）は、今までどおり requireMfa を通ること
+//   8. 任意（2026-10-01 の決定）：MFA_ENABLED が "true" でなければ（既定）、誰も止めない（strict も）。
+//      登録していないことを警告にしない（案内帯・必須・期限の文言を出さない）。登録・認証・解除の機能は残し、登録した人にはログインで6桁を聞く。
+//      MFA_ENABLED=true に戻せば、上の 1〜7 がそのまま効く
+//
+// 1〜7 は「MFA_ENABLED=true（再開したとき）」の決まりとして確かめる。8 は最後に OFF にして確かめる
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const M = await import(join(ROOT, "lib/mfa.js"));
-const read = (f) => readFileSync(join(ROOT, f), "utf8");
-/** コメントを除いたコード（// の行と、行末の空白つき //。文字列の中の http:// は消さない） */
-const code = (f) => read(f).replace(/(^|[ \t])\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+const ENABLED_BEFORE = process.env.MFA_ENABLED;
+process.env.MFA_ENABLED = "true";
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -45,155 +50,56 @@ const res = () => {
   return r;
 };
 
-const ROLES = [[], ["owner"], ["manager"], ["finance"], ["hr"], ["labor_advisor"], ["it"], ["sales"], ["recruiter"], ["owner", "hr", "manager", "finance", "labor_advisor"]];
-const CTXS = [...ROLES.map((roles) => ({ isAdmin: false, roles })), { isAdmin: true, roles: [] }, { isAdmin: true, roles: ["owner"] }, null];
-const TOKENS = [null, "aal1", "aal2"];
-const USERS = [none, half, enrolled, null];
-const DATES = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-12-31", "2027-06-01", "2099-01-01"];
+console.log("\n=== 二段階認証：決めたとおりに効くか ===\n");
 
-console.log("\n=== 二段階認証：任意（必須にしない・強制もしない） ===\n");
+console.log("— 誰に要るか —");
 
-console.log("— 誰にも必須でない —");
-
-await ok("needsMfa は、どの役割でも false（管理者・経営者・責任者・経理・人事・社労士も）", async () => {
-  for (const ctx of CTXS) assert.equal(M.needsMfa(ctx), false, JSON.stringify(ctx));
-  assert.equal(M.needsMfa(), false);
+await ok("管理者（会計側）は対象", async () => {
+  assert.equal(M.needsMfa({ isAdmin: true, roles: [] }), true);
 });
-await ok("mfaState は、どの役割・トークン・登録状況・日付でも、required / enforced / blocked が false。期限の日付を返さない", async () => {
-  let n = 0;
-  for (const ctx of CTXS) for (const t of TOKENS) for (const user of USERS) for (const today of DATES) {
-    const st = M.mfaState({ ctx, user, req: req(t), today });
-    assert.deepEqual([st.required, st.enforced, st.blocked], [false, false, false], JSON.stringify({ ctx, t, today }));
-    assert.deepEqual([st.enrollUntil, st.enforceFrom], [null, null]);
-    n++;
+await ok("経営者・責任者・経理・人事・社労士は対象（Office と /keiei に入れる人を含む）", async () => {
+  for (const r of ["owner", "manager", "finance", "hr", "labor_advisor"]) {
+    assert.equal(M.needsMfa({ isAdmin: false, roles: [r] }), true, r);
   }
-  assert.equal(n, CTXS.length * TOKENS.length * USERS.length * DATES.length);
-  assert.ok(n > 900, `${n} 通り`);
 });
-await ok("mfaState は、事実（登録済みか・6桁で確かめたか）は、そのまま返す（画面の表示に使う）", async () => {
-  assert.equal(M.mfaState({ user: enrolled, req: req("aal2") }).enrolled, true);
-  assert.equal(M.mfaState({ user: enrolled, req: req("aal2") }).verified, true);
-  assert.equal(M.mfaState({ user: enrolled, req: req("aal1") }).verified, false);
-  assert.equal(M.mfaState({ user: half, req: req("aal1") }).enrolled, false, "確認前の登録は、登録済みではない");
-  assert.equal(M.mfaState({ user: none, req: req(null) }).enrolled, false);
-  assert.equal(M.mfaState().enrolled, false);
+await ok("一般社員・IT・営業・採用担当だけの人は対象外", async () => {
+  assert.equal(M.needsMfa({ isAdmin: false, roles: [] }), false);
+  assert.equal(M.needsMfa({ isAdmin: false, roles: ["it", "sales", "recruiter"] }), false);
+  assert.equal(M.needsMfa(null), false);
 });
-await ok("requireMfa は、常に通す。応答を書かない（403 mfa_required を返さない）。昔の呼び出し（strict つき）でも", async () => {
-  for (const ctx of CTXS) for (const t of TOKENS) for (const user of USERS) {
-    for (const opts of [undefined, {}, { strict: true }]) {
-      const r = res();
-      assert.equal(await M.requireMfa(req(t), r, ctx, user, opts), true, JSON.stringify({ ctx, t }));
-      assert.equal(r.statusCode, 0, "何も書かない");
-      assert.equal(r.body, null);
-    }
+await ok("Office・/keiei に入れる役割（経営者・責任者・経理）は、二段階認証の対象に入っている（支払・給与などで使う）", async () => {
+  const { OFFICE_ROLES, KEIEI_ROLES } = await import(join(ROOT, "lib/gw.js"));
+  for (const r of [...OFFICE_ROLES, ...KEIEI_ROLES]) {
+    assert.ok(M.REQUIRED_ROLES.includes(r), `${r} が REQUIRED_ROLES に無い`);
   }
 });
 
-console.log("— 2026-10-01 以降の強制をしない —");
+console.log("— いつから止めるか —");
 
-await ok("強制日・対象のロール・登録期間の定数が、lib/mfa.js に無い（強制の処理が残っていない）", async () => {
-  for (const k of ["ENFORCE_FROM", "ENROLL_UNTIL", "REQUIRED_ROLES", "todayJst", "requireMfaStrict"]) assert.equal(k in M, false, k);
-  const src = code("lib/mfa.js");
-  assert.ok(!/2026-10-01|2026-09-30|MFA_ENFORCE|MFA_ENROLL|process\.env|strict/.test(src), "強制日・環境変数・strict がコードに残っている");
+await ok("日付は 登録期間 2026-09-30 まで／強制 2026-10-01 から", async () => {
+  assert.equal(M.ENROLL_UNTIL, "2026-09-30");
+  assert.equal(M.ENFORCE_FROM, "2026-10-01");
 });
-await ok("強制日を環境変数で過去にしても、止めない（環境変数を読まない）", async () => {
-  const keep = process.env.MFA_ENFORCE_FROM;
-  process.env.MFA_ENFORCE_FROM = "2000-01-01";
-  try {
-    const fresh = await import(join(ROOT, `lib/mfa.js?env${Date.now()}`));
-    const r = res();
-    assert.equal(await fresh.requireMfa(req("aal1"), r, { isAdmin: true, roles: ["owner"] }, none), true);
-    assert.equal(r.statusCode, 0);
-    assert.equal(fresh.mfaState({ ctx: { isAdmin: true }, user: none, req: req("aal1") }).blocked, false);
-  } finally {
-    if (keep === undefined) delete process.env.MFA_ENFORCE_FROM; else process.env.MFA_ENFORCE_FROM = keep;
-  }
+await ok("登録期間のあいだは、未登録でも止めない（案内だけ）", async () => {
+  const st = M.mfaState({ ctx: { isAdmin: true }, user: none, req: req("aal1"), today: "2026-09-30" });
+  assert.equal(st.required, true);
+  assert.equal(st.enrolled, false);
+  assert.equal(st.enforced, false);
+  assert.equal(st.blocked, false);
 });
-await ok("昔の強制日（2026-10-01）より後の日付に、時計を進めても、同じ（日付を見ない）", async () => {
-  const RealDate = Date;
-  try {
-    for (const d of ["2026-10-01T00:00:00+09:00", "2027-03-01T00:00:00+09:00"]) {
-      globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [d])); } static now() { return new RealDate(d).getTime(); } };
-      const r = res();
-      assert.equal(await M.requireMfa(req("aal1"), r, { isAdmin: true, roles: ["owner", "hr"] }, none), true, d);
-      assert.equal(M.mfaState({ ctx: { isAdmin: true }, user: none, req: req("aal1") }).blocked, false, d);
-    }
-  } finally { globalThis.Date = RealDate; }
+await ok("強制日からは、aal1 のままだと止める", async () => {
+  const st = M.mfaState({ ctx: { isAdmin: true }, user: enrolled, req: req("aal1"), today: "2026-10-01" });
+  assert.equal(st.enforced, true);
+  assert.equal(st.blocked, true);
 });
-
-console.log("— 登録していないことを、エラー・警告にしない —");
-
-await ok("共通ヘッダに、二段階認証の案内帯（mfaNudge・kp-mfa-nudge）が無い", async () => {
-  const src = read("js/layout.js");
-  assert.ok(!/mfaNudge|kp-mfa-nudge|二段階認証を .*登録してください|から必須/.test(src));
+await ok("強制日でも、6桁で確かめた（aal2）なら通す", async () => {
+  const st = M.mfaState({ ctx: { isAdmin: true }, user: enrolled, req: req("aal2"), today: "2026-10-01" });
+  assert.equal(st.verified, true);
+  assert.equal(st.blocked, false);
 });
-await ok("api/me.js は、二段階認証の状態を返す（事実だけ。required / blocked は false）", async () => {
-  const src = read("api/me.js");
-  assert.match(src, /mfa: mfaState\(/);
-});
-await ok("マイページは「任意」。必須・強制・期限・登録しないと開けない、の文言が無い。登録していなくても赤/黄の警告にしない", async () => {
-  const html = read("mypage.html");
-  assert.match(html, /二段階認証（任意のセキュリティ設定）/);
-  assert.match(html, /任意の設定です。登録しなくても、これまでどおり使えます/);
-  const start = html.indexOf("// ---- 二段階認証"), end = html.indexOf("function render(ctx)");
-  // コメント（「必須にしない」と説明している行）は除く。画面に出る文言と処理だけを見る
-  const mfa = html.slice(start, end).replace(/^\s*\/\/.*$/gm, "");
-  for (const w of ["必須", "強制", "enrollUntil", "enforceFrom", "開けなくなります", "開けません", "までの登録", "mfaInfo?.required", "banner err", "banner warn"]) {
-    assert.ok(!mfa.includes(w), `マイページの二段階認証に「${w}」が残っている`);
-  }
-});
-
-console.log("— 登録する機能は、残っている —");
-
-await ok("マイページ：登録を始める・確認して登録・登録を外す が残っている", async () => {
-  const html = read("mypage.html");
-  for (const w of ["mfaStart(", "mfaFinish(", "mfaOff(", "登録を始める", "確認して登録", "登録を外す", "登録済みです"]) assert.ok(html.includes(w), w);
-});
-await ok("/api/mfa：enroll・verify・unenroll・reset が残っている。画面（api-client）は /api/mfa を通す", async () => {
-  const src = read("api/mfa.js");
-  for (const a of ["enroll", "verify", "unenroll", "reset"]) assert.match(src, new RegExp(`case "${a}"`), a);
-  const c = read("js/api-client.js");
-  assert.doesNotMatch(c, /auth\/v1\/factors/, "画面から直接叩いている");
-  for (const f of ["mfaEnroll", "mfaVerify", "mfaUnenroll", "mfaReset", "mfaStatus", "mfaFactors"]) assert.ok(c.includes(f), f);
-});
-await ok("ログイン：登録している人には、6桁を聞く（登録した人だけ。登録していない人は、そのまま入れる）", async () => {
-  const src = read("index.html");
-  assert.match(src, /API\.mfaFactors\(\)/);
-  assert.match(src, /認証アプリの6桁/);
-});
-await ok("mfa_required を返す API が来ても、マイページへ送る画面の部品は残っている（js/api-client.js）。使うのは、これから MFA を要る機能を作るとき", async () => {
-  assert.match(read("js/api-client.js"), /mfa_required/);
-});
-
-console.log("— 自分で外せるか（再認証だけ）—");
-
-await ok("直前に6桁で確かめていれば（aal2）、どの役割でも外せる", async () => {
-  for (const ctx of CTXS) assert.deepEqual(M.selfUnenroll({ ctx, req: req("aal2"), today: "2026-10-01" }), { ok: true });
-  assert.deepEqual(M.selfUnenroll({ req: req("aal2") }), { ok: true });
-});
-await ok("確かめていなければ（aal1・トークンなし）外せない。理由は reauth で、「6桁でもう一度」の案内。「強制期間中は外せない（locked）」はない", async () => {
-  for (const ctx of CTXS) for (const t of [null, "aal1"]) for (const today of DATES) {
-    const r = M.selfUnenroll({ ctx, req: req(t), today });
-    assert.equal(r.ok, false);
-    assert.equal(r.reason, "reauth");
-    assert.match(r.hint, /6桁/);
-    assert.ok(!/強制|管理者/.test(r.hint), r.hint);
-  }
-});
-
-console.log("— 機密の API は、ロールで守る —");
-
-await ok("給与・人件費・権限の変更・アカウント・名簿・MFA のリセットの API は、ロールの判定（canManageHr）を通る", async () => {
-  for (const f of ["api/hr/payroll.js", "api/employees/roles.js", "api/employees/account.js", "api/employees/index.js", "api/mfa.js"]) {
-    assert.match(code(f), /canManageHr\(ctx\)/, `${f} にロールの判定が無い`);
-  }
-});
-await ok("ホーム・マイページ・タスクは止めない（登録へ行く道を塞がない）", async () => {
-  for (const f of ["api/me.js", "api/tasks/index.js", "api/news.js"]) {
-    let src = "";
-    try { src = read(f); } catch { continue; }
-    assert.doesNotMatch(src, /requireMfa\(/, `${f} で止めている`);
-  }
+await ok("強制日でも、対象外の人は止めない", async () => {
+  const st = M.mfaState({ ctx: { isAdmin: false, roles: [] }, user: none, req: req("aal1"), today: "2027-01-01" });
+  assert.equal(st.blocked, false);
 });
 
 console.log("— トークンの読み方 —");
@@ -216,35 +122,282 @@ await ok("登録済みは、verified の TOTP があるときだけ", async () =
   assert.equal(M.enrolledOf(null), false);
 });
 
-console.log("— Office は、二段階認証を見ない —");
+console.log("— API の入口 —");
+
+// requireMfa は「今日」を固定できないので、環境変数で強制日を前後に動かして試す
+const withDates = async (from, fn) => {
+  const keep = process.env.MFA_ENFORCE_FROM;
+  process.env.MFA_ENFORCE_FROM = from;
+  try {
+    // ENFORCE_FROM は読み込み時に決まる。値を変えて読み直す
+    const fresh = await import(join(ROOT, `lib/mfa.js?${from}`));
+    await fn(fresh);
+  } finally {
+    if (keep === undefined) delete process.env.MFA_ENFORCE_FROM;
+    else process.env.MFA_ENFORCE_FROM = keep;
+  }
+};
+
+await ok("強制前は通す（true を返し、何も書かない）", async () => {
+  await withDates("2999-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: true }, none), true);
+    assert.equal(r.statusCode, 0);
+  });
+});
+await ok("強制後・未登録は 403 mfa_required と「登録して」の案内", async () => {
+  await withDates("2000-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: true }, none), false);
+    assert.equal(r.statusCode, 403);
+    assert.equal(r.body.error, "mfa_required");
+    assert.equal(r.body.enrolled, false);
+    assert.match(r.body.hint, /登録/);
+  });
+});
+await ok("強制後・登録済み・aal1 は 403 と「確かめて」の案内", async () => {
+  await withDates("2000-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: true }, enrolled), false);
+    assert.equal(r.statusCode, 403);
+    assert.equal(r.body.enrolled, true);
+    assert.match(r.body.hint, /確かめ/);
+  });
+});
+await ok("強制後でも aal2 なら通す", async () => {
+  await withDates("2000-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal2"), r, { isAdmin: true }, enrolled), true);
+  });
+});
+await ok("強制後でも、対象外の一般社員は通す", async () => {
+  await withDates("2000-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles: [] }, none), true);
+  });
+});
+
+console.log("— strict（強制日を待たない。/keiei・これから作る支払・給与用） —");
+
+await ok("strict：強制日の前でも、対象の人が aal1 なら止める", async () => {
+  const st = M.mfaState({ ctx: { roles: ["finance"] }, user: enrolled, req: req("aal1"), today: "2026-09-29", strict: true });
+  assert.equal(st.enforced, false, "画面に出す強制日の判定は日付のまま");
+  assert.equal(st.blocked, true);
+});
+await ok("strict でも、aal2 なら通す／対象外の人は止めない", async () => {
+  const a = M.mfaState({ ctx: { roles: ["finance"] }, user: enrolled, req: req("aal2"), today: "2026-09-29", strict: true });
+  assert.equal(a.blocked, false);
+  const b = M.mfaState({ ctx: { roles: [] }, user: none, req: req("aal1"), today: "2026-09-29", strict: true });
+  assert.equal(b.blocked, false);
+});
+await ok("strict でなければ、これまでどおり強制日までは止めない", async () => {
+  const st = M.mfaState({ ctx: { roles: ["finance"] }, user: enrolled, req: req("aal1"), today: "2026-09-29" });
+  assert.equal(st.blocked, false);
+});
+await ok("requireMfa({ strict: true })：強制日の前でも、未登録・aal1 は 403 mfa_required", async () => {
+  await withDates("2999-01-01", async (m) => {
+    for (const roles of [["owner"], ["manager"], ["finance"]]) {
+      const r = res();
+      assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles }, none, { strict: true }), false, String(roles));
+      assert.equal(r.statusCode, 403);
+      assert.equal(r.body.error, "mfa_required");
+      assert.match(r.body.hint, /登録/);
+    }
+    const ok2 = res();
+    assert.equal(await m.requireMfa(req("aal2"), ok2, { isAdmin: false, roles: ["finance"] }, enrolled, { strict: true }), true);
+    assert.equal(ok2.statusCode, 0);
+  });
+});
+await ok("requireMfa（strict なし）は、強制日の前なら通す（既存の API は変わらない）", async () => {
+  await withDates("2999-01-01", async (m) => {
+    const r = res();
+    assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles: ["finance"] }, none), true);
+  });
+});
+
+console.log("— 入口に置いてあるか —");
+
+await ok("個人情報を返す API は、みな requireMfa を通る", async () => {
+  const { readFileSync } = await import("node:fs");
+  const files = [
+    "api/hr/index.js", "api/onboarding/index.js", "api/onboarding/upload.js",
+    "api/onboarding/items.js", "api/sign/index.js", "api/sign/orders.js", "api/sign/file.js",
+    "api/sign/templates.js", "api/employees/index.js", "api/employees/roles.js",
+    "api/employees/account.js", "api/devices/people.js", "api/devices/web.js",
+    "api/contracts/index.js",
+  ];
+  for (const f of files) {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    assert.match(src, /requireMfa\(req, res, ctx, user\)/, `${f} に requireMfa が無い`);
+  }
+});
+await ok("ホーム・マイページ・タスクは止めない（登録へ行く道を塞がない）", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const f of ["api/me.js", "api/tasks/index.js", "api/news.js"]) {
+    let src = "";
+    try { src = readFileSync(join(ROOT, f), "utf8"); } catch { continue; }
+    assert.doesNotMatch(src, /requireMfa\(/, `${f} で止めている`);
+  }
+});
+
+console.log("— Office は MFA を要求しない／MFA を残すもの —");
 
 await ok("Office の API（api/office/*.js）は、requireMfa も lib/mfa.js も使わない。権限（canAccessOffice）だけで通す", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
   const files = readdirSync(join(ROOT, "api/office")).filter((f) => f.endsWith(".js"));
   assert.ok(files.length >= 4, "index・timesheet・terms・file");
   for (const f of files) {
-    const src = code(`api/office/${f}`);
+    const src = readFileSync(join(ROOT, "api/office", f), "utf8").replace(/^\s*\/\/.*$/gm, "");   // コメントは除く
     assert.doesNotMatch(src, /requireMfa|lib\/mfa\.js|mfaState|aalOf/, `api/office/${f} が MFA を見ている`);
     assert.match(src, /canAccessOffice\(ctx\)/, `api/office/${f} に権限判定が無い`);
   }
 });
 await ok("Office の画面（office/*.html・js/office-layout.js）は、MFA の状態を見て止めない", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
   const pages = readdirSync(join(ROOT, "office")).filter((f) => f.endsWith(".html")).map((f) => `office/${f}`);
   for (const f of [...pages, "js/office-layout.js"]) {
-    assert.doesNotMatch(read(f), /mfaStatus|mfa_required|aal2|mfaState/i, `${f} が MFA を見ている`);
+    const src = readFileSync(join(ROOT, f), "utf8");
+    assert.doesNotMatch(src, /mfaStatus|mfa_required|aal2|mfaState/i, `${f} が MFA を見ている`);
   }
+});
+await ok("MFA を残すもの（給与・人件費／権限変更／MFA・パスワードのリセット）は、今までどおり requireMfa を通る", async () => {
+  const { readFileSync } = await import("node:fs");
+  const keep = {
+    "api/hr/payroll.js": "給与・人件費",
+    "api/employees/roles.js": "権限変更",
+    "api/employees/account.js": "アカウント（メール・パスワードの変更）",
+    "api/mfa.js": "MFA のリセット",
+  };
+  for (const [f, what] of Object.entries(keep)) {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    assert.match(src, /requireMfa\(req, res, ctx, user/, `${f}（${what}）に requireMfa が無い`);
+  }
+});
+await ok("strict の仕組みは残してある（/keiei・これから作る支払・給与用）。Office は、強制日を過ぎても、strict なしの requireMfa の対象にならない", async () => {
+  // 強制日を過去にした lib/mfa.js では、経営者・責任者・経理が aal1 のとき、requireMfa は止める。だから Office には置かない
+  await withDates("2000-01-01", async (m) => {
+    for (const roles of [["owner"], ["manager"], ["finance"]]) {
+      const r = res();
+      assert.equal(await m.requireMfa(req("aal1"), r, { isAdmin: false, roles }, enrolled), false, `${roles}：強制日以降は、非 strict でも止まる`);
+    }
+  });
+});
+
+console.log("— 自分で外せるか —");
+
+await ok("強制前・6桁で確かめていれば外せる", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: true }, req: req("aal2"), today: "2026-09-20" });
+  assert.equal(r.ok, true);
+});
+await ok("強制前でも、確かめていなければ外せない（再認証）", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: true }, req: req("aal1"), today: "2026-09-20" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "reauth");
+  assert.match(r.hint, /6桁/);
+});
+await ok("強制後・対象の人は、自分では外せない（管理者のリセットだけ）", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: true }, req: req("aal2"), today: "2026-10-01" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "locked");
+  assert.match(r.hint, /管理者/);
+});
+await ok("強制後でも、対象外の人は外せる", async () => {
+  const r = M.selfUnenroll({ ctx: { isAdmin: false, roles: ["it"] }, req: req("aal2"), today: "2027-01-01" });
+  assert.equal(r.ok, true);
 });
 
 console.log("— 出入りが記録に残るか —");
 
 await ok("登録・解除・リセット・再登録は、すべて記録する", async () => {
-  const src = read("api/mfa.js");
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(ROOT, "api/mfa.js"), "utf8");
   for (const a of ["mfa.enroll", "mfa.unenroll", "mfa.reset", "mfa.reenroll"]) {
     assert.ok(src.includes(`"${a}"`), `${a} を残していません`);
   }
 });
-await ok("自分のリセットは断る（パスワードだけで、登録を外せてしまうため）", async () => {
-  assert.match(read("api/mfa.js"), /self_reset/);
+await ok("画面から Supabase の factors を直接叩かない（記録が残らなくなる）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(ROOT, "js/api-client.js"), "utf8");
+  assert.doesNotMatch(src, /auth\/v1\/factors/, "画面から直接叩いています");
+  assert.match(src, /"\/api\/mfa"/, "/api/mfa を通していません");
 });
+await ok("自分のリセットは断る（強制の意味が無くなる）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(ROOT, "api/mfa.js"), "utf8");
+  assert.match(src, /self_reset/);
+});
+
+console.log("— 一時停止（MFA_ENABLED が true でない） —");
+
+for (const off of ["false", undefined, ""]) {
+  const label = off === undefined ? "未設定" : `"${off}"`;
+  await ok(`MFA_ENABLED=${label}：強制日を過ぎても、対象の役割（未登録・aal1）を止めない。required・blocked・enforced は false`, async () => {
+    if (off === undefined) delete process.env.MFA_ENABLED; else process.env.MFA_ENABLED = off;
+    assert.equal(M.mfaEnabled(), false);
+    for (const ctx of [{ isAdmin: true, roles: [] }, ...["owner", "manager", "finance", "hr", "labor_advisor"].map((r) => ({ isAdmin: false, roles: [r] }))]) {
+      const st = M.mfaState({ ctx, user: none, req: req("aal1"), today: "2027-01-01" });
+      assert.equal(st.enabled, false);
+      assert.equal(st.required, false, JSON.stringify(ctx));
+      assert.equal(st.blocked, false, JSON.stringify(ctx));
+      assert.equal(st.enforced, false, "期限の警告を出さない");
+      const r = res();
+      assert.equal(await M.requireMfa(req("aal1"), r, ctx, none), true, JSON.stringify(ctx));
+      assert.equal(r.statusCode, 0, "403 mfa_required を返さない");
+    }
+  });
+}
+await ok("一時停止中は strict: true の API（/keiei・支払・給与用）も止めない（MFA_ENFORCE_FROM を未来日にするだけでは止まるもの）", async () => {
+  process.env.MFA_ENABLED = "false";
+  for (const roles of [["owner"], ["manager"], ["finance"]]) {
+    const st = M.mfaState({ ctx: { isAdmin: false, roles }, user: none, req: req("aal1"), today: "2026-09-29", strict: true });
+    assert.equal(st.blocked, false, String(roles));
+    const r = res();
+    assert.equal(await M.requireMfa(req("aal1"), r, { isAdmin: false, roles }, none, { strict: true }), true, String(roles));
+    assert.equal(r.statusCode, 0);
+  }
+});
+await ok("一時停止中も、登録済み・今回の認証（aal2）の状態はそのまま返す（登録済みの factor は消さない・触らない）", async () => {
+  process.env.MFA_ENABLED = "false";
+  const st = M.mfaState({ ctx: { roles: ["hr"] }, user: enrolled, req: req("aal2") });
+  assert.equal(st.enrolled, true);
+  assert.equal(st.verified, true);
+  const { readFileSync } = await import("node:fs");
+  assert.doesNotMatch(readFileSync(join(ROOT, "lib/mfa.js"), "utf8"), /factors\/.*delete|admin\/users.*factors/i, "lib/mfa.js が factor を消している");
+});
+await ok("MFA_ENABLED=true に戻すと、これまでどおり止める（強制日以降の aal1・strict）", async () => {
+  process.env.MFA_ENABLED = "true";
+  const st = M.mfaState({ ctx: { roles: ["hr"] }, user: none, req: req("aal1"), today: "2026-10-01" });
+  assert.equal(st.enabled, true);
+  assert.equal(st.blocked, true);
+  const r = res();
+  assert.equal(await M.requireMfa(req("aal1"), r, { roles: ["finance"] }, none, { strict: true }), false);
+  assert.equal(r.body.error, "mfa_required");
+});
+await ok("画面：必須にしていない間（enabled=false）も、マイページの設定欄は「任意のセキュリティ設定」として出す。必須・期限の案内は出さない", async () => {
+  const { readFileSync } = await import("node:fs");
+  const my = readFileSync(join(ROOT, "mypage.html"), "utf8");
+  assert.doesNotMatch(my, /el\("mfa"\)\.hidden = true/, "mypage.html が MFA 欄を隠している");
+  assert.match(my, /二段階認証（任意のセキュリティ設定）/, "見出しが「任意のセキュリティ設定」でない");
+  assert.match(my, /任意の設定です。登録しなくても、これまでどおり使えます/, "「登録しなくても使える」の説明が無い");
+  // 必須・期限の案内は、サーバが required を返したときだけ（required の分岐の中にだけある）
+  assert.match(my, /const note = required\n/, "必須の案内が required の分岐になっていない");
+  // 登録を促す帯（js/layout.js mfaNudge）は required が false なら出ない。必須にしない間の mfaState は required=false
+  assert.match(readFileSync(join(ROOT, "js/layout.js"), "utf8"), /if \(!mfa\?\.required \|\| mfa\.enrolled\) return;/);
+});
+await ok("画面：登録した人は、必須を止めている間（enabled=false）も、ログインで6桁を聞く（任意の設定として、ちゃんと効く）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const login = readFileSync(join(ROOT, "index.html"), "utf8");
+  assert.doesNotMatch(login, /enabled === false/, "index.html が enabled=false で6桁を飛ばしている");
+  assert.match(login, /const factors = st\?\.factors \|\| \[\];/, "index.html が登録済みの factor で6桁を聞いていない");
+});
+await ok("必須を止めている間も、自分で登録を外すには、直前に6桁で確かめる（パスワードだけで、登録を外されない）", async () => {
+  process.env.MFA_ENABLED = "false";
+  const ctx = { isAdmin: false, roles: ["hr"] };
+  assert.deepEqual(M.selfUnenroll({ ctx, req: req("aal1"), today: "2027-01-01" }).reason, "reauth");
+  assert.equal(M.selfUnenroll({ ctx, req: req("aal2"), today: "2027-01-01" }).ok, true, "強制期間中の「外せない」は無い");
+});
+
+if (ENABLED_BEFORE === undefined) delete process.env.MFA_ENABLED; else process.env.MFA_ENABLED = ENABLED_BEFORE;
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

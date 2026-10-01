@@ -832,6 +832,7 @@ await ok("面談を設定：初回商談30分を作り、会社と面談のIDつ
   setup();
   process.env.TIMEREX_SALES_MEETING_URL = "https://timerex.net/s/eight/first30";
   const c = await newCompany();
+  await patchCo({ id: c.id, contacts: { email: "tanaka@sample.co.jp" } });
   const r = await mIssue({ companyId: c.id });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const m = r.body.meeting;
@@ -846,6 +847,43 @@ await ok("面談を設定：初回商談30分を作り、会社と面談のIDつ
   assert.equal(again.body.meeting.id, m.id);
   assert.equal(db.rows.gw_sales_meetings.length, 1);
   delete process.env.TIMEREX_SALES_MEETING_URL;
+});
+
+await ok("TimeRex を使うとき、予約照合に使うメールが無い企業は日程調整を開始できない（400 email_required・商談を作らない）", async () => {
+  setup();
+  process.env.TIMEREX_SALES_MEETING_URL = "https://timerex.net/s/eight/first30";
+  const c = await newCompany();
+  const r = await mIssue({ companyId: c.id });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "email_required");
+  assert.equal(db.rows.gw_sales_meetings.length, 0, "商談を作らない");
+  // いまの連絡手段がメールなら、その連絡先でも照合できる（Webhook と同じ判定）
+  const co = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  Object.assign(co, { current_contact_channel: "email", current_contact_value: "Info@Sample.co.jp" });
+  const d = await getOne(c.id);
+  assert.deepEqual(d.body.matchEmails, ["info@sample.co.jp"]);
+  assert.equal((await mIssue({ companyId: c.id })).statusCode, 200);
+  delete process.env.TIMEREX_SALES_MEETING_URL;
+});
+
+await ok("予約照合用のメールをその場で登録：PATCH contacts は連絡先だけ直し、営業履歴は増やさない。詳細の matchEmails に出る", async () => {
+  setup();
+  const c = await newCompany();
+  const before = db.rows.gw_sales_events.length;
+  assert.deepEqual((await getOne(c.id)).body.matchEmails, []);
+  assert.equal((await patchCo({ id: c.id, contacts: { email: "tanaka" } })).statusCode, 400, "メールの形");
+  const r = await patchCo({ id: c.id, contacts: { email: "tanaka@sample.co.jp" } });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.company.contacts.email, "tanaka@sample.co.jp");
+  assert.equal(db.rows.gw_sales_events.length, before, "営業履歴は増やさない");
+  assert.deepEqual((await getOne(c.id)).body.matchEmails, ["tanaka@sample.co.jp"]);
+  // 他の連絡先は消さない。いまの連絡手段がメールなら、その連絡先も合わせて直す
+  const co = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  co.contacts = { ...co.contacts, line: "sample_line" };
+  co.current_contact_channel = "email";
+  await patchCo({ id: c.id, contacts: { email: "sato@sample.co.jp" } });
+  assert.equal(co.contacts.line, "sample_line");
+  assert.equal(co.current_contact_value, "sato@sample.co.jp");
 });
 
 await ok("TimeRex の URL が未設定でも面談は作れる（URL は null、日程は手入力）", async () => {

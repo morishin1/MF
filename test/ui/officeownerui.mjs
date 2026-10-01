@@ -9,9 +9,9 @@
 // ■ 何を通しているか
 //   ブラウザの通信は、本物の api/office/{index,timesheet,file,terms}.js のハンドラにつなぐ（DB は偽：test/_memdb.mjs）。
 //   DB の中身は、db/office_phase3_test_seed.sql が本番に作る4行と同じ値（要員・現場契約・契約条件・月次進捗）。
-//   /api/me は、昔の「MFA が要る対象・未登録・強制日を過ぎている」状態の経営者を返す（いまの方針では、二段階認証は任意。案内帯も出さず、Office も止めない）。
+//   /api/me は「MFA が要る対象・未登録・強制日を過ぎている」経営者を返す（実際には、MFA を促す帯が出るだけで、Office は止まらない）。
 //
-// ■ 守ること（Office は MFA を要求しない。二段階認証は任意）
+// ■ 守ること（2026-09-30 の決定：Office は MFA を要求しない）
 //   ・/api/office* の応答は、どれも 403 mfa_required にならない（200）
 //   ・URL が /mypage.html#mfa に変わらない
 //   ・権限（access.office）が無い人は、MFA の有無にかかわらず、Office に入れない（home.html へ）
@@ -70,7 +70,7 @@ async function open(url, { access = { recruit: true, sell: true, office: true },
     const req = route.request(); const u = new URL(req.url());
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
     if (u.pathname === "/api/me") {
-      // 経営者。昔のサーバが返した「MFA の対象・未登録・強制日を過ぎている」状態。いまの方針（任意）では、帯は出さず、Office も止めない
+      // 経営者。MFA の対象で、未登録で、強制日（2026-10-01）を過ぎている。登録を促す帯は出るが、Office は止まらない
       return send({
         email: "owner@8grp.co.jp", appRole: "owner", isAdmin: false, shows: {}, roles: [], access,
         mfa: { required: true, enrolled: false, verified: false, enforced: true, enrollUntil: "2026-09-30", enforceFrom: "2026-10-01", blocked: true },
@@ -98,7 +98,7 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
   const { page, errs } = await open("/admin-dashboard.html");
   await page.waitForSelector(".topbar [data-shortcut='office']");
   check(true, "ダッシュボードのヘッダーに「Office」が出ている（access.office のとおり）");
-  check(await page.locator(".kp-mfa-nudge").count() === 0, "MFA の登録を促す帯は出ない（二段階認証は任意）");
+  check(await page.locator(".kp-mfa-nudge").count() === 1, "MFA の登録を促す帯は出ている（案内だけ。Office を止めない）");
 
   // Office をクリック
   await Promise.all([page.waitForURL(/\/office\/?(index\.html)?(\?.*)?$/), page.click(".topbar [data-shortcut='office']")]);
@@ -110,10 +110,13 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
   check(shown, `Office の画面が表示される。応答：${seen.map((s) => `${s.status}${s.error ? " " + s.error : ""}`).join(", ")}`);
   if (!shown) { await page.close(); throw new Error("Office が開かないので、以降は見られません"); }
 
-  // 対象月を 2026年10月 にする（画面の「次の月」／「前の月」）
+  // 対象月を 2026年10月 にする（画面の「次の月」／「前の月」）。
+  // 開いたときの月は今日で決まる（2026-10-01 以降は最初から10月）ので、動かした回数を数えておく
+  let moves = 0;
   for (let i = 0; i < 6 && (await page.inputValue("#month")) !== "2026-10"; i++) {
     const cur = await page.inputValue("#month");
     await page.click(cur < "2026-10" ? "#next" : "#prev");
+    moves++;
     await page.waitForTimeout(500);
   }
   check((await page.inputValue("#month")) === "2026-10", "対象月を 2026年10月 にできる");
@@ -136,7 +139,8 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
 
   // 応答：すべて 200。403 mfa_required は1つも無い
   const office = seen.filter((s) => s.path.startsWith("/api/office"));
-  check(office.length >= 3, `Office の API を呼んだ（${office.length}回）`);
+  // 開いたとき1回＋月を動かした回数＋9月へ戻した1回（今日の日付によらない）
+  check(office.length >= moves + 2, `Office の API を呼んだ（${office.length}回・月の移動 ${moves}回）`);
   check(office.every((s) => s.status === 200), `Office の API の応答が、すべて 200（${office.map((s) => s.status).join(",")}）`);
   check(!seen.some((s) => s.error === "mfa_required" || s.status === 403), "403・mfa_required は1つも無い");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" | ").slice(0, 200)}`);

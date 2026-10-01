@@ -1,9 +1,10 @@
-// 二段階認証は任意。マイページと共通ヘッダを、実際のブラウザで見る。
+// 二段階認証は任意（既定。MFA_ENABLED が true でない間）。マイページと共通ヘッダを、実際のブラウザで見る。
 //
 // ■ 何を守りたいのか
 //   ・マイページ#mfa は「任意のセキュリティ設定」。登録していなくても、エラー・警告（赤/黄）にしない。必須・期限・強制の文言が無い
-//   ・どの役割（経営者・人事・管理者・社労士）でも同じ。サーバが昔の「必須・期限」の状態を返してきても、画面は警告を出さない
+//   ・どの役割（経営者・人事・管理者・社労士）でも同じ（サーバは enabled:false・required:false を返す）
 //   ・共通ヘッダに、二段階認証の案内帯が出ない（登録していない経営者・人事のホームでも）
+//   ・MFA_ENABLED=true に戻したとき（サーバが required:true を返したとき）だけ、必須・期限の案内が出る（状態で切り替わる）
 //   ・登録する機能は残っている（登録を始める → 6桁入力欄。登録済みなら「登録済み」と、登録を外す導線）
 //   ・スマホ幅（390px）で横スクロールしない
 import { launch, BASE } from "../_browser.mjs";
@@ -39,11 +40,11 @@ async function open(page, { roles, status, meMfa, width = 1100, path = "/mypage.
 }
 
 // サーバが返す、いまの状態（lib/mfa.js mfaState）
-const OPTIONAL_NONE = { required: false, enrolled: false, verified: false, enforced: false, enrollUntil: null, enforceFrom: null, blocked: false,
+const OPTIONAL_NONE = { enabled: false, required: false, enrolled: false, verified: false, enforced: false, enrollUntil: null, enforceFrom: null, blocked: false,
   factors: [], selfUnenroll: "reauth", selfUnenrollHint: "外す前に、認証アプリの6桁でもう一度確かめてください", reset: null };
 const OPTIONAL_ON = { ...OPTIONAL_NONE, enrolled: true, factors: [{ id: "f1", status: "verified", name: "エイト" }] };
-// 昔のサーバ（必須・期限つき）が返す形。画面は、これを受けても警告を出さない
-const LEGACY_REQUIRED = { ...OPTIONAL_NONE, required: true, enforced: true, blocked: true, enrollUntil: "2026-09-30", enforceFrom: "2026-10-01" };
+// MFA_ENABLED=true に戻したときにサーバが返す形（必須・期限つき）
+const REQUIRED_ON = { ...OPTIONAL_NONE, enabled: true, required: true, enforced: true, blocked: true, enrollUntil: "2026-09-30", enforceFrom: "2026-10-01" };
 
 const ROLE_CASES = [["経営者", ["owner"]], ["人事", ["hr"]], ["社労士", ["labor_advisor"]], ["責任者", ["manager"]], ["経理", ["finance"]], ["一般メンバー", []]];
 
@@ -63,20 +64,24 @@ for (const [label, roles] of ROLE_CASES) {
   await page.close();
 }
 
-console.log("\n— 昔のサーバ（必須・期限つき）が返しても、警告を出さない —");
+console.log("\n— MFA_ENABLED=true に戻したとき（required:true）だけ、必須・期限の案内が出る —");
 {
   const page = await br.newPage();
-  await open(page, { roles: ["owner", "hr"], status: LEGACY_REQUIRED, meMfa: LEGACY_REQUIRED });
+  await open(page, { roles: ["owner", "hr"], status: REQUIRED_ON, meMfa: REQUIRED_ON });
   const t = await page.locator("#mfa").innerText();
-  check(await page.locator("#mfa .banner").count() === 0 && !/必須|強制|2026-10-01|2026-09-30/.test(t), "マイページ: 必須・期限・強制の案内を出さない");
-  check(await page.locator(".kp-mfa-nudge").count() === 0, "共通ヘッダ: 案内帯を出さない");
+  check(!/任意のセキュリティ設定/.test(t) && /必須/.test(t) && await page.locator("#mfa .banner.err").count() === 1, "マイページ: 必須の案内（赤い帯）が出る。「任意」とは書かない");
   await page.close();
+  // 登録を促す帯は、マイページ以外（ホーム）に出る
+  const home = await br.newPage();
+  await open(home, { roles: ["owner", "hr"], status: REQUIRED_ON, meMfa: REQUIRED_ON, path: "/home.html" });
+  check(await home.locator(".kp-mfa-nudge").count() === 1, "ホーム: 登録を促す帯が出る（必須のとき）");
+  await home.close();
 }
 
 console.log("\n— ホーム：二段階認証が未登録の経営者・人事に、案内帯を出さない —");
 for (const [label, roles] of [["経営者", ["owner"]], ["人事", ["hr"]]]) {
   const page = await br.newPage();
-  await open(page, { roles, status: OPTIONAL_NONE, meMfa: { ...OPTIONAL_NONE, required: true, enforced: false, enrollUntil: "2026-09-30", enforceFrom: "2026-10-01" }, path: "/home.html" });
+  await open(page, { roles, status: OPTIONAL_NONE, meMfa: OPTIONAL_NONE, path: "/home.html" });
   const t = await page.locator("body").innerText();
   check(await page.locator(".kp-mfa-nudge").count() === 0 && !/二段階認証を .*登録してください|から必須/.test(t), `${label}: ホームに、二段階認証の案内帯が出ない`);
   await page.close();
