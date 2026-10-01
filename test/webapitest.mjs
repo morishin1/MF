@@ -2,6 +2,7 @@
 //
 // いちばん厚く見るのは **URLをどこまで削るか**。
 // ここが緩むと、検索語・一度きりの鍵・メールアドレスがそのまま会社に届く。
+import { MFA_AUTH } from "./_mfa.mjs";
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -208,8 +209,8 @@ const res = () => {
   return r;
 };
 const call = async (h, req) => { const o = res(); await h(req, o); return o; };
-const get = (path, qs = "") => ({ method: "GET", url: `${path}${qs}`, headers: { authorization: "Bearer x" } });
-const post = (path, body) => ({ method: "POST", url: path, body, headers: { authorization: "Bearer x" } });
+const get = (path, qs = "") => ({ method: "GET", url: `${path}${qs}`, headers: { authorization: MFA_AUTH } });
+const post = (path, body) => ({ method: "POST", url: path, body, headers: { authorization: MFA_AUTH } });
 
 const HR = { tenantId: "t1", isAdmin: true, isHr: true, roles: ["hr"],
              employee: { id: "emp-hr", display_name: "事務" } };

@@ -132,8 +132,10 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
   check(tab.includes("予定：本日 01:30"), "面談タブ：日付またぎ（UTC では前日 9/30 16:30 → 日本では本日 01:30）");
   check(!tab.includes("9/30"), "UTC の日付（9/30）を出さない");
 
-  // 手動の古い面談の「日時を変更」：datetime-local は日本時間。保存しても 9 時間ずれない
-  await page.locator("button", { hasText: "日時を変更" }).click();
+  // 手動の古い面談の「面談情報を編集」（旧「日時を変更」）：datetime-local は日本時間。保存しても 9 時間ずれない
+  // TimeRex の面談にも「面談情報を編集」が出るので、手動の面談（TimeRex 用ボタンの無いカード）のものを押す
+  await page.locator(".card", { hasNot: page.locator("button[data-timerex]") })
+    .locator("button", { hasText: "面談情報を編集" }).click();
   await page.waitForTimeout(300);
   const v = await page.locator("#rs-when").inputValue();
   check(v === "2026-10-01T01:30", `datetime-local は日本時間（${v}）`);

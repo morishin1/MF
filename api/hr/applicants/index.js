@@ -82,6 +82,8 @@ async function list(req, res, sb, ctx) {
   return json(res, 200, {
     applicants: (data || []).map((a) => ({
       ...shapeApplicant(a, nextOf(a)),
+      // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
+      nextInterviewAt: nextOf(a)?.scheduledAt || null,
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
       docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,

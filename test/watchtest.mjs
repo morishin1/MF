@@ -13,6 +13,7 @@
 //        ・勤怠とWeb利用時間の大きな乖離
 //   4. 判定の数字を、外に出さないこと
 //      「何分から」を返すと、避け方を配ることになる
+import { MFA_AUTH } from "./_mfa.mjs";
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -76,7 +77,7 @@ const res = () => {
 const get = async (qs = "") => {
   const r = res();
   await people({ method: "GET", url: `/api/devices/people${qs}`,
-                 headers: { authorization: "Bearer x" } }, r);
+                 headers: { authorization: MFA_AUTH } }, r);
   return r;
 };
 
