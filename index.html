@@ -185,10 +185,8 @@
     const me = await API.me();
     const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
     const name = me.gw?.employee?.display_name || me.email || "";
-    const stage = me.gw?.stage || null;
-    try { localStorage.setItem("kp_layout", JSON.stringify({ appRole, name, stage })); } catch (e) { /* 任意 */ }
-    // 入社準備中の人は、ログインしたらまず入社準備（KPLayout.homeFor が決める）
-    location.replace(nextPath() || KPLayout.homeFor(appRole, stage));
+    try { localStorage.setItem("kp_layout", JSON.stringify({ appRole, name })); } catch (e) { /* 任意 */ }
+    location.replace(nextPath() || KPLayout.homeFor(appRole));
   }
 
   // 戻り先（?next=）。入社案内のURLなど、ログイン後に元の画面へ戻すため。
