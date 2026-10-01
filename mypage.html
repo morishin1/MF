@@ -132,7 +132,7 @@
   </div>
 
   <div class="card" id="mfa">
-    <h2><span class="material-symbols-outlined">verified_user</span>二段階認証（任意のセキュリティ設定）</h2>
+    <h2><span class="material-symbols-outlined">verified_user</span>二段階認証</h2>
     <div id="mfa-body"><span class="muted">読み込み中…</span></div>
   </div>
 
@@ -175,8 +175,8 @@
 
   // ---- 二段階認証 --------------------------------------------------------------
   //
-  // 二段階認証は任意（必須にしない・強制もしない。lib/mfa.js）。使いたい人だけが登録する。
-  // 登録していないことを、エラー・警告として出さない。登録の中身は Supabase Auth の TOTP
+  // 対象の人（管理者・人事・社労士）は 2026-09-30 までに登録、10-01 から強制。
+  // 対象でない人も登録できる。登録の中身は Supabase Auth の TOTP
   let mfaInfo = null;
   async function loadMfa(info) {
     const box = el("mfa-body");
@@ -186,24 +186,34 @@
     mfaInfo = st || info || null;
     const factors = st.factors || [];
     const on = factors.find((f) => f.status === "verified");
+    const note = mfaInfo?.required
+      ? (mfaInfo.enforced
+          ? `<div class="banner ${on ? "ok" : "err"}" style="margin:0 0 12px;">
+               <span class="material-symbols-outlined">${on ? "check_circle" : "error"}</span>
+               <div>${on ? "登録済みです。ログインのたびに認証アプリの6桁が要ります。"
+                        : "あなたの権限では二段階認証が必須です。登録するまで、個人情報の画面は開けません。"}</div></div>`
+          : `<div class="banner ${on ? "ok" : "warn"}" style="margin:0 0 12px;">
+               <span class="material-symbols-outlined">${on ? "check_circle" : "schedule"}</span>
+               <div>${on ? "登録済みです。"
+                        : `あなたの権限では <b>${esc(mfaInfo.enrollUntil)}</b> までの登録をお願いします。
+                           ${esc(mfaInfo.enforceFrom)} から、登録していないと個人情報の画面が開けなくなります。`}</div></div>`)
+      : "";
     // リセットされた直後は、登録し直してもらう
     const resetNote = st.reset ? `
-      <div class="banner" style="margin:0 0 12px;">
+      <div class="banner warn" style="margin:0 0 12px;">
         <span class="material-symbols-outlined">lock_reset</span>
-        <div>管理者が二段階認証をリセットしました。使う場合は、認証アプリで登録し直してください。</div></div>` : "";
+        <div>管理者が二段階認証をリセットしました。認証アプリで登録し直してください。</div></div>` : "";
 
-    box.innerHTML = resetNote + (on ? `
+    box.innerHTML = resetNote + note + (on ? `
       <p class="muted" style="font-size:13px;margin:0 0 10px;">
-        認証アプリ（Google Authenticator、Microsoft Authenticator など）で登録済みです。
-        ログインのたびに、認証アプリの6桁が要ります。</p>
+        認証アプリ（Google Authenticator、Microsoft Authenticator など）で登録済みです。</p>
       ${st.selfUnenroll === "ok"
         ? `<button class="btn btn-secondary btn-sm" onclick="mfaOff('${esc(on.id)}', this)">登録を外す</button>`
         : `<p class="muted" style="font-size:12.5px;margin:0;">
              ${esc(st.selfUnenrollHint || "いまは自分では外せません")}</p>`}
       <div id="mfa-msg" class="err-text"></div>` : `
       <p class="muted" style="font-size:13px;margin:0 0 10px;">
-        任意の設定です。登録しなくても、これまでどおり使えます。
-        登録すると、ログインのとき、パスワードに加えて認証アプリの6桁を入れるようになり、
+        ログインのとき、パスワードに加えて認証アプリの6桁を入れるようにします。
         パスワードが漏れても、それだけでは入れなくなります。</p>
       <button class="btn btn-primary btn-sm" onclick="mfaStart(this)">
         <span class="material-symbols-outlined icon-inline">qr_code_2</span>登録を始める</button>
@@ -258,13 +268,14 @@
   }
 
   async function mfaOff(factorId, btn) {
-    if (!confirm("二段階認証の登録を外します。外したあとは、ログインのときに認証アプリの6桁が要らなくなります。よろしいですか？")) return;
+    if (!confirm("二段階認証の登録を外します。あなたの権限で必須になっている場合、個人情報の画面が開けなくなります。よろしいですか？")) return;
     const msg = el("mfa-msg"); msg.textContent = "";
     try {
       await KPLayout.busy(btn, "…", () => API.mfaUnenroll(factorId));
       await loadMfa(mfaInfo);
     } catch (e) {
-      // 直前に6桁で確かめていないとき（パスワードだけのログイン）は、断られる
+      // 強制期間中は自分では外せない（管理者のリセットだけ）。
+      // 直前に6桁で確かめていないときも断られる
       msg.textContent = e.hint || (/aal2|AAL2/i.test(e.message || "")
         ? "外すには、いちどログインし直して6桁で認証してから操作してください"
         : (e.message || "外せませんでした"));

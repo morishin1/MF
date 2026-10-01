@@ -118,8 +118,6 @@ RLS は行を絞るが列は絞れない。列の出し分けは API 層（servi
 
 ### 4-2. MFA（二段階認証）を入れる
 
-> **【方針変更 2026-10-01】二段階認証は必須にしない（任意）。** 下の「登録期間・強制・止める API」は、変更前の設計の記録。いまは `requireMfa` は何も止めず、強制日もない。登録する機能は残る。詳しくは `docs/mfa-optional.md`
-
 Supabase Auth の TOTP をそのまま使う。サーバは秘密を持たず、トークンの `aal` だけを見る。
 
 | | |
@@ -221,7 +219,7 @@ Supabase のプロジェクトは Tokyo（ap-northeast-1）。バックアップ
   社労士は共有されている人のぶんだけ。出したことは `gw_activity_log` と
   `gw_sensitive_access_log`（kind=export）に残る。ファイル名に氏名を入れない
 
-### MFA の追加（済・2026-09-16。2026-10-01 に必須→任意へ変更。`docs/mfa-optional.md`）
+### MFA の追加（済・2026-09-16）
 
 - 強制日（2026-10-01）以降、対象の人は**自分で登録を外せない**（`lib/mfa.js` の `selfUnenroll`）。
   外すのは管理者のリセットだけ（`api/mfa.js` action=reset、`gw_mfa_resets`）。

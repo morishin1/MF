@@ -47,7 +47,7 @@
 ## 技術選定
 
 - **フロント / ホスティング**: Vercel（静的 → 将来 Next.js + Node API）
-- **認証**: Supabase Auth（二段階認証=任意のセキュリティ設定、ロール: admin/staff/client。`docs/mfa-optional.md`）
+- **認証**: Supabase Auth（スタッフ=MFA必須、ロール: admin/staff/client）
 - **DB**: Supabase Postgres（全テーブルに `tenant_id` + RLS）
 - **書類ストレージ**: Supabase Storage（非公開・署名付きURL・テナント別）
 - **AI仕訳**: Claude API（vision でPDF読取、学習に使わない/ゼロ保持設定）

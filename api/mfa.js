@@ -1,7 +1,7 @@
 // GET  /api/mfa                       … いまの状態（要るか・登録済みか・自分で外せるか・リセット中か）
 // POST /api/mfa {action:"enroll"}     … 登録を始める（QR と手入力キーが返る）
 // POST /api/mfa {action:"verify", factorId, code} … 6桁で確かめて登録を終える（aal2 のトークンが返る）
-// POST /api/mfa {action:"unenroll", factorId}     … 自分で外す（直前に6桁で確かめた人だけ）
+// POST /api/mfa {action:"unenroll", factorId}     … 自分で外す（再認証つき。強制期間中の対象者は不可）
 // POST /api/mfa {action:"reset", employeeId}      … 管理者・経営者が外す（本人は登録し直す）。
 //                                                   経営者（owner）のぶんは、経営者だけが外せる
 //
@@ -11,26 +11,28 @@
 //   画面から Supabase を直接叩くと、外したことがどこにも残らない。
 //   ログインのときの6桁の確認だけは、画面から直接（記録が要るのは登録の出入りだけ）。
 //
-// ■ 二段階認証は任意（lib/mfa.js）
+// ■ 守りは UI ではなく API
 //
-//   必須にしない・強制もしない。ここは、使いたい人が登録・解除でき、管理者がリセットできるための入口。
-//   自分で解除するときだけ、直前に6桁で確かめた aal2 を要る（パスワードだけで、登録を外されないように）。
+//   本人が Supabase を直接叩いて外すことはできる（それを止める設定は無い）。
+//   ただ、外した瞬間からその人のトークンは aal1 になり、
+//   機密の API は requireMfa（lib/mfa.js）で止まる。「外しても何も見られない」が守り。
+//   ここで 403 を返すのは、正しい道（管理者のリセット）を案内するため。
 //
 // ■ リセットは管理者だけ・自分のはできない
-//   リセットは、認証アプリを失った人のための操作。自分で自分のをリセットできると、
-//   パスワードだけで登録を外せてしまう。別の管理者に頼む。
+//   自分で自分をリセットできると、強制の意味が無い。別の管理者に頼む。
 //
 // ■ 経営者（owner）の二段階認証は、経営者だけがリセットできる
-//   二段階認証は任意。経営者がリセットを使うことは多くないが、
 //   管理者・人事が owner の認証を外せると、パスワードを知っている人が、
-//   管理者を経由して自分の認証アプリに差し替えられる。owner の保護は、二段階認証の有無とは別に守る。
+//   管理者を経由して自分の認証アプリに差し替えられる（経営の画面は認証さえ通れば開く）。
 //   だから
 //     経営者 → 一般ユーザー    可
-//     経営者 → ほかの経営者    可
+//     経営者 → ほかの経営者    可（二段階認証は任意。実行する経営者に aal2 は要らない。owner のロールの判定だけ）
 //     管理者・人事 → 経営者    不可（403 owner_only）。試みたことは記録に残す
 //     経営者 → 自分            不可（自分では外せない）
-//   経営者が1人だけで、その人が認証アプリを失ったときも、パスワードで入れる（二段階認証は任意）。
-//   画面から他人が外せる経路は残さない。緊急の復旧手順は docs/keiei-owner-recovery.md。
+//   経営者が1人だけで、その人が認証アプリを失ったときは、画面からは復旧できない
+//   （二段階認証は任意なので、登録していなければ、パスワードで入れる）。
+//   Supabase の SQL による緊急復旧（docs/keiei-owner-recovery.md）で行う。
+//   通常の画面に、経営者を乗っ取れる経路は残さない。
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
@@ -162,7 +164,7 @@ async function unenroll(req, res, ctx, user, body) {
 async function reset(req, res, ctx, user, body) {
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden", hint: "管理者だけができます" });
-  // （二段階認証は任意。requireMfa は何も止めない。権限は、この下の canManageHr の判定）
+  // 管理者自身が二段階認証を済ませていること（強制日以降）
   if (!(await requireMfa(req, res, ctx, user))) return;
 
   const employeeId = String(body?.employeeId || "");

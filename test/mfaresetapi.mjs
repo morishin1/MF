@@ -61,7 +61,15 @@ mock.module(atRoot("lib/auth.js"), { namedExports: { requireUser: async () => ({
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { logged.push(e); } } });
 mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async (rows) => { notices.push(...rows); return { created: rows.length }; } } });
 
-// lib/mfa.js は本物のまま使う（二段階認証は任意。requireMfa は何も止めない）
+// 二段階認証は任意。この API は、requireMfaStrict（aal2 を求める入口）を呼ばない。呼んだら数える
+// （requireMfa は、日付・環境変数で変わる決まり。ここでは、権限の判定だけを見るので、通しておく）
+let strictCalls = 0;
+const REAL_MFA = await import(atRoot("lib/mfa.js"));
+mock.module(atRoot("lib/mfa.js"), { namedExports: {
+  ...REAL_MFA,
+  requireMfa: async () => true,
+  requireMfaStrict: async () => { strictCalls += 1; return true; },
+} });
 
 const REAL_GW = await import(atRoot("lib/gw.js"));
 let who;
@@ -93,7 +101,7 @@ const ctxOf = (id, roles, extra = {}) => ({
 });
 
 function setup() {
-  logged.length = 0; notices.length = 0; deleted.length = 0;
+  logged.length = 0; notices.length = 0; deleted.length = 0; strictCalls = 0;
   const emp = (id, name, status = "active") => ({ id, tenant_id: "t1", display_name: name, user_id: `u-${id}`, status });
   db.rows = {
     gw_employees: [emp("own1", "経営者A"), emp("own2", "経営者B"), emp("adm", "管理者"), emp("hr1", "人事"), emp("mem", "一般"),
@@ -122,6 +130,7 @@ await ok("経営者は、ほかの経営者の認証をリセットできる（�
   const r = await reset("own2");
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.notEqual(r.body.error, "mfa_required");
+  assert.equal(strictCalls, 0, "経営者どうしのリセットも、aal2 を求める入口（requireMfaStrict）を呼ばない");
   assert.deepEqual(deleted.map((d) => d.userId), ["u-own2"]);
   assert.equal(logged.at(-1).action, "mfa.reset");
   assert.equal(logged.at(-1).detail.ownerTarget, true);
@@ -132,6 +141,7 @@ await ok("経営者どうしのリセットに、二段階認証の確認（mfa_
   const r = await reset("own2");
   assert.equal(r.statusCode, 200);
   assert.ok(!JSON.stringify(r.body).includes("mfa_required"));
+  assert.equal(strictCalls, 0);
   assert.equal(db.rows.gw_mfa_resets.length, 1);
 });
 
