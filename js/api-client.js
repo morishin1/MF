@@ -1197,6 +1197,33 @@
   const openAdminContact = () =>
     api("/api/messages/admin-contact", { method: "POST" });
 
+  // ---- 社内AI ----
+  // threadId を渡すと同じ相談の続き。省略すると新しい相談を始める
+  const askAssistant = (question, threadId, category) =>
+    api("/api/ai/ask", { method: "POST", body: { question, threadId, category } });
+  const listAiThreads = () => api("/api/ai/threads");
+  const getAiThread = (threadId) =>
+    api(`/api/ai/thread?threadId=${encodeURIComponent(threadId)}`);
+  const rateAiMessage = (messageId, rating, comment) =>
+    api("/api/ai/feedback", { method: "POST", body: { messageId, rating, comment } });
+
+  // 管理部への問い合わせ。threadId があればそのAI相談を要約して引き継ぐ
+  const listAiInquiries = () => api("/api/ai/inquiries");
+  const createAiInquiry = (threadId, note, category) =>
+    api("/api/ai/inquiries", { method: "POST", body: { threadId, note, category } });
+  const getAiInquiry = (id) => api(`/api/ai/inquiry?id=${encodeURIComponent(id)}`);
+  const replyAiInquiry = (id, content) =>
+    api("/api/ai/inquiry", { method: "POST", body: { id, content } });
+  const updateAiInquiry = (id, patch) =>
+    api("/api/ai/inquiry", { method: "PATCH", body: { id, ...patch } });
+
+  // 管理画面: AIナレッジ
+  const listAiKnowledge = () => api("/api/ai/knowledge").then((d) => d.knowledge || []);
+  const createAiKnowledge = (k) =>
+    api("/api/ai/knowledge", { method: "POST", body: k }).then((d) => d.knowledge);
+  const updateAiKnowledge = (id, patch) =>
+    api(`/api/ai/knowledge-item?id=${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+
   // ---- やること（タスク・予定） ----
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
@@ -1516,6 +1543,9 @@
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
     openAdminContact,
     uploadMessageFile, messageFileUrl,
+    askAssistant, listAiThreads, getAiThread, rateAiMessage,
+    listAiInquiries, createAiInquiry, getAiInquiry, replyAiInquiry, updateAiInquiry,
+    listAiKnowledge, createAiKnowledge, updateAiKnowledge,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
     onboardingStatus,

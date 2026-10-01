@@ -339,7 +339,7 @@ async function detail(res, sb, ctx, employeeId) {
       requestedAt: o.requested_at || o.created_at, dueOn: o.due_on })),
     signs: (signs || []).filter(isContract).map((x) => ({ id: x.id, title: x.title, status: x.status,
       sentAt: x.sent_at, signedAt: x.signed_at, dueOn: x.due_on,
-      // active契約に紐づくか（db/097）。無い古いデータは contractId が null のまま（§6の[現在契約]チップ判定に使う）
+      // active契約に紐づくか（db/112）。無い古いデータは contractId が null のまま（§6の[現在契約]チップ判定に使う）
       contractId: x.contract_id || null, currentContract: Boolean(active) && (!x.contract_id || x.contract_id === active.id) })),
     growth,
     autonomy: {

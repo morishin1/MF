@@ -56,7 +56,7 @@ const ALLOWED_MIME = new Set(["application/pdf"]);
 const FIELDS =
   "id, employee_id, doc_kind, title, assignee_name, assignee_email, conditions, note, "
   + "status, due_on, file_name, file_size, file_sha256, uploaded_at, "
-  + "requested_at, sign_request_id, created_at, updated_at";
+  + "requested_at, sign_request_id, contract_id, created_at, updated_at";
 // 071・087 で足した列。未適用でも一覧が出るように、別に引く
 const FIELDS_071 = "id, approved_by, approved_at, advisor_note, conditions_edited_at, "
   + "override_reason, override_by, override_at";
@@ -204,6 +204,8 @@ const shape = (o, advisor = false) => ({
   overrideReason: o.override_reason || null,
   overrideAt: o.override_at || null,
   signRequestId: o.sign_request_id,
+  // どの契約（gw_contracts）への作成依頼か。発行時にそのまま署名依頼へコピーされる（099）
+  contractId: o.contract_id || null,
 });
 
 /** 届いた書面を見るためのURL。人事・管理者と、労働条件の依頼なら社労士 */
@@ -256,6 +258,16 @@ async function create(res, sb, ctx, user, body) {
   if (!emp) return json(res, 404, { error: "employee_not_found" });
 
   const docKind = DOC_KIND_KEYS.includes(body.docKind) ? body.docKind : "employment";
+
+  // どの契約への作成依頼か（099）。雇用契約だけ。他人の契約IDを渡せないよう、
+  // 同じテナント・同じ本人の契約かをここで検証する（他人の契約を誤って紐付けない）
+  let contractId = null;
+  if (docKind === "employment" && body.contractId) {
+    const { data: k } = await sb.from("gw_contracts").select("id")
+      .eq("id", str(body.contractId, 40)).eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).maybeSingle();
+    if (!k) return json(res, 400, { error: "contract_not_found", hint: "この社員の契約が見つかりません" });
+    contractId = k.id;
+  }
 
   // 二重生成防止（採用HR Stage 9）。同じ社員・同じ書類種別で、まだ手続き
   // 途中の依頼があるなら、新しく作らせない。別タブ・別端末・APIの再送でも防ぐため
@@ -314,6 +326,7 @@ async function create(res, sb, ctx, user, body) {
     conditions,
     note: str(body.note, 2000),
     due_on: /^\d{4}-\d{2}-\d{2}$/.test(String(body.dueOn || "")) ? body.dueOn : null,
+    contract_id: contractId,
     requested_by: user.id,
     ...(override ? {
       override_reason: override.reason, override_by: user.id, override_at: new Date().toISOString(),
@@ -653,6 +666,8 @@ async function issue(req, res, sb, ctx, user, p) {
     doc_kind: o.doc_kind,
     source: p.source,
     order_id: o.id,
+    // 作成依頼にひもづく契約をそのままコピー（099）。null なら従来どおり doc_kind + 時期で推測
+    contract_id: o.contract_id || null,
     file_name: p.fileName || null,
     body_snapshot: p.bodySnapshot,
     merged_fields: p.mergedFields || {},
@@ -741,7 +756,7 @@ async function cancel(res, sb, ctx, user, body) {
 async function load(sb, ctx, id, advisor = false) {
   if (!id) return null;
   const { data } = await sb.from("gw_doc_orders")
-    .select("id, employee_id, title, doc_kind, status, conditions, file_path, file_name, file_sha256")
+    .select("id, employee_id, title, doc_kind, status, conditions, file_path, file_name, file_sha256, contract_id")
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!data) return null;
   // 社労士が触れるのは労働条件の依頼だけ

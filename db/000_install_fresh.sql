@@ -7256,6 +7256,16 @@ alter table public.gw_doc_orders
   add column if not exists sign_request_id uuid
   references public.gw_sign_requests(id) on delete set null;
 
+-- 契約と締結済み書面の明示的な関連（112_sign_contract_link.sql）。
+-- gw_contracts → gw_doc_orders → gw_sign_requests を1本のチェーンとして追える
+alter table public.gw_doc_orders
+  add column if not exists contract_id uuid references public.gw_contracts(id) on delete set null;
+create index if not exists idx_doc_orders_contract on public.gw_doc_orders(contract_id) where contract_id is not null;
+
+alter table public.gw_sign_requests
+  add column if not exists contract_id uuid references public.gw_contracts(id) on delete set null;
+create index if not exists idx_sign_requests_contract on public.gw_sign_requests(contract_id) where contract_id is not null;
+
 
 -- -----------------------------------------------------------------------------
 -- 4) RLS

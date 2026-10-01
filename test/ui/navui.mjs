@@ -106,7 +106,7 @@ console.log("— 管理者の左メニュー —");
   check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "左メニューに「採用」（/hr/）は置かない");
   check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "左メニューに「営業」（/sales/）は置かない");
   check(!allHref.some((h) => /(^|\/)office\/$/.test(h)), "左メニューに「Office」（/office/）は置かない");
-  // 最終メニュー（ホーム5・業務・経理4・管理・設定4）
+  // 最終メニュー（ホーム6・業務・経理4・管理・設定4）
   // 項目は見出しの隣の .kp-side-sub（同じ data-group）に入っている。畳まれていても数える
   const groupItems = await page.locator(".kp-side-group").evaluateAll((gs) => gs.map((g) => ({
     head: g.querySelector(".lb")?.textContent.trim(),
@@ -114,7 +114,7 @@ console.log("— 管理者の左メニュー —");
       .map((x) => x.textContent.trim()),
   })));
   const want = {
-    "ホーム": "ダッシュボード/今日のタスク/日報/メッセージ/お知らせ",
+    "ホーム": "ダッシュボード/今日のタスク/日報/社内AI/AIナレッジ/お知らせ",
     "業務・経理": "経費精算/月次業務/社内文書/会計",
     "管理・設定": "権限/端末・貸与品/アクセス分析/システム設定",
   };
@@ -199,7 +199,7 @@ console.log("\n— メンバーの左メニュー —");
     .map((s) => s.trim());
   check(items.length <= 9, `項目は9つまで（いま ${items.length}: ${items.join("・")}）`);
   // 評価・キャリア再設計 §37 の7つ
-  for (const x of ["ホーム", "今日やること", "メッセージ", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+  for (const x of ["ホーム", "今日やること", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `「${x}」`);
   }
   check(!items.some((i) => i.includes("スペース予約")), "スペース予約は通常メニューに出さない");

@@ -115,21 +115,7 @@
           <small>${esc(e.position || "—")}</small>
           ${e.email ? `<small><a href="mailto:${esc(e.email)}">${esc(e.email)}</a></small>` : ""}
         </span>
-        ${mine || !e.user_id ? "" :
-          `<button class="btn btn-secondary btn-sm" onclick="talk('${esc(e.id)}', this)">
-             <span class="material-symbols-outlined icon-inline">forum</span>メッセージ
-           </button>`}
       </div>`;
-  }
-
-  // その人との1対1を開く。すでにあるやりとりがあれば、そこへ合流する
-  async function talk(employeeId, btn) {
-    try {
-      const res = await KPLayout.busy(btn, "準備中…", () => API.createThread("dm", [employeeId]));
-      location.href = `messages.html?t=${encodeURIComponent(res.threadId)}`;
-    } catch (e) {
-      alert(e.detail || e.message || "開けませんでした");
-    }
   }
 </script>
 
