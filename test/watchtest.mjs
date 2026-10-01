@@ -13,6 +13,7 @@
 //        ・勤怠とWeb利用時間の大きな乖離
 //   4. 判定の数字を、外に出さないこと
 //      「何分から」を返すと、避け方を配ることになる
+import "./_beforemfa.mjs";   // MFA の強制日（2026-10-01）に左右されないようにする（理由は、そのファイルの先頭）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 

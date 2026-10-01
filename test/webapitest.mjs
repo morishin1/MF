@@ -2,6 +2,7 @@
 //
 // いちばん厚く見るのは **URLをどこまで削るか**。
 // ここが緩むと、検索語・一度きりの鍵・メールアドレスがそのまま会社に届く。
+import "./_beforemfa.mjs";   // MFA の強制日（2026-10-01）に左右されないようにする（理由は、そのファイルの先頭）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 

@@ -3,6 +3,7 @@
 //   ・宛先は最初に決まっていて、送るときに人が打ち直さない
 //   ・届いた書面と、送った書面が同じ（ハッシュが合う）
 //   ・送ったあとは差し替えられない
+import "./_beforemfa.mjs";   // MFA の強制日（2026-10-01）に左右されないようにする（理由は、そのファイルの先頭）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import crypto from "node:crypto";

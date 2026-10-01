@@ -7,6 +7,7 @@
 //   4. 空欄のままでは発行できない
 //   5. 発行したら、本人と会社の両方に届く
 //   6. 発行済みは二度と発行できない
+import "./_beforemfa.mjs";   // MFA の強制日（2026-10-01）に左右されないようにする（理由は、そのファイルの先頭）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
