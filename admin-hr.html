@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260929d">
-  <link rel="stylesheet" href="css/layout.css?v=20260929d">
+  <link rel="stylesheet" href="css/app.css?v=20261001b">
+  <link rel="stylesheet" href="css/layout.css?v=20261001b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -136,6 +136,23 @@
     .hr-ret td.late { color:#c53030; font-weight:700; }
     .hr-ret input[type="number"] { width:80px; margin:0; font-size:13px; }
 
+    /* 労働条件通知書（入社管理）。入社予定者に見せて、確認してもらう書類 */
+    .hr-ln { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:0 0 16px; background:#fff; }
+    .hr-ln h3 { margin:0 0 4px; font-size:15px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .hr-ln .pill { display:inline-block; border-radius:999px; padding:2px 10px; font-size:11.5px; font-weight:700; }
+    .hr-ln .lead { font-size:12px; color:var(--muted); margin:0 0 10px; line-height:1.8; }
+    .hr-ln .ver { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin:0 0 8px; }
+    .hr-ln .ver .t { font-size:13.5px; font-weight:700; color:var(--primary-dark); }
+    .hr-ln .ver .s { font-size:12px; color:var(--muted); margin-top:3px; line-height:1.8; }
+    .hr-ln .ver.draft { border-style:dashed; background:#fffaf0; }
+    .hr-ln .act { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+    .hr-ln table { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px; }
+    .hr-ln th { text-align:left; font-size:11.5px; color:var(--muted); font-weight:600; padding:0 8px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .hr-ln td { padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+    .hr-ln .err { color:#c53030; font-size:12.5px; margin-top:6px; }
+    .hr-ln input[type="file"] { font-size:12.5px; max-width:100%; }
+    @media (max-width:760px) { .hr-ln table { display:block; overflow-x:auto; } }
+
     /* 書類の保管先。毎回触るものではないので畳んでおく */
     .hr-drive { margin-top:6px; border-top:1px solid var(--border); padding-top:12px; }
     .hr-drive summary { cursor:pointer; font-size:12.5px; color:var(--muted); }
@@ -227,8 +244,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260929d"></script>
-<script src="js/layout.js?v=20260929d"></script>
+<script src="js/api-client.js?v=20261001b"></script>
+<script src="js/layout.js?v=20261001b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -475,6 +492,8 @@
 
         <div id="hr-date"></div>
 
+        ${p.kind === "onboarding" ? `<div class="hr-ln" id="labor-notice" data-employee="${esc(p.employeeId)}" hidden></div>` : ""}
+
         ${p.groups.map((g) => `
           <div class="hr-grp">
             <div class="h">
@@ -526,6 +545,7 @@
           </div>
         </details>
       </div>`;
+    if (p.kind === "onboarding") loadNotice(p.employeeId);
     // 上のバーは画面に固定されている。そのぶん引いてから寄せないと、
     // 押した直後に、いちばん見たい氏名と期日がバーの裏に隠れる
     const top = el("hr-detail").getBoundingClientRect().top + window.scrollY;
@@ -617,6 +637,131 @@
       const r = await API.hrUpdate({ id, remind: true });
       say(r.told ? `担当 ${r.told}名 に知らせました。` : "知らせる相手がいませんでした。");
     });
+  }
+
+  // ---- 労働条件通知書 ------------------------------------------------------------
+  // 入社予定者に見せて、確認してもらう書類（電子署名ではない）。アップロード → 公開 → 本人が確認。
+  // 差し替えは「新しい版を足す」（旧版は残る。新しい版は、本人が未確認から始まる）。
+  // 経営ハブ（/keiei）には、件数だけを出している。ここが実務の入口。
+  const LN_PILL = {
+    none: ["未登録", "#6b7080", "#f1f1ec"], draft: ["未公開", "#9c4221", "#fff3e0"],
+    unconfirmed: ["本人未確認", "#975a16", "#fffaf0"], confirmed: ["確認済み", "#256b36", "#e8f5ec"],
+  };
+  const fmtFull = (iso) => {
+    const t = Date.parse(iso || "");
+    if (!Number.isFinite(t)) return "";
+    const j = new Date(t + 9 * 3600000);
+    const p2 = (n) => String(n).padStart(2, "0");
+    return `${j.getUTCFullYear()}/${p2(j.getUTCMonth() + 1)}/${p2(j.getUTCDate())} ${p2(j.getUTCHours())}:${p2(j.getUTCMinutes())}`;
+  };
+  let lnData = null;
+  let lnScrolled = false;
+
+  // 労働条件通知書は、給与・個人情報を含むので、owner ロール・hr ロールの人だけ（API が決める）。
+  // 欄は最初は隠しておき、API が通った人にだけ出す。403（会計側の管理者・経理・責任者ほか）の人には、欄そのものを出さない
+  let lnDenied = false;
+  async function loadNotice(employeeId) {
+    const box = el("labor-notice");
+    if (!box) return;
+    if (lnDenied) { box.remove(); return; }
+    try {
+      const d = await API.api(`/api/onboarding/notice?employeeId=${encodeURIComponent(employeeId)}`);
+      box.hidden = false;
+      renderNotice(d);
+    } catch (e) {
+      if (e.status === 403 || e.code === "forbidden") { lnDenied = true; box.remove(); return; }
+      box.hidden = false;
+      box.innerHTML = `<h3>労働条件通知書</h3><div class="err" data-role="ln-err">${esc(e.hint || e.message || "読み込めませんでした")}</div>`;
+    }
+  }
+
+  function lnVersionRow(v, label) {
+    const conf = v.confirmedAt ? `確認済み（${esc(fmtFull(v.confirmedAt))}）` : v.publishedAt ? "本人未確認" : "";
+    return `<div class="ver ${v.phase === "draft" ? "draft" : ""}" data-role="${esc(label)}" data-version="${esc(v.version)}">
+      <div class="t">第${esc(v.version)}版　${esc(v.filename)}</div>
+      <div class="s">アップロード ${esc(fmtFull(v.uploadedAt))}${v.uploadedByName ? `（${esc(v.uploadedByName)}）` : ""}
+        ${v.publishedAt ? `<br>公開 ${esc(fmtFull(v.publishedAt))}${v.publishedByName ? `（${esc(v.publishedByName)}）` : ""}　<b data-role="ln-conf">${conf}</b>` : "<br>まだ本人には見えません"}</div>
+      <div class="act">
+        <a class="btn btn-secondary btn-sm" href="onboarding/notice.html?file=${encodeURIComponent(v.id)}" target="_blank" rel="noopener">プレビュー</a>
+        ${v.phase === "draft" ? `<button class="btn btn-primary btn-sm" data-role="ln-publish" onclick="lnPublish('${esc(v.id)}', ${Number(v.version)}, ${lnData.notice.replacing ? "true" : "false"}, this)">本人に公開する</button>` : ""}
+      </div></div>`;
+  }
+
+  function renderNotice(d) {
+    lnData = d;
+    const box = el("labor-notice");
+    if (!box) return;
+    if (!d.linked) {
+      box.innerHTML = `<h3>労働条件通知書</h3><div class="banner info" style="margin:8px 0 0;"><span class="material-symbols-outlined">build</span>
+        <div>この機能は、まだ使える状態になっていません。${esc(d.hint || "")}</div></div>`;
+      return;
+    }
+    const n = d.notice;
+    const [label, color, bg] = LN_PILL[n.status] || LN_PILL.none;
+    const hasCur = Boolean(n.current);
+    box.innerHTML = `
+      <h3>労働条件通知書 <span class="pill" data-role="ln-status" data-status="${esc(n.status)}" style="color:${color};background:${bg};">${esc(label)}</span></h3>
+      <p class="lead">${esc(d.employee.name)} さんに見せて、確認してもらいます（電子署名ではありません）。
+        PDFをアップロードして「本人に公開する」と、本人の入社準備の画面（STEP 2）に出ます。差し替えると新しい版になり、本人は確認し直します。旧版は残ります。</p>
+      ${(d.warnings || []).map((w) => `<div class="banner warn" data-role="ln-warning" style="margin:0 0 10px;"><span class="material-symbols-outlined">info</span><div>${esc(w)}</div></div>`).join("")}
+      ${hasCur ? `<div class="lead" style="margin:0 0 6px;"><b>本人に公開している版</b></div>${lnVersionRow(n.current, "ln-current")}` : ""}
+      ${n.pending ? `<div class="lead" style="margin:0 0 6px;"><b>${hasCur ? "差し替えの版（未公開）" : "アップロード済み（未公開）"}</b></div>${lnVersionRow(n.pending, "ln-pending")}` : ""}
+      <div class="act">
+        <input type="file" id="ln-file" accept="application/pdf,.pdf">
+        <button class="btn btn-secondary btn-sm" data-role="ln-upload" onclick="lnUpload(this)">${hasCur || n.pending ? "PDFを差し替える（新しい版を足す）" : "PDFをアップロード"}</button>
+      </div>
+      <div class="lead" style="margin-top:6px;">PDFのみ・${Math.round(d.limits.maxBytes / 1024 / 1024)}MBまで。登録しただけでは、本人には見えません。</div>
+      <div class="err" id="ln-err" data-role="ln-err"></div>
+      ${n.versions.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--muted);">版の履歴（${n.versions.length}）</summary>
+        <div class="table-scroll"><table data-role="ln-history"><thead><tr><th>版</th><th>ファイル</th><th>アップロード</th><th>公開</th><th>本人の確認</th></tr></thead><tbody>
+        ${n.versions.map((v) => `<tr><td>第${esc(v.version)}版${v.isCurrent ? "（公開中）" : ""}</td><td>${esc(v.filename)}</td>
+          <td>${esc(fmtFull(v.uploadedAt))}</td><td>${v.publishedAt ? esc(fmtFull(v.publishedAt)) : "未公開"}</td>
+          <td>${v.confirmedAt ? esc(fmtFull(v.confirmedAt)) : v.publishedAt ? "未確認" : "—"}</td></tr>`).join("")}
+        </tbody></table></div></details>` : ""}`;
+    if (location.hash === "#labor-notice" && !lnScrolled) {
+      lnScrolled = true;
+      setTimeout(() => box.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+    }
+  }
+
+  async function lnUpload(btn) {
+    const err = el("ln-err");
+    err.textContent = "";
+    const f = el("ln-file")?.files?.[0];
+    if (!f) { err.textContent = "PDFを選んでください"; return; }
+    if (!/\.pdf$/i.test(f.name) || (f.type && f.type !== "application/pdf")) { err.textContent = "PDFのみアップロードできます"; return; }
+    if (f.size > lnData.limits.maxBytes) { err.textContent = `ファイルは${Math.round(lnData.limits.maxBytes / 1024 / 1024)}MBまでにしてください`; return; }
+    const emp = lnData.employee.id;
+    try {
+      await KPLayout.busy(btn, "アップロード中…", async () => {
+        const sign = await API.api("/api/onboarding/notice", { method: "POST", body: { action: "upload", employeeId: emp, mimeType: "application/pdf", sizeBytes: f.size } });
+        const put = await fetch(sign.uploadUrl, { method: "PUT", headers: { "Content-Type": "application/pdf", "x-upsert": "false" }, body: f });
+        if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+        renderNotice(await API.api("/api/onboarding/notice", { method: "POST", body: { action: "attach", employeeId: emp, path: sign.path, filename: f.name } }));
+      });
+      say("PDFを登録しました。プレビューで内容を確かめて、「本人に公開する」を押してください。");
+    } catch (e) {
+      const m = el("ln-err");
+      if (m) m.textContent = e.hint || e.message || "登録できませんでした";
+    }
+  }
+
+  async function lnPublish(id, version, replacing, btn) {
+    const name = lnData.employee.name;
+    const ask = replacing
+      ? `第${version}版を、${name} さんに公開します。\nいま公開している版は見えなくなり、本人は第${version}版を確認し直します。よろしいですか？`
+      : `第${version}版を、${name} さんに公開します。本人の入社準備の画面に出ます。よろしいですか？`;
+    if (!confirm(ask)) return;
+    try {
+      await KPLayout.busy(btn, "公開中…", async () => {
+        renderNotice(await API.api("/api/onboarding/notice", { method: "POST", body: { action: "publish", employeeId: lnData.employee.id, id } }));
+      });
+      say(`第${version}版を公開しました。本人の確認をお待ちください。`);
+      if (typeof load === "function") load();   // 一覧の段階も、新しくする
+    } catch (e) {
+      const m = el("ln-err");
+      if (m) m.textContent = e.hint || e.message || "公開できませんでした";
+    }
   }
 
   // ---- 小物 ---------------------------------------------------------------------

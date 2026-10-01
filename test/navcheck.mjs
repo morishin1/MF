@@ -68,7 +68,7 @@ check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItem
 }
 
 // ---- 2) メンバーは7つ ---------------------------------------------------------
-//   ホーム・今日やること・メッセージ・勤怠・申請・キャリア・社内情報・マイページ
+//   ホーム・今日やること・社内AI・勤怠・申請・キャリア・社内情報・マイページ
 //   （評価・キャリア再設計 §3・§37。スペース予約は通常メニューから外した）
 console.log("\n— メンバー —");
 {
@@ -153,9 +153,10 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
     // 単純な「active: "esign"」か、「active: 何か ? "esign_order" : "esign"」の
     // どちらか。後者は三項演算の左右（実際にactiveへ入る側）だけを拾い、
     // 条件式の中の文字列（例: "order"）は候補に入れない
-    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*roles:/.exec(src);
+    // roles（appRole）か access（canManageHr 等、roles では表せない権限）のどちらかで入口を絞る
+    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*(?:roles|access):/.exec(src);
     if (plain) return [plain[1]];
-    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*roles:/
+    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*(?:roles|access):/
       .exec(src);
     return ternary ? [ternary[1], ternary[2]] : null;
   };

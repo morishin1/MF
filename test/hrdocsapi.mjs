@@ -115,7 +115,7 @@ const OTHER = { userId: "u-o", tenantId: "t2", isAdmin: true, isHr: true, roles:
 let who = RECRUITER;
 const real = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
-  namedExports: { gwContext: async () => who, canRecruit: real.canRecruit, canManageHr: real.canManageHr },
+  namedExports: { gwContext: async () => who, canRecruit: real.canRecruit, canManageHr: real.canManageHr, canSeeSalary: real.canSeeSalary },
 });
 
 const { default: docsApi } = await import(atRoot("api/hr/documents.js"));
@@ -189,6 +189,13 @@ await ok("営業・一般メンバー・会計の管理者だけ・IT・管理�
     assert.equal((await del(id)).statusCode, 403);
   }
   assert.equal(signed.length, 0, "URL は1つも出していない");
+});
+await ok("責任者は HR を使えるので、採用書類を扱える（経営者・責任者・人事・採用担当）", async () => {
+  setup();
+  await upload("ap1", "resume", PDF, MIME.pdf, "山田太郎_履歴書.pdf");
+  who = MANAGER;
+  const r = await get("applicantId=ap1");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
 });
 await ok("他社の応募者・書類には触れない", async () => {
   setup();

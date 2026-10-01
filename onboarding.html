@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260929d">
-  <link rel="stylesheet" href="css/layout.css?v=20260929d">
+  <link rel="stylesheet" href="css/app.css?v=20261001b">
+  <link rel="stylesheet" href="css/layout.css?v=20261001b">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -163,6 +163,9 @@
   </p>
 
   <div id="notice"></div>
+  <p class="hidden" id="hub-link" style="margin:0 0 12px;font-size:13px;">
+    <a href="/onboarding/"><span class="material-symbols-outlined icon-inline">route</span>入社準備の全体（6ステップ・入社案内）を見る</a>
+  </p>
   <div id="journey-box"></div>
 
   <div class="card hidden" id="role-card">
@@ -294,11 +297,11 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260929d"></script>
-<script src="js/device.js?v=20260929d"></script>
-<script src="js/layout.js?v=20260929d"></script>
-<script src="js/journey-bar.js?v=20260929d"></script>
-<script src="js/dropzone.js?v=20260929d"></script>
+<script src="js/api-client.js?v=20261001b"></script>
+<script src="js/device.js?v=20261001b"></script>
+<script src="js/layout.js?v=20261001b"></script>
+<script src="js/journey-bar.js?v=20261001b"></script>
+<script src="js/dropzone.js?v=20261001b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -349,6 +352,7 @@
     show("admin-wrap", false); show("advisor-wrap", false); show("advisor-mn-wrap", false);
     ["step-1", "consents-card", "step-3", "step-2", "step-4", "submit-card"].forEach((id) => show(id, false));
 
+    show("hub-link", data.role === "self");
     if (data.role === "self") {
       loadJourneyBar();
       await loadSelf();
@@ -683,13 +687,30 @@
   // ---- 本人契約：契約書 ----------------------------------------------------------
   function renderContracts() {
     const list = self_.contracts || [];
-    if (!list.length) {
+    // 労働条件通知書（電子署名ではなく、見て確認するもの）。公開された人には、確認の入口を出す（確認は /onboarding/）
+    const nt = self_.notice;
+    const byNotice = Boolean(nt && nt.linked && nt.mode === "notice" && nt.state !== "none");
+    const noticeRow = !byNotice ? "" : `
+      <div class="ob-doc${nt.state === "confirmed" ? " done" : ""}" data-role="notice">
+        <div class="hd">
+          <div class="t">労働条件通知書</div>
+          ${nt.state === "confirmed" ? '<span class="kp-chip event">確認済み</span>' : '<span class="kp-chip draft">未確認</span>'}
+        </div>
+        <div class="s">${nt.state === "confirmed"
+          ? `${esc(fmtDate(nt.confirmedAt))} に確認しました`
+          : "内容を読んで、「確認しました」を押してください"}</div>
+        <div class="act">
+          <a class="btn ${nt.state === "confirmed" ? "btn-secondary" : "btn-primary"} btn-sm" href="/onboarding/#notice">
+            <span class="material-symbols-outlined icon-inline">description</span>${nt.state === "confirmed" ? "もう一度見る" : "開いて確認する"}</a>
+        </div>
+      </div>`;
+    if (!list.length && !byNotice) {
       el("contracts").innerHTML = `
         <div class="banner info"><span class="material-symbols-outlined">schedule</span>
           <div>労働条件通知書は社労士が確認中です。届いたらお知らせします。</div></div>`;
       return;
     }
-    el("contracts").innerHTML = list.map((c) => `
+    el("contracts").innerHTML = noticeRow + list.map((c) => `
       <div class="ob-doc${c.status === "signed" ? " done" : ""}">
         <div class="hd">
           <div class="t">${esc(c.title)}</div>

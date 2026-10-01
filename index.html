@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260929d">
+  <link rel="stylesheet" href="css/app.css?v=20261001b">
   <style>
     .portal{ max-width:420px; margin:0 auto; padding:56px 0 40px; }
     .portal .lead{
@@ -98,9 +98,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260929d"></script>
-<script src="js/device.js?v=20260929d"></script>
-<script src="js/layout.js?v=20260929d"></script>
+<script src="js/api-client.js?v=20261001b"></script>
+<script src="js/device.js?v=20261001b"></script>
+<script src="js/layout.js?v=20261001b"></script>
 <script>
   const el = (id) => document.getElementById(id);
 
@@ -137,10 +137,10 @@
     try {
       await API.login(email, pw);
       // 二段階認証を登録している人は、ここで6桁。
-      // パスワードだけのトークン（aal1）では、機密の画面が開かない。
-      // MFA の一時停止中（/api/mfa の enabled=false。lib/mfa.js の MFA_ENABLED）は聞かない（パスワードだけで入れる）
+      // 二段階認証は任意（lib/mfa.js）。登録していない人は、パスワードだけで入れる。
+      // 登録した人は、本人が選んだ設定なので、MFA の必須を止めている間（MFA_ENABLED が true でない）も、6桁を聞く
       const st = await API.mfaStatus().catch(() => null);
-      const factors = st?.enabled === false ? [] : (st?.factors || []);
+      const factors = st?.factors || [];
       const f = factors.find((x) => x.status === "verified");
       if (f) { askTotp(f.id); return; }
       await goToHome();
@@ -186,7 +186,14 @@
     const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
     const name = me.gw?.employee?.display_name || me.email || "";
     try { localStorage.setItem("kp_layout", JSON.stringify({ appRole, name })); } catch (e) { /* 任意 */ }
-    location.replace(KPLayout.homeFor(appRole));
+    location.replace(nextPath() || KPLayout.homeFor(appRole));
+  }
+
+  // 戻り先（?next=）。入社案内のURLなど、ログイン後に元の画面へ戻すため。
+  // このサイトの中のパスだけ。//example.com や https://… のような外へのリンクは受けない（オープンリダイレクト対策）
+  function nextPath() {
+    const n = new URLSearchParams(location.search).get("next") || "";
+    return /^\/(?![\/\\])[A-Za-z0-9\-._~!$&'()*+,;=:@%\/?#]*$/.test(n) ? n : null;
   }
 </script>
 

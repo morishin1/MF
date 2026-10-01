@@ -49,8 +49,17 @@ function table(name) {
 }
 const copy = (r) => (r ? { ...r } : null);
 
+// ログインした本人の権限で読む userClient は、RLS の代わりに「通知書の表は owner・hr だけ」を模す（db/110）。
+// admin()（service_role）は RLS を通らない
+const emptyTable = () => {
+  const q = { select: () => q, eq: () => q, neq: () => q, order: () => q, limit: () => q,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    then: (fn) => Promise.resolve({ data: [], error: null }).then(fn) };
+  return q;
+};
+const rlsTable = (name) => (name === "gw_labor_notices" && !who?.roles?.some((r) => r === "owner" || r === "hr") ? emptyTable() : table(name));
 mock.module(atRoot("lib/supabase.js"), {
-  namedExports: { admin: () => ({ from: table }), userClient: () => ({ from: table }) },
+  namedExports: { admin: () => ({ from: table }), userClient: () => ({ from: rlsTable }) },
 });
 mock.module(atRoot("lib/auth.js"), {
   namedExports: { requireUser: async () => ({ id: "u-1" }), getMemberships: async () => [] },
@@ -199,6 +208,26 @@ await ok("届出が読めない相手には、入力が終わっていないよ�
   const r = await call("?employeeId=emp-1");
   const profileStep = r.body.steps.steps.find((s) => s.key === "profile");
   assert.equal(profileStep.done, false);
+});
+
+console.log("— 労働条件通知書（RLS は owner・hr だけ。進み具合は、見る人によって変わらない）—");
+
+await ok("本人・管理者・社労士のどれで見ても、通知書を確認済みなら STEP2 は完了。通知書の中身（ファイル名・場所・版）は返さない", async () => {
+  setup();
+  const { CONSENT_DOCS } = await import(atRoot("lib/consent-docs.js"));
+  db.rows.gw_sign_requests = [];                       // 電子署名の依頼は無い（通知書の確認で進む人）
+  db.rows.gw_onboard_consents = CONSENT_DOCS.map((d) => ({ employee_id: "emp-1", kind: d.key, version: d.version, agreed_at: "2026-09-02T00:00:00Z" }));
+  db.rows.gw_labor_notices = [{ id: "n1", tenant_id: "t1", employee_id: "emp-1", version: 1, filename: "秘密_山田.pdf",
+    storage_path: "t1/labor-notice/emp-1/x.pdf", sha256: "h", published_at: "2026-09-01T00:00:00Z", confirmed_at: "2026-09-02T00:00:00Z" }];
+  const seen = [];
+  for (const [w, qs] of [[SELF, ""], [ADMIN, "?employeeId=emp-1"], [ADVISOR, "?employeeId=emp-1"]]) {
+    who = w;
+    const r = await call(qs);
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    seen.push(r.body.steps.steps.find((s) => s.key === "advisor_check" || s.key === "contract")?.done);
+    assert.ok(!/秘密_|labor-notice|storage_path|sha256/.test(JSON.stringify(r.body)), `${w.employee.display_name}: 中身は返さない`);
+  }
+  assert.deepEqual(seen, [true, true, true], "誰が見ても同じ進み具合（RLS で空になった人だけ「未確認」に見える、ことはない）");
 });
 
 console.log("— 閲覧ログ —");

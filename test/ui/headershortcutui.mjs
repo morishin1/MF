@@ -1,15 +1,16 @@
-// ヘッダーの近道（採用HR・Sales・Office）を、実際のブラウザで見る（管理画面・メンバー画面とも）。
+// ヘッダーの業務ツール切替（採用HR・Sales・Office・経営）を、実際のブラウザで見る（管理画面・メンバー画面とも）。
 //
 // ■ 何を守りたいのか
-//   ・権限のある人にだけ出る（経営者・責任者は3つとも、採用担当は HR、営業は Sales、経理は Office）
-//   ・複数の権限があれば、使えるものをすべて出す（人事＋経理 → HR と Office）。並びは HR｜Sales｜Office
-//   ・出し分けは /api/me の access（サーバの canAccessHr / canAccessSales / canAccessOffice）どおり
+//   ・権限のある人にだけ出る（経営者は4つとも、責任者は 採用HR・Sales・Office、採用担当は HR、営業は Sales、経理は Office）
+//   ・経営（/keiei/）は経営者だけ。責任者・人事・採用担当・営業・経理・IT・管理者には出さない
+//   ・複数の権限があれば、使えるものをすべて出す（人事＋経理 → HR と Office）。並びは HR｜Sales｜Office｜経営
+//   ・出し分けは /api/me の access（サーバの canAccessHr / canAccessSales / canAccessOffice / canAccessKeiei）どおり
 //   ・一般メンバーの画面でも、権限があれば出る。権限を付けたら、再読込で出る
 //   ・メンバー表示で確認中も、実際の権限どおりに出る
-//   ・行き先が /hr/ と /sales/ と /office/
+//   ・行き先が /hr/ と /sales/ と /office/ と /keiei/
 //   ・メンバー表示・通知・ログアウトを壊さない
-//   ・狭い画面で「HR」「Sales」「Office」に縮み、通知・ログアウトを押し出さない
-//   ・入口はヘッダーだけ。左メニュー（管理者・メンバーとも）には採用・営業・Officeを置かない
+//   ・狭い画面で「HR」「Sales」「Office」「経営」に縮み、通知・ログアウトを押し出さない
+//   ・入口はヘッダーだけ。左メニュー（管理者・メンバーとも）には採用・営業・Office・経営を置かない
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
@@ -61,17 +62,21 @@ async function open(path, who) {
 const shortcuts = (page) => page.locator(".topbar [data-shortcut]").evaluateAll((ns) =>
   ns.map((n) => ({ key: n.dataset.shortcut, href: n.getAttribute("href"), text: n.innerText.trim() })));
 
-console.log("— owner：採用HR・Sales・Office の3つ —");
+console.log("— owner：採用HR・Sales・Office・経営の4つ —");
 {
   const page = await open("admin-dashboard.html", { appRole: "owner", roles: ["owner"] });
   const sc = await shortcuts(page);
-  check(sc.map((s) => s.key).join(",") === "hr,sales,office", `並び ホーム｜HR｜Sales｜Office（いま ${sc.map((s) => s.key)}）`);
+  check(sc.map((s) => s.key).join(",") === "hr,sales,office,keiei", `並び ホーム｜HR｜Sales｜Office｜経営（いま ${sc.map((s) => s.key)}）`);
   check(sc.find((s) => s.key === "hr")?.href === "/hr/", "採用HR → /hr/");
   check(sc.find((s) => s.key === "sales")?.href === "/sales/", "Sales → /sales/");
   check(sc.find((s) => s.key === "office")?.href === "/office/", "Office → /office/");
   check(sc.find((s) => s.key === "office")?.text.includes("Office"), "PCでは「Office」と出る");
   check(sc.find((s) => s.key === "hr")?.text.includes("採用HR"), "PCでは「採用HR」と出る");
-  check(await page.locator(".topbar .kp-shortcut.btn-secondary").count() === 3, "既存の secondary ボタン");
+  check(sc.find((s) => s.key === "keiei")?.href === "/keiei/", "経営 → /keiei/");
+  // アイコン（Material Symbols の名前）は文字として読めてしまうので、ラベルの部分だけを見る
+  const labels = await page.locator(".topbar [data-shortcut] .kp-sc-long").allInnerTexts();
+  check(labels.map((t) => t.trim()).join(" ｜ ") === "採用HR ｜ Sales ｜ Office ｜ 経営", `PCの表示（いま ${labels.join(" ｜ ")}）`);
+  check(await page.locator(".topbar .kp-shortcut.btn-secondary").count() === 4, "既存の secondary ボタン");
   check(await page.locator(".topbar .kp-shortcut.on").count() === 0, "ダッシュボードでは active にしない");
 
   // 既存の3つを壊していない
@@ -92,6 +97,7 @@ console.log("— owner：採用HR・Sales・Office の3つ —");
   check(!side.some((h) => /(^|\/)hr\/$/.test(h || "")), "左メニューに「採用」は置かない");
   check(!side.some((h) => /(^|\/)sales\/$/.test(h || "")), "左メニューに「営業」は置かない");
   check(!side.some((h) => /(^|\/)office\/$/.test(h || "")), "左メニューに「Office」は置かない");
+  check(!side.some((h) => /(^|\/)keiei\/$/.test(h || "")), "左メニューに「経営」は置かない");
 
   await page.screenshot({ path: shotPath("header-shortcuts-pc.png") });
   await page.close();
@@ -106,20 +112,20 @@ console.log("\n— 会計の管理者だけ・IT・管理だけでは出さな�
   check((await shortcuts(it)).length === 0, "IT・管理だけには出さない");
   await it.close();
   const both = await open("admin-dashboard.html", { appRole: "admin", isAdmin: true, roles: ["recruiter", "sales"] });
-  check((await shortcuts(both)).map((s) => s.key).join(",") === "hr,sales", "採用担当・営業担当を付けた管理者には HR と Sales（Office は出さない）");
+  check((await shortcuts(both)).map((s) => s.key).join(",") === "hr,sales", "採用担当・営業担当を付けた管理者には HR と Sales（Office・経営は出さない）");
   await both.close();
   const fin = await open("admin-dashboard.html", { appRole: "admin", isAdmin: true, roles: ["finance"] });
   check((await shortcuts(fin)).map((s) => s.key).join(",") === "office", "経理を付けた管理者には Office だけ（管理者の権限では出さない）");
   await fin.close();
 }
 
-console.log("\n— 権限に応じて出し分ける —");
+console.log("\n— 権限に応じて出し分ける（経営は経営者だけ） —");
 for (const [roles, want, label] of [
   [["recruiter"], "hr", "採用担当 → 採用HRだけ"],
   [["hr"], "hr", "人事 → 採用HRだけ"],
   [["sales"], "sales", "営業 → Salesだけ"],
-  [["owner"], "hr,sales,office", "経営者 → ホーム｜HR｜Sales｜Office"],
-  [["manager"], "hr,sales,office", "責任者 → 3つとも（経営者と責任者は全部使える）"],
+  [["owner"], "hr,sales,office,keiei", "経営者 → ホーム｜HR｜Sales｜Office｜経営"],
+  [["manager"], "hr,sales,office", "責任者 → 3つとも（経営は出ない）"],
   [["finance"], "office", "経理 → Office だけ（ホーム｜Office）"],
   [[], "", "権限なし → どれも出さない"],
   [["it"], "", "IT・管理だけ → どれも出さない"],
@@ -127,6 +133,8 @@ for (const [roles, want, label] of [
   [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → HR と Sales"],
   [["hr", "finance"], "hr,office", "人事＋経理 → ホーム｜HR｜Office"],
   [["sales", "finance"], "sales,office", "営業担当＋経理 → ホーム｜Sales｜Office"],
+  [["hr", "manager", "recruiter", "sales", "finance"], "hr,sales,office", "経営者以外の権限を全部 → 経営は出ない"],
+  [["owner", "hr"], "hr,sales,office,keiei", "経営者＋人事 → 経営者として全ツール"],
 ]) {
   const page = await open("home.html", { appRole: "member", roles });
   const got = (await shortcuts(page)).map((s) => s.key).join(",");
@@ -151,6 +159,10 @@ console.log("\n— サーバの access どおりに出す（役割名ではな�
   const oldOffice = await open("home.html", { appRole: "member", roles: ["finance", "owner"], noAccess: true });
   check(!(await shortcuts(oldOffice)).some((s) => s.key === "office"), "access が無い古い応答では、Office は出さない");
   await oldOffice.close();
+  // 経営は経営者だけ。access が無い古い応答でも、owner を持たない人には出さない
+  const oldKeiei = await open("home.html", { appRole: "member", roles: ["manager", "hr", "finance"], noAccess: true });
+  check(!(await shortcuts(oldKeiei)).some((s) => s.key === "keiei"), "access が無い古い応答でも、経営は経営者だけ");
+  await oldKeiei.close();
   // サーバが「Office に入れる」と言ったときだけ出す
   const yes = await open("home.html", { appRole: "member", roles: ["finance"], noAccess: false });
   check((await shortcuts(yes)).map((s) => s.key).join(",") === "office", "access.office のときだけ Office");
@@ -163,7 +175,7 @@ console.log("\n— 一般メンバーの画面：並びと、既存の氏名・�
   const order = await page.locator(".topbar").evaluate((bar) => {
     const pick = (el) => {
       if (el.matches?.(".brand")) return "エイト";
-      if (el.dataset?.shortcut) return { hr: "採用HR", sales: "Sales", office: "Office" }[el.dataset.shortcut];
+      if (el.dataset?.shortcut) return { hr: "採用HR", sales: "Sales", office: "Office", keiei: "経営" }[el.dataset.shortcut];
       if (el.classList?.contains("kp-who-name")) return "氏名";
       if (el.id === "kp-bell-btn") return "通知";
       if (el.tagName === "BUTTON" && /ログアウト/.test(el.textContent)) return "ログアウト";
@@ -201,8 +213,8 @@ console.log("\n— 権限を付けたら、再ログインなしで再読込後�
 console.log("\n— メンバー表示で確認中も、実際の権限どおりに出る —");
 {
   const page = await open("home.html", { appRole: "owner", roles: ["owner"], memberView: true });
-  check((await shortcuts(page)).map((s) => s.key).join(",") === "hr,sales,office",
-    "メンバー表示中も、同じ権限のメンバーと同じく近道が出る");
+  check((await shortcuts(page)).map((s) => s.key).join(",") === "hr,sales,office,keiei",
+    "メンバー表示中も、同じ権限のメンバーと同じく切替が出る（経営者は経営も）");
   check(await page.locator(".topbar button:has-text('管理画面に戻る')").isVisible(), "管理画面に戻る");
   await page.close();
 }
@@ -241,9 +253,10 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
   check(legend.includes("採用HR") && legend.includes("経営者・責任者・人事・採用担当"), "凡例：採用HR＝経営者・責任者・人事・採用担当");
   check(legend.includes("Sales") && legend.includes("経営者・責任者・営業担当"), "凡例：Sales＝経営者・責任者・営業担当");
   check(legend.includes("Office") && legend.includes("経営者・責任者・経理"), "凡例：Office＝経営者・責任者・経理");
+  check(legend.includes("経営") && legend.includes("経営者だけ"), "凡例：経営＝経営者だけ");
   check(legend.includes("IT・管理") && legend.includes("入れません"), "凡例：IT・管理だけでは入れない");
   const itTitle = await page.locator('input[data-role="it"]').first().evaluate((n) => n.closest("label").title);
-  check(/採用HR・Sales・Officeには入れない/.test(itTitle), "IT・管理のチェックに説明");
+  check(/どのツールにも入れない/.test(itTitle), "IT・管理のチェックに説明");
   await page.locator('input[data-role="recruiter"]').first().check();
   await page.waitForTimeout(300);
   await page.locator('input[data-role="sales"]').first().check();
@@ -260,8 +273,8 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
 
 console.log("\n— スマホ幅：短縮して、通知・ログアウトを押し出さない —");
 for (const [width, path, who, want] of [
-  [390, "admin-dashboard.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office"],
-  [360, "admin-dashboard.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office"],
+  [390, "admin-dashboard.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
+  [360, "admin-dashboard.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
   [390, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office"],
   [360, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office"],
   [390, "home.html", { appRole: "member", roles: ["recruiter", "sales"] }, "HR/Sales"],

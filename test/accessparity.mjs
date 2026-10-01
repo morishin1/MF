@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import {
   accessOf, canRecruit, canSell, canDecideHire, canForceAttack,
   canAccessHr, canAccessSales, canAccessOffice, canAccessKeiei,
+  canOffice, canKeiei, isOwner,
   HR_ROLES, SALES_ROLES, OFFICE_ROLES, KEIEI_ROLES, RECRUIT_ROLES,
 } from "../lib/gw.js";
 
@@ -95,6 +96,22 @@ check(!KEIEI_ROLES.includes("manager"), "責任者（manager）を KEIEI_ROLES �
   check(o.recruit && o.sell && o.office && o.keiei, "経営者：HR・Sales・Office・/keiei すべて ○");
 }
 
+{
+  // どの権限を、どう組み合わせても、owner を持たない限り経営には入れない
+  const all = ["hr", "manager", "recruiter", "sales", "finance", "it", "labor_advisor"];
+  let leak = null;
+  for (let mask = 0; mask < 1 << all.length && !leak; mask++) {
+    const roles = all.filter((_, i) => mask & (1 << i));
+    for (const extra of [{}, { isAdmin: true }, { isAdmin: true, isHr: true }]) {
+      if (canKeiei({ roles, ...extra }) || isOwner({ roles, ...extra })) { leak = JSON.stringify({ roles, ...extra }); break; }
+    }
+  }
+  check(!leak, `owner を持たない組み合わせ（${1 << all.length} 通り × 管理者の有無）は、経営に入れない${leak ? `（入れてしまう: ${leak}）` : ""}`);
+  // 逆に、owner は、ほかの権限が無くても、どのツールにも入れる
+  check(canRecruit({ roles: ["owner"] }) && canSell({ roles: ["owner"] }) && canOffice({ roles: ["owner"] }) && canKeiei({ roles: ["owner"] }),
+    "owner だけを持つ人は、全ツールに入れる");
+}
+
 console.log("\n— 採用判断・強行は、使える人の中の上乗せ権限 —");
 check(!canDecideHire({ isAdmin: true, roles: [] }), "会計の管理者だけでは採用判断もできない");
 check(canDecideHire({ isAdmin: false, roles: ["owner"] }), "経営者は採用判断ができる");
@@ -113,8 +130,12 @@ console.log("\n— /api/me がサーバの判定をそのまま返す —");
 console.log("\n— 画面はサーバの判定を使う（役割を並べ直さない） —");
 {
   const layout = read("js/layout.js");
-  check(/hr:\s*me\?\.access \? Boolean\(me\.access\.recruit\)/.test(layout), "ヘッダーの採用HRは access.recruit");
+  check(/hr:\s*me\?\.access \? Boolean\(me\.access\.recruit\)/.test(layout), "ヘッダーの HR は access.recruit");
   check(/sales:\s*me\?\.access \? Boolean\(me\.access\.sell\)/.test(layout), "ヘッダーの Sales は access.sell");
+  check(/keiei:\s*me\?\.access \? Boolean\(me\.access\.keiei\)/.test(layout), "ヘッダーの経営は access.keiei（経営者だけ）");
+  // access が無い古い応答のときの代替（役割で数える）も、サーバと同じ並び
+  check(/\["owner", "manager", "hr", "recruiter"\]\.some/.test(layout), "access が無いときの HR の代替も owner / manager / hr / recruiter");
+  check(/keiei:[^\n]*: gwRoles\.includes\("owner"\)/.test(layout), "access が無いときの経営の代替も owner だけ");
   check(/\$\{shortcutsHtml\(shows\)\}/.test(layout), "メンバーの画面・メンバー表示でも同じ条件で出す");
   check(/const canRecruit = me\?\.access \? Boolean\(me\.access\.recruit\)/.test(read("js/hr-layout.js")),
     "/hr の入口は access.recruit");
@@ -155,7 +176,8 @@ console.log("\n— DB の関数も同じ役割 —");
   const rec = last("gw_is_recruiting");
   const sales = last("gw_is_sales");
   const office = last("gw_is_office");
-  // 最新の定義（db/094・db/099）が、lib/gw.js の HR_ROLES / SALES_ROLES / OFFICE_ROLES と同じ役割の並び
+  const owner = last("gw_is_owner");
+  // 最新の定義（db/094・db/099・db/103）が、lib/gw.js の HR_ROLES / SALES_ROLES / OFFICE_ROLES と同じ役割の並び
   const rolesIn = (body) => [...body.matchAll(/gw_has_role\(p_tenant,\s*'(\w+)'\)/g)].map((m) => m[1]).sort();
   check(/'hr'/.test(isHr) && /'owner'/.test(isHr) && /is_tenant_staff/.test(isHr), "gw_is_hr（人事の台帳など）は変えていない");
   check(rolesIn(rec).join(",") === [...HR_ROLES].sort().join(","),
@@ -201,6 +223,15 @@ console.log("\n— DB の関数も同じ役割 —");
     check(!/\bunit_price\b|settlement_condition|alter table public\.gw_site_contracts/i.test(sql),
       `${file} は gw_site_contracts（unit_price・settlement_condition）に触れない`);
   }
+  // 経営（/keiei）と、owner の付与・剥奪。owner だけ。管理者・人事を含めない（db/099）
+  check(rolesIn(owner).join(",") === [...KEIEI_ROLES].sort().join(","),
+    `gw_is_owner = ${KEIEI_ROLES.join("・")}（いま ${rolesIn(owner).join("・")}）`);
+  check(!/is_tenant_staff|gw_is_hr/.test(owner), "gw_is_owner に会計の管理者・人事を含めない");
+  // 給与を見られる人（db/100）。段階1は gw_is_hr、段階2は gw_is_owner に差し替える。どちらの段階でも
+  // 採用担当・責任者・経理・IT・営業は入らない（gw_is_recruiting を使わない）
+  const salaryFn = last("gw_can_see_salary");
+  check(/gw_is_hr|gw_is_owner/.test(salaryFn) && !/gw_is_recruiting|gw_is_sales|gw_is_office|'manager'|'recruiter'/.test(salaryFn),
+    "gw_can_see_salary は、人事・管理者・経営者（段階1）か経営者だけ（段階2）。採用担当・責任者を含めない");
 }
 
 console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られている —");
@@ -240,6 +271,52 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
       check(!/canRecruit|canSell|canAccessHr|canAccessSales|canManageHr/.test(src), `${f} は HR・Sales・人事の判定を混ぜない`);
     }
   }
+}
+
+console.log("\n— /keiei が呼ぶ API は、経営者だけ（二段階認証は要らない）—");
+{
+  const walk = (d) => readdirSync(join(ROOT, d)).flatMap((f) => {
+    const p = `${d}/${f}`;
+    return statSync(join(ROOT, p)).isDirectory() ? walk(p) : p.endsWith(".js") ? [p] : [];
+  });
+  const files = walk("api/keiei");
+  check(files.length > 0, `api/keiei に API がある（${files.length}本）`);
+
+  // 入口は lib/keiei-gate.js ただ1つ。canKeiei（owner だけ）だけ。二段階認証（aal2）は要らない（任意のセキュリティ設定）
+  const gate = read("lib/keiei-gate.js");
+  check(/canKeiei\(ctx\)/.test(gate), "lib/keiei-gate.js は canKeiei（owner だけ）で判定");
+  check(!/requireMfa|lib\/mfa\.js|aal2|aalOf/.test(gate.replace(/\/\/.*$/gm, "")), "lib/keiei-gate.js は、二段階認証（aal2）を求めない（経営者のロールだけで通す）");
+  check(/if \(!canKeiei\(ctx\)\)[^\n]*403/.test(gate), "lib/keiei-gate.js は、経営者でない人に 403 を返す");
+  check(!/isAdmin|canManageHr|canRecruit|canSell|canOffice/.test(gate.replace(/\/\/.*$/gm, "")),
+    "lib/keiei-gate.js は、経営者以外の判定を混ぜない（下位の権限を継承しない）");
+
+  for (const f of files) {
+    const s = read(f);
+    const code = s.replace(/\/\/.*$/gm, "");
+    check(/await requireKeiei\(req, res\)/.test(code), `${f} は入口 requireKeiei（経営者だけ）を通る`);
+    // 入口より前に、データを読まない（応答を返す前に、何かを読む・書くことがない）
+    const head = code.slice(0, code.indexOf("requireKeiei(req, res)"));
+    check(!/\.from\(|admin\(\)|userClient\(/.test(head.slice(head.indexOf("export default"))), `${f} は、入口より前に DB へ触れない`);
+    check(!/isAdmin|canManageHr|canRecruit|canSell|canOffice/.test(code),
+      `${f} は、経営者以外の判定を混ぜない（下位の権限を継承しない）`);
+  }
+}
+
+console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、access と同じキー —");
+{
+  const layout = read("js/layout.js");
+  const block = layout.match(/const TOOLS = \[([\s\S]*?)\n  \];/)?.[1] || "";
+  const tools = [...block.matchAll(/\{\s*key:\s*"(\w+)",\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*short:\s*"([^"]+)",\s*icon:\s*"(\w+)",\s*ready:\s*(true|false)/g)]
+    .map((m) => ({ key: m[1], href: m[2], label: m[3], ready: m[6] === "true" }));
+  check(tools.map((t) => t.key).join(",") === "hr,sales,office,keiei", `ツールの並びは HR・Sales・Office・経営（いま ${tools.map((t) => t.key)}）`);
+  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,Office,経営", `表示は「採用HR ｜ Sales ｜ Office ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
+  const accessKeys = new Set(Object.keys(accessOf({ roles: [] })));
+  const keyOfAccess = { hr: "recruit", sales: "sell", office: "office", keiei: "keiei" };
+  check(tools.every((t) => accessKeys.has(keyOfAccess[t.key])), "TOOLS の各ツールに、サーバの access（accessOf）のキーがある");
+  // Office は実装された（/office/）ので ready:true。未実装のツールを足すときは ready:false で足す（存在しないリンクを出さない）
+  check(tools.every((t) => t.ready), "HR・Sales・Office・経営は ready:true（実装済み）");
+  check(/TOOLS\.filter\(\(t\) => t\.ready && shows\[t\.key\]\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
+  check(tools.find((t) => t.key === "keiei")?.href === "/keiei/", "経営 → /keiei/");
 }
 
 console.log(bad ? `${bad} 件 失敗` : "すべて通過");
