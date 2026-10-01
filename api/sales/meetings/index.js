@@ -22,6 +22,7 @@ import { COMPANY_FIELDS, isUuid, safeUrl } from "../../../lib/sales.js";
 import {
   MEETING_FIELDS, shapeMeeting, activeMeeting, salesSchedulingUrl, applyScheduled, waitingNext,
 } from "../../../lib/sales-meetings.js";
+import { companyEmails } from "../../../lib/sales-timerex.js";
 
 const SQL = "db/090_sales_meetings.sql";
 
@@ -87,6 +88,12 @@ async function issue(req, res, sb, ctx, user) {
   const open = activeMeeting(existing);
   if (open) {
     return json(res, 200, { meeting: shapeMeeting(open, nameOf), reused: true, timerexConfigured: configured() });
+  }
+
+  // TimeRex の予約は、予約時のメールアドレス（guest_email）と企業のメールの一致で商談に結びつける。
+  // メールが無いまま日程調整URLを出すと、予約が入っても自動で反映できない（手入力だけのときは要らない）
+  if (configured() && !companyEmails(c).size) {
+    return json(res, 400, { error: "email_required", hint: "予約の照合に使うメールアドレスを先に登録してください" });
   }
 
   const ownerId = body.ownerId || c.owner_id || ctx.employee?.id || null;

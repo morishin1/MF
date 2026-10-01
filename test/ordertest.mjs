@@ -3,7 +3,7 @@
 //   ・宛先は最初に決まっていて、送るときに人が打ち直さない
 //   ・届いた書面と、送った書面が同じ（ハッシュが合う）
 //   ・送ったあとは差し替えられない
-import "./_beforemfa.mjs";   // MFA の強制日（2026-10-01）に左右されないようにする（理由は、そのファイルの先頭）
+import { MFA_AUTH } from "./_mfa.mjs";
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import crypto from "node:crypto";
@@ -160,9 +160,9 @@ const res = () => {
   return r;
 };
 const post = (body) => ({ method: "POST", url: "/api/sign/orders", body,
-                          headers: { authorization: "Bearer x" } });
+                          headers: { authorization: MFA_AUTH } });
 const get = (qs = "") => ({ method: "GET", url: `/api/sign/orders${qs}`,
-                            headers: { authorization: "Bearer x" } });
+                            headers: { authorization: MFA_AUTH } });
 
 const call = async (handler, req) => { const r = res(); await handler(req, r); return r; };
 
@@ -432,7 +432,7 @@ await ok("書面が無い依頼は開けない", async () => {
 
 console.log("\n== 保存できること（労基則5条） ==");
 const fileReq = (qs) => ({ method: "GET", url: `/api/sign/file${qs}`,
-                           headers: { authorization: "Bearer x" } });
+                           headers: { authorization: MFA_AUTH } });
 await ok("download=1 なら、保存になるURLを返す", async () => {
   const o = await withFile();
   await call(orders, post({ action: "send", id: o.id }));

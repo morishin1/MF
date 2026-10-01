@@ -10,7 +10,7 @@
 //   5. 一覧が「何が終わっていないか」を出すこと（次の担当）
 //   6. 日付を変えたら、期限も動いて、知らせ直すこと
 //   7. チェックを付けたら、段階が進むこと
-import "./_beforemfa.mjs";   // MFA の強制日（2026-10-01）に左右されないようにする（理由は、そのファイルの先頭）
+import { MFA_AUTH } from "./_mfa.mjs";
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -151,7 +151,7 @@ const res = () => {
 };
 const call = async (req) => {
   const r = res();
-  await hr({ headers: { authorization: "Bearer x" }, ...req }, r);
+  await hr({ headers: { authorization: MFA_AUTH }, ...req }, r);
   return r;
 };
 const get = (qs = "") => call({ method: "GET", url: `/api/hr${qs}` });

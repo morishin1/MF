@@ -13,12 +13,18 @@
 //   7. Office（/office・/api/office/*）は MFA を要求しない（2026-09-30 の決定）。requireMfa を置かない
 //      置くと、強制日（2026-10-01）から、strict でなくても経営者・責任者・経理が入れなくなる
 //      MFA を残すもの（給与・権限変更・MFA/パスワードのリセットなど）は、今までどおり requireMfa を通ること
+//   8. 一時停止（2026-10-01 の決定）：MFA_ENABLED が "true" でなければ、誰も止めない（strict も）。
+//      案内も出さない。MFA_ENABLED=true に戻せば、上の 1〜7 がそのまま効く
+//
+// 1〜7 は「MFA_ENABLED=true（再開したとき）」の決まりとして確かめる。8 は最後に OFF にして確かめる
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const M = await import(join(ROOT, "lib/mfa.js"));
+const ENABLED_BEFORE = process.env.MFA_ENABLED;
+process.env.MFA_ENABLED = "true";
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -319,6 +325,64 @@ await ok("自分のリセットは断る（強制の意味が無くなる）", a
   const src = readFileSync(join(ROOT, "api/mfa.js"), "utf8");
   assert.match(src, /self_reset/);
 });
+
+console.log("— 一時停止（MFA_ENABLED が true でない） —");
+
+for (const off of ["false", undefined, ""]) {
+  const label = off === undefined ? "未設定" : `"${off}"`;
+  await ok(`MFA_ENABLED=${label}：強制日を過ぎても、対象の役割（未登録・aal1）を止めない。required・blocked・enforced は false`, async () => {
+    if (off === undefined) delete process.env.MFA_ENABLED; else process.env.MFA_ENABLED = off;
+    assert.equal(M.mfaEnabled(), false);
+    for (const ctx of [{ isAdmin: true, roles: [] }, ...["owner", "manager", "finance", "hr", "labor_advisor"].map((r) => ({ isAdmin: false, roles: [r] }))]) {
+      const st = M.mfaState({ ctx, user: none, req: req("aal1"), today: "2027-01-01" });
+      assert.equal(st.enabled, false);
+      assert.equal(st.required, false, JSON.stringify(ctx));
+      assert.equal(st.blocked, false, JSON.stringify(ctx));
+      assert.equal(st.enforced, false, "期限の警告を出さない");
+      const r = res();
+      assert.equal(await M.requireMfa(req("aal1"), r, ctx, none), true, JSON.stringify(ctx));
+      assert.equal(r.statusCode, 0, "403 mfa_required を返さない");
+    }
+  });
+}
+await ok("一時停止中は strict: true の API（/keiei・支払・給与用）も止めない（MFA_ENFORCE_FROM を未来日にするだけでは止まるもの）", async () => {
+  process.env.MFA_ENABLED = "false";
+  for (const roles of [["owner"], ["manager"], ["finance"]]) {
+    const st = M.mfaState({ ctx: { isAdmin: false, roles }, user: none, req: req("aal1"), today: "2026-09-29", strict: true });
+    assert.equal(st.blocked, false, String(roles));
+    const r = res();
+    assert.equal(await M.requireMfa(req("aal1"), r, { isAdmin: false, roles }, none, { strict: true }), true, String(roles));
+    assert.equal(r.statusCode, 0);
+  }
+});
+await ok("一時停止中も、登録済み・今回の認証（aal2）の状態はそのまま返す（登録済みの factor は消さない・触らない）", async () => {
+  process.env.MFA_ENABLED = "false";
+  const st = M.mfaState({ ctx: { roles: ["hr"] }, user: enrolled, req: req("aal2") });
+  assert.equal(st.enrolled, true);
+  assert.equal(st.verified, true);
+  const { readFileSync } = await import("node:fs");
+  assert.doesNotMatch(readFileSync(join(ROOT, "lib/mfa.js"), "utf8"), /factors\/.*delete|admin\/users.*factors/i, "lib/mfa.js が factor を消している");
+});
+await ok("MFA_ENABLED=true に戻すと、これまでどおり止める（強制日以降の aal1・strict）", async () => {
+  process.env.MFA_ENABLED = "true";
+  const st = M.mfaState({ ctx: { roles: ["hr"] }, user: none, req: req("aal1"), today: "2026-10-01" });
+  assert.equal(st.enabled, true);
+  assert.equal(st.blocked, true);
+  const r = res();
+  assert.equal(await M.requireMfa(req("aal1"), r, { roles: ["finance"] }, none, { strict: true }), false);
+  assert.equal(r.body.error, "mfa_required");
+});
+await ok("画面：一時停止中（enabled=false）は、マイページの設定欄を出さず、ログインで6桁を聞かない", async () => {
+  const { readFileSync } = await import("node:fs");
+  const my = readFileSync(join(ROOT, "mypage.html"), "utf8");
+  assert.match(my, /mfaInfo\?\.enabled === false\) \{ el\("mfa"\)\.hidden = true; return; \}/, "mypage.html が enabled=false で MFA 欄を隠していない");
+  const login = readFileSync(join(ROOT, "index.html"), "utf8");
+  assert.match(login, /st\?\.enabled === false \? \[\]/, "index.html が enabled=false でも6桁を聞いている");
+  // 登録を促す帯（js/layout.js mfaNudge）は required が false なら出ない。一時停止中の mfaState は required=false
+  assert.match(readFileSync(join(ROOT, "js/layout.js"), "utf8"), /if \(!mfa\?\.required \|\| mfa\.enrolled\) return;/);
+});
+
+if (ENABLED_BEFORE === undefined) delete process.env.MFA_ENABLED; else process.env.MFA_ENABLED = ENABLED_BEFORE;
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);
