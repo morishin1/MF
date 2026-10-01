@@ -24,9 +24,11 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, aggregateApproaches, nextFor, hasUnhandledClick, todayJst,
-  channelLabel, parseListQuery,
+  channelLabel, parseListQuery, NEXT_FILTERS,
 } from "../../../lib/sales.js";
 import { listPage, listFacets } from "../../../lib/sales-list.js";
+import { loadMasters } from "../../../lib/sales-master.js";
+import { CSV_IMPORT_COLUMNS } from "../../../lib/sales-csv-import.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
@@ -117,23 +119,32 @@ async function list(req, res, sb, ctx) {
 async function paged(res, sb, ctx, sp) {
   const f = parseListQuery(sp);
   if (f.error) return json(res, 400, f);
-  const [r, facets] = await Promise.all([
+  // 件数（facets）は企業一覧の条件だけで数える。アタック画面の条件（queue・NEXT・キャンペーン）では数えない
+  const withFacets = sp.get("facets") === "1" && !f.queue && !f.next && !f.campaign;
+  const [r, facets, masters] = await Promise.all([
     listPage(sb, ctx, f),
-    sp.get("facets") === "1" ? listFacets(sb, ctx) : Promise.resolve(undefined),
+    withFacets ? listFacets(sb, ctx, f) : Promise.resolve(undefined),
+    loadMasters(sb, ctx.tenantId),
   ]);
   if (r.error) {
     const hint = dbSetupHint(r.error, SQL);
     if (hint) return json(res, 200, { companies: [], notReady: true, message: hint, page: 1, total: 0, totalPages: 1 });
     return json(res, 500, { error: "db_query_failed", detail: r.error.message });
   }
-  return json(res, 200, { ...r, me: ctx.employee?.id || null, facets });
+  // masters … 業種・提案サービス・都道府県の共通マスター（画面はこれで選択肢を作る。lib/sales-master.js）
+  // （db/108 のテナントの選択肢。表示中のものだけ。非表示にしたものは旧データとして件数の側から出る）
+  return json(res, 200, {
+    ...r, me: ctx.employee?.id || null, facets,
+    masters: { industries: masters.industries, services: masters.services, prefectures: masters.prefectures },
+    nextFilters: NEXT_FILTERS.map(([key, label]) => ({ key, label })), csvColumns: CSV_IMPORT_COLUMNS,
+  });
 }
 
 async function create(req, res, sb, ctx, user) {
   const body = await readJson(req);
   if (Array.isArray(body.companies)) return bulk(res, sb, ctx, user, body.companies);
 
-  const row = normalizeCompany(body);
+  const row = normalizeCompany(body, { masters: await loadMasters(sb, ctx.tenantId) });
   if (row.error) return json(res, 400, row);
   if (!("owner_id" in row.value) && ctx.employee?.id) row.value.owner_id = ctx.employee.id;
 
@@ -174,8 +185,9 @@ async function bulk(res, sb, ctx, user, items) {
   if (items.length > BULK_MAX) return json(res, 400, { error: "too_many", hint: `一度に取り込めるのは${BULK_MAX}社までです` });
 
   const rows = [];
+  const masters = await loadMasters(sb, ctx.tenantId);
   for (let i = 0; i < items.length; i++) {
-    const r = normalizeCompany(items[i] || {});
+    const r = normalizeCompany(items[i] || {}, { masters });
     if (r.error) return json(res, 400, { ...r, row: i + 1, hint: `${i + 1}行目：${r.hint || r.error}` });
     rows.push(r.value);
   }

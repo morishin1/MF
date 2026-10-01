@@ -16,6 +16,17 @@
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     .at-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
     .at-links a { color:#4a5068; }
+    .at-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
+    .at-filters input, .at-filters select { margin:0; font-size:13px; padding:8px 10px; }
+    .at-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+    .at-head .sl-muted { margin-left:auto; }
+    #queue.loading { opacity:.45; pointer-events:none; }
+    .co-pager { display:flex; gap:6px; align-items:center; justify-content:center; flex-wrap:wrap; margin:14px 0 4px; font-size:13px; }
+    .co-pager button { border:1px solid #e2e2dc; background:#fff; border-radius:8px; padding:6px 11px; cursor:pointer; font:inherit; color:#1b2440; }
+    .co-pager button.on { background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+    .co-pager button:disabled { opacity:.4; cursor:default; }
+    .co-pager .gap { color:#6b7080; padding:0 2px; }
+    .co-range { text-align:center; font-size:12.5px; color:#6b7080; margin-bottom:28px; }
   </style>
 </head>
 <body>
@@ -29,13 +40,29 @@
   </div>
 
   <div class="sl-sec-h">アタックする企業</div>
-  <div class="sl-sec-sub">未アタック・再アタック待ちの企業。NEXTの期限が来ているもの、自分の担当を先に出します。営業禁止・直近30日以内にアタック済みの企業は出しません。</div>
-  <div class="sl-toolbar">
+  <div class="sl-sec-sub">未アタック・再アタック待ちの企業。営業禁止・直近30日以内にアタック済み・NEXTの期限がまだ先の企業は出しません。
+    検索・絞り込み・並べ替え・ページはサーバーで行います（100社ずつ）。</div>
+  <div class="at-head">
     <div class="sl-tabs-pill" id="scope"></div>
-    <select id="f-service" onchange="renderQueue()"></select>
-    <select id="f-campaign" onchange="renderQueue()"></select>
+    <select id="f-sort" onchange="onFilter()" aria-label="並び順">
+      <option value="next:asc">NEXTの急ぐ順</option>
+      <option value="name:asc">企業名順</option>
+      <option value="created:desc">登録の新しい順</option>
+      <option value="last_sent:desc">最終アタックの新しい順</option>
+    </select>
+    <span class="sl-muted" id="count"></span>
   </div>
-  <div class="sl-rows" id="queue" style="margin-bottom:28px;"></div>
+  <div class="at-filters">
+    <input type="text" id="f-q" placeholder="企業名・URLで探す" oninput="onSearchInput()">
+    <select id="f-region" onchange="onFilter()" aria-label="地域"></select>
+    <select id="f-industry" onchange="onFilter()" aria-label="業種"></select>
+    <select id="f-service" onchange="onFilter()" aria-label="提案サービス"></select>
+    <select id="f-campaign" onchange="onFilter()" aria-label="キャンペーン"></select>
+    <select id="f-next" onchange="onFilter()" aria-label="NEXT"></select>
+  </div>
+  <div class="sl-rows" id="queue"><div class="empty">読み込み中…</div></div>
+  <div class="co-pager" id="pager"></div>
+  <div class="co-range" id="range"></div>
 
   <div class="sl-sec-h">送った履歴</div>
   <div style="overflow-x:auto;">
@@ -46,7 +73,7 @@
   </div>
 </div>
 
-<script src="../js/api-client.js?v=20260929pg1"></script>
+<script src="../js/api-client.js?v=20260930sx1"></script>
 <script src="../js/layout.js?v=20260929d"></script>
 <script src="../js/sales-layout.js?v=20261001a"></script>
 <script>
@@ -54,87 +81,180 @@
   const esc = SalesLayout.esc;
   const { fmt, fmtDay } = SalesLayout;
 
-  let companies = [];
-  let approaches = [];
-  let me = null;
-  let today = "";
-  let scope = "mine";
+  // アタックする企業は、企業一覧と同じ API（サーバー側で絞って並べて100社ずつ。queue=attack）。
+  // 地域・業種・提案サービス・NEXT の意味は企業一覧と同じ（lib/sales.js・lib/sales-master.js）。
+  // 条件・ページ・並び順は URL に書く（フォームアタックを別タブで開いても、この画面はそのまま残る）
+  const KEYS = ["scope", "q", "region", "industry", "service", "campaign", "next", "sort", "order", "page"];
+  const FILTER_IDS = { q: "f-q", region: "f-region", industry: "f-industry", service: "f-service", campaign: "f-campaign", next: "f-next" };
+  let state = readState();
+  let masters = { industries: [], services: [], prefectures: [] };
+  let campaigns = [];
+  let nextFilters = [];
+  let pageInfo = { page: 1, total: 0, totalPages: 1, limit: 100 };
+  let listSeq = 0;
+  let openedAttack = false;
 
-  SalesLayout.init({ active: "attack" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "attack" }).then((ctx) => {
+    if (!ctx) return;
+    load();
+    loadHistory();
+  });
+
+  function readState() {
+    const q = new URLSearchParams(location.search);
+    const st = Object.fromEntries(KEYS.map((k) => [k, q.get(k) || ""]));
+    st.scope = st.scope === "all" ? "all" : "mine";
+    st.page = Math.max(1, Number(st.page) || 1);
+    if (!st.sort) { st.sort = "next"; st.order = "asc"; }
+    if (!st.order) st.order = ["created", "last_sent"].includes(st.sort) ? "desc" : "asc";
+    return st;
+  }
+  function writeUrl() {
+    const q = new URLSearchParams();
+    for (const k of KEYS) {
+      const v = state[k];
+      if (k === "scope" && v === "mine") continue;
+      if (k === "page" && v === 1) continue;
+      if (k === "sort" && v === "next" && state.order === "asc") continue;
+      if (k === "order" && state.sort === "next" && v === "asc") continue;
+      if (v) q.set(k, v);
+    }
+    const s = q.toString();
+    history.replaceState({}, "", s ? `?${s}` : location.pathname);
+  }
 
   async function load() {
+    const seq = ++listSeq;
+    el("queue").classList.add("loading");
+    el("pager").querySelectorAll("button").forEach((b) => { b.disabled = true; });
     try {
-      const [res, ap] = await Promise.all([API.listSalesCompanies(), API.listSalesApproaches(90)]);
+      const res = await API.listSalesCompanyPage({
+        queue: "attack", owner: state.scope === "mine" ? "mine" : undefined, q: state.q, region: state.region,
+        industry: state.industry, service: state.service, campaign: state.campaign, next: state.next,
+        sort: state.sort, order: state.order, page: state.page,
+      });
+      if (seq !== listSeq) return;
+      el("queue").classList.remove("loading");
       if (res.notReady) {
         el("queue").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span>
           <div>${esc(res.message)}</div></div>`;
-        el("rows").innerHTML = "";
         return;
       }
-      companies = res.companies || [];
-      approaches = ap.approaches || [];
-      me = res.me;
-      today = res.today;
-      if (!companies.some((c) => c.ownerId === me)) scope = "all";
+      if (res.masters) masters = res.masters;
+      if (res.campaigns) campaigns = res.campaigns;
+      if (res.nextFilters) nextFilters = res.nextFilters;
+      pageInfo = { page: res.page, total: res.total, totalPages: res.totalPages, limit: res.limit };
+      if (res.page !== state.page) { state.page = res.page; writeUrl(); }
       renderFilters();
-      renderQueue();
-      renderHistory();
+      renderQueue(res.companies || []);
     } catch (e) {
+      if (seq !== listSeq) return;
+      el("queue").classList.remove("loading");
       el("queue").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
-        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}
+          <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="load()">再読み込み</button></div></div>`;
     }
   }
 
   function renderFilters() {
-    const opts = (id, first, values) => {
-      el(id).innerHTML = `<option value="">${esc(first)}</option>`
-        + values.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
-    };
-    opts("f-service", "商材：すべて", [...new Set(companies.map((c) => c.service).filter(Boolean))].sort().map((v) => [v, v]));
-    const camps = new Map(companies.filter((c) => c.campaignId).map((c) => [c.campaignId, c.campaignName || "（名前なし）"]));
-    opts("f-campaign", "キャンペーン：すべて", [...camps.entries()]);
-  }
-
-  function setScope(s) { scope = s; renderQueue(); }
-
-  const RECENT_MS = 30 * 86400000;
-  function queue() {
-    const service = el("f-service").value;
-    const campaign = el("f-campaign").value;
-    return companies.filter((c) => !c.ngReason
-      && ["untouched", "reattack_wait"].includes(c.status)
-      && !(c.lastSentAt && Date.now() - new Date(c.lastSentAt).getTime() < RECENT_MS)
-      && (!c.nextDue || c.nextDue <= today || c.nextKey === "attack")
-      && (scope !== "mine" || c.ownerId === me || !c.ownerId)
-      && (!service || c.service === service)
-      && (!campaign || c.campaignId === campaign))
-      .sort((x, y) => (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
-        || (y.ownerId === me ? 1 : 0) - (x.ownerId === me ? 1 : 0)
-        || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9")));
-  }
-
-  function renderQueue() {
     el("scope").innerHTML = [["mine", "自分の担当＋担当なし"], ["all", "全員"]].map(([k, l]) =>
-      `<button class="${scope === k ? "on" : ""}" onclick="setScope('${k}')">${esc(l)}</button>`).join("");
-    const list = queue();
+      `<button class="${state.scope === k ? "on" : ""}" onclick="setScope('${k}')">${esc(l)}</button>`).join("");
+    const opts = (id, first, values) => {
+      const cur = state[id.replace("f-", "")] || "";
+      const list = !cur || values.some(([v]) => v === cur) ? values : [...values, [cur, cur]];
+      el(id).innerHTML = `<option value="">${esc(first)}</option>`
+        + list.map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
+    };
+    const m = (arr) => arr.map((v) => [v, v]);
+    opts("f-region", "地域：すべて", [...m(masters.prefectures), ["none", "未設定"]]);
+    opts("f-industry", "業種：すべて", m(masters.industries));
+    opts("f-service", "提案サービス：すべて", m(masters.services));
+    opts("f-campaign", "キャンペーン：すべて", [...campaigns.map((c) => [c.id, c.name || "（名前なし）"]), ["none", "キャンペーンなし"]]);
+    opts("f-next", "NEXT：すべて", nextFilters.map((x) => [x.key, x.label]));
+    el("f-q").value = state.q || "";
+    el("f-sort").value = `${state.sort}:${state.order}`;
+  }
+
+  function setScope(s) { state.scope = s; state.page = 1; writeUrl(); load(); }
+  function onFilter() {
+    for (const [k, id] of Object.entries(FILTER_IDS)) state[k] = el(id).value.trim();
+    [state.sort, state.order] = el("f-sort").value.split(":");
+    state.page = 1;
+    writeUrl();
+    load();
+  }
+  let searchTimer = null;
+  function onSearchInput() { clearTimeout(searchTimer); searchTimer = setTimeout(onFilter, 350); }
+  function goPage(n) {
+    if (n < 1 || n > pageInfo.totalPages || n === pageInfo.page) return;
+    state.page = n;
+    writeUrl();
+    load();
+    window.scrollTo({ top: el("queue").offsetTop - 80, behavior: "smooth" });
+  }
+
+  function renderQueue(list) {
+    const nf = (n) => Number(n).toLocaleString("ja-JP");
+    el("count").textContent = `${nf(pageInfo.total)}社`;
+    renderPager();
     if (!list.length) {
-      el("queue").innerHTML = `<div class="sl-empty">アタックする企業はありません。<a href="/sales/companies.html?new=1">企業を追加</a></div>`;
+      const filtered = ["q", "region", "industry", "service", "campaign", "next"].some((k) => state[k]);
+      el("queue").innerHTML = `<div class="sl-empty">${filtered ? "条件に合うアタック先はありません。"
+        : `アタックする企業はありません。<a href="/sales/companies.html?new=1">企業を追加</a>`}</div>`;
       return;
     }
-    const LIMIT = 30;
-    el("queue").innerHTML = `<div class="sl-muted">${list.length}社</div>` + list.slice(0, LIMIT).map((c) => `
-      <div class="sl-row${c.overdue ? " overdue" : ""}">
+    el("queue").innerHTML = list.map((c) => `
+      <div class="sl-row${c.overdue ? " overdue" : ""}" data-id="${esc(c.id)}">
         <div class="info"><b>${esc(c.name)}</b>
-          <div class="now">${esc([c.industry, c.region, c.service].filter(Boolean).join(" ／ ") || "—")}
+          <div class="now">${esc([c.industry, c.region || "地域未設定", c.service].filter(Boolean).join(" ／ "))}
+            ${c.campaignName ? `<span class="sl-muted">　キャンペーン：${esc(c.campaignName)}</span>` : ""}
             ${c.formUrl ? "" : `<span class="sl-hot">　フォームURL未登録</span>`}</div>
           <div class="n">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}）` : ""}　担当：${esc(c.ownerName || "未定")}</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="location.href='/sales/companies.html?attack=${esc(c.id)}'">フォームアタック</button>
-      </div>`).join("")
-      + (list.length > LIMIT ? `<div class="sl-muted" style="text-align:center;">ほか${list.length - LIMIT}社</div>` : "");
+        <button class="btn btn-primary btn-sm" onclick="openAttack('${esc(c.id)}')" title="新しいタブで開きます">
+          フォームアタック<span class="material-symbols-outlined icon-inline" style="margin:0 0 0 4px;">open_in_new</span></button>
+      </div>`).join("");
   }
 
-  function renderHistory() {
+  function renderPager() {
+    const { page, totalPages, total, limit } = pageInfo;
+    const nf = (n) => Number(n).toLocaleString("ja-JP");
+    const from = total ? (page - 1) * limit + 1 : 0;
+    const to = Math.min(total, page * limit);
+    el("range").textContent = total ? `${nf(from)}–${nf(to)} / ${nf(total)}件` : "";
+    if (totalPages <= 1) { el("pager").innerHTML = ""; return; }
+    const nums = [...new Set([1, page - 1, page, page + 1, totalPages])].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
+    let html = `<button onclick="goPage(${page - 1})" ${page <= 1 ? "disabled" : ""} aria-label="前のページ">← 前へ</button>`;
+    let prev = 0;
+    for (const n of nums) {
+      if (n - prev > 1) html += `<span class="gap">…</span>`;
+      html += `<button class="${n === page ? "on" : ""}" onclick="goPage(${n})" ${n === page ? 'aria-current="page"' : ""}>${n}</button>`;
+      prev = n;
+    }
+    html += `<button onclick="goPage(${page + 1})" ${page >= totalPages ? "disabled" : ""} aria-label="次のページ">次へ →</button>`;
+    el("pager").innerHTML = html;
+  }
+
+  // フォームアタックは新しいタブで開く（この画面の条件・ページはそのまま）。
+  // 戻ってきたら一覧を取り直す（送信完了した企業は30日ルールで外れる）
+  function openAttack(id) {
+    openedAttack = true;
+    window.open(`/sales/companies.html?attack=${encodeURIComponent(id)}`, "_blank", "noopener");
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && openedAttack) { openedAttack = false; load(); loadHistory(); }
+  });
+
+  async function loadHistory() {
+    try {
+      const ap = await API.listSalesApproaches(90);
+      renderHistory(ap.approaches || []);
+    } catch (e) {
+      el("rows").innerHTML = `<tr><td colspan="6" class="empty">送った履歴を取得できませんでした：${esc(e.hint || e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function renderHistory(approaches) {
     if (!approaches.length) {
       el("rows").innerHTML = `<tr><td colspan="6" class="empty">直近90日の送信はありません。</td></tr>`;
       return;
