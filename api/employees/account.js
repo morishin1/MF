@@ -28,6 +28,7 @@ import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { setSystemAccess, randomPassword, findUserByEmail, SYSTEMS } from "../../lib/accounts.js";
+import { guardOwnerTarget } from "../../lib/owner-guard.js";
 
 const TOGGLEABLE = new Set(["lms", "timecard", "accounting"]);
 const MIN_PASSWORD = 8;
@@ -60,6 +61,11 @@ export default async function handler(req, res) {
     .eq("id", employeeId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
   if (!emp) return json(res, 404, { error: "employee_not_found" });
+
+  // 経営者のログイン（メール・パスワード・使えるシステム）は、経営者だけが変えられる。
+  // ここが開いていると、パスワードを書き換えてその人になりすまし、経営者になれてしまう
+  const stopOwner = await guardOwnerTarget(sb, ctx, emp.id, "ログイン情報の変更");
+  if (stopOwner) return json(res, stopOwner.status, stopOwner.body);
 
   if (!emp.user_id) {
     return json(res, 400, {

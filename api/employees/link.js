@@ -16,6 +16,7 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { attachAccount } from "../../lib/accounts.js";
+import { guardOwnerTarget } from "../../lib/owner-guard.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -45,6 +46,10 @@ export default async function handler(req, res) {
     .maybeSingle();
   if (ee) return json(res, 500, { error: "db_query_failed", detail: ee.message });
   if (!employee) return json(res, 404, { error: "employee_not_found" });
+
+  // 経営者のアカウントの紐づけ・作り直しは、経営者だけ（別のログインに付け替えて乗っ取るのを防ぐ）
+  const stopOwner = await guardOwnerTarget(sb, ctx, employee.id, "アカウントの紐づけ");
+  if (stopOwner) return json(res, stopOwner.status, stopOwner.body);
 
   const r = await attachAccount(sb, {
     tenantId: ctx.tenantId,

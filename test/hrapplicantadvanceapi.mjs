@@ -89,6 +89,7 @@ mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     canDecideHire: REAL_GW.canDecideHire,
+    canSeeSalary: REAL_GW.canSeeSalary,
   },
 });
 

@@ -236,7 +236,7 @@
       // 絶対パスで送る。相対（mypage.html#mfa）だと、/hr/ や /sales/ や /office/ の画面からは
       // /hr/mypage.html のような存在しない場所へ飛び、登録できないまま行き止まりになる
       if (err.code === "mfa_required" && !/mypage\.html/.test(location.pathname)) {
-        location.href = "/mypage.html#mfa";
+        location.href = "/mypage.html#mfa";   // 絶対パス。/keiei/ など、サブディレクトリの画面から呼ばれても届く
       }
       throw err;
     }

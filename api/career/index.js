@@ -34,7 +34,9 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canRecruit, canDecideHire } from "../../lib/gw.js";
+import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../lib/gw.js";
+import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
+import { paySplit, attachPay } from "../../lib/hr-pay.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -74,6 +76,9 @@ export default async function handler(req, res) {
   if (!(await requireMfa(req, res, ctx, user))) return;
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canManageCareer(ctx)) return json(res, 403, { error: "forbidden" });
+  // 給与（現在給与・給与レンジ・昇給の判断）は、見られる人（lib/gw.js canSeeSalary）にだけ返す。
+  // 責任者は、部下の評価・キャリアは扱えるが、給与は見えない（この応答から外れる）
+  guardSalaryOutput(res, canSeeSalary(ctx));
 
   try {
     if (req.method === "GET") return await read(req, res, ctx);
@@ -607,12 +612,14 @@ async function saveLevel(res, sb, ctx, user, b) {
   const row = await upsert(sb, "gw_career_levels", ctx, b.id, {
     track_id: track.id, level_no: levelNo, level_name: levelName,
     role_summary: str(b.roleSummary, 200), expected_role: str(b.expectedRole), typical_months: int(b.typicalMonths),
-    salary_min: salaryMin, salary_max: salaryMax, next_level_summary: str(b.nextLevelSummary, 300),
+    // 給与レンジは、見られない人は書き換えない（見えていない値を null で上書きしてしまわないため）
+    ...(canSeeSalary(ctx) ? { salary_min: salaryMin, salary_max: salaryMax } : {}),
+    next_level_summary: str(b.nextLevelSummary, 300),
     is_active: b.isActive !== false, sort_order: int(b.sortOrder) ?? levelNo,
   });
   if (!row) return json(res, 404, { error: "not_found" });
   await log(ctx, user, "career.level.save", `career_level:${row.id}`,
-    { trackId: track.id, levelNo, salaryMin, salaryMax });
+    { trackId: track.id, levelNo, ...(canSeeSalary(ctx) ? { salaryMin, salaryMax } : {}) });
   return json(res, 200, { level: levelView(row) });
 }
 
@@ -710,9 +717,14 @@ async function saveReview(res, sb, ctx, user, b) {
     criterion_results: results,
     evidence_summary: b.evidenceSummary && typeof b.evidenceSummary === "object" ? b.evidenceSummary : null,
     system_judgement: judgement,
-    employee_comment: str(b.employeeComment), manager_comment: str(b.managerComment), salary_note: str(b.salaryNote),
+    employee_comment: str(b.employeeComment), manager_comment: str(b.managerComment),
     result: REVIEW_RESULT_KEYS.includes(b.result) ? b.result : null,
-    salary_decision: SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none",
+    // 給与の調整（メモ・昇給の判断）は、見られる人だけが書ける。
+    // 見られない人（責任者）が保存しても、すでに入っている値は消えない
+    ...(canSeeSalary(ctx) ? {
+      salary_note: str(b.salaryNote),
+      salary_decision: SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none",
+    } : {}),
     updated_at: now(),
   };
   let row;
@@ -748,15 +760,24 @@ async function confirmReview(res, sb, ctx, user, b) {
   if (!REVIEW_RESULT_KEYS.includes(result)) {
     return json(res, 400, { error: "no_result", hint: "最終判断（現Level継続・Level Up・保留）を選んでください" });
   }
-  const salaryDecision = SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none";
+  // 昇給の判断は、給与を見られる人だけが決める。見られない人が確定しても、値は動かさない
+  const salaryOk = canSeeSalary(ctx);
+  // 昇給の判断がすでに入っている評価は、給与を見られない人が確定しない（確定すると評価は動かせなくなり、
+  // 判断を見られる人が、契約の更新へ進む機会を失う）。見られる人（経営者・人事）が確定する
+  if (!salaryOk && rv.salary_decision && rv.salary_decision !== "none") {
+    return json(res, 403, { error: "salary_decision_pending",
+      hint: "この評価には、給与に関する判断が入っています。給与を見られる人（経営者・人事）が確定してください" });
+  }
+  const salaryDecision = salaryOk && SALARY_DECISION_KEYS.includes(b.salaryDecision) ? b.salaryDecision : "none";
   if (result === "level_up" && !target) return json(res, 400, { error: "no_target", hint: "上の Level がありません" });
 
   const decidedAt = now();
   const saved = await must(sb.from("gw_career_reviews").update({
-    status: "confirmed", result, salary_decision: salaryDecision,
+    status: "confirmed", result,
+    ...(salaryOk ? { salary_decision: salaryDecision } : {}),
     decided_by: user.id, decided_at: decidedAt, updated_at: decidedAt,
     ...(b.managerComment !== undefined ? { manager_comment: str(b.managerComment) } : {}),
-    ...(b.salaryNote !== undefined ? { salary_note: str(b.salaryNote) } : {}),
+    ...(salaryOk && b.salaryNote !== undefined ? { salary_note: str(b.salaryNote) } : {}),
   }).eq("id", rv.id).eq("status", "draft").select("*").maybeSingle());
   if (!saved) return json(res, 409, { error: "already_confirmed" });
 
@@ -771,7 +792,9 @@ async function confirmReview(res, sb, ctx, user, b) {
   await must(sb.from("gw_employee_careers").update(careerPatch).eq("id", c.id).select("id").maybeSingle());
 
   await log(ctx, user, "career.review.confirm", `career_review:${rv.id}`, {
-    employeeId: e.id, result, salaryDecision,
+    employeeId: e.id, result,
+    // 給与を見られない人が確定したときは、判断に触れていない（操作ログに、給与の値を残さない）
+    ...(salaryOk ? { salaryDecision } : { salaryUntouched: true }),
     ...(newLevel ? { newLevelNo: newLevel.level_no } : {}),
   });
   // 本人へ。中身（管理者メモ・給与の調整メモ）は通知に入れない
@@ -847,10 +870,14 @@ const APPLICANT_FIELDS = "id, tenant_id, name, status, decision, stage, join_dat
   + "contract_end_date, probation_months, wage_type, wage_amount, weekly_hours, work_location, recruiter_id, "
   + "employee_id, updated_at, created_at";
 
+// 応募者の給与の列。給与を見られない人には選ばない。給与を専用の表（gw_hr_pay）へ分けている設定
+// （HR_PAY_SPLIT=1）では、元の列は読まない（見られる人には、attachPay で専用の表から足す）
+const applicantFields = (ctx) => (canSeeSalary(ctx) && !paySplit() ? APPLICANT_FIELDS : withoutColumns(APPLICANT_FIELDS));
+
 /** 採用決定で、まだ社員になっていない人。応募者の情報は採用HRの権限がある人だけ（lib/gw.js canRecruit） */
 async function hiredApplicants(sb, ctx) {
   if (!canRecruit(ctx)) return [];
-  const rows = await soft(sb.from("gw_hr_applicants").select(APPLICANT_FIELDS)
+  const rows = await soft(sb.from("gw_hr_applicants").select(applicantFields(ctx))
     .eq("tenant_id", ctx.tenantId).eq("decision", "hired").limit(500));
   return (rows || []).filter((a) => !a.employee_id && !["declined", "passed", "done"].includes(a.status));
 }
@@ -937,9 +964,10 @@ async function journeyList(res, sb, ctx) {
 
 async function applicantDetail(res, sb, ctx, id) {
   if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden", hint: "採用HRの権限がある人だけが見られます" });
-  const a = await soft(sb.from("gw_hr_applicants").select(APPLICANT_FIELDS).eq("id", id)
+  const a = await soft(sb.from("gw_hr_applicants").select(applicantFields(ctx)).eq("id", id)
     .eq("tenant_id", ctx.tenantId).maybeSingle());
   if (!a || a.decision !== "hired") return json(res, 404, { error: "not_found" });
+  if (canSeeSalary(ctx)) await attachPay(ctx.tenantId, a, "applicant");
   if (a.employee_id) return json(res, 409, { error: "already_employee", employeeId: a.employee_id });
   const recruiter = a.recruiter_id ? await soft(sb.from("gw_employees").select("display_name")
     .eq("id", a.recruiter_id).eq("tenant_id", ctx.tenantId).maybeSingle()) : null;
