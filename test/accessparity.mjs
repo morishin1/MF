@@ -136,7 +136,7 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // access が無い古い応答のときの代替（役割で数える）も、サーバと同じ並び
   check(/\["owner", "manager", "hr", "recruiter"\]\.some/.test(layout), "access が無いときの HR の代替も owner / manager / hr / recruiter");
   check(/keiei:[^\n]*: gwRoles\.includes\("owner"\)/.test(layout), "access が無いときの経営の代替も owner だけ");
-  check(/\$\{shortcutsHtml\(shows\)\}/.test(layout), "メンバーの画面・メンバー表示でも同じ条件で出す");
+  check(/\$\{shortcutsHtml\(shows,/.test(layout), "メンバーの画面・メンバー表示でも同じ条件で出す");
   check(/const canRecruit = me\?\.access \? Boolean\(me\.access\.recruit\)/.test(read("js/hr-layout.js")),
     "/hr の入口は access.recruit");
   check(/const canSell = me\?\.access \? Boolean\(me\.access\.sell\)/.test(read("js/sales-layout.js")),
@@ -309,13 +309,19 @@ console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、ac
   const tools = [...block.matchAll(/\{\s*key:\s*"(\w+)",\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*short:\s*"([^"]+)",\s*icon:\s*"(\w+)",\s*ready:\s*(true|false)/g)]
     .map((m) => ({ key: m[1], href: m[2], label: m[3], ready: m[6] === "true" }));
   check(tools.map((t) => t.key).join(",") === "hr,sales,office,keiei", `ツールの並びは HR・Sales・Office・経営（いま ${tools.map((t) => t.key)}）`);
+  // ヘッダーは「採用HR｜Sales｜Office｜経営（＋⚙管理）」。Office は1つの名前に1つだけ
+  // （月次業務は Office の中の機能で、ヘッダーに別名で出さない）
   check(tools.map((t) => t.label).join(",") === "採用HR,Sales,Office,経営", `表示は「採用HR ｜ Sales ｜ Office ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
+  check(!/月次業務/.test(block), "ヘッダーのツール定義に「月次業務」を置かない（Officeの中の機能）");
   const accessKeys = new Set(Object.keys(accessOf({ roles: [] })));
   const keyOfAccess = { hr: "recruit", sales: "sell", office: "office", keiei: "keiei" };
   check(tools.every((t) => accessKeys.has(keyOfAccess[t.key])), "TOOLS の各ツールに、サーバの access（accessOf）のキーがある");
   // Office は実装された（/office/）ので ready:true。未実装のツールを足すときは ready:false で足す（存在しないリンクを出さない）
   check(tools.every((t) => t.ready), "HR・Sales・Office・経営は ready:true（実装済み）");
-  check(/TOOLS\.filter\(\(t\) => t\.ready && shows\[t\.key\]\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
+  check(/TOOLS\.filter\(\(t\) => t\.ready && toolVisible\(t, shows\)\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
+  // Office：/office に入れる人（access.office）か、管理画面を開ける管理者。入口は人によって変える（押して403を作らない）
+  check(/office: Boolean\(me\?\.access\?\.office\) \|\| adminApp/.test(layout), "Office の表示は access.office か管理者（adminApp）");
+  check(/if \(t\.key === "office"\) return shows\.adminApp \? t\.altHref : t\.href;/.test(layout), "Office の行き先: 管理者は管理画面（ダッシュボード）、それ以外（access.office）は /office/");
   check(tools.find((t) => t.key === "keiei")?.href === "/keiei/", "経営 → /keiei/");
 }
 

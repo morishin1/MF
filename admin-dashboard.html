@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>ダッシュボード - エイト</title>
+  <title>Officeダッシュボード - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,30 +20,22 @@
     } catch (e) { /* 読めなくても動く */ }
   </script>
   <style>
-    /* ダッシュボード＝今日やることだけ。探すのは一覧（admin-tasks.html）、
-       処理するのは右ドロワー（KPTaskDrawer）。ここでは数と3件だけ見せる */
-    .dt-table { width:100%; border-collapse:collapse; font-size:13px; }
-    .dt-table th { text-align:left; font-size:11.5px; color:var(--muted); font-weight:600;
-                   padding:0 10px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
-    .dt-table td { padding:10px; border-bottom:1px solid var(--border); vertical-align:top; }
-    .dt-table tr:last-child td { border-bottom:none; }
-    .dt-table tr.unassigned .who { color:var(--muted); font-style:italic; }
-    .dt-who { font-weight:700; color:var(--primary-dark); white-space:nowrap; }
-
-    .dt-today { display:flex; flex-direction:column; gap:4px; min-width:180px; }
-    .dt-today a { font-size:12.5px; color:inherit; text-decoration:none; display:flex;
-                  align-items:center; gap:5px; cursor:pointer; }
-    .dt-today a:hover { color:var(--primary); text-decoration:underline; }
-    .dt-today a.done { color:var(--muted); text-decoration:line-through; }
-    .dt-today .none { font-size:12px; color:var(--muted); }
-    .dt-today .material-symbols-outlined { font-size:15px; flex:0 0 auto; }
-
-    .dt-num { font-variant-numeric:tabular-nums; font-size:15px; font-weight:700;
-              color:var(--primary-dark); text-align:right; }
-    .dt-num.zero { color:var(--muted); font-weight:500; }
-    .dt-num.warn { color:#c53030; }
-    .dt-cell-link { text-decoration:none; color:inherit; display:block; }
-    .dt-cell-link:hover .dt-num { text-decoration:underline; }
+    /* Officeのダッシュボード＝Office業務の NEXT ACTION だけ。
+       チーム全体の状況（全員のタスク・日報）は経営側（admin-team.html）で見る */
+    .od-list { display:flex; flex-direction:column; }
+    .od-row { display:flex; align-items:center; gap:12px; padding:13px 4px; border-bottom:1px solid var(--border);
+              text-decoration:none; color:inherit; }
+    .od-row:last-child { border-bottom:none; }
+    .od-row:hover .od-label { text-decoration:underline; }
+    .od-row .material-symbols-outlined { color:var(--primary); font-size:22px; flex:0 0 auto; }
+    .od-main { flex:1; min-width:0; }
+    .od-label { font-size:14px; font-weight:700; color:var(--primary-dark); }
+    .od-hint { font-size:12px; color:var(--muted); margin-top:2px; }
+    .od-num { font-variant-numeric:tabular-nums; font-size:20px; font-weight:700; min-width:34px; text-align:right;
+              color:var(--muted); }
+    .od-num.todo { color:#c53030; }
+    .od-group { font-size:11.5px; font-weight:700; color:var(--muted); margin:18px 0 2px; letter-spacing:.04em; }
+    .od-group:first-child { margin-top:0; }
   </style>
 </head>
 <body>
@@ -55,21 +47,9 @@
   <div id="notice"></div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">checklist</span>今日のチーム状況</h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
-      詳しくは、タスクを押すと開きます。一覧で探したいときは
-      <a href="admin-tasks.html">タスク一覧</a>へ。
-    </p>
-    <div class="table-scroll">
-      <table class="dt-table">
-        <thead>
-          <tr>
-            <th>担当者</th><th>今日の3つ</th><th>完了数</th><th>期限超過</th><th>契約更新待ち</th>
-          </tr>
-        </thead>
-        <tbody id="dt-body"></tbody>
-      </table>
-    </div>
+    <h2><span class="material-symbols-outlined">task_alt</span>いま対応するもの</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 6px;">Office（人事・労務・経理・事務）の、対応待ちの件数です。押すとその画面を開きます。</p>
+    <div id="od-body" class="od-list"></div>
   </div>
 
 </div>
@@ -77,13 +57,23 @@
 <script src="js/api-client.js?v=20261001b"></script>
 <script src="js/device.js?v=20261001b"></script>
 <script src="js/layout.js?v=20261001b"></script>
-<script src="js/task-drawer.js?v=20261001b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   KPLayout.init({ active: "dashboard", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) start(ctx); });
+
+  // 前月（締める・請求するのはたいてい前月）。JST の年月
+  function prevMonth() {
+    const d = new Date(Date.now() + 9 * 3600000);
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  }
+
+  // 1つ取れなくても、ほかの行は出す（表が無い環境・権限が足りない場合に画面ごと落とさない）
+  const safe = (p) => p.then((v) => ({ ok: true, v }), () => ({ ok: false }));
 
   async function start(ctx) {
     const name = ctx.me?.gw?.employee?.display_name || ctx.me?.email || "";
@@ -93,66 +83,55 @@
   }
 
   async function load() {
-    let data;
-    try {
-      data = await API.dashboardTeam();
-    } catch (e) {
-      el("notice").innerHTML =
-        `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>${esc(e.hint || e.detail || e.message || "取得できませんでした")}</div></div>`;
-      return;
-    }
-    if (data.notReady) {
-      el("notice").innerHTML =
-        `<div class="banner warn"><span class="material-symbols-outlined">info</span>
-           <div>${esc(data.message)}</div></div>`;
-      el("dt-body").innerHTML = "";
-      return;
-    }
-    el("notice").innerHTML = "";
-    render(data);
-  }
+    const month = prevMonth();
+    const [b, hr, cl, bp] = await Promise.all([
+      safe(API.badges()), safe(API.hrList()), safe(API.closing(month)), safe(API.listBillingProgress(month)),
+    ]);
+    const badges = b.ok ? (b.v?.badges || {}) : {};
 
-  function render(data) {
-    const rows = [];
-    if (data.unassigned) rows.push({ employeeId: null, name: "（未担当）", ...data.unassigned });
-    rows.push(...data.team);
+    // 入社手続き待ち＝進行中の入社。退社も同じ画面（入退社）で扱う
+    const onboarding = hr.ok ? (hr.v?.onboarding || []).length : null;
+    const offboarding = hr.ok ? (hr.v?.offboarding || []).length : null;
 
-    if (!rows.length) {
-      el("dt-body").innerHTML = `<tr><td colspan="5" class="empty">今日は、期限超過も契約更新待ちもありません。</td></tr>`;
-      return;
-    }
+    // 月次未完了＝前月がまだ締まっていない。止めている理由の数も出す
+    const closing = cl.ok ? cl.v : null;
+    const monthOpen = closing ? (closing.closing?.status !== "closed" ? 1 : 0) : null;
 
-    el("dt-body").innerHTML = rows.map((r) => `
-      <tr class="${r.employeeId ? "" : "unassigned"}">
-        <td><span class="who dt-who">${esc(r.name)}</span></td>
-        <td>${todayCell(r.today, data.focusReady)}</td>
-        <td class="${numClass(r.doneToday)}">${r.doneToday}</td>
-        <td>${countCell(r.overdue, true)}</td>
-        <td>${countCell(r.renewalPending, true)}</td>
-      </tr>`).join("");
-  }
+    // 請求・支払＝前月ぶんで、5つの印がまだ揃っていない行
+    const STAGES = ["timesheet_received", "work_confirmed", "board_created", "sent", "bp_invoice_received"];
+    const unfinished = bp.ok && !bp.v?.notReady
+      ? (bp.v?.progress || []).filter((r) => STAGES.some((k) => !r[k])).length : null;
 
-  function todayCell(today, focusReady) {
-    if (!focusReady) return `<span class="dt-today"><span class="none">（未設定）</span></span>`;
-    if (!today.length) return `<span class="dt-today"><span class="none">今日の3つは未設定</span></span>`;
-    return `<span class="dt-today">${today.map((t) => `
-      <a class="${t.done ? "done" : ""}" onclick="openTask('${esc(t.id)}');return false;" href="#">
-        <span class="material-symbols-outlined">${t.done ? "check_circle" : "radio_button_unchecked"}</span>
-        ${esc(t.title)}
-      </a>`).join("")}</span>`;
-  }
+    const groups = [
+      { name: "人事・労務", rows: [
+        { icon: "how_to_reg", label: "入社手続き待ち", hint: "進行中の入社", n: onboarding, href: "admin-hr.html" },
+        { icon: "logout", label: "退社手続き待ち", hint: "進行中の退社", n: offboarding, href: "admin-hr.html" },
+        { icon: "contract", label: "契約待ち", hint: "署名がまだ返ってきていない契約書", n: badges.esign || 0, href: "admin-esign.html" },
+        { icon: "schedule", label: "勤怠確認", hint: "打刻の修正申請", n: badges.timecard || 0, href: "admin-timecard.html" },
+        { icon: "event_busy", label: "休暇・稟議の承認", hint: "承認待ち", n: badges.requests || 0, href: "admin-requests.html" },
+      ] },
+      { name: "経理・事務", rows: [
+        { icon: "receipt", label: "経費承認", hint: "承認待ちの経費精算", n: badges.expenses || 0, href: "admin-expenses.html" },
+        { icon: "event_available", label: "月次未完了",
+          hint: monthOpen ? `${month} の月次締めがまだです` + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : "") : `${month} は締め済み`,
+          n: monthOpen, href: "admin-closing.html" },
+        { icon: "request_quote", label: "請求・支払の進行中", hint: `${month} ぶんで、5つの印が揃っていないもの`, n: unfinished, href: "admin-month-start.html" },
+      ] },
+    ];
 
-  const numClass = (n) => `dt-num${n ? "" : " zero"}`;
-  const countCell = (n, linkOut) => {
-    const cls = numClass(n) + (n ? " warn" : "");
-    return linkOut && n
-      ? `<a class="dt-cell-link" href="admin-tasks.html"><span class="${cls}">${n}</span></a>`
-      : `<span class="${cls}">${n}</span>`;
-  };
+    el("od-body").innerHTML = groups.map((g) => `
+      <div class="od-group">${esc(g.name)}</div>
+      ${g.rows.map((r) => `
+        <a class="od-row" href="${r.href}">
+          <span class="material-symbols-outlined">${r.icon}</span>
+          <span class="od-main"><div class="od-label">${esc(r.label)}</div><div class="od-hint">${esc(r.hint)}</div></span>
+          <span class="od-num${r.n ? " todo" : ""}">${r.n === null ? "—" : r.n}</span>
+        </a>`).join("")}`).join("");
 
-  function openTask(id) {
-    KPTaskDrawer.open(id, { onChange: () => load() });
+    const failed = [b, hr, cl, bp].some((x) => !x.ok);
+    el("notice").innerHTML = failed
+      ? `<div class="banner warn"><span class="material-symbols-outlined">info</span>
+           <div>取得できなかった項目は「—」と出しています。</div></div>` : "";
   }
 </script>
 
