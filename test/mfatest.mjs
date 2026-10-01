@@ -13,8 +13,9 @@
 //   7. Office（/office・/api/office/*）は MFA を要求しない（2026-09-30 の決定）。requireMfa を置かない
 //      置くと、強制日（2026-10-01）から、strict でなくても経営者・責任者・経理が入れなくなる
 //      MFA を残すもの（給与・権限変更・MFA/パスワードのリセットなど）は、今までどおり requireMfa を通ること
-//   8. 一時停止（2026-10-01 の決定）：MFA_ENABLED が "true" でなければ、誰も止めない（strict も）。
-//      案内も出さない。MFA_ENABLED=true に戻せば、上の 1〜7 がそのまま効く
+//   8. 任意（2026-10-01 の決定）：MFA_ENABLED が "true" でなければ（既定）、誰も止めない（strict も）。
+//      登録していないことを警告にしない（案内帯・必須・期限の文言を出さない）。登録・認証・解除の機能は残し、登録した人にはログインで6桁を聞く。
+//      MFA_ENABLED=true に戻せば、上の 1〜7 がそのまま効く
 //
 // 1〜7 は「MFA_ENABLED=true（再開したとき）」の決まりとして確かめる。8 は最後に OFF にして確かめる
 import assert from "node:assert/strict";
@@ -399,14 +400,28 @@ await ok("MFA_ENABLED=true に戻すと、これまでどおり止める（強�
   assert.equal(await M.requireMfa(req("aal1"), r, { roles: ["finance"] }, none, { strict: true }), false);
   assert.equal(r.body.error, "mfa_required");
 });
-await ok("画面：一時停止中（enabled=false）は、マイページの設定欄を出さず、ログインで6桁を聞かない", async () => {
+await ok("画面：必須にしていない間（enabled=false）も、マイページの設定欄は「任意のセキュリティ設定」として出す。必須・期限の案内は出さない", async () => {
   const { readFileSync } = await import("node:fs");
   const my = readFileSync(join(ROOT, "mypage.html"), "utf8");
-  assert.match(my, /mfaInfo\?\.enabled === false\) \{ el\("mfa"\)\.hidden = true; return; \}/, "mypage.html が enabled=false で MFA 欄を隠していない");
-  const login = readFileSync(join(ROOT, "index.html"), "utf8");
-  assert.match(login, /st\?\.enabled === false \? \[\]/, "index.html が enabled=false でも6桁を聞いている");
-  // 登録を促す帯（js/layout.js mfaNudge）は required が false なら出ない。一時停止中の mfaState は required=false
+  assert.doesNotMatch(my, /el\("mfa"\)\.hidden = true/, "mypage.html が MFA 欄を隠している");
+  assert.match(my, /二段階認証（任意のセキュリティ設定）/, "見出しが「任意のセキュリティ設定」でない");
+  assert.match(my, /任意の設定です。登録しなくても、これまでどおり使えます/, "「登録しなくても使える」の説明が無い");
+  // 必須・期限の案内は、サーバが required を返したときだけ（required の分岐の中にだけある）
+  assert.match(my, /const note = required\n/, "必須の案内が required の分岐になっていない");
+  // 登録を促す帯（js/layout.js mfaNudge）は required が false なら出ない。必須にしない間の mfaState は required=false
   assert.match(readFileSync(join(ROOT, "js/layout.js"), "utf8"), /if \(!mfa\?\.required \|\| mfa\.enrolled\) return;/);
+});
+await ok("画面：登録した人は、必須を止めている間（enabled=false）も、ログインで6桁を聞く（任意の設定として、ちゃんと効く）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const login = readFileSync(join(ROOT, "index.html"), "utf8");
+  assert.doesNotMatch(login, /enabled === false/, "index.html が enabled=false で6桁を飛ばしている");
+  assert.match(login, /const factors = st\?\.factors \|\| \[\];/, "index.html が登録済みの factor で6桁を聞いていない");
+});
+await ok("必須を止めている間も、自分で登録を外すには、直前に6桁で確かめる（パスワードだけで、登録を外されない）", async () => {
+  process.env.MFA_ENABLED = "false";
+  const ctx = { isAdmin: false, roles: ["hr"] };
+  assert.deepEqual(M.selfUnenroll({ ctx, req: req("aal1"), today: "2027-01-01" }).reason, "reauth");
+  assert.equal(M.selfUnenroll({ ctx, req: req("aal2"), today: "2027-01-01" }).ok, true, "強制期間中の「外せない」は無い");
 });
 
 if (ENABLED_BEFORE === undefined) delete process.env.MFA_ENABLED; else process.env.MFA_ENABLED = ENABLED_BEFORE;
