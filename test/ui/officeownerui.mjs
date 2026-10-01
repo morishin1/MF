@@ -110,10 +110,13 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
   check(shown, `Office の画面が表示される。応答：${seen.map((s) => `${s.status}${s.error ? " " + s.error : ""}`).join(", ")}`);
   if (!shown) { await page.close(); throw new Error("Office が開かないので、以降は見られません"); }
 
-  // 対象月を 2026年10月 にする（画面の「次の月」／「前の月」）
+  // 対象月を 2026年10月 にする（画面の「次の月」／「前の月」）。
+  // 開いたときの月は今日で決まる（2026-10-01 以降は最初から10月）ので、動かした回数を数えておく
+  let moves = 0;
   for (let i = 0; i < 6 && (await page.inputValue("#month")) !== "2026-10"; i++) {
     const cur = await page.inputValue("#month");
     await page.click(cur < "2026-10" ? "#next" : "#prev");
+    moves++;
     await page.waitForTimeout(500);
   }
   check((await page.inputValue("#month")) === "2026-10", "対象月を 2026年10月 にできる");
@@ -136,7 +139,8 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
 
   // 応答：すべて 200。403 mfa_required は1つも無い
   const office = seen.filter((s) => s.path.startsWith("/api/office"));
-  check(office.length >= 3, `Office の API を呼んだ（${office.length}回）`);
+  // 開いたとき1回＋月を動かした回数＋9月へ戻した1回（今日の日付によらない）
+  check(office.length >= moves + 2, `Office の API を呼んだ（${office.length}回・月の移動 ${moves}回）`);
   check(office.every((s) => s.status === 200), `Office の API の応答が、すべて 200（${office.map((s) => s.status).join(",")}）`);
   check(!seen.some((s) => s.error === "mfa_required" || s.status === 403), "403・mfa_required は1つも無い");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" | ").slice(0, 200)}`);
