@@ -111,7 +111,9 @@ console.log("\n— 画面が呼ぶ API.xxx が、その画面の読んでいる�
     const known = reg[ver];
     if (!known) { unknown.add(`${ver}（${p}）`); continue; }
     const have = new Set(known.functions);
-    const uses = [...new Set([...src.matchAll(/\bAPI\.([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))];
+    // 画面が読む共通の js（/sales の企業詳細 js/sales-detail.js）が呼ぶものも、その画面の版で足りること
+    const withShared = src.includes("js/sales-detail.js?v=") ? src + read("js/sales-detail.js") : src;
+    const uses = [...new Set([...withShared.matchAll(/\bAPI\.([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))];
     const missing = uses.filter((fn) => !have.has(fn));
     if (missing.length) stale.push(`${p}（?v=${ver}）: ${missing.join(", ")}`);
   }

@@ -932,18 +932,20 @@ await ok("進行一覧：採用決定の人（採用HR権限だけ）と、入�
   const cs = await row();
   assert.equal(cs.journey.state, "career_setup");
   assert.equal(cs.journey.stateLabel, "入社手続き完了");
-  // 採用HRの権限が無い人（会計の管理者だけ）には、応募者は見えない
-  who = ADMIN;
-  const a = (await get("?journey=1")).body;
-  assert.equal(a.rows.some((x) => x.kind === "applicant"), false);
-  assert.equal(a.seesApplicants, false);
-  assert.ok(a.rows.some((x) => x.id === "e-new"));
-  // 責任者は HR を使える（経営者・責任者・人事・採用担当）ので、応募者も見える。ただし給与は見えない
+  // 責任者（manager）は採用HRにも入れる（経営者と責任者は HR・Sales・Office のすべて）。
+  // 担当の社員に加えて、応募者も見える。ただし給与は見えない
   who = MANAGER;
   const m = (await get("?journey=1")).body;
   assert.equal(m.seesApplicants, true);
-  assert.ok(m.rows.some((x) => x.kind === "applicant"), "責任者は採用HRを使えるので、応募者が見える");
+  assert.deepEqual(m.rows.filter((x) => x.kind === "applicant").map((x) => x.id).sort(), ["a-ok", "a-wait"]);
+  assert.ok(m.rows.some((x) => x.id === "e-new"));
   assert.equal(hasSalaryKey(m), false, "給与は、責任者には返らない");
+  // 採用HRの権限が無い人（会計の管理者だけ）には、社員は見えても応募者は見えない
+  who = ADMIN;
+  const ad = (await get("?journey=1")).body;
+  assert.equal(ad.seesApplicants, false);
+  assert.equal(ad.rows.some((x) => x.kind === "applicant"), false);
+  assert.ok(ad.rows.some((x) => x.id === "e-new"));
 });
 
 await ok("詳細：上部の NEXT ACTION は進行（journey）。入社手続きタブの中身。キャリア設定→育成開始", async () => {
@@ -986,13 +988,16 @@ await ok("採用決定の詳細：採用HRの権限がある人だけ。社員�
   assert.equal(r.body.canAdvance, true);
   assert.equal((await get("?applicant=a-done")).statusCode, 409);
   assert.equal((await get("?applicant=a-no")).statusCode, 404);
-  who = ADMIN;
-  assert.equal((await get("?applicant=a-ok")).statusCode, 403, "採用HRの権限が無い人（会計の管理者だけ）は見られない");
+  // 責任者は採用HRに入れるので見られる。ただし社員登録（契約条件の設定）は経営者・管理者だけ
   who = MANAGER;
   const mg = await get("?applicant=a-ok");
-  assert.equal(mg.statusCode, 200, "責任者は採用HRを使える");
+  assert.equal(mg.statusCode, 200);
+  assert.equal(mg.body.canAdvance, false);
   assert.equal(hasSalaryKey(mg.body), false, "ただし給与は返らない（採用条件の給与は、責任者には見えない）");
   assert.equal(mg.body.applicant.joinDate, r.body.applicant.joinDate, "給与以外の採用条件は見える");
+  // 採用HRの権限が無い人（会計の管理者だけ）は見られない
+  who = ADMIN;
+  assert.equal((await get("?applicant=a-ok")).statusCode, 403, "採用HRの権限が無い人（会計の管理者だけ）は見られない");
   who = HR;
   const h = await get("?applicant=a-ok");
   assert.equal(h.statusCode, 200);
