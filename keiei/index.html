@@ -230,17 +230,16 @@
     security(d) {
       if (d.status === "missing") return head("経営設定・セキュリティ", "") + bannerHtml(`${MISSING}。${d.reason || ""}`, "warn");
       const ST = { active: "在籍", leaving: "退職手続き中", left: "退職", invited: "入社準備中" };
-      const MFA = { enrolled: `<span class="kei-pill ok">登録済み</span>`, none: `<span class="kei-pill warn">未登録</span>`, unknown: `<span class="kei-pill miss">確認できません</span>` };
+      // 二段階認証は任意のセキュリティ設定。未登録は警告にしない（色も付けない）
+      const MFA = { enrolled: `<span class="kei-pill ok">登録済み</span>`, none: `<span class="kei-mute">未設定（任意）</span>`, unknown: `<span class="kei-mute">—</span>` };
       const when = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? "" : new Date(t.getTime() + 9 * 3600000).toISOString().slice(0, 16).replace("T", " ").replace(/-/g, "/"); };
-      const pol = d.mfaPolicy;
-      return head("経営設定・セキュリティ", "経営画面に入れるのは経営者（owner）だけで、二段階認証が済んでいないと開けません。")
+      return head("経営設定・セキュリティ", "経営画面に入れるのは経営者（owner）だけです。")
         + d.warnings.map((w) => `<div data-role="warning" data-key="${esc(w.key)}">${bannerHtml(`${w.label}。${w.detail}`, "warn")}</div>`).join("")
-        + (d.mfaUnknown ? bannerHtml("一部の経営者の二段階認証の登録状況を確認できませんでした（未登録とは限りません）。", "") : "")
         + `<div class="kei-h">経営者（owner）</div><div class="kei-panel"><table class="kei-t" data-role="owners"><thead><tr><th>氏名</th><th>在籍</th><th>ログイン</th><th>二段階認証</th></tr></thead><tbody>${
             d.owners.map((o) => `<tr class="${o.active ? "" : "dim"}"><td>${esc(o.name)}</td><td>${esc(ST[o.status] || o.status || "")}</td>
               <td>${o.canLogin ? "できる" : `<span class="kei-mute">アカウント未連携</span>`}</td><td>${MFA[o.mfa] || ""}</td></tr>`).join("")}</tbody></table>
            <div class="kei-note">経営者の追加・削除は、経営者だけができます。最後の経営者は、画面からも DB からも外せません。経営者は2人以上にしておくのが安全です。
-             ${pol ? `二段階認証は、経営画面では常に必要です。全員への強制は ${esc(pol.enforceFrom)} からです。` : ""}</div></div>`
+             二段階認証は任意のセキュリティ設定です（使う人だけ、マイページで登録します）。</div></div>`
         + `<div class="kei-h">経営者の変更履歴（新しい順・20件まで）</div><div class="kei-panel">${
             d.historyReadable === false ? `<div class="kei-empty">${MISSING}（履歴を読めませんでした）</div>`
             : d.history.length ? `<table class="kei-t" data-role="history"><thead><tr><th>日時</th><th>内容</th><th>実行した人</th><th>対象</th></tr></thead><tbody>${
@@ -296,7 +295,6 @@
 
   // ---- 読み込み ---------------------------------------------------------------
   const errBox = (e) => `${head("読み込めませんでした", "")}${bannerHtml(e.hint || e.detail || e.message || "エラーが起きました", "err")}`;
-  const mfaBox = (e) => `${head("二段階認証が必要です", "")}${bannerHtml(e.hint || "", "warn")}<div class="kei-panel"><a class="kei-btn" href="/mypage.html#mfa">マイページで二段階認証を設定する</a></div>`;
 
   let seq = 0;
   async function show(view) {
@@ -336,8 +334,7 @@
       window.scrollTo(0, 0);
     } catch (e) {
       if (mine !== seq) return;
-      if (e.code === "mfa_required") main.innerHTML = mfaBox(e);
-      else if (e.status === 403) location.replace("/home.html");
+      if (e.status === 403) location.replace("/home.html");
       else main.innerHTML = errBox(e);
     }
   }

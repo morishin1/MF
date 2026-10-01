@@ -48,10 +48,10 @@
 | 本人の入社準備 | `/onboarding/`（`onboarding/index.html`）・`GET/POST /api/onboarding/start` | ログインした本人（自分の分だけ） |
 | 案内を読む（ログイン前） | `GET /api/onboarding/guide?t=…` | 案内URLを持つ人。開くだけ（確認・入力はログイン後） |
 | 経営者の一覧 | `/keiei#onboarding`・`GET /api/keiei?view=onboarding` | 経営者のみ |
-| 経営者の詳細（案内・URL・メール） | `/keiei#onboarding/<社員ID>`・`/api/keiei/onboarding` | 経営者のみ・二段階認証つき |
+| 経営者の詳細（案内・URL・メール） | `/keiei#onboarding/<社員ID>`・`/api/keiei/onboarding` | 経営者のみ（二段階認証は要らない） |
 
 `/api/keiei/onboarding` の操作: `save_guide` / `issue_guide` / `create_invite` / `revoke_invite` / `preview_mail` / `test_mail` / `send_mail`（履歴は GET）。
-入口は `lib/keiei-gate.js`（`canKeiei` → `requireMfaStrict`）。HR・人事・管理者は、案内も履歴も見られない（DB も同じ）。
+入口は `lib/keiei-gate.js`（`canKeiei` だけ。二段階認証は任意）。HR・人事・管理者は、案内も履歴も見られない（DB も同じ）。
 
 ## 4. データ（`db/104_onboarding_guide.sql`）
 

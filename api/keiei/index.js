@@ -9,9 +9,9 @@
 //   DB 側は、給与を持つ表が gw_can_see_salary / gw_is_owner の RLS（db/099・db/100）。
 //   この API は service_role で読むので、入口の canKeiei が唯一の関門になる。
 //
-// ■ 二段階認証
-//   強制日（2026-10-01）を待たず、いつでも要る（lib/mfa.js requireMfaStrict）。
-//   経営は、給与・人件費・利益・資金繰りという最重要の情報を扱うため
+// ■ 二段階認証は要らない
+//   二段階認証は任意のセキュリティ設定（2026-10-01 の方針変更。docs/mfa-optional.md）。
+//   経営の入口は、経営者（owner）のロールだけで通す。未登録をエラー・警告にもしない
 //
 // ■ 元データを再入力させない
 //   経費・契約・請求進捗・営業が持つ確定済みの値を、その場で数える（lib/keiei.js）。
@@ -34,7 +34,6 @@ import { guideFact } from "../../lib/onboard-guide.js";
 import { readAll, readIn, chunks } from "../../lib/pg-read.js";
 import { buildHub, buildSecurity } from "../../lib/keiei-hub.js";
 import { readHubFacts, readSecurity, onboardingFact } from "../../lib/keiei-hub-read.js";
-import { ENFORCE_FROM, ENROLL_UNTIL } from "../../lib/mfa.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
@@ -46,7 +45,7 @@ const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue",
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
 
-  // 経営者だけ・二段階認証つき（lib/keiei-gate.js）。権限のない人には、認証の登録を促さず 403
+  // 経営者だけ（lib/keiei-gate.js）。権限のない人は 403
   const gate = await requireKeiei(req, res);
   if (!gate) return;
   const { user, ctx } = gate;
@@ -173,7 +172,7 @@ async function hub(sb, ctx) {
 async function security(sb, ctx) {
   const { people, owners, events } = await readSecurity(sb, ctx);
   if (!owners) return { status: STATUS.MISSING, missingLabel: MISSING_LABEL, reason: "経営者の一覧を読めませんでした" };
-  return { status: STATUS.EXACT, ...buildSecurity({ owners, events, people, today: todayJst(), mfaPolicy: { enforceFrom: ENFORCE_FROM, enrollUntil: ENROLL_UNTIL } }),
+  return { status: STATUS.EXACT, ...buildSecurity({ owners, events, people, today: todayJst() }),
     historyReadable: events !== null };
 }
 

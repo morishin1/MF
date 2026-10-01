@@ -58,7 +58,6 @@ export const securityBody = (over = {}) => ({
       { ts: "2026-09-29T01:00:00Z", action: "owner.grant", actor_id: "u1", target: "employee:e2", detail: { name: "経営 二郎" } },
       { ts: "2026-09-20T05:30:00Z", action: "mfa.reset_denied", actor_id: "ux", target: "employee:e1", detail: {} },
     ],
-    mfaPolicy: { enforceFrom: "2026-10-01", enrollUntil: "2026-09-30" },
   }),
   historyReadable: true,
   ...over,

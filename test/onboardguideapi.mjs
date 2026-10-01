@@ -3,7 +3,7 @@
 // ■ 何を守るテストか
 //
 //   経営者側（/api/keiei/onboarding）
-//   1. 経営者だけ・二段階認証つき。人事・管理者・責任者などは 403（案内も履歴も見えない）
+//   1. 経営者だけ（二段階認証は要らない）。人事・管理者・責任者などは 403（案内も履歴も見えない）
 //   2. 案内: 下書き保存（許した項目だけ・金額は断る）→ 発行（確定版・版が上がる・変化が無ければ断る）
 //   3. 案内URL: 発行済みの案内だけ。トークンはDBに平文で残らない。新しいURLで前のURLは失効。応答にだけURLが出る
 //   4. メール: 未設定なら実送信も履歴も作らない（URLをコピーして渡す）。プレビューは何も作らない。
@@ -186,7 +186,7 @@ const issue = (employeeId = "e1") => owner({ action: "issue_guide", employeeId }
 const invite = (extra = {}) => owner({ action: "create_invite", employeeId: "e1", ...extra });
 const tokenOf = (url) => new URL(url).searchParams.get("t");
 
-console.log("\n=== 経営者だけ・二段階認証つき ===\n");
+console.log("\n=== 経営者だけ（二段階認証は要らない） ===\n");
 
 await ok("人事・管理者・責任者・採用担当・経理・営業・一般は、読めない・書けない（403）", async () => {
   setup();
@@ -201,13 +201,13 @@ await ok("人事・管理者・責任者・採用担当・経理・営業・一�
   }
 });
 
-await ok("経営者でも、二段階認証（aal2）が済んでいなければ開けない", async () => {
+await ok("経営者なら、二段階認証（aal2）が済んでいなくても（aal1）、開けて・書ける。mfa_required は返らない", async () => {
   setup();
-  assert.equal((await ownerGet("employeeId=e1", { aal: "aal1" })).statusCode, 403);
-  assert.equal((await save(F, "e1")).statusCode, 200);
+  const g = await ownerGet("employeeId=e1", { aal: "aal1" });
+  assert.equal(g.statusCode, 200); assert.notEqual(g.body.error, "mfa_required");
   const r = await owner({ action: "save_guide", employeeId: "e1", fields: F }, { aal: "aal1" });
-  assert.equal(r.statusCode, 403);
-  assert.equal(r.body.error, "mfa_required");
+  assert.equal(r.statusCode, 200);
+  assert.notEqual(r.body.error, "mfa_required");
 });
 
 await ok("知らない action・employeeId なし・他社・退職者・存在しない人", async () => {

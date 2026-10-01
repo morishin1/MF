@@ -3,7 +3,7 @@
 // ■ 何を守るテストか
 //
 //   経営者 → 一般ユーザー    可
-//   経営者 → ほかの経営者    可（実行する経営者が、今回 aal2 で確かめていること）
+//   経営者 → ほかの経営者    可（二段階認証は任意。実行する経営者に aal2 は要らない）
 //   管理者・人事 → 経営者    不可（403 owner_only）。認証は1つも外れず、試みたことが記録に残る
 //   管理者・人事 → 一般ユーザー 可（いままでどおり）
 //   誰でも → 自分            不可
@@ -23,8 +23,6 @@ const db = { rows: {} };
 const logged = [];
 const notices = [];
 const deleted = [];
-let strictOk = true;
-let strictCalls = 0;
 
 function table(name) {
   const f = [];
@@ -63,16 +61,7 @@ mock.module(atRoot("lib/auth.js"), { namedExports: { requireUser: async () => ({
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { logged.push(e); } } });
 mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async (rows) => { notices.push(...rows); return { created: rows.length }; } } });
 
-const REAL_MFA = await import(atRoot("lib/mfa.js"));
-mock.module(atRoot("lib/mfa.js"), { namedExports: {
-  ...REAL_MFA,
-  requireMfa: async () => true,
-  requireMfaStrict: async (_req, res) => {
-    strictCalls += 1;
-    if (strictOk) return true;
-    res.statusCode = 403; res.end(JSON.stringify({ error: "mfa_required", strict: true })); return false;
-  },
-} });
+// lib/mfa.js は本物のまま使う（二段階認証は任意。requireMfa は何も止めない）
 
 const REAL_GW = await import(atRoot("lib/gw.js"));
 let who;
@@ -104,7 +93,7 @@ const ctxOf = (id, roles, extra = {}) => ({
 });
 
 function setup() {
-  logged.length = 0; notices.length = 0; deleted.length = 0; strictOk = true; strictCalls = 0;
+  logged.length = 0; notices.length = 0; deleted.length = 0;
   const emp = (id, name, status = "active") => ({ id, tenant_id: "t1", display_name: name, user_id: `u-${id}`, status });
   db.rows = {
     gw_employees: [emp("own1", "経営者A"), emp("own2", "経営者B"), emp("adm", "管理者"), emp("hr1", "人事"), emp("mem", "一般"),
@@ -125,27 +114,25 @@ await ok("経営者は、一般ユーザーの認証をリセットできる", a
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.deepEqual(deleted.map((d) => d.userId), ["u-mem"]);
   assert.equal(db.rows.gw_mfa_resets.length, 1);
-  assert.equal(strictCalls, 0, "一般ユーザーのリセットには、追加の aal2 は要らない（いままでどおり）");
   assert.equal(logged.at(-1).detail.ownerTarget, false);
 });
 
-await ok("経営者は、ほかの経営者の認証をリセットできる（今回 aal2 で確かめていること）", async () => {
+await ok("経営者は、ほかの経営者の認証をリセットできる（二段階認証は任意。実行する経営者に aal2 は要らない）", async () => {
   setup(); who = ctxOf("own1", ["owner"]);
   const r = await reset("own2");
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.notEqual(r.body.error, "mfa_required");
   assert.deepEqual(deleted.map((d) => d.userId), ["u-own2"]);
-  assert.equal(strictCalls, 1);
   assert.equal(logged.at(-1).action, "mfa.reset");
   assert.equal(logged.at(-1).detail.ownerTarget, true);
 });
 
-await ok("経営者どうしのリセットは、実行する経営者が aal2 でなければ止まる。何も外れない", async () => {
-  setup(); who = ctxOf("own1", ["owner"]); strictOk = false;
+await ok("経営者どうしのリセットに、二段階認証の確認（mfa_required）は付かない。権限（owner）の判定だけ", async () => {
+  setup(); who = ctxOf("own1", ["owner"]);
   const r = await reset("own2");
-  assert.equal(r.statusCode, 403);
-  assert.equal(r.body.error, "mfa_required");
-  assert.equal(deleted.length, 0);
-  assert.equal(db.rows.gw_mfa_resets.length, 0);
+  assert.equal(r.statusCode, 200);
+  assert.ok(!JSON.stringify(r.body).includes("mfa_required"));
+  assert.equal(db.rows.gw_mfa_resets.length, 1);
 });
 
 await ok("管理者は、経営者の認証をリセットできない（403 owner_only）。何も外れず、試みが記録に残る", async () => {
