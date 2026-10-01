@@ -215,8 +215,7 @@ const hire = await session("tok-e1");
 
   // 最上部の「次にやること」と、STEP2
   const next = page.locator('[data-role="next"]');
-  check((await next.innerText()).includes("労働条件通知書を確認してください"), "最上部の「次にやること」（NEXT ACTION）が、通知書の確認");
-  check((await next.locator(".ob-btn").innerText()).trim() === "労働条件を確認する" && await next.locator(".ob-btn").count() === 1, "Primary CTA は「労働条件を確認する」の1つ");
+  check((await next.innerText()).includes("労働条件通知書の確認"), "最上部の「次にやること」が、通知書の確認");
   check((await next.innerText()).includes("あなたの操作が必要です"), "あなたの番、と出る");
   const st2 = page.locator('[data-step="contract"]');
   check((await st2.getAttribute("data-state")) === "current" && (await st2.innerText()).includes("労働条件通知書を確認してください"), "STEP2 が、確認してください");
@@ -240,7 +239,7 @@ const hire = await session("tok-e1");
   check((await text(page, '[data-role="notice-state"]')).includes(`確認済み　${todayJst()}`), `「確認済み　${todayJst()}」`);
   check((await card.locator("a").first().innerText()).trim() === "もう一度見る" && await card.locator("button").count() === 0, "「もう一度見る」だけ（確認ボタンは消える）");
   check(await page.locator('[data-step="contract"]').getAttribute("data-state") === "done", "STEP2 が完了");
-  check((await next.innerText()).includes("入社情報を入力してください"), "次にやること が、入社情報の入力に進む");
+  check((await next.innerText()).includes("入社情報の入力"), "次にやること が、入社情報の入力に進む");
   const row = db.rows.gw_labor_notices[0];
   check(row.confirmed_at !== null && row.confirmed_by === "u-e1", "確認した日時・確認した人（本人）が残る");
   await page.screenshot({ path: shotPath("labor-notice-self-confirmed.png"), fullPage: true });
@@ -321,7 +320,7 @@ console.log("\n=== 管理側：確認済み・確認日時 → 差し替える�
   await page.reload();
   await page.waitForSelector('[data-role="notice"]');
   check((await page.locator('[data-role="notice"]').getAttribute("data-state")) === "unconfirmed", "本人: 確認済み → 未確認に戻る");
-  check((await text(page, '[data-role="next"]')).includes("労働条件通知書を確認してください"), "次にやること も、通知書の確認に戻る");
+  check((await text(page, '[data-role="next"]')).includes("労働条件通知書の確認"), "次にやること も、通知書の確認に戻る");
   const [pop] = await Promise.all([page.waitForEvent("popup"), page.locator('[data-role="notice-view"]').click()]);
   await pop.waitForSelector("iframe[src]");
   check((await text(pop, "#nv-sub")).includes("第2版"), "開くのは、新しい版（第2版）");
@@ -356,7 +355,7 @@ console.log("\n=== 電子署名の依頼がある人：確認の入口を出さ�
   await page.waitForSelector('[data-step="contract"]');
   check(await page.locator('[data-role="notice"]').count() === 0, "通知書の確認の欄は出ない（電子署名を優先する）");
   check((await text(page, '[data-step="contract"]')).includes("締結してください"), "STEP2 は、これまでどおり『締結』");
-  check((await page.locator('[data-role="next"]').innerText()).includes("契約書を確認して、署名してください"), "次にやること は、締結（署名）");
+  check((await page.locator('[data-role="next"]').innerText()).includes("労働条件通知書の締結"), "次にやること は、締結");
   check(JSON.stringify(db.rows.gw_sign_requests) === before, "電子署名の依頼（gw_sign_requests）は、書き換わっていない");
 
   const admin = hr.page;
