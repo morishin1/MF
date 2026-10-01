@@ -11,8 +11,9 @@
 //
 // ■ 守る形
 //
-//   ・ヘッダー＝業務領域（ホーム／Office／⚙管理）の切替、サイドメニュー＝その領域だけ
-//   ・ホームは5項目、管理（⚙）は4項目。Officeだけ2グループ・1グループ6項目まで
+//   ・左は自分の仕事（全員同じ）、上は担当業務（ヘッダー）。管理者も左メニューはメンバーと同じ
+//   ・Office（管理画面）に入ったときだけ専用の左メニュー: ダッシュボード＋3グループ・1グループ6項目まで
+//   ・管理（⚙）は4項目
 //   ・メンバーは8項目（条件付きで出るものを除く）
 //   ・2階層目は左メニューに出さず、ページの上のタブ（tabs）にする
 //   ・メンバーと管理者は、別の表にする（権限で出し分けない）
@@ -44,33 +45,33 @@ function tableOf(name, endMark) {
   return Function(`"use strict"; return (${expr});`)();
 }
 
-const HOME_ITEMS = tableOf("HOME_ITEMS", "\n  // Office: 人事・労務");
+const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // Office: 人事・労務");
 const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 管理（⚙）");
 const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /** active（いま開いている画面）");
-const MEMBER_SIDE_NAV = tableOf("MEMBER_SIDE_NAV", "\n  /**\n   * 管理者: ヘッダー＝業務領域");
+const MEMBER_SIDE_NAV = tableOf("MEMBER_SIDE_NAV", "\n  /**\n   * 「左は自分の仕事、上は担当業務」");
 const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * メンバー: PCでの左サイドメニュー");
 
-const adminItems = [...HOME_ITEMS, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS];
+const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS];
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
 // ---- 1) ホーム5・Office2グループ（各6項目まで）・管理4 ------------------------
 // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）。
 // ホーム・管理（⚙）はヘッダーで領域を切り替える前提なので、グループに畳まず平らなまま
 console.log("\n— 管理者 —");
-check(HOME_ITEMS.length === 5, `ホームは5項目（いま ${HOME_ITEMS.length}）`);
+check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "dashboard", "Officeの先頭はダッシュボード1つ");
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
-check(OFFICE_GROUPS.length === 2, `Officeは2グループ（いま ${OFFICE_GROUPS.length}）`);
+check(OFFICE_GROUPS.length === 3, `Officeは3グループ（人事・労務／経理・事務／全社運営。いま ${OFFICE_GROUPS.length}）`);
 for (const g of OFFICE_GROUPS) {
   check(g.items.length <= 6, `Office「${g.label}」は6項目まで（いま ${g.items.length}）`);
 }
 check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItems.length}`);
 
 // Officeを開いても、いちばん大きいグループ＋見出し2つが
-// PCの最初の画面に収まる高さかどうかの、おおまかな目安
+// PCの最初の画面に収まる高さかどうかの、おおまかな目安（先頭のダッシュボード1行を含む）
 {
   const biggest = Math.max(...OFFICE_GROUPS.map((g) => g.items.length));
-  check(OFFICE_GROUPS.length + biggest <= 11,
-    `Officeを開いた状態の行数の目安 ${OFFICE_GROUPS.length + biggest}（見出し2＋最大 ${biggest}）`);
+  check(1 + OFFICE_GROUPS.length + biggest <= 11,
+    `Officeを開いた状態の行数の目安 ${1 + OFFICE_GROUPS.length + biggest}（ダッシュボード1＋見出し${OFFICE_GROUPS.length}＋最大 ${biggest}）`);
 }
 
 // ---- 2) メンバーは7つ ---------------------------------------------------------
@@ -100,7 +101,7 @@ for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバ�
 }
 
 // メンバーと管理者は別の表。同じ配列を共有していない
-check(MEMBER_SIDE_NAV !== HOME_ITEMS, "メンバーと管理者は別の表");
+check(MEMBER_SIDE_NAV !== OFFICE_TOP, "メンバーと管理者は別の表");
 {
   // 管理側の画面が、メンバーの表に混ざっていないこと
   const leaked = memberItems.filter((n) => String(n.href || "").startsWith("admin-"));

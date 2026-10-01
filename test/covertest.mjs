@@ -11,8 +11,8 @@ const atRoot = (p) => _join(ROOT, p);
 
 const dir = ROOT;
 const src = fs.readFileSync(path.join(dir, "js/layout.js"), "utf8");
-// ホーム／Office／管理（⚙）の3つの表ぶんをまとめて見る（旧 ADMIN_GROUPS を分割した）
-const groups = src.slice(src.indexOf("const HOME_ITEMS = ["), src.indexOf("// 社労士は社外の人"));
+// Office（先頭・3グループ）と管理（⚙）の表ぶんをまとめて見る（旧 ADMIN_GROUPS を分割した）
+const groups = src.slice(src.indexOf("const OFFICE_TOP = ["), src.indexOf("// 社労士は社外の人"));
 const keys = new Set([...groups.matchAll(/\{ key: "([a-z_]+)",/g)].map((m) => m[1]));
 // match: [...] に書かれた鍵も、選ばれた状態になる正規の鍵（tabsの帯は出ないだけ）
 for (const m of groups.matchAll(/match:\s*\[([^\]]*)\]/g)) {
@@ -35,9 +35,11 @@ for (const f of fs.readdirSync(dir).filter((x) => x.startsWith("admin-") && x.en
   if (!m) { console.log("active が読めない:", f); bad++; continue; }
   for (const k of m) if (!keys.has(k)) { console.log("NG メニューに無い鍵:", f, "->", k); bad++; }
 }
-// messages.html は管理者も同じ画面を使う
+// messages.html（社内AI）は管理者も同じ画面を使う。管理者も左メニューは全員と同じなので、メンバー側の表で見る
+const memberSrc = src.slice(src.indexOf("const MEMBER_SIDE_NAV = ["), src.indexOf("const OFFICE_TOP = ["));
+const memberKeys = new Set([...memberSrc.matchAll(/\{ key: "([a-z_]+)",/g)].map((m) => m[1]));
 const msg = activeKeysOf(fs.readFileSync(path.join(dir, "messages.html"), "utf8"));
-for (const k of msg || []) if (!keys.has(k)) { console.log("NG messages.html ->", k); bad++; }
+for (const k of msg || []) if (!memberKeys.has(k)) { console.log("NG messages.html ->", k); bad++; }
 
 console.log(bad ? `${bad} 件 失敗` : `すべての管理画面がメニューに紐づいている（鍵 ${keys.size} 個）`);
 process.exit(bad ? 1 : 0);

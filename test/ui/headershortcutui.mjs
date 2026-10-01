@@ -81,7 +81,7 @@ console.log("— owner：採用HR・Sales・月次業務・経営の4つ（＋�
   check(sc.find((s) => s.key === "office")?.text.includes("月次業務"), "PCでは「月次業務」と出る（旧ラベル「Office」は管理画面側のエリア名に譲った）");
   check(sc.find((s) => s.key === "hr")?.text.includes("採用HR"), "PCでは「採用HR」と出る");
   check(sc.find((s) => s.key === "keiei")?.href === "/keiei/", "経営 → /keiei/");
-  check(sc.find((s) => s.key === "area-office")?.href === "admin-members.html", "Office（管理画面エリア） → admin-members.html");
+  check(sc.find((s) => s.key === "area-office")?.href === "admin-dashboard.html", "Office（管理画面エリア） → admin-dashboard.html（Officeのダッシュボード）");
   check(sc.find((s) => s.key === "area-office")?.text.includes("Office"), "PCでは管理画面側のOfficeに「Office」と出る");
   // ⚙管理は直リンクではなくドロップダウン（権限・端末・貸与品・アクセス分析・システム設定への4本リンク）
   check(await page.locator("#kp-admin-menu-panel a[href=\"admin-devices.html\"]").count() === 1,
@@ -91,7 +91,8 @@ console.log("— owner：採用HR・Sales・月次業務・経営の4つ（＋�
   check(labels.map((t) => t.trim()).join(" ｜ ") === "採用HR ｜ Sales ｜ 月次業務 ｜ 経営 ｜ Office",
     `PCの表示（いま ${labels.join(" ｜ ")}）`);
   check(await page.locator(".topbar .kp-shortcut.btn-secondary").count() === 5, "既存の secondary ボタン（TOOLS4つ＋Officeの管理画面エリア1つ）");
-  check(await page.locator(".topbar .kp-shortcut.on").count() === 0, "ダッシュボードでは active にしない");
+  // admin-dashboard.html は Office 領域の先頭（全社のダッシュボード）。ここでは Office が選ばれて見える
+  check(await page.locator(".topbar .kp-shortcut.on").count() === 1, "Officeのダッシュボードでは Office だけが active");
   check(await page.locator("#kp-admin-menu-btn").isVisible(), "⚙管理のアイコンボタンが出る（フルサイズのボタンにはしない。幅を取りすぎるため）");
 
   // 既存の3つを壊していない

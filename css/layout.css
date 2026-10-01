@@ -541,6 +541,8 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-subtab.on { border-color: var(--primary); background: var(--primary); color: #fff; }
 
 .topbar .brand a { display: inline-flex; align-items: center; }
+/* 担当業務（Office・管理）に入っているときの「エイト / OFFICE」 */
+.kp-app { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--primary); margin: 0 4px 0 2px; }
 
 /* ヘッダーの近道（採用HR・Sales・Office）。既存の btn-secondary をそのまま使い、
    いまいるアプリのものだけ primary と同じ色で塗る。

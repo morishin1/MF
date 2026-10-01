@@ -112,46 +112,31 @@
   ];
 
   /**
-   * 管理者: ヘッダー＝業務領域（ホーム／Office／⚙管理）の切替、
-   *         左サイドメニュー＝選んでいる業務領域の中だけ。
+   * 「左は自分の仕事、上は担当業務」。
    *
-   * ■ なぜ作り直したか
-   *   以前は24項目が1つのサイドメニューの中で4グループに畳まれていて、
-   *   「いまどの仕事をしているか」と「サイドメニューの中身」が常に一致しなかった。
-   *   ヘッダーで領域を選び、サイドメニューはその領域だけを映す形にそろえる
-   *   （採用HR／Sales／経営が、すでにヘッダー切替＋専用画面という形になっているのと同じ）。
+   * ■ 左サイドメニュー（MEMBER_SIDE_NAV）は、管理者も含め全員が同じ
+   *   ホーム・今日やること・社内AI・勤怠・申請・キャリア・社内情報・マイページ。
+   *   他人・会社を管理する画面は左に置かない。
    *
-   * ■ 3つの領域（areaOf が active から判定する）
-   *   home     … ダッシュボード・今日のタスク・日報・社内AI・お知らせ（毎日使うものだけ）
-   *   office   … 人事・労務／経理・事務の管理画面（旧 g-hr・g-ops）
-   *   settings … 権限・端末・アクセス分析・システム設定（旧 g-system）。ヘッダー右の⚙から
+   * ■ 担当業務はヘッダーから入る。入ったら、その業務だけの専用の左メニューになる。
+   *   採用HR（/hr）・Sales（/sales）・経営（/keiei）・月次業務（/office）は別アプリ。
+   *   管理者が使う管理画面（admin-*.html）は URL を変えず、次の2つの領域に分ける
+   *   （areaOf が active から判定する）。
+   *     office   … ダッシュボード／人事・労務／経理・事務／全社運営
+   *     settings … 権限・端末・アクセス分析・システム設定（ヘッダー右の⚙管理から）
+   *   上のどちらにも属さない画面は、ホーム領域＝全員と同じ左メニュー。
+   *
+   * ■ 同じ名前でも「本人用」と「管理用」を分ける
+   *   勤怠・申請（本人）／勤怠管理（全社員）、キャリア（本人）／評価・キャリア（他メンバー）。
    *
    * ■ 2階層目は、ページの上のタブにする（tabs）
    *   tabs に書いた鍵は、その項目が選ばれた状態になる（match は自動）。
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
-  const HOME_ITEMS = [
+  // Office の最初の行。管理者向けのダッシュボード（全社の今日の状況）
+  const OFFICE_TOP = [
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
-    // 今週のゴールは、今日のタスクの帯の中へ（左メニューの行は増やさない）
-    { key: "tasks",     href: "admin-tasks.html",     label: "今日のタスク",   icon: "checklist", ready: true,
-      tabs: [
-        { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
-        { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
-      ] },
-    { key: "nippo",     href: "admin-nippo.html",     label: "日報",           icon: "edit_note", ready: true },
-    // 「社内AI」1つにまとめる。AIナレッジの管理はその中のタブ（ページ内）に置く
-    { key: "messages",  href: "messages.html",        label: "社内AI",         icon: "smart_toy", ready: true,
-      tabs: [
-        { key: "messages", href: "messages.html",  label: "AIチャット" },
-        { key: "ai_admin", href: "admin-ai.html",   label: "AIナレッジ" },
-      ] },
-    // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
-    { key: "notices",   href: "admin-notices.html",   label: "お知らせ",       icon: "campaign",  ready: true,
-      tabs: [
-        { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
-        { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
-      ] },
   ];
 
   // Office: 人事・労務／経理・事務。今回は admin/owner のままに限定する
@@ -168,7 +153,7 @@
           // なく match だけにする（帯を出すと、見出しをそろえる制約が働く）
           match: ["members", "onboard"] },
         { key: "hr_flow",   href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
-        { key: "timecard",  href: "admin-timecard.html",  label: "勤怠・休暇",   icon: "schedule",   ready: true,
+        { key: "timecard",  href: "admin-timecard.html",  label: "勤怠管理",     icon: "schedule",   ready: true,
           tabs: [
             { key: "timecard", href: "admin-timecard.html", label: "勤怠" },
             { key: "requests", href: "admin-requests.html", label: "休暇・稟議" },
@@ -214,6 +199,28 @@
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
       ],
     },
+    {
+      // 旧「ホーム」にあった管理者向けの画面。全員の仕事を見る・全社へ発信する側なので、
+      // 左の「自分の仕事」には置かず、Officeの中に置く（本人用の同名画面とは別物）
+      key: "office-company", label: "全社運営", icon: "domain",
+      items: [
+        // 今週のゴールは、全員のタスクの帯の中へ（左メニューの行は増やさない）
+        { key: "tasks",     href: "admin-tasks.html",     label: "全員のタスク", icon: "checklist", ready: true,
+          tabs: [
+            { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
+            { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
+          ] },
+        { key: "nippo",     href: "admin-nippo.html",     label: "全員の日報",   icon: "edit_note", ready: true },
+        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true,
+          tabs: [
+            { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
+            { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
+          ] },
+        // 社内AI（本人が使うチャット）は左メニュー。ここは資料の管理と問い合わせ対応の側
+        { key: "ai_admin",  href: "admin-ai.html",        label: "AIナレッジ",   icon: "psychology", ready: true },
+      ],
+    },
   ];
 
   // 管理（⚙）: 毎日使わない設定系だけ。ヘッダー右のアイコンが正式な入口
@@ -237,13 +244,12 @@
       match: ["settings", "bookings"] },
   ];
 
-  /** active（いま開いている画面）が、ホーム／Office／管理のどの領域に属するか */
+  /** active（いま開いている画面）が、Office／管理（⚙）／ホーム（全員と同じ左メニュー）のどれか */
   function areaOf(active) {
     if (!active) return "home";
-    if (OFFICE_GROUPS.some((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))))
-      return "office";
-    if (SETTINGS_ITEMS.some((i) => i.key === active || (i.match || []).includes(active)))
-      return "settings";
+    const hit = (i) => i.key === active || (i.match || []).includes(active);
+    if (OFFICE_TOP.some(hit) || OFFICE_GROUPS.some((g) => g.items.some(hit))) return "office";
+    if (SETTINGS_ITEMS.some(hit)) return "settings";
     return "home";
   }
 
@@ -253,7 +259,7 @@
    * match を手で二重に書かせない。書き忘れると、開いたときに
    * メニューのどこも光らず「自分がどこにいるのか」が分からなくなる
    */
-  for (const n of [...HOME_ITEMS, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS, ...MEMBER_SIDE_NAV]) {
+  for (const n of [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS, ...MEMBER_SIDE_NAV]) {
     if (n.tabs && !n.match) n.match = n.tabs.map((t) => t.key);
   }
 
@@ -281,7 +287,6 @@
 
   // 管理者側の画面をメンバーが開いた場合などに、行き先へ送り返す
   function homeFor(appRole) {
-    if (appRole === "admin" || appRole === "owner") return "admin-dashboard.html";
     if (appRole === "sr") return "advisor.html";
     return "home.html";
   }
@@ -329,7 +334,7 @@
   // フルサイズのボタンをもう1つ足すと折り返して縦に伸びる。小さいアイコン＋
   // ドロップダウン（adminMenuHtml・toggleAdminMenu）にして、通知ベルと同じ形にする
   const ADMIN_TOOLS = [
-    { areaKey: "office", href: "admin-members.html", label: "Office", short: "Office", icon: "domain" },
+    { areaKey: "office", href: "admin-dashboard.html", label: "Office", short: "Office", icon: "domain" },
   ];
 
   function shortcutsHtml(shows = {}, path = location.pathname, showAdminTools = false, area = null) {
@@ -363,6 +368,7 @@
       <div class="brand">
         <a href="${home}" style="text-decoration:none;color:inherit;">
           <img src="img/logo.svg" alt="" class="kp-logo">エイト</a>
+        ${area === "office" || area === "settings" ? `<span class="kp-app">/ ${area === "office" ? "OFFICE" : "管理"}</span>` : ""}
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
@@ -522,9 +528,8 @@
   function renderAdminNav(active, items = null) {
     if (items) return renderSidebar(active, items, "admin");
 
-    const area = areaOf(active);
-    if (area === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
-    if (area !== "office") return renderSidebar(active, HOME_ITEMS, "admin");
+    // ホーム領域（全員と同じ左メニュー）は renderChrome が renderMemberNav で描く。ここは Office・管理だけ
+    if (areaOf(active) === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
 
     const open = loadOpen();
     const here = groupOf(active);
@@ -536,7 +541,7 @@
 
     const el = document.createElement("nav");
     el.className = "kp-sidebar grouped";
-    el.innerHTML = OFFICE_GROUPS.map((g) => {
+    el.innerHTML = OFFICE_TOP.map((n) => sideItem(n, active)).join("") + OFFICE_GROUPS.map((g) => {
       const on = open.has(g.key);
       const hasActive = here && here.key === g.key;
       return `
@@ -577,7 +582,7 @@
    * ■ なぜ左メニューに置かないのか
    *   「勤怠」と「休暇・稟議」は、どちらも同じ仕事の続きで開くもの。
    *   左メニューに2つ並べると、毎日見る一覧が1行ずつ長くなっていく。
-   *   左には「勤怠・休暇」1つだけ置き、行き来は開いた先でする。
+   *   左には「勤怠管理」1つだけ置き、行き来は開いた先でする。
    *
    * ■ 各HTMLには何も書かせない
    *   どの画面がどのタブに属するかは、この1か所（tabs）だけで決まる。
@@ -872,17 +877,18 @@
 
     renderTopbar({ name, appRole, memberView, shows, active });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
-    if (memberView) renderMemberNav(active, shows, stage);
-    else if (canPreview) renderAdminNav(active);
+    // 管理者もホーム領域は全員と同じ左メニュー。Office・管理（⚙）に入ったときだけ専用の左メニュー
+    const adminArea = canPreview && !memberView && areaOf(active) !== "home";
+    if (adminArea) renderAdminNav(active);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
 
     // 2階層目の帯。左メニューには出さず、ページの上に出す。
     // 管理者側は、いまどの領域を見ているかに関わらず全領域ぶんのタブ定義から探す
     // （領域をまたいで active を特定できるようにする。表示するサイドメニューとは別）
-    renderSubnav(active, memberView || !canPreview
+    renderSubnav(active, !adminArea
       ? MEMBER_SIDE_NAV
-      : [...HOME_ITEMS, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS]);
+      : [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...SETTINGS_ITEMS]);
 
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く。
     // その画面のデータより先に投げない（バッジのために本文を待たせない）
