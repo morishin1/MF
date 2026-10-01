@@ -8,7 +8,7 @@ import { admin } from "../../lib/supabase.js";
 import { CATEGORY_CODES } from "../../lib/ai-knowledge.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
-const SQL = "db/110_ai_assistant.sql";
+const SQL = "db/113_ai_assistant.sql";
 const SCOPES = ["all", "hr", "finance", "admin"];
 
 export default async function handler(req, res) {

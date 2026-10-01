@@ -8,7 +8,7 @@ import { gwContext, canManageAiInquiries } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
-const SQL = "db/110_ai_assistant.sql";
+const SQL = "db/113_ai_assistant.sql";
 const STATUSES = ["new", "in_progress", "waiting_user", "resolved", "closed"];
 
 async function loadInquiry(sb, ctx, id) {

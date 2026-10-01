@@ -5,7 +5,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 
-const SQL = "db/110_ai_assistant.sql";
+const SQL = "db/113_ai_assistant.sql";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);

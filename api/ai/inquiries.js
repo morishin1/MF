@@ -15,7 +15,7 @@ import { CATEGORY_CODES } from "../../lib/ai-knowledge.js";
 import { buildEscalationSummary } from "../../lib/ai-escalate.js";
 import { gwLog } from "../../lib/gw-audit.js";
 
-const SQL = "db/110_ai_assistant.sql";
+const SQL = "db/113_ai_assistant.sql";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);

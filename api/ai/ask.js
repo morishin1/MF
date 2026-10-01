@@ -13,7 +13,7 @@ import { admin } from "../../lib/supabase.js";
 import { allowedKnowledgeScopes, searchKnowledge, CATEGORY_CODES } from "../../lib/ai-knowledge.js";
 import { askAssistant } from "../../lib/ai-assistant.js";
 
-const SQL = "db/110_ai_assistant.sql";
+const SQL = "db/113_ai_assistant.sql";
 const MAX_QUESTION_LEN = 4000;
 const HISTORY_LIMIT = 8; // 直近何件を会話履歴としてAIへ渡すか（6〜10件の範囲）
 
