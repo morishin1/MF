@@ -27,6 +27,8 @@ import {
   channelLabel, parseListQuery,
 } from "../../../lib/sales.js";
 import { listPage, listFacets } from "../../../lib/sales-list.js";
+import { MASTERS } from "../../../lib/sales-master.js";
+import { CSV_IMPORT_COLUMNS } from "../../../lib/sales-csv-import.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
@@ -119,14 +121,15 @@ async function paged(res, sb, ctx, sp) {
   if (f.error) return json(res, 400, f);
   const [r, facets] = await Promise.all([
     listPage(sb, ctx, f),
-    sp.get("facets") === "1" ? listFacets(sb, ctx) : Promise.resolve(undefined),
+    sp.get("facets") === "1" ? listFacets(sb, ctx, f) : Promise.resolve(undefined),
   ]);
   if (r.error) {
     const hint = dbSetupHint(r.error, SQL);
     if (hint) return json(res, 200, { companies: [], notReady: true, message: hint, page: 1, total: 0, totalPages: 1 });
     return json(res, 500, { error: "db_query_failed", detail: r.error.message });
   }
-  return json(res, 200, { ...r, me: ctx.employee?.id || null, facets });
+  // masters … 業種・提案サービス・都道府県の共通マスター（画面はこれで選択肢を作る。lib/sales-master.js）
+  return json(res, 200, { ...r, me: ctx.employee?.id || null, facets, masters: MASTERS, csvColumns: CSV_IMPORT_COLUMNS });
 }
 
 async function create(req, res, sb, ctx, user) {

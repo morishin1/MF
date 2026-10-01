@@ -31,6 +31,7 @@ import {
 } from "../../../lib/sales.js";
 import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
 import { companyEmails } from "../../../lib/sales-timerex.js";
+import { MASTERS } from "../../../lib/sales-master.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 // 「最終連絡」に数えない出来事（こちらの記録の整理で、相手とのやり取りではないもの）
@@ -179,6 +180,8 @@ async function one(req, res, sb, ctx) {
     members: members || [],
     campaigns: (campaigns || []).filter((x) => !x.archived_at).map((x) => ({ id: x.id, name: x.name })),
     // 画面側で項目を持たない（ここが正）
+    // masters … 業種・提案サービス・都道府県の共通マスター（基本情報の編集の選択肢。リード一覧の詳細でも使う）
+    masters: MASTERS,
     statuses: STATUSES, ngReasons: NG_REASONS, eventKinds: EVENT_KINDS, services: SERVICES, industries: INDUSTRIES,
     sendChannels: SEND_CHANNELS, replyChannels: REPLY_CHANNELS, contactChannels: CONTACT_CHANNELS,
     hideReasons: HIDE_REASONS, sendFailReasons: SEND_FAIL_REASONS,
@@ -201,7 +204,8 @@ async function update(req, res, sb, ctx, user) {
   if (body.action === "followed") {
     patch = { followed_at: new Date().toISOString() };
   } else {
-    const row = normalizeCompany(body, { partial: true });
+    // マスターに無い昔の値（業種・商材・地域）は、変えていなければそのまま通す
+    const row = normalizeCompany(body, { partial: true, before });
     if (row.error) return json(res, 400, row);
     patch = row.value;
     // 連絡先（変わった項目だけ。null は消す）。いまの連絡手段の連絡先も合わせて直す
