@@ -4,6 +4,7 @@
 //   1. Sales 専用の Secret だけで通す。採用HRの Secret は 401。未設定は 503
 //   2. 営業の初回商談カレンダー以外（採用HRの面談など）は処理しない（422・何も書かない）
 //   3. 初回予約は guest_email の完全一致（大文字小文字は区別しない）で、日程調整中の商談を1件に決めたときだけ反映する
+//      照合するのは企業のメールアドレス（emails[]・db/108。複数のどれでもよい）と、連絡先のメール・連絡手段がメールのときの連絡先
 //      0件は 404・2件以上は 409（何も書かない）。別テナントへは書かない
 //   4. event_confirmed → 商談予定（scheduled）・日時・Google Meet URL・timerex_event_id・同期時刻
 //   5. 同じ event.id の再送で二重に登録・記録しない
@@ -211,10 +212,28 @@ await ok("guest_email は大文字小文字を区別しない。いまの連絡�
   assert.equal(m("m2").status, "scheduled");
 });
 
-await ok("#44 の emails[] があれば、そこも照合する（main に列が無くても壊れない）", async () => {
+await ok("企業のメールアドレス（emails[]・db/108）は複数のどれで予約されても照合する。列が無い企業でも壊れない", async () => {
   setup();
   c("c2").emails = ["sales@multi.example", "info@multi.example"];
   assert.equal((await hook(booked({}, { id: "evt_multi" }, "info@multi.example"))).body.meetingId, "m2");
+  setup();
+  c("c2").emails = ["sales@multi.example", "info@multi.example"];
+  assert.equal((await hook(booked({}, { id: "evt_multi1" }, "Sales@Multi.example"))).body.meetingId, "m2");
+  // 同じ予約の再送は、どのアドレスで来ても1件のまま
+  const again = await hook(booked({}, { id: "evt_multi1" }, "Sales@Multi.example"));
+  assert.equal(again.body.action, "resynced");
+});
+
+await ok("同じアドレスが2社の emails[] にあれば、どちらにも入れない（409・何も書かない）", async () => {
+  setup();
+  c("c1").emails = ["shared@group.example"];
+  c("c2").emails = ["info@c2.example", "shared@group.example"];
+  const r = await hook(booked({}, { id: "evt_shared" }, "shared@group.example"));
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "ambiguous_meeting");
+  assert.equal(writes.length, 0);
+  assert.equal(m("m1").status, "scheduling");
+  assert.equal(m("m2").status, "scheduling");
 });
 
 await ok("一致しない・guest_email が無いなら何も書かない（404・400）", async () => {
