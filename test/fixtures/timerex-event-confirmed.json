@@ -1,0 +1,36 @@
+{
+  "webhook_type": "event_confirmed",
+  "calendar_url_path": "98b26445",
+  "team_url_path": "bo_43ba_dabf",
+  "calendar_url": "https://timerex.net/s/bo_43ba_dabf/98b26445",
+  "calendar_name": "Wantedly_社長最終面談_匿名候補者様",
+  "event": {
+    "id": "evt_anon_ceo_0001",
+    "calendar_id": "calendar_anon",
+    "status": 1,
+    "url": "https://timerex.net/s/bo_43ba_dabf/98b26445",
+    "duration": 45,
+    "start_datetime": "2026-10-01T07:15:00+00:00",
+    "end_datetime": "2026-10-01T08:00:00+00:00",
+    "local_start_datetime": "2026-10-01T16:15:00+09:00",
+    "local_end_datetime": "2026-10-01T17:00:00+09:00",
+    "calendar_timezone": "Asia/Tokyo",
+    "guest_timezone": "Asia/Tokyo",
+    "guest_cancel_url": "https://timerex.net/anon/guest_cancel/ANON_GUEST_CANCEL_TOKEN",
+    "guest_reschedule_url": "https://timerex.net/anon/guest_reschedule/ANON_RESCHEDULE_TOKEN",
+    "host_cancel_url": "https://timerex.net/anon/host_cancel/ANON_HOST_CANCEL_TOKEN",
+    "google_meet_meeting": {
+      "meeting_id": "anon",
+      "join_url": "https://meet.google.com/anon"
+    },
+    "form": [
+      { "field_type": "company_name", "value": "" },
+      { "field_type": "guest_name", "value": "匿名候補者" },
+      { "field_type": "guest_email", "value": "candidate@example.test" },
+      { "field_type": "guest_comment", "value": "" }
+    ],
+    "is_changed": false,
+    "old_event_id": null,
+    "new_event_id": null
+  }
+}

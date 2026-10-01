@@ -1,0 +1,220 @@
+// 採用HR：日本時間の表示・NEXT ACTION の面談を ID で実施済みにする・状態の表示を、実際のブラウザで通す。
+//
+// ■ 何を守るテストか
+//   1. 端末が日本以外のタイムゾーン（ここでは米国西海岸）でも、HR の日時は日本時間
+//      UTC 07:15 → 「本日 16:15」（面談タブ・履歴・NEXT ACTION・CEO REVIEW で同じ）
+//   2. 日付またぎ（UTC 9/30 16:30 = 日本 10/1 01:30＝日本では「本日」）と、datetime-local の編集前後で 9 時間ずれない
+//   3. 古いカジュアル面談が残っていても、NEXT ACTION の「実施済みにする」は nextInterviewId（社長面談）を送る
+//      実施後は NEXT ACTION「社長判断をしてください」・CTA「採用判断」
+//   4. 「選考」「状態（表示だけ）」「NEXT ACTION」を並べて出す。状態のプルダウンは出さない
+//      （状態は NEXT ACTION を実行したときにシステムが進める）
+//   5. 実施する面談（nextInterviewId）が無ければ「面談を実施済みにする」を出さず、「面談を予定する」も開かない
+import { launch, BASE } from "../_browser.mjs";
+
+const br = await launch();
+let bad = 0;
+const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
+
+const OWNER_ME = { email: "ceo@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
+  gw: { employee: { id: "emp-o1", display_name: "社長" }, roles: ["owner"], isAdmin: false, tenantId: "t1", stage: null } };
+const NOW = new Date("2026-10-01T03:00:00Z");           // 日本時間 2026/10/1 12:00（米国ではまだ 9/30）
+const CEO_AT = "2026-10-01T07:15:00Z";                  // 日本時間 16:15
+const OLD_AT = "2026-09-30T16:30:00Z";                  // 日本時間 10/1 01:30（UTC では前日）
+const STATUS_OPTIONS = [
+  ["todo", "未対応"], ["scheduling", "日程調整中"], ["interview_scheduled", "面談予定"], ["eval_pending", "評価入力待ち"],
+  ["ceo_interview_pending", "社長面談設定待ち"], ["ceo_decision_pending", "社長判断待ち"],
+].map(([key, label]) => ({ key, label }));
+
+function makeState() {
+  return {
+    applicant: {
+      id: "a1", name: "匿名 候補者", jobTitle: "エンジニア", source: "Wantedly",
+      stage: "ceo_interview", stageLabel: "社長面談", status: "interview_scheduled", statusLabel: "面談予定",
+      nextAction: "本日 16:15 社長面談", nextActionCta: "面談を実施済みにする", nextActionKey: "conduct",
+      nextInterviewId: "iv-ceo", nextInterviewKind: "ceo",
+      rank: "A", decision: null, decisionDueOn: null,
+    },
+    interviews: [
+      // 作成の新しい順で先に来る、古いカジュアル面談（未完了のまま・手動登録）
+      { id: "iv-old", applicantId: "a1", kind: "casual", kindLabel: "カジュアル面談", scheduledAt: OLD_AT,
+        conductedAt: null, canceled: false, canceledAt: null, done: false, interviewerId: null, meetingUrl: null,
+        recordingUrl: null, scores: {}, rank: null, timerex: null },
+      { id: "iv-ceo", applicantId: "a1", kind: "ceo", kindLabel: "社長面談", scheduledAt: CEO_AT,
+        conductedAt: null, canceled: false, canceledAt: null, done: false, interviewerId: null,
+        meetingUrl: "https://meet.google.com/anon", recordingUrl: null, scores: {}, rank: null,
+        timerex: { linked: true, syncedAt: null, rescheduleUrl: null, cancelUrl: null } },
+    ],
+    timeline: [{ id: "t1", eventKey: "interview_scheduled", label: "社長面談が決まりました（TimeRex）", detail: null, occurredAt: CEO_AT }],
+  };
+}
+
+async function open(state, calls) {
+  const ctx = await br.newContext({ viewport: { width: 1300, height: 1100 }, timezoneId: "America/Los_Angeles" });
+  const page = await ctx.newPage();
+  await page.clock.setFixedTime(NOW);
+  await ctx.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" }));
+  });
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+  await ctx.route("**/api/**", (route) => {
+    const req = route.request();
+    const url = req.url();
+    const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
+    const body = () => JSON.parse(req.postData() || "{}");
+    if (/\/api\/me\b/.test(url)) return send(OWNER_ME);
+    if (/\/api\/hr\/interviews\b/.test(url) && req.method() === "PATCH") {
+      const b = body(); calls.push(["interview", b]);
+      if (b.action === "conduct") {
+        const iv = state.interviews.find((x) => x.id === b.id);
+        Object.assign(iv, { done: true, conductedAt: "2026-10-01T07:50:00Z" });
+        Object.assign(state.applicant, { status: "ceo_decision_pending", statusLabel: "社長判断待ち",
+          nextAction: "社長判断をしてください", nextActionCta: "採用判断", nextActionKey: "decide", nextInterviewId: null });
+        return send({ interview: iv, status: "ceo_decision_pending" });
+      }
+      if (b.action === "update") return send({ interview: state.interviews.find((x) => x.id === b.id) });
+      return send({});
+    }
+    if (/\/api\/hr\/applicants\/detail/.test(url)) {
+      if (req.method() === "PATCH") {
+        const b = body(); calls.push(["applicant", b]);
+        if (b.action === "setStatus") {
+          const to = STATUS_OPTIONS.find((o) => o.key === b.status);
+          const warnings = b.status === "ceo_decision_pending" && !state.interviews.some((i) => i.kind === "ceo" && i.done)
+            ? ["実施済みの社長面談がありません。社長面談をせずに社長判断待ちになります。"] : [];
+          if (b.dryRun) return send({ dryRun: true, warnings, from: state.applicant.statusLabel, to: to.label });
+          if (warnings.length && !b.acknowledgeWarnings) return send({ error: "status_change_warning", warnings }, 409);
+          Object.assign(state.applicant, { status: to.key, statusLabel: to.label,
+            nextAction: to.key === "ceo_decision_pending" ? "社長判断をしてください" : state.applicant.nextAction,
+            nextActionCta: to.key === "ceo_decision_pending" ? "採用判断" : state.applicant.nextActionCta,
+            nextActionKey: to.key === "ceo_decision_pending" ? "decide" : state.applicant.nextActionKey });
+          state.timeline.push({ id: "t2", eventKey: "status_manual", label: "状態を手動変更",
+            detail: `面談予定 → ${to.label}`, occurredAt: NOW.toISOString() });
+          return send({ applicant: state.applicant, warnings });
+        }
+        return send({ applicant: state.applicant });
+      }
+      calls.push(["detail-get"]);
+      return send({ applicant: state.applicant, interviews: state.interviews, interviewers: [],
+        timeline: state.timeline, offers: [], evalItems: [], evalScale: [], ranks: [], rankLabel: {},
+        interviewKinds: [], statusOptions: STATUS_OPTIONS });
+    }
+    if (/\/api\/hr\/applicants\b/.test(url)) { calls.push(["list-get"]); return send({ applicants: [state.applicant] }); }
+    if (/\/api\/hr\/ceo-review/.test(url)) {
+      const card = { ...state.applicant, ceoInterview: state.interviews.find((i) => i.kind === "ceo") };
+      return send({ todayMeetings: [card], recommended: [], decisionPending: [] });
+    }
+    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    if (/\/api\/badges/.test(url)) return send({ badges: {} });
+    return send({});
+  });
+  return { ctx, page, errs };
+}
+
+console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
+{
+  const state = makeState(); const calls = [];
+  const { ctx, page, errs } = await open(state, calls);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  check(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone) === "America/Los_Angeles", "端末のタイムゾーンは日本ではない");
+
+  const next = await page.locator(".hr-next").innerText();
+  check(next.includes("本日 16:15 社長面談"), "NEXT ACTION：本日 16:15 社長面談");
+  check(/選考\s*社長面談/.test(next), "選考：社長面談（どこまで進んでいるか）");
+  check((await page.locator(".hr-next #hr-status").innerText()).includes("面談予定"), "状態：面談予定（表示だけ）");
+  check(next.indexOf("選考") < next.indexOf("状態") && next.indexOf("状態") < next.indexOf("NEXT ACTION"), "選考 → 状態 → NEXT ACTION の順");
+
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
+  await page.waitForTimeout(300);
+  const tab = await page.locator("#hr-detail-tab").innerText();
+  check(tab.includes("予定：本日 16:15"), "面談タブ：社長面談 本日 16:15（UTC 07:15）");
+  check(tab.includes("予定：本日 01:30"), "面談タブ：日付またぎ（UTC では前日 9/30 16:30 → 日本では本日 01:30）");
+  check(!tab.includes("9/30"), "UTC の日付（9/30）を出さない");
+
+  // 手動の古い面談の「面談情報を編集」（旧「日時を変更」）：datetime-local は日本時間。保存しても 9 時間ずれない
+  // TimeRex の面談にも「面談情報を編集」が出るので、手動の面談（TimeRex 用ボタンの無いカード）のものを押す
+  await page.locator(".card", { hasNot: page.locator("button[data-timerex]") })
+    .locator("button", { hasText: "面談情報を編集" }).click();
+  await page.waitForTimeout(300);
+  const v = await page.locator("#rs-when").inputValue();
+  check(v === "2026-10-01T01:30", `datetime-local は日本時間（${v}）`);
+  await page.locator(".hr-modal button", { hasText: "保存する" }).click();
+  await page.waitForTimeout(500);
+  const upd = calls.find(([k, b]) => k === "interview" && b.action === "update")?.[1];
+  check(upd?.scheduledAt === "2026-09-30T16:30:00.000Z", `そのまま保存しても同じ時刻（${upd?.scheduledAt}）`);
+  calls.length = 0;
+  await page.evaluate(() => typeof closeHrModal === "function" && closeHrModal());
+
+  await page.locator('.hr-tabs button[data-tab="history"]').click();
+  await page.waitForTimeout(300);
+  check((await page.locator("#hr-detail-tab").innerText()).includes("本日 16:15"), "履歴：本日 16:15");
+
+  // CEO REVIEW：同じ面談が同じ時刻
+  const ceo = await ctx.newPage();
+  await ceo.goto(`${BASE}/hr/ceo-review.html`);
+  await ceo.waitForTimeout(1000);
+  check((await ceo.locator("#today").innerText()).includes("本日 16:15"), "CEO REVIEW：本日 16:15（応募者詳細と同じ）");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
+  await ctx.close();
+}
+
+console.log("\n=== NEXT ACTION の「実施済みにする」は社長面談だけ ===");
+{
+  const state = makeState(); const calls = [];
+  const { ctx, page, errs } = await open(state, calls);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  page.once("dialog", (d) => d.accept());
+  await page.locator(".hr-next button", { hasText: "面談を実施済みにする" }).click();
+  await page.waitForTimeout(800);
+  const sent = calls.filter(([k, b]) => k === "interview" && b.action === "conduct").map(([, b]) => b.id);
+  check(sent.length === 1 && sent[0] === "iv-ceo", `社長面談（nextInterviewId）だけを送る（${sent.join(",")}）`);
+  check(!state.interviews.find((i) => i.id === "iv-old").done, "古いカジュアル面談は実施済みにならない");
+  const next = await page.locator(".hr-next").innerText();
+  check(next.includes("社長判断をしてください"), "NEXT ACTION：社長判断をしてください");
+  check(await page.locator(".hr-next button", { hasText: "採用判断" }).count() === 1, "CTA：採用判断");
+  check(!/社長面談を設定|面談を予定する/.test(next), "面談の設定へ戻らない");
+  check((await page.locator(".hr-next #hr-status").innerText()).includes("社長判断待ち"), "状態：社長判断待ち");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
+  await ctx.close();
+}
+
+console.log("\n=== 状態は表示だけ（プルダウンは出さない） ===");
+{
+  const state = makeState(); const calls = [];
+  const { ctx, page, errs } = await open(state, calls);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  check(await page.locator(".hr-next select").count() === 0 && await page.locator(".hr-state select").count() === 0, "選考・状態・NEXT ACTION の領域にプルダウンが無い");
+  check(await page.locator("#hr-status").evaluate((n) => n.tagName) === "DD", "状態は文字で表示（選べない）");
+  check((await page.locator("#hr-status").innerText()).includes("面談予定"), "状態：面談予定");
+  check(!calls.some(([k, b]) => k === "applicant" && b.action === "setStatus"), "状態を変える API は呼ばない");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
+  await ctx.close();
+}
+
+console.log("\n=== 実施する面談が無い（nextInterviewId なし） ===");
+{
+  const state = makeState(); const calls = [];
+  // 社長面談の段階で、古いカジュアル面談だけが残っている（API は conduct を返さないが、古い応答でも守る）
+  state.interviews = state.interviews.filter((i) => i.id !== "iv-ceo");
+  Object.assign(state.applicant, { nextInterviewId: null, nextInterviewKind: null, nextAction: "面談を実施してください" });
+  const { ctx, page, errs } = await open(state, calls);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  const next = await page.locator(".hr-next").innerText();
+  check(await page.locator(".hr-next button", { hasText: "面談を実施済みにする" }).count() === 0, "「面談を実施済みにする」を出さない");
+  check(next.includes("面談予定の記録を確認してください"), "NEXT ACTION：面談予定の記録を確認してください");
+  await page.locator(".hr-next button", { hasText: "面談タブを確認" }).click();
+  await page.waitForTimeout(400);
+  check(await page.locator('.hr-tabs button[data-tab="interviews"].on').count() === 1, "［面談タブを確認］で面談タブへ");
+  check(await page.locator("#iv-kind").count() === 0 && await page.locator("#action-root .hr-modal").count() === 0, "「面談を予定する」モーダルは開かない");
+  check(!calls.some(([k, b]) => k === "interview" && b.action === "conduct"), "どの面談も実施済みにしない");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
+  await ctx.close();
+}
+
+await br.close();
+console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");
+process.exit(bad ? 1 : 0);

@@ -82,7 +82,9 @@ const res = () => {
 };
 const call = async (view = "dashboard", { aal = "aal2", method = "GET", extra = "" } = {}) => {
   const r = res();
-  await keiei({ method, url: `/api/keiei?view=${view}${extra}`, headers: { authorization: `Bearer ${jwt(aal)}` } }, r);
+  // 試験データは 2026-09。月を渡さないと「今月」（実行した日）になり、月が替わった日に落ちる。既定で、試験データの月を見る
+  const q = /month=/.test(extra) ? extra : `${extra}&month=${MONTH}`;
+  await keiei({ method, url: `/api/keiei?view=${view}${q}`, headers: { authorization: `Bearer ${jwt(aal)}` } }, r);
   return r;
 };
 
