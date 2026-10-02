@@ -8,11 +8,13 @@
 //
 // ブラウザの通信は、本物の api/office/{index,timesheet}.js につなぐ（DB は偽：test/_memdb.mjs）
 import "../_officeharness.mjs";
-import { mem, ctl, call, atRoot, FINANCE, uid, T1, E_PP, E_BP, C_PP, C_BP, PC_1 } from "../_officeharness.mjs";
+import { mem, ctl, call, atRoot, FINANCE, MANAGER, uid, T1, E_PP, E_BP, C_PP, C_BP, PC_1 } from "../_officeharness.mjs";
 import { launch, BASE } from "../_browser.mjs";
 
 const { default: indexApi } = await import(atRoot("api/office/index.js"));
 const { default: sheetApi } = await import(atRoot("api/office/timesheet.js"));
+const { default: payablesApi } = await import(atRoot("api/office/payables.js"));
+const { default: closeApi } = await import(atRoot("api/office/close.js"));
 
 const br = await launch();
 let bad = 0;
@@ -20,6 +22,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
 
 const M = "2026-10";
 const rows = (t) => mem.rows[t] || [];
+const answers = [];         // prompt に答える文（順番に使う）
 const progressOf = (emp) => rows("gw_billing_progress").find((r) => r.employee_id === emp && r.billing_month === M);
 
 function seed({ confirmed = true } = {}) {
@@ -48,7 +51,7 @@ async function open(url) {
   const errs = []; const dialogs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error" && !/fonts\.googleapis|net::ERR|Failed to load resource|manifest/.test(m.text())) errs.push(m.text()); });
-  page.on("dialog", (d) => { dialogs.push(d.message()); d.accept(); });
+  page.on("dialog", (d) => { dialogs.push(d.message()); d.type() === "prompt" ? d.accept(answers.shift() || "確認済み") : d.accept(); });
   await page.addInitScript(() => { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "keiri@8grp.co.jp" })); });
   await page.route("**/api/**", async (route) => {
     const req = route.request(); const u = new URL(req.url());
@@ -57,7 +60,7 @@ async function open(url) {
       return send({ email: "keiri@8grp.co.jp", appRole: "member", isAdmin: false, shows: {}, access: { office: true },
         gw: { employee: { id: "e-me", display_name: "経理 花子", status: "active" }, roles: ["finance"], isAdmin: false, tenantId: "t1", stage: null } });
     }
-    const h = { "/api/office": indexApi, "/api/office/timesheet": sheetApi }[u.pathname];
+    const h = { "/api/office": indexApi, "/api/office/timesheet": sheetApi, "/api/office/payables": payablesApi, "/api/office/close": closeApi }[u.pathname];
     if (h) {
       const body = req.postData() ? JSON.parse(req.postData()) : undefined;
       const r = await call(h, u.pathname + u.search, { method: req.method(), body });
@@ -145,6 +148,72 @@ console.log("\n=== 稼働が未確定：作成済みにできない ===");
   check(await btn.isDisabled(), "「請求書を作成済みにする」は押せない");
   check((await page.locator(".of-drawer #dr-sales").innerText()).includes("稼働を確定すると、押せるようになります"), "押せない理由が出る");
   check(progressOf(E_PP).board_created === false, "印は変わらない");
+  check(errs.length === 0, `ブラウザのエラーが無い ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== BP：請求額の登録 → 照合 → 承認 → 支払予定 → 支払済 → 月次完了 ===");
+{
+  seed();
+  for (const p of rows("gw_billing_progress")) Object.assign(p, { board_created: true, sent: true, bp_invoice_received: p.employee_id === E_BP });
+  mem.rows.gw_site_contract_terms = [{ id: uid(710), tenant_id: T1, site_contract_id: C_BP, valid_from: "2026-04-01", valid_to: null,
+    pricing_type: "monthly", sales_unit_price: 800000, purchase_unit_price: 550000, settlement_mode: "fixed", prorate: false }];
+  const { page, errs, dialogs } = await open(`/office/index.html?month=${M}`);
+  check((await page.locator("#closebar").innerText()).includes("残り 1 件"), "月次完了のバー：残り 1 件（BP の支払）");
+  check(await page.locator('#closebar [data-close-month="close"]').isDisabled(), "まだ月次完了にできない");
+  check((await stageOf(page, "鈴木 花子")).includes("支払準備"), "BP は支払準備");
+  await openRow(page, "鈴木 花子");
+  await page.waitForSelector('#payBody [data-pay="register"]');
+  check((await page.locator("#payBody").innerText()).includes("契約どおりなら：550,000円"), "契約どおりの額（仕入単価）が出る");
+  check(await page.locator("#pySub").inputValue() === "550000", "小計は、契約どおりの額を初期値にする");
+  // 金額不一致で登録 → 理由を書いて承認
+  await page.locator("#pySub").fill("600000");
+  await page.locator("#pyTax").fill("60000");
+  await page.locator('#payBody [data-pay="register"]').click();
+  await page.waitForSelector('#payBody [data-pay="approve"]');
+  const t1 = await page.locator("#payBody").innerText();
+  check(t1.includes("金額不一致") && t1.includes("契約条件（仕入単価）から出した額と一致しません"), "登録 → 照合：金額不一致と理由が出る");
+  check((await page.locator(".of-drawer .of-banner").innerText()).includes("BP請求書の金額が一致しません"), "ドロワー上部に要確認");
+  answers.push("追加作業分。BP会社と合意済み");
+  await page.locator('#payBody [data-pay="approve"]').click();
+  await page.waitForSelector('#payBody [data-pay="schedule"]');
+  check(rows("gw_vendor_invoices")[0].mismatch_note === "追加作業分。BP会社と合意済み", "承認の理由が残る");
+  await page.locator("#pyDue").fill("2026-11-30");
+  await page.locator('#payBody [data-pay="schedule"]').click();
+  await page.waitForSelector('#payBody [data-pay="pay"]');
+  check((await stageOf(page, "鈴木 花子")).includes("支払準備"), "支払予定のあいだは、まだ支払準備");
+  check((await page.locator('#rows tr:has-text("鈴木 花子") [data-label="支払"]').innerText()).includes("支払予定 11/30"), "一覧の支払：支払予定 11/30");
+  await page.locator('#payBody [data-pay="pay"]').click();
+  await page.waitForFunction(() => !document.querySelector('#payBody [data-pay="pay"]') && document.querySelector("#payBody")?.textContent.includes("支払済"));
+  check(rows("gw_office_payments")[0].status === "paid" && rows("gw_office_payments")[0].paid_on === "2026-11-30", "支払済（支払日 11/30）");
+  check((await page.locator("#closebar").innerText()).includes("すべての案件が完了しました"), "全件完了 → 月次完了にできる");
+  await page.locator('[data-close]').first().click();
+  await page.locator('#closebar [data-close-month="close"]').click();
+  await page.waitForFunction(() => document.querySelector("#closebar .of-closebar.done"));
+  check(rows("gw_office_month_closes").length === 1, "月次完了の記録");
+  check((await page.locator("#closebar").innerText()).includes("月次完了済み") && (await page.locator("#closebar").innerText()).includes("経理 花子"), "バー：月次完了済み・完了した人");
+  check(dialogs.some((d) => d.includes("月次完了にします")), "月次完了は確認してから");
+  check(errs.length === 0, `ブラウザのエラーが無い ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== 責任者：支払のボタンは出ない ===");
+{
+  seed();
+  for (const p of rows("gw_billing_progress")) Object.assign(p, { board_created: true, sent: true, bp_invoice_received: p.employee_id === E_BP });
+  ctl.who = MANAGER;
+  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  await openRow(page, "鈴木 花子");
+  await page.waitForSelector('#payBody [data-pay="register"]');
+  check((await page.locator("#payBody").innerText()).includes("契約条件が登録されていません"), "契約条件が無いと、契約どおりの額は出せない（理由を出す）");
+  await page.locator("#pySub").fill("500000");
+  await page.locator("#pyTax").fill("50000");
+  await page.locator('#payBody [data-pay="register"]').click();
+  await page.waitForSelector('#payBody [data-pay="approve"]');
+  answers.push("契約条件は来月登録。金額は注文書で確認");
+  await page.locator('#payBody [data-pay="approve"]').click();
+  await page.waitForFunction(() => document.querySelector("#payBody")?.textContent.includes("経営者・経理が行います"));
+  check(await page.locator('#payBody [data-pay="schedule"]').count() === 0, "責任者には、支払予定のボタンを出さない");
   check(errs.length === 0, `ブラウザのエラーが無い ${errs.join(" / ")}`);
   await page.close();
 }

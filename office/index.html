@@ -122,6 +122,15 @@
     .of-field > label.use { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
     .of-field > label.use input { width:auto; margin:0; }
     .of-field select, .of-field input[type="date"] { margin:0; width:100%; font-family:inherit; font-size:14px; }
+    .of-pay dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:6px 0; font-size:13px; }
+    .of-pay dt { color:#5a6275; } .of-pay dd { margin:0; font-variant-numeric:tabular-nums; }
+    .of-pay .row { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin:8px 0; }
+    .of-pay label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:#5a6275; }
+    .of-pay input { margin:0; width:9.5em; font-family:inherit; font-size:14px; }
+    .of-pay .issue { color:#a12a1f; font-size:13px; margin:4px 0; }
+    .of-closebar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between;
+      border:1px solid #d9dde6; border-radius:10px; background:#fff; padding:10px 14px; margin:0 0 12px; font-size:14px; }
+    .of-closebar.done { background:#eef7ef; border-color:#bfe0c4; }
     .of-field label.inline { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#1b2440; margin:0; cursor:pointer; }
     .of-field label.inline input { width:auto; margin:0; }
     .of-confirm { display:flex; align-items:flex-start; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
@@ -250,6 +259,8 @@
 
   <div id="now"></div>
 
+  <div id="closebar"></div>
+
   <div class="of-sum" id="sum" aria-label="今月の件数"></div>
 
   <div class="of-two">
@@ -322,6 +333,7 @@
 
   // ---- Phase 3（勤務表の確認・確定）：応答に phase3.ready があるときだけ、増えた表示を出す ----
   const p3 = () => Boolean(state.data?.phase3?.ready);
+  const p4 = () => Boolean(state.data?.phase4?.ready);
   const sheetUrl = (r) => `/office/timesheet.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
   const termsUrl = (r) => `/office/terms.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
   let lastFocus = null;
@@ -360,7 +372,15 @@
     : r.cols.salesInvoice.state === "created" ? st("blue", "作成済", "description") : st("orange", "未作成", "note_add");
   const vendorPill = (r) => r.cols.vendorInvoice.state === "not_applicable" ? st("gray", "対象外", "remove")
     : r.cols.vendorInvoice.state === "received" ? st("green", "受領済", DONE_ICON) : st("orange", "未受領", "inbox");
-  const paymentPill = (r) => r.cols.payment.state === "not_applicable" ? st("gray", "対象外", "remove") : st("gray", "未管理", "more_horiz");
+  const PAY_PILL = {
+    not_applicable: ["gray", "remove"], unmanaged: ["gray", "more_horiz"], waiting: ["gray", "more_horiz"],
+    unregistered: ["orange", "edit_note"], matching: ["orange", "fact_check"], mismatch: ["red", "error"],
+    approved: ["orange", "event"], scheduled: ["blue", "schedule"], paid: ["green", DONE_ICON],
+  };
+  const paymentPill = (r) => {
+    const [tone, icon] = PAY_PILL[r.cols.payment.state] || ["gray", "more_horiz"];
+    return st(tone, r.cols.payment.label, icon);
+  };
 
   const qsParams = new URLSearchParams(location.search);
   if (/^\d{4}-(0[1-9]|1[0-2])$/.test(qsParams.get("month") || "")) state.month = qsParams.get("month");
@@ -441,6 +461,10 @@
       const tagBtn = t.closest?.("[data-tag]");
       if (tagBtn) { applyTag(tagBtn.dataset.tag); return; }
       if (t.closest?.("[data-close]")) { closeDrawer(); return; }
+      const payBtn = t.closest?.("[data-pay]");
+      if (payBtn) { e.stopPropagation(); if (!payBtn.disabled) runPay(payBtn); return; }
+      const closeBtn = t.closest?.("[data-close-month]");
+      if (closeBtn) { if (!closeBtn.disabled) runClose(closeBtn.dataset.closeMonth); return; }
       const pgBtn = t.closest?.("[data-progress]");
       if (pgBtn) { e.stopPropagation(); if (!pgBtn.disabled) runProgress(pgBtn); return; }
       const fileBtn = t.closest?.("[data-file]");
@@ -496,6 +520,7 @@
     if (d.notReady || d.accessNotReady) banner("warn", d.message);
     else if (d.phase3 && d.phase3.ready === false) banner("warn", "勤務表の確認・稼働時間の機能は、まだ使えません。" + (d.phase3.message || ""));
     renderNow();
+    renderClose();
     renderSummary();
     renderControls();
     renderList();
@@ -769,6 +794,7 @@
     const dr = el("drawer-root").querySelector(".of-drawer");
     dr.focus();
     if (section) el("drawer-root").querySelector(`#dr-${section}`)?.scrollIntoView({ block: "start" });
+    if (r.usesVendor && p4()) loadPay(r);
   }
   function closeDrawer(silent) {
     el("drawer-root").innerHTML = "";
@@ -838,7 +864,7 @@
             ${salesProgressActions(r)}</section>
 
           <section class="of-sec" id="dr-order"><h3><span class="material-symbols-outlined" aria-hidden="true">assignment</span>発注</h3>
-            <p class="of-muted">発注情報は、今後追加します。</p></section>
+            <p class="of-muted">${r.usesVendor ? "発注書の発行は、今後追加します。BP請求書は、契約条件（仕入単価）と照合します。" : "対象外です（売上のみの契約）。"}</p></section>
 
           <section class="of-sec" id="dr-vendor"><h3><span class="material-symbols-outlined" aria-hidden="true">inbox</span>仕入請求</h3>
             ${r.usesVendor
@@ -848,7 +874,9 @@
               : `<p class="of-muted">対象外です（売上のみの契約）。</p>`}</section>
 
           <section class="of-sec" id="dr-payment"><h3><span class="material-symbols-outlined" aria-hidden="true">payments</span>支払</h3>
-            <p class="of-muted">${r.usesVendor ? "支払の管理は、今後追加します。" : "対象外です（売上のみの契約）。"}</p></section>
+            ${!r.usesVendor ? `<p class="of-muted">対象外です（売上のみの契約）。</p>`
+              : !p4() ? `<p class="of-muted">支払の記録は、まだ使えません。${esc(state.data?.phase4?.message || "")}</p>`
+                : `<div class="of-pay" id="payBody" data-contract="${esc(r.siteContractId)}"><p class="of-muted">読み込み中…</p></div>`}</section>
 
           <section class="of-sec" id="dr-history"><h3><span class="material-symbols-outlined" aria-hidden="true">history</span>履歴</h3>
             ${events.length ? `<div class="of-tl">${events.map((e) => `<div class="row"><div class="d">${esc(fmt(e.at) || "日時なし")}</div><div class="l">${esc(e.label)}</div></div>`).join("")}</div>`
@@ -887,6 +915,130 @@
     } catch (e) {
       btn.disabled = false;
       alert(e.hint || e.detail || e.message || "記録できませんでした");
+    }
+  }
+
+  // ---- 仕入請求（BP請求書）・支払（/api/office/payables）---------------------------------
+  //   請求額を登録 → 契約条件（仕入単価）と照合 → 承認（合わなければ理由）→ 支払予定 → 支払済。
+  //   照合の計算・順番・権限（支払は経営者・経理だけ）はサーバが持つ。画面は結果を出して、押せるボタンだけ出す
+  const yen = (v) => (v === null || v === undefined ? "—" : `${Number(v).toLocaleString("ja-JP")}円`);
+  const todayJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  async function loadPay(r) {
+    const box = el("payBody");
+    if (!box) return;
+    try {
+      const d = await API.api(`/api/office/payables?month=${encodeURIComponent(state.month)}`);
+      if (el("payBody")?.dataset.contract !== r.siteContractId) return;   // 別の行を開き直した
+      el("payBody").innerHTML = payHtml(r, d);
+    } catch (e) {
+      if (el("payBody")) el("payBody").innerHTML = `<p class="of-muted">${esc(e.hint || e.message || "読み込めませんでした")}</p>`;
+    }
+  }
+  function payHtml(r, d) {
+    const inv = (d.invoices || []).find((i) => i.status !== "void" && i.lines.some((l) => l.siteContractId === r.siteContractId && !l.voided));
+    const closed = Boolean(state.data?.close?.closed);
+    if (!inv) {
+      const pend = (d.pending || []).find((x) => x.siteContractId === r.siteContractId);
+      const exp = pend?.expected;
+      const files = r.submissions.filter((s) => s.kind === "invoice");
+      return `
+        <p>BP請求書の金額は、まだ登録されていません。</p>
+        <p class="of-muted">契約どおりなら：${exp != null ? `${yen(exp)}（税抜）` : esc((pend?.expectedReasons || ["契約条件から金額を出せません"]).join("・"))}</p>
+        ${closed ? "" : `<div class="row">
+          <label>受領日<input type="date" id="pyRecv" value="${todayJst()}"></label>
+          <label>請求書番号<input type="text" id="pyNo" maxlength="100"></label>
+          <label>小計（税抜）<input type="text" inputmode="decimal" id="pySub" value="${exp != null ? exp : ""}"></label>
+          <label>消費税<input type="text" inputmode="decimal" id="pyTax" value="${exp != null ? Math.round(exp / 10) : ""}"></label>
+          ${files.length ? `<label>ファイル<select id="pyFile">${files.map((f) => `<option value="${esc(f.id)}">${esc(f.fileName)}</option>`).join("")}<option value="">（なし）</option></select></label>` : ""}
+        </div>
+        <p><button type="button" class="of-btn" data-pay="register" data-contract="${esc(r.siteContractId)}">請求額を登録して照合する</button></p>`}`;
+    }
+    const line = inv.lines.find((l) => l.siteContractId === r.siteContractId);
+    const STATE = { match: "契約と一致", mismatch: "金額不一致", unknown: "自動で照合できません" };
+    const pay = inv.payment;
+    const btn = (action, label, sec) => `<button type="button" class="of-btn${sec ? " sec" : ""}" data-pay="${action}" data-invoice="${esc(inv.id)}" data-contract="${esc(r.siteContractId)}">${esc(label)}</button>`;
+    let actions = "";
+    if (!closed && inv.status === "received") actions = btn("approve", inv.match.state === "match" ? "照合OK・承認する" : "理由を書いて承認する") + " " + btn("void", "請求書を取り消す", true);
+    else if (!closed && inv.status === "approved" && d.canRecordPayment) {
+      if (!pay) actions = `<div class="row"><label>支払予定日<input type="date" id="pyDue"></label><label>支払額<input type="text" inputmode="decimal" id="pyAmt" value="${inv.total}"></label></div>${btn("schedule", "支払予定を入れる")} ${btn("void", "請求書を取り消す", true)}`;
+      else if (pay.status === "scheduled") actions = `<div class="row"><label>支払日<input type="date" id="pyPaid" value="${esc(pay.scheduledOn)}"></label></div>${btn("pay", "支払済にする")} ${btn("cancel_payment", "支払予定を取り消す", true)}`;
+      else actions = btn("cancel_payment", "支払済を取り消す", true);
+    } else if (!closed && inv.status === "approved") actions = `<p class="of-muted">支払の記録は、経営者・経理が行います。</p>`;
+    return `
+      <dl>
+        <dt>請求書</dt><dd>${esc(inv.invoiceNo || "番号なし")}（${esc(fmtDay(inv.receivedOn))} 受領）${inv.lines.length > 1 ? `・${inv.lines.length}名分` : ""}</dd>
+        <dt>この要員の請求額</dt><dd>${yen(line?.amount)}（税抜）</dd>
+        <dt>契約どおりなら</dt><dd>${line?.expected != null ? yen(line.expected) : esc((line?.expectedReasons || []).join("・") || "—")}</dd>
+        <dt>請求書の合計</dt><dd>${yen(inv.total)}（税 ${yen(inv.tax)}）</dd>
+        <dt>照合</dt><dd>${esc(STATE[inv.match.state] || inv.match.state)}</dd>
+        <dt>状態</dt><dd>${inv.status === "approved" ? "承認済" : "照合待ち"}${pay ? `・${pay.status === "paid" ? `支払済（${esc(fmtDay(pay.paidOn))}）` : `支払予定 ${esc(fmtDay(pay.scheduledOn))}`}` : ""}</dd>
+        ${inv.mismatchNote ? `<dt>承認の理由</dt><dd>${esc(inv.mismatchNote)}</dd>` : ""}
+      </dl>
+      ${inv.status === "received" ? inv.match.issues.map((i) => `<p class="issue">${esc(i.text)}</p>`).join("") : ""}
+      ${actions}`;
+  }
+  async function runPay(btn) {
+    const action = btn.dataset.pay;
+    const v = (id) => el(id)?.value ?? "";
+    let body;
+    if (action === "register") {
+      const sub = v("pySub"), tax = v("pyTax");
+      body = { receivedOn: v("pyRecv"), invoiceNo: v("pyNo"), subtotal: sub, tax, submissionId: v("pyFile") || undefined,
+        lines: [{ siteContractId: btn.dataset.contract, amount: sub }] };
+    } else if (action === "approve") {
+      body = { id: btn.dataset.invoice };
+      if (btn.textContent.includes("理由")) {
+        const note = prompt("契約と一致しない（または照合できない）まま承認します。理由を入れてください");
+        if (!note) return;
+        body.note = note;
+      }
+    } else if (action === "schedule") body = { id: btn.dataset.invoice, scheduledOn: v("pyDue"), amount: v("pyAmt") };
+    else if (action === "pay") body = { id: btn.dataset.invoice, paidOn: v("pyPaid") };
+    else {
+      const reason = prompt(action === "void" ? "請求書を取り消す理由を入れてください" : "支払を取り消す理由を入れてください");
+      if (!reason) return;
+      body = { id: btn.dataset.invoice, reason };
+    }
+    btn.disabled = true;
+    try {
+      await API.api("/api/office/payables", { method: "POST", body: { action, month: state.month, ...body } });
+      await load();                                    // 一覧・ドロワー（開き直して支払を読み直す）
+    } catch (e) {
+      btn.disabled = false;
+      alert(e.body?.errors?.join("\n") || e.hint || e.detail || e.message || "記録できませんでした");
+    }
+  }
+
+  // ---- 月次完了（/api/office/close）--------------------------------------------------
+  function renderClose() {
+    const d = state.data;
+    if (!d?.phase4?.ready) { el("closebar").innerHTML = ""; return; }
+    const c = d.close || { closed: false };
+    const rows = d.rows || [];
+    const left = rows.filter((r) => r.stage !== "done").length;
+    el("closebar").innerHTML = c.closed
+      ? `<div class="of-closebar done" role="status"><span><span class="material-symbols-outlined" aria-hidden="true" style="vertical-align:-5px;">task_alt</span>
+          この月は月次完了済みです（${esc(fmt(c.closedAt))}${c.closedByName ? `・${esc(c.closedByName)}` : ""}）</span>
+          <button type="button" class="of-btn sec" data-close-month="reopen">月次完了を取り消す</button></div>`
+      : `<div class="of-closebar"><span>${rows.length && !left ? "すべての案件が完了しました。月次完了にできます。" : `月次完了まで：残り ${left} 件`}</span>
+          <button type="button" class="of-btn" data-close-month="close"${rows.length && !left ? "" : " disabled"}>月次完了にする</button></div>`;
+  }
+  async function runClose(action) {
+    const body = { action, month: state.month };
+    if (action === "reopen") {
+      const reason = prompt("月次完了を取り消す理由を入れてください");
+      if (!reason) return;
+      body.reason = reason;
+    } else if ((state.data?.rows || []).some((r) => r.check)) {
+      const note = prompt("要確認の案件があります。確認した内容を入れてください");
+      if (!note) return;
+      body.note = note;
+    } else if (!confirm(`${state.month} を月次完了にします。よろしいですか？`)) return;
+    try {
+      await API.api("/api/office/close", { method: "POST", body });
+      await load();
+    } catch (e) {
+      alert(e.hint || e.detail || e.message || "月次完了にできませんでした");
     }
   }
 

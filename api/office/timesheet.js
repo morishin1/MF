@@ -711,6 +711,10 @@ async function progress({ req, res, ctx, user, k, body }) {
   const mark = PROGRESS_STEP[body.step];
   if (!mark) return json(res, 400, { error: "invalid_request", detail: `step は ${Object.keys(PROGRESS_STEP).join(" / ")} のどれかです` });
   const done = body.done !== false;
+  // 月次完了した月は、印を動かさない（db/117。表が無ければ、完了の記録も無い）
+  const closed = await admin().from("gw_office_month_closes").select("id")
+    .eq("tenant_id", ctx.tenantId).eq("billing_month", k.month).is("reopened_at", null).limit(1);
+  if (closed.data?.length) return json(res, 409, { error: "month_closed", hint: "この月は月次完了済みです。直すときは、先に月次完了を取り消してください" });
   const p = await must(userClient(req).from("gw_billing_progress").select(`id, ${STAGE_KEYS.join(", ")}`)
     .eq("tenant_id", ctx.tenantId).eq("employee_id", k.employeeId).eq("site_contract_id", k.siteContractId)
     .eq("billing_month", k.month).maybeSingle());
