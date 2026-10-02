@@ -13,6 +13,8 @@
 //   8. 非表示：一括で非表示 → 通常の一覧から消える → 「非表示」で見える → 再表示
 //   9. 返信・やり取りを記録：返信元・いまの連絡手段・連絡先・メモ・NEXT。企業詳細に「現在の連絡状況」
 import { launch, BASE, jstToday } from "../_browser.mjs";
+// ダッシュボード（/sales/）の4段は、本物と同じくサーバ側の決まり（lib/sales-dashboard.js）で組み立てる
+import { dashboardSections } from "../../lib/sales-dashboard.js";
 
 const br = await launch();
 let bad = 0;
@@ -322,6 +324,9 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         const m = meetings.find((x) => x.companyId === c.id && ["scheduling", "scheduled"].includes(x.status));
         return m ? { ...c, meetingStatus: m.status, meetingAt: m.scheduledAt || null } : c;
       });
+      if (sp.get("view") === "dashboard") {
+        return send({ today: TODAY, view: "dashboard", total: listed.length, sections: dashboardSections(listed, { today: TODAY }) });
+      }
       if (!sp.has("page")) return send({ today: TODAY, me: "emp-s1", members, companies: listed });
       const limit = 100;
       const total = listed.length;

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261001b">
+  <link rel="stylesheet" href="../css/app.css?v=20261002sp1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -230,8 +230,8 @@
 <!-- 勤務表を追加するときのファイル選択。「勤務表を追加」を押すと、すぐ開く（PDF・JPEG・PNG） -->
 <input type="file" id="sheetPick" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
 
-<script src="../js/api-client.js?v=20261001b"></script>
-<script src="../js/office-layout.js?v=20261001b"></script>
+<script src="../js/api-client.js?v=20261002sp1"></script>
+<script src="../js/office-layout.js?v=20261002sp1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -291,6 +291,12 @@
   const qsParams = new URLSearchParams(location.search);
   if (/^\d{4}-(0[1-9]|1[0-2])$/.test(qsParams.get("month") || "")) state.month = qsParams.get("month");
   state.openId = qsParams.get("id") || null;
+
+  // 表示速度：枠（権限の確認）を待たずに、開いた月のデータを取りにいき始める。
+  // 2回目からは前回の内容をすぐ出し、裏で最新にする（load の中の API.swr）
+  const officeKey = (month) => `office:${month || ""}`;
+  const fetchOffice = (month) => () => API.api(`/api/office${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  API.warm(officeKey(state.month), fetchOffice(state.month), O.allows);
 
   O.init({ active: "monthly" }).then((ctx) => { if (ctx) { wire(); load(); } });
 
@@ -357,17 +363,25 @@
   // ---- 読み込み ------------------------------------------------------------------
   async function load() {
     const seq = ++state.seq;
+    const month = state.month;
     el("banner").innerHTML = "";
+    // 前回の内容を覚えていれば、すぐ下で描き直す（同じ処理の中なので、この表示は画面に出ない）
     el("rows").innerHTML = `<tr><td colspan="10" class="of-empty">読み込み中…</td></tr>`;
+    let first = true;
     try {
-      const data = await API.api(`/api/office${state.month ? `?month=${encodeURIComponent(state.month)}` : ""}`);
-      if (seq !== state.seq) return;                // 月を素早く切り替えたとき、古い応答を捨てる
-      state.data = data; state.month = data.month;
-      render();
-      if (state.openId) {
-        if (!(data.rows || []).some((r) => r.siteContractId === state.openId)) { state.openId = null; syncUrl(); }
-        else openDrawer(state.openId, null, true);
-      } else syncUrl();
+      await API.swr(officeKey(month), fetchOffice(month), (data) => {
+        if (seq !== state.seq) return;              // 月を素早く切り替えたとき、古い応答を捨てる
+        state.data = data; state.month = data.month;
+        if (!first) el("banner").innerHTML = "";
+        render();
+        // 開く行（?id=）は、最初に描いたときだけ。裏で最新になったときは、開いているドロワーに触らない
+        if (!first) return;
+        first = false;
+        if (state.openId) {
+          if (!(data.rows || []).some((r) => r.siteContractId === state.openId)) { state.openId = null; syncUrl(); }
+          else openDrawer(state.openId, null, true);
+        } else syncUrl();
+      });
     } catch (e) {
       if (seq !== state.seq) return;
       state.data = null;
@@ -397,27 +411,27 @@
 
   function renderSummary() {
     const s = state.data.summary;
-    el("sum").innerHTML = s.cards.map((c) => `
+    API.morph(el("sum"), s.cards.map((c) => `
       <button type="button" class="of-card${c.alert ? " hot" : ""}${isCardOn(c.key) ? " on" : ""}" data-tag="${esc(c.key)}"
               ${isCardOn(c.key) ? 'aria-pressed="true"' : 'aria-pressed="false"'}>
         <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${CARD_ICON[c.key] || "label"}</span>${esc(c.label)}</span>
         <span class="v">${c.value}${c.of != null ? `<small> / ${c.of}</small>` : ""}</span>
-      </button>`).join("");
+      </button>`).join(""));
 
-    el("today").innerHTML = s.today.length ? s.today.map((t) => `
+    API.morph(el("today"), s.today.length ? s.today.map((t) => `
       <button type="button" class="${t.note ? "warn" : ""}" data-tag="${esc(t.key)}">
         <span class="n">${t.count}</span><span>${esc(t.label)}</span>
         ${t.note ? `<span class="note">${esc(t.note)}</span>` : ""}
         <span class="material-symbols-outlined go" aria-hidden="true">chevron_right</span>
       </button>`).join("")
-      : `<div class="of-empty">${s.total ? "いま対応が必要なものはありません" : "この月に動いている案件はありません"}</div>`;
+      : `<div class="of-empty">${s.total ? "いま対応が必要なものはありません" : "この月に動いている案件はありません"}</div>`);
 
-    el("prog").innerHTML = s.progress.map((p) => {
+    API.morph(el("prog"), s.progress.map((p) => {
       const pct = p.of ? Math.round((p.done / p.of) * 100) : 0;
       return `<div class="row"><span>${esc(p.label)}</span>
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${p.of}" aria-valuenow="${p.done}" aria-label="${esc(p.label)}"><i style="width:${pct}%"></i></div>
         <span class="num">${p.done} / ${p.of}</span></div>`;
-    }).join("");
+    }).join(""));
   }
   const isCardOn = (key) => (key === "all" ? !state.tag && !state.incompleteOnly && !state.q && !state.kind : state.tag === key);
 
@@ -453,7 +467,7 @@
     const rows = visibleRows();
     el("count").textContent = all.length ? `${all.length}件中 ${rows.length}件を表示` : "";
     el("listNote").textContent = p3() ? "勤務表を確定すると、稼働時間と売上の精算が出ます" : "稼働時間の自動計算は、次の段階で追加します";
-    el("rows").innerHTML = rows.map(rowHtml).join("");
+    API.morph(el("rows"), rows.map(rowHtml).join(""));
     const empty = el("empty");
     empty.hidden = rows.length > 0 || !state.data;
     if (!rows.length && state.data) {
@@ -582,7 +596,7 @@
   const NOW_MAX = 3;
   function renderNow() {
     const todo = (state.data?.rows || []).filter((r) => nextStep(r));
-    if (!todo.length) { el("now").innerHTML = ""; return; }
+    if (!todo.length) { API.morph(el("now"), ""); return; }
     const item = (r) => {
       const n = nextStep(r);
       const err = state.errs[r.siteContractId];
@@ -592,10 +606,10 @@
         <div class="go">${ctaBtn(r, n.cta, "cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div></div>`;
     };
     const rest = todo.length - NOW_MAX;
-    el("now").innerHTML = `<section class="of-now" aria-label="次にやること">
+    API.morph(el("now"), `<section class="of-now" aria-label="次にやること">
       <div class="of-now-h"><span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>次にやること</div>
       ${todo.slice(0, NOW_MAX).map(item).join("")}
-      ${rest > 0 ? `<div class="of-now-more">ほか ${rest}件<button type="button" class="of-btn sec" data-tag="all">一覧ですべて見る</button></div>` : ""}</section>`;
+      ${rest > 0 ? `<div class="of-now-more">ほか ${rest}件<button type="button" class="of-btn sec" data-tag="all">一覧ですべて見る</button></div>` : ""}</section>`);
   }
 
   function runCta(elm) {

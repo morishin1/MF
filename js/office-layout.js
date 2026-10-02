@@ -139,22 +139,22 @@
     document.removeEventListener("click", closeUserMenuOnce);
   }
 
+  // 入口は、ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで決める。
+  // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない。API.warm にも渡す
+  function allows(me) { return Boolean(me?.access?.office); }
+
+  // 前回の身元（/api/me）を覚えていれば、待たずにヘッダーを出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
   async function init(opts = {}) {
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
-    let me;
-    try {
-      me = await API.me();
-    } catch (e) {
-      location.href = "/index.html";
-      return null;
-    }
-    // ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで入口を決める。
-    // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない
-    if (!me?.access?.office) { location.replace("/home.html"); return null; }
-
-    renderHeader(opts.active, me);
-    return { me };
+    const got = await API.enterWithMe(allows, {
+      leave: () => location.replace("/home.html"),
+      lost: () => { location.href = "/index.html"; },
+    });
+    if (!got) return null;
+    renderHeader(opts.active, got.me);
+    return { me: got.me };
   }
 
   // ---- 画面どうしで共通の小さな道具 -------------------------------------------
@@ -189,5 +189,5 @@
     return `${Number(m)}/${Number(d)}`;
   }
 
-  window.OfficeLayout = { init, esc, pill, fmt, fmtDay, toggleUserMenu };
+  window.OfficeLayout = { init, allows, esc, pill, fmt, fmtDay, toggleUserMenu };
 })();

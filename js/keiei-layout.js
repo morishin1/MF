@@ -99,17 +99,22 @@
     for (const a of document.querySelectorAll("#kei-side a")) a.classList.toggle("on", a.dataset.view === active);
   }
 
+  // サーバの判定（canKeiei）そのもの。役割の並びを画面で持たない。API.warm にも渡す
+  function allows(me) { return me?.access ? Boolean(me.access.keiei) : (me?.gw?.roles || []).includes("owner"); }
+
+  // 前回の身元（/api/me）を覚えていれば、待たずに枠を出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
   async function init(opts = {}) {
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
-    let me;
-    try { me = await API.me(); } catch (e) { location.href = "/index.html"; return null; }
-    // サーバの判定（canKeiei）そのもの。役割の並びを画面で持たない
-    const canKeiei = me?.access ? Boolean(me.access.keiei) : (me?.gw?.roles || []).includes("owner");
-    if (!canKeiei) { location.replace("/home.html"); return null; }
-    render(opts.active || "home", me);
-    return { me };
+    const got = await API.enterWithMe(allows, {
+      leave: () => location.replace("/home.html"),
+      lost: () => { location.href = "/index.html"; },
+    });
+    if (!got) return null;
+    render(opts.active || "home", got.me);
+    return { me: got.me };
   }
 
-  window.KeieiLayout = { init, setActive, esc, MENU, SUB };
+  window.KeieiLayout = { init, allows, setActive, esc, MENU, SUB };
 })();

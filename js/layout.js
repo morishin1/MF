@@ -426,7 +426,7 @@
         </button>
       </div>`;
     document.body.prepend(el);
-    loadNotifications();
+    soon(() => loadNotifications());
   }
 
   /**
@@ -446,17 +446,24 @@
   // ---- 通知 ---------------------------------------------------------------
   let notifications = [];
 
-  async function loadNotifications() {
-    try {
-      const res = await API.listNotifications();
-      notifications = res.notifications || [];
-      const badge = document.getElementById("kp-bell-badge");
-      if (!badge) return;
-      badge.textContent = res.unread > 9 ? "9+" : String(res.unread || "");
-      badge.classList.toggle("hidden", !res.unread);
-    } catch (e) {
-      // 未適用の環境や名簿未登録では通知が無いだけ。画面は壊さない
-    }
+  // ■ 毎画面すぐには取りにいかない
+  //   前回の値（60秒以内）があればそれをすぐ出し、取り直さない。古ければ、本文のあとで取り直す。
+  //   ベルを開いたときは、いつも最新を取りにいく（toggleBell）。
+  //   本文の表示を、通知の取得で待たせない
+  const NOTIF_FRESH = 60;
+  function applyNotifications(res) {
+    notifications = res?.notifications || [];
+    const badge = document.getElementById("kp-bell-badge");
+    if (!badge) return;
+    badge.textContent = res?.unread > 9 ? "9+" : String(res?.unread || "");
+    badge.classList.toggle("hidden", !res?.unread);
+  }
+  function loadNotifications({ force = false } = {}) {
+    return API.swr("notifications", () => API.listNotifications(), (res) => {
+      applyNotifications(res);
+      if (!document.getElementById("kp-bell-panel")?.classList.contains("hidden")) renderBell();
+    }, { ttl: 600, fresh: force ? 0 : NOTIF_FRESH, quiet: true })
+      .catch(() => { /* 未適用の環境や名簿未登録では通知が無いだけ。画面は壊さない */ });
   }
 
   function renderBell() {
@@ -678,14 +685,17 @@
    * ■ 取れなくても画面は動く
    *   バッジのために画面が止まる理由はない。
    */
-  async function loadBadges() {
-    let badges = {};
-    try {
-      const res = await API.badges();
-      badges = res?.badges || {};
-    } catch (e) {
-      return;   // 数字が出ないだけ。黙って戻る
-    }
+  //
+  // ■ 30〜60秒は覚えておく
+  //   前回の数字（45秒以内）をすぐ出し、取り直さない。古ければ取り直して、違えば入れ直す。
+  //   何かを更新したら（GET 以外）覚えている数字は捨てるので、片づけた件数は次の画面で消える
+  const BADGE_FRESH = 45;
+  function loadBadges() {
+    return API.swr("badges", () => API.badges(), (res) => applyBadges(res?.badges || {}),
+      { ttl: 600, fresh: BADGE_FRESH, quiet: true })
+      .catch(() => { /* 数字が出ないだけ。黙って戻る */ });
+  }
+  function applyBadges(badges) {
     for (const node of document.querySelectorAll("[data-badge]")) {
       // 「mypage contracts」のように、複数の鍵を背負っていることがある。
       // 空白区切りにしてあるので、CSS からは [data-badge~="contracts"] で引ける
@@ -744,28 +754,14 @@
   //
   //   毎回かならず裏で確かめるので古いままにはならないが、
   //   何日も前のものを入口にはしない
-  const ME_KEY = "kp_me";
-  const ME_HOURS = 12;
-  const loadMe = () => {
-    try {
-      const v = JSON.parse(localStorage.getItem(ME_KEY) || "null");
-      if (!v?.me || Date.now() - (v.at || 0) > ME_HOURS * 3600000) return null;
-      // 誰のぶんかを必ず見る。
-      // ログアウトのときは消しているが、前の人のセッションが切れたところへ
-      // 別の人がそのまま入ると、消さずに入れ替わる道がある。
-      // 覚えていた人と、いま入っている人が違えば、使わない
-      if (v.email && v.email !== API.currentEmail()) return null;
-      return v.me;
-    } catch { return null; }
-  };
-  const saveMe = (me) => {
-    try {
-      localStorage.setItem(ME_KEY,
-        JSON.stringify({ at: Date.now(), email: API.currentEmail(), me }));
-    } catch { /* 保存できなくても動く */ }
-  };
+  //
+  //   覚え方（kp_me・12時間・誰のぶんか）は js/api-client.js の rememberedMe / rememberMe に1つにまとめた。
+  //   HR・Sales・Office・経営の専用ヘッダーも同じものを使う（そちらは毎回 /api/me を待っていた）。
+  //   誰のぶんかを必ず見る：覚えていた人と、いま入っている人が違えば使わない
+  const loadMe = () => API.rememberedMe();
+  const saveMe = (me) => API.rememberMe(me);
   const clearCache = () => {
-    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(ME_KEY); } catch { /* 同上 */ }
+    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem("kp_me"); } catch { /* 同上 */ }
   };
 
   /**
@@ -1162,9 +1158,10 @@
       // それが「読み込み中…」の正体だった
       if (painted && cachedMe) {
         fresh.catch(() => { /* 送り返し・ログイン画面は verify の中で済ませる */ });
+        API.perfMark("init");
         return { me: cachedMe, appRole: cached.appRole, remembered: true };
       }
-      return fresh;
+      return fresh.then((r) => { API.perfMark("init"); return r; });
     },
 
     /**
@@ -1190,6 +1187,8 @@
       const opening = panel.classList.contains("hidden");
       if (opening) renderBell();
       panel.classList.toggle("hidden", !opening);
+      // 開いたときは最新を取りにいく（届いたら、開いているパネルを描き直す）
+      if (opening) loadNotifications({ force: true });
     },
 
     // ⚙管理のドロップダウン開閉。中身は固定なので、通知と違って毎回組み立て直す必要はない

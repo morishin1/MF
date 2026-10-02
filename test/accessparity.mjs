@@ -146,7 +146,10 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // 金額を扱うので、access が無い古い応答では入れない側に倒す
   check(/office:\s*Boolean\(me\?\.access\?\.office\)/.test(layout), "ヘッダーの Office は access.office だけ（予備の役割判定を持たない）");
   const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  check(/!me\?\.access\?\.office/.test(officeLayout) && /location\.replace\("\/home\.html"\)/.test(officeLayout),
+  // 入口の判定は、覚えている身元（先に描く）と /api/me（裏で確かめる）の両方で同じ関数を使う（API.enterWithMe）
+  check(/function allows\(me\) \{ return Boolean\(me\?\.access\?\.office\); \}/.test(officeLayout)
+      && /API\.enterWithMe\(allows,/.test(officeLayout)
+      && /location\.replace\("\/home\.html"\)/.test(officeLayout),
     "/office の入口は access.office だけで決め、無ければ home.html へ");
   check(!/["'](owner|manager|finance|hr|sales|recruiter)["']/.test(officeLayout), "/office の画面に役割名を書かない");
 
