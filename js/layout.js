@@ -187,15 +187,19 @@
    */
   // Office の最初の行。管理者向けのダッシュボード（全社の今日の状況）
   const OFFICE_TOP = [
-    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
+    // Office の人事・労務／経理・事務のどちらかに入れる人に出す（中の行は、本人の担当分だけ）
+    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true, when: "officeAny" },
   ];
 
-  // Office: 人事・労務／経理・事務。今回は admin/owner のままに限定する
-  // （経理ロール等への開放はバックエンドAPI側の権限拡張も要るため、別タスクで扱う）。
+  // Office: 人事・労務／経理・事務。グループごとに、入れる人が違う（when）。
+  //   人事・労務 … officeHr（管理者・経営者・人事）
+  //   経理・事務 … officeFinance（管理者・経営者・経理）
+  // when は /api/me の access（サーバの canOfficeHr / canOfficeFinance）をそのまま使う。
+  // 入れない人には、グループごと出さない（押して 403 になる入口を作らない）。API も同じ関数で守る（lib/gw.js）。
   // HR（/hr）・Sales（/sales）・経営（/keiei）と同じく、ヘッダー切替が正式な入口
   const OFFICE_GROUPS = [
     {
-      key: "office-hr", label: "人事・労務", icon: "group",
+      key: "office-hr", label: "人事・労務", icon: "group", when: "officeHr",
       items: [
         { key: "members",   href: "admin-members.html",   label: "メンバー",     icon: "badge",      ready: true,
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
@@ -237,7 +241,7 @@
       ],
     },
     {
-      key: "office-ops", label: "経理・事務", icon: "work",
+      key: "office-ops", label: "経理・事務", icon: "work", when: "officeFinance",
       items: [
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
         // 月次締めと月初作業管理は、同じ「月の区切りの仕事」なので1つにまとめる
@@ -250,9 +254,10 @@
             { key: "office_monthly", href: "/office/",           label: "月末月初業務", when: "officeApp" },
           ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
-        { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
+        // 会計（admin.html）とお知らせ配信は、管理者・経営者のまま（経理の権限では、会計の画面・お知らせの保存権限が無い）
+        { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true, when: "adminApp" },
         // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に。社内事務・運営なのでOffice
-        { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true,
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true, when: "adminApp",
           tabs: [
             { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
             { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
@@ -410,7 +415,8 @@
     return Boolean(shows[t.key]);
   }
   function toolHref(t, shows) {
-    if (t.key === "office") return shows.adminApp ? t.altHref : t.href;
+    // 人事・労務／経理・事務のどちらかに入れる人は、Office の画面（ダッシュボード）へ。月末月初（/office/）だけの人は /office/ へ
+    if (t.key === "office") return shows.officeAny ? t.altHref : t.href;
     if (t.key === "keiei") return shows.keiei ? t.href : t.altHref;
     return t.href;
   }
@@ -436,7 +442,9 @@
     const canPreview = appRole === "admin" || appRole === "owner";
     // Office・⚙管理 は admin/owner だけ（メンバー表示で確認中は出さない。管理者機能を隠す意味が崩れるため）
     const showAdminTools = canPreview && !memberView;
-    const area = showAdminTools ? areaOf(active) : null;
+    // 人事・経理の担当者（管理者ではない）も、Office の画面（admin-*.html）の中では「/ OFFICE」を出す
+    const officeUser = !canPreview && appRole !== "sr" && Boolean(shows.officeAny);
+    const area = (showAdminTools || (officeUser && areaOf(active) === "office")) ? areaOf(active) : null;
 
     const el = document.createElement("div");
     el.className = "topbar";
@@ -645,7 +653,9 @@
 
     const el = document.createElement("nav");
     el.className = "kp-sidebar grouped";
-    el.innerHTML = OFFICE_TOP.map((n) => sideItem(n, active)).join("") + OFFICE_GROUPS.map((g) => {
+    // 自分の担当だけ出す（when は shows＝/api/me の access）。担当の無いグループは、グループごと出さない
+    const vis = (n) => !n.when || Boolean(shows[n.when]);
+    el.innerHTML = OFFICE_TOP.filter(vis).map((n) => sideItem(n, active)).join("") + OFFICE_GROUPS.filter(vis).map((g) => {
       const on = open.has(g.key);
       const hasActive = here && here.key === g.key;
       return `
@@ -657,7 +667,7 @@
           <span class="ch material-symbols-outlined">expand_more</span>
         </button>
         <div class="kp-side-sub${on ? "" : " hidden"}" data-group="${esc(g.key)}">
-          ${g.items.map((n) => sideItem(n, active)).join("")}
+          ${g.items.filter(vis).map((n) => sideItem(n, active)).join("")}
         </div>`;
     }).join("");
     document.body.appendChild(el);
@@ -906,7 +916,10 @@
     // roles（appRole）では表せない権限（例：人事・経理など、複数ロールにまたがるもの）は
     // access で見る。appRole は owner/admin/sr/member の4値しか無く、それ単体の人も
     // "member" になる。roles だけで入口を絞ると、API は通るのに画面へ入れない食い違いが起きる
-    if (opts.access && !me.access?.[opts.access]) {
+    // access は1つでも、複数（どれか1つ）でもよい。例: Office のダッシュボードは ["officeHr", "officeFinance"]。
+    // 社労士（sr）は Office・管理の画面を開かない（管理者を兼ねていても、advisor の画面だけ）
+    const need = [].concat(opts.access || []);
+    if (need.length && (appRole === "sr" || !need.some((k) => me.access?.[k]))) {
       location.replace(homeFor(appRole, stage));
       return null;
     }
@@ -984,7 +997,11 @@
     renderTopbar({ name, appRole, memberView, shows, active, stage });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     // 管理者もホーム領域は全員と同じ左メニュー。Office・管理（⚙）に入ったときだけ専用の左メニュー
-    const adminArea = canPreview && !memberView && areaOf(active) !== "home";
+    // Office の担当者（人事・経理。管理者ではない）は、Office の領域の中だけ専用の左メニュー（自分の担当グループだけ）。
+    // 管理（⚙）・経営の領域は管理者・経営者だけ
+    const areaNow = areaOf(active);
+    const officeUser = !canPreview && appRole !== "sr" && Boolean(shows.officeAny);
+    const adminArea = areaNow !== "home" && ((canPreview && !memberView) || (officeUser && areaNow === "office"));
     if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
@@ -1034,7 +1051,16 @@
       // 管理者（admin/owner）は管理画面の人事・労務・経理・事務に入れるので、Office の入口も出す。
       // 入口は人によって変える（toolHref）ので、押して 403 になる人は出ない
       officeApp: Boolean(me?.access?.office),
-      office: Boolean(me?.access?.office) || adminApp,
+      // Office の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance）そのもの。
+      // access が無い古い応答のときは、管理者（admin/owner）だけ両方に入れる。社労士（sr）は入れない
+      officeHr: me?.appRole !== "sr" && (me?.access ? Boolean(me.access.officeHr) : adminApp),
+      officeFinance: me?.appRole !== "sr" && (me?.access ? Boolean(me.access.officeFinance) : adminApp),
+      // Office の画面（admin-*.html）のどれかに入れる人
+      officeAny: me?.appRole !== "sr" && (me?.access ? Boolean(me.access.officeHr || me.access.officeFinance) : adminApp),
+      // Office の入口を出す人 = 人事・労務／経理・事務／月末月初（/office）のどれか1つでも入れる人。
+      // 入れない人にヘッダーの入口を出さない（押して 403 を作らない）
+      office: me?.appRole !== "sr" && (Boolean(me?.access?.office) || adminApp
+        || Boolean(me?.access?.officeHr) || Boolean(me?.access?.officeFinance)),
       // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
       // 全員のタスク・日報・チーム状況（管理画面）を開ける人。経営の入口（管理者はここから）

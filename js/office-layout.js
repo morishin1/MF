@@ -16,16 +16,18 @@
   // Office は1つの業務アプリ（人事・労務・経理・事務）。月次業務（/office/）はその中の機能。
   // 月次業務は access.office の人（経営者・責任者・経理）が使う。
   // 人事・労務、経理・事務の管理画面（admin-*.html）は、既存の管理画面をそのまま使い、
-  // その画面を開ける管理者（admin/owner）にだけ入口を出す（経理だけの人に押すと 403 の入口を出さない）。
-  // 権限を緩める変更はしていない。出す入口は、その人が実際に使えるものだけ
+  // 入口は担当の人にだけ出す。出すかどうかはサーバの判定（/api/me の access）で決める:
+  //   officeHr（人事・労務）… 管理者・経営者・人事 / officeFinance（経理・事務）… 管理者・経営者・経理
+  // （押すと 403 の入口を出さない。画面側で役割名を並べ直さない）
   const MONTHLY = { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available" };
-  const ADMIN_NAV = [
-    { key: "dashboard", href: "/admin-dashboard.html", label: "ダッシュボード", icon: "dashboard" },
-    { key: "people",    href: "/admin-members.html",   label: "人事・労務",     icon: "group" },
-    { key: "ops",       href: "/admin-expenses.html",  label: "経理・事務",     icon: "work" },
-  ];
-  // appRole（管理画面を開けるか）は役割名ではなく画面の種類。admin / owner だけ管理画面の入口を足す
-  const navFor = (me) => (/^(admin|owner)$/.test(me?.appRole || "") ? [...ADMIN_NAV, MONTHLY] : [MONTHLY]);
+  const DASH   = { key: "dashboard", href: "/admin-dashboard.html", label: "ダッシュボード", icon: "dashboard" };
+  const PEOPLE = { key: "people",    href: "/admin-members.html",   label: "人事・労務",     icon: "group" };
+  const OPS    = { key: "ops",       href: "/admin-expenses.html",  label: "経理・事務",     icon: "work" };
+  const navFor = (me) => {
+    const a = me?.access || {};
+    const hr = Boolean(a.officeHr), fin = Boolean(a.officeFinance);
+    return [...(hr || fin ? [DASH] : []), ...(hr ? [PEOPLE] : []), ...(fin ? [OPS] : []), MONTHLY];
+  };
 
   function css() {
     if (document.getElementById("office-layout-css")) return;

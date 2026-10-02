@@ -7,7 +7,7 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeFinance } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 
 const KINDS = ["onboarding", "offboarding", "general"];
@@ -34,10 +34,10 @@ export default async function handler(req, res) {
       .order("name", { ascending: true })
       .limit(200);
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
-    return json(res, 200, { templates: data || [], canManage: canManageHr(ctx) });
+    return json(res, 200, { templates: data || [], canManage: canOfficeFinance(ctx) });
   }
 
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
 
   if (req.method === "POST") {
     const body = await readJson(req);

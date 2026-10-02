@@ -8,7 +8,7 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeFinance } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 
 const BUCKET = "library";
@@ -44,10 +44,10 @@ export default async function handler(req, res) {
       .order("title", { ascending: true })
       .limit(500);
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
-    return json(res, 200, { documents: data || [], canManage: canManageHr(ctx) });
+    return json(res, 200, { documents: data || [], canManage: canOfficeFinance(ctx) });
   }
 
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
   const sb = userClient(req);
 
   if (req.method === "POST") {

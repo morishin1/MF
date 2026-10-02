@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261002b">
-  <link rel="stylesheet" href="css/layout.css?v=20261002b">
+  <link rel="stylesheet" href="css/app.css?v=20261002c">
+  <link rel="stylesheet" href="css/layout.css?v=20261002c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -370,9 +370,9 @@
 
 <div id="es-modal-root"></div>
 
-<script src="js/api-client.js?v=20261002b"></script>
-<script src="js/device.js?v=20261002b"></script>
-<script src="js/layout.js?v=20261002b"></script>
+<script src="js/api-client.js?v=20261002c"></script>
+<script src="js/device.js?v=20261002c"></script>
+<script src="js/layout.js?v=20261002c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -408,7 +408,7 @@
   // 上のメニューは「契約書作成依頼」と「電子署名」を別タブにしている
   // （js/layout.js）。どちらで開いたかは ?tab=order の有無で分かる
   const initialTab = new URLSearchParams(location.search).get("tab");
-  KPLayout.init({ active: initialTab === "order" ? "esign_order" : "esign", roles: ["admin", "owner"] })
+  KPLayout.init({ active: initialTab === "order" ? "esign_order" : "esign", access: "officeHr" })
     .then((ctx) => {
       if (!ctx) return;
       canOverride = Boolean(ctx.me?.gw?.isHr);

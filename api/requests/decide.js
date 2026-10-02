@@ -16,7 +16,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
-import { canReviewExpense } from "../../lib/expenses.js";
+import { canReviewRequest } from "../../lib/expenses.js";
 import { LEAVE_LABEL, STATUS_LABEL, nextStatusFor, leaveLabel, yen } from "../../lib/requests.js";
 import { syncAllDay } from "../../lib/gcal.js";
 import { notify } from "../../lib/notify.js";
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
   if (!r) return json(res, 404, { error: "request_not_found" });
 
-  const isReviewer = canReviewExpense(ctx);
+  const isReviewer = canReviewRequest(ctx);
   const isOwner = ctx.roles.includes("owner");
   const isMine = !!ctx.employee && r.employee_id === ctx.employee.id;
 

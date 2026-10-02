@@ -16,7 +16,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeFinance } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   // 給与に関わる数字がまとまっている。人事・経営者だけ
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
 
   if (req.method === "GET") return read(req, res, ctx);
   if (req.method === "PATCH") return patch(req, res, ctx, user);

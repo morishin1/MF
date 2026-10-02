@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261002b">
-  <link rel="stylesheet" href="css/layout.css?v=20261002b">
+  <link rel="stylesheet" href="css/app.css?v=20261002c">
+  <link rel="stylesheet" href="css/layout.css?v=20261002c">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -48,20 +48,20 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">task_alt</span>いま対応するもの</h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 6px;">Office（人事・労務・経理・事務）の、対応待ちの件数です。押すとその画面を開きます。</p>
+    <p class="muted" style="font-size:12.5px;margin:0 0 6px;">あなたの担当（人事・労務／経理・事務）の、対応待ちの件数です。押すとその画面を開きます。</p>
     <div id="od-body" class="od-list"></div>
   </div>
 
 </div>
 
-<script src="js/api-client.js?v=20261002b"></script>
-<script src="js/device.js?v=20261002b"></script>
-<script src="js/layout.js?v=20261002b"></script>
+<script src="js/api-client.js?v=20261002c"></script>
+<script src="js/device.js?v=20261002c"></script>
+<script src="js/layout.js?v=20261002c"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  KPLayout.init({ active: "dashboard", roles: ["admin", "owner"] })
+  KPLayout.init({ active: "dashboard", access: ["officeHr", "officeFinance"] })
     .then((ctx) => { if (ctx) start(ctx); });
 
   // 前月（締める・請求するのはたいてい前月）。JST の年月
@@ -79,45 +79,51 @@
     const name = ctx.me?.gw?.employee?.display_name || ctx.me?.email || "";
     el("greet-sub").textContent =
       `${name}　／　${new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}`;
-    await load();
+    await load(ctx.me?.access || {});
   }
 
-  async function load() {
+  // 自分の担当の行だけ出す・読む。人事・労務は officeHr、経理・事務は officeFinance（管理者・経営者は両方）。
+  // 担当でないAPIは呼ばない（呼ぶと 403 になる行を作らない）
+  async function load(access) {
     const month = prevMonth();
+    const none = Promise.resolve(null);
     const [b, hr, cl, bp] = await Promise.all([
-      safe(API.badges()), safe(API.hrList()), safe(API.closing(month)), safe(API.listBillingProgress(month)),
+      safe(API.badges()),
+      access.officeHr ? safe(API.hrList()) : none,
+      access.officeFinance ? safe(API.closing(month)) : none,
+      access.officeFinance ? safe(API.listBillingProgress(month)) : none,
     ]);
     const badges = b.ok ? (b.v?.badges || {}) : {};
 
     // 入社手続き待ち＝進行中の入社。退社も同じ画面（入退社）で扱う
-    const onboarding = hr.ok ? (hr.v?.onboarding || []).length : null;
-    const offboarding = hr.ok ? (hr.v?.offboarding || []).length : null;
+    const onboarding = hr?.ok ? (hr.v?.onboarding || []).length : null;
+    const offboarding = hr?.ok ? (hr.v?.offboarding || []).length : null;
 
     // 月次未完了＝前月がまだ締まっていない。止めている理由の数も出す
-    const closing = cl.ok ? cl.v : null;
+    const closing = cl?.ok ? cl.v : null;
     const monthOpen = closing ? (closing.closing?.status !== "closed" ? 1 : 0) : null;
 
     // 請求・支払＝前月ぶんで、5つの印がまだ揃っていない行
     const STAGES = ["timesheet_received", "work_confirmed", "board_created", "sent", "bp_invoice_received"];
-    const unfinished = bp.ok && !bp.v?.notReady
+    const unfinished = bp?.ok && !bp.v?.notReady
       ? (bp.v?.progress || []).filter((r) => STAGES.some((k) => !r[k])).length : null;
 
     const groups = [
-      { name: "人事・労務", rows: [
+      access.officeHr && { name: "人事・労務", rows: [
         { icon: "how_to_reg", label: "入社手続き待ち", hint: "進行中の入社", n: onboarding, href: "admin-hr.html" },
         { icon: "logout", label: "退社手続き待ち", hint: "進行中の退社", n: offboarding, href: "admin-hr.html" },
         { icon: "contract", label: "契約待ち", hint: "署名がまだ返ってきていない契約書", n: badges.esign || 0, href: "admin-esign.html" },
         { icon: "schedule", label: "勤怠確認", hint: "打刻の修正申請", n: badges.timecard || 0, href: "admin-timecard.html" },
         { icon: "event_busy", label: "休暇・稟議の承認", hint: "承認待ち", n: badges.requests || 0, href: "admin-requests.html" },
       ] },
-      { name: "経理・事務", rows: [
+      access.officeFinance && { name: "経理・事務", rows: [
         { icon: "receipt", label: "経費承認", hint: "承認待ちの経費精算", n: badges.expenses || 0, href: "admin-expenses.html" },
         { icon: "event_available", label: "月次未完了",
           hint: monthOpen ? `${month} の月次締めがまだです` + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : "") : `${month} は締め済み`,
           n: monthOpen, href: "admin-closing.html" },
         { icon: "request_quote", label: "請求・支払の進行中", hint: `${month} ぶんで、5つの印が揃っていないもの`, n: unfinished, href: "admin-month-start.html" },
       ] },
-    ];
+    ].filter(Boolean);
 
     el("od-body").innerHTML = groups.map((g) => `
       <div class="od-group">${esc(g.name)}</div>
@@ -128,7 +134,7 @@
           <span class="od-num${r.n ? " todo" : ""}">${r.n === null ? "—" : r.n}</span>
         </a>`).join("")}`).join("");
 
-    const failed = [b, hr, cl, bp].some((x) => !x.ok);
+    const failed = [b, hr, cl, bp].some((x) => x && !x.ok);
     el("notice").innerHTML = failed
       ? `<div class="banner warn"><span class="material-symbols-outlined">info</span>
            <div>取得できなかった項目は「—」と出しています。</div></div>` : "";
