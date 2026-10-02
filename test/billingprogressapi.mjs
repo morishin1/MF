@@ -97,8 +97,11 @@ const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, roles: [],
 const ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, roles: ["owner"],
                 employee: { id: "emp-hr", display_name: "事務 花子" } };
 let who = ADMIN;
+// 判定は本物（lib/gw.js）をそのまま使う。モックするのは gwContext（ログイン中の人）だけ
+const realGw = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
-  namedExports: { gwContext: async () => who, canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr) },
+  namedExports: { gwContext: async () => who, canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
+    canOfficeAny: realGw.canOfficeAny, canOfficeFinance: realGw.canOfficeFinance, canOfficeHr: realGw.canOfficeHr },
 });
 
 const { default: bp } = await import(atRoot("api/billing-progress/index.js"));
@@ -219,6 +222,20 @@ await ok("表がまだ無くても、一覧は落ちない", async () => {
   const r = await get("?month=2026-09");
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.notReady, true);
+});
+
+await ok("人事・労務（hr）も経理・事務（finance）も、請求の進み具合は読める（両方の画面が使う共有データ）。経理はそのまま書ける", async () => {
+  setup();
+  for (const roles of [["hr"], ["finance"]]) {
+    who = { tenantId: "t1", isAdmin: false, isHr: roles.includes("hr"), roles, employee: { id: "x", display_name: "x" } };
+    const r = await post({ employeeId: "e1", siteContractId: "sc-1", billingMonth: "2026-09" });
+    assert.notEqual(r.statusCode, 403, `${roles} は入れる`);
+  }
+  // 責任者（manager）・営業・採用担当・IT は、この画面のAPIには入れない（/office の月末月初だけ）
+  for (const roles of [["manager"], ["sales"], ["recruiter"], ["it"]]) {
+    who = { tenantId: "t1", isAdmin: false, isHr: false, roles, employee: { id: "x", display_name: "x" } };
+    assert.equal((await post({ employeeId: "e1", siteContractId: "sc-1", billingMonth: "2026-09" })).statusCode, 403, `${roles} は入れない`);
+  }
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

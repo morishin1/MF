@@ -165,20 +165,32 @@ for (const [roles, want, label] of [
   [["owner", "hr"], "hr,sales,office,keiei", "経営者＋人事 → 経営者として全ツール"],
 ]) {
   const page = await open("home.html", { appRole: "member", roles });
-  const got = (await shortcuts(page)).map((s) => s.key).join(",");
+  const got = toolsOnly(await shortcuts(page)).map((s) => s.key).join(",");
   check(got === want, `${label}（いま "${got}"）`);
   await page.close();
 }
 
 console.log("\n— 出た入口は、押して入れるところへ行く（Officeが出たのに403、を作らない） —");
 {
-  // 管理画面を開けない人（経理・責任者のメンバー）は、Officeアプリ（月次業務 /office/）へ。
-  // 管理画面（admin-*.html）は admin/owner だけなので、そちらへは送らない
+  // Office の行き先は、役割に関係なく /office/（月次業務）。管理画面（admin-*.html）へは送らない
   for (const [roles, label] of [[["finance"], "経理"], [["manager"], "責任者"]]) {
     const page = await open("home.html", { appRole: "member", roles });
     const sc = await shortcuts(page);
     check(hrefOf(sc, "office") === "/office/", `${label}（メンバー）の Office → /office/（月次業務）`);
-    check(!sc.some((x) => x.key === "area-settings"), `${label}（メンバー）に ⚙管理は出ない`);
+    await page.close();
+  }
+  // ⚙管理：人事・労務／経理・事務の担当（officeHr / officeFinance）には、管理画面の入口だけを出す
+  //   （経費の承認・月次締め・社内文書などは、管理画面にある。権限・端末・システム設定は出さない）。
+  //   どちらでもない人（責任者・営業・採用・IT）には出さない
+  for (const [roles, label, gear] of [[["finance"], "経理", true], [["hr"], "人事", true], [["manager"], "責任者", false], [["sales"], "営業", false], [["recruiter"], "採用担当", false]]) {
+    const page = await open("home.html", { appRole: "member", roles });
+    const sc = await shortcuts(page);
+    check(sc.some((x) => x.key === "area-settings") === gear, `${label}（メンバー）に ⚙管理は${gear ? "出る" : "出ない"}`);
+    if (gear) {
+      await page.locator("#kp-admin-menu-btn").click();
+      const items = await page.locator("#kp-admin-menu-panel a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+      check(items.length === 1 && items[0] === "admin-dashboard.html", `${label}（メンバー）の ⚙管理は、管理画面の入口だけ（いま ${items.join(",")}）`);
+    }
     await page.close();
   }
   // 人事だけの人（経理・責任者でない）は、Officeに入れる入口が無い（管理画面は admin/owner 前提）ので出さない
@@ -210,7 +222,7 @@ console.log("\n— サーバの access どおりに出す（役割名ではな�
   await oldKeiei.close();
   // サーバが「Office に入れる」と言ったときだけ出す
   const yes = await open("home.html", { appRole: "member", roles: ["finance"], noAccess: false });
-  check((await shortcuts(yes)).map((s) => s.key).join(",") === "office", "access.office のときだけ Office");
+  check(toolsOnly(await shortcuts(yes)).map((s) => s.key).join(",") === "office", "access.office のときだけ Office");
   await yes.close();
 }
 
