@@ -7,22 +7,35 @@
 //   ・表が無い（PGRST205）／列が無い（42703）状態の再現（missing）
 //   ・RLS：userClient は、表ごとの読み取り可否（rls）を通す。書き込みは、ポリシーが無いので、すべて拒否（42501）
 //     → API が、書き込みに userClient を使ったら、テストが落ちる（本物の DB でも落ちる）
-//   ・Storage：置く・読む・消す・署名付きURL
+//   ・Storage：置く・読む・消す・署名付きURL。state.storageFail を立てると、消すのが失敗する
+//   ・外部キー（on delete cascade／set null）：createMemDb({ fks }) で、親の表ごとに渡す。親の行を消すと、子も（再帰で）消える／外れる
 
 import crypto from "node:crypto";
 import { pgDateError } from "./_pgdate.mjs";
 
 const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 
-export function createMemDb({ schema = {}, rls = () => true, missing = null } = {}) {
+export function createMemDb({ schema = {}, rls = () => true, missing = null, fks = {} } = {}) {
   const rows = {};                       // 表名 → 行の配列
-  const state = { missing, log: [] };    // log … 書いた操作（表・種類・行数）
+  const state = { missing, log: [], storageFail: null };    // log … 書いた操作（表・種類・行数）／storageFail … Storage の削除を失敗させる（メッセージ）
   const storageFiles = new Map();        // "bucket/path" → Buffer
   const uploadUrls = [];
   const removed = [];
   const signed = [];
 
   const tableRows = (name) => (rows[name] ||= []);
+  // 親の行を消したときの、子の行の扱い（外部キー）。fks = { 親の表: [{ table, col, action: "cascade" | "setnull" }] }
+  function removeRows(name, hits) {
+    if (!hits.length) return;
+    rows[name] = tableRows(name).filter((r) => !hits.includes(r));
+    const ids = new Set(hits.map((r) => r.id));
+    for (const fk of fks[name] || []) {
+      const kids = tableRows(fk.table).filter((k) => ids.has(k[fk.col]));
+      if (!kids.length) continue;
+      if (fk.action === "cascade") { removeRows(fk.table, kids); state.log.push({ table: fk.table, op: "cascade", n: kids.length }); }
+      else for (const k of kids) k[fk.col] = null;
+    }
+  }
   const sc = (name) => schema[name] || {};
 
   function makeClient({ asUser, who }) {
@@ -151,7 +164,7 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null } = 
 
         if (op === "delete") {
           const hits = tableRows(name).filter(match);
-          rows[name] = tableRows(name).filter((r) => !hits.includes(r));
+          removeRows(name, hits);
           state.log.push({ table: name, op, n: hits.length });
           return { data: returning ? hits.map(project) : null, error: null };
         }
@@ -207,6 +220,8 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null } = 
           return { data: { arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) }, error: null };
         },
         remove: async (paths) => {
+          if (state.onStorageRemove) state.onStorageRemove(paths);     // 消す時点の DB の様子を見るための口（順番の検査用）
+          if (state.storageFail) return { data: null, error: { message: state.storageFail } };
           for (const p of paths) { storageFiles.delete(`${bucket}/${p}`); removed.push({ bucket, path: p }); }
           return { data: paths, error: null };
         },
@@ -219,6 +234,6 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null } = 
     admin: () => makeClient({ asUser: false, who: null }),
     userClient: (who) => makeClient({ asUser: true, who }),
     put: (bucket, path, buf) => storageFiles.set(`${bucket}/${path}`, Buffer.from(buf)),
-    reset() { for (const k of Object.keys(rows)) delete rows[k]; storageFiles.clear(); uploadUrls.length = 0; removed.length = 0; signed.length = 0; state.log.length = 0; state.missing = null; },
+    reset() { for (const k of Object.keys(rows)) delete rows[k]; storageFiles.clear(); uploadUrls.length = 0; removed.length = 0; signed.length = 0; state.log.length = 0; state.missing = null; state.storageFail = null; state.onStorageRemove = null; },
   };
 }

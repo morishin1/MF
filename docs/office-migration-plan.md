@@ -138,6 +138,7 @@ confirmed（人が「確定する」を押したときだけ）
 | 契約条件・精算（純関数） | `lib/office-calc.js` |
 | AI読取 | `lib/office-timesheet-ai.js`（Anthropic SDK 直接。厳密に検査し直す） |
 | API | `api/office/timesheet.js`（受領・読取・保存・確定・取消し・差し戻し）、`api/office/terms.js`（契約条件）、`api/office/index.js`（一覧に状態・稼働時間を足す） |
+| 案件の一括更新・削除 | `api/office/contracts.js`（`POST`。`preview`・`update`・`delete`。Office の権限だけ・MFA なし。HR 用 API には依存しない）。更新できるのは、更新確認状況・契約終了予定・契約開始日だけ。削除は `confirm: true`＋`confirmCount` が要り、Storage のファイルを先に消してから DB（外部キーで、月次進捗・提出・契約条件・勤務表も消える）。請求の印が付いた案件は消せない。履歴は `gw_office_events`（`contract.update`／`contract.delete`） |
 | 画面 | `office/timesheet.html`（確認・確定）、`office/terms.html`（契約条件）、`office/index.html`（一覧・ドロワー） |
 
 ### 6.2 時間の規則（決定済み）
@@ -207,6 +208,7 @@ Node：`officetimetest`（33）・`officecalctest`（41）・`officeaitest`（36
 UI：`officesheetui`（本物の API ハンドラ＋偽DB＋偽AIにつないで、勤務表の確認・確定・アップロード・契約条件・一覧を通す）、
 **`officee2e`（Phase 3 の完成条件：アップロード → 重複チェック → AI読取 → 左右で確認 → 誤読を修正 → 稼働確定 → 月間稼働時間 → `/office` 一覧が「請求作成待ち」へ進む。外部提出フォーム経由の二重提出、PDF・JPEG・PNG も通す）**。
 実 PostgreSQL 16 での migration 検証（前提なし／099・100 適用済み＋既存データ／105〜107 適用後）は `db/check_office_phase3.sql` と `docs/office-phase3-runbook.md` §1。
+案件の一括更新・削除：Node `officecontractsapi`（41）、UI `officebulkui`（1件選択・複数選択・全選択・更新・削除キャンセル・削除実行・請求済み・Storage 失敗・スマホ幅）。`test/_memdb.mjs` は、外部キー（cascade／set null）と Storage の削除失敗も真似る。
 すべて手計算の期待値。**変異テスト**（コードを壊して、テストが落ちるかを確認）で検出力を確かめた。`test/_memdb.mjs` は、一意制約・NOT NULL・CHECK・RLS（ユーザー権限の書き込みは拒否）・Storage を真似た偽DB。
 
 ## 7. 既存の月初作業（admin-month-start・cron・提出フォーム）への影響
