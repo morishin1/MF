@@ -441,6 +441,8 @@
       const tagBtn = t.closest?.("[data-tag]");
       if (tagBtn) { applyTag(tagBtn.dataset.tag); return; }
       if (t.closest?.("[data-close]")) { closeDrawer(); return; }
+      const pgBtn = t.closest?.("[data-progress]");
+      if (pgBtn) { e.stopPropagation(); if (!pgBtn.disabled) runProgress(pgBtn); return; }
       const fileBtn = t.closest?.("[data-file]");
       if (fileBtn) { openFile(fileBtn.dataset.file, fileBtn); return; }
       const act = t.closest?.("[data-open]");
@@ -832,7 +834,8 @@
 
           <section class="of-sec" id="dr-sales"><h3><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>売上請求</h3>
             <p>請求書の作成：${r.marks.board_created ? `作成済み${at("board_created")}` : "未作成"}</p>
-            <p>請求書の送付：${r.marks.sent ? `送付済み${at("sent")}` : "未送付"}</p></section>
+            <p>請求書の送付：${r.marks.sent ? `送付済み${at("sent")}` : "未送付"}</p>
+            ${salesProgressActions(r)}</section>
 
           <section class="of-sec" id="dr-order"><h3><span class="material-symbols-outlined" aria-hidden="true">assignment</span>発注</h3>
             <p class="of-muted">発注情報は、今後追加します。</p></section>
@@ -840,7 +843,8 @@
           <section class="of-sec" id="dr-vendor"><h3><span class="material-symbols-outlined" aria-hidden="true">inbox</span>仕入請求</h3>
             ${r.usesVendor
               ? `<p>${esc(r.partnerName || "BP会社")}の請求書：${c.vendorInvoice.state === "received" ? `受領済み${at("bp_invoice_received")}` : "未受領"}</p>
-                 ${fileList(files("invoice"), "まだ請求書のファイルが届いていません。")}`
+                 ${fileList(files("invoice"), "まだ請求書のファイルが届いていません。")}
+                 ${progressBtn(r, "vendor_received", !r.marks.bp_invoice_received, r.marks.bp_invoice_received ? "受領を取り消す" : "請求書を受領済みにする")}`
               : `<p class="of-muted">対象外です（売上のみの契約）。</p>`}</section>
 
           <section class="of-sec" id="dr-payment"><h3><span class="material-symbols-outlined" aria-hidden="true">payments</span>支払</h3>
@@ -852,6 +856,38 @@
             <p class="of-muted">印を付けた日時だけを表示しています。担当者名は、次の段階から記録します。</p></section>
         </div>
       </aside>`;
+  }
+
+  // ---- 請求の進み具合（Board で作った・送った、BP請求書を受け取った）を記録する ----------------
+  // 請求書そのものは Board で作る・送る。ここは「済んだ」の記録だけ（POST /api/office/timesheet action=progress）。
+  // 順番（稼働確定 → 作成 → 送付）はサーバが守る。押せない理由は、ボタンの横に出す
+  function progressBtn(r, step, done, label, disabledNote) {
+    const btn = `<button type="button" class="of-btn ${done ? "" : "sec"}" data-progress="${esc(step)}" data-done="${done ? "1" : "0"}"
+      data-contract="${esc(r.siteContractId)}"${disabledNote ? " disabled" : ""}>${esc(label)}</button>`;
+    return `<p class="of-progress">${btn}${disabledNote ? `<span class="of-muted" style="margin-left:8px;">${esc(disabledNote)}</span>` : ""}</p>`;
+  }
+  function salesProgressActions(r) {
+    const m = r.marks;
+    if (!m.board_created) {
+      return progressBtn(r, "invoice_created", true, "請求書を作成済みにする（Boardで作成したあと）",
+        m.work_confirmed ? "" : "稼働を確定すると、押せるようになります");
+    }
+    if (!m.sent) {
+      return progressBtn(r, "invoice_sent", true, "送付済みにする") + progressBtn(r, "invoice_created", false, "作成済みを取り消す");
+    }
+    return progressBtn(r, "invoice_sent", false, "送付済みを取り消す");
+  }
+  async function runProgress(btn) {
+    const done = btn.dataset.done === "1";
+    if (!done && !confirm(`${btn.textContent.trim()}。よろしいですか？`)) return;
+    btn.disabled = true;
+    try {
+      await postSheet(btn.dataset.contract, "progress", { step: btn.dataset.progress, done });
+      await load();                                    // 一覧・ドロワーを最新に（開いているドロワーは開き直す）
+    } catch (e) {
+      btn.disabled = false;
+      alert(e.hint || e.detail || e.message || "記録できませんでした");
+    }
   }
 
   // 勤務表の欄の操作：状態に合った1つ（次にやること と同じ）＋「勤務表を追加」（届いているファイルへの追加・差し替え）

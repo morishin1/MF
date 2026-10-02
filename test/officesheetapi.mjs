@@ -112,7 +112,7 @@ for (const [label, p] of [["経営者", OWNER], ["責任者", MANAGER], ["経理
     assert.equal(r.headers["cache-control"], "no-store");
   });
 }
-const ACTIONS = ["upload", "attach", "read", "blank", "save", "bulk", "confirm", "reopen", "return"];
+const ACTIONS = ["upload", "attach", "read", "blank", "save", "bulk", "confirm", "reopen", "return", "progress"];
 for (const [label, p] of Object.entries(DENIED)) {
   await ok(`${label} は GET も、すべての操作も 403。表・Storage に触れず、ログも残さない`, async () => {
     setup(); ctl.who = p;
