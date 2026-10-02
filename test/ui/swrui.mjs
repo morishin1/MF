@@ -40,7 +40,7 @@ async function tab() {
     }
   });
   const st = {
-    calls: [], lag: {}, fail: new Set(),
+    calls: [], reqs: [], lag: {}, fail: new Set(),
     companies: [company("c1", "返信商事"), company("c2", "二番商事")],
     unread: 2,
   };
@@ -49,6 +49,8 @@ async function tab() {
     const u = new URL(req.url());
     const p = u.pathname;
     st.calls.push(`${req.method()} ${p}${u.search}`);
+    // 何を呼んだか（path）と、どのページから呼んだか（referer）。「先読みで別の画面の API が動いていないか」を見るために残す
+    st.reqs.push({ method: req.method(), path: p, from: new URL(req.headers().referer || "http://x/", "http://x/").pathname });
     const lag = Object.entries(st.lag).find(([re]) => new RegExp(re).test(p))?.[1] || 0;
     if (lag) await wait(lag);
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) }).catch(() => {});
@@ -175,18 +177,58 @@ console.log("\n=== 通知・バッジは、毎画面すぐには取りにいか�
 console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
 {
   const { ctx, page, st } = await tab();
+  // 先読みの対象（タスク画面 tasks.html）の本体の API。ホーム自身も、同じ API を1回呼ぶ（自分の画面のために）。
+  // 通知・バッジなどの共通の裏の通信（/api/notifications・/api/badges）は、この画面の本体ではないので、数えない。
+  // 見たいのは「リンクに触れたことで、タスク画面の API が動いていないか」だけ
+  const BACKGROUND = /^\/api\/(notifications|badges)$/;
+  const TASKS_API = /^\/api\/tasks(\/|$)/;
+  const taskCalls = () => st.reqs.filter((r) => !BACKGROUND.test(r.path) && TASKS_API.test(r.path));
+  const until = async (fn, ms = 8000) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < ms) await wait(50); return fn(); };
+  // 数が落ち着くまで待つ：決まった秒数ではなく、「タスク API の数が、しばらく変わらない」ことを見て決める。
+  // ホーム自身が、自分の画面のために同じ API を数回に分けて呼ぶので、1回届いた時点を基準にすると、あとから届いた分を
+  // 「触れたせいで増えた」と取り違える（以前の揺れの原因）。最大でも max ミリ秒で打ち切る（落ち着かなければ、そのまま数える）
+  const settle = async ({ quiet = 800, max = 10000 } = {}) => {
+    const t0 = Date.now();
+    let last = taskCalls().length, since = Date.now();
+    while (Date.now() - t0 < max) {
+      const n = taskCalls().length;
+      if (n !== last) { last = n; since = Date.now(); } else if (Date.now() - since >= quiet) break;
+      await wait(50);
+    }
+    return taskCalls().length;
+  };
+
   await page.goto(`${BASE}/home.html`);
   await page.waitForSelector(".kp-sidebar a[href]");
-  const before = count(st, /./);
+  // ホーム自身のタスク取得が終わるのを、決まった秒数ではなく「届いたこと・数が落ち着いたこと」で待つ。
+  // これ以降に増えた分だけが、触れたことの影響
+  check(await until(() => taskCalls().length >= 1), "ホームは、自分の画面のためにタスクを取る（基準にする）");
+  await page.waitForLoadState("networkidle");
+  const base = await settle();
+  const mark = st.reqs.length;                       // ここより後の通信だけを見る
+
   await page.hover('.kp-sidebar a[href="tasks.html"]');
-  await page.waitForTimeout(200);
+  // 先読みの印（<link rel="prefetch">）が付くのを、条件で待つ
+  await page.waitForSelector('link[rel="prefetch"]', { state: "attached", timeout: 5000 }).catch(() => {});
   const pf = await page.evaluate(() => [...document.querySelectorAll('link[rel="prefetch"]')].map((l) => l.getAttribute("href")));
   check(pf.length === 1 && pf[0] === "/tasks.html", `左メニューのタスクに乗せたら、その HTML だけ先読み（${pf.join()}）`);
   await page.hover('.kp-sidebar a[href="tasks.html"]');
   check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 1, "同じリンクは1回だけ");
-  check(count(st, /./) === before, "API は先読みしない");
+  await page.waitForLoadState("networkidle");
+  await settle();                                    // 先読みが API を動かすなら、ここまでに届く
+
+  // 「API は先読みしない」：触れたあとに、タスク画面の API が増えていないこと。タスク画面のページから出た通信も無いこと。
+  // 通知・バッジなどの裏の通信が、たまたま同じ時間に届いても、ここには入らない
+  const after = st.reqs.slice(mark);
+  check(taskCalls().length === base, `API は先読みしない（タスクの API：触れる前 ${base}回 → 触れたあと ${taskCalls().length}回）`);
+  check(!after.some((r) => r.from === "/tasks.html"), "タスク画面のページから出た通信は無い（先読みは HTML だけで、その画面の中身は動かさない）");
+
   await page.hover("#greet").catch(() => {});
   check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 1, "本文の中に乗せても、先読みしない（ヘッダー・メニューだけ）");
+
+  // 見張りが空振りでないこと：タスク画面を実際に開けば、そのページ発のタスク API が記録される
+  await page.goto(`${BASE}/tasks.html`);
+  check(await until(() => st.reqs.some((r) => r.from === "/tasks.html" && TASKS_API.test(r.path))), "（確認）タスク画面を開くと、そのページ発のタスク API が記録される＝見張りは働いている");
   await ctx.close();
 }
 
