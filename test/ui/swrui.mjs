@@ -177,16 +177,20 @@ console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
   const { ctx, page, st } = await tab();
   await page.goto(`${BASE}/home.html`);
   await page.waitForSelector(".kp-sidebar a[href]");
-  const before = count(st, /./);
+  // 先読みで、その画面の API を呼ばないこと。ホームは自分でもタスクを読むので、勤怠（/api/timecard）で見る。
+  // バッジ・通知などは本文のあとに裏で出るので、数えると時刻しだいで揺れる（見るのは勤怠の API だけ）
+  await page.hover('.kp-sidebar a[href="timecard.html"]');
+  await page.waitForTimeout(200);
+  check(count(st, /\/api\/timecard/) === 0, "API は先読みしない（触れたリンク先の画面の API を呼ばない）");
   await page.hover('.kp-sidebar a[href="tasks.html"]');
   await page.waitForTimeout(200);
   const pf = await page.evaluate(() => [...document.querySelectorAll('link[rel="prefetch"]')].map((l) => l.getAttribute("href")));
-  check(pf.length === 1 && pf[0] === "/tasks.html", `左メニューのタスクに乗せたら、その HTML だけ先読み（${pf.join()}）`);
+  check(pf.includes("/tasks.html") && pf.includes("/timecard.html") && pf.length === 2,
+    `左メニューに乗せたら、その HTML だけ先読み（${pf.join()}）`);
   await page.hover('.kp-sidebar a[href="tasks.html"]');
-  check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 1, "同じリンクは1回だけ");
-  check(count(st, /./) === before, "API は先読みしない");
+  check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 2, "同じリンクは1回だけ");
   await page.hover("#greet").catch(() => {});
-  check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 1, "本文の中に乗せても、先読みしない（ヘッダー・メニューだけ）");
+  check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 2, "本文の中に乗せても、先読みしない（ヘッダー・メニューだけ）");
   await ctx.close();
 }
 
