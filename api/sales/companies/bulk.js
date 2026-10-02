@@ -36,6 +36,7 @@ import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { isUuid, autoNext, STATUS_KEYS, STATUS_LABEL, NG_KEYS, HIDE_KEYS, HIDE_LABEL } from "../../../lib/sales.js";
+import { loadMasters } from "../../../lib/sales-master.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 export const BULK_MAX = 500;
@@ -178,6 +179,11 @@ const ACTIONS = {
 
   async change_service({ res, sb, ctx, user, body, rows, notFound }) {
     const service = typeof body.service === "string" ? body.service.trim().slice(0, 100) || null : null;
+    // 共通マスター（テナントの表示中の選択肢。db/108）の値だけ。空（null）は「未設定に戻す」
+    const { services } = await loadMasters(sb, ctx.tenantId);
+    if (service && !services.includes(service)) {
+      return json(res, 400, { error: "bad_service", hint: `提案サービスは「${services.join("・")}」から選んでください` });
+    }
     const ids = rows.map((r) => r.id);
     const r = await updateMany(sb, ctx, ids, { service, updated_at: now() });
     if (r.updated) await audit(ctx, user, "sales.company_bulk_service", ids, { service });

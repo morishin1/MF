@@ -164,6 +164,7 @@ mock.module(atRoot("lib/gw.js"), {
     gwContext: async () => who,
     canRecruit: REAL_GW.canRecruit,
     canDecideHire: REAL_GW.canDecideHire,
+    canSeeSalary: REAL_GW.canSeeSalary,
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
   },
 });
@@ -233,7 +234,9 @@ async function runToAccepted({ wageAmount = 300000 } = {}) {
     id: applicantId, decision: "hired", stage: "offer", status: "offer_draft_pending",
   });
 
-  who = RECRUITER;
+  // 給与を含む合格通知は、給与を見られる人（人事）が作る。採用担当・責任者には給与が見えない・書けない
+  // （その確認は test/salaryguardapi.mjs）
+  who = HR;
   const offer = await post(offers, "/api/hr/offers", {
     applicantId, respondBy: "2026-10-15",
     employmentType: "正社員", jobTitle: "エンジニア", contractType: "無期",

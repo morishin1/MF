@@ -142,29 +142,34 @@
     if (window.KPLayout?.viewer) KPLayout.viewer({ title: "採用HR 1分マニュアル", text: GUIDE });
   }
 
-  async function init(opts = {}) {
-    css();
-    if (!window.API || !API.isLoggedIn()) { location.href = "../index.html"; return null; }
-    let me;
-    try {
-      me = await API.me();
-    } catch (e) {
-      location.href = "../index.html";
-      return null;
-    }
+  function permsOf(me) {
     const roles = me?.gw?.roles || [];
     const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
     // ヘッダーの近道と同じ値（/api/me の access = サーバの canRecruit）で入口を決める
     const canRecruit = me?.access ? Boolean(me.access.recruit)
       : roles.includes("hr") || roles.includes("owner") || roles.includes("manager") || roles.includes("recruiter");
-    if (!canRecruit) { location.replace("../home.html"); return null; }
     const canDecide = isAdmin || roles.includes("owner");
-
-    if (opts.active === "ceo" && !canDecide) { location.replace("/hr/"); return null; }
-
-    renderHeader(opts.active, me);
-    return { me, canRecruit, canDecide };
+    return { canRecruit, canDecide };
   }
 
-  window.HRLayout = { init, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, toggleBell, showGuide };
+  // 前回の身元（/api/me）を覚えていれば、待たずにヘッダーを出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す（API はサーバが権限を見るので、見えてはいけないものは返らない）
+  async function init(opts = {}) {
+    css();
+    if (!window.API || !API.isLoggedIn()) { location.href = "../index.html"; return null; }
+    const got = await API.enterWithMe((me) => allows(me, opts.active), {
+      leave: (me) => location.replace(permsOf(me).canRecruit ? "/hr/" : "../home.html"),
+      lost: () => { location.href = "../index.html"; },
+      // 書類のプレビュー（見られる URL を発行する）は、いまの権限を確かめてから
+      verify: Boolean(opts.verify),
+    });
+    if (!got) return null;
+    renderHeader(opts.active, got.me);
+    return { me: got.me, ...permsOf(got.me) };
+  }
+
+  // 覚えている身元で、この画面に入れるか（API.warm に渡す。init と同じ判定）
+  const allows = (me, active) => { const p = permsOf(me); return p.canRecruit && !(active === "ceo" && !p.canDecide); };
+
+  window.HRLayout = { init, allows, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, toggleBell, showGuide };
 })();

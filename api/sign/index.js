@@ -210,6 +210,23 @@ async function send(req, res, ctx, user, body) {
 
   const sb = admin();
 
+  // どの契約への署名依頼か（099）。1名あてのときだけ受け付ける（複数名に1つの契約は割り当てられない）。
+  // 他人の契約IDを渡せないよう、同じテナント・同じ本人の契約かをここで検証する
+  let contractId = null;
+  if (body?.contractId) {
+    if (ids.length !== 1) {
+      return json(res, 400, {
+        error: "contract_id_requires_single_employee",
+        hint: "契約を紐づけられるのは1名あての送信だけです",
+      });
+    }
+    const { data: k } = await sb.from("gw_contracts").select("id")
+      .eq("id", String(body.contractId).slice(0, 40)).eq("tenant_id", ctx.tenantId)
+      .eq("employee_id", ids[0]).maybeSingle();
+    if (!k) return json(res, 400, { error: "contract_not_found", hint: "この社員の契約が見つかりません" });
+    contractId = k.id;
+  }
+
   // 会社印。選ばれていれば、有効なものか確かめて画像を1回だけ読む
   let seal = null;
   if (body?.sealId) {
@@ -277,6 +294,7 @@ async function send(req, res, ctx, user, body) {
         doc_version: tpl.version,
         body_snapshot: text,
         merged_fields: one.fields,
+        contract_id: contractId,
         status: "sent",
         due_on: dueOn,
         pdf_path: path,

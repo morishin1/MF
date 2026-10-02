@@ -28,8 +28,9 @@ const detailIsCurrent = (seq, id) => seq === detailSeq && detailOpenId === id &&
 const esc = SalesLayout.esc;
 const { fmt, fmtDay, ago, statusPill } = SalesLayout;
 
-const INDUSTRIES = ["製造", "不動産", "士業", "医療", "小売", "その他"];
-const SERVICES = ["AI / DX", "システム開発", "PCレンタル", "ホームページ改善", "地方創生", "ENGER", "その他"];
+// 業種・提案サービス・都道府県の共通マスター（lib/sales-master.js）。画面側には同じ一覧を書かない。
+// 企業一覧は一覧APIの masters、リード一覧は企業詳細の masters で埋める（企業追加・編集・絞り込み・CSV取込が同じものを使う）
+let masters = { industries: [], services: [], prefectures: [] };
 
 let members = [];
 let myEmployeeId = null;
@@ -46,10 +47,10 @@ function closeModal() {
 }
 // 企業詳細から行う操作・一括操作は、中央モーダル（1つだけ）で開く。
 // 背景を押しても閉じるのはモーダルだけ。背後の企業詳細ドロワーは残す（/hr と同じ操作感）
-function openActionModal(html) {
+function openActionModal(html, width) {
   detailHost.beforeAction();
   el("action-root").innerHTML = `<div class="sl-modal-bg" onclick="closeAction()"></div>
-    <div class="sl-modal" role="dialog" aria-modal="true">${html}</div>`;
+    <div class="sl-modal" role="dialog" aria-modal="true"${width ? ` style="width:${width}px;"` : ""}>${html}</div>`;
 }
 function closeAction() { el("action-root").innerHTML = ""; }
 function errText(e, fallback) { return e.hint || e.detail || e.message || fallback; }
@@ -83,26 +84,36 @@ function companyForm(c = {}) {
     <label style="margin-top:10px;">企業サイトURL</label><input id="c-site" type="text" placeholder="https://example.co.jp" value="${esc(c.siteUrl || "")}">
     <label style="margin-top:10px;">問い合わせフォームURL</label><input id="c-form" type="text" value="${esc(c.formUrl || "")}">
     <label style="margin-top:10px;">業種</label>
-    <input id="c-industry" type="text" list="dl-industry" value="${esc(c.industry || "")}">
-    <datalist id="dl-industry">${INDUSTRIES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
-    <label style="margin-top:10px;">地域</label><input id="c-region" type="text" placeholder="東京都" value="${esc(c.region || "")}">
-    <label style="margin-top:10px;">商材（何を提案するか）</label>
-    <input id="c-service" type="text" list="dl-service" value="${esc(c.service || "")}">
-    <datalist id="dl-service">${SERVICES.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+    <select id="c-industry">${masterOptions(masters.industries, c.industry)}</select>
+    <label style="margin-top:10px;">地域（都道府県）</label>
+    <select id="c-region">${masterOptions(masters.prefectures, c.region)}</select>
+    <label style="margin-top:10px;">提案サービス（何を提案するか）</label>
+    <select id="c-service">${masterOptions(masters.services, c.service)}</select>
     <label style="margin-top:10px;">担当</label>
     <select id="c-owner"><option value="">（未定）</option>${memberOpts}</select>
     <label style="margin-top:10px;">所在地</label><input id="c-address" type="text" value="${esc(c.address || "")}">
     <label style="margin-top:10px;">電話番号</label><input id="c-phone" type="text" value="${esc(c.phone || "")}">
-    <label style="margin-top:10px;">企業規模</label><input id="c-size" type="text" placeholder="従業員50名" value="${esc(c.size || "")}">
+    <label style="margin-top:10px;">メールアドレス</label>
+    <input id="c-emails" type="text" inputmode="email" placeholder="info@example.jp, sales@example.jp" value="${esc((c.emails || []).join(", "))}">
+    <p class="sl-muted" style="margin:4px 0 0;">複数はカンマ区切り。保存時に小文字にして、重複を除きます</p>
     <label style="margin-top:10px;">メモ</label><textarea id="c-note" rows="3">${esc(c.note || "")}</textarea>`;
+}
+/**
+ * 共通マスターの select。いまの値がマスターに無い（昔の自由入力）ときは、その値も「（マスター外）」として残す
+ * （保存しても消えない。サーバーも変えていなければ通す）
+ */
+function masterOptions(list, cur) {
+  const extra = cur && !list.includes(cur) ? [[cur, `${cur}（マスター外）`]] : [];
+  return `<option value="">（未設定）</option>` + [...extra, ...list.map((v) => [v, v])]
+    .map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
 }
 function companyFields() {
   return {
     name: el("c-name").value.trim(), siteUrl: el("c-site").value.trim() || null,
-    formUrl: el("c-form").value.trim() || null, industry: el("c-industry").value.trim() || null,
-    region: el("c-region").value.trim() || null, service: el("c-service").value.trim() || null,
+    formUrl: el("c-form").value.trim() || null, industry: el("c-industry").value || null,
+    region: el("c-region").value || null, service: el("c-service").value || null,
     ownerId: el("c-owner").value || null, address: el("c-address").value.trim() || null,
-    phone: el("c-phone").value.trim() || null, size: el("c-size").value.trim() || null,
+    phone: el("c-phone").value.trim() || null, emails: el("c-emails").value,
     note: el("c-note").value.trim() || null,
   };
 }
@@ -122,6 +133,7 @@ async function openDetail(id) {
     const d = await API.getSalesCompany(id);
     if (!detailIsCurrent(seq, id)) return false;
     detail = d;
+    if (d.masters) masters = d.masters;
     renderDetail();
     return true;
   } catch (e) {
@@ -218,8 +230,8 @@ function renderDetail() {
           <div><dt>所在地</dt><dd>${esc(c.address || c.region || "—")}</dd></div>
           <div><dt>電話番号</dt><dd>${esc(c.phone || "—")}</dd></div>
           <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
-          <div><dt>企業規模</dt><dd>${esc(c.size || "—")}</dd></div>
-          <div><dt>商材</dt><dd>${esc(c.service || "—")}</dd></div>
+          <div><dt>メールアドレス</dt><dd>${(c.emails || []).length ? c.emails.map((e) => esc(e)).join("<br>") : "—"}</dd></div>
+          <div><dt>提案サービス</dt><dd>${esc(c.service || "—")}</dd></div>
           <div><dt>キャンペーン</dt><dd>${esc(c.campaignName || "—")}</dd></div>
           ${contactRows(c)}
           ${c.clickCount ? `<div><dt>初回クリック</dt><dd>${esc(fmt(c.firstClickAt))}</dd></div>
@@ -478,13 +490,15 @@ async function issueMeeting(btn) {
   } catch (e) { msg.textContent = errText(e, "日程調整を開始できませんでした"); }
 }
 
-// 予約照合用のメールを、企業の連絡先（contacts.email）として登録する。営業履歴は増やさない
+// 予約照合用のメールを、企業のメールアドレス（emails[]。基本情報の「メールアドレス」と同じ）に足す。
+// 形式チェック・小文字・重複除去はサーバー（lib/sales.js parseEmails）。営業履歴は増やさない
 async function saveMeetingEmail(btn) {
   const msg = el("mt-msg"); msg.textContent = "";
   const v = el("mt-email-input").value.trim();
   if (!v) { msg.textContent = "メールアドレスを入れてください"; return; }
   try {
-    await KPLayout.busy(btn, "登録中…", () => API.updateSalesCompany({ id: detail.company.id, contacts: { email: v } }));
+    const emails = [...(detail.company.emails || []), v];
+    await KPLayout.busy(btn, "登録中…", () => API.updateSalesCompany({ id: detail.company.id, emails }));
     meetingEmail = v.toLowerCase();
     await refreshMeeting();
   } catch (e) { msg.textContent = errText(e, "登録できませんでした"); }

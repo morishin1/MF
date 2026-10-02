@@ -79,22 +79,54 @@ function facetRows() {
   return [...out.values()];
 }
 
+// PostgREST の or()/and() の式（or=(…) の中身）を行に当てる。ネスト・not・like/ilike の * % に対応
+function splitTop(str) {
+  const out = [];
+  let depth = 0, cur = "";
+  for (const ch of str) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+const likeRe = (pat, flags) => new RegExp(`^${pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[%*]/g, ".*")}$`, flags);
+function logic(r, expr) {
+  const m = expr.match(/^(and|or)\((.*)\)$/s);
+  if (m) {
+    const parts = splitTop(m[2]);
+    return m[1] === "and" ? parts.every((p) => logic(r, p)) : parts.some((p) => logic(r, p));
+  }
+  const c = expr.match(/^([a-z_]+)\.(not\.)?([a-z]+)\.(.*)$/s);
+  if (!c) throw new Error(`mock: 読めない条件 ${expr}`);
+  const [, col, not, op, val] = c;
+  const x = r[col] ?? null;
+  let hit;
+  if (op === "is") hit = val === "null" ? x === null : String(x) === val;
+  else if (x === null) hit = false;
+  else if (op === "eq") hit = String(x) === val;
+  else if (op === "lt") hit = x < val;
+  else if (op === "lte") hit = x <= val;
+  else if (op === "gt") hit = x > val;
+  else if (op === "gte") hit = x >= val;
+  else if (op === "like") hit = likeRe(val, "").test(String(x));
+  else if (op === "ilike") hit = likeRe(val, "i").test(String(x));
+  else throw new Error(`mock: 知らない演算子 ${op}`);
+  return not ? (x === null ? false : !hit) : hit;
+}
+
 function matcher(f) {
   return (r) => f.every(([op, k, v]) => {
-    if (op === "or") {
-      // name.ilike.%x%,domain.ilike.%x% の形だけ
-      return v.split(",").some((part) => {
-        const [col, , pat] = part.split(".");
-        const needle = pat.replace(/%/g, "").toLowerCase();
-        return String(r[col] ?? "").toLowerCase().includes(needle);
-      });
-    }
+    if (op === "or") return logic(r, `or(${v})`);
     if (op === "gt") return r[k] !== null && r[k] !== undefined && r[k] > v;
     if (op === "eq") return r[k] === v;
     if (op === "in") return v.includes(r[k]);
     if (op === "is") return (r[k] ?? null) === v;
     if (op === "notnull") return r[k] !== null && r[k] !== undefined;
     if (op === "gte") return r[k] !== null && r[k] !== undefined && r[k] >= v;
+    // like 'x%'（先頭一致）だけ
+    if (op === "like") return String(r[k] ?? "").startsWith(v.replace(/%$/, "")) && r[k] !== null && r[k] !== undefined;
     return true;
   });
 }
@@ -103,6 +135,7 @@ function table(name) {
   const f = [];
   const orders = [];
   let range = null;
+  let cap = null;
   let withCount = false;
   let head = false;
   const rows = () => {
@@ -131,7 +164,9 @@ function table(name) {
     if (range && all.length && range[0] >= all.length) {
       return { data: null, count: null, error: { code: "PGRST103", message: "Requested range not satisfiable" } };
     }
-    const data = range ? all.slice(range[0], range[1] + 1) : all;
+    // 本物と同じく、limit(n) は先頭 n 件だけ（並べたあとで切る）
+    const cut = cap !== null ? all.slice(0, cap) : all;
+    const data = range ? cut.slice(range[0], range[1] + 1) : cut;
     return { data: head ? null : data.map(copy), count: withCount ? all.length : null, error: null };
   };
   const q = {
@@ -144,12 +179,19 @@ function table(name) {
     is(k, v) { f.push(["is", k, v]); return q; },
     not(k) { f.push(["notnull", k]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
+    like(k, v) { f.push(["like", k, v]); return q; },
     order(col, opts) { orders.push([col, opts?.ascending !== false, opts?.nullsFirst ?? (opts?.ascending === false)]); return q; },
-    limit() { return q; },
+    limit(n) { cap = n; return q; },
     maybeSingle: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     single: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     then: (fn) => Promise.resolve(result()).then(fn),
     insert(row) {
+      const failed = insertFail?.(name, [].concat(row));
+      if (failed) {
+        const r3 = { select: () => r3, single: () => Promise.resolve({ data: null, error: failed }),
+          then: (fn) => Promise.resolve({ data: null, error: failed }).then(fn) };
+        return r3;
+      }
       const made = [].concat(row).map((r) => ({
         id: r.id || uuid(), created_at: new Date().toISOString(),
         ...(name === "gw_sales_companies" ? { status: "untouched" } : {}),
@@ -205,8 +247,69 @@ function table(name) {
   return q;
 }
 
+// db/101 gw_sales_company_facet_counts と同じ集計（SQL を JS で書き直したもの。lib 側の絞り込みとは別に書く）
+const PREFS = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県",
+  "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県",
+  "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県",
+  "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
+let insertFail = null;          // (表名, 行[]) => error | null。登録の途中失敗を作る
+let rpcMissing = false;
+let rpcNoNone = false;           // true：101 の版の関数（地域に none を返さない）          // true：101 が未実行（関数が無い）
+const rpcCalls = [];
+function facetCountsRpc(a) {
+  const has = (s) => s !== null && s !== undefined && s !== "";
+  const base = (db.rows.gw_sales_companies || []).filter((c) => c.tenant_id === a.p_tenant
+    && (a.p_visibility === "all" || (a.p_visibility === "hidden") === Boolean(c.hidden_at))
+    && (!has(a.p_q) || ["name", "domain", "site_url"].some((k) => String(c[k] ?? "").toLowerCase().includes(a.p_q.toLowerCase()))))
+    .map((c) => ({
+      c, pref: PREFS.find((p) => String(c.region ?? "").startsWith(p)) || null,
+      m: {
+        status: !has(a.p_status) || (a.p_status === "ng" && Boolean(c.ng_reason)) || c.status === a.p_status,
+        owner: !has(a.p_owner) || (a.p_owner === "none" && !c.owner_id) || c.owner_id === a.p_owner,
+        service: !has(a.p_service) || c.service === a.p_service,
+        industry: !has(a.p_industry) || c.industry === a.p_industry,
+        region: !has(a.p_region) || (a.p_region === "none" ? !PREFS.some((p) => String(c.region ?? "").startsWith(p))
+          : String(c.region ?? "").startsWith(a.p_region)),
+        channel: !has(a.p_channel) || (a.p_channel === "none" && !c.current_contact_channel) || c.current_contact_channel === a.p_channel,
+        attacked: !has(a.p_attacked) || (a.p_attacked === "yes") === Boolean(c.last_sent_at),
+        clicked: !has(a.p_clicked) || (a.p_clicked === "yes") === ((c.click_count || 0) > 0),
+      },
+    }));
+  const but = (x, kind) => Object.entries(x.m).every(([k, v]) => k === kind || v);
+  const out = [{ kind: "total", value: null, n: base.filter((x) => but(x, null)).length }];
+  const group = (kind, key) => {
+    const m = new Map();
+    for (const x of base) {
+      if (!but(x, kind)) continue;
+      const v = key(x);
+      if (v === null || v === undefined) continue;
+      m.set(v, (m.get(v) || 0) + 1);
+    }
+    for (const [value, n] of m) out.push({ kind, value, n });
+  };
+  group("industry", (x) => x.c.industry ?? null);
+  group("region", (x) => x.pref || "none");   // db/108：都道府県が取れない企業は none（未設定）
+  group("service", (x) => x.c.service ?? null);
+  group("status", (x) => x.c.status);
+  const ng = base.filter((x) => but(x, "status") && x.c.ng_reason).length;
+  if (ng) out.push({ kind: "status", value: "ng", n: ng });
+  group("owner", (x) => x.c.owner_id || "none");
+  group("channel", (x) => x.c.current_contact_channel || "none");
+  group("attacked", (x) => (x.c.last_sent_at ? "yes" : "no"));
+  group("clicked", (x) => ((x.c.click_count || 0) > 0 ? "yes" : "no"));
+  return out;
+}
+function rpc(name, args) {
+  rpcCalls.push({ name, args });
+  if (rpcMissing || name !== "gw_sales_company_facet_counts") {
+    return Promise.resolve({ data: null, error: { code: "PGRST202", message: `Could not find the function public.${name}` } });
+  }
+  const rows = facetCountsRpc(args);
+  return Promise.resolve({ data: rpcNoNone ? rows.filter((r) => !(r.kind === "region" && r.value === "none")) : rows, error: null });
+}
+
 mock.module(atRoot("lib/supabase.js"), {
-  namedExports: { admin: () => ({ from: table }), userClient: () => ({ from: table }) },
+  namedExports: { admin: () => ({ from: table, rpc }), userClient: () => ({ from: table, rpc }) },
 });
 mock.module(atRoot("lib/auth.js"), {
   namedExports: { requireUser: async () => ({ id: "u-1" }), getMemberships: async () => [] },
@@ -258,6 +361,8 @@ const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
 const { default: exportApi } = await import(atRoot("api/sales/companies/export.js"));
+const { default: importApi } = await import(atRoot("api/sales/companies/import.js"));
+const { default: mastersApi } = await import(atRoot("api/sales/masters/index.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -293,6 +398,10 @@ const ok = async (name, fn) => {
 
 function setup() {
   who = SALES;
+  rpcMissing = false;
+  rpcNoNone = false;
+  insertFail = null;
+  rpcCalls.length = 0;
   logged.length = 0;
   notified.length = 0;
   slacked.length = 0;
@@ -866,6 +975,15 @@ await ok("TimeRex を使うとき、予約照合に使うメールが無い企�
   delete process.env.TIMEREX_SALES_MEETING_URL;
 });
 
+await ok("企業詳細は共通マスター（業種・提案サービス・47都道府県）を返す（リード一覧の基本情報の編集で使う）", async () => {
+  setup();
+  const c = await newCompany();
+  const d = await getOne(c.id);
+  assert.equal(d.statusCode, 200);
+  assert.equal(d.body.masters.prefectures.length, 47);
+  assert.ok(d.body.masters.industries.includes("製造") && d.body.masters.services.includes("AI / DX"));
+});
+
 await ok("予約照合用のメールをその場で登録：PATCH contacts は連絡先だけ直し、営業履歴は増やさない。詳細の matchEmails に出る", async () => {
   setup();
   const c = await newCompany();
@@ -1391,7 +1509,7 @@ async function seed(n) {
   const rows = [];
   for (let i = 1; i <= n; i++) {
     rows.push({ name: `会社${String(i).padStart(3, "0")}`, siteUrl: `https://c${i}.example.jp/`,
-      industry: ["IT", "製造", "医療"][i % 3], region: ["東京都", "大阪府"][i % 2], service: "AI / DX" });
+      industry: ["士業", "製造", "医療"][i % 3], region: ["東京都", "大阪府"][i % 2], service: "AI / DX" });
   }
   const r = await create({ companies: rows });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
@@ -1446,12 +1564,12 @@ await ok("ページング：DBから100社だけ取り、関連データ（ア�
 await ok("絞り込み：業種・地域・検索・担当・連絡手段。total は絞り込み後の件数", async () => {
   setup();
   await seed(30);
-  const it = await pageOf({ page: 1, industry: "IT" });
+  const it = await pageOf({ page: 1, industry: "士業" });
   assert.equal(it.body.total, 10);
-  assert.ok(it.body.companies.every((c) => c.industry === "IT"));
-  const both = await pageOf({ page: 1, industry: "IT", region: "東京都" });
+  assert.ok(it.body.companies.every((c) => c.industry === "士業"));
+  const both = await pageOf({ page: 1, industry: "士業", region: "東京都" });
   assert.equal(both.body.total, 5);
-  assert.ok(both.body.companies.every((c) => c.industry === "IT" && c.region === "東京都"));
+  assert.ok(both.body.companies.every((c) => c.industry === "士業" && c.region === "東京都"));
   assert.equal((await pageOf({ page: 1, q: "会社02" })).body.total, 10, "企業名で検索（会社020〜029）");
   assert.equal((await pageOf({ page: 1, q: "c7.example" })).body.total, 1, "ドメインでも探せる");
   assert.equal((await pageOf({ page: 1, q: "%,()" })).body.total, 30, "or() を壊す記号は外す");
@@ -1480,7 +1598,7 @@ await ok("並べ替え：企業名・業種・地域はDB全体で並べ、2ペ�
   assert.equal(d1[0].name, "会社150");
   const ind = [...(await pageOf({ page: 1, sort: "industry", order: "asc" })).body.companies,
     ...(await pageOf({ page: 2, sort: "industry", order: "asc" })).body.companies];
-  assert.deepEqual([...new Set(ind.map((c) => c.industry))], ["IT", "医療", "製造"]);
+  assert.deepEqual([...new Set(ind.map((c) => c.industry))], ["医療", "士業", "製造"]);
   assert.equal(new Set(ind.map((c) => c.id)).size, 150, "同じ値が続いても id で順番を固定するので、ページ間で重複しない");
   const reg = (await pageOf({ page: 1, sort: "region", order: "desc" })).body.companies;
   assert.equal(reg[0].region, "東京都");
@@ -1565,13 +1683,514 @@ await ok("並べ替え：NEXT は画面の実効NEXTの順。未対応クリッ�
   assert.ok([cs[4].id, cs[5].id].includes(desc[0].id), "降順は逆（やること無しが先）");
 });
 
-await ok("絞り込みの候補（facets=1）：業種・地域・商材を件数つきで返す", async () => {
+await ok("絞り込みの候補（facets=1）：業種・地域・商材を件数つきで返す。マスターも返す", async () => {
   setup();
   await seed(6);
   const r = await pageOf({ page: 1, facets: 1 });
-  assert.deepEqual(r.body.facets.industry.map((x) => [x.value, x.n]), [["IT", 2], ["医療", 2], ["製造", 2]]);
-  assert.deepEqual(r.body.facets.region.map((x) => x.value), ["大阪府", "東京都"]);
+  const byValue = (xs) => Object.fromEntries(xs.map((x) => [x.value, x.n]));
+  assert.deepEqual(byValue(r.body.facets.industry), { 士業: 2, 医療: 2, 製造: 2 });
+  assert.deepEqual(byValue(r.body.facets.region), { 大阪府: 3, 東京都: 3 });
+  assert.equal(r.body.facets.dynamic, true);
+  assert.equal(r.body.facets.total, 6);
   assert.equal((await pageOf({ page: 1 })).body.facets, undefined, "頼んだときだけ");
+  assert.deepEqual(r.body.masters.industries, ["製造", "不動産", "士業", "医療", "小売", "その他"]);
+  assert.equal(r.body.masters.prefectures.length, 47);
+  assert.ok(r.body.masters.services.includes("AI / DX"));
+  assert.deepEqual(r.body.csvColumns.map((c) => c.label),
+    ["企業名", "企業サイトURL", "問い合わせフォームURL", "業種", "都道府県", "所在地", "提案サービス", "電話番号", "メールアドレス", "企業規模", "メモ"]);
+});
+
+// 要件 2〜6・11・13：地域は都道府県にまとめる／件数はいまの条件に連動／並べ替えでは変わらない／総件数・ページャーと一致
+await ok("件数の連動：業種を変えると鹿児島県の件数も変わる。昔の「鹿児島県鹿屋市」は鹿児島県に数える", async () => {
+  setup();
+  // 鹿児島県：製造4（うち2社は昔の「鹿児島県鹿屋市」「鹿児島県 霧島市」）・医療3 ／ 東京都：製造2
+  const rows = [];
+  for (let i = 1; i <= 9; i++) {
+    rows.push({ name: `鹿${i}`, siteUrl: `https://k${i}.example.jp/`, industry: i <= 6 ? "製造" : "医療",
+      region: i <= 4 ? "鹿児島県" : i <= 6 ? "東京都" : "鹿児島県", service: "AI / DX" });
+  }
+  assert.equal((await create({ companies: rows })).statusCode, 200);
+  // 昔のデータ（API を通さずに入った市区町村つき）
+  const cs = db.rows.gw_sales_companies;
+  cs[0].region = "鹿児島県鹿屋市";
+  cs[1].region = "鹿児島県霧島市";
+  const f0 = (await pageOf({ page: 1, facets: 1 })).body;
+  const n = (xs, v) => xs.find((x) => x.value === v)?.n ?? 0;
+  assert.equal(n(f0.facets.region, "鹿児島県"), 7, "鹿児島県鹿屋市・霧島市も鹿児島県に合算");
+  assert.ok(!f0.facets.region.some((x) => x.value.includes("市")), "市区町村は候補に出ない");
+  const kago = (await pageOf({ page: 1, facets: 1, region: "鹿児島県" })).body;
+  assert.equal(kago.total, 7, "鹿児島県で絞ると、昔の市区町村つきも入る");
+  assert.ok(kago.companies.every((c) => c.region === "鹿児島県"), "一覧の地域は都道府県だけ表示");
+  assert.equal(kago.facets.total, kago.total, "件数の総数と一覧の総件数が一致");
+  assert.equal(n(kago.facets.region, "鹿児島県"), 7, "地域の件数は地域以外の条件で数える（選んだ地域の数が0にならない）");
+
+  const mfg = (await pageOf({ page: 1, facets: 1, industry: "製造" })).body;
+  assert.equal(n(mfg.facets.region, "鹿児島県"), 4, "業種＝製造にすると鹿児島県は4");
+  assert.equal(n(mfg.facets.region, "東京都"), 2);
+  assert.equal(n(mfg.facets.industry, "医療"), 3, "業種自身の件数は業種以外の条件で（切り替え先の件数が見える）");
+  assert.equal(mfg.facets.total, mfg.total);
+  assert.equal(mfg.total, 6);
+
+  const both = (await pageOf({ page: 1, facets: 1, industry: "製造", region: "鹿児島県" })).body;
+  assert.equal(both.total, 4);
+  assert.equal(both.facets.total, 4);
+  assert.equal(n(both.facets.industry, "医療"), 3, "鹿児島県の中の医療");
+
+  const q = (await pageOf({ page: 1, facets: 1, q: "鹿1" })).body;
+  assert.equal(q.total, 1, "検索語も件数に効く");
+  assert.equal(n(q.facets.region, "鹿児島県"), 1);
+
+  // 担当・連絡手段・アタック・クリック・状態も、ほかの条件に連動
+  cs[2].owner_id = null;
+  cs[3].current_contact_channel = "email";
+  const own = (await pageOf({ page: 1, facets: 1, industry: "医療" })).body.facets;
+  assert.equal(n(own.owner, "emp-s1"), 3);
+  assert.equal(n(own.channel, "none"), 3);
+  assert.equal(n(own.attacked, "no"), 3);
+  assert.equal(n(own.clicked, "no"), 3);
+  assert.equal(n(own.status, "untouched"), 3);
+  const me = (await pageOf({ page: 1, facets: 1, owner: "me" })).body;
+  assert.equal(me.total, 8);
+  assert.equal(me.facets.total, 8);
+  assert.equal(rpcCalls.at(-1).args.p_owner, "emp-s1", "「自分」は社員IDで数える");
+  assert.equal(rpcCalls.at(-1).args.p_tenant, "t1");
+});
+
+await ok("件数の連動：並べ替えでは件数が変わらない。100社を超えてもページングはサーバー側のまま", async () => {
+  setup();
+  await seed(250);
+  const a = (await pageOf({ page: 1, facets: 1, industry: "製造" })).body;
+  const b = (await pageOf({ page: 2, facets: 1, industry: "製造", sort: "name", order: "desc" })).body;
+  assert.deepEqual(b.facets, a.facets, "並べ替え・ページ送りで件数は同じ");
+  assert.equal(a.total, 84);
+  assert.equal(a.facets.total, 84, "件数の総数＝一覧の総件数（ページャー）");
+  assert.equal(a.companies.length, 84);
+  const all = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.equal(all.companies.length, 100, "1ページ100社");
+  assert.equal(all.totalPages, 3);
+  assert.equal(all.facets.total, 250);
+  const co = qlog.filter((x) => x.name === "gw_sales_companies" && x.range);
+  assert.ok(co.every((x) => x.range[1] - x.range[0] + 1 <= 100), "企業は100件ずつしか取らない");
+  assert.ok(!rpcCalls.some((c) => "p_sort" in c.args || "p_order" in c.args), "件数に並べ替えを渡さない");
+});
+
+await ok("件数：101 が未実行でも一覧は動く（以前の件数。地域は都道府県にまとめる）", async () => {
+  setup();
+  await seed(6);
+  db.rows.gw_sales_companies[0].region = "大阪府大阪市";
+  rpcMissing = true;
+  const r = await pageOf({ page: 1, facets: 1 });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.facets.dynamic, false);
+  assert.deepEqual(Object.fromEntries(r.body.facets.region.map((x) => [x.value, x.n])), { 大阪府: 3, 東京都: 3 });
+  assert.equal(r.body.total, 6);
+});
+
+console.log("\n=== 共通マスター・都道府県・CSV取込（/api/sales/companies/import） ===\n");
+
+const csvImport = (body) => call(importApi, { method: "POST", url: "/api/sales/companies/import", body });
+
+await ok("マスター：企業追加で「鹿児島県」を選んで登録できる。業種・提案サービス・地域はマスターの値だけ", async () => {
+  setup();
+  const a = await create({ name: "鹿児島の会社", siteUrl: "https://kago.example.jp", industry: "製造", region: "鹿児島県", service: "AI / DX" });
+  assert.equal(a.statusCode, 200, JSON.stringify(a.body));
+  assert.equal(db.rows.gw_sales_companies[0].region, "鹿児島県");
+  const l = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.deepEqual(l.facets.region, [{ value: "鹿児島県", n: 1 }], "一覧の地域の候補に鹿児島県が出る");
+  const bad = async (body, code) => {
+    const r = await create({ name: "x", ...body });
+    assert.equal(r.statusCode, 400, JSON.stringify(body));
+    assert.equal(r.body.error, code);
+  };
+  await bad({ industry: "IT" }, "bad_industry");
+  await bad({ service: "なんでも" }, "bad_service");
+  await bad({ region: "鹿屋市" }, "bad_region");
+  await bad({ region: "日本" }, "bad_region");
+  assert.equal(db.rows.gw_sales_companies.length, 1, "エラーの会社は入らない");
+});
+
+await ok("マスター：「鹿児島県鹿屋市」は鹿児島県にする（所在地が空なら元の文字列を所在地へ）。「東京」「大阪市北区」も都道府県に", async () => {
+  setup();
+  const cases = [
+    ["鹿児島県鹿屋市", "鹿児島県", "鹿児島県鹿屋市"], ["東京都渋谷区", "東京都", "東京都渋谷区"], ["北海道札幌市", "北海道", "北海道札幌市"],
+    ["京都府京都市", "京都府", "京都府京都市"], ["大阪府大阪市", "大阪府", "大阪府大阪市"], ["鹿児島", "鹿児島県", null], ["東京", "東京都", null],
+  ];
+  for (const [i, [input, pref, addr]] of cases.entries()) {
+    const r = await create({ name: `会社${i}`, region: input });
+    assert.equal(r.statusCode, 200, input);
+    const c = db.rows.gw_sales_companies.at(-1);
+    assert.equal(c.region, pref, input);
+    assert.equal(c.address ?? null, addr, input);
+  }
+  // 所在地を入れていれば所在地は変えない
+  await create({ name: "所在地あり", region: "鹿児島県鹿屋市", address: "鹿児島県鹿屋市○○1-2-3" });
+  assert.equal(db.rows.gw_sales_companies.at(-1).address, "鹿児島県鹿屋市○○1-2-3");
+});
+
+await ok("マスター：編集。昔の値（マスター外・市区町村つき）はそのままなら保存できる。新しくマスター外にはできない", async () => {
+  setup();
+  const c = await newCompany();
+  const row = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  row.industry = "IT"; row.region = "鹿児島県鹿屋市"; row.service = "旧商材";
+  const same = await patchCo({ id: c.id, name: "名前だけ変更", industry: "IT", region: "鹿児島県鹿屋市", service: "旧商材" });
+  assert.equal(same.statusCode, 200, JSON.stringify(same.body));
+  assert.equal(row.region, "鹿児島県鹿屋市", "DB を勝手に書き換えない");
+  assert.equal((await patchCo({ id: c.id, industry: "小売業" })).body.error, "bad_industry");
+  assert.equal((await patchCo({ id: c.id, service: "新商材" })).body.error, "bad_service");
+  assert.equal((await patchCo({ id: c.id, region: "どこか" })).body.error, "bad_region");
+  const fix = await patchCo({ id: c.id, region: "鹿児島県" });
+  assert.equal(fix.statusCode, 200);
+  assert.equal(row.region, "鹿児島県");
+  // 一覧の地域列は都道府県だけ
+  row.region = "東京都渋谷区";
+  assert.equal((await pageOf({ page: 1 })).body.companies[0].region, "東京都");
+  // 一括の商材変更もマスターだけ
+  assert.equal((await bulk({ ids: [c.id], action: "change_service", service: "新商材" })).body.error, "bad_service");
+  assert.equal((await bulk({ ids: [c.id], action: "change_service", service: "PCレンタル" })).statusCode, 200);
+});
+
+const CSV_ROWS = [
+  { row: 2, name: "株式会社A", siteUrl: "https://www.a.example.jp/", industry: "製造", region: "鹿児島県鹿屋市", service: "AI / DX" },
+  { row: 3, name: "株式会社B", siteUrl: "http://b.example.jp", industry: "不動産", region: "東京都", service: "PCレンタル" },
+  { row: 4, name: "株式会社C", siteUrl: "c.example.jp", industry: "未知の業種", region: "千葉県", service: "AI / DX" },
+  { row: 5, name: "株式会社D", siteUrl: "https://d.example.jp", industry: "医療", region: "千葉", service: "謎の商材" },
+  { row: 6, name: "株式会社A（重複）", siteUrl: "https://a.example.jp/contact", industry: "製造" },
+  { row: 7, name: "", siteUrl: "https://e.example.jp" },
+  { row: 8, name: "株式会社F", region: "どこか" },
+  { row: 9, name: "株式会社G", siteUrl: "https://g.example.jp", region: "鹿児島県", address: "鹿児島県霧島市1-1", formUrl: "https://g.example.jp/form",
+    phone: "099-000-0000", size: "10名", note: "メモ" },
+];
+
+await ok("CSV取込：確認（プレビュー）は DB に書かない。行ごとに 登録できる／重複／要修正 と理由", async () => {
+  setup();
+  await newCompany({ name: "既存B", siteUrl: "https://b.example.jp/" });
+  const before = db.rows.gw_sales_companies.length;
+  const r = await csvImport({ fileName: "list.csv", rows: CSV_ROWS, commit: false });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_sales_companies.length, before, "確認では登録しない");
+  const st = Object.fromEntries(r.body.results.map((x) => [x.row, x.status]));
+  assert.deepEqual(st, { 2: "ok", 3: "duplicate", 4: "error", 5: "error", 6: "duplicate", 7: "error", 8: "error", 9: "ok" });
+  assert.deepEqual(r.body.counts, { read: 8, ok: 2, duplicate: 2, error: 4 });
+  const by = Object.fromEntries(r.body.results.map((x) => [x.row, x]));
+  assert.equal(by[2].region, "鹿児島県", "鹿児島県鹿屋市 → 鹿児島県");
+  assert.equal(by[2].domain, "a.example.jp", "https://www. を外したドメイン");
+  assert.match(by[3].reasons[0], /登録済みのためスキップ（既存B）/);
+  assert.match(by[4].reasons[0], /業種「未知の業種」はマスターにありません/);
+  assert.ok(by[5].reasons.some((x) => /提案サービス「謎の商材」/.test(x)), "商材の間違い");
+  assert.equal(by[5].region, "千葉県", "「千葉」も千葉県にする");
+  assert.match(by[6].reasons[0], /CSV内で重複（2行目と同じサイト）/);
+  assert.match(by[7].reasons[0], /企業名がありません/);
+  assert.match(by[8].reasons[0], /都道府県「どこか」を判定できません/);
+  const log = logged.find((l) => l.action === "sales.company_csv_preview");
+  assert.deepEqual(log.detail, { fileName: "list.csv", read: 8, ok: 2, duplicate: 2, error: 4 });
+  assert.equal(log.actorId, "u-1", "実行者");
+});
+
+await ok("CSV取込：登録。担当は取り込んだ人、地域は都道府県、所在地は補完。監査ログに件数。もう一度送っても二重にならない", async () => {
+  setup();
+  await newCompany({ name: "既存B", siteUrl: "https://b.example.jp/" });
+  const pre = (await csvImport({ fileName: "list.csv", rows: CSV_ROWS, commit: false })).body;
+  const okRows = CSV_ROWS.filter((x) => pre.results.find((r) => r.row === x.row).status === "ok");
+  const r = await csvImport({ fileName: "list.csv", rows: okRows, commit: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.counts, { read: 2, created: 2, duplicate: 0, error: 0 });
+  const a = db.rows.gw_sales_companies.find((c) => c.domain === "a.example.jp");
+  assert.equal(a.region, "鹿児島県");
+  assert.equal(a.address, "鹿児島県鹿屋市", "所在地が空なら元の文字列を所在地へ");
+  assert.equal(a.owner_id, "emp-s1", "担当は取り込んだ人");
+  assert.equal(a.tenant_id, "t1");
+  assert.equal(a.industry, "製造");
+  const g = db.rows.gw_sales_companies.find((c) => c.domain === "g.example.jp");
+  assert.equal(g.address, "鹿児島県霧島市1-1");
+  assert.equal(g.form_url, "https://g.example.jp/form");
+  assert.equal(g.phone, "099-000-0000");
+  assert.equal(g.size, "10名");
+  assert.equal(g.note, "メモ");
+  const log = logged.find((l) => l.action === "sales.company_csv_import");
+  assert.deepEqual(log.detail, { fileName: "list.csv", read: 2, created: 2, duplicate: 0, error: 0, firstRow: 2, lastRow: 9 });
+  assert.equal(log.actorId, "u-1", "実行者");
+  assert.ok(log.tenantId === "t1");
+  // 同じ行をもう一度（別の人が同時に入れた・二度押し）→ 重複としてスキップ。上書きしない
+  a.name = "手で直した名前";
+  const again = await csvImport({ fileName: "list.csv", rows: okRows, commit: true });
+  assert.deepEqual(again.body.counts, { read: 2, created: 0, duplicate: 2, error: 0 });
+  assert.equal(a.name, "手で直した名前", "既存を上書きしない");
+  assert.equal(db.rows.gw_sales_companies.length, 3);
+});
+
+await ok("CSV取込：登録後、一覧の件数と絞り込みの件数に反映される", async () => {
+  setup();
+  const before = (await pageOf({ page: 1, facets: 1, region: "鹿児島県" })).body;
+  assert.equal(before.total, 0);
+  await csvImport({ fileName: "k.csv", rows: CSV_ROWS.filter((x) => [2, 9].includes(x.row)), commit: true });
+  const after = (await pageOf({ page: 1, facets: 1, region: "鹿児島県" })).body;
+  assert.equal(after.total, 2);
+  assert.equal(after.facets.total, 2);
+  assert.equal(after.facets.region.find((x) => x.value === "鹿児島県").n, 2);
+  assert.equal(after.facets.industry.find((x) => x.value === "製造").n, 1);
+});
+
+await ok("CSV取込：途中で失敗した行が分かる（まとめて入らなければ1行ずつ入れ直す）。エラー行は入らない", async () => {
+  setup();
+  const rows = [
+    { row: 2, name: "良い会社1", siteUrl: "https://ok1.example.jp" },
+    { row: 3, name: "壊れる会社", siteUrl: "https://bad.example.jp" },
+    { row: 4, name: "良い会社2", siteUrl: "https://ok2.example.jp" },
+    { row: 5, name: "同時に入った会社", siteUrl: "https://race.example.jp" },
+  ];
+  insertFail = (name, rs) => {
+    if (name !== "gw_sales_companies") return null;
+    if (rs.some((x) => x.domain === "bad.example.jp")) return { code: "23514", message: "check violation" };
+    if (rs.some((x) => x.domain === "race.example.jp")) return { code: "23505", message: "duplicate key" };
+    return null;
+  };
+  const r = await csvImport({ fileName: "p.csv", rows, commit: true });
+  assert.equal(r.statusCode, 200);
+  const st = Object.fromEntries(r.body.results.map((x) => [x.row, x.status]));
+  assert.deepEqual(st, { 2: "created", 3: "error", 4: "created", 5: "duplicate" });
+  assert.match(r.body.results[1].reasons[0], /登録できませんでした/);
+  assert.deepEqual(r.body.counts, { read: 4, created: 2, duplicate: 1, error: 1 });
+  assert.deepEqual(db.rows.gw_sales_companies.map((c) => c.domain).sort(), ["ok1.example.jp", "ok2.example.jp"]);
+  const log = logged.find((l) => l.action === "sales.company_csv_import");
+  assert.equal(log.detail.created, 2);
+  assert.equal(log.detail.error, 1);
+});
+
+await ok("CSV取込：権限・件数の上限・空。別テナントの同じドメインは重複にしない", async () => {
+  setup();
+  db.rows.gw_sales_companies.push({ id: "00000000-0000-4000-8000-0000000000e1", tenant_id: "t2", name: "他テナント",
+    domain: "a.example.jp", status: "untouched", click_count: 0 });
+  const r = await csvImport({ fileName: "x.csv", rows: [CSV_ROWS[0]], commit: false });
+  assert.equal(r.body.results[0].status, "ok", "他テナントの会社とは比べない");
+  const many = Array.from({ length: 101 }, (_, i) => ({ row: i + 2, name: `会社${i}` }));
+  assert.equal((await csvImport({ fileName: "x.csv", rows: many, commit: true })).statusCode, 400, "登録は1回100行まで");
+  assert.equal((await csvImport({ fileName: "x.csv", rows: many, commit: false })).statusCode, 200, "確認は5,000行まで");
+  const huge = Array.from({ length: 5001 }, (_, i) => ({ row: i + 2, name: `会社${i}` }));
+  assert.equal((await csvImport({ fileName: "x.csv", rows: huge, commit: false })).statusCode, 400);
+  assert.equal((await csvImport({ fileName: "x.csv", rows: [], commit: false })).statusCode, 400);
+  assert.equal((await call(importApi, { method: "GET", url: "/api/sales/companies/import" })).statusCode, 405);
+  who = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["staff"], employee: { id: "emp-x" } };
+  assert.equal((await csvImport({ fileName: "x.csv", rows: [CSV_ROWS[0]], commit: true })).statusCode, 403);
+  assert.equal(db.rows.gw_sales_companies.length, 1);
+});
+
+await ok("旧データ：マスター外の業種（イベント企画・制作・運営）は件数に出て絞り込める。新規・編集・CSVでは作れない", async () => {
+  setup();
+  const LEGACY = "イベント企画・制作・運営";
+  await seed(3);
+  const c = await newCompany({ name: "株式会社イベントワークス", siteUrl: "https://event-works.jp" });
+  const row = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  row.industry = LEGACY; row.region = "鹿児島県鹿屋市";   // 以前に自由入力で入ったデータ
+  const all = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.ok(all.companies.some((x) => x.id === c.id && x.industry === LEGACY && x.region === "鹿児島県"), "一覧に出る（地域は都道府県）");
+  assert.deepEqual(all.facets.industry.find((x) => x.value === LEGACY), { value: LEGACY, n: 1 }, "業種の件数に旧データも出る");
+  assert.ok(!all.facets.region.some((x) => x.value.includes("鹿屋市")), "地域は都道府県だけ");
+  const only = (await pageOf({ page: 1, facets: 1, industry: LEGACY })).body;
+  assert.deepEqual(only.companies.map((x) => x.id), [c.id], "選ぶとその企業だけ");
+  assert.equal(only.facets.total, 1);
+  assert.equal((await create({ name: "新規", industry: LEGACY })).body.error, "bad_industry", "新規では作れない");
+  const other = db.rows.gw_sales_companies.find((x) => x.id !== c.id);
+  assert.equal((await patchCo({ id: other.id, industry: LEGACY })).body.error, "bad_industry", "別の会社を旧データに変えられない");
+  const csv = await csvImport({ fileName: "x.csv", rows: [{ row: 2, name: "CSV社", industry: LEGACY }], commit: false });
+  assert.equal(csv.body.results[0].status, "error", "CSVでも要修正");
+});
+
+console.log("\n=== 分類マスター（db/108）・複数メールアドレス・地域「未設定」・アタック画面の絞り込み ===\n");
+
+const masterGet = () => call(mastersApi, { method: "GET", url: "/api/sales/masters" });
+const masterAdd = (body) => call(mastersApi, { method: "POST", url: "/api/sales/masters", body });
+const masterPatch = (body) => call(mastersApi, { method: "PATCH", url: "/api/sales/masters", body });
+
+await ok("分類マスター：初回は既定値を入れる。追加・重複・名前変更（企業もそろう）・非表示（新規では選べない・旧データとして絞れる）・再表示", async () => {
+  setup();
+  db.rows.gw_sales_master_options = [];
+  const g = await masterGet();
+  assert.equal(g.statusCode, 200, JSON.stringify(g.body));
+  assert.deepEqual(g.body.options.filter((o) => o.kind === "industry").map((o) => o.label), ["製造", "不動産", "士業", "医療", "小売", "その他"]);
+  assert.equal(g.body.options.filter((o) => o.kind === "service").length, 7);
+  assert.ok(db.rows.gw_sales_master_options.every((o) => o.tenant_id === "t1"));
+  assert.equal((await masterGet()).body.options.length, 13, "2回目は増やさない");
+
+  // 追加 → 企業追加で選べる
+  const add = await masterAdd({ kind: "service", label: "  Web広告  " });
+  assert.equal(add.statusCode, 200, JSON.stringify(add.body));
+  assert.equal(add.body.option.label, "Web広告");
+  assert.equal((await masterAdd({ kind: "service", label: "Web広告" })).statusCode, 409, "同じ名前は足せない");
+  assert.equal((await masterAdd({ kind: "nope", label: "x" })).statusCode, 400);
+  assert.equal((await masterAdd({ kind: "service", label: " " })).statusCode, 400);
+  const c = await newCompany({ service: "Web広告", industry: "製造" });
+  assert.equal(c.service, "Web広告");
+  const list = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.ok(list.masters.services.includes("Web広告"), "一覧の選択肢にも出る");
+
+  // 名前変更：その名前の企業もそろう
+  const opt = db.rows.gw_sales_master_options.find((o) => o.label === "Web広告");
+  const rn = await masterPatch({ id: opt.id, label: "Web広告運用" });
+  assert.equal(rn.statusCode, 200, JSON.stringify(rn.body));
+  assert.equal(rn.body.companies, 1);
+  assert.equal(db.rows.gw_sales_companies.find((x) => x.id === c.id).service, "Web広告運用");
+  const mfg = db.rows.gw_sales_master_options.find((o) => o.label === "製造");
+  assert.equal((await masterPatch({ id: mfg.id, label: "不動産" })).statusCode, 409, "既にある名前には変えられない");
+  assert.ok(logged.some((l) => l.action === "sales.master_rename" && l.detail.from === "Web広告" && l.detail.companies === 1));
+
+  // 非表示：企業のデータは変えない。新規では選べない。一覧の絞り込みでは旧データとして出る
+  assert.equal((await masterPatch({ id: mfg.id, archived: true })).statusCode, 200);
+  assert.equal(db.rows.gw_sales_companies.find((x) => x.id === c.id).industry, "製造", "既存企業はそのまま");
+  assert.equal((await create({ name: "新規", industry: "製造" })).body.error, "bad_industry", "非表示の値は新規で選べない");
+  const after = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.ok(!after.masters.industries.includes("製造"), "表示中の選択肢から消える");
+  assert.deepEqual(after.facets.industry.find((x) => x.value === "製造"), { value: "製造", n: 1 }, "件数には旧データとして出る");
+  assert.equal((await pageOf({ page: 1, industry: "製造" })).body.total, 1, "旧データでも絞り込める");
+  assert.equal((await patchCo({ id: c.id, industry: "製造", name: "名前だけ変更" })).statusCode, 200, "変えていなければ編集は通る");
+  assert.equal((await masterAdd({ kind: "industry", label: "製造" })).body.hint, "「製造」は非表示にしてあります。再表示してください");
+  assert.equal((await masterPatch({ id: mfg.id, archived: false })).statusCode, 200);
+  assert.equal((await create({ name: "新規2", industry: "製造" })).statusCode, 200, "再表示で選べる");
+  assert.equal((await masterGet()).body.options.find((o) => o.id === mfg.id).used, 2, "使っている企業数");
+
+  // 営業でない人は触れない
+  who = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["staff"], employee: { id: "emp-x" } };
+  assert.equal((await masterGet()).statusCode, 403);
+  assert.equal((await masterAdd({ kind: "industry", label: "x" })).statusCode, 403);
+});
+
+await ok("分類マスター：CSV取込・一括の提案サービス変更もテナントの選択肢でチェックする", async () => {
+  setup();
+  db.rows.gw_sales_master_options = [];
+  await masterGet();
+  await masterAdd({ kind: "industry", label: "イベント" });
+  const svc = db.rows.gw_sales_master_options.find((o) => o.label === "ENGER");
+  await masterPatch({ id: svc.id, archived: true });
+  const r = await csvImport({ fileName: "m.csv", commit: false, rows: [
+    { row: 2, name: "A", industry: "イベント" }, { row: 3, name: "B", service: "ENGER" }] });
+  assert.deepEqual(r.body.results.map((x) => x.status), ["ok", "error"]);
+  assert.match(r.body.results[1].reasons[0], /提案サービス「ENGER」はマスターにありません/);
+  const c = await newCompany();
+  assert.equal((await bulk({ ids: [c.id], action: "change_service", service: "ENGER" })).body.error, "bad_service");
+});
+
+await ok("メールアドレス：カンマ区切りで複数。前後空白・小文字・空・重複を整える。形式が違えば登録しない", async () => {
+  setup();
+  const r = await create({ name: "メール社", emails: " Info@Example.jp, sales@example.jp ,, info@example.jp，support@example.jp" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.company.emails, ["info@example.jp", "sales@example.jp", "support@example.jp"]);
+  const row = db.rows.gw_sales_companies.at(-1);
+  assert.deepEqual(row.emails, ["info@example.jp", "sales@example.jp", "support@example.jp"]);
+  assert.equal(row.size, undefined, "企業規模に入れない");
+  const bad = await create({ name: "x", emails: "info@example.jp, not-an-email, a@b" });
+  assert.equal(bad.statusCode, 400);
+  assert.equal(bad.body.error, "bad_email");
+  assert.deepEqual(bad.body.invalid, ["not-an-email", "a@b"]);
+  assert.equal(db.rows.gw_sales_companies.length, 1, "不正なら登録しない");
+  // 編集：配列でも送れる。空にもできる。企業規模は残る
+  row.size = "従業員50名";
+  assert.equal((await patchCo({ id: row.id, emails: ["NEW@example.jp"] })).statusCode, 200);
+  assert.deepEqual(row.emails, ["new@example.jp"]);
+  assert.equal((await patchCo({ id: row.id, emails: "" })).statusCode, 200);
+  assert.deepEqual(row.emails, []);
+  assert.equal(row.size, "従業員50名", "既存の企業規模は消さない");
+  assert.equal((await patchCo({ id: row.id, emails: Array.from({ length: 21 }, (_, i) => `u${i}@example.jp`) })).body.error, "bad_email");
+  // 詳細で返す
+  row.emails = ["a@example.jp", "b@example.jp"];
+  assert.deepEqual((await getOne(row.id)).body.company.emails, ["a@example.jp", "b@example.jp"]);
+  // CSV：同じ正規化・チェック
+  const csv = await csvImport({ fileName: "e.csv", commit: true, rows: [
+    { row: 2, name: "CSVメール社", siteUrl: "https://mail.example.jp", emails: "A@mail.example.jp,b@mail.example.jp" },
+    { row: 3, name: "CSV不正", emails: "x@y" }] });
+  assert.deepEqual(csv.body.results.map((x) => x.status), ["created", "error"]);
+  assert.match(csv.body.results[1].reasons[0], /メールアドレスが正しくありません：x@y/);
+  assert.deepEqual(db.rows.gw_sales_companies.find((x) => x.name === "CSVメール社").emails, ["a@mail.example.jp", "b@mail.example.jp"]);
+});
+
+await ok("地域「未設定」：null・空・都道府県で始まらない値を未設定にまとめる。47都道府県＋未設定＝総件数。未設定で絞れる", async () => {
+  setup();
+  await seed(6);
+  const cs = db.rows.gw_sales_companies;
+  cs[0].region = null; cs[1].region = ""; cs[2].region = "鹿屋市"; cs[3].region = "鹿児島県鹿屋市";
+  const all = (await pageOf({ page: 1, facets: 1 })).body;
+  const sum = all.facets.region.reduce((a, x) => a + x.n, 0);
+  assert.equal(sum, all.total, "地域の件数の合計＝総件数");
+  assert.deepEqual(all.facets.region.find((x) => x.value === "none"), { value: "none", n: 3 });
+  assert.equal(all.facets.region.find((x) => x.value === "鹿児島県").n, 1);
+  const none = (await pageOf({ page: 1, facets: 1, region: "none" })).body;
+  assert.equal(none.total, 3, "未設定で絞れる（null・空・鹿屋市）");
+  assert.deepEqual(none.companies.map((c) => c.region), [null, null, null], "一覧の地域は空（画面で「未設定」）");
+  assert.equal(none.facets.total, 3);
+  // 業種と組み合わせても合計が合う
+  const ind = (await pageOf({ page: 1, facets: 1, industry: "製造" })).body;
+  assert.equal(ind.facets.region.reduce((a, x) => a + x.n, 0), ind.total);
+  // 101 の版の関数（none を返さない）でも、全件－都道府県で未設定を出す
+  rpcNoNone = true;
+  const old = (await pageOf({ page: 1, facets: 1 })).body;
+  assert.deepEqual(old.facets.region.find((x) => x.value === "none"), { value: "none", n: 3 });
+  rpcNoNone = false;
+  assert.equal((await pageOf({ page: 1, region: "どこか" })).statusCode, 400);
+  // 企業追加で地域を未設定にできる
+  assert.equal((await create({ name: "地域なし", region: "" })).statusCode, 200);
+  assert.equal(db.rows.gw_sales_companies.at(-1).region ?? null, null);
+});
+
+await ok("アタック画面（queue=attack）：営業禁止・30日以内・期限前・対象外の状態を除く。地域・NEXT・キャンペーン・自分＋担当なしで絞れる。100社超もページ送り", async () => {
+  setup();
+  db.rows.gw_sales_campaigns = [{ id: "00000000-0000-4000-8000-0000000000c1", tenant_id: "t1", name: "秋の製造業" }];
+  await seed(130);
+  const cs = db.rows.gw_sales_companies;
+  const ymd = (d) => new Date(Date.now() + 9 * 3600000 + d * 86400000).toISOString().slice(0, 10);
+  cs[0].ng_reason = "no_sales";                                               // 営業禁止
+  cs[1].status = "won";                                                       // 対象外の状態
+  cs[2].last_sent_at = new Date(Date.now() - 5 * 86400000).toISOString();    // 30日以内に送った
+  cs[3].last_sent_at = new Date(Date.now() - 40 * 86400000).toISOString(); cs[3].status = "reattack_wait";  // 40日前 → 出す
+  cs[4].next_action = "電話"; cs[4].next_action_on = ymd(3);                  // 期限がまだ先
+  cs[5].next_action = "電話"; cs[5].next_action_on = ymd(-1);                 // 期限切れ → 出す（manual）
+  cs[6].region = "鹿屋市";                                                    // 未設定
+  cs[7].campaign_id = "00000000-0000-4000-8000-0000000000c1";
+  cs[8].owner_id = "emp-s2";                                                  // 他の人の担当
+  cs[9].owner_id = null;                                                      // 担当なし
+  const q = (params) => pageOf({ page: 1, queue: "attack", ...params });
+  const all = (await q({})).body;
+  assert.equal(all.total, 126, "130社から 営業禁止・成約・30日以内・期限前 の4社を除く");
+  assert.equal(all.companies.length, 100, "100社ずつ");
+  assert.equal(all.totalPages, 2);
+  const p2 = (await q({ page: 2 })).body;
+  assert.equal(p2.companies.length, 26, "2ページ目で残りを見られる（「ほか」に隠さない）");
+  const ids = new Set([...all.companies, ...p2.companies].map((c) => c.id));
+  assert.equal(ids.size, 126);
+  for (const i of [0, 1, 2, 4]) assert.ok(!ids.has(cs[i].id), `除外 ${i}`);
+  for (const i of [3, 5]) assert.ok(ids.has(cs[i].id), `対象 ${i}`);
+  assert.equal(all.facets, undefined, "件数（facets）はアタック画面の条件では数えない");
+
+  assert.deepEqual((await q({ region: "none" })).body.companies.map((c) => c.id), [cs[6].id], "地域：未設定");
+  const kc = (await q({ campaign: "00000000-0000-4000-8000-0000000000c1" })).body;
+  assert.deepEqual(kc.companies.map((c) => c.id), [cs[7].id], "キャンペーンで絞る");
+  assert.equal(kc.companies[0].campaignName, "秋の製造業", "キャンペーン名を返す");
+  assert.equal((await q({ campaign: "none" })).body.total, 125);
+  assert.deepEqual((await q({ next: "manual" })).body.companies.map((c) => c.id), [cs[5].id], "NEXT：決めたNEXT");
+  assert.equal((await q({ next: "attack" })).body.total, 125, "NEXT：フォームアタック");
+  const mine = (await q({ owner: "mine" })).body;
+  assert.equal(mine.total, 125, "自分の担当＋担当なし（他の人の担当を除く）");
+  assert.ok(mine.companies.every((c) => c.ownerId === "emp-s1" || c.ownerId === null));
+  const combo = (await q({ owner: "mine", q: "会社01", region: "東京都" })).body;
+  assert.ok(combo.total > 0 && combo.companies.every((c) => c.name.startsWith("会社01") && c.region === "東京都"),
+    "検索語・自分＋担当なし・地域を同時に（and(or…)）");
+  assert.ok(all.nextFilters.some((x) => x.key === "follow_click"), "NEXT の選択肢を返す");
+  assert.ok(all.campaigns.some((x) => x.name === "秋の製造業"));
+  // 企業一覧の NEXT の意味と同じ：一覧の nextKey と絞り込みが食い違わない
+  for (const [key] of [["manual"], ["attack"]]) {
+    const r = (await pageOf({ page: 1, next: key })).body;
+    assert.ok(r.companies.every((c) => c.nextKey === key), `NEXT=${key} は一覧の nextKey と同じ`);
+  }
+  for (const bad of [{ queue: "x" }, { next: "x" }, { campaign: "x" }, { owner: "x" }]) {
+    assert.equal((await pageOf({ page: 1, ...bad })).statusCode, 400, JSON.stringify(bad));
+  }
+});
+
+await ok("企業一覧：キャンペーン列（名前）を返す", async () => {
+  setup();
+  db.rows.gw_sales_campaigns = [{ id: "00000000-0000-4000-8000-0000000000c2", tenant_id: "t1", name: "冬の不動産" }];
+  await seed(2);
+  db.rows.gw_sales_companies[0].campaign_id = "00000000-0000-4000-8000-0000000000c2";
+  const r = (await pageOf({ page: 1 })).body.companies;
+  assert.equal(r.find((c) => c.id === db.rows.gw_sales_companies[0].id).campaignName, "冬の不動産");
+  assert.equal(r.find((c) => c.id === db.rows.gw_sales_companies[1].id).campaignName, null);
 });
 
 console.log("\n=== CSV（/api/sales/companies/export） ===\n");
@@ -1581,15 +2200,15 @@ const csvLines = (r) => String(r.body).replace(/^﻿/, "").split("\r\n").filter(
 await ok("CSV：いまの検索・絞り込み結果すべて。BOMつき・業種・地域・非表示理由を含む・並び順は一覧と同じ", async () => {
   setup();
   await seed(150);
-  const r = await exportGet({ industry: "IT", sort: "name", order: "asc" });
+  const r = await exportGet({ industry: "士業", sort: "name", order: "asc" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.match(r.headers["content-type"], /text\/csv; charset=utf-8/);
   assert.match(r.headers["content-disposition"], /sales_companies_\d{4}-\d{2}-\d{2}\.csv/);
   assert.ok(String(r.body).startsWith("﻿"), "UTF-8 BOM");
   const lines = csvLines(r);
-  assert.equal(lines.length, 51, "見出し＋IT の50社（100件で切らない）");
-  assert.equal(lines[0], "企業名,URL,ドメイン,業種,地域,商材,ステータス,担当,最終アタック日時,最終アタック実行者,送信チャネル,現在の連絡手段,クリック数,NEXT,NEXT期限,非表示状態,非表示理由,登録日時");
-  assert.ok(lines[1].startsWith("会社003,https://c3.example.jp/,c3.example.jp,IT,"), lines[1]);
+  assert.equal(lines.length, 51, "見出し＋士業 の50社（100件で切らない）");
+  assert.equal(lines[0], "企業名,URL,ドメイン,業種,地域,提案サービス,キャンペーン,ステータス,担当,最終アタック日時,最終アタック実行者,送信チャネル,現在の連絡手段,クリック数,NEXT,NEXT期限,非表示状態,非表示理由,登録日時");
+  assert.ok(lines[1].startsWith("会社003,https://c3.example.jp/,c3.example.jp,士業,"), lines[1]);
   assert.ok(logged.some((l) => l.action === "sales.company_export" && l.detail.count === 50 && l.detail.mode === "filtered"));
 
   const c = db.rows.gw_sales_companies[0];
@@ -1621,6 +2240,111 @@ await ok("CSV：営業の権限が無い人は 403", async () => {
   who = MEMBER;
   assert.equal((await exportGet({})).statusCode, 403);
   assert.equal((await exportPost({ ids: [db.rows.gw_sales_companies[0].id] })).statusCode, 403);
+});
+
+console.log("\n=== ダッシュボード（/sales/）：件数と上位だけ返す（表示速度） ===\n");
+
+// 以前の画面（sales/index.html）が、全件から組み立てていた決まり。サーバへ移しても同じ結果になることを確かめる
+function oldPageSections(companies, today) {
+  const open = (c) => !c.ngReason && !["won", "lost", "excluded"].includes(c.status);
+  const due = (c) => c.nextDue && c.nextDue <= today;
+  const RECENT_MS = 30 * 86400000;
+  const SECTIONS = [
+    { key: "click", pick: (c) => c.unhandledClick,
+      sort: (x, y) => String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || "")) || y.clickCount - x.clickCount },
+    { key: "replied", pick: (c) => open(c) && c.status === "replied" },
+    { key: "follow", pick: (c) => open(c) && !["untouched", "reattack_wait"].includes(c.status) && due(c) },
+    { key: "attack", pick: (c) => open(c) && ["untouched", "reattack_wait"].includes(c.status)
+        && !(c.lastSentAt && Date.now() - new Date(c.lastSentAt).getTime() < RECENT_MS)
+        && (!c.nextDue || c.nextDue <= today) },
+  ];
+  const DEFAULT_SORT = (x, y) => (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
+    || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9"));
+  const used = new Set();
+  const lists = {};
+  for (const sec of SECTIONS) {
+    lists[sec.key] = companies.filter((c) => !used.has(c.id) && sec.pick(c)).sort(sec.sort || DEFAULT_SORT);
+    for (const c of lists[sec.key]) used.add(c.id);
+  }
+  return lists;
+}
+
+async function seedDashboard() {
+  setup();
+  await seed(90);
+  const today = todayJst();
+  const shift = (d) => new Date(Date.parse(`${today}T00:00:00Z`) + d * 86400000).toISOString().slice(0, 10);
+  const ST = ["untouched", "attacked", "clicked", "replied", "meeting", "proposal", "reattack_wait", "won", "lost"];
+  db.rows.gw_sales_companies.forEach((c, i) => {
+    c.status = ST[i % ST.length];
+    c.next_action = i % 4 ? "電話する" : null;
+    c.next_action_on = i % 4 ? shift((i % 7) - 3) : null;
+    if (i % 17 === 0) c.ng_reason = "no_sales";
+  });
+  // アタック（クリックあり・なし・最近・昔）
+  db.rows.gw_sales_companies.forEach((c, i) => {
+    if (i % 3) return;
+    const sent = new Date(Date.now() - ((i % 50) + 1) * 86400000).toISOString();
+    db.rows.gw_sales_approaches.push({ id: `ap-${i}`, tenant_id: "t1", company_id: c.id, employee_id: "emp-s1", service: "AI / DX",
+      prepared_at: sent, sent_at: sent, channel: "form", click_count: i % 2 ? 0 : (i % 5) + 1,
+      first_click_at: i % 2 ? null : sent, last_click_at: i % 2 ? null : new Date(Date.parse(sent) + i * 60000).toISOString() });
+  });
+  // 1社は非表示（ダッシュボードには出さない）
+  db.rows.gw_sales_companies[1].hidden_at = new Date().toISOString();
+  db.rows.gw_sales_companies[1].hidden_reason = "closed";
+  return today;
+}
+
+await ok("view=dashboard：段ごとの件数と上位は、以前の画面（全件から組み立て）と同じ", async () => {
+  const today = await seedDashboard();
+  const all = await list();
+  assert.equal(all.statusCode, 200);
+  const want = oldPageSections(all.body.companies, today);
+  const r = await call(companies, { method: "GET", url: "/api/sales/companies?view=dashboard" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.view, "dashboard");
+  assert.equal(r.body.companies, undefined, "全件は返さない");
+  const LIMIT = { click: 20, replied: 20, follow: 20, attack: 10 };
+  let any = 0;
+  for (const k of ["click", "replied", "follow", "attack"]) {
+    assert.equal(r.body.sections[k].total, want[k].length, `${k} の件数`);
+    assert.deepEqual(r.body.sections[k].rows.map((c) => c.id), want[k].slice(0, LIMIT[k]).map((c) => c.id), `${k} の並びと上位`);
+    any += want[k].length;
+  }
+  assert.ok(any > 0 && want.click.length > 0 && want.attack.length > 0, "どの段にも何か入るデータで確かめる");
+  // 画面が使う項目は、全件の形と同じ値
+  const one = r.body.sections.click.rows[0];
+  const full = all.body.companies.find((c) => c.id === one.id);
+  for (const k of ["name", "status", "statusLabel", "next", "nextDue", "overdue", "ownerName", "clickCount", "lastClickAt", "lastSentAt", "unhandledClick"]) {
+    assert.deepEqual(one[k], full[k] ?? (typeof one[k] === "boolean" ? false : one[k]), k);
+  }
+  assert.ok(JSON.stringify(r.body).length < JSON.stringify(all.body).length / 2, "送る量は全件より小さい");
+});
+
+await ok("view=dashboard：非表示の企業は出さない。知らない view は 400。営業でない人は 403", async () => {
+  await seedDashboard();
+  const hidden = db.rows.gw_sales_companies[1].id;
+  const r = await call(companies, { method: "GET", url: "/api/sales/companies?view=dashboard" });
+  for (const k of Object.keys(r.body.sections)) assert.ok(!r.body.sections[k].rows.some((c) => c.id === hidden));
+  assert.equal(r.body.total, db.rows.gw_sales_companies.length - 1);
+  assert.equal((await call(companies, { method: "GET", url: "/api/sales/companies?view=nope" })).statusCode, 400);
+  who = MEMBER;
+  assert.equal((await call(companies, { method: "GET", url: "/api/sales/companies?view=dashboard" })).statusCode, 403);
+});
+
+await ok("最近の営業履歴：limit を渡すとその件数だけ（新しい順）。渡さなければ、いままでどおり全件", async () => {
+  setup();
+  for (let i = 0; i < 20; i++) {
+    const c = await newCompany({ name: `履歴${i}`, siteUrl: `https://h${i}.example.jp/` });
+    await sendAttack(c.id);
+  }
+  db.rows.gw_sales_approaches.forEach((a, i) => { a.sent_at = new Date(Date.now() - (20 - i) * 3600000).toISOString(); });
+  const all = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=14" });
+  assert.equal(all.body.approaches.length, 20);
+  const top = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=14&limit=15" });
+  assert.equal(top.body.approaches.length, 15);
+  assert.deepEqual(top.body.approaches.map((a) => a.id), all.body.approaches.slice(0, 15).map((a) => a.id), "新しい15件");
+  assert.equal((await call(approaches, { method: "GET", url: "/api/sales/approaches?days=14&limit=abc" })).body.approaches.length, 20);
 });
 
 console.log("\n=== 小さな道具 ===\n");

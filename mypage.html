@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20260929d">
-  <link rel="stylesheet" href="css/layout.css?v=20260929d">
+  <link rel="stylesheet" href="css/app.css?v=20261002of1">
+  <link rel="stylesheet" href="css/layout.css?v=20261002of1">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -66,6 +66,7 @@
   <div id="cond-card" class="card hidden">
     <h2><span class="material-symbols-outlined">description</span>労働条件</h2>
     <div id="cond"></div>
+    <div id="cond-history"></div>
     <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
       内容の変更は会社と本人の合意で行います。違いがあれば管理担当者にお知らせください。
     </p>
@@ -132,11 +133,11 @@
   </div>
 
   <div class="card" id="mfa">
-    <h2><span class="material-symbols-outlined">verified_user</span>二段階認証</h2>
+    <h2><span class="material-symbols-outlined">verified_user</span><span id="mfa-title">二段階認証（任意のセキュリティ設定）</span></h2>
     <div id="mfa-body"><span class="muted">読み込み中…</span></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="password">
     <h2><span class="material-symbols-outlined">key</span>パスワードの変更</h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
       会社から渡された初回パスワードのままの場合は、ここで自分だけが知っているものに変えてください。
@@ -159,9 +160,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20260929d"></script>
-<script src="js/device.js?v=20260929d"></script>
-<script src="js/layout.js?v=20260929d"></script>
+<script src="js/api-client.js?v=20261002of1"></script>
+<script src="js/device.js?v=20261002of1"></script>
+<script src="js/layout.js?v=20261002of1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -170,14 +171,15 @@
   const ROLE_JA = { owner: "経営者", hr: "人事", manager: "責任者", labor_advisor: "社労士" };
   const STATUS_JA = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
 
+  let me_ = null;   // /api/me の答え（入社準備中かどうかを、労働条件の出し方に使う）
   KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner", "sr"] })
-    .then((ctx) => { if (ctx) { render(ctx); loadMine(); loadMfa(ctx.me?.mfa); } });
+    .then((ctx) => { if (ctx) { me_ = ctx.me || null; render(ctx); loadMine(); loadMfa(ctx.me?.mfa); } });
 
   // ---- 二段階認証 --------------------------------------------------------------
   //
-  // 対象の人（管理者・人事・社労士）は 2026-09-30 までに登録、10-01 から強制。
-  // 対象でない人も登録できる。登録の中身は Supabase Auth の TOTP
-  // MFA の一時停止中（MFA_ENABLED が true でない）は、この欄を出さない
+  // 二段階認証は任意のセキュリティ設定（2026-10-01 の方針。既定では必須にしない・強制もしない。lib/mfa.js）。
+  // 使いたい人だけが登録する。登録していないことを、エラー・警告として出さない。登録の中身は Supabase Auth の TOTP。
+  // サーバが「必須（required）」を返したとき（MFA_ENABLED=true に戻したとき）だけ、必須・期限の案内を出す
   let mfaInfo = null;
   async function loadMfa(info) {
     const box = el("mfa-body");
@@ -185,13 +187,13 @@
     try { st = await API.mfaStatus(); }
     catch (e) { box.innerHTML = `<span class="err-text">${esc(e.hint || e.message || "確認できませんでした")}</span>`; return; }
     mfaInfo = st || info || null;
-    // MFA の一時停止中（MFA_ENABLED が true でない。lib/mfa.js）は、設定欄ごと出さない。
-    // 登録済みの factor やこの画面のコードは残す（MFA_ENABLED=true に戻せば、また出る）
-    if (mfaInfo?.enabled === false) { el("mfa").hidden = true; return; }
+    // 設定欄は、いつも出す（任意のセキュリティ設定として残す）。必須の案内は、サーバが required を返したときだけ
     el("mfa").hidden = false;
+    const required = Boolean(mfaInfo?.required);
+    el("mfa-title").textContent = required ? "二段階認証" : "二段階認証（任意のセキュリティ設定）";
     const factors = st.factors || [];
     const on = factors.find((f) => f.status === "verified");
-    const note = mfaInfo?.required
+    const note = required
       ? (mfaInfo.enforced
           ? `<div class="banner ${on ? "ok" : "err"}" style="margin:0 0 12px;">
                <span class="material-symbols-outlined">${on ? "check_circle" : "error"}</span>
@@ -205,20 +207,21 @@
       : "";
     // リセットされた直後は、登録し直してもらう
     const resetNote = st.reset ? `
-      <div class="banner warn" style="margin:0 0 12px;">
+      <div class="banner${required ? " warn" : ""}" style="margin:0 0 12px;">
         <span class="material-symbols-outlined">lock_reset</span>
-        <div>管理者が二段階認証をリセットしました。認証アプリで登録し直してください。</div></div>` : "";
+        <div>管理者が二段階認証をリセットしました。${required ? "認証アプリで登録し直してください。" : "使う場合は、認証アプリで登録し直してください。"}</div></div>` : "";
 
     box.innerHTML = resetNote + note + (on ? `
       <p class="muted" style="font-size:13px;margin:0 0 10px;">
-        認証アプリ（Google Authenticator、Microsoft Authenticator など）で登録済みです。</p>
+        認証アプリ（Google Authenticator、Microsoft Authenticator など）で登録済みです。
+        ログインのたびに、認証アプリの6桁が要ります。</p>
       ${st.selfUnenroll === "ok"
         ? `<button class="btn btn-secondary btn-sm" onclick="mfaOff('${esc(on.id)}', this)">登録を外す</button>`
         : `<p class="muted" style="font-size:12.5px;margin:0;">
              ${esc(st.selfUnenrollHint || "いまは自分では外せません")}</p>`}
       <div id="mfa-msg" class="err-text"></div>` : `
       <p class="muted" style="font-size:13px;margin:0 0 10px;">
-        ログインのとき、パスワードに加えて認証アプリの6桁を入れるようにします。
+        ${required ? "" : "任意の設定です。登録しなくても、これまでどおり使えます。登録すると、"}ログインのとき、パスワードに加えて認証アプリの6桁を入れる${required ? "ようにします。" : "ようになり、"}
         パスワードが漏れても、それだけでは入れなくなります。</p>
       <button class="btn btn-primary btn-sm" onclick="mfaStart(this)">
         <span class="material-symbols-outlined icon-inline">qr_code_2</span>登録を始める</button>
@@ -273,14 +276,16 @@
   }
 
   async function mfaOff(factorId, btn) {
-    if (!confirm("二段階認証の登録を外します。あなたの権限で必須になっている場合、個人情報の画面が開けなくなります。よろしいですか？")) return;
+    if (!confirm(mfaInfo?.required
+      ? "二段階認証の登録を外します。あなたの権限で必須になっている場合、個人情報の画面が開けなくなります。よろしいですか？"
+      : "二段階認証の登録を外します。外したあとは、ログインのときに認証アプリの6桁が要らなくなります。よろしいですか？")) return;
     const msg = el("mfa-msg"); msg.textContent = "";
     try {
       await KPLayout.busy(btn, "…", () => API.mfaUnenroll(factorId));
       await loadMfa(mfaInfo);
     } catch (e) {
-      // 強制期間中は自分では外せない（管理者のリセットだけ）。
-      // 直前に6桁で確かめていないときも断られる
+      // 強制期間中（MFA_ENABLED=true のとき）は自分では外せない（管理者のリセットだけ）。
+      // 直前に6桁で確かめていないとき（パスワードだけのログイン）も断られる
       msg.textContent = e.hint || (/aal2|AAL2/i.test(e.message || "")
         ? "外すには、いちどログインし直して6桁で認証してから操作してください"
         : (e.message || "外せませんでした"));
@@ -327,7 +332,7 @@
     renderDevices(dv);
 
     if (ob) {
-      renderConditions(ob.known || {});
+      renderConditions(ob.known || {}, ob.contractHistory || null);
       renderCompanyDocs(ob);
       renderConsentDocs(ob);
       renderOnboard(ob);
@@ -335,9 +340,13 @@
     if (plan) renderGoal(plan);
   }
 
-  function renderConditions(k) {
-    const rows = [
-      ["入社日", k.joinedOn],
+  // 労働条件。入社準備中も、入社後も、ここでいつでも見返せる（入社準備の「あなたの契約条件」と同じ元データ）。
+  // 未登録の項目は、空白やエラーにせず「会社で準備中です」と出す（本人が入力し忘れたと誤解しないように）。
+  // 更新のあとは、いまの契約・次回の更新確認・過去の契約を分けて出す（古い契約と混ぜない）
+  const PENDING = "会社で準備中です";
+  function renderConditions(k, hist) {
+    const all = [
+      ["入社日", k.joinedOn ? new Date(k.joinedOn).toLocaleDateString("ja-JP") : null],
       ["契約", k.contract],
       ["試用期間", k.probation],
       ["週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null],
@@ -346,15 +355,34 @@
       ["業務範囲", (k.workScope || []).join("、") || null],
       ["給与", k.wage],
       ["相談先", k.manager],
-    ].filter(([, v]) => v);
-    if (!rows.length) return;
-
+    ];
+    // 入社準備中は、全項目を並べて未登録は「準備中」。入社後は、登録されている項目だけ
+    const preparing = Boolean(me_?.gw?.stage && me_.gw.stage.key === "preparing");
+    const rows = preparing ? all : all.filter(([, v]) => v);
     el("cond-card").classList.remove("hidden");
-    el("cond").innerHTML = `
-      <div class="table-scroll"><table class="kp-items"><tbody>
+    el("cond").innerHTML = rows.length
+      ? `<div class="table-scroll"><table class="kp-items"><tbody>
         ${rows.map(([a, b]) => `
-          <tr><td style="width:130px;color:var(--muted);">${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}
-      </tbody></table></div>`;
+          <tr><td style="width:130px;color:var(--muted);">${esc(a)}</td><td>${b ? esc(b) : `<span class="muted">${PENDING}</span>`}</td></tr>`).join("")}
+      </tbody></table></div>`
+      : `<div class="muted" style="font-size:13px;">労働条件は、${PENDING}。</div>`;
+
+    // 契約の更新（現在の契約・次回更新確認・過去の契約）
+    const cur = hist?.current || null;
+    const past = hist?.past || [];
+    const sub = el("cond-history");
+    if (sub && (cur || past.length)) {
+      sub.innerHTML = `
+        ${cur ? `<div style="margin-top:14px;"><div class="muted" style="font-size:12px;">現在の契約</div>
+          <div style="font-size:14px;font-weight:700;">${esc(cur.period || "")}</div>
+          ${hist.nextRenewalOn ? `<div class="muted" style="font-size:12.5px;margin-top:4px;">次回の更新確認　${esc(hist.nextRenewalOn)}</div>` : ""}</div>` : ""}
+        ${past.length ? `<details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;">過去の契約（${past.length}件）</summary>
+          <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.9;">
+            ${past.map((c) => `<li>${esc(c.period || "")}　<span class="muted">${esc(c.kind)}・${esc(c.statusLabel)}</span></li>`).join("")}
+          </ul></details>` : ""}`;
+    }
+    // 「給与管理」から来たときは、この欄へ移す（欄は読み込み後に出るので、出てから動く）
+    if (/^#cond/.test(location.hash)) el("cond-card").scrollIntoView({ block: "start" });
   }
 
   // 共有フォルダ。管理者が貼ったリンクを開くだけ。

@@ -21,6 +21,9 @@
   //   古いまま動き続けないよう、覚えておくのは短いあいだだけにする。
   const CFG_KEY = "kp_cfg";
   const CFG_HOURS = 6;
+  // 覚えているものが、これより新しければ裏でも取り直さない。
+  // 毎画面で裏の1往復（/api/public-config）が出ていた。中身はデプロイしないと変わらない
+  const CFG_RECHECK_MIN = 30;
 
   function applyCfg(c) {
     // 拡張のIDは、画面から拡張へ話しかけるのに要る（js/device.js）。
@@ -48,8 +51,11 @@
     try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); } catch { /* 無視 */ }
     if (saved?.v?.supabaseUrl && Date.now() - (saved.at || 0) < CFG_HOURS * 3600000) {
       cfg = applyCfg(saved.v);
-      // 待たない。次に開くときには新しいほうが入っている
-      fetchCfg().catch(() => { /* 取れなくても、覚えているぶんで動く */ });
+      // 待たない。次に開くときには新しいほうが入っている。
+      // 30分以内に確かめたものは、取り直さない（画面を移るたびに裏で1往復しない）
+      if (Date.now() - (saved.at || 0) >= CFG_RECHECK_MIN * 60000) {
+        fetchCfg().catch(() => { /* 取れなくても、覚えているぶんで動く */ });
+      }
       return cfg;
     }
     return fetchCfg();
@@ -83,6 +89,8 @@
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error_description || data.msg || data.error || "ログインに失敗しました");
+    // 前にこのタブを使っていた人の画面データ・身元を残さない
+    forgetUser();
     return storeToken({ ...data, user: { email } });
   }
 
@@ -171,7 +179,68 @@
 
   function isLoggedIn() { return !!loadSession(); }
   function currentEmail() { return loadSession()?.email || null; }
-  function logout() { clearSession(); }
+  // ログアウトでは、このタブ・この端末に覚えている「その人のもの」を全部消す。
+  // 画面データ（sessionStorage の kp_swr:*）・身元（kp_me）・メニューの枠（kp_layout）。
+  // どのログアウトボタン（GW・HR・Sales・Office・経営）から出ても、ここを通る
+  function logout() { clearSession(); forgetUser(); }
+  function forgetUser() {
+    swrClear();
+    try { localStorage.removeItem(ME_KEY); localStorage.removeItem("kp_layout"); } catch { /* 使えない */ }
+  }
+
+  // ---- 身元（/api/me）を覚えておく -------------------------------------------------
+  //
+  // 前回の /api/me の答えを覚えておき、次の画面では待たずに枠を描く（確かめるのは裏で）。
+  // GW（js/layout.js）のほか、HR・Sales・Office・経営の専用ヘッダーも同じものを使う。
+  // それらは毎回 /api/me を待ってからヘッダーと本文を出していたので、2回目でも1往復遅れていた。
+  //
+  // ■ 覚えておくのは短いあいだだけ（12時間）。毎回かならず裏で確かめる
+  // ■ 誰のぶんかを必ず見る。覚えていた人と、いま入っている人が違えば使わない
+  //   （ログアウトのときは消しているが、前の人のセッションが切れたところへ
+  //     別の人がそのまま入ると、消さずに入れ替わる道がある）
+  const ME_KEY = "kp_me";
+  const ME_HOURS = 12;
+  function rememberedMe() {
+    try {
+      const v = JSON.parse(localStorage.getItem(ME_KEY) || "null");
+      if (!v?.me || Date.now() - (v.at || 0) > ME_HOURS * 3600000) return null;
+      if (v.email && v.email !== currentEmail()) return null;
+      return v.me;
+    } catch { return null; }
+  }
+  function rememberMe(me) {
+    try { localStorage.setItem(ME_KEY, JSON.stringify({ at: Date.now(), email: currentEmail(), me })); }
+    catch { /* 保存できなくても動く */ }
+  }
+  /**
+   * 専用ヘッダー（HR・Sales・Office・経営）の入口。
+   * 覚えている身元で入れるなら、それで先に描いて返し、確かめるのは裏で（違えば送り返す）。
+   * 覚えていない・覚えている身元では入れないときは、/api/me を待ってから決める（これまでどおり）。
+   * @param {(me:object) => boolean} canEnter その画面に入れるか（覚えている身元・確かめた身元の両方で使う）
+   * @param {{leave:(me:object)=>void, lost:()=>void}} go
+   *   leave … 確かめた身元では入れなかった（ホームなどへ送る）
+   *   lost  … ログインが切れていた（ログイン画面へ送る）
+   * @returns {Promise<{me:object, remembered:boolean}|null>}
+   */
+  async function enterWithMe(canEnter, { leave, lost, verify = false }) {
+    // verify … 覚えている身元では入らない（短い時間で見られる URL を発行するような画面。確かめてから）
+    const cached = verify ? null : rememberedMe();
+    const check = me().then((m) => { rememberMe(m); return m; });
+    if (cached && canEnter(cached)) {
+      check.then((m) => { if (!canEnter(m)) leave(m); }).catch((e) => {
+        // 裏の確認がたまたま通らなかっただけ（回線）なら、見ている画面から追い出さない。
+        // ログインが切れていたときだけ、ログイン画面へ
+        if (e?.status === 401 || !isLoggedIn()) lost();
+      });
+      perfMark("init");
+      return { me: cached, remembered: true };
+    }
+    let fresh;
+    try { fresh = await check; } catch { lost(); return null; }
+    if (!canEnter(fresh)) { leave(fresh); return null; }
+    perfMark("init");
+    return { me: fresh, remembered: false };
+  }
 
   // ---- ログイン前でも呼べる口（招待URLを開いた時点では、まだセッションが無い） ----
   async function publicApi(path, { method = "GET", body } = {}) {
@@ -196,7 +265,24 @@
     publicApi("/api/guests/accept", { method: "POST", body: { token, password } });
 
   // ---- API 呼び出し ----------------------------------------------------
-  async function api(path, { method = "GET", body } = {}) {
+  //
+  // ■ 更新したら、覚えている画面データを捨てる（下の「画面データの短期キャッシュ」）
+  //   GET 以外（POST・PATCH・PUT・DELETE）が終わったら、成功しても失敗しても全部捨てる。
+  //   どの更新がどの一覧に効くかを画面ごとに書き分けると、書き忘れた所で古い数字が残る。
+  //   捨てすぎても、次に開いたときに1往復待つだけで、間違った数字は出ない。
+  //   invalidates を渡したものだけは、その鍵だけ捨てる（通知の既読・端末の合図のように、
+  //   画面のデータを変えない更新）。[] なら何も捨てない
+  async function api(path, { method = "GET", body, invalidates } = {}) {
+    if (method === "GET") return request(path, { method, body });
+    try {
+      return await request(path, { method, body });
+    } finally {
+      if (Array.isArray(invalidates)) for (const k of invalidates) swrDrop(k);
+      else swrClear();
+    }
+  }
+
+  async function request(path, { method = "GET", body } = {}) {
     const token = await getToken();
     if (!token) throw new Error("未ログインです");
     const r = await fetch(path, {
@@ -236,11 +322,330 @@
       // 絶対パスで送る。相対（mypage.html#mfa）だと、/hr/ や /sales/ や /office/ の画面からは
       // /hr/mypage.html のような存在しない場所へ飛び、登録できないまま行き止まりになる
       if (err.code === "mfa_required" && !/mypage\.html/.test(location.pathname)) {
-        location.href = "/mypage.html#mfa";
+        location.href = "/mypage.html#mfa";   // 絶対パス。/keiei/ など、サブディレクトリの画面から呼ばれても届く
       }
       throw err;
     }
     return data;
+  }
+
+  // ---- 画面データの短期キャッシュ（stale-while-revalidate） -------------------
+  //
+  // ■ まず見せて、裏で最新にする
+  //   画面を開くたびに一覧・ダッシュボードの取得を待っていたので、2回目でも「読み込み中…」が出ていた。
+  //   同じタブで少し前に取ったものがあれば、それをすぐ描き、裏で取り直して、違っていたときだけ描き直す。
+  //     API.swr(鍵, 取りにいく関数, 描く関数, { ttl })
+  //   ・覚えていない／ttl（秒）を過ぎた → いつもどおり取って描く（待つ）
+  //   ・覚えている → すぐ描く → 裏で取り直す → 中身が変わっていたときだけ、もう一度描く
+  //   ・裏の取り直しに失敗 → 前の表示は消さない。画面の隅に「最新情報を取得できませんでした」
+  //
+  // ■ 人のあいだで混ざらない
+  //   置き場所は sessionStorage（タブを閉じれば消える）。鍵には「誰のものか」（ログインのID）を入れる。
+  //   ログアウト・ログインのときは、誰のものかに関わらず全部消す。
+  //   契約・給与・人事・応募者・営業先の中身が、次にそのタブを使う人に残らないようにする。
+  //
+  // ■ 更新したら捨てる
+  //   GET 以外が終わったら全部捨てる（api() の中）。捨てた時点で取りにいっていたものは、
+  //   返ってきても覚えない（更新の前の中身を、更新のあとで覚え直さない）。
+  const SWR_PREFIX = "kp_swr:";
+  const SWR_MAX_CHARS = 1500000;   // これより大きい応答は覚えない（sessionStorage の上限に当てない）
+  let swrGen = 0;                  // 捨てるたびに増やす。取りにいった時点の値と違えば、覚えない
+  const swrInflight = new Map();   // 鍵 → 取りにいっている最中の Promise（同じものを2本出さない）
+  const swrSeq = new Map();        // 鍵 → いちばん新しい呼び出しの番号（古い呼び出しの描き直しを捨てる）
+  const swrWarmed = new Set();     // warm で取ったが、まだ描いていない鍵（描くときは取り直さない。もう最新）
+
+  /** ログインしている人の印。トークンの sub（ユーザーID）、読めなければメール */
+  function swrWho() {
+    const sess = loadSession();
+    if (!sess) return null;
+    try {
+      const part = String(sess.access_token || "").split(".")[1];
+      if (part) {
+        const sub = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/"))).sub;
+        if (sub) return String(sub);
+      }
+    } catch { /* JWT でなければメールで分ける */ }
+    return sess.email || null;
+  }
+  const swrStoreKey = (key) => { const who = swrWho(); return who ? `${SWR_PREFIX}${who}:${key}` : null; };
+
+  function swrRead(key, ttlSec) {
+    const sk = swrStoreKey(key);
+    if (!sk) return null;
+    try {
+      const raw = sessionStorage.getItem(sk);
+      if (!raw) return null;
+      const i = raw.indexOf("|");
+      const at = Number(raw.slice(0, i));
+      if (!(Date.now() - at < ttlSec * 1000)) { sessionStorage.removeItem(sk); return null; }
+      const body = raw.slice(i + 1);
+      return { at, body, value: JSON.parse(body) };
+    } catch { return null; }
+  }
+  function swrWrite(key, body) {
+    const sk = swrStoreKey(key);
+    if (!sk || body.length > SWR_MAX_CHARS) return;
+    try { sessionStorage.setItem(sk, `${Date.now()}|${body}`); }
+    catch { /* いっぱい・使えない。覚えずに動く */ }
+  }
+  /** 鍵1つだけ捨てる（いまログインしている人のぶん） */
+  function swrDrop(key) {
+    swrGen++;
+    swrInflight.delete(key);
+    swrWarmed.delete(key);
+    const sk = swrStoreKey(key);
+    try { if (sk) sessionStorage.removeItem(sk); } catch { /* 無視 */ }
+  }
+  /** 全部捨てる（誰のものかに関わらず） */
+  function swrClear() {
+    swrGen++;
+    swrInflight.clear();
+    swrWarmed.clear();
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith(SWR_PREFIX)) sessionStorage.removeItem(k);
+      }
+    } catch { /* 使えない */ }
+  }
+
+  /** 取りにいく（同じ鍵が取りにいっている最中なら、それを待つ）。取れたら覚える */
+  function swrFetch(key, fetcher) {
+    const going = swrInflight.get(key);
+    if (going) return going;
+    const gen = swrGen;
+    const p = Promise.resolve().then(fetcher).then((v) => {
+      // 取りにいっているあいだに更新・ログアウトがあれば、覚えない（古い中身を覚え直さない）
+      if (gen === swrGen && v && typeof v === "object") swrWrite(key, JSON.stringify(v));
+      return v;
+    }).finally(() => { if (swrInflight.get(key) === p) swrInflight.delete(key); });
+    swrInflight.set(key, p);
+    return p;
+  }
+
+  /**
+   * 画面のデータを、覚えているぶんで先に描き、裏で最新にする。
+   * @param {string} key 鍵（画面＋条件。例 "sales:dashboard"・"office:2026-09"）
+   * @param {() => Promise<object>} fetcher 取りにいく関数（API.xxx を呼ぶだけ）
+   * @param {(data:object, meta:{cached:boolean, updated?:boolean}) => any} render 描く関数（2回呼ばれることがある）
+   * @param {{ttl?:number, fresh?:number, quiet?:boolean, onError?:(e:Error)=>void}} [opts]
+   *   ttl   … 覚えているぶんを使う長さ（秒。既定120）。過ぎたら、覚えていないのと同じ
+   *   fresh … これより新しければ、裏で取り直さない（秒。既定0＝毎回取り直す）
+   *   quiet … 画面の隅の「更新中…」を出さない（通知・バッジなど）
+   * @returns {Promise<object>} 最初に描いたデータ（覚えていなければ、取ったもの）
+   */
+  async function swr(key, fetcher, render, { ttl = 120, fresh = 0, quiet = false, onError } = {}) {
+    const my = (swrSeq.get(key) || 0) + 1;
+    swrSeq.set(key, my);
+    const latest = () => swrSeq.get(key) === my;
+    const hit = swrRead(key, ttl);
+    if (!hit) {
+      const v = await swrFetch(key, fetcher);
+      if (latest()) { await render(v, { cached: false }); if (!quiet) perfMark("first"); }
+      return v;
+    }
+    await render(hit.value, { cached: true, at: hit.at });
+    if (!quiet) perfMark("first");
+    // この画面を開いたときに先に取りにいったもの（warm）が、描く前に届いていたなら、それがもう最新
+    const warmed = swrWarmed.delete(key);
+    if (warmed || Date.now() - hit.at < fresh * 1000) return hit.value;
+    const done = quiet ? () => {} : busyStart();
+    swrFetch(key, fetcher).then(async (v) => {
+      done(true);
+      // 中身が同じなら描き直さない（点滅させない）。違っていれば、いちばん新しい呼び出しだけ描く
+      if (latest() && JSON.stringify(v) !== hit.body) await render(v, { cached: false, updated: true });
+    }).catch((e) => {
+      done(false);
+      if (onError) onError(e);
+    });
+    return hit.value;
+  }
+
+  /**
+   * 画面の枠（権限の確認）を待たずに、その画面のデータを取りにいき始める。
+   * あとで同じ鍵で swr() を呼べば、取りにいっている最中のものを待つ（2本出さない）。
+   *
+   * ■ 入れると分かっている人のときだけ
+   *   覚えている身元（いまログインしている本人のもの）があり、その身元でこの画面に入れるときだけ先に出す。
+   *   覚えていない・入れない人のためには、その画面の API を1本も呼ばない（これまでどおり、確かめてから）。
+   * @param {(me:object) => boolean} [canEnter] 覚えている身元で、この画面に入れるか（省略時は、ログインしていれば入れる画面）
+   */
+  function warm(key, fetcher, canEnter = () => true) {
+    const remembered = rememberedMe();
+    if (!remembered || !canEnter(remembered)) return;
+    const gen = swrGen;
+    swrFetch(key, fetcher).then(() => { if (gen === swrGen) swrWarmed.add(key); }, () => { /* swr() の側で扱う */ });
+  }
+
+  // 「更新中…」「最新情報を取得できませんでした」。画面の隅に小さく1つだけ。
+  // 画面全体を「読み込み中」にしない（前の表示はそのまま）
+  let busyCount = 0;
+  let busyTimer = null;
+  function chip() {
+    if (typeof document === "undefined") return null;
+    let c = document.getElementById("kp-swr-chip");
+    if (!c && document.body) {
+      c = document.createElement("div");
+      c.id = "kp-swr-chip";
+      c.setAttribute("role", "status");
+      c.setAttribute("aria-live", "polite");
+      c.style.cssText = "position:fixed;right:14px;bottom:14px;z-index:9999;padding:6px 12px;border-radius:999px;"
+        + "font-size:12px;line-height:1.4;background:rgba(27,36,64,.86);color:#fff;pointer-events:none;"
+        + "box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;max-width:80vw;";
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+  function showChip(text, warn) {
+    const c = chip();
+    if (!c) return;
+    c.textContent = text;
+    c.style.background = warn ? "rgba(179,38,30,.92)" : "rgba(27,36,64,.86)";
+    c.style.display = "block";
+  }
+  function hideChip() {
+    const c = typeof document === "undefined" ? null : document.getElementById("kp-swr-chip");
+    if (c) c.style.display = "none";
+  }
+  function busyStart() {
+    busyCount++;
+    // すぐ返ってくるときは出さない（一瞬だけ出て消えるのは、かえって気になる）
+    if (!busyTimer) busyTimer = setTimeout(() => { busyTimer = null; if (busyCount > 0) showChip("更新中…"); }, 250);
+    let ended = false;
+    return (ok) => {
+      if (ended) return;
+      ended = true;
+      busyCount = Math.max(0, busyCount - 1);
+      if (!ok) {
+        showChip("最新情報を取得できませんでした（前回の内容を表示しています）", true);
+        setTimeout(() => { if (busyCount === 0) hideChip(); }, 6000);
+        return;
+      }
+      if (busyCount === 0) {
+        if (busyTimer) { clearTimeout(busyTimer); busyTimer = null; }
+        const c = chip();
+        if (c && !/取得できません/.test(c.textContent)) hideChip();
+      }
+    };
+  }
+
+  /**
+   * 描き直すとき、要素を全部作り直さず、変わったところだけ変える。
+   * 入力中の欄・開いている details・スクロール位置がそのまま残り、点滅しない。
+   * 中身がまだ無い（はじめて描く）ときは innerHTML と同じ。
+   * 描いたあとに addEventListener を付ける画面では使わない（残った要素に二重に付く）。onclick="…" の画面向け
+   */
+  function morph(node, html) {
+    if (!node) return;
+    if (!node.firstChild) { node.innerHTML = html; return; }
+    const next = node.cloneNode(false);
+    next.innerHTML = html;
+    morphChildren(node, next);
+  }
+  const sameNode = (a, b) => a.nodeType === b.nodeType && a.nodeName === b.nodeName
+    && (a.nodeType !== 1 || ((a.id || "") === (b.id || "") && (a.dataset?.id || "") === (b.dataset?.id || "")));
+  function morphChildren(from, to) {
+    let cur = from.firstChild;
+    for (const nb of [...to.childNodes]) {
+      if (cur && sameNode(cur, nb)) {
+        if (nb.nodeType === 1) morphEl(cur, nb);
+        else if (cur.nodeValue !== nb.nodeValue) cur.nodeValue = nb.nodeValue;
+        cur = cur.nextSibling;
+      } else {
+        from.insertBefore(nb, cur);
+      }
+    }
+    while (cur) { const n = cur.nextSibling; from.removeChild(cur); cur = n; }
+  }
+  function morphEl(a, b) {
+    for (const { name } of [...a.attributes]) {
+      // 開いている details は、描き直しで閉じない（人が開けたもの）
+      if (!b.hasAttribute(name) && !(name === "open" && a.tagName === "DETAILS")) a.removeAttribute(name);
+    }
+    for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+    // 入力中の欄は触らない
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && document.activeElement === a) return;
+    if (a.tagName === "INPUT") { a.value = b.value; a.checked = b.checked; }
+    morphChildren(a, b);
+    if (a.tagName === "TEXTAREA") a.value = b.value;
+    if (a.tagName === "SELECT") a.value = b.value;
+  }
+
+  // ---- 表示速度の計測（KPPerf） --------------------------------------------------
+  //
+  // どの画面でも URL に ?perf=1 を付けると、このタブのあいだ、開いた画面ごとに
+  // コンソールへ次の時刻（ページを開いた時点からのミリ秒）を出す。?perf=0 でやめる。
+  //   HTML（DOMContentLoaded）・枠（init）・/api/me・/api/public-config・その画面のAPI・本文が出た（first）
+  // 推測で速くしない。本番で測って、改善の前後を比べるための道具（scripts/perf/measure.mjs と同じ項目）
+  const PERF_ON = (() => {
+    try {
+      if (/[?&]perf=1\b/.test(location.search)) sessionStorage.setItem("kp_perf", "1");
+      if (/[?&]perf=0\b/.test(location.search)) sessionStorage.removeItem("kp_perf");
+      return sessionStorage.getItem("kp_perf") === "1";
+    } catch { return false; }
+  })();
+  let perfTimer = null;
+  function perfMark(name) {
+    try {
+      if (typeof performance === "undefined" || !performance.mark) return;
+      if (performance.getEntriesByName(`kp:${name}`).length) return;   // 最初の1回だけ
+      performance.mark(`kp:${name}`);
+    } catch { return; }
+    if (PERF_ON && name === "first" && !perfTimer) perfTimer = setTimeout(perfReport, 2000);
+  }
+  function perfReport() {
+    try {
+      const nav = performance.getEntriesByType("navigation")[0];
+      const mark = (n) => { const e = performance.getEntriesByName(`kp:${n}`)[0]; return e ? Math.round(e.startTime) : null; };
+      const apis = performance.getEntriesByType("resource").filter((e) => /\/api\//.test(e.name));
+      const end = (re) => { const h = apis.filter((e) => re.test(new URL(e.name).pathname)); return h.length ? Math.round(h[0].responseEnd) : null; };
+      const first = mark("first");
+      console.log(`[KPPerf] ${location.pathname}`);
+      console.table({
+        "HTML（DOMContentLoaded）": nav ? Math.round(nav.domContentLoadedEventEnd) : null,
+        "枠（init）": mark("init"),
+        "/api/me": end(/^\/api\/me$/),
+        "/api/public-config": end(/^\/api\/public-config$/),
+        "本文が出た（first）": first,
+      });
+      console.table(apis.map((e) => ({ api: new URL(e.name).pathname + new URL(e.name).search,
+        開始: Math.round(e.startTime), 完了: Math.round(e.responseEnd), 所要: Math.round(e.duration),
+        KB: Math.round((e.decodedBodySize || 0) / 102.4) / 10, 本文の前: first !== null && e.responseEnd <= first })));
+    } catch { /* 測れない環境 */ }
+  }
+
+  // ---- 画面の先読み（prefetch） --------------------------------------------------
+  //
+  // ヘッダー・左メニュー・画面上のタブのリンクに、マウスが乗った・フォーカスが来た・
+  // 指が触れた時点で、その先の HTML だけを先に取っておく（押したときには手元にある）。
+  // 触れたリンクだけ。一斉に先読みはしない。API（データ）は先読みしない。
+  // JS・CSS は ?v= 付きで1年キャッシュされるので、2回目以降はもともと手元にある
+  const PREFETCH_SCOPE = ".topbar, .kp-sidebar, .kp-tabbar, .kp-subnav, .kp-bell-panel, "
+    + ".hr-bar, .sl-bar, .of-bar, .kei-bar, .kei-side, [data-prefetch]";
+  const prefetched = new Set();
+  function prefetchFrom(e) {
+    const a = e.target?.closest?.("a[href]");
+    if (!a || !a.closest(PREFETCH_SCOPE) || a.hasAttribute("download")) return;
+    let u;
+    try { u = new URL(a.getAttribute("href"), location.href); } catch { return; }
+    if (u.origin !== location.origin || !/^https?:$/.test(u.protocol)) return;
+    if (u.pathname === location.pathname) return;
+    // 画面（.html か、/hr/ のような入口）だけ。API・ファイルは先読みしない
+    if (!/(\.html|\/|\/(hr|sales|office|keiei|onboarding)(\/[a-z-]+)?)$/.test(u.pathname) || /^\/api\//.test(u.pathname)) return;
+    const href = u.pathname + u.search;
+    if (prefetched.has(href)) return;
+    if (navigator.connection?.saveData) return;   // データを節約する設定の人には、先読みしない
+    prefetched.add(href);
+    const l = document.createElement("link");
+    l.rel = "prefetch";
+    l.as = "document";
+    l.href = href;
+    document.head.appendChild(l);
+  }
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("mouseover", prefetchFrom, { passive: true });
+    document.addEventListener("focusin", prefetchFrom);
+    document.addEventListener("touchstart", prefetchFrom, { passive: true });
   }
 
   // 拡張子から MIME を補完（ブラウザが file.type を空で返す場合の保険）
@@ -463,13 +868,21 @@
     api(`/api/sales/companies${visibility && visibility !== "shown" ? `?visibility=${encodeURIComponent(visibility)}` : ""}`);
   const createSalesCompany = (body) => api("/api/sales/companies", { method: "POST", body });
   const importSalesCompanies = (companies) => api("/api/sales/companies", { method: "POST", body: { companies } });
+  // CSV 取込。commit=false で確認（プレビュー）、true で登録（画面は50行ずつ送る）
+  const importSalesCsv = (body) => api("/api/sales/companies/import", { method: "POST", body });
+  // 業種・提案サービスの選択肢（db/108）。追加・名前変更・非表示・再表示
+  const getSalesMasters = () => api("/api/sales/masters");
+  const addSalesMaster = (kind, label) => api("/api/sales/masters", { method: "POST", body: { kind, label } });
+  const updateSalesMaster = (body) => api("/api/sales/masters", { method: "PATCH", body });
   const getSalesCompany = (id) => api(`/api/sales/companies/detail?id=${encodeURIComponent(id)}`);
   const updateSalesCompany = (body) => api("/api/sales/companies/detail", { method: "PATCH", body });
   const markSalesFollowed = (id) => updateSalesCompany({ id, action: "followed" });
   // 企業の一括操作（change_status / change_owner / change_service / change_campaign / set_ng / delete）
   const bulkSalesCompanies = (body) => api("/api/sales/companies/bulk", { method: "POST", body });
   const addSalesEvent = (body) => api("/api/sales/companies/detail", { method: "POST", body });
-  const listSalesApproaches = (days) => api(`/api/sales/approaches${days ? `?days=${encodeURIComponent(days)}` : ""}`);
+  const listSalesApproaches = (days, limit) => api(`/api/sales/approaches${qs({ days: days || undefined, limit: limit || undefined })}`);
+  // ダッシュボード（/sales/）の4段。件数と各段の上位だけ（全件は送らない）
+  const salesDashboard = () => api("/api/sales/companies?view=dashboard");
   const prepareSalesAttack = (body) => api("/api/sales/approaches", { method: "POST", body });
   const salesAttackAct = (body) => api("/api/sales/approaches", { method: "PATCH", body });
   const markSalesAttackSent = (body) => salesAttackAct({ ...body, action: "sent" });
@@ -511,10 +924,11 @@
 
   // ---- 通知 ----
   const listNotifications = () => api("/api/notifications");
+  // 既読は、通知とバッジだけ取り直せばよい（ほかの画面のデータは変わらない）
   const markNotificationRead = (id) =>
-    api("/api/notifications", { method: "PATCH", body: { id } });
+    api("/api/notifications", { method: "PATCH", body: { id }, invalidates: ["notifications", "badges"] });
   const markAllNotificationsRead = () =>
-    api("/api/notifications", { method: "PATCH", body: { all: true } });
+    api("/api/notifications", { method: "PATCH", body: { all: true }, invalidates: ["notifications", "badges"] });
 
   // ---- 管理設定 ----
   const settings = () => api("/api/settings");
@@ -964,12 +1378,13 @@
   // ブラウザ拡張をつなぐための、1回きりの合言葉。
   // 社員のログインは拡張へ渡さない（渡せない）。合言葉だけを渡す
   const browserCode = (body) =>
-    api("/api/devices/browser", { method: "POST", body: { action: "code", ...body } });
+    api("/api/devices/browser", { method: "POST", body: { action: "code", ...body }, invalidates: [] });
 
   const myDevices = () => api("/api/devices/me");
   // 画面を開いているあいだの合図。js/device.js から5分ごとに呼ばれる
+  // 画面のデータは変えない（5分ごとの合図で、覚えている画面データを捨てない）
   const deviceBeat = (body) =>
-    api("/api/devices/me", { method: "POST", body: { action: "beat", ...body } });
+    api("/api/devices/me", { method: "POST", body: { action: "beat", ...body }, invalidates: [] });
   // ブラウザの行は deviceUid、エージェントの行は deviceId で指す
   const confirmDevice = (target) =>
     api("/api/devices/me", { method: "POST", body: { action: "confirm", ...idOf(target) } });
@@ -1191,6 +1606,33 @@
   const openAdminContact = () =>
     api("/api/messages/admin-contact", { method: "POST" });
 
+  // ---- 社内AI ----
+  // threadId を渡すと同じ相談の続き。省略すると新しい相談を始める
+  const askAssistant = (question, threadId, category) =>
+    api("/api/ai/ask", { method: "POST", body: { question, threadId, category } });
+  const listAiThreads = () => api("/api/ai/threads");
+  const getAiThread = (threadId) =>
+    api(`/api/ai/thread?threadId=${encodeURIComponent(threadId)}`);
+  const rateAiMessage = (messageId, rating, comment) =>
+    api("/api/ai/feedback", { method: "POST", body: { messageId, rating, comment } });
+
+  // 管理部への問い合わせ。threadId があればそのAI相談を要約して引き継ぐ
+  const listAiInquiries = () => api("/api/ai/inquiries");
+  const createAiInquiry = (threadId, note, category) =>
+    api("/api/ai/inquiries", { method: "POST", body: { threadId, note, category } });
+  const getAiInquiry = (id) => api(`/api/ai/inquiry?id=${encodeURIComponent(id)}`);
+  const replyAiInquiry = (id, content) =>
+    api("/api/ai/inquiry", { method: "POST", body: { id, content } });
+  const updateAiInquiry = (id, patch) =>
+    api("/api/ai/inquiry", { method: "PATCH", body: { id, ...patch } });
+
+  // 管理画面: AIナレッジ
+  const listAiKnowledge = () => api("/api/ai/knowledge").then((d) => d.knowledge || []);
+  const createAiKnowledge = (k) =>
+    api("/api/ai/knowledge", { method: "POST", body: k }).then((d) => d.knowledge);
+  const updateAiKnowledge = (id, patch) =>
+    api(`/api/ai/knowledge-item?id=${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+
   // ---- やること（タスク・予定） ----
   // scope='mine' で自分の担当分だけ
   const listTasks = (scope) =>
@@ -1343,9 +1785,9 @@
 
   // ---- デスクトップ通知（1日3回の声かけ） ----
   const pushConfig = () => api("/api/push");
-  const pushSubscribe = (sub) => api("/api/push", { method: "POST", body: sub });
+  const pushSubscribe = (sub) => api("/api/push", { method: "POST", body: sub, invalidates: [] });
   const pushUnsubscribe = (endpoint) =>
-    api(`/api/push?endpoint=${encodeURIComponent(endpoint)}`, { method: "DELETE" });
+    api(`/api/push?endpoint=${encodeURIComponent(endpoint)}`, { method: "DELETE", invalidates: [] });
   const pushRemoveDevice = (id) =>
     api(`/api/push?id=${encodeURIComponent(id)}`, { method: "DELETE" });
   const pushPrefs = (prefs) => api("/api/push", { method: "PATCH", body: prefs });
@@ -1419,6 +1861,8 @@
 
   window.API = {
     config, login, logout, refresh, getToken, changePassword,
+    // 画面データの短期キャッシュ・身元の記憶・描き直し・計測（表示速度）
+    swr, warm, morph, perfMark, rememberedMe, rememberMe, enterWithMe,
     mfaStatus, mfaFactors, mfaEnroll, mfaVerify, mfaUnenroll, mfaReset,
     isLoggedIn, currentEmail,
     api, me, listClients, createClient, listJournals, listDocuments,
@@ -1447,7 +1891,7 @@
     createHrOffer, hrOfferAct, updateHrOffer, confirmHrOffer,
     issueHrOfferLink, markHrOfferSent, hrOfferPublic, hrOfferRespond,
     getHrAdvancePrefill, claimHrAdvance, hrAdvanceAct, releaseHrAdvance, completeHrAdvance,
-    listSalesCompanies, listSalesCompanyPage, exportSalesCompanies, createSalesCompany, importSalesCompanies, getSalesCompany, updateSalesCompany,
+    listSalesCompanies, listSalesCompanyPage, salesDashboard, exportSalesCompanies, createSalesCompany, importSalesCompanies, importSalesCsv, getSalesMasters, addSalesMaster, updateSalesMaster, getSalesCompany, updateSalesCompany,
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,
@@ -1510,6 +1954,9 @@
     listThreads, createThread, getThread, sendMessage, markThreadRead, threadMembers,
     openAdminContact,
     uploadMessageFile, messageFileUrl,
+    askAssistant, listAiThreads, getAiThread, rateAiMessage,
+    listAiInquiries, createAiInquiry, getAiInquiry, replyAiInquiry, updateAiInquiry,
+    listAiKnowledge, createAiKnowledge, updateAiKnowledge,
     listProcedures, createProcedure, updateProcedure, deleteProcedure,
     addProcedureItem, updateProcedureItem, deleteProcedureItem, submitProcedureItem,
     onboardingStatus,

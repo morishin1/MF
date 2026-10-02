@@ -13,8 +13,9 @@
 //   7. Office（/office・/api/office/*）は MFA を要求しない（2026-09-30 の決定）。requireMfa を置かない
 //      置くと、強制日（2026-10-01）から、strict でなくても経営者・責任者・経理が入れなくなる
 //      MFA を残すもの（給与・権限変更・MFA/パスワードのリセットなど）は、今までどおり requireMfa を通ること
-//   8. 一時停止（2026-10-01 の決定）：MFA_ENABLED が "true" でなければ、誰も止めない（strict も）。
-//      案内も出さない。MFA_ENABLED=true に戻せば、上の 1〜7 がそのまま効く
+//   8. 任意（2026-10-01 の決定）：MFA_ENABLED が "true" でなければ（既定）、誰も止めない（strict も）。
+//      登録していないことを警告にしない（案内帯・必須・期限の文言を出さない）。登録・認証・解除の機能は残し、登録した人にはログインで6桁を聞く。
+//      MFA_ENABLED=true に戻せば、上の 1〜7 がそのまま効く
 //
 // 1〜7 は「MFA_ENABLED=true（再開したとき）」の決まりとして確かめる。8 は最後に OFF にして確かめる
 import assert from "node:assert/strict";
@@ -305,6 +306,33 @@ await ok("強制後でも、対象外の人は外せる", async () => {
   assert.equal(r.ok, true);
 });
 
+console.log("— /keiei（経営）は、二段階認証を見ない（ロール＝経営者だけ。2026-10-01 に必須→任意）—");
+
+{
+  const { readFileSync } = await import("node:fs");
+  const read = (f) => readFileSync(join(ROOT, f), "utf8");
+  /** コメントを除いたコード（// の行と、行末の空白つき //。文字列の中の http:// は消さない） */
+  const code = (f) => read(f).replace(/(^|[ \t])\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  await ok("経営の入口（lib/keiei-gate.js）は、ロール（canKeiei）だけで通す。二段階認証・aal を見ない", async () => {
+    const src = code("lib/keiei-gate.js");
+    assert.match(src, /canKeiei\(ctx\)/, "経営者の判定が無い");
+    assert.doesNotMatch(src, /requireMfa|lib\/mfa\.js|mfaState|aalOf|aal2|enrolledOf/, "経営の入口が MFA を見ている");
+  });
+  await ok("api/mfa.js のリセットは、aal2 を求める入口（requireMfaStrict）を呼ばない。owner の保護（owner_only・self_reset）は残る", async () => {
+    const src = code("api/mfa.js");
+    assert.doesNotMatch(src, /requireMfaStrict|aal2/, "api/mfa.js が aal2 を要求している");
+    assert.match(src, /guardOwnerTarget/);
+    assert.match(src, /self_reset/);
+  });
+  await ok("経営の画面・API に、「二段階認証が必要です」「未登録」の警告・案内が残っていない", async () => {
+    for (const f of ["keiei/index.html", "api/keiei/index.js", "lib/keiei-hub.js", "lib/keiei-hub-read.js"]) {
+      assert.doesNotMatch(code(f), /mfa_missing|mfaUnknown|mfaPolicy|mfaBox|二段階認証が必要です|二段階認証が未登録/, `${f} に、MFA 必須の名残がある`);
+    }
+    assert.doesNotMatch(code("keiei/index.html"), /kei-pill warn">未登録|mfa_required/, "経営画面が、未登録を警告にしている");
+    assert.doesNotMatch(code("api/keiei/index.js"), /ENFORCE_FROM|ENROLL_UNTIL/, "経営の API が強制日を見ている");
+  });
+}
+
 console.log("— 出入りが記録に残るか —");
 
 await ok("登録・解除・リセット・再登録は、すべて記録する", async () => {
@@ -372,14 +400,28 @@ await ok("MFA_ENABLED=true に戻すと、これまでどおり止める（強�
   assert.equal(await M.requireMfa(req("aal1"), r, { roles: ["finance"] }, none, { strict: true }), false);
   assert.equal(r.body.error, "mfa_required");
 });
-await ok("画面：一時停止中（enabled=false）は、マイページの設定欄を出さず、ログインで6桁を聞かない", async () => {
+await ok("画面：必須にしていない間（enabled=false）も、マイページの設定欄は「任意のセキュリティ設定」として出す。必須・期限の案内は出さない", async () => {
   const { readFileSync } = await import("node:fs");
   const my = readFileSync(join(ROOT, "mypage.html"), "utf8");
-  assert.match(my, /mfaInfo\?\.enabled === false\) \{ el\("mfa"\)\.hidden = true; return; \}/, "mypage.html が enabled=false で MFA 欄を隠していない");
-  const login = readFileSync(join(ROOT, "index.html"), "utf8");
-  assert.match(login, /st\?\.enabled === false \? \[\]/, "index.html が enabled=false でも6桁を聞いている");
-  // 登録を促す帯（js/layout.js mfaNudge）は required が false なら出ない。一時停止中の mfaState は required=false
+  assert.doesNotMatch(my, /el\("mfa"\)\.hidden = true/, "mypage.html が MFA 欄を隠している");
+  assert.match(my, /二段階認証（任意のセキュリティ設定）/, "見出しが「任意のセキュリティ設定」でない");
+  assert.match(my, /任意の設定です。登録しなくても、これまでどおり使えます/, "「登録しなくても使える」の説明が無い");
+  // 必須・期限の案内は、サーバが required を返したときだけ（required の分岐の中にだけある）
+  assert.match(my, /const note = required\n/, "必須の案内が required の分岐になっていない");
+  // 登録を促す帯（js/layout.js mfaNudge）は required が false なら出ない。必須にしない間の mfaState は required=false
   assert.match(readFileSync(join(ROOT, "js/layout.js"), "utf8"), /if \(!mfa\?\.required \|\| mfa\.enrolled\) return;/);
+});
+await ok("画面：登録した人は、必須を止めている間（enabled=false）も、ログインで6桁を聞く（任意の設定として、ちゃんと効く）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const login = readFileSync(join(ROOT, "index.html"), "utf8");
+  assert.doesNotMatch(login, /enabled === false/, "index.html が enabled=false で6桁を飛ばしている");
+  assert.match(login, /const factors = st\?\.factors \|\| \[\];/, "index.html が登録済みの factor で6桁を聞いていない");
+});
+await ok("必須を止めている間も、自分で登録を外すには、直前に6桁で確かめる（パスワードだけで、登録を外されない）", async () => {
+  process.env.MFA_ENABLED = "false";
+  const ctx = { isAdmin: false, roles: ["hr"] };
+  assert.deepEqual(M.selfUnenroll({ ctx, req: req("aal1"), today: "2027-01-01" }).reason, "reauth");
+  assert.equal(M.selfUnenroll({ ctx, req: req("aal2"), today: "2027-01-01" }).ok, true, "強制期間中の「外せない」は無い");
 });
 
 if (ENABLED_BEFORE === undefined) delete process.env.MFA_ENABLED; else process.env.MFA_ENABLED = ENABLED_BEFORE;

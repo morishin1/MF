@@ -11,7 +11,9 @@
 //
 // ■ 守る形
 //
-//   ・管理者は5グループ。1グループ6項目まで
+//   ・左は自分の仕事（全員同じ）、上は担当業務（ヘッダー）。管理者も左メニューはメンバーと同じ
+//   ・Office（人事・労務・経理・事務だけ）は 専用の左メニュー: ダッシュボード＋2グループ・1グループ6項目まで
+//   ・経営（チーム状況・全員のタスク・全員の日報）と管理（⚙。AIナレッジを含む）は平らな別の表
 //   ・メンバーは8項目（条件付きで出るものを除く）
 //   ・2階層目は左メニューに出さず、ページの上のタブ（tabs）にする
 //   ・メンバーと管理者は、別の表にする（権限で出し分けない）
@@ -43,32 +45,49 @@ function tableOf(name, endMark) {
   return Function(`"use strict"; return (${expr});`)();
 }
 
-const ADMIN_GROUPS = tableOf("ADMIN_GROUPS", "\n  /**\n   * tabs を書いた項目は");
-const MEMBER_SIDE_NAV = tableOf("MEMBER_SIDE_NAV", "\n  /**\n   * 管理者: 左サイドメニュー");
-const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * メンバー: PCでの左サイドメニュー");
+const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // 管理画面: 人事・労務");
+const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会社全体の管理、判断）");
+const KEIEI_ITEMS = tableOf("KEIEI_ITEMS", "\n  // 管理（⚙）");
+const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /**\n   * いま開いている画面が");
+const MEMBER_SIDE_NAV = tableOf("MEMBER_SIDE_NAV", "\n  /**\n   * 「左は自分の仕事、上は担当業務」");
+const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * 入社準備中（入社日前で");
+const PREPARING_NAV = tableOf("PREPARING_NAV", "\n  /**\n   * 本人（入社する人・メンバー）の画面に出すエラー文。");
 
-const adminItems = ADMIN_GROUPS.flatMap((g) => g.items);
+const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS];
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
-// ---- 1) 管理者は4グループ、1グループ6項目まで --------------------------------
-// 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）
+// ---- 1) ホーム5・Office2グループ（各6項目まで）・管理4 ------------------------
+// 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）。
+// ホーム・管理（⚙）はヘッダーで領域を切り替える前提なので、グループに畳まず平らなまま
 console.log("\n— 管理者 —");
-check(ADMIN_GROUPS.length === 4, `グループは4つ（いま ${ADMIN_GROUPS.length}）`);
-for (const g of ADMIN_GROUPS) {
-  check(g.items.length <= 6, `${g.label} は6項目まで（いま ${g.items.length}）`);
+check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "dashboard", "Officeの先頭はダッシュボード1つ");
+check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
+check(OFFICE_GROUPS.length === 2, `Officeは2グループ（人事・労務／経理・事務。いま ${OFFICE_GROUPS.length}）`);
+{
+  // 新方針にない分類（全社運営など）で、Officeを何でも置く場所にしない
+  const labels = OFFICE_GROUPS.map((g) => g.label).join("/");
+  check(labels === "人事・労務/経理・事務", `Officeのグループは人事・労務と経理・事務だけ（いま ${labels}）`);
+  const keys = OFFICE_GROUPS.flatMap((g) => g.items.map((i) => i.key));
+  for (const k of ["tasks", "nippo", "ai_admin", "team"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
+  check(keys.includes("notices"), "お知らせ配信は経理・事務（Office）");
+}
+check(KEIEI_ITEMS.map((i) => i.key).join(",") === "keiei_home,team,tasks,nippo", `経営の表（いま ${KEIEI_ITEMS.map((i) => i.key)}）`);
+check(SETTINGS_ITEMS.some((i) => i.key === "ai_admin"), "AIナレッジは⚙管理");
+for (const g of OFFICE_GROUPS) {
+  check(g.items.length <= 6, `Office「${g.label}」は6項目まで（いま ${g.items.length}）`);
 }
 check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItems.length}`);
 
-// 畳んだときに見出し5つ。開いても、いちばん大きいグループ＋見出し4つが
-// PCの最初の画面に収まる高さかどうかの、おおまかな目安
+// Officeを開いても、いちばん大きいグループ＋見出し2つが
+// PCの最初の画面に収まる高さかどうかの、おおまかな目安（先頭のダッシュボード1行を含む）
 {
-  const biggest = Math.max(...ADMIN_GROUPS.map((g) => g.items.length));
-  check(ADMIN_GROUPS.length + biggest <= 11,
-    `開いた状態の行数の目安 ${ADMIN_GROUPS.length + biggest}（見出し5＋最大 ${biggest}）`);
+  const biggest = Math.max(...OFFICE_GROUPS.map((g) => g.items.length));
+  check(1 + OFFICE_GROUPS.length + biggest <= 11,
+    `Officeを開いた状態の行数の目安 ${1 + OFFICE_GROUPS.length + biggest}（ダッシュボード1＋見出し${OFFICE_GROUPS.length}＋最大 ${biggest}）`);
 }
 
 // ---- 2) メンバーは7つ ---------------------------------------------------------
-//   ホーム・今日やること・メッセージ・勤怠・申請・キャリア・社内情報・マイページ
+//   ホーム・今日やること・社内AI・勤怠・申請・キャリア・社内情報・マイページ
 //   （評価・キャリア再設計 §3・§37。スペース予約は通常メニューから外した）
 console.log("\n— メンバー —");
 {
@@ -78,9 +97,29 @@ console.log("\n— メンバー —");
   check(always.length === 7,
     `いつも出るのは7つ（いま ${always.length}: ${always.map((n) => n.label).join("・")}）`);
   check(MEMBER_NAV.length === 5, `スマホの下タブは5つ（いま ${MEMBER_NAV.length}）`);
+
+// ---- 入社準備中のメニュー --------------------------------------------------------
+// 入社前の人には、通常メンバー向けの機能を並べない。ホーム／入社準備／給与管理／設定・セキュリティ の4つだけ。
+// 行き先は、入社準備中に開いている画面（lib/stages.js ALLOWED.preparing）だけ。開けない画面への入口は置かない
+{
+  const { ALLOWED, PREPARING_ONLY } = await import("../lib/stages.js");
+  const items = PREPARING_NAV.filter((n) => !n.section);
+  check(items.map((n) => n.label).join("／") === "ホーム／入社準備／給与管理／設定・セキュリティ",
+    `入社準備中のメニューは4つ（いま ${items.map((n) => n.label).join("／")}）`);
+  const fileOf = (href) => href.replace(/^\//, "").replace(/[?#].*$/, "").replace(/\/$/, "") || "index";
+  const screenOf = { "home.html": "home", "onboarding": "onboarding", "mypage.html": "mypage", "contracts.html": "contracts" };
+  for (const n of items) {
+    const f = fileOf(n.href);
+    check(screenOf[f] && ALLOWED.preparing.includes(screenOf[f]), `入社準備中のメニュー「${n.label}」は、入社準備中に開ける画面へ（${n.href}）`);
+  }
+  check(PREPARING_ONLY.includes("onboarding"), "入社準備は、入社準備中だけの画面");
+  // 通常メンバーの機能（今日やること・勤怠・キャリア・社内情報…）は、入社準備中のメニューに並べない
+  const normal = ["tasks", "nippo", "timecard", "requests", "expenses", "career", "notices", "messages", "dojo"];
+  check(!items.some((n) => normal.includes(n.key)), "入社準備中のメニューに、通常メンバーの機能を並べない");
+}
 }
 
-// 採用HR（/hr/）・Sales（/sales/）・Office（/office/）の入口は共通ヘッダーの近道だけ。
+// 採用HR（/hr/）・Sales（/sales/）・月次業務（/office/）の入口は共通ヘッダーの近道だけ。
 // 左メニューにも置くと二重導線になる（when で権限者だけに出す形も含めて置かない）
 for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバー"]]) {
   const dup = navs.filter((n) => /^\/?(hr|sales|office)\/$/.test(String(n.href || "")));
@@ -94,7 +133,7 @@ for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバ�
 }
 
 // メンバーと管理者は別の表。同じ配列を共有していない
-check(MEMBER_SIDE_NAV !== ADMIN_GROUPS, "メンバーと管理者は別の表");
+check(MEMBER_SIDE_NAV !== OFFICE_TOP, "メンバーと管理者は別の表");
 {
   // 管理側の画面が、メンバーの表に混ざっていないこと
   const leaked = memberItems.filter((n) => String(n.href || "").startsWith("admin-"));
@@ -153,9 +192,10 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
     // 単純な「active: "esign"」か、「active: 何か ? "esign_order" : "esign"」の
     // どちらか。後者は三項演算の左右（実際にactiveへ入る側）だけを拾い、
     // 条件式の中の文字列（例: "order"）は候補に入れない
-    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*roles:/.exec(src);
+    // roles（appRole）か access（canManageHr 等、roles では表せない権限）のどちらかで入口を絞る
+    const plain = /KPLayout\.init\(\{\s*active:\s*"([a-z_]+)"\s*,\s*(?:roles|access):/.exec(src);
     if (plain) return [plain[1]];
-    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*roles:/
+    const ternary = /KPLayout\.init\(\{\s*active:[\s\S]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)"\s*,\s*(?:roles|access):/
       .exec(src);
     return ternary ? [ternary[1], ternary[2]] : null;
   };
@@ -201,7 +241,8 @@ console.log("\n— 見出しとまとまりの名前 —");
         const f = pageOf(t.key, navs);
         // #… は同じ画面の別ビュー、?… は同じ画面の別タブ（例: admin-esign.html?tab=order）。
         // どちらも「別のHTMLファイル」ではないので、見出し比較の対象外
-        if (!f || f.includes("#") || f.includes("?")) continue;
+        // "/office/" のような別アプリへの入口も、別のHTMLファイルではないので対象外
+        if (!f || f.includes("#") || f.includes("?") || f.startsWith("/")) continue;
         const h = h1Of(f);
         check(h === n.label,
           `${who} ${f} の見出しは「${n.label}」（いま「${h}」）`);

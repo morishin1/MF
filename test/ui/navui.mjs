@@ -3,7 +3,8 @@
 // ■ 何を守りたいのか
 //
 //   「登録済みの機能を全部並べる」に戻らないこと。
-//   左は目的ごとに5つ。細かい行き先はページの上のタブ。
+//   「左は自分の仕事、上は担当業務」。管理者も、ホーム領域の左メニューは全員と同じ。
+//   Office・⚙管理に入ったときだけ専用の左メニュー。細かい行き先はページの上のタブ。
 //   管理者とメンバーで、表そのものが別であること。
 //
 //   ここが崩れると、前のように24項目が一列に並び、
@@ -47,7 +48,7 @@ const fitsNote = async (page, sel) => {
 };
 
 /** ログイン済みの画面を1つ開く */
-async function open(path, { admin }) {
+async function open(path, { admin, access }) {
   const page = await br.newPage({ viewport: { width: 1440, height: 900 }, timezoneId: "Asia/Tokyo" });
   const role = admin ? "admin" : "member";
   await page.addInitScript((r) => {
@@ -65,6 +66,9 @@ async function open(path, { admin }) {
     if (/\/api\/me\b/.test(url)) {
       return send({
         email: "a@b.c", appRole: role, shows: {}, isAdmin: admin,
+        // access（roles では表せない権限）。admin は owner 相当で全部 true にしておく
+        // （admin-ai.html の access:"aiInquiries" のような画面もこのモックで開けるように）
+        access: access || { recruit: admin, sell: admin, office: admin, keiei: admin, aiInquiries: admin },
         gw: { employee: { id: "e1", display_name: "テスト", status: "active" },
               roles: admin ? ["owner"] : [], isAdmin: admin, tenantId: "t1", stage: null },
       });
@@ -79,14 +83,27 @@ async function open(path, { admin }) {
 }
 
 // ---------------------------------------------------------------------------
-console.log("— 管理者の左メニュー —");
+console.log("— 管理者：ヘッダーの業務領域切替 —");
 {
+  // admin-timecard.html は管理画面（人事・労務グループ）の画面。Office（/office/）ではない（2026-10-02）
   const page = await open("admin-timecard.html", { admin: true });
 
+  // ヘッダーに Office・⚙管理 のショートカットが出る。管理画面にいるときは、⚙管理が選ばれて見える
+  // （Office は /office/ の中にいるときだけ選ばれる）。⚙管理は幅を取らないよう、通知ベルと同じアイコン＋ドロップダウン（#kp-admin-menu-btn）
+  const office = page.locator('.kp-shortcut[data-shortcut="office"]');
+  const settings = page.locator('#kp-admin-menu-btn');
+  check(await office.isVisible(), "ヘッダーに「Office」が出る");
+  check(await settings.isVisible(), "ヘッダーに「管理」（⚙）が出る");
+  check((await office.getAttribute("href")) === "/office/", "Office の行き先は /office/（管理画面へは送らない）");
+  check(!/\bon\b/.test((await office.getAttribute("class")) || ""), "管理画面にいるときは「Office」は選ばれない（管理画面は Office ではない）");
+  check(/\bon\b/.test((await settings.getAttribute("class")) || ""), "管理画面にいるときは「管理」（⚙）が選ばれて見える");
+  check(!(await page.locator(".kp-app").innerText()).includes("OFFICE"), "管理画面のタグは「OFFICE」と名乗らない");
+
   const heads = await page.locator(".kp-side-group .lb").allInnerTexts();
-  // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）
-  check(heads.length === 4, `見出しは4つ（いま ${heads.length}: ${heads.join("・")}）`);
-  for (const x of ["ホーム", "人事・労務", "業務・経理", "管理・設定"]) {
+  // Office は2グループだけ（人事・労務・経理・事務に限る）（ホーム＝全員と同じ左メニュー・管理は領域が別なので、ここには出ない）
+  check(heads.length === 2, `見出しは2つ（いま ${heads.length}: ${heads.join("・")}）`);
+  check(!heads.some((h) => /全社運営/.test(h)), "新方針にない「全社運営」は作らない");
+  for (const x of ["人事・労務", "経理・事務"]) {
     check(heads.some((h) => h.trim() === x), `グループ「${x}」`);
   }
 
@@ -94,19 +111,22 @@ console.log("— 管理者の左メニュー —");
   const shown = (await page.locator(".kp-side-sub:not(.hidden) .kp-side-item").allInnerTexts())
     .map((s) => s.trim());
   check(shown.length <= 6, `開いているのは1グループぶんだけ（いま ${shown.length} 行）`);
-  check(shown.some((s) => s.includes("勤怠・休暇")), "いまいるグループが開いている");
+  check(shown.some((s) => s.includes("勤怠管理")), "いまいるグループが開いている");
   // 人事・労務の最終形（採用HRはヘッダーの近道が正式な入口。左には置かない）
   // アイコンはフォントが読めない環境では名前の文字として出るので、最後の行（項目名）だけを比べる
   const hrItems = shown.map((t) => t.split("\n").pop().trim()).join("/");
-  check(hrItems === "メンバー管理/入退社/勤怠・休暇/雇用契約/評価・キャリア",
+  check(hrItems === "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア",
     `人事・労務の並び（いま ${hrItems}）`);
 
   // 左メニュー全体（畳まれているグループも含む）に、採用HR・Sales の入口が無い
   const allHref = await page.locator(".kp-sidebar a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href") || ""));
   check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "左メニューに「採用」（/hr/）は置かない");
   check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "左メニューに「営業」（/sales/）は置かない");
-  check(!allHref.some((h) => /(^|\/)office\/$/.test(h)), "左メニューに「Office」（/office/）は置かない");
-  // 最終メニュー（ホーム5・業務・経理4・管理・設定4）
+  check(!allHref.some((h) => /(^|\/)office\/$/.test(h)), "左メニューに月次業務（/office/）は置かない");
+  // 先頭のダッシュボードは、グループの外の1行
+  const top = (await page.locator(".kp-sidebar > .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
+  check(top.join("/") === "ダッシュボード", `Officeの先頭（いま ${top.join("/")}）`);
+  // Office の最終メニュー（人事・労務5・経理・事務5）
   // 項目は見出しの隣の .kp-side-sub（同じ data-group）に入っている。畳まれていても数える
   const groupItems = await page.locator(".kp-side-group").evaluateAll((gs) => gs.map((g) => ({
     head: g.querySelector(".lb")?.textContent.trim(),
@@ -114,9 +134,8 @@ console.log("— 管理者の左メニュー —");
       .map((x) => x.textContent.trim()),
   })));
   const want = {
-    "ホーム": "ダッシュボード/今日のタスク/日報/メッセージ/お知らせ",
-    "業務・経理": "経費精算/月次業務/社内文書/会計",
-    "管理・設定": "権限/端末・貸与品/アクセス分析/システム設定",
+    "人事・労務": "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア",
+    "経理・事務": "経費精算/月次業務/社内文書/会計/お知らせ配信",
   };
   for (const [head, list] of Object.entries(want)) {
     const g = groupItems.find((x) => x.head === head);
@@ -132,6 +151,9 @@ console.log("— 管理者の左メニュー —");
 
   // 2階層目は左に出さない。ページの上の帯に出す
   const side = await page.locator(".kp-sidebar").innerText();
+  for (const x of ["全員のタスク", "全員の日報", "AIナレッジ", "チーム状況"]) {
+    check(!side.includes(x), `Officeの左メニューに「${x}」を置かない（経営・⚙管理の側）`);
+  }
   check(!/休暇・稟議/.test(side), "「休暇・稟議」は左メニューに出ていない");
   check(!/自走レベル/.test(side), "「自走レベル」は左メニューに出ていない");
   check(!/電子署名/.test(side), "「電子署名」は左メニューに出ていない");
@@ -154,6 +176,110 @@ console.log("— 管理者の左メニュー —");
   await page.close();
 }
 
+console.log("\n— 管理者：ホーム領域の左メニューは全員と同じ —");
+{
+  // admin-dashboard.html は管理画面（先頭のダッシュボード）。Office ではない
+  const d = await open("admin-dashboard.html", { admin: true });
+  check(await d.locator('.kp-shortcut[data-shortcut="office"].on').count() === 0, "管理画面のダッシュボードでは「Office」は選ばれない");
+  check((await d.locator(".kp-app").innerText()).includes("管理") && !(await d.locator(".kp-app").innerText()).includes("OFFICE"), "ヘッダーに「/ 管理」と出る（Office と名乗らない）");
+  check((await d.locator(".kp-side-item.on").innerText()).includes("ダッシュボード"), "管理画面の左でダッシュボードが光る");
+  await d.close();
+
+  // home.html はホーム領域。管理者でも、メンバーと同じ左メニューになる
+  const page = await open("home.html", { admin: true });
+  check(await page.locator(".kp-side-group").count() === 0, "ホームはグループに畳まない");
+  check(await page.locator(".kp-sidebar.member").count() === 1, "管理者でもメンバーと同じ左メニュー");
+  const items = (await page.locator(".kp-sidebar.member .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts())
+    .map((s) => s.trim());
+  for (const x of ["ホーム", "今日やること", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+    check(items.some((i) => i.includes(x)), `管理者の左にも「${x}」`);
+  }
+  const side = await page.locator(".kp-sidebar.member").innerText();
+  for (const x of ["メンバー管理", "入退社", "勤怠管理", "全員の日報", "AIナレッジ", "システム設定"]) {
+    check(!side.includes(x), `左メニューに管理用の「${x}」を置かない`);
+  }
+
+  // Office・管理のどちらもいまは選ばれていない。ヘッダーのロゴは home.html
+  check(await page.locator(".kp-shortcut.on").count() === 0, "ホームでは Office は選ばれていない");
+  check(!/\bon\b/.test((await page.locator("#kp-admin-menu-btn").getAttribute("class")) || ""), "ホームでは「管理」は選ばれていない");
+  check((await page.locator(".topbar .brand a").getAttribute("href")) === "home.html", "ロゴは全員共通のホームへ");
+  await page.close();
+}
+
+console.log("\n— AIナレッジは⚙管理。社内AIは左メニュー —");
+{
+  const page = await open("admin-ai.html", { admin: true });
+  const lit = await page.locator(".kp-side-item.on").innerText();
+  check(/AIナレッジ/.test(lit), `⚙管理の左では「AIナレッジ」が光る（いま ${lit.trim()}）`);
+  check(/\bon\b/.test((await page.locator("#kp-admin-menu-btn").getAttribute("class")) || ""), "ヘッダーの⚙管理が選ばれて見える");
+  check(await page.locator(".kp-subnav").count() === 0, "AIチャットとの切替帯は出さない（本人用と管理用を混ぜない）");
+  await page.close();
+  const chat = await open("messages.html", { admin: true });
+  const l2 = await chat.locator(".kp-sidebar.member .kp-side-item.on").innerText();
+  check(/社内AI/.test(l2), `管理者の社内AIは、左メニュー（全員と同じ）で光る（いま ${l2.trim()}）`);
+  await chat.close();
+}
+
+console.log("\n— 経営：全員のタスク・日報・チーム状況 —");
+{
+  const page = await open("admin-tasks.html", { admin: true });
+  const items = (await page.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
+  check(items.join("/") === "経営ホーム/チーム状況/全員のタスク/全員の日報", `経営の並び（いま ${items.join("/")}）`);
+  check(/\bon\b/.test((await page.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("class")) || ""), "ヘッダーの「経営」が選ばれて見える");
+  check((await page.locator(".kp-app").innerText()).includes("経営"), "ヘッダーに「/ 経営」と出る");
+  const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
+  check(tabs.join("/") === "タスク・予定/今週のゴール", `全員のタスクの帯（いま ${tabs.join("/")}）`);
+  await page.close();
+}
+
+console.log("\n— 管理者（経営者・経理の権限なし）：入れる入口だけが出る —");
+{
+  // 会計側の管理者だけ（access.keiei・access.office なし）。管理画面は開けるが、/keiei と /office は入れない
+  const only = { recruit: false, sell: false, office: false, keiei: false, aiInquiries: true };
+  const t = await open("admin-tasks.html", { admin: true, access: only });
+  const items = (await t.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
+  check(items.join("/") === "チーム状況/全員のタスク/全員の日報", `経営ホーム（/keiei）は経営者だけ。管理者はチーム管理の3つ（いま ${items.join("/")}）`);
+  check((await t.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("href")) === "admin-team.html", "管理者の「経営」は、チーム状況から入る（導線がある）");
+  check(await t.locator('.kp-shortcut[data-shortcut="office"]').count() === 0, "access.office が無い管理者には「Office」を出さない（押しても入れない入口を出さない。管理画面は ⚙管理 から）");
+  await t.close();
+  const c = await open("admin-closing.html", { admin: true, access: only });
+  const tabs = (await c.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
+  check(tabs.join("/") === "月次締め/月初作業管理", `/office に入れない人には「月末月初業務」を出さない（いま ${tabs.join("/")}）`);
+  await c.close();
+
+  // access.office のある管理者（経営者・責任者・経理を兼ねる）には、Officeの月次業務の中に /office/ が出る
+  const c2 = await open("admin-closing.html", { admin: true });
+  const tabs2 = await c2.locator(".kp-subnav .kp-subtab").evaluateAll((ns) => ns.map((n) => `${n.textContent.trim()}|${n.getAttribute("href") || ""}`));
+  check(tabs2.join(",") === "月次締め|,月初作業管理|admin-month-start.html,月末月初業務|/office/", `月次業務の帯に /office/（いま ${tabs2.join(",")}）`);
+  await c2.close();
+}
+
+console.log("\n— 同じ鍵でもメンバー画面は本人用（管理者でもOfficeの左メニューにしない） —");
+{
+  for (const f of ["timecard.html", "expenses.html", "tasks.html", "nippo.html", "notices.html", "career.html"]) {
+    const page = await open(f, { admin: true });
+    check(await page.locator(".kp-sidebar.member").count() === 1, `${f}: 管理者でもメンバーと同じ左メニュー`);
+    check(await page.locator(".kp-side-group").count() === 0, `${f}: Officeのグループは出ない`);
+    await page.close();
+  }
+}
+
+console.log("\n— 管理者：⚙管理 領域は平らな5項目 —");
+{
+  const page = await open("admin-devices.html", { admin: true });
+
+  check(await page.locator(".kp-side-group").count() === 0, "管理はグループに畳まない");
+  const items = (await page.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts())
+    .map((s) => s.trim());
+  check(items.join("/") === "権限/端末・貸与品/アクセス分析/AIナレッジ/システム設定",
+    `管理の並び（いま ${items.join("/")}）`);
+
+  const settings = page.locator('#kp-admin-menu-btn');
+  check(/\bon\b/.test((await settings.getAttribute("class")) || ""), "管理にいるときは「管理」が選ばれて見える");
+
+  await page.close();
+}
+
 console.log("\n— 帯から、隣の画面へ行ける —");
 {
   const page = await open("admin-requests.html", { admin: true });
@@ -161,7 +287,7 @@ console.log("\n— 帯から、隣の画面へ行ける —");
   check(on.trim() === "休暇・稟議", `隣を開いても帯が出る（いま ${on}）`);
   // 左メニューでは、まとめた側が光っている
   const lit = await page.locator(".kp-side-item.on").innerText();
-  check(/勤怠・休暇/.test(lit), `左では「勤怠・休暇」が光る（いま ${lit.trim()}）`);
+  check(/勤怠管理/.test(lit), `左では「勤怠管理」が光る（いま ${lit.trim()}）`);
   await page.close();
 }
 
@@ -199,7 +325,7 @@ console.log("\n— メンバーの左メニュー —");
     .map((s) => s.trim());
   check(items.length <= 9, `項目は9つまで（いま ${items.length}: ${items.join("・")}）`);
   // 評価・キャリア再設計 §37 の7つ
-  for (const x of ["ホーム", "今日やること", "メッセージ", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+  for (const x of ["ホーム", "今日やること", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `「${x}」`);
   }
   check(!items.some((i) => i.includes("スペース予約")), "スペース予約は通常メニューに出さない");

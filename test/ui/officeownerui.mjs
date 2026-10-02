@@ -1,7 +1,7 @@
 // 経営者（owner）が、二段階認証（MFA）なしで、Office に入れること。実際のブラウザで見る。
 //
 //   経営者でログイン（MFA は未登録・6桁の確認もしていない＝aal1）
-//     → ヘッダーの「Office」をクリック
+//     → ヘッダーの「Office」を押す（行き先は役割に関係なく /office/。管理画面のダッシュボードへは送らない）
 //     → /office が開く（マイページの MFA 登録へ飛ばされない）
 //     → 対象月を 2026年10月 にすると、テスト案件（【Office Phase3 TEST】）が1行出る
 //     → 勤務表の画面（/office/timesheet.html）も開く
@@ -100,9 +100,11 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
   check(true, "ダッシュボードのヘッダーに「Office」が出ている（access.office のとおり）");
   check(await page.locator(".kp-mfa-nudge").count() === 1, "MFA の登録を促す帯は出ている（案内だけ。Office を止めない）");
 
-  // Office をクリック
+  // Office に入る。経営者でも経理でも、ヘッダーの Office は /office/ へ行く（管理画面のダッシュボードへは送らない）
+  check((await page.locator(".topbar [data-shortcut='office']").getAttribute("href")) === "/office/",
+    "経営者の Office は /office/ へ行く（管理画面のダッシュボードではない）");
   await Promise.all([page.waitForURL(/\/office\/?(index\.html)?(\?.*)?$/), page.click(".topbar [data-shortcut='office']")]);
-  check(new URL(page.url()).pathname.startsWith("/office"), `クリックで /office が開く（いま ${new URL(page.url()).pathname}）`);
+  check(new URL(page.url()).pathname.startsWith("/office"), `Office をクリックすると /office が開く（いま ${new URL(page.url()).pathname}）`);
   errs.length = 0;      // ここまでは開始地点（ダッシュボード。疑似 API は空を返すだけ）。Office に入ってからのエラーを見る
   const shown = await page.waitForSelector("#month", { timeout: 8000 }).then(() => true, () => false);
   await page.waitForTimeout(600);

@@ -8,7 +8,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageHr, isOwner } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -16,6 +16,7 @@ import {
   readAccounts, setAccountsActive, removeAccountingAccess, attachAccount, SYSTEMS,
 } from "../../lib/accounts.js";
 import { normalizeKind } from "../../lib/partner.js";
+import { guardOwnerTarget, guardLastOwner } from "../../lib/owner-guard.js";
 
 // 退職・退職手続き中は、どのシステムにも入れない状態にする
 const LEFT = ["leaving", "left"];
@@ -104,6 +105,8 @@ export default async function handler(req, res) {
       }),
       canManage: canManageHr(ctx),
       canGrantRoles: canManageHr(ctx),
+      // 経営者（owner）の付与・剥奪と、経営者の名簿・ログインの変更は、いまの経営者だけ
+      canGrantOwner: isOwner(ctx),
       systems: SYSTEMS,
       kindReady,
     });
@@ -168,6 +171,16 @@ export default async function handler(req, res) {
       if (bad) return json(res, 400, bad);
     }
 
+    // 経営者（owner）の名簿は、経営者以外は変えられない（退職にして締め出す・ログインを奪うのを防ぐ）
+    const sbAdmin0 = admin();
+    const stopOwner = await guardOwnerTarget(sbAdmin0, ctx, body.id, "名簿の変更");
+    if (stopOwner) return json(res, stopOwner.status, stopOwner.body);
+    // 最後の（在籍中の）経営者を、退職にしてしまわない
+    if (row.value.status && LEFT.includes(row.value.status)) {
+      const stopLast = await guardLastOwner(sbAdmin0, ctx.tenantId, body.id, "退職にする");
+      if (stopLast) return json(res, stopLast.status, stopLast.body);
+    }
+
     // 状態が変わるかどうかを、書き換える前に見ておく
     const { data: before } = await sb
       .from("gw_employees").select("status, user_id")
@@ -221,6 +234,12 @@ export default async function handler(req, res) {
       .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
     if (!target) return json(res, 404, { error: "employee_not_found" });
 
+    // 経営者は、経営者以外は消せない。最後の経営者は、経営者でも消せない
+    const stopOwner = await guardOwnerTarget(admin(), ctx, id, "名簿からの削除");
+    if (stopOwner) return json(res, stopOwner.status, stopOwner.body);
+    const stopLast = await guardLastOwner(admin(), ctx.tenantId, id, "削除する");
+    if (stopLast) return json(res, stopLast.status, stopLast.body);
+
     // 自分を消すと、その場で名簿を触れなくなる
     if (ctx.employee?.id === id) {
       return json(res, 400, { error: "cannot_delete_self", hint: "自分自身は削除できません" });
@@ -240,6 +259,12 @@ export default async function handler(req, res) {
 
     const { error } = await sb
       .from("gw_employees").delete().eq("id", id).eq("tenant_id", ctx.tenantId);
+    // 外部キーが止めた（給与の履歴など、消してはいけない記録が残っている: db/105）。
+    // 何の記録かは言わない（ここで開く人は、その記録を読める人とは限らない）。退職にすれば、記録は残る
+    if (error?.code === "23503") {
+      return json(res, 409, { error: "employee_has_records", blockers: [],
+        hint: "消してはいけない記録が残っているため、名簿から消せません。状態を「退職」に変えてください（記録はそのまま残ります）。" });
+    }
     if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
 
     // ログインアカウント（auth.users）は消さない。同じアカウントを
