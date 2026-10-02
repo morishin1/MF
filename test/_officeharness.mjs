@@ -91,7 +91,18 @@ export const rls = (name, c) => {
   return true;
 };
 
-export const mem = createMemDb({ schema, rls });
+// 外部キー（db/077・080・105〜107）：現場契約を消すと、月次進捗・提出・契約条件・勤務表（→日別）が消え、履歴は契約の id だけ外れる
+const fks = {
+  gw_site_contracts: [
+    { table: "gw_billing_progress", col: "site_contract_id", action: "cascade" },
+    { table: "gw_submissions", col: "site_contract_id", action: "cascade" },
+    { table: "gw_site_contract_terms", col: "site_contract_id", action: "cascade" },
+    { table: "gw_timesheets", col: "site_contract_id", action: "cascade" },
+    { table: "gw_office_events", col: "site_contract_id", action: "setnull" },
+  ],
+  gw_timesheets: [{ table: "gw_timesheet_days", col: "timesheet_id", action: "cascade" }],
+};
+export const mem = createMemDb({ schema, rls, fks });
 export const ctl = { who: null, aal: "aal2" };
 export const asked = [];        // userClient で読んだ列（機微な列を読んでいないかを見る）
 export const logged = [];

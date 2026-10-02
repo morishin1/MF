@@ -13,21 +13,23 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // Office は1つの業務アプリ（人事・労務・経理・事務）。月次業務（/office/）はその中の機能。
-  // 月次業務は access.office の人（経営者・責任者・経理）が使う。
-  // 人事・労務、経理・事務の管理画面（admin-*.html）は、既存の管理画面をそのまま使い、
-  // 入口は担当の人にだけ出す。出すかどうかはサーバの判定（/api/me の access）で決める:
-  //   officeHr（人事・労務）… 管理者・経営者・人事 / officeFinance（経理・事務）… 管理者・経営者・経理
-  // （押すと 403 の入口を出さない。画面側で役割名を並べ直さない）
-  const MONTHLY = { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available" };
-  const DASH   = { key: "dashboard", href: "/admin-dashboard.html", label: "ダッシュボード", icon: "dashboard" };
-  const PEOPLE = { key: "people",    href: "/admin-members.html",   label: "人事・労務",     icon: "group" };
-  const OPS    = { key: "ops",       href: "/admin-expenses.html",  label: "経理・事務",     icon: "work" };
-  const navFor = (me) => {
-    const a = me?.access || {};
-    const hr = Boolean(a.officeHr), fin = Boolean(a.officeFinance);
-    return [...(hr || fin ? [DASH] : []), ...(hr ? [PEOPLE] : []), ...(fin ? [OPS] : []), MONTHLY];
-  };
+  // ■ Office は1つの業務アプリ（役割で入口も見た目も変えない。2026-10-02 に決めた）
+  //   経営者でも、経理でも、人事・労務でも、Office を押したら同じ /office/ に入り、
+  //   同じヘッダー・同じナビ・同じコンテンツ幅・同じカード／ボタン／フォント／色になる。
+  //   役割で変わるのは「見えるメニュー・データ・操作」だけ（＝権限）。ナビ全体を役割で差し替えない。
+  //
+  //   以前は、admin/owner のときだけ管理画面（ダッシュボード・人事・労務・経理・事務）のナビを足していた。廃止した。
+  //   管理画面（admin-*.html）は残してあるが、Office の入口でもナビでもない（ヘッダー右の ⚙管理 から開く）。
+  //
+  // ■ ナビは1つだけ定義する（NAV）
+  //   needs … その項目を出すのに要る権限。/api/me の access のキー（サーバの判定そのもの）。
+  //           役割名（owner・finance など）は、ここでも持たない。
+  //   機能を足すときは、ここに1行足す（人事・労務の機能なら needs: "recruit"、など）。
+  //   権限のない人には、その項目だけを出さない（ナビ全体は変えない）
+  const NAV = [
+    { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available", needs: "office" },
+  ];
+  const navFor = (me) => NAV.filter((n) => !n.needs || Boolean(me?.access?.[n.needs]));
 
   function css() {
     if (document.getElementById("office-layout-css")) return;
@@ -141,22 +143,22 @@
     document.removeEventListener("click", closeUserMenuOnce);
   }
 
+  // 入口は、ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで決める。
+  // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない。API.warm にも渡す
+  function allows(me) { return Boolean(me?.access?.office); }
+
+  // 前回の身元（/api/me）を覚えていれば、待たずにヘッダーを出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
   async function init(opts = {}) {
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
-    let me;
-    try {
-      me = await API.me();
-    } catch (e) {
-      location.href = "/index.html";
-      return null;
-    }
-    // ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで入口を決める。
-    // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない
-    if (!me?.access?.office) { location.replace("/home.html"); return null; }
-
-    renderHeader(opts.active, me);
-    return { me };
+    const got = await API.enterWithMe(allows, {
+      leave: () => location.replace("/home.html"),
+      lost: () => { location.href = "/index.html"; },
+    });
+    if (!got) return null;
+    renderHeader(opts.active, got.me);
+    return { me: got.me };
   }
 
   // ---- 画面どうしで共通の小さな道具 -------------------------------------------
@@ -191,5 +193,5 @@
     return `${Number(m)}/${Number(d)}`;
   }
 
-  window.OfficeLayout = { init, esc, pill, fmt, fmtDay, toggleUserMenu };
+  window.OfficeLayout = { init, allows, navFor, NAV, esc, pill, fmt, fmtDay, toggleUserMenu };
 })();

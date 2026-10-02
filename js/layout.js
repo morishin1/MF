@@ -169,10 +169,11 @@
    *   他人・会社を管理する画面は左に置かない。
    *
    * ■ 担当業務はヘッダーから入る。入ったら、その業務だけの専用の左メニューになる。
-   *   採用HR（/hr）・Sales（/sales）・経営（/keiei）・月次業務（/office）は別アプリ。
+   *   採用HR（/hr）・Sales（/sales）・経営（/keiei）・Office（/office。月次業務はその中の機能）は別アプリ。
    *   管理者が使う管理画面（admin-*.html）は URL を変えず、次の3つの領域に分ける
-   *   （areaOf が active から判定する）。
-   *     office   … ダッシュボード／人事・労務／経理・事務（人事・労務・経理・事務だけ）
+   *   （areaOf が active から判定する）。管理画面は Office ではない（ヘッダーの Office は /office/ に1つだけ。
+   *   管理画面へは ⚙管理 から入る。2026-10-02 に、Office の入口を役割で分けるのをやめた）。
+   *     office   … ダッシュボード／人事・労務／経理・事務（管理画面。ヘッダーのタグは「管理」）
    *     keiei    … チーム状況・全員のタスク・全員の日報（チーム・会社全体の管理）
    *     settings … 権限・端末・アクセス分析・AIナレッジ・システム設定（ヘッダー右の⚙管理から）
    *   上のどちらにも属さない画面は、ホーム領域＝全員と同じ左メニュー。
@@ -185,18 +186,16 @@
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
-  // Office の最初の行。管理者向けのダッシュボード（全社の今日の状況）
+  // 管理画面（人事・労務／経理・事務）の最初の行。管理者向けのダッシュボード（全社の今日の状況）
   const OFFICE_TOP = [
     // Office の人事・労務／経理・事務のどちらかに入れる人に出す（中の行は、本人の担当分だけ）
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true, when: "officeAny" },
   ];
 
-  // Office: 人事・労務／経理・事務。グループごとに、入れる人が違う（when）。
-  //   人事・労務 … officeHr（管理者・経営者・人事）
-  //   経理・事務 … officeFinance（管理者・経営者・経理）
-  // when は /api/me の access（サーバの canOfficeHr / canOfficeFinance）をそのまま使う。
-  // 入れない人には、グループごと出さない（押して 403 になる入口を作らない）。API も同じ関数で守る（lib/gw.js）。
-  // HR（/hr）・Sales（/sales）・経営（/keiei）と同じく、ヘッダー切替が正式な入口
+  // 管理画面: 人事・労務／経理・事務。入口はヘッダー右の ⚙管理（Office の入口ではない。Office は全員 /office/）。
+  // グループごとに、入れる人が違う（when）。when は /api/me の access（サーバの canOfficeHr / canOfficeFinance）をそのまま使う:
+  //   人事・労務 … officeHr（管理者・経営者・人事） / 経理・事務 … officeFinance（管理者・経営者・経理）
+  // 入れない人には、グループごと出さない（押して 403 になる入口を作らない）。API も同じ関数で守る（lib/gw.js）
   const OFFICE_GROUPS = [
     {
       key: "office-hr", label: "人事・労務", icon: "group", when: "officeHr",
@@ -388,23 +387,26 @@
   //
   // ■ ヘッダーは「採用HR｜Sales｜Office｜経営｜⚙管理」の5つ。担当業務は1つの名前に1つだけ
   //   （同じ Office を「Office」と「月次業務」で二重に出さない。月次業務は Office の中の機能）
-  //   altHref … 管理者（admin/owner）が開くときの入口。管理画面（admin-*.html）はそちらが正本で、
-  //             /office・/keiei は access（canAccessOffice・canKeiei）の人だけが入れる別アプリ。
-  //             入れない入口を出さない（出たのに押すと 403、を作らない）ため、人によって行き先を変える
+  //   altHref … 経営（/keiei）だけが持つ。経営者以外の管理者（admin）は、チーム状況（管理画面）から入る。
+  //             Office には持たせない（下の「Office は役割で入口を変えない」）
+  //
+  // ■ Office は役割で入口を変えない（2026-10-02 に決めた）
+  //   Office は1つの業務アプリ。経営者でも、経理でも、押したら同じ /office/ に入り、同じヘッダー・同じナビ・
+  //   同じ画面構造になる。違うのは「見えるメニュー・データ・操作」だけ（権限＝サーバの access.office による）。
+  //   以前は、管理者（admin/owner）だけ admin-dashboard.html（管理画面の人事・労務・経理・事務）へ送っていたが、廃止した。
+  //   管理画面（admin-*.html）は残してあり、ヘッダー右の ⚙管理 から開く（Office の入口ではない）
   const TOOLS = [
     { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add",       ready: true },
     { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
-    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true,
-      altHref: "admin-dashboard.html" },
+    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true },
     { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true,
       altHref: "admin-team.html" },
   ];
 
   /**
    * このツールを出すか／どこへ行くか。
-   *   office … /api/me の access.office（経営者・責任者・経理）か、管理者（admin/owner）。
-   *            管理者は管理画面（人事・労務・経理・事務）を開けるので Office に入れる。
-   *            access.office の人は /office/（月次業務）、管理者は admin-dashboard.html から入る
+   *   office … /api/me の access.office（経営者・責任者・経理）の人だけ。行き先は、役割に関係なく /office/。
+   *            管理者（admin/owner）でも、access.office が無ければ出さない（押しても入れない入口を出さない）
    *   keiei  … 経営者（access.keiei）は /keiei/。管理者はチーム状況（admin-team.html）から
    *            （全員のタスク・日報・チーム状況は管理者も使う。経営アプリそのものは経営者だけ）
    * 権限の判定は showsFor（サーバの判定そのもの）に集めてある。ここでは並べ直さない
@@ -415,8 +417,6 @@
     return Boolean(shows[t.key]);
   }
   function toolHref(t, shows) {
-    // 人事・労務／経理・事務のどちらかに入れる人は、Office の画面（ダッシュボード）へ。月末月初（/office/）だけの人は /office/ へ
-    if (t.key === "office") return shows.officeAny ? t.altHref : t.href;
     if (t.key === "keiei") return shows.keiei ? t.href : t.altHref;
     return t.href;
   }
@@ -425,8 +425,9 @@
     const list = TOOLS.filter((t) => t.ready && toolVisible(t, shows));
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
-      // /office・/keiei の中にいるとき、または管理画面でその領域（Office・経営）を開いているとき
-      const on = path.startsWith(s.href) || (s.key === "office" && area === "office") || (s.key === "keiei" && area === "keiei");
+      // /office・/keiei の中にいるとき。経営は、管理画面でその領域（チーム管理）を開いているときも選ぶ。
+      // Office は /office/ の中だけ（管理画面の人事・労務・経理・事務は、Office ではない）
+      const on = path.startsWith(s.href) || (s.key === "keiei" && area === "keiei");
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
@@ -444,6 +445,8 @@
     const showAdminTools = canPreview && !memberView;
     // 人事・経理の担当者（管理者ではない）も、Office の画面（admin-*.html）の中では「/ OFFICE」を出す
     const officeUser = !canPreview && appRole !== "sr" && Boolean(shows.officeAny);
+    // ⚙管理：管理者は設定一式。人事・経理の担当者は、管理画面（自分の担当グループだけが出る）への入口だけ
+    const showGear = showAdminTools || (officeUser && !memberView);
     const area = (showAdminTools || (officeUser && areaOf(active) === "office")) ? areaOf(active) : null;
 
     const el = document.createElement("div");
@@ -452,7 +455,7 @@
       <div class="brand">
         <a href="${home}" style="text-decoration:none;color:inherit;">
           <img src="img/logo.svg" alt="" class="kp-logo">エイト</a>
-        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "OFFICE", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
+        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "管理", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
@@ -466,13 +469,13 @@
                      title="メンバーに見える画面を、このアカウントのまま確認します">
                ${icon("visibility", 18)}メンバー表示
              </button>`) : ""}
-        ${showAdminTools ? `
+        ${showGear ? `
         <div class="kp-bell kp-admin-menu">
-          <button class="icon-btn${area === "settings" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
+          <button class="icon-btn${area === "settings" || area === "office" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
                   data-shortcut="area-settings" onclick="KPLayout.toggleAdminMenu()">
             ${icon("settings", 20)}
           </button>
-          <div class="kp-bell-panel hidden" id="kp-admin-menu-panel">${adminMenuHtml()}</div>
+          <div class="kp-bell-panel hidden" id="kp-admin-menu-panel">${adminMenuHtml(showAdminTools)}</div>
         </div>` : ""}
         <div class="kp-bell">
           <button class="icon-btn" id="kp-bell-btn" title="通知" onclick="KPLayout.toggleBell()">
@@ -486,7 +489,7 @@
         </button>
       </div>`;
     document.body.prepend(el);
-    loadNotifications();
+    soon(() => loadNotifications());
   }
 
   /**
@@ -494,10 +497,15 @@
    * SETTINGS_ITEMS（権限・端末・貸与品・アクセス分析・システム設定）への直リンクだけ。
    * サーバへ確かめに行く必要が無いので、通知と違って毎回その場で組み立てるだけでよい
    */
-  function adminMenuHtml() {
+  // 管理画面（人事・労務／経理・事務。admin-*.html）の入口。Office の入口ではない（Office は /office/ に1つだけ）。
+  // ヘッダーの「Office」から管理画面へは送らなくなったので、管理者がここから開く
+  const ADMIN_CONSOLE = { key: "console", href: "admin-dashboard.html", label: "管理画面（人事・労務／経理・事務）", icon: "dashboard" };
+
+  function adminMenuHtml(full = true) {
+    // 担当者（人事・経理）は管理画面だけ。権限・端末・システム設定などは管理者・経営者だけ
     return `
       <div class="kp-bell-head"><b>管理</b></div>
-      ${SETTINGS_ITEMS.map((n) => `
+      ${(full ? [ADMIN_CONSOLE, ...SETTINGS_ITEMS] : [ADMIN_CONSOLE]).map((n) => `
         <a class="kp-bell-item" href="${esc(n.href)}">
           ${icon(n.icon, 18)}<b style="display:inline;margin-left:8px;">${esc(n.label)}</b>
         </a>`).join("")}`;
@@ -506,17 +514,24 @@
   // ---- 通知 ---------------------------------------------------------------
   let notifications = [];
 
-  async function loadNotifications() {
-    try {
-      const res = await API.listNotifications();
-      notifications = res.notifications || [];
-      const badge = document.getElementById("kp-bell-badge");
-      if (!badge) return;
-      badge.textContent = res.unread > 9 ? "9+" : String(res.unread || "");
-      badge.classList.toggle("hidden", !res.unread);
-    } catch (e) {
-      // 未適用の環境や名簿未登録では通知が無いだけ。画面は壊さない
-    }
+  // ■ 毎画面すぐには取りにいかない
+  //   前回の値（60秒以内）があればそれをすぐ出し、取り直さない。古ければ、本文のあとで取り直す。
+  //   ベルを開いたときは、いつも最新を取りにいく（toggleBell）。
+  //   本文の表示を、通知の取得で待たせない
+  const NOTIF_FRESH = 60;
+  function applyNotifications(res) {
+    notifications = res?.notifications || [];
+    const badge = document.getElementById("kp-bell-badge");
+    if (!badge) return;
+    badge.textContent = res?.unread > 9 ? "9+" : String(res?.unread || "");
+    badge.classList.toggle("hidden", !res?.unread);
+  }
+  function loadNotifications({ force = false } = {}) {
+    return API.swr("notifications", () => API.listNotifications(), (res) => {
+      applyNotifications(res);
+      if (!document.getElementById("kp-bell-panel")?.classList.contains("hidden")) renderBell();
+    }, { ttl: 600, fresh: force ? 0 : NOTIF_FRESH, quiet: true })
+      .catch(() => { /* 未適用の環境や名簿未登録では通知が無いだけ。画面は壊さない */ });
   }
 
   function renderBell() {
@@ -766,14 +781,17 @@
    * ■ 取れなくても画面は動く
    *   バッジのために画面が止まる理由はない。
    */
-  async function loadBadges() {
-    let badges = {};
-    try {
-      const res = await API.badges();
-      badges = res?.badges || {};
-    } catch (e) {
-      return;   // 数字が出ないだけ。黙って戻る
-    }
+  //
+  // ■ 30〜60秒は覚えておく
+  //   前回の数字（45秒以内）をすぐ出し、取り直さない。古ければ取り直して、違えば入れ直す。
+  //   何かを更新したら（GET 以外）覚えている数字は捨てるので、片づけた件数は次の画面で消える
+  const BADGE_FRESH = 45;
+  function loadBadges() {
+    return API.swr("badges", () => API.badges(), (res) => applyBadges(res?.badges || {}),
+      { ttl: 600, fresh: BADGE_FRESH, quiet: true })
+      .catch(() => { /* 数字が出ないだけ。黙って戻る */ });
+  }
+  function applyBadges(badges) {
     for (const node of document.querySelectorAll("[data-badge]")) {
       // 「mypage contracts」のように、複数の鍵を背負っていることがある。
       // 空白区切りにしてあるので、CSS からは [data-badge~="contracts"] で引ける
@@ -832,28 +850,14 @@
   //
   //   毎回かならず裏で確かめるので古いままにはならないが、
   //   何日も前のものを入口にはしない
-  const ME_KEY = "kp_me";
-  const ME_HOURS = 12;
-  const loadMe = () => {
-    try {
-      const v = JSON.parse(localStorage.getItem(ME_KEY) || "null");
-      if (!v?.me || Date.now() - (v.at || 0) > ME_HOURS * 3600000) return null;
-      // 誰のぶんかを必ず見る。
-      // ログアウトのときは消しているが、前の人のセッションが切れたところへ
-      // 別の人がそのまま入ると、消さずに入れ替わる道がある。
-      // 覚えていた人と、いま入っている人が違えば、使わない
-      if (v.email && v.email !== API.currentEmail()) return null;
-      return v.me;
-    } catch { return null; }
-  };
-  const saveMe = (me) => {
-    try {
-      localStorage.setItem(ME_KEY,
-        JSON.stringify({ at: Date.now(), email: API.currentEmail(), me }));
-    } catch { /* 保存できなくても動く */ }
-  };
+  //
+  //   覚え方（kp_me・12時間・誰のぶんか）は js/api-client.js の rememberedMe / rememberMe に1つにまとめた。
+  //   HR・Sales・Office・経営の専用ヘッダーも同じものを使う（そちらは毎回 /api/me を待っていた）。
+  //   誰のぶんかを必ず見る：覚えていた人と、いま入っている人が違えば使わない
+  const loadMe = () => API.rememberedMe();
+  const saveMe = (me) => API.rememberMe(me);
   const clearCache = () => {
-    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(ME_KEY); } catch { /* 同上 */ }
+    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem("kp_me"); } catch { /* 同上 */ }
   };
 
   /**
@@ -1055,19 +1059,17 @@
         : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
-      // Office。/office（月次業務）に入れる人は access.office だけ（金額を扱うので、access が無いときは出さない）。
-      // 管理者（admin/owner）は管理画面の人事・労務・経理・事務に入れるので、Office の入口も出す。
-      // 入口は人によって変える（toolHref）ので、押して 403 になる人は出ない
+      // Office。/office に入れる人は access.office だけ（金額を扱うので、access が無いときは出さない）。
+      // 役割（管理者か経理か）で入口も見た目も変えない。入れる人は全員 /office/ に入り、同じ画面を見る。
+      // 管理者（admin/owner）でも、access.office が無ければ出さない（押して入れない入口を作らない）
       officeApp: Boolean(me?.access?.office),
-      // Office の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance）そのもの。
-      // access が無い古い応答のときは、管理者（admin/owner）だけ両方に入れる。社労士（sr）は入れない
+      // 管理画面（⚙管理）の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance）そのもの。
+      // access が無い古い応答のときは、管理者（admin/owner）だけ両方に入れる。社労士（sr）は入れない。
+      // Office（/office/）の入口は、これとは別に access.office だけで決める（役割で入口を変えない）
       officeHr: officeHr,
       officeFinance: officeFinance,
-      // Office の画面（admin-*.html）のどれかに入れる人
       officeAny: officeHr || officeFinance,
-      // Office の入口を出す人 = 人事・労務／経理・事務／月末月初（/office）のどれか1つでも入れる人。
-      // 入れない人にヘッダーの入口を出さない（押して 403 を作らない）
-      office: me?.appRole !== "sr" && (Boolean(me?.access?.office) || adminApp || officeHr || officeFinance),
+      office: Boolean(me?.access?.office),
       // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
       // 全員のタスク・日報・チーム状況（管理画面）を開ける人。経営の入口（管理者はここから）
@@ -1286,9 +1288,10 @@
       // それが「読み込み中…」の正体だった
       if (painted && cachedMe) {
         fresh.catch(() => { /* 送り返し・ログイン画面は verify の中で済ませる */ });
+        API.perfMark("init");
         return { me: cachedMe, appRole: cached.appRole, remembered: true };
       }
-      return fresh;
+      return fresh.then((r) => { API.perfMark("init"); return r; });
     },
 
     /**
@@ -1314,6 +1317,8 @@
       const opening = panel.classList.contains("hidden");
       if (opening) renderBell();
       panel.classList.toggle("hidden", !opening);
+      // 開いたときは最新を取りにいく（届いたら、開いているパネルを描き直す）
+      if (opening) loadNotifications({ force: true });
     },
 
     // ⚙管理のドロップダウン開閉。中身は固定なので、通知と違って毎回組み立て直す必要はない

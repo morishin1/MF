@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261002c">
+  <link rel="stylesheet" href="../css/app.css?v=20261002sp1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -100,10 +100,10 @@
   <div class="card"><div id="list"></div></div>
 </div>
 
-<script src="../js/api-client.js?v=20261002c"></script>
-<script src="../js/layout.js?v=20261002c"></script>
-<script src="../js/hr-layout.js?v=20261002c"></script>
-<script src="../js/jst.js?v=20261002c"></script>
+<script src="../js/api-client.js?v=20261002sp1"></script>
+<script src="../js/layout.js?v=20261002sp1"></script>
+<script src="../js/hr-layout.js?v=20261002sp1"></script>
+<script src="../js/jst.js?v=20261002sp1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -117,17 +117,27 @@
   let applicants = [];
   let todayInterviews = [];
 
+  // 表示速度：枠（権限の確認）を待たずに取りにいき始める。
+  // 2回目からは前回の内容をすぐ出し、裏で最新にする（変わったところだけ描き直す）
+  //   応募者一覧（hr:applicants）は応募者の画面と同じ鍵。ここで取ったものが、応募者の画面でもすぐ出る
+  const fetchApplicants = () => API.listHrApplicants();
+  const ivKey = `hr:interviews:${JST.ymd()}`;
+  const fetchToday = () => API.todayHrInterviews().catch(() => ({ interviews: [] }));
+  const canHr = (me) => HRLayout.allows(me, "dashboard");
+  API.warm("hr:applicants", fetchApplicants, canHr);
+  API.warm(ivKey, fetchToday, canHr);
+
   HRLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
 
   async function load() {
+    // 2つとも1回目が届いてから描く。そのあとは、どちらかが新しくなるたびに描き直す（変わったところだけ）
+    const got = new Set();
+    const ready = (k) => { got.add(k); if (got.size === 2) render(); };
     try {
-      const [res, ti] = await Promise.all([
-        API.listHrApplicants(),
-        API.todayHrInterviews().catch(() => ({ interviews: [] })),
+      await Promise.all([
+        API.swr("hr:applicants", fetchApplicants, (res) => { applicants = res.applicants || []; ready("a"); }),
+        API.swr(ivKey, fetchToday, (ti) => { todayInterviews = ti.interviews || []; ready("i"); }),
       ]);
-      applicants = res.applicants || [];
-      todayInterviews = ti.interviews || [];
-      render();
     } catch (e) {
       el("today").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
@@ -146,20 +156,20 @@
   /** Aランク、または社長推薦の段階まで進んだ人だけ */
   function renderGoodCandidates() {
     const list = applicants.filter((a) => a.rank === "A" || a.stage === "ceo_recommend");
-    if (!list.length) { el("good").innerHTML = `<div class="hr-empty">候補者はいません</div>`; return; }
-    el("good").innerHTML = list.map((a) => `
+    if (!list.length) { API.morph(el("good"), `<div class="hr-empty">候補者はいません</div>`); return; }
+    API.morph(el("good"), list.map((a) => `
       <div class="hr-good-card" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">
         <div class="nm">${esc(a.name)}</div>
         <div class="jb">${esc(a.jobTitle)}</div>
         <div class="row">${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span>` : ""}
           <span class="st">${esc(a.stageLabel)}</span></div>
         <button class="btn btn-secondary btn-sm">詳細</button>
-      </div>`).join("");
+      </div>`).join(""));
   }
 
   function renderTodayInterviews() {
-    if (!todayInterviews.length) { el("todayiv").innerHTML = `<div class="hr-empty">本日の面談はありません</div>`; return; }
-    el("todayiv").innerHTML = `<div class="card"><div>${todayInterviews.map((i) => `
+    if (!todayInterviews.length) { API.morph(el("todayiv"), `<div class="hr-empty">本日の面談はありません</div>`); return; }
+    API.morph(el("todayiv"), `<div class="card"><div>${todayInterviews.map((i) => `
       <div class="hr-iv-row">
         <span class="tm">${esc(fmtTime(i.scheduledAt))}</span>
         <span class="nm" style="cursor:pointer;" onclick="location.href='/hr/applicants.html?id=${esc(i.applicantId)}'">${esc(i.name)}</span>
@@ -168,7 +178,7 @@
         ${!i.done && i.meetingUrl
           ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="margin-left:auto;">面談に参加</a>`
           : `<span class="st">${esc(i.statusLabel)}</span>`}
-      </div>`).join("")}</div></div>`;
+      </div>`).join("")}</div></div>`);
   }
 
   function fmtTime(iso) { return JST.time(iso); }   // 日本時間（js/jst.js）
@@ -181,12 +191,12 @@
       .sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0));
 
     if (!items.length) {
-      el("today").innerHTML = `<div class="hr-empty">対応が必要な応募者はいません</div>`;
+      API.morph(el("today"), `<div class="hr-empty">対応が必要な応募者はいません</div>`);
       return;
     }
     const LIMIT = 12;
     const shown = items.slice(0, LIMIT);
-    el("today").innerHTML = `
+    API.morph(el("today"), `
       <div class="hr-today-count">${items.length}件</div>
       ${shown.map((a) => `
         <div class="hr-today-row${a.overdue ? " overdue" : ""}">
@@ -196,14 +206,14 @@
           </div>
           <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">${esc(a.nextActionCta)}</button>
         </div>`).join("")}
-      ${items.length > LIMIT ? `<div class="hr-today-more">ほか${items.length - LIMIT}件は応募者一覧で確認してください</div>` : ""}`;
+      ${items.length > LIMIT ? `<div class="hr-today-more">ほか${items.length - LIMIT}件は応募者一覧で確認してください</div>` : ""}`);
   }
 
   function renderFunnel() {
-    el("funnel").innerHTML = STAGES.map((s, i) => {
+    API.morph(el("funnel"), STAGES.map((s, i) => {
       const n = applicants.filter((a) => a.stage === s.key).length;
       return `${i > 0 ? `<span class="arrow">→</span>` : ""}${esc(s.label)} <span class="v">${n}</span>`;
-    }).join(" ");
+    }).join(" "));
   }
 
   function renderKpi() {
@@ -213,20 +223,20 @@
     const newApplied = applicants.filter((a) => monthOf(a.createdAt) === thisMonth).length;
     const interviewed = applicants.filter((a) => a.stage === "casual_interview" || (a.interviewCount || 0) > 0).length;
     const hired = applicants.filter((a) => a.stage === "offer" && monthOf(a.updatedAt) === thisMonth).length;
-    el("kpi").innerHTML = `今月：新規応募 ${newApplied} / 面談 ${interviewed} / 内定 ${hired}`;
+    API.morph(el("kpi"), `今月：新規応募 ${newApplied} / 面談 ${interviewed} / 内定 ${hired}`);
   }
 
   function renderList() {
     if (!applicants.length) {
-      el("list").innerHTML = `<div class="hr-empty">まだ応募者がいません</div>
-        <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?new=1'">応募者を追加</button>`;
+      API.morph(el("list"), `<div class="hr-empty">まだ応募者がいません</div>
+        <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?new=1'">応募者を追加</button>`);
       return;
     }
-    el("list").innerHTML = applicants.slice(0, 8).map((a) => `
+    API.morph(el("list"), applicants.slice(0, 8).map((a) => `
       <div class="hr-list-row" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">
         <span class="nm">${esc(a.name)}</span><span class="st">${esc(a.stageLabel)} ／ ${esc(a.statusLabel)}</span>
         <span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span>
-      </div>`).join("");
+      </div>`).join(""));
   }
 </script>
 

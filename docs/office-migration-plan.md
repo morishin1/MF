@@ -42,6 +42,7 @@
 
 - 判定は `lib/gw.js` の `canAccessHr` / `canAccessSales` / `canAccessOffice` / `canAccessKeiei` に集約。DB は `gw_is_recruiting` / `gw_is_sales` / `gw_is_office` / `gw_is_keiei`。画面は `/api/me` の `access` だけで出し分ける（役割名を持たない）。`test/accessparity.mjs` が一致を機械で見る（Phase 3 の新しい表・API も対象）
 - **二段階認証（MFA）**：**Office は MFA を要求しない**（2026-09-30 に変更）。**2026-10-01 からは、どこでも MFA を必須にしない（任意）**。以下の「MFA を残す」「強制日」は、変更前の記録（`docs/mfa-optional.md`）。`/office`・`/api/office/*`（月次一覧・勤務表の受領・AI読取・修正・確定・契約条件の閲覧と編集・ファイル閲覧）は、経営者・責任者・経理の**権限だけ**で通す（`requireMfa` を置かない。置くと、強制日 2026-10-01 から、`strict` なしでも aal2 が要る）。権限の条件（`access.office`・API・RLS）は変えていない。MFA を残すのは、支払・振込の実行／給与・人件費／外部への請求書送信／権限変更／MFA・パスワードのリセット／金融・会計サービスへの確定送信、と `/keiei`。Office には、いまこのどれも無い（Office に足すときは、その API にだけ `requireMfa`。支払・給与など、強制日を待たないものは `{ strict: true }`）。`test/mfatest.mjs` が見張る
+- **入口・見た目は役割で分けない**（2026-10-02 に決めた）：Office は1つの業務アプリ。経営者・管理者・経理・責任者のだれが「Office」を押しても、同じ `/office/` に入り、同じヘッダー・ナビ・コンテンツ幅・カード・フォント・ボタン・余白・色になる。違うのは、見えるメニュー・データ・操作だけ（権限＝サーバの `access.office`）。以前は、管理者（admin/owner）だけ `admin-dashboard.html`（管理画面の人事・労務・経理・事務）へ送り、`office-layout.js` も admin/owner だけ別ナビを足していた。廃止した（`js/layout.js` の `altHref`、`js/office-layout.js` の `ADMIN_NAV`）。ナビは `NAV` に1つだけ定義し、項目ごとに `needs`（access のキー）で出し分ける。ヘッダーの Office は access.office の人だけに出す（管理者でも、権限が無ければ出さない）。管理画面（`admin-*.html`）は残してあり、ヘッダー右の ⚙管理 の先頭から開く（Office の入口でもナビでもない。タグは「管理」）。必要になったら、Office 内の1機能として統合する。`test/ui/officeunifiedui.mjs` が、入口・全ロールで同じレイアウト（ピクセルまで）・権限のないメニューと API を見張る
 - **`/keiei` はこれから作る**。責任者にも公開しない。**HR から給与・人件費など経営情報が見えないことは、`/keiei` を実装するときに必ず分離する**（別の関数・別の表で持つ）
 
 ## 3. 番号と適用順
@@ -137,6 +138,7 @@ confirmed（人が「確定する」を押したときだけ）
 | 契約条件・精算（純関数） | `lib/office-calc.js` |
 | AI読取 | `lib/office-timesheet-ai.js`（Anthropic SDK 直接。厳密に検査し直す） |
 | API | `api/office/timesheet.js`（受領・読取・保存・確定・取消し・差し戻し）、`api/office/terms.js`（契約条件）、`api/office/index.js`（一覧に状態・稼働時間を足す） |
+| 案件の一括更新・削除 | `api/office/contracts.js`（`POST`。`preview`・`update`・`delete`。Office の権限だけ・MFA なし。HR 用 API には依存しない）。更新できるのは、更新確認状況・契約終了予定・契約開始日だけ。削除は `confirm: true`＋`confirmCount` が要り、Storage のファイルを先に消してから DB（外部キーで、月次進捗・提出・契約条件・勤務表も消える）。請求の印が付いた案件は消せない。履歴は `gw_office_events`（`contract.update`／`contract.delete`） |
 | 画面 | `office/timesheet.html`（確認・確定）、`office/terms.html`（契約条件）、`office/index.html`（一覧・ドロワー） |
 
 ### 6.2 時間の規則（決定済み）
@@ -206,6 +208,7 @@ Node：`officetimetest`（33）・`officecalctest`（41）・`officeaitest`（36
 UI：`officesheetui`（本物の API ハンドラ＋偽DB＋偽AIにつないで、勤務表の確認・確定・アップロード・契約条件・一覧を通す）、
 **`officee2e`（Phase 3 の完成条件：アップロード → 重複チェック → AI読取 → 左右で確認 → 誤読を修正 → 稼働確定 → 月間稼働時間 → `/office` 一覧が「請求作成待ち」へ進む。外部提出フォーム経由の二重提出、PDF・JPEG・PNG も通す）**。
 実 PostgreSQL 16 での migration 検証（前提なし／099・100 適用済み＋既存データ／105〜107 適用後）は `db/check_office_phase3.sql` と `docs/office-phase3-runbook.md` §1。
+案件の一括更新・削除：Node `officecontractsapi`（41）、UI `officebulkui`（1件選択・複数選択・全選択・更新・削除キャンセル・削除実行・請求済み・Storage 失敗・スマホ幅）。`test/_memdb.mjs` は、外部キー（cascade／set null）と Storage の削除失敗も真似る。
 すべて手計算の期待値。**変異テスト**（コードを壊して、テストが落ちるかを確認）で検出力を確かめた。`test/_memdb.mjs` は、一意制約・NOT NULL・CHECK・RLS（ユーザー権限の書き込みは拒否）・Storage を真似た偽DB。
 
 ## 7. 既存の月初作業（admin-month-start・cron・提出フォーム）への影響

@@ -72,9 +72,14 @@ console.log("— 人事（hr）: 人事・労務だけ —");
   const items = await side(p);
   check(items.includes("ダッシュボード") && items.includes("メンバー") && items.includes("勤怠管理") && items.includes("雇用契約"), `人事・労務の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["経費精算", "月次業務", "社内文書", "会計", "お知らせ配信"].includes(x)), "経理・事務の項目は出ない");
-  check((await p.locator(".topbar .kp-app").innerText()).includes("OFFICE"), "ヘッダーに「/ OFFICE」が出る");
-  check(await officeBtn(p).count() === 1 && (await officeBtn(p).getAttribute("href")) === "admin-dashboard.html", "ヘッダーの Office → ダッシュボード（入れる）");
-  check(await p.locator("#kp-admin-menu-btn").count() === 0, "⚙管理は出ない（管理者・経営者だけ）");
+  check((await p.locator(".topbar .kp-app").innerText()).includes("管理"), "ヘッダーに「/ 管理」が出る（管理画面の中）");
+  // Office は全員 /office/（2026-10-02）。人事だけの人は /office（月末月初）に入れないので、Office は出さない
+  check(await officeBtn(p).count() === 0, "人事だけの人には、ヘッダーの Office を出さない（/office に入れない）");
+  // 管理画面へは ⚙管理 から。担当者には管理画面の入口だけ
+  check(await p.locator("#kp-admin-menu-btn").count() === 1, "⚙管理が出る（管理画面の入口）");
+  await p.locator("#kp-admin-menu-btn").click();
+  const menu = await p.locator("#kp-admin-menu-panel a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+  check(menu.join() === "admin-dashboard.html", `⚙管理は管理画面の入口だけ（権限・端末・設定は出さない。いま ${menu.join()}）`);
   await p.close();
 
   const f = await open(FIN_PAGE, { roles: ["hr"] });
@@ -102,7 +107,8 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
   const items = await side(p);
   check(items.includes("ダッシュボード") && items.includes("経費精算") && items.includes("月次業務") && items.includes("社内文書"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["メンバー", "勤怠管理", "雇用契約", "入退社", "評価・キャリア", "会計", "お知らせ配信"].includes(x)), "人事・労務の項目・会計・お知らせ配信は出ない");
-  check(await officeBtn(p).count() === 1 && (await officeBtn(p).getAttribute("href")) === "admin-dashboard.html", "ヘッダーの Office → ダッシュボード（入れる）");
+  check(await officeBtn(p).count() === 1 && (await officeBtn(p).getAttribute("href")) === "/office/", "ヘッダーの Office → /office/（役割で行き先を変えない）");
+  check(await p.locator("#kp-admin-menu-btn").count() === 1, "⚙管理が出る（管理画面の入口）");
   await p.close();
 
   const h = await open(HR_PAGE, { roles: ["finance"] });

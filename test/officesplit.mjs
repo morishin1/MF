@@ -162,7 +162,7 @@ function tableOf(name, endMark) {
   return Function(`"use strict"; return (${body.slice(0, body.lastIndexOf("];") + 1)});`)();
 }
 const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会社全体の管理、判断）");
-const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // Office: 人事・労務");
+const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // 管理画面: 人事・労務");
 
 ok("グループの when: 人事・労務 は officeHr、経理・事務 は officeFinance", () => {
   assert.equal(OFFICE_GROUPS.find((g) => g.key === "office-hr").when, "officeHr");
@@ -222,12 +222,17 @@ ok("ダッシュボードの行は、担当の分だけ読む・出す（担当�
   assert.match(src, /access\.officeFinance && \{ name: "経理・事務"/);
 });
 
-ok("/office/ の画面メニューは、担当の入口だけ（人事・労務は officeHr、経理・事務は officeFinance）", () => {
+ok("/office/ は全員同じナビ（access のキーだけで絞る）。管理画面へは ⚙管理 から。担当者（人事・経理）の ⚙管理 は管理画面の入口だけ", () => {
+  // Office は1つの業務アプリ（2026-10-02 の決定）：/office/ のナビに管理画面（admin-*.html）を入れない
   const src = strip(read("js/office-layout.js"));
-  assert.match(src, /\(hr \? \[PEOPLE\] : \[\]\)/);
-  assert.match(src, /\(fin \? \[OPS\] : \[\]\)/);
-  assert.match(src, /a\.officeHr/);
-  assert.match(src, /a\.officeFinance/);
+  assert.doesNotMatch(src, /admin-/);
+  assert.match(src, /const navFor = \(me\) => NAV\.filter/);
+  // ⚙管理：管理者は設定一式、担当者（officeAny）は管理画面の入口だけ。左メニューは担当のグループだけ（when）
+  const lay = strip(read("js/layout.js"));
+  assert.match(lay, /const showGear = showAdminTools \|\| \(officeUser && !memberView\);/);
+  assert.match(lay, /\(full \? \[ADMIN_CONSOLE, \.\.\.SETTINGS_ITEMS\] : \[ADMIN_CONSOLE\]\)/);
+  assert.match(lay, /officeHr: officeHr,/);
+  assert.match(lay, /officeFinance: officeFinance,/);
 });
 
 console.log("\n— 5. DB（db/115_office_split.sql）—");
