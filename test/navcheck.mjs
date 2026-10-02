@@ -45,7 +45,7 @@ function tableOf(name, endMark) {
   return Function(`"use strict"; return (${expr});`)();
 }
 
-const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // Office: 人事・労務");
+const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // 管理画面: 人事・労務");
 const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会社全体の管理、判断）");
 const KEIEI_ITEMS = tableOf("KEIEI_ITEMS", "\n  // 管理（⚙）");
 const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /**\n   * いま開いている画面が");
