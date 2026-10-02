@@ -33,6 +33,56 @@
   ];
 
   /**
+   * 入社準備中（入社日前で、入社手続きがまだ終わっていない人）のメニュー。
+   *
+   * 通常メンバー向けの機能（今日やること・勤怠・キャリア・社内情報…）を最初から並べない。
+   * 本人が迷わないよう、4つだけにする。入社準備が終わる（stage.unlocked）か、
+   * 入社日が来て在籍になると、通常のメニューに切り替わる（lib/stages.js の stageInfo）。
+   *
+   *   ホーム
+   *   入社準備          … ログイン直後に開く画面（/onboarding/）。契約も、ここから進める
+   *   給与管理          … 本人用の給与管理の画面は無いので、マイページの労働条件（給与）へつなぐ
+   *   ─────
+   *   設定・セキュリティ … マイページの二段階認証・パスワード変更
+   *
+   * 行き先はどれも、入社準備中に開いている画面（lib/stages.js ALLOWED.preparing）。
+   * 開けない画面への入口は置かない。
+   */
+  const PREPARING_NAV = [
+    { key: "home",       href: "/home.html",     label: "ホーム",     icon: "home",       ready: true },
+    { key: "onboarding", href: "/onboarding/",   label: "入社準備",   icon: "how_to_reg", ready: true, match: ["contracts"] },
+    { key: "payroll",    href: "/mypage.html#cond-card", label: "給与管理", icon: "payments", ready: true },
+    { section: "自分の設定" },
+    { key: "settings_self", href: "/mypage.html#mfa", label: "設定・セキュリティ", icon: "lock", ready: true, match: ["mypage"] },
+  ];
+
+  /**
+   * 本人（入社する人・メンバー）の画面に出すエラー文。
+   *
+   * 技術的な原因（DB名・migration番号・SQL・API名・サーバの詳細）は、本人画面に出さない。
+   * 原因は管理画面・サーバログ・監査ログで見る。ここでは、本人が次に何をすればよいかだけを返す。
+   *
+   *   サーバが本人向けの言葉（hint）を返していれば、それをそのまま出す
+   *   DB・サーバの失敗（5xx・not_ready・db_*）や、技術的な語を含む文は、
+   *   「◯◯できませんでした。管理担当者へお問い合わせください。」にする
+   *
+   * @param {Error} e
+   * @param {string} [fallback] 何ができなかったか。例: "保存できませんでした"
+   */
+  const FRIENDLY_LOAD = "入社手続き情報を現在確認できません";
+  function friendlyError(e, fallback) {
+    const what = fallback || FRIENDLY_LOAD;
+    const text = `${e?.hint || ""} ${e?.message || ""}`;
+    const technical = (e?.status >= 500) || e?.code === "not_ready" || /^db_/.test(String(e?.code || ""))
+      || /db\/\d|\.sql|\bSQL\b|migration|テーブル|schema|relation|PGRST|column|\bapi\//i.test(text);
+    if (technical) return `${what}。管理担当者へお問い合わせください。`;
+    return e?.hint || `${what}。もう一度お試しください。`;
+  }
+
+  /** 入社準備中か（入社日前で、入社手続きがまだ終わっていない） */
+  const isPreparing = (stage) => Boolean(stage && stage.key === "preparing" && !stage.unlocked);
+
+  /**
    * メンバー: PCでの左サイドメニュー。7つ（＋入社準備中の入社手続き・権限のある人の営業）。
    *
    * ■ 管理者とは、完全に別の表にしてある
@@ -300,8 +350,10 @@
   }
 
   // 管理者側の画面をメンバーが開いた場合などに、行き先へ送り返す
-  function homeFor(appRole) {
+  function homeFor(appRole, stage = null) {
     if (appRole === "sr") return "advisor.html";
+    // 入社準備中は、ログインしたらまず入社準備。本人に「どこを見るか」を考えさせない
+    if (appRole === "member" && isPreparing(stage)) return "/onboarding/";
     return "home.html";
   }
 
@@ -376,11 +428,11 @@
     }).join("")}</nav>`;
   }
 
-  function renderTopbar({ name, appRole, memberView, shows, active }) {
+  function renderTopbar({ name, appRole, memberView, shows, active, stage }) {
     const tag = memberView
       ? "メンバー表示で確認中"
       : ({ admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "");
-    const home = memberView ? "home.html" : homeFor(appRole);
+    const home = memberView ? "home.html" : homeFor(appRole, stage);
     const canPreview = appRole === "admin" || appRole === "owner";
     // Office・⚙管理 は admin/owner だけ（メンバー表示で確認中は出さない。管理者機能を隠す意味が崩れるため）
     const showAdminTools = canPreview && !memberView;
@@ -484,6 +536,7 @@
   // メンバー: PCでは左サイドメニュー、スマホでは画面下のタブ。
   // 両方を描いて CSS で出し分ける。同じ画面幅で2つ出ることはない。
   function renderMemberNav(active, shows = {}, stage = null) {
+    if (isPreparing(stage)) return renderPreparingNav(active);
     // 出す・出さないの条件は3つ。
     //   when  … 使う人にだけ（設備予約・会計）
     //   stage … いまの段階で開いている画面だけ（入社準備は5つだけ）
@@ -511,6 +564,31 @@
     }).join("");
     document.body.appendChild(el);
     document.body.classList.add("kp-has-tabbar");
+  }
+
+  /** 入社準備中のメニュー。PCは左、スマホは下のタブ（どちらも同じ4つ） */
+  function renderPreparingNav(active) {
+    // 給与管理はマイページの中の#cond-card。同じ画面なので、どちらを見ているかは # で決める
+    const key = active === "mypage" && /^#cond/.test(location.hash) ? "payroll" : active;
+    renderSidebar(key, PREPARING_NAV, "member");
+
+    const el = document.createElement("nav");
+    el.className = "kp-tabbar";
+    el.innerHTML = PREPARING_NAV.filter((n) => !n.section).map((n) => {
+      const on = n.key === key || (n.match || []).includes(key);
+      return `<a class="kp-tab${on ? " on" : ""}" href="${n.href}">${icon(n.icon, 22)}<span>${esc(n.key === "settings_self" ? "設定" : n.label)}</span></a>`;
+    }).join("");
+    document.body.appendChild(el);
+    document.body.classList.add("kp-has-tabbar");
+
+    // マイページの中で「給与管理」と「設定」を行き来したとき（同じ画面で # だけ変わる）、選んだ状態を合わせる
+    window.addEventListener("hashchange", () => {
+      const k = active === "mypage" && /^#cond/.test(location.hash) ? "payroll" : active;
+      for (const a of document.querySelectorAll(".kp-sidebar .kp-side-item, .kp-tabbar .kp-tab")) {
+        const item = PREPARING_NAV.find((n) => n.href === a.getAttribute("href"));
+        if (item) a.classList.toggle("on", item.key === k || (item.match || []).includes(k));
+      }
+    });
   }
 
   /**
@@ -815,13 +893,13 @@
     // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
     if (appRole === "member" && stage && opts.active
         && !stage.allowed.includes(opts.active)) {
-      location.replace("home.html");
+      location.replace(homeFor(appRole, stage));
       return null;
     }
 
     const allowed = opts.roles;
     if (allowed && !allowed.includes(appRole)) {
-      location.replace(homeFor(appRole));
+      location.replace(homeFor(appRole, stage));
       return null;
     }
 
@@ -829,7 +907,7 @@
     // access で見る。appRole は owner/admin/sr/member の4値しか無く、それ単体の人も
     // "member" になる。roles だけで入口を絞ると、API は通るのに画面へ入れない食い違いが起きる
     if (opts.access && !me.access?.[opts.access]) {
-      location.replace(homeFor(appRole));
+      location.replace(homeFor(appRole, stage));
       return null;
     }
 
@@ -903,7 +981,7 @@
     const canPreview = appRole === "admin" || appRole === "owner";
     const memberView = canPreview && isMemberView();
 
-    renderTopbar({ name, appRole, memberView, shows, active });
+    renderTopbar({ name, appRole, memberView, shows, active, stage });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     // 管理者もホーム領域は全員と同じ左メニュー。Office・管理（⚙）に入ったときだけ専用の左メニュー
     const adminArea = canPreview && !memberView && areaOf(active) !== "home";
@@ -1235,6 +1313,7 @@
 
     logout() { API.logout(); clearCache(); setMemberView(false); location.href = "index.html"; },
     homeFor,
+    friendlyError,
     esc, strong,
     icon,
     // 業務ツールの定義（HR・Sales・Office・経営）。/keiei など、別アプリの画面が切替を出すときに使う

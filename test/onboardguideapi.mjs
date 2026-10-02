@@ -623,7 +623,51 @@ await ok("案内が無い本人: 6ステップ。① は「対象外」、② �
   assert.equal(d.six.next.actor, "owner");
   assert.equal(d.hasProcedure, true);
   const text = JSON.stringify(d);
-  for (const leaked of ["wage", "salary", "給与", "PC の準備", "hire@example", "user_id"]) assert.ok(!text.includes(leaked), `${leaked} が返っている`);
+  for (const leaked of ["salary", "PC の準備", "hire@example", "user_id", "db/0"]) assert.ok(!text.includes(leaked), `${leaked} が返っている`);
+  // 契約がまだ無いので、契約条件は「準備中」（値は null）。本人に空白やエラーを見せない
+  assert.equal(d.conditions.ready, false);
+  assert.equal(d.conditions.rows.find((r) => r.key === "wage").value, null);
+  assert.equal(d.conditions.rows.find((r) => r.key === "period").value, null);
+});
+
+await ok("契約条件: 管理側で確定した（active）契約だけを、そのまま本人に出す。下書き・他の人の契約・更新済みは出ない", async () => {
+  setup(); asHire();
+  const base = { tenant_id: "t1", created_at: daysAgo(3) };
+  db.rows.gw_contracts = [
+    { ...base, id: "c-draft", employee_id: "e1", status: "draft", fixed_term: true, period_from: "2026-10-01", period_to: "2026-12-31", wage_type: "月給", wage_amount: 111111 },
+    { ...base, id: "c-other", employee_id: "e2", status: "active", fixed_term: false, wage_type: "月給", wage_amount: 777777 },
+  ];
+  let d = (await hire(undefined, { method: "GET" })).body;
+  assert.equal(d.conditions.ready, false, "下書きは「準備中」");
+  assert.ok(!JSON.stringify(d).includes("111,111") && !JSON.stringify(d).includes("777,777"), "他の契約・下書きの金額は出ない");
+
+  db.rows.gw_contracts.push({ ...base, id: "c-act", employee_id: "e1", status: "active", contract_type: "契約社員", fixed_term: true,
+    period_from: "2026-10-01", period_to: "2026-12-31", probation_months: 3, weekly_hours: 30, work_hours: "9:00〜17:00",
+    job_content: "ITS事業部", wage_type: "月給", wage_amount: 250000 });
+  d = (await hire(undefined, { method: "GET" })).body;
+  const v = (k) => d.conditions.rows.find((r) => r.key === k).value;
+  assert.equal(d.conditions.ready, true);
+  assert.equal(d.conditions.statusLabel, "有効");
+  assert.equal(v("contract"), "契約社員・有期契約");
+  assert.equal(v("period"), "2026/10/01 ～ 2026/12/31");
+  assert.equal(v("probation"), "3か月");
+  assert.equal(v("hours"), "週30時間");
+  assert.equal(v("workStyle"), "9:00〜17:00");
+  assert.equal(v("role"), "ITS事業部");
+  assert.equal(v("wage"), "月給 250,000円");
+  assert.equal(v("joinedOn"), "2026/10/01", "入社日は、手続きの入社予定日から");
+});
+
+await ok("本人向けのステップ: 契約条件→契約書→入社情報→必要書類→オリエンテーション→会社→完了。本人の番と会社の番が分かる", async () => {
+  setup(); asHire();
+  const d = (await hire(undefined, { method: "GET" })).body;
+  assert.deepEqual(d.self.steps.map((s) => s.label), ["契約条件を確認", "契約書を確認・署名", "入社情報を入力", "必要書類を提出", "オリエンテーションを確認", "会社の確認", "入社準備完了"]);
+  assert.equal(d.self.phase.label, "会社確認中", "会社が労働条件を準備している間は、本人の操作は無い");
+  assert.equal(d.self.next.mine, false);
+  assert.equal(d.self.next.cta, null);
+  assert.equal(d.documents.length, 1);
+  assert.deepEqual({ title: d.documents[0].title, label: d.documents[0].label }, { title: "本人確認書類", label: "未提出" });
+  assert.ok(!JSON.stringify(d.documents).includes("PC の準備"), "社内準備の項目は、書類に出ない");
 });
 
 await ok("入社手続きがまだ無い本人: hasProcedure=false。完了とは言わない", async () => {

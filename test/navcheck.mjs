@@ -50,7 +50,8 @@ const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会�
 const KEIEI_ITEMS = tableOf("KEIEI_ITEMS", "\n  // 管理（⚙）");
 const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /**\n   * いま開いている画面が");
 const MEMBER_SIDE_NAV = tableOf("MEMBER_SIDE_NAV", "\n  /**\n   * 「左は自分の仕事、上は担当業務」");
-const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * メンバー: PCでの左サイドメニュー");
+const MEMBER_NAV = tableOf("MEMBER_NAV", "\n  /**\n   * 入社準備中（入社日前で");
+const PREPARING_NAV = tableOf("PREPARING_NAV", "\n  /**\n   * 本人（入社する人・メンバー）の画面に出すエラー文。");
 
 const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS];
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
@@ -96,6 +97,26 @@ console.log("\n— メンバー —");
   check(always.length === 7,
     `いつも出るのは7つ（いま ${always.length}: ${always.map((n) => n.label).join("・")}）`);
   check(MEMBER_NAV.length === 5, `スマホの下タブは5つ（いま ${MEMBER_NAV.length}）`);
+
+// ---- 入社準備中のメニュー --------------------------------------------------------
+// 入社前の人には、通常メンバー向けの機能を並べない。ホーム／入社準備／給与管理／設定・セキュリティ の4つだけ。
+// 行き先は、入社準備中に開いている画面（lib/stages.js ALLOWED.preparing）だけ。開けない画面への入口は置かない
+{
+  const { ALLOWED, PREPARING_ONLY } = await import("../lib/stages.js");
+  const items = PREPARING_NAV.filter((n) => !n.section);
+  check(items.map((n) => n.label).join("／") === "ホーム／入社準備／給与管理／設定・セキュリティ",
+    `入社準備中のメニューは4つ（いま ${items.map((n) => n.label).join("／")}）`);
+  const fileOf = (href) => href.replace(/^\//, "").replace(/[?#].*$/, "").replace(/\/$/, "") || "index";
+  const screenOf = { "home.html": "home", "onboarding": "onboarding", "mypage.html": "mypage", "contracts.html": "contracts" };
+  for (const n of items) {
+    const f = fileOf(n.href);
+    check(screenOf[f] && ALLOWED.preparing.includes(screenOf[f]), `入社準備中のメニュー「${n.label}」は、入社準備中に開ける画面へ（${n.href}）`);
+  }
+  check(PREPARING_ONLY.includes("onboarding"), "入社準備は、入社準備中だけの画面");
+  // 通常メンバーの機能（今日やること・勤怠・キャリア・社内情報…）は、入社準備中のメニューに並べない
+  const normal = ["tasks", "nippo", "timecard", "requests", "expenses", "career", "notices", "messages", "dojo"];
+  check(!items.some((n) => normal.includes(n.key)), "入社準備中のメニューに、通常メンバーの機能を並べない");
+}
 }
 
 // 採用HR（/hr/）・Sales（/sales/）・月次業務（/office/）の入口は共通ヘッダーの近道だけ。
