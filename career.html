@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261002b">
-  <link rel="stylesheet" href="css/layout.css?v=20261002b">
+  <link rel="stylesheet" href="css/app.css?v=20261002sp1">
+  <link rel="stylesheet" href="css/layout.css?v=20261002sp1">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -79,10 +79,10 @@
   <div id="body"><div class="empty">読み込み中…</div></div>
 </div>
 
-<script src="js/api-client.js?v=20261002b"></script>
-<script src="js/device.js?v=20261002b"></script>
-<script src="js/layout.js?v=20261002b"></script>
-<script src="js/journey-bar.js?v=20261002b"></script>
+<script src="js/api-client.js?v=20261002sp1"></script>
+<script src="js/device.js?v=20261002sp1"></script>
+<script src="js/layout.js?v=20261002sp1"></script>
+<script src="js/journey-bar.js?v=20261002sp1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -100,16 +100,28 @@
   // 管理者の「本人画面をプレビュー」。本人の API と同じ組み立てで、押しても何も起きない
   const PREVIEW = new URLSearchParams(location.search).get("preview");
 
+  // 表示速度：枠（/api/me の確認）を待たずに取りにいき始める。
+  // 2回目からは前回の内容をすぐ出し、裏で最新にする（違っていたときだけ描き直す）。
+  // 管理者のプレビューは覚えない（いつも、その場で本人の組み立てを取る）
+  const fetchCareer = () => API.myCareer();
+  if (!PREVIEW) API.warm("career:mine", fetchCareer);
+
   KPLayout.init({ active: "career", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
-    try { data = PREVIEW ? await API.careerPreview(PREVIEW) : await API.myCareer(); }
-    catch (e) {
+    let first = true;
+    try {
+      if (PREVIEW) show(await API.careerPreview(PREVIEW), true);
+      else await API.swr("career:mine", fetchCareer, (d) => { show(d, first); first = false; });
+    } catch (e) {
       el("body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
         <div>${esc(e.message || e.hint || "読み込めませんでした")}</div></div>`;
-      return;
     }
+  }
+
+  function show(d, first) {
+    data = d;
     if (PREVIEW) {
       el("preview-note").innerHTML = `<div class="banner warn" id="preview-banner"><span class="material-symbols-outlined">visibility</span>
         <div><b>プレビュー</b>：${esc(data.preview?.employeeName || "")}さんには、この画面がこう見えます。ここでの操作は記録されません。</div></div>`;
@@ -121,7 +133,7 @@
             { viewer: "member", here: "career.html" })}</div>` : "";
     if (PREVIEW) el("journey-box").querySelectorAll("#jb-cta").forEach((a) => { a.setAttribute("aria-disabled", "true"); a.onclick = () => false; });
     render();
-    if (location.hash === "#confirm") el("sec-confirm")?.scrollIntoView({ block: "start" });
+    if (first && location.hash === "#confirm") el("sec-confirm")?.scrollIntoView({ block: "start" });
   }
 
   const wageLine = (w) => (w && w.wageAmount != null ? `${esc(w.wageType || "")} ${yen(w.wageAmount)}` : "—");

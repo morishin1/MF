@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261002b">
-  <link rel="stylesheet" href="css/layout.css?v=20261002b">
+  <link rel="stylesheet" href="css/app.css?v=20261002sp1">
+  <link rel="stylesheet" href="css/layout.css?v=20261002sp1">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -251,10 +251,10 @@
 
 </div>
 
-<script src="js/api-client.js?v=20261002b"></script>
-<script src="js/device.js?v=20261002b"></script>
-<script src="js/layout.js?v=20261002b"></script>
-<script src="js/journey-bar.js?v=20261002b"></script>
+<script src="js/api-client.js?v=20261002sp1"></script>
+<script src="js/device.js?v=20261002sp1"></script>
+<script src="js/layout.js?v=20261002sp1"></script>
+<script src="js/journey-bar.js?v=20261002sp1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -282,7 +282,8 @@
     if (ctx.me?.gw?.employee) loadCareerAsk();
     loadFocus();
     loadDashboard();
-    renderTiles(await loadStats());
+    // 4つの件数（日報・予定・タスク・申請）。2回目からは前回の数字をすぐ出し、裏で最新にする
+    await API.swr(HOME.statsKey(), loadStats, renderTiles);
     loadNotices();
     wireMemoInput();
   }
@@ -348,12 +349,12 @@
   let focusData = null;
 
   async function loadFocus() {
-    try { focusData = await API.focus(); }
-    catch (e) {
+    try {
+      // 2回目からは前回の内容をすぐ出し、裏で最新にする（違っていたときだけ描き直す）
+      await API.swr("home:focus", HOME.focus, (d) => { focusData = d; renderFocus(); });
+    } catch (e) {
       // 072 をまだ流していない環境・名簿に無い人。カードごと出さない
-      return;
     }
-    renderFocus();
   }
 
   function renderFocus() {
@@ -446,11 +447,14 @@
 
   async function loadDashboard() {
     try {
-      dash = await API.dashboard({ date: dayStr(new Date()) });
+      // 2回目からは前回の内容をすぐ出し、裏で最新にする（違っていたときだけ描き直す）
+      await API.swr(HOME.dashboardKey(), HOME.dashboard, (d) => { dash = d; renderDash(); });
     } catch (e) {
       // 日報を使っていない人や、DBがまだ入っていない環境ではカードごと出さない
-      return;
     }
+  }
+
+  function renderDash() {
     renderGoal();
     renderMorningNudge();
     renderProposals();
@@ -1148,11 +1152,12 @@
 
   async function loadNotices() {
     try {
-      const res = await API.listNotices();
-      notices = res.notices || [];
-      el("unread-badge").innerHTML = res.unread
-        ? `<span class="kp-chip important" style="margin-left:8px;">未読 ${res.unread}</span>` : "";
-      renderNotices();
+      await API.swr("home:notices", HOME.notices, (res) => {
+        notices = res.notices || [];
+        el("unread-badge").innerHTML = res.unread
+          ? `<span class="kp-chip important" style="margin-left:8px;">未読 ${res.unread}</span>` : "";
+        renderNotices();
+      });
     } catch (e) {
       el("notices").innerHTML =
         `<div class="banner warn"><span class="material-symbols-outlined">info</span>
@@ -1253,6 +1258,20 @@
       tile("workflow.html", "approval", "承認待ちの申請", s.pending ?? "—", "件", "自分が出したもの"),
     ].join("");
   }
+
+  // ---- 表示速度：枠（/api/me の確認）を待たずに、ホームのデータを取りにいき始める ----------------
+  // 鍵には日付を入れる（日をまたいだら、前の日の内容を出さない）
+  const HOME = {
+    dashboardKey: () => `home:dashboard:${dayStr(new Date())}`,
+    statsKey: () => `home:stats:${dayStr(new Date())}`,
+    dashboard: () => API.dashboard({ date: dayStr(new Date()) }),
+    focus: () => API.focus(),
+    notices: () => API.listNotices(),
+  };
+  API.warm(HOME.dashboardKey(), HOME.dashboard);
+  API.warm("home:focus", HOME.focus);
+  API.warm(HOME.statsKey(), loadStats);
+  API.warm("home:notices", HOME.notices);
 </script>
 
 </body>

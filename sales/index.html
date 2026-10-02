@@ -82,94 +82,80 @@
   </div>
 </div>
 
-<script src="../js/api-client.js?v=20260930sx1"></script>
-<script src="../js/layout.js?v=20261002b"></script>
-<script src="../js/sales-layout.js?v=20261001a"></script>
+<script src="../js/api-client.js?v=20261002sp1"></script>
+<script src="../js/layout.js?v=20261002sp1"></script>
+<script src="../js/sales-layout.js?v=20261002sp1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, fmtDay, ago } = SalesLayout;
 
-  let companies = [];
+  let sections = {};
   let approaches = [];
-  let today = "";
+
+  // 表示速度：
+  //   ・企業の全件ではなく、4段の件数と上位だけを受け取る（GET /api/sales/companies?view=dashboard）。
+  //     振り分けの決まりはサーバ（lib/sales-dashboard.js）に移した。決まりそのものは変えていない
+  //   ・最近の営業履歴は、出す15件だけ取る
+  //   ・枠（権限の確認）を待たずに取りにいき始める。2回目からは前回の内容をすぐ出し、裏で最新にする
+  const KEY = "sales:dashboard";
+  const fetchDashboard = () => Promise.all([
+    API.salesDashboard(),
+    API.listSalesApproaches(14, 15).catch(() => ({ approaches: [] })),
+  ]).then(([dash, ap]) => ({ dash, ap }));
+  API.warm(KEY, fetchDashboard, SalesLayout.allows);
 
   SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
 
   async function load() {
     try {
-      const [res, ap] = await Promise.all([
-        API.listSalesCompanies(),
-        API.listSalesApproaches(14).catch(() => ({ approaches: [] })),
-      ]);
-      if (res.notReady) {
-        el("sum").innerHTML = `<div class="banner warn" style="grid-column:1/-1;"><span class="material-symbols-outlined">build</span>
-          <div>${esc(res.message)}</div></div>`;
-        return;
-      }
-      companies = res.companies || [];
-      approaches = ap.approaches || [];
-      today = res.today || new Date().toISOString().slice(0, 10);
-      render();
+      await API.swr(KEY, fetchDashboard, ({ dash, ap }) => {
+        if (dash.notReady) {
+          el("sum").innerHTML = `<div class="banner warn" style="grid-column:1/-1;"><span class="material-symbols-outlined">build</span>
+            <div>${esc(dash.message)}</div></div>`;
+          return;
+        }
+        sections = dash.sections || {};
+        approaches = ap.approaches || [];
+        render();
+      });
     } catch (e) {
       el("sum").innerHTML = `<div class="banner err" style="grid-column:1/-1;"><span class="material-symbols-outlined">error</span>
         <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
     }
   }
 
-  const open = (c) => !c.ngReason && !["won", "lost", "excluded"].includes(c.status);
-  const due = (c) => c.nextDue && c.nextDue <= today;
-  const RECENT_MS = 30 * 86400000;
   const go = (c) => `/sales/companies.html?id=${encodeURIComponent(c.id)}`;
 
-  // 1社は、上の段に入ったら下の段には出さない（同じ会社を2回見せない）
+  // 段の見た目と行き先。どの企業がどの段に入るかは、サーバ（lib/sales-dashboard.js）が決める
   const SECTIONS = [
-    { key: "click", label: "リード・未対応", icon: "ads_click", hot: true,
-      pick: (c) => c.unhandledClick,
-      sort: (x, y) => String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || "")) || y.clickCount - x.clickCount,
-      cta: "フォローする", href: go },
-    { key: "replied", label: "返信あり", icon: "mark_email_read",
-      pick: (c) => open(c) && c.status === "replied",
-      cta: "返信対応", href: go },
-    { key: "follow", label: "今日フォロー", icon: "call",
-      pick: (c) => open(c) && !["untouched", "reattack_wait"].includes(c.status) && due(c),
-      cta: "対応する", href: go },
-    { key: "attack", label: "今日アタック", icon: "send",
-      pick: (c) => open(c) && ["untouched", "reattack_wait"].includes(c.status)
-        && !(c.lastSentAt && Date.now() - new Date(c.lastSentAt).getTime() < RECENT_MS)
-        && (!c.nextDue || c.nextDue <= today),
-      cta: "フォームアタック", href: (c) => `/sales/companies.html?attack=${encodeURIComponent(c.id)}` },
+    { key: "click", label: "リード・未対応", icon: "ads_click", hot: true, cta: "フォローする", href: go },
+    { key: "replied", label: "返信あり", icon: "mark_email_read", cta: "返信対応", href: go },
+    { key: "follow", label: "今日フォロー", icon: "call", cta: "対応する", href: go },
+    { key: "attack", label: "今日アタック", icon: "send", cta: "フォームアタック",
+      href: (c) => `/sales/companies.html?attack=${encodeURIComponent(c.id)}` },
   ];
-  const DEFAULT_SORT = (x, y) => (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
-    || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9"));
 
   function render() {
-    const used = new Set();
-    const lists = {};
-    for (const s of SECTIONS) {
-      lists[s.key] = companies.filter((c) => !used.has(c.id) && s.pick(c)).sort(s.sort || DEFAULT_SORT);
-      for (const c of lists[s.key]) used.add(c.id);
-    }
-
-    el("sum").innerHTML = SECTIONS.map((s) => {
-      const n = lists[s.key].length;
+    // 描き直すときは、変わったところだけ変える（API.morph。点滅させない）
+    API.morph(el("sum"), SECTIONS.map((s) => {
+      const n = sections[s.key]?.total || 0;
       return `<a href="#sec-${s.key}" class="${s.hot && n ? "hot" : ""}">
         <div class="lb"><span class="material-symbols-outlined">${s.icon}</span>${esc(s.label)}</div>
         <div class="v">${n}<small>社</small></div></a>`;
-    }).join("");
+    }).join(""));
 
-    for (const s of SECTIONS) renderSection(s, lists[s.key]);
+    for (const s of SECTIONS) renderSection(s, sections[s.key] || { total: 0, rows: [] });
     renderHistory();
   }
 
-  function renderSection(s, list) {
-    el(`n-${s.key}`).textContent = `${list.length}社`;
-    if (!list.length) {
-      el(`list-${s.key}`).innerHTML = `<div class="sl-empty">${esc(s.label)}の企業はありません</div>`;
+  function renderSection(s, { total, rows }) {
+    el(`n-${s.key}`).textContent = `${total}社`;
+    if (!total) {
+      API.morph(el(`list-${s.key}`), `<div class="sl-empty">${esc(s.label)}の企業はありません</div>`);
       return;
     }
-    const LIMIT = s.key === "attack" ? 10 : 20;
-    el(`list-${s.key}`).innerHTML = list.slice(0, LIMIT).map((c) => `
+    API.morph(el(`list-${s.key}`), rows.map((c) => `
       <div class="sl-row${c.unhandledClick ? " hot" : ""}${c.overdue ? " overdue" : ""}">
         <div class="info"><b>${esc(c.name)}</b>
           <div class="now">${s.key === "click"
@@ -179,22 +165,22 @@
         </div>
         <button class="btn btn-primary btn-sm" onclick="location.href='${esc(s.href(c))}'">${esc(s.cta)}</button>
       </div>`).join("")
-      + (list.length > LIMIT ? `<div class="db-more">ほか${list.length - LIMIT}社</div>` : "");
+      + (total > rows.length ? `<div class="db-more">ほか${total - rows.length}社</div>` : ""));
   }
 
   function renderHistory() {
     if (!approaches.length) {
-      el("history").innerHTML = `<tr><td colspan="5" class="empty">直近14日の送信はありません。</td></tr>`;
+      API.morph(el("history"), `<tr><td colspan="5" class="empty">直近14日の送信はありません。</td></tr>`);
       return;
     }
-    el("history").innerHTML = approaches.slice(0, 15).map((a) => `
+    API.morph(el("history"), approaches.slice(0, 15).map((a) => `
       <tr class="click" onclick="location.href='/sales/companies.html?id=${esc(a.companyId)}'">
         <td style="white-space:nowrap;">${esc(fmt(a.sentAt))}</td>
         <td><span class="sl-nm">${esc(a.companyName || "—")}</span></td>
         <td>${esc(a.service || "—")}</td>
         <td>${esc(a.employeeName || "—")}</td>
         <td>${a.clickCount ? `<span class="sl-hot">${a.clickCount}回</span>` : "—"}</td>
-      </tr>`).join("");
+      </tr>`).join(""));
   }
 </script>
 

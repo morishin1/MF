@@ -1,6 +1,9 @@
 // GET  /api/sales/companies?page=1&limit=100&sort=name&order=asc&q=&status=&owner=&service=&industry=&region=&channel=&visibility=
 //        … 企業一覧（サーバー側ページング。db/097）。DB で絞って並べて100件だけ返す。
 //          { companies, page, limit, total, totalPages, members, facets? }（facets=1 のとき絞り込みの候補も）
+// GET  /api/sales/companies?view=dashboard
+//        … ダッシュボード（/sales/）の4段。件数と各段の上位だけ（lib/sales-dashboard.js）。
+//          全件を画面に送らない（表示速度）。振り分けの決まりは、画面で組み立てていたときと同じ
 // GET  /api/sales/companies[?visibility=shown|hidden|all]（page なし）
 //        … 全件（ダッシュボード・リード・アタック画面用。これらはまだ全件で集計している）
 //        … 企業一覧（ダッシュボード・企業・アタック・反応・分析で共通利用）
@@ -29,6 +32,7 @@ import {
 import { listPage, listFacets } from "../../../lib/sales-list.js";
 import { loadMasters } from "../../../lib/sales-master.js";
 import { CSV_IMPORT_COLUMNS } from "../../../lib/sales-csv-import.js";
+import { dashboardSections } from "../../../lib/sales-dashboard.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
@@ -53,7 +57,10 @@ export default async function handler(req, res) {
 async function list(req, res, sb, ctx) {
   const sp = new URL(req.url || "/", "http://localhost").searchParams;
   if (sp.has("page")) return paged(res, sb, ctx, sp);
-  const v = sp.get("visibility") || "shown";
+  const view = sp.get("view");
+  if (view && view !== "dashboard") return json(res, 400, { error: "bad_view", allowed: ["dashboard"] });
+  // ダッシュボードは表示中の企業だけ（いままでと同じ）
+  const v = view === "dashboard" ? "shown" : (sp.get("visibility") || "shown");
   if (!VISIBILITY.includes(v)) return json(res, 400, { error: "bad_visibility", allowed: VISIBILITY });
   let q = sb.from("gw_sales_companies").select(FIELDS).eq("tenant_id", ctx.tenantId);
   if (v === "shown") q = q.is("hidden_at", null);
@@ -86,12 +93,7 @@ async function list(req, res, sb, ctx) {
   }
   const today = todayJst();
 
-  return json(res, 200, {
-    today,
-    visibility: v,
-    me: ctx.employee?.id || null,
-    members: members || [],
-    companies: (data || []).map((c) => {
+  const rows = (data || []).map((c) => {
       const g = agg.get(c.id) || null;
       const next = nextFor(c, g, today);
       return {
@@ -112,7 +114,17 @@ async function list(req, res, sb, ctx) {
         meetingAt: meetingOf.get(c.id)?.scheduled_at || null,
         next: next.label, nextKey: next.key, nextDue: next.due, overdue: next.overdue,
       };
-    }),
+  });
+
+  if (view === "dashboard") {
+    return json(res, 200, { today, view, total: rows.length, sections: dashboardSections(rows, { today }) });
+  }
+  return json(res, 200, {
+    today,
+    visibility: v,
+    me: ctx.employee?.id || null,
+    members: members || [],
+    companies: rows,
   });
 }
 

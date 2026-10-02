@@ -51,8 +51,11 @@ async function list(req, res, sb, ctx, salary) {
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
 
-  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
-  if (salary) await attachPay(ctx.tenantId, data || [], "applicant");
+  // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）。
+  // 下の取得（担当・面談・書類）とは互いに待つ理由がないので、同時に出す（直列にしていたぶん、1往復待っていた）
+  //   失敗はいままでどおり投げる（待つまでのあいだ「受け手の無い失敗」にしないよう、いったん値で受ける）
+  const payAttached = salary
+    ? attachPay(ctx.tenantId, data || [], "applicant").then(() => null, (e) => e) : Promise.resolve(null);
 
   const ids = (data || []).map((a) => a.id);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
@@ -74,6 +77,8 @@ async function list(req, res, sb, ctx, salary) {
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
+  const payError = await payAttached;
+  if (payError) throw payError;
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
   const interviewCount = new Map();
   const interviewsOf = new Map();
