@@ -918,8 +918,10 @@
     // "member" になる。roles だけで入口を絞ると、API は通るのに画面へ入れない食い違いが起きる
     // access は1つでも、複数（どれか1つ）でもよい。例: Office のダッシュボードは ["officeHr", "officeFinance"]。
     // 社労士（sr）は Office・管理の画面を開かない（管理者を兼ねていても、advisor の画面だけ）
+    // Office の業務ごとの権限（officeHr / officeFinance）は、サーバ（/api/me の access）の判定。
+    // 古い応答（その2つのキーが無い）のときだけ、管理者（admin/owner）を入れる（showsFor と同じ代替。デプロイの切り替わり中の保険）
     const need = [].concat(opts.access || []);
-    if (need.length && (appRole === "sr" || !need.some((k) => me.access?.[k]))) {
+    if (need.length && (appRole === "sr" || !need.some((k) => hasAccess(me, k)))) {
       location.replace(homeFor(appRole, stage));
       return null;
     }
@@ -1035,6 +1037,12 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     // 管理画面（admin-*.html）を開ける人（appRole が admin / owner）
     const adminApp = ["admin", "owner"].includes(me?.appRole || (me?.isAdmin ? "admin" : ""));
+    // Office の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance。/api/me の access）そのもの。
+    // 古い応答（そのキーが無い）のときだけ、管理者（admin/owner）を入れる。社労士（sr）は入れない
+    const acc = me?.access || {};
+    const flag = (k) => me?.appRole !== "sr" && (k in acc ? Boolean(acc[k]) : adminApp);
+    const officeHr = flag("officeHr");
+    const officeFinance = flag("officeFinance");
     return {
       booking: staff || gwRoles.includes("booking"),
       adminApp,
@@ -1053,14 +1061,13 @@
       officeApp: Boolean(me?.access?.office),
       // Office の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance）そのもの。
       // access が無い古い応答のときは、管理者（admin/owner）だけ両方に入れる。社労士（sr）は入れない
-      officeHr: me?.appRole !== "sr" && (me?.access ? Boolean(me.access.officeHr) : adminApp),
-      officeFinance: me?.appRole !== "sr" && (me?.access ? Boolean(me.access.officeFinance) : adminApp),
+      officeHr: officeHr,
+      officeFinance: officeFinance,
       // Office の画面（admin-*.html）のどれかに入れる人
-      officeAny: me?.appRole !== "sr" && (me?.access ? Boolean(me.access.officeHr || me.access.officeFinance) : adminApp),
+      officeAny: officeHr || officeFinance,
       // Office の入口を出す人 = 人事・労務／経理・事務／月末月初（/office）のどれか1つでも入れる人。
       // 入れない人にヘッダーの入口を出さない（押して 403 を作らない）
-      office: me?.appRole !== "sr" && (Boolean(me?.access?.office) || adminApp
-        || Boolean(me?.access?.officeHr) || Boolean(me?.access?.officeFinance)),
+      office: me?.appRole !== "sr" && (Boolean(me?.access?.office) || adminApp || officeHr || officeFinance),
       // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
       // 全員のタスク・日報・チーム状況（管理画面）を開ける人。経営の入口（管理者はここから）
@@ -1225,7 +1232,20 @@
     if (window.KPPush) KPPush.warm();
   }
 
+  /**
+   * /api/me の access を、画面の入口として読む。サーバの判定そのもの（画面で役割を並べ直さない）。
+   * 古い応答（Office の業務ごとの権限 officeHr / officeFinance のキーが無い）のときだけ、管理者（admin/owner）を入れる。
+   * 社労士（sr）は Office の画面を開かない
+   */
+  function hasAccess(me, key) {
+    const role = me?.appRole || (me?.isAdmin ? "admin" : "member");
+    if (role === "sr") return false;
+    if (me?.access && key in me.access) return Boolean(me.access[key]);
+    return (key === "officeHr" || key === "officeFinance") && (role === "admin" || role === "owner");
+  }
+
   window.KPLayout = {
+    hasAccess,
     /**
      * ログイン確認 → 権限確認 → レイアウト描画。
      * 権限が無ければ本来の画面へ送り返し、null を返す（呼び出し側は何もしない）。

@@ -1,5 +1,5 @@
 // GET    /api/library                … 社内文書の一覧（社員は公開分のみ。RLSが決める）
-// POST   /api/library                … 登録（管理部）
+// POST   /api/library                … 登録（経理・事務＝管理者・経営者・経理）
 // PATCH  /api/library {id, ...}      … 更新（管理部）
 // DELETE /api/library?id=…           … 削除（管理部。実体のファイルも消す）
 //

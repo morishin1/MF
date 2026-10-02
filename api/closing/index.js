@@ -33,7 +33,7 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  // 給与に関わる数字がまとまっている。人事・経営者だけ
+  // 給与に関わる数字がまとまっている。経理・事務（管理者・経営者・経理。lib/gw.js canOfficeFinance）だけ
   if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
 
   if (req.method === "GET") return read(req, res, ctx);

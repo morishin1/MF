@@ -146,8 +146,9 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // 金額を扱うので、access が無い古い応答では入れない側に倒す
   // Office の入口は、サーバの判定3つ（access.office＝月末月初 / access.officeHr＝人事・労務 / access.officeFinance＝経理・事務）か、
   // 管理者（adminApp。access が無い古い応答のときの代替）。役割名は並べ直さない
-  check(/office:\s*me\?\.appRole !== "sr" && \(Boolean\(me\?\.access\?\.office\) \|\| adminApp\s*\|\| Boolean\(me\?\.access\?\.officeHr\) \|\| Boolean\(me\?\.access\?\.officeFinance\)\)/.test(layout),
-    "ヘッダーの Office は access.office / officeHr / officeFinance のどれか（予備の役割判定を持たない）");
+  check(/office:\s*me\?\.appRole !== "sr" && \(Boolean\(me\?\.access\?\.office\) \|\| adminApp \|\| officeHr \|\| officeFinance\)/.test(layout)
+    && /const flag = \(k\) => me\?\.appRole !== "sr" && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
+    "ヘッダーの Office は access.office / officeHr / officeFinance のどれか（予備は管理者だけ。役割名は並べ直さない）");
   const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   check(/!me\?\.access\?\.office/.test(officeLayout) && /location\.replace\("\/home\.html"\)/.test(officeLayout),
     "/office の入口は access.office だけで決め、無ければ home.html へ");

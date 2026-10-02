@@ -1,5 +1,5 @@
 // GET   /api/expenses/settings          … ワークフロー設定
-// PATCH /api/expenses/settings          … 承認しきい値・勘定科目の変更（管理部のみ）
+// PATCH /api/expenses/settings          … 承認しきい値・勘定科目の変更（経理・事務のみ。canOfficeFinance）
 //
 // 承認経路をコードに埋めず設定に置いているのは、運用しながら
 // 「いくらから代表承認にするか」を変えたくなるため。

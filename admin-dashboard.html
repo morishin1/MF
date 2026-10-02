@@ -79,7 +79,8 @@
     const name = ctx.me?.gw?.employee?.display_name || ctx.me?.email || "";
     el("greet-sub").textContent =
       `${name}　／　${new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}`;
-    await load(ctx.me?.access || {});
+    // サーバの判定（/api/me の access）。古い応答のときだけ、管理者は両方
+    await load({ officeHr: KPLayout.hasAccess(ctx.me, "officeHr"), officeFinance: KPLayout.hasAccess(ctx.me, "officeFinance") });
   }
 
   // 自分の担当の行だけ出す・読む。人事・労務は officeHr、経理・事務は officeFinance（管理者・経営者は両方）。

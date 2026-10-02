@@ -1,4 +1,4 @@
-// GET    /api/templates            … 書類の雛形一覧（管理者・人事のみ／RLSが決める）
+// GET    /api/templates            … 書類の雛形一覧（経理・事務のみ＝管理者・経営者・経理。RLSも同じ: db/115）
 // POST   /api/templates            … 追加
 // PATCH  /api/templates {id, ...}  … 更新
 // DELETE /api/templates?id=...     … 削除

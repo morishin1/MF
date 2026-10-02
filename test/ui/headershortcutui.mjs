@@ -141,7 +141,7 @@ for (const [who, want, wantHref, label] of [
 console.log("\n— 権限に応じて出し分ける（経営は経営者だけ） —");
 for (const [roles, want, label] of [
   [["recruiter"], "hr", "採用担当 → 採用HRだけ"],
-  [["hr"], "hr", "人事 → 採用HRだけ"],
+  [["hr"], "hr,office", "人事 → 採用HR と Office（人事・労務）"],
   [["sales"], "sales", "営業 → Salesだけ"],
   [["owner"], "hr,sales,office,keiei", "経営者 → ホーム｜HR｜Sales｜Office｜経営"],
   [["manager"], "hr,sales,office", "責任者 → 3つとも（経営は出ない）"],
@@ -163,19 +163,23 @@ for (const [roles, want, label] of [
 
 console.log("\n— 出た入口は、押して入れるところへ行く（Officeが出たのに403、を作らない） —");
 {
-  // 管理画面を開けない人（経理・責任者のメンバー）は、Officeアプリ（月次業務 /office/）へ。
-  // 管理画面（admin-*.html）は admin/owner だけなので、そちらへは送らない
-  for (const [roles, label] of [[["finance"], "経理"], [["manager"], "責任者"]]) {
+  // Office の行き先は、その人が入れるところへ（押して 403 を作らない）。
+  //   人事・労務／経理・事務に入れる人（人事・経理。管理者でなくてもよい）… Office の管理画面（ダッシュボード）。
+  //     中は担当のグループだけ。月末月初（/office/）は、経理・事務の「月次業務」の中の「月末月初業務」から入る
+  //   月末月初（/office/）だけの人（責任者）… /office/
+  for (const [roles, label, want] of [[["finance"], "経理", "admin-dashboard.html"], [["hr"], "人事", "admin-dashboard.html"], [["manager"], "責任者", "/office/"]]) {
     const page = await open("home.html", { appRole: "member", roles });
     const sc = await shortcuts(page);
-    check(hrefOf(sc, "office") === "/office/", `${label}（メンバー）の Office → /office/（月次業務）`);
+    check(hrefOf(sc, "office") === want, `${label}（メンバー）の Office → ${want}`);
     check(!sc.some((x) => x.key === "area-settings"), `${label}（メンバー）に ⚙管理は出ない`);
     await page.close();
   }
-  // 人事だけの人（経理・責任者でない）は、Officeに入れる入口が無い（管理画面は admin/owner 前提）ので出さない
-  const hr = await open("home.html", { appRole: "member", roles: ["hr"] });
-  check(!(await shortcuts(hr)).some((x) => x.key === "office"), "人事だけ（メンバー）には Office を出さない（入っても使えるものが無い）");
-  await hr.close();
+  // 人事・経理・責任者のどれでもない人（採用担当・営業・IT）には、Office を出さない
+  for (const roles of [["recruiter"], ["sales"], ["it"]]) {
+    const p = await open("home.html", { appRole: "member", roles });
+    check(!(await shortcuts(p)).some((x) => x.key === "office"), `${roles}（メンバー）には Office を出さない`);
+    await p.close();
+  }
 }
 
 console.log("\n— サーバの access どおりに出す（役割名ではなく判定結果で） —");
