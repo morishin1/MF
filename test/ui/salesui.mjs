@@ -51,11 +51,23 @@ const CSV_COLUMNS = [["name", "企業名", true], ["siteUrl", "企業サイトUR
 
 const CAMPAIGNS = [{ id: "cp1", name: "秋の製造業" }, { id: "cp2", name: "冬の不動産" }];
 
-async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0, extra = [] } = {}) {
+async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0, extra = [],
+  deals: dealSeed = [], dealsNotReady = false, dealsTruncated = false, analytics = null, analyticsSince = null } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
   const meetings = [];
+  // 案件（db/116）。本物（api/sales/deals）と同じ形で返す
+  const deals = dealSeed.map((d) => ({ ...d }));
+  const PROB = { meeting: 20, proposal: 50, negotiation: 80 };
+  const STAGE = { meeting: "商談", proposal: "提案", negotiation: "最終調整", won: "成約", lost: "失注" };
+  const shapeD = (d) => {
+    const open = ["meeting", "proposal", "negotiation"].includes(d.stage);
+    const p = open ? d.probability ?? PROB[d.stage] : null;
+    return { approachId: null, ownerName: "営業 一郎", probability: null, lostReason: null, wonOn: null, lostOn: null,
+      createdAt: NOW, ...d, stageLabel: STAGE[d.stage], open, probabilityUsed: p,
+      expected: open && d.amount != null ? Math.round((d.amount * p) / 100) : 0 };
+  };
   // lib/sales-timerex.js companyEmails と同じ：連絡先のメール・連絡手段がメールのときの連絡先・メールアドレス（emails[]）
   const emailsOf = (c) => [...new Set([c?.contacts?.email, c?.contactChannel === "email" ? c?.contactValue : null, ...(c?.emails || [])]
     .filter(Boolean).map((v) => String(v).toLowerCase()))];
@@ -240,6 +252,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
           { at: c.lastClickAt, kind: "click", label: "リンククリック" }] : [],
         canForce: isAdmin, members: [{ id: "emp-s1", display_name: "営業 一郎" }], campaigns: [],
         meetings: meetings.filter((m) => m.companyId === id).map(shapeM), meetingsReady: true, timerexConfigured: timerex,
+        deals: deals.filter((d) => d.companyId === id).map(shapeD), dealsReady: !dealsNotReady,
         matchEmails: emailsOf(c),
         // 本物と同じ：基本情報の編集の選択肢（共通マスター）。リード一覧はここから受け取る
         masters: MASTERS,
@@ -247,6 +260,29 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         ngReasons: [{ key: "no_sales", label: "営業禁止" }],
         eventKinds: [{ key: "follow", label: "フォロー" }, { key: "reply", label: "返信あり" }],
       });
+    }
+    if (/\/api\/sales\/deals\b/.test(url)) {
+      if (dealsNotReady) return send({ error: "not_ready", message: "db/116_sales_deals.sql を実行してください" }, 503);
+      if (req.method() === "POST") {
+        const b = body();
+        calls.push({ kind: "deal-create", body: b });
+        const d = { id: `d${deals.length + 1}`, companyId: b.companyId, title: b.title, stage: b.stage || "meeting",
+          amount: b.amount == null ? null : Number(b.amount), probability: b.probability ?? null };
+        deals.push(d);
+        return send({ deal: shapeD(d), companyStatus: "meeting", suggestCompanyLost: false });
+      }
+      if (req.method() === "PATCH") {
+        const b = body();
+        calls.push({ kind: "deal-update", body: b });
+        const d = deals.find((x) => x.id === b.id);
+        Object.assign(d, { stage: b.stage ?? d.stage, title: b.title ?? d.title, lostReason: b.lostReason ?? d.lostReason,
+          amount: "amount" in b ? (b.amount == null ? null : Number(b.amount)) : d.amount });
+        if (d.stage === "won") d.wonOn = TODAY;
+        if (d.stage === "lost") d.lostOn = TODAY;
+        const mine = deals.filter((x) => x.companyId === d.companyId);
+        return send({ deal: shapeD(d), companyStatus: null, suggestCompanyLost: mine.every((x) => x.stage === "lost") });
+      }
+      return send({ deals: deals.map(shapeD), truncated: dealsTruncated });
     }
     if (/\/api\/sales\/meetings\b/.test(url)) {
       const b = body();
@@ -379,7 +415,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         calls.push({ kind: "act", body: body() });
         return send({ approach: { id: "ap1", sentAt: NOW } });
       }
-      return send({ approaches: [] });
+      return send({ approaches: analytics || [], ...(analyticsSince ? { since: analyticsSince } : {}) });
     }
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     return send({});
@@ -1710,6 +1746,174 @@ console.log("\n=== 権限の無い人 ===");
   await page.waitForTimeout(1000);
   check(/home\.html/.test(page.url()), `home.html へ送り返す（いま ${page.url()}）`);
   await page.close();
+}
+
+console.log("\n=== 案件（企業詳細） ===");
+{
+  const { page, errs, calls } = await openAs({ deals: [{ id: "d1", companyId: "c2", title: "既存案件", stage: "proposal", amount: 500000 }] });
+  await page.goto(`${BASE}/sales/companies.html?id=c2`);
+  await page.waitForSelector("#detail-box .deal-row");
+  const row = await page.locator("#detail-box .deal-row").first().innerText();
+  check(/既存案件/.test(row) && /提案/.test(row) && /500,000円/.test(row) && /見込額 250,000円（50%）/.test(row), `案件が段階・金額・見込つきで出る（${row.replace(/\s+/g, " ")}）`);
+
+  // 追加：金額と段階を入れる
+  await page.click("text=案件を追加");
+  await page.waitForSelector("#dl-title");
+  const stages = await page.locator("#dl-stage option").allInnerTexts();
+  check(stages.join() === "商談,提案,最終調整", `作るときの段階は進行中だけ（${stages.join()}）`);
+  check(/既定の 20%/.test(await page.locator("#dl-prob-hint").innerText()), "確率の既定値を表示");
+  await page.click(".sl-modal-foot >> text=追加");
+  check(/案件名を入れてください/.test(await page.locator("#dl-msg").innerText()), "案件名が空なら送らない");
+  await page.fill("#dl-title", "AI/DX 導入支援");
+  await page.fill("#dl-amount", "1200000");
+  await page.click(".sl-modal-foot >> text=追加");
+  await page.waitForFunction(() => document.querySelectorAll("#detail-box .deal-row").length === 2);
+  const made = calls.find((c) => c.kind === "deal-create");
+  check(made && made.body.companyId === "c2" && made.body.title === "AI/DX 導入支援" && String(made.body.amount) === "1200000" && made.body.stage === "meeting",
+    `案件の作成を送る（${JSON.stringify(made?.body)}）`);
+
+  // 成約は金額が要る（画面でも止める）
+  await page.locator("#detail-box .deal-row", { hasText: "AI/DX 導入支援" }).click();
+  await page.waitForSelector("#dl-stage");
+  await page.selectOption("#dl-stage", "won");
+  check(await page.locator("#dl-prob-box").isHidden(), "成約では確率の欄を隠す");
+  await page.fill("#dl-amount", "");
+  await page.click(".sl-modal-foot >> text=保存");
+  check(/0円より大きい案件金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "金額なしの成約は送らない");
+  await page.fill("#dl-amount", "0");
+  await page.click(".sl-modal-foot >> text=保存");
+  check(/0円より大きい案件金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "0円の成約も送らない");
+  await page.click(".sl-modal-foot >> text=閉じる");
+
+  // 2件とも失注 → 「会社も失注にしますか」（はい）→ 会社の更新を送る
+  for (const t of ["既存案件", "AI/DX 導入支援"]) {
+    await page.locator("#detail-box .deal-row", { hasText: t }).click();
+    await page.waitForSelector("#dl-stage");
+    await page.selectOption("#dl-stage", "lost");
+    check(await page.locator("#dl-lost-box").isVisible(), "失注では理由の欄を出す");
+    await page.fill("#dl-lost", "予算なし");
+    await page.click(".sl-modal-foot >> text=保存");
+    await page.waitForTimeout(400);
+  }
+  const ups = calls.filter((c) => c.kind === "deal-update");
+  check(ups.length === 2 && ups.every((u) => u.body.stage === "lost" && u.body.lostReason === "予算なし"), "失注と理由を送る");
+  check(calls.some((c) => c.kind === "detail" && c.method === "PATCH"), "全部失注のときだけ、会社の失注を（確認のうえ）送る");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+{
+  const { page } = await openAs({ dealsNotReady: true });
+  await page.goto(`${BASE}/sales/companies.html?id=c1`);
+  await page.waitForSelector("#detail-box h4");
+  check(/db\/116_sales_deals\.sql/.test(await page.locator("#detail-box").innerText()), "表が無いときは db/116 の実行を案内（詳細は開ける）");
+  await page.close();
+}
+
+console.log("\n=== 分析（上部6マス） ===");
+{
+  const ago = (d) => new Date(Date.now() - d * 86400000).toISOString();
+  const ap = (id, companyId, over = {}) => ({ id, companyId, companyName: `会社${companyId}`, companyStatus: "attacked", clickCount: 0,
+    sentAt: ago(5), channelLabel: "お問い合わせフォーム", templateName: "AI/DX診断", service: "AI / DX", industry: "製造",
+    employeeName: "営業 一郎", ...over });
+  const analytics = [
+    ap("a1", "k1", { clickCount: 2, companyStatus: "replied" }),
+    ap("a2", "k2", { clickCount: 1, companyStatus: "clicked" }),
+    ap("a3", "k3", { clickCount: 1, companyStatus: "lost" }),       // 失注でも案件があるので商談に数える
+    ap("a4", "k4", { companyStatus: "won", templateName: "PCレンタル" }),
+  ];
+  const { page, errs } = await openAs({ analytics, deals: [
+    { id: "d1", companyId: "k3", approachId: "a3", title: "失注案件", stage: "lost", amount: 900000 },
+    { id: "d2", companyId: "k4", approachId: "a4", title: "成約案件", stage: "won", amount: 1500000, wonOn: TODAY },
+    { id: "d3", companyId: "k1", approachId: "a1", title: "進行中", stage: "proposal", amount: 1000000 },
+    // 期間内にアタックしていない会社の成約（上部の受注額には入る・要因分析には入らない）
+    { id: "d4", companyId: "old", approachId: "a-old", companyName: "昔からの取引先", title: "追加発注", stage: "won", amount: 200000, wonOn: TODAY },
+    // 成約日が期間より前（上部の受注額には入らない）
+    { id: "d5", companyId: "k4", approachId: "a4", title: "去年の成約", stage: "won", amount: 5000000, wonOn: "2020-01-01" },
+  ] });
+  await page.goto(`${BASE}/sales/analytics.html`);
+  await page.waitForSelector("#funnel .an2-card");
+  const cards = await page.locator("#funnel .an2-card").allInnerTexts();
+  const flat = cards.map((t) => t.replace(/\s+/g, " ").trim());
+  check(flat.length === 6, `マスは6枚（${flat.length}）`);
+  check(/^send 4社 アタック$/.test(flat[0]), `アタック 4社（${flat[0]}）`);
+  check(/4社 クリック 100%（4 \/ 4）/.test(flat[1]), `クリック：後ろまで進んだ会社も通ったものとして数える（${flat[1]}）`);
+  check(/3社 返信/.test(flat[2]), `返信 3社（${flat[2]}）`);
+  check(/3社 商談 100%（3 \/ 3）.*4案件/.test(flat[3]), `商談 3社・4案件（1社に2案件・失注の会社も数える）（${flat[3]}）`);
+  check(/1社 成約 33\.3%（1 \/ 3）/.test(flat[4]), `成約 1社（${flat[4]}）`);
+  check(/¥1,700,000 受注額 成約日が期間内の 2案件/.test(flat[5]), `受注額＝成約日が期間内の成約案件の金額（アタックの時期は問わない）（${flat[5]}）`);
+  check(/参考値/.test(flat[1]), "母数10未満は参考値");
+  const money = (await page.locator(".an-money").innerText()).replace(/\s+/g, " ");
+  check(/見込額 ¥500,000 進行中 1案件/.test(money) && /パイプライン ¥1,000,000/.test(money) && !/売上（/.test(money),
+    `見込額・パイプライン（${money}）`);
+  check(/会計上の売上ではありません/.test(money), "受注額は会計上の売上ではないと書く");
+  const heads = await page.locator("#by-template thead th").allInnerTexts();
+  check(heads.join("|") === "項目|アタック数|クリック率|返信率|商談化率|受注額|見込額|1アタック見込額", `既存の列に受注額の3列を足す（${heads.join("|")}）`);
+  const tpl = (await page.locator("#by-template tbody tr", { hasText: "PCレンタル" }).innerText()).replace(/\s+/g, " ");
+  check(/650万円/.test(tpl), `営業文別の受注額はもとのアタックで数える（成約日を問わない attribution）（${tpl}）`);
+  await page.click("#funnel .an2-card >> nth=5");
+  await page.waitForSelector(".sl-drawer");
+  const dr = await page.locator(".sl-drawer").innerText();
+  check(/成約案件/.test(dr) && /昔からの取引先/.test(dr) && !/去年の成約/.test(dr), "受注額のマスを押すと、成約日が期間内の案件を出す");
+  await page.keyboard.press("Escape");
+  await page.click("#funnel .an2-card >> nth=3");
+  check(/会社k3/.test(await page.locator(".sl-drawer").innerText()), "商談のマスを押すと、商談した企業を出す");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+{
+  const { page, errs } = await openAs({ dealsNotReady: true, analytics: [{ id: "a1", companyId: "k1", companyName: "会社k1",
+    companyStatus: "attacked", clickCount: 0, sentAt: NOW, channelLabel: "お問い合わせフォーム" }] });
+  await page.goto(`${BASE}/sales/analytics.html`);
+  await page.waitForSelector("#funnel .an2-card");
+  const t = await page.locator("#kpi").innerText();
+  check(/db\/116_sales_deals\.sql/.test(t) && /1社/.test(t), "案件の表が無くても、活動のマスは出して db/116 を案内");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+{
+  // 案件が5,000件を超えたら（API の truncated）、集計が一部省略されていると画面に出す
+  const { page, errs } = await openAs({ dealsTruncated: true, analytics: [{ id: "a1", companyId: "k1", companyName: "会社k1",
+    companyStatus: "attacked", clickCount: 0, sentAt: NOW, channelLabel: "お問い合わせフォーム" }],
+    deals: [{ id: "d1", companyId: "k1", approachId: "a1", title: "進行中", stage: "proposal", amount: 1000000 }] });
+  await page.goto(`${BASE}/sales/analytics.html`);
+  await page.waitForSelector("#funnel .an2-card");
+  const b = page.locator("#deals-truncated");
+  check(await b.isVisible(), "truncated のときは警告を出す");
+  check(/5,000件超で集計が一部省略されています/.test(await b.innerText()), `警告の文言（${(await b.innerText()).replace(/\s+/g, " ")}）`);
+  check(await page.locator(".an-money").isVisible(), "警告を出しても数字は出す");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+{
+  const { page } = await openAs({ analytics: [{ id: "a1", companyId: "k1", companyName: "会社k1",
+    companyStatus: "attacked", clickCount: 0, sentAt: NOW, channelLabel: "お問い合わせフォーム" }] });
+  await page.goto(`${BASE}/sales/analytics.html`);
+  await page.waitForSelector("#funnel .an2-card");
+  check(!(await page.locator("#deals-truncated").count()), "5,000件以下なら警告は出さない");
+  await page.close();
+}
+{
+  // 期間の始まりは日本時間。UTC ではまだ 9/30 20:00 でも、日本時間では 10/1 05:00 → 直近30日は 9/2 から（UTC で30日前に切ると 8/31・9/1 を入れてしまう）
+  const deals = [
+    { id: "w1", companyId: "k1", approachId: null, companyName: "初日", title: "初日の成約", stage: "won", amount: 100000, wonOn: "2026-09-02" },
+    { id: "w2", companyId: "k1", approachId: null, companyName: "前日", title: "前日の成約", stage: "won", amount: 7000000, wonOn: "2026-09-01" },
+  ];
+  const analytics = [{ id: "a1", companyId: "k1", companyName: "会社k1", companyStatus: "attacked", clickCount: 0,
+    sentAt: "2026-09-30T19:00:00Z", channelLabel: "お問い合わせフォーム" }];
+  for (const [since, label] of [[null, "API が since を返さない版でも画面で日本時間で計算"], ["2026-09-02", "API の since を使う"]]) {
+    const { page, errs } = await openAs({ analytics, analyticsSince: since, deals });
+    await page.clock.setFixedTime(new Date("2026-09-30T20:00:00Z"));
+    await page.goto(`${BASE}/sales/analytics.html`);
+    await page.waitForSelector("#period button");
+    await page.click("#period button >> text=30日");
+    await page.waitForFunction(() => /2026-09-02/.test(document.querySelector("#kpi")?.innerText || ""));
+    const flat = (await page.locator("#funnel .an2-card >> nth=5").innerText()).replace(/\s+/g, " ");
+    check(/¥100,000 受注額 成約日が期間内の 1案件/.test(flat), `${label}：始まりの日（9/2）は入れ、前日（9/1）は入れない（${flat}）`);
+    check(/期間：2026-09-02 〜 今日（日本時間）/.test(await page.locator("#kpi").innerText()), `${label}：期間の始まりを日本時間の日付で出す`);
+    check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+    await page.close();
+  }
 }
 
 console.log("\n=== スマホ幅 ===");

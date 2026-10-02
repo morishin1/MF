@@ -901,6 +901,10 @@
   const listSalesMeetings = (companyId) => api(`/api/sales/meetings?companyId=${encodeURIComponent(companyId)}`);
   const issueSalesMeeting = (body) => api("/api/sales/meetings", { method: "POST", body });
   const salesMeetingAct = (body) => api("/api/sales/meetings", { method: "PATCH", body });
+  // 営業の案件（db/116）。companyId なしならテナントの案件すべて（分析用）
+  const listSalesDeals = (companyId) => api(`/api/sales/deals${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`);
+  const createSalesDeal = (body) => api("/api/sales/deals", { method: "POST", body });
+  const updateSalesDeal = (body) => api("/api/sales/deals", { method: "PATCH", body });
 
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
@@ -1895,7 +1899,7 @@
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,
-    listSalesMeetings, issueSalesMeeting, salesMeetingAct,
+    listSalesMeetings, issueSalesMeeting, salesMeetingAct, listSalesDeals, createSalesDeal, updateSalesDeal,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
     setEmployeeRole, linkEmployeeAccount,

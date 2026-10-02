@@ -1,9 +1,9 @@
 {
-  "version": "20261002of1",
+  "version": "20261002dl3",
   "files": {
     "css/app.css": "c716128d39f5567c",
     "css/layout.css": "86bd6194bbe5567f",
-    "js/api-client.js": "25c2ae9cd079ace4",
+    "js/api-client.js": "9a353e8d1d212ca5",
     "js/device.js": "a6a1d1d336ce897b",
     "js/dropzone.js": "31273a877deaa90d",
     "js/hr-layout.js": "b632aeec9ac3e913",
@@ -14,6 +14,7 @@
     "js/office-layout.js": "4a629412d3abe8ac",
     "js/preview.js": "d1725ffbb496c650",
     "js/push.js": "6d99fbc72f947940",
+    "js/sales-detail.js": "9f2636bf1cf3efca",
     "js/sales-layout.js": "67e2ef972af10e78",
     "js/task-drawer.js": "e48ecbf729b677a9"
   }

@@ -193,6 +193,9 @@ console.log("\n=== 直す：その日だけ保存・その場で更新・フォ�
   await page.keyboard.press("Tab");
   const r2 = await s2;
   check(r2.status() === 400, "読めない時刻は 400");
+  // 応答が届いたあと、画面が行を描き直すまで待つ（応答直後に読むと、CI で描き直しの前に当たることがある）
+  await page.waitForFunction(() => /開始「9:5」/.test(document.querySelector('#dayrows tr[data-date$="-06"]')?.innerText || ""),
+    null, { timeout: 5000 }).catch(() => {});
   check((await row(page, 6).innerText()).includes("開始「9:5」を、時刻（例 9:00）で入れてください"), "理由を、その日の行に出す");
   check(await st6.getAttribute("aria-invalid") === "true", "その欄に、エラーの印");
   check(rows("gw_timesheet_days").find((d) => d.work_date === `${M}-06`).start_min == null, "保存されていない");

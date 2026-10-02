@@ -30,12 +30,13 @@ import {
   SEND_FAIL_REASONS, channelLabel, normalizeContacts, mergeContacts,
 } from "../../../lib/sales.js";
 import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
+import { DEAL_FIELDS, shapeDeal } from "../../../lib/sales-deals.js";
 import { loadMasters } from "../../../lib/sales-master.js";
 import { companyEmails } from "../../../lib/sales-timerex.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 // 「最終連絡」に数えない出来事（こちらの記録の整理で、相手とのやり取りではないもの）
-const NOT_CONTACT = new Set(["status", "memo", "next", "hide"]);
+const NOT_CONTACT = new Set(["status", "memo", "next", "hide", "deal"]);
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -71,7 +72,7 @@ async function one(req, res, sb, ctx) {
   }
   if (!c) return json(res, 404, { error: "not_found" });
 
-  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }, masters] = await Promise.all([
+  const [{ data: approaches }, { data: clicks }, { data: events }, { data: members }, { data: campaigns }, { data: meetings }, { data: deals }, masters] = await Promise.all([
     sb.from("gw_sales_approaches")
       .select("id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
         + "tracking_token, destination_url, prepared_at, sent_at, forced, first_click_at, last_click_at, click_count, "
@@ -86,6 +87,8 @@ async function one(req, res, sb, ctx) {
     sb.from("gw_sales_campaigns").select("id, name, archived_at").eq("tenant_id", ctx.tenantId).limit(500),
     // 面談（db/090）。まだ表が無い環境でも企業詳細は開けるようにする（エラーは空として扱う）
     sb.from("gw_sales_meetings").select(MEETING_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(50),
+    // 案件（db/116）。まだ表が無い環境でも企業詳細は開けるようにする
+    sb.from("gw_sales_deals").select(DEAL_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(100),
     loadMasters(sb, ctx.tenantId),
   ]);
   const name = new Map((members || []).map((e) => [e.id, e.display_name]));
@@ -167,6 +170,8 @@ async function one(req, res, sb, ctx) {
     contactStatus,
     meetings: (meetings || []).map((m) => shapeMeeting(m, (eid) => name.get(eid))),
     meetingsReady: meetings !== null && meetings !== undefined,
+    deals: (deals || []).map((d) => shapeDeal(d, (eid) => name.get(eid) || null)),
+    dealsReady: deals !== null && deals !== undefined,
     timerexConfigured: Boolean((process.env.TIMEREX_SALES_MEETING_URL || "").trim()),
     // TimeRex の予約（guest_email）と照合するメールアドレス。Webhook（lib/sales-timerex.js）と同じ判定
     matchEmails: [...companyEmails(c)],
