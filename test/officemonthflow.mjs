@@ -265,9 +265,11 @@ await ok("月次の流れを、提出から完了（PP）・支払準備（BP）
   assert.equal(events("timesheet.confirm").length, 2);
   assert.equal(events("billing.invoice_created").length, 2);
   assert.equal(events("billing.invoice_sent").length, 2);
-  const evText = JSON.stringify(rows("gw_office_events").filter((e) => /^(billing|vendor_invoice|payment|month)\./.test(e.kind)));
+  // UUID・日時の数字がたまたま金額に見えないよう、除いてから探す
+  const scrub = (t) => t.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<id>").replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<ts>");
+  const evText = scrub(JSON.stringify(rows("gw_office_events").filter((e) => /^(billing|vendor_invoice|payment|month)\./.test(e.kind))));
   assert.ok(!/700000|800000|550000|605000|田中|鈴木/.test(evText), evText);
-  assert.ok(!/550000|605000|田中|鈴木/.test(JSON.stringify(logged.filter((l) => /office\.(vendor_invoice|payment|month)/.test(l.action)))), "監査ログにも金額・氏名を入れない");
+  assert.ok(!/550000|605000|田中|鈴木/.test(scrub(JSON.stringify(logged.filter((l) => /office\.(vendor_invoice|payment|month)/.test(l.action))))), "監査ログにも金額・氏名を入れない");
 });
 
 await ok("BP請求書を画面から受領済みにする（郵送・メールで届いた場合）→ 支払準備", async () => {

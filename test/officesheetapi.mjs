@@ -967,7 +967,10 @@ await ok("履歴には、金額・単価・氏名などの個人情報を入れ�
   mem.rows.gw_site_contract_terms = [{ id: uid(600), tenant_id: T1, site_contract_id: C_PP, valid_from: "2026-04-01", pricing_type: "hourly", sales_unit_price: 4500, purchase_unit_price: 3800 }];
   await readIt();
   await post("confirm");
-  const text = JSON.stringify(rows("gw_office_events")) + JSON.stringify(logged);
+  // 乱数の UUID・日時の数字が、たまたま 4500 などを含むことがある。それらを除いてから探す（値として入っていないか）
+  const text = (JSON.stringify(rows("gw_office_events")) + JSON.stringify(logged))
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<id>")
+    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<ts>");
   for (const w of ["4500", "3800", "108000", "田中"]) assert.ok(!text.includes(w), `${w} が履歴に入っている`);
 });
 
