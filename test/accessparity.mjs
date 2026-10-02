@@ -152,6 +152,15 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
       && /location\.replace\("\/home\.html"\)/.test(officeLayout),
     "/office の入口は access.office だけで決め、無ければ home.html へ");
   check(!/["'](owner|manager|finance|hr|sales|recruiter)["']/.test(officeLayout), "/office の画面に役割名を書かない");
+  // Office は役割で入口も見た目も変えない（2026-10-02）：ナビは1つだけ定義し、出し分けは access のキー（needs）だけ。
+  // appRole・admin・owner で、ナビ全体を差し替えない（以前は admin/owner だけ管理画面のナビを足していた）
+  check(!/appRole|isAdmin|\badmin\b|\bowner\b|ADMIN_NAV/.test(officeLayout), "/office の画面は、appRole・admin・owner でナビやレイアウトを分けない");
+  check(/const navFor = \(me\) => NAV\.filter\(\(n\) => !n\.needs \|\| Boolean\(me\?\.access\?\.\[n\.needs\]\)\);/.test(officeLayout),
+    "Office のナビは、全員同じ定義（NAV）を、access のキー（needs）だけで絞る");
+  const navBlock = officeLayout.match(/const NAV = \[([\s\S]*?)\n  \];/)?.[1] || "";
+  const needs = [...navBlock.matchAll(/needs:\s*"(\w+)"/g)].map((m) => m[1]);
+  check(needs.length > 0 && needs.every((k) => Object.keys(accessOf({ roles: [] })).includes(k)), `NAV の needs は、サーバの access（accessOf）のキー（いま ${needs.join("・")}）`);
+  check(!/admin-|\/admin/.test(navBlock), "Office のナビに、管理画面（admin-*.html）を入れない");
 
   // 予備の判定（access が無い古い応答のときだけ使う）が、サーバの役割の並びとずれていない
   // （責任者が HR に入れる、という変更のあとに、画面だけ旧仕様のまま残さない）
@@ -323,8 +332,12 @@ console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、ac
   check(tools.every((t) => t.ready), "HR・Sales・Office・経営は ready:true（実装済み）");
   check(/TOOLS\.filter\(\(t\) => t\.ready && toolVisible\(t, shows\)\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
   // Office：/office に入れる人（access.office）か、管理画面を開ける管理者。入口は人によって変える（押して403を作らない）
-  check(/office: Boolean\(me\?\.access\?\.office\) \|\| adminApp/.test(layout), "Office の表示は access.office か管理者（adminApp）");
-  check(/if \(t\.key === "office"\) return shows\.adminApp \? t\.altHref : t\.href;/.test(layout), "Office の行き先: 管理者は管理画面（ダッシュボード）、それ以外（access.office）は /office/");
+  // Office：/office に入れる人（access.office）だけに出し、行き先は役割に関係なく /office/（管理者だけ別の入口、をやめた）
+  check(/\boffice: Boolean\(me\?\.access\?\.office\),/.test(layout) && !/office: Boolean\(me\?\.access\?\.office\) \|\|/.test(layout),
+    "Office の表示は access.office だけ（管理者かどうかで出し分けない）");
+  const officeTool = block.match(/\{\s*key:\s*"office"[^}]*\}/)?.[0] || "";
+  check(officeTool && !/altHref/.test(officeTool), "Office の定義に、役割別の行き先（altHref）を持たせない");
+  check(!/t\.key === "office"\) return shows\.adminApp/.test(layout) && !/admin-dashboard/.test(officeTool), "Office の行き先を、管理者（adminApp）で分けない");
   check(tools.find((t) => t.key === "keiei")?.href === "/keiei/", "経営 → /keiei/");
 }
 

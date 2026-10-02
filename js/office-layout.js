@@ -13,19 +13,23 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // Office は1つの業務アプリ（人事・労務・経理・事務）。月次業務（/office/）はその中の機能。
-  // 月次業務は access.office の人（経営者・責任者・経理）が使う。
-  // 人事・労務、経理・事務の管理画面（admin-*.html）は、既存の管理画面をそのまま使い、
-  // その画面を開ける管理者（admin/owner）にだけ入口を出す（経理だけの人に押すと 403 の入口を出さない）。
-  // 権限を緩める変更はしていない。出す入口は、その人が実際に使えるものだけ
-  const MONTHLY = { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available" };
-  const ADMIN_NAV = [
-    { key: "dashboard", href: "/admin-dashboard.html", label: "ダッシュボード", icon: "dashboard" },
-    { key: "people",    href: "/admin-members.html",   label: "人事・労務",     icon: "group" },
-    { key: "ops",       href: "/admin-expenses.html",  label: "経理・事務",     icon: "work" },
+  // ■ Office は1つの業務アプリ（役割で入口も見た目も変えない。2026-10-02 に決めた）
+  //   経営者でも、経理でも、人事・労務でも、Office を押したら同じ /office/ に入り、
+  //   同じヘッダー・同じナビ・同じコンテンツ幅・同じカード／ボタン／フォント／色になる。
+  //   役割で変わるのは「見えるメニュー・データ・操作」だけ（＝権限）。ナビ全体を役割で差し替えない。
+  //
+  //   以前は、admin/owner のときだけ管理画面（ダッシュボード・人事・労務・経理・事務）のナビを足していた。廃止した。
+  //   管理画面（admin-*.html）は残してあるが、Office の入口でもナビでもない（ヘッダー右の ⚙管理 から開く）。
+  //
+  // ■ ナビは1つだけ定義する（NAV）
+  //   needs … その項目を出すのに要る権限。/api/me の access のキー（サーバの判定そのもの）。
+  //           役割名（owner・finance など）は、ここでも持たない。
+  //   機能を足すときは、ここに1行足す（人事・労務の機能なら needs: "recruit"、など）。
+  //   権限のない人には、その項目だけを出さない（ナビ全体は変えない）
+  const NAV = [
+    { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available", needs: "office" },
   ];
-  // appRole（管理画面を開けるか）は役割名ではなく画面の種類。admin / owner だけ管理画面の入口を足す
-  const navFor = (me) => (/^(admin|owner)$/.test(me?.appRole || "") ? [...ADMIN_NAV, MONTHLY] : [MONTHLY]);
+  const navFor = (me) => NAV.filter((n) => !n.needs || Boolean(me?.access?.[n.needs]));
 
   function css() {
     if (document.getElementById("office-layout-css")) return;
@@ -189,5 +193,5 @@
     return `${Number(m)}/${Number(d)}`;
   }
 
-  window.OfficeLayout = { init, allows, esc, pill, fmt, fmtDay, toggleUserMenu };
+  window.OfficeLayout = { init, allows, navFor, NAV, esc, pill, fmt, fmtDay, toggleUserMenu };
 })();

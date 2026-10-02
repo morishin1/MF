@@ -169,10 +169,11 @@
    *   他人・会社を管理する画面は左に置かない。
    *
    * ■ 担当業務はヘッダーから入る。入ったら、その業務だけの専用の左メニューになる。
-   *   採用HR（/hr）・Sales（/sales）・経営（/keiei）・月次業務（/office）は別アプリ。
+   *   採用HR（/hr）・Sales（/sales）・経営（/keiei）・Office（/office。月次業務はその中の機能）は別アプリ。
    *   管理者が使う管理画面（admin-*.html）は URL を変えず、次の3つの領域に分ける
-   *   （areaOf が active から判定する）。
-   *     office   … ダッシュボード／人事・労務／経理・事務（人事・労務・経理・事務だけ）
+   *   （areaOf が active から判定する）。管理画面は Office ではない（ヘッダーの Office は /office/ に1つだけ。
+   *   管理画面へは ⚙管理 から入る。2026-10-02 に、Office の入口を役割で分けるのをやめた）。
+   *     office   … ダッシュボード／人事・労務／経理・事務（管理画面。ヘッダーのタグは「管理」）
    *     keiei    … チーム状況・全員のタスク・全員の日報（チーム・会社全体の管理）
    *     settings … 権限・端末・アクセス分析・AIナレッジ・システム設定（ヘッダー右の⚙管理から）
    *   上のどちらにも属さない画面は、ホーム領域＝全員と同じ左メニュー。
@@ -185,14 +186,13 @@
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
-  // Office の最初の行。管理者向けのダッシュボード（全社の今日の状況）
+  // 管理画面（人事・労務／経理・事務）の最初の行。管理者向けのダッシュボード（全社の今日の状況）
   const OFFICE_TOP = [
     { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
   ];
 
-  // Office: 人事・労務／経理・事務。今回は admin/owner のままに限定する
-  // （経理ロール等への開放はバックエンドAPI側の権限拡張も要るため、別タスクで扱う）。
-  // HR（/hr）・Sales（/sales）・経営（/keiei）と同じく、ヘッダー切替が正式な入口
+  // 管理画面: 人事・労務／経理・事務。admin/owner だけ（経理ロール等への開放はバックエンドAPI側の権限拡張も要るため、別タスクで扱う）。
+  // 入口はヘッダー右の ⚙管理（Office の入口ではない）。Office 内の1機能として統合するのは、あとで決める
   const OFFICE_GROUPS = [
     {
       key: "office-hr", label: "人事・労務", icon: "group",
@@ -383,23 +383,26 @@
   //
   // ■ ヘッダーは「採用HR｜Sales｜Office｜経営｜⚙管理」の5つ。担当業務は1つの名前に1つだけ
   //   （同じ Office を「Office」と「月次業務」で二重に出さない。月次業務は Office の中の機能）
-  //   altHref … 管理者（admin/owner）が開くときの入口。管理画面（admin-*.html）はそちらが正本で、
-  //             /office・/keiei は access（canAccessOffice・canKeiei）の人だけが入れる別アプリ。
-  //             入れない入口を出さない（出たのに押すと 403、を作らない）ため、人によって行き先を変える
+  //   altHref … 経営（/keiei）だけが持つ。経営者以外の管理者（admin）は、チーム状況（管理画面）から入る。
+  //             Office には持たせない（下の「Office は役割で入口を変えない」）
+  //
+  // ■ Office は役割で入口を変えない（2026-10-02 に決めた）
+  //   Office は1つの業務アプリ。経営者でも、経理でも、押したら同じ /office/ に入り、同じヘッダー・同じナビ・
+  //   同じ画面構造になる。違うのは「見えるメニュー・データ・操作」だけ（権限＝サーバの access.office による）。
+  //   以前は、管理者（admin/owner）だけ admin-dashboard.html（管理画面の人事・労務・経理・事務）へ送っていたが、廃止した。
+  //   管理画面（admin-*.html）は残してあり、ヘッダー右の ⚙管理 から開く（Office の入口ではない）
   const TOOLS = [
     { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add",       ready: true },
     { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
-    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true,
-      altHref: "admin-dashboard.html" },
+    { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true },
     { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true,
       altHref: "admin-team.html" },
   ];
 
   /**
    * このツールを出すか／どこへ行くか。
-   *   office … /api/me の access.office（経営者・責任者・経理）か、管理者（admin/owner）。
-   *            管理者は管理画面（人事・労務・経理・事務）を開けるので Office に入れる。
-   *            access.office の人は /office/（月次業務）、管理者は admin-dashboard.html から入る
+   *   office … /api/me の access.office（経営者・責任者・経理）の人だけ。行き先は、役割に関係なく /office/。
+   *            管理者（admin/owner）でも、access.office が無ければ出さない（押しても入れない入口を出さない）
    *   keiei  … 経営者（access.keiei）は /keiei/。管理者はチーム状況（admin-team.html）から
    *            （全員のタスク・日報・チーム状況は管理者も使う。経営アプリそのものは経営者だけ）
    * 権限の判定は showsFor（サーバの判定そのもの）に集めてある。ここでは並べ直さない
@@ -410,7 +413,6 @@
     return Boolean(shows[t.key]);
   }
   function toolHref(t, shows) {
-    if (t.key === "office") return shows.adminApp ? t.altHref : t.href;
     if (t.key === "keiei") return shows.keiei ? t.href : t.altHref;
     return t.href;
   }
@@ -419,8 +421,9 @@
     const list = TOOLS.filter((t) => t.ready && toolVisible(t, shows));
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
-      // /office・/keiei の中にいるとき、または管理画面でその領域（Office・経営）を開いているとき
-      const on = path.startsWith(s.href) || (s.key === "office" && area === "office") || (s.key === "keiei" && area === "keiei");
+      // /office・/keiei の中にいるとき。経営は、管理画面でその領域（チーム管理）を開いているときも選ぶ。
+      // Office は /office/ の中だけ（管理画面の人事・労務・経理・事務は、Office ではない）
+      const on = path.startsWith(s.href) || (s.key === "keiei" && area === "keiei");
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
@@ -444,7 +447,7 @@
       <div class="brand">
         <a href="${home}" style="text-decoration:none;color:inherit;">
           <img src="img/logo.svg" alt="" class="kp-logo">エイト</a>
-        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "OFFICE", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
+        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "管理", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
@@ -460,7 +463,7 @@
              </button>`) : ""}
         ${showAdminTools ? `
         <div class="kp-bell kp-admin-menu">
-          <button class="icon-btn${area === "settings" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
+          <button class="icon-btn${area === "settings" || area === "office" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
                   data-shortcut="area-settings" onclick="KPLayout.toggleAdminMenu()">
             ${icon("settings", 20)}
           </button>
@@ -486,10 +489,14 @@
    * SETTINGS_ITEMS（権限・端末・貸与品・アクセス分析・システム設定）への直リンクだけ。
    * サーバへ確かめに行く必要が無いので、通知と違って毎回その場で組み立てるだけでよい
    */
+  // 管理画面（人事・労務／経理・事務。admin-*.html）の入口。Office の入口ではない（Office は /office/ に1つだけ）。
+  // ヘッダーの「Office」から管理画面へは送らなくなったので、管理者がここから開く
+  const ADMIN_CONSOLE = { key: "console", href: "admin-dashboard.html", label: "管理画面（人事・労務／経理・事務）", icon: "dashboard" };
+
   function adminMenuHtml() {
     return `
       <div class="kp-bell-head"><b>管理</b></div>
-      ${SETTINGS_ITEMS.map((n) => `
+      ${[ADMIN_CONSOLE, ...SETTINGS_ITEMS].map((n) => `
         <a class="kp-bell-item" href="${esc(n.href)}">
           ${icon(n.icon, 18)}<b style="display:inline;margin-left:8px;">${esc(n.label)}</b>
         </a>`).join("")}`;
@@ -1026,11 +1033,11 @@
         : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
-      // Office。/office（月次業務）に入れる人は access.office だけ（金額を扱うので、access が無いときは出さない）。
-      // 管理者（admin/owner）は管理画面の人事・労務・経理・事務に入れるので、Office の入口も出す。
-      // 入口は人によって変える（toolHref）ので、押して 403 になる人は出ない
+      // Office。/office に入れる人は access.office だけ（金額を扱うので、access が無いときは出さない）。
+      // 役割（管理者か経理か）で入口も見た目も変えない。入れる人は全員 /office/ に入り、同じ画面を見る。
+      // 管理者（admin/owner）でも、access.office が無ければ出さない（押して入れない入口を作らない）
       officeApp: Boolean(me?.access?.office),
-      office: Boolean(me?.access?.office) || adminApp,
+      office: Boolean(me?.access?.office),
       // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
       // 全員のタスク・日報・チーム状況（管理画面）を開ける人。経営の入口（管理者はここから）
