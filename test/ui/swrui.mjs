@@ -83,25 +83,28 @@ console.log("\n=== Sales ダッシュボード：2回目は前回の内容をす
   check(count(st, /GET \/api\/sales\/companies$/) === 0, "企業の全件は取らない");
   check(count(st, /approaches\?days=14&limit=15/) === 1, "最近の営業履歴は15件だけ取る");
 
-  // 2回目：API を遅くし、中身も変える（1社増える）
-  st.lag = { "^/api/(me|sales/companies)$": 1500 };
+  // 2回目：API を遅くし、中身も変える（1社増える）。
+  // 遅らせる長さは、実行する機械が遅くても「前回の内容が出る」より先に API が返ってしまわない長さにする。
+  // 守りたいのは「API の返事を待たずに、前回の内容が出る」という順序で、何ミリ秒以内、という速さではない
+  const LAG = 5000;
+  st.lag = { "^/api/(me|sales/companies)$": LAG };
   st.companies = [company("c1", "返信商事"), company("c2", "二番商事"), company("c3", "三番商事")];
   await page.goto(`${BASE}/sales/`, { waitUntil: "commit" });
   await page.waitForSelector("#list-replied .sl-row");
-  // ページを開いた時点からの時刻（ブラウザの中で測る）。API は 1500ms かかる
+  // ページを開いた時点からの時刻（ブラウザの中で測る）。表示した時点で、/api/me はまだ返っていないこと（＝返事を待っていない）
   const shownAt = await page.evaluate(() => Math.round(performance.now()));
   const meDone = await page.evaluate(() => performance.getEntriesByType("resource").some((e) => /\/api\/me$/.test(e.name) && e.responseEnd > 0));
-  check(!meDone && shownAt < 1400, `/api/me も一覧も待たずに、前回の内容が出る（${shownAt}ms・/api/me はまだ）`);
+  check(!meDone, `/api/me も一覧も待たずに、前回の内容が出る（${shownAt}ms で表示。そのとき /api/me はまだ返っていない）`);
   check((await rowNames(page)).join() === "返信商事,二番商事", "出ているのは前回の内容");
   check(await page.locator(".sl-bar").count() === 1, "Sales のヘッダーも、/api/me を待たずに出る");
-  await page.waitForFunction(() => document.getElementById("kp-swr-chip")?.style.display === "block", null, { timeout: 1500 });
+  await page.waitForFunction(() => document.getElementById("kp-swr-chip")?.style.display === "block", null, { timeout: LAG });
   check(/更新中/.test(await page.locator("#kp-swr-chip").innerText()), "画面の隅に小さく「更新中…」");
   // 変わらない行は作り直さない（同じ要素のまま）
   await page.evaluate(() => { window.__first = document.querySelector("#list-replied .sl-row"); });
-  await page.waitForFunction(() => document.querySelectorAll("#list-replied .sl-row").length === 3, null, { timeout: 4000 });
+  await page.waitForFunction(() => document.querySelectorAll("#list-replied .sl-row").length === 3, null, { timeout: LAG + 10000 });
   check((await rowNames(page)).join() === "返信商事,二番商事,三番商事", "裏で取った最新に描き直す");
   check(await page.evaluate(() => window.__first === document.querySelector("#list-replied .sl-row")), "変わらない行は、同じ要素のまま（全体を作り直さない）");
-  await page.waitForFunction(() => document.getElementById("kp-swr-chip")?.style.display === "none", null, { timeout: 2000 });
+  await page.waitForFunction(() => document.getElementById("kp-swr-chip")?.style.display === "none", null, { timeout: 10000 });
   check(true, "最新になったら「更新中…」は消える");
 
   // 最新の取得に失敗：前回の内容は消さない
@@ -127,12 +130,18 @@ console.log("\n=== 更新のあとは、前回の内容を出さない ===");
   check(await page.evaluate(() => !Object.keys(sessionStorage).some((k) => k.startsWith("kp_swr:sales"))), "POST のあと、覚えている画面データは捨てる");
   st.lag = { "^/api/sales/companies$": 800 };
   st.companies = [company("c1", "返信商事")];
+  // 画面に現れた企業名を、全部記録しておく（途中で一瞬でも古い内容が出たら、あとから読み取っても見逃さない）。
+  // 「何ミリ秒後に0行」という時間の見方だと、遅い機械では、取り直した正しい内容がもう出ていて落ちる
+  await page.addInitScript(() => {
+    window.__seen = [];
+    const rec = () => document.querySelectorAll("#list-replied .sl-row b").forEach((b) => { if (!window.__seen.includes(b.textContent)) window.__seen.push(b.textContent); });
+    new MutationObserver(rec).observe(document, { childList: true, subtree: true, characterData: true });
+  });
   await page.goto(`${BASE}/sales/`, { waitUntil: "commit" });
-  await page.waitForSelector(".sl-bar");
-  await page.waitForTimeout(300);
-  check(await page.locator("#list-replied .sl-row").count() === 0, "古い内容（2社）は出さず、取り直すのを待つ");
   await page.waitForSelector("#list-replied .sl-row");
   check((await rowNames(page)).join() === "返信商事", "取り直した内容を出す");
+  const seen = await page.evaluate(() => window.__seen);
+  check(seen.join() === "返信商事", `古い内容（2社）は一度も出さず、取り直した内容だけを出す（画面に現れた企業：${seen.join("・")}）`);
   await ctx.close();
 }
 
@@ -177,7 +186,7 @@ console.log("\n=== 通知・バッジは、毎画面すぐには取りにいか�
 console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
 {
   const { ctx, page, st } = await tab();
-  // 先読みの対象（タスク画面 tasks.html）の本体の API。ホーム自身も、同じ API を1回呼ぶ（自分の画面のために）。
+  // 先読みの対象（タスク画面 tasks.html）の本体の API。ホーム自身も、同じ API を（数回に分けて）呼ぶ（自分の画面のために）。
   // 通知・バッジなどの共通の裏の通信（/api/notifications・/api/badges）は、この画面の本体ではないので、数えない。
   // 見たいのは「リンクに触れたことで、タスク画面の API が動いていないか」だけ
   const BACKGROUND = /^\/api\/(notifications|badges)$/;
