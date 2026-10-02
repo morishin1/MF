@@ -85,17 +85,19 @@ async function open(path, { admin, access }) {
 // ---------------------------------------------------------------------------
 console.log("— 管理者：ヘッダーの業務領域切替 —");
 {
-  // admin-timecard.html は Office 領域（人事・労務グループ）の画面
+  // admin-timecard.html は管理画面（人事・労務グループ）の画面。Office（/office/）ではない（2026-10-02）
   const page = await open("admin-timecard.html", { admin: true });
 
-  // ヘッダーに Office・⚙管理 のショートカットが出て、いま Office を見ている。
-  // ⚙管理は幅を取らないよう、通知ベルと同じアイコン＋ドロップダウン（#kp-admin-menu-btn）
+  // ヘッダーに Office・⚙管理 のショートカットが出る。管理画面にいるときは、⚙管理が選ばれて見える
+  // （Office は /office/ の中にいるときだけ選ばれる）。⚙管理は幅を取らないよう、通知ベルと同じアイコン＋ドロップダウン（#kp-admin-menu-btn）
   const office = page.locator('.kp-shortcut[data-shortcut="office"]');
   const settings = page.locator('#kp-admin-menu-btn');
   check(await office.isVisible(), "ヘッダーに「Office」が出る");
   check(await settings.isVisible(), "ヘッダーに「管理」（⚙）が出る");
-  check(/\bon\b/.test((await office.getAttribute("class")) || ""), "Officeにいるときは「Office」が選ばれて見える");
-  check(!/\bon\b/.test((await settings.getAttribute("class")) || ""), "「管理」は選ばれていない");
+  check((await office.getAttribute("href")) === "/office/", "Office の行き先は /office/（管理画面へは送らない）");
+  check(!/\bon\b/.test((await office.getAttribute("class")) || ""), "管理画面にいるときは「Office」は選ばれない（管理画面は Office ではない）");
+  check(/\bon\b/.test((await settings.getAttribute("class")) || ""), "管理画面にいるときは「管理」（⚙）が選ばれて見える");
+  check(!(await page.locator(".kp-app").innerText()).includes("OFFICE"), "管理画面のタグは「OFFICE」と名乗らない");
 
   const heads = await page.locator(".kp-side-group .lb").allInnerTexts();
   // Office は2グループだけ（人事・労務・経理・事務に限る）（ホーム＝全員と同じ左メニュー・管理は領域が別なので、ここには出ない）
@@ -176,11 +178,11 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
 
 console.log("\n— 管理者：ホーム領域の左メニューは全員と同じ —");
 {
-  // admin-dashboard.html は Office 領域（先頭のダッシュボード）
+  // admin-dashboard.html は管理画面（先頭のダッシュボード）。Office ではない
   const d = await open("admin-dashboard.html", { admin: true });
-  check(await d.locator('.kp-shortcut[data-shortcut="office"].on').count() === 1, "ダッシュボードにいるときは「Office」が選ばれて見える");
-  check((await d.locator(".kp-app").innerText()).includes("OFFICE"), "ヘッダーに「/ OFFICE」と出る");
-  check((await d.locator(".kp-side-item.on").innerText()).includes("ダッシュボード"), "Officeの左でダッシュボードが光る");
+  check(await d.locator('.kp-shortcut[data-shortcut="office"].on').count() === 0, "管理画面のダッシュボードでは「Office」は選ばれない");
+  check((await d.locator(".kp-app").innerText()).includes("管理") && !(await d.locator(".kp-app").innerText()).includes("OFFICE"), "ヘッダーに「/ 管理」と出る（Office と名乗らない）");
+  check((await d.locator(".kp-side-item.on").innerText()).includes("ダッシュボード"), "管理画面の左でダッシュボードが光る");
   await d.close();
 
   // home.html はホーム領域。管理者でも、メンバーと同じ左メニューになる
@@ -238,7 +240,7 @@ console.log("\n— 管理者（経営者・経理の権限なし）：入れる�
   const items = (await t.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
   check(items.join("/") === "チーム状況/全員のタスク/全員の日報", `経営ホーム（/keiei）は経営者だけ。管理者はチーム管理の3つ（いま ${items.join("/")}）`);
   check((await t.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("href")) === "admin-team.html", "管理者の「経営」は、チーム状況から入る（導線がある）");
-  check((await t.locator('.kp-shortcut[data-shortcut="office"]').getAttribute("href")) === "admin-dashboard.html", "管理者の「Office」は Officeのダッシュボードから入る");
+  check(await t.locator('.kp-shortcut[data-shortcut="office"]').count() === 0, "access.office が無い管理者には「Office」を出さない（押しても入れない入口を出さない。管理画面は ⚙管理 から）");
   await t.close();
   const c = await open("admin-closing.html", { admin: true, access: only });
   const tabs = (await c.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
