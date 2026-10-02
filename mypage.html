@@ -66,6 +66,7 @@
   <div id="cond-card" class="card hidden">
     <h2><span class="material-symbols-outlined">description</span>労働条件</h2>
     <div id="cond"></div>
+    <div id="cond-history"></div>
     <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
       内容の変更は会社と本人の合意で行います。違いがあれば管理担当者にお知らせください。
     </p>
@@ -136,7 +137,7 @@
     <div id="mfa-body"><span class="muted">読み込み中…</span></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="password">
     <h2><span class="material-symbols-outlined">key</span>パスワードの変更</h2>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
       会社から渡された初回パスワードのままの場合は、ここで自分だけが知っているものに変えてください。
@@ -170,8 +171,9 @@
   const ROLE_JA = { owner: "経営者", hr: "人事", manager: "責任者", labor_advisor: "社労士" };
   const STATUS_JA = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
 
+  let me_ = null;   // /api/me の答え（入社準備中かどうかを、労働条件の出し方に使う）
   KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner", "sr"] })
-    .then((ctx) => { if (ctx) { render(ctx); loadMine(); loadMfa(ctx.me?.mfa); } });
+    .then((ctx) => { if (ctx) { me_ = ctx.me || null; render(ctx); loadMine(); loadMfa(ctx.me?.mfa); } });
 
   // ---- 二段階認証 --------------------------------------------------------------
   //
@@ -330,7 +332,7 @@
     renderDevices(dv);
 
     if (ob) {
-      renderConditions(ob.known || {});
+      renderConditions(ob.known || {}, ob.contractHistory || null);
       renderCompanyDocs(ob);
       renderConsentDocs(ob);
       renderOnboard(ob);
@@ -338,9 +340,13 @@
     if (plan) renderGoal(plan);
   }
 
-  function renderConditions(k) {
-    const rows = [
-      ["入社日", k.joinedOn],
+  // 労働条件。入社準備中も、入社後も、ここでいつでも見返せる（入社準備の「あなたの契約条件」と同じ元データ）。
+  // 未登録の項目は、空白やエラーにせず「会社で準備中です」と出す（本人が入力し忘れたと誤解しないように）。
+  // 更新のあとは、いまの契約・次回の更新確認・過去の契約を分けて出す（古い契約と混ぜない）
+  const PENDING = "会社で準備中です";
+  function renderConditions(k, hist) {
+    const all = [
+      ["入社日", k.joinedOn ? new Date(k.joinedOn).toLocaleDateString("ja-JP") : null],
       ["契約", k.contract],
       ["試用期間", k.probation],
       ["週の勤務時間", k.weeklyHours != null ? `${k.weeklyHours} 時間` : null],
@@ -349,15 +355,34 @@
       ["業務範囲", (k.workScope || []).join("、") || null],
       ["給与", k.wage],
       ["相談先", k.manager],
-    ].filter(([, v]) => v);
-    if (!rows.length) return;
-
+    ];
+    // 入社準備中は、全項目を並べて未登録は「準備中」。入社後は、登録されている項目だけ
+    const preparing = Boolean(me_?.gw?.stage && me_.gw.stage.key === "preparing");
+    const rows = preparing ? all : all.filter(([, v]) => v);
     el("cond-card").classList.remove("hidden");
-    el("cond").innerHTML = `
-      <div class="table-scroll"><table class="kp-items"><tbody>
+    el("cond").innerHTML = rows.length
+      ? `<div class="table-scroll"><table class="kp-items"><tbody>
         ${rows.map(([a, b]) => `
-          <tr><td style="width:130px;color:var(--muted);">${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}
-      </tbody></table></div>`;
+          <tr><td style="width:130px;color:var(--muted);">${esc(a)}</td><td>${b ? esc(b) : `<span class="muted">${PENDING}</span>`}</td></tr>`).join("")}
+      </tbody></table></div>`
+      : `<div class="muted" style="font-size:13px;">労働条件は、${PENDING}。</div>`;
+
+    // 契約の更新（現在の契約・次回更新確認・過去の契約）
+    const cur = hist?.current || null;
+    const past = hist?.past || [];
+    const sub = el("cond-history");
+    if (sub && (cur || past.length)) {
+      sub.innerHTML = `
+        ${cur ? `<div style="margin-top:14px;"><div class="muted" style="font-size:12px;">現在の契約</div>
+          <div style="font-size:14px;font-weight:700;">${esc(cur.period || "")}</div>
+          ${hist.nextRenewalOn ? `<div class="muted" style="font-size:12.5px;margin-top:4px;">次回の更新確認　${esc(hist.nextRenewalOn)}</div>` : ""}</div>` : ""}
+        ${past.length ? `<details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;">過去の契約（${past.length}件）</summary>
+          <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.9;">
+            ${past.map((c) => `<li>${esc(c.period || "")}　<span class="muted">${esc(c.kind)}・${esc(c.statusLabel)}</span></li>`).join("")}
+          </ul></details>` : ""}`;
+    }
+    // 「給与管理」から来たときは、この欄へ移す（欄は読み込み後に出るので、出てから動く）
+    if (/^#cond/.test(location.hash)) el("cond-card").scrollIntoView({ block: "start" });
   }
 
   // 共有フォルダ。管理者が貼ったリンクを開くだけ。

@@ -331,7 +331,7 @@
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+           <div>${esc(KPLayout.friendlyError(e))}</div></div>`;
       return;
     }
     el("notice").innerHTML = "";
@@ -660,7 +660,7 @@
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+           <div>${esc(KPLayout.friendlyError(e))}</div></div>`;
       return;
     }
     renderKnown();
@@ -764,7 +764,7 @@
     try {
       await KPLayout.busy(btn, "…", () => API.orientationConfirm(id));
       await loadSelf();
-    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+    } catch (e) { alert(KPLayout.friendlyError(e, "確認できませんでした")); }
   }
 
   // 入力欄はサーバの定義から組み立てる。画面とサーバで項目がずれないように
@@ -978,7 +978,7 @@
       el("c-msg").textContent = `${r.agreed.join("・")} への同意を記録しました。`;
     } catch (e) {
       el("c-msg").style.color = "";
-      el("c-msg").textContent = e.hint || e.detail || e.message || "記録できませんでした";
+      el("c-msg").textContent = KPLayout.friendlyError(e, "記録できませんでした");
     }
   }
 
@@ -1183,7 +1183,7 @@
     } catch (e) {
       box.checked = !want;
       box.disabled = false;
-      alert(e.hint || e.detail || e.message || "できませんでした");
+      alert(KPLayout.friendlyError(e, "更新できませんでした"));
     }
   }
 
@@ -1199,7 +1199,7 @@
       await KPLayout.busy(btn, "…", () => API.submitProcedureItem(itemId, { undo }));
       await loadSelf();
     } catch (e) {
-      alert(e.hint || e.detail || e.message || "できませんでした");
+      alert(KPLayout.friendlyError(e, "更新できませんでした"));
     }
   }
 
@@ -1288,7 +1288,7 @@
       await loadSelf();
       if (submit) window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
-      el("f-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした";
+      el("f-msg").textContent = KPLayout.friendlyError(e, "保存できませんでした");
       if (submit) el("f-msg").scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }

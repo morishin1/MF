@@ -14,9 +14,15 @@
 //   lib/onboard-six.js が、既存の判定（段階 computeStage・キャリア careerStatus）から並べる。
 //   ここで新しく判定しない。ログインしている本人の、自分の分だけを返す（employee_id は ctx から）。
 //
+// ■ あなたの契約条件（conditions）
+//   管理側で登録した契約（gw_contracts の active）と社員名簿を、lib/onboard-conditions.js で読むだけ。
+//   マイページ・入社手続き（/api/onboarding/me の known）と同じ元データで、別に持たない。
+//   給与は、本人の自分のことなので本人にだけ出す（マイページの労働条件と同じ）。
+//   まだ登録されていない行は null（画面は「会社で準備中です」）。本人に「入力し忘れた」と思わせない。
+//
 // ■ 出さないもの
-//   給与・手当などの金額は、この画面に一切出さない（労働条件通知書は、契約の画面で本人が確認する）。
-//   社内準備の内訳（PC・アカウントの項目）も出さず、「会社が確認しています」だけ。
+//   社内準備の内訳（PC・アカウントの項目）は出さず、「会社が確認しています」だけ。
+//   DB名・migration番号・SQL は、本人向けの値に含めない。
 //
 // ■ 入力・提出・署名は、これまでの画面で
 //   契約は /contracts.html、入社情報・必要書類・誓約書・オリエンテーションは /onboarding.html。
@@ -39,6 +45,9 @@ import { sha256, TOKEN_RE } from "../../lib/hr.js";
 import { selfState, canConfirm, currentOf, NOTICE_TTL } from "../../lib/labor-notice.js";
 import { NOTICE_SQL, NOTICE_COLS, NOTICE_COLS_FILE, loadNoticeRows, esignState, signedNoticeUrl } from "../../lib/labor-notice-db.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
+import { conditionRows } from "../../lib/onboard-conditions.js";
+import { selfSteps, documentRows } from "../../lib/onboard-self.js";
+import { orientationState } from "../../lib/orientation.js";
 
 const SQL = "db/104_onboarding_guide.sql";
 
@@ -134,11 +143,30 @@ async function read(sb, ctx) {
   const es = await esignState(sb, ctx.tenantId, e.id);
   const ns = selfState(nr.rows, { esign: es.esign });
 
+  // あなたの契約条件。管理側で登録した契約（gw_contracts の active）をそのまま読む。別に持たない。
+  // 読めない・まだ無いときは null のまま返し、画面は「会社で準備中です」と出す
+  const soft = async (fn) => { try { const r = await fn(); return r?.error ? null : (r?.data ?? null); } catch { return null; } };
+  const [contracts, mgr, oriItems, oriChecks] = await Promise.all([
+    soft(() => sb.from("gw_contracts").select("*").eq("tenant_id", ctx.tenantId).eq("employee_id", e.id)
+      .eq("status", "active").order("created_at", { ascending: false }).limit(1)),
+    e.manager_id ? soft(() => sb.from("gw_employees").select("display_name").eq("id", e.manager_id).maybeSingle()) : null,
+    soft(() => sb.from("gw_orientation_items").select("id, title, kind, required, sort_order, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("active", true).limit(200)),
+    soft(() => sb.from("gw_orientation_checks").select("item_id, confirmed_at").eq("employee_id", e.id)),
+  ]);
+  const conditions = conditionRows(e, (Array.isArray(contracts) ? contracts[0] : null) || null, mgr?.display_name || null);
+  if (procedure?.target_on) {
+    const row = conditions.rows.find((r) => r.key === "joinedOn");
+    if (row && !row.value) row.value = String(procedure.target_on).slice(0, 10).replace(/-/g, "/");
+  }
+
   const six = mapSix({ facts, career: (careers || [])[0] || null, guide: guideFact(g.row), guideLinked: g.linked, audience: "self" });
   const x = facts ? stageFlags(facts) : null;
   for (const s of six.steps) s.cta = ctaOf(s, x, six);
   if (six.after) six.after.cta = six.after.actor === "employee" ? { label: "キャリアプランを確認する", href: "/career.html#confirm" } : null;
   six.next.cta = (six.steps.find((s) => s.key === six.next.key) || {}).cta || null;
+  // 本人に見せる並べ方（契約条件・書類・オリエンテーションを分けたもの）。判定は six と同じ事実から
+  const self = selfSteps(six, x);
 
   return {
     companyName: tenant?.name || null,
@@ -146,6 +174,11 @@ async function read(sb, ctx) {
       joinOn: procedure?.target_on || e.joined_on || null },
     hasProcedure: Boolean(procedure),
     six,
+    self,
+    conditions,
+    documents: documentRows(facts?.items),
+    orientation: orientationState(oriItems || [], oriChecks || [])
+      .map((i) => ({ id: i.id, title: i.title, required: i.required, confirmed: i.confirmed })),
     // 労働条件通知書。none=会社が準備中 / unconfirmed=確認してください / confirmed=確認済み / esign=電子署名で進める
     notice: {
       linked: nr.linked, mode: ns.mode, state: ns.state, version: ns.version,
