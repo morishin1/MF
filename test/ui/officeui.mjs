@@ -282,7 +282,7 @@ console.log("\n=== 右ドロワー ===");
   await page.waitForSelector(".of-drawer");
   const bpText = await page.locator("#dr-vendor").innerText();
   check(bpText.includes("株式会社ビーピー") && bpText.includes("受領済み") && bpText.includes("BP請求書.pdf"), "BP：仕入請求は受領済みで、請求書のファイルが見える");
-  check((await page.locator("#dr-payment").innerText()).includes("支払の管理は、今後追加します"), "BP：支払は今後追加");
+  check((await page.locator("#dr-payment").innerText()).includes("支払の記録は、まだ使えません"), "BP：支払の表（db/117）が無いときは、まだ使えないと出す");
   check((await page.locator("#dr-history .of-tl .row").count()) === 5, "履歴：印を付けた日時が並ぶ");
   await page.keyboard.press("Escape");
 

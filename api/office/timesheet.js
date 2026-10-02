@@ -12,6 +12,8 @@
 //        confirm  … 確定する（条件を満たしたときだけ。合計の不一致は承知のうえで）
 //        reopen   … 確定を取り消して、下書きに戻す（請求書を作成済みなら断る）
 //        return   … 提出物に問題があるとして、差し戻す（再提出の依頼。メールは送らない）
+//        progress … 請求の進み具合を記録する（step: invoice_created／invoice_sent／vendor_received、done: true/false）。
+//                   請求書そのものは Board で作る・送る（この画面では作らない）。ここは「済んだ」の記録だけ
 //
 // ■ 入れる人（画面・API・DB を同じ条件にする）
 //   経営者 OR 責任者 OR 経理（canAccessOffice）。二段階認証（MFA）は要求しない（受領・AI読取・修正・確定も、権限だけで通す）。
@@ -30,6 +32,7 @@
 //   確定（confirm）       → 稼働確認 を立てる（受領も立てる）
 //   確定の取消し（reopen）→ 稼働確認 を外す。請求書の作成・送付の印があるときは断る
 //   差し戻し（return）    → 勤務表受領 を外す（再提出を待つ）
+//   請求の記録（progress）→ Board作成・送付・BP請求書受領 を立てる／外す（順番を守る。下の progress）
 //   印を手で直す既存の画面（月初作業管理）は、そのまま使える。
 //
 // ■ 操作は gw_office_events（履歴）に残す。金額・単価・個人情報は入れない。
@@ -98,7 +101,7 @@ export default async function handler(req, res) {
     }
     const body = (await readJson(req)) || {};
     const k = await keyOf(req, ctx, body);
-    const actions = { upload, attach, read, blank, save, bulk, confirm, reopen, return: giveBack };
+    const actions = { upload, attach, read, blank, save, bulk, confirm, reopen, return: giveBack, progress };
     const fn = actions[body.action];
     if (!fn) return json(res, 400, { error: "invalid_action", detail: Object.keys(actions).join(", ") });
     return await fn({ req, res, ctx, user, k, body });
@@ -687,6 +690,51 @@ async function reopen({ req, res, ctx, user, k, body }) {
   const marks = await syncMarks(ctx, k, { work_confirmed: false });
   await logEvent(ctx, user, k, "timesheet.reopen", { reason, marks });
   return json(res, 200, { ...(await payload(req, ctx, k)), done: "reopen" });
+}
+
+// ---------------------------------------------------------------------------
+// 請求の進み具合（月初作業管理の印）を、/office から記録する
+//
+//   これまでは、メンバー管理（人事の画面・人事の API）からしか印を付けられず、
+//   /office で月次を進める経理が、請求書の作成・送付・BP請求書の受領を記録できなかった。
+//   印（gw_billing_progress の列）はそのまま使う。表も列も増やさない。
+//
+// ■ 順番を守る
+//   作成済みにする … 稼働が確定していること（稼働の確定を取り消すときは、逆に作成済みなら断っている：reopen）
+//   送付済みにする … 作成済みであること
+//   作成済みを外す … 送付済みなら断る（先に送付を外す）
+//   BP請求書の受領 … BP の契約だけ（売上のみの契約には、仕入請求が無い）
+// ---------------------------------------------------------------------------
+const PROGRESS_STEP = { invoice_created: "board_created", invoice_sent: "sent", vendor_received: "bp_invoice_received" };
+
+async function progress({ req, res, ctx, user, k, body }) {
+  const mark = PROGRESS_STEP[body.step];
+  if (!mark) return json(res, 400, { error: "invalid_request", detail: `step は ${Object.keys(PROGRESS_STEP).join(" / ")} のどれかです` });
+  const done = body.done !== false;
+  // 月次完了した月は、印を動かさない（db/117。表が無ければ、完了の記録も無い）
+  const closed = await admin().from("gw_office_month_closes").select("id")
+    .eq("tenant_id", ctx.tenantId).eq("billing_month", k.month).is("reopened_at", null).limit(1);
+  if (closed.data?.length) return json(res, 409, { error: "month_closed", hint: "この月は月次完了済みです。直すときは、先に月次完了を取り消してください" });
+  const p = await must(userClient(req).from("gw_billing_progress").select(`id, ${STAGE_KEYS.join(", ")}`)
+    .eq("tenant_id", ctx.tenantId).eq("employee_id", k.employeeId).eq("site_contract_id", k.siteContractId)
+    .eq("billing_month", k.month).maybeSingle());
+
+  if (mark === "bp_invoice_received" && k.contract.engagement_kind !== "bp") {
+    return json(res, 409, { error: "not_vendor", hint: "売上のみの契約です。仕入請求（BP請求書）はありません" });
+  }
+  if (done && mark === "board_created" && !p?.work_confirmed) {
+    return json(res, 409, { error: "work_not_confirmed", hint: "稼働がまだ確定していません。勤務表を確定してから、請求書を作成済みにしてください" });
+  }
+  if (done && mark === "sent" && !p?.board_created) {
+    return json(res, 409, { error: "invoice_not_created", hint: "請求書がまだ作成済みになっていません。先に作成済みにしてください" });
+  }
+  if (!done && mark === "board_created" && p?.sent) {
+    return json(res, 409, { error: "already_sent", hint: "送付済みです。作成済みを取り消すときは、先に送付済みを取り消してください" });
+  }
+
+  const marks = await syncMarks(ctx, k, { [mark]: done });
+  if (marks.length) await logEvent(ctx, user, k, `billing.${body.step}${done ? "" : ".undo"}`, { marks });
+  return json(res, 200, { done: "progress", step: body.step, value: done, marks });
 }
 
 async function giveBack({ req, res, ctx, user, k, body }) {
