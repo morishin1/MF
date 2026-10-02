@@ -9,7 +9,7 @@
 // ■ 積み上がらない
 //   dedupe_key を手続き×宛先で固定（lib/onboard-due.js）。毎日走っても1件が更新されるだけ。
 //
-// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
+// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。本番で未設定なら 503（lib/cron-auth.js）。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
@@ -17,15 +17,12 @@ import { notify } from "../../lib/notify.js";
 import { gatherFactsBulk } from "../../lib/onboard-advance.js";
 import { computeStage } from "../../lib/onboard-stage.js";
 import { dueNotices, DUE_WINDOW_DAYS } from "../../lib/onboard-due.js";
+import { cronAuthorized } from "../../lib/cron-auth.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const given = req.headers.authorization || "";
-    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
-  }
+  if (!cronAuthorized(req, res)) return;
 
   const sb = admin();
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
