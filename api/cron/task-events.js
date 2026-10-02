@@ -21,13 +21,14 @@
 //   月初・45日前のように「日々数え直す」ものはここ、
 //   「事が起きた瞬間に決まる」ものは事が起きた場所、という使い分け。
 //
-// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
+// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。本番で未設定なら 503（lib/cron-auth.js）。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { jstDate } from "../../lib/devices.js";
 import { buildTask, runEventTasks } from "../../lib/task-events.js";
 import { monthRange } from "../../lib/timecard.js";
+import { cronAuthorized } from "../../lib/cron-auth.js";
 
 const DEVICE_GRACE_DAYS = 3;     // 入社から、これだけ経っても端末が無ければ知らせる
 const CONTRACT_LEAD_DAYS = 45;   // 契約終了の、これだけ前から知らせる
@@ -44,11 +45,7 @@ const addDays = (ymd, n) => {
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const given = req.headers.authorization || "";
-    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
-  }
+  if (!cronAuthorized(req, res)) return;
 
   const sb = admin();
   const today = jstDate();

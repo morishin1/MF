@@ -11,12 +11,13 @@
 //   一度送った面談は、評価が入るまで何度cronが回っても増えない
 //   （読んだ／読んでいないに関わらず、再通知で未読へ戻さない）。
 //
-// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
+// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。本番で未設定なら 503（lib/cron-auth.js）。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
 import { interviewKindLabel } from "../../lib/hr.js";
+import { cronAuthorized } from "../../lib/cron-auth.js";
 
 const EVAL_GRACE_MS = 2 * 3600 * 1000; // 実施から2時間たっても未評価なら知らせる
 const MAX_INTERVIEWS = 300;
@@ -24,11 +25,7 @@ const MAX_INTERVIEWS = 300;
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const given = req.headers.authorization || "";
-    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
-  }
+  if (!cronAuthorized(req, res)) return;
 
   const sb = admin();
   const before = new Date(Date.now() - EVAL_GRACE_MS).toISOString();

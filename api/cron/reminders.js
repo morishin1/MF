@@ -19,24 +19,21 @@
 //   gw_reminder_log の (社員, 日付, 枠) が主キー。
 //   先に記録してから送るので、cron が重なっても2回送らない。
 //
-// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
+// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。本番で未設定なら 503（lib/cron-auth.js）。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { sendToDevices, pushConfigured } from "../../lib/webpush.js";
 import { SLOTS, slotDueAt, jstNow } from "../../lib/reminders.js";
 import { notify } from "../../lib/notify.js";
+import { cronAuthorized } from "../../lib/cron-auth.js";
 
 const SLOT_BY_KEY = new Map(SLOTS.map((s) => [s.key, s]));
 
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const given = req.headers.authorization || "";
-    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
-  }
+  if (!cronAuthorized(req, res)) return;
 
   const now = jstNow();
   const sb = admin();

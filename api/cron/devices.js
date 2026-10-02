@@ -17,6 +17,7 @@
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
+import { cronAuthorized } from "../../lib/cron-auth.js";
 import {
   jstDate, webAlerts, confirmWaitingAlert, DISTRACT_CATEGORIES,
 } from "../../lib/devices.js";
@@ -24,11 +25,7 @@ import {
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const given = req.headers.authorization || "";
-    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
-  }
+  if (!cronAuthorized(req, res)) return;
 
   const sb = admin();
   const out = {

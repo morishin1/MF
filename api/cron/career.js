@@ -6,16 +6,13 @@
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
+import { cronAuthorized } from "../../lib/cron-auth.js";
 
 export const REMIND_DAYS = 7;
 
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const given = req.headers.authorization || "";
-    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
-  }
+  if (!cronAuthorized(req, res)) return;
 
   const sb = admin();
   const target = new Date(Date.now() + 9 * 3600000 + REMIND_DAYS * 86400000).toISOString().slice(0, 10);
