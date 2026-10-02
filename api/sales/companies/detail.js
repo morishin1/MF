@@ -87,7 +87,7 @@ async function one(req, res, sb, ctx) {
     sb.from("gw_sales_campaigns").select("id, name, archived_at").eq("tenant_id", ctx.tenantId).limit(500),
     // 面談（db/090）。まだ表が無い環境でも企業詳細は開けるようにする（エラーは空として扱う）
     sb.from("gw_sales_meetings").select(MEETING_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(50),
-    // 案件（db/115）。まだ表が無い環境でも企業詳細は開けるようにする
+    // 案件（db/116）。まだ表が無い環境でも企業詳細は開けるようにする
     sb.from("gw_sales_deals").select(DEAL_FIELDS).eq("company_id", id).order("created_at", { ascending: false }).limit(100),
     loadMasters(sb, ctx.tenantId),
   ]);

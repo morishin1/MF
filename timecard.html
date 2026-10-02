@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261001b">
-  <link rel="stylesheet" href="css/layout.css?v=20261001b">
+  <link rel="stylesheet" href="css/app.css?v=20261002dl2">
+  <link rel="stylesheet" href="css/layout.css?v=20261002dl2">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -174,9 +174,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261001b"></script>
-<script src="js/device.js?v=20261001b"></script>
-<script src="js/layout.js?v=20261001b"></script>
+<script src="js/api-client.js?v=20261002dl2"></script>
+<script src="js/device.js?v=20261002dl2"></script>
+<script src="js/layout.js?v=20261002dl2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -207,6 +207,8 @@
   // 端末の時計を出しているだけ。記録に使うのはサーバの時刻
   const jst = () => new Date(Date.now() + 9 * 3600000);
   const jstToday = () => jst().toISOString().slice(0, 10);
+  // 表示速度：枠（/api/me の確認）を待たずに、今月の勤怠を取りにいき始める（load の API.swr が受け取る）
+  { const m = jstToday().slice(0, 7); API.warm(`timecard:${m}`, () => API.myTimecard(m)); }
 
   function tickClock() {
     const t = jst();
@@ -228,9 +230,15 @@
 
   // ---- 取得 -------------------------------------------------------------------
   async function load() {
+    const month = el("m-month").value;
     try {
-      data = await API.myTimecard(el("m-month").value);
-      render();
+      // 2回目からは前回の内容をすぐ出し、裏で最新にする（違っていたときだけ描き直す）。
+      // 打刻の状態を見るので、覚えておくのは短め（60秒）。打刻（POST）したら、覚えているぶんは捨てる
+      await API.swr(`timecard:${month}`, () => API.myTimecard(month), (d) => {
+        if (el("m-month").value !== month) return;   // 月を切り替えたあとに届いた古い月は描かない
+        data = d;
+        render();
+      }, { ttl: 60 });
     } catch (e) {
       el("gate").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>

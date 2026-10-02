@@ -21,6 +21,11 @@
     { key: "home",       label: "ホーム",   icon: "home" },
     { key: "onboarding", label: "入社準備", icon: "how_to_reg" },
     { key: "pay",        label: "給与管理", icon: "request_quote" },
+    // チーム・会社全体の管理（全員のタスク・日報・チーム状況）。既存の管理画面（admin-*.html）へそのまま行く。
+    // href があるものはこの画面の中のビューではなく、別の画面への入口
+    { key: "team",       label: "チーム状況",   icon: "groups",     href: "/admin-team.html" },
+    { key: "tasks",      label: "全員のタスク", icon: "checklist",  href: "/admin-tasks.html" },
+    { key: "nippo",      label: "全員の日報",   icon: "edit_note",  href: "/admin-nippo.html" },
   ];
   // 小さな入口（経営設定・セキュリティ）。日々使うものではないので、メニューの下に控えめに置く
   const SUB = [
@@ -74,7 +79,7 @@
     bar.className = "kei-bar";
     bar.innerHTML = `
       <div class="kei-logo"><b>EIGHT</b> <span>/ 経営</span></div>
-      <a class="kei-back" href="/admin-dashboard.html" title="グループウェアへ戻る">
+      <a class="kei-back" href="/home.html" title="グループウェアへ戻る">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <div class="kei-spacer"></div>
       <div class="kei-user" title="${esc(name)}">${esc(name)}</div>`;
@@ -83,7 +88,7 @@
     const side = document.getElementById("kei-side");
     if (side) {
       side.className = "kei-side";
-      const link = (m) => `<a href="#${m.key}" data-view="${m.key}" class="${m.key === active ? "on" : ""}">
+      const link = (m) => `<a href="${m.href || `#${m.key}`}" ${m.href ? "" : `data-view="${m.key}" `}class="${!m.href && m.key === active ? "on" : ""}">
         <span class="material-symbols-outlined">${m.icon}</span>${esc(m.label)}</a>`;
       side.innerHTML = MENU.map(link).join("") + `<div class="kei-sub-nav">${SUB.map(link).join("")}</div>`;
     }
@@ -94,17 +99,22 @@
     for (const a of document.querySelectorAll("#kei-side a")) a.classList.toggle("on", a.dataset.view === active);
   }
 
+  // サーバの判定（canKeiei）そのもの。役割の並びを画面で持たない。API.warm にも渡す
+  function allows(me) { return me?.access ? Boolean(me.access.keiei) : (me?.gw?.roles || []).includes("owner"); }
+
+  // 前回の身元（/api/me）を覚えていれば、待たずに枠を出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
   async function init(opts = {}) {
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
-    let me;
-    try { me = await API.me(); } catch (e) { location.href = "/index.html"; return null; }
-    // サーバの判定（canKeiei）そのもの。役割の並びを画面で持たない
-    const canKeiei = me?.access ? Boolean(me.access.keiei) : (me?.gw?.roles || []).includes("owner");
-    if (!canKeiei) { location.replace("/home.html"); return null; }
-    render(opts.active || "home", me);
-    return { me };
+    const got = await API.enterWithMe(allows, {
+      leave: () => location.replace("/home.html"),
+      lost: () => { location.href = "/index.html"; },
+    });
+    if (!got) return null;
+    render(opts.active || "home", got.me);
+    return { me: got.me };
   }
 
-  window.KeieiLayout = { init, setActive, esc, MENU, SUB };
+  window.KeieiLayout = { init, allows, setActive, esc, MENU, SUB };
 })();

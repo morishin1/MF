@@ -2,7 +2,8 @@
 //
 // ■ 何を守りたいのか
 //   ・経営者（owner）だけが開ける。それ以外は、ホームへ送り返される（画面には何も出ない）
-//   ・サイドメニューは、ホーム・入社準備・給与管理の3つ＋小さな「経営設定・セキュリティ」
+//   ・サイドメニューは、ホーム・入社準備・給与管理の3つ＋チーム管理への入口3つ（チーム状況・全員のタスク・全員の日報。
+//     既存の管理画面へ行く）＋小さな「経営設定・セキュリティ」
 //   ・旧ダッシュボード・売上・入金・経費・会計の入口は無い（ブックマークはホームへ送る）。ホームの中身は keieihubui.mjs
 //   ・画面を切り替えても、最後に押した画面だけが出る
 //   ・二段階認証は要らない。未登録・パスワードだけ（aal1）の経営者でも、ホームがそのまま開く（案内帯も、マイページへの転送も無い）
@@ -164,11 +165,13 @@ console.log("— 経営者は開ける —");
 {
   const page = await open({ appRole: "owner", roles: ["owner"] });
   check(pathOf(page) === "/keiei/index.html", "経営者は /keiei/ にとどまる");
-  const labels = (await page.locator("#kei-side a").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
+  const labels = (await page.locator("#kei-side a[data-view]").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
   check(labels === "home,onboarding,pay,security", `メニュー: ホーム・入社準備・給与管理＋小さな経営設定・セキュリティ（いま ${labels}）`);
-  check(await page.locator("#kei-side > a").count() === 3, "メインのメニューは3つ");
+  check(await page.locator("#kei-side > a[data-view]").count() === 3, "この画面の中のビューは3つ");
+  const ext = await page.locator("#kei-side > a:not([data-view])").evaluateAll((ns) => ns.map((n) => n.getAttribute("href")));
+  check(ext.join(",") === "/admin-team.html,/admin-tasks.html,/admin-nippo.html", `チーム管理への入口は既存の管理画面（いま ${ext.join(",")}）`);
   check(await page.locator("#kei-side .kei-sub-nav a").count() === 1, "経営設定・セキュリティは、メニューの下の小さな入口");
-  const gone = await page.locator("#kei-side a").evaluateAll((ns) => ns.map((n) => n.dataset.view));
+  const gone = await page.locator("#kei-side a[data-view]").evaluateAll((ns) => ns.map((n) => n.dataset.view));
   check(["dashboard", "revenue", "cash", "expenses", "accounting", "payroll"].every((v) => !gone.includes(v)), "旧ダッシュボード・売上・入金・経費・会計・人件費の入口は、メニューに無い");
   check(await page.locator(".kei-bar").isVisible(), "専用ヘッダーが出る");
   check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "home", "初期はホーム");
@@ -424,7 +427,7 @@ for (const width of [390, 360]) {
   const page = await open({ appRole: "owner", roles: ["owner"] }, { width });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 0, `${width}px ホーム: 横スクロールが出ない（はみ出し ${overflow}px）`);
-  check(await page.locator("#kei-side a").count() === 4, `${width}px: メニューが4つ（3つ＋経営設定・セキュリティ）ある`);
+  check(await page.locator("#kei-side a").count() === 7, `${width}px: メニューが7つ（3つ＋チーム管理への入口3つ＋経営設定・セキュリティ）ある`);
   await page.click('#kei-side a[data-view="security"]');
   await page.waitForTimeout(500);
   const overflow2 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

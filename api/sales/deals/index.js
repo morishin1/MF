@@ -1,4 +1,4 @@
-// 営業の案件（db/115_sales_deals.sql）
+// 営業の案件（db/116_sales_deals.sql）
 //
 // GET   /api/sales/deals?companyId=…   … その会社の案件（新しい順）
 // GET   /api/sales/deals                … テナントの案件すべて（分析用。最大5,000件）
@@ -24,7 +24,7 @@ import {
   DEAL_FIELDS, DEAL_STAGE_LABEL, shapeDeal, normalizeDeal, stageDates, advanceCompanyStatus, allLost,
 } from "../../../lib/sales-deals.js";
 
-const SQL = "db/115_sales_deals.sql";
+const SQL = "db/116_sales_deals.sql";
 const ALL_LIMIT = 5000;
 
 export default async function handler(req, res) {

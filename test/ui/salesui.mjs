@@ -13,6 +13,8 @@
 //   8. 非表示：一括で非表示 → 通常の一覧から消える → 「非表示」で見える → 再表示
 //   9. 返信・やり取りを記録：返信元・いまの連絡手段・連絡先・メモ・NEXT。企業詳細に「現在の連絡状況」
 import { launch, BASE, jstToday } from "../_browser.mjs";
+// ダッシュボード（/sales/）の4段は、本物と同じくサーバ側の決まり（lib/sales-dashboard.js）で組み立てる
+import { dashboardSections } from "../../lib/sales-dashboard.js";
 
 const br = await launch();
 let bad = 0;
@@ -55,7 +57,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
   const meetings = [];
-  // 案件（db/115）。本物（api/sales/deals）と同じ形で返す
+  // 案件（db/116）。本物（api/sales/deals）と同じ形で返す
   const deals = dealSeed.map((d) => ({ ...d }));
   const PROB = { meeting: 20, proposal: 50, negotiation: 80 };
   const STAGE = { meeting: "商談", proposal: "提案", negotiation: "最終調整", won: "成約", lost: "失注" };
@@ -260,7 +262,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       });
     }
     if (/\/api\/sales\/deals\b/.test(url)) {
-      if (dealsNotReady) return send({ error: "not_ready", message: "db/115_sales_deals.sql を実行してください" }, 503);
+      if (dealsNotReady) return send({ error: "not_ready", message: "db/116_sales_deals.sql を実行してください" }, 503);
       if (req.method() === "POST") {
         const b = body();
         calls.push({ kind: "deal-create", body: b });
@@ -358,6 +360,9 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         const m = meetings.find((x) => x.companyId === c.id && ["scheduling", "scheduled"].includes(x.status));
         return m ? { ...c, meetingStatus: m.status, meetingAt: m.scheduledAt || null } : c;
       });
+      if (sp.get("view") === "dashboard") {
+        return send({ today: TODAY, view: "dashboard", total: listed.length, sections: dashboardSections(listed, { today: TODAY }) });
+      }
       if (!sp.has("page")) return send({ today: TODAY, me: "emp-s1", members, companies: listed });
       const limit = 100;
       const total = listed.length;
@@ -1800,7 +1805,7 @@ console.log("\n=== 案件（企業詳細） ===");
   const { page } = await openAs({ dealsNotReady: true });
   await page.goto(`${BASE}/sales/companies.html?id=c1`);
   await page.waitForSelector("#detail-box h4");
-  check(/db\/115_sales_deals\.sql/.test(await page.locator("#detail-box").innerText()), "表が無いときは db/115 の実行を案内（詳細は開ける）");
+  check(/db\/116_sales_deals\.sql/.test(await page.locator("#detail-box").innerText()), "表が無いときは db/116 の実行を案内（詳細は開ける）");
   await page.close();
 }
 
@@ -1861,7 +1866,7 @@ console.log("\n=== 分析（上部6マス） ===");
   await page.goto(`${BASE}/sales/analytics.html`);
   await page.waitForSelector("#funnel .an2-card");
   const t = await page.locator("#kpi").innerText();
-  check(/db\/115_sales_deals\.sql/.test(t) && /1社/.test(t), "案件の表が無くても、活動のマスは出して db/115 を案内");
+  check(/db\/116_sales_deals\.sql/.test(t) && /1社/.test(t), "案件の表が無くても、活動のマスは出して db/116 を案内");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }

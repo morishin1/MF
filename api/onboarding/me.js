@@ -36,6 +36,7 @@ import { DOCS, COMPANY_DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/on
 import { hrConfigured } from "../../lib/gdrive.js";
 import { intakeGate } from "../../lib/onboard-gate.js";
 import { onboardingDone } from "../../lib/stages.js";
+import { knownOf, contractHistory } from "../../lib/onboard-conditions.js";
 import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
 import { computeSteps } from "../../lib/onboard-steps.js";
@@ -102,7 +103,7 @@ async function read(res, user, ctx) {
   // 表が無くても（071 未適用）この画面は出す。読めなければ空
   // 関数で渡す。問い合わせの組み立てで落ちても（古い環境・偽の表）、この画面は出す
   const soft = async (fn) => { try { const r = await fn(); return r?.error ? [] : (r?.data || []); } catch { return []; } };
-  const [signRows, oriItems, oriChecks] = await Promise.all([
+  const [signRows, oriItems, oriChecks, contractRows] = await Promise.all([
     soft(() => sb.from("gw_sign_requests")
       .select("id, title, doc_kind, status, due_on, signed_at, sent_at")
       .eq("tenant_id", ctx.tenantId).eq("employee_id", empId).neq("status", "cancelled")
@@ -111,6 +112,11 @@ async function read(res, user, ctx) {
       .select("id, title, kind, url, body, description, required, sort_order, created_at")
       .eq("tenant_id", ctx.tenantId).eq("active", true).limit(200)),
     soft(() => sb.from("gw_orientation_checks").select("item_id, confirmed_at").eq("employee_id", empId)),
+    // 契約の履歴（更新済みの契約）。現在有効な契約と混ぜずに見せるため
+    soft(() => sb.from("gw_contracts")
+      .select("id, status, contract_type, fixed_term, period_from, period_to, renewal_notice_days, created_at")
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", empId).in("status", ["active", "superseded"])
+      .order("period_from", { ascending: false }).limit(20)),
   ]);
   const contracts = signRows.map((r) => ({
     id: r.id, title: r.title, kind: r.doc_kind, status: r.status, view: statusOf(r),
@@ -308,24 +314,9 @@ async function read(res, user, ctx) {
     targetOn: proc.row?.target_on || null,
 
     // 会社が既に知っていること。読み取り専用で見せる
-    known: {
-      name: ctx.employee.display_name,
-      email: ctx.employee.email,
-      joinedOn: ctx.employee.joined_on,
-      role: c?.job_content || ctx.employee.initial_role,
-      workScope: Array.isArray(c?.work_scope) ? c.work_scope : [],
-      workStyle: c?.work_style || ctx.employee.work_style,
-      weeklyHours: c?.weekly_hours ?? null,
-      contract: c?.fixed_term
-        ? `有期（${c.period_from} 〜 ${c.period_to || "—"}）`
-        : c ? "無期" : null,
-      probation: c?.probation_months ? `${c.probation_months}か月` : null,
-      wage: c?.wage_amount
-        ? `${c.wage_type || ""} ${Number(c.wage_amount).toLocaleString("ja-JP")}円`
-          + (c.wage_note ? `（${c.wage_note}）` : "")
-        : null,
-      manager: manager.data?.display_name || null,
-    },
+    known: knownOf(ctx.employee, c, manager.data?.display_name || null),
+    // 現在の契約・次回の更新確認・過去の契約（マイページで、いつでも見返せる）
+    contractHistory: contractHistory(contractRows),
 
     profile: pf,
     profileStatus: pf?.status || "draft",

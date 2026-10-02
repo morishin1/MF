@@ -13,10 +13,19 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // Phase 2 は月次ダッシュボードの1画面。画面が増えたら、ここに足す
-  const NAV = [
-    { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available" },
+  // Office は1つの業務アプリ（人事・労務・経理・事務）。月次業務（/office/）はその中の機能。
+  // 月次業務は access.office の人（経営者・責任者・経理）が使う。
+  // 人事・労務、経理・事務の管理画面（admin-*.html）は、既存の管理画面をそのまま使い、
+  // その画面を開ける管理者（admin/owner）にだけ入口を出す（経理だけの人に押すと 403 の入口を出さない）。
+  // 権限を緩める変更はしていない。出す入口は、その人が実際に使えるものだけ
+  const MONTHLY = { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available" };
+  const ADMIN_NAV = [
+    { key: "dashboard", href: "/admin-dashboard.html", label: "ダッシュボード", icon: "dashboard" },
+    { key: "people",    href: "/admin-members.html",   label: "人事・労務",     icon: "group" },
+    { key: "ops",       href: "/admin-expenses.html",  label: "経理・事務",     icon: "work" },
   ];
+  // appRole（管理画面を開けるか）は役割名ではなく画面の種類。admin / owner だけ管理画面の入口を足す
+  const navFor = (me) => (/^(admin|owner)$/.test(me?.appRole || "") ? [...ADMIN_NAV, MONTHLY] : [MONTHLY]);
 
   function css() {
     if (document.getElementById("office-layout-css")) return;
@@ -102,7 +111,7 @@
       <a class="of-back" href="/home.html" title="GWへ戻る">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="of-nav" aria-label="Office">
-        ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}"${n.key === active ? ' aria-current="page"' : ""}>
+        ${navFor(me).map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}"${n.key === active ? ' aria-current="page"' : ""}>
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
       </nav>
       <div class="of-actions">
@@ -130,22 +139,22 @@
     document.removeEventListener("click", closeUserMenuOnce);
   }
 
+  // 入口は、ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで決める。
+  // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない。API.warm にも渡す
+  function allows(me) { return Boolean(me?.access?.office); }
+
+  // 前回の身元（/api/me）を覚えていれば、待たずにヘッダーを出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
   async function init(opts = {}) {
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
-    let me;
-    try {
-      me = await API.me();
-    } catch (e) {
-      location.href = "/index.html";
-      return null;
-    }
-    // ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで入口を決める。
-    // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない
-    if (!me?.access?.office) { location.replace("/home.html"); return null; }
-
-    renderHeader(opts.active, me);
-    return { me };
+    const got = await API.enterWithMe(allows, {
+      leave: () => location.replace("/home.html"),
+      lost: () => { location.href = "/index.html"; },
+    });
+    if (!got) return null;
+    renderHeader(opts.active, got.me);
+    return { me: got.me };
   }
 
   // ---- 画面どうしで共通の小さな道具 -------------------------------------------
@@ -180,5 +189,5 @@
     return `${Number(m)}/${Number(d)}`;
   }
 
-  window.OfficeLayout = { init, esc, pill, fmt, fmtDay, toggleUserMenu };
+  window.OfficeLayout = { init, allows, esc, pill, fmt, fmtDay, toggleUserMenu };
 })();

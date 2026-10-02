@@ -273,7 +273,7 @@ const ACTIONS = {
       ["gw_sales_click_events", "click", true],
       ["gw_sales_events", "event", true],
       ["gw_sales_meetings", "meeting", false],   // db/090 が未実行なら、無いものとして扱う
-      ["gw_sales_deals", "deal", false],         // db/115 が未実行なら、無いものとして扱う
+      ["gw_sales_deals", "deal", false],         // db/116 が未実行なら、無いものとして扱う
     ];
     for (const [tbl, key, required] of related) {
       for (const part of chunks(ids)) {

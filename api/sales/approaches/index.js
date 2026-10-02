@@ -77,9 +77,12 @@ async function list(req, res, sb, ctx) {
   // 期間の始まりは日本時間の日付で決める（今日を1日目に days 日ぶん。lib/sales.js periodStartJst）
   const period = periodStartJst(days);
   const since = period.iso;
+  // 件数の上限。ダッシュボードの「最近の営業履歴」は新しい15件しか出さないので、15件だけ取る（表示速度）。
+  // 指定が無ければ、いままでどおり 10,000件まで
+  const limit = Math.min(Math.max(Math.floor(Number(q.get("limit"))) || 10000, 1), 10000);
 
   const { data, error } = await sb.from("gw_sales_approaches").select(FIELDS)
-    .eq("tenant_id", ctx.tenantId).gte("sent_at", since).order("sent_at", { ascending: false }).limit(10000);
+    .eq("tenant_id", ctx.tenantId).gte("sent_at", since).order("sent_at", { ascending: false }).limit(limit);
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { approaches: [], notReady: true, message: hint });

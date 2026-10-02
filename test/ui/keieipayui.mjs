@@ -199,7 +199,7 @@ console.log("— 一覧 —");
 {
   const server = makeServer();
   const page = await open({}, { server });
-  const labels = (await page.locator("#kei-side a").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
+  const labels = (await page.locator("#kei-side a[data-view]").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
   // メニューは、ホーム・入社準備・給与管理の3つ＋小さな入口（経営設定・セキュリティ）。旧: ダッシュボード〜会計の8つ
   check(labels === "home,onboarding,pay,security", `メニューに「給与管理」がある（${labels}）`);
   check((await page.locator('[data-role="to-payroll"]').getAttribute("href")) === "#payroll", "人件費の集計への入口（メニューから外したので、給与管理の一覧から入る）");

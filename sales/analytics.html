@@ -83,9 +83,9 @@
 
 <div id="drawer-root"></div>
 
-<script src="../js/api-client.js?v=20261001dl1"></script>
-<script src="../js/layout.js?v=20261001b"></script>
-<script src="../js/sales-layout.js?v=20261001a"></script>
+<script src="../js/api-client.js?v=20261002dl2"></script>
+<script src="../js/layout.js?v=20261002dl2"></script>
+<script src="../js/sales-layout.js?v=20261002dl2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -111,7 +111,7 @@
     try {
       const [res, dl] = await Promise.all([
         API.listSalesApproaches(days),
-        // 案件（db/115）がまだ無くても、活動の分析は出す
+        // 案件（db/116）がまだ無くても、活動の分析は出す
         API.listSalesDeals().catch((e) => ({ failed: true, notReady: e.code === "not_ready", error: e })),
       ]);
       if (res.notReady) {
@@ -123,7 +123,7 @@
       dealsReady = !dl.failed;
       dealsTruncated = dealsReady && dl.truncated === true;
       dealsMsg = dl.failed ? (dl.notReady
-        ? "案件（金額・段階）の表がまだありません。管理者に db/115_sales_deals.sql の実行を依頼すると、受注額・見込額が出ます。"
+        ? "案件（金額・段階）の表がまだありません。管理者に db/116_sales_deals.sql の実行を依頼すると、受注額・見込額が出ます。"
         : `案件を取得できませんでした：${dl.error?.hint || dl.error?.message || ""}（活動の数字は出ています）`) : "";
       deals = dealsReady ? dl.deals || [] : [];
       render();
@@ -290,7 +290,7 @@
             <td>${statusPill(DEAL_PILL[d.stage] || "attacked", d.stageLabel)}</td>
             <td class="num">${d.amount == null ? "未定" : esc(yen(d.amount))}</td>
             <td>${esc(fmtDay(d.wonOn || d.lostOn || String(d.createdAt).slice(0, 10)))}</td></tr>`).join("")}</tbody></table>`
-      : `<div class="sl-empty">${dealsReady ? "対象の案件はありません" : "案件の表がまだありません（db/115）"}</div>`);
+      : `<div class="sl-empty">${dealsReady ? "対象の案件はありません" : "案件の表がまだありません（db/116）"}</div>`);
     const T = {
       attack: ["アタックした企業", () => coRows(cohort.cos, `直近${days}日にアタックした会社です（1社に複数回送っても1社）`)],
       click: ["クリックした企業", () => coRows(cohort.clicked, "専用URLをクリックした会社（返信・商談まで進んだ会社を含む）")],

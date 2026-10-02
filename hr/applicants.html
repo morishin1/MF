@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261001b">
+  <link rel="stylesheet" href="../css/app.css?v=20261002dl2">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -166,10 +166,10 @@
 <div id="hr-modal-root"></div>
 <div id="confirm-root"></div>
 
-<script src="../js/api-client.js?v=20261001b"></script>
-<script src="../js/layout.js?v=20261001b"></script>
-<script src="../js/hr-layout.js?v=20261001b"></script>
-<script src="../js/jst.js?v=20261001b"></script>
+<script src="../js/api-client.js?v=20261002dl2"></script>
+<script src="../js/layout.js?v=20261002dl2"></script>
+<script src="../js/hr-layout.js?v=20261002dl2"></script>
+<script src="../js/jst.js?v=20261002dl2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -216,6 +216,11 @@
   let selectedIds = new Set();
   let visibleIds = [];
 
+  // 表示速度：枠（権限の確認）を待たずに一覧を取りにいき始める。
+  // HRダッシュボードと同じ鍵（hr:applicants）なので、ダッシュボードから来たときは前回の一覧がすぐ出る
+  const fetchApplicants = () => API.listHrApplicants();
+  API.warm("hr:applicants", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
+
   HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; start(); } });
 
   function start() {
@@ -235,7 +240,7 @@
       return `<button class="${stageFilter === key ? "on" : ""}${n ? "" : " zero"}" data-stage="${esc(key || "all")}"
         onclick="setStage('${esc(key)}')">${esc(label)}<span class="n">${n}</span></button>`;
     };
-    el("stage-tabs").innerHTML = tab("", "すべて") + STAGES.map((s) => tab(s.key, s.label)).join("");
+    API.morph(el("stage-tabs"), tab("", "すべて") + STAGES.map((s) => tab(s.key, s.label)).join(""));
   }
   function setStage(key) { stageFilter = key; renderStageTabs(); render(); }
 
@@ -243,17 +248,19 @@
   function load() { loading = loadList().finally(() => { loading = null; }); return loading; }
   async function loadList() {
     try {
-      const res = await API.listHrApplicants();
-      if (res.notReady) {
-        el("rows").innerHTML = `<tr><td colspan="8"><div class="banner warn">
-          <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
-        return;
-      }
-      applicants = res.applicants || [];
-      employees = res.employees || [];
-      meEmployeeId = res.meEmployeeId || null;
-      renderStageTabs();
-      render();
+      // 2回目からは前回の一覧をすぐ出し、裏で最新にする（変わった行だけ描き直す）
+      await API.swr("hr:applicants", fetchApplicants, (res) => {
+        if (res.notReady) {
+          el("rows").innerHTML = `<tr><td colspan="8"><div class="banner warn">
+            <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
+          return;
+        }
+        applicants = res.applicants || [];
+        employees = res.employees || [];
+        meEmployeeId = res.meEmployeeId || null;
+        renderStageTabs();
+        render();
+      });
     } catch (e) {
       el("rows").innerHTML = `<tr><td colspan="8"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
@@ -281,11 +288,11 @@
     visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
-      el("rows").innerHTML = `<tr><td colspan="8" class="empty">対象がありません。</td></tr>`;
+      API.morph(el("rows"), `<tr><td colspan="8" class="empty">対象がありません。</td></tr>`);
       renderBulkBar();
       return;
     }
-    el("rows").innerHTML = list.map((a) => {
+    API.morph(el("rows"), list.map((a) => {
       const [bg, fg, icon] = a.overdue ? OVERDUE_COLOR : (STATUS_COLOR[a.status] || STATUS_COLOR.todo);
       const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
       return `
@@ -301,7 +308,7 @@
         <td>${esc(a.recruiterName || "未定")}</td>
         <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
       </tr>`;
-    }).join("");
+    }).join(""));
     renderBulkBar();
   }
 

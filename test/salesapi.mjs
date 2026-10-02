@@ -135,6 +135,7 @@ function table(name) {
   const f = [];
   const orders = [];
   let range = null;
+  let cap = null;
   let withCount = false;
   let head = false;
   const rows = () => {
@@ -163,7 +164,9 @@ function table(name) {
     if (range && all.length && range[0] >= all.length) {
       return { data: null, count: null, error: { code: "PGRST103", message: "Requested range not satisfiable" } };
     }
-    const data = range ? all.slice(range[0], range[1] + 1) : all;
+    // 本物と同じく、limit(n) は先頭 n 件だけ（並べたあとで切る）
+    const cut = cap !== null ? all.slice(0, cap) : all;
+    const data = range ? cut.slice(range[0], range[1] + 1) : cut;
     return { data: head ? null : data.map(copy), count: withCount ? all.length : null, error: null };
   };
   const q = {
@@ -178,7 +181,7 @@ function table(name) {
     gte(k, v) { f.push(["gte", k, v]); return q; },
     like(k, v) { f.push(["like", k, v]); return q; },
     order(col, opts) { orders.push([col, opts?.ascending !== false, opts?.nullsFirst ?? (opts?.ascending === false)]); return q; },
-    limit() { return q; },
+    limit(n) { cap = n; return q; },
     maybeSingle: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     single: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     then: (fn) => Promise.resolve(result()).then(fn),
@@ -298,7 +301,7 @@ function facetCountsRpc(a) {
 }
 function rpc(name, args) {
   rpcCalls.push({ name, args });
-  // db/115：担当が同じテナントの社員か（true/false だけ返す）
+  // db/116：担当が同じテナントの社員か（true/false だけ返す）
   if (name === "gw_sales_deal_owner_ok" && !rpcMissing) {
     return Promise.resolve({ data: (db.rows.gw_employees || []).some((e) => e.id === args.p_owner && e.tenant_id === args.p_tenant), error: null });
   }
@@ -2244,7 +2247,7 @@ await ok("CSV：営業の権限が無い人は 403", async () => {
   assert.equal((await exportPost({ ids: [db.rows.gw_sales_companies[0].id] })).statusCode, 403);
 });
 
-console.log("\n=== 案件（db/115） ===\n");
+console.log("\n=== 案件（db/116） ===\n");
 
 const newDeal = (body) => call(dealsApi, { method: "POST", url: "/api/sales/deals", body });
 const patchDeal = (body) => call(dealsApi, { method: "PATCH", url: "/api/sales/deals", body });
@@ -2416,8 +2419,8 @@ await ok("案件の担当は同じテナントの社員だけ（別テナント�
   assert.equal((await patchDeal({ id: ok1.body.deal.id, ownerId: null })).statusCode, 200, "未定に戻すのはよい");
   assert.ok(rpcCalls.some((x) => x.name === "gw_sales_deal_owner_ok" && x.args.p_tenant === "t1"), "判定はログインした人のテナントで");
 
-  // DB 側：db/115 のトリガーが、作るとき・担当を変えるときに同じテナントの社員か確かめる
-  const sql = (await import("node:fs")).readFileSync(atRoot("db/115_sales_deals.sql"), "utf8").replace(/--.*$/gm, "");
+  // DB 側：db/116 のトリガーが、作るとき・担当を変えるときに同じテナントの社員か確かめる
+  const sql = (await import("node:fs")).readFileSync(atRoot("db/116_sales_deals.sql"), "utf8").replace(/--.*$/gm, "");
   const fn = sql.slice(sql.indexOf("function public.gw_sales_deal_owner_ok"));
   assert.match(fn.slice(0, fn.indexOf("$$;", fn.indexOf("$$") + 2)), /e\.id = p_owner and e\.tenant_id = p_tenant/);
   assert.match(sql, /revoke all on function public\.gw_sales_deal_owner_ok\(uuid, uuid\) from anon/);
@@ -2484,14 +2487,119 @@ await ok("企業詳細に案件が出る。案件のある企業は削除でき�
   assert.match(r.body.blocked[0].reasons.join(), /案件あり/);
 });
 
-await ok("成約確率の既定値：DB（db/115 の関数）と画面・API（lib/sales-deals.js）が同じ", async () => {
+await ok("成約確率の既定値：DB（db/116 の関数）と画面・API（lib/sales-deals.js）が同じ", async () => {
   const { DEFAULT_PROBABILITY } = await import(atRoot("lib/sales-deals.js"));
-  const sql = (await import("node:fs")).readFileSync(atRoot("db/115_sales_deals.sql"), "utf8");
+  const sql = (await import("node:fs")).readFileSync(atRoot("db/116_sales_deals.sql"), "utf8");
   const fn = sql.slice(sql.indexOf("function public.gw_sales_deal_default_probability"));
   const inSql = Object.fromEntries([...fn.slice(0, fn.indexOf("$$;")).matchAll(/when '(\w+)'\s+then (\d+)/g)].map((m) => [m[1], Number(m[2])]));
   for (const [k, v] of Object.entries(DEFAULT_PROBABILITY)) assert.equal(inSql[k], v, `${k}: SQL ${inSql[k]} / JS ${v}`);
   assert.equal(inSql.won, 100);
   assert.equal(inSql.lost, 0);
+});
+
+console.log("\n=== ダッシュボード（/sales/）：件数と上位だけ返す（表示速度） ===\n");
+
+// 以前の画面（sales/index.html）が、全件から組み立てていた決まり。サーバへ移しても同じ結果になることを確かめる
+function oldPageSections(companies, today) {
+  const open = (c) => !c.ngReason && !["won", "lost", "excluded"].includes(c.status);
+  const due = (c) => c.nextDue && c.nextDue <= today;
+  const RECENT_MS = 30 * 86400000;
+  const SECTIONS = [
+    { key: "click", pick: (c) => c.unhandledClick,
+      sort: (x, y) => String(y.lastClickAt || "").localeCompare(String(x.lastClickAt || "")) || y.clickCount - x.clickCount },
+    { key: "replied", pick: (c) => open(c) && c.status === "replied" },
+    { key: "follow", pick: (c) => open(c) && !["untouched", "reattack_wait"].includes(c.status) && due(c) },
+    { key: "attack", pick: (c) => open(c) && ["untouched", "reattack_wait"].includes(c.status)
+        && !(c.lastSentAt && Date.now() - new Date(c.lastSentAt).getTime() < RECENT_MS)
+        && (!c.nextDue || c.nextDue <= today) },
+  ];
+  const DEFAULT_SORT = (x, y) => (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0)
+    || String(x.nextDue || "9").localeCompare(String(y.nextDue || "9"));
+  const used = new Set();
+  const lists = {};
+  for (const sec of SECTIONS) {
+    lists[sec.key] = companies.filter((c) => !used.has(c.id) && sec.pick(c)).sort(sec.sort || DEFAULT_SORT);
+    for (const c of lists[sec.key]) used.add(c.id);
+  }
+  return lists;
+}
+
+async function seedDashboard() {
+  setup();
+  await seed(90);
+  const today = todayJst();
+  const shift = (d) => new Date(Date.parse(`${today}T00:00:00Z`) + d * 86400000).toISOString().slice(0, 10);
+  const ST = ["untouched", "attacked", "clicked", "replied", "meeting", "proposal", "reattack_wait", "won", "lost"];
+  db.rows.gw_sales_companies.forEach((c, i) => {
+    c.status = ST[i % ST.length];
+    c.next_action = i % 4 ? "電話する" : null;
+    c.next_action_on = i % 4 ? shift((i % 7) - 3) : null;
+    if (i % 17 === 0) c.ng_reason = "no_sales";
+  });
+  // アタック（クリックあり・なし・最近・昔）
+  db.rows.gw_sales_companies.forEach((c, i) => {
+    if (i % 3) return;
+    const sent = new Date(Date.now() - ((i % 50) + 1) * 86400000).toISOString();
+    db.rows.gw_sales_approaches.push({ id: `ap-${i}`, tenant_id: "t1", company_id: c.id, employee_id: "emp-s1", service: "AI / DX",
+      prepared_at: sent, sent_at: sent, channel: "form", click_count: i % 2 ? 0 : (i % 5) + 1,
+      first_click_at: i % 2 ? null : sent, last_click_at: i % 2 ? null : new Date(Date.parse(sent) + i * 60000).toISOString() });
+  });
+  // 1社は非表示（ダッシュボードには出さない）
+  db.rows.gw_sales_companies[1].hidden_at = new Date().toISOString();
+  db.rows.gw_sales_companies[1].hidden_reason = "closed";
+  return today;
+}
+
+await ok("view=dashboard：段ごとの件数と上位は、以前の画面（全件から組み立て）と同じ", async () => {
+  const today = await seedDashboard();
+  const all = await list();
+  assert.equal(all.statusCode, 200);
+  const want = oldPageSections(all.body.companies, today);
+  const r = await call(companies, { method: "GET", url: "/api/sales/companies?view=dashboard" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.view, "dashboard");
+  assert.equal(r.body.companies, undefined, "全件は返さない");
+  const LIMIT = { click: 20, replied: 20, follow: 20, attack: 10 };
+  let any = 0;
+  for (const k of ["click", "replied", "follow", "attack"]) {
+    assert.equal(r.body.sections[k].total, want[k].length, `${k} の件数`);
+    assert.deepEqual(r.body.sections[k].rows.map((c) => c.id), want[k].slice(0, LIMIT[k]).map((c) => c.id), `${k} の並びと上位`);
+    any += want[k].length;
+  }
+  assert.ok(any > 0 && want.click.length > 0 && want.attack.length > 0, "どの段にも何か入るデータで確かめる");
+  // 画面が使う項目は、全件の形と同じ値
+  const one = r.body.sections.click.rows[0];
+  const full = all.body.companies.find((c) => c.id === one.id);
+  for (const k of ["name", "status", "statusLabel", "next", "nextDue", "overdue", "ownerName", "clickCount", "lastClickAt", "lastSentAt", "unhandledClick"]) {
+    assert.deepEqual(one[k], full[k] ?? (typeof one[k] === "boolean" ? false : one[k]), k);
+  }
+  assert.ok(JSON.stringify(r.body).length < JSON.stringify(all.body).length / 2, "送る量は全件より小さい");
+});
+
+await ok("view=dashboard：非表示の企業は出さない。知らない view は 400。営業でない人は 403", async () => {
+  await seedDashboard();
+  const hidden = db.rows.gw_sales_companies[1].id;
+  const r = await call(companies, { method: "GET", url: "/api/sales/companies?view=dashboard" });
+  for (const k of Object.keys(r.body.sections)) assert.ok(!r.body.sections[k].rows.some((c) => c.id === hidden));
+  assert.equal(r.body.total, db.rows.gw_sales_companies.length - 1);
+  assert.equal((await call(companies, { method: "GET", url: "/api/sales/companies?view=nope" })).statusCode, 400);
+  who = MEMBER;
+  assert.equal((await call(companies, { method: "GET", url: "/api/sales/companies?view=dashboard" })).statusCode, 403);
+});
+
+await ok("最近の営業履歴：limit を渡すとその件数だけ（新しい順）。渡さなければ、いままでどおり全件", async () => {
+  setup();
+  for (let i = 0; i < 20; i++) {
+    const c = await newCompany({ name: `履歴${i}`, siteUrl: `https://h${i}.example.jp/` });
+    await sendAttack(c.id);
+  }
+  db.rows.gw_sales_approaches.forEach((a, i) => { a.sent_at = new Date(Date.now() - (20 - i) * 3600000).toISOString(); });
+  const all = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=14" });
+  assert.equal(all.body.approaches.length, 20);
+  const top = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=14&limit=15" });
+  assert.equal(top.body.approaches.length, 15);
+  assert.deepEqual(top.body.approaches.map((a) => a.id), all.body.approaches.slice(0, 15).map((a) => a.id), "新しい15件");
+  assert.equal((await call(approaches, { method: "GET", url: "/api/sales/approaches?days=14&limit=abc" })).body.approaches.length, 20);
 });
 
 console.log("\n=== 小さな道具 ===\n");

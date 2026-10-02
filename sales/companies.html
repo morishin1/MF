@@ -138,10 +138,10 @@
 <div id="action-root"></div>
 <div id="attack-root"></div>
 
-<script src="../js/api-client.js?v=20261001dl1"></script>
-<script src="../js/layout.js?v=20261001b"></script>
-<script src="../js/sales-layout.js?v=20261001a"></script>
-<script src="../js/sales-detail.js?v=20261001sx1"></script>
+<script src="../js/api-client.js?v=20261002dl2"></script>
+<script src="../js/layout.js?v=20261002dl2"></script>
+<script src="../js/sales-layout.js?v=20261002dl2"></script>
+<script src="../js/sales-detail.js?v=20261002dl2"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
   detailHost.onChange = () => load();
@@ -223,6 +223,12 @@
       if (node && node.value !== state[k] && document.activeElement !== node) node.value = state[k];
     }
   }
+
+  // 表示速度：枠（権限の確認）を待たずに、いまの条件の一覧を取りにいき始める。
+  // 2回目からは前回の一覧をすぐ出し、裏で最新にする（load の中の API.swr）。鍵は条件ごと
+  const listKey = (params) => `sales:companies:${JSON.stringify(params)}`;
+  const fetchList = (params) => () => API.listSalesCompanyPage(params);
+  { const p = apiParams({ facets: 1 }); API.warm(listKey(p), fetchList(p), SalesLayout.allows); }
 
   SalesLayout.init({ active: "companies" }).then((ctx) => {
     if (!ctx) return;
@@ -312,27 +318,29 @@
     el("pager").querySelectorAll("button").forEach((b) => { b.disabled = true; });
     try {
       // 絞り込みの件数は、いまの条件（検索語を含む）で毎回数え直す（サーバー側。db/101）
-      const res = await API.listSalesCompanyPage(apiParams({ facets: 1 }));
-      if (seq !== listSeq) return;
-      el("rows").classList.remove("loading");
-      if (res.notReady) {
-        el("count").textContent = "";
-        el("rows").innerHTML = `<tr><td colspan="${COLS}"><div class="banner warn">
-          <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
-        el("pager").innerHTML = ""; el("range").textContent = "";
-        return;
-      }
-      companies = res.companies || [];
-      members = res.members || members;
-      myEmployeeId = res.me || null;
-      if (res.facets) facets = res.facets;
-      if (res.masters) masters = res.masters;
-      if (res.csvColumns) csvColumns = res.csvColumns;
-      pageInfo = { page: res.page, total: res.total, totalPages: res.totalPages, limit: res.limit };
-      // 範囲外のページを頼んだときは、サーバーが最後のページを返す。URL もそれに合わせる
-      if (res.page !== state.page) { state.page = res.page; history.replaceState({}, "", listUrl(currentExtra())); }
-      renderFilters();
-      render();
+      const params = apiParams({ facets: 1 });
+      await API.swr(listKey(params), fetchList(params), (res) => {
+        if (seq !== listSeq) return;
+        el("rows").classList.remove("loading");
+        if (res.notReady) {
+          el("count").textContent = "";
+          el("rows").innerHTML = `<tr><td colspan="${COLS}"><div class="banner warn">
+            <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
+          el("pager").innerHTML = ""; el("range").textContent = "";
+          return;
+        }
+        companies = res.companies || [];
+        members = res.members || members;
+        myEmployeeId = res.me || null;
+        if (res.facets) facets = res.facets;
+        if (res.masters) masters = res.masters;
+        if (res.csvColumns) csvColumns = res.csvColumns;
+        pageInfo = { page: res.page, total: res.total, totalPages: res.totalPages, limit: res.limit };
+        // 範囲外のページを頼んだときは、サーバーが最後のページを返す。URL もそれに合わせる
+        if (res.page !== state.page) { state.page = res.page; history.replaceState({}, "", listUrl(currentExtra())); }
+        renderFilters();
+        render();
+      });
     } catch (e) {
       if (seq !== listSeq) return;
       el("rows").classList.remove("loading");

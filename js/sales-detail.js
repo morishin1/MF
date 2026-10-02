@@ -551,13 +551,13 @@ async function reloadDetail() {
   }
 }
 
-// ---- 案件（db/115） ----------------------------------------------------------------
+// ---- 案件（db/116） ----------------------------------------------------------------
 //
 // 1社に複数の案件を持てる。金額・段階（商談 → 提案 → 最終調整 → 成約／失注）を記録し、
 // 分析の 受注額・見込額・パイプライン はここから数える（金額は営業の案件金額。会計上の売上ではない）。
 // 会社のステータスはサーバが案件に合わせて進める（戻さない）。失注は会社に写さず、
 // その会社の案件がすべて失注になったときだけ「会社も失注にしますか」と聞く。
-// 成約確率の既定値は lib/sales-deals.js の DEFAULT_PROBABILITY・db/115 と同じ
+// 成約確率の既定値は lib/sales-deals.js の DEFAULT_PROBABILITY・db/116 と同じ
 const DEAL_STAGES = [["meeting", "商談"], ["proposal", "提案"], ["negotiation", "最終調整"], ["won", "成約"], ["lost", "失注"]];
 const DEAL_OPEN = ["meeting", "proposal", "negotiation"];
 const DEAL_PROB = { meeting: 20, proposal: 50, negotiation: 80 };
@@ -569,7 +569,7 @@ function dealsHtml() {
     <h4 style="font-size:13px;color:#1b2440;margin:0;flex:1;">案件</h4>${btn}</div>`;
   if (detail.dealsReady === false) {
     return head("") + `<div class="card" style="margin-bottom:16px;"><div class="sl-empty">
-      案件の表がまだ作られていません。管理者に db/115_sales_deals.sql の実行を依頼してください。</div></div>`;
+      案件の表がまだ作られていません。管理者に db/116_sales_deals.sql の実行を依頼してください。</div></div>`;
   }
   const list = detail.deals || [];
   const add = `<button class="btn btn-secondary btn-sm" id="dl-add" onclick="openDeal()">

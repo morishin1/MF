@@ -296,6 +296,9 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
    ========================================================================== */
 .kp-bell{ position:relative; }
 .kp-bell .icon-btn{ position:relative; }
+/* ⚙管理（kp-admin-menu）は kp-bell と同じドロップダウンの器を使う。
+   いま Office/管理 のどちらを開いているかは、通常のボタンと同じ .on で見せる */
+.kp-admin-menu .icon-btn.on{ background:var(--soft); color:var(--primary); }
 .kp-bell-badge{
   position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px;
   border-radius:999px; background:#b3261e; color:#fff;
@@ -538,11 +541,15 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-subtab.on { border-color: var(--primary); background: var(--primary); color: #fff; }
 
 .topbar .brand a { display: inline-flex; align-items: center; }
+/* 担当業務（Office・管理）に入っているときの「エイト / OFFICE」 */
+.kp-app { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--primary); margin: 0 4px 0 2px; }
 
 /* ヘッダーの近道（採用HR・Sales・Office）。既存の btn-secondary をそのまま使い、
    いまいるアプリのものだけ primary と同じ色で塗る。
    高さは btn-sm のままなので、ヘッダーの高さは変わらない */
-.kp-shortcuts { display: inline-flex; align-items: center; gap: 6px; }
+/* 業務ツール切替の数が増えても（Office 追加など）、名前・ログアウトを押し出さず
+   横スクロールで逃がす（min-width:0 が無いと flex の子は自分の内容ぶんまでしか縮まない） */
+.kp-shortcuts { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 1; min-width: 0; overflow-x: auto; }
 .kp-shortcut { text-decoration: none; white-space: nowrap; }
 .kp-shortcut.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .kp-shortcut .kp-sc-short { display: none; }

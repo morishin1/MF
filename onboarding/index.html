@@ -3,52 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 共通メニュー（layout.js）が、img/・他の画面へのリンクを相対で書く。/onboarding/ の中でも同じ場所を指すようにする -->
+  <base href="/">
   <!-- 案内URL（?t=）を、外部（フォントの配信元など）へ渡さない -->
   <meta name="referrer" content="no-referrer">
-  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>入社準備 - EIGHT</title>
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <title>入社準備 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261001b">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261002dl2">
+  <link rel="stylesheet" href="css/layout.css?v=20261002dl2">
+  <script>
+    try {
+      // ログイン済みなら、最初の描画から左メニューの余白を確保する（画面が動かない）
+      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) { /* 読めなくても動く */ }
+  </script>
   <style>
-    body { font-family:'Zen Kaku Gothic New', sans-serif; background:#f6f6f2; color:#1b2440; margin:0; }
-    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
-    .ob-top { background:#fff; border-bottom:1px solid #e2e2dc; height:56px; display:flex; align-items:center; gap:12px; padding:0 16px; position:sticky; top:0; z-index:5; }
-    .ob-logo { font-weight:700; font-size:14px; letter-spacing:.02em; white-space:nowrap; }
-    .ob-logo span { color:#6b7080; font-weight:500; }
-    .ob-top .sp { flex:1; }
-    .ob-who { font-size:12px; color:#6b7080; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:50vw; }
-    .ob-wrap { max-width:680px; margin:0 auto; padding:20px 16px 64px; }
-    .ob-hi { font-size:13px; color:#6b7080; margin:0 0 2px; }
-    h1.ob-h { font-size:24px; font-weight:900; margin:0 0 6px; }
-    .ob-lead { font-size:13.5px; color:#4a5068; line-height:1.9; margin:0 0 16px; }
-    .ob-prog { background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:14px 16px; margin-bottom:16px; }
-    .ob-prog .row { display:flex; justify-content:space-between; font-size:12.5px; color:#6b7080; margin-bottom:8px; }
-    .ob-prog .row b { color:#1b2440; font-size:15px; }
-    .ob-bar { height:10px; background:#ecece6; border-radius:999px; overflow:hidden; }
-    .ob-bar > i { display:block; height:100%; background:#1f8a4c; border-radius:999px; }
-    .ob-next { background:#1b2440; color:#fff; border-radius:12px; padding:16px; margin-bottom:16px; }
-    .ob-next .k { font-size:11.5px; opacity:.75; margin-bottom:4px; }
-    .ob-next .t { font-size:17px; font-weight:700; margin-bottom:4px; }
+    .ob-wrap { max-width:760px; }
+    .ob-top { background:#fff; border-bottom:1px solid var(--border); height:56px; display:flex; align-items:center; gap:12px; padding:0 16px; }
+    .ob-logo { font-weight:700; font-size:14px; white-space:nowrap; }
+    .ob-logo span { color:var(--muted); font-weight:500; }
+    .ob-hi { font-size:13px; color:var(--muted); margin:0 0 2px; }
+    h1.ob-h { font-size:22px; font-weight:700; margin:0 0 6px; color:var(--primary-dark); }
+    .ob-meta { display:flex; gap:6px 22px; flex-wrap:wrap; font-size:13.5px; color:#4a5568; margin:0 0 16px; }
+    .ob-meta b { color:var(--text); }
+    .ob-lead { font-size:13.5px; color:#4a5568; line-height:1.9; margin:0 0 16px; }
+
+    /* NEXT ACTION。Primary CTA（黄色）はこの1つだけ */
+    .ob-next { background:#1b2440; color:#fff; border-radius:12px; padding:18px; margin-bottom:16px; }
+    .ob-next .k { font-size:11.5px; letter-spacing:.08em; opacity:.75; margin-bottom:4px; }
+    .ob-next .t { font-size:18px; font-weight:700; margin-bottom:4px; }
     .ob-next .s { font-size:12.5px; opacity:.85; line-height:1.8; }
-    .ob-next.wait { background:#fff; color:#1b2440; border:1px solid #e2e2dc; }
-    .ob-next.wait .k, .ob-next.wait .s { opacity:1; color:#6b7080; }
+    .ob-next.wait { background:#fff; color:var(--text); border:1px solid var(--border); }
+    .ob-next.wait .k, .ob-next.wait .s { opacity:1; color:var(--muted); }
     .ob-next.done { background:#e3f4e7; color:#1f6f3a; }
     .ob-btn { display:inline-block; background:#e6f050; color:#1b2440; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:700;
               text-decoration:none; cursor:pointer; margin-top:12px; font-family:inherit; }
     .ob-btn.dark { background:#1b2440; color:#fff; }
     .ob-btn.sec { background:#fff; color:#1b2440; border:1px solid #c7cad4; }
     .ob-btn[disabled] { opacity:.5; cursor:default; }
-    ol.ob-steps { list-style:none; margin:0 0 20px; padding:0; }
-    .ob-st { background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:13px 15px; margin-bottom:8px; display:flex; gap:12px; }
-    .ob-st .no { flex:0 0 30px; height:30px; border-radius:50%; background:#ecece6; color:#6b7080; display:flex; align-items:center; justify-content:center;
+    .ob-btns { display:flex; gap:10px; flex-wrap:wrap; }
+
+    .ob-prog { background:#fff; border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
+    .ob-prog .row { display:flex; justify-content:space-between; font-size:12.5px; color:var(--muted); margin-bottom:8px; }
+    .ob-prog .row b { color:var(--text); font-size:15px; }
+    .ob-bar { height:10px; background:#ecece6; border-radius:999px; overflow:hidden; }
+    .ob-bar > i { display:block; height:100%; background:#1f8a4c; border-radius:999px; }
+
+    ol.ob-steps { list-style:none; margin:0 0 18px; padding:0; }
+    .ob-st { background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:8px; display:flex; gap:12px; }
+    .ob-st .no { flex:0 0 28px; height:28px; border-radius:50%; background:#ecece6; color:var(--muted); display:flex; align-items:center; justify-content:center;
                  font-size:13px; font-weight:700; }
     .ob-st .bd { flex:1; min-width:0; }
     .ob-st .tt { font-size:14.5px; font-weight:700; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .ob-st .nt { font-size:12.5px; color:#6b7080; line-height:1.8; margin-top:2px; }
+    .ob-st .nt { font-size:12.5px; color:var(--muted); line-height:1.8; margin-top:2px; }
     .ob-chip { font-size:10.5px; font-weight:700; padding:1px 8px; border-radius:999px; white-space:nowrap; }
     .ob-chip.me { background:#fff2d6; color:#8a5a00; }
     .ob-chip.co { background:#ecece6; color:#6b7080; }
@@ -56,39 +69,46 @@
     .ob-st.done { background:#f3faf5; border-color:#cfe8d6; }
     .ob-st.current { border-color:#e8c977; background:#fffaf0; }
     .ob-st.current .no { background:#c07a00; color:#fff; }
-    .ob-st.todo .tt, .ob-st.na .tt, .ob-st.unlinked .tt { color:#6b7080; }
+    .ob-st.todo .tt, .ob-st.na .tt, .ob-st.unlinked .tt { color:var(--muted); }
     .ob-st.na, .ob-st.unlinked { background:#fafaf7; border-style:dashed; }
-    .ob-card { background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:16px; margin-bottom:16px; }
-    .ob-card h2 { font-size:15px; margin:0 0 10px; font-weight:700; }
+
+    .ob-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+    .ob-card h2 { font-size:15px; margin:0 0 10px; font-weight:700; color:var(--primary-dark); }
     dl.ob-g { display:grid; grid-template-columns:minmax(86px,auto) 1fr; gap:8px 14px; margin:0; font-size:13.5px; }
-    dl.ob-g dt { color:#6b7080; font-size:12px; padding-top:2px; }
+    dl.ob-g dt { color:var(--muted); font-size:12px; padding-top:2px; }
     dl.ob-g dd { margin:0; white-space:pre-wrap; line-height:1.8; }
-    .ob-note { font-size:12px; color:#6b7080; line-height:1.8; margin:10px 0 0; }
-    .ob-banner { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e0a030; border-radius:8px; padding:12px 14px; font-size:13px; line-height:1.8; margin-bottom:16px; }
+    .ob-pending { color:#9aa0b4; }
+    .ob-note { font-size:12px; color:var(--muted); line-height:1.8; margin:10px 0 0; }
+    .ob-banner { background:#fff; border:1px solid var(--border); border-left:3px solid #e0a030; border-radius:8px; padding:12px 14px; font-size:13px; line-height:1.8; margin-bottom:16px; }
     .ob-banner.err { border-left-color:#b3261e; background:#fff5f4; }
     .ob-empty { color:#9aa0b4; font-size:13px; padding:8px 0; }
-    .ob-foot { font-size:12px; color:#6b7080; line-height:1.9; }
-    .ob-foot a { color:#1b2440; }
+    .ob-foot { font-size:12px; color:var(--muted); line-height:1.9; }
+    .ob-foot a { color:var(--primary-dark); }
     .ob-ok { color:#1f6f3a; font-weight:700; font-size:13px; margin-top:12px; }
     .ob-nt { font-size:15px; font-weight:700; margin:0 0 4px; }
     .ob-nt.ok { color:#1f6f3a; }
-    .ob-nt.wait { color:#6b7080; }
-    .ob-btns { display:flex; gap:10px; flex-wrap:wrap; }
+    .ob-nt.wait { color:var(--muted); }
+    ul.ob-list { list-style:none; margin:0; padding:0; }
+    ul.ob-list li { display:flex; gap:10px; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
+    ul.ob-list li:last-child { border-bottom:0; }
+    .ob-tag { font-size:11.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; background:#ecece6; color:#6b7080; }
+    .ob-tag.ok { background:#e3f4e7; color:#1f6f3a; }
+    .ob-tag.wait { background:#fff2d6; color:#8a5a00; }
+    .ob-req { font-size:10.5px; color:#9aa0b4; margin-left:6px; }
   </style>
 </head>
 <body>
-<header class="ob-top">
-  <div class="ob-logo"><b>EIGHT</b> <span>/ 入社準備</span></div>
-  <div class="sp"></div>
-  <div class="ob-who" id="who"></div>
-</header>
-<main class="ob-wrap" id="main"><div class="ob-empty">読み込み中…</div></main>
+<div class="wrap ob-wrap" id="main"><div class="ob-empty">読み込み中…</div></div>
 
-<script src="../js/api-client.js?v=20261001b"></script>
+<script src="js/api-client.js?v=20261002dl2"></script>
+<script src="js/device.js?v=20261002dl2"></script>
+<script src="js/layout.js?v=20261002dl2"></script>
 <script>
-  // 本人の入社準備。6ステップの「いまどこか・次に何をするか」と、入社案内の確認。
+  // 本人の入社準備（ログイン直後に開く画面）。
+  //   挨拶 → 現在 → NEXT ACTION（Primary CTA は1つ）→ あなたの契約条件 → 入社準備のステップ → 書類・オリエンテーション
   // 入力・署名・提出は、これまでの画面（contracts.html / onboarding.html）で行う（作り直さない）。
-  // 状態は自分で判定せず、サーバ（/api/onboarding/start）が返した6ステップをそのまま出す。
+  // 状態は自分で判定せず、サーバ（/api/onboarding/start）が返したものをそのまま出す。
+  // 本人に出す文に、DB・API・migration の名前は使わない（エラーは KPLayout.friendlyError を通す）。
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const TOKEN = new URLSearchParams(location.search).get("t") || "";
@@ -99,10 +119,15 @@
     const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : null;
   };
+  const slashDate = (d) => {
+    const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[1]}/${m[2]}/${m[3]}` : null;
+  };
   const todayJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
   const daysTo = (d) => (d ? Math.round((Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`) - Date.parse(`${todayJst()}T00:00:00Z`)) / 86400000) : null);
 
   const banner = (text, kind = "") => `<div class="ob-banner ${kind}">${esc(text)}</div>`;
+  const friendly = (e, what) => (window.KPLayout ? KPLayout.friendlyError(e, what) : "入社手続き情報を現在確認できません。管理担当者へお問い合わせください。");
 
   // ---- 入社案内（発行された内容）----------------------------------------------
   function guideRows(guide, fields) {
@@ -116,6 +141,7 @@
   // ---- ログイン前（案内URLで、案内だけ読む）--------------------------------------
   async function anonymous() {
     if (!TOKEN) { location.replace(loginUrl()); return; }
+    document.body.insertAdjacentHTML("afterbegin", `<header class="ob-top"><div class="ob-logo"><b>エイト</b> <span>/ 入社準備</span></div></header>`);
     let r, d;
     try {
       r = await fetch(`/api/onboarding/guide?t=${encodeURIComponent(TOKEN)}`, { cache: "no-store" });
@@ -145,15 +171,47 @@
     const mine = s.actor === "employee";
     const chip = s.state === "current" && s.actorLabel
       ? `<span class="ob-chip ${mine ? "me" : "co"}">${mine ? "あなたの番です" : `${esc(s.actorLabel)}が対応中`}</span>` : "";
-    const glyph = s.state === "done" ? "✓" : s.n;
-    const note = s.state === "unlinked" ? "確認できていません。担当者にお知らせください" : s.note;
-    const cta = s.cta
-      ? (s.cta.href ? `<a class="ob-btn" href="${esc(s.cta.href)}">${esc(s.cta.label)}</a>`
-        : `<button class="ob-btn" data-action="${esc(s.cta.action)}">${esc(s.cta.label)}</button>`) : "";
+    const glyph = s.state === "done" ? "✓" : s.state === "current" ? "●" : "○";
+    const note = s.state === "unlinked" ? "現在確認できていません。管理担当者へお問い合わせください" : s.note;
     return `<li class="ob-st ${esc(s.state)}" data-step="${esc(s.key)}" data-state="${esc(s.state)}">
         <div class="no">${glyph}</div>
         <div class="bd"><div class="tt">${esc(s.label)}${chip}</div>
-          ${note ? `<div class="nt">${esc(note)}</div>` : ""}${cta}</div></li>`;
+          ${note ? `<div class="nt">${esc(note)}</div>` : ""}</div></li>`;
+  }
+
+  // ---- あなたの契約条件 -------------------------------------------------------
+  // 管理側で登録した契約条件をそのまま読む（別に持たない）。未登録は、エラーにせず「会社で準備中です」
+  function conditionsCard(c, d) {
+    const rows = (c?.rows || []).map((r) => `<dt>${esc(r.label)}</dt><dd data-key="${esc(r.key)}">${r.value
+      ? esc(r.value) : `<span class="ob-pending">${c?.ready ? "現在確認中" : "会社で準備中です"}</span>`}</dd>`).join("");
+    const viaNotice = d.notice?.linked && d.notice.mode === "notice" && d.notice.state !== "none";
+    const view = viaNotice
+      ? `<button class="ob-btn sec" data-action="notice">契約書を確認する</button>`
+      : `<a class="ob-btn sec" href="/contracts.html">契約書を確認する</a>`;
+    return `<div class="ob-card" data-role="conditions" data-ready="${c?.ready ? "1" : "0"}"><h2>あなたの契約条件</h2>
+      <dl class="ob-g">${rows}</dl>
+      ${c?.ready ? "" : `<p class="ob-note">契約条件は、会社の準備が整うとここに表示されます。</p>`}
+      <div class="ob-btns">${view}</div>
+      <p class="ob-note">入社後も、<a href="/mypage.html#cond-card">マイページ</a>でいつでも見返せます。</p></div>`;
+  }
+
+  // ---- 必要書類 ---------------------------------------------------------------
+  function documentsCard(docs) {
+    if (!docs?.length) return "";
+    const open = docs.some((x) => x.state === "open");
+    return `<div class="ob-card" data-role="documents"><h2>必要書類</h2>
+      <ul class="ob-list">${docs.map((x) => `<li data-state="${esc(x.state)}"><span>${esc(x.title)}${x.required ? "" : `<span class="ob-req">任意</span>`}</span>
+        <span class="ob-tag ${x.state === "confirmed" || x.state === "submitted" || x.state === "na" ? "ok" : "wait"}">${esc(x.label)}</span></li>`).join("")}</ul>
+      ${open ? `<a class="ob-btn sec" href="/onboarding.html#step-4">必要書類を提出する</a>` : ""}</div>`;
+  }
+
+  function orientationCard(items) {
+    if (!items?.length) return "";
+    const open = items.some((x) => !x.confirmed);
+    return `<div class="ob-card" data-role="orientation"><h2>オリエンテーション</h2>
+      <ul class="ob-list">${items.map((x) => `<li data-state="${x.confirmed ? "confirmed" : "open"}"><span>${esc(x.title)}</span>
+        <span class="ob-tag ${x.confirmed ? "ok" : "wait"}">${x.confirmed ? "確認済み" : "未確認"}</span></li>`).join("")}</ul>
+      ${open ? `<a class="ob-btn sec" href="/onboarding.html#step-2">オリエンテーションを確認する</a>` : ""}</div>`;
   }
 
   // ---- 労働条件通知書 ---------------------------------------------------------
@@ -195,49 +253,56 @@
       b.disabled = false;
       if (e.code === "version_changed") {
         // 読んでいるあいだに、会社が差し替えた。新しい版を読み直してもらう
-        try { data = await API.api("/api/onboarding/start"); render(); el("notice-msg").textContent = "労働条件通知書が更新されました。もう一度、内容をご確認ください。"; } catch { el("notice-msg").textContent = e.hint || "更新されました。ページを読み込み直してください"; }
+        try { data = await API.api("/api/onboarding/start"); render(); el("notice-msg").textContent = "労働条件通知書が更新されました。もう一度、内容をご確認ください。"; } catch { el("notice-msg").textContent = "更新されました。ページを読み込み直してください"; }
       } else {
-        el("notice-msg").textContent = e.hint || e.message || "確認できませんでした";
+        el("notice-msg").textContent = friendly(e, "確認できませんでした");
       }
     }
   }
 
   function render() {
     const d = data;
-    const six = d.six;
+    const sf = d.self;
     const left = daysTo(d.employee.joinOn);
-    const join = jpDate(d.employee.joinOn);
-    el("who").textContent = d.employee.name || "";
+    const join = slashDate(d.employee.joinOn);
+    const name = d.employee.name || "";
 
-    let h = `<p class="ob-hi">${esc(d.employee.name || "")} さん</p><h1 class="ob-h">入社準備</h1>`;
-    h += `<p class="ob-lead">${join ? `${esc(join)}のご入社${left != null && left >= 0 ? `（あと${left}日）` : ""}に向けて、` : "ご入社に向けて、"}以下の準備をお願いします。上から順に進めれば終わります。保存されますので、一度にすべて行う必要はありません。</p>`;
+    let h = "";
+    h += `<p class="ob-hi">${esc(name)} さん</p>
+      <h1 class="ob-h" data-role="greeting">${sf.next.done ? `${esc(name)}さん、入社準備は完了しました` : `${esc(name)}さん、入社準備を進めましょう`}</h1>
+      <div class="ob-meta">
+        <span>入社予定日　<b>${join ? esc(join) : "調整中"}</b>${left != null && left >= 0 ? `（あと${left}日）` : ""}</span>
+        <span>現在　<b data-role="phase">${esc(sf.phase.label)}</b></span>
+      </div>`;
 
     if (!d.hasProcedure) {
-      h += banner("入社手続きがまだ作られていません。担当者にお知らせください。", "");
+      h += banner("入社手続きの情報は、会社で準備しています。準備が整うと、ここに表示されます。");
     }
 
-    // 進み具合（案内が対象外・未連携のときは、数えない）
-    const pct = six.total ? Math.round((six.done / six.total) * 100) : 0;
-    h += `<div class="ob-prog"><div class="row"><span>進み具合</span><span><b>${six.done}</b> / ${six.total} 完了</span></div>
-      <div class="ob-bar"><i style="width:${pct}%"></i></div></div>`;
-
-    // 次にやること（1つ）
-    const nx = six.next;
-    if (six.complete) {
-      h += `<div class="ob-next done" data-role="next"><div class="k">入社準備</div><div class="t">入社準備は完了しました</div>
+    // NEXT ACTION（1つ）。Primary CTA も1つ
+    const nx = sf.next;
+    if (nx.done) {
+      h += `<div class="ob-next done" data-role="next"><div class="k">NEXT ACTION</div><div class="t">入社準備は完了しました</div>
         <div class="s">ご入社を楽しみにしています。当日は、入社案内をご確認ください。</div></div>`;
     } else {
-      const mine = nx.actor === "employee";
-      const cta = nx.cta ? (nx.cta.href ? `<a class="ob-btn" href="${esc(nx.cta.href)}">${esc(nx.cta.label)}</a>`
-        : `<button class="ob-btn" data-action="${esc(nx.cta.action)}">${esc(nx.cta.label)}</button>`) : "";
-      h += `<div class="ob-next ${mine ? "" : "wait"}" data-role="next"><div class="k">次にやること</div>
-        <div class="t">${esc(nx.label)}</div>
-        <div class="s">${mine ? "あなたの操作が必要です。" : "いまは、あなたの操作は必要ありません。会社の対応をお待ちください。"}</div>${cta}</div>`;
+      const cta = nx.mine && nx.cta
+        ? (nx.cta.href ? `<a class="ob-btn" href="${esc(nx.cta.href)}">${esc(nx.cta.label)}</a>`
+          : `<button class="ob-btn" data-action="${esc(nx.cta.action)}">${esc(nx.cta.label)}</button>`) : "";
+      h += `<div class="ob-next ${nx.mine ? "" : "wait"}" data-role="next"><div class="k">NEXT ACTION</div>
+        <div class="t">${esc(nx.title)}</div>
+        <div class="s">${esc(nx.sub)}${nx.mine ? "" : "。会社の対応をお待ちください。"}</div>${cta}</div>`;
     }
 
-    h += `<ol class="ob-steps">${six.steps.map(stepHtml).join("")}</ol>`;
+    // あなたの契約条件（最初に重要項目の要約。正式な契約書は、その下から開ける）
+    h += conditionsCard(d.conditions, d);
 
-    // 労働条件通知書（STEP 2）。電子署名の依頼がある人（mode: esign）には出さない（これまでの「契約」の画面で進める）
+    // 入社準備のステップ（進み具合）
+    const pct = sf.total ? Math.round((sf.done / sf.total) * 100) : 0;
+    h += `<div class="ob-prog"><div class="row"><span>入社準備</span><span><b>${sf.done}</b> / ${sf.total} 完了</span></div>
+      <div class="ob-bar"><i style="width:${pct}%"></i></div></div>`;
+    h += `<ol class="ob-steps">${sf.steps.map(stepHtml).join("")}</ol>`;
+
+    // 労働条件通知書。電子署名の依頼がある人（mode: esign）には出さない（契約書の画面で進める）
     if (d.hasProcedure && d.notice && d.notice.linked && d.notice.mode === "notice") h += noticeCard(d.notice);
 
     // 入社案内
@@ -249,12 +314,20 @@
         <div id="guide-msg" class="ob-note" style="color:#b3261e;"></div></div>`;
     }
 
+    h += documentsCard(d.documents);
+    h += orientationCard(d.orientation);
+
     // 入社準備のあと
-    if (six.complete && six.after) {
+    if (sf.next.done && d.six.after) {
       h += `<div class="ob-card" data-role="after"><h2>このあとのこと</h2>
-        <div class="ob-note" style="margin:0;font-size:13px;color:#1b2440;">${esc(six.after.label)}</div>
-        ${six.after.cta ? `<a class="ob-btn dark" href="${esc(six.after.cta.href)}">${esc(six.after.cta.label)}</a>` : ""}</div>`;
+        <div class="ob-note" style="margin:0;font-size:13px;color:var(--text);">${esc(d.six.after.label)}</div>
+        ${d.six.after.cta ? `<a class="ob-btn dark" href="${esc(d.six.after.cta.href)}">${esc(d.six.after.cta.label)}</a>` : ""}</div>`;
     }
+
+    // 初回パスワード（会社から渡されたまま）の案内
+    h += `<div class="ob-card" data-role="password"><h2>パスワードの変更</h2>
+      <p class="ob-note" style="margin:0 0 8px;">会社から渡された初回パスワードのままの方は、ご自身だけが知っているパスワードに変更してください。</p>
+      <a class="ob-btn sec" href="/mypage.html#password">パスワードを変更する</a></div>`;
 
     h += `<p class="ob-foot">入力・署名・書類の提出は、これまでの画面で行います（上のボタンから移動できます）。
       <a href="${esc(d.links.form)}">入社手続きの画面を開く</a></p>`;
@@ -285,18 +358,21 @@
         el("guide-msg").textContent = e.hint || "入社案内が更新されました。もう一度ご確認ください。";
         try { data = await API.api("/api/onboarding/start"); render(); el("guide-msg").textContent = "入社案内が更新されました。もう一度ご確認ください。"; } catch { /* 表示は残す */ }
       } else {
-        el("guide-msg").textContent = e.hint || e.message || "確認できませんでした";
+        el("guide-msg").textContent = friendly(e, "確認できませんでした");
       }
     }
   }
 
   async function loggedIn() {
+    // 共通メニュー（ホーム／入社準備／給与管理／設定・セキュリティ）と、ログイン・権限の確認
+    const ctx = await KPLayout.init({ active: "onboarding", roles: ["member", "admin", "owner"] });
+    if (!ctx) return;
     try {
       data = await API.api(`/api/onboarding/start${TOKEN ? `?t=${encodeURIComponent(TOKEN)}` : ""}`);
     } catch (e) {
       if (e.status === 401 || (!e.status && /ログイン|セッション/.test(e.message || ""))) { location.replace(loginUrl()); return; }
       const wrong = e.code === "wrong_account";
-      el("main").innerHTML = `<h1 class="ob-h">入社準備</h1>${banner(e.hint || e.message || "読み込めませんでした", "err")}
+      el("main").innerHTML = `<h1 class="ob-h">入社準備</h1>${banner(friendly(e), "err")}
         ${wrong ? `<div class="ob-card"><button class="ob-btn dark" id="relogin">ログインし直す</button></div>` : ""}`;
       const r = el("relogin");
       if (r) r.addEventListener("click", () => { API.logout(); location.replace(loginUrl()); });

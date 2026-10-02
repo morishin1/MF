@@ -1,9 +1,10 @@
 -- =============================================================================
--- 115: /sales 案件（金額・ステージ）と、その履歴
+-- 116: /sales 案件（金額・ステージ）と、その履歴
 --
 -- 番号：main の db/ は 114（114_ai_assistant_seed）まで使っている（099 は3つ、100・101・105 は2つずつ、111 は欠番）。
---       open PR では #45 が 110_career_self_check を使う。111 はかつて社内AI（いまの 113・114）が使っていた番号のため避け、
---       どれとも重ならない 115 にする（旧名 db/100_sales_deals.sql。本番には未適用）。
+--       open PR では #45 が 110_career_self_check、#65 が 115_office_split を使う。
+--       111 はかつて社内AI（いまの 113・114）が使っていた番号のため避け、どれとも重ならない 116 にする
+--       （旧名 db/100_sales_deals.sql → db/115_sales_deals.sql。どちらも本番には未適用）。
 --
 --   1) gw_sales_deals        … 案件。1社に複数あってよい
 --        stage   … meeting（商談）→ proposal（提案）→ negotiation（最終調整）→ won（成約）／ lost（失注）
@@ -271,7 +272,7 @@ notify pgrst, 'reload schema';
 -- select count(*) from public.gw_sales_deals d join public.gw_employees e on e.id = d.owner_id where e.tenant_id <> d.tenant_id;
 
 -- =============================================================================
--- ロールバック（戻すときだけ。先にアプリを 115 より前の版へ戻してから。案件と履歴は消えます）
+-- ロールバック（戻すときだけ。先にアプリを 116 より前の版へ戻してから。案件と履歴は消えます）
 -- =============================================================================
 -- begin;
 -- drop table if exists public.gw_sales_deal_history;

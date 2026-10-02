@@ -262,26 +262,28 @@
     if (window.KPLayout?.viewer) KPLayout.viewer({ title: "営業 1分マニュアル", text: GUIDE });
   }
 
-  async function init(opts = {}) {
-    css();
-    if (!window.API || !API.isLoggedIn()) { location.href = "../index.html"; return null; }
-    let me;
-    try {
-      me = await API.me();
-    } catch (e) {
-      location.href = "../index.html";
-      return null;
-    }
+  function permsOf(me) {
     const roles = me?.gw?.roles || [];
     const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
     // ヘッダーの近道と同じ値（/api/me の access = サーバの canSell）で入口を決める
     const canSell = me?.access ? Boolean(me.access.sell)
       : ["owner", "manager", "sales"].some((r) => roles.includes(r));
-    if (!canSell) { location.replace("../home.html"); return null; }
     const canForce = isAdmin || roles.includes("owner");
+    return { canSell, canForce };
+  }
 
-    renderHeader(opts.active, me);
-    return { me, canSell, canForce };
+  // 前回の身元（/api/me）を覚えていれば、待たずにヘッダーを出して本文を取りにいく。
+  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
+  async function init(opts = {}) {
+    css();
+    if (!window.API || !API.isLoggedIn()) { location.href = "../index.html"; return null; }
+    const got = await API.enterWithMe(allows, {
+      leave: () => location.replace("../home.html"),
+      lost: () => { location.href = "../index.html"; },
+    });
+    if (!got) return null;
+    renderHeader(opts.active, got.me);
+    return { me: got.me, ...permsOf(got.me) };
   }
 
   // ---- 画面どうしで共通の小さな道具 -------------------------------------------
@@ -321,8 +323,11 @@
     return `${Math.floor(ms / 86400000)}日前`;
   }
 
+  // 覚えている身元で、この画面に入れるか（API.warm に渡す。init と同じ判定）
+  function allows(me) { return permsOf(me).canSell; }
+
   window.SalesLayout = {
-    init, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, showGuide,
+    init, allows, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, showGuide,
     statusPill, fmt, fmtDay, ago,
   };
 })();
