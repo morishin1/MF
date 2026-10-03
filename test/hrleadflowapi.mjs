@@ -407,6 +407,16 @@ await ok("保留：次の確認事項を残し、保留から再開したら dec
   assert.equal(app(A_MD).status, "todo");
 });
 
+await ok("無限道場リードの保留・対象外は採用の判断ではない：本人への連絡状況（未連絡）は出さない", async () => {
+  setup();
+  await act("hold", { note: "11月に再連絡" });
+  const d = await call(detailApi, { method: "GET", url: `/api/hr/applicants/detail?id=${A_MD}` });
+  assert.equal(d.body.applicant.contact.state, "none");
+  await act("not_target");
+  const l = await call(listApi, { method: "GET", url: "/api/hr/applicants?category=mugendojo" });
+  assert.equal(l.body.applicants[0].contact.state, "none");
+});
+
 await ok("対象外：status=passed（表示は「対象外」）。ENGER紹介・別サービス紹介は完了", async () => {
   setup();
   await act("not_target");

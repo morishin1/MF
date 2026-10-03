@@ -17,6 +17,7 @@ import {
   RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor, pickNextInterview,
   STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
 } from "../../../lib/hr.js";
+import { contactStatusOf } from "../../../lib/hr-messages.js";
 import { selectWithLeadFields } from "../../../lib/hr-leads.js";
 import {
   LEAD_NEXT_ACTIONS, LEAD_NEXT_ACTION_KEYS, leadNextActionPatch, leadNextActionLabel, isMugendojo,
@@ -92,6 +93,9 @@ async function one(req, res, sb, ctx, salary) {
         current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
       ),
       recruiterName: recruiter?.display_name || null,
+      // 本人への連絡状況（未連絡／連絡済み）。タイムラインの判断・連絡の記録から決める（lib/hr-messages.js）
+      // 無限道場リードの decision（保留・対象外）は採用の選考結果ではないので、連絡状況は出さない
+      contact: contactStatusOf(isMugendojo(a) ? null : a.decision, timeline),
     },
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
