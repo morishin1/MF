@@ -330,7 +330,7 @@
   function areaOf(active, path = location.pathname) {
     const file = String(path || "").split("/").pop();
     // 月末月初業務（/office/ の各画面）は Office の中
-    if (active && /^\/office\//.test(String(path || ""))) return "office";
+    if (active && /^\/office(\/|$)/.test(String(path || ""))) return "office";
     if (!active || !/^admin-/.test(file)) return "home";
     const hit = (i) => i.key === active || (i.match || []).includes(active);
     if (OFFICE_TOP.some(hit) || OFFICE_GROUPS.some((g) => g.items.some(hit))) return "office";
@@ -727,7 +727,7 @@
     const wrap = document.querySelector(".wrap");
     if (!wrap) return;
     for (const old of document.querySelectorAll(".kp-side-toggle, .kp-side-backdrop")) old.remove();
-    const cur = nav.querySelector(".kp-side-item.on span");
+    const cur = nav.querySelector(".kp-side-item.on > span:not(.material-symbols-outlined)");
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "kp-side-toggle";

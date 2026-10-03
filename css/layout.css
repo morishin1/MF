@@ -393,6 +393,15 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 @keyframes kp-spin { to { transform: rotate(360deg); } }
 .btn:disabled{ opacity:.6; cursor:default; }
 
+/* Office の左メニューを開くボタン（狭い画面だけ） */
+.kp-side-toggle{
+  display:none; align-items:center; gap:8px; width:100%; margin:0 0 12px; padding:9px 12px;
+  background:#fff; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13.5px;
+  font-weight:700; color:var(--primary-dark); cursor:pointer; text-align:left;
+}
+.kp-side-toggle small{ font-size:12px; font-weight:500; color:var(--muted); margin-left:auto; }
+.kp-side-backdrop[hidden]{ display:none; }
+
 @media (max-width:860px){
   /* 横スクロールのメニューでは見出しを畳んで、項目だけを並べる */
   .kp-side-section{
@@ -419,15 +428,6 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
   }
   .kp-sidebar.grouped .kp-side-item em{ display:inline; }
 }
-
-/* Office の左メニューを開くボタン（狭い画面だけ） */
-.kp-side-toggle{
-  display:none; align-items:center; gap:8px; width:100%; margin:0 0 12px; padding:9px 12px;
-  background:#fff; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13.5px;
-  font-weight:700; color:var(--primary-dark); cursor:pointer; text-align:left;
-}
-.kp-side-toggle small{ font-size:12px; font-weight:500; color:var(--muted); margin-left:auto; }
-.kp-side-backdrop[hidden]{ display:none; }
 
 /* メニュー一覧（メンバーの「メニュー」画面） */
 .kp-menu{ display:grid; gap:10px; }

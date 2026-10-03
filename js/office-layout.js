@@ -29,6 +29,10 @@
       body.of-app .material-symbols-outlined { display:inline-block; width:1em; overflow:hidden;
         white-space:nowrap; line-height:1; flex:none; }
 
+      /* Office 共通の枠の中で、上の余白を詰める（いちばん先に押すものを、上に） */
+      body.of-app .wrap { padding-top:18px; }
+      body.of-app .of-head .kp-subnav { margin:8px 0 10px; }
+
       /* ここから下は /office の各画面で共通 */
       h1.of-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
       .of-sub { color:#6b7080; font-size:13px; margin:0 0 20px; }
@@ -47,6 +51,7 @@
                 color:#fff; border-radius:7px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;
                 font-family:inherit; white-space:nowrap; }
       .of-btn.sec { background:#fff; color:#1b2440; border-color:#c7cad4; }
+      a.of-btn { text-decoration:none; }
       .of-btn .material-symbols-outlined { font-size:16px; }
       .of-btn:disabled { opacity:.55; cursor:default; }
       .of-btn:focus-visible, button:focus-visible {
@@ -84,7 +89,8 @@
   // 枠（ヘッダー・Office の左メニュー）は KPLayout が描く。入れない人は KPLayout がホームへ送り返す（null）
   async function init(opts = {}) {
     css();
-    if (!window.API || !window.KPLayout) { location.href = "/index.html"; return null; }
+    // 未ログインはログイン画面へ（/office/ の画面は、これまでどおり index.html から入り直す）
+    if (!window.API || !window.KPLayout || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
     const got = await KPLayout.init({ active: ACTIVE[opts.active] || ACTIVE.monthly, access: opts.access || "office" });
     if (!got) return null;
     document.body.classList.add("of-app");

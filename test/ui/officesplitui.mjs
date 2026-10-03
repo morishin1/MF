@@ -4,8 +4,9 @@
 //   ・人事（hr）は人事・労務だけ、経理（finance）は経理・事務だけ、管理者・経営者は両方
 //   ・Office のヘッダーが出る人は、押して入れる（出たのに 403・追い返される、を作らない）
 //   ・左メニューは担当のグループだけ。担当でない画面を直接開いたら、ホームへ戻す
-//   ・ダッシュボードは、担当の行だけ読む・出す（担当でない API を呼んで 403 の行を作らない）
-//   ・責任者（manager）は、今までどおり /office/（月末月初）だけ。人事・労務、経理・事務の管理画面には入れない
+//   ・Office ホーム（/office/）は、担当の数字だけ読む・出す（担当でない API を呼んで 403 の行を作らない）
+//   ・責任者（manager）は、月末月初業務（/office/monthly.html）だけ。人事・労務、経理・事務の管理画面には入れない
+//   ・⚙管理はシステム設定だけ（管理者・経営者）。業務の担当（人事・経理）には出さない（業務は Office の左メニューから）
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -58,7 +59,7 @@ const side = (page) => page.locator(".kp-sidebar .kp-side-item > span:not(.mater
   .then((a) => a.map((x) => x.trim()));
 const groups = (page) => page.locator(".kp-side-group .lb").allInnerTexts().then((a) => a.map((x) => x.trim()));
 const officeBtn = (page) => page.locator('.topbar [data-shortcut="office"]');
-const rowsOf = (page) => page.locator(".od-row .od-label").allInnerTexts().then((a) => a.map((x) => x.trim()));
+const cardsOf = (page) => page.locator("#cards .oh-card .lb .t").allInnerTexts().then((a) => a.map((x) => x.trim()));
 const called = (page, re) => page.calls.some((u) => re.test(u));
 
 const HR_PAGE = "admin-members.html";
@@ -70,32 +71,29 @@ console.log("— 人事（hr）: 人事・労務だけ —");
   check(pathOf(p) === `/${HR_PAGE}`, `人事は 人事・労務の画面（${HR_PAGE}）を開ける（いま ${pathOf(p)}）`);
   check((await groups(p)).join("|") === "人事・労務", `左メニューは「人事・労務」のグループだけ（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
-  check(items.includes("ダッシュボード") && items.includes("メンバー") && items.includes("勤怠管理") && items.includes("雇用契約"), `人事・労務の項目が並ぶ（${items.join("|")}）`);
-  check(!items.some((x) => ["経費精算", "月次業務", "社内文書", "会計", "お知らせ配信"].includes(x)), "経理・事務の項目は出ない");
-  check((await p.locator(".topbar .kp-app").innerText()).includes("管理"), "ヘッダーに「/ 管理」が出る（管理画面の中）");
-  // Office は全員 /office/（2026-10-02）。人事だけの人は /office（月末月初）に入れないので、Office は出さない
-  check(await officeBtn(p).count() === 0, "人事だけの人には、ヘッダーの Office を出さない（/office に入れない）");
-  // 管理画面へは ⚙管理 から。担当者には管理画面の入口だけ
-  check(await p.locator("#kp-admin-menu-btn").count() === 1, "⚙管理が出る（管理画面の入口）");
-  await p.locator("#kp-admin-menu-btn").click();
-  const menu = await p.locator("#kp-admin-menu-panel a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
-  check(menu.join() === "admin-dashboard.html", `⚙管理は管理画面の入口だけ（権限・端末・設定は出さない。いま ${menu.join()}）`);
+  check(items.includes("ホーム") && items.includes("メンバー") && items.includes("勤怠管理") && items.includes("雇用契約"), `人事・労務の項目が並ぶ（${items.join("|")}）`);
+  check(!items.some((x) => ["経費精算", "月次業務", "請求・支払", "社内文書", "会計", "お知らせ配信"].includes(x)), "経理・事務・社内管理の項目は出ない");
+  check((await p.locator(".topbar .kp-app").innerText()).includes("Office"), "ヘッダーに「/ Office」が出る（Office の中）");
+  // 人事も Office（人事・労務）に入れる。行き先は Office ホーム（/office/）
+  check(await officeBtn(p).count() === 1 && (await officeBtn(p).getAttribute("href")) === "/office/", "人事にもヘッダーの Office → /office/");
+  // ⚙管理はシステム設定だけ（管理者・経営者）。人事には出さない
+  check(await p.locator("#kp-admin-menu-btn").count() === 0, "⚙管理は出ない（業務は Office の左メニューから）");
   await p.close();
 
   const f = await open(FIN_PAGE, { roles: ["hr"] });
   check(pathOf(f) === "/home.html", `人事が 経理・事務の画面（${FIN_PAGE}）を直接開いたらホームへ（いま ${pathOf(f)}）`);
   await f.close();
-  for (const u of ["admin-closing.html", "admin-month-start.html", "admin-docs.html", "admin-notices.html", "admin-site-news.html", "admin-settings.html"]) {
+  for (const u of ["admin-closing.html", "admin-month-start.html", "admin-docs.html", "admin-notices.html", "admin-site-news.html", "admin-settings.html", "office/monthly.html", "office/billing.html"]) {
     const q = await open(u, { roles: ["hr"] });
     check(pathOf(q) === "/home.html", `人事が ${u} を直接開いたらホームへ`);
     await q.close();
   }
 
-  const d = await open("admin-dashboard.html", { roles: ["hr"] });
-  check(pathOf(d) === "/admin-dashboard.html", "人事はダッシュボードを開ける");
-  const rows = await rowsOf(d);
-  check(rows.join("|") === "入社手続き待ち|退社手続き待ち|契約待ち|勤怠確認|休暇・稟議の承認", `ダッシュボードは人事・労務の行だけ（いま ${rows.join("|")}）`);
-  check(called(d, /\/api\/hr\b/) && !called(d, /\/api\/closing/) && !called(d, /\/api\/billing-progress/), "担当でない API（月次・請求）は呼ばない");
+  const d = await open("office/", { roles: ["hr"] });
+  check(pathOf(d) === "/office/", "人事は Office ホームを開ける");
+  const c = await cardsOf(d);
+  check(c.join("|") === "勤怠要確認|入社準備", `Office ホームは人事・労務の数字だけ（いま ${c.join("|")}）`);
+  check(called(d, /\/api\/hr\b/) && !called(d, /\/api\/closing/) && !called(d, /\/api\/office(\?|$)/), "担当でない API（月次・請求）は呼ばない");
   await d.close();
 }
 
@@ -103,12 +101,12 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
 {
   const p = await open(FIN_PAGE, { roles: ["finance"] });
   check(pathOf(p) === `/${FIN_PAGE}`, `経理は 経理・事務の画面（${FIN_PAGE}）を開ける（いま ${pathOf(p)}）`);
-  check((await groups(p)).join("|") === "経理・事務", `左メニューは「経理・事務」のグループだけ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "経理・事務|社内管理", `左メニューは「経理・事務」「社内管理」だけ（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
-  check(items.includes("ダッシュボード") && items.includes("経費精算") && items.includes("月次業務") && items.includes("社内文書"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
+  check(items.includes("ホーム") && items.includes("経費精算") && items.includes("月次業務") && items.includes("請求・支払") && items.includes("社内文書"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["メンバー", "勤怠管理", "雇用契約", "入退社", "評価・キャリア", "会計", "お知らせ配信"].includes(x)), "人事・労務の項目・会計・お知らせ配信は出ない");
   check(await officeBtn(p).count() === 1 && (await officeBtn(p).getAttribute("href")) === "/office/", "ヘッダーの Office → /office/（役割で行き先を変えない）");
-  check(await p.locator("#kp-admin-menu-btn").count() === 1, "⚙管理が出る（管理画面の入口）");
+  check(await p.locator("#kp-admin-menu-btn").count() === 0, "⚙管理は出ない（業務は Office の左メニューから）");
   await p.close();
 
   const h = await open(HR_PAGE, { roles: ["finance"] });
@@ -120,23 +118,23 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
     await q.close();
   }
 
-  const d = await open("admin-dashboard.html", { roles: ["finance"] });
-  const rows = await rowsOf(d);
-  check(rows.join("|") === "経費承認|月次未完了|請求・支払の進行中", `ダッシュボードは経理・事務の行だけ（いま ${rows.join("|")}）`);
-  check(!called(d, /\/api\/hr\b/) && called(d, /\/api\/closing/) && called(d, /\/api\/billing-progress/), "担当でない API（人事）は呼ばない");
+  const d = await open("office/", { roles: ["finance"] });
+  const fc = await cardsOf(d);
+  check(fc.join("|") === "経費承認待ち|月次残件|契約期限|請求未完了", `Office ホームは経理・事務・月次の数字だけ（いま ${fc.join("|")}）`);
+  check(!called(d, /\/api\/hr\b/) && called(d, /\/api\/office(\?|$)/), "担当でない API（人事）は呼ばない");
   await d.close();
 
-  // 月末月初（/office/）は、経理・事務の「月次業務」の中の「月末月初業務」から入る（経理は access.office もある）
+  // 月末月初業務（/office/monthly.html）は、経理・事務の「月次業務」の帯の先頭（経理は access.office もある）
   const c = await open("admin-closing.html", { roles: ["finance"] });
   const tabs = (await c.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
-  check(tabs.join("|") === "月次締め|月初作業管理|月末月初業務", `月次業務の帯に「月末月初業務」が出る（いま ${tabs.join("|")}）`);
+  check(tabs.join("|") === "月末月初業務|月次締め|月初作業管理", `月次業務の帯に「月末月初業務」が出る（いま ${tabs.join("|")}）`);
   await c.close();
 }
 
 console.log("\n— 管理者・経営者: 両方 —");
 for (const [who, label] of [[{ isAdmin: true }, "管理者"], [{ roles: ["owner"] }, "経営者"]]) {
   const p = await open(HR_PAGE, who);
-  check((await groups(p)).join("|") === "人事・労務|経理・事務", `${label}: 左メニューは両方のグループ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人事・労務|経理・事務|社内管理", `${label}: 左メニューは全部のグループ（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
   check(items.includes("会計") && items.includes("お知らせ配信"), `${label}: 会計・お知らせ配信も出る`);
   check(await p.locator("#kp-admin-menu-btn").count() === 1, `${label}: ⚙管理が出る`);
@@ -144,24 +142,25 @@ for (const [who, label] of [[{ isAdmin: true }, "管理者"], [{ roles: ["owner"
   const f = await open(FIN_PAGE, who);
   check(pathOf(f) === `/${FIN_PAGE}`, `${label}: 経理・事務の画面も開ける`);
   await f.close();
-  const d = await open("admin-dashboard.html", who);
-  check((await rowsOf(d)).length === 8, `${label}: ダッシュボードは8行（人事・労務5＋経理・事務3）`);
+  const d = await open("office/", who);
+  const want = who.isAdmin ? 4 : 6;   // 管理者は月末月初業務（access.office）を持たない
+  check((await cardsOf(d)).length === want, `${label}: Office ホームのカードは ${want}つ（いま ${(await cardsOf(d)).join("|")}）`);
   await d.close();
 }
 
 console.log("\n— 人事＋経理: 両方に入れる —");
 {
   const p = await open(HR_PAGE, { roles: ["hr", "finance"] });
-  check((await groups(p)).join("|") === "人事・労務|経理・事務", "人事＋経理: 両方のグループ");
+  check((await groups(p)).join("|") === "人事・労務|経理・事務|社内管理", "人事＋経理: 全部のグループ");
   await p.close();
 }
 
-console.log("\n— 責任者（manager）: 今までどおり /office/ だけ —");
+console.log("\n— 責任者（manager）: 月末月初業務だけ —");
 {
   const h = await open("home.html", { roles: ["manager"] });
-  check(await officeBtn(h).count() === 1 && (await officeBtn(h).getAttribute("href")) === "/office/", "ヘッダーの Office → /office/（月末月初）");
+  check(await officeBtn(h).count() === 1 && (await officeBtn(h).getAttribute("href")) === "/office/", "ヘッダーの Office → /office/（Office ホーム）");
   await h.close();
-  for (const u of [HR_PAGE, FIN_PAGE, "admin-dashboard.html"]) {
+  for (const u of [HR_PAGE, FIN_PAGE, "admin-closing.html"]) {
     const q = await open(u, { roles: ["manager"] });
     check(pathOf(q) === "/home.html", `責任者が ${u} を直接開いたらホームへ`);
     await q.close();

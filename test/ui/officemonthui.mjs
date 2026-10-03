@@ -90,7 +90,7 @@ const btnGone = (sel) => ({ fn: (s) => !document.querySelector(`.of-drawer ${s}`
 console.log("=== PP：作成済み → 送付済み → 完了 ===");
 {
   seed();
-  const { page, errs, dialogs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs, dialogs } = await open(`/office/monthly.html?month=${M}`);
   check((await stageOf(page, "田中 太郎")).includes("請求作成待ち"), "はじめは請求作成待ち");
   await openRow(page, "田中 太郎");
   const created = '[data-progress="invoice_created"][data-done="1"]';
@@ -122,7 +122,7 @@ console.log("=== PP：作成済み → 送付済み → 完了 ===");
 console.log("\n=== BP：作成済み → 送付済み → 請求書を受領済み → 支払準備 ===");
 {
   seed();
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await openRow(page, "鈴木 花子");
   for (const step of ["invoice_created", "invoice_sent"]) {
     const sel = `[data-progress="${step}"][data-done="1"]`;
@@ -142,7 +142,7 @@ console.log("\n=== BP：作成済み → 送付済み → 請求書を受領済�
 console.log("\n=== 稼働が未確定：作成済みにできない ===");
 {
   seed({ confirmed: false });
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await openRow(page, "田中 太郎");
   const btn = page.locator('.of-drawer [data-progress="invoice_created"]');
   check(await btn.isDisabled(), "「請求書を作成済みにする」は押せない");
@@ -158,7 +158,7 @@ console.log("\n=== BP：請求額の登録 → 照合 → 承認 → 支払予�
   for (const p of rows("gw_billing_progress")) Object.assign(p, { board_created: true, sent: true, bp_invoice_received: p.employee_id === E_BP });
   mem.rows.gw_site_contract_terms = [{ id: uid(710), tenant_id: T1, site_contract_id: C_BP, valid_from: "2026-04-01", valid_to: null,
     pricing_type: "monthly", sales_unit_price: 800000, purchase_unit_price: 550000, settlement_mode: "fixed", prorate: false }];
-  const { page, errs, dialogs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs, dialogs } = await open(`/office/monthly.html?month=${M}`);
   check((await page.locator("#closebar").innerText()).includes("残り 1 件"), "月次完了のバー：残り 1 件（BP の支払）");
   check(await page.locator('#closebar [data-close-month="close"]').isDisabled(), "まだ月次完了にできない");
   check((await stageOf(page, "鈴木 花子")).includes("支払準備"), "BP は支払準備");
@@ -202,7 +202,7 @@ console.log("\n=== 責任者：支払のボタンは出ない ===");
   seed();
   for (const p of rows("gw_billing_progress")) Object.assign(p, { board_created: true, sent: true, bp_invoice_received: p.employee_id === E_BP });
   ctl.who = MANAGER;
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await openRow(page, "鈴木 花子");
   await page.waitForSelector('#payBody [data-pay="register"]');
   check((await page.locator("#payBody").innerText()).includes("契約条件が登録されていません"), "契約条件が無いと、契約どおりの額は出せない（理由を出す）");

@@ -35,7 +35,7 @@
 
     .oh-two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:14px; }
     .oh-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
-    .oh-panel h2 { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; display:flex; align-items:baseline; gap:10px; }
+    .oh-panel h2 { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; display:flex; align-items:baseline; gap:4px 10px; flex-wrap:wrap; }
     .oh-panel h2 small { font-size:12px; font-weight:500; color:#6b7080; }
     .oh-panel h2 a { margin-left:auto; font-size:12px; font-weight:700; }
 
@@ -58,7 +58,11 @@
 
     @media (max-width: 1180px) { .oh-cards { grid-template-columns:repeat(3,minmax(0,1fr)); } }
     @media (max-width: 900px) { .oh-two { grid-template-columns:1fr; } }
-    @media (max-width: 560px) { .oh-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } .oh-pri { width:auto; } }
+    @media (max-width: 560px) {
+      .oh-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .oh-card.hot .lb::after { display:none; }          /* 狭い画面では、枠と数字で示す（ラベルの折り返しを避ける） */
+      .oh-pri { width:auto; }
+    }
   </style>
 </head>
 <body>
@@ -167,7 +171,7 @@
     ].filter(Boolean);
     el("cards").innerHTML = cards.map((c) => `
       <a class="oh-card${c.v ? " hot" : ""}" href="${esc(c.href)}"${c.hint ? ` title="${esc(c.hint)}"` : ""}>
-        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${c.icon}</span>${esc(c.label)}</span>
+        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${c.icon}</span><span class="t">${esc(c.label)}</span></span>
         <span class="v">${c.v === undefined ? "—" : c.v}${c.of != null && c.v !== undefined ? `<small>/ ${c.of}</small>` : ""}</span>
       </a>`).join("");
 
@@ -190,7 +194,8 @@
       add(3, "請求・支払", "支払の登録・確認", "", t.payment?.count || 0, mq("payment"));
       const exp = expiring || [];
       add(1, "契約", "契約期限切れ（更新未確認）", "契約期間が終わっていて、更新の確認がまだ", exp.filter((r) => r.periodTo < today).length, "/office/monthly.html?tag=expiring");
-      add(3, "契約", "契約期限の確認", "30日以内に契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo >= today).length, "/office/monthly.html?tag=expiring");
+      add(2, "契約", "契約期限（今日まで）", "今日で契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo === today).length, "/office/monthly.html?tag=expiring");
+      add(3, "契約", "契約期限の確認", "30日以内に契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo > today).length, "/office/monthly.html?tag=expiring");
     }
     if (can.hr) {
       add(0, "人事・労務", "勤怠の修正申請", "打刻の修正申請", badges.timecard || 0, "/admin-timecard.html");
@@ -207,8 +212,8 @@
     todo.sort((a, b2) => a.pri - b2.pri || b2.count - a.count);
     el("todo").innerHTML = todo.length ? todo.map((t) => `
       <a class="oh-row" href="${esc(t.href)}">
-        <span class="oh-pri p${t.pri}"><span class="material-symbols-outlined" aria-hidden="true">${PRI[t.pri].icon}</span>${PRI[t.pri].label}</span>
-        <span class="oh-main"><span class="oh-label">${esc(t.label)}<span class="oh-area">${esc(t.area)}</span></span>${t.hint ? `<div class="oh-hint">${esc(t.hint)}</div>` : ""}</span>
+        <span class="oh-pri p${t.pri}"><span class="material-symbols-outlined" aria-hidden="true">${PRI[t.pri].icon}</span><span class="t">${PRI[t.pri].label}</span></span>
+        <span class="oh-main"><span class="oh-label"><span class="t">${esc(t.label)}</span><span class="oh-area">${esc(t.area)}</span></span>${t.hint ? `<div class="oh-hint">${esc(t.hint)}</div>` : ""}</span>
         <span class="oh-n">${t.count}<small style="font-size:11px;font-weight:700;color:#6b7080;">件</small></span>
         <span class="material-symbols-outlined go" aria-hidden="true">chevron_right</span>
       </a>`).join("")
