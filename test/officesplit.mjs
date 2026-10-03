@@ -162,12 +162,23 @@ function tableOf(name, endMark) {
   return Function(`"use strict"; return (${body.slice(0, body.lastIndexOf("];") + 1)});`)();
 }
 const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会社全体の管理、判断）");
-const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // 管理画面: 人事・労務");
+const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  const OFFICE_GROUPS");
 
-ok("グループの when: 人事・労務 は officeHr、経理・事務 は officeFinance", () => {
-  assert.equal(OFFICE_GROUPS.find((g) => g.key === "office-hr").when, "officeHr");
-  assert.equal(OFFICE_GROUPS.find((g) => g.key === "office-ops").when, "officeFinance");
-  assert.equal(OFFICE_TOP[0].when, "officeAny", "ダッシュボードは どちらかに入れる人");
+ok("左メニューの項目の when: 人事・労務は officeHr、経理・事務・社内文書は officeFinance、月末月初業務・請求・支払は officeApp、会計・お知らせ配信は adminApp", () => {
+  const whenOf = (k) => OFFICE_GROUPS.flatMap((g) => g.items).find((i) => i.key === k)?.when;
+  const tabWhen = (item, tab) => OFFICE_GROUPS.flatMap((g) => g.items).find((i) => i.key === item)?.tabs?.find((t) => t.key === tab)?.when;
+  for (const g of OFFICE_GROUPS.filter((x) => x.key === "office-hr")) for (const i of g.items) assert.equal(i.when, "officeHr", i.key);
+  // 月次業務は、中のタブのどれかに入れる人（月末月初業務＝officeApp、月次締め・月初作業管理＝officeFinance）
+  assert.equal(whenOf("office_monthly"), "officeMonthly");
+  assert.equal(tabWhen("office_monthly", "office_monthly"), "officeApp");
+  assert.equal(tabWhen("office_monthly", "closing"), "officeFinance");
+  assert.equal(tabWhen("office_monthly", "monthstart"), "officeFinance");
+  assert.equal(whenOf("office_billing"), "officeApp");
+  assert.equal(whenOf("expenses"), "officeFinance");
+  assert.equal(whenOf("templates"), "officeFinance");
+  assert.equal(whenOf("accounting"), "adminApp");
+  assert.equal(whenOf("notices"), "adminApp");
+  assert.equal(OFFICE_TOP[0].when, "officeEntry", "ホームは Office に入れる人（人事・労務／経理・事務／月末月初業務のどれか）");
 });
 
 const initOf = (file) => (read(file).match(/KPLayout\.init\(\{[\s\S]*?\}\)/) || [""])[0];
@@ -181,15 +192,16 @@ ok("左メニューの各グループの画面は、そのグループの access
   const bad = [];
   for (const g of OFFICE_GROUPS) {
     for (const it of g.items) {
-      // 管理者・経営者のままの項目（会計・お知らせ配信）は、画面も roles（admin/owner）のまま
-      const hrefs = [it.href, ...(it.tabs || []).map((t) => t.href)]
-        .filter((h) => /^admin-[a-z-]+\.html/.test(h)).map((h) => h.replace(/[?#].*$/, ""));
-      for (const h of new Set(hrefs)) {
-        if (it.when === "adminApp") {
+      // 管理者・経営者のままの項目（会計・お知らせ配信）は、画面も roles（admin/owner）のまま。
+      // タブに when があれば、そのタブの画面はタブの when で守る（月次業務の中の月次締め・月初作業管理）
+      const pages = [[it.href, it.when], ...(it.tabs || []).map((t) => [t.href, t.when || it.when])]
+        .filter(([h]) => /^admin-[a-z-]+\.html/.test(h)).map(([h, w]) => [h.replace(/[?#].*$/, ""), w]);
+      for (const [h, when] of new Map(pages)) {
+        if (when === "adminApp") {
           if (!/roles:\s*\["admin",\s*"owner"\]/.test(initOf(h))) bad.push(`${h}: 管理者・経営者の画面のはずが roles が違う`);
           continue;
         }
-        const want = `"${g.when}"`;
+        const want = `"${when}"`;
         if (accessOfPage(h) !== want) bad.push(`${h}: access が ${accessOfPage(h)}（${want} のはず）`);
       }
     }
@@ -197,8 +209,9 @@ ok("左メニューの各グループの画面は、そのグループの access
   assert.deepEqual(bad, []);
 });
 
-ok("Office のダッシュボードは、人事・労務／経理・事務のどちらかで入れる", () => {
-  assert.equal(accessOfPage("admin-dashboard.html"), '["officeHr","officeFinance"]');
+ok("Office ホーム（/office/）は、人事・労務／経理・事務／月末月初業務のどれかで入れる。旧ダッシュボードは /office/ へ送る", () => {
+  assert.match(read("office/index.html"), /O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office"\] \}\)/);
+  assert.match(read("admin-dashboard.html"), /location\.replace\("\/office\/"/);
 });
 
 ok("Office の画面に、役割（roles: admin/owner）だけの入口が残っていない（管理者・経営者のままの画面を除く）", () => {
@@ -213,26 +226,33 @@ ok("Office の画面に、役割（roles: admin/owner）だけの入口が残っ
   assert.deepEqual(bad, []);
 });
 
-ok("ダッシュボードの行は、担当の分だけ読む・出す（担当でないAPIを呼んで 403 の行を作らない）", () => {
-  const src = read("admin-dashboard.html");
-  assert.match(src, /access\.officeHr \? safe\(API\.hrList\(\)\)/);
-  assert.match(src, /access\.officeFinance \? safe\(API\.closing\(month\)\)/);
-  assert.match(src, /access\.officeFinance \? safe\(API\.listBillingProgress\(month\)\)/);
-  assert.match(src, /access\.officeHr && \{ name: "人事・労務"/);
-  assert.match(src, /access\.officeFinance && \{ name: "経理・事務"/);
+ok("Office ホームの数字は、担当の分だけ読む・出す（担当でないAPIを呼んで 403 の行を作らない）", () => {
+  const src = read("office/index.html");
+  assert.match(src, /hr: KPLayout\.hasAccess\(me, "officeHr"\)/);
+  assert.match(src, /fin: KPLayout\.hasAccess\(me, "officeFinance"\)/);
+  assert.match(src, /app: O\.allows\(me\)/);
+  assert.match(src, /can\.hr \? safe\(API\.hrList\(\)\)/);
+  assert.match(src, /can\.fin && !can\.app \? safe\(API\.closing\(closingMonth\)\)/);
+  assert.match(src, /can\.app \? safe\(API\.swr\(OFFICE_KEY/);
+  assert.match(src, /if \(can\.hr\) \{/);
+  assert.match(src, /if \(can\.fin\) \{/);
+  assert.match(src, /if \(can\.app && od\) \{/);
 });
 
-ok("/office/ は全員同じナビ（access のキーだけで絞る）。管理画面へは ⚙管理 から。担当者（人事・経理）の ⚙管理 は管理画面の入口だけ", () => {
-  // Office は1つの業務アプリ（2026-10-02 の決定）：/office/ のナビに管理画面（admin-*.html）を入れない
-  const src = strip(read("js/office-layout.js"));
-  assert.doesNotMatch(src, /admin-/);
-  assert.match(src, /const navFor = \(me\) => NAV\.filter/);
-  // ⚙管理：管理者は設定一式、担当者（officeAny）は管理画面の入口だけ。左メニューは担当のグループだけ（when）
+ok("Office は1つの左メニュー（ホーム／人事・労務／経理・事務／社内管理）。⚙管理は設定系だけ。/office/ も同じ枠（専用ヘッダー・GWへ戻るなし）", () => {
+  assert.deepEqual(OFFICE_GROUPS.map((g) => g.label), ["人事・労務", "経理・事務", "社内管理"]);
+  assert.equal(OFFICE_TOP[0].label, "ホーム");
   const lay = strip(read("js/layout.js"));
-  assert.match(lay, /const showGear = showAdminTools \|\| \(officeUser && !memberView\);/);
-  assert.match(lay, /\(full \? \[ADMIN_CONSOLE, \.\.\.SETTINGS_ITEMS\] : \[ADMIN_CONSOLE\]\)/);
+  // ⚙管理は管理者・経営者だけ、中身は設定系（SETTINGS_ITEMS）だけ。業務の入口は置かない
+  assert.match(lay, /const showGear = showAdminTools;/);
+  assert.match(lay, /\$\{SETTINGS_ITEMS\.map\(/);
+  assert.doesNotMatch(lay, /ADMIN_CONSOLE/);
   assert.match(lay, /officeHr: officeHr,/);
   assert.match(lay, /officeFinance: officeFinance,/);
+  // /office/ の画面は KPLayout（共通の枠）で描く。専用ヘッダー・GWへ戻るは持たない
+  const ol = strip(read("js/office-layout.js"));
+  assert.match(ol, /KPLayout\.init\(\{ active: ACTIVE\[opts\.active\] \|\| ACTIVE\.monthly, access: opts\.access \|\| "office" \}\)/);
+  assert.doesNotMatch(ol, /GWへ戻る|of-back|of-bar|admin-/);
 });
 
 console.log("\n— 5. DB（db/115_office_split.sql）—");

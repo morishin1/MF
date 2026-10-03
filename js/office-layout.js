@@ -1,68 +1,29 @@
-// 月末月初業務（/office）専用の、軽いヘッダー。
+// Office の /office/ 配下の画面（ホーム・月次業務・請求・支払・勤務表・契約条件）の共通部品。
 //
-// ■ /sales・/hr と同じ作り（js/sales-layout.js）
-//   左サイドメニューではなく、ロゴ＋ナビ＋操作だけの専用ヘッダーにする。
-//   ページどうしで共通の見た目（一覧・ドロワー・状態のラベル）は、ここに置く。
+// ■ 見た目の枠（ヘッダー・左メニュー）は、Office の他の画面（人事・労務／経理・事務／社内管理）と同じ
+//   2026-10-03 の Office UI/UX 再設計で、月次業務の専用ヘッダーと「GWへ戻る」を廃止した。
+//   枠は js/layout.js（KPLayout）の Office 共通の左メニュー・ヘッダーで描く。ここに枠を持たない。
+//   ここに残すのは、/office/ の画面どうしで共通の中身の見た目（一覧・ドロワー・状態のラベル）と道具だけ。
 //
 // ■ 権限
-//   /office を開けるのは、経営者・責任者・経理だけ（サーバの canAccessOffice、DB の gw_is_office と同じ）。
-//   入口は /api/me の access.office だけで決める。画面側で役割名を並べ直さない
-//   （ヘッダーに出たのに API が 403、を作らない。test/accessparity.mjs が見張る）。
+//   月末月初業務の画面（月次業務・請求・支払・勤務表・契約条件）を開けるのは、経営者・責任者・経理だけ
+//   （サーバの canAccessOffice、DB の gw_is_office と同じ）。入口は /api/me の access.office だけで決める
+//   （KPLayout.init の access: "office"）。Office ホーム（/office/）だけは、Office に入れる人の全員
+//   （officeHr・officeFinance・office のどれか）が開け、中身を担当の分だけ出す（opts.access で渡す）。
+//   画面側で役割名を並べ直さない（メニューに出たのに API が 403、を作らない。test/accessparity.mjs が見張る）。
 //   古い応答（access が無い）のときは、入れない側に倒す。
 (function () {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // ■ Office は1つの業務アプリ（役割で入口も見た目も変えない。2026-10-02 に決めた）
-  //   経営者でも、経理でも、人事・労務でも、Office を押したら同じ /office/ に入り、
-  //   同じヘッダー・同じナビ・同じコンテンツ幅・同じカード／ボタン／フォント／色になる。
-  //   役割で変わるのは「見えるメニュー・データ・操作」だけ（＝権限）。ナビ全体を役割で差し替えない。
-  //
-  //   以前は、admin/owner のときだけ管理画面（ダッシュボード・人事・労務・経理・事務）のナビを足していた。廃止した。
-  //   管理画面（admin-*.html）は残してあるが、Office の入口でもナビでもない（ヘッダー右の ⚙管理 から開く）。
-  //
-  // ■ ナビは1つだけ定義する（NAV）
-  //   needs … その項目を出すのに要る権限。/api/me の access のキー（サーバの判定そのもの）。
-  //           役割名（owner・finance など）は、ここでも持たない。
-  //   機能を足すときは、ここに1行足す（人事・労務の機能なら needs: "recruit"、など）。
-  //   権限のない人には、その項目だけを出さない（ナビ全体は変えない）
-  const NAV = [
-    { key: "monthly", href: "/office/", label: "月次業務", icon: "event_available", needs: "office" },
-  ];
-  const navFor = (me) => NAV.filter((n) => !n.needs || Boolean(me?.access?.[n.needs]));
+  // 各画面の鍵 → Office の左メニューの鍵（js/layout.js の OFFICE_GROUPS「月末月初業務」の match）
+  const ACTIVE = { home: "office_home", monthly: "office_monthly", billing: "office_billing", timesheet: "office_timesheet", terms: "office_terms" };
 
   function css() {
     if (document.getElementById("office-layout-css")) return;
     const style = document.createElement("style");
     style.id = "office-layout-css";
     style.textContent = `
-      body.of-app { background:#f6f6f2; font-family:'Zen Kaku Gothic New', sans-serif; }
-      .of-bar { background:#fff; border-bottom:1px solid #e2e2dc; padding:0 20px;
-                display:flex; align-items:center; gap:22px; height:56px; position:sticky; top:0; z-index:20; }
-      .of-logo { font-weight:700; font-size:14px; color:#1b2440; letter-spacing:.02em; white-space:nowrap; }
-      .of-logo span { color:#6b7080; font-weight:500; }
-      .of-back { display:flex; align-items:center; gap:4px; color:#9aa0b4; text-decoration:none;
-                 font-size:11.5px; white-space:nowrap; }
-      .of-back .material-symbols-outlined { font-size:16px; }
-      .of-back:hover { color:#6b7080; }
-      .of-nav { display:flex; gap:4px; flex:1; min-width:0; overflow-x:auto; }
-      .of-nav a { display:flex; align-items:center; gap:6px; padding:0 12px; height:56px; white-space:nowrap;
-                  color:#4a5068; text-decoration:none; font-size:13px; font-weight:500;
-                  border-bottom:3px solid transparent; }
-      .of-nav a .material-symbols-outlined { font-size:19px; }
-      .of-nav a.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
-      .of-actions { display:flex; align-items:center; gap:8px; }
-      .of-iconbtn { position:relative; border:none; background:none; cursor:pointer; padding:8px;
-                    border-radius:8px; color:#4a5068; display:flex; }
-      .of-iconbtn:hover { background:#f6f6f2; }
-      .of-menu { position:absolute; right:20px; top:56px; background:#fff; border:1px solid #e2e2dc;
-                 border-radius:8px; box-shadow:0 8px 24px rgba(27,36,64,.12); min-width:180px; z-index:30; }
-      .of-menu a, .of-menu button { display:block; width:100%; text-align:left; border:none; background:none;
-                 padding:10px 14px; font-size:13px; color:#1b2440; cursor:pointer; font-family:inherit;
-                 text-decoration:none; box-sizing:border-box; }
-      .of-menu a:hover, .of-menu button:hover { background:#f6f6f2; }
-      .of-wrap { max-width:1280px; margin:0 auto; padding:24px 16px 60px; }
-
       /* アイコンは幅を 1em に固定する。フォントの読込前・読込に失敗したときに、
          アイコン名（chevron_right など）の文字がそのまま幅をとって、横にはみ出さないように */
       body.of-app .material-symbols-outlined { display:inline-block; width:1em; overflow:hidden;
@@ -88,76 +49,46 @@
       .of-btn.sec { background:#fff; color:#1b2440; border-color:#c7cad4; }
       .of-btn .material-symbols-outlined { font-size:16px; }
       .of-btn:disabled { opacity:.55; cursor:default; }
-      .of-btn:focus-visible, .of-iconbtn:focus-visible, .of-nav a:focus-visible, button:focus-visible {
+      .of-btn:focus-visible, button:focus-visible {
         outline:2px solid #1b2440; outline-offset:2px; }
+
+      /* 月次進捗（Office ホーム・月次業務で共通）。全体の割合＋工程ごとの 済 / 対象 */
+      .of-prog { display:grid; gap:9px; }
+      .of-prog .all { display:flex; align-items:baseline; gap:8px; font-size:12.5px; color:#4a5068; font-weight:700; }
+      .of-prog .all b { font-size:22px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; }
+      .of-prog .row { display:grid; grid-template-columns:120px 1fr 64px; align-items:center; gap:10px; font-size:12.5px; color:#1b2440; }
+      .of-prog .bar { height:8px; background:#efefeb; border-radius:99px; overflow:hidden; }
+      .of-prog .bar i { display:block; height:100%; background:#1b2440; border-radius:99px; }
+      .of-prog .num { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
+      .of-prog .num.ok::before { content:"✓ "; color:#2f6f3a; }
+      @media (max-width: 560px) { .of-prog .row { grid-template-columns:96px 1fr 56px; } }
+
+      /* 月の切り替え（月次業務・請求・支払で共通） */
+      .of-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px 16px; flex-wrap:wrap; margin-bottom:14px; }
+      .of-head .of-sub { margin:0; }
+      .of-month { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+      .of-month input[type="month"] { margin:0; width:auto; font-family:inherit; font-size:14px; font-weight:700; }
 
       .of-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:40; }
       .of-drawer { position:fixed; top:0; right:0; bottom:0; width:560px; max-width:100vw; background:#f6f6f2;
                    z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; }
 
-      @media (max-width: 760px) {
-        .of-bar { gap:10px; padding:0 10px; }
-        .of-back, .of-logo span { display:none; }
-        .of-nav a { padding:0 8px; font-size:12px; }
-        .of-nav a .material-symbols-outlined { display:none; }
-      }
     `;
     document.head.appendChild(style);
   }
 
-  function renderHeader(active, me) {
-    document.body.classList.add("of-app");
-    const name = me?.gw?.employee?.display_name || me?.email || "";
-    const bar = document.createElement("div");
-    bar.className = "of-bar";
-    bar.innerHTML = `
-      <div class="of-logo">EIGHT <span>/ OFFICE</span></div>
-      <a class="of-back" href="/home.html" title="GWへ戻る">
-        <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
-      <nav class="of-nav" aria-label="Office">
-        ${navFor(me).map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}"${n.key === active ? ' aria-current="page"' : ""}>
-          <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
-      </nav>
-      <div class="of-actions">
-        <button class="of-iconbtn" id="of-user-btn" onclick="OfficeLayout.toggleUserMenu()" title="${esc(name)}" aria-label="アカウント">
-          <span class="material-symbols-outlined">account_circle</span>
-        </button>
-      </div>`;
-    document.body.insertBefore(bar, document.body.firstChild);
-    for (const w of document.querySelectorAll(".wrap")) w.classList.add("of-wrap");
-  }
-
-  function toggleUserMenu() {
-    let menu = document.getElementById("of-user-menu");
-    if (menu) { menu.remove(); return; }
-    menu = document.createElement("div");
-    menu.className = "of-menu";
-    menu.id = "of-user-menu";
-    menu.innerHTML = `<button onclick="API.logout();location.href='/index.html'">ログアウト</button>`;
-    document.body.appendChild(menu);
-    setTimeout(() => document.addEventListener("click", closeUserMenuOnce), 0);
-  }
-  function closeUserMenuOnce(e) {
-    const menu = document.getElementById("of-user-menu");
-    if (menu && !menu.contains(e.target) && !e.target.closest?.("#of-user-btn")) menu.remove();
-    document.removeEventListener("click", closeUserMenuOnce);
-  }
-
-  // 入口は、ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで決める。
+  // 入口は、Office の左メニュー・ヘッダーの近道と同じ値（/api/me の access = サーバの canAccessOffice）だけで決める。
   // 役割名は画面側で持たない。access が無い（古い応答）ときは入れない。API.warm にも渡す
   function allows(me) { return Boolean(me?.access?.office); }
 
-  // 前回の身元（/api/me）を覚えていれば、待たずにヘッダーを出して本文を取りにいく。
-  // 確かめるのは裏で。権限が変わっていたら、そこで送り返す
+  // 枠（ヘッダー・Office の左メニュー）は KPLayout が描く。入れない人は KPLayout がホームへ送り返す（null）
   async function init(opts = {}) {
     css();
-    if (!window.API || !API.isLoggedIn()) { location.href = "/index.html"; return null; }
-    const got = await API.enterWithMe(allows, {
-      leave: () => location.replace("/home.html"),
-      lost: () => { location.href = "/index.html"; },
-    });
+    if (!window.API || !window.KPLayout) { location.href = "/index.html"; return null; }
+    const got = await KPLayout.init({ active: ACTIVE[opts.active] || ACTIVE.monthly, access: opts.access || "office" });
     if (!got) return null;
-    renderHeader(opts.active, got.me);
+    document.body.classList.add("of-app");
+    for (const w of document.querySelectorAll(".wrap")) w.classList.add("of-wrap");
     return { me: got.me };
   }
 
@@ -193,5 +124,50 @@
     return `${Number(m)}/${Number(d)}`;
   }
 
-  window.OfficeLayout = { init, allows, navFor, NAV, esc, pill, fmt, fmtDay, toggleUserMenu };
+  /**
+   * 月次進捗の行。/api/office の summary.progress（勤務表回収・稼働確認・売上請求・仕入請求・月次完了）に、
+   * 支払（支払を管理している行のうち、支払済み）を月次完了の前に足す。数え方はサーバの印のまま（画面で判定を増やさない）
+   */
+  function progressOf(data) {
+    const list = ((data && data.summary && data.summary.progress) || []).map((p) => ({ ...p }));
+    const payRows = ((data && data.rows) || []).filter((r) => r.cols && r.cols.payment
+      && !["not_applicable", "unmanaged"].includes(r.cols.payment.state));
+    if (payRows.length) {
+      const at = list.findIndex((p) => p.key === "done");
+      const pay = { key: "payment", label: "支払", done: payRows.filter((r) => r.cols.payment.state === "paid").length, of: payRows.length };
+      list.splice(at < 0 ? list.length : at, 0, pay);
+    }
+    return list;
+  }
+  function progressHtml(list) {
+    const sum = list.reduce((a, p) => [a[0] + p.done, a[1] + p.of], [0, 0]);
+    const pct = (d, o) => (o ? Math.round((d / o) * 100) : 0);
+    const all = sum[1] ? `<div class="all">全体 <b>${pct(sum[0], sum[1])}%</b></div>` : "";
+    return all + list.map((p) => `<div class="row"><span>${esc(p.label)}</span>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${p.of}" aria-valuenow="${p.done}" aria-label="${esc(p.label)}"><i style="width:${pct(p.done, p.of)}%"></i></div>
+        <span class="num${p.of && p.done >= p.of ? " ok" : ""}">${p.done} / ${p.of}</span></div>`).join("");
+  }
+
+  /**
+   * 契約期限の確認が要る行：契約期間の終わり（periodTo）が today から30日以内（過ぎたものも含む）で、
+   * 更新の確認がまだ（renewalStatus が未確認）。/api/office の行の値だけで決める
+   */
+  function expiring(r, today) {
+    if (!r || !r.periodTo || !today) return false;
+    if (r.renewalStatus && r.renewalStatus !== "pending") return false;
+    const t = new Date(`${today}T00:00:00Z`);
+    t.setUTCDate(t.getUTCDate() + 30);
+    return r.periodTo <= t.toISOString().slice(0, 10);
+  }
+
+  /** 請求・支払がまだ終わっていない行：売上請求が未送付／BP請求書が未受領／支払が済んでいない（支払を管理している行だけ） */
+  const PAY_OPEN = ["waiting", "unregistered", "matching", "mismatch", "approved", "scheduled"];
+  function billingOpen(r) {
+    const c = (r && r.cols) || {};
+    return (c.salesInvoice && c.salesInvoice.state !== "sent")
+      || (c.vendorInvoice && c.vendorInvoice.state === "not_received")
+      || (c.payment && PAY_OPEN.includes(c.payment.state));
+  }
+
+  window.OfficeLayout = { init, allows, esc, pill, fmt, fmtDay, progressOf, progressHtml, expiring, billingOpen, PAY_OPEN };
 })();

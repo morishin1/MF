@@ -403,14 +403,31 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
   /* 畳めるメニューは、狭い画面でも縦のまま。
      24項目を横スクロールに並べても、端のほうは誰も見ない。
      開いているのは1グループだけなので、上に置いても本文をさほど押し下げない */
+  /* Office の左メニューは、狭い画面では左から出るドロワー（本文の上に積まない）。
+     本文の先頭の「メニュー」ボタンで開き、背景・Esc・項目を押すと閉じる */
   .kp-sidebar.grouped{
-    display:block; overflow-x:visible; padding:8px 10px 10px;
+    display:block; overflow-x:visible; overflow-y:auto; padding:12px 10px 16px;
+    position:fixed; top:0; left:0; bottom:0; width:min(300px, 86vw); z-index:70;
+    border-right:1px solid var(--border); border-bottom:none;
+    transform:translateX(-102%); transition:transform .2s ease; box-shadow:none; visibility:hidden;
   }
+  .kp-sidebar.grouped.drawer-open{ transform:none; visibility:visible; box-shadow:8px 0 24px rgba(27,36,64,.18); }
+  .kp-side-backdrop{ position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:69; }
+  .kp-side-toggle{ display:flex; }
   .kp-sidebar.grouped .kp-side-item{
     margin-bottom:0; flex:none; font-size:13px; padding:8px 12px;
   }
   .kp-sidebar.grouped .kp-side-item em{ display:inline; }
 }
+
+/* Office の左メニューを開くボタン（狭い画面だけ） */
+.kp-side-toggle{
+  display:none; align-items:center; gap:8px; width:100%; margin:0 0 12px; padding:9px 12px;
+  background:#fff; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13.5px;
+  font-weight:700; color:var(--primary-dark); cursor:pointer; text-align:left;
+}
+.kp-side-toggle small{ font-size:12px; font-weight:500; color:var(--muted); margin-left:auto; }
+.kp-side-backdrop[hidden]{ display:none; }
 
 /* メニュー一覧（メンバーの「メニュー」画面） */
 .kp-menu{ display:grid; gap:10px; }

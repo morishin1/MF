@@ -142,28 +142,40 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   check(/const canSell = me\?\.access \? Boolean\(me\.access\.sell\)/.test(read("js/sales-layout.js")),
     "/sales の入口は access.sell");
 
-  // Office：ヘッダーの近道も /office の入口も、access.office だけで決める（役割名を画面に持たない）。
-  // 金額を扱うので、access が無い古い応答では入れない側に倒す
-  check(/office:\s*Boolean\(me\?\.access\?\.office\)/.test(layout), "ヘッダーの Office は access.office だけ（予備の役割判定を持たない）");
-  // 管理画面（⚙管理）の担当別の入口は、サーバの判定（access.officeHr / officeFinance）。予備は管理者だけ。役割名は並べ直さない
+  // Office：ヘッダーの近道は、Office に入れる人（サーバの access：officeHr／officeFinance／office のどれか）だけ。
+  // 行き先も access で決める（人事・労務／経理・事務の人は Office のホーム、月末月初業務だけの人は /office/）。役割名は並べ直さない
+  check(/officeEntry: me\?\.appRole !== "sr" && \(officeHr \|\| officeFinance \|\| Boolean\(me\?\.access\?\.office\)\)/.test(layout)
+      && /if \(t\.key === "office"\) return Boolean\(shows\.officeEntry\);/.test(layout),
+    "ヘッダーの Office は、サーバの access（officeHr・officeFinance・office）のどれかがある人だけ");
+  // 担当別の入口は、サーバの判定（access.officeHr / officeFinance）。予備は管理者だけ。役割名は並べ直さない
   check(/const flag = \(k\) => me\?\.appRole !== "sr" && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
-    "管理画面の人事・労務／経理・事務は access.officeHr / officeFinance（予備は管理者だけ）");
+    "Office の人事・労務／経理・事務は access.officeHr / officeFinance（予備は管理者だけ）");
   const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  // 入口の判定は、覚えている身元（先に描く）と /api/me（裏で確かめる）の両方で同じ関数を使う（API.enterWithMe）
+  // /office/ の入口は access.office だけ。枠は KPLayout（入れない人はホームへ送り返す）
   check(/function allows\(me\) \{ return Boolean\(me\?\.access\?\.office\); \}/.test(officeLayout)
-      && /API\.enterWithMe\(allows,/.test(officeLayout)
-      && /location\.replace\("\/home\.html"\)/.test(officeLayout),
-    "/office の入口は access.office だけで決め、無ければ home.html へ");
+      && /KPLayout\.init\(\{ active: ACTIVE\[opts\.active\] \|\| ACTIVE\.monthly, access: opts\.access \|\| "office" \}\)/.test(officeLayout),
+    "/office の入口は access.office だけで決め（ホームだけ access を渡す）、無ければ KPLayout がホームへ送り返す");
+  // /office/ 配下の各画面の入口：ホームは Office に入れる人の全員、それ以外（月次業務・請求・支払・勤務表・契約条件）は access.office
+  {
+    const home = read("office/index.html");
+    check(/O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office"\] \}\)/.test(home), "Office ホームは officeHr・officeFinance・office のどれかで入れる");
+    // ホームは、担当でない API を呼ばない（403 の行を作らない）
+    check(/can\.hr \? safe\(API\.hrList\(\)\)/.test(home) && /can\.app \? safe\(API\.swr\(OFFICE_KEY/.test(home)
+      && /can\.fin && !can\.app \? safe\(API\.closing\(/.test(home), "Office ホームは、担当の API だけ呼ぶ");
+    for (const f of ["office/monthly.html", "office/billing.html", "office/timesheet.html", "office/terms.html"]) {
+      const src = read(f);
+      check(/O\.init\(\{ active: "\w+" \}\)/.test(src) && !/O\.init\(\{[^}]*access/.test(src), `${f} は access.office で入口を守る（access を広げない）`);
+    }
+  }
   check(!/["'](owner|manager|finance|hr|sales|recruiter)["']/.test(officeLayout), "/office の画面に役割名を書かない");
-  // Office は役割で入口も見た目も変えない（2026-10-02）：ナビは1つだけ定義し、出し分けは access のキー（needs）だけ。
-  // appRole・admin・owner で、ナビ全体を差し替えない（以前は admin/owner だけ管理画面のナビを足していた）
-  check(!/appRole|isAdmin|\badmin\b|\bowner\b|ADMIN_NAV/.test(officeLayout), "/office の画面は、appRole・admin・owner でナビやレイアウトを分けない");
-  check(/const navFor = \(me\) => NAV\.filter\(\(n\) => !n\.needs \|\| Boolean\(me\?\.access\?\.\[n\.needs\]\)\);/.test(officeLayout),
-    "Office のナビは、全員同じ定義（NAV）を、access のキー（needs）だけで絞る");
-  const navBlock = officeLayout.match(/const NAV = \[([\s\S]*?)\n  \];/)?.[1] || "";
-  const needs = [...navBlock.matchAll(/needs:\s*"(\w+)"/g)].map((m) => m[1]);
-  check(needs.length > 0 && needs.every((k) => Object.keys(accessOf({ roles: [] })).includes(k)), `NAV の needs は、サーバの access（accessOf）のキー（いま ${needs.join("・")}）`);
-  check(!/admin-|\/admin/.test(navBlock), "Office のナビに、管理画面（admin-*.html）を入れない");
+  check(!/appRole|isAdmin|\badmin\b|\bowner\b|ADMIN_NAV|GWへ戻る|of-back/.test(officeLayout), "/office の画面は、appRole・admin・owner で枠を分けない（専用ヘッダー・GWへ戻るを持たない）");
+  // Office の左メニューの項目は、サーバの access のキー（または管理者・経営者の adminApp）だけで出し分ける
+  const officeBlock = layout.slice(layout.indexOf("const OFFICE_TOP = ["), layout.indexOf("// 経営（チーム・会社全体の管理、判断）"));
+  const whens = [...new Set([...officeBlock.matchAll(/when:\s*"(\w+)"/g)].map((m) => m[1]))];
+  const allowed = ["officeHr", "officeFinance", "officeApp", "officeEntry", "officeMonthly", "adminApp"];
+  // 月次業務の入口は、中のタブのどれかに入れる人（月末月初業務＝officeApp、月次締め・月初作業管理＝officeFinance）
+  check(/officeMonthly: officeFinance \|\| Boolean\(me\?\.access\?\.office\),/.test(layout), "月次業務の入口（officeMonthly）＝ officeFinance か access.office");
+  check(whens.length > 0 && whens.every((k) => allowed.includes(k)), `Office の左メニューの when は access 由来のキーだけ（いま ${whens.join("・")}）`);
 
   // 予備の判定（access が無い古い応答のときだけ使う）が、サーバの役割の並びとずれていない
   // （責任者が HR に入れる、という変更のあとに、画面だけ旧仕様のまま残さない）

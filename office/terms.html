@@ -8,12 +8,11 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261002sp2">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261003ux1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261003ux1">
   <style>
-    body { font-family:'Zen Kaku Gothic New', sans-serif; }
-    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     [hidden] { display:none !important; }   /* display を指定した部品でも、hidden で隠れるように */
     .tm-back { display:inline-flex; align-items:center; gap:3px; font-size:12px; color:#6b7080; text-decoration:none; margin-bottom:6px; }
     .tm-back .material-symbols-outlined { font-size:16px; }
@@ -43,7 +42,7 @@
 <body>
 
 <div class="wrap">
-  <a class="tm-back" id="back" href="/office/"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>戻る</a>
+  <a class="tm-back" id="back" href="/office/monthly.html"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>戻る</a>
   <h1 class="of-title">契約条件</h1>
   <p class="of-sub" id="sub"></p>
   <div id="banner" aria-live="polite"></div>
@@ -118,8 +117,10 @@
   </div>
 </div>
 
-<script src="../js/api-client.js?v=20261002sp2"></script>
-<script src="../js/office-layout.js?v=20261002sp2"></script>
+<script src="../js/api-client.js?v=20261003ux1"></script>
+<script src="../js/device.js?v=20261003ux1"></script>
+<script src="../js/layout.js?v=20261003ux1"></script>
+<script src="../js/office-layout.js?v=20261003ux1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -135,7 +136,7 @@
   O.init({ active: "monthly" }).then((ctx) => {
     if (!ctx) return;
     if (!CONTRACT) { banner("err", "対象の現場契約が指定されていません。"); el("form").hidden = true; return; }
-    el("back").href = MONTH ? `timesheet.html?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}` : "/office/";
+    el("back").href = MONTH ? `timesheet.html?contract=${encodeURIComponent(CONTRACT)}&month=${encodeURIComponent(MONTH)}` : "/office/monthly.html";
     wire(); load(); syncType();
   });
 

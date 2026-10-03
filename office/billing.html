@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>請求・支払 - EIGHT OFFICE</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261003ux1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261003ux1">
+  <style>
+    /* 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で並べ直した一覧。
+       操作（作成・送付・受領・照合・支払）は、月次業務の案件の画面で行う（ここでは処理を増やさない） */
+    .bl-sum { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:0 0 14px; }
+    .bl-card { text-align:left; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; cursor:pointer; font-family:inherit; color:inherit; }
+    .bl-card:hover { background:#fafaf7; }
+    .bl-card.on { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
+    .bl-card .lb { font-size:12px; color:#6b7080; font-weight:700; }
+    .bl-card .v { display:block; font-size:24px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; }
+    .bl-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
+    .bl-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px; background:#f6f6f2; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
+    .bl-table td { padding:10px; border-bottom:1px solid #e2e2dc; font-size:13px; vertical-align:top; }
+    .bl-table tr:last-child td { border-bottom:none; }
+    .bl-nm { font-weight:700; color:#1b2440; display:block; }
+    .bl-sub { font-size:11.5px; color:#6b7080; display:block; margin-top:2px; }
+    .bl-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 10px 3px 8px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+    .bl-st .material-symbols-outlined { font-size:14px; }
+    .bl-st.done { background:#d9f0d9; color:#1f6b31; }
+    .bl-st.todo { background:#ffe9d1; color:#a34a00; }
+    .bl-st.warn { background:#fde4e2; color:#b3261e; }
+    .bl-st.mid  { background:#e3e8f6; color:#1b2440; }
+    .bl-st.na   { background:#eeeeea; color:#5b6070; }
+    @media (max-width: 860px) {
+      .bl-sum { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .bl-table, .bl-table tbody, .bl-table tr, .bl-table td { display:block; width:100%; box-sizing:border-box; }
+      .bl-table { border:none; background:none; }
+      .bl-table thead { display:none; }
+      .bl-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:6px 12px; }
+      .bl-table td { display:flex; justify-content:space-between; gap:10px; border:none; padding:5px 0; }
+      .bl-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <div class="of-head">
+    <div>
+      <h1 class="of-title">請求・支払</h1>
+      <p class="of-sub" id="sub">売上請求・仕入請求（BP）・支払の状況を、案件ごとに確認できます。</p>
+    </div>
+    <div class="of-month">
+      <button type="button" class="of-btn sec" id="prev" aria-label="前の月"><span class="material-symbols-outlined">chevron_left</span></button>
+      <input type="month" id="month" aria-label="対象月">
+      <button type="button" class="of-btn sec" id="next" aria-label="次の月"><span class="material-symbols-outlined">chevron_right</span></button>
+      <button type="button" class="of-btn sec" id="thisMonth">今月</button>
+    </div>
+  </div>
+
+  <div id="banner"></div>
+  <div class="bl-sum" id="sum" aria-label="請求・支払の件数"></div>
+
+  <table class="bl-table" aria-label="請求・支払の一覧">
+    <thead><tr><th>客先</th><th>要員</th><th>売上請求</th><th>仕入請求（BP）</th><th>支払</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="6" class="of-empty">読み込み中…</td></tr></tbody>
+  </table>
+  <div class="of-empty" id="empty" hidden></div>
+</div>
+
+<script src="../js/api-client.js?v=20261003ux1"></script>
+<script src="../js/device.js?v=20261003ux1"></script>
+<script src="../js/layout.js?v=20261003ux1"></script>
+<script src="../js/office-layout.js?v=20261003ux1"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const O = window.OfficeLayout;
+  const esc = O.esc;
+
+  const state = { month: null, data: null, filter: "open", seq: 0 };
+  const qs = new URLSearchParams(location.search);
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(qs.get("month") || "")) state.month = qs.get("month");
+
+  // 月次業務（monthly.html）と同じデータ・同じ鍵（取ったぶんは、行き来してもすぐ出る）
+  const officeKey = (month) => `office:${month || ""}`;
+  const fetchOffice = (month) => () => API.api(`/api/office${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  API.warm(officeKey(state.month), fetchOffice(state.month), O.allows);
+
+  O.init({ active: "billing" }).then((ctx) => { if (ctx) { wire(); load(); } });
+
+  const ymAdd = (ym, n) => {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + n, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  const jstMonth = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 7);
+  function setMonth(m) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m || "")) return;
+    state.month = m;
+    history.replaceState(null, "", `${location.pathname}?month=${m}`);
+    load();
+  }
+  function wire() {
+    el("prev").onclick = () => setMonth(ymAdd(state.month || jstMonth(), -1));
+    el("next").onclick = () => setMonth(ymAdd(state.month || jstMonth(), 1));
+    el("thisMonth").onclick = () => setMonth(jstMonth());
+    el("month").onchange = (e) => setMonth(e.target.value);
+    el("sum").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-filter]");
+      if (b) { state.filter = b.dataset.filter; render(); }
+    });
+  }
+
+  async function load() {
+    const seq = ++state.seq;
+    const month = state.month;
+    try {
+      await API.swr(officeKey(month), fetchOffice(month), (data) => {
+        if (seq !== state.seq) return;
+        state.data = data; state.month = data.month;
+        render();
+      });
+    } catch (e) {
+      if (seq !== state.seq) return;
+      state.data = null;
+      el("rows").innerHTML = ""; el("sum").innerHTML = "";
+      el("banner").innerHTML = `<div class="of-banner err" role="alert"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+
+  // 状態の表示：文字＋アイコン＋色（色だけで判断させない）
+  const st = (tone, label, icon) => `<span class="bl-st ${tone}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${esc(label)}</span>`;
+  const sales = (c) => c.state === "sent" ? st("done", c.label, "check_circle") : c.state === "created" ? st("mid", c.label, "description") : st("todo", c.label, "note_add");
+  const vendor = (c) => c.state === "not_applicable" ? st("na", c.label, "remove") : c.state === "received" ? st("done", c.label, "check_circle") : st("todo", c.label, "inbox");
+  const pay = (c) => c.state === "paid" ? st("done", c.label, "check_circle")
+    : ["not_applicable", "unmanaged"].includes(c.state) ? st("na", c.label, "remove")
+      : c.state === "mismatch" ? st("warn", c.label, "error")
+        : c.state === "scheduled" ? st("mid", c.label, "schedule") : st("todo", c.label, "edit_note");
+
+  const FILTERS = [
+    { key: "open",   label: "未完了",           fn: O.billingOpen },
+    { key: "sales",  label: "売上請求 未送付",  fn: (r) => r.cols.salesInvoice.state !== "sent" },
+    { key: "vendor", label: "BP請求書 未受領",  fn: (r) => r.cols.vendorInvoice.state === "not_received" },
+    { key: "pay",    label: "支払 未完了",      fn: (r) => O.PAY_OPEN.includes(r.cols.payment.state) },
+  ];
+
+  function render() {
+    const d = state.data;
+    el("month").value = state.month;
+    el("banner").innerHTML = d.notReady || d.accessNotReady
+      ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>${esc(d.message || "")}</div></div>` : "";
+    const rows = d.rows || [];
+    el("sum").innerHTML = FILTERS.map((f) => `
+      <button type="button" class="bl-card${state.filter === f.key ? " on" : ""}" data-filter="${f.key}" aria-pressed="${state.filter === f.key}">
+        <span class="lb">${esc(f.label)}</span><span class="v">${rows.filter(f.fn).length}</span>
+      </button>`).join("");
+    const f = FILTERS.find((x) => x.key === state.filter) || FILTERS[0];
+    const list = rows.filter(f.fn);
+    el("rows").innerHTML = list.map((r) => `
+      <tr>
+        <td data-label="客先"><span class="bl-nm">${esc(r.siteCompany)}</span>${r.primeCompany ? `<span class="bl-sub">上位：${esc(r.primeCompany)}</span>` : ""}</td>
+        <td data-label="要員"><span class="bl-nm">${esc(r.employeeName)}</span>${r.usesVendor ? `<span class="bl-sub">${esc(r.partnerName || "BP会社 未登録")}</span>` : ""}</td>
+        <td data-label="売上請求">${sales(r.cols.salesInvoice)}</td>
+        <td data-label="仕入請求（BP）">${vendor(r.cols.vendorInvoice)}</td>
+        <td data-label="支払">${pay(r.cols.payment)}</td>
+        <td><a class="of-btn sec" href="/office/monthly.html?month=${encodeURIComponent(state.month)}&id=${encodeURIComponent(r.siteContractId)}">案件を開く</a></td>
+      </tr>`).join("");
+    const empty = el("empty");
+    empty.hidden = list.length > 0;
+    empty.textContent = rows.length ? `「${f.label}」の案件はありません。` : "この月に動いている現場契約はありません。";
+  }
+</script>
+
+</body>
+</html>

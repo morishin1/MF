@@ -4,1309 +4,229 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>月次業務 - EIGHT OFFICE</title>
+  <title>Office - EIGHT OFFICE</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261002sp2">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261003ux1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261003ux1">
+  <script>
+    // 旧URLの互換：月次業務は /office/monthly.html へ移った。案件・月・絞り込みを付けた古いリンク（/office/?month=…&id=…）は、
+    // そのまま月次業務へ送る（ブックマーク・通知・メールのリンクを壊さない）
+    (function () {
+      var q = new URLSearchParams(location.search);
+      if (q.has("month") || q.has("id") || q.has("tag")) location.replace("/office/monthly.html" + location.search + location.hash);
+    })();
+  </script>
   <style>
-    body { font-family:'Zen Kaku Gothic New', sans-serif; }
-    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    /* Office ホーム：いま、自分（の担当）が処理すべきものだけ。中身は権限で出し分け、画面は全員同じ */
+    .oh-cards { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:0 0 18px; }
+    .oh-card { display:block; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px;
+               text-decoration:none; color:inherit; transition:box-shadow .15s; }
+    .oh-card:hover { box-shadow:0 3px 12px rgba(27,36,64,.12); }
+    .oh-card .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
+    .oh-card .lb .material-symbols-outlined { font-size:16px; }
+    .oh-card .v { display:block; font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
+    .oh-card .v small { font-size:13px; font-weight:700; color:#6b7080; margin-left:2px; }
+    .oh-card.hot { border-color:#e0a100; background:#fffaf0; }
+    .oh-card.hot .lb::after { content:"対応あり"; margin-left:auto; font-size:10.5px; color:#7d5a00; background:#fdf0b8; border-radius:4px; padding:1px 6px; }
 
-    .of-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
-    .of-head .of-sub { margin:0; }
-    .of-month { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-    .of-month input[type="month"] { margin:0; width:auto; font-family:inherit; font-size:14px; font-weight:700; }
+    .oh-two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:14px; }
+    .oh-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
+    .oh-panel h2 { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; display:flex; align-items:baseline; gap:10px; }
+    .oh-panel h2 small { font-size:12px; font-weight:500; color:#6b7080; }
+    .oh-panel h2 a { margin-left:auto; font-size:12px; font-weight:700; }
 
-    /* いちばん上の件数。押すと、その条件で一覧を絞る */
-    .of-sum { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:20px; }
-    .of-card { text-align:left; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px;
-               cursor:pointer; font-family:inherit; color:inherit; }
-    .of-card:hover { background:#fafaf7; }
-    .of-card.on { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
-    .of-card.hot { background:#fff4d6; border-color:#e0a100; }
-    .of-card .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
-    .of-card.hot .lb { color:#7d5a00; }
-    .of-card .lb .material-symbols-outlined { font-size:16px; }
-    .of-card .v { display:block; font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
-    .of-card .v small { font-size:13px; font-weight:700; color:#6b7080; }
+    .oh-todo { display:flex; flex-direction:column; }
+    .oh-row { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid #efefeb; text-decoration:none; color:#1b2440; }
+    .oh-row:last-child { border-bottom:none; }
+    .oh-row:hover .oh-label { text-decoration:underline; }
+    .oh-pri { display:inline-flex; align-items:center; gap:3px; flex:none; width:84px; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
+    .oh-pri .material-symbols-outlined { font-size:14px; }
+    .oh-pri.p0 { background:#fdf0b8; color:#6b4e00; }   /* 要確認 */
+    .oh-pri.p1 { background:#fde4e2; color:#b3261e; }   /* 期限超過 */
+    .oh-pri.p2 { background:#ffe9d1; color:#a34a00; }   /* 今日期限 */
+    .oh-pri.p3 { background:#e3e8f6; color:#1b2440; }   /* 今週対応 */
+    .oh-main { flex:1; min-width:0; }
+    .oh-label { font-size:13.5px; font-weight:700; }
+    .oh-hint { font-size:11.5px; color:#6b7080; margin-top:1px; }
+    .oh-area { font-size:10.5px; color:#6b7080; border:1px solid #e2e2dc; border-radius:4px; padding:0 5px; margin-left:6px; font-weight:500; vertical-align:1px; }
+    .oh-n { font-size:18px; font-weight:900; font-variant-numeric:tabular-nums; min-width:30px; text-align:right; }
+    .oh-row .go { color:#9aa0b4; font-size:18px; }
 
-    .of-two { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:22px; }
-    .of-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
-    .of-today { display:grid; gap:6px; }
-    .of-today button { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:#fff;
-      border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:8px; padding:9px 12px; cursor:pointer;
-      font-family:inherit; font-size:13px; color:#1b2440; }
-    .of-today button:hover { background:#f6f6f2; }
-    .of-today button.warn { border-left-color:#c0392b; }
-    .of-today .n { font-weight:900; font-size:16px; font-variant-numeric:tabular-nums; min-width:26px; }
-    .of-today .note { color:#b3261e; font-size:11.5px; font-weight:700; margin-left:auto; }
-    .of-today .go { color:#9aa0b4; font-size:18px; margin-left:auto; }
-    .of-today .note + .go { margin-left:0; }
-    .of-prog { display:grid; gap:10px; }
-    .of-prog .row { display:grid; grid-template-columns:120px 1fr 64px; align-items:center; gap:10px; font-size:12.5px; color:#1b2440; }
-    .of-prog .bar { height:8px; background:#efefeb; border-radius:99px; overflow:hidden; }
-    .of-prog .bar i { display:block; height:100%; background:#1b2440; border-radius:99px; }
-    .of-prog .num { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
-
-    .of-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
-    .of-toolbar input[type="search"], .of-toolbar select { margin:0; width:auto; font-family:inherit; font-size:13px; }
-    .of-toolbar input[type="search"] { width:220px; max-width:100%; }
-    .of-toolbar label.chk { display:flex; align-items:center; gap:6px; font-size:13px; color:#1b2440; margin:0; cursor:pointer; }
-    .of-toolbar label.chk input { width:auto; margin:0; }
-    .of-toolbar .count { margin-left:auto; color:#6b7080; font-size:12px; }
-
-    .of-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
-    .of-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px 10px;
-      background:#f6f6f2; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
-    .of-table td { padding:11px 10px; border-bottom:1px solid #e2e2dc; font-size:13px; vertical-align:top; }
-    .of-table tr:last-child td { border-bottom:none; }
-    .of-table tbody tr { cursor:pointer; }
-    .of-table tbody tr:hover { background:#fafaf7; }
-    .of-table tbody tr:focus-visible { outline:2px solid #1b2440; outline-offset:-2px; }
-    .of-table tbody tr.open td { background:#f3f5fb; }
-    .of-nm { font-weight:700; color:#1b2440; font-size:13.5px; display:block; }
-    .of-sub2 { font-size:11.5px; color:#6b7080; display:block; margin-top:3px; }
-    .of-hot { color:#b3261e; font-weight:700; }
-    .of-hours { font-size:15px; font-weight:700; color:#9aa0b4; margin-bottom:3px; }
-    .of-act { font-size:12.5px; color:#1b2440; margin-bottom:6px; line-height:1.5; }
-    .of-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:1px; }
-
-    /* 複数選択：左端のチェック列。押してもドロワーは開かない（セル全体がチェックの当たり判定） */
-    .of-table th.of-sel, .of-table td.of-sel { width:44px; padding:0; }
-    .of-sel label { display:flex; align-items:center; justify-content:center; width:100%; min-height:44px; cursor:pointer; margin:0; }
-    .of-table td.of-sel { vertical-align:top; }
-    .of-table td.of-sel label { min-height:0; height:100%; padding-top:11px; align-items:flex-start; }
-    .of-sel input[type="checkbox"], .of-selall-m input[type="checkbox"] { width:18px; height:18px; margin:0; cursor:pointer; accent-color:#1b2440; }
-    .of-table tbody tr.sel td { background:#eef2fb; }
-    .of-table tbody tr.sel:hover td { background:#e6ecf9; }
-    .of-selall-m { display:none; }
-
-    /* 選択したときの操作バー：画面の下に固定。「3件選択中 ｜ 更新 ｜ 削除 ｜ 選択解除」 */
-    .of-bulk { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:35; display:flex; align-items:center; gap:14px;
-      background:#1b2440; color:#fff; border-radius:12px; padding:10px 16px; box-shadow:0 8px 28px rgba(27,36,64,.35); max-width:calc(100vw - 24px); }
-    .of-bulk[hidden] { display:none; }
-    .of-bulk .n { font-size:14px; font-weight:700; white-space:nowrap; }
-    .of-bulk .n b { font-size:18px; font-weight:900; font-variant-numeric:tabular-nums; margin-right:2px; }
-    .of-bulk .sep { width:1px; align-self:stretch; background:rgba(255,255,255,.3); }
-    .of-bulk .of-btn { background:#fff; color:#1b2440; border-color:#fff; padding:8px 14px; font-size:13px; }
-    .of-bulk .of-btn.danger { background:#c0392b; border-color:#c0392b; color:#fff; }
-    .of-bulk .of-btn.ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.45); }
-    .of-bulk .of-btn:focus-visible { outline-color:#e6f050; }
-    .wrap.has-bulk { padding-bottom:110px; }
-
-    /* 更新・削除の確認モーダル */
-    .of-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:60; display:flex; align-items:center; justify-content:center; padding:16px; }
-    .of-modal { background:#fff; border-radius:14px; width:560px; max-width:100%; max-height:calc(100vh - 32px); overflow-y:auto; box-shadow:0 16px 48px rgba(27,36,64,.35); }
-    .of-modal-h { padding:18px 20px 10px; }
-    .of-modal-h h2 { margin:0; font-size:18px; font-weight:900; color:#1b2440; }
-    .of-modal-h p { margin:6px 0 0; font-size:12.5px; color:#4a5068; line-height:1.6; }
-    .of-modal-b { padding:4px 20px 8px; display:grid; gap:12px; }
-    .of-modal-f { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; flex-wrap:wrap; }
-    .of-modal-f .of-btn { padding:10px 18px; font-size:14px; }
-    .of-btn.danger { background:#c0392b; border-color:#c0392b; color:#fff; }
-    .of-btn.danger:disabled { background:#c0392b; }
-    .of-targets { border:1px solid #e2e2dc; border-radius:10px; max-height:200px; overflow-y:auto; }
-    .of-targets .t { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px 12px; border-bottom:1px solid #efefeb; font-size:13px; color:#1b2440; }
-    .of-targets .t:last-child { border-bottom:none; }
-    .of-targets .t small { display:block; color:#6b7080; font-size:11.5px; margin-top:2px; }
-    .of-targets .t b { font-weight:700; }
-    .of-warnbox { background:#fdecea; color:#8f1d15; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.7; }
-    .of-warnbox b { font-weight:900; }
-    .of-warnbox ul { margin:4px 0 0; padding-left:18px; }
-    .of-okbox { background:#f6f6f2; border-radius:10px; padding:10px 12px; font-size:12.5px; color:#4a5068; line-height:1.6; }
-    .of-field { border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; display:grid; gap:8px; }
-    .of-field.on { border-color:#1b2440; background:#f7f8fc; }
-    .of-field > label.use { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
-    .of-field > label.use input { width:auto; margin:0; }
-    .of-field select, .of-field input[type="date"] { margin:0; width:100%; font-family:inherit; font-size:14px; }
-    .of-pay dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:6px 0; font-size:13px; }
-    .of-pay dt { color:#5a6275; } .of-pay dd { margin:0; font-variant-numeric:tabular-nums; }
-    .of-pay .row { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin:8px 0; }
-    .of-pay label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:#5a6275; }
-    .of-pay input { margin:0; width:9.5em; font-family:inherit; font-size:14px; }
-    .of-pay .issue { color:#a12a1f; font-size:13px; margin:4px 0; }
-    .of-closebar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between;
-      border:1px solid #d9dde6; border-radius:10px; background:#fff; padding:10px 14px; margin:0 0 12px; font-size:14px; }
-    .of-closebar.done { background:#eef7ef; border-color:#bfe0c4; }
-    .of-field label.inline { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#1b2440; margin:0; cursor:pointer; }
-    .of-field label.inline input { width:auto; margin:0; }
-    .of-confirm { display:flex; align-items:flex-start; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
-    .of-confirm input { width:auto; margin:3px 0 0; }
-    .of-modal .er { white-space:pre-line; color:#b3261e; font-size:12.5px; font-weight:700; line-height:1.6; }
-
-    @media (max-width: 1080px) { .of-sum { grid-template-columns:repeat(3,minmax(0,1fr)); } .of-two { grid-template-columns:1fr; } }
-    /* 狭い画面は、表をやめてカードにする（横スクロールを前提にしない） */
-    @media (max-width: 980px) {
-      .of-table, .of-table tbody, .of-table tr, .of-table td { display:block; width:100%; box-sizing:border-box; }
-      .of-table { border:none; background:none; }
-      .of-table thead { display:none; }
-      .of-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:8px 12px; }
-      .of-table td { display:flex; gap:10px; justify-content:space-between; align-items:flex-start; border:none; padding:6px 0; }
-      .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; width:64px; padding-top:3px; }
-      .of-table td > div, .of-table td > span:not(.of-pill) { text-align:right; }
-      .of-table td .cell { flex:1; min-width:0; text-align:right; }
-      /* カードでは、見出しの行が無い。選択は、カードの右上の行（「選択」＋チェック）と、検索の横の「表示中をすべて選択」 */
-      .of-table td.of-sel { width:100%; padding:0 0 4px; border-bottom:1px solid #efefeb; margin-bottom:4px; }
-      .of-table td.of-sel::before { padding:0 0 0 0; width:auto; align-self:center; }
-      .of-table td.of-sel label { width:auto; height:auto; padding:6px 0; margin-left:auto; min-height:32px; align-items:center; gap:8px; }
-      .of-selall-m { display:flex; }
-      .of-bulk { gap:10px; padding:8px 12px; }
-      .of-bulk .sep { display:none; }
-    }
-    @media (max-width: 560px) { .of-bulk { flex-wrap:wrap; justify-content:center; bottom:8px; width:calc(100vw - 16px); } .of-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } .of-prog .row { grid-template-columns:96px 1fr 56px; } }
-
-    /* 右ドロワー */
-    .of-dr-head { position:sticky; top:0; background:#fff; border-bottom:1px solid #e2e2dc; padding:16px 18px 12px; z-index:1; }
-    .of-dr-head h2 { font-size:18px; font-weight:700; color:#1b2440; margin:0 0 4px; padding-right:36px; }
-    .of-dr-head .close { position:absolute; top:10px; right:10px; }
-    .of-dr-body { padding:16px 18px 40px; display:grid; gap:12px; }
-    .of-steps { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:6px 14px; }
-    .of-steps .st { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #efefeb; font-size:13px; color:#1b2440; }
-    .of-steps .st:last-child { border-bottom:none; }
-    .of-next { background:#e6f050; border-radius:10px; padding:14px 16px; }
-    .of-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }
-    .of-next .lb .material-symbols-outlined { font-size:15px; }
-    .of-next p { font-size:15px; font-weight:700; color:#1b2440; margin:6px 0 0; line-height:1.5; }
-    .of-next.ok { background:#e5f1e2; }
-    /* 「次にやること」は、案内ではなく押せるカード。カード全体か、中のボタンを押すと、その場で動く */
-    .of-next.cta { display:grid; gap:4px; cursor:pointer; transition:box-shadow .15s, transform .15s; }
-    .of-next.cta:hover { box-shadow:0 4px 14px rgba(27,36,64,.18); transform:translateY(-1px); }
-    .of-next .ttl { font-size:18px; font-weight:900; color:#1b2440; line-height:1.4; margin:4px 0 0; }
-    .of-next .meta { font-size:13px; font-weight:700; color:#4a5068; }
-    .of-next .meta.hot { color:#b3261e; }
-    .of-next .go { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
-    .of-next .go .of-btn { padding:10px 18px; font-size:14px; }
-    .of-next .hint { font-size:11.5px; color:#4a5068; margin-top:6px; }
-    .of-next .er { margin-top:8px; font-size:12.5px; font-weight:700; color:#b3261e; background:#fff; border-radius:7px; padding:7px 10px; }
-
-    /* ページの一番上：いま、いちばん先に押すもの。開いた人が、探さずに押せる（行ごとのボタンは、下の一覧にもある） */
-    .of-now { background:#e6f050; border-radius:12px; padding:14px 16px; margin-bottom:18px; }
-    .of-now-h { font-size:12px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; margin-bottom:8px; }
-    .of-now-h .material-symbols-outlined { font-size:16px; }
-    .of-now-item { display:flex; align-items:center; gap:10px 16px; flex-wrap:wrap; background:#fff; border-radius:10px; padding:12px 14px; cursor:pointer; transition:box-shadow .15s; }
-    .of-now-item:hover { box-shadow:0 3px 12px rgba(27,36,64,.18); }
-    .of-now-item + .of-now-item { margin-top:8px; }
-    .of-now-item .who { flex:1 1 220px; min-width:0; }
-    .of-now-item .who b { display:block; font-size:13.5px; color:#1b2440; }
-    .of-now-item .who small { display:block; font-size:11.5px; color:#6b7080; margin-top:2px; }
-    .of-now-item .what { flex:2 1 260px; min-width:0; }
-    .of-now-item .what b { display:block; font-size:16px; font-weight:900; color:#1b2440; line-height:1.4; }
-    .of-now-item .what span { display:block; font-size:12.5px; font-weight:700; color:#4a5068; margin-top:2px; }
-    .of-now-item .what span.hot, .of-now-item .what .er { color:#b3261e; }
-    .of-now-item .go { display:flex; gap:8px; flex-wrap:wrap; }
-    .of-now-item .go .of-btn { padding:10px 18px; font-size:14px; }
-    .of-now-more { margin-top:8px; font-size:12.5px; color:#4a5068; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-
-    /* 状態の表示：色＋文字＋アイコン。未完了に ○ は使わない（○は完了に見えるため）。チェックは完了だけ */
-    .of-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 10px 3px 8px; font-size:11.5px; font-weight:700; white-space:nowrap; }
-    .of-st .material-symbols-outlined { font-size:14px; }
-    .of-st.red    { background:#fde4e2; color:#b3261e; }   /* 未提出・差し戻し（止まっている） */
-    .of-st.orange { background:#ffe9d1; color:#a34a00; }   /* 未作成・未受領（作る・受け取る） */
-    .of-st.yellow { background:#fdf0b8; color:#6b4e00; }   /* 要確認・未読取（人が見る） */
-    .of-st.green  { background:#d9f0d9; color:#1f6b31; }   /* 確定済・送付済・受領済・提出済（完了） */
-    .of-st.blue   { background:#e3e8f6; color:#1b2440; }   /* 作成済（進行中） */
-    .of-st.gray   { background:#eeeeea; color:#5b6070; }   /* 対象外・未管理 */
-
-    /* 一覧の「次にやること」：何が起きていて、何を押せばよいかが、その行で分かる */
-    .of-cta { display:grid; gap:4px; justify-items:start; }
-    .of-cta .t { font-size:12.5px; font-weight:700; color:#1b2440; line-height:1.4; }
-    .of-cta .m { font-size:11.5px; color:#6b7080; }
-    .of-cta .m.hot { color:#b3261e; font-weight:700; }
-    .of-cta .er { font-size:11.5px; font-weight:700; color:#b3261e; }
-    .of-cta .btns { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
-    .of-btn.cta { padding:8px 14px; font-size:13px; text-decoration:none; }
-    a.of-btn { text-decoration:none; }
-    /* 「要対応」から欄へ飛ぶとき、固定の氏名の帯（約72px）の下に見出しが隠れないようにする */
-    .of-sec { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; scroll-margin-top:88px; }
-    .of-sec h3 { font-size:13px; font-weight:700; color:#1b2440; margin:0 0 8px; display:flex; align-items:center; gap:6px; }
-    .of-sec h3 .material-symbols-outlined { font-size:17px; color:#6b7080; }
-    .of-sec p { margin:0 0 6px; font-size:12.5px; color:#1b2440; line-height:1.6; }
-    .of-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; font-size:12.5px; margin:0; }
-    .of-grid2 dt { color:#6b7080; margin-bottom:2px; }
-    .of-grid2 dd { margin:0 0 10px; color:#1b2440; font-weight:600; word-break:break-all; }
-    .of-files { display:grid; gap:6px; margin:6px 0 0; }
-    .of-file { display:flex; align-items:center; gap:8px; justify-content:space-between; background:#f6f6f2; border-radius:8px; padding:8px 10px; font-size:12.5px; }
-    .of-file .nm { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#1b2440; font-weight:600; }
-    .of-file .at { color:#6b7080; font-size:11px; display:block; font-weight:400; }
-    .of-tl { border-left:2px solid #e2e2dc; margin-left:6px; padding-left:16px; }
-    .of-tl .row { position:relative; padding-bottom:12px; }
-    .of-tl .row::before { content:""; position:absolute; left:-21px; top:4px; width:9px; height:9px; border-radius:99px; background:#1b2440; }
-    .of-tl .d { font-size:11px; color:#6b7080; font-variant-numeric:tabular-nums; }
-    .of-tl .l { font-size:13px; font-weight:600; color:#1b2440; }
-    @media (max-width: 560px) { .of-grid2 { grid-template-columns:1fr; } }
+    @media (max-width: 1180px) { .oh-cards { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width: 900px) { .oh-two { grid-template-columns:1fr; } }
+    @media (max-width: 560px) { .oh-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } .oh-pri { width:auto; } }
   </style>
 </head>
 <body>
 
 <div class="wrap" id="wrap">
-  <div class="of-head">
-    <div>
-      <h1 class="of-title">月次業務</h1>
-      <p class="of-sub" id="sub">今月、どの案件のどこが止まっているかが分かります。</p>
-    </div>
-    <div class="of-month">
-      <button type="button" class="of-btn sec" id="prev" aria-label="前の月"><span class="material-symbols-outlined">chevron_left</span></button>
-      <input type="month" id="month" aria-label="対象月">
-      <button type="button" class="of-btn sec" id="next" aria-label="次の月"><span class="material-symbols-outlined">chevron_right</span></button>
-      <button type="button" class="of-btn sec" id="thisMonth">今月</button>
-    </div>
-  </div>
+  <h1 class="of-title">Office</h1>
+  <p class="of-sub" id="sub">会社の管理業務をまとめて確認できます</p>
 
   <div id="banner"></div>
 
-  <div id="now"></div>
+  <div class="oh-cards" id="cards" aria-label="対応が要る件数"></div>
 
-  <div id="closebar"></div>
-
-  <div class="of-sum" id="sum" aria-label="今月の件数"></div>
-
-  <div class="of-two">
-    <div class="of-panel">
-      <div class="of-sec-h">今日やること</div>
-      <div class="of-today" id="today"></div>
-    </div>
-    <div class="of-panel">
-      <div class="of-sec-h">月次進捗</div>
+  <div class="oh-two">
+    <section class="oh-panel" aria-labelledby="todoH">
+      <h2 id="todoH">今日やること <small>要確認 → 期限超過 → 今日期限 → 今週対応 の順</small></h2>
+      <div class="oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
+    </section>
+    <section class="oh-panel" id="progBox" aria-labelledby="progH" hidden>
+      <h2 id="progH">月次進捗 <small id="progMonth"></small><a href="/office/monthly.html">月次業務を開く</a></h2>
       <div class="of-prog" id="prog"></div>
-    </div>
+      <p class="of-muted" id="closeNote" style="margin:10px 0 0;"></p>
+    </section>
   </div>
-
-  <div class="of-sec-h" id="listTop">案件一覧 <small id="listNote"></small></div>
-  <div class="of-toolbar" role="search">
-    <input type="search" id="q" placeholder="要員・客先・BP会社を検索" aria-label="検索">
-    <select id="fstage" aria-label="状況で絞り込む"></select>
-    <select id="fkind" aria-label="区分で絞り込む">
-      <option value="">区分：すべて</option>
-      <option value="pp">PP（自社）</option>
-      <option value="bp">BP</option>
-    </select>
-    <label class="chk"><input type="checkbox" id="fopen" checked>未完了のみ</label>
-    <label class="chk of-selall-m"><input type="checkbox" id="selAllM" aria-label="表示中の案件をすべて選択">表示中をすべて選択</label>
-    <button type="button" class="of-btn sec" id="reset">条件をリセット</button>
-    <span class="count" id="count" aria-live="polite"></span>
-  </div>
-
-  <table class="of-table" aria-label="月次案件一覧">
-    <thead><tr>
-      <th class="of-sel"><label><input type="checkbox" id="selAll" aria-label="表示中の案件をすべて選択"></label></th>
-      <th>客先</th><th>案件</th><th>要員</th><th>勤務表</th><th>稼働時間</th>
-      <th>売上請求</th><th>仕入請求</th><th>支払</th><th>現在工程</th><th>次にやること</th>
-    </tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
-  <div class="of-empty" id="empty" hidden></div>
 </div>
 
-<div id="drawer-root"></div>
-<div id="modal-root"></div>
-<!-- 案件を選んだときの操作バー（1件以上で、画面の下に固定表示） -->
-<div class="of-bulk" id="bulkbar" role="region" aria-label="選択中の案件の操作" hidden>
-  <span class="n" id="bulkN" aria-live="polite"></span>
-  <span class="sep" aria-hidden="true"></span>
-  <button type="button" class="of-btn" id="bulkUpdate"><span class="material-symbols-outlined" aria-hidden="true">edit</span>更新</button>
-  <span class="sep" aria-hidden="true"></span>
-  <button type="button" class="of-btn danger" id="bulkDelete"><span class="material-symbols-outlined" aria-hidden="true">delete</span>削除</button>
-  <span class="sep" aria-hidden="true"></span>
-  <button type="button" class="of-btn ghost" id="bulkClear">選択解除</button>
-</div>
-<!-- 勤務表を追加するときのファイル選択。「勤務表を追加」を押すと、すぐ開く（PDF・JPEG・PNG） -->
-<input type="file" id="sheetPick" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
-
-<script src="../js/api-client.js?v=20261002sp2"></script>
-<script src="../js/office-layout.js?v=20261002sp2"></script>
+<script src="../js/api-client.js?v=20261003ux1"></script>
+<script src="../js/device.js?v=20261003ux1"></script>
+<script src="../js/layout.js?v=20261003ux1"></script>
+<script src="../js/office-layout.js?v=20261003ux1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
-  const esc = O.esc, pill = O.pill, fmt = O.fmt, fmtDay = O.fmtDay;
+  const esc = O.esc;
 
-  const CARD_ICON = { all: "folder_open", timesheet: "description", work: "schedule", invoice: "receipt_long", vendor: "inbox", done: "task_alt" };
-  const RENEWAL = { pending: "未確認", confirmed: "更新確認済み・継続", ending: "終了予定", renewed: "更新手続き済み" };
-  const EVENTS = [
-    ["timesheet_received", "勤務表を受領"], ["work_confirmed", "稼働を確認"], ["board_created", "売上請求書を作成（Board）"],
-    ["sent", "売上請求書を送付"], ["bp_invoice_received", "BP請求書を受領"],
+  // 表示速度：月末月初業務を使える人は、枠（権限の確認）を待たずに今月のデータを取りにいき始める。
+  // 月次業務（monthly.html）と同じ鍵なので、ホームで取ったぶんは月次業務を開いたときにすぐ出る
+  const OFFICE_KEY = "office:";
+  const fetchOffice = () => API.api("/api/office");
+  API.warm(OFFICE_KEY, fetchOffice, O.allows);
+
+  // Office に入れる人の全員（人事・労務／経理・事務／月末月初業務のどれか）が開ける。中身は担当の分だけ
+  O.init({ active: "home", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(ctx); });
+
+  // 1つ取れなくても、ほかは出す（表が無い環境・権限が足りない場合に画面ごと落とさない）
+  const safe = (p) => p.then((v) => ({ ok: true, v }), () => ({ ok: false }));
+  const ym = (d) => d.toISOString().slice(0, 7);
+  function prevMonth() {
+    const d = new Date(Date.now() + 9 * 3600000);
+    d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+    return ym(d);
+  }
+  const monthLabel = (m) => (m ? `${m.slice(0, 4)}年${Number(m.slice(5, 7))}月` : "");
+
+  // 優先度：要確認 → 期限超過 → 今日期限 → 今週対応。色だけで分けず、文字とアイコンも付ける
+  const PRI = [
+    { label: "要確認",   icon: "flag" },
+    { label: "期限超過", icon: "warning" },
+    { label: "今日期限", icon: "today" },
+    { label: "今週対応", icon: "date_range" },
   ];
 
-  const state = { month: null, data: null, tag: "", q: "", kind: "", incompleteOnly: true, openId: null, seq: 0, pickFor: null, busy: null, errs: {}, sel: new Set(), modal: null };
-
-  // ---- Phase 3（勤務表の確認・確定）：応答に phase3.ready があるときだけ、増えた表示を出す ----
-  const p3 = () => Boolean(state.data?.phase3?.ready);
-  const p4 = () => Boolean(state.data?.phase4?.ready);
-  const sheetUrl = (r) => `/office/timesheet.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
-  const termsUrl = (r) => `/office/terms.html?contract=${encodeURIComponent(r.siteContractId)}&month=${encodeURIComponent(state.month)}`;
-  let lastFocus = null;
-
-  // ---- 状態の表示 ----------------------------------------------------------------------
-  // 色＋文字＋アイコン。赤＝止まっている／橙＝作る・受け取る／黄＝人が見る／緑＝完了／青＝進行中／灰＝対象外。
-  // 未完了に ○ のアイコンは使わない（完了に見えるため）。チェックは、完了のときだけ
-  const DONE_ICON = "check_circle";
-  const st = (tone, label, icon) => `<span class="of-st ${tone}">${icon ? `<span class="material-symbols-outlined" aria-hidden="true">${icon}</span>` : ""}${esc(label)}</span>`;
-  const isSheetRow = (r) => p3() && r.sheetInfo;
-
-  function sheetPill(r) {
-    if (isSheetRow(r)) {
-      const s = r.sheetInfo.state;
-      if (s === "confirmed") return st("green", "確定済", DONE_ICON);
-      if (s === "draft") return st("yellow", "要確認", "edit_note");
-      if (s === "submitted") return st("yellow", "未読取", "document_scanner");
-      if (s === "returned") return st("red", "差し戻し", "undo");
-      // none：勤務表のファイルも、行も無い。月初の画面で「受領」の印だけ付けてあれば、提出済み（手動）
-    }
-    return r.cols.timesheet.state === "submitted" ? st("green", "提出済", DONE_ICON) : st("red", "未提出", "upload_file");
-  }
-  function workPill(r) {
-    const c = r.cols;
-    if (c.work.state === "confirmed") return st("green", "確定済", DONE_ICON);
-    if (isSheetRow(r)) {
-      const s = r.sheetInfo.state;
-      if (s === "draft") return st("yellow", "要確認", "edit_note");
-      if (s === "submitted") return st("yellow", "未読取", "document_scanner");
-      if (s === "returned") return st("red", "差し戻し", "undo");
-      return "";                                       // 勤務表が無いうちは、確定するものが無い
-    }
-    return st("gray", "未確認", "remove");
-  }
-  const salesPill = (r) => r.cols.salesInvoice.state === "sent" ? st("green", "送付済", DONE_ICON)
-    : r.cols.salesInvoice.state === "created" ? st("blue", "作成済", "description") : st("orange", "未作成", "note_add");
-  const vendorPill = (r) => r.cols.vendorInvoice.state === "not_applicable" ? st("gray", "対象外", "remove")
-    : r.cols.vendorInvoice.state === "received" ? st("green", "受領済", DONE_ICON) : st("orange", "未受領", "inbox");
-  const PAY_PILL = {
-    not_applicable: ["gray", "remove"], unmanaged: ["gray", "more_horiz"], waiting: ["gray", "more_horiz"],
-    unregistered: ["orange", "edit_note"], matching: ["orange", "fact_check"], mismatch: ["red", "error"],
-    approved: ["orange", "event"], scheduled: ["blue", "schedule"], paid: ["green", DONE_ICON],
-  };
-  const paymentPill = (r) => {
-    const [tone, icon] = PAY_PILL[r.cols.payment.state] || ["gray", "more_horiz"];
-    return st(tone, r.cols.payment.label, icon);
-  };
-
-  const qsParams = new URLSearchParams(location.search);
-  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(qsParams.get("month") || "")) state.month = qsParams.get("month");
-  state.openId = qsParams.get("id") || null;
-
-  // 表示速度：枠（権限の確認）を待たずに、開いた月のデータを取りにいき始める。
-  // 2回目からは前回の内容をすぐ出し、裏で最新にする（load の中の API.swr）
-  const officeKey = (month) => `office:${month || ""}`;
-  const fetchOffice = (month) => () => API.api(`/api/office${month ? `?month=${encodeURIComponent(month)}` : ""}`);
-  API.warm(officeKey(state.month), fetchOffice(state.month), O.allows);
-
-  O.init({ active: "monthly" }).then((ctx) => { if (ctx) { wire(); load(); } });
-
-  // ---- 月の切り替え -------------------------------------------------------------
-  const ymAdd = (ym, n) => {
-    const [y, m] = ym.split("-").map(Number);
-    const d = new Date(Date.UTC(y, m - 1 + n, 1));
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  };
-  const jstMonth = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 7);
-  function setMonth(m) {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m || "")) return;
-    state.month = m; state.openId = null;
-    state.sel.clear();                                   // 月を替えたら、選択は持ち越さない
-    closeDrawer(true);
-    load();
-  }
-  function syncUrl() {
-    const p = new URLSearchParams();
-    if (state.month) p.set("month", state.month);
-    if (state.openId) p.set("id", state.openId);
-    history.replaceState(null, "", `${location.pathname}${p.toString() ? `?${p}` : ""}`);
-  }
-
-  function wire() {
-    el("prev").onclick = () => setMonth(ymAdd(state.month || jstMonth(), -1));
-    el("next").onclick = () => setMonth(ymAdd(state.month || jstMonth(), 1));
-    el("thisMonth").onclick = () => setMonth(jstMonth());
-    el("month").onchange = (e) => setMonth(e.target.value);
-    el("q").oninput = (e) => { state.q = e.target.value.trim().toLowerCase(); renderList(); };
-    el("fstage").onchange = (e) => { state.tag = e.target.value; if (state.tag === "done") state.incompleteOnly = false; renderControls(); renderList(); };
-    el("fkind").onchange = (e) => { state.kind = e.target.value; renderList(); };
-    el("fopen").onchange = (e) => { state.incompleteOnly = e.target.checked; renderList(); };
-    el("reset").onclick = () => { state.tag = ""; state.q = ""; state.kind = ""; state.incompleteOnly = true; renderControls(); renderList(); };
-    el("selAll").onchange = (e) => toggleAll(e.target.checked);
-    el("selAllM").onchange = (e) => toggleAll(e.target.checked);
-    el("bulkClear").onclick = () => { state.sel.clear(); renderSelection(); };
-    el("bulkUpdate").onclick = () => openUpdateModal();
-    el("bulkDelete").onclick = () => openDeleteModal();
-    el("sheetPick").onchange = (e) => {
-      const f = e.target.files[0]; e.target.value = "";
-      if (f && state.pickFor) uploadSheet(state.pickFor, f);
+  async function load(ctx) {
+    const me = ctx.me;
+    // サーバの判定（/api/me の access）そのもの。担当でない API は呼ばない（403 の行を作らない）
+    const can = {
+      hr: KPLayout.hasAccess(me, "officeHr"),
+      fin: KPLayout.hasAccess(me, "officeFinance"),
+      app: O.allows(me),
     };
-    // 行のチェック：change で受ける（キーボード＝Space でも同じ）。ドロワーは開かない
-    document.addEventListener("change", (e) => {
-      const b = e.target.closest?.("[data-sel]");
-      if (!b) return;
-      if (b.checked) state.sel.add(b.dataset.sel); else state.sel.delete(b.dataset.sel);
-      renderSelection();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && state.modal) { if (!state.modal.busy) closeModal(); return; }
-      if (e.key === "Escape" && state.openId) { closeDrawer(); return; }
-      // 行はキーボードでも開ける（Tab で選んで Enter / Space）
-      const tr = e.target.matches?.("tr[data-id]") ? e.target : null;
-      if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDrawer(tr.dataset.id, null); }
-    });
-    // クリックは、ここでまとめて受ける（画面の部品ごとに onclick を持たない）
-    document.addEventListener("click", (e) => {
-      const t = e.target;
-      // 選択のチェック（セルのどこを押しても）：チェックを切り替えるだけ。行（ドロワー）は開かない
-      if (t.closest?.(".of-sel")) return;
-      // リンク（AIで読み取る・内容を確認する など）は、そのまま移動する。行を開かない
-      if (t.closest?.("a[href]")) return;
-      // 次にやること：ボタンでも、カード全体でも動く
-      const cta = t.closest?.("[data-cta]");
-      if (cta) { e.stopPropagation(); runCta(cta); return; }
-      const tagBtn = t.closest?.("[data-tag]");
-      if (tagBtn) { applyTag(tagBtn.dataset.tag); return; }
-      if (t.closest?.("[data-close]")) { closeDrawer(); return; }
-      const payBtn = t.closest?.("[data-pay]");
-      if (payBtn) { e.stopPropagation(); if (!payBtn.disabled) runPay(payBtn); return; }
-      const closeBtn = t.closest?.("[data-close-month]");
-      if (closeBtn) { if (!closeBtn.disabled) runClose(closeBtn.dataset.closeMonth); return; }
-      const pgBtn = t.closest?.("[data-progress]");
-      if (pgBtn) { e.stopPropagation(); if (!pgBtn.disabled) runProgress(pgBtn); return; }
-      const fileBtn = t.closest?.("[data-file]");
-      if (fileBtn) { openFile(fileBtn.dataset.file, fileBtn); return; }
-      const act = t.closest?.("[data-open]");
-      if (act) { e.stopPropagation(); openDrawer(act.dataset.open, act.dataset.section || null); return; }
-      const tr = t.closest?.("tr[data-id]");
-      if (tr) openDrawer(tr.dataset.id, null);
-    });
-  }
+    const none = Promise.resolve(null);
+    const closingMonth = prevMonth();
+    let officeData = null;
+    const [b, hr, cl, of] = await Promise.all([
+      safe(API.badges()),
+      can.hr ? safe(API.hrList()) : none,
+      can.fin && !can.app ? safe(API.closing(closingMonth)) : none,
+      can.app ? safe(API.swr(OFFICE_KEY, fetchOffice, (d) => { officeData = d; })) : none,
+    ]);
+    if (of && of.ok) officeData = officeData || of.v;
+    const badges = b.ok ? (b.v?.badges || {}) : {};
 
-  // ---- 読み込み ------------------------------------------------------------------
-  async function load() {
-    const seq = ++state.seq;
-    const month = state.month;
-    el("banner").innerHTML = "";
-    // 前回の内容を覚えていれば、すぐ下で描き直す（同じ処理の中なので、この表示は画面に出ない）。列は、左端の選択（チェック）を入れて11
-    el("rows").innerHTML = `<tr><td colspan="11" class="of-empty">読み込み中…</td></tr>`;
-    let first = true;
-    try {
-      await API.swr(officeKey(month), fetchOffice(month), (data) => {
-        if (seq !== state.seq) return;              // 月を素早く切り替えたとき、古い応答を捨てる
-        state.data = data; state.month = data.month;
-        if (!first) el("banner").innerHTML = "";
-        render();
-        // 開く行（?id=）は、最初に描いたときだけ。裏で最新になったときは、開いているドロワーに触らない
-        if (!first) return;
-        first = false;
-        if (state.openId) {
-          if (!(data.rows || []).some((r) => r.siteContractId === state.openId)) { state.openId = null; syncUrl(); }
-          else openDrawer(state.openId, null, true);
-        } else syncUrl();
-      });
-    } catch (e) {
-      if (seq !== state.seq) return;
-      state.data = null;
-      el("now").innerHTML = ""; el("sum").innerHTML = ""; el("today").innerHTML = ""; el("prog").innerHTML = ""; el("rows").innerHTML = "";
-      el("count").textContent = "";
-      banner("err", "取得に失敗しました：" + (e.hint || e.detail || e.message));
+    // ---- 数字（担当でないものは null＝出さない。取れなかったものは undefined＝「—」） ----
+    const od = officeData && !officeData.notReady && !officeData.accessNotReady ? officeData : null;
+    const rows = od?.rows || [];
+    const today = od?.today || null;
+    const summary = od?.summary || null;
+    const officeFail = can.app && !(of && of.ok);
+    const onboarding = hr ? (hr.ok ? (hr.v?.onboarding || []).length : undefined) : null;
+    const offboarding = hr ? (hr.ok ? (hr.v?.offboarding || []).length : undefined) : null;
+    const left = can.app ? (summary ? summary.total - (summary.byStage?.done || 0) : (officeFail ? undefined : 0)) : null;
+    const closing = cl ? (cl.ok ? cl.v : undefined) : null;
+    const closingOpen = closing ? (closing.closing?.status !== "closed" ? 1 : 0) : closing;
+    const expiring = can.app ? (od ? rows.filter((r) => O.expiring(r, today)) : (officeFail ? undefined : [])) : null;
+    const billOpen = can.app ? (od ? rows.filter(O.billingOpen).length
+      : (officeFail ? undefined : 0)) : null;
+
+    // ---- サマリーカード（押すと、その一覧へ） ----
+    const cards = [
+      can.hr && { icon: "schedule", label: "勤怠要確認", v: b.ok ? (badges.timecard || 0) : undefined, href: "/admin-timecard.html" },
+      can.fin && { icon: "receipt", label: "経費承認待ち", v: b.ok ? (badges.expenses || 0) : undefined, href: "/admin-expenses.html" },
+      can.app ? { icon: "event_available", label: "月次残件", v: left, of: summary?.total, href: "/office/monthly.html" }
+        : can.fin && { icon: "event_available", label: "月次残件", v: closingOpen, hint: `${closingMonth} の月次締め`, href: "/admin-closing.html" },
+      can.hr && { icon: "how_to_reg", label: "入社準備", v: onboarding, href: "/admin-hr.html" },
+      can.app && { icon: "event_busy", label: "契約期限", v: expiring == null ? expiring : expiring.length, href: "/office/monthly.html?tag=expiring" },
+      can.app && { icon: "request_quote", label: "請求未完了", v: billOpen, href: "/office/billing.html" },
+    ].filter(Boolean);
+    el("cards").innerHTML = cards.map((c) => `
+      <a class="oh-card${c.v ? " hot" : ""}" href="${esc(c.href)}"${c.hint ? ` title="${esc(c.hint)}"` : ""}>
+        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${c.icon}</span>${esc(c.label)}</span>
+        <span class="v">${c.v === undefined ? "—" : c.v}${c.of != null && c.v !== undefined ? `<small>/ ${c.of}</small>` : ""}</span>
+      </a>`).join("");
+
+    // ---- 今日やること（担当の分だけ。優先度順） ----
+    const todo = [];
+    const add = (pri, area, label, hint, count, href) => { if (count > 0) todo.push({ pri, area, label, hint, count, href }); };
+    if (can.app && od) {
+      const t = Object.fromEntries((summary?.today || []).map((x) => [x.key, x]));
+      const m = od.month;
+      const mq = (tag) => `/office/monthly.html?month=${encodeURIComponent(m)}&tag=${tag}`;
+      add(0, "月次業務", "要確認の案件", "確認の印が付いた案件", t.check?.count || 0, mq("check"));
+      add(0, "月次業務", "稼働確認待ち", t.work?.note || "勤務表を確認して稼働を確定する", t.work?.count || 0, mq("work"));
+      add(0, "月次業務", "契約条件の確認", "精算できない契約条件", t.terms?.count || 0, mq("terms"));
+      const overdue = summary?.overdue || 0;
+      add(1, "月次業務", "勤務表の提出期限超過", od.deadline ? `期限 ${O.fmtDay(od.deadline)}` : "", overdue, mq("overdue"));
+      const sheetLeft = (t.timesheet?.count || 0) - overdue;
+      add(od.deadline && od.deadline === today ? 2 : 3, "月次業務", "勤務表の回収", od.deadline ? `期限 ${O.fmtDay(od.deadline)}` : "", sheetLeft, mq("timesheet"));
+      add(3, "請求・支払", "売上請求の作成・送付", "", t.invoice?.count || 0, mq("invoice"));
+      add(3, "請求・支払", "BP請求書の受領・確認", "", t.vendor?.count || 0, mq("vendor"));
+      add(3, "請求・支払", "支払の登録・確認", "", t.payment?.count || 0, mq("payment"));
+      const exp = expiring || [];
+      add(1, "契約", "契約期限切れ（更新未確認）", "契約期間が終わっていて、更新の確認がまだ", exp.filter((r) => r.periodTo < today).length, "/office/monthly.html?tag=expiring");
+      add(3, "契約", "契約期限の確認", "30日以内に契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo >= today).length, "/office/monthly.html?tag=expiring");
     }
-  }
-
-  function banner(kind, text) {
-    el("banner").innerHTML = `<div class="of-banner ${kind === "err" ? "err" : ""}" role="${kind === "err" ? "alert" : "status"}">
-      <span class="material-symbols-outlined" aria-hidden="true">${kind === "err" ? "error" : "info"}</span><div>${esc(text)}</div></div>`;
-  }
-
-  // ---- 描画 ----------------------------------------------------------------------
-  function render() {
-    const d = state.data;
-    el("month").value = state.month;
-    el("sub").textContent = `${state.month.replace("-", "年").replace(/^(\d{4}年)0?/, "$1")}月分。勤務表の提出期限は ${d.deadline ? fmtDay(d.deadline) : "—"} です。`;
-    if (d.notReady || d.accessNotReady) banner("warn", d.message);
-    else if (d.phase3 && d.phase3.ready === false) banner("warn", "勤務表の確認・稼働時間の機能は、まだ使えません。" + (d.phase3.message || ""));
-    renderNow();
-    renderClose();
-    renderSummary();
-    renderControls();
-    renderList();
-  }
-
-  function renderSummary() {
-    const s = state.data.summary;
-    API.morph(el("sum"), s.cards.map((c) => `
-      <button type="button" class="of-card${c.alert ? " hot" : ""}${isCardOn(c.key) ? " on" : ""}" data-tag="${esc(c.key)}"
-              ${isCardOn(c.key) ? 'aria-pressed="true"' : 'aria-pressed="false"'}>
-        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${CARD_ICON[c.key] || "label"}</span>${esc(c.label)}</span>
-        <span class="v">${c.value}${c.of != null ? `<small> / ${c.of}</small>` : ""}</span>
-      </button>`).join(""));
-
-    API.morph(el("today"), s.today.length ? s.today.map((t) => `
-      <button type="button" class="${t.note ? "warn" : ""}" data-tag="${esc(t.key)}">
-        <span class="n">${t.count}</span><span>${esc(t.label)}</span>
-        ${t.note ? `<span class="note">${esc(t.note)}</span>` : ""}
+    if (can.hr) {
+      add(0, "人事・労務", "勤怠の修正申請", "打刻の修正申請", badges.timecard || 0, "/admin-timecard.html");
+      add(0, "人事・労務", "休暇・稟議の承認", "承認待ち", badges.requests || 0, "/admin-requests.html");
+      add(3, "人事・労務", "入社準備", "進行中の入社", onboarding || 0, "/admin-hr.html");
+      add(3, "人事・労務", "退社手続き", "進行中の退社", offboarding || 0, "/admin-hr.html");
+      add(3, "人事・労務", "契約書の署名待ち", "署名がまだ返ってきていない契約書", badges.esign || 0, "/admin-esign.html");
+    }
+    if (can.fin) {
+      add(0, "経理・事務", "経費精算の承認", "承認待ちの経費精算", badges.expenses || 0, "/admin-expenses.html");
+      if (!can.app) add(3, "経理・事務", "月次締め", `${closingMonth} の月次締めがまだです`
+        + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : ""), closingOpen || 0, "/admin-closing.html");
+    }
+    todo.sort((a, b2) => a.pri - b2.pri || b2.count - a.count);
+    el("todo").innerHTML = todo.length ? todo.map((t) => `
+      <a class="oh-row" href="${esc(t.href)}">
+        <span class="oh-pri p${t.pri}"><span class="material-symbols-outlined" aria-hidden="true">${PRI[t.pri].icon}</span>${PRI[t.pri].label}</span>
+        <span class="oh-main"><span class="oh-label">${esc(t.label)}<span class="oh-area">${esc(t.area)}</span></span>${t.hint ? `<div class="oh-hint">${esc(t.hint)}</div>` : ""}</span>
+        <span class="oh-n">${t.count}<small style="font-size:11px;font-weight:700;color:#6b7080;">件</small></span>
         <span class="material-symbols-outlined go" aria-hidden="true">chevron_right</span>
-      </button>`).join("")
-      : `<div class="of-empty">${s.total ? "いま対応が必要なものはありません" : "この月に動いている案件はありません"}</div>`);
+      </a>`).join("")
+      : `<div class="of-empty">いま対応が必要なものはありません</div>`;
 
-    API.morph(el("prog"), s.progress.map((p) => {
-      const pct = p.of ? Math.round((p.done / p.of) * 100) : 0;
-      return `<div class="row"><span>${esc(p.label)}</span>
-        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${p.of}" aria-valuenow="${p.done}" aria-label="${esc(p.label)}"><i style="width:${pct}%"></i></div>
-        <span class="num">${p.done} / ${p.of}</span></div>`;
-    }).join(""));
-  }
-  const isCardOn = (key) => (key === "all" ? !state.tag && !state.incompleteOnly && !state.q && !state.kind : state.tag === key);
-
-  function renderControls() {
-    const opts = [`<option value="">状況：すべて</option>`].concat(
-      (state.data?.filters || []).map((f) => `<option value="${esc(f.key)}">${esc(f.label)}</option>`));
-    el("fstage").innerHTML = opts.join("");
-    el("fstage").value = state.tag;
-    el("fkind").value = state.kind;
-    el("fopen").checked = state.incompleteOnly;
-    el("q").value = state.q;
-    if (state.data) renderSummary();                  // 選んだカードの強調を合わせる
-  }
-
-  // カード・今日やること・選択肢は、どれも同じ絞り込みの印（tag）で答える
-  function applyTag(tag) {
-    if (tag === "all") { state.tag = ""; state.q = ""; state.kind = ""; state.incompleteOnly = false; }
-    else { state.tag = state.tag === tag ? "" : tag; if (state.tag === "done") state.incompleteOnly = false; }
-    renderControls(); renderList();
-    el("listTop").scrollIntoView({ block: "start", behavior: "smooth" });
-  }
-
-  function visibleRows() {
-    const rows = state.data?.rows || [];
-    return rows.filter((r) => (!state.incompleteOnly || !r.done)
-      && (!state.tag || r.tags.includes(state.tag))
-      && (!state.kind || r.engagementKind === state.kind)
-      && (!state.q || r.searchText.includes(state.q)));
-  }
-
-  function renderList() {
-    const all = state.data?.rows || [];
-    const rows = visibleRows();
-    // 選べるのは、いま一覧に見えている案件だけ（絞り込みで消えた案件を、見えないまま更新・削除しない）
-    const shown = new Set(rows.map((r) => r.siteContractId));
-    for (const id of [...state.sel]) if (!shown.has(id)) state.sel.delete(id);
-    el("count").textContent = all.length ? `${all.length}件中 ${rows.length}件を表示` : "";
-    el("listNote").textContent = p3() ? "勤務表を確定すると、稼働時間と売上の精算が出ます" : "稼働時間の自動計算は、次の段階で追加します";
-    API.morph(el("rows"), rows.map(rowHtml).join(""));
-    renderSelection();                                // 描き直しても、チェックの状態・選んだ行の色・操作バーを、選択（state.sel）に合わせる
-    const empty = el("empty");
-    empty.hidden = rows.length > 0 || !state.data;
-    if (!rows.length && state.data) {
-      empty.innerHTML = all.length
-        ? `条件に合う案件はありません。<br><button type="button" class="of-btn sec" style="margin-top:10px;" data-reset>条件をリセット</button>`
-        : "この月に動いている現場契約はありません。";
-      const b = empty.querySelector("[data-reset]");
-      if (b) b.onclick = () => el("reset").click();
+    // ---- 月次進捗（月末月初業務を使える人だけ） ----
+    if (can.app && od) {
+      el("progBox").hidden = false;
+      el("progMonth").textContent = monthLabel(od.month);
+      el("prog").innerHTML = O.progressHtml(O.progressOf(od));
+      el("closeNote").textContent = od.phase4?.ready
+        ? (od.close?.closed ? "月次完了：完了済み" : "月次完了：未完了") : "";
     }
-  }
 
-  function rowHtml(r) {
-    const c = r.cols;
-    const files = (kind) => r.submissions.filter((s) => s.kind === kind).length;
-    const period = `${r.periodFrom.replaceAll("-", "/")} 〜 ${r.periodTo ? r.periodTo.replaceAll("-", "/") : "未定"}`;
-    const stageTone = r.done ? "ok" : (r.overdue ? "danger" : "progress");
-    const stageIcon = r.done ? "task_alt" : (r.overdue ? "warning" : "arrow_forward");
-    // 勤務表の欄：状態の色つきラベル。提出がまだなら、期限も添える
-    const waiting = c.timesheet.state !== "submitted" && (!isSheetRow(r) || ["none", "returned"].includes(r.sheetInfo.state));
-    const tsNote = r.overdue ? `<span class="of-sub2 of-hot">期限超過（${fmtDay(r.deadline)}）</span>`
-      : (waiting && r.deadline ? `<span class="of-sub2">期限 ${fmtDay(r.deadline)}</span>` : "");
-    const on = state.sel.has(r.siteContractId);
-    return `<tr data-id="${esc(r.siteContractId)}" tabindex="0" class="${state.openId === r.siteContractId ? "open" : ""}${on ? " sel" : ""}">
-      <td class="of-sel" data-label="選択"><label><input type="checkbox" data-sel="${esc(r.siteContractId)}"${on ? " checked" : ""} aria-label="${esc(r.employeeName)}（${esc(r.siteCompany)}）を選択"></label></td>
-      <td data-label="客先"><div class="cell"><span class="of-nm">${esc(r.siteCompany)}</span>${r.primeCompany ? `<span class="of-sub2">上位：${esc(r.primeCompany)}</span>` : ""}</div></td>
-      <td data-label="案件"><div class="cell"><span class="of-nm">現場契約<span class="of-tag">${esc(r.kindLabel)}</span></span><span class="of-sub2">${esc(period)}</span></div></td>
-      <td data-label="要員"><div class="cell"><span class="of-nm">${esc(r.employeeName)}</span>${r.usesVendor ? `<span class="of-sub2">${esc(r.partnerName || "BP会社 未登録")}</span>` : (r.department ? `<span class="of-sub2">${esc(r.department)}</span>` : "")}</div></td>
-      <td data-label="勤務表"><div class="cell">${sheetPill(r)}${tsNote}${files("timesheet") ? `<span class="of-sub2">ファイル ${files("timesheet")}件</span>` : ""}</div></td>
-      <td data-label="稼働時間"><div class="cell">${workCell(r)}</div></td>
-      <td data-label="売上請求"><div class="cell">${salesPill(r)}</div></td>
-      <td data-label="仕入請求"><div class="cell">${vendorPill(r)}</div></td>
-      <td data-label="支払"><div class="cell">${paymentPill(r)}</div></td>
-      <td data-label="現在工程"><div class="cell">${pill(r.stageLabel, stageTone, stageIcon)}${r.check ? `<span class="of-sub2">${st("yellow", "要確認", "flag")}</span>` : ""}</div></td>
-      <td data-label="次にやること"><div class="cell">${ctaCell(r)}</div></td>
-    </tr>`;
-  }
-
-  // 稼働時間の欄：確定した時間と、状態
-  function workCell(r) {
-    const si = r.sheetInfo;
-    const hours = p3() && si?.hours ? `<div class="of-hours" style="color:#1b2440;">${esc(si.hours)}h</div>`
-      : `<div class="of-hours" title="稼働時間は、勤務表を確定すると出ます">—</div>`;
-    return `${hours}${workPill(r)}`;
-  }
-
-  // ---- 次にやること ---------------------------------------------------------------------
-  // その行で「いま何が起きていて、何を押せばよいか」を1つに決める。一覧とドロワーは、これだけを見て描く。
-  //   ファイルなし → 勤務表を追加（すぐファイル選択）／ファイルあり・未読取 → AIで読み取る
-  //   AI読取済（下書き）→ 内容を確認する／確定 → 確定内容を見る
-  const sheetLinkUrl = (r, extra = "") => `${sheetUrl(r)}${extra}`;
-  const PICK = { kind: "pick", label: "勤務表を追加", icon: "upload_file" };
-
-  function nextStep(r) {
-    if (r.done) return null;
-    const si = r.sheetInfo;
-    const n = r.submissions.filter((s) => s.kind === "timesheet").length;
-    const day = r.deadline ? fmtDay(r.deadline) : "";
-    const legacy = r.action ? { tone: "todo", title: r.action.text, meta: "", cta: { kind: "drawer", label: r.action.cta, icon: "arrow_forward", section: r.action.section } } : null;
-    if (!isSheetRow(r)) return legacy;                          // 勤務表の機能が未適用のときは、従来どおり
-
-    const link = (label, icon, extra) => ({ kind: "link", label, icon, href: sheetLinkUrl(r, extra) });
-    const sheetStage = ["timesheet", "work"].includes(r.stage);
-    if (sheetStage || si.state === "confirmed") {
-      switch (si.state) {
-        case "none":
-          if (r.stage === "timesheet") {
-            return { tone: r.overdue ? "hot" : "todo", title: "勤務表が未提出です",
-              meta: day ? (r.overdue ? `期限 ${day} を過ぎています` : `期限 ${day}`) : "", hot: r.overdue, cta: PICK, hint: "PDF・JPEG・PNG（10MBまで）" };
-          }
-          return { tone: "todo", title: "勤務表のファイルがありません", meta: "稼働時間を確定するには、勤務表が要ります", cta: PICK, hint: "PDF・JPEG・PNG（10MBまで）" };
-        case "returned":
-          return { tone: "todo", title: "勤務表が差し戻されています", meta: "再提出を待っています", cta: PICK, hint: "PDF・JPEG・PNG（10MBまで）" };
-        case "submitted":
-          // ファイルが1件で、重複の疑いも無いときだけ、確認画面で読み取りを始める（複数・重複は、どれを読むか人が選ぶ）
-          if (n > 1 || r.warnings.some((w) => /同じファイル/.test(w))) {
-            return { tone: "todo", title: "勤務表が複数届いています", meta: `ファイル ${n}件。どれを読み取るか、確認してください`, cta: link("ファイルを確認する", "folder_open") };
-          }
-          return { tone: "todo", title: "勤務表が届いています", meta: `ファイル ${n}件。まだ読み取っていません`, cta: link("AIで読み取る", "auto_awesome", "&read=1") };
-        case "draft": {
-          const parts = [si.unresolved ? `入力が必要な日 ${si.unresolved}日` : null, si.review ? `要確認 ${si.review}日` : null].filter(Boolean);
-          return { tone: "todo", title: "読取結果の確認待ちです", meta: parts.length ? parts.join("・") : "内容を見て、確定してください", cta: link("内容を確認する", "fact_check") };
-        }
-        case "confirmed":
-          if (sheetStage) return { tone: "ok", title: "勤務表は確定済みです", meta: si.hours ? `稼働 ${si.hours}h` : "", cta: link("確定内容を見る", "visibility") };
-          break;
-      }
-    }
-    // 勤務表を確定したあと（請求・仕入・支払）：次の工程を示し、確定内容も見られるようにする
-    if (si.state === "confirmed") {
-      return { tone: "todo", title: r.action.text, meta: si.hours ? `勤務表は確定済み（稼働 ${si.hours}h）` : "勤務表は確定済み",
-        cta: link("確定内容を見る", "visibility"),
-        sub: { kind: "drawer", label: r.action.cta, icon: "arrow_forward", section: r.action.section } };
-    }
-    return legacy;
-  }
-
-  const ctaAttrs = (r, c) => `data-cta="${esc(c.kind)}" data-contract="${esc(r.siteContractId)}"${c.href ? ` data-href="${esc(c.href)}"` : ""}${c.section ? ` data-section="${esc(c.section)}"` : ""}`;
-  function ctaBtn(r, c, cls) {
-    const busy = state.busy === r.siteContractId && c.kind === "pick";
-    const inner = `<span class="material-symbols-outlined" aria-hidden="true">${busy ? "hourglass_top" : c.icon}</span>${busy ? "アップロード中…" : esc(c.label)}`;
-    return c.kind === "link"
-      ? `<a class="of-btn ${cls}" href="${esc(c.href)}" data-cta-link>${inner}</a>`
-      : `<button type="button" class="of-btn ${cls}" ${ctaAttrs(r, c)}${busy ? " disabled" : ""}>${inner}</button>`;
-  }
-  function ctaCell(r) {
-    const n = nextStep(r);
-    if (!n) return `<span class="of-muted">対応は不要です</span>`;
-    const err = state.errs[r.siteContractId];
-    return `<div class="of-cta"><div class="t">${esc(n.title)}</div>${n.meta ? `<div class="m${n.hot ? " hot" : ""}">${esc(n.meta)}</div>` : ""}
-      ${err ? `<div class="er" role="alert">${esc(err)}</div>` : ""}
-      <div class="btns">${ctaBtn(r, n.cta, "cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div></div>`;
-  }
-  // ドロワーの上の、大きな「次にやること」。カード全体が押せる（中のボタンと同じ動き）
-  function nextCardHtml(r) {
-    const n = nextStep(r);
-    if (!n) return `<div class="of-next ok"><div class="lb"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>完了</div><p>この案件の月次業務は完了しています</p></div>`;
-    const err = state.errs[r.siteContractId];
-    return `<div class="of-next cta${n.tone === "ok" ? " ok" : ""}" ${ctaAttrs(r, n.cta)} id="dr-next">
-      <div class="lb"><span class="material-symbols-outlined" aria-hidden="true">${n.tone === "ok" ? "task_alt" : "arrow_forward"}</span>次にやること</div>
-      <div class="ttl">${esc(n.title)}</div>
-      ${n.meta ? `<div class="meta${n.hot ? " hot" : ""}">${esc(n.meta)}</div>` : ""}
-      ${err ? `<div class="er" role="alert">${esc(err)}</div>` : ""}
-      <div class="go">${ctaBtn(r, n.cta, "cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div>
-      ${n.hint ? `<div class="hint">${esc(n.hint)}</div>` : ""}</div>`;
-  }
-
-  // ページの一番上：いま押すもの（一覧の並び＝期限超過 → 上流の工程の順）を3件まで。残りは下の一覧へ
-  const NOW_MAX = 3;
-  function renderNow() {
-    const todo = (state.data?.rows || []).filter((r) => nextStep(r));
-    if (!todo.length) { API.morph(el("now"), ""); return; }
-    const item = (r) => {
-      const n = nextStep(r);
-      const err = state.errs[r.siteContractId];
-      return `<div class="of-now-item" ${ctaAttrs(r, n.cta)}>
-        <div class="who"><b>${esc(r.employeeName)}</b><small>${esc(r.siteCompany)}</small></div>
-        <div class="what"><b>${esc(n.title)}</b>${n.meta ? `<span class="${n.hot ? "hot" : ""}">${esc(n.meta)}</span>` : ""}${err ? `<span class="er" role="alert">${esc(err)}</span>` : ""}</div>
-        <div class="go">${ctaBtn(r, n.cta, "cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div></div>`;
-    };
-    const rest = todo.length - NOW_MAX;
-    API.morph(el("now"), `<section class="of-now" aria-label="次にやること">
-      <div class="of-now-h"><span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>次にやること</div>
-      ${todo.slice(0, NOW_MAX).map(item).join("")}
-      ${rest > 0 ? `<div class="of-now-more">ほか ${rest}件<button type="button" class="of-btn sec" data-tag="all">一覧ですべて見る</button></div>` : ""}</section>`);
-  }
-
-  function runCta(elm) {
-    const kind = elm.dataset.cta, id = elm.dataset.contract;
-    if (kind === "pick") {
-      if (state.busy) return;
-      state.pickFor = id;
-      el("sheetPick").click();                                 // クリックの中で、すぐ開く
-    } else if (kind === "link") location.href = elm.dataset.href;
-    else if (kind === "drawer") openDrawer(id, elm.dataset.section || null);
-  }
-
-  // 勤務表を追加：アップロード → 登録（attach）→ 勤務表の確認画面へ。サーバの処理は、確認画面の「勤務表を追加」と同じ
-  const ACCEPT = ["application/pdf", "image/jpeg", "image/png"];
-  const postSheet = (id, action, extra = {}) => API.api("/api/office/timesheet", { method: "POST", body: { action, siteContractId: id, month: state.month, ...extra } });
-  function setUploadError(id, text) {
-    state.busy = null; state.errs[id] = text;
-    banner("err", text);
-    renderNow(); renderList();
-    if (state.openId === id) openDrawer(id, null, true);
-  }
-  async function uploadSheet(id, file, allow, sid) {
-    const r = (state.data?.rows || []).find((x) => x.siteContractId === id);
-    if (!r || !file) return;
-    delete state.errs[id];
-    if (!ACCEPT.includes(file.type)) return setUploadError(id, "PDF・JPEG・PNG のファイルを選んでください");
-    if (file.size > 10 * 1024 * 1024) return setUploadError(id, "ファイルは 10MB までです");
-    state.busy = id; el("banner").innerHTML = "";
-    renderNow(); renderList(); if (state.openId === id) openDrawer(id, null, true);
-    try {
-      let submissionId = sid;
-      if (!submissionId) {
-        const u = await postSheet(id, "upload", { mimeType: file.type, sizeBytes: file.size, filename: file.name });
-        const put = await fetch(u.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: file });
-        if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
-        submissionId = u.submissionId;
-      }
-      await postSheet(id, "attach", { submissionId, filename: file.name, allowDuplicate: allow === true });
-      location.href = sheetUrl(r);                              // 勤務表の確認画面へ
-    } catch (e) {
-      if (e.code === "duplicate_other" && confirm("同じファイルが、別の月・別の人の勤務表としても提出されています。別のファイルではありませんか？\n\nそれでもこの勤務表として登録しますか？")) {
-        return uploadSheet(id, file, true, e.body?.submissionId);
-      }
-      setUploadError(id, e.code === "duplicate" ? (e.hint || "同じファイルが、すでに届いています。登録しませんでした")
-        : (e.hint || e.detail || e.message || "アップロードに失敗しました"));
-      if (e.code === "duplicate") load();                        // 届いている状態を読み直す
-    }
-  }
-
-  // ---- 右ドロワー ------------------------------------------------------------------
-  function openDrawer(id, section, restoring) {
-    const r = (state.data?.rows || []).find((x) => x.siteContractId === id);
-    if (!r) return;
-    if (!restoring) lastFocus = document.activeElement;
-    state.openId = id;
-    syncUrl();
-    el("drawer-root").innerHTML = drawerHtml(r);
-    for (const tr of document.querySelectorAll("#rows tr")) tr.classList.toggle("open", tr.dataset.id === id);
-    const dr = el("drawer-root").querySelector(".of-drawer");
-    dr.focus();
-    if (section) el("drawer-root").querySelector(`#dr-${section}`)?.scrollIntoView({ block: "start" });
-    if (r.usesVendor && p4()) loadPay(r);
-  }
-  function closeDrawer(silent) {
-    el("drawer-root").innerHTML = "";
-    for (const tr of document.querySelectorAll("#rows tr.open")) tr.classList.remove("open");
-    state.openId = null;
-    syncUrl();
-    if (!silent && lastFocus?.focus) { try { lastFocus.focus(); } catch { /* 消えた要素には戻さない */ } }
-  }
-
-  function drawerHtml(r) {
-    const c = r.cols;
-    const ym = state.month.replace("-", "年").replace(/^(\d{4}年)0?/, "$1") + "月";
-    const files = (kind) => r.submissions.filter((s) => s.kind === kind);
-    const fileList = (list, none) => list.length
-      ? `<div class="of-files">${list.map((s) => `<div class="of-file"><span class="nm">${esc(s.fileName)}<span class="at">${esc(fmt(s.submittedAt))} に届きました</span></span>
-          <button type="button" class="of-btn sec" data-file="${esc(s.id)}"><span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>開く</button></div>`).join("")}</div>`
-      : `<p class="of-muted">${esc(none)}</p>`;
-    const at = (k) => r.marks[`${k}_at`] ? `（${esc(fmt(r.marks[`${k}_at`]))}）` : "";
-
-    const step = (label, pillHtml) => `<div class="st"><span>${esc(label)}</span>${pillHtml || st("gray", "—", "")}</div>`;
-    const steps = `
-      ${step("勤務表", sheetPill(r))}
-      ${step("稼働", workPill(r))}
-      ${step("売上請求", salesPill(r))}
-      ${step("仕入請求", vendorPill(r))}
-      ${step("支払", paymentPill(r))}`;
-
-    const events = EVENTS.filter(([k]) => r.marks[k]).map(([k, label]) => ({ label, at: r.marks[`${k}_at`] }))
-      .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
-
-    return `
-      <div class="of-drawer-bg" data-close></div>
-      <aside class="of-drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title" tabindex="-1">
-        <div class="of-dr-head">
-          <button type="button" class="of-iconbtn close" data-close aria-label="閉じる"><span class="material-symbols-outlined">close</span></button>
-          <h2 id="dr-title">${esc(r.employeeName)}<span class="of-tag">${esc(r.kindLabel)}</span></h2>
-          <div class="of-sub2" style="margin:0;">${esc(r.siteCompany)} ／ ${esc(ym)}</div>
-        </div>
-        <div class="of-dr-body">
-          ${r.check ? `<div class="of-banner" role="status"><span class="material-symbols-outlined" aria-hidden="true">flag</span><div>${r.warnings.map(esc).join("<br>")}</div></div>` : ""}
-          <div class="of-steps" aria-label="進捗">${steps}</div>
-          ${nextCardHtml(r)}
-
-          <section class="of-sec" id="dr-contract"><h3><span class="material-symbols-outlined" aria-hidden="true">handshake</span>契約</h3>
-            <dl class="of-grid2">
-              <div><dt>区分</dt><dd>${esc(r.kindLabel)}</dd></div>
-              <div><dt>客先</dt><dd>${esc(r.siteCompany)}</dd></div>
-              <div><dt>上位会社</dt><dd>${esc(r.primeCompany || "—")}</dd></div>
-              <div><dt>BP会社</dt><dd>${r.usesVendor ? esc(r.partnerName || "未登録") : "—（売上のみ）"}</dd></div>
-              <div><dt>契約期間</dt><dd>${esc(r.periodFrom.replaceAll("-", "/"))} 〜 ${esc(r.periodTo ? r.periodTo.replaceAll("-", "/") : "未定")}</dd></div>
-              <div><dt>更新状態</dt><dd>${esc(RENEWAL[r.renewalStatus] || r.renewalStatus || "—")}</dd></div>
-            </dl>
-            ${p3() ? termsBlock(r) : `<p class="of-muted">単価・精算条件は、この画面ではまだ扱いません。</p>`}</section>
-
-          <section class="of-sec" id="dr-timesheet"><h3><span class="material-symbols-outlined" aria-hidden="true">description</span>勤務表</h3>
-            <p>${c.timesheet.state === "submitted" ? `提出済み${at("timesheet_received")}` : `未提出です${r.deadline ? `（期限 ${esc(fmtDay(r.deadline))}）` : ""}`}</p>
-            ${fileList(files("timesheet"), "まだファイルが届いていません。")}
-            ${sheetSectionActions(r)}</section>
-
-          <section class="of-sec" id="dr-work"><h3><span class="material-symbols-outlined" aria-hidden="true">schedule</span>稼働計算</h3>
-            <p>稼働の確認：${c.work.state === "confirmed" ? `確認済み${at("work_confirmed")}` : "未確認"}</p>
-            ${p3() ? workBlock(r) : `<p class="of-muted">勤務表からの稼働時間の読取・計算は、次の段階で追加します。</p>`}</section>
-
-          <section class="of-sec" id="dr-sales"><h3><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>売上請求</h3>
-            <p>請求書の作成：${r.marks.board_created ? `作成済み${at("board_created")}` : "未作成"}</p>
-            <p>請求書の送付：${r.marks.sent ? `送付済み${at("sent")}` : "未送付"}</p>
-            ${salesProgressActions(r)}</section>
-
-          <section class="of-sec" id="dr-order"><h3><span class="material-symbols-outlined" aria-hidden="true">assignment</span>発注</h3>
-            <p class="of-muted">${r.usesVendor ? "発注書の発行は、今後追加します。BP請求書は、契約条件（仕入単価）と照合します。" : "対象外です（売上のみの契約）。"}</p></section>
-
-          <section class="of-sec" id="dr-vendor"><h3><span class="material-symbols-outlined" aria-hidden="true">inbox</span>仕入請求</h3>
-            ${r.usesVendor
-              ? `<p>${esc(r.partnerName || "BP会社")}の請求書：${c.vendorInvoice.state === "received" ? `受領済み${at("bp_invoice_received")}` : "未受領"}</p>
-                 ${fileList(files("invoice"), "まだ請求書のファイルが届いていません。")}
-                 ${progressBtn(r, "vendor_received", !r.marks.bp_invoice_received, r.marks.bp_invoice_received ? "受領を取り消す" : "請求書を受領済みにする")}`
-              : `<p class="of-muted">対象外です（売上のみの契約）。</p>`}</section>
-
-          <section class="of-sec" id="dr-payment"><h3><span class="material-symbols-outlined" aria-hidden="true">payments</span>支払</h3>
-            ${!r.usesVendor ? `<p class="of-muted">対象外です（売上のみの契約）。</p>`
-              : !p4() ? `<p class="of-muted">支払の記録は、まだ使えません。${esc(state.data?.phase4?.message || "")}</p>`
-                : `<div class="of-pay" id="payBody" data-contract="${esc(r.siteContractId)}"><p class="of-muted">読み込み中…</p></div>`}</section>
-
-          <section class="of-sec" id="dr-history"><h3><span class="material-symbols-outlined" aria-hidden="true">history</span>履歴</h3>
-            ${events.length ? `<div class="of-tl">${events.map((e) => `<div class="row"><div class="d">${esc(fmt(e.at) || "日時なし")}</div><div class="l">${esc(e.label)}</div></div>`).join("")}</div>`
-              : `<p class="of-muted">まだ記録はありません。</p>`}
-            <p class="of-muted">印を付けた日時だけを表示しています。担当者名は、次の段階から記録します。</p></section>
-        </div>
-      </aside>`;
-  }
-
-  // ---- 請求の進み具合（Board で作った・送った、BP請求書を受け取った）を記録する ----------------
-  // 請求書そのものは Board で作る・送る。ここは「済んだ」の記録だけ（POST /api/office/timesheet action=progress）。
-  // 順番（稼働確定 → 作成 → 送付）はサーバが守る。押せない理由は、ボタンの横に出す
-  function progressBtn(r, step, done, label, disabledNote) {
-    const btn = `<button type="button" class="of-btn ${done ? "" : "sec"}" data-progress="${esc(step)}" data-done="${done ? "1" : "0"}"
-      data-contract="${esc(r.siteContractId)}"${disabledNote ? " disabled" : ""}>${esc(label)}</button>`;
-    return `<p class="of-progress">${btn}${disabledNote ? `<span class="of-muted" style="margin-left:8px;">${esc(disabledNote)}</span>` : ""}</p>`;
-  }
-  function salesProgressActions(r) {
-    const m = r.marks;
-    if (!m.board_created) {
-      return progressBtn(r, "invoice_created", true, "請求書を作成済みにする（Boardで作成したあと）",
-        m.work_confirmed ? "" : "稼働を確定すると、押せるようになります");
-    }
-    if (!m.sent) {
-      return progressBtn(r, "invoice_sent", true, "送付済みにする") + progressBtn(r, "invoice_created", false, "作成済みを取り消す");
-    }
-    return progressBtn(r, "invoice_sent", false, "送付済みを取り消す");
-  }
-  async function runProgress(btn) {
-    const done = btn.dataset.done === "1";
-    if (!done && !confirm(`${btn.textContent.trim()}。よろしいですか？`)) return;
-    btn.disabled = true;
-    try {
-      await postSheet(btn.dataset.contract, "progress", { step: btn.dataset.progress, done });
-      await load();                                    // 一覧・ドロワーを最新に（開いているドロワーは開き直す）
-    } catch (e) {
-      btn.disabled = false;
-      alert(e.hint || e.detail || e.message || "記録できませんでした");
-    }
-  }
-
-  // ---- 仕入請求（BP請求書）・支払（/api/office/payables）---------------------------------
-  //   請求額を登録 → 契約条件（仕入単価）と照合 → 承認（合わなければ理由）→ 支払予定 → 支払済。
-  //   照合の計算・順番・権限（支払は経営者・経理だけ）はサーバが持つ。画面は結果を出して、押せるボタンだけ出す
-  const yen = (v) => (v === null || v === undefined ? "—" : `${Number(v).toLocaleString("ja-JP")}円`);
-  const todayJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
-  async function loadPay(r) {
-    const box = el("payBody");
-    if (!box) return;
-    try {
-      const d = await API.api(`/api/office/payables?month=${encodeURIComponent(state.month)}`);
-      if (el("payBody")?.dataset.contract !== r.siteContractId) return;   // 別の行を開き直した
-      el("payBody").innerHTML = payHtml(r, d);
-    } catch (e) {
-      if (el("payBody")) el("payBody").innerHTML = `<p class="of-muted">${esc(e.hint || e.message || "読み込めませんでした")}</p>`;
-    }
-  }
-  function payHtml(r, d) {
-    const inv = (d.invoices || []).find((i) => i.status !== "void" && i.lines.some((l) => l.siteContractId === r.siteContractId && !l.voided));
-    const closed = Boolean(state.data?.close?.closed);
-    if (!inv) {
-      const pend = (d.pending || []).find((x) => x.siteContractId === r.siteContractId);
-      const exp = pend?.expected;
-      const files = r.submissions.filter((s) => s.kind === "invoice");
-      return `
-        <p>BP請求書の金額は、まだ登録されていません。</p>
-        <p class="of-muted">契約どおりなら：${exp != null ? `${yen(exp)}（税抜）` : esc((pend?.expectedReasons || ["契約条件から金額を出せません"]).join("・"))}</p>
-        ${closed ? "" : `<div class="row">
-          <label>受領日<input type="date" id="pyRecv" value="${todayJst()}"></label>
-          <label>請求書番号<input type="text" id="pyNo" maxlength="100"></label>
-          <label>小計（税抜）<input type="text" inputmode="decimal" id="pySub" value="${exp != null ? exp : ""}"></label>
-          <label>消費税<input type="text" inputmode="decimal" id="pyTax" value="${exp != null ? Math.round(exp / 10) : ""}"></label>
-          ${files.length ? `<label>ファイル<select id="pyFile">${files.map((f) => `<option value="${esc(f.id)}">${esc(f.fileName)}</option>`).join("")}<option value="">（なし）</option></select></label>` : ""}
-        </div>
-        <p><button type="button" class="of-btn" data-pay="register" data-contract="${esc(r.siteContractId)}">請求額を登録して照合する</button></p>`}`;
-    }
-    const line = inv.lines.find((l) => l.siteContractId === r.siteContractId);
-    const STATE = { match: "契約と一致", mismatch: "金額不一致", unknown: "自動で照合できません" };
-    const pay = inv.payment;
-    const btn = (action, label, sec) => `<button type="button" class="of-btn${sec ? " sec" : ""}" data-pay="${action}" data-invoice="${esc(inv.id)}" data-contract="${esc(r.siteContractId)}">${esc(label)}</button>`;
-    let actions = "";
-    if (!closed && inv.status === "received") actions = btn("approve", inv.match.state === "match" ? "照合OK・承認する" : "理由を書いて承認する") + " " + btn("void", "請求書を取り消す", true);
-    else if (!closed && inv.status === "approved" && d.canRecordPayment) {
-      if (!pay) actions = `<div class="row"><label>支払予定日<input type="date" id="pyDue"></label><label>支払額<input type="text" inputmode="decimal" id="pyAmt" value="${inv.total}"></label></div>${btn("schedule", "支払予定を入れる")} ${btn("void", "請求書を取り消す", true)}`;
-      else if (pay.status === "scheduled") actions = `<div class="row"><label>支払日<input type="date" id="pyPaid" value="${esc(pay.scheduledOn)}"></label></div>${btn("pay", "支払済にする")} ${btn("cancel_payment", "支払予定を取り消す", true)}`;
-      else actions = btn("cancel_payment", "支払済を取り消す", true);
-    } else if (!closed && inv.status === "approved") actions = `<p class="of-muted">支払の記録は、経営者・経理が行います。</p>`;
-    return `
-      <dl>
-        <dt>請求書</dt><dd>${esc(inv.invoiceNo || "番号なし")}（${esc(fmtDay(inv.receivedOn))} 受領）${inv.lines.length > 1 ? `・${inv.lines.length}名分` : ""}</dd>
-        <dt>この要員の請求額</dt><dd>${yen(line?.amount)}（税抜）</dd>
-        <dt>契約どおりなら</dt><dd>${line?.expected != null ? yen(line.expected) : esc((line?.expectedReasons || []).join("・") || "—")}</dd>
-        <dt>請求書の合計</dt><dd>${yen(inv.total)}（税 ${yen(inv.tax)}）</dd>
-        <dt>照合</dt><dd>${esc(STATE[inv.match.state] || inv.match.state)}</dd>
-        <dt>状態</dt><dd>${inv.status === "approved" ? "承認済" : "照合待ち"}${pay ? `・${pay.status === "paid" ? `支払済（${esc(fmtDay(pay.paidOn))}）` : `支払予定 ${esc(fmtDay(pay.scheduledOn))}`}` : ""}</dd>
-        ${inv.mismatchNote ? `<dt>承認の理由</dt><dd>${esc(inv.mismatchNote)}</dd>` : ""}
-      </dl>
-      ${inv.status === "received" ? inv.match.issues.map((i) => `<p class="issue">${esc(i.text)}</p>`).join("") : ""}
-      ${actions}`;
-  }
-  async function runPay(btn) {
-    const action = btn.dataset.pay;
-    const v = (id) => el(id)?.value ?? "";
-    let body;
-    if (action === "register") {
-      const sub = v("pySub"), tax = v("pyTax");
-      body = { receivedOn: v("pyRecv"), invoiceNo: v("pyNo"), subtotal: sub, tax, submissionId: v("pyFile") || undefined,
-        lines: [{ siteContractId: btn.dataset.contract, amount: sub }] };
-    } else if (action === "approve") {
-      body = { id: btn.dataset.invoice };
-      if (btn.textContent.includes("理由")) {
-        const note = prompt("契約と一致しない（または照合できない）まま承認します。理由を入れてください");
-        if (!note) return;
-        body.note = note;
-      }
-    } else if (action === "schedule") body = { id: btn.dataset.invoice, scheduledOn: v("pyDue"), amount: v("pyAmt") };
-    else if (action === "pay") body = { id: btn.dataset.invoice, paidOn: v("pyPaid") };
-    else {
-      const reason = prompt(action === "void" ? "請求書を取り消す理由を入れてください" : "支払を取り消す理由を入れてください");
-      if (!reason) return;
-      body = { id: btn.dataset.invoice, reason };
-    }
-    btn.disabled = true;
-    try {
-      await API.api("/api/office/payables", { method: "POST", body: { action, month: state.month, ...body } });
-      await load();                                    // 一覧・ドロワー（開き直して支払を読み直す）
-    } catch (e) {
-      btn.disabled = false;
-      alert(e.body?.errors?.join("\n") || e.hint || e.detail || e.message || "記録できませんでした");
-    }
-  }
-
-  // ---- 月次完了（/api/office/close）--------------------------------------------------
-  function renderClose() {
-    const d = state.data;
-    if (!d?.phase4?.ready) { el("closebar").innerHTML = ""; return; }
-    const c = d.close || { closed: false };
-    const rows = d.rows || [];
-    const left = rows.filter((r) => r.stage !== "done").length;
-    el("closebar").innerHTML = c.closed
-      ? `<div class="of-closebar done" role="status"><span><span class="material-symbols-outlined" aria-hidden="true" style="vertical-align:-5px;">task_alt</span>
-          この月は月次完了済みです（${esc(fmt(c.closedAt))}${c.closedByName ? `・${esc(c.closedByName)}` : ""}）</span>
-          <button type="button" class="of-btn sec" data-close-month="reopen">月次完了を取り消す</button></div>`
-      : `<div class="of-closebar"><span>${rows.length && !left ? "すべての案件が完了しました。月次完了にできます。" : `月次完了まで：残り ${left} 件`}</span>
-          <button type="button" class="of-btn" data-close-month="close"${rows.length && !left ? "" : " disabled"}>月次完了にする</button></div>`;
-  }
-  async function runClose(action) {
-    const body = { action, month: state.month };
-    if (action === "reopen") {
-      const reason = prompt("月次完了を取り消す理由を入れてください");
-      if (!reason) return;
-      body.reason = reason;
-    } else if ((state.data?.rows || []).some((r) => r.check)) {
-      const note = prompt("要確認の案件があります。確認した内容を入れてください");
-      if (!note) return;
-      body.note = note;
-    } else if (!confirm(`${state.month} を月次完了にします。よろしいですか？`)) return;
-    try {
-      await API.api("/api/office/close", { method: "POST", body });
-      await load();
-    } catch (e) {
-      alert(e.hint || e.detail || e.message || "月次完了にできませんでした");
-    }
-  }
-
-  // 勤務表の欄の操作：状態に合った1つ（次にやること と同じ）＋「勤務表を追加」（届いているファイルへの追加・差し替え）
-  function sheetSectionActions(r) {
-    if (!isSheetRow(r)) return "";
-    const s = r.sheetInfo.state;
-    const link = (label, icon, extra) => ({ kind: "link", label, icon, href: sheetLinkUrl(r, extra) });
-    const oneFile = r.submissions.filter((x) => x.kind === "timesheet").length === 1 && !r.warnings.some((w) => /同じファイル/.test(w));
-    const main = s === "submitted" ? (oneFile ? link("AIで読み取る", "auto_awesome", "&read=1") : link("ファイルを確認する", "folder_open"))
-      : s === "draft" ? link("内容を確認する", "fact_check")
-        : s === "confirmed" ? link("確定内容を見る", "visibility") : PICK;
-    const more = s === "none" || s === "returned" || s === "confirmed" ? "" : ctaBtn(r, { ...PICK, label: "別のファイルを追加" }, "sec");
-    return `<div class="of-actions" style="margin-top:8px;gap:8px;flex-wrap:wrap;">${ctaBtn(r, main, "cta")}${more}</div>`;
-  }
-
-  // 契約条件（単価そのものは、この一覧では出さない。条件の画面で見る）
-  function termsBlock(r) {
-    const t = r.terms || { status: "none" };
-    const txt = t.status === "none" ? "この月に効く契約条件は、まだ登録されていません。"
-      : t.status === "multiple" ? "この月は、条件が2件以上あります（月の途中で条件が変わる）。自動では選びません。"
-        : t.partial ? "契約条件は登録済みです（この月の一部だけ有効）。" : "契約条件は登録済みです。";
-    return `<p>${esc(txt)}</p><div class="of-actions" style="margin-top:6px;"><a class="of-btn sec" style="text-decoration:none;" href="${esc(termsUrl(r))}">契約条件を${t.status === "none" ? "登録する" : "見る・直す"}</a></div>`;
-  }
-  // 稼働計算：勤務表の状態、確定した時間、精算の結果
-  function workBlock(r) {
-    const si = r.sheetInfo;
-    if (!si) return "";
-    const yen = (v) => `${Number(v).toLocaleString("ja-JP")}円`;
-    let h = `<p>勤務表の状態：${sheetPill(r)}</p>`;
-    if (si.state === "confirmed") h += `<p>確定した稼働時間：<b>${esc(si.hours)}h</b>${si.workDays != null ? `（稼働 ${si.workDays}日）` : ""}</p>`;
-    else if (si.state === "draft") h += `<p class="of-muted">下書きです。${si.unresolved ? `入力が必要な日 ${si.unresolved}日。` : ""}${si.review ? `要確認 ${si.review}日。` : ""}確定すると、稼働時間が出ます。</p>`;
-    const st = r.settle;
-    if (st) {
-      h += st.status === "calculated"
-        ? `<p>売上の精算：<b>${esc(yen(st.amount))}</b>${st.band ? `<span class="of-muted">（${{ within: "精算幅の中", over: "精算幅の超過", under: "精算幅の不足" }[st.band]}）</span>` : ""}</p>`
-        : `<p>売上の精算：${st.status === "none" ? "契約条件が未登録のため、計算できません。" : "自動では計算できません。"}</p>${(st.reasons || []).length ? `<ul style="margin:0 0 6px;padding-left:18px;font-size:12px;">${st.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}`;
-    }
-    return h;
-  }
-
-  // ---- 複数選択・一括更新・一括削除 ------------------------------------------------------------
-  // 選べるのは、いま一覧に見えている案件だけ。選ぶと、画面の下に操作バーが出る（更新・削除・選択解除）。
-  // 更新：複数の案件に共通して安全な項目（更新確認状況・契約終了予定・契約開始日）だけ。単価・精算条件・勤務時間は、案件ごとに違うので、ここでは変えない。
-  // 削除：必ず確認のモーダルを通す（件数・要員名・客先名・いっしょに消える関連データを見せ、確認のチェックを入れるまで押せない）。
-  // どちらも、Office 専用の /api/office/contracts を使う（権限・履歴はサーバ側）
-  const rowById = (id) => (state.data?.rows || []).find((r) => r.siteContractId === id);
-  const visibleIds = () => visibleRows().map((r) => r.siteContractId);
-  const selectedRows = () => [...state.sel].map(rowById).filter(Boolean);
-
-  function toggleAll(on) {
-    for (const id of visibleIds()) { if (on) state.sel.add(id); else state.sel.delete(id); }
-    renderSelection();
-  }
-  function renderSelection() {
-    const ids = visibleIds(), n = state.sel.size;
-    const all = ids.length > 0 && ids.every((i) => state.sel.has(i));
-    for (const b of [el("selAll"), el("selAllM")]) { b.checked = all; b.indeterminate = n > 0 && !all; b.disabled = !ids.length; }
-    for (const tr of document.querySelectorAll("#rows tr[data-id]")) {
-      const on = state.sel.has(tr.dataset.id);
-      tr.classList.toggle("sel", on);
-      const cb = tr.querySelector("[data-sel]");
-      if (cb) cb.checked = on;
-    }
-    el("bulkbar").hidden = n === 0;
-    el("bulkN").innerHTML = `<b>${n}</b>件選択中`;
-    el("wrap").classList.toggle("has-bulk", n > 0);
-  }
-
-  const postContracts = (action, ids, extra = {}) =>
-    API.api("/api/office/contracts", { method: "POST", body: { action, ids, month: state.month, ...extra } });
-
-  // モーダル：開くと中にフォーカス。Esc・キャンセルで閉じる（処理中は閉じない）。背景を押しても閉じない（誤操作防止）
-  let modalFocus = null;
-  function openModal(html) {
-    modalFocus = document.activeElement;
-    state.modal = { busy: false };
-    el("modal-root").innerHTML = `<div class="of-modal-bg"><div class="of-modal" role="dialog" aria-modal="true" aria-labelledby="md-title" tabindex="-1">${html}</div></div>`;
-    el("modal-root").querySelector(".of-modal").focus();
-    return el("modal-root");
-  }
-  function closeModal() {
-    el("modal-root").innerHTML = ""; state.modal = null;
-    if (modalFocus?.focus && document.contains(modalFocus)) { try { modalFocus.focus(); } catch { /* 消えた要素には戻さない */ } }
-    modalFocus = null;
-  }
-  function setModalBusy(on) {
-    if (!state.modal) return;
-    state.modal.busy = on;
-    for (const b of el("modal-root").querySelectorAll("button, input, select")) b.disabled = on || b.dataset.off === "1";
-  }
-  const nameLine = (r) => `<div class="t"><div><b>${esc(r.employeeName || "（要員名なし）")}</b></div><div>${esc(r.siteCompany)}</div></div>`;
-
-  // ---- 更新 ----
-  function openUpdateModal() {
-    const rows = selectedRows();
-    if (!rows.length) return;
-    const n = rows.length;
-    const root = openModal(`
-      <div class="of-modal-h"><h2 id="md-title">選択した${n}件を更新</h2>
-        <p>複数の案件に共通して変えてよい項目だけを、まとめて変更できます。変えたい項目にチェックを入れてください。</p></div>
-      <div class="of-modal-b">
-        <div class="of-targets" aria-label="更新する案件">${rows.map((r) => `<div class="t"><div><b>${esc(r.employeeName)}</b></div><div>${esc(r.siteCompany)}</div></div>`).join("")}</div>
-        <div class="of-field" id="uf-renewal-box">
-          <label class="use"><input type="checkbox" id="uf-renewal-use">更新確認状況を変更する</label>
-          <select id="uf-renewal" aria-label="更新確認状況" disabled>${Object.entries(RENEWAL).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
-        </div>
-        <div class="of-field" id="uf-to-box">
-          <label class="use"><input type="checkbox" id="uf-to-use">契約終了予定を変更する</label>
-          <input type="date" id="uf-to" aria-label="契約終了予定" disabled>
-          <label class="inline"><input type="checkbox" id="uf-to-none" disabled>未定にする（終了予定を空にする）</label>
-        </div>
-        <div class="of-field" id="uf-from-box">
-          <label class="use"><input type="checkbox" id="uf-from-use">契約期間（開始日）を変更する</label>
-          <input type="date" id="uf-from" aria-label="契約期間の開始日" disabled>
-        </div>
-        <div class="of-okbox">単価・精算条件・勤務時間は、案件ごとに違うことが多いため、一括では変更できません。案件ごとに変更してください。</div>
-        <div class="er" id="mdErr" role="alert"></div>
-      </div>
-      <div class="of-modal-f">
-        <button type="button" class="of-btn sec" id="mdCancel">キャンセル</button>
-        <button type="button" class="of-btn" id="mdOk" disabled data-off="1">選択した${n}件を更新</button>
-      </div>`);
-    const $ = (id) => root.querySelector(`#${id}`);
-    const read = () => {
-      const f = {};
-      if ($("uf-renewal-use").checked) f.renewalStatus = $("uf-renewal").value;
-      if ($("uf-to-use").checked) f.periodTo = $("uf-to-none").checked ? null : $("uf-to").value;
-      if ($("uf-from-use").checked) f.periodFrom = $("uf-from").value;
-      let error = "";
-      if (!Object.keys(f).length) error = "";
-      else if ("periodTo" in f && f.periodTo === "") error = "契約終了予定の日付を入れてください（空にするときは「未定にする」）";
-      else if ("periodFrom" in f && !f.periodFrom) error = "契約開始日の日付を入れてください";
-      else if (f.periodTo && f.periodFrom && f.periodTo < f.periodFrom) error = "契約終了予定が、開始日より前になっています";
-      return { f, error, ready: Object.keys(f).length > 0 && !error };
-    };
-    let srvErr = "";                                   // サーバに断られた理由（入力を変えたら消す）
-    const sync = () => {
-      $("uf-renewal").disabled = !$("uf-renewal-use").checked;
-      $("uf-to-none").disabled = !$("uf-to-use").checked;
-      $("uf-to").disabled = !$("uf-to-use").checked || $("uf-to-none").checked;
-      $("uf-from").disabled = !$("uf-from-use").checked;
-      for (const [box, use] of [["uf-renewal-box", "uf-renewal-use"], ["uf-to-box", "uf-to-use"], ["uf-from-box", "uf-from-use"]]) $(box).classList.toggle("on", $(use).checked);
-      const r = read();
-      $("mdErr").textContent = r.error || srvErr;
-      $("mdOk").disabled = !r.ready; $("mdOk").dataset.off = r.ready ? "0" : "1";
-    };
-    root.querySelector(".of-modal").addEventListener("input", () => { srvErr = ""; sync(); });
-    root.querySelector(".of-modal").addEventListener("change", () => { srvErr = ""; sync(); });
-    $("mdCancel").onclick = () => closeModal();
-    $("mdOk").onclick = async () => {
-      const r = read();
-      if (!r.ready || state.modal?.busy) return;
-      const ids = rows.map((x) => x.siteContractId);
-      setModalBusy(true); $("mdOk").textContent = "更新中…"; $("mdErr").textContent = "";
-      try {
-        const res = await postContracts("update", ids, { fields: r.f });
-        const what = [r.f.renewalStatus ? "更新確認状況" : null, "periodTo" in r.f ? "契約終了予定" : null, r.f.periodFrom ? "契約開始日" : null].filter(Boolean).join("・");
-        closeModal(); state.sel.clear();
-        await load();
-        banner("ok", `${res.updated}件の案件を更新しました（${what}）`);
-      } catch (e) {
-        setModalBusy(false); $("mdOk").textContent = `選択した${n}件を更新`;
-        srvErr = contractError(e, "更新できませんでした");
-        sync();
-      }
-    };
-    sync();
-  }
-
-  // 削除・更新の失敗を、人が読む文にする（期間の食い違い・請求済み・ファイルを消せない、など）
-  function contractError(e, fallback) {
-    const b = e.body || {};
-    if (e.code === "period_conflict" && Array.isArray(b.conflicts)) {
-      return `${fallback}。1件も変更していません。\n` + b.conflicts.map((c) => `・${c.employeeName}（${c.siteCompany}）：${c.reason}`).join("\n");
-    }
-    if (e.code === "has_billing" && Array.isArray(b.contracts)) {
-      return `${b.hint}\n` + b.contracts.map((c) => `・${c.employeeName}（${c.siteCompany}）`).join("\n");
-    }
-    if (e.code === "contract_not_found") return "選んだ案件のうち、すでに無くなっているものがあります。画面を読み込み直して、選び直してください";
-    return e.hint || e.detail || e.message || fallback;
-  }
-
-  // ---- 削除 ----
-  async function openDeleteModal() {
-    const rows = selectedRows();
-    if (!rows.length) return;
-    const n = rows.length, ids = rows.map((r) => r.siteContractId);
-    const root = openModal(`
-      <div class="of-modal-h"><h2 id="md-title">案件を削除します</h2>
-        <p>選択件数：<b id="mdCount">${n}件</b>　この操作は元に戻せません。</p></div>
-      <div class="of-modal-b">
-        <div class="of-targets" id="mdTargets" aria-label="削除する案件">${rows.map((r) => `<div class="t" data-id="${esc(r.siteContractId)}"><div><b>${esc(r.employeeName || "（要員名なし）")}</b><small>要員</small></div><div>${esc(r.siteCompany)}<small>客先</small></div></div>`).join("")}</div>
-        <div class="of-warnbox">
-          <b>選択した案件に関連する、勤務表・月次進捗・契約条件も、あわせて削除されます。</b>
-          <ul>
-            <li>勤務表（提出されたファイル・読取結果・確定した稼働時間）</li>
-            <li>月次進捗（受領・確認・請求などの記録）</li>
-            <li>契約条件（単価・精算条件）</li>
-          </ul>
-          <div id="mdRel" style="margin-top:6px;">削除される件数を確認しています…</div>
-          <div style="margin-top:4px;">要員（社員名簿）は、削除されません。</div>
-        </div>
-        <label class="of-confirm"><input type="checkbox" id="mdConfirm" disabled>上の内容を確認しました。関連データも削除されることを了解します</label>
-        <div class="er" id="mdErr" role="alert"></div>
-      </div>
-      <div class="of-modal-f">
-        <button type="button" class="of-btn sec" id="mdCancel">キャンセル</button>
-        <button type="button" class="of-btn danger" id="mdOk" disabled data-off="1">選択した${n}件を削除</button>
-      </div>`);
-    const $ = (id) => root.querySelector(`#${id}`);
-    const me = state.modal;                            // このモーダル（閉じて開き直されたら、古い応答は捨てる）
-    let ready = false;                                 // 関連データの件数を読み終えて、削除できる状態か
-    const sync = () => {
-      const can = ready && $("mdConfirm").checked;
-      $("mdOk").disabled = !can; $("mdOk").dataset.off = can ? "0" : "1";
-    };
-    $("mdCancel").onclick = () => closeModal();        // 何も削除しない
-    $("mdConfirm").onchange = sync;
-    $("mdOk").onclick = async () => {
-      if (!ready || !$("mdConfirm").checked || state.modal?.busy) return;
-      setModalBusy(true); $("mdOk").textContent = "削除中…"; $("mdErr").textContent = "";
-      try {
-        const res = await postContracts("delete", ids, { confirm: true, confirmCount: n });
-        closeModal(); state.sel.clear();
-        if (state.openId && ids.includes(state.openId)) { state.openId = null; closeDrawer(true); }
-        await load();
-        banner("ok", `${res.deleted}件の案件を削除しました${res.storageRemoved ? `（勤務表のファイル ${res.storageRemoved}件も削除）` : ""}`);
-      } catch (e) {
-        setModalBusy(false); $("mdOk").textContent = `選択した${n}件を削除`;
-        $("mdErr").textContent = contractError(e, "削除できませんでした");
-        sync();
-      }
-    };
-    try {
-      const pv = await postContracts("preview", ids);
-      if (state.modal !== me) return;                  // 読んでいる間に閉じられた
-      for (const c of pv.contracts) {
-        const t = root.querySelector(`#mdTargets [data-id="${c.id}"]`);
-        if (t) t.lastElementChild.insertAdjacentHTML("beforeend", `<small>勤務表ファイル ${c.counts.files}件・勤務表 ${c.counts.sheets}件・月次進捗 ${c.counts.progress}件・契約条件 ${c.counts.terms}件</small>`);
-      }
-      const tt = pv.totals;
-      $("mdRel").innerHTML = `削除されるもの：勤務表のファイル <b>${tt.files}件</b>（保存先のファイルも削除）／勤務表 <b>${tt.sheets}件</b>${tt.confirmedSheets ? `（確定済み ${tt.confirmedSheets}件を含む）` : ""}／月次進捗 <b>${tt.progress}件</b>／契約条件 <b>${tt.terms}件</b>`;
-      if (pv.blocked.length) {
-        const names = pv.contracts.filter((c) => c.blocked).map((c) => `・${c.employeeName}（${c.siteCompany}）`).join("\n");
-        $("mdErr").textContent = `請求書の作成・送付、BP請求書の受領の印が付いている案件は、削除できません。選択から外してください。\n${names}`;
-      } else { ready = true; $("mdConfirm").disabled = false; }
-      sync();
-    } catch (e) {
-      if (state.modal !== me) return;
-      $("mdRel").textContent = "";
-      $("mdErr").textContent = contractError(e, "削除の内容を確認できませんでした");
-    }
-  }
-
-  // ---- 提出ファイルを開く ------------------------------------------------------------
-  // クリックの中で先に空の窓を開けておく（あとから開くと、ポップアップとして止められる）
-  async function openFile(id, btn) {
-    const w = window.open("about:blank", "_blank");
-    if (w) { try { w.opener = null; } catch { /* 触れない窓でも続ける */ } }
-    btn.disabled = true;
-    try {
-      const res = await API.api(`/api/office/file?id=${encodeURIComponent(id)}`);
-      if (w) w.location.href = res.url; else location.href = res.url;
-    } catch (e) {
-      if (w) w.close();
-      banner("err", "ファイルを開けませんでした：" + (e.hint || e.detail || e.message));
-    } finally { btn.disabled = false; }
+    const failed = [b, hr, cl, of].some((x) => x && !x.ok);
+    el("banner").innerHTML = failed
+      ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>取得できなかった項目は「—」と出しています。</div></div>`
+      : (od == null && can.app && officeData?.message ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>${esc(officeData.message)}</div></div>` : "");
   }
 </script>
 

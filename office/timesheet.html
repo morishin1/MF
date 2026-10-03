@@ -8,12 +8,11 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261002sp2">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261003ux1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261003ux1">
   <style>
-    body { font-family:'Zen Kaku Gothic New', sans-serif; }
-    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     [hidden] { display:none !important; }   /* display を指定した部品でも、hidden で隠れるように */
 
     .ts-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
@@ -128,7 +127,7 @@
 <body>
 
 <div class="wrap">
-  <a class="ts-back" id="back" href="/office/"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>月次業務へ戻る</a>
+  <a class="ts-back" id="back" href="/office/monthly.html"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>月次業務へ戻る</a>
   <div class="ts-head">
     <div>
       <h1 class="of-title" id="title">勤務表の確認</h1>
@@ -162,8 +161,10 @@
 
 <div id="dlg-root"></div>
 
-<script src="../js/api-client.js?v=20261002sp2"></script>
-<script src="../js/office-layout.js?v=20261002sp2"></script>
+<script src="../js/api-client.js?v=20261003ux1"></script>
+<script src="../js/device.js?v=20261003ux1"></script>
+<script src="../js/layout.js?v=20261003ux1"></script>
+<script src="../js/office-layout.js?v=20261003ux1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -192,7 +193,7 @@
   O.init({ active: "monthly" }).then((ctx) => {
     if (!ctx) return;
     if (!CONTRACT || !MONTH) { banner("err", "対象（現場契約・月）が指定されていません。月次業務の一覧から開いてください。"); return; }
-    el("back").href = `/office/?month=${encodeURIComponent(MONTH)}&id=${encodeURIComponent(CONTRACT)}`;
+    el("back").href = `/office/monthly.html?month=${encodeURIComponent(MONTH)}&id=${encodeURIComponent(CONTRACT)}`;
     wire();
     load();
     // 確認にかかった時間（人が画面を見ている時間）。AI の精度ではなく、確認の手間を測るために残す
