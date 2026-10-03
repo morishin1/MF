@@ -99,65 +99,37 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   check(!/\bon\b/.test((await settings.getAttribute("class")) || ""), "Office の業務の画面では「管理」（⚙）は選ばれない");
   check((await page.locator(".kp-app").innerText()).includes("Office"), "タグは「Office」");
 
-  const heads = await page.locator(".kp-side-group .lb").allInnerTexts();
-  // Office は3グループ（人事・労務／経理・事務／社内管理）。⚙管理（システム設定）は領域が別なので、ここには出ない
-  check(heads.length === 3, `見出しは3つ（いま ${heads.length}: ${heads.join("・")}）`);
-  check(!heads.some((h) => /全社運営/.test(h)), "新方針にない「全社運営」は作らない");
-  for (const x of ["人事・労務", "経理・事務", "社内管理"]) {
-    check(heads.some((h) => h.trim() === x), `グループ「${x}」`);
-  }
-
-  // 見えている項目は、いまいるグループのぶんだけ。ほかは畳んである
-  const shown = (await page.locator(".kp-side-sub:not(.hidden) .kp-side-item").allInnerTexts())
-    .map((s) => s.trim());
-  check(shown.length <= 6, `開いているのは1グループぶんだけ（いま ${shown.length} 行）`);
-  check(shown.some((s) => s.includes("勤怠管理")), "いまいるグループが開いている");
-  // 人事・労務の最終形（採用HRはヘッダーの近道が正式な入口。左には置かない）
-  // アイコンはフォントが読めない環境では名前の文字として出るので、最後の行（項目名）だけを比べる
-  const hrItems = shown.map((t) => t.split("\n").pop().trim()).join("/");
-  check(hrItems === "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア",
-    `人事・労務の並び（いま ${hrItems}）`);
-
-  // 左メニュー全体（畳まれているグループも含む）に、採用HR・Sales の入口が無い
-  const allHref = await page.locator(".kp-sidebar a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href") || ""));
-  check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "左メニューに「採用」（/hr/）は置かない");
-  check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "左メニューに「営業」（/sales/）は置かない");
-  // 先頭のホーム（/office/）は、グループの外の1行
-  const top = (await page.locator(".kp-sidebar > .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
-  check(top.join("/") === "ホーム", `Officeの先頭（いま ${top.join("/")}）`);
-  check(await page.locator(".kp-sidebar > .kp-side-item").first().getAttribute("href") === "/office/", "ホーム → /office/");
-  // Office の最終メニュー（人事・労務5・経理・事務4・社内管理2）
-  // 項目は見出しの隣の .kp-side-sub（同じ data-group）に入っている。畳まれていても数える
-  const groupItems = await page.locator(".kp-side-group").evaluateAll((gs) => gs.map((g) => ({
-    head: g.querySelector(".lb")?.textContent.trim(),
-    items: [...document.querySelectorAll(`.kp-side-sub[data-group="${g.dataset.group}"] .kp-side-item > span:not(.material-symbols-outlined)`)]
-      .map((x) => x.textContent.trim()),
-  })));
-  const want = {
-    "人事・労務": "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア",
-    "経理・事務": "経費精算/月次業務/請求・支払/会計",
-    "社内管理": "社内文書/お知らせ配信",
-  };
-  for (const [head, list] of Object.entries(want)) {
-    const g = groupItems.find((x) => x.head === head);
-    const got = (g?.items || []).join("/");
-    check(got === list, `${head} の並び（いま ${got}）`);
-  }
-
-  // ここがいちばん大事。スクロールなしで全部見えるか。
-  //
-  // 器（.kp-sidebar）の高さは画面いっぱいなので、測っても分からない。
-  // 中身の最後の行が、画面の下より上にあるかを見る
-  check(await fits(page, ".kp-sidebar"), await fitsNote(page, ".kp-sidebar"));
-
-  // 2階層目は左に出さない。ページの上の帯に出す
-  const side = await page.locator(".kp-sidebar").innerText();
+  // Office のナビゲーションは、共通ヘッダーの下の横タブ（左サイドバーは無い）
+  check(await page.locator(".kp-sidebar").count() === 0, "Office に左サイドバーは無い");
+  const cat = await page.locator("#kp-office-nav .kp-otab").evaluateAll((ns) => ns.map((n) => ({
+    label: n.querySelector("span").textContent.trim(), href: n.getAttribute("href"), on: n.classList.contains("on") })));
+  check(cat.map((x) => x.label).join("/") === "ホーム/人事・労務/経理・事務/社内管理", `1段目のタブ（いま ${cat.map((x) => x.label).join("/")}）`);
+  check(cat[0]?.href === "/office/", "ホーム → /office/");
+  check(cat.find((x) => x.on)?.label === "人事・労務", "いまいるカテゴリ（人事・労務）が選ばれている");
+  // 2段目：いまのカテゴリの中の画面。人事・労務の最終形（採用HRはヘッダーの近道が正式な入口。ここには置かない）
+  const sub2 = await page.locator("#kp-office-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => ({
+    label: n.querySelector("span").textContent.trim(), href: n.getAttribute("href"), on: n.classList.contains("on") })));
+  check(sub2.map((x) => x.label).join("/") === "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア", `人事・労務の並び（いま ${sub2.map((x) => x.label).join("/")}）`);
+  check(sub2.find((x) => x.on)?.label === "勤怠管理", "いまいる画面（勤怠管理）が選ばれている");
+  const allHref = await page.locator("#kp-office-nav a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href") || ""));
+  check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "Office のタブに「採用」（/hr/）は置かない");
+  check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "Office のタブに「営業」（/sales/）は置かない");
+  const nav = await page.locator("#kp-office-nav").innerText();
   for (const x of ["全員のタスク", "全員の日報", "AIナレッジ", "チーム状況"]) {
-    check(!side.includes(x), `Officeの左メニューに「${x}」を置かない（経営・⚙管理の側）`);
+    check(!nav.includes(x), `Office のタブに「${x}」を置かない（経営・⚙管理の側）`);
   }
-  check(!/休暇・稟議/.test(side), "「休暇・稟議」は左メニューに出ていない");
-  check(!/自走レベル/.test(side), "「自走レベル」は左メニューに出ていない");
-  check(!/電子署名/.test(side), "「電子署名」は左メニューに出ていない");
+  // 3段目（画面の中の切り替え）は、Office のタブではなく見出しの下の帯
+  check(!/休暇・稟議/.test(nav), "「休暇・稟議」は Office のタブに出ていない（見出しの下の帯）");
+  // ほかのカテゴリの中身（2段目）
+  for (const [file, head, list] of [
+    ["admin-expenses.html", "経理・事務", "経費精算/月次業務/請求・支払/会計"],
+    ["admin-docs.html", "社内管理", "社内文書/お知らせ配信"],
+  ]) {
+    const q = await open(file, { admin: true });
+    const got = (await q.locator("#kp-office-nav .kp-ostab span:first-child").allInnerTexts()).map((x) => x.trim()).join("/");
+    check(got === list, `${head} の並び（いま ${got}）`);
+    await q.close();
+  }
 
   const sub = page.locator(".kp-subnav");
   check(await sub.isVisible(), "ページの上に切り替えの帯が出る");
@@ -184,7 +156,7 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
   check(new URL(d.url()).pathname === "/office/", `admin-dashboard.html → /office/（いま ${new URL(d.url()).pathname}）`);
   check(await d.locator('.kp-shortcut[data-shortcut="office"].on').count() === 1, "Office ホームでは「Office」が選ばれる");
   check((await d.locator(".kp-app").innerText()).includes("Office"), "ヘッダーに「/ Office」と出る");
-  check((await d.locator(".kp-side-item.on").innerText()).includes("ホーム"), "左でホームが光る");
+  check((await d.locator("#kp-office-nav .kp-otab.on").innerText()).includes("ホーム"), "Office のタブでホームが選ばれる");
   await d.close();
 
   // home.html はホーム領域。管理者でも、メンバーと同じ左メニューになる
@@ -288,9 +260,9 @@ console.log("\n— 帯から、隣の画面へ行ける —");
   const page = await open("admin-requests.html", { admin: true });
   const on = await page.locator(".kp-subnav .kp-subtab.on").innerText();
   check(on.trim() === "休暇・稟議", `隣を開いても帯が出る（いま ${on}）`);
-  // 左メニューでは、まとめた側が光っている
-  const lit = await page.locator(".kp-side-item.on").innerText();
-  check(/勤怠管理/.test(lit), `左では「勤怠管理」が光る（いま ${lit.trim()}）`);
+  // Office のタブ（2段目）では、まとめた側が選ばれている
+  const lit = await page.locator("#kp-office-nav .kp-ostab.on").innerText();
+  check(/勤怠管理/.test(lit), `タブでは「勤怠管理」が選ばれる（いま ${lit.trim()}）`);
   await page.close();
 }
 

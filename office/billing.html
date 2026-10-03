@@ -15,33 +15,25 @@
   <style>
     /* 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で並べ直した一覧。
        操作（作成・送付・受領・照合・支払）は、月次業務の案件の画面で行う（ここでは処理を増やさない） */
-    .bl-sum { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:0 0 14px; }
-    .bl-card { text-align:left; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; cursor:pointer; font-family:inherit; color:inherit; }
-    .bl-card:hover { background:#fafaf7; }
-    .bl-card.on { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
-    .bl-card .lb { font-size:12px; color:#6b7080; font-weight:700; }
-    .bl-card .v { display:block; font-size:24px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; }
-    .bl-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
-    .bl-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px; background:#f6f6f2; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
-    .bl-table td { padding:10px; border-bottom:1px solid #e2e2dc; font-size:13px; vertical-align:top; }
-    .bl-table tr:last-child td { border-bottom:none; }
-    .bl-nm { font-weight:700; color:#1b2440; display:block; }
-    .bl-sub { font-size:11.5px; color:#6b7080; display:block; margin-top:2px; }
-    .bl-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 10px 3px 8px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+    /* 見た目は共通（.of-chips / .of-chip / .of-table）。状態のラベルは月次業務と同じ色（薄い色＋文字＋アイコン） */
+    .bl-sum { margin:0 0 12px; }
+    .bl-card .v { margin-left:2px; }
+    .bl-nm { font-weight:700; color:var(--of-ink); display:block; }
+    .bl-sub { font-size:11.5px; color:var(--of-mute); display:block; margin-top:2px; }
+    .bl-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:2px 9px 2px 7px; font-size:11px; font-weight:700; white-space:nowrap; }
     .bl-st .material-symbols-outlined { font-size:14px; }
-    .bl-st.done { background:#d9f0d9; color:#1f6b31; }
-    .bl-st.todo { background:#ffe9d1; color:#a34a00; }
-    .bl-st.warn { background:#fde4e2; color:#b3261e; }
-    .bl-st.mid  { background:#e3e8f6; color:#1b2440; }
-    .bl-st.na   { background:#eeeeea; color:#5b6070; }
+    .bl-st.done { background:#e3f4e7; color:#1f6f3a; }
+    .bl-st.todo { background:#fff4d9; color:#8a5a00; }
+    .bl-st.warn { background:#fdeceb; color:#b3261e; }
+    .bl-st.mid  { background:#e8f0fb; color:#2c5282; }
+    .bl-st.na   { background:#edf0f4; color:#5b6474; }
     @media (max-width: 860px) {
-      .bl-sum { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .bl-table, .bl-table tbody, .bl-table tr, .bl-table td { display:block; width:100%; box-sizing:border-box; }
-      .bl-table { border:none; background:none; }
-      .bl-table thead { display:none; }
-      .bl-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:6px 12px; }
-      .bl-table td { display:flex; justify-content:space-between; gap:10px; border:none; padding:5px 0; }
-      .bl-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; }
+      .wrap .of-table, .wrap .of-table tbody, .wrap .of-table tr, .wrap .of-table td { display:block; width:100%; box-sizing:border-box; }
+      .wrap .of-table { border:none; background:none; }
+      .wrap .of-table thead { display:none; }
+      .wrap .of-table tr { background:#fff; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:10px; padding:6px 12px; }
+      .wrap .of-table td { display:flex; justify-content:space-between; gap:10px; border:none; padding:5px 0; }
+      .wrap .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; }
     }
   </style>
 </head>
@@ -62,9 +54,9 @@
   </div>
 
   <div id="banner"></div>
-  <div class="bl-sum" id="sum" aria-label="請求・支払の件数"></div>
+  <div class="of-chips bl-sum" id="sum" aria-label="請求・支払の件数"></div>
 
-  <table class="bl-table" aria-label="請求・支払の一覧">
+  <table class="of-table" aria-label="請求・支払の一覧">
     <thead><tr><th>客先</th><th>要員</th><th>売上請求</th><th>仕入請求（BP）</th><th>支払</th><th></th></tr></thead>
     <tbody id="rows"><tr><td colspan="6" class="of-empty">読み込み中…</td></tr></tbody>
   </table>
@@ -154,8 +146,8 @@
       ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>${esc(d.message || "")}</div></div>` : "";
     const rows = d.rows || [];
     el("sum").innerHTML = FILTERS.map((f) => `
-      <button type="button" class="bl-card${state.filter === f.key ? " on" : ""}" data-filter="${f.key}" aria-pressed="${state.filter === f.key}">
-        <span class="lb">${esc(f.label)}</span><span class="v">${rows.filter(f.fn).length}</span>
+      <button type="button" class="of-chip bl-card${state.filter === f.key ? " on" : ""}" data-filter="${f.key}" aria-pressed="${state.filter === f.key}">
+        <span class="lb">${esc(f.label)}</span><b class="v">${rows.filter(f.fn).length}</b>
       </button>`).join("");
     const f = FILTERS.find((x) => x.key === state.filter) || FILTERS[0];
     const list = rows.filter(f.fn);

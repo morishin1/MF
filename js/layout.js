@@ -186,9 +186,11 @@
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
-  // ■ Office（業務アプリ）の左メニュー。2026-10-03 の再設計で、⚙管理にあった業務メニューをここへ移した。
-  //   ホーム／人事・労務／経理・事務／社内管理 の4つ。Office の画面（/office/* と、業務の管理画面 admin-*.html）は
-  //   すべてこの1つの左メニュー・同じヘッダーを使う（月次業務の専用ヘッダー・「GWへ戻る」は廃止）。
+  // ■ Office（業務アプリ）のナビゲーション。2026-10-03 の再設計で、⚙管理にあった業務メニューをここへ移した。
+  //   共通ヘッダー（採用HR／Sales／Office／経営）の下の横タブ：1段目がカテゴリ（ホーム／人事・労務／経理・事務／社内管理）、
+  //   2段目がカテゴリの中の画面（renderOfficeNav）。左サイドバー・ドロワーは持たない。
+  //   Office の画面（/office/* と、業務の管理画面 admin-*.html）は、すべてこのタブと同じヘッダーを使う
+  //   （月次業務の専用ヘッダー・「GWへ戻る」は廃止）。
   //   ⚙管理は、権限・端末・アクセス分析・AIナレッジ・システム設定だけ（毎日使わない設定系）。
   //
   // ■ 見えるかどうかは when（showsFor の shows ＝ /api/me の access。サーバの判定そのもの）だけで決める
@@ -197,7 +199,7 @@
   //     officeFinance … 経理・事務（管理者・経営者・経理）           lib/gw.js canOfficeFinance
   //     officeApp     … 月末月初業務 /office/（経営者・責任者・経理） lib/gw.js canAccessOffice
   //     adminApp      … 会計・お知らせ配信（管理者・経営者）
-  //   グループは、中に見える項目が1つも無ければ、グループごと出さない
+  //   カテゴリは、中に見える項目が1つも無ければ、カテゴリごと出さない
   //
   // ホーム（/office/）。Office に入れる人は全員ここが入口。中身は担当（権限）の分だけ出す
   const OFFICE_TOP = [
@@ -647,130 +649,63 @@
     });
   }
 
-  // ---- 管理者メニューの開け閉め -----------------------------------------------
-  // 開いているグループの鍵を覚えておく。読めない・壊れているときは空で始める
-  const NAV_OPEN_KEY = "kp_nav_open";
-  const loadOpen = () => {
-    try {
-      const v = JSON.parse(localStorage.getItem(NAV_OPEN_KEY) || "[]");
-      return new Set(Array.isArray(v) ? v : []);
-    } catch { return new Set(); }
-  };
-  const saveOpen = (set) => {
-    try { localStorage.setItem(NAV_OPEN_KEY, JSON.stringify([...set])); }
-    catch { /* 保存できなくても、その画面のあいだは動く */ }
-  };
-
-  /** いま見ている画面が入っている Office サブグループ。ここは必ず開く */
+  /** いま見ている画面が入っている Office のカテゴリ（人事・労務／経理・事務／社内管理） */
   const groupOf = (active) =>
     OFFICE_GROUPS.find((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))) || null;
 
   /**
-   * 管理者: 左サイドメニュー。いま選んでいる業務領域（ホーム／Office／管理）の中だけを出す。
-   * ホーム・管理は項目が少ないので平らに並べる。Office だけ人事・労務／経理・事務の
-   * 2グループに畳める（社労士のように項目が少ない相手には、従来どおり平らに並べる＝items引数）
+   * 管理者: 左サイドメニュー（管理（⚙）・経営の領域と、社労士）。
+   * Office は左メニューを持たない（renderOfficeNav の横タブ）
    */
   function renderAdminNav(active, items = null, shows = {}) {
     if (items) return renderSidebar(active, items, "admin");
-
-    // ホーム領域（全員と同じ左メニュー）は renderChrome が renderMemberNav で描く。ここは Office・管理だけ
     const area = areaOf(active);
-    if (area === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
     if (area === "keiei") return renderSidebar(active, KEIEI_ITEMS.filter((n) => !n.when || shows[n.when]), "admin");
+    return renderSidebar(active, SETTINGS_ITEMS, "admin");
+  }
 
-    const open = loadOpen();
-    const here = groupOf(active);
-    // PC では、いる場所のグループを必ず開く。
-    // 狭い画面ではメニューが本文の上に積まれるので、開いたままにすると
-    // 本文が下に押される。見出しに印を付けるだけにして、畳んでおく
-    // 狭い画面ではドロワー（本文を押し下げない）なので、どちらでも、いる場所のグループを開いておく
-    if (here) open.add(here.key);
-
-    const el = document.createElement("nav");
-    el.className = "kp-sidebar grouped";
-    // 自分の担当だけ出す（when は shows＝/api/me の access）。見える項目の無いグループは、グループごと出さない
+  /**
+   * Office のナビゲーション：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、横タブを2段で出す。
+   *   1段目：ホーム／人事・労務／経理・事務／社内管理（カテゴリ。OFFICE_TOP と OFFICE_GROUPS）
+   *   2段目：いまのカテゴリの中の画面（メンバー／入退社／… など。OFFICE_GROUPS の items）
+   *   3段目：画面の中の切り替え（勤怠／休暇・稟議 など）は、これまでどおり見出しの下の帯（renderSubnav）
+   * 左サイドバー・狭い画面のドロワーは持たない（採用HR・Sales と同じ、上のタブで行き来する）。
+   * 見える・見えないは when（/api/me の access）だけ。見える画面の無いカテゴリは出さない。
+   * 項目の行き先は、その人に見える先頭のタブ（月次業務のように、中のタブを担当で出し分ける項目）
+   */
+  function renderOfficeNav(active, shows = {}) {
     const vis = (n) => !n.when || Boolean(shows[n.when]);
-    // タブを担当で出し分ける項目（月次業務）は、その人に見えるタブの先頭へ飛ばす（入れない画面へ送らない）
     const first = (n) => {
       const t = (n.tabs || []).find(vis);
       return t && t.href !== n.href ? { ...n, href: t.href } : n;
     };
-    el.innerHTML = OFFICE_TOP.filter(vis).map((n) => sideItem(n, active)).join("") + OFFICE_GROUPS.filter((g) => vis(g) && g.items.some(vis)).map((g) => {
-      const on = open.has(g.key);
-      const hasActive = here && here.key === g.key;
-      return `
-        <button type="button" class="kp-side-group${on ? " open" : ""}${hasActive ? " here" : ""}"
-                data-group="${esc(g.key)}" aria-expanded="${on}"
-                onclick="KPLayout.toggleNavGroup('${esc(g.key)}')">
-          ${icon(g.icon, 19)}<span class="lb">${esc(g.label)}</span>
-          <span class="kp-side-dot hidden" title="中に対応が必要なものがあります"></span>
-          <span class="ch material-symbols-outlined">expand_more</span>
-        </button>
-        <div class="kp-side-sub${on ? "" : " hidden"}" data-group="${esc(g.key)}">
-          ${g.items.filter(vis).map((n) => sideItem(first(n), active)).join("")}
-        </div>`;
+    const hit = (n) => n.key === active || (n.match || []).includes(active);
+    const here = groupOf(active);
+    const groups = OFFICE_GROUPS.filter((g) => vis(g) && g.items.some(vis));
+    const top = OFFICE_TOP.filter(vis);
+
+    const cat = (key, href, label, on, badge) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}"${on ? ' aria-current="page"' : ""}>`
+      + `<span>${esc(label)}</span>${badge ? `<b class="kp-otab-dot hidden" data-cat-dot="${esc(key)}" title="中に対応が必要なものがあります"></b>` : ""}</a>`;
+    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), false)).join("")
+      + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), true)).join("");
+
+    const items = here ? here.items.filter(vis).map(first) : [];
+    const row2 = items.map((n) => {
+      const on = hit(n);
+      return `<a class="kp-ostab${on ? " on" : ""}${n.external ? " ext" : ""}" href="${esc(rootHref(n.href))}"${on ? ' aria-current="page"' : ""}>`
+        + `<span>${esc(n.label)}</span><b class="kp-side-badge hidden" data-badge="${esc(badgeKeys(n).join(" "))}"></b></a>`;
     }).join("");
+
+    const el = document.createElement("nav");
+    el.className = "kp-officenav";
     el.id = "kp-office-nav";
-    el.setAttribute("aria-label", "Office メニュー");
-    document.body.appendChild(el);
-    document.body.classList.add("kp-has-sidebar");
-    document.documentElement.classList.add("kp-has-sidebar");
-    mountDrawerToggle(el);
-  }
-
-  /**
-   * 狭い画面（860px 以下）では、Office の左メニューを左から出るドロワーにする。
-   * 本文の先頭に「メニュー」ボタン（いまいる画面の名前つき）を置き、押すと開く。背景・Esc・項目を押すと閉じる。
-   * 広い画面ではボタンは出ない（CSS）。描き直しても2つにならない
-   */
-  function mountDrawerToggle(nav) {
-    const wrap = document.querySelector(".wrap");
-    if (!wrap) return;
-    for (const old of document.querySelectorAll(".kp-side-toggle, .kp-side-backdrop")) old.remove();
-    const cur = nav.querySelector(".kp-side-item.on > span:not(.material-symbols-outlined)");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "kp-side-toggle";
-    btn.setAttribute("aria-controls", "kp-office-nav");
-    btn.setAttribute("aria-expanded", "false");
-    btn.innerHTML = `${icon("menu", 20)}<span>Office メニュー</span>${cur ? `<small>${esc(cur.textContent)}</small>` : ""}`;
-    wrap.insertBefore(btn, wrap.firstChild);
-    const back = document.createElement("div");
-    back.className = "kp-side-backdrop";
-    back.hidden = true;
-    document.body.appendChild(back);
-    const set = (on) => {
-      nav.classList.toggle("drawer-open", on);
-      back.hidden = !on;
-      btn.setAttribute("aria-expanded", String(on));
-      if (on) (nav.querySelector(".kp-side-item.on") || nav.querySelector("a, button"))?.focus();
-    };
-    btn.onclick = () => set(!nav.classList.contains("drawer-open"));
-    back.onclick = () => set(false);
-    if (!drawerKeyBound) {
-      drawerKeyBound = true;
-      document.addEventListener("keydown", (e) => {
-        if (e.key !== "Escape") return;
-        const n = document.getElementById("kp-office-nav");
-        if (n && n.classList.contains("drawer-open")) document.querySelector(".kp-side-toggle")?.click();
-      });
-    }
-  }
-  let drawerKeyBound = false;
-
-  /** グループを1つ開け閉めする。描き直さず、その場で切り替える */
-  function toggleNavGroup(key) {
-    const btn = document.querySelector(`.kp-side-group[data-group="${key}"]`);
-    const box = document.querySelector(`.kp-side-sub[data-group="${key}"]`);
-    if (!btn || !box) return;
-
-    const nowOpen = box.classList.toggle("hidden") === false;
-    btn.classList.toggle("open", nowOpen);
-    btn.setAttribute("aria-expanded", String(nowOpen));
-
-    const open = loadOpen();
-    if (nowOpen) open.add(key); else open.delete(key);
-    saveOpen(open);
+    el.setAttribute("aria-label", "Office");
+    el.innerHTML = `<div class="kp-otabs" role="list">${row1}</div>`
+      + (row2 ? `<div class="kp-ostabs" aria-label="${esc(here.label)}">${row2}</div>` : "");
+    const bar = document.querySelector(".topbar");
+    if (bar && bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling);
+    else document.body.insertBefore(el, document.body.firstChild);
+    document.body.classList.add("kp-has-officenav");
   }
 
   /**
@@ -868,12 +803,11 @@
       node.textContent = n > 99 ? "99+" : String(n);
       node.classList.toggle("hidden", !n);
     }
-    // 畳んだグループにも、中に用があることを出す（畳めるのは Office の2グループだけ）。
-    // 開かないと気づけないのでは、畳んだ意味が無くなる
+    // Office のカテゴリのタブにも、中に用があることを出す（開かないと気づけない、を作らない）
     for (const g of OFFICE_GROUPS) {
       const sum = g.items.reduce((a, it) =>
         a + badgeKeys(it).reduce((b, k) => b + (badges[k] || 0), 0), 0);
-      const mark = document.querySelector(`.kp-side-group[data-group="${g.key}"] .kp-side-dot`);
+      const mark = document.querySelector(`[data-cat-dot="${g.key}"]`);
       if (mark) mark.classList.toggle("hidden", !sum);
     }
   }
@@ -1040,7 +974,7 @@
     for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar"]) {
       for (const n of document.querySelectorAll(sel)) n.remove();
     }
-    document.body.classList.remove("kp-has-sidebar", "kp-has-tabbar");
+    document.body.classList.remove("kp-has-sidebar", "kp-has-tabbar", "kp-has-officenav");
     document.documentElement.classList.remove("kp-has-sidebar");
   }
 
@@ -1078,7 +1012,8 @@
     const areaNow = areaOf(active);
     const officeArea = areaNow === "office" && Boolean(shows.officeEntry) && !memberView;
     const adminArea = officeArea || (areaNow !== "home" && canPreview && !memberView);
-    if (adminArea) renderAdminNav(active, null, shows);
+    if (officeArea) renderOfficeNav(active, shows);
+    else if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
 
@@ -1425,8 +1360,6 @@
     // 保存させる（開かずに落とす）
     save: saveFile,
 
-    // 管理者メニューのグループを開け閉めする（サイドメニューの中から呼ばれる）
-    toggleNavGroup,
 
     // メンバーに見える画面を、このアカウントのまま確認する／やめる
     viewAsMember() { setMemberView(true); location.href = "home.html"; },
