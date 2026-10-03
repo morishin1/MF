@@ -108,9 +108,9 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック 
   await page.waitForSelector("#cards .oh-card", { timeout: 8000 });
   check(await page.locator("#progBox").isVisible(), "Office ホームに月次進捗が出る（/api/office を読める）");
   // 左メニューの「月次業務」から、月末月初業務の一覧へ
-  const ops = page.locator('.kp-side-group[data-group="office-ops"]');
-  if ((await ops.getAttribute("aria-expanded")) !== "true") await ops.click();
-  await Promise.all([page.waitForURL(/\/office\/monthly\.html/), page.locator('.kp-sidebar a.kp-side-item[href="/office/monthly.html"]').click()]);
+  // Office のタブ：経理・事務 → 2段目の「月次業務」
+  await Promise.all([page.waitForURL(/admin-expenses\.html|\/office\/monthly\.html/), page.locator('#kp-office-nav .kp-otab[data-cat="office-ops"]').click()]);
+  await Promise.all([page.waitForURL(/\/office\/monthly\.html/), page.locator('#kp-office-nav a.kp-ostab[href="/office/monthly.html"]').click()]);
   errs.length = 0;      // ここまでは開始地点（ホーム。疑似 API は空を返すだけ）。月次業務に入ってからのエラーを見る
   const shown = await page.waitForSelector("#month", { timeout: 8000 }).then(() => true, () => false);
   await page.waitForTimeout(600);
