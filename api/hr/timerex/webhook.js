@@ -71,7 +71,8 @@ const ERROR_STATUS = {
   invalid_body: 400, unsupported_webhook_type: 400, missing_applicant_id: 400,
   missing_event_id: 400, missing_scheduled_at: 400, unknown_event_type: 400, invalid_event: 400,
   applicant_not_found: 404, interview_not_found: 404, unknown_timerex_calendar: 422,
-  ambiguous_applicant: 409, already_conducted: 409,
+  ambiguous_applicant: 409, already_conducted: 409, category_mismatch: 409,
+  lead_tenant_not_configured: 503,
 };
 
 export default async function handler(req, res) {

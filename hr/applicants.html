@@ -26,6 +26,20 @@
     /* 選考パイプライン：段階ごとの人数。0人の段階は薄く（押せるがレイアウトは変えない） */
     .hr-stage-tabs button .n { display:inline-block; min-width:1.4em; margin-left:6px; font-weight:700; text-align:center; }
     .hr-stage-tabs button.zero:not(.on) { opacity:.45; }
+    /* 区分（すべて／採用／無限道場）。選考パイプラインより一段上の切り替え（検索・段階の行とは別の行） */
+    .hr-catbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+    .hr-cat-tabs { display:inline-flex; border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#fff; }
+    .hr-cat-tabs button { border:none; border-right:1px solid #e2e2dc; background:#fff; padding:7px 14px; font-size:12.5px;
+      font-weight:600; color:#4a5068; cursor:pointer; font-family:inherit; }
+    .hr-cat-tabs button:last-child { border-right:none; }
+    .hr-cat-tabs button.on { background:#1b2440; color:#fff; }
+    .hr-cat-tabs button .n { margin-left:6px; font-weight:700; }
+    .hr-lead-badge { display:inline-block; margin-left:6px; background:#fbf1d6; color:#7d5a00; border-radius:999px;
+      padding:1px 8px; font-size:10.5px; font-weight:700; vertical-align:middle; }
+    .hr-chips-sm span { display:inline-block; background:#e7eaf3; color:#1b2440; border-radius:999px; padding:1px 8px;
+      font-size:11px; margin:0 4px 3px 0; }
+    .hr-lead-iv { border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; margin:0 0 8px; font-size:12.5px; }
+    .hr-watch-list label { display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13px; border-bottom:1px solid #f0f0ec; }
 
     .hr-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
     .hr-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px 14px;
@@ -144,6 +158,10 @@
   <h1 class="hr-title">応募者</h1>
   <p class="hr-sub">選考中の応募者を一覧で見て、詳細は右ドロワーで開きます。</p>
 
+  <div class="hr-catbar">
+    <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="区分"></div>
+    <span id="lead-tools"></span>
+  </div>
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render()">
     <div class="hr-stage-tabs" id="stage-tabs"></div>
@@ -153,7 +171,7 @@
 
   <div style="overflow-x:auto;">
     <table class="hr-table">
-      <thead><tr>
+      <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
         <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
       <tbody id="rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
@@ -179,6 +197,16 @@
     { key: "ceo_recommend", label: "社長推薦" }, { key: "ceo_interview", label: "社長面談" },
     { key: "offer", label: "内定" }, { key: "joining_scheduled", label: "入社予定" },
   ];
+  // 無限道場リードの段階（lib/hr-lead-flow.js の MUGENDOJO_STAGES と同じ並び）
+  const MD_STAGES = [
+    { key: "applied", label: "新規リード" }, { key: "casual_interview", label: "カジュアル面談" },
+    { key: "md_trial", label: "体験案内" }, { key: "md_considering", label: "参加検討" },
+    { key: "md_applied", label: "申込" }, { key: "md_joined", label: "参加" },
+  ];
+  // 区分。「採用」は無限道場以外（API の既定と同じ）
+  const CATEGORIES = [{ key: "all", label: "すべて" }, { key: "recruitment", label: "採用" }, { key: "mugendojo", label: "無限道場" }];
+  const isLead = (a) => a?.leadCategory === "mugendojo";
+  const inCategory = (a, key) => key === "all" || (key === "mugendojo" ? isLead(a) : !isLead(a));
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
     interview_scheduled: ["#e7eaf3", "#1b2440", "video_call"], eval_pending: ["#fbf1d6", "#7d5a00", "edit_note"],
@@ -210,6 +238,8 @@
   const recruiterOptions = (selected) => `<option value="">未定</option>` + employees.map((e) =>
     `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.display_name)}</option>`).join("");
   let stageFilter = "";
+  let categoryFilter = "all";
+  let leadReady = true;      // db/118（リードの列）が入っているか。無ければ無限道場の欄を出さない
   let openId = null;
   let canDecide = false;
   // 一覧の複数選択（ページ内表示分だけを対象にする。README §1）
@@ -217,13 +247,17 @@
   let visibleIds = [];
 
   // 表示速度：枠（権限の確認）を待たずに一覧を取りにいき始める。
-  // HRダッシュボードと同じ鍵（hr:applicants）なので、ダッシュボードから来たときは前回の一覧がすぐ出る
-  const fetchApplicants = () => API.listHrApplicants();
-  API.warm("hr:applicants", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
+  // この画面は「すべて／採用／無限道場」を切り替えるので、無限道場リードも含めて取る（category=all）。
+  // HRダッシュボードは採用だけ（既定）を取るので、鍵を分ける（混ぜると、ダッシュボードに無限道場が出る）
+  const fetchApplicants = () => API.api("/api/hr/applicants?category=all");
+  API.warm("hr:applicants:all", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
 
   HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; start(); } });
 
   function start() {
+    const cat = new URLSearchParams(location.search).get("category");
+    if (CATEGORIES.some((c) => c.key === cat)) categoryFilter = cat;
+    renderCategoryTabs();
     renderStageTabs();
     load();
     const q = new URLSearchParams(location.search);
@@ -233,14 +267,41 @@
 
   // 選考パイプライン：「採用フロー上のどこに人が溜まっているか」。人数は取得済みの応募者から数える
   // （固定値を持たない）。細かい状態（status）は上に出さない
+  /** いまの区分の応募者 */
+  const catList = () => applicants.filter((a) => inCategory(a, categoryFilter));
+  const listUrl = () => (categoryFilter === "all" ? "/hr/applicants.html" : `/hr/applicants.html?category=${categoryFilter}`);
+
+  function renderCategoryTabs() {
+    API.morph(el("cat-tabs"), CATEGORIES.map((c) => {
+      const n = applicants.filter((a) => inCategory(a, c.key)).length;
+      return `<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
+        data-category="${esc(c.key)}" onclick="setCategory('${esc(c.key)}')">${esc(c.label)}<span class="n">${n}</span></button>`;
+    }).join(""));
+    // 無限道場の通知先（運営担当）は、無限道場を見ているときだけ出す
+    el("lead-tools").innerHTML = categoryFilter === "mugendojo"
+      ? `<button class="btn btn-secondary btn-sm" onclick="openLeadWatchers()">
+          <span class="material-symbols-outlined icon-inline">notifications</span>通知先（運営担当）</button>
+        ${leadReady ? "" : `<span class="muted" style="font-size:12px;margin-left:8px;">リードの列がまだありません（db/118_hr_leads.sql 未実行）</span>`}`
+      : "";
+  }
+  function setCategory(key) {
+    categoryFilter = key;
+    stageFilter = "";
+    selectedIds.clear();
+    if (!openId) history.replaceState({}, "", listUrl());
+    renderCategoryTabs(); renderStageTabs(); render();
+  }
+
   function renderStageTabs() {
-    const count = (key) => (key ? applicants.filter((a) => a.stage === key).length : applicants.length);
+    const pool = catList();
+    const count = (key) => (key ? pool.filter((a) => a.stage === key).length : pool.length);
     const tab = (key, label) => {
       const n = count(key);
       return `<button class="${stageFilter === key ? "on" : ""}${n ? "" : " zero"}" data-stage="${esc(key || "all")}"
         onclick="setStage('${esc(key)}')">${esc(label)}<span class="n">${n}</span></button>`;
     };
-    API.morph(el("stage-tabs"), tab("", "すべて") + STAGES.map((s) => tab(s.key, s.label)).join(""));
+    const stages = categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
+    API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s) => tab(s.key, s.label)).join(""));
   }
   function setStage(key) { stageFilter = key; renderStageTabs(); render(); }
 
@@ -249,7 +310,7 @@
   async function loadList() {
     try {
       // 2回目からは前回の一覧をすぐ出し、裏で最新にする（変わった行だけ描き直す）
-      await API.swr("hr:applicants", fetchApplicants, (res) => {
+      await API.swr("hr:applicants:all", fetchApplicants, (res) => {
         if (res.notReady) {
           el("rows").innerHTML = `<tr><td colspan="8"><div class="banner warn">
             <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
@@ -258,6 +319,8 @@
         applicants = res.applicants || [];
         employees = res.employees || [];
         meEmployeeId = res.meEmployeeId || null;
+        leadReady = res.leadReady !== false;
+        renderCategoryTabs();
         renderStageTabs();
         render();
       });
@@ -280,15 +343,72 @@
     return `<span class="hr-docs" data-docs>${link(d.resumeId, "description", "履歴書")}${link(d.workHistoryId, "work_history", "職務経歴書")}</span>`;
   }
 
+  /** 流入元の1語（UTM → 参照元のドメイン → 直接） */
+  function leadSourceLabel(a) {
+    const utm = [a.utmSource, a.utmMedium].filter(Boolean).join(" / ");
+    if (utm) return utm;
+    const ref = a.attribution?.first?.referrer;
+    if (ref) { try { return new URL(ref).hostname; } catch { /* そのまま下へ */ } }
+    return "直接";
+  }
+  const leadDiagnosis = (a) => a.leadProfile?.diagnosis_label || a.leadProfile?.diagnosis_type || "";
+  const leadInterests = (a) => (a.leadProfile?.interests || []);
+
+  const THEAD = {
+    standard: ["応募者", "書類", "選考", "状態", "NEXT", "担当", ""],
+    mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
+  };
+  let theadKind = "standard";
+  function renderThead() {
+    const kind = categoryFilter === "mugendojo" ? "mugendojo" : "standard";
+    if (kind === theadKind && el("chk-all")) return;
+    theadKind = kind;
+    el("thead").innerHTML = `<tr><th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
+      ${THEAD[kind].map((h) => `<th>${esc(h)}</th>`).join("")}</tr>`;
+  }
+  const colCount = () => THEAD[theadKind].length + 1;
+
+  function statusPill(a) {
+    const [bg, fg, icon] = a.overdue ? OVERDUE_COLOR : (STATUS_COLOR[a.status] || STATUS_COLOR.todo);
+    const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
+    return `<span class="hr-pill" style="background:${bg};color:${fg};">
+          <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>`;
+  }
+
+  /** 無限道場の一覧の1行 */
+  function leadRow(a) {
+    return `
+      <tr class="click" onclick="openDetail('${esc(a.id)}')">
+        <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
+          onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
+        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.leadProfile?.occupation || "")}</span></td>
+        <td>${esc(leadSourceLabel(a))}${a.utmCampaign ? `<span class="hr-sub2">${esc(a.utmCampaign)}</span>` : ""}</td>
+        <td class="hr-chips-sm">${leadInterests(a).map((x) => `<span>${esc(x)}</span>`).join("") || "—"}</td>
+        <td>${esc(leadDiagnosis(a) || "—")}</td>
+        <td>${statusPill(a)}<span class="hr-sub2">${esc(a.stageLabel)}</span></td>
+        <td>${a.nextInterviewAt ? esc(fmtDate(a.nextInterviewAt)) : "—"}</td>
+        <td>${esc(a.recruiterName || "未定")}</td>
+        <td>${esc(JST.date(a.createdAt))}</td>
+        <td>${a.lastContactedAt ? esc(JST.date(a.lastContactedAt)) : "—"}</td>
+        <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
+      </tr>`;
+  }
+
   function render() {
+    renderThead();
     const q = (el("q").value || "").trim().toLowerCase();
-    const list = applicants.filter((a) =>
+    const list = catList().filter((a) =>
       (!stageFilter || a.stage === stageFilter)
-      && (!q || `${a.name} ${a.jobTitle}`.toLowerCase().includes(q)));
+      && (!q || `${a.name} ${a.jobTitle} ${a.source || ""}`.toLowerCase().includes(q)));
     visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
-      API.morph(el("rows"), `<tr><td colspan="8" class="empty">対象がありません。</td></tr>`);
+      API.morph(el("rows"), `<tr><td colspan="${colCount()}" class="empty">対象がありません。</td></tr>`);
+      renderBulkBar();
+      return;
+    }
+    if (theadKind === "mugendojo") {
+      API.morph(el("rows"), list.map(leadRow).join(""));
       renderBulkBar();
       return;
     }
@@ -299,7 +419,7 @@
       <tr class="click" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
-        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td><span class="hr-nm">${esc(a.name)}${isLead(a) ? `<span class="hr-lead-badge">無限道場</span>` : ""}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
         <td>${docsCell(a)}</td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
@@ -505,7 +625,7 @@
         note: el("a-note").value.trim() || undefined,
       }));
       closeModal();
-      history.replaceState({}, "", "/hr/applicants.html");
+      history.replaceState({}, "", listUrl());
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
   }
@@ -564,7 +684,7 @@
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
     openId = null;
-    history.replaceState({}, "", "/hr/applicants.html");
+    history.replaceState({}, "", listUrl());
   }
 
   function setDetailTab(t) { detailTab = t; renderDetail(); }
@@ -573,13 +693,17 @@
     const a = detail.applicant;
     const box = el("hr-detail-box");
     if (!box) return;
-    const TABS = [["overview", "概要"], ["interviews", "面談"], ["docs", "書類"], ["history", "履歴"]];
+    // 無限道場リードには書類（履歴書・職務経歴書）が無い
+    const TABS = isLead(a)
+      ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
+      : [["overview", "概要"], ["interviews", "面談"], ["docs", "書類"], ["history", "履歴"]];
     if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
     box.innerHTML = `
       <div style="padding:20px 20px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
-            ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}</div>
+            ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}
+            ${isLead(a) ? `<span class="hr-lead-badge">無限道場</span>` : ""}</div>
           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(a.jobTitle)} ／ ${esc(a.source)}</div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
@@ -600,7 +724,7 @@
     return `
       <div class="hr-next" style="margin:0 0 16px;">
         <dl class="hr-state now">
-          <dt>選考</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
+          <dt>${isLead(a) ? "段階" : "選考"}</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
           <dt>状態</dt><dd id="hr-status">${esc(a.statusLabel || "—")}<small>いま何待ちか</small></dd>
         </dl>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION<small style="font-weight:400;margin-left:6px;">次にすること</small></div>
@@ -622,10 +746,56 @@
     return (detail.interviews || []).find((i) => i.rank) || null;
   }
 
+  /** 無限道場リードの概要（LP で本人が入れた内容・流入・面談・次のアクション） */
+  function leadOverview(a) {
+    const p = a.leadProfile || {};
+    const first = a.attribution?.first || {};
+    const last = a.attribution?.last || {};
+    const dd = (v) => esc(v || "—");
+    const link = (u) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all;">${esc(u)}</a>` : "—");
+    const utm = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]
+      .map((k) => (first[k] ? `${k.replace("utm_", "")}=${first[k]}` : null)).filter(Boolean).join("　");
+    const lastUtm = [last.utm_source, last.utm_medium, last.utm_campaign].filter(Boolean).join(" / ");
+    const ivs = (detail.interviews || []).filter((i) => !i.canceled);
+    return `
+        ${nextActionBox(a)}
+        <dl class="hr-grid2">
+          <div><dt>氏名</dt><dd>${dd(a.name)}</dd></div>
+          <div><dt>メール</dt><dd>${dd(a.email)}</dd></div>
+          <div><dt>電話</dt><dd>${dd(a.phone)}</dd></div>
+          <div><dt>現在の状況</dt><dd>${dd(p.occupation)}</dd></div>
+          <div><dt>都道府県</dt><dd>${dd(p.prefecture)}</dd></div>
+          <div><dt>担当</dt><dd id="hr-recruiter">${esc(a.recruiterName || "未定")}
+            <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></dd></div>
+          <div><dt>流入元</dt><dd>${esc(leadSourceLabel(a))}</dd></div>
+          <div><dt>UTM（最初）</dt><dd>${dd(utm)}</dd></div>
+          <div><dt>参照元</dt><dd>${link(first.referrer)}</dd></div>
+          <div><dt>最初に来たページ</dt><dd>${link(first.landing_page)}</dd></div>
+          <div><dt>送信したページ</dt><dd>${link(last.source_url || first.source_url)}</dd></div>
+          <div><dt>直近の流入</dt><dd>${dd(lastUtm)}${a.attribution?.touches > 1 ? `<small class="muted">（送信${esc(a.attribution.touches)}回）</small>` : ""}</dd></div>
+          <div><dt>AI経験</dt><dd>${dd(p.ai_experience)}</dd></div>
+          <div><dt>IT経験</dt><dd>${dd(p.it_experience)}</dd></div>
+          <div style="grid-column:1/-1;"><dt>興味・目的</dt><dd class="hr-chips-sm">${(p.interests || []).map((x) => `<span>${esc(x)}</span>`).join("") || "—"}</dd></div>
+          <div style="grid-column:1/-1;"><dt>挑戦してみたいこと</dt><dd style="white-space:pre-wrap;font-weight:500;">${dd(p.challenge_text)}</dd></div>
+          <div><dt>適性診断</dt><dd>${dd(leadDiagnosis(a))}</dd></div>
+          <div><dt>次のアクション</dt><dd>${dd(a.leadNextActionLabel)}</dd></div>
+          <div><dt>登録日</dt><dd>${esc(fmtDate(a.createdAt))}</dd></div>
+          <div><dt>最終接触</dt><dd>${a.lastContactedAt ? esc(fmtDate(a.lastContactedAt)) : "—"}</dd></div>
+        </dl>
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">面談</h4>
+        ${ivs.length ? ivs.map((i) => `<div class="hr-lead-iv">
+            <b>${esc(i.kindLabel)}</b>　${i.scheduledAt ? esc(fmtDate(i.scheduledAt)) : "日時未定"}${i.done ? "（実施済み）" : ""}
+            ${i.memo ? `<div style="white-space:pre-wrap;margin-top:6px;color:#4a5068;">${esc(i.memo)}</div>` : ""}
+          </div>`).join("") : `<p class="muted" style="font-size:12.5px;">まだ面談の予定はありません（本人の TimeRex 予約を待っています）。</p>`}
+        <p class="muted" style="font-size:12px;margin:6px 0 0;">面談メモの編集は<a href="#" onclick="setDetailTab('interviews');return false;">面談タブ</a>、経過は<a href="#" onclick="setDetailTab('history');return false;">履歴タブ</a>で見られます。</p>`;
+  }
+
   function renderDetailTab() {
     const a = detail.applicant;
     const box = el("hr-detail-tab");
-    if (detailTab === "overview") {
+    if (detailTab === "overview" && isLead(a)) {
+      box.innerHTML = leadOverview(a);
+    } else if (detailTab === "overview") {
       const ev = latestEvaluation();
       const evLine = ev ? (detail.evalItems || []).filter((e) => ev.scores?.[e.key])
         .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
@@ -1151,6 +1321,7 @@
     const a = detail.applicant;
     const key = a.nextActionKey;
     if (key === "sendSchedulingLink") return openSendSchedulingForm();
+    if (key === "leadNextAction") return openLeadNextActionForm();
     if (key === "schedule") return openScheduleForm(a.nextActionKind);
     // 実施する面談が無い（NEXT ACTION は「面談タブを確認」と出している）ときは、面談タブへ
     if (key === "conduct" && !a.nextInterviewId) return setDetailTab("interviews");
@@ -1321,7 +1492,7 @@
       <button class="btn btn-secondary btn-sm" style="margin-top:16px;"
               onclick="closeHrModal();openScheduleForm()">TimeRexを使わず、手動で面談を設定する</button>` : `
       <div class="banner warn"><span class="material-symbols-outlined">build</span>
-        <div>TimeRexの日程調整URLが未設定です（環境変数 TIMEREX_CASUAL_INTERVIEW_URL）。
+        <div>TimeRexの日程調整URLが未設定です（環境変数 ${esc(detail.schedulingUrlEnv || "TIMEREX_CASUAL_INTERVIEW_URL")}）。
         手動で面談を設定してください。</div></div>
       <div style="display:flex;gap:8px;margin-top:14px;">
         <button class="btn btn-primary" onclick="closeHrModal();openScheduleForm()">手動で面談を設定</button>
@@ -1331,6 +1502,18 @@
 
   function schedulingMailTemplate(url) {
     const a = detail.applicant;
+    if (isLead(a)) {
+      return `件名：無限道場 無料カジュアル面談の日程調整のお願い
+
+${a.name} 様
+
+このたびは無限道場の無料カジュアル面談にお申し込みいただき、ありがとうございます。
+下記URLより、ご都合の良い日時をお選びください。
+
+${url}
+
+ご不明点がございましたら、このメールにご返信ください。`;
+    }
     return `件名：面談日程のご調整のお願い
 
 ${a.name} 様
@@ -1678,6 +1861,69 @@ ${url}
   // 実際の社員登録は既存のadmin-onboard.htmlで行う（作り直さない）。
   // 二重手続きを防いでから、応募者IDだけを渡す。給与・勤務条件はURLへ載せず、
   // admin-onboard.html側がサーバから改めて取得する（README Stage 8）
+  // ---- 無限道場リード：面談後の次のアクション ------------------------------------------
+  // 選択肢は API（lib/hr-lead-flow.js）が返す。画面側に定義を持たない
+  function openLeadNextActionForm() {
+    const a = detail.applicant;
+    const opts = (detail.leadNextActions || []).map((x) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">
+        <input type="radio" name="lead-next" value="${esc(x.key)}" ${a.leadNextAction === x.key ? "checked" : ""}> ${esc(x.label)}</label>`).join("");
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">次のアクションを選ぶ</h2>
+      <p class="hr-sub" style="margin:0 0 10px;">${esc(a.name)}さんの、面談後の次のアクションです。段階と状態はこれに合わせて変わります。</p>
+      <div>${opts || `<p class="muted">選択肢を読み込めませんでした。</p>`}</div>
+      <label style="margin-top:10px;">メモ（任意。保留なら次に確認すること）</label>
+      <textarea id="lead-next-note" rows="3" maxlength="500"></textarea>
+      <div id="lead-next-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-primary" onclick="submitLeadNextAction(this)">保存する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+  async function submitLeadNextAction(btn) {
+    const picked = document.querySelector('input[name="lead-next"]:checked');
+    if (!picked) { el("lead-next-msg").textContent = "次のアクションを選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/hr/applicants/detail", { method: "PATCH", body: {
+        id: detail.applicant.id, action: "leadNextAction", nextAction: picked.value, note: el("lead-next-note").value,
+      } }));
+      closeHrModal();
+      await refreshDetail();
+      await load();
+    } catch (e) { el("lead-next-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // ---- 無限道場リードの通知先（運営担当） ------------------------------------------------
+  // 新しいリードが入ったら、ここで選んだ人へ通知する。誰も選んでいなければ採用HRの担当へ届く
+  async function openLeadWatchers() {
+    openHrModal(`<p class="muted">読み込み中…</p>`);
+    try {
+      const r = await API.api("/api/hr/lead-watchers?category=mugendojo");
+      const on = new Set(r.employeeIds || []);
+      openHrModal(`
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">無限道場リードの通知先</h2>
+        <p class="hr-sub" style="margin:0 0 10px;">新しいリードが入ったとき、選んだ人へ通知します。誰も選ばなければ、採用HRの担当（経営者・人事・採用担当）へ届きます。</p>
+        ${r.notReady ? `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(r.message)}</div></div>` : `
+        <div class="hr-watch-list" style="max-height:320px;overflow:auto;">${(r.employees || []).map((e) => `
+          <label><input type="checkbox" name="lead-watch" value="${esc(e.id)}" ${on.has(e.id) ? "checked" : ""}> ${esc(e.display_name)}</label>`).join("")}</div>
+        <div id="lead-watch-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-primary" onclick="submitLeadWatchers(this)">保存する</button>
+          <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+        </div>`}`);
+    } catch (e) {
+      openHrModal(`<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.detail || e.message)}</div></div>
+        <button class="btn btn-secondary" style="margin-top:12px;" onclick="closeHrModal()">閉じる</button>`);
+    }
+  }
+  async function submitLeadWatchers(btn) {
+    const ids = [...document.querySelectorAll('input[name="lead-watch"]:checked')].map((x) => x.value);
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/hr/lead-watchers", { method: "PUT", body: { category: "mugendojo", employeeIds: ids } }));
+      closeHrModal();
+    } catch (e) { el("lead-watch-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
   async function startAdvance() {
     try {
       await API.claimHrAdvance(detail.applicant.id);

@@ -104,6 +104,54 @@ lms 側は **2xx だけを「送れた」とする。** 4xx の `invalid_body` �
 `gw_activity_log` に `hr.lead_intake`（`result`・`submissionId`・`utmSource`・`utmMedium`）。
 メールアドレス・氏名・本文は残さない。
 
+## TimeRex（無限道場のカジュアル面談）
+
+予約枠は採用と分ける。`TIMEREX_MUGENDOJO_CASUAL_URL`（または `TIMEREX_HR_CALENDARS` の値
+`"mugendojo_casual"`）に登録した予約枠からの Webhook は、既存の `/api/hr/timerex/webhook`
+（`TIMEREX_WEBHOOK_SECRET`）でそのまま受ける。
+
+| 順番 | 応募者の探し方 |
+|---|---|
+| 1 | payload の `applicant_id`（予約URLに付けている） |
+| 2 | 同じ `event_id`（再送）・旧 `event_id`（日程変更）の面談 |
+| 3 | `HR_LEAD_TENANT_ID` のテナント ＋ `lead_category = mugendojo` ＋ 小文字のメール（status が scheduling・todo） |
+
+- 同じメールの人が採用にもいても、無限道場の予約は無限道場のリードへ付く。
+  採用の予約枠からの予約は、無限道場のリードを候補から外す（取り違えない）。
+- どの方法で見つけても、予約枠と応募者の区分が違えば `409 category_mismatch` で止める。
+- 予約：`scheduling` → `interview_scheduled`（stage は `casual_interview`）。最終接触日時も進める。
+- キャンセル（`TIMEREX_CANCEL_WEBHOOK_TYPES` に入れた event 名）：`interview_scheduled` → `scheduling`。
+- 無限道場の予約枠なのに `HR_LEAD_TENANT_ID` が未設定なら `503 lead_tenant_not_configured`（メールで探さない）。
+
+## 採用HRの画面（/hr/applicants.html）
+
+- 上の「すべて／採用／無限道場」で切り替える（`?category=mugendojo` で直接開ける。通知のリンクもこれ）。
+  「採用」は無限道場以外。HR ダッシュボード（`/hr/`）と `GET /api/hr/applicants` の既定は採用だけで、
+  無限道場リードは採用のファネルに混ざらない。
+- 無限道場タブの列：氏名・流入元・興味・目的・適性診断・状態・面談日時・担当・登録日・最終接触。
+- 詳細：氏名・メール・現在の状況・流入元・UTM・参照元・AI/IT経験・興味・挑戦したいこと・適性診断・
+  面談（日時・メモ）・状態・次のアクション。経過は「履歴」タブ（選考タイムライン）。
+- 面談後の次のアクション（`PATCH /api/hr/applicants/detail { action: "leadNextAction" }`）：
+
+  | 次のアクション | 段階（stage） | 状態（status） |
+  |---|---|---|
+  | 体験案内 | md_trial | todo（対応中） |
+  | 説明 | 変えない | todo |
+  | 参加検討 | md_considering | todo |
+  | 申込 | md_applied | todo |
+  | 参加 | md_joined | done（完了） |
+  | ENGER紹介・別サービス紹介 | 変えない | done |
+  | 保留 | 変えない | next_scheduling_pending（保留）・メモは「次に確認すること」 |
+  | 対象外 | 変えない | passed（対象外） |
+
+  定義は `lib/hr-lead-flow.js` の `LEAD_NEXT_ACTIONS` だけ（画面には持たない）。選ぶたびにタイムラインと
+  監査ログ（`hr.lead_next_action`）に残る。
+- 「通知先（運営担当）」で、新しいリードの通知先を社員単位で選ぶ（`/api/hr/lead-watchers`）。
+- 面談を実施済みにしたあと、次のアクションを選ばないまま2時間たつと、cron（`/api/cron/hr-interviews`）が
+  面談担当（いなければ担当）へ「面談後の次のアクションが未選択です」と知らせる（評価の催促はしない）。
+
+db/118 を流す前でも、一覧・詳細は今までどおり開ける（無限道場の欄が出ないだけ）。
+
 ## 手で試す
 
 ```bash
@@ -116,4 +164,4 @@ curl -sS -X POST https://<MFのドメイン>/api/hr/leads -H 'content-type: appl
   -H "x-lead-timestamp: $TS" -H "x-lead-signature: $SIG" -d "$BODY"
 ```
 
-テストは `test/hrleadsapi.mjs`（`npm test` に含まれる）。
+テストは `test/hrleadsapi.mjs`・`test/hrleadflowapi.mjs`（`npm test`）と `test/ui/hrleadsui.mjs`（`npm run test:ui`）。

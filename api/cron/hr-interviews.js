@@ -11,13 +11,16 @@
 //   一度送った面談は、評価が入るまで何度cronが回っても増えない
 //   （読んだ／読んでいないに関わらず、再通知で未読へ戻さない）。
 //
-// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。本番で未設定なら 503（lib/cron-auth.js）。
+// ■ 無限道場リード（db/118 の lead_category = mugendojo）
+//   評価（ランク）を付けないので、「面談結果を入力してください」ではなく、
+//   面談後の次のアクション（体験案内・参加検討…）が未選択のときだけ、それを知らせる。
+//
+// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
 import { interviewKindLabel } from "../../lib/hr.js";
-import { cronAuthorized } from "../../lib/cron-auth.js";
 
 const EVAL_GRACE_MS = 2 * 3600 * 1000; // 実施から2時間たっても未評価なら知らせる
 const MAX_INTERVIEWS = 300;
@@ -25,7 +28,11 @@ const MAX_INTERVIEWS = 300;
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  if (!cronAuthorized(req, res)) return;
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const given = req.headers.authorization || "";
+    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
+  }
 
   const sb = admin();
   const before = new Date(Date.now() - EVAL_GRACE_MS).toISOString();
@@ -42,8 +49,9 @@ export default async function handler(req, res) {
   if (!list.length) return json(res, 200, { ok: true, checked: 0, notified: 0 });
 
   const applicantIds = [...new Set(list.map((i) => i.applicant_id))];
+  // select("*")：lead_category・lead_next_action（db/118）が無い環境でも同じ問い合わせで読む
   const { data: applicants } = await sb.from("gw_hr_applicants")
-    .select("id, name, recruiter_id").in("id", applicantIds);
+    .select("*").in("id", applicantIds);
   const applicantOf = new Map((applicants || []).map((a) => [a.id, a]));
 
   const notifyRows = [];
@@ -52,9 +60,12 @@ export default async function handler(req, res) {
     if (!a) continue;
     const target = i.interviewer_id || a.recruiter_id;
     if (!target) continue;
+    const lead = a.lead_category === "mugendojo";
+    // 無限道場：次のアクションを選んだ（面談済のまま止まっていない）なら知らせない
+    if (lead && (a.lead_next_action || a.status !== "eval_pending")) continue;
     notifyRows.push({
       tenantId: i.tenant_id, employeeId: target, kind: "hr",
-      title: "面談結果が未入力です",
+      title: lead ? "面談後の次のアクションが未選択です" : "面談結果が未入力です",
       body: `${a.name}\n${interviewKindLabel(i.kind)}`,
       link: `/hr/applicants.html?id=${i.applicant_id}`,
       dedupeKey: `hr_interview_eval:${i.id}`,
