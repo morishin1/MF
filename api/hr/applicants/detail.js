@@ -1,5 +1,7 @@
 // GET   /api/hr/applicants/detail?id=…  … 応募者1人ぶん（面談・タイムライン・合格通知つき）
 // PATCH /api/hr/applicants/detail { id, ... } … 応募者本体を更新
+// PATCH /api/hr/applicants/detail { id, action: "leadNextAction", nextAction, note? }
+//       … 無限道場リードの面談後の次のアクション（体験案内・参加検討・申込…。lib/hr-lead-flow.js）
 
 import { checkRecruiter } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
@@ -16,6 +18,10 @@ import {
   STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
 } from "../../../lib/hr.js";
 import { contactStatusOf } from "../../../lib/hr-messages.js";
+import { selectWithLeadFields } from "../../../lib/hr-leads.js";
+import {
+  LEAD_NEXT_ACTIONS, LEAD_NEXT_ACTION_KEYS, leadNextActionPatch, leadNextActionLabel, isMugendojo,
+} from "../../../lib/hr-lead-flow.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない
@@ -47,8 +53,8 @@ async function one(req, res, sb, ctx, salary) {
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
 
-  const { data: a, error } = await sb.from("gw_hr_applicants").select(columns(salary))
-    .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  const { data: a, error, leadReady } = await selectWithLeadFields((fields) => sb.from("gw_hr_applicants")
+    .select(fields).eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle(), columns(salary));
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { notReady: true, message: hint });
@@ -88,7 +94,8 @@ async function one(req, res, sb, ctx, salary) {
       ),
       recruiterName: recruiter?.display_name || null,
       // 本人への連絡状況（未連絡／連絡済み）。タイムラインの判断・連絡の記録から決める（lib/hr-messages.js）
-      contact: contactStatusOf(a.decision, timeline),
+      // 無限道場リードの decision（保留・対象外）は採用の選考結果ではないので、連絡状況は出さない
+      contact: contactStatusOf(isMugendojo(a) ? null : a.decision, timeline),
     },
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
@@ -99,8 +106,14 @@ async function one(req, res, sb, ctx, salary) {
     interviewKinds: INTERVIEW_KINDS,
     // 状態プルダウンの選択肢（lib/hr.js の STATUSES / STATUS_LABEL が正）
     statusOptions: STATUS_OPTIONS,
-    // TimeRexの日程調整URL（環境変数未設定ならnull。README「TimeRex連携」指示書 §7）
-    schedulingUrl: schedulingUrlFor(process.env.TIMEREX_CASUAL_INTERVIEW_URL, a.id),
+    // TimeRexの日程調整URL（環境変数未設定ならnull。README「TimeRex連携」指示書 §7）。
+    // 無限道場リードは無限道場の予約枠（同じメールの採用応募者と取り違えないよう、予約枠を分けている）
+    schedulingUrl: schedulingUrlFor(isMugendojo(a)
+      ? process.env.TIMEREX_MUGENDOJO_CASUAL_URL : process.env.TIMEREX_CASUAL_INTERVIEW_URL, a.id),
+    schedulingUrlEnv: isMugendojo(a) ? "TIMEREX_MUGENDOJO_CASUAL_URL" : "TIMEREX_CASUAL_INTERVIEW_URL",
+    // 無限道場リードの次のアクションの選択肢（lib/hr-lead-flow.js が正。画面側に定義を持たない）
+    leadNextActions: isMugendojo(a) ? LEAD_NEXT_ACTIONS.map(({ key, label }) => ({ key, label })) : [],
+    leadReady,
     timeline: (timeline || []).map((t) => ({
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
     })),
@@ -120,6 +133,7 @@ async function update(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
   if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
+  if (body.action === "leadNextAction") return setLeadNextAction(res, sb, ctx, user, body);
   // 給与を見られない人は、給与の欄を書き換えられない（見えていない値を上書きしてしまわないため）
   const row = normalizeApplicant(salary ? body : dropSalaryInput(body), { partial: true });
   if (row.error) return json(res, 400, row);
@@ -249,5 +263,56 @@ async function setStatus(res, sb, ctx, user, body) {
   return json(res, 200, {
     applicant: shapeApplicant(data, next && { id: next.id, scheduledAt: next.scheduled_at, kind: next.kind }),
     warnings,
+  });
+}
+
+// ---- 無限道場リード：面談後の次のアクション ------------------------------------------
+// PATCH { id, action: "leadNextAction", nextAction, note? }
+//   stage / status / decision を、選んだアクションの値にする（lib/hr-lead-flow.js の LEAD_NEXT_ACTIONS）。
+//   採用の応募者には使えない（採用の判断は既存の評価・社長判断の流れで行う）。
+//   選考タイムラインと監査ログに残す（誰が・何を選んだか）。メモは任意（500文字まで）
+async function setLeadNextAction(res, sb, ctx, user, body) {
+  if (!LEAD_NEXT_ACTION_KEYS.includes(body.nextAction)) {
+    return json(res, 400, { error: "invalid_body", detail: `nextAction は ${LEAD_NEXT_ACTION_KEYS.join(" / ")} のいずれかです` });
+  }
+  const note = String(body.note ?? "").trim().slice(0, 500) || null;
+
+  const { data: before, error: berr, leadReady } = await selectWithLeadFields((fields) => sb.from("gw_hr_applicants")
+    .select(fields).eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle(), FIELDS);
+  if (berr) return json(res, 500, { error: "db_query_failed", detail: berr.message });
+  if (!before) return json(res, 404, { error: "not_found" });
+  if (!leadReady) return json(res, 503, { error: "not_ready", hint: "管理者に db/118_hr_leads.sql の実行を依頼してください" });
+  if (!isMugendojo(before)) {
+    return json(res, 400, { error: "not_lead", hint: "次のアクションは無限道場リードだけで使えます" });
+  }
+
+  const patch = leadNextActionPatch(body.nextAction);
+  // 保留の「次の確認事項」は既存の hold_next_step に入れる（NEXT ACTION にそのまま出る）
+  if (body.nextAction === "hold") patch.hold_next_step = note;
+  const now = new Date().toISOString();
+  const { data, error } = await sb.from("gw_hr_applicants")
+    .update({ ...patch, updated_at: now })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select("*").maybeSingle();
+  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  if (!data) return json(res, 404, { error: "not_found" });
+
+  const label = leadNextActionLabel(body.nextAction);
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: body.id, event_key: `lead_next_${body.nextAction}`,
+    label: `次のアクション：${label}`, detail: note, created_by: user.id,
+  });
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.lead_next_action",
+    target: `hr_applicant:${body.id}`,
+    detail: { nextAction: body.nextAction, from: { stage: before.stage, status: before.status },
+              to: { stage: data.stage, status: data.status } },
+  });
+
+  const { data: interviews } = await sb.from("gw_hr_interviews")
+    .select("id, kind, scheduled_at, conducted_at, canceled_at")
+    .eq("applicant_id", body.id).eq("tenant_id", ctx.tenantId);
+  const next = pickNextInterview(data, interviews);
+  return json(res, 200, {
+    applicant: shapeApplicant(data, next && { id: next.id, scheduledAt: next.scheduled_at, kind: next.kind }),
   });
 }

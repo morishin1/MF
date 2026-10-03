@@ -26,20 +26,23 @@
 //   消すこと自体をやめて、一覧が信用されなくなる。
 //   行は消さずに status='cancelled' にしてあるので、occ_key が残る。
 //
-// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。本番で未設定なら 503（lib/cron-auth.js）。
+// 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { pendingOccurrences, HORIZON_MONTHS } from "../../lib/task-flow.js";
 import { jstDate } from "../../lib/devices.js";
-import { cronAuthorized } from "../../lib/cron-auth.js";
 
 const SQL = "db/068_task_flow.sql";
 
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
 
-  if (!cronAuthorized(req, res)) return;
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const given = req.headers.authorization || "";
+    if (given !== `Bearer ${secret}`) return json(res, 401, { error: "unauthorized" });
+  }
 
   const sb = admin();
   const today = jstDate();

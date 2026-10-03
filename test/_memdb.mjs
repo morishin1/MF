@@ -1,7 +1,7 @@
 // 偽の Supabase（メモリ上の表）。/api/office/* の書き込みまで通すためのもの。
 //
 // ■ 実DBの何を真似しているか
-//   ・select / insert / update / upsert / delete と、eq・neq・in・lt・lte・gt・gte・is・order・limit・single・maybeSingle
+//   ・select / insert / update / upsert / delete と、eq・neq・in・lt・lte・gt・gte・is・ilike・not(is)・order・limit・single・maybeSingle
 //   ・一意制約（23505）・NOT NULL（23502）・CHECK（23514）：表ごとに、SQL と同じ条件を書いて渡す
 //   ・date 列の比較に、実在しない日付（2026-09-31）を渡したら 22008 で落とす（test/_pgdate.mjs）
 //   ・表が無い（PGRST205）／列が無い（42703）状態の再現（missing）
@@ -13,6 +13,9 @@
 import crypto from "node:crypto";
 import { pgDateError } from "./_pgdate.mjs";
 
+// ilike のパターン（% と _、\\ でのエスケープ）を正規表現にする。大文字小文字は区別しない
+const likeRe = (p) => new RegExp(`^${String(p).replace(/\\(.)|([%_])|([.*+?^${}()|[\]\\/])/g,
+  (m, esc, wild, special) => (esc !== undefined ? esc.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&") : wild === "%" ? ".*" : wild === "_" ? "." : `\\${special}`))}$`, "is");
 const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 
 export function createMemDb({ schema = {}, rls = () => true, missing = null, fks = {} } = {}) {
@@ -63,6 +66,8 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         if (o === "gt") return x > v;
         if (o === "gte") return x >= v;
         if (o === "is") return v === null ? (x === null || x === undefined) : x === v;
+        if (o === "ilike") return x != null && likeRe(v).test(String(x));
+        if (o === "not_is") return v === null ? !(x === null || x === undefined) : x !== v;
         return true;
       });
       const project = (r) => (cols ? Object.fromEntries(cols.map((c) => [c, clone(r[c]) ?? null])) : clone(r));
@@ -191,6 +196,8 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         gt(k, v) { f.push(["gt", k, v]); return q; },
         gte(k, v) { f.push(["gte", k, v]); return q; },
         is(k, v) { f.push(["is", k, v]); return q; },
+        ilike(k, v) { f.push(["ilike", k, v]); return q; },
+        not(k, op, v) { if (op !== "is") throw new Error(`_memdb: not(${op}) は未対応`); f.push(["not_is", k, v]); return q; },
         order(col, o) { order = { col, asc: o?.ascending !== false }; return q; },
         limit(n) { lim = n; return q; },
         single() { one = "single"; return q; },
