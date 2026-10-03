@@ -10,7 +10,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeAny } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 import { STAGE_KEYS, isBillingMonth } from "../../lib/billing-progress.js";
 
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canOfficeAny(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
 

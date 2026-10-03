@@ -45,7 +45,7 @@ function tableOf(name, endMark) {
   return Function(`"use strict"; return (${expr});`)();
 }
 
-const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  // 管理画面: 人事・労務");
+const OFFICE_TOP = tableOf("OFFICE_TOP", "\n  const OFFICE_GROUPS");
 const OFFICE_GROUPS = tableOf("OFFICE_GROUPS", "\n  // 経営（チーム・会社全体の管理、判断）");
 const KEIEI_ITEMS = tableOf("KEIEI_ITEMS", "\n  // 管理（⚙）");
 const SETTINGS_ITEMS = tableOf("SETTINGS_ITEMS", "\n  /**\n   * いま開いている画面が");
@@ -56,20 +56,31 @@ const PREPARING_NAV = tableOf("PREPARING_NAV", "\n  /**\n   * 本人（入社す
 const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS];
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
-// ---- 1) ホーム5・Office2グループ（各6項目まで）・管理4 ------------------------
+// ---- 1) Office はホーム＋3グループ（各6項目まで）・管理（⚙）は設定系だけ -----------------
+// 2026-10-03 の Office UI/UX 再設計：⚙管理にあった業務メニューを Office の左メニューへ移した
 // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）。
 // ホーム・管理（⚙）はヘッダーで領域を切り替える前提なので、グループに畳まず平らなまま
 console.log("\n— 管理者 —");
-check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "dashboard", "Officeの先頭はダッシュボード1つ");
+check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "office_home" && OFFICE_TOP[0].label === "ホーム" && OFFICE_TOP[0].href === "/office/",
+  "Officeの先頭はホーム1つ（/office/）");
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
-check(OFFICE_GROUPS.length === 2, `Officeは2グループ（人事・労務／経理・事務。いま ${OFFICE_GROUPS.length}）`);
+check(OFFICE_GROUPS.length === 3, `Officeは3グループ（人事・労務／経理・事務／社内管理。いま ${OFFICE_GROUPS.length}）`);
 {
   // 新方針にない分類（全社運営など）で、Officeを何でも置く場所にしない
   const labels = OFFICE_GROUPS.map((g) => g.label).join("/");
-  check(labels === "人事・労務/経理・事務", `Officeのグループは人事・労務と経理・事務だけ（いま ${labels}）`);
+  check(labels === "人事・労務/経理・事務/社内管理", `Officeのグループは人事・労務・経理・事務・社内管理だけ（いま ${labels}）`);
   const keys = OFFICE_GROUPS.flatMap((g) => g.items.map((i) => i.key));
   for (const k of ["tasks", "nippo", "ai_admin", "team"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
-  check(keys.includes("notices"), "お知らせ配信は経理・事務（Office）");
+  check(OFFICE_GROUPS.find((g) => g.label === "社内管理")?.items.some((i) => i.key === "notices"), "お知らせ配信は社内管理（Office）");
+  const ops = OFFICE_GROUPS.find((g) => g.label === "経理・事務")?.items || [];
+  check(ops.map((i) => i.label).join("/") === "経費精算/月次業務/請求・支払/会計", `経理・事務は 経費精算／月次業務／請求・支払／会計（いま ${ops.map((i) => i.label).join("/")}）`);
+  check(ops.some((i) => i.key === "office_monthly" && i.href === "/office/monthly.html"), "月次業務（/office/monthly.html）は経理・事務（Office）");
+  check(ops.some((i) => i.key === "office_billing" && i.href === "/office/billing.html"), "請求・支払（/office/billing.html）は経理・事務（Office）");
+  const hrItems = OFFICE_GROUPS.find((g) => g.label === "人事・労務")?.items || [];
+  check(hrItems.map((i) => i.label).join("/") === "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア", `人事・労務は メンバー／入退社／勤怠管理／雇用契約／評価・キャリア（いま ${hrItems.map((i) => i.label).join("/")}）`);
+  // ⚙管理（設定系）の項目を Office に置かない・Office の業務を ⚙管理 に置かない
+  const settingKeys = SETTINGS_ITEMS.map((i) => i.key);
+  check(!keys.some((k) => settingKeys.includes(k)), "Office と ⚙管理 に同じ項目を置かない");
 }
 check(KEIEI_ITEMS.map((i) => i.key).join(",") === "keiei_home,team,tasks,nippo", `経営の表（いま ${KEIEI_ITEMS.map((i) => i.key)}）`);
 check(SETTINGS_ITEMS.some((i) => i.key === "ai_admin"), "AIナレッジは⚙管理");
@@ -83,7 +94,7 @@ check(adminItems.length <= 24, `左メニューの項目は全部で ${adminItem
 {
   const biggest = Math.max(...OFFICE_GROUPS.map((g) => g.items.length));
   check(1 + OFFICE_GROUPS.length + biggest <= 11,
-    `Officeを開いた状態の行数の目安 ${1 + OFFICE_GROUPS.length + biggest}（ダッシュボード1＋見出し${OFFICE_GROUPS.length}＋最大 ${biggest}）`);
+    `Officeを開いた状態の行数の目安 ${1 + OFFICE_GROUPS.length + biggest}（ホーム1＋見出し${OFFICE_GROUPS.length}＋最大 ${biggest}）`);
 }
 
 // ---- 2) メンバーは7つ ---------------------------------------------------------
@@ -119,10 +130,10 @@ console.log("\n— メンバー —");
 }
 }
 
-// 採用HR（/hr/）・Sales（/sales/）・月次業務（/office/）の入口は共通ヘッダーの近道だけ。
-// 左メニューにも置くと二重導線になる（when で権限者だけに出す形も含めて置かない）
+// 採用HR（/hr/）・Sales（/sales/）の入口は共通ヘッダーの近道だけ。左メニューにも置くと二重導線になる。
+// 月末月初業務（/office/）は Office の中の画面なので、Office の左メニュー（経理・事務）にだけ置く。メンバーの表には置かない
 for (const [navs, who] of [[adminItems, "管理者"], [memberItems, "メンバー"]]) {
-  const dup = navs.filter((n) => /^\/?(hr|sales|office)\/$/.test(String(n.href || "")));
+  const dup = navs.filter((n) => /^\/?(hr|sales)\/$/.test(String(n.href || "")) || (who === "メンバー" && /^\/?office\//.test(String(n.href || ""))));
   check(!dup.length, `${who}の左メニューに採用HR・Salesを置かない${dup.length ? `（${dup.map((n) => n.label).join("・")}）` : ""}`);
 }
 {
@@ -200,7 +211,9 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
     return ternary ? [ternary[1], ternary[2]] : null;
   };
 
-  for (const f of readdirSync(ROOT).filter((x) => x.startsWith("admin-") && x.endsWith(".html"))) {
+  // admin-dashboard.html は旧URLの互換（/office/ へ送るだけ）。枠を持たないので数えない
+  const redirectOnly = (f) => /^\s*<script>location\.replace\("\/office\/"/m.test(readFileSync(join(ROOT, f), "utf8"));
+  for (const f of readdirSync(ROOT).filter((x) => x.startsWith("admin-") && x.endsWith(".html") && !redirectOnly(x))) {
     const a = activeOf(f);
     check(a && a.every((k) => adminLit.has(k)), `${f} → ${a ? a.join(" | ") : "（読めない）"}`);
   }

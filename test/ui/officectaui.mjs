@@ -147,7 +147,7 @@ const bodyText = (page) => page.locator("body").innerText();
 console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===");
 {
   seed();
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(400);
   const ts = await pillOf(cell(page, "勤務表"));
@@ -192,7 +192,7 @@ console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===
 console.log("\n=== 2. ドロワーの「次にやること」＝押せるカード（カード全体でも動く） ===");
 {
   seed();
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.locator(`${ROW} [data-label="要員"]`).click();
   await page.waitForSelector(".of-drawer #dr-next");
@@ -216,7 +216,7 @@ console.log("\n=== 3. ファイルを選ぶ → アップロード → 登録（
 {
   seed();
   seenApi.length = 0;
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), cell(page, "次にやること").locator('button[data-cta="pick"]').click()]);
   await fc.setFiles(atRoot(SAMPLE));
@@ -240,7 +240,7 @@ console.log("\n=== 3. ファイルを選ぶ → アップロード → 登録（
 console.log("\n=== 3b. PNG・JPEG も、同じ流れで確認画面へ ===");
 for (const [ext, mime] of [["png", "image/png"], ["jpg", "image/jpeg"]]) {
   seed();
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector("#now .of-now");
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.locator('#now button[data-cta="pick"]').click()]);
   await fc.setFiles({ name: `sample-2026-10.${ext}`, mimeType: mime, buffer: fs.readFileSync(atRoot(`test/fixtures/office-timesheet/sample-2026-10.${ext}`)) });
@@ -258,14 +258,14 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
   // ファイル1件・未読取の状態にする（実際の操作と同じ：勤務表を追加）
   seed();
   {
-    const { page: up } = await open(`/office/index.html?month=${M}`);
+    const { page: up } = await open(`/office/monthly.html?month=${M}`);
     await up.waitForSelector("#now .of-now");
     const [fcU] = await Promise.all([up.waitForEvent("filechooser"), up.locator('#now button[data-cta="pick"]').click()]);
     await fcU.setFiles(atRoot(SAMPLE));
     await up.waitForURL(/timesheet\.html/, { timeout: 15000 });
     await up.close();
   }
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表"));
@@ -295,7 +295,7 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
 
 console.log("\n=== 5. AI読取済（下書き）：「内容を確認する」 ===");
 {
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表")), wk = await pillOf(cell(page, "稼働時間"));
@@ -320,7 +320,7 @@ console.log("\n=== 6. 確定：「確定内容を見る」。完了のラベル�
   const sv = await sheetPost("save", { days: [{ workDate: "2026-10-14", break: clock(truth("2026-10-14").break) }, { workDate: "2026-10-21", end: clock(truth("2026-10-21").end) }] });
   const cf = await sheetPost("confirm");
   check(sv.statusCode === 200 && cf.statusCode === 200, "（準備）空欄を埋めて、確定した");
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表")), wk = await pillOf(cell(page, "稼働時間"));
@@ -350,25 +350,25 @@ console.log("\n=== 6. 確定：「確定内容を見る」。完了のラベル�
 console.log("\n=== 7. 使えないファイル・同じファイル：理由を出して、進まない ===");
 {
   seed(); seenApi.length = 0;
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), cell(page, "次にやること").locator('button[data-cta="pick"]').click()]);
   await fc.setFiles({ name: "memo.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
   await page.waitForSelector(".of-cta .er");
   check((await cell(page, "次にやること").innerText()).includes("PDF・JPEG・PNG のファイルを選んでください"), "PDF・JPEG・PNG 以外は、理由を出す");
-  check(page.url().includes("/office/index.html") && seenApi.every((s) => s.action !== "upload"), "移動せず、アップロードもしない");
+  check(page.url().includes("/office/monthly.html") && seenApi.every((s) => s.action !== "upload"), "移動せず、アップロードもしない");
   check(await cell(page, "次にやること").locator('button[data-cta="pick"]').isEnabled(), "もう一度、選び直せる");
   await page.close();
 
   // 同じファイルをもう一度（1回目を登録してから）
   seed(); seenApi.length = 0;
-  const a = await open(`/office/index.html?month=${M}`);
+  const a = await open(`/office/monthly.html?month=${M}`);
   await a.page.waitForSelector(ROW);
   const [fc1] = await Promise.all([a.page.waitForEvent("filechooser"), cell(a.page, "次にやること").locator('button[data-cta="pick"]').click()]);
   await fc1.setFiles(atRoot(SAMPLE));
   await a.page.waitForURL(/timesheet\.html/);
   await a.page.close();
-  const b = await open(`/office/index.html?month=${M}`);
+  const b = await open(`/office/monthly.html?month=${M}`);
   await b.page.waitForSelector(ROW);
   await b.page.locator(`${ROW} [data-label="要員"]`).click();
   await b.page.waitForSelector("#dr-timesheet");
@@ -379,14 +379,14 @@ console.log("\n=== 7. 使えないファイル・同じファイル：理由を�
   await b.page.waitForSelector("#dr-next .er", { timeout: 8000 });
   check((await b.page.locator("#dr-next .er").innerText()).includes("すでに届いています"), "同じファイル：「すでに届いています」と出て、登録しない");
   check(rows("gw_submissions").length === 1, "ファイルは1件のまま");
-  check(b.page.url().includes("/office/index.html"), "移動しない");
+  check(b.page.url().includes("/office/monthly.html"), "移動しない");
   await b.page.close();
 }
 
 console.log("\n=== 8. スマホ幅：押せる場所が、横にはみ出さず見える ===");
 {
   seed();
-  const { page } = await open(`/office/index.html?month=${M}`, { viewport: { width: 390, height: 844 } });
+  const { page } = await open(`/office/monthly.html?month=${M}`, { viewport: { width: 390, height: 844 } });
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ov = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -405,7 +405,7 @@ console.log("\n=== 8. スマホ幅：押せる場所が、横にはみ出さず�
 console.log("\n=== 9. 一覧の状態の色（BP・期限超過）は officeui.mjs で見る。ここでは、ページ全体にエラーが無いこと ===");
 {
   seed();
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.locator(`${ROW} [data-label="要員"]`).click();
   await page.waitForSelector("#dr-next");

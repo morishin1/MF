@@ -70,7 +70,7 @@ const hrefOf = (sc, k) => sc.find((s) => s.key === k)?.href;
 
 console.log("— owner：採用HR・Sales・Office・経営（＋⚙管理） —");
 {
-  const page = await open("admin-dashboard.html", { appRole: "owner", roles: ["owner"] });
+  const page = await open("admin-settings.html", { appRole: "owner", roles: ["owner"] });
   const sc = await shortcuts(page);
   const tools = toolsOnly(sc);
   check(tools.map((s) => s.key).join(",") === "hr,sales,office,keiei", `並び ホーム｜HR｜Sales｜Office｜経営（いま ${tools.map((s) => s.key)}）`);
@@ -88,19 +88,22 @@ console.log("— owner：採用HR・Sales・Office・経営（＋⚙管理） �
   check(await page.locator("#kp-admin-menu-panel a[href=\"admin-devices.html\"]").count() === 1,
     "⚙管理のドロップダウンに「端末・貸与品」→ admin-devices.html がある");
   check(await page.locator("#kp-admin-menu-panel a[href=\"admin-ai.html\"]").count() === 1, "⚙管理に「AIナレッジ」がある");
-  // Office から管理画面へ送らなくなったので、管理画面（人事・労務／経理・事務）は ⚙管理 の先頭から開く
-  check(await page.locator("#kp-admin-menu-panel a[href=\"admin-dashboard.html\"]").count() === 1, "⚙管理に「管理画面（人事・労務／経理・事務）」→ admin-dashboard.html がある");
-  check(await page.locator("#kp-admin-menu-panel a").first().getAttribute("href") === "admin-dashboard.html", "管理画面の入口は ⚙管理 の先頭");
+  // Office UI/UX 再設計（2026-10-03）：業務（人事・労務／経理・事務／社内管理）は Office の左メニューへ移した。
+  // ⚙管理はシステム設定だけ（業務の入口・旧ダッシュボードは置かない）
+  const gear = await page.locator("#kp-admin-menu-panel a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href")));
+  check(!gear.some((h) => /admin-(dashboard|members\.html$|expenses|closing|month-start|docs|notices|timecard|hr\.html)/.test(h || "")),
+    `⚙管理に業務の画面を置かない（いま ${gear.join(" ")}）`);
+  check(gear[0] === "admin-members.html#roles", "⚙管理の先頭は「権限」");
   // アイコン（Material Symbols の名前）は文字として読めてしまうので、ラベルの部分だけを見る
   const labels = await page.locator(".topbar [data-shortcut] .kp-sc-long").allInnerTexts();
   check(labels.map((t) => t.trim()).join(" ｜ ") === "採用HR ｜ Sales ｜ Office ｜ 経営", `PCの表示（いま ${labels.join(" ｜ ")}）`);
   check(!labels.some((t) => /月次業務/.test(t)), "ヘッダーに「月次業務」は出ない（Officeの中の機能）");
   check(await page.locator(".topbar .kp-shortcut.btn-secondary").count() === 4, "既存の secondary ボタン（4つ）");
-  // admin-dashboard.html は管理画面（Office ではない）。業務ツールのどれも選ばれず、⚙管理が選ばれて見える
-  check(await page.locator(".topbar .kp-shortcut.on").count() === 0, "管理画面（ダッシュボード）では、Office を含む業務ツールは選ばれない");
-  check(/\bon\b/.test((await page.locator("#kp-admin-menu-btn").getAttribute("class")) || ""), "管理画面では ⚙管理 が選ばれて見える");
+  // システム設定（⚙管理）の画面では、業務ツールのどれも選ばれず、⚙管理が選ばれて見える
+  check(await page.locator(".topbar .kp-shortcut.on").count() === 0, "⚙管理の画面では、Office を含む業務ツールは選ばれない");
+  check(/\bon\b/.test((await page.locator("#kp-admin-menu-btn").getAttribute("class")) || ""), "⚙管理の画面では ⚙管理 が選ばれて見える");
   check((await page.locator(".topbar .kp-app").innerText()).includes("管理") && !(await page.locator(".topbar .kp-app").innerText()).includes("OFFICE"),
-    "管理画面のタグは「管理」（Office と名乗らない）");
+    "⚙管理の画面のタグは「管理」（Office と名乗らない）");
   check(await page.locator("#kp-admin-menu-btn").isVisible(), "⚙管理のアイコンボタンが出る（フルサイズのボタンにはしない。幅を取りすぎるため）");
 
   // 既存の3つを壊していない
@@ -132,15 +135,17 @@ console.log("\n— 管理者（admin/owner）：Office は access.office のと�
 // （押しても入れない入口を出さない）。管理画面（admin-*.html）へは ⚙管理 から入る。
 // 経営アプリ（/keiei）は経営者だけなので、管理者の「経営」はチーム状況（admin-team.html。全員のタスク・日報）から入る。
 // 採用HR・Sales は社内権限（access）のとおり
+// 2026-10-03 Office UI/UX 再設計：Office は人事・労務（officeHr）／経理・事務（officeFinance）／月末月初業務（office）の
+// どれかに入れる人に出す。管理者（isAdmin）は officeHr・officeFinance を持つので、Office が出る（中身は担当の分だけ）
 for (const [who, want, wantHref, label] of [
-  [{ appRole: "admin", isAdmin: true, roles: [] }, "keiei", { keiei: "admin-team.html" }, "会計の管理者だけ（Office の権限なし）"],
-  [{ appRole: "admin", isAdmin: true, roles: ["it"] }, "keiei", {}, "IT・管理だけ（Office の権限なし）"],
-  [{ appRole: "admin", isAdmin: true, roles: ["recruiter", "sales"] }, "hr,sales,keiei", {}, "採用担当・営業担当を付けた管理者（Office の権限なし）"],
+  [{ appRole: "admin", isAdmin: true, roles: [] }, "office,keiei", { office: "/office/", keiei: "admin-team.html" }, "管理者（人事・労務／経理・事務。月末月初業務はなし）"],
+  [{ appRole: "admin", isAdmin: true, roles: ["it"] }, "office,keiei", { office: "/office/" }, "IT・管理を付けた管理者"],
+  [{ appRole: "admin", isAdmin: true, roles: ["recruiter", "sales"] }, "hr,sales,office,keiei", {}, "採用担当・営業担当を付けた管理者"],
   [{ appRole: "admin", isAdmin: true, roles: ["finance"] }, "office,keiei", { office: "/office/" }, "経理を付けた管理者（役割によらず /office/）"],
   [{ appRole: "admin", isAdmin: true, roles: ["manager"] }, "hr,sales,office,keiei", { office: "/office/" }, "責任者を付けた管理者（/office/）"],
   [{ appRole: "owner", roles: ["owner"] }, "hr,sales,office,keiei", { office: "/office/", keiei: "/keiei/" }, "経営者（/office/）"],
 ]) {
-  const page = await open("admin-dashboard.html", who);
+  const page = await open("admin-settings.html", who);
   const sc = await shortcuts(page);
   check(toolsOnly(sc).map((s) => s.key).join(",") === want, `${label} → ${want}（いま ${toolsOnly(sc).map((s) => s.key)}）`);
   for (const [k, h] of Object.entries(wantHref)) check(hrefOf(sc, k) === h, `${label}: ${k} の行き先は ${h}（いま ${hrefOf(sc, k)}）`);
@@ -150,7 +155,7 @@ for (const [who, want, wantHref, label] of [
 console.log("\n— 権限に応じて出し分ける（経営は経営者だけ） —");
 for (const [roles, want, label] of [
   [["recruiter"], "hr", "採用担当 → 採用HRだけ"],
-  [["hr"], "hr", "人事 → 採用HRだけ"],
+  [["hr"], "hr,office", "人事 → 採用HR と Office（人事・労務）"],
   [["sales"], "sales", "営業 → Salesだけ"],
   [["owner"], "hr,sales,office,keiei", "経営者 → ホーム｜HR｜Sales｜Office｜経営"],
   [["manager"], "hr,sales,office", "責任者 → 3つとも（経営は出ない）"],
@@ -159,32 +164,37 @@ for (const [roles, want, label] of [
   [["it"], "", "IT・管理だけ → どれも出さない"],
   [["labor_advisor"], "", "社労士 → どれも出さない（共有された手続きだけを見る）"],
   [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → HR と Sales"],
-  [["hr", "finance"], "hr,office", "人事＋経理 → ホーム｜HR｜Office"],
+  [["hr", "finance"], "hr,office", "人事＋経理 → HR と Office"],
   [["sales", "finance"], "sales,office", "営業担当＋経理 → ホーム｜Sales｜Office"],
   [["hr", "manager", "recruiter", "sales", "finance"], "hr,sales,office", "経営者以外の権限を全部 → 経営は出ない"],
   [["owner", "hr"], "hr,sales,office,keiei", "経営者＋人事 → 経営者として全ツール"],
 ]) {
   const page = await open("home.html", { appRole: "member", roles });
-  const got = (await shortcuts(page)).map((s) => s.key).join(",");
+  const got = toolsOnly(await shortcuts(page)).map((s) => s.key).join(",");
   check(got === want, `${label}（いま "${got}"）`);
   await page.close();
 }
 
 console.log("\n— 出た入口は、押して入れるところへ行く（Officeが出たのに403、を作らない） —");
 {
-  // 管理画面を開けない人（経理・責任者のメンバー）は、Officeアプリ（月次業務 /office/）へ。
-  // 管理画面（admin-*.html）は admin/owner だけなので、そちらへは送らない
+  // Office の行き先は、役割に関係なく /office/（月次業務）。管理画面（admin-*.html）へは送らない
   for (const [roles, label] of [[["finance"], "経理"], [["manager"], "責任者"]]) {
     const page = await open("home.html", { appRole: "member", roles });
     const sc = await shortcuts(page);
     check(hrefOf(sc, "office") === "/office/", `${label}（メンバー）の Office → /office/（月次業務）`);
-    check(!sc.some((x) => x.key === "area-settings"), `${label}（メンバー）に ⚙管理は出ない`);
     await page.close();
   }
-  // 人事だけの人（経理・責任者でない）は、Officeに入れる入口が無い（管理画面は admin/owner 前提）ので出さない
+  // 人事だけの人も、Office（人事・労務）に入れるので Office が出る。行き先は /office/（Office ホーム）
   const hr = await open("home.html", { appRole: "member", roles: ["hr"] });
-  check(!(await shortcuts(hr)).some((x) => x.key === "office"), "人事だけ（メンバー）には Office を出さない（入っても使えるものが無い）");
+  check(hrefOf(await shortcuts(hr), "office") === "/office/", "人事（メンバー）の Office → /office/（人事・労務の分だけ見える）");
   await hr.close();
+  // ⚙管理はシステム設定だけ（管理者・経営者）。業務の担当（人事・経理）・責任者・営業・採用には出さない
+  for (const [roles, label] of [[["finance"], "経理"], [["hr"], "人事"], [["manager"], "責任者"], [["sales"], "営業"], [["recruiter"], "採用担当"]]) {
+    const page = await open("home.html", { appRole: "member", roles });
+    const sc = await shortcuts(page);
+    check(!sc.some((x) => x.key === "area-settings"), `${label}（メンバー）に ⚙管理は出ない（業務は Office から）`);
+    await page.close();
+  }
 }
 
 console.log("\n— サーバの access どおりに出す（役割名ではなく判定結果で） —");
@@ -210,7 +220,7 @@ console.log("\n— サーバの access どおりに出す（役割名ではな�
   await oldKeiei.close();
   // サーバが「Office に入れる」と言ったときだけ出す
   const yes = await open("home.html", { appRole: "member", roles: ["finance"], noAccess: false });
-  check((await shortcuts(yes)).map((s) => s.key).join(",") === "office", "access.office のときだけ Office");
+  check(toolsOnly(await shortcuts(yes)).map((s) => s.key).join(",") === "office", "access.office のときだけ Office");
   await yes.close();
 }
 
@@ -322,8 +332,8 @@ console.log("\n— スマホ幅：短縮して、通知・ログアウトを押�
 const shortcutLabels = (page) => page.locator(".topbar .kp-shortcut").evaluateAll((ns) =>
   ns.map((n) => n.innerText.trim()));
 for (const [width, path, who, want] of [
-  [390, "admin-dashboard.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
-  [360, "admin-dashboard.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
+  [390, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
+  [360, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
   [390, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office"],
   [360, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office"],
   [390, "home.html", { appRole: "member", roles: ["recruiter", "sales"] }, "HR/Sales"],

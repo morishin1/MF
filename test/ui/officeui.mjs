@@ -106,11 +106,13 @@ const rowsText = (page) => page.locator("#rows tr[data-id]").evaluateAll((t) => 
 // ============================================================================
 console.log("\n=== 経理：ダッシュボード ===");
 {
-  const { page, requests, errs } = await open("/office/index.html?month=2026-09");
+  const { page, requests, errs } = await open("/office/monthly.html?month=2026-09");
   await page.waitForSelector("#rows tr[data-id]");
 
-  check(/OFFICE/.test(await page.locator(".of-logo").innerText()), "専用ヘッダー（EIGHT / OFFICE）");
-  check((await page.locator(".of-nav a.on").innerText()).includes("月次業務"), "ナビ：月次業務が選ばれている");
+  // 専用ヘッダー・「GWへ戻る」は廃止。Office 共通の枠（ヘッダーの Office・左メニューの月次業務）が選ばれている
+  check(await page.locator('.topbar [data-shortcut="office"].on').count() === 1, "共通ヘッダー：Office が選ばれている");
+  check((await page.locator(".kp-sidebar .kp-side-item.on").innerText()).includes("月次業務"), "左メニュー：月次業務が選ばれている");
+  check(await page.locator(".of-logo, .of-back").count() === 0 && !(await page.locator("body").innerText()).includes("GWへ戻る"), "専用ヘッダー・「GWへ戻る」は無い");
   check(requests.office[0] === "2026-09", "月を指定して読む");
 
   const labels = await page.locator("#sum .of-card .lb").evaluateAll((l) => l.map((x) => x.lastChild.textContent.trim()));
@@ -161,7 +163,7 @@ console.log("\n=== 経理：ダッシュボード ===");
 
 console.log("\n=== 絞り込み ===");
 {
-  const { page } = await open("/office/index.html?month=2026-09");
+  const { page } = await open("/office/monthly.html?month=2026-09");
   await page.waitForSelector("#rows tr[data-id]");
   const count = async () => (await rowsText(page)).length;
 
@@ -211,7 +213,7 @@ console.log("\n=== 絞り込み ===");
 
 console.log("\n=== 月の切り替え ===");
 {
-  const { page, requests } = await open("/office/index.html?month=2026-09");
+  const { page, requests } = await open("/office/monthly.html?month=2026-09");
   await page.waitForSelector("#rows tr[data-id]");
   check((await page.locator("#sub").innerText()).includes("2026年9月分") && (await page.locator("#sub").innerText()).includes("10/5"), "2026年9月分・提出期限 10/5");
   await page.locator("#next").click();
@@ -235,7 +237,7 @@ console.log("\n=== 月の切り替え ===");
 
 console.log("\n=== 右ドロワー ===");
 {
-  const { page, requests } = await open("/office/index.html?month=2026-09");
+  const { page, requests } = await open("/office/monthly.html?month=2026-09");
   await page.waitForSelector("#rows tr[data-id]");
   await page.locator('#rows tr:has-text("田中 太郎") td[data-label="要員"]').click();
   await page.waitForSelector(".of-drawer");
@@ -287,14 +289,14 @@ console.log("\n=== 右ドロワー ===");
   await page.keyboard.press("Escape");
 
   // 完了・要確認
-  await page.goto(`${BASE}/office/index.html?month=2026-09&id=E`);
+  await page.goto(`${BASE}/office/monthly.html?month=2026-09&id=E`);
   await page.waitForSelector(".of-drawer");
   check((await page.locator(".of-next.ok").innerText()).includes("完了"), "完了の案件：完了と表示");
   check((await page.locator(".of-dr-head").innerText()).includes("伊藤 四郎"), "URL の id でドロワーが開いた状態を再現（完了は一覧に出ない行でも）");
-  await page.goto(`${BASE}/office/index.html?month=2026-09&id=G`);
+  await page.goto(`${BASE}/office/monthly.html?month=2026-09&id=G`);
   await page.waitForSelector(".of-drawer");
   check((await page.locator(".of-drawer .of-banner").innerText()).includes("順番どおりについていません"), "要確認の理由がドロワーの上に出る");
-  await page.goto(`${BASE}/office/index.html?month=2026-09&id=NOPE`);
+  await page.goto(`${BASE}/office/monthly.html?month=2026-09&id=NOPE`);
   await page.waitForSelector("#rows tr[data-id]");
   check(await page.locator(".of-drawer").count() === 0 && !new URL(page.url()).searchParams.get("id"), "存在しない id は無視して、URL からも消す");
   await page.close();
@@ -302,7 +304,7 @@ console.log("\n=== 右ドロワー ===");
 
 console.log("\n=== キーボード ===");
 {
-  const { page } = await open("/office/index.html?month=2026-09");
+  const { page } = await open("/office/monthly.html?month=2026-09");
   await page.waitForSelector("#rows tr[data-id]");
   const row = page.locator('#rows tr:has-text("田中 太郎")');
   await row.focus();
@@ -316,30 +318,30 @@ console.log("\n=== キーボード ===");
 
 console.log("\n=== 権限・MFA・エラー ===");
 {
-  const a = await open("/office/index.html", { access: { office: false, recruit: true, sell: false } });
+  const a = await open("/office/monthly.html", { access: { office: false, recruit: true, sell: false } });
   await a.page.waitForURL(/\/home\.html/);
   check(true, "Office 権限が無い人（HR だけ）は home.html へ送り返される");
   check(a.requests.office.length === 0, "その人のために、Office の API は呼ばない");
   await a.page.close();
 
-  const b = await open("/office/index.html", { access: null });
+  const b = await open("/office/monthly.html", { access: null });
   await b.page.waitForURL(/\/home\.html/);
   check(true, "access が無い（古い応答）ときは、入れない側に倒す");
   await b.page.close();
 
-  const c = await open("/office/index.html", { loggedIn: false });
+  const c = await open("/office/monthly.html", { loggedIn: false });
   await c.page.waitForURL(/\/index\.html/);
   check(true, "未ログインは index.html へ");
   await c.page.close();
 
-  const d = await open("/office/index.html?month=2026-09", {
+  const d = await open("/office/monthly.html?month=2026-09", {
     officeResponse: () => ({ status: 403, body: { error: "mfa_required", hint: "登録してください", enrolled: false } }),
   });
   await d.page.waitForURL(/\/mypage\.html/);
   check(new URL(d.page.url()).pathname === "/mypage.html" && new URL(d.page.url()).hash === "#mfa", "（共通の遷移）サーバが mfa_required を返したら /mypage.html#mfa へ（/office/mypage.html にならない）");
   await d.page.close();
 
-  const e = await open("/office/index.html?month=2026-09", {
+  const e = await open("/office/monthly.html?month=2026-09", {
     // API が返す形（空の一覧と同じ形＋理由）。summary が欠けると、画面は描けない
     officeResponse: (m) => ({ body: { ...build(m, "2026-10-06", []), accessNotReady: true, message: "権限の設定が未適用のため表示できません。db/100_office_access.sql の実行を依頼してください" } }),
   });
@@ -347,14 +349,14 @@ console.log("\n=== 権限・MFA・エラー ===");
   check((await e.page.locator(".of-banner").innerText()).includes("db/100_office_access.sql"), "権限の設定が未適用なら、「0件」ではなく理由を出す");
   await e.page.close();
 
-  const f = await open("/office/index.html?month=2026-09", {
+  const f = await open("/office/monthly.html?month=2026-09", {
     officeResponse: (m) => ({ body: { ...build(m, "2026-10-06", []), notReady: true, message: "この機能に必要なテーブルがまだ作られていません。管理者に db/076_site_contracts.sql の実行を依頼してください" } }),
   });
   await f.page.waitForSelector(".of-banner");
   check((await f.page.locator(".of-banner").innerText()).includes("db/076_site_contracts.sql"), "表が無い環境は、実行してほしい SQL を案内する");
   await f.page.close();
 
-  const g = await open("/office/index.html?month=2026-09", {
+  const g = await open("/office/monthly.html?month=2026-09", {
     officeResponse: () => ({ status: 500, body: { error: "db_query_failed", detail: "boom" } }),
   });
   await g.page.waitForSelector(".of-banner.err");
@@ -365,7 +367,7 @@ console.log("\n=== 権限・MFA・エラー ===");
 
 console.log("\n=== スマホ幅 ===");
 {
-  const { page, errs } = await open("/office/index.html?month=2026-09", { viewport: { width: 390, height: 844 } });
+  const { page, errs } = await open("/office/monthly.html?month=2026-09", { viewport: { width: 390, height: 844 } });
   await page.waitForSelector("#rows tr[data-id]");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(over <= 1, `横にはみ出さない（はみ出し ${over}px）`);

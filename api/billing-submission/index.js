@@ -10,7 +10,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeFinance } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
 
   const sb = userClient(req);
 

@@ -128,7 +128,7 @@ const PAGES = [
     ready: "document.querySelector('#good .hr-good-card, #good .hr-empty')", main: [/\/api\/hr\/applicants\b/, /\/api\/hr\/dashboard\b/] },
   { key: "sales",  label: "Salesダッシュボード", url: "/sales/",
     ready: "document.querySelector('#sum a')", main: [/\/api\/sales\/(companies|approaches|dashboard)\b/] },
-  { key: "office", label: "Officeダッシュボード", url: "/office/",
+  { key: "office", label: "Office月次業務", url: "/office/monthly.html",
     ready: "document.querySelector('#rows tr[data-id]')", main: [/\/api\/office(\?|$)/] },
   { key: "keiei",  label: "経営ダッシュボード", url: "/keiei/",
     ready: "(() => { const m = document.querySelector('#kei-main'); return m && m.textContent.trim() && !/読み込み中/.test(m.textContent); })()",

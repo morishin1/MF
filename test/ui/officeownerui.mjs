@@ -95,17 +95,23 @@ async function open(url, { access = { recruit: true, sell: true, office: true },
 console.log("\n=== 経営者（MFA 未登録・aal1）：Office をクリック → /office → 2026-10 のテスト案件 ===");
 {
   seed();
-  const { page, errs } = await open("/admin-dashboard.html");
+  const { page, errs } = await open("/home.html");
   await page.waitForSelector(".topbar [data-shortcut='office']");
-  check(true, "ダッシュボードのヘッダーに「Office」が出ている（access.office のとおり）");
+  check(true, "ホームのヘッダーに「Office」が出ている（access のとおり）");
   check(await page.locator(".kp-mfa-nudge").count() === 1, "MFA の登録を促す帯は出ている（案内だけ。Office を止めない）");
 
-  // Office に入る。経営者でも経理でも、ヘッダーの Office は /office/ へ行く（管理画面のダッシュボードへは送らない）
+  // Office に入る。経営者でも経理でも、ヘッダーの Office は Office ホーム（/office/）へ行く
   check((await page.locator(".topbar [data-shortcut='office']").getAttribute("href")) === "/office/",
-    "経営者の Office は /office/ へ行く（管理画面のダッシュボードではない）");
-  await Promise.all([page.waitForURL(/\/office\/?(index\.html)?(\?.*)?$/), page.click(".topbar [data-shortcut='office']")]);
-  check(new URL(page.url()).pathname.startsWith("/office"), `Office をクリックすると /office が開く（いま ${new URL(page.url()).pathname}）`);
-  errs.length = 0;      // ここまでは開始地点（ダッシュボード。疑似 API は空を返すだけ）。Office に入ってからのエラーを見る
+    "経営者の Office は /office/（Office ホーム）へ行く");
+  await Promise.all([page.waitForURL(/\/office\/?(\?.*)?$/), page.click(".topbar [data-shortcut='office']")]);
+  check(new URL(page.url()).pathname === "/office/", `Office をクリックすると Office ホームが開く（いま ${new URL(page.url()).pathname}）`);
+  await page.waitForSelector("#cards .oh-card", { timeout: 8000 });
+  check(await page.locator("#progBox").isVisible(), "Office ホームに月次進捗が出る（/api/office を読める）");
+  // 左メニューの「月次業務」から、月末月初業務の一覧へ
+  const ops = page.locator('.kp-side-group[data-group="office-ops"]');
+  if ((await ops.getAttribute("aria-expanded")) !== "true") await ops.click();
+  await Promise.all([page.waitForURL(/\/office\/monthly\.html/), page.locator('.kp-sidebar a.kp-side-item[href="/office/monthly.html"]').click()]);
+  errs.length = 0;      // ここまでは開始地点（ホーム。疑似 API は空を返すだけ）。月次業務に入ってからのエラーを見る
   const shown = await page.waitForSelector("#month", { timeout: 8000 }).then(() => true, () => false);
   await page.waitForTimeout(600);
   check(!/mypage\.html/.test(page.url()), `マイページの MFA 登録へは飛ばされない（いま ${new URL(page.url()).pathname}${new URL(page.url()).hash}）`);
@@ -167,7 +173,7 @@ console.log("\n=== 経営者（MFA 未登録・aal1）：勤務表の画面も�
 console.log("\n=== 権限（access.office）が無い人は、MFA の有無にかかわらず入れない ===");
 {
   seed(); seen.length = 0;
-  const { page } = await open("/office/index.html?month=2026-10", { access: { recruit: true, sell: false, office: false }, roles: ["hr"] });
+  const { page } = await open("/office/monthly.html?month=2026-10", { access: { recruit: true, sell: false, office: false }, roles: ["hr"] });
   await page.waitForTimeout(1200);
   check(/home\.html/.test(page.url()), `権限が無い人は home.html へ送られる（いま ${new URL(page.url()).pathname}）`);
   check(!/mypage\.html/.test(page.url()), "MFA の登録画面へは誘導しない");

@@ -133,7 +133,7 @@ async function edit(page, d, field, value) {
 console.log("\n=== E2E 1：Office から勤務表を登録して、稼働確定まで ===");
 {
   seed();
-  const { page, errs, dialogs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs, dialogs } = await open(`/office/monthly.html?month=${M}`);
 
   // 1. 一覧：勤務表待ち
   await page.waitForSelector("#rows tr[data-id]");
@@ -253,7 +253,7 @@ console.log("\n=== E2E 2：外部提出フォームから届いた勤務表（�
   check(rows("gw_submissions").length === 2 && rows("gw_submissions").every((s) => !s.sha256), "外部フォーム：2回届いた（届いた時点では、中身は未確認）");
   check(progress().timesheet_received === true, "外部フォーム：従来どおり、勤務表受領の印が立つ");
 
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector("#rows tr[data-id]");
   const tr = page.locator('#rows tr:has-text("田中 太郎")');
   check((await tr.locator('[data-label="稼働時間"]').innerText()).includes("未読取"), "一覧：ファイルは届いているが「未読取」");

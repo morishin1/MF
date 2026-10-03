@@ -54,7 +54,7 @@ for (const p of [
   "/admin-members.html",      // ルート直下
   "/hr/ceo-review.html",      // 採用HR（MFA 必須の /api/employees を呼ぶ）
   "/sales/index.html",        // Sales
-  "/office/index.html",       // Office（これから作る。単価・請求額を返すので MFA を課す想定）
+  "/office/monthly.html",     // Office（単価・請求額を返すので MFA を課す想定）
   "/biz/home.html",
 ]) {
   await ok(`${p} → /mypage.html#mfa（相対パスで /階層/mypage.html にならない）`, async () => {
