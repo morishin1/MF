@@ -201,5 +201,67 @@ await ok("採用の連絡の送信元は HR_RECRUITING_FROM、無ければ HR_ON
     "入社案内の送信元は、採用の送信元で代わりにしない");
 });
 
+console.log("\n=== 本人への連絡状況（タイムラインから決める・DB の列は増やさない） ===\n");
+
+const { contactStatusOf, CONTACT_EVENT_KEYS } = await import(atRoot("lib/hr-messages.js"));
+const ev = (key, at) => ({ event_key: key, occurred_at: `2026-10-0${at}T00:00:00+00:00` });
+
+await ok("判断していなければ none（バッジを出さない）", async () => {
+  assert.equal(contactStatusOf(null, [ev("message_hold", 1)]).state, "none");
+});
+
+await ok("判断のあとに同じ種類の連絡があれば連絡済み、無ければ未連絡", async () => {
+  assert.equal(contactStatusOf("rejected", [ev("decision_rejected", 1)]).state, "pending");
+  const done = contactStatusOf("rejected", [ev("decision_rejected", 1), ev("message_rejected", 2)]);
+  assert.equal(done.state, "done"); assert.equal(done.via, "message");
+});
+
+await ok("保留を連絡したあと内定に変えたら、内定は未連絡に戻る", async () => {
+  assert.equal(contactStatusOf("hired", [ev("decision_hold", 1), ev("message_hold", 2), ev("decision_hired", 3)]).state, "pending");
+});
+
+await ok("判断より前の連絡は数えない（保留 → 連絡 → 内定 → 保留に戻した）", async () => {
+  assert.equal(contactStatusOf("hold", [ev("decision_hold", 1), ev("message_hold", 2), ev("decision_hired", 3),
+    ev("decision_hold", 4)]).state, "pending");
+});
+
+await ok("内定は、合格通知を送ったら連絡済み（via=offer）", async () => {
+  const c = contactStatusOf("hired", [ev("decision_hired", 1), ev("offer_sent", 2)]);
+  assert.equal(c.state, "done"); assert.equal(c.via, "offer");
+  assert.equal(contactStatusOf("rejected", [ev("decision_rejected", 1), ev("offer_sent", 2)]).state, "pending", "見送りは合格通知で連絡済みにしない");
+});
+
+await ok("判断の記録が無い古いデータでも、同じ種類の連絡があれば連絡済み", async () => {
+  assert.equal(contactStatusOf("hold", [ev("message_hold", 1)]).state, "done");
+  assert.ok(CONTACT_EVENT_KEYS.includes("offer_sent") && CONTACT_EVENT_KEYS.length === 7);
+});
+
+await ok("CEO REVIEW：内定・見送りで未連絡の人は「判断済み・本人へ未連絡」、連絡済みは出さない。保留は社長判断待ちに連絡状況つき", async () => {
+  setup();
+  const { default: ceo } = await import(atRoot("api/hr/ceo-review.js"));
+  const base = { tenant_id: T1, job_title: "x", source: "x" };
+  mem.rows.gw_hr_applicants = [
+    { ...base, id: "h1", name: "内定 未連絡", stage: "offer", status: "offer_draft_pending", decision: "hired" },
+    { ...base, id: "h2", name: "内定 通知済み", stage: "offer", status: "offer_sent", decision: "hired" },
+    { ...base, id: "r1", name: "見送り 未連絡", stage: "ceo_interview", status: "passed", decision: "rejected" },
+    { ...base, id: "o1", name: "保留", stage: "ceo_interview", status: "ceo_decision_pending", decision: "hold" },
+    { ...base, id: "p1", name: "推薦", stage: "ceo_recommend", status: "ceo_interview_pending", decision: null },
+  ];
+  mem.rows.gw_hr_interviews = [];
+  mem.rows.gw_hr_timeline = [
+    { applicant_id: "h1", tenant_id: T1, event_key: "decision_hired", occurred_at: "2026-10-01T00:00:00Z" },
+    { applicant_id: "h2", tenant_id: T1, event_key: "decision_hired", occurred_at: "2026-10-01T00:00:00Z" },
+    { applicant_id: "h2", tenant_id: T1, event_key: "offer_sent", occurred_at: "2026-10-02T00:00:00Z" },
+    { applicant_id: "r1", tenant_id: T1, event_key: "decision_rejected", occurred_at: "2026-10-01T00:00:00Z" },
+    { applicant_id: "o1", tenant_id: T1, event_key: "decision_hold", occurred_at: "2026-10-01T00:00:00Z" },
+  ];
+  const r = { statusCode: 0 }; r.setHeader = () => {}; r.end = (b) => { r.body = JSON.parse(b); };
+  await ceo({ method: "GET", headers: {}, url: "/api/hr/ceo-review" }, r);
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.contactPending.map((a) => a.id).sort(), ["h1", "r1"]);
+  assert.deepEqual(r.body.decisionPending.map((a) => [a.id, a.contact.state]), [["o1", "pending"]]);
+  assert.deepEqual(r.body.recommended.map((a) => a.id), ["p1"], "見送りにした人は「社長に会ってほしい人」に残らない");
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) process.exit(1);

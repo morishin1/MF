@@ -43,17 +43,61 @@
       max-height:88vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
       box-shadow:0 20px 60px rgba(27,36,64,.28); overscroll-behavior:contain; }
     .hr-modal.wide { width:680px; }
-    /* 評価・採用判断（hr/applicants.html と hr/ceo-review.html で同じ） */
-    .hr-dk-tabs { display:flex; gap:8px; margin:4px 0 12px; }
-    .hr-dk-tabs .hr-dk { min-width:76px; font-weight:700; }
-    .hr-dk-banner { border:1px solid; border-radius:10px; padding:10px 12px; font-size:12.5px; margin:0 0 12px; }
-    .hr-dk-eval { border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; margin:0 0 14px; }
-    .hr-dk-eval .hd { font-size:13px; font-weight:700; color:#1b2440; margin-bottom:6px; }
-    .hr-dk-eval .hd small { font-weight:400; color:#6b7080; margin-left:8px; }
-    .hr-dk-eval .row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 0; font-size:12.5px; border-bottom:1px solid #f0f0ec; }
-    .hr-dk-eval .row .v { display:flex; gap:10px; }
-    .hr-dk-eval .row label { display:inline-flex; align-items:center; gap:3px; margin:0; font-weight:600; cursor:pointer; }
-    .hr-dk-eval .row input { width:auto; margin:0; }
+    /* 評価・採用判断・本人への連絡（hr/applicants.html と hr/ceo-review.html で同じ。直すときは両方そろえる）
+       色は意味のあるものだけ：緑＝内定・黄＝保留・赤＝見送り・オレンジ＝本人へ未連絡 */
+    .hr-flow-sec { border:1px solid #e2e2dc; border-radius:12px; padding:16px 18px; margin:0 0 14px; background:#fff; }
+    .hr-flow-sec.is-wait { background:#fafaf8; }
+    .hr-flow-hd { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 12px; }
+    .hr-flow-hd h3 { font-size:14px; font-weight:700; color:#1b2440; margin:0; display:flex; align-items:center; gap:8px; }
+    .hr-flow-hd .st { font-size:11px; font-weight:700; color:#6b7080; letter-spacing:.06em; }
+    .hr-flow-state { display:inline-flex; align-items:center; gap:3px; border-radius:999px; padding:3px 10px;
+      font-size:11.5px; font-weight:700; background:#efefeb; color:#4a5068; white-space:nowrap; }
+    .hr-flow-state .material-symbols-outlined { font-size:15px; }
+    .hr-flow-state.done { background:#e5f1e2; color:#2f6f3a; }
+    .hr-flow-state.todo { background:#ffedd5; color:#c2410c; }
+    .hr-flow-note { font-size:12.5px; color:#6b7080; margin:0; }
+    .hr-flow-sum { font-size:13px; color:#1b2440; line-height:1.7; }
+
+    .hr-score-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid #f0f0ec; }
+    .hr-score-row:last-of-type { border-bottom:none; }
+    .hr-score-row .k { font-size:13px; color:#1b2440; }
+    .hr-score-opts { display:flex; gap:6px; flex-shrink:0; }
+    .hr-score { width:42px; height:36px; border:1px solid #d9d9d2; border-radius:8px; background:#fff; color:#9aa0b4;
+      font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; padding:0; }
+    .hr-score:disabled { cursor:default; }
+    .hr-score.on[data-v="great"] { background:#2f6f3a; border-color:#2f6f3a; color:#fff; }
+    .hr-score.on[data-v="good"] { background:#e5f1e2; border-color:#2f6f3a; color:#2f6f3a; }
+    .hr-score.on[data-v="fair"] { background:#fbf1d6; border-color:#a16207; color:#a16207; }
+    .hr-score.on[data-v="bad"] { background:#fdecea; border-color:#b3261e; color:#b3261e; }
+
+    .hr-seg { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid #d9d9d2; border-radius:10px; overflow:hidden; background:#fff; margin:0 0 12px; }
+    .hr-seg button { border:none; border-right:1px solid #d9d9d2; background:#fff; color:#4a5068; padding:11px 6px; font-size:14px;
+      font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:4px; }
+    .hr-seg button:last-child { border-right:none; }
+    .hr-seg button .material-symbols-outlined { font-size:18px; }
+    .hr-seg button.on[data-kind="hired"] { background:#2f6f3a; color:#fff; }
+    .hr-seg button.on[data-kind="hold"] { background:#b7791f; color:#fff; }
+    .hr-seg button.on[data-kind="rejected"] { background:#b3261e; color:#fff; }
+    .hr-dk-banner { border:1px solid; border-radius:10px; padding:10px 12px; font-size:12.5px; margin:0 0 12px; display:flex; gap:6px; align-items:flex-start; }
+    .hr-dk-banner .material-symbols-outlined { font-size:18px; }
+    .hr-dk-banner[data-kind="hired"] { background:#e5f1e2; color:#2f6f3a; border-color:#2f6f3a; }
+    .hr-dk-banner[data-kind="hold"] { background:#fbf1d6; color:#8a5a00; border-color:#b7791f; }
+    .hr-dk-banner[data-kind="rejected"] { background:#fdecea; color:#b3261e; border-color:#b3261e; }
+    .btn.hr-dk-save[data-kind="hired"] { background:#2f6f3a; border-color:#2f6f3a; color:#fff; }
+    .btn.hr-dk-save[data-kind="hold"] { background:#b7791f; border-color:#b7791f; color:#fff; }
+    .btn.hr-dk-save[data-kind="rejected"] { background:#b3261e; border-color:#b3261e; color:#fff; }
+    .hr-msg-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+    .hr-msg-actions .later { margin-left:auto; font-size:12.5px; color:#6b7080; background:none; border:none; cursor:pointer; font-family:inherit; }
+
+    /* 一覧・詳細・カードの小さなバッジ（判断と、本人への連絡状況は別のバッジ） */
+    .hr-badges { display:inline-flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+    .hr-badge { display:inline-flex; align-items:center; gap:2px; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .hr-badge .material-symbols-outlined { font-size:13px; }
+    .hr-badge.d-hired { background:#e5f1e2; color:#2f6f3a; }
+    .hr-badge.d-hold { background:#fbf1d6; color:#8a5a00; }
+    .hr-badge.d-rejected { background:#fdecea; color:#b3261e; }
+    .hr-badge.c-pending { background:#ffedd5; color:#c2410c; border:1px solid #fdba74; }
+    .hr-badge.c-done { background:#efefeb; color:#4a5068; }
     .hr-drawer { position:fixed; top:0; right:0; bottom:0; width:440px; max-width:92vw; background:#fff;
       z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:22px; }
     .hr-detail { position:fixed; top:0; right:0; bottom:0; width:480px; max-width:94vw; background:#fff;
@@ -80,6 +124,9 @@
 
   <div class="hr-sec-h">社長判断待ち<span class="n" id="n-dec"></span></div>
   <div class="hr-cv-grid" id="dec"></div>
+
+  <div class="hr-sec-h">判断済み・本人へ未連絡<span class="n" id="n-contact"></span></div>
+  <div class="hr-cv-grid" id="contact"></div>
 </div>
 
 <div id="modal-root"></div>
@@ -93,7 +140,7 @@
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
 
-  let data = { todayMeetings: [], recommended: [], decisionPending: [] };
+  let data = { todayMeetings: [], recommended: [], decisionPending: [], contactPending: [] };
   let employees = [];
 
   HRLayout.init({ active: "ceo" }).then((ctx) => { if (ctx) load(); });
@@ -129,6 +176,11 @@
     el("dec").innerHTML = data.decisionPending.length
       ? data.decisionPending.map((a) => card(a, "dec")).join("")
       : `<div class="hr-cv-empty">いまのところ対象はいません。</div>`;
+    const contactList = data.contactPending || [];
+    el("n-contact").textContent = contactList.length ? `${contactList.length}件` : "";
+    el("contact").innerHTML = contactList.length
+      ? contactList.map((a) => card(a, "contact")).join("")
+      : `<div class="hr-cv-empty">本人へ未連絡の判断はありません。</div>`;
   }
 
   // 日本時間で「本日 16:15」（今日でなければ「2026/10/1 16:15」）。js/jst.js
@@ -148,8 +200,9 @@
           </div>
           ${booked ? `<span class="tm">${esc(fmtTime(booked.scheduledAt))}</span>` : ""}
         </div>
-        ${bucket === "dec" && a.decision === "hold" ? `<div class="hr-dk-banner" data-kind="hold" style="background:#fbf1d6;color:#7d5a00;border-color:#7d5a00;">
-          <b>保留中</b>${a.holdNextStep ? `　次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div>` : ""}
+        ${decisionBadges(a)}
+        ${a.decision === "hold" ? `<div class="hr-dk-banner" data-kind="hold" style="margin-top:10px;"><span class="material-symbols-outlined">pause_circle</span>
+          <div><b>保留中</b>${a.holdReason ? `　理由：${esc(a.holdReason)}` : ""}${a.holdNextStep ? `<br>次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
         ${a.recommendNote ? `<div class="sec"><b>推薦理由</b>${esc(a.recommendNote)}</div>` : ""}
         ${a.goodPoints ? `<div class="sec"><b>良かった点</b>${esc(a.goodPoints)}</div>` : ""}
         ${a.concerns ? `<div class="sec"><b>気になる点・次に確認したいこと</b>${esc(a.concerns)}</div>` : ""}
@@ -162,10 +215,15 @@
           ` : bucket === "rec" && booked ? `
             <span class="muted" style="font-size:12px;">社長面談 予定：${esc(fmtTime(booked.scheduledAt))}</span>
             ${booked.meetingUrl ? `<a href="${esc(booked.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">面談を開く</a>` : ""}
+          ` : bucket === "contact" ? `
+            <button class="btn btn-primary btn-sm" onclick="openContactForm('${esc(a.id)}', '${esc(a.decision)}')">
+              <span class="material-symbols-outlined icon-inline">mail</span>本人へ連絡</button>
           ` : bucket === "rec" ? `
             <button class="btn btn-primary btn-sm" onclick="openScheduleForm('${esc(a.id)}')">社長面談を設定</button>
           ` : `
             <button class="btn btn-primary btn-sm" onclick="openDecideForm('${esc(a.id)}')">評価・採用判断</button>
+            ${a.decision === "hold" && a.contact?.state === "pending" ? `<button class="btn btn-secondary btn-sm" onclick="openContactForm('${esc(a.id)}', 'hold')">
+              <span class="material-symbols-outlined icon-inline">mail</span>本人へ連絡</button>` : ""}
           `}
         </div>
       </div>`;
@@ -228,99 +286,189 @@
   const closeDecisionModal = () => closeAction();
   async function afterDecision() { await load(); }
 
-  // ---- 採用判断（内定・保留・見送り）・社長面談の評価・本人への連絡 ----------------------
+  // ---- 社長面談の評価 → STEP 1 採用判断 → STEP 2 本人へ連絡 ------------------------------
   // 採用HRの詳細（hr/applicants.html）と CEO REVIEW（hr/ceo-review.html）で同じもの。直すときは両方そろえる。
-  //   ・選んだ判断で色が変わる（内定＝緑・保留＝黄・見送り＝赤）。いまどれを選んでいるかを取り違えない
-  //   ・社長面談の評価（5項目・社長の所感）を、判断と同じ画面で残す（面談の scores / notes。状態は動かさない）
-  //   ・判断を保存したら、そのまま本人へ伝える文面を出す（api/hr/applicants/message.js。直してから送れる）
+  //   ・1つのモーダルの中を、3枚のカード（評価／採用判断／本人へ連絡）に分ける。保存しても閉じずに次の段へ進む
+  //   ・判断はセグメント（選んだものだけ色＋チェック）。説明の帯・確定ボタンも同じ色に切り替わる
+  //   ・評価は面談の scores / notes（状態は動かさない）。判断は応募者の decision。連絡は api/hr/applicants/message.js
+  //   ・本人への連絡状況（未連絡／連絡済み）は API の contact（lib/hr-messages.js。タイムラインから決める）
   const DECIDE_KINDS = [
-    { key: "hired", label: "内定", fg: "#2f6f3a", bg: "#e5f1e2", icon: "check_circle", submit: "内定にする",
-      note: "内定にします。続けて合格通知（雇用条件）を作ります。" },
-    { key: "hold", label: "保留", fg: "#7d5a00", bg: "#fbf1d6", icon: "pause_circle", submit: "保留にする",
+    { key: "hired", label: "内定", icon: "check_circle", submit: "内定にする",
+      note: "内定にします。続けて本人へ連絡し、合格通知（雇用条件）を作ります。" },
+    { key: "hold", label: "保留", icon: "pause_circle", submit: "保留にする",
       note: "保留にします。社長判断待ちのまま、次に確認することと再判断期限を残します。" },
-    { key: "rejected", label: "見送り", fg: "#b3261e", bg: "#fdecea", icon: "cancel", submit: "見送りを確定",
+    { key: "rejected", label: "見送り", icon: "cancel", submit: "見送りを確定",
       note: "見送りにします。この応募者の選考は終わります。" },
   ];
+  const DECIDE_LABEL = Object.fromEntries(DECIDE_KINDS.map((k) => [k.key, k.label]));
+
+  /** 判断と、本人への連絡状況のバッジ（一覧・詳細・CEO REVIEW で同じ） */
+  function decisionBadges(a) {
+    const d = a?.decision;
+    if (!DECIDE_LABEL[d]) return "";
+    const c = a.contact?.state;
+    return `<span class="hr-badges" data-decision="${esc(d)}">
+      <span class="hr-badge d-${esc(d)}">${esc(DECIDE_LABEL[d])}</span>
+      ${c === "pending" ? `<span class="hr-badge c-pending" data-contact="pending"><span class="material-symbols-outlined">mark_email_unread</span>本人へ未連絡</span>`
+        : c === "done" ? `<span class="hr-badge c-done" data-contact="done"><span class="material-symbols-outlined">done</span>連絡済み</span>` : ""}
+    </span>`;
+  }
+
+  /** 社長面談の評価（読むだけ）。モーダルと同じ見た目・同じ色のルールで出す（応募者詳細・CEO REVIEW の詳細） */
+  function ceoEvalSummary(res) {
+    const iv = (res?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled);
+    if (!iv || (!Object.keys(iv.scores || {}).length && !iv.notes)) return "";
+    return `<section class="hr-flow-sec" data-ceo-eval style="margin-top:14px;">
+      <div class="hr-flow-hd"><h3><span class="material-symbols-outlined">fact_check</span>社長面談の評価</h3>
+        <span class="hr-flow-note">${iv.scheduledAt ? esc(JST.when(iv.scheduledAt)) : ""}</span></div>
+      ${(res.evalItems || []).map((it) => `<div class="hr-score-row"><span class="k">${esc(it.label)}</span><span class="hr-score-opts">
+        ${(res.evalScale || []).map((s) => `<button type="button" class="hr-score${iv.scores?.[it.key] === s.key ? " on" : ""}" data-v="${esc(s.key)}" disabled>${esc(s.label)}</button>`).join("")}
+      </span></div>`).join("")}
+      ${iv.notes ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:10px;color:#1b2440;"><b style="color:#6b7080;font-size:11px;display:block;">社長の所感</b>${esc(iv.notes)}</div>` : ""}
+    </section>`;
+  }
+
   let decideKind = "hired";
-  let decideData = null;   // { applicantId, name, ceoInterview, evalItems, evalScale }
+  // { applicantId, name, ceoInterview, evalItems, evalScale, scores, step: "decide"|"contact"|"done",
+  //   savedKind, summary, message, sentChannel }
+  let flow = null;
+
+  const flowState = (done, doneText, todoText) => (done
+    ? `<span class="hr-flow-state done"><span class="material-symbols-outlined">check</span>${esc(doneText)}</span>`
+    : `<span class="hr-flow-state todo">${esc(todoText)}</span>`);
 
   function openDecideForm(applicantId) {
     const id = applicantId || decideDefaultId();
-    decideData = { applicantId: id, name: "", ceoInterview: null, evalItems: [], evalScale: [] };
-    openDecisionModal(`
-        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">評価・採用判断</h2>
-        <p class="hr-sub" id="dc-name" style="margin:0 0 14px;"></p>
-        <div id="dc-eval"><p class="muted" style="font-size:12px;">社長面談の評価を読み込み中…</p></div>
-        <div class="hr-dk-tabs" id="dc-tabs" role="group" aria-label="判断"></div>
-        <div id="decide-body"></div>
-        <div id="dc-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-secondary" onclick="closeDecisionModal()">閉じる</button>
-        </div>`);
-    setDecideKind("hired");
+    flow = { applicantId: id, name: "", ceoInterview: null, evalItems: [], evalScale: [], scores: {}, step: "decide",
+      savedKind: null, summary: "", message: null, sentChannel: null };
+    decideKind = "hired";
+    for (const k of Object.keys(fieldMemo)) delete fieldMemo[k];
+    openDecisionModal(flowShell(), { wide: true });
+    renderStep1(); renderStep2();
     loadDecideEval(id);
   }
 
-  /** 社長面談（実施済み・キャンセルでない、いちばん新しいもの）の評価欄 */
-  async function loadDecideEval(id) {
-    let d = null;
-    try { d = await API.getHrApplicant(id); } catch { d = null; }
-    if (!el("dc-eval") || decideData?.applicantId !== id) return;
-    const iv = (d?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled) || null;
-    decideData = { applicantId: id, name: d?.applicant?.name || "", ceoInterview: iv,
-      evalItems: d?.evalItems || [], evalScale: d?.evalScale || [] };
-    el("dc-name").textContent = decideData.name;
-    if (!iv || !decideData.evalItems.length) {
-      el("dc-eval").innerHTML = d?.applicant
-        ? `<p class="muted" style="font-size:12px;margin:0 0 12px;">実施済みの社長面談がないため、評価欄は出していません。</p>` : "";
-      return;
-    }
-    el("dc-eval").innerHTML = `
-        <div class="hr-dk-eval">
-          <div class="hd">社長面談の評価${iv.scheduledAt ? `<small>${esc(JST.when(iv.scheduledAt))}</small>` : ""}</div>
-          ${decideData.evalItems.map((it) => `
-            <div class="row"><span class="k">${esc(it.label)}</span><span class="v">
-              ${decideData.evalScale.map((s) => `<label><input type="radio" name="dce-${esc(it.key)}" value="${esc(s.key)}"
-                ${iv.scores?.[it.key] === s.key ? "checked" : ""}>${esc(s.label)}</label>`).join("")}</span></div>`).join("")}
-          <label style="margin-top:8px;">社長の所感（任意）</label>
-          <textarea id="dc-ceo-notes" rows="3" maxlength="1000" placeholder="良かった点・気になった点・判断の理由">${esc(iv.notes || "")}</textarea>
+  /** 判断済みの人に、あとから本人へ連絡する（STEP 1 は完了のまま、STEP 2 だけを開く） */
+  async function openContactForm(applicantId, kind) {
+    flow = { applicantId, name: "", ceoInterview: null, evalItems: [], evalScale: [], scores: {}, step: "contact",
+      savedKind: kind, summary: `${DECIDE_LABEL[kind] || ""}を決定済み`, message: null, sentChannel: null, contactOnly: true };
+    openDecisionModal(flowShell(), { wide: true });
+    renderStep1();
+    await loadMessage();
+  }
+
+  function flowShell() {
+    return `
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 2px;">${flow.contactOnly ? "本人へ連絡" : "評価・採用判断"}</h2>
+        <p class="hr-sub" id="dc-name" style="margin:0 0 16px;"></p>
+        ${flow.contactOnly ? "" : `<section class="hr-flow-sec" id="dc-eval"><p class="hr-flow-note">社長面談の評価を読み込み中…</p></section>`}
+        <section class="hr-flow-sec" id="dc-step1"></section>
+        <section class="hr-flow-sec" id="dc-step2"></section>
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn btn-secondary" onclick="closeDecisionModal()">閉じる</button>
         </div>`;
   }
 
-  function renderDecideTabs() {
-    el("dc-tabs").innerHTML = DECIDE_KINDS.map((k) => {
-      const on = k.key === decideKind;
-      return `<button type="button" class="btn btn-sm hr-dk${on ? " on" : ""}" data-kind="${k.key}" aria-pressed="${on}"
-        style="border:1px solid ${k.fg};${on ? `background:${k.fg};color:#fff;` : `background:#fff;color:${k.fg};`}"
-        onclick="setDecideKind('${k.key}')">${on ? "✓ " : ""}${esc(k.label)}</button>`;
-    }).join("");
+  /** ① 社長面談の評価・② 社長の所感（実施済み・キャンセルでない、いちばん新しい社長面談） */
+  async function loadDecideEval(id) {
+    let d = null;
+    try { d = await API.getHrApplicant(id); } catch { d = null; }
+    if (!el("dc-eval") || flow?.applicantId !== id) return;
+    const iv = (d?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled) || null;
+    Object.assign(flow, { name: d?.applicant?.name || "", ceoInterview: iv, evalItems: d?.evalItems || [],
+      evalScale: d?.evalScale || [], scores: { ...(iv?.scores || {}) } });
+    el("dc-name").textContent = flow.name;
+    renderEval();
+  }
+
+  function renderEval() {
+    const box = el("dc-eval");
+    if (!box) return;
+    const iv = flow.ceoInterview;
+    if (!iv || !flow.evalItems.length) {
+      box.className = "hr-flow-sec is-wait";
+      box.innerHTML = `<div class="hr-flow-hd"><h3>社長面談の評価</h3></div>
+        <p class="hr-flow-note">実施済みの社長面談がないため、評価は入力できません。判断だけを保存できます。</p>`;
+      return;
+    }
+    const locked = flow.step !== "decide";
+    box.className = "hr-flow-sec";
+    box.innerHTML = `
+        <div class="hr-flow-hd"><h3><span class="material-symbols-outlined">fact_check</span>社長面談の評価</h3>
+          <span class="hr-flow-note">${iv.scheduledAt ? esc(JST.when(iv.scheduledAt)) : ""}</span></div>
+        ${flow.evalItems.map((it) => `
+          <div class="hr-score-row" data-item="${esc(it.key)}"><span class="k">${esc(it.label)}</span>
+            <span class="hr-score-opts" role="group" aria-label="${esc(it.label)}">
+              ${flow.evalScale.map((s) => `<button type="button" class="hr-score${flow.scores[it.key] === s.key ? " on" : ""}"
+                data-v="${esc(s.key)}" aria-pressed="${flow.scores[it.key] === s.key}" ${locked ? "disabled" : ""}
+                onclick="setScore('${esc(it.key)}', '${esc(s.key)}')">${esc(s.label)}</button>`).join("")}
+            </span></div>`).join("")}
+        <label style="margin-top:14px;">社長の所感（任意）</label>
+        <textarea id="dc-ceo-notes" rows="3" maxlength="1000" ${locked ? "disabled" : ""}
+          placeholder="良かった点・気になった点・判断の理由">${esc(iv.notes || "")}</textarea>`;
+  }
+
+  function setScore(item, v) {
+    // 同じものをもう一度押したら外す（付け間違いを戻せるように）
+    flow.scores[item] = flow.scores[item] === v ? undefined : v;
+    if (!flow.scores[item]) delete flow.scores[item];
+    const row = document.querySelector(`#dc-eval .hr-score-row[data-item="${item}"]`);
+    row?.querySelectorAll(".hr-score").forEach((b) => {
+      const on = b.dataset.v === flow.scores[item];
+      b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+    });
+  }
+
+  /** ③ 採用判断・④ 補足・⑤ 保存（STEP 1） */
+  function renderStep1() {
+    const box = el("dc-step1");
+    if (!box) return;
+    const done = flow.step !== "decide";
+    const head = `<div class="hr-flow-hd"><h3><span class="st">STEP 1</span>採用判断</h3>${flowState(done, "完了", "未完了")}</div>`;
+    if (done) {
+      box.innerHTML = `${head}<div class="hr-flow-sum">${decisionBadges({ decision: flow.savedKind })}
+        ${flow.summary ? `<div style="margin-top:6px;">${esc(flow.summary)}</div>` : ""}</div>`;
+      return;
+    }
+    const k = DECIDE_KINDS.find((x) => x.key === decideKind) || DECIDE_KINDS[0];
+    box.innerHTML = `${head}
+        <div class="hr-seg" id="dc-tabs" role="radiogroup" aria-label="採用判断">
+          ${DECIDE_KINDS.map((x) => {
+            const on = x.key === decideKind;
+            return `<button type="button" role="radio" class="${on ? "on" : ""}" data-kind="${x.key}" aria-checked="${on}" aria-pressed="${on}"
+              onclick="setDecideKind('${x.key}')">${on ? `<span class="material-symbols-outlined">check</span>` : ""}${esc(x.label)}</button>`;
+          }).join("")}
+        </div>
+        <div class="hr-dk-banner" data-kind="${k.key}"><span class="material-symbols-outlined">${k.icon}</span><div><b>${esc(k.label)}</b>　${esc(k.note)}</div></div>
+        <div id="decide-body"></div>
+        <div id="dc-msg" class="err-text" style="margin:8px 0 0;"></div>
+        <button class="btn hr-dk-save" data-kind="${k.key}" style="margin-top:12px;" onclick="submitDecide(this)">${esc(k.submit)}</button>`;
+    renderDecideFields();
+  }
+
+  // 判断ごとの補足（④）。判断を切り替えても、入れた値はなるべく残す
+  const fieldMemo = {};
+  function renderDecideFields() {
+    for (const id of ["dc-reason", "dc-next", "dc-due", "dc-note"]) if (el(id)) fieldMemo[id] = el(id).value;
+    const v = (id) => esc(fieldMemo[id] || "");
+    el("decide-body").innerHTML = decideKind === "hold" ? `
+        <label>保留理由</label><input id="dc-reason" type="text" value="${v("dc-reason")}">
+        <label style="margin-top:10px;">次に確認すること <span style="color:#b3261e;">*</span></label><input id="dc-next" type="text" value="${v("dc-next")}">
+        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date" value="${v("dc-due")}">` : `
+        <label>コメント（任意・社内用。本人には送りません）</label><textarea id="dc-note" rows="3">${v("dc-note")}</textarea>`;
   }
 
   function setDecideKind(kind) {
+    for (const id of ["dc-reason", "dc-next", "dc-due", "dc-note"]) if (el(id)) fieldMemo[id] = el(id).value;
     decideKind = kind;
-    const k = DECIDE_KINDS.find((x) => x.key === kind) || DECIDE_KINDS[0];
-    renderDecideTabs();
-    const fields = kind === "hold" ? `
-        <label>保留理由</label><input id="dc-reason" type="text">
-        <label style="margin-top:10px;">次に確認すること <span style="color:#b3261e;">*</span></label><input id="dc-next" type="text">
-        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date">` : `
-        <label>コメント（任意・社内用）</label><textarea id="dc-note" rows="3"></textarea>`;
-    el("decide-body").innerHTML = `
-        <div class="hr-dk-banner" data-kind="${k.key}" style="background:${k.bg};color:${k.fg};border-color:${k.fg};">
-          <b>${esc(k.label)}</b>　${esc(k.note)}</div>
-        ${fields}
-        <button class="btn btn-primary" style="margin-top:14px;background:${k.fg};border-color:${k.fg};" onclick="submitDecide(this)">${esc(k.submit)}</button>`;
+    renderStep1();
   }
 
   /** 評価欄の入力（変わっていなければ null） */
   function decideEvalPatch() {
-    const iv = decideData?.ceoInterview;
+    const iv = flow?.ceoInterview;
     if (!iv || !el("dc-ceo-notes")) return null;
-    const scores = {};
-    for (const it of decideData.evalItems) {
-      const v = document.querySelector(`input[name="dce-${it.key}"]:checked`)?.value;
-      if (v) scores[it.key] = v;
-    }
+    const scores = { ...flow.scores };
     const notes = el("dc-ceo-notes").value.trim();
     const same = JSON.stringify(scores) === JSON.stringify(iv.scores || {}) && notes === (iv.notes || "");
     return same ? null : { id: iv.id, scores, notes };
@@ -328,8 +476,8 @@
 
   async function submitDecide(btn) {
     const msg = el("dc-msg"); msg.textContent = "";
-    const id = decideData?.applicantId;
-    const body = { id, decision: decideKind };
+    const body = { id: flow.applicantId, decision: decideKind };
+    let summary = "";
     if (decideKind === "hired") {
       body.stage = "offer"; body.status = "offer_draft_pending";
       body.decisionNote = el("dc-note").value.trim() || undefined;
@@ -339,11 +487,12 @@
       body.holdReason = el("dc-reason").value.trim() || undefined;
       body.holdNextStep = next;
       body.decisionDueOn = el("dc-due").value || undefined;
+      summary = [body.holdReason ? `保留理由：${body.holdReason}` : null, `次に確認：${next}`,
+        body.decisionDueOn ? `再判断期限：${body.decisionDueOn}` : null].filter(Boolean).join("　");
     } else {
       body.status = "passed";
       body.decisionNote = el("dc-note").value.trim() || undefined;
     }
-    const kind = decideKind;
     try {
       await KPLayout.busy(btn, "保存中…", async () => {
         const ev = decideEvalPatch();
@@ -351,46 +500,75 @@
         await API.updateHrApplicant(body);
       });
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; return; }
+    Object.assign(flow, { step: "contact", savedKind: decideKind, summary });
+    renderEval(); renderStep1();
+    await loadMessage();
     await afterDecision();
-    await openMessageStep(id, kind);
   }
 
-  // ---- 本人へ伝える（判断のあと／あとから詳細で） --------------------------------------
-  let messageCtx = null;
-  async function openMessageStep(id, kind) {
+  /** ⑥ 本人へ連絡（STEP 2） */
+  async function loadMessage() {
+    const box = el("dc-step2");
+    if (!box) return;
+    box.className = "hr-flow-sec";
+    box.innerHTML = `<div class="hr-flow-hd"><h3><span class="st">STEP 2</span>本人へ連絡</h3>${flowState(false, "", "未完了")}</div>
+      <p class="hr-flow-note">文面を用意しています…</p>`;
     let r = null;
-    try { r = await API.api(`/api/hr/applicants/message?id=${encodeURIComponent(id)}&kind=${encodeURIComponent(kind)}`); }
+    try { r = await API.api(`/api/hr/applicants/message?id=${encodeURIComponent(flow.applicantId)}&kind=${encodeURIComponent(flow.savedKind)}`); }
     catch { r = null; }
-    // 文面を作れない（古いサーバ等）ときは、出さずに閉じる（判断の保存はもう済んでいる）
-    if (!r?.subject) { closeDecisionModal(); return; }
-    messageCtx = { id, kind, to: r.to || "" };
-    openDecisionModal(`
-        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">本人へ伝える</h2>
-        <p class="hr-sub" style="margin:0 0 12px;">${esc(r.label)}の文面です。直してから送れます（社内の評価・所感は入っていません）。</p>
+    // 文面を作れない（古いサーバ等）ときは、判断の保存だけで閉じる
+    if (!r?.subject) { if (flow.contactOnly) renderStep2(); else closeDecisionModal(); return; }
+    flow.message = r;
+    if (flow.contactOnly && el("dc-name") && !flow.name) el("dc-name").textContent = r.to ? `宛先：${r.to}` : "";
+    renderStep2();
+  }
+
+  function renderStep2() {
+    const box = el("dc-step2");
+    if (!box) return;
+    const head = (done) => `<div class="hr-flow-hd"><h3><span class="st">STEP 2</span>本人へ連絡</h3>${flowState(done, "連絡済み", "未完了")}</div>`;
+    if (flow.step === "decide") {
+      box.className = "hr-flow-sec is-wait";
+      box.innerHTML = `${head(false)}<p class="hr-flow-note">採用判断を保存すると、本人へ伝える文面がここに出ます。判断の保存と本人への連絡は別の操作です。</p>`;
+      return;
+    }
+    box.className = "hr-flow-sec";
+    if (flow.step === "done") {
+      box.innerHTML = `${head(true)}<p class="hr-flow-sum">${flow.sentChannel === "email" ? "メールで送りました。" : "送付済みとして記録しました。"}選考タイムラインに残っています。</p>`;
+      return;
+    }
+    const r = flow.message;
+    if (!r) { box.innerHTML = `${head(false)}<p class="hr-flow-note">文面を用意できませんでした。</p>`; return; }
+    const canMail = Boolean(r.mail?.configured);
+    // メイン操作は1つだけ：メールで送れるなら「メールで送る」、送れなければ「メールソフトで開く」（宛先が無ければ「コピー」）
+    const primary = canMail ? "email" : r.to ? "mailer" : "copy";
+    const cls = (k) => (k === primary ? "btn btn-primary" : "btn btn-secondary");
+    box.innerHTML = `${head(false)}
+        <p class="hr-flow-note" style="margin-bottom:10px;">${esc(r.label)}の文面です。直してから送れます（社内の評価・所感は入っていません）。</p>
         <label>宛先</label>
-        <div style="font-size:13px;margin-bottom:6px;">${r.to ? esc(r.to) : `<span class="muted">メールアドレスが登録されていません</span>`}</div>
+        <div style="font-size:13px;margin-bottom:8px;">${r.to ? esc(r.to) : `<span class="muted">メールアドレスが登録されていません</span>`}</div>
         <label>件名</label><input id="msg-subject" type="text" maxlength="200" value="${esc(r.subject)}">
-        <label style="margin-top:10px;">本文</label><textarea id="msg-body" rows="12">${esc(r.body)}</textarea>
-        ${r.mail?.configured ? "" : `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">mail</span>
-          <div>このシステムからはメールを送れません（${esc(r.mail?.reason || "未設定")}）。メールソフトで開くか、文面をコピーして送り、送ったら「送付済みにする」を押してください。</div></div>`}
-        <div id="msg-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-          ${r.mail?.configured ? `<button class="btn btn-primary" onclick="sendDecisionMessage('email', this)">メールで送る</button>` : ""}
-          ${r.to ? `<button class="btn btn-secondary" onclick="openMailer()">メールソフトで開く</button>` : ""}
-          <button class="btn btn-secondary" onclick="copyDecisionMessage(this)">文面をコピー</button>
-          <button class="btn btn-secondary" onclick="sendDecisionMessage('manual', this)">送付済みにする</button>
-          <button class="btn btn-secondary" onclick="closeDecisionModal()">あとで</button>
-        </div>`, { wide: true });
+        <label style="margin-top:10px;">本文</label><textarea id="msg-body" rows="11">${esc(r.body)}</textarea>
+        ${canMail ? "" : `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">mail</span>
+          <div>このシステムからはメールを送れません（${esc(r.mail?.reason || "未設定")}）。${r.to ? "メールソフトで開く" : "コピー"}で送り、送ったら「送付済みにする」を押してください。</div></div>`}
+        <div id="msg-msg" class="err-text" style="margin:8px 0 0;"></div>
+        <div class="hr-msg-actions">
+          ${canMail ? `<button class="${cls("email")}" onclick="sendDecisionMessage('email', this)"><span class="material-symbols-outlined icon-inline">send</span>メールで送る</button>` : ""}
+          ${r.to ? `<button class="${cls("mailer")}" onclick="openMailer()"><span class="material-symbols-outlined icon-inline">open_in_new</span>メールソフトで開く</button>` : ""}
+          <button class="${cls("copy")}" onclick="copyDecisionMessage(this)"><span class="material-symbols-outlined icon-inline">content_copy</span>コピー</button>
+          <button class="btn btn-secondary" onclick="sendDecisionMessage('manual', this)"><span class="material-symbols-outlined icon-inline">task_alt</span>送付済みにする</button>
+          <button class="later" onclick="closeDecisionModal()">あとで連絡する</button>
+        </div>`;
   }
 
   function openMailer() {
     const q = `subject=${encodeURIComponent(el("msg-subject").value)}&body=${encodeURIComponent(el("msg-body").value)}`;
-    window.location.href = `mailto:${encodeURIComponent(messageCtx.to)}?${q}`;
+    window.location.href = `mailto:${encodeURIComponent(flow.message.to)}?${q}`;
   }
 
   async function copyDecisionMessage(btn) {
     const text = `${el("msg-subject").value}\n\n${el("msg-body").value}`;
-    try { await navigator.clipboard.writeText(text); btn.textContent = "コピーしました"; }
+    try { await navigator.clipboard.writeText(text); btn.lastChild.textContent = "コピーしました"; }
     catch { el("msg-body").select(); el("msg-msg").textContent = "コピーできませんでした。本文を選んでコピーしてください"; }
   }
 
@@ -399,12 +577,13 @@
     const msg = el("msg-msg"); msg.textContent = "";
     try {
       await KPLayout.busy(btn, channel === "email" ? "送信中…" : "記録中…", () => API.api("/api/hr/applicants/message", {
-        method: "POST", body: { id: messageCtx.id, kind: messageCtx.kind, channel,
+        method: "POST", body: { id: flow.applicantId, kind: flow.savedKind, channel,
           subject: el("msg-subject").value, body: el("msg-body").value },
       }));
-      closeDecisionModal();
-      await afterDecision();
-    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; return; }
+    Object.assign(flow, { step: "done", sentChannel: channel });
+    renderStep2();
+    await afterDecision();
   }
 
   // ---- 必要なら詳細を右ドロワーで（読むだけ。事務処理の操作はここに置かない） ----------
@@ -428,6 +607,7 @@
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
             ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}</div>
           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(a.jobTitle)} ／ ${esc(a.source)}</div>
+          ${decisionBadges(a)}
         </div>
         <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
       </div>
@@ -436,7 +616,7 @@
         <span class="material-symbols-outlined">pending_actions</span>
         <div>${a.holdReason ? `${esc(a.holdReason)}<br>` : ""}${a.holdNextStep ? `次に確認：${esc(a.holdNextStep)}` : ""}
           ${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
-      ${ceoEvalBlock(res)}
+      ${ceoEvalSummary(res)}
       <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">選考タイムライン</h4>
       <div class="hr-tl">${ceoTimeline(res.timeline).map((t, i, arr) => `
         <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
@@ -452,17 +632,6 @@
 
   function fmtDate(s) { return JST.when(s); }
 
-  /** 社長面談の評価（入っていれば）。判断材料なので、詳細でも読めるようにする */
-  function ceoEvalBlock(res) {
-    const iv = (res.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled);
-    if (!iv || (!Object.keys(iv.scores || {}).length && !iv.notes)) return "";
-    const scale = Object.fromEntries((res.evalScale || []).map((s) => [s.key, s.label]));
-    const line = (res.evalItems || []).filter((e) => iv.scores?.[e.key])
-      .map((e) => `${esc(e.label)} ${esc(scale[iv.scores[e.key]] || iv.scores[e.key])}`).join("　");
-    return `<div class="hr-dk-eval" style="margin-top:12px;"><div class="hd">社長面談の評価</div>
-      ${line ? `<div style="font-size:12.5px;">${line}</div>` : ""}
-      ${iv.notes ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:6px;">${esc(iv.notes)}</div>` : ""}</div>`;
-  }
 </script>
 
 </body>

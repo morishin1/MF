@@ -15,6 +15,7 @@ import {
   RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor, pickNextInterview,
   STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
 } from "../../../lib/hr.js";
+import { contactStatusOf } from "../../../lib/hr-messages.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない
@@ -86,6 +87,8 @@ async function one(req, res, sb, ctx, salary) {
         current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
       ),
       recruiterName: recruiter?.display_name || null,
+      // 本人への連絡状況（未連絡／連絡済み）。タイムラインの判断・連絡の記録から決める（lib/hr-messages.js）
+      contact: contactStatusOf(a.decision, timeline),
     },
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({

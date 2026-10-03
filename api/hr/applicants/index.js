@@ -14,6 +14,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { normalizeApplicant, shapeApplicant, pickNextInterview } from "../../../lib/hr.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
+import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
@@ -58,6 +59,13 @@ async function list(req, res, sb, ctx, salary) {
     ? attachPay(ctx.tenantId, data || [], "applicant").then(() => null, (e) => e) : Promise.resolve(null);
 
   const ids = (data || []).map((a) => a.id);
+  // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
+  const decidedIds = (data || []).filter((a) => a.decision).map((a) => a.id);
+  const contactEventsP = decidedIds.length
+    ? Promise.resolve(sb.from("gw_hr_timeline").select("applicant_id, event_key, occurred_at")
+      .in("applicant_id", decidedIds).in("event_key", CONTACT_EVENT_KEYS).limit(5000))
+      .then((r) => (r.error ? [] : r.data || []), () => [])
+    : Promise.resolve([]);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
   const [{ data: recruiters }, { data: interviewCounts }, { data: employees }, docs] = await Promise.all([
     recruiterIds.length
@@ -77,6 +85,12 @@ async function list(req, res, sb, ctx, salary) {
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
+  const contactEvents = await contactEventsP;
+  const eventsOf = new Map();
+  for (const e of contactEvents) {
+    if (!eventsOf.has(e.applicant_id)) eventsOf.set(e.applicant_id, []);
+    eventsOf.get(e.applicant_id).push(e);
+  }
   const payError = await payAttached;
   if (payError) throw payError;
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
@@ -102,6 +116,7 @@ async function list(req, res, sb, ctx, salary) {
       recruiterName: recruiterName.get(a.recruiter_id) || null,
       interviewCount: interviewCount.get(a.id) || 0,
       docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
+      contact: contactStatusOf(a.decision, eventsOf.get(a.id)),
     })),
     employees: employees || [],
     // 応募者を追加するとき、担当の初期値（登録する本人）
