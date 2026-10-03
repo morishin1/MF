@@ -1,4 +1,8 @@
 // GET  /api/hr/applicants          … 応募者一覧（ダッシュボード・応募者一覧・CEO REVIEWで共通利用）
+//      ?category=recruitment（既定）| mugendojo | internship | other | all
+//      既定は採用（＝専用の流れを持つ区分〔無限道場〕以外。インターン等は採用と同じ選考段階を使う）。
+//      無限道場リード（db/118）を採用のダッシュボード・ファネルに混ぜない。
+//      応募者一覧の「すべて／採用／無限道場」は all で取り、画面で分ける
 // POST /api/hr/applicants { name, jobTitle, source, ... } … 応募者を追加
 //
 // ダッシュボード・採用ファネル・通知の元ネタは、すべてこの一覧から
@@ -14,6 +18,8 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { normalizeApplicant, shapeApplicant, pickNextInterview } from "../../../lib/hr.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
+import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
+import { DEDICATED_CATEGORIES } from "../../../lib/hr-timerex-calendars.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
@@ -43,8 +49,21 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res, sb, ctx, salary) {
-  const { data, error } = await sb.from("gw_hr_applicants").select(columns(salary))
-    .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(1000);
+  const want = new URL(req.url || "/", "http://localhost").searchParams.get("category") || "recruitment";
+  if (want !== "all" && !LEAD_CATEGORIES.includes(want)) {
+    return json(res, 400, { error: "invalid_query", detail: `category は all / ${LEAD_CATEGORIES.join(" / ")} のいずれかです` });
+  }
+  // リードの列（db/118）が無い環境では、全員が採用。区分では絞れないので、採用・すべては全員、それ以外は0人
+  const query = (fields, withCategory) => {
+    let q = sb.from("gw_hr_applicants").select(fields).eq("tenant_id", ctx.tenantId);
+    if (withCategory && want === "recruitment") for (const c of DEDICATED_CATEGORIES) q = q.neq("lead_category", c);
+    else if (withCategory && want !== "all") q = q.eq("lead_category", want);
+    return q.order("created_at", { ascending: false }).limit(1000);
+  };
+  const first = await selectWithLeadFields(query, columns(salary));
+  const { error, leadReady } = first;
+  let { data } = first;
+  if (!error && !leadReady && !["all", "recruitment"].includes(want)) data = [];
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { applicants: [], notReady: true, message: hint });
@@ -108,6 +127,8 @@ async function list(req, res, sb, ctx, salary) {
     meEmployeeId: ctx.employee?.id || null,
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
     salaryVisible: salary,
+    // どの区分で取ったか・リードの列（db/118）があるか（無ければ画面は無限道場の欄を出さない）
+    category: want, leadReady,
   });
 }
 

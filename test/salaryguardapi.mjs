@@ -28,6 +28,7 @@ function table(name) {
   const rows = () => {
     let out = (db.rows[name] || []).filter((r) => f.every(([op, k, v]) => {
       if (op === "eq") return r[k] === v;
+      if (op === "neq") return r[k] !== v;
       if (op === "in") return Array.isArray(v) ? v.includes(r[k]) : r[k] === v;
       return true;
     }));
@@ -38,6 +39,7 @@ function table(name) {
   const q = {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
+    neq(k, v) { f.push(["neq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
     order(col) { order = col; return q; },
     limit() { return q; },
