@@ -266,12 +266,17 @@ for (const label of ["経営者（owner）", "管理者＋経理（admin）"]) {
   await page.close();
 }
 {
-  // 管理画面を開けない人（経理・責任者のメンバー）には、⚙管理も管理画面の入口も出ない
-  for (const label of ["経理（finance）", "責任者（manager）"]) {
+  // ⚙管理：経理（経理・事務の管理画面に入れる）には、管理画面の入口だけを出す。責任者（管理画面に入れない）には出さない
+  for (const [label, gear] of [["経理（finance）", true], ["責任者（manager）", false]]) {
     seed();
     const { page } = await open("/home.html", ROLES[label]);
     await page.waitForSelector(".topbar [data-shortcut='office']", { timeout: 8000 });
-    check(await page.locator("#kp-admin-menu-btn").count() === 0, `${label}：⚙管理（管理画面の入口）は出ない。Office は出る`);
+    check(await page.locator("#kp-admin-menu-btn").count() === (gear ? 1 : 0), `${label}：⚙管理（管理画面の入口）は${gear ? "出る" : "出ない"}。Office は出る`);
+    if (gear) {
+      await page.locator("#kp-admin-menu-btn").click();
+      const menu = await page.locator("#kp-admin-menu-panel a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+      check(menu.join() === "admin-dashboard.html", `${label}：⚙管理は管理画面の入口だけ（いま ${menu.join()}）`);
+    }
     await page.close();
   }
 }

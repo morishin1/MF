@@ -145,6 +145,9 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // Office：ヘッダーの近道も /office の入口も、access.office だけで決める（役割名を画面に持たない）。
   // 金額を扱うので、access が無い古い応答では入れない側に倒す
   check(/office:\s*Boolean\(me\?\.access\?\.office\)/.test(layout), "ヘッダーの Office は access.office だけ（予備の役割判定を持たない）");
+  // 管理画面（⚙管理）の担当別の入口は、サーバの判定（access.officeHr / officeFinance）。予備は管理者だけ。役割名は並べ直さない
+  check(/const flag = \(k\) => me\?\.appRole !== "sr" && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
+    "管理画面の人事・労務／経理・事務は access.officeHr / officeFinance（予備は管理者だけ）");
   const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   // 入口の判定は、覚えている身元（先に描く）と /api/me（裏で確かめる）の両方で同じ関数を使う（API.enterWithMe）
   check(/function allows\(me\) \{ return Boolean\(me\?\.access\?\.office\); \}/.test(officeLayout)
