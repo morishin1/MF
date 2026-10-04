@@ -83,6 +83,10 @@
   let kind = "bp";
   let openId = null;
 
+  // 表示速度：今月の請求提出の状況は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const msKey = (month) => `office:monthstart:${month || ""}`;
+  { const m = new Date().toISOString().slice(0, 7); KPLayout.warm("officeFinance", msKey(m), () => API.listBillingSubmissions(m)); }
+
   KPLayout.init({ active: "monthstart", access: "officeFinance" })
     .then((ctx) => { if (ctx) start(); });
 
@@ -104,14 +108,16 @@
     el("ms-detail").innerHTML = "";
     openId = null;
     try {
-      const res = await API.listBillingSubmissions(month);
-      if (res.notReady) {
-        el("ms-rows").innerHTML = `<tr><td colspan="5"><div class="banner warn">
-          <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
-        return;
-      }
-      rows = res.rows || [];
-      render();
+      await API.swr(msKey(month), () => API.listBillingSubmissions(month), (res) => {
+        if (el("ms-month").value !== month) return;   // 月を素早く切り替えたとき、古い応答で描かない
+        if (res.notReady) {
+          el("ms-rows").innerHTML = `<tr><td colspan="5"><div class="banner warn">
+            <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
+          return;
+        }
+        rows = res.rows || [];
+        render();
+      });
     } catch (e) {
       el("ms-rows").innerHTML = `<tr><td colspan="5"><div class="banner err">
         <span class="material-symbols-outlined">error</span>

@@ -81,6 +81,11 @@
   const OFFICE_KEY = "office:";
   const fetchOffice = () => API.api("/api/office");
   API.warm(OFFICE_KEY, fetchOffice, O.allows);
+  // 人事・労務の数字（入退社）と件数（ヘッダー・タブのバッジと同じ鍵）も、枠を待たずに取りにいき始める。
+  // 鍵は入退社の画面（admin-hr.html）・共通の枠と同じなので、行き来しても取り直さない
+  const HR_KEY = "office:hr";
+  KPLayout.warm("officeHr", HR_KEY, () => API.hrList());
+  API.warm("badges", () => API.badges());
 
   // Office に入れる人の全員（人事・労務／経理・事務／月末月初業務のどれか）が開ける。中身は担当の分だけ
   O.init({ active: "home", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(ctx); });
@@ -115,9 +120,10 @@
     const closingMonth = prevMonth();
     let officeData = null;
     const [b, hr, cl, of] = await Promise.all([
-      safe(API.badges()),
-      can.hr ? safe(API.hrList()) : none,
-      can.fin && !can.app ? safe(API.closing(closingMonth)) : none,
+      // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
+      safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
+      can.hr ? safe(API.swr(HR_KEY, () => API.hrList(), () => {}, { quiet: true })) : none,
+      can.fin && !can.app ? safe(API.swr(`office:closing:${closingMonth}`, () => API.closing(closingMonth), () => {}, { quiet: true })) : none,
       can.app ? safe(API.swr(OFFICE_KEY, fetchOffice, (d) => { officeData = d; })) : none,
     ]);
     if (of && of.ok) officeData = officeData || of.v;

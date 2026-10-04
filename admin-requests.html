@@ -94,6 +94,10 @@
   let isOwner = false;
   let filter = "leave";
 
+  // 表示速度：申請の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const REQ_KEY = "office:requests";
+  KPLayout.warm("officeHr", REQ_KEY, () => API.listRequests("all"));
+
   KPLayout.init({ active: "requests", access: "officeHr" })
     .then((ctx) => { if (ctx) start(); });
 
@@ -116,10 +120,11 @@
   // ---- 申請 -----------------------------------------------------------------
   async function load() {
     try {
-      const res = await API.listRequests("all");
-      requests = res.requests || [];
-      isOwner = !!res.isOwner;
-      render();
+      await API.swr(REQ_KEY, () => API.listRequests("all"), (res) => {
+        requests = res.requests || [];
+        isOwner = !!res.isOwner;
+        render();
+      });
     } catch (e) {
       el("pending").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>

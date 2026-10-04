@@ -241,19 +241,32 @@
   let partners = [];
   let editingPartnerId = null;
 
+  // 表示速度：名簿は枠（権限の確認）を待たずに取りにいき始め、2回目からは前回の内容をすぐ出して裏で最新にする。
+  // BP企業の一覧は、要るときだけ取る（名簿にBPの人がいる／BP企業の欄を開いた／区分でBPを選んだ）
+  const EMP_KEY = "office:employees";
+  const PARTNER_KEY = "office:partners";
+  KPLayout.warm("officeHr", EMP_KEY, () => API.listEmployees());
+
   KPLayout.init({ active: "members", access: "officeHr" })
-    .then((ctx) => { if (ctx) { load(); loadPartners(); } });
+    .then((ctx) => { if (ctx) load(); });
+
+  function applyEmployees(res) {
+    employees = res.employees || [];
+    canGrantRoles = !!res.canGrantRoles;
+    canGrantOwner = !!res.canGrantOwner;
+    canManage = !!res.canManage;
+    kindReady = !!res.kindReady;
+    el("e-kind-wrap").classList.toggle("hidden", !kindReady);
+    // BP企業の欄は、BPの列がある（db/075 適用済み）ときだけ。中身は開いたときに取る
+    el("partner-card").classList.toggle("hidden", !kindReady || partnersNotReady);
+    render();
+    // 名簿にBPの人がいれば、所属先の会社名のために一覧を取る（名簿の表示は待たせない）
+    if (kindReady && employees.some((e) => e.employee_kind === "bp")) ensurePartners();
+  }
 
   async function load() {
     try {
-      const res = await API.listEmployees();
-      employees = res.employees || [];
-      canGrantRoles = !!res.canGrantRoles;
-      canGrantOwner = !!res.canGrantOwner;
-      canManage = !!res.canManage;
-      kindReady = !!res.kindReady;
-      el("e-kind-wrap").classList.toggle("hidden", !kindReady);
-      render();
+      await API.swr(EMP_KEY, () => API.listEmployees(), applyEmployees);
     } catch (e) {
       el("list").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -262,18 +275,29 @@
   }
 
   // --- BP企業（パートナー企業） ------------------------------------------------
+  // 初回は取らない（閉じた欄のために名簿の表示を遅らせない）。要るときに ensurePartners() で1回だけ取る。
+  // 追加・変更・削除のあとは loadPartners() で取り直す
+  let partnersNotReady = false;
+  let partnersOnce = null;
+  function ensurePartners() {
+    if (!partnersOnce) partnersOnce = loadPartners();
+    return partnersOnce;
+  }
+  function applyPartners(res) {
+    if (res.notReady) { partnersNotReady = true; el("partner-card").classList.add("hidden"); return; }
+    partners = res.companies || [];
+    el("partner-card").classList.remove("hidden");
+    renderPartnerSelect();
+    if (!el("partner-body").classList.contains("hidden")) renderPartners();
+    // 名簿の行に会社名を反映し直す
+    if (employees.length) render();
+  }
   async function loadPartners() {
     try {
-      const res = await API.listPartners();
-      if (res.notReady) { el("partner-card").classList.add("hidden"); return; }
-      partners = res.companies || [];
-      el("partner-card").classList.remove("hidden");
-      renderPartnerSelect();
-      renderPartners();
-      // load() と並行で走るので、先に名簿の行が描けていたら会社名を反映し直す
-      if (employees.length) render();
+      await API.swr(PARTNER_KEY, () => API.listPartners(), applyPartners);
     } catch (e) {
       // 075未適用など。区分の欄自体を出していないので、静かに諦める
+      partnersNotReady = true;
       el("partner-card").classList.add("hidden");
     }
   }
@@ -291,10 +315,15 @@
     const open = body.classList.toggle("hidden");
     el("partner-caret").textContent = open ? "expand_more" : "expand_less";
     el("partner-caret").nextSibling.textContent = open ? "開く" : "閉じる";
+    // 開いたときに一覧を出す（まだ取っていなければ、ここで取る）
+    if (!open) { renderPartners(); ensurePartners(); }
   }
 
   function toggleKindPartner() {
-    el("e-partner-wrap").classList.toggle("hidden", el("e-kind").value !== "bp");
+    const bp = el("e-kind").value === "bp";
+    el("e-partner-wrap").classList.toggle("hidden", !bp);
+    // 区分でBPを選んだら、所属先の選択肢のために一覧を取る
+    if (bp) ensurePartners();
   }
 
   async function savePartner(btn) {
@@ -1157,7 +1186,17 @@
   }
 
   async function setRole(employeeId, role, grant, input) {
-    try { await API.setEmployeeRole(employeeId, role, grant); await load(); }
+    try {
+      await API.setEmployeeRole(employeeId, role, grant);
+      // 変わったのはこの人の権限1つだけ。名簿を全件取り直さず、手元の行だけ直す
+      const e = employees.find((x) => x.id === employeeId);
+      if (e) {
+        const roles = new Set(e.roles || []);
+        if (grant) roles.add(role); else roles.delete(role);
+        e.roles = [...roles];
+        render();
+      } else await load();
+    }
     catch (e) {
       input.checked = !grant;   // 失敗したら見た目を元に戻す
       alert(e.detail || e.hint || e.message || "変更に失敗しました");
@@ -1173,7 +1212,7 @@
         !confirm(`${e.display_name} さんを「${STATUS_LABEL[status]}」にします。\n\n` +
                  "無限道場・タイムカード・会計にも入れなくなります。\n" +
                  "（ログインアカウント自体は消しません。記録が残るため）\n\nよろしいですか？")) {
-      await load();
+      render();             // 選択を元に戻すだけ（データは変わっていないので取り直さない）
       return;
     }
     try {

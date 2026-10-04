@@ -169,6 +169,10 @@
   let companyName = "";
   let editingId = null;
 
+  // 表示速度：社内文書の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const LIB_KEY = "office:library";
+  KPLayout.warm("officeFinance", LIB_KEY, () => API.listLibrary());
+
   KPLayout.init({ active: "templates", access: "officeFinance" })
     .then((ctx) => { if (!ctx) return; load(); wireDrop(); });
 
@@ -218,9 +222,9 @@
   }
 
   async function load() {
-    // 会社名は差し込みの {{会社名}} に使う
-    await API.settings().then((s) => { companyName = s.tenant?.name || ""; }).catch(() => {});
-    await Promise.all([loadTemplates(), loadEmployees(), loadLibrary()]);
+    // 会社名は差し込みの {{会社名}} に使う。一覧の表示はこれを待たない（同時に取りにいく。届いたら下書きの見本を描き直す）
+    const company = API.settings().then((s) => { companyName = s.tenant?.name || ""; preview(); }).catch(() => {});
+    await Promise.all([company, loadTemplates(), loadEmployees(), loadLibrary()]);
   }
 
   /* ===== 社内文書 ===== */
@@ -230,9 +234,10 @@
 
   async function loadLibrary() {
     try {
-      const res = await API.listLibrary();
-      library = res.documents || [];
-      renderLibrary();
+      await API.swr(LIB_KEY, () => API.listLibrary(), (res) => {
+        library = res.documents || [];
+        renderLibrary();
+      });
     } catch (e) {
       el("d-rows").innerHTML =
         `<tr><td colspan="4" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;

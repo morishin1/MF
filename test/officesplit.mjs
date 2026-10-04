@@ -231,8 +231,9 @@ ok("Office ホームの数字は、担当の分だけ読む・出す（担当で
   assert.match(src, /hr: KPLayout\.hasAccess\(me, "officeHr"\)/);
   assert.match(src, /fin: KPLayout\.hasAccess\(me, "officeFinance"\)/);
   assert.match(src, /app: O\.allows\(me\)/);
-  assert.match(src, /can\.hr \? safe\(API\.hrList\(\)\)/);
-  assert.match(src, /can\.fin && !can\.app \? safe\(API\.closing\(closingMonth\)\)/);
+  assert.match(src, /can\.hr \? safe\(API\.swr\(HR_KEY, \(\) => API\.hrList\(\)/);
+  assert.match(src, /can\.fin && !can\.app \? safe\(API\.swr\(`office:closing:\$\{closingMonth\}`, \(\) => API\.closing\(closingMonth\)/);
+  assert.match(src, /KPLayout\.warm\("officeHr", HR_KEY, \(\) => API\.hrList\(\)\)/);
   assert.match(src, /can\.app \? safe\(API\.swr\(OFFICE_KEY/);
   assert.match(src, /if \(can\.hr\) \{/);
   assert.match(src, /if \(can\.fin\) \{/);

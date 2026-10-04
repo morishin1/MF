@@ -117,17 +117,22 @@
   let isOwner = false;
   let filter = "";
 
+  // 表示速度：経費の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const EXP_KEY = "office:expenses";
+  KPLayout.warm("officeFinance", EXP_KEY, () => API.listExpenses("all"));
+
   KPLayout.init({ active: "expenses", access: "officeFinance" })
     .then((ctx) => { if (ctx) load(); });
 
   async function load() {
     try {
-      const res = await API.listExpenses("all");
-      reports = res.reports || [];
-      settings = res.settings || {};
-      isOwner = !!res.isOwner;
-      el("w-threshold").value = settings.expense_owner_threshold ?? 0;
-      render();
+      await API.swr(EXP_KEY, () => API.listExpenses("all"), (res) => {
+        reports = res.reports || [];
+        settings = res.settings || {};
+        isOwner = !!res.isOwner;
+        el("w-threshold").value = settings.expense_owner_threshold ?? 0;
+        render();
+      });
     } catch (e) {
       el("pending").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>

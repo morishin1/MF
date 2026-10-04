@@ -1,6 +1,7 @@
 // 画面の表示速度を、手元のブラウザで測る（CI では回さない。改善の前後を比べるための道具）。
 //
-//   node scripts/perf/measure.mjs [--lag 300] [--base http://127.0.0.1:8713] [--json out.json]
+//   node scripts/perf/measure.mjs [--lag 300] [--base http://127.0.0.1:8713] [--json out.json] [--set office]
+//   --set office … Office の画面（ホーム・月次業務・請求・支払と、人事・労務／経理・事務の管理画面）を測る
 //
 // ■ 何を測るか（1画面あたり、はじめて開いたとき／同じタブで2回目に開いたとき）
 //   html   … HTML を読み終わった（DOMContentLoaded）
@@ -65,7 +66,7 @@ const TODAY = jst();
 
 const ME = {
   email: "owner@8grp.co.jp", appRole: "owner", isAdmin: true,
-  access: { recruit: true, sell: true, office: true, keiei: true },
+  access: { recruit: true, sell: true, office: true, keiei: true, officeHr: true, officeFinance: true, aiInquiries: true },
   gw: { employee: { id: "emp-1", display_name: "森田 経営", status: "active" }, roles: ["owner"], isAdmin: true,
     tenantId: "t1", stage: null, available: true },
 };
@@ -96,7 +97,25 @@ const officeRows = Array.from({ length: 60 }, (_, i) => O.deriveRow({
 const office = (month) => ({ month, today: TODAY, deadline: O.timesheetDeadline(month), rows: O.sortRows(officeRows),
   summary: O.summarize(officeRows), stages: O.STAGES, filters: O.FILTERS });
 
+// Office の管理画面（名簿・入退社・勤怠・経費・月次締め・契約・社内文書・キャリア）の代役
+const employees = Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, display_name: `社員 ${i}`, email: `e${i}@8grp.co.jp`,
+  department: "開発", position: "", employment_type: "正社員", status: "active", roles: i ? [] : ["owner"],
+  employee_kind: i % 5 === 0 ? "bp" : "proper", partner_company_id: i % 5 === 0 ? "p1" : null, systems: {} }));
+const partners = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, company_name: `BP株式会社${i}` }));
+
 function mock(path, sp) {
+  if (path === "/api/employees") return { employees, canGrantRoles: true, canGrantOwner: true, canManage: true, kindReady: true };
+  if (path === "/api/partners") return { companies: partners };
+  if (path === "/api/hr") return { tabs: [], onboarding: [], offboarding: [], done: [] };
+  if (path === "/api/timecard") return { month: TODAY.slice(0, 7), people: [], working: [], closed: false };
+  if (path === "/api/expenses") return { expenses: [], items: [] };
+  if (path === "/api/closing") return { month: TODAY.slice(0, 7), closing: { status: "open" }, canClose: false, blockers: [], rows: [] };
+  if (path === "/api/contracts") return { contracts: [], upcoming: [] };
+  if (path === "/api/library") return { documents: [] };
+  if (path === "/api/templates") return { templates: [] };
+  if (path === "/api/settings") return { tenant: { name: "テスト" } };
+  if (path === "/api/career") return { rows: [], employees: [] };
+  if (path === "/api/billing-submission") return { month: TODAY.slice(0, 7), rows: [] };
   if (path === "/api/me") return ME;
   if (path === "/api/public-config") return { supabaseUrl: "https://x.supabase.co", supabaseAnonKey: "anon" };
   if (path === "/api/notifications") return { notifications: [], unread: 0 };
@@ -135,6 +154,26 @@ const PAGES = [
     main: [/\/api\/keiei(\?|$)/] },
 ];
 
+// Office（--set office）：本文の器から「読み込み中…」が消えた時刻
+const loaded = (id) => `(() => { const n = document.getElementById("${id}"); return Boolean(n && n.textContent.trim() && !/読み込み中/.test(n.textContent)); })()`;
+const OFFICE_PAGES = [
+  { key: "o-home", label: "Officeホーム", url: "/office/", ready: "document.querySelector('#cards .oh-card')", main: [/\/api\/(office|badges|hr)(\?|$)/] },
+  { key: "o-monthly", label: "月次業務", url: "/office/monthly.html", ready: "document.querySelector('#rows tr[data-id]')", main: [/\/api\/office(\?|$)/] },
+  { key: "o-billing", label: "請求・支払", url: "/office/billing.html", ready: "document.querySelector('#rows td[data-label]') || !document.getElementById('empty').hidden", main: [/\/api\/office(\?|$)/] },
+  { key: "members", label: "メンバー", url: "/admin-members.html", ready: loaded("list"), main: [/\/api\/employees\b/] },
+  { key: "hr", label: "入退社", url: "/admin-hr.html", ready: loaded("hr-rows"), main: [/\/api\/hr(\?|$)/] },
+  { key: "timecard", label: "勤怠管理", url: "/admin-timecard.html", ready: loaded("people"), main: [/\/api\/timecard\b/] },
+  { key: "contracts", label: "雇用契約", url: "/admin-contracts.html", ready: loaded("contracts"), main: [/\/api\/contracts\b/] },
+  { key: "career", label: "評価・キャリア", url: "/admin-career.html", ready: "document.querySelectorAll('#f-track option').length >= 2", main: [/\/api\/career\b/] },
+  { key: "expenses", label: "経費精算", url: "/admin-expenses.html", ready: loaded("pending"), main: [/\/api\/expenses\b/] },
+  { key: "closing", label: "月次締め", url: "/admin-closing.html", ready: loaded("c-rows"), main: [/\/api\/closing\b/] },
+  { key: "monthstart", label: "月初作業管理", url: "/admin-month-start.html", ready: loaded("ms-rows"), main: [/\/api\/billing-submission\b/] },
+  { key: "docs", label: "社内文書", url: "/admin-docs.html", ready: loaded("d-rows"), main: [/\/api\/library\b/] },
+];
+const SET = arg("set", null);
+const ONLY = arg("only", null);   // 例：--only members,hr
+const TARGETS = (SET === "office" ? OFFICE_PAGES : PAGES).filter((p) => !ONLY || ONLY.split(",").includes(p.key));
+
 const INIT = (ready) => {
   // 枠の init が返った時刻
   window.__kp = { init: null, first: null };
@@ -168,6 +207,7 @@ const INIT = (ready) => {
 };
 
 async function visit(page, pg, calls) {
+  if (process.env.PERF_DEBUG) console.error("visit", pg.key);
   calls.length = 0;
   await page.goto(`${BASE}${pg.url}`);
   await page.waitForFunction(() => window.__kp && window.__kp.first !== null, null, { timeout: 15000 });
@@ -199,7 +239,7 @@ const br = await launch();
 const results = [];
 // 外のフォント（Google Fonts）は、回線しだいで毎回大きくぶれるので、空で返す（前後の比較を、手元の差だけにする）
 const noFonts = (page) => page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
-for (const pg of PAGES) {
+for (const pg of TARGETS) {
   const rows = { first: [], viaHome: [], second: [] };
   for (let round = 0; round < ROUNDS; round++) {
     const ctx = await br.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: "Asia/Tokyo" });

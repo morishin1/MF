@@ -115,17 +115,22 @@
 
   let data = null;
 
+  // 締めるのはたいてい前月。開いた時点でそれを出す
+  const prevMonth = () => {
+    const d = new Date(Date.now() + 9 * 3600000);
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  };
+  // 表示速度：前月の締めの状況は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const clKey = (month) => `office:closing:${month || ""}`;
+  { const m = prevMonth(); KPLayout.warm("officeFinance", clKey(m), () => API.closing(m)); }
+
   KPLayout.init({ active: "closing", access: "officeFinance" })
     .then((ctx) => { if (ctx) start(); });
 
   async function start() {
-    // 締めるのはたいてい前月。開いた時点でそれを出す
-    if (!el("c-month").value) {
-      const d = new Date(Date.now() + 9 * 3600000);
-      d.setUTCDate(1);
-      d.setUTCMonth(d.getUTCMonth() - 1);
-      el("c-month").value = d.toISOString().slice(0, 7);
-    }
+    if (!el("c-month").value) el("c-month").value = prevMonth();
     await load();
   }
 
@@ -138,8 +143,11 @@
   async function load() {
     el("c-msg").textContent = "";
     try {
-      data = await API.closing(el("c-month").value);
-      render();
+      const month = el("c-month").value;
+      await API.swr(clKey(month), () => API.closing(month), (d) => {
+        if (el("c-month").value !== month) return;   // 月を素早く切り替えたとき、古い応答で描かない
+        data = d; render();
+      });
     } catch (e) {
       el("c-rows").innerHTML =
         `<tr><td colspan="11"><div class="banner err">

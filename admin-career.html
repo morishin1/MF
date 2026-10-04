@@ -269,6 +269,10 @@
   let detail = null;      // いま開いている社員の詳細
   let evidence = null;    // 評価モーダルで読んだ根拠
 
+  // 表示速度：キャリアの一覧（最初に開くタブ）は、枠を待たずに取りにいき始める
+  const CAREER_KEY = "office:career";
+  if (!["history", "master", "journey"].includes(TAB)) KPLayout.warm("officeHr", CAREER_KEY, () => API.careerList());
+
   KPLayout.init({ active: TAB === "history" ? "career_history" : TAB === "master" ? "career_master" : TAB === "journey" ? "career_journey" : "career", access: "officeHr" })
     .then((ctx) => { if (ctx) start(); });
 
@@ -292,12 +296,19 @@
 
   // ---- 一覧 -------------------------------------------------------------------
   async function loadList() {
-    try { listData = await API.careerList(); } catch (e) { showError(e); return; }
+    // 2回目からは前回の内容をすぐ出し、裏で最新にする（届いたら、選んでいる絞り込みを保ったまま描き直す）
+    try { await API.swr(CAREER_KEY, () => API.careerList(), applyList); } catch (e) { showError(e); }
+  }
+  function applyList(d) {
+    listData = d;
     const tracks = listData.tracks || [];
+    const keepTrack = el("f-track").value, keepLevel = el("f-level").value;
     el("f-track").innerHTML = `<option value="">すべて</option>` + tracks.map((t) =>
       `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("") + `<option value="__none">未設定</option>`;
+    el("f-track").value = keepTrack;
     const nos = [...new Set((listData.levels || []).map((l) => l.levelNo))].sort((a, b) => a - b);
     el("f-level").innerHTML = `<option value="">すべて</option>` + nos.map((n) => `<option value="${n}">L${n}</option>`).join("");
+    el("f-level").value = keepLevel;
     const keep = el("f-state").value;
     el("f-state").innerHTML = `<option value="">すべて</option>` + (listData.flowStates || []).map((f) =>
       `<option value="${esc(f.key)}">${esc(f.label)}</option>`).join("");

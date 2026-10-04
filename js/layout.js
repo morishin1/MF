@@ -1255,6 +1255,16 @@
   window.KPLayout = {
     hasAccess,
     /**
+     * 画面のデータを、枠（権限の確認）を待たずに取りにいき始める（API.warm）。
+     * 覚えている身元が、その画面の access（どれか1つ）を持っているときだけ出す。持っていない人のためには呼ばない。
+     * あとで同じ鍵で API.swr を呼べば、取りにいっている最中のものを待つ（2本出さない）
+     * @param {string|string[]} access
+     */
+    warm(access, key, fetcher) {
+      const need = [].concat(access || []);
+      API.warm(key, fetcher, (me) => me?.appRole !== "sr" && need.some((k) => hasAccess(me, k)));
+    },
+    /**
      * ログイン確認 → 権限確認 → レイアウト描画。
      * 権限が無ければ本来の画面へ送り返し、null を返す（呼び出し側は何もしない）。
      * @param {{active?:string, roles?:string[], access?:string}} opts
@@ -1269,9 +1279,14 @@
 
       // 覚えている権限で、この画面を開いてよいか。
       // 入社準備のあいだの制限も、覚えているぶんで一度見る。
-      // access（roles では表せない権限）を使う画面は、access を覚えていないので
-      // 先描きはせず、毎回 verify() の確認を待つ
-      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && !opts.access;
+      // access（roles では表せない権限。Office の人事・労務／経理・事務など）を使う画面は、
+      // 覚えている身元（kp_me。/api/me の応答そのもの）の access で同じ判定をする。
+      // 判定できない（覚えていない・社労士・メンバー表示で確認中）ときは、これまでどおり verify() を待つ。
+      // ここは表示の順番だけ。入れるかどうかの最終判断は verify()（違えば送り返す）と、各 API の権限チェック
+      const need = [].concat(opts.access || []);
+      const okAccess = !need.length || (Boolean(cachedMe) && cached?.appRole !== "sr" && !isMemberView()
+        && need.some((k) => hasAccess(cachedMe, k)));
+      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && okAccess;
       // 覚えている形が古いことがある（allowed を持たない頃のもの）。
       // そこで落ちると、画面が真っ白のまま何も出ない
       const okStage = !(cached?.appRole === "member" && cached?.stage?.allowed && opts.active
