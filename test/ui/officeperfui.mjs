@@ -84,6 +84,7 @@ console.log("— 名簿：BP企業の一覧は、要るときだけ取る —");
 {
   const { page, ctx, calls } = await open("admin-members.html");
   await page.waitForSelector("#list table", { timeout: 8000 });
+  await page.locator("#add-btn").click();        // 追加のフォーム（右のドロワー）を開く
   await page.selectOption("#e-kind", "bp");
   await page.waitForTimeout(LAG * 2);
   check(n(calls, "/api/partners") === 1, "区分でBPを選ぶと、所属先の選択肢のために取る");

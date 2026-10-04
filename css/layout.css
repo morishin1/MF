@@ -693,3 +693,31 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 
 /* Office は左メニューを持たない（上の横タブ）。本文は採用HR・Sales と同じ幅で中央に置く */
 body.kp-has-officenav .wrap{ max-width:1200px; margin-left:auto; margin-right:auto; }
+
+/* =============================================================================
+   Office の業務画面（admin-*.html）の本文。採用HR・Sales・経営の実画面と同じ見た目にそろえる
+   （白いカード・1px の枠線・角丸10px・見出し22px／区切り15px・主ボタンは青、副は白に枠線・タブは選択チップ）。
+   Office の横タブ（kp-has-officenav）の画面の本文（.wrap・ドロワー）だけに効かせる。ヘッダー・タブ、メンバーのホーム・⚙管理・経営の画面は変えない
+   ============================================================================= */
+body.kp-has-officenav .kp-greet{ font-size:22px; font-weight:700; color:#1b2440; margin:0 0 4px; }
+body.kp-has-officenav .kp-greet-sub{ font-size:13px; color:#6b7080; margin:0 0 18px; line-height:1.6; }
+body.kp-has-officenav .wrap .card{ border-radius:10px; padding:16px 18px; margin-bottom:14px; box-shadow:none; }
+body.kp-has-officenav .wrap .card h2{ font-size:15px; color:#1b2440; margin:0 0 12px; }
+body.kp-has-officenav .wrap .card h2 > .material-symbols-outlined:first-child{ font-size:18px; color:#6b7080; }
+body.kp-has-officenav :is(.wrap, .mb-drawer) .btn{ padding:7px 14px; font-size:13px; border-radius:7px; font-weight:700; border:1px solid transparent;
+  transition:background .12s, border-color .12s; }
+body.kp-has-officenav :is(.wrap, .mb-drawer) .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+body.kp-has-officenav :is(.wrap, .mb-drawer) .btn-primary:hover:not(:disabled){ background:#2b6cb0; border-color:#2b6cb0; }
+body.kp-has-officenav :is(.wrap, .mb-drawer) .btn-secondary{ background:#fff; color:#1b2440; border-color:#cbd2dc; }
+body.kp-has-officenav :is(.wrap, .mb-drawer) .btn-secondary:hover:not(:disabled){ background:#f4f6f9; border-color:#b8c1cd; }
+body.kp-has-officenav :is(.wrap, .mb-drawer) .btn-sm{ padding:5px 11px; font-size:12.5px; }
+body.kp-has-officenav .wrap .tabs{ gap:6px; }
+body.kp-has-officenav .wrap .tab{ background:#fff; color:#4a5068; border:1px solid var(--border); border-radius:999px; padding:5px 13px; font-size:12.5px; }
+body.kp-has-officenav .wrap .tab:hover{ border-color:#b8c1cd; background:#f8fafc; }
+body.kp-has-officenav .wrap .tab.active{ background:var(--soft); color:var(--primary); border-color:var(--primary); }
+body.kp-has-officenav .kp-items th{ font-size:11.5px; color:#6b7080; font-weight:600; background:#fafbfc; text-transform:none; letter-spacing:0; }
+body.kp-has-officenav .kp-items td{ border-bottom-color:#eef1f5; }
+body.kp-has-officenav .empty{ padding:20px; font-size:12.5px; }
+/* 一覧の中のボタンは小さく（行の高さ・横幅を取りすぎない） */
+body.kp-has-officenav .wrap .kp-items .btn{ padding:4px 9px; font-size:12px; }
+body.kp-has-officenav .wrap table thead th{ background:#fafbfc; }

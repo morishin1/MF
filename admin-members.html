@@ -16,6 +16,40 @@
   <style>
     .kp-items tr.click { cursor:pointer; }
     .kp-items tr.click:hover td { background:var(--soft); }
+
+    /* ページ上部：タイトル＋説明（左）と「メンバー追加」（右） */
+    .mb-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px 16px; flex-wrap:wrap; }
+    .mb-head .kp-greet-sub { margin-bottom:14px; }
+    .mb-head .btn .material-symbols-outlined { font-size:18px; }
+
+    /* 補助機能（まとめて追加・BP企業）：一覧の下に、細い帯で並べる。開いたときだけ中身を出す */
+    .mb-aux { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:10px; align-items:start; margin-top:4px; }
+    .mb-aux .card { padding:10px 14px; margin:0; }
+    .mb-aux .card h2 { margin:0; font-size:13.5px; font-weight:700; }
+    .mb-aux .card h2 small { font-size:11.5px; font-weight:500; color:#6b7080; margin-left:2px; }
+    .mb-aux .card > div:not(.hidden) { margin-top:12px; }
+    .mb-legend summary { cursor:pointer; font-size:12.5px; color:#4a5068; font-weight:600; margin:0 0 8px; }
+    /* 社員一覧：操作は折り返して並べる（横にはみ出さない）。区分は読める幅を確保 */
+    #list td.mb-ops { min-width:170px; }
+    #list td.mb-ops > * { margin:0 4px 4px 0; }
+    #list td.mb-kind { min-width:84px; font-size:12.5px; }
+    .mb-count { font-size:11.5px; font-weight:700; color:#6b7080; background:#edf0f4; border-radius:999px; padding:1px 9px; }
+
+    /* 追加・編集は右のドロワー（常設の大きなフォームは置かない） */
+    .mb-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:60; }
+    .mb-drawer { position:fixed; top:0; right:0; bottom:0; width:460px; max-width:100vw; background:#fff; z-index:61;
+      box-shadow:-8px 0 24px rgba(27,36,64,.15); display:flex; flex-direction:column; }
+    .mb-drawer.hidden, .mb-drawer-bg.hidden { display:none; }
+    .mb-dr-head { display:flex; align-items:center; gap:8px; padding:16px 18px 12px; border-bottom:1px solid var(--border); }
+    .mb-dr-head h2 { margin:0; font-size:17px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:8px; flex:1; }
+    .mb-dr-head h2 .material-symbols-outlined { font-size:20px; color:#6b7080; }
+    .mb-dr-body { padding:14px 18px; overflow-y:auto; flex:1; }
+    .mb-form { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+    .mb-form > div.wide { grid-column:1 / -1; }
+    .mb-form label { font-size:12px; color:#4a5068; font-weight:600; }
+    .mb-form input, .mb-form select { margin:2px 0 0; width:100%; }
+    .mb-dr-foot { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px 16px; border-top:1px solid var(--border); flex-wrap:wrap; }
+    @media (max-width: 560px) { .mb-form { grid-template-columns:1fr; } }
   </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
@@ -32,8 +66,16 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">メンバー</h1>
-  <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
+  <div class="mb-head">
+    <div>
+      <h1 class="kp-greet">メンバー</h1>
+      <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
+    </div>
+    <!-- 名簿を編集できる人（canManage）にだけ出す。押すと右のドロワーで追加する -->
+    <button class="btn btn-primary hidden" id="add-btn" onclick="openAdd()">
+      <span class="material-symbols-outlined icon-inline">person_add</span>メンバー追加
+    </button>
+  </div>
 
   <div class="tabs" style="margin-bottom:16px;">
     <button class="tab active" id="tab-employees" onclick="setView('employees')">社員</button>
@@ -41,59 +83,40 @@
   </div>
 
   <div id="view-employees">
-  <div class="card">
-    <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
-    <div class="inline-controls" style="margin-bottom:12px;">
-      <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
-      <div><label>メール</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
-      <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
-      <div><label>役職</label><input id="e-position" type="text" placeholder="主任"></div>
-      <div><label>勤務地</label><input id="e-location" type="text" placeholder="本社"></div>
-      <div>
-        <label>雇用区分</label>
-        <select id="e-type">
-          <option>正社員</option><option>契約社員</option><option>パート</option>
-          <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
-        </select>
-      </div>
-      <!-- プロパー（自社雇用）か、パートナー企業に所属するBPか。
-           075（db/075_partner_bp.sql）が未適用の環境では、この欄ごと隠す -->
-      <div id="e-kind-wrap" class="hidden">
-        <label>区分</label>
-        <select id="e-kind" onchange="toggleKindPartner()">
-          <option value="proper">プロパー</option>
-          <option value="bp">BP</option>
-        </select>
-      </div>
-      <div id="e-partner-wrap" class="hidden">
-        <label>所属先（BP企業）</label>
-        <select id="e-partner"><option value="">（選んでください）</option></select>
-      </div>
-      <div><label>入社日</label><input id="e-joined" type="date"></div>
-      <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
-      <div>
-        <button class="btn btn-primary" id="e-save" onclick="save(this)">
-          <span class="material-symbols-outlined icon-inline">add</span>追加
-        </button>
-      </div>
-      <div id="e-cancel-wrap" style="display:none;">
-        <button class="btn btn-secondary" onclick="resetForm()">
-          <span class="material-symbols-outlined icon-inline">close</span>編集をやめる
-        </button>
-      </div>
-    </div>
-    <p class="muted" style="font-size:12px;margin:0;" id="e-note">
-      メールを入れて追加すると、ログインアカウントもここで作られ、
-      <strong>グループウェア・無限道場・タイムカード・会計</strong>にまとめて登録されます。
-      初回パスワードはこの画面に1回だけ出るので、本人へ直接お渡しください。
+  <!-- 追加・保存の結果（初回パスワードなど）と、行の操作（ログイン・現場契約）の窓。閉じるまで残す -->
+  <div id="e-account"></div>
+  <div id="e-site"></div>
+
+  <!-- サイドメニューの「権限」からここへ飛ぶ。
+       社内権限は名簿の行ごとに渡すもので、専用の画面を作ると
+       同じ人を2か所で探すことになる -->
+  <div class="card" id="roles">
+    <h2><span class="material-symbols-outlined">group</span>社員一覧 <span class="mb-count" id="e-count"></span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportCsv()">
+        <span class="material-symbols-outlined icon-inline">download</span>CSV
+      </button>
+    </h2>
+    <!-- 業務ツールの利用権限は、ここのチェックが正式な設定元（lib/gw.js HR_ROLES / SALES_ROLES / OFFICE_ROLES / KEIEI_ROLES）。
+         Office 専用のロールは無く、「経理」を使う。
+         付け外しは再ログイン不要で、相手が画面を再読込するとヘッダーと入口に反映される -->
+    <details class="mb-legend"><summary>社内権限と使える業務ツール</summary>
+    <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
+      <b>採用HR</b>（/hr/）を使える：経営者・責任者・人事・採用担当　／
+      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当　／
+      <b>Office</b>（/office/）を使える：経営者・責任者・経理　／
+      <b>経営</b>（/keiei/）を使える：経営者だけ<br>
+      経営者は全ツールを使えます。責任者・採用担当などが経営者の権限を引き継ぐことはありません（給与も見えません）。
+      「IT・管理」はシステム管理用で、それだけではどのツールにも入れません。
+      チェックを付け外しすると、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
     </p>
-    <div id="e-msg" class="err-text"></div>
-    <div id="e-account"></div>
-    <div id="e-site"></div>
+    </details>
+    <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">upload_file</span>まとめて追加
+  <!-- 補助機能：まとめて追加・BP企業（ふだんは閉じた細い帯） -->
+  <div class="mb-aux">
+  <div class="card" id="bulk-card">
+    <h2><span class="material-symbols-outlined">upload_file</span>まとめて追加<small>表計算から貼り付け</small>
       <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="toggleBulk()">
         <span class="material-symbols-outlined icon-inline" id="bulk-caret">expand_more</span>開く
       </button>
@@ -122,7 +145,7 @@
   <!-- BP企業（パートナー企業）の名簿。075（db/075_partner_bp.sql）が
        未適用の環境では notReady になるので、カードごと隠す -->
   <div class="card hidden" id="partner-card">
-    <h2><span class="material-symbols-outlined">apartment</span>BP企業（パートナー企業）
+    <h2><span class="material-symbols-outlined">apartment</span>BP企業<small>BPの所属先</small>
       <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="togglePartner()">
         <span class="material-symbols-outlined icon-inline" id="partner-caret">expand_more</span>開く
       </button>
@@ -152,28 +175,6 @@
     </div>
   </div>
 
-  <!-- サイドメニューの「権限」からここへ飛ぶ。
-       社内権限は名簿の行ごとに渡すもので、専用の画面を作ると
-       同じ人を2か所で探すことになる -->
-  <div class="card" id="roles">
-    <h2><span class="material-symbols-outlined">group</span>名簿
-      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportCsv()">
-        <span class="material-symbols-outlined icon-inline">download</span>CSV
-      </button>
-    </h2>
-    <!-- 業務ツールの利用権限は、ここのチェックが正式な設定元（lib/gw.js HR_ROLES / SALES_ROLES / OFFICE_ROLES / KEIEI_ROLES）。
-         Office 専用のロールは無く、「経理」を使う。
-         付け外しは再ログイン不要で、相手が画面を再読込するとヘッダーと入口に反映される -->
-    <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
-      <b>採用HR</b>（/hr/）を使える：経営者・責任者・人事・採用担当　／
-      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当　／
-      <b>Office</b>（/office/）を使える：経営者・責任者・経理　／
-      <b>経営</b>（/keiei/）を使える：経営者だけ<br>
-      経営者は全ツールを使えます。責任者・採用担当などが経営者の権限を引き継ぐことはありません（給与も見えません）。
-      「IT・管理」はシステム管理用で、それだけではどのツールにも入れません。
-      チェックを付け外しすると、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
-    </p>
-    <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
   </div>
 
@@ -206,6 +207,59 @@
     <div id="guest-detail"></div>
   </div>
 </div>
+
+<div class="mb-drawer-bg hidden" id="e-drawer-bg" onclick="closeAdd()"></div>
+<aside class="mb-drawer hidden" id="e-drawer" role="dialog" aria-modal="true" aria-labelledby="e-title">
+  <div class="mb-dr-head">
+    <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
+    <button class="btn btn-secondary btn-sm" onclick="closeAdd()" aria-label="閉じる"><span class="material-symbols-outlined icon-inline">close</span></button>
+  </div>
+  <div class="mb-dr-body">
+    <div class="mb-form">
+      <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
+      <div><label>メール</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
+      <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
+      <div><label>役職</label><input id="e-position" type="text" placeholder="主任"></div>
+      <div><label>勤務地</label><input id="e-location" type="text" placeholder="本社"></div>
+      <div>
+        <label>雇用区分</label>
+        <select id="e-type">
+          <option>正社員</option><option>契約社員</option><option>パート</option>
+          <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
+        </select>
+      </div>
+      <!-- プロパー（自社雇用）か、パートナー企業に所属するBPか。
+           075（db/075_partner_bp.sql）が未適用の環境では、この欄ごと隠す -->
+      <div id="e-kind-wrap" class="hidden">
+        <label>区分</label>
+        <select id="e-kind" onchange="toggleKindPartner()">
+          <option value="proper">プロパー</option>
+          <option value="bp">BP</option>
+        </select>
+      </div>
+      <div id="e-partner-wrap" class="hidden">
+        <label>所属先（BP企業）</label>
+        <select id="e-partner"><option value="">（選んでください）</option></select>
+      </div>
+      <div><label>入社日</label><input id="e-joined" type="date"></div>
+      <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.7;" id="e-note">
+      メールを入れて追加すると、ログインアカウントもここで作られ、
+      <strong>グループウェア・無限道場・タイムカード・会計</strong>にまとめて登録されます。
+      初回パスワードはこの画面に1回だけ出るので、本人へ直接お渡しください。
+    </p>
+    <div id="e-msg" class="err-text"></div>
+  </div>
+  <div class="mb-dr-foot">
+    <span id="e-cancel-wrap" style="display:none;"></span>
+    <button class="btn btn-secondary" onclick="closeAdd()">閉じる</button>
+    <button class="btn btn-primary" id="e-save" onclick="save(this)">
+      <span class="material-symbols-outlined icon-inline">add</span>追加
+    </button>
+  </div>
+</aside>
+
 
 <script src="js/api-client.js?v=20261003ux1"></script>
 <script src="js/device.js?v=20261003ux1"></script>
@@ -257,6 +311,8 @@
     canManage = !!res.canManage;
     kindReady = !!res.kindReady;
     el("e-kind-wrap").classList.toggle("hidden", !kindReady);
+    el("add-btn").classList.toggle("hidden", !canManage);
+    el("e-count").textContent = `${employees.length}人`;
     // BP企業の欄は、BPの列がある（db/075 適用済み）ときだけ。中身は開いたときに取る
     el("partner-card").classList.toggle("hidden", !kindReady || partnersNotReady);
     render();
@@ -447,7 +503,10 @@
         showAccountResult(res?.account, display_name);
       }
       resetForm();
+      closeAdd();
       await load();
+      // 初回パスワードなどの結果は、一覧の上の窓に、閉じるまで残す
+      if (el("e-account").innerHTML.trim()) el("e-account").scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (e) {
       msg.textContent = e.detail || e.hint || e.message || "保存に失敗しました";
     }
@@ -523,8 +582,24 @@
     el("e-left-wrap").style.display = "";
     el("e-note").textContent = "在籍状態と社内権限は、下の一覧で切り替えます。";
     el("e-msg").textContent = "";
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    showDrawer();
   }
+
+  // ---- 追加・編集のドロワー ----
+  function showDrawer() {
+    el("e-drawer").classList.remove("hidden");
+    el("e-drawer-bg").classList.remove("hidden");
+    setTimeout(() => el("e-name").focus(), 0);
+  }
+  function openAdd() { resetForm(); showDrawer(); }
+  function closeAdd() {
+    el("e-drawer").classList.add("hidden");
+    el("e-drawer-bg").classList.add("hidden");
+    if (editingId) resetForm();
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el("e-drawer").classList.contains("hidden")) closeAdd();
+  });
 
   function resetForm() {
     editingId = null;
@@ -614,7 +689,7 @@
         <td>${esc(e.display_name)}${e.email ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.email)}</span>` : ""}${lockedOwner ? `<br><span class="muted" style="font-size:11px;" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
         <td>${esc(e.department || "—")}${e.position ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.position)}</span>` : ""}</td>
         <td>${esc(e.employment_type || "—")}</td>
-        ${kindReady ? `<td>${esc(kindOf(e))}</td>` : ""}
+        ${kindReady ? `<td class="mb-kind">${esc(kindOf(e))}</td>` : ""}
         <td>
           <select ${canEdit ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
@@ -623,7 +698,7 @@
         </td>
         <td style="min-width:230px;">${roleCells}</td>
         <td style="min-width:190px;">${systemsCell(e)}</td>
-        <td style="white-space:nowrap;">
+        <td class="mb-ops">
           <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
                   onclick="startEdit('${esc(e.id)}')">編集</button>
           ${e.user_id ? `
