@@ -451,6 +451,9 @@ await ok("応募者一覧：キャンセル済み・実施済みの面談は直�
 await ok("今日の面談：今日へ動かせば出て、別の日へ動かせば消える", async () => {
   setup();
   const iv = await manualInterview();
+  // 作った面談は固定の日付（2026-10-05）。その日（日本時間）にこのテストを回すと最初から「今日」になるので、
+  // まず確実に今日ではない日へ動かしてから確かめる（日付によって落ちないように）
+  await edit({ id: iv.id, scheduledAt: "2020-01-01T01:00:00Z" });
   assert.equal((await getToday()).body.interviews.length, 0);
   await edit({ id: iv.id, scheduledAt: `${jstToday()}T01:00:00Z` });
   const r1 = await getToday();
