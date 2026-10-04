@@ -9,10 +9,12 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261003ux1">
-  <link rel="stylesheet" href="css/layout.css?v=20261003ux1">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261004office3">
+  <link rel="stylesheet" href="css/layout.css?v=20261004office3">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -249,10 +251,10 @@
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
 
-<script src="js/api-client.js?v=20261003ux1"></script>
-<script src="js/device.js?v=20261003ux1"></script>
-<script src="js/layout.js?v=20261003ux1"></script>
-<script src="js/journey-bar.js?v=20261003ux1"></script>
+<script src="js/api-client.js?v=20261004office3"></script>
+<script src="js/device.js?v=20261004office3"></script>
+<script src="js/layout.js?v=20261004office3"></script>
+<script src="js/journey-bar.js?v=20261004office3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -268,6 +270,10 @@
   let listData = null;
   let detail = null;      // いま開いている社員の詳細
   let evidence = null;    // 評価モーダルで読んだ根拠
+
+  // 表示速度：キャリアの一覧（最初に開くタブ）は、枠を待たずに取りにいき始める
+  const CAREER_KEY = "office:career";
+  if (!["history", "master", "journey"].includes(TAB)) KPLayout.warm("officeHr", CAREER_KEY, () => API.careerList());
 
   KPLayout.init({ active: TAB === "history" ? "career_history" : TAB === "master" ? "career_master" : TAB === "journey" ? "career_journey" : "career", access: "officeHr" })
     .then((ctx) => { if (ctx) start(); });
@@ -292,12 +298,19 @@
 
   // ---- 一覧 -------------------------------------------------------------------
   async function loadList() {
-    try { listData = await API.careerList(); } catch (e) { showError(e); return; }
+    // 2回目からは前回の内容をすぐ出し、裏で最新にする（届いたら、選んでいる絞り込みを保ったまま描き直す）
+    try { await API.swr(CAREER_KEY, () => API.careerList(), applyList); } catch (e) { showError(e); }
+  }
+  function applyList(d) {
+    listData = d;
     const tracks = listData.tracks || [];
+    const keepTrack = el("f-track").value, keepLevel = el("f-level").value;
     el("f-track").innerHTML = `<option value="">すべて</option>` + tracks.map((t) =>
       `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("") + `<option value="__none">未設定</option>`;
+    el("f-track").value = keepTrack;
     const nos = [...new Set((listData.levels || []).map((l) => l.levelNo))].sort((a, b) => a - b);
     el("f-level").innerHTML = `<option value="">すべて</option>` + nos.map((n) => `<option value="${n}">L${n}</option>`).join("");
+    el("f-level").value = keepLevel;
     const keep = el("f-state").value;
     el("f-state").innerHTML = `<option value="">すべて</option>` + (listData.flowStates || []).map((f) =>
       `<option value="${esc(f.key)}">${esc(f.label)}</option>`).join("");

@@ -8,69 +8,69 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261003ux1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261003ux1">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261004office3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261004office3">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
 
-    /* いちばん上の件数。押すと、その条件で一覧を絞る */
-    .of-sum { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:20px; }
-    .of-card { text-align:left; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px;
-               cursor:pointer; font-family:inherit; color:inherit; }
-    .of-card:hover { background:#fafaf7; }
-    .of-card.on { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
-    .of-card.hot { background:#fff4d6; border-color:#e0a100; }
-    .of-card .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
-    .of-card.hot .lb { color:#7d5a00; }
-    .of-card .lb .material-symbols-outlined { font-size:16px; }
-    .of-card .v { display:block; font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
-    .of-card .v small { font-size:13px; font-weight:700; color:#6b7080; }
+    /* 一覧の上の件数（絞り込みのチップ）。押すと、その条件で一覧を絞る。見た目は共通の .of-chip */
+    .of-sum { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+    .of-card { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--of-line); border-radius:999px;
+               padding:6px 13px; font-size:12px; font-weight:500; color:var(--of-sub); cursor:pointer; font-family:inherit; }
+    .of-card:hover { background:var(--of-bg); }
+    .of-card.on { background:var(--of-ink); border-color:var(--of-ink); color:#fff; font-weight:700; }
+    .of-card .lb { display:inline-flex; align-items:center; gap:4px; }
+    .of-card .lb .material-symbols-outlined { font-size:15px; }
+    .of-card .v { font-weight:700; color:var(--of-ink); font-variant-numeric:tabular-nums; }
+    .of-card .v small { font-size:11.5px; font-weight:500; color:var(--of-mute); }
+    .of-card.on .v, .of-card.on .v small { color:#fff; }
+    /* 期限超過がある：色だけでなく、件数の前に「!」の印 */
+    .of-card.hot .v::before { content:"! "; color:#b3261e; }
+    .of-card.hot { border-color:#c0392b; }
 
-    .of-two { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:22px; }
-    .of-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
-    .of-today { display:grid; gap:6px; }
-    .of-today button { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:#fff;
-      border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:8px; padding:9px 12px; cursor:pointer;
-      font-family:inherit; font-size:13px; color:#1b2440; }
-    .of-today button:hover { background:#f6f6f2; }
-    .of-today button.warn { border-left-color:#c0392b; }
-    .of-today .n { font-weight:900; font-size:16px; font-variant-numeric:tabular-nums; min-width:26px; }
+    /* 月次進捗（左）と今日やること（右） */
+    .of-two { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,7fr); gap:12px; margin-bottom:14px; }
+    .of-today { display:flex; flex-direction:column; }
+    .of-today button { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:0;
+      border-top:1px solid var(--of-line2); padding:9px 2px; cursor:pointer; font-family:inherit; font-size:13px; color:var(--of-ink); }
+    .of-today button:first-child { border-top:0; }
+    .of-today button:hover { background:var(--of-bg); }
+    .of-today .n { font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; min-width:24px; color:var(--of-ink); }
     .of-today .note { color:#b3261e; font-size:11.5px; font-weight:700; margin-left:auto; }
-    .of-today .go { color:#9aa0b4; font-size:18px; margin-left:auto; }
+    .of-today .go { color:var(--of-faint); font-size:18px; margin-left:auto; }
     .of-today .note + .go { margin-left:0; }
+    .of-today button.warn .n { color:#b3261e; }
 
     .of-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
     .of-toolbar input[type="search"], .of-toolbar select { margin:0; width:auto; font-family:inherit; font-size:13px; }
     .of-toolbar input[type="search"] { width:220px; max-width:100%; }
-    .of-toolbar label.chk { display:flex; align-items:center; gap:6px; font-size:13px; color:#1b2440; margin:0; cursor:pointer; }
+    .of-toolbar label.chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--of-ink); margin:0; cursor:pointer; }
     .of-toolbar label.chk input { width:auto; margin:0; }
-    .of-toolbar .count { margin-left:auto; color:#6b7080; font-size:12px; }
+    .of-toolbar .count { margin-left:auto; color:var(--of-mute); font-size:12px; }
 
-    .of-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
-    .of-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px 10px;
-      background:#f6f6f2; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
-    .of-table td { padding:11px 10px; border-bottom:1px solid #e2e2dc; font-size:13px; vertical-align:top; }
-    .of-table tr:last-child td { border-bottom:none; }
+    /* 表の見た目は共通（.of-table）。ここは行の操作だけ */
     .of-table tbody tr { cursor:pointer; }
-    .of-table tbody tr:hover { background:#fafaf7; }
-    .of-table tbody tr:focus-visible { outline:2px solid #1b2440; outline-offset:-2px; }
-    .of-table tbody tr.open td { background:#f3f5fb; }
-    .of-nm { font-weight:700; color:#1b2440; font-size:13.5px; display:block; }
-    .of-sub2 { font-size:11.5px; color:#6b7080; display:block; margin-top:3px; }
+    .of-table tbody tr:hover td { background:var(--of-bg); }
+    .of-table tbody tr:focus-visible { outline:2px solid var(--of-blue); outline-offset:-2px; }
+    .of-table tbody tr.open td { background:var(--of-soft); }
+    .of-nm { font-weight:700; color:var(--of-ink); font-size:13.5px; display:block; }
+    .of-sub2 { font-size:11.5px; color:var(--of-mute); display:block; margin-top:3px; }
     .of-hot { color:#b3261e; font-weight:700; }
-    .of-hours { font-size:15px; font-weight:700; color:#9aa0b4; margin-bottom:3px; }
+    .of-hours { font-size:14px; font-weight:700; color:var(--of-faint); margin-bottom:3px; }
     .of-act { font-size:12.5px; color:#1b2440; margin-bottom:6px; line-height:1.5; }
-    .of-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:1px; }
+    .of-tag { display:inline-block; font-size:10.5px; font-weight:700; color:var(--of-sub); background:#efefeb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:1px; }
 
     /* 複数選択：左端のチェック列。押してもドロワーは開かない（セル全体がチェックの当たり判定） */
     .of-table th.of-sel, .of-table td.of-sel { width:44px; padding:0; }
     .of-sel label { display:flex; align-items:center; justify-content:center; width:100%; min-height:44px; cursor:pointer; margin:0; }
     .of-table td.of-sel { vertical-align:top; }
     .of-table td.of-sel label { min-height:0; height:100%; padding-top:11px; align-items:flex-start; }
-    .of-sel input[type="checkbox"], .of-selall-m input[type="checkbox"] { width:18px; height:18px; margin:0; cursor:pointer; accent-color:#1b2440; }
-    .of-table tbody tr.sel td { background:#eef2fb; }
-    .of-table tbody tr.sel:hover td { background:#e6ecf9; }
+    .of-sel input[type="checkbox"], .of-selall-m input[type="checkbox"] { width:18px; height:18px; margin:0; cursor:pointer; accent-color:var(--of-blue); }
+    .of-table tbody tr.sel td { background:var(--of-soft); }
+    .of-table tbody tr.sel:hover td { background:#e7eaf3; }
     .of-selall-m { display:none; }
 
     /* 選択したときの操作バー：画面の下に固定。「3件選択中 ｜ 更新 ｜ 削除 ｜ 選択解除」 */
@@ -80,10 +80,11 @@
     .of-bulk .n { font-size:14px; font-weight:700; white-space:nowrap; }
     .of-bulk .n b { font-size:18px; font-weight:900; font-variant-numeric:tabular-nums; margin-right:2px; }
     .of-bulk .sep { width:1px; align-self:stretch; background:rgba(255,255,255,.3); }
-    .of-bulk .of-btn { background:#fff; color:#1b2440; border-color:#fff; padding:8px 14px; font-size:13px; }
+    .of-bulk .of-btn { background:#fff; color:var(--of-ink); border-color:#fff; padding:8px 14px; font-size:13px; }
+    .of-bulk .of-btn:hover { background:var(--of-bg); }
     .of-bulk .of-btn.danger { background:#c0392b; border-color:#c0392b; color:#fff; }
     .of-bulk .of-btn.ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.45); }
-    .of-bulk .of-btn:focus-visible { outline-color:#e6f050; }
+    .of-bulk .of-btn:focus-visible { outline-color:#fff; }
     .wrap.has-bulk { padding-bottom:110px; }
 
     /* 更新・削除の確認モーダル */
@@ -98,28 +99,28 @@
     .of-btn.danger { background:#c0392b; border-color:#c0392b; color:#fff; }
     .of-btn.danger:disabled { background:#c0392b; }
     .of-targets { border:1px solid #e2e2dc; border-radius:10px; max-height:200px; overflow-y:auto; }
-    .of-targets .t { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px 12px; border-bottom:1px solid #efefeb; font-size:13px; color:#1b2440; }
+    .of-targets .t { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px 12px; border-bottom:1px solid #e2e2dc; font-size:13px; color:#1b2440; }
     .of-targets .t:last-child { border-bottom:none; }
     .of-targets .t small { display:block; color:#6b7080; font-size:11.5px; margin-top:2px; }
     .of-targets .t b { font-weight:700; }
-    .of-warnbox { background:#fdecea; color:#8f1d15; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.7; }
+    .of-warnbox { background:#fdecea; color:#b3261e; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.7; }
     .of-warnbox b { font-weight:900; }
     .of-warnbox ul { margin:4px 0 0; padding-left:18px; }
     .of-okbox { background:#f6f6f2; border-radius:10px; padding:10px 12px; font-size:12.5px; color:#4a5068; line-height:1.6; }
     .of-field { border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; display:grid; gap:8px; }
-    .of-field.on { border-color:#1b2440; background:#f7f8fc; }
+    .of-field.on { border-color:#1b2440; background:#f6f6f2; }
     .of-field > label.use { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
     .of-field > label.use input { width:auto; margin:0; }
     .of-field select, .of-field input[type="date"] { margin:0; width:100%; font-family:inherit; font-size:14px; }
     .of-pay dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:6px 0; font-size:13px; }
-    .of-pay dt { color:#5a6275; } .of-pay dd { margin:0; font-variant-numeric:tabular-nums; }
+    .of-pay dt { color:#4a5068; } .of-pay dd { margin:0; font-variant-numeric:tabular-nums; }
     .of-pay .row { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin:8px 0; }
-    .of-pay label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:#5a6275; }
+    .of-pay label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:#4a5068; }
     .of-pay input { margin:0; width:9.5em; font-family:inherit; font-size:14px; }
-    .of-pay .issue { color:#a12a1f; font-size:13px; margin:4px 0; }
+    .of-pay .issue { color:#b3261e; font-size:13px; margin:4px 0; }
     .of-closebar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between;
-      border:1px solid #d9dde6; border-radius:10px; background:#fff; padding:10px 14px; margin:0 0 12px; font-size:14px; }
-    .of-closebar.done { background:#eef7ef; border-color:#bfe0c4; }
+      border:1px solid var(--of-line); border-radius:10px; background:#fff; padding:10px 14px; margin:0 0 18px; font-size:13.5px; color:var(--of-ink); }
+    .of-closebar.done { border-left:3px solid #2f6f3a; }
     .of-field label.inline { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#1b2440; margin:0; cursor:pointer; }
     .of-field label.inline input { width:auto; margin:0; }
     .of-confirm { display:flex; align-items:flex-start; gap:8px; font-size:13.5px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
@@ -129,18 +130,18 @@
     @media (max-width: 1080px) { .of-sum { grid-template-columns:repeat(3,minmax(0,1fr)); } .of-two { grid-template-columns:1fr; } }
     /* 狭い画面は、表をやめてカードにする（横スクロールを前提にしない） */
     @media (max-width: 980px) {
-      .of-table, .of-table tbody, .of-table tr, .of-table td { display:block; width:100%; box-sizing:border-box; }
-      .of-table { border:none; background:none; }
-      .of-table thead { display:none; }
-      .of-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:8px 12px; }
-      .of-table td { display:flex; gap:10px; justify-content:space-between; align-items:flex-start; border:none; padding:6px 0; }
-      .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; width:64px; padding-top:3px; }
-      .of-table td > div, .of-table td > span:not(.of-pill) { text-align:right; }
-      .of-table td .cell { flex:1; min-width:0; text-align:right; }
+      .wrap .of-table, .wrap .of-table tbody, .wrap .of-table tr, .wrap .of-table td { display:block; width:100%; box-sizing:border-box; }
+      .wrap .of-table { border:none; background:none; }
+      .wrap .of-table thead { display:none; }
+      .wrap .of-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:8px 12px; }
+      .wrap .of-table td { display:flex; gap:10px; justify-content:space-between; align-items:flex-start; border:none; padding:6px 0; }
+      .wrap .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; width:64px; padding-top:3px; }
+      .wrap .of-table td > div, .of-table td > span:not(.of-pill) { text-align:right; }
+      .wrap .of-table td .cell { flex:1; min-width:0; text-align:right; }
       /* カードでは、見出しの行が無い。選択は、カードの右上の行（「選択」＋チェック）と、検索の横の「表示中をすべて選択」 */
-      .of-table td.of-sel { width:100%; padding:0 0 4px; border-bottom:1px solid #efefeb; margin-bottom:4px; }
-      .of-table td.of-sel::before { padding:0 0 0 0; width:auto; align-self:center; }
-      .of-table td.of-sel label { width:auto; height:auto; padding:6px 0; margin-left:auto; min-height:32px; align-items:center; gap:8px; }
+      .wrap .of-table td.of-sel { width:100%; padding:0 0 4px; border-bottom:1px solid #e2e2dc; margin-bottom:4px; }
+      .wrap .of-table td.of-sel::before { padding:0 0 0 0; width:auto; align-self:center; }
+      .wrap .of-table td.of-sel label { width:auto; height:auto; padding:6px 0; margin-left:auto; min-height:32px; align-items:center; gap:8px; }
       .of-selall-m { display:flex; }
       .of-bulk { gap:10px; padding:8px 12px; }
       .of-bulk .sep { display:none; }
@@ -152,52 +153,58 @@
     .of-dr-head h2 { font-size:18px; font-weight:700; color:#1b2440; margin:0 0 4px; padding-right:36px; }
     .of-dr-head .close { position:absolute; top:10px; right:10px; }
     .of-dr-body { padding:16px 18px 40px; display:grid; gap:12px; }
-    .of-steps { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:6px 14px; }
-    .of-steps .st { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #efefeb; font-size:13px; color:#1b2440; }
+    .of-steps { background:#fff; border:1px solid var(--of-line); border-radius:10px; padding:6px 14px; }
+    .of-steps .st { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--of-line2); font-size:13px; color:var(--of-ink); }
     .of-steps .st:last-child { border-bottom:none; }
-    .of-next { background:#e6f050; border-radius:10px; padding:14px 16px; }
-    .of-next .lb { font-size:11px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; }
+    /* ドロワーの「次にやること」：白いカード＋左に青の線（強い色の帯にしない） */
+    .of-next { background:#fff; border:1px solid var(--of-line); border-left:3px solid var(--of-blue); border-radius:10px; padding:12px 14px; }
+    .of-next .lb { font-size:11.5px; font-weight:700; color:var(--of-mute); display:flex; align-items:center; gap:5px; }
     .of-next .lb .material-symbols-outlined { font-size:15px; }
-    .of-next p { font-size:15px; font-weight:700; color:#1b2440; margin:6px 0 0; line-height:1.5; }
-    .of-next.ok { background:#e5f1e2; }
-    /* 「次にやること」は、案内ではなく押せるカード。カード全体か、中のボタンを押すと、その場で動く */
-    .of-next.cta { display:grid; gap:4px; cursor:pointer; transition:box-shadow .15s, transform .15s; }
-    .of-next.cta:hover { box-shadow:0 4px 14px rgba(27,36,64,.18); transform:translateY(-1px); }
-    .of-next .ttl { font-size:18px; font-weight:900; color:#1b2440; line-height:1.4; margin:4px 0 0; }
-    .of-next .meta { font-size:13px; font-weight:700; color:#4a5068; }
-    .of-next .meta.hot { color:#b3261e; }
-    .of-next .go { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
-    .of-next .go .of-btn { padding:10px 18px; font-size:14px; }
-    .of-next .hint { font-size:11.5px; color:#4a5068; margin-top:6px; }
-    .of-next .er { margin-top:8px; font-size:12.5px; font-weight:700; color:#b3261e; background:#fff; border-radius:7px; padding:7px 10px; }
+    .of-next p { font-size:14px; font-weight:700; color:var(--of-ink); margin:6px 0 0; line-height:1.5; }
+    .of-next.ok { border-left-color:#2f6f3a; }
+    .of-next.cta { display:grid; gap:4px; cursor:pointer; transition:border-color .12s; }
+    .of-next.cta:hover { border-left-color:var(--of-blue); }
+    .of-next .ttl { font-size:16px; font-weight:700; color:var(--of-ink); line-height:1.4; margin:4px 0 0; }
+    .of-next .meta { font-size:12.5px; color:var(--of-sub); }
+    .of-next .meta.hot { color:#b3261e; font-weight:700; }
+    .of-next .go { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .of-next .go .of-btn { padding:8px 14px; font-size:13px; }
+    .of-next .hint { font-size:11.5px; color:var(--of-mute); margin-top:6px; }
+    .of-next .er { margin-top:8px; font-size:12.5px; font-weight:700; color:#b3261e; background:#fdecea; border-radius:7px; padding:7px 10px; }
 
-    /* ページの一番上：いま、いちばん先に押すもの。開いた人が、探さずに押せる（行ごとのボタンは、下の一覧にもある） */
-    .of-now { background:#e6f050; border-radius:12px; padding:14px 16px; margin-bottom:18px; }
-    .of-now-h { font-size:12px; font-weight:700; color:#4a5068; display:flex; align-items:center; gap:5px; margin-bottom:8px; }
-    .of-now-h .material-symbols-outlined { font-size:16px; }
-    .of-now-item { display:flex; align-items:center; gap:10px 16px; flex-wrap:wrap; background:#fff; border-radius:10px; padding:12px 14px; cursor:pointer; transition:box-shadow .15s; }
-    .of-now-item:hover { box-shadow:0 3px 12px rgba(27,36,64,.18); }
-    .of-now-item + .of-now-item { margin-top:8px; }
-    .of-now-item .who { flex:1 1 220px; min-width:0; }
-    .of-now-item .who b { display:block; font-size:13.5px; color:#1b2440; }
-    .of-now-item .who small { display:block; font-size:11.5px; color:#6b7080; margin-top:2px; }
-    .of-now-item .what { flex:2 1 260px; min-width:0; }
-    .of-now-item .what b { display:block; font-size:16px; font-weight:900; color:#1b2440; line-height:1.4; }
-    .of-now-item .what span { display:block; font-size:12.5px; font-weight:700; color:#4a5068; margin-top:2px; }
-    .of-now-item .what span.hot, .of-now-item .what .er { color:#b3261e; }
-    .of-now-item .go { display:flex; gap:8px; flex-wrap:wrap; }
-    .of-now-item .go .of-btn { padding:10px 18px; font-size:14px; }
-    .of-now-more { margin-top:8px; font-size:12.5px; color:#4a5068; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    /* ページの一番上：次にやること。採用HRの「今やること」（.hr-today-row）・Sales の .sl-row と同じ形：
+       1件ずつ独立したカード（白・1px #e2e2dc・角丸9px）、状態は左端の色（期限超過 #c0392b・ほか #e6f050）、右に操作ボタン */
+    .of-now { margin-bottom:22px; }
+    .of-now-h { font-size:15px; font-weight:700; color:var(--of-ink); display:flex; align-items:center; gap:8px; margin:0 0 10px; }
+    .of-now-list { display:grid; gap:8px; }
+    .of-now-item { display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--of-line); border-left:3px solid #e6f050;
+      border-radius:9px; padding:12px 14px; cursor:pointer; }
+    .of-now-item.overdue { border-left-color:#c0392b; }
+    .of-now-item:hover .what b { text-decoration:underline; }
+    .of-now-item .who { flex:0 0 180px; min-width:0; }
+    .of-now-item .who b { display:block; font-size:14px; color:var(--of-ink); }
+    .of-now-item .who small { display:block; font-size:12px; color:var(--of-mute); margin-top:3px; }
+    .of-now-item .what { flex:1; min-width:0; }
+    .of-now-item .what b { display:block; font-size:13px; font-weight:700; color:var(--of-ink); line-height:1.5; }
+    .of-now-item .what span { display:block; font-size:12px; color:var(--of-mute); margin-top:3px; }
+    .of-now-item .what span.hot, .of-now-item .what .er { color:#b3261e; font-weight:700; }
+    .of-now-item .go { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .of-now-more { font-size:12px; color:var(--of-mute); display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; padding:4px 0 0; }
+    @media (max-width: 720px) {
+      .of-now-item { flex-wrap:wrap; }
+      .of-now-item .who { flex:1 1 100%; }
+      .of-now-item .go { justify-content:flex-start; }
+    }
 
     /* 状態の表示：色＋文字＋アイコン。未完了に ○ は使わない（○は完了に見えるため）。チェックは完了だけ */
     .of-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 10px 3px 8px; font-size:11.5px; font-weight:700; white-space:nowrap; }
     .of-st .material-symbols-outlined { font-size:14px; }
-    .of-st.red    { background:#fde4e2; color:#b3261e; }   /* 未提出・差し戻し（止まっている） */
-    .of-st.orange { background:#ffe9d1; color:#a34a00; }   /* 未作成・未受領（作る・受け取る） */
-    .of-st.yellow { background:#fdf0b8; color:#6b4e00; }   /* 要確認・未読取（人が見る） */
-    .of-st.green  { background:#d9f0d9; color:#1f6b31; }   /* 確定済・送付済・受領済・提出済（完了） */
-    .of-st.blue   { background:#e3e8f6; color:#1b2440; }   /* 作成済（進行中） */
-    .of-st.gray   { background:#eeeeea; color:#5b6070; }   /* 対象外・未管理 */
+    .of-st.red    { background:#fdecea; color:#b3261e; }   /* 未提出・差し戻し（止まっている） */
+    .of-st.orange { background:#ffedd5; color:#c2410c; }   /* 未作成・未受領（作る・受け取る） */
+    .of-st.yellow { background:#fbf1d6; color:#7d5a00; }   /* 要確認・未読取（人が見る） */
+    .of-st.green  { background:#e5f1e2; color:#2f6f3a; }   /* 確定済・送付済・受領済・提出済（完了） */
+    .of-st.blue   { background:#e7eaf3; color:#1b2440; }   /* 作成済（進行中） */
+    .of-st.gray   { background:#efefeb; color:#4a5068; }   /* 対象外・未管理 */
 
     /* 一覧の「次にやること」：何が起きていて、何を押せばよいかが、その行で分かる */
     .of-cta { display:grid; gap:4px; justify-items:start; }
@@ -250,7 +257,7 @@
 
   <div class="of-two">
     <div class="of-panel">
-      <div class="of-sec-h">月次進捗</div>
+      <div class="of-sec-h">月次進捗 <small id="progMonth"></small></div>
       <div class="of-prog" id="prog"></div>
     </div>
     <div class="of-panel">
@@ -261,9 +268,8 @@
 
   <div id="closebar"></div>
 
-  <div class="of-sum" id="sum" aria-label="今月の件数"></div>
-
   <div class="of-sec-h" id="listTop">案件一覧 <small id="listNote"></small></div>
+  <div class="of-sum" id="sum" aria-label="今月の件数（押すと絞り込み）"></div>
   <div class="of-toolbar" role="search">
     <input type="search" id="q" placeholder="要員・客先・BP会社を検索" aria-label="検索">
     <select id="fstage" aria-label="状況で絞り込む"></select>
@@ -304,10 +310,10 @@
 <!-- 勤務表を追加するときのファイル選択。「勤務表を追加」を押すと、すぐ開く（PDF・JPEG・PNG） -->
 <input type="file" id="sheetPick" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
 
-<script src="../js/api-client.js?v=20261003ux1"></script>
-<script src="../js/device.js?v=20261003ux1"></script>
-<script src="../js/layout.js?v=20261003ux1"></script>
-<script src="../js/office-layout.js?v=20261003ux1"></script>
+<script src="../js/api-client.js?v=20261004office3"></script>
+<script src="../js/device.js?v=20261004office3"></script>
+<script src="../js/layout.js?v=20261004office3"></script>
+<script src="../js/office-layout.js?v=20261004office3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -692,7 +698,7 @@
     const err = state.errs[r.siteContractId];
     return `<div class="of-cta"><div class="t">${esc(n.title)}</div>${n.meta ? `<div class="m${n.hot ? " hot" : ""}">${esc(n.meta)}</div>` : ""}
       ${err ? `<div class="er" role="alert">${esc(err)}</div>` : ""}
-      <div class="btns">${ctaBtn(r, n.cta, "cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div></div>`;
+      <div class="btns">${ctaBtn(r, n.cta, "sec cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div></div>`;
   }
   // ドロワーの上の、大きな「次にやること」。カード全体が押せる（中のボタンと同じ動き）
   function nextCardHtml(r) {
@@ -716,16 +722,17 @@
     const item = (r) => {
       const n = nextStep(r);
       const err = state.errs[r.siteContractId];
-      return `<div class="of-now-item" ${ctaAttrs(r, n.cta)}>
+      // 期限超過（n.hot）は左端を赤に（採用HRの .hr-today-row.overdue と同じ）。右の主ボタンは青（採用HRと同じ btn-primary の色）
+      return `<div class="of-now-item${n.hot ? " overdue" : ""}" ${ctaAttrs(r, n.cta)}>
         <div class="who"><b>${esc(r.employeeName)}</b><small>${esc(r.siteCompany)}</small></div>
         <div class="what"><b>${esc(n.title)}</b>${n.meta ? `<span class="${n.hot ? "hot" : ""}">${esc(n.meta)}</span>` : ""}${err ? `<span class="er" role="alert">${esc(err)}</span>` : ""}</div>
         <div class="go">${ctaBtn(r, n.cta, "cta")}${n.sub ? ctaBtn(r, n.sub, "sec") : ""}</div></div>`;
     };
     const rest = todo.length - NOW_MAX;
     API.morph(el("now"), `<section class="of-now" aria-label="次にやること">
-      <div class="of-now-h"><span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>次にやること</div>
-      ${todo.slice(0, NOW_MAX).map(item).join("")}
-      ${rest > 0 ? `<div class="of-now-more">ほか ${rest}件<button type="button" class="of-btn sec" data-tag="all">一覧ですべて見る</button></div>` : ""}</section>`);
+      <div class="of-now-h">次にやること<span class="of-count">${todo.length}件</span></div>
+      <div class="of-now-list">${todo.slice(0, NOW_MAX).map(item).join("")}
+      ${rest > 0 ? `<div class="of-now-more">ほか ${rest}件<button type="button" class="of-btn sec" data-tag="all">一覧ですべて見る</button></div>` : ""}</div></section>`);
   }
 
   function runCta(elm) {

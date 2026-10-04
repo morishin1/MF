@@ -151,10 +151,11 @@ console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===
   await page.waitForSelector(ROW);
   await page.waitForTimeout(400);
   const ts = await pillOf(cell(page, "勤務表"));
-  check(ts.text === "未提出" && ts.cls.includes("red") && ts.bg === "rgb(253, 228, 226)" && ts.fg === "rgb(179, 38, 30)", `勤務表：「未提出」は薄い赤の背景＋赤い文字（${ts.text} ${ts.bg} ${ts.fg}）`);
+  // 2026-10-04：状態の色は採用HRの色（js/office-layout.js の TONE・hr/applicants.html の .hr-flow-state）にそろえた
+  check(ts.text === "未提出" && ts.cls.includes("red") && ts.bg === "rgb(253, 236, 234)" && ts.fg === "rgb(179, 38, 30)", `勤務表：「未提出」は薄い赤の背景＋赤い文字（${ts.text} ${ts.bg} ${ts.fg}）`);
   check(ts.icon !== "" && ts.icon !== "radio_button_unchecked" && !/check|task_alt/.test(ts.icon), `未提出のアイコンは ○ でも チェックでもない（${ts.icon}）`);
   const sales = await pillOf(cell(page, "売上請求"));
-  check(sales.text === "未作成" && sales.cls.includes("orange") && sales.bg === "rgb(255, 233, 209)", `売上請求：「未作成」は橙（${sales.text} ${sales.bg}）`);
+  check(sales.text === "未作成" && sales.cls.includes("orange") && sales.bg === "rgb(255, 237, 213)", `売上請求：「未作成」は橙（${sales.text} ${sales.bg}）`);
   const vend = await pillOf(cell(page, "仕入請求")), pay = await pillOf(cell(page, "支払"));
   check(vend.text === "対象外" && vend.cls.includes("gray") && pay.text === "対象外" && pay.cls.includes("gray"), "仕入請求・支払：「対象外」は灰色");
   check((await cell(page, "稼働時間").locator(".of-st").count()) === 0, "稼働時間：勤務表が無いうちは、状態のラベルを出さない（—）");
@@ -174,7 +175,9 @@ console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===
   check(await now.isVisible() && nt.includes(`${TAG}テスト 太郎`) && nt.includes("勤務表が未提出です") && nt.includes("期限 11/5") && nt.includes("勤務表を追加"),
     `ページの一番上：誰の何が未提出か・期限・「勤務表を追加」（${nt.replace(/\s+/g, " ")}）`);
   const nowBox = await now.boundingBox();
-  check(nowBox.y < 200, `一番上の帯は、数字カードより上（上から ${Math.round(nowBox.y)}px）`);
+  // 共通ヘッダー＋Office の横タブ（2段）＋見出しの下、本文のいちばん上。件数（絞り込みのチップ）より上
+  const sumBox = await page.locator("#sum").boundingBox();
+  check(nowBox.y < 320 && nowBox.y < sumBox.y, `次にやることは、本文のいちばん上（上から ${Math.round(nowBox.y)}px・件数は ${Math.round(sumBox.y)}px）`);
   check((await page.locator("#now .of-now-item").count()) === 1, "件数ぶんだけ出る（1件）");
   const [fcNow] = await Promise.all([page.waitForEvent("filechooser", { timeout: 5000 }), now.locator('button[data-cta="pick"]').click()]);
   check(!!fcNow && await page.locator(".of-drawer").count() === 0, "一番上の「勤務表を追加」→ その場でファイル選択（ドロワーは開かない）");
@@ -269,7 +272,7 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表"));
-  check(ts.text === "未読取" && ts.cls.includes("yellow") && ts.bg === "rgb(253, 240, 184)", `勤務表：「未読取」は黄色（${ts.text} ${ts.bg}）`);
+  check(ts.text === "未読取" && ts.cls.includes("yellow") && ts.bg === "rgb(251, 241, 214)", `勤務表：「未読取」は黄色（${ts.text} ${ts.bg}）`);
   const cta = cell(page, "次にやること");
   const t = await cta.innerText();
   check(t.includes("勤務表が届いています") && t.includes("AIで読み取る") && !t.includes("勤務表を追加"), `次にやること：勤務表が届いています／AIで読み取る（${t.replace(/\s+/g, " ")}）`);
@@ -324,7 +327,7 @@ console.log("\n=== 6. 確定：「確定内容を見る」。完了のラベル�
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表")), wk = await pillOf(cell(page, "稼働時間"));
-  check(ts.text === "確定済" && ts.cls.includes("green") && ts.bg === "rgb(217, 240, 217)" && ts.icon === "check_circle", `勤務表：「確定済」は薄い緑＋チェック（${ts.text} ${ts.bg} ${ts.icon}）`);
+  check(ts.text === "確定済" && ts.cls.includes("green") && ts.bg === "rgb(229, 241, 226)" && ts.icon === "check_circle", `勤務表：「確定済」は薄い緑＋チェック（${ts.text} ${ts.bg} ${ts.icon}）`);
   check(wk.text === "確定済" && wk.cls.includes("green"), "稼働時間：「確定済」は緑");
   check((await cell(page, "稼働時間").innerText()).includes("154.75h"), "稼働時間：154.75h（= 154:45）");
   const t = await cell(page, "次にやること").innerText();

@@ -8,10 +8,12 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261003ux1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261003ux1">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261004office3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261004office3">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
     // 旧URLの互換：月次業務は /office/monthly.html へ移った。案件・月・絞り込みを付けた古いリンク（/office/?month=…&id=…）は、
     // そのまま月次業務へ送る（ブックマーク・通知・メールのリンクを壊さない）
@@ -21,48 +23,22 @@
     })();
   </script>
   <style>
-    /* Office ホーム：いま、自分（の担当）が処理すべきものだけ。中身は権限で出し分け、画面は全員同じ */
-    .oh-cards { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:0 0 18px; }
-    .oh-card { display:block; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px;
-               text-decoration:none; color:inherit; transition:box-shadow .15s; }
-    .oh-card:hover { box-shadow:0 3px 12px rgba(27,36,64,.12); }
-    .oh-card .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
-    .oh-card .lb .material-symbols-outlined { font-size:16px; }
-    .oh-card .v { display:block; font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
-    .oh-card .v small { font-size:13px; font-weight:700; color:#6b7080; margin-left:2px; }
-    .oh-card.hot { border-color:#e0a100; background:#fffaf0; }
-    .oh-card.hot .lb::after { content:"対応あり"; margin-left:auto; font-size:10.5px; color:#7d5a00; background:#fdf0b8; border-radius:4px; padding:1px 6px; }
-
-    .oh-two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:14px; }
-    .oh-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
-    .oh-panel h2 { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; display:flex; align-items:baseline; gap:4px 10px; flex-wrap:wrap; }
-    .oh-panel h2 small { font-size:12px; font-weight:500; color:#6b7080; }
-    .oh-panel h2 a { margin-left:auto; font-size:12px; font-weight:700; }
-
-    .oh-todo { display:flex; flex-direction:column; }
-    .oh-row { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid #efefeb; text-decoration:none; color:#1b2440; }
-    .oh-row:last-child { border-bottom:none; }
-    .oh-row:hover .oh-label { text-decoration:underline; }
-    .oh-pri { display:inline-flex; align-items:center; gap:3px; flex:none; width:84px; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
-    .oh-pri .material-symbols-outlined { font-size:14px; }
-    .oh-pri.p0 { background:#fdf0b8; color:#6b4e00; }   /* 要確認 */
-    .oh-pri.p1 { background:#fde4e2; color:#b3261e; }   /* 期限超過 */
-    .oh-pri.p2 { background:#ffe9d1; color:#a34a00; }   /* 今日期限 */
-    .oh-pri.p3 { background:#e3e8f6; color:#1b2440; }   /* 今週対応 */
-    .oh-main { flex:1; min-width:0; }
-    .oh-label { font-size:13.5px; font-weight:700; }
-    .oh-hint { font-size:11.5px; color:#6b7080; margin-top:1px; }
-    .oh-area { font-size:10.5px; color:#6b7080; border:1px solid #e2e2dc; border-radius:4px; padding:0 5px; margin-left:6px; font-weight:500; vertical-align:1px; }
-    .oh-n { font-size:18px; font-weight:900; font-variant-numeric:tabular-nums; min-width:30px; text-align:right; }
-    .oh-row .go { color:#9aa0b4; font-size:18px; }
-
-    @media (max-width: 1180px) { .oh-cards { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-    @media (max-width: 900px) { .oh-two { grid-template-columns:1fr; } }
-    @media (max-width: 560px) {
-      .oh-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .oh-card.hot .lb::after { display:none; }          /* 狭い画面では、枠と数字で示す（ラベルの折り返しを避ける） */
-      .oh-pri { width:auto; }
-    }
+    /* Office ホーム：いま、自分（の担当）が処理すべきものだけ。中身は権限で出し分け、画面は全員同じ。
+       並べ方は採用HRのダッシュボード（hr/index.html）と同じ：見出し → 件数のカード → 今日やること（1件ずつのカード） → 月次進捗。
+       見た目は共通（js/office-layout.js の .of-tile＝Sales の .db-sum a／.of-row＝採用HRの .hr-today-row）。ここは並べ方だけ */
+    .oh-cards { margin:0 0 22px; }
+    .oh-card .val.zero { color:var(--of-faint); }
+    .oh-sec { margin:0 0 22px; }
+    .oh-sec-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; }
+    .oh-sec-row .of-sec-h { margin:0; }
+    .oh-sec-row a { font-size:12px; color:var(--of-sub); text-decoration:none; white-space:nowrap; }
+    .oh-sec-row a:hover { color:var(--of-ink); }
+    .oh-row .now .oh-pri { font-weight:700; }
+    .oh-row.p1 .now .oh-pri { color:#b3261e; }
+    .oh-row.p2 .now .oh-pri { color:#7d5a00; }
+    .oh-row .oh-n { font-variant-numeric:tabular-nums; }
+    .oh-row .oh-n small { font-size:inherit; font-weight:inherit; }
+    #progBox .of-panel { max-width:640px; }
   </style>
 </head>
 <body>
@@ -73,25 +49,29 @@
 
   <div id="banner"></div>
 
-  <div class="oh-cards" id="cards" aria-label="対応が要る件数"></div>
+  <div class="of-tiles oh-cards" id="cards" aria-label="対応が要る件数"></div>
 
-  <div class="oh-two">
-    <section class="oh-panel" aria-labelledby="todoH">
-      <h2 id="todoH">今日やること <small>要確認 → 期限超過 → 今日期限 → 今週対応 の順</small></h2>
-      <div class="oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
-    </section>
-    <section class="oh-panel" id="progBox" aria-labelledby="progH" hidden>
-      <h2 id="progH">月次進捗 <small id="progMonth"></small><a href="/office/monthly.html">月次業務を開く</a></h2>
+  <section class="oh-sec" aria-labelledby="todoH">
+    <h2 class="of-sec-h" id="todoH">今日やること</h2>
+    <div class="of-rows oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
+  </section>
+
+  <section class="oh-sec" id="progBox" aria-labelledby="progH" hidden>
+    <div class="oh-sec-row">
+      <h2 class="of-sec-h" id="progH">月次進捗 <small id="progMonth"></small></h2>
+      <a href="/office/monthly.html">月次業務を開く</a>
+    </div>
+    <div class="of-panel">
       <div class="of-prog" id="prog"></div>
       <p class="of-muted" id="closeNote" style="margin:10px 0 0;"></p>
-    </section>
-  </div>
+    </div>
+  </section>
 </div>
 
-<script src="../js/api-client.js?v=20261003ux1"></script>
-<script src="../js/device.js?v=20261003ux1"></script>
-<script src="../js/layout.js?v=20261003ux1"></script>
-<script src="../js/office-layout.js?v=20261003ux1"></script>
+<script src="../js/api-client.js?v=20261004office3"></script>
+<script src="../js/device.js?v=20261004office3"></script>
+<script src="../js/layout.js?v=20261004office3"></script>
+<script src="../js/office-layout.js?v=20261004office3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -102,6 +82,11 @@
   const OFFICE_KEY = "office:";
   const fetchOffice = () => API.api("/api/office");
   API.warm(OFFICE_KEY, fetchOffice, O.allows);
+  // 人事・労務の数字（入退社）と件数（ヘッダー・タブのバッジと同じ鍵）も、枠を待たずに取りにいき始める。
+  // 鍵は入退社の画面（admin-hr.html）・共通の枠と同じなので、行き来しても取り直さない
+  const HR_KEY = "office:hr";
+  KPLayout.warm("officeHr", HR_KEY, () => API.hrList());
+  API.warm("badges", () => API.badges());
 
   // Office に入れる人の全員（人事・労務／経理・事務／月末月初業務のどれか）が開ける。中身は担当の分だけ
   O.init({ active: "home", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(ctx); });
@@ -116,12 +101,13 @@
   }
   const monthLabel = (m) => (m ? `${m.slice(0, 4)}年${Number(m.slice(5, 7))}月` : "");
 
-  // 優先度：要確認 → 期限超過 → 今日期限 → 今週対応。色だけで分けず、文字とアイコンも付ける
+  // 優先度：要確認 → 期限超過 → 今日期限 → 今週対応。
+  // 状態は、採用HR・Sales の「今やること」と同じく左端の色で示す（期限超過＝赤 overdue・今日期限＝黄 hot・ほか＝通常）。色だけにせず文字も出す
   const PRI = [
-    { label: "要確認",   icon: "flag" },
-    { label: "期限超過", icon: "warning" },
-    { label: "今日期限", icon: "today" },
-    { label: "今週対応", icon: "date_range" },
+    { label: "要確認",   tone: "" },
+    { label: "期限超過", tone: "overdue" },
+    { label: "今日期限", tone: "hot" },
+    { label: "今週対応", tone: "" },
   ];
 
   async function load(ctx) {
@@ -136,9 +122,10 @@
     const closingMonth = prevMonth();
     let officeData = null;
     const [b, hr, cl, of] = await Promise.all([
-      safe(API.badges()),
-      can.hr ? safe(API.hrList()) : none,
-      can.fin && !can.app ? safe(API.closing(closingMonth)) : none,
+      // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
+      safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
+      can.hr ? safe(API.swr(HR_KEY, () => API.hrList(), () => {}, { quiet: true })) : none,
+      can.fin && !can.app ? safe(API.swr(`office:closing:${closingMonth}`, () => API.closing(closingMonth), () => {}, { quiet: true })) : none,
       can.app ? safe(API.swr(OFFICE_KEY, fetchOffice, (d) => { officeData = d; })) : none,
     ]);
     if (of && of.ok) officeData = officeData || of.v;
@@ -170,53 +157,58 @@
       can.app && { icon: "request_quote", label: "請求未完了", v: billOpen, href: "/office/billing.html" },
     ].filter(Boolean);
     el("cards").innerHTML = cards.map((c) => `
-      <a class="oh-card${c.v ? " hot" : ""}" href="${esc(c.href)}"${c.hint ? ` title="${esc(c.hint)}"` : ""}>
-        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${c.icon}</span><span class="t">${esc(c.label)}</span></span>
-        <span class="v">${c.v === undefined ? "—" : c.v}${c.of != null && c.v !== undefined ? `<small>/ ${c.of}</small>` : ""}</span>
+      <a class="of-tile oh-card" href="${esc(c.href)}"${c.hint ? ` title="${esc(c.hint)}"` : ""}>
+        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${esc(c.icon)}</span><span class="t">${esc(c.label)}</span></span>
+        <span class="val v${c.v ? "" : " zero"}">${c.v === undefined ? "—" : c.v}${c.of != null && c.v !== undefined ? `<small>/ ${c.of}</small>` : ""}</span>
       </a>`).join("");
 
     // ---- 今日やること（担当の分だけ。優先度順） ----
     const todo = [];
-    const add = (pri, area, label, hint, count, href) => { if (count > 0) todo.push({ pri, area, label, hint, count, href }); };
+    // cta … 右のボタン（採用HRの「今やること」と同じく、押せば、その仕事の画面が開く）
+    const add = (pri, area, label, hint, count, href, cta) => { if (count > 0) todo.push({ pri, area, label, hint, count, href, cta }); };
     if (can.app && od) {
       const t = Object.fromEntries((summary?.today || []).map((x) => [x.key, x]));
       const m = od.month;
       const mq = (tag) => `/office/monthly.html?month=${encodeURIComponent(m)}&tag=${tag}`;
-      add(0, "月次業務", "要確認の案件", "確認の印が付いた案件", t.check?.count || 0, mq("check"));
-      add(0, "月次業務", "稼働確認待ち", t.work?.note || "勤務表を確認して稼働を確定する", t.work?.count || 0, mq("work"));
-      add(0, "月次業務", "契約条件の確認", "精算できない契約条件", t.terms?.count || 0, mq("terms"));
+      add(0, "月次業務", "要確認の案件", "確認の印が付いた案件", t.check?.count || 0, mq("check"), "案件を確認");
+      add(0, "月次業務", "稼働確認待ち", t.work?.note || "勤務表を確認して稼働を確定する", t.work?.count || 0, mq("work"), "稼働を確認");
+      add(0, "月次業務", "契約条件の確認", "精算できない契約条件", t.terms?.count || 0, mq("terms"), "契約条件を確認");
       const overdue = summary?.overdue || 0;
-      add(1, "月次業務", "勤務表の提出期限超過", od.deadline ? `期限 ${O.fmtDay(od.deadline)}` : "", overdue, mq("overdue"));
+      add(1, "月次業務", "勤務表の提出期限超過", od.deadline ? `期限 ${O.fmtDay(od.deadline)}` : "", overdue, mq("overdue"), "勤務表を確認");
       const sheetLeft = (t.timesheet?.count || 0) - overdue;
-      add(od.deadline && od.deadline === today ? 2 : 3, "月次業務", "勤務表の回収", od.deadline ? `期限 ${O.fmtDay(od.deadline)}` : "", sheetLeft, mq("timesheet"));
-      add(3, "請求・支払", "売上請求の作成・送付", "", t.invoice?.count || 0, mq("invoice"));
-      add(3, "請求・支払", "BP請求書の受領・確認", "", t.vendor?.count || 0, mq("vendor"));
-      add(3, "請求・支払", "支払の登録・確認", "", t.payment?.count || 0, mq("payment"));
+      add(od.deadline && od.deadline === today ? 2 : 3, "月次業務", "勤務表の回収", od.deadline ? `期限 ${O.fmtDay(od.deadline)}` : "", sheetLeft, mq("timesheet"), "勤務表を回収");
+      add(3, "請求・支払", "売上請求の作成・送付", "", t.invoice?.count || 0, mq("invoice"), "請求書を作成");
+      add(3, "請求・支払", "BP請求書の受領・確認", "", t.vendor?.count || 0, mq("vendor"), "請求書を確認");
+      add(3, "請求・支払", "支払の登録・確認", "", t.payment?.count || 0, mq("payment"), "支払を登録");
       const exp = expiring || [];
-      add(1, "契約", "契約期限切れ（更新未確認）", "契約期間が終わっていて、更新の確認がまだ", exp.filter((r) => r.periodTo < today).length, "/office/monthly.html?tag=expiring");
-      add(2, "契約", "契約期限（今日まで）", "今日で契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo === today).length, "/office/monthly.html?tag=expiring");
-      add(3, "契約", "契約期限の確認", "30日以内に契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo > today).length, "/office/monthly.html?tag=expiring");
+      add(1, "契約", "契約期限切れ（更新未確認）", "契約期間が終わっていて、更新の確認がまだ", exp.filter((r) => r.periodTo < today).length, "/office/monthly.html?tag=expiring", "契約を確認");
+      add(2, "契約", "契約期限（今日まで）", "今日で契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo === today).length, "/office/monthly.html?tag=expiring", "契約を確認");
+      add(3, "契約", "契約期限の確認", "30日以内に契約期間が終わり、更新の確認がまだ", exp.filter((r) => r.periodTo > today).length, "/office/monthly.html?tag=expiring", "契約を確認");
     }
     if (can.hr) {
-      add(0, "人事・労務", "勤怠の修正申請", "打刻の修正申請", badges.timecard || 0, "/admin-timecard.html");
-      add(0, "人事・労務", "休暇・稟議の承認", "承認待ち", badges.requests || 0, "/admin-requests.html");
-      add(3, "人事・労務", "入社準備", "進行中の入社", onboarding || 0, "/admin-hr.html");
-      add(3, "人事・労務", "退社手続き", "進行中の退社", offboarding || 0, "/admin-hr.html");
-      add(3, "人事・労務", "契約書の署名待ち", "署名がまだ返ってきていない契約書", badges.esign || 0, "/admin-esign.html");
+      add(0, "人事・労務", "勤怠の修正申請", "打刻の修正申請", badges.timecard || 0, "/admin-timecard.html", "勤怠を確認");
+      add(0, "人事・労務", "休暇・稟議の承認", "承認待ち", badges.requests || 0, "/admin-requests.html", "申請を承認");
+      add(3, "人事・労務", "入社準備", "進行中の入社", onboarding || 0, "/admin-hr.html", "入社準備を開く");
+      add(3, "人事・労務", "退社手続き", "進行中の退社", offboarding || 0, "/admin-hr.html", "退社手続きを開く");
+      add(3, "人事・労務", "契約書の署名待ち", "署名がまだ返ってきていない契約書", badges.esign || 0, "/admin-esign.html", "署名状況を確認");
     }
     if (can.fin) {
-      add(0, "経理・事務", "経費精算の承認", "承認待ちの経費精算", badges.expenses || 0, "/admin-expenses.html");
+      add(0, "経理・事務", "経費精算の承認", "承認待ちの経費精算", badges.expenses || 0, "/admin-expenses.html", "経費を承認");
       if (!can.app) add(3, "経理・事務", "月次締め", `${closingMonth} の月次締めがまだです`
-        + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : ""), closingOpen || 0, "/admin-closing.html");
+        + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : ""), closingOpen || 0, "/admin-closing.html", "月次締めを開く");
     }
     todo.sort((a, b2) => a.pri - b2.pri || b2.count - a.count);
-    el("todo").innerHTML = todo.length ? todo.map((t) => `
-      <a class="oh-row" href="${esc(t.href)}">
-        <span class="oh-pri p${t.pri}"><span class="material-symbols-outlined" aria-hidden="true">${PRI[t.pri].icon}</span><span class="t">${PRI[t.pri].label}</span></span>
-        <span class="oh-main"><span class="oh-label"><span class="t">${esc(t.label)}</span><span class="oh-area">${esc(t.area)}</span></span>${t.hint ? `<div class="oh-hint">${esc(t.hint)}</div>` : ""}</span>
-        <span class="oh-n">${t.count}<small style="font-size:11px;font-weight:700;color:#6b7080;">件</small></span>
-        <span class="material-symbols-outlined go" aria-hidden="true">chevron_right</span>
-      </a>`).join("")
+    // 採用HRの「今やること」（.hr-today-row）と同じ形：1件ずつ独立したカード。左端の色で状態、右に操作ボタン
+    el("todo").innerHTML = todo.length ? `<div class="of-rows-count" id="todoN">${todo.length}件（要確認 → 期限超過 → 今日期限 → 今週対応の順）</div>`
+      + todo.map((t) => `
+      <div class="of-row oh-row p${t.pri}${PRI[t.pri].tone ? ` ${PRI[t.pri].tone}` : ""}">
+        <div class="info">
+          <b class="oh-label"><span class="t">${esc(t.label)}</span></b>
+          <div class="now"><span class="oh-pri p${t.pri}"><span class="t">${PRI[t.pri].label}</span></span>・<span class="oh-area">${esc(t.area)}</span>${t.hint ? `・${esc(t.hint)}` : ""}</div>
+          <div class="n">対象：<span class="oh-n">${t.count}<small>件</small></span></div>
+        </div>
+        <a class="btn btn-primary btn-sm oh-go" href="${esc(t.href)}">${esc(t.cta)}</a>
+      </div>`).join("")
       : `<div class="of-empty">いま対応が必要なものはありません</div>`;
 
     // ---- 月次進捗（月末月初業務を使える人だけ） ----

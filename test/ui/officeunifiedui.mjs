@@ -2,9 +2,9 @@
 //
 // ■ 守ること（2026-10-02 の決定 → 2026-10-03 の Office UI/UX 再設計）
 //   1. ヘッダーの「Office」を押すと、経営者（owner）でも、管理者（admin）でも、経理（finance）でも、責任者（manager）でも、
-//      同じ Office ホーム（/office/）に入る。どの画面から押しても同じ。月次業務は左メニューの「月次業務」から
-//   2. 全ロールで、Office は同じUI：同じヘッダー・同じ左メニューの部品・同じ本文の幅・カード・フォント・ボタン・余白・色。
-//      違うのは、左メニューに出る項目（担当）と、見えるデータ・押せる操作だけ。月次業務の一覧は、画面のピクセルまで同じ
+//      同じ Office ホーム（/office/）に入る。どの画面から押しても同じ。月次業務はOffice のタブの「月次業務」から
+//   2. 全ロールで、Office は同じUI：同じヘッダー・同じOffice のタブの部品・同じ本文の幅・カード・フォント・ボタン・余白・色。
+//      違うのは、Office のタブに出る項目（担当）と、見えるデータ・押せる操作だけ。月次業務の一覧は、画面のピクセルまで同じ
 //   3. 権限のないメニューだけが出ない：Office に入れない人（営業・一般メンバー）には Office を出さない。
 //      人事（人事・労務）・管理者（人事・労務／経理・事務）には Office は出るが、月末月初業務（/office/monthly.html）は出ない
 //   4. 月末月初業務の権限のない人が /office/monthly.html を直接開いても、home.html へ戻され、Office の API は1回も呼ばれない
@@ -111,10 +111,11 @@ for (const [label, role] of Object.entries(ROLES)) {
     check(new URL(page.url()).pathname === "/office/", `${label}：${start} から Office を押す → /office/（いま ${new URL(page.url()).pathname}）`);
     await page.waitForSelector("#progBox:not([hidden]) #prog .row", { timeout: 8000 });
     check(await page.locator("#cards .oh-card").count() > 0, `${label}：Office ホーム（サマリーカード・月次進捗）が出る`);
-    // 左メニューの「月次業務」から、月末月初業務の一覧へ
-    const ops = page.locator('.kp-side-group[data-group="office-ops"]');
-    if ((await ops.getAttribute("aria-expanded")) !== "true") await ops.click();
-    await Promise.all([page.waitForURL(/\/office\/monthly\.html/), page.locator('.kp-sidebar a.kp-side-item[href="/office/monthly.html"]').click()]);
+    // Office のタブの「月次業務」から、月末月初業務の一覧へ
+    // Office のタブ：経理・事務 → 2段目の「月次業務」
+    await page.locator('#kp-office-nav .kp-otab[data-cat="office-ops"]').click();
+    await page.waitForSelector('#kp-office-nav a.kp-ostab[href="/office/monthly.html"]', { timeout: 8000 });
+    await Promise.all([page.waitForURL(/\/office\/monthly\.html/), page.locator('#kp-office-nav a.kp-ostab[href="/office/monthly.html"]').click()]);
     await page.waitForSelector("#rows tr[data-id]", { timeout: 8000 });
     check((await page.locator("#rows tr[data-id]").count()) === 2, `${label}：月次業務の一覧が出る（2件）`);
     await page.close();
@@ -136,10 +137,10 @@ for (const [label, role] of Object.entries(ROLES)) {
     const box = (sel) => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
     return {
       bodyClass: document.body.className,
-      // 共通の枠：ヘッダー（.topbar）と Office の左メニュー（#kp-office-nav）。いま選ばれているのは Office・月次業務
-      chrome: Boolean(document.querySelector(".topbar")) && Boolean(document.querySelector("#kp-office-nav.kp-sidebar.grouped")),
+      // 共通の枠：ヘッダー（.topbar）と Office の横タブ（#kp-office-nav）。いま選ばれているのは Office・月次業務。左サイドバーは無い
+      chrome: Boolean(document.querySelector(".topbar")) && Boolean(document.querySelector("#kp-office-nav.kp-officenav")) && !document.querySelector(".kp-sidebar"),
       officeOn: Boolean(document.querySelector('.topbar [data-shortcut="office"].on')),
-      sideOn: document.querySelector("#kp-office-nav .kp-side-item.on > span:not(.material-symbols-outlined)")?.textContent.trim(),
+      sideOn: document.querySelector("#kp-office-nav .kp-ostab.on > span")?.textContent.trim(),
       noOwnHeader: !document.querySelector(".of-bar, .of-logo, .of-back") && !document.body.innerText.includes("GWへ戻る"),
       ids: [...document.querySelectorAll("[id]")].map((e) => e.id).filter((i) => !/^kp-|^of-user/.test(i)),
       sections: [...document.querySelectorAll(".of-sec-h, h1")].map((e) => e.textContent.trim().replace(/\s+/g, " ")),
@@ -148,8 +149,9 @@ for (const [label, role] of Object.entries(ROLES)) {
       wrap: cs(".wrap", ["maxWidth", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginLeft"]),
       wrapBox: (box(".wrap") || []).slice(0, 3),
       topbar: cs(".topbar", ["height", "backgroundColor", "position"]),
-      sidebar: cs("#kp-office-nav", ["width", "backgroundColor", "position"]),
-      sideItemOn: cs("#kp-office-nav .kp-side-item.on", ["color", "backgroundColor", "fontWeight"]),
+      officeNav: cs("#kp-office-nav", ["backgroundColor", "position"]),
+      catOn: cs("#kp-office-nav .kp-otab.on", ["color", "fontWeight", "borderBottomColor"]),
+      tabOn: cs("#kp-office-nav .kp-ostab.on", ["color", "backgroundColor", "fontWeight"]),
       title: cs("h1.of-title", ["fontSize", "fontWeight", "color"]),
       card: cs(".of-card", ["backgroundColor", "borderTopColor", "borderRadius", "paddingTop", "fontFamily"]),
       table: cs(".of-table", ["backgroundColor", "borderTopColor"]),
@@ -160,20 +162,20 @@ for (const [label, role] of Object.entries(ROLES)) {
     };
   });
   // 本文の一覧（データが同じなら、役割によらず、描いた結果＝マークアップ・各セルの計算済みスタイル・大きさまで同じ）。
-  // 左メニューは担当で項目が変わるので、比べない（スクリーンショットのバイト比較は、スクロール位置の端数で揺れるので使わない）
+  // Office のタブは担当で項目が変わるので、比べない（スクリーンショットのバイト比較は、スクロール位置の端数で揺れるので使わない）
   shots[label] = await page.locator(".of-table").evaluate((t) => t.outerHTML.replace(/\s+/g, " ") + JSON.stringify([...t.querySelectorAll("th, td, .of-st, .of-btn")].map((e) => { const c = getComputedStyle(e); const r = e.getBoundingClientRect(); return [c.fontSize, c.color, c.backgroundColor, c.paddingTop, Math.round(r.width), Math.round(r.height)]; })));
-  groupsOf[label] = await page.locator(".kp-side-group .lb").allInnerTexts().then((a) => a.map((x) => x.trim()).join("|"));
+  groupsOf[label] = await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "ホーム").join("|"));
   check(calls.length > 0 && errs.length === 0, `${label}：Office が表示される（API ${calls.length}回・画面のエラーなし ${errs.join(" | ").slice(0, 120)}）`);
   if (label.startsWith("経営者")) await page.screenshot({ path: shotPath("office-unified-owner.png") });
   if (label.startsWith("経理")) await page.screenshot({ path: shotPath("office-unified-finance.png") });
   await page.close();
 }
 const base = sig["経営者（owner）"];
-check(base && base.chrome && base.officeOn && base.sideOn === "月次業務", `Office 共通の枠（ヘッダーの Office・左メニューの月次業務が選ばれている。いま ${base?.sideOn}）`);
+check(base && base.chrome && base.officeOn && base.sideOn === "月次業務", `Office 共通の枠（ヘッダーの Office・Office のタブの月次業務が選ばれている。いま ${base?.sideOn}）`);
 check(base && base.noOwnHeader, "月次業務の専用ヘッダー・「GWへ戻る」は無い");
-// 担当で変わるのは、左メニューのグループ（項目）だけ
-check(groupsOf["経営者（owner）"] === "人事・労務|経理・事務|社内管理", `経営者：左メニューは全部（いま ${groupsOf["経営者（owner）"]}）`);
-check(groupsOf["管理者＋経理（admin）"] === "人事・労務|経理・事務|社内管理", `管理者＋経理：左メニューは全部（いま ${groupsOf["管理者＋経理（admin）"]}）`);
+// 担当で変わるのは、Office のタブのグループ（項目）だけ
+check(groupsOf["経営者（owner）"] === "人事・労務|経理・事務|社内管理", `経営者：Office のタブは全部（いま ${groupsOf["経営者（owner）"]}）`);
+check(groupsOf["管理者＋経理（admin）"] === "人事・労務|経理・事務|社内管理", `管理者＋経理：Office のタブは全部（いま ${groupsOf["管理者＋経理（admin）"]}）`);
 check(groupsOf["経理（finance）"] === "経理・事務|社内管理", `経理：経理・事務／社内管理（いま ${groupsOf["経理（finance）"]}）`);
 check(groupsOf["責任者（manager）"] === "経理・事務", `責任者：経理・事務（月次業務・請求・支払）だけ（いま ${groupsOf["責任者（manager）"]}）`);
 for (const [label, s] of Object.entries(sig)) {
@@ -181,7 +183,7 @@ for (const [label, s] of Object.entries(sig)) {
   // 責任者は月次締め・月初作業管理（経理・事務の管理画面）に入れないので、月次業務の帯（タブ）が出ない。そのぶんだけ縦の位置が違う
   const skip = label.startsWith("責任者") ? ["wrapBox"] : [];
   const diff = Object.keys(base).filter((k) => !skip.includes(k) && JSON.stringify(base[k]) !== JSON.stringify(s[k]));
-  check(diff.length === 0, `${label} は 経営者と同じレイアウト${diff.length ? `（違い：${diff.join("・")}）` : "（ヘッダー・左メニューの部品・DOMの骨組み・幅・余白・色・フォント・カード・ボタンが同一）"}`);
+  check(diff.length === 0, `${label} は 経営者と同じレイアウト${diff.length ? `（違い：${diff.join("・")}）` : "（ヘッダー・Office のタブの部品・DOMの骨組み・幅・余白・色・フォント・カード・ボタンが同一）"}`);
 }
 for (const [label, buf] of Object.entries(shots)) {
   if (label.startsWith("経営者")) continue;
@@ -204,7 +206,7 @@ for (const [label, buf] of Object.entries(shots)) {
 }
 
 // ============================================================================================
-console.log("\n=== 3. 権限のないメニューだけが出ない（ヘッダーのツールは権限のとおり。月末月初業務の権限が無ければ、左メニューに出さない） ===");
+console.log("\n=== 3. 権限のないメニューだけが出ない（ヘッダーのツールは権限のとおり。月末月初業務の権限が無ければ、Office のタブに出さない） ===");
 for (const [label, role] of Object.entries(DENIED)) {
   seed();
   const { page, calls } = await open("/home.html", role);
@@ -222,7 +224,7 @@ for (const label of ["人事（hr）", "会計の管理者だけ（admin）"]) {
   await page.waitForSelector("#cards", { timeout: 8000 });
   await page.waitForTimeout(500);
   const hrefs = await page.locator("#kp-office-nav a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
-  check(!hrefs.some((h) => /\/office\/(monthly|billing)\.html/.test(h)), `${label}：左メニューに月末月初業務・請求・支払は出ない（${hrefs.join(" ")}）`);
+  check(!hrefs.some((h) => /\/office\/(monthly|billing)\.html/.test(h)), `${label}：Office のタブに月末月初業務・請求・支払は出ない（${hrefs.join(" ")}）`);
   check(!(await page.locator("#progBox").isVisible()), `${label}：Office ホームに月次進捗は出ない`);
   check(calls.length === 0, `${label}：Office ホームを開いても、月末月初業務の API は呼ばれない（${calls.length}回）`);
   await page.close();
@@ -275,7 +277,7 @@ for (const label of ["経営者（owner）", "管理者＋経理（admin）"]) {
   await st.page.close();
 }
 {
-  // ⚙管理は管理者・経営者だけ。経理・責任者には出さない（業務は Office の左メニューから）
+  // ⚙管理は管理者・経営者だけ。経理・責任者には出さない（業務は Office のOffice のタブから）
   for (const label of ["経理（finance）", "責任者（manager）"]) {
     seed();
     const { page } = await open("/home.html", ROLES[label]);

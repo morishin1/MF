@@ -355,52 +355,76 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-side-item.ext{ border-top:1px dashed var(--border); }
 
 /* =============================================================================
-   管理者メニュー: 畳めるグループ
-   24項目を一列に並べると、毎日押すものと年に一度のものが同じ重さで並ぶ。
-   5つに束ね、いま見ている画面のグループだけを開く。
+   Office のヘッダーとタブ。採用HR（js/hr-layout.js の .hr-bar / .hr-nav）・Sales（js/sales-layout.js の
+   .sl-bar / .sl-nav / .sl-tabs-pill / .sl-add）と同じ値をそのまま使う（ここで新しい値を作らない。
+   test/officedesign.mjs が HR・Sales の値と照らし合わせる）。
+     ヘッダー：白・高さ56px・左右20px・下線 1px #e2e2dc／ロゴは 14px 700 #1b2440、「/ Office」は #6b7080 500
+     カテゴリ：.hr-nav a と同じ（13px 500 #4a5068・アイコン19px・下線3px、選択中は #1b2440 700）
+     画面のタブ：.sl-tabs-pill と同じ丸いタブ（選択中は #1b2440 で塗る）。本文と同じ幅（1200px）にそろえる
+   1段目：ホーム／人事・労務／経理・事務／社内管理　2段目：カテゴリの中の画面
    ============================================================================= */
-.kp-side-group{
-  display:flex; align-items:center; gap:10px;
-  width:100%; padding:10px 12px; margin:2px 0 0;
-  border:0; border-radius:8px; background:none;
-  font-family:inherit; font-size:13.5px; font-weight:700;
-  color:var(--primary-dark); text-align:left; cursor:pointer;
-  white-space:nowrap;
+body.kp-has-officenav .topbar{ background:#fff; border-bottom:1px solid #e2e2dc; padding:0 20px; min-height:56px; box-sizing:border-box; gap:22px; z-index:20; }
+body.kp-has-officenav .topbar .brand{ font-weight:700; font-size:14px; color:#1b2440; letter-spacing:.02em; gap:6px; }
+body.kp-has-officenav .topbar .kp-logo{ width:20px; height:20px; }
+body.kp-has-officenav .topbar .kp-app{ color:#6b7080; font-weight:500; font-size:14px; letter-spacing:.02em; margin:0; }
+body.kp-has-officenav .topbar .brand .tag{ background:#efefeb; color:#4a5068; border-radius:999px; font-size:11px; font-weight:700; padding:2px 9px; }
+body.kp-has-officenav .topbar .who{ gap:8px; }
+body.kp-has-officenav .topbar .kp-who-name{ color:#6b7080; font-size:12px; }
+/* 近道・メンバー表示・ログアウト：白に 1px #e2e2dc の丸いボタン（.sl-tabs-pill button と同じ）。いまいる Office は #1b2440 で塗る（.hr-add と同じ色） */
+body.kp-has-officenav .topbar .who .btn{ border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px; min-height:0;
+  font-size:12px; font-weight:500; color:#4a5068; gap:5px; }
+body.kp-has-officenav .topbar .who .btn:hover{ background:#f6f6f2; }
+body.kp-has-officenav .topbar .who .btn .material-symbols-outlined{ font-size:17px; }
+body.kp-has-officenav .topbar .kp-shortcut.on{ background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+body.kp-has-officenav .topbar .icon-btn{ color:#4a5068; border-radius:8px; }
+body.kp-has-officenav .topbar .icon-btn:hover{ background:#f6f6f2; }
+
+.kp-officenav{ position:relative; }
+.kp-otabs{ background:#fff; border-bottom:1px solid #e2e2dc; display:flex; gap:4px; padding:0 20px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.kp-otabs::-webkit-scrollbar, .kp-ostabs::-webkit-scrollbar{ display:none; }
+.kp-otab{ display:flex; align-items:center; gap:6px; padding:0 12px; height:48px; flex:none; box-sizing:border-box;
+  color:#4a5068; text-decoration:none; font-size:13px; font-weight:500; white-space:nowrap;
+  border-bottom:3px solid transparent; }
+.kp-otab::before{ content:attr(data-ic); font-family:'Material Symbols Rounded','Material Symbols Outlined'; font-size:19px; font-weight:normal;
+  line-height:1; display:inline-block; width:1em; overflow:hidden; letter-spacing:normal; text-transform:none; white-space:nowrap;
+  -webkit-font-feature-settings:'liga'; font-feature-settings:'liga'; -webkit-font-smoothing:antialiased; }
+.kp-otab:hover{ color:#1b2440; }
+.kp-otab.on{ color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
+.kp-otab-dot{ width:7px; height:7px; border-radius:50%; background:#b3261e; }
+.kp-otab-dot.hidden{ display:none; }
+/* 2段目は本文の上（背景 #f6f6f2）に、本文と同じ幅・同じ左端で丸いタブを並べる */
+.kp-ostabs{ display:flex; flex-wrap:wrap; gap:6px; max-width:1200px; margin:0 auto; padding:16px 16px 0; box-sizing:border-box; }
+.kp-ostab{ display:inline-flex; align-items:center; gap:6px; border:1px solid #e2e2dc; background:#fff; border-radius:999px;
+  padding:6px 13px; font-size:12px; font-weight:500; color:#4a5068; text-decoration:none; white-space:nowrap; }
+.kp-ostab:hover{ background:#f6f6f2; }
+.kp-ostab.on{ background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+.kp-ostab .kp-side-badge{ margin-left:2px; }
+.kp-ostab.on .kp-side-badge{ background:#b3261e; color:#fff; }
+@media (max-width:860px){
+  .kp-otabs{ padding-left:10px; padding-right:10px; }
+  .kp-otab{ padding:0 10px; height:46px; }
+  .kp-ostabs{ flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding:12px 16px 0; }
+  .kp-ostab{ flex:none; }
+  body.kp-has-officenav .topbar{ padding:10px 14px; gap:8px; }
+  body.kp-has-officenav .topbar .who .btn{ padding:5px 10px; }
 }
-.kp-side-group:hover{ background:var(--soft); }
-/* 見出しだけを伸ばす。アイコンと矢印は幅を持たせない
-   （span をまとめて伸ばすと、アイコンまで引き伸ばされて重なる） */
-.kp-side-group .lb{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-.kp-side-group > .material-symbols-outlined{ flex:0 0 auto; }
-.kp-side-group .ch{
-  font-size:20px; color:#a7b2bd; transition:transform .15s;
+/* スマホ幅では、カテゴリのアイコンを外して4つを1画面に収める（横にはみ出さない）。
+   ヘッダーは採用HR・Sales と同じく低く：名前は出さず、メンバー表示・ログアウトはアイコンだけ（文字は title・読み上げに残す） */
+@media (max-width:480px){
+  .kp-otab::before{ display:none; }
+  body.kp-has-officenav .topbar{ padding:8px 12px; row-gap:6px; }
+  body.kp-has-officenav .topbar .kp-who-name{ display:none; }
+  body.kp-has-officenav .topbar .who{ gap:4px; }
+  body.kp-has-officenav .topbar .who > .btn{ font-size:0; padding:6px 8px; gap:0; }
+  body.kp-has-officenav .topbar .who > .btn .material-symbols-outlined{ font-size:18px; }
+  body.kp-has-officenav .topbar .icon-btn{ padding:6px; }
+  body.kp-has-officenav .topbar .kp-shortcut .material-symbols-outlined{ display:none; }
 }
-.kp-side-group.open .ch{ transform:rotate(180deg); }
-/* いま見ている画面が入っているグループ。畳んでも、どこにいるか分かるように */
-.kp-side-group.here{ color:var(--primary); }
-.kp-side-group.here::before{
-  content:""; width:3px; align-self:stretch; margin:2px 0 2px -6px;
-  border-radius:2px; background:var(--primary);
-}
-.kp-side-sub{ padding:0 0 4px 10px; }
-.kp-side-sub .kp-side-item{ font-size:13px; font-weight:500; padding:8px 12px; }
-.kp-side-sub .kp-side-item.on{ font-weight:600; }
-/* グループの中では、会計を切る破線は要らない（グループ自体が区切りになる） */
-.kp-side-sub .kp-side-item.ext{ border-top:none; }
 
 /* 処理中のボタン */
 .kp-spin{ animation: kp-spin 1s linear infinite; }
 @keyframes kp-spin { to { transform: rotate(360deg); } }
 .btn:disabled{ opacity:.6; cursor:default; }
-
-/* Office の左メニューを開くボタン（狭い画面だけ） */
-.kp-side-toggle{
-  display:none; align-items:center; gap:8px; width:100%; margin:0 0 12px; padding:9px 12px;
-  background:#fff; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13.5px;
-  font-weight:700; color:var(--primary-dark); cursor:pointer; text-align:left;
-}
-.kp-side-toggle small{ font-size:12px; font-weight:500; color:var(--muted); margin-left:auto; }
-.kp-side-backdrop[hidden]{ display:none; }
 
 @media (max-width:860px){
   /* 横スクロールのメニューでは見出しを畳んで、項目だけを並べる */
@@ -409,24 +433,6 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
     white-space:nowrap; font-size:10px; color:#b3bcc6;
   }
 
-  /* 畳めるメニューは、狭い画面でも縦のまま。
-     24項目を横スクロールに並べても、端のほうは誰も見ない。
-     開いているのは1グループだけなので、上に置いても本文をさほど押し下げない */
-  /* Office の左メニューは、狭い画面では左から出るドロワー（本文の上に積まない）。
-     本文の先頭の「メニュー」ボタンで開き、背景・Esc・項目を押すと閉じる */
-  .kp-sidebar.grouped{
-    display:block; overflow-x:visible; overflow-y:auto; padding:12px 10px 16px;
-    position:fixed; top:0; left:0; bottom:0; width:min(300px, 86vw); z-index:70;
-    border-right:1px solid var(--border); border-bottom:none;
-    transform:translateX(-102%); transition:transform .2s ease; box-shadow:none; visibility:hidden;
-  }
-  .kp-sidebar.grouped.drawer-open{ transform:none; visibility:visible; box-shadow:8px 0 24px rgba(27,36,64,.18); }
-  .kp-side-backdrop{ position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:69; }
-  .kp-side-toggle{ display:flex; }
-  .kp-sidebar.grouped .kp-side-item{
-    margin-bottom:0; flex:none; font-size:13px; padding:8px 12px;
-  }
-  .kp-sidebar.grouped .kp-side-item em{ display:inline; }
 }
 
 /* メニュー一覧（メンバーの「メニュー」画面） */
@@ -601,19 +607,6 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 .kp-side-item.on .kp-side-badge { background: #fff; color: var(--primary); }
 .kp-side-badge.hidden { display: none; }
 
-/* 畳んだグループの見出しに付ける印。
-   開かないと気づけないのでは、畳んだ意味が無くなる */
-.kp-side-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #c53030;
-  flex: 0 0 auto;
-  margin-left: 4px;
-}
-.kp-side-dot.hidden { display: none; }
-/* 開いているあいだは、中の件数が見えているので印は要らない */
-.kp-side-group.open .kp-side-dot { display: none; }
 
 /* ===========================================================================
    大きく見る（KPLayout.viewer）
@@ -737,3 +730,38 @@ body:not(.kp-has-sidebar):not(.kp-has-tabbar) .wrap { padding-bottom: 88px; }
 
   @page { size: A4; margin: 18mm 16mm; }
 }
+
+/* =============================================================================
+   Office の本文（/office/ と、Office のタブから開く admin-*.html）。
+   採用HR（hr/index.html・js/hr-layout.js）・Sales（sales/index.html・js/sales-layout.js）で実際に使っている値をそのまま使う。
+   ここで新しい値は作らない（test/officedesign.mjs が HR・Sales の値と照らし合わせる）。
+     背景 #f6f6f2／本文は幅1200px・余白 24px 16px 60px（.hr-wrap・.sl-wrap）
+     見出し 24px 700 #1b2440（h1.hr-title・h1.sl-title）／説明 13px #6b7080・下20px（.sl-sub）／区切り 15px 700（.hr-sec-h）
+     表は .sl-table（白・1px #e2e2dc・角丸10px／見出し 11px 700 #6b7080 背景 #f6f6f2）
+     画面の中の切り替えは .sl-tabs-pill（白に 1px #e2e2dc の丸いタブ、選択中は #1b2440 で塗る）
+     ボタン・カード（.btn・.card）は css/app.css のまま（採用HR・Sales も上書きせずに使っている）
+   Office の横タブ（kp-has-officenav）の画面だけに効かせる。メンバーのホーム・⚙管理・経営の画面は変えない
+   ============================================================================= */
+body.kp-has-officenav{ background:#f6f6f2; }
+body.kp-has-officenav .wrap{ max-width:1200px; margin-left:auto; margin-right:auto; padding:24px 16px 60px; }
+body.kp-has-officenav .kp-greet{ font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
+body.kp-has-officenav .kp-greet-sub{ color:#6b7080; font-size:13px; margin:0 0 20px; }
+body.kp-has-officenav .wrap .card h2{ font-size:15px; font-weight:700; color:#1b2440; }
+body.kp-has-officenav .wrap .tabs{ gap:6px; }
+body.kp-has-officenav .wrap .tab{ border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px;
+  font-size:12px; font-weight:500; color:#4a5068; }
+body.kp-has-officenav .wrap .tab.active{ background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+body.kp-has-officenav .wrap .kp-subtab{ border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px;
+  font-size:12px; font-weight:500; color:#4a5068; }
+body.kp-has-officenav .wrap .kp-subtab.on{ background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+body.kp-has-officenav .wrap table thead th, body.kp-has-officenav .kp-items th{ font-size:11px; color:#6b7080; font-weight:700; background:#f6f6f2;
+  text-transform:none; letter-spacing:0; border-bottom-color:#e2e2dc; }
+body.kp-has-officenav .wrap table td{ border-bottom-color:#e2e2dc; }
+body.kp-has-officenav .wrap .empty{ color:#9aa0b4; font-size:12.5px; }
+/* 見出しの右の主ボタン（メンバー追加 など）は、採用HR・Sales のヘッダーの主ボタン（.hr-add・.sl-add）と同じ */
+body.kp-has-officenav .kp-add{ display:inline-flex; align-items:center; gap:6px; background:#1b2440; color:#fff; border:none;
+  border-radius:7px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap; text-decoration:none; }
+body.kp-has-officenav .kp-add .material-symbols-outlined{ font-size:18px; }
+body.kp-has-officenav .kp-add.hidden{ display:none; }
+/* リンクで作ったボタン（a.btn）は下線を引かない（採用HR・Sales の button.btn と同じ見た目にする） */
+body.kp-has-officenav a.btn{ text-decoration:none; }
