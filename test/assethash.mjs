@@ -14,6 +14,7 @@
 //   版を上げ忘れている。版を上げたら、記録を作り直す。
 //
 //     node test/assethash.mjs --update     … 版を上げたあとに、記録を作り直す
+//       （同じ版の記録があり、中身が違うときは書き換えない。版を上げずに黙らせるのを防ぐ）
 //
 //   見るのは、その版で読んでいるファイル（HTML の ?v= が、いまの版のもの）だけ。
 //   /sales のように、別の版で読んでいるものは、ここでは見ない（test/salesassets.mjs が見る）。
@@ -60,7 +61,17 @@ function current() {
 }
 
 if (process.argv.includes("--update")) {
-  writeFileSync(MANIFEST, JSON.stringify({ version: VER, files: current() }, null, 2) + "\n");
+  // 同じ版のまま記録を書き換えると、この見張りが黙ってしまう（PR #75 で実際に起きた：
+  // layout.js を変えたのに ?v=20261003ux1 のまま --update し、Preview で古い layout.js が残って /office/ が止まった）。
+  // 記録を作り直してよいのは、版を上げたときだけ。同じ版で書き換えたいときは、版を上げる
+  const prev = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, "utf8")) : null;
+  const next = current();
+  if (prev && prev.version === VER && JSON.stringify(prev.files) !== JSON.stringify(next) && !process.argv.includes("--force")) {
+    const changed = Object.keys(next).filter((f) => prev.files[f] !== next[f]);
+    console.log(`版 ${VER} の記録は、もうあります。中身を変えたなら、版を上げてから --update してください（変えたファイル: ${changed.join(", ")}）`);
+    process.exit(1);
+  }
+  writeFileSync(MANIFEST, JSON.stringify({ version: VER, files: next }, null, 2) + "\n");
   console.log(`記録を作り直しました（版 ${VER}）`);
   process.exit(0);
 }
