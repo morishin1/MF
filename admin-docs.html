@@ -15,146 +15,311 @@
   <link rel="stylesheet" href="css/layout.css?v=20261004office3">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
-  <script>
-    // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
-    // これが無いと、本文が中央→左寄せへずれてから枠が出る。
-    try {
-      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
-      var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
-      if (kpc && kpc.appRole) {
-        document.documentElement.classList.add("kp-has-sidebar");
-      }
-    } catch (e) { /* 読めなくても動く */ }
-  </script>
+  <style>
+    /* 社内文書・雛形：本文を「文書一覧｜雛形｜差し込み作成」の3つのタブに分ける（縦に4枚並べない）。
+       値は Office（#75）＝採用HR・Sales と同じ（背景 #f6f6f2・白・枠 #e2e2dc・文字 #1b2440／#4a5068／#6b7080／#9aa0b4）。
+       表は Sales の .sl-table、ドロワーは .sl-drawer、主ボタンは .kp-add（.hr-add と同じ）。ここで新しい色は作らない */
+    .dc-tabs { display:flex; gap:4px; border-bottom:1px solid #e2e2dc; margin:0 0 16px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+    .dc-tabs::-webkit-scrollbar { display:none; }
+    .dc-tab { display:inline-flex; align-items:center; gap:6px; flex:none; border:0; background:none; cursor:pointer; font-family:inherit;
+      padding:0 12px; height:42px; font-size:13px; font-weight:500; color:#4a5068; border-bottom:3px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+    .dc-tab .material-symbols-outlined { font-size:18px; }
+    .dc-tab:hover { color:#1b2440; }
+    .dc-tab[aria-selected="true"] { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
+    .dc-tab .n { font-size:11.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:999px; padding:0 7px; }
+
+    .dc-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; flex-wrap:wrap; }
+    .dc-bar .t { font-size:15px; font-weight:700; color:#1b2440; }
+    .dc-bar .t small { font-size:12px; font-weight:400; color:#6b7080; margin-left:6px; }
+    .dc-msg { font-size:12.5px; color:#b3261e; margin:0 0 8px; }
+    .dc-msg:empty { display:none; }
+    .dc-msg.ok { color:#2f6f3a; }
+
+    /* 一覧（Sales の .sl-table と同じ） */
+    .dc-table { width:100%; border-collapse:separate; border-spacing:0; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
+    .dc-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px 12px; background:#f6f6f2; border-bottom:1px solid #e2e2dc; white-space:nowrap; text-transform:none; letter-spacing:0; }
+    .dc-table td { padding:11px 12px; border-bottom:1px solid #e2e2dc; font-size:13px; vertical-align:middle; color:#1b2440; }
+    .dc-table tr:last-child td { border-bottom:none; }
+    .dc-nm { font-weight:700; font-size:14px; display:block; }
+    .dc-sub { font-size:11.5px; color:#6b7080; display:block; margin-top:2px; }
+    .dc-muted { color:#6b7080; font-size:12.5px; white-space:nowrap; }
+    .dc-empty { color:#9aa0b4; font-size:12.5px; text-align:center; padding:22px 12px; }
+    .dc-where { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:#4a5068; max-width:300px; }
+    .dc-where .material-symbols-outlined { font-size:17px; color:#6b7080; flex:none; }
+    .dc-where span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dc-ops { display:flex; gap:6px; justify-content:flex-end; flex-wrap:nowrap; }
+    .dc-ops .btn { white-space:nowrap; }
+    .dc-chip { display:inline-flex; align-items:center; border-radius:999px; padding:2px 9px; font-size:11.5px; font-weight:600; white-space:nowrap; background:#efefeb; color:#4a5068; }
+    .dc-chip.in  { background:#e7eaf3; color:#1b2440; }
+    .dc-chip.out { background:#fbf1d6; color:#7d5a00; }
+
+    /* 公開状態：押すと切り替わる状態ラベル（公開中＝緑、非公開＝灰）。色だけでなく文字とアイコンも */
+    .dc-pub { display:inline-flex; align-items:center; gap:4px; border:1px solid transparent; border-radius:999px; padding:3px 10px 3px 8px;
+      font-family:inherit; font-size:11.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .dc-pub .material-symbols-outlined { font-size:15px; }
+    .dc-pub.on  { background:#e5f1e2; color:#2f6f3a; }
+    .dc-pub.off { background:#efefeb; color:#4a5068; }
+    .dc-pub:hover { border-color:#e2e2dc; }
+    .dc-pub:disabled { opacity:.6; cursor:progress; }
+
+    /* 右のドロワー（Sales の .sl-drawer と同じ値） */
+    .dc-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:60; }
+    .dc-drawer { position:fixed; top:0; right:0; bottom:0; width:480px; max-width:100vw; background:#fff; z-index:61;
+      box-shadow:-8px 0 24px rgba(27,36,64,.15); display:flex; flex-direction:column; }
+    .dc-drawer[hidden], .dc-drawer-bg[hidden] { display:none; }
+    .dc-dr-head { display:flex; align-items:center; gap:8px; padding:16px 18px 12px; border-bottom:1px solid #e2e2dc; }
+    .dc-dr-head h2 { margin:0; font-size:17px; font-weight:700; color:#1b2440; flex:1; }
+    .dc-dr-body { padding:16px 18px; overflow-y:auto; flex:1; display:grid; gap:14px; align-content:start; }
+    .dc-dr-foot { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px 16px; border-top:1px solid #e2e2dc; flex-wrap:wrap; }
+    .dc-field > label, .dc-field > .lb { display:block; font-size:12px; color:#4a5068; font-weight:700; margin:0 0 4px; }
+    .dc-field input, .dc-field select, .dc-field textarea { margin:0; }
+    .dc-field .hint { font-size:11.5px; color:#6b7080; margin:5px 0 0; line-height:1.6; }
+    .dc-row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+    /* 登録のしかた：ファイル／リンクの2択 */
+    .dc-choice { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .dc-choice label { display:flex; gap:8px; align-items:flex-start; border:1px solid #e2e2dc; border-radius:9px; padding:10px 12px; cursor:pointer; background:#fff; margin:0; }
+    .dc-choice input { width:auto; margin:3px 0 0; accent-color:#1b2440; }
+    .dc-choice b { display:block; font-size:13px; color:#1b2440; }
+    .dc-choice small { display:block; font-size:11.5px; color:#6b7080; line-height:1.5; margin-top:1px; }
+    .dc-choice label:has(input:checked) { border-color:#1b2440; box-shadow:inset 0 0 0 1px #1b2440; }
+
+    /* 対象の雇用区分：選択チップ（全区分が初期） */
+    .dc-types { display:flex; flex-wrap:wrap; gap:6px; }
+    .dc-types label { margin:0; cursor:pointer; }
+    .dc-types input { position:absolute; opacity:0; width:1px; height:1px; }
+    .dc-types span { display:inline-flex; align-items:center; border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px; font-size:12px; font-weight:500; color:#4a5068; }
+    .dc-types input:checked + span { background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+    .dc-types input:focus-visible + span { outline:2px solid #3182ce; outline-offset:2px; }
+    .dc-tokens { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+    .dc-tokens button { border:1px solid #e2e2dc; background:#f6f6f2; border-radius:6px; padding:2px 7px; font-size:11.5px; color:#4a5068; cursor:pointer; font-family:inherit; }
+    .dc-tokens button:hover { color:#1b2440; border-color:#c7c7bf; }
+
+    /* 差し込み作成：①雛形 → ②対象者 → ③プレビュー */
+    .dc-steps { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0 0 12px; }
+    .dc-step { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; }
+    .dc-step.off { opacity:.55; }
+    .dc-step h3 { margin:0 0 8px; font-size:13px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:8px; }
+    .dc-step h3 .no { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:#1b2440; color:#fff; font-size:11.5px; font-weight:700; }
+    .dc-step.off h3 .no { background:#c7c7bf; }
+    .dc-step select { margin:0; }
+    .dc-step .meta { font-size:11.5px; color:#6b7080; margin-top:6px; min-height:1.4em; }
+    .dc-preview { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; }
+    .dc-preview[hidden] { display:none; }
+    .dc-preview .dc-bar { margin-bottom:8px; }
+    .dc-preview textarea { margin:0; min-height:220px; font-size:13.5px; line-height:1.8; background:#f6f6f2; }
+    .dc-warn { font-size:12px; color:#7d5a00; background:#fbf1d6; border-radius:8px; padding:7px 10px; margin:0 0 8px; }
+    .dc-warn[hidden] { display:none; }
+    .dc-wait { color:#9aa0b4; font-size:12.5px; text-align:center; padding:26px 12px; background:#fff; border:1px dashed #e2e2dc; border-radius:10px; }
+
+    /* ファイルの受け口（css/app.css の .dz）を Office の色に（枠 #e2e2dc・背景 #f6f6f2・選択中は #1b2440） */
+    .dc-drawer .dz { border-color:#c7c7bf; background:#f6f6f2; color:#6b7080; }
+    .dc-drawer .dz:hover, .dc-drawer .dz:focus-visible, .dc-drawer .dz.is-over { border-color:#1b2440; background:#fff; color:#1b2440; }
+    .dc-drawer .dz .dz-main { color:#1b2440; }
+
+    @media (max-width: 900px) {
+      .dc-steps, .dc-row2, .dc-choice { grid-template-columns:1fr; }
+      /* 狭い画面は、表をやめて1件1枚の短いカードにする（横スクロールを前提にしない）。
+         1行目にタイトル、2行目に種類・公開状態・更新日、保存先、右下に操作 */
+      .dc-table, .dc-table tbody { display:block; width:100%; }
+      .dc-table { border:none; background:none; }
+      .dc-table thead { display:none; }
+      .dc-table tr { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:8px; padding:10px 12px; }
+      .dc-table td { display:block; border:none; padding:0; font-size:12.5px; color:#4a5068; }
+      .dc-table td.dc-main { order:-1; width:100%; color:#1b2440; }
+      .dc-table td[data-label="保存先"] { width:100%; }
+      .dc-table td[data-label="操作"] { margin-left:auto; }
+      .dc-table td.dc-empty { width:100%; }
+      .dc-where { max-width:60vw; }
+      .dc-ops { flex-wrap:wrap; }
+      .dc-drawer { width:100vw; }
+    }
+  </style>
 </head>
 <body>
 
 <div class="wrap">
   <h1 class="kp-greet">社内文書・雛形</h1>
-  <p class="kp-greet-sub">
-    <b>社内文書</b>はメンバーが読むもの（就業規則・マニュアル・様式）、
-    <b>雛形</b>は管理部が差し込んで書き出すものです。
-  </p>
+  <p class="kp-greet-sub">社内文書はメンバーが読むもの（就業規則・マニュアル・様式）、雛形は管理部が差し込んで書き出すものです。</p>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">folder_shared</span>社内文書（メンバーが読むもの）</h2>
+  <div class="dc-tabs" role="tablist" aria-label="社内文書・雛形">
+    <button type="button" class="dc-tab" role="tab" id="tab-docs" data-tab="docs" aria-controls="pane-docs" aria-selected="true">
+      <span class="material-symbols-outlined" aria-hidden="true">folder_shared</span>文書一覧<span class="n" id="n-docs"></span></button>
+    <button type="button" class="dc-tab" role="tab" id="tab-templates" data-tab="templates" aria-controls="pane-templates" aria-selected="false">
+      <span class="material-symbols-outlined" aria-hidden="true">folder_copy</span>雛形<span class="n" id="n-templates"></span></button>
+    <button type="button" class="dc-tab" role="tab" id="tab-merge" data-tab="merge" aria-controls="pane-merge" aria-selected="false">
+      <span class="material-symbols-outlined" aria-hidden="true">auto_fix_high</span>差し込み作成</button>
+  </div>
 
-    <div class="inline-controls" style="margin-bottom:10px;">
-      <div style="min-width:200px;flex:1;"><label>タイトル</label>
-        <input id="d-title" type="text" placeholder="就業規則（2026年4月版）"></div>
-      <div style="max-width:180px;"><label>種類</label>
+  <!-- ===== 文書一覧 ===== -->
+  <section id="pane-docs" role="tabpanel" aria-labelledby="tab-docs">
+    <div class="dc-bar">
+      <div class="t">社内文書<small>メンバーが読むもの。公開中のものだけがメンバーに見えます</small></div>
+      <button type="button" class="kp-add" id="d-add" onclick="openDoc()">
+        <span class="material-symbols-outlined" aria-hidden="true">add</span>文書を登録</button>
+    </div>
+    <div id="d-list-msg" class="dc-msg"></div>
+    <table class="dc-table" aria-label="社内文書の一覧">
+      <thead><tr><th style="width:140px;">種類</th><th>タイトル・説明</th><th>保存先</th><th style="width:96px;">公開状態</th><th style="width:96px;">更新日</th><th style="width:130px;">操作</th></tr></thead>
+      <tbody id="d-rows"><tr><td colspan="6" class="dc-empty">読み込み中…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- ===== 雛形 ===== -->
+  <section id="pane-templates" role="tabpanel" aria-labelledby="tab-templates" hidden>
+    <div class="dc-bar">
+      <div class="t">登録済みの雛形<small>差し込み作成で、対象者の情報を入れて書き出します</small></div>
+      <button type="button" class="kp-add" id="t-add" onclick="openTemplate()">
+        <span class="material-symbols-outlined" aria-hidden="true">add</span>雛形を作成</button>
+    </div>
+    <div id="t-list-msg" class="dc-msg"></div>
+    <table class="dc-table" aria-label="雛形の一覧">
+      <thead><tr><th>名前</th><th style="width:80px;">用途</th><th style="width:140px;">対象の雇用区分</th><th style="width:96px;">更新日</th><th style="width:300px;">操作</th></tr></thead>
+      <tbody id="list"><tr><td colspan="5" class="dc-empty">読み込み中…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- ===== 差し込み作成 ===== -->
+  <section id="pane-merge" role="tabpanel" aria-labelledby="tab-merge" hidden>
+    <div class="dc-steps">
+      <div class="dc-step" id="step-template">
+        <h3><span class="no">1</span>雛形を選ぶ</h3>
+        <select id="m-template" aria-label="雛形" onchange="onPickTemplate()"></select>
+        <div class="meta" id="m-template-meta"></div>
+      </div>
+      <div class="dc-step off" id="step-employee">
+        <h3><span class="no">2</span>対象者を選ぶ</h3>
+        <select id="m-employee" aria-label="対象者" onchange="preview()" disabled></select>
+        <div class="meta" id="m-employee-meta"></div>
+      </div>
+    </div>
+    <div class="dc-wait" id="m-wait">雛形と対象者を選ぶと、ここに ③ プレビューが出ます。</div>
+    <div class="dc-preview" id="m-preview" hidden>
+      <div class="dc-bar">
+        <div class="t"><span class="material-symbols-outlined" aria-hidden="true" style="font-size:18px;vertical-align:-3px;color:#6b7080;">visibility</span> ③ プレビュー<small id="m-title"></small></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" id="m-copy" onclick="copyOut()">
+            <span class="material-symbols-outlined icon-inline">content_copy</span>コピー</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="m-save" onclick="downloadOut()">
+            <span class="material-symbols-outlined icon-inline">download</span>テキスト保存</button>
+        </div>
+      </div>
+      <div class="dc-warn" id="m-missing" hidden></div>
+      <textarea id="m-out" readonly aria-label="差し込み結果"></textarea>
+    </div>
+    <div id="m-msg" class="dc-msg" role="status"></div>
+  </section>
+</div>
+
+<!-- 文書を登録（右のドロワー） -->
+<div class="dc-drawer-bg" id="doc-bg" hidden onclick="closeDoc()"></div>
+<aside class="dc-drawer" id="doc-drawer" role="dialog" aria-modal="true" aria-labelledby="doc-h" hidden>
+  <div class="dc-dr-head">
+    <h2 id="doc-h">文書を登録</h2>
+    <button type="button" class="icon-btn" title="閉じる" aria-label="閉じる" onclick="closeDoc()"><span class="material-symbols-outlined">close</span></button>
+  </div>
+  <div class="dc-dr-body">
+    <div class="dc-field">
+      <span class="lb">登録のしかた</span>
+      <div class="dc-choice" role="radiogroup" aria-label="登録のしかた">
+        <label><input type="radio" name="d-mode" value="file" checked onchange="setDocMode()">
+          <div><b>ファイルを登録</b><small>PDF・Word・Excel など（25MBまで）。まとめて落とすと1件ずつ登録</small></div></label>
+        <label><input type="radio" name="d-mode" value="link" onchange="setDocMode()">
+          <div><b>リンクを登録</b><small>Googleドライブ等で運用中の文書。移す必要はありません</small></div></label>
+      </div>
+    </div>
+    <div class="dc-field" id="d-file-box">
+      <div class="dz" id="d-drop">
+        <div class="dz-main"><span class="material-symbols-outlined icon-inline">attach_file</span>
+          <span id="d-file-label">ファイルを落とす／押して選ぶ</span></div>
+        <div class="dz-sub">複数を落とすと、その場で1件ずつ登録します（題名はファイル名から。あとから直せます）</div>
+      </div>
+    </div>
+    <div class="dc-field" id="d-link-box" hidden>
+      <label for="d-link">リンク</label>
+      <input id="d-link" type="url" placeholder="https://drive.google.com/...">
+    </div>
+    <div class="dc-field">
+      <label for="d-title">タイトル</label>
+      <input id="d-title" type="text" placeholder="就業規則（2026年4月版）">
+    </div>
+    <div class="dc-row2">
+      <div class="dc-field">
+        <label for="d-category">種類</label>
         <select id="d-category">
           <option value="rule">社内規定</option>
           <option value="manual">マニュアル</option>
           <option value="form">様式・テンプレート</option>
           <option value="other">その他</option>
-        </select></div>
-      <div style="min-width:200px;flex:1;"><label>説明（任意）</label>
-        <input id="d-desc" type="text" placeholder="改定日、対象者など"></div>
-    </div>
-    <div class="inline-controls" style="margin-bottom:10px;align-items:center;">
-      <div style="min-width:240px;flex:1;"><label>リンク（Googleドライブ等・任意）</label>
-        <input id="d-link" type="url" placeholder="https://drive.google.com/..."></div>
-      <div style="min-width:200px;flex:1;">
-        <div class="dz sm" id="d-drop">
-          <div class="dz-main">
-            <span class="material-symbols-outlined icon-inline">attach_file</span>
-            <span id="d-file-label">ファイルを落とす／押して選ぶ</span>
-          </div>
-        </div>
+        </select>
       </div>
-      <div>
-        <button class="btn btn-primary" onclick="addLibrary(this)">
-          <span class="material-symbols-outlined icon-inline">add</span>登録
-        </button>
+      <div class="dc-field">
+        <label for="d-desc">説明（任意）</label>
+        <input id="d-desc" type="text" placeholder="改定日、対象者など">
       </div>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px;">
-      ファイルを上げるか、リンクを入れるかのどちらかで登録できます。
-      すでにGoogleドライブで運用している文書は、リンクだけ登録すれば移す必要はありません（25MBまで）。
-      <br><b>まとめて落とすと、1件ずつそのまま登録します</b>（題名はファイル名から作ります。あとから直せます）。
-      就業規則・賃金規定のように最初にまとめて入れるものは、こちらが早いです。
-    </p>
-    <div id="d-msg" class="err-text"></div>
-
-    <div class="table-scroll">
-      <table class="kp-items">
-        <thead><tr>
-          <th style="width:130px;">種類</th><th>タイトル</th>
-          <th style="width:120px;">公開</th><th style="width:96px;"></th>
-        </tr></thead>
-        <tbody id="d-rows"><tr><td colspan="4" class="muted">読み込み中…</td></tr></tbody>
-      </table>
-    </div>
+    <div id="d-msg" class="dc-msg" role="alert"></div>
   </div>
+  <div class="dc-dr-foot">
+    <button type="button" class="btn btn-secondary" onclick="closeDoc()">閉じる</button>
+    <button type="button" class="btn btn-primary" id="d-save" onclick="addLibrary(this)">
+      <span class="material-symbols-outlined icon-inline">add</span>登録</button>
+  </div>
+</aside>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">note_add</span><span id="form-title">雛形を作る</span></h2>
-
-    <div class="inline-controls" style="margin-bottom:12px;">
-      <div style="min-width:220px;flex:1;"><label>名前</label><input id="f-name" type="text" placeholder="雇用契約書（正社員）"></div>
-      <div>
-        <label>用途</label>
+<!-- 雛形の作成・編集（右のドロワー） -->
+<div class="dc-drawer-bg" id="tpl-bg" hidden onclick="closeTemplate()"></div>
+<aside class="dc-drawer" id="tpl-drawer" role="dialog" aria-modal="true" aria-labelledby="form-title" hidden>
+  <div class="dc-dr-head">
+    <h2 id="form-title">雛形を作成</h2>
+    <button type="button" class="icon-btn" title="閉じる" aria-label="閉じる" onclick="closeTemplate()"><span class="material-symbols-outlined">close</span></button>
+  </div>
+  <div class="dc-dr-body">
+    <div class="dc-row2">
+      <div class="dc-field">
+        <label for="f-name">名前</label>
+        <input id="f-name" type="text" placeholder="雇用契約書（正社員）">
+      </div>
+      <div class="dc-field">
+        <label for="f-kind">用途</label>
         <select id="f-kind">
           <option value="onboarding">入社</option>
           <option value="offboarding">退職</option>
           <option value="general">その他</option>
         </select>
       </div>
-      <div style="min-width:260px;">
-        <label>対象の雇用区分（未選択＝全区分）</label>
-        <select id="f-types" multiple size="4">
-          <option>正社員</option><option>契約社員</option><option>パート</option>
-          <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
-        </select>
+    </div>
+    <div class="dc-field">
+      <span class="lb" id="f-types-lb">対象の雇用区分</span>
+      <div class="dc-types" id="f-types" role="group" aria-labelledby="f-types-lb">
+        <label><input type="checkbox" value="" data-all checked><span>全区分</span></label>
+        <label><input type="checkbox" value="正社員"><span>正社員</span></label>
+        <label><input type="checkbox" value="契約社員"><span>契約社員</span></label>
+        <label><input type="checkbox" value="パート"><span>パート</span></label>
+        <label><input type="checkbox" value="アルバイト"><span>アルバイト</span></label>
+        <label><input type="checkbox" value="業務委託"><span>業務委託</span></label>
+        <label><input type="checkbox" value="役員"><span>役員</span></label>
+        <label><input type="checkbox" value="その他"><span>その他</span></label>
+      </div>
+      <p class="hint">区分を選ぶと、差し込み作成でその区分の人を先に並べます。</p>
+    </div>
+    <div class="dc-field">
+      <label for="f-body">本文</label>
+      <textarea id="f-body" rows="12" placeholder="{{氏名}} 様&#10;&#10;このたびは……"></textarea>
+      <div class="dc-tokens" aria-label="差し込みできる項目（押すと本文に入ります）">
+        <button type="button">{{氏名}}</button><button type="button">{{部署}}</button><button type="button">{{役職}}</button>
+        <button type="button">{{雇用区分}}</button><button type="button">{{入社日}}</button><button type="button">{{メール}}</button>
+        <button type="button">{{会社名}}</button><button type="button">{{今日}}</button>
       </div>
     </div>
-
-    <div style="margin-bottom:12px;">
-      <label>本文</label>
-      <textarea id="f-body" rows="10" placeholder="{{氏名}} 様&#10;&#10;このたびは……"></textarea>
-      <p class="muted" style="font-size:12px;margin:8px 0 0;">
-        差し込みできる項目：
-        <code>{{氏名}}</code> <code>{{部署}}</code> <code>{{役職}}</code>
-        <code>{{雇用区分}}</code> <code>{{入社日}}</code> <code>{{メール}}</code>
-        <code>{{会社名}}</code> <code>{{今日}}</code>
-      </p>
-    </div>
-
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="btn-save" class="btn btn-primary" onclick="save(this)">
-        <span class="material-symbols-outlined icon-inline">save</span>保存
-      </button>
-      <button id="btn-cancel" class="btn btn-secondary hidden" onclick="resetForm()">編集をやめる</button>
-    </div>
-    <div id="form-msg" class="err-text"></div>
+    <div id="form-msg" class="dc-msg" role="alert"></div>
   </div>
-
-  <div class="card">
-    <h2><span class="material-symbols-outlined">folder_copy</span>登録済みの雛形</h2>
-    <div id="list"><div class="empty">読み込み中…</div></div>
+  <div class="dc-dr-foot">
+    <button type="button" class="btn btn-secondary" id="btn-cancel" onclick="closeTemplate()">閉じる</button>
+    <button type="button" class="btn btn-primary" id="btn-save" onclick="save(this)">
+      <span class="material-symbols-outlined icon-inline">save</span>保存</button>
   </div>
-
-  <div class="card">
-    <h2><span class="material-symbols-outlined">auto_fix_high</span>差し込んで書き出す</h2>
-    <div class="inline-controls" style="margin-bottom:12px;">
-      <div style="min-width:220px;flex:1;"><label>雛形</label><select id="m-template" onchange="preview()"></select></div>
-      <div style="min-width:200px;"><label>対象者</label><select id="m-employee" onchange="preview()"></select></div>
-      <div>
-        <button class="btn btn-secondary" onclick="copyOut()">
-          <span class="material-symbols-outlined icon-inline">content_copy</span>コピー
-        </button>
-      </div>
-      <div>
-        <button class="btn btn-secondary" onclick="downloadOut()">
-          <span class="material-symbols-outlined icon-inline">download</span>テキスト保存
-        </button>
-      </div>
-    </div>
-    <textarea id="m-out" rows="12" readonly placeholder="雛形と対象者を選ぶと、ここに差し込み結果が出ます。"></textarea>
-    <div id="m-msg" class="err-text"></div>
-  </div>
-</div>
+</aside>
 
 <script src="js/api-client.js?v=20261004office3"></script>
 <script src="js/device.js?v=20261004office3"></script>
@@ -165,22 +330,148 @@
   const esc = KPLayout.esc;
 
   const KIND_LABEL = { onboarding: "入社", offboarding: "退職", general: "その他" };
+  const LIB_LABEL = { rule: "社内規定", manual: "マニュアル", form: "様式・テンプレート", other: "その他" };
+  const day = (iso) => (iso ? new Date(iso).toLocaleDateString("ja-JP") : "");
 
   let templates = [];
   let employees = [];
+  let library = [];
   let companyName = "";
   let editingId = null;
+  let pendingFile = null;   // 登録待ちのファイル（1つ選んだとき）
 
   // 表示速度：社内文書の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
   const LIB_KEY = "office:library";
   KPLayout.warm("officeFinance", LIB_KEY, () => API.listLibrary());
 
   KPLayout.init({ active: "templates", access: "officeFinance" })
-    .then((ctx) => { if (!ctx) return; load(); wireDrop(); });
+    .then((ctx) => { if (!ctx) return; wireTabs(); wireDrop(); wireTypes(); wireTokens(); load(); });
+
+  /* ===== タブ（文書一覧｜雛形｜差し込み作成）。?tab= で開ける・戻れる ===== */
+  const TABS = ["docs", "templates", "merge"];
+  function showTab(name, { push = true } = {}) {
+    if (!TABS.includes(name)) name = "docs";
+    for (const t of TABS) {
+      el(`tab-${t}`).setAttribute("aria-selected", String(t === name));
+      el(`tab-${t}`).tabIndex = t === name ? 0 : -1;
+      el(`pane-${t}`).hidden = t !== name;
+    }
+    if (push) {
+      const q = new URLSearchParams(location.search);
+      if (name === "docs") q.delete("tab"); else q.set("tab", name);
+      history.replaceState(null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}`);
+    }
+  }
+  function wireTabs() {
+    const bar = document.querySelector(".dc-tabs");
+    bar.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab); });
+    bar.addEventListener("keydown", (e) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      const cur = TABS.findIndex((t) => el(`tab-${t}`).getAttribute("aria-selected") === "true");
+      const next = TABS[(cur + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
+      showTab(next); el(`tab-${next}`).focus();
+    });
+    showTab(new URLSearchParams(location.search).get("tab") || "docs", { push: false });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (!el("doc-drawer").hidden) closeDoc();
+      if (!el("tpl-drawer").hidden) closeTemplate();
+    });
+  }
+
+  async function load() {
+    // 会社名は差し込みの {{会社名}} に使う。一覧の表示はこれを待たない（同時に取りにいく。届いたらプレビューを描き直す）
+    const company = API.settings().then((s) => { companyName = s.tenant?.name || ""; preview(); }).catch(() => {});
+    await Promise.all([company, loadTemplates(), loadEmployees(), loadLibrary()]);
+  }
+
+  /* ===== 社内文書 ===== */
+  async function loadLibrary() {
+    try {
+      await API.swr(LIB_KEY, () => API.listLibrary(), (res) => {
+        library = res.documents || [];
+        renderLibrary();
+      });
+    } catch (e) {
+      el("d-rows").innerHTML = `<tr><td colspan="6" class="dc-empty">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
+    }
+  }
+
+  function whereOf(d) {
+    if (d.link_url) {
+      let host = "";
+      try { host = new URL(d.link_url).hostname.replace(/^www\./, ""); } catch { host = "リンク"; }
+      return `<span class="dc-where" title="${esc(d.link_url)}"><span class="material-symbols-outlined" aria-hidden="true">link</span><span>リンク・${esc(host)}</span></span>`;
+    }
+    const kb = d.size_bytes ? (d.size_bytes >= 1048576 ? `${(d.size_bytes / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(d.size_bytes / 1024))}KB`) : "";
+    return `<span class="dc-where" title="${esc(d.file_name || "")}"><span class="material-symbols-outlined" aria-hidden="true">description</span><span>ファイル・${esc(d.file_name || "")}${kb ? `（${kb}）` : ""}</span></span>`;
+  }
+  function pubBtn(d) {
+    return d.published
+      ? `<button type="button" class="dc-pub on" data-pub="${esc(d.id)}" aria-pressed="true" title="押すと非公開にします（メンバーに見えなくなります）"><span class="material-symbols-outlined" aria-hidden="true">visibility</span>公開中</button>`
+      : `<button type="button" class="dc-pub off" data-pub="${esc(d.id)}" aria-pressed="false" title="押すと公開します（メンバーに見えます）"><span class="material-symbols-outlined" aria-hidden="true">visibility_off</span>非公開</button>`;
+  }
+  function renderLibrary() {
+    el("n-docs").textContent = library.length ? String(library.length) : "";
+    if (!library.length) {
+      el("d-rows").innerHTML = `<tr><td colspan="6" class="dc-empty">まだ登録がありません。右上の「文書を登録」から追加してください。</td></tr>`;
+      return;
+    }
+    el("d-rows").innerHTML = library.map((d) => `
+      <tr data-id="${esc(d.id)}">
+        <td data-label="種類">${esc(LIB_LABEL[d.category] || d.category)}</td>
+        <td class="dc-main"><span class="dc-nm">${esc(d.title)}</span>${d.description ? `<span class="dc-sub">${esc(d.description)}</span>` : ""}</td>
+        <td data-label="保存先">${whereOf(d)}</td>
+        <td data-label="公開状態">${pubBtn(d)}</td>
+        <td data-label="更新日"><span class="dc-muted">${esc(day(d.updated_at || d.created_at))}</span></td>
+        <td data-label="操作"><div class="dc-ops">
+          <a class="btn btn-secondary btn-sm" title="メンバーに見えるとおりに開く" target="_blank" rel="noopener"
+             href="${d.link_url ? esc(d.link_url) : `doc.html?id=${encodeURIComponent(d.id)}`}">
+            <span class="material-symbols-outlined icon-inline">open_in_new</span>開く</a>
+          <button type="button" class="btn btn-secondary btn-sm" data-del="${esc(d.id)}" title="削除" aria-label="${esc(d.title)} を削除">
+            <span class="material-symbols-outlined icon-inline" style="margin:0;">delete</span></button>
+        </div></td>
+      </tr>`).join("");
+  }
+  el("d-rows").addEventListener("click", (e) => {
+    const p = e.target.closest("[data-pub]");
+    if (p) return togglePublished(p.dataset.pub, p);
+    const d = e.target.closest("[data-del]");
+    if (d) return removeLibrary(d.dataset.del);
+  });
+
+  // 登録のドロワー。ふだんは閉じておく（一覧が主役）
+  const docMode = () => document.querySelector('input[name="d-mode"]:checked').value;
+  function setDocMode() {
+    const file = docMode() === "file";
+    el("d-file-box").hidden = !file;
+    el("d-link-box").hidden = file;
+    el("d-msg").textContent = "";
+  }
+  function openDoc() {
+    el("doc-bg").hidden = false; el("doc-drawer").hidden = false;
+    setDocMode();
+    setTimeout(() => (docMode() === "file" ? el("d-title") : el("d-link")).focus(), 0);
+  }
+  function closeDoc() {
+    el("doc-bg").hidden = true; el("doc-drawer").hidden = true;
+    el("d-msg").textContent = "";
+    el("d-add").focus();
+  }
+  function setMode(v) {
+    document.querySelector(`input[name="d-mode"][value="${v}"]`).checked = true;
+    setDocMode();
+  }
+  function resetDocForm() {
+    for (const id of ["d-title", "d-desc", "d-link"]) el(id).value = "";
+    setMode("file");
+    pendingFile = null;
+    el("d-file-label").textContent = "ファイルを落とす／押して選ぶ";
+  }
 
   // ファイルの受け口。落としても押しても同じ（js/dropzone.js）
   //
-  // 1つなら、いつも通り下のフォームに付ける（題名を付けてから登録する）。
+  // 1つなら、いつも通りフォームに付ける（題名を付けてから登録する）。
   // まとめて落としたときは、その場で1件ずつ登録する。
   // 就業規則・賃金規定のように、最初にまとめて入れるものが必ずあるので、
   // 4回同じ操作をさせない。題名はファイル名から作る（あとから直せる）
@@ -199,7 +490,9 @@
     .trim() || String(name || "無題");
 
   async function addManyLibrary(files) {
+    setMode("file");
     const msg = el("d-msg");
+    msg.classList.remove("ok");
     const category = el("d-category").value;
     const fail = [];
     for (let n = 0; n < files.length; n++) {
@@ -219,105 +512,67 @@
         fail.push(`${files[n].name}：${e.hint || e.detail || e.message}`);
       }
     }
-    msg.textContent = fail.length ? `登録できなかったもの　${fail.join("　")}` : "";
     await loadLibrary();
-  }
-
-  async function load() {
-    // 会社名は差し込みの {{会社名}} に使う。一覧の表示はこれを待たない（同時に取りにいく。届いたら下書きの見本を描き直す）
-    const company = API.settings().then((s) => { companyName = s.tenant?.name || ""; preview(); }).catch(() => {});
-    await Promise.all([company, loadTemplates(), loadEmployees(), loadLibrary()]);
-  }
-
-  /* ===== 社内文書 ===== */
-  const LIB_LABEL = { rule: "社内規定", manual: "マニュアル", form: "様式・テンプレート", other: "その他" };
-  let library = [];
-  let pendingFile = null;   // 登録待ちのファイル
-
-  async function loadLibrary() {
-    try {
-      await API.swr(LIB_KEY, () => API.listLibrary(), (res) => {
-        library = res.documents || [];
-        renderLibrary();
-      });
-    } catch (e) {
-      el("d-rows").innerHTML =
-        `<tr><td colspan="4" class="muted">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
-    }
-  }
-
-  function renderLibrary() {
-    if (!library.length) {
-      el("d-rows").innerHTML = `<tr><td colspan="4" class="muted">まだ登録がありません。</td></tr>`;
-      return;
-    }
-    el("d-rows").innerHTML = library.map((d) => `
-      <tr>
-        <td>${esc(LIB_LABEL[d.category] || d.category)}</td>
-        <td><b>${esc(d.title)}</b>${d.description ? `<small class="muted">　${esc(d.description)}</small>` : ""}
-          ${d.link_url ? '<span class="kp-chip">リンク</span>' : ""}</td>
-        <td>
-          <select onchange="setPublished(\'${esc(d.id)}\', this)">
-            <option value="on"${d.published ? " selected" : ""}>公開</option>
-            <option value="off"${d.published ? "" : " selected"}>非公開</option>
-          </select>
-        </td>
-        <td style="white-space:nowrap;">
-          <a class="icon-btn" title="メンバーに見えるとおりに開く" target="_blank" rel="noopener"
-             href="${d.link_url ? esc(d.link_url) : `doc.html?id=${encodeURIComponent(d.id)}`}">
-            <span class="material-symbols-outlined">open_in_new</span></a>
-          <button class="icon-btn" title="削除" onclick="removeLibrary(\'${esc(d.id)}\')">
-          <span class="material-symbols-outlined">delete</span></button></td>
-      </tr>`).join("");
+    if (fail.length) { msg.textContent = `登録できなかったもの　${fail.join("　")}`; return; }
+    msg.textContent = "";
+    resetDocForm();
+    closeDoc();
+    flash("d-list-msg", `${files.length} 件を登録しました`);
   }
 
   async function pickLibraryFile(file) {
     if (!file) return;
+    setMode("file");   // ファイルを選んだ（落とした）なら、ファイルで登録する
     const label = el("d-file-label");
     label.textContent = "アップロード中…";
     try {
       pendingFile = await API.uploadLibraryFile(file);
-      label.textContent = pendingFile.name.slice(0, 24);
+      label.textContent = pendingFile.name.slice(0, 40);
+      if (!el("d-title").value.trim()) el("d-title").value = titleOf(pendingFile.name);
     } catch (e) {
       label.textContent = "ファイルを落とす／押して選ぶ";
-      alert(e.hint || e.detail || e.message || "アップロードできませんでした");
+      el("d-msg").textContent = e.hint || e.detail || e.message || "アップロードできませんでした";
     }
   }
 
   async function addLibrary(btn) {
     const msg = el("d-msg");
     msg.textContent = "";
+    msg.classList.remove("ok");
+    const file = docMode() === "file";
     const title = el("d-title").value.trim();
     const link = el("d-link").value.trim();
+    if (file && !pendingFile) { msg.textContent = "ファイルを選んでください"; return; }
+    if (!file && !/^https?:\/\//i.test(link)) { msg.textContent = "リンク（https://…）を入れてください"; return; }
     if (!title) { msg.textContent = "タイトルを入力してください"; return; }
-    if (!pendingFile && !link) { msg.textContent = "ファイルを選ぶか、リンクを入れてください"; return; }
 
     try {
       await KPLayout.busy(btn, "登録中…", () => API.createLibraryDoc({
         title,
         category: el("d-category").value,
         description: el("d-desc").value.trim() || null,
-        linkUrl: link || null,
-        filePath: pendingFile?.path || null,
-        fileName: pendingFile?.name || null,
-        mimeType: pendingFile?.mimeType || null,
-        sizeBytes: pendingFile?.sizeBytes || null,
+        linkUrl: file ? null : link,
+        filePath: file ? pendingFile.path : null,
+        fileName: file ? pendingFile.name : null,
+        mimeType: file ? pendingFile.mimeType : null,
+        sizeBytes: file ? pendingFile.sizeBytes : null,
         sortOrder: library.length + 1,
       }));
-      for (const id of ["d-title", "d-desc", "d-link"]) el(id).value = "";
-      pendingFile = null;
-      el("d-file-label").textContent = "ファイルを落とす／押して選ぶ";
+      resetDocForm();
+      closeDoc();
       await loadLibrary();
+      flash("d-list-msg", `「${title}」を登録しました`);
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "登録できませんでした";
     }
   }
 
-  async function setPublished(id, sel) {
-    sel.disabled = true;
-    try { await API.updateLibraryDoc({ id, published: sel.value === "on" }); await loadLibrary(); }
+  async function togglePublished(id, btn) {
+    const d = library.find((x) => x.id === id);
+    if (!d) return;
+    btn.disabled = true;
+    try { await API.updateLibraryDoc({ id, published: !d.published }); await loadLibrary(); }
     catch (e) { alert(e.detail || e.message || "変更できませんでした"); await loadLibrary(); }
-    finally { sel.disabled = false; }
   }
 
   async function removeLibrary(id) {
@@ -327,82 +582,110 @@
     catch (e) { alert(e.detail || e.message || "削除できませんでした"); }
   }
 
-  async function loadEmployees() {
-    try {
-      const res = await API.listEmployees();
-      employees = res.employees || [];
-      el("m-employee").innerHTML = employees.length
-        ? employees.map((e) => `<option value="${esc(e.id)}">${esc(e.display_name)}</option>`).join("")
-        : `<option value="">（名簿に誰もいません）</option>`;
-      preview();
-    } catch (e) {
-      el("m-msg").textContent = e.detail || e.message;
-    }
+  function flash(id, text) {
+    const m = el(id);
+    m.textContent = text; m.classList.add("ok");
+    setTimeout(() => { if (m.textContent === text) { m.textContent = ""; m.classList.remove("ok"); } }, 3000);
   }
 
+  /* ===== 雛形 ===== */
   async function loadTemplates() {
     try {
       const res = await API.listTemplates();
       templates = res.templates || [];
       render();
     } catch (e) {
-      el("list").innerHTML =
-        `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+      el("list").innerHTML = `<tr><td colspan="5" class="dc-empty">取得に失敗しました：${esc(e.detail || e.message)}</td></tr>`;
     }
   }
 
+  const typesText = (t) => ((t.employment_types || []).length ? t.employment_types.join("・") : "全区分");
   function render() {
-    el("m-template").innerHTML = templates.length
-      ? templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")
-      : `<option value="">（雛形がありません）</option>`;
-
+    el("n-templates").textContent = templates.length ? String(templates.length) : "";
+    renderMergeTemplates();
     if (!templates.length) {
-      el("list").innerHTML = `<div class="empty">まだ雛形はありません。上のフォームから作成してください。</div>`;
+      el("list").innerHTML = `<tr><td colspan="5" class="dc-empty">まだ雛形はありません。右上の「雛形を作成」から作ってください。</td></tr>`;
       return;
     }
     el("list").innerHTML = templates.map((t) => `
-      <div class="kp-notice">
-        <div class="head">
-          <span class="kp-chip ${t.kind === "onboarding" ? "event" : (t.kind === "offboarding" ? "archived" : "")}">
-            ${esc(KIND_LABEL[t.kind] || t.kind)}</span>
-          ${(t.employment_types || []).length
-            ? `<span class="kp-chip">${esc((t.employment_types || []).join("・"))}</span>`
-            : `<span class="kp-chip">全区分</span>`}
-          <span class="meta">${esc(new Date(t.updated_at || t.created_at).toLocaleDateString("ja-JP"))}</span>
-        </div>
-        <div class="title">${esc(t.name)}</div>
-        <div class="body" style="max-height:5.6em;overflow:hidden;">${esc(t.body)}</div>
-        <div class="foot">
-          <button class="btn btn-secondary btn-sm" onclick="startEdit('${esc(t.id)}')">
-            <span class="material-symbols-outlined icon-inline">edit</span>編集
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="remove('${esc(t.id)}')">
-            <span class="material-symbols-outlined icon-inline">delete</span>削除
-          </button>
-        </div>
-      </div>`).join("");
-    preview();
+      <tr data-id="${esc(t.id)}">
+        <td class="dc-main"><span class="dc-nm">${esc(t.name)}</span><span class="dc-sub">${esc(String(t.body || "").replace(/\s+/g, " ").slice(0, 60))}</span></td>
+        <td data-label="用途"><span class="dc-chip ${t.kind === "onboarding" ? "in" : (t.kind === "offboarding" ? "out" : "")}">${esc(KIND_LABEL[t.kind] || t.kind)}</span></td>
+        <td data-label="対象の雇用区分"><span class="dc-muted" style="white-space:normal;">${esc(typesText(t))}</span></td>
+        <td data-label="更新日"><span class="dc-muted">${esc(day(t.updated_at || t.created_at))}</span></td>
+        <td data-label="操作"><div class="dc-ops">
+          <button type="button" class="btn btn-secondary btn-sm" data-edit="${esc(t.id)}">
+            <span class="material-symbols-outlined icon-inline">edit</span>編集</button>
+          <button type="button" class="btn btn-primary btn-sm" data-use="${esc(t.id)}">
+            <span class="material-symbols-outlined icon-inline">auto_fix_high</span>この雛形で作成</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-remove="${esc(t.id)}" title="削除" aria-label="${esc(t.name)} を削除">
+            <span class="material-symbols-outlined icon-inline" style="margin:0;">delete</span></button>
+        </div></td>
+      </tr>`).join("");
+  }
+  el("list").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-edit],[data-use],[data-remove]");
+    if (!b) return;
+    if (b.dataset.edit) startEdit(b.dataset.edit);
+    else if (b.dataset.use) useTemplate(b.dataset.use);
+    else remove(b.dataset.remove);
+  });
+
+  // 対象の雇用区分：「全区分」が初期。区分を1つ選ぶと全区分は外れ、全部外すと全区分に戻る
+  const typeBoxes = () => [...el("f-types").querySelectorAll("input")];
+  function wireTypes() {
+    el("f-types").addEventListener("change", (e) => {
+      const all = el("f-types").querySelector("[data-all]");
+      if (e.target === all) { for (const b of typeBoxes()) b.checked = b === all; return; }
+      if (e.target.checked) all.checked = false;
+      if (!typeBoxes().some((b) => b !== all && b.checked)) all.checked = true;
+    });
+  }
+  function setTypes(list) {
+    const want = list || [];
+    for (const b of typeBoxes()) b.checked = b.hasAttribute("data-all") ? !want.length : want.includes(b.value);
+  }
+  // 差し込み項目を押すと、本文のカーソル位置に入れる
+  function wireTokens() {
+    document.querySelector(".dc-tokens").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      const ta = el("f-body");
+      const s = ta.selectionStart ?? ta.value.length, en = ta.selectionEnd ?? ta.value.length;
+      ta.value = ta.value.slice(0, s) + b.textContent + ta.value.slice(en);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = s + b.textContent.length;
+    });
   }
 
   function collect() {
     return {
       name: el("f-name").value.trim(),
       kind: el("f-kind").value,
-      employmentTypes: [...el("f-types").selectedOptions].map((o) => o.value),
+      // 全区分＝空の配列（これまでどおり。保存の形は変えない）
+      employmentTypes: typeBoxes().filter((b) => !b.hasAttribute("data-all") && b.checked).map((b) => b.value),
       body: el("f-body").value.trim(),
     };
   }
 
   function resetForm() {
     editingId = null;
-    el("form-title").textContent = "雛形を作る";
-    el("btn-cancel").classList.add("hidden");
+    el("form-title").textContent = "雛形を作成";
     el("f-name").value = "";
     el("f-body").value = "";
     el("f-kind").value = "onboarding";
-    for (const o of el("f-types").options) o.selected = false;
+    setTypes([]);
     el("form-msg").textContent = "";
+  }
+  function openTemplate() {
+    resetForm();
+    el("tpl-bg").hidden = false; el("tpl-drawer").hidden = false;
+    setTimeout(() => el("f-name").focus(), 0);
+  }
+  function closeTemplate() {
+    el("tpl-bg").hidden = true; el("tpl-drawer").hidden = true;
+    el("form-msg").textContent = "";
+    el("t-add").focus();
   }
 
   async function save(btn) {
@@ -410,13 +693,16 @@
     msg.textContent = "";
     const payload = collect();
     if (!payload.name || !payload.body) { msg.textContent = "名前と本文を入力してください"; return; }
+    const was = editingId;
     try {
       await KPLayout.busy(btn, "保存中…", async () => {
         if (editingId) await API.updateTemplate({ id: editingId, ...payload });
         else await API.createTemplate(payload);
       });
+      closeTemplate();
       resetForm();
       await loadTemplates();
+      flash("t-list-msg", was ? `「${payload.name}」を保存しました` : `「${payload.name}」を作成しました`);
     } catch (e) {
       msg.textContent = e.detail || e.message || "保存に失敗しました";
     }
@@ -425,14 +711,15 @@
   function startEdit(id) {
     const t = templates.find((x) => x.id === id);
     if (!t) return;
+    resetForm();
     editingId = id;
     el("form-title").textContent = "雛形を編集";
-    el("btn-cancel").classList.remove("hidden");
     el("f-name").value = t.name;
     el("f-body").value = t.body;
     el("f-kind").value = t.kind;
-    for (const o of el("f-types").options) o.selected = (t.employment_types || []).includes(o.value);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setTypes(t.employment_types);
+    el("tpl-bg").hidden = false; el("tpl-drawer").hidden = false;
+    setTimeout(() => el("f-name").focus(), 0);
   }
 
   async function remove(id) {
@@ -442,12 +729,75 @@
     catch (e) { alert(e.detail || e.message || "削除に失敗しました"); }
   }
 
+  function useTemplate(id) {
+    showTab("merge");
+    el("m-template").value = id;
+    onPickTemplate();
+    el("m-employee").focus();
+  }
+
+  /* ===== 差し込み作成：①雛形 → ②対象者 → ③プレビュー ===== */
+  async function loadEmployees() {
+    try {
+      const res = await API.listEmployees();
+      employees = res.employees || [];
+      renderMergeEmployees();
+    } catch (e) {
+      el("m-msg").textContent = e.detail || e.message;
+    }
+  }
+
+  function renderMergeTemplates() {
+    const cur = el("m-template").value;
+    el("m-template").innerHTML = templates.length
+      ? `<option value="">雛形を選んでください</option>` + templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")
+      : `<option value="">（雛形がありません。「雛形」タブで作成してください）</option>`;
+    if (templates.some((t) => t.id === cur)) el("m-template").value = cur;
+    onPickTemplate();
+  }
+
+  // 雛形に対象の雇用区分があれば、その区分の人を先に並べる（ほかの人も選べる）
+  function renderMergeEmployees() {
+    const t = templates.find((x) => x.id === el("m-template").value);
+    const cur = el("m-employee").value;
+    const types = (t && t.employment_types) || [];
+    const opt = (e) => `<option value="${esc(e.id)}">${esc(e.display_name)}${e.employment_type ? `（${esc(e.employment_type)}）` : ""}</option>`;
+    let html = `<option value="">${t ? "対象者を選んでください" : "先に雛形を選んでください"}</option>`;
+    if (!employees.length) html = `<option value="">（名簿に誰もいません）</option>`;
+    else if (types.length) {
+      const hit = employees.filter((e) => types.includes(e.employment_type));
+      const rest = employees.filter((e) => !types.includes(e.employment_type));
+      if (hit.length) html += `<optgroup label="この雛形の対象（${esc(types.join("・"))}）">${hit.map(opt).join("")}</optgroup>`;
+      if (rest.length) html += `<optgroup label="その他のメンバー">${rest.map(opt).join("")}</optgroup>`;
+      el("m-employee-meta").textContent = hit.length
+        ? `${types.join("・")} の ${hit.length} 人を先に並べています`
+        : `${types.join("・")} の人が名簿にいません（ほかの人も選べます）`;
+    } else {
+      html += employees.map(opt).join("");
+      el("m-employee-meta").textContent = t ? "全区分の雛形です" : "";
+    }
+    el("m-employee").innerHTML = html;
+    if (employees.some((e) => e.id === cur)) el("m-employee").value = cur;
+  }
+
+  function onPickTemplate() {
+    const t = templates.find((x) => x.id === el("m-template").value);
+    el("m-template-meta").textContent = t ? `${KIND_LABEL[t.kind] || t.kind}・対象：${typesText(t)}` : "";
+    el("m-employee").disabled = !t;
+    el("step-employee").classList.toggle("off", !t);
+    renderMergeEmployees();
+    preview();
+  }
+
   // {{項目}} を対象者の情報で置き換える。該当が無い項目はそのまま残し、
   // 埋め忘れに気づけるようにする。
   function preview() {
     const t = templates.find((x) => x.id === el("m-template").value);
     const e = employees.find((x) => x.id === el("m-employee").value);
-    if (!t || !e) { el("m-out").value = ""; return; }
+    const ready = Boolean(t && e);
+    el("m-preview").hidden = !ready;
+    el("m-wait").hidden = ready;
+    if (!ready) { el("m-out").value = ""; return; }
 
     const map = {
       "氏名": e.display_name || "",
@@ -459,16 +809,26 @@
       "会社名": companyName,
       "今日": new Date().toLocaleDateString("ja-JP"),
     };
-    el("m-out").value = t.body.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (whole, key) =>
-      Object.prototype.hasOwnProperty.call(map, key) ? map[key] : whole);
+    const empty = new Set();
+    el("m-out").value = t.body.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (whole, key) => {
+      if (!Object.prototype.hasOwnProperty.call(map, key)) { empty.add(whole); return whole; }
+      if (!map[key]) empty.add(`{{${key}}}`);
+      return map[key];
+    });
+    el("m-title").textContent = `${t.name} ／ ${e.display_name}`;
+    el("m-missing").hidden = !empty.size;
+    el("m-missing").textContent = empty.size ? `空のまま・埋まらなかった項目：${[...empty].join(" ")}（名簿や会社設定を確認するか、書き出したあとで直してください）` : "";
+    const ta = el("m-out");
+    ta.rows = Math.min(28, Math.max(8, ta.value.split("\n").length + 1));
   }
 
   async function copyOut() {
     const text = el("m-out").value;
     if (!text) return;
-    try { await navigator.clipboard.writeText(text); el("m-msg").textContent = "コピーしました"; }
-    catch { el("m-out").select(); el("m-msg").textContent = "コピーできませんでした。手動で選択してください"; }
-    setTimeout(() => { el("m-msg").textContent = ""; }, 2500);
+    const m = el("m-msg");
+    try { await navigator.clipboard.writeText(text); m.textContent = "コピーしました"; m.classList.add("ok"); }
+    catch { el("m-out").select(); m.textContent = "コピーできませんでした。手動で選択してください"; m.classList.remove("ok"); }
+    setTimeout(() => { m.textContent = ""; m.classList.remove("ok"); }, 2500);
   }
 
   function downloadOut() {
@@ -480,8 +840,11 @@
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${(t?.name || "書類")}_${(e?.display_name || "")}.txt`;
+    // 画面に置いてから押す。すぐに URL を捨てるとファイル名が付かないブラウザがあるので、少し待ってから捨てる
+    a.style.display = "none";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
 </script>
 
