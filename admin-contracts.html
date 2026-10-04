@@ -124,6 +124,10 @@
   let data = null;
   let detail = null;
 
+  // 表示速度：契約の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const CT_KEY = "office:contracts";
+  KPLayout.warm("officeHr", CT_KEY, () => API.contracts());
+
   KPLayout.init({ active: "contracts", access: "officeHr" })
     .then((ctx) => {
       if (!ctx) return;
@@ -138,17 +142,18 @@
 
   async function load() {
     try {
-      data = await API.contracts();
+      await API.swr(CT_KEY, () => API.contracts(), (d) => {
+        data = d;
+        el("notice").innerHTML = "";
+        renderPickers();
+        renderUpcoming();
+        renderContracts();
+      });
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
-      return;
     }
-    el("notice").innerHTML = "";
-    renderPickers();
-    renderUpcoming();
-    renderContracts();
   }
 
   function renderPickers() {

@@ -255,6 +255,10 @@
   let tabNow = "onboarding";
   let openId = null;
 
+  // 表示速度：入退社の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const HR_KEY = "office:hr";
+  KPLayout.warm("officeHr", HR_KEY, () => API.hrList());
+
   KPLayout.init({ active: "hr_flow", access: "officeHr" }).then((ctx) => {
     if (!ctx) return;
     // 通知から直接この人を開く（api/hr が出すリンク）
@@ -271,8 +275,7 @@
 
   async function load() {
     try {
-      data = await API.hrList();
-      render();
+      await API.swr(HR_KEY, () => API.hrList(), (d) => { data = d; render(); });
       if (openId) await showDetail(openId);
     } catch (e) {
       // 表がまだ無いのは、壊れているのではなく「まだ作っていない」。

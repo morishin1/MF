@@ -151,6 +151,13 @@
   let open = new Set();          // 開いている人。読み直しても開いたまま
   let editing = null;
 
+  // 表示速度：今月の勤怠は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
+  const tcKey = (month) => `office:timecard:${month || ""}`;
+  {
+    const m = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 7);
+    KPLayout.warm("officeHr", tcKey(m), () => API.timecards(m));
+  }
+
   KPLayout.init({ active: "timecard", access: "officeHr" })
     .then((ctx) => { if (ctx) start(); });
 
@@ -168,8 +175,11 @@
 
   async function load() {
     try {
-      data = await API.timecards(el("m-month").value);
-      render();
+      const month = el("m-month").value;
+      await API.swr(tcKey(month), () => API.timecards(month), (d) => {
+        if (el("m-month").value !== month) return;   // 月を素早く切り替えたとき、古い応答で描かない
+        data = d; render();
+      });
     } catch (e) {
       el("people").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>

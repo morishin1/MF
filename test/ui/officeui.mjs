@@ -111,7 +111,7 @@ console.log("\n=== 経理：ダッシュボード ===");
 
   // 専用ヘッダー・「GWへ戻る」は廃止。Office 共通の枠（ヘッダーの Office・左メニューの月次業務）が選ばれている
   check(await page.locator('.topbar [data-shortcut="office"].on').count() === 1, "共通ヘッダー：Office が選ばれている");
-  check((await page.locator(".kp-sidebar .kp-side-item.on").innerText()).includes("月次業務"), "左メニュー：月次業務が選ばれている");
+  check((await page.locator("#kp-office-nav .kp-ostab.on").innerText()).includes("月次業務"), "Office のタブ：月次業務が選ばれている");
   check(await page.locator(".of-logo, .of-back").count() === 0 && !(await page.locator("body").innerText()).includes("GWへ戻る"), "専用ヘッダー・「GWへ戻る」は無い");
   check(requests.office[0] === "2026-09", "月を指定して読む");
 
@@ -373,8 +373,9 @@ console.log("\n=== スマホ幅 ===");
   check(over <= 1, `横にはみ出さない（はみ出し ${over}px）`);
   check(await page.locator(".of-table thead").evaluate((e) => getComputedStyle(e).display) === "none", "表はカードになる（見出し行を隠す）");
   check((await page.locator("#rows tr").first().locator('td[data-label="客先"]').evaluate((e) => getComputedStyle(e, "::before").content)).includes("客先"), "各項目に見出しが付く");
-  const cards = await page.locator("#sum .of-card").evaluateAll((c) => c.map((x) => x.getBoundingClientRect().width));
-  check(cards.every((w) => w > 100), "数字カードは2列で、潰れない");
+  // 件数は、折り返して並ぶチップ。画面の幅からはみ出さず、文字が潰れない
+  const cards = await page.locator("#sum .of-card").evaluateAll((c) => c.map((x) => { const r = x.getBoundingClientRect(); return [r.width, r.right, x.scrollWidth <= x.clientWidth + 1]; }));
+  check(cards.every(([w, right, fit]) => w > 60 && right <= 390 && fit), "件数のチップは、はみ出さず潰れない");
   await page.locator('#rows tr:has-text("田中 太郎")').first().click();
   await page.waitForSelector(".of-drawer");
   const w = await page.locator(".of-drawer").evaluate((e) => Math.round(e.getBoundingClientRect().width));

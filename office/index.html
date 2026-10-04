@@ -21,47 +21,24 @@
     })();
   </script>
   <style>
-    /* Office ホーム：いま、自分（の担当）が処理すべきものだけ。中身は権限で出し分け、画面は全員同じ */
-    .oh-cards { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:0 0 18px; }
-    .oh-card { display:block; background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px;
-               text-decoration:none; color:inherit; transition:box-shadow .15s; }
-    .oh-card:hover { box-shadow:0 3px 12px rgba(27,36,64,.12); }
-    .oh-card .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
-    .oh-card .lb .material-symbols-outlined { font-size:16px; }
-    .oh-card .v { display:block; font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
-    .oh-card .v small { font-size:13px; font-weight:700; color:#6b7080; margin-left:2px; }
-    .oh-card.hot { border-color:#e0a100; background:#fffaf0; }
-    .oh-card.hot .lb::after { content:"対応あり"; margin-left:auto; font-size:10.5px; color:#7d5a00; background:#fdf0b8; border-radius:4px; padding:1px 6px; }
-
-    .oh-two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:14px; }
-    .oh-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; }
-    .oh-panel h2 { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; display:flex; align-items:baseline; gap:4px 10px; flex-wrap:wrap; }
-    .oh-panel h2 small { font-size:12px; font-weight:500; color:#6b7080; }
-    .oh-panel h2 a { margin-left:auto; font-size:12px; font-weight:700; }
-
-    .oh-todo { display:flex; flex-direction:column; }
-    .oh-row { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid #efefeb; text-decoration:none; color:#1b2440; }
-    .oh-row:last-child { border-bottom:none; }
-    .oh-row:hover .oh-label { text-decoration:underline; }
-    .oh-pri { display:inline-flex; align-items:center; gap:3px; flex:none; width:84px; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
-    .oh-pri .material-symbols-outlined { font-size:14px; }
-    .oh-pri.p0 { background:#fdf0b8; color:#6b4e00; }   /* 要確認 */
-    .oh-pri.p1 { background:#fde4e2; color:#b3261e; }   /* 期限超過 */
-    .oh-pri.p2 { background:#ffe9d1; color:#a34a00; }   /* 今日期限 */
-    .oh-pri.p3 { background:#e3e8f6; color:#1b2440; }   /* 今週対応 */
-    .oh-main { flex:1; min-width:0; }
-    .oh-label { font-size:13.5px; font-weight:700; }
-    .oh-hint { font-size:11.5px; color:#6b7080; margin-top:1px; }
-    .oh-area { font-size:10.5px; color:#6b7080; border:1px solid #e2e2dc; border-radius:4px; padding:0 5px; margin-left:6px; font-weight:500; vertical-align:1px; }
-    .oh-n { font-size:18px; font-weight:900; font-variant-numeric:tabular-nums; min-width:30px; text-align:right; }
-    .oh-row .go { color:#9aa0b4; font-size:18px; }
-
-    @media (max-width: 1180px) { .oh-cards { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    /* Office ホーム：いま、自分（の担当）が処理すべきものだけ。中身は権限で出し分け、画面は全員同じ。
+       見た目は共通（js/office-layout.js の .of-tile / .of-list / .of-li / .of-sev）。ここは並べ方だけ */
+    .oh-cards { margin:0 0 20px; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+    .oh-card .val.zero { color:var(--of-faint); }
+    .oh-two { display:grid; grid-template-columns:minmax(0,7fr) minmax(0,5fr); gap:16px; align-items:start; }
+    .oh-sec h2 { font-size:15px; font-weight:700; color:var(--of-ink); margin:0 0 10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .oh-sec h2 small { font-size:12px; font-weight:500; color:var(--of-mute); }
+    .oh-sec h2 a { margin-left:auto; font-size:12.5px; font-weight:600; color:var(--of-blue); text-decoration:none; }
+    .oh-sec h2 a:hover { text-decoration:underline; }
+    .oh-area { font-size:10.5px; color:var(--of-mute); background:#edf0f4; border-radius:4px; padding:0 6px; margin-left:6px; font-weight:500; vertical-align:1px; }
+    .oh-row .go { color:var(--of-faint); font-size:18px; }
+    .oh-row .of-sev { min-width:78px; }
+    .oh-row .oh-end { display:flex; align-items:center; gap:6px; }
     @media (max-width: 900px) { .oh-two { grid-template-columns:1fr; } }
-    @media (max-width: 560px) {
-      .oh-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .oh-card.hot .lb::after { display:none; }          /* 狭い画面では、枠と数字で示す（ラベルの折り返しを避ける） */
-      .oh-pri { width:auto; }
+    /* 狭い画面：重要度を上の行に、件数は右に残す */
+    @media (max-width: 720px) {
+      .of-li.oh-row { grid-template-columns:minmax(0,1fr) auto; }
+      .oh-row .of-sev { grid-column:1 / -1; justify-self:start; min-width:0; }
     }
   </style>
 </head>
@@ -73,17 +50,19 @@
 
   <div id="banner"></div>
 
-  <div class="oh-cards" id="cards" aria-label="対応が要る件数"></div>
+  <div class="of-tiles oh-cards" id="cards" aria-label="対応が要る件数"></div>
 
   <div class="oh-two">
-    <section class="oh-panel" aria-labelledby="todoH">
-      <h2 id="todoH">今日やること <small>要確認 → 期限超過 → 今日期限 → 今週対応 の順</small></h2>
-      <div class="oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
+    <section class="oh-sec" aria-labelledby="todoH">
+      <h2 id="todoH">今日やること <span class="of-count" id="todoN">0</span><small>要確認 → 期限超過 → 今日期限 → 今週対応</small></h2>
+      <div class="of-list oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
     </section>
-    <section class="oh-panel" id="progBox" aria-labelledby="progH" hidden>
+    <section class="oh-sec" id="progBox" aria-labelledby="progH" hidden>
       <h2 id="progH">月次進捗 <small id="progMonth"></small><a href="/office/monthly.html">月次業務を開く</a></h2>
-      <div class="of-prog" id="prog"></div>
-      <p class="of-muted" id="closeNote" style="margin:10px 0 0;"></p>
+      <div class="of-panel">
+        <div class="of-prog" id="prog"></div>
+        <p class="of-muted" id="closeNote" style="margin:10px 0 0;"></p>
+      </div>
     </section>
   </div>
 </div>
@@ -102,6 +81,11 @@
   const OFFICE_KEY = "office:";
   const fetchOffice = () => API.api("/api/office");
   API.warm(OFFICE_KEY, fetchOffice, O.allows);
+  // 人事・労務の数字（入退社）と件数（ヘッダー・タブのバッジと同じ鍵）も、枠を待たずに取りにいき始める。
+  // 鍵は入退社の画面（admin-hr.html）・共通の枠と同じなので、行き来しても取り直さない
+  const HR_KEY = "office:hr";
+  KPLayout.warm("officeHr", HR_KEY, () => API.hrList());
+  API.warm("badges", () => API.badges());
 
   // Office に入れる人の全員（人事・労務／経理・事務／月末月初業務のどれか）が開ける。中身は担当の分だけ
   O.init({ active: "home", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(ctx); });
@@ -118,10 +102,10 @@
 
   // 優先度：要確認 → 期限超過 → 今日期限 → 今週対応。色だけで分けず、文字とアイコンも付ける
   const PRI = [
-    { label: "要確認",   icon: "flag" },
-    { label: "期限超過", icon: "warning" },
-    { label: "今日期限", icon: "today" },
-    { label: "今週対応", icon: "date_range" },
+    { label: "要確認",   icon: "flag",       tone: "mid" },
+    { label: "期限超過", icon: "warning",    tone: "high" },
+    { label: "今日期限", icon: "today",      tone: "high" },
+    { label: "今週対応", icon: "date_range", tone: "info" },
   ];
 
   async function load(ctx) {
@@ -136,9 +120,10 @@
     const closingMonth = prevMonth();
     let officeData = null;
     const [b, hr, cl, of] = await Promise.all([
-      safe(API.badges()),
-      can.hr ? safe(API.hrList()) : none,
-      can.fin && !can.app ? safe(API.closing(closingMonth)) : none,
+      // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
+      safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
+      can.hr ? safe(API.swr(HR_KEY, () => API.hrList(), () => {}, { quiet: true })) : none,
+      can.fin && !can.app ? safe(API.swr(`office:closing:${closingMonth}`, () => API.closing(closingMonth), () => {}, { quiet: true })) : none,
       can.app ? safe(API.swr(OFFICE_KEY, fetchOffice, (d) => { officeData = d; })) : none,
     ]);
     if (of && of.ok) officeData = officeData || of.v;
@@ -170,9 +155,9 @@
       can.app && { icon: "request_quote", label: "請求未完了", v: billOpen, href: "/office/billing.html" },
     ].filter(Boolean);
     el("cards").innerHTML = cards.map((c) => `
-      <a class="oh-card${c.v ? " hot" : ""}" href="${esc(c.href)}"${c.hint ? ` title="${esc(c.hint)}"` : ""}>
-        <span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${c.icon}</span><span class="t">${esc(c.label)}</span></span>
-        <span class="v">${c.v === undefined ? "—" : c.v}${c.of != null && c.v !== undefined ? `<small>/ ${c.of}</small>` : ""}</span>
+      <a class="of-tile oh-card${c.v ? " hot" : ""}" href="${esc(c.href)}"${c.hint ? ` title="${esc(c.hint)}"` : ""}>
+        <span class="lb"><span class="t">${esc(c.label)}</span></span>
+        <span class="val v${c.v ? "" : " zero"}">${c.v === undefined ? "—" : c.v}${c.of != null && c.v !== undefined ? `<small>/ ${c.of}</small>` : ""}</span>
       </a>`).join("");
 
     // ---- 今日やること（担当の分だけ。優先度順） ----
@@ -210,12 +195,12 @@
         + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : ""), closingOpen || 0, "/admin-closing.html");
     }
     todo.sort((a, b2) => a.pri - b2.pri || b2.count - a.count);
+    el("todoN").textContent = String(todo.length);
     el("todo").innerHTML = todo.length ? todo.map((t) => `
-      <a class="oh-row" href="${esc(t.href)}">
-        <span class="oh-pri p${t.pri}"><span class="material-symbols-outlined" aria-hidden="true">${PRI[t.pri].icon}</span><span class="t">${PRI[t.pri].label}</span></span>
-        <span class="oh-main"><span class="oh-label"><span class="t">${esc(t.label)}</span><span class="oh-area">${esc(t.area)}</span></span>${t.hint ? `<div class="oh-hint">${esc(t.hint)}</div>` : ""}</span>
-        <span class="oh-n">${t.count}<small style="font-size:11px;font-weight:700;color:#6b7080;">件</small></span>
-        <span class="material-symbols-outlined go" aria-hidden="true">chevron_right</span>
+      <a class="of-li oh-row" href="${esc(t.href)}">
+        <span class="of-sev ${PRI[t.pri].tone} oh-pri p${t.pri}"><span class="material-symbols-outlined" aria-hidden="true">${PRI[t.pri].icon}</span><span class="t">${PRI[t.pri].label}</span></span>
+        <span class="of-li-t"><b class="oh-label"><span class="t">${esc(t.label)}</span><span class="oh-area">${esc(t.area)}</span></b>${t.hint ? `<span>${esc(t.hint)}</span>` : ""}</span>
+        <span class="oh-end"><span class="of-li-n oh-n">${t.count}<small>件</small></span><span class="material-symbols-outlined go" aria-hidden="true">chevron_right</span></span>
       </a>`).join("")
       : `<div class="of-empty">いま対応が必要なものはありません</div>`;
 

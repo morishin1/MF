@@ -304,6 +304,8 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
   });
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(900);
+  // 凡例は一覧の上の折りたたみ（「社内権限と使える業務ツール」）。開いて読む
+  await page.locator(".mb-legend summary").click();
   const legend = await page.locator("#role-legend").innerText();
   check(legend.includes("採用HR") && legend.includes("経営者・責任者・人事・採用担当"), "凡例：採用HR＝経営者・責任者・人事・採用担当");
   check(legend.includes("Sales") && legend.includes("経営者・責任者・営業担当"), "凡例：Sales＝経営者・責任者・営業担当");

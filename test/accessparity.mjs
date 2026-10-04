@@ -160,8 +160,11 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
     const home = read("office/index.html");
     check(/O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office"\] \}\)/.test(home), "Office ホームは officeHr・officeFinance・office のどれかで入れる");
     // ホームは、担当でない API を呼ばない（403 の行を作らない）
-    check(/can\.hr \? safe\(API\.hrList\(\)\)/.test(home) && /can\.app \? safe\(API\.swr\(OFFICE_KEY/.test(home)
-      && /can\.fin && !can\.app \? safe\(API\.closing\(/.test(home), "Office ホームは、担当の API だけ呼ぶ");
+    check(/can\.hr \? safe\(API\.swr\(HR_KEY, \(\) => API\.hrList\(\)/.test(home) && /can\.app \? safe\(API\.swr\(OFFICE_KEY/.test(home)
+      && /can\.fin && !can\.app \? safe\(API\.swr\(`office:closing:\$\{closingMonth\}`, \(\) => API\.closing\(/.test(home), "Office ホームは、担当の API だけ呼ぶ");
+    // 枠を待たずに取りにいく（warm）のも、同じ担当の人だけ
+    check(/KPLayout\.warm\("officeHr", HR_KEY, \(\) => API\.hrList\(\)\)/.test(home) && /API\.warm\(OFFICE_KEY, fetchOffice, O\.allows\)/.test(home),
+      "Office ホームの先読みも、担当の人だけ（人事・労務＝officeHr、月末月初業務＝access.office）");
     for (const f of ["office/monthly.html", "office/billing.html", "office/timesheet.html", "office/terms.html"]) {
       const src = read(f);
       check(/O\.init\(\{ active: "\w+" \}\)/.test(src) && !/O\.init\(\{[^}]*access/.test(src), `${f} は access.office で入口を守る（access を広げない）`);
