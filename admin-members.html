@@ -9,18 +9,19 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261004office2">
-  <link rel="stylesheet" href="css/layout.css?v=20261004office2">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261004office3">
+  <link rel="stylesheet" href="css/layout.css?v=20261004office3">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     .kp-items tr.click { cursor:pointer; }
-    .kp-items tr.click:hover td { background:var(--soft); }
+    .kp-items tr.click:hover td { background:#f6f6f2; }
 
     /* ページ上部：タイトル＋説明（左）と「メンバー追加」（右） */
     .mb-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px 16px; flex-wrap:wrap; }
-    .mb-head .kp-greet-sub { margin-bottom:14px; }
-    .mb-head .btn .material-symbols-outlined { font-size:18px; }
+    .mb-head .kp-greet-sub { margin-bottom:20px; }
 
     /* 補助機能（まとめて追加・BP企業）：一覧の下に、細い帯で並べる。開いたときだけ中身を出す */
     .mb-aux { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:10px; align-items:start; margin-top:4px; }
@@ -33,14 +34,14 @@
     #list td.mb-ops { min-width:170px; }
     #list td.mb-ops > * { margin:0 4px 4px 0; }
     #list td.mb-kind { min-width:84px; font-size:12.5px; }
-    .mb-count { font-size:11.5px; font-weight:700; color:#6b7080; background:#edf0f4; border-radius:999px; padding:1px 9px; }
+    .mb-count { font-size:11.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:999px; padding:1px 9px; }
 
     /* 追加・編集は右のドロワー（常設の大きなフォームは置かない） */
     .mb-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:60; }
     .mb-drawer { position:fixed; top:0; right:0; bottom:0; width:460px; max-width:100vw; background:#fff; z-index:61;
       box-shadow:-8px 0 24px rgba(27,36,64,.15); display:flex; flex-direction:column; }
     .mb-drawer.hidden, .mb-drawer-bg.hidden { display:none; }
-    .mb-dr-head { display:flex; align-items:center; gap:8px; padding:16px 18px 12px; border-bottom:1px solid var(--border); }
+    .mb-dr-head { display:flex; align-items:center; gap:8px; padding:16px 18px 12px; border-bottom:1px solid #e2e2dc; }
     .mb-dr-head h2 { margin:0; font-size:17px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:8px; flex:1; }
     .mb-dr-head h2 .material-symbols-outlined { font-size:20px; color:#6b7080; }
     .mb-dr-body { padding:14px 18px; overflow-y:auto; flex:1; }
@@ -48,7 +49,7 @@
     .mb-form > div.wide { grid-column:1 / -1; }
     .mb-form label { font-size:12px; color:#4a5068; font-weight:600; }
     .mb-form input, .mb-form select { margin:2px 0 0; width:100%; }
-    .mb-dr-foot { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px 16px; border-top:1px solid var(--border); flex-wrap:wrap; }
+    .mb-dr-foot { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px 16px; border-top:1px solid #e2e2dc; flex-wrap:wrap; }
     @media (max-width: 560px) { .mb-form { grid-template-columns:1fr; } }
   </style>
   <script>
@@ -72,8 +73,8 @@
       <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
     </div>
     <!-- 名簿を編集できる人（canManage）にだけ出す。押すと右のドロワーで追加する -->
-    <button class="btn btn-primary hidden" id="add-btn" onclick="openAdd()">
-      <span class="material-symbols-outlined icon-inline">person_add</span>メンバー追加
+    <button class="kp-add hidden" id="add-btn" onclick="openAdd()">
+      <span class="material-symbols-outlined">person_add</span>メンバー追加
     </button>
   </div>
 
@@ -261,9 +262,9 @@
 </aside>
 
 
-<script src="js/api-client.js?v=20261004office2"></script>
-<script src="js/device.js?v=20261004office2"></script>
-<script src="js/layout.js?v=20261004office2"></script>
+<script src="js/api-client.js?v=20261004office3"></script>
+<script src="js/device.js?v=20261004office3"></script>
+<script src="js/layout.js?v=20261004office3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;

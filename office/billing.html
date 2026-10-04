@@ -8,30 +8,32 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261004office2">
-  <link rel="stylesheet" href="../css/layout.css?v=20261004office2">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261004office3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261004office3">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     /* 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で並べ直した一覧。
        操作（作成・送付・受領・照合・支払）は、月次業務の案件の画面で行う（ここでは処理を増やさない） */
     /* 見た目は共通（.of-chips / .of-chip / .of-table）。状態のラベルは月次業務と同じ色（薄い色＋文字＋アイコン） */
     .bl-sum { margin:0 0 12px; }
     .bl-card .v { margin-left:2px; }
-    .bl-nm { font-weight:700; color:var(--of-ink); display:block; }
+    .bl-nm { font-weight:700; color:var(--of-ink); font-size:14px; display:block; }
     .bl-sub { font-size:11.5px; color:var(--of-mute); display:block; margin-top:2px; }
-    .bl-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:2px 9px 2px 7px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .bl-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 10px 3px 8px; font-size:11.5px; font-weight:700; white-space:nowrap; }
     .bl-st .material-symbols-outlined { font-size:14px; }
-    .bl-st.done { background:#e3f4e7; color:#1f6f3a; }
-    .bl-st.todo { background:#fff4d9; color:#8a5a00; }
-    .bl-st.warn { background:#fdeceb; color:#b3261e; }
-    .bl-st.mid  { background:#e8f0fb; color:#2c5282; }
-    .bl-st.na   { background:#edf0f4; color:#5b6474; }
+    .bl-st.done { background:#e5f1e2; color:#2f6f3a; }
+    .bl-st.todo { background:#fbf1d6; color:#7d5a00; }
+    .bl-st.warn { background:#fdecea; color:#b3261e; }
+    .bl-st.mid  { background:#e7eaf3; color:#1b2440; }
+    .bl-st.na   { background:#efefeb; color:#4a5068; }
     @media (max-width: 860px) {
       .wrap .of-table, .wrap .of-table tbody, .wrap .of-table tr, .wrap .of-table td { display:block; width:100%; box-sizing:border-box; }
       .wrap .of-table { border:none; background:none; }
       .wrap .of-table thead { display:none; }
-      .wrap .of-table tr { background:#fff; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:10px; padding:6px 12px; }
+      .wrap .of-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:6px 12px; }
       .wrap .of-table td { display:flex; justify-content:space-between; gap:10px; border:none; padding:5px 0; }
       .wrap .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; }
     }
@@ -63,10 +65,10 @@
   <div class="of-empty" id="empty" hidden></div>
 </div>
 
-<script src="../js/api-client.js?v=20261004office2"></script>
-<script src="../js/device.js?v=20261004office2"></script>
-<script src="../js/layout.js?v=20261004office2"></script>
-<script src="../js/office-layout.js?v=20261004office2"></script>
+<script src="../js/api-client.js?v=20261004office3"></script>
+<script src="../js/device.js?v=20261004office3"></script>
+<script src="../js/layout.js?v=20261004office3"></script>
+<script src="../js/office-layout.js?v=20261004office3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;

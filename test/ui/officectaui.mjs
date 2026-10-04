@@ -151,10 +151,11 @@ console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===
   await page.waitForSelector(ROW);
   await page.waitForTimeout(400);
   const ts = await pillOf(cell(page, "勤務表"));
-  check(ts.text === "未提出" && ts.cls.includes("red") && ts.bg === "rgb(253, 236, 235)" && ts.fg === "rgb(179, 38, 30)", `勤務表：「未提出」は薄い赤の背景＋赤い文字（${ts.text} ${ts.bg} ${ts.fg}）`);
+  // 2026-10-04：状態の色は採用HRの色（js/office-layout.js の TONE・hr/applicants.html の .hr-flow-state）にそろえた
+  check(ts.text === "未提出" && ts.cls.includes("red") && ts.bg === "rgb(253, 236, 234)" && ts.fg === "rgb(179, 38, 30)", `勤務表：「未提出」は薄い赤の背景＋赤い文字（${ts.text} ${ts.bg} ${ts.fg}）`);
   check(ts.icon !== "" && ts.icon !== "radio_button_unchecked" && !/check|task_alt/.test(ts.icon), `未提出のアイコンは ○ でも チェックでもない（${ts.icon}）`);
   const sales = await pillOf(cell(page, "売上請求"));
-  check(sales.text === "未作成" && sales.cls.includes("orange") && sales.bg === "rgb(253, 238, 221)", `売上請求：「未作成」は橙（${sales.text} ${sales.bg}）`);
+  check(sales.text === "未作成" && sales.cls.includes("orange") && sales.bg === "rgb(255, 237, 213)", `売上請求：「未作成」は橙（${sales.text} ${sales.bg}）`);
   const vend = await pillOf(cell(page, "仕入請求")), pay = await pillOf(cell(page, "支払"));
   check(vend.text === "対象外" && vend.cls.includes("gray") && pay.text === "対象外" && pay.cls.includes("gray"), "仕入請求・支払：「対象外」は灰色");
   check((await cell(page, "稼働時間").locator(".of-st").count()) === 0, "稼働時間：勤務表が無いうちは、状態のラベルを出さない（—）");
@@ -271,7 +272,7 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表"));
-  check(ts.text === "未読取" && ts.cls.includes("yellow") && ts.bg === "rgb(255, 244, 217)", `勤務表：「未読取」は黄色（${ts.text} ${ts.bg}）`);
+  check(ts.text === "未読取" && ts.cls.includes("yellow") && ts.bg === "rgb(251, 241, 214)", `勤務表：「未読取」は黄色（${ts.text} ${ts.bg}）`);
   const cta = cell(page, "次にやること");
   const t = await cta.innerText();
   check(t.includes("勤務表が届いています") && t.includes("AIで読み取る") && !t.includes("勤務表を追加"), `次にやること：勤務表が届いています／AIで読み取る（${t.replace(/\s+/g, " ")}）`);
@@ -326,7 +327,7 @@ console.log("\n=== 6. 確定：「確定内容を見る」。完了のラベル�
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表")), wk = await pillOf(cell(page, "稼働時間"));
-  check(ts.text === "確定済" && ts.cls.includes("green") && ts.bg === "rgb(227, 244, 231)" && ts.icon === "check_circle", `勤務表：「確定済」は薄い緑＋チェック（${ts.text} ${ts.bg} ${ts.icon}）`);
+  check(ts.text === "確定済" && ts.cls.includes("green") && ts.bg === "rgb(229, 241, 226)" && ts.icon === "check_circle", `勤務表：「確定済」は薄い緑＋チェック（${ts.text} ${ts.bg} ${ts.icon}）`);
   check(wk.text === "確定済" && wk.cls.includes("green"), "稼働時間：「確定済」は緑");
   check((await cell(page, "稼働時間").innerText()).includes("154.75h"), "稼働時間：154.75h（= 154:45）");
   const t = await cell(page, "次にやること").innerText();

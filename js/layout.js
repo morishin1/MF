@@ -511,7 +511,7 @@
           </button>
           <div class="kp-bell-panel hidden" id="kp-bell-panel"></div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="KPLayout.logout()">
+        <button class="btn btn-secondary btn-sm" onclick="KPLayout.logout()" title="ログアウト">
           ${icon("logout", 18)}ログアウト
         </button>
       </div>`;
@@ -684,10 +684,11 @@
     const groups = OFFICE_GROUPS.filter((g) => vis(g) && g.items.some(vis));
     const top = OFFICE_TOP.filter(vis);
 
-    const cat = (key, href, label, on, badge) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}"${on ? ' aria-current="page"' : ""}>`
+    // アイコン＋名前（採用HR・Sales のヘッダーのタブと同じ）。アイコンは CSS（data-ic → ::before）で描き、タブの文字には混ぜない
+    const cat = (key, href, label, on, badge, ic) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}" data-ic="${esc(ic)}"${on ? ' aria-current="page"' : ""}>`
       + `<span>${esc(label)}</span>${badge ? `<b class="kp-otab-dot hidden" data-cat-dot="${esc(key)}" title="中に対応が必要なものがあります"></b>` : ""}</a>`;
-    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), false)).join("")
-      + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), true)).join("");
+    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), false, n.icon)).join("")
+      + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), true, g.icon)).join("");
 
     const items = here ? here.items.filter(vis).map(first) : [];
     const row2 = items.map((n) => {

@@ -90,7 +90,9 @@ const cards = (page) => page.locator("#cards .oh-card").evaluateAll((ns) => ns.m
 })));
 const todo = (page) => page.locator("#todo .oh-row").evaluateAll((ns) => ns.map((n) => ({
   pri: n.querySelector(".oh-pri .t").textContent.trim(), label: n.querySelector(".oh-label .t").textContent.trim(),
-  n: n.querySelector(".oh-n").childNodes[0].textContent.trim(), href: n.getAttribute("href"),
+  // 2026-10-04：行は採用HRの「今やること」と同じカード（左端の色＋右の操作ボタン）。行き先は右のボタン
+  n: n.querySelector(".oh-n").childNodes[0].textContent.trim(), href: n.querySelector(".oh-go").getAttribute("href"),
+  cta: n.querySelector(".oh-go").textContent.trim(),
 })));
 // Office の横タブ。1段目（カテゴリ）と2段目（カテゴリの中の画面）
 const tabsOf = (page, sel) => page.locator(sel).evaluateAll((ns) => ns.map((n) => ({
@@ -126,6 +128,19 @@ console.log("— 経営者（owner）: 全部の数字・全部のメニュー �
   check(t.some((x) => x.label === "入社準備" && x.n === "2"), "入社準備 2件");
   check(t.some((x) => x.label === "契約期限の確認" && x.n === "1"), "契約期限の確認 1件");
   check(t.some((x) => x.label === "支払の登録・確認" && x.n === "1"), "支払の登録・確認 1件（BP）");
+  check(t.find((x) => x.label === "経費精算の承認")?.cta === "経費を承認" && t.find((x) => x.label === "勤怠の修正申請")?.cta === "勤怠を確認",
+    "右の操作ボタン：経費精算の承認 →「経費を承認」、勤怠の修正申請 →「勤怠を確認」");
+  // 採用HRの .hr-today-row と同じ形：1件ずつ独立したカード（白・1px #e2e2dc・角丸9px）、状態は左端3pxの色、右に btn-primary
+  const hrRow = await p.locator("#todo .oh-row").evaluateAll((ns) => ns.map((n) => {
+    const c = getComputedStyle(n); const b = n.querySelector(".oh-go"); const br = b.getBoundingClientRect(); const nr = n.getBoundingClientRect();
+    return { pri: n.querySelector(".oh-pri .t").textContent.trim(), bg: c.backgroundColor, border: c.borderTopColor, left: c.borderLeftColor, lw: c.borderLeftWidth,
+      radius: c.borderRadius, btn: getComputedStyle(b).backgroundColor, right: Math.round(nr.right - br.right) };
+  }));
+  check(hrRow.every((r) => r.bg === "rgb(255, 255, 255)" && r.border === "rgb(226, 226, 220)" && r.lw === "3px" && r.radius === "9px"),
+    "今日やることは1件ずつのカード（白・枠 #e2e2dc・左端3px・角丸9px。採用HRの .hr-today-row と同じ）");
+  const leftOf = { 期限超過: "rgb(192, 57, 43)", 今日期限: "rgb(224, 161, 0)", 要確認: "rgb(230, 240, 80)", 今週対応: "rgb(230, 240, 80)" };
+  check(hrRow.every((r) => r.left === leftOf[r.pri]), `左端の色で状態（期限超過 #c0392b・今日期限 #e0a100・ほか #e6f050）（いま ${[...new Set(hrRow.map((r) => `${r.pri}:${r.left}`))].join(" ")}）`);
+  check(hrRow.every((r) => r.btn === "rgb(49, 130, 206)" && r.right <= 16), "操作ボタンは右端（btn btn-primary btn-sm。採用HRと同じ）");
 
   check(await p.locator("#progBox").isVisible(), "月次進捗が出る");
   const prog = await p.locator("#prog .row span:first-child").allInnerTexts();
