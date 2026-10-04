@@ -158,7 +158,9 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   check(st.interviews[0]?.scheduled_at === "2026-10-05T05:00:00.000Z", `JST 14:00 がUTCで保存される（${st.interviews[0]?.scheduled_at}）`);
   check(st.interviews[0]?.method === "online", "面談方法も保存される");
   let txt = await card(page).innerText();
-  check(txt.includes("10/5 14:00"), `面談カードに予定日時（${txt.split("\n")[1]?.trim()}）`);
+  // 予定日（2026-10-05）が日本時間の今日なら「本日 14:00」と出る（js/jst.js の JST.when）。日付によって落ちないように
+  const SHOWN = jstToday() === "2026-10-05" ? "本日 14:00" : "10/5 14:00";
+  check(txt.includes(SHOWN), `面談カードに予定日時（${txt.split("\n")[1]?.trim()}）`);
   check(txt.includes("面談方法：オンライン"), "面談カードに面談方法");
 
   console.log("\n— 2. 面談日時を変更して保存 —");
@@ -184,7 +186,7 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   const [m, d] = today.slice(5).split("-").map(Number);
   // 日時の書き方は HR 共通（js/jst.js JST.when）：今日なら「本日 16:30」
   check(txt.includes("本日 16:30"), `面談カードが新しい日時（本日 16:30）`);
-  check(!txt.includes("10/5 14:00"), "古い日時は出ない");
+  check(!txt.includes(SHOWN), "古い日時は出ない");
   check(txt.includes("面談担当：面接 一郎") && txt.includes("面談方法：対面"), "面談担当・面談方法も残る");
   await page.locator("button", { hasText: "面談情報を編集" }).click();
   await page.waitForTimeout(250);
