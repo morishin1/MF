@@ -123,8 +123,9 @@ check(canForceAttack({ isAdmin: false, roles: ["owner"] }), "経営者は強行�
 console.log("\n— /api/me がサーバの判定をそのまま返す —");
 {
   const src = read("api/me.js");
-  check(/import \{ accessOf \} from "\.\.\/lib\/gw\.js"/.test(src), "api/me は lib/gw.js の accessOf を使う");
-  check(/access:\s*accessOf\(\{\s*isAdmin,\s*isHr:\s*gw\.isHr,\s*roles:\s*gw\.roles\s*\}\)/.test(src), "access を返している");
+  check(/import \{ accessOf(, isHrOf)? \} from "\.\.\/lib\/gw\.js"/.test(src), "api/me は lib/gw.js の accessOf を使う");
+  // アプリ利用権限（apps）も一緒に渡す（入口は gw_app_grants、中身は内部ロール。db/119）
+  check(/access:\s*accessOf\(\{\s*isAdmin,\s*isHr:\s*gw\.isHr,\s*roles:\s*gw\.roles,\s*apps:\s*gw\.apps\s*\}\)/.test(src), "access を返している");
 }
 
 console.log("\n— 画面はサーバの判定を使う（役割を並べ直さない） —");
@@ -144,9 +145,9 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
 
   // Office：ヘッダーの近道は、Office に入れる人（サーバの access：officeHr／officeFinance／office のどれか）だけ。
   // 行き先も access で決める（人事・労務／経理・事務の人は Office のホーム、月末月初業務だけの人は /office/）。役割名は並べ直さない
-  check(/officeEntry: me\?\.appRole !== "sr" && \(officeHr \|\| officeFinance \|\| Boolean\(me\?\.access\?\.office\)\)/.test(layout)
+  check(/officeEntry: me\?\.appRole !== "sr" && \(officeHr \|\| officeFinance \|\| Boolean\(me\?\.access\?\.office\) \|\| Boolean\(me\?\.access\?\.officeApp\)\)/.test(layout)
       && /if \(t\.key === "office"\) return Boolean\(shows\.officeEntry\);/.test(layout),
-    "ヘッダーの Office は、サーバの access（officeHr・officeFinance・office）のどれかがある人だけ");
+    "ヘッダーの Office は、サーバの access（officeApp＝Office の入口・officeHr・officeFinance・office）のどれかがある人だけ");
   // 担当別の入口は、サーバの判定（access.officeHr / officeFinance）。予備は管理者だけ。役割名は並べ直さない
   check(/const flag = \(k\) => me\?\.appRole !== "sr" && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
     "Office の人事・労務／経理・事務は access.officeHr / officeFinance（予備は管理者だけ）");
@@ -158,7 +159,7 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // /office/ 配下の各画面の入口：ホームは Office に入れる人の全員、それ以外（月次業務・請求・支払・勤務表・契約条件）は access.office
   {
     const home = read("office/index.html");
-    check(/O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office"\] \}\)/.test(home), "Office ホームは officeHr・officeFinance・office のどれかで入れる");
+    check(/O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office", "officeApp"\] \}\)/.test(home), "Office ホームは officeApp（入口）・officeHr・officeFinance・office のどれかで入れる");
     // ホームは、担当でない API を呼ばない（403 の行を作らない）
     check(/can\.hr \? safe\(API\.swr\(HR_KEY, \(\) => API\.hrList\(\)/.test(home) && /can\.app \? safe\(API\.swr\(OFFICE_KEY/.test(home)
       && /can\.fin && !can\.app \? safe\(API\.swr\(`office:closing:\$\{closingMonth\}`, \(\) => API\.closing\(/.test(home), "Office ホームは、担当の API だけ呼ぶ");

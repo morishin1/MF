@@ -114,6 +114,7 @@ const REAL_GW = await import(atRoot("lib/gw.js"));
 let who;
 mock.module(atRoot("lib/gw.js"), { namedExports: {
   gwContext: async () => who, canManageHr: REAL_GW.canManageHr, isOwner: REAL_GW.isOwner,
+  memberAccessOf: REAL_GW.memberAccessOf, accessOf: REAL_GW.accessOf, isHrOf: REAL_GW.isHrOf,
 } });
 
 const { default: rolesApi } = await import(atRoot("api/employees/roles.js"));

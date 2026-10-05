@@ -210,7 +210,7 @@ ok("左メニューの各グループの画面は、そのグループの access
 });
 
 ok("Office ホーム（/office/）は、人事・労務／経理・事務／月末月初業務のどれかで入れる。旧ダッシュボードは /office/ へ送る", () => {
-  assert.match(read("office/index.html"), /O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office"\] \}\)/);
+  assert.match(read("office/index.html"), /O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office", "officeApp"\] \}\)/);
   assert.match(read("admin-dashboard.html"), /location\.replace\("\/office\/"/);
 });
 

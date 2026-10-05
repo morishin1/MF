@@ -921,6 +921,10 @@
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
 
+  // アプリ利用権限（採用HR・Sales・Office・経営の4つのボタン）。app = hr / sales / office / keiei
+  const setEmployeeApp = (employeeId, app, grant) =>
+    api("/api/employees/apps", { method: "POST", body: { employeeId, app, grant } });
+
   // opts.create=true でアカウントが無ければ作る（招待）。
   // password を省くと自動生成され、その1回だけ応答に含まれる。
   const linkEmployeeAccount = (employeeId, email, clientId, opts = {}) =>
@@ -1902,7 +1906,7 @@
     listSalesMeetings, issueSalesMeeting, salesMeetingAct, listSalesDeals, createSalesDeal, updateSalesDeal,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
-    setEmployeeRole, linkEmployeeAccount,
+    setEmployeeRole, setEmployeeApp, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
     listAssets, createAsset, updateAsset, deleteAsset,

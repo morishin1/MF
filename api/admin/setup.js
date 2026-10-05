@@ -25,6 +25,7 @@
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
+import { appsFromRoles } from "../../lib/app-grants.js";
 
 const MEMBERSHIP_ROLES = ["admin", "staff", "client"];
 const GW_ROLES = ["owner", "hr", "it", "finance", "manager", "labor_advisor"];
@@ -198,6 +199,15 @@ async function ensureEmployee(sb, tenantId, userId, a, flags) {
       .from("gw_role_grants")
       .upsert({ tenant_id: tenantId, employee_id: employee.id, role }, { onConflict: "employee_id,role" });
     if (!error) flags.gwRoles.push(role);
+  }
+  // アプリ利用権限（どのアプリへ入れるか。db/119）も、内部ロールの移行の規則どおりに付ける。
+  // 内部ロールは「中でできること」だけで、入口は開かない。表が無い環境（db/119 未適用）では何もしない
+  // （そのときは lib/app-grants.js が内部ロールから同じ入口を出す）
+  const apps = appsFromRoles(a.gwRoles || []);
+  if (apps.length) {
+    await sb.from("gw_app_grants").upsert(
+      apps.map((app_key) => ({ tenant_id: tenantId, employee_id: employee.id, app_key })),
+      { onConflict: "employee_id,app_key", ignoreDuplicates: true });
   }
   return employee;
 }
