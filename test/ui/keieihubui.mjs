@@ -1,7 +1,8 @@
 // 経営ハブ（/keiei ホーム・経営設定・セキュリティ）を、実際のブラウザで見る。
 //
 // ■ 何を守りたいのか
-//   ・4ブロックだけ。上から ①今日の確認 ②人・組織 ③お金 ④リスク・未処理
+//   ・営業（sales）を返さない応答では4ブロック。上から ①今日の確認 ②お金 ③人・組織 ④リスク・未処理
+//     （2026-10 の経営方針で「売上・利益」を「人・組織」の前に。営業の欄は test/ui/keieisalesui.mjs）
 //   ・①は最上部。重要度の高い順。何をすればいいかが先（押す先の名前つき）。0件なら、大きく出さず1行
 //   ・Board は「売上・請求は Board 連携後に表示します」の1表示だけ。「データ未連携」の空カードを並べない
 //   ・押したら、決めた元システムへ移る（HR・経費精算・会計・月次締め … ）。ここで処理を終わらせない
@@ -65,9 +66,9 @@ console.log("— 忙しい日（PC）—");
 {
   const page = await open();
   const blocks = await page.locator("[data-block]").evaluateAll((ns) => ns.map((n) => n.dataset.block));
-  check(blocks.join() === "today,people,money,risk", `4ブロックだけ。順は ①今日の確認 ②人・組織 ③お金 ④リスク・未処理（いま ${blocks.join()}）`);
+  check(blocks.join() === "today,money,people,risk", `4ブロックだけ。順は ①今日の確認 ②お金 ③人・組織 ④リスク・未処理（いま ${blocks.join()}）`);
   const heads = await page.locator("[data-block] .hub-h").evaluateAll((ns) => ns.map((n) => n.firstChild.textContent.trim()));
-  check(heads.join("|") === "今日の確認|人・組織|お金|リスク・未処理", `見出し（いま ${heads.join("|")}）`);
+  check(heads.join("|") === "今日の確認|お金|人・組織|リスク・未処理", `見出し（いま ${heads.join("|")}）`);
   const ys = await page.locator("[data-block]").evaluateAll((ns) => ns.map((n) => Math.round(n.getBoundingClientRect().top)));
   check(ys.every((y, i) => i === 0 || y > ys[i - 1]), `上から順に並ぶ（${ys.join(",")}）`);
   check(page.calls.join() === "hub", `呼ぶ API は hub だけ（いま ${page.calls.join()}）`);

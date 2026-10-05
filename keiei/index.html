@@ -144,6 +144,50 @@
     .pay-filters select { border:1px solid #c7cad4; border-radius:7px; padding:6px 8px; font-size:13px; font-family:inherit; background:#fff; color:#1b2440; width:auto; }
     .pay-filters input[type=search] { border:1px solid #c7cad4; border-radius:7px; padding:6px 8px; font-size:13px; font-family:inherit; width:150px; }
     .pay-pv > div { margin:2px 0; } .pay-pv b { color:#1b2440; }
+    /* 10月の目標と実績・営業ファネル・担当者別（lib/keiei-sales.js）。値は採用HR・Sales と同じ（#1b2440・#e2e2dc・#f6f6f2） */
+    .kgi-meta { font-size:12px; color:#6b7080; margin:-4px 0 10px; line-height:1.7; }
+    .kgi-t { width:100%; border-collapse:collapse; font-size:13px; }
+    .kgi-t th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:8px 10px; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
+    .kgi-t td { padding:9px 10px; border-bottom:1px solid #f0f0ea; vertical-align:middle; color:#1b2440; }
+    .kgi-t tr:last-child td { border-bottom:0; }
+    .kgi-t td.n, .kgi-t th.n { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .kgi-t td.v { font-weight:700; font-size:14px; }
+    .kgi-t tr.na td { color:#9aa0b4; }
+    .kgi-bar { display:inline-block; width:100%; max-width:160px; height:6px; background:#efefeb; border-radius:99px; overflow:hidden; vertical-align:middle; }
+    .kgi-bar i { display:block; height:100%; background:#1b2440; border-radius:99px; }
+    .kgi-bar.ok i { background:#2f6f3a; }
+    .kgi-pct { font-size:11.5px; color:#6b7080; margin-left:6px; font-variant-numeric:tabular-nums; }
+    .kgi-state { display:inline-block; font-size:11px; font-weight:700; padding:1px 8px; border-radius:999px; background:#efefeb; color:#4a5068; white-space:nowrap; }
+    .kgi-why { display:block; font-size:11px; color:#9aa0b4; margin-top:2px; font-weight:400; line-height:1.5; white-space:normal; }
+    .kgi-line { font-size:12px; color:#4a5068; margin:10px 2px 0; line-height:1.8; }
+    .kgi-line b { color:#1b2440; }
+    .kgi-pc { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; background:#fff; border:1px dashed #c7cad4; border-radius:10px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:#4a5068; }
+    .kgi-pc b { color:#1b2440; font-size:13.5px; }
+    .pp { display:grid; grid-template-columns:minmax(120px,170px) minmax(0,1fr); gap:6px 14px; padding:11px 0; border-top:1px solid #f0f0ea; align-items:start; }
+    .pp:first-child { border-top:0; }
+    .pp-nm b { display:block; font-size:14px; color:#1b2440; }
+    .pp-nm span { display:block; font-size:11.5px; color:#6b7080; line-height:1.5; }
+    .pp-k { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 14px; }
+    .pp-kpi { min-width:0; }
+    .pp-kpi .l { font-size:11.5px; color:#6b7080; line-height:1.4; }
+    .pp-kpi .v { font-size:15px; font-weight:700; color:#1b2440; margin:2px 0 3px; font-variant-numeric:tabular-nums; }
+    .pp-kpi .v small { font-size:11.5px; font-weight:500; color:#6b7080; margin-left:2px; }
+    .pp-kpi .v.ok { color:#2f6f3a; } .pp-kpi .v.ng { color:#b3261e; }
+    .pp-kpi.na .v { font-size:12px; color:#9aa0b4; font-weight:700; }
+    .pp-kpi .w { font-size:10.5px; color:#9aa0b4; line-height:1.5; }
+    .st-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; align-items:center; padding:10px 0; border-top:1px solid #f0f0ea; }
+    .st-row:first-child { border-top:0; }
+    .st-row b { font-size:13.5px; color:#1b2440; } .st-row span { font-size:12px; color:#4a5068; }
+    .snap { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+    .snap span { font-size:12px; color:#4a5068; background:#fff; border:1px solid #e2e2dc; border-radius:999px; padding:3px 10px; }
+    .snap span b { color:#1b2440; margin-left:3px; font-variant-numeric:tabular-nums; }
+    .hub-subh { font-size:13px; font-weight:700; color:#1b2440; margin:14px 0 8px; }
+    @media (max-width: 820px) {
+      .kgi-t th.pace, .kgi-t td.pace { display:none; }
+      .kgi-bar { max-width:70px; }
+      .pp { grid-template-columns:1fr; }
+      .pp-k { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
   </style>
 </head>
 <body>
@@ -179,6 +223,63 @@
   const bannerHtml = (text, kind = "") => `<div class="kei-banner ${kind}">${esc(text)}</div>`;
   const head = (title, sub) => `<h1 class="kei-title">${esc(title)}</h1><p class="kei-sub">${esc(sub || "")}</p>`;
 
+  // ---- 10月の目標と実績・営業ファネル・担当者別（hub の応答の sales）----------------
+  // 実データの無いものは 0 にしない（「定義未決」「未計測」「未接続」「取得できません」と理由を出す）
+  const man = (n) => (Math.abs(n) >= 10000 ? `${(n / 10000).toLocaleString("ja-JP", { maximumFractionDigits: 1 })}万円` : yen(n));
+  const val = (v, unit) => (unit === "円" ? man(v) : unit === "%" ? `${num(v)}%` : `${num(v)}<small>${esc(unit || "")}</small>`);
+  const bar = (pct, ok) => `<span class="kgi-bar${ok ? " ok" : ""}"><i style="width:${Math.max(0, Math.min(100, pct || 0))}%"></i></span>`;
+  const STATE_LABEL = { undefined: "定義未決", missing: "取得できません" };
+  function kgiHtml(S) {
+    if (!S) return `<div class="hub-board" data-role="sales-missing">営業の数字を、いま取得できません（Sales の元データを読み込めませんでした）。ほかのブロックは出ています。</div>`;
+    const row = (f) => f.value == null
+      ? `<tr class="na" data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td>
+          <td class="n pace">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
+          <td colspan="2" title="${esc(f.reason || "")}"><span class="kgi-state" data-role="state">${esc(STATE_LABEL[f.status] || "未計測")}</span>${f.status === "undefined" ? "" : `<span class="kgi-why">${esc(f.reason || "")}</span>`}</td></tr>`
+      : `<tr data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td>
+          <td class="n pace">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
+          <td class="n v" data-role="actual">${val(f.value, f.unit)}</td>
+          <td>${f.pct == null ? "" : `${bar(f.pct, f.pct >= 100)}<span class="kgi-pct">${f.pct}%</span>`}</td></tr>`;
+    const rates = S.rates.filter((r) => r.value != null)
+      .map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value == null ? "—" : `${r.value}%`}</b>${r.plan == null ? "" : `（計画 ${r.plan}%）`}`).join("　");
+    return `<div class="kgi-meta">${esc(S.label)}・${S.dayNo}/${S.daysInMonth}日目。「今日の目安」は目標を日数で割った進み具合です。${S.note ? esc(S.note) : "この月の目標は、まだ設定していません。"}</div>
+      <div class="hub-panel" style="padding:4px 12px;overflow-x:auto;"><table class="kgi-t" data-role="funnel"><thead><tr><th>段階</th><th class="n">目標</th><th class="n pace">今日の目安</th><th class="n">実績</th><th>達成率</th></tr></thead>
+        <tbody>${S.funnel.map(row).join("")}</tbody></table></div>
+      ${rates ? `<div class="kgi-line" data-role="rates">転換率（実績・前の段階から）：${rates}</div>` : ""}
+      <div class="kgi-line" data-role="won-amount">${S.won ? `今月の受注額（Sales の案件金額。会計上の売上・粗利ではありません）：<b>${yen(S.won.amount)}</b>（${num(S.won.count)}件）` : `今月の受注額：取得できません（${esc(S.wonReason || "")}）`}</div>
+      ${S.pc ? `<div class="kgi-pc" data-role="pc"><b>${esc(S.pc.label)}</b><span>目標 ${man(S.pc.target)}</span><span class="kgi-state">未接続</span><span>${esc(S.pc.reason)}</span></div>` : ""}`;
+  }
+  function salesHtml(S) {
+    const kpi = (k) => {
+      if (k.value == null) {
+        return `<div class="pp-kpi na" data-role="kpi" title="${esc(k.reason || "")}"><div class="l">${esc(k.label)}${k.target == null ? "" : `（目標 ${k.unit === "円" ? man(k.target) : `${num(k.target)}${esc(k.unit)}`}）`}</div>
+          <div class="v">${esc(k.unmeasured ? (k.short || "未計測") : "取得できません")}</div>${k.unmeasured ? "" : `<div class="w">${esc(k.reason || "")}</div>`}</div>`;
+      }
+      const tone = k.done == null ? "" : k.done ? " ok" : (k.lowerIsBetter ? " ng" : "");
+      return `<div class="pp-kpi" data-role="kpi"><div class="l">${esc(k.label)}</div>
+        <div class="v${tone}">${val(k.value, k.unit)}${k.target == null ? "" : `<small>／目標 ${k.unit === "円" ? man(k.target) : `${num(k.target)}${esc(k.unit)}`}</small>`}</div>
+        ${k.pct == null ? "" : bar(k.pct, k.done)}${k.note ? `<div class="w">${esc(k.note)}</div>` : ""}</div>`;
+    };
+    const people = S.perPerson.length ? `<div class="hub-panel" data-role="people-kpi">${S.perPerson.map((p) => `<div class="pp" data-person="${esc(p.name)}">
+        <div class="pp-nm"><b>${esc(p.name)}</b><span>${esc(p.role)}</span>${p.linked ? "" : `<span style="color:#7d5a00;">名簿で特定できません</span>`}</div>
+        <div class="pp-k">${p.kpis.map(kpi).join("")}</div></div>`).join("")}</div>`
+      : `<div class="hub-none">この月の担当者別の目標は、まだ設定していません。</div>`;
+    const stalled = S.stalled
+      ? (S.stalled.count ? `<div class="hub-panel" data-role="stalled">${S.stalled.rows.map((r) => `<div class="st-row">
+            <div><b>${esc(r.company)}</b> <span>${esc(r.title)}・${esc(r.stage)}のまま${r.idle}日・担当 ${esc(r.owner)}</span></div>
+            <a class="hub-go" href="${esc(r.href)}">Salesで開く →</a></div>`).join("")}
+          ${S.stalled.count > S.stalled.rows.length ? `<div class="hub-none">ほか${S.stalled.count - S.stalled.rows.length}件。<a href="${esc(S.links.home)}">Salesで確認する</a></div>` : ""}</div>`
+        : `<div class="hub-none" data-role="stalled-none">提案・最終調整のまま${S.stalled.days}日以上止まっている案件はありません。</div>`)
+      : `<div class="hub-none" data-role="stalled-missing">停滞案件：取得できません（${esc(S.stalledReason || "")}）</div>`;
+    const snap = S.snapshot ? `<div class="snap" data-role="snapshot">${S.snapshot.map((x) => `<span>${esc(x.label)}<b>${num(x.count)}</b></span>`).join("")}</div>`
+      : `<div class="hub-none">Sales の企業：取得できません</div>`;
+    const unconnected = S.unconnected.filter((u) => u.key !== "board").map((u) => esc(u.label)).join("／");
+    return `<div class="hub-subh">担当者別（目標案と、今月の実績）</div>${people}
+      <div class="kgi-line" style="margin:6px 2px 0;">「定義未決」「記録なし」「未接続」は、まだ数えられないものです（0 ではありません）。PC では、項目にカーソルを合わせると理由が出ます。</div>
+      <div class="hub-subh">提案後に止まっている案件</div>${stalled}
+      <div class="hub-subh">Sales の企業（いまの状態。今月分ではありません）</div>${snap}
+      <div class="kgi-line" data-role="unconnected">未接続：${unconnected}。数字は出していません（0 ではありません）。　<a href="${esc(S.links.home)}">Salesを開く →</a></div>`;
+  }
+
   // ---- 画面 ------------------------------------------------------------------
   const RENDER = {
     // ---- 経営ハブ（ホーム）。見る → 気付く → 判断する → 元システムへ。ここでは処理を終わらせない ----
@@ -202,9 +303,11 @@
       return head("ホーム", `${dateText}。見る → 気付く → 判断する → 元のシステムへ。処理は、それぞれのシステムで行います。`)
         + (d.unreadable.length ? `<div data-role="unreadable">${bannerHtml(`一部の元データを読み込めませんでした：${d.unreadable.join("・")}。該当する判定・数字は出していません（問題がないという意味ではありません）。`, "warn")}</div>` : "")
         + sec("today", "今日の確認", d.attention.length, list(d.attention, "今日、経営者が対応するものはありません。"))
-        + sec("people", "人・組織", null, `<div class="hub-tiles">${d.people.tiles.map(tile).join("")}</div>`)
+        + (d.sales === undefined ? "" : sec("kgi", d.sales ? `${esc(d.sales.label.replace(/^\d+年/, ""))}の目標と実績` : "目標と実績", null, kgiHtml(d.sales)))
         + sec("money", "お金", null, `<div class="hub-board" data-role="board">${esc(d.money.board.message)}</div>
             <div class="hub-tiles">${d.money.internal.map(tile).join("")}</div>`)
+        + sec("people", "人・組織", null, `<div class="hub-tiles">${d.people.tiles.map(tile).join("")}</div>`)
+        + (d.sales ? sec("sales", "営業ファネル・担当者別", null, salesHtml(d.sales)) : "")
         + sec("risk", "リスク・未処理", d.risks.length, list(d.risks, "気付くべき異常はありません。"))
         + `<div class="hub-foot"><a href="#security" data-role="to-security">経営設定・セキュリティ</a>（経営者・二段階認証・変更履歴・給与の監査ログ）</div>`;
     },
