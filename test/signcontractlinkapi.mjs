@@ -117,6 +117,7 @@ mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     canManageHr: (c) => Boolean(c.isAdmin || c.isHr),
+    canOfficeHr: (c) => Boolean(c.isAdmin || c.isHr),
   },
 });
 const logged = [];

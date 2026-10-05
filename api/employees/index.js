@@ -17,6 +17,8 @@ import {
 } from "../../lib/accounts.js";
 import { normalizeKind } from "../../lib/partner.js";
 import { guardOwnerTarget, guardLastOwner } from "../../lib/owner-guard.js";
+import { adminFlags, accessForMember } from "../../lib/member-access.js";
+import { loadAppsMany } from "../../lib/app-grants.js";
 
 // 退職・退職手続き中は、どのシステムにも入れない状態にする
 const LEFT = ["leaving", "left"];
@@ -83,6 +85,19 @@ export default async function handler(req, res) {
       } catch { /* 添え物なので、取れなければ空のままにする */ }
     }
 
+    // 4つのボタン（採用HR / Sales / Office / 経営）と、「利用できる業務」（access）。人事・管理者だけに返す。
+    // 判定は lib/gw.js の accessOf（= その人が /api/me で受け取る access）そのもの。入力（内部ロール・アプリ利用権限・
+    // 会計の管理者か）を集めるだけで、条件はここで書き直さない。読めなかったものは null（「確認できません」）
+    let appsInfo = null;
+    if (canManageHr(ctx)) {
+      const rows = data || [];
+      const [flags, apps] = await Promise.all([
+        adminFlags(admin(), rows.map((e) => e.user_id)),
+        loadAppsMany(admin(), rows.map((e) => e.id), byEmployee),
+      ]);
+      appsInfo = { flags, apps };
+    }
+
     // 雇用区分は、人事・管理者以外には返さない。
     //
     // 名簿は社員同士で引けるようにしてある（RLS の gw_employees_peer_select）が、
@@ -101,12 +116,15 @@ export default async function handler(req, res) {
           ...(hideType ? rest : e),
           roles: byEmployee.get(e.id) || [],
           accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
+          ...(appsInfo ? accessForMember(byEmployee.get(e.id) || [], e.user_id, appsInfo.flags, appsInfo.apps.byId.get(e.id) || []) : {}),
         };
       }),
       canManage: canManageHr(ctx),
       canGrantRoles: canManageHr(ctx),
       // 経営者（owner）の付与・剥奪と、経営者の名簿・ログインの変更は、いまの経営者だけ
       canGrantOwner: isOwner(ctx),
+      // アプリ利用権限（gw_app_grants, db/119）の状態。"table"=使える / "derived"=表が未適用（内部ロールから導出。変更できない）/ "error"=読めなかった
+      appsState: appsInfo ? appsInfo.apps.state : null,
       systems: SYSTEMS,
       kindReady,
     });

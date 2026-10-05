@@ -1142,7 +1142,8 @@
       officeFinance: officeFinance,
       officeAny: officeHr || officeFinance,
       // Office に入れる人（人事・労務／経理・事務／月末月初業務のどれか）。ヘッダーの Office・Office ホーム（/office/）・左メニュー
-      officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office)),
+      // officeApp ＝ Office の利用権限（アプリへ入れる）。入っても、中身は内部ロールが決める（人事・労務／経理・事務／月末月初）
+      officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp)),
       // 月次業務の入口：月末月初業務（officeApp）か、月次締め・月初作業管理（officeFinance）のどちらか
       officeMonthly: officeFinance || Boolean(me?.access?.office),
       office: Boolean(me?.access?.office),

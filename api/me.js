@@ -15,7 +15,8 @@ import { stageInfo, shouldOpen, onboardingDone } from "../lib/stages.js";
 import { intakeGate } from "../lib/onboard-gate.js";
 import { jstDate } from "../lib/nippo.js";
 import { mfaState } from "../lib/mfa.js";
-import { accessOf } from "../lib/gw.js";
+import { accessOf, isHrOf } from "../lib/gw.js";
+import { readApps, resolveApps } from "../lib/app-grants.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
     appRole: resolveAppRole({ isAdmin, gwRoles: gw.roles }),
     // 採用HR（/hr）・Sales（/sales）に入れるか。サーバの canRecruit / canSell そのもの。
     // ヘッダーの近道と /hr・/sales の入口は、これで出し分ける（lib/gw.js accessOf）
-    access: accessOf({ isAdmin, isHr: gw.isHr, roles: gw.roles }),
+    access: accessOf({ isAdmin, isHr: gw.isHr, roles: gw.roles, apps: gw.apps }),
     // 二段階認証。要るか・登録済みか・今回の入り方で確かめたか・いつから止めるか
     mfa: mfaState({ ctx: { isAdmin, roles: gw.roles }, user, req }),
   });
@@ -58,7 +59,7 @@ export default async function handler(req, res) {
 //   本人が開いた最初の1回で切り替わるので、管理者の操作は要らない。
 //   （ログインしない人のぶんは api/cron/escalate.js が毎日ならす）
 async function loadGroupware(userId, tenantId) {
-  const empty = { available: false, tenantId, employee: null, roles: [], isHr: false, isOwner: false };
+  const empty = { available: false, tenantId, employee: null, roles: [], apps: [], isHr: false, isOwner: false };
 
   const sb = admin();
   // 会計側のメンバーシップが無い人（社労士など）も名簿から拾えるように、
@@ -88,8 +89,10 @@ async function loadGroupware(userId, tenantId) {
   //
   // 提出がそろっていれば、入社日前でも画面を開ける（在籍の状態は変えない）。
   // 調べるのは入社準備中の人だけ（そうでない人には要らない問い合わせ）
-  const [grantsRes, itemsRes] = await Promise.all([
+  // アプリ利用権限（gw_app_grants, db/119）も同時に読む。表が無い間は、内部ロールから移行の規則どおりに出す
+  const [grantsRes, appsRead, itemsRes] = await Promise.all([
     sb.from("gw_role_grants").select("role").eq("employee_id", employee.id),
+    readApps(sb, employee.id),
     employee.status === "invited"
       ? sb.from("gw_procedure_items")
           .select("owner, required, status, gw_procedures!inner(employee_id, kind)")
@@ -115,6 +118,7 @@ async function loadGroupware(userId, tenantId) {
   }
 
   const gwRoles = (grantsRes.data || []).map((g) => g.role);
+  const { apps } = resolveApps(appsRead, gwRoles);
   return {
     available: true,
     tenantId,
@@ -123,7 +127,10 @@ async function loadGroupware(userId, tenantId) {
     // その段階で開いている画面。メニューはこれで絞る
     stage: stageInfo(employee, { onboardingDone: done }),
     roles: gwRoles,
-    isHr: gwRoles.includes("hr") || gwRoles.includes("owner"),
+    // アプリ利用権限（どのアプリへ入れるか）。内部ロール（roles）は、アプリの中で何ができるか
+    apps,
+    // 人事の管理権限。内部ロール hr は Office の中の権限なので、Office の入口が前提（lib/gw.js isHrOf）
+    isHr: isHrOf({ roles: gwRoles, apps }),
     isOwner: gwRoles.includes("owner"),
   };
 }
