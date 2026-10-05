@@ -717,9 +717,10 @@
     const chip = (r) => `<span class="mb-ab${a[r.key] ? " on" : ""}" data-access="${r.key}" data-on="${a[r.key] ? 1 : 0}">${esc(r.label)} ${a[r.key] ? "○" : "×"}</span>`;
     const body = ACCESS_ROWS.map((r) => chip(r)
       + (r.sub ? `<div class="mb-ab-sub">${r.sub.map(chip).join("")}</div>` : "")).join("");
-    // 会計の管理者は社内権限のチェックとは別の軸。チェックが無いのに Office が ○ の理由が分かるように添える
-    const acc = e.accounts?.accounting?.role;
-    const adm = acc === "admin" || acc === "staff"
+    // 会計の管理者は社内権限のチェックとは別の軸。チェックが無いのに Office が ○ の理由が分かるように添える。
+    // 注記の元は、サーバが accessOf に渡した isAdmin そのもの（accessMeta.accountingAdmin = memberships の admin / staff）。
+    // 「利用中のシステム」（accounts）など、別の読み取りから推測しない（表示する理由と、実効権限の入力元を一致させる）
+    const adm = e.accessMeta?.accountingAdmin === true
       ? `<div class="mb-acc-note" data-note="accounting-admin">会計の管理者（社内権限とは別。人事・労務／経理・事務を使える）</div>` : "";
     return body + adm;
   }
@@ -1329,9 +1330,10 @@
       // 「利用できる業務」は、サーバが変更後に計算し直した access（lib/gw.js accessOf）をそのまま入れる。
       // こちらでは計算しない（画面と実際の権限がずれないように）
       const e = employees.find((x) => x.id === employeeId);
-      if (e && res && Array.isArray(res.roles) && res.access !== undefined) {
+      if (e && res && Array.isArray(res.roles) && res.access !== undefined && res.accessMeta !== undefined) {
         e.roles = res.roles;
-        e.access = res.access;      // null なら「確認できません」
+        e.access = res.access;          // null なら「確認できません」
+        e.accessMeta = res.accessMeta;  // accessOf に渡した isAdmin（会計の管理者の注記の元）
         render();
       } else if (e) {
         // 応答に access が無い（古いサーバ・読めなかった）ときは、名簿ごと読み直して、表示と実際を合わせる

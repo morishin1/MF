@@ -106,7 +106,8 @@ export default async function handler(req, res) {
           ...(hideType ? rest : e),
           roles: byEmployee.get(e.id) || [],
           accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
-          ...(flags === undefined ? {} : { access: accessForMember(byEmployee.get(e.id) || [], e.user_id, flags) }),
+          // access（利用できる業務）と、その計算に使った入力（accessMeta.accountingAdmin = accessOf に渡した isAdmin）
+          ...(flags === undefined ? {} : accessForMember(byEmployee.get(e.id) || [], e.user_id, flags)),
         };
       }),
       canManage: canManageHr(ctx),

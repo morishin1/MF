@@ -71,8 +71,14 @@ mock.module(atRoot("lib/auth.js"), {
 });
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async () => {} } });
 mock.module(atRoot("lib/mfa.js"), { namedExports: { requireMfa: async () => true, mfaState: () => ({ required: false, enrolled: false }) } });
+// 「利用中のシステム」の読み取り（readAccounts）。access の元には使わない（access の元は memberships）。
+//   db.accountsFail … 読めなかった（例外）
+//   db.accountsView … 読めたときの見え方（user_id → { accounting: { role } }）。memberships とわざとずらして、混ざらないことを見る
 mock.module(atRoot("lib/accounts.js"), { namedExports: {
-  SYSTEMS: [], readAccounts: async () => new Map(),
+  SYSTEMS: [], readAccounts: async (_sb, ids) => {
+    if (db.accountsFail) throw new Error("accounts を読めません");
+    return new Map((ids || []).filter(Boolean).map((id) => [id, db.accountsView?.[id] || {}]));
+  },
   setAccountsActive: async () => ({}), removeAccountingAccess: async () => ({}),
   attachAccount: async () => ({ ok: true }), setSystemAccess: async () => ({ ok: true }),
   randomPassword: () => "pw", findUserByEmail: async () => null,
@@ -112,6 +118,8 @@ const emp = (id, name, user, extra = {}) => ({ id, tenant_id: "t1", user_id: use
 
 function setup() {
   db.fail = new Set();
+  db.accountsFail = false;
+  db.accountsView = {};
   jwt.id = "u-own";
   db.rows = {
     gw_employees: [
@@ -159,6 +167,8 @@ await ok("各行に、その人の「利用できる業務」（accessOf）が�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const m = byId(r);
   for (const [id, want] of Object.entries(EXPECT)) assert.deepEqual(pick(m[id].access), want, id);
+  // 会計の管理者の注記の元（accessOf に渡した isAdmin）。memberships の admin / staff の判定結果
+  for (const id of Object.keys(EXPECT)) assert.equal(m[id].accessMeta.accountingAdmin, id === "e-adm", `${id}: accessMeta.accountingAdmin`);
 });
 
 await ok("Office は、人事・労務／経理・事務／月末月初のどれか1つでも入れれば officeAny（ヘッダーに Office が出る条件と同じ）", async () => {
@@ -186,6 +196,7 @@ await ok("名簿の access は、本人が /api/me で受け取る access と同
     if (!e.user_id) continue;
     const mine = (await me(e.user_id)).body;
     assert.deepEqual(pick(mine.access), pick(e.access), `${e.id}: 名簿の access と /api/me の access`);
+    assert.equal(mine.isAdmin, e.accessMeta.accountingAdmin, `${e.id}: 注記の元（accessMeta.accountingAdmin）は、/api/me の isAdmin と同じ`);
     assert.equal(mine.access.officeHr, e.access.officeHr);
   }
 });
@@ -203,7 +214,36 @@ await ok("会計側の管理者かどうか（memberships）が読めなかっ�
   const m = byId(await list("u-own"));
   assert.equal(m["e-adm"].access, null);
   assert.equal(m["e-hr"].access, null);
+  // 管理者かどうかも「分からない」（false と言い切らない）。注記の元も null
+  assert.equal(m["e-adm"].accessMeta.accountingAdmin, null);
+  assert.equal(m["e-hr"].accessMeta.accountingAdmin, null);
   assert.deepEqual(pick(m["e-nouser"].access), EXPECT["e-nouser"], "ログイン未連携の人は memberships が要らない");
+  assert.equal(m["e-nouser"].accessMeta.accountingAdmin, false, "ログイン未連携の人は、会計の管理者ではない（accessOf に false を渡している）");
+});
+
+await ok("「利用中のシステム」（accounts）の取得に失敗しても、memberships が admin / staff なら access も注記の元（accountingAdmin）も出る", async () => {
+  setup();
+  db.accountsFail = true;     // readAccounts が例外
+  const r = await list("u-own");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const m = byId(r);
+  assert.deepEqual(pick(m["e-adm"].access), EXPECT["e-adm"], "管理者の access は accounts に左右されない");
+  assert.equal(m["e-adm"].accessMeta.accountingAdmin, true, "accounts が読めなくても、memberships の admin を使う");
+  assert.equal(m["e-hr"].accessMeta.accountingAdmin, false);
+});
+
+await ok("accounts の見え方が memberships と食い違っても、access と注記は memberships（accessOf に渡した isAdmin）だけで決まる", async () => {
+  setup();
+  // accounts では「管理者」に見えるが、memberships では管理者ではない / 逆
+  db.accountsView = { "u-none": { accounting: { exists: true, active: true, role: "admin" } }, "u-adm": { accounting: { exists: true, active: true, role: "client" } } };
+  const m = byId(await list("u-own"));
+  assert.equal(m["e-none"].accessMeta.accountingAdmin, false);
+  assert.deepEqual(pick(m["e-none"].access), only(), "accounts が admin に見えても、access は変わらない");
+  assert.equal(m["e-adm"].accessMeta.accountingAdmin, true);
+  assert.deepEqual(pick(m["e-adm"].access), EXPECT["e-adm"]);
+  // 本人の /api/me とも一致
+  assert.equal((await me("u-none")).body.isAdmin, false);
+  assert.equal((await me("u-adm")).body.isAdmin, true);
 });
 
 console.log("\n=== 社内権限のチェック変更（/api/employees/roles）: 変更後の access を、その場で返す ===\n");
@@ -269,6 +309,7 @@ await ok("会計側の管理者（memberships admin）の人は、社内権限�
   setup();
   const r = await setRole("e-adm", "sales", true);
   assert.deepEqual(pick(r.body.access), only("sell", "officeHr", "officeFinance"));
+  assert.equal(r.body.accessMeta.accountingAdmin, true, "応答の accessMeta も、accessOf に渡した isAdmin");
   assert.deepEqual(pick((await me("u-adm")).body.access), pick(r.body.access));
 });
 
@@ -276,6 +317,16 @@ await ok("ログイン未連携の人も、社内権限だけで access が返�
   setup();
   const r = await setRole("e-nouser", "finance", true);
   assert.deepEqual(pick(r.body.access), only("recruit", "office", "officeHr", "officeFinance"));
+  assert.equal(r.body.accessMeta.accountingAdmin, false);
+});
+
+await ok("権限変更の応答でも、accounts の取得失敗は access・注記に影響しない", async () => {
+  setup();
+  db.accountsFail = true;
+  const r = await setRole("e-adm", "sales", true);
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.accessMeta.accountingAdmin, true);
+  assert.deepEqual(pick(r.body.access), only("sell", "officeHr", "officeFinance"));
 });
 
 await ok("memberships が読めなかったとき、権限の付け外しは成功し、access は返さない（画面は名簿を読み直す）", async () => {
@@ -285,6 +336,7 @@ await ok("memberships が読めなかったとき、権限の付け外しは成�
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.granted, true);
   assert.equal(r.body.access, null, "読めないときは null（×と言い切らない）");
+  assert.equal(r.body.accessMeta.accountingAdmin, null, "注記の元も null（会計の管理者かどうか分からない）");
   assert.ok(db.rows.gw_role_grants.some((g) => g.employee_id === "e-none" && g.role === "finance"), "付け外し自体は行われている");
 });
 

@@ -130,7 +130,7 @@ async function accessAfter(tenantId, target) {
       .eq("tenant_id", tenantId).eq("employee_id", target.id);
     if (error) return {};
     const roles = (data || []).map((g) => g.role);
-    const access = accessForMember(roles, target.user_id, await adminFlags(admin(), [target.user_id]));
-    return { roles, access };
+    // access と accessMeta（accessOf に渡した isAdmin）。画面は同じ行の「利用できる業務」と注記を、この2つで直す
+    return { roles, ...accessForMember(roles, target.user_id, await adminFlags(admin(), [target.user_id])) };
   } catch { return {}; }
 }

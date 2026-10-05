@@ -23,7 +23,8 @@ const ADMIN_ME = { email: "own@8grp.co.jp", appRole: "owner", isAdmin: false, ro
 const base = (id, name, roles, extra = {}) => ({ id, display_name: name, email: `${id}@8grp.co.jp`, user_id: `u-${id}`,
   department: "開発", employment_type: "正社員", status: "active", employee_kind: "proper", partner_company_id: null,
   roles, accounts: {}, ...extra });
-const withAccess = (e, isAdmin = false) => ({ ...e, access: GW.memberAccessOf({ roles: e.roles, isAdmin }) });
+// サーバの応答の形: access（accessOf の結果）と accessMeta（accessOf に渡した isAdmin）
+const withAccess = (e, isAdmin = false) => ({ ...e, access: GW.memberAccessOf({ roles: e.roles, isAdmin }), accessMeta: { accountingAdmin: isAdmin } });
 
 async function open({ employees, width = 1500, failRole = false, roleResponder = null } = {}) {
   const page = await br.newPage({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
@@ -46,8 +47,11 @@ async function open({ employees, width = 1500, failRole = false, roleResponder =
       const roles = new Set(e.roles);
       if (body.grant) roles.add(body.role); else roles.delete(body.role);
       e.roles = [...roles];
-      const out = roleResponder ? roleResponder(e) : { roles: e.roles, access: GW.memberAccessOf({ roles: e.roles, isAdmin: false }) };
+      const isAdmin = e.accessMeta?.accountingAdmin === true;
+      const out = roleResponder ? roleResponder(e)
+        : { roles: e.roles, access: GW.memberAccessOf({ roles: e.roles, isAdmin }), accessMeta: { accountingAdmin: isAdmin } };
       e.access = out.access;
+      if (out.accessMeta !== undefined) e.accessMeta = out.accessMeta;
       return send({ ok: true, employeeId: e.id, role: body.role, granted: Boolean(body.grant), ...out });
     }
     if (/\/api\/employees\b/.test(url) && req.method() === "GET") {
@@ -78,7 +82,8 @@ const EMPLOYEES = () => [
   withAccess(base("e-mgr", "責任 二郎", ["manager"])),
   withAccess(base("e-rec", "採用 三郎", ["recruiter"])),
   withAccess(base("e-none", "一般 七郎", [])),
-  withAccess(base("e-adm", "管理 六郎", [], { accounts: { accounting: { exists: true, active: true, role: "admin" } } }), true),
+  // 会計の管理者。「利用中のシステム」（accounts）は読めなかった想定で空にしてある。注記は accounts ではなく accessMeta から出る
+  withAccess(base("e-adm", "管理 六郎", [], { accounts: {} }), true),
 ];
 
 console.log("— 各行の「利用できる業務」（サーバの accessOf のとおり）—");
@@ -193,6 +198,57 @@ console.log("\n— 応答に access が無い・読めなかったとき —");
   const p3 = await open({ employees: emps3 });
   check((await p3.locator("td.mb-acc .mb-ab").count()) === 0, "access が無い名簿では、○× を出さない（推測しない）");
   await p3.close();
+}
+
+console.log("\n— 会計の管理者の注記は、accessOf に渡した isAdmin（accessMeta.accountingAdmin）から出す —");
+{
+  // 1) accounts（利用中のシステム）が空でも、accessMeta が true なら注記が出る
+  // 2) accounts が「管理者」に見えても、accessMeta が false なら注記は出ない（accounts から推測しない）
+  // 3) access も accessMeta も null（memberships が読めなかった）→「確認できません」。注記は出ない
+  const employees = [
+    withAccess(base("e-adm", "管理 六郎", [], { accounts: {} }), true),
+    withAccess(base("e-fake", "見せかけ 一郎", [], { accounts: { accounting: { exists: true, active: true, role: "admin" } } }), false),
+    { ...base("e-unk", "不明 二郎", ["hr"], { accounts: { accounting: { exists: true, active: true, role: "staff" } } }), access: null, accessMeta: { accountingAdmin: null } },
+  ];
+  const page = await open({ employees });
+  const note = (id) => page.locator(`td.mb-acc[data-employee="${id}"] [data-note="accounting-admin"]`).count();
+  check(await note("e-adm") === 1, "accounts が空でも、accessMeta.accountingAdmin = true なら「会計の管理者」の注記が出る");
+  const adm = await chips(page, "e-adm");
+  check(adm.officeHr && adm.officeFinance, "その人の 人事・労務 ○・経理・事務 ○ は、同じ isAdmin から（注記と○の理由が一致する）");
+  check(await note("e-fake") === 0, "accounts が admin に見えても、accessMeta が false なら注記は出ない（推測しない）");
+  const fake = await chips(page, "e-fake");
+  check(!fake.officeHr && !fake.officeFinance, "注記が無い人は、人事・労務／経理・事務も ×（注記と実効権限が一致する）");
+  check(await note("e-unk") === 0, "isAdmin が分からない（null）人には、注記を出さない（staff に見える accounts でも）");
+  check((await page.locator('td.mb-acc[data-employee="e-unk"] [data-access-unknown]').count()) === 1, "memberships が読めない（access = null）→「確認できません」");
+  check((await page.locator('td.mb-acc[data-employee="e-unk"] .mb-ab').count()) === 0, "分からない人に ○× は出さない");
+  await page.close();
+
+  // 権限変更の応答の accessMeta で、同じ行の注記も変わる（accountingAdmin が変わらなければ消えない／null なら消える）
+  const emps2 = [withAccess(base("e-adm", "管理 六郎", [], { accounts: {} }), true), withAccess(base("e-none", "一般 七郎", []))];
+  const p2 = await open({ employees: emps2 });
+  await p2.locator('tr:has(td.mb-acc[data-employee="e-adm"]) input[data-role="sales"]').check();
+  await p2.waitForTimeout(350);
+  check(await p2.locator('td.mb-acc[data-employee="e-adm"] [data-note="accounting-admin"]').count() === 1, "権限を付けても、会計の管理者の注記は残る（応答の accessMeta から）");
+  const a2 = await chips(p2, "e-adm");
+  check(a2.recruit === false && a2.sell && a2.officeHr && a2.officeFinance, "Sales ○ が足され、人事・労務／経理・事務 ○ は管理者のまま");
+  await p2.close();
+
+  const p3 = await open({ employees: [withAccess(base("e-adm", "管理 六郎", [], { accounts: {} }), true)],
+    roleResponder: (e) => ({ roles: e.roles, access: null, accessMeta: { accountingAdmin: null } }) });
+  await p3.locator('tr:has(td.mb-acc[data-employee="e-adm"]) input[data-role="sales"]').check();
+  await p3.waitForTimeout(350);
+  check(await p3.locator('td.mb-acc[data-employee="e-adm"] [data-note="accounting-admin"]').count() === 0, "応答で isAdmin が分からなくなったら、注記も消える");
+  check((await p3.locator('td.mb-acc[data-employee="e-adm"] [data-access-unknown]').count()) === 1, "「確認できません」になる");
+  await p3.close();
+
+  // 応答に accessMeta が無い（古いサーバ）→ 名簿を読み直して、表示と実際を合わせる（注記を推測で出さない）
+  const p4 = await open({ employees: [withAccess(base("e-none", "一般 七郎", []))],
+    roleResponder: (e) => ({ roles: e.roles, access: GW.memberAccessOf({ roles: e.roles, isAdmin: false }) }) });
+  const g0 = p4.calls.employeesGet;
+  await p4.locator('tr:has(td.mb-acc[data-employee="e-none"]) input[data-role="finance"]').check();
+  await p4.waitForTimeout(500);
+  check(p4.calls.employeesGet === g0 + 1, "accessMeta が無い応答のときは、名簿を読み直す");
+  await p4.close();
 }
 
 console.log("\n— 「メンバー」のプルダウン = 基本区分（在籍の段階）。業務の権限ではない —");
