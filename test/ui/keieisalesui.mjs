@@ -1,7 +1,8 @@
 // 経営ハブ（/keiei ホーム）の「10月の目標と実績」「営業ファネル・担当者別」を、実際のブラウザで見る（2026-10 経営方針 §12 Phase 1）。
 //
 // ■ 何を守りたいのか
-//   ・並び：今日の確認 → 10月の目標と実績 → お金 → 人・組織 → 営業ファネル・担当者別 → リスク・未処理
+//   ・並び：今日の確認 → 10月の目標と実績 → お金 → 人・組織 → 営業ファネル → 担当者別 → リスク・未処理
+//   ・ファネルは会社（企業ID）で数える（接触は送信の件数を添える）
 //   ・ファネル：目標・今日の目安・実績・達成率。有効企業・本命案件は「定義未決」（0 と出さない）
 //   ・PC/IT機器売上（1,000万円）は「未接続」（金額を作らない）。EC・Space は未接続の1行だけ
 //   ・停滞案件は「今日の確認」に1項目＋営業の欄に一覧。押すと Sales の会社へ
@@ -49,7 +50,9 @@ console.log("— 10月のホーム（PC 1280）—");
 {
   const page = await open();
   const blocks = await page.locator("[data-block]").evaluateAll((ns) => ns.map((n) => n.dataset.block));
-  check(blocks.join() === "today,kgi,money,people,sales,risk", `並び：今日の確認→目標と実績→お金→人・組織→営業→リスク（いま ${blocks.join()}）`);
+  check(blocks.join() === "today,kgi,money,people,funnel,byperson,risk", `並び：今日の確認→10月の目標と実績→お金→人・組織→営業ファネル→担当者別→リスク（いま ${blocks.join()}）`);
+  const heads = await page.locator("[data-block] .hub-h").evaluateAll((ns) => ns.map((n) => n.firstChild.textContent.trim()));
+  check(heads.join("|") === "今日の確認|10月の目標と実績|お金|人・組織|営業ファネル|担当者別|リスク・未処理", `見出し（いま ${heads.join("|")}）`);
   const kgiHead = (await page.locator('[data-block="kgi"] .hub-h').innerText()).trim();
   check(kgiHead === "10月の目標と実績", `見出し「10月の目標と実績」（いま ${kgiHead}）`);
 
@@ -57,13 +60,14 @@ console.log("— 10月のホーム（PC 1280）—");
   const rows = await page.locator('[data-role="funnel"] tbody tr').evaluateAll((ns) => ns.map((n) => [n.dataset.stage, n.innerText.replace(/\s+/g, " ").trim()]));
   check(rows.map((r) => r[0]).join() === "contact,effective,meeting,proposal,won,key", `段階：接触→有効企業→商談→提案→有料契約→本命案件（${rows.map((r) => r[0]).join()}）`);
   const row = (k) => rows.find((r) => r[0] === k)[1];
-  check(row("contact").includes("4,000件") && row("contact").includes("645件") && row("contact").includes("120件") && row("contact").includes("3%"), `接触：目標4,000・今日の目安645・実績120・3%（${row("contact")}）`);
-  check(row("meeting").includes("30件") && row("meeting").includes("5件") && row("meeting").includes("17%"), `商談：目標30・実績5・17%（${row("meeting")}）`);
+  check(row("contact").includes("4,000社") && row("contact").includes("645社") && row("contact").includes("100社") && row("contact").includes("送信 120件") && row("contact").includes("3%"), `接触：目標4,000社・今日の目安645・実績100社（送信120件）・3%（${row("contact")}）`);
+  check(row("meeting").includes("30社") && row("meeting").includes("6社") && row("meeting").includes("20%"), `商談：目標30社・実績6社・20%（${row("meeting")}）`);
   check(row("effective").includes("定義未決") && !/\b0件/.test(row("effective")), `有効企業は「定義未決」で、0件と出さない（${row("effective")}）`);
   check(row("key").includes("定義未決"), "本命案件は「定義未決」");
-  const kgi = await textOf(page, '[data-block="kgi"]');
-  check(kgi.includes("商談→提案 60%（計画 50%）") && kgi.includes("提案→有料契約 33.3%（計画 67%）"), "転換率（実績と計画）");
-  check(kgi.includes("480,000円") && kgi.includes("会計上の売上・粗利ではありません"), "受注額は案件金額で、会計上の売上と区別して出す");
+  check((await textOf(page, '[data-block="kgi"]')).includes("会社（企業ID）で数えています"), "会社で数えていることを明記");
+  const fun = await textOf(page, '[data-block="funnel"]');
+  check(fun.includes("商談→提案 66.7%（計画 50%）") && fun.includes("提案→有料契約 25%（計画 67%）"), "営業ファネル：転換率（実績と計画）");
+  check(fun.includes("480,000円") && fun.includes("1社・1件") && fun.includes("会計上の売上・粗利ではありません"), "受注額は案件金額で、会計上の売上・粗利と区別して出す");
   const pc = await textOf(page, '[data-role="pc"]');
   check(pc.includes("PC/IT機器売上") && pc.includes("1,000万円") && pc.includes("未接続"), `PC/IT機器売上：目標1,000万円・未接続（${pc.replace(/\s+/g, " ")}）`);
 
@@ -74,20 +78,23 @@ console.log("— 10月のホーム（PC 1280）—");
   check(await page.locator('[data-block="risk"] [data-key="sales_stalled"]').count() === 0, "リスクには同じ事実を出さない");
 
   // 営業ファネル・担当者別
-  const sales = await textOf(page, '[data-block="sales"]');
+  const sales = await textOf(page, '[data-block="funnel"]');
   const nakamura = (await textOf(page, '[data-person="中村 次郎"]')).replace(/\s+/g, " ");
-  check(nakamura.includes("90件") && nakamura.includes("目標 2,000件") && nakamura.includes("定義未決"), `中村：接触 90／2,000・有効企業は定義未決（${nakamura}）`);
+  check(nakamura.includes("90社") && nakamura.includes("目標 2,000社") && nakamura.includes("送信90件") && nakamura.includes("定義未決"), `中村：接触 90社（送信90件）／2,000・有効企業は定義未決（${nakamura}）`);
   const kudo = (await textOf(page, '[data-person="工藤 五郎"]')).replace(/\s+/g, " ");
   check(kudo.includes("1,000万円") && kudo.includes("未接続") && kudo.includes("記録なし"), `工藤：PC売上は未接続・診断送客は記録なし（${kudo}）`);
   const fujimoto = (await textOf(page, '[data-person="藤本 三郎"]')).replace(/\s+/g, " ");
-  check(fujimoto.includes("50%") && fujimoto.includes("提案1／商談2"), `藤本：提案率 50%（提案1／商談2）（${fujimoto}）`);
+  check(fujimoto.includes("67%") && fujimoto.includes("提案2社／商談3社"), `藤本：提案率 67%（提案2社／商談3社）（${fujimoto}）`);
+  check((await textOf(page, '[data-block="byperson"]')).includes("社員IDで数えています"), "担当者別：社員IDで数えていることを明記");
   check(await page.locator('[data-person="池永 四郎"] .v.ng').count() === 1, "池永：停滞（目標0件）を超えていれば赤");
   const st = page.locator('[data-role="stalled"] .st-row');
-  check(await st.count() === 1 && (await st.innerText()).includes("テスト株式会社2") && (await st.innerText()).includes("10日"), "停滞案件の一覧（会社・日数）");
+  check(await st.count() === 1 && (await st.innerText()).includes("テスト株式会社2") && (await st.innerText()).includes("最後の動き 2026/09/25（10日前）"), `停滞案件の一覧（会社・最後の動き）（${(await st.innerText()).replace(/\s+/g, " ")}）`);
   check(await st.locator("a").getAttribute("href") === "/sales/companies.html?id=cd2", "押すと Sales のその会社へ");
   check(sales.includes("アタック済") && sales.includes("今月分ではありません"), "Sales の企業の今の状態（今月分ではないと明記）");
   const un = await textOf(page, '[data-role="unconnected"]');
   check(un.includes("EC・PC販売") && un.includes("Space") && !un.includes("Board"), "未接続の1行（EC・Space。Board はお金の欄にある）");
+  const unmeasured = await page.locator('[data-role="kpi"].na .v').allInnerTexts();
+  check(unmeasured.length > 0 && unmeasured.every((x) => /定義未決|記録なし|未接続|未計測|取得できません/.test(x)), `数えられない KPI は 0 ではなく状態で出す（${[...new Set(unmeasured)].join("・")}）`);
   const bodyText = await textOf(page, "#kei-main");
   check(!/NaN|undefined|null/.test(bodyText), "NaN・undefined・null の文字が出ない");
   check(page.errs.length === 0, `画面のエラーが無い ${page.errs.join(" / ").slice(0, 160)}`);
@@ -112,6 +119,7 @@ console.log("\n— 営業を読めない（sales: null）—");
   const page = await open({ hub: { ...hubOctober(), sales: null } });
   const blocks = await page.locator("[data-block]").evaluateAll((ns) => ns.map((n) => n.dataset.block));
   check(blocks.join() === "today,kgi,money,people,risk", `目標の欄に「取得できません」、ほかのブロックは出る（${blocks.join()}）`);
+  check(!/\b0(件|社|円)/.test(await textOf(page, '[data-block="kgi"]')), "読めないときに 0件・0社・0円と出さない");
   check((await textOf(page, '[data-role="sales-missing"]')).includes("取得できません"), "営業の数字を、いま取得できません");
   check(page.errs.length === 0, "画面のエラーが無い");
   await page.close();

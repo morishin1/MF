@@ -75,30 +75,54 @@ export const salesPeople = () => [
   { id: "p5", display_name: "工藤 五郎", status: "active" }, { id: "p6", display_name: "今福 六郎", status: "active" },
   { id: "p7", display_name: "魚住 七郎", status: "active" }, { id: "p8", display_name: "野澤 八郎", status: "active" },
 ];
-/** テスト用の Sales・Tasks の事実（今月：アタック 120件・案件 6件・提案 3件・成約 1件・停滞 2件） */
+/**
+ * テスト用の Sales・Tasks の事実（2026-10-05 時点）
+ *   アタック 121件の送信（うち1件は送れなかった・1件は先月）→ 100社。中村 90社（送信90件）・山内 30社（送信30件）
+ *   案件：今月作成 7件（cd1 に2件）→ 商談 6社。今月 提案以降に進んだ 4社（cd3・cd4・cd5、提案のあと失注した cd10 も数える）
+ *         成約 1社（cd5・48万円）。停滞：d2（提案のまま 9/25 から動きなし・10日）だけ。
+ *         d8 は案件の更新は 9/20 だが、会社の営業履歴が 10/2 にあるので停滞ではない
+ */
 export const salesFacts = () => {
-  const approaches = Array.from({ length: 120 }, (_, i) => ({ id: `a${i}`, employee_id: i < 90 ? "p2" : "p1", sent_at: octTs(1 + (i % 4)), failed_at: null }));
-  approaches.push({ id: "afail", employee_id: "p2", sent_at: octTs(2), failed_at: octTs(2) });   // 送れなかった：数えない
-  approaches.push({ id: "aold", employee_id: "p2", sent_at: "2026-09-29T03:00:00Z", failed_at: null });   // 先月：数えない
-  const deal = (id, owner, stage, extra = {}) => ({ id, company_id: `c${id}`, owner_id: owner, title: `テスト案件 ${id}`, stage, amount: null,
+  const approaches = Array.from({ length: 120 }, (_, i) => ({ id: `a${i}`, company_id: `cx${i % 100}`, employee_id: i < 90 ? "p2" : "p1", sent_at: octTs(1 + (i % 4)), failed_at: null }));
+  approaches.push({ id: "afail", company_id: "cx200", employee_id: "p2", sent_at: octTs(2), failed_at: octTs(2) });   // 送れなかった：数えない
+  approaches.push({ id: "aold", company_id: "cx201", employee_id: "p2", sent_at: "2026-09-29T03:00:00Z", failed_at: null });   // 先月：数えない
+  const deal = (id, company, owner, stage, extra = {}) => ({ id, company_id: company, owner_id: owner, title: `テスト案件 ${id}`, stage, amount: null,
     won_on: null, created_at: octTs(2), updated_at: octTs(4), ...extra });
+  const deals = [
+    deal("d1", "cd1", "p3", "meeting"),
+    deal("d7", "cd1", "p3", "meeting"),   // 同じ会社の2件目：商談は1社
+    deal("d2", "cd2", "p3", "proposal", { created_at: "2026-09-20T03:00:00Z", updated_at: "2026-09-25T03:00:00Z" }),
+    deal("d3", "cd3", "p3", "proposal"),
+    deal("d4", "cd4", "p4", "negotiation", { updated_at: octTs(1, 0) }),
+    deal("d5", "cd5", "p1", "won", { amount: 480000, won_on: "2026-10-03" }),
+    deal("d6", "cd6", "p2", "meeting"),
+    deal("d8", "cd8", "p4", "proposal", { created_at: "2026-09-10T03:00:00Z", updated_at: "2026-09-20T03:00:00Z" }),
+    deal("d10", "cd10", "p3", "lost", { updated_at: octTs(3) }),   // 提案のあと失注：今月の提案には数える
+  ];
+  const h = (id, d, stage, at) => ({ id, deal_id: d, company_id: deals.find((x) => x.id === d).company_id, stage, changed_at: at });
+  const history = [
+    h("h1", "d3", "proposal", octTs(3)), h("h2", "d4", "negotiation", octTs(1, 0)),
+    h("h3", "d5", "proposal", octTs(2)), h("h4", "d5", "won", octTs(3)),
+    h("h5", "d10", "proposal", octTs(2)), h("h6", "d10", "lost", octTs(3)),
+    h("h7", "d1", "meeting", octTs(2)), h("h8", "d7", "meeting", octTs(2)),
+  ];
   return {
     companies: [
-      ...Array.from({ length: 6 }, (_, i) => ({ id: `cd${i + 1}`, name: `テスト株式会社${i + 1}`, status: "meeting", owner_id: "p3", hidden_at: null })),
+      ...["cd1", "cd2", "cd3", "cd4", "cd5", "cd6", "cd8", "cd10"].map((id, i) => ({ id, name: `テスト株式会社${id.slice(2)}`, status: "meeting", owner_id: "p3", hidden_at: null })).slice(0, 6),
       ...Array.from({ length: 40 }, (_, i) => ({ id: `cx${i}`, name: `テスト企業${i}`, status: i < 30 ? "attacked" : "clicked", owner_id: "p2", hidden_at: null })),
+      { id: "cd8", name: "テスト株式会社8", status: "proposal", owner_id: "p4", hidden_at: null },
+      { id: "cd10", name: "テスト株式会社10", status: "lost", owner_id: "p3", hidden_at: null },
     ],
     approaches,
     dealState: "ok",
-    deals: [
-      deal("d1", "p3", "meeting"), deal("d2", "p3", "proposal", { updated_at: "2026-09-25T03:00:00Z", created_at: "2026-09-20T03:00:00Z" }),
-      deal("d3", "p3", "proposal"), deal("d4", "p4", "negotiation", { updated_at: octTs(1, 0) }),
-      deal("d5", "p1", "won", { amount: 480000, won_on: "2026-10-03" }), deal("d6", "p2", "meeting"),
-    ].map((d) => ({ ...d, company_id: `cd${d.id.slice(1)}` })),
-    history: [
-      { id: "h1", deal_id: "d3", stage: "proposal", changed_at: octTs(3) },
-      { id: "h2", deal_id: "d4", stage: "negotiation", changed_at: octTs(1, 0) },
-      { id: "h3", deal_id: "d5", stage: "proposal", changed_at: octTs(2) }, { id: "h4", deal_id: "d5", stage: "won", changed_at: octTs(3) },
+    deals,
+    history,
+    // 停滞の判定：いま提案・最終調整の案件の、すべての段階の記録と、その会社の営業履歴
+    lastStage: [
+      h("s1", "d2", "proposal", "2026-09-25T03:00:00Z"), h("s2", "d3", "proposal", octTs(3)),
+      h("s3", "d4", "negotiation", octTs(1, 0)), h("s4", "d8", "proposal", "2026-09-20T03:00:00Z"),
     ],
+    lastEvent: [{ id: "ev1", company_id: "cd8", occurred_at: octTs(2) }, { id: "ev2", company_id: "cd2", occurred_at: "2026-09-21T03:00:00Z" }],
     tasks: [{ id: "t1", assignee_id: "p8", due_on: "2026-10-01", status: "doing" }, { id: "t2", assignee_id: null, due_on: "2026-10-20", status: "todo" }],
   };
 };

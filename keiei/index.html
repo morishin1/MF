@@ -237,18 +237,34 @@
           <td colspan="2" title="${esc(f.reason || "")}"><span class="kgi-state" data-role="state">${esc(STATE_LABEL[f.status] || "未計測")}</span>${f.status === "undefined" ? "" : `<span class="kgi-why">${esc(f.reason || "")}</span>`}</td></tr>`
       : `<tr data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td>
           <td class="n pace">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
-          <td class="n v" data-role="actual">${val(f.value, f.unit)}</td>
+          <td class="n v" data-role="actual">${val(f.value, f.unit)}${f.sends == null ? "" : `<span class="kgi-why" style="text-align:right;">送信 ${num(f.sends)}件</span>`}</td>
           <td>${f.pct == null ? "" : `${bar(f.pct, f.pct >= 100)}<span class="kgi-pct">${f.pct}%</span>`}</td></tr>`;
-    const rates = S.rates.filter((r) => r.value != null)
-      .map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value == null ? "—" : `${r.value}%`}</b>${r.plan == null ? "" : `（計画 ${r.plan}%）`}`).join("　");
     return `<div class="kgi-meta">${esc(S.label)}・${S.dayNo}/${S.daysInMonth}日目。「今日の目安」は目標を日数で割った進み具合です。${S.note ? esc(S.note) : "この月の目標は、まだ設定していません。"}</div>
       <div class="hub-panel" style="padding:4px 12px;overflow-x:auto;"><table class="kgi-t" data-role="funnel"><thead><tr><th>段階</th><th class="n">目標</th><th class="n pace">今日の目安</th><th class="n">実績</th><th>達成率</th></tr></thead>
         <tbody>${S.funnel.map(row).join("")}</tbody></table></div>
-      ${rates ? `<div class="kgi-line" data-role="rates">転換率（実績・前の段階から）：${rates}</div>` : ""}
-      <div class="kgi-line" data-role="won-amount">${S.won ? `今月の受注額（Sales の案件金額。会計上の売上・粗利ではありません）：<b>${yen(S.won.amount)}</b>（${num(S.won.count)}件）` : `今月の受注額：取得できません（${esc(S.wonReason || "")}）`}</div>
+      <div class="kgi-line">ファネルは会社（企業ID）で数えています。同じ会社への2回目のアタック・2件目の案件は、1社のままです。</div>
       ${S.pc ? `<div class="kgi-pc" data-role="pc"><b>${esc(S.pc.label)}</b><span>目標 ${man(S.pc.target)}</span><span class="kgi-state">未接続</span><span>${esc(S.pc.reason)}</span></div>` : ""}`;
   }
-  function salesHtml(S) {
+  function funnelHtml(S) {
+    const rates = S.rates.filter((r) => r.value != null)
+      .map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value}%</b>${r.plan == null ? "" : `（計画 ${r.plan}%）`}`).join("　");
+    const stalled = S.stalled
+      ? (S.stalled.count ? `<div class="hub-panel" data-role="stalled">${S.stalled.rows.map((r) => `<div class="st-row">
+            <div><b>${esc(r.company)}</b> <span>${esc(r.title)}・${esc(r.stage)}・最後の動き ${esc(String(r.last || "").replace(/-/g, "/"))}（${r.idle}日前）・担当 ${esc(r.owner)}</span></div>
+            <a class="hub-go" href="${esc(r.href)}">Salesで開く →</a></div>`).join("")}
+          ${S.stalled.count > S.stalled.rows.length ? `<div class="hub-none">ほか${S.stalled.count - S.stalled.rows.length}件。<a href="${esc(S.links.home)}">Salesで確認する</a></div>` : ""}</div>`
+        : `<div class="hub-none" data-role="stalled-none">提案・最終調整のまま${S.stalled.days}日以上動きのない案件はありません。</div>`)
+      : `<div class="hub-none" data-role="stalled-missing">停滞案件：取得できません（${esc(S.stalledReason || "")}）</div>`;
+    const snap = S.snapshot ? `<div class="snap" data-role="snapshot">${S.snapshot.map((x) => `<span>${esc(x.label)}<b>${num(x.count)}</b></span>`).join("")}</div>`
+      : `<div class="hub-none">Sales の企業：取得できません</div>`;
+    const unconnected = S.unconnected.filter((u) => u.key !== "board").map((u) => esc(u.label)).join("／");
+    return `<div class="kgi-line" data-role="rates" style="margin-top:0;">転換率（今月の実績・前の段階から）：${rates || "まだ出せません（となりの段階の両方が数えられたときだけ出します）"}</div>
+      <div class="kgi-line" data-role="won-amount">${S.won ? `今月の受注額（Sales の案件金額。会計上の売上・粗利ではありません）：<b>${yen(S.won.amount)}</b>（${num(S.won.companies)}社・${num(S.won.deals)}件）` : `今月の受注額：取得できません（${esc(S.wonReason || "")}）`}</div>
+      <div class="hub-subh">提案後に止まっている案件（${S.stalled ? S.stalled.days : 7}日以上、動きなし）</div>${stalled}
+      <div class="hub-subh">Sales の企業（いまの状態。今月分ではありません）</div>${snap}
+      <div class="kgi-line" data-role="unconnected">未接続：${unconnected}。数字は出していません（0 ではありません）。　<a href="${esc(S.links.home)}">Salesを開く →</a></div>`;
+  }
+  function peopleKpiHtml(S) {
     const kpi = (k) => {
       if (k.value == null) {
         return `<div class="pp-kpi na" data-role="kpi" title="${esc(k.reason || "")}"><div class="l">${esc(k.label)}${k.target == null ? "" : `（目標 ${k.unit === "円" ? man(k.target) : `${num(k.target)}${esc(k.unit)}`}）`}</div>
@@ -259,25 +275,12 @@
         <div class="v${tone}">${val(k.value, k.unit)}${k.target == null ? "" : `<small>／目標 ${k.unit === "円" ? man(k.target) : `${num(k.target)}${esc(k.unit)}`}</small>`}</div>
         ${k.pct == null ? "" : bar(k.pct, k.done)}${k.note ? `<div class="w">${esc(k.note)}</div>` : ""}</div>`;
     };
-    const people = S.perPerson.length ? `<div class="hub-panel" data-role="people-kpi">${S.perPerson.map((p) => `<div class="pp" data-person="${esc(p.name)}">
+    if (!S.perPerson.length) return `<div class="hub-none">この月の担当者別の目標は、まだ設定していません。</div>`;
+    return `<div class="kgi-meta">目標案と、今月の実績（社員IDで数えています）。</div>
+      <div class="hub-panel" data-role="people-kpi">${S.perPerson.map((p) => `<div class="pp" data-person="${esc(p.name)}">
         <div class="pp-nm"><b>${esc(p.name)}</b><span>${esc(p.role)}</span>${p.linked ? "" : `<span style="color:#7d5a00;">名簿で特定できません</span>`}</div>
-        <div class="pp-k">${p.kpis.map(kpi).join("")}</div></div>`).join("")}</div>`
-      : `<div class="hub-none">この月の担当者別の目標は、まだ設定していません。</div>`;
-    const stalled = S.stalled
-      ? (S.stalled.count ? `<div class="hub-panel" data-role="stalled">${S.stalled.rows.map((r) => `<div class="st-row">
-            <div><b>${esc(r.company)}</b> <span>${esc(r.title)}・${esc(r.stage)}のまま${r.idle}日・担当 ${esc(r.owner)}</span></div>
-            <a class="hub-go" href="${esc(r.href)}">Salesで開く →</a></div>`).join("")}
-          ${S.stalled.count > S.stalled.rows.length ? `<div class="hub-none">ほか${S.stalled.count - S.stalled.rows.length}件。<a href="${esc(S.links.home)}">Salesで確認する</a></div>` : ""}</div>`
-        : `<div class="hub-none" data-role="stalled-none">提案・最終調整のまま${S.stalled.days}日以上止まっている案件はありません。</div>`)
-      : `<div class="hub-none" data-role="stalled-missing">停滞案件：取得できません（${esc(S.stalledReason || "")}）</div>`;
-    const snap = S.snapshot ? `<div class="snap" data-role="snapshot">${S.snapshot.map((x) => `<span>${esc(x.label)}<b>${num(x.count)}</b></span>`).join("")}</div>`
-      : `<div class="hub-none">Sales の企業：取得できません</div>`;
-    const unconnected = S.unconnected.filter((u) => u.key !== "board").map((u) => esc(u.label)).join("／");
-    return `<div class="hub-subh">担当者別（目標案と、今月の実績）</div>${people}
-      <div class="kgi-line" style="margin:6px 2px 0;">「定義未決」「記録なし」「未接続」は、まだ数えられないものです（0 ではありません）。PC では、項目にカーソルを合わせると理由が出ます。</div>
-      <div class="hub-subh">提案後に止まっている案件</div>${stalled}
-      <div class="hub-subh">Sales の企業（いまの状態。今月分ではありません）</div>${snap}
-      <div class="kgi-line" data-role="unconnected">未接続：${unconnected}。数字は出していません（0 ではありません）。　<a href="${esc(S.links.home)}">Salesを開く →</a></div>`;
+        <div class="pp-k">${p.kpis.map(kpi).join("")}</div></div>`).join("")}</div>
+      <div class="kgi-line" style="margin:6px 2px 0;">「定義未決」「記録なし」「未接続」「未計測」は、まだ数えられないものです（0 ではありません）。PC では、項目にカーソルを合わせると理由が出ます。</div>`;
   }
 
   // ---- 画面 ------------------------------------------------------------------
@@ -307,7 +310,7 @@
         + sec("money", "お金", null, `<div class="hub-board" data-role="board">${esc(d.money.board.message)}</div>
             <div class="hub-tiles">${d.money.internal.map(tile).join("")}</div>`)
         + sec("people", "人・組織", null, `<div class="hub-tiles">${d.people.tiles.map(tile).join("")}</div>`)
-        + (d.sales ? sec("sales", "営業ファネル・担当者別", null, salesHtml(d.sales)) : "")
+        + (d.sales ? sec("funnel", "営業ファネル", null, funnelHtml(d.sales)) + sec("byperson", "担当者別", null, peopleKpiHtml(d.sales)) : "")
         + sec("risk", "リスク・未処理", d.risks.length, list(d.risks, "気付くべき異常はありません。"))
         + `<div class="hub-foot"><a href="#security" data-role="to-security">経営設定・セキュリティ</a>（経営者・二段階認証・変更履歴・給与の監査ログ）</div>`;
     },

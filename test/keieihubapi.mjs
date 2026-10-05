@@ -513,9 +513,9 @@ await ok("hub は sales（目標と実績・担当者別・停滞）を返す。
   setup();
   const sentAt = new Date(Date.now() - 3600000).toISOString();
   db.rows.gw_sales_approaches = [
-    { id: "a1", tenant_id: "t1", employee_id: "e3", sent_at: sentAt, failed_at: null },
-    { id: "a2", tenant_id: "t1", employee_id: "e3", sent_at: sentAt, failed_at: sentAt },
-    { id: "ax", tenant_id: "t2", employee_id: "ex", sent_at: sentAt, failed_at: null },
+    { id: "a1", tenant_id: "t1", company_id: "c1", employee_id: "e3", sent_at: sentAt, failed_at: null },
+    { id: "a2", tenant_id: "t1", company_id: "c2", employee_id: "e3", sent_at: sentAt, failed_at: sentAt },
+    { id: "ax", tenant_id: "t2", company_id: "cx", employee_id: "ex", sent_at: sentAt, failed_at: null },
   ];
   db.rows.gw_sales_deals = [{ id: "d1", tenant_id: "t1", company_id: "c1", owner_id: "e3", title: "テスト案件", stage: "meeting", amount: null, won_on: null, created_at: sentAt, updated_at: sentAt }];
   const r = await call("hub");
