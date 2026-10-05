@@ -3,11 +3,11 @@
 // ■ 何を守りたいのか
 //   ・ホームの順番：今日の判断 → 10月KGI → 営業ファネル → 担当者別KPI → お金 → 人・組織 → リスク・停滞
 //   ・KGI は大きなカード3枚：PC/IT機器売上（未接続）・有料契約・本命案件（定義未決）。実績が無いものを 0 と出さない
-//   ・営業ファネルは横に 接触 → 商談 → 提案 → 有料契約。件数・目標・今日の目安・達成率・前の段階からの転換率（計画つき）
+//   ・営業ファネルは横に 接触 → 商談 → 提案 → 有料契約。件数・目標・今日の目安・達成率・月内実績の比率（転換率ではない）
 //   ・ファネルは会社（企業ID）で数える（接触は送信の件数を添える）。有効企業・本命案件は定義が決まるまで、ファネルに含めない
 //   ・担当者別はカード：氏名・今月の目標と実績・遅れ／順調／未計測・次に見るもの
 //   ・停滞案件・期限超過のタスクは「今日の判断」に1項目ずつ。停滞の一覧はリスク・停滞に。押すと Sales の会社へ
-//   ・「売上・営業」のタブは、段階ごとの目標と実績（理由つき）・転換率・受注額・停滞・企業の状態・担当者の全項目
+//   ・「売上・営業」のタブは、段階ごとの目標と実績（理由つき）・月内実績の比率・受注額・停滞・企業の状態・担当者の全項目
 //   ・営業を読めない（sales: null）・案件の表が無い環境でも、ほかのブロックは出る
 //   ・1280 / 768 / 390 で横にはみ出さない。画面のエラーが無い
 import { launch, BASE } from "../_browser.mjs";
@@ -78,9 +78,12 @@ console.log("— 10月のホーム（PC 1280）—");
   check(steps.every((s, i) => i === 0 || (s[2] > steps[i - 1][2] && Math.abs(s[3] - steps[0][3]) < 4)), "横に並ぶ（左から右へ）");
   const s = (key) => steps.find((x) => x[0] === key)[1];
   check(s("contact").includes("120件") && s("contact").includes("目標 4,000件") && s("contact").includes("今日の目安 645") && s("contact").includes("企業 100社（重複を除く）") && s("contact").includes("達成率 3%"), `接触：送信120件が主・目標4,000件・今日の目安645・企業100社（重複を除く）が補助・達成率3%（${s("contact")}）`);
-  check(s("meeting").includes("6社") && s("meeting").includes("達成率 20%") && s("meeting").includes("前の段階から 6%（計画 0.8%）"), `商談：6社・達成率20%・転換率6%（計画0.8%）（${s("meeting")}）`);
-  check(s("proposal").includes("前の段階から 66.7%（計画 50%）"), `提案：転換率66.7%（計画50%）（${s("proposal")}）`);
-  check(s("won").includes("前の段階から 25%（計画 66.7%）"), `有料契約：転換率25%（計画66.7%）（${s("won")}）`);
+  check(s("meeting").includes("6社") && s("meeting").includes("達成率 20%") && s("meeting").includes("月内実績の比率 6%") && !s("meeting").includes("目標の比"), `商談：6社・達成率20%・月内実績の比率6%（接触→商談は、単位が違うので目標の比を出さない）（${s("meeting")}）`);
+  check(s("proposal").includes("月内実績の比率 66.7%（目標の比 50%）"), `提案：月内実績の比率66.7%（目標の比50%）（${s("proposal")}）`);
+  check(s("won").includes("月内実績の比率 25%（目標の比 66.7%）"), `有料契約：月内実績の比率25%（目標の比66.7%）（${s("won")}）`);
+  check(!/転換率\s*\d|前の段階から/.test(await textOf(page, '[data-role="funnel"]')), "ファネルの数字を「転換率」「前の段階から」とは呼ばない");
+  const note = await textOf(page, '[data-role="ratio-note"]');
+  check(note.includes("月内実績の比率") && note.includes("転換率") && note.includes("先月に商談になった企業が今月提案に進んだ場合") && note.includes("目標が送信件数のため"), `読み方の注記が出る（${note.slice(0, 60)}…）`);
   check(s("proposal").includes("停滞 1件（7日以上動きなし）") && !s("contact").includes("停滞") && !s("won").includes("停滞"), `提案の段階に、停滞件数（${s("proposal")}）`);
   check(await page.locator('[data-role="funnel"] [data-role="stall"].hot').count() === 1, "停滞があるときは、目を引く色で出す");
   const fun = await textOf(page, '[data-block="funnel"]');
@@ -133,7 +136,8 @@ console.log("\n— 売上・営業（#sales）—");
   check(row("effective").includes("定義未決") && row("key").includes("定義未決") && !/\b0(件|社)/.test(row("effective")), "有効企業・本命案件は「定義未決」（0 と出さない）");
   check(row("contact").includes("120件") && row("contact").includes("企業 100社") && row("contact").includes("3%"), "接触：送信120件（企業100社）・3%");
   const rates = await textOf(page, '[data-role="rates"]');
-  check(rates.includes("商談→提案 66.7%（計画 50%）") && rates.includes("提案→有料契約 25%（計画 67%）"), `転換率（実績と計画）（${rates}）`);
+  check(rates.includes("月内実績の比率") && rates.includes("商談→提案 66.7%（目標の比 50%）") && rates.includes("提案→有料契約 25%（目標の比 67%）"), `月内実績の比率（実績と目標の比）（${rates}）`);
+  check(!/接触→有効企業[^）]*目標の比/.test(rates) && (await page.locator('[data-block="table"] [data-role="ratio-note"]').count()) === 1, "売上・営業のタブの、段階ごとの表にも、読み方の注記がある");
   check((await textOf(page, '[data-role="won-amount"]')).includes("480,000円"), "受注額は案件金額");
   check((await textOf(page, '[data-role="snapshot"]')).includes("アタック済"), "Sales の企業の今の状態");
   const un = await textOf(page, '[data-role="unconnected"]');

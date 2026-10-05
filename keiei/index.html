@@ -202,7 +202,7 @@
   const kgiBlock = (S) => section("kgi", S ? `${esc(monthName(S))}KGI` : "KGI",
     S ? `<div class="kg-meta">${esc(S.label)}・${S.dayNo}/${S.daysInMonth}日目。${S.note ? esc(S.note) : ""}</div>${kgiCards(S)}` : salesMissing);
 
-  // ③ 営業ファネル：接触 → 商談 → 提案 → 契約。件数・目標・達成率・前の段階からの転換率
+  // ③ 営業ファネル：接触 → 商談 → 提案 → 契約。件数・目標・達成率・月内実績の比率（転換率ではない）
   const FLOW_KEYS = ["contact", "meeting", "proposal", "won"];
   function funnelFlow(S) {
     const steps = FLOW_KEYS.map((k) => S.funnel.find((x) => x.key === k)).filter(Boolean);
@@ -211,8 +211,8 @@
       const cv = i === 0 ? "" : (() => {
         const r = S.flow.find((x) => x.toKey === f.key);
         return r && r.value != null
-          ? `<span class="cv" data-role="conv">前の段階から ${r.value}%${r.plan == null ? "" : `（計画 ${r.plan}%）`}</span>`
-          : `<span class="cv na" data-role="conv">前の段階から —</span>`;
+          ? `<span class="cv" data-role="conv" title="${esc(S.ratioNote)}">月内実績の比率 ${r.value}%${r.plan == null ? "" : `（目標の比 ${r.plan}%）`}</span>`
+          : `<span class="cv na" data-role="conv" title="${esc(S.ratioNote)}">月内実績の比率 —</span>`;
       })();
       return `<div class="fn-step" data-stage="${esc(f.key)}">
         <div class="lb">${esc(f.label)}</div>
@@ -225,7 +225,8 @@
           : `<div class="fn-stall${f.stalledCount ? " hot" : ""}" data-role="stall">停滞 ${num(f.stalledCount)}件${f.stalledCount ? "（7日以上動きなし）" : ""}</div>`}</div>`;
     };
     return `<div class="fn" data-role="funnel">${steps.map(step).join("")}</div>
-      <div class="fn-foot">接触は送信件数が主、重複を除いた企業数は補助です。商談・提案・有料契約は会社（企業ID）で数え、同じ会社の2件目の案件は1社のままです。転換率は、接触の企業数（社）から数えます。有効企業と本命案件は定義が決まるまで、ファネルに含めていません。</div>`;
+      <div class="fn-foot" data-role="fn-foot">接触は送信件数が主、重複を除いた企業数は補助です。商談・提案・有料契約は会社（企業ID）で数え、同じ会社の2件目の案件は1社のままです。有効企業と本命案件は定義が決まるまで、ファネルに含めていません。</div>
+      <div class="fn-foot" data-role="ratio-note">${esc(S.ratioNote)}</div>`;
   }
   const funnelBlock = (S) => section("funnel", "営業ファネル", S ? funnelFlow(S) : salesMissing);
 
@@ -303,7 +304,7 @@
         + riskBlock(d);
     },
 
-    // ---- 売上・営業：ホームの詳しい版（段階ごとの理由・転換率・受注額・停滞・担当者の全項目）----
+    // ---- 売上・営業：ホームの詳しい版（段階ごとの理由・月内実績の比率・受注額・停滞・担当者の全項目）----
     sales(d) {
       const S = d.sales;
       if (!S) return head("売上・営業", "") + salesMissing;
@@ -313,7 +314,7 @@
         : `<tr data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td><td class="n">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
             <td class="n" data-role="actual"><b>${val(f.value, f.unit)}</b>${f.companies == null ? "" : `<span class="kei-why" style="text-align:right;">企業 ${num(f.companies)}社（重複を除く）</span>`}</td>
             <td>${f.pct == null ? "" : `${prog(f.pct, f.pct >= 100)}<span class="kg-pct">${f.pct}%</span>`}</td></tr>`;
-      const rates = S.rates.filter((r) => r.value != null).map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value}%</b>${r.plan == null ? "" : `（計画 ${r.plan}%）`}`).join("　");
+      const rates = S.rates.filter((r) => r.value != null).map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value}%</b>${r.plan == null ? "" : `（目標の比 ${r.plan}%）`}`).join("　");
       const snap = S.snapshot ? `<div class="kei-panel" data-role="snapshot">${S.snapshot.map((x) => `<span class="kei-pill low" style="margin:2px 6px 2px 0;">${esc(x.label)} <b>${num(x.count)}</b></span>`).join("")}</div>`
         : `<div class="kei-none">Sales の企業：取得できません</div>`;
       const unconnected = S.unconnected.filter((u) => u.key !== "board").map((u) => esc(u.label)).join("／");
@@ -322,7 +323,8 @@
         + kgiBlock(S) + funnelBlock(S)
         + section("table", "段階ごとの目標と実績", `<div class="kei-panel"><table class="kei-t" data-role="funnel-table"><thead><tr><th>段階</th><th class="n">目標</th><th class="n">今日の目安</th><th class="n">実績</th><th>達成率</th></tr></thead>
             <tbody>${S.funnel.map(frow).join("")}</tbody></table></div>
-          <div class="kei-note" data-role="rates">転換率（今月・前の段階から）：${rates || "まだ出せません（となりの段階の両方が数えられたときだけ出します）"}</div>
+          <div class="kei-note" data-role="rates">月内実績の比率（今月の実績どうし）：${rates || "まだ出せません（となりの段階の両方が数えられたときだけ出します）"}</div>
+          <div class="kei-note" data-role="ratio-note">${esc(S.ratioNote)}</div>
           <div class="kei-note" data-role="won-amount">${S.won ? `今月の受注額（Sales の案件金額。会計上の売上・粗利ではありません）：<b>${yen(S.won.amount)}</b>（${num(S.won.companies)}社・${num(S.won.deals)}件）` : `今月の受注額：取得できません（${esc(S.wonReason || "")}）`}</div>`)
         + section("stalled", "提案後に止まっている案件", stalledList(S))
         + section("snapshot", "Sales の企業（いまの状態。今月分ではありません）", snap)

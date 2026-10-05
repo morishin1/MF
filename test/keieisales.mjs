@@ -96,12 +96,13 @@ await ok("今日の目安＝目標×経過日数／月の日数（10/5 は 5/31�
   assert.equal(stage(s, "meeting").pct, Math.round((6 / 30) * 100));
 });
 
-await ok("転換率：となりの段階が両方測れたときだけ（商談→提案 66.7%・提案→契約 25%）。計画値を並べる", () => {
+await ok("月内実績の比率：となりの段階が両方測れたときだけ（商談→提案 66.7%・提案→契約 25%）。目標の比を並べる", () => {
   const r = Object.fromEntries(salesOct().rates.map((x) => [`${x.from}→${x.to}`, x]));
   assert.equal(r["商談→提案"].value, 66.7); assert.equal(r["商談→提案"].plan, 50);
   assert.equal(r["提案→有料契約"].value, 25); assert.equal(r["提案→有料契約"].plan, 67);
   assert.equal(r["有効企業→商談"].value, null, "有効企業は測れないので、率を作らない");
   assert.equal(r["接触→有効企業"].value, null);
+  assert.equal(r["接触→有効企業"].plan, null, "接触が前の段階のときは、目標の比を出さない（実績の分母は社・目標の分母は件で、単位が違う）");
 });
 
 console.log("\n=== 数えられないものを 0 にしない ===\n");
@@ -308,7 +309,7 @@ await ok("案件の表が無い（db/116 未適用）：dealState absent。障�
   assert.equal((await readSalesFacts(fakeDb({ fail: ["gw_sales_deals"] }).sb, { tenantId: "t1" }, { today: OCT })).dealState, "error");
 });
 
-console.log("\n=== 経営UIの刷新で足した集計（遅れ／順調・次に見るもの・転換率・期限超過タスク） ===\n");
+console.log("\n=== 経営UIの刷新で足した集計（遅れ／順調・次に見るもの・月内実績の比率・期限超過タスク） ===\n");
 
 const person = (s, name) => s.perPerson.find((p) => p.name.startsWith(name));
 
@@ -344,16 +345,32 @@ await ok("次に見るもの：遅れている項目を先に。無ければ、�
   assert.equal(person(s, "山内").next.kind, "unmeasured", "山内は数えられる項目（有料化）が順調で、地域接点・診断が未計測");
 });
 
-await ok("営業の流れ（接触→商談→提案→有料契約）の転換率。計画は目標どうしの比（有効企業を飛ばして比べる）", () => {
+await ok("営業の流れ（接触→商談→提案→有料契約）の月内実績の比率。目標の比は、同じ単位どうしのときだけ", () => {
   const s = salesOct();
   assert.deepEqual(s.flow.map((r) => [r.from, r.to]), [["接触", "商談"], ["商談", "提案"], ["提案", "有料契約"]]);
   const f = Object.fromEntries(s.flow.map((r) => [r.toKey, r]));
-  assert.equal(f.meeting.value, 6, "接触→商談は、同じ単位（社）どうし：商談6社 / 接触の企業100社"); assert.equal(f.meeting.plan, 0.8, "30 / 4,000 = 0.75% → 0.8%");
+  assert.equal(f.meeting.value, 6, "接触→商談は、同じ単位（社）どうし：商談6社 / 接触の企業100社");
+  assert.equal(f.meeting.plan, null, "接触→商談の目標の比は出さない：目標は 30社 ÷ 4,000送信件で、実績（社 ÷ 社）と単位が違い、並べても比べられない");
   assert.equal(f.proposal.value, 66.7); assert.equal(f.proposal.plan, 50);
   assert.equal(f.won.value, 25); assert.equal(f.won.plan, 66.7);
 });
 
-await ok("案件の表が無い環境：転換率は出さない（null）。推し量らない", () => {
+await ok("比率は「転換率」ではなく「月内実績の比率」：今月の実績を別々に数えて割る。先月の商談が今月提案に進んだ分は、提案にだけ入る", () => {
+  const f = salesFacts();
+  // 先月（9/28）に商談になった企業 cd11 が、今月提案に進んだ
+  f.deals.push({ id: "d11", company_id: "cd11", owner_id: "p3", title: "先月の商談", stage: "proposal", amount: null, won_on: null, created_at: "2026-09-28T03:00:00Z", updated_at: "2026-10-04T03:00:00Z" });
+  f.history.push({ id: "h11", deal_id: "d11", company_id: "cd11", stage: "proposal", changed_at: octTs(4) });
+  f.lastStage.push({ id: "s11", deal_id: "d11", changed_at: octTs(4) });
+  const s = salesOct(f);
+  assert.equal(stage(s, "meeting").value, 6, "先月の商談は、今月の商談に数えない");
+  assert.equal(stage(s, "proposal").value, 5, "今月提案に進んだ企業には数える（先月の商談の分も）");
+  const r = s.flow.find((x) => x.toKey === "proposal");
+  assert.equal(r.value, 83.3, "5 ÷ 6：今月の提案 ÷ 今月の商談。『今月の商談の83%が提案に進んだ』（転換率）ではない");
+  assert.match(s.ratioNote, /月内実績の比率/); assert.match(s.ratioNote, /転換率/); assert.match(s.ratioNote, /先月に商談になった企業が今月提案に進んだ場合/);
+  assert.match(s.ratioNote, /目標が送信件数のため/);
+});
+
+await ok("案件の表が無い環境：月内実績の比率は出さない（null）。推し量らない", () => {
   const s = buildSales({ today: OCT, facts: { ...salesFacts(), dealState: "absent", deals: null, history: null, lastStage: null, lastEvent: null }, targets: targetsOf("2026-10"), people: salesPeople() });
   const f = Object.fromEntries(s.flow.map((r) => [r.toKey, r]));
   assert.equal(f.meeting.value, null); assert.equal(f.proposal.value, null); assert.equal(f.won.value, null);
