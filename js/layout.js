@@ -333,6 +333,8 @@
     const file = String(path || "").split("/").pop();
     // 月末月初業務（/office/ の各画面）は Office の中
     if (active && /^\/office(\/|$)/.test(String(path || ""))) return "office";
+    // 経営（/keiei/）はパスで決める（画面の中のビューはハッシュで切り替わるので、active に頼らない）
+    if (/^\/keiei(\/|$)/.test(String(path || ""))) return "keiei";
     if (!active || !/^admin-/.test(file)) return "home";
     const hit = (i) => i.key === active || (i.match || []).includes(active);
     if (OFFICE_TOP.some(hit) || OFFICE_GROUPS.some((g) => g.items.some(hit))) return "office";
@@ -665,6 +667,70 @@
   }
 
   /**
+   * 経営（/keiei/）の横タブ。Office と同じ作り：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、タブを2段で出す。
+   *   1段目：ホーム／売上・営業／人・組織／財務／リスク
+   *   2段目：いまのタブの中の画面（人・組織＝入社準備・給与管理・チーム状況…、財務＝人件費、リスク＝経営設定・セキュリティ）
+   * 左サイドバーは持たない。画面の中の切り替えは URL のハッシュ（#sales など）で、ページは作り直さない。
+   * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
+   */
+  const KEIEI_TABS = [
+    { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
+    { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
+    { key: "people",  label: "人・組織",     icon: "groups",    views: ["people", "onboarding", "pay"],
+      sub: [
+        { view: "people",     label: "概要" },
+        { view: "onboarding", label: "入社準備" },
+        { view: "pay",        label: "給与管理" },
+        { href: "/admin-team.html",  label: "チーム状況" },
+        { href: "/admin-tasks.html", label: "全員のタスク" },
+        { href: "/admin-nippo.html", label: "全員の日報" },
+      ] },
+    { key: "finance", label: "財務",         icon: "payments",  views: ["finance", "payroll"],
+      sub: [
+        { view: "finance", label: "お金" },
+        { view: "payroll", label: "人件費" },
+      ] },
+    { key: "risk",    label: "リスク",       icon: "warning",   views: ["risk", "security"],
+      sub: [
+        { view: "risk",     label: "リスク・未処理" },
+        { view: "security", label: "経営設定・セキュリティ" },
+      ] },
+  ];
+  /** URL のハッシュ（#onboarding/<ID>・#pay/<ID> など）から、画面の鍵（view）を取る */
+  const keieiViewOf = (hash = location.hash) => {
+    const v = String(hash || "").replace(/^#/, "").split("/")[0] || "home";
+    return v === "pay-audit" || v === "pay-candidates" ? "pay" : v;
+  };
+  const keieiTabOf = (view) => KEIEI_TABS.find((t) => t.views.includes(view)) || KEIEI_TABS[0];
+  function keieiNavHtml(view) {
+    const here = keieiTabOf(view);
+    const row1 = KEIEI_TABS.map((t) => `<a class="kp-otab${t === here ? " on" : ""}" href="#${t.key}" data-ktab="${t.key}" data-ic="${t.icon}"${t === here ? ' aria-current="page"' : ""}><span>${esc(t.label)}</span></a>`).join("");
+    const row2 = (here.sub || []).map((n) => {
+      const on = Boolean(n.view) && n.view === view;
+      return n.view
+        ? `<a class="kp-ostab${on ? " on" : ""}" href="#${n.view}" data-kview="${n.view}"${on ? ' aria-current="page"' : ""}><span>${esc(n.label)}</span></a>`
+        : `<a class="kp-ostab ext" href="${esc(n.href)}"><span>${esc(n.label)}</span></a>`;
+    }).join("");
+    return `<div class="kp-otabs" role="list">${row1}</div>` + (row2 ? `<div class="kp-ostabs" aria-label="${esc(here.label)}">${row2}</div>` : "");
+  }
+  function renderKeieiNav() {
+    const el = document.createElement("nav");
+    el.className = "kp-officenav";
+    el.id = "kp-keiei-nav";
+    el.setAttribute("aria-label", "経営");
+    el.innerHTML = keieiNavHtml(keieiViewOf());
+    const bar = document.querySelector(".topbar");
+    if (bar && bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling);
+    else document.body.insertBefore(el, document.body.firstChild);
+    document.body.classList.add("kp-has-officenav");
+  }
+  /** 経営の画面を切り替えたとき、タブの強調だけ更新する（ページは作り直さない） */
+  function setKeieiView(view) {
+    const nav = document.getElementById("kp-keiei-nav");
+    if (nav) nav.innerHTML = keieiNavHtml(view || keieiViewOf());
+  }
+
+  /**
    * Office のナビゲーション：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、横タブを2段で出す。
    *   1段目：ホーム／人事・労務／経理・事務／社内管理（カテゴリ。OFFICE_TOP と OFFICE_GROUPS）
    *   2段目：いまのカテゴリの中の画面（メンバー／入退社／… など。OFFICE_GROUPS の items）
@@ -972,7 +1038,7 @@
   }
 
   function clearChrome() {
-    for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar"]) {
+    for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar", ".kp-officenav"]) {
       for (const n of document.querySelectorAll(sel)) n.remove();
     }
     document.body.classList.remove("kp-has-sidebar", "kp-has-tabbar", "kp-has-officenav");
@@ -1012,8 +1078,11 @@
     // 経営・管理（⚙）の領域は管理者・経営者だけ
     const areaNow = areaOf(active);
     const officeArea = areaNow === "office" && Boolean(shows.officeEntry) && !memberView;
-    const adminArea = officeArea || (areaNow !== "home" && canPreview && !memberView);
+    // 経営（/keiei/）は経営者だけ。Office と同じ横タブ（左メニューは持たない）
+    const keieiApp = areaNow === "keiei" && /^\/keiei(\/|$)/.test(location.pathname) && Boolean(shows.keiei) && !memberView;
+    const adminArea = officeArea || keieiApp || (areaNow !== "home" && canPreview && !memberView);
     if (officeArea) renderOfficeNav(active, shows);
+    else if (keieiApp) renderKeieiNav();
     else if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
@@ -1255,6 +1324,9 @@
 
   window.KPLayout = {
     hasAccess,
+    /** 経営（/keiei/）の横タブの強調を、画面の切り替えに合わせて直す */
+    setKeieiView,
+    keieiViewOf,
     /**
      * 画面のデータを、枠（権限の確認）を待たずに取りにいき始める（API.warm）。
      * 覚えている身元が、その画面の access（どれか1つ）を持っているときだけ出す。持っていない人のためには呼ばない。

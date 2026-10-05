@@ -34,7 +34,9 @@ import { guideFact } from "../../lib/onboard-guide.js";
 import { listStatus } from "../../lib/labor-notice.js";
 import { readAll, readIn, chunks } from "../../lib/pg-read.js";
 import { buildHub, buildSecurity } from "../../lib/keiei-hub.js";
-import { readHubFacts, readSecurity, onboardingFact } from "../../lib/keiei-hub-read.js";
+import { readHubFacts, readSecurity, onboardingFact, peopleOf } from "../../lib/keiei-hub-read.js";
+import { readSalesFacts, buildSales, stalledItem, overdueItem } from "../../lib/keiei-sales.js";
+import { targetsOf } from "../../lib/keiei-targets.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
@@ -165,8 +167,38 @@ async function hub(sb, ctx) {
   const today = todayJst();
   let ob = null;
   try { ob = onboardingFact(await onboarding(sb, ctx)); } catch { ob = null; }
-  const facts = await readHubFacts(sb, ctx, { today, onboarding: ob });
-  return { ...buildHub({ today, facts }), missingLabel: MISSING_LABEL };
+  const [facts, sales] = await Promise.all([
+    readHubFacts(sb, ctx, { today, onboarding: ob }),
+    salesOf10(sb, ctx, today),
+  ]);
+  const out = buildHub({ today, facts });
+  // 提案後に止まっている案件は「今日の確認」にも出す（重要の次。同じ事実をリスクには出さない）
+  const stall = sales ? stalledItem(sales) : null;
+  if (stall) {
+    const at = out.attention.findIndex((i) => i.severity !== "high");
+    out.attention.splice(at < 0 ? out.attention.length : at, 0, stall);
+  }
+  // 期限を過ぎたタスクも、重要の次に出す（停滞案件の次）
+  const late = sales ? overdueItem(sales) : null;
+  if (late) {
+    const at = out.attention.findIndex((i) => i.severity !== "high" && i.key !== "sales_stalled");
+    out.attention.splice(at < 0 ? out.attention.length : at, 0, late);
+  }
+  return { ...out, sales, missingLabel: MISSING_LABEL };
+}
+
+/**
+ * 10月の目標と実績・営業ファネル・担当者別・停滞案件（lib/keiei-sales.js）。読み取りだけ。
+ * 失敗しても、ホームのほかのブロックは出す（sales: null。画面は「取得できません」）
+ */
+async function salesOf10(sb, ctx, today) {
+  try {
+    const [facts, people] = await Promise.all([readSalesFacts(sb, ctx, { today }), peopleOf(sb, ctx)]);
+    return buildSales({ today, facts, targets: targetsOf(today.slice(0, 7)), people });
+  } catch (e) {
+    console.error("[keiei] sales:", e?.message || e);
+    return null;
+  }
 }
 
 /** 経営設定・セキュリティ: 経営者の一覧・二段階認証・変更の履歴 */
