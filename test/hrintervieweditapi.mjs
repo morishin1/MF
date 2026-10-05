@@ -180,7 +180,15 @@ const ok = async (name, fn) => {
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
 };
 
-const jstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+// 「今日」は実行時のJST日付が正本。固定の日付を「今日」の代わりに書かない
+//（書くと、その日を過ぎた瞬間から今日の面談に混ざって落ちる）
+const jstToday = (offsetDays = 0) => new Date(Date.now() + 9 * 3600000 + offsetDays * 86400000).toISOString().slice(0, 10);
+/** JSTの日付と時刻（"14:00"）を、UTCのISO文字列にする。例：今日の 14:00 JST → 今日の 05:00:00.000Z */
+const jstToUtc = (day, hhmm) => new Date(`${day}T${hhmm}:00+09:00`).toISOString();
+
+// 手入力の面談の初期日時：今日（JST）から1週間後の 14:00 JST。今日にも昨日にもならない日
+const FIRST_DAY = jstToday(7);
+const FIRST_AT = jstToUtc(FIRST_DAY, "14:00");
 
 function setup() {
   who = RECRUITER;
@@ -212,7 +220,7 @@ function setup() {
 
 /** 手入力で面談を1件予定して、その行を返す */
 async function manualInterview(over = {}) {
-  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: "2026-10-05T05:00:00Z",
+  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: FIRST_AT,
     interviewerId: "e1", meetingUrl: "https://meet.example.com/manual", ...over });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   return db.rows.gw_hr_interviews.find((i) => i.id === r.body.interview.id);
@@ -281,7 +289,7 @@ await ok("監査ログに、変えた項目と日時の前後が残る（URL等�
   assert.ok(l, "hr.interview_update が残る");
   assert.equal(l.target, `hr_interview:${iv.id}`);
   assert.deepEqual([...l.detail.fields].sort(), ["meeting_url", "scheduled_at"]);
-  assert.equal(l.detail.scheduledFrom, "2026-10-05T05:00:00Z");
+  assert.equal(l.detail.scheduledFrom, FIRST_AT);
   assert.equal(l.detail.scheduledTo, "2026-10-07T06:30:00Z");
   assert.equal(l.detail.timerex, false);
   assert.ok(!JSON.stringify(l).includes("secret"), "URLは監査ログに入れない");
@@ -292,7 +300,7 @@ await ok("値が変わっていなければ、タイムライン・監査ログ�
   const iv = await manualInterview();
   logged.length = 0;
   const before = db.rows.gw_hr_timeline.length;
-  const r = await edit({ id: iv.id, scheduledAt: "2026-10-05T14:00:00+09:00", interviewerId: "e1" });
+  const r = await edit({ id: iv.id, scheduledAt: `${FIRST_DAY}T14:00:00+09:00`, interviewerId: "e1" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.changed, [], "同じ時刻（表記ゆれ）は変更扱いにしない");
   assert.equal(db.rows.gw_hr_timeline.length, before);
@@ -328,7 +336,7 @@ await ok("日時として読めない値は断る", async () => {
   const iv = await manualInterview();
   const r = await edit({ id: iv.id, scheduledAt: "来週の火曜" });
   assert.equal(r.statusCode, 400);
-  assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).scheduled_at, "2026-10-05T05:00:00Z");
+  assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).scheduled_at, FIRST_AT);
 });
 
 await ok("面談方法は online / onsite / phone だけ", async () => {
@@ -451,13 +459,20 @@ await ok("応募者一覧：キャンセル済み・実施済みの面談は直�
 await ok("今日の面談：今日へ動かせば出て、別の日へ動かせば消える", async () => {
   setup();
   const iv = await manualInterview();
-  assert.equal((await getToday()).body.interviews.length, 0);
-  await edit({ id: iv.id, scheduledAt: `${jstToday()}T01:00:00Z` });
+  assert.equal((await getToday()).body.interviews.length, 0, "初期日時（1週間後）は今日の面談に出ない");
+  // 今日（JST）14:00 へ。JST→UTC に直した値が、そのまま保存・表示される
+  const todayAt = jstToUtc(jstToday(), "14:00");
+  const e1 = await edit({ id: iv.id, scheduledAt: `${jstToday()}T14:00:00+09:00` });
+  assert.equal(e1.statusCode, 200, JSON.stringify(e1.body));
   const r1 = await getToday();
   assert.equal(r1.body.interviews.length, 1);
-  assert.equal(r1.body.interviews[0].scheduledAt, `${jstToday()}T01:00:00Z`);
-  await edit({ id: iv.id, scheduledAt: "2020-01-01T01:00:00Z" });
-  assert.equal((await getToday()).body.interviews.length, 0);
+  assert.equal(new Date(r1.body.interviews[0].scheduledAt).toISOString(), todayAt);
+  // 明日（JST）14:00 へ動かせば消える
+  await edit({ id: iv.id, scheduledAt: `${jstToday(1)}T14:00:00+09:00` });
+  assert.equal((await getToday()).body.interviews.length, 0, "明日へ動かせば消える");
+  // 昨日（JST）14:00 へ動かしても出ない
+  await edit({ id: iv.id, scheduledAt: `${jstToday(-1)}T14:00:00+09:00` });
+  assert.equal((await getToday()).body.interviews.length, 0, "昨日へ動かしても出ない");
 });
 
 console.log("\n=== 面談メモ（memo） ===\n");
@@ -723,7 +738,7 @@ console.log("\n=== 面談を予定するときの面談担当（編集と同じ�
 
 await ok("別の会社の社員を面談担当にして予定しようとすると断る", async () => {
   setup();
-  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: "2026-10-05T05:00:00Z", interviewerId: "e9" });
+  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: FIRST_AT, interviewerId: "e9" });
   assert.equal(r.statusCode, 400);
   assert.equal(r.body.error, "invalid_interviewer");
   assert.equal(db.rows.gw_hr_interviews.filter((i) => i.tenant_id === "t1").length, 0, "面談は作られない");
