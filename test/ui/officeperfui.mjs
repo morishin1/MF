@@ -12,7 +12,7 @@ const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
-const { accessOf } = await import("../../lib/gw.js");
+const { accessOf, memberAccessOf } = await import("../../lib/gw.js");
 const LAG = 250;
 
 const emp = (i, extra = {}) => ({ id: `e${i}`, display_name: `社員 ${i}`, email: `e${i}@x.jp`, department: "開発", position: "",
@@ -49,7 +49,13 @@ async function open(path, o = {}) {
       return send({ employees: list, canGrantRoles: true, canGrantOwner: false, canManage: true, kindReady: true });
     }
     if (u.pathname === "/api/partners") return send({ companies: [{ id: "p1", company_name: "BP株式会社" }] });
-    if (u.pathname === "/api/employees/roles") return send({ ok: true });
+    if (u.pathname === "/api/employees/roles") {
+      // サーバの応答（変更後の roles と access。lib/gw.js memberAccessOf）。画面はこれで同じ行を直し、名簿は取り直さない
+      const body = JSON.parse(route.request().postData() || "{}");
+      const after = [...new Set([...(body.grant === false ? [] : [body.role])])];
+      return send({ ok: true, employeeId: body.employeeId, role: body.role, granted: body.grant !== false,
+        roles: after, access: memberAccessOf({ roles: after, isAdmin: false }) });
+    }
     if (u.pathname === "/api/notifications") return send({ notifications: [], unread: 0 });
     if (u.pathname === "/api/badges") return send({ badges: {} });
     return send({});
