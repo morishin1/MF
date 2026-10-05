@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>メンバー管理（業務権限トグル・デザイン確認用）</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1f2933; --sub: #667085; --line: #e3e7ee;
+    --on: #2563eb; --on-ink: #fff; --on-soft: #e8f0fe;
+    --off: #fff; --off-ink: #475467; --off-line: #d0d5dd;
+    --lock: #eef0f4; --err: #b42318; --err-bg: #fef3f2; --ok: #067647; --warn-bg: #fff7e6; --warn-line: #f5d58a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
+  .banner { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
+  h1 { font-size: 20px; margin: 4px 0 4px; }
+  .lead { color: var(--sub); margin: 0 0 14px; font-size: 13px; }
+  .tools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; color: var(--sub); }
+  .tools label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .head, .row { display: grid; grid-template-columns: minmax(150px, 1.2fr) 150px minmax(300px, 2fr) 96px; gap: 12px; align-items: center; padding: 12px 16px; }
+  .head { background: #fafbfc; border-bottom: 1px solid var(--line); color: var(--sub); font-size: 12px; font-weight: 600; }
+  .row { border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .name { font-weight: 600; }
+  .name small { display: block; color: var(--sub); font-weight: 400; font-size: 12px; }
+  .basic { font-size: 13px; color: var(--off-ink); }
+  .toggles { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tg {
+    appearance: none; cursor: pointer; border: 1px solid var(--off-line); background: var(--off); color: var(--off-ink);
+    border-radius: 999px; padding: 6px 16px; min-height: 34px; font: inherit; font-weight: 600; min-width: 84px;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .tg:hover:not(:disabled) { border-color: #98a2b3; }
+  .tg[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: var(--on-ink); }
+  .tg[aria-pressed="true"]:hover:not(:disabled) { background: #1d4fd8; }
+  .tg:focus-visible { outline: 3px solid #93b4fb; outline-offset: 2px; }
+  .tg.busy { cursor: progress; opacity: .7; position: relative; }
+  .tg.busy::after { content: ""; display: inline-block; width: 11px; height: 11px; margin-left: 8px; vertical-align: -1px;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tg.locked { background: var(--lock); border-color: var(--lock); color: var(--sub); cursor: not-allowed; }
+  .tg.locked[aria-pressed="true"] { background: #b9c8f2; border-color: #b9c8f2; color: #fff; }
+  .lockmsg { grid-column: 1 / -1; font-size: 12px; color: var(--sub); margin-top: -4px; }
+  .more-btn { appearance: none; border: 0; background: none; color: var(--on); cursor: pointer; font: inherit; font-size: 13px; text-align: right; }
+  .detail { grid-column: 1 / -1; background: #fafbfc; border: 1px dashed var(--off-line); border-radius: 8px; padding: 12px 14px; display: none; }
+  .detail.open { display: block; }
+  .detail h4 { margin: 0 0 6px; font-size: 13px; }
+  .detail p { margin: 0 0 8px; color: var(--sub); font-size: 12px; }
+  .detail .grp { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 10px; }
+  .detail label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 10px 16px;
+    border-radius: 8px; font-weight: 600; box-shadow: 0 6px 20px rgba(16,24,40,.18); display: none; z-index: 10; }
+  .toast.err { display: block; background: var(--err-bg); color: var(--err); border: 1px solid #fda29b; }
+  .toast.ok { display: block; background: #ecfdf3; color: var(--ok); border: 1px solid #abefc6; }
+  .legend { margin-top: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 13px; }
+  .legend h3 { margin: 0 0 6px; font-size: 14px; }
+  .legend ul { margin: 0; padding-left: 18px; }
+  .legend li { margin: 2px 0; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
+  @media (max-width: 760px) {
+    .head { display: none; }
+    .row { grid-template-columns: 1fr auto; gap: 8px 10px; }
+    .row .toggles { grid-column: 1 / -1; order: 3; }
+    .row .basic { order: 2; text-align: right; }
+    .more-btn { order: 4; grid-column: 1 / -1; text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner"><b>デザイン確認用のモックです。</b>サンプルの人で動かしています。保存はされず、権限にも一切つながっていません（権限の仕組みは設計の確認後につなぎます）。</div>
+  <h1>メンバー</h1>
+  <p class="lead">その人が使える業務を、押して ON / OFF します。押すとすぐ保存されます。</p>
+
+  <div class="tools">
+    <span>動きの確認：</span>
+    <label><input type="checkbox" id="fail"> 保存を失敗させる（元に戻ってエラーが出ます）</label>
+    <label><input type="checkbox" id="slow" checked> ゆっくり保存する（保存中の表示を見る）</label>
+  </div>
+
+  <div class="card" id="list">
+    <div class="head"><div>名前</div><div>基本区分</div><div>使える業務</div><div></div></div>
+  </div>
+
+  <div class="legend">
+    <h3>見かた</h3>
+    <ul>
+      <li><span class="sw" style="background:var(--on)"></span>青＝ON（その業務を使える） ／ <span class="sw" style="background:#fff;border:1px solid var(--off-line)"></span>白＝OFF</li>
+      <li><b>Office</b> を ON にすると、Office のホームと「月末月初業務」が使えます。経理・事務、人事・労務は、行の「詳細設定」で別に付けます。</li>
+      <li>薄いグレーの青は、変えられない ON です（経営者・会計の管理者）。理由は行の下に出ます。</li>
+    </ul>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  // サンプルの人。権限の持ち方（apps）は、この画面の見せ方を確かめるためだけの仮データ
+  const APPS = [
+    { key: "recruit", label: "採用HR" },
+    { key: "sales",   label: "Sales" },
+    { key: "office",  label: "Office" },
+    { key: "keiei",   label: "経営" },
+  ];
+  const members = [
+    { id: 1, name: "山田 一郎", sub: "代表", basic: "メンバー（在籍中）", apps: { recruit: 1, sales: 1, office: 1, keiei: 1 }, lock: { all: "経営者は、すべての業務を使えます。変更できません。" } },
+    { id: 2, name: "佐藤 花子", sub: "経理", basic: "メンバー（在籍中）", apps: { office: 1 }, detail: { finance: 1 } },
+    { id: 3, name: "鈴木 次郎", sub: "人事", basic: "メンバー（在籍中）", apps: { recruit: 1, office: 1 }, detail: { hr: 1 } },
+    { id: 4, name: "高橋 美咲", sub: "営業", basic: "メンバー（在籍中）", apps: { sales: 1 } },
+    { id: 5, name: "田中 健", sub: "責任者", basic: "メンバー（在籍中）", apps: { recruit: 1, sales: 1, office: 1 } },
+    { id: 6, name: "伊藤 さくら", sub: "会計側の管理者", basic: "メンバー（在籍中）", apps: { office: 1 }, lock: { office: "会計の管理者のため、Office を使えます。変更できません。" } },
+    { id: 7, name: "渡辺 新人", sub: "入社準備中", basic: "入社準備中", apps: {} },
+  ];
+  const $ = (s, r = document) => r.querySelector(s);
+  const list = $("#list");
+  const toast = $("#toast");
+  let toastTimer;
+  function say(kind, msg) {
+    toast.className = "toast " + kind; toast.textContent = msg;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.className = "toast"; }, 3200);
+  }
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function fakeSave() {            // 本番ではここがサーバへの保存になる
+    await wait($("#slow").checked ? 900 : 120);
+    if ($("#fail").checked) throw new Error("保存できませんでした。もう一度お試しください。");
+  }
+
+  function lockedFor(m, k) { return Boolean(m.lock && (m.lock.all || m.lock[k])); }
+
+  function render(m) {
+    const row = document.createElement("div");
+    row.className = "row"; row.dataset.id = m.id;
+    const lockMsg = m.lock ? (m.lock.all || Object.values(m.lock)[0]) : "";
+    row.innerHTML = `
+      <div class="name">${m.name}<small>${m.sub}</small></div>
+      <div class="basic">${m.basic}</div>
+      <div class="toggles" role="group" aria-label="${m.name}が使える業務"></div>
+      <button class="more-btn" type="button" aria-expanded="false">詳細設定</button>
+      ${lockMsg ? `<div class="lockmsg">${lockMsg}</div>` : ""}
+      <div class="detail">
+        <h4>Office の範囲</h4>
+        <p>Office を ON にした人に、さらに付ける業務です。</p>
+        <div class="grp">
+          <label><input type="checkbox" data-d="finance" ${m.detail?.finance ? "checked" : ""}> 経理・事務</label>
+          <label><input type="checkbox" data-d="hr" ${m.detail?.hr ? "checked" : ""}> 人事・労務</label>
+        </div>
+        <h4>内部の役割</h4>
+        <p>通常は触る必要がありません。ここで付け外ししても、上のボタンの意味は変わりません。</p>
+        <div class="grp">
+          ${["owner", "hr", "manager", "finance", "it", "labor_advisor"].map((r) => `<label><input type="checkbox" disabled> ${r}</label>`).join("")}
+        </div>
+      </div>`;
+    const box = $(".toggles", row);
+    for (const a of APPS) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "tg"; b.textContent = a.label; b.dataset.app = a.key;
+      const locked = lockedFor(m, a.key);
+      b.setAttribute("aria-pressed", m.apps[a.key] ? "true" : "false");
+      if (locked) { b.classList.add("locked"); b.disabled = true; b.title = lockMsg; }
+      if (m.basic === "入社準備中") { b.disabled = true; b.classList.add("locked"); b.title = "入社後に設定できます"; }
+      b.addEventListener("click", () => toggle(m, a, b));
+      box.append(b);
+    }
+    $(".more-btn", row).addEventListener("click", (e) => {
+      const d = $(".detail", row); const open = d.classList.toggle("open");
+      e.currentTarget.setAttribute("aria-expanded", String(open));
+    });
+    return row;
+  }
+
+  async function toggle(m, a, btn) {
+    if (btn.classList.contains("busy")) return;              // 保存中の二重クリックを止める
+    const before = Boolean(m.apps[a.key]);
+    const next = !before;
+    btn.classList.add("busy");
+    btn.setAttribute("aria-busy", "true");
+    btn.disabled = true;
+    btn.setAttribute("aria-pressed", String(next));         // 押した瞬間に見た目を切り替える（失敗したら戻す）
+    try {
+      await fakeSave();
+      m.apps[a.key] = next ? 1 : 0;                          // 成功：そのまま反映
+      say("ok", `${m.name} の ${a.label} を ${next ? "ON" : "OFF"} にしました`);
+    } catch (e) {
+      btn.setAttribute("aria-pressed", String(before));      // 失敗：元に戻す
+      say("err", `${m.name} の ${a.label} を変えられませんでした。${e.message}`);
+    } finally {
+      btn.classList.remove("busy"); btn.removeAttribute("aria-busy");
+      btn.disabled = lockedFor(m, a.key) || m.basic === "入社準備中";
+    }
+  }
+  for (const m of members) list.append(render(m));
+</script>
+</body>
+</html>
