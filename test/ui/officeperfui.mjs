@@ -50,11 +50,11 @@ async function open(path, o = {}) {
     }
     if (u.pathname === "/api/partners") return send({ companies: [{ id: "p1", company_name: "BP株式会社" }] });
     if (u.pathname === "/api/employees/roles") {
-      // サーバの応答（変更後の roles と access。lib/gw.js memberAccessOf）。画面はこれで同じ行を直し、名簿は取り直さない
+      // サーバの応答（変更後の roles と access、accessOf に渡した isAdmin = accessMeta。lib/gw.js memberAccessOf）。画面はこれで同じ行を直し、名簿は取り直さない
       const body = JSON.parse(route.request().postData() || "{}");
       const after = [...new Set([...(body.grant === false ? [] : [body.role])])];
       return send({ ok: true, employeeId: body.employeeId, role: body.role, granted: body.grant !== false,
-        roles: after, access: memberAccessOf({ roles: after, isAdmin: false }) });
+        roles: after, access: memberAccessOf({ roles: after, isAdmin: false }), accessMeta: { accountingAdmin: false } });
     }
     if (u.pathname === "/api/notifications") return send({ notifications: [], unread: 0 });
     if (u.pathname === "/api/badges") return send({ badges: {} });
