@@ -1,165 +1,171 @@
-# メンバー管理：業務権限を4つ（採用HR / Sales / Office / 経営）だけにする設計案
+# メンバー管理：アプリ利用権限（4つ）と内部ロールの分離 設計案 v2
 
-状態: **提案（未実装・SQL 未実行）**。承認をもらってから実装する。
-UI の見た目だけを先に確認するモック: `member-toggle-mock.html`（サンプルデータ。権限にはつながっていない）
+状態: **提案（未実装・SQL 未実行）**。承認後に実装する。
+見た目のモック（承認済み）: `member-toggle-mock.html`（一覧は4ボタンだけ）
 
-## 1. いまの権限モデル（調査結果）
+## 0. 前提（承認いただいた方針）
 
-画面・API・DB は、社内権限 `gw_role_grants.role` の並びで判定している。判定は `lib/gw.js`（API・画面）と DB の `gw_is_*` 関数（RLS）。
+- メンバー一覧で設定するのは **採用HR / Sales / Office / 経営** の4つだけ。意味は「どのアプリへ入れるか」だけ。
+- `owner / hr / finance / manager / recruiter / sales / it / labor_advisor` は **アプリの中で何ができるか** を決める内部ロール（`gw_role_grants` のまま・変更しない）。一覧には出さず「詳細設定」へ。
+- Office は、入口と中身を分ける。
+  - Office ON ＝ Office アプリへ入れる
+  - Office ON ＋ `hr` ＝ 人事・労務
+  - Office ON ＋ `finance` ＝ 経理・事務
+  - Office ON ＋ 現在の月末月初権限（`owner` / `manager` / `finance`）＝ 月末月初
+  - **Office ON だけで3つ全部は使えない。**
+- 経営は `owner` のまま。経営 ON（＝ owner）は 4 つ全部 ON 固定。
+- **移行前後で実効権限を変えない（必須）。差分 0 人でなければ止める。**
+- 保存先は `gw_role_grants` に役割を足す案ではなく、**アプリ利用権限専用テーブル `gw_app_grants`**。
 
-| 役割（role） | 採用HR | Sales | Office 月末月初（`office`） | Office 経理・事務（`officeFinance`） | Office 人事・労務（`officeHr`） | 経営 |
-|---|---|---|---|---|---|---|
-| owner（経営者） | ○ | ○ | ○ | ○ | ○ | ○ |
-| manager（責任者） | ○ | ○ | ○ | × | × | × |
-| hr（人事） | ○ | × | × | × | ○ | × |
-| recruiter（採用担当） | ○ | × | × | × | × | × |
-| sales（営業担当） | × | ○ | × | × | × | × |
-| finance（経理） | × | × | ○ | ○ | × | × |
-| it / labor_advisor | × | × | × | × | × | × |
-| 会計の管理者（memberships の admin/staff） | × | × | × | ○ | ○ | × |
+## 1. 新しい判定（入口 × 内部ロール）
 
-つまり **4つの業務と既存ロールは1対1ではない**。
+記号: `A(x)` ＝ アプリ x へ入れる（入口）。`role(r)` ＝ 内部ロール r を持つ。
 
-- **暗黙の継承がある**: owner は全部、manager は3つ、hr は採用HRも使える。採用HR を OFF にしたくても、hr や manager を持っていれば ON のまま。
-- **Office は実体が3つ**に分かれている（月末月初／経理・事務／人事・労務）。
-- **`hr` は「人事の業務」だけでなく、管理権限そのもの**: `canManageHr`（API 約 75 ファイル）、給与の閲覧（`canSeeSalary`）、社員名簿・雇用契約・勤怠・権限の付け外し、DB の `gw_is_hr` が `hr` を見ている。Office のボタンを `hr` に結びつけると、「Office を使える人＝人事の管理者」になってしまう。
-- 経営（`/keiei`）は owner だけ。owner は権限の付与・MFA・給与・印鑑・端末の失効も握る。
+```
+■ 入口（gw_app_grants ＋ 暗黙の2つ）
+  A(hr)     = owner  または  app_key='hr'
+  A(sales)  = owner  または  app_key='sales'
+  A(office) = owner  または  会計の管理者（memberships の admin/staff）  または  app_key='office'
+  A(keiei)  = owner                                   ← gw_app_grants は見ない（経営は owner のまま）
 
-→ 見た目だけ4つにして既存ロールへ割り当てると、「OFF にしても入れる」「Office を付けたら人事の管理者になる」が起きる。したがって、下の設計で**4つを独立した持ち物にする**。
+■ 実効権限（いまの access のキーと同じ名前・同じ意味で返す）
+  recruit       = A(hr)
+  sell          = A(sales)
+  office        = A(office) かつ ( owner | manager | finance )   … 月末月初（今の OFFICE_ROLES をそのまま内部条件に）
+  officeHr      = 会計の管理者 または owner または ( A(office) かつ hr )          … 人事・労務
+  officeFinance = 会計の管理者 または owner または ( A(office) かつ finance )     … 経理・事務
+  keiei         = owner
+  isHr（canManageHr・給与閲覧などの土台）= owner または ( A(office) かつ hr )     … 内部ロール hr は Office の中の権限
+```
 
-## 2. 設計案（推奨）
+- 内部ロールは「持っているだけでは入口は開かない」。入口は `gw_app_grants`（と owner／会計の管理者）だけが決める。
+- 暗黙の2つ（owner・会計の管理者）は **行を作らない**。画面では「変更不可の ON」＋理由を出す（#78 の `accessMeta.accountingAdmin` を流用）。
+  - owner を後で外したときは、いまと同じく何も開かなくなる（暗黙の分は残らない）。
+- `gw_app_grants.app_key = 'keiei'` は表の CHECK に入れるが **予約**（判定は読まない）。うっかり行が入って「付けたのに効かない」を防ぐため、いまは INSERT を拒否するトリガを付ける（将来経営を独立させるときに外す）。
+  - 画面の経営ボタンは、今の `owner` の付け外し API（経営者だけが操作可・MFA・最後の1人は外せない）をそのまま使う。
+- 内部ロールの意味は変えない（`hr` ＝人事の管理権限、`recruiter` ＝採用担当ラベル、`manager` ＝責任者、`finance` ＝経理、`it`、`labor_advisor`）。
 
-### 2.1 考え方
+## 2. ① 新 DB 設計
 
-1. 業務権限は **4つの明示フラグ**だけで決まる（暗黙の継承をやめる）。
-2. 細かいロール（hr / manager / finance / it …）は「詳細設定」へ。上のボタンの意味は変えない。
-3. 画面は、サーバが返す結果（`access`）を表示するだけ。画面側で役割を並べ直さない（今と同じ）。
+### 2.1 テーブル `public.gw_app_grants`
 
-### 2.2 4つのボタンの意味
-
-| ボタン | ON の意味 | 保存先（`gw_role_grants.role`） |
+| 列 | 型 | 備考 |
 |---|---|---|
-| 採用HR | 採用HR（`/hr`）を使える | `recruiter`（既存） |
-| Sales | Sales（`/sales`）を使える | `sales`（既存） |
-| **Office** | **Office のホームと「月末月初業務」を使える**（下の「Office ON の意味」を参照） | **`office`（新設）** |
-| 経営 | 経営（`/keiei`）を使える ＝ 経営者 | `owner`（既存。経営者だけが付け外せる。MFA・最後の1人は外せない、の既存ルールのまま） |
+| `tenant_id` | uuid not null | `gw_role_grants` と同じ |
+| `employee_id` | uuid not null | `gw_employees(id)` on delete cascade |
+| `app_key` | text not null | check in (`hr`,`sales`,`office`,`keiei`) |
+| `granted_by` | uuid | 付けた人（`auth.users`）。移行で入れた行は null |
+| `created_at` | timestamptz not null default now() | |
+| 主キー | `(employee_id, app_key)` | 二重付与できない（API は upsert + ignore duplicates） |
+| 索引 | `(tenant_id, employee_id)` | 一覧・ctx の読み込み用 |
 
-- 経営は「経営者（owner）」そのもの。owner は全業務の上位なので、経営 ON の人は他の3つも ON で固定（画面では変更不可・理由を表示）。経営を他の業務と独立させる案は §6（要判断）。
-- 会計の管理者（memberships の admin/staff）は、いまも Office の経理・人事に入れる。これは会計側の権限なので変更不可の ON として表示し、理由を出す。
+- **RLS**: 読み取り＝自分の行 ／ 人事・管理者（`gw_is_hr`）は全件。書き込み＝`gw_is_hr`（`gw_role_grants` と同じ考え方）。`keiei` の INSERT はトリガで拒否。
+- **ヘルパー関数** `gw_has_app(p_tenant uuid, p_app text)`: `gw_has_role` と同じ作り（`gw_employees.user_id = auth.uid()` で引く。在籍状態では絞らない＝いまの `gw_has_role` と同じ）。
+- 経営（owner）・会計の管理者は行を持たない（§1）。
 
-### 2.3 「Office ON」が何を意味するか（要確認の中心）
+### 2.2 DB の判定関数（SQL 2 本目で切り替え）
 
-今の Office は3つの業務を含み、持っている役割ごとに入れる範囲が違う。選択肢はこの3つ。
+| 関数 | いま | 切り替え後 |
+|---|---|---|
+| `gw_is_recruiting` | owner / manager / hr / recruiter | owner **または** `gw_has_app('hr')` |
+| `gw_is_sales` | owner / manager / sales | owner **または** `gw_has_app('sales')` |
+| `gw_is_office`（月末月初） | owner / manager / finance | owner **または** (`gw_has_app('office')` かつ (manager または finance)) |
+| `gw_is_office_finance` | 管理者 / owner / finance | 管理者 / owner / (`gw_has_app('office')` かつ finance) |
+| `gw_is_hr` | hr / owner / 管理者 | 管理者 / owner / (`gw_has_app('office')` かつ hr) |
+| `gw_expense_can_review`・`gw_request_can_review` | 上の2つを参照 | 変更なし（上が変われば追従） |
+| `gw_is_owner`・`gw_is_keiei` | owner | **変更なし** |
 
-| 案 | Office ON の意味 | 良い点 | 悪い点 |
+`gw_is_hr` は RLS で最も広く使われる関数なので、**ここだけ別ステップ**にして単独で検証・巻き戻せるようにする（§5）。
+
+## 3. ② 現在のロール → 4アプリ権限の移行表
+
+内部ロール（`gw_role_grants`）は**1行も消さない・変えない**。`gw_app_grants` に次の行を足すだけ（同じ人に複数あれば和集合・重複なし）。
+
+| 今の内部ロール | 足す `app_key` | 移行後に効く実効権限（いまと同じ） |
+|---|---|---|
+| owner | なし（暗黙で全部） | 採用HR・Sales・Office（人事・労務／経理・事務／月末月初）・経営 |
+| manager | `hr`, `sales`, `office` | 採用HR・Sales・月末月初（人事・労務／経理・事務は無し） |
+| hr | `hr`, `office` | 採用HR・人事・労務（**月末月初は無し**。`hr` は月末月初の内部条件に入っていないため） |
+| recruiter | `hr` | 採用HR だけ |
+| sales | `sales` | Sales だけ |
+| finance | `office` | 経理・事務＋月末月初（今と同じ） |
+| it / labor_advisor | なし | 何も開かない（今と同じ） |
+| 会計の管理者（admin/staff） | なし（暗黙で Office の入口） | 人事・労務＋経理・事務（月末月初は無し。今と同じ） |
+
+- 検算（`hr`）: 今＝採用HR○・人事・労務○・月末月初×。移行後＝`A(hr)`○ → 採用HR○ ／ `A(office)`○ かつ `hr` → 人事・労務○ ／ 月末月初は「owner/manager/finance」が条件なので×。**増えない・減らない**。
+- 複数ロールの人（例: hr＋finance、manager＋hr）も和集合で今と一致する（§4 のテストで全組合せを確認）。
+- 移行後に変わる運用（意図した結果）: 内部ロールを付け外ししても入口は勝手に開かない。入口は一覧の4ボタンで決める。新しい責任者の作成（`lib/onboard.js`）は、今の「責任者＝3アプリ」を保つため `manager` ＋ `hr`・`sales`・`office` を一緒に付ける。
+
+## 4. ③ 移行前後の実効権限の比べ方（差分 0 人が条件）
+
+比べる「実効権限ベクトル」（人ごと）:
+`recruit / sell / office(月末月初) / officeHr / officeFinance / keiei / aiInquiries / canManageHr(isHr) / canSeeSalary / isOwner`（アプリ側）と、
+`gw_is_recruiting / gw_is_sales / gw_is_office / gw_is_office_finance / gw_is_hr / gw_expense_can_review / gw_request_can_review / gw_is_owner / gw_is_keiei`（DB 側）。
+
+| 段階 | 何を比べるか | 書き込み | 合格条件 |
 |---|---|---|---|
-| **A（推奨）** | Office ホーム＋月末月初業務。**経理・事務／人事・労務は「詳細設定」で別に付ける** | 最小権限。今の責任者（manager）と同じ範囲。個人情報・給与・権限管理を、Office を付けただけで渡さない | 経理担当に付けるときは「詳細設定」で経理・事務も付ける1手間 |
-| B | Office ON ＝ 月末月初＋経理・事務（今の `finance` と同じ） | 経理担当は1回で済む | 責任者（月末月初のみ）に付けると経理・事務（経費承認・請求）まで広がる |
-| C | Office ON ＝ 3つ全部 | 利用者から見て一番単純 | 経理に人事・労務（個人情報・給与・雇用契約・権限管理）まで渡る。#65 で分けた意味がなくなる |
+| a. 書く前のドライラン | 今の式（`gw_role_grants` と memberships から）と、「移行表を当てたあとの式」を、全社員＋会計の管理者で比べる。**テーブルも行も作らない（読み取りだけ）** | なし | 差分 0 人 |
+| b. 移行直後 | 本物の `gw_app_grants` から出した新しい式と、今の式（同じ SQL に残す）を比べる | 移行 SQL のあと | 差分 0 人 |
+| c. DB 関数の切り替え前後 | 全員を `auth.uid()` に見立てて（`set_config('request.jwt.claim.sub', …)`）9 つの関数の結果を `gw_access_snapshot` に保存 → 切り替え → 同じ集計を取って突き合わせ | スナップショット表のみ | 差分 0 人 |
+| d. アプリ側 | node テスト：8 ロールの全部分集合（256）× 会計の管理者（有無）で、凍結した「いまの式（test 内にコピー）」と「新しい式＋移行表」を比べる | なし | 差分 0 件 |
+| e. 反映後の実機 | 管理者の画面で、各人の4ボタンの表示が、移行前に控えた「利用できる業務」と一致するか | なし | 一致 |
 
-**推奨は A**。「Office を ON にした人」の既定が最も狭く、広げるのは明示的な操作（詳細設定）だけになる。
-A の場合、`officeFinance`（経理・事務）／`officeHr`（人事・労務）は「Office が ON の人にだけ」有効にする（Office が OFF なら詳細側が残っていても入れない）。詳細設定の持ち物は既存の `finance` ／ `hr` をそのまま使う。
+- **増える人も減る人も 1 人でも出たら止める**（その人のID・どのキーが変わったかを出力して中断。適用を進めない）。
+- 差分の出力は「社員ID・名前・キー・移行前・移行後」。個人情報を外に出さないよう、会社内の SQL Editor 上だけで見る（ログには人数だけ残す）。
 
-### 2.4 実効権限の式（提案後）
+## 5. ④ 必要な SQL ファイル（**作るだけ・まだ流さない**）
 
-```
-recruit       = owner  または recruiter
-sell          = owner  または sales
-office        = owner  または office            （月末月初）
-officeFinance = 会計の管理者 または owner または (office かつ finance)
-officeHr      = 会計の管理者 または owner または (office かつ hr)
-keiei         = owner
-```
+段階を分けて、各段階が権限にとって中立になるようにする。
 
-`manager` / `hr` / `finance` は、アプリの入口を開く力を失う（`hr` の人事管理者としての力・`finance` の経理業務の力は残る）。これが「独立して ON/OFF」の前提。
+| 順 | ファイル | 内容 | 権限への影響 |
+|---|---|---|---|
+| 0 | `db/check_app_grants_dryrun.sql` | §4-a。読み取りだけ。**最初に流して差分 0 人を確認** | なし |
+| 1 | `db/119_app_grants.sql` | テーブル `gw_app_grants`・RLS・`keiei` 拒否トリガ・`gw_has_app()`・§3 の移行 INSERT（べき等） | **なし**（どの判定関数もまだ読まない。古いアプリも影響を受けない） |
+| 2 | `db/check_app_grants_after.sql` | §4-b。移行直後の突き合わせ | なし |
+| — | （アプリのデプロイ） | 新しい判定コード。DB 関数はまだ旧式（役割基準）だが、移行済みなので結果は同じ | なし（差分 0 が前提） |
+| 3 | `db/check_app_grants_functions.sql`（snapshot） | §4-c の保存側 | スナップショット表のみ |
+| 4 | `db/120_app_gates.sql` | `gw_is_recruiting / sales / office / office_finance` を新式に（`gw_is_hr` は含めない） | なし（差分 0 が前提） |
+| 5 | `db/121_app_gate_hr.sql` | `gw_is_hr` を新式に（単独。巻き戻し SQL をファイル内に添付） | なし（差分 0 が前提） |
+| 6 | `db/check_app_grants_functions.sql`（compare） | §4-c の比較側。**各 4・5 のあとに実行** | — |
+| — | `db/000_install_fresh.sql` | 新規構築用に 119〜121 を反映 | — |
 
-## 3. 必要な SQL（**まだ実行しない・提示のみ**）
+- 巻き戻し: 5 → 4 → 1 の逆順。4・5 は旧式の関数定義に戻すだけ。1 の表は、4・5 を戻したあとなら消してよい（内部ロールは触っていないので、戻しても元通り）。
+- 順序の注意: **SQL（1）が先、アプリが後**。アプリが先だと、入口の行が無くて全員が閉め出される。アプリのデプロイ前に §4-b の差分 0 を確認する。
 
-`db/119_member_apps.sql`（案。べき等。Supabase SQL Editor で実行）
+## 6. ⑤ 変更対象ファイル
 
-```sql
-begin;
-
--- 1) role に 'office' を加える（いまの値は狭めない）
-do $$
-declare cur text; vals text[];
-begin
-  select pg_get_constraintdef(oid) into cur from pg_constraint
-   where conrelid = 'public.gw_role_grants'::regclass and conname = 'gw_role_grants_role_check';
-  select array_agg(distinct v order by v) into vals from (
-    select m[1] as v from regexp_matches(coalesce(cur, ''), '''([^'']+)''', 'g') as m where m[1] !~ '[{},]'
-    union select role from public.gw_role_grants where role is not null
-    union select unnest(array['owner','hr','manager','labor_advisor','it','finance','recruiter','sales','office'])
-  ) s;
-  alter table public.gw_role_grants drop constraint if exists gw_role_grants_role_check;
-  execute format('alter table public.gw_role_grants add constraint gw_role_grants_role_check check (role in (%s))',
-    (select string_agg(quote_literal(v), ', ' order by v) from unnest(vals) as v));
-end $$;
-
--- 2) 既存ユーザーの移行：いま入れている業務を、明示フラグにする
---    manager → 採用HR・Sales・Office       hr → 採用HR・Office       finance → Office
---    ※ hr だけは例外：Office が ON になるため、月末月初業務が新たに使える（§5・§6-5）
-insert into public.gw_role_grants (tenant_id, employee_id, role, granted_by)
-select g.tenant_id, g.employee_id, x.role, g.granted_by
-  from public.gw_role_grants g
-  join (values ('manager','recruiter'), ('manager','sales'), ('manager','office'),
-               ('hr','recruiter'),      ('hr','office'),
-               ('finance','office')) as x(from_role, role) on x.from_role = g.role
-on conflict (employee_id, role) do nothing;
-
--- 3) DB の判定を、明示フラグに（owner は今までどおり全部）
-create or replace function public.gw_is_recruiting(p_tenant uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select public.gw_has_role(p_tenant,'owner') or public.gw_has_role(p_tenant,'recruiter') $$;
-create or replace function public.gw_is_sales(p_tenant uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select public.gw_has_role(p_tenant,'owner') or public.gw_has_role(p_tenant,'sales') $$;
-create or replace function public.gw_is_office(p_tenant uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select public.gw_has_role(p_tenant,'owner') or public.gw_has_role(p_tenant,'office') $$;
-
-notify pgrst, 'reload schema';
-commit;
-```
-
-- `gw_is_hr`・`gw_is_owner`・`gw_is_keiei`・`gw_is_office_finance`・`gw_request_can_review` は**変えない**（人事管理・経営・経理の RLS は今のまま。経理・事務／人事・労務が「Office ON のときだけ」は API 側で絞る。DB を絞るかは §6）。
-- 流す前に、`office` の CHECK を許可する SQL（1）と移行（2）が先。アプリを先に出さない（先に出すと、移行前の manager が HR を失う）。
-
-### 実行前後の検証（結果が変わらないことの確認）
-実行前に「人ごとの入れる業務」を保存し、実行＋デプロイ後に同じ集計を取って比べる（`db/check_member_apps.sql` を同時に用意する）。差が出てよいのは「`hr` を持つ人の月末月初業務」だけ。それ以外の差は 0 件でなければ止める。
-
-## 4. 影響範囲（アプリ側の変更）
-
-| 場所 | 変更 |
-|---|---|
-| `lib/gw.js` | `HR_ROLES` = owner/recruiter、`SALES_ROLES` = owner/sales、`OFFICE_ROLES` = owner/office。`canOfficeHr/Finance` に「Office が ON」の条件を足す |
-| `api/employees/roles.js` | ROLES に `office` を足す。ボタン用に `{employeeId, app, grant}` を受け、**サーバ側の1か所の対応表**で `recruit→recruiter` `sales→sales` `office→office` `keiei→owner` に変換（owner の既存ガードはそのまま） |
-| `api/employees/index.js` | 一覧に `apps`（4つの ON/OFF）と、ロックの理由（経営者／会計の管理者）を返す（#78 の `access` / `accessMeta` を土台にする） |
-| `admin-members.html` | 一覧は4ボタンだけ。詳細設定に Office の範囲（経理・事務／人事・労務）と内部ロール。**一覧には人事・労務／経理・事務／月末月初／内部ロール名を出さない** |
-| `lib/onboard.js` | `account_type = manager` で `manager` を付けている箇所を、`manager` ＋ `recruiter` / `sales` / `office` に（付けないと新しい責任者が何も開けなくなる） |
-| `api/admin/setup.js`・初期化 SQL | 同じ理由で、初期の役割に `office` などを足す |
-| テスト | `accessparity`・`memberaccess*`・`partnerapi`・`owneronlyapi`・Office 系の判定表を新しい式に更新。全 role の組合せで `/api/me` と一覧が一致すること、移行前後で同じになることを確認 |
-| 影響しないもの | `manager` を使う非権限の処理（キャリア・週目標・入退社の担当者割当）、`hr` の人事管理権限、`/api/me` の応答の形（`access` のキーは同じ） |
-
-## 5. 既存ユーザーの移行方法
-
-§3 の SQL（2）で、今の役割から明示フラグを足す。`hr` 以外は**今と同じ範囲**になる。
-
-| 今の役割 | 移行後に付くフラグ | 変わるか |
+| 区分 | ファイル | 変更 |
 |---|---|---|
-| owner | なし（owner が全部を含む） | 変わらない |
-| manager | recruiter / sales / office | 変わらない（経理・事務、人事・労務は元から無し） |
-| hr | recruiter / office（`hr` は残る＝人事・労務を使える） | **月末月初業務が新たに使える**（今は使えない。§6-5） |
-| finance | office（`finance` は残る＝経理・事務を使える） | 変わらない |
-| recruiter / sales | 変更なし | 変わらない |
-| 会計の管理者 | 変更なし（変更不可の ON） | 変わらない |
+| 判定 | `lib/gw.js` | `gwContext` が `gw_app_grants` を読む（`ctx.apps`）。`canAccessHr/Sales/Office/OfficeHr/OfficeFinance/isHr` を §1 の式に。`HR_ROLES` などの「入口になる役割一覧」は廃止し、月末月初の内部条件だけ `OFFICE_MONTHLY_ROLES` として残す。`accessOf` に `apps`（4つの入口）を追加。キー名・意味は既存のまま |
+| 判定 | `lib/app-grants.js`（新規） | `APP_KEYS`、移行表（役割→app_key。SQL と node テストで共通に使う）、`loadApps()` |
+| API | `api/me.js` | `access` に加え `apps`（4つの入口）を返す。内部の生ロール判定（1か所）を `isHr` 経由に |
+| API | `api/employees/index.js` | 各人に `apps`（4つ）・ロック理由（owner／会計の管理者）・`access`・`accessMeta` を返す（#78 の形を拡張） |
+| API | `api/employees/apps.js`（新規） | `POST {employeeId, app, grant}`。`hr/sales/office` は `gw_app_grants` を upsert/delete、`keiei` は owner の付け外し（既存ガードをそのまま呼ぶ）。`gwLog`（`app.grant`/`app.revoke`）。応答は #78 と同じ形（`apps`・`access`・`accessMeta`） |
+| API | `api/employees/roles.js` | 内部ロールの付け外しのまま。応答に `apps` を足すだけ。詳細設定から使う |
+| 作成系 | `lib/onboard.js`、`api/admin/setup.js`、`db/bootstrap_eight_accounts.sql` | 役割を付けるとき、移行表どおりの入口も一緒に付ける（付けないと新しい責任者が何も開けない） |
+| 内部ロールを直接見ている所 | `lib/career.js`（3か所）、`api/week-goals.js`（1か所） | `career` は `isHr` 経由に（Office の人事・労務の内側）。`week-goals` の `manager` はアプリの入口と無関係なので変更なし。実装時に全件洗い出し直す |
+| 画面 | `admin-members.html` | 一覧は4ボタンだけ（承認済みのモック）。詳細設定に内部ロール（8つ）と「Office ON ＋ hr ＝人事・労務…」の説明。CSV は4アプリ |
+| 画面 | `js/layout.js` | Office の入口を `apps.office`（Office ON）に。**共有 js のため `?v=`・`api/health.js assetVersion`・`test/asset-versions.json`・`test/asset-hashes.json` の更新が必要** |
+| 画面 | `office/` の各ページ | Office ON だけで中身が無い人のために、Office ホームに「担当の権限がありません」を出す |
+| DB | 上の §5 の SQL 一式、`db/000_install_fresh.sql` | |
+| テスト | `test/accessparity.mjs`、`test/memberaccessapi.mjs`、`test/ui/memberaccessui.mjs`、`partnerapi`・`owneronlyapi`・Office 系の判定表、`test/mfatest.mjs` | 新しい式に更新。**凍結した旧式との全組合せ比較を新設**（§4-d） |
+| 触らない | `lib/mfa.js`（二段階認証は内部ロール基準のまま）、`gw_is_owner`・`gw_is_keiei`、`gw_role_grants` 本体 | |
 
-移行後は、役割を付け外ししても入口は勝手に開かない（上のボタンで決める）。
+## 7. ⑥ #78 から再利用する部分
 
-## 6. 判断してほしい点
+| 再利用 | 内容 |
+|---|---|
+| `lib/member-access.js` | `adminFlags()`（memberships の admin/staff を1回で集める）と `accessForMember()`。入力に `apps` を足すだけ |
+| `lib/gw.js memberAccessOf` | 「他人の access を `accessOf` そのもので出す」考え方（新しい式に追従させる） |
+| `api/employees/index.js` | 閲覧者が人事のときだけ `access`・`accessMeta` を付ける仕組み。`null`＝確認できません の扱い |
+| `api/employees/roles.js accessAfter` | 変更直後に再計算した値を応答で返す仕組み → `apps.js` が同じ形で返す |
+| `admin-members.html` | その場で同じ行を更新（一覧を読み直さない）、応答に `access`/`accessMeta` が無ければ読み直す、`accessMeta.accountingAdmin` ＝「会計の管理者のため変更不可」の理由、基本区分の名称、スマホ幅の扱い |
+| テスト | `memberaccessapi`（`/api/me` と一覧の全役割組合せ一致）、`memberaccessui`（その場で更新・失敗・null・狭い幅・CSV）、`officeperfui` のモック調整 |
+| 捨てる | 7行の○×チップ表（`ACCESS_ROWS`）、Office 3行の凡例、3つの細かい行のテスト |
 
-1. **Office ON の意味**: A（推奨）／B／C のどれにするか（§2.3）。
-2. **経営を独立させるか**: 推奨は「経営＝経営者（owner）」のまま。独立した `keiei` フラグにすると、owner でない人が給与・経営指標を見られるので、給与の見せ方（`docs/keiei-salary-separation.md`）の判断が先に要る。
-3. **経理・事務／人事・労務の DB（RLS）を「Office ON」でも絞るか**: 推奨は今回は API だけ（SQL を最小にする）。DB まで絞るなら `gw_is_office_finance` などの再定義が増える。
-4. **#78 の扱い**: 今の「利用できる業務の細かい○×」は、この設計では不要になる。#78 は閉じるか、土台（`access` を一覧に返す部分）だけ残して作り直すかの判断。
-5. **`hr`（人事）の人の月末月初業務**: 案 A で「経理・事務／人事・労務は Office が ON のときだけ有効」にすると、今は月末月初が使えない人事担当にも Office ON が付き、月末月初（単価・請求額・支払など金額の画面）が使えるようになる。避けたい場合は、(a) 人事・労務を Office フラグに依存させない（Office が OFF でも `hr` があれば Office の人事・労務には入れる）にするか、(b) 移行で `hr` の人に `office` を付けず、Office の人事・労務だけ今のまま残す。ただし (a)(b) は「一覧の Office が OFF なのに Office の一部に入れる」状態を作るので、推奨は**移行時に拡大を認めて、月末月初を外したい人だけ個別に OFF にする**運用。
+## 8. 確認したいこと
+
+1. `gw_app_grants.app_key='keiei'` を表に入れるが、いまは INSERT を拒否する（判定は `owner` のまま）でよいか。
+2. `isHr`（人事の管理権限・給与閲覧の土台）を「Office ON ＋ hr」の内側にする（§1）でよいか。これを外すと、Office OFF の `hr` が人事の管理 API を使えてしまう。
+3. `gw_is_hr`（RLS）も新式にする（SQL 5）でよいか。やらない場合は API だけが入口になり、DB は役割基準のまま残る。
+4. Office ON だけで中身が無い人のために、Office ホームに「担当の権限がありません」を出す扱いでよいか。

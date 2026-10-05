@@ -90,7 +90,7 @@
     <h3>見かた</h3>
     <ul>
       <li><span class="sw" style="background:var(--on)"></span>青＝ON（その業務を使える） ／ <span class="sw" style="background:#fff;border:1px solid var(--off-line)"></span>白＝OFF</li>
-      <li><b>Office</b> を ON にすると、Office のホームと「月末月初業務」が使えます。経理・事務、人事・労務は、行の「詳細設定」で別に付けます。</li>
+      <li><b>Office</b> を ON にすると、Office アプリへ入れます。中で何ができるか（人事・労務／経理・事務／月末月初）は、行の「詳細設定」の内部の役割で決まります。</li>
       <li>薄いグレーの青は、変えられない ON です（経営者・会計の管理者）。理由は行の下に出ます。</li>
     </ul>
   </div>
@@ -106,11 +106,11 @@
     { key: "keiei",   label: "経営" },
   ];
   const members = [
-    { id: 1, name: "山田 一郎", sub: "代表", basic: "メンバー（在籍中）", apps: { recruit: 1, sales: 1, office: 1, keiei: 1 }, lock: { all: "経営者は、すべての業務を使えます。変更できません。" } },
-    { id: 2, name: "佐藤 花子", sub: "経理", basic: "メンバー（在籍中）", apps: { office: 1 }, detail: { finance: 1 } },
-    { id: 3, name: "鈴木 次郎", sub: "人事", basic: "メンバー（在籍中）", apps: { recruit: 1, office: 1 }, detail: { hr: 1 } },
-    { id: 4, name: "高橋 美咲", sub: "営業", basic: "メンバー（在籍中）", apps: { sales: 1 } },
-    { id: 5, name: "田中 健", sub: "責任者", basic: "メンバー（在籍中）", apps: { recruit: 1, sales: 1, office: 1 } },
+    { id: 1, name: "山田 一郎", sub: "代表", basic: "メンバー（在籍中）", apps: { recruit: 1, sales: 1, office: 1, keiei: 1 }, roles: ["owner"], lock: { all: "経営者は、すべての業務を使えます。変更できません。" } },
+    { id: 2, name: "佐藤 花子", sub: "経理", basic: "メンバー（在籍中）", apps: { office: 1 }, roles: ["finance"] },
+    { id: 3, name: "鈴木 次郎", sub: "人事", basic: "メンバー（在籍中）", apps: { recruit: 1, office: 1 }, roles: ["hr"] },
+    { id: 4, name: "高橋 美咲", sub: "営業", basic: "メンバー（在籍中）", apps: { sales: 1 }, roles: ["sales"] },
+    { id: 5, name: "田中 健", sub: "責任者", basic: "メンバー（在籍中）", apps: { recruit: 1, sales: 1, office: 1 }, roles: ["manager"] },
     { id: 6, name: "伊藤 さくら", sub: "会計側の管理者", basic: "メンバー（在籍中）", apps: { office: 1 }, lock: { office: "会計の管理者のため、Office を使えます。変更できません。" } },
     { id: 7, name: "渡辺 新人", sub: "入社準備中", basic: "入社準備中", apps: {} },
   ];
@@ -141,17 +141,13 @@
       <button class="more-btn" type="button" aria-expanded="false">詳細設定</button>
       ${lockMsg ? `<div class="lockmsg">${lockMsg}</div>` : ""}
       <div class="detail">
-        <h4>Office の範囲</h4>
-        <p>Office を ON にした人に、さらに付ける業務です。</p>
+        <h4>内部の役割（アプリの中でできること）</h4>
+        <p>上のボタンは「どのアプリへ入れるか」だけです。入ったあとの権限は、ここで決めます。</p>
         <div class="grp">
-          <label><input type="checkbox" data-d="finance" ${m.detail?.finance ? "checked" : ""}> 経理・事務</label>
-          <label><input type="checkbox" data-d="hr" ${m.detail?.hr ? "checked" : ""}> 人事・労務</label>
+          ${[["owner","経営者"],["hr","人事"],["finance","経理"],["manager","責任者"],["recruiter","採用担当"],["sales","営業担当"],["it","IT・管理"],["labor_advisor","社労士"]]
+            .map(([k, l]) => `<label><input type="checkbox" data-role="${k}" ${(m.roles || []).includes(k) ? "checked" : ""}> ${l}（${k}）</label>`).join("")}
         </div>
-        <h4>内部の役割</h4>
-        <p>通常は触る必要がありません。ここで付け外ししても、上のボタンの意味は変わりません。</p>
-        <div class="grp">
-          ${["owner", "hr", "manager", "finance", "it", "labor_advisor"].map((r) => `<label><input type="checkbox" disabled> ${r}</label>`).join("")}
-        </div>
+        <p>Office が ON のとき：<b>人事（hr）＝人事・労務</b> ／ <b>経理（finance）＝経理・事務</b> ／ <b>責任者（manager）・経理（finance）＝月末月初</b>。Office が ON だけでは、この3つは使えません。</p>
       </div>`;
     const box = $(".toggles", row);
     for (const a of APPS) {
