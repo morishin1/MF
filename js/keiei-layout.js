@@ -119,6 +119,9 @@
       .fn-step .tg { font-size:11.5px; color:var(--k-mute); line-height:1.7; margin-top:2px; }
       .fn-step .cv { display:inline-block; margin-top:8px; font-size:11.5px; font-weight:700; color:var(--k-sub); background:var(--k-soft); border-radius:999px; padding:2px 9px; }
       .fn-step .cv.na { color:var(--k-faint); font-weight:500; }
+      .fn-stall { display:inline-block; margin-top:8px; font-size:11.5px; font-weight:700; border-radius:999px; padding:2px 9px; background:var(--k-soft); color:var(--k-sub); }
+      .fn-stall.hot { background:var(--k-amber-bg); color:var(--k-amber); }
+      .fn-stall.na { color:var(--k-faint); font-weight:500; }
       .fn-foot { font-size:12px; color:var(--k-sub); margin:10px 2px 0; line-height:1.8; }
       .fn-foot b { color:var(--k-ink); }
 

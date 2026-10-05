@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261005apps1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261005apps1">
+  <link rel="stylesheet" href="../css/app.css?v=20261005keiei1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261005keiei1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -100,11 +100,11 @@
   <main id="kei-main"><div class="kei-empty">読み込み中…</div></main>
 </div>
 
-<script src="../js/api-client.js?v=20261005apps1"></script>
-<script src="../js/layout.js?v=20261005apps1"></script>
-<script src="../js/keiei-layout.js?v=20261005apps1"></script>
-<script src="/keiei/onboarding.js?v=20261005apps1"></script>
-<script src="/keiei/pay.js?v=20261005apps1"></script>
+<script src="../js/api-client.js?v=20261005keiei1"></script>
+<script src="../js/layout.js?v=20261005keiei1"></script>
+<script src="../js/keiei-layout.js?v=20261005keiei1"></script>
+<script src="/keiei/onboarding.js?v=20261005keiei1"></script>
+<script src="/keiei/pay.js?v=20261005keiei1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -218,11 +218,14 @@
         <div class="lb">${esc(f.label)}</div>
         ${live ? `<div class="v" data-role="actual">${num(f.value)}<small>${esc(f.unit)}</small></div>`
                : `<div class="v miss" data-role="state" title="${esc(f.reason || "")}">${f.status === "undefined" ? "定義未決" : "取得できません"}</div>`}
-        <div class="tg">目標 ${f.target == null ? "—" : `${num(f.target)}${esc(f.unit)}`}${f.pace == null ? "" : `・今日の目安 ${num(f.pace)}`}${f.sends == null ? "" : `<br>送信 ${num(f.sends)}件`}</div>
-        ${live && f.pct != null ? `${prog(f.pct, f.pct >= 100)}<div class="kg-pct">達成率 ${f.pct}%</div>` : ""}${cv}</div>`;
+        <div class="tg">目標 ${f.target == null ? "—" : `${num(f.target)}${esc(f.unit)}`}${f.pace == null ? "" : `・今日の目安 ${num(f.pace)}`}${f.companies == null ? "" : `<br>企業 ${num(f.companies)}社（重複を除く）`}</div>
+        ${live && f.pct != null ? `${prog(f.pct, f.pct >= 100)}<div class="kg-pct">達成率 ${f.pct}%</div>` : ""}${cv}
+        ${f.stalledCount === undefined ? "" : f.stalledCount === null
+          ? `<div class="fn-stall na" data-role="stall">停滞：取得できません</div>`
+          : `<div class="fn-stall${f.stalledCount ? " hot" : ""}" data-role="stall">停滞 ${num(f.stalledCount)}件${f.stalledCount ? "（7日以上動きなし）" : ""}</div>`}</div>`;
     };
     return `<div class="fn" data-role="funnel">${steps.map(step).join("")}</div>
-      <div class="fn-foot">ファネルは会社（企業ID）で数えます。同じ会社への2回目のアタック・2件目の案件は、1社のままです。有効企業と本命案件は定義が決まるまで、ファネルに含めていません。</div>`;
+      <div class="fn-foot">接触は送信件数が主、重複を除いた企業数は補助です。商談・提案・有料契約は会社（企業ID）で数え、同じ会社の2件目の案件は1社のままです。転換率は、接触の企業数（社）から数えます。有効企業と本命案件は定義が決まるまで、ファネルに含めていません。</div>`;
   }
   const funnelBlock = (S) => section("funnel", "営業ファネル", S ? funnelFlow(S) : salesMissing);
 
@@ -308,7 +311,7 @@
         ? `<tr class="na" data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td><td class="n">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
             <td colspan="2" title="${esc(f.reason || "")}"><span class="kei-pill miss" data-role="state">${f.status === "undefined" ? "定義未決" : "取得できません"}</span>${f.status === "undefined" ? "" : `<span class="kei-why">${esc(f.reason || "")}</span>`}</td></tr>`
         : `<tr data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td><td class="n">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
-            <td class="n" data-role="actual"><b>${val(f.value, f.unit)}</b>${f.sends == null ? "" : `<span class="kei-why" style="text-align:right;">送信 ${num(f.sends)}件</span>`}</td>
+            <td class="n" data-role="actual"><b>${val(f.value, f.unit)}</b>${f.companies == null ? "" : `<span class="kei-why" style="text-align:right;">企業 ${num(f.companies)}社（重複を除く）</span>`}</td>
             <td>${f.pct == null ? "" : `${prog(f.pct, f.pct >= 100)}<span class="kg-pct">${f.pct}%</span>`}</td></tr>`;
       const rates = S.rates.filter((r) => r.value != null).map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value}%</b>${r.plan == null ? "" : `（計画 ${r.plan}%）`}`).join("　");
       const snap = S.snapshot ? `<div class="kei-panel" data-role="snapshot">${S.snapshot.map((x) => `<span class="kei-pill low" style="margin:2px 6px 2px 0;">${esc(x.label)} <b>${num(x.count)}</b></span>`).join("")}</div>`

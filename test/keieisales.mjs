@@ -25,10 +25,20 @@ const stage = (s, key) => s.funnel.find((f) => f.key === key);
 
 console.log("\n=== 今月の実績（全社） ===\n");
 
-await ok("接触：今月アタックを送った会社（120件の送信が100社。送れなかったもの・先月の分は数えない）", () => {
+await ok("接触：主KPIは送信件数（120件）。重複を除いた企業数（100社）は補助値。送れなかったもの・先月の分は数えない", () => {
   const s = salesOct();
-  assert.equal(stage(s, "contact").value, 100); assert.equal(stage(s, "contact").sends, 120);
-  assert.equal(stage(s, "contact").target, 4000); assert.equal(stage(s, "contact").unit, "社");
+  assert.equal(stage(s, "contact").value, 120, "送信件数が主");
+  assert.equal(stage(s, "contact").companies, 100, "企業数（重複を除く）は補助");
+  assert.equal(stage(s, "contact").target, 4000); assert.equal(stage(s, "contact").unit, "件");
+  assert.equal(stage(s, "contact").pct, 3, "達成率は送信件数 / 目標");
+  assert.equal(stage(s, "meeting").companies, null, "補助の企業数は、接触だけが持つ");
+});
+
+await ok("提案の段階に、停滞件数（提案・最終調整のまま7日以上）を添える。読めなければ null", () => {
+  assert.equal(stage(salesOct(), "proposal").stalledCount, 1);
+  assert.equal(stage(salesOct(), "contact").stalledCount, undefined);
+  const absent = salesOct({ ...salesFacts(), dealState: "absent", deals: null, history: null });
+  assert.equal(stage(absent, "proposal").stalledCount, null);
 });
 
 await ok("商談・提案・有料契約・受注額（会社で重複を除く）", () => {
@@ -115,7 +125,7 @@ await ok("案件の表が無い環境：商談・提案・契約・停滞は「�
   for (const k of ["meeting", "proposal", "won"]) {
     assert.equal(stage(s, k).value, null, k); assert.equal(stage(s, k).status, "missing"); assert.ok(stage(s, k).reason.includes("まだ使えません"), k);
   }
-  assert.equal(stage(s, "contact").value, 100);
+  assert.equal(stage(s, "contact").value, 120);
   assert.equal(s.stalled, null); assert.ok(s.stalledReason);
   assert.equal(s.won, null);
   assert.equal(stalledItem(s), null, "停滞を数えられないときは、今日の確認に出さない（0件とも言わない）");
@@ -185,7 +195,7 @@ console.log("\n=== 担当者別 ===\n");
 
 await ok("担当者の実績：中村 接触90社・商談1社、藤本 提案2社・提案率67%（商談3社）、山内 有料化1、池永 全社の契約1・停滞1、野澤 タスク", () => {
   const p = Object.fromEntries(salesOct().perPerson.map((x) => [x.name, Object.fromEntries(x.kpis.map((k) => [k.label, k]))]));
-  assert.equal(p["中村 次郎"]["接触"].value, 90); assert.equal(p["中村 次郎"]["接触"].note, "送信90件"); assert.equal(p["中村 次郎"]["商談"].value, 1);
+  assert.equal(p["中村 次郎"]["接触"].value, 90); assert.equal(p["中村 次郎"]["接触"].note, "企業90社（重複を除く）"); assert.equal(p["中村 次郎"]["商談"].value, 1);
   assert.equal(p["藤本 三郎"]["提案"].value, 2); assert.equal(p["藤本 三郎"]["提案率"].value, 67); assert.equal(p["藤本 三郎"]["提案率"].note, "提案2社／商談3社");
   assert.equal(p["山内 太郎"]["有料化"].value, 1); assert.equal(p["山内 太郎"]["有料化"].done, true);
   assert.equal(p["池永 四郎"]["有料契約（全社）"].value, 1);
@@ -304,7 +314,7 @@ const person = (s, name) => s.perPerson.find((p) => p.name.startsWith(name));
 
 await ok("担当者の状態：目安に届いていない項目があれば「遅れ」、すべて届いていれば「順調」、測れた項目が無ければ「未計測」", () => {
   const s = salesOct();   // 10/5（31日中5日目）
-  assert.equal(person(s, "中村").state.key, "behind", "接触 90社は目安 323社（2,000×5/31）に届いていない");
+  assert.equal(person(s, "中村").state.key, "behind", "接触 90件は目安 323件（2,000×5/31）に届いていない");
   assert.equal(person(s, "山内").state.key, "ontrack", "有料化 1社は目標 1社に届いている（地域接点・診断は数えられないので比べない）");
   assert.equal(person(s, "工藤").state.key, "unmeasured", "PC売上・法人顧客・診断送客は、まだ数えられない");
   assert.equal(person(s, "今福").state.key, "unmeasured");
@@ -327,7 +337,7 @@ await ok("KPI に今日の目安（pace）と、目安に届いているか（on
 await ok("次に見るもの：遅れている項目を先に。無ければ、まだ数えられない項目（理由のことば）。どちらも無ければ null", () => {
   const s = salesOct();
   assert.equal(person(s, "中村").next.kind, "behind");
-  assert.match(person(s, "中村").next.text, /接触 90社／目安 323社/);
+  assert.match(person(s, "中村").next.text, /接触 90件／目安 323件/);
   assert.match(person(s, "野澤").next.text, /目標 0件以下/, "少ないほどよい項目は「目標 0件以下」と出す（「目安 目標」と重ねない）");
   assert.equal(person(s, "工藤").next.kind, "unmeasured");
   assert.match(person(s, "工藤").next.text, /未接続|定義未決|記録なし/);
@@ -338,7 +348,7 @@ await ok("営業の流れ（接触→商談→提案→有料契約）の転換�
   const s = salesOct();
   assert.deepEqual(s.flow.map((r) => [r.from, r.to]), [["接触", "商談"], ["商談", "提案"], ["提案", "有料契約"]]);
   const f = Object.fromEntries(s.flow.map((r) => [r.toKey, r]));
-  assert.equal(f.meeting.value, 6); assert.equal(f.meeting.plan, 0.8, "30 / 4,000 = 0.75% → 0.8%");
+  assert.equal(f.meeting.value, 6, "接触→商談は、同じ単位（社）どうし：商談6社 / 接触の企業100社"); assert.equal(f.meeting.plan, 0.8, "30 / 4,000 = 0.75% → 0.8%");
   assert.equal(f.proposal.value, 66.7); assert.equal(f.proposal.plan, 50);
   assert.equal(f.won.value, 25); assert.equal(f.won.plan, 66.7);
 });

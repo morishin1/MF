@@ -199,11 +199,14 @@ console.log("— 一覧 —");
 {
   const server = makeServer();
   const page = await open({}, { server });
-  const labels = (await page.locator("#kei-side a[data-view]").evaluateAll((ns) => ns.map((n) => n.dataset.view))).join(",");
-  // メニューは、ホーム・入社準備・給与管理の3つ＋小さな入口（経営設定・セキュリティ）。旧: ダッシュボード〜会計の8つ
-  check(labels === "home,onboarding,pay,security", `メニューに「給与管理」がある（${labels}）`);
+  // 横タブ：ホーム｜売上・営業｜人・組織｜財務｜リスク。給与管理は「人・組織」の中（2段目）にある
+  const tabs = (await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => n.dataset.ktab))).join(",");
+  check(tabs === "home,sales,people,finance,risk", `横タブは5つ（${tabs}）`);
+  check((await page.locator("#kp-keiei-nav .kp-otab.on").getAttribute("data-ktab")) === "people", "給与管理を開くと、「人・組織」のタブが選ばれる");
+  const subs = (await page.locator("#kp-keiei-nav .kp-ostab[data-kview]").evaluateAll((ns) => ns.map((n) => n.dataset.kview))).join(",");
+  check(subs === "people,onboarding,pay", `「人・組織」の2段目に「給与管理」がある（${subs}）`);
   check((await page.locator('[data-role="to-payroll"]').getAttribute("href")) === "#payroll", "人件費の集計への入口（メニューから外したので、給与管理の一覧から入る）");
-  check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "pay", "メニューの強調は「給与管理」");
+  check((await page.locator("#kp-keiei-nav .kp-ostab.on").getAttribute("data-kview")) === "pay", "2段目の強調は「給与管理」");
   const t = await text(page);
   check(t.includes("給与管理") && t.includes("山田 月給") && t.includes("佐藤 未登録") && t.includes("鈴木 契約違い"), "在籍の人が並ぶ");
   check(!t.includes("高橋 退職"), "退職者は、既定では出さない");
@@ -379,7 +382,7 @@ console.log("\n— 初回給与の候補：確認 → 修正 → 理由入力 �
   await page.click('[data-role="to-candidates"]');
   await page.waitForTimeout(500);
   check((await text(page, '[data-role="title"]')).includes("初回給与の候補"), "候補の一覧が開く");
-  check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "pay", "メニューは「給与管理」のまま");
+  check((await page.locator("#kp-keiei-nav .kp-ostab.on").getAttribute("data-kview")) === "pay", "横タブは「給与管理」のまま");
   const t = await text(page);
   check(t.includes("自動では登録しません"), "自動では登録しないと明記");
   check((await text(page, '[data-role="c-total"]')).includes("3") && (await text(page, '[data-role="c-with"]')).includes("2") && (await text(page, '[data-role="c-without"]')).includes("1"),
@@ -477,7 +480,7 @@ console.log("\n— 全員の監査ログ —");
   await page.click('[data-role="to-audit"]');
   await page.waitForTimeout(500);
   check((await text(page, '[data-role="title"]')).includes("監査ログ"), "監査ログの画面が開く");
-  check((await page.locator("#kei-side a.on").getAttribute("data-view")) === "pay", "メニューは「給与管理」のまま");
+  check((await page.locator("#kp-keiei-nav .kp-ostab.on").getAttribute("data-kview")) === "pay", "横タブは「給与管理」のまま");
   const before = await page.locator('[data-role="audit-all"] tbody tr').count();
   check(before === 3, `新しい順に 3 件ずつ（いま ${before}）`);
   const more = page.locator('[data-act="more"]');
