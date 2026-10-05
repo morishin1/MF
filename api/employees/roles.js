@@ -19,6 +19,7 @@ import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { guardLastOwner, INACTIVE } from "../../lib/owner-guard.js";
+import { adminFlags, accessForMember } from "../../lib/member-access.js";
 
 // it=IT・管理（PC・アカウント・権限）、finance=経理（給与・精算）。
 // 入退社のチェックリストは、この役割から担当者を1人決める（lib/hr-flow.js）。
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
 
   // 対象は、このテナントの社員であること
   const { data: target } = await admin()
-    .from("gw_employees").select("id, display_name, status")
+    .from("gw_employees").select("id, display_name, status, user_id")
     .eq("tenant_id", ctx.tenantId).eq("id", employeeId).maybeSingle();
   if (!target) return json(res, 404, { error: "employee_not_found" });
 
@@ -88,7 +89,7 @@ export default async function handler(req, res) {
         target: `employee:${employeeId}`, detail: { name: target.display_name, via: "api" },
       });
     }
-    return json(res, 200, { ok: true, employeeId, role, granted: true });
+    return json(res, 200, { ok: true, employeeId, role, granted: true, ...(await accessAfter(ctx.tenantId, target)) });
   }
 
   // 最後の（在籍中の）owner を外させない。自分を外して誰もいなくなる事故も、ここで止まる
@@ -115,5 +116,21 @@ export default async function handler(req, res) {
       detail: { name: target.display_name, via: "api", self: ctx.employee?.id === employeeId },
     });
   }
-  return json(res, 200, { ok: true, employeeId, role, granted: false });
+  return json(res, 200, { ok: true, employeeId, role, granted: false, ...(await accessAfter(ctx.tenantId, target)) });
+}
+
+/**
+ * 変更したあとの、その人の社内権限と「利用できる業務」。画面は、これで同じ行をその場で直す。
+ * 判定は lib/gw.js の accessOf（= その人が画面を再読込したあとに /api/me で受け取る access）そのもの。
+ * 読めなかったときは何も返さない（権限の付け外しそのものは成功している。画面は名簿を読み直す）
+ */
+async function accessAfter(tenantId, target) {
+  try {
+    const { data, error } = await admin().from("gw_role_grants").select("role")
+      .eq("tenant_id", tenantId).eq("employee_id", target.id);
+    if (error) return {};
+    const roles = (data || []).map((g) => g.role);
+    const access = accessForMember(roles, target.user_id, await adminFlags(admin(), [target.user_id]));
+    return { roles, access };
+  } catch { return {}; }
 }

@@ -34,6 +34,15 @@
     #list td.mb-ops { min-width:170px; }
     #list td.mb-ops > * { margin:0 4px 4px 0; }
     #list td.mb-kind { min-width:84px; font-size:12.5px; }
+    /* 利用できる業務（その人が使える業務。サーバの accessOf の結果をそのまま出す） */
+    #list td.mb-acc { min-width:210px; font-size:11.5px; line-height:1.9; }
+    .mb-ab { display:inline-block; padding:0 8px; margin:0 4px 3px 0; border-radius:999px; border:1px solid #d6d6cf; color:#9aa0b4; white-space:nowrap; }
+    .mb-ab.on { background:#e3f4e7; border-color:#bfe3c8; color:#1f6f3a; font-weight:700; }
+    .mb-ab-sub { margin:0 0 3px 10px; padding-left:8px; border-left:2px solid #e2e2dc; }
+    .mb-ab-sub .mb-ab { font-size:10.5px; padding:0 7px; }
+    .mb-acc-note { color:#6b7080; font-size:10.5px; }
+    .mb-th small { display:block; font-weight:500; color:#6b7080; font-size:10.5px; line-height:1.4; }
+    .mb-axes { font-size:12px; color:#4a5068; line-height:1.9; margin:10px 0 0; padding:8px 12px; background:#f6f6f2; border-radius:8px; }
     .mb-count { font-size:11.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:999px; padding:1px 9px; }
 
     /* 追加・編集は右のドロワー（常設の大きなフォームは置かない） */
@@ -101,15 +110,24 @@
          Office 専用のロールは無く、「経理」を使う。
          付け外しは再ログイン不要で、相手が画面を再読込するとヘッダーと入口に反映される -->
     <details class="mb-legend"><summary>社内権限と使える業務ツール</summary>
-    <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
-      <b>採用HR</b>（/hr/）を使える：経営者・責任者・人事・採用担当　／
-      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当　／
-      <b>Office</b>（/office/）を使える：経営者・責任者・経理　／
-      <b>経営</b>（/keiei/）を使える：経営者だけ<br>
-      経営者は全ツールを使えます。責任者・採用担当などが経営者の権限を引き継ぐことはありません（給与も見えません）。
-      「IT・管理」はシステム管理用で、それだけではどのツールにも入れません。
-      チェックを付け外しすると、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
-    </p>
+    <div class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.9;">
+      <div><b>採用HR</b>（/hr/）を使える：経営者・責任者・人事・採用担当</div>
+      <div><b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当</div>
+      <div><b>Office</b>は、次の3つのどれか1つでも使えれば使えます（使える業務だけが中に出ます）：
+        <ul style="margin:2px 0 2px 18px;padding:0;">
+          <li data-legend="officeHr"><b>人事・労務</b>（メンバー・入退社・勤怠・休暇・雇用契約・評価・キャリア）：経営者・人事・会計の管理者</li>
+          <li data-legend="officeFinance"><b>経理・事務</b>（経費精算・月次業務・社内文書）：経営者・経理・会計の管理者</li>
+          <li data-legend="office"><b>月末月初</b>（/office/）：経営者・責任者・経理</li>
+        </ul></div>
+      <div><b>経営</b>（/keiei/）を使える：経営者だけ</div>
+      <div style="margin-top:4px;">
+        経営者は全ツールを使えます。責任者・採用担当・人事・経理などが経営者の権限を引き継ぐことはありません（給与も見えません）。
+        「IT・管理」はシステム管理用で、それだけではどのツールにも入れません。
+        <b>会計の管理者</b>は、社内権限のチェックとは別の軸（下の「利用中のシステム」の会計の権限）です。
+        管理者の人は、社内権限が無くても Office の人事・労務／経理・事務を使えます（採用HR・Sales・月末月初・経営は、社内権限が無ければ使えません）。<br>
+        チェックを付け外しすると、同じ行の「利用できる業務」がすぐ変わります。相手が画面を再読込したときに、ヘッダーと入口へ反映されます（再ログインは不要）。
+      </div>
+    </div>
     </details>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
@@ -273,17 +291,32 @@
                      manager: "責任者", labor_advisor: "社労士", recruiter: "採用担当", sales: "営業担当" };
   // 各権限で何ができるか（チェックにマウスを乗せると出る）。採用HR・Sales・Office の条件は lib/gw.js と同じ
   const ROLE_HINT = {
-    owner: "経営者：最上位の権限（採用HR・Sales・Office・経営を使え、全員の給与も見られる）。付け外しできるのは経営者だけ",
-    hr: "人事：人事の台帳・入退社と、採用HR（/hr/）を使える",
+    owner: "経営者：最上位の権限（採用HR・Sales・Office（人事・労務／経理・事務／月末月初）・経営を使え、全員の給与も見られる）。付け外しできるのは経営者だけ",
+    hr: "人事：人事の台帳・入退社と、採用HR（/hr/）、Office の人事・労務を使える。経理・事務、月末月初は使えない",
     it: "IT・管理：端末・アカウントなどシステム管理用。これだけではどのツールにも入れない",
-    finance: "経理：給与・精算。Office（/office/）を使える。給与は見えない",
-    manager: "責任者：採用HR（/hr/）・Sales（/sales/）・Office（/office/）を使える。給与は見えない（採用判断は経営者・管理者だけ）",
+    finance: "経理：給与・精算。Office の経理・事務と月末月初（/office/）を使える。人事・労務は使えない。給与は見えない",
+    manager: "責任者：採用HR（/hr/）・Sales（/sales/）・月末月初（/office/）を使える。Office の人事・労務／経理・事務は使えない。給与は見えない（採用判断は経営者・管理者だけ）",
     labor_advisor: "社労士：共有された手続きだけを見る",
     recruiter: "採用担当：HR（/hr/）だけを使える（人事の機密・給与は見えない）",
     sales: "営業担当：Sales（/sales/）だけを使える",
   };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない
   const STATUS_LABEL = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
+  // 「基本区分」のプルダウンに出す名前。在籍の段階であって、業務の権限ではない（権限は右の「社内権限」「利用できる業務」）。
+  // 「メンバー」だけだと、権限の名前（経営者・人事…と並ぶ区分）に見えるので、在籍中と分かる言い方にする
+  const STATUS_OPTION_LABEL = { invited: "入社準備中", active: "メンバー（在籍中）", leaving: "退職手続き中", left: "退職" };
+  // 「利用できる業務」の並びと名前。○×は、サーバ（lib/gw.js accessOf）が返した access をそのまま出す。ここで条件は持たない
+  //   Office は、人事・労務／経理・事務／月末月初のどれか1つでも使えれば ○（officeAny＝ヘッダーに Office が出る条件）
+  const ACCESS_ROWS = [
+    { key: "recruit", label: "採用HR" },
+    { key: "sell", label: "Sales" },
+    { key: "officeAny", label: "Office", sub: [
+      { key: "officeHr", label: "人事・労務" },
+      { key: "officeFinance", label: "経理・事務" },
+      { key: "office", label: "月末月初" },
+    ] },
+    { key: "keiei", label: "経営" },
+  ];
   // 同じログインアカウントを使っている社内システム。表示の並び順もこの通り
   const SYSTEM_LABEL = { lms: "無限道場", timecard: "タイムカード", accounting: "会計" };
 
@@ -649,12 +682,21 @@
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
-            <th>氏名</th><th>部署・役職</th><th>雇用区分</th>${kindReady ? "<th>区分</th>" : ""}<th>状態</th><th>社内権限</th>
+            <th>氏名</th><th>部署・役職</th><th>雇用区分</th>${kindReady ? "<th>区分</th>" : ""}
+            <th class="mb-th" title="在籍の段階（入社準備中／メンバー（在籍中）／退職手続き中／退職）。使える画面の段階を決めるもので、業務の権限ではありません">基本区分<small>在籍の段階（権限ではない）</small></th>
+            <th class="mb-th" title="チェックを付けた権限が、右の「利用できる業務」の元になります">社内権限<small>チェックで付与（業務の権限）</small></th>
+            <th class="mb-th" title="社内権限（と会計の管理者）から、いま実際に使える業務。サーバの判定そのままです">利用できる業務<small>権限の結果（自動）</small></th>
             <th>利用中のシステム</th><th>操作</th>
           </tr></thead>
           <tbody>${employees.map(row).join("")}</tbody>
         </table>
       </div>
+      <p class="mb-axes">
+        この一覧には、別々のことが並んでいます。
+        <b>基本区分</b>＝在籍の段階（入社準備中・メンバー（在籍中）・退職手続き中・退職。業務の権限ではありません）／
+        <b>社内権限</b>＝チェックで付ける業務の権限／
+        <b>利用できる業務</b>＝社内権限（と会計の管理者）の結果として、いま実際に使える業務（自動で出ます。ここは直接は変えられません）。
+      </p>
       <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.9;">
         <b>利用中のシステム</b>のチップを押すと、その場で開放／停止できます
         （グループウェアは名簿にいる方全員が使うので切れません。止めるときは状態を「退職」に）。<br>
@@ -663,6 +705,23 @@
         ${canGrantRoles ? "" :
           "<br>いまのアカウントには管理者権限がないため、変更できる項目がありません。"}
       </p>`;
+  }
+
+  // その人が使える業務。出すのは、サーバが返した access（lib/gw.js accessOf の結果）だけ。
+  //   access が無い（名簿を読める立場ではない）→ 何も出さない
+  //   access が null（会計側の管理者かどうかが読めなかった）→ 「確認できません」（×と言い切らない）
+  function accessCell(e) {
+    if (e.access === undefined) return `<span class="muted">—</span>`;
+    if (e.access === null) return `<span class="mb-acc-note" data-access-unknown="1">確認できません（会計の権限を読めませんでした）</span>`;
+    const a = e.access;
+    const chip = (r) => `<span class="mb-ab${a[r.key] ? " on" : ""}" data-access="${r.key}" data-on="${a[r.key] ? 1 : 0}">${esc(r.label)} ${a[r.key] ? "○" : "×"}</span>`;
+    const body = ACCESS_ROWS.map((r) => chip(r)
+      + (r.sub ? `<div class="mb-ab-sub">${r.sub.map(chip).join("")}</div>` : "")).join("");
+    // 会計の管理者は社内権限のチェックとは別の軸。チェックが無いのに Office が ○ の理由が分かるように添える
+    const acc = e.accounts?.accounting?.role;
+    const adm = acc === "admin" || acc === "staff"
+      ? `<div class="mb-acc-note" data-note="accounting-admin">会計の管理者（社内権限とは別。人事・労務／経理・事務を使える）</div>` : "";
+    return body + adm;
   }
 
   function kindOf(e) {
@@ -692,12 +751,14 @@
         <td>${esc(e.employment_type || "—")}</td>
         ${kindReady ? `<td class="mb-kind">${esc(kindOf(e))}</td>` : ""}
         <td>
-          <select ${canEdit ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
-            ${Object.entries(STATUS_LABEL).map(([k, v]) =>
-              `<option value="${k}"${e.status === k ? " selected" : ""}>${v}</option>`).join("")}
+          <select ${canEdit ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)" data-kind="base-status"
+                  aria-label="基本区分（在籍の段階。業務の権限ではありません）" title="基本区分：在籍の段階。業務の権限ではありません">
+            ${Object.keys(STATUS_LABEL).map((k) =>
+              `<option value="${k}"${e.status === k ? " selected" : ""}>${STATUS_OPTION_LABEL[k]}</option>`).join("")}
           </select>
         </td>
         <td style="min-width:230px;">${roleCells}</td>
+        <td class="mb-acc" data-employee="${esc(e.id)}">${accessCell(e)}</td>
         <td style="min-width:190px;">${systemsCell(e)}</td>
         <td class="mb-ops">
           <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
@@ -1263,14 +1324,18 @@
 
   async function setRole(employeeId, role, grant, input) {
     try {
-      await API.setEmployeeRole(employeeId, role, grant);
-      // 変わったのはこの人の権限1つだけ。名簿を全件取り直さず、手元の行だけ直す
+      const res = await API.setEmployeeRole(employeeId, role, grant);
+      // 変わったのはこの人の権限1つだけ。名簿を全件取り直さず、手元の行だけ直す。
+      // 「利用できる業務」は、サーバが変更後に計算し直した access（lib/gw.js accessOf）をそのまま入れる。
+      // こちらでは計算しない（画面と実際の権限がずれないように）
       const e = employees.find((x) => x.id === employeeId);
-      if (e) {
-        const roles = new Set(e.roles || []);
-        if (grant) roles.add(role); else roles.delete(role);
-        e.roles = [...roles];
+      if (e && res && Array.isArray(res.roles) && res.access !== undefined) {
+        e.roles = res.roles;
+        e.access = res.access;      // null なら「確認できません」
         render();
+      } else if (e) {
+        // 応答に access が無い（古いサーバ・読めなかった）ときは、名簿ごと読み直して、表示と実際を合わせる
+        await load();
       } else await load();
     }
     catch (e) {
@@ -1389,13 +1454,26 @@
     navigator.clipboard.writeText(text);
   }
 
+  // CSV 用。画面の「利用できる業務」と同じ中身（○のものだけ。Office は中の業務も）
+  function accessText(e) {
+    if (!e.access) return e.access === null ? "確認できません" : "";
+    const on = [];
+    for (const r of ACCESS_ROWS) {
+      if (!e.access[r.key]) continue;
+      const subs = (r.sub || []).filter((x) => e.access[x.key]).map((x) => x.label);
+      on.push(subs.length ? `${r.label}（${subs.join("・")}）` : r.label);
+    }
+    return on.join(" ");
+  }
+
   function exportCsv() {
-    const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "状態", "社内権限"];
+    const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "基本区分", "社内権限", "利用できる業務"];
     const rows = employees.map((e) => [
       e.display_name, e.email || "", e.department || "", e.position || "",
       e.employment_type || "", e.joined_on || "",
-      STATUS_LABEL[e.status] || e.status,
+      STATUS_OPTION_LABEL[e.status] || e.status,
       (e.roles || []).map((r) => ROLE_LABEL[r] || r).join(" "),
+      accessText(e),
     ]);
     const csv = [head, ...rows]
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))

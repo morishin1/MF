@@ -17,6 +17,7 @@ import {
 } from "../../lib/accounts.js";
 import { normalizeKind } from "../../lib/partner.js";
 import { guardOwnerTarget, guardLastOwner } from "../../lib/owner-guard.js";
+import { adminFlags, accessForMember } from "../../lib/member-access.js";
 
 // 退職・退職手続き中は、どのシステムにも入れない状態にする
 const LEFT = ["leaving", "left"];
@@ -94,6 +95,10 @@ export default async function handler(req, res) {
     // 本人が自分の契約を確かめる先は、労働条件のカードと雇用契約書
     const hideType = !canManageHr(ctx);
 
+    // 「利用できる業務」の表示用。判定は lib/gw.js の accessOf（= その人が /api/me で受け取る access）そのもの。
+    // 権限の付け外しと同じ人（人事・管理者）にだけ返す。会計側の管理者かどうかが読めなかった人は null（画面は「確認できません」）
+    const flags = canManageHr(ctx) ? await adminFlags(admin(), (data || []).map((e) => e.user_id)) : undefined;
+
     return json(res, 200, {
       employees: (data || []).map((e) => {
         const { employment_type, ...rest } = e;
@@ -101,6 +106,7 @@ export default async function handler(req, res) {
           ...(hideType ? rest : e),
           roles: byEmployee.get(e.id) || [],
           accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
+          ...(flags === undefined ? {} : { access: accessForMember(byEmployee.get(e.id) || [], e.user_id, flags) }),
         };
       }),
       canManage: canManageHr(ctx),

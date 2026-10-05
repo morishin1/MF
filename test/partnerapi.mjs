@@ -102,9 +102,12 @@ const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, roles: [],
 const ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, roles: ["owner"],
                 employee: { id: "emp-hr", display_name: "事務 花子" } };
 let who = ADMIN;
+const REAL_GW = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who, canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
+    // api/employees/index.js の「利用できる業務」（lib/member-access.js）が使う。判定は本物
+    memberAccessOf: REAL_GW.memberAccessOf,
     // api/employees/index.js が経営者の保護（lib/owner-guard.js）に使う
     isOwner: (c) => (c?.roles || []).includes("owner"),
   },
