@@ -16,7 +16,8 @@ const { accessOf } = await import("../../lib/gw.js");
 const LAG = 250;
 
 const emp = (i, extra = {}) => ({ id: `e${i}`, display_name: `社員 ${i}`, email: `e${i}@x.jp`, department: "開発", position: "",
-  employment_type: "正社員", status: "active", roles: [], employee_kind: "proper", partner_company_id: null, systems: {}, ...extra });
+  employment_type: "正社員", status: "active", roles: [], employee_kind: "proper", partner_company_id: null, systems: {},
+  apps: { hr: false, sales: false, office: false, keiei: false }, appLocks: {}, accessMeta: { accountingAdmin: false }, ...extra });
 
 /**
  * @param {{ roles?: string[], bp?: boolean, freshRoles?: string[] }} o
@@ -46,10 +47,15 @@ async function open(path, o = {}) {
     if (u.pathname === "/api/me") return send(meOf(o.freshRoles || roles));
     if (u.pathname === "/api/employees" && method === "GET") {
       const list = [emp(1), emp(2), ...(o.bp ? [emp(3, { employee_kind: "bp", partner_company_id: "p1" })] : [])];
-      return send({ employees: list, canGrantRoles: true, canGrantOwner: false, canManage: true, kindReady: true });
+      return send({ employees: list, canGrantRoles: true, canGrantOwner: false, canManage: true, kindReady: true, appsState: "table" });
     }
     if (u.pathname === "/api/partners") return send({ companies: [{ id: "p1", company_name: "BP株式会社" }] });
     if (u.pathname === "/api/employees/roles") return send({ ok: true });
+    if (u.pathname === "/api/employees/apps") {
+      const b = JSON.parse(route.request().postData() || "{}");
+      return send({ ok: true, employeeId: b.employeeId, app: b.app, granted: b.grant !== false, roles: [], appsState: "table",
+        apps: { hr: false, sales: false, office: false, keiei: false, [b.app]: b.grant !== false }, appLocks: {}, accessMeta: { accountingAdmin: false }, access: {} });
+    }
     if (u.pathname === "/api/notifications") return send({ notifications: [], unread: 0 });
     if (u.pathname === "/api/badges") return send({ badges: {} });
     return send({});
@@ -103,12 +109,12 @@ console.log("\n— 2回目からは、枠の確認を待たずに名簿を取り
 
   console.log("\n— 権限を1つ変えても、名簿を全件取り直さない —");
   const before = n(calls, "/api/employees");
-  const box = page.locator('#list input[type="checkbox"][data-role]:not([disabled])').first();
-  await box.check();
+  const box = page.locator('#list .mb-tg[data-app="sales"]:not([disabled])').first();
+  await box.click();
   await page.waitForTimeout(LAG * 2);
-  check(n(calls, "/api/employees/roles", "POST") === 1, "権限の変更を送る");
+  check(n(calls, "/api/employees/apps", "POST") === 1, "権限（アプリ利用権限のボタン）の変更を送る");
   check(n(calls, "/api/employees") === before, `名簿は取り直さない（GET /api/employees ${before}→${n(calls, "/api/employees")}回）`);
-  check(await box.isChecked(), "画面の印はそのまま");
+  check(await box.getAttribute("aria-pressed") === "true", "画面の印（ON）はそのまま");
   await ctx.close();
 }
 

@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261004office3">
-  <link rel="stylesheet" href="../css/layout.css?v=20261004office3">
+  <link rel="stylesheet" href="../css/app.css?v=20261005apps1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261005apps1">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -68,10 +68,10 @@
   </section>
 </div>
 
-<script src="../js/api-client.js?v=20261004office3"></script>
-<script src="../js/device.js?v=20261004office3"></script>
-<script src="../js/layout.js?v=20261004office3"></script>
-<script src="../js/office-layout.js?v=20261004office3"></script>
+<script src="../js/api-client.js?v=20261005apps1"></script>
+<script src="../js/device.js?v=20261005apps1"></script>
+<script src="../js/layout.js?v=20261005apps1"></script>
+<script src="../js/office-layout.js?v=20261005apps1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -89,7 +89,7 @@
   API.warm("badges", () => API.badges());
 
   // Office に入れる人の全員（人事・労務／経理・事務／月末月初業務のどれか）が開ける。中身は担当の分だけ
-  O.init({ active: "home", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(ctx); });
+  O.init({ active: "home", access: ["officeHr", "officeFinance", "office", "officeApp"] }).then((ctx) => { if (ctx) load(ctx); });
 
   // 1つ取れなくても、ほかは出す（表が無い環境・権限が足りない場合に画面ごと落とさない）
   const safe = (p) => p.then((v) => ({ ok: true, v }), () => ({ ok: false }));
@@ -118,6 +118,16 @@
       fin: KPLayout.hasAccess(me, "officeFinance"),
       app: O.allows(me),
     };
+    // Office の利用権限（入口）だけで、担当の内部ロール（人事・労務／経理・事務／月末月初）が無い人。
+    // 入れるが、中で使えるものはまだ無い。何をすればよいかを出す
+    if (!can.hr && !can.fin && !can.app) {
+      el("cards").innerHTML = "";
+      el("todo").innerHTML = `<div class="of-panel" data-role="no-duty">
+        <b>担当の業務が、まだ設定されていません。</b>
+        <div class="of-muted" style="margin-top:6px;line-height:1.8;">Office へは入れますが、人事・労務、経理・事務、月末月初のどれも、まだ使えません。
+        管理者に、メンバー管理の「詳細設定」で、内部の役割（人事・経理・責任者など）を付けてもらってください。</div></div>`;
+      return;
+    }
     const none = Promise.resolve(null);
     const closingMonth = prevMonth();
     let officeData = null;
