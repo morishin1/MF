@@ -11,6 +11,7 @@
 //   ・基本区分（在籍の段階）のプルダウンは、使える業務とは別と分かる名前
 //   ・スマホ幅（390px）でも、4つのボタンが押せる・横にはみ出さない
 import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const br = await launch();
 let bad = 0;
@@ -124,7 +125,7 @@ console.log("— 一覧に出るのは、4つのボタンだけ —");
   check(on[0] === "rgb(37, 99, 235)" && on[1] === "rgb(255, 255, 255)", `ON は青（${on[0]}）`);
   check(off[0] === "rgb(255, 255, 255)", `OFF は白（${off[0]}）`);
   check(await page.locator("#list tbody tr.mb-detail").count() === 0, "詳細設定は、初めは閉じている");
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/members-apps-pc.png` });
+  await page.screenshot({ path: shotPath("members-apps-pc.png") });
   await page.close();
 }
 
@@ -284,7 +285,7 @@ console.log("\n— スマホ幅（390px）—");
   await b.click();
   await page.waitForTimeout(500);
   check(page.calls.appPosts.length === 1 && await b.getAttribute("aria-pressed") === "true", "スマホ幅でも押せて、保存される");
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/members-apps-sp.png` });
+  await page.screenshot({ path: shotPath("members-apps-sp.png") });
   await page.close();
 }
 

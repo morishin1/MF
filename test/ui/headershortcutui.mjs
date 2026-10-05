@@ -24,7 +24,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
  */
 // サーバ（lib/gw.js accessOf）そのもの。/api/me の access の代わりに返す
 const { accessOf: serverAccessOf } = await import("../../lib/gw.js");
-const accessOf = (w) => serverAccessOf({ isAdmin: Boolean(w.isAdmin), roles: w.roles || [] });
+const accessOf = (w) => serverAccessOf({ isAdmin: Boolean(w.isAdmin), roles: w.roles || [], apps: w.apps });
 
 async function open(path, who) {
   const page = await br.newPage({
@@ -282,7 +282,13 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
     localStorage.removeItem("kp_layout"); localStorage.removeItem("kp_me");
   });
   const grants = [];
-  const emp = { id: "e9", display_name: "山田 採用", status: "active", roles: [], user_id: "u9" };
+  // 4つのボタン（採用HR / Sales / Office / 経営）で、アプリへ入れるかを決める。内部の役割は「詳細設定」の中だけ
+  const MA = await import("../../lib/member-access.js");
+  const emp = { id: "e9", display_name: "山田 採用", status: "active", roles: [], user_id: "u9", employee_kind: "proper" };
+  let apps = [];
+  const refresh = () => Object.assign(emp, MA.accessForMember(emp.roles, "u9", new Map([["u9", false]]), apps));
+  refresh();
+  const appPosts = [];
   await page.route("**/api/**", (route) => {
     const req = route.request();
     const url = req.url();
@@ -292,39 +298,56 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
         gw: { employee: { id: "e1", display_name: "森田", status: "active" }, roles: ["owner"], tenantId: "t1", stage: null },
         access: accessOf({ roles: ["owner"] }) });
     }
+    if (/\/api\/employees\/apps/.test(url)) {
+      const b = JSON.parse(req.postData() || "{}");
+      appPosts.push(b);
+      apps = b.grant === false ? apps.filter((a) => a !== b.app) : [...new Set([...apps, b.app])];
+      refresh();
+      return send({ ok: true, roles: emp.roles, appsState: "table", apps: emp.apps, appLocks: emp.appLocks, access: emp.access, accessMeta: emp.accessMeta });
+    }
     if (/\/api\/employees\/roles/.test(url)) {
       const b = JSON.parse(req.postData() || "{}");
       grants.push(b);
       emp.roles = b.grant === false ? emp.roles.filter((r) => r !== b.role) : [...new Set([...emp.roles, b.role])];
-      return send({ ok: true });
+      refresh();
+      return send({ ok: true, roles: emp.roles, appsState: "table", apps: emp.apps, appLocks: emp.appLocks, access: emp.access, accessMeta: emp.accessMeta });
     }
-    if (/\/api\/employees\b/.test(url)) return send({ employees: [emp], canManage: true, canGrantRoles: true });
+    if (/\/api\/employees\b/.test(url)) return send({ employees: [emp], canManage: true, canGrantRoles: true, canGrantOwner: true, appsState: "table" });
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     return send({});
   });
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(900);
-  // 凡例は一覧の上の折りたたみ（「社内権限と使える業務ツール」）。開いて読む
+  // 凡例は一覧の上の折りたたみ（「使える業務（4つのボタン）の見かた」）。開いて読む
   await page.locator(".mb-legend summary").click();
   const legend = await page.locator("#role-legend").innerText();
-  check(legend.includes("採用HR") && legend.includes("経営者・責任者・人事・採用担当"), "凡例：採用HR＝経営者・責任者・人事・採用担当");
-  check(legend.includes("Sales") && legend.includes("経営者・責任者・営業担当"), "凡例：Sales＝経営者・責任者・営業担当");
-  check(legend.includes("Office") && legend.includes("経営者・責任者・経理"), "凡例：Office＝経営者・責任者・経理");
-  check(legend.includes("経営") && legend.includes("経営者だけ"), "凡例：経営＝経営者だけ");
-  check(legend.includes("IT・管理") && legend.includes("入れません"), "凡例：IT・管理だけでは入れない");
+  check(legend.includes("採用HR") && legend.includes("Sales") && legend.includes("Office") && legend.includes("経営"), "凡例：4つのボタン（採用HR・Sales・Office・経営）");
+  check(legend.includes("どのアプリへ入れるか"), "凡例：ボタンは「どのアプリへ入れるか」だけ");
+  check(legend.includes("Office をONにしただけでは、中の業務は使えません"), "凡例：Office を ON にしただけでは中の業務は使えない");
+  check(legend.includes("経営者はすべてのアプリを使えます"), "凡例：経営者は全部使える");
+  check(legend.includes("内部の役割を付けただけでは、アプリへは入れません"), "凡例：内部の役割だけでは入れない");
+  check(await page.locator('#list tbody input[type="checkbox"]').count() === 0, "一覧に、内部の役割のチェックボックスは出ない");
+  // 内部の役割は、詳細設定の中だけ
+  await page.locator('[data-role="more"]').first().click();
   const itTitle = await page.locator('input[data-role="it"]').first().evaluate((n) => n.closest("label").title);
-  check(/どのツールにも入れない/.test(itTitle), "IT・管理のチェックに説明");
-  await page.locator('input[data-role="recruiter"]').first().check();
-  await page.waitForTimeout(300);
-  await page.locator('input[data-role="sales"]').first().check();
-  await page.waitForTimeout(300);
-  check(grants.some((g) => g.role === "recruiter" && g.grant !== false) && grants.some((g) => g.role === "sales" && g.grant !== false),
-    "「採用担当」「営業担当」のチェックで社内権限が付く");
-  await page.locator('input[data-role="sales"]').first().uncheck();
-  await page.waitForTimeout(300);
-  check(grants.some((g) => g.role === "sales" && g.grant === false), "チェックを外すと社内権限が外れる");
-  check(accessOf({ roles: emp.roles }).recruit && !accessOf({ roles: emp.roles }).sell,
+  check(/どのアプリにも入れない/.test(itTitle), "詳細設定の中：IT・管理に説明（これだけではどのアプリにも入れない）");
+  // ボタン：採用HR を ON → Sales を ON → Sales を OFF
+  await page.locator('.mb-tg[data-app="hr"]').first().click();
+  await page.waitForTimeout(400);
+  await page.locator('.mb-tg[data-app="sales"]').first().click();
+  await page.waitForTimeout(400);
+  check(appPosts.some((g) => g.app === "hr" && g.grant === true) && appPosts.some((g) => g.app === "sales" && g.grant === true),
+    "「採用HR」「Sales」のボタンで、アプリ利用権限が付く");
+  await page.locator('.mb-tg[data-app="sales"]').first().click();
+  await page.waitForTimeout(400);
+  check(appPosts.some((g) => g.app === "sales" && g.grant === false), "もう一度押すと外れる");
+  check(accessOf({ roles: emp.roles, apps }).recruit && !accessOf({ roles: emp.roles, apps }).sell,
     "付け外しの結果が、そのままサーバの判定（採用HR ○ / Sales ×）になる");
+  // 内部の役割を付けても、入口は変わらない（Sales の担当ラベルを付けても Sales へは入れない）
+  await page.locator('input[data-role="sales"]').first().check();
+  await page.waitForTimeout(400);
+  check(grants.some((g) => g.role === "sales" && g.grant !== false) && !accessOf({ roles: emp.roles, apps }).sell,
+    "詳細設定で「営業担当」を付けても、Sales のボタンが OFF のままなら入れない");
   await page.close();
 }
 
