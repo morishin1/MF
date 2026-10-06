@@ -289,6 +289,32 @@ console.log("\n— スマホ幅（390px）—");
   await page.close();
 }
 
+console.log("\n— Office の入口と中の業務の食い違いを、行に出す —");
+{
+  const employees = [
+    ...EMPLOYEES(),
+    base("e-empty", "入口 だけ", [], ["office"]),
+    base("e-finoff", "経理 入口なし", ["finance"], []),
+  ];
+  const page = await open({ employees });
+  const note = (id, k) => row(page, id).locator(`.mb-gap[data-note="${k}"]`);
+  check(await note("e-empty", "office-empty").count() === 1, "Office だけ ON・役割なし →「中で使える業務がありません」");
+  check(await note("e-finoff", "office-off").count() === 1, "経理の役割あり・Office OFF →「Office が OFF のため…使えません」");
+  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-adm"]) {
+    check(await row(page, id).locator(".mb-gap").count() === 0, `${id}: 食い違いが無い行には出ない`);
+  }
+  // 直すと、その場で消える（Office を ON にする／役割を付ける）
+  await btn(page, "e-finoff", "office").click();
+  await page.waitForTimeout(500);
+  check(await row(page, "e-finoff").locator(".mb-gap").count() === 0, "Office を ON にすると、注記が消える");
+  await page.close();
+}
+{
+  const page = await open({ employees: [base("e-empty", "入口 だけ", [], ["office"])], appsState: "derived" });
+  check(await row(page, "e-empty").locator(".mb-gap").count() === 0, "db/119 の前（入口は内部ロールから決まる）は出さない");
+  await page.close();
+}
+
 await br.close();
 console.log(bad ? `${bad} 件 失敗` : "すべて通過");
 process.exit(bad ? 1 : 0);
