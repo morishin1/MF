@@ -9,7 +9,8 @@
 //              member → メンバー用ホーム / admin・owner → 管理者ダッシュボード / sr → 限定画面
 
 import { json, methodNotAllowed } from "../lib/http.js";
-import { requireUser, getMemberships } from "../lib/auth.js";
+import { requireUserAllowLeft, leftStateOf, getMemberships } from "../lib/auth.js";
+import { leftSelf } from "../lib/left-gate.js";
 import { admin } from "../lib/supabase.js";
 import { stageInfo, shouldOpen, onboardingDone } from "../lib/stages.js";
 import { intakeGate } from "../lib/onboard-gate.js";
@@ -21,8 +22,13 @@ import { readApps, resolveApps } from "../lib/app-grants.js";
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
 
-  const user = await requireUser(req, res);
+  // 退職者もここは通る（退職者ポータルが、自分の状態を知るため）。ただし中身は最小にする
+  const user = await requireUserAllowLeft(req, res);
   if (!user) return;
+
+  const st = await leftStateOf(user.id);
+  if (st.error) return json(res, 503, { error: "status_unavailable" });
+  if (st.left) return json(res, 200, await leftMe(user, req));
 
   const memberships = await getMemberships(user.id);
   const roles = [...new Set(memberships.map((m) => m.role))];
@@ -140,4 +146,35 @@ function resolveAppRole({ isAdmin, gwRoles }) {
   if (gwRoles.includes("owner")) return "owner";
   if (isAdmin) return "admin";
   return "member";
+}
+
+/**
+ * 退職者（left）への応答。
+ *
+ * 権限の行（内部ロール・アプリ利用権限・会計のメンバーシップ）が残っていても、返さない。
+ * 管理者でも、どの業務にも入れない（access はすべて false）。本人の名前と退職日だけを返す。
+ * 画面（js/layout.js）は stage.key === "left" を見て、退職者ポータルへ送る
+ */
+async function leftMe(user, req) {
+  const { data } = await admin()
+    .from("gw_employees").select("id, tenant_id, display_name, status, left_on")
+    .eq("user_id", user.id).limit(1).maybeSingle();
+  const self = leftSelf(data);
+  const none = accessOf({ isAdmin: false, isHr: false, roles: [], apps: [] });
+  return {
+    email: user.email || null,
+    userId: user.id,
+    isAdmin: false,
+    roles: [],
+    memberships: [],
+    gw: {
+      available: true, tenantId: data?.tenant_id || null,
+      employee: self,
+      stage: stageInfo({ ...self }),
+      roles: [], apps: [], isHr: false, isOwner: false, left: true,
+    },
+    appRole: "member",
+    access: none,
+    mfa: mfaState({ ctx: { isAdmin: false, roles: [] }, user, req }),
+  };
 }
