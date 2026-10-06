@@ -38,6 +38,7 @@ import { json, readJson, methodNotAllowed, dbSetupHint } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
 import { gwContext, canManageHr, isOwner } from "../lib/gw.js";
 import { admin } from "../lib/supabase.js";
+import { enrollBody } from "../lib/mfa.js";
 import { gwLog } from "../lib/gw-audit.js";
 import { notify } from "../lib/notify.js";
 import { mfaState, selfUnenroll, requireMfa, enrolledOf } from "../lib/mfa.js";
@@ -99,9 +100,16 @@ async function enroll(req, res, ctx, user) {
         : (r.body?.msg || r.body?.message || "始められませんでした"),
     });
   }
+  // 応答が欠けていたら、中身を出さずに断る（セットアップキーが無いと登録できない。応答本文は、そのまま返さない）
+  const out = enrollBody(r.body);
+  if (!out) return json(res, 502, { error: "auth_failed", hint: "登録用の情報を受け取れませんでした。もう一度お試しください" });
+  // 監査ログには、要素の ID だけを残す。秘密の情報（secret・uri・QR）は、ログにも監査ログにも入れない
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "mfa.enroll_start",
-                target: `user:${user.id}`, detail: { factorId: r.body?.id || null } });
-  return json(res, 200, { id: r.body.id, totp: r.body.totp || null });
+                target: `user:${user.id}`, detail: { factorId: out.id } });
+  // 画面に渡すのは secret と uri だけ（lib/mfa.js enrollBody）。GoTrue の qr_code（生の SVG）は渡さない。
+  // QR は、画面が uri から自分で作る（js/qr.js）。この応答は、端末にもプロキシにも残さない
+  res.setHeader("Cache-Control", "no-store");
+  return json(res, 200, out);
 }
 
 async function verify(req, res, ctx, user, body) {
