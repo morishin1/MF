@@ -9,6 +9,9 @@
     "api/sign/*.js": {
       "includeFiles": "assets/fonts/**"
     },
+    "api/employees/retire-cert.js": {
+      "includeFiles": "assets/fonts/**"
+    },
     "api/office/timesheet.js": {
       "maxDuration": 60
     }

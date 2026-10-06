@@ -130,9 +130,10 @@ for (const path of ["/home.html", "/tasks.html", "/mypage.html", "/admin-members
 console.log("— 管理側：メンバー管理の「退職手続き」 —");
 const empRow = (id, name, status, left_on = null) => ({ id, display_name: name, email: `${id}@8grp.co.jp`, user_id: `u-${id}`, department: "開発", employment_type: "アルバイト",
   status, left_on, joined_on: "2025-04-01", employee_kind: "proper", partner_company_id: null, roles: [], accounts: {}, apps: { hr: false, sales: false, office: false, keiei: false }, appLocks: {}, access: {}, accessMeta: {} });
-async function openAdmin({ width = 1280 } = {}) {
+async function openAdmin({ width = 1280, canStamp = true, seals = [{ id: "seal-cert", name: "証明書発行用印" }] } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   const posts = [];
+  const certPosts = [];
   await page.addInitScript(() => { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "own@8grp.co.jp" })); for (const k of ["kp_layout", "kp_me", "kp_nav_open"]) localStorage.removeItem(k); });
   page.on("dialog", (d) => d.accept());
   const OWNER_ME = { email: "own@8grp.co.jp", appRole: "owner", isAdmin: false, roles: [], memberships: [], gw: { employee: { id: "e-own", display_name: "経営 太郎", status: "active" }, roles: ["owner"], tenantId: "t1", stage: null }, access: { recruit: true, sell: true, office: true, keiei: true, officeHr: true, officeFinance: true, officeApp: true } };
@@ -145,6 +146,17 @@ async function openAdmin({ width = 1280 } = {}) {
   await page.route("**/api/**", async (route) => {
     const req = route.request(); const url = req.url();
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/employees\/retire-cert/.test(url)) {
+      const b = JSON.parse(req.postData() || "{}"); certPosts.push(b);
+      if (b.action === "draft") {
+        return send({ body: `山田 太郎 殿\n\n下記のとおり、当社を退職したことを証明します。\n\n退職日：2026年9月30日${b.includeReason ? "\n退職の事由：契約期間満了" : ""}`, unresolved: [],
+          employee: { id: "e-left", name: "山田 太郎", leftOn: "2026-09-30", status: "left" }, company: { name: "株式会社エイト", representative: "代表取締役 森田 太郎", address: "東京都千代田区1-1-1", ready: true },
+          reason: { code: "contract_end", label: "契約期間満了" }, templates: [{ id: "tpl-1", name: "退職証明書（標準）" }], seals, canStamp });
+      }
+      if (b.action === "preview") return send({ pdfBase64: Buffer.from("%PDF-1.4\n%%EOF").toString("base64") });
+      if (b.action === "issue") return send({ document: { id: "d-new", issuedNo: "RET-2026-0013", version: 3 } });
+      return send({ ok: true });
+    }
     if (/\/api\/employees\/retire/.test(url)) {
       if (req.method() === "POST") { posts.push(JSON.parse(req.postData() || "{}")); return send({ ok: true }); }
       return send({ employee: { id: "e-left", name: "山田 太郎", leftOn: "2026-09-30", status: "left" }, reason: { code: "contract_end", note: "" },
@@ -160,7 +172,7 @@ async function openAdmin({ width = 1280 } = {}) {
   });
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(1300);
-  page.posts = posts;
+  page.posts = posts; page.certPosts = certPosts;
   return page;
 }
 {
@@ -174,7 +186,7 @@ async function openAdmin({ width = 1280 } = {}) {
   check(await page.locator("#e-retire").isVisible(), "退職の人のドロワーには、退職手続きが出る");
   const rows = await page.locator("#e-retire .rt-docrow").evaluateAll((ns) => ns.map((n) => ({ kind: n.dataset.kind, st: n.querySelector(".st").innerText, acts: [...n.querySelectorAll("button")].map((b) => b.innerText.trim()) })));
   check(rows.length === 4, "書類は4つ");
-  check(rows[0].st.includes("本人に公開中") && rows[0].st.includes("第2版") && rows[0].acts.join(",") === "PDFを見る,公開停止,再登録", `退職証明書: 公開中・第2版・[PDFを見る][公開停止][再登録]（${rows[0].st} / ${rows[0].acts}）`);
+  check(rows[0].st.includes("本人に公開中") && rows[0].st.includes("第2版") && rows[0].acts.join(",") === "PDFを見る,公開停止,再発行（作り直す）,再登録", `退職証明書: 公開中・第2版・[PDFを見る][公開停止][再発行（作り直す）][再登録]（${rows[0].st} / ${rows[0].acts}）`);
   check(rows[1].st === "未登録" && rows[1].acts.join(",") === "登録,手続き中にする", `源泉徴収票: 未登録・[登録][手続き中にする]（${rows[1].acts}）`);
   check(rows[2].st.includes("手続き中") && rows[2].st.includes("2026/10/30") && rows[2].acts.join(",") === "登録,未登録に戻す", `離職票: 手続き中・発行予定・[登録][未登録に戻す]（${rows[2].acts}）`);
   check(rows[3].st.includes("本人には未公開") && rows[3].acts.join(",") === "PDFを見る,本人に公開,再登録", `資格喪失証明書: 発行済み未公開・[PDFを見る][本人に公開][再登録]（${rows[3].acts}）`);
@@ -192,6 +204,51 @@ async function openAdmin({ width = 1280 } = {}) {
   check(page.posts.some((p) => p.action === "reason" && p.reasonCode === "personal"), "退職理由を保存 → reason を送る");
   await page.close();
 }
+console.log("— 管理側：退職証明書の作成 —");
+{
+  const page = await openAdmin();
+  await page.evaluate(() => startEdit("e-left"));
+  await page.waitForSelector("#e-retire .rt-docrow");
+  const certRowBtns = await page.locator('#e-retire .rt-docrow[data-kind="certificate"] button').allInnerTexts();
+  check(certRowBtns.includes("再発行（作り直す）"), `退職証明書の行に [再発行（作り直す）]（${certRowBtns}）`);
+  const certOther = await page.locator('#e-retire .rt-docrow[data-kind="withholding"] button').allInnerTexts();
+  check(!certOther.some((t) => t.includes("証明書を作成") || t.includes("再発行")), "ほかの書類には、証明書の作成ボタンは無い");
+  await page.locator('#e-retire .rt-docrow[data-kind="certificate"] button', { hasText: "再発行" }).click();
+  await page.waitForSelector("#e-cert-card");
+  check((await page.locator("#c-body").inputValue()).includes("山田 太郎 殿"), "差し込み済みの本文が出る（編集できる）");
+  check(!(await page.locator("#c-body").inputValue()).includes("退職の事由"), "退職理由は、既定では本文に入らない");
+  await page.locator("#c-reason").check();
+  await page.waitForTimeout(500);
+  check((await page.locator("#c-body").inputValue()).includes("退職の事由：契約期間満了"), "「退職理由を含める」を選ぶと本文に入る");
+  check(page.certPosts.some((p) => p.action === "draft" && p.includeReason === true), "含める → draft を作り直す");
+  check((await page.locator("#e-cert-card .note").innerText()).includes("証明書発行用印"), "押印に使う印鑑は、証明書発行用の名前だけが出る（画像は出ない）");
+  check(await page.locator("#e-cert-card img").count() === 0, "印影の画像は、画面に出ない");
+  await page.locator("#e-cert-card button", { hasText: "プレビュー" }).click();
+  await page.waitForTimeout(500);
+  check(page.certPosts.some((p) => p.action === "preview" && p.body.includes("山田 太郎 殿")), "プレビュー → 本文を送って PDF を受け取る");
+  check(await page.locator("#c-issue").isEnabled(), "経営者・管理者（canStamp）は [発行・押印] を押せる");
+  await page.locator("#c-issue").click();
+  await page.waitForTimeout(600);
+  check(page.certPosts.some((p) => p.action === "issue" && p.includeReason === true), "発行・押印 → issue を送る");
+  check((await page.locator("#mb-toast").innerText()).includes("RET-2026-0013"), "発行番号が出る");
+  await page.close();
+
+  const p2 = await openAdmin({ canStamp: false });
+  await p2.evaluate(() => startEdit("e-left")); await p2.waitForSelector("#e-retire .rt-docrow");
+  await p2.locator('#e-retire .rt-docrow[data-kind="certificate"] button', { hasText: "再発行" }).click();
+  await p2.waitForSelector("#e-cert-card");
+  check(await p2.locator("#c-issue").isDisabled(), "押せない人（人事だけ）は [発行・押印] が押せない");
+  check((await p2.locator("#e-cert-card .note").innerText()).includes("経営者・管理者だけ"), "押せない理由が出る");
+  await p2.close();
+
+  const p3 = await openAdmin({ seals: [] });
+  await p3.evaluate(() => startEdit("e-left")); await p3.waitForSelector("#e-retire .rt-docrow");
+  await p3.locator('#e-retire .rt-docrow[data-kind="certificate"] button', { hasText: "再発行" }).click();
+  await p3.waitForSelector("#e-cert-card");
+  check(await p3.locator("#c-issue").isDisabled() && (await p3.locator("#e-cert-card .note").innerText()).includes("登録されていません"), "証明書用の印鑑が無ければ、発行できず、登録の案内が出る");
+  await p3.close();
+}
+
 for (const w of [768, 390]) {
   const page = await openAdmin({ width: w });
   await page.evaluate(() => startEdit("e-left"));
@@ -199,6 +256,11 @@ for (const w of [768, 390]) {
   const m = await page.evaluate(() => { const d = document.getElementById("e-drawer"); const r = d.getBoundingClientRect(); const b = document.querySelector("#e-retire"); return { drawerRight: r.right, w: window.innerWidth, bodyOver: document.documentElement.scrollWidth - window.innerWidth, bodyScrollW: document.querySelector(".mb-dr-body").scrollWidth, bodyClientW: document.querySelector(".mb-dr-body").clientWidth }; });
   check(m.drawerRight <= m.w + 1, `${w}px: ドロワーが画面に収まる`);
   check(m.bodyScrollW <= m.bodyClientW + 1, `${w}px: 退職手続きの中身が、ドロワーの横にはみ出さない（${m.bodyScrollW}/${m.bodyClientW}）`);
+  await page.locator('#e-retire .rt-docrow[data-kind="certificate"] button', { hasText: "再発行" }).click();
+  await page.waitForSelector("#e-cert-card");
+  const m2 = await page.evaluate(() => ({ sw: document.querySelector(".mb-dr-body").scrollWidth, cw: document.querySelector(".mb-dr-body").clientWidth }));
+  check(m2.sw <= m2.cw + 1, `${w}px: 証明書の作成欄もはみ出さない（${m2.sw}/${m2.cw}）`);
+  await page.screenshot({ path: shotPath(`retire-cert-${w}.png`) });
   await page.screenshot({ path: shotPath(`retire-admin-${w}.png`) });
   await page.close();
 }

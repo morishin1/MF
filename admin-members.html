@@ -75,6 +75,13 @@
     .mb-retire .rt-docrow .st { font-size:12px; color:#667085; margin:2px 0 6px; }
     .mb-retire .rt-docrow.pub .st { color:#1f6f3a; }
     .mb-retire .rt-acts { display:flex; flex-wrap:wrap; gap:6px; }
+    .mb-retire .rt-cert { border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; margin:0 0 8px; background:#fafaf7; }
+    .mb-retire .rt-cert h4 { margin:0 0 6px; font-size:13px; }
+    .mb-retire .rt-cert label { font-size:12px; color:#667085; display:block; margin:6px 0 2px; }
+    .mb-retire .rt-cert textarea { width:100%; min-height:190px; font-size:13px; line-height:1.7; box-sizing:border-box; }
+    .mb-retire .rt-cert .row2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .mb-retire .rt-cert .note { font-size:11.5px; color:#667085; margin:6px 0; line-height:1.7; }
+    @media (max-width: 560px) { .mb-retire .rt-cert .row2 { grid-template-columns:1fr; } }
     .mb-retire .rt-reason { display:grid; grid-template-columns:1fr; gap:6px; margin:6px 0 10px; }
     @media (max-width: 560px) { .mb-tg { padding:6px 12px; min-width:64px; } #list td.mb-apps { min-width:270px; } }
 
@@ -678,6 +685,7 @@
           ? `<button class="btn btn-secondary btn-sm" onclick="retireDo('unpublish','${cur.id}')">公開停止</button>`
           : `<button class="btn btn-primary btn-sm" onclick="retireDo('publish','${cur.id}')">本人に公開</button>`);
       }
+      if (k.kind === "certificate") acts.push(`<button class="btn btn-primary btn-sm" onclick="certOpen()">${st === "issued" || st === "published" ? "再発行（作り直す）" : "証明書を作成"}</button>`);
       acts.push(`<button class="btn btn-secondary btn-sm" onclick="retirePick('${k.kind}')">${st === "issued" || st === "published" ? "再登録" : "登録"}</button>`);
       if (st === "none") acts.push(`<button class="btn btn-secondary btn-sm" onclick="retireProgress('${k.kind}','processing')">手続き中にする</button>`);
       if (st === "processing") acts.push(`<button class="btn btn-secondary btn-sm" onclick="retireProgress('${k.kind}','none')">未登録に戻す</button>`);
@@ -689,6 +697,7 @@
       <p class="rt-prog">退職日 ${d.employee.leftOn ? esc(slash(d.employee.leftOn)) : "（未入力）"}　進捗 ${d.progress.done} / ${d.progress.total}
         （${d.progress.steps.map((s) => `${s.done ? "✓" : "○"}${esc(s.label)}`).join("　")}）</p>
       ${rows}
+      <div id="e-cert" class="hidden"></div>
       <input type="file" id="e-retire-file" accept="application/pdf,.pdf" class="hidden">
       <h4 style="margin:10px 0 4px;font-size:13px;">退職理由</h4>
       <div class="rt-reason">
@@ -696,6 +705,75 @@
         <input id="e-reason-note" type="text" maxlength="500" placeholder="補足（社内向け。退職証明書には、発行のたびに含めるか選びます）" value="${esc(d.reason.note || "")}">
         <div><button class="btn btn-secondary btn-sm" onclick="retireReason()">退職理由を保存</button></div>
       </div>`;
+  }
+
+  // ---- 退職証明書の作成（雛形 → 差し込み → プレビュー → 発行・押印。api/employees/retire-cert.js）----
+  let certState = null;
+  async function certApi(body) { return API.api("/api/employees/retire-cert", { method: "POST", body: { employeeId: retireFor, ...body } }); }
+  async function certOpen() {
+    const box = el("e-cert");
+    box.classList.remove("hidden");
+    box.innerHTML = '<div class="muted" style="font-size:12px;">読み込み中…</div>';
+    try { certState = await certApi({ action: "draft", includeReason: false }); certState.includeReason = false; certState.templateId = ""; renderCert(); }
+    catch (err) { box.innerHTML = `<div class="err-text">${esc(err.hint || err.message || "読み込めませんでした")}</div>`; }
+  }
+  function renderCert() {
+    const d = certState;
+    const seal = d.seals[0];
+    el("e-cert").innerHTML = `
+      <div class="rt-cert" id="e-cert-card">
+        <h4>退職証明書を作成</h4>
+        <label>雛形</label>
+        <select id="c-tpl"><option value="">標準の文面</option>${d.templates.map((t) => `<option value="${esc(t.id)}" ${d.templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+        <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="c-reason" ${d.includeReason ? "checked" : ""} style="width:auto;margin:0;">退職理由を証明書に含める${d.reason.label ? `（${esc(d.reason.label)}）` : "（退職理由が未選択です）"}</label>
+        <label>本文（差し込み済み。このまま直せます）</label>
+        <textarea id="c-body">${esc(d.body)}</textarea>
+        ${d.unresolved.length ? `<div class="err-text">差し込めていない項目：${esc(d.unresolved.join("、"))}</div>` : ""}
+        <div class="row2">
+          <div><label>代表者名</label><input id="c-rep" type="text" maxlength="60" value="${esc(d.company.representative)}"></div>
+          <div><label>会社住所</label><input id="c-addr" type="text" maxlength="200" value="${esc(d.company.address)}"></div>
+        </div>
+        <div style="margin:6px 0;"><button class="btn btn-secondary btn-sm" onclick="certCompany()">代表者名・会社住所を保存</button></div>
+        <p class="note">${seal ? `押印：${esc(seal.name)}（証明書発行用）。` : '<strong>証明書発行用の印鑑が登録されていません。</strong>署名の画面の「印鑑」で、種類「証明書発行用印」を登録してください。'}
+          ${d.canStamp ? "" : "発行・押印は、経営者・管理者だけができます。"}
+          発行したあと、本人に見せるときは「本人に公開」を押してください。</p>
+        <div class="rt-acts">
+          <button class="btn btn-secondary btn-sm" onclick="certPreview()">プレビュー</button>
+          <button class="btn btn-primary btn-sm" id="c-issue" onclick="certIssue()" ${d.canStamp && seal ? "" : "disabled"}>発行・押印</button>
+          <button class="btn btn-secondary btn-sm" onclick="el('e-cert').classList.add('hidden')">閉じる</button>
+        </div>
+      </div>`;
+    el("c-tpl").onchange = () => certRedraft();
+    el("c-reason").onchange = () => certRedraft();
+  }
+  async function certRedraft() {
+    try {
+      const templateId = el("c-tpl").value, includeReason = el("c-reason").checked;
+      const d = await certApi({ action: "draft", templateId: templateId || undefined, includeReason });
+      certState = { ...d, templateId, includeReason }; renderCert();
+    } catch (err) { toast("err", err.hint || err.message || "作り直せませんでした"); }
+  }
+  async function certCompany() {
+    try { await certApi({ action: "company", representative: el("c-rep").value, address: el("c-addr").value }); toast("ok", "保存しました"); }
+    catch (err) { toast("err", err.hint || err.message || "保存できませんでした"); }
+  }
+  async function certPreview() {
+    const w = window.open("", "_blank"); if (w) w.opener = null;
+    try {
+      const r = await certApi({ action: "preview", body: el("c-body").value, includeReason: el("c-reason").checked });
+      const bin = atob(r.pdfBase64); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+      if (w) w.location.href = url;
+    } catch (err) { if (w) w.close(); toast("err", err.hint || err.message || "プレビューできませんでした"); }
+  }
+  async function certIssue() {
+    if (!confirm("この内容で発行し、証明書用の会社印を押します。\n発行したあと、直接の上書きはできません（直すときは再発行）。\nよろしいですか？")) return;
+    el("c-issue").disabled = true;
+    try {
+      const r = await certApi({ action: "issue", body: el("c-body").value, includeReason: el("c-reason").checked });
+      await loadRetire(employees.find((x) => x.id === retireFor));
+      toast("ok", `発行しました（${r.document.issuedNo}）。本人に見せるときは「本人に公開」を押してください`);
+    } catch (err) { el("c-issue").disabled = false; toast("err", err.hint || err.message || "発行できませんでした"); }
   }
   async function retireDo(action, docId) {
     try { await API.api("/api/employees/retire", { method: "POST", body: { action, docId } }); await loadRetire(employees.find((x) => x.id === retireFor)); toast("ok", action === "publish" ? "本人に公開しました" : "公開を止めました"); }

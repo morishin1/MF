@@ -34,6 +34,7 @@ import {
   retirePath, ownsPath, downloadName,
 } from "../../lib/retire.js";
 import { ymd } from "../../lib/jst.js";
+import { putIssued, viewDoc } from "../../lib/retire-store.js";
 
 const BUCKET = "hr";
 const TTL = 60 * 5;
@@ -73,14 +74,7 @@ async function loadEmployee(sb, ctx, id) {
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle());
 }
 
-// 管理側に見せる1行（保存先・ハッシュ・本文は返さない）
-const view = (d) => ({
-  id: d.id, kind: d.kind, label: kindLabel(d.kind), version: d.version, state: d.state, adminState: adminState(d),
-  expectedOn: d.expected_on || null, note: d.note || null, issuedNo: d.issued_no || null, issuedOn: d.issued_on || null,
-  fileName: d.file_name || null, includeReason: Boolean(d.include_reason),
-  published: Boolean(d.published), publishedAt: d.published_at || null, revokedAt: d.revoked_at || null,
-  createdAt: d.created_at,
-});
+const view = viewDoc;
 
 async function read(req, res, sb, ctx, user) {
   const q = new URL(req.url, "http://localhost").searchParams;
@@ -227,21 +221,16 @@ async function act(req, res, sb, ctx, user) {
       await sb.storage.from(BUCKET).remove([path]);
       return json(res, 400, { error: "unsupported_file", hint: "PDF を選んでください" });
     }
-    const rows = await must(sb.from("gw_retire_docs").select("id, kind, version, state, published")
-      .eq("tenant_id", ctx.tenantId).eq("employee_id", emp.id).eq("kind", kind));
-    const maxVersion = Math.max(0, ...(rows || []).map((r) => r.version || 0));
-    const live = liveOf(rows, kind);
-    // 新しい版を入れる前に、いまの有効な行を置き換え済みにする（1人・1種類で、有効な行は1つだけ。公開は外す）
-    if (live) {
-      await must(sb.from("gw_retire_docs").update({ state: "superseded", published: false, updated_at: now })
-        .eq("id", live.id).eq("tenant_id", ctx.tenantId).select("id").maybeSingle());
+    let done;
+    try {
+      done = await putIssued(sb, ctx, user, emp, kind, {
+        path, sha256: sha256(bytes), size: bytes.length, issuedOn, fileName: body.filename,
+      });
+    } catch (e) {
+      await sb.storage.from(BUCKET).remove([path]);
+      throw e;
     }
-    const row = await must(sb.from("gw_retire_docs").insert({
-      tenant_id: ctx.tenantId, employee_id: emp.id, kind, version: maxVersion + 1, state: "issued",
-      issued_on: issuedOn, issued_by: user.id, storage_path: path,
-      file_name: String(body.filename || "").slice(0, 120) || null, file_size: bytes.length, sha256: sha256(bytes),
-      published: false, created_by: user.id, created_at: now, updated_at: now,
-    }).select(DOC_FIELDS).single());
+    const { row, live } = done;
     await gwLog({
       tenantId: ctx.tenantId, actorId: user.id, action: live?.state === "issued" ? "retire.reissue" : "retire.register",
       target: `employee:${emp.id}`, detail: { docId: row.id, kind, version: row.version, supersedes: live?.id || null },

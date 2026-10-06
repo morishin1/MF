@@ -755,7 +755,8 @@
   // 送るときの選択肢。有効な印鑑だけ
   function renderSealPicker() {
     const before = pickedSealId();
-    const active = seals.filter((x) => x.isActive);
+    // 証明書発行用の印鑑は、契約書には使えない（退職証明書などの発行専用）
+    const active = seals.filter((x) => x.isActive && x.sealType !== "certificate");
     el("s-seal").innerHTML = `
       <label class="es-seal-opt"><input type="radio" name="s-seal" value="" ${before ? "" : "checked"}>押印しない</label>
       ${active.map((x) => `
@@ -816,7 +817,8 @@
         <div style="margin-bottom:12px;"><label>種類</label>
           <select id="sm-type">${sealTypes.map((t) =>
             `<option value="${esc(t.key)}" ${(cur?.sealType || "representative") === t.key ? "selected" : ""}>${esc(t.label)}</option>`).join("")}
-          </select></div>
+          </select>
+          <p class="muted" style="font-size:11.5px;margin:4px 0 0;">「証明書発行用印」は、退職証明書などの発行だけに使います（契約書には選べません）。実印・銀行印の画像は登録しないでください。</p></div>
         <div style="margin-bottom:12px;"><label>印鑑画像${cur ? "（差し替えるときだけ選ぶ）" : ""}</label>
           <input id="sm-file" type="file" accept="image/png,image/jpeg,image/webp" onchange="onSealFile(this)">
           <p class="muted" style="font-size:11.5px;margin:4px 0 0;">PNG・JPEG・WebP、2MBまで。WebPはPNGに変換して保存します。</p>
