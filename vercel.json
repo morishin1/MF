@@ -68,6 +68,10 @@
       "destination": "/onboarding/index.html"
     },
     {
+      "source": "/retiree",
+      "destination": "/retiree/index.html"
+    },
+    {
       "source": "/sales",
       "destination": "/sales/index.html"
     },
