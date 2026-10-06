@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261006hr1">
+  <link rel="stylesheet" href="css/app.css?v=20261006ml1">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -88,6 +88,7 @@
       <a href="#hr-onboarding"><span class="material-symbols-outlined">person_add</span>入社を進める（人事）</a>
       <a href="#contracts"><span class="material-symbols-outlined">history_edu</span>契約書を送る（人事）</a>
       <a href="#hr-offboarding"><span class="material-symbols-outlined">person_remove</span>退社を進める（人事）</a>
+      <a href="#hr-mail"><span class="material-symbols-outlined">mail</span>応募者へメールを送る（採用）</a>
       <a href="#analytics"><span class="material-symbols-outlined">monitoring</span>アクセス分析</a>
       <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
       <a href="#faq"><span class="material-symbols-outlined">quiz</span>よくある質問</a>
@@ -771,6 +772,57 @@
     </div>
   </div>
 
+  <!-- ======================================================== 応募者へメールを送る（採用HR） -->
+  <div class="card" id="hr-mail">
+    <h2><span class="material-symbols-outlined">mail</span>応募者へメールを送る（採用）</h2>
+    <span class="who-for admin">採用HRを使う方</span>
+
+    <h3 id="hr-mail-templates" style="font-size:15px;margin:16px 0 6px;">ひな型を管理する</h3>
+    <p class="lead" style="margin-top:0;">採用HRの<b>［メールひな型］</b>（<a href="/hr/templates.html">/hr/templates.html</a>）で、応募者へ送るメールのひな型を作ります。</p>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>［ひな型を作る］か［編集］を押す</b><br>
+        ひな型名・用途・件名・本文を入れます。<b>差し込みボタン</b>を押すと、カーソルの位置に {{応募者名}}・{{募集職種}}・{{面談予約URL}}・{{担当者名}}・{{会社名}} が入ります。
+        {{応募者名}} は敬称なしなので、「様」は本文に書いてください。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>用途を選ぶ</b><br>
+        用途で {{面談予約URL}} の予約先が決まります（応募受付・カジュアル面談 → カジュアル面談、社長面談 → 社長面談）。予約先が設定されていないときは、別の予約先で代わりにせず「足りない」と出ます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>［複製］［非表示］［既定にする］</b><br>
+        似たひな型は複製してから直すと早いです。使わなくなったものは非表示にします（消えません。送った記録もそのまま残ります）。
+        既定は用途ごとに1つで、［メールを送る］を開いたとき最初に選ばれます。</div>
+    </div>
+    <p class="lead">はじめから「応募受付・事前質問・面談案内」のひな型が入っています。直しても、元に戻されることはありません。ひな型を直すと版が1つ上がり、それまでに送ったメールの記録は変わりません。</p>
+
+    <h3 id="hr-mail-send" style="font-size:15px;margin:20px 0 6px;">応募者へメールを送る</h3>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>応募者を開いて［メールを送る］を押す</b><br>
+        上に<b>宛先（氏名とメールアドレス）</b>と送信元・返信先が出ます。送る相手が合っているか、まず確かめてください。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>ひな型を選び、件名・本文を確かめる</b><br>
+        氏名・予約URLなどが差し込まれた内容が出ます。ここで直した内容は<b>このメール1通だけ</b>に使われ、ひな型は変わりません。
+        直したあとにひな型を変えると、確認が出ます（黙って消えることはありません）。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>［送信］を押す</b><br>
+        送るのは［送信］を押したときだけです。差し込めない項目（予約URLの設定が無い等）が残っていると、理由が出て送れません。</div>
+    </div>
+    <div class="banner info">
+      <span class="material-symbols-outlined">info</span>
+      <div>
+        結果は3つです。<b>送信済み</b>＝メールサービスが受け付けた（相手に届いた・開いた、ではありません）／<b>失敗</b>＝送れなかった（直して送り直せます）／<b>結果不明</b>＝送れたか分からない（相手に届いているか確かめるまで、送り直さないでください）。
+        二度押しや通信のやり直しでは、2通目は送られません。送ったメールは応募者ごとに［この応募者へ送ったメール］で見られます。返信はメールソフトで受け取ります（この画面では返信を見分けません）。
+      </div>
+    </div>
+  </div>
   <!-- ======================================================== 管理者 -->
   <div class="card" id="admin">
     <h2><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</h2>
