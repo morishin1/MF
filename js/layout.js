@@ -704,23 +704,30 @@
     return v === "pay-audit" || v === "pay-candidates" ? "pay" : v;
   };
   const keieiTabOf = (view) => KEIEI_TABS.find((t) => t.views.includes(view)) || KEIEI_TABS[0];
-  function keieiNavHtml(view) {
-    const here = keieiTabOf(view);
-    const row1 = KEIEI_TABS.map((t) => `<a class="kp-otab${t === here ? " on" : ""}" href="#${t.key}" data-ktab="${t.key}" data-ic="${t.icon}"${t === here ? ' aria-current="page"' : ""}><span>${esc(t.label)}</span></a>`).join("");
+  // 経営の画面の外（チーム状況・全員のタスク・全員の日報＝admin-*.html）でも、経営の横タブを出す。
+  // そのときのタブの行き先は /keiei/#… （ページを移る）。いま開いている外の画面は、2段目で選んだ状態にする
+  const KEIEI_EXT_OF = { team: "/admin-team.html", tasks: "/admin-tasks.html", goals: "/admin-tasks.html", nippo: "/admin-nippo.html" };
+  const onKeieiPage = () => /^\/keiei(\/|$)/.test(location.pathname);
+  function keieiNavHtml(view, extActive = null) {
+    const ext = extActive ? KEIEI_EXT_OF[extActive] || null : null;
+    const here = ext ? KEIEI_TABS.find((t) => (t.sub || []).some((n) => n.href === ext)) || KEIEI_TABS[0] : keieiTabOf(view);
+    const base = onKeieiPage() ? "#" : "/keiei/#";
+    const row1 = KEIEI_TABS.map((t) => `<a class="kp-otab${t === here ? " on" : ""}" href="${base}${t.key}" data-ktab="${t.key}" data-ic="${t.icon}"${t === here ? ' aria-current="page"' : ""}><span>${esc(t.label)}</span></a>`).join("");
     const row2 = (here.sub || []).map((n) => {
-      const on = Boolean(n.view) && n.view === view;
+      const on = n.view ? !ext && n.view === view : n.href === ext;
+      const cur = on ? ' aria-current="page"' : "";
       return n.view
-        ? `<a class="kp-ostab${on ? " on" : ""}" href="#${n.view}" data-kview="${n.view}"${on ? ' aria-current="page"' : ""}><span>${esc(n.label)}</span></a>`
-        : `<a class="kp-ostab ext" href="${esc(n.href)}"><span>${esc(n.label)}</span></a>`;
+        ? `<a class="kp-ostab${on ? " on" : ""}" href="${base}${n.view}" data-kview="${n.view}"${cur}><span>${esc(n.label)}</span></a>`
+        : `<a class="kp-ostab ext${on ? " on" : ""}" href="${esc(n.href)}"${cur}><span>${esc(n.label)}</span></a>`;
     }).join("");
     return `<div class="kp-otabs" role="list">${row1}</div>` + (row2 ? `<div class="kp-ostabs" aria-label="${esc(here.label)}">${row2}</div>` : "");
   }
-  function renderKeieiNav() {
+  function renderKeieiNav(active) {
     const el = document.createElement("nav");
     el.className = "kp-officenav";
     el.id = "kp-keiei-nav";
     el.setAttribute("aria-label", "経営");
-    el.innerHTML = keieiNavHtml(keieiViewOf());
+    el.innerHTML = onKeieiPage() ? keieiNavHtml(keieiViewOf()) : keieiNavHtml(null, active);
     const bar = document.querySelector(".topbar");
     if (bar && bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling);
     else document.body.insertBefore(el, document.body.firstChild);
@@ -1086,11 +1093,14 @@
     // 経営・管理（⚙）の領域は管理者・経営者だけ
     const areaNow = areaOf(active);
     const officeArea = areaNow === "office" && Boolean(shows.officeEntry) && !memberView;
-    // 経営（/keiei/）は経営者だけ。Office と同じ横タブ（左メニューは持たない）
-    const keieiApp = areaNow === "keiei" && /^\/keiei(\/|$)/.test(location.pathname) && Boolean(shows.keiei) && !memberView;
+    // 経営（/keiei/）は経営者だけ。Office と同じ横タブ（左メニューは持たない）。
+    // チーム状況・全員のタスク・全員の日報（admin-*.html）も、経営者には経営の横タブで出す（経営の中を移っているように見せる）。
+    // 経営に入れない管理者（会計の管理者）は、これまでどおり管理の左メニュー（経営のタブの行き先が開けないため）
+    const keieiApp = areaNow === "keiei" && Boolean(shows.keiei) && !memberView
+      && (/^\/keiei(\/|$)/.test(location.pathname) || Boolean(KEIEI_EXT_OF[active]));
     const adminArea = officeArea || keieiApp || (areaNow !== "home" && canPreview && !memberView);
     if (officeArea) renderOfficeNav(active, shows);
-    else if (keieiApp) renderKeieiNav();
+    else if (keieiApp) renderKeieiNav(active);
     else if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
