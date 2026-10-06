@@ -201,10 +201,14 @@ console.log("— 日報の直し —");
     "代わりにその日の最優先が1行で出る");
   check(past.includes("できた 5 / 6 件"), "できた件数はそのまま出る");
 
-  // ⑦明日の最優先は、もう自由入力の候補チップではなく、
-  // 「明日の重要タスクを決める」で選んだものと自動でそろう（日報提出ハードロック修正）
-  check(await p.locator("#f-tomorrow").getAttribute("readonly") !== null, "自由入力はさせない");
-  check(await p.locator("#f-tomorrow-view").isVisible(), "選んだ最優先を表示する欄がある");
+  // ⑦明日の最優先は、もう自由入力の候補チップではない。
+  // 明日の重要タスクのカードがあれば、そこで選んだものと自動でそろう（日報提出ハードロック修正。test/ui/nippoworkui.mjs）。
+  // この画面ではカードが出せない（/api/tasks/focus が状態を返さない）ので、⑦ に直接書ける。
+  // 以前は読み取り専用のまま書く場所が無くなり、「明日の最優先が入力できない」になっていた
+  check(await p.locator("#focus-card").isHidden(), "明日の重要タスクのカードが出せない環境");
+  check(await p.locator("#f-tomorrow").isVisible() && await p.locator("#f-tomorrow").getAttribute("readonly") === null,
+    "そのときは ⑦ に直接書ける（書く場所を無くさない）");
+  check(await p.locator("#f-tomorrow-sug, #f-tomorrow ~ .np-tags").count() === 0, "候補チップは出さない");
 
   // 「やること」で済ませたものが、完了 で埋められていない
   const rows = p.locator("#f-work .np-item");

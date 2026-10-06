@@ -101,4 +101,64 @@ ok("やること同士の重複も1行", () => {
   assert.equal(r[0].action_id, "a1");
 });
 
+// ---- 朝に決めた件数と、成果の行数を1対1にする（「今日やること3件 → 成果2件」の不具合）----------------
+// 朝の「今日の最優先」は work_items と別（top_priority）に持っている。足さないと1件減っていた
+ok("今日やること3件（最優先＋ほか2件）→ 成果3件", () => {
+  const r = merge([{ task: "B社へ電話する" }, { task: "商品登録を20件行う" }], [], { top: "A社へ提案書を送る" });
+  assert.equal(r.length, 3);
+  assert.equal(r.map((x) => x.task).join("|"), ["A社へ提案書を送る", "B社へ電話する", "商品登録を20件行う"].join("|"));
+  assert.equal(r[0].from_label, "今日の最優先");
+});
+ok("今日やること2件 → 成果2件", () => {
+  const r = merge([{ task: "B社へ電話する" }], [], { top: "A社へ提案書を送る" });
+  assert.equal(r.length, 2);
+});
+ok("今日やること1件（最優先だけ）→ 成果1件", () => {
+  const r = merge(null, [], { top: "A社へ提案書を送る" });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].task, "A社へ提案書を送る");
+});
+ok("夜に一度保存したあと（最優先も work_items に入っている）でも増えない", () => {
+  const saved = [{ task: "A社へ提案書を送る", done: true }, { task: "B社へ電話する" }, { task: "商品登録を20件行う" }];
+  const r = merge(saved, [], { top: "A社へ提案書を送る" });
+  assert.equal(r.length, 3);
+  assert.equal(r[0].done, true);
+});
+ok("全角・半角・空白の違いでは2行にしない（題名の突き合わせ）", () => {
+  const r = merge([{ task: "Ａ社へ　提案書" }], [], { top: "A社へ 提案書" });
+  assert.equal(r.length, 1);
+});
+ok("明日の重要タスク（今日の3つ）は、タスクのIDつきで1件ずつ並ぶ", () => {
+  const focus = [
+    { id: "11111111-1111-4111-8111-111111111111", title: "A社へ提案書を送る", status: "todo", doneCondition: "送付済み" },
+    { id: "22222222-2222-4222-8222-222222222222", title: "B社へ電話する", status: "done", result: "担当者と話せた" },
+    { id: "33333333-3333-4333-8333-333333333333", title: "商品登録を20件行う", status: "doing" },
+  ];
+  const r = merge(null, [], { focusToday: focus });
+  assert.equal(r.length, 3);
+  assert.equal(r.map((x) => x.task_id).join("|"), focus.map((t) => t.id).join("|"));
+  assert.equal(r[0].done_when, "送付済み");
+  assert.equal(r[1].done, true);
+  assert.equal(r[1].result, "担当者と話せた");
+});
+ok("保存した行とタスクは ID で結び付く（題名を直しても2行にならない）", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const r = merge([{ task: "A社 提案（修正）", task_id: id }], [], { focusToday: [{ id, title: "A社へ提案書を送る", status: "todo" }] });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].task, "A社 提案（修正）");
+});
+ok("取りやめた重要タスクは出さない", () => {
+  const r = merge(null, [], { focusToday: [{ id: "x", title: "やめた", status: "cancelled" }] });
+  assert.equal(r.length, 0);
+});
+ok("朝の3件と重要タスクが同じものなら、3行のまま", () => {
+  const r = merge([{ task: "B社へ電話する" }, { task: "商品登録を20件行う" }], [], {
+    top: "A社へ提案書を送る",
+    focusToday: [{ id: "f1", title: "A社へ提案書を送る", status: "todo" }, { id: "f2", title: "B社へ電話する", status: "todo" }],
+  });
+  assert.equal(r.length, 3);
+  assert.equal(r[0].task_id, "f1");
+  assert.equal(r[1].task_id, "f2");
+});
+
 console.log(`\n${n} 件 すべて通りました`);
