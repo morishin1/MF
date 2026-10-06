@@ -222,10 +222,15 @@ await ok("在籍中の owner は、これまでどおり", async () => {
 
 console.log("[6] 退職者を通せる入口を使う API は、決めたものだけ");
 const walk = (dir) => readdirSync(dir).flatMap((f) => { const p = _join(dir, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith(".js") ? [p] : []; });
-await ok("requireUserAllowLeft を使うのは api/me.js だけ（退職者ポータルを足したら、ここに加える）", () => {
-  const ALLOWED = new Set(["api/me.js"]);
-  const users = walk(atRoot("api")).filter((p) => /requireUserAllowLeft/.test(readFileSync(p, "utf8"))).map((p) => relative(ROOT, p));
-  for (const u of users) assert.ok(ALLOWED.has(u), `${u} は退職者を通す入口を使っています。退職者向けの API として決めたものだけにしてください`);
+await ok("退職者を通せる入口（requireUserAllowLeft）を使うのは、api/me.js と lib/retiree-gate.js だけ", () => {
+  const ALLOWED = new Set(["api/me.js", "lib/retiree-gate.js", "lib/auth.js"]);
+  const users = [...walk(atRoot("api")), ...walk(atRoot("lib"))].filter((p) => /requireUserAllowLeft/.test(readFileSync(p, "utf8"))).map((p) => relative(ROOT, p));
+  for (const u of users) assert.ok(ALLOWED.has(u), `${u} は退職者を通す入口を使っています。退職者向けの入口として決めたものだけにしてください`);
+});
+await ok("退職者ポータルの API（api/retiree/*）は、必ず requireRetiree を通る", () => {
+  const files = walk(atRoot("api/retiree"));
+  assert.ok(files.length >= 2);
+  for (const f of files) assert.ok(/requireRetiree\(/.test(readFileSync(f, "utf8")), `${relative(ROOT, f)} が requireRetiree を呼んでいません`);
 });
 await ok("API は、ログインの確認を lib/auth.js の requireUser 以外でしていない（auth.getUser を直接呼ばない）", () => {
   const bad = [...walk(atRoot("api")), ...walk(atRoot("lib"))].filter((p) => !p.endsWith("lib/auth.js") && /auth\.getUser\(/.test(readFileSync(p, "utf8"))).map((p) => relative(ROOT, p));
