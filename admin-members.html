@@ -1451,12 +1451,19 @@
   // 黙って閉じると気づけないので、何が起きたかを必ず出す
   async function setStatus(id, status) {
     const e = employees.find((x) => x.id === id);
-    const out = ["leaving", "left"].includes(status);
-    if (out && e?.user_id &&
-        !confirm(`${e.display_name} さんを「${STATUS_LABEL[status]}」にします。\n\n` +
-                 "無限道場・タイムカード・会計にも入れなくなります。\n" +
+    // 止まるのは「退職」にしたときだけ。退職手続き中（退職予定・引継ぎ中）は、退職日まで通常どおり使える
+    if (status === "left" && e?.user_id &&
+        !confirm(`${e.display_name} さんを「退職」にします。\n\n` +
+                 "社内の画面・無限道場・タイムカード・会計に入れなくなります（退職後の書類だけ見られます）。\n" +
                  "（ログインアカウント自体は消しません。記録が残るため）\n\nよろしいですか？")) {
       render();             // 選択を元に戻すだけ（データは変わっていないので取り直さない）
+      return;
+    }
+    if (status === "leaving" && e?.user_id &&
+        !confirm(`${e.display_name} さんを「退職手続き中」にします。\n\n` +
+                 "退職日までは、これまでどおり使えます。退職日の翌日から「退職」として扱い、入れなくなります。\n" +
+                 "退職日を入れてください（入れないと、自動では退職になりません）。\n\nよろしいですか？")) {
+      render();
       return;
     }
     try {

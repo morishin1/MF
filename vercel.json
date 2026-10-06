@@ -191,6 +191,10 @@
       "schedule": "0 1 * * 1"
     },
     {
+      "path": "/api/cron/leave",
+      "schedule": "5 15 * * *"
+    },
+    {
       "path": "/api/cron/devices",
       "schedule": "20 18 * * *"
     },
