@@ -55,6 +55,7 @@
     .mb-tg.locked[aria-pressed="true"] { background:#b9c8f2; border-color:#b9c8f2; color:#fff; }
     .mb-tg:disabled:not(.locked):not(.busy) { opacity:.55; }
     .mb-lockmsg { font-size:11.5px; color:#667085; margin:5px 0 0; line-height:1.6; }
+    .mb-lockmsg.mb-gap { color:#9a5b00; }
     .mb-more { appearance:none; border:0; background:none; color:#2563eb; cursor:pointer; font:inherit; font-size:12.5px; padding:4px 0 0; }
     .mb-detail td { background:#fafafa; border-bottom:1px solid #e2e2dc; }
     .mb-detail h4 { margin:0 0 4px; font-size:13px; color:#1b2440; }
@@ -752,8 +753,17 @@
     const lockMsg = locks.keiei === "owner" ? ["owner", LOCK_TEXT.owner]
       : (e.accessMeta?.accountingAdmin === true && locks.office === "accountingAdmin") ? ["accounting-admin", LOCK_TEXT.accountingAdmin] : null;
     const unknown = e.accessMeta && e.accessMeta.accountingAdmin === null;
+    // Office の入口と中の業務が食い違っている人（入れても何もできない／役割があるのに入れない）。判定はサーバの access と内部の役割
+    const ac = e.access || {};
+    const officeWork = Boolean(ac.office || ac.officeHr || ac.officeFinance);
+    const officeRoles = (e.roles || []).some((r) => ["hr", "finance", "manager"].includes(r));
+    const gap = live && !locks.office
+      ? (e.apps.office && !officeWork ? ["office-empty", "Office に入れますが、中で使える業務がありません（詳細設定で役割を付けてください）"]
+        : (!e.apps.office && officeRoles ? ["office-off", "Office が OFF のため、詳細設定の役割（Office の業務）が使えません"] : null))
+      : null;
     return `<div class="mb-tgs" role="group" aria-label="${esc(e.display_name)}が使える業務">${btns}</div>
       ${lockMsg ? `<div class="mb-lockmsg" data-note="${lockMsg[0]}">${esc(lockMsg[1])}</div>` : ""}
+      ${gap ? `<div class="mb-lockmsg mb-gap" data-note="${gap[0]}">${esc(gap[1])}</div>` : ""}
       ${unknown ? `<div class="mb-lockmsg" data-note="unknown">会計の管理者かどうかを確認できません。</div>` : ""}
       <button type="button" class="mb-more" data-role="more" aria-expanded="${openDetail.has(e.id)}"
               onclick="toggleDetail('${esc(e.id)}')">詳細設定</button>`;
