@@ -45,6 +45,7 @@
   <div class="at-head">
     <div class="sl-tabs-pill" id="scope"></div>
     <select id="f-sort" onchange="onFilter()" aria-label="並び順">
+      <option value="priority:asc">アタック優先順</option>
       <option value="next:asc">NEXTの急ぐ順</option>
       <option value="name:asc">企業名順</option>
       <option value="created:desc">登録の新しい順</option>
@@ -105,7 +106,9 @@
     const st = Object.fromEntries(KEYS.map((k) => [k, q.get(k) || ""]));
     st.scope = st.scope === "all" ? "all" : "mine";
     st.page = Math.max(1, Number(st.page) || 1);
-    if (!st.sort) { st.sort = "next"; st.order = "asc"; }
+    // 既定はアタック優先順（フォームアタック → そのほかの NEXT → 別チャネルで再アタックを検討）。
+    // 並べるのはサーバー（lib/sales-list.js listPriorityPage）。100社ずつのどのページも同じ順番の続き
+    if (!st.sort) { st.sort = "priority"; st.order = "asc"; }
     if (!st.order) st.order = ["created", "last_sent"].includes(st.sort) ? "desc" : "asc";
     return st;
   }
@@ -115,8 +118,8 @@
       const v = state[k];
       if (k === "scope" && v === "mine") continue;
       if (k === "page" && v === 1) continue;
-      if (k === "sort" && v === "next" && state.order === "asc") continue;
-      if (k === "order" && state.sort === "next" && v === "asc") continue;
+      if (k === "sort" && v === "priority" && state.order === "asc") continue;
+      if (k === "order" && state.sort === "priority" && v === "asc") continue;
       if (v) q.set(k, v);
     }
     const s = q.toString();

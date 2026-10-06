@@ -1,5 +1,8 @@
 // GET   /api/sales/approaches[?days=90]
-//         … 送信済みのアタック一覧（アタック画面の履歴・分析・テンプレート比較の元）
+// GET   /api/sales/approaches?from=YYYY-MM-DD&to=YYYY-MM-DD   （昨日・先週・先月・任意期間。日本時間の暦日・両端を含む）
+//         … 送信済みのアタック一覧（アタック画面の履歴・分析・テンプレート比較の元）。
+//           from・to が無ければ、いままでどおり days（今日を1日目に days 日ぶん）
+//           担当者別フォームアタック数は /api/sales/approaches/counts（0件の人も出す集計）
 // POST  /api/sales/approaches { companyId, channel?, templateId?, campaignId?, destinationUrl?, force?, acknowledgeRecent? }
 //         … アタックを始める。専用URL（/r/<token>）を発行して返す。
 //           営業文に専用URLを入れてから送るので、送る前に発行しておく必要がある
@@ -27,6 +30,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell, canForceAttack } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
+import { resolvePeriod } from "../../../lib/sales-period.js";
 import {
   COMPANY_FIELDS, shapeApproach, newTrackingToken, recentApproach, statusRank, safeUrl, isUuid,
   NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst, periodStartJst, agoText,
@@ -73,16 +77,23 @@ function sendChannel(v, fallback) {
 
 async function list(req, res, sb, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
+  // from・to（日本時間の暦日）を指定したときは、その期間。無ければ days（後方互換）
+  let range = null;
+  if (q.get("from") || q.get("to")) {
+    range = resolvePeriod("custom", { from: q.get("from"), to: q.get("to") });
+    if (range.error) return json(res, 400, range);
+  }
   const days = Math.min(Math.max(Number(q.get("days")) || 365, 1), 3650);
   // 期間の始まりは日本時間の日付で決める（今日を1日目に days 日ぶん。lib/sales.js periodStartJst）
-  const period = periodStartJst(days);
+  const period = range ? { date: range.from, iso: range.sinceIso } : periodStartJst(days);
   const since = period.iso;
   // 件数の上限。ダッシュボードの「最近の営業履歴」は新しい15件しか出さないので、15件だけ取る（表示速度）。
   // 指定が無ければ、いままでどおり 10,000件まで
   const limit = Math.min(Math.max(Math.floor(Number(q.get("limit"))) || 10000, 1), 10000);
 
-  const { data, error } = await sb.from("gw_sales_approaches").select(FIELDS)
-    .eq("tenant_id", ctx.tenantId).gte("sent_at", since).order("sent_at", { ascending: false }).limit(limit);
+  let query = sb.from("gw_sales_approaches").select(FIELDS).eq("tenant_id", ctx.tenantId).gte("sent_at", since);
+  if (range) query = query.lt("sent_at", range.untilIso);
+  const { data, error } = await query.order("sent_at", { ascending: false }).limit(limit);
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { approaches: [], notReady: true, message: hint });
@@ -103,6 +114,7 @@ async function list(req, res, sb, ctx) {
   return json(res, 200, {
     // 分析の画面が、成約日（won_on）の期間を同じ始まりの日で切るために返す
     since: period.date,
+    ...(range ? { until: range.to } : {}),
     approaches: (data || []).map((a) => {
       const c = company.get(a.company_id);
       return {
