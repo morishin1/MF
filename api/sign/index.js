@@ -237,9 +237,30 @@ async function send(req, res, ctx, user, body) {
   const { map, companyName } = await fieldsFor(ctx, ids);
   const out = { sent: [], failed: [] };
 
+  // 二重送信を防ぐ。同じ雛形を同じ人に、直前（10分以内）に送っていて、まだ署名待ちなら送らない
+  // （ボタンの二度押し・通信のやり直し・別タブ）。意図して送り直すときは「再通知」か、時間をおいて送る
+  const recent = new Set();
+  if (tpl.id && !body?.preview) {
+    try {
+      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: dup } = await sb.from("gw_sign_requests").select("employee_id")
+        .eq("tenant_id", ctx.tenantId).eq("template_id", tpl.id).eq("status", "sent")
+        .in("employee_id", ids).gte("created_at", since);
+      for (const d of dup || []) recent.add(d.employee_id);
+    } catch (e) {
+      // 確かめられなかったときは、送ることを止めない（画面のボタンも送信中は押せない）
+      console.error("[sign] 直前の送信を確かめられませんでした:", e?.message || e);
+    }
+  }
+
   for (const employeeId of ids) {
     const one = map.get(employeeId);
     if (!one) { out.failed.push({ employeeId, reason: "名簿にありません" }); continue; }
+    if (recent.has(employeeId)) {
+      out.failed.push({ employeeId, name: one.employee.display_name, duplicate: true,
+        reason: "直前に同じ書類の署名依頼を送っています（二重送信を防ぐため送りませんでした。「署名の状況」で確認できます）" });
+      continue;
+    }
 
     const { text, missing } = merge(tpl.body, one.fields);
     // 埋まらない項目があるまま送らせない。
@@ -310,17 +331,24 @@ async function send(req, res, ctx, user, body) {
           { requestId: id, title: tpl.name, sealSha256: seal.sha256 });
       }
 
-      await notify([{
-        tenantId: ctx.tenantId,
-        employeeId,
-        kind: "general",
-        title: "署名をお願いします",
-        body: `${tpl.name}（期限 ${dueOn}）`,
-        link: "contracts.html",
-        dedupeKey: `sign:${id}`,
-      }]);
+      // 依頼は登録済み。お知らせに失敗しても、依頼そのものは「署名の状況」で追える（失敗扱いにしない）
+      let notified = true;
+      try {
+        await notify([{
+          tenantId: ctx.tenantId,
+          employeeId,
+          kind: "general",
+          title: "署名をお願いします",
+          body: `${tpl.name}（期限 ${dueOn}）`,
+          link: "contracts.html",
+          dedupeKey: `sign:${id}`,
+        }]);
+      } catch (ne) {
+        notified = false;
+        console.error("[sign] お知らせを送れませんでした:", ne?.message || ne);
+      }
 
-      out.sent.push({ id, employeeId, name: one.employee.display_name });
+      out.sent.push({ id, employeeId, name: one.employee.display_name, notified });
     } catch (e) {
       console.error("[sign] 送れませんでした:", e?.message || e);
       out.failed.push({ employeeId, name: one.employee.display_name, reason: String(e?.message || e) });

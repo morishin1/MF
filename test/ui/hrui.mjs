@@ -179,19 +179,19 @@ console.log("— 一覧 —");
   check(tabs[2].startsWith("完了"), `3つめ ${tabs[2]}`);
   check(tabs[0].includes("2"), "件数が出る");
 
-  // 氏名・日付・状態・進捗・次の担当 に「止まっているもの」を足した6つ。
-  // 「何が止まっているか」が一覧だけで分かるのが、この画面の仕事
+  // 対象者・入社日／退職日・現在の状態・次にすること・担当・期限・操作の7つ（入退社のUI/UX改善、2026-10-06）。
+  // 「今どこまで終わっていて、誰が、次に何をすればよいか」が一覧だけで分かるのが、この画面の仕事
   const heads = (await page.locator(".hr-table th").allInnerTexts()).map((s) => s.trim());
-  check(heads.filter(Boolean).length === 6,
-    `見出しは6つ（いま ${heads.filter(Boolean).join("・")}）`);
-  check(heads.includes("止まっているもの"), "「止まっているもの」の列がある");
+  check(heads.filter(Boolean).join("・") === "対象者・入社日／退職日・現在の状態・次にすること・担当・期限・操作",
+    `見出し（いま ${heads.filter(Boolean).join("・")}）`);
 
   const first = await page.locator("#hr-rows tr").first().innerText();
   check(/山田 太郎/.test(first), "氏名");
   check(/入社まで3日/.test(first), "入社日までの日数");
   check(/入社準備/.test(first), "状態");
   check(/7\/10/.test(first), "進捗");
-  check(/IT・管理：会社PCの準備/.test(first), "次の担当（誰が・何を）");
+  check(/会社PCの準備/.test(first) && /情報 次郎/.test(first), "次にすること・担当（何を・誰が）");
+  check(/手続きを開く/.test(first), "操作：手続きを開く");
 
   // 急ぎは色で分かる
   const cls = await page.locator("#hr-rows tr").first().locator(".hr-due").getAttribute("class");

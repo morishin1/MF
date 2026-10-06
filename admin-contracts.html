@@ -57,7 +57,7 @@
 <div class="wrap">
   <h1 class="kp-greet">雇用契約</h1>
   <p class="kp-greet-sub">
-    契約書を上げるとAIが期間や条件を読み取ります。
+    契約書の内容を読み取って管理すると、AIが期間や条件を読み取ります（本人への署名依頼は別の操作です）。
     <b>内容を確認して確定すると</b>、試用期間の満了・更新の判断・契約満了が予定として並び、
     期日が来たら日報とKGIの記録を集計します。
   </p>
@@ -70,7 +70,10 @@
   </div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">upload_file</span>契約書を上げる</h2>
+    <h2><span class="material-symbols-outlined">upload_file</span>契約内容を読み取って管理する</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 10px;">契約期間や更新予定を管理します。この操作だけでは本人への署名依頼は送られません。
+      署名を依頼するときは <a href="admin-esign.html?tab=send">入力して契約書を作る</a> か
+      <a href="admin-esign.html?tab=pdf">作成済みPDFを使う</a> から。</p>
     <div class="inline-controls" style="margin-bottom:10px;">
       <div style="min-width:220px;"><label>対象者</label><select id="u-emp"></select></div>
       <div style="min-width:240px;flex:1;align-self:flex-end;">
@@ -232,7 +235,7 @@
     superseded: '<span class="kp-chip archived">更新済み</span>',
   }[c.status] || "");
 
-  // --- 契約書を上げる ---------------------------------------------------------
+  // --- 契約内容を読み取って管理する（署名依頼は送らない） ---------------------------------------------------------
   async function pickFile(file) {
     if (!file) return;
     const employeeId = el("u-emp").value;

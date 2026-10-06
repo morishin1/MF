@@ -85,6 +85,9 @@
       <a href="#library"><span class="material-symbols-outlined">folder_shared</span>社内文書</a>
       <a href="#bell"><span class="material-symbols-outlined">notifications</span>通知</a>
       <a href="#hr"><span class="material-symbols-outlined">badge</span>入社手続き</a>
+      <a href="#hr-onboarding"><span class="material-symbols-outlined">person_add</span>入社を進める（人事）</a>
+      <a href="#contracts"><span class="material-symbols-outlined">history_edu</span>契約書を送る（人事）</a>
+      <a href="#hr-offboarding"><span class="material-symbols-outlined">person_remove</span>退社を進める（人事）</a>
       <a href="#analytics"><span class="material-symbols-outlined">monitoring</span>アクセス分析</a>
       <a href="#admin"><span class="material-symbols-outlined">admin_panel_settings</span>管理者の方へ</a>
       <a href="#faq"><span class="material-symbols-outlined">quiz</span>よくある質問</a>
@@ -631,6 +634,140 @@
         提出した書類は<b>会計の書類とは別の場所</b>に保管され、本人と人事以外は見られません。
         社会保険の手続きに必要な書類だけ、社労士に共有されます（どれを共有するかは人事が指定します）。
       </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== 入社を進める（人事） -->
+  <div class="card" id="hr-onboarding">
+    <h2><span class="material-symbols-outlined">person_add</span>入社を進める（人事）</h2>
+    <span class="who-for admin">人事・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      Office ＞ 人事・労務 ＞ <b>入退社</b> の一覧で、<b>［手続きを開く］</b>を押します。
+      一覧には、対象者・入社日／退職日・現在の状態・次にすること・担当・期限が並びます。
+    </p>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>いちばん上の「次にすること」を見る</b><br>
+        いま誰が何をすればよいかと、期限が出ます。下のボタンから、その作業の画面へ進めます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>「手続き全体の進み具合」で6つの段階を確かめる</b><br>
+        基本情報 → 契約書の準備 → 本人の確認・署名 → 入社情報・必要書類 → アカウント・貸与品 → 会社確認・完了。並びは目安で、作業は並行して進められます。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>契約書を準備する</b><br>
+        「入力して契約書を作る」か「作成済みPDFを使う」を選びます（<a href="#contracts">契約書を送る</a>）。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">4</div>
+      <div class="body"><b>本人の署名と提出を待つ</b><br>
+        「署名依頼済み」と「締結済み」、「本人が提出した」と「会社が確認した」は別に表示されます。提出された書類は［提出内容を確認］から確認します。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">5</div>
+      <div class="body"><b>完了</b><br>
+        必須の項目がすべて済むと、自動で「完了」になります。入社日が来ただけでは完了になりません。</div>
+    </div>
+    <div class="banner info"><span class="material-symbols-outlined">info</span>
+      <div>本人のログインアカウントが無いと、署名画面に入れません。先にメンバー管理で作ってください。契約の署名のために Office の権限は付けません。</div></div>
+  </div>
+
+  <!-- ======================================================== 契約書を送る（人事） -->
+  <div class="card" id="contracts">
+    <h2><span class="material-symbols-outlined">history_edu</span>契約書を送る（人事）</h2>
+    <span class="who-for admin">人事・経営者の方</span>
+    <p class="lead" style="margin-top:0;">
+      Office ＞ 人事・労務 ＞ <b>電子署名</b>（または入社の人別画面の「契約書」）に、作り方が2つあります。
+      どちらも「対象者 → 書類の準備 → 内容の確認 → 署名依頼 → 本人の署名 → 署名済みPDFの保管」の順です。
+    </p>
+    <h3 style="font-size:15px;">A. 入力して契約書を作る</h3>
+    <p class="lead">雛形と登録情報からPDFを作ります。会社印を選べます。</p>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>雛形を選ぶ</b><br>
+        対象者は、入社の人別画面から来たときは選ばれた状態で始まります。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>プレビューを押す</b><br>
+        氏名・契約期間・給与などは登録情報から入ります。足りない項目はここで分かります（社員名簿や確定済みの契約は書き換えません）。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>会社印を確かめる</b><br>
+        会社印を選ぶと、本人の署名のあとに末尾へ足す「電子署名記録」ページに押されます（本文には押しません）。選ばなければ「会社印を付けずに送ります」。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">4</div>
+      <div class="body"><b>期限を確かめて［署名依頼を送る］</b><br>
+        同じ雛形を同じ人に、直前（10分以内）に送っていれば、二重送信を防ぐため送りません。</div>
+    </div>
+    <h3 style="font-size:15px;">B. 作成済みPDFを使う</h3>
+    <p class="lead">手元のPDFをアップロードして、そのまま署名を依頼します。作成依頼・依頼先・PDFに書いてある条件の入力は要りません。</p>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>対象者を選び、PDFを選ぶ</b><br>
+        PDF・15MBまで。選ぶと、その場でプレビューが出ます（まだどこにも送っていません）。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>書類名と署名の期限を確かめる</b><br>
+        PDFに含まれる印鑑をそのまま使用します。会社印は自動追加されません。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>プレビューで、氏名・内容・会社印の有無を確かめてチェック</b><br>
+        押印の有無は自動では判定しません。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">4</div>
+      <div class="body"><b>［署名依頼を送る］</b><br>
+        採用承諾時の条件と、登録されている条件が違うときは止まります（社長・人事は理由を付けて進められます）。途中で失敗しても、もう一度押すと続きから進みます。</div>
+    </div>
+    <h3 style="font-size:15px;">送ったあと（署名の状況）</h3>
+    <p class="lead">
+      状態は「署名待ち・署名済み・取消済み」。補助として「閲覧記録あり（本人が署名画面で開いた）」「期限超過」を添えます。
+      署名待ちは［状況を見る］［案内文をコピー］［再通知］、署名済みは［署名済みPDFを開く］［保存］。
+      お知らせはアプリ内に出ます。メール・Slack に届いたかは記録していません。案内文をコピーしても送信済みにはなりません。
+    </p>
+    <p class="lead">
+      本人は、ログインして内容を確認し、同意のチェックと氏名の入力で署名します（本人の印影は押されません）。
+      社労士などに作成を頼むときは［作成を依頼する］を使います。<br>
+      雇用契約の画面の［契約内容を読み取って管理する］は、契約期間や更新予定を管理するためのものです。この操作だけでは本人への署名依頼は送られません。
+    </p>
+  </div>
+
+  <!-- ======================================================== 退社を進める（人事） -->
+  <div class="card" id="hr-offboarding">
+    <h2><span class="material-symbols-outlined">person_remove</span>退社を進める（人事）</h2>
+    <span class="who-for admin">人事・経営者の方</span>
+    <p class="lead" style="margin-top:0;">入退社の一覧で退社の人を開くと、1画面にまとまっています。</p>
+    <div class="stepbox">
+      <div class="num">1</div>
+      <div class="body"><b>基本情報と［退職日を変更］</b><br>
+        退職日・最終出勤日・担当を変えられます。日付を変えても、在籍状態やアカウントは変わりません。ほかの担当者が先に更新していたら上書きしません。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">2</div>
+      <div class="body"><b>次にやること</b><br>
+        返却待ち・書類の未発行／未公開・サービスの未確認など、実際の未完了だけが出ます。押すとその欄へ移ります。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">3</div>
+      <div class="body"><b>書類・本人対応</b><br>
+        PDFのプレビュー・登録（再発行）・本人への公開・版の履歴。公開・本人が開いた・受領・署名は別の記録です（受領・署名の記録は、まだありません）。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">4</div>
+      <div class="body"><b>アカウント・貸与品</b><br>
+        グループウェア・無限道場・タイムカード・会計は、各システムの状態を表示します（退職日の翌日に自動で止まります）。Google Workspace・Slack・GitHub・Vercel は、各サービスで止めてから「停止済」を記録します。貸与品は［返却を確認］で台帳から外れ、返却の記録は残ります。</div>
+    </div>
+    <div class="stepbox">
+      <div class="num">5</div>
+      <div class="body"><b>連絡・履歴</b><br>
+        ［本人へ案内］［再通知］で、メール文・Slack文・本人用URLをコピーできます（送信はしません）。履歴には、誰が・いつ・何をしたかが、本人・管理者・自動に分けて出ます。</div>
     </div>
   </div>
 
