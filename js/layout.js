@@ -174,7 +174,7 @@
    *   （areaOf が active から判定する）。管理画面は Office ではない（ヘッダーの Office は /office/ に1つだけ。
    *   管理画面へは ⚙管理 から入る。2026-10-02 に、Office の入口を役割で分けるのをやめた）。
    *     office   … ダッシュボード／人事・労務／経理・事務（管理画面。ヘッダーのタグは「管理」）
-   *     keiei    … チーム状況・全員のタスク・全員の日報（チーム・会社全体の管理）
+   *     keiei    … 日報・勤怠・チーム状況・全員のタスク（チーム・会社全体の管理）
    *     settings … 権限・端末・アクセス分析・AIナレッジ・システム設定（ヘッダー右の⚙管理から）
    *   上のどちらにも属さない画面は、ホーム領域＝全員と同じ左メニュー。
    *
@@ -296,7 +296,7 @@
         { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
         { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
       ] },
-    { key: "nippo", href: "admin-nippo.html", label: "全員の日報", icon: "edit_note", ready: true },
+    { key: "nippo", href: "admin-nippo.html", label: "日報・勤怠", icon: "edit_note", ready: true },
   ];
 
   // 管理（⚙）: 毎日使わない設定系だけ。ヘッダー右のアイコンが正式な入口
@@ -678,14 +678,15 @@
   const KEIEI_TABS = [
     { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
     { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
-    { key: "people",  label: "人・組織",     icon: "groups",    views: ["people", "onboarding", "pay"],
+    // 人・組織を押すと、日報・勤怠（/admin-nippo.html）を開く（2026-10-06：経営者が毎日最初に見るのは今週の提出・勤怠）
+    { key: "people",  label: "人・組織",     icon: "groups",    views: ["people", "onboarding", "pay"], href: "/admin-nippo.html",
       sub: [
-        { view: "people",     label: "概要" },
-        { view: "onboarding", label: "入社準備" },
-        { view: "pay",        label: "給与管理" },
+        { href: "/admin-nippo.html", label: "日報・勤怠" },
         { href: "/admin-team.html",  label: "チーム状況" },
         { href: "/admin-tasks.html", label: "全員のタスク" },
-        { href: "/admin-nippo.html", label: "全員の日報" },
+        { view: "onboarding", label: "入社準備" },
+        { view: "pay",        label: "給与管理" },
+        { view: "people",     label: "概要" },
       ] },
     { key: "finance", label: "財務",         icon: "payments",  views: ["finance", "payroll"],
       sub: [
@@ -712,7 +713,7 @@
     const ext = extActive ? KEIEI_EXT_OF[extActive] || null : null;
     const here = ext ? KEIEI_TABS.find((t) => (t.sub || []).some((n) => n.href === ext)) || KEIEI_TABS[0] : keieiTabOf(view);
     const base = onKeieiPage() ? "#" : "/keiei/#";
-    const row1 = KEIEI_TABS.map((t) => `<a class="kp-otab${t === here ? " on" : ""}" href="${base}${t.key}" data-ktab="${t.key}" data-ic="${t.icon}"${t === here ? ' aria-current="page"' : ""}><span>${esc(t.label)}</span></a>`).join("");
+    const row1 = KEIEI_TABS.map((t) => `<a class="kp-otab${t === here ? " on" : ""}" href="${t.href ? esc(t.href) : `${base}${t.key}`}" data-ktab="${t.key}" data-ic="${t.icon}"${t === here ? ' aria-current="page"' : ""}><span>${esc(t.label)}</span></a>`).join("");
     const row2 = (here.sub || []).map((n) => {
       const on = n.view ? !ext && n.view === view : n.href === ext;
       const cur = on ? ' aria-current="page"' : "";

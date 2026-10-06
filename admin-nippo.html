@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>日報 - エイト</title>
+  <title>日報・勤怠 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261006kei2">
-  <link rel="stylesheet" href="css/layout.css?v=20261006kei2">
+  <link rel="stylesheet" href="css/app.css?v=20261006kei3">
+  <link rel="stylesheet" href="css/layout.css?v=20261006kei3">
   <!-- 経営の画面と同じ字（採用HR・Sales・Office と同じ。admin-members.html と同じ指定） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -45,16 +45,117 @@
     .dr-bar { display:flex; align-items:flex-end; gap:3px; height:60px; }
     .dr-bar div { flex:1; background:var(--soft); border-radius:2px 2px 0 0; position:relative; }
     .dr-bar div span { position:absolute; inset:auto 0 0 0; background:var(--primary); border-radius:2px 2px 0 0; }
+    /* 今週の提出・勤怠（経営・採用HR・Sales・Office と同じ値：文字 #1b2440・枠 #e2e2dc・背景 #f6f6f2） */
+    .nw-sec { background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:16px 18px; margin:0 0 20px; }
+    .nw-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:0 0 12px; }
+    .nw-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:15px; font-weight:700; color:#1b2440; margin:0; }
+    .nw-h .material-symbols-outlined { font-size:20px; }
+    .nw-range { font-size:12.5px; font-weight:500; color:#6b7080; }
+    .nw-nav { display:flex; gap:6px; }
+    .nw-nav .btn[disabled] { opacity:.5; cursor:default; }
+    .nw-kpis { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin:0 0 12px; }
+    .nw-kpi { border:1px solid #e2e2dc; border-left:3px solid #c7cad4; border-radius:10px; padding:10px 12px; background:#fff; min-width:0; }
+    .nw-kpi.warn { border-left-color:#e0a030; }
+    .nw-kpi .lb { font-size:12px; color:#4a5068; font-weight:700; }
+    .nw-kpi .v { font-size:24px; font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; line-height:1.3; }
+    .nw-kpi .v small { font-size:12px; font-weight:500; color:#6b7080; margin-left:2px; }
+    .nw-kpi .sub { font-size:11px; color:#6b7080; line-height:1.6; }
+    .nw-legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11.5px; color:#4a5068; margin:0 0 10px; }
+    .nw-lg { display:inline-flex; align-items:center; gap:5px; }
+    .nw-lg.note { color:#7d5a00; }
+    .nw-table-wrap { overflow-x:auto; }
+    .nw-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .nw-table th, .nw-table td { border-bottom:1px solid #efefeb; padding:7px 6px; text-align:center; }
+    .nw-table thead th { font-size:11px; color:#6b7080; font-weight:700; background:#f6f6f2; white-space:nowrap; }
+    .nw-table thead th small { display:block; font-weight:500; font-size:10.5px; }
+    .nw-table th.nw-name { text-align:left; font-weight:700; color:#1b2440; white-space:nowrap; min-width:110px; }
+    .nw-table th.nw-name small { display:block; font-size:10.5px; color:#9aa0b4; font-weight:500; }
+    .nw-table .is-today { background:#eef1fb; }
+    .nw-sec .nw-table thead th.is-today { background:#dfe5f7; color:#1b2440; }
+    .nw-sec .nw-table thead th { background:#f6f6f2; }
+    .nw-table thead th.is-off { color:#9aa0b4; }
+    .nw-num { white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .nw-num small { color:#6b7080; }
+    .nw-num .bad { color:#b3261e; }
+    .nw-c { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:7px; cursor:default; }
+    .nw-c .material-symbols-outlined { font-size:18px; }
+    .nw-c .nw-sym { display:none; font-size:12px; font-weight:700; }
+    .nw-c.s-ok { background:#e5f1e2; color:#2f6f3a; }
+    .nw-c.s-nippo { background:#fbf1d6; color:#7d5a00; }
+    .nw-c.s-time { background:#fff0e0; color:#9a4a00; border:1px dashed #e0a030; }
+    .nw-c.s-both { background:#fdecea; color:#b3261e; }
+    .nw-c.s-off { background:transparent; color:#c7cad4; }
+    .nw-c.s-today { background:#f6f6f2; color:#6b7080; border:1px dotted #9aa0b4; }
+    /* アイコンのフォントが読めないときは記号で出す（色だけに頼らない） */
+    .fonts-missing .nw-c .material-symbols-outlined { display:none; }
+    .fonts-missing .nw-c .nw-sym { display:inline; }
+    .nw-iss { display:inline-block; background:#fdecea; color:#b3261e; border-radius:999px; padding:1px 9px; font-size:11.5px; font-weight:700; }
+    .nw-ok { font-size:11.5px; color:#2f6f3a; }
+    .nw-cards { display:none; }
+    .nw-card { border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; margin:0 0 8px; }
+    .nw-card-h { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; color:#1b2440; margin:0 0 8px; }
+    .nw-card-days { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px; }
+    .nw-cd { display:flex; flex-direction:column; align-items:center; gap:2px; padding:3px 0; border-radius:6px; }
+    .nw-cd small { font-size:10.5px; color:#6b7080; }
+    .nw-cd.is-today { background:#eef1fb; }
+    .nw-card-f { font-size:11.5px; color:#4a5068; margin-top:8px; }
+    .nw-sec-h { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; color:#1b2440; margin:22px 0 10px; }
+    .nw-sec-h .material-symbols-outlined { font-size:20px; }
+    .nw-more { margin:20px 0 0; }
+    .nw-more > summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#fff; border:1px solid #e2e2dc;
+      border-radius:10px; padding:12px 16px; font-size:14px; font-weight:700; color:#1b2440; margin:0 0 12px; }
+    .nw-more > summary::-webkit-details-marker { display:none; }
+    .nw-more > summary .muted { font-size:12px; font-weight:400; }
+    .nw-more[open] > summary { background:#f6f6f2; }
+    @media (max-width: 900px) { .nw-kpis { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+    /* スマホ：巨大な横表にしない。メンバーごとのカードにする */
+    @media (max-width: 600px) {
+      .nw-sec { padding:14px 12px; }
+      .nw-table-wrap { display:none; }
+      .nw-cards { display:block; }
+      .nw-kpi .v { font-size:20px; }
+    }
   </style>
 </head>
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">全員の日報</h1>
-  <p class="kp-greet-sub">全員の日報を1日ぶんまとめて確認し、必要なら本人へメッセージを返します。</p>
+  <h1 class="kp-greet">日報・勤怠</h1>
+  <p class="kp-greet-sub">今週の日報の提出と勤怠をまとめて見て、止まっている人をフォローします。日報を読む・返信するのは「今日の日報」から。</p>
 
   <div id="notice"></div>
 
+  <!-- 1. 今週の提出・勤怠（既存の日報・打刻だけから作る。lib/nippo-week.js） -->
+  <section class="nw-sec" id="sec-week" aria-labelledby="nw-title">
+    <div class="nw-head">
+      <h2 class="nw-h" id="nw-title"><span class="material-symbols-outlined">calendar_view_week</span>今週の提出・勤怠
+        <span class="nw-range" id="nw-range"></span></h2>
+      <div class="nw-nav" role="group" aria-label="週を移る">
+        <button class="btn btn-secondary btn-sm" id="nw-prev" onclick="shiftWeek(-1)">← 前週</button>
+        <button class="btn btn-secondary btn-sm" id="nw-this" onclick="thisWeek()">今週</button>
+        <button class="btn btn-secondary btn-sm" id="nw-next" onclick="shiftWeek(1)">次週 →</button>
+      </div>
+    </div>
+    <div class="nw-kpis" id="nw-kpi"></div>
+    <div class="nw-legend" id="nw-legend"></div>
+    <div id="nw-grid"><div class="empty">読み込み中…</div></div>
+  </section>
+
+  <!-- 2. 今日の要フォロー -->
+  <!-- 全員の日報を読まなくて済むように、見るべき人だけ出す。
+       条件は「相談あり・3日連続KPI未達・日報未提出2日」の3つだけ -->
+  <div id="follow-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">priority_high</span>今日の要フォロー
+      <span id="follow-tag" class="kp-chip important" style="margin-left:6px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      相談が来ている人・止まっている人・日報が続けて出ていない人だけを出しています。
+      ここに出ていない人は、下の一覧の数字を見れば足ります。
+    </p>
+    <div id="follow-list"></div>
+  </div>
+
+  <!-- 3. 今日の日報 -->
+  <h2 class="nw-sec-h" id="sec-today"><span class="material-symbols-outlined">description</span>今日の日報</h2>
   <div class="card">
     <div class="inline-controls" style="margin-bottom:0;">
       <div><label>日付</label><input id="f-date" type="date"></div>
@@ -74,34 +175,6 @@
 
   <div id="tiles" class="kp-tiles"></div>
 
-  <!-- 全員の日報を読まなくて済むように、見るべき人だけ出す。
-       条件は「相談あり・3日連続KPI未達・日報未提出2日」の3つだけ -->
-  <div id="follow-card" class="card hidden">
-    <h2><span class="material-symbols-outlined">priority_high</span>要フォロー
-      <span id="follow-tag" class="kp-chip important" style="margin-left:6px;"></span></h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
-      相談が来ている人・止まっている人・日報が続けて出ていない人だけを出しています。
-      ここに出ていない人は、下の一覧の数字を見れば足ります。
-    </p>
-    <div id="follow-list"></div>
-  </div>
-
-  <!-- 管理職の仕事は命令することではなく、止まっているものを外すこと -->
-  <div id="blk-card" class="card hidden">
-    <h2><span class="material-symbols-outlined">block</span>止まっていること
-      <span id="blk-tag" class="kp-chip important" style="margin-left:6px;"></span></h2>
-    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
-      長く止まっているものから並べています。外れたら「外れた」を押してください（誰が外したかが残ります）。
-    </p>
-    <div id="blk-body"></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="material-symbols-outlined">trending_up</span>提出率<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近の平日</span></h2>
-    <div class="dr-bar" id="trend"></div>
-    <div id="trend-labels" style="display:flex;gap:3px;margin-top:4px;font-size:10px;color:var(--muted);"></div>
-  </div>
-
   <div class="card">
     <h2><span class="material-symbols-outlined">person_off</span>未提出</h2>
     <div id="not-submitted"></div>
@@ -116,6 +189,26 @@
   <div class="card">
     <h2><span class="material-symbols-outlined">description</span>提出された日報</h2>
     <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- 4. 溜まっていること -->
+  <!-- 管理職の仕事は命令することではなく、止まっているものを外すこと -->
+  <div id="blk-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">block</span>溜まっていること<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">止まっている仕事</span>
+      <span id="blk-tag" class="kp-chip important" style="margin-left:6px;"></span></h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      長く止まっているものから並べています。外れたら「外れた」を押してください（誰が外したかが残ります）。
+    </p>
+    <div id="blk-body"></div>
+  </div>
+
+  <!-- 5. 分析・履歴（下位の分析はたたむ） -->
+  <details class="nw-more" id="sec-analysis">
+    <summary><span class="material-symbols-outlined">insights</span>詳細分析を見る<span class="muted">提出率・直近の傾向・週次評価・月次</span></summary>
+  <div class="card">
+    <h2><span class="material-symbols-outlined">trending_up</span>提出率<span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">直近の平日</span></h2>
+    <div class="dr-bar" id="trend"></div>
+    <div id="trend-labels" style="display:flex;gap:3px;margin-top:4px;font-size:10px;color:var(--muted);"></div>
   </div>
 
   <!-- 「頑張っている人ランキング」は作らない。
@@ -153,11 +246,12 @@
     </div>
     <div id="m-form"><div class="empty">上の「対象者」を選ぶと出ます。</div></div>
   </div>
+  </details>
 </div>
 
-<script src="js/api-client.js?v=20261006kei2"></script>
-<script src="js/device.js?v=20261006kei2"></script>
-<script src="js/layout.js?v=20261006kei2"></script>
+<script src="js/api-client.js?v=20261006kei3"></script>
+<script src="js/device.js?v=20261006kei3"></script>
+<script src="js/layout.js?v=20261006kei3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -218,7 +312,102 @@
   function start() {
     el("f-date").value = todayStr();
     el("f-date").addEventListener("change", () => load(el("f-date").value));
+    weekDate = todayStr();
+    loadWeek();
+    // アイコンのフォントが読めない環境では、セルの印を記号（○・日・勤・！・－・…）に切り替える
+    try {
+      document.fonts?.ready.then(() => {
+        if (!document.fonts.check('18px "Material Symbols Rounded"')) document.body.classList.add("fonts-missing");
+      });
+    } catch { /* 判定できなくても、title と読み上げの説明はある */ }
     load(todayStr());
+  }
+
+  // ---- 今週の提出・勤怠（/api/nippo/admin?view=week。既存の日報・打刻だけ） ----------------------
+  //   セルは、日報と勤怠の状態を1つの印で出す。色だけに頼らず、印（アイコン・記号）と説明（title・読み上げ）を添える
+  let weekDate = null;
+  let week = null;
+  const CELL = {
+    ok:    { icon: "check",         sym: "○", label: "正常" },
+    nippo: { icon: "edit_off",      sym: "日", label: "日報未提出" },
+    time:  { icon: "schedule",      sym: "勤", label: "勤怠要確認" },
+    both:  { icon: "priority_high", sym: "！", label: "両方未完了" },
+    off:   { icon: "remove",        sym: "－", label: "休日・対象外" },
+    today: { icon: "more_horiz",    sym: "…", label: "今日（まだ）" },
+  };
+  const NIPPO_WORD = { ok: "提出済み", missing: "未提出", today: "まだ（今日）", off: "対象外" };
+  const TIME_WORD = { ok: "打刻あり", check: "要確認", today: "今日", off: "休み・対象外", none: "—" };
+
+  function shiftWeek(n) {
+    const d = new Date(`${weekDate || todayStr()}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 7 * n);
+    weekDate = d.toISOString().slice(0, 10);
+    loadWeek();
+  }
+  function thisWeek() { weekDate = todayStr(); loadWeek(); }
+
+  async function loadWeek() {
+    const asked = weekDate;
+    try {
+      const w = await API.nippoWeek(asked);
+      if (asked !== weekDate) return;         // 押し直された
+      week = w;
+      renderWeek();
+    } catch (e) {
+      if (asked !== weekDate) return;
+      el("nw-grid").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.detail || e.message || "読み込めませんでした")}</div></div>`;
+    }
+  }
+
+  const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+
+  function cellHtml(c, d, name) {
+    const k = CELL[c.state] || CELL.off;
+    const tip = `${name}　${md(d.date)}（${d.dow}）\n${k.label}\n日報：${NIPPO_WORD[c.nippo] || "—"}\n勤怠：${TIME_WORD[c.time] || "—"}${c.time !== "none" && c.timeWhy ? `（${c.timeWhy}）` : ""}`;
+    return `<span class="nw-c s-${c.state}" title="${esc(tip)}" aria-label="${esc(tip.replace(/\n/g, "　"))}" data-state="${c.state}">
+      <span class="material-symbols-outlined" aria-hidden="true">${k.icon}</span><span class="nw-sym" aria-hidden="true">${k.sym}</span></span>`;
+  }
+
+  function renderWeek() {
+    const w = week;
+    const thisMonday = w.days.some((d) => d.today);
+    el("nw-range").textContent = `${md(w.from)}（月）〜 ${md(w.to)}（日）${thisMonday ? "・今週" : ""}`;
+    el("nw-this").disabled = thisMonday;
+    const k = w.kpi;
+    const tile = (label, v, sub, tone = "", id = "") => `<div class="nw-kpi${tone ? ` ${tone}` : ""}"${id ? ` data-kpi="${id}"` : ""}>
+      <div class="lb">${esc(label)}</div><div class="v">${v}</div><div class="sub">${esc(sub)}</div></div>`;
+    el("nw-kpi").innerHTML = [
+      tile("日報提出率", k.rate == null ? "—" : `${k.rate}<small>%</small>`,
+        k.expected ? `出した日 ${k.submitted} ／ 出すべき日 ${k.expected}（今日より前の営業日）` : "まだ数える日がありません", k.rate != null && k.rate < 80 ? "warn" : "", "rate"),
+      tile("日報未提出", `${k.missing}<small>件</small>`, "人×日（今日より前の営業日）", k.missing ? "warn" : "", "missing"),
+      tile("勤怠要確認", k.timeCheck == null ? "—" : `${k.timeCheck}<small>件</small>`,
+        k.timeCheck == null ? (w.attendanceNote || "勤怠は見られません") : "打刻なし・退勤なし・修正の承認待ち（人×日）", k.timeCheck ? "warn" : "", "time"),
+      tile("要フォロー人数", k.followUps == null ? "—" : `${k.followUps}<small>人</small>`,
+        k.followUps == null ? "まだ来ていない週です" : "相談・KPI未達・未提出2日など（下の「今日の要フォロー」）", k.followUps ? "warn" : "", "follow"),
+    ].join("");
+    el("nw-legend").innerHTML = ["ok", "nippo", "time", "both", "off", "today"].map((s) =>
+      `<span class="nw-lg">${cellHtml({ state: s, nippo: "", time: "none" }, { date: w.from, dow: "" }, "").replace(/title="[^"]*"/, "").replace(/aria-label="[^"]*"/, 'aria-hidden="true"')}${esc(CELL[s].label)}</span>`).join("")
+      + (w.attendance ? "" : `<span class="nw-lg note">${esc(w.attendanceNote || "勤怠は見られません")}</span>`);
+
+    if (!w.members.length) { el("nw-grid").innerHTML = `<div class="empty">対象のメンバーがいません。</div>`; return; }
+    const head = w.days.map((d) => `<th class="nw-d${d.today ? " is-today" : ""}${d.holiday ? " is-off" : ""}" scope="col">${esc(d.dow)}<small>${md(d.date)}</small></th>`).join("");
+    const rows = w.members.map((m) => `<tr data-user="${esc(m.userId)}">
+        <th scope="row" class="nw-name">${esc(m.name)}${m.department ? `<small>${esc(m.department)}</small>` : ""}</th>
+        ${m.days.map((c, i) => `<td class="nw-d${w.days[i].today ? " is-today" : ""}">${cellHtml(c, w.days[i], m.name)}</td>`).join("")}
+        <td class="nw-num">${m.nippo.expected ? `${m.nippo.submitted}<small>/${m.nippo.expected}</small>` : "—"}</td>
+        <td class="nw-num">${!w.attendance ? "—" : m.time.uses ? (m.time.check ? `<b class="bad">${m.time.check}</b>` : "0") : `<small class="muted">未使用</small>`}</td>
+        <td class="nw-num">${m.issues ? `<span class="nw-iss">${m.issues}</span>` : `<span class="nw-ok">なし</span>`}</td>
+      </tr>`).join("");
+    const cards = w.members.map((m) => `<div class="nw-card" data-user="${esc(m.userId)}">
+        <div class="nw-card-h"><b>${esc(m.name)}</b>${m.issues ? `<span class="nw-iss">要対応 ${m.issues}</span>` : `<span class="nw-ok">要対応なし</span>`}</div>
+        <div class="nw-card-days">${m.days.map((c, i) => `<div class="nw-cd${w.days[i].today ? " is-today" : ""}"><small>${esc(w.days[i].dow)}</small>${cellHtml(c, w.days[i], m.name)}</div>`).join("")}</div>
+        <div class="nw-card-f">日報 ${m.nippo.expected ? `${m.nippo.submitted}/${m.nippo.expected}` : "—"}　勤怠 ${!w.attendance ? "—" : m.time.uses ? `要確認 ${m.time.check}` : "未使用"}</div>
+      </div>`).join("");
+    el("nw-grid").innerHTML = `
+      <div class="nw-table-wrap"><table class="nw-table">
+        <thead><tr><th scope="col" class="nw-name">メンバー</th>${head}<th scope="col" class="nw-num">日報</th><th scope="col" class="nw-num">勤怠</th><th scope="col" class="nw-num">要対応</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <div class="nw-cards">${cards}</div>`;
   }
 
   function shift(n) {
@@ -275,8 +464,15 @@
   // 管理者が全員の日報を読まなくて済むように、見るべき人だけ出す
   function renderFollowUps() {
     const list = data.followUps || [];
-    if (!list.length) { el("follow-card").classList.add("hidden"); return; }
+    // 0人でも場所は出す（並びを固定する）。大きくは出さず1行
     el("follow-card").classList.remove("hidden");
+    if (!list.length) {
+      el("follow-tag").textContent = "0 名";
+      el("follow-tag").className = "kp-chip";
+      el("follow-list").innerHTML = `<div class="empty" style="padding:6px 0;">要フォローの人はいません。</div>`;
+      return;
+    }
+    el("follow-tag").className = "kp-chip important";
     el("follow-tag").textContent = `${list.length} 名`;
 
     const COLOR = {
@@ -303,8 +499,13 @@
   // 外すのは管理職に限らないが、この画面では管理者が順番を決めるために使う
   function renderBlockers() {
     const list = data.blockers || [];
-    if (!list.length) { el("blk-card").classList.add("hidden"); return; }
     el("blk-card").classList.remove("hidden");
+    if (!list.length) {
+      el("blk-tag").textContent = "0 件";
+      el("blk-tag").className = "kp-chip";
+      el("blk-body").innerHTML = `<div class="empty" style="padding:6px 0;">溜まっていることはありません。</div>`;
+      return;
+    }
 
     const long = list.filter((b) => b.long).length;
     el("blk-tag").textContent = long ? `${list.length} 件（${long} 件が長期化）` : `${list.length} 件`;
@@ -343,6 +544,8 @@
     }
     const card = [...document.querySelectorAll(".dr-card")]
       .find((c) => c.dataset.user === userId);
+    // 日報のカードが無ければ、たたんである「詳細分析」の週次評価へ（開いてから）
+    if (!card && el("sec-analysis")) el("sec-analysis").open = true;
     (card || sel).scrollIntoView({ behavior: "smooth", block: "center" });
   }
 

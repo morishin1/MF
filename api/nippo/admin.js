@@ -1,4 +1,6 @@
 // GET  /api/nippo/admin?date=YYYY-MM-DD&days=14 … その日の全員の日報と、提出率の推移
+// GET  /api/nippo/admin?view=week&date=YYYY-MM-DD … その日を含む週（月〜日）の、メンバー別の日報・勤怠（lib/nippo-week.js）
+//        勤怠（打刻）は、勤怠を見られる人（canManageHr。/api/timecard と同じ）にだけ返す。読み取りだけ・新しい表は使わない
 // POST /api/nippo/admin {action:…}                … 確認・個別メッセージ・AI返信のON/OFF
 //
 // 週次・月次の評価は /api/nippo/weekly と /api/nippo/monthly が持つ。
@@ -23,6 +25,7 @@ import { ACTIONS as CRITERIA, rubric } from "../../lib/scoring.js";
 import { findFollowUps, rankings, recentWorkdays } from "../../lib/follow.js";
 import { kpiRate } from "../../lib/actions.js";
 import { shapeBlocker } from "../../lib/blockers.js";
+import { buildWeek, mondayOf, weekRange } from "../../lib/nippo-week.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 
@@ -42,6 +45,7 @@ export default async function handler(req, res) {
 // ---- 読み取り ---------------------------------------------------------------
 async function read(req, res, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
+  if (q.get("view") === "week") return readWeek(res, ctx, isDate(q.get("date")) ? q.get("date") : jstDate());
   const date = isDate(q.get("date")) ? q.get("date") : jstDate();
   const days = Math.min(Math.max(Number(q.get("days")) || 14, 7), 60);
   const sb = admin();
@@ -188,6 +192,69 @@ async function read(req, res, ctx) {
     notSubmitted: staff.filter((e) => !submittedToday.has(e.user_id)).map((e) => e.display_name),
     weekStart: weekStart(date),
   });
+}
+
+// ---- 今週の提出・勤怠（メンバー別・月〜日） ---------------------------------------
+async function readWeek(res, ctx, date) {
+  const sb = admin();
+  const today = jstDate();
+  const monday = mondayOf(date);
+  const range = weekRange(monday);
+
+  const { data: roster } = await sb
+    .from("gw_employees")
+    .select("id, user_id, display_name, department, employment_type, status")
+    .eq("tenant_id", ctx.tenantId)
+    .in("status", ["active", "leaving"])
+    .order("display_name")
+    .limit(300);
+  const staff = (roster || []).filter((e) => e.user_id);
+  const userIds = staff.map((e) => e.user_id);
+
+  const { data: nippos } = userIds.length
+    ? await sb.from("tc_nippo").select("user_id, work_date")
+      .in("user_id", userIds).gte("work_date", range.from).lte("work_date", range.to).limit(5000)
+    : { data: [] };
+
+  // 勤怠は、勤怠を見られる人だけ（/api/timecard と同じ条件）。表が無ければ「見られない」で返す
+  let entries = null, fixes = [], usedTimecard = null, attendanceNote = null;
+  if (canManageHr(ctx)) {
+    const [ent, fx] = await Promise.all([
+      sb.from("gw_time_entries").select("employee_id, work_date, clock_in, clock_out, status")
+        .eq("tenant_id", ctx.tenantId).gte("work_date", range.usageFrom).lte("work_date", range.to).limit(20000),
+      sb.from("gw_time_fixes").select("employee_id, work_date")
+        .eq("tenant_id", ctx.tenantId).eq("status", "pending").gte("work_date", range.from).lte("work_date", range.to).limit(2000),
+    ]);
+    if (ent.error) attendanceNote = "勤怠の記録を読めませんでした";
+    else {
+      usedTimecard = new Set((ent.data || []).map((e) => e.employee_id));
+      entries = (ent.data || []).filter((e) => e.work_date >= range.from);
+      fixes = fx.error ? [] : (fx.data || []);
+    }
+  } else attendanceNote = "勤怠は、勤怠管理を見られる人にだけ出ます";
+
+  // 要フォロー：週の終わり（今週なら今日）の時点で、lib/follow.js が出す「見るべき人」
+  const ref = range.to < today ? range.to : today;
+  let followUps = null;
+  if (monday <= today) {
+    const spanFrom = recentWorkdays(ref, 14).slice(-1)[0];
+    const [detail, kpis, blockers, items] = await Promise.all([
+      sb.from("tc_nippo").select("user_id, work_date, work_items, tomorrow_plan, consult_note, morning_note")
+        .gte("work_date", spanFrom).lte("work_date", ref).limit(5000),
+      sb.from("gw_daily_kpis").select("user_id, work_date, target, actual")
+        .gte("work_date", spanFrom).lte("work_date", ref).limit(5000),
+      sb.from("gw_blockers").select("*").eq("status", "open").limit(300),
+      sb.from("gw_action_items").select("user_id, status, due_date")
+        .lte("due_date", ref).gte("due_date", spanFrom).limit(5000),
+    ]);
+    followUps = findFollowUps({
+      date: ref, staff, nippos: detail.data || [], kpis: kpis.data || [],
+      blockers: blockers.data || [], items: items.data || [],
+    }).length;
+  }
+
+  const week = buildWeek({ monday, today, staff, nippos: nippos || [], entries, fixes, usedTimecard, followUps });
+  return json(res, 200, { ...week, attendanceNote });
 }
 
 // ---- 操作 -------------------------------------------------------------------
