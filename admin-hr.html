@@ -240,8 +240,8 @@
     <div class="table-scroll">
       <table class="hr-table">
         <thead><tr>
-          <th>氏名</th><th>入社／退社日</th><th>状態</th><th>進捗</th>
-          <th>次の担当</th><th>止まっているもの</th><th></th>
+          <th>対象者</th><th>入社日／退職日</th><th>現在の状態</th><th>次にすること</th>
+          <th>担当</th><th>期限</th><th>操作</th>
         </tr></thead>
         <tbody id="hr-rows"><tr><td colspan="7">読み込み中…</td></tr></tbody>
       </table>
@@ -384,40 +384,49 @@
     }
     el("hr-rows").innerHTML = rows.map((r) => {
       const pct = r.progress.total ? Math.round(r.progress.done / r.progress.total * 100) : 0;
-      // 入社は5段階、退社はこれまでどおり phase
+      // 入社は段階（①〜⑤）、退社は phase
       const onb = r.kind === "onboarding" && r.stage;
+      const done = onb ? r.stage === "complete" : !r.next;
+      // 現在の状態は、誰の番かで言う（準備中／本人対応待ち／社内対応待ち／完了）。段階の名前は小さく添える
+      const who0 = r.nextActors?.[0];
+      const stateWord = !onb ? r.phaseLabel
+        : r.stage === "complete" ? "完了"
+        : r.stage === "conditions" || r.stage === "advisor_review" ? (who0 === "advisor" ? "社労士対応待ち" : "準備中")
+        : who0 === "employee" ? "本人対応待ち" : "社内対応待ち";
       const stateCell = onb
-        ? `<span class="hr-st ${esc(r.stage)}"><span class="n">${r.stageN}</span>${esc(r.stageLabel)}</span>`
+        ? `<span class="hr-st ${esc(r.stage)}"><span class="n">${r.stageN}</span>${esc(stateWord)}</span><span class="sub">${esc(r.stageLabel)}</span>`
         : `<span class="hr-ph ${esc(r.phase)}">${esc(r.phaseLabel)}</span>`;
       const barPct = onb ? r.pct : pct;
-      const nextCell = onb
-        ? (r.stage === "complete"
-            ? `<span class="hr-next none">すべて完了</span>`
-            : `<span class="hr-next"><b>${esc(r.nextActorLabel)}</b>${
-                r.next && r.nextActors?.includes("admin")
-                  ? `<span class="who">：${esc(r.next.title)}${r.next.who ? `（${esc(r.next.who)}）` : ""}</span>` : ""}</span>`)
-        : (r.next
-            ? `<span class="hr-next">${esc(r.next.role)}：${esc(r.next.title)}
-                ${r.next.who ? `<span class="who">（${esc(r.next.who)}）</span>` : ""}</span>`
-            : `<span class="hr-next none">すべて完了</span>`);
-      const stuckCell = onb
-        ? (r.stuck ? `<span class="hr-stuck">${esc(r.stuck)}</span>` : `<span class="hr-stuck none">なし</span>`)
-        : "";
+      // 次にすることと担当。入社は段階の「誰の番か」（会社・社労士・本人）から。退社はチェックリストの次の項目
+      let nextText = "すべて完了", who = "—";
+      if (!done && onb) {
+        const actor = r.nextActors?.[0];
+        if (actor === "admin") { nextText = r.next?.title || r.blockers?.[0] || r.stageLabel; who = r.next?.who || "未設定"; }
+        else if (actor === "employee") { nextText = `本人の対応待ち（${r.blockers?.[0] || r.stageLabel}）`; who = "本人"; }
+        else if (actor === "advisor") { nextText = r.blockers?.[0] || "社労士の対応待ち"; who = "社労士"; }
+        else { nextText = r.next?.title || r.blockers?.[0] || r.stageLabel; who = r.next?.who || "未設定"; }
+      } else if (!done) {
+        nextText = r.next?.title || "—";
+        who = r.next?.who || (r.next?.role ? `${r.next.role}（担当者 未設定）` : "未設定");
+      }
+      // 名前を取れない行を、空欄のまま出さない（別の人と取り違えないように、操作も出さない）
+      const missing = !r.name || r.name === "（不明）";
+      const nameCell = missing
+        ? `<span class="nm" style="color:#c53030;">対象者情報を取得できません</span><span class="sub">名簿を確認してください</span>`
+        : `<span class="nm">${esc(r.name)}</span><span class="sub">${esc([r.department, r.employmentType].filter(Boolean).join("・"))}</span>`;
+      const date = r.targetOn ? String(r.targetOn).replace(/-/g, "/") : "未設定";
       return `
-      <tr class="click" onclick="showDetail('${esc(r.id)}')">
-        <td><span class="nm">${esc(r.name)}</span>
-          <span class="sub">${esc([r.department, r.employmentType].filter(Boolean).join("・"))}</span></td>
-        <td><span class="hr-due ${esc(r.urgency)}">${esc(r.due)}</span>${
-          onb && r.daysLeft != null && r.stage !== "complete"
-            ? `<span class="sub">${r.daysLeft >= 0 ? `あと ${r.daysLeft} 日` : `${-r.daysLeft} 日経過`}</span>` : ""}</td>
-        <td>${stateCell}</td>
-        <td><span class="hr-prog">
+      <tr class="${missing ? "" : "click"}" ${missing ? "" : `onclick="showDetail('${esc(r.id)}')"`} data-row="${esc(r.id)}">
+        <td>${nameCell}</td>
+        <td>${esc(date)}<span class="sub">${r.kind === "offboarding" ? "退職日" : "入社日"}</span></td>
+        <td>${stateCell}<span class="hr-prog" style="margin-top:4px;">
           <span class="bar"><span style="width:${barPct}%"></span></span>
           <span class="n">${onb ? `${barPct}%` : `${r.progress.done}/${r.progress.total}`}</span></span></td>
-        <td>${nextCell}</td>
-        <td>${stuckCell}</td>
-        <td><span class="material-symbols-outlined"
-              style="font-size:18px;color:var(--muted);">chevron_right</span></td>
+        <td><span class="hr-next ${done ? "none" : ""}">${esc(nextText)}</span></td>
+        <td>${esc(who)}</td>
+        <td>${done ? "—" : `<span class="hr-due ${esc(r.urgency)}">${esc(r.due)}</span>${
+          onb && r.daysLeft != null && r.daysLeft < 0 ? `<span class="sub" style="color:#c53030;">${-r.daysLeft} 日超過</span>` : ""}`}</td>
+        <td>${missing ? "" : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showDetail('${esc(r.id)}')">手続きを開く</button>`}</td>
       </tr>`;
     }).join("");
   }
@@ -536,7 +545,8 @@
           </div>
         </div>
 
-        ${p.kind === "offboarding" ? "" : `
+        ${p.kind === "onboarding" && p.flow ? obFlowHtml(p) : ""}
+        ${p.kind === "offboarding" || p.flow ? "" : `
         <div class="hr-now ${next ? "" : "done"}">
           <div class="k">次にやること</div>
           ${next
@@ -554,6 +564,7 @@
         <h3 class="rc-checkh">チェックリスト（人事・社労士・本人）</h3>` : ""}
 
         ${p.kind === "onboarding" ? `<div class="hr-ln" id="labor-notice" data-employee="${esc(p.employeeId)}" hidden></div>` : ""}
+        ${p.kind === "onboarding" && p.flow ? `<h3 class="rc-checkh" id="hr-checklist">チェックリスト（人事・社労士・本人）</h3>` : ""}
 
         ${p.groups.map((g) => `
           <div class="hr-grp">
@@ -1071,6 +1082,59 @@
     } catch (e) { el("ret-msg").textContent = e.hint || e.detail || e.message || "消せませんでした"; }
   }
 
+  // ---- 入社の人別画面：6つの段階と次にすること（api/hr の flow。lib/onboard-flow.js）-------------------
+  const OB_ACT = {
+    basic:       (p) => [`admin-members.html`, "基本情報を入力"],
+    make:        (p) => [`admin-esign.html?tab=send&employeeId=${encodeURIComponent(p.employeeId)}`, "入力して契約書を作る"],
+    pdf:         (p) => [`admin-esign.html?tab=pdf&employeeId=${encodeURIComponent(p.employeeId)}`, "作成済みPDFを使う"],
+    order:       (p) => [`admin-esign.html?tab=order&employeeId=${encodeURIComponent(p.employeeId)}`, "作成依頼を見る"],
+    send_order:  (p) => [`admin-esign.html?tab=order&employeeId=${encodeURIComponent(p.employeeId)}`, "確認して署名依頼"],
+    sign_status: (p) => [`admin-esign.html?tab=list`, "署名の状況を見る"],
+    self:        (p) => [`onboarding.html?employeeId=${encodeURIComponent(p.employeeId)}`, "本人の画面を見る"],
+    guide:       (p) => [`onboarding.html?employeeId=${encodeURIComponent(p.employeeId)}`, "本人への案内"],
+    review:      (p) => [`onboarding.html?employeeId=${encodeURIComponent(p.employeeId)}`, "提出内容を確認"],
+    setup:       (p) => ["#hr-checklist", "設定を確認"],
+    assets:      (p) => [`admin-assets.html`, "貸与品を登録"],
+  };
+  const OB_STATE = { done: ["済み", "ok"], current: ["対応中", "info"], todo: ["まだ", ""], na: ["対象外", ""] };
+  function obBtn(p, key, primary) {
+    const a = OB_ACT[key]?.(p);
+    if (!a) return "";
+    return `<a class="btn ${primary ? "btn-primary" : "btn-secondary"} btn-sm" href="${esc(a[0])}" data-act="${esc(key)}">${esc(a[1])}</a>`;
+  }
+  function obFlowHtml(p) {
+    const f = p.flow, n = f.next;
+    const cur = n ? f.steps.find((s) => s.key === n.step) : null;
+    return `
+      <div class="rc" id="ob">
+        <section class="rc-sec" id="ob-next"><h3>次にすること
+          <a class="sub" href="help.html#hr-onboarding" target="_blank" rel="noopener" style="margin-left:auto;">使い方</a></h3>
+          ${n ? `<div style="font-size:16px;font-weight:700;color:${n.late ? "#c53030" : "var(--primary-dark)"};">${esc(n.text)}</div>
+              <div class="rc-note">担当：${esc(n.who)}${n.dueOn ? `・期限 ${esc(String(n.dueOn).replace(/-/g, "/"))}${n.late ? "（超過）" : ""}` : ""}</div>
+              <div class="rc-acts">${(cur?.actions || []).map((k, i) => obBtn(p, k, i === 0)).join("")}</div>`
+            : `<div style="font-weight:700;color:#256b36;">入社準備はすべて完了しました</div>`}
+        </section>
+        <section class="rc-sec" id="ob-flow"><h3>手続き全体の進み具合 <span class="sub">${f.done}/${f.total} 済み・並びは目安で、作業は並行して進められます</span></h3>
+          <table class="rc-tbl stack"><thead><tr><th>段階</th><th>状態</th><th>いまの様子</th><th>操作</th></tr></thead><tbody>
+          ${f.steps.map((s, i) => `<tr data-step="${esc(s.key)}">
+            <td>${i + 1}. ${esc(s.label)}</td>
+            <td><span class="rc-pill ${OB_STATE[s.state]?.[1] || ""}">${esc(OB_STATE[s.state]?.[0] || s.state)}</span></td>
+            <td>${esc(s.status)}${s.note ? `<span class="s">${esc(s.note)}</span>` : ""}</td>
+            <td><div class="rc-acts">${(s.actions || []).map((k) => obBtn(p, k, false)).join("")}</div></td></tr>`).join("")}
+          </tbody></table>
+        </section>
+        <section class="rc-sec" id="ob-contract"><h3>契約書 <span class="sub">作り方を選びます。どちらも「書類の準備 → 内容の確認 → 署名依頼 → 本人の署名 → 署名済みPDFの保管」</span></h3>
+          <div class="rc-acts">
+            ${obBtn(p, "make", false)}<span class="rc-note" style="margin:0 8px 0 0;">雛形と登録情報からPDFを作ります。会社印を選べます。</span>
+          </div>
+          <div class="rc-acts">
+            ${obBtn(p, "pdf", false)}<span class="rc-note" style="margin:0;">手元のPDFをアップロードして、そのまま署名を依頼します。</span>
+          </div>
+          <p class="rc-note">社労士などに作成を頼むときは ${obBtn(p, "order", false)}。署名依頼済みと締結済みは別の状態です（上の「本人の確認・署名」で分かります）。</p>
+        </section>
+      </div>`;
+  }
+
   // ---- 退職手続き（退社の詳細）。1人の退職を1画面で ------------------------------------------
   //
   // 状態の正は各業務の表（社員名簿の退職日・退職書類・貸与品台帳・各システム）。画面は組み立てない。
@@ -1115,6 +1179,7 @@
         <button class="btn btn-secondary btn-sm" onclick="rcGuide(false)">本人へ案内</button>
         <button class="btn btn-secondary btn-sm" onclick="rcGuide(true)">再通知</button>
         <button class="btn btn-secondary btn-sm" onclick="rcGo('rc-history')">手続き履歴</button>
+        <a class="btn btn-secondary btn-sm" href="help.html#hr-offboarding" target="_blank" rel="noopener" data-role="help">使い方</a>
       </div>
       ${off ? `<div class="rc-msg err" data-role="not-ready-banner">退職手続きの追加の記録（db/123）が、まだ流されていません。退職日の変更・返却・アカウントの記録は、流したあとに使えます。</div>` : ""}
 

@@ -31,6 +31,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate } from "../../lib/devices.js";
 import { seed, tell } from "../../lib/hr-run.js";
 import { advance, gatherFactsBulk } from "../../lib/onboard-advance.js";
+import { onboardFlow } from "../../lib/onboard-flow.js";
 import { computeStage, stageOf, progressPct, daysToStart, kpiOf, stuckLine }
   from "../../lib/onboard-stage.js";
 import { MYNUMBER_KEYS, mynumberLabel } from "../../lib/mynumber.js";
@@ -119,9 +120,27 @@ async function read(req, res, ctx) {
     if (!one) return json(res, 404, { error: "not_found" });
     const its = items.get(id) || [];
     const raw = list.find((p) => p.id === id);
+    // 入社：6つの段階と次にすること（既存の段階の判定を並べ替えるだけ。lib/onboard-flow.js）
+    let flow = null;
+    if (raw?.kind === "onboarding") {
+      const soft = async (q2) => { try { const { data } = await q2; return data ?? null; } catch { return null; } };
+      const [signRow, assetRows] = await Promise.all([
+        soft(sb.from("gw_sign_requests").select("status, source, first_viewed_at, due_on, sent_at, signed_at")
+          .eq("tenant_id", ctx.tenantId).eq("employee_id", raw.employee_id).eq("doc_kind", "employment")
+          .neq("status", "cancelled").order("sent_at", { ascending: false }).limit(1).maybeSingle()),
+        soft(sb.from("gw_assets").select("id").eq("tenant_id", ctx.tenantId).eq("assigned_to", raw.employee_id).limit(100)),
+      ]);
+      const person = people.get(raw.employee_id);
+      flow = onboardFlow({
+        facts: facts.get(id) || { procedure: raw, items: its }, sign: signRow,
+        employee: { user_id: person?.userId || null }, targetOn: raw.target_on, items: its,
+        assets: (assetRows || []).length, today,
+      });
+    }
     return json(res, 200, {
       procedure: {
         ...one,
+        flow,
         groups: byRole(its).map((g) => ({
           ...g,
           items: g.items.map((i) => item(i, people)),

@@ -368,7 +368,7 @@ await ok("入社の段階と、止まっているものが出る", async () => {
   assert.equal(row.stage, "conditions");
   assert.equal(row.stageN, 1);
   assert.equal(row.nextActorLabel, "管理者");
-  assert.match(row.stuck, /作成依頼/);
+  assert.match(row.stuck, /契約書の準備がまだです/);
   assert.equal(row.daysLeft, 3);
   assert.ok(row.internalOpen > 0, "社内準備の残りが数えられていない");
 });

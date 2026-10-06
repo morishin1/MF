@@ -27,6 +27,7 @@ function matcher(f) {
     if (op === "eq") return r[k] === v;
     if (op === "neq") return r[k] !== v;
     if (op === "in") return v.includes(r[k]);
+    if (op === "gte") return String(r[k] ?? "") >= String(v);
     return true;
   });
 }
@@ -46,6 +47,7 @@ function table(name) {
     eq(k, v) { f.push(["eq", k, v]); return q; },
     neq(k, v) { f.push(["neq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
+    gte(k, v) { f.push(["gte", k, v]); return q; },
     order(col, opts) { if (!order) order = [col, opts?.ascending !== false]; return q; },
     limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
@@ -121,9 +123,10 @@ mock.module(atRoot("lib/gw.js"), {
   },
 });
 const logged = [];
+let notifyFails = false;
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { logged.push(e); } } });
 mock.module(atRoot("lib/notify.js"), {
-  namedExports: { notify: async () => ({ created: 0 }), clearNotification: async () => {} },
+  namedExports: { notify: async () => { if (notifyFails) throw new Error("通知の表が読めない"); return { created: 0 }; }, clearNotification: async () => {} },
 });
 mock.module(atRoot("lib/slack.js"), { namedExports: { notifySlack: async () => {} } });
 mock.module(atRoot("lib/onboard-advance.js"), { namedExports: { advanceFor: async () => null } });
@@ -157,6 +160,7 @@ const ok = async (name, fn) => {
 
 function setup() {
   who = ADMIN;
+  notifyFails = false;
   logged.length = 0;
   store.clear();
   db.rows = {
@@ -266,6 +270,32 @@ await ok("他契約向け（contract_id が別のcontract）は、この契約�
   const otherSign = { status: "signed", doc_kind: "employment", contract_id: "c-old" };
   const status = contractStatus({ contract, signs: [otherSign] });
   assert.notEqual(status.key, "signed", "他契約の署名を、この契約の締結として誤認した");
+});
+
+
+console.log("\n=== 二重送信を防ぐ・お知らせに失敗しても依頼は追える ===\n");
+const TPL = { id: "tpl-1", tenant_id: "t1", name: "雇用契約書", body: "本文です。{{氏名}}", doc_kind: "employment", version: 1, due_days: 7 };
+await ok("雛形で送る：同じ雛形・同じ人に、直前に送っていれば送らない（二度押し・やり直し）", async () => {
+  setup(); db.rows.gw_sign_templates = [TPL];
+  const a = await signSend({ templateId: "tpl-1", employeeIds: ["emp-a"], force: true });
+  assert.equal(a.statusCode, 200); assert.equal(a.body.sent.length, 1);
+  const b = await signSend({ templateId: "tpl-1", employeeIds: ["emp-a", "emp-b"], force: true });
+  assert.equal(b.body.sent.length, 1, "別の人には送る"); assert.equal(b.body.sent[0].employeeId, "emp-b");
+  assert.equal(b.body.failed.length, 1); assert.equal(b.body.failed[0].duplicate, true);
+  assert.equal(db.rows.gw_sign_requests.filter((r) => r.employee_id === "emp-a").length, 1);
+});
+await ok("雛形で送る：お知らせに失敗しても、依頼は送れたことにして追える（notified=false）", async () => {
+  setup(); db.rows.gw_sign_templates = [TPL]; notifyFails = true;
+  const r = await signSend({ templateId: "tpl-1", employeeIds: ["emp-a"], force: true });
+  assert.equal(r.statusCode, 200); assert.equal(r.body.sent.length, 1); assert.equal(r.body.sent[0].notified, false);
+  assert.equal(r.body.failed.length, 0); assert.equal(db.rows.gw_sign_requests.length, 1);
+});
+await ok("作成済みPDF・作成依頼から送る：お知らせに失敗しても、依頼は登録済み（notified=false）", async () => {
+  setup(); notifyFails = true;
+  const created = await ordersAct({ action: "create", employeeId: "emp-a", docKind: "employment", force: true });
+  const approved = await ordersAct({ action: "approve", id: created.body.order.id, force: true });
+  assert.equal(approved.statusCode, 200, JSON.stringify(approved.body)); assert.equal(approved.body.notified, false);
+  assert.equal(db.rows.gw_doc_orders[0].status, "sent");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -69,6 +69,27 @@
     .es-st.overdue { background:#fdecec; color:#b3261e; }
     .es-st.cancelled { background:#eee; color:#777; }
 
+    /* 契約書の2つの作り方（入口） */
+    .es-entry { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 0 14px; }
+    .es-way { display:flex; gap:10px; align-items:flex-start; text-align:left; border:1px solid var(--border); border-radius:12px;
+              background:#fff; padding:12px 14px; cursor:pointer; font:inherit; color:var(--primary-dark); }
+    .es-way:hover { border-color:var(--primary); background:#f5f9ff; }
+    .es-way .material-symbols-outlined { font-size:26px; color:var(--primary); }
+    .es-way b { display:block; font-size:14.5px; }
+    .es-way small { display:block; font-size:12px; color:var(--muted); margin-top:3px; line-height:1.6; }
+    .es-entry-sub { grid-column:1 / -1; font-size:12px; color:var(--muted); }
+    @media (max-width:640px) { .es-entry { grid-template-columns:1fr; } }
+    .es-flow { display:flex; flex-wrap:wrap; gap:4px 6px; font-size:11.5px; color:var(--muted); margin:0 0 12px; padding:0; list-style:none; }
+    .es-flow li::after { content:"→"; margin-left:6px; }
+    .es-flow li:last-child::after { content:""; }
+    .es-sealnote { border:1px dashed var(--border); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:12px; line-height:1.7; background:#fafaf7; }
+    .es-sealnote img { width:48px; height:48px; object-fit:contain; vertical-align:middle; margin-right:8px; }
+    .es-sample { border:1px solid var(--border); border-radius:6px; background:#fff; padding:8px 10px; margin-top:6px; font-size:11.5px; }
+    .es-sample .ttl { font-weight:700; margin-bottom:4px; }
+    .es-sample .tag { display:inline-block; font-size:10.5px; border-radius:4px; padding:0 5px; background:#fff3e0; color:#9c4221; margin-left:4px; }
+    .es-check { display:flex; gap:8px; align-items:flex-start; font-size:13px; margin:10px 0; }
+    .es-check input { width:auto; margin:3px 0 0; }
+
     /* 会社の印鑑。一覧のカードと、送るときの選択肢 */
     .es-seals { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:12px; }
     .es-seal { border:1px solid var(--border); border-radius:10px; padding:14px; background:#fff;
@@ -123,11 +144,28 @@
     </div>
   </div>
 
+  <!-- 契約書の作り方は2つ。どちらも「対象者 → 書類の準備 → 内容の確認 → 署名依頼 → 本人の署名 → 署名済みPDFの保管」 -->
+  <div class="es-entry" id="es-entry">
+    <button type="button" class="es-way" data-way="send" onclick="setTab('send', el('tab-send'))">
+      <span class="material-symbols-outlined">edit_document</span>
+      <span><b>入力して契約書を作る</b><small>雛形と登録情報からPDFを作ります。会社印を選べます。</small></span>
+    </button>
+    <button type="button" class="es-way" data-way="pdf" onclick="setTab('pdf', el('tab-pdf'))">
+      <span class="material-symbols-outlined">upload_file</span>
+      <span><b>作成済みPDFを使う</b><small>手元のPDFをアップロードして、そのまま署名を依頼します。</small></span>
+    </button>
+    <div class="es-entry-sub">
+      社労士などに作成を頼むときは <a href="#" onclick="setTab('order', el('tab-order'));return false;">作成を依頼する</a>
+      ・<a href="help.html#contracts" target="_blank" rel="noopener">使い方</a>（別のタブで開くので、入力中の内容は消えません）
+    </div>
+  </div>
+
   <div class="tabs" style="margin-bottom:16px;">
-    <button id="tab-order" class="tab" onclick="setTab('order', this)">作成依頼<span id="c-order"></span></button>
-    <button id="tab-send" class="tab active" onclick="setTab('send', this)">送る</button>
+    <button id="tab-send" class="tab active" onclick="setTab('send', this)">入力して作る</button>
+    <button id="tab-pdf" class="tab" onclick="setTab('pdf', this)">PDFを使う</button>
     <button id="tab-list" class="tab" onclick="setTab('list', this)">署名の状況</button>
     <button id="tab-tpl"  class="tab" onclick="setTab('tpl', this)">雛形</button>
+    <button id="tab-order" class="tab" onclick="setTab('order', this)">作成を依頼する<span id="c-order"></span></button>
     <!-- 印鑑の登録・変更は owner / admin だけ。それ以外の人にはタブごと出さない -->
     <button id="tab-seal" class="tab hidden" onclick="setTab('seal', this)">印鑑</button>
   </div>
@@ -207,7 +245,10 @@
   <!-- ===== 送る ===== -->
   <div id="pane-send">
     <div class="card">
-      <h2><span class="material-symbols-outlined">send</span>署名依頼を送る</h2>
+      <h2><span class="material-symbols-outlined">edit_document</span>入力して契約書を作る</h2>
+      <p class="muted" style="font-size:12.5px;margin:0 0 6px;">雛形と登録情報からPDFを作ります。会社印を選べます。
+        氏名・契約期間・給与などは登録情報から入ります。足りない項目はプレビューで分かります（送るための一時的な値で、社員名簿や確定済みの契約は書き換えません）。</p>
+      <ol class="es-flow"><li>対象者</li><li>雛形を選ぶ</li><li>プレビュー・会社印の確認</li><li>期限を確かめて署名依頼</li><li>本人の署名</li><li>署名済みPDFの保管</li></ol>
 
       <div class="es-cols">
         <div>
@@ -231,11 +272,8 @@
 
           <div style="margin-top:14px;">
             <label>使用する印鑑</label>
-            <div id="s-seal" class="es-seal-pick"><span class="muted" style="font-size:12px;">読み込み中…</span></div>
-            <p class="muted" style="font-size:11.5px;margin:6px 0 0;">
-              会社印は、署名済みPDFの「電子署名記録」ページに押されます。送った時点の印影が使われ、
-              あとで印鑑を差し替えても変わりません。
-            </p>
+            <div id="s-seal" class="es-seal-pick" onchange="renderSealNote()"><span class="muted" style="font-size:12px;">読み込み中…</span></div>
+            <div id="s-seal-note" class="es-sealnote" aria-live="polite"></div>
           </div>
         </div>
 
@@ -273,6 +311,44 @@
       </div>
       <div id="s-msg" class="err-text"></div>
       <div id="s-result"></div>
+    </div>
+  </div>
+
+  <!-- ===== 作成済みPDFを使う ===== -->
+  <div id="pane-pdf" class="hidden">
+    <div class="card">
+      <h2><span class="material-symbols-outlined">upload_file</span>作成済みPDFを使う</h2>
+      <p class="muted" style="font-size:12.5px;margin:0 0 6px;">手元のPDFをアップロードして、そのまま署名を依頼します。
+        作成依頼・依頼先・PDFに書いてある条件の入力は要りません。</p>
+      <ol class="es-flow"><li>対象者</li><li>PDFを選ぶ</li><li>書類名・期限</li><li>プレビューで確認</li><li>署名依頼</li><li>本人の署名</li><li>署名済みPDFの保管</li></ol>
+      <div class="es-cols">
+        <div>
+          <label for="p-emp">対象者</label>
+          <select id="p-emp" onchange="pdfReset()"><option value="">読み込み中…</option></select>
+          <p class="muted" style="font-size:11.5px;margin:4px 0 10px;">署名画面に入れる人（ログインアカウントがある人）だけ選べます。契約の署名のために Office の権限は付けません。</p>
+          <label for="p-file">PDF</label>
+          <input type="file" id="p-file" accept="application/pdf,.pdf" onchange="pdfPicked()">
+          <div id="p-file-msg" class="muted" style="font-size:12px;margin:4px 0 10px;">PDF・15MBまで</div>
+          <label for="p-title">書類名</label>
+          <input id="p-title" type="text" value="雇用契約書" maxlength="120">
+          <div class="inline-controls" style="margin:10px 0;">
+            <div style="max-width:180px;"><label for="p-due">署名の期限</label><input id="p-due" type="date"></div>
+          </div>
+          <div class="es-sealnote">PDFに含まれる印鑑をそのまま使用します。会社印は自動追加されません。<br>
+            押印の有無は自動で判定しません。プレビューで確かめてください。</div>
+          <div id="p-recon"></div>
+          <label class="es-check"><input type="checkbox" id="p-ok"> <span>プレビューで、氏名・内容・会社印の有無を確認しました</span></label>
+          <button class="btn btn-primary" id="p-send" onclick="pdfSend(this)">
+            <span class="material-symbols-outlined icon-inline">send</span>署名依頼を送る</button>
+          <div id="p-msg" class="err-text"></div>
+          <div id="p-result"></div>
+        </div>
+        <div>
+          <label style="margin:0;">プレビュー（選んだPDFそのもの）</label>
+          <div id="p-preview" class="es-prev hidden"><iframe id="p-frame" title="PDFのプレビュー"></iframe></div>
+          <div id="p-preview-empty" class="empty">PDFを選ぶと、ここに表示されます。</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -379,7 +455,15 @@
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  const ST_LABEL = { sent: "未署名", signed: "署名済", overdue: "期限切れ", cancelled: "取り消し" };
+  const ST_LABEL = { sent: "署名待ち", signed: "署名済み", overdue: "署名待ち", cancelled: "取消済み" };
+  // 状態は1つ、補助の情報（閲覧記録・期限超過）は添える。排他的にして情報を落とさない
+  // 「閲覧記録あり」は本人が署名画面で書類を開いた記録（読み終えたことの証明ではない）
+  function stText(r) {
+    const parts = [ST_LABEL[r.view] || r.view];
+    if (r.view !== "signed" && r.view !== "cancelled" && r.first_viewed_at) parts.push("閲覧記録あり");
+    if (r.view === "overdue") parts.push("期限超過");
+    return parts.join("・");
+  }
 
   let templates = [];
   let employees = [];
@@ -398,7 +482,7 @@
   let reconcileResult = null;  // 採用承諾条件との突き合わせ（採用HR Stage 9）
   let canOverride = false;     // owner・hrだけ、条件不一致のまま進められる
 
-  const PANES = ["order", "send", "list", "tpl", "seal"];
+  const PANES = ["order", "send", "pdf", "list", "tpl", "seal"];
 
   let seals = [];               // 会社の印鑑。owner/admin には無効なものも来る
   let sealTypes = [];
@@ -439,6 +523,14 @@
       el("o-emp").value = emp;
       el("o-emp").focus();
     }
+    // 入社の人別画面から来たときは、対象者を選んだ状態で始める
+    if (tab === "pdf" && emp) { el("p-emp").value = emp; pdfReset(); }
+    if (tab === "send" && emp) {
+      for (const n of document.querySelectorAll("[data-who]")) n.checked = n.value === emp;
+      if (!document.querySelector(`[data-who][value="${CSS.escape(emp)}"]`)) {
+        el("s-msg").textContent = "この人は、署名画面に入るためのログインアカウントがありません。先にメンバー管理でアカウントを作ってください";
+      }
+    }
   }
 
   function setTab(name, btn) {
@@ -448,6 +540,7 @@
     for (const p of PANES) {
       el(`pane-${p}`).classList.toggle("hidden", p !== name);
     }
+    if (name === "pdf" && !el("p-due").value) pdfReset();
   }
 
   // ---- 雛形 -------------------------------------------------------------------
@@ -635,6 +728,10 @@
         `<option value="${esc(e.id)}">${esc(e.display_name)}${
           e.department ? `（${esc(e.department)}）` : ""}</option>`).join("");
     if (keep) el("o-emp").value = keep;
+    const keepP = el("p-emp").value;
+    el("p-emp").innerHTML = `<option value="">選んでください</option>`
+      + employees.map((e) => `<option value="${esc(e.id)}">${esc(e.display_name)}${e.department ? `（${esc(e.department)}）` : ""}</option>`).join("");
+    if (keepP) el("p-emp").value = keepP;
   }
 
   async function doPreview(btn) {
@@ -712,8 +809,10 @@
         ${r.sent.length ? `
           <div class="banner ok" style="margin-top:12px;">
             <span class="material-symbols-outlined">check_circle</span>
-            <div><b>${r.sent.length}名に送りました。</b>
-              ${esc(r.sent.map((x) => x.name).join("、"))}</div>
+            <div><b>${r.sent.length}名に署名依頼を登録しました。</b>
+              ${esc(r.sent.map((x) => x.name).join("、"))}
+              <div style="font-size:12px;">本人のお知らせ（アプリ内）に出ます。メール・Slack に届いたかは記録していません。</div>
+              ${r.sent.some((x) => x.notified === false) ? `<div style="font-size:12px;color:#9c4221;">お知らせを出せなかった人がいます：${esc(r.sent.filter((x) => x.notified === false).map((x) => x.name).join("、"))}（依頼は登録済み。「署名の状況」から案内文をコピーして連絡してください）</div>` : ""}</div>
           </div>` : ""}
         ${r.failed.length ? `
           <div class="banner err" style="margin-top:12px;">
@@ -728,6 +827,122 @@
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "送れませんでした";
     }
+  }
+
+  // ---- 作成済みPDFを使う ------------------------------------------------------------
+  //
+  // 1. 対象者 → 2. PDF を選ぶ（その場でプレビュー）→ 3. 書類名・期限 → 4. 確認 → 5. 署名依頼
+  // サーバーでは pdf_start（手続き中の依頼があればそれを使う）→ upload → attach → send。
+  // 途中で失敗しても、ここまで済んだところ（依頼・取り込み）は覚えていて、もう一度押すと続きから進む。
+  // 二度押し：送信中はボタンを止め、サーバーも「署名依頼ずみ」は 409 で断る（同じ書面を2回送らない）
+  const pdfState = { orderId: null, attachedKey: null, objectUrl: null, sending: false, overrideReason: null };
+  const fileKey = (f) => (f ? `${f.name}|${f.size}|${f.lastModified}` : null);
+
+  function pdfReset() {
+    pdfState.orderId = null; pdfState.attachedKey = null; pdfState.overrideReason = null;
+    el("p-recon").innerHTML = ""; el("p-msg").textContent = ""; el("p-result").innerHTML = "";
+    if (!el("p-due").value) {
+      const d = new Date(Date.now() + 7 * 86400000);
+      el("p-due").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+  }
+
+  function pdfPicked() {
+    const f = el("p-file").files?.[0];
+    el("p-ok").checked = false;
+    if (pdfState.objectUrl) URL.revokeObjectURL(pdfState.objectUrl);
+    pdfState.objectUrl = null;
+    if (!f) { el("p-preview").classList.add("hidden"); el("p-preview-empty").classList.remove("hidden"); return; }
+    if (f.type !== "application/pdf") { el("p-file-msg").textContent = "PDF を選んでください"; el("p-file").value = ""; return; }
+    if (f.size > 15 * 1024 * 1024) { el("p-file-msg").textContent = "15MBまでにしてください"; el("p-file").value = ""; return; }
+    el("p-file-msg").textContent = `${f.name}（${Math.ceil(f.size / 1024)}KB）`;
+    // 送る前のプレビューは、ブラウザの中だけ（まだどこにも上げていない）
+    pdfState.objectUrl = URL.createObjectURL(f);
+    el("p-frame").src = pdfState.objectUrl;
+    el("p-preview").classList.remove("hidden");
+    el("p-preview-empty").classList.add("hidden");
+  }
+
+  function renderPdfMismatch(e) {
+    const list = (e.body?.mismatches || []).map((m) => `<li>${esc(m.label || "")}：承諾時 ${esc(m.offerValue ?? "—")} ／ 現在 ${esc(m.currentValue ?? "—")}</li>`).join("");
+    el("p-recon").innerHTML = `
+      <div class="banner err" style="margin:10px 0;"><span class="material-symbols-outlined">warning</span>
+        <div><b>採用承諾時の条件と、登録されている条件が異なります。</b>
+          <ul style="margin:6px 0;padding-left:18px;">${list}</ul>
+          ${canOverride
+            ? `<label for="p-override" style="font-size:12px;">それでも進める理由（社長・人事だけ）</label>
+               <textarea id="p-override" rows="2" style="width:100%;"></textarea>
+               <button class="btn btn-secondary btn-sm" onclick="pdfState.overrideReason=el('p-override').value.trim();pdfSend(el('p-send'))">理由を付けて進める</button>`
+            : `<div style="font-size:12px;">本人と条件を確認してください（進められるのは社長・人事だけです）。</div>`}
+        </div></div>`;
+  }
+
+  async function pdfSend(btn) {
+    if (pdfState.sending) return;
+    const msg = el("p-msg");
+    msg.textContent = ""; el("p-result").innerHTML = "";
+    const employeeId = el("p-emp").value;
+    const f = el("p-file").files?.[0];
+    const title = el("p-title").value.trim() || "雇用契約書";
+    if (!employeeId) { msg.textContent = "対象者を選んでください"; return; }
+    if (!f) { msg.textContent = "PDF を選んでください"; return; }
+    if (!el("p-ok").checked) { msg.textContent = "プレビューで、氏名・内容・会社印の有無を確認して、チェックを入れてください"; return; }
+    const who = employees.find((x) => x.id === employeeId)?.display_name || "";
+    if (!confirm(`${who}さんに「${title}」の署名を依頼します。\n会社印は自動で追加されません（PDFのまま送ります）。\n送ったあと、書面は差し替えられません。よろしいですか？`)) return;
+
+    pdfState.sending = true;
+    btn.disabled = true;
+    let stage = "start";
+    try {
+      // 1) 依頼の箱（手続き中があればそれ）。採用承諾条件の突き合わせもここ
+      if (!pdfState.orderId) {
+        const r = await API.docOrderAct({ action: "pdf_start", employeeId, title, ...(pdfState.overrideReason ? { overrideReason: pdfState.overrideReason } : {}) });
+        if (!r.employee?.hasAccount) throw Object.assign(new Error("この人は、署名画面に入るためのログインアカウントがありません。先にメンバー管理でアカウントを作ってください"), { hint: null });
+        pdfState.orderId = r.order.id;
+        if (r.reconciliation?.hasAcceptedOffer) {
+          el("p-recon").innerHTML = `<div class="muted" style="font-size:12px;margin:8px 0;">採用承諾時の条件と、登録されている条件は${r.reconciliation.overridden ? "異なります（理由を付けて進めました）" : "一致しています"}。PDFの中身はプレビューで確かめてください（自動では照合していません）。</div>`;
+        }
+      }
+      // 2) PDF を取り込む（同じファイルなら、取り込み済みを使う）
+      stage = "upload";
+      if (pdfState.attachedKey !== fileKey(f)) {
+        await API.uploadDocOrderFile(pdfState.orderId, f);
+        pdfState.attachedKey = fileKey(f);
+      }
+      // 3) そのまま署名依頼
+      stage = "send";
+      const r = await API.docOrderAct({ action: "send", id: pdfState.orderId, dueOn: el("p-due").value || null });
+      el("p-result").innerHTML = `
+        <div class="banner ok" style="margin-top:12px;"><span class="material-symbols-outlined">check_circle</span>
+          <div><b>${esc(who)}さんに署名依頼を登録しました。</b>（期限 ${esc(r.dueOn || "")}）<br>
+            <span style="font-size:12px;">本人のお知らせ（アプリ内）に出ます。メール・Slack に届いたかは記録していません。
+            ${r.notified === false ? "お知らせを出せませんでした。依頼は登録済みです。「署名の状況」から案内文をコピーして連絡してください。" : ""}
+            進み具合は「署名の状況」で見られます。</span></div></div>`;
+      pdfState.orderId = null; pdfState.attachedKey = null; pdfState.overrideReason = null;
+      el("p-file").value = ""; el("p-ok").checked = false;
+      await Promise.all([loadRequests(), loadOrders()]);
+    } catch (e) {
+      if (e.code === "offer_mismatch") { renderPdfMismatch(e); msg.textContent = "採用承諾時の条件と異なるため、止めました"; }
+      else if (e.code === "already_sent") { msg.textContent = `${e.hint || "すでに署名依頼を出しています"}`; pdfState.orderId = null; }
+      else {
+        const where = stage === "upload" ? "PDFの取り込み" : stage === "send" ? "署名依頼" : "準備";
+        msg.textContent = `${where}で止まりました：${e.hint || e.detail || e.message || "うまくいきませんでした"}。もう一度押すと、ここから続けます。`;
+      }
+    } finally {
+      pdfState.sending = false;
+      btn.disabled = false;
+    }
+  }
+
+  // 署名待ちの人に送る案内文。コピーしただけでは送信済みにしない
+  async function copyGuide(id, btn) {
+    const r = requests.find((x) => x.id === id);
+    if (!r) return;
+    const url = `${location.origin}/contracts.html`;
+    const text = `${r.employee?.display_name || ""} さん\n\n「${r.title}」の内容をご確認のうえ、署名をお願いします。${r.due_on ? `\n期限：${r.due_on}` : ""}\n\nいつものログインで開けます：\n${url}\n\nご不明な点は人事までご連絡ください。`;
+    try { await navigator.clipboard.writeText(text); }
+    catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } finally { t.remove(); } }
+    const o = btn.textContent; btn.textContent = "コピーしました（送信はしていません）"; setTimeout(() => { btn.textContent = o; }, 1800);
   }
 
   // ---- 会社の印鑑 -------------------------------------------------------------
@@ -768,10 +983,25 @@
         ? `<span class="muted" style="font-size:12px;align-self:center;">
              印鑑は<a href="#" onclick="setTab('seal', el('tab-seal'));return false;">印鑑タブ</a>で登録できます</span>`
         : ""}`;
+    renderSealNote();
   }
 
   function pickedSealId() {
     return document.querySelector('input[name="s-seal"]:checked')?.value || "";
+  }
+
+  // 会社印をどこに押すか。雛形で作るときは、本人の署名のあとに末尾へ足す「電子署名記録」ページに押す（本文には押さない）
+  function renderSealNote() {
+    const box = el("s-seal-note");
+    if (!box) return;
+    const seal = seals.find((x) => x.id === pickedSealId());
+    box.innerHTML = seal
+      ? `<div>${seal.imageUrl ? `<img src="${esc(seal.imageUrl)}" alt="">` : ""}<b>${esc(seal.name)}</b> を押します。</div>
+         <div>配置先：署名後の末尾の「電子署名記録」ページ（本文には押しません）。送った時点の印影を使い、あとで印鑑を差し替えても変わりません。</div>
+         <div class="es-sample"><div class="ttl">電子署名記録（見本）<span class="tag">見本</span></div>
+           署名者：本人が署名すると入ります　／　署名日時：署名後に記録されます　／　会社印：${esc(seal.name)}<br>
+           <span class="muted">未署名のため、まだ署名済みではありません。本人はログインして内容を確認し、同意のチェックと氏名の入力で署名します（本人の印影は押されません）。</span></div>`
+      : `<div>会社印を付けずに送ります。</div>`;
   }
 
   function renderSeals() {
@@ -967,18 +1197,21 @@
           ${r.employee?.department ? `<small class="muted">　${esc(r.employee.department)}</small>` : ""}</td>
         <td>${esc(r.title)}${r.doc_version ? `<small class="muted">　第${r.doc_version}版</small>` : ""}
           ${r.source === "uploaded" ? `<span class="es-src" title="受け取ったPDFをそのまま送ったもの">書面</span>` : ""}</td>
-        <td><span class="es-st ${esc(r.view)}">${esc(ST_LABEL[r.view] || r.view)}</span></td>
+        <td><span class="es-st ${esc(r.view)}">${esc(stText(r))}</span></td>
         <td>${esc(d(r.sent_at))}</td>
         <td>${esc(r.due_on ? d(r.due_on) : "—")}</td>
         <td style="text-align:right;white-space:nowrap;">
-          <button class="btn btn-secondary btn-sm" onclick="showDetail('${esc(r.id)}')">記録</button>
           ${r.view === "signed"
-            ? `<button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">PDF</button>
+            ? `<button class="btn btn-secondary btn-sm" onclick="openPdf('${esc(r.id)}','signed',this)">署名済みPDFを開く</button>
                <button class="btn btn-secondary btn-sm" title="PDFを保存する"
-                       onclick="savePdf('${esc(r.id)}','signed',this)">保存</button>`
-            : r.view === "cancelled" ? ""
-              : `<button class="btn btn-secondary btn-sm" onclick="resend('${esc(r.id)}',this)">再送</button>
-                 <button class="icon-btn" title="取り消す" onclick="cancelReq('${esc(r.id)}')">
+                       onclick="savePdf('${esc(r.id)}','signed',this)">保存</button>
+               <button class="btn btn-secondary btn-sm" onclick="showDetail('${esc(r.id)}')">記録</button>`
+            : r.view === "cancelled"
+              ? `<button class="btn btn-secondary btn-sm" onclick="showDetail('${esc(r.id)}')">履歴を見る</button>`
+              : `<button class="btn btn-secondary btn-sm" onclick="showDetail('${esc(r.id)}')">状況を見る</button>
+                 <button class="btn btn-secondary btn-sm" onclick="copyGuide('${esc(r.id)}',this)">案内文をコピー</button>
+                 <button class="btn btn-secondary btn-sm" onclick="resend('${esc(r.id)}',this)">再通知</button>
+                 <button class="icon-btn" title="取り消す（補助）" onclick="cancelReq('${esc(r.id)}')">
                    <span class="material-symbols-outlined">close</span></button>`}
         </td>
       </tr>`).join("");
@@ -997,10 +1230,12 @@
                   onclick="closeDetail()">閉じる</button></h2>
         <div class="table-scroll"><table class="kp-items"><tbody>
           ${row("相手", esc(r.employee?.display_name || "—"))}
-          ${row("状態", `<span class="es-st ${esc(r.view)}">${esc(ST_LABEL[r.view] || r.view)}</span>`)}
+          ${row("状態", `<span class="es-st ${esc(r.view)}">${esc(stText(r))}</span>`)}
           ${row("送付", esc(dt(r.sent_at)))}
           ${row("再送", r.resent_at ? esc(`${dt(r.resent_at)}（${r.resent_count}回）`) : "")}
-          ${row("本人が開いた", esc(dt(r.first_viewed_at)))}
+          ${row("閲覧記録（本人が初めて開いた）", r.first_viewed_at ? esc(dt(r.first_viewed_at)) : "")}
+          ${row("お知らせ", "アプリ内のお知らせに登録（メール・Slack の到達は記録していません）")}
+          ${row("署名済みPDF", r.view === "signed" ? "システムに保管済み（本人が端末に保存したかは記録していません）" : "")}
           ${row("署名", esc(dt(r.signed_at)))}
           ${row("署名者", esc(r.signer_name || ""))}
           ${row("メール", esc(r.signer_email || ""))}
