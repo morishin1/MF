@@ -44,7 +44,7 @@ for (const w of [390, 360]) {
     });
     check(m.over <= 0, `${w}px ${path}: 画面全体が横に伸びない（${m.over}）`);
     check(m.bell && m.user && m.add && m.logo, `${w}px ${path}: ロゴ・通知・メニュー・応募者追加が画面の中`);
-    check(m.tabs.length === 3, `${w}px ${path}: タブは3つ（${m.tabs.join("|")}）`);
+    check(m.tabs.length === 4, `${w}px ${path}: タブは4つ（${m.tabs.join("|")}）`);
     if (path === "/hr/") await page.screenshot({ path: shotPath(`hr-header-${w}.png`) });
     await page.close();
   }
@@ -56,7 +56,7 @@ console.log("— タブは、横に流せば全部押せる —");
   const last = page.locator(".hr-nav a").last();
   await last.scrollIntoViewIfNeeded();
   const r = await last.evaluate((a) => { const b = a.getBoundingClientRect(); return { l: b.left, r: b.right, w: window.innerWidth }; });
-  check(r.r <= r.w + 1 && r.l >= 0, "最後のタブ（CEO REVIEW）を、画面の中に出せる");
+  check(r.r <= r.w + 1 && r.l >= 0, "最後のタブ（メールひな型）を、画面の中に出せる");
   await page.close();
 }
 

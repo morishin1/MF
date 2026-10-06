@@ -3,7 +3,7 @@
 // ■ なぜ KPLayout（サイドメニュー）を使わないか
 //   ユーザーには「/hr という別アプリの中を移動している」ように見せたい
 //   （指示書§1）。左サイドメニュー・通常の帯ではなく、
-//   ロゴ＋3ナビ＋3操作だけの専用ヘッダーにする。
+//   ロゴ＋4ナビ＋3操作だけの専用ヘッダーにする。
 //   esc・busy は KPLayout のものをそのまま使う（作り直さない）。
 //
 // ■ 権限
@@ -18,6 +18,7 @@
     { key: "dashboard", href: "/hr/", label: "ダッシュボード", icon: "dashboard" },
     { key: "applicants", href: "/hr/applicants.html", label: "応募者", icon: "group" },
     { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
+    { key: "templates", href: "/hr/templates.html", label: "メールひな型", icon: "mail" },
   ];
 
   function css() {
@@ -150,6 +151,11 @@
 
 ⑦ その後は既存GWで
 　社員登録 → 契約書 → 電子署名 → 入社手続き
+
+応募者へのメール
+　応募者を開いて［メールを送る］→ ひな型を選ぶ
+　→ 宛先と内容を確かめる（直せる）→［送信］
+　ひな型は［メールひな型］で作る・直す
 
 迷ったら、「NEXT ACTIONを見る」で統一してください。`;
 

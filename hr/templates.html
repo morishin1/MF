@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>メールひな型 - EIGHT HR</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261006ml1">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
+    .hr-sub { color:#6b7080; font-size:13px; margin:0 0 18px; }
+    .mt-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 12px; }
+    .mt-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
+    .mt-table th, .mt-table td { padding:10px 12px; border-bottom:1px solid #efefeb; font-size:13px; text-align:left; vertical-align:top; }
+    .mt-table th { background:#f6f6f2; color:#4a5068; font-size:12px; font-weight:600; white-space:nowrap; }
+    .mt-table tr.off td { color:#9aa0b4; }
+    .mt-name { font-weight:700; color:#1b2440; }
+    .mt-subj { font-size:11.5px; color:#6b7080; margin-top:2px; word-break:break-all; }
+    .mt-chip { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .mt-chip.on { background:#e5f1e2; color:#2f6f3a; } .mt-chip.off { background:#efefeb; color:#6b7080; }
+    .mt-chip.def { background:#1b2440; color:#fff; margin-left:4px; }
+    .mt-ops { display:flex; gap:6px; flex-wrap:wrap; }
+    .mt-ops .btn { padding:2px 10px; }
+    .mt-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
+    .mt-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:720px; max-width:94vw;
+      max-height:90vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
+      box-shadow:0 20px 60px rgba(27,36,64,.28); overscroll-behavior:contain; }
+    .mt-modal label { display:block; font-size:12px; font-weight:700; color:#4a5068; margin:12px 0 4px; }
+    .mt-modal input, .mt-modal select, .mt-modal textarea { width:100%; box-sizing:border-box; }
+    .mt-fields { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 0; align-items:center; }
+    .mt-fields .lb { font-size:11.5px; color:#6b7080; }
+    .mt-fields button { border:1px solid #c9ccd8; background:#fff; border-radius:6px; padding:3px 8px; font-size:12px; cursor:pointer; font-family:inherit; color:#1b2440; }
+    .mt-fields button:hover { background:#f6f6f2; }
+    @media (max-width:720px) { .mt-table .hide-sp { display:none; } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="hr-title">メールひな型</h1>
+  <p class="hr-sub">応募者へ送るメールのひな型です。応募者の画面の［メールを送る］で選び、差し込み済みの内容を確かめてから送ります。<br>
+    非表示にしても消えません（送った記録はそのまま残ります）。既定は用途ごとに1つで、［メールを送る］で最初に選ばれます。</p>
+
+  <div class="mt-toolbar">
+    <button class="btn btn-primary btn-sm" onclick="openEdit()">
+      <span class="material-symbols-outlined icon-inline">add</span>ひな型を作る</button>
+    <label style="display:flex;align-items:center;gap:4px;margin:0;font-size:12.5px;color:#4a5068;">
+      <input type="checkbox" id="show-off" style="width:auto;margin:0;" onchange="render()">非表示のものも出す</label>
+  </div>
+  <div id="msg"></div>
+  <div style="overflow-x:auto;">
+    <table class="mt-table">
+      <thead><tr><th>ひな型名</th><th>用途</th><th>使用状態</th><th class="hide-sp">更新日</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5" class="empty">読み込み中…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="../js/api-client.js?v=20261006ml1"></script>
+<script src="../js/layout.js?v=20261006ml1"></script>
+<script src="../js/hr-layout.js?v=20261006ml1"></script>
+<script src="../js/jst.js?v=20261006ml1"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = HRLayout.esc;
+
+  let templates = [];
+  let purposes = [];
+  let fields = [];
+  let editing = null;          // 開いているひな型（新規は {}）
+  let lastFocus = "mt-body";   // 差し込みボタンで入れる先（件名か本文）
+
+  HRLayout.init({ active: "templates" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      const r = await API.api("/api/hr/mail-templates");
+      templates = r.templates || []; purposes = r.purposes || []; fields = r.fields || [];
+      el("msg").innerHTML = "";
+      render();
+    } catch (e) {
+      el("rows").innerHTML = `<tr><td colspan="5"><div class="banner ${e.code === "not_ready" ? "warn" : "err"}"><span class="material-symbols-outlined">${e.code === "not_ready" ? "build" : "error"}</span>
+        <div>${esc(e.hint || e.detail || e.message || "読み込めませんでした")}</div></div></td></tr>`;
+    }
+  }
+
+  function render() {
+    const all = el("show-off").checked;
+    const rows = templates.filter((t) => all || t.active);
+    if (!rows.length) {
+      el("rows").innerHTML = `<tr><td colspan="5" class="empty">${templates.length ? "使用中のひな型がありません（「非表示のものも出す」で見られます）" : "ひな型がありません"}</td></tr>`;
+      return;
+    }
+    el("rows").innerHTML = rows.map((t) => `
+      <tr class="${t.active ? "" : "off"}" data-id="${esc(t.id)}">
+        <td><div class="mt-name">${esc(t.name)}</div><div class="mt-subj">件名：${esc(t.subject)}</div></td>
+        <td>${esc(t.purposeLabel)}</td>
+        <td><span class="mt-chip ${t.active ? "on" : "off"}">${t.active ? "使用中" : "非表示"}</span>${t.isDefault ? `<span class="mt-chip def">既定</span>` : ""}</td>
+        <td class="hide-sp">${esc(JST.when(t.updatedAt))}<div class="mt-subj">版${esc(t.version)}</div></td>
+        <td><div class="mt-ops">
+          <button class="btn btn-secondary btn-sm" onclick="openEdit('${esc(t.id)}')">編集</button>
+          <button class="btn btn-secondary btn-sm" onclick="act('duplicate','${esc(t.id)}',this)">複製</button>
+          ${t.active ? `<button class="btn btn-secondary btn-sm" onclick="act('hide','${esc(t.id)}',this)">非表示</button>`
+                     : `<button class="btn btn-secondary btn-sm" onclick="act('show','${esc(t.id)}',this)">使用</button>`}
+          ${t.active && !t.isDefault ? `<button class="btn btn-secondary btn-sm" onclick="act('default','${esc(t.id)}',this)">既定にする</button>` : ""}
+        </div></td>
+      </tr>`).join("");
+  }
+
+  async function act(what, id, btn) {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    if (what === "hide" && !confirm(`「${t.name}」を非表示にします。［メールを送る］で選べなくなります（消えません。送った記録も残ります）。よろしいですか？`)) return;
+    const body = what === "duplicate" ? { action: "duplicate", id }
+      : what === "hide" ? { action: "set_active", id, active: false }
+      : what === "show" ? { action: "set_active", id, active: true }
+      : { action: "set_default", id };
+    try {
+      await KPLayout.busy(btn, "…", () => API.api("/api/hr/mail-templates", { method: "POST", body, invalidates: [] }));
+      el("msg").innerHTML = `<div class="banner ok" style="margin-bottom:10px;"><span class="material-symbols-outlined">check_circle</span><div>${
+        what === "duplicate" ? `「${esc(t.name)}」を複製しました` : what === "hide" ? "非表示にしました" : what === "show" ? "使用にしました" : `「${esc(t.purposeLabel)}」の既定にしました`}</div></div>`;
+      await load();
+    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+  }
+
+  function openEdit(id) {
+    const t = id ? templates.find((x) => x.id === id) : null;
+    editing = t ? { ...t } : { purpose: "application", name: "", subject: "", body: "" };
+    lastFocus = "mt-body";
+    el("modal-root").innerHTML = `<div class="mt-modal-bg" onclick="closeEdit()"></div><div class="mt-modal">
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">${t ? "ひな型を編集" : "ひな型を作る"}</h2>
+      ${t ? `<p class="hr-sub" style="margin:0;">保存すると版が1つ上がります（版${esc(t.version)} → 版${esc(t.version + 1)}）。送ったメールの記録は変わりません。</p>` : ""}
+      <label>ひな型名</label><input id="mt-name" type="text" maxlength="80" value="${esc(editing.name)}">
+      <label>用途</label><select id="mt-purpose">${purposes.map((p) => `<option value="${esc(p.key)}" ${p.key === editing.purpose ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
+      <p class="hr-sub" style="margin:4px 0 0;font-size:11.5px;">用途で {{面談予約URL}} の予約先が決まります（応募受付・カジュアル面談 → カジュアル面談／社長面談 → 社長面談／その他 → 予約先なし）。</p>
+      <label>件名</label><input id="mt-subject" type="text" maxlength="200" value="${esc(editing.subject)}" onfocus="lastFocus='mt-subject'">
+      <label>本文</label><textarea id="mt-body" rows="16" onfocus="lastFocus='mt-body'">${esc(editing.body)}</textarea>
+      <div class="mt-fields"><span class="lb">差し込み：</span>${fields.map((f) =>
+        `<button type="button" title="${esc(f.hint)}" onmousedown="event.preventDefault()" onclick="insertField('${esc(f.key)}')">{{${esc(f.key)}}}</button>`).join("")}</div>
+      <p class="hr-sub" style="margin:6px 0 0;font-size:11.5px;">{{応募者名}} は敬称なしです（「様」は本文に書いてください）。担当者名・会社名は、送るときに登録内容から入ります。</p>
+      <div id="mt-err" class="err-text" style="margin:10px 0 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" id="mt-save" onclick="save(this)">保存</button>
+        <button class="btn btn-secondary" onclick="closeEdit()">閉じる</button>
+      </div></div>`;
+  }
+
+  function dirty() {
+    if (!editing || !el("mt-name")) return false;
+    return el("mt-name").value !== (editing.name || "") || el("mt-purpose").value !== (editing.purpose || "")
+      || el("mt-subject").value !== (editing.subject || "") || el("mt-body").value !== (editing.body || "");
+  }
+  function closeEdit() {
+    if (dirty() && !confirm("保存していない変更は消えます。閉じますか？")) return;
+    editing = null; el("modal-root").innerHTML = "";
+  }
+
+  // カーソルの位置に {{項目}} を入れる（最後に触った件名か本文）
+  function insertField(key) {
+    const box = el(lastFocus) || el("mt-body");
+    const tag = `{{${key}}}`;
+    const s = box.selectionStart ?? box.value.length, e = box.selectionEnd ?? box.value.length;
+    box.value = box.value.slice(0, s) + tag + box.value.slice(e);
+    box.focus();
+    box.selectionStart = box.selectionEnd = s + tag.length;
+  }
+
+  async function save(btn) {
+    const err = el("mt-err"); err.textContent = "";
+    const body = { name: el("mt-name").value, purpose: el("mt-purpose").value, subject: el("mt-subject").value, body: el("mt-body").value };
+    if (/[\r\n]/.test(body.subject)) { err.textContent = "件名に改行は使えません"; return; }
+    const req = editing.id ? { action: "update", id: editing.id, version: editing.version, ...body } : { action: "create", ...body };
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/hr/mail-templates", { method: "POST", body: req, invalidates: [] }));
+    } catch (e) {
+      err.textContent = (e.body?.problems || [e.hint || e.detail || e.message || "保存できませんでした"]).join("／");
+      return;
+    }
+    editing = null; el("modal-root").innerHTML = "";
+    el("msg").innerHTML = `<div class="banner ok" style="margin-bottom:10px;"><span class="material-symbols-outlined">check_circle</span><div>保存しました</div></div>`;
+    await load();
+  }
+</script>
+</body>
+</html>
