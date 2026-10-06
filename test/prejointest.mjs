@@ -96,7 +96,8 @@ mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: client, userClie
 let who = null;       // gwContext の結果
 let user = null;      // requireUser の結果
 mock.module(atRoot("lib/auth.js"), {
-  namedExports: { requireUser: async () => user, getMemberships: async () => [] },
+  // api/me.js は、退職者も通す入口（requireUserAllowLeft）と退職者の判定（leftStateOf）を使う。この画面は在籍中の人だけを見る
+  namedExports: { requireUser: async () => user, requireUserAllowLeft: async () => user, leftStateOf: async () => ({ left: false }), getMemberships: async () => [] },
 });
 const REAL_MFA = await import(atRoot("lib/mfa.js"));
 mock.module(atRoot("lib/mfa.js"), { namedExports: { ...REAL_MFA, requireMfa: async () => true } });
