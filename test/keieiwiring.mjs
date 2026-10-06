@@ -52,7 +52,8 @@ console.log("— 画面が呼ぶ view —");
 
 ok("keiei/index.html の API_VIEW（画面→view の対応表）がある", () => {
   assert.ok(map, "API_VIEW が見つからない");
-  assert.deepEqual(Object.fromEntries(mapped), { home: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" });
+  // ホーム・売上・営業・人・組織・財務・リスクは、同じ hub の応答を使う（タブを切り替えても取り直さない）
+  assert.deepEqual(Object.fromEntries(mapped), { home: "hub", sales: "hub", people: "hub", finance: "hub", risk: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" });
 });
 
 ok("画面が API を呼ぶのは、この対応表の1か所だけ（ほかにリテラルで /api/keiei?view= と書いた画面は無い）", () => {
@@ -79,7 +80,7 @@ ok("旧画面のメニュー・描画は、フロントに残っていない（�
   const layout = read(join(ROOT, "js/keiei-layout.js"));
   for (const v of OLD) assert.equal(new RegExp(`key:\\s*"${v}"`).test(layout), false, `メニューに ${v}`);
   for (const v of OLD) assert.equal(new RegExp(`^\\s{4}${v}\\(d\\)\\s*\\{`, "m").test(index), false, `RENDER に ${v}`);
-  assert.deepEqual([...index.matchAll(/^\s{4}(\w+)\(d\)\s*\{/gm)].map((m) => m[1]).sort(), ["home", "onboarding", "payroll", "security"]);
+  assert.deepEqual([...index.matchAll(/^\s{4}(\w+)\(d\)\s*\{/gm)].map((m) => m[1]).sort(), ["finance", "home", "onboarding", "payroll", "people", "risk", "sales", "security"]);
 });
 
 ok("旧画面のブックマーク（#dashboard など）は、ホームへ送る", () => {

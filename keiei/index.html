@@ -10,12 +10,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261005apps1">
+  <link rel="stylesheet" href="../css/app.css?v=20261005keiei1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261005keiei1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
-    h1.kei-title { font-size:22px; font-weight:700; color:#1b2440; margin:0 0 4px; }
-    .kei-sub { color:#6b7080; font-size:12.5px; margin:0 0 20px; line-height:1.7; }
+    /* 入社準備・給与管理の中身（keiei/onboarding.js・keiei/pay.js）。ホーム・売上・営業などの見た目は js/keiei-layout.js */
     .kei-h { font-size:14px; font-weight:700; color:#1b2440; margin:24px 0 10px; }
     .kei-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
     .kei-card { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 15px; display:block;
@@ -29,59 +29,6 @@
     .kei-card .nt { font-size:11px; color:#9aa0b4; margin-top:6px; line-height:1.6; }
     .kei-card.miss { background:#fafaf7; border-style:dashed; }
     .kei-missing { font-size:15px; font-weight:700; color:#9aa0b4; margin:8px 0 4px; }
-    .kei-pill { display:inline-block; font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:999px; white-space:nowrap; }
-    .kei-pill.prov { background:#fff2d6; color:#8a5a00; }
-    .kei-pill.miss { background:#ecece6; color:#6b7080; }
-    .kei-banner { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:8px; padding:11px 14px;
-                  font-size:12.5px; color:#4a5068; line-height:1.8; margin:0 0 16px; }
-    .kei-banner.warn { border-left-color:#e0a030; background:#fffaf0; }
-    .kei-banner.err { border-left-color:#b3261e; background:#fff5f4; }
-    .kei-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:16px; margin-bottom:14px; overflow-x:auto; }
-    table.kei-t { border-collapse:collapse; width:100%; font-size:13px; }
-    table.kei-t th { text-align:left; font-size:11.5px; color:#6b7080; font-weight:500; padding:6px 8px; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
-    table.kei-t td { padding:8px; border-bottom:1px solid #f0f0ea; vertical-align:top; }
-    table.kei-t td.n, table.kei-t th.n { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
-    table.kei-t tr.dim td { color:#9aa0b4; }
-    /* 経営ハブ（ホーム）: 今日の確認 / 人・組織 / お金 / リスク・未処理 */
-    .hub-sec { margin:0 0 22px; }
-    .hub-h { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
-    .hub-count { font-size:11.5px; font-weight:700; color:#6b7080; background:#ecece6; border-radius:999px; padding:1px 9px; }
-    .hub-panel { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:4px 16px; }
-    .hub-sec.today .hub-panel { border-left:4px solid #1b2440; }
-    .hub-list { list-style:none; margin:0; padding:0; }
-    .hub-it { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:4px 12px; align-items:center; padding:11px 0; border-top:1px solid #f0f0ea; }
-    .hub-it:first-child { border-top:0; }
-    .hub-tx { display:flex; flex-direction:column; gap:2px; min-width:0; }
-    .hub-tx b { font-size:14px; color:#1b2440; }
-    .hub-tx span { font-size:12.5px; color:#4a5068; line-height:1.6; }
-    .hub-go { font-size:12.5px; font-weight:700; color:#1b2440; text-decoration:none; white-space:nowrap; border:1px solid #c7cad4; border-radius:7px; padding:6px 11px; background:#fff; }
-    .hub-go:hover { background:#f3f3ee; }
-    .hub-sev { font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
-    .hub-sev.high { background:#fdeceb; color:#b3261e; }
-    .hub-sev.mid { background:#fff2d6; color:#8a5a00; }
-    .hub-sev.low { background:#ecece6; color:#6b7080; }
-    .hub-none { font-size:12.5px; color:#6b7080; padding:10px 0; }
-    .hub-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
-    .hub-tile { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; text-decoration:none; color:inherit; display:block; }
-    .hub-tile:hover { border-color:#b8bccb; }
-    .hub-tile .lb { font-size:12px; color:#6b7080; }
-    .hub-tile .val { font-size:24px; font-weight:700; color:#1b2440; margin:4px 0 2px; letter-spacing:.01em; }
-    .hub-tile .val small { font-size:12px; font-weight:500; color:#6b7080; margin-left:2px; }
-    .hub-tile .val.miss { font-size:13px; color:#9aa0b4; margin:9px 0 7px; }
-    .hub-tile .sub { font-size:11.5px; color:#6b7080; line-height:1.5; min-height:1.5em; }
-    .hub-board { border:1px dashed #c7cad4; background:#fafaf7; border-radius:10px; padding:12px 14px; font-size:12.5px; color:#6b7080; margin-bottom:10px; }
-    .hub-foot { margin-top:6px; font-size:12px; color:#9aa0b4; }
-    .hub-foot a { color:#6b7080; }
-    @media (max-width: 820px) {
-      .hub-it { grid-template-columns:auto minmax(0,1fr); }
-      .hub-go { grid-column:1 / -1; justify-self:start; }
-      .hub-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    }
-    .kei-btn { display:inline-block; background:#1b2440; color:#fff; border-radius:7px; padding:8px 14px; font-size:12.5px;
-               font-weight:700; text-decoration:none; margin:4px 8px 4px 0; }
-    .kei-btn.sec { background:#fff; color:#1b2440; border:1px solid #c7cad4; }
-    .kei-empty { color:#9aa0b4; font-size:12.5px; padding:6px 0; }
-    /* 入社準備（6ステップ） */
     .kei-ob { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 15px; margin-bottom:12px; }
     .kei-ob-h { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
     .kei-ob-h .nm { font-size:15px; font-weight:700; color:#1b2440; }
@@ -99,24 +46,27 @@
     .kei-st .nt { color:#6b7080; margin-top:2px; word-break:break-all; }
     .kei-st .who { color:#8a5a00; font-size:11px; margin-top:2px; }
     .kei-st a { display:inline-block; margin-top:4px; font-size:11.5px; font-weight:700; color:#1b2440; }
-    .kei-st.done { background:#f3faf5; border-color:#cfe8d6; } .kei-st.done .g { color:#1f8a4c; }
-    .kei-st.current { background:#fffaf0; border-color:#e8c977; } .kei-st.current .g { color:#c07a00; }
-    .kei-st.todo .g { color:#9aa0b4; } .kei-st.todo .t { color:#6b7080; }
-    .kei-st.unlinked { background:#fafaf7; border-style:dashed; } .kei-st.unlinked .g, .kei-st.unlinked .t { color:#9aa0b4; }
+    .kei-st.done { background:#f3faf5; border-color:#cfe8d6; }
+    .kei-st.done .g { color:#1f8a4c; }
+    .kei-st.current { background:#fffaf0; border-color:#e8c977; }
+    .kei-st.current .g { color:#c07a00; }
+    .kei-st.todo .g { color:#9aa0b4; }
+    .kei-st.todo .t { color:#6b7080; }
+    .kei-st.unlinked { background:#fafaf7; border-style:dashed; }
+    .kei-st.unlinked .g, .kei-st.unlinked .t { color:#9aa0b4; }
     @media (max-width: 820px) { .kei-six { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-    .kei-after { font-size:12px; color:#6b7080; margin-top:8px; } .kei-after a { color:#1b2440; font-weight:700; }
-    .kei-st.na { background:#fafaf7; border-style:dashed; } .kei-st.na .g, .kei-st.na .t { color:#9aa0b4; }
-    /* 入社準備の詳細（案内・URL・メール） */
+    .kei-after { font-size:12px; color:#6b7080; margin-top:8px; }
+    .kei-after a { color:#1b2440; font-weight:700; }
+    .kei-st.na { background:#fafaf7; border-style:dashed; }
+    .kei-st.na .g, .kei-st.na .t { color:#9aa0b4; }
     .kei-back2 { display:inline-block; font-size:12.5px; color:#6b7080; text-decoration:none; margin-bottom:10px; }
     .kei-back2:hover { color:#1b2440; }
     h3.kei-h3 { font-size:15px; font-weight:700; margin:0 0 8px; color:#1b2440; }
-    .kei-pill.ok { background:#e3f4e7; color:#1f6f3a; }
-    .kei-mute { font-size:12px; color:#9aa0b4; }
-    .kei-note { font-size:11.5px; color:#6b7080; line-height:1.8; margin:6px 0; }
     .kei-err { color:#b3261e; font-size:12.5px; line-height:1.7; margin:6px 0; }
     .kei-okmsg { color:#1f6f3a; font-size:13px; font-weight:700; margin:10px 0; }
     dl.kei-dl { display:grid; grid-template-columns:minmax(64px,auto) 1fr; gap:6px 14px; margin:0 0 6px; font-size:13px; }
-    dl.kei-dl dt { color:#6b7080; font-size:12px; } dl.kei-dl dd { margin:0; }
+    dl.kei-dl dt { color:#6b7080; font-size:12px; }
+    dl.kei-dl dd { margin:0; }
     .kei-form { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin:12px 0; }
     .kei-f { display:flex; flex-direction:column; gap:4px; font-size:12px; color:#6b7080; min-width:0; }
     .kei-f.wide { grid-column:1 / -1; }
@@ -129,11 +79,7 @@
     .kei-mailbox span { display:inline-block; min-width:52px; color:#6b7080; font-size:12px; }
     .kei-mailbox pre { white-space:pre-wrap; word-break:break-all; font-family:inherit; margin:8px 0 0; }
     .kei-tw { overflow-x:auto; margin-top:8px; }
-    .kei-btn.sm { padding:4px 10px; font-size:11.5px; margin:0; }
-    .kei-btn[disabled] { opacity:.45; cursor:default; }
     @media (max-width: 820px) { .kei-form { grid-template-columns:1fr; } }
-    /* 給与管理 */
-    .kei-pill.warn { background:#fdeceb; color:#b3261e; }
     .pay-arow { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto; gap:8px; margin-bottom:6px; align-items:center; }
     .pay-arow input { border:1px solid #c7cad4; border-radius:7px; padding:8px 10px; font-size:13.5px; font-family:inherit; color:#1b2440; background:#fff; width:100%; box-sizing:border-box; }
     .kei-f select { border:1px solid #c7cad4; border-radius:7px; padding:8px 10px; font-size:13.5px; font-family:inherit; color:#1b2440; background:#fff; width:100%; box-sizing:border-box; }
@@ -143,28 +89,34 @@
     .pay-modes input[type=radio] { width:auto; margin:0; }
     .pay-filters select { border:1px solid #c7cad4; border-radius:7px; padding:6px 8px; font-size:13px; font-family:inherit; background:#fff; color:#1b2440; width:auto; }
     .pay-filters input[type=search] { border:1px solid #c7cad4; border-radius:7px; padding:6px 8px; font-size:13px; font-family:inherit; width:150px; }
-    .pay-pv > div { margin:2px 0; } .pay-pv b { color:#1b2440; }
+    .pay-pv > div { margin:2px 0; }
+    .pay-pv b { color:#1b2440; }
   </style>
 </head>
 <body>
-<div class="kei-shell">
-  <nav id="kei-side"></nav>
-  <main class="kei-main" id="kei-main"><div class="kei-empty">読み込み中…</div></main>
+<!-- 枠（共通ヘッダー＋経営の横タブ）は js/layout.js が描く。中身はここ（左サイドバーは持たない） -->
+<!-- class="wrap" にしない：KPLayout は .wrap の先頭に二段階認証の案内（mfaNudge）を挿す。経営画面では二段階認証は任意で、案内・警告は出さない -->
+<div class="kei-wrap">
+  <main id="kei-main"><div class="kei-empty">読み込み中…</div></main>
 </div>
 
-<script src="../js/api-client.js?v=20261005apps1"></script>
-<script src="../js/keiei-layout.js?v=20261005apps1"></script>
-<script src="/keiei/onboarding.js?v=20261005apps1"></script>
-<script src="/keiei/pay.js?v=20261005apps1"></script>
+<script src="../js/api-client.js?v=20261005keiei1"></script>
+<script src="../js/layout.js?v=20261005keiei1"></script>
+<script src="../js/keiei-layout.js?v=20261005keiei1"></script>
+<script src="/keiei/onboarding.js?v=20261005keiei1"></script>
+<script src="/keiei/pay.js?v=20261005keiei1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
   const MISSING = "データ未連携";
   const yen = (n) => `${Math.round(Number(n) || 0).toLocaleString("ja-JP")}円`;
   const num = (n) => Number(n || 0).toLocaleString("ja-JP");
+  const man = (n) => (Math.abs(n) >= 10000 ? `${(n / 10000).toLocaleString("ja-JP", { maximumFractionDigits: 1 })}万円` : yen(n));
+  const val = (v, unit) => (unit === "円" ? man(v) : unit === "%" ? `${num(v)}%` : `${num(v)}<small>${esc(unit || "")}</small>`);
+  const prog = (pct, ok) => `<span class="kei-prog${ok ? " ok" : ""}"><i style="width:${Math.max(0, Math.min(100, pct || 0))}%"></i></span>`;
 
   // ---- 部品 ------------------------------------------------------------------
-  // 数値カード。取れないもの（status: missing）は、値を持たず「データ未連携」と出す。0円とは出さない
+  // 数値カード（入社準備・人件費で使う）。取れないもの（status: missing）は、値を持たず「データ未連携」と出す。0円とは出さない
   function card(c) {
     const miss = c.status === "missing";
     const pill = c.status === "provisional" ? `<span class="kei-pill prov">暫定</span>` : "";
@@ -179,34 +131,226 @@
   const bannerHtml = (text, kind = "") => `<div class="kei-banner ${kind}">${esc(text)}</div>`;
   const head = (title, sub) => `<h1 class="kei-title">${esc(title)}</h1><p class="kei-sub">${esc(sub || "")}</p>`;
 
+  // ---- 経営ハブ（hub の応答）の部品 ------------------------------------------------
+  // 見る → 気付く → 判断する → 元のシステムへ。ここでは処理を終わらせない。
+  const SEV = { high: "重要", mid: "注意", low: "確認" };
+  const goLink = (i) => `<a class="kei-go" href="${esc(i.href)}" data-role="go">${esc(i.linkLabel)} →</a>`;
+  const decisionRow = (i) => `<div class="kd-row" data-key="${esc(i.key)}" data-severity="${esc(i.severity)}">
+      <span class="kei-pill ${esc(i.severity)}">${esc(SEV[i.severity] || "")}</span>
+      <div class="kd-tx"><b>${esc(i.label)}</b><span>${esc(i.detail)}</span></div>${goLink(i)}</div>`;
+  const tile = (t) => `<a class="kt" href="${esc(t.href)}" data-key="${esc(t.key)}" title="${esc(t.linkLabel)}">
+      <div class="lb">${esc(t.label)}</div>
+      ${t.value == null ? `<div class="val miss">取得できません</div>` : `<div class="val">${num(t.value)}<small>${esc(t.suffix || "")}</small></div>`}
+      <div class="sub">${esc(t.sub || "")}</div></a>`;
+  // セクション。data-block は画面の目印（テスト用）。more は見出しの右の「すべて見る」
+  const section = (block, title, inner, o = {}) => `<section class="kei-sec" data-block="${block}">
+      <h2 class="kei-sec-h" data-role="h"><span class="t">${title}</span>${o.count == null ? "" : `<span class="kei-count" data-role="count">${o.count}件</span>`}${o.more || ""}</h2>${inner}</section>`;
+  const unreadableBanner = (d) => d.unreadable.length
+    ? `<div data-role="unreadable">${bannerHtml(`一部の元データを読み込めませんでした：${d.unreadable.join("・")}。該当する判定・数字は出していません（問題がないという意味ではありません）。`, "warn")}</div>` : "";
+  const dateText = (d) => {
+    const wd = ["日", "月", "火", "水", "木", "金", "土"];
+    const t = new Date(`${d.today}T00:00:00Z`);
+    return `${t.getUTCFullYear()}年${t.getUTCMonth() + 1}月${t.getUTCDate()}日（${wd[t.getUTCDay()]}）`;
+  };
+  const salesMissing = `<div class="kei-none" data-role="sales-missing">営業の数字を、いま取得できません（Sales の元データを読み込めませんでした）。ほかのブロックは出ています。</div>`;
+
+  // ① 今日の判断：経営者がいま対応するものだけ。件数の要約 → 1件ずつ（押す先の名前つき）
+  function todayBlock(d) {
+    const S = d.sales;
+    const stall = S && S.stalled ? S.stalled.count : null;
+    const ceo = d.attention.find((i) => i.key === "ceo_decision");
+    const chip = (key, label, text, hot) => `<span class="kd-chip${hot ? " hot" : ""}" data-chip="${key}"><span>${label}</span><b>${text}</b></span>`;
+    const chips = `<div class="kd-chips">${chip("total", "要対応", `${d.attention.length}件`, d.attention.length > 0)}
+      ${chip("stalled", "停滞案件", stall == null ? "—" : `${stall}件`, stall > 0)}
+      ${chip("ceo", "採用判断", `${ceo ? (ceo.count || 1) : 0}件`, Boolean(ceo))}</div>`;
+    // 重要度の高い順に、上位だけ並べる。残りは「ほか○件を見る」にたたむ（ホームを長くしない）
+    const TOP = 5;
+    const rest = d.attention.slice(TOP);
+    const rows = d.attention.length
+      ? `<div class="kd-rows">${d.attention.slice(0, TOP).map(decisionRow).join("")}</div>`
+        + (rest.length ? `<details class="kd-more" data-role="more"><summary>ほか${rest.length}件を見る</summary><div class="kd-rows">${rest.map(decisionRow).join("")}</div></details>` : "")
+      : `<div class="kei-none" data-role="none">今日、経営者が判断するものはありません。</div>`;
+    return section("today", "今日の判断", chips + rows);
+  }
+
+  // ② KGI：大きなカード。実績が取れないものは 0 にせず「未接続」「定義未決」
+  const monthName = (S) => String(S.label || "").replace(/^\d+年/, "");
+  function kgiCards(S) {
+    if (!S.hasTargets) return `<div class="kei-none" data-role="no-targets">この月の目標は、まだ設定していません。</div>`;
+    const f = (k) => S.funnel.find((x) => x.key === k);
+    const cards = [];
+    if (S.pc) {
+      cards.push(`<div class="kg-card miss" data-kgi="pc"><div class="lb"><span>${esc(S.pc.label)}</span><span class="kei-pill miss">未接続</span></div>
+        <div class="big miss">未接続</div><div class="tg">目標 ${man(S.pc.target)}</div><div class="why">${esc(S.pc.reason)}</div></div>`);
+    }
+    const won = f("won");
+    if (won) {
+      const live = won.value != null;
+      cards.push(`<div class="kg-card${live ? "" : " miss"}" data-kgi="won"><div class="lb"><span>有料契約</span>${live ? "" : `<span class="kei-pill miss">取得できません</span>`}</div>
+        ${live ? `<div class="big" data-role="actual">${num(won.value)}<small>/ 目標 ${num(won.target)}${esc(won.unit)}</small></div>
+          ${won.pct == null ? "" : `${prog(won.pct, won.pct >= 100)}<div class="kg-pct">達成率 ${won.pct}%・今日の目安 ${num(won.pace)}${esc(won.unit)}</div>`}
+          <div class="why">${S.won ? `今月の受注額 ${yen(S.won.amount)}（案件金額。会計上の売上ではありません）` : ""}</div>`
+        : `<div class="big miss">取得できません</div><div class="tg">目標 ${num(won.target)}${esc(won.unit)}</div><div class="why">${esc(won.reason || "")}</div>`}</div>`);
+    }
+    const key = f("key");
+    if (key) {
+      cards.push(`<div class="kg-card miss" data-kgi="key"><div class="lb"><span>本命案件</span><span class="kei-pill miss">定義未決</span></div>
+        <div class="big miss">定義未決</div><div class="tg">目標 ${num(key.target)}${esc(key.unit)}</div><div class="why">${esc(key.reason || "")}</div></div>`);
+    }
+    return `<div class="kg-cards" data-role="kgi">${cards.join("")}</div>`;
+  }
+  const kgiBlock = (S) => section("kgi", S ? `${esc(monthName(S))}KGI` : "KGI",
+    S ? `<div class="kg-meta">${esc(S.label)}・${S.dayNo}/${S.daysInMonth}日目。${S.note ? esc(S.note) : ""}</div>${kgiCards(S)}` : salesMissing);
+
+  // ③ 営業ファネル：接触 → 商談 → 提案 → 契約。件数・目標・達成率・月内実績の比率（転換率ではない）
+  const FLOW_KEYS = ["contact", "meeting", "proposal", "won"];
+  function funnelFlow(S) {
+    const steps = FLOW_KEYS.map((k) => S.funnel.find((x) => x.key === k)).filter(Boolean);
+    const step = (f, i) => {
+      const live = f.value != null;
+      const cv = i === 0 ? "" : (() => {
+        const r = S.flow.find((x) => x.toKey === f.key);
+        return r && r.value != null
+          ? `<span class="cv" data-role="conv" title="${esc(S.ratioNote)}">月内実績の比率 ${r.value}%${r.plan == null ? "" : `（目標の比 ${r.plan}%）`}</span>`
+          : `<span class="cv na" data-role="conv" title="${esc(S.ratioNote)}">月内実績の比率 —</span>`;
+      })();
+      return `<div class="fn-step" data-stage="${esc(f.key)}">
+        <div class="lb">${esc(f.label)}</div>
+        ${live ? `<div class="v" data-role="actual">${num(f.value)}<small>${esc(f.unit)}</small></div>`
+               : `<div class="v miss" data-role="state" title="${esc(f.reason || "")}">${f.status === "undefined" ? "定義未決" : "取得できません"}</div>`}
+        <div class="tg">目標 ${f.target == null ? "—" : `${num(f.target)}${esc(f.unit)}`}${f.pace == null ? "" : `・今日の目安 ${num(f.pace)}`}${f.companies == null ? "" : `<br>企業 ${num(f.companies)}社（重複を除く）`}</div>
+        ${live && f.pct != null ? `${prog(f.pct, f.pct >= 100)}<div class="kg-pct">達成率 ${f.pct}%</div>` : ""}${cv}
+        ${f.stalledCount === undefined ? "" : f.stalledCount === null
+          ? `<div class="fn-stall na" data-role="stall">停滞：取得できません</div>`
+          : `<div class="fn-stall${f.stalledCount ? " hot" : ""}" data-role="stall">停滞 ${num(f.stalledCount)}件${f.stalledCount ? "（7日以上動きなし）" : ""}</div>`}</div>`;
+    };
+    return `<div class="fn" data-role="funnel">${steps.map(step).join("")}</div>
+      <div class="fn-foot" data-role="fn-foot">接触は送信件数が主、重複を除いた企業数は補助です。商談・提案・有料契約は会社（企業ID）で数え、同じ会社の2件目の案件は1社のままです。有効企業と本命案件は定義が決まるまで、ファネルに含めていません。</div>
+      <div class="fn-foot" data-role="ratio-note">${esc(S.ratioNote)}</div>`;
+  }
+  const funnelBlock = (S) => section("funnel", "営業ファネル", S ? funnelFlow(S) : salesMissing);
+
+  // ④ 担当者別：カード。氏名・今月の目標と実績・遅れ／順調・次に見るもの
+  const STATE_CLASS = { ontrack: "ontrack", behind: "behind", unmeasured: "unmeasured" };
+  function kpiMain(p) {
+    // 代表の項目：目標があって数えられているものを先頭に、無ければ先頭の項目
+    const k = p.kpis.find((x) => x.value != null && x.target != null && x.onPace !== null) || p.kpis.find((x) => x.value != null) || p.kpis[0];
+    if (!k) return "";
+    if (k.value == null) return `<div class="pc-main"><div class="l">${esc(k.label)}</div><span class="t" title="${esc(k.reason || "")}">${esc(k.unmeasured ? (k.short || "未計測") : "取得できません")}</span></div>`;
+    return `<div class="pc-main"><div class="l">${esc(k.label)}</div><span class="v">${val(k.value, k.unit)}</span>${k.target == null ? "" : `<span class="t">／ 目標 ${k.unit === "円" ? man(k.target) : `${num(k.target)}${esc(k.unit)}`}</span>`}</div>
+      ${k.pct == null ? "" : `${prog(k.pct, k.done)}`}`;
+  }
+  function kpiFull(k) {
+    if (k.value == null) {
+      return `<div class="pc-kpi na" data-role="kpi" title="${esc(k.reason || "")}"><div class="l">${esc(k.label)}</div>
+        <div class="v">${esc(k.unmeasured ? (k.short || "未計測") : "取得できません")}</div>${k.unmeasured ? "" : `<div class="w">${esc(k.reason || "")}</div>`}</div>`;
+    }
+    return `<div class="pc-kpi" data-role="kpi"><div class="l">${esc(k.label)}${k.target == null ? "" : `（目標 ${k.unit === "円" ? man(k.target) : `${num(k.target)}${esc(k.unit)}`}）`}</div>
+      <div class="v">${val(k.value, k.unit)}</div>${k.note ? `<div class="w">${esc(k.note)}</div>` : ""}</div>`;
+  }
+  function personCard(p, full) {
+    return `<div class="pc" data-person="${esc(p.name)}" data-state="${esc(p.state.key)}">
+      <div class="pc-h"><div><b>${esc(p.name)}</b><span class="r">${esc(p.role)}${p.linked ? "" : `・名簿で特定できません`}</span></div>
+        <span class="kei-pill ${STATE_CLASS[p.state.key]}" data-role="state">${esc(p.state.label)}</span></div>
+      ${full ? `<div class="pc-kpis">${p.kpis.map(kpiFull).join("")}</div>` : kpiMain(p)}
+      <div class="pc-next" data-role="next"><b>次に見るもの</b>${p.next ? esc(p.next.text) : "特にありません"}</div></div>`;
+  }
+  const peopleCards = (S, full) => !S.perPerson.length
+    ? `<div class="kei-none">この月の担当者別の目標は、まだ設定していません。</div>`
+    : `<div class="pc-grid" data-role="people-kpi">${S.perPerson.map((p) => personCard(p, full)).join("")}</div>
+       <div class="kei-note">「遅れ」は、今日の目安（目標 × 経過日数 / 月の日数）に届いていない項目があるとき。数えられない項目（定義未決・記録なし・未接続・未計測）は、0 ではなく状態のことばで出しています。</div>`;
+  const byPersonBlock = (S, full = false) => section("byperson", "担当者別KPI", S ? peopleCards(S, full) : salesMissing);
+
+  // ⑤ お金 ⑥ 人・組織
+  function moneyBlock(d) {
+    const link = `<a class="kt" href="#payroll" data-key="payroll"><div class="lb">人件費</div><div class="val" style="font-size:15px;margin:10px 0 8px;">内訳を見る</div><div class="sub">社員別の月額換算（暫定）</div></a>`;
+    return section("money", "お金", `<div class="kei-none" data-role="board" style="margin-bottom:10px;">${esc(d.money.board.message)}</div>
+      <div class="kt-grid">${d.money.internal.map(tile).join("")}${link}</div>`);
+  }
+  const orgBlock = (d) => section("people", "人・組織", `<div class="kt-grid">${d.people.tiles.map(tile).join("")}</div>`);
+
+  // ⑦ リスク・停滞
+  function stalledList(S) {
+    if (!S) return "";
+    if (!S.stalled) return `<div class="kei-none" data-role="stalled-missing">停滞案件：取得できません（${esc(S.stalledReason || "")}）</div>`;
+    if (!S.stalled.count) return `<div class="kei-none" data-role="stalled-none">提案・最終調整のまま${S.stalled.days}日以上動きのない案件はありません。</div>`;
+    return `<div class="kei-panel" data-role="stalled">${S.stalled.rows.map((r) => `<div class="ks-row">
+        <span class="kei-pill mid">${r.idle}日</span>
+        <div class="kd-tx"><b>${esc(r.company)}</b><span>${esc(r.title)}・${esc(r.stage)}・最後の動き ${esc(String(r.last || "").replace(/-/g, "/"))}・担当 ${esc(r.owner)}</span></div>
+        <a class="kei-go" href="${esc(r.href)}">Salesで開く →</a></div>`).join("")}
+      ${S.stalled.count > S.stalled.rows.length ? `<div class="kei-note">ほか${S.stalled.count - S.stalled.rows.length}件。<a href="${esc(S.links.home)}">Salesで確認する</a></div>` : ""}</div>`;
+  }
+  function riskBlock(d) {
+    const rows = d.risks.length
+      ? `<div class="kei-panel" style="padding:4px 16px;">${d.risks.map((i) => `<div class="kr-row" data-key="${esc(i.key)}" data-severity="${esc(i.severity)}">
+          <span class="kei-pill ${esc(i.severity)}">${esc(SEV[i.severity] || "")}</span>
+          <div class="kd-tx"><b>${esc(i.label)}</b><span>${esc(i.detail)}</span></div>${goLink(i)}</div>`).join("")}</div>`
+      : `<div class="kei-none" data-role="none">気付くべき異常はありません。</div>`;
+    return section("risk", "リスク・停滞", `${rows}<div class="kr-sub">提案後の停滞案件（${d.sales && d.sales.stalled ? d.sales.stalled.days : 7}日以上、動きなし）</div>${d.sales ? stalledList(d.sales) : salesMissing}`, { count: d.risks.length });
+  }
+
   // ---- 画面 ------------------------------------------------------------------
   const RENDER = {
-    // ---- 経営ハブ（ホーム）。見る → 気付く → 判断する → 元システムへ。ここでは処理を終わらせない ----
+    // ---- ホーム：経営者が「今日は何を判断するか」。上から、判断 → KGI → ファネル → 担当者 → お金 → 人・組織 → リスク ----
     home(d) {
-      const SEV = { high: "重要", mid: "注意", low: "確認" };
-      const go = (i) => `<a class="hub-go" href="${esc(i.href)}" data-role="go">${esc(i.linkLabel)} →</a>`;
-      const row = (i) => `<li class="hub-it" data-key="${esc(i.key)}" data-severity="${esc(i.severity)}">
-          <span class="hub-sev ${esc(i.severity)}">${esc(SEV[i.severity] || "")}</span>
-          <div class="hub-tx"><b>${esc(i.label)}</b><span>${esc(i.detail)}</span></div>${go(i)}</li>`;
-      const tile = (t) => `<a class="hub-tile" href="${esc(t.href)}" data-key="${esc(t.key)}" title="${esc(t.linkLabel)}">
-          <div class="lb">${esc(t.label)}</div>
-          ${t.value == null ? `<div class="val miss">取得できません</div>` : `<div class="val">${num(t.value)}<small>${esc(t.suffix || "")}</small></div>`}
-          <div class="sub">${esc(t.sub || "")}</div></a>`;
-      const sec = (block, title, count, inner) => `<section class="hub-sec ${block}" data-block="${block}">
-          <h2 class="hub-h">${title}${count == null ? "" : `<span class="hub-count" data-role="count">${count}件</span>`}</h2>${inner}</section>`;
-      const wd = ["日", "月", "火", "水", "木", "金", "土"];
-      const t = new Date(`${d.today}T00:00:00Z`);
-      const dateText = `${t.getUTCFullYear()}年${t.getUTCMonth() + 1}月${t.getUTCDate()}日（${wd[t.getUTCDay()]}）`;
-      const list = (items, none) => items.length ? `<div class="hub-panel"><ul class="hub-list">${items.map(row).join("")}</ul></div>`
-        : `<div class="hub-none" data-role="none">${none}</div>`;
-      return head("ホーム", `${dateText}。見る → 気付く → 判断する → 元のシステムへ。処理は、それぞれのシステムで行います。`)
-        + (d.unreadable.length ? `<div data-role="unreadable">${bannerHtml(`一部の元データを読み込めませんでした：${d.unreadable.join("・")}。該当する判定・数字は出していません（問題がないという意味ではありません）。`, "warn")}</div>` : "")
-        + sec("today", "今日の確認", d.attention.length, list(d.attention, "今日、経営者が対応するものはありません。"))
-        + sec("people", "人・組織", null, `<div class="hub-tiles">${d.people.tiles.map(tile).join("")}</div>`)
-        + sec("money", "お金", null, `<div class="hub-board" data-role="board">${esc(d.money.board.message)}</div>
-            <div class="hub-tiles">${d.money.internal.map(tile).join("")}</div>`)
-        + sec("risk", "リスク・未処理", d.risks.length, list(d.risks, "気付くべき異常はありません。"))
-        + `<div class="hub-foot"><a href="#security" data-role="to-security">経営設定・セキュリティ</a>（経営者・二段階認証・変更履歴・給与の監査ログ）</div>`;
+      return head("ホーム", `${dateText(d)}。見る → 気付く → 判断する → 元のシステムへ。処理は、それぞれのシステムで行います。`)
+        + unreadableBanner(d)
+        + todayBlock(d)
+        + (d.sales === undefined ? "" : kgiBlock(d.sales))
+        + (d.sales === undefined ? "" : funnelBlock(d.sales))
+        + (d.sales === undefined ? "" : byPersonBlock(d.sales))
+        + moneyBlock(d)
+        + orgBlock(d)
+        + riskBlock(d);
+    },
+
+    // ---- 売上・営業：ホームの詳しい版（段階ごとの理由・月内実績の比率・受注額・停滞・担当者の全項目）----
+    sales(d) {
+      const S = d.sales;
+      if (!S) return head("売上・営業", "") + salesMissing;
+      const frow = (f) => f.value == null
+        ? `<tr class="na" data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td><td class="n">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
+            <td colspan="2" title="${esc(f.reason || "")}"><span class="kei-pill miss" data-role="state">${f.status === "undefined" ? "定義未決" : "取得できません"}</span>${f.status === "undefined" ? "" : `<span class="kei-why">${esc(f.reason || "")}</span>`}</td></tr>`
+        : `<tr data-stage="${esc(f.key)}"><td>${esc(f.label)}</td><td class="n">${f.target == null ? "—" : val(f.target, f.unit)}</td><td class="n">${f.pace == null ? "—" : val(f.pace, f.unit)}</td>
+            <td class="n" data-role="actual"><b>${val(f.value, f.unit)}</b>${f.companies == null ? "" : `<span class="kei-why" style="text-align:right;">企業 ${num(f.companies)}社（重複を除く）</span>`}</td>
+            <td>${f.pct == null ? "" : `${prog(f.pct, f.pct >= 100)}<span class="kg-pct">${f.pct}%</span>`}</td></tr>`;
+      const rates = S.rates.filter((r) => r.value != null).map((r) => `${esc(r.from)}→${esc(r.to)} <b>${r.value}%</b>${r.plan == null ? "" : `（目標の比 ${r.plan}%）`}`).join("　");
+      const snap = S.snapshot ? `<div class="kei-panel" data-role="snapshot">${S.snapshot.map((x) => `<span class="kei-pill low" style="margin:2px 6px 2px 0;">${esc(x.label)} <b>${num(x.count)}</b></span>`).join("")}</div>`
+        : `<div class="kei-none">Sales の企業：取得できません</div>`;
+      const unconnected = S.unconnected.filter((u) => u.key !== "board").map((u) => esc(u.label)).join("／");
+      return head("売上・営業", `${S.label}・${S.dayNo}/${S.daysInMonth}日目。正本は Sales です。ここでは見て・気付くだけで、処理は Sales で行います。`)
+        + unreadableBanner(d)
+        + kgiBlock(S) + funnelBlock(S)
+        + section("table", "段階ごとの目標と実績", `<div class="kei-panel"><table class="kei-t" data-role="funnel-table"><thead><tr><th>段階</th><th class="n">目標</th><th class="n">今日の目安</th><th class="n">実績</th><th>達成率</th></tr></thead>
+            <tbody>${S.funnel.map(frow).join("")}</tbody></table></div>
+          <div class="kei-note" data-role="rates">月内実績の比率（今月の実績どうし）：${rates || "まだ出せません（となりの段階の両方が数えられたときだけ出します）"}</div>
+          <div class="kei-note" data-role="ratio-note">${esc(S.ratioNote)}</div>
+          <div class="kei-note" data-role="won-amount">${S.won ? `今月の受注額（Sales の案件金額。会計上の売上・粗利ではありません）：<b>${yen(S.won.amount)}</b>（${num(S.won.companies)}社・${num(S.won.deals)}件）` : `今月の受注額：取得できません（${esc(S.wonReason || "")}）`}</div>`)
+        + section("stalled", "提案後に止まっている案件", stalledList(S))
+        + section("snapshot", "Sales の企業（いまの状態。今月分ではありません）", snap)
+        + byPersonBlock(S, true)
+        + `<div class="kei-note" data-role="unconnected">未接続：${unconnected}。数字は出していません（0 ではありません）。　<a href="${esc(S.links.home)}">Salesを開く →</a></div>`;
+    },
+
+    // ---- 人・組織 ----
+    people(d) {
+      return head("人・組織", "在籍・採用・入社準備の状況です。処理は、HR・メンバー管理・入社準備で行います。")
+        + unreadableBanner(d) + orgBlock(d)
+        + `<section class="kei-sec"><div class="kei-panel"><a class="kei-btn" href="#onboarding">入社準備を見る</a><a class="kei-btn sec" href="#pay">給与管理を開く</a>
+            <div class="kei-note">チーム状況・全員のタスク・全員の日報は、上のタブ（人・組織）の右から開けます。</div></div></section>`;
+    },
+
+    // ---- 財務 ----
+    finance(d) {
+      return head("財務", "売上・請求は Board との連携後に表示します。いまは、社内の承認待ち・支払待ち・人件費だけを出しています。")
+        + unreadableBanner(d) + moneyBlock(d);
+    },
+
+    // ---- リスク ----
+    risk(d) {
+      return head("リスク", "止まっているもの・期限を過ぎたもの・気付くべき異常です。")
+        + unreadableBanner(d) + riskBlock(d)
+        + `<div class="kei-note"><a href="#security" data-role="to-security">経営設定・セキュリティ</a>（経営者・二段階認証・変更履歴・給与の監査ログ）</div>`;
     },
 
     payroll(d) {
@@ -323,14 +467,14 @@
       return;
     }
     if (!RENDER[view]) view = "home";
-    KeieiLayout.setActive(MENU_OF[view] || view);
+    KeieiLayout.setActive(view);
     const mine = ++seq;
     const main = el("kei-main");
-    // 前回の内容を覚えていれば、すぐ下で描き直す（同じ処理の中なので、この表示は画面に出ない）
     main.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
     let first = true;
     try {
       // 2回目からは前回の内容をすぐ出し、裏で最新にする。最新が違えば、変わったところだけ描き直す
+      // （ホーム・売上・営業・人・組織・財務・リスクは同じ hub の応答を使うので、タブを切り替えても取り直さない）
       await API.swr(keieiKey(view), fetchKeiei(view), (d) => {
         if (mine !== seq) return;      // 速く切り替えたときは、最後に押した画面だけを出す
         API.morph(main, RENDER[view](d));
@@ -346,21 +490,19 @@
   // ブックマークが残っていても開けるよう、ホームへ送る。API の旧 view は、後方互換のためまだ残している
   const LEGACY = new Set(["dashboard", "revenue", "cash", "expenses", "accounting"]);
   // 画面 → /api/keiei の view。画面が呼ぶ view は、ここに書いたものだけ（docs/keiei-hub.md §6）
-  const API_VIEW = { home: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" };
-  // 人件費（給与管理から開く）は、メニューでは給与管理を強調する
-  const MENU_OF = { payroll: "pay" };
+  const API_VIEW = { home: "hub", sales: "hub", people: "hub", finance: "hub", risk: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" };
   const viewOf = () => {
     const v = (location.hash || "#home").slice(1) || "home";
     if (LEGACY.has(v)) { history.replaceState(null, "", "#home"); return "home"; }
     return v;
   };
 
-  // 表示速度：枠（権限の確認）を待たずに、開いた画面のデータを取りにいき始める（ホーム・経営設定・人件費・入社準備）
+  // 表示速度：枠（権限の確認）を待たずに、開いた画面のデータを取りにいき始める
   const keieiKey = (view) => `keiei:${API_VIEW[view]}`;
   const fetchKeiei = (view) => () => API.api(`/api/keiei?view=${encodeURIComponent(API_VIEW[view])}`);
   if (API_VIEW[viewOf()]) API.warm(keieiKey(viewOf()), fetchKeiei(viewOf()), KeieiLayout.allows);
 
-  KeieiLayout.init({ active: viewOf() }).then((ctx) => {
+  KeieiLayout.init().then((ctx) => {
     if (!ctx) return;
     window.addEventListener("hashchange", () => show(viewOf()));
     show(viewOf());
