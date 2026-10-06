@@ -19,9 +19,13 @@ import { normalizeKind } from "../../lib/partner.js";
 import { guardOwnerTarget, guardLastOwner } from "../../lib/owner-guard.js";
 import { adminFlags, accessForMember } from "../../lib/member-access.js";
 import { loadAppsMany } from "../../lib/app-grants.js";
+import { ymd } from "../../lib/jst.js";
 
-// 退職・退職手続き中は、どのシステムにも入れない状態にする
+// 経営者を退職にしてしまわないための確認の対象（退職予定も含む。退職日が来たら誰もいなくなるため）
 const LEFT = ["leaving", "left"];
+// 社内システム（無限道場・タイムカード・会計）を止めるのは、退職（left）になったときだけ。
+// 退職予定・引継ぎ中（leaving）は、退職日まで通常どおり使える（lib/left-gate.js）
+const CLOSED = ["left"];
 
 const EMPLOYMENT_TYPES = ["正社員", "契約社員", "パート", "アルバイト", "業務委託", "役員", "その他"];
 const STATUSES = ["invited", "active", "leaving", "left"];
@@ -201,12 +205,17 @@ export default async function handler(req, res) {
 
     // 状態が変わるかどうかを、書き換える前に見ておく
     const { data: before } = await sb
-      .from("gw_employees").select("status, user_id")
+      .from("gw_employees").select("status, user_id, left_on")
       .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+
+    // 退職（left）にするのに退職日が無ければ、今日（日本時間）を退職日にする。
+    // 退職日が空のままだと、退職証明書などの書類を作れない
+    const patch = { ...row.value };
+    if (patch.status === "left" && !patch.left_on && !before?.left_on) patch.left_on = ymd();
 
     const { data, error } = await sb
       .from("gw_employees")
-      .update({ ...row.value, updated_at: new Date().toISOString() })
+      .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", body.id)
       .eq("tenant_id", ctx.tenantId)
       .select(FIELDS)
@@ -225,8 +234,8 @@ export default async function handler(req, res) {
       // 退職にしたら、社内システムの入口をまとめて閉じる。
       // ここを手作業に残すと、辞めた人が無限道場やタイムカードに入れる状態が
       // そのまま残る。逆に在籍へ戻したら開け直す。
-      const wasOut = LEFT.includes(before?.status);
-      const isOut = LEFT.includes(data.status);
+      const wasOut = CLOSED.includes(before?.status);
+      const isOut = CLOSED.includes(data.status);
       if (data.user_id && wasOut !== isOut) {
         const sbAdmin = admin();
         systems = await setAccountsActive(sbAdmin, data.user_id, !isOut);

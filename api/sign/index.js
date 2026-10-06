@@ -413,6 +413,10 @@ async function loadSeal(sb, ctx, sealId) {
   if (!s || !s.is_active) {
     return { error: "seal_not_available", status: 400, hint: "選んだ印鑑は使えません（無効か、見つかりません）" };
   }
+  // 証明書発行用の印鑑は、契約書には使えない（実印・契約用の印鑑と完全に分ける。db/122）
+  if (s.seal_type === "certificate") {
+    return { error: "seal_not_for_contract", status: 400, hint: "証明書発行用の印鑑は、契約書には使えません。別の印鑑を選んでください" };
+  }
   const dl = await sb.storage.from(BUCKET).download(s.image_path);
   if (dl.error || !dl.data) {
     return { error: "seal_image_missing", status: 500, hint: "印鑑の画像を読み出せませんでした" };

@@ -383,6 +383,8 @@
 
   // 管理者側の画面をメンバーが開いた場合などに、行き先へ送り返す
   function homeFor(appRole, stage = null) {
+    // 退職者（left）は、通常の画面を持たない。ログインしたら退職者ポータル（退職後のお手続き）へ
+    if (stage && stage.key === "left") return "/retiree/";
     if (appRole === "sr") return "advisor.html";
     // 入社準備中は、ログインしたらまず入社準備。本人に「どこを見るか」を考えさせない
     if (appRole === "member" && isPreparing(stage)) return "/onboarding/";
@@ -972,6 +974,12 @@
     saveMe(me);
     mfaNudge(me.mfa);
 
+    // 退職者（left）は、どの画面を開いても退職者ポータルへ送る（サーバーも API を止めている：lib/auth.js）
+    if (stage && stage.key === "left" && !/^\/retiree(\/|$)/.test(location.pathname)) {
+      location.replace("/retiree/");
+      return null;
+    }
+
     // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
     // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
     if (appRole === "member" && stage && opts.active
@@ -1364,7 +1372,8 @@
       // 覚えている形が古いことがある（allowed を持たない頃のもの）。
       // そこで落ちると、画面が真っ白のまま何も出ない
       const okStage = !(cached?.appRole === "member" && cached?.stage?.allowed && opts.active
-                        && !cached.stage.allowed.includes(opts.active));
+                        && !cached.stage.allowed.includes(opts.active))
+        && cached?.stage?.key !== "left";   // 退職者は、覚えている枠を描かず、確かめて退職者ポータルへ送る
 
       // 覚えている権限があれば、通信を待たずに先に描く。
       // この画面を開いてよい権限のときだけ描く（違えばこのあと送り返される）
