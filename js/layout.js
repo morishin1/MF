@@ -990,8 +990,7 @@
 
     // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
     // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
-    if (appRole === "member" && stage && opts.active
-        && !stage.allowed.includes(opts.active)) {
+    if (stageBlocks(appRole, stage, opts)) {
       location.replace(rootHref(homeFor(appRole, stage)));
       return null;
     }
@@ -1051,6 +1050,21 @@
       : `二段階認証を <b>${esc(mfa.enrollUntil)}</b> までに登録してください。${esc(mfa.enforceFrom)} から必須になります。`}
       　<a href="mypage.html#mfa">マイページで登録する</a></div>`;
     wrap.insertBefore(box, wrap.firstChild);
+  }
+
+  /**
+   * 在籍の段階（lib/stages.js の allowed）で、この画面を止めるか。
+   *   ・入社準備中（preparing＝invited）は、段階の表に無い画面を止める（これまでどおり）
+   *   ・在籍中（member）・退職手続き中（leaving）の人が、アプリの画面（Office・採用HR などの access で入口を決める画面）を
+   *     開くときは、段階の表ではなく、このあとの access の判定を正とする。
+   *     段階の表（SCREENS）はグループウェアの画面の鍵だけで、office_home などのアプリの鍵を持たないため、
+   *     Office ON・人事／経理の人でも /office/ からホームへ戻されていた（2026-10-07）
+   *   ・退職（left）は、別に退職者ポータルへ送る（ここでは見ない）
+   */
+  function stageBlocks(appRole, stage, opts) {
+    if (appRole !== "member" || !stage || !Array.isArray(stage.allowed) || !opts.active) return false;
+    if ((stage.key === "member" || stage.key === "leaving") && [].concat(opts.access || []).length) return false;
+    return !stage.allowed.includes(opts.active);
   }
 
   function clearChrome() {
@@ -1382,8 +1396,7 @@
       const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && okAccess;
       // 覚えている形が古いことがある（allowed を持たない頃のもの）。
       // そこで落ちると、画面が真っ白のまま何も出ない
-      const okStage = !(cached?.appRole === "member" && cached?.stage?.allowed && opts.active
-                        && !cached.stage.allowed.includes(opts.active))
+      const okStage = !stageBlocks(cached?.appRole, cached?.stage, opts)
         && cached?.stage?.key !== "left";   // 退職者は、覚えている枠を描かず、確かめて退職者ポータルへ送る
 
       // 覚えている権限があれば、通信を待たずに先に描く。

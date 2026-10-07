@@ -297,21 +297,70 @@ console.log("\n— Office の入口と中の業務の食い違いを、行に出
     base("e-finoff", "経理 入口なし", ["finance"], []),
   ];
   const page = await open({ employees });
-  const note = (id, k) => row(page, id).locator(`.mb-gap[data-note="${k}"]`);
-  check(await note("e-empty", "office-empty").count() === 1, "Office だけ ON・役割なし →「中で使える業務がありません」");
+  const note = (id, k) => row(page, id).locator(`[data-note="${k}"]`);
+  const warn = note("e-empty", "office-empty");
+  check(await warn.count() === 1 && (await warn.innerText()).includes("Office内の権限が未設定"), "Office だけ ON・役割なし →「Office内の権限が未設定」");
+  check(await warn.evaluate((n) => n.tagName === "BUTTON" && getComputedStyle(n).color === "rgb(180, 83, 9)"), "オレンジ色で、押せる");
   check(await note("e-finoff", "office-off").count() === 1, "経理の役割あり・Office OFF →「Office が OFF のため…使えません」");
   for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-adm"]) {
-    check(await row(page, id).locator(".mb-gap").count() === 0, `${id}: 食い違いが無い行には出ない`);
+    check(await row(page, id).locator('.mb-gap, [data-note="office-empty"]').count() === 0, `${id}: 食い違いが無い行には出ない（会計の管理者・経営者・人事・経理・責任者）`);
   }
+  // 一覧の上で、該当者がまとめて分かる
+  const sum = page.locator('[data-role="office-empty-sum"]');
+  check(await sum.count() === 1 && (await sum.innerText()).includes("1人") && (await sum.innerText()).includes("入口 だけ"), "一覧の上に「Office内の権限が未設定：1人」と名前");
+  // 押すと、詳細設定で 責任者・人事・経理 を付ける案内（権限は付けない）
+  await warn.click();
+  await page.waitForTimeout(300);
+  const guide = page.locator('[data-detail="e-empty"] [data-role="office-guide"]');
+  const gt = await guide.innerText();
+  check(await guide.count() === 1 && /責任者（manager）/.test(gt) && /人事（hr）/.test(gt) && /経理（finance）/.test(gt) && /自動では付けません/.test(gt), "押すと、詳細設定で 責任者／人事／経理 のどれかを付ける案内");
+  const need = await page.locator('[data-detail="e-empty"] label.mb-need input').evaluateAll((ns) => ns.map((n) => n.dataset.role).sort());
+  check(need.join(",") === "finance,hr,manager", `付ける候補の3つに印（${need.join(",")}）`);
+  check(page.calls.rolePosts.length === 0, "案内を出しただけでは、権限を付けない");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: shotPath("members-office-empty.png"), fullPage: true });
+  // 人事を付けると、表示が消える
+  await page.locator('[data-detail="e-empty"] input[data-role="hr"]').check();
+  await page.waitForTimeout(500);
+  check(await note("e-empty", "office-empty").count() === 0 && await page.locator('[data-role="office-guide"]').count() === 0, "役割を付けると「Office内の権限が未設定」が消える");
+  check(await page.locator('[data-role="office-empty-sum"]').count() === 0, "一覧の上の表示も消える");
   // 直すと、その場で消える（Office を ON にする／役割を付ける）
   await btn(page, "e-finoff", "office").click();
   await page.waitForTimeout(500);
   check(await row(page, "e-finoff").locator(".mb-gap").count() === 0, "Office を ON にすると、注記が消える");
+  check(await page.locator('[data-detail="e-finoff"] [data-role="office-guide"]').count() === 0, "役割がある人の Office を ON にしても、案内は出ない");
+  await page.close();
+}
+
+console.log("\n— Office を ON にした瞬間：中の役割が無ければ、その場で案内（自動では付けない）—");
+{
+  const page = await open({ delay: 600 });
+  await btn(page, "e-none", "office").click();
+  await page.waitForTimeout(150);
+  check(await page.locator('[data-detail="e-none"] [data-role="office-guide"]').count() === 1, "保存の終わりを待たずに、押した瞬間に案内が出る");
+  await page.waitForTimeout(900);
+  check(await page.locator('[data-detail="e-none"] [data-role="office-guide"]').count() === 1, "保存後も、サーバの判定で案内が残る");
+  check(await row(page, "e-none").locator('[data-note="office-empty"]').count() === 1, "行に「Office内の権限が未設定」");
+  check(/Office内の権限（責任者・人事・経理）が未設定/.test(await toast(page)), `知らせにも出る（${await toast(page)}）`);
+  check(page.calls.rolePosts.length === 0 && page.calls.appPosts.length === 1, "役割は送っていない（Office の ON だけ）");
+  await page.close();
+}
+{
+  // 会計の管理者は役割なしでも Office の業務を使える（サーバの判定）。だから案内は出さない
+  const page = await open({ employees: [...EMPLOYEES(), base("e-adm2", "管理 八郎", [], [], true)] });
+  check(await row(page, "e-adm2").locator('[data-note="office-empty"]').count() === 0, "会計の管理者には出さない");
+  await page.close();
+}
+{
+  const page = await open({ failApp: true });
+  await btn(page, "e-none", "office").click();
+  await page.waitForTimeout(500);
+  check(await page.locator('[data-role="office-guide"]').count() === 0 && await row(page, "e-none").locator('[data-note="office-empty"]').count() === 0, "保存に失敗したら、案内も消える（OFF のまま）");
   await page.close();
 }
 {
   const page = await open({ employees: [base("e-empty", "入口 だけ", [], ["office"])], appsState: "derived" });
-  check(await row(page, "e-empty").locator(".mb-gap").count() === 0, "db/119 の前（入口は内部ロールから決まる）は出さない");
+  check(await row(page, "e-empty").locator('.mb-gap, [data-note="office-empty"]').count() === 0, "db/119 の前（入口は内部ロールから決まる）は出さない");
   await page.close();
 }
 
