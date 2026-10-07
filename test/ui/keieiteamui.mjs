@@ -39,7 +39,7 @@ const PAGES = [
   ["admin-team.html", "チーム状況"],
   ["admin-tasks.html", "全員のタスク"],
   ["admin-goals.html", "全員のタスク"],
-  ["admin-nippo.html", "日報・勤怠"],
+  // 日報・勤怠（admin-nippo.html）は Office の「人・組織」（2026-10-07。test/ui/gwmenuui.mjs・nippoweekui.mjs が見る）
 ];
 
 for (const [path, sub] of PAGES) {
@@ -48,13 +48,14 @@ for (const [path, sub] of PAGES) {
   check(await page.locator("#kp-keiei-nav").count() === 1, "経営の横タブが出る");
   check(await page.locator(".kp-sidebar").count() === 0, "旧い左メニューは出ない");
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").allInnerTexts();
-  check(tabs.map((t) => t.trim()).join("|") === "ホーム|売上・営業|人・組織|財務|リスク", `1段目（${tabs.join("|")}）`);
+  check(tabs.map((t) => t.trim()).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `1段目（${tabs.join("|")}）`);
   check((await page.locator("#kp-keiei-nav .kp-otab.on").innerText()).trim() === "人・組織", "「人・組織」が選ばれている");
   const on = await page.locator("#kp-keiei-nav .kp-ostab.on").allInnerTexts();
   check(on.length === 1 && on[0].trim() === sub, `2段目は「${sub}」が選ばれている（${on.join("|")}）`);
   check(await page.locator('#kp-keiei-nav .kp-otab[data-ktab="home"]').getAttribute("href") === "/keiei/#home", "ホームのタブは経営の画面へ");
   check(await page.locator('#kp-keiei-nav .kp-ostab[data-kview="pay"]').getAttribute("href") === "/keiei/#pay", "給与管理は経営の画面へ");
-  check(await page.locator("#kp-keiei-nav .kp-ostab.ext", { hasText: "日報・勤怠" }).getAttribute("href") === "/admin-nippo.html", "外の画面へのリンクはそのまま");
+  check(await page.locator("#kp-keiei-nav .kp-ostab.ext", { hasText: "チーム状況" }).getAttribute("href") === "/admin-team.html", "外の画面へのリンクはそのまま");
+  check(await page.locator("#kp-keiei-nav .kp-ostab", { hasText: "日報・勤怠" }).count() === 0, "日報・勤怠は経営に置かない（Office の人・組織）");
   check(await page.evaluate(() => document.body.classList.contains("kp-has-officenav")), "本文は採用HR・Sales・Office・経営と同じ見た目（kp-has-officenav）");
   // 本文のデータは空の応答（{}）なので、本文の描画のエラーはここでは見ない（各画面のテストが見る）。ナビの描画で落ちていないことだけ
   check(!errs.some((e) => /layout|keiei|KEIEI/i.test(e)), `ナビの描画でエラーなし：${errs.join(" / ")}`);

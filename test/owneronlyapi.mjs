@@ -212,6 +212,57 @@ await ok("人事は、これまでどおり owner 以外のロールを付け外
   assert.ok(!db.rows.gw_role_grants.some((g) => g.employee_id === "emp-e" && g.role === "manager"));
 });
 
+console.log("\n=== 経営者でない人が付け外しできる範囲（固定ルール。2026-10-07 メニュー整理・権限分担） ===\n");
+
+await ok("人事・管理者は、通常の業務の権限（hr / finance / manager / recruiter / sales）を、ほかの人に付け外しできる", async () => {
+  for (const c of [HR, ADMIN]) {
+    setup(); who = c;
+    for (const role of ["hr", "finance", "manager", "recruiter", "sales"]) {
+      const r = await setRole("emp-e", role);
+      assert.equal(r.statusCode, 200, `${role} ${JSON.stringify(r.body)}`);
+      assert.equal((await setRole("emp-e", role, false)).statusCode, 200, role);
+    }
+  }
+});
+
+await ok("IT・管理（it）・社労士（labor_advisor）の付け外しは、経営者だけ（人事・管理者は403 owner_only・何も書かない）", async () => {
+  for (const c of [HR, ADMIN]) {
+    setup(); who = c;
+    db.rows.gw_role_grants.push({ id: "g9", tenant_id: "t1", employee_id: "emp-d", role: "it" });
+    for (const [role, grant, target] of [["it", true, "emp-e"], ["labor_advisor", true, "emp-e"], ["it", false, "emp-d"]]) {
+      const r = await setRole(target, role, grant);
+      assert.equal(r.statusCode, 403, `${role} ${grant}`); assert.equal(r.body.error, "owner_only");
+    }
+    assert.ok(!db.rows.gw_role_grants.some((g) => g.employee_id === "emp-e" && ["it", "labor_advisor"].includes(g.role)));
+    assert.ok(db.rows.gw_role_grants.some((g) => g.employee_id === "emp-d" && g.role === "it"), "外されていない");
+    assert.equal(logged.length, 0);
+  }
+  setup(); who = OWNER;
+  assert.equal((await setRole("emp-e", "it")).statusCode, 200);
+  assert.equal((await setRole("emp-e", "labor_advisor")).statusCode, 200);
+  assert.equal((await setRole("emp-e", "it", false)).statusCode, 200);
+});
+
+await ok("経営者でない人は、自分の権限を変えられない（付ける・外すとも 403 self_change）。経営者は自分のも変えられる", async () => {
+  setup(); who = HR;
+  for (const [role, grant] of [["finance", true], ["hr", false], ["manager", true]]) {
+    const r = await setRole("emp-c", role, grant);
+    assert.equal(r.statusCode, 403, `${role} ${grant}`); assert.equal(r.body.error, "self_change");
+  }
+  assert.deepEqual(db.rows.gw_role_grants.filter((g) => g.employee_id === "emp-c").map((g) => g.role), ["hr"]);
+  setup(); who = ADMIN;
+  assert.equal((await setRole("emp-b", "hr")).body.error, "self_change");
+  setup(); who = OWNER;
+  assert.equal((await setRole("emp-a", "finance")).statusCode, 200);
+});
+
+await ok("一覧は、自分の行（meEmployeeId）を返す（画面が自分のボタンを止める）", async () => {
+  setup(); who = HR;
+  const r = await call(employeesApi, { method: "GET", url: "/api/employees" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.meEmployeeId, "emp-c");
+});
+
 await ok("owner は、ほかの人に owner を付けられる。履歴が残る", async () => {
   setup(); who = OWNER;
   const r = await setRole("emp-e", "owner");

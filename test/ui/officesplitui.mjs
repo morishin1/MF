@@ -70,9 +70,9 @@ console.log("— 人事（hr）: 人事・労務だけ —");
 {
   const p = await open(HR_PAGE, { roles: ["hr"] });
   check(pathOf(p) === `/${HR_PAGE}`, `人事は 人事・労務の画面（${HR_PAGE}）を開ける（いま ${pathOf(p)}）`);
-  check((await groups(p)).join("|") === "人事・労務", `Office のタブは「人事・労務」のグループだけ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・組織|契約・書類|端末・貸与品", `Office のタブは「人・組織」「契約・書類」「端末・貸与品」だけ（2026-10-07）（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
-  check(items.includes("ホーム") && items.includes("メンバー") && items.includes("勤怠管理") && items.includes("雇用契約"), `人事・労務の項目が並ぶ（${items.join("|")}）`);
+  check(items.includes("ホーム") && items.includes("日報・勤怠") && items.includes("メンバー") && items.includes("勤怠管理"), `人・組織の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["経費精算", "月次業務", "請求・支払", "社内文書", "会計", "お知らせ配信"].includes(x)), "経理・事務・社内管理の項目は出ない");
   check((await p.locator(".topbar .kp-app").innerText()).includes("Office"), "ヘッダーに「/ Office」が出る（Office の中）");
   // 人事も Office（人事・労務）に入れる。行き先は Office ホーム（/office/）
@@ -102,7 +102,7 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
 {
   const p = await open(FIN_PAGE, { roles: ["finance"] });
   check(pathOf(p) === `/${FIN_PAGE}`, `経理は 経理・事務の画面（${FIN_PAGE}）を開ける（いま ${pathOf(p)}）`);
-  check((await groups(p)).join("|") === "経理・事務|社内管理", `Office のタブは「経理・事務」「社内管理」だけ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "請求・支払|契約・書類", `Office のタブは「請求・支払」「契約・書類」だけ（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
   check(items.includes("ホーム") && items.includes("経費精算") && items.includes("月次業務") && items.includes("請求・支払"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["メンバー", "勤怠管理", "雇用契約", "入退社", "評価・キャリア", "会計", "お知らせ配信"].includes(x)), "人事・労務の項目・会計・お知らせ配信は出ない");
@@ -135,7 +135,7 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
 console.log("\n— 管理者・経営者: 両方 —");
 for (const [who, label] of [[{ isAdmin: true }, "管理者"], [{ roles: ["owner"] }, "経営者"]]) {
   const p = await open(HR_PAGE, who);
-  check((await groups(p)).join("|") === "人事・労務|経理・事務|社内管理", `${label}: Office のタブは全部のグループ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・組織|請求・支払|契約・書類|端末・貸与品", `${label}: Office のタブは全部のグループ（いま ${(await groups(p)).join("|")}）`);
   check(await p.locator(".kp-sidebar").count() === 0, `${label}: Office に左サイドバーは無い`);
   check(await p.locator("#kp-admin-menu-btn").count() === 1, `${label}: ⚙管理が出る`);
   await p.close();
@@ -152,7 +152,7 @@ for (const [who, label] of [[{ isAdmin: true }, "管理者"], [{ roles: ["owner"
 console.log("\n— 人事＋経理: 両方に入れる —");
 {
   const p = await open(HR_PAGE, { roles: ["hr", "finance"] });
-  check((await groups(p)).join("|") === "人事・労務|経理・事務|社内管理", "人事＋経理: 全部のグループ");
+  check((await groups(p)).join("|") === "人・組織|請求・支払|契約・書類|端末・貸与品", "人事＋経理: 全部のグループ");
   await p.close();
 }
 

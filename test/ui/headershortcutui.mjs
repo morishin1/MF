@@ -87,16 +87,16 @@ console.log("— owner：採用HR・Sales・Office・経営（＋⚙管理） �
   check(sc.find((s) => s.key === "office")?.text.includes("Office"), "PCでは「Office」と出る");
   check(sc.find((s) => s.key === "hr")?.text.includes("採用HR"), "PCでは「採用HR」と出る");
   check(hrefOf(sc, "keiei") === "/keiei/", "経営者の経営 → /keiei/");
-  // ⚙管理は直リンクではなくドロップダウン（権限・端末・貸与品・アクセス分析・AIナレッジ・システム設定）
-  check(await page.locator("#kp-admin-menu-panel a[href=\"admin-devices.html\"]").count() === 1,
-    "⚙管理のドロップダウンに「端末・貸与品」→ admin-devices.html がある");
+  // ⚙管理は直リンクではなくドロップダウン（AIナレッジ・システム設定）。2026-10-07：権限は経営、端末・貸与品は Office、アクセス分析は経営
+  check(await page.locator("#kp-admin-menu-panel a[href=\"admin-devices.html\"]").count() === 0,
+    "⚙管理のドロップダウンに「端末・貸与品」は無い（Office の端末・貸与品）");
   check(await page.locator("#kp-admin-menu-panel a[href=\"admin-ai.html\"]").count() === 1, "⚙管理に「AIナレッジ」がある");
   // Office UI/UX 再設計（2026-10-03）：業務（人事・労務／経理・事務／社内管理）は Office の左メニューへ移した。
   // ⚙管理はシステム設定だけ（業務の入口・旧ダッシュボードは置かない）
   const gear = await page.locator("#kp-admin-menu-panel a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href")));
   check(!gear.some((h) => /admin-(dashboard|members\.html$|expenses|closing|month-start|docs|notices|timecard|hr\.html)/.test(h || "")),
     `⚙管理に業務の画面を置かない（いま ${gear.join(" ")}）`);
-  check(gear[0] === "admin-members.html#roles", "⚙管理の先頭は「権限」");
+  check(gear.join(" ") === "admin-ai.html admin-settings.html", `⚙管理は AIナレッジ・システム設定だけ（いま ${gear.join(" ")}）`);
   // アイコン（Material Symbols の名前）は文字として読めてしまうので、ラベルの部分だけを見る
   const labels = await page.locator(".topbar [data-shortcut] .kp-sc-long").allInnerTexts();
   check(labels.map((t) => t.trim()).join(" ｜ ") === "採用HR ｜ Sales ｜ Office ｜ 経営", `PCの表示（いま ${labels.join(" ｜ ")}）`);

@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261007ofc1">
-  <link rel="stylesheet" href="css/layout.css?v=20261007ofc1">
+  <link rel="stylesheet" href="css/app.css?v=20261007gw1">
+  <link rel="stylesheet" href="css/layout.css?v=20261007gw1">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -294,8 +294,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261007ofc1"></script>
-<script src="js/layout.js?v=20261007ofc1"></script>
+<script src="js/api-client.js?v=20261007gw1"></script>
+<script src="js/layout.js?v=20261007gw1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -1275,7 +1275,7 @@
         <div class="rc-msg" id="rc-accounts-msg"></div>
       </section>
 
-      <section class="rc-sec" id="rc-assets"><h3>貸与品 <span class="sub">貸与品の台帳（社内管理）から、この人に貸し出しているもの</span></h3>
+      <section class="rc-sec" id="rc-assets"><h3>貸与品 <span class="sub">貸与品の台帳（Office › 端末・貸与品）から、この人に貸し出しているもの</span></h3>
         ${d.assets.length ? `<table class="rc-tbl stack"><thead><tr><th>種類・名前</th><th>管理番号</th><th>返却</th><th>操作</th></tr></thead><tbody>
           ${d.assets.map((a) => `<tr data-asset="${esc(a.assetId || "")}">
             <td>${esc(a.kindLabel)}<span class="s">${esc(a.name)}</span></td>

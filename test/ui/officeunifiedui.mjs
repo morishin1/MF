@@ -174,10 +174,10 @@ const base = sig["経営者（owner）"];
 check(base && base.chrome && base.officeOn && base.sideOn === "月次業務", `Office 共通の枠（ヘッダーの Office・Office のタブの月次業務が選ばれている。いま ${base?.sideOn}）`);
 check(base && base.noOwnHeader, "月次業務の専用ヘッダー・「GWへ戻る」は無い");
 // 担当で変わるのは、Office のタブのグループ（項目）だけ
-check(groupsOf["経営者（owner）"] === "人事・労務|経理・事務|社内管理", `経営者：Office のタブは全部（いま ${groupsOf["経営者（owner）"]}）`);
-check(groupsOf["管理者＋経理（admin）"] === "人事・労務|経理・事務|社内管理", `管理者＋経理：Office のタブは全部（いま ${groupsOf["管理者＋経理（admin）"]}）`);
-check(groupsOf["経理（finance）"] === "経理・事務|社内管理", `経理：経理・事務／社内管理（いま ${groupsOf["経理（finance）"]}）`);
-check(groupsOf["責任者（manager）"] === "経理・事務", `責任者：経理・事務（月次業務・請求・支払）だけ（いま ${groupsOf["責任者（manager）"]}）`);
+check(groupsOf["経営者（owner）"] === "人・組織|請求・支払|契約・書類|端末・貸与品", `経営者：Office のタブは全部（いま ${groupsOf["経営者（owner）"]}）`);
+check(groupsOf["管理者＋経理（admin）"] === "人・組織|請求・支払|契約・書類|端末・貸与品", `管理者＋経理：Office のタブは全部（いま ${groupsOf["管理者＋経理（admin）"]}）`);
+check(groupsOf["経理（finance）"] === "請求・支払|契約・書類", `経理：請求・支払／契約・書類（いま ${groupsOf["経理（finance）"]}）`);
+check(groupsOf["責任者（manager）"] === "請求・支払", `責任者：請求・支払（請求・支払・月次業務）だけ（いま ${groupsOf["責任者（manager）"]}）`);
 for (const [label, s] of Object.entries(sig)) {
   if (label.startsWith("経営者")) continue;
   // 責任者は月次締め・月初作業管理（経理・事務の管理画面）に入れないので、月次業務の帯（タブ）が出ない。そのぶんだけ縦の位置が違う

@@ -23,7 +23,7 @@ import { gwContext, canManageHr } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { changeRole, afterChange } from "../../lib/role-change.js";
+import { changeRole, afterChange, grantRuleError } from "../../lib/role-change.js";
 import { APP_KEYS, isAbsent } from "../../lib/app-grants.js";
 
 export default async function handler(req, res) {
@@ -55,6 +55,10 @@ export default async function handler(req, res) {
     if (r.status !== 200) return json(res, r.status, r.body);
     return json(res, 200, { ok: true, employeeId, app, granted: r.body.granted, ...(await afterChange(ctx.tenantId, r.target)) });
   }
+
+  // 経営者でない人は、自分のアプリは変えられない（lib/role-change.js の固定ルール）
+  const ruled = grantRuleError(ctx, employeeId);
+  if (ruled) return json(res, ruled.status, ruled.body);
 
   // 対象は、このテナントの社員であること
   const { data: target } = await admin()
