@@ -187,7 +187,7 @@
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
   // ■ Office（業務アプリ）のナビゲーション。2026-10-03 の再設計で、⚙管理にあった業務メニューをここへ移した。
-  //   共通ヘッダー（採用HR／Sales／Office／経営）の下の横タブ：1段目がカテゴリ（ホーム／人事・労務／経理・事務／社内管理）、
+  //   共通ヘッダー（採用HR／Sales／Office／経営）の下の横タブ：1段目がカテゴリ（ホーム／人・組織／請求・支払／契約・書類／端末・貸与品）、
   //   2段目がカテゴリの中の画面（renderOfficeNav）。左サイドバー・ドロワーは持たない。
   //   Office の画面（/office/* と、業務の管理画面 admin-*.html）は、すべてこのタブと同じヘッダーを使う
   //   （月次業務の専用ヘッダー・「GWへ戻る」は廃止）。
@@ -207,10 +207,15 @@
       match: ["office_home", "dashboard"] },
   ];
 
+  // 2026-10-07 メニュー整理・権限分担：Office は日常の事務運用。人・組織／請求・支払／契約・書類／端末・貸与品。
+  // 判断・承認・重要な権限（給与の金額・経営者の付け外し・アクセス分析）は経営、システム設定は⚙。
+  // 中の画面と URL・when（権限）は、これまでと同じ（置き場所だけ変えた）
   const OFFICE_GROUPS = [
     {
-      key: "office-hr", label: "人事・労務", icon: "group",
+      key: "office-hr", label: "人・組織", icon: "group",
       items: [
+        // 初めに見るのは今週の日報・勤怠（提出状況・未提出・要確認）。経営は集計（チーム状況）を見る
+        { key: "nippo",     href: "admin-nippo.html",     label: "日報・勤怠",   icon: "edit_note",  ready: true, when: "officeHr" },
         { key: "members",   href: "admin-members.html",   label: "メンバー",     icon: "badge",      ready: true, when: "officeHr",
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
           // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
@@ -222,16 +227,6 @@
           tabs: [
             { key: "timecard", href: "admin-timecard.html", label: "勤怠" },
             { key: "requests", href: "admin-requests.html", label: "休暇・稟議" },
-          ] },
-        { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true, when: "officeHr",
-          // 業務順に並べる: ①契約・面談 → ②契約書作成依頼 → ③電子署名。
-          // 「作成依頼」はadmin-esign.html自身の中のタブ（PANES）の1つで、
-          // 新しい画面は作らない。?tab=order で開くと、そのタブが選ばれた
-          // 状態で開く（admin-esign.html:openFromUrl）
-          tabs: [
-            { key: "contracts",   href: "admin-contracts.html",       label: "契約・面談" },
-            { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
-            { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
         // 評価・キャリア。入口は「キャリア」（admin-career.html）。
         // 3か月育成・自走レベルは既存画面をそのままタブに並べる（作り直さない）。
@@ -251,8 +246,10 @@
       ],
     },
     {
-      key: "office-ops", label: "経理・事務", icon: "work",
+      key: "office-ops", label: "請求・支払", icon: "request_quote",
       items: [
+        // 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で見る画面（このカテゴリの入口。書類回収・内容確認・支払準備）
+        { key: "office_billing", href: "/office/billing.html", label: "請求・支払", icon: "request_quote", ready: true, when: "officeApp" },
         { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true, when: "officeFinance" },
         // 月次業務：月末月初業務（/office/monthly.html・勤務表・契約条件）と、月次締め・月初作業管理を1つの入口に。
         // 中のタブは担当の分だけ出す（月末月初業務は officeApp、月次締め・月初作業管理は officeFinance）。
@@ -264,20 +261,39 @@
             { key: "monthstart",     href: "admin-month-start.html", label: "月初作業管理", when: "officeFinance" },
           ],
           match: ["office_monthly", "office_timesheet", "office_terms", "closing", "monthstart"] },
-        // 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で見る画面
-        { key: "office_billing", href: "/office/billing.html", label: "請求・支払", icon: "request_quote", ready: true, when: "officeApp" },
         { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true, when: "adminApp" },
       ],
     },
     {
-      key: "office-admin", label: "社内管理", icon: "apartment",
+      key: "office-docs", label: "契約・書類", icon: "contract",
       items: [
+        { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true, when: "officeHr",
+          // 業務順に並べる: ①契約・面談 → ②契約書作成依頼 → ③電子署名。
+          // 「作成依頼」はadmin-esign.html自身の中のタブ（PANES）の1つで、
+          // 新しい画面は作らない。?tab=order で開くと、そのタブが選ばれた
+          // 状態で開く（admin-esign.html:openFromUrl）
+          tabs: [
+            { key: "contracts",   href: "admin-contracts.html",       label: "契約・面談" },
+            { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
+            { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
+          ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true, when: "officeFinance" },
         // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
         { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true, when: "adminApp",
           tabs: [
             { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
             { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
+          ] },
+      ],
+    },
+    {
+      // 端末・貸与品（もとは⚙）。登録・貸出・返却・棚卸は Office の実務。API（api/devices・api/assets）と同じ人事の権限
+      key: "office-assets", label: "端末・貸与品", icon: "computer",
+      items: [
+        { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true, when: "officeHr",
+          tabs: [
+            { key: "devices", href: "admin-devices.html", label: "端末管理" },
+            { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
           ] },
       ],
     },
@@ -296,23 +312,19 @@
         { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
         { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
       ] },
-    { key: "nippo", href: "admin-nippo.html", label: "日報・勤怠", icon: "edit_note", ready: true },
-  ];
-
-  // 管理（⚙）: 毎日使わない設定系だけ。ヘッダー右のアイコンが正式な入口
-  const SETTINGS_ITEMS = [
-    // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
-    { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
-    { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true,
-      tabs: [
-        { key: "devices", href: "admin-devices.html", label: "端末管理" },
-        { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
-      ] },
+    // 日報・勤怠（admin-nippo.html）は Office の「人・組織」へ（2026-10-07）。経営はチーム状況で集計を見る
+    // 利用状況の分析は経営（もとは⚙）。ログイン・操作の履歴は⚙のシステム設定（操作ログ）
     { key: "analytics", href: "admin-analytics.html", label: "アクセス分析", icon: "monitoring", ready: true,
       tabs: [
         { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
         { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
       ] },
+  ];
+
+  // 管理（⚙）: 毎日使わない設定系だけ（システム設定・外部連携・操作ログ）。ヘッダー右のアイコンが正式な入口
+  const SETTINGS_ITEMS = [
+    // 2026-10-07：権限は経営（リスク・権限）、端末・貸与品は Office、アクセス分析は経営へ移した。
+    // ⚙に残すのは、システム設定（会社情報・外部サービスの状態＝外部連携・操作ログ）と AIナレッジの管理
     // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
     // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
     // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
@@ -477,7 +489,7 @@
     const here = areaOf(active);
     const area = !memberView && here === "office" && shows.officeEntry ? "office" : (showAdminTools ? here : null);
     // ⚙管理は設定系だけ（権限・端末・アクセス分析・AIナレッジ・システム設定）。管理者・経営者だけ。
-    // 業務のメニュー（人事・労務／経理・事務／社内管理）は Office の左メニューへ移した
+    // 業務のメニュー（人・組織／請求・支払／契約・書類／端末・貸与品）は Office の左メニューへ移した
     const showGear = showAdminTools;
 
     const el = document.createElement("div");
@@ -525,7 +537,7 @@
 
   /**
    * ⚙管理のドロップダウン中身。通知ベル（kp-bell-panel）と同じ器を使い回す。
-   * SETTINGS_ITEMS（権限・端末・貸与品・アクセス分析・システム設定）への直リンクだけ。
+   * SETTINGS_ITEMS（AIナレッジ・システム設定＝外部連携・操作ログ）への直リンクだけ。
    * サーバへ確かめに行く必要が無いので、通知と違って毎回その場で組み立てるだけでよい
    */
   function adminMenuHtml() {
@@ -653,7 +665,7 @@
     });
   }
 
-  /** いま見ている画面が入っている Office のカテゴリ（人事・労務／経理・事務／社内管理） */
+  /** いま見ている画面が入っている Office のカテゴリ（人・組織／請求・支払／契約・書類／端末・貸与品） */
   const groupOf = (active) =>
     OFFICE_GROUPS.find((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))) || null;
 
@@ -670,18 +682,18 @@
 
   /**
    * 経営（/keiei/）の横タブ。Office と同じ作り：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、タブを2段で出す。
-   *   1段目：ホーム／売上・営業／人・組織／財務／リスク
-   *   2段目：いまのタブの中の画面（人・組織＝入社準備・給与管理・チーム状況…、財務＝人件費、リスク＝経営設定・セキュリティ）
+   *   1段目：ホーム／売上・営業／人・組織／財務／リスク・権限
+   *   2段目：いまのタブの中の画面（人・組織＝チーム状況・入社準備・給与管理…、財務＝人件費、リスク・権限＝経営設定・セキュリティ・権限・アクセス分析）
    * 左サイドバーは持たない。画面の中の切り替えは URL のハッシュ（#sales など）で、ページは作り直さない。
    * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
    */
   const KEIEI_TABS = [
     { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
     { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
-    // 人・組織を押すと、日報・勤怠（/admin-nippo.html）を開く（2026-10-06：経営者が毎日最初に見るのは今週の提出・勤怠）
-    { key: "people",  label: "人・組織",     icon: "groups",    views: ["people", "onboarding", "pay"], href: "/admin-nippo.html",
+    // 人・組織を押すと、チーム状況（/admin-team.html。全体の集計）を開く。
+    // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）
+    { key: "people",  label: "人・組織",     icon: "groups",    views: ["people", "onboarding", "pay"], href: "/admin-team.html",
       sub: [
-        { href: "/admin-nippo.html", label: "日報・勤怠" },
         { href: "/admin-team.html",  label: "チーム状況" },
         { href: "/admin-tasks.html", label: "全員のタスク" },
         { view: "onboarding", label: "入社準備" },
@@ -693,10 +705,13 @@
         { view: "finance", label: "お金" },
         { view: "payroll", label: "人件費" },
       ] },
-    { key: "risk",    label: "リスク",       icon: "warning",   views: ["risk", "security"],
+    // 権限・セキュリティ（2026-10-07）：管理者の任命・重要な権限の付与は経営。権限の画面はメンバー一覧の「権限」
+    { key: "risk",    label: "リスク・権限", icon: "warning",   views: ["risk", "security"],
       sub: [
         { view: "risk",     label: "リスク・未処理" },
         { view: "security", label: "経営設定・セキュリティ" },
+        { href: "/admin-members.html#roles",  label: "権限" },
+        { href: "/admin-analytics.html",      label: "アクセス分析" },
       ] },
   ];
   /** URL のハッシュ（#onboarding/<ID>・#pay/<ID> など）から、画面の鍵（view）を取る */
@@ -707,7 +722,7 @@
   const keieiTabOf = (view) => KEIEI_TABS.find((t) => t.views.includes(view)) || KEIEI_TABS[0];
   // 経営の画面の外（チーム状況・全員のタスク・全員の日報＝admin-*.html）でも、経営の横タブを出す。
   // そのときのタブの行き先は /keiei/#… （ページを移る）。いま開いている外の画面は、2段目で選んだ状態にする
-  const KEIEI_EXT_OF = { team: "/admin-team.html", tasks: "/admin-tasks.html", goals: "/admin-tasks.html", nippo: "/admin-nippo.html" };
+  const KEIEI_EXT_OF = { team: "/admin-team.html", tasks: "/admin-tasks.html", goals: "/admin-tasks.html", analytics: "/admin-analytics.html", blocks: "/admin-analytics.html" };
   const onKeieiPage = () => /^\/keiei(\/|$)/.test(location.pathname);
   function keieiNavHtml(view, extActive = null) {
     const ext = extActive ? KEIEI_EXT_OF[extActive] || null : null;
@@ -742,8 +757,8 @@
 
   /**
    * Office のナビゲーション：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、横タブを2段で出す。
-   *   1段目：ホーム／人事・労務／経理・事務／社内管理（カテゴリ。OFFICE_TOP と OFFICE_GROUPS）
-   *   2段目：いまのカテゴリの中の画面（メンバー／入退社／… など。OFFICE_GROUPS の items）
+   *   1段目：ホーム／人・組織／請求・支払／契約・書類／端末・貸与品（カテゴリ。OFFICE_TOP と OFFICE_GROUPS）
+   *   2段目：いまのカテゴリの中の画面（日報・勤怠／メンバー／入退社／… など。OFFICE_GROUPS の items）
    *   3段目：画面の中の切り替え（勤怠／休暇・稟議 など）は、これまでどおり見出しの下の帯（renderSubnav）
    * 左サイドバー・狭い画面のドロワーは持たない（採用HR・Sales と同じ、上のタブで行き来する）。
    * 見える・見えないは when（/api/me の access）だけ。見える画面の無いカテゴリは出さない。
