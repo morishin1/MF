@@ -49,6 +49,22 @@
     .an-money .n { font-size:11px; color:#9aa0b4; }
     .an-money .note { margin-left:auto; font-size:11px; color:#9aa0b4; }
 
+    /* 担当者別フォームアタック数（日々の管理用）。表は担当者と件数の2列だけ。横に広げない */
+    .an-rep { background:#fff; border:1px solid #ececE6; border-radius:12px; padding:18px 20px; margin:0 0 26px; }
+    .an-rep .sl-sec-h { margin-top:0; }
+    .an-rep-sub { font-size:12px; color:#6b7080; margin:-4px 0 12px; line-height:1.7; }
+    .an-rep-range { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin:12px 0 0; }
+    .an-rep-range label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:#4a5068; margin:0; }
+    .an-rep-range input { margin:0; font-size:14px; padding:8px 10px; min-height:40px; }
+    .an-rep-range .btn { min-height:40px; }
+    .an-rep-when { font-size:12.5px; color:#4a5068; margin:14px 0 8px; }
+    .an-rep-when b { color:#1b2440; }
+    .an-rep table { max-width:520px; }
+    .an-rep td.num, .an-rep th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .an-rep tr.zero td { color:#9aa0b4; }
+    .an-rep tr.sum td { font-weight:700; border-top:2px solid #e2e2dc; background:#f8f9fc; }
+    .an-rep .former { font-size:11px; color:#9aa0b4; margin-left:6px; }
+
     @media (max-width: 900px) { .an2-grid { grid-template-columns:repeat(3, 1fr); } }
     @media (max-width: 560px) {
       .an2-grid { grid-template-columns:repeat(2, 1fr); gap:10px; }
@@ -71,6 +87,20 @@
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
 
   <div id="kpi"><div class="sl-empty">読み込み中…</div></div>
+
+  <!-- 担当者別フォームアタック数（/api/sales/approaches/counts）。上の 30日・90日・1年 とは別の期間で数える -->
+  <section class="an-rep" aria-labelledby="rep-title">
+    <div class="sl-sec-h" id="rep-title">担当者別フォームアタック数</div>
+    <div class="an-rep-sub">送信完了を押したフォームアタックを、実際に送った人ごとに数えます（企業の担当者ではありません）。
+      日本時間で区切り、週は月曜はじまりです。</div>
+    <div class="sl-tabs-pill" id="rep-period" role="group" aria-label="集計する期間"></div>
+    <div class="an-rep-range" id="rep-range" hidden>
+      <label>開始日<input type="date" id="rep-from"></label>
+      <label>終了日<input type="date" id="rep-to"></label>
+      <button class="btn btn-primary btn-sm" onclick="applyRepRange()">集計する</button>
+    </div>
+    <div id="rep-body"><div class="sl-empty">読み込み中…</div></div>
+  </section>
 
   <div class="an-grid">
     <div><div class="sl-sec-h">送信チャネル別</div><div id="by-channel"></div></div>
@@ -103,7 +133,94 @@
   let since = "";               // 期間の始まり（日本時間の YYYY-MM-DD）。API の since を使う
   let cohort = null;
 
-  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) { load(); loadRep(); } });
+
+  // ---- 担当者別フォームアタック数 ---------------------------------------------------
+  // 期間は URL に持つ（rp=this_week など。任意期間は rf・rt）。既定は今週
+  const REP_PERIODS = [["today", "本日"], ["yesterday", "昨日"], ["this_week", "今週"], ["last_week", "先週"],
+    ["this_month", "今月"], ["last_month", "先月"], ["custom", "任意期間"]];
+  const repState = (() => {
+    const q = new URLSearchParams(location.search);
+    const key = REP_PERIODS.some(([k]) => k === q.get("rp")) ? q.get("rp") : "this_week";
+    return { key, from: q.get("rf") || "", to: q.get("rt") || "" };
+  })();
+  let repSeq = 0;
+  function writeRepUrl() {
+    const q = new URLSearchParams(location.search);
+    for (const k of ["rp", "rf", "rt"]) q.delete(k);
+    if (repState.key !== "this_week") q.set("rp", repState.key);
+    if (repState.key === "custom") { if (repState.from) q.set("rf", repState.from); if (repState.to) q.set("rt", repState.to); }
+    const s = q.toString();
+    history.replaceState({}, "", s ? `?${s}` : location.pathname);
+  }
+  function renderRepControls() {
+    el("rep-period").innerHTML = REP_PERIODS.map(([k, l]) =>
+      `<button class="${k === repState.key ? "on" : ""}" aria-pressed="${k === repState.key}" onclick="setRepPeriod('${k}')">${esc(l)}</button>`).join("");
+    el("rep-range").hidden = repState.key !== "custom";
+    el("rep-from").value = repState.from;
+    el("rep-to").value = repState.to;
+  }
+  function setRepPeriod(k) {
+    repState.key = k;
+    writeRepUrl();
+    renderRepControls();
+    // 任意期間は、日付を入れて「集計する」を押してから数える
+    if (k === "custom" && !(repState.from && repState.to)) {
+      el("rep-body").innerHTML = `<div class="sl-empty">開始日と終了日を選んで「集計する」を押してください。</div>`;
+      return;
+    }
+    loadRep();
+  }
+  function applyRepRange() {
+    repState.from = el("rep-from").value;
+    repState.to = el("rep-to").value;
+    if (!repState.from || !repState.to) {
+      el("rep-body").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">event</span><div>開始日と終了日を選んでください。</div></div>`;
+      return;
+    }
+    writeRepUrl();
+    loadRep();
+  }
+  async function loadRep() {
+    renderRepControls();
+    if (repState.key === "custom" && !(repState.from && repState.to)) return setRepPeriod("custom");
+    const seq = ++repSeq;
+    const q = new URLSearchParams({ period: repState.key });
+    if (repState.key === "custom") { q.set("from", repState.from); q.set("to", repState.to); }
+    el("rep-body").style.opacity = ".5";
+    try {
+      const r = await API.api(`/api/sales/approaches/counts?${q}`);
+      if (seq !== repSeq) return;
+      renderRep(r);
+    } catch (e) {
+      if (seq !== repSeq) return;
+      el("rep-body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>集計できませんでした：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    } finally {
+      if (seq === repSeq) el("rep-body").style.opacity = "";
+    }
+  }
+  function renderRep(r) {
+    if (r.notReady) {
+      el("rep-body").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(r.message)}</div></div>`;
+      return;
+    }
+    const p = r.period || {};
+    const day = (d) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
+    const nf = (n) => Number(n || 0).toLocaleString("ja-JP");
+    const range = p.from === p.to ? day(p.from) : `${day(p.from)}〜${day(p.to)}`;
+    const rows = r.rows || [];
+    el("rep-body").innerHTML = `
+      <div class="an-rep-when">期間：<b>${esc(p.label || "")}</b>（${esc(range)}）</div>
+      ${r.zeroMembers === "unavailable" ? `<div class="banner warn" style="margin:0 0 10px;"><span class="material-symbols-outlined">info</span>
+        <div>Sales の利用権限を確認できなかったため、0件の人は表示していません。</div></div>` : ""}
+      ${rows.length ? `<div style="overflow-x:auto;"><table class="sl-table" id="rep-table">
+        <thead><tr><th>担当者</th><th class="num">フォームアタック</th></tr></thead>
+        <tbody>${rows.map((x) => `<tr class="${x.count ? "" : "zero"}"><td>${esc(x.name)}${x.former ? `<span class="former">（退職・権限なし）</span>` : ""}</td>
+          <td class="num">${nf(x.count)}件</td></tr>`).join("")}
+          <tr class="sum"><td>合計</td><td class="num" id="rep-total">${nf(r.total)}件</td></tr></tbody>
+      </table></div>` : `<div class="sl-empty">この期間のフォームアタックはありません。</div>`}`;
+  }
 
   async function load() {
     el("period").innerHTML = PERIODS.map(([d, l]) =>

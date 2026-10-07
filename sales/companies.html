@@ -74,6 +74,7 @@
     .atk-url { font-size:12px; background:#f6f6f2; border-radius:6px; padding:8px 10px; word-break:break-all; color:#1b2440; }
     .atk-body textarea#at-body { min-height:300px; font-size:13.5px; }
     .atk-done { margin-top:16px; padding-top:14px; border-top:1px solid #e2e2dc; }
+    .atk-tools { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
     @media (max-width: 860px) { .atk-body { grid-template-columns:1fr; } }
   </style>
 </head>
@@ -107,6 +108,7 @@
     <select id="f-industry" onchange="onFilter()" aria-label="業種"></select>
     <select id="f-region" onchange="onFilter()" aria-label="地域"></select>
     <select id="f-service" onchange="onFilter()" aria-label="提案サービス"></select>
+    <select id="f-campaign" onchange="onFilter()" aria-label="キャンペーン"></select>
     <select id="f-status" onchange="onFilter()" aria-label="状態"></select>
     <select id="f-owner" onchange="onFilter()" aria-label="担当"></select>
     <select id="f-channel" onchange="onFilter()" aria-label="連絡手段"></select>
@@ -121,6 +123,7 @@
       <option value="no">クリックなし</option>
     </select>
   </div>
+  <div id="notice"></div>
   <div class="co-count" id="count"></div>
 
   <div style="overflow-x:auto;">
@@ -144,7 +147,8 @@
 <script src="../js/sales-detail.js?v=20261007kei4"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
-  detailHost.onChange = () => load();
+  // 企業詳細・フォームアタック画面で保存したら、一覧を取り直す。アタック画面が開いていれば、そこにもすぐ反映する
+  detailHost.onChange = () => { load(); if (atk?.approach) refreshAttackCompany(); };
   detailHost.urlFor = (id) => listUrl(id ? { id } : {});
   detailHost.beforeAction = () => closeBulkMenu();
   detailHost.openAttack = (id) => openAttack(id);
@@ -169,10 +173,11 @@
   // 検索・絞り込み・並べ替え・ページはすべてサーバー側（/api/sales/companies?page=…。db/097）。
   // ブラウザは「いまのページの100社」しか持たない。状態は URL に書いて、
   // 企業詳細を開いて閉じても・ブラウザで戻っても、同じページ・条件に戻れるようにする。
-  const LIST_KEYS = ["page", "q", "status", "owner", "service", "industry", "region", "channel", "visibility",
+  const LIST_KEYS = ["page", "q", "status", "owner", "service", "industry", "region", "campaign", "channel", "visibility",
     "attacked", "clicked", "sort", "order"];
   const FILTER_IDS = { q: "f-q", status: "f-status", owner: "f-owner", service: "f-service", industry: "f-industry",
-    region: "f-region", channel: "f-channel", visibility: "f-visibility", attacked: "f-attacked", clicked: "f-clicked" };
+    region: "f-region", campaign: "f-campaign", channel: "f-channel", visibility: "f-visibility", attacked: "f-attacked",
+    clicked: "f-clicked" };
   const CONTACT_CHANNELS = [["email", "メール"], ["line", "LINE"], ["instagram", "Instagram"], ["x", "X"],
     ["facebook", "Facebook"], ["linkedin", "LinkedIn"], ["phone", "電話"], ["other", "その他"]];
   // 見出し（並べ替えのキーは api 側 lib/sales.js LIST_SORTS と同じ）
@@ -188,6 +193,8 @@
   let state = readState();
   let pageInfo = { page: 1, total: 0, totalPages: 1, limit: 100 };
   let facets = null;
+  // キャンペーンの絞り込みの選択肢（一覧APIの応答 campaigns：{id,name}）。キャンペーンは企業の campaign_id（1社1つ）
+  let campaignOptions = [];
   let listSeq = 0;
 
   function readState(search = location.search) {
@@ -228,7 +235,19 @@
   // 2回目からは前回の一覧をすぐ出し、裏で最新にする（load の中の API.swr）。鍵は条件ごと
   const listKey = (params) => `sales:companies:${JSON.stringify(params)}`;
   const fetchList = (params) => () => API.listSalesCompanyPage(params);
-  { const p = apiParams({ facets: 1 }); API.warm(listKey(p), fetchList(p), SalesLayout.allows); }
+  // フォームアタック（?attack=）で開いたときは、一覧を先に取りにいかない。
+  // 1社のアタックに一覧（100社・絞り込みの件数）は要らないので、企業詳細と専用URLの発行を先に通す（start の中）
+  const ATTACK_FIRST = new URLSearchParams(location.search).get("attack") && !new URLSearchParams(location.search).get("new");
+  if (!ATTACK_FIRST) { const p = apiParams({ facets: 1 }); API.warm(listKey(p), fetchList(p), SalesLayout.allows); }
+  // アタックに要る企業詳細・テンプレートは、枠（権限の確認）を待たずに取りにいく（openAttack が受け取る）。
+  // 権限が無ければ失敗するだけで、画面は枠の判定どおりに止まる
+  let attackPrefetch = null;
+  if (ATTACK_FIRST) {
+    const id = new URLSearchParams(location.search).get("attack");
+    const p = Promise.all([API.getSalesCompany(id), API.listSalesTemplates().catch(() => ({ templates: [] }))]);
+    p.catch(() => {});
+    attackPrefetch = { id, p };
+  }
 
   SalesLayout.init({ active: "companies" }).then((ctx) => {
     if (!ctx) return;
@@ -241,8 +260,14 @@
     renderHead();
     renderFilters();
     syncControls();
-    await load({ facets: true });
     const q = new URLSearchParams(location.search);
+    // フォームアタック（別タブ）：アタック画面を先に出して操作できるようにし、一覧はそのあと裏で取る
+    if (ATTACK_FIRST) {
+      await openAttack(q.get("attack"));
+      load({ facets: true });
+      return;
+    }
+    await load({ facets: true });
     if (q.get("new")) openAdd();
     else if (q.get("attack")) openAttack(q.get("attack"));
     else if (q.get("id")) openDetail(q.get("id")).then((shown) => { if (shown && q.get("meeting")) openMeeting(); });
@@ -333,6 +358,10 @@
         members = res.members || members;
         myEmployeeId = res.me || null;
         if (res.facets) facets = res.facets;
+        // キャンペーンで絞っているときは、サーバーが件数（facets）を数えない（数える関数にキャンペーンの条件が無い）。
+        // 前の条件の件数を出したままにすると、絞り込みと合わない数字になるので、件数は出さない
+        else if (state.campaign) facets = null;
+        if (Array.isArray(res.campaigns)) campaignOptions = res.campaigns;
         if (res.masters) masters = res.masters;
         if (res.csvColumns) csvColumns = res.csvColumns;
         pageInfo = { page: res.page, total: res.total, totalPages: res.totalPages, limit: res.limit };
@@ -368,7 +397,8 @@
       return hit ? hit.n : 0;
     };
     // 件数が数えられている項目だけ「（n）」を付ける（db/101 が未実行なら、業種・地域・提案サービスだけ以前の件数）
-    const counted = (kind) => dynamic || (["industry", "region", "service"].includes(kind) && facets);
+    // キャンペーンは件数を数えていない（db/101 の関数にキャンペーンの軸が無い）ので、件数を付けない
+    const counted = (kind) => kind !== "campaign" && (dynamic || (["industry", "region", "service"].includes(kind) && facets));
     // legacy：マスター外の旧データ（「イベント企画・制作・運営（1・旧データ）」）
     const label = (kind, v, l, legacy) => (counted(kind)
       ? `${l}（${countOf(kind, v)}${legacy ? "・旧データ" : ""}）` : legacy ? `${l}（旧データ）` : l);
@@ -391,6 +421,14 @@
     opts("f-region", "地域：すべて", "region", [...m(masters.prefectures), ["none", "未設定"]]);
     opts("f-service", "提案サービス：すべて", "service", withLegacy("service", masters.services));
     opts("f-status", "状態：すべて", "status", [...STATUSES, ["ng", "営業禁止"]]);
+    // キャンペーン：すべて／各キャンペーン／なし（campaign=none は campaign_id が空の企業。lib/sales.js applyListFilters）
+    const campList = [...campaignOptions].sort((a, b) => String(a.name).localeCompare(String(b.name), "ja"))
+      .map((c) => [c.id, c.name]);
+    // URL のキャンペーンが一覧に無い（削除された等）ときは、ID ではなく「選択中のキャンペーン」と出す
+    if (state.campaign && state.campaign !== "none" && !campList.some(([v]) => v === state.campaign)) {
+      campList.push([state.campaign, "選択中のキャンペーン"]);
+    }
+    opts("f-campaign", "キャンペーン：すべて", "campaign", [...campList, ["none", "キャンペーンなし"]]);
     // 「自分」の件数は、自分の社員IDの件数
     const ownerList = [["me", "自分"], ["none", "未定"], ...members.map((x) => [x.id, x.display_name])];
     const cur = state.owner || "";
@@ -1295,11 +1333,18 @@
     el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
     history.replaceState({}, "", listUrl({ attack: id }));
     try {
-      const [d, t] = await Promise.all([
+      // 先に取りにいっていれば、それを使う（失敗していたら取り直す）
+      const pre = attackPrefetch?.id === id ? attackPrefetch.p : null;
+      attackPrefetch = null;
+      const [d, t] = (pre && await pre.catch(() => null)) || await Promise.all([
         detail?.company?.id === id ? Promise.resolve(detail) : API.getSalesCompany(id),
         API.listSalesTemplates().catch(() => ({ templates: [] })),
       ]);
       detail = d;
+      // 一覧より先に開いたとき（?attack=）は、提案サービスの候補・担当者の一覧を企業詳細の応答から使う
+      // （基本情報の編集でも使う。一覧が届いたら、一覧の応答で上書きされる）
+      if (d.masters && !masters.services.length) masters = d.masters;
+      if (d.members && !members.length) members = d.members;
       const templates = (t.templates || []).filter((x) => !x.archived);
       atk = { company: d.company, detail: d, templates: templates.length ? templates : [DEFAULT_TEMPLATE],
         campaigns: d.campaigns || [], approach: null, url: "", force: Boolean(force), channel: "form",
@@ -1431,12 +1476,27 @@
           ${atk.force ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span><div>直近のアタックを押し切って送ります（管理者）。</div></div>` : ""}
           ${atk.ackRecent && atk.recentOther ? `<div class="sl-warn sl-caution" id="at-recent-banner"><span class="material-symbols-outlined">warning</span>
             <div>${recentText(atk.recentOther)}。別チャネル（${esc(channelName(atk.channel))}）で送ります。</div></div>` : ""}
-          <dl class="sl-grid2" style="margin-bottom:10px;">
+          <dl class="sl-grid2" style="margin-bottom:10px;" id="at-company">
             <div><dt>企業名</dt><dd>${esc(c.name)}</dd></div>
             <div><dt>業種</dt><dd>${esc(c.industry || "—")}</dd></div>
+            <div><dt>地域</dt><dd>${esc(c.region || "—")}</dd></div>
             <div><dt>提案サービス</dt><dd>${esc(c.service || "—")}</dd></div>
             <div><dt>担当</dt><dd>${esc(c.ownerName || "未定")}</dd></div>
+            <div><dt>キャンペーン</dt><dd>${esc(c.campaignName || "—")}</dd></div>
+            <div><dt>電話番号</dt><dd>${esc(c.phone || "—")}</dd></div>
+            <div><dt>メールアドレス</dt><dd>${(c.emails || []).length ? c.emails.map((e) => esc(e)).join("<br>") : "—"}</dd></div>
           </dl>
+          <!-- 企業の編集・削除・非表示は、企業詳細と同じモーダル（js/sales-detail.js の openEdit・openStatus・openHideOne と、
+               この画面の openDeleteOne）。保存したら、このアタック画面にもすぐ反映する（refreshAttackCompany） -->
+          <div class="atk-tools">
+            <button class="btn btn-secondary btn-sm" onclick="openEdit()">
+              <span class="material-symbols-outlined icon-inline">edit</span>基本情報を編集</button>
+            <button class="btn btn-secondary btn-sm" onclick="openStatus()">担当・キャンペーン・NEXT</button>
+            <button class="btn btn-secondary btn-sm" onclick="openDeleteOne()">
+              <span class="material-symbols-outlined icon-inline">delete</span>削除</button>
+            <button class="btn btn-secondary btn-sm" onclick="openHideOne()">
+              <span class="material-symbols-outlined icon-inline">visibility_off</span>一覧から非表示</button>
+          </div>
           <div class="atk-links">
             <div class="atk-step">① 企業サイトを確認</div>${link(c.siteUrl, "企業サイトを開く")}
             <div class="atk-step">② 問い合わせフォームを開く</div>${link(c.formUrl, "問い合わせフォームを開く")}
@@ -1581,6 +1641,139 @@
       load();
     } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
   }
+
+  // ---- 企業の編集・削除・非表示（企業詳細・フォームアタック画面） --------------------------------
+  //
+  // 編集・非表示は企業詳細と同じモーダル（js/sales-detail.js の openEdit・openStatus・openHideOne）をそのまま使う。
+  // 保存すると reloadDetail → detailHost.onChange → refreshAttackCompany で、アタック画面にも反映する。
+  //
+  // 削除は一括削除と同じ API（POST /api/sales/companies/bulk {action:"delete"}）を1社で呼ぶ。先に dryRun で確かめ、
+  // アタック・クリック・営業履歴・商談・案件・営業禁止（・成約）のどれかがあれば消さない（サーバー側で止める）。
+  // 消せない企業は「一覧から非表示」へ案内する。履歴を消して削除する手段は作らない。
+  //
+  // js/sales-detail.js は1年キャッシュの共有ファイル（中身を変えると全画面の ?v= を上げる必要がある）なので、
+  // 企業詳細の「削除」ボタンは、この画面で描画のあとに足す（renderDetail を包む）
+
+  let atkRefreshSeq = 0;
+  /** アタック画面の企業情報を取り直して描き直す。書きかけの本文・件名は残す */
+  async function refreshAttackCompany() {
+    const id = atk?.company?.id;
+    if (!id) return;
+    const seq = ++atkRefreshSeq;
+    let d;
+    try { d = await API.getSalesCompany(id); } catch { return; }
+    if (seq !== atkRefreshSeq || atk?.company?.id !== id) return;
+    // 本文・件名を手で直していたら、それを残す（直していなければ、新しい企業情報で作り直す）
+    const typed = el("at-body") && el("at-body").value !== composeBody() ? el("at-body").value : null;
+    const subject = el("at-subject")?.value;
+    detail = d;
+    atk.company = d.company;
+    atk.detail = d;
+    atk.campaigns = d.campaigns || atk.campaigns;
+    if (d.company.hidden) {
+      // 非表示にした企業には送らない。準備した専用URLは取り消す（送信済み・クリック済みならサーバーが残す）
+      if (atk.approach?.id) API.discardSalesAttack(atk.approach.id).catch(() => {});
+      atk.approach = null;
+      return renderAttackBlocked(`一覧から非表示にしました（${d.company.hiddenLabel || "理由未設定"}）。この企業へのアタックは行いません。`);
+    }
+    if (d.company.ngReason) {
+      if (atk.approach?.id) API.discardSalesAttack(atk.approach.id).catch(() => {});
+      atk.approach = null;
+      return renderAttackBlocked(`この企業は営業禁止です（${d.company.ngLabel}）。アタックできません。`);
+    }
+    renderAttack();
+    if (typed !== null && el("at-body")) el("at-body").value = typed;
+    if (subject !== undefined && el("at-subject")) el("at-subject").value = subject;
+  }
+
+  /** 1社を削除する（先に可否を確かめる） */
+  async function openDeleteOne() {
+    const c = detail?.company;
+    if (!c) return;
+    // アタック画面で開いた分の「準備だけのアタック」は、履歴に数えない（api/sales/companies/bulk.js）
+    const ignoreApproachId = atk?.company?.id === c.id && atk?.approach?.id ? atk.approach.id : undefined;
+    openActionModal(`
+      <h2>企業の削除</h2>
+      <div id="del-box"><div class="empty" style="padding:16px;">営業履歴があるかを確認しています…</div></div>`);
+    let r;
+    try {
+      r = await API.bulkSalesCompanies({ ids: [c.id], action: "delete", dryRun: true, ignoreApproachId });
+    } catch (e) {
+      if (el("del-box")) el("del-box").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
+        <div>${esc(errText(e, "確認できませんでした"))}</div></div>
+        <div class="sl-modal-foot"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`;
+      return;
+    }
+    const box = el("del-box");
+    if (!box) return;
+    if ((r.deletable || []).some((x) => x.id === c.id)) {
+      box.innerHTML = `
+        <p style="margin:0 0 6px;font-size:14px;color:#1b2440;">この企業を削除します。<br>削除後は元に戻せません。</p>
+        <p class="sl-muted" style="margin:0 0 4px;">${esc(c.name)}</p>
+        <div id="del-msg" class="err-text" style="margin:10px 0 0;"></div>
+        <div class="sl-modal-foot">
+          <button class="btn btn-secondary" onclick="closeAction()">キャンセル</button>
+          <button class="btn btn-danger" id="del-go" onclick="submitDeleteOne(this)">削除する</button>
+        </div>`;
+      return;
+    }
+    renderDeleteBlocked(box, c, (r.blocked || []).find((x) => x.id === c.id)?.reasons || []);
+  }
+  function renderDeleteBlocked(box, c, reasons) {
+    box.innerHTML = `
+      <p style="margin:0 0 6px;font-size:14px;color:#1b2440;">この企業には営業履歴があるため削除できません。</p>
+      ${reasons.length ? `<p class="sl-muted" style="margin:0 0 6px;" id="del-reasons">理由：${esc(reasons.join("・"))}</p>` : ""}
+      <p style="margin:0;font-size:13px;color:#1b2440;">${c.hidden ? "この企業は、すでに一覧から非表示にしています。" : "企業一覧から非表示にすることはできます。"}</p>
+      <div class="sl-modal-foot">
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        ${c.hidden ? "" : `<button class="btn btn-primary" onclick="openHideOne()">
+          <span class="material-symbols-outlined icon-inline">visibility_off</span>一覧から非表示</button>`}
+      </div>`;
+  }
+  async function submitDeleteOne(btn) {
+    const c = detail?.company;
+    if (!c) return;
+    const ignoreApproachId = atk?.company?.id === c.id && atk?.approach?.id ? atk.approach.id : undefined;
+    const msg = el("del-msg");
+    let r;
+    try {
+      r = await KPLayout.busy(btn, "削除中…", () => API.bulkSalesCompanies({ ids: [c.id], action: "delete", ignoreApproachId }));
+    } catch (e) { if (msg) msg.textContent = errText(e, "削除できませんでした"); return; }
+    if (!r.deleted) {
+      // 確かめたあとに履歴が付いた（別の人がアタックした等）。サーバーは消していない
+      const reasons = (r.blocked || []).find((x) => x.id === c.id)?.reasons || [];
+      if (reasons.length && el("del-box")) return renderDeleteBlocked(el("del-box"), c, reasons);
+      if (msg) msg.textContent = "削除できませんでした。時間をおいて、もう一度お試しください。";
+      return;
+    }
+    // 消した企業の画面（アタック画面・企業詳細）は閉じて、一覧へ戻る
+    closeAction();
+    if (atk?.company?.id === c.id) { atk = null; el("attack-root").innerHTML = ""; }
+    if (detail?.company?.id === c.id) detail = null;
+    closeModal();
+    load();
+    showNotice(`${c.name} を削除しました。`);
+  }
+  // 一覧の上に、終わったことを短く出す（数秒で消える）
+  let noticeTimer = null;
+  function showNotice(text) {
+    const box = el("notice");
+    if (!box) return;
+    box.innerHTML = `<div class="banner ok" role="status"><span class="material-symbols-outlined">check_circle</span><div>${esc(text)}</div></div>`;
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => { box.innerHTML = ""; }, 6000);
+  }
+
+  // 企業詳細（右ドロワー）に「削除」を足す（js/sales-detail.js の renderDetail のあと）
+  const renderDetailBase = renderDetail;
+  renderDetail = function () {
+    renderDetailBase();
+    const row = el("detail-box")?.querySelector('button[onclick="openEdit()"]')?.parentElement;
+    if (row && !row.querySelector(".dt-delete")) {
+      row.insertAdjacentHTML("beforeend", `<button class="btn btn-secondary btn-sm dt-delete" onclick="openDeleteOne()">
+        <span class="material-symbols-outlined icon-inline">delete</span>削除</button>`);
+    }
+  };
 
   async function discardAttack(btn) {
     if (!confirm("今回は送らずに閉じます。発行した専用URLは使えなくなります。よろしいですか？")) return;

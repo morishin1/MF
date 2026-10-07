@@ -10,7 +10,9 @@
 //           "hide"            { reason, note? }        … 非表示にする（リンク切れ・閉業など。db/096）
 //           "unhide"          {}                       … 再表示する
 //           "set_ng"          { ngReason, ngNote? }    … 営業禁止にする
-//           "delete"          { dryRun? }              … 削除（dryRun なら消さずに可否だけ返す）
+//           "delete"          { dryRun?, ignoreApproachId? } … 削除（dryRun なら消さずに可否だけ返す）
+//                             ignoreApproachId … フォームアタック画面から1社を消すとき、その画面で準備した
+//                             未送信のアタック1件だけは履歴に数えない（送った・失敗・クリックありは数える）
 //
 // ■ 選んだ企業だけが対象
 //   ids は画面で明示的に選んだものだけ。絞り込み条件は受け取らない（意図せず全件にしない）。
@@ -275,9 +277,16 @@ const ACTIONS = {
       ["gw_sales_meetings", "meeting", false],   // db/090 が未実行なら、無いものとして扱う
       ["gw_sales_deals", "deal", false],         // db/116 が未実行なら、無いものとして扱う
     ];
+    // フォームアタック画面から1社を消すとき：画面を開いた時点で作られた「まだ送っていない準備だけのアタック」
+    // （ignoreApproachId）は、営業の履歴として数えない。開いただけで、どの企業も消せなくなるのを防ぐ。
+    // 数えないのは、その1件が 未送信・送信失敗でない・クリック0 のときだけ。送った・失敗した・クリックされたものは履歴
+    const ignoreApproach = rows.length === 1 && isUuid(body.ignoreApproachId) ? body.ignoreApproachId : null;
+    const isPreparedOnly = (x) => ignoreApproach && x.id === ignoreApproach && !x.sent_at && !x.failed_at && !(x.click_count > 0);
     for (const [tbl, key, required] of related) {
       for (const part of chunks(ids)) {
-        const { data, error } = await sb.from(tbl).select(key === "event" ? "company_id, event_key" : "company_id")
+        const cols = key === "event" ? "company_id, event_key"
+          : key === "approach" && ignoreApproach ? "id, company_id, sent_at, failed_at, click_count" : "company_id";
+        const { data, error } = await sb.from(tbl).select(cols)
           .eq("tenant_id", ctx.tenantId).in("company_id", part).limit(10000);
         if (error) {
           if (!required && dbSetupHint(error, "")) continue;
@@ -285,7 +294,8 @@ const ACTIONS = {
           return json(res, 500, { error: "check_failed", hint: "関連する履歴を確認できませんでした", detail: error.message });
         }
         // 非表示・再表示の記録だけなら、営業の履歴ではないので削除を止めない（テスト企業を隠してから消せるように）
-        const hits = (data || []).filter((x) => !(key === "event" && x.event_key === "hide"));
+        const hits = (data || []).filter((x) => !(key === "event" && x.event_key === "hide")
+          && !(key === "approach" && isPreparedOnly(x)));
         for (const cid of new Set(hits.map((x) => x.company_id))) {
           const list = reasons.get(cid);
           if (list && !list.includes(key)) list.push(key);
