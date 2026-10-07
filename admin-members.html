@@ -56,6 +56,20 @@
     .mb-tg:disabled:not(.locked):not(.busy) { opacity:.55; }
     .mb-lockmsg { font-size:11.5px; color:#667085; margin:5px 0 0; line-height:1.6; }
     .mb-lockmsg.mb-gap { color:#9a5b00; }
+    /* Office は ON なのに、中の業務（責任者・人事・経理など）が無くて使えない人。一覧だけで見つけられるように目立たせる */
+    .mb-warn { appearance:none; display:inline-flex; align-items:center; gap:4px; margin:6px 0 0; padding:3px 10px; border-radius:999px;
+               border:1px solid #f5b25b; background:#fff4e5; color:#b45309; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+    .mb-warn:hover { background:#ffe9cc; }
+    .mb-warn:focus-visible { outline:3px solid #f5b25b; outline-offset:2px; }
+    .mb-guide { border:1px solid #f5b25b; border-left:4px solid #e08a1e; background:#fff8ee; border-radius:8px; padding:10px 12px; margin:0 0 10px;
+                color:#7a4a05; font-size:12.5px; line-height:1.8; }
+    .mb-guide b { color:#7a4a05; }
+    .mb-roles label.mb-need { background:#fff4e5; border-radius:6px; padding:2px 6px; outline:1px dashed #f5b25b; }
+    .mb-sum { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; border:1px solid #f5b25b; background:#fff8ee; color:#7a4a05;
+              border-radius:10px; padding:10px 14px; margin:0 0 12px; font-size:13px; }
+    .mb-sum b { color:#b45309; }
+    .mb-sum button { appearance:none; border:1px solid #f5b25b; background:#fff; color:#b45309; border-radius:999px; padding:2px 10px;
+                     font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
     .mb-more { appearance:none; border:0; background:none; color:#2563eb; cursor:pointer; font:inherit; font-size:12.5px; padding:4px 0 0; }
     .mb-detail td { background:#fafafa; border-bottom:1px solid #e2e2dc; }
     .mb-detail h4 { margin:0 0 4px; font-size:13px; color:#1b2440; }
@@ -65,6 +79,7 @@
                 font-weight:700; font-size:13px; box-shadow:0 6px 20px rgba(16,24,40,.18); display:none; z-index:80; }
     .mb-toast.err { display:block; background:#fef3f2; color:#b42318; border:1px solid #fda29b; }
     .mb-toast.ok { display:block; background:#ecfdf3; color:#067647; border:1px solid #abefc6; }
+    .mb-toast.warn { display:block; background:#fff4e5; color:#b45309; border:1px solid #f5b25b; }
 
     /* 退職手続き（退職手続き中・退職の人のドロワーにだけ出す）。既存のカード・ボタンだけで組む */
     .mb-retire { margin-top:16px; padding-top:14px; border-top:1px solid #e2e2dc; }
@@ -356,6 +371,7 @@
   let appsState = null;       // アプリ利用権限（gw_app_grants, db/119）："table"=変更できる / "derived"=表が未適用 / "error"=読めない / null=見る権限なし
   const openDetail = new Set();   // 「詳細設定」を開いている行
   const busyApps = new Set();     // 保存中のボタン（社員ID:アプリ）。二重に押せない
+  const officeGuide = new Set();  // 「Office内の権限が未設定」の案内を開いている行（詳細設定の上に出す）
   let editingId = null;      // null なら追加、id が入っていればその人の編集
   let kindReady = false;     // 075（BP）が適用済みか。未適用なら区分の欄ごと隠す
   let partners = [];
@@ -884,7 +900,12 @@
       el("list").innerHTML = `<div class="empty">まだ誰も登録されていません。</div>`;
       return;
     }
-    el("list").innerHTML = `
+    const empties = employees.filter((x) => x.status !== "left" && officeEmpty(x));
+    const sum = empties.length ? `<div class="mb-sum" data-role="office-empty-sum" role="status">
+        <span><b>⚠ Office内の権限が未設定：${empties.length}人</b>（Office は ON ですが、中の業務を使えません）</span>
+        ${empties.map((x) => `<button type="button" onclick="showOfficeGuide('${esc(x.id)}')">${esc(x.display_name)}</button>`).join("")}
+      </div>` : "";
+    el("list").innerHTML = `${sum}
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
@@ -909,6 +930,30 @@
   // ---- 使える業務：4つのボタン ----------------------------------------------------
   // ボタンの表示は、サーバが返した e.apps（= lib/gw.js の判定。本人が画面を再読込したあとの /api/me の access と同じ元）だけ。
   // 画面で役割を並べ直さない。内部の役割（e.roles）は、ボタンには出さず、詳細設定の中だけ。
+  // Office は ON なのに、Office の中で使える業務が無い（＝本人が Office を開いても何もできない）か。
+  // 判定はサーバが返した access（lib/gw.js accessOf。本人の /api/me と同じ元）。権限の決め方はここで作らない。
+  // Office を押した直後（保存中）だけは、まだ新しい access が無いので、内部の役割（経営者・責任者・人事・経理）と
+  // 会計の管理者かどうかで先に見立てる（保存が終われば、サーバの access で出し直す）
+  const OFFICE_WORK_ROLES = ["owner", "manager", "hr", "finance"];
+  function officeEmpty(e) {
+    if (!e.apps || !e.apps.office || appsState !== "table" || (e.appLocks || {}).office) return false;
+    if (busyApps.has(`${e.id}:office`)) {
+      return !(e.roles || []).some((r) => OFFICE_WORK_ROLES.includes(r)) && e.accessMeta?.accountingAdmin !== true;
+    }
+    if (!e.access) return false;                 // 確かめられないときは出さない（「確認できません」は別に出る）
+    const ac = e.access;
+    return !(ac.office || ac.officeHr || ac.officeFinance);
+  }
+
+  // 「Office内の権限が未設定」を押したとき：詳細設定を開き、何を付ければよいかを出す（権限は付けない）
+  function showOfficeGuide(id) {
+    officeGuide.add(id);
+    openDetail.add(id);
+    render();
+    const box = document.querySelector(`[data-detail="${CSS.escape(id)}"] .mb-guide`);
+    if (box) { box.scrollIntoView({ behavior: "smooth", block: "center" }); box.focus({ preventScroll: true }); }
+  }
+
   function appsCell(e) {
     if (!e.apps) return `<span class="muted">—</span>`;
     const locks = e.appLocks || {};
@@ -933,15 +978,15 @@
       : (e.accessMeta?.accountingAdmin === true && locks.office === "accountingAdmin") ? ["accounting-admin", LOCK_TEXT.accountingAdmin] : null;
     const unknown = e.accessMeta && e.accessMeta.accountingAdmin === null;
     // Office の入口と中の業務が食い違っている人（入れても何もできない／役割があるのに入れない）。判定はサーバの access と内部の役割
-    const ac = e.access || {};
-    const officeWork = Boolean(ac.office || ac.officeHr || ac.officeFinance);
     const officeRoles = (e.roles || []).some((r) => ["hr", "finance", "manager"].includes(r));
-    const gap = live && !locks.office
-      ? (e.apps.office && !officeWork ? ["office-empty", "Office に入れますが、中で使える業務がありません（詳細設定で役割を付けてください）"]
-        : (!e.apps.office && officeRoles ? ["office-off", "Office が OFF のため、詳細設定の役割（Office の業務）が使えません"] : null))
-      : null;
+    const empty = officeEmpty(e);
+    const gap = live && !locks.office && !empty && !e.apps.office && officeRoles
+      ? ["office-off", "Office が OFF のため、詳細設定の役割（Office の業務）が使えません"] : null;
     return `<div class="mb-tgs" role="group" aria-label="${esc(e.display_name)}が使える業務">${btns}</div>
       ${lockMsg ? `<div class="mb-lockmsg" data-note="${lockMsg[0]}">${esc(lockMsg[1])}</div>` : ""}
+      ${empty ? `<button type="button" class="mb-warn" data-note="office-empty" aria-expanded="${officeGuide.has(e.id)}"
+          title="Office は ON ですが、Office の中で使える業務がありません。押すと設定のしかたを出します"
+          onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}
       ${gap ? `<div class="mb-lockmsg mb-gap" data-note="${gap[0]}">${esc(gap[1])}</div>` : ""}
       ${unknown ? `<div class="mb-lockmsg" data-note="unknown">会計の管理者かどうかを確認できません。</div>` : ""}
       <button type="button" class="mb-more" data-role="more" aria-expanded="${openDetail.has(e.id)}"
@@ -953,14 +998,16 @@
     if (!openDetail.has(e.id)) return "";
     const roles = e.roles || [];
     const cols = 7 + (kindReady ? 1 : 0);
+    const need = officeEmpty(e);
     const boxes = Object.keys(ROLE_LABEL).map((r) => `
-      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
+      <label class="${need && ["manager", "hr", "finance"].includes(r) ? "mb-need" : ""}" style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
         <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
                ${canGrantRoles && (r !== "owner" || canGrantOwner) ? "" : "disabled"}
                onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
         ${ROLE_LABEL[r]}（${r}）
       </label>`).join("");
     return `<tr class="mb-detail" data-detail="${esc(e.id)}"><td colspan="${cols}">
+      ${need ? officeGuideHtml(e) : ""}
       <h4>内部の役割（アプリの中でできること）</h4>
       <p>上の4つのボタンは「どのアプリへ入れるか」だけです。ここで役割を付けても、アプリへは入れません。
          入れるようにするには、上のボタンを ON にします。</p>
@@ -968,6 +1015,14 @@
       <p>Office のボタンが ON のとき：人事（hr）＝人事・労務 ／ 経理（finance）＝経理・事務 ／ 責任者（manager）・経理（finance）・経営者（owner）＝月末月初。
          Office を ON にしただけでは、この3つは使えません。</p>
     </td></tr>`;
+  }
+  function officeGuideHtml(e) {
+    return `<div class="mb-guide" data-role="office-guide" tabindex="-1" role="note">
+      <b>⚠ Office内の権限が未設定です。</b>${esc(e.display_name)} さんは Office に入れますが、このままでは Office の中の業務を使えません。<br>
+      下の役割から、<b>責任者（manager）</b>／<b>人事（hr）</b>／<b>経理（finance）</b>のいずれかを付けてください。<br>
+      人事 → 人事・労務（メンバー・入退社・勤怠・雇用契約・評価）／経理 → 経理・事務（経費精算・月次業務・請求・会計）／責任者 → 月末月初。
+      役割は自動では付けません。付けると、この表示は消えます。
+    </div>`;
   }
   function toggleDetail(id) {
     if (openDetail.has(id)) openDetail.delete(id); else openDetail.add(id);
@@ -1002,16 +1057,25 @@
     const next = !before;
     busyApps.add(key);
     e.apps = { ...e.apps, [app]: next };       // 押した瞬間に見た目を切り替える（失敗したら戻す）
+    if (app === "office" && next && officeEmpty(e)) { officeGuide.add(employeeId); openDetail.add(employeeId); }
     render();
     try {
       const res = await API.setEmployeeApp(employeeId, app, next);
       busyApps.delete(key);
       if (res && res.apps) { applyResult(e, res); render(); }
       else await load();                         // 応答に新しい値が無いときは、名簿を読み直す
-      toast("ok", `${e.display_name} の ${label} を ${next ? "ON" : "OFF"} にしました`);
+      const cur = employees.find((x) => x.id === employeeId) || e;
+      if (app === "office" && next && officeEmpty(cur)) {
+        // ON にしただけでは使えない。黙って青くせず、その場で何を付ければよいかを出す（自動では付けない）
+        showOfficeGuide(employeeId);
+        toast("warn", `${cur.display_name} の Office を ON にしました。Office内の権限（責任者・人事・経理）が未設定のため、まだ使えません`);
+      } else {
+        toast("ok", `${e.display_name} の ${label} を ${next ? "ON" : "OFF"} にしました`);
+      }
     } catch (err) {
       busyApps.delete(key);
       e.apps = { ...e.apps, [app]: before };    // 失敗したら元に戻す
+      if (app === "office" && next) officeGuide.delete(employeeId);
       render();
       toast("err", `${e.display_name} の ${label} を変えられませんでした。${err.hint || err.detail || err.message || ""}`);
     }
