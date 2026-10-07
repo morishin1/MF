@@ -220,6 +220,10 @@
     {
       "path": "/api/cron/career",
       "schedule": "40 23 * * *"
+    },
+    {
+      "path": "/api/cron/office-recurring",
+      "schedule": "40 19 * * *"
     }
   ]
 }

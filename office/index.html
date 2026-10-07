@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261007ofc1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261007ofc1">
+  <link rel="stylesheet" href="../css/app.css?v=20261007rec1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261007rec1">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -39,6 +39,65 @@
     .oh-row .oh-n { font-variant-numeric:tabular-nums; }
     .oh-row .oh-n small { font-size:inherit; font-weight:inherit; }
     #progBox .of-panel { max-width:640px; }
+
+    /* 今月の Office カレンダー・今週の Office 予定（db/125。定例業務マスターから作った予定と単発の予定） */
+    .oc-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:0 0 10px; }
+    .oc-head b { font-size:16px; color:var(--of-ink); }
+    .oc-nav { display:flex; gap:6px; }
+    .oc-nav .of-btn { padding:6px 10px; font-size:12.5px; }
+    .oc-grid { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); border-top:1px solid var(--of-line); border-left:1px solid var(--of-line); }
+    .oc-dow { font-size:11px; font-weight:700; color:var(--of-mute); text-align:center; padding:6px 0; background:#f6f6f2; border-right:1px solid var(--of-line); border-bottom:1px solid var(--of-line); }
+    .oc-day { appearance:none; text-align:left; font:inherit; background:#fff; border:0; border-right:1px solid var(--of-line); border-bottom:1px solid var(--of-line);
+              min-height:92px; padding:5px 6px; cursor:pointer; display:flex; flex-direction:column; gap:3px; min-width:0; }
+    .oc-day:hover { background:#fafaf6; }
+    .oc-day.out { background:#fbfbf8; }
+    .oc-day.out .oc-num { color:var(--of-faint); }
+    .oc-day.off .oc-num { color:#b3261e; }
+    .oc-day.today { background:#eef1fb; }
+    .oc-day.today .oc-num { background:var(--of-ink); color:#fff; border-radius:999px; padding:0 7px; }
+    .oc-num { font-size:12.5px; font-weight:700; color:var(--of-ink); align-self:flex-start; }
+    .oc-ev { font-size:11px; line-height:1.35; color:var(--of-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-left:3px solid #c7cad4; padding-left:4px; }
+    .oc-ev.done { color:var(--of-faint); text-decoration:line-through; border-left-color:#d8dbe2; }
+    .oc-ev.skipped { color:var(--of-faint); border-left-color:#e2e2dc; }
+    .oc-ev.overdue { color:#b3261e; border-left-color:#c0392b; font-weight:700; }
+    .oc-more { font-size:11px; color:var(--of-mute); font-weight:700; }
+    .oc-strip { display:none; }
+    .oc-legend { font-size:11.5px; color:var(--of-mute); margin:8px 0 0; }
+    .oc-wk-tiles { margin:0 0 10px; }
+    .oc-wk-tiles .of-tile { cursor:default; }
+    .oc-tag { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; background:#efefeb; color:#4a5068; margin-left:4px; }
+    .oc-tag.warn { background:#fbf1d6; color:#7d5a00; }
+    .oc-tag.ng { background:#fdecea; color:#b3261e; }
+    .oc-tag.ok { background:#e5f1e2; color:#2f6f3a; }
+    /* 日付を押したときの右ドロワー */
+    .oc-dr { padding:18px 18px 40px; }
+    .oc-dr-h { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 12px; }
+    .oc-dr-h h2 { margin:0; font-size:18px; color:var(--of-ink); }
+    .oc-cat { font-size:12.5px; font-weight:700; color:var(--of-sub); margin:14px 0 6px; }
+    .oc-card { background:#fff; border:1px solid var(--of-line); border-left:3px solid #c7cad4; border-radius:9px; padding:10px 12px; margin:0 0 8px; }
+    .oc-card.overdue { border-left-color:#c0392b; }
+    .oc-card.done { opacity:.75; }
+    .oc-card b { font-size:14px; color:var(--of-ink); }
+    .oc-card .m { font-size:12px; color:var(--of-mute); margin-top:4px; line-height:1.7; }
+    .oc-card .ops { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .oc-card .ops .of-btn { padding:5px 10px; font-size:12px; }
+    /* スマホ：月のカレンダーを縮めない。日付を横に流して、選んだ日の予定をカードで出す */
+    @media (max-width: 600px) {
+      .oc-grid { display:none; }
+      .oc-strip { display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; -webkit-overflow-scrolling:touch; }
+      .oc-sd { appearance:none; font:inherit; flex:0 0 auto; width:48px; border:1px solid var(--of-line); background:#fff; border-radius:10px; padding:6px 0;
+               display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; }
+      .oc-sd small { font-size:10.5px; color:var(--of-mute); }
+      .oc-sd b { font-size:15px; color:var(--of-ink); }
+      .oc-sd i { font-style:normal; font-size:10.5px; color:var(--of-mute); min-height:1.2em; }
+      .oc-sd.off small, .oc-sd.off b { color:#b3261e; }
+      .oc-sd.today { border-color:var(--of-ink); }
+      .oc-sd.on { background:var(--of-ink); border-color:var(--of-ink); }
+      .oc-sd.on small, .oc-sd.on b, .oc-sd.on i { color:#fff; }
+      .oc-sd i.ng { color:#b3261e; font-weight:700; }
+      .oc-day-cards { margin-top:6px; }
+    }
+    @media (min-width: 601px) { .oc-day-cards { display:none; } }
   </style>
 </head>
 <body>
@@ -56,6 +115,31 @@
     <div class="of-rows oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
   </section>
 
+  <section class="oh-sec" id="calBox" aria-labelledby="calH" hidden>
+    <div class="oh-sec-row">
+      <h2 class="of-sec-h" id="calH">今月のOfficeカレンダー</h2>
+      <a href="/office/recurring.html">定例業務を開く</a>
+    </div>
+    <div class="of-panel">
+      <div class="oc-head">
+        <b id="calMonth"></b>
+        <div class="oc-nav" role="group" aria-label="月を移る">
+          <button type="button" class="of-btn sec" id="calPrev" onclick="calMove(-1)">＜ 前月</button>
+          <button type="button" class="of-btn sec" id="calToday" onclick="calMove(0)">今日</button>
+          <button type="button" class="of-btn sec" id="calNext" onclick="calMove(1)">次月 ＞</button>
+        </div>
+      </div>
+      <div id="cal"><div class="of-empty">読み込み中…</div></div>
+      <p class="oc-legend">日付を押すと、その日の業務（担当・期限・状態）が開きます。赤字は期限超過、取り消し線は完了。</p>
+    </div>
+  </section>
+
+  <section class="oh-sec" id="weekBox" aria-labelledby="weekH" hidden>
+    <h2 class="of-sec-h" id="weekH">今週のOffice予定</h2>
+    <div class="of-tiles oc-wk-tiles" id="wkTiles"></div>
+    <div class="of-rows" id="wkList"></div>
+  </section>
+
   <section class="oh-sec" id="progBox" aria-labelledby="progH" hidden>
     <div class="oh-sec-row">
       <h2 class="of-sec-h" id="progH">月次進捗 <small id="progMonth"></small></h2>
@@ -67,11 +151,12 @@
     </div>
   </section>
 </div>
+<div id="drawer-root"></div>
 
-<script src="../js/api-client.js?v=20261007ofc1"></script>
-<script src="../js/device.js?v=20261007ofc1"></script>
-<script src="../js/layout.js?v=20261007ofc1"></script>
-<script src="../js/office-layout.js?v=20261007ofc1"></script>
+<script src="../js/api-client.js?v=20261007rec1"></script>
+<script src="../js/device.js?v=20261007rec1"></script>
+<script src="../js/layout.js?v=20261007rec1"></script>
+<script src="../js/office-layout.js?v=20261007rec1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -125,12 +210,16 @@
       el("todo").innerHTML = `<div class="of-panel" data-role="no-duty">
         <b>担当の業務が、まだ設定されていません。</b>
         <div class="of-muted" style="margin-top:6px;line-height:1.8;">Office へは入れますが、人事・労務、経理・事務、月末月初のどれも、まだ使えません。
-        管理者に、メンバー管理の「詳細設定」で、内部の役割（人事・経理・責任者など）を付けてもらってください。</div></div>`;
+        管理者に、メンバー管理で Office の中の業務（人事・労務／経理・事務／月末月初）を付けてもらってください。</div></div>`;
       return;
     }
     const none = Promise.resolve(null);
     const closingMonth = prevMonth();
     let officeData = null;
+    CTX = ctx;
+    CAL.today = todayJst();
+    if (!CAL.ym) CAL.ym = CAL.today.slice(0, 7);
+    const calP = API.api(calUrl(CAL.today.slice(0, 7))).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
     const [b, hr, cl, of] = await Promise.all([
       // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
       safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
@@ -207,6 +296,20 @@
       if (!can.app) add(3, "経理・事務", "月次締め", `${closingMonth} の月次締めがまだです`
         + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : ""), closingOpen || 0, "/admin-closing.html", "月次締めを開く");
     }
+    // Office の業務予定（定例業務マスター・単発）。期限超過・今日の分は「今日やること」に1件ずつ入れる
+    const calRes = await calP;
+    CAL.week = calRes.ok ? calRes.v : null;
+    if (CAL.week) {
+      if (CAL.ym === CAL.today.slice(0, 7)) CAL.data = CAL.week;
+      const w = weekBuckets(CAL.week, CAL.today);
+      const evRows = [...w.check.map((e) => [e, 0]), ...w.overdue.map((e) => [e, 1]), ...w.today.map((e) => [e, 2])];
+      for (const [e, pri] of evRows.slice(0, 8)) {
+        todo.push({ pri, area: e.categoryLabel, label: e.title, count: 1, date: e.date, cta: "確認する",
+          hint: pri === 0 ? "担当者が未設定です" : pri === 1 ? `${e.overdueDays}日超過（期限 ${O.fmtDay(e.dueOn)}）` : (e.dueOn === CAL.today ? "今日が期限" : "今日の予定"),
+          n: `担当：${e.assigneeName || "未設定"}` });
+      }
+      if (evRows.length > 8) todo.push({ pri: 3, area: "Office予定", label: `ほか ${evRows.length - 8}件`, hint: "今週のOffice予定で確認できます", count: evRows.length - 8, href: "#weekBox", cta: "今週の予定を見る" });
+    }
     todo.sort((a, b2) => a.pri - b2.pri || b2.count - a.count);
     // 採用HRの「今やること」（.hr-today-row）と同じ形：1件ずつ独立したカード。左端の色で状態、右に操作ボタン
     el("todo").innerHTML = todo.length ? `<div class="of-rows-count" id="todoN">${todo.length}件（要確認 → 期限超過 → 今日期限 → 今週対応の順）</div>`
@@ -215,9 +318,10 @@
         <div class="info">
           <b class="oh-label"><span class="t">${esc(t.label)}</span></b>
           <div class="now"><span class="oh-pri p${t.pri}"><span class="t">${PRI[t.pri].label}</span></span>・<span class="oh-area">${esc(t.area)}</span>${t.hint ? `・${esc(t.hint)}` : ""}</div>
-          <div class="n">対象：<span class="oh-n">${t.count}<small>件</small></span></div>
+          <div class="n">${t.n ? esc(t.n) : `対象：<span class="oh-n">${t.count}<small>件</small></span>`}</div>
         </div>
-        <a class="btn btn-primary btn-sm oh-go" href="${esc(t.href)}">${esc(t.cta)}</a>
+        ${t.date ? `<button type="button" class="btn btn-primary btn-sm oh-go" data-office-event onclick="openDay('${esc(t.date)}')">${esc(t.cta)}</button>`
+          : `<a class="btn btn-primary btn-sm oh-go" href="${esc(t.href)}">${esc(t.cta)}</a>`}
       </div>`).join("")
       : `<div class="of-empty">いま対応が必要なものはありません</div>`;
 
@@ -230,10 +334,205 @@
         ? (od.close?.closed ? "月次完了：完了済み" : "月次完了：未完了") : "";
     }
 
+    renderCalendarArea(calRes);
+
     const failed = [b, hr, cl, of].some((x) => x && !x.ok);
     el("banner").innerHTML = failed
       ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>取得できなかった項目は「—」と出しています。</div></div>`
       : (od == null && can.app && officeData?.message ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>${esc(officeData.message)}</div></div>` : "");
+  }
+
+  // ---- 今月の Office カレンダー・今週の Office 予定（/api/office-tasks/calendar。db/125） ----------------------
+  // 予定は Office 専用（個人の予定 gw_calendar_events とは別）。見られるカテゴリ・完了できるかはサーバの判定（canEdit）そのもの
+  let CTX = null;
+  const CAL = { ym: null, today: null, data: null, week: null, sel: null, byId: new Map(), drawer: null };
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const addD = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const dowIdx = (d) => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7;   // 0=月〜6=日
+  const DOW = ["月", "火", "水", "木", "金", "土", "日"];
+  function todayJst() { return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); }
+  function gridOf(ym) {
+    const first = `${ym}-01`;
+    const [y, m] = ym.split("-").map(Number);
+    const last = `${ym}-${pad2(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+    return { from: addD(first, -dowIdx(first)), to: addD(last, 6 - dowIdx(last)), first, last };
+  }
+  function calUrl(ym) { const g = gridOf(ym); return `/api/office-tasks/calendar?from=${g.from}&to=${g.to}`; }
+  const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  const dayLabel = (d) => `${Number(d.slice(5, 7))}月${Number(d.slice(8, 10))}日（${DOW[dowIdx(d)]}）`;
+
+  function remember(data) { for (const e of [...(data?.events || []), ...(data?.overdue || [])]) CAL.byId.set(e.id, e); }
+  function eventsOn(date) {
+    return [...CAL.byId.values()].filter((e) => e.date === date)
+      .sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1) || b.overdueDays - a.overdueDays || a.title.localeCompare(b.title, "ja"));
+  }
+
+  /** 今週の Office 予定の分け方：要確認（担当者未設定）→ 期限超過 → 今日 → 明日 → 今週 → 今後 */
+  function weekBuckets(data, today) {
+    const sunday = addD(today, 6 - dowIdx(today)), tomorrow = addD(today, 1);
+    const all = new Map();
+    for (const e of [...(data?.events || []), ...(data?.overdue || [])]) if (e.status === "pending") all.set(e.id, e);
+    const out = { check: [], overdue: [], today: [], tomorrow: [], week: [], later: [] };
+    for (const e of [...all.values()].sort((a, b) => a.date.localeCompare(b.date))) {
+      const inWeek = e.date <= sunday || e.dueOn <= sunday;
+      if (e.assigneeMissing && (inWeek || e.overdueDays > 0)) out.check.push(e);
+      else if (e.overdueDays > 0) out.overdue.push(e);
+      else if (e.dueOn === today || e.date === today) out.today.push(e);
+      else if (e.dueOn === tomorrow || e.date === tomorrow) out.tomorrow.push(e);
+      else if (e.date <= sunday) out.week.push(e);
+      else if (e.date <= addD(today, 14)) out.later.push(e);
+    }
+    out.sunday = sunday;
+    return out;
+  }
+
+  function renderCalendarArea(res) {
+    if (!res.ok) {
+      const nr = res.e?.code === "not_ready";
+      el("calBox").hidden = !nr; el("weekBox").hidden = true;
+      if (nr) el("cal").innerHTML = `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">build</span><div>${esc(res.e.hint || "定例業務の準備（db/125）がまだです")}</div></div>`;
+      return;
+    }
+    el("calBox").hidden = false; el("weekBox").hidden = false;
+    remember(res.v);
+    renderCal();
+    renderWeek();
+  }
+
+  async function calMove(n) {
+    const [y, m] = (n === 0 ? CAL.today.slice(0, 7) : CAL.ym).split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + n, 1));
+    const ym = d.toISOString().slice(0, 7);
+    CAL.ym = ym; CAL.sel = null;
+    el("calMonth").textContent = `${ym.slice(0, 4)}年${Number(ym.slice(5, 7))}月`;
+    el("cal").innerHTML = `<div class="of-empty">読み込み中…</div>`;
+    try {
+      const data = await API.api(calUrl(ym));
+      if (CAL.ym !== ym) return;
+      CAL.data = data; remember(data); renderCal();
+    } catch (e) { el("cal").innerHTML = `<div class="of-banner err"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`; }
+  }
+
+  function evLine(e) {
+    const cls = e.status === "done" ? "done" : e.status === "skipped" ? "skipped" : e.overdueDays > 0 ? "overdue" : "";
+    return `<span class="oc-ev ${cls}" title="${esc(`${e.title}（${e.categoryLabel}${e.assigneeName ? `・${e.assigneeName}` : ""}）`)}">${esc(e.title)}</span>`;
+  }
+
+  function renderCal() {
+    const ym = CAL.ym, g = gridOf(ym), today = CAL.today;
+    el("calMonth").textContent = `${ym.slice(0, 4)}年${Number(ym.slice(5, 7))}月`;
+    el("calToday").disabled = ym === today.slice(0, 7);
+    const days = [];
+    for (let d = g.from; d <= g.to; d = addD(d, 1)) days.push(d);
+    const cells = days.map((d) => {
+      const evs = eventsOn(d);
+      const out = d.slice(0, 7) !== ym, off = dowIdx(d) >= 5;
+      const pend = evs.filter((e) => e.status === "pending").length;
+      return `<button type="button" class="oc-day${out ? " out" : ""}${off ? " off" : ""}${d === today ? " today" : ""}" data-date="${d}"
+          aria-label="${esc(`${dayLabel(d)} 予定${evs.length}件${pend ? `（未完了${pend}件）` : ""}`)}" onclick="openDay('${d}')">
+        <span class="oc-num">${Number(d.slice(8, 10))}</span>
+        ${evs.slice(0, 3).map(evLine).join("")}
+        ${evs.length > 3 ? `<span class="oc-more">+${evs.length - 3}件</span>` : ""}
+      </button>`;
+    }).join("");
+    // スマホ：その月の日付を横に流し、選んだ日の予定をカードで出す
+    const monthDays = days.filter((d) => d.slice(0, 7) === ym);
+    if (!CAL.sel || CAL.sel.slice(0, 7) !== ym) CAL.sel = monthDays.includes(today) ? today : monthDays[0];
+    const strip = monthDays.map((d) => {
+      const evs = eventsOn(d), late = evs.some((e) => e.overdueDays > 0 && e.status === "pending");
+      return `<button type="button" class="oc-sd${dowIdx(d) >= 5 ? " off" : ""}${d === today ? " today" : ""}${d === CAL.sel ? " on" : ""}" data-date="${d}" onclick="pickDay('${d}')">
+        <small>${DOW[dowIdx(d)]}</small><b>${Number(d.slice(8, 10))}</b><i class="${late ? "ng" : ""}">${evs.length ? `${evs.length}件` : ""}</i></button>`;
+    }).join("");
+    el("cal").innerHTML = `<div class="oc-grid" role="grid">${DOW.map((w) => `<div class="oc-dow">${w}</div>`).join("")}${cells}</div>
+      <div class="oc-strip" id="calStrip">${strip}</div>
+      <div class="oc-day-cards" id="calCards">${dayCardsHtml(CAL.sel, true)}</div>`;
+    const on = el("calStrip")?.querySelector(".oc-sd.on");
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest", inline: "center" });
+  }
+  function pickDay(d) { CAL.sel = d; renderCal(); }
+
+  function cardHtml(e) {
+    const st = e.status === "done" ? `<span class="oc-tag ok">完了</span>` : e.status === "skipped" ? `<span class="oc-tag">今回なし</span>`
+      : e.overdueDays > 0 ? `<span class="oc-tag ng">期限超過 ${e.overdueDays}日</span>` : `<span class="oc-tag">未完了</span>`;
+    const ops = !e.canEdit ? "" : e.status === "pending"
+      ? `<button type="button" class="of-btn" data-act="complete" onclick="calAct('${esc(e.id)}','complete',this)"><span class="material-symbols-outlined" aria-hidden="true">check</span>完了</button>
+         <button type="button" class="of-btn sec" data-act="skip" onclick="calAct('${esc(e.id)}','skip',this)">今回なし</button>`
+      : `<button type="button" class="of-btn sec" data-act="reopen" onclick="calAct('${esc(e.id)}','reopen',this)">未完了に戻す</button>`;
+    return `<div class="oc-card${e.status !== "pending" ? " done" : e.overdueDays > 0 ? " overdue" : ""}" data-event="${esc(e.id)}">
+      <b>${esc(e.title)}</b>${st}${e.assigneeMissing ? `<span class="oc-tag warn">担当者未設定</span>` : ""}
+      <div class="m">${esc(e.categoryLabel)}・担当：${esc(e.assigneeName || "未設定")}・期限：${esc(md(e.dueOn))}
+        ${e.status === "done" && e.completedAt ? `<br>完了：${esc(O.fmt(e.completedAt))}${e.completedByName ? `（${esc(e.completedByName)}）` : ""}` : ""}
+        ${e.note ? `<br>備考：${esc(e.note)}` : ""}${e.description ? `<br>${esc(e.description)}` : ""}</div>
+      <div class="ops">${ops}
+        ${e.url ? `<a class="of-btn sec" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">関連URL</a>` : ""}
+        ${e.recurringTaskId ? `<a class="of-btn sec" href="/office/recurring.html?id=${encodeURIComponent(e.recurringTaskId)}">定例業務の設定</a>` : ""}</div>
+    </div>`;
+  }
+
+  function dayCardsHtml(date, compact) {
+    if (!date) return "";
+    const evs = eventsOn(date);
+    if (!evs.length) return `<div class="of-empty">${compact ? `${esc(dayLabel(date))}：` : ""}この日の予定はありません</div>`;
+    const groups = new Map();
+    for (const e of evs) groups.set(e.categoryLabel, [...(groups.get(e.categoryLabel) || []), e]);
+    return (compact ? `<div class="oc-cat" style="margin-top:4px;">${esc(dayLabel(date))}</div>` : "")
+      + [...groups].map(([cat, list]) => `<div class="oc-cat">${esc(cat)}</div>${list.map(cardHtml).join("")}`).join("");
+  }
+
+  function openDay(date) {
+    CAL.drawer = date;
+    el("drawer-root").innerHTML = `<div class="of-drawer-bg" data-close onclick="closeDay()"></div>
+      <aside class="of-drawer" role="dialog" aria-modal="true" aria-labelledby="oc-dr-title" tabindex="-1">
+        <div class="oc-dr"><div class="oc-dr-h"><h2 id="oc-dr-title">${esc(dayLabel(date))}</h2>
+          <button type="button" class="of-btn sec" onclick="closeDay()">閉じる</button></div>
+          <div id="oc-dr-body">${dayCardsHtml(date)}</div></div></aside>`;
+    el("drawer-root").querySelector(".of-drawer").focus();
+  }
+  function closeDay() { CAL.drawer = null; el("drawer-root").innerHTML = ""; }
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && CAL.drawer) closeDay(); });
+
+  async function calAct(id, action, btn) {
+    try {
+      const r = await KPLayout.busy(btn, "…", () => API.api("/api/office-tasks/calendar", { method: "POST", body: { action, id }, invalidates: [] }));
+      if (r?.event) {
+        CAL.byId.set(r.event.id, r.event);
+        for (const d of [CAL.data, CAL.week]) {
+          if (!d) continue;
+          d.events = (d.events || []).map((e) => (e.id === r.event.id ? r.event : e));
+          d.overdue = (d.overdue || []).filter((e) => e.id !== r.event.id || r.event.status === "pending").map((e) => (e.id === r.event.id ? r.event : e));
+        }
+      }
+      if (CAL.drawer) el("oc-dr-body").innerHTML = dayCardsHtml(CAL.drawer);
+      renderCal(); renderWeek();
+      if (CTX) load(CTX);              // 件数・今日やることも出し直す（ほかは覚えている値ですぐ出る）
+    } catch (e) { alert(e.hint || e.message || "できませんでした"); }
+  }
+
+  function renderWeek() {
+    if (!CAL.week) return;
+    const today = CAL.today, w = weekBuckets(CAL.week, today);
+    const weekN = w.check.length + w.today.length + w.tomorrow.length + w.week.length;
+    const tile = (k, label, n, sub, tone) => `<div class="of-tile${tone && n ? " hot" : ""}" data-wk="${k}"><span class="lb"><span class="t">${esc(label)}</span></span>
+      <span class="val${n ? "" : " zero"}">${n}<small>件</small></span><span class="sub">${esc(sub)}</span></div>`;
+    el("wkTiles").innerHTML = [
+      tile("today", "今日", w.today.length, "今日が予定日・期限", true),
+      tile("tomorrow", "明日", w.tomorrow.length, md(addD(today, 1))),
+      tile("week", "今週", weekN, `${md(today)}〜${md(w.sunday)}`),
+      tile("overdue", "期限超過", w.overdue.length, "期限を過ぎて未完了", true),
+    ].join("");
+    const LBL = [["check", "要確認", ""], ["overdue", "期限超過", "overdue"], ["today", "今日期限", "hot"], ["tomorrow", "明日期限", ""], ["week", "今週対応", ""], ["later", "今後の予定", ""]];
+    const rows = [];
+    for (const [k, label, tone] of LBL) for (const e of w[k].slice(0, k === "later" ? 5 : 30)) rows.push(`
+      <div class="of-row oc-wk${tone ? ` ${tone}` : ""}" data-wk-row="${k}" data-event="${esc(e.id)}">
+        <div class="info">
+          <b>${esc(e.title)}</b>
+          <div class="now"><span class="oh-pri">${esc(label)}</span>・${esc(e.categoryLabel)}・${esc(md(e.date))}（期限 ${esc(md(e.dueOn))}）${e.overdueDays ? `・${e.overdueDays}日超過` : ""}</div>
+          <div class="n">担当：${esc(e.assigneeName || "未設定")}${e.assigneeMissing ? `<span class="oc-tag warn">担当者未設定</span>` : ""}</div>
+        </div>
+        ${e.canEdit ? `<button type="button" class="btn btn-secondary btn-sm" onclick="calAct('${esc(e.id)}','complete',this)">完了</button>` : ""}
+        <button type="button" class="btn btn-primary btn-sm" onclick="openDay('${esc(e.date)}')">確認する</button>
+      </div>`);
+    el("wkList").innerHTML = rows.length ? rows.join("") : `<div class="of-empty">今週の Office 予定はありません</div>`;
   }
 </script>
 
