@@ -2,7 +2,8 @@
 //
 // ■ 何を守りたいのか
 //   ・各社員の行に出る権限は、4つのボタンだけ（採用HR / Sales / Office / 経営）。ON＝青・OFF＝白
-//   ・経営者・人事・IT・管理・経理・責任者・社労士・採用担当・営業担当（内部の役割）は、一覧に出さない。「詳細設定」を開いたときだけ
+//   ・Office が ON の人だけ、その下に Office の中の業務 3つ（人事・労務／経理・事務／月末月初 → hr／finance／manager）
+//   ・IT・管理・社労士・採用担当・営業担当は「高度な権限設定」の中だけ（ふだんは閉じている）。経営者は「経営」のボタン
 //   ・押すとすぐ保存される。保存中は同じボタンを押せない（二重クリックしても1回だけ送る）
 //   ・成功したら、サーバの応答でその場の同じ行を直す（名簿は取り直さない）。失敗したら元に戻して、エラーを出す
 //   ・経営者は4つとも ON で変えられない。会計の管理者は Office が ON で変えられない（理由が出る）
@@ -115,7 +116,9 @@ console.log("— 一覧に出るのは、4つのボタンだけ —");
   // 「変えられない理由」の注記（経営者・会計の管理者の行）は、内部の役割を選ぶものではないので除く
   const listText = await page.locator("#list tbody").evaluate((n) => { const c = n.cloneNode(true); c.querySelectorAll(".mb-lockmsg").forEach((x) => x.remove()); return c.innerText; });
   check(!/経営者|IT・管理|責任者|社労士|採用担当|営業担当/.test(listText.replace(/経営 太郎|責任 二郎|営業 三郎/g, "")), "一覧に、経営者・IT・管理・責任者・社労士・採用担当・営業担当（内部の役割）の名前が出ない");
-  check(!/人事・労務|経理・事務|月末月初/.test(listText), "一覧に、人事・労務／経理・事務／月末月初が出ない");
+  // 人事・労務／経理・事務／月末月初は、Office が ON の人の「Office の中」だけに出る（2026-10-07）
+  const outside = await page.locator("#list tbody").evaluate((n) => { const c = n.cloneNode(true); c.querySelectorAll(".mb-lockmsg, [data-role=\"office-work\"]").forEach((x) => x.remove()); return c.innerText; });
+  check(!/人事・労務|経理・事務|月末月初/.test(outside), "人事・労務／経理・事務／月末月初は、Office の中のスイッチ以外に出ない");
   const hr = await pressed(page, "e-hr");
   check(JSON.stringify(hr) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), `人事（hr）: 採用HR ON・Sales OFF・Office ON・経営 OFF（サーバの値のまま。いま ${JSON.stringify(hr)}）`);
   check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify(OFF), "権限なし: 4つとも OFF");
@@ -205,27 +208,56 @@ console.log("\n— 変えられない行（経営者・会計の管理者）と�
   await p2.close();
 }
 
-console.log("\n— 詳細設定：内部の役割は、ここだけ —");
+console.log("\n— 高度な権限設定：特殊な役割だけ（ふだんは閉じている）—");
 {
   const page = await open();
+  check((await row(page, "e-hr").locator('[data-role="more"]').innerText()).trim() === "高度な権限設定", "ボタンの名前は「高度な権限設定」");
   await row(page, "e-hr").locator('[data-role="more"]').click();
   const detail = page.locator('tr.mb-detail[data-detail="e-hr"]');
-  check(await detail.count() === 1, "「詳細設定」で、その行の下に開く");
+  check(await detail.count() === 1, "その行の下に開く");
   const labels = (await detail.locator("label").allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
-  check(labels.length === 8 && ["経営者（owner）", "人事（hr）", "IT・管理（it）", "経理（finance）", "責任者（manager）", "社労士（labor_advisor）", "採用担当（recruiter）", "営業担当（sales）"].every((l) => labels.includes(l)), `内部の役割 8つ（いま ${labels.join("／")}）`);
-  check(await detail.locator('input[data-role="hr"]').isChecked() && !(await detail.locator('input[data-role="finance"]').isChecked()), "いまの内部の役割にチェックが付いている");
-  check((await detail.innerText()).includes("アプリへは入れません") && (await detail.innerText()).includes("Office を ON にしただけでは"), "ボタンとの関係（入口と中身は別）が書いてある");
+  check(labels.join("／") === "経営者／IT・管理／社労士／採用担当／営業担当", `経営者・IT・管理・社労士・採用担当・営業担当の5つだけ（いま ${labels.join("／")}）`);
+  check(await detail.locator('input[data-role="hr"], input[data-role="finance"], input[data-role="manager"]').count() === 0, "人事・経理・責任者は、ここに出さない（Office の中のスイッチと重複させない）");
+  const txt = await detail.innerText();
+  check(txt.includes("付け外しは経営者だけ") && txt.includes("採用HR・Sales に入れるかは、上のボタン"), "経営者は経営者だけが付け外し、採用担当・営業担当はボタンと別の名札、と書いてある");
   check(await row(page, "e-hr").locator('[data-role="more"]').getAttribute("aria-expanded") === "true", "aria-expanded が開いた状態");
-  // 内部の役割を付けても、入口（ボタン）は変わらない
   const get0 = page.calls.employeesGet;
-  await detail.locator('input[data-role="finance"]').check();
+  await detail.locator('input[data-role="recruiter"]').check();
   await page.waitForTimeout(500);
-  check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-hr", role: "finance", grant: true }), "チェックは /api/employees/roles へ送る");
-  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), "内部の役割を付けても、4つのボタンは変わらない");
+  check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-hr", role: "recruiter", grant: true }), "チェックは /api/employees/roles へ送る");
+  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), "役割を付けても、4つのボタンは変わらない");
   check(page.calls.employeesGet === get0, "名簿は取り直さない");
-  check(await page.locator('tr.mb-detail[data-detail="e-hr"]').count() === 1, "付け外しのあとも、詳細設定は開いたまま");
+  check(await page.locator('tr.mb-detail[data-detail="e-hr"]').count() === 1, "付け外しのあとも開いたまま");
   await row(page, "e-hr").locator('[data-role="more"]').click();
   check(await page.locator("tr.mb-detail").count() === 0, "もう一度押すと閉じる");
+  await page.close();
+}
+
+console.log("\n— Office の中の業務：Office が ON の人だけ、3つのスイッチ —");
+{
+  const page = await open();
+  const subs = (id) => row(page, id).locator('[data-role="office-work"] .mb-sub');
+  const work = async (id) => Object.fromEntries(await subs(id).evaluateAll((ns) => ns.map((n) => [n.dataset.work, n.getAttribute("aria-pressed") === "true"])));
+  check((await subs("e-hr").allInnerTexts()).map((t) => t.replace("✓", "").trim()).join("/") === "人事・労務/経理・事務/月末月初", "人事・労務／経理・事務／月末月初");
+  check(await subs("e-sales").count() === 0 && await subs("e-none").count() === 0, "Office が OFF の人には出さない");
+  check(JSON.stringify(await work("e-hr")) === JSON.stringify({ hr: true, finance: false, month: false }), "人事（hr）→ 人事・労務だけ ON");
+  check(JSON.stringify(await work("e-fin")) === JSON.stringify({ hr: false, finance: true, month: true }), "経理（finance）→ 経理・事務と月末月初が ON");
+  check(await row(page, "e-fin").locator('.mb-sub[data-work="month"]').isDisabled() && (await row(page, "e-fin").locator('[data-note="office-via"]').innerText()).includes("経理・事務に含まれ"), "経理で使えている月末月初は押せず、理由が出る");
+  check(JSON.stringify(await work("e-mgr")) === JSON.stringify({ hr: false, finance: false, month: true }), "責任者（manager）→ 月末月初が ON");
+  check(JSON.stringify(await work("e-own")) === JSON.stringify({ hr: true, finance: true, month: true }) && (await row(page, "e-own").locator('[data-note="office-via"]').innerText()).trim() === "経営者として、3つとも使えます", "経営者 → 3つとも ON（「経営者として、3つとも使えます」）");
+  // 押すと、内部ロールを付け外しする（DB・API はこれまでどおり）
+  await row(page, "e-hr").locator('.mb-sub[data-work="finance"]').click();
+  await page.waitForTimeout(500);
+  check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-hr", role: "finance", grant: true }), "経理・事務 → finance を付ける");
+  check(JSON.stringify(await work("e-hr")) === JSON.stringify({ hr: true, finance: true, month: true }), "サーバの判定で出し直す（経理を付けたので月末月初も ON）");
+  await row(page, "e-hr").locator('.mb-sub[data-work="hr"]').click();
+  await page.waitForTimeout(500);
+  check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-hr", role: "hr", grant: false }), "人事・労務を外す → hr を外す");
+  await row(page, "e-mgr").locator('.mb-sub[data-work="month"]').click();
+  await page.waitForTimeout(500);
+  check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-mgr", role: "manager", grant: false }), "月末月初を外す → manager を外す");
+  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), "4つのボタンは変わらない");
+  await page.screenshot({ path: shotPath("members-office-work.png"), fullPage: true });
   await page.close();
 }
 
@@ -308,27 +340,27 @@ console.log("\n— Office の入口と中の業務の食い違いを、行に出
   // 一覧の上で、該当者がまとめて分かる
   const sum = page.locator('[data-role="office-empty-sum"]');
   check(await sum.count() === 1 && (await sum.innerText()).includes("1人") && (await sum.innerText()).includes("入口 だけ"), "一覧の上に「Office内の権限が未設定：1人」と名前");
-  // 押すと、詳細設定で 責任者・人事・経理 を付ける案内（権限は付けない）
+  // 押すと、Office の下の3つのスイッチのところに案内（権限は付けない）
   await warn.click();
   await page.waitForTimeout(300);
-  const guide = page.locator('[data-detail="e-empty"] [data-role="office-guide"]');
+  const guide = row(page, "e-empty").locator('[data-role="office-guide"]');
   const gt = await guide.innerText();
-  check(await guide.count() === 1 && /責任者（manager）/.test(gt) && /人事（hr）/.test(gt) && /経理（finance）/.test(gt) && /自動では付けません/.test(gt), "押すと、詳細設定で 責任者／人事／経理 のどれかを付ける案内");
-  const need = await page.locator('[data-detail="e-empty"] label.mb-need input').evaluateAll((ns) => ns.map((n) => n.dataset.role).sort());
-  check(need.join(",") === "finance,hr,manager", `付ける候補の3つに印（${need.join(",")}）`);
+  check(await guide.count() === 1 && /人事・労務/.test(gt) && /経理・事務/.test(gt) && /月末月初/.test(gt) && /自動では付けません/.test(gt), "押すと、人事・労務／経理・事務／月末月初 のどれかを ON にする案内");
+  check(await row(page, "e-empty").locator('[data-role="office-work"] .mb-sub').count() === 3, "そのすぐ上に3つのスイッチ");
   check(page.calls.rolePosts.length === 0, "案内を出しただけでは、権限を付けない");
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: shotPath("members-office-empty.png"), fullPage: true });
-  // 人事を付けると、表示が消える
-  await page.locator('[data-detail="e-empty"] input[data-role="hr"]').check();
+  // 人事・労務を ON にすると、表示が消える
+  await row(page, "e-empty").locator('.mb-sub[data-work="hr"]').click();
   await page.waitForTimeout(500);
-  check(await note("e-empty", "office-empty").count() === 0 && await page.locator('[data-role="office-guide"]').count() === 0, "役割を付けると「Office内の権限が未設定」が消える");
+  check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-empty", role: "hr", grant: true }), "人事・労務 → hr を付ける");
+  check(await note("e-empty", "office-empty").count() === 0 && await page.locator('[data-role="office-guide"]').count() === 0, "ON にすると「Office内の権限が未設定」が消える");
   check(await page.locator('[data-role="office-empty-sum"]').count() === 0, "一覧の上の表示も消える");
   // 直すと、その場で消える（Office を ON にする／役割を付ける）
   await btn(page, "e-finoff", "office").click();
   await page.waitForTimeout(500);
   check(await row(page, "e-finoff").locator(".mb-gap").count() === 0, "Office を ON にすると、注記が消える");
-  check(await page.locator('[data-detail="e-finoff"] [data-role="office-guide"]').count() === 0, "役割がある人の Office を ON にしても、案内は出ない");
+  check(await page.locator('[data-role="office-guide"]').count() === 0, "役割がある人の Office を ON にしても、案内は出ない");
   await page.close();
 }
 
@@ -337,9 +369,9 @@ console.log("\n— Office を ON にした瞬間：中の役割が無ければ�
   const page = await open({ delay: 600 });
   await btn(page, "e-none", "office").click();
   await page.waitForTimeout(150);
-  check(await page.locator('[data-detail="e-none"] [data-role="office-guide"]').count() === 1, "保存の終わりを待たずに、押した瞬間に案内が出る");
+  check(await row(page, "e-none").locator('[data-role="office-guide"]').count() === 1, "保存の終わりを待たずに、押した瞬間に案内が出る");
   await page.waitForTimeout(900);
-  check(await page.locator('[data-detail="e-none"] [data-role="office-guide"]').count() === 1, "保存後も、サーバの判定で案内が残る");
+  check(await row(page, "e-none").locator('[data-role="office-guide"]').count() === 1, "保存後も、サーバの判定で案内が残る");
   check(await row(page, "e-none").locator('[data-note="office-empty"]').count() === 1, "行に「Office内の権限が未設定」");
   check(/Office内の権限（責任者・人事・経理）が未設定/.test(await toast(page)), `知らせにも出る（${await toast(page)}）`);
   check(page.calls.rolePosts.length === 0 && page.calls.appPosts.length === 1, "役割は送っていない（Office の ON だけ）");
