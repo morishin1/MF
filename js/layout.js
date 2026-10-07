@@ -272,9 +272,10 @@
     {
       key: "office-admin", label: "社内管理", icon: "apartment",
       items: [
-        // 定例業務マスター（Office の年間業務カレンダーの元。db/125）。見られるカテゴリは中で担当の分だけ
-        { key: "office_recurring", href: "/office/recurring.html", label: "定例業務", icon: "event_repeat", ready: true, when: "officeEntry" },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true, when: "officeFinance" },
+        // 定例業務マスター（Office の年間業務カレンダーの元。db/125）。見られるカテゴリは中で担当の分だけ。
+        // 人事・労務だけの人には社内管理のタブを出さない（これまでどおり）ので、Office ホームのカレンダーの「定例業務を開く」から入る
+        { key: "office_recurring", href: "/office/recurring.html", label: "定例業務", icon: "event_repeat", ready: true, when: "officeFinance" },
         // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
         { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true, when: "adminApp",
           tabs: [
