@@ -64,12 +64,22 @@
     .mb-guide { border:1px solid #f5b25b; border-left:4px solid #e08a1e; background:#fff8ee; border-radius:8px; padding:10px 12px; margin:0 0 10px;
                 color:#7a4a05; font-size:12.5px; line-height:1.8; }
     .mb-guide b { color:#7a4a05; }
-    .mb-roles label.mb-need { background:#fff4e5; border-radius:6px; padding:2px 6px; outline:1px dashed #f5b25b; }
     .mb-sum { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; border:1px solid #f5b25b; background:#fff8ee; color:#7a4a05;
               border-radius:10px; padding:10px 14px; margin:0 0 12px; font-size:13px; }
     .mb-sum b { color:#b45309; }
     .mb-sum button { appearance:none; border:1px solid #f5b25b; background:#fff; color:#b45309; border-radius:999px; padding:2px 10px;
                      font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+    /* Office の中の業務（Office が ON のときだけ）。4つのボタンより一段小さく、すぐ下に置く */
+    .mb-subs { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin:7px 0 0; padding:6px 8px; border-left:2px solid #c7d4f5; background:#f7f9ff; border-radius:0 8px 8px 0; }
+    .mb-subs .lb { font-size:11.5px; color:#475467; font-weight:700; margin-right:2px; }
+    .mb-sub { appearance:none; cursor:pointer; border:1px solid #d0d5dd; background:#fff; color:#475467; border-radius:999px;
+              padding:3px 11px; min-height:28px; font:inherit; font-size:12px; font-weight:700; }
+    .mb-sub[aria-pressed="true"] { background:#dbe6ff; border-color:#2563eb; color:#1d4fd8; }
+    .mb-sub[aria-pressed="true"]::before { content:"✓ "; }
+    .mb-sub.via { opacity:.75; cursor:not-allowed; }
+    .mb-sub:disabled:not(.via) { opacity:.55; cursor:not-allowed; }
+    .mb-sub.busy { cursor:progress; opacity:.7; }
+    .mb-sub:focus-visible { outline:3px solid #93b4fb; outline-offset:2px; }
     .mb-more { appearance:none; border:0; background:none; color:#2563eb; cursor:pointer; font:inherit; font-size:12.5px; padding:4px 0 0; }
     .mb-detail td { background:#fafafa; border-bottom:1px solid #e2e2dc; }
     .mb-detail h4 { margin:0 0 4px; font-size:13px; color:#1b2440; }
@@ -162,15 +172,16 @@
       </button>
     </h2>
     <!-- どのアプリへ入れるかは、行の4つのボタン（採用HR / Sales / Office / 経営）が正式な設定元（gw_app_grants, db/119）。
-         アプリの中で何ができるかは、内部ロール（行の「詳細設定」）が決める。ボタンは押すとすぐ保存される。
+         アプリの中で何ができるかは、内部ロール（Office の中の3つのスイッチ・行の「高度な権限設定」）が決める。ボタンは押すとすぐ保存される。
          付け外しは再ログイン不要で、相手が画面を再読込すると、ヘッダーと入口に反映される -->
     <details class="mb-legend"><summary>使える業務（4つのボタン）の見かた</summary>
     <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
       ボタンは「どのアプリへ入れるか」だけを決めます。青＝ON（入れる）、白＝OFF。押すとすぐ保存されます。<br>
       <b>採用HR</b>（/hr/）・<b>Sales</b>（/sales/）・<b>Office</b>（/office/）・<b>経営</b>（/keiei/・経営者だけ）。
       経営者はすべてのアプリを使えます（変更できません）。会計の管理者は Office に入れます（変更できません）。<br>
-      <b>Office をONにしただけでは、中の業務は使えません。</b>入ったあとに何ができるかは、行の「詳細設定」の内部の役割が決めます：
-      人事（hr）＝人事・労務 ／ 経理（finance）＝経理・事務 ／ 責任者（manager）・経理（finance）・経営者（owner）＝月末月初。
+      <b>Office をONにしただけでは、中の業務は使えません。</b>Office が ON の人には、その下に「Office の中」の3つのスイッチが出ます：
+      <b>人事・労務</b>／<b>経理・事務</b>／<b>月末月初</b>（経理・事務を ON にすると月末月初も使えます）。
+      IT・管理・社労士・経営者・採用担当／営業担当の名札は、行の「高度な権限設定」（ふだんは閉じています）。
       内部の役割を付けただけでは、アプリへは入れません。
       付け外しは、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
     </p>
@@ -354,7 +365,7 @@
     { key: "office", label: "Office" }, { key: "keiei", label: "経営" },
   ];
   const LOCK_TEXT = {
-    owner: "経営者は、すべてのアプリを使えます。変更できません（外すときは、詳細設定の「経営者」）。",
+    owner: "経営者は、すべてのアプリを使えます。変更できません（外すときは、高度な権限設定の「経営者」）。",
     accountingAdmin: "会計の管理者のため、Office に入れます。変更できません。",
   };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない
@@ -369,9 +380,9 @@
   let canGrantOwner = false;  // 経営者（owner）の付け外しと、経営者の名簿・ログインの変更（いまの経営者だけ）
   let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
   let appsState = null;       // アプリ利用権限（gw_app_grants, db/119）："table"=変更できる / "derived"=表が未適用 / "error"=読めない / null=見る権限なし
-  const openDetail = new Set();   // 「詳細設定」を開いている行
+  const openDetail = new Set();   // 「高度な権限設定」を開いている行
   const busyApps = new Set();     // 保存中のボタン（社員ID:アプリ）。二重に押せない
-  const officeGuide = new Set();  // 「Office内の権限が未設定」の案内を開いている行（詳細設定の上に出す）
+  const officeGuide = new Set();  // 「Office内の権限が未設定」の案内を開いている行（Office の中のスイッチの下に出す）
   let editingId = null;      // null なら追加、id が入っていればその人の編集
   let kindReady = false;     // 075（BP）が適用済みか。未適用なら区分の欄ごと隠す
   let partners = [];
@@ -919,7 +930,8 @@
         <b>利用中のシステム</b>のチップを押すと、その場で開放／停止できます
         （グループウェアは名簿にいる方全員が使うので切れません。止めるときは状態を「退職」に）。<br>
         <b>使える業務</b>の4つのボタンは、押すとすぐ保存されます（保存中は押せません。失敗したら元に戻ります）。
-        内部の役割（経営者・人事・経理・責任者など）は、「詳細設定」を開いたときだけ出ます。<br>
+        Office が ON の人には、その下に Office の中の業務（人事・労務／経理・事務／月末月初）のスイッチが出ます。
+        IT・管理・社労士・担当者の名札は「高度な権限設定」の中です。<br>
         <b>ログイン</b>でメールアドレスとパスワードを変えられます。
         4つのシステムは同じログインなので、変えると全部に効きます。
         ${canGrantRoles ? "" :
@@ -929,7 +941,7 @@
 
   // ---- 使える業務：4つのボタン ----------------------------------------------------
   // ボタンの表示は、サーバが返した e.apps（= lib/gw.js の判定。本人が画面を再読込したあとの /api/me の access と同じ元）だけ。
-  // 画面で役割を並べ直さない。内部の役割（e.roles）は、ボタンには出さず、詳細設定の中だけ。
+  // 画面で役割を並べ直さない。内部の役割（e.roles）は、Office の中のスイッチと高度な権限設定だけ。
   // Office は ON なのに、Office の中で使える業務が無い（＝本人が Office を開いても何もできない）か。
   // 判定はサーバが返した access（lib/gw.js accessOf。本人の /api/me と同じ元）。権限の決め方はここで作らない。
   // Office を押した直後（保存中）だけは、まだ新しい access が無いので、内部の役割（経営者・責任者・人事・経理）と
@@ -945,12 +957,87 @@
     return !(ac.office || ac.officeHr || ac.officeFinance);
   }
 
-  // 「Office内の権限が未設定」を押したとき：詳細設定を開き、何を付ければよいかを出す（権限は付けない）
+  // ---- Office の中の業務：3つのスイッチ（Office が ON のときだけ出す） -----------------------------
+  // 画面の名前と、既存の内部ロールの対応（DB・API はこれまでどおり内部ロールで持つ。ここは見せ方だけ）
+  //   人事・労務 → hr（access.officeHr）／経理・事務 → finance（access.officeFinance）／月末月初 → manager（access.office）
+  // ON／OFF の見え方は、サーバが返した access（lib/gw.js。本人の /api/me と同じ元）。押すと内部ロールを付け外しする。
+  // 別の権限で使えているとき（経営者・会計の管理者・月末月初を経理で）は、ON のまま押せなくし、理由を出す
+  const OFFICE_WORK = [
+    { key: "hr",      role: "hr",      label: "人事・労務", acc: "officeHr",      hint: "メンバー・入退社・勤怠・雇用契約・評価" },
+    { key: "finance", role: "finance", label: "経理・事務", acc: "officeFinance", hint: "経費精算・月次業務・請求・会計" },
+    { key: "month",   role: "manager", label: "月末月初",   acc: "office",        hint: "月末月初の業務（Office の月次）" },
+  ];
+  const busyWork = new Set();     // 保存中の Office の中の業務（社員ID:key）
+
+  function officeWorkState(e, w) {
+    const roles = e.roles || [];
+    const has = roles.includes(w.role);
+    const busy = busyWork.has(`${e.id}:${w.key}`);
+    const on = busy || !e.access ? has || (w.key === "month" && roles.includes("finance")) : Boolean(e.access[w.acc]);
+    let via = null;
+    if (on && !has && !busy) {
+      via = roles.includes("owner") ? "経営者として使えます"
+        : w.key === "month" && roles.includes("finance") ? "経理・事務に含まれます"
+        : e.accessMeta?.accountingAdmin === true ? "会計の管理者として使えます" : "ほかの権限で使えます";
+    }
+    return { has, on, busy, via };
+  }
+
+  function officeWorkHtml(e) {
+    if (!e.apps || !e.apps.office) return "";
+    const live = appsState === "table";
+    const items = OFFICE_WORK.map((w) => {
+      const st = officeWorkState(e, w);
+      const disabled = st.busy || Boolean(st.via) || !live || !canGrantRoles || (e.appLocks || {}).office === "owner";
+      const title = st.via ? `${w.label}：${st.via}` : !canGrantRoles ? "変更には管理者権限が必要です"
+        : `${w.label}（${w.hint}）：${st.on ? "使える（押すと外す）" : "使えない（押すと付ける）"}`;
+      return `<button type="button" class="mb-sub${st.busy ? " busy" : ""}${st.via ? " via" : ""}" data-work="${w.key}" aria-pressed="${st.on}"
+          ${disabled ? "disabled" : ""} title="${esc(title)}" onclick="setOfficeWork('${esc(e.id)}','${w.key}')">${w.label}</button>`;
+    }).join("");
+    // 同じ理由はまとめる（例：経営者は「経営者として、3つとも使えます」）
+    const byVia = new Map();
+    for (const w of OFFICE_WORK) { const st = officeWorkState(e, w); if (st.via) byVia.set(st.via, [...(byVia.get(st.via) || []), w.label]); }
+    const vias = [...byVia].map(([via, labels]) => labels.length === OFFICE_WORK.length
+      ? `${via.replace(/使えます$/, "")}3つとも使えます`.replace("として3つ", "として、3つ")
+      : `${labels.join("・")}は${via}`);
+    const empty = officeEmpty(e);
+    return `<div class="mb-subs" data-role="office-work" role="group" aria-label="${esc(e.display_name)}が Office の中で使える業務">
+        <span class="lb">Office の中：</span>${items}</div>
+      ${vias.length ? `<div class="mb-lockmsg" data-note="office-via">${esc(vias.join("／"))}</div>` : ""}
+      ${empty && officeGuide.has(e.id) ? officeGuideHtml(e) : ""}`;
+  }
+
+  async function setOfficeWork(employeeId, key) {
+    const w = OFFICE_WORK.find((x) => x.key === key);
+    const e = employees.find((x) => x.id === employeeId);
+    const bk = `${employeeId}:${key}`;
+    if (!w || !e || busyWork.has(bk)) return;
+    const before = [...(e.roles || [])];
+    const grant = !before.includes(w.role);
+    busyWork.add(bk);
+    e.roles = grant ? [...before, w.role] : before.filter((r) => r !== w.role);   // 押した瞬間に見た目を切り替える（失敗したら戻す）
+    render();
+    try {
+      const res = await API.setEmployeeRole(employeeId, w.role, grant);
+      busyWork.delete(bk);
+      if (res && res.apps) applyResult(e, res); else await load();
+      if (!officeEmpty(e)) officeGuide.delete(employeeId);
+      render();
+      const st = officeWorkState(e, w);
+      toast("ok", `${e.display_name} の「${w.label}」を ${grant ? "ON" : "OFF"} にしました${!grant && st.on && st.via ? `（${st.via}）` : ""}`);
+    } catch (err) {
+      busyWork.delete(bk);
+      e.roles = before;
+      render();
+      toast("err", `${e.display_name} の「${w.label}」を変えられませんでした。${err.hint || err.detail || err.message || ""}`);
+    }
+  }
+
+  // 「Office内の権限が未設定」を押したとき：Office の下の3つのスイッチのところに、何を ON にすればよいかを出す（権限は付けない）
   function showOfficeGuide(id) {
     officeGuide.add(id);
-    openDetail.add(id);
     render();
-    const box = document.querySelector(`[data-detail="${CSS.escape(id)}"] .mb-guide`);
+    const box = document.querySelector(`tr[data-employee="${CSS.escape(id)}"] .mb-guide`);
     if (box) { box.scrollIntoView({ behavior: "smooth", block: "center" }); box.focus({ preventScroll: true }); }
   }
 
@@ -981,47 +1068,47 @@
     const officeRoles = (e.roles || []).some((r) => ["hr", "finance", "manager"].includes(r));
     const empty = officeEmpty(e);
     const gap = live && !locks.office && !empty && !e.apps.office && officeRoles
-      ? ["office-off", "Office が OFF のため、詳細設定の役割（Office の業務）が使えません"] : null;
+      ? ["office-off", "Office が OFF のため、Office の中の業務（人事・労務など）は使えません"] : null;
     return `<div class="mb-tgs" role="group" aria-label="${esc(e.display_name)}が使える業務">${btns}</div>
       ${lockMsg ? `<div class="mb-lockmsg" data-note="${lockMsg[0]}">${esc(lockMsg[1])}</div>` : ""}
+      ${officeWorkHtml(e)}
       ${empty ? `<button type="button" class="mb-warn" data-note="office-empty" aria-expanded="${officeGuide.has(e.id)}"
           title="Office は ON ですが、Office の中で使える業務がありません。押すと設定のしかたを出します"
           onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}
       ${gap ? `<div class="mb-lockmsg mb-gap" data-note="${gap[0]}">${esc(gap[1])}</div>` : ""}
       ${unknown ? `<div class="mb-lockmsg" data-note="unknown">会計の管理者かどうかを確認できません。</div>` : ""}
       <button type="button" class="mb-more" data-role="more" aria-expanded="${openDetail.has(e.id)}"
-              onclick="toggleDetail('${esc(e.id)}')">詳細設定</button>`;
+              onclick="toggleDetail('${esc(e.id)}')">高度な権限設定</button>`;
   }
 
-  // 詳細設定：内部の役割（アプリの中で何ができるか）。アプリへ入れるかは、上の4つのボタン
+  // 高度な権限設定（ふだんは閉じている）：特殊な役割だけ。
+  //   人事・経理・責任者は、Office の下の3つのスイッチ（人事・労務／経理・事務／月末月初）で付け外しする
+  //   経営者（owner）は特殊な権限としてここに置く（付けると4つのアプリすべて。付け外しは経営者だけ）。
+  //   採用担当・営業担当は、採用HR・Sales のボタンとは別の「担当のラベル」
+  const ADVANCED_ROLES = ["owner", "it", "labor_advisor", "recruiter", "sales"];
   function detailRow(e) {
     if (!openDetail.has(e.id)) return "";
     const roles = e.roles || [];
     const cols = 7 + (kindReady ? 1 : 0);
-    const need = officeEmpty(e);
-    const boxes = Object.keys(ROLE_LABEL).map((r) => `
-      <label class="${need && ["manager", "hr", "finance"].includes(r) ? "mb-need" : ""}" style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
+    const boxes = ADVANCED_ROLES.map((r) => `
+      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
         <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
                ${canGrantRoles && (r !== "owner" || canGrantOwner) ? "" : "disabled"}
                onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
-        ${ROLE_LABEL[r]}（${r}）
+        ${ROLE_LABEL[r]}
       </label>`).join("");
     return `<tr class="mb-detail" data-detail="${esc(e.id)}"><td colspan="${cols}">
-      ${need ? officeGuideHtml(e) : ""}
-      <h4>内部の役割（アプリの中でできること）</h4>
-      <p>上の4つのボタンは「どのアプリへ入れるか」だけです。ここで役割を付けても、アプリへは入れません。
-         入れるようにするには、上のボタンを ON にします。</p>
+      <h4>高度な権限設定</h4>
+      <p>ふだんは使いません。アプリへ入れるかは上の4つのボタン、Office の中の業務は Office の下の3つのスイッチで決まります。</p>
       <div class="mb-roles">${boxes}</div>
-      <p>Office のボタンが ON のとき：人事（hr）＝人事・労務 ／ 経理（finance）＝経理・事務 ／ 責任者（manager）・経理（finance）・経営者（owner）＝月末月初。
-         Office を ON にしただけでは、この3つは使えません。</p>
+      <p>経営者＝すべてのアプリと全員の給与（付け外しは経営者だけ${canGrantOwner ? "" : "。いまのアカウントでは変えられません"}）／IT・管理＝端末・アカウントなどのシステム管理／社労士＝共有された手続きだけを見る。<br>
+         採用担当・営業担当は担当者の名札です（採用HR・Sales に入れるかは、上のボタンで決まります）。</p>
     </td></tr>`;
   }
   function officeGuideHtml(e) {
     return `<div class="mb-guide" data-role="office-guide" tabindex="-1" role="note">
       <b>⚠ Office内の権限が未設定です。</b>${esc(e.display_name)} さんは Office に入れますが、このままでは Office の中の業務を使えません。<br>
-      下の役割から、<b>責任者（manager）</b>／<b>人事（hr）</b>／<b>経理（finance）</b>のいずれかを付けてください。<br>
-      人事 → 人事・労務（メンバー・入退社・勤怠・雇用契約・評価）／経理 → 経理・事務（経費精算・月次業務・請求・会計）／責任者 → 月末月初。
-      役割は自動では付けません。付けると、この表示は消えます。
+      すぐ上の <b>人事・労務</b>／<b>経理・事務</b>／<b>月末月初</b> のどれかを ON にしてください（役割は自動では付けません。ON にすると、この表示は消えます）。
     </div>`;
   }
   function toggleDetail(id) {
@@ -1057,7 +1144,7 @@
     const next = !before;
     busyApps.add(key);
     e.apps = { ...e.apps, [app]: next };       // 押した瞬間に見た目を切り替える（失敗したら戻す）
-    if (app === "office" && next && officeEmpty(e)) { officeGuide.add(employeeId); openDetail.add(employeeId); }
+    if (app === "office" && next && officeEmpty(e)) officeGuide.add(employeeId);
     render();
     try {
       const res = await API.setEmployeeApp(employeeId, app, next);
@@ -1092,7 +1179,7 @@
     // 経営者の名簿・ログイン・在籍状態は、経営者以外は変えられない（サーバでも止める）
     const lockedOwner = roles.includes("owner") && !canGrantOwner;
     const canEdit = canManage && !lockedOwner;
-    // 使える業務：4つのボタンだけ。内部の役割は、ここには出さない（詳細設定の中だけ）
+    // 使える業務：4つのボタン（Office が ON なら、その下に Office の中の3つのスイッチ）
     const appCells = appsCell(e);
     return `
       <tr class="${e.status === "left" ? "done" : ""}" data-employee="${esc(e.id)}">
@@ -1670,7 +1757,7 @@
     }
   }
 
-  // 内部の役割（詳細設定）の付け外し。アプリへ入れるかは変わらない（ボタンは別）。
+  // 内部の役割（高度な権限設定）の付け外し。アプリへ入れるかは変わらない（ボタンは別）。
   // 変更直後の応答（4つのボタン・access・accessMeta）で、同じ行をその場で直す
   async function setRole(employeeId, role, grant, input) {
     try {
