@@ -409,6 +409,13 @@ for (const [width, path, name] of [
       scrolled: nav.scrollWidth - nav.clientWidth,
       overName: links.filter((a) => { const b = box(a); return b.right > mb.left + 0.5 && b.left < mb.right - 0.5; }).map((a) => a.innerText.trim()),
       nameTitle: nm.title, nameText: nm.textContent, nameCut: nm.scrollWidth > nm.clientWidth + 0.5,
+      // 1行のままか：ロゴ・近道・名前・ボタンの縦の中心がそろっている（高さの絶対値はフォントで変わるので見ない）
+      rowSpread: (() => {
+        const items = [bar.querySelector(".brand"), ...links, nm, ...bar.querySelectorAll(".who > .btn, .who .icon-btn")]
+          .filter((n) => n && n.offsetParent);
+        const mids = items.map((n) => { const b = box(n); return (b.top + b.bottom) / 2; });
+        return Math.round(Math.max(...mids) - Math.min(...mids));
+      })(),
       height: Math.round(box(bar).height),
       overflow: document.documentElement.scrollWidth - window.innerWidth,
       // 読み上げの文字＝アイコン（material-symbols）を除いたボタンの文字
@@ -420,7 +427,7 @@ for (const [width, path, name] of [
   check(r.labels === "HR/Sales/Office/経営", `${tag}: 近道は4つ（いま ${r.labels}）`);
   check(!r.clipped.length && r.scrolled <= 1, `${tag}: 近道が切れない（切れている ${r.clipped.join("・") || "なし"}・はみ出し ${r.scrolled}px）`);
   check(!r.overName.length, `${tag}: 近道と名前が重ならない（重なり ${r.overName.join("・") || "なし"}）`);
-  check(r.height <= 60, `${tag}: ヘッダーは1行のまま（高さ ${r.height}px）`);
+  check(r.rowSpread <= 12, `${tag}: ヘッダーは1行のまま（縦の中心のずれ ${r.rowSpread}px・高さ ${r.height}px）`);
   check(r.overflow <= 0, `${tag}: 横スクロールが出ない（はみ出し ${r.overflow}px）`);
   check(r.buttons.map((b) => b.text).join("/") === "メンバー表示/ログアウト" && r.buttons.every((b) => b.inView && b.title && b.w <= 40),
     `${tag}: メンバー表示・ログアウトはアイコンだけで画面内。title と読み上げの文字は残る（${r.buttons.map((b) => `${b.text}:${b.w}px`).join("・")}）`);
