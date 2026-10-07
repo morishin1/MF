@@ -266,8 +266,8 @@ function wire(page) {
   console.log("— メニュー —");
   // 最終メニューでは「ホーム ＞ お知らせ」の帯の中（社内のお知らせ / サイトのお知らせ）
   check(await page.locator("#kp-office-nav .kp-ostab.on:has-text('お知らせ')").count() === 1
-    && await page.locator("#kp-office-nav .kp-otab.on:has-text('社内管理')").count() === 1,
-    "Office のタブでは「社内管理 ＞ お知らせ配信」が選ばれている");
+    && await page.locator("#kp-office-nav .kp-otab.on:has-text('契約・書類')").count() === 1,
+    "Office のタブでは「契約・書類 ＞ お知らせ配信」が選ばれている");
   check(await page.locator(".kp-subnav .kp-subtab.on:has-text('サイトのお知らせ')").count() === 1,
     "帯では「サイトのお知らせ」が選ばれている");
 

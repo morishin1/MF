@@ -182,20 +182,21 @@ console.log("— 経営者は開ける —");
   const shortcuts = await page.locator(".topbar .kp-shortcut").evaluateAll((ns) => ns.map((n) => n.dataset.shortcut));
   check(shortcuts.join(",") === "hr,sales,office,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜経営（いま ${shortcuts.join(",")}）`);
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => [n.dataset.ktab, n.innerText.trim()]));
-  check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク（いま ${tabs.map((t) => t[1]).join("|")}）`);
+  check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");
   check(await page.locator("#kp-keiei-nav .kp-ostab").count() === 0, "ホームには2段目のタブが無い");
-  // 「人・組織」を押すと日報・勤怠（/admin-nippo.html）へ移る（2026-10-06）。ここでは行き先だけ見て、2段目は概要（#people）から見る
-  check(await page.locator('#kp-keiei-nav [data-ktab="people"]').getAttribute("href") === "/admin-nippo.html", "「人・組織」の行き先は日報・勤怠");
+  // 「人・組織」を押すとチーム状況（/admin-team.html。全体の集計）へ移る（2026-10-07：日報・勤怠は Office の人・組織）。
+  // ここでは行き先だけ見て、2段目は概要（#people）から見る
+  check(await page.locator('#kp-keiei-nav [data-ktab="people"]').getAttribute("href") === "/admin-team.html", "「人・組織」の行き先はチーム状況");
   await page.evaluate(() => { location.hash = "#people"; });
   await page.waitForTimeout(300);
   const subs = await page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => [n.dataset.kview || "", n.getAttribute("href")]));
-  check(subs.map((x) => x[0]).join(",") === ",,,onboarding,pay,people", `人・組織の2段目: 日報・勤怠・チーム状況・全員のタスク・入社準備・給与管理・概要（いま ${subs.map((x) => x[0]).join(",")}）`);
-  check(subs.slice(0, 3).map((x) => x[1]).join(",") === "/admin-nippo.html,/admin-team.html,/admin-tasks.html", `日報・勤怠／チーム状況／全員のタスクは既存の管理画面（いま ${subs.slice(0, 3).map((x) => x[1]).join(",")}）`);
+  check(subs.map((x) => x[0]).join(",") === ",,onboarding,pay,people", `人・組織の2段目: チーム状況・全員のタスク・入社準備・給与管理・概要（いま ${subs.map((x) => x[0]).join(",")}）`);
+  check(subs.slice(0, 2).map((x) => x[1]).join(",") === "/admin-team.html,/admin-tasks.html", `チーム状況／全員のタスクは既存の管理画面（いま ${subs.slice(0, 2).map((x) => x[1]).join(",")}）`);
   const fin = await (async () => { await page.click('#kp-keiei-nav [data-ktab="finance"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();
   check(fin.join(",") === "finance,payroll", `財務の2段目: お金・人件費（いま ${fin.join(",")}）`);
   const risk = await (async () => { await page.click('#kp-keiei-nav [data-ktab="risk"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();
-  check(risk.join(",") === "risk,security", `リスクの2段目: リスク・未処理／経営設定・セキュリティ（いま ${risk.join(",")}）`);
+  check(risk.join(",") === "risk,security,,", `リスク・権限の2段目: リスク・未処理／経営設定・セキュリティ／権限／アクセス分析（いま ${risk.join(",")}）`);
   const allHrefs = await page.locator("#kp-keiei-nav a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href")));
   check(["dashboard", "revenue", "cash", "expenses", "accounting"].every((v) => !allHrefs.some((h) => h.endsWith(`#${v}`))), "旧ダッシュボード・売上・入金・経費・会計の入口は、タブに無い");
   await page.click('#kp-keiei-nav [data-ktab="home"]');

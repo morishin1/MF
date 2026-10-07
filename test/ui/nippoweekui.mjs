@@ -45,13 +45,15 @@ async function open(width = 1280) {
   return { page, errs, asked };
 }
 
-console.log("\n=== 経営の「人・組織」 ===");
+console.log("\n=== Office の「人・組織」（2026-10-07：日報・勤怠は Office。経営はチーム状況で集計を見る） ===");
 {
   const { page, errs } = await open();
-  check(await page.locator('#kp-keiei-nav .kp-otab[data-ktab="people"]').getAttribute("href") === "/admin-nippo.html", "「人・組織」を押すと日報・勤怠（/admin-nippo.html）");
-  const subs = (await page.locator("#kp-keiei-nav .kp-ostab").allInnerTexts()).map((x) => x.trim());
-  check(subs.join("/") === "日報・勤怠/チーム状況/全員のタスク/入社準備/給与管理/概要", `2段目の並び（${subs.join("/")}）`);
-  check((await page.locator("#kp-keiei-nav .kp-ostab.on").innerText()).trim() === "日報・勤怠", "「日報・勤怠」が選ばれている");
+  check(await page.locator("#kp-keiei-nav").count() === 0, "経営のタブは出さない");
+  check((await page.locator("#kp-office-nav .kp-otab.on").innerText()).trim() === "人・組織", "Office の「人・組織」が選ばれている");
+  check(/admin-nippo\.html$/.test(await page.locator('#kp-office-nav .kp-otab:has-text("人・組織")').getAttribute("href") || ""), "「人・組織」を押すと日報・勤怠（admin-nippo.html）");
+  const subs = (await page.locator("#kp-office-nav .kp-ostab").allInnerTexts()).map((x) => x.trim());
+  check(subs[0] === "日報・勤怠", `2段目の初めは日報・勤怠（${subs.join("/")}）`);
+  check((await page.locator("#kp-office-nav .kp-ostab.on").innerText()).trim() === "日報・勤怠", "「日報・勤怠」が選ばれている");
   check((await page.locator("h1.kp-greet").innerText()).trim() === "日報・勤怠", "タイトルは「日報・勤怠」");
 
   console.log("\n=== 並び・今ある機能 ===");

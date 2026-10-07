@@ -127,6 +127,8 @@ export default async function handler(req, res) {
       canGrantRoles: canManageHr(ctx),
       // 経営者（owner）の付与・剥奪と、経営者の名簿・ログインの変更は、いまの経営者だけ
       canGrantOwner: isOwner(ctx),
+      // 自分の行。経営者でなければ、自分の権限は変えられない（lib/role-change.js の固定ルール）。画面はボタンを止める
+      meEmployeeId: ctx.employee?.id || null,
       // アプリ利用権限（gw_app_grants, db/119）の状態。"table"=使える / "derived"=表が未適用（内部ロールから導出。変更できない）/ "error"=読めなかった
       appsState: appsInfo ? appsInfo.apps.state : null,
       systems: SYSTEMS,

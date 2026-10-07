@@ -40,7 +40,7 @@ const EMPLOYEES = () => [
 ];
 const OFF = { hr: false, sales: false, office: false, keiei: false };
 
-async function open({ employees = EMPLOYEES(), width = 1500, appsState = "table", canGrantOwner = true, delay = 0, failApp = false, noApps = false } = {}) {
+async function open({ employees = EMPLOYEES(), width = 1500, appsState = "table", canGrantOwner = true, meEmployeeId = "e-own", delay = 0, failApp = false, noApps = false } = {}) {
   const page = await br.newPage({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
   const calls = { employeesGet: 0, appPosts: [], rolePosts: [] };
   await page.addInitScript(() => {
@@ -85,7 +85,7 @@ async function open({ employees = EMPLOYEES(), width = 1500, appsState = "table"
     }
     if (/\/api\/employees\b/.test(url) && req.method() === "GET") {
       calls.employeesGet++;
-      return send({ employees: employees.map(({ __apps, ...e }) => e), canManage: true, canGrantRoles: true, canGrantOwner, appsState, systems: {}, kindReady: true });
+      return send({ employees: employees.map(({ __apps, ...e }) => e), canManage: true, canGrantRoles: true, canGrantOwner, meEmployeeId, appsState, systems: {}, kindReady: true });
     }
     if (/\/api\/partners\b/.test(url)) return send({ companies: [], canManage: true });
     if (/\/api\/me\b/.test(url)) return send(OWNER_ME);
@@ -393,6 +393,39 @@ console.log("\n— Office を ON にした瞬間：中の役割が無ければ�
 {
   const page = await open({ employees: [base("e-empty", "入口 だけ", [], ["office"])], appsState: "derived" });
   check(await row(page, "e-empty").locator('.mb-gap, [data-note="office-empty"]').count() === 0, "db/119 の前（入口は内部ロールから決まる）は出さない");
+  await page.close();
+}
+
+console.log("\n— 経営者でない人（人事）が開いたとき：自分の行と、経営者だけの権限は押せない（2026-10-07 固定ルール）—");
+{
+  const page = await open({ canGrantOwner: false, meEmployeeId: "e-hr" });
+  const mine = row(page, "e-hr");
+  const dis = await mine.locator(".mb-tg").evaluateAll((ns) => ns.map((n) => n.disabled));
+  check(dis.every(Boolean), `自分の行の4つのボタンは押せない（いま ${dis.join(",")}）`);
+  check(/自分の権限は変更できません/.test(await mine.locator(".mb-tg").first().getAttribute("title")), "押せない理由（自分の権限は変更できません）");
+  check(await mine.locator('[data-note="self"]').count() === 1, "自分の行に、変えられない理由が出る");
+  const subs = await mine.locator(".mb-sub").evaluateAll((ns) => ns.map((n) => n.disabled));
+  check(subs.length === 3 && subs.every(Boolean), "自分の Office の中の3つのスイッチも押せない");
+  check(!(await btn(page, "e-none", "office").isDisabled()) && !(await btn(page, "e-none", "hr").isDisabled()), "ほかの人の採用HR・Sales・Office は押せる");
+  check(await btn(page, "e-none", "keiei").isDisabled(), "経営のボタンは押せない（経営者だけ）");
+  await row(page, "e-none").locator('[data-role="more"]').click();
+  const box = (r) => page.locator(`tr.mb-detail[data-detail="e-none"] input[data-role="${r}"]`);
+  for (const r of ["owner", "it", "labor_advisor"]) check(await box(r).isDisabled(), `高度な権限設定：${r} は経営者だけ（押せない）`);
+  for (const r of ["recruiter", "sales"]) check(!(await box(r).isDisabled()), `高度な権限設定：${r} は押せる`);
+  check(await page.locator('tr.mb-detail[data-detail="e-none"] [data-note="owner-only"]').count() === 1, "IT・管理・社労士は経営者だけ、と書いてある");
+  await row(page, "e-hr").locator('[data-role="more"]').click();
+  const selfBoxes = await page.locator('tr.mb-detail[data-detail="e-hr"] input[type="checkbox"]').evaluateAll((ns) => ns.map((n) => n.disabled));
+  check(selfBoxes.length > 0 && selfBoxes.every(Boolean), "自分の高度な権限設定も、全部押せない");
+  await btn(page, "e-hr", "sales").click({ force: true }).catch(() => {});
+  await page.waitForTimeout(200);
+  check(page.calls.appPosts.length === 0, "押しても送らない");
+  await page.close();
+}
+{
+  const page = await open({ canGrantOwner: true, meEmployeeId: "e-own" });
+  await row(page, "e-none").locator('[data-role="more"]').click();
+  const all = await page.locator('tr.mb-detail[data-detail="e-none"] input[type="checkbox"]').evaluateAll((ns) => ns.map((n) => n.disabled));
+  check(all.length === 5 && all.every((d) => !d), "経営者は、IT・管理・社労士・経営者も含めて全部押せる");
   await page.close();
 }
 

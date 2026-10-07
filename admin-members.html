@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261007rec1">
-  <link rel="stylesheet" href="css/layout.css?v=20261007rec1">
+  <link rel="stylesheet" href="css/app.css?v=20261008rec2">
+  <link rel="stylesheet" href="css/layout.css?v=20261008rec2">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
@@ -339,9 +339,9 @@
 </aside>
 
 
-<script src="js/api-client.js?v=20261007rec1"></script>
-<script src="js/device.js?v=20261007rec1"></script>
-<script src="js/layout.js?v=20261007rec1"></script>
+<script src="js/api-client.js?v=20261008rec2"></script>
+<script src="js/device.js?v=20261008rec2"></script>
+<script src="js/layout.js?v=20261008rec2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -364,6 +364,10 @@
     { key: "hr", label: "採用HR" }, { key: "sales", label: "Sales" },
     { key: "office", label: "Office" }, { key: "keiei", label: "経営" },
   ];
+  // 経営者でない人は、自分の権限を変えられない・IT・管理と社労士は付け外しできない（lib/role-change.js の固定ルール）
+  const SELF_LOCK = "自分の権限は変更できません。経営者に依頼してください";
+  const OWNER_ONLY_ROLE_TEXT = "IT・管理・社労士の付け外しは、経営者だけができます";
+  const selfLocked = (e) => !canGrantOwner && Boolean(meEmployeeId) && e.id === meEmployeeId;
   const LOCK_TEXT = {
     owner: "経営者は、すべてのアプリを使えます。変更できません（外すときは、高度な権限設定の「経営者」）。",
     accountingAdmin: "会計の管理者のため、Office に入れます。変更できません。",
@@ -378,6 +382,7 @@
   let employees = [];
   let canGrantRoles = false;  // 社内権限の付け外し（管理者または人事）
   let canGrantOwner = false;  // 経営者（owner）の付け外しと、経営者の名簿・ログインの変更（いまの経営者だけ）
+  let meEmployeeId = null;    // 自分の行。経営者でなければ、自分の権限は変えられない（lib/role-change.js）
   let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
   let appsState = null;       // アプリ利用権限（gw_app_grants, db/119）："table"=変更できる / "derived"=表が未適用 / "error"=読めない / null=見る権限なし
   const openDetail = new Set();   // 「高度な権限設定」を開いている行
@@ -401,6 +406,7 @@
     employees = res.employees || [];
     canGrantRoles = !!res.canGrantRoles;
     canGrantOwner = !!res.canGrantOwner;
+    meEmployeeId = res.meEmployeeId || null;
     canManage = !!res.canManage;
     appsState = res.appsState || null;
     kindReady = !!res.kindReady;
@@ -988,8 +994,8 @@
     const live = appsState === "table";
     const items = OFFICE_WORK.map((w) => {
       const st = officeWorkState(e, w);
-      const disabled = st.busy || Boolean(st.via) || !live || !canGrantRoles || (e.appLocks || {}).office === "owner";
-      const title = st.via ? `${w.label}：${st.via}` : !canGrantRoles ? "変更には管理者権限が必要です"
+      const disabled = st.busy || Boolean(st.via) || !live || !canGrantRoles || selfLocked(e) || (e.appLocks || {}).office === "owner";
+      const title = st.via ? `${w.label}：${st.via}` : !canGrantRoles ? "変更には管理者権限が必要です" : selfLocked(e) ? SELF_LOCK
         : `${w.label}（${w.hint}）：${st.on ? "使える（押すと外す）" : "使えない（押すと付ける）"}`;
       return `<button type="button" class="mb-sub${st.busy ? " busy" : ""}${st.via ? " via" : ""}" data-work="${w.key}" aria-pressed="${st.on}"
           ${disabled ? "disabled" : ""} title="${esc(title)}" onclick="setOfficeWork('${esc(e.id)}','${w.key}')">${w.label}</button>`;
@@ -1054,6 +1060,7 @@
       if (lock) title = LOCK_TEXT[lock];
       else if (!live) { disabled = true; title = appsState === "derived" ? "アプリ利用権限の表（db/119）が未適用のため、変更できません" : "確認できません"; }
       else if (!canGrantRoles) { disabled = true; title = "変更には管理者権限が必要です"; }
+      else if (selfLocked(e)) { disabled = true; title = SELF_LOCK; }
       else if (a.key === "keiei" && !canGrantOwner) { disabled = true; title = "経営の付け外しは、経営者だけができます"; }
       else title = `${a.label}：${on ? "入れる（押すと外す）" : "入れない（押すと付ける）"}`;
       return `<button type="button" class="mb-tg${lock ? " locked" : ""}${busy ? " busy" : ""}" data-app="${a.key}" aria-pressed="${on}"
@@ -1062,7 +1069,8 @@
     }).join("");
     // 変更できない理由。会計の管理者の注記は、サーバが access の計算に使った isAdmin（accessMeta.accountingAdmin）そのもの
     const lockMsg = locks.keiei === "owner" ? ["owner", LOCK_TEXT.owner]
-      : (e.accessMeta?.accountingAdmin === true && locks.office === "accountingAdmin") ? ["accounting-admin", LOCK_TEXT.accountingAdmin] : null;
+      : (e.accessMeta?.accountingAdmin === true && locks.office === "accountingAdmin") ? ["accounting-admin", LOCK_TEXT.accountingAdmin]
+      : selfLocked(e) && canGrantRoles ? ["self", SELF_LOCK] : null;
     const unknown = e.accessMeta && e.accessMeta.accountingAdmin === null;
     // Office の入口と中の業務が食い違っている人（入れても何もできない／役割があるのに入れない）。判定はサーバの access と内部の役割
     const officeRoles = (e.roles || []).some((r) => ["hr", "finance", "manager"].includes(r));
@@ -1093,7 +1101,7 @@
     const boxes = ADVANCED_ROLES.map((r) => `
       <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
         <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
-               ${canGrantRoles && (r !== "owner" || canGrantOwner) ? "" : "disabled"}
+               ${canGrantRoles && !selfLocked(e) && (!["owner", "it", "labor_advisor"].includes(r) || canGrantOwner) ? "" : "disabled"}
                onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
         ${ROLE_LABEL[r]}
       </label>`).join("");
@@ -1101,6 +1109,7 @@
       <h4>高度な権限設定</h4>
       <p>ふだんは使いません。アプリへ入れるかは上の4つのボタン、Office の中の業務は Office の下の3つのスイッチで決まります。</p>
       <div class="mb-roles">${boxes}</div>
+      ${selfLocked(e) ? `<p class="mb-lockmsg" data-note="self">${esc(SELF_LOCK)}</p>` : (!canGrantOwner ? `<p class="mb-lockmsg" data-note="owner-only">${esc(OWNER_ONLY_ROLE_TEXT)}</p>` : "")}
       <p>経営者＝すべてのアプリと全員の給与（付け外しは経営者だけ${canGrantOwner ? "" : "。いまのアカウントでは変えられません"}）／IT・管理＝端末・アカウントなどのシステム管理／社労士＝共有された手続きだけを見る。<br>
          採用担当・営業担当は担当者の名札です（採用HR・Sales に入れるかは、上のボタンで決まります）。</p>
     </td></tr>`;

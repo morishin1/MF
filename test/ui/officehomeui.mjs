@@ -7,7 +7,7 @@
 //   ・月次進捗（勤務表回収・稼働確認・売上請求・仕入請求・支払・月次完了）は、月末月初業務を使える人だけ
 //   ・担当でない API は呼ばない（403 の行を作らない）。1つ取れなくても、ほかは出す（「—」）
 //   ・旧URL（/office/?month=…&id=…、admin-dashboard.html）は、新しい場所へ送る
-//   ・ナビゲーションは共通ヘッダーの下の横タブ（1段目：ホーム／人事・労務／経理・事務／社内管理、2段目：カテゴリの中の画面）。
+//   ・ナビゲーションは共通ヘッダーの下の横タブ（1段目：ホーム／人・組織／請求・支払／契約・書類／端末・貸与品、2段目：カテゴリの中の画面）。
 //     左サイドバー・ドロワーは無い。狭い画面でも同じタブ（横にスクロール）
 import { launch, BASE } from "../_browser.mjs";
 
@@ -148,11 +148,12 @@ console.log("— 経営者（owner）: 全部の数字・全部のメニュー �
   check((await p.locator("#closeNote").innerText()).includes("月次完了：未完了"), "月次完了の状態（未完了）を文字で出す");
 
   const c1 = await cats(p);
-  check(c1.map((x) => x.label).join("|") === "ホーム|人事・労務|経理・事務|社内管理", `横タブ：ホーム／人事・労務／経理・事務／社内管理（いま ${c1.map((x) => x.label).join("|")}）`);
+  check(c1.map((x) => x.label).join("|") === "ホーム|人・組織|請求・支払|契約・書類|端末・貸与品", `横タブ：ホーム／人・組織／請求・支払／契約・書類／端末・貸与品（いま ${c1.map((x) => x.label).join("|")}）`);
   check(c1.find((x) => x.label === "ホーム")?.on && c1.find((x) => x.label === "ホーム")?.href === "/office/", "ホーム（/office/）が選ばれた状態");
-  check(c1.find((x) => x.label === "人事・労務")?.href === "/admin-members.html", "人事・労務 → メンバー（下の階層の画面からも、ルートから開く）");
-  check(c1.find((x) => x.label === "経理・事務")?.href === "/admin-expenses.html", "経理・事務 → 経費精算");
-  check(c1.find((x) => x.label === "社内管理")?.href === "/admin-docs.html", "社内管理 → 社内文書");
+  check(c1.find((x) => x.label === "人・組織")?.href === "/admin-nippo.html", "人・組織 → 日報・勤怠（下の階層の画面からも、ルートから開く）");
+  check(c1.find((x) => x.label === "請求・支払")?.href === "/office/billing.html", "請求・支払 → 請求・支払");
+  check(c1.find((x) => x.label === "契約・書類")?.href === "/admin-contracts.html", "契約・書類 → 雇用契約");
+  check(c1.find((x) => x.label === "端末・貸与品")?.href === "/admin-devices.html", "端末・貸与品 → 端末管理");
   check((await subs(p)).length === 0, "ホームでは2段目のタブは出ない");
   check(await p.locator(".kp-sidebar").count() === 0 && await p.locator(".kp-side-toggle, .kp-side-backdrop").count() === 0, "左サイドバー・ドロワーは無い");
   check(await p.locator('.topbar [data-shortcut="office"].on').count() === 1, "ヘッダーの Office が選ばれた状態");
@@ -171,7 +172,7 @@ console.log("\n— 人事（hr）: 人事・労務の数字・メニューだけ
   check(t.every((x) => !["経費精算の承認", "稼働確認待ち", "月次締め"].includes(x.label)), "経理・事務・月次業務の行は出ない");
   check(!(await p.locator("#progBox").isVisible()), "月次進捗は出ない（月末月初業務を使えない）");
   check(!called(p, /\/api\/office(\?|$)/) && !called(p, /\/api\/closing/), "経理・事務・月末月初業務の API は呼ばない");
-  check((await groups(p)).join("|") === "人事・労務", `タブは 人事・労務 だけ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・組織|契約・書類|端末・貸与品", `タブは 人・組織／契約・書類／端末・貸与品（いま ${(await groups(p)).join("|")}）`);
   check(await p.locator('.topbar [data-shortcut="office"]').count() === 1, "ヘッダーに Office が出る（Office ホームに入れる）");
   await p.close();
 }
@@ -183,13 +184,13 @@ console.log("\n— 経理（finance）: 経理・事務の数字・メニュー�
   check(c.map((x) => x.label).join("|") === "経費承認待ち|月次残件|契約期限|請求未完了", `カードは 経費承認待ち・月次残件・契約期限・請求未完了（いま ${c.map((x) => x.label).join("|")}）`);
   check(!called(p, /\/api\/hr\b/), "人事・労務の API は呼ばない");
   check(await p.locator("#progBox").isVisible(), "月次進捗が出る");
-  check((await groups(p)).join("|") === "経理・事務|社内管理", `タブは 経理・事務／社内管理（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "請求・支払|契約・書類", `タブは 請求・支払／契約・書類（いま ${(await groups(p)).join("|")}）`);
   await p.close();
   const m = await open("office/monthly.html", { roles: ["finance"] });
   const s2 = await subs(m);
-  check(s2.map((x) => x.label).join("|") === "経費精算|月次業務|請求・支払", `経理・事務の2段目（いま ${s2.map((x) => x.label).join("|")}）`);
+  check(s2.map((x) => x.label).join("|") === "請求・支払|経費精算|月次業務", `請求・支払の2段目（いま ${s2.map((x) => x.label).join("|")}）`);
   check(s2.find((x) => x.label === "月次業務")?.on && s2.find((x) => x.label === "月次業務")?.href === "/office/monthly.html", "月次業務が選ばれている（/office/monthly.html）");
-  check((await cats(m)).find((x) => x.label === "経理・事務")?.on, "1段目は 経理・事務 が選ばれている");
+  check((await cats(m)).find((x) => x.label === "請求・支払")?.on, "1段目は 請求・支払 が選ばれている");
   await m.close();
 }
 
@@ -199,12 +200,12 @@ console.log("\n— 責任者（manager）: 月末月初業務だけ —");
   const c = await cards(p);
   check(c.map((x) => x.label).join("|") === "月次残件|契約期限|請求未完了", `カードは 月次残件・契約期限・請求未完了（いま ${c.map((x) => x.label).join("|")}）`);
   check(!called(p, /\/api\/hr\b/) && !called(p, /\/api\/closing/), "人事・労務、経理・事務の API は呼ばない");
-  check((await groups(p)).join("|") === "経理・事務", `タブは 経理・事務 だけ（いま ${(await groups(p)).join("|")}）`);
-  check((await cats(p)).find((x) => x.label === "経理・事務")?.href === "/office/monthly.html", "経理・事務 → 月次業務（入れる先頭の画面）");
+  check((await groups(p)).join("|") === "請求・支払", `タブは 請求・支払 だけ（いま ${(await groups(p)).join("|")}）`);
+  check((await cats(p)).find((x) => x.label === "請求・支払")?.href === "/office/billing.html", "請求・支払 → 請求・支払（入れる先頭の画面）");
   await p.close();
   const m = await open("office/billing.html", { roles: ["manager"] });
   const s2 = await subs(m);
-  check(s2.map((x) => x.label).join("|") === "月次業務|請求・支払", `月次業務・請求・支払だけ（いま ${s2.map((x) => x.label).join("|")}）`);
+  check(s2.map((x) => x.label).join("|") === "請求・支払|月次業務", `請求・支払・月次業務だけ（いま ${s2.map((x) => x.label).join("|")}）`);
   await m.close();
 }
 

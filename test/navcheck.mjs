@@ -56,7 +56,7 @@ const PREPARING_NAV = tableOf("PREPARING_NAV", "\n  /**\n   * 本人（入社す
 const adminItems = [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS];
 const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 
-// ---- 1) Office はホーム＋3グループ（各6項目まで）・管理（⚙）は設定系だけ -----------------
+// ---- 1) Office はホーム＋4グループ（各6項目まで）・管理（⚙）は設定系だけ -----------------
 // 2026-10-03 の Office UI/UX 再設計：⚙管理にあった業務メニューを Office の左メニューへ移した
 // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）。
 // ホーム・管理（⚙）はヘッダーで領域を切り替える前提なので、グループに畳まず平らなまま
@@ -64,25 +64,34 @@ console.log("\n— 管理者 —");
 check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "office_home" && OFFICE_TOP[0].label === "ホーム" && OFFICE_TOP[0].href === "/office/",
   "Officeの先頭はホーム1つ（/office/）");
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
-check(OFFICE_GROUPS.length === 3, `Officeは3グループ（人事・労務／経理・事務／社内管理。いま ${OFFICE_GROUPS.length}）`);
+// 2026-10-07 メニュー整理・権限分担：Office は 人・組織／請求・支払／契約・書類／端末・貸与品（日常の事務運用）。
+// 判断・承認・重要な権限（権限・アクセス分析）は経営、システム設定は⚙
+check(OFFICE_GROUPS.length === 4, `Officeは4グループ（人・組織／請求・支払／契約・書類／端末・貸与品。いま ${OFFICE_GROUPS.length}）`);
 {
   // 新方針にない分類（全社運営など）で、Officeを何でも置く場所にしない
   const labels = OFFICE_GROUPS.map((g) => g.label).join("/");
-  check(labels === "人事・労務/経理・事務/社内管理", `Officeのグループは人事・労務・経理・事務・社内管理だけ（いま ${labels}）`);
+  check(labels === "人・組織/請求・支払/契約・書類/端末・貸与品", `Officeのグループは人・組織・請求・支払・契約・書類・端末・貸与品だけ（いま ${labels}）`);
   const keys = OFFICE_GROUPS.flatMap((g) => g.items.map((i) => i.key));
-  for (const k of ["tasks", "nippo", "ai_admin", "team"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
-  check(OFFICE_GROUPS.find((g) => g.label === "社内管理")?.items.some((i) => i.key === "notices"), "お知らせ配信は社内管理（Office）");
-  const ops = OFFICE_GROUPS.find((g) => g.label === "経理・事務")?.items || [];
-  check(ops.map((i) => i.label).join("/") === "経費精算/月次業務/請求・支払/会計", `経理・事務は 経費精算／月次業務／請求・支払／会計（いま ${ops.map((i) => i.label).join("/")}）`);
-  check(ops.some((i) => i.key === "office_monthly" && i.href === "/office/monthly.html"), "月次業務（/office/monthly.html）は経理・事務（Office）");
-  check(ops.some((i) => i.key === "office_billing" && i.href === "/office/billing.html"), "請求・支払（/office/billing.html）は経理・事務（Office）");
-  const hrItems = OFFICE_GROUPS.find((g) => g.label === "人事・労務")?.items || [];
-  check(hrItems.map((i) => i.label).join("/") === "メンバー/入退社/勤怠管理/雇用契約/評価・キャリア", `人事・労務は メンバー／入退社／勤怠管理／雇用契約／評価・キャリア（いま ${hrItems.map((i) => i.label).join("/")}）`);
+  for (const k of ["tasks", "ai_admin", "team", "roles", "analytics", "settings"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
+  check(OFFICE_GROUPS.find((g) => g.label === "契約・書類")?.items.some((i) => i.key === "notices"), "お知らせ配信は契約・書類（Office）");
+  const ops = OFFICE_GROUPS.find((g) => g.label === "請求・支払")?.items || [];
+  check(ops.map((i) => i.label).join("/") === "請求・支払/経費精算/月次業務/会計", `請求・支払は 請求・支払／経費精算／月次業務／会計（いま ${ops.map((i) => i.label).join("/")}）`);
+  check(ops.some((i) => i.key === "office_monthly" && i.href === "/office/monthly.html"), "月次業務（/office/monthly.html）は請求・支払（Office）");
+  check(ops.some((i) => i.key === "office_billing" && i.href === "/office/billing.html"), "請求・支払（/office/billing.html）は請求・支払（Office）");
+  const hrItems = OFFICE_GROUPS.find((g) => g.label === "人・組織")?.items || [];
+  check(hrItems.map((i) => i.label).join("/") === "日報・勤怠/メンバー/入退社/勤怠管理/評価・キャリア", `人・組織は 日報・勤怠／メンバー／入退社／勤怠管理／評価・キャリア（いま ${hrItems.map((i) => i.label).join("/")}）`);
+  check(hrItems[0]?.key === "nippo" && hrItems[0]?.href === "admin-nippo.html", "人・組織の初めは日報・勤怠（admin-nippo.html）");
+  const docs = OFFICE_GROUPS.find((g) => g.label === "契約・書類")?.items || [];
+  check(docs.map((i) => i.label).join("/") === "雇用契約/社内文書/定例業務/お知らせ配信", `契約・書類は 雇用契約／社内文書／定例業務／お知らせ配信（いま ${docs.map((i) => i.label).join("/")}）`);
+  const dev = OFFICE_GROUPS.find((g) => g.label === "端末・貸与品")?.items || [];
+  check(dev.length === 1 && dev[0].key === "devices" && dev[0].when === "officeHr" && (dev[0].tabs || []).map((t) => t.href).join(",") === "admin-devices.html,admin-assets.html",
+    "端末・貸与品（端末管理・アカウント・貸与品）は Office（人事の権限＝api/devices・api/assets と同じ）");
   // ⚙管理（設定系）の項目を Office に置かない・Office の業務を ⚙管理 に置かない
   const settingKeys = SETTINGS_ITEMS.map((i) => i.key);
   check(!keys.some((k) => settingKeys.includes(k)), "Office と ⚙管理 に同じ項目を置かない");
 }
-check(KEIEI_ITEMS.map((i) => i.key).join(",") === "keiei_home,team,tasks,nippo", `経営の表（いま ${KEIEI_ITEMS.map((i) => i.key)}）`);
+check(KEIEI_ITEMS.map((i) => i.key).join(",") === "keiei_home,team,tasks,analytics", `経営の表（いま ${KEIEI_ITEMS.map((i) => i.key)}）`);
+check(SETTINGS_ITEMS.map((i) => i.key).join(",") === "ai_admin,settings", `⚙はAIナレッジ・システム設定だけ（権限は経営、端末・貸与品は Office、アクセス分析は経営。いま ${SETTINGS_ITEMS.map((i) => i.key)}）`);
 check(SETTINGS_ITEMS.some((i) => i.key === "ai_admin"), "AIナレッジは⚙管理");
 for (const g of OFFICE_GROUPS) {
   check(g.items.length <= 6, `Office「${g.label}」は6項目まで（いま ${g.items.length}）`);

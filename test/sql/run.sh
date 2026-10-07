@@ -45,7 +45,7 @@ run "$ROOT/db/100_hr_pay.sql"       # べき等（2回流しても、行が増�
 # シナリオは、それぞれ別の DB の上で流す（お互いの行に影響されない）
 OUT=""
 export SCEN_ROOT="$ROOT"   # 101 のシナリオが、db/101 を読むために使う
-for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices 123_retire_case 124_hr_mail_templates 125_office_recurring check_pay_reconcile check_exposure; do
+for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices 123_retire_case 124_hr_mail_templates 125_office_recurring 126_grant_rules check_pay_reconcile check_exposure; do
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done

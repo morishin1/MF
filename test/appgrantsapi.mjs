@@ -215,10 +215,27 @@ await ok("人事・管理者だけ。一般・責任者は403。他社の社員�
   assert.deepEqual(appRows("emp-x"), []);
 });
 
-await ok("人事でも、Office を外した自分は、人事の管理権限を失う（次のリクエストから403）", async () => {
+await ok("経営者でない人は、自分のアプリを変えられない（403 self_change・何も書かない・履歴も無い。2026-10-07 固定ルール）", async () => {
   setup(); as("emp-c");
-  assert.equal((await setApp("emp-c", "office", false)).statusCode, 200);
-  assert.equal((await setApp("emp-e", "sales")).statusCode, 403, "hr は Office の中の権限。Office を外すと管理できない");
+  const before = appRows("emp-c");
+  for (const [app, grant] of [["office", false], ["sales", true], ["hr", true]]) {
+    const r = await setApp("emp-c", app, grant);
+    assert.equal(r.statusCode, 403, `${app}`); assert.equal(r.body.error, "self_change");
+  }
+  assert.deepEqual(appRows("emp-c"), before);
+  assert.equal(logged.length, 0);
+  // ほかの人のアプリは、これまでどおり変えられる
+  assert.equal((await setApp("emp-e", "sales")).statusCode, 200);
+  // 管理者（会計の staff）も同じ
+  as("emp-b", staff());
+  const b = await setApp("emp-b", "hr");
+  assert.equal(b.statusCode, 403); assert.equal(b.body.error, "self_change");
+});
+
+await ok("経営者は、自分のアプリも変えられる（経営者は全部のアプリ＝ owner_locked。自分の行を作る必要が無い）", async () => {
+  setup(); as("emp-a");
+  const r = await setApp("emp-a", "sales");
+  assert.notEqual(r.body.error, "self_change");
 });
 
 await ok("入力チェック：app が無い・知らない app は400。メソッドは POST だけ", async () => {
