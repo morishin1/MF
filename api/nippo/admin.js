@@ -1,6 +1,6 @@
 // GET  /api/nippo/admin?date=YYYY-MM-DD&days=14 … その日の全員の日報と、提出率の推移
 // GET  /api/nippo/admin?view=week&date=YYYY-MM-DD … その日を含む週（月〜日）の、メンバー別の日報・勤怠（lib/nippo-week.js）
-//        勤怠（打刻）は、勤怠を見られる人（canManageHr。/api/timecard と同じ）にだけ返す。読み取りだけ・新しい表は使わない
+//        勤怠（打刻）は、経営者と勤怠を見られる人（canManageHr。/api/timecard と同じ）に返す。読み取りだけ・新しい表は使わない
 // POST /api/nippo/admin {action:…}                … 確認・個別メッセージ・AI返信のON/OFF
 //
 // 週次・月次の評価は /api/nippo/weekly と /api/nippo/monthly が持つ。
@@ -28,6 +28,8 @@ import { shapeBlocker } from "../../lib/blockers.js";
 import { buildWeek, mondayOf, weekRange } from "../../lib/nippo-week.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
+// 週の表の勤怠（打刻）を見られる人。経営者は、管理者・人事でなくても見る（経営の「人・組織」で勤怠の状況を見るため）
+const canSeeAttendance = (ctx) => ctx.roles.includes("owner") || canManageHr(ctx);
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -216,9 +218,9 @@ async function readWeek(res, ctx, date) {
       .in("user_id", userIds).gte("work_date", range.from).lte("work_date", range.to).limit(5000)
     : { data: [] };
 
-  // 勤怠は、勤怠を見られる人だけ（/api/timecard と同じ条件）。表が無ければ「見られない」で返す
+  // 勤怠は、経営者と勤怠を見られる人（/api/timecard と同じ条件）。表が無ければ「見られない」で返す
   let entries = null, fixes = [], usedTimecard = null, attendanceNote = null;
-  if (canManageHr(ctx)) {
+  if (canSeeAttendance(ctx)) {
     const [ent, fx] = await Promise.all([
       sb.from("gw_time_entries").select("employee_id, work_date, clock_in, clock_out, status")
         .eq("tenant_id", ctx.tenantId).gte("work_date", range.usageFrom).lte("work_date", range.to).limit(20000),

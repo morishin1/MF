@@ -491,9 +491,9 @@
       </div>
       <div class="who">
         ${shortcutsHtml(shows, location.pathname, area)}
-        <span class="kp-who-name">${esc(name)}</span>
+        <span class="kp-who-name" title="${esc(name)}">${esc(name)}</span>
         ${canPreview ? (memberView
-          ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
+          ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()" title="管理画面に戻る">
                ${icon("admin_panel_settings", 18)}管理画面に戻る
              </button>`
           : `<button class="btn btn-secondary btn-sm" onclick="KPLayout.viewAsMember()"

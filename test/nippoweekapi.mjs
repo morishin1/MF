@@ -7,7 +7,7 @@
 //      ・直近5週間に一度も打刻していない人は「勤怠を使っていない」として要確認にしない
 //   2. KPI：日報提出率・日報未提出・勤怠要確認・要フォロー人数
 //   3. 新しい表を使わない（読むのは tc_nippo・gw_time_entries・gw_time_fixes・gw_employees など既存のものだけ）。書き込まない
-//   4. 勤怠は、勤怠を見られる人（canManageHr。/api/timecard と同じ）にだけ返す。他社の打刻は混ざらない
+//   4. 勤怠は、経営者と勤怠を見られる人（canManageHr。/api/timecard と同じ）に返す。他社の打刻は混ざらない
 //   5. 週の指定（どの曜日を渡しても、その週の月〜日）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
@@ -167,14 +167,21 @@ await ok("管理者：週の表と勤怠。在籍・退職予定でログイン�
   assert.ok(!mem.state.log.some((l) => l.op !== "select"), "書き込まない");
 });
 
-await ok("勤怠を見られない人（経営者だけ・管理者でも人事でもない）：日報だけ。勤怠は返さない", async () => {
+await ok("経営者（管理者でも人事でもない）も勤怠を見る。中身は管理者と同じで、他社の打刻は混ざらない", async () => {
+  setup(); who = ADMIN;
+  const byAdmin = (await get("view=week&date=2026-10-08")).body;
   setup(); who = OWNER_ONLY;
-  const r = await get("view=week");
-  assert.equal(r.statusCode, 200);
-  assert.equal(r.body.attendance, false);
-  assert.equal(r.body.kpi.timeCheck, null);
-  assert.match(r.body.attendanceNote, /勤怠管理を見られる人/);
-  assert.ok(r.body.members.every((m) => m.days.every((c) => c.time === "none" && !/打刻/.test(c.timeWhy))), "打刻の中身を返さない");
+  const r = await get("view=week&date=2026-10-08");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.attendance, true);
+  assert.equal(r.body.attendanceNote, null);
+  assert.equal(r.body.kpi.timeCheck, byAdmin.kpi.timeCheck);
+  assert.ok(r.body.kpi.timeCheck > 0, "勤怠要確認を数える");
+  assert.deepEqual(r.body.members.map((m) => m.days.map((c) => `${c.state}/${c.time}`)),
+    byAdmin.members.map((m) => m.days.map((c) => `${c.state}/${c.time}`)), "管理者と同じ表");
+  const y = r.body.members.find((m) => m.name === "山田");
+  assert.deepEqual(y.days.slice(0, 3).map((c) => c.state), ["ok", "ok", "today"], "他社の行（退勤なし）は見ない");
+  assert.ok(!mem.state.log.some((l) => l.op !== "select"), "書き込まない");
 });
 
 await ok("見られない人は 403（日次と同じ入口）", async () => {
