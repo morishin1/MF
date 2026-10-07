@@ -1028,6 +1028,8 @@
     return api(`/api/nippo/admin${q.toString() ? `?${q}` : ""}`);
   };
   const nippoAdminAct = (body) => api("/api/nippo/admin", { method: "POST", body });
+  // 今週（月〜日）のメンバー別の日報・勤怠。date を含む週を返す
+  const nippoWeek = (date) => api(`/api/nippo/admin?view=week${date ? `&date=${encodeURIComponent(date)}` : ""}`);
 
   // 提出直後にこれを1回叩くと、AIが評価して返す。
   // force:true は管理者だけ（もう一度評価し直す）
@@ -1915,7 +1917,7 @@
     schedule, teamSchedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle,
     googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
-    nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
+    nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, nippoWeek, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem, badges,
     pinAction, reorderActions, recalcActions, adoptProposals, rejectProposals,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,

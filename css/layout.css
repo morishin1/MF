@@ -420,6 +420,19 @@ body.kp-has-officenav .topbar .icon-btn:hover{ background:#f6f6f2; }
   body.kp-has-officenav .topbar .icon-btn{ padding:6px; }
   body.kp-has-officenav .topbar .kp-shortcut .material-symbols-outlined{ display:none; }
 }
+/* タブレット幅（721〜1024px）は、ヘッダーが1行のまま。近道（HR・Sales・Office・経営）が押し込まれて、
+   Office・経営が名前の下で切れていた（2026-10-07。経営者は近道が4つ出るので一番狭い）。
+   メンバー表示・ログアウトはアイコンだけにする（文字は title・読み上げに残す。480px 以下と同じやり方）。
+   近道は縮めない。入らないぶんは名前を縮める（…で省く。全文は title）。800px 以下は近道のアイコンも外す */
+@media (min-width:721px) and (max-width:1024px){
+  .topbar .who > .btn,
+  body.kp-has-officenav .topbar .who > .btn{ font-size:0; gap:0; padding-left:8px; padding-right:8px; }
+  .topbar .who > .kp-shortcuts{ flex-shrink:0; }
+  .topbar .who > .kp-who-name{ flex-shrink:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
+@media (min-width:721px) and (max-width:800px){
+  .topbar .kp-shortcut .material-symbols-outlined{ display:none; }
+}
 
 /* 処理中のボタン */
 .kp-spin{ animation: kp-spin 1s linear infinite; }
