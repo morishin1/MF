@@ -125,6 +125,7 @@ function matcher(f) {
     if (op === "is") return (r[k] ?? null) === v;
     if (op === "notnull") return r[k] !== null && r[k] !== undefined;
     if (op === "gte") return r[k] !== null && r[k] !== undefined && r[k] >= v;
+    if (op === "lt") return r[k] !== null && r[k] !== undefined && r[k] < v;
     // like 'x%'（先頭一致）だけ
     if (op === "like") return String(r[k] ?? "").startsWith(v.replace(/%$/, "")) && r[k] !== null && r[k] !== undefined;
     return true;
@@ -179,6 +180,7 @@ function table(name) {
     is(k, v) { f.push(["is", k, v]); return q; },
     not(k) { f.push(["notnull", k]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
+    lt(k, v) { f.push(["lt", k, v]); return q; },
     like(k, v) { f.push(["like", k, v]); return q; },
     order(col, opts) { orders.push([col, opts?.ascending !== false, opts?.nullsFirst ?? (opts?.ascending === false)]); return q; },
     limit(n) { cap = n; return q; },
@@ -368,6 +370,7 @@ const { default: exportApi } = await import(atRoot("api/sales/companies/export.j
 const { default: importApi } = await import(atRoot("api/sales/companies/import.js"));
 const { default: mastersApi } = await import(atRoot("api/sales/masters/index.js"));
 const { default: dealsApi } = await import(atRoot("api/sales/deals/index.js"));
+const { default: countsApi } = await import(atRoot("api/sales/approaches/counts.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -2616,6 +2619,244 @@ await ok("差し込みは決めた4つだけ。知らない {{…}} は残す", 
   const s = renderTemplate("{{company}} {{ sender }} {{url}} {{service}} {{unknown}}",
     { company: "A社", sender: "森", url: "https://x/r/ABC", service: "DX" });
   assert.equal(s, "A社 森 https://x/r/ABC DX {{unknown}}");
+});
+
+console.log("\n=== アタックする企業：アタック優先順（サーバー側で並べてからページに切る） ===\n");
+
+const { NEXT_AFTER_FAIL } = await import(atRoot("lib/sales.js"));
+const ymdJst = (d) => new Date(Date.now() + 9 * 3600000 + d * 86400000).toISOString().slice(0, 10);
+async function seedQueue() {
+  // 243社：通常フォームアタック（未アタック150・再アタック待ち40）／そのほかのNEXT 33（期限付き30・クリック要フォロー3）／別チャネル再アタック 20
+  await seed(243);
+  const cs = db.rows.gw_sales_companies;
+  const kind = new Map();
+  cs.forEach((c, i) => {
+    if (i < 150) kind.set(c.id, "new");
+    else if (i < 190) { c.status = "reattack_wait"; kind.set(c.id, "re"); }
+    else if (i < 220) { c.next_action = "反応確認"; c.next_action_on = ymdJst(-1 - (i % 5)); kind.set(c.id, "next"); }
+    else if (i < 223) {
+      // 送れなかったが、そのあとクリックがあった（要フォロー）→ そのほかの NEXT に入れる
+      c.next_action = NEXT_AFTER_FAIL; c.next_action_on = ymdJst(-1); c.last_click_at = new Date().toISOString(); c.followed_at = null;
+      kind.set(c.id, "next");
+    } else { c.next_action = NEXT_AFTER_FAIL; c.next_action_on = ymdJst(-1 - (i % 3)); kind.set(c.id, "fail"); }
+  });
+  return kind;
+}
+const RANK = { new: 0, re: 1, next: 2, fail: 3 };
+
+await ok("アタック優先順：通常フォームアタック → そのほかのNEXT → 別チャネルで再アタック。101社目以降（2・3ページ目）も同じ順番の続き", async () => {
+  setup();
+  const kind = await seedQueue();
+  const pages = [];
+  for (const page of [1, 2, 3]) {
+    const r = await pageOf({ page, queue: "attack", sort: "priority", order: "asc" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(r.body.total, 243);
+    assert.equal(r.body.totalPages, 3);
+    assert.equal(r.body.page, page);
+    pages.push(r.body.companies);
+  }
+  assert.deepEqual(pages.map((p) => p.length), [100, 100, 43]);
+  const order = pages.flat().map((c) => kind.get(c.id));
+  assert.equal(new Set(pages.flat().map((c) => c.id)).size, 243, "重複・欠落なし");
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(RANK[order[i - 1]] <= RANK[order[i]], `${i}番目で順番が戻っている（${order[i - 1]} → ${order[i]}）`);
+  }
+  assert.ok(pages[0].every((c) => kind.get(c.id) === "new"), "1ページ目は通常フォームアタック（未アタック）だけ");
+  assert.ok(pages[0].every((c) => c.nextKey === "attack" && c.next === "フォームアタック"));
+  assert.equal(order.indexOf("re"), 150, "再アタック待ちは、未アタックのあと");
+  assert.equal(order.indexOf("fail"), 223, "別チャネルで再アタックは、最後");
+  assert.ok(pages[2].slice(-20).every((c) => c.next === NEXT_AFTER_FAIL));
+  // そのほかの NEXT の中は急ぐ順（クリックの要フォロー → 期限の古い順）
+  const nexts = pages.flat().filter((c) => kind.get(c.id) === "next");
+  const clicked = new Set(db.rows.gw_sales_companies.slice(220, 223).map((c) => c.id));
+  assert.ok(nexts.slice(0, 3).every((c) => clicked.has(c.id)), "クリックの要フォロー（next_group 0）が先");
+  const dated = nexts.slice(3).map((c) => c.nextDue);
+  assert.deepEqual(dated, [...dated].sort(), "期限の古い順");
+});
+
+await ok("アタック優先順：「別チャネルで再アタックを検討」が通常フォームアタックより先頭に来ない（期限が今日でも）", async () => {
+  setup();
+  await seed(5);
+  const cs = db.rows.gw_sales_companies;
+  cs[0].next_action = NEXT_AFTER_FAIL; cs[0].next_action_on = ymdJst(0);
+  const r = (await pageOf({ page: 1, queue: "attack", sort: "priority" })).body.companies;
+  assert.equal(r.length, 5);
+  assert.equal(r[r.length - 1].id, cs[0].id);
+  // 以前の「NEXTの急ぐ順」では先頭に来ていた（この並びは選べるまま残す）
+  const old = (await pageOf({ page: 1, queue: "attack", sort: "next" })).body.companies;
+  assert.equal(old[0].id, cs[0].id);
+});
+
+await ok("アタック優先順：絞り込み（キャンペーン・自分の担当＋担当なし）と一緒に使える。範囲外のページは最後のページ", async () => {
+  setup();
+  const kind = await seedQueue();
+  const camp = "00000000-0000-4000-8000-0000000000c9";
+  db.rows.gw_sales_campaigns = [{ id: camp, tenant_id: "t1", name: "秋" }];
+  const cs = db.rows.gw_sales_companies;
+  for (const i of [5, 160, 200, 230]) cs[i].campaign_id = camp;
+  const r = (await pageOf({ page: 1, queue: "attack", sort: "priority", campaign: camp })).body;
+  assert.deepEqual(r.companies.map((c) => kind.get(c.id)), ["new", "re", "next", "fail"]);
+  const last = (await pageOf({ page: 9, queue: "attack", sort: "priority" })).body;
+  assert.equal(last.page, 3);
+  assert.equal(last.companies.length, 43);
+});
+
+await ok("アタック優先順は、アタックする企業の一覧（queue=attack）だけ", async () => {
+  setup();
+  await seed(3);
+  const r = await pageOf({ page: 1, sort: "priority" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "bad_sort");
+});
+
+console.log("\n=== 1社の削除（企業詳細・フォームアタック画面から） ===\n");
+
+await ok("削除：アタック画面で準備しただけ（未送信）のアタックは、指定したときだけ履歴に数えない", async () => {
+  setup();
+  const c = await newCompany({ name: "開いただけ社", siteUrl: "https://open.example.jp/" });
+  const p = await prepare({ companyId: c.id });
+  assert.equal(p.statusCode, 200, JSON.stringify(p.body));
+  const plain = await bulk({ ids: [c.id], action: "delete", dryRun: true });
+  assert.match(plain.body.blocked[0].reasons.join(), /アタック履歴あり/, "指定しなければ、これまでどおり止める");
+  const dry = await bulk({ ids: [c.id], action: "delete", dryRun: true, ignoreApproachId: p.body.approach.id });
+  assert.deepEqual(dry.body.deletable.map((x) => x.id), [c.id]);
+  const r = await bulk({ ids: [c.id], action: "delete", ignoreApproachId: p.body.approach.id });
+  assert.equal(r.body.deleted, 1);
+  assert.equal(db.rows.gw_sales_companies.length, 0);
+});
+
+await ok("削除：送信済み・送信できなかった・ほかの履歴があれば、準備中のアタックを指定しても消さない", async () => {
+  setup();
+  const sent = await newCompany({ name: "送信済社", siteUrl: "https://sent.example.jp/" });
+  const { approach } = await sendAttack(sent.id);
+  const r1 = await bulk({ ids: [sent.id], action: "delete", ignoreApproachId: approach.id });
+  assert.equal(r1.body.deleted, 0);
+  assert.match(r1.body.blocked[0].reasons.join(), /アタック履歴あり/);
+
+  const failed = await newCompany({ name: "失敗社", siteUrl: "https://failed.example.jp/" });
+  const p = await prepare({ companyId: failed.id });
+  const f = await act({ id: p.body.approach.id, action: "failed", reason: "captcha" });
+  assert.equal(f.statusCode, 200, JSON.stringify(f.body));
+  const r2 = await bulk({ ids: [failed.id], action: "delete", ignoreApproachId: p.body.approach.id });
+  assert.equal(r2.body.deleted, 0, "送信できなかった記録も履歴");
+
+  const memo = await newCompany({ name: "メモあり社", siteUrl: "https://memo2.example.jp/" });
+  const p3 = await prepare({ companyId: memo.id });
+  await addEvent({ id: memo.id, kind: "memo", detail: "電話した" });
+  const r3 = await bulk({ ids: [memo.id], action: "delete", ignoreApproachId: p3.body.approach.id });
+  assert.equal(r3.body.deleted, 0);
+  assert.match(r3.body.blocked[0].reasons.join(), /営業履歴あり/);
+
+  // 2社以上をまとめて消すときは、指定を使わない（1社の画面からだけ）
+  const a = await newCompany({ name: "A社", siteUrl: "https://a2.example.jp/" });
+  const b = await newCompany({ name: "B社", siteUrl: "https://b2.example.jp/" });
+  const pa = await prepare({ companyId: a.id });
+  const r4 = await bulk({ ids: [a.id, b.id], action: "delete", dryRun: true, ignoreApproachId: pa.body.approach.id });
+  assert.deepEqual(r4.body.deletable.map((x) => x.name), ["B社"]);
+});
+
+await ok("削除：案件（db/116）がある企業は消さない。削除できない企業も非表示にはできる", async () => {
+  setup();
+  db.rows.gw_sales_deals = [];
+  const c = await newCompany({ name: "案件社", siteUrl: "https://deal.example.jp/" });
+  db.rows.gw_sales_deals.push({ id: uuid(), tenant_id: "t1", company_id: c.id, stage: "meeting" });
+  const r = await bulk({ ids: [c.id], action: "delete", dryRun: true });
+  assert.match(r.body.blocked[0].reasons.join(), /案件あり/);
+  const h = await bulk({ ids: [c.id], action: "hide", reason: "not_target" });
+  assert.equal(h.statusCode, 200, JSON.stringify(h.body));
+  assert.ok(coRow(c.id).hidden_at, "一覧から非表示にできる");
+  assert.equal(db.rows.gw_sales_companies.length, 1, "データは残る");
+});
+
+console.log("\n=== 担当者別フォームアタック数（/api/sales/approaches/counts） ===\n");
+
+const counts = (qs) => call(countsApi, { method: "GET", url: `/api/sales/approaches/counts?${qs}` });
+const atJst = (ymd, hh = "12") => new Date(`${ymd}T${hh}:00:00+09:00`).toISOString();
+function seedCounts() {
+  const today = ymdJst(0), yday = ymdJst(-1);
+  db.rows.gw_employees.push(
+    { id: "emp-m1", tenant_id: "t1", display_name: "一般 次郎", status: "active" },
+    { id: "emp-x1", tenant_id: "t1", display_name: "退職 太郎", status: "left" },
+    { id: "emp-x2", tenant_id: "t1", display_name: "退職予定 花子", status: "leaving", left_on: ymdJst(10) },
+  );
+  db.rows.gw_role_grants = [{ tenant_id: "t1", employee_id: "emp-a1", role: "owner" }];
+  db.rows.gw_app_grants = [
+    { employee_id: "emp-s1", app_key: "sales" }, { employee_id: "emp-s2", app_key: "sales" },
+    { employee_id: "emp-x1", app_key: "sales" }, { employee_id: "emp-x2", app_key: "sales" },
+    { employee_id: "emp-m1", app_key: "hr" },
+  ];
+  const ap = (employee_id, sent_at, over = {}) => db.rows.gw_sales_approaches.push({
+    id: uuid(), tenant_id: "t1", company_id: "co-1", employee_id, channel: "form", sent_at, click_count: 0, ...over });
+  // 営業 一郎：今日フォーム3件（企業の担当は二郎でも、送った一郎に付く）
+  for (let i = 0; i < 3; i++) ap("emp-s1", atJst(today, "1" + i));
+  ap("emp-s1", atJst(today), { channel: "email" });                  // フォーム以外は数えない
+  ap("emp-s1", null);                                                  // 準備だけ（未送信）は数えない
+  ap("emp-s1", null, { failed_at: atJst(today) });                    // 送信できなかったは数えない
+  ap("emp-s2", atJst(yday, "09")); ap("emp-s2", atJst(yday, "23"));   // 二郎：昨日2件（23時も昨日）
+  ap("emp-s2", atJst(today, "00"));                                    // 0時ちょうどは今日
+  ap("emp-x1", atJst(today));                                          // 退職した人の実績も残す
+  ap(null, atJst(today));                                              // 送った人が分からない
+  return { today, yday };
+}
+
+await ok("本日：channel=form かつ sent_at ありだけを、送った人（employee_id）ごとに数える。0件の Sales メンバーも出す", async () => {
+  setup();
+  seedCounts();
+  const r = await counts("period=today");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const by = Object.fromEntries(r.body.rows.map((x) => [x.name, x.count]));
+  assert.equal(by["営業 一郎"], 3);
+  assert.equal(by["営業 二郎"], 1, "0時ちょうど（日本時間）は今日");
+  assert.equal(by["管理 花子"], 0, "経営者は Sales を使えるので、0件でも出す");
+  assert.equal(by["退職予定 花子"], 0, "退職日までは在籍");
+  assert.equal(by["退職 太郎"], 1, "退職した人でも、期間内の実績は出す");
+  assert.equal(by["（不明）"], 1);
+  assert.equal(by["一般 次郎"], undefined, "Sales を使えない人の0件は出さない");
+  assert.equal(r.body.total, 6);
+  assert.equal(r.body.rows[0].name, "営業 一郎", "多い順");
+  assert.equal(r.body.rows.find((x) => x.name === "退職 太郎").former, true);
+  assert.equal(r.body.period.key, "today");
+  assert.equal(r.body.zeroMembers, "listed");
+});
+
+await ok("昨日・任意期間（日本時間の暦日・両端を含む）", async () => {
+  setup();
+  const { today, yday } = seedCounts();
+  const y = (await counts("period=yesterday")).body;
+  assert.deepEqual(y.rows.filter((x) => x.count).map((x) => [x.name, x.count]), [["営業 二郎", 2]]);
+  assert.equal(y.period.from, yday);
+  const c = (await counts(`period=custom&from=${yday}&to=${today}`)).body;
+  assert.equal(c.total, 8);
+  assert.equal(c.rows.find((x) => x.name === "営業 二郎").count, 3);
+  assert.equal((await counts(`period=custom&from=${today}&to=${yday}`)).statusCode, 400, "開始日が終了日より後");
+  assert.equal((await counts("period=custom&from=2026-02-30&to=2026-03-01")).statusCode, 400, "存在しない日付");
+  assert.equal((await counts("period=foo")).statusCode, 400);
+});
+
+await ok("今週（既定）：期間の指定が無ければ今週。Sales を使えない人は 403", async () => {
+  setup();
+  seedCounts();
+  const r = await counts("");
+  assert.equal(r.body.period.key, "this_week");
+  assert.ok(r.body.total >= 6, "今日ぶんは必ず今週に入る");
+  who = MEMBER;
+  assert.equal((await counts("period=today")).statusCode, 403);
+});
+
+await ok("アタック一覧：from・to で期間を指定できる。days も、いままでどおり使える", async () => {
+  setup();
+  const { yday } = seedCounts();
+  const r = await call(approaches, { method: "GET", url: `/api/sales/approaches?from=${yday}&to=${yday}` });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.approaches.length, 2);
+  assert.equal(r.body.since, yday);
+  assert.equal(r.body.until, yday);
+  const d = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=1" });
+  assert.equal(d.statusCode, 200);
+  assert.ok(d.body.approaches.length >= 6, "今日ぶん（フォーム3・メール1・退職者・不明 ほか）");
+  assert.ok(d.body.approaches.every((a) => a.sentAt > atJst(yday, "23")) && !d.body.until, "昨日ぶんは入らない");
+  assert.equal((await call(approaches, { method: "GET", url: "/api/sales/approaches?from=x&to=y" })).statusCode, 400);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

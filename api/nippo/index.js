@@ -359,6 +359,16 @@ async function submit(res, user, ctx, body) {
     console.error("[nippo] 宿題を閉じられませんでした:", e.message);
   }
 
+  // ⑦ 明日の最優先：明日の重要タスク（gw_tasks）がまだ1件も無いときだけ、書いた内容で1件つくる。
+  // 明日の重要タスクのカードが読めない環境では ⑦ に直接書く。そのままだと tc_nippo に残るだけで、
+  // 翌日の「今日やること」に出てこなかった。すでに決めてあれば何もしない（同じ仕事を2つ作らない）
+  let tomorrowSeeded = false;
+  try {
+    tomorrowSeeded = await seedTomorrow(sb, ctx, user, date, row.tomorrow_plan);
+  } catch (e) {
+    console.error("[nippo] 明日の最優先をタスクにできませんでした:", e.message);
+  }
+
   // 「明日やること」は、もう gw_action_items へ写さない。
   // 明日の3つは日報より前に gw_focus_days/gw_tasks で確定済み
   // （focusGate が確定していない提出を止める）。ここで別の表にまた
@@ -380,7 +390,28 @@ async function submit(res, user, ctx, body) {
     ok: true, id: nippoId, dailyFlags: row.daily_flags,
     ai: { configured: aiConfigured(), pending: aiPending },
     actions: { closed },
+    tomorrowSeeded,
   });
+}
+
+/**
+ * ⑦ 明日の最優先を、明日（次の営業日）の重要タスクにする。決めたタスクが1件も無いときだけ。
+ * 072（gw_tasks の focus_* 列）が無い環境では、何もしない（日報の保存は済んでいる）
+ * @returns {Promise<boolean>} 作ったら true
+ */
+async function seedTomorrow(sb, ctx, user, date, plan) {
+  const title = String(plan || "").trim().slice(0, 200);
+  const focusDate = nextFocusDate(date);
+  if (!title || !focusDate || !ctx.employee?.id) return false;
+  const { data: have, error } = await sb.from("gw_tasks").select("id, status")
+    .eq("tenant_id", ctx.tenantId).eq("focus_for", ctx.employee.id).eq("focus_date", focusDate);
+  if (error) return false;
+  if ((have || []).some((t) => t.status !== "cancelled")) return false;
+  const { error: ie } = await sb.from("gw_tasks").insert({
+    tenant_id: ctx.tenantId, title, assignee_id: ctx.employee.id, due_on: focusDate, priority: "high",
+    focus_date: focusDate, focus_rank: 1, focus_for: ctx.employee.id, created_by: user.id,
+  });
+  return !ie;
 }
 
 // ⑧「今日の感謝」は、要件の見直しで ⑤「顧客・チームのためにしたこと」に

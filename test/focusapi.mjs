@@ -23,8 +23,12 @@ const DEFAULTS = {
   gw_focus_days: { status: "draft" },
 };
 
+// db/082 の列（ペアコーチング）がまだ無い環境のまね。その列を select すると、本物と同じく 42703 で失敗する
+let missing082 = false;
+const COLS_082_RE = /\b(outcome|tomorrow_reason|coached_at|coached_with)\b/;
 function table(name) {
   const f = [];
+  let err = null;
   const rows = () => (db.rows[name] || []).filter((r) => f.every(([k, v]) => {
     if (k.startsWith("!")) return r[k.slice(1)] !== v;
     if (k.startsWith("<")) return r[k.slice(1)] && r[k.slice(1)] < v;
@@ -35,7 +39,12 @@ function table(name) {
     return Array.isArray(v) ? v.includes(r[k]) : r[k] === v;
   }));
   const q = {
-    select() { return q; },
+    select(cols) {
+      if (missing082 && name === "gw_tasks" && COLS_082_RE.test(String(cols || ""))) {
+        err = { code: "42703", message: `column gw_tasks.${String(cols).match(COLS_082_RE)[1]} does not exist` };
+      }
+      return q;
+    },
     eq(k, v) { f.push([k, v]); return q; },
     neq(k, v) { f.push(["!" + k, v]); return q; },
     lt(k, v) { f.push(["<" + k, v]); return q; },
@@ -44,9 +53,9 @@ function table(name) {
     is(k, v) { f.push([`null:${k}`, v === null ? "is" : "not"]); return q; },
     not(k, op, v) { f.push([`null:${k}`, v === null ? "not" : "is"]); return q; },
     order() { return q; }, limit() { return q; },
-    maybeSingle: () => Promise.resolve({ data: copy(rows()[0]), error: null }),
-    single: () => Promise.resolve({ data: copy(rows()[0]), error: null }),
-    then: (fn) => Promise.resolve({ data: rows().map(copy), error: null }).then(fn),
+    maybeSingle: () => Promise.resolve(err ? { data: null, error: err } : { data: copy(rows()[0]), error: null }),
+    single: () => Promise.resolve(err ? { data: null, error: err } : { data: copy(rows()[0]), error: null }),
+    then: (fn) => Promise.resolve(err ? { data: null, error: err } : { data: rows().map(copy), error: null }).then(fn),
     insert(row) {
       const made = [].concat(row).map((r, n) => ({
         ...(DEFAULTS[name] || {}),
@@ -441,6 +450,36 @@ await ok("確定したあとは足せない・直せない", async () => {
   assert.equal(a.body.error, "already_confirmed");
 });
 
+await ok("確定を取り消すと、また足せる・外せる（日報の画面から直せる）", async () => {
+  setup();
+  await addThree();
+  coachAll(TOMORROW);
+  await post({ action: "confirm", date: TOMORROW });
+  assert.equal(dayOf(TOMORROW)?.status, "confirmed");
+  const u = await post({ action: "unconfirm", date: TOMORROW });
+  assert.equal(u.statusCode, 200, JSON.stringify(u.body));
+  assert.equal(u.body.state.confirmed, false);
+  assert.notEqual(dayOf(TOMORROW)?.status, "confirmed");
+  assert.equal(dayOf(TOMORROW)?.confirmed_at, null);
+  assert.ok(logged.some((l) => l.action === "focus.unconfirm"));
+  // 3件そろっているので、1件外してから足す
+  const first = u.body.tasks[0];
+  const rm = await post({ action: "remove", id: first.id });
+  assert.equal(rm.statusCode, 200);
+  const a = await post({ action: "add", ...full(4), date: TOMORROW });
+  assert.equal(a.statusCode, 200, JSON.stringify(a.body));
+});
+
+await ok("確定していない日に取り消しても、何も変わらない", async () => {
+  setup();
+  await addThree();
+  const before = logged.filter((l) => l.action === "focus.unconfirm").length;
+  const u = await post({ action: "unconfirm", date: TOMORROW });
+  assert.equal(u.statusCode, 200);
+  assert.equal(u.body.state.confirmed, false);
+  assert.equal(logged.filter((l) => l.action === "focus.unconfirm").length, before, "記録も残さない");
+});
+
 await ok("2回押しても、確定は1回", async () => {
   setup();
   await addThree();
@@ -683,6 +722,36 @@ await ok("今日ぶん・明日ぶん・持ち越しを、1回で返す", async 
   assert.ok(r.body.people.length >= 2, "担当の選択肢が要る");
   assert.deepEqual(r.body.carryChoices.map((c) => c.key), ["carry", "lower", "hand", "drop"]);
 });
+
+console.log("— db/082 がまだ無い環境 —");
+
+// 列の有無は、関数ごとに一度確かめて覚えている。新しい関数（別のモジュール）として読み直して、無い環境を再現する
+missing082 = true;
+const { default: focusNo082 } = await import(`${atRoot("api/tasks/focus.js")}?no082`);
+const call082 = async (req) => {
+  const r = res();
+  await focusNo082({ headers: { authorization: "Bearer x" }, ...req }, r);
+  return r;
+};
+
+await ok("082 の列が無くても、明日の重要タスクを読める（日報のカードが消えない）", async () => {
+  setup();
+  const r = await call082({ method: "GET", url: "/api/tasks/focus" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(r.body.tomorrowState, "カードを出す状態が返る");
+});
+await ok("082 の列が無くても、足す・選ぶ・最優先を変える ができる", async () => {
+  setup();
+  const a = await call082({ method: "POST", url: "/api/tasks/focus", body: { action: "add", title: "A社へ提案書を送る", date: TOMORROW } });
+  assert.equal(a.statusCode, 200, JSON.stringify(a.body));
+  const b = await call082({ method: "POST", url: "/api/tasks/focus", body: { action: "add", title: "B社へ電話する", date: TOMORROW } });
+  assert.equal(b.statusCode, 200, JSON.stringify(b.body));
+  const u = await call082({ method: "POST", url: "/api/tasks/focus", body: { action: "update", id: b.body.task.id, focusRank: 1 } });
+  assert.equal(u.statusCode, 200, JSON.stringify(u.body));
+  const g = await call082({ method: "GET", url: "/api/tasks/focus" });
+  assert.equal(g.body.tomorrowTasks.length, 2);
+});
+missing082 = false;
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

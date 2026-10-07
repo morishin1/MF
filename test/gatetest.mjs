@@ -248,5 +248,73 @@ await ok("明日の3つ確定 → 日報送信 → 同じ仕事が二重生成�
   assert.equal(r.body.actions.planned, undefined, "もう作らないので planned は返さない");
 });
 
+console.log("\n=== ⑦ 明日の最優先 → 保存 → 再取得 → 翌日の「今日やること」 ===\n");
+
+await ok("明日の重要タスクが0件のとき、⑦ に書いた内容が明日のタスク1件になる", async () => {
+  setup();
+  const r = await call({ method: "POST", url: "/api/nippo", body: body({ tomorrowPlan: "A社へ提案書を送る" }) });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.tomorrowSeeded, true);
+  const made = db.rows.gw_tasks;
+  assert.equal(made.length, 1);
+  assert.equal(made[0].title, "A社へ提案書を送る");
+  assert.equal(made[0].focus_date, TOMORROW);
+  assert.equal(made[0].focus_for, "emp-1");
+  assert.equal(made[0].assignee_id, "emp-1");
+  assert.equal(made[0].focus_rank, 1);
+  // 保存した内容が残る（再取得）
+  const g = await call({ method: "GET", url: `/api/nippo?date=${TODAY}` });
+  assert.equal(g.body.today.tomorrow_plan, "A社へ提案書を送る");
+  assert.equal(g.body.focus.tomorrow[0].title, "A社へ提案書を送る");
+});
+
+await ok("翌日に開くと、そのタスクが「今日の重要タスク」として返る（成果の行になる）", async () => {
+  setup();
+  await call({ method: "POST", url: "/api/nippo", body: body({ tomorrowPlan: "A社へ提案書を送る" }) });
+  // 本物の表では status の既定値が todo（この偽の表は既定値を入れないので写す）
+  db.rows.gw_tasks[0].status = "todo";
+  // 翌日の日報を読むときと同じ問い合わせ（今日＝TOMORROW の、自分が担当の重要タスク）
+  const g = await call({ method: "GET", url: `/api/nippo?date=${TOMORROW}` });
+  assert.equal(g.statusCode, 200, JSON.stringify(g.body));
+  assert.deepEqual(g.body.focus.today.map((t) => t.title), ["A社へ提案書を送る"]);
+});
+
+await ok("すでに明日の重要タスクを決めてあれば、⑦ からは作らない（同じ仕事を2つにしない）", async () => {
+  setup({ tasks: [task("t1")] });
+  const r = await call({ method: "POST", url: "/api/nippo", body: body({ tomorrowPlan: "やることt1" }) });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.tomorrowSeeded, false);
+  assert.equal(db.rows.gw_tasks.length, 1);
+});
+
+await ok("⑦ が空なら作らない", async () => {
+  setup();
+  const r = await call({ method: "POST", url: "/api/nippo", body: body({ tomorrowPlan: "" }) });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.tomorrowSeeded, false);
+  assert.equal(db.rows.gw_tasks.length, 0);
+});
+
+await ok("タスクの表が無い環境でも、日報の提出は成功する（⑦ は日報に残る）", async () => {
+  setup({ missing: ["gw_tasks"] });
+  const r = await call({ method: "POST", url: "/api/nippo", body: body({ tomorrowPlan: "A社へ提案書を送る" }) });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.tomorrowSeeded, false);
+  assert.equal(db.rows.tc_nippo[0].tomorrow_plan, "A社へ提案書を送る");
+});
+
+await ok("成果の行は、朝のタスクとの結び付き（task_id）を保存する", async () => {
+  setup();
+  const id = "11111111-1111-4111-8111-111111111111";
+  const r = await call({ method: "POST", url: "/api/nippo", body: body({
+    workItems: [{ task: "A社へ提案", done: true, task_id: id }, { task: "B社へ電話", task_id: "not-a-uuid" }],
+  }) });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const w = db.rows.tc_nippo[0].work_items;
+  assert.equal(w.length, 2);
+  assert.equal(w[0].task_id, id);
+  assert.equal(w[1].task_id, undefined, "ID の形でないものは保存しない");
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

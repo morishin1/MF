@@ -350,12 +350,15 @@
 
     <div class="np-sec">
       <h3><span class="no">⑦</span>明日の最優先</h3>
-      <p class="lead">
+      <p class="lead" id="f-tomorrow-lead">
         上の「明日の重要タスクを決める」で選んだものから、自動で入ります。
         別に書き直す必要はありません。
       </p>
       <p class="lead" id="f-tomorrow-view" style="font-weight:700;color:var(--primary-dark);">（未定）</p>
-      <input id="f-tomorrow" type="text" readonly style="display:none;">
+      <!-- 明日の重要タスクのカードが出せないとき（読めない・この仕組みが無い）は、ここに直接書く（setTomorrowEditable）。
+           提出すると、明日の重要タスクがまだ無ければ1件になり、翌日の「今日やること」に出る（api/nippo/index.js seedTomorrow） -->
+      <input id="f-tomorrow" type="text" readonly style="display:none;" maxlength="200" aria-label="明日の最優先"
+             placeholder="例：A社へ提案書を送る">
     </div>
 
     <button class="btn btn-primary" id="submit-btn" onclick="submit(this)">
@@ -980,6 +983,7 @@
       </div>
       ${v.done_when ? `<div class="wh">終わり方：${esc(v.done_when)}</div>` : ""}
       <input data-k="action_id" type="hidden" value="${esc(v.action_id || "")}">
+      <input data-k="task_id" type="hidden" value="${esc(v.task_id || "")}">
       <div class="did">
         <button type="button" class="yes${state === "yes" ? " on" : ""}" onclick="setDone(this, true)">できた</button>
         <button type="button" class="no${state === "no" ? " on" : ""}" onclick="setDone(this, false)">できなかった</button>
@@ -1059,11 +1063,43 @@
    *   ただし、一言の欄に「完了」と入れて埋めることはしない。
    *   埋めると、日報の一覧に「完了 / 完了 / 完了」と並ぶだけになる。
    *   済んだことは done で持ち、一言は書きたい人が書く
+   *
+   * ■ 朝に決めた件数と、同じ件数を並べる（3件決めたら3行・2件なら2行・1件なら1行）
+   *   朝の「今日の最優先」（top_priority）は work_items とは別に持っているので、ここで1行目に足す。
+   *   足さないと、最優先＋ほかに2件＝3件決めたのに、成果は2行しか出ない（以前の不具合）。
+   *   明日の重要タスク（gw_tasks・今日の focus）は、タスクのID（task_id）で行と結び付ける。
+   *   同じものを2行にしないよう、ID → 題名（全角・半角・大小をそろえて）の順で突き合わせる
    */
-  function mergeWork(workItems, todayActions) {
+  function mergeWork(workItems, todayActions, { top = "", focusToday = [] } = {}) {
     const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result));
-    const key = (s) => String(s || "").trim().toLowerCase();
+    const key = (s) => String(s || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
     const byTitle = new Map(rows.map((w) => [key(w.task), w]));
+    const byTask = new Map(rows.filter((w) => w.task_id).map((w) => [w.task_id, w]));
+
+    // 朝の「今日の最優先」。まだ行に無ければ先頭に
+    if (String(top || "").trim() && !byTitle.has(key(top))) {
+      const row = { task: String(top).trim(), from_label: "今日の最優先" };
+      rows.unshift(row);
+      byTitle.set(key(top), row);
+    }
+
+    // 今日の重要タスク（前日に決めた「今日やる」もの）。取りやめたものは出さない
+    for (const t of focusToday || []) {
+      if (!t || !t.title || t.status === "cancelled") continue;
+      const hit = byTask.get(t.id) || byTitle.get(key(t.title));
+      const done = t.status === "done";
+      if (hit) {
+        hit.task_id = hit.task_id || t.id;
+        if (!hit.done_when && t.doneCondition) hit.done_when = t.doneCondition;
+        if (done && !hit.result && !hit.undone_reason) { hit.done = true; if (t.result) hit.result = t.result; }
+        continue;
+      }
+      const row = { task: t.title, task_id: t.id, done_when: t.doneCondition || "", from_label: "今日の重要タスク" };
+      if (done) { row.done = true; if (t.result) row.result = t.result; }
+      rows.push(row);
+      byTitle.set(key(t.title), row);
+      byTask.set(t.id, row);
+    }
 
     for (const a of todayActions || []) {
       const hit = byTitle.get(key(a.title));
@@ -1104,8 +1140,12 @@
     // 「やること」で できた にしたものは、ここに済みの状態で出る。
     // 書き直しが要らないようにするのが目的なので、行を作るだけでは足りない
     el("f-work").innerHTML = "";
-    const items = mergeWork(n?.work_items, data?.todayActions);
-    (items.length ? items : [{}, {}, {}]).forEach(addWork);
+    // 朝に決めた件数をそのまま並べる（空欄を3つ固定で出さない）。何も決めていない日は、書く欄を1つだけ
+    const items = mergeWork(n?.work_items, data?.todayActions, {
+      top: n?.top_priority ?? data?.today?.top_priority ?? "",
+      focusToday: data?.focus?.today || [],
+    });
+    (items.length ? items : [{}]).forEach(addWork);
 
     fillMet(n);
     fillWins(n);
@@ -1363,21 +1403,45 @@
   //   任意の詳細設定として残す（<details>の中）。使わなくても日報は書ける
   let focusData = null;
   let memoData = null;
+  // カードを描き直しても消えないように持っておく、直前の操作のエラー（描いたあとに出して空にする）
+  let focusMsg = "";
 
   async function loadFocus() {
     try { focusData = await API.focus({ date: el("f-date").value || jstToday() }); }
     catch (e) {
-      // 072 をまだ流していない環境では、これまでどおりの日報にする
+      // 072 をまだ流していない・読めない環境では、これまでどおりの日報にする。
+      // ⑦ はカードから入らなくなるので、直接書けるようにする（書く場所が無くならないように）
+      focusData = null;
       el("focus-card").classList.add("hidden");
+      setTomorrowEditable(true);
       return;
     }
     // 状態が返ってこない（この仕組みを使っていない環境）
     if (!focusData?.tomorrowState) {
       el("focus-card").classList.add("hidden");
+      setTomorrowEditable(true);
       return;
     }
+    setTomorrowEditable(false);
     el("focus-card").classList.remove("hidden");
     renderFocus();
+  }
+
+  /** ⑦ を直接書けるようにする（カードが無いとき）／カードから入る表示に戻す */
+  function setTomorrowEditable(on) {
+    const input = el("f-tomorrow");
+    input.readOnly = !on;
+    input.style.display = on ? "" : "none";
+    el("f-tomorrow-view").style.display = on ? "none" : "";
+    el("f-tomorrow-lead").textContent = on
+      ? "明日いちばん先にやることを1つ書いてください。提出すると、明日の「今日やること」に入ります。"
+      : "上の「明日の重要タスクを決める」で選んだものから、自動で入ります。別に書き直す必要はありません。";
+  }
+
+  /** 操作が失敗したとき：サーバの状態でカードを描き直してから、エラーを出す（描き直しで消さない） */
+  async function focusFail(e, fallback) {
+    focusMsg = e?.hint || e?.detail || e?.message || fallback;
+    await loadFocus();
   }
 
   /** 候補（今日できなかった／自分の未完了）＋ すでに選んだものを、1つの並びにする */
@@ -1401,6 +1465,8 @@
     const count = list.length;
     const atMax = count >= max;
     const cands = candidateRows();
+    // 確定したあとは、取り消すまで足す・選ぶ・外すはできない（サーバも 409 で止める）。押せないようにして、取り消す道を出す
+    const locked = Boolean(focusData.tomorrowState?.confirmed);
 
     el("focus-tag").textContent = `${count} / ${max}`;
     el("focus-tag").className = `kp-chip ${count > 0 ? "event" : "draft"}`;
@@ -1408,7 +1474,7 @@
     const rows = cands.map((c) => `
       <div class="fc-cand">
         <input type="checkbox" id="fc-c-${esc(c.id)}" ${c.selected ? "checked" : ""}
-               ${!c.selected && atMax ? "disabled" : ""}
+               ${locked || (!c.selected && atMax) ? "disabled" : ""}
                onchange="toggleCandidate('${esc(c.id)}', this.checked)">
         <label for="fc-c-${esc(c.id)}">
           ${c.src ? `<span class="src">${esc(c.src)}</span>` : ""}${esc(c.title)}
@@ -1438,12 +1504,17 @@
       <div class="fc-cand-list" id="fc-cand-list">${rows
         || `<p class="muted" style="font-size:12.5px;">候補はまだありません。下から新しく追加してください。</p>`}</div>
       <div class="fc-quickadd">
-        <input type="text" id="fc-quick-title" placeholder="新しいタスク名" ${atMax ? "disabled" : ""}
+        <input type="text" id="fc-quick-title" placeholder="新しいタスク名" ${atMax || locked ? "disabled" : ""}
                onkeydown="if(event.key==='Enter'){event.preventDefault();quickAddFocus();}">
-        <button class="btn btn-secondary btn-sm" onclick="quickAddFocus()" ${atMax ? "disabled" : ""}>
+        <button class="btn btn-secondary btn-sm" onclick="quickAddFocus()" ${atMax || locked ? "disabled" : ""}>
           <span class="material-symbols-outlined icon-inline">add</span>新しいタスクを追加</button>
       </div>
       <div class="fc-count">選択したもの ${count} / ${max}</div>
+      ${locked ? `<div class="banner ok" style="margin:8px 0;" id="fc-locked">
+        <span class="material-symbols-outlined">lock</span>
+        <div>確定ずみです。直すときは、確定を取り消してください。
+          <button class="btn btn-secondary btn-sm" style="margin-left:6px;" onclick="unconfirmFocus(this)">確定を取り消す</button></div>
+      </div>` : ""}
       ${priBox}
       <div id="fc-msg" class="err-text" style="margin-bottom:6px;"></div>
       <div class="fc-detail-toggle">
@@ -1453,7 +1524,18 @@
         ${detailPanel()}
       </div>`;
 
+    // 直前の操作のエラーは、描き直したあとに出す（描き直しで消さない）
+    el("fc-msg").textContent = focusMsg;
+    focusMsg = "";
     syncTomorrowPlanField();
+  }
+
+  /** 確定を取り消す（明日の重要タスクを直せるようにする） */
+  async function unconfirmFocus(btn) {
+    try {
+      await KPLayout.busy(btn, "取り消し中…", () => API.focusAct({ action: "unconfirm", date: focusData.tomorrowDate }));
+      await loadFocus();
+    } catch (e) { await focusFail(e, "取り消せませんでした"); }
   }
 
   /** 詳しい項目・AIレビュー・ペアコーチング・確定。使わなくても日報は書ける任意の仕組み */
@@ -1519,8 +1601,8 @@
       else await API.focusRemove(id);
       await loadFocus();
     } catch (e) {
-      el("fc-msg").textContent = e.hint || e.detail || e.message || "できませんでした";
-      await loadFocus();   // チェックの見た目を、実際のサーバの状態へ戻す
+      // チェックの見た目を実際のサーバの状態へ戻してから、なぜできなかったかを出す
+      await focusFail(e, "できませんでした");
     }
   }
 
@@ -1533,7 +1615,7 @@
     try {
       await API.focusAdd({ title, date: focusData.tomorrowDate });
       await loadFocus();
-    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
+    } catch (e) { await focusFail(e, "追加できませんでした"); }
   }
 
   /** 選んだ中から、最優先を1件だけにする */
@@ -1548,7 +1630,7 @@
       }
       await API.focusUpdate({ id, focusRank: 1 });
       await loadFocus();
-    } catch (e) { el("fc-msg").textContent = e.hint || e.detail || e.message || "できませんでした"; }
+    } catch (e) { await focusFail(e, "できませんでした"); }
   }
 
   /** ⑦ 明日の最優先は、選んだ重要タスクの最優先1件とそろえる（別入力させない） */
