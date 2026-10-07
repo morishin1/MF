@@ -10,6 +10,9 @@
 //   ・行き先が /hr/ と /sales/ と /office/ と /keiei/
 //   ・メンバー表示・通知・ログアウトを壊さない
 //   ・狭い画面で「HR」「Sales」「Office」「経営」に縮み、通知・ログアウトを押し出さない
+//   ・タブレット幅（721〜1024px。ヘッダーが1行のまま）で、近道が切れない・名前と重ならない
+//     （2026-10-07：768px で Office・経営が名前の下で切れていた。メンバー表示・ログアウトはアイコンだけにし、
+//       入らないぶんは名前を…で縮める）
 //   ・入口はヘッダーだけ。左メニュー（管理者・メンバーとも）には採用・営業・Office・経営を置かない
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
@@ -45,7 +48,7 @@ async function open(path, who) {
       // who.roles は途中で書き換える（権限を付けたあとの再読込を再現する）
       return send({
         email: "a@b.c", appRole: who.appRole, isAdmin: Boolean(who.isAdmin), roles: [],
-        gw: { employee: { id: "e1", display_name: "森田", status: "active" },
+        gw: { employee: { id: "e1", display_name: who.name || "森田", status: "active" },
               roles: who.roles || [], tenantId: "t1", stage: null },
         ...(who.noAccess ? {} : { access: accessOf(who) }),
       });
@@ -378,6 +381,59 @@ for (const [width, path, who, want] of [
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 0, `${width}px: 横スクロールが出ない（はみ出し ${overflow}px）`);
   if (width === 390) await page.screenshot({ path: shotPath(`header-shortcuts-sp-${path.replace(".html", "")}.png`) });
+  await page.close();
+}
+
+console.log("\n— タブレット幅（721〜1024px）：近道が切れない・名前と重ならない —");
+for (const [width, path, name] of [
+  [721, "admin-nippo.html"], [768, "admin-nippo.html"], [820, "admin-nippo.html"], [1024, "admin-nippo.html"],
+  [721, "timecard.html"], [768, "timecard.html"], [1024, "timecard.html"],
+  [768, "admin-nippo.html", "長谷川 真理子郎"], [768, "timecard.html", "ジョナサン・アレクサンダー・ウィリアムズ"],
+]) {
+  const page = await open(path, { appRole: "owner", roles: ["owner"], width, name });
+  // アイコンフォント（Google Fonts）は、オフラインの環境では読めず、アイコン名が文字で出て幅を取る。
+  // 本番と同じ幅（20px の枠。本番の 18px より広め）に置き換えて、配置を確かめる（keieihubui と同じ）
+  await page.addStyleTag({ content: ".material-symbols-outlined{font-size:0!important;width:20px;height:20px;display:inline-block;flex:none}" });
+  await page.waitForTimeout(200);
+  const tag = `${width}px ${path}${name ? "（長い名前）" : ""}`;
+  const r = await page.evaluate(() => {
+    const box = (n) => n.getBoundingClientRect();
+    const bar = document.querySelector(".topbar");
+    const nav = bar.querySelector(".kp-shortcuts");
+    const nm = bar.querySelector(".kp-who-name");
+    const links = [...nav.querySelectorAll(".kp-shortcut")];
+    const nb = box(nav), mb = box(nm);
+    return {
+      labels: links.map((a) => a.querySelector(".kp-sc-short").textContent.trim()).join("/"),
+      clipped: links.filter((a) => box(a).right > nb.right + 0.5 || box(a).left < nb.left - 0.5).map((a) => a.innerText.trim()),
+      scrolled: nav.scrollWidth - nav.clientWidth,
+      overName: links.filter((a) => { const b = box(a); return b.right > mb.left + 0.5 && b.left < mb.right - 0.5; }).map((a) => a.innerText.trim()),
+      nameTitle: nm.title, nameText: nm.textContent, nameCut: nm.scrollWidth > nm.clientWidth + 0.5,
+      // 1行のままか：ロゴ・近道・名前・ボタンの縦の中心がそろっている（高さの絶対値はフォントで変わるので見ない）
+      rowSpread: (() => {
+        const items = [bar.querySelector(".brand"), ...links, nm, ...bar.querySelectorAll(".who > .btn, .who .icon-btn")]
+          .filter((n) => n && n.offsetParent);
+        const mids = items.map((n) => { const b = box(n); return (b.top + b.bottom) / 2; });
+        return Math.round(Math.max(...mids) - Math.min(...mids));
+      })(),
+      height: Math.round(box(bar).height),
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      // 読み上げの文字＝アイコン（material-symbols）を除いたボタンの文字
+      buttons: [...bar.querySelectorAll(".who > .btn")].map((b) => ({ title: b.title,
+        text: [...b.childNodes].filter((n) => !(n.classList && n.classList.contains("material-symbols-outlined"))).map((n) => n.textContent).join("").trim(),
+        inView: box(b).left >= 0 && box(b).right <= window.innerWidth, w: Math.round(box(b).width) })),
+    };
+  });
+  check(r.labels === "HR/Sales/Office/経営", `${tag}: 近道は4つ（いま ${r.labels}）`);
+  check(!r.clipped.length && r.scrolled <= 1, `${tag}: 近道が切れない（切れている ${r.clipped.join("・") || "なし"}・はみ出し ${r.scrolled}px）`);
+  check(!r.overName.length, `${tag}: 近道と名前が重ならない（重なり ${r.overName.join("・") || "なし"}）`);
+  check(r.rowSpread <= 12, `${tag}: ヘッダーは1行のまま（縦の中心のずれ ${r.rowSpread}px・高さ ${r.height}px）`);
+  check(r.overflow <= 0, `${tag}: 横スクロールが出ない（はみ出し ${r.overflow}px）`);
+  check(r.buttons.map((b) => b.text).join("/") === "メンバー表示/ログアウト" && r.buttons.every((b) => b.inView && b.title && b.w <= 40),
+    `${tag}: メンバー表示・ログアウトはアイコンだけで画面内。title と読み上げの文字は残る（${r.buttons.map((b) => `${b.text}:${b.w}px`).join("・")}）`);
+  check(r.nameTitle === r.nameText, `${tag}: 名前の全文は title に残る`);
+  if (name && name.length > 12) check(r.nameCut, `${tag}: 入らない名前は…で縮める（近道を削らない）`);
+  if (width === 768 && !name) await page.screenshot({ path: shotPath(`header-shortcuts-tablet-${path.replace(".html", "")}.png`), clip: { x: 0, y: 0, width, height: 120 } });
   await page.close();
 }
 

@@ -427,24 +427,25 @@ console.log("\n=== 日時の変更が、一覧・詳細・今日の面談へ反�
 await ok("応募者詳細：面談の日時とNEXT ACTIONが新しい日時になる", async () => {
   setup();
   const iv = await manualInterview();
-  await edit({ id: iv.id, scheduledAt: "2026-10-07T06:30:00Z", method: "online" });
+  // 日付は「今日」にならない遠い日（2026-10-07 の日本時間に回すと「本日 15:30」と出て落ちていた。表示の決まりは変えていない）
+  await edit({ id: iv.id, scheduledAt: "2030-10-07T06:30:00Z", method: "online" });
   const r = await getDetail("a1");
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const got = r.body.interviews.find((i) => i.id === iv.id);
-  assert.equal(got.scheduledAt, "2026-10-07T06:30:00Z");
+  assert.equal(got.scheduledAt, "2030-10-07T06:30:00Z");
   assert.equal(got.methodLabel, "オンライン");
-  assert.equal(r.body.applicant.nextAction, "2026/10/7 15:30 カジュアル面談", "JSTで出す");
+  assert.equal(r.body.applicant.nextAction, "2030/10/7 15:30 カジュアル面談", "JSTで出す");
 });
 
 await ok("応募者一覧：直近の面談日時とNEXT ACTIONが新しい日時になる", async () => {
   setup();
   const iv = await manualInterview();
-  await edit({ id: iv.id, scheduledAt: "2026-10-07T06:30:00Z" });
+  await edit({ id: iv.id, scheduledAt: "2030-10-07T06:30:00Z" });
   const r = await getList();
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const a = r.body.applicants.find((x) => x.id === "a1");
-  assert.equal(a.nextInterviewAt, "2026-10-07T06:30:00Z");
-  assert.equal(a.nextAction, "2026/10/7 15:30 カジュアル面談");
+  assert.equal(a.nextInterviewAt, "2030-10-07T06:30:00Z");
+  assert.equal(a.nextAction, "2030/10/7 15:30 カジュアル面談");
 });
 
 await ok("応募者一覧：キャンセル済み・実施済みの面談は直近の面談に数えない", async () => {
