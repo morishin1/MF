@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261006ml1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261006ml1">
+  <link rel="stylesheet" href="../css/app.css?v=20261007kei4">
+  <link rel="stylesheet" href="../css/layout.css?v=20261007kei4">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -100,11 +100,11 @@
   <main id="kei-main"><div class="kei-empty">読み込み中…</div></main>
 </div>
 
-<script src="../js/api-client.js?v=20261006ml1"></script>
-<script src="../js/layout.js?v=20261006ml1"></script>
-<script src="../js/keiei-layout.js?v=20261006ml1"></script>
-<script src="/keiei/onboarding.js?v=20261006ml1"></script>
-<script src="/keiei/pay.js?v=20261006ml1"></script>
+<script src="../js/api-client.js?v=20261007kei4"></script>
+<script src="../js/layout.js?v=20261007kei4"></script>
+<script src="../js/keiei-layout.js?v=20261007kei4"></script>
+<script src="/keiei/onboarding.js?v=20261007kei4"></script>
+<script src="/keiei/pay.js?v=20261007kei4"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -337,7 +337,7 @@
       return head("人・組織", "在籍・採用・入社準備の状況です。処理は、HR・メンバー管理・入社準備で行います。")
         + unreadableBanner(d) + orgBlock(d)
         + `<section class="kei-sec"><div class="kei-panel"><a class="kei-btn" href="#onboarding">入社準備を見る</a><a class="kei-btn sec" href="#pay">給与管理を開く</a>
-            <div class="kei-note">チーム状況・全員のタスク・全員の日報は、上のタブ（人・組織）の右から開けます。</div></div></section>`;
+            <div class="kei-note">日報・勤怠・チーム状況・全員のタスクは、上のタブ（人・組織）の2段目から開けます。</div></div></section>`;
     },
 
     // ---- 財務 ----

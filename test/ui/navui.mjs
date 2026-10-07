@@ -115,7 +115,7 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   check(!allHref.some((h) => /(^|\/)hr\/$/.test(h)), "Office のタブに「採用」（/hr/）は置かない");
   check(!allHref.some((h) => /(^|\/)sales\/$/.test(h)), "Office のタブに「営業」（/sales/）は置かない");
   const nav = await page.locator("#kp-office-nav").innerText();
-  for (const x of ["全員のタスク", "全員の日報", "AIナレッジ", "チーム状況"]) {
+  for (const x of ["全員のタスク", "日報・勤怠", "AIナレッジ", "チーム状況"]) {
     check(!nav.includes(x), `Office のタブに「${x}」を置かない（経営・⚙管理の側）`);
   }
   // 3段目（画面の中の切り替え）は、Office のタブではなく見出しの下の帯
@@ -169,7 +169,7 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
     check(items.some((i) => i.includes(x)), `管理者の左にも「${x}」`);
   }
   const side = await page.locator(".kp-sidebar.member").innerText();
-  for (const x of ["メンバー管理", "入退社", "勤怠管理", "全員の日報", "AIナレッジ", "システム設定"]) {
+  for (const x of ["メンバー管理", "入退社", "勤怠管理", "日報・勤怠", "AIナレッジ", "システム設定"]) {
     check(!side.includes(x), `左メニューに管理用の「${x}」を置かない`);
   }
 
@@ -197,8 +197,11 @@ console.log("\n— AIナレッジは⚙管理。社内AIは左メニュー —")
 console.log("\n— 経営：全員のタスク・日報・チーム状況 —");
 {
   const page = await open("admin-tasks.html", { admin: true });
-  const items = (await page.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
-  check(items.join("/") === "経営ホーム/チーム状況/全員のタスク/全員の日報", `経営の並び（いま ${items.join("/")}）`);
+  // 経営者には、経営（/keiei）と同じ横タブで出す（2026-10-06：左メニューは出さない。test/ui/keieiteamui.mjs も見る）
+  check(await page.locator(".kp-sidebar").count() === 0, "経営者には左メニューを出さない");
+  const subs = (await page.locator("#kp-keiei-nav .kp-ostab").allInnerTexts()).map((x) => x.trim());
+  check(subs.join("/") === "日報・勤怠/チーム状況/全員のタスク/入社準備/給与管理/概要", `経営の「人・組織」の並び（いま ${subs.join("/")}）`);
+  check((await page.locator("#kp-keiei-nav .kp-ostab.on").innerText()).trim() === "全員のタスク", "「全員のタスク」が選ばれている");
   check(/\bon\b/.test((await page.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("class")) || ""), "ヘッダーの「経営」が選ばれて見える");
   check((await page.locator(".kp-app").innerText()).includes("経営"), "ヘッダーに「/ 経営」と出る");
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((x) => x.trim());
@@ -212,7 +215,7 @@ console.log("\n— 管理者（経営者・経理の権限なし）：入れる�
   const only = { recruit: false, sell: false, office: false, keiei: false, aiInquiries: true };
   const t = await open("admin-tasks.html", { admin: true, access: only });
   const items = (await t.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.trim());
-  check(items.join("/") === "チーム状況/全員のタスク/全員の日報", `経営ホーム（/keiei）は経営者だけ。管理者はチーム管理の3つ（いま ${items.join("/")}）`);
+  check(items.join("/") === "チーム状況/全員のタスク/日報・勤怠", `経営ホーム（/keiei）は経営者だけ。管理者はチーム管理の3つ（いま ${items.join("/")}）`);
   check((await t.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("href")) === "admin-team.html", "管理者の「経営」は、チーム状況から入る（導線がある）");
   // 管理者は人事・労務／経理・事務（officeHr・officeFinance）に入れるので、Office は出る（Office ホームは担当の分だけ）
   check((await t.locator('.kp-shortcut[data-shortcut="office"]').getAttribute("href")) === "/office/", "access.office が無い管理者にも「Office」（人事・労務／経理・事務）→ /office/");
