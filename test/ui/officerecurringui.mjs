@@ -9,7 +9,7 @@
 //   5. 期限超過・今日の予定は「今日やること」に1件ずつ入る（担当つき・確認するでドロワー）
 //   6. 今週のOffice予定：今日・明日・今週・期限超過の件数と、要確認 → 期限超過 → 今日 → 明日 → 今週 → 今後 の順
 //   7. 390px は月の格子を縮めず、日付を横に流して選んだ日の予定をカードで出す。1280・768・390 で横にはみ出さない
-//   8. 定例業務：一覧・カテゴリの絞り込み・作る（ルールの送り方）・停止の確認・Excel を読んで変換一覧 → 登録にした行だけ送る
+//   8. 定例業務：一覧・カテゴリの絞り込み・作る（ルールの送り方）・停止の確認・Excel 最新版の同期の入口と最終同期の表示
 import { launch, BASE } from "../_browser.mjs";
 import { writeFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -187,7 +187,8 @@ console.log("\n=== 定例業務（/office/recurring.html） ===");
       }
       return send({ today: TODAY, masters, employees: [{ id: "e-me", name: "経理 太郎" }],
         categories: L.CATEGORIES.map((c) => ({ key: c.key, label: c.label, col: c.col, view: true, edit: ["finance", "sales_admin", "all", "ecnw", "other"].includes(c.key) })),
-        priorities: L.PRIORITIES, perms: { hr: false, fin: true, app: true, admin: false } });
+        priorities: L.PRIORITIES, perms: { hr: false, fin: true, app: true, admin: false },
+        sync: { ready: true, applying: null, failed: null, last: { id: "s1", periodStart: "2026-09", periodLabel: "2026年9月〜2027年8月", fileName: "年間予定表.xlsx", total: 180, new: 180, update: 0, unchanged: 0, stop: 0, reactivate: 0, status: "committed", byName: "経理 太郎", createdAt: "2026-10-09T05:04:00Z", committedAt: "2026-10-09T05:05:00Z" } } });
     }
     if (u.pathname === "/api/notifications") return send({ notifications: [], unread: 0 });
     return send({});
@@ -234,34 +235,11 @@ console.log("\n=== 定例業務（/office/recurring.html） ===");
   await page.waitForTimeout(300);
   check(posts.some((p) => p.action === "set_active" && p.id === "m1" && p.active === false), "停止を送る（確かめてから）");
 
-  console.log("\n— Excel から取り込む —");
-  const wb = XLSX.utils.book_new();
-  for (const [name, m] of [["202510月", 10], ["202511月", 11], ["202512月", 12], ["202601月", 1]]) {
-    const aoa = [["月間スケジュール管理表", "", "", "", "", "", "", `x年${m}月度`], [], [], ["日", "曜日", "作業名"]];
-    for (let d = 1; d <= 10; d++) aoa.push([d, "", d === 6 ? "・給与データ作成〆" : "", "", "", "", "", "", "", "", "", "", "", "", "", "", d === 7 ? "・10日振込予約\n・通帳記帳" : ""]);
-    if (m === 11) aoa[4 + 10 - 1][13] = "・山田さん入社対応";
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name);
-  }
-  const dir = mkdtempSync(join(tmpdir(), "office-xlsx-"));
-  const file = join(dir, "annual.xlsx");
-  writeFileSync(file, XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-  await page.click("#impOpen");
-  await page.setInputFiles("#impFile", file);
-  await page.click("#impRead");
-  await page.waitForSelector("#impTable");
-  const prev = posts.find((p) => p.action === "import_preview");
-  check(prev && prev.cells.some((x) => x.sheet === "202510月" && x.col === "Q" && x.day === 7 && x.text.includes("10日振込予約")) && prev.periodStart === "2025-09", "Excel をこの画面で読み、セル（シート・日・列・文言）だけ送る");
-  const recRows = await page.locator("#impTable tbody tr").count();
-  check(recRows === 3, `定例（毎月）の候補（${recRows}行：給与データ作成〆・10日振込予約・通帳記帳）`);
-  await page.locator("#impResult .of-chip", { hasText: "単発" }).click();
-  check((await page.locator("#impTable").innerText()).includes("山田さん入社対応") && !(await page.locator('#impTable input[data-f="include"]').first().isChecked()), "単発は初めは除外");
-  await page.locator('#impTable input[data-f="include"]').first().check();
-  await page.locator("#impResult .of-chip", { hasText: "定例" }).click();
-  await page.locator('#impTable tbody tr').filter({ hasText: "通帳記帳" }).locator('input[data-f="include"]').uncheck();
-  await page.click("#impCommit");
-  await page.waitForSelector('[data-role="import-done"]');
-  const com = posts.find((p) => p.action === "import_commit");
-  check(com && com.rows.length === 3 && com.rows.filter((x) => x.kind === "single").length === 1 && !com.rows.some((x) => x.title === "通帳記帳"), `登録にした行だけ送る（${com?.rows.map((x) => x.title).join("・")}）`);
+  console.log("\n— Excel 最新版の同期（入口と最終同期の表示。中身は test/ui/officesyncui.mjs） —");
+  check((await page.locator("#syncOpen").innerText()).includes("年間予定表を最新版として同期"), "「年間予定表を最新版として同期」のボタン");
+  check((await page.locator('[data-role="sync-info"]').innerText()).includes("2026年9月〜2027年8月") && (await page.locator('[data-role="sync-info"]').innerText()).includes("最終同期：2026/10/09 14:05"), "ページ上部に Excel最新版の期と最終同期");
+  await page.click("#syncOpen");
+  check((await page.locator("#syncBox").innerText()).includes("手動登録した定例業務と過去の履歴は変更しません"), "同期の説明");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   for (const w of [768, 390]) {
     await page.setViewportSize({ width: w, height: 900 });
