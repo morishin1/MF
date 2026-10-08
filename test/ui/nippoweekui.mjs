@@ -4,7 +4,8 @@
 //   1. 経営の「人・組織」を押すと日報・勤怠が開く。2段目は 日報・勤怠／チーム状況／全員のタスク／入社準備／給与管理／概要
 //   2. 並び：今週の提出・勤怠 → 今日の要フォロー → 今日の日報 → 溜まっていること → 分析・履歴（たたむ）
 //      今ある機能（要フォロー・溜まっていること・提出率・未提出・一覧・提出された日報・直近の傾向・週次評価・月次）を消していない
-//   3. KPI 4つ（日報提出率・日報未提出・勤怠要確認・要フォロー人数）と、メンバー別の週の表（月〜日・日報・勤怠・要対応）
+//   3. KPI（日報提出率（過去営業日）・今日の提出・日報未提出・勤怠要確認・要フォロー人数）と、メンバー別の週の表（月〜日・日報・勤怠・要対応）
+//      今日の提出は今週だけ。今日出した人は、今日のセルがはっきり緑で「提出済み」、日報の列に「今日 提出済み」
 //   4. セルは色だけに頼らない（印＋説明 title／読み上げ）。今日の列は背景を変える
 //   5. [← 前週] [今週] [次週 →] で週を移る（今週のときは「今週」を押せない）
 //   6. 390px は横の表ではなくメンバーごとのカード。1280・768・390 で横にはみ出さない
@@ -70,7 +71,13 @@ console.log("\n=== Office の「人・組織」（2026-10-07：日報・勤怠�
 
   console.log("\n=== 今週の提出・勤怠 ===");
   const kpis = (await page.locator(".nw-kpi .lb").allInnerTexts()).map((x) => x.trim());
-  check(kpis.join("/") === "日報提出率/日報未提出/勤怠要確認/要フォロー人数", `KPI 4つ（${kpis.join("/")}）`);
+  check(kpis.join("/") === "日報提出率（過去営業日）/今日の提出/日報未提出/勤怠要確認/要フォロー人数", `KPI 5つ（${kpis.join("/")}）`);
+  check((await page.locator('[data-kpi="today"] .v').innerText()).replace(/\s/g, "") === "1/4人", "今日の提出 1/4人（山田だけ）");
+  check((await page.locator('[data-kpi="rate"] .sub').innerText()).includes("今日より前の営業日"), "提出率は過去営業日だけと書く");
+  const yToday = page.locator('.nw-table tr[data-user="u1"] td.is-today');
+  check(await yToday.locator(".nw-c.is-now").count() === 1 && (await yToday.innerText()).includes("提出済み"), "今日出した人：今日のセルが緑で「提出済み」");
+  check((await page.locator('.nw-table tr[data-user="u1"] [data-today="ok"]').innerText()).trim() === "今日 提出済み", "日報の列に「今日 提出済み」");
+  check((await page.locator('.nw-table tr[data-user="u2"] [data-today="yet"]').innerText()).trim() === "今日 まだ", "まだの人は「今日 まだ」");
   check((await page.locator('[data-kpi="rate"] .v').innerText()).replace(/\s/g, "") === "75%", "日報提出率 75%（6/8）");
   check((await page.locator('[data-kpi="missing"] .v').innerText()).replace(/\s/g, "") === "2件", "日報未提出 2件");
   check((await page.locator('[data-kpi="time"] .v').innerText()).replace(/\s/g, "") === "2件", "勤怠要確認 2件");
@@ -104,6 +111,7 @@ console.log("\n=== Office の「人・組織」（2026-10-07：日報・勤怠�
   await page.click("#nw-next");
   await page.waitForFunction(() => document.getElementById("nw-range").textContent.includes("10/12"));
   check((await page.locator('[data-kpi="follow"] .v').innerText()).trim() === "—", "まだ来ていない週の要フォローは「—」");
+  check(await page.locator('[data-kpi="today"]').count() === 0 && await page.locator("[data-today]").count() === 0, "今日を含まない週には「今日の提出」を出さない");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
 }
@@ -115,7 +123,10 @@ for (const w of [1280, 768, 390]) {
   check(over <= 0, `${w}px：横にはみ出さない（${over}）`);
   const tableShown = await page.locator(".nw-table-wrap").isVisible();
   const cardsShown = await page.locator(".nw-cards").isVisible();
-  if (w === 390) check(!tableShown && cardsShown && await page.locator(".nw-card").count() === 4, "390px：表ではなくメンバーごとのカード");
+  if (w === 390) {
+    check(!tableShown && cardsShown && await page.locator(".nw-card").count() === 4, "390px：表ではなくメンバーごとのカード");
+    check((await page.locator('.nw-card[data-user="u1"] .nw-card-f').innerText()).includes("今日：提出済み"), "390px：カードに「今日：提出済み」");
+  }
   else check(tableShown && !cardsShown, `${w}px：週の表`);
   await page.close();
 }

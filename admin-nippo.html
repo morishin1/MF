@@ -53,9 +53,10 @@
     .nw-range { font-size:12.5px; font-weight:500; color:#6b7080; }
     .nw-nav { display:flex; gap:6px; }
     .nw-nav .btn[disabled] { opacity:.5; cursor:default; }
-    .nw-kpis { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin:0 0 12px; }
+    .nw-kpis { display:grid; grid-template-columns:repeat(var(--nw-n, 4), minmax(0,1fr)); gap:10px; margin:0 0 12px; }
     .nw-kpi { border:1px solid #e2e2dc; border-left:3px solid #c7cad4; border-radius:10px; padding:10px 12px; background:#fff; min-width:0; }
     .nw-kpi.warn { border-left-color:#e0a030; }
+    .nw-kpi.good { border-left-color:#2f6f3a; }
     .nw-kpi .lb { font-size:12px; color:#4a5068; font-weight:700; }
     .nw-kpi .v { font-size:24px; font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; line-height:1.3; }
     .nw-kpi .v small { font-size:12px; font-weight:500; color:#6b7080; margin-left:2px; }
@@ -85,6 +86,13 @@
     .nw-c.s-time { background:#fff0e0; color:#9a4a00; border:1px dashed #e0a030; }
     .nw-c.s-both { background:#fdecea; color:#b3261e; }
     .nw-c.s-off { background:transparent; color:#c7cad4; }
+    /* 今日の日報を出した人のセルは、はっきり緑（提出率に今日が入らないので、ここで一目で分かるように） */
+    .nw-c.s-ok.is-now { background:#2f6f3a; color:#fff; }
+    .nw-tl { display:block; font-size:10px; font-weight:700; color:#2f6f3a; margin-top:2px; white-space:nowrap; }
+    .nw-tday { display:block; font-size:10.5px; font-weight:700; white-space:nowrap; margin-top:2px; color:#6b7080; }
+    .nw-tday.ok { color:#2f6f3a; }
+    .nw-ctoday { color:#6b7080; }
+    .nw-ctoday.ok { color:#2f6f3a; }
     .nw-c.s-today { background:#f6f6f2; color:#6b7080; border:1px dotted #9aa0b4; }
     /* アイコンのフォントが読めないときは記号で出す（色だけに頼らない） */
     .fonts-missing .nw-c .material-symbols-outlined { display:none; }
@@ -364,9 +372,17 @@
   function cellHtml(c, d, name) {
     const k = CELL[c.state] || CELL.off;
     const tip = `${name}　${md(d.date)}（${d.dow}）\n${k.label}\n日報：${NIPPO_WORD[c.nippo] || "—"}\n勤怠：${TIME_WORD[c.time] || "—"}${c.time !== "none" && c.timeWhy ? `（${c.timeWhy}）` : ""}`;
-    return `<span class="nw-c s-${c.state}" title="${esc(tip)}" aria-label="${esc(tip.replace(/\n/g, "　"))}" data-state="${c.state}">
+    const now = d.today && c.state === "ok" && c.nippo === "ok" ? " is-now" : "";
+    return `<span class="nw-c s-${c.state}${now}" title="${esc(tip)}" aria-label="${esc(tip.replace(/\n/g, "　"))}" data-state="${c.state}" data-nippo="${esc(c.nippo || "")}">
       <span class="material-symbols-outlined" aria-hidden="true">${k.icon}</span><span class="nw-sym" aria-hidden="true">${k.sym}</span></span>`;
   }
+
+  // 今日の日報。提出率（過去営業日）に今日は入らないので、行・カードに「今日 提出済み／まだ」を別に書く
+  function todayHtml(m) {
+    if (!m.today || m.today.nippo === "off") return "";
+    return m.today.submitted ? `<span class="nw-tday ok" data-today="ok">今日 提出済み</span>` : `<span class="nw-tday" data-today="yet">今日 まだ</span>`;
+  }
+  const nowLabel = (c, d) => d.today && c.nippo === "ok" ? `<span class="nw-tl">提出済み</span>` : "";
 
   function renderWeek() {
     const w = week;
@@ -376,9 +392,13 @@
     const k = w.kpi;
     const tile = (label, v, sub, tone = "", id = "") => `<div class="nw-kpi${tone ? ` ${tone}` : ""}"${id ? ` data-kpi="${id}"` : ""}>
       <div class="lb">${esc(label)}</div><div class="v">${v}</div><div class="sub">${esc(sub)}</div></div>`;
+    const kt = k.today;
+    el("nw-kpi").style.setProperty("--nw-n", kt ? 5 : 4);
     el("nw-kpi").innerHTML = [
-      tile("日報提出率", k.rate == null ? "—" : `${k.rate}<small>%</small>`,
-        k.expected ? `出した日 ${k.submitted} ／ 出すべき日 ${k.expected}（今日より前の営業日）` : "まだ数える日がありません", k.rate != null && k.rate < 80 ? "warn" : "", "rate"),
+      tile("日報提出率（過去営業日）", k.rate == null ? "—" : `${k.rate}<small>%</small>`,
+        k.expected ? `出した日 ${k.submitted} ／ 出すべき日 ${k.expected}（今日より前の営業日。今日の分は右の「今日の提出」）` : "まだ数える日がありません", k.rate != null && k.rate < 80 ? "warn" : "", "rate"),
+      kt ? tile("今日の提出", kt.expected == null ? `${kt.submitted}<small>人</small>` : `${kt.submitted}<small>/${kt.expected}人</small>`,
+        kt.holiday ? "今日は休日です（出した人だけ数えます）" : "今日の日報を出した人（提出率とは別に数えます）", kt.expected && kt.submitted === kt.expected ? "good" : "", "today") : "",
       tile("日報未提出", `${k.missing}<small>件</small>`, "人×日（今日より前の営業日）", k.missing ? "warn" : "", "missing"),
       tile("勤怠要確認", k.timeCheck == null ? "—" : `${k.timeCheck}<small>件</small>`,
         k.timeCheck == null ? (w.attendanceNote || "勤怠は見られません") : "打刻なし・退勤なし・修正の承認待ち（人×日）", k.timeCheck ? "warn" : "", "time"),
@@ -393,15 +413,15 @@
     const head = w.days.map((d) => `<th class="nw-d${d.today ? " is-today" : ""}${d.holiday ? " is-off" : ""}" scope="col">${esc(d.dow)}<small>${md(d.date)}</small></th>`).join("");
     const rows = w.members.map((m) => `<tr data-user="${esc(m.userId)}">
         <th scope="row" class="nw-name">${esc(m.name)}${m.department ? `<small>${esc(m.department)}</small>` : ""}</th>
-        ${m.days.map((c, i) => `<td class="nw-d${w.days[i].today ? " is-today" : ""}">${cellHtml(c, w.days[i], m.name)}</td>`).join("")}
-        <td class="nw-num">${m.nippo.expected ? `${m.nippo.submitted}<small>/${m.nippo.expected}</small>` : "—"}</td>
+        ${m.days.map((c, i) => `<td class="nw-d${w.days[i].today ? " is-today" : ""}">${cellHtml(c, w.days[i], m.name)}${nowLabel(c, w.days[i])}</td>`).join("")}
+        <td class="nw-num">${m.nippo.expected ? `${m.nippo.submitted}<small>/${m.nippo.expected}</small>` : "—"}${todayHtml(m)}</td>
         <td class="nw-num">${!w.attendance ? "—" : m.time.uses ? (m.time.check ? `<b class="bad">${m.time.check}</b>` : "0") : `<small class="muted">未使用</small>`}</td>
         <td class="nw-num">${m.issues ? `<span class="nw-iss">${m.issues}</span>` : `<span class="nw-ok">なし</span>`}</td>
       </tr>`).join("");
     const cards = w.members.map((m) => `<div class="nw-card" data-user="${esc(m.userId)}">
         <div class="nw-card-h"><b>${esc(m.name)}</b>${m.issues ? `<span class="nw-iss">要対応 ${m.issues}</span>` : `<span class="nw-ok">要対応なし</span>`}</div>
-        <div class="nw-card-days">${m.days.map((c, i) => `<div class="nw-cd${w.days[i].today ? " is-today" : ""}"><small>${esc(w.days[i].dow)}</small>${cellHtml(c, w.days[i], m.name)}</div>`).join("")}</div>
-        <div class="nw-card-f">日報 ${m.nippo.expected ? `${m.nippo.submitted}/${m.nippo.expected}` : "—"}　勤怠 ${!w.attendance ? "—" : m.time.uses ? `要確認 ${m.time.check}` : "未使用"}</div>
+        <div class="nw-card-days">${m.days.map((c, i) => `<div class="nw-cd${w.days[i].today ? " is-today" : ""}"><small>${esc(w.days[i].dow)}</small>${cellHtml(c, w.days[i], m.name)}${nowLabel(c, w.days[i])}</div>`).join("")}</div>
+        <div class="nw-card-f">${m.today && m.today.nippo !== "off" ? `<b class="nw-ctoday${m.today.submitted ? " ok" : ""}" data-today="${m.today.submitted ? "ok" : "yet"}">今日：${m.today.submitted ? "提出済み" : "まだ"}</b>　` : ""}日報 ${m.nippo.expected ? `${m.nippo.submitted}/${m.nippo.expected}` : "—"}　勤怠 ${!w.attendance ? "—" : m.time.uses ? `要確認 ${m.time.check}` : "未使用"}</div>
       </div>`).join("");
     el("nw-grid").innerHTML = `
       <div class="nw-table-wrap"><table class="nw-table">
@@ -442,7 +462,8 @@
 
   function renderTiles() {
     const total = (data.members || []).length;
-    const done = (data.nippos || []).length;
+    // 提出は名簿の人（user_id が一致する人）だけ数える。名簿に紐づかない日報まで数えると「未提出」の一覧と食い違う
+    const done = (data.members || []).filter((m) => m.submitted).length;
     const confirmed = (data.nippos || []).filter((n) => n.confirmed).length;
     const struggling = (data.nippos || []).filter((n) => n.mood === "苦戦").length;
     el("tiles").innerHTML = [
