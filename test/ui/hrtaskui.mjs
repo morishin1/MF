@@ -28,7 +28,8 @@ const OFF = () => ({ procedure: {
   id: "p-off", kind: "offboarding", name: "退職 太郎", employeeId: "e-off", department: "開発", targetOn: "2026-09-30", days: -8, due: "退社から8日",
   phase: "lastday", phaseLabel: "退社日対応", progress: { done: 2, total: 9 }, urgency: "late",
   groups: [
-    grp("hr", "人事", [it("o1", "off_hr_date", "退職日の確認", "hr", true), it("o2", "off_hr_docs", "必要書類の受け渡し", "hr"), it("o3", "off_hr_handover", "引継ぎの確認", "hr", true)]),
+    grp("hr", "人事", [it("o1", "off_hr_date", "退職日の確認", "hr", true), it("o2", "off_hr_docs", "必要書類の受け渡し", "hr"), it("o3", "off_hr_handover", "引継ぎの確認", "hr", true),
+      it("o10", "off_hr_cert", "退職証明書の交付", "hr")]),
     grp("it", "IT・管理", [it("o4", "off_it_pc", "PCの返却", "it"), it("o5", "off_it_mail", "メールの停止", "it"), it("o6", "off_it_slack", "Slack の停止", "it"),
       it("o7", "off_it_gw", "グループウェアの停止", "it", false, { href: "admin-members.html" }), it("o8", "off_it_perm", "システム権限の削除", "it", false, { href: "admin-members.html#roles" })]),
     grp("finance", "経理", [it("o9", "off_fin_pay", "最終給与等の確認", "finance")]),
@@ -37,7 +38,7 @@ const acct = (key, label, how, state, extra = {}) => ({ key, label, how, state, 
 const RC = () => ({
   employee: { id: "e-off", name: "退職 太郎", statusLabel: "退職手続き中", leftOn: "2026-09-30", lastWorkOn: "2026-09-29", reasonLabel: "自己都合",
     owner: { id: "e-hr", name: "人事 花子" }, updatedAt: "x", caseUpdatedAt: "y" },
-  ready: { case: true, docs: true }, staff: [{ id: "e-hr", name: "人事 花子" }],
+  ready: { case: true, docs: true, cert: true }, certRequest: null, canIssueCert: false, staff: [{ id: "e-hr", name: "人事 花子" }],
   next: [{ key: "asset:a-pc", text: "PC返却待ち（MacBook 01）", target: "rc-assets" },
          { key: "acct:slack", text: "Slackの停止が未確認", target: "rc-accounts", late: true },
          { key: "doc:certificate", text: "退職証明書未公開", target: "rc-docs" }],
@@ -148,7 +149,8 @@ console.log("— 退社：上から 警告 → ステップ → チェックリ�
   await item(page, "off_hr_docs").locator('input[type="checkbox"]').check();
   await page.waitForTimeout(900);
   check(sent.some((b) => b.itemId === "o2" && b.done === true), "サーバへ送る（必要書類の受け渡し）");
-  check(!(await isOpen(page, "off_hr_docs")) && await isOpen(page, "off_it_pc"), "その項目を閉じて、次の未完了（PCの返却）を開く");
+  check(!(await isOpen(page, "off_hr_docs")) && await isOpen(page, "off_hr_cert"), "その項目を閉じて、次の未完了（退職証明書の交付）を開く");
+  await item(page, "off_it_pc").locator(".hx-t").click();
   check((await item(page, "off_hr_docs").locator('[data-role="done-at"]').innerText()).includes("10/8 完了"), "チェックした日（10/8 完了）が出る");
   await item(page, "off_it_pc").locator('button[data-act="done"]').click();
   await page.waitForTimeout(900);

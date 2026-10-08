@@ -70,8 +70,14 @@ async function rpc(fn, a) {
 }
 // PDF を見る（署名付き URL）だけ。登録・アップロードは test/retireeapi.mjs が見る
 export const signed = [];
+// 発行（退職証明書の承認して発行）で使う：印影の取り出し・PDF の保存（test/certrequestapi.mjs）
+export const stored = new Map();
+const PNG_1PX = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const storage = { from: () => ({
   createSignedUrl: async (path, ttl) => { signed.push({ path, ttl }); return { data: { signedUrl: `https://storage.test/sign/hr/${encodeURIComponent(path)}` }, error: null }; },
+  download: async (path) => (path.startsWith("seals/") ? { data: new Blob([PNG_1PX]), error: null } : { data: null, error: { message: "nf" } }),
+  upload: async (path, bytes) => { stored.set(path, bytes); return { data: { path }, error: null }; },
+  remove: async (paths) => { for (const p of paths) stored.delete(p); return { data: null, error: null }; },
 }) };
 mock.module(atRoot("lib/supabase.js"), { namedExports: {
   admin: () => ({ from: table, rpc, storage }),

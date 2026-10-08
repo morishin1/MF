@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261007gw1">
-  <link rel="stylesheet" href="css/layout.css?v=20261007gw1">
+  <link rel="stylesheet" href="css/app.css?v=20261008hx1">
+  <link rel="stylesheet" href="css/layout.css?v=20261008hx1">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -365,8 +365,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261007gw1"></script>
-<script src="js/layout.js?v=20261007gw1"></script>
+<script src="js/api-client.js?v=20261008hx1"></script>
+<script src="js/layout.js?v=20261008hx1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -571,6 +571,7 @@
   //   （作業の場所が画面から消えることは無い）
   const HX_OFF_SECTIONS = [
     { key: "basic",       label: "退職日・担当者",       keys: ["off_hr_date"],   kw: /退職日/ },
+    { key: "cert",        label: "退職証明書の申請",     keys: ["off_hr_cert"],   kw: /証明書/ },
     { key: "docs",        label: "退職書類・本人対応",   keys: ["off_hr_docs"],   kw: /書類/ },
     { key: "assets",      label: "貸与品の返却",         keys: ["off_it_pc"],     kw: /PC|返却|貸与/ },
     { key: "acct-google", label: "Google Workspace",     keys: ["off_it_mail"],   kw: /メール|Google/, services: ["google"] },
@@ -592,7 +593,7 @@
     { key: "done",  label: "完了" },
   ];
   const hxOffStepOf = (i) => {
-    if (i.key === "off_hr_docs") return "docs";
+    if (i.key === "off_hr_docs" || i.key === "off_hr_cert") return "docs";
     if (/^off_it_/.test(i.key || "")) return "stop";
     if (/^off_fin_/.test(i.key || "")) return "pay";
     if (/^off_(hr|mgr)_/.test(i.key || "")) return "agree";
@@ -649,7 +650,7 @@
     const pend = (rcFor(p)?.next || []).map((n) => n.key);
     const open = (k) => items.some((i) => !i.done && hxOffStepOf(i) === k)
       || (k === "stop" && pend.some((x) => /^(acct|asset):/.test(x)))
-      || (k === "docs" && pend.some((x) => /^doc:/.test(x)))
+      || (k === "docs" && (pend.some((x) => /^doc:/.test(x)) || rcFor(p)?.certRequest?.status === "requested"))
       || (k === "agree" && pend.includes("left_on"));
     let cur = null;
     return HX_OFF_STEPS.map((s) => {
@@ -702,6 +703,7 @@
       if (!rcFor(p)) return `<div class="muted" style="font-size:13px;">読み込み中…</div>`;
       if (s.key === "basic") return rcBasicHtml();
       if (s.key === "docs") return rcDocsHtml() + rcSelfHtml();
+      if (s.key === "cert") return rcCertHtml();
       if (s.key === "assets") return rcAssetsHtml();
       if (s.services) return rcAccountsHtml(s);
       return "";
@@ -730,7 +732,7 @@
       <div class="hx-row">
         <input type="checkbox" ${i.done ? "checked" : ""} aria-label="${esc(i.title)}を完了にする" onchange="toggle('${esc(p.id)}','${esc(i.id)}', this)">
         <button type="button" class="hx-t" aria-expanded="${open}" aria-controls="hxp-${esc(i.id)}" onclick="hxToggle('${esc(i.id)}')">
-          <span class="tt">${esc(i.title)}</span>${hxDone(i)}</button>
+          <span class="tt">${esc(i.title)}</span>${hxDone(i)}<span data-hx-badge="${esc(secs.map((x) => x.key).join(" "))}"></span></button>
         <span class="material-symbols-outlined chev" aria-hidden="true">expand_more</span>
       </div>
       <div class="hx-panel" id="hxp-${esc(i.id)}" ${open ? "" : "hidden"}>${hxPanelHtml(p, i, secs)}</div>
@@ -744,7 +746,7 @@
     return `<div class="hx-item hx-x${open ? " open" : ""}" data-id="${esc(id)}" data-key="${esc(id)}">
       <div class="hx-row">
         <button type="button" class="hx-t" aria-expanded="${open}" aria-controls="hxp-${esc(id)}" onclick="hxToggle('${esc(id)}')">
-          <span class="tt">${esc(s.label)}</span></button>
+          <span class="tt">${esc(s.label)}</span><span data-hx-badge="${esc(s.key)}"></span></button>
         <span class="material-symbols-outlined chev" aria-hidden="true">expand_more</span>
       </div>
       <div class="hx-panel" id="hxp-${esc(id)}" ${open ? "" : "hidden"}><div data-sec="${esc(s.key)}">${hxSecHtml(p, s)}</div></div>
@@ -1580,6 +1582,57 @@
       <div class="rc-msg" id="rc-accounts-msg-${esc(sec.key)}"></div>
     </section>`;
   }
+  // 退職証明書の本人申請（db/127）。選んだ項目・誓約の日時と証跡・印字される本文 → 承認して発行（経営者・管理者）
+  function rcCertHtml() {
+    const d = rcData, r = d.certRequest;
+    if (!d.ready.cert) return `<section class="rc-sec" id="rc-cert"><div class="rc-msg err">退職証明書の申請の表（db/127）が、まだ流されていません。</div></section>`;
+    if (!r) return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請</h3>
+      <div class="muted" style="font-size:13px;">本人からの申請はまだありません。本人は${d.employee.status === "left" ? "退職者ポータル" : "マイページ"}から、記載してほしい項目を選んで申請します。</div></section>`;
+    const items = `<ul style="margin:4px 0 0;padding-left:18px;font-size:13px;" data-role="cert-items">${r.items.map((i) => `<li>${esc(i.label)}</li>`).join("")}</ul>`;
+    const nda = `<div style="font-size:12.5px;margin-top:6px;" data-role="cert-nda"><span class="rc-pill ok">${esc(rcFmt(r.nda.agreedAt))} 誓約済</span>
+      <span class="s" style="display:block;color:var(--muted);margin-top:4px;">「${esc(r.nda.text)}」（版 ${esc(r.nda.version)}${r.nda.ip ? `・接続元 ${esc(r.nda.ip)}` : ""}）</span></div>`;
+    if (r.status === "issued") return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請 <span class="rc-pill ok">発行済み</span></h3>
+      <div style="font-size:13px;">${esc(rcFmt(r.decidedAt))}・${esc(r.decidedByName || "管理者")} が承認して発行し、本人に公開しました。</div>
+      <div class="rc-note">本人が選んだ項目</div>${items}${nda}</section>`;
+    if (r.status === "cancelled") return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請 <span class="rc-pill">差し戻し</span></h3>
+      <div style="font-size:13px;">${esc(rcFmt(r.decidedAt))} に差し戻しました。本人がもう一度申請すると、ここに出ます。</div></section>`;
+    const missing = (r.missing || []).length;
+    const can = d.canIssueCert && !missing;
+    return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請 <span class="rc-pill bad">申請あり</span><span class="sub">${esc(rcFmt(r.requestedAt))} に本人が申請</span></h3>
+      <div class="rc-note" style="margin:0;">本人が選んだ記載項目（選んだ項目だけを証明書に記載します）</div>${items}
+      <div class="rc-note">NDA等の誓約</div>${nda}
+      <details style="margin-top:8px;" open><summary class="muted" style="font-size:12px;cursor:pointer;">証明書に印字される内容</summary>
+        <pre style="white-space:pre-wrap;font:inherit;font-size:12.5px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin:6px 0 0;" data-role="cert-preview">${esc(r.preview || "")}</pre></details>
+      ${missing ? `<div class="rc-msg err">記載する値がありません：${esc(r.missing.join("、"))}。名簿・契約・退職理由を入れてから発行してください。</div>` : ""}
+      <div class="rc-acts" style="margin-top:10px;">
+        <button class="btn btn-primary btn-sm" data-act="cert-approve" ${can ? "" : "disabled"} onclick="rcCertApprove(this)">承認して発行</button>
+        <button class="btn btn-secondary btn-sm" data-act="cert-return" onclick="rcCertReturn(this)">差し戻す</button>
+      </div>
+      ${d.canIssueCert ? `<p class="rc-note">発行すると、証明書用の会社印を押した PDF を作って本人に公開し（本人はダウンロードできます）、この項目を完了にします。</p>`
+        : `<p class="rc-note" data-role="cert-who">承認して発行（押印）は、経営者・管理者だけができます。内容を確認したら、経営者・管理者に依頼してください。</p>`}
+      <div class="rc-msg" id="rc-cert-msg"></div>
+    </section>`;
+  }
+  async function rcCertAct(action, btn, body = {}) {
+    const r = rcData.certRequest;
+    const itemBox = btn.closest(".hx-item");
+    try {
+      await KPLayout.busy(btn, action === "approve" ? "発行中…" : "…", () => API.api("/api/employees/cert-request",
+        { method: "POST", body: { action, employeeId: rcData.employee.id, requestId: r.id, ...body } }));
+      if (action === "approve" && itemBox) hxState.open.delete(itemBox.dataset.id);   // 完了したので閉じる
+      rcPending = ["rc-docs-msg", action === "approve" ? "退職証明書を発行して、本人に公開しました" : "申請を差し戻しました"];
+      await load();      // チェックリスト（完了日・対応者）ごと描き直す
+    } catch (e) { rcSay("rc-cert-msg", e.hint || e.message || "できませんでした", true); }
+  }
+  function rcCertApprove(btn) {
+    if (!confirm("本人が選んだ項目だけを記載した退職証明書を発行・押印して、本人に公開します。よろしいですか？")) return;
+    rcCertAct("approve", btn);
+  }
+  function rcCertReturn(btn) {
+    if (!confirm("この申請を差し戻します（本人はもう一度申請できます）。よろしいですか？")) return;
+    rcCertAct("return", btn);
+  }
+
   function rcAssetsHtml() {
     const d = rcData, off = rcOff();
     return `<section class="rc-sec" id="rc-assets"><h3>貸与品 <span class="sub">貸与品の台帳（Office › 端末・貸与品）から、この人に貸し出しているもの</span></h3>
@@ -1648,6 +1701,16 @@
       ? d.next.map((n) => `<button class="${n.late ? "late" : ""}" onclick="rcGo('${esc(n.target)}','${esc(n.key)}')" data-next="${esc(n.key)}">
           <span class="material-symbols-outlined" style="font-size:18px;">chevron_right</span>${esc(n.text)}</button>`).join("")
       : `<div class="none">いま残っている作業はありません</div>`);
+    // 本人の申請があれば「申請あり」（チェックリストの項目の見出しに）
+    const asked = d.certRequest?.status === "requested";
+    document.querySelectorAll('#rc [data-hx-badge~="cert"]').forEach((n) => {
+      n.innerHTML = asked ? `<span class="rc-pill bad" data-role="cert-badge">申請あり</span>` : "";
+    });
+    if (asked && el("rc-next")) {
+      el("rc-next").insertAdjacentHTML("afterbegin", `<button class="late" onclick="rcGo('rc-cert')" data-next="cert">
+        <span class="material-symbols-outlined" style="font-size:18px;">chevron_right</span>退職証明書の発行の申請があります</button>`);
+      el("rc-next").querySelector(".none")?.remove();
+    }
     document.querySelectorAll("#rc [data-sec]").forEach((n) => {
       const s = HX_OFF_SECTIONS.find((x) => x.key === n.dataset.sec);
       if (s) n.innerHTML = hxSecHtml(p, s);

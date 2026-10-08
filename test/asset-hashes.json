@@ -1,9 +1,10 @@
 {
-  "version": "20261007gw1",
+  "version": "20261008hx1",
   "files": {
     "css/app.css": "c716128d39f5567c",
     "css/layout.css": "5a190391460e460d",
     "js/api-client.js": "6b30a58c1eab0229",
+    "js/cert-request.js": "31a57b0f58900440",
     "js/device.js": "a6a1d1d336ce897b",
     "js/dropzone.js": "31273a877deaa90d",
     "js/hr-layout.js": "22e086e525f4b58e",

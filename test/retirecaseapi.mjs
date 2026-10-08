@@ -37,7 +37,7 @@ await ok("人事は、基本情報・次にやること・書類・アカウン�
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.employee.leftOn, NEXTWEEK); assert.equal(r.body.employee.reasonLabel, "自己都合");
   assert.equal(r.body.employee.updatedAt, "2026-10-01T00:00:00.000001+00:00"); assert.ok(r.body.employee.caseUpdatedAt);
-  assert.deepEqual(r.body.ready, { docs: true, case: true });
+  assert.deepEqual(r.body.ready, { docs: true, case: true, cert: true });
   for (const k of ["next", "self", "docs", "accounts", "assets", "guide", "remind", "history", "staff"]) assert.ok(k in r.body, k);
 });
 await ok("貸与品は対象者のものだけ（ほかの人の 600 件があっても欠けない・混ざらない）", async () => {

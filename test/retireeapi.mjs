@@ -184,7 +184,12 @@ for (const id of ["hr", "member", "future"]) {
   await ok(`${id}（在籍中・退職日前）は 403 not_retired`, async () => { as(id); const r = await call(portal, { url: "/api/retiree" }); assert.equal(r.statusCode, 403); assert.equal(r.body.error, "not_retired"); });
 }
 await ok("ログインしていなければ 401", async () => { current = { userId: null }; const r = await call(portal, { url: "/api/retiree" }); assert.equal(r.statusCode, 401); });
-await ok("書き込みはできない（POST は 405）", async () => { as("left"); const r = await call(portal, { url: "/api/retiree", method: "POST" }); assert.equal(r.statusCode, 405); });
+await ok("書き込みは、退職証明書の申請（cert_request）だけ。ほかの POST は 400、PUT は 405", async () => {
+  as("left");
+  const r = await call(portal, { url: "/api/retiree", method: "POST", body: { action: "publish", docId: "d-left" } });
+  assert.equal(r.statusCode, 400);
+  assert.equal((await call(portal, { url: "/api/retiree", method: "PUT" })).statusCode, 405);
+});
 await ok("表が無い環境（db/121 未適用）でも、ポータルは開く（すべて準備中）", async () => {
   db.absent.add("gw_retire_docs");
   try {
