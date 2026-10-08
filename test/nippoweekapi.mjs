@@ -9,6 +9,9 @@
 //   3. 新しい表を使わない（読むのは tc_nippo・gw_time_entries・gw_time_fixes・gw_employees など既存のものだけ）。書き込まない
 //   4. 勤怠は、経営者と勤怠を見られる人（canManageHr。/api/timecard と同じ）に返す。他社の打刻は混ざらない
 //   5. 週の指定（どの曜日を渡しても、その週の月〜日）
+//   6. 今日の提出：提出率（過去営業日）には入れないが、今日の提出として別に数える（行ごと・KPI）
+//   7. 本番の中村さんの条件（active・user_id 一致・今日の日報あり・AI評価 completed）で、管理側が「未提出」にしない
+//      （日次の一覧・未提出・AI評価・週の表のどれでも）。別の user_id／名簿の user_id が空 は未提出のまま
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -20,6 +23,7 @@ const atRoot = (p) => _join(ROOT, p);
 const T1 = "00000000-0000-4000-8000-000000000001", T2 = "00000000-0000-4000-8000-000000000002";
 
 const L = await import(atRoot("lib/nippo-week.js"));
+const NK = await import(atRoot("test/fixtures/nippo-nakamura.mjs"));
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
@@ -111,6 +115,30 @@ await ok("まだ来ていない週：数える日が無い（提出率は null�
   assert.equal(h.members[0].nippo.expected, 5, "土曜に書いても、出すべき日は増えない");
 });
 
+await ok("今日の提出：提出率には入れず、行ごと・KPI に別に数える。今日を含まない週は null", async () => {
+  const w = L.buildWeek({
+    monday: "2026-10-05", today: "2026-10-07", staff,
+    nippos: [{ user_id: "u1", work_date: "2026-10-05" }, { user_id: "u1", work_date: "2026-10-06" }, { user_id: "u1", work_date: "2026-10-07" },
+             { user_id: "u2", work_date: "2026-10-07" }],
+    entries: null,
+  });
+  const by = (n) => w.members.find((m) => m.name === n);
+  assert.deepEqual(by("山田").today, { nippo: "ok", submitted: true });
+  assert.deepEqual(by("佐藤").today, { nippo: "ok", submitted: true });
+  assert.deepEqual(by("鈴木").today, { nippo: "today", submitted: false });
+  assert.equal(by("山田").days[2].state, "ok", "今日のセルは正常（提出済み）");
+  assert.deepEqual(w.kpi.today, { submitted: 2, expected: 3, holiday: false });
+  assert.equal(w.kpi.expected, 6, "提出率の分母は今日より前の営業日だけ（変えない）");
+  assert.equal(w.kpi.submitted, 2);
+  assert.equal(by("山田").nippo.submitted, 2, "行の「日報 ○/○」も過去営業日だけ");
+  const prev = L.buildWeek({ monday: "2026-09-28", today: "2026-10-07", staff, nippos: [], entries: null });
+  assert.equal(prev.kpi.today, null);
+  assert.ok(prev.members.every((m) => m.today === null));
+  const hol = L.buildWeek({ monday: "2026-10-12", today: "2026-10-12", staff, nippos: [{ user_id: "u1", work_date: "2026-10-12" }], entries: null });
+  assert.deepEqual(hol.kpi.today, { submitted: 1, expected: null, holiday: true }, "今日が祝日なら分母なし");
+  assert.equal(hol.members.find((m) => m.name === "佐藤").today.nippo, "off");
+});
+
 console.log("\n=== GET /api/nippo/admin?view=week ===\n");
 
 const mem = createMemDb();
@@ -121,7 +149,8 @@ let who = null;
 const REAL_GW = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), { namedExports: { ...REAL_GW, gwContext: async () => who } });
 const REAL_NIPPO = await import(atRoot("lib/nippo.js"));
-mock.module(atRoot("lib/nippo.js"), { namedExports: { ...REAL_NIPPO, jstDate: () => "2026-10-07" } });
+let TODAY_JST = "2026-10-07";
+mock.module(atRoot("lib/nippo.js"), { namedExports: { ...REAL_NIPPO, jstDate: () => TODAY_JST } });
 const { default: api } = await import(atRoot("api/nippo/admin.js"));
 const res = () => { const r = { statusCode: 0 }; r.setHeader = () => {}; r.end = (b) => { r.body = JSON.parse(b); }; return r; };
 const get = async (q) => { const r = res(); await api({ method: "GET", url: `/api/nippo/admin?${q}`, headers: {} }, r); return r; };
@@ -209,6 +238,61 @@ await ok("日次の応答は変わらない（view を付けなければ従来�
   assert.equal(r.body.date, "2026-10-07");
   assert.ok(Array.isArray(r.body.trend) && Array.isArray(r.body.followUps));
   assert.equal(r.body.from, undefined);
+});
+
+console.log("\n=== 本番の中村さんの条件（active・user_id 一致・今日の日報・AI評価 completed） ===\n");
+
+function setupNakamura() {
+  mem.reset();
+  Object.assign(mem.rows, NK.nakamuraRows());
+  TODAY_JST = NK.TODAY;
+  return { ...ADMIN, tenantId: NK.TENANT };
+}
+
+await ok("日次：中村さんは提出済み。一覧・未提出・AI評価・日報カードの材料に出る", async () => {
+  who = setupNakamura();
+  try {
+    const r = await get(`date=${NK.TODAY}`);
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    const m = r.body.members.find((x) => x.userId === NK.NAKAMURA.user_id);
+    assert.ok(m, "名簿に出る");
+    assert.equal(m.submitted, true, "「未提出」にならない");
+    assert.ok(!r.body.notSubmitted.includes(NK.NAKAMURA.display_name), "未提出の一覧に出ない");
+    const n = r.body.nippos.find((x) => x.id === NK.NIPPO_ID);
+    assert.ok(n && n.user_id === NK.NAKAMURA.user_id, "今日の日報の一覧に出る（詳細カードの材料）");
+    const e = r.body.evals.find((x) => x.nippoId === NK.NIPPO_ID);
+    assert.equal(e?.status, "completed", "AI評価 completed が付く");
+    assert.equal(e.totalScore, 72);
+    assert.ok(r.body.replies.some((x) => x.nippo_id === NK.NIPPO_ID && x.kind === "ai"), "AIフィードバックも付く");
+    assert.ok(!mem.state.log.some((l) => l.op !== "select"), "書き込まない");
+  } finally { TODAY_JST = "2026-10-07"; }
+});
+
+await ok("日次：別の user_id で書いた人・名簿の user_id が空の人は未提出のまま（名前では寄せない）", async () => {
+  who = setupNakamura();
+  try {
+    const r = await get(`date=${NK.TODAY}`);
+    assert.equal(r.body.members.find((x) => x.name === "別アカウント 太郎").submitted, false, "日報の user_id が名簿と違う");
+    assert.ok(r.body.notSubmitted.includes("別アカウント 太郎"));
+    assert.ok(!r.body.members.some((x) => x.name === "ログインなし 花子"), "user_id が空の人は名簿（対象者）に出ない");
+    assert.ok(r.body.nippos.some((x) => x.user_id === "u-second-account"), "その日報自体は今日の日報の一覧に出る（消えない）");
+  } finally { TODAY_JST = "2026-10-07"; }
+});
+
+await ok("週：中村さんの今日のセルは提出済み。今日の提出に数える。提出率（過去営業日）は 3/3", async () => {
+  who = setupNakamura();
+  try {
+    const r = await get(`view=week&date=${NK.TODAY}`);
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    const m = r.body.members.find((x) => x.userId === NK.NAKAMURA.user_id);
+    assert.deepEqual(m.days.slice(0, 4).map((c) => c.nippo), ["ok", "ok", "ok", "ok"], "10/5〜10/8 すべて提出");
+    assert.equal(m.days[3].state, "ok", "今日（10/8）のセルは提出済み");
+    assert.deepEqual(m.today, { nippo: "ok", submitted: true });
+    assert.deepEqual(m.nippo, { submitted: 3, expected: 3, missing: 0 });
+    assert.deepEqual(r.body.kpi.today, { submitted: 1, expected: 2, holiday: false }, "今日の提出 1/2人（別アカウントの人はまだ）");
+    const other = r.body.members.find((x) => x.name === "別アカウント 太郎");
+    assert.deepEqual(other.today, { nippo: "today", submitted: false });
+  } finally { TODAY_JST = "2026-10-07"; }
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
