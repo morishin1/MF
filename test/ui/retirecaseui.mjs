@@ -80,26 +80,41 @@ async function open({ width = 1280 } = {}) {
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errs.push(String(e)));
   await page.goto(`${BASE}/admin-hr.html?id=p-soon`);
-  await page.waitForSelector("#rc-basic", { timeout: 15000 });
+  await page.waitForSelector("#rc-basic", { state: "attached", timeout: 15000 });
   page.ctx = ctx;
   return page;
 }
+// 作業の場所は、チェックリストの項目の中（閉じている）。画面の関数で開いてから触る（人が項目を押すのと同じ）
+const reveal = (page, sel) => page.evaluate((x) => { const n = document.querySelector(x); if (n) hxReveal(n); }, sel);
 const text = (page, sel) => page.locator(sel).innerText();
 const reload = async (page) => { await page.waitForTimeout(400); };
 
-console.log("— 並び・チェックリストは下に残る —");
+console.log("— 並び：警告 → ステップ → チェックリスト（いちばん上）→ 次にやること → タブ —");
 setup();
 {
   const page = await open();
-  const ids = await page.locator("#rc > section, #rc > details").evaluateAll((ns) => ns.map((n) => n.id));
-  check(ids.join(",") === "rc-basic,rc-next,rc-self,rc-docs,rc-accounts,rc-assets,rc-contact,rc-history", `並び（${ids.join(",")}）`);
+  const order = await page.evaluate(() => ["hx-steps", "hr-checklist", "rc-next"].map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? -1)
+    .concat([document.querySelector(".hx-tabs")?.getBoundingClientRect().top ?? -1]));
+  check(order.every((y, i) => y >= 0 && (i === 0 || y > order[i - 1])), `ステップ → チェックリスト → 次にやること → タブ（${order.map(Math.round).join(",")}）`);
+  check((await page.locator(".hx-band").innerText()).includes("退社手続き") && await page.locator(".hx.off").count() === 1, "退社手続きと分かる帯（退社の色）");
+  const steps = (await page.locator(".hx-steps li").allInnerTexts()).map((x) => x.replace(/^\d+\.\s*/, "").trim());
+  check(steps.join("|") === "退職合意|アカウント停止・貸与品回収|最終給与・精算|書類発行|完了", `ステップ（${steps.join("|")}）`);
+  check(await page.locator(".hx-steps li.current").count() === 1, "いまの段階が1つ強調される");
+  const tabs = (await page.locator(".hx-tabs button").allInnerTexts()).map((x) => x.trim());
+  check(tabs.join("|") === "基本情報|連絡|手続き履歴|書類の保管先", `タブ（${tabs.join("|")}）`);
+  // この画面の項目（退職届の受領など）には、作業の場所が結びつかない → 「そのほかの作業」に全部出る（画面から消えない）
+  const extras = await page.locator('[data-role="hx-extras"] .hx-item').evaluateAll((ns) => ns.map((n) => n.dataset.key));
+  check(["x-basic", "x-docs", "x-assets", "x-acct-slack"].every((k) => extras.includes(k)), `そのほかの作業（${extras.join(",")}）`);
+  check(await page.locator('.hx-item[data-key="x-assets"] .hx-panel').isHidden(), "作業の場所は、押すまで閉じている");
+  await page.locator('.hx-item[data-key="x-assets"] .hx-t').click();
+  check(await page.locator("#rc-assets").isVisible(), "押すと、その下に貸与品の欄が開く");
+  await page.locator('.hx-item[data-key="x-assets"] .hx-t').click();
+  check(await page.locator("#rc-assets").isHidden(), "もう一度押すと閉じる");
+  const done = await page.locator(".hx-item", { hasText: "退職届の受領" }).locator('[data-role="done-at"]').innerText();
+  check(/10\/2 完了/.test(done), `チェックした日を出す（${done}）`);
   const bar = (await page.locator('[data-role="rc-bar"] button').allInnerTexts()).map((x) => x.trim());
   check(bar.join("|") === "退職日を変更|本人へ案内|再通知|手続き履歴", `上の操作（${bar.join("|")}）`);
-  const order = await page.evaluate(() => {
-    const rc = document.getElementById("rc"), grp = document.querySelector(".hr-grp");
-    return Boolean(rc && grp && (rc.compareDocumentPosition(grp) & Node.DOCUMENT_POSITION_FOLLOWING));
-  });
-  check(order, "これまでのチェックリスト（人事・社労士・本人）は、退職手続きの下に残る");
+  check(await page.locator("#rc #hr-checklist").count() === 1, "チェックリスト（人事・社労士・本人）は、退職手続きの画面の中のいちばん上");
   check((await page.locator(".hr-grp .h b").allInnerTexts()).join("|") === "人事|社労士|本人", "チェックリストの3つの担当");
   check(await page.locator(".hr-now").count() === 0, "古いチェックリストから作った「次にやること」は出さない（実データの次にやることと食い違わない）");
   check((await text(page, "#rc-basic")).includes(NEXTWEEK.replace(/-/g, "/")), "基本情報に退職日");
@@ -164,6 +179,7 @@ console.log("\n— 貸与品・アカウント・書類 —");
 setup();
 {
   const page = await open();
+  await reveal(page, "#rc-assets");
   const row = page.locator('#rc-assets tr[data-asset="a-pc"]');
   await row.locator("button", { hasText: "返却を確認" }).click();
   await page.waitForFunction(() => /返却を確認しました/.test(document.getElementById("rc-assets-msg")?.textContent || ""), null, { timeout: 8000 }).catch(() => {});
@@ -171,16 +187,21 @@ setup();
   check(db.rows.gw_assets.find((a) => a.id === "a-pc").assigned_to === null, "台帳の貸出先が外れる");
   check(await page.locator('#rc-next button', { hasText: "MacBook" }).count() === 0, "次にやることから消える");
 
-  const slack = page.locator('#rc-accounts tr[data-acct="slack"]');
+  await reveal(page, '[data-acct="slack"]');
+  const slack = page.locator('tr[data-acct="slack"]');
   check((await slack.innerText()).includes("未確認"), "Slack は記録が無ければ未確認");
   await slack.locator("select").selectOption("stopped");
   await slack.locator("button", { hasText: "記録" }).click();
-  await page.waitForFunction(() => /記録しました/.test(document.getElementById("rc-accounts-msg")?.textContent || ""), null, { timeout: 8000 }).catch(() => {});
-  const st = await page.locator('#rc-accounts tr[data-acct="slack"]').innerText();
+  await page.waitForFunction(() => /記録しました/.test(document.getElementById("rc-accounts-msg-acct-slack")?.textContent || ""), null, { timeout: 8000 }).catch(() => {});
+  const st = await page.locator('tr[data-acct="slack"]').innerText();
   check(st.includes("停止済") && st.includes("担当者による停止確認") && st.includes("名前hr"), "停止済：担当者による停止確認・対応者");
-  const gw = await page.locator('#rc-accounts tr[data-acct="groupware"]').innerText();
+  check(await page.locator('[data-accounts="acct-slack"] tr[data-acct]').count() === 1, "Slack の欄には Slack だけ（その項目で止めるサービスだけ）");
+  await reveal(page, '[data-acct="groupware"]');
+  const gw = await page.locator('tr[data-acct="groupware"]').innerText();
   check(gw.includes("停止予定") && gw.includes("自動停止予定"), "グループウェアは自動停止予定（退職日の翌日）");
-  check(await page.locator('#rc-accounts tr[data-acct="lms"] select').count() === 0, "自動のサービスは手で記録しない");
+  check(await page.locator('tr[data-acct="lms"] select').count() === 0, "自動のサービスは手で記録しない");
+
+  await reveal(page, "#rc-docs");
 
   const doc = page.locator('#rc-docs tr[data-doc="withholding"]');
   check((await doc.innerText()).includes("発行済み・未公開"), "源泉徴収票：発行済み・未公開");
@@ -195,7 +216,7 @@ setup();
   // 履歴：本人と管理者を分ける
   await page.locator('[data-role="rc-bar"] button', { hasText: "手続き履歴" }).click();
   await page.waitForTimeout(300);
-  check(await page.locator("#rc-history").evaluate((n) => n.open), "手続き履歴が開く");
+  check(await page.locator("#rc-history").isVisible() && (await page.locator('.hx-tabs button[aria-selected="true"]').innerText()).trim() === "手続き履歴", "手続き履歴のタブが開く");
   const hist = await page.locator("#rc-history li").allInnerTexts();
   check(hist.some((h) => h.includes("返却を確認：MacBook 01") && h.includes("管理者")), "履歴：返却の確認（管理者）");
   check(hist.some((h) => h.includes("Slack") && h.includes("担当者による停止確認")), "履歴：Slack の停止の記録");
@@ -241,16 +262,17 @@ db.rows.gw_employees.find((e) => e.id === "e-soon").display_name = "とても長
 db.rows.gw_assets.find((a) => a.id === "a-pc").name = "MacBookPro16インチ2023年モデル開発部共用機材管理番号つき長い名前の貸与品";
 {
   const page = await open({ width: 390 });
+  for (const k of ["x-assets", "x-acct-slack"]) await page.locator(`.hx-item[data-key="${k}"] .hx-t`).click();
   const over = await page.evaluate(() => {
     const W = document.documentElement.clientWidth;
     return [...document.querySelectorAll("#rc *")].filter((n) => n.getBoundingClientRect().width > 0)
       .map((n) => Math.round(n.getBoundingClientRect().right - W)).reduce((a, b) => Math.max(a, b), -999);
   });
   check(over <= 0, `退職手続きの中身が、画面の幅に収まる（はみ出し ${over}px）`);
-  const sizes = await page.locator('[data-role="rc-bar"] button, #rc-assets button, #rc-accounts button').evaluateAll((ns) =>
+  const sizes = await page.locator('[data-role="rc-bar"] button, #rc-assets button, [data-accounts="acct-slack"] button').evaluateAll((ns) =>
     ns.map((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
   check(sizes.length >= 6 && sizes.every(([w, h]) => w >= 44 && h >= 28), `主要なボタンが押せる大きさ（${sizes.map((s) => s.join("x")).join(" ")}）`);
-  check((await text(page, "#rc-basic")).includes("とても長い氏名"), "長い氏名も読める");
+  check((await text(page, ".hr-head .nm")).includes("とても長い氏名") && (await text(page, '[data-role="rc-basic-ro"]')).includes("とても長い氏名"), "長い氏名も読める（見出し・基本情報のタブ）");
   await page.locator('[data-role="rc-bar"] button', { hasText: "本人へ案内" }).click();
   check(await page.locator("#rc-contact button", { hasText: "メール文をコピー" }).isVisible(), "390px でもコピーできる");
   await page.screenshot({ path: shotPath("retire-case-sp.png"), fullPage: true });

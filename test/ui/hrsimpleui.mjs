@@ -170,8 +170,19 @@ console.log("\n— 入退社：一覧と入社の人別画面 —");
   check((await row.innerText()).includes("2026/10/20") && (await row.innerText()).includes("人事 花子"), "入社日・担当");
   await row.locator("button", { hasText: "手続きを開く" }).click();
   await page.waitForSelector("#ob", { timeout: 8000 });
-  const ids = await page.locator("#ob > section").evaluateAll((ns) => ns.map((n) => n.id));
-  check(ids.join(",") === "ob-next,ob-flow,ob-contract", `次にすること → 進み具合 → 契約書（${ids.join(",")}）`);
+  // 2026-10-08：チェックリストが上。次にすることは、その下。進み具合はタブ、契約書は「労働条件・契約の確認」の中
+  //   （この画面の項目には労働条件の項目が無いので「そのほかの作業」に出る）
+  const order = await page.evaluate(() => {
+    const a = document.getElementById("hr-checklist"), b = document.getElementById("ob-next");
+    return Boolean(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  check(order, "チェックリスト → 次にすること");
+  check((await page.locator(".hx-steps li").allInnerTexts()).map((x) => x.replace(/^\d+\.\s*/, "").trim()).join("|") === "基本情報|契約書の準備|本人の確認・署名|入社情報・必要書類|アカウント・貸与品|会社確認・完了", "ステップは6つの段階");
+  check((await page.locator(".hx-steps li.current").innerText()).includes("契約書の準備"), "いまの段階（契約書の準備）が強調される");
+  const extra = page.locator('.hx-item[data-key="x-terms"]');
+  check(await extra.count() === 1, "結びつく項目の無い作業の場所は「そのほかの作業」に出る（画面から消えない）");
+  await extra.locator(".hx-t").click();
+  await page.locator('.hx-tabs button', { hasText: "手続きの進み具合" }).click();
   check((await page.locator("#ob-next").innerText()).includes("契約書を準備する"), "次にすること：契約書を準備する");
   const steps = (await page.locator("#ob-flow tbody tr td:first-child").allInnerTexts()).map((x) => x.trim().replace(/^\d+\.\s*/, ""));
   check(steps.join("|") === "基本情報|契約書の準備|本人の確認・署名|入社情報・必要書類|アカウント・貸与品|会社確認・完了", `6つの段階（${steps.join("|")}）`);
@@ -179,11 +190,7 @@ console.log("\n— 入退社：一覧と入社の人別画面 —");
   const pdf = await page.locator('#ob-contract a[data-act="pdf"]').getAttribute("href");
   check(make.includes("tab=send") && make.includes("employeeId=e-new") && pdf.includes("tab=pdf") && pdf.includes("employeeId=e-new"), "2つの入口は対象者を付けて開く");
   check((await page.locator('#ob-next a[href="help.html#hr-onboarding"]').getAttribute("target")) === "_blank", "使い方は別のタブ");
-  const pos = await page.evaluate(() => {
-    const ob = document.getElementById("ob"), grp = document.querySelector(".hr-grp");
-    return Boolean(ob && grp && (ob.compareDocumentPosition(grp) & Node.DOCUMENT_POSITION_FOLLOWING));
-  });
-  check(pos, "チェックリストは下に残る");
+  check(await page.locator(".hr-grp .hx-item", { hasText: "会社PCの準備" }).count() === 1, "チェックリストの項目が出る");
   await page.screenshot({ path: shotPath("hr-onboarding-detail.png"), fullPage: true });
   await page.ctx.close();
 }
@@ -198,6 +205,7 @@ for (const path of ["admin-esign.html?tab=pdf&employeeId=e-new", "admin-hr.html?
       .map((n) => Math.round(n.getBoundingClientRect().right - W)).reduce((a, b) => Math.max(a, b), -999);
   });
   check(over <= 0, `${path}：横にはみ出さない（${over}px）`);
+  if (!path.includes("esign")) await page.locator('.hx-item[data-key="x-terms"] .hx-t').click();
   const btn = path.includes("esign") ? page.locator("#p-send") : page.locator('#ob-contract a[data-act="pdf"]');
   const box = await btn.boundingBox();
   check(box && box.width >= 44 && box.height >= 28, `${path}：主要なボタンが押せる大きさ`);

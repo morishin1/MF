@@ -49,7 +49,7 @@ const P_FIELDS = "id, tenant_id, employee_id, kind, status, target_on, note, pha
   // 入退社の本筋ではないが、ここ以外に置き場所が無い
   + "drive_link, drive_folders, advisor_shared_to, advisor_shared_at";
 const I_FIELDS = "id, procedure_id, item_key, title, category, owner, phase, assignee_id, "
-  + "required, status, due_on, note, sort_order, completed_at";
+  + "required, status, due_on, note, sort_order, completed_at, completed_by";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -254,6 +254,8 @@ function row(p, its, people, today, facts) {
   };
 }
 
+const nameOfUser = (people, userId) => [...people.values()].find((p) => p.userId === userId)?.name || null;
+
 function item(i, people) {
   const def = flowOf(i.item_key) || {};
   return {
@@ -265,6 +267,8 @@ function item(i, people) {
     phase: i.phase,
     done: i.status === "done" || i.status === "na",
     completedAt: i.completed_at,
+    // チェックした人（証跡）。ログインアカウントから名簿の名前を引く。名簿に無ければ名前は出さない
+    completedByName: i.completed_by ? nameOfUser(people, i.completed_by) : null,
     assignee: i.assignee_id
       ? { id: i.assignee_id, name: people.get(i.assignee_id)?.name || "（不明）" }
       : null,
