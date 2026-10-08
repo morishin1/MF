@@ -24,23 +24,21 @@
 //   retire.cert_draft（作成）・retire.cert_preview・retire.cert_company・retire.issue / retire.reissue
 //   本文・印影・URL は残さない。
 
-import crypto from "node:crypto";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr, canManageSeals } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { renderCertificatePdf, sha256 } from "../../lib/pdf-jp.js";
-import { reasonLabel, retirePath, issuedNo as fmtNo } from "../../lib/retire.js";
-import { DEFAULT_TEMPLATE, mergeCertificate, certValues, leftoverFields, CERT_MAX_CHARS } from "../../lib/retire-cert.js";
-import { putIssued, viewDoc } from "../../lib/retire-store.js";
+import { renderCertificatePdf } from "../../lib/pdf-jp.js";
+import { reasonLabel } from "../../lib/retire.js";
+import { DEFAULT_TEMPLATE, mergeCertificate, certValues, CERT_MAX_CHARS } from "../../lib/retire-cert.js";
+import { viewDoc } from "../../lib/retire-store.js";
+import { loadCompany, certificateSeals, issueCertificate } from "../../lib/retire-cert-issue.js";
 import { ymd } from "../../lib/jst.js";
 
-const BUCKET = "hr";
 const SQL = "db/121_retire_docs.sql";
 const must = async (q) => { const { data, error } = await q; if (error) throw error; return data; };
-const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")) && !Number.isNaN(Date.parse(s));
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -67,24 +65,6 @@ async function loadEmployee(sb, ctx, id) {
   return must(sb.from("gw_employees")
     .select("id, tenant_id, display_name, employment_type, joined_on, left_on, status")
     .eq("id", String(id)).eq("tenant_id", ctx.tenantId).maybeSingle());
-}
-
-/** 会社の情報（会社名は tenants.name、代表者名・住所は gw_retire_company）。db/122 が未適用でも、会社名だけで動かす */
-async function loadCompany(sb, ctx) {
-  const t = await must(sb.from("tenants").select("name").eq("id", ctx.tenantId).maybeSingle());
-  let c = null;
-  const q = await sb.from("gw_retire_company").select("representative, address").eq("tenant_id", ctx.tenantId).maybeSingle();
-  if (!q.error) c = q.data;
-  return { name: t?.name || "", representative: c?.representative || "", address: c?.address || "", ready: !q.error };
-}
-
-/** 証明書用の印鑑だけ（有効なもの）。契約書用の印鑑は、ここには出てこない */
-async function certificateSeals(sb, ctx) {
-  const q = await sb.from("gw_seals")
-    .select("id, name, seal_type, image_path, image_mime, image_sha256, is_active, sort_order")
-    .eq("tenant_id", ctx.tenantId).eq("seal_type", "certificate").eq("is_active", true).order("sort_order");
-  if (q.error) return [];
-  return q.data || [];
 }
 
 async function act(req, res, sb, ctx, user) {
@@ -152,62 +132,13 @@ async function act(req, res, sb, ctx, user) {
       return json(res, 200, { pdfBase64: Buffer.from(r.bytes).toString("base64") });
     }
 
-    // ---- 発行・押印 ----
+    // ---- 発行・押印（lib/retire-cert-issue.js。本人の申請を承認して発行するときと同じ処理）----
     if (!canManageSeals(ctx)) {
       return json(res, 403, { error: "seal_forbidden", hint: "発行・押印は、経営者・管理者だけができます" });
     }
-    if (!["leaving", "left"].includes(emp.status)) {
-      return json(res, 409, { error: "not_leaving", hint: "退職手続き中・退職の人だけ、証明書を発行できます" });
-    }
-    if (!emp.left_on) return json(res, 400, { error: "no_left_on", hint: "退職日を入れてから発行してください" });
-    const left = leftoverFields(text);
-    if (left.length) return json(res, 400, { error: "unresolved_fields", fields: left, hint: `差し込み項目が残っています：${left.join("、")}` });
-    if (!company.name || !company.representative || !company.address) {
-      return json(res, 400, { error: "company_incomplete", hint: "会社名・代表者名・会社住所を入れてください（代表者名と住所は、証明書の画面で保存できます）" });
-    }
-    const issuedOn = body.issuedOn ? String(body.issuedOn) : ymd();
-    if (!isDate(issuedOn)) return json(res, 400, { error: "invalid_date", hint: "発行日を日付で入れてください" });
-
-    // 証明書用の印鑑（契約書用は使えない）。画像はサーバーの中だけで扱う
-    const seals = await certificateSeals(sb, ctx);
-    const seal = body.sealId ? seals.find((x) => x.id === String(body.sealId)) : seals[0];
-    if (!seal) {
-      return json(res, 409, { error: "no_certificate_seal", hint: "証明書発行用の印鑑が登録されていません。署名の画面の「印鑑」で、種類「証明書発行用印」を登録してください" });
-    }
-    const dl = await sb.storage.from(BUCKET).download(seal.image_path);
-    if (dl.error || !dl.data) return json(res, 500, { error: "seal_image_missing", hint: "印鑑の画像を読み出せませんでした" });
-    const sealBytes = Buffer.from(await dl.data.arrayBuffer());
-    if (seal.image_sha256 && sha256(sealBytes) !== seal.image_sha256) {
-      return json(res, 500, { error: "seal_hash_mismatch", hint: "印鑑の画像が登録時と一致しません。印鑑を登録し直してください" });
-    }
-    const sealMime = seal.image_mime === "image/jpeg" ? "image/jpeg" : "image/png";
-
-    const year = issuedOn.slice(0, 4);
-    let done = null, lastErr = null;
-    for (let attempt = 0; attempt < 4 && !done; attempt++) {
-      const rows = (await must(sb.from("gw_retire_docs").select("issued_no").eq("tenant_id", ctx.tenantId).eq("kind", "certificate"))) || [];
-      const used = rows.map((r) => String(r.issued_no || "")).filter((n) => n.startsWith(`RET-${year}-`)).map((n) => Number(n.split("-")[2]) || 0);
-      const no = fmtNo(year, Math.max(0, ...used) + 1 + attempt);
-      const r = await renderCertificatePdf({
-        title: "退職証明書", body: text, company: company.name, address: company.address, representative: company.representative,
-        issuedOn: certValues({ issuedOn }).発行日, issuedNo: no, seal: { bytes: sealBytes, mime: sealMime },
-      });
-      const bytes = Buffer.from(r.bytes);
-      const path = retirePath(ctx.tenantId, emp.id, "certificate", crypto.randomUUID());
-      const up = await sb.storage.from(BUCKET).upload(path, bytes, { contentType: "application/pdf", upsert: false });
-      if (up.error) { lastErr = up.error; break; }
-      try {
-        done = await putIssued(sb, ctx, user, emp, "certificate", {
-          path, sha256: sha256(bytes), size: bytes.length, issuedOn, fileName: `退職証明書_${emp.display_name}.pdf`,
-          extra: { issued_no: no, include_reason: includeReason, body_snapshot: text },
-        });
-      } catch (e) {
-        await sb.storage.from(BUCKET).remove([path]);
-        lastErr = e;
-        if (e?.code !== "23505") break;      // 発行番号が重なったときだけ、番号を取り直す
-      }
-    }
-    if (!done) throw lastErr || new Error("issue_failed");
+    const done = await issueCertificate(sb, ctx, user, emp, { text, includeReason, issuedOn: body.issuedOn, sealId: body.sealId });
+    if (done.status) return json(res, done.status, done.body);
+    const seal = done.seal;
     const { row, live } = done;
     // 記録：本文・印影・URL・パスは残さない
     await gwLog({
