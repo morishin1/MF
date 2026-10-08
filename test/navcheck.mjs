@@ -82,7 +82,7 @@ check(OFFICE_GROUPS.length === 4, `Officeは4グループ（人・組織／請�
   check(hrItems.map((i) => i.label).join("/") === "日報・勤怠/メンバー/入退社/勤怠管理/評価・キャリア", `人・組織は 日報・勤怠／メンバー／入退社／勤怠管理／評価・キャリア（いま ${hrItems.map((i) => i.label).join("/")}）`);
   check(hrItems[0]?.key === "nippo" && hrItems[0]?.href === "admin-nippo.html", "人・組織の初めは日報・勤怠（admin-nippo.html）");
   const docs = OFFICE_GROUPS.find((g) => g.label === "契約・書類")?.items || [];
-  check(docs.map((i) => i.label).join("/") === "雇用契約/社内文書/お知らせ配信", `契約・書類は 雇用契約／社内文書／お知らせ配信（いま ${docs.map((i) => i.label).join("/")}）`);
+  check(docs.map((i) => i.label).join("/") === "雇用契約/社内文書/定例業務/お知らせ配信", `契約・書類は 雇用契約／社内文書／定例業務／お知らせ配信（いま ${docs.map((i) => i.label).join("/")}）`);
   const dev = OFFICE_GROUPS.find((g) => g.label === "端末・貸与品")?.items || [];
   check(dev.length === 1 && dev[0].key === "devices" && dev[0].when === "officeHr" && (dev[0].tabs || []).map((t) => t.href).join(",") === "admin-devices.html,admin-assets.html",
     "端末・貸与品（端末管理・アカウント・貸与品）は Office（人事の権限＝api/devices・api/assets と同じ）");

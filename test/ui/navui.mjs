@@ -123,7 +123,7 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   // ほかのカテゴリの中身（2段目）
   for (const [file, head, list] of [
     ["admin-expenses.html", "請求・支払", "請求・支払/経費精算/月次業務/会計"],
-    ["admin-docs.html", "契約・書類", "雇用契約/社内文書/お知らせ配信"],
+    ["admin-docs.html", "契約・書類", "雇用契約/社内文書/定例業務/お知らせ配信"],
     ["admin-devices.html", "端末・貸与品", "端末・貸与品"],
   ]) {
     const q = await open(file, { admin: true });

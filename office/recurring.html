@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>定例業務 - EIGHT OFFICE</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261008rec3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261008rec3">
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
+  <style>
+    /* 定例業務マスター（db/125）。見た目は Office 共通（js/office-layout.js の .of-*）。ここは並べ方だけ */
+    .rc-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:0 0 12px; }
+    .rc-tools .sp { flex:1; }
+    .rc-tools input[type="search"] { margin:0; width:220px; max-width:100%; font-family:inherit; font-size:13px; padding:6px 10px; border:1px solid var(--of-line); border-radius:8px; }
+    .rc-list { display:grid; gap:8px; }
+    .rc-item { background:#fff; border:1px solid var(--of-line); border-radius:10px; padding:11px 14px; display:grid;
+               grid-template-columns:minmax(0,2.2fr) minmax(0,1.6fr) minmax(0,1.1fr) minmax(0,1fr) auto; gap:4px 14px; align-items:center; }
+    .rc-item.off { background:#fafaf7; }
+    .rc-item.off b { color:var(--of-faint); }
+    .rc-item b { font-size:14px; color:var(--of-ink); display:block; }
+    .rc-item .s { font-size:12px; color:var(--of-mute); line-height:1.6; }
+    .rc-item .ops { display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+    .rc-item .ops .of-btn { padding:5px 10px; font-size:12px; }
+    .rc-tag { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; background:#efefeb; color:#4a5068; margin:0 4px 0 0; }
+    .rc-tag.on { background:#e5f1e2; color:#2f6f3a; }
+    .rc-tag.warn { background:#fbf1d6; color:#7d5a00; }
+    .rc-tag.cat { background:#e7eaf3; color:#1b2440; }
+    @media (max-width: 760px) {
+      .rc-item { grid-template-columns:1fr; }
+      .rc-item .ops { justify-content:flex-start; }
+    }
+    /* 編集（右ドロワー） */
+    .rc-dr { padding:18px 18px 40px; }
+    .rc-dr h2 { margin:0 0 12px; font-size:18px; color:var(--of-ink); }
+    .rc-dr label { display:block; font-size:12px; font-weight:700; color:var(--of-sub); margin:12px 0 4px; }
+    .rc-dr input, .rc-dr select, .rc-dr textarea { width:100%; box-sizing:border-box; margin:0; font-family:inherit; }
+    .rc-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .rc-row > * { flex:1 1 120px; }
+    .rc-dows { display:flex; gap:6px; flex-wrap:wrap; }
+    .rc-dows label { display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:500; }
+    .rc-dows input { width:auto; }
+    .rc-note { font-size:11.5px; color:var(--of-mute); margin:4px 0 0; line-height:1.7; }
+    .rc-err { color:#b3261e; font-size:12.5px; margin:10px 0 0; }
+    /* Excel 取り込み */
+    .rc-imp { margin:0 0 16px; }
+    .rc-imp-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+    .rc-imp-tools input[type="month"] { margin:0; width:auto; }
+    .rc-imp-table { width:100%; border-collapse:collapse; font-size:12px; background:#fff; }
+    .rc-imp-table th, .rc-imp-table td { border-bottom:1px solid var(--of-line); padding:6px; text-align:left; vertical-align:top; }
+    .rc-imp-table th { font-size:11px; color:var(--of-mute); background:#f6f6f2; white-space:nowrap; }
+    .rc-imp-table input[type="text"] { width:100%; min-width:160px; margin:0; font-size:12px; padding:4px 6px; }
+    .rc-imp-table select, .rc-imp-table input[type="number"] { margin:0; font-size:12px; padding:3px 4px; width:auto; }
+    .rc-imp-table tr.ex td { color:var(--of-faint); }
+    .rc-imp-wrap { max-height:60vh; overflow:auto; border:1px solid var(--of-line); border-radius:10px; }
+    .rc-origin { font-size:11px; color:var(--of-mute); }
+  </style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <div class="of-head">
+    <div>
+      <h1 class="of-title">定例業務</h1>
+      <p class="of-sub">毎月・毎年の会社の業務を1回登録すると、Office のカレンダーと「今日やること」に自動で出ます（今日から先90日ぶん）。</p>
+    </div>
+    <div class="rc-tools" style="margin:0;">
+      <button type="button" class="of-btn sec" id="impOpen" onclick="toggleImport()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>Excelから取り込む</button>
+      <button type="button" class="of-btn" id="newBtn" onclick="openEdit()"><span class="material-symbols-outlined" aria-hidden="true">add</span>定例業務を作る</button>
+    </div>
+  </div>
+
+  <div id="banner"></div>
+
+  <section class="rc-imp of-panel" id="impBox" hidden aria-labelledby="impH">
+    <h2 class="of-sec-h" id="impH">Excel 年間予定表から取り込む</h2>
+    <p class="of-muted" style="line-height:1.8;">年間予定表（.xlsx）を選ぶと、月をまたいで何回出てくるかで「毎月」「毎年」「単発」に分けた一覧を出します。
+      まだ何も登録しません。一覧で「登録」にした行だけが入ります（単発は初めは除外。同じ行は2回入りません）。
+      列：C 全体／G その他／M 営業事務／N 人事／O 労務・総務／P EC・NW／Q 経理。</p>
+    <div class="rc-imp-tools">
+      <input type="file" id="impFile" accept=".xlsx,.xls">
+      <label class="of-muted" style="display:flex;align-items:center;gap:6px;">期の始まり <input type="month" id="impPeriod" value="2025-09"></label>
+      <button type="button" class="of-btn sec" id="impRead" onclick="readExcel(this)">読み込んで一覧を作る</button>
+    </div>
+    <div id="impMsg" class="rc-err"></div>
+    <div id="impResult"></div>
+  </section>
+
+  <div class="rc-tools">
+    <div class="of-chips" id="catChips"></div>
+    <span class="sp"></span>
+    <select id="fState" onchange="render()" aria-label="状態">
+      <option value="active">有効</option><option value="off">停止</option><option value="all">すべて</option>
+    </select>
+    <input type="search" id="fText" placeholder="業務名・担当で絞り込む" oninput="render()">
+  </div>
+  <div class="rc-list" id="list"><div class="of-empty">読み込み中…</div></div>
+</div>
+<div id="drawer-root"></div>
+
+<script src="../js/api-client.js?v=20261008rec3"></script>
+<script src="../js/device.js?v=20261008rec3"></script>
+<script src="../js/layout.js?v=20261008rec3"></script>
+<script src="../js/office-layout.js?v=20261008rec3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const O = window.OfficeLayout;
+  const esc = O.esc;
+  let D = null;            // GET /api/office-tasks/recurring
+  let cat = "";            // 絞り込みのカテゴリ
+  let editing = null;      // 編集中のマスター（新規は {}）
+  let IMP = null;          // 取り込みの変換一覧
+
+  O.init({ active: "recurring", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      D = await API.api("/api/office-tasks/recurring");
+      el("banner").innerHTML = "";
+    } catch (e) {
+      el("list").innerHTML = "";
+      el("banner").innerHTML = `<div class="of-banner${e.code === "not_ready" ? "" : " err"}"><span class="material-symbols-outlined" aria-hidden="true">${e.code === "not_ready" ? "build" : "error"}</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
+      return;
+    }
+    const canAny = D.categories.some((c) => c.edit);
+    el("newBtn").hidden = !canAny; el("impOpen").hidden = !canAny;
+    render();
+    const id = new URLSearchParams(location.search).get("id");
+    if (id && D.masters.some((m) => m.id === id)) openEdit(id);
+  }
+
+  function render() {
+    const vis = D.categories.filter((c) => c.view);
+    el("catChips").innerHTML = [{ key: "", label: "すべて" }, ...vis].map((c) => {
+      const n = D.masters.filter((m) => (!c.key || m.category === c.key) && m.active).length;
+      return `<button type="button" class="of-chip${cat === c.key ? " on" : ""}" data-cat="${esc(c.key)}" onclick="setCat('${esc(c.key)}')">${esc(c.label)} <b>${n}</b></button>`;
+    }).join("");
+    const st = el("fState").value, q = el("fText").value.trim();
+    const rows = D.masters.filter((m) => (!cat || m.category === cat) && (st === "all" || (st === "active" ? m.active : !m.active))
+      && (!q || `${m.title} ${m.assigneeName || ""} ${m.description || ""}`.includes(q)))
+      .sort((a, b) => String(a.nextDate || "9999").localeCompare(String(b.nextDate || "9999")) || a.title.localeCompare(b.title, "ja"));
+    const missing = D.masters.filter((m) => m.active && m.assigneeMissing).length;
+    el("banner").innerHTML = missing ? `<div class="of-banner" data-role="assignee-missing"><span class="material-symbols-outlined" aria-hidden="true">person_off</span><div>担当者が未設定（または退職）の定例業務が ${missing}件あります。担当を決めてください。</div></div>` : "";
+    el("list").innerHTML = rows.length ? rows.map((m) => `
+      <div class="rc-item${m.active ? "" : " off"}" data-id="${esc(m.id)}">
+        <div><b>${esc(m.title)}</b><div class="s"><span class="rc-tag cat">${esc(m.categoryLabel)}</span>${m.priority === "high" ? `<span class="rc-tag warn">優先度 高</span>` : ""}${m.source === "excel" ? `<span class="rc-tag">Excel</span>` : ""}</div></div>
+        <div class="s"><b style="font-size:12.5px;font-weight:500;color:var(--of-ink);display:inline;">${esc(m.ruleText)}</b><br>期限：${esc(m.dueText)}</div>
+        <div class="s">担当：${m.assigneeMissing ? `<span class="rc-tag warn">担当者未設定</span>${m.assigneeName ? `（${esc(m.assigneeName)}）` : ""}` : esc(m.assigneeName)}</div>
+        <div class="s">${m.active ? `<span class="rc-tag on">有効</span>` : `<span class="rc-tag">停止</span>`}<br>次回：${m.nextDate ? esc(O.fmtDay(m.nextDate)) : "—"}<br>更新：${esc(O.fmtDay(String(m.updatedAt || "").slice(0, 10)))}</div>
+        <div class="ops">${m.canEdit ? `<button type="button" class="of-btn sec" onclick="openEdit('${esc(m.id)}')">編集</button>
+          <button type="button" class="of-btn sec" data-act="toggle" onclick="setActive('${esc(m.id)}', ${!m.active}, this)">${m.active ? "停止" : "有効にする"}</button>` : ""}</div>
+      </div>`).join("") : `<div class="of-empty">${D.masters.length ? "条件に合う定例業務はありません" : "まだ定例業務がありません。「定例業務を作る」か「Excelから取り込む」から始めてください"}</div>`;
+  }
+  function setCat(k) { cat = k; render(); }
+
+  async function setActive(id, active, btn) {
+    const m = D.masters.find((x) => x.id === id);
+    if (!active && !confirm(`「${m.title}」を停止します。今日以降の未完了の予定は消えます（完了した記録・マスターは残ります）。よろしいですか？`)) return;
+    try {
+      const r = await KPLayout.busy(btn, "…", () => API.api("/api/office-tasks/recurring", { method: "POST", body: { action: "set_active", id, active }, invalidates: [] }));
+      D.masters = D.masters.map((x) => (x.id === id ? r.master : x));
+      render();
+    } catch (e) { alert(e.hint || e.message || "できませんでした"); }
+  }
+
+  // ---- 作る・直す（右ドロワー） ----------------------------------------------------
+  const DOWS = ["月", "火", "水", "木", "金", "土", "日"];
+  function openEdit(id) {
+    const m = id ? D.masters.find((x) => x.id === id) : null;
+    editing = m ? JSON.parse(JSON.stringify(m)) : { category: D.categories.find((c) => c.edit)?.key, recurrenceType: "monthly", recurrenceRule: { day: 1 }, dueRule: { type: "same" }, priority: "normal" };
+    const e = editing, r = e.recurrenceRule || {}, du = e.dueRule || { type: "same" };
+    const dayVal = r.type === "month_end" ? "end" : r.type === "month_end_biz" ? "biz" : String(r.day || 1);
+    el("drawer-root").innerHTML = `<div class="of-drawer-bg" onclick="closeEdit()"></div>
+      <aside class="of-drawer" role="dialog" aria-modal="true" aria-labelledby="rc-title" tabindex="-1"><div class="rc-dr">
+        <h2 id="rc-title">${m ? "定例業務を直す" : "定例業務を作る"}</h2>
+        ${m ? `<p class="rc-note">直すと、今日以降の未完了の予定を作り直します（完了した記録・過去の予定は変わりません）。</p>` : ""}
+        <label for="e-title">業務名</label><input id="e-title" type="text" maxlength="200" value="${esc(e.title || "")}">
+        <label for="e-desc">説明</label><textarea id="e-desc" rows="2" maxlength="4000">${esc(e.description || "")}</textarea>
+        <div class="rc-row">
+          <div><label for="e-cat">カテゴリ</label><select id="e-cat">${D.categories.filter((c) => c.edit || c.key === e.category).map((c) => `<option value="${esc(c.key)}" ${c.key === e.category ? "selected" : ""} ${c.edit ? "" : "disabled"}>${esc(c.label)}</option>`).join("")}</select></div>
+          <div><label for="e-pri">優先度</label><select id="e-pri">${D.priorities.map((p) => `<option value="${p.key}" ${p.key === e.priority ? "selected" : ""}>${p.label}</option>`).join("")}</select></div>
+        </div>
+        <div class="rc-row">
+          <div><label for="e-who">担当者</label><select id="e-who"><option value="">（未設定）</option>${D.employees.map((p) => `<option value="${esc(p.id)}" ${p.id === e.assigneeId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+          <div><label for="e-dept">担当部署</label><input id="e-dept" type="text" maxlength="100" value="${esc(e.department || "")}"></div>
+        </div>
+        <label for="e-type">繰り返し</label>
+        <select id="e-type" onchange="ruleFields()">
+          ${[["monthly", "毎月"], ["yearly", "毎年"], ["weekly", "毎週"], ["none", "1回だけ"]].map(([k, l]) => `<option value="${k}" ${k === e.recurrenceType ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+        <div id="ruleBox"></div>
+        <label for="e-shift">土日祝にあたったら</label>
+        <select id="e-shift"><option value="">そのまま</option><option value="prev" ${r.shift === "prev" ? "selected" : ""}>前の営業日</option><option value="next" ${r.shift === "next" ? "selected" : ""}>次の営業日</option></select>
+        <label for="e-due">期限</label>
+        <div class="rc-row">
+          <select id="e-due" onchange="dueFields()">
+            <option value="same" ${du.type === "same" ? "selected" : ""}>予定日と同じ</option>
+            <option value="offset" ${du.type === "offset" ? "selected" : ""}>予定日の◯日後</option>
+            <option value="day" ${du.type === "day" ? "selected" : ""}>毎月◯日</option>
+            <option value="month_end" ${du.type === "month_end" ? "selected" : ""}>その月の末日</option>
+          </select>
+          <input id="e-dueN" type="number" min="0" max="365" value="${esc(du.days ?? du.day ?? "")}" aria-label="期限の日数・日">
+        </div>
+        <div class="rc-row">
+          <div><label for="e-start">開始日</label><input id="e-start" type="date" value="${esc(e.startOn || "")}"></div>
+          <div><label for="e-end">終了日（任意）</label><input id="e-end" type="date" value="${esc(e.endOn || "")}"></div>
+        </div>
+        <label for="e-note">備考</label><textarea id="e-note" rows="2" maxlength="2000">${esc(e.note || "")}</textarea>
+        <label for="e-url">関連URL</label><input id="e-url" type="url" maxlength="1000" value="${esc(e.url || "")}" placeholder="https://">
+        <div id="e-err" class="rc-err" role="alert"></div>
+        <div class="rc-row" style="margin-top:14px;flex-wrap:nowrap;">
+          <button type="button" class="of-btn" id="e-save" onclick="save(this)" style="flex:0 0 auto;">保存</button>
+          <button type="button" class="of-btn sec" onclick="closeEdit()" style="flex:0 0 auto;">閉じる</button>
+        </div>
+      </div></aside>`;
+    el("drawer-root").dataset.day = dayVal;
+    ruleFields(); dueFields();
+    el("drawer-root").querySelector(".of-drawer").focus();
+  }
+  function closeEdit() { editing = null; el("drawer-root").innerHTML = ""; if (location.search.includes("id=")) history.replaceState({}, "", location.pathname); }
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && editing) closeEdit(); });
+
+  function ruleFields() {
+    const t = el("e-type").value, r = editing.recurrenceRule || {};
+    const day = r.type === "month_end" ? "end" : r.type === "month_end_biz" ? "biz" : String(r.day || 1);
+    const dayOpts = (withBiz) => [...Array.from({ length: 31 }, (_, i) => [String(i + 1), `${i + 1}日`]), ["end", "末日"], ...(withBiz ? [["biz", "最終営業日（の◯営業日前）"]] : [])]
+      .map(([v, l]) => `<option value="${v}" ${v === day ? "selected" : ""}>${l}</option>`).join("");
+    el("ruleBox").innerHTML = t === "monthly" ? `<label for="e-day">日</label><div class="rc-row"><select id="e-day">${dayOpts(true)}</select>
+        <input id="e-bizN" type="number" min="0" max="10" value="${esc(r.n ?? 0)}" aria-label="最終営業日の何営業日前"></div>
+        <p class="rc-note">「最終営業日」のときだけ、右の数（0＝最終営業日、1＝その1営業日前）を使います。</p>`
+      : t === "yearly" ? `<div class="rc-row"><div><label for="e-month">月</label><select id="e-month">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${Number(r.month) === i + 1 ? "selected" : ""}>${i + 1}月</option>`).join("")}</select></div>
+        <div><label for="e-day">日</label><select id="e-day">${dayOpts(false)}</select></div></div>`
+      : t === "weekly" ? `<label>曜日</label><div class="rc-dows">${DOWS.map((w, i) => `<label><input type="checkbox" data-dow="${i + 1}" ${(r.dows || []).includes(i + 1) ? "checked" : ""}>${w}</label>`).join("")}</div>`
+      : `<label for="e-date">日付</label><input id="e-date" type="date" value="${esc(r.date || "")}">`;
+  }
+  function dueFields() { const t = el("e-due").value; el("e-dueN").hidden = !(t === "offset" || t === "day"); el("e-dueN").placeholder = t === "offset" ? "日数" : "日"; }
+
+  function collect() {
+    const t = el("e-type").value;
+    const rule = {};
+    if (el("e-shift").value) rule.shift = el("e-shift").value;
+    if (t === "monthly" || t === "yearly") {
+      const d = el("e-day").value;
+      if (d === "end") rule.type = "month_end"; else if (d === "biz") { rule.type = "month_end_biz"; rule.n = Number(el("e-bizN").value) || 0; } else rule.day = Number(d);
+      if (t === "yearly") rule.month = Number(el("e-month").value);
+    } else if (t === "weekly") rule.dows = [...document.querySelectorAll("#ruleBox [data-dow]:checked")].map((x) => Number(x.dataset.dow));
+    else rule.date = el("e-date").value;
+    const dt = el("e-due").value, dn = el("e-dueN").value;
+    const dueRule = dt === "offset" ? { type: "offset", days: Number(dn) } : dt === "day" ? { type: "day", day: Number(dn) } : { type: dt };
+    return {
+      title: el("e-title").value, description: el("e-desc").value, category: el("e-cat").value, priority: el("e-pri").value,
+      assigneeEmployeeId: el("e-who").value || null, department: el("e-dept").value, recurrenceType: t, recurrenceRule: rule, dueRule,
+      startOn: el("e-start").value || null, endOn: el("e-end").value || null, note: el("e-note").value, url: el("e-url").value,
+    };
+  }
+
+  async function save(btn) {
+    el("e-err").textContent = "";
+    const body = { action: editing.id ? "update" : "create", ...(editing.id ? { id: editing.id } : {}), ...collect() };
+    try {
+      const r = await KPLayout.busy(btn, "保存中…", () => API.api("/api/office-tasks/recurring", { method: "POST", body, invalidates: [] }));
+      const i = D.masters.findIndex((x) => x.id === r.master.id);
+      if (i >= 0) D.masters[i] = r.master; else D.masters.unshift(r.master);
+      closeEdit(); render();
+    } catch (e) { el("e-err").textContent = (e.body?.problems || [e.hint || e.message || "保存できませんでした"]).join("／"); }
+  }
+
+  // ---- Excel 年間予定表から取り込む ----------------------------------------------------------
+  // ファイルはこの画面（ブラウザ）で読み、セル（シート名・見出し・日・列・文言）だけをサーバへ送る。分けるのはサーバ（lib/office-recurring.js）
+  function toggleImport() { el("impBox").hidden = !el("impBox").hidden; }
+  const COLS = ["C", "G", "M", "N", "O", "P", "Q"];
+  async function readExcel(btn) {
+    el("impMsg").textContent = "";
+    const f = el("impFile").files[0];
+    if (!f) { el("impMsg").textContent = "Excel ファイルを選んでください"; return; }
+    if (!window.XLSX) { el("impMsg").textContent = "Excel を読む部品を読み込めませんでした。少し待ってからもう一度お試しください"; return; }
+    try {
+      await KPLayout.busy(btn, "読み込み中…", async () => {
+        const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+        const cells = [];
+        for (const name of wb.SheetNames) {
+          const ws = wb.Sheets[name];
+          const header = ws.H1 ? String(ws.H1.v ?? "") : "";
+          for (let r = 5; r <= 45; r++) {
+            const day = ws[`A${r}`]?.v;
+            if (typeof day !== "number") continue;
+            for (const col of COLS) {
+              const v = ws[`${col}${r}`]?.v;
+              if (v != null && String(v).trim()) cells.push({ sheet: name, header, row: r, day, col, text: String(v) });
+            }
+          }
+        }
+        IMP = await API.api("/api/office-tasks/recurring", { method: "POST", body: { action: "import_preview", cells, periodStart: el("impPeriod").value || "2025-09" }, invalidates: [] });
+        IMP.filter = "recurring";
+        renderImport();
+      });
+    } catch (e) { el("impMsg").textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+
+  function impRuleCell(r, i) {
+    if (r.kind === "single") return `<input type="date" data-i="${i}" data-f="date" value="${esc(r.recurrenceRule.date || "")}" onchange="impSet(this)">`;
+    if (r.recurrenceType === "yearly") return `毎年 <input type="number" min="1" max="12" data-i="${i}" data-f="month" value="${esc(r.recurrenceRule.month)}" onchange="impSet(this)">月
+      <input type="number" min="1" max="31" data-i="${i}" data-f="day" value="${esc(r.recurrenceRule.day ?? "")}" onchange="impSet(this)">日`;
+    return `毎月 <input type="number" min="1" max="31" data-i="${i}" data-f="day" value="${esc(r.recurrenceRule.day ?? "")}" onchange="impSet(this)">日
+      <select data-i="${i}" data-f="shift" onchange="impSet(this)"><option value="">そのまま</option><option value="prev" ${r.recurrenceRule.shift === "prev" ? "selected" : ""}>土日祝は前</option><option value="next" ${r.recurrenceRule.shift === "next" ? "selected" : ""}>土日祝は次</option></select>`;
+  }
+
+  function renderImport() {
+    const rows = IMP.rows;
+    const n = (k) => rows.filter((r) => (k === "on" ? r.include : r.kind === k)).length;
+    const shown = rows.map((r, i) => [r, i]).filter(([r]) => IMP.filter === "on" ? r.include : r.kind === IMP.filter);
+    const skipped = IMP.sheets.filter((s) => !s.used && s.month);
+    el("impResult").innerHTML = `
+      <div class="rc-imp-tools">
+        <div class="of-chips">${[["recurring", "定例（毎月・毎年）"], ["single", "単発"], ["on", "登録にした行"]].map(([k, l]) => `<button type="button" class="of-chip${IMP.filter === k ? " on" : ""}" onclick="impFilter('${k}')">${l} <b>${n(k)}</b></button>`).join("")}</div>
+        <span class="of-muted">${skipped.length ? `使わないシート：${skipped.map((s) => `${esc(s.name)}（${esc(s.reason || "")}）`).join("・")}` : ""}</span>
+      </div>
+      <div class="rc-imp-wrap"><table class="rc-imp-table" id="impTable">
+        <thead><tr><th>登録</th><th>元の日付・列</th><th>元の文言 → 業務名</th><th>カテゴリ</th><th>定例／単発</th><th>繰り返し</th><th>担当</th><th>理由</th></tr></thead>
+        <tbody>${shown.map(([r, i]) => `<tr class="${r.include ? "" : "ex"}" data-i="${i}">
+          <td><input type="checkbox" data-i="${i}" data-f="include" ${r.include ? "checked" : ""} ${r.registered || !r.canEdit ? "disabled" : ""} onchange="impSet(this)" aria-label="登録する"></td>
+          <td class="rc-origin">${esc(r.origin.slice(0, 3).map((o) => o.date).join("、"))}${r.origin.length > 3 ? ` ほか${r.origin.length - 3}` : ""}<br>${esc(r.col)}列${r.registered ? `<br><span class="rc-tag on">登録済み</span>` : ""}</td>
+          <td><div class="rc-origin">${esc(r.text)}</div><input type="text" maxlength="200" data-i="${i}" data-f="title" value="${esc(r.title)}" onchange="impSet(this)"></td>
+          <td><select data-i="${i}" data-f="category" onchange="impSet(this)">${D.categories.map((c) => `<option value="${c.key}" ${c.key === r.category ? "selected" : ""} ${c.edit ? "" : "disabled"}>${esc(c.label)}</option>`).join("")}</select></td>
+          <td><select data-i="${i}" data-f="kind" onchange="impSet(this)"><option value="monthly" ${r.kind === "recurring" && r.recurrenceType === "monthly" ? "selected" : ""}>毎月</option><option value="yearly" ${r.recurrenceType === "yearly" ? "selected" : ""}>毎年</option><option value="single" ${r.kind === "single" ? "selected" : ""}>単発</option></select></td>
+          <td>${impRuleCell(r, i)}</td>
+          <td><select data-i="${i}" data-f="assigneeEmployeeId" onchange="impSet(this)"><option value="">（未設定）</option>${D.employees.map((p) => `<option value="${esc(p.id)}" ${p.id === r.assigneeEmployeeId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></td>
+          <td class="rc-origin">${esc(r.reason)}</td>
+        </tr>`).join("") || `<tr><td colspan="8" class="of-empty">この分け方の行はありません</td></tr>`}</tbody></table></div>
+      <div class="rc-imp-tools"><button type="button" class="of-btn" id="impCommit" onclick="commitImport(this)">登録にした ${n("on")}件を登録する</button>
+        <span class="of-muted">毎月・毎年はマスター（今日から先90日の予定を作ります）、単発はその日の予定になります。</span></div>`;
+  }
+  function impFilter(k) { IMP.filter = k; renderImport(); }
+  function impSet(inp) {
+    const r = IMP.rows[Number(inp.dataset.i)], f = inp.dataset.f;
+    if (f === "include") r.include = inp.checked;
+    else if (f === "title") r.title = inp.value;
+    else if (f === "category") r.category = inp.value;
+    else if (f === "assigneeEmployeeId") r.assigneeEmployeeId = inp.value || null;
+    else if (f === "kind") {
+      const first = r.origin[0]?.date || "";
+      if (inp.value === "single") { r.kind = "single"; r.recurrenceType = "none"; r.recurrenceRule = { date: first }; }
+      else { r.kind = "recurring"; r.recurrenceType = inp.value;
+        r.recurrenceRule = inp.value === "yearly" ? { month: Number(first.slice(5, 7)) || 1, day: Number(first.slice(8, 10)) || 1 } : { day: Number(first.slice(8, 10)) || 1, shift: "prev" }; }
+      renderImport(); return;
+    } else if (f === "date") r.recurrenceRule = { date: inp.value };
+    else if (f === "shift") { if (inp.value) r.recurrenceRule.shift = inp.value; else delete r.recurrenceRule.shift; }
+    else r.recurrenceRule[f] = Number(inp.value);
+    if (f === "include") renderImport();
+  }
+  async function commitImport(btn) {
+    const rows = IMP.rows.filter((r) => r.include);
+    if (!rows.length) { el("impMsg").textContent = "登録にした行がありません"; return; }
+    if (!confirm(`${rows.length}件を登録します（定例 ${rows.filter((r) => r.kind !== "single").length}件・単発 ${rows.filter((r) => r.kind === "single").length}件）。よろしいですか？`)) return;
+    try {
+      const r = await KPLayout.busy(btn, "登録中…", () => API.api("/api/office-tasks/recurring", { method: "POST", body: { action: "import_commit", rows }, invalidates: [] }));
+      el("impMsg").textContent = "";
+      el("impResult").innerHTML = `<div class="of-banner" data-role="import-done"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span><div>定例業務 ${r.masters}件・単発の予定 ${r.singles}件を登録しました（作った予定 ${r.events}件${r.skipped ? `・登録済みで飛ばした行 ${r.skipped}件` : ""}）。</div></div>`;
+      IMP = null;
+      await load();
+    } catch (e) { el("impMsg").textContent = (e.body?.problems || [e.hint || e.message || "登録できませんでした"]).slice(0, 3).join("／"); }
+  }
+</script>
+</body>
+</html>

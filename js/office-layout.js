@@ -17,7 +17,7 @@
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   // 各画面の鍵 → Office の左メニューの鍵（js/layout.js の OFFICE_GROUPS「月末月初業務」の match）
-  const ACTIVE = { home: "office_home", monthly: "office_monthly", billing: "office_billing", timesheet: "office_timesheet", terms: "office_terms" };
+  const ACTIVE = { home: "office_home", monthly: "office_monthly", billing: "office_billing", timesheet: "office_timesheet", terms: "office_terms", recurring: "office_recurring" };
 
   function css() {
     if (document.getElementById("office-layout-css")) return;

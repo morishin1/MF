@@ -278,6 +278,9 @@
             { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
         { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true, when: "officeFinance" },
+        // 定例業務マスター（Office の年間業務カレンダーの元。db/125）。見られるカテゴリは中で担当の分だけ。
+        // 契約・書類のタブは、人事・労務だけの人には雇用契約だけ。定例業務は Office ホームのカレンダーの「定例業務を開く」から入る
+        { key: "office_recurring", href: "/office/recurring.html", label: "定例業務", icon: "event_repeat", ready: true, when: "officeFinance" },
         // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
         { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true, when: "adminApp",
           tabs: [
@@ -1194,6 +1197,7 @@
       officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp)),
       // 月次業務の入口：月末月初業務（officeApp）か、月次締め・月初作業管理（officeFinance）のどちらか
       officeMonthly: officeFinance || Boolean(me?.access?.office),
+      // Office の業務のどれか（人事・労務／経理・事務／月末月初）。定例業務（/office/recurring.html）の入口
       office: Boolean(me?.access?.office),
       // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
