@@ -23,6 +23,7 @@
 //   画面ごとに数え方を書くと、一覧と詳細とホームで数字が違う、が起きる。
 //   数え方は lib/hr-flow.js に1つだけ置く。
 
+import { manualCheckBlock } from "../../lib/retire-cert-request-db.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
@@ -392,6 +393,12 @@ async function patch(req, res, ctx, user, body, advisorOnly = false) {
   // チェックを付ける・外す
   if (body.itemId && body.done !== undefined) {
     const done = Boolean(body.done);
+    // 退職証明書の交付：本人の申請があるあいだは、手で完了にしない（承認して発行が正本。lib/retire-cert-request-db.js）
+    const { data: target } = await sb.from("gw_procedure_items").select("item_key").eq("id", body.itemId).eq("procedure_id", id).maybeSingle();
+    if (target?.item_key === "off_hr_cert") {
+      const block = await manualCheckBlock(sb, ctx.tenantId, proc.employee_id, done);
+      if (block) return json(res, block.status, block.body);
+    }
     const { error } = await sb.from("gw_procedure_items").update({
       status: done ? "done" : "todo",
       completed_at: done ? now : null,

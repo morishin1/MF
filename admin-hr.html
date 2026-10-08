@@ -1706,6 +1706,24 @@
     document.querySelectorAll('#rc [data-hx-badge~="cert"]').forEach((n) => {
       n.innerHTML = asked ? `<span class="rc-pill bad" data-role="cert-badge">申請あり</span>` : "";
     });
+    // 本人の申請があるあいだは、手で完了にしない（承認して発行で PDF を発行してはじめて完了。サーバーも同じ：api/hr）。
+    //   申請なし＝手で完了できる（紙で別に発行する場合）／申請中・差し戻し＝押せない／発行済み＝完了のまま（戻せない）
+    const st = d.ready.cert ? d.certRequest?.status : null;
+    document.querySelectorAll("#rc .hx-item:not(.hx-x)").forEach((box) => {
+      if (!box.querySelector('[data-sec="cert"]')) return;
+      const done = box.classList.contains("done");
+      const lock = (!done && (st === "requested" || st === "cancelled")) ? (st === "requested"
+          ? "本人の申請があります。［承認して発行］で証明書を発行すると、自動で完了になります"
+          : "差し戻した申請があります。本人の再申請を承認して発行すると、完了になります")
+        : (done && st === "issued") ? "申請にもとづいて発行済みです（未完了には戻せません）" : "";
+      const cb = box.querySelector('.hx-row input[type="checkbox"]');
+      const btn = box.querySelector('.hx-foot [data-act="done"]');
+      if (cb) { cb.disabled = Boolean(lock); cb.title = lock; }
+      if (btn) btn.style.display = lock ? "none" : "";   // .btn の display が hidden 属性より強いので、style で隠す
+      const foot = box.querySelector(".hx-foot");
+      foot?.querySelector('[data-role="cert-lock"]')?.remove();
+      if (lock && foot) foot.insertAdjacentHTML("beforeend", `<span class="rc-note" style="margin:0;" data-role="cert-lock">${esc(lock)}</span>`);
+    });
     if (asked && el("rc-next")) {
       el("rc-next").insertAdjacentHTML("afterbegin", `<button class="late" onclick="rcGo('rc-cert')" data-next="cert">
         <span class="material-symbols-outlined" style="font-size:18px;">chevron_right</span>退職証明書の発行の申請があります</button>`);

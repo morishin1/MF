@@ -141,6 +141,9 @@ for (const [who, canIssue] of [["人事", false], ["経営者", true]]) {
   check(/2026\/10\/8 10:00 誓約済/.test(await item.locator('[data-role="cert-nda"]').innerText()), `${who}：誓約の同意日時と証跡（2026/10/8 10:00 誓約済）`);
   check((await item.locator('[data-role="cert-preview"]').innerText()).includes("使用期間："), `${who}：証明書に印字される内容`);
   await item.screenshot({ path: shotPath(`cert-approve-${canIssue ? "owner" : "hr"}.png`) });
+  check(await item.locator('.hx-row input[type="checkbox"]').isDisabled(), `${who}：申請中は、チェックを付けられない`);
+  check(await item.locator('.hx-foot button[data-act="done"]').isHidden(), `${who}：申請中は、汎用の［完了にする］を出さない`);
+  check((await item.locator('[data-role="cert-lock"]').innerText()).includes("承認して発行"), `${who}：理由（承認して発行で自動で完了）`);
   const btn = item.locator('button[data-act="cert-approve"]');
   if (!canIssue) {
     check(await btn.isDisabled() && (await item.locator('[data-role="cert-who"]').innerText()).includes("経営者・管理者だけ"), "人事：「承認して発行」は押せない（経営者・管理者に依頼）");
@@ -152,7 +155,30 @@ for (const [who, canIssue] of [["人事", false], ["経営者", true]]) {
     check(!(await item.getAttribute("class")).includes("open") && (await item.getAttribute("class")).includes("done"), "完了になって、アコーディオンが閉じる");
     check((await item.locator('[data-role="done-at"]').innerText()).includes("10/8 完了・経営 太郎"), "完了日・対応者が付く");
     check(await item.locator('[data-role="cert-badge"]').count() === 0, "「申請あり」は消える");
+    check(await item.locator('.hx-row input[type="checkbox"]').isDisabled(), "発行済み：完了のまま（チェックを外せない）");
   }
+  await ctx.close();
+}
+
+console.log("\n— 申請なし：これまでどおり手で完了にできる（紙で別に発行する場合）—");
+{
+  const ctx = await ctxOf();
+  await ctx.route("**/api/**", async (route) => {
+    const u = new URL(route.request().url());
+    if (u.pathname === "/api/employees/retire-case") return send(route, { ...CASE(false), certRequest: null });
+    if (u.pathname === "/api/hr") return send(route, u.searchParams.get("id") ? PROC(false) : { tabs: [], onboarding: [], offboarding: [], done: [], kpi: {} });
+    if (/\/api\/hr\/retention/.test(u.pathname)) return send(route, { today: "2026-10-08", rules: [], schedule: [], expired: 0, log: [] });
+    if (/\/api\/me\b/.test(u.pathname)) return send(route, { email: "a@example.com", appRole: "member", gw: { employee: { id: "e-me", display_name: "人事", status: "active" }, roles: ["hr"], tenantId: "t1", stage: null },
+      access: accessOf({ isAdmin: false, isHr: true, roles: ["hr"], apps: ["hr", "office"] }) });
+    return send(route, {});
+  });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/admin-hr.html?id=p-off`);
+  await page.waitForSelector("#rc-cert", { state: "attached", timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(500);
+  const item = page.locator('.hx-item[data-key="off_hr_cert"]');
+  check(!(await item.locator('.hx-row input[type="checkbox"]').isDisabled()) && await item.locator('.hx-foot button[data-act="done"]').isVisible(), "申請なし：チェック・［完了にする］が使える");
+  check(await item.locator('[data-role="cert-lock"]').count() === 0, "申請なし：止める理由は出ない");
   await ctx.close();
 }
 

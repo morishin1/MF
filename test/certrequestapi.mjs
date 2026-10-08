@@ -185,6 +185,56 @@ await ok("値の無い項目があれば発行しない（400 missing_values。�
   assert.equal(db.rows.gw_retire_cert_requests[0].status, "requested");
 });
 
+console.log("\n=== 承認して発行：途中で失敗したら、チェックリストだけ完了にはしない ===\n");
+async function approveWith(prepare) {
+  more(); as("soon");
+  await self({ action: "request", items: ["period"], ndaAgreed: true });
+  const reqId = db.rows.gw_retire_cert_requests[0].id;
+  prepare();
+  as("own");
+  const r = await adm({ action: "approve", employeeId: "e-soon", requestId: reqId });
+  const item = db.rows.gw_procedure_items.find((i) => i.item_key === "off_hr_cert");
+  return { r, req: db.rows.gw_retire_cert_requests[0], item };
+}
+await ok("PDF の保存（Storage）に失敗：申請は申請中・チェックリストは未完了", async () => {
+  const { r, req, item } = await approveWith(() => { db.failUpload = true; });
+  assert.ok(r.statusCode >= 500, String(r.statusCode));
+  assert.equal(req.status, "requested"); assert.equal(item.status, "todo"); assert.ok(!item.completed_at);
+});
+await ok("本人への公開に失敗：申請は申請中・チェックリストは未完了", async () => {
+  const { r, req, item } = await approveWith(() => {
+    db.rows.gw_retire_docs = db.rows.gw_retire_docs.filter((d) => d.kind !== "certificate");   // 前の版の置き換え（更新）が無い形
+    db.failUpdate.add("gw_retire_docs");
+  });
+  assert.ok(r.statusCode >= 500, String(r.statusCode));
+  assert.equal(req.status, "requested"); assert.equal(item.status, "todo");
+});
+await ok("申請の更新（発行済み）に失敗：チェックリストは未完了", async () => {
+  const { r, req, item } = await approveWith(() => { db.failUpdate.add("gw_retire_cert_requests"); });
+  assert.ok(r.statusCode >= 500, String(r.statusCode));
+  assert.equal(req.status, "requested"); assert.equal(item.status, "todo");
+});
+await ok("申請中でなくなった申請（差し戻し済み）を承認しようとしても：409・発行しない・チェックリストは変えない", async () => {
+  more(); as("soon");
+  await self({ action: "request", items: ["period"], ndaAgreed: true });
+  const q = db.rows.gw_retire_cert_requests[0];
+  Object.assign(q, { status: "cancelled", decided_at: new Date().toISOString() });
+  const docs = db.rows.gw_retire_docs.length;
+  as("own");
+  const r = await adm({ action: "approve", employeeId: "e-soon", requestId: q.id });
+  assert.equal(r.statusCode, 409);
+  assert.equal(db.rows.gw_retire_docs.length, docs, "PDF を作らない");
+  assert.equal(db.rows.gw_procedure_items.find((i) => i.item_key === "off_hr_cert").status, "todo");
+});
+await ok("順番：PDF 保存 → 本人に公開 → 申請を発行済み → チェックリスト完了（記録の時刻も）", async () => {
+  const { r, req, item } = await approveWith(() => {});
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const doc = db.rows.gw_retire_docs.find((d) => d.id === req.doc_id);
+  assert.ok(doc && stored.has(doc.storage_path) && doc.published === true, "保存・公開");
+  assert.equal(req.status, "issued"); assert.equal(item.status, "done");
+  assert.ok(doc.published_at <= req.decided_at && req.decided_at <= item.completed_at, "公開 → 申請 → チェックリストの順");
+});
+
 await ok("人事は差し戻せる → 本人はもう一度申請できる", async () => {
   more(); as("soon");
   await self({ action: "request", items: ["period"], ndaAgreed: true });

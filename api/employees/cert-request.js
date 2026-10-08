@@ -105,14 +105,23 @@ async function approve(res, sb, ctx, user, body) {
   const { row, live, seal } = done;
   const now = new Date().toISOString();
 
-  // 本人に公開（ダウンロードできるようにする）
+  // 順番を守る：① PDF 生成 → ② Storage 保存（ここまで issueCertificate）→ ③ 本人に公開 → ④ 申請を発行済み → ⑤ チェックリストを完了。
+  // どこかで失敗したら、そこで止める（チェックリストだけ完了にはしない）
+  // ③ 本人に公開（ダウンロードできるようにする）。失敗したら例外で止まる（申請・チェックリストは変えない）
   await must(sb.from("gw_retire_docs").update({ published: true, published_at: now, published_by: user.id, updated_at: now })
     .eq("id", row.id).eq("tenant_id", ctx.tenantId).select("id").maybeSingle());
-  // 申請を発行済みに（同時に2人が押しても、1回だけ）
+  // ④ 申請を発行済みに（同時に2人が押しても、1回だけ）
   const decidedByName = ctx.employee?.display_name || null;
   const upd = await must(sb.from("gw_retire_cert_requests").update({
     status: "issued", decided_by: user.id, decided_by_name: decidedByName, decided_at: now, doc_id: row.id, updated_at: now,
   }).eq("id", reqRow.id).eq("tenant_id", ctx.tenantId).eq("status", "requested").select(REQ_FIELDS));
+  if (!(upd || []).length) {
+    // ほかの人が先に対応した（このとき発行した版は、記録に残す。チェックリストは変えない）
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "retire.issue", target: `employee:${emp.id}`,
+      detail: { docId: row.id, kind: "certificate", version: row.version, issuedNo: row.issued_no, requestId: reqRow.id, conflict: true } });
+    return json(res, 409, { error: "not_requested", hint: "この申請は、ほかの人が先に対応しました。画面を読み直してください" });
+  }
+  // ⑤ チェックリストの「退職証明書の交付」を完了（日時・対応者）
   const checked = await completeChecklist(sb, ctx, emp, user, now);
 
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: live?.state === "issued" ? "retire.reissue" : "retire.issue", target: `employee:${emp.id}`,
