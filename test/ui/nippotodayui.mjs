@@ -91,6 +91,8 @@ console.log("\n=== 今週の提出・勤怠（中村さん：今日 10/8 に提�
   console.log("\n=== 今日の日報（一覧・未提出・カード） ===");
   check((await page.locator("#tiles").innerText()).replace(/\s/g, "").includes("提出1/2"), "提出の数は名簿の人だけ（1/2。名簿に紐づかない日報は数えない）");
   const yet = await page.locator("#not-submitted").innerText();
+  const yetNames = (await page.locator("#not-submitted .kp-chip").allInnerTexts()).map((x) => x.trim());
+  check(JSON.stringify(yetNames) === JSON.stringify(["別アカウント 太郎"]), `未提出の一覧は「別アカウント 太郎」だけ（${yetNames.join("・")}）`);
   check(!yet.includes(NK.NAKAMURA.display_name), "未提出の一覧に中村さんは出ない");
   check(yet.includes("別アカウント 太郎"), "別の user_id で書いた人は未提出のまま（名前では寄せない）");
   const ov = page.locator("#overview tr", { hasText: NK.NAKAMURA.display_name });
