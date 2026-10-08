@@ -85,7 +85,7 @@ const ONE = {
     groups: [
       { role: "hr", label: "人事", done: 3, total: 3, items: [
         { id: "i1", title: "労働条件・契約の確認", owner: "hr", ownerLabel: "人事",
-          phase: "prep", done: true, completedAt: "2026-09-20T00:00:00Z",
+          phase: "prep", done: true, completedAt: "2026-09-20T00:00:00Z", completedByName: "事務 花子",
           assignee: { id: "e9", name: "事務 花子" }, href: "admin-contracts.html" },
         { id: "i2", title: "必要書類の回収", owner: "hr", ownerLabel: "人事",
           phase: "prep", done: true, assignee: { id: "e9", name: "事務 花子" }, href: null },
@@ -234,7 +234,7 @@ console.log("\n— 詳細（入退社 → 対象者 → チェックリスト）
   });
   check(!hidden, "見出しがバーの裏に隠れない");
 
-  // いちばん上は「次にやること」
+  // 2026-10-08：いちばん上はチェックリスト（次にやることは、その下）
   const now = page.locator(".hr-now");
   check(await now.isVisible(), "「次にやること」が出る");
   const nowText = await now.innerText();
@@ -242,14 +242,13 @@ console.log("\n— 詳細（入退社 → 対象者 → チェックリスト）
   check(/IT・管理：会社PCの準備/.test(nowText), "誰が・何を");
   check(/情報 次郎/.test(nowText), "担当者の名前");
 
-  // 本文の並び順。次にやることが、チェックリストより上
+  // 本文の並び順。チェックリストが、次にやることより上（画面を開いてすぐ作業に取りかかれる）
   const order = await page.evaluate(() => {
-    const c = document.querySelector("#hr-detail .card");
-    const kids = [...c.children].map((n) => n.className);
-    return { now: kids.findIndex((k) => /hr-now/.test(k)),
-             grp: kids.findIndex((k) => /hr-grp/.test(k)) };
+    const a = document.querySelector("#hr-checklist"), b = document.querySelector(".hr-now");
+    return Boolean(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
   });
-  check(order.now >= 0 && order.now < order.grp, "「次にやること」がリストより上");
+  check(order, "チェックリストが「次にやること」より上");
+  check((await page.locator(".hx-band").innerText()).includes("入社手続き") && await page.locator(".hx.on").count() === 1, "入社手続きと分かる帯（入社の色）");
 
   const groups = (await page.locator(".hr-grp > .h b").allInnerTexts()).map((s) => s.trim());
   check(groups.join("・") === "人事・IT・管理・上長・経理", `担当別（いま ${groups.join("・")}）`);
@@ -259,17 +258,22 @@ console.log("\n— 詳細（入退社 → 対象者 → チェックリスト）
   check(/情報 次郎/.test(it), "担当者の名前");
 
   // 終わったものは見た目で分かる
-  const doneRows = await page.locator(".hr-row.done").count();
+  const doneRows = await page.locator(".hx-item.done").count();
   check(doneRows === 7, `終わったものに印（いま ${doneRows}）`);
 
   // 別の画面でやる作業には、行き先が出る
-  const agentRow = page.locator(".hr-row", { hasText: "EIGHT Agent の設定" });
-  check(await agentRow.locator("a.go").getAttribute("href") === "admin-devices.html",
+  const agentRow = page.locator(".hx-item", { hasText: "EIGHT Agent の設定" });
+  await agentRow.locator(".hx-t").click();
+  check(await agentRow.locator(".hx-panel").isVisible(), "項目を押すと、その下に作業の場所が開く");
+  check(await agentRow.locator(".hx-panel a", { hasText: "端末管理を開く" }).getAttribute("href") === "admin-devices.html",
     "EIGHT Agent は端末管理へ飛べる");
 
-  // 初日ぶんは、そう分かる
-  const d1 = await page.locator(".hr-row", { hasText: "初日の予定の登録" }).innerText();
-  check(/初日/.test(d1), "初日にやるものが分かる");
+  // 予定日ではなく、チェックした日（と人）を出す
+  const d1 = await page.locator(".hx-item", { hasText: "労働条件・契約の確認" }).locator('[data-role="done-at"]').innerText();
+  check(/9\/20 完了・事務 花子/.test(d1), `チェックした日と人（${d1}）`);
+  check(await page.locator(".hx-item", { hasText: "初日の予定の登録" }).locator(".ph").count() === 0, "予定の段階の札は出さない");
+  // 初めに開いているのは、上から最初の未完了（会社PCの準備）
+  check(await page.locator('.hx-item.open', { hasText: "会社PCの準備" }).count() === 1, "上から最初の未完了の項目が開いている");
 
   // 担当が決まっていないものは、そう出す
   const noone = await page.locator(".hr-grp").nth(2).innerText();
@@ -281,7 +285,7 @@ console.log("\n— 詳細（入退社 → 対象者 → チェックリスト）
 console.log("\n— チェックを付ける —");
 {
   const before = sent.length;
-  await page.locator(".hr-row", { hasText: "会社PCの準備" }).locator("input").check();
+  await page.locator(".hx-item", { hasText: "会社PCの準備" }).locator('input[type="checkbox"]').check();
   await page.waitForTimeout(600);
   const p = sent.slice(before).find((x) => x.m === "PATCH");
   check(Boolean(p), "サーバへ送る");

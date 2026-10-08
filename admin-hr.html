@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261008rec2">
-  <link rel="stylesheet" href="css/layout.css?v=20261008rec2">
+  <link rel="stylesheet" href="css/app.css?v=20261008rec3">
+  <link rel="stylesheet" href="css/layout.css?v=20261008rec3">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -203,6 +203,77 @@
       .rc-form { grid-template-columns:1fr; }
     }
 
+    /* 入退社の1人ぶん（2026-10-08 タスク指向に作り直し）。入社・退社で同じ並び：
+       警告 → 全体の進み具合（ステップ）→ チェックリスト（押すとその場で操作できる）→ 次にやること → タブ（基本情報など）。
+       入社は青、退社は橙で、いまどちらを触っているかを分ける（色・フォントは既存のものだけ） */
+    .hx { border-top:4px solid #2f6fd6; }
+    .hx.off { border-top-color:#c2702a; }
+    .hx-band { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 12px 3px 9px;
+               font-size:12.5px; font-weight:700; background:#e8effd; color:#2c4f9e; margin:0 0 8px; }
+    .hx.off .hx-band { background:#fff3e0; color:#9c4221; }
+    .hx-band .material-symbols-outlined { font-size:17px; }
+    .hx-alert { display:flex; gap:10px; align-items:flex-start; background:#fdecec; border:1px solid #f2c2c2; color:#a12a2a;
+                border-radius:10px; padding:10px 14px; margin:12px 0 0; font-size:13.5px; font-weight:700; line-height:1.6; }
+    .hx-alert .material-symbols-outlined { font-size:20px; flex:0 0 auto; }
+    .hx-alert ul { margin:4px 0 0; padding-left:18px; font-weight:500; font-size:12.5px; }
+    .hx-steps { display:flex; list-style:none; padding:0; margin:14px 0 0; gap:2px; }
+    .hx-steps li { flex:1 1 0; min-width:0; padding:7px 8px 7px 16px; font-size:12px; font-weight:600; line-height:1.4;
+                   color:var(--muted); background:#f1f1ec; overflow-wrap:anywhere;
+                   clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%); }
+    .hx-steps li:first-child { padding-left:10px; clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); }
+    .hx-steps li .n { font-variant-numeric:tabular-nums; margin-right:3px; }
+    .hx-steps li.done { background:#e8f5ec; color:#256b36; }
+    .hx-steps li.na { opacity:.6; }
+    .hx-steps li.current { background:#2f6fd6; color:#fff; }
+    .hx.off .hx-steps li.current { background:#c2702a; }
+    .hx-next { margin:14px 0 0; }
+    .hx-next .rc-next { flex-direction:row; flex-wrap:wrap; }
+    .hx-next .rc-next button { padding:6px 10px; font-size:12.5px; }
+    .hx-next .k { font-size:11.5px; color:var(--muted); font-weight:600; margin:0 0 5px; }
+    .hx-check { margin:16px 0 0; }
+    .hx-check > h3 { font-size:15px; margin:0 0 8px; color:var(--primary-dark); display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+    .hx-check > h3 .sub { font-size:11.5px; color:var(--muted); font-weight:400; }
+    .hx-grp { margin:0 0 12px; }
+    .hx-grp > .h { display:flex; align-items:baseline; gap:9px; margin:0 0 6px; font-size:12.5px; }
+    .hx-grp > .h b { color:var(--primary-dark); }
+    .hx-grp > .h .n { color:var(--muted); font-variant-numeric:tabular-nums; }
+    .hx-item { border:1px solid var(--border); border-radius:10px; margin:0 0 6px; background:#fff; min-width:0; }
+    .hx-item.done { background:#f7fbf8; border-color:#b7e0c4; }
+    .hx-item.open { border-color:#9fb8e8; box-shadow:0 0 0 2px #e8effd; }
+    .hx.off .hx-item.open { border-color:#e5b98c; box-shadow:0 0 0 2px #fff3e0; }
+    .hx-row { display:flex; align-items:center; gap:10px; padding:6px 10px 6px 12px; min-width:0; }
+    .hx-row input[type="checkbox"] { width:18px; height:18px; margin:0; flex:0 0 auto; cursor:pointer; }
+    .hx-row .hx-t { flex:1; min-width:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; text-align:left;
+                    background:none; border:0; padding:6px 0; font:inherit; font-size:13.5px; font-weight:600; color:inherit; cursor:pointer; }
+    .hx-row .hx-t .tt { overflow-wrap:anywhere; }
+    .hx-item.done .hx-t .tt { color:var(--muted); font-weight:500; text-decoration:line-through; }
+    .hx-row .who { font-size:11.5px; color:var(--muted); font-weight:400; }
+    .hx-row .at { font-size:11.5px; color:#256b36; font-weight:700; white-space:nowrap; }
+    .hx-row .chev { font-size:20px; color:var(--muted); flex:0 0 auto; transition:transform .15s; }
+    .hx-item.open .chev { transform:rotate(180deg); }
+    .hx-panel { border-top:1px solid var(--border); padding:12px 14px; background:#fbfbf8; border-radius:0 0 10px 10px; min-width:0; }
+    .hx-panel .rc-sec { border:0; padding:0; background:transparent; margin:0 0 12px; }
+    .hx-panel .rc-sec:last-child { margin-bottom:0; }
+    .hx-panel .rc-sec.hl { box-shadow:0 0 0 2px #dbe6fb; border-radius:8px; }
+    .hx-panel .hr-ln { margin:0 0 12px; }
+    .hx-panel .lead { font-size:12.5px; color:var(--muted); line-height:1.7; margin:0 0 8px; }
+    .hx-foot { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; padding-top:10px; border-top:1px dashed var(--border); }
+    .hx-x .hx-row { padding-left:14px; }
+    .hx-tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin:18px 0 0; overflow-x:auto; }
+    .hx-tabs button { border:0; background:none; font:inherit; font-size:13px; font-weight:600; color:var(--muted);
+                      padding:9px 12px; border-bottom:3px solid transparent; cursor:pointer; white-space:nowrap; }
+    .hx-tabs button[aria-selected="true"] { color:var(--primary-dark); border-bottom-color:#2f6fd6; }
+    .hx.off .hx-tabs button[aria-selected="true"] { border-bottom-color:#c2702a; }
+    .hx-pane { padding:14px 0 0; min-width:0; }
+    .hx-pane > .rc-sec { margin:0 0 10px; }
+    @media (max-width:600px) {
+      .hx-steps { flex-wrap:wrap; gap:4px; }
+      .hx-steps li, .hx-steps li:first-child { flex:1 1 40%; clip-path:none; border-radius:8px; padding:6px 8px; font-size:11.5px; }
+      .hx-row { flex-wrap:wrap; }
+      .hx-row .hx-t { flex-basis:calc(100% - 64px); }
+      .hx-panel { padding:10px; }
+    }
+
     /* 書類の保管先。毎回触るものではないので畳んでおく */
     .hr-drive { margin-top:6px; border-top:1px solid var(--border); padding-top:12px; }
     .hr-drive summary { cursor:pointer; font-size:12.5px; color:var(--muted); }
@@ -294,8 +365,8 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261008rec2"></script>
-<script src="js/layout.js?v=20261008rec2"></script>
+<script src="js/api-client.js?v=20261008rec3"></script>
+<script src="js/layout.js?v=20261008rec3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -492,6 +563,202 @@
     catch (e) { say(e.hint || e.message || "変えられませんでした", true); }
   }
 
+  // ---- 1人ぶん（入社・退社で同じ並び。2026-10-08 タスク指向） --------------------------------
+  //   警告 → 全体の進み具合（ステップ）→ チェックリスト → 次にやること（データから）→ タブ（基本情報ほか）
+  //   チェックリストの各項目を押すと、その下に「その作業をする場所」が開く（下の欄までスクロールしない）。
+  //   チェックした日と、チェックした人を項目の横に出す（予定日ではなく、終わった日の証跡）。
+  //   項目と作業の場所の結びつき：まず項目の鍵、なければ見出しの言葉。どれにも結びつかない作業は「そのほかの作業」に出す
+  //   （作業の場所が画面から消えることは無い）
+  const HX_OFF_SECTIONS = [
+    { key: "basic",       label: "退職日・担当者",       keys: ["off_hr_date"],   kw: /退職日/ },
+    { key: "cert",        label: "退職証明書の申請",     keys: ["off_hr_cert"],   kw: /証明書/ },
+    { key: "docs",        label: "退職書類・本人対応",   keys: ["off_hr_docs"],   kw: /書類/ },
+    { key: "assets",      label: "貸与品の返却",         keys: ["off_it_pc"],     kw: /PC|返却|貸与/ },
+    { key: "acct-google", label: "Google Workspace",     keys: ["off_it_mail"],   kw: /メール|Google/, services: ["google"] },
+    { key: "acct-slack",  label: "Slack",                keys: ["off_it_slack"],  kw: /Slack/i, services: ["slack"] },
+    { key: "acct-gw",     label: "グループウェアほか",   keys: ["off_it_gw"],     kw: /グループウェア/, services: ["groupware", "lms", "timecard", "accounting"] },
+    { key: "acct-dev",    label: "GitHub・Vercel",       keys: ["off_it_perm"],   kw: /権限|GitHub|Vercel/, services: ["github", "vercel"] },
+  ];
+  const HX_ON_SECTIONS = [
+    { key: "terms",  label: "労働条件通知書・契約書",   keys: ["on_hr_terms"], kw: /労働条件|契約/ },
+    { key: "intake", label: "本人の提出・マイナンバー", keys: ["on_hr_docs"],  kw: /書類|提出/ },
+    { key: "pay",    label: "MF給与の取込",             keys: ["on_fin_pay"],  kw: /給与/ },
+  ];
+  // 退社の全体の流れ（5つ）。どの項目がどこに入るかは、鍵 → 担当の順で決める
+  const HX_OFF_STEPS = [
+    { key: "agree", label: "退職合意" },
+    { key: "stop",  label: "アカウント停止・貸与品回収" },
+    { key: "pay",   label: "最終給与・精算" },
+    { key: "docs",  label: "書類発行" },
+    { key: "done",  label: "完了" },
+  ];
+  const hxOffStepOf = (i) => {
+    if (i.key === "off_hr_docs" || i.key === "off_hr_cert") return "docs";
+    if (/^off_it_/.test(i.key || "")) return "stop";
+    if (/^off_fin_/.test(i.key || "")) return "pay";
+    if (/^off_(hr|mgr)_/.test(i.key || "")) return "agree";
+    return { it: "stop", finance: "pay", labor_advisor: "docs", employee: "docs" }[i.owner] || "agree";
+  };
+  // 項目ごとの案内（作業の場所が画面の外にある項目）。無い項目は共通の案内
+  const HX_LEAD = {
+    off_hr_handover: "引継ぎ資料・担当の引き渡しが済んだかを確認します。",
+    off_mgr_handover: "担当していた業務・案件を、引き継ぐ人に渡します。",
+    off_mgr_data: "個人のドライブ・案件のデータが会社側に残っているかを確認します。",
+    off_it_agent: "端末の利用を止め、手元に戻らない端末は削除まで進めます。",
+    off_fin_expense: "未精算の経費が残っていないかを確認します。",
+    off_fin_pay: "最終給与・精算額を確認します（金額の決定は経営者）。",
+    on_hr_rules: "就業規則・社内ルールを本人と確認します。",
+    on_it_pc: "会社PCを用意し、貸与品の台帳に登録します。",
+    on_it_agent: "会社PCに EIGHT Agent を入れて、端末を登録します。",
+    on_it_perm: "業務で使うシステムの権限を付けます（メンバー一覧の権限）。",
+    on_mgr_work: "担当業務・最初の目標を設定します。",
+    on_mgr_orient: "オリエンテーションを行います（教材はこの画面の下の「オリエンテーション」）。",
+  };
+  const HX_LINK_LABEL = {
+    "admin-contracts.html": "雇用契約を開く", "admin-devices.html": "端末管理を開く", "admin-members.html#roles": "権限を開く",
+    "admin-members.html": "メンバーを開く", "admin-goals.html": "今週のゴールを開く", "admin-expenses.html": "経費精算を開く",
+  };
+  const HX_SECTIONS = (p) => (p.kind === "offboarding" ? HX_OFF_SECTIONS : HX_ON_SECTIONS);
+  let hxState = { id: null, open: new Set(), tab: "basic", auto: true };
+  // 退職手続きのデータは、いま開いている人のものだけを使う（前に開いた人のものを混ぜない）
+  const rcFor = (p) => (rcData && rcData.employee?.id === p.employeeId ? rcData : null);
+  let hxProc = null;
+
+  /** 作業の場所（セクション）を、チェックリストの項目に結びつける。結びつかないものは extras */
+  function hxAssign(p) {
+    const items = p.groups.flatMap((g) => g.items);
+    const by = new Map(items.map((i) => [i.id, []]));
+    const extras = [];
+    for (const s of HX_SECTIONS(p)) {
+      const hit = items.find((i) => s.keys.includes(i.key)) || items.find((i) => s.kw.test(i.title || ""));
+      if (hit) by.get(hit.id).push(s); else extras.push(s);
+    }
+    return { items, by, extras };
+  }
+
+  function hxStepsOf(p) {
+    if (p.kind === "onboarding" && p.flow) {
+      return p.flow.steps.map((s) => ({ key: s.key, label: s.label, state: s.state }));
+    }
+    if (p.kind === "onboarding") {
+      const order = ["planned", "prep", "day1", "done"];
+      const names = { planned: "入社予定", prep: "入社準備", day1: "初日対応", done: "完了" };
+      const at = order.indexOf(p.phase);
+      return order.map((k, i) => ({ key: k, label: names[k], state: i < at ? "done" : i === at ? "current" : "todo" }));
+    }
+    const items = p.groups.flatMap((g) => g.items);
+    const pend = (rcFor(p)?.next || []).map((n) => n.key);
+    const open = (k) => items.some((i) => !i.done && hxOffStepOf(i) === k)
+      || (k === "stop" && pend.some((x) => /^(acct|asset):/.test(x)))
+      || (k === "docs" && (pend.some((x) => /^doc:/.test(x)) || rcFor(p)?.certRequest?.status === "requested"))
+      || (k === "agree" && pend.includes("left_on"));
+    let cur = null;
+    return HX_OFF_STEPS.map((s) => {
+      const done = s.key === "done" ? !cur : !open(s.key);
+      const state = done ? "done" : cur ? "todo" : (cur = s.key, "current");
+      return { ...s, state: s.key === "done" && !cur ? "current" : state };
+    });
+  }
+  function hxStepsHtml(p) {
+    return hxStepsOf(p).map((s, i) => `<li class="${esc(s.state)}" data-step="${esc(s.key)}"${s.state === "current" ? ' aria-current="step"' : ""}>
+      <span class="n">${i + 1}.</span>${esc(s.label)}</li>`).join("");
+  }
+
+  /** 期限超過・遅れ（いちばん上に赤い帯で） */
+  function hxAlertHtml(p) {
+    const what = p.kind === "offboarding" ? "退社" : "入社";
+    const rest = p.progress.total - p.progress.done;
+    const lines = [];
+    if (p.urgency === "late" && rest > 0) lines.push(`${what}日を過ぎていますが、未完了の作業が ${rest} 件あります（${p.due}）`);
+    if (p.kind === "onboarding" && p.flow?.next?.late) lines.push(`期限を過ぎています：${p.flow.next.text}`);
+    const late = p.kind === "offboarding" ? (rcFor(p)?.next || []).filter((n) => n.late) : [];
+    if (!lines.length && !late.length) return "";
+    return `<div class="hx-alert" role="alert" data-role="hx-alert"><span class="material-symbols-outlined">warning</span><div>
+      ${lines.map((l) => `<div>${esc(l)}</div>`).join("")}
+      ${late.length ? `<ul>${late.map((n) => `<li>${esc(n.text)}</li>`).join("")}</ul>` : ""}</div></div>`;
+  }
+
+  function hxDone(i) {
+    if (!i.done) return i.assignee ? `<span class="who">担当 ${esc(i.assignee.name)}</span>` : "";
+    if (!i.completedAt) return `<span class="at">完了</span>`;
+    return `<span class="at" title="${esc(fmtFull(i.completedAt))}" data-role="done-at">${esc(fmt(i.completedAt))} 完了${i.completedByName ? `・${esc(i.completedByName)}` : ""}</span>`;
+  }
+
+  /** 項目の下に開く中身。作業の場所（セクション）＋行き先＋完了にする */
+  function hxPanelHtml(p, i, secs) {
+    const lead = HX_LEAD[i.key] || (!secs.length && !i.href ? "この作業はグループウェアの外で行います。終わったら「完了にする」を押してください。" : "");
+    return `
+      ${lead ? `<p class="lead">${esc(lead)}</p>` : ""}
+      ${secs.map((s) => `<div data-sec="${esc(s.key)}">${hxSecHtml(p, s)}</div>`).join("")}
+      <div class="hx-foot">
+        ${i.href ? `<a class="btn btn-secondary btn-sm" href="${esc(i.href)}">${esc(HX_LINK_LABEL[i.href] || "この作業の画面を開く")}</a>` : ""}
+        <button type="button" class="btn ${i.done ? "btn-secondary" : "btn-primary"} btn-sm" data-act="done"
+          onclick="hxMark('${esc(p.id)}','${esc(i.id)}', ${i.done ? "false" : "true"}, this)">${i.done ? "未完了に戻す" : "完了にする"}</button>
+      </div>`;
+  }
+
+  /** 作業の場所の中身。退社はデータ（rcData）を読んでから描く。入社は、その場で描く */
+  function hxSecHtml(p, s) {
+    if (p.kind === "offboarding") {
+      if (!rcFor(p)) return `<div class="muted" style="font-size:13px;">読み込み中…</div>`;
+      if (s.key === "basic") return rcBasicHtml();
+      if (s.key === "docs") return rcDocsHtml() + rcSelfHtml();
+      if (s.key === "cert") return rcCertHtml();
+      if (s.key === "assets") return rcAssetsHtml();
+      if (s.services) return rcAccountsHtml(s);
+      return "";
+    }
+    if (s.key === "terms") return `<div class="hr-ln" id="labor-notice" data-employee="${esc(p.employeeId)}" hidden></div>${p.flow ? obContractHtml(p) : ""}`;
+    if (s.key === "intake") return `
+      <section class="rc-sec" id="ob-intake"><h3>本人の提出</h3>
+        <div class="rc-acts">${p.flow ? obBtn(p, "review", false) : `<a class="btn btn-secondary btn-sm" href="onboarding.html?employeeId=${esc(p.employeeId)}">提出内容を確認</a>`}</div>
+        <div class="rc-acts" style="font-size:12.5px;">マイナンバー：
+          <select style="width:auto;margin:0;font-size:12.5px;" onchange="setMynumber('${esc(p.id)}', this)" aria-label="マイナンバーの進み具合">
+            ${MN_STATES.map(([k, l]) => `<option value="${k}" ${k === p.mynumber ? "selected" : ""}>${l}</option>`).join("")}
+          </select></div>
+        <p class="rc-note">番号は持ちません。社労士側で収集・管理します。</p>
+      </section>`;
+    if (s.key === "pay") return `
+      <section class="rc-sec" id="ob-pay"><h3>MF給与の取込</h3>
+        <div class="rc-acts"><button class="btn btn-secondary btn-sm" onclick="payroll('${esc(p.employeeId)}', this)">MF給与の取込CSV</button></div>
+        <p class="rc-note">本人が入れた内容から作ります。出したことは記録に残ります。</p>
+      </section>`;
+    return "";
+  }
+
+  function hxItemHtml(p, i, secs) {
+    const open = hxState.open.has(i.id);
+    return `<div class="hx-item${i.done ? " done" : ""}${open ? " open" : ""}" data-id="${esc(i.id)}" data-key="${esc(i.key || "")}">
+      <div class="hx-row">
+        <input type="checkbox" ${i.done ? "checked" : ""} aria-label="${esc(i.title)}を完了にする" onchange="toggle('${esc(p.id)}','${esc(i.id)}', this)">
+        <button type="button" class="hx-t" aria-expanded="${open}" aria-controls="hxp-${esc(i.id)}" onclick="hxToggle('${esc(i.id)}')">
+          <span class="tt">${esc(i.title)}</span>${hxDone(i)}<span data-hx-badge="${esc(secs.map((x) => x.key).join(" "))}"></span></button>
+        <span class="material-symbols-outlined chev" aria-hidden="true">expand_more</span>
+      </div>
+      <div class="hx-panel" id="hxp-${esc(i.id)}" ${open ? "" : "hidden"}>${hxPanelHtml(p, i, secs)}</div>
+    </div>`;
+  }
+
+  /** どれにも結びつかない作業の場所。チェックは無い（チェックリストの項目ではない） */
+  function hxExtraHtml(p, s) {
+    const id = `x-${s.key}`;
+    const open = hxState.open.has(id);
+    return `<div class="hx-item hx-x${open ? " open" : ""}" data-id="${esc(id)}" data-key="${esc(id)}">
+      <div class="hx-row">
+        <button type="button" class="hx-t" aria-expanded="${open}" aria-controls="hxp-${esc(id)}" onclick="hxToggle('${esc(id)}')">
+          <span class="tt">${esc(s.label)}</span><span data-hx-badge="${esc(s.key)}"></span></button>
+        <span class="material-symbols-outlined chev" aria-hidden="true">expand_more</span>
+      </div>
+      <div class="hx-panel" id="hxp-${esc(id)}" ${open ? "" : "hidden"}><div data-sec="${esc(s.key)}">${hxSecHtml(p, s)}</div></div>
+    </div>`;
+  }
+
+  function hxTabsOf(p) {
+    return p.kind === "offboarding"
+      ? [["basic", "基本情報"], ["contact", "連絡"], ["history", "手続き履歴"], ["drive", "書類の保管先"]]
+      : [["basic", "基本情報"], ...(p.flow ? [["flow", "手続きの進み具合"]] : []), ["drive", "書類の保管先"]];
+  }
+
   async function showDetail(id) {
     openId = id;
     let d;
@@ -502,11 +769,20 @@
       return;
     }
     const p = d.procedure;
-    const pct = p.progress.total ? Math.round(p.progress.done / p.progress.total * 100) : 0;
-    const next = p.groups.flatMap((g) => g.items).find((i) => !i.done);
+    hxProc = p;
+    const first = hxState.id !== id;
+    if (first) hxState = { id, open: new Set(), tab: "basic", auto: true };
+    const { items, by, extras } = hxAssign(p);
+    // 初めて開いたときは、上から最初の未完了の項目を開いておく（上から順にこなせば終わる）
+    if (hxState.auto) { const n = items.find((i) => !i.done); if (n) hxState.open.add(n.id); hxState.auto = false; }
+    const off = p.kind === "offboarding";
+    const tabs = hxTabsOf(p);
+    if (!tabs.some(([k]) => k === hxState.tab)) hxState.tab = "basic";
+    const next = items.find((i) => !i.done);
 
     el("hr-detail").innerHTML = `
-      <div class="card">
+      <div class="card hx ${off ? "off" : "on"}" data-kind="${esc(p.kind)}">
+        <div class="hx-band" data-role="hx-kind"><span class="material-symbols-outlined">${off ? "logout" : "login"}</span>${off ? "退社手続き" : "入社手続き"}</div>
         <div class="hr-head">
           <div class="who">
             <div class="nm">${esc(p.name)}</div>
@@ -514,135 +790,140 @@
               ${esc(onDay(p))}
               ・<span class="hr-ph ${esc(p.phase)}">${esc(p.phaseLabel)}</span>
               ・${p.progress.done}/${p.progress.total} 完了
-              ${p.days != null
-                ? `<span class="hr-due ${esc(p.urgency)}"
-                     style="margin-left:8px;">${esc(p.due)}</span>` : ""}
+              ${p.days != null ? `<span class="hr-due ${esc(p.urgency)}" style="margin-left:8px;">${esc(p.due)}</span>` : ""}
             </div>
-            ${p.kind === "onboarding" ? `
-            <div class="meta" style="margin-top:6px;">
-              マイナンバー：
-              <select style="width:auto;margin:0;font-size:12.5px;" onchange="setMynumber('${esc(p.id)}', this)">
-                ${MN_STATES.map(([k, l]) => `<option value="${k}" ${k === p.mynumber ? "selected" : ""}>${l}</option>`).join("")}
-              </select>
-              <span class="muted" style="font-size:11.5px;">番号は持ちません。社労士側で収集・管理します</span>
-            </div>` : ""}
           </div>
           <div class="ops">
-            ${p.kind === "onboarding" ? `
-            <a class="btn btn-secondary btn-sm" href="onboarding.html?employeeId=${esc(p.employeeId)}"
-               target="_blank" rel="noopener">
-              本人・社労士と同じ画面を開く</a>` : ""}
-            ${p.kind === "offboarding"
-              ? ""
-              : `<button class="btn btn-secondary btn-sm" onclick="editDate('${esc(p.id)}','${esc(p.targetOn || "")}')">
-              日付を変える</button>`}
-            <button class="btn btn-secondary btn-sm" onclick="remind('${esc(p.id)}', this)">
-              もう一度知らせる</button>
-            ${p.kind === "onboarding" ? `
-            <button class="btn btn-secondary btn-sm" onclick="payroll('${esc(p.employeeId)}', this)">
-              MF給与の取込CSV</button>` : ""}
+            ${!off ? `<a class="btn btn-secondary btn-sm" href="onboarding.html?employeeId=${esc(p.employeeId)}" target="_blank" rel="noopener">本人・社労士と同じ画面を開く</a>
+            <button class="btn btn-secondary btn-sm" onclick="editDate('${esc(p.id)}','${esc(p.targetOn || "")}')">日付を変える</button>` : ""}
+            <button class="btn btn-secondary btn-sm" onclick="remind('${esc(p.id)}', this)">もう一度知らせる</button>
             <button class="btn btn-secondary btn-sm" onclick="closeDetail()">閉じる</button>
           </div>
         </div>
-
-        ${p.kind === "onboarding" && p.flow ? obFlowHtml(p) : ""}
-        ${p.kind === "offboarding" || p.flow ? "" : `
-        <div class="hr-now ${next ? "" : "done"}">
-          <div class="k">次にやること</div>
-          ${next
-            ? `<div class="t">${esc(next.ownerLabel)}：${esc(next.title)}</div>
-               <div class="w">${next.assignee ? esc(next.assignee.name) : "担当が決まっていません"}
-                 ${next.href ? `　<a href="${esc(next.href)}">この画面で行う</a>` : ""}</div>`
-            : `<div class="t">すべて終わりました</div>`}
-        </div>`}
-
         <div id="hr-date"></div>
+        ${off ? `<div id="rc-bar-slot"></div>` : ""}
+        <div ${off ? `class="rc" id="rc" data-employee="${esc(p.employeeId)}"` : `id="ob"`}>
+          ${off ? `<div id="rc-banner"></div>` : ""}
+          <div id="hx-alert">${hxAlertHtml(p)}</div>
+          <ol class="hx-steps" id="hx-steps" aria-label="手続き全体の進み具合">${hxStepsHtml(p)}</ol>
+          <section class="hx-check" id="hr-checklist" aria-label="チェックリスト">
+            <h3>チェックリスト <span class="sub">${p.progress.done}/${p.progress.total} 完了・項目を押すと、その場で作業できます。チェックした日と人が残ります</span></h3>
+            ${p.groups.map((g) => `
+              <div class="hx-grp hr-grp">
+                <div class="h"><b>${esc(g.label)}</b><span class="n">${g.done}/${g.total}</span></div>
+                ${g.items.map((i) => hxItemHtml(p, i, by.get(i.id) || [])).join("")}
+              </div>`).join("")}
+            ${extras.length ? `<div class="hx-grp" data-role="hx-extras"><div class="h"><b>そのほかの作業</b></div>
+              ${extras.map((s) => hxExtraHtml(p, s)).join("")}</div>` : ""}
+          </section>
 
-        ${p.kind === "offboarding" ? `
-        <!-- 退職手続き：1人の退職を1画面で（api/employees/retire-case.js）。下に、これまでのチェックリスト -->
-        <div class="rc" id="rc" data-employee="${esc(p.employeeId)}"><div class="muted" style="font-size:13px;">退職手続きを読み込み中…</div></div>
-        <h3 class="rc-checkh">チェックリスト（人事・社労士・本人）</h3>` : ""}
+          <div class="hx-next" data-role="hx-next">${off
+            ? `<div class="k">データから見た残りの作業（押すと、その作業の場所が開きます）</div><div class="rc-next" id="rc-next"><div class="muted" style="font-size:12.5px;">読み込み中…</div></div>`
+            : p.flow ? obNextHtml(p)
+            : `<div class="hr-now ${next ? "" : "done"}"><div class="k">次にやること</div>
+                ${next ? `<div class="t">${esc(next.ownerLabel)}：${esc(next.title)}</div>
+                  <div class="w">${next.assignee ? esc(next.assignee.name) : "担当が決まっていません"}</div>`
+                  : `<div class="t">すべて終わりました</div>`}</div>`}</div>
 
-        ${p.kind === "onboarding" ? `<div class="hr-ln" id="labor-notice" data-employee="${esc(p.employeeId)}" hidden></div>` : ""}
-        ${p.kind === "onboarding" && p.flow ? `<h3 class="rc-checkh" id="hr-checklist">チェックリスト（人事・社労士・本人）</h3>` : ""}
-
-        ${p.groups.map((g) => `
-          <div class="hr-grp">
-            <div class="h">
-              <b>${esc(g.label)}</b>
-              <span class="n">${g.done}/${g.total}</span>
-              ${g.items[0]?.assignee ? `<span class="who">${esc(g.items[0].assignee.name)}</span>` : ""}
-            </div>
-            ${g.items.map((i) => `
-              <label class="hr-row ${i.done ? "done" : ""}">
-                <input type="checkbox" ${i.done ? "checked" : ""}
-                       onchange="toggle('${esc(p.id)}','${esc(i.id)}', this)">
-                <span class="t">${esc(i.title)}</span>
-                ${i.phase === "day1" ? '<span class="ph">初日</span>'
-                  : i.phase === "lastday" ? '<span class="ph">退社日</span>' : ""}
-                ${i.href ? `<a class="go" href="${esc(i.href)}"
-                   onclick="event.stopPropagation()">開く</a>` : ""}
-                ${i.done && i.completedAt
-                  ? `<span class="at">${esc(fmt(i.completedAt))}</span>` : ""}
-              </label>`).join("")}
-          </div>`).join("")}
-
-        <!-- 書類の保管先。
-             毎回触るものではないので畳んでおく。
-             ここを消すと、個人フォルダを作る場所も、社労士に渡す場所も
-             どこにも無くなる -->
-        <details class="hr-drive">
-          <summary>書類の保管先（Googleドライブ）</summary>
-          <div class="in">
-            ${p.drive?.link
-              ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive.link)}"
-                   target="_blank" rel="noopener">フォルダを開く</a>`
-              : `<button class="btn btn-secondary btn-sm"
-                   onclick="makeFolder('${esc(p.id)}', this)">個人フォルダ一式を作る</button>`}
-            <div class="row">
-              <input type="text" id="dv-url" placeholder="ドライブのフォルダURLを貼る"
-                     style="margin:0;">
-              <button class="btn btn-secondary btn-sm" onclick="setFolder('${esc(p.id)}', this)">
-                貼る</button>
-            </div>
-            <div class="row">
-              <input type="email" id="dv-sr" placeholder="社労士のメールアドレス"
-                     value="${esc(p.drive?.advisor || "")}" style="margin:0;">
-              <button class="btn btn-secondary btn-sm" onclick="shareSr('${esc(p.id)}', this)">
-                社会保険のフォルダだけ共有</button>
-            </div>
-            ${p.drive?.advisorAt
-              ? `<div class="note">${esc(fmt(p.drive.advisorAt))} に
-                   ${esc(p.drive.advisor)} へ共有済み</div>` : ""}
+          <div class="hx-tabs" role="tablist" aria-label="${off ? "退社" : "入社"}の情報">
+            ${tabs.map(([k, l]) => `<button type="button" role="tab" id="hxt-${k}" data-tab="${k}" aria-controls="hx-pane-${k}"
+              aria-selected="${hxState.tab === k}" onclick="hxTab('${k}')">${l}</button>`).join("")}
           </div>
-        </details>
+          <div class="hx-pane" role="tabpanel" id="hx-pane-basic" data-pane="basic" ${hxState.tab === "basic" ? "" : "hidden"}>${off ? `<div id="rc-basic-ro"><div class="muted" style="font-size:13px;">読み込み中…</div></div>` : obBasicHtml(p)}</div>
+          ${off ? `
+          <div class="hx-pane" role="tabpanel" id="hx-pane-contact" data-pane="contact" ${hxState.tab === "contact" ? "" : "hidden"}><div id="rc-contact-slot"></div></div>
+          <div class="hx-pane" role="tabpanel" id="hx-pane-history" data-pane="history" ${hxState.tab === "history" ? "" : "hidden"}><div id="rc-history-slot"></div></div>`
+          : p.flow ? `<div class="hx-pane" role="tabpanel" id="hx-pane-flow" data-pane="flow" ${hxState.tab === "flow" ? "" : "hidden"}>${obFlowTableHtml(p)}</div>` : ""}
+          <div class="hx-pane" role="tabpanel" id="hx-pane-drive" data-pane="drive" ${hxState.tab === "drive" ? "" : "hidden"}>${hxDriveHtml(p)}</div>
+        </div>
       </div>`;
-    if (p.kind === "onboarding") loadNotice(p.employeeId);
-    if (p.kind === "offboarding") loadRetireCase(p.employeeId);
-    // 上のバーは画面に固定されている。そのぶん引いてから寄せないと、
-    // 押した直後に、いちばん見たい氏名と期日がバーの裏に隠れる
-    const top = el("hr-detail").getBoundingClientRect().top + window.scrollY;
-    const bar = document.querySelector(".topbar")?.offsetHeight || 0;
-    window.scrollTo({ top: Math.max(0, top - bar - 12), behavior: "smooth" });
+    if (!off) loadNotice(p.employeeId);
+    if (off) { if (rcFor(p)) renderRetireCase(); loadRetireCase(p.employeeId); }
+    if (first) {
+      // 上のバーは画面に固定されている。そのぶん引いてから寄せないと、
+      // 押した直後に、いちばん見たい氏名と期日がバーの裏に隠れる
+      const top = el("hr-detail").getBoundingClientRect().top + window.scrollY;
+      const bar = document.querySelector(".topbar")?.offsetHeight || 0;
+      window.scrollTo({ top: Math.max(0, top - bar - 12), behavior: "smooth" });
+    }
+  }
+
+  /** 書類の保管先（Googleドライブ）。毎回触るものではないので、タブの1つに */
+  function hxDriveHtml(p) {
+    return `<div class="hr-drive" style="margin:0;border:0;padding:0;"><div class="in" style="margin:0;">
+      ${p.drive?.link
+        ? `<a class="btn btn-secondary btn-sm" href="${esc(p.drive.link)}" target="_blank" rel="noopener">フォルダを開く</a>`
+        : `<button class="btn btn-secondary btn-sm" onclick="makeFolder('${esc(p.id)}', this)">個人フォルダ一式を作る</button>`}
+      <div class="row">
+        <input type="text" id="dv-url" placeholder="ドライブのフォルダURLを貼る" style="margin:0;">
+        <button class="btn btn-secondary btn-sm" onclick="setFolder('${esc(p.id)}', this)">貼る</button>
+      </div>
+      <div class="row">
+        <input type="email" id="dv-sr" placeholder="社労士のメールアドレス" value="${esc(p.drive?.advisor || "")}" style="margin:0;">
+        <button class="btn btn-secondary btn-sm" onclick="shareSr('${esc(p.id)}', this)">社会保険のフォルダだけ共有</button>
+      </div>
+      ${p.drive?.advisorAt ? `<div class="note">${esc(fmt(p.drive.advisorAt))} に ${esc(p.drive.advisor)} へ共有済み</div>` : ""}
+    </div></div>`;
+  }
+
+  function hxToggle(itemId) {
+    const box = document.querySelector(`.hx-item[data-id="${CSS.escape(itemId)}"]`);
+    if (!box) return;
+    const open = !hxState.open.has(itemId);
+    if (open) hxState.open.add(itemId); else hxState.open.delete(itemId);
+    box.classList.toggle("open", open);
+    box.querySelector(".hx-panel").hidden = !open;
+    box.querySelector(".hx-t").setAttribute("aria-expanded", String(open));
+  }
+
+  function hxTab(name) {
+    hxState.tab = name;
+    document.querySelectorAll(".hx-tabs [role=tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+    document.querySelectorAll(".hx-pane").forEach((n) => { n.hidden = n.dataset.pane !== name; });
+  }
+
+  /** ある要素が見えるように、入っている項目を開き、タブを切り替える */
+  function hxReveal(node) {
+    const pane = node.closest(".hx-pane");
+    if (pane) hxTab(pane.dataset.pane);
+    const item = node.closest(".hx-item");
+    if (item && !hxState.open.has(item.dataset.id)) hxToggle(item.dataset.id);
   }
 
   function closeDetail() {
     el("hr-detail").innerHTML = "";
     openId = null;
+    hxState = { id: null, open: new Set(), tab: "basic", auto: true };
     history.replaceState(null, "", location.pathname);
+  }
+
+  // チェックを付けたら、その項目を閉じて、次の未完了の項目を開く（上から順にこなせば終わる）
+  async function hxCheck(id, itemId, done) {
+    await API.hrCheck({ id, itemId, done });
+    if (done) {
+      hxState.open.delete(itemId);
+      const items = (hxProc?.groups || []).flatMap((g) => g.items);
+      const at = items.findIndex((i) => i.id === itemId);
+      const nx = items.slice(at + 1).find((i) => !i.done) || items.find((i) => !i.done && i.id !== itemId);
+      if (nx) hxState.open.add(nx.id);
+    }
+    await load();
+    await showDetail(id);
   }
 
   async function toggle(id, itemId, box) {
     const done = box.checked;
-    box.closest(".hr-row").classList.toggle("done", done);
+    box.closest(".hx-item")?.classList.toggle("done", done);
     try {
-      await API.hrCheck({ id, itemId, done });
-      await load();
-      await showDetail(id);
+      await hxCheck(id, itemId, done);
     } catch (e) {
       box.checked = !done;
+      box.closest(".hx-item")?.classList.toggle("done", !done);
       say(e.hint || e.message || "変更できませんでした", true);
     }
+  }
+  async function hxMark(id, itemId, done, btn) {
+    await run(btn, "保存中…", () => hxCheck(id, itemId, done));
   }
 
   function editDate(id, cur) {
@@ -793,6 +1074,7 @@
         </tbody></table></div></details>` : ""}`;
     if (location.hash === "#labor-notice" && !lnScrolled) {
       lnScrolled = true;
+      hxReveal(box);   // チェックリストの「労働条件・契約の確認」の中にあるので、開いてから移る
       setTimeout(() => box.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
     }
   }
@@ -1102,37 +1384,55 @@
     if (!a) return "";
     return `<a class="btn ${primary ? "btn-primary" : "btn-secondary"} btn-sm" href="${esc(a[0])}" data-act="${esc(key)}">${esc(a[1])}</a>`;
   }
-  function obFlowHtml(p) {
+  // 次にすること（ステップの下）
+  function obNextHtml(p) {
     const f = p.flow, n = f.next;
     const cur = n ? f.steps.find((s) => s.key === n.step) : null;
-    return `
-      <div class="rc" id="ob">
-        <section class="rc-sec" id="ob-next"><h3>次にすること
-          <a class="sub" href="help.html#hr-onboarding" target="_blank" rel="noopener" style="margin-left:auto;">使い方</a></h3>
-          ${n ? `<div style="font-size:16px;font-weight:700;color:${n.late ? "#c53030" : "var(--primary-dark)"};">${esc(n.text)}</div>
-              <div class="rc-note">担当：${esc(n.who)}${n.dueOn ? `・期限 ${esc(String(n.dueOn).replace(/-/g, "/"))}${n.late ? "（超過）" : ""}` : ""}</div>
-              <div class="rc-acts">${(cur?.actions || []).map((k, i) => obBtn(p, k, i === 0)).join("")}</div>`
-            : `<div style="font-weight:700;color:#256b36;">入社準備はすべて完了しました</div>`}
-        </section>
-        <section class="rc-sec" id="ob-flow"><h3>手続き全体の進み具合 <span class="sub">${f.done}/${f.total} 済み・並びは目安で、作業は並行して進められます</span></h3>
-          <table class="rc-tbl stack"><thead><tr><th>段階</th><th>状態</th><th>いまの様子</th><th>操作</th></tr></thead><tbody>
-          ${f.steps.map((s, i) => `<tr data-step="${esc(s.key)}">
-            <td>${i + 1}. ${esc(s.label)}</td>
-            <td><span class="rc-pill ${OB_STATE[s.state]?.[1] || ""}">${esc(OB_STATE[s.state]?.[0] || s.state)}</span></td>
-            <td>${esc(s.status)}${s.note ? `<span class="s">${esc(s.note)}</span>` : ""}</td>
-            <td><div class="rc-acts">${(s.actions || []).map((k) => obBtn(p, k, false)).join("")}</div></td></tr>`).join("")}
-          </tbody></table>
-        </section>
-        <section class="rc-sec" id="ob-contract"><h3>契約書 <span class="sub">作り方を選びます。どちらも「書類の準備 → 内容の確認 → 署名依頼 → 本人の署名 → 署名済みPDFの保管」</span></h3>
-          <div class="rc-acts">
-            ${obBtn(p, "make", false)}<span class="rc-note" style="margin:0 8px 0 0;">雛形と登録情報からPDFを作ります。会社印を選べます。</span>
-          </div>
-          <div class="rc-acts">
-            ${obBtn(p, "pdf", false)}<span class="rc-note" style="margin:0;">手元のPDFをアップロードして、そのまま署名を依頼します。</span>
-          </div>
-          <p class="rc-note">社労士などに作成を頼むときは ${obBtn(p, "order", false)}。署名依頼済みと締結済みは別の状態です（上の「本人の確認・署名」で分かります）。</p>
-        </section>
-      </div>`;
+    return `<section class="rc-sec" id="ob-next" style="padding:10px 14px;">
+      <h3 style="margin:0 0 4px;font-size:12.5px;color:var(--muted);">次にすること
+        <a class="sub" href="help.html#hr-onboarding" target="_blank" rel="noopener" style="margin-left:auto;">使い方</a></h3>
+      ${n ? `<div style="font-size:15px;font-weight:700;color:${n.late ? "#c53030" : "var(--primary-dark)"};">${esc(n.text)}</div>
+          <div class="rc-note" style="margin:2px 0 0;">担当：${esc(n.who)}${n.dueOn ? `・期限 ${esc(String(n.dueOn).replace(/-/g, "/"))}${n.late ? "（超過）" : ""}` : ""}</div>
+          <div class="rc-acts">${(cur?.actions || []).map((k, i) => obBtn(p, k, i === 0)).join("")}</div>`
+        : `<div style="font-weight:700;color:#256b36;">入社準備はすべて完了しました</div>`}
+    </section>`;
+  }
+  // 手続きの進み具合（6つの段階の表。タブ）
+  function obFlowTableHtml(p) {
+    const f = p.flow;
+    return `<section class="rc-sec" id="ob-flow"><h3>手続き全体の進み具合 <span class="sub">${f.done}/${f.total} 済み・並びは目安で、作業は並行して進められます</span></h3>
+      <table class="rc-tbl stack"><thead><tr><th>段階</th><th>状態</th><th>いまの様子</th><th>操作</th></tr></thead><tbody>
+      ${f.steps.map((s, i) => `<tr data-step="${esc(s.key)}">
+        <td>${i + 1}. ${esc(s.label)}</td>
+        <td><span class="rc-pill ${OB_STATE[s.state]?.[1] || ""}">${esc(OB_STATE[s.state]?.[0] || s.state)}</span></td>
+        <td>${esc(s.status)}${s.note ? `<span class="s">${esc(s.note)}</span>` : ""}</td>
+        <td><div class="rc-acts">${(s.actions || []).map((k) => obBtn(p, k, false)).join("")}</div></td></tr>`).join("")}
+      </tbody></table>
+    </section>`;
+  }
+  // 契約書（「労働条件・契約の確認」の項目の中）
+  function obContractHtml(p) {
+    return `<section class="rc-sec" id="ob-contract"><h3>契約書 <span class="sub">作り方を選びます。どちらも「書類の準備 → 内容の確認 → 署名依頼 → 本人の署名 → 署名済みPDFの保管」</span></h3>
+      <div class="rc-acts">
+        ${obBtn(p, "make", false)}<span class="rc-note" style="margin:0 8px 0 0;">雛形と登録情報からPDFを作ります。会社印を選べます。</span>
+      </div>
+      <div class="rc-acts">
+        ${obBtn(p, "pdf", false)}<span class="rc-note" style="margin:0;">手元のPDFをアップロードして、そのまま署名を依頼します。</span>
+      </div>
+      <p class="rc-note">社労士などに作成を頼むときは ${obBtn(p, "order", false)}。署名依頼済みと締結済みは別の状態です（「手続きの進み具合」のタブの「本人の確認・署名」で分かります）。</p>
+    </section>`;
+  }
+  // 基本情報（タブ）
+  function obBasicHtml(p) {
+    const v = (x) => (x ? `<span class="v">${esc(x)}</span>` : `<span class="v none">未設定</span>`);
+    return `<section class="rc-sec" id="ob-basic"><div class="rc-grid">
+      <div><div class="k">氏名</div>${v(p.name)}</div>
+      <div><div class="k">入社日</div>${v(p.targetOn ? String(p.targetOn).replace(/-/g, "/") : "")}</div>
+      <div><div class="k">段階</div>${v(p.phaseLabel)}</div>
+      <div><div class="k">進み具合</div>${v(`${p.progress.done}/${p.progress.total} 完了`)}</div>
+      <div><div class="k">マイナンバー</div>${v(MN_STATES.find(([k]) => k === p.mynumber)?.[1] || "未提出")}</div>
+    </div>
+    <p class="rc-note">マイナンバーの進み具合・MF給与の取込は、チェックリストの「必要書類の回収」「給与・振込情報の確認」の中で扱います。</p></section>`;
   }
 
   // ---- 退職手続き（退社の詳細）。1人の退職を1画面で ------------------------------------------
@@ -1170,164 +1470,292 @@
     }
   }
 
-  function renderRetireCase() {
-    const d = rcData, e = d.employee, off = !d.ready.case;
-    const offNote = off ? `<p class="rc-note" data-role="not-ready">退職手続きの追加の記録（db/123）がまだ流されていないため、この操作は使えません。</p>` : "";
-    el("rc").innerHTML = `
-      <div class="rc-bar" data-role="rc-bar">
-        <button class="btn btn-secondary btn-sm" onclick="rcEdit()" ${off ? "disabled" : ""}>退職日を変更</button>
-        <button class="btn btn-secondary btn-sm" onclick="rcGuide(false)">本人へ案内</button>
-        <button class="btn btn-secondary btn-sm" onclick="rcGuide(true)">再通知</button>
-        <button class="btn btn-secondary btn-sm" onclick="rcGo('rc-history')">手続き履歴</button>
-        <a class="btn btn-secondary btn-sm" href="help.html#hr-offboarding" target="_blank" rel="noopener" data-role="help">使い方</a>
+  // 退職手続きの各欄。チェックリストの項目の中（hxSecHtml）と、タブ（基本情報・連絡・手続き履歴）に入る
+  const rcOff = () => !rcData.ready.case;
+  const rcOffNote = () => (rcOff() ? `<p class="rc-note" data-role="not-ready">退職手続きの追加の記録（db/123）がまだ流されていないため、この操作は使えません。</p>` : "");
+  function rcBasicHtml() {
+    const d = rcData, e = d.employee, off = rcOff();
+    return `<section class="rc-sec" id="rc-basic"><h3>退職日・担当者</h3>
+      <div class="rc-grid">
+        <div><div class="k">退職日</div>${rcV(rcDay(e.leftOn))}</div>
+        <div><div class="k">最終出勤日</div>${rcV(rcDay(e.lastWorkOn))}</div>
+        <div><div class="k">退職理由</div>${rcV(e.reasonLabel)}</div>
+        <div><div class="k">担当者</div>${rcV(e.owner?.name)}</div>
       </div>
-      ${off ? `<div class="rc-msg err" data-role="not-ready-banner">退職手続きの追加の記録（db/123）が、まだ流されていません。退職日の変更・返却・アカウントの記録は、流したあとに使えます。</div>` : ""}
-
-      <section class="rc-sec" id="rc-basic"><h3>基本情報</h3>
-        <div class="rc-grid">
-          <div><div class="k">氏名</div><span class="v">${esc(e.name)}</span></div>
-          <div><div class="k">状態</div><span class="v">${esc(e.statusLabel)}</span></div>
-          <div><div class="k">退職日</div>${rcV(rcDay(e.leftOn))}</div>
-          <div><div class="k">最終出勤日</div>${rcV(rcDay(e.lastWorkOn))}</div>
-          <div><div class="k">退職理由</div>${rcV(e.reasonLabel)}</div>
-          <div><div class="k">担当者</div>${rcV(e.owner?.name)}</div>
-        </div>
-        ${rcEditOpen && !off ? `
-        <div class="rc-form" data-role="dates-form">
-          <label for="rc-left">退職日</label><input type="date" id="rc-left" value="${esc(e.leftOn || "")}">
-          <label for="rc-last">最終出勤日</label><input type="date" id="rc-last" value="${esc(e.lastWorkOn || "")}">
-          <label for="rc-owner">担当者</label>
-          <select id="rc-owner"><option value="">（未設定）</option>
-            ${d.staff.map((s) => `<option value="${esc(s.id)}" ${e.owner?.id === s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
-          <span></span>
-          <div class="rc-acts">
-            <button class="btn btn-primary btn-sm" onclick="rcSaveDates(this)">保存する</button>
-            <button class="btn btn-secondary btn-sm" onclick="rcEditOpen=false;renderRetireCase()">やめる</button>
-          </div>
-        </div>
-        <p class="rc-note">退職日を変えても、在籍状態やアカウントは変わりません（止まるのは、退職日の翌日の自動処理か、メンバー管理で「退職」にしたとき）。
-          発行済みの書類は書き換えません。必要なら再発行してください。入退社の退社日と、未完了の項目の期限も合わせます（お知らせは送りません）。</p>` : ""}
-        <div class="rc-msg" id="rc-basic-msg"></div>
-      </section>
-
-      <section class="rc-sec" id="rc-next"><h3>次にやること <span class="sub">データから自動で出します。押すと、その場所へ移ります</span></h3>
-        <div class="rc-next">${d.next.length
-          ? d.next.map((n) => `<button class="${n.late ? "late" : ""}" onclick="rcGo('${esc(n.target)}')" data-next="${esc(n.key)}">
-              <span class="material-symbols-outlined" style="font-size:18px;">chevron_right</span>${esc(n.text)}</button>`).join("")
-          : `<div class="none">いま残っている作業はありません</div>`}</div>
-      </section>
-
-      <section class="rc-sec" id="rc-self"><h3>本人対応 <span class="sub">公開・本人が開いた・受領・署名は、それぞれ別の記録です</span></h3>
-        <table class="rc-tbl stack"><thead><tr><th>書類</th><th>本人に公開</th><th>本人が開いた</th><th>受領</th><th>署名</th></tr></thead><tbody>
-          ${d.self.map((s) => `<tr data-self="${esc(s.kind)}">
-            <td>${esc(s.label)}</td>
-            <td>${s.published ? `<span class="rc-pill ok">公開中</span><span class="s">${esc(rcFmt(s.publishedAt))}</span>` : `<span class="rc-pill">公開していない</span>`}</td>
-            <td>${s.openedAt ? `${esc(rcFmt(s.openedAt))}<span class="s">本人の操作の記録（管理者のプレビューは含まない）</span>` : `<span class="muted">記録なし</span>`}</td>
-            <td><span class="muted">記録なし（受領の確認はまだありません）</span></td>
-            <td><span class="muted">記録なし（署名はまだありません）</span></td></tr>`).join("")}
-        </tbody></table>
-        <p class="rc-note">案内の送信記録：まだありません。下の「連絡」で文面をコピーしても、送信済みにはなりません。</p>
-      </section>
-
-      <section class="rc-sec" id="rc-docs"><h3>書類 <span class="sub">発行済みの版は書き換えません。直すときは再発行（新しい版）</span></h3>
-        ${d.ready.docs ? `<table class="rc-tbl stack"><thead><tr><th>書類</th><th>状態</th><th>操作</th></tr></thead><tbody>
-          ${d.docs.map((k) => {
-            const [label, cls] = DOC_STATE[k.adminState] || DOC_STATE.none;
-            const cur = k.current;
-            const acts = [];
-            if (cur && (k.adminState === "issued" || k.adminState === "published")) {
-              acts.push(`<button class="btn btn-secondary btn-sm" onclick="rcPreview('${esc(cur.id)}')">PDFを見る</button>`);
-              acts.push(k.adminState === "published"
-                ? `<button class="btn btn-secondary btn-sm" onclick="rcDoc('unpublish','${esc(cur.id)}', this)">公開停止</button>`
-                : `<button class="btn btn-primary btn-sm" onclick="rcDoc('publish','${esc(cur.id)}', this)">本人に公開</button>`);
-            }
-            acts.push(`<button class="btn btn-secondary btn-sm" onclick="rcPick('${esc(k.kind)}')">${cur?.state === "issued" ? "再発行（PDFを登録）" : "PDFを登録"}</button>`);
-            const old = k.history.filter((h) => h.id !== cur?.id && h.state !== "processing");
-            return `<tr data-doc="${esc(k.kind)}"><td>${esc(k.label)}${cur?.version ? `<span class="s">第${cur.version}版${cur.issuedOn ? `・${esc(rcDay(cur.issuedOn))} 発行` : ""}</span>` : ""}</td>
-              <td><span class="rc-pill ${cls}">${esc(label)}</span>${cur?.expectedOn ? `<span class="s">発行予定 ${esc(rcDay(cur.expectedOn))}</span>` : ""}</td>
-              <td><div class="rc-acts">${acts.join("")}</div>
-                ${old.length ? `<details style="margin-top:6px;"><summary class="muted" style="font-size:12px;cursor:pointer;">版の履歴（${old.length}）</summary>
-                  ${old.map((h) => `<div class="rc-acts"><span style="font-size:12px;">第${h.version}版・${esc(h.state === "superseded" ? "置き換え済み" : h.state)}${h.issuedOn ? `・${esc(rcDay(h.issuedOn))}` : ""}</span>
-                    ${h.state === "superseded" || h.state === "issued" ? `<button class="btn btn-secondary btn-sm" onclick="rcPreview('${esc(h.id)}')">見る</button>` : ""}</div>`).join("")}
-                </details>` : ""}</td></tr>`;
-          }).join("")}</tbody></table>
-          <input type="file" id="rc-file" accept="application/pdf,.pdf" class="hidden">
-          <p class="rc-note">本人に見えるのは、公開中の最新の版だけです。退職証明書の作成（雛形・押印）は、<a href="admin-members.html">メンバー管理</a>の退職手続きから。</p>`
-          : `<div class="rc-msg err">退職書類の表（db/121）が、まだ流されていません。</div>`}
-        <div class="rc-msg" id="rc-docs-msg"></div>
-      </section>
-
-      <section class="rc-sec" id="rc-accounts"><h3>アカウント <span class="sub">自動＝システムの状態を読んで表示／手動＝担当者の記録</span></h3>
-        <table class="rc-tbl stack"><thead><tr><th>サービス</th><th>状態</th><th>停止予定・停止確認</th><th>操作</th></tr></thead><tbody>
-          ${d.accounts.map((a) => `<tr data-acct="${esc(a.key)}">
-            <td>${esc(a.label)}<span class="s">${a.how === "auto" ? "自動（システムの状態）" : "手動（担当者が停止して記録）"}</span></td>
-            <td><span class="rc-pill ${a.warn ? "bad" : ACCT_PILL[a.state] || ""}">${esc(ACCT_LABEL[a.state] || a.state)}</span>${a.note ? `<span class="s">${esc(a.note)}</span>` : ""}</td>
-            <td>${a.scheduledOn ? `${esc(rcDay(a.scheduledOn))} ${a.auto ? "自動停止予定" : "手動対応予定"}` : ""}
-              ${a.stoppedAt ? `<span class="s">${esc(rcFmt(a.stoppedAt))}${a.confirmLabel ? `・${esc(a.confirmLabel)}` : ""}${a.stoppedBy ? `・${esc(a.stoppedBy)}` : ""}</span>` : ""}</td>
-            <td>${a.how === "manual" && !off ? `<div class="rc-acts">
-                <select id="rc-as-${esc(a.key)}" aria-label="${esc(a.label)}の状態">
-                  ${d.accountStates.map((s) => `<option value="${esc(s.key)}" ${a.state === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
-                <input type="date" id="rc-ad-${esc(a.key)}" value="${esc(a.scheduledOn || "")}" aria-label="停止予定日">
-                <button class="btn btn-secondary btn-sm" onclick="rcAccount('${esc(a.key)}', this)">記録</button></div>` : ""}</td></tr>`).join("")}
-        </tbody></table>
-        <p class="rc-note">Google Workspace・Slack・GitHub・Vercel は、ここからは止めません。各サービスで止めたあと「停止済」を記録してください（外部での停止の証明ではありません）。</p>
-        ${offNote}
-        <div class="rc-msg" id="rc-accounts-msg"></div>
-      </section>
-
-      <section class="rc-sec" id="rc-assets"><h3>貸与品 <span class="sub">貸与品の台帳（Office › 端末・貸与品）から、この人に貸し出しているもの</span></h3>
-        ${d.assets.length ? `<table class="rc-tbl stack"><thead><tr><th>種類・名前</th><th>管理番号</th><th>返却</th><th>操作</th></tr></thead><tbody>
-          ${d.assets.map((a) => `<tr data-asset="${esc(a.assetId || "")}">
-            <td>${esc(a.kindLabel)}<span class="s">${esc(a.name)}</span></td>
-            <td>${esc(a.identifier || "—")}</td>
-            <td>${a.state === "returned" ? `<span class="rc-pill ok">返却確認済</span><span class="s">${esc(rcFmt(a.returnedAt))}</span>`
-              : a.state === "requested" ? `<span class="rc-pill info">返却依頼済</span>${a.dueOn ? `<span class="s">返却予定 ${esc(rcDay(a.dueOn))}</span>` : ""}`
-              : `<span class="rc-pill warn">貸出中</span>`}</td>
-            <td>${a.state !== "returned" && a.assetId && !off ? `<div class="rc-acts">
-                <input type="date" id="rc-due-${esc(a.assetId)}" value="${esc(a.dueOn || "")}" aria-label="返却予定日">
-                <button class="btn btn-secondary btn-sm" onclick="rcAsset('asset_request','${esc(a.assetId)}', this)">返却を依頼</button>
-                <button class="btn btn-primary btn-sm" onclick="rcAsset('asset_return','${esc(a.assetId)}', this)">返却を確認</button></div>` : ""}</td></tr>`).join("")}
-        </tbody></table>` : `<div class="muted" style="font-size:13px;">貸し出し中の貸与品はありません。</div>`}
-        <p class="rc-note">「返却を確認」で、台帳の貸出先が外れて在庫に戻ります。次の人へ貸し出しても、この退職で返したものはここに残ります。</p>
-        ${offNote}
-        <div class="rc-msg" id="rc-assets-msg"></div>
-      </section>
-
-      <section class="rc-sec rc-copy" id="rc-contact"><h3>連絡 <span class="sub">${rcRemind ? "再通知の文面（未完了の項目だけ）" : "本人への案内の文面"}</span></h3>
-        ${(() => { const g = rcRemind ? d.remind : d.guide; return `
+      ${rcEditOpen && !off ? `
+      <div class="rc-form" data-role="dates-form">
+        <label for="rc-left">退職日</label><input type="date" id="rc-left" value="${esc(e.leftOn || "")}">
+        <label for="rc-last">最終出勤日</label><input type="date" id="rc-last" value="${esc(e.lastWorkOn || "")}">
+        <label for="rc-owner">担当者</label>
+        <select id="rc-owner"><option value="">（未設定）</option>
+          ${d.staff.map((s) => `<option value="${esc(s.id)}" ${e.owner?.id === s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
+        <span></span>
         <div class="rc-acts">
-          <button class="btn btn-secondary btn-sm" onclick="rcCopy('rc-mail', this)">メール文をコピー</button>
-          <button class="btn btn-secondary btn-sm" onclick="rcCopy('rc-slack', this)">Slack文をコピー</button>
-          <button class="btn btn-secondary btn-sm" onclick="rcCopyText(${esc(JSON.stringify(g.url))}, this)">案内URLをコピー</button>
+          <button class="btn btn-primary btn-sm" onclick="rcSaveDates(this)">保存する</button>
+          <button class="btn btn-secondary btn-sm" onclick="rcEditOpen=false;renderRetireCase()">やめる</button>
         </div>
-        <label class="muted" style="font-size:12px;display:block;margin-top:8px;" for="rc-mail">メール文</label>
-        <textarea id="rc-mail" readonly>${esc(g.email)}</textarea>
-        <label class="muted" style="font-size:12px;display:block;margin-top:8px;" for="rc-slack">Slack文</label>
-        <textarea id="rc-slack" readonly style="min-height:120px;">${esc(g.slack)}</textarea>
-        <p class="rc-note">案内URL：${esc(g.url)}（${esc(g.urlNote)}）<br>
-          この画面からは送信しません。コピーしても「送信済み」にはなりません。${rcRemind ? "再通知も、文面を作り直すだけで実際には送りません。" : ""}
-          退職理由・社内メモ・管理者用の画面のURLは入れていません。</p>`; })()}
-      </section>
-
-      <details class="rc-sec" id="rc-history"><summary style="cursor:pointer;font-weight:700;font-size:14.5px;color:var(--primary-dark);">手続き履歴（${d.history.length}）</summary>
-        ${d.history.length ? `<ul class="rc-hist">${d.history.map((h) => `<li data-who="${esc(h.whoKind)}">
-          <span class="at">${esc(rcFmt(h.at))}</span>
-          <span><span class="rc-pill ${h.whoKind === "self" ? "info" : ""}">${esc(h.whoKind === "self" ? "本人" : h.whoKind === "system" ? "自動" : "管理者")}</span></span>
-          <span>${h.whoKind === "admin" && h.who && h.who !== "管理者" ? `${esc(h.who)}：` : ""}${esc(h.text)}</span></li>`).join("")}</ul>`
-          : `<div class="muted" style="font-size:13px;margin-top:8px;">まだ記録がありません。</div>`}
-      </details>`;
+      </div>
+      <p class="rc-note">退職日を変えても、在籍状態やアカウントは変わりません（止まるのは、退職日の翌日の自動処理か、メンバー管理で「退職」にしたとき）。
+        発行済みの書類は書き換えません。必要なら再発行してください。入退社の退社日と、未完了の項目の期限も合わせます（お知らせは送りません）。</p>`
+      : `<div class="rc-acts"><button class="btn btn-secondary btn-sm" onclick="rcEdit()" ${off ? "disabled" : ""}>退職日・担当者を変更</button></div>`}
+      <div class="rc-msg" id="rc-basic-msg"></div>
+    </section>`;
+  }
+  function rcBasicRoHtml() {
+    const e = rcData.employee;
+    return `<section class="rc-sec" data-role="rc-basic-ro"><div class="rc-grid">
+      <div><div class="k">氏名</div><span class="v">${esc(e.name)}</span></div>
+      <div><div class="k">状態</div><span class="v">${esc(e.statusLabel)}</span></div>
+      <div><div class="k">退職日</div>${rcV(rcDay(e.leftOn))}</div>
+      <div><div class="k">最終出勤日</div>${rcV(rcDay(e.lastWorkOn))}</div>
+      <div><div class="k">退職理由</div>${rcV(e.reasonLabel)}</div>
+      <div><div class="k">担当者</div>${rcV(e.owner?.name)}</div>
+    </div></section>`;
+  }
+  function rcSelfHtml() {
+    return `<section class="rc-sec" id="rc-self"><h3>本人対応 <span class="sub">公開・本人が開いた・受領・署名は、それぞれ別の記録です</span></h3>
+      <table class="rc-tbl stack"><thead><tr><th>書類</th><th>本人に公開</th><th>本人が開いた</th><th>受領</th><th>署名</th></tr></thead><tbody>
+        ${rcData.self.map((s) => `<tr data-self="${esc(s.kind)}">
+          <td>${esc(s.label)}</td>
+          <td>${s.published ? `<span class="rc-pill ok">公開中</span><span class="s">${esc(rcFmt(s.publishedAt))}</span>` : `<span class="rc-pill">公開していない</span>`}</td>
+          <td>${s.openedAt ? `${esc(rcFmt(s.openedAt))}<span class="s">本人の操作の記録（管理者のプレビューは含まない）</span>` : `<span class="muted">記録なし</span>`}</td>
+          <td><span class="muted">記録なし（受領の確認はまだありません）</span></td>
+          <td><span class="muted">記録なし（署名はまだありません）</span></td></tr>`).join("")}
+      </tbody></table>
+      <p class="rc-note">案内の送信記録：まだありません。「連絡」のタブで文面をコピーしても、送信済みにはなりません。</p>
+    </section>`;
+  }
+  function rcDocsHtml() {
+    const d = rcData;
+    return `<section class="rc-sec" id="rc-docs"><h3>書類 <span class="sub">発行済みの版は書き換えません。直すときは再発行（新しい版）</span></h3>
+      ${d.ready.docs ? `<table class="rc-tbl stack"><thead><tr><th>書類</th><th>状態</th><th>操作</th></tr></thead><tbody>
+        ${d.docs.map((k) => {
+          const [label, cls] = DOC_STATE[k.adminState] || DOC_STATE.none;
+          const cur = k.current;
+          const acts = [];
+          if (cur && (k.adminState === "issued" || k.adminState === "published")) {
+            acts.push(`<button class="btn btn-secondary btn-sm" onclick="rcPreview('${esc(cur.id)}')">PDFを見る</button>`);
+            acts.push(k.adminState === "published"
+              ? `<button class="btn btn-secondary btn-sm" onclick="rcDoc('unpublish','${esc(cur.id)}', this)">公開停止</button>`
+              : `<button class="btn btn-primary btn-sm" onclick="rcDoc('publish','${esc(cur.id)}', this)">本人に公開</button>`);
+          }
+          acts.push(`<button class="btn btn-secondary btn-sm" onclick="rcPick('${esc(k.kind)}')">${cur?.state === "issued" ? "再発行（PDFを登録）" : "PDFを登録"}</button>`);
+          const old = k.history.filter((h) => h.id !== cur?.id && h.state !== "processing");
+          return `<tr data-doc="${esc(k.kind)}"><td>${esc(k.label)}${cur?.version ? `<span class="s">第${cur.version}版${cur.issuedOn ? `・${esc(rcDay(cur.issuedOn))} 発行` : ""}</span>` : ""}</td>
+            <td><span class="rc-pill ${cls}">${esc(label)}</span>${cur?.expectedOn ? `<span class="s">発行予定 ${esc(rcDay(cur.expectedOn))}</span>` : ""}</td>
+            <td><div class="rc-acts">${acts.join("")}</div>
+              ${old.length ? `<details style="margin-top:6px;"><summary class="muted" style="font-size:12px;cursor:pointer;">版の履歴（${old.length}）</summary>
+                ${old.map((h) => `<div class="rc-acts"><span style="font-size:12px;">第${h.version}版・${esc(h.state === "superseded" ? "置き換え済み" : h.state)}${h.issuedOn ? `・${esc(rcDay(h.issuedOn))}` : ""}</span>
+                  ${h.state === "superseded" || h.state === "issued" ? `<button class="btn btn-secondary btn-sm" onclick="rcPreview('${esc(h.id)}')">見る</button>` : ""}</div>`).join("")}
+              </details>` : ""}</td></tr>`;
+        }).join("")}</tbody></table>
+        <input type="file" id="rc-file" accept="application/pdf,.pdf" class="hidden">
+        <p class="rc-note">本人に見えるのは、公開中の最新の版だけです。退職証明書の作成（雛形・押印）は、<a href="admin-members.html">メンバー管理</a>の退職手続きから。</p>`
+        : `<div class="rc-msg err">退職書類の表（db/121）が、まだ流されていません。</div>`}
+      <div class="rc-msg" id="rc-docs-msg"></div>
+    </section>`;
+  }
+  // アカウント。項目ごとに、その項目で止めるサービスだけ（例：「Slack の停止」には Slack だけ）
+  const rcSecOfService = (svc) => {
+    const known = HX_OFF_SECTIONS.find((s) => (s.services || []).includes(svc));
+    return known ? known.key : "acct-dev";
+  };
+  function rcAccountsHtml(sec) {
+    const d = rcData, off = rcOff();
+    const rows = d.accounts.filter((a) => rcSecOfService(a.key) === sec.key);
+    if (!rows.length) return `<div class="muted" style="font-size:13px;">対象のサービスはありません。</div>`;
+    return `<section class="rc-sec rc-accounts" data-accounts="${esc(sec.key)}"><h3>アカウント <span class="sub">自動＝システムの状態を読んで表示／手動＝担当者の記録</span></h3>
+      <table class="rc-tbl stack"><thead><tr><th>サービス</th><th>状態</th><th>停止予定・停止確認</th><th>操作</th></tr></thead><tbody>
+        ${rows.map((a) => `<tr data-acct="${esc(a.key)}">
+          <td>${esc(a.label)}<span class="s">${a.how === "auto" ? "自動（システムの状態）" : "手動（担当者が停止して記録）"}</span></td>
+          <td><span class="rc-pill ${a.warn ? "bad" : ACCT_PILL[a.state] || ""}">${esc(ACCT_LABEL[a.state] || a.state)}</span>${a.note ? `<span class="s">${esc(a.note)}</span>` : ""}</td>
+          <td>${a.scheduledOn ? `${esc(rcDay(a.scheduledOn))} ${a.auto ? "自動停止予定" : "手動対応予定"}` : ""}
+            ${a.stoppedAt ? `<span class="s">${esc(rcFmt(a.stoppedAt))}${a.confirmLabel ? `・${esc(a.confirmLabel)}` : ""}${a.stoppedBy ? `・${esc(a.stoppedBy)}` : ""}</span>` : ""}</td>
+          <td>${a.how === "manual" && !off ? `<div class="rc-acts">
+              <select id="rc-as-${esc(a.key)}" aria-label="${esc(a.label)}の状態">
+                ${d.accountStates.map((s) => `<option value="${esc(s.key)}" ${a.state === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
+              <input type="date" id="rc-ad-${esc(a.key)}" value="${esc(a.scheduledOn || "")}" aria-label="停止予定日">
+              <button class="btn btn-secondary btn-sm" onclick="rcAccount('${esc(a.key)}', this)">記録</button></div>` : ""}</td></tr>`).join("")}
+      </tbody></table>
+      ${rows.some((a) => a.how === "manual") ? `<p class="rc-note">${esc(rows.filter((a) => a.how === "manual").map((a) => a.label.replace(/（.*）/, "")).join("・"))} は、ここからは止めません。各サービスで止めたあと「停止済」を記録してください（外部での停止の証明ではありません）。</p>` : ""}
+      ${rcOffNote()}
+      <div class="rc-msg" id="rc-accounts-msg-${esc(sec.key)}"></div>
+    </section>`;
+  }
+  // 退職証明書の本人申請（db/127）。選んだ項目・誓約の日時と証跡・印字される本文 → 承認して発行（経営者・管理者）
+  function rcCertHtml() {
+    const d = rcData, r = d.certRequest;
+    if (!d.ready.cert) return `<section class="rc-sec" id="rc-cert"><div class="rc-msg err">退職証明書の申請の表（db/127）が、まだ流されていません。</div></section>`;
+    if (!r) return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請</h3>
+      <div class="muted" style="font-size:13px;">本人からの申請はまだありません。本人は${d.employee.status === "left" ? "退職者ポータル" : "マイページ"}から、記載してほしい項目を選んで申請します。</div></section>`;
+    const items = `<ul style="margin:4px 0 0;padding-left:18px;font-size:13px;" data-role="cert-items">${r.items.map((i) => `<li>${esc(i.label)}</li>`).join("")}</ul>`;
+    const nda = `<div style="font-size:12.5px;margin-top:6px;" data-role="cert-nda"><span class="rc-pill ok">${esc(rcFmt(r.nda.agreedAt))} 誓約済</span>
+      <span class="s" style="display:block;color:var(--muted);margin-top:4px;">「${esc(r.nda.text)}」（版 ${esc(r.nda.version)}${r.nda.ip ? `・接続元 ${esc(r.nda.ip)}` : ""}）</span></div>`;
+    if (r.status === "issued") return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請 <span class="rc-pill ok">発行済み</span></h3>
+      <div style="font-size:13px;">${esc(rcFmt(r.decidedAt))}・${esc(r.decidedByName || "管理者")} が承認して発行し、本人に公開しました。</div>
+      <div class="rc-note">本人が選んだ項目</div>${items}${nda}</section>`;
+    if (r.status === "cancelled") return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請 <span class="rc-pill">差し戻し</span></h3>
+      <div style="font-size:13px;">${esc(rcFmt(r.decidedAt))} に差し戻しました。本人がもう一度申請すると、ここに出ます。</div></section>`;
+    const missing = (r.missing || []).length;
+    const can = d.canIssueCert && !missing;
+    return `<section class="rc-sec" id="rc-cert"><h3>退職証明書の申請 <span class="rc-pill bad">申請あり</span><span class="sub">${esc(rcFmt(r.requestedAt))} に本人が申請</span></h3>
+      <div class="rc-note" style="margin:0;">本人が選んだ記載項目（選んだ項目だけを証明書に記載します）</div>${items}
+      <div class="rc-note">NDA等の誓約</div>${nda}
+      <details style="margin-top:8px;" open><summary class="muted" style="font-size:12px;cursor:pointer;">証明書に印字される内容</summary>
+        <pre style="white-space:pre-wrap;font:inherit;font-size:12.5px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin:6px 0 0;" data-role="cert-preview">${esc(r.preview || "")}</pre></details>
+      ${missing ? `<div class="rc-msg err">記載する値がありません：${esc(r.missing.join("、"))}。名簿・契約・退職理由を入れてから発行してください。</div>` : ""}
+      <div class="rc-acts" style="margin-top:10px;">
+        <button class="btn btn-primary btn-sm" data-act="cert-approve" ${can ? "" : "disabled"} onclick="rcCertApprove(this)">承認して発行</button>
+        <button class="btn btn-secondary btn-sm" data-act="cert-return" onclick="rcCertReturn(this)">差し戻す</button>
+      </div>
+      ${d.canIssueCert ? `<p class="rc-note">発行すると、証明書用の会社印を押した PDF を作って本人に公開し（本人はダウンロードできます）、この項目を完了にします。</p>`
+        : `<p class="rc-note" data-role="cert-who">承認して発行（押印）は、経営者・管理者だけができます。内容を確認したら、経営者・管理者に依頼してください。</p>`}
+      <div class="rc-msg" id="rc-cert-msg"></div>
+    </section>`;
+  }
+  async function rcCertAct(action, btn, body = {}) {
+    const r = rcData.certRequest;
+    const itemBox = btn.closest(".hx-item");
+    try {
+      await KPLayout.busy(btn, action === "approve" ? "発行中…" : "…", () => API.api("/api/employees/cert-request",
+        { method: "POST", body: { action, employeeId: rcData.employee.id, requestId: r.id, ...body } }));
+      if (action === "approve" && itemBox) hxState.open.delete(itemBox.dataset.id);   // 完了したので閉じる
+      rcPending = ["rc-docs-msg", action === "approve" ? "退職証明書を発行して、本人に公開しました" : "申請を差し戻しました"];
+      await load();      // チェックリスト（完了日・対応者）ごと描き直す
+    } catch (e) { rcSay("rc-cert-msg", e.hint || e.message || "できませんでした", true); }
+  }
+  function rcCertApprove(btn) {
+    if (!confirm("本人が選んだ項目だけを記載した退職証明書を発行・押印して、本人に公開します。よろしいですか？")) return;
+    rcCertAct("approve", btn);
+  }
+  function rcCertReturn(btn) {
+    if (!confirm("この申請を差し戻します（本人はもう一度申請できます）。よろしいですか？")) return;
+    rcCertAct("return", btn);
   }
 
-  function rcGo(id) {
-    const box = el(id);
-    if (!box) return;
-    if (box.tagName === "DETAILS") box.open = true;
+  function rcAssetsHtml() {
+    const d = rcData, off = rcOff();
+    return `<section class="rc-sec" id="rc-assets"><h3>貸与品 <span class="sub">貸与品の台帳（Office › 端末・貸与品）から、この人に貸し出しているもの</span></h3>
+      ${d.assets.length ? `<table class="rc-tbl stack"><thead><tr><th>種類・名前</th><th>管理番号</th><th>返却</th><th>操作</th></tr></thead><tbody>
+        ${d.assets.map((a) => `<tr data-asset="${esc(a.assetId || "")}">
+          <td>${esc(a.kindLabel)}<span class="s">${esc(a.name)}</span></td>
+          <td>${esc(a.identifier || "—")}</td>
+          <td>${a.state === "returned" ? `<span class="rc-pill ok">返却確認済</span><span class="s">${esc(rcFmt(a.returnedAt))}</span>`
+            : a.state === "requested" ? `<span class="rc-pill info">返却依頼済</span>${a.dueOn ? `<span class="s">返却予定 ${esc(rcDay(a.dueOn))}</span>` : ""}`
+            : `<span class="rc-pill warn">貸出中</span>`}</td>
+          <td>${a.state !== "returned" && a.assetId && !off ? `<div class="rc-acts">
+              <input type="date" id="rc-due-${esc(a.assetId)}" value="${esc(a.dueOn || "")}" aria-label="返却予定日">
+              <button class="btn btn-secondary btn-sm" onclick="rcAsset('asset_request','${esc(a.assetId)}', this)">返却を依頼</button>
+              <button class="btn btn-primary btn-sm" onclick="rcAsset('asset_return','${esc(a.assetId)}', this)">返却を確認</button></div>` : ""}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="muted" style="font-size:13px;">貸し出し中の貸与品はありません。</div>`}
+      <p class="rc-note">「返却を確認」で、台帳の貸出先が外れて在庫に戻ります。次の人へ貸し出しても、この退職で返したものはここに残ります。</p>
+      ${rcOffNote()}
+      <div class="rc-msg" id="rc-assets-msg"></div>
+    </section>`;
+  }
+  function rcContactHtml() {
+    const g = rcRemind ? rcData.remind : rcData.guide;
+    return `<section class="rc-sec rc-copy" id="rc-contact"><h3>連絡 <span class="sub">${rcRemind ? "再通知の文面（未完了の項目だけ）" : "本人への案内の文面"}</span></h3>
+      <div class="rc-acts">
+        <button class="btn btn-secondary btn-sm" onclick="rcCopy('rc-mail', this)">メール文をコピー</button>
+        <button class="btn btn-secondary btn-sm" onclick="rcCopy('rc-slack', this)">Slack文をコピー</button>
+        <button class="btn btn-secondary btn-sm" onclick="rcCopyText(${esc(JSON.stringify(g.url))}, this)">案内URLをコピー</button>
+      </div>
+      <label class="muted" style="font-size:12px;display:block;margin-top:8px;" for="rc-mail">メール文</label>
+      <textarea id="rc-mail" readonly>${esc(g.email)}</textarea>
+      <label class="muted" style="font-size:12px;display:block;margin-top:8px;" for="rc-slack">Slack文</label>
+      <textarea id="rc-slack" readonly style="min-height:120px;">${esc(g.slack)}</textarea>
+      <p class="rc-note">案内URL：${esc(g.url)}（${esc(g.urlNote)}）<br>
+        この画面からは送信しません。コピーしても「送信済み」にはなりません。${rcRemind ? "再通知も、文面を作り直すだけで実際には送りません。" : ""}
+        退職理由・社内メモ・管理者用の画面のURLは入れていません。</p>
+    </section>`;
+  }
+  function rcHistoryHtml() {
+    const d = rcData;
+    return `<section class="rc-sec" id="rc-history"><h3>手続き履歴（${d.history.length}）</h3>
+      ${d.history.length ? `<ul class="rc-hist">${d.history.map((h) => `<li data-who="${esc(h.whoKind)}">
+        <span class="at">${esc(rcFmt(h.at))}</span>
+        <span><span class="rc-pill ${h.whoKind === "self" ? "info" : ""}">${esc(h.whoKind === "self" ? "本人" : h.whoKind === "system" ? "自動" : "管理者")}</span></span>
+        <span>${h.whoKind === "admin" && h.who && h.who !== "管理者" ? `${esc(h.who)}：` : ""}${esc(h.text)}</span></li>`).join("")}</ul>`
+        : `<div class="muted" style="font-size:13px;margin-top:8px;">まだ記録がありません。</div>`}
+    </section>`;
+  }
+
+  // 読んだデータで、チェックリストの中の欄・次にやること・タブ・警告・ステップを描き直す（開いている項目・タブはそのまま）
+  function renderRetireCase() {
+    const d = rcData, off = rcOff();
+    const p = hxProc;
+    if (!el("rc") || !p || el("rc").dataset.employee !== d.employee.id) return;
+    const put = (id, html) => { const n = el(id); if (n) n.innerHTML = html; };
+    put("rc-bar-slot", `<div class="rc-bar" data-role="rc-bar" style="margin:10px 0 0;">
+      <button class="btn btn-secondary btn-sm" onclick="rcEdit()" ${off ? "disabled" : ""}>退職日を変更</button>
+      <button class="btn btn-secondary btn-sm" onclick="rcGuide(false)">本人へ案内</button>
+      <button class="btn btn-secondary btn-sm" onclick="rcGuide(true)">再通知</button>
+      <button class="btn btn-secondary btn-sm" onclick="hxTab('history');rcGo('rc-history')">手続き履歴</button>
+      <a class="btn btn-secondary btn-sm" href="help.html#hr-offboarding" target="_blank" rel="noopener" data-role="help">使い方</a>
+    </div>`);
+    put("rc-banner", off ? `<div class="rc-msg err" data-role="not-ready-banner">退職手続きの追加の記録（db/123）が、まだ流されていません。退職日の変更・返却・アカウントの記録は、流したあとに使えます。</div>` : "");
+    put("hx-alert", hxAlertHtml(p));
+    put("hx-steps", hxStepsHtml(p));
+    put("rc-next", d.next.length
+      ? d.next.map((n) => `<button class="${n.late ? "late" : ""}" onclick="rcGo('${esc(n.target)}','${esc(n.key)}')" data-next="${esc(n.key)}">
+          <span class="material-symbols-outlined" style="font-size:18px;">chevron_right</span>${esc(n.text)}</button>`).join("")
+      : `<div class="none">いま残っている作業はありません</div>`);
+    // 本人の申請があれば「申請あり」（チェックリストの項目の見出しに）
+    const asked = d.certRequest?.status === "requested";
+    document.querySelectorAll('#rc [data-hx-badge~="cert"]').forEach((n) => {
+      n.innerHTML = asked ? `<span class="rc-pill bad" data-role="cert-badge">申請あり</span>` : "";
+    });
+    // 本人の申請があるあいだは、手で完了にしない（承認して発行で PDF を発行してはじめて完了。サーバーも同じ：api/hr）。
+    //   申請なし＝手で完了できる（紙で別に発行する場合）／申請中・差し戻し＝押せない／発行済み＝完了のまま（戻せない）
+    const st = d.ready.cert ? d.certRequest?.status : null;
+    document.querySelectorAll("#rc .hx-item:not(.hx-x)").forEach((box) => {
+      if (!box.querySelector('[data-sec="cert"]')) return;
+      const done = box.classList.contains("done");
+      const lock = (!done && (st === "requested" || st === "cancelled")) ? (st === "requested"
+          ? "本人の申請があります。［承認して発行］で証明書を発行すると、自動で完了になります"
+          : "差し戻した申請があります。本人の再申請を承認して発行すると、完了になります")
+        : (done && st === "issued") ? "申請にもとづいて発行済みです（未完了には戻せません）" : "";
+      const cb = box.querySelector('.hx-row input[type="checkbox"]');
+      const btn = box.querySelector('.hx-foot [data-act="done"]');
+      if (cb) { cb.disabled = Boolean(lock); cb.title = lock; }
+      if (btn) btn.style.display = lock ? "none" : "";   // .btn の display が hidden 属性より強いので、style で隠す
+      const foot = box.querySelector(".hx-foot");
+      foot?.querySelector('[data-role="cert-lock"]')?.remove();
+      if (lock && foot) foot.insertAdjacentHTML("beforeend", `<span class="rc-note" style="margin:0;" data-role="cert-lock">${esc(lock)}</span>`);
+    });
+    if (asked && el("rc-next")) {
+      el("rc-next").insertAdjacentHTML("afterbegin", `<button class="late" onclick="rcGo('rc-cert')" data-next="cert">
+        <span class="material-symbols-outlined" style="font-size:18px;">chevron_right</span>退職証明書の発行の申請があります</button>`);
+      el("rc-next").querySelector(".none")?.remove();
+    }
+    document.querySelectorAll("#rc [data-sec]").forEach((n) => {
+      const s = HX_OFF_SECTIONS.find((x) => x.key === n.dataset.sec);
+      if (s) n.innerHTML = hxSecHtml(p, s);
+    });
+    put("rc-basic-ro", rcBasicRoHtml());
+    put("rc-contact-slot", rcContactHtml());
+    put("rc-history-slot", rcHistoryHtml());
+  }
+
+  // 次にやること・上のボタン → その作業の場所（項目を開き、タブを切り替えて、そこへ移る）
+  function rcGo(id, key) {
+    let node = null;
+    if (key && key.includes(":")) {
+      const [k, v] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+      const attr = { acct: "data-acct", asset: "data-asset", doc: "data-doc" }[k];
+      if (attr) node = document.querySelector(`#rc [${attr}="${CSS.escape(v)}"]`);
+    }
+    node = node || el(id);
+    if (!node) return;
+    hxReveal(node);
+    const box = node.closest(".rc-sec") || node;
     box.scrollIntoView({ behavior: "smooth", block: "start" });
     box.classList.add("hl");
     setTimeout(() => box.classList.remove("hl"), 1600);
   }
   function rcEdit() { rcEditOpen = true; renderRetireCase(); rcGo("rc-basic"); el("rc-left")?.focus(); }
-  function rcGuide(remind) { rcRemind = remind; renderRetireCase(); rcGo("rc-contact"); }
+  function rcGuide(remind) { rcRemind = remind; renderRetireCase(); hxTab("contact"); rcGo("rc-contact"); }
   const rcSay = (id, msg, bad) => { const m = el(id); if (m) { m.textContent = msg || ""; m.className = `rc-msg ${bad ? "err" : "ok"}`; } };
   async function rcReload() { await loadRetireCase(rcData.employee.id); }
 
@@ -1364,8 +1792,8 @@
     try {
       await API.api(RC, { method: "POST", body: { action: "account", employeeId: rcData.employee.id, service, state, scheduledOn } });
       await rcReload();
-      rcSay("rc-accounts-msg", "記録しました（外部サービスは、ここからは止めていません）");
-    } catch (err) { rcSay("rc-accounts-msg", err.hint || err.message || "記録できませんでした", true); }
+      rcSay(`rc-accounts-msg-${rcSecOfService(service)}`, "記録しました（外部サービスは、ここからは止めていません）");
+    } catch (err) { rcSay(`rc-accounts-msg-${rcSecOfService(service)}`, err.hint || err.message || "記録できませんでした", true); }
   }
 
   async function rcAsset(action, assetId, btn) {

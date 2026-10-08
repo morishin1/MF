@@ -20,12 +20,13 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageHr, canManageSeals, canSeeSalary } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { ymd } from "../../lib/jst.js";
 import { KINDS, liveOf, adminState, reasonLabel } from "../../lib/retire.js";
 import { viewDoc } from "../../lib/retire-store.js";
+import { adminState as certAdminState, CERT_EMP_FIELDS } from "../../lib/retire-cert-request-db.js";
 import { publicBaseUrl } from "../../lib/onboard-guide.js";
 import {
   SERVICES, MANUAL_SERVICES, MANUAL_STATES, ACCOUNT_STATE_LABEL, isRealDate, checkDates, reissueHint,
@@ -146,8 +147,20 @@ async function read(req, res, sb, ctx) {
   const base = publicBaseUrl(req);
   const selfEvents = (logs || []).filter((l) => (l.action === "retire.view" || l.action === "retire.download") && emp.user_id && l.actor_id === emp.user_id);
 
+  // 退職証明書の本人申請（db/127）。表が無ければ null（申請の欄は「まだ使えません」）
+  let certRequest = null, certReady = true;
+  try {
+    const full = await must(sb.from("gw_employees").select(CERT_EMP_FIELDS).eq("id", emp.id).eq("tenant_id", ctx.tenantId).maybeSingle());
+    certRequest = await certAdminState(sb, ctx, full || emp, { canSeeWage: canSeeSalary(ctx) });
+  } catch (e) {
+    if (!dbSetupHint(e, "db/127_retire_cert_requests.sql")) throw e;
+    certReady = false;
+  }
+
   return json(res, 200, {
-    ready,
+    ready: { ...ready, cert: certReady },
+    certRequest,
+    canIssueCert: canManageSeals(ctx),
     employee: {
       id: emp.id, name: emp.display_name, department: emp.department || null, employmentType: emp.employment_type || null,
       status: emp.status, statusLabel: STATUS_LABEL[emp.status] || emp.status,

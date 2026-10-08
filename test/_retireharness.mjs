@@ -8,7 +8,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const atRoot = (p) => _join(ROOT, p);
 
 // ---- 偽の DB ----------------------------------------------------------------------
-export const db = { rows: {}, n: 0, absent: new Set(), failRead: new Set() };
+export const db = { rows: {}, n: 0, absent: new Set(), failRead: new Set(), failUpdate: new Set(), failUpload: false };
 export const logs = [];
 export const current = { userId: null };
 
@@ -20,6 +20,7 @@ function table(name) {
     if (db.absent.has(name)) return { data: null, error: { code: "PGRST205", message: "Could not find the table in the schema cache" } };
     if (db.failRead.has(name)) return { data: null, error: { code: "500", message: "boom" } };
     const list = all();
+    if (op === "update" && db.failUpdate.has(name)) return { data: null, error: { code: "500", message: "update failed" } };
     if (op === "insert") {
       const rows = [].concat(payload).map((r) => ({ id: `${name}-${++db.n}`, created_at: new Date(Date.now() + db.n).toISOString(), ...r }));
       for (const r of rows) list.push(r);
@@ -70,8 +71,14 @@ async function rpc(fn, a) {
 }
 // PDF を見る（署名付き URL）だけ。登録・アップロードは test/retireeapi.mjs が見る
 export const signed = [];
+// 発行（退職証明書の承認して発行）で使う：印影の取り出し・PDF の保存（test/certrequestapi.mjs）
+export const stored = new Map();
+const PNG_1PX = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const storage = { from: () => ({
   createSignedUrl: async (path, ttl) => { signed.push({ path, ttl }); return { data: { signedUrl: `https://storage.test/sign/hr/${encodeURIComponent(path)}` }, error: null }; },
+  download: async (path) => (path.startsWith("seals/") ? { data: new Blob([PNG_1PX]), error: null } : { data: null, error: { message: "nf" } }),
+  upload: async (path, bytes) => { if (db.failUpload) return { data: null, error: { message: "upload failed" } }; stored.set(path, bytes); return { data: { path }, error: null }; },
+  remove: async (paths) => { for (const p of paths) stored.delete(p); return { data: null, error: null }; },
 }) };
 mock.module(atRoot("lib/supabase.js"), { namedExports: {
   admin: () => ({ from: table, rpc, storage }),
@@ -90,7 +97,7 @@ export const TODAY = ymdOffset(0), YESTERDAY = ymdOffset(-1), TOMORROW = ymdOffs
 export const emp = (id, status, left_on = null, tenant = "t1") => ({ id: `e-${id}`, tenant_id: tenant, user_id: `u-${id}`, display_name: `名前${id}`, department: "開発",
   employment_type: "正社員", joined_on: "2025-04-01", status, left_on, updated_at: "2026-10-01T00:00:00.000001+00:00" });
 export function setup() {
-  resetLeftCache(); db.absent.clear(); db.failRead.clear(); logs.length = 0; rpcCalls.length = 0; signed.length = 0; db.n = 0; current.userId = null;
+  resetLeftCache(); db.absent.clear(); db.failRead.clear(); db.failUpdate.clear(); db.failUpload = false; logs.length = 0; rpcCalls.length = 0; signed.length = 0; db.n = 0; current.userId = null;
   db.rows = {
     gw_employees: [emp("hr", "active"), emp("member", "active"), emp("soon", "leaving", NEXTWEEK), emp("past", "leaving", LASTWEEK), emp("left", "left", LASTWEEK),
       emp("noday", "leaving", null), emp("other", "active", null, "t2")],

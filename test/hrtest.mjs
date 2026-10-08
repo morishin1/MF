@@ -490,6 +490,51 @@ await ok("外せる（押し間違い）", async () => {
   assert.equal(first.completed_at, null);
 });
 
+// 退職証明書の交付：本人の申請（db/127）があるあいだは、手で完了にしない（承認して発行が正本）
+console.log("\n— 退職証明書の交付（本人の申請との整合）—");
+async function certItem(status) {
+  setup();
+  const made = await post({ employeeId: "emp-new", kind: "offboarding", targetOn: day(10) });
+  const it = items().find((i) => i.item_key === "off_hr_cert");
+  db.rows.gw_retire_cert_requests = status ? [{ id: "q1", tenant_id: "t1", employee_id: "emp-new", status, requested_at: new Date().toISOString() }] : [];
+  return { id: made.body.id, it };
+}
+await ok("退社のチェックリストに「退職証明書の交付」がある", async () => {
+  const { it } = await certItem(null);
+  assert.ok(it, "off_hr_cert が無い");
+  assert.equal(it.title, "退職証明書の交付");
+});
+await ok("申請なし：これまでどおり手で完了にできる（紙で別に発行する場合）", async () => {
+  const { id, it } = await certItem(null);
+  const r = await patch({ id, itemId: it.id, done: true });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(it.status, "done");
+});
+await ok("申請中：手で完了にできない（409 cert_pending・完了にならない）", async () => {
+  const { id, it } = await certItem("requested");
+  const r = await patch({ id, itemId: it.id, done: true });
+  assert.equal(r.statusCode, 409); assert.equal(r.body.error, "cert_pending");
+  assert.notEqual(it.status, "done"); assert.ok(!it.completed_at);
+});
+await ok("差し戻し：手で完了にできない（409 cert_returned）", async () => {
+  const { id, it } = await certItem("cancelled");
+  const r = await patch({ id, itemId: it.id, done: true });
+  assert.equal(r.statusCode, 409); assert.equal(r.body.error, "cert_returned");
+  assert.notEqual(it.status, "done");
+});
+await ok("発行済み：完了のまま（未完了に戻せない。409 cert_issued）", async () => {
+  const { id, it } = await certItem("issued");
+  Object.assign(it, { status: "done", completed_at: new Date().toISOString() });
+  const r = await patch({ id, itemId: it.id, done: false });
+  assert.equal(r.statusCode, 409); assert.equal(r.body.error, "cert_issued");
+  assert.equal(it.status, "done");
+});
+await ok("ほかの項目は、申請があっても手で付け外しできる", async () => {
+  const { id } = await certItem("requested");
+  const other = items().find((i) => i.item_key === "off_hr_date");
+  assert.equal((await patch({ id, itemId: other.id, done: true })).statusCode, 200);
+});
+
 /**
  * 入社の「完了」は、社内準備だけでは決まらない。
  * 作成依頼 → 社労士の発行 → 本人の締結・同意 → 届出 → 社内準備、が全部そろって ⑤。

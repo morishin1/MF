@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261008rec2">
+  <link rel="stylesheet" href="css/app.css?v=20261008rec3">
   <style>
     .guide h3{font-size:15px;color:var(--primary-dark);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
     .stepbox{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
@@ -643,17 +643,22 @@
     <h2><span class="material-symbols-outlined">person_add</span>入社を進める（人事）</h2>
     <span class="who-for admin">人事・経営者の方</span>
     <p class="lead" style="margin-top:0;">
-      Office ＞ 人事・労務 ＞ <b>入退社</b> の一覧で、<b>［手続きを開く］</b>を押します。
+      Office ＞ 人・組織 ＞ <b>入退社</b> の一覧で、<b>［手続きを開く］</b>を押します。
       一覧には、対象者・入社日／退職日・現在の状態・次にすること・担当・期限が並びます。
     </p>
+    <p class="lead">開いた画面は、入社・退社とも同じ並びです（入社は青、退社は橙の線）。
+      いちばん上に期限超過の赤い帯、その下に<b>全体の進み具合（ステップ）</b>、そして<b>チェックリスト</b>。
+      チェックリストの項目を押すと、その下に作業の場所（書類・アカウント・貸与品など）が開き、その場で作業して［完了にする］で次の項目へ進みます。
+      項目の横には、予定日ではなく<b>チェックした日と人</b>が残ります。基本情報・連絡・手続き履歴・書類の保管先は、下のタブにあります。</p>
     <div class="stepbox">
       <div class="num">1</div>
-      <div class="body"><b>いちばん上の「次にすること」を見る</b><br>
-        いま誰が何をすればよいかと、期限が出ます。下のボタンから、その作業の画面へ進めます。</div>
+      <div class="body"><b>チェックリストを上から進める</b><br>
+        最初の未完了の項目が開いています。「労働条件・契約の確認」の中で労働条件通知書と契約書、「必要書類の回収」の中でマイナンバーの進み具合を扱います。
+        チェックリストの下の「次にすること」には、いま誰が何をすればよいかと期限が出ます。</div>
     </div>
     <div class="stepbox">
       <div class="num">2</div>
-      <div class="body"><b>「手続き全体の進み具合」で6つの段階を確かめる</b><br>
+      <div class="body"><b>ステップと「手続きの進み具合」のタブで6つの段階を確かめる</b><br>
         基本情報 → 契約書の準備 → 本人の確認・署名 → 入社情報・必要書類 → アカウント・貸与品 → 会社確認・完了。並びは目安で、作業は並行して進められます。</div>
     </div>
     <div class="stepbox">
@@ -744,16 +749,23 @@
   <div class="card" id="hr-offboarding">
     <h2><span class="material-symbols-outlined">person_remove</span>退社を進める（人事）</h2>
     <span class="who-for admin">人事・経営者の方</span>
-    <p class="lead" style="margin-top:0;">入退社の一覧で退社の人を開くと、1画面にまとまっています。</p>
+    <p class="lead" style="margin-top:0;">入退社の一覧で退社の人を開くと、1画面にまとまっています。並びは入社と同じで、
+      ステップは 退職合意 → アカウント停止・貸与品回収 → 最終給与・精算 → 書類発行 → 完了 です。
+      「PCの返却」を押すと貸与品、「Slack の停止」を押すと Slack のアカウント、のように、その項目の作業の場所が開きます。</p>
+    <p class="lead"><b>退職証明書の本人申請</b>：本人が（退職手続き中はマイページ、退職後は退職者ポータルから）記載してほしい項目を選び、
+      NDA等の誓約にチェックして申請すると、チェックリストの「退職証明書の交付」に<b>申請あり</b>と出ます。
+      開くと、本人が選んだ項目・誓約の日時と証跡・証明書に印字される内容が見られます。
+      <b>［承認して発行］</b>（経営者・管理者）で、選んだ項目だけを記載した証明書を押印して発行・本人に公開し、項目が完了になります。
+      人事は内容の確認と［差し戻す］まで行えます。</p>
     <div class="stepbox">
       <div class="num">1</div>
-      <div class="body"><b>基本情報と［退職日を変更］</b><br>
+      <div class="body"><b>「退職日の確認」と［退職日を変更］</b><br>
         退職日・最終出勤日・担当を変えられます。日付を変えても、在籍状態やアカウントは変わりません。ほかの担当者が先に更新していたら上書きしません。</div>
     </div>
     <div class="stepbox">
       <div class="num">2</div>
       <div class="body"><b>次にやること</b><br>
-        返却待ち・書類の未発行／未公開・サービスの未確認など、実際の未完了だけが出ます。押すとその欄へ移ります。</div>
+        チェックリストの下に、返却待ち・書類の未発行／未公開・サービスの未確認など、実際の未完了だけが出ます。押すと、その作業の場所が開きます。</div>
     </div>
     <div class="stepbox">
       <div class="num">3</div>

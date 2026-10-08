@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261008rec2">
-  <link rel="stylesheet" href="css/layout.css?v=20261008rec2">
+  <link rel="stylesheet" href="css/app.css?v=20261008rec3">
+  <link rel="stylesheet" href="css/layout.css?v=20261008rec3">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -63,6 +63,9 @@
   </div>
 
   <!-- 労働条件。入社時に登録されたもの。本人が読めるようにしておく -->
+  <!-- 退職証明書の申請（退職手続き中の人だけ。退職したあとは退職者ポータル /retiree/ から）。db/127 -->
+  <div id="cert-card" class="card hidden"><div id="cert-box"></div></div>
+
   <div id="cond-card" class="card hidden">
     <h2><span class="material-symbols-outlined">description</span>労働条件</h2>
     <div id="cond"></div>
@@ -160,9 +163,10 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261008rec2"></script>
-<script src="js/device.js?v=20261008rec2"></script>
-<script src="js/layout.js?v=20261008rec2"></script>
+<script src="js/api-client.js?v=20261008rec3"></script>
+<script src="js/device.js?v=20261008rec3"></script>
+<script src="js/layout.js?v=20261008rec3"></script>
+<script src="js/cert-request.js?v=20261008rec3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -315,6 +319,16 @@
 
   // 入社手続きが終わったあとも、出した内容と確認したことはここで読める。
   // 「やること」からは消えるので、あとから見返す場所が必要になる
+  // 退職証明書の申請。退職手続き中の人にだけ出す（canRequest はサーバーが在籍状態から決める）。表が無い・読めないときは出さない
+  async function loadCertRequest() {
+    let st;
+    try { st = await API.api("/api/employees/cert-request"); } catch { return; }
+    if (!st?.canRequest || !window.CertRequest) return;
+    el("cert-card").classList.remove("hidden");
+    CertRequest.mount(el("cert-box"), { state: st,
+      submit: (body) => API.api("/api/employees/cert-request", { method: "POST", body: { action: "request", ...body } }) });
+  }
+
   async function loadMine() {
     const [ob, plan, dl, sg, dv] = await Promise.all([
       API.myOnboarding().catch(() => null),
@@ -327,6 +341,7 @@
       myDevicesAfterBeat(),
     ]);
 
+    loadCertRequest();
     renderDriveLinks(dl);
     renderSigned(sg);
     renderDevices(dv);
