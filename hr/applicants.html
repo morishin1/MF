@@ -843,6 +843,38 @@
       </div>`;
   }
 
+  /**
+   * 無限道場の講師・メンター応募（lead_type = mugendojo_instructor）。採用の応募者として入る（区分は recruitment）。
+   * 本人が /instructors/recruit で入れた内容（lead_profile）と流入を、概要の上に出す。
+   */
+  const isInstructorApplicant = (a) => a?.attribution?.lead_type === "mugendojo_instructor" || a?.leadProfile?.kind === "instructor";
+  function instructorApplication(a) {
+    if (!isInstructorApplicant(a)) return "";
+    const p = a.leadProfile || {};
+    const first = a.attribution?.first || {};
+    const dd = (v) => esc(v || "—");
+    const pre = (v) => `<dd style="white-space:pre-wrap;font-weight:500;">${dd(v)}</dd>`;
+    const link = (u) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all;">${esc(u)}</a>` : "—");
+    const utm = [first.utm_source, first.utm_medium, first.utm_campaign].filter(Boolean).join(" / ");
+    return `
+        <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">講師・メンター応募の内容</h4>
+        <dl class="hr-grid2" style="margin-bottom:14px;padding-bottom:6px;border-bottom:1px solid #e7eaf3;">
+          <div><dt>現在の仕事・肩書き</dt><dd>${dd(p.occupation)}</dd></div>
+          <div><dt>会社・所属</dt><dd>${dd(p.company)}</dd></div>
+          <div style="grid-column:1/-1;"><dt>専門分野</dt><dd class="hr-chips-sm">${(p.specialties || []).map((x) => `<span>${esc(x)}</span>`).join("") || "—"}</dd></div>
+          <div style="grid-column:1/-1;"><dt>経歴・実績・できること</dt>${pre(p.career_text)}</div>
+          <div style="grid-column:1/-1;"><dt>応募理由</dt>${pre(p.motivation_text)}</div>
+          <div style="grid-column:1/-1;"><dt>講師・メンター経験</dt>${pre(p.teaching_experience)}</div>
+          <div><dt>対応可能な曜日・時間</dt><dd>${dd(p.availability)}</dd></div>
+          <div><dt>オンライン／対面</dt><dd>${dd((p.work_styles || []).join("・"))}</dd></div>
+          <div><dt>プロフィールURL</dt><dd>${link(p.profile_url || a.profileUrl)}</dd></div>
+          <div><dt>SNS／Webサイト</dt><dd>${link(p.website_url)}</dd></div>
+          <div style="grid-column:1/-1;"><dt>その他</dt>${pre(p.note_text)}</div>
+          <div><dt>流入（UTM）</dt><dd>${dd(utm)}</dd></div>
+          <div><dt>送信したページ</dt><dd>${link(a.attribution?.last?.source_url || first.source_url)}</dd></div>
+        </dl>`;
+  }
+
   /** いちばん新しい、評価済みの面談 */
   function latestEvaluation() {
     return (detail.interviews || []).find((i) => i.rank) || null;
@@ -904,6 +936,7 @@
       const missing = docMissingLabels();
       box.innerHTML = `
         ${nextActionBox(a)}
+        ${instructorApplication(a)}
         <dl class="hr-grid2">
           <div><dt>応募経路</dt><dd>${esc(a.source || "—")}</dd></div>
           <div><dt>応募職種</dt><dd>${esc(a.jobTitle || "—")}</dd></div>

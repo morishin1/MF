@@ -475,6 +475,140 @@ await ok(`テナント全体で10分に${NEW_LEAD_LIMIT.max}件を超える新�
   assert.equal(r.statusCode, 429);
 });
 
+console.log("\n=== 講師・メンター応募（lead_type = mugendojo_instructor）===\n");
+
+const CASUAL_URL = "https://timerex.net/s/eight/cas001";
+const inst = (over = {}) => ({
+  submission_id: `ins-${String(++n).padStart(6, "0")}`,
+  lead_type: "mugendojo_instructor",
+  name: "講師 花子", email: "hanako@example.jp",
+  occupation: "株式会社テスト 代表 / AI・DX支援", company: "株式会社テスト",
+  specialties: ["生成AI", "DX", "生成AI"], career_text: "自治体向けDX支援・AI研修",
+  motivation_text: "挑戦する人を支えたい", teaching_experience: "社内研修の講師 3年",
+  availability: "平日夜・土曜", work_styles: ["オンライン", "対面", "ほか"],
+  profile_url: "https://example.jp/hanako", website_url: "javascript:alert(1)", note_text: "よろしくお願いします",
+  source_url: "https://mugendojo.jp/instructors/recruit", utm_source: "column", utm_medium: "referral",
+  ...over,
+});
+const recApps = (t = T1) => apps().filter((a) => a.tenant_id === t && a.lead_category === "recruitment");
+
+await ok("講師応募は採用（recruitment）の応募者として入る：募集職種「無限道場 講師・メンター」・応募経路「無限道場HP」", async () => {
+  setup();
+  process.env.TIMEREX_CASUAL_INTERVIEW_URL = CASUAL_URL;
+  const r = await call(inst());
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.result, "created");
+  const a = recApps();
+  assert.equal(a.length, 1);
+  assert.equal(mdApps().length, 0, "無料カウンセリング（無限道場）の区分には入れない");
+  assert.equal(a[0].job_title, "無限道場 講師・メンター");
+  assert.equal(a[0].source, "無限道場HP");
+  assert.equal(a[0].stage, "applied");
+  assert.equal(a[0].status, "scheduling");
+  assert.equal(a[0].profile_url, "https://example.jp/hanako");
+  assert.equal(a[0].attribution.lead_type, "mugendojo_instructor");
+  const p = a[0].lead_profile;
+  assert.equal(p.kind, "instructor");
+  assert.deepEqual(p.specialties, ["生成AI", "DX"], "重複は除く");
+  assert.deepEqual(p.work_styles, ["オンライン", "対面"], "決まった値だけ");
+  assert.equal(p.website_url, undefined, "http(s) 以外のURLは保存しない");
+  assert.equal(p.career_text, "自治体向けDX支援・AI研修");
+  assert.equal(p.motivation_text, "挑戦する人を支えたい");
+  assert.equal(p.interests, undefined, "講師応募は興味の欄を持たない");
+  assert.equal(r.body.schedulingUrl, `${CASUAL_URL}?applicant_id=${a[0].id}`, "採用のカジュアル面談の予約枠＋応募者ID");
+  assert.ok(tl(a[0].id).some((t) => t.event_key === "applied" && t.label === "無限道場HPから講師・メンターに応募"));
+  const nt = notes().filter((x) => x.dedupe_key === `hr_lead:${a[0].id}`);
+  assert.ok(nt.length >= 1 && nt.every((x) => x.title === "無限道場HPから講師・メンターの応募が入りました"));
+  assert.ok(nt.every((x) => x.link.includes("category=recruitment")));
+  assert.ok(nt.some((x) => x.employee_id === E_HR) && !nt.some((x) => x.employee_id === E_WATCH), "無料カウンセリングの通知先ではなく、採用HRの担当へ");
+  assert.equal(logged.at(-1).detail.leadType, "mugendojo_instructor");
+  assert.equal(logged.at(-1).detail.category, "recruitment");
+  assert.ok(!JSON.stringify(logged).includes("hanako@example.jp"), "監査ログにメールを残さない");
+});
+
+await ok("講師応募の必須（現在の仕事・専門分野・経歴・応募理由）が無ければ 400（field 付き）", async () => {
+  setup();
+  for (const [k, v] of [["occupation", ""], ["specialties", []], ["career_text", " "], ["motivation_text", ""]]) {
+    const r = await call(inst({ [k]: v }));
+    assert.equal(r.statusCode, 400, k);
+    assert.equal(r.body.field, k);
+  }
+  const bad = await call(inst({ email: "not-an-email" }));
+  assert.equal(bad.statusCode, 400);
+  assert.equal(bad.body.field, "email");
+  assert.equal(recApps().length, 0);
+});
+
+await ok("同じメールで講師に再応募：1人のまま更新・タイムラインに再送信（同じ送信IDは何もしない）", async () => {
+  setup();
+  const first = await call(inst());
+  const again = await call(inst({ email: "HANAKO@example.jp", specialties: ["システム開発"], career_text: "追記した経歴" }));
+  assert.equal(again.body.result, "updated");
+  assert.equal(again.body.applicantId, first.body.applicantId);
+  assert.equal(recApps().length, 1);
+  const a = recApps()[0];
+  assert.deepEqual(a.lead_profile.specialties, ["システム開発"], "最新の応募内容");
+  assert.equal(a.lead_profile.career_text, "追記した経歴");
+  assert.equal(a.lead_profile.motivation_text, "挑戦する人を支えたい", "空で消さない");
+  assert.ok(tl(a.id).some((t) => t.event_key === "lead_resubmitted" && t.label.startsWith("無限道場HPから再送信")));
+  const body = inst();
+  const r1 = await call(body);
+  const r2 = await call(body);
+  assert.equal(r2.body.result, "replayed");
+  assert.equal(r1.body.applicantId, r2.body.applicantId);
+});
+
+await ok("採用の別の職種・無料カウンセリングに同じメールがいても統合しない（別の行・注記）", async () => {
+  setup();
+  mem.rows.gw_hr_applicants.push({ id: uid(81), tenant_id: T1, name: "講師 花子", email: "hanako@example.jp",
+    lead_category: "recruitment", job_title: "営業職", stage: "applied", status: "todo", created_at: nowIso() });
+  await call(lead({ email: "hanako@example.jp" }));      // 無料カウンセリング
+  const r = await call(inst());
+  assert.equal(r.body.result, "created");
+  assert.notEqual(r.body.applicantId, uid(81));
+  assert.equal(recApps().length, 2);
+  assert.equal(mdApps().length, 1);
+  const note = tl(r.body.applicantId).find((t) => t.event_key === "lead_same_email");
+  assert.ok(note, "同じメールの応募者がいることを残す");
+  assert.match(note.detail, /営業職/);
+  assert.match(note.detail, /無限道場/);
+});
+
+await ok("講師に応募した人が無料カウンセリングにも申し込んだら、無限道場の区分に別に入る（講師応募は変えない）", async () => {
+  setup();
+  const i = await call(inst());
+  const c = await call(lead({ email: "hanako@example.jp" }));
+  assert.equal(c.body.result, "created");
+  assert.notEqual(c.body.applicantId, i.body.applicantId);
+  assert.equal(mdApps().length, 1);
+  assert.equal(recApps()[0].job_title, "無限道場 講師・メンター");
+});
+
+await ok("採用の予約枠が未設定なら schedulingUrl は null（応募は登録する）", async () => {
+  setup();
+  delete process.env.TIMEREX_CASUAL_INTERVIEW_URL;
+  const r = await call(inst());
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.schedulingUrl, null);
+  assert.equal(recApps().length, 1);
+});
+
+await ok("lead_type が無い・知らない値は、従来どおり無料カウンセリング（後方互換）", async () => {
+  setup();
+  const a = await call(lead());
+  const b = await call(lead({ email: "other@example.jp", lead_type: "something_else" }));
+  assert.equal(a.statusCode, 200);
+  assert.equal(b.statusCode, 200);
+  assert.equal(mdApps().length, 2);
+  assert.equal(recApps().length, 0);
+  assert.equal(a.body.schedulingUrl.startsWith("https://timerex.net/s/eight/md0001"), true, "無限道場の予約枠のまま");
+});
+
+await ok("署名は lms 側（src/lib/hr-lead-sign.ts）と同じ値になる（互換の確認用の値）", async () => {
+  const body = { submission_id: "manual-0001", name: "テスト 太郎", email: "test@example.jp", utm_source: "manual" };
+  assert.equal(signLeadRequest("x".repeat(40), 1790000000, body), "v1=9802e68862c1863fff64eb2c918a2eadc22ad2dc3ed521d48bf566e371602bd9");
+});
+
 console.log("\n=== DB未準備 ===\n");
 
 await ok("db/118 未実行（lead_category 列が無い）なら 503 not_ready で、SQL名を返す", async () => {
