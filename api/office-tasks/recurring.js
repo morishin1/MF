@@ -15,7 +15,8 @@
 // POST /api/office-tasks/recurring {action:"sync_commit", cells, periodStart, syncToken, decisions?, assignees?, fileName?, fileHash?}
 //        … 差分をサーバでもう一度作り直して（画面から来た行は信用しない）、syncToken が同じときだけ反映する（lib/office-excel-sync.js・db/128）
 //          手動のマスターは触らない。消さない（停止だけ）。担当・優先度・URL など Excel が持たない項目は空欄に戻さない。
-//          今日以降の未完了の予定だけ作り直す（過去・完了・今回なしは残す）。同じテナントで同時に2つは走らせない
+//          今日以降の未完了の予定だけ作り直す（過去・完了・今回なしは残す）。その月（毎年はその年）に完了・今回なしの回があれば、
+//          新しい基準日の回をその期には作らない（同じ月に2件にしない）。同じテナントで同時に2つは走らせない
 //
 // ■ 権限（Office の既存の権限。lib/gw.js と同じ判定）
 //   見る：カテゴリごと（人事・労務＝人事・労務／経理＝経理・事務／営業事務＝経理・事務か月末月初／ほか＝Office の業務のどれか）
@@ -242,7 +243,9 @@ async function syncCommit(res, sb, ctx, user, perms, b, today) {
       await must(sb.from("gw_office_calendar_events").delete().eq("tenant_id", ctx.tenantId)
         .in("recurring_task_id", redo.slice(i, i + 200)).eq("status", "pending").gte("event_date", today).select("id"));
     }
-    made = await generate(sb, [...inserted, ...updated.filter((m) => touched.has(m.id))], { from: today, to: addDays(today, HORIZON_DAYS) });
+    //    その期（月・年）に完了・今回なしの回がある業務は、その期の新しい回を作らない（基準日を変えても同じ月に2件にしない）
+    made = await generate(sb, [...inserted, ...updated.filter((m) => touched.has(m.id))], { from: today, to: addDays(today, HORIZON_DAYS) },
+      { preserveTerminalPeriod: true });
     await must(sb.from("gw_office_excel_syncs").update({ status: "committed", lock_key: null, committed_at: new Date().toISOString() })
       .eq("id", batch.id).select("id"));
   } catch (e) {

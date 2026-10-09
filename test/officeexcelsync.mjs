@@ -12,6 +12,8 @@
 //   9. 完了済みの予定：マスターを更新しても残る
 //   10. 未来の未完了の予定：最新のルールで作り直す
 //   11. 権限：経理しか直せない業務を、権限のない人は同期できない（権限不足として残す）
+//   12. 基準日の変更で同じ期に2件にしない（Excel 同期だけ）：その月（毎年はその年）に完了・今回なしの回があれば、新しい日の回を作らない。
+//       翌月（翌年）からは新しいルール。未完了の回は作り直して1件だけ。手動でマスターを直したときの動きは変えない
 //   ほか：Excel が持たない項目（担当・優先度・URL・備考）を空欄に戻さない／プレビューのあとで変わったら 409／
 //        同時に2つは走らせない／監査ログ／期をシート名から出す・2026年を決め打ちしない／最終同期が一覧で分かる／db/128 が無ければ 503
 import assert from "node:assert/strict";
@@ -170,6 +172,16 @@ await ok("期：シート名から出す・表示・期の外のシート（2026
   assert.equal(S.similarity("給与振込確認", "給与振込の確認"), 1, "「の」を除くと同じ");
 });
 
+await ok("期の判定（lib）：毎月はその月・毎年はその年。donePeriods に入っている期は作らない", async () => {
+  const m = { id: "a", tenant_id: T1, title: "x", category: "finance", recurrence_type: "monthly", recurrence_rule: { day: 6 }, start_on: "2026-01-01", is_active: true, due_rule: { type: "same" } };
+  assert.equal(R.periodKeyOf(m, "2026-11-06"), "2026-11");
+  assert.equal(R.periodKeyOf({ ...m, recurrence_type: "yearly" }, "2026-11-06"), "2026");
+  assert.equal(R.periodKeyOf({ ...m, recurrence_type: "weekly" }, "2026-11-06"), null);
+  const rows = R.planGeneration([m], new Set(), { from: "2026-10-08", to: "2026-12-31" }, { donePeriods: new Set(["a|2026-11"]) });
+  assert.deepEqual(rows.map((r) => r.event_date), ["2026-12-06"]);
+  assert.deepEqual(R.planGeneration([m], new Set(), { from: "2026-10-08", to: "2026-12-31" }).map((r) => r.event_date), ["2026-11-06", "2026-12-06"], "指定しなければ従来どおり");
+});
+
 await ok("かっこ書きだけの文言どうしが同じキーにならない", async () => {
   const cells = ["（健康診断の回収期限）", "（賞与アンケートの回収）"].map((text, i) => ({ sheet: "202611月", header: "", row: 10 + i, day: 10 + i, col: "C", text: `${text}` }));
   const keys = R.classifyExcel(cells, { periodStart: "2026-09" }).rows.map((r) => r.key);
@@ -309,6 +321,80 @@ await ok("API 6・10：日付変更（5日→6日）は更新。今日以降の�
   const mine = events().filter((e) => e.recurring_task_id === m.id).map((e) => `${e.event_date}:${e.status}`).sort();
   assert.ok(mine.includes("2026-11-05:done"), "完了済みは残る");
   assert.ok(mine.includes("2026-12-06:pending") && !mine.includes("2026-12-05:pending"), `先の未完了は6日で作り直す（${mine.join(",")}）`);
+});
+
+// ---- 12. 基準日の変更で同じ期に2件にしない ----
+const evOf = (id) => events().filter((e) => e.recurring_task_id === id).map((e) => `${e.event_date}:${e.status}`).sort();
+const markAs = (id, date, status) => {
+  const e = events().find((x) => x.recurring_task_id === id && x.event_date === date);
+  if (!e) throw new Error(`予定がありません ${date}`);
+  Object.assign(e, { status, completed_at: status === "done" ? "2026-10-08T01:00:00Z" : null });
+};
+
+await ok("12-1 毎月・完了：11/5 を完了 → 5日→6日。11月に6日を作らない。12月以降は6日", async () => {
+  setup(); who = MGR;
+  await sync(book());
+  const m = masters().find((x) => x.title === "月次作業004");   // 毎月5日
+  markAs(m.id, "2026-11-05", "done");
+  const { c } = await sync(book({ over: { m4: { day: 6 } } }));
+  assert.equal(c.body.update, 1);
+  const got = evOf(m.id);
+  assert.ok(got.includes("2026-11-05:done"), "完了は残す");
+  assert.ok(!got.some((x) => x.startsWith("2026-11-06")), `11月に2件目を作らない（${got.join(",")}）`);
+  assert.equal(got.filter((x) => x.startsWith("2026-11-")).length, 1);
+  assert.ok(got.includes("2026-12-06:pending") && got.includes("2027-01-06:pending"), `翌月からは6日（${got.join(",")}）`);
+  assert.ok(!got.some((x) => /^2026-12-05|^2027-01-05/.test(x)), "古い5日は残さない");
+});
+
+await ok("12-2 毎月・今回なし：11/5 を今回なし → 5日→6日。11月に6日を作らない", async () => {
+  setup(); who = MGR;
+  await sync(book());
+  const m = masters().find((x) => x.title === "月次作業004");
+  markAs(m.id, "2026-11-05", "skipped");
+  await sync(book({ over: { m4: { day: 6 } } }));
+  const got = evOf(m.id);
+  assert.ok(got.includes("2026-11-05:skipped"), "今回なしは残す");
+  assert.equal(got.filter((x) => x.startsWith("2026-11-")).length, 1, `11月は1件だけ（${got.join(",")}）`);
+  assert.ok(got.includes("2026-12-06:pending"));
+});
+
+await ok("12-3 毎年・完了：今年分を完了 → 日付変更。同じ年に2件目を作らない。翌年は新しい日", async () => {
+  setup(); who = MGR;
+  // 毎年10月20日の業務（今日 10/8 から先90日に今年分が入る）
+  const yearly = (day) => SHEETS.filter((x) => x.m === 10).map((s0) => ({ sheet: s0.name, header: "", row: 4 + day, day, col: "O", text: "・年末調整の準備" }));
+  const cellsA = [...book(), ...yearly(20)], cellsB = [...book(), ...yearly(22)];
+  await sync(cellsA);
+  const m = masters().find((x) => x.title === "年末調整の準備");
+  assert.equal(m.recurrence_type, "yearly");
+  markAs(m.id, "2026-10-20", "done");
+  const { c } = await sync(cellsB);
+  assert.equal(c.body.update, 1);
+  assert.deepEqual(m.recurrence_rule, { month: 10, day: 22 });
+  const got = evOf(m.id);
+  assert.deepEqual(got, ["2026-10-20:done"], `2026年に2件目（10/22）を作らない（${got.join(",")}）`);
+  // 翌年は新しいルール（先の日付まで作って確かめる）
+  const { generate } = await import(atRoot("lib/office-recurring-db.js"));
+  await generate(mem.admin(), [m], { from: "2027-01-01", to: "2027-12-31" }, { preserveTerminalPeriod: true });
+  assert.ok(evOf(m.id).includes("2027-10-22:pending"), `翌年は10/22（${evOf(m.id).join(",")}）`);
+});
+
+await ok("12-4 未完了のとき：旧5日が未完了 → 5日→6日。作り直して6日の1件だけ", async () => {
+  setup(); who = MGR;
+  await sync(book());
+  const m = masters().find((x) => x.title === "月次作業004");
+  assert.ok(evOf(m.id).includes("2026-11-05:pending"));
+  await sync(book({ over: { m4: { day: 6 } } }));
+  const nov = evOf(m.id).filter((x) => x.startsWith("2026-11-"));
+  assert.deepEqual(nov, ["2026-11-06:pending"], `11月は6日の1件だけ（${nov.join(",")}）`);
+});
+
+await ok("12-5 手動でマスターを直したときの動きは変えない（期の判定は Excel 同期だけ）", async () => {
+  setup(); who = MGR;
+  const made = await rec({ action: "create", title: "手動の月次", category: "finance", recurrenceType: "monthly", recurrenceRule: { day: 5 } });
+  const id = made.body.master.id;
+  markAs(id, "2026-11-05", "done");
+  await rec({ action: "update", id, title: "手動の月次", category: "finance", recurrenceType: "monthly", recurrenceRule: { day: 6 } });
+  assert.ok(evOf(id).includes("2026-11-06:pending"), "手動の編集は従来どおり（#95 のまま）");
 });
 
 await ok("API 8：手動のマスターは、Excel に無くても停止しない・同じ名前でも変えない", async () => {
