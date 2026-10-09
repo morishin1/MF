@@ -2,7 +2,7 @@
 // サーバは偽物（page.route）。予定の分け方・権限の判定はサーバ（lib/office-recurring.js）の値をそのまま使う。
 //
 // ■ 何を守るテストか
-//   1. Office ホームの並び：件数 → 今日やること → 今月のOfficeカレンダー → 今週のOffice予定 → 月次進捗
+//   1. Office ホームの並び：件数 → 今月のOfficeカレンダー → 今日やること → 今週のOffice予定 → 月次進捗（カレンダーは件数のすぐ下。1280・390 とも）
 //   2. カレンダー：月〜日の格子・今日の印・1日3件まで＋「+N件」・期限超過は赤・完了は取り消し線。前月／今日／次月で月を移る
 //   3. 日付を押すと右ドロワー：カテゴリごとに、業務名・担当・期限・状態・備考・完了ボタン・定例業務へのリンク
 //   4. 完了を押すと、サーバへ送り、その場で表示が変わる
@@ -87,9 +87,10 @@ async function openHome(width = 1280) {
 console.log("\n=== Office ホーム：並び・カレンダー ===");
 {
   const { page, calls, errs } = await openHome();
-  const order = await page.evaluate(() => ["cards", "todo", "calBox", "weekBox", "progBox"].map((id) => { const n = document.getElementById(id); return n && !n.hidden ? Math.round(n.getBoundingClientRect().top) : -1; }));
+  const order = await page.evaluate(() => ["cards", "calBox", "todo", "weekBox", "progBox"].map((id) => { const n = document.getElementById(id); return n && !n.hidden ? Math.round(n.getBoundingClientRect().top) : -1; }));
   const shown = order.filter((y) => y >= 0);
-  check(order[2] > order[1] && order[3] > order[2] && shown.every((y, i) => i === 0 || y > shown[i - 1]), `件数 → 今日やること → カレンダー → 今週の予定 → 月次進捗（${order.join(",")}）`);
+  check(order[2] > order[1] && order[3] > order[2] && shown.every((y, i) => i === 0 || y > shown[i - 1]), `件数 → カレンダー → 今日やること → 今週の予定 → 月次進捗（${order.join(",")}）`);
+  check(await page.evaluate(() => document.getElementById("cards").nextElementSibling?.id === "calBox"), "カレンダーは件数（サマリーカード）のすぐ下");
   check(calls.get[0] === "2026-09-28..2026-11-01", `今月の格子の範囲を取る（${calls.get[0]}）`);
   check((await page.locator("#calMonth").innerText()) === "2026年10月", "見出しは 2026年10月");
   const cells = await page.locator(".oc-grid .oc-day").count();
@@ -145,6 +146,8 @@ for (const w of [1280, 768, 390]) {
   const { page } = await openHome(w);
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(over <= 0, `${w}px：横にはみ出さない（${over}）`);
+  const ys = await page.evaluate(() => ["cards", "calBox", "todo"].map((id) => Math.round(document.getElementById(id).getBoundingClientRect().top)));
+  check(ys[0] < ys[1] && ys[1] < ys[2], `${w}px：カレンダーは件数の下・今日やることの上（${ys.join(",")}）`);
   const grid = await page.locator(".oc-grid").isVisible(), strip = await page.locator("#calStrip").isVisible();
   if (w === 390) {
     check(!grid && strip, "390px：格子ではなく、日付を横に流す");

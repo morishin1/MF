@@ -110,11 +110,8 @@
 
   <div class="of-tiles oh-cards" id="cards" aria-label="対応が要る件数"></div>
 
-  <section class="oh-sec" aria-labelledby="todoH">
-    <h2 class="of-sec-h" id="todoH">今日やること</h2>
-    <div class="of-rows oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
-  </section>
-
+  <!-- 並び：件数 → 今月のOfficeカレンダー → 今日やること → 今週のOffice予定 → 月次進捗。
+       予定の全体像を先に見せる（今日やることが長くても、カレンダーが下に埋もれないように） -->
   <section class="oh-sec" id="calBox" aria-labelledby="calH" hidden>
     <div class="oh-sec-row">
       <h2 class="of-sec-h" id="calH">今月のOfficeカレンダー</h2>
@@ -132,6 +129,11 @@
       <div id="cal"><div class="of-empty">読み込み中…</div></div>
       <p class="oc-legend">日付を押すと、その日の業務（担当・期限・状態）が開きます。赤字は期限超過、取り消し線は完了。</p>
     </div>
+  </section>
+
+  <section class="oh-sec" aria-labelledby="todoH">
+    <h2 class="of-sec-h" id="todoH">今日やること</h2>
+    <div class="of-rows oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
   </section>
 
   <section class="oh-sec" id="weekBox" aria-labelledby="weekH" hidden>
