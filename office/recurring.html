@@ -47,17 +47,42 @@
     .rc-dows input { width:auto; }
     .rc-note { font-size:11.5px; color:var(--of-mute); margin:4px 0 0; line-height:1.7; }
     .rc-err { color:#b3261e; font-size:12.5px; margin:10px 0 0; }
-    /* Excel 取り込み */
-    .rc-imp { margin:0 0 16px; }
-    .rc-imp-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
-    .rc-imp-tools input[type="month"] { margin:0; width:auto; }
-    .rc-imp-table { width:100%; border-collapse:collapse; font-size:12px; background:#fff; }
-    .rc-imp-table th, .rc-imp-table td { border-bottom:1px solid var(--of-line); padding:6px; text-align:left; vertical-align:top; }
-    .rc-imp-table th { font-size:11px; color:var(--of-mute); background:#f6f6f2; white-space:nowrap; }
-    .rc-imp-table input[type="text"] { width:100%; min-width:160px; margin:0; font-size:12px; padding:4px 6px; }
-    .rc-imp-table select, .rc-imp-table input[type="number"] { margin:0; font-size:12px; padding:3px 4px; width:auto; }
-    .rc-imp-table tr.ex td { color:var(--of-faint); }
-    .rc-imp-wrap { max-height:60vh; overflow:auto; border:1px solid var(--of-line); border-radius:10px; }
+    /* Excel 最新版の同期（db/128・lib/office-excel-sync.js） */
+    .sy-info { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fff; border:1px solid var(--of-line); border-left:3px solid var(--of-blue, #2c4f9e);
+      border-radius:10px; padding:10px 14px; margin:0 0 14px; font-size:12.5px; color:var(--of-sub); line-height:1.7; }
+    .sy-info b { color:var(--of-ink); font-size:13.5px; }
+    .sy-info .material-symbols-outlined { font-size:20px; color:var(--of-blue, #2c4f9e); }
+    .sy-box { margin:0 0 16px; }
+    .sy-lead { line-height:1.8; margin:0 0 10px; }
+    .sy-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+    .sy-tools input[type="month"], .sy-tools input[type="file"] { margin:0; width:auto; max-width:100%; }
+    .sy-sum { display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:8px; margin:12px 0; }
+    .sy-sum div { background:#fff; border:1px solid var(--of-line); border-left:3px solid #c7cad4; border-radius:9px; padding:8px 10px; }
+    .sy-sum div span { display:block; font-size:11.5px; color:var(--of-mute); font-weight:700; }
+    .sy-sum div b { font-size:20px; color:var(--of-ink); font-variant-numeric:tabular-nums; }
+    .sy-sum .a-new { border-left-color:#2c4f9e; } .sy-sum .a-update { border-left-color:#7d5a00; } .sy-sum .a-stop { border-left-color:#b3261e; }
+    .sy-sum .a-reactivate { border-left-color:#2f6f3a; } .sy-sum .a-review { border-left-color:#c05621; } .sy-sum .a-forbidden { border-left-color:#9aa0b4; }
+    .sy-list { display:grid; gap:8px; max-height:65vh; overflow:auto; padding-right:2px; }
+    .sy-row { background:#fff; border:1px solid var(--of-line); border-left:3px solid #c7cad4; border-radius:10px; padding:10px 12px;
+      display:grid; grid-template-columns:96px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr); gap:6px 12px; align-items:start; font-size:12.5px; }
+    .sy-row.a-new { border-left-color:#2c4f9e; } .sy-row.a-update { border-left-color:#7d5a00; } .sy-row.a-stop { border-left-color:#b3261e; background:#fffafa; }
+    .sy-row.a-reactivate { border-left-color:#2f6f3a; } .sy-row.a-review { border-left-color:#c05621; background:#fffaf3; } .sy-row.a-unchanged { opacity:.85; }
+    .sy-row .k { display:block; font-size:10.5px; color:var(--of-mute); font-weight:700; }
+    .sy-row b.t { color:var(--of-ink); font-size:13.5px; }
+    .sy-row .chg { color:#7d5a00; }
+    .sy-row .why { grid-column:1 / -1; font-size:12px; color:var(--of-sub); line-height:1.7; }
+    .sy-row select { margin:0; font-size:12px; padding:3px 6px; max-width:100%; }
+    .sy-row .pick { display:flex; flex-direction:column; gap:4px; }
+    .sy-row .pick label { display:flex; align-items:center; gap:6px; font-weight:500; margin:0; }
+    .sy-row .pick input { width:auto; margin:0; }
+    .sy-tag { display:inline-block; border-radius:999px; padding:2px 9px; font-size:11.5px; font-weight:700; background:#efefeb; color:#4a5068; white-space:nowrap; }
+    .sy-tag.a-new { background:#e7eefb; color:#2c4f9e; } .sy-tag.a-update { background:#fbf1d6; color:#7d5a00; } .sy-tag.a-stop { background:#fdecea; color:#b3261e; }
+    .sy-tag.a-reactivate { background:#e5f1e2; color:#2f6f3a; } .sy-tag.a-review { background:#fdebd9; color:#9c4221; } .sy-tag.ng { background:#efefeb; color:#6b7080; margin-top:4px; }
+    .sy-go { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:12px 0 0; }
+    @media (max-width: 760px) {
+      .sy-row { grid-template-columns:1fr; }
+      .sy-go .of-btn { width:100%; justify-content:center; }
+    }
     .rc-origin { font-size:11px; color:var(--of-mute); }
   </style>
 </head>
@@ -70,25 +95,29 @@
       <p class="of-sub">毎月・毎年の会社の業務を1回登録すると、Office のカレンダーと「今日やること」に自動で出ます（今日から先90日ぶん）。</p>
     </div>
     <div class="rc-tools" style="margin:0;">
-      <button type="button" class="of-btn sec" id="impOpen" onclick="toggleImport()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>Excelから取り込む</button>
+      <button type="button" class="of-btn sec" id="syncOpen" onclick="toggleSync()"><span class="material-symbols-outlined" aria-hidden="true">sync</span>年間予定表を最新版として同期</button>
       <button type="button" class="of-btn" id="newBtn" onclick="openEdit()"><span class="material-symbols-outlined" aria-hidden="true">add</span>定例業務を作る</button>
     </div>
   </div>
 
   <div id="banner"></div>
 
-  <section class="rc-imp of-panel" id="impBox" hidden aria-labelledby="impH">
-    <h2 class="of-sec-h" id="impH">Excel 年間予定表から取り込む</h2>
-    <p class="of-muted" style="line-height:1.8;">年間予定表（.xlsx）を選ぶと、月をまたいで何回出てくるかで「毎月」「毎年」「単発」に分けた一覧を出します。
-      まだ何も登録しません。一覧で「登録」にした行だけが入ります（単発は初めは除外。同じ行は2回入りません）。
-      列：C 全体／G その他／M 営業事務／N 人事／O 労務・総務／P EC・NW／Q 経理。</p>
-    <div class="rc-imp-tools">
-      <input type="file" id="impFile" accept=".xlsx,.xls">
-      <label class="of-muted" style="display:flex;align-items:center;gap:6px;">期の始まり <input type="month" id="impPeriod" value="2025-09"></label>
-      <button type="button" class="of-btn sec" id="impRead" onclick="readExcel(this)">読み込んで一覧を作る</button>
+  <div id="syncInfo"></div>
+
+  <section class="sy-box of-panel" id="syncBox" hidden aria-labelledby="syncH">
+    <h2 class="of-sec-h" id="syncH">年間予定表を最新版として同期</h2>
+    <p class="of-muted sy-lead">アップロードしたExcelを、Excel由来の定例業務の最新版として反映します。<br>
+      Excelに追加された業務は新規登録、変更された業務は更新、Excelから削除された業務は停止します。<br>
+      手動登録した定例業務と過去の履歴は変更しません。担当・優先度・URL・備考など Excel に無い項目も、そのまま残します。</p>
+    <p class="of-muted" style="font-size:12px;margin:0;">読むのは各月のシート（例：202609月）の 5〜45行目、列は C 全体／G その他／M 営業事務／N 人事／O 労務・総務／P EC・NW／Q 経理 だけです。
+      読み込んだだけでは何も変わりません。差分を確かめてから「最新版として同期する」を押してください。</p>
+    <div class="sy-tools">
+      <input type="file" id="syncFile" accept=".xlsx,.xls" onchange="syncFilePicked()">
+      <label class="of-muted" style="display:flex;align-items:center;gap:6px;">期の始まり <input type="month" id="syncPeriod"></label>
+      <button type="button" class="of-btn sec" id="syncRead" onclick="readSync(this)">読み込んで差分を確認する</button>
     </div>
-    <div id="impMsg" class="rc-err"></div>
-    <div id="impResult"></div>
+    <div id="syncMsg" class="rc-err" role="alert"></div>
+    <div id="syncResult"></div>
   </section>
 
   <div class="rc-tools">
@@ -115,7 +144,7 @@
   let D = null;            // GET /api/office-tasks/recurring
   let cat = "";            // 絞り込みのカテゴリ
   let editing = null;      // 編集中のマスター（新規は {}）
-  let IMP = null;          // 取り込みの変換一覧
+  let SY = null;           // 同期の差分（sync_preview の結果と、読み込んだセル・担当・要確認の判断）
 
   O.init({ active: "recurring", access: ["officeHr", "officeFinance", "office"] }).then((ctx) => { if (ctx) load(); });
 
@@ -129,7 +158,8 @@
       return;
     }
     const canAny = D.categories.some((c) => c.edit);
-    el("newBtn").hidden = !canAny; el("impOpen").hidden = !canAny;
+    el("newBtn").hidden = !canAny; el("syncOpen").hidden = !canAny;
+    renderSyncInfo();
     render();
     const id = new URLSearchParams(location.search).get("id");
     if (id && D.masters.some((m) => m.id === id)) openEdit(id);
@@ -155,7 +185,7 @@
         <div class="s">${m.active ? `<span class="rc-tag on">有効</span>` : `<span class="rc-tag">停止</span>`}<br>次回：${m.nextDate ? esc(O.fmtDay(m.nextDate)) : "—"}<br>更新：${esc(O.fmtDay(String(m.updatedAt || "").slice(0, 10)))}</div>
         <div class="ops">${m.canEdit ? `<button type="button" class="of-btn sec" onclick="openEdit('${esc(m.id)}')">編集</button>
           <button type="button" class="of-btn sec" data-act="toggle" onclick="setActive('${esc(m.id)}', ${!m.active}, this)">${m.active ? "停止" : "有効にする"}</button>` : ""}</div>
-      </div>`).join("") : `<div class="of-empty">${D.masters.length ? "条件に合う定例業務はありません" : "まだ定例業務がありません。「定例業務を作る」か「Excelから取り込む」から始めてください"}</div>`;
+      </div>`).join("") : `<div class="of-empty">${D.masters.length ? "条件に合う定例業務はありません" : "まだ定例業務がありません。「定例業務を作る」か「年間予定表を最新版として同期」から始めてください"}</div>`;
   }
   function setCat(k) { cat = k; render(); }
 
@@ -271,100 +301,152 @@
     } catch (e) { el("e-err").textContent = (e.body?.problems || [e.hint || e.message || "保存できませんでした"]).join("／"); }
   }
 
-  // ---- Excel 年間予定表から取り込む ----------------------------------------------------------
-  // ファイルはこの画面（ブラウザ）で読み、セル（シート名・見出し・日・列・文言）だけをサーバへ送る。分けるのはサーバ（lib/office-recurring.js）
-  function toggleImport() { el("impBox").hidden = !el("impBox").hidden; }
+  // ---- Excel 年間予定表を最新版として同期（db/128） ----------------------------------------------------
+  // ファイルはこの画面（ブラウザ）で読み、決まった列・行の空でないセルだけをサーバへ送る。差分を作るのも確かめるのもサーバ
   const COLS = ["C", "G", "M", "N", "O", "P", "Q"];
-  async function readExcel(btn) {
-    el("impMsg").textContent = "";
-    const f = el("impFile").files[0];
-    if (!f) { el("impMsg").textContent = "Excel ファイルを選んでください"; return; }
-    if (!window.XLSX) { el("impMsg").textContent = "Excel を読む部品を読み込めませんでした。少し待ってからもう一度お試しください"; return; }
+  const ACTION_LABEL = { new: "新規", update: "更新", unchanged: "変更なし", stop: "停止予定", reactivate: "再有効化", review: "要確認" };
+  const jst = (iso) => { const t = Date.parse(iso || ""); if (!Number.isFinite(t)) return ""; const d = new Date(t + 9 * 3600000), p = (n) => String(n).padStart(2, "0");
+    return `${d.getUTCFullYear()}/${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; };
+
+  function renderSyncInfo() {
+    const s = D.sync || {};
+    if (!s.ready) { el("syncInfo").innerHTML = s.hint ? `<div class="sy-info" data-role="sync-info"><span class="material-symbols-outlined" aria-hidden="true">build</span><div>Excel 最新版の同期は、まだ使えません。${esc(s.hint)}</div></div>` : ""; return; }
+    const l = s.last;
+    el("syncInfo").innerHTML = `<div class="sy-info" data-role="sync-info"><span class="material-symbols-outlined" aria-hidden="true">table_view</span>
+      <div>${l ? `<b>Excel最新版　${esc(l.periodLabel)}</b><br>最終同期：${esc(jst(l.committedAt))}${l.byName ? `（${esc(l.byName)}）` : ""}　新規 ${l.new}・更新 ${l.update}・停止 ${l.stop}${l.reactivate ? `・再有効化 ${l.reactivate}` : ""}${l.fileName ? `　ファイル：${esc(l.fileName)}` : ""}`
+        : `<b>Excel最新版</b>　まだ同期していません。「年間予定表を最新版として同期」から年間予定表を選んでください。`}
+      ${s.applying ? `<br><span style="color:#b3261e;">同期中のものがあります（${esc(jst(s.applying.createdAt))}〜）。終わるまでお待ちください。</span>` : s.failed ? `<br><span style="color:#b3261e;">前回の同期が途中で止まりました。もう一度同期すると、残りが反映されます。</span>` : ""}</div></div>`;
+  }
+  function toggleSync() { el("syncBox").hidden = !el("syncBox").hidden; }
+
+  /** 年間予定表（.xlsx）を読む。シート名（例：202609月）から期の始まりも出す */
+  async function readBook(f) {
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const cells = [];
+    for (const name of wb.SheetNames) {
+      const ws = wb.Sheets[name];
+      const header = ws.H1 ? String(ws.H1.v ?? "") : "";
+      for (let r = 5; r <= 45; r++) {
+        const day = ws[`A${r}`]?.v;
+        if (typeof day !== "number") continue;
+        for (const col of COLS) {
+          const v = ws[`${col}${r}`]?.v;
+          if (v != null && String(v).trim()) cells.push({ sheet: name, header, row: r, day, col, text: String(v) });
+        }
+      }
+    }
+    const ym = wb.SheetNames.map((n) => String(n).match(/^(\d{4})(\d{2})月$/)).filter(Boolean).map((m) => `${m[1]}-${m[2]}`).sort();
+    let hash = null;
+    try { const h = await crypto.subtle.digest("SHA-256", buf); hash = [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join(""); } catch { /* 無くても同期はできる */ }
+    return { cells, period: ym[0] || null, hash };
+  }
+  async function syncFilePicked() {
+    el("syncMsg").textContent = "";
+    const f = el("syncFile").files[0];
+    if (!f || !window.XLSX) return;
+    try { const b = await readBook(f); if (b.period) el("syncPeriod").value = b.period; } catch { /* 読み込みボタンで知らせる */ }
+  }
+  async function readSync(btn) {
+    el("syncMsg").textContent = "";
+    const f = el("syncFile").files[0];
+    if (!f) { el("syncMsg").textContent = "年間予定表の Excel ファイルを選んでください"; return; }
+    if (!window.XLSX) { el("syncMsg").textContent = "Excel を読む部品を読み込めませんでした。少し待ってからもう一度お試しください"; return; }
     try {
       await KPLayout.busy(btn, "読み込み中…", async () => {
-        const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-        const cells = [];
-        for (const name of wb.SheetNames) {
-          const ws = wb.Sheets[name];
-          const header = ws.H1 ? String(ws.H1.v ?? "") : "";
-          for (let r = 5; r <= 45; r++) {
-            const day = ws[`A${r}`]?.v;
-            if (typeof day !== "number") continue;
-            for (const col of COLS) {
-              const v = ws[`${col}${r}`]?.v;
-              if (v != null && String(v).trim()) cells.push({ sheet: name, header, row: r, day, col, text: String(v) });
-            }
-          }
-        }
-        IMP = await API.api("/api/office-tasks/recurring", { method: "POST", body: { action: "import_preview", cells, periodStart: el("impPeriod").value || "2025-09" }, invalidates: [] });
-        IMP.filter = "recurring";
-        renderImport();
+        const b = await readBook(f);
+        if (!b.cells.length) throw new Error("Excel から読めた行がありません。年間予定表のファイルか確かめてください");
+        if (!el("syncPeriod").value && b.period) el("syncPeriod").value = b.period;
+        SY = { cells: b.cells, fileName: f.name, fileHash: b.hash, periodStart: el("syncPeriod").value || b.period, decisions: {}, assignees: {}, filter: "changed" };
+        await previewSync();
       });
-    } catch (e) { el("impMsg").textContent = e.hint || e.message || "読み込めませんでした"; }
+    } catch (e) { el("syncMsg").textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+  async function previewSync() {
+    const r = await API.api("/api/office-tasks/recurring", { method: "POST", invalidates: [],
+      body: { action: "sync_preview", cells: SY.cells, periodStart: SY.periodStart, decisions: SY.decisions } });
+    Object.assign(SY, { view: r, periodStart: r.periodStart });
+    el("syncPeriod").value = r.periodStart;
+    renderSync();
   }
 
-  function impRuleCell(r, i) {
-    if (r.kind === "single") return `<input type="date" data-i="${i}" data-f="date" value="${esc(r.recurrenceRule.date || "")}" onchange="impSet(this)">`;
-    if (r.recurrenceType === "yearly") return `毎年 <input type="number" min="1" max="12" data-i="${i}" data-f="month" value="${esc(r.recurrenceRule.month)}" onchange="impSet(this)">月
-      <input type="number" min="1" max="31" data-i="${i}" data-f="day" value="${esc(r.recurrenceRule.day ?? "")}" onchange="impSet(this)">日`;
-    return `毎月 <input type="number" min="1" max="31" data-i="${i}" data-f="day" value="${esc(r.recurrenceRule.day ?? "")}" onchange="impSet(this)">日
-      <select data-i="${i}" data-f="shift" onchange="impSet(this)"><option value="">そのまま</option><option value="prev" ${r.recurrenceRule.shift === "prev" ? "selected" : ""}>土日祝は前</option><option value="next" ${r.recurrenceRule.shift === "next" ? "selected" : ""}>土日祝は次</option></select>`;
+  function syRow(r) {
+    const cur = r.current, nx = r.next;
+    const changeText = r.action === "new" ? "Excel に追加された業務" : r.action === "stop" ? "Excel から消えた業務"
+      : r.changes.length ? r.changes.map((c) => `${c.label}：${c.beforeText ?? "—"} → ${c.afterText ?? "—"}`).join("／") : (r.action === "reactivate" ? "停止中 → 有効" : "—");
+    let act = "";
+    if (r.forbidden) act = `<span class="sy-tag ng">権限不足（同期しません）</span>`;
+    else if (r.action === "new") act = `<label class="k" for="as-${esc(r.key)}">担当（任意）</label><select id="as-${esc(r.key)}" data-key="${esc(r.key)}" onchange="syAssign(this)"><option value="">（未設定）</option>${D.employees.map((p) => `<option value="${esc(p.id)}" ${SY.assignees[r.key] === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`;
+    else if (r.action === "review") act = `<div class="pick" role="radiogroup" aria-label="この業務の扱い">
+        <label><input type="radio" name="rv-${esc(r.key)}" data-key="${esc(r.key)}" value="link" onchange="syDecide(this)">同じ業務として更新</label>
+        <label><input type="radio" name="rv-${esc(r.key)}" data-key="${esc(r.key)}" value="separate" onchange="syDecide(this)">別の業務として登録（前のものは停止）</label></div>`;
+    else if (r.decided) act = `<span class="of-muted">${r.decided === "link" ? "同じ業務として更新" : "別の業務として登録"}（<a href="#" data-key="${esc(r.key)}" onclick="syUndecide(this);return false;">選び直す</a>）</span>`;
+    else if (r.action === "stop") act = `<span class="of-muted">停止（削除しません）</span>`;
+    else if (r.action === "update" || r.action === "reactivate") act = `<span class="of-muted">担当・優先度・URL などはそのまま</span>`;
+    return `<div class="sy-row a-${r.action}" data-action="${r.action}" data-key="${esc(r.key || "")}">
+      <div><span class="sy-tag a-${r.action}">${ACTION_LABEL[r.action]}</span></div>
+      <div><span class="k">業務名・カテゴリ</span><b class="t">${esc(r.title)}</b><br><span class="of-muted">${esc(r.categoryLabel)}</span></div>
+      <div><span class="k">現在</span>${cur ? `${esc(cur.ruleText)}${cur.active ? "" : "（停止中）"}${r.action === "review" ? `<br><span class="of-muted">「${esc(cur.title)}」</span>` : ""}` : "—"}</div>
+      <div><span class="k">Excel最新版</span>${nx ? esc(nx.ruleText) : "（Excel にありません）"}</div>
+      <div><span class="k">変更内容</span><span class="chg">${esc(changeText)}</span><div style="margin-top:6px;">${act}</div></div>
+      ${r.reason && (r.action === "stop" || r.action === "review") ? `<div class="why">${esc(r.reason)}</div>` : ""}
+    </div>`;
   }
 
-  function renderImport() {
-    const rows = IMP.rows;
-    const n = (k) => rows.filter((r) => (k === "on" ? r.include : r.kind === k)).length;
-    const shown = rows.map((r, i) => [r, i]).filter(([r]) => IMP.filter === "on" ? r.include : r.kind === IMP.filter);
-    const skipped = IMP.sheets.filter((s) => !s.used && s.month);
-    el("impResult").innerHTML = `
-      <div class="rc-imp-tools">
-        <div class="of-chips">${[["recurring", "定例（毎月・毎年）"], ["single", "単発"], ["on", "登録にした行"]].map(([k, l]) => `<button type="button" class="of-chip${IMP.filter === k ? " on" : ""}" onclick="impFilter('${k}')">${l} <b>${n(k)}</b></button>`).join("")}</div>
-        <span class="of-muted">${skipped.length ? `使わないシート：${skipped.map((s) => `${esc(s.name)}（${esc(s.reason || "")}）`).join("・")}` : ""}</span>
-      </div>
-      <div class="rc-imp-wrap"><table class="rc-imp-table" id="impTable">
-        <thead><tr><th>登録</th><th>元の日付・列</th><th>元の文言 → 業務名</th><th>カテゴリ</th><th>定例／単発</th><th>繰り返し</th><th>担当</th><th>理由</th></tr></thead>
-        <tbody>${shown.map(([r, i]) => `<tr class="${r.include ? "" : "ex"}" data-i="${i}">
-          <td><input type="checkbox" data-i="${i}" data-f="include" ${r.include ? "checked" : ""} ${r.registered || !r.canEdit ? "disabled" : ""} onchange="impSet(this)" aria-label="登録する"></td>
-          <td class="rc-origin">${esc(r.origin.slice(0, 3).map((o) => o.date).join("、"))}${r.origin.length > 3 ? ` ほか${r.origin.length - 3}` : ""}<br>${esc(r.col)}列${r.registered ? `<br><span class="rc-tag on">登録済み</span>` : ""}</td>
-          <td><div class="rc-origin">${esc(r.text)}</div><input type="text" maxlength="200" data-i="${i}" data-f="title" value="${esc(r.title)}" onchange="impSet(this)"></td>
-          <td><select data-i="${i}" data-f="category" onchange="impSet(this)">${D.categories.map((c) => `<option value="${c.key}" ${c.key === r.category ? "selected" : ""} ${c.edit ? "" : "disabled"}>${esc(c.label)}</option>`).join("")}</select></td>
-          <td><select data-i="${i}" data-f="kind" onchange="impSet(this)"><option value="monthly" ${r.kind === "recurring" && r.recurrenceType === "monthly" ? "selected" : ""}>毎月</option><option value="yearly" ${r.recurrenceType === "yearly" ? "selected" : ""}>毎年</option><option value="single" ${r.kind === "single" ? "selected" : ""}>単発</option></select></td>
-          <td>${impRuleCell(r, i)}</td>
-          <td><select data-i="${i}" data-f="assigneeEmployeeId" onchange="impSet(this)"><option value="">（未設定）</option>${D.employees.map((p) => `<option value="${esc(p.id)}" ${p.id === r.assigneeEmployeeId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></td>
-          <td class="rc-origin">${esc(r.reason)}</td>
-        </tr>`).join("") || `<tr><td colspan="8" class="of-empty">この分け方の行はありません</td></tr>`}</tbody></table></div>
-      <div class="rc-imp-tools"><button type="button" class="of-btn" id="impCommit" onclick="commitImport(this)">登録にした ${n("on")}件を登録する</button>
-        <span class="of-muted">毎月・毎年はマスター（今日から先90日の予定を作ります）、単発はその日の予定になります。</span></div>`;
+  function renderSync() {
+    const v = SY.view, s = v.summary;
+    const changed = v.rows.filter((r) => r.action !== "unchanged");
+    const shown = SY.filter === "all" ? v.rows : SY.filter === "unchanged" ? v.rows.filter((r) => r.action === "unchanged") : changed;
+    const tile = (k, label, n) => `<div class="a-${k}" data-sum="${k}"><span>${label}</span><b>${n}</b>件</div>`;
+    const undecided = v.rows.filter((r) => r.action === "review" && !r.forbidden).length;
+    const doable = s.new + s.update + s.stop + s.reactivate;
+    const notes = [
+      v.ready ? "" : `<div class="of-banner err"><span class="material-symbols-outlined" aria-hidden="true">build</span><div>${esc(v.hint || "同期の履歴の表（db/128）がまだありません")}。差分は見られますが、同期はできません。</div></div>`,
+      v.outOfPeriod?.length ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">warning</span><div>期（${esc(v.periodLabel)}）の外のシートがあります：${esc(v.outOfPeriod.join("・"))}。期の始まりを確かめてください。</div></div>` : "",
+      v.singles ? `<p class="of-muted">単発（1回だけ）の行 ${v.singles}件は、同期の対象外です。</p>` : "",
+    ].join("");
+    el("syncResult").innerHTML = `
+      <h3 class="of-sec-h" style="margin:14px 0 0;">最新版との差分（${esc(v.periodLabel)}・${esc(SY.fileName)}）</h3>
+      <div class="sy-sum" id="sySum">${tile("new", "新規", s.new)}${tile("update", "更新", s.update)}${tile("unchanged", "変更なし", s.unchanged)}${tile("stop", "停止予定", s.stop)}${s.reactivate ? tile("reactivate", "再有効化", s.reactivate) : ""}${s.review ? tile("review", "要確認", s.review) : ""}${s.forbidden ? tile("forbidden", "権限不足", s.forbidden) : ""}<div data-sum="total"><span>合計（Excel）</span><b>${s.total}</b>件</div></div>
+      ${notes}
+      <div class="sy-tools"><div class="of-chips">${[["changed", "変更がある行", changed.length], ["unchanged", "変更なし", s.unchanged], ["all", "すべて", v.rows.length]].map(([k, l, n]) => `<button type="button" class="of-chip${SY.filter === k ? " on" : ""}" data-filter="${k}" onclick="syFilter('${k}')">${l} <b>${n}</b></button>`).join("")}</div></div>
+      <div class="sy-list" id="syList">${shown.map(syRow).join("") || `<div class="of-empty">${SY.filter === "changed" ? "変更はありません。Excel と定例業務は同じです。" : "行はありません"}</div>`}</div>
+      <div class="sy-go">
+        <button type="button" class="of-btn" id="syncCommit" onclick="commitSync(this)" ${!v.ready || undecided || !doable ? "disabled" : ""}>最新版として同期する</button>
+        <span class="of-muted" id="syncGoNote">${undecided ? `要確認の ${undecided}件の扱いを選んでください。` : !doable ? "反映する変更はありません。" : "今日以降の未完了の予定だけ作り直します。過去・完了・今回なしの予定は残ります。"}</span>
+      </div>`;
   }
-  function impFilter(k) { IMP.filter = k; renderImport(); }
-  function impSet(inp) {
-    const r = IMP.rows[Number(inp.dataset.i)], f = inp.dataset.f;
-    if (f === "include") r.include = inp.checked;
-    else if (f === "title") r.title = inp.value;
-    else if (f === "category") r.category = inp.value;
-    else if (f === "assigneeEmployeeId") r.assigneeEmployeeId = inp.value || null;
-    else if (f === "kind") {
-      const first = r.origin[0]?.date || "";
-      if (inp.value === "single") { r.kind = "single"; r.recurrenceType = "none"; r.recurrenceRule = { date: first }; }
-      else { r.kind = "recurring"; r.recurrenceType = inp.value;
-        r.recurrenceRule = inp.value === "yearly" ? { month: Number(first.slice(5, 7)) || 1, day: Number(first.slice(8, 10)) || 1 } : { day: Number(first.slice(8, 10)) || 1, shift: "prev" }; }
-      renderImport(); return;
-    } else if (f === "date") r.recurrenceRule = { date: inp.value };
-    else if (f === "shift") { if (inp.value) r.recurrenceRule.shift = inp.value; else delete r.recurrenceRule.shift; }
-    else r.recurrenceRule[f] = Number(inp.value);
-    if (f === "include") renderImport();
+  function syFilter(k) { SY.filter = k; renderSync(); }
+  function syAssign(sel) { if (sel.value) SY.assignees[sel.dataset.key] = sel.value; else delete SY.assignees[sel.dataset.key]; }
+  async function syDecide(inp) {
+    SY.decisions[inp.dataset.key] = inp.value;
+    try { await previewSync(); } catch (e) { el("syncMsg").textContent = e.hint || e.message || "読み込めませんでした"; }
   }
-  async function commitImport(btn) {
-    const rows = IMP.rows.filter((r) => r.include);
-    if (!rows.length) { el("impMsg").textContent = "登録にした行がありません"; return; }
-    if (!confirm(`${rows.length}件を登録します（定例 ${rows.filter((r) => r.kind !== "single").length}件・単発 ${rows.filter((r) => r.kind === "single").length}件）。よろしいですか？`)) return;
+  async function syUndecide(a) {
+    delete SY.decisions[a.dataset.key];
+    try { await previewSync(); } catch (e) { el("syncMsg").textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+  async function commitSync(btn) {
+    const s = SY.view.summary;
+    const msg = `Excel最新版を反映します。\n\n新規：${s.new}件\n更新：${s.update}件\n停止：${s.stop}件${s.reactivate ? `\n再有効化：${s.reactivate}件` : ""}${s.forbidden ? `\n（権限不足で同期しない：${s.forbidden}件）` : ""}\n\n手動登録した業務と過去の履歴は変更されません。\n\n実行しますか？`;
+    if (!confirm(msg)) return;
+    el("syncMsg").textContent = "";
     try {
-      const r = await KPLayout.busy(btn, "登録中…", () => API.api("/api/office-tasks/recurring", { method: "POST", body: { action: "import_commit", rows }, invalidates: [] }));
-      el("impMsg").textContent = "";
-      el("impResult").innerHTML = `<div class="of-banner" data-role="import-done"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span><div>定例業務 ${r.masters}件・単発の予定 ${r.singles}件を登録しました（作った予定 ${r.events}件${r.skipped ? `・登録済みで飛ばした行 ${r.skipped}件` : ""}）。</div></div>`;
-      IMP = null;
+      const r = await KPLayout.busy(btn, "同期中…", () => API.api("/api/office-tasks/recurring", { method: "POST", invalidates: [], body: {
+        action: "sync_commit", cells: SY.cells, periodStart: SY.periodStart, syncToken: SY.view.syncToken, decisions: SY.decisions,
+        assignees: SY.assignees, fileName: SY.fileName, fileHash: SY.fileHash } }));
+      const excelCount = r.total;
+      el("syncResult").innerHTML = `<div class="of-banner" data-role="sync-done" style="background:#e5f1e2;color:#2f6f3a;"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span><div>
+        <b>${esc(r.periodLabel)} の年間予定表を最新版として同期しました</b><br>
+        新規 ${r.new}件・更新 ${r.update}件・変更なし ${r.unchanged}件・停止 ${r.stop}件${r.reactivate ? `・再有効化 ${r.reactivate}件` : ""}${r.skippedForbidden ? `（権限不足で同期しなかった行 ${r.skippedForbidden}件）` : ""}<br>
+        Excel由来定例業務：${excelCount}件　最終同期：${esc(jst(r.sync?.last?.committedAt))}　作った予定 ${r.events}件</div></div>`;
+      SY = null;
+      el("syncFile").value = "";
       await load();
-    } catch (e) { el("impMsg").textContent = (e.body?.problems || [e.hint || e.message || "登録できませんでした"]).slice(0, 3).join("／"); }
+    } catch (e) {
+      el("syncMsg").textContent = e.hint || e.message || "同期できませんでした";
+      if (e.code === "stale") { SY.view = null; el("syncResult").innerHTML = ""; }
+    }
   }
 </script>
 </body>
