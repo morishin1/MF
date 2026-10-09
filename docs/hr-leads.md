@@ -56,7 +56,7 @@ mugendojo.jp（ブラウザ）
 | `source_url` / `landing_page` / `referrer` | | 送信したページ / 最初に来たページ / 参照元（http(s) のみ保存） |
 | `utm_source` / `utm_medium` / `utm_campaign` / `utm_content` / `utm_term` | | UTM |
 | `first_touch_at` | | 最初に LP へ来た時刻（ISO8601） |
-| `lead_type` | | 既定 `mugendojo_casual` |
+| `lead_type` | | 既定 `mugendojo_casual`（無料カウンセリング）。`mugendojo_instructor` は講師・メンター応募（下の「講師・メンター応募」） |
 
 ### 返り値
 
@@ -103,6 +103,42 @@ lms 側は **2xx だけを「送れた」とする。** 4xx の `invalid_body` �
 
 `gw_activity_log` に `hr.lead_intake`（`result`・`submissionId`・`utmSource`・`utmMedium`）。
 メールアドレス・氏名・本文は残さない。
+
+## 講師・メンター応募（lead_type = mugendojo_instructor）
+
+無限道場HPの講師・メンター募集（lms の `/instructors/recruit`）からの応募。**新しいCRM・表・環境変数は作らない。**
+同じ `POST /api/hr/leads`（同じ署名・canonical JSON・`MUGENDOJO_LEAD_SECRET`）で受け、採用の応募者として入れる。
+入れ先は `lib/hr-leads.js` の `LEAD_TYPES` だけで決める（`lead_type` が無い・知らない値は、従来どおり無料カウンセリング）。
+
+| 列 | 中身 |
+|---|---|
+| `lead_category` | `recruitment`（採用。無料カウンセリングの `mugendojo` とは分ける） |
+| `source` / `job_title` | `無限道場HP` / `無限道場 講師・メンター`（採用の一覧で見分ける） |
+| `stage` / `status` | `applied` / `scheduling`（日程調整中）。以降は採用の選考と同じ |
+| `profile_url` | 本人のプロフィールURL（http(s) のみ） |
+| `attribution.lead_type` | `mugendojo_instructor` |
+| `lead_profile` | `kind: "instructor"` と、本人が入れた応募内容（下の表） |
+
+本文に足す項目（`lead_type = mugendojo_instructor` のときだけ読む。必須が無ければ `400 invalid_body`・`field` 付き）：
+
+| キー | 必須 | 内容 |
+|---|---|---|
+| `occupation` | ○ | 現在の仕事・肩書き（100文字まで） |
+| `specialties` | ○ | 専門分野（文字列の配列、12個まで） |
+| `career_text` | ○ | 経歴・実績・できること（2000文字まで） |
+| `motivation_text` | ○ | 応募理由（2000文字まで） |
+| `company` / `availability` | | 会社・所属 / 対応可能な曜日・時間 |
+| `teaching_experience` / `note_text` | | 講師・メンター経験 / その他（1000文字まで） |
+| `work_styles` | | `オンライン`・`対面`（配列。ほかの値は捨てる） |
+| `profile_url` / `website_url` | | プロフィールURL / SNS・Webサイト（http(s) のみ保存） |
+
+- **同じ人**＝テナント＋採用＋募集職種「無限道場 講師・メンター」＋小文字のメール。再応募は更新（最新の応募内容。空で消さない）＋タイムラインに「無限道場HPから再送信」。同じ `submission_id` は何も変えない。
+- 採用の別の職種・無料カウンセリングに同じメールの人がいても統合しない（タイムラインに注記）。
+- 予約URL：採用のカジュアル面談の予約枠（既存の `TIMEREX_CASUAL_INTERVIEW_URL`）＋`applicant_id`。未設定なら `schedulingUrl: null`（応募は登録する）。予約は既存の `/api/hr/timerex/webhook` が採用の応募者として受ける。
+- 通知：「無限道場HPから講師・メンターの応募が入りました」。宛先は `gw_hr_lead_watchers`（`lead_category = recruitment`）、未設定なら採用HRの担当。リンクは `?category=recruitment&id=…`。
+- 監査ログ `hr.lead_intake` の detail に `leadType`。
+- 採用HRの画面：採用の一覧に「無限道場 講師・メンター ／ 無限道場HP」。詳細の概要の先頭に「講師・メンター応募の内容」（専門分野・経歴・応募理由・経験・対応可能日時・オンライン/対面・URL）。
+- 採用後のLMS講師アカウントは自動では作らない（lms の管理者が講師プロフィールを登録し、必要ならアカウントを紐付ける）。
 
 ## TimeRex（無限道場のカジュアル面談）
 

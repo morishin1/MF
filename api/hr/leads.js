@@ -10,6 +10,12 @@
 //   HR_LEAD_TENANT_ID       リードを入れるテナント。リクエストからは決めない（固定）。未設定なら 503
 //   TIMEREX_MUGENDOJO_CASUAL_URL  無限道場のカジュアル面談の予約ページ（任意）。
 //                           あれば、応募者IDを付けた予約URLを返す（LP の完了画面から進ませる）
+//   TIMEREX_CASUAL_INTERVIEW_URL  採用のカジュアル面談の予約ページ（既存）。講師・メンター応募
+//                           （lead_type = mugendojo_instructor）の予約URLに使う
+//
+// ■ リードの種類（lib/hr-leads.js の LEAD_TYPES）
+//   lead_type で入れ先が決まる。無い・知らない値は無料カウンセリング（lead_category = mugendojo。従来どおり）。
+//   mugendojo_instructor は採用（recruitment）の応募者・募集職種「無限道場 講師・メンター」として入る。
 //
 // ■ 返すもの
 //   200 { ok, applicantId, result: "created"|"updated"|"replayed", schedulingUrl }
@@ -23,7 +29,7 @@ import { readJson, methodNotAllowed, json } from "../../lib/http.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { schedulingUrlFor } from "../../lib/hr.js";
-import { verifyLeadSignature, normalizeLeadPayload, intakeLead } from "../../lib/hr-leads.js";
+import { verifyLeadSignature, normalizeLeadPayload, intakeLead, leadTypeOf } from "../../lib/hr-leads.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,7 +48,8 @@ export default async function handler(req, res) {
   const lead = normalizeLeadPayload(body);
   if (lead.error) return json(res, 400, { ok: false, error: lead.error, field: lead.field, detail: lead.detail });
 
-  const out = await intakeLead(admin(), tenantId, lead.value, { category: "mugendojo" });
+  const kind = leadTypeOf(lead.value.leadType);
+  const out = await intakeLead(admin(), tenantId, lead.value);
   if (out.error) {
     if (out.status >= 500) console.error("[hr-leads] intake failed:", out.error, out.detail || out.message || "");
     return json(res, out.status, { ok: false, error: out.error, message: out.message });
@@ -53,7 +60,7 @@ export default async function handler(req, res) {
       tenantId, actorId: null, action: "hr.lead_intake",
       target: `hr_applicant:${out.applicantId}`,
       detail: {
-        category: "mugendojo", result: out.result, submissionId: lead.value.submissionId,
+        category: kind.category, leadType: lead.value.leadType, result: out.result, submissionId: lead.value.submissionId,
         utmSource: lead.value.touch.utm_source || null, utmMedium: lead.value.touch.utm_medium || null,
       },
     });
@@ -61,6 +68,6 @@ export default async function handler(req, res) {
 
   return json(res, 200, {
     ok: true, applicantId: out.applicantId, result: out.result,
-    schedulingUrl: schedulingUrlFor(process.env.TIMEREX_MUGENDOJO_CASUAL_URL, out.applicantId),
+    schedulingUrl: schedulingUrlFor(process.env[kind.schedulingEnv], out.applicantId),
   });
 }
