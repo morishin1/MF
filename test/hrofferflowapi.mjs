@@ -198,30 +198,30 @@ await ok("知らない区分ははじく", async () => {
 });
 
 console.log("\n— 区分ごとのオファー —");
-await ok("業務委託：必要な項目だけ。試用期間・正社員・月給は持ち込まない。必須（委託業務・契約開始日）が無ければ作れない", async () => {
+await ok("業務委託：必要な項目だけ。試用期間・正社員・月給は持ち込まない。必須（業務内容・契約開始日）が無ければ作れない", async () => {
   setup();
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
   const bad = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", offerTerms: { nda: "必要" } });
   assert.equal(bad.statusCode, 400);
-  assert.ok(/委託業務/.test(bad.body.detail) && /契約開始日/.test(bad.body.detail), bad.body.detail);
+  assert.ok(/業務内容/.test(bad.body.detail) && /契約開始日/.test(bad.body.detail), bad.body.detail);
   const wrongWage = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", joinDate: "2026-11-01",
     wageType: "月給", offerTerms: { duties: "AI/DX支援" } });
   assert.equal(wrongWage.statusCode, 400, "業務委託の報酬形態に「月給」は無い");
   const r = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", joinDate: "2026-11-01",
-    wageType: "月額固定", wageAmount: 400000, workLocation: "リモート",
+    wageType: "月額", wageAmount: 400000, workLocation: "リモート",
     offerTerms: { duties: "AI/DX支援業務", workDays: "月・水・金", nda: "必要", deliverables: "月次レポート", position: "部長" } });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const o = db.rows.gw_hr_offers[0];
   assert.equal(o.offer_type, "contractor");
   assert.equal(o.employment_type, "業務委託");
   assert.equal(o.probation_months, null, "業務委託に試用期間を持ち込まない");
-  assert.deepEqual([o.wage_type, o.wage_amount], ["月額固定", 400000]);
+  assert.deepEqual([o.wage_type, o.wage_amount], ["月額", 400000]);
   assert.deepEqual(o.offer_terms, { duties: "AI/DX支援業務", workDays: "月・水・金", deliverables: "月次レポート", nda: "必要" },
     "区分に無い項目（役職）は入らない");
   assert.equal(app("a1").status, "offer_review_pending");
   assert.ok(tl().includes("業務委託オファーを作成"), tl().join(","));
   const a = (await getDetail("a1")).body.applicant;
-  assert.deepEqual([a.statusLabel, a.nextActionCta], ["業務委託オファーの社内確認待ち", "内容を確認する"]);
+  assert.deepEqual([a.statusLabel, a.nextActionCta], ["業務委託オファーの下書き", "内容を確認して送信"]);
 });
 
 await ok("オファーを作ったあとは、区分を変えられない", async () => {
@@ -232,14 +232,14 @@ await ok("オファーを作ったあとは、区分を変えられない", asyn
   assert.equal(app("a1").offer_type, "contractor");
 });
 
-await ok("確定 → 送付待ち：NEXT ACTION「業務委託オファーを候補者へ送ってください」［候補者へ送信］", async () => {
+await ok("確定 → 送付待ち：NEXT ACTION「業務委託オファーを候補者へ送ってください」［メールで送信］", async () => {
   setup();
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
   const made = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", joinDate: "2026-11-01", offerTerms: { duties: "AI/DX支援" } });
   const c = await patchOffer({ id: made.body.offer.id, action: "confirm" });
   assert.equal(c.statusCode, 200, JSON.stringify(c.body));
   const a = (await getDetail("a1")).body.applicant;
-  assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["業務委託オファーの送付待ち", "候補者へ送信", "sendOffer"]);
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["業務委託オファーの送付待ち", "メールで送信", "sendOffer"]);
   assert.ok(tl().includes("業務委託オファーの内容を確定"));
 });
 
@@ -287,10 +287,10 @@ await ok("業務委託オファー：書類名・契約形態・区分の項目�
   assert.equal(v.offerName, "業務委託オファー");
   const items = Object.fromEntries(v.items.map((i) => [i.label, i.value]));
   assert.deepEqual(items, {
-    契約形態: "業務委託", 委託業務: "AI/DX支援業務", 報酬: "月額固定 400,000円", 稼働時間: "週20時間程度",
+    契約形態: "業務委託", 業務内容: "AI/DX支援業務", 報酬: "月額固定 400,000円", 稼働目安: "週20時間程度",
     稼働場所: "リモート", 契約開始日: "2026年11月1日", 契約終了日: "2027年3月31日", NDA: "必要",
-  });
-  assert.ok(v.afterAccept.includes("次は契約手続き"));
+  }, "これまでの版の報酬形態（月額固定）もそのまま読める");
+  assert.equal(v.afterAccept, "ご同意ありがとうございます。\n次の手続きについて株式会社エイトからご案内します。");
   assert.equal(JSON.stringify(v).includes("rank"), false);
 });
 
@@ -328,7 +328,8 @@ await ok("通常：応募 → 面談 → 合格 → オファー → 承諾 → 
   assert.equal(now({ stage: "offer", status: "offer_draft_pending", offer_type: "contractor" }), "オファー");
   assert.equal(now({ stage: "offer", status: "offer_send_pending", offer_type: "contractor" }), "オファー");
   assert.equal(now({ stage: "offer", status: "offer_response_pending", offer_type: "contractor" }), "承諾");
-  assert.equal(now({ stage: "offer", status: "accepted", offer_type: "contractor" }), "契約");
+  assert.equal(now({ stage: "offer", status: "accepted", offer_type: "contractor" }), "入社/稼働", "本人の同意＝契約完了");
+  assert.equal(now({ stage: "offer", status: "accepted" }), "契約", "区分の無い、これまでの承諾は契約の手前");
   const done = T.recruitStepsOf({ stage: "joining_scheduled", status: "done", offer_type: "executive_employee" });
   assert.ok(done.steps.every((s) => s.state === "done"));
   const ended = T.recruitStepsOf({ stage: "ceo_interview", status: "passed" });
@@ -344,9 +345,14 @@ await ok("育成枠：合格 → 育成参加 → 育成 → 実案件 → 評�
   assert.equal(T.recruitStepsOf({ stage: "offer", status: "accepted", offer_type: "training" }).steps.find((x) => x.state === "now").label, "育成");
 });
 
-await ok("承諾後の NEXT ACTION は区分ごと（業務委託は契約・NDA、育成は参加手続き）", () => {
-  assert.equal(nextActionOf({ status: "accepted", offer_type: "contractor" }).cta, "契約手続きへ進む");
-  assert.equal(nextActionOf({ status: "accepted", offer_type: "training" }).cta, "参加手続きへ進む");
+await ok("契約完了後の NEXT ACTION は区分ごと（正社員・パート→入社手続き／育成→LMS・育成開始／業務委託→稼働開始準備／スポット→案件アサイン）", () => {
+  assert.equal(nextActionOf({ status: "accepted", offer_type: "executive_employee" }).cta, "入社手続きへ進む");
+  assert.equal(nextActionOf({ status: "accepted", offer_type: "part_time" }).cta, "入社手続きへ進む");
+  assert.equal(nextActionOf({ status: "accepted", offer_type: "training" }).cta, "育成開始手続きへ進む");
+  assert.ok(nextActionOf({ status: "accepted", offer_type: "training" }).label.includes("LMS"));
+  assert.equal(nextActionOf({ status: "accepted", offer_type: "contractor" }).cta, "稼働開始準備へ進む");
+  assert.equal(nextActionOf({ status: "accepted", offer_type: "spot" }).cta, "案件アサインへ進む");
+  assert.ok(nextActionOf({ status: "accepted", offer_type: "spot" }).label.startsWith("契約完了"));
   assert.equal(nextActionOf({ status: "accepted" }).cta, "本採用へ進める", "区分なしは従来どおり");
 });
 

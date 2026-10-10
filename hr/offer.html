@@ -19,9 +19,8 @@
     .ho-logo { text-align:center; margin-bottom:20px; font-weight:700; font-size:15px; color:#1b2440; }
     .ho-greet { font-size:13.5px; color:#4a5068; line-height:1.9; margin:0 0 18px; }
     .ho-greet b { color:#1b2440; font-size:16px; }
-    /* 区分つきのオファー：書類名（業務委託オファー など）と、大きな承諾ボタン（スマホでも押しやすく） */
-    .ho-doc { display:inline-block; background:#1b2440; color:#fff; border-radius:999px; padding:2px 12px; font-size:12px; font-weight:700; }
-    .btn.ho-accept { width:100%; padding:14px 16px; font-size:15px; }
+    /* 区分つきのオファー：区分（育成枠・業務委託 など）と書類名 */
+    .ho-doc { display:inline-block; background:#1b2440; color:#fff; border-radius:999px; padding:3px 14px; font-size:13px; font-weight:700; }
     .ho-fields dt { color:#6b7080; font-size:11.5px; margin:14px 0 2px; }
     .ho-fields dd { margin:0; color:#1b2440; font-weight:700; font-size:15px; }
     .ho-msg { white-space:pre-wrap; font-size:13px; color:#1b2440; line-height:1.8;
@@ -33,12 +32,31 @@
     .ho-done { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700;
       color:#2f6f3a; background:#e5f1e2; border-radius:8px; padding:14px; margin-top:20px; }
     .ho-done.declined { color:#4a5068; background:#efefeb; }
+    /* 区分つき：重要条件を先にコンパクトに → 契約・条件 → 同意（チェック＋大きなボタン） */
+    .ho-sub { font-size:12px; color:#6b7080; margin:6px 0 0; }
+    .ho-key { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0 0; }
+    .ho-key div { background:#f6f6f2; border-radius:8px; padding:10px 12px; min-width:0; }
+    .ho-key span { display:block; font-size:11.5px; color:#6b7080; }
+    .ho-key b { display:block; font-size:15px; color:#1b2440; margin-top:2px; overflow-wrap:anywhere; }
+    .ho-terms h3 { font-size:13px; color:#1b2440; margin:22px 0 0; padding-bottom:6px; border-bottom:1px solid #e2e2dc; }
+    .ho-terms dd { white-space:pre-wrap; font-size:14px; overflow-wrap:anywhere; }
+    .ho-agree { display:flex; align-items:flex-start; gap:10px; background:#f6f6f2; border:1.5px solid #d5d7e0; border-radius:10px;
+      padding:14px; margin:0 0 14px; font-size:14px; font-weight:700; color:#1b2440; cursor:pointer; }
+    .ho-agree input { width:20px; height:20px; margin:1px 0 0; flex:none; accent-color:#1b2440; }
+    .ho-agree.on { border-color:#1b2440; }
+    .btn.ho-accept { width:100%; padding:16px; font-size:16px; font-weight:700; }
+    .btn.ho-accept:disabled { opacity:.45; cursor:not-allowed; }
+    .ho-complete { background:#e5f1e2; border-radius:10px; padding:18px 16px; margin-top:20px; color:#2f6f3a; }
+    .ho-complete h3 { display:flex; align-items:center; gap:8px; margin:0 0 8px; font-size:17px; }
+    .ho-complete h3 .material-symbols-outlined { flex:none; width:22px; overflow:hidden; }
+    .ho-complete p { margin:0; white-space:pre-wrap; font-size:14px; line-height:1.8; color:#1b2440; }
+    @media (max-width: 380px) { .ho-key { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
 
 <div class="ho-wrap">
-  <div class="ho-logo">選考結果のご案内</div>
+  <div class="ho-logo" id="ho-logo">選考結果のご案内</div>
   <div class="card" id="box"><div class="empty">読み込み中…</div></div>
 </div>
 
@@ -83,25 +101,77 @@
   }
 
   // 採用区分つきのオファー（正社員・育成・業務委託・パート・スポット）。区分ごとの書類名と条件の行は
-  // サーバが作る（lib/hr-offer-types.js）。社内の状態・評価・社内用の項目は届かない
+  // サーバが作る（lib/hr-offer-types.js）。社内の状態・評価・社内用の項目は届かない。
+  // 重要条件を先にコンパクトに出し、その下に契約・条件の本文。最後に「確認し、同意します」＋［同意して契約を完了する］
   function renderTyped(o) {
+    const items = o.items || [];
+    const key = items.filter((it) => it.highlight);
+    const rest = items.filter((it) => !it.highlight);
+    document.title = "オファーのご案内";
+    el("ho-logo").textContent = "オファーのご案内";
     el("box").innerHTML = `
       <h2>${o.tenantName ? `${esc(o.tenantName)}からの` : ""}オファー</h2>
-      <p class="ho-greet">
-        <span class="ho-doc">${esc(o.offerName)}</span><br>
-        <b>${esc(o.candidateName)} 様</b><br><br>
-        このたびはご応募いただき、ありがとうございました。<br>
+      <p style="margin:0;"><span class="ho-doc" id="ho-type">${esc(o.typeLabel || o.offerName)}</span></p>
+      <p class="ho-sub">${esc(o.offerName)}</p>
+      <p class="ho-greet" style="margin-top:14px;">
+        <b>${esc(o.candidateName)} 様</b><br>
+        このたびは面談にご参加いただき、ありがとうございました。<br>
         下記の内容をご確認ください。
       </p>
-      <dl class="ho-fields" id="ho-items">
-        ${(o.items || []).map((it) => `<dt>${esc(it.label)}</dt><dd>${esc(it.value)}</dd>`).join("")}
-        <dt>回答期限</dt><dd>${fmtDate(o.respondBy)}</dd>
-      </dl>
+      <div class="ho-key" id="ho-key">
+        ${key.map((it) => `<div><span>${esc(it.label)}</span><b>${esc(it.value)}</b></div>`).join("")}
+        <div><span>回答期限</span><b>${fmtDate(o.respondBy)}</b></div>
+      </div>
+      ${rest.length ? `
+      <div class="ho-terms">
+        <h3>契約・条件</h3>
+        <dl class="ho-fields" id="ho-items">${rest.map((it) => `<dt>${esc(it.label)}</dt><dd>${esc(it.value)}</dd>`).join("")}</dl>
+      </div>` : ""}
       ${o.messageToCandidate ? `
         <h4 style="font-size:12.5px;color:#6b7080;margin:20px 0 0;">採用担当からのメッセージ</h4>
         <div class="ho-msg">${esc(o.messageToCandidate)}</div>` : ""}
       <div id="ho-actions"></div>`;
     renderActions(o);
+  }
+
+  // 区分つきの同意（チェックしたときだけ押せる）。同意＝契約手続きの完了
+  function renderAgree(o, box, mailto) {
+    if (o.responseStatus === "accepted") {
+      box.innerHTML = `<div class="ho-complete" id="ho-complete">
+        <h3><span class="material-symbols-outlined">check_circle</span>${esc(o.doneTitle || "契約手続きが完了しました。")}</h3>
+        <p>${esc(o.afterAccept || "")}</p></div>`;
+      return;
+    }
+    box.innerHTML = `
+      <div class="ho-actions">
+        <label class="ho-agree" id="ho-agree-box"><input type="checkbox" id="ho-agree" onchange="toggleAgree(this)">
+          <span>${esc(o.agreeCheck || "上記の内容を確認し、同意します")}</span></label>
+        <button class="btn btn-primary ho-accept" id="ho-accept" disabled onclick="submitAccept(this)">${esc(o.agreeButton || "同意して契約を完了する")}</button>
+        <button class="btn btn-secondary" onclick="openDeclineForm()">辞退する</button>
+        <div id="ho-decline"></div>
+        ${mailto ? `
+          <p class="ask">条件について確認したいことがありますか？</p>
+          <a class="btn btn-secondary" href="${esc(mailto)}">採用担当へ連絡</a>` : ""}
+      </div>
+      <div id="ho-msg" class="err-text" style="margin-top:10px;"></div>`;
+  }
+  function toggleAgree(box) {
+    el("ho-accept").disabled = !box.checked;
+    el("ho-agree-box").classList.toggle("on", box.checked);
+  }
+
+  // 同意・辞退を送る（ログイン不要の口。同意は agreed: true を付ける）
+  async function respond(body) {
+    const r = await fetch("/api/hr/offers/public", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, ...body }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(data.hint || data.message || "送れませんでした");
+      err.hint = data.hint || data.message || null;
+      throw err;
+    }
+    return data;
   }
 
   function render(o) {
@@ -137,6 +207,11 @@
   // 人事が改めて「本採用へ進める」を押してから（次のステージ）
   function renderActions(o) {
     const box = el("ho-actions");
+    if (o.offerType && o.responseStatus !== "declined") {
+      const mailto = o.recruiterEmail
+        ? `mailto:${encodeURIComponent(o.recruiterEmail)}?subject=${encodeURIComponent(`${o.offerName}について`)}` : null;
+      return renderAgree(o, box, mailto);
+    }
     if (o.responseStatus === "accepted") {
       box.innerHTML = `<div class="ho-done"><span class="material-symbols-outlined">check_circle</span>
         ${esc(o.afterAccept || "承諾済みです。採用担当からのご連絡をお待ちください。")}</div>`;
@@ -152,8 +227,8 @@
       : null;
     box.innerHTML = `
       <div class="ho-actions">
-        <p class="due">${o.offerType ? "内容をご確認のうえ、回答期限" : "採用条件を確認しました。回答期限"}：${fmtDate(o.respondBy)}</p>
-        <button class="btn btn-primary${o.offerType ? " ho-accept" : ""}" onclick="submitAccept(this)">${o.offerType ? "内容を確認して承諾する" : "承諾する"}</button>
+        <p class="due">採用条件を確認しました。回答期限：${fmtDate(o.respondBy)}</p>
+        <button class="btn btn-primary" onclick="submitAccept(this)">承諾する</button>
         <button class="btn btn-secondary" onclick="openDeclineForm()">辞退する</button>
         <div id="ho-decline"></div>
         ${mailto ? `
@@ -164,11 +239,15 @@
   }
 
   async function submitAccept(btn) {
-    if (!confirm("この内容で承諾します。よろしいですか？")) return;
+    // 区分つきは、チェック（上記の内容を確認し、同意します）が確認の代わり。これまでの合格通知は確認ダイアログ
+    if (current.offerType) {
+      if (!el("ho-agree")?.checked) { el("ho-msg").textContent = "「上記の内容を確認し、同意します」にチェックしてください"; return; }
+    } else if (!confirm("この内容で承諾します。よろしいですか？")) return;
     const msg = el("ho-msg"); msg.textContent = "";
     btn.disabled = true;
     try {
-      await API.hrOfferRespond(token, "accept");
+      if (current.offerType) await respond({ action: "accept", agreed: true });
+      else await API.hrOfferRespond(token, "accept");
       current.responseStatus = "accepted";
       renderActions(current);
     } catch (e) {

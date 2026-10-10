@@ -3,12 +3,12 @@
 // ■ 何を守るテストか（HR 面談合格後の採用・育成フロー UI/UX 仕様 Phase 1）
 //   1. ［合格にする］で「この方をどの形で迎えますか？」と5つのカード。選ばずには合格にできない
 //   2. 区分を選ぶと、ステップバー（応募 → 面談 → 合格 → オファー → …）・状態・NEXT ACTION が区分の言い方になる
-//   3. オファーの入力は区分に必要な項目だけ（業務委託に試用期間・役職・インセンティブを出さない）
+//   3. オファーの入力は区分に必要な項目だけ（業務委託に試用期間・役職・インセンティブを出さない）。通常は少なく、ほかは詳細設定
 //   4. 区分を後から選ぶ（NEXT ACTION「採用区分を選ぶ」）→ そのままオファーの入力へ
 //   5. 給与を見られない人には、報酬・インセンティブの欄を出さない
 //   6. 選考タイムラインに「誰が」
 //   7. スマホ（390px）：カードは1列・横にはみ出さない
-//   8. 本人向けページ：区分の書類名と項目だけ。［内容を確認して承諾する］→「次は契約手続きです」
+//   8. 本人向けページ：区分の書類名と項目だけ。同意のチェック →［同意して契約を完了する］→「契約手続きが完了しました」
 //
 // 応答は lib/hr.js・lib/hr-offer-types.js の本物の関数で組み立てる（ラベルや NEXT ACTION をテスト側で作らない）
 import { launch, BASE } from "../_browser.mjs";
@@ -127,31 +127,38 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   check((await page.locator("#hr-status").innerText()).includes("業務委託オファーの作成待ち"), "状態：業務委託オファーの作成待ち");
   check(await page.locator(".hr-next button", { hasText: "オファーを作成" }).count() === 1, "NEXT ACTION：オファーを作成");
 
-  console.log("\n— 業務委託オファー：必要な項目だけ —");
+  console.log("\n— 業務委託オファー：必要な項目だけ（通常は少なく、ほかは詳細設定） —");
   await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
   await page.waitForTimeout(400);
   const modal = page.locator("#action-root .hr-modal");
   check((await modal.locator("h2").innerText()).includes("業務委託オファーを作成"), "見出し：業務委託オファーを作成");
-  const labels = (await modal.locator("#of-fields label").allInnerTexts()).map((s) => s.replace(/\s*\*$/, "").trim());
-  for (const l of ["委託業務", "報酬形態", "報酬（円）", "稼働時間", "稼働曜日", "契約開始日", "契約終了日", "成果物", "支払条件", "NDA"]) {
-    check(labels.some((x) => x.startsWith(l)), `項目：${l}`);
-  }
-  for (const l of ["試用期間", "役職", "インセンティブ", "給与区分"]) check(!labels.some((x) => x.startsWith(l)), `正社員向けの「${l}」は出さない`);
-  const wageOpts = await modal.locator("#of-f-wageType option").allInnerTexts();
-  check(wageOpts.join("/") === "（選択）/月額固定/時間単価/案件単価/成果報酬", `報酬形態の選択肢（${wageOpts.join("/")}）`);
-  check(await modal.locator("#of-f-wageType").inputValue() === "", "応募者の「月給」は持ち込まない");
-  check((await modal.innerText()).includes("業務委託契約書") && (await modal.innerText()).includes("NDA"), "必要書類（業務委託契約書・NDA）");
+  const strip = (xs) => xs.map((s) => s.replace(/\s*\*$/, "").trim());
+  const basic = strip(await modal.locator("#of-fields label").allInnerTexts());
+  check(basic.join("/") === "業務内容/報酬/契約開始日/稼働目安/回答期限", `通常表示（${basic.join("/")}）`);
+  // 閉じた詳細設定の中は、見えていない（textContent で読む）
+  const more = strip(await modal.locator("#of-more-fields label").allTextContents());
+  for (const l of ["契約終了日", "更新", "成果物", "支払条件", "NDA", "稼働曜日", "稼働場所"]) check(more.includes(l), `詳細設定：${l}`);
+  check(!(await modal.locator("#of-more").evaluate((d) => d.open)), "詳細設定は閉じている");
+  const all = [...basic, ...more];
+  for (const l of ["試用期間", "役職", "インセンティブ", "給与区分"]) check(!all.some((x) => x.startsWith(l)), `正社員向けの「${l}」は出さない`);
+  const pays = await modal.locator('[data-field="pay"] .hr-opt button').allInnerTexts();
+  check(pays.join("/") === "月額/時給/案件/成果報酬", `報酬はボタン（${pays.join("/")}）`);
+  check(await modal.locator('[data-field="pay"] .hr-opt button.on').count() === 0, "応募者の「月給」は持ち込まない");
+  check(!(await modal.locator("#of-pay-amount").isVisible()), "報酬を選ぶまで金額欄は出さない");
+  check((await modal.locator("#of-more").textContent()).includes("業務委託契約書"), "必要書類（詳細設定の中）");
   await page.fill("#of-f-duties", "AI/DX支援業務");
   await page.fill("#of-f-joinDate", "2026-11-01");
-  await page.selectOption("#of-f-wageType", "月額固定");
+  await modal.locator('[data-field="pay"] .hr-opt button', { hasText: "月額" }).click();
+  check(await modal.locator("#of-pay-unit").innerText() === "月額", "［月額］を押すと「月額 [ ] 円」");
   await page.fill("#of-f-wageAmount", "400000");
-  await page.selectOption("#of-f-nda", "必要");
   await page.fill("#of-respondby", "2026-10-31");
-  await modal.locator("button", { hasText: "オファーを作成" }).click();
+  await modal.locator("button", { hasText: "下書き保存" }).click();
   await page.waitForTimeout(600);
   const made = state.calls.find(([k]) => k === "offer")?.[1];
-  check(made?.offerTerms?.duties === "AI/DX支援業務" && made.offerTerms.nda === "必要", "区分の項目は offerTerms で送る");
-  check(made?.joinDate === "2026-11-01" && made.wageType === "月額固定" && made.wageAmount === "400000", "契約開始日・報酬は既存の項目で送る");
+  check(made?.offerTerms?.duties === "AI/DX支援業務", "区分の項目は offerTerms で送る");
+  check(made?.offerTerms?.nda === "必要" && made.offerTerms.renewal === "協議のうえ更新" && made.offerTerms.paymentTerms === "月末締め翌月末払い",
+    "既定値（NDA 必要・協議のうえ更新・月末締め翌月末払い）が入る");
+  check(made?.joinDate === "2026-11-01" && made.wageType === "月額" && made.wageAmount === "400000", "契約開始日・報酬は既存の項目で送る");
   check(made && !("probationMonths" in made) && !("position" in (made.offerTerms || {})), "区分に無い項目は送らない");
 
   console.log("\n— 選考タイムラインに「誰が」 —");
@@ -178,11 +185,12 @@ console.log("\n=== あとから採用区分を選ぶ（正社員・幹部候補�
   check(state.calls.some(([k, b]) => k === "applicant" && b.offerType === "executive_employee"), "区分が保存される");
   const modal = page.locator("#action-root .hr-modal");
   check((await modal.locator("h2").innerText()).includes("内定通知を作成"), "続けて「内定通知を作成」");
-  const labels = (await modal.locator("#of-fields label").allInnerTexts()).join("/");
-  for (const l of ["職種", "役職", "給与区分", "試用期間", "勤務時間", "入社予定日", "業務内容", "インセンティブ", "その他条件"]) {
-    check(labels.includes(l), `正社員の項目：${l}`);
-  }
-  check(await modal.locator("#of-f-wageType").inputValue() === "月給", "応募者の「月給」は正社員ではそのまま使う");
+  const labels = (await modal.locator("#of-fields label").allInnerTexts()).map((s) => s.replace(/\s*\*$/, "").trim()).join("/");
+  check(labels === "職種/給与/入社予定日/勤務地/回答期限", `正社員の通常表示（${labels}）`);
+  const more = (await modal.locator("#of-more-fields label").allTextContents()).join("/");
+  for (const l of ["役職", "試用期間", "勤務時間", "インセンティブ", "その他条件", "業務内容"]) check(more.includes(l), `正社員の詳細設定：${l}`);
+  check((await modal.locator('[data-field="pay"] .hr-opt button.on').innerText()) === "月給", "応募者の「月給」は正社員ではそのまま使う");
+  check(await modal.locator("#of-f-wageAmount").inputValue() === "300000", "金額も応募者の値");
   check(await modal.locator("#of-f-probationMonths").inputValue() === "3", "試用期間も応募者の値");
   check(await modal.locator("button", { hasText: "区分を変える" }).count() === 1, "送る前なら区分を変えられる");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
@@ -197,8 +205,9 @@ console.log("\n=== 給与を見られない人（採用担当） ===");
   await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
   await page.waitForTimeout(400);
   const modal = page.locator("#action-root .hr-modal");
-  const labels = (await modal.locator("#of-fields label").allInnerTexts()).join("/");
+  const labels = (await modal.locator("#of-fields label, #of-more-fields label").allTextContents()).join("/");
   check(!labels.includes("給与") && !labels.includes("インセンティブ"), "給与・インセンティブの欄を出さない");
+  check(await modal.locator('[data-field="pay"]').count() === 0, "報酬のボタンも出さない");
   check((await modal.innerText()).includes("権限のある方が入力・確認します"), "誰が入れるかを案内");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();
@@ -249,17 +258,18 @@ for (const width of [1100, 390]) {
   check(text.includes("株式会社エイトからのオファー"), `[${width}px] 見出し：株式会社エイトからのオファー`);
   check(text.includes("業務委託オファー") && text.includes("AI/DX支援業務") && text.includes("月額固定 400,000円"), `[${width}px] 書類名と条件`);
   check(!/試用期間|社長|ランク|評価/.test(text), `[${width}px] 社内用語・社内の項目を出さない`);
-  const btn = page.locator("button", { hasText: "内容を確認して承諾する" });
-  check(await btn.count() === 1, `[${width}px] ［内容を確認して承諾する］`);
+  const btn = page.locator("#ho-accept");
+  check((await btn.innerText()).includes("同意して契約を完了する"), `[${width}px] ［同意して契約を完了する］`);
+  check(await btn.isDisabled(), `[${width}px] チェックするまで押せない`);
   if (width === 390) {
     const bw = await btn.evaluate((b) => b.getBoundingClientRect().width);
-    check(bw > 300, `[390px] 承諾ボタンは横いっぱい（${Math.round(bw)}px）`);
+    check(bw > 300, `[390px] 同意ボタンは横いっぱい（${Math.round(bw)}px）`);
   }
-  page.once("dialog", (d) => d.accept());
+  await page.locator("#ho-agree").check();
   await btn.click();
   await page.waitForTimeout(500);
-  check(posted.some((p) => p.action === "accept"), `[${width}px] 承諾が送られる`);
-  check((await page.locator("#ho-actions").innerText()).includes("次は契約手続きです"), `[${width}px] 承諾後「次は契約手続きです」`);
+  check(posted.some((p) => p.action === "accept" && p.agreed === true), `[${width}px] 同意（agreed: true）が送られる`);
+  check((await page.locator("#ho-actions").innerText()).includes("契約手続きが完了しました"), `[${width}px] 同意後「契約手続きが完了しました」`);
   check(!errs.length, `[${width}px] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();
 }
