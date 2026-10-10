@@ -293,8 +293,8 @@
   //   ・評価は面談の scores / notes（状態は動かさない）。判断は応募者の decision。連絡は api/hr/applicants/message.js
   //   ・本人への連絡状況（未連絡／連絡済み）は API の contact（lib/hr-messages.js。タイムラインから決める）
   const DECIDE_KINDS = [
-    { key: "hired", label: "内定", icon: "check_circle", submit: "内定にする",
-      note: "内定にします。続けて本人へ連絡し、合格通知（雇用条件）を作ります。" },
+    { key: "hired", label: "合格", icon: "check_circle", submit: "合格にする",
+      note: "合格にします。どの形で迎えるか（採用区分）は、応募者詳細の NEXT ACTION「採用区分を選ぶ」で選びます。" },
     { key: "hold", label: "保留", icon: "pause_circle", submit: "保留にする",
       note: "保留にします。社長判断待ちのまま、次に確認することと再判断期限を残します。" },
     { key: "rejected", label: "見送り", icon: "cancel", submit: "見送りを確定",

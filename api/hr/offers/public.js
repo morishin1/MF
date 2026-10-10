@@ -1,9 +1,14 @@
 // GET  /api/hr/offers/public?token=…
 //        … 候補者本人が、確定した合格通知（そのtokenに紐づくoffer versionだけ）を見る。
 //          ログイン不要。gwContext() は使わない（README Stage 6 §16）
-// POST /api/hr/offers/public { token, action, declineReason? }
-//        "accept"  … 本人が承諾する
+// POST /api/hr/offers/public { token, action, declineReason?, agreed? }
+//        "accept"  … 本人が承諾する。採用区分つきのオファーは「上記の内容を確認し、同意します」に
+//                    チェックした（agreed: true）ときだけ。同意＝契約手続きの完了（HR では「契約完了」）
 //        "decline" … 本人が辞退する（理由は任意）
+//
+// ■ 同意の証跡（新しい表は作らない）
+//   どの版（gw_hr_offers.version。送った後は内容を変えない）に・いつ（accepted_at）同意したかを、
+//   その版の行・選考タイムライン・監査ログに残す
 //   ログイン不要。「承諾した」だけで gw_employees は作らない（README Stage 7）。
 //   本採用へ進めるのは、HRが「本採用へ進める」を押してから（次のステージ）
 //
@@ -25,6 +30,10 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { sha256, TOKEN_RE, shapePublicOffer, decisionMakerEmployeeIds } from "../../../lib/hr.js";
 import { attachPay } from "../../../lib/hr-pay.js";
+import { offerTypeOf } from "../../../lib/hr-offer-types.js";
+
+// 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
+const docName = (offer) => offerTypeOf(offer?.offer_type)?.offerName || "合格通知";
 
 const SQL = "db/081_hr_recruiting.sql";
 const CANT_OPEN = { error: "invalid_token", hint: "このURLは開けません。採用担当までお問い合わせください。" };
@@ -78,12 +87,15 @@ async function view(req, res) {
     const now = new Date().toISOString();
     await sb.from("gw_hr_offers").update({ viewed_at: now, sent_at: offer.sent_at || now }).eq("id", offer.id);
     // 閲覧できた＝以後は「本人の回答を待っています」（承諾待ち）。
-    // 「閲覧した」という事実そのものはoffer.viewed_at・選考タイムラインに残す
-    await sb.from("gw_hr_applicants").update({ status: "offer_response_pending", updated_at: now })
-      .eq("id", applicant.id).eq("tenant_id", applicant.tenant_id);
+    // 「閲覧した」という事実そのものはoffer.viewed_at・選考タイムラインに残す。
+    // すでに回答（同意・辞退）した版なら、状態は戻さない（契約完了を承諾待ちにしない）
+    if (!offer.accepted_at && !offer.declined_at) {
+      await sb.from("gw_hr_applicants").update({ status: "offer_response_pending", updated_at: now })
+        .eq("id", applicant.id).eq("tenant_id", applicant.tenant_id);
+    }
     await sb.from("gw_hr_timeline").insert({
       tenant_id: applicant.tenant_id, applicant_id: applicant.id, event_key: "offer_viewed",
-      label: "本人が合格通知を確認", detail: `第${offer.version}版`, created_by: null,
+      label: `本人が${docName(offer)}を確認`, detail: `第${offer.version}版`, created_by: null,
     });
     await gwLog({
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_viewed",
@@ -126,6 +138,11 @@ async function respond(req, res) {
     return json(res, 409, { error: "already_responded", hint: "すでに回答済みです" });
   }
 
+  const typed = Boolean(offerTypeOf(offer.offer_type));
+  if (body.action === "accept" && typed && body.agreed !== true) {
+    return json(res, 400, { error: "agreement_required", hint: "「上記の内容を確認し、同意します」にチェックしてください" });
+  }
+
   const now = new Date().toISOString();
   if (body.action === "accept") {
     await sb.from("gw_hr_offers").update({ accepted_at: now }).eq("id", offer.id);
@@ -133,13 +150,13 @@ async function respond(req, res) {
       .eq("id", applicant.id).eq("tenant_id", applicant.tenant_id);
     await sb.from("gw_hr_timeline").insert({
       tenant_id: applicant.tenant_id, applicant_id: applicant.id, event_key: "offer_accepted",
-      label: "本人が承諾", detail: `第${offer.version}版`, created_by: null,
+      label: typed ? `本人が${docName(offer)}に同意（契約完了）` : "本人が承諾", detail: `第${offer.version}版`, created_by: null,
     });
     await gwLog({
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_accepted",
-      target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id },
+      target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version, agreed: typed ? true : undefined },
     });
-    await notifyOnResponse("候補者が合格通知を承諾しました");
+    await notifyOnResponse(typed ? `候補者が${docName(offer)}に同意しました（契約完了）` : `候補者が${docName(offer)}を承諾しました`);
   } else {
     const reason = String(body.declineReason ?? "").trim().slice(0, DECLINE_REASON_MAX) || null;
     await sb.from("gw_hr_offers").update({ declined_at: now, decline_reason: reason }).eq("id", offer.id);
@@ -153,7 +170,7 @@ async function respond(req, res) {
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_declined",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, hasReason: Boolean(reason) },
     });
-    await notifyOnResponse("候補者が合格通知を辞退しました");
+    await notifyOnResponse(`候補者が${docName(offer)}を辞退しました`);
   }
 
   return json(res, 200, { ok: true, responseStatus: body.action === "accept" ? "accepted" : "declined" });

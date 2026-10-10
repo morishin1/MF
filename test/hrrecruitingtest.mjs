@@ -322,10 +322,16 @@ ok("社長面談待ちは、社長面談を設定（kind: ceo）", () => {
 
 console.log("— NEXT ACTION：合格通知・本人専用URL（Stage 5・6） —");
 
-ok("合格通知作成待ちは、合格通知を作成", () => {
+ok("合格通知作成待ち：採用区分が無ければ、まず採用区分を選ぶ（面談合格後の採用・育成フロー §4）", () => {
   const n = nextActionOf({ status: "offer_draft_pending" });
-  assert.equal(n.cta, "合格通知を作成");
+  assert.equal(n.cta, "採用区分を選ぶ");
+  assert.equal(n.action, "chooseOfferType");
+});
+ok("合格通知作成待ち：採用区分があれば、その区分のオファーを作成", () => {
+  const n = nextActionOf({ status: "offer_draft_pending", offer_type: "contractor" });
+  assert.equal(n.cta, "オファーを作成");
   assert.equal(n.action, "createOffer");
+  assert.ok(n.label.includes("業務委託オファー"), n.label);
 });
 ok("本人送付待ちは、本人へ送る", () => {
   const n = nextActionOf({ status: "offer_send_pending" });

@@ -87,7 +87,7 @@ console.log("\n=== 判断の選択（内定・保留・見送り）：選んだ�
   check((await page.locator("#dc-step2").innerText()).includes("未完了"), "STEP 2 は最初「未完了」（判断と連絡は別の操作）");
 
   for (const kind of ["hired", "hold", "rejected"]) {
-    const label = { hired: "内定", hold: "保留", rejected: "見送り" }[kind];
+    const label = { hired: "合格", hold: "保留", rejected: "見送り" }[kind];
     await page.locator(`#dc-tabs button[data-kind="${kind}"]`).click();
     await page.waitForTimeout(150);
     const on = await segOn(page);
@@ -154,7 +154,7 @@ console.log("\n=== 評価保存 → 判断保存（保留）→ STEP 2 → 送�
   await page.close();
 }
 
-console.log("\n=== 内定 → 本人へのメール（メール設定あり） ===");
+console.log("\n=== 合格 → 本人へのメール（メール設定あり） ===");
 {
   const state = { posted: [], applicant: baseApplicant(), interviews: [ceoInterview()], pending: [baseApplicant()], mailConfigured: true };
   const page = await newPage(state);
@@ -162,15 +162,15 @@ console.log("\n=== 内定 → 本人へのメール（メール設定あり） =
   await page.waitForTimeout(900);
   await page.locator("#dec button", { hasText: "評価・採用判断" }).click();
   await page.waitForTimeout(600);
-  await page.locator("#action-root .hr-modal button", { hasText: "内定にする" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "合格にする" }).click();
   await page.waitForTimeout(800);
   check(!state.posted.some((p) => p.interview), "評価を変えていなければ、面談は保存しない");
-  check(state.posted.find((p) => p.applicant)?.applicant.decision === "hired", "内定が保存される");
+  check(state.posted.find((p) => p.applicant)?.applicant.decision === "hired", "合格が保存される");
   check(await page.locator("#dc-step2 button.btn-primary", { hasText: "メールで送る" }).count() === 1, "メールを送れるときは「メールで送る」がメイン");
   await page.locator("#dc-step2 button", { hasText: "メールで送る" }).click();
   await page.waitForTimeout(700);
   const m = state.posted.find((p) => p.message)?.message;
-  check(m && m.channel === "email" && m.kind === "hired", "本人へのメール：email・内定");
+  check(m && m.channel === "email" && m.kind === "hired", "本人へのメール：email・合格");
   check((await page.locator("#dc-step2").innerText()).includes("メールで送りました"), "送ったら連絡済みになる");
   await page.close();
 }
@@ -214,7 +214,7 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
   const r2 = rows.find((t) => t.includes("鈴木 花子")) || "";
   check(r1.includes("見送り") && r1.includes("本人へ未連絡"), "一覧：見送り｜本人へ未連絡");
   check(r1.includes("本人へ見送りを伝えてください"), "一覧の NEXT：本人へ見送りを伝えてください");
-  check(r2.includes("内定") && r2.includes("連絡済み") && !r2.includes("未連絡"), "一覧：内定｜連絡済み");
+  check(r2.includes("合格") && r2.includes("連絡済み") && !r2.includes("未連絡"), "一覧：合格｜連絡済み");
 
   await page.locator("#rows tr", { hasText: "山田 太郎" }).click();
   await page.waitForTimeout(700);
