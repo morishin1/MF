@@ -36,7 +36,7 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 // analytics-preview.html は、営業分析の画面をモックデータで確かめるためのもの（本実装が入ったら消す）
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
-check(main.length === 7, `/sales の画面は7つ＋プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+check(main.length === 8, `/sales の画面は8つ＋プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {

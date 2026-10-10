@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>AI営業 - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .ai-status { display:flex; gap:12px; flex-wrap:wrap; align-items:stretch; margin:0 0 14px; }
+    .ai-kpi { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:10px 14px; min-width:150px; flex:1 1 150px; }
+    .ai-kpi .k { font-size:11px; color:#6b7080; font-weight:700; }
+    .ai-kpi .v { font-size:20px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; }
+    .ai-kpi .s { font-size:11.5px; color:#6b7080; }
+    .ai-bar { height:6px; background:#eef0f4; border-radius:3px; overflow:hidden; margin-top:6px; }
+    .ai-bar i { display:block; height:100%; background:#2f6fde; }
+    .ai-bar i.warn { background:#d69e2e; } .ai-bar i.over { background:#c53030; }
+    .ai-tabs { margin:6px 0 14px; }
+    .ai-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:0 0 10px; }
+    .ai-tools input[type=text], .ai-tools select { width:auto; min-width:150px; margin:0; }
+    .ai-wrap { overflow-x:auto; }
+    .ai-wrap .sl-table td, .ai-wrap .sl-table th { white-space:nowrap; }
+    .ai-wrap .sl-table td.wrap { white-space:normal; min-width:220px; }
+    .ai-tag { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; background:#eef0f4; color:#3a4256; }
+    .ai-tag.ok { background:#e6f4ea; color:#1e6b34; } .ai-tag.ng { background:#fde8e8; color:#b3261e; }
+    .ai-tag.rv { background:#fff4e0; color:#8a5a00; } .ai-tag.pd { background:#e8effd; color:#1f4fae; }
+    .ai-score { font-weight:900; font-variant-numeric:tabular-nums; }
+    .ai-card { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; margin:0 0 12px; }
+    .ai-card h3 { margin:0 0 6px; font-size:15px; color:#1b2440; }
+    .ai-pre { white-space:pre-wrap; background:#f6f6f2; border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; font-size:13px; line-height:1.7; }
+    .ai-list { margin:4px 0 8px; padding-left:18px; font-size:13px; line-height:1.7; }
+    .ai-list a { font-size:11px; }
+    .ai-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .ai-warn { color:#8a5a00; font-size:12.5px; margin:4px 0; }
+    .ai-progress { font-size:13px; color:#1b2440; margin:6px 0; }
+    .sl-drawer.ai-detail { width:720px; max-width:100vw; }
+    .ai-form-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px; }
+    @media (max-width: 900px) { .ai-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">AI営業</h1>
+  <p class="sl-sub">アタックリストの企業を AI が調べて、合う商材（8EC・8RENT／ENGER／無限道場）と営業文の下書きを作ります。
+    営業文は営業責任者が承認してから、アタック画面で<strong>人が手で</strong>送ります（AI は外部へ送りません）。</p>
+  <div id="status"></div>
+  <div class="sl-tabs-pill ai-tabs" id="tabs"></div>
+  <div id="panel"><div class="empty">読み込み中…</div></div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="../js/api-client.js?v=20261008rec3"></script>
+<script src="../js/layout.js?v=20261008rec3"></script>
+<script src="../js/sales-layout.js?v=20261008rec3"></script>
+<script>
+  // API はすべて API.api（js/api-client.js の共通の呼び出し）。共通の js は変えない（キャッシュの版を上げずに済む）
+  const el = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const errText = (e, f) => e?.hint || e?.detail || e?.message || f;
+  const TABS = [
+    ["analyze", "企業を選んで分析"], ["results", "分析結果・営業文"], ["approve", "承認待ち"], ["admin", "費用・設定"],
+  ];
+  const SERVICES = ["8EC・8RENT", "ENGER", "無限道場（企業開拓）", "無限道場（生徒募集）"];
+  const SEND_TAG = { blocked: ["ng", "送信不可"], manual_review: ["rv", "要確認"], ok_manual: ["ok", "確認済み"] };
+  const DRAFT_TAG = { draft: ["", "下書き"], pending: ["pd", "承認待ち"], approved: ["ok", "承認済み"], rejected: ["ng", "差し戻し"], used: ["ok", "送信に使用済み"] };
+  const BATCH = 5, MAX_PICK = 50;
+
+  let state = { admin: null, tab: "analyze", companies: [], campaigns: [], picked: new Set(), results: [], analyses: [], running: false };
+  const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const tag = (pair) => (pair ? `<span class="ai-tag ${pair[0]}">${esc(pair[1])}</span>` : "");
+  const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("ja-JP") : "—");
+
+  SalesLayout.init({ active: "attack" }).then((ctx) => { if (ctx) boot(); });
+
+  async function boot() {
+    const t = new URLSearchParams(location.search).get("tab");
+    if (TABS.some(([k]) => k === t)) state.tab = t;
+    await loadStatus();
+    renderTabs();
+    showTab(state.tab);
+  }
+
+  async function loadStatus() {
+    try { state.admin = await API.api("/api/sales/ai/admin"); } catch (e) {
+      el("status").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(errText(e, "取得できませんでした"))}</div></div>`;
+      return;
+    }
+    renderStatus();
+  }
+
+  function renderStatus() {
+    const a = state.admin;
+    if (!a) return;
+    if (!a.ready) {
+      el("status").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(a.message || "AI営業の準備がまだです")}</div></div>`;
+      return;
+    }
+    const s = a.settings, m = a.usage.month, d = a.usage.today;
+    const used = m.committedUsd + m.reservedUsd;
+    const pct = s.monthlyCapUsd ? Math.min(100, (used / s.monthlyCapUsd) * 100) : 0;
+    const cls = used >= s.monthlyCapUsd ? "over" : used >= s.monthlyTargetUsd ? "warn" : "";
+    const banners = [];
+    if (!a.configured) banners.push(`<div class="banner warn"><span class="material-symbols-outlined">key_off</span><div>AI営業の API キーが未設定です（Vercel の環境変数 SALES_AI_ANTHROPIC_API_KEY）。設定するまで分析・営業文は使えません。</div></div>`);
+    if (!s.enabled) banners.push(`<div class="banner warn" id="ai-stopped"><span class="material-symbols-outlined">pause_circle</span><div>${esc(s.stopLabel || "AI営業は停止中です")}</div></div>`);
+    el("status").innerHTML = `${banners.join("")}
+      <div class="ai-status">
+        <div class="ai-kpi"><div class="k">今月の AI 費用（上限 ${usd(s.monthlyCapUsd)}）</div><div class="v" id="kpi-month">${usd(used)}</div>
+          <div class="ai-bar"><i class="${cls}" style="width:${pct.toFixed(1)}%"></i></div><div class="s">目標 ${usd(s.monthlyTargetUsd)}／確定 ${usd(m.committedUsd)}</div></div>
+        <div class="ai-kpi"><div class="k">今日（上限 ${usd(s.dailyCapUsd)}）</div><div class="v">${usd(d.committedUsd + d.reservedUsd)}</div>
+          <div class="s">分析 ${d.byPurpose.analysis?.calls || 0}社／営業文 ${d.byPurpose.draft?.calls || 0}件（1日 ${s.dailyCompanyLimit}社まで）</div></div>
+        <div class="ai-kpi"><div class="k">承認待ち</div><div class="v">${a.pendingCount}</div><div class="s">${a.canApprove ? "あなたは承認できます" : "承認は経営者・営業責任者"}</div></div>
+        <div class="ai-kpi"><div class="k">状態</div><div class="v" style="font-size:16px;">${s.enabled ? "稼働中" : "停止中"}</div>
+          <div class="s">失敗 今月 ${m.failures} 回</div></div>
+      </div>`;
+  }
+
+  function renderTabs() {
+    el("tabs").innerHTML = TABS.map(([k, label]) => `<button class="${k === state.tab ? "on" : ""}" onclick="showTab('${k}')">${esc(label)}</button>`).join("");
+  }
+  function showTab(k) {
+    state.tab = k;
+    const u = new URL(location.href); u.searchParams.set("tab", k); history.replaceState({}, "", u);
+    renderTabs();
+    ({ analyze: loadAnalyze, results: loadResults, approve: loadApprove, admin: renderAdmin })[k]();
+  }
+
+  // ---- 企業を選んで分析 ----------------------------------------------------------------
+  async function loadAnalyze() {
+    el("panel").innerHTML = `
+      <div class="sl-sec-sub">アタックする企業（未アタック・再アタック待ち。営業禁止・直近30日にアタック済みは出ません）から選びます。
+        最初は PC 販売・レンタルのキャンペーンで 20〜50社 を目安にしてください。1回に ${MAX_PICK}社まで選べます。</div>
+      <div class="ai-tools">
+        <select id="f-campaign" aria-label="キャンペーン" onchange="fetchCompanies()"><option value="">キャンペーン：すべて</option></select>
+        <input type="text" id="f-q" placeholder="企業名・URLで探す" onkeydown="if(event.key==='Enter')fetchCompanies()">
+        <button class="btn btn-secondary btn-sm" onclick="fetchCompanies()">探す</button>
+        <span class="sl-muted" id="pick-count"></span>
+      </div>
+      <div class="ai-tools">
+        <button class="btn btn-primary" id="run-btn" onclick="runAnalyze()" disabled>
+          <span class="material-symbols-outlined icon-inline">psychology</span><span id="run-label">選択した企業を分析する</span></button>
+        <button class="btn btn-secondary btn-sm" onclick="pickAll()">表示中をすべて選ぶ（${MAX_PICK}社まで）</button>
+        <button class="btn btn-secondary btn-sm" onclick="state.picked.clear();renderCompanies()">選択を外す</button>
+      </div>
+      <div id="progress" class="ai-progress"></div>
+      <div class="ai-wrap"><table class="sl-table"><thead><tr><th></th><th>企業</th><th>業種</th><th>地域</th><th>サイト</th><th>前回のAI分析</th></tr></thead>
+        <tbody id="c-rows"><tr><td colspan="6" class="empty">読み込み中…</td></tr></tbody></table></div>
+      <div id="run-results"></div>`;
+    try {
+      const r = await API.listSalesCampaigns();
+      state.campaigns = r.campaigns || [];
+      el("f-campaign").innerHTML += state.campaigns.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+    } catch { /* キャンペーンが読めなくても、企業は選べる */ }
+    fetchCompanies();
+  }
+
+  async function fetchCompanies() {
+    const q = new URLSearchParams({ page: "1", limit: "100", queue: "attack", sort: "priority" });
+    if (el("f-campaign")?.value) q.set("campaign", el("f-campaign").value);
+    if (el("f-q")?.value.trim()) q.set("q", el("f-q").value.trim());
+    el("c-rows").innerHTML = `<tr><td colspan="6" class="empty">読み込み中…</td></tr>`;
+    try {
+      const [r, list] = await Promise.all([
+        API.api(`/api/sales/companies?${q}`),
+        API.api("/api/sales/ai/analyze?list=1").catch(() => ({ analyses: [] })),
+      ]);
+      state.companies = r.companies || [];
+      state.lastBy = new Map((list.analyses || []).map((a) => [a.companyId, a]));
+      renderCompanies();
+    } catch (e) {
+      el("c-rows").innerHTML = `<tr><td colspan="6"><div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(errText(e, "取得できませんでした"))}</div></div></td></tr>`;
+    }
+  }
+
+  function renderCompanies() {
+    const rows = state.companies;
+    el("c-rows").innerHTML = rows.length ? rows.map((c) => {
+      const last = state.lastBy?.get(c.id);
+      return `<tr>
+        <td><input type="checkbox" style="width:auto;margin:0;" aria-label="${esc(c.name)}を選ぶ" ${state.picked.has(c.id) ? "checked" : ""}
+          ${!c.siteUrl ? "disabled title='サイトURLが未登録'" : ""} onchange="togglePick('${esc(c.id)}', this.checked)"></td>
+        <td>${esc(c.name)}</td><td>${esc(c.industry || "—")}</td><td>${esc(c.region || "—")}</td>
+        <td>${c.siteUrl ? `<a href="${esc(c.siteUrl)}" target="_blank" rel="noopener noreferrer">開く</a>` : "<span class='sl-muted'>未登録</span>"}</td>
+        <td>${last ? `${last.score ?? "—"}点 ${tag(SEND_TAG[last.sendCheck])} <span class="sl-muted">${fmtDate(last.createdAt)}</span>` : "<span class='sl-muted'>未分析</span>"}</td></tr>`;
+    }).join("") : `<tr><td colspan="6" class="empty">アタックする企業がありません</td></tr>`;
+    const n = state.picked.size;
+    el("pick-count").textContent = `${n}社を選択中`;
+    el("run-btn").disabled = !n || state.running || !state.admin?.settings?.enabled;
+    el("run-label").textContent = n ? `選択した${n}社を分析する` : "選択した企業を分析する";
+  }
+  function togglePick(id, on) {
+    if (on && state.picked.size >= MAX_PICK) { alert(`1回に選べるのは${MAX_PICK}社までです`); renderCompanies(); return; }
+    if (on) state.picked.add(id); else state.picked.delete(id);
+    renderCompanies();
+  }
+  function pickAll() {
+    for (const c of state.companies) { if (state.picked.size >= MAX_PICK) break; if (c.siteUrl) state.picked.add(c.id); }
+    renderCompanies();
+  }
+
+  // 5社ずつ順に（1回の API は Vercel の 60 秒に収める）。止まった（上限・停止）らそこでやめる
+  async function runAnalyze() {
+    const ids = [...state.picked];
+    if (!ids.length || state.running) return;
+    state.running = true; renderCompanies();
+    const out = [];
+    let stopped = null;
+    for (let i = 0; i < ids.length && !stopped; i += BATCH) {
+      el("progress").textContent = `分析中… ${Math.min(i + BATCH, ids.length)} / ${ids.length}社`;
+      try {
+        const r = await API.api("/api/sales/ai/analyze", { method: "POST", body: { companyIds: ids.slice(i, i + BATCH) } });
+        out.push(...r.results);
+        if (r.stopped) stopped = r.stopped.hint;
+      } catch (e) { stopped = errText(e, "分析できませんでした"); }
+    }
+    state.running = false;
+    state.picked.clear();
+    const ok = out.filter((r) => r.result === "ok").length;
+    el("progress").innerHTML = `分析完了：${ok}社を分析／${out.length - ok}社は外しました・失敗しました${stopped ? `<div class="banner warn" style="margin-top:8px;"><span class="material-symbols-outlined">pause_circle</span><div>${esc(stopped)}</div></div>` : ""}`;
+    el("run-results").innerHTML = out.length ? `<div class="ai-wrap" style="margin-top:12px;"><table class="sl-table"><thead><tr><th>企業</th><th>結果</th><th>点数</th><th>合う商材</th><th>送信可否</th><th></th></tr></thead><tbody>
+      ${out.map((r) => `<tr><td>${esc(r.companyName || "")}</td>
+        <td>${r.result === "ok" ? tag(["ok", "分析済み"]) : `${tag(["", r.result === "skipped" ? "外した" : r.result === "stopped" ? "停止" : "失敗"])} <span class="sl-muted">${esc(r.reasonLabel || r.reason || "")}</span>`}</td>
+        <td class="ai-score">${r.analysis?.score ?? "—"}</td><td>${esc(r.analysis?.bestService || "—")}</td><td>${tag(SEND_TAG[r.analysis?.sendCheck])}</td>
+        <td>${r.analysis ? `<button class="btn btn-secondary btn-sm" onclick="openDetail('${esc(r.companyId)}')">詳細・営業文</button>` : ""}</td></tr>`).join("")}
+      </tbody></table></div>` : "";
+    await loadStatus();
+    fetchCompanies();
+  }
+
+  // ---- 分析結果・営業文 ------------------------------------------------------------------
+  async function loadResults() {
+    el("panel").innerHTML = `<div class="ai-tools"><select id="r-filter" onchange="renderResults()" aria-label="絞り込み">
+        <option value="">すべて</option><option value="effective">有効企業だけ</option><option value="review">要確認だけ</option><option value="nodraft">営業文がまだ</option></select>
+        <span class="sl-muted" id="r-count"></span></div>
+      <div class="ai-wrap"><table class="sl-table"><thead><tr><th>企業</th><th>点数</th><th>合う商材</th><th>送信可否</th><th>有効企業</th><th>営業文</th><th>分析日</th><th></th></tr></thead>
+        <tbody id="r-rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody></table></div>`;
+    try {
+      const r = await API.api("/api/sales/ai/analyze?list=1");
+      if (!r.ready) { el("r-rows").innerHTML = `<tr><td colspan="8" class="empty">${esc(r.message || "準備がまだです")}</td></tr>`; return; }
+      state.analyses = r.analyses || [];
+      renderResults();
+    } catch (e) { el("r-rows").innerHTML = `<tr><td colspan="8" class="empty">${esc(errText(e, "取得できませんでした"))}</td></tr>`; }
+  }
+  function renderResults() {
+    const f = el("r-filter").value;
+    const rows = state.analyses.filter((a) => !f || (f === "effective" && a.effective) || (f === "review" && a.sendCheck === "manual_review")
+      || (f === "nodraft" && a.status === "ok" && !a.draft));
+    el("r-count").textContent = `${rows.length}社`;
+    el("r-rows").innerHTML = rows.length ? rows.map((a) => `<tr>
+      <td>${esc(a.company.name)}</td><td class="ai-score">${a.score ?? "—"}</td><td>${esc(a.bestService || (a.status !== "ok" ? a.skipReason || a.status : "—"))}</td>
+      <td>${tag(SEND_TAG[a.sendCheck])}</td><td>${a.effective ? tag(["ok", "有効"]) : "<span class='sl-muted'>—</span>"}</td>
+      <td>${a.draft ? tag(DRAFT_TAG[a.draft.status]) : "<span class='sl-muted'>なし</span>"}</td><td>${fmtDate(a.createdAt)}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openDetail('${esc(a.companyId)}')">詳細・営業文</button></td></tr>`).join("")
+      : `<tr><td colspan="8" class="empty">分析した企業はまだありません</td></tr>`;
+  }
+
+  async function openDetail(companyId) {
+    el("modal-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeModal()"></div><div class="sl-drawer ai-detail"><div class="empty">読み込み中…</div></div>`;
+    try {
+      const r = await API.api(`/api/sales/ai/analyze?companyId=${encodeURIComponent(companyId)}`);
+      state.detail = { companyId, ...r };
+      renderDetail();
+    } catch (e) { document.querySelector(".ai-detail").innerHTML = `<div class="banner err"><div>${esc(errText(e, "取得できませんでした"))}</div></div>`; }
+  }
+  function closeModal() { el("modal-root").innerHTML = ""; }
+
+  function renderDetail() {
+    const { analysis: a, drafts = [], canApprove, meId } = state.detail;
+    const company = state.analyses.find((x) => x.companyId === state.detail.companyId)?.company
+      || state.companies.find((x) => x.id === state.detail.companyId) || { name: "" };
+    const draft = drafts.find((d) => !["superseded"].includes(d.status));
+    const facts = (a?.facts || []).map((f) => `<li>${esc(f.text)} <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">出典</a></li>`).join("");
+    const svc = (a?.services || []).map((s) => `<tr><td>${esc(s.service)}</td><td class="ai-score">${s.score}</td><td class="wrap">${esc(s.reason || "")}</td></tr>`).join("");
+    const reasons = (a?.sendCheckReasons || []).map((r) => `<li>${esc(r.label)}${r.quote ? `：「${esc(r.quote)}」` : ""}${r.url ? ` <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">出典</a>` : ""}</li>`).join("");
+    document.querySelector(".ai-detail").innerHTML = `
+      <h2>${esc(company.name || "")}</h2>
+      ${!a ? `<p class="sl-muted">まだ分析していません。</p>` : `
+      <div class="ai-card"><h3>概要 <span class="ai-score">${a.score ?? "—"}点</span> ${a.effective ? tag(["ok", "有効企業"]) : ""}</h3>
+        <div style="font-size:13px;line-height:1.7;">${esc(a.summary || (a.status !== "ok" ? `分析できませんでした（${a.skipReason || a.status}）` : ""))}</div>
+        ${a.effectiveReasons?.length ? `<div class="ai-warn">有効企業にしない理由：${esc(a.effectiveReasons.join("・"))}</div>` : ""}</div>
+      <div class="ai-card"><h3>送信可否 ${tag(SEND_TAG[a.sendCheck])}</h3><ul class="ai-list">${reasons}</ul>
+        ${a.formUrl ? `<a class="btn btn-secondary btn-sm" href="${esc(a.formUrl)}" target="_blank" rel="noopener noreferrer">問い合わせページを開く</a>` : ""}
+        ${a.sendCheck === "manual_review" ? `<button class="btn btn-primary btn-sm" onclick="sendCheck('ok_manual')">受付目的・禁止の記載を確認した</button>` : ""}
+        ${a.sendCheck === "blocked" && canApprove ? `<button class="btn btn-secondary btn-sm" onclick="sendCheck('ok_manual', true)">誤判定として確認済みにする（理由が必要）</button>` : ""}
+        ${a.sendCheck !== "blocked" ? `<button class="btn btn-secondary btn-sm" onclick="sendCheck('blocked')">送信不可にする</button>` : ""}
+        <div id="sc-msg" class="err-text"></div></div>
+      <div class="ai-grid">
+        <div class="ai-card"><h3>事実（出典つき）</h3><ul class="ai-list">${facts || "<li class='sl-muted'>なし</li>"}</ul></div>
+        <div class="ai-card"><h3>推測・不明点</h3><ul class="ai-list">${(a.hypotheses || []).map((h) => `<li>（推測）${esc(h)}</li>`).join("")}
+          ${(a.uncertainties || []).map((h) => `<li class="sl-muted">（不明）${esc(h)}</li>`).join("")}</ul></div>
+      </div>
+      <div class="ai-card"><h3>商材ごとの点数</h3><div class="ai-wrap"><table class="sl-table"><thead><tr><th>商材</th><th>点</th><th>理由</th></tr></thead><tbody>${svc}</tbody></table></div>
+        <div class="sl-muted" style="margin-top:6px;">読んだページ：${(a.pages || []).filter((p) => !p.skipped).map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${esc(p.kind)}</a>`).join("・")}</div>
+        <div style="margin-top:8px;">分析の当たり外れ：
+          ${["correct", "wrong", "unknown"].map((k) => `<label class="sl-chip"><input type="radio" name="chk" value="${k}" ${a.checkResult === k ? "checked" : ""} onchange="checkResult('${k}')">${{ correct: "合っている", wrong: "違う", unknown: "分からない" }[k]}</label>`).join("")}</div></div>`}
+      <div class="ai-card" id="draft-card"><h3>営業文 ${draft ? tag(DRAFT_TAG[draft.status]) : ""}</h3>${draftHtml(a, draft, canApprove, meId)}</div>
+      <div style="margin-top:8px;"><button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`;
+  }
+
+  function draftHtml(a, d, canApprove, meId) {
+    if (!a || a.status !== "ok") return `<p class="sl-muted">分析が済んだ企業に作れます。</p>`;
+    if (a.sendCheck === "blocked") return `<p class="sl-muted">送信不可の企業には作りません。</p>`;
+    const make = `<div class="ai-tools" style="margin-top:8px;"><select id="d-service" aria-label="商材">${SERVICES.map((s) => `<option ${s === (d?.service || a.bestService) ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
+      <button class="btn ${d ? "btn-secondary" : "btn-primary"} btn-sm" onclick="makeDraft(this)">${d ? "作り直す" : "AI で営業文を作る"}</button></div>`;
+    if (!d) return `${make}<div id="d-msg" class="err-text"></div>`;
+    const editable = ["draft", "rejected", "pending", "approved"].includes(d.status);
+    return `
+      ${d.decisionNote ? `<div class="ai-warn">承認者のメモ：${esc(d.decisionNote)}</div>` : ""}
+      <label>件名（メールで送るとき）</label><input id="d-subject" type="text" value="${esc(d.subject)}" ${editable ? "" : "disabled"}>
+      <label style="margin-top:8px;">本文（{{company}}・{{sender}}・{{url}} は送るときに差し込みます。署名は自動で付きます）</label>
+      <textarea id="d-body" rows="12" ${editable ? "" : "disabled"}>${esc(d.body)}</textarea>
+      ${d.rationale ? `<div class="sl-muted" style="margin-top:4px;">この文面にした理由：${esc(d.rationale)}</div>` : ""}
+      <div class="ai-tools" style="margin-top:8px;">
+        ${editable ? `<button class="btn btn-secondary btn-sm" onclick="draftAct(this, 'edit')">保存する${["pending", "approved"].includes(d.status) ? "（承認をやり直します）" : ""}</button>` : ""}
+        ${["draft", "rejected"].includes(d.status) ? `<button class="btn btn-primary btn-sm" onclick="draftAct(this, 'request')">承認を依頼する</button>` : ""}
+        ${d.status === "pending" && (d.requestedBy === meId || canApprove) ? `<button class="btn btn-secondary btn-sm" onclick="draftAct(this, 'withdraw')">依頼を取り下げる</button>` : ""}
+        ${d.status === "approved" ? `<a class="btn btn-primary btn-sm" href="/sales/companies.html?attack=${esc(d.companyId)}">アタック画面で送る</a>` : ""}
+      </div>${make}<div id="d-msg" class="err-text"></div>`;
+  }
+
+  async function sendCheck(decision, needNote) {
+    const a = state.detail.analysis;
+    let note;
+    if (needNote) { note = prompt("「送信不可」を覆す理由を書いてください"); if (!note) return; }
+    else if (decision === "ok_manual" && !confirm("問い合わせページを開いて、受付目的（一般の問い合わせ・取引の相談）と、営業・自動送信の禁止の記載が無いことを確認しましたか？")) return;
+    try {
+      const r = await API.api("/api/sales/ai/analyze", { method: "PATCH", body: { id: a.id, action: "send_check", decision, note } });
+      state.detail.analysis = r.analysis; renderDetail();
+    } catch (e) { el("sc-msg").textContent = errText(e, "保存できませんでした"); }
+  }
+  async function checkResult(result) {
+    try { await API.api("/api/sales/ai/analyze", { method: "PATCH", body: { id: state.detail.analysis.id, action: "check", result } }); } catch { /* 品質の記録は失敗しても続ける */ }
+  }
+  async function makeDraft(btn) {
+    el("d-msg").textContent = "";
+    try {
+      const r = await KPLayout.busy(btn, "作成中…", () => API.api("/api/sales/ai/drafts", { method: "POST", body: { companyId: state.detail.companyId, service: el("d-service").value } }));
+      if (r.warnings?.length) alert(`確認してください：\n${r.warnings.join("\n")}`);
+      await openDetail(state.detail.companyId);
+      loadStatus();
+    } catch (e) { el("d-msg").textContent = errText(e, "作れませんでした"); }
+  }
+  async function draftAct(btn, action) {
+    const d = (state.detail.drafts || []).find((x) => x.status !== "superseded");
+    const body = { id: d.id, action };
+    if (action === "edit") { body.subject = el("d-subject").value; body.body = el("d-body").value; }
+    el("d-msg").textContent = "";
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/ai/drafts", { method: "PATCH", body }));
+      await openDetail(state.detail.companyId);
+      loadStatus();
+    } catch (e) { el("d-msg").textContent = errText(e, "保存できませんでした"); }
+  }
+
+  // ---- 承認待ち ------------------------------------------------------------------------
+  async function loadApprove() {
+    el("panel").innerHTML = `<div class="empty">読み込み中…</div>`;
+    try {
+      const r = await API.api("/api/sales/ai/drafts?status=pending");
+      if (r.ready === false) { el("panel").innerHTML = `<div class="banner warn"><div>${esc(r.message)}</div></div>`; return; }
+      const list = r.drafts || [];
+      el("panel").innerHTML = `${r.canApprove ? "" : `<div class="banner info"><span class="material-symbols-outlined">info</span><div>承認できるのは、経営者・営業責任者（責任者＋Salesの権限）だけです。ここでは承認待ちの一覧を見られます。</div></div>`}
+        ${list.length ? list.map((d) => approveCard(d, r.canApprove)).join("") : `<div class="empty">承認待ちの営業文はありません</div>`}`;
+    } catch (e) { el("panel").innerHTML = `<div class="banner err"><div>${esc(errText(e, "取得できませんでした"))}</div></div>`; }
+  }
+  function approveCard(d, canApprove) {
+    const a = d.analysis;
+    return `<div class="ai-card" id="ap-${esc(d.id)}">
+      <h3>${esc(d.company?.name || "")} <span class="sl-muted" style="font-weight:500;">／${esc(d.service || "")}／依頼：${esc(d.requestedByName || "—")}</span></h3>
+      <div class="ai-grid">
+        <div><div class="sl-muted">送る文面の見本（差し込み・署名つき）</div>
+          ${d.preview.subject ? `<div style="font-weight:700;margin:4px 0;">件名：${esc(d.preview.subject)}</div>` : ""}<div class="ai-pre">${esc(d.preview.body)}</div>
+          ${(d.warnings || []).map((w) => `<div class="ai-warn">⚠ ${esc(w)}</div>`).join("")}
+          ${d.rationale ? `<div class="sl-muted" style="margin-top:4px;">理由：${esc(d.rationale)}</div>` : ""}</div>
+        <div><div class="sl-muted">根拠（AIの分析 ${a?.score ?? "—"}点・送信可否 ${esc(a?.sendCheckLabel || "—")}）</div>
+          <div style="font-size:13px;margin:4px 0;">${esc(a?.summary || "")}</div>
+          <ul class="ai-list">${(a?.facts || []).map((f) => `<li>${esc(f.text)} <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">出典</a></li>`).join("")}</ul>
+          ${d.company?.siteUrl ? `<a href="${esc(d.company.siteUrl)}" target="_blank" rel="noopener noreferrer">企業サイトを開く</a>` : ""}</div>
+      </div>
+      ${canApprove ? (d.selfInvolved ? `<p class="ai-warn">自分が作った・直した・依頼した営業文は承認できません。別の承認者に依頼してください。</p>` : `
+        <label style="margin-top:8px;">メモ（差し戻すときは必須）</label><input type="text" id="note-${esc(d.id)}">
+        <div class="ai-tools" style="margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="decide(this, '${esc(d.id)}', 'approve')">承認する</button>
+          <button class="btn btn-secondary btn-sm" onclick="decide(this, '${esc(d.id)}', 'reject')">差し戻す</button></div>`) : ""}
+      <div id="msg-${esc(d.id)}" class="err-text"></div></div>`;
+  }
+  async function decide(btn, id, action) {
+    const note = el(`note-${id}`)?.value.trim() || undefined;
+    if (action === "reject" && !note) { el(`msg-${id}`).textContent = "差し戻す理由を書いてください"; return; }
+    try {
+      await KPLayout.busy(btn, action === "approve" ? "承認中…" : "差し戻し中…", () => API.api("/api/sales/ai/drafts", { method: "PATCH", body: { id, action, note } }));
+      el(`ap-${id}`).remove();
+      loadStatus();
+    } catch (e) { el(`msg-${id}`).textContent = errText(e, "保存できませんでした"); }
+  }
+
+  // ---- 費用・設定 ----------------------------------------------------------------------
+  function renderAdmin() {
+    const a = state.admin;
+    if (!a?.ready) { el("panel").innerHTML = `<div class="banner warn"><div>${esc(a?.message || "準備がまだです")}</div></div>`; return; }
+    const s = a.settings, m = a.usage.month;
+    const purpose = { analysis: "企業分析（Haiku）", draft: "営業文（Sonnet）", deep_analysis: "詳しい分析（Opus）" };
+    const dis = a.canManage ? "" : "disabled";
+    el("panel").innerHTML = `
+      <div class="ai-card"><h3>今月の内訳</h3>
+        <div class="ai-wrap"><table class="sl-table"><thead><tr><th>用途</th><th>回数</th><th>費用</th><th>入力トークン</th><th>出力トークン</th></tr></thead><tbody>
+          ${Object.entries(m.byPurpose).map(([k, p]) => `<tr><td>${esc(purpose[k] || k)}</td><td>${p.calls}</td><td>${usd(p.usd)}</td><td>${p.inputTokens.toLocaleString()}</td><td>${p.outputTokens.toLocaleString()}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">今月はまだ使っていません</td></tr>`}
+        </tbody></table></div>
+        <p class="sl-muted" style="margin-top:6px;">${esc(a.costNote)}</p>
+        ${a.recentErrors.length ? `<div class="sl-muted">最近の失敗：${a.recentErrors.map((e) => `${esc(fmtDate(e.at))} ${esc(e.purpose)} ${esc(e.outcome)}${e.error ? `（${esc(e.error)}）` : ""}`).join("／")}</div>` : ""}
+        <div class="sl-muted">モデル：分析 ${esc(a.models.light)}／営業文 ${esc(a.models.standard)}</div></div>
+      <div class="ai-card"><h3>開始・停止</h3>
+        <p style="font-size:13px;">いまは <strong>${s.enabled ? "稼働中" : "停止中"}</strong>です。${s.enabled ? "" : esc(s.stopLabel || "")}
+          上限に達したとき・失敗が続いたとき・短時間に呼び出しが多すぎたときは、自動で止まります。</p>
+        ${a.canManage ? `<div class="ai-tools">${s.enabled ? `<button class="btn btn-secondary" onclick="adminAct(this, 'pause')">停止する</button>`
+          : `<button class="btn btn-primary" onclick="adminAct(this, 'start')" ${a.configured ? "" : "disabled"}>開始する</button>`}</div>`
+          : `<p class="sl-muted">開始・停止・設定は、経営者・管理者だけが変更できます。</p>`}
+        <div id="adm-msg" class="err-text"></div></div>
+      <div class="ai-card"><h3>設定</h3>
+        <div class="ai-form-grid">
+          <div><label>月の目標（ドル）</label><input id="s-target" type="number" min="0" step="1" value="${s.monthlyTargetUsd}" ${dis}></div>
+          <div><label>月の上限（ドル・100まで）</label><input id="s-cap" type="number" min="0" max="100" step="1" value="${s.monthlyCapUsd}" ${dis}></div>
+          <div><label>1日の上限（ドル）</label><input id="s-day" type="number" min="0" step="0.5" value="${s.dailyCapUsd}" ${dis}></div>
+          <div><label>1日に分析する社数の上限</label><input id="s-companies" type="number" min="0" max="2000" step="10" value="${s.dailyCompanyLimit}" ${dis}></div>
+          <div><label>有効企業の基準（点）</label><input id="s-threshold" type="number" min="0" max="100" step="5" value="${s.effectiveThreshold}" ${dis}></div>
+        </div>
+        <label style="margin-top:10px;">共通署名（営業文の最後に付きます。{{sender}} で送る人の名前）</label>
+        <textarea id="s-signature" rows="5" ${dis}>${esc(s.signature)}</textarea>
+        <label style="margin-top:10px;">使わない言い回し（1行に1つ。既定の「必ず・絶対・最安」などに足します）</label>
+        <textarea id="s-banned" rows="3" ${dis}>${esc((s.bannedPhrases || []).join("\n"))}</textarea>
+        ${a.canManage ? `<div class="ai-tools" style="margin-top:10px;"><button class="btn btn-primary" onclick="saveSettings(this)">設定を保存する</button></div>` : ""}
+        <div id="set-msg" class="err-text"></div></div>`;
+  }
+  async function adminAct(btn, action) {
+    if (action === "start" && !confirm("AI営業を開始します。AI の利用料（トークン代）がかかります。よろしいですか？")) return;
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/ai/admin", { method: "PATCH", body: { action } }));
+      await loadStatus(); renderAdmin();
+    } catch (e) { el("adm-msg").textContent = errText(e, "保存できませんでした"); }
+  }
+  async function saveSettings(btn) {
+    const body = { action: "settings", monthlyTargetUsd: Number(el("s-target").value), monthlyCapUsd: Number(el("s-cap").value),
+      dailyCapUsd: Number(el("s-day").value), dailyCompanyLimit: Number(el("s-companies").value), effectiveThreshold: Number(el("s-threshold").value),
+      signature: el("s-signature").value, bannedPhrases: el("s-banned").value.split("\n").map((x) => x.trim()).filter(Boolean) };
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/ai/admin", { method: "PATCH", body }));
+      await loadStatus(); renderAdmin();
+      el("set-msg").textContent = "保存しました";
+    } catch (e) { el("set-msg").textContent = errText(e, "保存できませんでした"); }
+  }
+</script>
+</body>
+</html>
