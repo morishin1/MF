@@ -213,8 +213,14 @@ console.log("\n— DB の関数も同じ役割 —");
   check(/'hr'/.test(isHr) && /'owner'/.test(isHr) && /is_tenant_staff/.test(isHr), "gw_is_hr（人事の台帳など）は変えていない");
   check(rolesIn(rec).join(",") === [...HR_ROLES].sort().join(","),
     `gw_is_recruiting = ${HR_ROLES.join("・")}（いま ${rolesIn(rec).join("・")}）`);
-  check(rolesIn(sales).join(",") === [...SALES_ROLES].sort().join(","),
-    `gw_is_sales = ${SALES_ROLES.join("・")}（いま ${rolesIn(sales).join("・")}）`);
+  // Sales は db/128 から「owner ロール または Sales のアプリ権限」（lib/gw.js canSell と同じ）。
+  // ロールの並び（SALES_ROLES）ではなく、API の判定そのものとそろっていることを見る
+  const appsIn = (body) => [...body.matchAll(/gw_has_app\(p_tenant,\s*'(\w+)'\)/g)].map((m) => m[1]).sort();
+  check(rolesIn(sales).join(",") === "owner" && appsIn(sales).join(",") === "sales",
+    `gw_is_sales = owner ロール または Sales のアプリ権限（いま ロール ${rolesIn(sales).join("・") || "なし"}／アプリ ${appsIn(sales).join("・") || "なし"}）`);
+  check(canSell({ roles: ["owner"], apps: [] }) && canSell({ roles: [], apps: ["sales"] })
+        && !canSell({ roles: ["manager"], apps: [] }) && !canSell({ roles: ["sales"], apps: [] }),
+    "API の canSell も同じ（経営者・Sales アプリは通る／manager・sales のロールだけでは通らない）");
   check(office !== "" && rolesIn(office).join(",") === [...OFFICE_ROLES].sort().join(","),
     `gw_is_office = ${OFFICE_ROLES.join("・")}（いま ${rolesIn(office).join("・") || "未定義"}）`);
   check(!/is_tenant_staff|gw_is_hr/.test(rec), "gw_is_recruiting に会計の管理者（is_tenant_staff）を含めない");
