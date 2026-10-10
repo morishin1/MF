@@ -18,13 +18,15 @@
    - 推奨の組み合わせなら、**2,000社で月 約$40**（AIトークン代。§8）。目標 $50・上限 $100 に収まる。
    - 利用量はAIを呼ぶたびに1行ずつ記録する。上限か異常を検知したら自動で止まる。
 5. **既存のAI機能の設定は変えない**。AI営業は専用の設定（環境変数・モジュール）に分ける。
-   - 既存のAI呼び出しは「強制ツール呼び出し」を使っていて、Claude 5.5 系では 400 になる。AI営業は構造化出力で書き、いまの SDK（0.39.0）で動くかを PR1 の最初に確かめる。
+   - 既存のAI呼び出しは「強制ツール呼び出し」を使っていて、Claude 5.5 系では 400 になる。AI営業は構造化出力で書き、いまの SDK（0.39.0）で動くかを MVP の最初に確かめる。
 6. **KGI（100有効企業 → 30商談 → 10有料契約 → 3本命案件）に合わせる**。
    - 「有効企業」は AIスコア・対象条件・NG除外・重複排除で判定し、接触したかどうかとは別に数える。
    - 本命案件の数え方の案は §5.10。
-7. **進め方**：PR0（権限の整合）→ PR1（AI企業分析・スコアリング）→ PR2（営業文作成・承認ワークフロー）→ PR3（AI営業管理画面・KPI連携）。
+7. **進め方**（2026-10-11 の方針：最短で実用化）：**PR0（Sales 権限の安全な修正）→ MVP 統合PR（AI企業分析・商材選定・営業文生成・承認・簡易管理画面）**。
+   - 高度な KPI（見積・粗利・本命案件の集計）と研修生向け機能は、MVP のあとに足す。
    - 検証は PC販売・レンタルの1キャンペーン・20〜50社から始める。
    - 本番DBの変更・マージ・本番反映・外部への営業送信は、どれも承認をいただいてから。
+   - SQL はすべて GitHub に置く（本番の確認：`docs/sql/ai-sales-prod-check.sql`。1回で全部）。
 
 ---
 
@@ -106,24 +108,24 @@
 
 | ID | 機能 | いま | 再利用するもの・足すもの | PR |
 |---|---|---|---|---|
-| F-01 | アタックリスト連携 | ○ | `gw_sales_companies` をそのまま使う | PR1 |
-| F-02 | 企業情報整備 | △ | ドメイン正規化・ドメイン一意・CSV重複除外は既存。URL有効性は取得結果で記録 | PR1 |
-| F-03 | 公開情報調査 | △ | `lib/sales-lookup.js` を広げる（最大4ページ・robots.txt・取得日時とURL） | PR1 |
-| F-04 | AI営業スコア | × | 新規。仮配点・商材別に変えられる作り | PR1 |
-| F-05 | 商材マッチング | × | 候補は既存の商材マスタ。重点4分野を優先 | PR1 |
-| F-06 | 提案文生成 | × | 新規。既存テンプレートを型に | PR2 |
-| F-07 | フォーム検出 | △ | 問い合わせURLは既存の取得で拾う。項目の識別は Phase 2 | PR1 |
-| F-08 | 送信可否判定 | △ | NG・非表示・30日ガード・送れなかった理由は既存。営業お断りの検出と判定の記録を足す | PR1 |
-| F-09 | 承認ワークフロー | × | 新規（経営者・営業責任者だけ。自己承認なし） | PR2 |
+| F-01 | アタックリスト連携 | ○ | `gw_sales_companies` をそのまま使う | MVP |
+| F-02 | 企業情報整備 | △ | ドメイン正規化・ドメイン一意・CSV重複除外は既存。URL有効性は取得結果で記録 | MVP |
+| F-03 | 公開情報調査 | △ | `lib/sales-lookup.js` を広げる（最大4ページ・robots.txt・取得日時とURL） | MVP |
+| F-04 | AI営業スコア | × | 新規。仮配点・商材別に変えられる作り | MVP |
+| F-05 | 商材マッチング | × | 候補は既存の商材マスタ。重点4分野を優先 | MVP |
+| F-06 | 提案文生成 | × | 新規。既存テンプレートを型に | MVP |
+| F-07 | フォーム検出 | △ | 問い合わせURLは既存の取得で拾う。項目の識別は Phase 2 | MVP |
+| F-08 | 送信可否判定 | △ | NG・非表示・30日ガード・送れなかった理由は既存。営業お断りの検出と判定の記録を足す | MVP |
+| F-09 | 承認ワークフロー | × | 新規（経営者・営業責任者だけ。自己承認なし） | MVP |
 | F-10 | 安全な送信実行 | × | 作らない（Phase 2 以降） | — |
-| F-11 | 送信証跡・状態管理 | △ | 手動分は既存。AI文面との結び付けを足す | PR2 |
+| F-11 | 送信証跡・状態管理 | △ | 手動分は既存。AI文面との結び付けを足す | MVP |
 | F-12 | 反応・営業ステータス | ○ | 既存。新しいステータスは作らない | — |
-| F-13 | ダッシュボード | △ | AI営業の画面と、既存の分析に AI分の内訳 | PR3 |
-| F-14 | 除外・停止リスト | △ | 企業単位は既存の NG。AI全体の停止を足す | PR1 |
+| F-13 | ダッシュボード | △ | AI営業の画面と、既存の分析に AI分の内訳 | MVP |
+| F-14 | 除外・停止リスト | △ | 企業単位は既存の NG。AI全体の停止を足す | MVP |
 | F-15 | AIフォロー案 | × | Phase 2 | — |
 | F-16 | 反応データによる改善 | △ | Phase 4 | — |
 | F-17 | 担当者への引継ぎ | △ | クリック通知は既存。研修生からの引き継ぎは §6 | Phase 2 |
-| F-18 | 監査・費用・品質 | △ | 監査ログは既存。**利用量の台帳・予算上限・異常時停止**を足す | PR1 |
+| F-18 | 監査・費用・品質 | △ | 監査ログは既存。**利用量の台帳・予算上限・異常時停止**を足す | MVP |
 
 ---
 
@@ -180,7 +182,7 @@
 
 ### 5.3 データ（すべて足すだけ。既存の列・表は変えない）
 
-**PR1 で作る表**
+**MVP で作る表**
 
 `gw_sales_ai_settings`（テナントに1行）
 
@@ -207,6 +209,8 @@
 | `score` `score_detail` jsonb `score_profile` jsonb | 総合点・項目ごとの点と理由・使った配点の写し（あとで配点を変えても再現できる） |
 | `services` jsonb | `[{service, rank, reason}]`（商材マスタの値だけ） |
 | `send_check` `send_check_reasons` jsonb | `blocked` / `manual_review` / `ok_manual`（§5.8） |
+| `form_url` `form_purpose` | 問い合わせ窓口のURLと用途（`general` 一般 / `business` 取引・協業 / `support_only` / `recruit_only` / `unknown`） |
+| `send_check_by` `send_check_at` | `manual_review` を人が判断したとき（誰が・いつ） |
 | `effective` `effective_reasons` jsonb | 有効企業の判定と理由（§5.10） |
 | `pages` jsonb | 取得したページ `[{url, fetched_at, ok, status, bytes, robots}]` |
 | `checked_by` `checked_at` `check_result` `check_note` | 人のチェック（「合っている／違う／分からない」）。品質の評価と、研修生の作業（§6）に使う |
@@ -222,7 +226,7 @@
 | `outcome` `latency_ms` `error_code` | `ok` / `error` / `refusal` / `timeout` / `invalid_output` |
 | `analysis_id` `draft_id` `created_at` | |
 
-**PR2 で作る表と列**
+**MVP で作る表と列（営業文・承認）**
 
 `gw_sales_ai_drafts`（AI文面。版を残す）
 
@@ -239,9 +243,9 @@
 - 既存への列追加：`gw_sales_approaches.ai_draft_id`（null可）。
 - 1社につき `pending` と `approved` の下書きは1つまで（部分一意インデックス）。
 
-**PR3 で足す列（案件）**：§5.10。
+**MVP のあとで足す列（案件）**：§5.10。
 
-**RLS（PR1〜PR3 の新しい表すべて）**：
+**RLS（新しい表すべて）**：
 
 - SELECT だけを `gw_is_sales(tenant_id)` で許可する。INSERT・UPDATE・DELETE のポリシーは置かない。
 - 書き込みは API が権限を確かめてから service_role で行う。営業担当が PostgREST を直接呼んでも、承認の列を書き換えられない。
@@ -254,12 +258,16 @@
 **PR0（前提）：判定をそろえる**
 
 - `gw_is_sales(t)` を「owner ロール **または** Sales のアプリ権限」に置き換える（API の `canSell` と同じ）。
-  - `gw_app_grants` の表が無い環境では、いまの判定（owner・manager・sales のロール）に戻す。
-- 既存のポリシーはそのまま（中で呼ぶ関数だけを置き換える）。
-- 影響（§11 のSQLで事前に確認）：
+- **フェイルクローズ（判定できないときは広げない）**：
+  - マイグレーションは、`gw_app_grants`・`gw_has_app`・`gw_has_role` が無ければ**何も変えずにエラーで止まる**（表が無いまま「全員 OK」や「ロールで代用」に倒さない）。
+  - 実行時に判定の部品が読めなければ、エラー＝拒否になる（SECURITY DEFINER の関数が例外を出し、RLS は行を返さない）。
+  - API 側は既存のとおり、アプリ権限が読めないときは「権限なし」（`lib/app-grants.js resolveApps`）。
+- 既存のポリシーはそのまま（中で呼ぶ関数だけを置き換える）。owner の扱いは変わらない。
+- 影響（`docs/sql/ai-sales-prod-check.sql` の 06 で事前に一覧）：
   - 「アプリ権限だけの人」は DB でも通るようになる（いま画面が空になっている人が直る）。
   - 「manager・sales ロールだけでアプリ権限が無い人」は DB でも止まる（いまも API では止まっている）。
-- テスト：`test/sql/` に、アプリ権限だけの人は読める・書ける／ロールだけの人は読めない／退職者は読めない／他社のデータは見えない、を足す。
+- テスト（実際の PostgreSQL。`test/sql/`）：アプリ権限だけの人は読める・書ける／ロールだけの人は読めない・書けない／退職者は読めない／他テナントの行は見えない／経営者は読める／**PostgREST を直接呼ぶのと同じ条件（authenticated ロール＋JWT の sub）で**確かめる。
+- 適用前後の確認SQLとロールバック（元の `gw_is_sales` に戻す）SQLを、マイグレーションと一緒に GitHub に置く。
 
 **AI営業の操作**
 
@@ -269,7 +277,7 @@
 | **承認・却下** | **経営者、または営業責任者（manager ロール＋Sales のアプリ権限）**。作った本人・申請した本人は不可 | 新 `canApproveAiSales`＋本人チェック（DB でも止める） |
 | 設定・停止の解除・予算の変更 | 経営者・管理者 | 新 `canManageAiSales` |
 | 例外の深い分析（Opus 5.5） | 経営者・営業責任者が理由を書いて頼んだときだけ | `canApproveAiSales` |
-| 研修生（営業補助） | §6。承認・契約・技術判断はできない | 新 `canAssistSales` |
+| 研修生（営業補助） | §6。承認・価格決定・契約・技術判断はできない | 新 `canAssistSales` |
 
 - 「営業責任者」は**専用のロールが無いので、manager ロールで Sales のアプリ権限がある人**とする（確認事項 §12-1）。
 
@@ -286,7 +294,7 @@
 - **詳細分析（Sonnet）に回す条件**：一次スコアが閾値の前後（例 50〜75点）／一次分析の不確実性が高い／重点商材の候補が2つ以上で決めきれない。それ以外は Haiku の結果で確定する。
 - **APIキー**：AI営業専用のキーを推奨する。Anthropic のコンソールで、AI営業用のワークスペースに月の上限（$100）を付ける。アプリ側の上限（§5.6）が効かなかったときの最後の歯止めになる。
 - **出力**：構造化出力（JSON スキーマ）を使い、強制ツール呼び出しは使わない。返ってきた JSON はコードでもう一度検証する。範囲外の点数・マスタに無い商材・出典URLが取得したページに無い「事実」は落とす。
-- **互換性の確認**（PR1 の最初）：`@anthropic-ai/sdk 0.39.0` が、構造化出力（`output_config.format`）の指定をそのまま送れるかを、偽の通信でリクエストの中身を見て確かめる。だめなら次のどちらか。
+- **互換性の確認**（MVP の最初）：`@anthropic-ai/sdk 0.39.0` が、構造化出力（`output_config.format`）の指定をそのまま送れるかを、偽の通信でリクエストの中身を見て確かめる。だめなら次のどちらか。
   - 案A：`strict: true` のツール＋`tool_choice: auto`。
   - 案B：AI営業のモジュールだけで新しい SDK を使う。既存機能の依存は変えない（パッケージの別名で入れる）。
 - **AIにWeb検索をさせない**：サーバーで取得したページ本文だけを渡す。
@@ -296,8 +304,16 @@
 
 ### 5.6 予算・利用量・異常時停止
 
-- **呼ぶ前**：今月と今日の合計（台帳 `gw_sales_ai_usage`）、1日の分析社数を見る。上限を超えるなら呼ばずに止める（429 と理由）。
-- **呼んだ後**：トークン数から費用を計算して台帳に1行。
+- 上限は **AIトークン代だけ**（目標 $50・上限 $100/月、日の上限あり）。Vercel・Supabase の費用は別の欄に出し、上限の計算には入れない。
+- **並列で呼ばれても上限をすり抜けない（予約方式）**：
+  1. **呼ぶ前に予約**：DB の関数 `gw_sales_ai_reserve(tenant, 見込み額)` が、テナントの設定行をロック（`select … for update`）してから「確定済み＋予約中＋今回の見込み額 ≤ 月の上限・日の上限、かつ停止中でない」を確かめ、台帳に `reserved` の行を作る。足りなければ予約せずに断る（429 と理由）。
+     見込み額は「入力トークンの見積もり × 入力単価 ＋ `max_tokens` × 出力単価」（最悪の場合の額）。
+  2. **呼んだ後に確定**：実際のトークン数から費用を計算し、その行を `committed` にする（差額は自動で戻る）。
+  3. **失敗したら解放**：エラー・タイムアウトは `released`。応答が無いまま一定時間（10分）たった予約は、次の予約のときに解放する。
+  - テスト：上限の直前で同時に何本も予約しても、合計が上限を超えないこと（実際の PostgreSQL で並列に流す）。
+- **台帳**（`gw_sales_ai_usage`）：呼び出し1回＝1行（予約・確定・解放の状態、モデル、トークン、費用、結果、時間）。画面で月・日・モデル別に集計する。
+- **手動停止**：経営者・管理者が画面からいつでも止められる（`enabled=false`）。
+- **事業者側の上限**：AI営業専用の API キーを、Anthropic の専用ワークスペースで月 $100 の上限付きで使う前提（アプリの上限が効かなかったときの最後の歯止め）。
 - **自動停止**（`enabled=false`、`paused_reason` を記録し、経営者・管理者へ通知）。止まったら人が解除するまで止まったまま：
   - 今月の合計が上限（$100）に達した。
   - 今日の合計が日の上限を超えた（既定：月上限の1/10）。
@@ -320,10 +336,13 @@
 
 | 判定 | 条件 | Phase 1 の扱い |
 |---|---|---|
-| `blocked` | NG・非表示・成約/失注/対象外／サイトに「営業お断り」「売り込み禁止」等（ルールで検出＋AIで確認）／過去に断られた | 文面を作っても**送れない**（アタックの準備で止める） |
-| `manual_review` | 判断できない（取れない、利用条件があいまい） | 人が確認して `ok_manual` か `blocked` を選ぶ |
-| `ok_manual` | 上のどれにも当たらない | **人が手で送ってよい** |
-| （自動送信可） | — | **Phase 1 では誰も選べない** |
+| `blocked` | NG・非表示・成約/失注/対象外／「営業お断り」「売り込み禁止」「自動操作・自動送信の禁止」の記載／**顧客サポート専用・採用専用など営業を受け付けない窓口**／過去に断られた（拒否履歴・`unsubscribed`） | 文面を作っても**送れない**（アタックの準備で止める） |
+| `manual_review` | 窓口の用途（受付目的）や利用条件が分からない／取れない／記載があいまい | **担当者が確認して `ok_manual` か `blocked` を選ぶまで、送信の操作に進めない**（サーバーで止める） |
+| `ok_manual` | 窓口の用途が「一般のお問い合わせ」または「取引・協業・提案のご相談」と**確認でき**、上の禁止に当たらない | **人が手で送ってよい** |
+| （自動送信可） | — | **Phase 1 では誰も選べない**（自動フォーム送信は実装しない） |
+
+- **「営業禁止の記載が無い」ことだけで `ok_manual` にしない**。窓口の用途を確認できたときだけ `ok_manual`。用途が分からなければ必ず `manual_review`。
+- robots.txt と利用条件を尊重する。CAPTCHA・ログイン・アクセス制限は回避しない（取れなければ `manual_review`）。
 
 - 「営業お断り」を見つけたら、企業に `ng_reason = 'no_sales'` を付けるかを人に聞く（自動では付けない）。
 - **差出人**は送る担当者本人の名前（既存の `{{sender}}`）。**会社署名**は設定の共通署名を本文の最後に付ける。
@@ -354,7 +373,7 @@
 
 - 案件の種類（`category`）：`pc`（8EC・8RENT）／`ses`（ENGER）／`dx`／`development`（受託開発）／`education`（無限道場・法人研修）／`space`／`regional`（地方創生）／`other`。
 - 金額の閾値は設定で変えられるようにする（確認事項 §12-3）。
-- `/keiei` の「有効企業」「本命案件」の「定義未決」は、この定義が決まった時点（PR3）で集計に切り替える。
+- `/keiei` の「有効企業」「本命案件」の「定義未決」は、この定義で、MVP のあとに集計へ切り替える。
 
 ---
 
@@ -382,8 +401,8 @@
 **段階**
 
 - **Phase 1 で入れるもの**：
-  - 分析の表の `checked_*`（PR1）。
-  - 権限の関数の設計（`canAssistSales` と「承認できない」のテストは PR2）。
+  - 分析の表の `checked_*`（MVP）。
+  - 権限の線引き（研修生には承認の権限を付けない。MVP の承認のテストに含める）。
   - この画面設計。
 - **Phase 2 以降**：ロールの追加、作業・入力・引き継ぎの表、画面、ENGER 連携。
 
@@ -448,82 +467,30 @@
 
 ---
 
-## 9. Phase 1 の実装順（具体）
+## 9. 実装順（2026-10-11 の方針：PR を減らして最短で MVP）
 
-どのPRも：外部への営業送信なし。マイグレーションは `db/` にファイルで置き、**本番には手動で、承認をいただいてから**適用する（適用の順番と確認SQLをPRに書く）。マージ・本番反映も承認後。
+どのPRも：外部への営業送信なし。SQL は `db/` にファイルで置き、**本番には手動で、承認をいただいてから**適用する（PR に実行順・適用後の確認SQL・ロールバックSQLのリンクを書く）。マージ・本番反映も承認後。
 
-### PR0 権限の整合（前提。小さい）
+| PR | 中身 | 承認をいただくところ |
+|---|---|---|
+| #103（この設計書） | 設計の確定・本番の確認SQL（`docs/sql/ai-sales-prod-check.sql`） | マージ |
+| **PR0 Sales 権限の安全な修正** | `db/128`：`gw_is_sales` を「owner ロール または Sales のアプリ権限」に（前提が無ければエラーで止まる）。適用後の確認SQL・ロールバックSQL。`test/sql/` に実 PostgreSQL の正・負のテスト（アプリ権限だけ・ロールだけ・退職者・他テナント・経営者・PostgREST 直呼びと同じ条件） | 本番SQLの適用 → マージ |
+| **MVP 統合PR** | 下の「MVP の範囲」すべて。既存機能を壊す恐れが見つかったときだけ分ける | 本番SQLの適用 → Preview 確認 → マージ |
+| あとで | 見積・粗利・本命案件の集計（§5.10 の列）、研修生向け画面（§6）、夜間のまとめ処理 | — |
 
-1. `db/128_sales_access_align.sql`：`gw_is_sales` を「owner ロール または Sales のアプリ権限」に置き換える（`gw_app_grants` が無い環境では今の判定）。ポリシーはそのまま。
-2. `test/sql/128_sales_access.sql`：実際の PostgreSQL で次を確かめる。
-   - アプリ権限だけの人は読み書きできる。
-   - ロールだけの人は読めない。
-   - 退職者・他社の人は読めない。
-   - 経営者は読める。
-3. `test/sql/run.sh` に足す（CI では回っていないので、手元で回した結果をPRに貼る）。
-4. API の判定は変えない（`canSell` のまま）。
-5. 適用前に §11-4 のSQLで影響を受ける人を確かめる。
+**MVP の範囲**
 
-### PR1 AI企業分析・スコアリング
+1. 既存のアタックリスト（企業一覧・キャンペーン）から企業を選ぶ（1社ずつ／選んだ企業をまとめて。1日の上限あり）。
+2. AI が企業HPを分析する（最大4ページ・robots.txt・取得前の除外・出典URL・事実と推測の分離）。**Haiku 5.5 中心**。難しいときだけ Sonnet 5.5。
+3. 重点商材（8EC・8RENT／ENGER／無限道場（企業開拓）／無限道場（生徒募集））から適切な商材を判定する（商材別の配点を持てる作り）。
+4. AI が営業文を作る（Sonnet 5.5。差出人＝担当者本人、共通の会社署名）。
+5. 経営者・営業責任者が承認する（作った人・申請した人は承認できない。DB でも止める）。
+6. 承認済みの文面を、既存の手動フォームアタックで使う（最終文面の確認・本文の照合・NG と30日の重複ガードはそのまま）。
+7. 送信履歴と成果は既存の KPI（分析・`/keiei`）で見る。AI分は `ai_draft_id` で内訳を出す（二重に数えない）。
+8. 簡易管理画面：承認待ち・承認済み・費用（今月・今日）・停止と解除・上限の設定。
+9. 予算：予約方式の上限（§5.6）、台帳、異常時の自動停止。
 
-1. **互換性の確認**：SDK 0.39.0 と構造化出力（§5.5）。結果で書き方を決める。
-2. `db/129_sales_ai.sql`：`gw_sales_ai_settings`・`gw_sales_ai_analyses`・`gw_sales_ai_usage`（読むだけRLS）。
-3. `lib/sales-ai/`（新しいモジュール。既存の `lib/claude.js` は使わない）：
-   - `config`：モデル・単価・上限。
-   - `fetch`：`sales-lookup` を広げる。最大4ページ・robots.txt・取得前の除外。
-   - `rules`：営業お断り・自動収集禁止の検出。
-   - `analyze`：Haiku の一次分析、条件に当たれば Sonnet。
-   - `scoring`：商材別の配点・不明の扱い・有効企業の判定。
-   - `budget`：台帳・上限・自動停止。
-4. API：
-   - `GET/POST /api/sales/ai/analysis`
-   - `GET/PATCH /api/sales/ai/settings`（有効・停止・上限だけ。経営者・管理者）
-   - `PATCH /api/sales/ai/analysis {checked}`（人のチェック）
-5. 画面：企業の詳細ドロワーに「AI分析」の欄（共有 js の版を上げる）。
-6. テスト（AIは偽物に差し替える）：
-   - 出典の無い事実を落とす／範囲外の点・マスタ外の商材を落とす。
-   - NG・非表示・30日以内は取得もしない／robots で止まる／SSRF。
-   - 予算上限・日の上限で止まる／失敗が続くと自動停止する。
-   - 台帳に1行残る。
-   - 既存のAI設定に触れていない。
-   - RLS：営業担当が分析・設定・台帳を直接書けない（実 PostgreSQL）。
-   - 画面：1280・768・390。
-
-### PR2 営業文作成・承認ワークフロー
-
-1. `db/130_sales_ai_drafts.sql`：`gw_sales_ai_drafts` と `gw_sales_approaches.ai_draft_id`。
-   - 読むだけRLS。
-   - 承認者と作成者が同じなら弾く CHECK・トリガ。
-2. API：`POST /api/sales/ai/drafts`（Sonnet で作成）、`PATCH /api/sales/ai/drafts {edit | request | approve | reject}`。
-3. 権限の関数：`canApproveAiSales`（経営者、または manager ロール＋Sales アプリ権限）と本人チェック。
-4. 既存の `POST/PATCH /api/sales/approaches` が `aiDraftId` を受け取る。準備のときに承認済み・停止中でない・NG でないかを再確認し、［送信完了］のときに本文を照合する。
-5. 画面：アタック画面のテンプレートの選択肢に「AI文面（承認済み）」を足す。差出人・署名・計測URL込みの最終文面のプレビューと、「内容を確認しました」の印。承認待ちは送れない。
-6. テスト：
-   - API：自己承認は 403／営業担当は承認できない／承認後に本文を変えたら再承認／NG・停止中は準備で止まる／二重送信が起きない。
-   - RLS：営業担当が `status` を `approved` に直接書き換えられない（実 PostgreSQL）。
-   - 画面。
-
-### PR3 AI営業管理画面・KPI連携
-
-1. `sales/ai.html`（タブを1つ足す）：一覧（未分析〜承認済み・却下）・承認・数字（分析数・有効企業・承認数・AIで送った件数・クリック・返信・商談・成約・今月のAI費用）・設定（重点商材・配点・閾値・上限・署名・禁止表現）・停止と解除。
-2. `db/131_sales_deal_kpi.sql`：案件に `category` `quote_amount` `quoted_on` `cost_amount` `recurring_monthly` `contract_months` `is_key` `key_reason` `key_marked_by` を足す（null可）。
-3. 分析画面に「AI分」の内訳を出す。`/keiei` の有効企業・本命案件を、決まった定義で集計に切り替える。
-4. テスト：
-   - 既存の分析と `/keiei` の数字が変わらない（AI分は内訳だけ）。
-   - 権限外は設定を開けない（サーバーで 403）。
-   - スマホで承認と停止ができる。
-
-### 検証（PR1・PR2 のあと。本番DBに表を作る承認が要る）
-
-- 「8EC・8RENT」の1キャンペーン・20〜50社で行う。
-- 分析品質：事実の誤りの率。人のチェック（`checked_*`）で数える。
-- 商材判定の当たり率。
-- 提案文：承認率と修正の量。
-- 承認フロー：承認までの時間。
-- 運用コスト：1社あたりの費用。台帳で数える。
-- 結果を見てから ENGER・無限道場に広げる。
-
----
+**検証**（MVP の本番適用のあと）：「8EC・8RENT」の1キャンペーン・20〜50社。分析の正確さ（人のチェック）・商材判定・営業文の承認率と修正量・承認までの時間・1社あたりの費用を見て、ENGER・無限道場へ広げる。
 
 ## 10. リスクと対策
 
@@ -545,81 +512,19 @@
 
 ## 11. 本番で確かめること（読み取り専用のSQL）
 
-**書き込みはしない**。結果を貼っていただければ、PR0・PR1 の前提（どのマイグレーションが入っているか・影響を受ける人）を確定できる。
+**`docs/sql/ai-sales-prod-check.sql`**（1回で全部。SELECT だけ。表や関数が無くてもエラーにせず「確認できません」と出す）。
+Supabase の SQL Editor（MF の本番プロジェクト）に全文を貼って Run し、`section`・`result` の全行を渡す。
 
-```sql
--- 1) Sales の表と列（096/097/098/101/108/116 が入っているか）
-select table_name, count(*) as columns
-  from information_schema.columns
- where table_schema = 'public' and table_name like 'gw_sales_%'
- group by table_name order by table_name;
+確かめること：Sales の表・列（096/097/098/101/108/116/119 の推定）／`gw_is_sales`・`gw_has_app`・`gw_has_role` の中身／Sales の RLS ポリシー／商材マスタ／PR0 で使えるようになる人・使えなくなる人・営業責任者の候補・経営者／企業の内訳／AI分析の候補数／PC販売・レンタルの候補（商材・キャンペーン別）／直近90日のアタック実績。
+結果に社員の名前が含まれるので、社外に共有しない。
 
-select column_name from information_schema.columns
- where table_schema = 'public' and table_name = 'gw_sales_companies'
-   and column_name in ('hidden_at','contacts','last_sent_at','click_count','status_rank','last_click_at','emails');
+## 12. 既定の案で進めること（2026-10-11：推奨案で決めて進める）
 
--- 2) 権限の部品があるか（db/119・120）と、いまの gw_is_sales の中身
-select to_regclass('public.gw_app_grants') as app_grants_table,
-       to_regprocedure('public.gw_has_app(uuid,text)') as gw_has_app,
-       to_regprocedure('public.gw_has_role(uuid,text)') as gw_has_role;
-select pg_get_functiondef('public.gw_is_sales(uuid)'::regprocedure);
-
--- 3) 提案サービス（商材）のマスタ
-select kind, label, archived_at is not null as archived
-  from public.gw_sales_master_options order by kind, sort_order, label;
-
--- 4) PR0 で影響を受ける人
--- 4-a) アプリ権限 sales はあるが、owner/manager/sales のロールが無い人（いま API は通るが DB で止まる → 直る）
-select e.display_name, e.status
-  from public.gw_app_grants g
-  join public.gw_employees e on e.id = g.employee_id
- where g.app_key = 'sales'
-   and not exists (select 1 from public.gw_role_grants r
-                    where r.employee_id = e.id and r.role in ('owner','manager','sales'));
--- 4-b) manager / sales のロールはあるが、アプリ権限 sales が無い人（経営者を除く。いま API で止まっている → DB でも止まる）
-select e.display_name, e.status, array_agg(r.role order by r.role) as roles
-  from public.gw_role_grants r
-  join public.gw_employees e on e.id = r.employee_id
- where r.role in ('manager','sales')
-   and not exists (select 1 from public.gw_role_grants o where o.employee_id = e.id and o.role = 'owner')
-   and not exists (select 1 from public.gw_app_grants g where g.employee_id = e.id and g.app_key = 'sales')
- group by e.display_name, e.status;
--- 4-c) 営業責任者の候補（manager ロール＋Sales のアプリ権限）
-select e.display_name, e.status
-  from public.gw_role_grants r
-  join public.gw_employees e on e.id = r.employee_id
- where r.role = 'manager'
-   and exists (select 1 from public.gw_app_grants g where g.employee_id = e.id and g.app_key = 'sales');
-
--- 5) 企業の数と内訳
-select status, count(*) from public.gw_sales_companies group by status order by 2 desc;
-select coalesce(ng_reason,'(なし)') as ng, count(*) from public.gw_sales_companies group by 1 order by 2 desc;
-select coalesce(service,'(なし)') as service, count(*) from public.gw_sales_companies group by 1 order by 2 desc;
-
--- 6) AI分析の対象になりうる企業（サイトURLあり・NGでない・非表示でない・未成約）
-select count(*) filter (where site_url is not null) as with_site,
-       count(*) filter (where form_url is not null) as with_form,
-       count(*) as total
-  from public.gw_sales_companies
- where hidden_at is null and ng_reason is null and status not in ('won','lost','excluded');
-
--- 7) 検証用（PC販売・レンタル）の候補：商材・キャンペーンごとの数
-select coalesce(c.service,'(なし)') as service, coalesce(k.name,'(なし)') as campaign, count(*)
-  from public.gw_sales_companies c
-  left join public.gw_sales_campaigns k on k.id = c.campaign_id
- where c.hidden_at is null and c.ng_reason is null and c.site_url is not null
- group by 1, 2 order by 3 desc limit 30;
-```
-
----
-
-## 12. 確認したいこと（実装は既定の案で進められる）
-
-| # | 内容 | 既定の案 |
+| # | 内容 | 進め方 |
 |---|---|---|
-| 1 | 「営業責任者」は誰か | manager ロールで Sales のアプリ権限がある人（§11-4-c で一覧を確認） |
-| 2 | 研修生が「承認済みの文面」を手動で送ってよいか | Phase 2 で決める（Phase 1 は研修生に送信させない） |
-| 3 | 本命案件の金額の閾値 | 100万円（一括、または月額×契約月数） |
+| 1 | 「営業責任者」 | manager ロールで Sales のアプリ権限がある人（`docs/sql/ai-sales-prod-check.sql` の 06 で一覧） |
+| 2 | 研修生の送信 | MVP では研修生向け機能を作らない（あとで決める） |
+| 3 | 本命案件の金額の閾値 | 100万円（一括、または月額×契約月数）。集計は MVP のあと |
 | 4 | 無限道場（生徒募集）の Sales 側の対象 | 生徒を紹介できる団体（学校・自治体・企業）。個人の申込は既存の HR「無限道場」リードへ |
-| 5 | AI営業専用の Anthropic API キー | 専用ワークスペースで月 $100 の上限を付けたキーを用意していただく |
-| 6 | 研修生が見る ENGER の候補者・案件 | MF にはデータが無い。enger 側からの読み取り方法を Phase 2 で調べる |
+| 5 | AI営業専用の Anthropic API キー | 専用ワークスペースで月 $100 の上限を付けたキーを、Vercel の環境変数に設定していただく（キーは会話に貼らない） |
+| 6 | 研修生が見る ENGER の候補者・案件 | MF にはデータが無い。研修生向け機能のときに enger 側からの読み取り方法を決める |
