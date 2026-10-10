@@ -11,6 +11,7 @@
 // ■ 権限
 //   採用HRを使える人（canRecruit）。社長が CEO REVIEW で判断したあと、そのまま送れる。
 
+import { readOfferTypes } from "../../../lib/hr.js";
 import { json, readJson, methodNotAllowed } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
@@ -56,7 +57,7 @@ async function draft(res, sb, ctx, id, kind) {
   const { data: tenant } = await sb.from("tenants").select("name").eq("id", ctx.tenantId).maybeSingle();
   const msg = decisionMessage(kind, {
     name: a.name, tenantName: tenant?.name || null, senderName: ctx.employee?.display_name || null,
-    jobTitle: a.job_title, dueOn: a.decision_due_on,
+    jobTitle: a.job_title, dueOn: a.decision_due_on, offerType: (await readOfferTypes(sb, ctx.tenantId, [a.id])).byId.get(a.id) || null,
   });
   const cfg = mailConfig("recruiting");
   return json(res, 200, {

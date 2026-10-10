@@ -28,6 +28,14 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import {
   normalizeOffer, shapeOffer, sha256, newOfferToken, offerExpiresAt,
 } from "../../../lib/hr.js";
+import { offerTypeOf, missingRequired } from "../../../lib/hr-offer-types.js";
+
+// 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
+const docName = (row) => offerTypeOf(row?.offer_type)?.offerName || "合格通知";
+// 区分の必須項目が足りないときの応答
+const missingResponse = (res, missing) => json(res, 400, {
+  error: "invalid_body", detail: `次の項目を入力してください：${missing.join("・")}`, missing,
+});
 
 const SQL = "db/081_hr_recruiting.sql・086_hr_offer_public_link.sql";
 
@@ -37,6 +45,8 @@ const OFFER_SNAPSHOT_COLUMNS = [
   "job_title", "employment_type", "contract_type", "contract_end_date", "join_date",
   "probation_months", "wage_type", "wage_amount", "weekly_hours", "work_location",
   "message_to_candidate", "respond_by",
+  // 採用区分と区分ごとの条件（db/128。列が無い環境・区分の無い版では undefined のまま＝送らない）
+  "offer_type", "offer_terms",
 ];
 
 export default async function handler(req, res) {
@@ -71,8 +81,13 @@ async function create(req, res, sb, ctx, user, salary) {
   await attachPay(ctx.tenantId, applicant, "applicant");
 
   // 給与を見られない人は、給与の欄を書き換えられない。応募者に入っている条件は、そのまま引き継ぐ
-  const row = normalizeOffer(salary ? body : dropSalaryInput(body), applicant);
+  const row = normalizeOffer(salary ? body : dropSalaryInput(body), applicant,
+    { offerType: applicant.offer_type || null, salary });
   if (row.error) return json(res, 400, row);
+  if (applicant.offer_type) {
+    const missing = missingRequired(applicant.offer_type, row.value);
+    if (missing.length) return missingResponse(res, missing);
+  }
 
   const { data: existing } = await sb.from("gw_hr_offers").select("version")
     .eq("applicant_id", applicant.id).order("version", { ascending: false }).limit(1);
@@ -105,7 +120,7 @@ async function create(req, res, sb, ctx, user, salary) {
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_drafted",
-    label: "合格通知を作成", detail: `第${version}版`, created_by: user.id,
+    label: `${docName(data)}を作成`, detail: `第${version}版`, created_by: user.id,
   });
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_create",
@@ -137,7 +152,9 @@ async function update(res, sb, ctx, user, offer, body, salary) {
     return json(res, 409, { error: "invalid_state", hint: "社内確認待ちの間だけ、内容を直せます" });
   }
 
-  const row = normalizeOffer(body, null, { partial: true });
+  const row = normalizeOffer(body, null, {
+    partial: true, offerType: offer.offer_type || null, salary, previousTerms: offer.offer_terms || {},
+  });
   if (row.error) return json(res, 400, row);
   if (!Object.keys(row.value).length) return json(res, 400, { error: "invalid_body", detail: "更新する項目がありません" });
 
@@ -165,12 +182,17 @@ async function confirm(res, sb, ctx, user, offer, salary) {
     return json(res, 409, { error: "invalid_state", hint: "社内確認待ちの合格通知だけ確定できます" });
   }
 
+  if (offer.offer_type) {
+    const missing = missingRequired(offer.offer_type, offer);
+    if (missing.length) return missingResponse(res, missing);
+  }
+
   const now = new Date().toISOString();
   await sb.from("gw_hr_applicants").update({ status: "offer_send_pending", updated_at: now })
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_confirmed",
-    label: "合格通知の内容を確定", detail: `第${offer.version}版`, created_by: user.id,
+    label: `${docName(offer)}の内容を確定`, detail: `第${offer.version}版`, created_by: user.id,
   });
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_confirm",
@@ -273,7 +295,7 @@ async function markSent(res, sb, ctx, user, offer, salary) {
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_sent",
-    label: "本人へ送付", detail: `第${offer.version}版`, created_by: user.id,
+    label: `${docName(offer)}を本人へ送付`, detail: `第${offer.version}版`, created_by: user.id,
   });
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_sent",

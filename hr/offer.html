@@ -19,6 +19,9 @@
     .ho-logo { text-align:center; margin-bottom:20px; font-weight:700; font-size:15px; color:#1b2440; }
     .ho-greet { font-size:13.5px; color:#4a5068; line-height:1.9; margin:0 0 18px; }
     .ho-greet b { color:#1b2440; font-size:16px; }
+    /* 区分つきのオファー：書類名（業務委託オファー など）と、大きな承諾ボタン（スマホでも押しやすく） */
+    .ho-doc { display:inline-block; background:#1b2440; color:#fff; border-radius:999px; padding:2px 12px; font-size:12px; font-weight:700; }
+    .btn.ho-accept { width:100%; padding:14px 16px; font-size:15px; }
     .ho-fields dt { color:#6b7080; font-size:11.5px; margin:14px 0 2px; }
     .ho-fields dd { margin:0; color:#1b2440; font-weight:700; font-size:15px; }
     .ho-msg { white-space:pre-wrap; font-size:13px; color:#1b2440; line-height:1.8;
@@ -79,7 +82,30 @@
     return `${o.wageType ? esc(o.wageType) + " " : ""}${Number(o.wageAmount).toLocaleString("ja-JP")}円`;
   }
 
+  // 採用区分つきのオファー（正社員・育成・業務委託・パート・スポット）。区分ごとの書類名と条件の行は
+  // サーバが作る（lib/hr-offer-types.js）。社内の状態・評価・社内用の項目は届かない
+  function renderTyped(o) {
+    el("box").innerHTML = `
+      <h2>${o.tenantName ? `${esc(o.tenantName)}からの` : ""}オファー</h2>
+      <p class="ho-greet">
+        <span class="ho-doc">${esc(o.offerName)}</span><br>
+        <b>${esc(o.candidateName)} 様</b><br><br>
+        このたびはご応募いただき、ありがとうございました。<br>
+        下記の内容をご確認ください。
+      </p>
+      <dl class="ho-fields" id="ho-items">
+        ${(o.items || []).map((it) => `<dt>${esc(it.label)}</dt><dd>${esc(it.value)}</dd>`).join("")}
+        <dt>回答期限</dt><dd>${fmtDate(o.respondBy)}</dd>
+      </dl>
+      ${o.messageToCandidate ? `
+        <h4 style="font-size:12.5px;color:#6b7080;margin:20px 0 0;">採用担当からのメッセージ</h4>
+        <div class="ho-msg">${esc(o.messageToCandidate)}</div>` : ""}
+      <div id="ho-actions"></div>`;
+    renderActions(o);
+  }
+
   function render(o) {
+    if (o.offerType) return renderTyped(o);
     el("box").innerHTML = `
       <h2>選考結果のご案内</h2>
       <p class="ho-greet">
@@ -113,7 +139,7 @@
     const box = el("ho-actions");
     if (o.responseStatus === "accepted") {
       box.innerHTML = `<div class="ho-done"><span class="material-symbols-outlined">check_circle</span>
-        承諾済みです。採用担当からのご連絡をお待ちください。</div>`;
+        ${esc(o.afterAccept || "承諾済みです。採用担当からのご連絡をお待ちください。")}</div>`;
       return;
     }
     if (o.responseStatus === "declined") {
@@ -122,12 +148,12 @@
       return;
     }
     const mailto = o.recruiterEmail
-      ? `mailto:${encodeURIComponent(o.recruiterEmail)}?subject=${encodeURIComponent("選考結果について")}`
+      ? `mailto:${encodeURIComponent(o.recruiterEmail)}?subject=${encodeURIComponent(o.offerName ? `${o.offerName}について` : "選考結果について")}`
       : null;
     box.innerHTML = `
       <div class="ho-actions">
-        <p class="due">採用条件を確認しました。回答期限：${fmtDate(o.respondBy)}</p>
-        <button class="btn btn-primary" onclick="submitAccept(this)">承諾する</button>
+        <p class="due">${o.offerType ? "内容をご確認のうえ、回答期限" : "採用条件を確認しました。回答期限"}：${fmtDate(o.respondBy)}</p>
+        <button class="btn btn-primary${o.offerType ? " ho-accept" : ""}" onclick="submitAccept(this)">${o.offerType ? "内容を確認して承諾する" : "承諾する"}</button>
         <button class="btn btn-secondary" onclick="openDeclineForm()">辞退する</button>
         <div id="ho-decline"></div>
         ${mailto ? `

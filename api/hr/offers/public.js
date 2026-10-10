@@ -25,6 +25,10 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { sha256, TOKEN_RE, shapePublicOffer, decisionMakerEmployeeIds } from "../../../lib/hr.js";
 import { attachPay } from "../../../lib/hr-pay.js";
+import { offerTypeOf } from "../../../lib/hr-offer-types.js";
+
+// 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
+const docName = (offer) => offerTypeOf(offer?.offer_type)?.offerName || "合格通知";
 
 const SQL = "db/081_hr_recruiting.sql";
 const CANT_OPEN = { error: "invalid_token", hint: "このURLは開けません。採用担当までお問い合わせください。" };
@@ -83,7 +87,7 @@ async function view(req, res) {
       .eq("id", applicant.id).eq("tenant_id", applicant.tenant_id);
     await sb.from("gw_hr_timeline").insert({
       tenant_id: applicant.tenant_id, applicant_id: applicant.id, event_key: "offer_viewed",
-      label: "本人が合格通知を確認", detail: `第${offer.version}版`, created_by: null,
+      label: `本人が${docName(offer)}を確認`, detail: `第${offer.version}版`, created_by: null,
     });
     await gwLog({
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_viewed",
@@ -139,7 +143,7 @@ async function respond(req, res) {
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_accepted",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id },
     });
-    await notifyOnResponse("候補者が合格通知を承諾しました");
+    await notifyOnResponse(`候補者が${docName(offer)}を承諾しました`);
   } else {
     const reason = String(body.declineReason ?? "").trim().slice(0, DECLINE_REASON_MAX) || null;
     await sb.from("gw_hr_offers").update({ declined_at: now, decline_reason: reason }).eq("id", offer.id);
@@ -153,7 +157,7 @@ async function respond(req, res) {
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_declined",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, hasReason: Boolean(reason) },
     });
-    await notifyOnResponse("候補者が合格通知を辞退しました");
+    await notifyOnResponse(`候補者が${docName(offer)}を辞退しました`);
   }
 
   return json(res, 200, { ok: true, responseStatus: body.action === "accept" ? "accepted" : "declined" });

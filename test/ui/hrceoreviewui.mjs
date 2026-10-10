@@ -123,14 +123,14 @@ console.log("\n=== 社長推薦 → 社長面談設定 → 今日会う人 → �
   check((await page.locator("#dec").innerText()).includes("山田 太郎"), "社長判断待ちに出る");
   check(await page.locator("#today .hr-cv-card").count() === 0, "今日会う人からは消える");
 
-  console.log("\n— 内定にする —");
+  console.log("\n— 合格にする —");
   await page.locator("#dec button", { hasText: "採用判断" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#action-root .hr-modal").isVisible(), "採用判断フォームが開く");
-  await page.locator("#action-root .hr-modal button", { hasText: "内定にする" }).click();
+  await page.locator("#action-root .hr-modal button", { hasText: "合格にする" }).click();
   await page.waitForTimeout(700);
   const hired = posted.find((p) => p.decision === "hired");
-  check(Boolean(hired), "内定がサーバへ送られる");
+  check(Boolean(hired), "合格がサーバへ送られる");
   check(hired?.stage === "offer", "stage = offer（内定）");
   check(hired?.status === "offer_draft_pending", "status = 合格通知作成待ち（Stage 5へ渡す）");
 

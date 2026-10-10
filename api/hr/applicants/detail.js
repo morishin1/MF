@@ -18,6 +18,14 @@ import {
   STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
 } from "../../../lib/hr.js";
 import { contactStatusOf } from "../../../lib/hr-messages.js";
+import { OFFER_TYPES_PUBLIC, offerTypeLabel } from "../../../lib/hr-offer-types.js";
+import { readOfferTypes } from "../../../lib/hr.js";
+
+const OFFER_TYPE_SQL = "db/128_hr_offer_type.sql";
+// 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
+const OFFER_TYPE_EDITABLE = ["ceo_decision_pending", "offer_draft_pending"];
+
+
 import { selectWithLeadFields } from "../../../lib/hr-leads.js";
 import {
   LEAD_NEXT_ACTIONS, LEAD_NEXT_ACTION_KEYS, leadNextActionPatch, leadNextActionLabel, isMugendojo,
@@ -61,6 +69,8 @@ async function one(req, res, sb, ctx, salary) {
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
   if (!a) return json(res, 404, { error: "not_found" });
+  const offerTypes = await readOfferTypes(sb, ctx.tenantId, [a.id]);
+  a.offer_type = offerTypes.byId.get(a.id) ?? null;
 
   const [{ data: interviews }, { data: timeline }, { data: offers }, { data: recruiter }, { data: interviewers }] = await Promise.all([
     sb.from("gw_hr_interviews").select("*").eq("applicant_id", id).order("created_at", { ascending: false }),
@@ -73,6 +83,12 @@ async function one(req, res, sb, ctx, salary) {
       .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
+  // 選考タイムラインの「誰が」。記録の created_by（ログインの ID）から社員名を引く。本人の操作（承諾など）は null
+  const actorIds = [...new Set((timeline || []).map((t) => t.created_by).filter(Boolean))];
+  const { data: actors } = actorIds.length
+    ? await sb.from("gw_employees").select("user_id, display_name").eq("tenant_id", ctx.tenantId).in("user_id", actorIds)
+    : { data: [] };
+  const actorName = new Map((actors || []).map((e) => [e.user_id, e.display_name]));
   // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
   if (salary) {
     await attachPay(ctx.tenantId, a, "applicant");
@@ -116,7 +132,11 @@ async function one(req, res, sb, ctx, salary) {
     leadReady,
     timeline: (timeline || []).map((t) => ({
       id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
+      actorName: t.created_by ? (actorName.get(t.created_by) || null) : null,
     })),
+    // 合格後の採用区分の定義（lib/hr-offer-types.js が正。画面側に定義を持たない）。
+    // offerTypeReady=false は db/128 が未適用（採用区分を選ぶ操作だけ止まる）
+    offerTypes: OFFER_TYPES_PUBLIC, offerTypeReady: offerTypes.ready,
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
     offers: (offers || []).map((o) => shapeOffer(o)),
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
@@ -150,12 +170,30 @@ async function update(req, res, sb, ctx, user, salary) {
       && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
   }
+  // 採用区分（db/128）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
+  let beforeOfferType = null;
+  if ("offer_type" in row.value) {
+    if (!OFFER_TYPE_EDITABLE.includes(before.status)) {
+      return json(res, 409, { error: "invalid_state", hint: "オファーを作ったあとは、採用区分を変えられません" });
+    }
+    const { data: ot, error: oterr } = await sb.from("gw_hr_applicants").select("offer_type")
+      .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+    if (oterr) {
+      return json(res, 503, { error: "not_ready", hint: `採用区分を使うには ${OFFER_TYPE_SQL} を Supabase に流してください` });
+    }
+    beforeOfferType = ot?.offer_type ?? null;
+  }
 
   const { data, error } = await sb.from("gw_hr_applicants")
     .update({ ...splitWage(row.value).base, updated_at: new Date().toISOString() })
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(columns(salary)).maybeSingle();
-  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  if (error) {
+    const hint = "offer_type" in row.value ? dbSetupHint(error, OFFER_TYPE_SQL) : null;
+    if (hint) return json(res, 503, { error: "not_ready", hint });
+    return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  }
   if (!data) return json(res, 404, { error: "not_found" });
+  if ("offer_type" in row.value) data.offer_type = row.value.offer_type;
   // 給与は、分けている設定なら専用の表へ（見られない人の入力は、ここまで来ない）
   try {
     await savePay(ctx.tenantId, { applicantId: body.id, wage: splitWage(row.value).wage });
@@ -186,12 +224,21 @@ async function update(req, res, sb, ctx, user, salary) {
   // 「ランクだけで自動的に確定しない」の記録がここに残る
   if ("decision" in row.value && row.value.decision !== before.decision) {
     const label = row.value.decision === "rejected" ? "見送りを確定"
-      : row.value.decision === "hired" ? "内定" : row.value.decision === "hold" ? "保留にした" : "決定を取り消した";
+      : row.value.decision === "hired" ? "合格" : row.value.decision === "hold" ? "保留にした" : "決定を取り消した";
     const detail = row.value.decision === "hold" ? (data.hold_next_step || null)
       : data.rank ? `ランク${data.rank}` : null;
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: body.id,
       event_key: `decision_${row.value.decision || "cleared"}`, label, detail, created_by: user.id,
+    });
+  }
+
+  // 採用区分を選んだ・変えたときは、選考の履歴に残す（「10/11 業務委託を選択」）
+  if ("offer_type" in row.value && row.value.offer_type !== beforeOfferType) {
+    await sb.from("gw_hr_timeline").insert({
+      tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "offer_type_selected",
+      label: row.value.offer_type ? `採用区分：${offerTypeLabel(row.value.offer_type)}を選択` : "採用区分を外した",
+      detail: beforeOfferType ? `変更前：${offerTypeLabel(beforeOfferType)}` : null, created_by: user.id,
     });
   }
 

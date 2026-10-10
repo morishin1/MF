@@ -205,6 +205,40 @@
     .hr-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12.5px; }
     .hr-grid2 dt { color:#6b7080; margin-bottom:2px; } .hr-grid2 dd { margin:0 0 10px; color:#1b2440; font-weight:600; }
 
+    /* 合格後の採用区分のカード（「この方をどの形で迎えますか？」）。PCは横並び、スマホは1列 */
+    .hr-otype-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin:6px 0 4px; }
+    .hr-otype { text-align:left; border:1.5px solid #e2e2dc; border-radius:10px; background:#fff; padding:12px;
+      cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:4px; min-width:0; }
+    .hr-otype:hover { border-color:#9aa0b4; }
+    .hr-otype.on { border-color:#1b2440; background:#eef0f6; box-shadow:inset 0 0 0 1px #1b2440; }
+    .hr-otype .hd { display:flex; align-items:center; gap:6px; font-weight:700; color:#1b2440; font-size:13.5px; }
+    .hr-otype .hd .material-symbols-outlined { font-size:20px; overflow:hidden; width:20px; }
+    .hr-otype .sm { font-size:11.5px; color:#4a5068; line-height:1.5; }
+    .hr-otype .fl { font-size:10.5px; color:#6b7080; line-height:1.5; }
+    @media (max-width: 520px) { .hr-otype-grid { grid-template-columns:1fr; } }
+    /* 区分ごとのオファー入力（必要な項目だけ） */
+    .hr-of-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+    .hr-of-grid .wide { grid-column:1 / -1; }
+    .hr-of-grid label { margin-top:0; }
+    @media (max-width: 520px) { .hr-of-grid { grid-template-columns:1fr; } }
+    .hr-of-docs { font-size:11.5px; color:#4a5068; background:#f6f6f2; border-radius:8px; padding:8px 10px; margin:0 0 12px; }
+    /* 採用フローのステップバー（候補者詳細の上部に常時表示。いまの段階を強調） */
+    .hr-steps { display:flex; list-style:none; margin:0; padding:0 16px 12px; overflow-x:auto; }
+    .hr-steps li { flex:1 0 auto; min-width:56px; display:flex; flex-direction:column; align-items:center;
+      position:relative; font-size:11px; color:#9aa0b4; }
+    .hr-steps li::before { content:""; position:absolute; top:10px; left:-50%; width:100%; height:2px; background:#e2e2dc; z-index:0; }
+    .hr-steps li:first-child::before { display:none; }
+    .hr-steps li.done::before, .hr-steps li.now::before { background:#3e9c5a; }
+    .hr-steps .m { width:21px; height:21px; border-radius:50%; border:2px solid #c5cfdd; background:#fff; z-index:1;
+      display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; }
+    .hr-steps li.done .m { background:#eaf5ec; border-color:#3e9c5a; color:#256b36; }
+    .hr-steps li.now .m { background:#1b2440; border-color:#1b2440; color:#fff; }
+    .hr-steps .l { margin-top:3px; white-space:nowrap; }
+    .hr-steps li.now .l { color:#1b2440; font-weight:700; }
+    .hr-steps li.done .l { color:#256b36; }
+    .hr-steps-ended { padding:0 20px 10px; font-size:11.5px; color:#b3261e; }
+    .hr-tl .row .d .who { margin-left:6px; color:#4a5068; }
+
     .hr-tl { border-left:2px solid #e2e2dc; margin-left:6px; padding-left:16px; }
     .hr-tl .row { position:relative; padding-bottom:16px; }
     .hr-tl .row::before { content:""; position:absolute; left:-21px; top:3px; width:9px; height:9px; border-radius:999px; background:#1b2440; }
@@ -702,6 +736,37 @@
   let detail = null;
   let detailTab = "overview";
 
+  // ---- 合格後の採用区分（API が返す lib/hr-offer-types.js が正。画面側に定義を持たない） --------
+  let offerTypesDef = [];
+  let offerTypeReady = true;   // false は db/128 未適用（区分を選ぶ操作だけ止め、これまでの合格通知で進める）
+  const offerTypeDef = (key) => offerTypesDef.find((t) => t.key === key) || null;
+  function takeOfferTypes(d) {
+    if (Array.isArray(d?.offerTypes)) offerTypesDef = d.offerTypes;
+    if (d && "offerTypeReady" in d) offerTypeReady = d.offerTypeReady !== false;
+  }
+
+  /** 採用区分の5つのカード。onPick は選んだときに呼ぶ関数名（区分の key を渡す） */
+  function offerTypeCards(selected, onPick) {
+    if (!offerTypesDef.length) return `<p class="hr-flow-note">採用区分を読み込み中…</p>`;
+    return `<div class="hr-otype-grid" role="radiogroup" aria-label="採用区分">${offerTypesDef.map((t) => `
+      <button type="button" class="hr-otype${selected === t.key ? " on" : ""}" role="radio" aria-checked="${selected === t.key}"
+        data-otype="${esc(t.key)}" onclick="${onPick}('${esc(t.key)}')">
+        <span class="hd"><span class="material-symbols-outlined" aria-hidden="true">${esc(t.icon)}</span>${esc(t.label)}</span>
+        <span class="sm">${esc(t.summary)}</span>
+        <span class="fl">${esc((t.flow || []).join(" → "))}</span>
+      </button>`).join("")}</div>`;
+  }
+
+  /** 採用フローのステップバー（応募 → 面談 → 合格 → オファー → 承諾 → 契約 → 入社/稼働。育成枠は育成の流れ） */
+  function stepBar(a) {
+    const s = a.steps;
+    if (!s || !(s.steps || []).length) return "";
+    return `<ol class="hr-steps" id="hr-steps" data-flow="${esc(s.flow)}" aria-label="採用の進み具合">${s.steps.map((p, i) => `
+      <li class="${esc(p.state)}" data-step="${esc(p.key)}" aria-current="${p.state === "now" ? "step" : "false"}">
+        <span class="m" aria-hidden="true">${p.state === "done" ? "✓" : i + 1}</span><span class="l">${esc(p.label)}</span></li>`).join("")}</ol>
+      ${s.ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(s.ended)}）</div>` : ""}`;
+  }
+
   async function openDetail(id) {
     // 同じ応募者を開き直す場合（各操作後の再読み込み）は、いま見ているタブを保つ。
     // 呼び出し側が detailTab = "interviews" を先に指定してから呼ぶケースがあるため
@@ -716,6 +781,7 @@
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
       detail = d;
+      takeOfferTypes(d);
       renderDetail();
     } catch (e) {
       el("hr-detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
@@ -734,6 +800,7 @@
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
       detail = d;
+      takeOfferTypes(d);
       if (el("hr-detail-box")) renderDetail();
     } catch (e) {
       alert(e.hint || e.detail || e.message || "再読み込みできませんでした");
@@ -780,6 +847,7 @@
           <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
         </div>
       </div>
+      ${stepBar(a)}
       <div class="hr-tabs">${TABS.map(([k, l]) =>
         `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
       <div class="hr-detail-body" id="hr-detail-tab"></div>`;
@@ -820,11 +888,16 @@
     if (a.nextActionKey === "conduct" && !a.nextInterviewId) {
       a = { ...a, nextAction: "面談予定の記録を確認してください", nextActionCta: "面談タブを確認", nextActionKey: "checkInterviews" };
     }
+    // 採用区分を選べない環境（db/128 未適用）では、これまでどおり合格通知を作る
+    if (a.nextActionKey === "chooseOfferType" && !offerTypeReady) {
+      a = { ...a, nextAction: "合格通知を作成してください", nextActionCta: "合格通知を作成", nextActionKey: "createOffer" };
+    }
     return `
       <div class="hr-next" style="margin:0 0 16px;">
         <dl class="hr-state now">
           <dt>${isLead(a) ? "段階" : "選考"}</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
           <dt>状態</dt><dd id="hr-status">${esc(a.statusLabel || "—")}<small>いま何待ちか</small></dd>
+          ${a.offerTypeLabel ? `<dt>採用区分</dt><dd id="hr-otype">${esc(a.offerTypeLabel)}<small>どの形で迎えるか</small></dd>` : ""}
         </dl>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION<small style="font-weight:400;margin-left:6px;">次にすること</small></div>
         <h3>${esc(a.nextAction)}</h3>
@@ -956,7 +1029,7 @@
           ${esc(missing.join("・"))}が未登録です。<a href="#" onclick="setDetailTab('docs');return false;">書類タブ</a>から登録できます。</p>` : ""}
         ${ceoEvalSummary(detail)}
         ${(detail.offers || []).length ? `
-        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">合格通知</h4>
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
         ${detail.offers.map(offerRow).join("")}` : ""}`;
     } else if (detailTab === "interviews") {
       box.innerHTML = `
@@ -970,11 +1043,15 @@
       box.innerHTML = `
         <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">選考タイムライン</h4>
         <div class="hr-tl">${(detail.timeline || []).map((t, i, arr) => `
-          <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
+          <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t) ? `<span class="who">・${esc(timelineWho(t))}</span>` : ""}</div>
             <div class="l">${esc(t.label)}${t.detail ? `　${esc(t.detail)}` : ""}${i === arr.length - 1 ? `<span class="now">← 現在</span>` : ""}</div>
           </div>`).join("") || `<p class="muted">まだ記録がありません。</p>`}</div>`;
     }
   }
+
+  // 選考タイムラインの「誰が」。社内の操作は社員名、本人の閲覧・承諾・辞退は「本人」
+  const CANDIDATE_EVENTS = ["offer_viewed", "offer_accepted", "offer_declined"];
+  const timelineWho = (t) => t.actorName || (CANDIDATE_EVENTS.includes(t.eventKey) ? "本人" : "");
 
   // ---- 書類タブ ---------------------------------------------------------------------
   const fmtDay = (iso) => JST.date(iso);   // 日本時間の日付（js/jst.js）
@@ -1477,6 +1554,7 @@
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
     if (key === "contact") return openContactForm(a.id, a.decision);
+    if (key === "chooseOfferType") return offerTypeReady ? openOfferTypeModal() : openOfferForm();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
     if (key === "sendOffer" || key === "reissueOffer") return openSendOfferForm();
   }
@@ -1539,8 +1617,8 @@
   //   ・評価は面談の scores / notes（状態は動かさない）。判断は応募者の decision。連絡は api/hr/applicants/message.js
   //   ・本人への連絡状況（未連絡／連絡済み）は API の contact（lib/hr-messages.js。タイムラインから決める）
   const DECIDE_KINDS = [
-    { key: "hired", label: "内定", icon: "check_circle", submit: "内定にする",
-      note: "内定にします。続けて本人へ連絡し、合格通知（雇用条件）を作ります。" },
+    { key: "hired", label: "合格", icon: "check_circle", submit: "合格にする",
+      note: "合格にします。どの形で迎えるか（採用区分）を選ぶと、その区分のオファー（条件）を作る流れに進みます。" },
     { key: "hold", label: "保留", icon: "pause_circle", submit: "保留にする",
       note: "保留にします。社長判断待ちのまま、次に確認することと再判断期限を残します。" },
     { key: "rejected", label: "見送り", icon: "cancel", submit: "見送りを確定",
@@ -1576,6 +1654,7 @@
   }
 
   let decideKind = "hired";
+  let decideOfferType = null;   // 合格のときの採用区分（「この方をどの形で迎えますか？」）
   // { applicantId, name, ceoInterview, evalItems, evalScale, scores, step: "decide"|"contact"|"done",
   //   savedKind, summary, message, sentChannel }
   let flow = null;
@@ -1589,6 +1668,7 @@
     flow = { applicantId: id, name: "", ceoInterview: null, evalItems: [], evalScale: [], scores: {}, step: "decide",
       savedKind: null, summary: "", message: null, sentChannel: null };
     decideKind = "hired";
+    decideOfferType = null;
     for (const k of Object.keys(fieldMemo)) delete fieldMemo[k];
     openDecisionModal(flowShell(), { wide: true });
     renderStep1(); renderStep2();
@@ -1621,6 +1701,10 @@
     let d = null;
     try { d = await API.getHrApplicant(id); } catch { d = null; }
     if (!el("dc-eval") || flow?.applicantId !== id) return;
+    // 採用区分の定義（合格のときのカード）。開いた時点でまだ無ければ、ここで描き直す
+    takeOfferTypes(d);
+    if (!decideOfferType && d?.applicant?.offerType) decideOfferType = d.applicant.offerType;
+    if (flow.step === "decide" && decideKind === "hired") renderDecideFields();
     const iv = (d?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled) || null;
     Object.assign(flow, { name: d?.applicant?.name || "", ceoInterview: iv, evalItems: d?.evalItems || [],
       evalScale: d?.evalScale || [], scores: { ...(iv?.scores || {}) } });
@@ -1698,11 +1782,22 @@
   function renderDecideFields() {
     for (const id of ["dc-reason", "dc-next", "dc-due", "dc-note"]) if (el(id)) fieldMemo[id] = el(id).value;
     const v = (id) => esc(fieldMemo[id] || "");
+    const note = `<label${decideKind === "hired" ? ' style="margin-top:12px;"' : ""}>コメント（任意・社内用。本人には送りません）</label><textarea id="dc-note" rows="3">${v("dc-note")}</textarea>`;
     el("decide-body").innerHTML = decideKind === "hold" ? `
         <label>保留理由</label><input id="dc-reason" type="text" value="${v("dc-reason")}">
         <label style="margin-top:10px;">次に確認すること <span style="color:#b3261e;">*</span></label><input id="dc-next" type="text" value="${v("dc-next")}">
-        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date" value="${v("dc-due")}">` : `
-        <label>コメント（任意・社内用。本人には送りません）</label><textarea id="dc-note" rows="3">${v("dc-note")}</textarea>`;
+        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date" value="${v("dc-due")}">`
+      : decideKind === "hired" ? `
+        ${offerTypeReady ? `
+        <label>この方をどの形で迎えますか？ <span style="color:#b3261e;">*</span></label>
+        <div id="dc-otypes">${offerTypeCards(decideOfferType, "pickDecideOfferType")}</div>` : `
+        <p class="hr-flow-note">採用区分（正社員・育成枠・業務委託など）を選ぶには db/128 の適用が必要です。いまは合格だけを保存し、これまでの合格通知で進めます。</p>`}
+        ${note}` : note;
+  }
+
+  function pickDecideOfferType(key) {
+    decideOfferType = key;
+    if (el("dc-otypes")) el("dc-otypes").innerHTML = offerTypeCards(decideOfferType, "pickDecideOfferType");
   }
 
   function setDecideKind(kind) {
@@ -1726,8 +1821,13 @@
     const body = { id: flow.applicantId, decision: decideKind };
     let summary = "";
     if (decideKind === "hired") {
+      // 採用区分を選んでから合格にする（区分ごとに、必要な条件だけでオファーを作るため）
+      if (offerTypeReady && offerTypesDef.length && !decideOfferType) { msg.textContent = "どの形で迎えるか（採用区分）を選んでください"; return; }
       body.stage = "offer"; body.status = "offer_draft_pending";
+      if (decideOfferType) body.offerType = decideOfferType;
       body.decisionNote = el("dc-note").value.trim() || undefined;
+      const t = offerTypeDef(decideOfferType);
+      if (t) summary = `採用区分：${t.label}`;
     } else if (decideKind === "hold") {
       const next = el("dc-next").value.trim();
       if (!next) { msg.textContent = "次に確認することを入力してください"; return; }
@@ -2286,7 +2386,7 @@ ${url}
   function offerRow(o) {
     return `
       <div class="card" style="margin-bottom:10px;">
-        <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版
+        <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版${o.offerType ? `　${esc(o.offerName || "")}` : ""}
           <span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">${esc(OFFER_STATUS_LABEL[o.status] || o.status)}</span></div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">回答期限：${esc(o.respondBy || "—")}
           ${o.sentAt ? `　送付：${esc(fmtDate(o.sentAt))}` : ""}
@@ -2304,7 +2404,108 @@ ${url}
     return list.find((o) => o.status !== "revoked") || null;
   }
 
+  // ---- 採用区分を選ぶ（合格後。区分を選ぶと、その区分のオファーの入力へ進む） ------------------
+  let pickOfferType = null;
+  function openOfferTypeModal() {
+    const a = detail.applicant;
+    pickOfferType = a.offerType || null;
+    openActionModal(`
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">この方をどの形で迎えますか？</h2>
+        <p class="hr-sub" style="margin:0 0 12px;">${esc(a.name)}さん　選んだ区分に必要な項目だけで、オファー（候補者へ送る条件）を作ります。</p>
+        <div id="ot-cards">${offerTypeCards(pickOfferType, "pickModalOfferType")}</div>
+        <div id="ot-msg" class="err-text" style="margin:10px 0 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="ot-save" onclick="submitOfferType(this)">この区分で進む</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>`, { wide: true });
+  }
+  function pickModalOfferType(key) {
+    pickOfferType = key;
+    el("ot-cards").innerHTML = offerTypeCards(pickOfferType, "pickModalOfferType");
+  }
+  async function submitOfferType(btn) {
+    const msg = el("ot-msg"); msg.textContent = "";
+    if (!pickOfferType) { msg.textContent = "採用区分を選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({ id: detail.applicant.id, offerType: pickOfferType }));
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; return; }
+    closeAction();
+    await refreshDetail();
+    load();
+    openOfferForm();   // 続けて、その区分の条件を入れる
+  }
+
+  // ---- オファー（候補者へ送る条件）を作る・確認する ------------------------------------------
+  // 採用区分があれば、その区分に必要な項目だけを出す（業務委託に正社員向けの項目を並べない）。
+  // 区分の無い、これまでの合格通知は従来の項目のまま
+  let offerFormType = null;
   function openOfferForm() {
+    const a = detail.applicant;
+    const reviewing = a.status === "offer_review_pending";
+    const o = reviewing ? currentOffer() : null;
+    const t = offerTypeDef(reviewing ? o?.offerType : a.offerType);
+    if (!t) { offerFormType = null; return openLegacyOfferForm(); }
+    offerFormType = t;
+    const hideSalary = detail.salaryVisible === false;
+    const terms = o?.offerTerms || {};
+    // 既存の値：確認中はその版の値、作成時は応募者に入っている条件（区分の選択肢に無い値は入れない）
+    const valueOf = (f) => {
+      const raw = f.term ? terms[f.key] : (o ? o[f.key] : a[f.key]);
+      if (raw == null) return "";
+      if (f.kind === "select" && !(f.options || []).includes(raw)) return "";
+      return raw;
+    };
+    const field = (f) => {
+      const id = `of-f-${f.key}`;
+      const v = valueOf(f);
+      const unit = f.kind === "number" && f.unit ? `（${esc(f.unit)}）` : "";
+      const ctl = f.kind === "textarea" ? `<textarea id="${id}" rows="3" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`
+        : f.kind === "select" ? `<select id="${id}"><option value="">（選択）</option>${f.options.map((op) =>
+          `<option value="${esc(op)}" ${op === v ? "selected" : ""}>${esc(op)}</option>`).join("")}</select>`
+        : `<input id="${id}" type="${f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}"
+            ${f.kind === "number" ? 'step="any" min="0"' : ""} value="${esc(v)}" placeholder="${esc(f.placeholder || "")}">`;
+      return `<div class="${f.kind === "textarea" ? "wide" : ""}" data-field="${esc(f.key)}">
+        <label for="${id}">${esc(f.label)}${unit}${f.required ? ` <span style="color:#b3261e;">*</span>` : ""}</label>${ctl}</div>`;
+    };
+    const shown = t.fields.filter((f) => !(f.salary && hideSalary));
+    const canChangeType = !reviewing && a.status === "offer_draft_pending";
+    openActionModal(`
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">${esc(t.offerName)}を${reviewing ? "確認" : "作成"}</h2>
+        <p class="hr-sub" style="margin:0 0 10px;">採用区分：<b id="of-type" data-otype="${esc(t.key)}">${esc(t.label)}</b>
+          ${canChangeType ? `<button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="closeAction();openOfferTypeModal()">区分を変える</button>` : ""}<br>
+          候補者には「${esc(t.offerName)}」として届きます（社内の状態や評価は見えません）。本人へ送るまでは、いつでも直せます。</p>
+        <div class="hr-of-docs"><b>この区分の流れ</b>　${esc((t.flow || []).join(" → "))}<br><b>必要書類</b>　${esc((t.documents || []).join("・"))}</div>
+        <div class="hr-of-grid" id="of-fields" data-otype="${esc(t.key)}">${shown.map(field).join("")}</div>
+        ${hideSalary && t.fields.some((f) => f.salary) ? `
+        <p class="hr-sub" style="margin:10px 0 0;">給与・報酬は、権限のある方が入力・確認します（応募者に入っている条件が、そのままオファーに入ります）。</p>` : ""}
+        <div class="hr-of-grid" style="margin-top:10px;">
+          <div><label for="of-respondby">回答期限 <span style="color:#b3261e;">*</span></label>
+            <input id="of-respondby" type="date" value="${esc(o?.respondBy || "")}"></div>
+          <div class="wide"><label for="of-message">本人向けメッセージ</label>
+            <textarea id="of-message" rows="3">${esc(o?.messageToCandidate || "")}</textarea></div>
+        </div>
+        <div id="of-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn ${reviewing ? "btn-secondary" : "btn-primary"}" onclick="submitOffer(this)">${reviewing ? "内容を保存" : "オファーを作成"}</button>
+          ${reviewing ? `<button class="btn btn-primary" onclick="submitConfirmOffer(this)">確定して送付待ちにする</button>` : ""}
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>`, { wide: true });
+  }
+
+  /** 区分つきの入力。既存の列の項目はそのまま、区分にしか無い項目は offerTerms にまとめる。空欄は消す（null） */
+  function typedOfferFields(t) {
+    const out = { offerTerms: {}, messageToCandidate: el("of-message").value.trim() || undefined };
+    for (const f of t.fields) {
+      const node = el(`of-f-${f.key}`);
+      if (!node) continue;   // 給与を見られない人には出していない（送らない＝変えない）
+      const v = String(node.value || "").trim();
+      if (f.term) { if (v) out.offerTerms[f.key] = v; } else out[f.key] = v;
+    }
+    return out;
+  }
+  const offerFields = () => (offerFormType ? typedOfferFields(offerFormType) : offerFormFields());
+
+  function openLegacyOfferForm() {
     const a = detail.applicant;
     const reviewing = a.status === "offer_review_pending";
     const o = reviewing ? currentOffer() : null;
@@ -2355,7 +2556,7 @@ ${url}
     const msg = el("of-msg"); msg.textContent = "";
     const respondBy = el("of-respondby").value;
     if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
-    const fields = offerFormFields();
+    const fields = offerFields();
     try {
       if (detail.applicant.status === "offer_review_pending") {
         const o = currentOffer();
@@ -2377,7 +2578,7 @@ ${url}
     if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
     try {
       await KPLayout.busy(btn, "確定中…", async () => {
-        await API.updateHrOffer({ id: o.id, ...offerFormFields(), respondBy });
+        await API.updateHrOffer({ id: o.id, ...offerFields(), respondBy });
         await API.confirmHrOffer(o.id);
       });
       closeAction();
@@ -2428,13 +2629,14 @@ ${url}
   function offerMailTemplate(url) {
     const a = detail.applicant;
     const o = currentOffer();
-    return `件名：選考結果のご案内
+    const t = offerTypeDef(o?.offerType);
+    return `件名：${t ? `${t.offerName}のご案内` : "選考結果のご案内"}
 
 ${a.name} 様
 
 このたびは弊社採用選考にご参加いただき、ありがとうございました。
 
-選考結果および採用条件について、下記の専用ページよりご確認ください。
+${t ? `${t.offerName}（条件）を、下記の専用ページよりご確認ください。` : "選考結果および採用条件について、下記の専用ページよりご確認ください。"}
 
 ${url}
 
