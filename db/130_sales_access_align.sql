@@ -1,5 +1,5 @@
 -- =============================================================================
--- 128: Sales の権限判定を API と DB でそろえる（AI営業 PR0）
+-- 130: Sales の権限判定を API と DB でそろえる（AI営業 PR0）
 --
 -- ■ 何が問題だったか
 --   API（lib/gw.js canSell / canAccessSales）は「経営者（owner ロール）または Sales のアプリ権限」で通す。
@@ -21,25 +21,25 @@
 --
 -- ■ 実行順
 --   1. docs/sql/ai-sales-prod-check.sql の 06 で、使えるようになる人・使えなくなる人を確かめる
---   2. この db/128 を Supabase の SQL Editor で Run
---   3. db/check_128_sales_access.sql で確認（❌ が無いこと）
---   戻すとき：db/rollback_128_sales_access.sql
+--   2. この db/130 を Supabase の SQL Editor で Run
+--   3. db/check_130_sales_access.sql で確認（❌ が無いこと）
+--   戻すとき：db/rollback_130_sales_access.sql
 -- =============================================================================
 begin;
 
 do $$
 begin
   if to_regclass('public.gw_app_grants') is null then
-    raise exception 'db/128: public.gw_app_grants がありません（先に db/119 を適用してください）。何も変更していません';
+    raise exception 'db/130: public.gw_app_grants がありません（先に db/119 を適用してください）。何も変更していません';
   end if;
   if to_regprocedure('public.gw_has_app(uuid,text)') is null then
-    raise exception 'db/128: public.gw_has_app(uuid,text) がありません（先に db/119・db/120 を適用してください）。何も変更していません';
+    raise exception 'db/130: public.gw_has_app(uuid,text) がありません（先に db/119・db/120 を適用してください）。何も変更していません';
   end if;
   if to_regprocedure('public.gw_has_role(uuid,text)') is null then
-    raise exception 'db/128: public.gw_has_role(uuid,text) がありません。何も変更していません';
+    raise exception 'db/130: public.gw_has_role(uuid,text) がありません。何も変更していません';
   end if;
   if to_regprocedure('public.gw_is_sales(uuid)') is null then
-    raise exception 'db/128: public.gw_is_sales(uuid) がありません（先に db/088・db/094 を適用してください）。何も変更していません';
+    raise exception 'db/130: public.gw_is_sales(uuid) がありません（先に db/088・db/094 を適用してください）。何も変更していません';
   end if;
 end $$;
 
@@ -56,6 +56,6 @@ $$;
 
 comment on function public.gw_is_sales(uuid) is
   '営業アタック管理（/sales）を使える人。経営者（owner ロール）または Sales のアプリ権限（gw_app_grants の sales）がある人。'
-  '退職者は入れない（gw_has_role / gw_has_app）。lib/gw.js canSell と同じ（db/128。db/094 のロール判定から変更）';
+  '退職者は入れない（gw_has_role / gw_has_app）。lib/gw.js canSell と同じ（db/130。db/094 のロール判定から変更）';
 
 commit;

@@ -1,4 +1,4 @@
--- db/128_sales_access_align.sql のやり直し（Sales の DB 判定を db/094 のロール判定に戻す）。
+-- db/130_sales_access_align.sql のやり直し（Sales の DB 判定を db/094 のロール判定に戻す）。
 -- 戻すと、また「アプリ権限だけの人は DB で止まる」「manager / sales のロールだけの人は DB を通る」に戻る。
 begin;
 

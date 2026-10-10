@@ -213,7 +213,7 @@ console.log("\n— DB の関数も同じ役割 —");
   check(/'hr'/.test(isHr) && /'owner'/.test(isHr) && /is_tenant_staff/.test(isHr), "gw_is_hr（人事の台帳など）は変えていない");
   check(rolesIn(rec).join(",") === [...HR_ROLES].sort().join(","),
     `gw_is_recruiting = ${HR_ROLES.join("・")}（いま ${rolesIn(rec).join("・")}）`);
-  // Sales は db/128 から「owner ロール または Sales のアプリ権限」（lib/gw.js canSell と同じ）。
+  // Sales は db/130 から「owner ロール または Sales のアプリ権限」（lib/gw.js canSell と同じ）。
   // ロールの並び（SALES_ROLES）ではなく、API の判定そのものとそろっていることを見る
   const appsIn = (body) => [...body.matchAll(/gw_has_app\(p_tenant,\s*'(\w+)'\)/g)].map((m) => m[1]).sort();
   check(rolesIn(sales).join(",") === "owner" && appsIn(sales).join(",") === "sales",

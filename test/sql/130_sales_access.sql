@@ -1,23 +1,23 @@
--- db/128_sales_access_align.sql の検証（実際の PostgreSQL で流す。test/sql/run.sh）
+-- db/130_sales_access_align.sql の検証（実際の PostgreSQL で流す。test/sql/run.sh）
 --
 -- ■ 何を確かめるか
---   ・前提（gw_app_grants・gw_has_app）が無い DB では、128 は何も変えずにエラーで止まる（フェイルクローズ）
+--   ・前提（gw_app_grants・gw_has_app）が無い DB では、130 は何も変えずにエラーで止まる（フェイルクローズ）
 --   ・適用前は API と DB の判定がずれている（アプリ権限だけの人は DB で止まり、ロールだけの人は DB を通る）
 --   ・適用後は「owner ロール または Sales のアプリ権限」の人だけが gw_sales_* を読み書きできる
 --     （PostgREST を直接呼ぶのと同じ条件＝ authenticated ロール＋JWT の sub で確かめる）
 --   ・退職者・他テナントの人・権限の無い社員・anon は読めない・書けない
 --   ・実行時に判定の部品が無ければ拒否になる（行を返さない）
---   ・戻す SQL（rollback）で元の判定に戻り、もう一度 128 を流しても同じ（べき等）
---   ・確認 SQL（db/check_128_sales_access.sql）に ❌ が出ない
+--   ・戻す SQL（rollback）で元の判定に戻り、もう一度 130 を流しても同じ（べき等）
+--   ・確認 SQL（db/check_130_sales_access.sql）に ❌ が出ない
 --
 \set ON_ERROR_STOP 0
 \set c088 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/088_sales.sql"`
 \set c094 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/094_recruit_sales_roles.sql"`
 \set c119 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/119_app_grants.sql"`
 \set c120 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/120_left_gate.sql"`
-\set c128 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/128_sales_access_align.sql"`
-\set crb `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/rollback_128_sales_access.sql"`
-\set cchk `sed 's/;\s*$//' "$SCEN_ROOT/db/check_128_sales_access.sql"`
+\set c130 `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/130_sales_access_align.sql"`
+\set crb `sed '/^begin;/d;/^commit;/d;/^notify/d' "$SCEN_ROOT/db/rollback_130_sales_access.sql"`
+\set cchk `sed 's/;\s*$//' "$SCEN_ROOT/db/check_130_sales_access.sql"`
 
 create or replace function pg_temp.expect(label text, got int, want int) returns void language plpgsql as $$
 begin raise notice '% : %', case when got = want then 'PASS' else 'FAIL' end || ' ' || label, 'got ' || got || ' / want ' || want; end $$;
@@ -83,7 +83,7 @@ grant usage on schema public, auth to anon;
 -- ---------------------------------------------------------------------------
 select pg_temp.try('A0 088 applies', :'c088', 'ok');
 select pg_temp.try('A0 094 applies', :'c094', 'ok');
-select pg_temp.try('A1 128 は前提が無ければエラーで止まる（フェイルクローズ）', :'c128', 'gw_app_grants');
+select pg_temp.try('A1 130 は前提が無ければエラーで止まる（フェイルクローズ）', :'c130', 'gw_app_grants');
 select pg_temp.expect_true('A2 止まったときは gw_is_sales を変えていない（ロール判定のまま）',
   pg_temp.is_sales_def() ilike '%''manager''%' and pg_temp.is_sales_def() not ilike '%gw_has_app%');
 
@@ -127,18 +127,18 @@ insert into public.gw_sales_companies(id, tenant_id, name, domain) values
   ('c9000000-0000-0000-0000-000000000001', '99999999-9999-9999-9999-999999999999', 'T9 一社', 'nine.example');
 
 -- ---------------------------------------------------------------------------
--- B. 128 の前（094 のロール判定）：API とずれている
+-- B. 130 の前（094 のロール判定）：API とずれている
 -- ---------------------------------------------------------------------------
-select pg_temp.expect('B1 128 の前：sales ロールだけの人は DB を通る（API では止まる）',
+select pg_temp.expect('B1 130 の前：sales ロールだけの人は DB を通る（API では止まる）',
   pg_temp.count_as('a8a00003-0000-0000-0000-000000000000', 'public.gw_sales_companies'), 2);
-select pg_temp.expect('B2 128 の前：Sales アプリだけの人は DB で止まる（API は通る）',
+select pg_temp.expect('B2 130 の前：Sales アプリだけの人は DB で止まる（API は通る）',
   pg_temp.count_as('a8a00004-0000-0000-0000-000000000000', 'public.gw_sales_companies'), 0);
 
 -- ---------------------------------------------------------------------------
--- C. 128 を適用
+-- C. 130 を適用
 -- ---------------------------------------------------------------------------
-select pg_temp.try('C0 128 applies', :'c128', 'ok');
-select pg_temp.try('C0 128 は2回流しても同じ（べき等）', :'c128', 'ok');
+select pg_temp.try('C0 130 applies', :'c130', 'ok');
+select pg_temp.try('C0 130 は2回流しても同じ（べき等）', :'c130', 'ok');
 select pg_temp.expect_true('C1 gw_is_sales は owner ロール または Sales アプリ',
   pg_temp.is_sales_def() ilike '%gw_has_role(p_tenant, ''owner'')%' and pg_temp.is_sales_def() ilike '%gw_has_app(p_tenant, ''sales'')%'
   and pg_temp.is_sales_def() not ilike '%''manager''%');
@@ -180,7 +180,7 @@ select pg_temp.expect('D7 他テナントの経営者は T8 の企業を消せ�
     $q$delete from public.gw_sales_companies where id = 'c8000000-0000-0000-0000-000000000002'$q$), 0);
 
 -- 確認 SQL に ❌ が出ない
-select pg_temp.expect('E1 db/check_128_sales_access.sql に ❌ が無い', pg_temp.check_fails(:'cchk'), 0);
+select pg_temp.expect('E1 db/check_130_sales_access.sql に ❌ が無い', pg_temp.check_fails(:'cchk'), 0);
 
 -- ---------------------------------------------------------------------------
 -- F. 実行時に判定の部品が読めなければ拒否（行を返さない）
@@ -191,7 +191,7 @@ select pg_temp.try_as('F1 gw_app_grants が無いときは読めない（エラ�
 alter table public.gw_app_grants_moved rename to gw_app_grants;
 
 -- ---------------------------------------------------------------------------
--- G. 戻す（rollback）→ もう一度 128
+-- G. 戻す（rollback）→ もう一度 130
 -- ---------------------------------------------------------------------------
 select pg_temp.try('G1 rollback applies', :'crb', 'ok');
 select pg_temp.expect('G2 戻すと sales ロールだけの人がまた読める（元の判定）',
@@ -199,7 +199,7 @@ select pg_temp.expect('G2 戻すと sales ロールだけの人がまた読め�
 select pg_temp.expect('G2 戻すと Sales アプリだけの人はまた読めない',
   pg_temp.count_as('a8a00004-0000-0000-0000-000000000000', 'public.gw_sales_companies'), 0);
 select pg_temp.expect('G3 戻した状態では確認 SQL に ❌ が出る', (pg_temp.check_fails(:'cchk') > 0)::int, 1);
-select pg_temp.try('G4 128 をもう一度 applies', :'c128', 'ok');
+select pg_temp.try('G4 130 をもう一度 applies', :'c130', 'ok');
 select pg_temp.expect('G5 もう一度流すと Sales アプリだけの人が読める',
   pg_temp.count_as('a8a00004-0000-0000-0000-000000000000', 'public.gw_sales_companies'), 3);
 select pg_temp.expect('G6 もう一度流したあとも確認 SQL に ❌ が無い', pg_temp.check_fails(:'cchk'), 0);
