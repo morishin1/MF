@@ -9,7 +9,7 @@
 //   5. オファーを作ったあとは区分を変えられない
 //   6. 本人向けページは区分の書類名・項目名だけ（社内用の備考・社内の状態は出さない）
 //   7. ステップバー：応募 → 面談 → 合格 → オファー → 承諾 → 契約 → 入社/稼働（育成枠は育成の流れ）
-//   8. 区分の無い、これまでの合格通知はそのまま動く。db/128 未適用でも一覧・詳細は止まらない
+//   8. 区分の無い、これまでの合格通知はそのまま動く。db/129 未適用でも一覧・詳細は止まらない
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ const logged = [];
 const copy = (r) => (r ? JSON.parse(JSON.stringify(r)) : null);
 const test1 = (x, [op, k, v]) => (op === "eq" ? x[k] === v : op === "neq" ? x[k] !== v
   : op === "in" ? v.includes(x[k]) : op === "is" ? (x[k] ?? null) === v : true);
-// db/128 が未適用の環境：offer_type を読もうとすると「列が無い」
+// db/129 が未適用の環境：offer_type を読もうとすると「列が無い」
 const missing = (cols) => db.noOfferTypeColumn && /offer_type/.test(String(cols || ""))
   ? { data: null, error: { code: "42703", message: 'column "offer_type" does not exist' } } : null;
 function table(name) {
@@ -350,7 +350,7 @@ await ok("承諾後の NEXT ACTION は区分ごと（業務委託は契約・NDA
   assert.equal(nextActionOf({ status: "accepted" }).cta, "本採用へ進める", "区分なしは従来どおり");
 });
 
-console.log("\n— これまでの動き・db/128 未適用 —");
+console.log("\n— これまでの動き・db/129 未適用 —");
 await ok("区分の無い応募者は、これまでどおりの合格通知を作れる（区分の列を書かない）", async () => {
   setup();
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending" });
@@ -362,7 +362,7 @@ await ok("区分の無い応募者は、これまでどおりの合格通知を�
   assert.ok(tl().includes("合格通知を作成"));
 });
 
-await ok("db/128 が未適用でも、一覧・詳細は止まらない。区分を選ぶ操作だけ「SQL を流してください」", async () => {
+await ok("db/129 が未適用でも、一覧・詳細は止まらない。区分を選ぶ操作だけ「SQL を流してください」", async () => {
   setup();
   db.noOfferTypeColumn = true;
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending" });
@@ -373,7 +373,7 @@ await ok("db/128 が未適用でも、一覧・詳細は止まらない。区分
   assert.equal((await listAll()).statusCode, 200);
   const r = await patchDetail({ id: "a1", offerType: "contractor" });
   assert.equal(r.statusCode, 503);
-  assert.ok(/db\/128/.test(r.body.hint), r.body.hint);
+  assert.ok(/db\/129/.test(r.body.hint), r.body.hint);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

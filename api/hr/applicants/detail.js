@@ -21,7 +21,7 @@ import { contactStatusOf } from "../../../lib/hr-messages.js";
 import { OFFER_TYPES_PUBLIC, offerTypeLabel } from "../../../lib/hr-offer-types.js";
 import { readOfferTypes } from "../../../lib/hr.js";
 
-const OFFER_TYPE_SQL = "db/128_hr_offer_type.sql";
+const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
 const OFFER_TYPE_EDITABLE = ["ceo_decision_pending", "offer_draft_pending"];
 
@@ -135,7 +135,7 @@ async function one(req, res, sb, ctx, salary) {
       actorName: t.created_by ? (actorName.get(t.created_by) || null) : null,
     })),
     // 合格後の採用区分の定義（lib/hr-offer-types.js が正。画面側に定義を持たない）。
-    // offerTypeReady=false は db/128 が未適用（採用区分を選ぶ操作だけ止まる）
+    // offerTypeReady=false は db/129 が未適用（採用区分を選ぶ操作だけ止まる）
     offerTypes: OFFER_TYPES_PUBLIC, offerTypeReady: offerTypes.ready,
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
     offers: (offers || []).map((o) => shapeOffer(o)),
@@ -170,7 +170,7 @@ async function update(req, res, sb, ctx, user, salary) {
       && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
   }
-  // 採用区分（db/128）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
+  // 採用区分（db/129）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
   let beforeOfferType = null;
   if ("offer_type" in row.value) {
     if (!OFFER_TYPE_EDITABLE.includes(before.status)) {

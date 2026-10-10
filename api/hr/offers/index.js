@@ -45,7 +45,7 @@ const OFFER_SNAPSHOT_COLUMNS = [
   "job_title", "employment_type", "contract_type", "contract_end_date", "join_date",
   "probation_months", "wage_type", "wage_amount", "weekly_hours", "work_location",
   "message_to_candidate", "respond_by",
-  // 採用区分と区分ごとの条件（db/128。列が無い環境・区分の無い版では undefined のまま＝送らない）
+  // 採用区分と区分ごとの条件（db/129。列が無い環境・区分の無い版では undefined のまま＝送らない）
   "offer_type", "offer_terms",
 ];
 

@@ -1,5 +1,5 @@
 -- =============================================================================
--- 128: 採用HR：面談合格後の「採用区分」（offer_type）と、区分ごとの条件（offer_terms）
+-- 129: 採用HR：面談合格後の「採用区分」（offer_type）と、区分ごとの条件（offer_terms）
 --
 -- ■ 何をするか（列を足すだけ。既存の行・既存の列は変えない）
 --   1) gw_hr_applicants.offer_type … 合格後に選んだ採用区分
@@ -22,10 +22,14 @@
 -- ■ 適用の順番
 --   この SQL → アプリのデプロイ。
 --   デプロイが先でも、応募者一覧・詳細・合格通知はこれまでどおり動く。
---   採用区分を選ぶ操作だけが「db/128 を流してください」と出て止まる。
+--   採用区分を選ぶ操作だけが「db/129 を流してください」と出て止まる。
+--
+-- ■ 番号
+--   128 は Office（db/128_office_excel_sync.sql。本番適用済み）が使っているため 129。
 --
 -- 実行方法: Supabase の SQL Editor に、このファイル全体を貼って Run（べき等。2回流してもよい）
 -- 前提: 081（gw_hr_applicants・gw_hr_offers）
+-- 確認: 流したあと db/check_hr_offer_type.sql を Run（1つの表で ✅／❌ を見る。読み取りだけ）
 -- =============================================================================
 
 begin;
@@ -72,12 +76,4 @@ commit;
 
 notify pgrst, 'reload schema';
 
--- ■ 確認（流したあとに実行。1つ目は3行・2つ目も3行出れば OK）
--- select table_name, column_name, data_type
---   from information_schema.columns
---  where table_schema = 'public'
---    and ((table_name = 'gw_hr_applicants' and column_name = 'offer_type')
---      or (table_name = 'gw_hr_offers' and column_name in ('offer_type', 'offer_terms')))
---  order by table_name, column_name;
--- select conname from pg_constraint
---  where conname in ('gw_hr_applicants_offer_type_chk', 'gw_hr_offers_offer_type_chk', 'gw_hr_offers_offer_terms_obj_chk');
+-- ■ 確認：db/check_hr_offer_type.sql を Supabase の SQL Editor で Run（読み取りだけ）

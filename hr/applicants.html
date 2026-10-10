@@ -738,7 +738,7 @@
 
   // ---- 合格後の採用区分（API が返す lib/hr-offer-types.js が正。画面側に定義を持たない） --------
   let offerTypesDef = [];
-  let offerTypeReady = true;   // false は db/128 未適用（区分を選ぶ操作だけ止め、これまでの合格通知で進める）
+  let offerTypeReady = true;   // false は db/129 未適用（区分を選ぶ操作だけ止め、これまでの合格通知で進める）
   const offerTypeDef = (key) => offerTypesDef.find((t) => t.key === key) || null;
   function takeOfferTypes(d) {
     if (Array.isArray(d?.offerTypes)) offerTypesDef = d.offerTypes;
@@ -888,7 +888,7 @@
     if (a.nextActionKey === "conduct" && !a.nextInterviewId) {
       a = { ...a, nextAction: "面談予定の記録を確認してください", nextActionCta: "面談タブを確認", nextActionKey: "checkInterviews" };
     }
-    // 採用区分を選べない環境（db/128 未適用）では、これまでどおり合格通知を作る
+    // 採用区分を選べない環境（db/129 未適用）では、これまでどおり合格通知を作る
     if (a.nextActionKey === "chooseOfferType" && !offerTypeReady) {
       a = { ...a, nextAction: "合格通知を作成してください", nextActionCta: "合格通知を作成", nextActionKey: "createOffer" };
     }
@@ -1791,7 +1791,7 @@
         ${offerTypeReady ? `
         <label>この方をどの形で迎えますか？ <span style="color:#b3261e;">*</span></label>
         <div id="dc-otypes">${offerTypeCards(decideOfferType, "pickDecideOfferType")}</div>` : `
-        <p class="hr-flow-note">採用区分（正社員・育成枠・業務委託など）を選ぶには db/128 の適用が必要です。いまは合格だけを保存し、これまでの合格通知で進めます。</p>`}
+        <p class="hr-flow-note">採用区分（正社員・育成枠・業務委託など）を選ぶには db/129 の適用が必要です。いまは合格だけを保存し、これまでの合格通知で進めます。</p>`}
         ${note}` : note;
   }
 

@@ -78,7 +78,7 @@ async function list(req, res, sb, ctx, salary) {
     ? attachPay(ctx.tenantId, data || [], "applicant").then(() => null, (e) => e) : Promise.resolve(null);
 
   const ids = (data || []).map((a) => a.id);
-  // 合格後の採用区分（db/128）。状態・NEXT の言い方が区分で変わる。列がまだ無い環境では区分なしとして扱う
+  // 合格後の採用区分（db/129）。状態・NEXT の言い方が区分で変わる。列がまだ無い環境では区分なしとして扱う
   const offerTypes = await readOfferTypes(sb, ctx.tenantId, ids);
   for (const a of data || []) a.offer_type = offerTypes.byId.get(a.id) ?? null;
   // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
