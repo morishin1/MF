@@ -16,7 +16,7 @@ import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib
 import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes } from "../../../lib/hr.js";
+import { normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates } from "../../../lib/hr.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
 import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js";
 import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
@@ -81,6 +81,12 @@ async function list(req, res, sb, ctx, salary) {
   // 合格後の採用区分（db/129）。状態・NEXT の言い方が区分で変わる。列がまだ無い環境では区分なしとして扱う
   const offerTypes = await readOfferTypes(sb, ctx.tenantId, ids);
   for (const a of data || []) a.offer_type = offerTypes.byId.get(a.id) ?? null;
+  // 条件を承諾した人の、正式契約（LegalSign）の段階（db/132。正式契約待ち／正式契約済み）。列が無ければ数えない
+  const acceptedIds = (data || []).filter((a) => a.status === "accepted").map((a) => a.id);
+  if (acceptedIds.length) {
+    const formal = await readFormalStates(sb, ctx.tenantId, acceptedIds);
+    for (const a of data || []) a.formal_state = formal.byId.get(a.id) ?? null;
+  }
   // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
   // 無限道場リードの decision（保留・対象外。lib/hr-lead-flow.js）は採用の選考結果ではないので数えない
   const decidedIds = (data || []).filter((a) => a.decision && a.lead_category !== "mugendojo").map((a) => a.id);

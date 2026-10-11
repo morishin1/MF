@@ -219,8 +219,16 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
   await page.locator("#rows tr", { hasText: "山田 太郎" }).click();
   await page.waitForTimeout(700);
   const next = await page.locator(".hr-next").innerText();
-  check(next.includes("本人へ見送りを伝えてください") && next.includes("本人へ未連絡"), "詳細の NEXT ACTION：本人へ連絡（未連絡のバッジつき）");
-  check(await page.locator("[data-ceo-eval]").count() === 1, "詳細に社長面談の評価（モーダルと同じ見た目）");
+  check(next.includes("本人へ見送りを伝えてください") && (await page.locator(".hr-contact-row").innerText()).includes("本人へ未連絡"),
+    "詳細の NEXT ACTION：本人へ連絡（すぐ下に未連絡のバッジ）");
+  // 概要の社長面談の評価は1行（評価＋［見る］）。詳しい評価は面談タブ（応募者ドロワー改善 §7）
+  check(await page.locator("[data-ceo-brief]").count() === 1 && await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 0,
+    "概要の社長面談の評価は1行だけ（詳細は展開しない）");
+  await page.locator("[data-ceo-brief] button", { hasText: "見る" }).click();
+  await page.waitForTimeout(300);
+  check(await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 1, "［見る］で面談タブに社長面談の評価（モーダルと同じ見た目）");
+  await page.locator('.hr-tabs button[data-tab="overview"]').click();
+  await page.waitForTimeout(200);
   await page.locator(".hr-next button", { hasText: "本人へ連絡" }).click();
   await page.waitForTimeout(700);
   check((await page.locator("#dc-step2").innerText()).includes("選考結果のご連絡"), "詳細から本人へ連絡を開ける");

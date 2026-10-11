@@ -100,6 +100,9 @@ async function one(req, res, sb, ctx, salary) {
   const nextInterview = pickNextInterview(a, interviews);
   // いま有効な合格通知（NEXT ACTIONの「送付：.../閲覧：...」に使う。README Stage 6）
   const current = activeOffer(offers);
+  // 正式契約（LegalSign）の段階（db/132。承諾した版の記録から。列が無い環境では null＝条件承諾済みのまま）
+  const acceptedOffer = (offers || []).find((o) => o.accepted_at);
+  a.formal_state = acceptedOffer?.formal_signed_at ? "signed" : acceptedOffer?.formal_sent_at ? "sent" : null;
 
   return json(res, 200, {
     applicant: {

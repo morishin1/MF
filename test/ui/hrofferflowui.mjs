@@ -8,7 +8,7 @@
 //   5. 給与を見られない人には、報酬・インセンティブの欄を出さない
 //   6. 選考タイムラインに「誰が」
 //   7. スマホ（390px）：カードは1列・横にはみ出さない
-//   8. 本人向けページ：区分の書類名と項目だけ。同意のチェック →［同意して契約を完了する］→「契約手続きが完了しました」
+//   8. 本人向けページ：区分の書類名と項目だけ。同意のチェック →［条件を承諾する］→「条件の承諾を受け付けました」
 //
 // 応答は lib/hr.js・lib/hr-offer-types.js の本物の関数で組み立てる（ラベルや NEXT ACTION をテスト側で作らない）
 import { launch, BASE } from "../_browser.mjs";
@@ -124,7 +124,8 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   const steps = await page.locator("#hr-steps li").evaluateAll((ls) => ls.map((l) => `${l.querySelector(".l").textContent}:${l.className}`));
   check(steps.join(",") === "応募:done,面談:done,合格:done,オファー:now,承諾:todo,契約:todo,入社/稼働:todo", `ステップバー（${steps.join(",")}）`);
   check((await page.locator("#hr-otype").innerText()).includes("業務委託"), "概要に採用区分");
-  check((await page.locator("#hr-status").innerText()).includes("業務委託オファーの作成待ち"), "状態：業務委託オファーの作成待ち");
+  check((await page.locator(".hr-next #hr-stage").innerText()) === "業務委託オファー" && (await page.locator("#hr-status").innerText()).includes("作成待ち"),
+    "見出し「業務委託オファー」＋状態「作成待ち」");
   check(await page.locator(".hr-next button", { hasText: "オファーを作成" }).count() === 1, "NEXT ACTION：オファーを作成");
 
   console.log("\n— 業務委託オファー：必要な項目だけ（通常は少なく、ほかは詳細設定） —");
@@ -259,7 +260,7 @@ for (const width of [1100, 390]) {
   check(text.includes("業務委託オファー") && text.includes("AI/DX支援業務") && text.includes("月額固定 400,000円"), `[${width}px] 書類名と条件`);
   check(!/試用期間|社長|ランク|評価/.test(text), `[${width}px] 社内用語・社内の項目を出さない`);
   const btn = page.locator("#ho-accept");
-  check((await btn.innerText()).includes("同意して契約を完了する"), `[${width}px] ［同意して契約を完了する］`);
+  check((await btn.innerText()).includes("条件を承諾する"), `[${width}px] ［条件を承諾する］`);
   check(await btn.isDisabled(), `[${width}px] チェックするまで押せない`);
   if (width === 390) {
     const bw = await btn.evaluate((b) => b.getBoundingClientRect().width);
@@ -269,7 +270,7 @@ for (const width of [1100, 390]) {
   await btn.click();
   await page.waitForTimeout(500);
   check(posted.some((p) => p.action === "accept" && p.agreed === true), `[${width}px] 同意（agreed: true）が送られる`);
-  check((await page.locator("#ho-actions").innerText()).includes("契約手続きが完了しました"), `[${width}px] 同意後「契約手続きが完了しました」`);
+  check((await page.locator("#ho-actions").innerText()).includes("条件の承諾を受け付けました"), `[${width}px] 承諾後「条件の承諾を受け付けました」`);
   check(!errs.length, `[${width}px] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();
 }

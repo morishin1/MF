@@ -41,13 +41,18 @@ function table(name) {
     then: (fn) => Promise.resolve({ data: e() ? null : rows().map(copy), error: e() }).then(fn),
     update(patch) {
       const g = [];
+      const apply = () => {
+        const hit = (db.rows[name] || []).filter((x) => g.every(([k, v]) => (v === null ? (x[k] ?? null) === null : x[k] === v)));
+        for (const x of hit) Object.assign(x, patch);
+        return hit;
+      };
       const r2 = {
         eq: (k, v) => { g.push([k, v]); return r2; },
-        then: (fn) => {
-          const hit = (db.rows[name] || []).filter((x) => g.every(([k, v]) => x[k] === v));
-          for (const x of hit) Object.assign(x, patch);
-          return Promise.resolve({ data: hit.map(copy), error: null }).then(fn);
-        },
+        is: (k, v) => { g.push([k, v]); return r2; },   // is(k, null)：まだ空の行だけ
+        select: () => r2,
+        maybeSingle: () => Promise.resolve({ data: copy(apply()[0]) || null, error: null }),
+        single: () => Promise.resolve({ data: copy(apply()[0]) || null, error: null }),
+        then: (fn) => Promise.resolve({ data: apply().map(copy), error: null }).then(fn),
       };
       return r2;
     },

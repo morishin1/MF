@@ -63,8 +63,10 @@
     .hr-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:40; }
     .hr-drawer { position:fixed; top:0; right:0; bottom:0; width:440px; max-width:92vw; background:#fff;
       z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:22px; }
-    .hr-detail { position:fixed; top:0; right:0; bottom:0; width:560px; max-width:94vw; background:#f6f6f2;
-      z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:0; }
+    .hr-detail { position:fixed; top:0; right:0; bottom:0; width:660px; max-width:94vw; background:#f6f6f2;
+      z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; overflow-x:hidden; padding:0; }
+    /* スマホはフル幅・1列（横にはみ出さない） */
+    @media (max-width:600px) { .hr-detail { width:100vw; max-width:100vw; } }
 
     /* モーダル＝1つの操作を実行する場所。ドロワー（詳細）の上に重ねて出す。
        閉じてもドロワーは閉じない（採用HR応募者一覧・ドロワーUI改善指示書 §4・§5） */
@@ -182,7 +184,31 @@
     }
     .hr-check-col { width:34px; }
 
-    .hr-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
+    /* NEXT ACTION：いまの状態と、次に押すボタン1つだけ（高さ 80〜110px 程度。淡い注意色） */
+    .hr-next { background:#f3f8e3; border:1px solid #dde8bd; border-radius:10px; padding:12px 14px; margin:0 0 12px; }
+    .hr-next .row1 { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .hr-next .ttl { font-size:15px; font-weight:700; color:#1b2440; }
+    .hr-next .st { font-size:12px; font-weight:600; color:#4a5068; background:#fff; border:1px solid #dde8bd; border-radius:999px; padding:1px 10px; }
+    .hr-next .chip { font-size:11px; color:#4a5068; }
+    .hr-next .sub { font-size:12px; color:#4a5068; margin:4px 0 8px; line-height:1.5; }
+    .hr-next > .btn { margin-top:0; }
+    .hr-contact-row { padding:0 2px; }
+    /* 概要：値のある項目だけ。メールはその場で登録・編集 */
+    .hr-email-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px; margin:2px 0 10px; }
+    .hr-email-row .k { color:#6b7080; min-width:3em; }
+    .hr-email-row .v { color:#1b2440; font-weight:600; overflow-wrap:anywhere; }
+    .hr-email-row .v.muted { color:#9a5b00; font-weight:600; }
+    .hr-email-row input { flex:1 1 220px; min-width:0; }
+    .hr-email-row .acts { display:flex; gap:6px; }
+    .hr-email-row .err-text { flex-basis:100%; margin:0; }
+    .hr-more-info summary { cursor:pointer; font-size:12.5px; font-weight:700; color:#1b2440; padding:4px 0; }
+    .hr-more-info .when-open, .hr-more-info[open] .when-closed { display:none; }
+    .hr-more-info[open] .when-open { display:inline; }
+    .hr-ceo-brief { display:flex; align-items:center; gap:10px; font-size:13px; color:#1b2440; background:#fff;
+      border:1px solid #e2e2dc; border-radius:8px; padding:8px 12px; margin-top:12px; }
+    .hr-ceo-brief b { font-size:15px; }
+    .hr-head-mail { font-size:12px; color:#4a5068; margin-top:2px; overflow-wrap:anywhere; }
+    .hr-head-mail.none { color:#9a5b00; }
     .hr-next .now { font-size:11px; color:#4a5068; margin-bottom:2px; }
     /* 選考（どこまで進んだか）・状態（いま何待ちか）・NEXT ACTION（次に何をするか）を上から並べる */
     .hr-state { display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; margin:0 0 10px; }
@@ -204,6 +230,8 @@
 
     .hr-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12.5px; }
     .hr-grid2 dt { color:#6b7080; margin-bottom:2px; } .hr-grid2 dd { margin:0 0 10px; color:#1b2440; font-weight:600; }
+    /* スマホは1列（応募者ドロワー改善 §8） */
+    @media (max-width:600px) { .hr-grid2 { grid-template-columns:1fr; gap:4px; } }
 
     /* 合格後の採用区分のカード（「この方をどの形で迎えますか？」）。PCは横並び、スマホは1列 */
     .hr-otype-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin:6px 0 4px; }
@@ -271,6 +299,12 @@
     .hr-steps li.now .l { color:#1b2440; font-weight:700; }
     .hr-steps li.done .l { color:#256b36; }
     .hr-steps-ended { padding:0 20px 10px; font-size:11.5px; color:#b3261e; }
+    /* 390px でも横にはみ出さない（7つの段階を画面の幅に収める。長い名前は2行に） */
+    @media (max-width:480px) {
+      .hr-steps { padding:0 6px 10px; overflow-x:visible; }
+      .hr-steps li { flex:1 1 0; min-width:0; }
+      .hr-steps .l { white-space:normal; text-align:center; font-size:10px; line-height:1.25; }
+    }
     .hr-tl .row .d .who { margin-left:6px; color:#4a5068; }
 
     .hr-tl { border-left:2px solid #e2e2dc; margin-left:6px; padding-left:16px; }
@@ -805,7 +839,7 @@
     // 同じ応募者を開き直す場合（各操作後の再読み込み）は、いま見ているタブを保つ。
     // 呼び出し側が detailTab = "interviews" を先に指定してから呼ぶケースがあるため
     // （openIdはcloseModal()内でnullに戻るため、判定にはdetailの中身を使う）
-    if (detail?.applicant?.id !== id) detailTab = "overview";
+    if (detail?.applicant?.id !== id) { detailTab = "overview"; emailEditing = false; }
     openId = id;
     closeModal();
     const root = el("modal-root");
@@ -873,6 +907,7 @@
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
             ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}
             ${isLead(a) ? `<span class="hr-lead-badge">無限道場</span>` : ""}</div>
+          ${isLead(a) ? "" : `<div class="hr-head-mail${a.email ? "" : " none"}" id="hr-head-mail">${esc(a.email || "メール未登録")}</div>`}
           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(a.jobTitle)} ／ ${esc(a.source)}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -926,28 +961,30 @@
     if (a.nextActionKey === "chooseOfferType" && !offerTypeReady) {
       a = { ...a, nextAction: "合格通知を作成してください", nextActionCta: "合格通知を作成", nextActionKey: "createOffer" };
     }
+    // 見出し：オファーの段階では書類名（育成参加決定通知 など）、それ以外は選考段階
+    const otype = offerTypeDef(a.offerType);
+    const offerStage = ["offer_draft_pending", "offer_review_pending", "offer_send_pending", "offer_sent", "offer_viewed",
+      "offer_response_pending", "offer_resend_pending", "accepted"].includes(a.status);
+    const title = otype && offerStage ? otype.offerName : (a.stageLabel || "—");
+    // 見出しと同じ書類名で始まる状態は、重ねて書かない（「育成参加決定通知」＋「下書き（本人未送信）」）
+    const statusText = String(a.statusLabel || "—").startsWith(`${title}の`) ? a.statusLabel.slice(title.length + 1) : (a.statusLabel || "—");
     return `
-      <div class="hr-next" style="margin:0 0 16px;">
-        <dl class="hr-state now">
-          <dt>${isLead(a) ? "段階" : "選考"}</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
-          <dt>状態</dt><dd id="hr-status">${esc(a.statusLabel || "—")}<small>いま何待ちか</small></dd>
-          ${a.offerTypeLabel ? `<dt>採用区分</dt><dd id="hr-otype">${esc(a.offerTypeLabel)}<small>どの形で迎えるか</small></dd>` : ""}
-        </dl>
-        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION<small style="font-weight:400;margin-left:6px;">次にすること</small></div>
-        <h3>${esc(a.nextAction)}</h3>
-        <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
+      <div class="hr-next">
+        <div class="row1"><span class="ttl" id="hr-stage">${esc(title)}</span><span class="st" id="hr-status">${esc(statusText)}</span>
+          ${a.offerTypeLabel ? `<span class="chip" id="hr-otype">${esc(a.offerTypeLabel)}</span>` : ""}</div>
+        <div class="sub">${esc(a.nextAction)}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
         ${isOnHold(a) ? `<div class="hr-dk-banner" data-kind="hold"><span class="material-symbols-outlined">pause_circle</span>
           <div><b>保留中</b>${a.holdReason ? `　理由：${esc(a.holdReason)}` : ""}${a.holdNextStep ? `<br>次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
-        ${contactRow(a)}
         ${a.nextActionCta && (!["decide", "advance"].includes(a.nextActionKey) || canDecide)
           ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
           : a.nextActionKey === "decide"
-            ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">採用判断は社長・管理者が行います。</p>`
+            ? `<p class="muted" style="font-size:12px;margin:0;">採用判断は社長・管理者が行います。</p>`
             : a.nextActionKey === "advance"
-              ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">本採用へ進めるのは社長・管理者が行います。</p>`
+              ? `<p class="muted" style="font-size:12px;margin:0;">本採用へ進めるのは社長・管理者が行います。</p>`
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
-      </div>`;
+      </div>
+      ${contactRow(a)}`;
   }
 
   /**
@@ -1031,6 +1068,96 @@
         <p class="muted" style="font-size:12px;margin:6px 0 0;">面談メモの編集は<a href="#" onclick="setDetailTab('interviews');return false;">面談タブ</a>、経過は<a href="#" onclick="setDetailTab('history');return false;">履歴タブ</a>で見られます。</p>`;
   }
 
+  // ---- 概要：値のある項目だけを出す（空欄は［詳細を表示］の中）。メールはその場で登録・編集 --------------------
+  function basicInfo(a, ev, evLine) {
+    const salary = detail.salaryVisible === false ? null
+      : a.wageAmount ? `${a.wageType || ""} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : null;
+    const rank = a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span> ${esc((detail.rankLabel || {})[a.rank] || "")}` : null;
+    const evText = ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : null;
+    // [見出し, 表示（HTML。null は未登録）, 常に通常表示に出すか]
+    const items = [
+      ["応募経路", a.source ? esc(a.source) : null],
+      ["応募職種", a.jobTitle ? esc(a.jobTitle) : null],
+      ["担当", `<span id="hr-recruiter">${esc(a.recruiterName || "未定")}
+        <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></span>`, true],
+      ["ランク", rank],
+      ["最新評価", evText],
+      ["電話", a.phone ? esc(a.phone) : null],
+      ["雇用形態", a.employmentType ? esc(a.employmentType) : null],
+      ["入社予定日", a.joinDate ? esc(a.joinDate) : null],
+      ...(detail.salaryVisible === false ? [] : [["給与", salary ? esc(salary) : null]]),
+      ["勤務地", a.workLocation ? esc(a.workLocation) : null],
+      ["選考段階", a.stageLabel ? esc(a.stageLabel) : null, false],
+    ];
+    const cell = ([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v ?? "—"}</dd></div>`;
+    const shown = items.filter(([k, v, always]) => always || (v != null && k !== "選考段階"));
+    const rest = items.filter((x) => !shown.includes(x));
+    return `
+        <dl class="hr-grid2" id="hr-basic">${shown.map(cell).join("")}</dl>
+        ${emailRow(a)}
+        ${rest.length ? `<details class="hr-more-info" id="hr-more-info">
+          <summary><span class="when-closed">詳細を表示</span><span class="when-open">詳細を閉じる</span></summary>
+          <dl class="hr-grid2" style="margin-top:8px;">${rest.map(cell).join("")}</dl></details>` : ""}`;
+  }
+
+  // メール：登録済みなら［編集］、未登録なら［メールを登録］。押すとその場で入力（大きなモーダルは開かない）
+  let emailEditing = false;
+  const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/;   // lib/mail isEmail と同じ形
+  function emailRow(a) {
+    if (isLead(a)) return "";
+    if (emailEditing) {
+      return `<div class="hr-email-row" id="hr-email-row"><label class="k" for="hr-email-input">メール</label>
+        <input id="hr-email-input" type="email" inputmode="email" autocomplete="off" value="${esc(a.email || "")}" placeholder="example@example.com"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();saveEmailInline(this)}">
+        <span class="acts"><button class="btn btn-primary btn-sm" id="hr-email-save" onclick="saveEmailInline(this)">保存</button>
+          <button class="btn btn-secondary btn-sm" onclick="cancelEmailEdit()">キャンセル</button></span>
+        <div class="err-text" id="hr-email-msg"></div></div>`;
+    }
+    return `<div class="hr-email-row" id="hr-email-row"><span class="k">メール</span>
+      ${a.email ? `<span class="v" id="hr-email">${esc(a.email)}</span><button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="startEmailEdit()">編集</button>`
+        : `<span class="v muted" id="hr-email">未登録</span><button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="startEmailEdit()">メールを登録</button>`}</div>`;
+  }
+  function rerenderEmailRow() {
+    const row = el("hr-email-row");
+    if (row) row.outerHTML = emailRow(detail.applicant);
+    const head = el("hr-head-mail");
+    if (head) { head.textContent = detail.applicant.email || "メール未登録"; head.classList.toggle("none", !detail.applicant.email); }
+  }
+  function startEmailEdit() { emailEditing = true; rerenderEmailRow(); el("hr-email-input")?.focus(); }
+  function cancelEmailEdit() { emailEditing = false; rerenderEmailRow(); }
+
+  /**
+   * 応募者のメールを保存する（PATCH /api/hr/applicants/detail。形は lib/hr.js normalizeApplicant が確かめる）。
+   * 前後の空白は除く。空欄は「未登録」に戻す。保存してもドロワー・送信画面は閉じない
+   * @returns {Promise<string|null>} 保存できなければ理由
+   */
+  async function saveApplicantEmail(value, btn) {
+    const email = String(value || "").trim();
+    if (email && !EMAIL_RE.test(email)) return "メールアドレスの形式を確認してください";
+    try {
+      const r = await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({ id: detail.applicant.id, email }));
+      detail.applicant = { ...detail.applicant, ...(r?.applicant || {}), email: r?.applicant?.email ?? (email || null) };
+      load();   // 一覧も新しいメールに
+      return null;
+    } catch (e) { return e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+  async function saveEmailInline(btn) {
+    const msg = el("hr-email-msg");
+    msg.textContent = "";
+    const err = await saveApplicantEmail(el("hr-email-input").value, btn);
+    if (err) { msg.textContent = err; return; }
+    emailEditing = false;
+    rerenderEmailRow();
+  }
+
+  /** 概要の社長面談の評価は1行だけ（詳しくは面談タブ） */
+  function ceoEvalBrief(res) {
+    const iv = (res?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled);
+    if (!iv || (!Object.keys(iv.scores || {}).length && !iv.notes && !iv.rank)) return "";
+    return `<div class="hr-ceo-brief" data-ceo-brief><span>社長面談の評価</span><b>${esc(iv.rank || "—")}</b>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;padding:2px 12px;" onclick="setDetailTab('interviews')">見る</button></div>`;
+  }
+
   function renderDetailTab() {
     const a = detail.applicant;
     const box = el("hr-detail-tab");
@@ -1044,30 +1171,17 @@
       box.innerHTML = `
         ${nextActionBox(a)}
         ${instructorApplication(a)}
-        <dl class="hr-grid2">
-          <div><dt>応募経路</dt><dd>${esc(a.source || "—")}</dd></div>
-          <div><dt>応募職種</dt><dd>${esc(a.jobTitle || "—")}</dd></div>
-          <div><dt>選考段階</dt><dd>${esc(a.stageLabel || "—")}</dd></div>
-          <div><dt>担当</dt><dd id="hr-recruiter">${esc(a.recruiterName || "未定")}
-            <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></dd></div>
-          <div><dt>メール</dt><dd>${esc(a.email || "—")}</dd></div>
-          <div><dt>電話</dt><dd>${esc(a.phone || "—")}</dd></div>
-          <div><dt>ランク</dt><dd>${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span> ${esc((detail.rankLabel || {})[a.rank] || "")}` : "—"}</dd></div>
-          <div><dt>最新評価</dt><dd>${ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : "まだありません"}</dd></div>
-          <div><dt>雇用形態</dt><dd>${esc(a.employmentType || "—")}</dd></div>
-          <div><dt>入社予定日</dt><dd>${esc(a.joinDate || "—")}</dd></div>
-          ${detail.salaryVisible === false ? "" : `<div><dt>給与</dt><dd>${a.wageAmount ? `${esc(a.wageType || "")} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : "—"}</dd></div>`}
-          <div><dt>勤務地</dt><dd>${esc(a.workLocation || "—")}</dd></div>
-        </dl>
-        ${missing.length ? `<p class="muted" style="font-size:12px;margin:12px 0 0;">
+        ${basicInfo(a, ev, evLine)}
+        ${missing.length ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">
           ${esc(missing.join("・"))}が未登録です。<a href="#" onclick="setDetailTab('docs');return false;">書類タブ</a>から登録できます。</p>` : ""}
-        ${ceoEvalSummary(detail)}
+        ${ceoEvalBrief(detail)}
         ${(detail.offers || []).length ? `
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
         ${detail.offers.map(offerRow).join("")}` : ""}`;
     } else if (detailTab === "interviews") {
       box.innerHTML = `
-        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin-bottom:12px;">
+        ${ceoEvalSummary(detail)}
+        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:${ceoEvalSummary(detail) ? "14px" : "0"} 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
         ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
           : `<p class="muted">まだ面談の記録がありません。</p>`}`;
@@ -1590,6 +1704,7 @@
     if (key === "contact") return openContactForm(a.id, a.decision);
     if (key === "chooseOfferType") return offerTypeReady ? openOfferTypeModal() : openOfferForm();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
+    if (key === "formalContract") return openFormalContract();
     // 区分つきは、内容を確認してメールで送る。区分の無い、これまでの合格通知と URL の再発行は従来の画面
     if (key === "sendOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "sendOffer" || key === "reissueOffer") return openSendOfferForm();
@@ -2420,17 +2535,27 @@ ${url}
     revoked: "無効化", expired: "期限切れ",
   };
   function offerRow(o) {
-    // 区分つきは、本人の同意＝契約完了（同意した版・日時がこの行に残る）
-    const done = o.offerType && o.status === "accepted";
+    // 区分つきは、本人の承諾＝条件承諾済み（正式契約は LegalSign。承諾した版・日時・承諾記録がこの行に残る）
+    const accepted = o.offerType && o.status === "accepted";
+    const label = !accepted ? (OFFER_STATUS_LABEL[o.status] || o.status)
+      : o.formalSignedAt ? "正式契約済み" : o.formalSentAt ? "正式契約待ち" : "条件承諾済み";
+    const canPdf = detail.salaryVisible !== false && o.docsReady;
     return `
-      <div class="card" style="margin-bottom:10px;">
+      <div class="card hr-offer-card" style="margin-bottom:10px;" data-offer="${esc(o.id)}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版${o.offerType ? `　${esc(o.offerName || "")}` : ""}
-          <span class="hr-pill" style="background:${done ? "#e5f1e2;color:#2f6f3a" : "#e7eaf3;color:#1b2440"};margin-left:6px;">${esc(done ? "契約完了" : OFFER_STATUS_LABEL[o.status] || o.status)}</span></div>
+          <span class="hr-pill" data-offer-state style="background:${accepted ? "#e5f1e2;color:#2f6f3a" : "#e7eaf3;color:#1b2440"};margin-left:6px;">${esc(label)}</span></div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">回答期限：${esc(o.respondBy || "—")}
           ${o.sentAt ? `　送付：${esc(fmtDate(o.sentAt))}` : ""}
           ${o.viewedAt ? `　閲覧：${esc(fmtDate(o.viewedAt))}` : ""}
-          ${o.acceptedAt ? `　${done ? "同意" : "承諾"}：${esc(fmtDate(o.acceptedAt))}` : ""}
+          ${o.acceptedAt ? `　${accepted ? "条件承諾" : "承諾"}：${esc(fmtDate(o.acceptedAt))}` : ""}
+          ${o.formalSentAt ? `　正式契約の案内：${esc(fmtDate(o.formalSentAt))}` : ""}
+          ${o.formalSignedAt ? `　正式契約済み：${esc(fmtDate(o.formalSignedAt))}` : ""}
           ${o.declinedAt ? `　辞退：${esc(fmtDate(o.declinedAt))}` : ""}</div>
+        ${canPdf && (o.noticePdf || o.acceptedPdf || (accepted && o.noticePdf)) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          ${o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'notice', this)">${esc(o.noticeTitle || "条件通知書")}（PDF）</button>` : ""}
+          ${accepted && o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button>` : ""}
+        </div>` : ""}
+        ${accepted && o.docsReady && !o.formalSignedAt ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;padding:2px 10px;" onclick="openFormalContract()">正式契約（LegalSign）</button>` : ""}
         ${o.messageToCandidate ? `<div style="font-size:12px;margin-top:4px;">${esc(o.messageToCandidate)}</div>` : ""}
         ${o.declineReason ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">辞退理由：${esc(o.declineReason)}</div>` : ""}
       </div>`;
@@ -2848,11 +2973,31 @@ ${url}
         <dl>${top.map(row).join("")}<dt>回答期限</dt><dd>${esc(fmtYmdJa(o.respondBy))}</dd></dl>
         ${rest.length ? `<details><summary>その他の条件（${rest.length}件）</summary><dl>${rest.map(row).join("")}</dl></details>` : ""}
       </div>
-      ${d.mail.configured ? "" : `
+      ${d.notice?.ready ? `
+      <div class="hr-of-auto" id="sm-notice" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="material-symbols-outlined" style="font-size:18px;width:18px;overflow:hidden;">picture_as_pdf</span>
+        <span><b>${esc(d.notice.title)}</b>（PDF）を${d.notice.stored ? "送った時点の版で" : "送る時点の版から自動で作り、"}メールに添付します</span>
+        ${d.notice.salaryVisible === false ? "" : `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', '${d.notice.stored ? "notice" : "preview"}', this)">PDFを確認</button>`}</div>` : ""}
+      ${!d.to ? `
+      <div class="banner warn" id="sm-email-need" style="margin-top:12px;display:block;">
+        <b>本人のメールアドレスが未登録です</b>
+        <div class="hr-email-row" style="margin:8px 0 0;"><input id="sm-email-new" type="email" inputmode="email" autocomplete="off" placeholder="example@example.com"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();registerSendEmail(this)}">
+          <button class="btn btn-primary btn-sm" onclick="registerSendEmail(this)">登録して続ける</button></div>
+        <div class="err-text" id="sm-email-msg"></div></div>`
+      : d.mail.configured ? "" : `
       <div class="banner warn" id="sm-nomail" style="margin-top:12px;"><span class="material-symbols-outlined">mail</span>
         <div>メールで送れません（${esc(d.mail.reason || "設定がありません")}）。URLを発行して、下の文面をコピーして送ってください。</div></div>`}
       <div class="hr-of-grid" style="margin-top:12px;">
-        <div class="wide"><label>宛先</label><div class="hr-to" id="sm-to">${esc(d.candidateName)} 様　${esc(d.to || "（メールアドレス未登録）")}</div></div>
+        <div class="wide"><label>送信先</label>
+          ${offerSend.editTo ? `<div class="hr-email-row" style="margin:0;"><input id="sm-to-input" type="email" inputmode="email" autocomplete="off" value="${esc(d.to || "")}"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();saveSendTo(this)}">
+            <span class="acts"><button class="btn btn-primary btn-sm" onclick="saveSendTo(this)">保存</button>
+              <button class="btn btn-secondary btn-sm" onclick="offerSend.editTo=false;renderOfferSendKeep()">キャンセル</button></span>
+            <div class="err-text" id="sm-to-msg"></div></div>`
+          : `<div class="hr-to" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${esc(d.candidateName)} 様
+              <b id="sm-to">${esc(d.to || "（メールアドレス未登録）")}</b>
+              ${d.to ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" id="sm-to-change" onclick="offerSend.editTo=true;renderOfferSendKeep();el('sm-to-input')?.focus()">変更</button>` : ""}</div>`}</div>
         <div class="wide"><label for="sm-subject">件名</label><input id="sm-subject" type="text" value="${esc(d.subject)}"></div>
         <div class="wide"><label for="sm-body">本文</label><textarea id="sm-body" rows="12">${esc(d.body)}</textarea>
           <div class="hr-of-auto">${esc(d.urlTag)} の位置に、この方専用のURLが入ります（送った記録にはURLを残しません）</div></div>
@@ -2869,6 +3014,58 @@ ${url}
       </div>`;
   }
   const fmtYmdJa = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || "")); return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : "—"; };
+
+  // 件名・本文の手直しを残したまま描き直す（送信先を変える・メールを登録するとき）
+  function renderOfferSendKeep() {
+    const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
+    renderOfferSend();
+    if (subject != null) el("sm-subject").value = subject;
+    if (body != null) el("sm-body").value = body;
+  }
+  // メールを登録・変更したら、送信先と「メールで送れるか」をサーバーから読み直す（画面は閉じない）
+  async function reloadSendDraft() {
+    const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
+    const d = await API.api(`/api/hr/offers?id=${encodeURIComponent(offerSend.id)}`);
+    offerSend.d = { ...d, subject: subject ?? d.subject, body: body ?? d.body };
+    offerSend.editTo = false;
+    renderOfferSend();
+  }
+  async function registerSendEmail(btn) {
+    const msg = el("sm-email-msg"); msg.textContent = "";
+    const err = await saveApplicantEmail(el("sm-email-new").value, btn);
+    if (err) { msg.textContent = err; return; }
+    if (!detail.applicant.email) { msg.textContent = "メールアドレスを入力してください"; return; }
+    try { await reloadSendDraft(); } catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+  async function saveSendTo(btn) {
+    const msg = el("sm-to-msg"); msg.textContent = "";
+    const value = el("sm-to-input").value;
+    if (!String(value).trim()) { msg.textContent = "送信先のメールアドレスを入力してください"; return; }
+    const err = await saveApplicantEmail(value, btn);
+    if (err) { msg.textContent = err; return; }
+    try { await reloadSendDraft(); } catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+
+  // オファーの PDF（条件通知書・承諾済み・送る前の確認用）を開く。ログインの鍵が要るので、取得してから保存させる
+  async function openOfferPdf(offerId, file, btn) {
+    try {
+      await KPLayout.busy(btn, "読み込み中…", async () => {
+        const token = await API.getToken();
+        const r = await fetch(`/api/hr/offers?id=${encodeURIComponent(offerId)}&file=${encodeURIComponent(file)}`,
+          { headers: { Authorization: `Bearer ${token}` } });
+        if (!r.ok) {
+          const b = await r.json().catch(() => ({}));
+          throw new Error(b.hint || b.message || "PDFを開けませんでした");
+        }
+        const blob = await r.blob();
+        const name = decodeURIComponent((/filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") || "") || [])[1] || "offer.pdf");
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      });
+    } catch (e) { alert(e.message || "PDFを開けませんでした"); }
+  }
 
   function offerMailText() {
     const subject = el("sm-subject").value.trim();
@@ -3038,6 +3235,109 @@ ${url}
       await refreshDetail();
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
+  }
+
+  // ---- 正式契約（LegalSign。db/132） ---------------------------------------------------
+  //   本人の「条件承諾」は正式な契約ではない。正式な契約は LegalSign で行う（最初は URL を登録して本人へ案内するだけ）。
+  //   ① LegalSign の URL（https:// だけ。本人へ案内するまでは直せる）→ ② 本人へ案内（メール／自分で送った記録）
+  //   → ③ LegalSign で署名が終わったら［正式契約済みにする］（誰が・いつ。取り消せない）→ 入社・稼働の手続きへ
+  //   URL は画面とこの版の記録にだけ持つ（監査ログ・タイムラインには「登録した」「案内した」だけ）
+  let formalFlow = null;
+  const acceptedOffer = () => (detail.offers || []).find((o) => o.acceptedAt && o.status !== "revoked") || null;
+  function openFormalContract() {
+    const o = acceptedOffer();
+    if (!o) return;
+    formalFlow = { offerId: o.id, mail: null, key: newMailKey() };
+    openActionModal(`<div id="fc-box"></div>`, { wide: true });
+    renderFormal();
+  }
+  function renderFormal() {
+    const o = acceptedOffer();
+    if (!o || !el("fc-box")) return;
+    const sent = Boolean(o.formalSentAt), signed = Boolean(o.formalSignedAt);
+    const step = (n, done, title, body) => `<section class="hr-flow-sec" style="margin-top:12px;">
+      <div class="hr-flow-hd"><h3>${done ? `<span class="material-symbols-outlined" style="color:#2f6f3a;">check_circle</span>` : `<b style="margin-right:4px;">${n}</b>`}${esc(title)}</h3></div>${body}</section>`;
+    el("fc-box").innerHTML = `
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">正式契約（LegalSign）</h2>
+      <p class="hr-sub" style="margin:0 0 6px;">${esc(detail.applicant.name)} さんは第${esc(o.version)}版の条件を承諾済みです（${esc(fmtDate(o.acceptedAt))}）。
+        正式な契約は LegalSign で行います。条件の承諾は、正式な契約ではありません。</p>
+      ${!o.docsReady ? `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>db/132_hr_offer_documents.sql を Supabase に流すと使えます。</div></div>` : `
+      ${detail.salaryVisible !== false && o.noticePdf ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button></div>` : ""}
+      ${step(1, Boolean(o.legalsignUrl), "LegalSign の URL", sent
+        ? `<p class="hr-sub" style="margin:0;">登録済みです（本人へ案内したため、変えられません）。</p>`
+        : `<div class="hr-email-row" style="margin:0;"><input id="fc-url" type="url" inputmode="url" autocomplete="off" placeholder="https://..."
+              value="${esc(o.legalsignUrl || "")}"><button class="btn ${o.legalsignUrl ? "btn-secondary" : "btn-primary"} btn-sm" id="fc-url-save" onclick="saveLegalSignUrl(this)">保存</button></div>
+           <div class="hr-of-auto">https:// で始まる URL だけ登録できます。本人へ案内するまでは直せます。</div>
+           <div class="err-text" id="fc-url-msg"></div>`)}
+      ${step(2, sent, "本人へ正式契約を案内", !o.legalsignUrl ? `<p class="hr-sub" style="margin:0;">先に LegalSign の URL を登録してください。</p>`
+        : `${sent ? `<p class="hr-sub" style="margin:0 0 8px;">案内済み：${esc(fmtDate(o.formalSentAt))}</p>` : ""}
+           <div id="fc-mail">${signed ? "" : `<button class="btn ${sent ? "btn-secondary" : "btn-primary"} btn-sm" id="fc-guide" onclick="openFormalMail(this)">${sent ? "もう一度案内する" : "本人へ正式契約を案内"}</button>`}</div>`)}
+      ${step(3, signed, "正式契約済みにする", signed
+        ? `<p class="hr-sub" style="margin:0 0 8px;">正式契約済み：${esc(fmtDate(o.formalSignedAt))}</p>
+           ${canDecide ? `<button class="btn btn-primary btn-sm" onclick="closeAction();startAdvance()">${esc(detail.applicant.nextActionKey === "advance" && detail.applicant.nextActionCta || "本採用へ進める")}</button>` : `<p class="muted" style="font-size:12px;margin:0;">入社・稼働の手続きへ進めるのは社長・管理者が行います。</p>`}`
+        : `<p class="hr-sub" style="margin:0 0 8px;">LegalSign で本人の署名が終わったことを確かめてから押してください（取り消せません）。</p>
+           <button class="btn btn-secondary btn-sm" id="fc-signed" ${o.legalsignUrl || sent ? "" : "disabled"} onclick="markFormalSigned(this)">正式契約済みにする</button>`)}
+      `}
+      <div id="fc-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`;
+  }
+  async function formalAct(btn, label, body) {
+    const r = await KPLayout.busy(btn, label, () => API.hrOfferAct({ id: formalFlow.offerId, ...body }));
+    await refreshDetail();
+    load();
+    return r;
+  }
+  async function saveLegalSignUrl(btn) {
+    const msg = el("fc-url-msg"); msg.textContent = "";
+    const url = el("fc-url").value.trim();
+    if (!/^https:\/\/\S+$/i.test(url)) { msg.textContent = "https:// で始まる URL を入力してください"; return; }
+    try { await formalAct(btn, "保存中…", { action: "setLegalSign", url }); renderFormal(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+  async function openFormalMail(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    let d;
+    try { d = await KPLayout.busy(btn, "読み込み中…", () => API.hrOfferAct({ id: formalFlow.offerId, action: "sendFormal", preview: true })); }
+    catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; return; }
+    formalFlow.mail = d;
+    el("fc-mail").innerHTML = `
+      ${d.mail?.configured ? "" : `<div class="banner warn" style="margin:0 0 8px;"><span class="material-symbols-outlined">mail</span>
+        <div>メールで送れません（${esc(d.mail?.reason || "設定がありません")}）。いつものメールで LegalSign の URL を送り、「自分で送った」を押してください。</div></div>`}
+      <div class="hr-of-grid">
+        <div class="wide"><label>送信先</label><div class="hr-to"><b>${esc(d.to || "（メールアドレス未登録）")}</b></div></div>
+        <div class="wide"><label for="fc-subject">件名</label><input id="fc-subject" type="text" value="${esc(d.subject)}"></div>
+        <div class="wide"><label for="fc-body">本文</label><textarea id="fc-body" rows="9">${esc(d.body)}</textarea>
+          <div class="hr-of-auto">${esc(d.urlTag)} の位置に LegalSign の URL が入ります（送った記録には URL を残しません）</div></div>
+      </div>
+      <div class="hr-of-actions" style="margin-top:8px;">
+        ${d.mail?.configured ? `<button class="btn btn-primary btn-sm" id="fc-send" onclick="sendFormalMail(this)">メールで案内する</button>` : ""}
+        <button class="btn btn-secondary btn-sm" id="fc-manual" onclick="sendFormalManual(this)">自分で送った（記録だけ）</button>
+      </div>`;
+  }
+  async function sendFormalMail(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    const subject = el("fc-subject").value.trim(), body = el("fc-body").value;
+    if (!subject) { msg.textContent = "件名を入力してください"; return; }
+    if (!body.includes(formalFlow.mail.urlTag)) { msg.textContent = `本文に ${formalFlow.mail.urlTag} を残してください`; return; }
+    try {
+      const r = await formalAct(btn, "送信中…", { action: "sendFormal", channel: "email", subject, body, requestKey: formalFlow.key });
+      if (r?.status && r.status !== "sent") { msg.textContent = r.hint || "送れませんでした"; return; }
+      formalFlow.key = newMailKey();
+      renderFormal();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "送れませんでした"; }
+  }
+  async function sendFormalManual(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    if (!confirm("LegalSign の URL を、本人へ自分で送りましたか？（案内済みとして記録します）")) return;
+    try { await formalAct(btn, "記録中…", { action: "sendFormal", channel: "manual" }); renderFormal(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "記録できませんでした"; }
+  }
+  async function markFormalSigned(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    if (!confirm("LegalSign で本人の署名が終わったことを確かめましたか？（正式契約済みにすると取り消せません）")) return;
+    try { await formalAct(btn, "記録中…", { action: "markFormalSigned" }); renderFormal(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "記録できませんでした"; }
   }
 
   // ---- 本採用へ進める（Stage 8） ---------------------------------------------------

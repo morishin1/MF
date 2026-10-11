@@ -7,8 +7,9 @@
 //      既存のメール送信（lib/mail）と送った記録（gw_hr_mail_sends）を使う。新しい表は作らない
 //   3. 送った記録・監査ログに本人専用URL（token）を残さない。二重送信しない（同じ鍵の2回目は送らない）
 //   4. 送れないとき（設定が無い・アドレスが無い・失敗・結果不明）は、送付済みにせず、手で送る道を残す
-//   5. 本人は「上記の内容を確認し、同意します」にチェックしたときだけ同意できる。同意＝契約完了（accepted_at・版・タイムライン）
-//   6. HR は「契約完了」。NEXT ACTION は区分ごと
+//   5. 本人は「上記の条件通知書の内容を確認し、この条件に同意します」にチェックしたときだけ［条件を承諾する］を押せる
+//      （accepted_at・版・タイムライン。条件の承諾で、正式な契約ではない）
+//   6. HR は「条件承諾済み」。NEXT ACTION は区分ごと（正式契約は LegalSign。db/132 の分は下の「条件通知書・電子承諾・LegalSign」）
 //   ※ 実在の応募者・実際のメール送信は使わない（送信は偽物。宛先は example.test）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
@@ -190,7 +191,7 @@ await ok("メールの文面は区分ごと（育成：【株式会社エイト�
   assert.equal(m.subject, "【株式会社エイト】育成プログラムのご案内");
   assert.ok(m.body.startsWith("テスト 候補者 様\n"));
   assert.ok(m.body.includes("株式会社エイトより、\n育成プログラムへの参加をご案内いたします。"));
-  assert.ok(m.body.includes("「同意して契約を完了する」を押してください"));
+  assert.ok(m.body.includes("「条件を承諾する」を押してください"));
   assert.ok(m.body.includes("［内容を確認する］\n{{オファーURL}}"));
   assert.ok(m.body.includes("回答期限：2026年10月13日"));
   assert.equal(T.offerMail({ offer_type: "contractor" }, { name: "x", company: "株式会社エイト" }).subject, "【株式会社エイト】業務委託契約のご案内");
@@ -252,7 +253,7 @@ await ok("［メールでオファー送信］1回で：確定 → URL → メ�
   assert.equal(JSON.stringify(logged).includes(token), false, "監査ログにも残さない");
   assert.equal(JSON.stringify(r.body).includes(token), false, "送れたときは、画面にも URL を返さない");
   const a = (await getDetail("a1")).body.applicant;
-  assert.equal(a.statusLabel, "承諾待ち");
+  assert.equal(a.statusLabel, "条件承諾待ち");
 });
 
 await ok("同じ鍵の2回目は送らない（二度押し・通信のやり直し）", async () => {
@@ -343,7 +344,7 @@ await ok("結果不明（時間切れ）：届いたかもしれないので、�
   assert.equal((await patchOffer({ id, action: "markSent" })).statusCode, 200);
 });
 
-console.log("\n— 候補者：内容確認 → 同意 → 契約完了 —");
+console.log("\n— 候補者：内容確認 → 条件の承諾（db/132 が無い環境でも動く） —");
 async function sentTraining() {
   setup();
   const id = (await trainingOffer()).body.offer.id;
@@ -358,14 +359,14 @@ await ok("メールのURLから開ける：重要条件（コース・開始日�
   assert.equal(v.statusCode, 200, JSON.stringify(v.body));
   assert.deepEqual([v.body.typeLabel, v.body.offerName], ["育成枠", "育成参加決定通知"]);
   assert.deepEqual(v.body.items.filter((i) => i.highlight).map((i) => i.label), ["育成コース", "開始日", "期間", "報酬"]);
-  assert.equal(v.body.agreeCheck, "上記の内容を確認し、同意します");
-  assert.equal(v.body.agreeButton, "同意して契約を完了する");
+  assert.equal(v.body.agreeCheck, "上記の条件通知書の内容を確認し、この条件に同意します");
+  assert.equal(v.body.agreeButton, "条件を承諾する");
   assert.equal(JSON.stringify(v.body).includes("rank"), false);
   assert.ok(offerRow().viewed_at);
   assert.equal(app().status, "offer_response_pending");
 });
 
-await ok("同意のチェックが無ければ同意できない。チェックして同意 → accepted_at・版・タイムライン・「契約完了」", async () => {
+await ok("同意のチェックが無ければ承諾できない。チェックして承諾 → accepted_at・版・タイムライン・「条件承諾済み」", async () => {
   const token = await sentTraining();
   const no = await respond({ token, action: "accept" });
   assert.deepEqual([no.statusCode, no.body.error], [400, "agreement_required"]);
@@ -375,21 +376,21 @@ await ok("同意のチェックが無ければ同意できない。チェック�
   const o = offerRow();
   assert.ok(o.accepted_at, "accepted_at");
   assert.equal(app().status, "accepted");
-  assert.ok(tl().includes("本人が育成参加決定通知に同意（契約完了）"), tl().join(","));
+  assert.ok(tl().includes("本人が育成参加決定通知の条件を承諾"), tl().join(","));
   const log = logged.find((e) => e.action === "hr.offer_accepted");
   assert.deepEqual([log.detail.version, log.detail.agreed], [1, true], "どの版に同意したか");
   const v = await viewPublic(token);
   assert.equal(v.body.responseStatus, "accepted");
-  assert.equal(v.body.doneTitle, "契約手続きが完了しました。");
-  assert.equal(v.body.afterAccept, "ご同意ありがとうございます。\n次の手続きについて株式会社エイトからご案内します。");
+  assert.equal(v.body.doneTitle, "条件の承諾を受け付けました。");
+  assert.equal(v.body.afterAccept, "ご承諾ありがとうございます。\n正式な契約の手続きについて、株式会社エイトからご案内します。");
   const d = (await getDetail("a1")).body;
-  assert.equal(d.applicant.statusLabel, "契約完了");
-  assert.equal(d.applicant.nextActionCta, "育成開始手続きへ進む");
+  assert.equal(d.applicant.statusLabel, "条件承諾済み");
+  assert.equal(d.applicant.nextActionCta, "LMS・育成開始手続きへ");
   assert.ok(d.offers[0].acceptedAt && d.offers[0].version === 1);
   assert.equal((await respond({ token, action: "accept", agreed: true })).statusCode, 409, "二度は同意しない");
 });
 
-await ok("区分ごとに、契約完了後の NEXT ACTION が違う（業務委託 → 稼働開始準備）", async () => {
+await ok("区分ごとに、条件承諾後の NEXT ACTION が違う（業務委託 → 正式契約へ）", async () => {
   setup("contractor");
   const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "月額", wageAmount: 200000,
     offerTerms: { duties: T.DUTY_TEMPLATES[0].text, renewal: "協議のうえ更新", paymentTerms: "月末締め翌月末払い", nda: "必要" } });
@@ -405,7 +406,7 @@ await ok("区分ごとに、契約完了後の NEXT ACTION が違う（業務委
   assert.equal(items.支払条件, "月末締め翌月末払い");
   assert.equal((await respond({ token, action: "accept", agreed: true })).statusCode, 200);
   const a = (await getDetail("a1")).body.applicant;
-  assert.deepEqual([a.statusLabel, a.nextActionCta], ["契約完了", "稼働開始準備へ進む"]);
+  assert.deepEqual([a.statusLabel, a.nextActionCta], ["条件承諾済み", "正式契約へ"]);
 });
 
 await ok("区分の無い、これまでの合格通知は、これまでどおり承諾できる（チェックは求めない）", async () => {

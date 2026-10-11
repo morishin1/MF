@@ -1,4 +1,4 @@
-// 採用HR：オファー作成 → 内容を確認してメールで送信 → 本人の同意（契約完了）を、実際のブラウザで通す。
+// 採用HR：オファー作成 → 内容を確認してメールで送信 → 本人の条件承諾 を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（オファー作成・メール送信・同意完結 UI/UX改善仕様 §25）
 //   育成枠   … 通常表示は5項目前後／無限道場で期間が自動／報酬［なし］で金額を出さない・［時給］で出す／回答期限が自動
@@ -6,7 +6,7 @@
 //   パート   … 給与区分を選ばせない（時給だけ）
 //   メール   … ［内容を確認してメールで送信］→ 本人に届く内容と件名・本文 →［メールでオファー送信］1回で送る
 //              送れないとき（設定が無い・失敗）は URL を発行して手で送る → 送付済みにする
-//   HR       … 同意後は「契約完了」。区分ごとに次のアクションが違う
+//   HR       … 承諾後は「条件承諾済み」→ 正式契約（LegalSign）。区分ごとに次のアクションが違う
 //   候補者   … 重要条件が先／同意のチェックが無ければ押せない／同意で完了画面
 //   画面     … PC・768px・390px（1列・横にはみ出さない）
 //
@@ -156,7 +156,7 @@ console.log("\n=== 育成枠（PC）：入力を減らす → 内容を確認 �
   check(preview.includes("無限道場") && preview.includes("3か月") && preview.includes("時給 1,500円") && preview.includes("2026年11月1日"), "本人に届く重要条件を確認できる");
   check(await page.locator("#sm-subject").inputValue() === "【株式会社エイト】育成プログラムのご案内", "件名は区分ごと（直せる）");
   const mailBody = await page.locator("#sm-body").inputValue();
-  check(mailBody.includes("テスト 候補者 様") && mailBody.includes(OFFER_URL_TAG) && mailBody.includes("同意して契約を完了する"), "本文（URLの場所つき・直せる）");
+  check(mailBody.includes("テスト 候補者 様") && mailBody.includes(OFFER_URL_TAG) && mailBody.includes("条件を承諾する"), "本文（URLの場所つき・直せる）");
   check((await page.locator("#sm-to").innerText()).includes("candidate@example.test"), "宛先");
   await page.fill("#sm-subject", "【株式会社エイト】育成プログラムのご案内（テスト）");
   await page.locator("#sm-send").click();
@@ -282,21 +282,22 @@ console.log("\n=== 送れなかった（失敗）：送付済みにせず、URL 
   await ctx.close();
 }
 
-console.log("\n=== HR：同意のあとは「契約完了」。次のアクションは区分ごと ===");
-for (const [type, cta] of [["training", "育成開始手続きへ進む"], ["contractor", "稼働開始準備へ進む"], ["spot", "案件アサインへ進む"], ["part_time", "入社手続きへ進む"]]) {
+console.log("\n=== HR：承諾のあとは「条件承諾済み」。次のアクションは区分ごと（§37） ===");
+for (const [type, cta] of [["training", "LMS・育成開始手続きへ"], ["contractor", "正式契約へ"], ["spot", "案件アサイン・契約へ"], ["part_time", "本採用・正式契約へ"], ["executive_employee", "本採用・正式契約へ"]]) {
   const state = makeState(type, { status: "accepted" });
   state.offers = [{ id: "o1", version: 1, offer_type: type, respond_by: "2026-10-13", sent_at: "2026-10-10T02:00:00Z",
     viewed_at: "2026-10-10T03:00:00Z", accepted_at: "2026-10-10T04:00:00Z", expires_at: "2026-10-13T14:59:59Z", offer_terms: {} }];
   const { ctx, page, errs } = await open(state);
-  check((await page.locator("#hr-status").innerText()).includes("契約完了"), `[${type}] 状態：契約完了`);
+  check((await page.locator("#hr-status").innerText()).includes("条件承諾済み"), `[${type}] 状態：条件承諾済み（契約完了とは言わない）`);
+  check(!(await page.locator(".hr-detail").innerText()).includes("契約完了"), `[${type}] 「契約完了」と表示しない`);
   check(await page.locator(".hr-next button", { hasText: cta }).count() === 1, `[${type}] NEXT ACTION：${cta}`);
   const offerCard = await page.locator("#hr-detail-tab").innerText();
-  check(offerCard.includes("契約完了") && offerCard.includes("同意："), `[${type}] オファーの版に「契約完了・同意：日時」`);
+  check(offerCard.includes("条件承諾済み") && offerCard.includes("条件承諾："), `[${type}] オファーの版に「条件承諾済み・条件承諾：日時」`);
   check(!errs.length, `[${type}] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();
 }
 
-console.log("\n=== 候補者：メールのURL → 内容確認 → 同意 → 契約完了 ===");
+console.log("\n=== 候補者：メールのURL → 内容確認 → 同意のチェック → 条件を承諾 ==="); 
 for (const width of [1100, 768, 390]) {
   const offer = {
     offer_type: "training", employment_type: "育成枠", join_date: "2026-11-01", wage_type: "時給", wage_amount: 1500,
@@ -326,9 +327,9 @@ for (const width of [1100, 768, 390]) {
   check((await page.locator("#ho-type").innerText()) === "育成枠", `[${width}px] 区分：育成枠`);
   const text = await page.locator("#box").innerText();
   check(!/社内メモ|ランク|社長/.test(text), `[${width}px] 社内用語・社内用の項目を出さない`);
-  check((await page.locator("#ho-agree-box").innerText()).includes("上記の内容を確認し、同意します"), `[${width}px] 「□ 上記の内容を確認し、同意します」`);
+  check((await page.locator("#ho-agree-box").innerText()).includes("上記の条件通知書の内容を確認し、この条件に同意します"), `[${width}px] 「□ 上記の条件通知書の内容を確認し、この条件に同意します」`);
   const btn = page.locator("#ho-accept");
-  check((await btn.innerText()) === "同意して契約を完了する" && await btn.isDisabled(), `[${width}px] チェックするまで［同意して契約を完了する］は押せない`);
+  check((await btn.innerText()) === "条件を承諾する" && await btn.isDisabled(), `[${width}px] チェックするまで［条件を承諾する］は押せない`);
   if (width === 390) {
     const bw = await btn.evaluate((b) => b.getBoundingClientRect().width);
     check(bw > 300, `[390px] 同意ボタンは横いっぱい（${Math.round(bw)}px）`);
@@ -341,7 +342,7 @@ for (const width of [1100, 768, 390]) {
   await page.waitForTimeout(500);
   check(posted.length === 1 && posted[0].action === "accept" && posted[0].agreed === true, `[${width}px] 同意（agreed: true）を送る`);
   const done = await page.locator("#ho-complete").innerText();
-  check(done.includes("契約手続きが完了しました。") && done.includes("ご同意ありがとうございます。") && done.includes("株式会社エイトからご案内します"),
+  check(done.includes("条件の承諾を受け付けました。") && done.includes("ご承諾ありがとうございます。") && done.includes("株式会社エイトからご案内します"),
     `[${width}px] 完了画面`);
   check(!errs.length, `[${width}px] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();

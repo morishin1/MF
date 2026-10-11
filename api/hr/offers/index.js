@@ -44,6 +44,10 @@ import {
 import { sendMail, mailConfig, isEmail } from "../../../lib/mail/index.js";
 import { sendProblems, sendOutcome } from "../../../lib/hr-mail-template.js";
 import { publicBaseUrl } from "../../../lib/onboard-guide.js";
+import {
+  offerDocsReady, noticeTitleOf, buildNoticePdf, ensureNoticePdf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName,
+  checkLegalSignUrl,
+} from "../../../lib/hr-offer-docs.js";
 
 // 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
 const docName = (row) => offerTypeOf(row?.offer_type)?.offerName || "合格通知";
@@ -77,7 +81,11 @@ export default async function handler(req, res) {
   // 採用担当・責任者は、給与が見えないまま合格通知を作れる（応募者の条件は、サーバ側でそのまま引き継ぐ）
   const salary = guardSalaryOutput(res, canSeeSalary(ctx));
 
-  if (req.method === "GET") return sendDraft(req, res, sb, ctx, salary);
+  if (req.method === "GET") {
+    const q = new URL(req.url || "/", "http://localhost").searchParams;
+    if (q.get("file")) return offerFile(res, sb, ctx, user, q.get("id"), q.get("file"), salary);
+    return sendDraft(req, res, sb, ctx, salary);
+  }
   if (req.method === "POST") return create(req, res, sb, ctx, user, salary);
   if (req.method === "PATCH") return act(req, res, sb, ctx, user, salary);
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
@@ -159,6 +167,9 @@ async function act(req, res, sb, ctx, user, salary) {
   if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary);
   if (body.action === "markSent") return markSent(res, sb, ctx, user, offer, salary);
   if (body.action === "send") return sendOffer(req, res, sb, ctx, user, offer, body, salary);
+  if (body.action === "setLegalSign") return setLegalSign(res, sb, ctx, user, offer, body, salary);
+  if (body.action === "sendFormal") return sendFormal(req, res, sb, ctx, user, offer, body, salary);
+  if (body.action === "markFormalSigned") return markFormalSigned(res, sb, ctx, user, offer, salary);
   return json(res, 400, { error: "unknown_action" });
 }
 
@@ -168,6 +179,8 @@ async function update(res, sb, ctx, user, offer, body, salary) {
   if (!applicant || applicant.status !== "offer_review_pending") {
     return json(res, 409, { error: "invalid_state", hint: "社内確認待ちの間だけ、内容を直せます" });
   }
+  // 条件通知書PDFを作った版は直さない（送った書面と中身がずれないように。db/132）
+  if (offer.notice_pdf_path) return json(res, 409, { error: "invalid_state", hint: "条件通知書を作った版は直せません" });
 
   const row = normalizeOffer(body, null, {
     partial: true, offerType: offer.offer_type || null, salary, previousTerms: offer.offer_terms || {},
@@ -259,6 +272,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
       tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_issue",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version },
     });
+    await noticeForManual(sb, ctx, data);
     return json(res, 200, { offer: await shape(ctx, data, salary), token });
   }
 
@@ -292,6 +306,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
     target: `hr_offer:${made.id}`, detail: { applicantId: applicant.id, revokedOfferId: offer.id, version: nextVersion },
   });
 
+  await noticeForManual(sb, ctx, made);
   return json(res, 200, { offer: await shape(ctx, made, salary), token, status: "offer_resend_pending" });
 }
 
@@ -370,12 +385,16 @@ async function sendDraft(req, res, sb, ctx, salary) {
   await attachPay(ctx.tenantId, offer, "offer");
   // 本人に見える条件の行。給与を見られない人には、給与の行を出さない（行の値は文字列なので、出口の伏せ字が効かない）
   const items = publicOfferItems(offer).filter((it) => salary || !it.salary);
-  const mail = offerMail(offer, { name: applicant.name, company });
+  // 条件通知書PDF（db/132 があり、区分つきの版だけ）。送るときに作ってメールに添付する
+  const noticeTitle = offerDocsReady(offer) ? (offer.notice_title || noticeTitleOf(offer)) : null;
+  const mail = offerMail(offer, { name: applicant.name, company, attachment: noticeTitle });
   // offer の給与は、見られない人には出口（json）で外れる。送った記録は、応募者のメールの履歴（api/hr/applicants/mail.js）に並ぶ
   return json(res, 200, {
     offer: shapeOffer(offer), items, to: applicant.email || null, candidateName: applicant.name,
     subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG, mail: mailReady(applicant),
     canSend: SENDABLE_STATUSES.includes(applicant.status) && !offer.sent_at && !offer.revoked_at,
+    // ready=false は db/132 未適用・区分の無い版（PDF なしで、これまでどおり送る）。stored は作成済み（送った時点の版）
+    notice: { ready: Boolean(noticeTitle), title: noticeTitle, stored: Boolean(offer.notice_pdf_path), salaryVisible: salary },
   });
 }
 
@@ -428,7 +447,8 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   const { data: rec, error: insErr } = await sbAdmin.from("gw_hr_mail_sends").insert({
     tenant_id: ctx.tenantId, applicant_id: applicant.id, to_email: applicant.email, to_name: applicant.name,
     from_email: cfg.from || null, reply_to: cfg.replyTo || null,
-    template_id: null, template_version: null, template_name: `オファー送付（${docLabel}・第${offer.version}版）`,
+    template_id: null, template_version: null,
+    template_name: `オファー送付（${docLabel}・第${offer.version}版${offerDocsReady(offer) && noticeTitleOf(offer) ? "・条件通知書PDF添付" : ""}）`,
     subject, body: recordBody, status: "sending", request_key: requestKey,
     sent_by: user.id, sent_by_name: ctx.employee?.display_name || null,
   }).select(SEND_FIELDS).single();
@@ -470,9 +490,26 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
     });
   }
 
-  // 4) メールを送る（本文の {{オファーURL}} に本人専用URLを入れて）
+  // 4) 条件通知書PDF（確定したこの版から作る。db/132 が無い・区分の無い版は PDF なしで、これまでどおり送る）
+  let notice = null;
+  try {
+    const payOffer = { ...claimed };
+    await attachPay(ctx.tenantId, payOffer, "offer");
+    notice = await ensureNoticePdf(sb, payOffer, { candidateName: applicant.name, company });
+    if (notice) Object.assign(claimed, { notice_title: notice.title, notice_pdf_path: notice.path, notice_pdf_sha256: notice.sha256 });
+  } catch (e) {
+    console.error("[hr/offers] notice pdf", e?.message || e);
+    await sb.from("gw_hr_offers").update({ sent_at: null }).eq("id", offer.id).eq("tenant_id", ctx.tenantId);
+    await finish({ status: "not_sent", error: "条件通知書PDFを作れませんでした" });
+    return json(res, 500, { error: "notice_failed", hint: "条件通知書PDFを作れませんでした。時間をおいて、もう一度送ってください（内容は確定したままです）" });
+  }
+
+  // 5) メールを送る（本文の {{オファーURL}} に本人専用URLを入れて。条件通知書PDFを添付）
   const url = offerUrl(req, token);
-  const mail = await sendMail({ purpose: "recruiting", to: applicant.email, subject, text: text.split(OFFER_URL_TAG).join(url) });
+  const mail = await sendMail({
+    purpose: "recruiting", to: applicant.email, subject, text: text.split(OFFER_URL_TAG).join(url),
+    ...(notice ? { attachments: [{ filename: pdfFileName(notice.title, offer.version), content: notice.bytes, contentType: "application/pdf" }] } : {}),
+  });
   const outcome = sendOutcome(mail);
   const send = await finish({
     status: outcome, provider: mail.provider || null, provider_message_id: mail.providerMessageId || null,
@@ -487,12 +524,12 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   });
 
   if (outcome === "sent") {
-    // 5) 承諾待ちへ。タイムラインに「メールで送付」（件名まで）
+    // 6) 承諾待ちへ。タイムラインに「メールで送付」（件名まで）
     await sb.from("gw_hr_applicants").update({ status: "offer_sent", updated_at: new Date().toISOString() })
       .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_sent",
-      label: `${docLabel}をメールで送付`, detail: `第${offer.version}版　件名：${subject}`, created_by: user.id,
+      label: `${docLabel}をメールで送付`, detail: `第${offer.version}版${notice ? `・${notice.title}（PDF）添付` : ""}　件名：${subject}`, created_by: user.id,
     });
     return json(res, 200, { status: "sent", offer: await shape(ctx, claimed, salary), send, applicantStatus: "offer_sent" });
   }
@@ -513,4 +550,204 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   }
   return json(res, 502, { status: outcome, ...common,
     hint: `メールを送れませんでした（${mail.error || "原因不明"}）。下のURLと文面をコピーして手で送り、「送付済みにする」を押してください` });
+}
+
+// ---- 条件通知書PDF・承諾済みPDF（db/132） ------------------------------------------------
+
+/** 手で送るとき（URL を発行）にも、本人が保存できるよう条件通知書PDFを用意しておく。作れなくても URL の発行は止めない */
+async function noticeForManual(sb, ctx, offer) {
+  if (!offerDocsReady(offer) || !noticeTitleOf(offer) || offer.notice_pdf_path) return;
+  try {
+    const { applicant, company } = await loadSendContext(sb, ctx, offer);
+    const payOffer = { ...offer };
+    await attachPay(ctx.tenantId, payOffer, "offer");
+    const n = await ensureNoticePdf(sb, payOffer, { candidateName: applicant?.name, company });
+    if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
+  } catch (e) { console.error("[hr/offers] notice pdf (manual)", e?.message || e); }
+}
+
+/**
+ * GET /api/hr/offers?id=…&file=preview|notice|accepted … PDF を返す（採用HRを使える人。PDF には給与が入るので、給与を見られる人だけ）
+ *   preview  … 送る前の確認用（作るだけで置かない）。作成済みなら、置いたもの
+ *   notice   … 送った条件通知書（その版のまま）
+ *   accepted … 承諾済みPDF（条件通知書＋電子承諾記録）。まだ無ければ、承諾の記録から作って置く
+ */
+async function offerFile(res, sb, ctx, user, id, file, salary) {
+  if (!id || !["preview", "notice", "accepted"].includes(file)) return json(res, 400, { error: "invalid_query" });
+  if (!salary) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
+  const { data: offer } = await sb.from("gw_hr_offers").select("*").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!offer) return json(res, 404, { error: "not_found" });
+  if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+  if (!noticeTitleOf(offer)) return json(res, 404, { error: "no_notice", hint: "区分の無い合格通知には条件通知書がありません" });
+  try {
+    if (file === "accepted") {
+      const acc = await ensureAcceptedPdf(sb, offer);
+      if (!acc) return json(res, 404, { error: "no_file", hint: "承諾済みPDFはまだありません" });
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_download", target: `hr_offer:${offer.id}`, detail: { file } });
+      return sendPdf(res, acc.bytes, pdfFileName(offer.notice_title, offer.version, true));
+    }
+    if (offer.notice_pdf_path) {
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_download", target: `hr_offer:${offer.id}`, detail: { file: "notice" } });
+      return sendPdf(res, await readPdf(offer.notice_pdf_path), pdfFileName(offer.notice_title, offer.version));
+    }
+    if (file === "notice") return json(res, 404, { error: "no_file", hint: "条件通知書はまだ作っていません（送るときに作ります）" });
+    const { applicant, company } = await loadSendContext(sb, ctx, offer);
+    await attachPay(ctx.tenantId, offer, "offer");
+    const built = await buildNoticePdf(offer, { candidateName: applicant?.name, company });
+    return sendPdf(res, built.bytes, `確認用_${pdfFileName(built.title, offer.version)}`);
+  } catch (e) {
+    console.error("[hr/offers] pdf", e?.message || e);
+    return json(res, 500, { error: "pdf_failed", hint: "PDFを用意できませんでした" });
+  }
+}
+
+// ---- 正式契約（LegalSign。db/132） ----------------------------------------------------
+// URL は gw_hr_offers.legalsign_url にだけ持つ。監査ログ・タイムライン・console には書かない（事実だけ）
+
+const formalNotReady = (res) => json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+const lockedResponse = (res, e) => (e?.code === "55000"
+  ? json(res, 409, { error: "locked", hint: "確定した記録は変更できません" }) : null);
+
+async function loadAccepted(sb, ctx, offer) {
+  const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name, email, status")
+    .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  return applicant;
+}
+
+/** LegalSign の URL を登録・直す（本人へ正式契約を案内する前まで） */
+async function setLegalSign(res, sb, ctx, user, offer, body, salary) {
+  if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから登録できます" });
+  if (offer.formal_sent_at) return json(res, 409, { error: "locked", hint: "本人へ案内したあとは、URL を変えられません" });
+  const checked = checkLegalSignUrl(body?.url);
+  if (checked.error) return json(res, 400, { error: "invalid_body", hint: checked.error });
+  const { data, error } = await sb.from("gw_hr_offers").update({ legalsign_url: checked.url })
+    .eq("id", offer.id).eq("tenant_id", ctx.tenantId).is("formal_sent_at", null).select("*").maybeSingle();
+  if (error) return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed" });
+  if (!data) return json(res, 409, { error: "locked", hint: "本人へ案内したあとは、URL を変えられません" });
+  const first = !offer.legalsign_url;
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: offer.applicant_id, event_key: "formal_url_set",
+    label: first ? "正式契約（LegalSign）の URL を登録" : "正式契約（LegalSign）の URL を変更", detail: `第${offer.version}版`, created_by: user.id,
+  });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_legalsign_url_set",
+    target: `hr_offer:${offer.id}`, detail: { applicantId: offer.applicant_id, version: offer.version, changed: !first } });
+  return json(res, 200, { offer: await shape(ctx, data, salary) });
+}
+
+/** 正式契約の案内メールの下書き（{{正式契約URL}} の位置に、送るときサーバーが URL を入れる） */
+const FORMAL_URL_TAG = "{{正式契約URL}}";
+function formalMail(offer, { name, company }) {
+  const c = company || "弊社";
+  return {
+    subject: `【${c}】正式なご契約のお手続きのご案内`,
+    body: [
+      `${name} 様`, "",
+      "このたびは条件をご承諾いただき、ありがとうございます。", "",
+      "正式なご契約は、電子契約サービス（LegalSign）で行います。",
+      "下記より内容をご確認のうえ、署名のお手続きをお願いいたします。", "",
+      "［正式契約の手続きへ］", FORMAL_URL_TAG, "",
+      "ご不明な点がございましたら、このメールにご返信ください。", "",
+      c, "採用担当",
+    ].join("\n"),
+  };
+}
+
+/**
+ * 本人へ正式契約（LegalSign）を案内する。
+ *   channel "email" … 既存の採用メールで送る（送った記録には URL を残さない）／ "manual" … 自分で送った、という記録だけ
+ *   GET 用の下書きは body.preview=true で返す（送らない）
+ */
+async function sendFormal(req, res, sb, ctx, user, offer, body, salary) {
+  if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから案内できます" });
+  if (!offer.legalsign_url) return json(res, 400, { error: "invalid_body", hint: "先に LegalSign の URL を登録してください" });
+  if (offer.formal_signed_at) return json(res, 409, { error: "invalid_state", hint: "すでに正式契約済みです" });
+  const applicant = await loadAccepted(sb, ctx, offer);
+  if (!applicant) return json(res, 404, { error: "not_found" });
+  const { company } = await loadSendContext(sb, ctx, offer);
+
+  if (body?.preview) {
+    const m = formalMail(offer, { name: applicant.name, company });
+    return json(res, 200, { subject: m.subject, body: m.body, urlTag: FORMAL_URL_TAG, to: applicant.email || null, mail: mailReady(applicant) });
+  }
+
+  const channel = body?.channel === "manual" ? "manual" : "email";
+  let send = null;
+  if (channel === "email") {
+    const requestKey = String(body?.requestKey || "");
+    if (!REQUEST_KEY_RE.test(requestKey)) return json(res, 400, { error: "invalid_body", hint: "送信の鍵がありません。画面を開き直してください" });
+    const sbAdmin = admin();
+    const prev = await sbAdmin.from("gw_hr_mail_sends").select(SEND_FIELDS).eq("tenant_id", ctx.tenantId).eq("request_key", requestKey).maybeSingle();
+    if (prev.data) return json(res, 200, { duplicate: true, status: prev.data.status, send: shapeSendRow(prev.data) });
+    const subject = String(body?.subject ?? "").trim();
+    const text = String(body?.body ?? "").replace(/\r\n/g, "\n");
+    if (!text.includes(FORMAL_URL_TAG)) return json(res, 400, { error: "cannot_send", hint: `本文に ${FORMAL_URL_TAG} を残してください（LegalSign の URL が入る場所です）` });
+    const recordBody = text.split(FORMAL_URL_TAG).join("（LegalSign の URL・記録には残しません）");
+    const problems = sendProblems({ subject, body: recordBody, applicantId: applicant.id });
+    if (problems.length) return json(res, 400, { error: "cannot_send", hint: problems[0], problems });
+    const ready = mailReady(applicant);
+    if (!ready.configured) return json(res, 409, { error: isEmail(applicant.email) ? "mail_not_configured" : "no_email", hint: `メールで送れません（${ready.reason}）` });
+    const cfg = mailConfig("recruiting");
+    const { data: rec, error: insErr } = await sbAdmin.from("gw_hr_mail_sends").insert({
+      tenant_id: ctx.tenantId, applicant_id: applicant.id, to_email: applicant.email, to_name: applicant.name,
+      from_email: cfg.from || null, reply_to: cfg.replyTo || null, template_id: null, template_version: null,
+      template_name: `正式契約の案内（LegalSign・第${offer.version}版）`, subject, body: recordBody, status: "sending",
+      request_key: requestKey, sent_by: user.id, sent_by_name: ctx.employee?.display_name || null,
+    }).select(SEND_FIELDS).single();
+    if (insErr) {
+      if (insErr.code === "23505") return json(res, 200, { duplicate: true, status: "sending" });
+      return json(res, 500, { error: "db_insert_failed" });
+    }
+    const mail = await sendMail({ purpose: "recruiting", to: applicant.email, subject, text: text.split(FORMAL_URL_TAG).join(offer.legalsign_url) });
+    const outcome = sendOutcome(mail);
+    const { data: done } = await sbAdmin.from("gw_hr_mail_sends").update({
+      status: outcome, provider: mail.provider || null, provider_message_id: mail.providerMessageId || null,
+      error: outcome === "sent" ? null : String(mail.error || "").slice(0, 300) || null, finished_at: new Date().toISOString(),
+    }).eq("id", rec.id).eq("tenant_id", ctx.tenantId).select(SEND_FIELDS).single();
+    send = shapeSendRow(done || rec);
+    if (outcome !== "sent") {
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_formal_send_failed",
+        target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version, status: outcome } });
+      return json(res, outcome === "unknown" ? 202 : 502, { status: outcome, send,
+        hint: outcome === "unknown" ? "送れたかどうか分かりません。届いているか確かめてから、必要なら「自分で送った」として記録してください"
+          : `メールを送れませんでした（${mail.error || "原因不明"}）` });
+    }
+  }
+
+  // 案内した（初回の日時・人だけ残す。2回目以降の案内は、記録を変えない）
+  let data = offer;
+  if (!offer.formal_sent_at) {
+    const r = await sb.from("gw_hr_offers").update({ formal_sent_at: new Date().toISOString(), formal_sent_by: user.id })
+      .eq("id", offer.id).eq("tenant_id", ctx.tenantId).is("formal_sent_at", null).select("*").maybeSingle();
+    if (r.error) return lockedResponse(res, r.error) || json(res, 500, { error: "db_update_failed" });
+    data = r.data || offer;
+  }
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "formal_sent",
+    label: channel === "email" ? "正式契約（LegalSign）を本人へメールで案内" : "正式契約（LegalSign）を本人へ案内（自分で送付）",
+    detail: `第${offer.version}版`, created_by: user.id,
+  });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_formal_sent",
+    target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version, channel, again: Boolean(offer.formal_sent_at) } });
+  return json(res, 200, { status: "sent", channel, send, offer: await shape(ctx, data, salary) });
+}
+
+/** 正式契約済みにする（LegalSign で署名が終わったのを、HR が確かめて押す。誰が・いつ。取り消せない） */
+async function markFormalSigned(res, sb, ctx, user, offer, salary) {
+  if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾していません" });
+  if (offer.formal_signed_at) return json(res, 409, { error: "locked", hint: "すでに正式契約済みです" });
+  const { data, error } = await sb.from("gw_hr_offers")
+    .update({ formal_signed_at: new Date().toISOString(), formal_signed_by: user.id })
+    .eq("id", offer.id).eq("tenant_id", ctx.tenantId).is("formal_signed_at", null).select("*").maybeSingle();
+  if (error) return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed" });
+  if (!data) return json(res, 409, { error: "locked", hint: "すでに正式契約済みです" });
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: offer.applicant_id, event_key: "formal_signed",
+    label: "正式契約済み（LegalSign）", detail: `第${offer.version}版`, created_by: user.id,
+  });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_formal_signed",
+    target: `hr_offer:${offer.id}`, detail: { applicantId: offer.applicant_id, version: offer.version } });
+  return json(res, 200, { offer: await shape(ctx, data, salary) });
 }

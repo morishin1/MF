@@ -50,6 +50,11 @@
     .ho-complete h3 { display:flex; align-items:center; gap:8px; margin:0 0 8px; font-size:17px; }
     .ho-complete h3 .material-symbols-outlined { flex:none; width:22px; overflow:hidden; }
     .ho-complete p { margin:0; white-space:pre-wrap; font-size:14px; line-height:1.8; color:#1b2440; }
+    .btn.ho-pdf { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; margin-top:16px; text-decoration:none; }
+    .btn.ho-pdf .material-symbols-outlined { font-size:18px; width:18px; overflow:hidden; }
+    .ho-formal { margin-top:14px; }
+    .ho-formal p { font-size:13px; color:#1b2440; margin:0 0 8px; }
+    .ho-formal .btn { display:block; text-align:center; text-decoration:none; }
     @media (max-width: 380px) { .ho-key { grid-template-columns:1fr; } }
   </style>
 </head>
@@ -102,7 +107,7 @@
 
   // 採用区分つきのオファー（正社員・育成・業務委託・パート・スポット）。区分ごとの書類名と条件の行は
   // サーバが作る（lib/hr-offer-types.js）。社内の状態・評価・社内用の項目は届かない。
-  // 重要条件を先にコンパクトに出し、その下に契約・条件の本文。最後に「確認し、同意します」＋［同意して契約を完了する］
+  // 重要条件を先にコンパクトに出し、その下に契約・条件の本文。最後に同意のチェック＋［条件を承諾する］（正式な契約は LegalSign）
   function renderTyped(o) {
     const items = o.items || [];
     const key = items.filter((it) => it.highlight);
@@ -130,23 +135,36 @@
       ${o.messageToCandidate ? `
         <h4 style="font-size:12.5px;color:#6b7080;margin:20px 0 0;">採用担当からのメッセージ</h4>
         <div class="ho-msg">${esc(o.messageToCandidate)}</div>` : ""}
+      ${o.noticePdf ? `
+        <a class="btn btn-secondary ho-pdf" id="ho-notice-pdf" href="${esc(pdfUrl("notice"))}" download>
+          <span class="material-symbols-outlined">download</span>${esc(o.noticeTitle || "条件通知書")}PDFを保存</a>` : ""}
       <div id="ho-actions"></div>`;
     renderActions(o);
   }
+  // 本人専用の PDF（条件通知書・承諾済み）。この URL の token だけで開ける（ログイン不要）
+  const pdfUrl = (file) => `/api/hr/offers/public?token=${encodeURIComponent(token)}&file=${file}`;
+  // 正式契約（LegalSign）の URL は https:// のときだけ開く（それ以外はリンクにしない）
+  const safeHttps = (u) => (/^https:\/\/[^\s"'<>]+$/i.test(String(u || "")) ? String(u) : null);
 
-  // 区分つきの同意（チェックしたときだけ押せる）。同意＝契約手続きの完了
+  // 区分つきの条件承諾（チェックしたときだけ押せる）。承諾＝条件の承諾（正式な契約は、このあと LegalSign で）
   function renderAgree(o, box, mailto) {
     if (o.responseStatus === "accepted") {
+      const legal = safeHttps(o.formal?.url);
       box.innerHTML = `<div class="ho-complete" id="ho-complete">
-        <h3><span class="material-symbols-outlined">check_circle</span>${esc(o.doneTitle || "契約手続きが完了しました。")}</h3>
-        <p>${esc(o.afterAccept || "")}</p></div>`;
+        <h3><span class="material-symbols-outlined">check_circle</span>${esc(o.doneTitle || "条件の承諾を受け付けました。")}</h3>
+        <p>${esc(o.formal?.signed ? "正式な契約の手続きが完了しています。次の手続きについて、採用担当からご案内します。" : (o.afterAccept || ""))}</p></div>
+        ${legal ? `<div class="ho-formal" id="ho-formal">
+          <p>正式な契約は、電子契約サービス（LegalSign）で行います。</p>
+          <a class="btn btn-primary ho-accept" id="ho-legalsign" href="${esc(legal)}" target="_blank" rel="noopener noreferrer">LegalSignで正式契約を行う</a></div>` : ""}
+        ${o.acceptedPdf || o.noticePdf ? `<a class="btn btn-secondary ho-pdf" id="ho-accepted-pdf" href="${esc(pdfUrl(o.acceptedPdf ? "accepted" : "notice"))}" download>
+          <span class="material-symbols-outlined">download</span>${o.acceptedPdf ? "承諾済みPDF（電子承諾記録つき）を保存" : "条件通知書PDFを保存"}</a>` : ""}`;
       return;
     }
     box.innerHTML = `
       <div class="ho-actions">
         <label class="ho-agree" id="ho-agree-box"><input type="checkbox" id="ho-agree" onchange="toggleAgree(this)">
-          <span>${esc(o.agreeCheck || "上記の内容を確認し、同意します")}</span></label>
-        <button class="btn btn-primary ho-accept" id="ho-accept" disabled onclick="submitAccept(this)">${esc(o.agreeButton || "同意して契約を完了する")}</button>
+          <span>${esc(o.agreeCheck || "上記の条件通知書の内容を確認し、この条件に同意します")}</span></label>
+        <button class="btn btn-primary ho-accept" id="ho-accept" disabled onclick="submitAccept(this)">${esc(o.agreeButton || "条件を承諾する")}</button>
         <button class="btn btn-secondary" onclick="openDeclineForm()">辞退する</button>
         <div id="ho-decline"></div>
         ${mailto ? `
@@ -241,13 +259,15 @@
   async function submitAccept(btn) {
     // 区分つきは、チェック（上記の内容を確認し、同意します）が確認の代わり。これまでの合格通知は確認ダイアログ
     if (current.offerType) {
-      if (!el("ho-agree")?.checked) { el("ho-msg").textContent = "「上記の内容を確認し、同意します」にチェックしてください"; return; }
+      if (!el("ho-agree")?.checked) { el("ho-msg").textContent = `「${current.agreeCheck || "上記の条件通知書の内容を確認し、この条件に同意します"}」にチェックしてください`; return; }
     } else if (!confirm("この内容で承諾します。よろしいですか？")) return;
     const msg = el("ho-msg"); msg.textContent = "";
     btn.disabled = true;
     try {
-      if (current.offerType) await respond({ action: "accept", agreed: true });
-      else await API.hrOfferRespond(token, "accept");
+      if (current.offerType) {
+        const r = await respond({ action: "accept", agreed: true });
+        current.acceptedPdf = Boolean(r?.acceptedPdf || current.noticePdf);
+      } else await API.hrOfferRespond(token, "accept");
       current.responseStatus = "accepted";
       renderActions(current);
     } catch (e) {

@@ -110,13 +110,17 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.locator(".hr-table tr.click").first().click();
   await page.waitForTimeout(500);
   check(await page.locator(".hr-detail").isVisible(), "右ドロワーが開く");
-  check((await page.locator(".hr-detail").innerText()).includes("NEXT ACTION"), "NEXT ACTIONが最優先表示される");
+  check(await page.locator(".hr-detail .hr-next").isVisible(), "NEXT ACTION（いまの状態と次の1つ）が概要の最初に出る");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   check((await page.locator(".hr-detail").innerText()).includes("応募"), "選考タイムラインが出る");
   {
-    // 選考（どこまで進んだか）・状態（いま何待ちか）が NEXT ACTION の前に出る（迷わないUI）
-    const now = await page.locator(".hr-next .now").innerText();
-    check(now.includes("選考") && now.includes("状態"), "「選考」「状態」が NEXT ACTION の前に出る（迷わないUI）");
+    // NEXT ACTION は「いまの状態」と「次に押すボタン1つ」だけ（応募者ドロワー改善 §3・§4：高さ 80〜110px 程度）
+    const card = page.locator(".hr-next");
+    check((await page.locator(".hr-next #hr-status").innerText()).trim().length > 0, "いまの状態が出る");
+    check(await card.locator("button.btn-primary").count() <= 1, "主のボタンは1つだけ");
+    const h = (await card.boundingBox()).height;
+    check(h <= 130, `NEXT ACTION の枠は短い（${Math.round(h)}px）`);
+    check(!(await card.innerText()).includes("どこまで進んでいるか"), "選考・状態の長い説明は出さない");
   }
 
   console.log("— 担当を詳細から変更できる —");

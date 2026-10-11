@@ -7,7 +7,7 @@
 //   ・表が無い（PGRST205）／列が無い（42703）状態の再現（missing）
 //   ・RLS：userClient は、表ごとの読み取り可否（rls）を通す。書き込みは、ポリシーが無いので、すべて拒否（42501）
 //     → API が、書き込みに userClient を使ったら、テストが落ちる（本物の DB でも落ちる）
-//   ・Storage：置く・読む・消す・署名付きURL。state.storageFail を立てると、消すのが失敗する
+//   ・Storage：置く（upload・署名付きアップロードURL）・読む・消す・署名付きURL。state.storageFail を立てると、置く・消すのが失敗する
 //   ・外部キー（on delete cascade／set null）：createMemDb({ fks }) で、親の表ごとに渡す。親の行を消すと、子も（再帰で）消える／外れる
 
 import crypto from "node:crypto";
@@ -220,6 +220,13 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
           signed.push({ bucket, path, ttl });
           if (!storageFiles.has(`${bucket}/${path}`)) return { data: null, error: { message: "Object not found" } };
           return { data: { signedUrl: `https://storage.example/${bucket}/${path}?token=t` }, error: null };
+        },
+        // 置く（サーバーから直接）。upsert でなければ、同じパスがあると断る（本物の Storage と同じ）
+        upload: async (path, bytes, opts = {}) => {
+          if (state.storageFail) return { data: null, error: { message: state.storageFail } };
+          if (storageFiles.has(`${bucket}/${path}`) && !opts.upsert) return { data: null, error: { message: "The resource already exists", statusCode: "409" } };
+          storageFiles.set(`${bucket}/${path}`, Buffer.from(bytes));
+          return { data: { path }, error: null };
         },
         download: async (path) => {
           const b = storageFiles.get(`${bucket}/${path}`);
