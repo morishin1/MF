@@ -20,6 +20,9 @@
     },
     "api/sales/ai/drafts.js": {
       "maxDuration": 60
+    },
+    "api/sales/ai/classify.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [

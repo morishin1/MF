@@ -4,6 +4,8 @@
 -- ■ 足すもの（既存の表・列は変えない。gw_sales_approaches に列を1つ足すだけ）
 --   gw_sales_ai_settings  … テナントごとの設定（有効／停止・上限・重点商材・配点・署名）
 --   gw_sales_ai_analyses  … 企業ごとの AI 分析（履歴を残す）
+--   gw_sales_ai_classifications … 商材の一次分類（1社1行・最新だけ）。候補を探すための安い分類。
+--                           企業マスタの「提案サービス」（gw_sales_companies.service）は書き換えない
 --   gw_sales_ai_drafts    … AI 営業文（版・承認）
 --   gw_sales_ai_usage     … AI を呼ぶたびに1行（予約 → 確定 → 解放）。予算と異常の判定に使う台帳
 --   gw_sales_approaches.ai_draft_id … AI 文面で送ったアタック（接触の数え方は変えない）
@@ -96,6 +98,28 @@ create index if not exists idx_gw_sales_ai_analyses_tenant on public.gw_sales_ai
 comment on table public.gw_sales_ai_analyses is
   'AI営業の企業分析（履歴。最新は created_at が最大の行。db/131）。事実は出典URLつき、推測は hypotheses に分ける';
 
+-- 2b) 商材の一次分類（候補探し）---------------------------------------------------------
+-- 企業の登録情報＋トップページ1枚だけを見て、重点商材ごとの合いそうな度合い（0〜10）を付ける。
+-- 本番の「提案サービス」欄は未設定が多く、電話番号などが入っている行もあるため、そこには頼らず・書き戻さない。
+create table if not exists public.gw_sales_ai_classifications (
+  company_id     uuid primary key references public.gw_sales_companies(id) on delete cascade,
+  tenant_id      uuid not null references public.tenants(id) on delete cascade,
+  best_service   text check (best_service is null or char_length(best_service) <= 100),
+  fits           jsonb not null default '{}'::jsonb,       -- { "<商材>": 0〜10 }
+  confidence     text check (confidence is null or confidence in ('high','mid','low')),
+  reason         text check (reason is null or char_length(reason) <= 500),
+  source         text not null check (source in ('site','meta')),   -- site = トップページも読んだ／meta = 登録情報だけ
+  site_status    text check (site_status is null or site_status in ('ok','robots_blocked','site_unreachable','no_site')),
+  service_field_invalid boolean not null default false,  -- 提案サービス欄に電話番号などが入っていた（直さない。印だけ）
+  model          text,
+  prompt_version text,
+  classified_by  uuid,
+  classified_at  timestamptz not null default now()
+);
+create index if not exists idx_gw_sales_ai_classifications_tenant on public.gw_sales_ai_classifications(tenant_id, best_service);
+comment on table public.gw_sales_ai_classifications is
+  'AI営業：商材の一次分類（1社1行・最新）。候補を探すためだけに使い、企業マスタは書き換えない（db/131）';
+
 -- 3) 営業文 ---------------------------------------------------------------------
 create table if not exists public.gw_sales_ai_drafts (
   id                 uuid primary key default gen_random_uuid(),
@@ -165,7 +189,7 @@ create table if not exists public.gw_sales_ai_usage (
   tenant_id     uuid not null references public.tenants(id) on delete cascade,
   company_id    uuid references public.gw_sales_companies(id) on delete set null,
   employee_id   uuid references public.gw_employees(id) on delete set null,
-  purpose       text not null check (purpose in ('analysis','draft','deep_analysis')),
+  purpose       text not null check (purpose in ('analysis','draft','deep_analysis','classify')),
   model         text not null,
   status        text not null default 'reserved' check (status in ('reserved','committed','released')),
   reserved_usd  numeric(12,6) not null default 0 check (reserved_usd >= 0),
@@ -296,6 +320,7 @@ alter table public.gw_sales_ai_settings enable row level security;
 alter table public.gw_sales_ai_analyses enable row level security;
 alter table public.gw_sales_ai_drafts   enable row level security;
 alter table public.gw_sales_ai_usage    enable row level security;
+alter table public.gw_sales_ai_classifications enable row level security;
 
 drop policy if exists gw_sales_ai_settings_select on public.gw_sales_ai_settings;
 create policy gw_sales_ai_settings_select on public.gw_sales_ai_settings for select using (public.gw_is_sales(tenant_id));
@@ -305,5 +330,7 @@ drop policy if exists gw_sales_ai_drafts_select on public.gw_sales_ai_drafts;
 create policy gw_sales_ai_drafts_select on public.gw_sales_ai_drafts for select using (public.gw_is_sales(tenant_id));
 drop policy if exists gw_sales_ai_usage_select on public.gw_sales_ai_usage;
 create policy gw_sales_ai_usage_select on public.gw_sales_ai_usage for select using (public.gw_is_sales(tenant_id));
+drop policy if exists gw_sales_ai_classifications_select on public.gw_sales_ai_classifications;
+create policy gw_sales_ai_classifications_select on public.gw_sales_ai_classifications for select using (public.gw_is_sales(tenant_id));
 
 commit;

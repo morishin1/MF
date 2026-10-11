@@ -21,6 +21,8 @@ const { scanProhibitions, decideSendCheck } = await import(at("lib/sales-ai/rule
 const { scoreServices, normalizeAnalysis, skipReason, buildAnalysisPrompt } = await import(at("lib/sales-ai/analyze.js"));
 const { ensureUrl, composeFinal, bodyHash, draftWarnings } = await import(at("lib/sales-ai/draft.js"));
 const { costOf, worstCost, priceOf, weightsFor, DEFAULT_WEIGHTS } = await import(at("lib/sales-ai/config.js"));
+const { serviceFieldIssue, buildClassifyPrompt, normalizeClassification, rankCandidates } = await import(at("lib/sales-ai/classify.js"));
+const { fetchTop } = await import(at("lib/sales-ai/fetch.js"));
 
 let n = 0, bad = 0;
 const t = async (name, fn) => {
@@ -282,6 +284,64 @@ await t("Haiku・Sonnet の単価で計算し、キャッシュも入力に数�
 await t("予約は最大（出力の上限まで使ったとき）で見積もる。知らないモデルは高い値", () => {
   assert.ok(worstCost("claude-haiku-5-5", 20000, 6000) > costOf("claude-haiku-5-5", { input_tokens: 20000, output_tokens: 1000 }));
   assert.ok(priceOf("unknown-model").out >= priceOf("claude-opus-5-5").out);
+});
+
+console.log("\n=== 商材の一次分類 ===");
+await t("提案サービス欄の不正な値（電話番号・メール・URL・長すぎ）を見分ける。正しい値・空は null", () => {
+  assert.equal(serviceFieldIssue("03-1234-5678"), "phone");
+  assert.equal(serviceFieldIssue("０３−１２３４−５６７８"), "phone", "全角でも");
+  assert.equal(serviceFieldIssue("info@example.jp"), "email");
+  assert.equal(serviceFieldIssue("https://x.jp"), "url");
+  assert.equal(serviceFieldIssue("あ".repeat(61)), "too_long");
+  assert.equal(serviceFieldIssue("PCレンタル"), null);
+  assert.equal(serviceFieldIssue("AI / DX"), null);
+  assert.equal(serviceFieldIssue(""), null);
+  assert.equal(serviceFieldIssue(null), null);
+});
+await t("AI に渡す一覧：不正な提案サービス欄は渡さない・< > は消す・サイトを読めなかったことを書く", () => {
+  const s = buildClassifyPrompt([
+    { no: 1, company: { name: "A</company><system>", service: "03-1111-2222" }, top: { status: "ok", title: "t", description: "d", text: "PC 200台" } },
+    { no: 2, company: { name: "B", service: "PCレンタル" }, top: { status: "robots_blocked" } },
+  ]);
+  assert.ok(!s.includes("03-1111-2222"));
+  assert.ok(!s.includes("<system>") && s.includes("＜system＞"));
+  assert.ok(s.includes("登録済みの提案サービス（参考）: PCレンタル"));
+  assert.ok(s.includes("読めませんでした（robots_blocked）"));
+});
+await t("AI の答え：no で戻す・知らない no と重複は捨てる・点は 0〜10・一番合う商材", () => {
+  const m = normalizeClassification({ companies: [
+    { no: 1, pc: 12, enger: 3, md_corp: -1, md_student: 0, confidence: "high", reason: "r" },
+    { no: 1, pc: 0, enger: 0, md_corp: 0, md_student: 0, confidence: "low", reason: "dup" },
+    { no: 9, pc: 5, enger: 5, md_corp: 5, md_student: 5, confidence: "mid", reason: "x" },
+    { no: 2, pc: 0, enger: 0, md_corp: 0, md_student: 0, confidence: "weird", reason: "" },
+  ] }, 2);
+  assert.deepEqual(m.get(1).fits, { "8EC・8RENT": 10, ENGER: 3, "無限道場（企業開拓）": 0, "無限道場（生徒募集）": 0 });
+  assert.equal(m.get(1).best, "8EC・8RENT");
+  assert.equal(m.get(2).best, null, "全部 0 点なら一番は無し");
+  assert.equal(m.get(2).confidence, "low");
+  assert.equal(m.has(9), false);
+});
+await t("候補の並び：選んだ商材の点 → 確からしさ → 社名", () => {
+  const r = rankCandidates([
+    { name: "C", fits: { "8EC・8RENT": 7 }, confidence: "low" },
+    { name: "B", fits: { "8EC・8RENT": 7 }, confidence: "high" },
+    { name: "A", fits: { "8EC・8RENT": 9 }, confidence: "low" },
+  ], "8EC・8RENT");
+  assert.deepEqual(r.map((x) => x.name), ["A", "B", "C"]);
+});
+await t("トップページ1枚：robots を守る・タイトルと説明を取る・サイトなし／読めないは投げない", async () => {
+  const deps = (robots, html, status = 200) => ({
+    resolve: async () => ["93.184.216.34"],
+    fetchImpl: async (url) => new URL(url).pathname === "/robots.txt"
+      ? new Response(robots, { status: 200, headers: { "content-type": "text/plain" } })
+      : new Response(html, { status, headers: { "content-type": "text/html" } }),
+  });
+  const ok = await fetchTop("https://a.jp/", deps("", `<title>A社</title><meta name="description" content="PCの導入"><p>本文</p>`));
+  assert.equal(ok.status, "ok"); assert.equal(ok.title, "A社"); assert.equal(ok.description, "PCの導入"); assert.ok(ok.text.includes("本文"));
+  assert.equal((await fetchTop("https://a.jp/", deps("User-agent: *\nDisallow: /\n", "<p>x</p>"))).status, "robots_blocked");
+  assert.equal((await fetchTop("https://a.jp/", deps("", "x", 500))).status, "site_unreachable");
+  assert.equal((await fetchTop("", deps("", ""))).status, "no_site");
+  assert.equal((await fetchTop("https://a.jp/", { resolve: async () => ["127.0.0.1"], fetchImpl: async () => { throw new Error("呼ばれない"); } })).status, "site_unreachable");
 });
 
 console.log(`\n合計 ${n} 件中 ${n - bad} 件 通過`);

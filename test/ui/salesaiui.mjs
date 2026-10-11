@@ -27,7 +27,7 @@ const analysis = (cid, over = {}) => ({
 
 async function open({ roles = ["sales"], apps = ["sales"], canApprove = false, canManage = false, enabled = true, width = 1280, pending = [] } = {}) {
   const calls = [];
-  const state = { analyses: new Map(), drafts: new Map(), enabled, pending: pending.map((p) => ({ ...p })) };
+  const state = { analyses: new Map(), drafts: new Map(), enabled, pending: pending.map((p) => ({ ...p })), classified: new Set() };
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "s@8grp.co.jp" })));
   const errs = [];
@@ -94,6 +94,25 @@ async function open({ roles = ["sales"], apps = ["sales"], canApprove = false, c
       }
       return send({ ready: true, canApprove, meId: "u-me", drafts: state.pending });
     }
+    // 商材の一次分類（本物は api/sales/ai/classify.js）。サイトのある 11社が対象。偶数番の会社は PC が合う（8点）
+    if (p === "/api/sales/ai/classify") {
+      const eligible = companies.filter((c) => c.siteUrl);
+      const fitOf = (c) => (Number(c.id.slice(1)) % 2 === 0 ? 8 : 3);
+      if (req.method() === "POST") {
+        const b = body(); calls.push({ kind: "classify", ids: b.companyIds });
+        for (const id of b.companyIds) state.classified.add(id);
+        return send({ classified: b.companyIds.length, skipped: 0, failed: 0, results: [], stopped: null });
+      }
+      calls.push({ kind: "classifyGet", service: url.searchParams.get("service") });
+      const done = eligible.filter((c) => state.classified.has(c.id));
+      return send({ ready: true, enabled: state.enabled, configured: true, service: url.searchParams.get("service"), batch: 5,
+        counts: { companies: companies.length, eligible: eligible.length, classified: done.length, pending: eligible.length - done.length,
+          invalidServiceField: 1, strong: done.filter((c) => fitOf(c) >= 7).length },
+        pending: eligible.filter((c) => !state.classified.has(c.id)).map((c) => c.id),
+        candidates: done.map((c) => ({ companyId: c.id, fit: fitOf(c), confidence: "high", reason: fitOf(c) >= 7 ? "PCを大量導入" : "手がかりが少ない",
+          source: "site", serviceFieldInvalid: c.id === "c2", company: c, analysis: state.analyses.get(c.id) || null }))
+          .sort((a, b) => b.fit - a.fit) });
+    }
     if (/\/api\/notifications/.test(p)) return send({ notifications: [], unread: 0 });
     return send({});
   });
@@ -105,6 +124,8 @@ console.log("\n=== 企業を選ぶ → 分析する → 分析完了 ===");
 {
   const { page, calls, errs } = await open();
   await page.goto(`${BASE}/sales/ai.html`);
+  await page.locator("#cand-rows tr").first().waitFor();
+  await page.locator("#list-card summary").click();
   await page.locator("#c-rows tr", { hasText: "株式会社テスト12" }).waitFor();
   check((await page.locator("#c-rows tr").count()) === 12, "アタックする企業を一覧に出す");
   check(calls.some((c) => c.kind === "companies" && c.q.queue === "attack"), "アタックする企業（queue=attack）から選ぶ");
@@ -139,10 +160,40 @@ console.log("\n=== 企業を選ぶ → 分析する → 分析完了 ===");
   await page.close();
 }
 
+console.log("\n=== 候補を探す：AI で分類 → 上位20社を選ぶ → 詳しく分析する ===");
+{
+  const { page, calls, errs } = await open();
+  await page.goto(`${BASE}/sales/ai.html`);
+  await page.locator("#cls-counts", { hasText: "未分類 11社" }).waitFor();
+  check((await page.locator("#cls-card").innerText()).includes("企業マスタ（提案サービス欄など）は書き換えません"), "企業マスタは書き換えないと書く");
+  check((await page.locator("#cls-counts").innerText()).includes("電話番号などが入っている会社：1社"), "提案サービス欄が不正な会社の数を出す");
+  check((await page.locator("#cand-rows").innerText()).includes("まだ分類していません"), "分類前の案内");
+  check(calls.some((c) => c.kind === "classifyGet" && c.service === "8EC・8RENT"), "既定は PC 販売・レンタル（8EC・8RENT）");
+  await page.locator("#cls-run").click();
+  await page.locator("#cls-progress", { hasText: "分類完了" }).waitFor();
+  const posts = calls.filter((c) => c.kind === "classify");
+  check(posts.length === 3 && posts.every((x) => x.ids.length <= 5), `決まった社数ずつ（並べて）分類する（${posts.map((x) => x.ids.length).join(",")}）`);
+  check((await page.locator("#cand-rows tr").count()) === 11, "分類した会社を候補に出す");
+  check((await page.locator("#cand-rows tr").first().innerText()).includes("8"), "合う度合いの高い順");
+  check((await page.locator("#cand-rows").innerText()).includes("商材欄が不正"), "提案サービス欄が不正な会社に印");
+  check(await page.locator("#cls-run").isDisabled(), "すべて分類済みなら分類ボタンは押せない");
+  await page.locator("button", { hasText: "上位20社を選ぶ" }).click();
+  check((await page.locator("#run-label").innerText()).includes("11社"), "上位を選ぶ（未分析の会社だけ）");
+  await page.locator("#run-btn").click();
+  await page.locator("#progress", { hasText: "分析完了" }).waitFor();
+  const first = calls.find((c) => c.kind === "analyze");
+  check(first && first.ids[0] === "c2", "合う度合いの高い会社から詳しく分析する");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
 console.log("\n=== 止まっているとき ===");
 {
   const { page, errs } = await open({ enabled: false });
   await page.goto(`${BASE}/sales/ai.html`);
+  await page.locator("#cand-rows tr").first().waitFor();
+  check(await page.locator("#cls-run").isDisabled(), "止まっているときは分類ボタンも押せない");
+  await page.locator("#list-card summary").click();
   await page.locator("#c-rows tr", { hasText: "株式会社テスト1" }).first().waitFor();
   check((await page.locator("#ai-stopped").innerText()).includes("停止"), "止まっている理由を出す");
   await page.locator("#c-rows input[type=checkbox]").first().check();

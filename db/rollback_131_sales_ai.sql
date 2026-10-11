@@ -8,6 +8,7 @@ drop function if exists public.gw_sales_ai_settle(uuid, int, int, numeric, text,
 drop table if exists public.gw_sales_ai_usage;
 drop table if exists public.gw_sales_ai_drafts;
 drop function if exists public.gw_sales_ai_drafts_guard();
+drop table if exists public.gw_sales_ai_classifications;
 drop table if exists public.gw_sales_ai_analyses;
 drop table if exists public.gw_sales_ai_settings;
 

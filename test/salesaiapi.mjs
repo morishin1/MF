@@ -34,6 +34,8 @@ const schema = {
       : ACTIVE.includes(r.status) && !r.approved_body_hash ? "gw_sales_ai_drafts_approved_hash" : null),
   },
   gw_sales_ai_analyses: { defaults: () => ({ created_at: nowIso(), facts: [], hypotheses: [], uncertainties: [], send_check_reasons: [], pages: [], effective: false }) },
+  // db/131：company_id が主キー（1社1行。分類し直すと上書き）
+  gw_sales_ai_classifications: { noId: true, unique: [["company_id"]] },
   gw_sales_ai_usage: { defaults: () => ({ created_at: nowIso(), status: "reserved", reserved_usd: 0, cost_usd: 0, input_tokens: 0, output_tokens: 0 }) },
   gw_sales_ai_settings: { noId: true, unique: [["tenant_id"]], defaults: () => ({ enabled: false, monthly_target_usd: 50, monthly_cap_usd: 100, daily_cap_usd: 10, daily_company_limit: 100, effective_threshold: 60, focus_services: [], score_profiles: {}, banned_phrases: [] }) },
   gw_sales_approaches: { defaults: () => ({ prepared_at: nowIso(), created_at: nowIso(), click_count: 0, channel: "form", forced: false }) },
@@ -128,7 +130,15 @@ mock.module(at("lib/sales-ai/client.js"), {
         create: async (p) => {
           ai.calls.push(p);
           if (ai.mode === "throw") throw Object.assign(new Error("overloaded"), { status: 529 });
-          const isDraft = Boolean(p.output_config.format.schema.properties.rationale);
+          const props = p.output_config.format.schema.properties;
+          const isDraft = Boolean(props.rationale);
+          // 商材の一次分類：本文に「PC」がある会社は pc 8 点、それ以外は 2 点
+          if (props.companies) {
+            const blocks = [...String(p.messages[0].content).matchAll(/<company no="(\d+)">([\s\S]*?)<\/company>/g)];
+            const companies = blocks.map(([, no, text]) => ({ no: Number(no), pc: /PC/.test(text) ? 8 : 2, enger: 3, md_corp: 1, md_student: 0,
+              confidence: /サイトの文/.test(text) ? "high" : "low", reason: /PC/.test(text) ? "PCを大量導入" : "手がかりが少ない" }));
+            return { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ companies }) }], usage: { input_tokens: 5000, output_tokens: 900 } };
+          }
           const data = isDraft
             ? { subject: "PCの入替のご相談", body: "{{company}} ご担当者様\n\n{{sender}}と申します。PCの入替をお手伝いします。", rationale: "PCの大量導入の事実から" }
             : analysisAnswer(p.messages[0].content);
@@ -143,6 +153,7 @@ process.env.SALES_AI_ANTHROPIC_API_KEY = "sk-test";
 const { default: analyzeApi } = await import(at("api/sales/ai/analyze.js"));
 const { default: draftsApi } = await import(at("api/sales/ai/drafts.js"));
 const { default: adminApi } = await import(at("api/sales/ai/admin.js"));
+const { default: classifyApi } = await import(at("api/sales/ai/classify.js"));
 const { default: approachesApi } = await import(at("api/sales/approaches/index.js"));
 const { bodyHash } = await import(at("lib/sales-ai/draft.js"));
 
@@ -169,7 +180,7 @@ function seed() {
     co(C_NOSITE),
     co(C_BLOCK, { site_url: "https://block.co.jp/" }),
     co(C_ROBOTS, { site_url: "https://robots.co.jp/" }),
-    co(C_FAIL, { site_url: "https://fail.co.jp/" }),
+    co(C_FAIL, { site_url: "https://fail.co.jp/", service: "03-1234-5678" }),
     { id: C9, tenant_id: T2, name: "他社の会社", status: "untouched", site_url: "https://sample.co.jp/" },
   ];
   mem.rows.gw_sales_ai_settings = [
@@ -202,7 +213,7 @@ console.log("\n=== 使える人 ===");
 await t("Sales を使えない人（権限なし・Salesアプリの無い責任者）は 403", async () => {
   for (const ctx of [NONE, MGR_NOAPP]) {
     as(ctx);
-    for (const [h, m] of [[analyzeApi, "GET"], [analyzeApi, "POST"], [draftsApi, "GET"], [draftsApi, "POST"], [adminApi, "GET"], [adminApi, "PATCH"]]) {
+    for (const [h, m] of [[analyzeApi, "GET"], [analyzeApi, "POST"], [draftsApi, "GET"], [draftsApi, "POST"], [adminApi, "GET"], [adminApi, "PATCH"], [classifyApi, "GET"], [classifyApi, "POST"]]) {
       assert.equal((await call(h, m, { query: `?companyId=${C1}`, body: { companyIds: [C1], companyId: C1 } })).status, 403, `${ctx.employee.display_name} ${m}`);
     }
   }
@@ -508,6 +519,88 @@ await t("費用の集計：確定は実費・予約中は予約額。Vercel・Su
   assert.equal(r.body.usage.month.byPurpose.analysis.calls, 1);
   assert.ok(r.body.costNote.includes("Vercel"));
   assert.equal(r.body.canManage, false);
+});
+
+console.log("\n=== 商材の一次分類（候補探し）===");
+const classify = (ids) => call(classifyApi, "POST", { body: { companyIds: ids } });
+await t("対象・未分類・提案サービス欄が不正な会社の数を返す（企業マスタは読むだけ）", async () => {
+  as(REP);
+  const r = await call(classifyApi, "GET", { query: "?service=8EC・8RENT" });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ready, true);
+  // 対象 = サイトあり・NG でない・直近30日にアタックしていない：C1・C_BLOCK・C_ROBOTS・C_FAIL
+  assert.equal(r.body.counts.eligible, 4);
+  assert.equal(r.body.counts.pending, 4);
+  assert.deepEqual(new Set(r.body.pending), new Set([C1, C_BLOCK, C_ROBOTS, C_FAIL]));
+  assert.equal(r.body.counts.invalidServiceField, 1, "電話番号が入っている提案サービス欄");
+  assert.equal(r.body.candidates.length, 0);
+});
+await t("20社ずつ分類：登録情報＋トップページ1枚。NG は外し、robots で止められたサイトは登録情報だけ。企業マスタは書き換えない", async () => {
+  as(REP);
+  const before = JSON.stringify(mem.rows.gw_sales_companies);
+  const r = await classify([C1, C_ROBOTS, C_FAIL, C_NG]);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.classified, 3);
+  assert.equal(r.body.results.find((x) => x.companyId === C_NG).reason, "ng");
+  assert.equal(ai.calls.length, 1, "1回の呼び出しでまとめて分類");
+  assert.equal(ai.calls[0].model, "claude-haiku-5-5");
+  assert.ok(!ai.calls[0].messages[0].content.includes("03-1234-5678"), "不正な提案サービス欄は AI に渡さない");
+  const rows = mem.rows.gw_sales_ai_classifications;
+  const byId = new Map(rows.map((x) => [x.company_id, x]));
+  assert.equal(byId.get(C1).source, "site");
+  assert.equal(byId.get(C1).fits["8EC・8RENT"], 8);
+  assert.equal(byId.get(C1).best_service, "8EC・8RENT");
+  assert.equal(byId.get(C_ROBOTS).source, "meta");
+  assert.equal(byId.get(C_ROBOTS).site_status, "robots_blocked");
+  assert.equal(byId.get(C_FAIL).service_field_invalid, true);
+  assert.ok(rows.every((x) => x.tenant_id === T1));
+  assert.ok(!fetched.some((u) => u.startsWith("https://robots.co.jp/") && !u.endsWith("/robots.txt")), "robots で止められたトップは読まない");
+  assert.equal(JSON.stringify(mem.rows.gw_sales_companies), before, "企業マスタは1文字も変えない");
+  const u = mem.rows.gw_sales_ai_usage;
+  assert.equal(u.length, 1); assert.equal(u[0].purpose, "classify"); assert.equal(u[0].status, "committed");
+});
+await t("候補：選んだ商材が合いそうな順。7点以上の数・詳しい分析の有無も返す。分類し直しても1社1行", async () => {
+  as(REP);
+  await classify([C1, C_ROBOTS, C_FAIL, C_BLOCK]);
+  await classify([C1]);
+  assert.equal(mem.rows.gw_sales_ai_classifications.filter((x) => x.company_id === C1).length, 1, "1社1行（上書き）");
+  await analyze([C1]);
+  const r = await call(classifyApi, "GET", { query: `?service=${encodeURIComponent("8EC・8RENT")}` });
+  assert.equal(r.body.counts.pending, 0);
+  assert.equal(r.body.counts.strong, 1, "PC の記載があるのは C1 だけ");
+  assert.equal(r.body.candidates[0].fit, 8);
+  assert.ok(r.body.candidates.findIndex((x) => x.companyId === C_ROBOTS) > 1, "手がかりの少ない会社は下");
+  assert.equal(r.body.candidates.find((x) => x.companyId === C1).analysis.status, "ok");
+  assert.equal(r.body.candidates.find((x) => x.companyId === C_FAIL).serviceFieldInvalid, true);
+  const e = await call(classifyApi, "GET", { query: `?service=${encodeURIComponent("ENGER")}` });
+  assert.ok(e.body.candidates.every((x) => x.fit === 3));
+  assert.equal((await call(classifyApi, "GET", { query: "?service=unknown" })).status, 400);
+});
+await t("止まっている・キーが無い・21社以上・予算の予約を断られたら AI を呼ばず、何も書かない", async () => {
+  as(REP);
+  mem.rows.gw_sales_ai_settings[0].enabled = false;
+  assert.equal((await classify([C1])).body.error, "ai_stopped");
+  mem.rows.gw_sales_ai_settings[0].enabled = true;
+  delete process.env.SALES_AI_ANTHROPIC_API_KEY;
+  assert.equal((await classify([C1])).status, 503);
+  process.env.SALES_AI_ANTHROPIC_API_KEY = "sk-test";
+  assert.equal((await classify(Array.from({ length: 21 }, (_, i) => id(1000 + i)))).status, 400);
+  ctl.reserveFail = "daily_cap";
+  const r = await classify([C1]);
+  assert.equal(r.body.stopped.reason, "daily_cap");
+  assert.equal(ai.calls.length, 0);
+  assert.equal((mem.rows.gw_sales_ai_classifications || []).length, 0);
+});
+await t("他テナントの会社は分類できず、候補にも出ない", async () => {
+  mem.rows.gw_sales_ai_settings.push({ ...mem.rows.gw_sales_ai_settings[0], tenant_id: T2 });
+  as(OTHER);
+  const r = await classify([C1]);
+  assert.equal(r.body.results[0].reason, "not_found");
+  assert.equal(ai.calls.length, 0);
+  as(REP);
+  await classify([C1]);
+  as(OTHER);
+  assert.equal((await call(classifyApi, "GET", { query: "" })).body.candidates.length, 0);
 });
 
 console.log(`\n合計 ${n} 件中 ${n - bad} 件 通過`);

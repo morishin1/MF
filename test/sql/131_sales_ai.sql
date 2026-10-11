@@ -162,6 +162,9 @@ insert into public.gw_sales_ai_drafts(id, tenant_id, company_id, analysis_id, bo
 insert into public.gw_sales_ai_usage(tenant_id, purpose, model, status, cost_usd) values
   ('88888888-8888-8888-8888-888888888888', 'analysis', 'claude-haiku-5-5', 'committed', 0.001),
   ('99999999-9999-9999-9999-999999999999', 'analysis', 'claude-haiku-5-5', 'committed', 0.001);
+insert into public.gw_sales_ai_classifications(company_id, tenant_id, best_service, fits, source) values
+  ('c8000000-0000-0000-0000-000000000001', '88888888-8888-8888-8888-888888888888', '8EC・8RENT', '{"8EC・8RENT": 8}', 'site'),
+  ('c9000000-0000-0000-0000-000000000001', '99999999-9999-9999-9999-999999999999', 'ENGER', '{"ENGER": 6}', 'meta');
 
 -- ---------------------------------------------------------------------------
 -- B. 読む：Sales の人だけ・自分のテナントだけ
@@ -176,6 +179,11 @@ select pg_temp.expect('B7 退職者は営業文を読めない', pg_temp.count_a
 select pg_temp.expect('B8 他テナントの人には自分のテナントの行だけ', pg_temp.count_as('authenticated', 'a8a00005-0000-0000-0000-000000000000', 'public.gw_sales_ai_drafts where tenant_id = ''88888888-8888-8888-8888-888888888888'''), 0);
 select pg_temp.expect('B9 anon は営業文を読めない', pg_temp.count_as('anon', null, 'public.gw_sales_ai_drafts'), 0);
 select pg_temp.expect('B10 anon は利用量を読めない', pg_temp.count_as('anon', null, 'public.gw_sales_ai_usage'), 0);
+select pg_temp.expect('B11 営業担当は自分のテナントの一次分類を読める', pg_temp.count_as('authenticated', 'a8a00003-0000-0000-0000-000000000000', 'public.gw_sales_ai_classifications'), 1);
+select pg_temp.expect('B12 権限の無い社員・退職者・anon は一次分類を読めない',
+  pg_temp.count_as('authenticated', 'a8a00004-0000-0000-0000-000000000000', 'public.gw_sales_ai_classifications')
+  + pg_temp.count_as('authenticated', 'a8a00006-0000-0000-0000-000000000000', 'public.gw_sales_ai_classifications')
+  + pg_temp.count_as('anon', null, 'public.gw_sales_ai_classifications'), 0);
 
 -- ---------------------------------------------------------------------------
 -- C. 書く：authenticated（PostgREST 直接）からは誰も書けない
@@ -202,6 +210,13 @@ select pg_temp.try_role('C9 anon は予約の関数を呼べない', 'anon', nul
   $$select public.gw_sales_ai_reserve('88888888-8888-8888-8888-888888888888', 0, 'analysis', 'm', null, null)$$, 'permission denied');
 select pg_temp.try_role('C10 service_role は予約の関数を呼べる', 'service_role', null,
   $$select public.gw_sales_ai_reserve('99999999-9999-9999-9999-999999999999', 0.01, 'analysis', 'm', null, null)$$, 'ok');
+select pg_temp.try_role('C13 経営者でも一次分類を直接は書けない', 'authenticated', 'a8a00001-0000-0000-0000-000000000000',
+  $$insert into public.gw_sales_ai_classifications(company_id, tenant_id, source) values ('c8000000-0000-0000-0000-000000000002', '88888888-8888-8888-8888-888888888888', 'meta')$$,
+  'row-level security');
+select pg_temp.expect('C14 営業担当は一次分類を書き換えられない（0行）', pg_temp.rows_as('a8a00003-0000-0000-0000-000000000000',
+  $$update public.gw_sales_ai_classifications set best_service = 'ENGER'$$), 0);
+select pg_temp.try('C15 一次分類の出どころは site / meta だけ',
+  $$insert into public.gw_sales_ai_classifications(company_id, tenant_id, source) values ('c8000000-0000-0000-0000-000000000002', '88888888-8888-8888-8888-888888888888', 'guess')$$, 'check');
 select pg_temp.expect('C11 書けなかったあとも営業文は下書きのまま',
   (select count(*)::int from public.gw_sales_ai_drafts where id = 'dd000000-0000-0000-0000-000000000001' and status = 'draft'), 1);
 select pg_temp.expect('C12 書けなかったあとも上限は 100 ドルのまま',
@@ -313,6 +328,7 @@ select pg_temp.expect('E25 解放した予約は expired として残る',
   (select count(*)::int from public.gw_sales_ai_usage where status = 'released' and outcome = 'expired'), 1);
 select pg_temp.try('E26 見込み額がマイナスなら断る',
   $$select public.gw_sales_ai_reserve('88888888-8888-8888-8888-888888888888', -1, 'analysis', 'm', null, null)$$, '見込み額');
+select pg_temp.expect_text('E28 商材の一次分類（classify）も予約できる（分析社数の上限には数えない）', pg_temp.reserve(0.001, 'classify'), 'ok');
 select pg_temp.expect_text('E27 他テナントの使いすぎは、こちらの予約に影響しない',
   (select case when reservation_id is not null then 'ok' else reason end
      from public.gw_sales_ai_reserve('99999999-9999-9999-9999-999999999999', 0.01, 'analysis', 'm', null, null)), 'ok');
@@ -321,7 +337,9 @@ select pg_temp.expect_text('E27 他テナントの使いすぎは、こちらの
 -- F. 戻す（rollback）→ もう一度 131
 -- ---------------------------------------------------------------------------
 select pg_temp.try('F1 rollback applies', :'crb', 'ok');
-select pg_temp.expect_true('F2 戻すと AI営業の表が消える', to_regclass('public.gw_sales_ai_drafts') is null and to_regclass('public.gw_sales_ai_usage') is null);
+select pg_temp.expect_true('F2 戻すと AI営業の表が消える', to_regclass('public.gw_sales_ai_drafts') is null and to_regclass('public.gw_sales_ai_usage') is null
+  and to_regclass('public.gw_sales_ai_classifications') is null);
+select pg_temp.expect('F2b 戻しても企業マスタは消えない', (select count(*)::int from public.gw_sales_companies), 3);
 select pg_temp.expect('F3 戻しても既存のアタックは消えない', (select count(*)::int from public.gw_sales_approaches where tracking_token = 'tok131'), 1);
 select pg_temp.expect('F4 戻した状態では確認 SQL に ❌ が出る', (pg_temp.check_fails(:'cchk') > 0)::int, 1);
 select pg_temp.try('F5 もう一度 131 を流せる', :'c131', 'ok');
