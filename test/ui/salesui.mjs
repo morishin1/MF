@@ -53,7 +53,7 @@ const CAMPAIGNS = [{ id: "cp1", name: "秋の製造業" }, { id: "cp2", name: "�
 
 async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0, extra = [],
   deals: dealSeed = [], dealsNotReady = false, dealsTruncated = false, analytics = null, analyticsSince = null,
-  repCounts = null } = {}) {
+  repCounts = null, ai = null } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
@@ -434,6 +434,19 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         return send({ approach: { id: "ap1", sentAt: NOW } });
       }
       return send({ approaches: analytics || [], ...(analyticsSince ? { since: analyticsSince } : {}) });
+    }
+    // AI営業（api/sales/ai/*）。ai を渡したときだけ。渡さなければ {}（本物の db/131 の前と同じく、アタックはこれまでどおり）
+    if (ai && /\/api\/sales\/ai\/analyze/.test(url)) {
+      if (req.method() === "PATCH") {
+        const b = body(); calls.push({ kind: "ai_check", body: b });
+        ai.analysis.sendCheck = b.decision;
+        return send({ analysis: ai.analysis });
+      }
+      return send({ ready: true, analysis: ai.analysis, drafts: ai.drafts || [] });
+    }
+    if (ai && /\/api\/sales\/ai\/drafts/.test(url)) {
+      calls.push({ kind: "ai_final", url });
+      return send({ draft: ai.drafts[0], final: ai.final });
     }
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     return send({});
@@ -2142,6 +2155,54 @@ console.log("\n=== 分析：担当者別フォームアタック数（本日〜�
   await page.locator("#rep-table").waitFor();
   const r = calls.filter((x) => x.kind === "counts").at(-1).params;
   check(r.period === "custom" && r.from === "2026-09-01", "URL から期間を復元");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== AI営業：要確認ならコピー・送信完了を押せない → 確認 → 承認済みの AI 文面で送る ===");
+{
+  const FINAL = "株式会社サンプル ご担当者様\n営業 一郎と申します。\nhttps://gw.8grp.co.jp/r/X7K92PABCD\n\n株式会社エイト 営業 一郎";
+  const ai = {
+    analysis: { id: "an1", companyId: "c1", status: "ok", sendCheck: "manual_review",
+      sendCheckReasons: [{ key: "confirm", label: "フォームの受付目的を確認してください" }] },
+    drafts: [{ id: "d1", companyId: "c1", status: "approved", service: "8EC・8RENT", subject: "PCのご相談", body: "{{company}} ご担当者様" }],
+    final: { subject: "PCのご相談", body: FINAL },
+  };
+  const { page, calls, errs } = await openAs({ ai });
+  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
+  await page.locator(".atk #at-body").waitFor();
+  check((await page.locator("#at-ai-check").innerText()).includes("要確認"), "AI営業の確認：要確認を出す");
+  check(await page.locator("#at-copy").isDisabled() && await page.locator("#at-sent").isDisabled(), "確認するまでコピー・送信完了を押せない");
+  await page.locator("#at-ai-check button", { hasText: "確認した" }).click();
+  await page.waitForTimeout(400);
+  check(calls.some((c) => c.kind === "ai_check" && c.body.decision === "ok_manual" && c.body.id === "an1"), "確認した → 確認済み");
+  check(!(await page.locator("#at-copy").isDisabled()), "確認したらコピーできる");
+
+  check(await page.locator('#at-template option[value="__ai__"]').count() === 1, "テンプレートに「AI文面（承認済み）」がある");
+  await page.locator("#at-template").selectOption("__ai__");
+  await page.locator("#at-ai-confirm").waitFor();
+  check(calls.some((c) => c.kind === "ai_final" && /id=d1&approachId=ap1/.test(c.url)), "サーバが作った最終文面を取りにいく");
+  check((await page.locator("#at-body").inputValue()) === FINAL, "最終文面（宛名・差出人・専用URL・署名）を出す");
+  check(await page.locator("#at-body").getAttribute("readonly") !== null, "AI 文面はここでは書き換えられない");
+  check(await page.locator("#at-sent").isDisabled(), "最終文面を確認したチェックが無ければ送信完了を押せない");
+  await page.locator("#at-ai-confirm").check();
+  check(!(await page.locator("#at-sent").isDisabled()), "確認したら送信完了を押せる");
+  await page.locator("#at-sent").click();
+  await page.locator(".sl-modal").waitFor();
+  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.waitForTimeout(600);
+  const sent = calls.find((c) => c.kind === "act");
+  check(sent && sent.body.aiDraftId === "d1" && sent.body.templateId === null, "AI 文面で送ったことを記録する（aiDraftId）");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+{
+  // AI の分析が無い会社（db/131 の前を含む）は、これまでどおり
+  const { page, errs } = await openAs();
+  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
+  await page.locator(".atk #at-body").waitFor();
+  check(!(await page.locator("#at-ai-check").count()) && !(await page.locator("#at-copy").isDisabled()), "AI の分析が無ければ、これまでどおり送れる");
+  check(!(await page.locator('#at-template option[value="__ai__"]').count()), "承認済みの AI 文面が無ければ選択肢に出さない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }

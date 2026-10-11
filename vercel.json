@@ -14,6 +14,15 @@
     },
     "api/office/timesheet.js": {
       "maxDuration": 60
+    },
+    "api/sales/ai/analyze.js": {
+      "maxDuration": 60
+    },
+    "api/sales/ai/drafts.js": {
+      "maxDuration": 60
+    },
+    "api/sales/ai/classify.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
