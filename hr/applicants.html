@@ -240,6 +240,9 @@
     .hr-of-more { margin-top:12px; border-top:1px solid #e2e2dc; padding-top:6px; }
     .hr-of-more summary { cursor:pointer; font-weight:700; color:#1b2440; font-size:13px; padding:8px 0; }
     .hr-of-more[open] summary { margin-bottom:8px; }
+    /* 開閉で見出しを切り替える（CSS だけ。toggle イベントは開いたあとに遅れて届くので使わない） */
+    .hr-of-more .when-open, .hr-of-more[open] .when-closed { display:none; }
+    .hr-of-more[open] .when-open { display:inline; }
     .hr-of-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
     .hr-of-preview { border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; background:#fafaf7; }
     .hr-of-preview .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#1b2440; }
@@ -2529,8 +2532,8 @@ ${url}
         </div>
         ${hideSalary && t.fields.some((f) => f.salary) ? `
         <p class="hr-sub" style="margin:10px 0 0;">給与・報酬は、権限のある方が入力・確認します（応募者に入っている条件が、そのままオファーに入ります）。</p>` : ""}
-        <details class="hr-of-more" id="of-more" ontoggle="this.querySelector('summary').textContent = this.open ? '詳細設定を閉じる' : '詳細設定を開く'">
-          <summary>詳細設定を開く</summary>
+        <details class="hr-of-more" id="of-more">
+          <summary><span class="when-closed">詳細設定を開く</span><span class="when-open">詳細設定を閉じる</span></summary>
           <div class="hr-of-grid" id="of-more-fields">
             ${more.map(fieldHtml).join("")}
             <div class="wide"><label for="of-message">本人向けメッセージ</label>
