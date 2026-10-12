@@ -234,6 +234,23 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
           .map((x) => x.trim().toLowerCase()).filter(Boolean))];
         return send({ company: c });
       }
+      // MGNDigital申込の候補を確かめる（本物は api/sales/companies/detail decideLpCandidate）
+      if (req.method() === "POST" && body().action === "lp_candidate") {
+        const b = body();
+        calls.push({ kind: "lp-decide", body: b });
+        if (b.decision === "confirm") {
+          Object.assign(c, { status: "replied", statusLabel: "返信あり", lpCandidate: false, lpAppliedAt: NOW, next: "商談を予定する" });
+          c.lp = { ...c.lp, candidate: false, appliedAt: NOW };
+        } else { c.lpCandidate = false; c.lp = null; }
+        return send({ company: c });
+      }
+      // 履歴の記録（電話した・フォロー）。本物は api/sales/companies/detail addEvent
+      if (req.method() === "POST" && body().kind) {
+        calls.push({ kind: "event", body: body() });
+        c.unhandledClick = false;
+        if (body().nextAction) c.next = body().nextAction;
+        return send({ company: c });
+      }
       if (req.method() === "POST" && body().action === "contact") {
         const b = body();
         calls.push({ kind: "contact", body: b });
@@ -258,6 +275,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         contactChannels: ch([["email", "メール"], ["line", "LINE"], ["instagram", "Instagram"], ["phone", "電話"]]),
         sendFailReasons: ch([["no_form", "問い合わせフォームがない"], ["captcha", "CAPTCHA等で送信できない"], ["other", "その他"]]),
         hideReasons: ch([["link_broken", "リンク切れ"], ["other", "その他"]]),
+        lp: c.lp || null,
         timeline: c.lastSentAt ? [{ at: c.lastSentAt, kind: "attack", label: "フォーム送信" },
           { at: c.lastClickAt, kind: "click", label: "リンククリック" }] : [],
         canForce: isAdmin, members: [{ id: "emp-s1", display_name: "営業 一郎" }], campaigns: [],
@@ -639,11 +657,12 @@ console.log("\n=== リード ===");
   check(cards[0]?.includes("リード") && cards[1]?.includes("ウォームリード"), "返信はリード、クリックだけはウォームリード");
   check(cards[1]?.includes("🔥"), "未対応クリックは🔥");
   const meta = await page.locator(".ld-card").nth(1).innerText();
-  check(meta.includes("クリック 2回") && meta.includes("NEXT：クリックあり・要フォロー"), "クリック回数とNEXTを出す");
+  check(meta.includes("クリック 2回") && meta.includes("NEXT：フォローする"), `クリック回数とNEXT（電話番号が無いウォームリードは「フォローする」）（${meta.replace(/\s+/g, " ")}）`);
   const tabs = await page.locator("#stages button").allInnerTexts();
   check(["すべて", "クリックあり", "返信あり", "予約待ち", "商談予定", "提案中", "成約"].every((l) => tabs.some((t) => t.startsWith(l))), `段階で絞れる（${tabs.join(" / ")}）`);
   const btns = await page.locator(".ld-card button").allInnerTexts();
-  check(btns.length === 2 && btns.every((t) => t === "商談を予定する"), `リードのボタンは「商談を予定する」1つ（${btns.join(" / ")}）`);
+  check(btns.length === 2 && btns[0] === "商談を予定する" && btns[1] === "フォローする",
+    `リード（返信あり）は「商談を予定する」、電話番号の無いウォームリードは「フォローする」（${btns.join(" / ")}）`);
   await page.locator("#stages button", { hasText: "返信あり" }).click();
   check((await page.locator(".ld-card").count()) === 1, "「返信あり」で絞ると1社");
   await page.locator(".ld-card").first().click();
@@ -655,6 +674,96 @@ console.log("\n=== リード ===");
   const d = await page.locator(".sl-detail").innerText();
   check(d.includes("初回クリック") && d.includes("最終クリック"), "詳細に初回・最終クリックが出る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
+
+console.log("\n=== MGNDigital：30分以内のクリック・電話する／電話した・フォローする・申込あり・既存企業候補 ===");
+{
+  const MIN = 60000;
+  const ago = (m) => new Date(Date.now() - m * MIN).toISOString();
+  const { page, calls, errs } = await openAs({ extra: [
+    { id: "c4", name: "電話商会", domain: "denwa.jp", status: "clicked", statusLabel: "クリックあり", attackCount: 1, lastSentAt: ago(60),
+      clickCount: 1, firstClickAt: ago(10), lastClickAt: ago(10), unhandledClick: true, mgnClick: true, phone: "03-5555-1234",
+      next: "クリックあり・要フォロー", nextKey: "follow_click", nextDue: TODAY },
+    { id: "c5", name: "申込産業", domain: "moushikomi.jp", status: "replied", statusLabel: "返信あり", attackCount: 1, lastSentAt: ago(300),
+      clickCount: 1, firstClickAt: ago(200), lastClickAt: ago(200), mgnClick: true, lpAppliedAt: ago(5), lpServices: ["無限道場のAI研修", "ローカルAIデモ"],
+      lp: { appliedAt: ago(5), services: ["無限道場のAI研修", "ローカルAIデモ"], candidate: false },
+      next: "商談を予定する", nextKey: "manual", nextDue: TODAY },
+    { id: "c6", name: "候補物産", domain: "kouho.jp", status: "attacked", statusLabel: "アタック済", attackCount: 1, lastSentAt: ago(600),
+      lpCandidate: true, lpServices: ["AIパソコン実機貸出"],
+      lp: { candidate: true, candidateAt: ago(3), services: ["AIパソコン実機貸出"], candidateInfo: { company: "候補物産", name: "佐藤", email: "sato@kouho.jp" } },
+      next: "反応確認", nextKey: "manual", nextDue: TODAY },
+    { id: "c7", name: "昔クリック", domain: "mukashi.jp", status: "clicked", statusLabel: "クリックあり", attackCount: 1, lastSentAt: ago(900),
+      clickCount: 1, firstClickAt: ago(120), lastClickAt: ago(120), unhandledClick: false, next: "反応確認", nextKey: "manual", nextDue: TODAY },
+  ] });
+  await page.goto(`${BASE}/sales/leads.html`);
+  await page.locator(".ld-card").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  const names = (await page.locator(".ld-card .nm").allInnerTexts()).map((t) => t.replace("🔥 ", "").split(/\s/)[0]);
+  check(names.join("|") === "申込産業|候補物産|返信工業|反応商事|電話商会|昔クリック",
+    `申込 → 返信 → 複数回クリック → 30分以内のクリック → それ以外（${names.join(" / ")}）`);
+  const card = (n) => page.locator(".ld-card", { hasText: n });
+  const t5 = await card("申込産業").innerText();
+  check(t5.includes("MGNDigital申込あり") && t5.includes("無限道場のAI研修") && t5.includes("ローカルAIデモ"), "申込あり・希望サービスを出す");
+  check(t5.includes("NEXT：商談を予定する") && (await card("申込産業").locator("button").innerText()) === "商談を予定する", "申込のあとは「商談を予定する」");
+  const t6 = await card("候補物産").innerText();
+  check(t6.includes("既存企業候補あり・要確認") && (await card("候補物産").locator("button").innerText()) === "申込を確認する", "トークンの無い申込は「既存企業候補あり」");
+  const t4 = await card("電話商会").innerText();
+  check(t4.includes("🔥") && t4.includes("30分以内にクリック") && t4.includes("MGNDigital LP クリック 1回"), `30分以内のクリックを強調（${t4.replace(/\s+/g, " ")}）`);
+  check(t4.includes("NEXT：電話する"), "電話番号があれば NEXT は「電話する」");
+  check(await card("電話商会").locator("a", { hasText: "電話する" }).getAttribute("href") === "tel:0355551234", "「電話する」は電話をかけるリンク");
+  const t7 = await card("昔クリック").innerText();
+  check(!t7.includes("30分以内") && !t7.includes("🔥") && t7.includes("NEXT：フォローする"), "2時間前のクリックは強調しない・電話番号が無ければフォローする");
+  const all = await page.locator("#list").innerText();
+  check(!/閲覧中|見ています|オンライン/.test(all), "「いま見ている」とは書かない");
+  check((await page.locator("#stages button", { hasText: "MGNDigital申込" }).innerText()).includes("2"), "段階「MGNDigital申込」に申込・候補の2社");
+
+  // 電話した → 結果・メモ・NEXT・期限 → 1回で記録
+  await card("電話商会").locator("button", { hasText: "電話した" }).click();
+  await page.locator(".sl-modal h2", { hasText: "電話した" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(/\/sales\/leads\.html$/.test(page.url()), "一覧のまま中央モーダル（遷移しない）");
+  await page.locator("#cl-save").click();
+  check((await page.locator("#cl-msg").innerText()).includes("結果を選んでください"), "結果は必須");
+  await page.locator(".sl-modal label", { hasText: "不在・留守電" }).click();
+  check(await page.inputValue("#cl-next") === "再電話" && /^\d{4}-\d{2}-\d{2}$/.test(await page.inputValue("#cl-next-on")), "結果に合わせて NEXT と期限が入る");
+  await page.fill("#cl-memo", "午後に再度");
+  await page.locator("#cl-save").click();
+  await page.locator(".sl-modal").waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+  const ev = calls.find((c) => c.kind === "event" && c.body.kind === "call");
+  check(ev && ev.body.id === "c4" && ev.body.detail === "結果：不在・留守電\n午後に再度" && ev.body.nextAction === "再電話" && ev.body.nextActionOn,
+    `電話（kind=call）として結果・メモ・NEXT・期限を送る（${JSON.stringify(ev?.body)}）`);
+
+  // フォローする → ドロワー＋「履歴を記録」（フォローが選ばれている）
+  await card("昔クリック").locator("button", { hasText: "フォローする" }).click();
+  await page.locator(".sl-modal h2", { hasText: "履歴を記録" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await page.locator(".sl-detail").isVisible() && await page.locator('input[name="ev-kind"][value="follow"]').isChecked(), "フォローする → ドロワー＋フォローの記録");
+  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+
+  // 申込あり：ドロワーにも希望サービス
+  await card("申込産業").click();
+  await page.locator("#dt-lp").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  const lp5 = await page.locator("#dt-lp").innerText();
+  check(lp5.includes("MGNDigital申込あり") && lp5.includes("無限道場のAI研修"), "ドロワーに申込あり・希望サービス");
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+
+  // 既存企業候補 → 確定
+  await card("候補物産").locator("button", { hasText: "申込を確認する" }).click();
+  await page.locator("#dt-lp").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  const lp6 = await page.locator("#dt-lp").innerText();
+  check(lp6.includes("既存企業候補あり・要確認") && lp6.includes("sato@kouho.jp") && lp6.includes("AIパソコン実機貸出"), "候補の申込内容を見て確かめられる");
+  await page.locator("#dt-lp button", { hasText: "この会社の申込として確定" }).click();
+  await page.waitForTimeout(800);
+  check(calls.some((c) => c.kind === "lp-decide" && c.body.id === "c6" && c.body.decision === "confirm"), "確定を送る");
+  check((await page.locator("#dt-lp").innerText()).includes("MGNDigital申込あり"), "確定するとドロワーは「申込あり」");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+
+  // スマホ幅（390px）：横にはみ出さない
+  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.waitForTimeout(300);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(over <= 1, `390px で横にはみ出さない（${over}px）`);
   await page.close();
 }
 

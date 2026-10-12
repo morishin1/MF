@@ -363,6 +363,7 @@ const { default: detail } = await import(atRoot("api/sales/companies/detail.js")
 const { default: approaches } = await import(atRoot("api/sales/approaches/index.js"));
 const { default: templates } = await import(atRoot("api/sales/templates/index.js"));
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
+const { default: lpLead } = await import(atRoot("api/sales/lp-lead.js"));
 const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
@@ -2857,6 +2858,190 @@ await ok("アタック一覧：from・to で期間を指定できる。days も�
   assert.ok(d.body.approaches.length >= 6, "今日ぶん（フォーム3・メール1・退職者・不明 ほか）");
   assert.ok(d.body.approaches.every((a) => a.sentAt > atJst(yday, "23")) && !d.body.until, "昨日ぶんは入らない");
   assert.equal((await call(approaches, { method: "GET", url: "/api/sales/approaches?from=x&to=y" })).statusCode, 400);
+});
+
+
+console.log("\n=== MGNDigital LP（クリック → 申込 → 正式リード。DB変更なし） ===\n");
+
+const LP = "https://8grp.co.jp/lp/";
+const lpPost = (body, { origin = "https://8grp.co.jp", method = "POST" } = {}) =>
+  call(lpLead, { method, url: "/api/sales/lp-lead", body, headers: origin ? { origin } : {} });
+const lpBody = (over = {}) => ({
+  submissionId: `sub-${Math.random().toString(36).slice(2, 12)}`, company: "株式会社サンプル", name: "田中 太郎",
+  email: "tanaka@sample.co.jp", tel: "03-1234-5678", size: "10〜49名",
+  services: ["グループウェア（30日間）", "無限道場のAI研修"], attribution: { utm_source: "sales", utm_campaign: "autumn" }, ...over,
+});
+const lpEvents = (key) => db.rows.gw_sales_events.filter((e) => !key || e.event_key === key);
+
+await ok("LP 宛ての営業リンクは ?sr=<token> を付けて飛ばす。通知は「MGNDigitalのLPリンク」", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  const r = await click(approach.trackingToken);
+  assert.equal(r.statusCode, 302);
+  assert.equal(r.headers.location, `${LP}?sr=${approach.trackingToken}`);
+  assert.ok(notified.some((n) => n.title === "株式会社サンプルがMGNDigitalのLPリンクをクリックしました"), JSON.stringify(notified.map((n) => n.title)));
+  assert.ok(!notified.some((n) => /閲覧中|見ています/.test(n.title + n.body)), "「いま見ている」とは書かない");
+  assert.match(slacked[0].text, /MGNDigital LPクリック/);
+  assert.equal(db.rows.gw_sales_click_events[0].destination_url, LP, "記録する飛び先にはトークンを入れない");
+  const l = await list();
+  assert.equal(l.body.companies[0].mgnClick, true);
+});
+
+await ok("LP 以外のサイトにはトークンを渡さない（通知もいままでどおり）", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: "https://example.com/service" });
+  const r = await click(approach.trackingToken);
+  assert.equal(r.headers.location, "https://example.com/service");
+  assert.ok(notified.some((n) => n.title === "株式会社サンプルが営業リンクをクリックしました"));
+  assert.equal((await list()).body.companies[0].mgnClick, false);
+});
+
+await ok("申込の口：LP 以外の Origin・Origin なしは 403。プリフライトは LP だけ通す", async () => {
+  setup();
+  assert.equal((await lpPost(lpBody(), { origin: null })).statusCode, 403);
+  assert.equal((await lpPost(lpBody(), { origin: "https://evil.example" })).statusCode, 403);
+  assert.equal((await lpPost(lpBody(), { origin: "http://8grp.co.jp" })).statusCode, 403, "http は受けない");
+  const pre = await lpPost(null, { method: "OPTIONS" });
+  assert.equal(pre.statusCode, 204);
+  assert.equal(pre.headers["access-control-allow-origin"], "https://8grp.co.jp");
+  const bad = await lpPost(null, { method: "OPTIONS", origin: "https://evil.example" });
+  assert.equal(bad.statusCode, 403);
+  assert.equal(bad.headers["access-control-allow-origin"], undefined);
+  assert.equal(lpEvents().length, 0);
+});
+
+await ok("申込の口：形の悪いものは 400（メール・トークン・申込ID）", async () => {
+  setup();
+  assert.equal((await lpPost(lpBody({ email: "not-mail" }))).statusCode, 400);
+  assert.equal((await lpPost(lpBody({ sr: "abc" }))).statusCode, 400);
+  assert.equal((await lpPost(lpBody({ submissionId: "x" }))).statusCode, 400);
+  assert.equal((await lpPost(lpBody({ tel: "<script>" }))).statusCode, 400);
+});
+
+await ok("トークンつきの申込 → 同じ会社が「MGNDigital申込あり」（返信ありの段階）・NEXT 商談を予定する・希望サービス", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  await click(approach.trackingToken);
+  notified.length = 0; slacked.length = 0;
+  const body = lpBody({ sr: approach.trackingToken.toLowerCase() });
+  const r = await lpPost(body);
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.body, { ok: true }, "会社が見つかったかは返さない");
+  const row = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  assert.equal(row.status, "replied");
+  assert.equal(row.next_action, "商談を予定する");
+  assert.equal(row.contacts.email, "tanaka@sample.co.jp");
+  assert.equal(row.phone, "03-1234-5678", "電話番号が空なら埋める");
+  assert.equal(db.rows.gw_sales_companies.length, 1, "会社を増やさない");
+  const ev = lpEvents("lp_apply");
+  assert.equal(ev.length, 1);
+  assert.match(ev[0].detail, /希望サービス：グループウェア（30日間）、無限道場のAI研修/);
+  assert.match(ev[0].detail, /流入元：sales／autumn/);
+  assert.ok(notified.some((n) => n.title === "株式会社サンプルからMGNDigitalの申込がありました" && n.link === `/sales/leads.html?id=${c.id}`));
+  assert.match(slacked[0].text, /MGNDigital申込/);
+  // 同じ申込IDは2回記録しない
+  await lpPost(body);
+  assert.equal(lpEvents("lp_apply").length, 1);
+  // 一覧：申込あり・希望サービス
+  const l = (await list()).body.companies.find((x) => x.id === c.id);
+  assert.ok(l.lpAppliedAt);
+  assert.deepEqual(l.lpServices, ["グループウェア（30日間）", "無限道場のAI研修"]);
+  assert.equal(l.lpCandidate, false);
+  const d = await getOne(c.id);
+  assert.deepEqual(d.body.lp.services, ["グループウェア（30日間）", "無限道場のAI研修"]);
+  assert.ok(d.body.timeline.some((t) => t.kind === "lp_apply" && t.label === "MGNDigital申込あり"));
+});
+
+await ok("トークンつきの申込：人が入れた連絡先は上書きしない・商談中の会社は状態とNEXTを戻さない", async () => {
+  setup();
+  const c = await newCompany({ phone: "06-0000-0000" });
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  Object.assign(db.rows.gw_sales_companies[0], { status: "meeting", next_action: "商談準備", contacts: { email: "boss@sample.co.jp" } });
+  await lpPost(lpBody({ sr: approach.trackingToken }));
+  const row = db.rows.gw_sales_companies[0];
+  assert.equal(row.status, "meeting");
+  assert.equal(row.next_action, "商談準備");
+  assert.equal(row.contacts.email, "boss@sample.co.jp");
+  assert.equal(row.contacts.phone, "03-1234-5678");
+  assert.equal(row.phone, "06-0000-0000");
+  assert.equal(lpEvents("lp_apply").length, 1, "申込は記録する");
+});
+
+await ok("トークンつきの申込：営業禁止の会社は記録と通知だけ（営業を再開しない）", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  Object.assign(db.rows.gw_sales_companies[0], { ng_reason: "no_sales", status: "attacked" });
+  await lpPost(lpBody({ sr: approach.trackingToken }));
+  assert.equal(db.rows.gw_sales_companies[0].status, "attacked");
+  assert.equal(lpEvents("lp_apply").length, 1);
+  assert.ok(notified.some((n) => /営業禁止/.test(n.body)));
+});
+
+await ok("トークンなし：メールのドメインが1社だけ一致 → 既存企業候補（状態は動かさない）→ 人が確定すると正式リード", async () => {
+  setup();
+  const c = await newCompany();
+  await lpPost(lpBody());
+  assert.equal(db.rows.gw_sales_companies.length, 1, "会社を作らない");
+  assert.equal(db.rows.gw_sales_companies[0].status, "untouched", "人が確かめるまで状態は動かさない");
+  assert.equal(lpEvents("lp_candidate").length, 1);
+  assert.ok(notified.some((n) => /要確認/.test(n.title)));
+  let l = (await list()).body.companies[0];
+  assert.equal(l.lpCandidate, true);
+  assert.equal(l.lpAppliedAt, null);
+  const d = await getOne(c.id);
+  assert.equal(d.body.lp.candidate, true);
+  assert.equal(d.body.lp.candidateInfo.email, "tanaka@sample.co.jp");
+  // 確定
+  const r = await addEvent({ id: c.id, action: "lp_candidate", decision: "confirm" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_sales_companies[0];
+  assert.equal(row.status, "replied");
+  assert.equal(row.next_action, "商談を予定する");
+  assert.equal(row.contacts.email, "tanaka@sample.co.jp");
+  l = (await list()).body.companies[0];
+  assert.equal(l.lpCandidate, false);
+  assert.ok(l.lpAppliedAt);
+  assert.deepEqual(l.lpServices, ["グループウェア（30日間）", "無限道場のAI研修"]);
+  // もう候補は無い
+  assert.equal((await addEvent({ id: c.id, action: "lp_candidate", decision: "confirm" })).statusCode, 409);
+});
+
+await ok("トークンなし：「別の会社」なら記録だけ。フリーメール・一致なしは何もしない", async () => {
+  setup();
+  const c = await newCompany();
+  await lpPost(lpBody());
+  const r = await addEvent({ id: c.id, action: "lp_candidate", decision: "reject" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(db.rows.gw_sales_companies[0].status, "untouched");
+  const l = (await list()).body.companies[0];
+  assert.equal(l.lpCandidate, false);
+  assert.deepEqual(l.lpServices, []);
+  const before = lpEvents().length;
+  await lpPost(lpBody({ email: "someone@gmail.com" }));
+  await lpPost(lpBody({ email: "x@unknown-company.jp" }));
+  assert.equal(lpEvents().length, before);
+  assert.equal(db.rows.gw_sales_companies.length, 1);
+  assert.equal((await addEvent({ id: c.id, action: "lp_candidate", decision: "maybe" })).statusCode, 400);
+});
+
+await ok("電話した：結果・メモ・NEXT・期限を1回で記録（kind=call）。未対応クリックは対応済みになる", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  await click(approach.trackingToken);
+  assert.equal((await list()).body.companies[0].unhandledClick, true);
+  const r = await addEvent({ id: c.id, kind: "call", detail: "結果：不在・留守電\n午後に再度", nextAction: "再電話", nextActionOn: "2099-01-05" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_sales_companies[0];
+  assert.equal(row.next_action, "再電話");
+  assert.equal(row.next_action_on, "2099-01-05");
+  const ev = db.rows.gw_sales_events.find((e) => e.event_key === "call");
+  assert.match(ev.detail, /^結果：不在・留守電\n午後に再度$/);
+  assert.equal((await list()).body.companies[0].unhandledClick, false);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -200,6 +200,8 @@ function renderDetail() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
     </div>
 
+    ${lpBlockHtml(detail.lp)}
+
     <div style="padding:0 20px;">
       ${c.hidden ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">visibility_off</span>
         <div>非表示にしています（${esc(c.hiddenLabel || "理由未設定")}）。通常の一覧・アタック対象には出ません。${c.hiddenNote ? `<br>${esc(c.hiddenNote)}` : ""}</div></div>` : ""}
@@ -670,6 +672,106 @@ async function markFollowed(btn) {
     await KPLayout.busy(btn, "保存中…", () => API.markSalesFollowed(detail.company.id));
     await reloadDetail();
   } catch (e) { alert(errText(e, "できませんでした")); }
+}
+
+// ---- MGNDigital の LP 申込（lib/sales-lp.js・api/sales/lp-lead.js） ----------------------------
+//
+// 営業リンク経由の申込は「MGNDigital申込あり」（返信ありと同じ段階）。希望サービスを出す。
+// トークンが無く、メールのドメインだけで当たった申込は「既存企業候補あり」。人が確かめてから確定する。
+function lpBlockHtml(lp) {
+  if (!lp) return "";
+  const svc = (list) => (list || []).length
+    ? list.map((s) => `<span class="sl-chip" style="cursor:default;">${esc(s)}</span>`).join("")
+    : `<span class="sl-muted">希望サービスの選択なし（相談したい）</span>`;
+  if (lp.candidate) {
+    const i = lp.candidateInfo || {};
+    return `<div class="sl-warn sl-caution" id="dt-lp" style="margin:0 20px 12px;"><span class="material-symbols-outlined">help</span>
+      <div style="min-width:0;flex:1;"><b>既存企業候補あり・要確認</b>（MGNDigital申込 ${esc(fmt(lp.candidateAt))}）<br>
+        メールのドメインがこの会社と一致しました。同じ会社か確かめてください。<br>
+        <span class="sl-muted">${esc([i.company && `会社名：${i.company}`, i.name && `お名前：${i.name}`, i.email && `メール：${i.email}`].filter(Boolean).join("　"))}</span>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${svc(lp.services)}</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="decideLp(this, 'confirm')">この会社の申込として確定</button>
+          <button class="btn btn-secondary btn-sm" onclick="decideLp(this, 'reject')">別の会社</button>
+        </div></div></div>`;
+  }
+  if (!lp.appliedAt) return "";
+  return `<div class="sl-warn" id="dt-lp" style="margin:0 20px 12px;background:#e5f1e2;border-color:#bcd9b6;color:#1f4d27;">
+    <span class="material-symbols-outlined">verified</span>
+    <div style="min-width:0;flex:1;"><b>MGNDigital申込あり</b>（${esc(fmt(lp.appliedAt))}）
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${svc(lp.services)}</div></div></div>`;
+}
+async function decideLp(btn, decision) {
+  if (decision === "reject" && !confirm("別の会社の申込として扱います（この会社の状態は変わりません）。よろしいですか？")) return;
+  try {
+    await KPLayout.busy(btn, "保存中…", () => API.addSalesEvent({ id: detail.company.id, action: "lp_candidate", decision }));
+    await reloadDetail();
+  } catch (e) { alert(errText(e, "保存できませんでした")); }
+}
+
+// ---- 電話した（結果・メモ・NEXT・期限を1回で記録）---------------------------------------
+//
+// 営業履歴には「電話」（kind=call）として残す。結果は内容の1行目（「結果：不在」）。
+// 結果に合わせて NEXT と期限の初期値を入れる（その場で変えてよい）。
+const CALL_RESULTS = [
+  ["talked", "話せた", "商談を予定する", 0],
+  ["absent", "不在・留守電", "再電話", 1],
+  ["no_person", "担当者不在", "再電話", 1],
+  ["callback", "折り返し待ち", "折り返し確認", 1],
+  ["declined", "興味なし・断り", "様子見", 20],
+];
+function bizDaysLater(n) {
+  const d = new Date(Date.now() + 9 * 3600000);
+  const day = () => d.getUTCDay();
+  while (day() === 0 || day() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  for (let left = n; left > 0;) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (day() !== 0 && day() !== 6) left--;
+  }
+  return d.toISOString().slice(0, 10);
+}
+let callTarget = null;
+function openCallLog(id, name) {
+  callTarget = { id, name };
+  openActionModal(`
+      <h2>電話した</h2>
+      <p class="sl-sub" style="margin:-8px 0 12px;">${esc(name || "")}</p>
+      <label>結果</label>
+      <div id="cl-results">${CALL_RESULTS.map(([k, l]) => `
+        <label class="sl-chip"><input type="radio" name="cl-result" value="${k}" onchange="pickCallResult('${k}')">${esc(l)}</label>`).join("")}</div>
+      <label style="margin-top:10px;">メモ（任意）</label>
+      <textarea id="cl-memo" rows="3" placeholder="担当の田中様。来週の火曜に再度連絡"></textarea>
+      <h4 style="font-size:13px;color:#1b2440;margin:18px 0 6px;">NEXT（次にやること）</h4>
+      <input id="cl-next" type="text" list="dl-cl-next" placeholder="結果を選ぶと入ります">
+      <datalist id="dl-cl-next">${["商談を予定する", "再電話", "折り返し確認", "資料送付", "メール", "様子見"].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+      <input id="cl-next-on" type="date" style="margin-top:6px;">
+      <div id="cl-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" id="cl-save" onclick="submitCallLog(this)">記録する</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+}
+function pickCallResult(k) {
+  const r = CALL_RESULTS.find((x) => x[0] === k);
+  if (!r) return;
+  el("cl-next").value = r[2];
+  el("cl-next-on").value = bizDaysLater(r[3]);
+}
+async function submitCallLog(btn) {
+  const msg = el("cl-msg"); msg.textContent = "";
+  const k = document.querySelector('input[name="cl-result"]:checked')?.value;
+  const r = CALL_RESULTS.find((x) => x[0] === k);
+  if (!r) { msg.textContent = "結果を選んでください"; return; }
+  const memo = el("cl-memo").value.trim();
+  try {
+    await KPLayout.busy(btn, "記録中…", () => API.addSalesEvent({
+      id: callTarget.id, kind: "call", detail: `結果：${r[1]}${memo ? `\n${memo}` : ""}`,
+      nextAction: el("cl-next").value.trim() || null, nextActionOn: el("cl-next-on").value || null,
+    }));
+    closeAction();
+    if (detailOpenId === callTarget.id) await reloadDetail();
+    else detailHost.onChange();
+  } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
 }
 
 // ---- 履歴を記録（フォロー・電話・返信あり・商談…）＋NEXT ---------------------------
