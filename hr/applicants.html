@@ -253,6 +253,7 @@
 <script src="../js/layout.js?v=20261008rec3"></script>
 <script src="../js/hr-layout.js?v=20261008rec3"></script>
 <script src="../js/jst.js?v=20261008rec3"></script>
+<script src="../js/hr-lms-trial.js?v=20261012lms1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -784,6 +785,7 @@
         `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
       <div class="hr-detail-body" id="hr-detail-tab"></div>`;
     renderDetailTab();
+    if (window.HrLmsTrial) HrLmsTrial.mount(detail);   // 概要タブに「無限道場 体験」（js/hr-lms-trial.js）
   }
 
   /**
