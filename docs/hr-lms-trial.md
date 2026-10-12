@@ -2,7 +2,10 @@
 
 カジュアル面談のあと、応募者へ「面談のお礼＋無限道場 体験のご案内」を**1通**送り、無限道場（LMS・eight-its/lms）での体験の進み具合を応募者ドロワーで見る。
 
-- 画面：応募者ドロワーの概要タブ、NEXT ACTION の下の「無限道場 体験」（`js/hr-lms-trial.js`）
+- 画面：応募者ドロワーの概要タブ。NEXT ACTION と、その下の「無限道場 体験」パネル（`js/hr-lms-trial.js`）
+  - 面談後・未案内（採用は「評価待ち」、無限道場リードは段階「体験案内」）は、NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］。もとの操作（評価を入力 など）は補助のボタンに残る
+  - 案内後は NEXT ACTION に体験の状況を1行（招待済み／体験中・○%／体験完了）。主ボタンはもとの操作に戻る
+  - ほかの段階では NEXT ACTION を変えない（案内はパネルから送れる）。無限道場の状況を読み終えるまでは、これまでの NEXT ACTION のまま
 - API：`api/hr/applicants/lms-trial.js`（採用HRを使える人だけ。無限道場を運営する会社＝`HR_LEAD_TENANT_ID` だけ）
 - LMS 側の仕様：eight-its/lms `v3-next/docs/hr-lms-api.md`（`trial-invite` の `send_mail:false` は eight-its/lms#364）
 - DB の変更なし（送った記録は db/124 の `gw_hr_mail_sends` を使う）

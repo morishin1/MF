@@ -3,6 +3,8 @@
 //
 // ■ 何を守るテストか
 //   1. パネルは概要タブの NEXT ACTION の下にだけ出る。無限道場を運営していない会社には出さない
+//   1b. 面談後・未案内（採用は評価待ち／リードは段階「体験案内」）は、NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］
+//       （もとの操作は補助のボタン）。案内後は NEXT ACTION に体験の状況を1行。ほかの段階では NEXT ACTION を変えない
 //   2. 面談前は案内ボタンを出さない。面談後は［お礼＋無限道場体験を案内］→ 文面を確かめて・直して送る
 //   3. 本人専用の URL は画面に出さない（送る直前にサーバーが入れる）。URL の差し込み位置を消したら送らない
 //   4. 二度押しで2通送らない。通信が切れてやり直すときは同じ鍵。失敗から送り直すときは新しい鍵
@@ -40,7 +42,8 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   const applicant = { id: A1, name: NAME, email: "taro@example.jp", jobTitle: "エンジニア", source: "Wantedly", stage: "casual_interview", stageLabel: "カジュアル面談",
-    status: "eval_pending", statusLabel: "評価待ち", nextAction: "面談の評価を入力してください", nextActionCta: null, nextActionKey: null, rank: null };
+    status: "eval_pending", statusLabel: "評価待ち", nextAction: "面談の評価を入力してください", nextActionCta: "評価を入力", nextActionKey: "evaluate", rank: null,
+    ...(o.applicant || {}) };
   const lmsBody = () => {
     if (st.lms === "down") return { ok: false, error: "network", hint: "無限道場に接続できませんでした（時間切れ・通信の失敗）。少し待ってからやり直してください" };
     if (st.lms === "active") return { ok: true, stage: { key: "active", label: "体験中" }, registered: true, enrolled: true,
@@ -132,8 +135,14 @@ console.log("\n=== 案内を送る（文面・URL を出さない・二度押し
 {
   const { page, st, errs } = await open();
   const dlg = dialogs(page);
-  check((await page.locator("[data-lms-invite]").innerText()).includes("お礼＋無限道場体験を案内"), "面談後は［お礼＋無限道場体験を案内］が出る");
-  await page.click("[data-lms-invite]");
+  await page.waitForSelector(".hr-next [data-lms-next-invite]");
+  check((await page.locator(".hr-next [data-lms-next-invite]").innerText()).includes("お礼＋無限道場体験を案内")
+    && (await page.locator(".hr-next [data-lms-next-invite]").getAttribute("class")).includes("btn-primary"), "面談後・未案内：NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］");
+  check((await page.locator(".hr-next .sub").first().innerText()).includes("無限道場の体験を案内"), "NEXT ACTION の文言も案内に変わる");
+  check((await page.locator(".hr-next .btn-secondary", { hasText: "評価を入力" }).count()) === 1
+    && (await page.locator(".hr-next .btn-primary").count()) === 1, "もとの操作（評価を入力）は補助のボタンに残る（主のボタンは1つ）");
+  check((await page.locator("[data-lms-trial] [data-lms-invite]").count()) === 0 && (await page.locator("[data-lms-in-next]").count()) === 1, "パネルには案内ボタンを重ねて出さない");
+  await page.click(".hr-next [data-lms-next-invite]");
   await page.waitForSelector("#lms-body");
   check(await page.locator("#lms-subject").inputValue() === DRAFT.subject, "件名が入っている");
   const body = await page.locator("#lms-body").inputValue();
@@ -161,7 +170,10 @@ console.log("\n=== 案内を送る（文面・URL を出さない・二度押し
   await page.click("#lms-modal >> text=閉じる");
   await page.waitForSelector("[data-lms-sent]");
   check((await page.locator("[data-lms-stage]").innerText()) === "招待済み", "送ったあと：段階が招待済みに変わる");
-  check((await page.locator("[data-lms-invite]").count()) === 0, "送ったあと：案内ボタンは消える（2通目を送らない）");
+  check((await page.locator("[data-lms-invite]").count()) === 0 && (await page.locator("[data-lms-next-invite]").count()) === 0, "送ったあと：案内ボタンは消える（2通目を送らない）");
+  await page.waitForSelector(".hr-next [data-lms-next]");
+  check((await page.locator(".hr-next [data-lms-next]").innerText()).includes("招待済み")
+    && (await page.locator(".hr-next .btn-primary").innerText()).includes("評価を入力"), "送ったあと：NEXT ACTION は元の操作に戻り、体験の状況（招待済み）を1行で出す");
   check((await page.locator("[data-lms-resend]").count()) === 1 && (await page.locator("[data-lms-copy]").count()) === 1, "送ったあと：［再送する］［URLをコピー］");
 
   // 再送
@@ -187,7 +199,7 @@ console.log("\n=== 通信が切れた・失敗した ===");
 {
   const { page, st } = await open({ postMode: (n) => (n === 1 ? "abort" : n === 2 ? "failed" : "sent") });
   dialogs(page);
-  await page.click("[data-lms-invite]");
+  await page.click(".hr-next [data-lms-next-invite]");
   await page.waitForSelector("#lms-send");
   await page.click("#lms-send");
   await page.waitForFunction(() => document.getElementById("lms-msg")?.textContent.includes("通信が切れました"));
@@ -209,11 +221,15 @@ console.log("\n=== 体験状況（進捗・完了・取れない） ===");
   check((await page.locator("[data-lms-stage]").innerText()) === "体験中", "段階：体験中");
   check((await page.locator("[data-lms-progress]").innerText()).includes("50%") && (await page.locator("[data-lms-progress]").innerText()).includes("3/6"), "進捗％・レッスン数");
   check((await page.locator('[data-lms-conditions] li[data-done="1"]').count()) === 3 && (await page.locator("[data-lms-conditions] li").count()) === 6, "6条件の達成を出す");
-  check((await page.locator("[data-lms-invite]").count()) === 0, "登録済み・体験中には案内ボタンを出さない");
+  check((await page.locator("[data-lms-invite]").count()) === 0 && (await page.locator("[data-lms-next-invite]").count()) === 0, "登録済み・体験中には案内ボタンを出さない");
+  await page.waitForSelector(".hr-next [data-lms-next]");
+  check((await page.locator(".hr-next [data-lms-next]").innerText()).includes("体験中・50%"), "NEXT ACTION に体験の状況（体験中・50%）");
   st.lms = "done";
   await page.click("[data-lms-refresh]");
   await page.waitForSelector("[data-lms-done]");
   check((await page.locator("[data-lms-done]").innerText()).includes("体験の結果で合否は決まりません"), "完了：合否は決まらないと出す");
+  await page.waitForFunction(() => document.querySelector(".hr-next [data-lms-next]")?.textContent.includes("体験完了"));
+  check((await page.locator(".hr-next [data-lms-next]").innerText()).includes("合否は決まりません"), "NEXT ACTION にも体験完了（合否は決まらない）");
   const before = st.posts.length;
   await page.click("text=採用判断へ進む");
   await page.waitForTimeout(300);
@@ -225,7 +241,8 @@ console.log("\n=== 体験状況（進捗・完了・取れない） ===");
   await page.waitForSelector("[data-lms-unavailable]");
   const t = await page.locator("[data-lms-trial]").innerText();
   check(t.includes("最新情報を取得できません") && !/未完了|不合格|未招待/.test(t), "取れないときは「最新情報を取得できません」（未完了・未招待と書かない）");
-  check((await page.locator("[data-lms-invite]").count()) === 1, "取れなくても、面談後なら案内は送れる（サーバーで確かめる）");
+  await page.waitForSelector(".hr-next [data-lms-next-invite]");
+  check(true, "取れなくても、面談後なら案内は送れる（NEXT ACTION から。サーバーで確かめる）");
   st.lms = "active";
   await page.click("text=再試行");
   await page.waitForSelector("[data-lms-progress]");
@@ -233,10 +250,28 @@ console.log("\n=== 体験状況（進捗・完了・取れない） ===");
   await page.close();
 }
 
+console.log("\n=== NEXT ACTION を変えない段階・無限道場リード ===");
+{
+  const { page, st } = await open({ applicant: { status: "ceo_recommend_pending", statusLabel: "社長推薦待ち", nextAction: "社長に会ってほしい候補です", nextActionCta: "社長推薦する", nextActionKey: "recommend" } });
+  await page.waitForSelector("[data-lms-trial] [data-lms-invite]");
+  check((await page.locator(".hr-next [data-lms-next-invite]").count()) === 0 && (await page.locator(".hr-next .btn-primary").innerText()).includes("社長推薦する"),
+    "評価待ち以外の段階では NEXT ACTION を変えない（案内はパネルから送れる）");
+  check(st.gets === 1, `無限道場への問い合わせは1回（${st.gets}回）`);
+  await page.close();
+}
+{
+  const { page } = await open({ applicant: { leadCategory: "mugendojo", stage: "md_trial", stageLabel: "体験案内", status: "todo", statusLabel: "未対応",
+    nextAction: "体験を案内してください", nextActionCta: null, nextActionKey: null } });
+  await page.waitForSelector(".hr-next [data-lms-next-invite]");
+  check(true, "無限道場リード（段階：体験案内）は NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］");
+  await page.close();
+}
+
 console.log("\n=== スマホ ===");
 for (const width of [320, 390]) {
   const { page } = await open({ lms: "active" }, { width, height: 860 });
   await page.waitForSelector("[data-lms-progress]");
+  await page.waitForSelector(".hr-next [data-lms-next]");
   check((await overflow(page)) <= 0, `${width}px：横にはみ出さない`);
   const box = await page.locator("[data-lms-refresh]").boundingBox();
   check(box && box.x + box.width <= width, `${width}px：［最新にする］が画面内`);

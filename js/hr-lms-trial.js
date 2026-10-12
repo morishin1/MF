@@ -9,6 +9,11 @@
 //   取れないときは「最新情報を取得できません」と［再試行］（未完了・不合格とは書かない）
 //   体験の完了は採用の合格ではない（合否は人が決める。ここでは決めない）
 //
+// ■ NEXT ACTION との関係（hr/applicants.html nextActionBox が HrLmsTrial.nextAction(a) を呼ぶ）
+//   面談後・未案内（採用は「評価待ち」、無限道場リードは段階「体験案内」）なら、NEXT ACTION の主ボタンを
+//   ［お礼＋無限道場体験を案内］にする（もとの操作は補助のボタンに残る）。案内後は体験の状況を1行で出す。
+//   無限道場の状況を読み終えるまでは、これまでの NEXT ACTION のまま（読み終えたら描き直す）
+//
 // ■ 送る
 //   カジュアル面談を実施済みにした後だけ。文面は画面で直せる。本人専用の URL と期限は、サーバーが送る直前に入れる（画面に出さない）
 //   二度押し・通信のやり直しで2通にならない（送信の鍵）。送信済みなら［再送する］を選んだときだけもう1通
@@ -96,7 +101,7 @@
       c.error = e.hint || e.message || "読み込めませんでした";
     }
     c.loading = false; c.at = Date.now();
-    if (cache.get(id) === c) paintAll(id);
+    if (cache.get(id) === c) { paintAll(id); syncNextAction(id); }
   }
 
   function paintAll(id) {
@@ -158,13 +163,16 @@
       sendPart = `<p class="line" data-lms-sent>案内メール：<span class="hr-mail-st ${st[1]}">${esc(st[0])}</span>　${esc(fmt(live.createdAt))}${live.sentByName ? `・${esc(live.sentByName)}` : ""}</p>`;
     }
     const acts = [];
+    // NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］のときは、ここには重ねて出さない
+    const inNext = typeof detail !== "undefined" && detail?.applicant?.id === id && nextAction(detail.applicant)?.primary;
     if (canInvite && d.applicant.email && d.interviewDone) {
-      if (!live) acts.push(`<button class="btn btn-primary btn-sm" data-lms-invite onclick="HrLmsTrial.openSend(false)">${icon("send")}お礼＋無限道場体験を案内</button>`);
+      if (!live) { if (!inNext) acts.push(`<button class="btn btn-primary btn-sm" data-lms-invite onclick="HrLmsTrial.openSend(false)">${icon("send")}お礼＋無限道場体験を案内</button>`); }
       else if (live.status !== "sending") acts.push(`<button class="btn btn-secondary btn-sm" data-lms-resend onclick="HrLmsTrial.openSend(true)">${icon("forward_to_inbox")}再送する</button>`);
       if (live) acts.push(`<button class="btn btn-secondary btn-sm" data-lms-copy onclick="HrLmsTrial.copyLink(this)">${icon("content_copy")}URLをコピー</button>`);
     }
     let note = "";
-    if (canInvite && !live) {
+    if (inNext) note = `<p class="line" data-lms-in-next>上の NEXT ACTION の［お礼＋無限道場体験を案内］から送れます。</p>`;
+    else if (canInvite && !live) {
       if (!d.applicant.email) note = `<p class="line" data-lms-noemail>メールアドレスが未登録です。登録してから案内できます。</p>`;
       else if (!d.interviewDone) note = `<p class="line" data-lms-wait>カジュアル面談を実施済みにすると、お礼＋無限道場体験を案内できます。</p>`;
     }
@@ -176,6 +184,46 @@
   }
 
   function reload(id) { load(id); }
+
+  /**
+   * NEXT ACTION に出す「無限道場 体験」。読み込み済みのときだけ（まだなら null）
+   * @returns {null | {key:string, primary:true, label:string, cta:string} | {key:string, primary:false, line:string}}
+   *   line は HTML（エスケープ済み）。key はドロワーに描いた形（変わったときだけ描き直す）
+   */
+  function nextAction(a) {
+    const d = a?.id ? cache.get(a.id)?.data : null;
+    if (!d?.available || !d.configured || d.applicant?.id !== a.id) return null;
+    const lms = d.lms || {};
+    const live = (d.sends || []).find((s) => LIVE.includes(s.status));
+    const stageKey = lms.ok ? lms.stage?.key : null;
+    const hasAccount = ["registered", "active", "done"].includes(stageKey);
+    const lead = typeof isLead === "function" && isLead(a);
+    const atStep = lead ? a.stage === "md_trial" : a.status === "eval_pending";
+    if (atStep && d.interviewDone && d.applicant.email && !live && !hasAccount) {
+      return { key: "primary", primary: true, label: "面談のお礼と、無限道場の体験を案内してください", cta: "お礼＋無限道場体験を案内" };
+    }
+    if (!live && !hasAccount && stageKey !== "invited" && stageKey !== "expired") return null;
+    const label = lms.ok ? lms.stage.label : "最新情報を取得できません";
+    const pct = hasAccount && lms.progress ? `・${Number(lms.progress.percent) || 0}%` : "";
+    const tail = stageKey === "done" ? "（体験の結果で合否は決まりません）" : "";
+    return { key: `line:${label}${pct}`, primary: false,
+      line: `${icon("school")}無限道場 体験：<b>${esc(label)}</b>${esc(pct)}${esc(tail)}　<a href="#" onclick="HrLmsTrial.toPanel();return false;">詳しく見る</a>` };
+  }
+
+  /** NEXT ACTION の「詳しく見る」→ 下の体験パネルへ */
+  function toPanel() {
+    const box = document.querySelector("#hr-detail-tab [data-lms-trial]");
+    if (box) box.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** 読み終えたら、NEXT ACTION の出し方が変わるときだけドロワーを描き直す */
+  function syncNextAction(id) {
+    if (typeof detail === "undefined" || detail?.applicant?.id !== id || typeof renderDetail !== "function") return;
+    const box = document.querySelector("#hr-detail-tab .hr-next");
+    if (!box) return;
+    const na = nextAction(detail.applicant);
+    if ((box.dataset.lmsNa || "") !== (na?.key || "")) renderDetail();
+  }
 
   /** 体験完了 → NEXT ACTION（採用判断）へ。押すだけで判断は決まらない */
   function toDecision() {
@@ -321,5 +369,5 @@
     }
   }
 
-  window.HrLmsTrial = { mount, reload, openSend, closeSend, send, retry, copyLink, toDecision, _cache: cache };
+  window.HrLmsTrial = { mount, reload, nextAction, toPanel, openSend, closeSend, send, retry, copyLink, toDecision, _cache: cache };
 })();

@@ -366,7 +366,7 @@
 <script src="../js/layout.js?v=20261008rec3"></script>
 <script src="../js/hr-layout.js?v=20261008rec3"></script>
 <script src="../js/jst.js?v=20261008rec3"></script>
-<script src="../js/hr-lms-trial.js?v=20261012lms1"></script>
+<script src="../js/hr-lms-trial.js?v=20261012lms2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -989,14 +989,22 @@
     const title = otype && offerStage ? otype.offerName : (a.stageLabel || "—");
     // 見出しと同じ書類名で始まる状態は、重ねて書かない（「育成参加決定通知」＋「下書き（本人未送信）」）
     const statusText = String(a.statusLabel || "—").startsWith(`${title}の`) ? a.statusLabel.slice(title.length + 1) : (a.statusLabel || "—");
+    // 無限道場 体験（js/hr-lms-trial.js）。面談後・未案内なら主のボタンを［お礼＋無限道場体験を案内］にし、
+    // もとの操作（評価を入力 など）は補助のボタンに回す。案内後は体験の状況を1行で出す
+    const lms = window.HrLmsTrial ? HrLmsTrial.nextAction(a) : null;
+    const canRun = a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : ["advance", "handoff"].includes(a.nextActionKey) ? canAdvance : true);
     return `
-      <div class="hr-next">
+      <div class="hr-next" data-lms-na="${esc(lms?.key || "")}">
         <div class="row1"><span class="ttl" id="hr-stage">${esc(title)}</span><span class="st" id="hr-status">${esc(statusText)}</span>
           ${a.offerTypeLabel ? `<span class="chip" id="hr-otype">${esc(a.offerTypeLabel)}</span>` : ""}</div>
-        <div class="sub">${esc(a.nextAction)}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
+        <div class="sub">${esc(lms?.primary ? lms.label : a.nextAction)}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
         ${isOnHold(a) ? `<div class="hr-dk-banner" data-kind="hold"><span class="material-symbols-outlined">pause_circle</span>
           <div><b>保留中</b>${a.holdReason ? `　理由：${esc(a.holdReason)}` : ""}${a.holdNextStep ? `<br>次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
-        ${a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : ["advance", "handoff"].includes(a.nextActionKey) ? canAdvance : true)
+        ${lms?.line ? `<div class="sub" data-lms-next>${lms.line}</div>` : ""}
+        ${lms?.primary
+          ? `<button class="btn btn-primary btn-sm" data-lms-next-invite onclick="HrLmsTrial.openSend(false)">${esc(lms.cta)}</button>
+             ${canRun ? `<button class="btn btn-secondary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}`
+          : canRun
           ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
           : a.nextActionKey === "decide"
             ? `<p class="muted" style="font-size:12px;margin:0;">採用判断は社長・管理者が行います。</p>`
