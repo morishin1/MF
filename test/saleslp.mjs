@@ -1,7 +1,7 @@
 // MGNDigital の LP と /sales をつなぐ部品（lib/sales-lp.js）。DB を使わない決まりだけ。
 import assert from "node:assert/strict";
 import {
-  withSalesRef, isMgnLp, isLpHost, companyDomainOfEmail, normalizeLpLead, lpEventDetail, parseLpDetail, aggregateLp,
+  withSalesRef, isMgnLp, senderAllowed, isLpHost, companyDomainOfEmail, normalizeLpLead, lpEventDetail, parseLpDetail, aggregateLp,
 } from "../lib/sales-lp.js";
 
 let pass = 0, fail = 0;
@@ -64,6 +64,16 @@ ok("会社ごとのまとめ：候補 → 確定 / 候補 → 別の会社", () 
   assert.equal(m.get("c2").candidate, false);
   assert.deepEqual(m.get("c2").services, []);
   assert.equal(m.has("c3"), false);
+});
+
+ok("送信元ごとの回数：窓の中だけ数える", () => {
+  const m = new Map();
+  const rule = { windowSec: 60, max: 2 };
+  assert.ok(senderAllowed(m, "a", 0, rule) && senderAllowed(m, "a", 1000, rule));
+  assert.ok(!senderAllowed(m, "a", 2000, rule));
+  assert.ok(senderAllowed(m, "b", 2000, rule));
+  assert.ok(senderAllowed(m, "a", 61500, rule), "60秒たてば、また受ける");
+  assert.ok(senderAllowed(m, null, 0, rule), "送信元が分からないときは止めない");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

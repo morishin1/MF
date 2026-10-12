@@ -363,7 +363,7 @@ const { default: detail } = await import(atRoot("api/sales/companies/detail.js")
 const { default: approaches } = await import(atRoot("api/sales/approaches/index.js"));
 const { default: templates } = await import(atRoot("api/sales/templates/index.js"));
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
-const { default: lpLead } = await import(atRoot("api/sales/lp-lead.js"));
+const { default: lpLead, _resetLpRate } = await import(atRoot("api/sales/lp-lead.js"));
 const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
@@ -3026,6 +3026,45 @@ await ok("トークンなし：「別の会社」なら記録だけ。フリー�
   assert.equal(lpEvents().length, before);
   assert.equal(db.rows.gw_sales_companies.length, 1);
   assert.equal((await addEvent({ id: c.id, action: "lp_candidate", decision: "maybe" })).statusCode, 400);
+});
+
+await ok("連続送信の歯止め：同じ送信元は60秒に3回まで（429）。別の送信元は通る", async () => {
+  setup(); _resetLpRate();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  const from = (ip) => call(lpLead, { method: "POST", url: "/api/sales/lp-lead",
+    body: lpBody({ sr: approach.trackingToken }), headers: { origin: "https://8grp.co.jp", "x-forwarded-for": ip } });
+  const codes = [];
+  for (let i = 0; i < 4; i++) codes.push((await from("198.51.100.7")).statusCode);
+  assert.deepEqual(codes, [200, 200, 200, 429]);
+  assert.equal((await from("198.51.100.8")).statusCode, 200, "別の送信元は数えない");
+  _resetLpRate();
+});
+
+await ok("連続送信の歯止め：同じ会社への申込は10分に3件まで（それ以上は黙って記録しない）", async () => {
+  setup(); _resetLpRate();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  for (let i = 0; i < 5; i++) assert.equal((await lpPost(lpBody({ sr: approach.trackingToken }))).statusCode, 200);
+  assert.equal(lpEvents("lp_apply").length, 3);
+  // 10分より前の記録は数えない
+  for (const e of lpEvents("lp_apply")) e.occurred_at = new Date(Date.now() - 11 * 60000).toISOString();
+  await lpPost(lpBody({ sr: approach.trackingToken }));
+  assert.equal(lpEvents("lp_apply").length, 4);
+});
+
+await ok("連続送信の歯止め：全体で10分に30件を超えたら 429（何も記録しない）", async () => {
+  setup(); _resetLpRate();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  for (let i = 0; i < 30; i++) {
+    db.rows.gw_sales_events.push({ id: `seed${i}`, tenant_id: "t1", company_id: `other${i}`, event_key: "lp_apply",
+      label: "x", detail: null, occurred_at: new Date().toISOString() });
+  }
+  const r = await lpPost(lpBody({ sr: approach.trackingToken }));
+  assert.equal(r.statusCode, 429);
+  assert.equal(lpEvents("lp_apply").filter((e) => e.company_id === c.id).length, 0);
+  assert.equal(db.rows.gw_sales_companies[0].status === "replied", false);
 });
 
 await ok("電話した：結果・メモ・NEXT・期限を1回で記録（kind=call）。未対応クリックは対応済みになる", async () => {

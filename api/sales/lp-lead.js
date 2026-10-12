@@ -16,6 +16,8 @@
 //   ・LP のホスト（env SALES_LP_HOSTS。既定 8grp.co.jp）からのブラウザ呼び出しだけ受ける（Origin）
 //   ・形が悪いものは捨てる（lib/sales-lp.js normalizeLpLead）
 //   ・同じ申込ID は2回記録しない
+//   ・短時間の連続送信を止める（lib/sales-lp.js LP_RATE。表は増やさない）
+//       同じ送信元 60秒に3回まで（429）／全体 10分に30件まで（429）／同じ会社 10分に3件まで（黙って記録しない）
 //   ・返事は会社が見つかったかどうかを言わない（{ ok: true } だけ）
 //   ・ログに連絡先を出さない
 // 表は増やさない（DB変更なし）。書き込みは service_role。
@@ -26,12 +28,18 @@ import { notify } from "../../lib/notify.js";
 import { notifySlack } from "../../lib/slack.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
-  TRACKING_RE, statusRank, todayJst, bizDayOnOrAfter, CLOSED_STATUSES, mergeContacts,
+  TRACKING_RE, statusRank, todayJst, bizDayOnOrAfter, CLOSED_STATUSES, mergeContacts, ipHash,
 } from "../../lib/sales.js";
 import {
   LP_EVENT, LP_EVENT_KEYS, LP_LABEL, LP_NEXT, lpHosts, normalizeLpLead, lpEventDetail, parseLpDetail,
-  companyDomainOfEmail,
+  companyDomainOfEmail, LP_RATE, senderAllowed,
 } from "../../lib/sales-lp.js";
+
+// 送信元ごとの回数（このインスタンスのメモリ。lib/sales-lp.js senderAllowed）
+const senders = new Map();
+export const _resetLpRate = () => senders.clear();   // テスト用
+
+const sinceMin = (min) => new Date(Date.now() - min * 60_000).toISOString();
 
 function allowedOrigin(req) {
   const origin = String(req.headers?.origin || "");
@@ -58,12 +66,25 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST", "OPTIONS"]);
   if (!origin) return json(res, 403, { error: "forbidden_origin" });
 
+  const ip = String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || req.socket?.remoteAddress || "";
+  if (!senderAllowed(senders, ipHash(ip))) return json(res, 429, { error: "rate_limited" });
+
   const body = await readJson(req);
   const lead = normalizeLpLead(body);
   if (lead.error) return json(res, 400, { error: lead.error });
 
+  let sb;
   try {
-    const sb = admin();
+    sb = admin();
+    // 全体の勢い（荒らされたときの歯止め）。数えられなければ止めない（申込を落とさない）
+    const { count, error } = await sb.from("gw_sales_events").select("id", { count: "exact", head: true })
+      .in("event_key", LP_EVENT_KEYS).gte("occurred_at", sinceMin(LP_RATE.global.windowMin));
+    if (!error && (count || 0) >= LP_RATE.global.max) return json(res, 429, { error: "rate_limited" });
+  } catch (e) {
+    console.error("[sales/lp-lead] rate check failed:", e?.message || e);
+  }
+
+  try {
     if (lead.value.token) await byToken(sb, lead.value);
     else await byDomain(sb, lead.value);
   } catch (e) {
@@ -73,11 +94,17 @@ export default async function handler(req, res) {
   return json(res, 200, { ok: true });
 }
 
-/** 同じ申込ID がこの会社に記録済みか */
+/**
+ * 記録しないでよいか：同じ申込ID がこの会社に記録済み、または同じ会社への申込の記録が多すぎる
+ * （10分に3件まで。lib/sales-lp.js LP_RATE.company）
+ */
 async function alreadyRecorded(sb, companyId, submissionId) {
-  const { data } = await sb.from("gw_sales_events").select("id, event_key, detail")
+  const { data } = await sb.from("gw_sales_events").select("id, event_key, detail, occurred_at")
     .eq("company_id", companyId).in("event_key", LP_EVENT_KEYS).limit(500);
-  return (data || []).some((e) => parseLpDetail(e.detail).submissionId === submissionId);
+  if ((data || []).some((e) => parseLpDetail(e.detail).submissionId === submissionId)) return true;
+  const since = sinceMin(LP_RATE.company.windowMin);
+  const recent = (data || []).filter((e) => e.event_key !== "lp_reject" && String(e.occurred_at) >= since).length;
+  return recent >= LP_RATE.company.max;
 }
 
 async function byToken(sb, v) {
