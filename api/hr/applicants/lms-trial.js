@@ -2,7 +2,7 @@
 //
 // GET  /api/hr/applicants/lms-trial?id=…
 //        … 使えるか（連携の設定・カジュアル面談の実施）・下書き・このご案内の送信記録・体験状況（LMS から、その場で読む）
-// POST /api/hr/applicants/lms-trial { id, action:"send", subject, body, requestKey, resend? }
+// POST /api/hr/applicants/lms-trial { id, action:"send", subject, body, requestKey, resend?, variant? }
 //        … LMS で本人専用の招待URLを受け取り（LMS からはメールを送らない）、お礼の本文に入れて MF から1通送る
 // POST /api/hr/applicants/lms-trial { id, action:"link" }
 //        … 本人専用の招待URLを、担当者が手で渡すために受け取る（画面でコピーするだけ。どこにも残さない）
@@ -17,6 +17,13 @@
 //   このご案内を送った（送信中・結果不明を含む）記録があれば、resend:true が無い限り送らない（409 already_sent）
 //   招待は LMS で同じ人に有効なものがあれば使い回す（reused）ので、送り直しても招待は増えない
 //   送れなかった（failed）ときは、もう一度送れる（同じURLが返る）
+//
+// ■ すでに無限道場のアカウントがある応募者（受講生として登録済み・体験版は未参加）
+//   LMS に allow_existing:true で頼み、登録URLではなく参加用URL（ログインして［このコースに参加する］）を受け取る。
+//   新しいアカウントは作らない（二重登録なし）・パスワードや学習の記録はそのまま。文面は「ログインして参加」の版（draft.existing）
+//   体験版に参加済みなら 409 lms_already_enrolled（招待もメールも作らない）
+//   画面の文面の版（variant: "new" | "existing"）と LMS の答え（existing）が食い違ったら、送らずに 409 lms_variant_changed
+//   （登録URLのつもりの文面に参加用URLを入れて送らない。招待は LMS に残り、開き直して送ると同じURLを使い回す）
 //
 // ■ 残さないもの
 //   招待URL（トークン）・秘密は、送信記録の本文・タイムライン・監査ログ・ログに残さない（送信記録の本文は URL を伏せる）
@@ -132,7 +139,7 @@ async function overview(res, sb, ctx, id) {
     applicant: { id: a.id, name: a.name, email: a.email || null },
     interviewDone: done,
     mail: mailView(a),
-    draft: { ...trialDraft(a), tags: [TRIAL_URL_TAG, TRIAL_EXPIRY_TAG] },
+    draft: { ...trialDraft(a, { existing: Boolean(lms.ok && lms.existing) }), tags: [TRIAL_URL_TAG, TRIAL_EXPIRY_TAG] },
     sends: sends.map(shapeSend),
     lms,
   });
@@ -156,7 +163,7 @@ async function precheck(res, sb, ctx, b) {
   return a;
 }
 
-/** LMS で招待URLを受け取る。already_registered・失敗は応答を返して null */
+/** LMS で招待URLを受け取る。参加済み・対応前の LMS・失敗は応答を返して null */
 async function inviteFor(res, ctx, user, a, action) {
   const r = await lmsTrialInvite({ email: String(a.email).trim().toLowerCase(), name: a.name || undefined });
   if (!r.ok) {
@@ -165,12 +172,18 @@ async function inviteFor(res, ctx, user, a, action) {
     return null;
   }
   const d = r.data;
+  if (d.result === "already_enrolled") {
+    json(res, 409, { error: "lms_already_enrolled",
+      hint: "この方は、すでに無限道場の体験版に参加しています。新しい案内は不要です（体験の状況は［最新にする］で確かめられます）" });
+    return null;
+  }
   if (d.result === "already_registered" || !d.invite?.url) {
+    // 既存アカウントへの案内（allow_existing）に対応する前の LMS
     json(res, 409, { error: "lms_already_registered",
       hint: "この方は、すでに無限道場のアカウントを持っています。新しく登録してもらう必要はありません。ログインして体験版を開くよう案内してください（体験版の受講登録は無限道場の管理画面で行います）" });
     return null;
   }
-  return { url: d.invite.url, expiresAt: d.invite.expires_at || null, result: d.result };
+  return { url: d.invite.url, expiresAt: d.invite.expires_at || null, result: d.result, existing: d.existing === true };
 }
 
 async function send(res, sb, ctx, user, b) {
@@ -206,6 +219,15 @@ async function send(res, sb, ctx, user, b) {
 
   const inv = await inviteFor(res, ctx, user, a, "hr.lms_trial_mail");
   if (!inv) return;
+  // 文面の版（登録URL／ログインして参加）と、LMS が返した URL の種類が合わなければ送らない
+  if (b?.variant === "new" || b?.variant === "existing") {
+    if ((b.variant === "existing") !== inv.existing) {
+      return json(res, 409, { error: "lms_variant_changed", existing: inv.existing,
+        hint: inv.existing
+          ? "この方は、すでに無限道場のアカウントを持っています。「ログインして参加」の文面に切り替えたので、内容を確かめてから送ってください（メールは送っていません）"
+          : "この方は、まだ無限道場のアカウントを持っていません。登録URLの文面に切り替えたので、内容を確かめてから送ってください（メールは送っていません）" });
+    }
+  }
   const m = fillTrialMail({ subject, body, name: a.name, url: inv.url, expiresAt: inv.expiresAt });
   const problems = sendProblems({ subject: m.subject, body: m.text, applicantId: a.id });
   if (problems.length) return json(res, 400, { error: "cannot_send", hint: problems[0], problems });
@@ -241,10 +263,10 @@ async function send(res, sb, ctx, user, b) {
   }
   // 本文・宛先・URL は監査ログに残さない
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.lms_trial_mail", target: `hr_applicant:${a.id}`,
-    detail: { send: row.id, status: outcome, invite: inv.result, resend: b?.resend === true, providerMessageId: mail.providerMessageId || null } });
+    detail: { send: row.id, status: outcome, invite: inv.result, existing: inv.existing, resend: b?.resend === true, providerMessageId: mail.providerMessageId || null } });
 
   const shaped = shapeSend(done);
-  const invite = { result: inv.result, expiresAt: inv.expiresAt };
+  const invite = { result: inv.result, expiresAt: inv.expiresAt, existing: inv.existing };
   if (outcome === "sent") return json(res, 200, { status: "sent", send: shaped, invite });
   if (outcome === "unknown") {
     return json(res, 202, { status: "unknown", send: shaped, invite,
@@ -261,8 +283,8 @@ async function link(res, sb, ctx, user, b) {
   if (!a) return;
   const inv = await inviteFor(res, ctx, user, a, "hr.lms_trial_link");
   if (!inv) return;
-  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.lms_trial_link", target: `hr_applicant:${a.id}`, detail: { invite: inv.result } });
-  return json(res, 200, { url: inv.url, expiresAt: inv.expiresAt, result: inv.result });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.lms_trial_link", target: `hr_applicant:${a.id}`, detail: { invite: inv.result, existing: inv.existing } });
+  return json(res, 200, { url: inv.url, expiresAt: inv.expiresAt, result: inv.result, existing: inv.existing });
 }
 
 /** 画面が「送信」を押す前に作る鍵（テスト用にも出す） */

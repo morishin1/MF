@@ -12,6 +12,8 @@
 //   6. 体験状況（進捗・6条件・完了）を出す。取れないときは「最新情報を取得できません」（未完了と書かない）。［再試行］
 //   7. 体験完了でも合否は決めない（［採用判断へ進む］は NEXT ACTION へ移るだけで、何も送らない）
 //   8. スマホ（320・390px）で横にはみ出さない
+//   9. すでに無限道場のアカウントがある人（体験版は未参加）にも案内できる：「ログインして参加」の文面・参加用URL（variant:"existing"）。
+//      開いている間にアカウントの有無が変わったら（lms_variant_changed）、送らずに正しい文面へ入れ替える
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -28,6 +30,8 @@ const DRAFT = {
   body: `${NAME} 様\n\n本日はカジュアル面談のお時間をいただき、ありがとうございました。\n\n▼無限道場 体験版（個別登録URL）\n${URL_TAG}\n（このURLの有効期限：{{体験URLの有効期限}}）\n\n体験や継続受講の申し込みは、採用・契約の成立を意味しません。\n\n株式会社エイト\n採用担当`,
   missing: [], tags: [URL_TAG, "{{体験URLの有効期限}}"],
 };
+const DRAFT_EX = { ...DRAFT, existing: true,
+  body: `${NAME} 様\n\n▼無限道場 体験版（参加用URL）\n${URL_TAG}\n（このURLの有効期限：{{体験URLの有効期限}}）\n\nすでにお持ちの無限道場のアカウントでログインし、［このコースに参加する］を押してください。\n新しいアカウントの登録は不要です。これまでの学習の記録はそのまま残ります。\n\n株式会社エイト\n採用担当` };
 const COND = (on) => ["必須レッスン", "考え方（MVV）への回答", "AIとのやり取り", "3分AIチャレンジ", "小さな成果物", "振り返り"]
   .map((label, i) => ({ key: `c${i}`, label, done: i < on, ...(i === 0 ? { detail: `${Math.min(6, on * 2)}/6` } : {}) }));
 
@@ -50,6 +54,8 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
       progress: { percent: 50, lessonsDone: 3, lessonsTotal: 6, lastActivityAt: "2026-10-12T06:00:00Z" }, conditions: COND(3), course: "無限道場 体験版" };
     if (st.lms === "done") return { ok: true, stage: { key: "done", label: "体験完了" }, registered: true, enrolled: true,
       progress: { percent: 100, lessonsDone: 6, lessonsTotal: 6, lastActivityAt: "2026-10-12T07:00:00Z" }, conditions: COND(6), course: "無限道場 体験版" };
+    if (st.lms === "account") return { ok: true, stage: { key: "account", label: "アカウントあり（体験版は未参加）" }, registered: true, enrolled: false, existing: true, progress: null, conditions: [] };
+    if (st.lms === "account_invited") return { ok: true, stage: { key: "account_invited", label: "参加の案内済み（アカウントあり）" }, registered: true, enrolled: false, existing: true, progress: null, conditions: [] };
     if (st.lms === "invited") return { ok: true, stage: { key: "invited", label: "招待済み" }, progress: null, conditions: [] };
     return { ok: true, stage: { key: "none", label: "未招待" }, progress: null, conditions: [] };
   };
@@ -65,14 +71,18 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
         if (b.action === "link") return send({ url: "https://lms.example.test/mgn/register?invite=SECRET-TOKEN", expiresAt: "2026-10-19T05:05:00Z", result: "reused" });
         const mode = o.postMode ? o.postMode(st.posts.length, b) : "sent";
         if (mode === "abort") return route.abort("failed");
+        if (mode === "variant") {
+          st.lms = "account";
+          return send({ error: "lms_variant_changed", existing: true, hint: "この方は、すでに無限道場のアカウントを持っています。「ログインして参加」の文面に切り替えたので、内容を確かめてから送ってください（メールは送っていません）" }, 409);
+        }
         await new Promise((r) => setTimeout(r, 300));
         if (mode === "failed") {
           st.sends.unshift({ id: `s${st.posts.length}`, status: "failed", createdAt: "2026-10-12T05:00:00Z", sentByName: "人事 花子", error: "送信サービスが断りました（422）" });
           return send({ status: "failed", hint: "送れませんでした（送信サービスが断りました（422））。もう一度送ると、同じ招待URLで送ります" }, 502);
         }
         const dup = st.posts.filter((p) => p.requestKey === b.requestKey).length > 1;
-        if (!dup) { st.sends.unshift({ id: `s${st.posts.length}`, status: "sent", createdAt: "2026-10-12T05:05:00Z", sentByName: "人事 花子" }); st.lms = "invited"; }
-        return send({ status: "sent", duplicate: dup, invite: { result: "issued", expiresAt: "2026-10-19T05:05:00Z" } });
+        if (!dup) { st.sends.unshift({ id: `s${st.posts.length}`, status: "sent", createdAt: "2026-10-12T05:05:00Z", sentByName: "人事 花子" }); st.lms = st.lms === "account" ? "account_invited" : "invited"; }
+        return send({ status: "sent", duplicate: dup, invite: { result: "issued", expiresAt: "2026-10-19T05:05:00Z", existing: st.lms === "account_invited" } });
       }
       st.gets++;
       if (o.available === false) return send({ available: false });
@@ -80,7 +90,7 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
         lms: { ok: false, error: "not_configured", hint: "無限道場との連携の設定がありません（MUGENDOJO_HR_LMS_SECRET）" } });
       return send({ available: true, configured: true, missing: [], applicant: { id: A1, name: NAME, email: "taro@example.jp" },
         interviewDone: st.interviewDone, mail: { configured: true, reason: null, from: "株式会社エイト 採用 <recruit@example.jp>" },
-        draft: DRAFT, sends: st.sends, lms: lmsBody() });
+        draft: st.lms.startsWith("account") ? DRAFT_EX : { ...DRAFT, existing: false }, sends: st.sends, lms: lmsBody() });
     }
     if (/\/api\/hr\/applicants\/detail/.test(url)) return send({ applicant, timeline: [], interviews: [], offers: [] });
     if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [applicant] });
@@ -191,6 +201,49 @@ console.log("\n=== 案内を送る（文面・URL を出さない・二度押し
   check(st.posts.at(-1).action === "link", "［URLをコピー］は URL を受け取るだけ（メールは送らない）");
   check(dlg.seen.some((m) => m.includes("本人以外に送らないでください")), "コピーの前後に、本人以外に送らないよう出す");
   check(!(await page.locator("[data-lms-trial]").innerHTML()).includes("SECRET-TOKEN"), "パネルに URL を残さない");
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+
+console.log("\n=== すでに無限道場のアカウントがある人（体験版は未参加） ===");
+{
+  const { page, st, errs } = await open({ lms: "account" });
+  const dlg = dialogs(page);
+  await page.waitForSelector("[data-lms-existing]");
+  check((await page.locator("[data-lms-stage]").innerText()).includes("アカウントあり"), "段階：アカウントあり（体験版は未参加）");
+  check((await page.locator("[data-lms-existing]").innerText()).includes("新しい登録は不要"), "パネル：ログインして参加・新しい登録は不要・記録はそのまま");
+  await page.waitForSelector(".hr-next [data-lms-next-invite]");
+  check(true, "アカウントがあっても、面談後なら NEXT ACTION から案内できる");
+  await page.click(".hr-next [data-lms-next-invite]");
+  await page.waitForSelector("#lms-body");
+  check((await page.locator("[data-lms-existing-mail]").count()) === 1 && (await page.locator("#lms-body").inputValue()).includes("［このコースに参加する］"), "「ログインして参加」の文面と説明");
+  check((await page.locator(".hr-modal").innerText()).includes("参加用URL"), "登録URLではなく参加用URLと出す");
+  await page.click("#lms-send");
+  await page.waitForSelector("[data-lms-result]");
+  check(dlg.seen.some((m) => m.includes("参加用URL")), "送る前の確認も参加用URL");
+  check(st.posts[0].variant === "existing", "文面の版（existing）を送る");
+  await page.click("#lms-modal >> text=閉じる");
+  await page.waitForSelector("[data-lms-sent]");
+  check((await page.locator("[data-lms-stage]").innerText()).includes("参加の案内済み") && (await page.locator("[data-lms-next-invite]").count()) === 0, "送ったあと：参加の案内済み・案内ボタンは消える");
+  await page.waitForSelector(".hr-next [data-lms-next]");
+  check((await page.locator(".hr-next [data-lms-next]").innerText()).includes("参加の案内済み"), "NEXT ACTION に「参加の案内済み」を1行");
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+{
+  // 開いている間に本人が無限道場に登録した → 送らずに「ログインして参加」の文面へ入れ替え
+  const { page, st, errs } = await open({ postMode: (n) => (n === 1 ? "variant" : "sent") });
+  dialogs(page);
+  await page.click(".hr-next [data-lms-next-invite]");
+  await page.waitForSelector("#lms-send");
+  check(!(await page.locator("#lms-body").inputValue()).includes("［このコースに参加する］"), "はじめは登録URLの文面");
+  await page.click("#lms-send");
+  await page.waitForFunction(() => document.getElementById("lms-body")?.value.includes("［このコースに参加する］"));
+  check((await page.locator("#lms-msg").innerText()).includes("ログインして参加") && (await page.locator("[data-lms-existing-mail]").count()) === 1, "食い違い：送らずに文面を入れ替えて理由を出す");
+  check(st.posts[0].variant === "new" && st.sends.length === 0, "1回目は登録URLの版で頼み、送っていない");
+  await page.click("#lms-send");
+  await page.waitForSelector('[data-lms-result="sent"]');
+  check(st.posts[1].variant === "existing" && st.posts[1].requestKey !== st.posts[0].requestKey, "入れ替えたあとは existing・新しい鍵で送る");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
 }

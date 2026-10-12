@@ -26,7 +26,7 @@
     .hr-lms .hd .sp { flex:1; }
     .hr-lms-chip { border-radius:999px; padding:2px 10px; font-size:11.5px; font-weight:700; background:#eef0f6; color:#3b4a6b; }
     .hr-lms-chip[data-stage="done"] { background:#e5f1e2; color:#2f6f3a; }
-    .hr-lms-chip[data-stage="active"], .hr-lms-chip[data-stage="registered"] { background:#e8eefc; color:#2a4a9a; }
+    .hr-lms-chip[data-stage="active"], .hr-lms-chip[data-stage="registered"], .hr-lms-chip[data-stage="account"] { background:#e8eefc; color:#2a4a9a; }
     .hr-lms-chip[data-stage="expired"], .hr-lms-chip[data-stage="unavailable"] { background:#fbf1d6; color:#8a5a00; }
     .hr-lms .line { font-size:12.5px; color:#4a5068; margin:8px 0 0; line-height:1.7; }
     .hr-lms .bar { height:8px; border-radius:999px; background:#eef0f6; overflow:hidden; margin:10px 0 4px; }
@@ -145,7 +145,6 @@
     } else if (hasAccount) {
       const p = lms.progress || {};
       status = `
-        ${lms.enrolled === false ? `<p class="line">無限道場のアカウントはありますが、体験版の受講登録がありません（無限道場の管理画面で登録してください）。</p>` : ""}
         <div class="bar" aria-hidden="true"><i style="width:${Number(p.percent) || 0}%"></i></div>
         <p class="line" data-lms-progress>進捗 <b>${esc(p.percent ?? 0)}%</b>・レッスン ${esc(p.lessonsDone ?? 0)}/${esc(p.lessonsTotal ?? 0)}・最終学習 ${esc(fmt(p.lastActivityAt))}</p>
         <ul class="cond" data-lms-conditions>${(lms.conditions || []).map((x) => `<li class="${x.done ? "on" : ""}" data-done="${x.done ? 1 : 0}">
@@ -153,6 +152,10 @@
         ${stage.key === "done" ? `<div class="banner ok" data-lms-done><span class="material-symbols-outlined">task_alt</span>
           <div>体験を完了しました。体験の結果で合否は決まりません。採用判断は面談・評価をもとに、NEXT ACTION から進めてください。
           <br><button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="HrLmsTrial.toDecision()">採用判断へ進む</button></div></div>` : ""}`;
+    } else if (stage.key === "account") {
+      status = `<p class="line" data-lms-existing>無限道場のアカウントがあります（体験版は未参加）。案内を送ると、本人はログインして［このコースに参加する］を押すだけで始められます。新しい登録は不要で、これまでの学習の記録はそのまま残ります。</p>`;
+    } else if (stage.key === "account_invited") {
+      status = `<p class="line" data-lms-existing>参加の案内済みです。本人がログインして体験版に参加するのを待っています（新しい登録は不要）。</p>`;
     } else if (stage.key === "invited" || stage.key === "expired") {
       status = `<p class="line">${stage.key === "expired" ? "招待URLの期限が切れています。［再送する］で新しいURLを送れます。" : "本人の登録を待っています。"}</p>`;
     }
@@ -202,7 +205,7 @@
     if (atStep && d.interviewDone && d.applicant.email && !live && !hasAccount) {
       return { key: "primary", primary: true, label: "面談のお礼と、無限道場の体験を案内してください", cta: "お礼＋無限道場体験を案内" };
     }
-    if (!live && !hasAccount && stageKey !== "invited" && stageKey !== "expired") return null;
+    if (!live && !hasAccount && !["invited", "expired", "account_invited"].includes(stageKey)) return null;
     const label = lms.ok ? lms.stage.label : "最新情報を取得できません";
     const pct = hasAccount && lms.progress ? `・${Number(lms.progress.percent) || 0}%` : "";
     const tail = stageKey === "done" ? "（体験の結果で合否は決まりません）" : "";
@@ -267,7 +270,9 @@
         <div>${esc(fmt(f.live.createdAt))} に送っています（${esc((STATUS[f.live.status] || STATUS.unknown)[0])}）。本人に届いていないこと・期限が切れたことを確かめてから送ってください。
         有効な招待があれば同じURL、期限切れなら新しいURLで送ります。</div></div>` : ""}
       <div class="banner info" style="margin:0 0 10px;"><span class="material-symbols-outlined">link</span>
-        <div>本人専用の登録URLと有効期限は、送信するときに無限道場から受け取り、${esc(URL_TAG)}・{{体験URLの有効期限}} に入れます（この画面には表示しません。送信記録にも残しません）。</div></div>
+        <div>本人専用の${d.draft.existing ? "参加用URL" : "登録URL"}と有効期限は、送信するときに無限道場から受け取り、${esc(URL_TAG)}・{{体験URLの有効期限}} に入れます（この画面には表示しません。送信記録にも残しません）。</div></div>
+      ${d.draft.existing ? `<div class="banner info" style="margin:0 0 10px;" data-lms-existing-mail><span class="material-symbols-outlined">person_check</span>
+        <div>この方は、すでに無限道場のアカウントを持っています。ログインして［このコースに参加する］を押す案内の文面です（新しいアカウントは作りません・これまでの学習の記録はそのまま）。</div></div>` : ""}
       ${missing.length ? `<div class="banner warn"><span class="material-symbols-outlined">warning</span><div>${missing.map((m) => `{{${esc(m.key)}}}：${esc(m.reason)}`).join("<br>")}</div></div>` : ""}
       <label>件名</label>
       <input id="lms-subject" type="text" maxlength="200" value="${esc(subject)}" ${edit ? "" : "readonly"}>
@@ -312,13 +317,13 @@
     if (left.length) { msg.textContent = `使えない差し込み項目があります：${[...new Set(left)].map((k) => `{{${k}}}`).join("・")}`; return; }
     if (/[\r\n]/.test(subject)) { msg.textContent = "件名に改行は使えません"; return; }
     const a = f.d.applicant;
-    if (!confirm(`${a.name} 様（${a.email}）へ${f.resend ? "再送" : "送信"}します。無限道場で本人専用の登録URLを用意して、このメールに入れます。よろしいですか？`)) return;
+    if (!confirm(`${a.name} 様（${a.email}）へ${f.resend ? "再送" : "送信"}します。無限道場で本人専用の${f.d.draft.existing ? "参加用URL" : "登録URL"}を用意して、このメールに入れます。よろしいですか？`)) return;
     f.sending = true; f.typed = { subject, body };
     let r = null, err = null;
     try {
       r = await KPLayout.busy(btn, "送信中…", () => API.api("/api/hr/applicants/lms-trial", {
         method: "POST", invalidates: [],
-        body: { id: f.id, action: "send", subject, body, requestKey: f.key, ...(f.resend ? { resend: true } : {}) },
+        body: { id: f.id, action: "send", subject, body, requestKey: f.key, variant: f.d.draft.existing ? "existing" : "new", ...(f.resend ? { resend: true } : {}) },
       }));
     } catch (e) { err = e; }
     f.sending = false;
@@ -335,7 +340,14 @@
       } else {
         // 送る前に断られた（面談前・URL の差し込み位置・無限道場の失敗・送信済み など）。メールは送っていない
         msg.textContent = (b.problems || [err.hint || err.message]).join("／");
-        if (b.error === "already_sent" || b.error === "lms_already_registered") { cache.delete(f.id); load(f.id); }
+        if (b.error === "lms_variant_changed") {
+          // アカウントの有無が変わった：新しい文面に入れ替えて、確かめてから送ってもらう
+          await load(f.id);
+          const nd = cache.get(f.id)?.data;
+          if (flow === f && nd?.draft) { f.d = nd; f.key = newKey(); renderSend(nd.draft.subject, nd.draft.body); document.getElementById("lms-msg").textContent = err.hint || ""; }
+          return;
+        }
+        if (["already_sent", "lms_already_registered", "lms_already_enrolled"].includes(b.error)) { cache.delete(f.id); load(f.id); }
         return;
       }
     } else {
@@ -353,7 +365,7 @@
   async function copyLink(btn) {
     const d = current();
     if (!d) return;
-    if (!confirm("本人専用の登録URLをコピーします。本人以外に送らないでください。よろしいですか？")) return;
+    if (!confirm(`本人専用の${d.draft?.existing ? "参加用URL" : "登録URL"}をコピーします。本人以外に送らないでください。よろしいですか？`)) return;
     let r;
     try {
       r = await KPLayout.busy(btn, "準備中…", () => API.api("/api/hr/applicants/lms-trial", { method: "POST", invalidates: [], body: { id: d.applicant.id, action: "link" } }));
@@ -362,7 +374,7 @@
       await navigator.clipboard.writeText(r.url);
       alert(`コピーしました（有効期限：${fmt(r.expiresAt)}）。本人以外に送らないでください。`);
     } catch {
-      openHrModal(`<h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 10px;">本人専用の登録URL</h2>
+      openHrModal(`<h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 10px;">本人専用の${r.existing ? "参加用URL（ログインして参加）" : "登録URL"}</h2>
         <p class="hr-sub" style="margin:0 0 8px;">自動でコピーできませんでした。選択してコピーしてください（有効期限：${esc(fmt(r.expiresAt))}）。本人以外に送らないでください。</p>
         <input type="text" readonly value="${esc(r.url)}" onfocus="this.select()" data-lms-url>
         <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button></div>`);

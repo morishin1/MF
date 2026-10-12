@@ -7,7 +7,7 @@
   - 案内後は NEXT ACTION に体験の状況を1行（招待済み／体験中・○%／体験完了）。主ボタンはもとの操作に戻る
   - ほかの段階では NEXT ACTION を変えない（案内はパネルから送れる）。無限道場の状況を読み終えるまでは、これまでの NEXT ACTION のまま
 - API：`api/hr/applicants/lms-trial.js`（採用HRを使える人だけ。無限道場を運営する会社＝`HR_LEAD_TENANT_ID` だけ）
-- LMS 側の仕様：eight-its/lms `v3-next/docs/hr-lms-api.md`（`trial-invite` の `send_mail:false` は eight-its/lms#364）
+- LMS 側の仕様：eight-its/lms `v3-next/docs/hr-lms-api.md`（`trial-invite` の `send_mail:false` は eight-its/lms#364、既存アカウントへの案内 `allow_existing` は eight-its/lms#365）
 - DB の変更なし（送った記録は db/124 の `gw_hr_mail_sends` を使う）
 
 ## 流れ
@@ -17,7 +17,7 @@
 3. サーバーが LMS の `trial-invite`（`action:"issue"`・`send_mail:false`）で本人専用の招待URLを受け取り、本文の `{{無限道場体験URL}}` と `{{体験URLの有効期限}}` に入れて、MF のメール送信（Resend）で1通送る
    - LMS からはメールを送らない（本人に2通届かない）
    - 有効な招待があれば LMS は同じものを返す（reused）。送り直しても招待は増えない
-4. 本人が URL から `/mgn/register` で登録 → 45分体験
+4. 本人が URL から `/mgn/register` で登録 → 45分体験（既存アカウントの人は下の「すでに無限道場のアカウントがある人」）
 5. ドロワーを開くと、LMS の `trial-status` をその場で読む（HR には保存しない）
 
 ## 二重送信を防ぐ
@@ -25,7 +25,18 @@
 - 送信の鍵（requestKey）：二度押し・通信のやり直しでは送らず、1回目の結果を返す
 - このご案内を送った（送信中・結果不明を含む）記録があれば、［再送する］（`resend:true`）を選んだときだけ送る
 - メールが失敗（failed）なら、もう一度送れる（同じ招待URL）
-- LMS に登録済みのメールには送らない（409。ログインして体験版を開くよう案内する）
+- 体験版に参加済み（LMS の `already_enrolled`）なら送らない（409 `lms_already_enrolled`。招待も作らない）
+- LMS が既存アカウントへの案内に対応する前（#365 未反映。`already_registered`）なら送らない（409 `lms_already_registered`）
+
+## すでに無限道場のアカウントがある人（体験版は未参加）
+
+LMS の受講生として登録済みの応募者にも、同じ［お礼＋無限道場体験を案内］から1通で案内できる。
+
+- MF は `trial-invite` に `allow_existing:true` を付けて頼む。LMS は登録URLではなく**参加用URL**（`/mgn/invite?invite=…`）を返す（`existing:true`）
+- 本人はいつものアカウントでログインして［このコースに参加する］を押す。**新しいアカウントは作らない**（二重登録なし）。パスワード・これまでの学習の記録・ほかの受講コースはそのまま（体験版の受講登録が1つ増えるだけ）
+- 文面は「ログインして参加」の版（`LMS_TRIAL_TEMPLATE_EXISTING`）。下書きの `draft.existing` で切り替わる
+- 画面を開いている間にアカウントの有無が変わったとき：画面は文面の版（`variant: "new" | "existing"`）を送り、LMS の答えと食い違えば送らずに 409 `lms_variant_changed`。画面は正しい文面に入れ替えて、確かめてから送ってもらう（LMS の招待は残り、次の送信で同じURLを使い回す＝招待は増えない）
+- 二重メール：LMS からはメールを送らない（`send_mail:false`）。MF 側の1通だけ
 
 ## 残さないもの
 
@@ -37,7 +48,9 @@
 |---|---|
 | 未招待 | 招待なし |
 | 招待済み／招待の期限切れ | 招待あり・未登録 |
-| 登録済み | LMS のアカウントあり・未開始 |
+| アカウントあり（体験版は未参加） | LMS のアカウントあり・体験版の受講登録なし（`enrolled:false`）。案内できる |
+| 参加の案内済み（アカウントあり） | 上に加えて、有効な体験版の招待あり（本人の参加待ち） |
+| 登録済み | LMS のアカウントあり・体験版に参加済み・未開始 |
 | 体験中 | 開始した |
 | 体験完了 | 6条件（必須レッスン・MVV・AI・3分チャレンジ・成果物・振り返り）がそろった |
 | 取得できません | LMS に届かない・認証できない（未完了・未招待とは書かない） |

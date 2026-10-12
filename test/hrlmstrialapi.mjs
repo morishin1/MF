@@ -71,7 +71,8 @@ mock.module(atRoot("lib/gw.js"), { namedExports: { ...REAL_GW, gwContext: async 
 const canon = (v) => (v === null || typeof v !== "object" ? JSON.stringify(v ?? null)
   : Array.isArray(v) ? `[${v.map(canon).join(",")}]`
     : `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}`);
-const lms = { calls: [], seen: new Set(), invites: new Map(), registered: new Set(), progress: new Map(), mode: null, tokenN: 0 };
+// registered … LMS のアカウントがある（notEnrolled に無ければ体験版にも参加済み）。legacy … allow_existing に対応する前の LMS
+const lms = { calls: [], seen: new Set(), invites: new Map(), registered: new Set(), notEnrolled: new Set(), progress: new Map(), mode: null, tokenN: 0, legacy: false };
 globalThis.fetch = async (url, init) => {
   const body = JSON.parse(init.body);
   const h = init.headers;
@@ -88,21 +89,25 @@ globalThis.fetch = async (url, init) => {
   if (lms.mode === "no_course") return reply(409, { ok: false, error: "trial_course_missing" });
   if (url.endsWith("/api/hr/lms/trial-invite")) {
     const email = body.email;
-    if (lms.registered.has(email)) return reply(200, { ok: true, result: "already_registered", email, registered: true, invite: null, mail: { sent: false } });
+    if (body.allow_existing !== undefined && typeof body.allow_existing !== "boolean" && !lms.legacy) return reply(400, { ok: false, error: "invalid_allow_existing" });
+    const existing = lms.registered.has(email);
+    if (existing && (lms.legacy || body.allow_existing !== true)) return reply(200, { ok: true, result: "already_registered", email, registered: true, invite: null, mail: { sent: false } });
+    if (existing && !lms.notEnrolled.has(email)) return reply(200, { ok: true, result: "already_enrolled", email, registered: true, existing: true, invite: null, mail: { sent: false } });
     let inv = lms.invites.get(email);
     let result = "reused";
     if (!inv || inv.expired) {
-      inv = { url: `${BASE}/mgn/register?invite=tok-${++lms.tokenN}-SECRETTOKEN`, expires_at: "2026-10-19T05:05:00.000Z", expired: false };
+      inv = { url: `${BASE}/mgn/${existing ? "invite" : "register"}?invite=tok-${++lms.tokenN}-SECRETTOKEN`, expires_at: "2026-10-19T05:05:00.000Z", expired: false };
       lms.invites.set(email, inv); result = "issued";
     }
-    return reply(200, { ok: true, result, email, registered: false,
+    if (existing) inv = { ...inv, url: inv.url.replace("/mgn/register?", "/mgn/invite?") };   // LMS は既存アカウントには参加用URL（acceptLink）で返す
+    return reply(200, { ok: true, result, email, registered: existing, ...(existing ? { existing: true } : {}),
       invite: { url: inv.url, status: "invited", created_at: "2026-10-12T05:05:00.000Z", expires_at: inv.expires_at },
       mail: { sent: body.send_mail !== false } });
   }
   if (url.endsWith("/api/hr/lms/trial-status")) {
     return reply(200, { ok: true, trial_course: { id: "c1", title: "無限道場 体験版" },
       items: body.emails.map((email) => ({ email, invited: lms.invites.has(email), invite_status: lms.invites.get(email)?.expired ? "expired" : "invited",
-        registered: lms.registered.has(email), enrolled: lms.registered.has(email), started: false, completed: false,
+        registered: lms.registered.has(email), enrolled: lms.registered.has(email) && !lms.notEnrolled.has(email), started: false, completed: false,
         progress_percent: 0, lessons_done: 0, lessons_total: 6, mvv_answered: false, ai_tried: false, challenge_submitted: false,
         output_submitted: false, reflection_submitted: false, last_activity_at: null, ...(lms.progress.get(email) || {}) })),
       invalid_emails: [] });
@@ -134,7 +139,7 @@ const everythingStored = () => JSON.stringify({ sends: mem.rows.gw_hr_mail_sends
 
 function setup() {
   mem.reset(); logged.length = 0; sent.length = 0; mailMode = "sent"; who = HR; configure();
-  Object.assign(lms, { calls: [], seen: new Set(), invites: new Map(), registered: new Set(), progress: new Map(), mode: null, tokenN: 0 });
+  Object.assign(lms, { calls: [], seen: new Set(), invites: new Map(), registered: new Set(), notEnrolled: new Set(), progress: new Map(), mode: null, tokenN: 0, legacy: false });
   mem.rows.gw_hr_applicants = [
     { id: A1, tenant_id: T1, name: "山田 太郎", email: "Taro@Example.jp" },
     { id: A2, tenant_id: T1, name: "佐藤 花子", email: "hanako@example.jp" },
@@ -194,6 +199,12 @@ await ok("体験の段階：未招待／招待済み／期限切れ／登録済�
   assert.equal(L.trialStage({ invited: true, invite_status: "invited" }).label, "招待済み");
   assert.equal(L.trialStage({ invited: true, invite_status: "expired" }).key, "expired");
   assert.equal(L.trialStage({ invited: true, registered: true }).key, "registered");
+  assert.equal(L.trialStage({ invited: true, registered: true, enrolled: true }).key, "registered");
+  assert.equal(L.trialStage({ registered: true, enrolled: false }).key, "account", "アカウントあり・体験版は未参加");
+  assert.equal(L.trialStage({ registered: true, enrolled: false, invited: true, invite_status: "expired" }).key, "account");
+  assert.equal(L.trialStage({ registered: true, enrolled: false, invited: true, invite_status: "invited" }).key, "account_invited");
+  assert.equal(L.shapeTrialStatus({ registered: true, enrolled: false }).existing, true);
+  assert.equal(L.shapeTrialStatus({ registered: true, enrolled: true }).existing, false);
   assert.equal(L.trialStage({ registered: true, started: true }).key, "active");
   assert.equal(L.trialStage({ registered: true, started: true, completed: true }).label, "体験完了");
   const s = L.shapeTrialStatus({ registered: true, started: true, progress_percent: 60, lessons_done: 4, lessons_total: 6, mvv_answered: true, ai_tried: true });
@@ -354,15 +365,94 @@ await ok("本文に URL の差し込み位置が無い → 400（LMS に招待�
   assert.equal(lms.calls.length, 0);
 });
 
-await ok("LMS に登録済みのメール → 409 lms_already_registered（重複登録を促さない）。メールは送らない", async () => {
+await ok("LMS 登録済み・体験版に参加済み → 409 lms_already_enrolled（招待もメールも作らない）", async () => {
   setup();
   lms.registered.add("taro@example.jp");
+  const r = await send(A1);
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "lms_already_enrolled");
+  assert.match(r.body.hint, /参加しています/);
+  assert.equal(inviteCalls()[0].body.allow_existing, true, "既存アカウントへの案内を頼む");
+  assert.equal(lms.invites.size, 0);
+  assert.equal(sent.length, 0);
+  assert.equal(trialSends().length, 0);
+});
+
+await ok("LMS 登録済み・体験版は未参加 → 「ログインして参加」の文面と参加用URLで1通（新しい登録を促さない）", async () => {
+  setup();
+  lms.registered.add("taro@example.jp"); lms.notEnrolled.add("taro@example.jp");
+  const g = await get(A1);
+  assert.equal(g.body.lms.stage.key, "account");
+  assert.equal(g.body.lms.existing, true);
+  assert.equal(g.body.draft.existing, true);
+  assert.match(g.body.draft.body, /ログインし、［このコースに参加する］/);
+  assert.match(g.body.draft.body, /新しいアカウントの登録は不要/);
+  assert.match(g.body.draft.body, /学習の記録はそのまま/);
+  assert.ok(!g.body.draft.body.includes("個別登録URL"));
+  const r = await send(A1, { variant: "existing" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.invite.existing, true);
+  assert.equal(sent.length, 1);
+  assert.ok(sent[0].text.includes("/mgn/invite?invite=tok-1-SECRETTOKEN"), "参加用URL（登録画面ではない）");
+  assert.ok(!sent[0].text.includes("/mgn/register"));
+  assert.ok(!everythingStored().includes("SECRETTOKEN"));
+  assert.equal(logged.find((e) => e.action === "hr.lms_trial_mail").detail.existing, true);
+  // 送ったあと：参加の案内済み。もう一度（別の鍵）は already_sent、再送は同じ参加用URL（招待は増えない）
+  assert.equal((await get(A1)).body.lms.stage.key, "account_invited");
+  assert.equal((await send(A1, { variant: "existing" })).body.error, "already_sent");
+  const rs = await send(A1, { variant: "existing", resend: true });
+  assert.equal(rs.statusCode, 200);
+  assert.equal(lms.invites.size, 1);
+  assert.ok(sent[1].text.includes("tok-1-SECRETTOKEN"));
+  // 本人が参加したら、もう案内しない
+  lms.notEnrolled.delete("taro@example.jp");
+  assert.equal((await send(A1, { variant: "existing", resend: true })).body.error, "lms_already_enrolled");
+  assert.equal(sent.length, 2);
+});
+
+await ok("文面の版と LMS の答えが食い違う → 409 lms_variant_changed（送らない）。開き直すと正しい版", async () => {
+  setup();
+  const g = await get(A1);                                 // まだアカウントなし → 登録URLの文面
+  assert.equal(g.body.draft.existing, false);
+  lms.registered.add("taro@example.jp"); lms.notEnrolled.add("taro@example.jp");   // 画面を開いている間に本人が登録
+  const r = await call({ method: "POST", url: "/x", body: { id: A1, action: "send", subject: g.body.draft.subject, body: g.body.draft.body, requestKey: key(), variant: "new" } });
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "lms_variant_changed");
+  assert.equal(r.body.existing, true);
+  assert.equal(sent.length, 0);
+  assert.equal(trialSends().length, 0);
+  assert.equal((await get(A1)).body.draft.existing, true);
+  const ok2 = await send(A1, { variant: "existing" });
+  assert.equal(ok2.statusCode, 200);
+  assert.equal(lms.invites.size, 1, "招待は使い回す（増えない）");
+  // 逆向き（参加用の文面なのに、アカウントが無い）も送らない
+  setup();
+  const r2 = await call({ method: "POST", url: "/x", body: { id: A1, action: "send", subject: "件名", body: L.trialDraft({ name: "山田 太郎" }, { existing: true }).body, requestKey: key(), variant: "existing" } });
+  assert.equal(r2.body.error, "lms_variant_changed");
+  assert.equal(sent.length, 0);
+});
+
+await ok("既存アカウントへの案内に対応する前の LMS → 409 lms_already_registered（重複登録を促さない）。メールは送らない", async () => {
+  setup();
+  lms.legacy = true;
+  lms.registered.add("taro@example.jp"); lms.notEnrolled.add("taro@example.jp");
   const r = await send(A1);
   assert.equal(r.statusCode, 409);
   assert.equal(r.body.error, "lms_already_registered");
   assert.match(r.body.hint, /ログインして/);
   assert.equal(sent.length, 0);
   assert.equal(trialSends().length, 0);
+});
+
+await ok("URL を手で渡す（link）：既存アカウントには参加用URL（existing:true）", async () => {
+  setup();
+  lms.registered.add("taro@example.jp"); lms.notEnrolled.add("taro@example.jp");
+  const r = await call({ method: "POST", url: "/x", body: { id: A1, action: "link" } });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.existing, true);
+  assert.match(r.body.url, /\/mgn\/invite\?invite=tok-1-/);
+  assert.equal(logged.at(-1).detail.existing, true);
+  assert.ok(!everythingStored().includes("SECRETTOKEN"));
 });
 
 await ok("LMS の失敗：署名不一致 401 / LMS の設定なし 503 / 体験版なし 409 / 届かない・時間切れ → 説明つき。メールは送らない", async () => {
