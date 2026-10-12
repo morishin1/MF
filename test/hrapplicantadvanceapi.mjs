@@ -37,6 +37,8 @@ function table(name) {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     is(k, v) { f.push(["is", k, v]); return q; },
+    order() { return q; },
+    limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: e() ? null : copy(rows()[0]) || null, error: e() }),
     then: (fn) => Promise.resolve({ data: e() ? null : rows().map(copy), error: e() }).then(fn),
     update(patch) {
@@ -292,6 +294,32 @@ await ok("別の会社の社員・存在しない社員とは結ばない", asyn
   }
   assert.equal(db.rows.gw_hr_applicants[0].employee_id, null);
   assert.equal(db.rows.gw_hr_applicants[0].status, "accepted");
+});
+
+await ok("Office へ引き渡されたオファーの版から事前入力する（区分 → 雇用区分・入社手続きの範囲。業務委託は試用期間なし）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [
+    { id: "o-old", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "contractor", revoked_at: "2026-10-01T00:00:00Z", join_date: "2026-10-01" },
+    { id: "o2", tenant_id: "t1", applicant_id: "a1", version: 2, offer_type: "contractor", join_date: "2026-12-01", wage_type: "月額", wage_amount: 250000,
+      probation_months: 3, accepted_at: "2026-10-10T00:00:00Z", formal_contract_required: false, handoff_at: "2026-10-11T00:00:00Z" },
+  ];
+  const r = await getPrefill("a1");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const p = r.body.prefill;
+  assert.deepEqual([p.joinDate, p.employmentType, p.onboardingProfile, p.wageType, p.wageAmount], ["2026-12-01", "業務委託", "contractor", "月給", 250000]);
+  assert.equal(p.probationMonths, undefined, "業務委託に試用期間を持ち込まない");
+  assert.deepEqual([p.offerType, p.offerTypeLabel, p.formalRequired, p.handoffAt], ["contractor", "業務委託", false, "2026-10-11T00:00:00Z"]);
+  // パート・アルバイトは、オファーの区分のまま（正社員に丸めない）
+  db.rows.gw_hr_offers = [{ id: "o3", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "part_time", employment_type: "アルバイト",
+    join_date: "2026-11-15", wage_type: "時給", wage_amount: 1300, weekly_hours: 20, accepted_at: "2026-10-10T00:00:00Z" }];
+  const q = (await getPrefill("a1")).body.prefill;
+  assert.deepEqual([q.employmentType, q.onboardingProfile, q.weeklyHours, q.wageType], ["アルバイト", "full", 20, "時給"]);
+  // スポット：案件単価は給与区分に当てはめず、備考へ
+  db.rows.gw_hr_offers = [{ id: "o4", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "spot", join_date: "2026-11-20",
+    wage_type: "案件単価", wage_amount: 50000, accepted_at: "2026-10-10T00:00:00Z" }];
+  const sp = (await getPrefill("a1")).body.prefill;
+  assert.deepEqual([sp.employmentType, sp.onboardingProfile, sp.wageType, sp.wageAmount], ["業務委託", "spot", undefined, undefined]);
+  assert.match(sp.wageNote, /案件単価 50,000円/);
 });
 
 await ok("employeeIdが無ければ断る", async () => {

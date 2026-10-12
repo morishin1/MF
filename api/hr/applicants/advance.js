@@ -27,7 +27,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canAdvanceHire, canSeeSalary } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { advancePrefill, isAdvanceClaimStale } from "../../../lib/hr.js";
+import { advancePrefillFromOffer, isAdvanceClaimStale } from "../../../lib/hr.js";
 import { guardSalaryOutput } from "../../../lib/salary.js";
 import { attachPay } from "../../../lib/hr-pay.js";
 
@@ -69,9 +69,16 @@ async function prefill(req, res, sb, ctx) {
   const found = await findAdvancing(sb, ctx, applicantId);
   if (found.deny) return json(res, found.deny.status, found.deny.body);
 
+  // 本人が承諾したオファーの版（Office へ引き渡した版）の条件を土台にする（区分つき。無ければ応募者の値）
+  const { data: offers } = await sb.from("gw_hr_offers").select("*")
+    .eq("applicant_id", found.applicant.id).eq("tenant_id", ctx.tenantId).order("version", { ascending: false }).limit(20);
+  const accepted = (offers || []).find((o) => o.accepted_at && !o.revoked_at && !o.declined_at) || null;
   // 給与の事前入力は、見られる人にだけ（見られない人の応答からは、lib/salary.js が外す）
-  if (canSeeSalary(ctx)) await attachPay(ctx.tenantId, found.applicant, "applicant");
-  return json(res, 200, { applicantId: found.applicant.id, prefill: advancePrefill(found.applicant) });
+  if (canSeeSalary(ctx)) {
+    await attachPay(ctx.tenantId, found.applicant, "applicant");
+    if (accepted) await attachPay(ctx.tenantId, accepted, "offer");
+  }
+  return json(res, 200, { applicantId: found.applicant.id, prefill: advancePrefillFromOffer(found.applicant, accepted) });
 }
 
 async function claim(req, res, sb, ctx, user) {

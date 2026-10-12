@@ -152,6 +152,18 @@
         <label>契約終了日<span class="req">*</span></label>
         <input id="f-end" type="date" oninput="clearPreview()">
       </div>
+      <div>
+        <label for="f-emptype">雇用区分</label>
+        <!-- 空欄は、これまでどおり契約区分から（無期＝正社員・有期＝契約社員）。採用HRから引き渡された人は、オファーの区分が入る -->
+        <select id="f-emptype" onchange="clearPreview()">
+          <option value="">契約区分から（無期＝正社員・有期＝契約社員）</option>
+          <option value="正社員">正社員</option><option value="契約社員">契約社員</option>
+          <option value="パート">パート</option><option value="アルバイト">アルバイト</option>
+          <option value="業務委託">業務委託</option>
+        </select>
+        <input type="hidden" id="f-profile" value="">
+        <div class="muted" id="f-profile-note" style="font-size:11.5px;margin-top:4px;"></div>
+      </div>
       <div class="full">
         <label>初回パスワード
           <span class="muted" style="font-weight:400;">空のままなら自動で作ります</span></label>
@@ -396,17 +408,31 @@
     if (p.weeklyHours != null) el("f-hours").value = p.weeklyHours;
     if (p.wageType) el("f-wage-type").value = p.wageType;
     if (p.wageAmount != null) el("f-wage").value = p.wageAmount;
+    if (p.wageNote) el("f-wage-note").value = p.wageNote;
+    if (p.employmentType) el("f-emptype").value = p.employmentType;
+    if (p.onboardingProfile) {
+      el("f-profile").value = p.onboardingProfile;
+      el("f-profile-note").textContent = PROFILE_NOTE[p.onboardingProfile] || "";
+    }
 
     el("notice").innerHTML = `
       <div class="kp-next">
         <div class="now">現在：本採用手続き</div>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>社内情報を確認して社員登録してください</h3>
-        <div class="meta">採用HRから、選考時の採用条件を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div>
+        <div class="meta">採用HRから、${p.offerTypeLabel ? `本人が承諾したオファー（${esc(p.offerTypeLabel)}）の条件` : "選考時の採用条件"}を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div>
+        ${p.handoffAt ? `<div class="meta" id="adv-handoff">HRから引き渡し：✓ 条件承諾済み　${p.formalRequired ? "✓ 正式契約済み" : "正式契約なし"}</div>` : ""}
         <button class="btn btn-primary btn-sm" onclick="focusStep3()">
           <span class="material-symbols-outlined icon-inline">person_add</span>社員登録</button>
       </div>`;
   }
+
+  // 入社手続きの範囲（lib/intake.js ONBOARDING_PROFILES）。業務委託・スポットは必要なものだけ作る
+  const PROFILE_NOTE = {
+    full: "",
+    contractor: "業務委託：労働条件通知書・試用期間・社会保険の手続きは作りません（業務委託契約・アカウント・必要な入社手続きだけ）。",
+    spot: "スポット・副業：アカウント・Slack・Webメール・契約など必要な項目だけ作り、ほかは「対象外」にします。",
+  };
 
   // NEXT ACTIONの［社員登録］は、この下にあるSTEP3のフォームへ案内するだけ。
   // 別の画面やボタンを増やさない
@@ -576,6 +602,9 @@
       trainingPrograms: dojo ? ["無限道場"] : [],
       autonomyLevel: el("f-level").value,
       accountType: el("f-account").value,
+      // 雇用区分・入社手続きの範囲（採用HRから引き渡された人は、オファーの区分から）
+      employmentType: el("f-emptype").value,
+      onboardingProfile: el("f-profile").value,
       wageType: el("f-wage-type").value,
       wageAmount: el("f-wage").value,
       allowances,
@@ -644,6 +673,7 @@
           <dt>メール</dt><dd>${esc(v.email)}</dd>
           <dt>入社日</dt><dd>${esc(v.joinDate)}</dd>
           <dt>契約</dt><dd>${esc(v.contract)}</dd>
+          ${v.employmentType ? `<dt>雇用区分</dt><dd id="pv-emptype">${esc(v.employmentType)}${PROFILE_NOTE[v.profile] ? `<div class="muted" style="font-size:11.5px;font-weight:400;">${esc(PROFILE_NOTE[v.profile])}</div>` : ""}</dd>` : ""}
           <dt>試用期間</dt><dd>${esc(v.probation)}</dd>
           <dt>育成期間</dt><dd>${esc(v.training)}</dd>
           <dt>勤務</dt><dd>${esc(v.weeklyHours)}${v.workStyle !== "指定なし" ? ` ・ ${esc(v.workStyle)}` : ""}</dd>

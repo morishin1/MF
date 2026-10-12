@@ -137,6 +137,9 @@ function toMaster(form) {
     three_month_goal: "",                    // AIとテンプレートが作る。入力させない
     kpi_template_code: "",
     account_type: form.accountType || "member",
+    // 雇用区分・入社手続きの範囲（任意。採用HRから引き渡された人は、オファーの区分から事前入力される）
+    employment_type: form.employmentType || "",
+    onboarding_profile: form.onboardingProfile || "",
     wage_type: form.wageType,
     wage_amount: form.wageAmount,
     // 選んだ手当と、当てはまらないぶんの自由記述をつなぐ。
@@ -338,6 +341,8 @@ const shape = (m) => ({
     ? `有期（${m.join_date} 〜 ${m.contract_end_date}）`
     : "無期",
   probation: m.probation_months ? `${m.probation_months}か月` : "なし",
+  employmentType: m.employment_type,
+  profile: m.onboarding_profile,
   training: `${m.training_months}か月（${m.join_date} 〜 ${addMonths(m.join_date, m.training_months)}）`,
   weeklyHours: `週 ${m.weekly_hours} 時間`,
   workMode: m.work_mode ? (workModeOptions().find((w) => w.code === m.work_mode)?.label || m.work_mode) : null,
