@@ -1,10 +1,10 @@
-// 採用HR：オファー作成 → 内容を確認してメールで送信 → 本人の条件承諾 を、実際のブラウザで通す。
+// 採用HR：オファー作成 → プレビュー（内容を確認）→ メールで送信 → 本人の条件承諾 を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（オファー作成・メール送信・同意完結 UI/UX改善仕様 §25）
 //   育成枠   … 通常表示は5項目前後／無限道場で期間が自動／報酬［なし］で金額を出さない・［時給］で出す／回答期限が自動
 //   業務委託 … 報酬はボタン／標準の支払条件が入る／詳細設定は閉じている／業務内容は標準文から
 //   パート   … 給与区分を選ばせない（時給だけ）
-//   メール   … ［内容を確認してメールで送信］→ 本人に届く内容と件名・本文 →［メールでオファー送信］1回で送る
+//   メール   … ［PDFをプレビュー］→ 本人に届く内容と件名・本文 →［メールでオファー送信］1回で送る
 //              送れないとき（設定が無い・失敗）は URL を発行して手で送る → 送付済みにする
 //   HR       … 承諾後は「条件承諾済み」→ 正式契約（LegalSign）。区分ごとに次のアクションが違う
 //   候補者   … 重要条件が先／同意のチェックが無ければ押せない／同意で完了画面
@@ -144,7 +144,7 @@ console.log("\n=== 育成枠（PC）：入力を減らす → 内容を確認 �
   await modal.locator('[data-field="pay"] .hr-opt button', { hasText: "時給" }).click();
   check(await modal.locator("#of-pay-amount").isVisible() && (await modal.locator("#of-pay-unit").innerText()) === "時給", "［時給］で「時給 [ ] 円」");
   await page.fill("#of-f-wageAmount", "1500");
-  check(await modal.locator("#of-draft").isVisible() && await modal.locator("#of-send").isVisible(), "［下書き保存］［内容を確認してメールで送信］");
+  check(await modal.locator("#of-draft").isVisible() && await modal.locator("#of-send").isVisible(), "［下書き保存］［PDFをプレビュー］");
 
   await modal.locator("#of-send").click();
   await page.waitForTimeout(900);

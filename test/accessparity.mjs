@@ -11,7 +11,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  accessOf, canRecruit, canSell, canDecideHire, canForceAttack,
+  accessOf, canRecruit, canSell, canDecideHire, canAdvanceHire, canForceAttack,
   canAccessHr, canAccessSales, canAccessOffice, canAccessKeiei,
   canOffice, canKeiei, isOwner,
   HR_ROLES, SALES_ROLES, OFFICE_ROLES, KEIEI_ROLES, RECRUIT_ROLES,
@@ -117,6 +117,27 @@ check(!canDecideHire({ isAdmin: true, roles: [] }), "会計の管理者だけで
 check(canDecideHire({ isAdmin: false, roles: ["owner"] }), "経営者は採用判断ができる");
 check(!canDecideHire({ isAdmin: false, roles: ["recruiter"] }), "採用担当だけでは採用判断はできない");
 check(!canDecideHire({ isAdmin: false, roles: ["manager"] }), "責任者はHRに入れるが、採用判断まではできない");
+
+console.log("— 本採用へ進める（社員登録の事前入力・完了。canAdvanceHire）—");
+// 社長・管理者・人事が最後まで同じ流れを実行できる。給与・owner・IT・管理は広げない
+const adv = [
+  [{ roles: ["owner"] }, true, "社長"],
+  [{ isAdmin: true, roles: [] }, true, "管理者（会計側）"],
+  [{ roles: ["hr"], apps: ["hr", "office"], isHr: true }, true, "人事（HR と Office に入れる）"],
+  [{ roles: ["hr"], apps: ["hr"] }, false, "人事でも Office（社員登録の画面）に入れなければ進めない"],
+  [{ roles: ["recruiter"], isHr: true }, false, "採用担当"],
+  [{ roles: ["manager"] }, false, "責任者"],
+  [{ roles: ["finance"] }, false, "経理"],
+  [{ roles: ["it"] }, false, "IT・管理"],
+  [{ roles: ["labor_advisor"] }, false, "社労士"],
+];
+for (const [ctx, want, label] of adv) check(canAdvanceHire(ctx) === want, `${label} → 本採用へ進める ${want ? "○" : "×"}`);
+{
+  // 画面（hr/applicants.html の canAdvanceOf）も同じ条件：管理者・社長・人事（access.officeHr）
+  const page = read("hr/applicants.html");
+  check(/return isAdmin\s*\|\|\s*roles\.includes\("owner"\)\s*\|\|\s*\(roles\.includes\("hr"\)\s*&&\s*Boolean\(me\?\.access\?\.officeHr\)\)/.test(page),
+    "hr/applicants.html の canAdvanceOf は 管理者・社長・人事（officeHr）");
+}
 check(!canForceAttack({ isAdmin: true, roles: [] }), "会計の管理者だけでは強行アタックもできない");
 check(canForceAttack({ isAdmin: false, roles: ["owner"] }), "経営者は強行アタックができる");
 
@@ -282,10 +303,10 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
     const s = read(f);
     // 候補者に送る公開リンク（ログイン不要）は対象外
     if (/public/.test(f)) continue;
-    // 本採用へ進める（社員化）は、採用HRの中でも社長・管理者だけ（canDecideHire）。
-    // 画面（hr/applicants.html）も canDecide のときだけボタンを出すので、403 にはならない
+    // 本採用へ進める（社員化）は、社長・管理者・人事（canAdvanceHire。社員登録の画面 admin-onboard.html に入れる人と同じ）。
+    // 画面（hr/applicants.html）も canAdvance のときだけボタンを出すので、403 にはならない
     if (/advance\.js$/.test(f)) {
-      check(/canDecideHire/.test(s), `${f} は canDecideHire（社長・管理者だけ。画面でもボタンを出し分け）`);
+      check(/canAdvanceHire/.test(s) && !/canDecideHire/.test(s), `${f} は canAdvanceHire（社長・管理者・人事。画面でもボタンを出し分け）`);
       continue;
     }
     check(/canRecruit/.test(s), `${f} は canRecruit で判定`);

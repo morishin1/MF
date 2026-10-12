@@ -178,7 +178,7 @@ async function preview(res, ctx, body) {
 
   // 既にログインアカウントがあるか。無限道場やタイムカードを先に
   // 使っていた人は、ここに引っかかる。押してから分かるのでは遅い
-  const acc = await accountState(sb, ctx, v.value.login_email);
+  const acc = await accountState(sb, ctx, v.value.login_email, v.value.name);
   if (acc.blocked) {
     return json(res, 200, { ok: false, errors: [{ field: "メールアドレス", message: acc.message }] });
   }
@@ -201,7 +201,7 @@ async function preview(res, ctx, body) {
  * 判定できないとき（listUsers が失敗など）は new 扱いにせず、
  * 分からないことを分からないまま返す。作成側でもう一度見る
  */
-async function accountState(sb, ctx, email) {
+async function accountState(sb, ctx, email, name = null) {
   let userId;
   try {
     userId = await findUserByEmail(sb, email);
@@ -233,13 +233,38 @@ async function accountState(sb, ctx, email) {
     };
   }
 
+  // 無限道場（profiles）に、もう受講者として居るか。紐づけると何が変わるかを、登録の前に見せる
+  // （学習履歴・提出物・ロール・パスワードは変えない。氏名は名簿に合わせ、止まっていたら利用できる状態に戻す）
+  const lms = await lmsStateOf(sb, userId, name);
   return {
-    kind: "existing", blocked: false,
+    kind: "existing", blocked: false, lms,
     message: "この方は既にログインアカウントをお持ちです"
       + "（無限道場・タイムカードなどで作成済み）。"
       + "新しくは作らず、そのアカウントに紐づけます。"
-      + "パスワードは変わりません（いま使っているものでログインできます）。",
+      + "パスワードは変わりません（いま使っているものでログインできます）。"
+      + (lms?.exists ? "無限道場の学習履歴・提出物・ロールはそのままです。" : "")
+      + (lms?.renames ? `無限道場の氏名「${lms.name}」は、名簿の「${name}」に合わせます。` : "")
+      + (lms?.reopens ? `無限道場で${lms.stateLabel}のため、利用できる状態に戻します。` : ""),
   };
+}
+
+const LMS_STATE_LABEL = { pending: "承認待ち", rejected: "利用を止めている（却下）", suspended: "停止中" };
+/**
+ * 無限道場（profiles）の、いまの状態と、紐づけたときに変わること（provisionAccounts と同じ変え方）。
+ * 読めない（表が無い・失敗）ときは null（登録は止めない。変わることを言い切れないだけ）
+ */
+async function lmsStateOf(sb, userId, name) {
+  try {
+    const { data, error } = await sb.from("profiles").select("id, name, approval_status, suspended_at").eq("id", userId).maybeSingle();
+    if (error) return null;
+    if (!data) return { exists: false };
+    const state = data.suspended_at ? "suspended" : data.approval_status && data.approval_status !== "approved" ? data.approval_status : null;
+    return {
+      exists: true, name: data.name || null,
+      renames: Boolean(name && data.name && data.name !== name),
+      reopens: Boolean(state), stateLabel: state ? (LMS_STATE_LABEL[state] || state) : null,
+    };
+  } catch { return null; }
 }
 
 // ---- アカウント作成＋育成開始 --------------------------------------------------
@@ -263,7 +288,7 @@ async function create(res, ctx, user, body) {
 
   // プレビューで見せたのと同じ確認を、押した直後にもう一度する。
   // 見てから押すまでのあいだに、別の管理者が同じ人を入れていることがある
-  const acc = await accountState(sb, ctx, m.login_email);
+  const acc = await accountState(sb, ctx, m.login_email, m.name);
   if (acc.blocked) {
     return json(res, 409, { error: "account_taken", hint: acc.message });
   }

@@ -594,6 +594,8 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
     const { applicant, company } = await loadSendContext(sb, ctx, offer);
     await attachPay(ctx.tenantId, offer, "offer");
     const built = await buildNoticePdf(offer, { candidateName: applicant?.name, company });
+    // プレビューは確定しない（置かない・db/132 の列は入れない）。見たという事実だけ残す
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_preview", target: `hr_offer:${offer.id}`, detail: { version: offer.version } });
     return sendPdf(res, built.bytes, `確認用_${pdfFileName(built.title, offer.version)}`);
   } catch (e) {
     console.error("[hr/offers] pdf", e?.message || e);

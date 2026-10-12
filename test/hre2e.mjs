@@ -165,6 +165,7 @@ mock.module(atRoot("lib/gw.js"), {
     gwContext: async () => who,
     canRecruit: REAL_GW.canRecruit,
     canDecideHire: REAL_GW.canDecideHire,
+    canAdvanceHire: REAL_GW.canAdvanceHire,
     canSeeSalary: REAL_GW.canSeeSalary,
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
   },

@@ -273,6 +273,17 @@
     .hr-of-more[open] .when-open { display:inline; }
     .hr-of-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
     .hr-of-preview { border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; background:#fafaf7; }
+    .hr-pdf-box { border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; background:#fff; }
+    .hr-accepted { border:1px solid #e2e2dc; border-radius:10px; padding:8px 12px; margin:8px 0 10px; background:#fff; display:grid; gap:4px; }
+    .hr-accepted .ln { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; color:#1b2440; }
+    .hr-accepted .mk { width:16px; text-align:center; color:#8a8f9e; font-weight:700; }
+    .hr-accepted .mk.ok { color:#2f6f3a; }
+    .hr-accepted .when { color:#4a5068; font-size:12px; }
+    .hr-accepted .btn { padding:2px 10px; margin-left:auto; }
+    .hr-pdf-box .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#1b2440; }
+    .hr-pdf-box .frame { margin-top:10px; height:min(62vh, 640px); border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#f3f3ef; }
+    .hr-pdf-box .frame .empty { padding:24px; }
+    .hr-pdf-box iframe { width:100%; height:100%; border:0; display:block; }
     .hr-of-preview .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#1b2440; }
     .hr-of-preview dl { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; margin:10px 0 0; font-size:13px; }
     .hr-of-preview dt { color:#6b7080; }
@@ -412,6 +423,7 @@
   let leadReady = true;      // db/118（リードの列）が入っているか。無ければ無限道場の欄を出さない
   let openId = null;
   let canDecide = false;
+  let canAdvance = false;   // 本採用へ進める（社長・管理者・人事）
   // 一覧の複数選択（ページ内表示分だけを対象にする。README §1）
   let selectedIds = new Set();
   let visibleIds = [];
@@ -422,7 +434,14 @@
   const fetchApplicants = () => API.api("/api/hr/applicants?category=all");
   API.warm("hr:applicants:all", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
 
-  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; start(); } });
+  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); start(); } });
+  // 本採用へ進める（社員登録へ）。社長・管理者・人事（社員登録の画面に入れる人＝/api/me の access.officeHr）。
+  // サーバの canAdvanceHire（lib/gw.js）と同じ条件（test/accessparity.mjs が見張る）
+  function canAdvanceOf(me) {
+    const roles = me?.gw?.roles || [];
+    const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
+    return isAdmin || roles.includes("owner") || (roles.includes("hr") && Boolean(me?.access?.officeHr));
+  }
 
   function start() {
     const cat = new URLSearchParams(location.search).get("category");
@@ -975,16 +994,42 @@
         <div class="sub">${esc(a.nextAction)}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
         ${isOnHold(a) ? `<div class="hr-dk-banner" data-kind="hold"><span class="material-symbols-outlined">pause_circle</span>
           <div><b>保留中</b>${a.holdReason ? `　理由：${esc(a.holdReason)}` : ""}${a.holdNextStep ? `<br>次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
-        ${a.nextActionCta && (!["decide", "advance"].includes(a.nextActionKey) || canDecide)
+        ${a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : a.nextActionKey === "advance" ? canAdvance : true)
           ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
           : a.nextActionKey === "decide"
             ? `<p class="muted" style="font-size:12px;margin:0;">採用判断は社長・管理者が行います。</p>`
             : a.nextActionKey === "advance"
-              ? `<p class="muted" style="font-size:12px;margin:0;">本採用へ進めるのは社長・管理者が行います。</p>`
+              ? `<p class="muted" style="font-size:12px;margin:0;">本採用へ進めるのは社長・管理者・人事が行います。</p>`
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
       </div>
+      ${acceptedPanel(a)}
       ${contactRow(a)}`;
+  }
+
+  /**
+   * 本人が条件を承諾したあと（区分つき）。承諾した版・日時・承諾済みPDF と、正式契約（LegalSign）の進み具合を1か所で見せる。
+   * 「契約完了」とは書かない（正式な契約は LegalSign。条件の承諾は MF の電子承諾記録）
+   */
+  function acceptedPanel(a) {
+    const o = (detail.offers || []).find((x) => x.offerType && x.status === "accepted");
+    if (!o || a.status !== "accepted") return "";
+    const t = offerTypeDef(o.offerType);
+    const canPdf = detail.salaryVisible !== false && o.docsReady && o.noticePdf;
+    const usesLegalSign = Boolean(t?.legalSign);
+    const formal = !usesLegalSign ? ""
+      : o.formalSignedAt
+        ? `<div class="ln" data-acc="formal"><span class="mk ok">✓</span><b>正式契約済み</b><span class="when">${esc(JST.dateTime(o.formalSignedAt))}（LegalSign）</span></div>`
+        : o.formalSentAt
+          ? `<div class="ln" data-acc="formal"><span class="mk">○</span><b>正式契約待ち</b><span class="when">LegalSign の案内：${esc(JST.dateTime(o.formalSentAt))}</span></div>`
+          : `<div class="ln" data-acc="formal"><span class="mk">○</span><b>正式契約（LegalSign）</b><span class="when">${o.legalsignUrl ? "URL 登録済み・まだ案内していません" : "まだ案内していません"}</span></div>`;
+    return `
+      <div class="hr-accepted" id="hr-accepted">
+        <div class="ln" data-acc="accepted"><span class="mk ok">✓</span><b>条件承諾済み</b>
+          <span class="when">${esc(JST.dateTime(o.acceptedAt))}（第${esc(o.version)}版）</span>
+          ${canPdf ? `<button class="btn btn-secondary btn-sm" id="hr-accepted-pdf" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDFを確認する</button>` : ""}</div>
+        ${formal}
+      </div>`;
   }
 
   /**
@@ -2669,7 +2714,7 @@ ${url}
         <div id="of-msg" class="err-text" style="margin:10px 0 0;"></div>
         <div class="hr-of-actions">
           <button class="btn btn-secondary" id="of-draft" onclick="submitOffer(this)">下書き保存</button>
-          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndSend(this)">内容を確認してメールで送信</button>
+          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndSend(this)">PDFをプレビュー</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
         </div>`, { wide: true });
     offerAutoFill({ init: true });
@@ -2909,7 +2954,8 @@ ${url}
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
 
-  // ［内容を確認してメールで送信］：入力を保存して、送る前の確認（本人に届く内容・メールの件名と本文）へ
+  // ［PDFをプレビュー］：入力を下書きとして保存し、送る前のプレビュー（条件通知書PDF・本人に届く内容・メールの件名と本文）へ。
+  //   プレビューでは確定しない（PDF はその場で作って見せるだけ。db/132 の列は送るときに初めて入る）
   async function submitOfferAndSend(btn) {
     const msg = el("of-msg"); msg.textContent = "";
     const t = offerFormType;
@@ -2945,7 +2991,7 @@ ${url}
     const id = offerId || currentOffer()?.id;
     if (!id) return;
     openActionModal(`
-        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">内容を確認して送信</h2>
+        <h2 id="sm-title" style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">プレビュー</h2>
         <div id="sm-box"><div class="empty">読み込み中…</div></div>`, { wide: true });
     let d;
     try { d = await API.api(`/api/hr/offers?id=${encodeURIComponent(id)}`); }
@@ -2955,6 +3001,7 @@ ${url}
     }
     offerSend = { id, d, key: newMailKey() };
     renderOfferSend();
+    loadSendPdf();
   }
 
   function renderOfferSend() {
@@ -2965,19 +3012,27 @@ ${url}
     const top = items.filter((x) => x.highlight), rest = items.filter((x) => !x.highlight);
     const row = (x) => `<dt>${esc(x.label)}</dt><dd>${esc(x.value)}</dd>`;
     const waitingSend = a.status === "offer_send_pending" && !d.canSend;   // 送った結果が分からない・手で送った途中
+    const notice = d.notice?.ready ? d.notice : null;
+    if (el("sm-title")) el("sm-title").textContent = notice ? `${notice.title}のプレビュー` : "内容を確認して送信";
     el("sm-box").innerHTML = `
-      <p class="hr-sub" style="margin:0 0 10px;">候補者に届く内容です。送ったあと、この版の内容は変わりません（同意したときの内容として残ります）。</p>
-      <div class="hr-of-preview" id="sm-preview">
+      <p class="hr-sub" style="margin:0 0 10px;">${notice && !notice.stored
+        ? "まだ本人には送っていません。［この内容で本人へ送る］を押すと、この内容で確定し、条件通知書PDFを添付してメールで送ります。"
+        : "候補者に届く内容です。送ったあと、この版の内容は変わりません（承諾したときの内容として残ります）。"}</p>
+      ${notice ? `
+      <div class="hr-pdf-box" id="sm-notice">
+        <div class="hd"><span class="material-symbols-outlined" style="font-size:18px;width:18px;overflow:hidden;">picture_as_pdf</span>
+          <span><b>${esc(notice.title)}</b>（PDF・A4）　${notice.stored ? "送った時点の版です" : "送るときに、この内容で確定してメールに添付します"}</span>
+          ${notice.salaryVisible === false ? "" : `<button class="btn btn-secondary btn-sm" id="sm-pdf-open" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', '${notice.stored ? "notice" : "preview"}', this)">PDFを開く</button>`}</div>
+        ${notice.salaryVisible === false
+          ? `<div class="hr-of-auto" id="sm-pdf-hidden">給与・報酬が入るため、PDF は給与を見られる方が確認します。</div>`
+          : pdfInline() ? `<div class="frame" id="sm-pdf-frame-box"><div class="empty" id="sm-pdf-loading">PDFを読み込み中…</div></div>` : ""}
+      </div>` : ""}
+      <div class="hr-of-preview" id="sm-preview" style="margin-top:${notice ? 10 : 0}px;">
         <div class="hd"><span class="hr-pill" style="background:#1b2440;color:#fff;">${esc(o.offerName || "合格通知")}</span>
           <b>${esc(d.candidateName)} 様</b>　第${esc(o.version)}版</div>
         <dl>${top.map(row).join("")}<dt>回答期限</dt><dd>${esc(fmtYmdJa(o.respondBy))}</dd></dl>
         ${rest.length ? `<details><summary>その他の条件（${rest.length}件）</summary><dl>${rest.map(row).join("")}</dl></details>` : ""}
       </div>
-      ${d.notice?.ready ? `
-      <div class="hr-of-auto" id="sm-notice" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span class="material-symbols-outlined" style="font-size:18px;width:18px;overflow:hidden;">picture_as_pdf</span>
-        <span><b>${esc(d.notice.title)}</b>（PDF）を${d.notice.stored ? "送った時点の版で" : "送る時点の版から自動で作り、"}メールに添付します</span>
-        ${d.notice.salaryVisible === false ? "" : `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', '${d.notice.stored ? "notice" : "preview"}', this)">PDFを確認</button>`}</div>` : ""}
       ${!d.to ? `
       <div class="banner warn" id="sm-email-need" style="margin-top:12px;display:block;">
         <b>本人のメールアドレスが未登録です</b>
@@ -3005,11 +3060,11 @@ ${url}
       <div id="sm-msg" class="err-text" style="margin:10px 0 0;"></div>
       <div class="hr-of-actions">
         ${d.canSend ? (d.mail.configured
-          ? `<button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)">メールでオファー送信</button>`
+          ? `<button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)">${notice ? "この内容で本人へ送る" : "メールでオファー送信"}</button>`
           : `<button class="btn btn-primary" id="sm-manual" onclick="sendOfferManual(this)">URLを発行して手で送る</button>`) : ""}
         ${waitingSend ? `<button class="btn btn-primary" onclick="submitMarkSent(this, '${esc(o.id)}')">送付済みにする</button>
           <button class="btn btn-secondary" onclick="openSendOfferForm()">URLを再発行する</button>` : ""}
-        ${a.status === "offer_review_pending" ? `<button class="btn btn-secondary" onclick="openOfferForm()">戻って直す</button>` : ""}
+        ${a.status === "offer_review_pending" ? `<button class="btn btn-secondary" id="sm-edit" onclick="openOfferForm()">条件を修正</button>` : ""}
         <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
       </div>`;
   }
@@ -3019,6 +3074,7 @@ ${url}
   function renderOfferSendKeep() {
     const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
     renderOfferSend();
+    showSendPdf();
     if (subject != null) el("sm-subject").value = subject;
     if (body != null) el("sm-body").value = body;
   }
@@ -3029,6 +3085,7 @@ ${url}
     offerSend.d = { ...d, subject: subject ?? d.subject, body: body ?? d.body };
     offerSend.editTo = false;
     renderOfferSend();
+    showSendPdf();
   }
   async function registerSendEmail(btn) {
     const msg = el("sm-email-msg"); msg.textContent = "";
@@ -3046,25 +3103,54 @@ ${url}
     try { await reloadSendDraft(); } catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; }
   }
 
-  // オファーの PDF（条件通知書・承諾済み・送る前の確認用）を開く。ログインの鍵が要るので、取得してから保存させる
+  // オファーの PDF（条件通知書・承諾済み・送る前の確認用）を取ってくる。ログインの鍵が要るので fetch で受け取る
+  async function fetchOfferPdf(offerId, file) {
+    const token = await API.getToken();
+    const r = await fetch(`/api/hr/offers?id=${encodeURIComponent(offerId)}&file=${encodeURIComponent(file)}`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    if (!r.ok) {
+      const b = await r.json().catch(() => ({}));
+      throw new Error(b.hint || b.message || "PDFを開けませんでした");
+    }
+    const blob = await r.blob();
+    const name = decodeURIComponent((/filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") || "") || [])[1] || "offer.pdf");
+    return { blob, name };
+  }
+  // 開く（保存させる）。スマホではそのまま PDF の表示になる
   async function openOfferPdf(offerId, file, btn) {
     try {
       await KPLayout.busy(btn, "読み込み中…", async () => {
-        const token = await API.getToken();
-        const r = await fetch(`/api/hr/offers?id=${encodeURIComponent(offerId)}&file=${encodeURIComponent(file)}`,
-          { headers: { Authorization: `Bearer ${token}` } });
-        if (!r.ok) {
-          const b = await r.json().catch(() => ({}));
-          throw new Error(b.hint || b.message || "PDFを開けませんでした");
-        }
-        const blob = await r.blob();
-        const name = decodeURIComponent((/filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") || "") || [])[1] || "offer.pdf");
+        const { blob, name } = await fetchOfferPdf(offerId, file);
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 30000);
       });
     } catch (e) { alert(e.message || "PDFを開けませんでした"); }
+  }
+  // プレビュー画面の中に PDF を出すか。PC だけ（スマホのブラウザは画面の中の PDF を1ページ目しか見せない・見せないので、［PDFを開く］にする）
+  const pdfInline = () => window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
+  // プレビュー画面の PDF。読み込んだものは、描き直し（送信先の変更など）でも使い回す。開くたびに作り直す（直した内容が出る）
+  let sendPdf = null;   // { offerId, url }
+  async function loadSendPdf() {
+    if (sendPdf) { URL.revokeObjectURL(sendPdf.url); sendPdf = null; }
+    const n = offerSend?.d?.notice;
+    if (!n?.ready || n.salaryVisible === false || !pdfInline()) return;
+    const offerId = offerSend.id;
+    try {
+      const { blob } = await fetchOfferPdf(offerId, n.stored ? "notice" : "preview");
+      if (offerSend?.id !== offerId) return;
+      sendPdf = { offerId, url: URL.createObjectURL(blob) };
+      showSendPdf();
+    } catch (e) {
+      const box = el("sm-pdf-frame-box");
+      if (box) box.innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.message || "PDFを表示できませんでした")}</div></div>`;
+    }
+  }
+  function showSendPdf() {
+    const box = el("sm-pdf-frame-box");
+    if (!box || !sendPdf || sendPdf.offerId !== offerSend?.id) return;
+    box.innerHTML = `<iframe id="sm-pdf-frame" title="条件通知書のプレビュー" src="${sendPdf.url}#view=FitH"></iframe>`;
   }
 
   function offerMailText() {
@@ -3275,7 +3361,7 @@ ${url}
            <div id="fc-mail">${signed ? "" : `<button class="btn ${sent ? "btn-secondary" : "btn-primary"} btn-sm" id="fc-guide" onclick="openFormalMail(this)">${sent ? "もう一度案内する" : "本人へ正式契約を案内"}</button>`}</div>`)}
       ${step(3, signed, "正式契約済みにする", signed
         ? `<p class="hr-sub" style="margin:0 0 8px;">正式契約済み：${esc(fmtDate(o.formalSignedAt))}</p>
-           ${canDecide ? `<button class="btn btn-primary btn-sm" onclick="closeAction();startAdvance()">${esc(detail.applicant.nextActionKey === "advance" && detail.applicant.nextActionCta || "本採用へ進める")}</button>` : `<p class="muted" style="font-size:12px;margin:0;">入社・稼働の手続きへ進めるのは社長・管理者が行います。</p>`}`
+           ${canAdvance ? `<button class="btn btn-primary btn-sm" onclick="closeAction();startAdvance()">${esc(detail.applicant.nextActionKey === "advance" && detail.applicant.nextActionCta || "本採用へ進める")}</button>` : `<p class="muted" style="font-size:12px;margin:0;">入社・稼働の手続きへ進めるのは社長・管理者・人事が行います。</p>`}`
         : `<p class="hr-sub" style="margin:0 0 8px;">LegalSign で本人の署名が終わったことを確かめてから押してください（取り消せません）。</p>
            <button class="btn btn-secondary btn-sm" id="fc-signed" ${o.legalsignUrl || sent ? "" : "disabled"} onclick="markFormalSigned(this)">正式契約済みにする</button>`)}
       `}

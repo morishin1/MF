@@ -5,7 +5,8 @@
 //              PC 620〜720px・390px はフル幅1列で横にはみ出さない
 //   メール   … ドロワーで登録・編集（その場で。モーダルを開かない）・形の確認（その場で出す）・保存してもドロワーは閉じない
 //              送信画面で未登録なら「登録して続ける」・送信先の確認と［変更］・変更後の送信先が最新
-//   条件通知書 … 送信画面に書類名と［PDFを確認］・HR のオファーに条件通知書PDF／承諾済みPDF
+//   条件通知書 … 入力 →［PDFをプレビュー］→ プレビュー画面（PC は画面内に PDF・スマホは［PDFを開く］）→［条件を修正］で直して再プレビュー →
+//              ［この内容で本人へ送る］・HR のオファーに条件通知書PDF／承諾済みPDF
 //   HR       … 条件承諾済み → 正式契約（LegalSign）：URL 登録（https:// だけ）→ 本人へ案内 → 正式契約済みにする
 //   本人     … ［条件通知書PDFを保存］・同意のチェックが無ければ［条件を承諾する］を押せない・承諾後の案内・
 //              承諾済みPDF・［LegalSignで正式契約を行う］（https:// のときだけ）
@@ -161,7 +162,7 @@ for (const width of [1300, 768, 390]) {
   await ctx.close();
 }
 
-console.log("\n=== 送信画面：メール未登録 → 登録して続ける → 送信先の確認と［変更］・条件通知書PDF ===");
+console.log("\n=== 送信画面（プレビュー）：メール未登録 → 登録して続ける → 送信先の確認と［変更］・条件通知書PDF ===");
 for (const width of [1300, 390]) {
   const offer = { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "training", join_date: "2026-11-01", wage_type: "時給", wage_amount: 1500,
     respond_by: "2026-10-15", offer_terms: { course: "無限道場", trainingPeriod: "3か月", paidDuringTraining: "あり" }, ...DOC_NULLS };
@@ -169,7 +170,18 @@ for (const width of [1300, 390]) {
   const { ctx, page, errs } = await open(st, { width });
   await page.locator(".hr-next button", { hasText: "条件通知書を確認して送る" }).click();
   await page.waitForTimeout(800);
-  check(await page.locator("#sm-email-need").isVisible(), `[${width}] 最上部に「本人のメールアドレスが未登録です」`);
+  check((await page.locator("#sm-title").innerText()) === "育成参加条件通知書のプレビュー", `[${width}] 見出しは「育成参加条件通知書のプレビュー」`);
+  check((await page.locator("#sm-box .hr-sub").first().innerText()).includes("まだ本人には送っていません"), `[${width}] まだ送っていない（確定していない）ことを書く`);
+  if (width === 1300) {
+    check(await page.locator("#sm-pdf-frame").isVisible(), `[${width}] PC は画面の中に PDF を表示`);
+    check((await page.locator("#sm-pdf-frame").getAttribute("src")).startsWith("blob:"), `[${width}] PDF はログインの鍵つきで取ってから表示（URL に鍵を載せない）`);
+    check(st.calls.some(([k, f]) => k === "file" && f === "preview"), `[${width}] プレビュー用の PDF を開いた時点で読み込む`);
+    const fh = await page.locator("#sm-pdf-frame").evaluate((f) => f.getBoundingClientRect().height);
+    check(fh >= 400, `[${width}] PDF の表示は十分な高さ（${Math.round(fh)}px）`);
+  } else {
+    check(await page.locator("#sm-pdf-frame").count() === 0 && await page.locator("#sm-pdf-open").isVisible(), `[${width}] スマホは画面の中に出さず［PDFを開く］`);
+  }
+  check(await page.locator("#sm-email-need").isVisible(), `[${width}] 「本人のメールアドレスが未登録です」`);
   check(await page.locator("#sm-send").count() === 0, `[${width}] 未登録のうちは送れない`);
   check((await page.locator("#sm-notice").innerText()).includes("育成参加条件通知書"), `[${width}] 条件通知書（PDF）を添付する案内`);
   await page.fill("#sm-email-new", "bad-mail");
@@ -180,19 +192,51 @@ for (const width of [1300, 390]) {
   await page.locator("#sm-email-need button", { hasText: "登録して続ける" }).click();
   await page.waitForTimeout(800);
   check(await page.locator("#sm-box").isVisible() && (await page.locator("#sm-to").innerText()) === "first@example.test", `[${width}] 登録して、そのまま送信確認へ（画面は閉じない）`);
-  check(await page.locator("#sm-send").isVisible(), `[${width}] 送れるようになる`);
+  check(await page.locator("#sm-send").isVisible() && (await page.locator("#sm-send").innerText()) === "この内容で本人へ送る", `[${width}] ［この内容で本人へ送る］で送れるようになる`);
+  if (width === 1300) check(await page.locator("#sm-pdf-frame").isVisible(), `[${width}] 登録したあとも PDF の表示は残る`);
   await page.locator("#sm-to-change").click();
   await page.fill("#sm-to-input", "second@example.test");
   await page.locator("#sm-box button", { hasText: "保存" }).click();
   await page.waitForTimeout(800);
   check((await page.locator("#sm-to").innerText()) === "second@example.test", `[${width}] 送信先を［変更］すると最新のメールになる`);
   check(st.row.email === "second@example.test", `[${width}] 応募者のメールも変わる`);
-  await page.locator("#sm-notice button", { hasText: "PDFを確認" }).click();
+  const before = st.calls.filter(([k]) => k === "file").length;
+  await page.locator("#sm-pdf-open").click();
   await page.waitForTimeout(500);
-  check(st.calls.some(([k, f]) => k === "file" && f === "preview"), `[${width}] ［PDFを確認］で送る前の条件通知書を開ける`);
+  const files = st.calls.filter(([k]) => k === "file");
+  check(files.length === before + 1 && files.at(-1)[1] === "preview", `[${width}] ［PDFを開く］で送る前の条件通知書を開ける`);
+  check(!st.calls.some(([k]) => k === "send"), `[${width}] プレビューでは送らない（確定しない）`);
   const over = await page.evaluate(() => { const m = document.querySelector("#action-root .hr-modal"); return m ? m.scrollWidth - m.clientWidth : 0; });
   check(over <= 1, `[${width}] 送信画面は横にはみ出さない`);
   check(!errs.length, `[${width}] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
+  await ctx.close();
+}
+
+console.log("\n=== プレビュー →［条件を修正］→ 直して［PDFをプレビュー］（作り直す・まだ送らない） ===");
+{
+  const offer = { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "training", join_date: "2026-11-01", wage_type: "時給", wage_amount: 1500,
+    respond_by: "2099-10-15", offer_terms: { course: "無限道場", trainingPeriod: "3か月", paidDuringTraining: "あり" }, ...DOC_NULLS };
+  const st = makeState({ stage: "offer", status: "offer_review_pending", decision: "hired", offer_type: "training", email: "c@example.test" }, [offer]);
+  const { ctx, page, errs } = await open(st);
+  await page.locator(".hr-next button", { hasText: "条件通知書を確認して送る" }).click();
+  await page.waitForTimeout(500);
+  check(await page.locator("#of-fields").isVisible() && (await page.locator("#of-send").innerText()) === "PDFをプレビュー", "下書きは入力画面で開く（下に［PDFをプレビュー］）");
+  await page.locator("#of-send").click();
+  await page.waitForTimeout(900);
+  check(await page.locator("#sm-title").isVisible() && await page.locator("#sm-edit").isVisible(), "プレビューに［条件を修正］");
+  check((await page.locator("#sm-edit").innerText()) === "条件を修正" && (await page.locator("#sm-send").innerText()) === "この内容で本人へ送る", "［条件を修正］［この内容で本人へ送る］");
+  await page.locator("#sm-edit").click();
+  await page.waitForTimeout(400);
+  check(await page.locator("#of-fields").isVisible() && (await page.locator("#of-send").innerText()) === "PDFをプレビュー", "入力画面に戻る（下に［PDFをプレビュー］）");
+  await page.fill("#of-f-wageAmount", "1600");
+  const n0 = st.calls.filter(([k]) => k === "file").length;
+  await page.locator("#of-send").click();
+  await page.waitForTimeout(900);
+  const upd = st.calls.filter(([k]) => k === "update").at(-1)?.[1];
+  check(upd?.wageAmount === "1600", "直した内容を下書きとして保存");
+  check(await page.locator("#sm-title").isVisible() && st.calls.filter(([k]) => k === "file").length === n0 + 1, "直したあと、もう一度プレビュー（PDF を作り直す）");
+  check(!st.calls.some(([k]) => k === "send"), "まだ送っていない");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();
 }
 
@@ -206,6 +250,13 @@ console.log("\n=== HR：条件承諾済み → 正式契約（LegalSign）：URL
   const st = makeState({ stage: "offer", status: "accepted", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st);
   check((await page.locator("#hr-status").innerText()) === "条件承諾済み", "状態：条件承諾済み（「契約完了」と言わない）");
+  const acc = await page.locator("#hr-accepted").innerText();
+  check(acc.includes("✓") && acc.includes("条件承諾済み") && acc.includes("2026/10/11 13:00（第1版）"), "承諾のあと：条件承諾済み ✓・承諾日時（日本時間）・版");
+  check(acc.includes("正式契約（LegalSign）") && acc.includes("まだ案内していません"), "正式契約（LegalSign）の進み具合も同じ場所に");
+  check(!acc.includes("契約完了"), "「契約完了」とは出さない");
+  await page.locator("#hr-accepted-pdf").click();
+  await page.waitForTimeout(400);
+  check(st.calls.filter(([k, f]) => k === "file" && f === "accepted").length === 1, "［承諾済みPDFを確認する］で承諾済みPDFを開ける");
   const card = await page.locator(".hr-offer-card").innerText();
   check(card.includes("業務委託条件通知書（PDF）") && card.includes("承諾済みPDF"), "オファーの版に条件通知書PDF・承諾済みPDF");
   await page.locator(".hr-offer-card button", { hasText: "承諾済みPDF" }).click();
@@ -230,10 +281,13 @@ console.log("\n=== HR：条件承諾済み → 正式契約（LegalSign）：URL
   await page.waitForTimeout(700);
   check(st.calls.some(([k, b]) => k === "sendFormal" && b.channel === "email" && /^[0-9a-f]{32}$/.test(b.requestKey)), "メールで案内（二重送信を防ぐ鍵つき）");
   check((await page.locator("#hr-status").innerText()) === "正式契約待ち", "状態：正式契約待ち");
+  check((await page.locator('#hr-accepted [data-acc="formal"]').innerText()).includes("正式契約待ち"), "承諾の欄にも「正式契約待ち」");
   check((await page.locator("#fc-box").innerText()).includes("本人へ案内したため、変えられません"), "案内したあとは URL を変えられない");
   await page.locator("#fc-signed").click();
   await page.waitForTimeout(700);
   check((await page.locator("#hr-status").innerText()) === "正式契約済み", "状態：正式契約済み");
+  const fl = await page.locator('#hr-accepted [data-acc="formal"]').innerText();
+  check(fl.includes("✓") && fl.includes("正式契約済み") && fl.includes("LegalSign"), "承諾の欄に「✓ 正式契約済み」");
   check(await page.locator("#fc-box button", { hasText: "稼働開始準備へ進む" }).count() === 1, "正式契約済みのあと：業務委託は［稼働開始準備へ進む］");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();

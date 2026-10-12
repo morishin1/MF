@@ -151,7 +151,7 @@ await ok("書類名は区分ごと（労働条件通知書／育成参加条件�
   assert.equal(t(null), null, "区分の無い合格通知には作らない");
 });
 
-await ok("送る前：下書きに書類名と添付の案内。確認用の PDF は作るだけで置かない", async () => {
+await ok("送る前：下書きに書類名と添付の案内。プレビューの PDF は作るだけで置かない（db/132 の列も入れない）", async () => {
   setup();
   const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" } });
   const id = made.body.offer.id;
@@ -164,6 +164,17 @@ await ok("送る前：下書きに書類名と添付の案内。確認用の PDF
   assert.ok(p.raw.subarray(0, 5).toString() === "%PDF-");
   assert.ok(/filename\*=UTF-8''/.test(p.headers["content-disposition"]));
   assert.equal(mem.storageFiles.size, 0, "確認用は置かない");
+  const row = offerRow();
+  assert.deepEqual([row.notice_pdf_path, row.notice_pdf_sha256, row.notice_title, row.sent_at ?? null], [null, null, null, null], "プレビューでは確定しない");
+  const pv = logged.filter((e) => e.action === "hr.offer_pdf_preview");
+  assert.equal(pv.length, 1, "プレビューした事実を監査ログに残す");
+  assert.deepEqual(pv[0].detail, { version: 1 });
+  // 直して、もう一度プレビュー：直した内容で作り直す（まだ置かない）
+  await patchOffer({ id, action: "update", wageAmount: 1600, respondBy: DUE });
+  const p2 = await hrFile(id, "preview");
+  assert.equal(p2.statusCode, 200);
+  assert.notEqual(Buffer.compare(p.raw, p2.raw), 0, "直した内容でプレビューが変わる");
+  assert.equal(mem.storageFiles.size, 0);
   assert.equal(offerRow().notice_pdf_path, null);
 });
 

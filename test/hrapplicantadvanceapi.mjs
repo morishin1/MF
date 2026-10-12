@@ -82,6 +82,10 @@ mock.module(atRoot("lib/gw-audit.js"), {
 });
 const OWNER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["owner"], employee: { id: "emp-o1", display_name: "社長" } };
 const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["recruiter"], employee: { id: "emp-r1", display_name: "採用 花子" } };
+// 人事（hr。HR と Office に入れる）。社長・管理者と同じ流れを最後まで実行できる
+const HR = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], apps: ["hr", "office"], employee: { id: "emp-h1", display_name: "人事 次郎" } };
+const ADMIN = { tenantId: "t1", isAdmin: true, isHr: false, roles: [], employee: { id: "emp-a1", display_name: "管理 三郎" } };
+const MANAGER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["manager"], apps: ["hr", "sales", "office"], employee: { id: "emp-m1", display_name: "責任 四郎" } };
 let who = OWNER;
 // 判定は本物（lib/gw.js）を使う。テストで条件を書き直すと、本番とずれても気づけない
 const REAL_GW = await import(atRoot("lib/gw.js"));
@@ -89,6 +93,7 @@ mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     canDecideHire: REAL_GW.canDecideHire,
+    canAdvanceHire: REAL_GW.canAdvanceHire,
     canSeeSalary: REAL_GW.canSeeSalary,
   },
 });
@@ -125,6 +130,11 @@ function setup() {
       employee_id: null, advance_claimed_at: null, created_at: "2026-09-20T00:00:00Z", updated_at: "2026-09-20T00:00:00Z",
     }],
     gw_hr_timeline: [],
+    gw_employees: [
+      { id: "emp-new1", tenant_id: "t1", display_name: "山田 太郎" },
+      { id: "emp-new2", tenant_id: "t1", display_name: "山田 太郎（2）" },
+      { id: "emp-other", tenant_id: "t2", display_name: "別の会社の人" },
+    ],
   };
 }
 
@@ -168,11 +178,14 @@ await ok("すでに本採用済みなら取得できない", async () => {
   assert.equal(r.body.error, "already_advanced");
 });
 
-await ok("recruiter・hrだけの人は取得できない", async () => {
+await ok("採用担当（recruiter）・責任者（manager）は取得できない", async () => {
   setup();
-  who = RECRUITER;
-  const r = await getPrefill("a1");
-  assert.equal(r.statusCode, 403);
+  for (const w of [RECRUITER, MANAGER]) {
+    who = w;
+    const r = await getPrefill("a1");
+    assert.equal(r.statusCode, 403, w.roles.join(","));
+    assert.match(r.body.hint, /社長・管理者・人事/);
+  }
 });
 
 console.log("\n=== 本採用の手続きを始める（POST claim） ===\n");
@@ -270,6 +283,17 @@ await ok("employee_idは1応募者につき1回だけ埋まる（二重確定を
   assert.equal(db.rows.gw_hr_applicants[0].employee_id, "emp-new1", "最初のemployeeIdのまま");
 });
 
+await ok("別の会社の社員・存在しない社員とは結ばない", async () => {
+  setup();
+  for (const employeeId of ["emp-other", "emp-none"]) {
+    const r = await act({ applicantId: "a1", action: "complete", employeeId });
+    assert.equal(r.statusCode, 404, employeeId);
+    assert.equal(r.body.error, "employee_not_found");
+  }
+  assert.equal(db.rows.gw_hr_applicants[0].employee_id, null);
+  assert.equal(db.rows.gw_hr_applicants[0].status, "accepted");
+});
+
 await ok("employeeIdが無ければ断る", async () => {
   setup();
   const r = await act({ applicantId: "a1", action: "complete" });
@@ -278,11 +302,28 @@ await ok("employeeIdが無ければ断る", async () => {
 
 console.log("\n=== 誰が触れるか ===\n");
 
-await ok("recruiter・hrだけの人は使えない（社長・管理者だけ）", async () => {
-  setup();
-  who = RECRUITER;
-  const r = await claim("a1");
-  assert.equal(r.statusCode, 403);
+await ok("採用担当（recruiter）・責任者（manager）は使えない", async () => {
+  for (const w of [RECRUITER, MANAGER]) {
+    setup();
+    who = w;
+    assert.equal((await claim("a1")).statusCode, 403);
+    assert.equal((await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" })).statusCode, 403);
+    assert.equal(db.rows.gw_hr_applicants[0].employee_id, null);
+  }
+});
+
+await ok("人事（hr）・管理者も、社長と同じ流れを最後まで実行できる（事前入力 → 手続き開始 → 完了）", async () => {
+  for (const w of [HR, ADMIN]) {
+    setup();
+    who = w;
+    const p = await getPrefill("a1");
+    assert.equal(p.statusCode, 200, JSON.stringify(p.body));
+    assert.equal(p.body.prefill.name, "山田 太郎");
+    assert.equal((await claim("a1")).statusCode, 200);
+    const r = await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(db.rows.gw_hr_applicants[0].status, "done");
+  }
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
