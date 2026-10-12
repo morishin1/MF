@@ -312,8 +312,14 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
     check(/canRecruit/.test(s), `${f} は canRecruit で判定`);
   }
   // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト（公開）は対象外
-  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p))) {
+  // 自治体向けLPの問い合わせ（inquiries.js）はサーバー間（無限道場→ここ）なので、ログインではなく署名で守る
+  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p) && !/\/sales\/inquiries\.js$/.test(p))) {
     check(/canSell/.test(read(f)), `${f} は canSell で判定`);
+  }
+  {
+    const src = read("api/sales/inquiries.js").replace(/^\s*\/\/.*$/gm, "");
+    check(/verifySalesSignature\(/.test(src) && /if \(!auth\.ok\) return/.test(src), "api/sales/inquiries.js は署名を確かめてから受け付ける（canSell の代わり）");
+    check(!/Access-Control-Allow-Origin/i.test(src), "api/sales/inquiries.js は CORS を開けない（ブラウザから呼ばせない）");
   }
   // Office（/api/office/*）は canAccessOffice。単価・請求額・支払を返すので、例外は作らない。
   // api/office/ はこれから作るので、無いあいだは何も見ない（作った瞬間から全ファイルが対象になる）
