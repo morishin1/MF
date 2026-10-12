@@ -121,9 +121,9 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
 
   const next = await page.locator(".hr-next").innerText();
   check(next.includes("本日 16:15 社長面談"), "NEXT ACTION：本日 16:15 社長面談");
-  check(/選考\s*社長面談/.test(next), "選考：社長面談（どこまで進んでいるか）");
+  check((await page.locator(".hr-next #hr-stage").innerText()).includes("社長面談"), "見出し：社長面談（どこまで進んでいるか）");
   check((await page.locator(".hr-next #hr-status").innerText()).includes("面談予定"), "状態：面談予定（表示だけ）");
-  check(next.indexOf("選考") < next.indexOf("状態") && next.indexOf("状態") < next.indexOf("NEXT ACTION"), "選考 → 状態 → NEXT ACTION の順");
+  check(next.indexOf("社長面談") < next.indexOf("面談予定"), "見出し → 状態 → 次にすること の順");
 
   await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   await page.waitForTimeout(300);
@@ -187,7 +187,7 @@ console.log("\n=== 状態は表示だけ（プルダウンは出さない） ===
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
   check(await page.locator(".hr-next select").count() === 0 && await page.locator(".hr-state select").count() === 0, "選考・状態・NEXT ACTION の領域にプルダウンが無い");
-  check(await page.locator("#hr-status").evaluate((n) => n.tagName) === "DD", "状態は文字で表示（選べない）");
+  check(await page.locator("#hr-status").evaluate((n) => n.tagName) === "SPAN", "状態は文字で表示（選べない）");
   check((await page.locator("#hr-status").innerText()).includes("面談予定"), "状態：面談予定");
   check(!calls.some(([k, b]) => k === "applicant" && b.action === "setStatus"), "状態を変える API は呼ばない");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);

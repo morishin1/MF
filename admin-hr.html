@@ -285,7 +285,21 @@
                            font-family:inherit; }
     .hr-drive .note { font-size:11.5px; color:var(--muted); }
 
+    .hr-handoff { margin-bottom:14px; border-left:4px solid #2f6f3a; }
+    .hr-handoff .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; color:#1b2440; margin-bottom:6px; }
+    .hr-handoff .hd .n { background:#e5f1e2; color:#2f6f3a; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:700; }
+    .hr-handoff .hd .muted { font-size:12px; }
+    .hr-handoff .row { display:grid; grid-template-columns:minmax(160px, 1.2fr) 2fr auto; gap:8px 14px; align-items:center;
+                       padding:10px 0; border-top:1px solid var(--border); }
+    .hr-handoff .who { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .hr-handoff .chip { font-size:11px; background:#e7eaf3; color:#1b2440; border-radius:999px; padding:1px 8px; }
+    .hr-handoff .facts { display:flex; gap:6px 12px; flex-wrap:wrap; font-size:12.5px; color:#1b2440; }
+    .hr-handoff .facts .ok { color:#2f6f3a; font-weight:700; }
+    .hr-handoff .facts .muted { color:var(--muted); }
+
     @media (max-width:760px) {
+      .hr-handoff .row { grid-template-columns:1fr; }
+      .hr-handoff .act .btn { width:100%; }
       .hr-table thead { display:none; }
       .hr-table tr { display:block; border-bottom:1px solid var(--border); padding:10px 0; }
       .hr-table td { display:block; border:0; padding:2px 0; }
@@ -303,6 +317,9 @@
   </p>
 
   <div id="hr-msg" class="err-text"></div>
+
+  <!-- 採用HRから引き渡された人（db/133）。「入社予定」の上に出す。社員登録へ進むのは Office の人事・労務 -->
+  <div id="hr-handoff"></div>
 
   <!-- 一覧 -->
   <div class="card" id="hr-list-card">
@@ -413,6 +430,7 @@
   }
 
   function render() {
+    renderHandoffs(data.handoffs);
     renderKpi(data.kpi);
     const counts = {
       onboarding: (data.onboarding || []).length,
@@ -429,6 +447,51 @@
   function tab(key) {
     tabNow = key;
     render();
+  }
+
+  /**
+   * HRから引き渡し（採用HR で本人が条件を承諾し、HR が承諾内容を確認して Office へ引き渡した人。db/133）。
+   * ［社員登録へ］で既存の社員登録（admin-onboard.html）へ。条件はオファーの版から事前入力される（URL には載せない）。
+   * 「Office へ引き渡す」は Office 担当者の入社準備キューに載せることで、本人に Office の権限を与えるものではない
+   */
+  function renderHandoffs(h) {
+    const box = el("hr-handoff");
+    const rows = h?.rows || [];
+    if (!rows.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `
+      <div class="card hr-handoff" id="hr-handoff-card">
+        <div class="hd"><b>HRから引き渡し</b><span class="n" id="hr-handoff-n">${rows.length}名</span>
+          <span class="muted">採用HRで条件の承諾を確認済みです。社員登録へ進めてください。</span></div>
+        ${rows.map((r) => `
+          <div class="row" data-handoff="${esc(r.applicantId)}">
+            <div class="who"><b>${esc(r.name)}</b><span class="chip">${esc(r.offerTypeLabel || "")}</span></div>
+            <div class="facts">
+              <span class="ok">✓ 条件承諾済み</span>
+              <span class="${r.formalRequired ? "ok" : "muted"}">${r.formalRequired ? "✓ 正式契約済み" : "正式契約なし"}</span>
+              ${r.joinDate ? `<span>入社・稼働予定：${esc(r.joinDate)}</span>` : ""}
+              <span class="muted">引き渡し：${esc(fmtDateTime(r.handoffAt))}</span>
+            </div>
+            <div class="act">${r.claimed
+              ? `<button class="btn btn-secondary btn-sm" onclick="startRegister('${esc(r.applicantId)}', this)">社員登録の続きを開く</button>`
+              : `<button class="btn btn-primary btn-sm" onclick="startRegister('${esc(r.applicantId)}', this)">社員登録へ</button>`}</div>
+          </div>`).join("")}
+      </div>`;
+  }
+  const fmtDateTime = (iso) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    const p = Object.fromEntries(new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d).map((x) => [x.type, x.value]));
+    return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}`;
+  };
+  // 社員登録へ（採用HR の［本採用へ進める］と同じ確保をしてから、既存の社員登録の画面へ）
+  async function startRegister(applicantId, btn) {
+    try {
+      await KPLayout.busy(btn, "開いています…", () => API.claimHrAdvance(applicantId));
+      location.href = `admin-onboard.html?applicantId=${encodeURIComponent(applicantId)}`;
+    } catch (e) {
+      el("hr-msg").textContent = `社員登録へ進めませんでした：${e.hint || e.detail || e.message || "理由が返ってきませんでした"}`;
+    }
   }
 
   /**
