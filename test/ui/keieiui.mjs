@@ -233,7 +233,8 @@ console.log("\n— メニューで画面を切り替える —");
   check((await activeTab(page)) === "finance" && (await activeSub(page)) === "payroll", "人件費を開くと、財務 → 人件費が選ばれる（#payroll を直接開いても、横タブが追従する）");
 
   await nav(page, "onboarding");
-  await page.waitForTimeout(500);
+  // 決め打ちの待ち時間ではなく、入社予定者の行が描かれるまで待つ（遅い CI で描画前に数えて落ちないように）
+  await page.waitForSelector(".kei-ob", { timeout: 15000 }).catch(() => {});
   t = await bodyText(page);
   check(t.includes("入社準備"), "入社準備の画面がある");
   check(await page.locator(".kei-ob").count() === 3, "入社予定者が3人並ぶ");
