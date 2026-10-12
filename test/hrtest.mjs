@@ -197,6 +197,45 @@ function setup({ roles = true } = {}) {
 const proc = () => db.rows.gw_procedures[0];
 const items = () => db.rows.gw_procedure_items;
 
+console.log("\n=== 入退社：採用HRから引き渡された人（Office の入社準備キュー。db/133）===\n");
+
+await ok("引き渡し済み・まだ社員登録していない人だけを「HRから引き渡し」に出す（給与・メール・承諾の記録は出さない）", async () => {
+  setup();
+  const now = new Date().toISOString();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "高木 沙綾", email: "saya@example.test", status: "accepted", employee_id: null, advance_claimed_at: null },
+    { id: "a2", tenant_id: "t1", name: "未引き渡し 二郎", email: "x@example.test", status: "accepted", employee_id: null },
+    { id: "a3", tenant_id: "t1", name: "登録済み 三子", email: "y@example.test", status: "done", employee_id: "emp-new" },
+    { id: "a4", tenant_id: "t1", name: "入力中 四郎", email: "z@example.test", status: "accepted", employee_id: null, advance_claimed_at: now },
+  ];
+  db.rows.gw_hr_offers = [
+    { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "executive_employee", join_date: "2026-11-01", wage_amount: 400000,
+      accepted_at: now, accept_ip: "203.0.113.1", formal_contract_required: true, formal_signed_at: now, handoff_at: now },
+    { id: "o2", tenant_id: "t1", applicant_id: "a2", version: 1, offer_type: "contractor", accepted_at: now, handoff_at: null },
+    { id: "o3", tenant_id: "t1", applicant_id: "a3", version: 1, offer_type: "part_time", accepted_at: now, handoff_at: now },
+    { id: "o4", tenant_id: "t1", applicant_id: "a4", version: 1, offer_type: "spot", accepted_at: now, formal_contract_required: false, handoff_at: now },
+  ];
+  const r = await get();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const h = r.body.handoffs;
+  assert.equal(h.ready, true);
+  assert.deepEqual(h.rows.map((x) => x.name).sort(), ["入力中 四郎", "高木 沙綾"]);
+  const a1 = h.rows.find((x) => x.applicantId === "a1");
+  assert.deepEqual([a1.offerTypeLabel, a1.formalRequired, a1.joinDate, a1.claimed], ["正社員・幹部候補", true, "2026-11-01", false]);
+  const a4 = h.rows.find((x) => x.applicantId === "a4");
+  assert.deepEqual([a4.formalRequired, a4.claimed], [false, true], "スポット（正式契約なし）・社員登録の画面で入力中");
+  const text = JSON.stringify(h);
+  for (const secret of ["400000", "203.0.113.1", "saya@example.test"]) assert.equal(text.includes(secret), false, `${secret} を出さない`);
+});
+
+await ok("db/133 が無い環境では、引き渡しの欄は出さない（一覧は止めない）", async () => {
+  setup();
+  delete db.rows.gw_hr_offers;
+  const r = await get();
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.body.handoffs.rows, []);
+});
+
 console.log("\n=== 入退社：漏れなく進められるか ===\n");
 
 // ---------------------------------------------------------------------------

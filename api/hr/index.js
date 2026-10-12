@@ -37,6 +37,8 @@ import { computeStage, stageOf, progressPct, daysToStart, kpiOf, stuckLine }
   from "../../lib/onboard-stage.js";
 import { MYNUMBER_KEYS, mynumberLabel } from "../../lib/mynumber.js";
 import { requireMfa } from "../../lib/mfa.js";
+import { offerTypeLabel } from "../../lib/hr-offer-types.js";
+import { isAdvanceClaimStale } from "../../lib/hr.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -185,6 +187,8 @@ async function read(req, res, ctx) {
   // 3つのタブ。完了は入社・退社をまとめて出す
   const finished = (r) => (r.kind === "onboarding" ? r.stage === "complete" : r.phase === "done");
   return json(res, 200, {
+    // 採用HRから引き渡された人（db/133。まだ社員登録していない人だけ）。「入社予定」の上に出す
+    handoffs: await handoffQueue(sb, ctx.tenantId),
     tabs: TABS,
     onboarding: rows.filter((r) => r.kind === "onboarding" && !finished(r)),
     offboarding: rows.filter((r) => r.kind === "offboarding" && !finished(r)),
@@ -195,6 +199,41 @@ async function read(req, res, ctx) {
     roles: ROLES,
     today,
   });
+}
+
+/**
+ * 採用HRから引き渡された人（Office の入社準備キュー。db/133）。HR が本人の承諾内容を確認して
+ * ［承諾を確認してOfficeへ引き渡す］を押した版のうち、まだ社員登録（gw_employees）していない人。
+ * 給与・連絡先・承諾の IP などは出さない（社員登録の画面で、権限のある人にだけ事前入力される）。
+ * db/133 が未適用なら ready=false（画面は何も出さない）
+ */
+async function handoffQueue(sb, tenantId) {
+  try {
+    const { data: offers, error } = await sb.from("gw_hr_offers")
+      .select("id, applicant_id, version, offer_type, join_date, accepted_at, formal_contract_required, formal_signed_at, handoff_at")
+      .eq("tenant_id", tenantId).not("handoff_at", "is", null)
+      .order("handoff_at", { ascending: false }).limit(100);
+    if (error) return { ready: false, rows: [] };
+    const handed = (offers || []).filter((o) => o.handoff_at);
+    const ids = [...new Set(handed.map((o) => o.applicant_id))];
+    if (!ids.length) return { ready: true, rows: [] };
+    const { data: apps } = await sb.from("gw_hr_applicants").select("id, name, status, employee_id, advance_claimed_at")
+      .eq("tenant_id", tenantId).in("id", ids);
+    const byId = new Map((apps || []).map((a) => [a.id, a]));
+    const rows = [];
+    for (const o of handed) {
+      const a = byId.get(o.applicant_id);
+      if (!a || a.employee_id || a.status !== "accepted" || rows.some((r) => r.applicantId === a.id)) continue;
+      rows.push({
+        applicantId: a.id, name: a.name, offerType: o.offer_type, offerTypeLabel: offerTypeLabel(o.offer_type),
+        version: o.version, joinDate: o.join_date || null, acceptedAt: o.accepted_at,
+        formalRequired: o.formal_contract_required !== false, formalSignedAt: o.formal_signed_at || null, handoffAt: o.handoff_at,
+        // 誰かが社員登録の画面で入力中（1時間で外れる。採用HR の「本採用へ進める」と同じ確保）
+        claimed: Boolean(a.advance_claimed_at && !isAdvanceClaimStale(a.advance_claimed_at)),
+      });
+    }
+    return { ready: true, rows };
+  } catch { return { ready: false, rows: [] }; }
 }
 
 /** 一覧の1行。余計なものは出さない */
