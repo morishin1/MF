@@ -14,7 +14,7 @@
 // 応答は lib/hr.js・lib/hr-offer-types.js・lib/hr-offer-docs.js の本物の関数で組み立てる（文言をテスト側で作らない）
 import { launch, BASE } from "../_browser.mjs";
 import { shapeApplicant, shapePublicOffer, shapeOffer, normalizeApplicant } from "../../lib/hr.js";
-import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG } from "../../lib/hr-offer-types.js";
+import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG, acceptFactsOf, formalRequiredOf } from "../../lib/hr-offer-types.js";
 import { checkLegalSignUrl, noticeTitleOf } from "../../lib/hr-offer-docs.js";
 
 const br = await launch();
@@ -45,7 +45,8 @@ async function open(st, { width = 1300 } = {}) {
   const ctx = await br.newContext({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await ctx.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })));
   const errs = [];
-  const shaped = () => ({ ...shapeApplicant({ ...st.row, formal_state: formalOf(st) }), recruiterName: "採用 花子", contact: { state: "none" } });
+  const shaped = () => ({ ...shapeApplicant({ ...st.row, ...acceptFactsOf(st.offers.find((x) => x.accepted_at)), formal_state: formalOf(st) }),
+    recruiterName: "採用 花子", contact: { state: "none" } });
   await ctx.route("**/api/**", (route) => {
     const req = route.request(), url = req.url(), m = req.method();
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
@@ -80,7 +81,7 @@ async function open(st, { width = 1300 } = {}) {
         return send({ offer: shapeOffer(o), items: publicOfferItems(o), to: st.row.email, candidateName: st.row.name,
           subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG,
           mail: { configured: Boolean(st.row.email) && st.mailConfigured, reason: st.row.email ? null : "候補者のメールアドレスが登録されていません" },
-          canSend: true, notice: { ready: true, title, stored: false, salaryVisible: true } });
+          canSend: true, notice: { ready: true, title, stored: false, salaryVisible: true }, formalRequired: formalRequiredOf(o) });
       }
       const b = body(); st.calls.push([b.action, b]);
       if (b.action === "setLegalSign") {
@@ -94,6 +95,10 @@ async function open(st, { width = 1300 } = {}) {
       }
       if (b.action === "sendFormal") { o.formal_sent_at = o.formal_sent_at || "2026-10-12T02:00:00Z"; return send({ status: "sent", channel: b.channel, offer: shapeOffer(o) }); }
       if (b.action === "markFormalSigned") { o.formal_signed_at = "2026-10-12T05:00:00Z"; return send({ offer: shapeOffer(o) }); }
+      if (b.action === "handoff") { o.handoff_at = o.handoff_at || "2026-10-12T06:00:00Z"; o.handoff_by = "u-owner"; return send({ offer: shapeOffer(o) }); }
+      if (b.action === "update" || b.action === undefined) {
+        if (typeof b.formalContractRequired === "boolean" && !o.sent_at) o.formal_contract_required = b.formalContractRequired;
+      }
       return send({ offer: shapeOffer(o) });
     }
     if (/\/api\/hr\/documents/.test(url)) return send({ documents: [], types: [], limits: {} });
@@ -240,6 +245,62 @@ console.log("\n=== プレビュー →［条件を修正］→ 直して［PDF�
   await ctx.close();
 }
 
+console.log("\n=== 正式契約（LegalSign）の 必要／不要 をオファーごとに決める → プレビューにも出す ===");
+{
+  const offer = { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "contractor", join_date: "2026-11-01", wage_type: "月額", wage_amount: 200000,
+    respond_by: "2099-10-15", offer_terms: { duties: "営業" }, ...DOC_NULLS, formal_contract_required: null, handoff_at: null, handoff_by: null };
+  const st = makeState({ stage: "offer", status: "offer_review_pending", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
+  const { ctx, page, errs } = await open(st);
+  await page.locator(".hr-next button", { hasText: "条件通知書を確認して送る" }).click();
+  await page.waitForTimeout(500);
+  await page.locator("#of-more summary").click();
+  const seg = page.locator('[data-field="formal"] .hr-opt button');
+  check((await seg.allInnerTexts()).join("/") === "必要/不要", "正式契約（LegalSign）は［必要］［不要］で選ぶ");
+  check((await page.locator('[data-field="formal"] .hr-opt button.on').innerText()) === "必要", "業務委託の既定は「必要」");
+  await page.locator('[data-field="formal"] .hr-opt button', { hasText: "不要" }).click();
+  await page.locator("#of-send").click();
+  await page.waitForTimeout(900);
+  const upd = st.calls.filter(([k]) => k === "update").at(-1)?.[1];
+  check(upd?.formalContractRequired === false, "オファーごとに「不要」を保存する（区分だけで固定しない）");
+  check((await page.locator("#sm-formal").innerText()).includes("不要"), "プレビューにも 正式契約 不要 と出す");
+  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
+  await ctx.close();
+}
+
+console.log("\n=== 正式契約 不要のオファー：条件承諾済み →［承諾を確認してOfficeへ引き渡す］（承諾済みPDFを確認してから） ===");
+for (const width of [1300, 390]) {
+  const offer = { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "contractor", join_date: "2026-11-01", wage_type: "月額", wage_amount: 200000,
+    respond_by: "2026-10-15", offer_terms: { duties: "営業" }, sent_at: "2026-10-11T02:00:00Z", viewed_at: "2026-10-11T03:00:00Z",
+    accepted_at: "2026-10-11T04:00:00Z", expires_at: "2026-10-15T14:59:59Z", ...DOC_NULLS,
+    notice_title: "業務委託条件通知書", notice_pdf_path: "t1/offers/a1/o1/notice-v1-x.pdf", notice_pdf_sha256: "a".repeat(64),
+    accepted_pdf_path: "t1/offers/a1/o1/accepted-v1-x.pdf", accepted_pdf_sha256: "b".repeat(64), accept_name: "テスト 候補者",
+    formal_contract_required: false, handoff_at: null, handoff_by: null };
+  const st = makeState({ stage: "offer", status: "accepted", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
+  const { ctx, page, errs } = await open(st, { width });
+  const acc = await page.locator("#hr-accepted").innerText();
+  check(acc.includes("条件承諾済み") && acc.includes("正式契約（LegalSign）") && acc.includes("不要"), `[${width}] 承諾の欄：正式契約は「不要」`);
+  check((await page.locator(".hr-offer-card").innerText()).includes("正式契約（LegalSign）：不要") && await page.locator(".hr-offer-card button", { hasText: "正式契約（LegalSign）" }).count() === 0,
+    `[${width}] 不要のオファーには LegalSign のボタンを出さない`);
+  const cta = page.locator(".hr-next button", { hasText: "承諾を確認してOfficeへ引き渡す" });
+  check(await cta.count() === 1, `[${width}] NEXT ACTION は［承諾を確認してOfficeへ引き渡す］`);
+  await cta.click();
+  await page.waitForTimeout(400);
+  check(await page.locator("#hd-go").isDisabled(), `[${width}] 承諾済みPDFと内容を確認したチェックが無ければ押せない`);
+  await page.locator("#hd-pdf").click();
+  await page.waitForTimeout(400);
+  check(st.calls.some(([k, f]) => k === "file" && f === "accepted"), `[${width}] 引き渡す前に承諾済みPDFを開ける`);
+  await page.locator("#hd-check").check();
+  await page.locator("#hd-go").click();
+  await page.waitForTimeout(900);
+  check(st.calls.some(([k, b]) => k === "handoff" && b.id === "o1"), `[${width}] Office へ引き渡す`);
+  check((await page.locator("#hr-status").innerText()) === "Office引き渡し済み", `[${width}] 状態：Office引き渡し済み`);
+  check((await page.locator('#hr-accepted [data-acc="handoff"]').innerText()).includes("Office へ引き渡し済み"), `[${width}] 承諾の欄に「Office へ引き渡し済み」`);
+  check(await page.locator(".hr-next button.btn-primary").count() === 0, `[${width}] 引き渡したあとは HR の主のボタンを出さない（社員登録は Office）`);
+  check((await drawerOverflow(page)) <= 1, `[${width}] 横にはみ出さない`);
+  check(!errs.length, `[${width}] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
+  await ctx.close();
+}
+
 console.log("\n=== HR：条件承諾済み → 正式契約（LegalSign）：URL → 案内 → 正式契約済み ===");
 {
   const offer = { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "contractor", join_date: "2026-11-01", wage_type: "月額", wage_amount: 200000,
@@ -325,7 +386,8 @@ for (const width of [1100, 768, 390]) {
   await page.waitForTimeout(500);
   check(posted[0]?.action === "accept" && posted[0].agreed === true, `[${width}] 承諾（agreed: true）`);
   const done = await page.locator("#ho-complete").innerText();
-  check(done.includes("条件の承諾を受け付けました。") && done.includes("正式な契約の手続きについて"), `[${width}] 承諾後の案内（正式契約は別に）`);
+  check(done.includes("条件の承諾を受け付けました。") && done.includes("育成参加の手続きについて") && !done.includes("正式な契約"),
+    `[${width}] 承諾後の案内（育成枠は正式契約 不要：次の手続きを案内）`);
   check(!done.includes("契約手続きが完了"), `[${width}] 「契約完了」とは言わない`);
   check((await page.locator("#ho-accepted-pdf").getAttribute("href")).includes("file=accepted"), `[${width}] 承諾済みPDFを保存できる`);
   check(!errs.length, `[${width}] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);

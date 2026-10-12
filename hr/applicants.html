@@ -994,12 +994,14 @@
         <div class="sub">${esc(a.nextAction)}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
         ${isOnHold(a) ? `<div class="hr-dk-banner" data-kind="hold"><span class="material-symbols-outlined">pause_circle</span>
           <div><b>保留中</b>${a.holdReason ? `　理由：${esc(a.holdReason)}` : ""}${a.holdNextStep ? `<br>次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
-        ${a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : a.nextActionKey === "advance" ? canAdvance : true)
+        ${a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : ["advance", "handoff"].includes(a.nextActionKey) ? canAdvance : true)
           ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
           : a.nextActionKey === "decide"
             ? `<p class="muted" style="font-size:12px;margin:0;">採用判断は社長・管理者が行います。</p>`
             : a.nextActionKey === "advance"
               ? `<p class="muted" style="font-size:12px;margin:0;">本採用へ進めるのは社長・管理者・人事が行います。</p>`
+            : a.nextActionKey === "handoff"
+              ? `<p class="muted" style="font-size:12px;margin:0;">Office への引き渡しは社長・管理者・人事が行います。</p>`
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
       </div>
@@ -1013,11 +1015,13 @@
    */
   function acceptedPanel(a) {
     const o = (detail.offers || []).find((x) => x.offerType && x.status === "accepted");
-    if (!o || a.status !== "accepted") return "";
+    if (!o || !["accepted", "done"].includes(a.status)) return "";
     const t = offerTypeDef(o.offerType);
     const canPdf = detail.salaryVisible !== false && o.docsReady && o.noticePdf;
-    const usesLegalSign = Boolean(t?.legalSign);
-    const formal = !usesLegalSign ? ""
+    // 正式契約（LegalSign）の要否はオファーごと（db/133。送ったときに決まっている）
+    const usesLegalSign = typeof o.formalRequired === "boolean" ? o.formalRequired : Boolean(t?.legalSign);
+    const formal = !usesLegalSign
+      ? (t?.key === "training" ? "" : `<div class="ln" data-acc="formal"><span class="mk ok">✓</span><b>正式契約（LegalSign）</b><span class="when">不要（このオファーで不要として送付）</span></div>`)
       : o.formalSignedAt
         ? `<div class="ln" data-acc="formal"><span class="mk ok">✓</span><b>正式契約済み</b><span class="when">${esc(JST.dateTime(o.formalSignedAt))}（LegalSign）</span></div>`
         : o.formalSentAt
@@ -1029,6 +1033,7 @@
           <span class="when">${esc(JST.dateTime(o.acceptedAt))}（第${esc(o.version)}版）</span>
           ${canPdf ? `<button class="btn btn-secondary btn-sm" id="hr-accepted-pdf" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDFを確認する</button>` : ""}</div>
         ${formal}
+        ${o.handoffAt ? `<div class="ln" data-acc="handoff"><span class="mk ok">✓</span><b>Office へ引き渡し済み</b><span class="when">${esc(JST.dateTime(o.handoffAt))}</span></div>` : ""}
       </div>`;
   }
 
@@ -1744,6 +1749,7 @@
     }
     if (key === "recommend") return openRecommendForm();
     if (key === "advance") return startAdvance();
+    if (key === "handoff") return openHandoff();
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
     if (key === "contact") return openContactForm(a.id, a.decision);
@@ -2583,7 +2589,7 @@ ${url}
     // 区分つきは、本人の承諾＝条件承諾済み（正式契約は LegalSign。承諾した版・日時・承諾記録がこの行に残る）
     const accepted = o.offerType && o.status === "accepted";
     const label = !accepted ? (OFFER_STATUS_LABEL[o.status] || o.status)
-      : o.formalSignedAt ? "正式契約済み" : o.formalSentAt ? "正式契約待ち" : "条件承諾済み";
+      : o.handoffAt ? "Office引き渡し済み" : o.formalSignedAt ? "正式契約済み" : o.formalSentAt ? "正式契約待ち" : "条件承諾済み";
     const canPdf = detail.salaryVisible !== false && o.docsReady;
     return `
       <div class="card hr-offer-card" style="margin-bottom:10px;" data-offer="${esc(o.id)}">
@@ -2600,7 +2606,8 @@ ${url}
           ${o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'notice', this)">${esc(o.noticeTitle || "条件通知書")}（PDF）</button>` : ""}
           ${accepted && o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button>` : ""}
         </div>` : ""}
-        ${accepted && o.docsReady && !o.formalSignedAt ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;padding:2px 10px;" onclick="openFormalContract()">正式契約（LegalSign）</button>` : ""}
+        ${accepted && o.offerType ? `<div class="muted" style="font-size:11.5px;margin-top:4px;" data-offer-formal>正式契約（LegalSign）：${o.formalRequired === false ? "不要" : "必要"}${o.handoffAt ? `　Office へ引き渡し：${esc(fmtDate(o.handoffAt))}` : ""}</div>` : ""}
+        ${accepted && o.docsReady && o.formalRequired !== false && !o.formalSignedAt ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;padding:2px 10px;" onclick="openFormalContract()">正式契約（LegalSign）</button>` : ""}
         ${o.messageToCandidate ? `<div style="font-size:12px;margin-top:4px;">${esc(o.messageToCandidate)}</div>` : ""}
         ${o.declineReason ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">辞退理由：${esc(o.declineReason)}</div>` : ""}
       </div>`;
@@ -2706,6 +2713,7 @@ ${url}
           <summary><span class="when-closed">詳細設定を開く</span><span class="when-open">詳細設定を閉じる</span></summary>
           <div class="hr-of-grid" id="of-more-fields">
             ${more.map(fieldHtml).join("")}
+            ${formalControlHtml(t, o)}
             <div class="wide"><label for="of-message">本人向けメッセージ</label>
               <textarea id="of-message" rows="3">${esc(o?.messageToCandidate || "")}</textarea></div>
           </div>
@@ -2718,6 +2726,20 @@ ${url}
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
         </div>`, { wide: true });
     offerAutoFill({ init: true });
+  }
+
+  /**
+   * 正式契約（LegalSign）の 必要／不要（db/133）。区分の既定（育成枠は不要で、選ばせない）から始めて、オファーごとに決める。
+   * 送ったあとは変えられない（条件通知書PDFに、正式契約の有無を書いて送るため）
+   */
+  function formalControlHtml(t, o) {
+    if (t.key === "training") return `<input type="hidden" id="of-formal" value="0">`;
+    const v = (o && typeof o.formalRequired === "boolean" ? o.formalRequired : t.formalDefault !== false) ? "1" : "0";
+    return `<div class="wide" data-field="formal"><label>正式契約（LegalSign）</label>
+      ${segHtml("of-formal", [{ value: "1", label: "必要" }, { value: "0", label: "不要" }], v, { label: "正式契約（LegalSign）" })}
+      <input type="hidden" id="of-formal" value="${v}">
+      <div class="hr-of-auto">「必要」なら、本人の条件承諾のあと LegalSign で正式契約をしてから Office へ引き渡します。
+        「不要」なら、条件承諾のあと${esc(t.nextStep || "次の手続き")}へ進みます（条件通知書にも書きます）。送ったあとは変えられません。</div></div>`;
   }
 
   /** ボタンの並び（選択肢が少ないもの）。押すと target（hidden の入力、または報酬）に値が入る */
@@ -2885,6 +2907,8 @@ ${url}
       }
       if (f.term) { if (v) out.offerTerms[f.key] = v; } else out[f.key] = v;
     }
+    // 正式契約（LegalSign）の 必要／不要（db/133。列が無い環境では、サーバが外して区分の既定で扱う）
+    if (el("of-formal")) out.formalContractRequired = el("of-formal").value === "1";
     return out;
   }
   const offerFields = () => (offerFormType ? typedOfferFields(offerFormType) : offerFormFields());
@@ -3033,6 +3057,8 @@ ${url}
         <dl>${top.map(row).join("")}<dt>回答期限</dt><dd>${esc(fmtYmdJa(o.respondBy))}</dd></dl>
         ${rest.length ? `<details><summary>その他の条件（${rest.length}件）</summary><dl>${rest.map(row).join("")}</dl></details>` : ""}
       </div>
+      ${o.offerType && typeof d.formalRequired === "boolean" ? `<div class="hr-of-auto" id="sm-formal" style="margin-top:6px;">社内の設定：正式契約（LegalSign）は
+        <b>${d.formalRequired ? "必要" : "不要"}</b>（${d.formalRequired ? "条件承諾のあと LegalSign で正式契約" : "条件承諾のあと、正式契約なしで次の手続きへ"}。条件通知書にも書きます）</div>` : ""}
       ${!d.to ? `
       <div class="banner warn" id="sm-email-need" style="margin-top:12px;display:block;">
         <b>本人のメールアドレスが未登録です</b>
@@ -3361,7 +3387,9 @@ ${url}
            <div id="fc-mail">${signed ? "" : `<button class="btn ${sent ? "btn-secondary" : "btn-primary"} btn-sm" id="fc-guide" onclick="openFormalMail(this)">${sent ? "もう一度案内する" : "本人へ正式契約を案内"}</button>`}</div>`)}
       ${step(3, signed, "正式契約済みにする", signed
         ? `<p class="hr-sub" style="margin:0 0 8px;">正式契約済み：${esc(fmtDate(o.formalSignedAt))}</p>
-           ${canAdvance ? `<button class="btn btn-primary btn-sm" onclick="closeAction();startAdvance()">${esc(detail.applicant.nextActionKey === "advance" && detail.applicant.nextActionCta || "本採用へ進める")}</button>` : `<p class="muted" style="font-size:12px;margin:0;">入社・稼働の手続きへ進めるのは社長・管理者・人事が行います。</p>`}`
+           ${!["advance", "handoff"].includes(detail.applicant.nextActionKey) ? ""
+             : canAdvance ? `<button class="btn btn-primary btn-sm" id="fc-next" onclick="closeAction();runNextAction()">${esc(detail.applicant.nextActionCta || "本採用へ進める")}</button>`
+             : `<p class="muted" style="font-size:12px;margin:0;">入社・稼働の手続きへ進めるのは社長・管理者・人事が行います。</p>`}`
         : `<p class="hr-sub" style="margin:0 0 8px;">LegalSign で本人の署名が終わったことを確かめてから押してください（取り消せません）。</p>
            <button class="btn btn-secondary btn-sm" id="fc-signed" ${o.legalsignUrl || sent ? "" : "disabled"} onclick="markFormalSigned(this)">正式契約済みにする</button>`)}
       `}
@@ -3491,6 +3519,44 @@ ${url}
       await KPLayout.busy(btn, "保存中…", () => API.api("/api/hr/lead-watchers", { method: "PUT", body: { category: "mugendojo", employeeIds: ids } }));
       closeHrModal();
     } catch (e) { el("lead-watch-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // ---- 承諾を確認して Office へ引き渡す（db/133） ------------------------------------------
+  //   HR が承諾済みPDF（条件通知書＋電子承諾記録）と内容を確かめてから押す。社員にはしない（社員登録は Office が行う）。
+  //   正式契約が必要なオファーは、正式契約済みになってから（API・DB でも止める）
+  function openHandoff() {
+    const o = acceptedOffer();
+    if (!o) return;
+    const t = offerTypeDef(o.offerType);
+    const canPdf = detail.salaryVisible !== false && o.docsReady && o.noticePdf;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">承諾を確認して Office へ引き渡す</h2>
+      <p class="hr-sub" style="margin:0 0 12px;">${esc(detail.applicant.name)}さん（${esc(t?.label || "")}）を、Office の入社準備（入退社の「HRから引き渡し」）へ載せます。
+        社員名簿・アカウントは Office が社員登録で作ります。本人に Office の権限は付きません。</p>
+      <div class="hr-accepted" id="ho-box" style="margin:0 0 10px;">
+        <div class="ln"><span class="mk ok">✓</span><b>条件承諾済み</b><span class="when">${esc(JST.dateTime(o.acceptedAt))}（第${esc(o.version)}版）</span>
+          ${canPdf ? `<button class="btn btn-secondary btn-sm" id="hd-pdf" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDFを確認する</button>` : ""}</div>
+        <div class="ln"><span class="mk ok">✓</span><b>正式契約（LegalSign）</b><span class="when">${o.formalRequired === false ? "不要（このオファーで不要として送付）" : `正式契約済み ${esc(JST.dateTime(o.formalSignedAt))}`}</span></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:#1b2440;">
+        <input type="checkbox" id="hd-check" onchange="el('hd-go').disabled=!this.checked" style="margin-top:3px;">
+        <span>承諾済みPDFと条件の内容を確認しました</span></label>
+      <div id="hd-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="hr-of-actions">
+        <button class="btn btn-primary" id="hd-go" disabled onclick="submitHandoff(this)">Office へ引き渡す</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+  async function submitHandoff(btn) {
+    const msg = el("hd-msg"); msg.textContent = "";
+    const o = acceptedOffer();
+    if (!o || !el("hd-check").checked) { msg.textContent = "承諾済みPDFと条件の内容を確認してください"; return; }
+    try {
+      await KPLayout.busy(btn, "引き渡し中…", () => API.api("/api/hr/offers", { method: "PATCH", body: { id: o.id, action: "handoff" } }));
+      closeAction();
+      await refreshDetail();
+      load();
+    } catch (e) { msg.textContent = e.hint || e.message || "引き渡せませんでした"; }
   }
 
   async function startAdvance() {

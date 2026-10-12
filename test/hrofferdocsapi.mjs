@@ -28,18 +28,24 @@ process.env.PUBLIC_BASE_URL = "https://gw.example.test";
 const DOC_COLS = ["notice_title", "notice_pdf_path", "notice_pdf_sha256", "accept_name", "accept_email", "accept_ip", "accept_ua",
   "accept_text", "accepted_pdf_path", "accepted_pdf_sha256", "legalsign_url", "formal_sent_at", "formal_sent_by", "formal_signed_at", "formal_signed_by"];
 let docsOn = true;   // db/132 が適用済みの DB か（false＝列が無い）
+let h133On = false;  // db/133 が適用済みの DB か（正式契約の要否・Office への引き渡しの列）
+const H133_COLS = ["formal_contract_required", "handoff_at", "handoff_by"];
 const mem = createMemDb({
   schema: {
     gw_hr_mail_sends: { unique: [["tenant_id", "request_key"]], required: ["tenant_id", "to_email", "subject", "body", "request_key"] },
-    gw_hr_offers: { defaults: () => (docsOn ? Object.fromEntries(DOC_COLS.map((c) => [c, null])) : {}) },
+    gw_hr_offers: { defaults: () => ({
+      ...(docsOn ? Object.fromEntries(DOC_COLS.map((c) => [c, null])) : {}),
+      ...(h133On ? Object.fromEntries(H133_COLS.map((c) => [c, null])) : {}),
+    }) },
   },
 });
+const notified = [];
 const logged = [];
 const sent = [];
 let mailMode = "sent";
 mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: () => mem.admin(), userClient: () => mem.admin() } });
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { logged.push(e); } } });
-mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async (rows) => ({ created: rows.length }) } });
+mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async (rows) => { notified.push(...rows); return { created: rows.length }; } } });
 mock.module(atRoot("lib/auth.js"), { namedExports: { requireUser: async () => ({ id: who.userId }), getMemberships: async () => [] } });
 const REAL_MAIL = await import(atRoot("lib/mail/index.js"));
 const MAIL_ON = { configured: true, reason: null, from: "株式会社エイト 採用 <recruit@example.test>", replyTo: "hr@example.test" };
@@ -104,8 +110,8 @@ const ok = async (name, fn) => {
 };
 
 const DUE = T.defaultRespondBy();
-function setup(offerType = "training", extra = {}, { docs = true } = {}) {
-  mem.reset(); logged.length = 0; sent.length = 0; mailMode = "sent"; who = OWNER; docsOn = docs;
+function setup(offerType = "training", extra = {}, { docs = true, h133 = false } = {}) {
+  mem.reset(); logged.length = 0; sent.length = 0; notified.length = 0; mailMode = "sent"; who = OWNER; docsOn = docs; h133On = h133;
   delete process.env.LEGALSIGN_ALLOWED_HOSTS;
   mem.rows.tenants = [{ id: "t1", name: "株式会社エイト" }];
   mem.rows.gw_employees = [
@@ -126,17 +132,17 @@ const tl = () => mem.rows.gw_hr_timeline;
 const tokenIn = (text) => (/token=([A-Za-z0-9_-]+)/.exec(text) || [])[1] || null;
 const stored = (path) => mem.storageFiles.get(`hr/${path}`);
 const pages = async (bytes) => (await PDFDocument.load(bytes)).getPageCount();
-async function sendTraining() {
-  const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" } });
+async function sendTraining(extra = {}) {
+  const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" }, ...extra });
   assert.equal(made.statusCode, 200, JSON.stringify(made.body));
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
   const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
   return { id, d, r };
 }
-async function acceptedTraining() {
+async function acceptedTraining(extra = {}) {
   setup();
-  const { id } = await sendTraining();
+  const { id } = await sendTraining(extra);
   const token = tokenIn(sent[0].text);
   const r = await respond({ token, action: "accept", agreed: true });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
@@ -338,15 +344,17 @@ const noUrlLeak = (url) => {
   assert.equal(text.includes(url), false, "URL を監査ログ・タイムライン・送った記録に残さない");
 };
 
+// LegalSign の流れは、育成枠を「正式契約 必要」にしたオファーで確かめる（区分だけで固定しない。db/133）
+const FORMAL = { formalContractRequired: true };
 await ok("承諾する前は LegalSign の URL を登録できない", async () => {
   setup();
-  const { id } = await sendTraining();
+  const { id } = await sendTraining(FORMAL);
   const r = await patchOffer({ id, action: "setLegalSign", url: URL1 });
   assert.equal(r.statusCode, 409);
 });
 
 await ok("URL は https:// だけ（javascript: data: http: 空白入り・ID 入りは断る）", async () => {
-  const { id } = await acceptedTraining();
+  const { id } = await acceptedTraining(FORMAL);
   for (const bad of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "http://sign.example.test/x",
     "https://sign.example.test/a b", "https://user:pw@sign.example.test/x", "ftp://sign.example.test/x", ""]) {
     const r = await patchOffer({ id, action: "setLegalSign", url: bad });
@@ -356,7 +364,7 @@ await ok("URL は https:// だけ（javascript: data: http: 空白入り・ID �
 });
 
 await ok("LEGALSIGN_ALLOWED_HOSTS があれば、そのホストだけ", async () => {
-  const { id } = await acceptedTraining();
+  const { id } = await acceptedTraining(FORMAL);
   process.env.LEGALSIGN_ALLOWED_HOSTS = "*.legalsign.example";
   assert.equal((await patchOffer({ id, action: "setLegalSign", url: URL1 })).statusCode, 400);
   assert.equal((await patchOffer({ id, action: "setLegalSign", url: "https://app.legalsign.example/x" })).statusCode, 200);
@@ -364,7 +372,7 @@ await ok("LEGALSIGN_ALLOWED_HOSTS があれば、そのホストだけ", async (
 });
 
 await ok("登録 → 案内前は直せる → メールで案内（正式契約待ち）→ 案内後は直せない → 正式契約済み（取り消せない）", async () => {
-  const { id, token } = await acceptedTraining();
+  const { id, token } = await acceptedTraining(FORMAL);
   const consoleOut = [];
   const keep = { log: console.log, error: console.error, warn: console.warn };
   for (const k of ["log", "error", "warn"]) console[k] = (...a) => { consoleOut.push(a.join(" ")); keep[k](...a); };
@@ -420,7 +428,7 @@ await ok("登録 → 案内前は直せる → メールで案内（正式契約
 });
 
 await ok("URL を登録せずに案内はできない。メール送信の設定が無ければ「自分で送った」記録だけ", async () => {
-  const { id } = await acceptedTraining();
+  const { id } = await acceptedTraining(FORMAL);
   assert.equal((await patchOffer({ id, action: "sendFormal", channel: "manual" })).statusCode, 400);
   await patchOffer({ id, action: "setLegalSign", url: URL1 });
   mailMode = "off";
@@ -451,6 +459,154 @@ await ok("区分ごとの条件承諾後の NEXT ACTION（業務委託［正式�
   a = (await getDetail("a1")).body.applicant;
   assert.deepEqual([a.statusLabel, a.nextActionCta], ["正式契約済み", "稼働開始準備へ進む"]);
   assert.equal(a.steps.steps.find((s) => s.state === "now").label, "入社/稼働");
+});
+
+console.log("\n— 正式契約の要否（オファーごと。db/133）と、承諾を確認して Office へ引き渡す —");
+const HR_ROLE = { userId: "u-hr2", tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], apps: ["hr", "office"], employee: { id: "e-hr2", display_name: "人事 次郎" } };
+// 区分ごとに、作る → 送る → 本人が承諾する
+async function acceptedOf(type, extra = {}, opts = { h133: true }) {
+  setup(type, {}, opts);
+  const base = {
+    contractor: { wageType: "月額", wageAmount: 200000, offerTerms: { duties: T.DUTY_TEMPLATES[1].text } },
+    executive_employee: { wageType: "月給", wageAmount: 400000, jobTitle: "エンジニア", workLocation: "東京本社" },
+    spot: { wageType: "日額", wageAmount: 30000, offerTerms: { projectName: "展示会", duties: "受付" } },
+    training: { wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" } },
+  }[type];
+  const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", ...base, ...extra });
+  assert.equal(made.statusCode, 200, JSON.stringify(made.body));
+  const id = made.body.offer.id;
+  const d = (await sendDraft(id)).body;
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const token = tokenIn(sent[0].text);
+  const acc = await respond({ token, action: "accept", agreed: true });
+  assert.equal(acc.statusCode, 200, JSON.stringify(acc.body));
+  return { id, token, draft: d, accepted: acc.body };
+}
+const handoffOf = (id) => patchOffer({ id, action: "handoff" });
+
+await ok("オファーごとに 必要／不要 を決めて保存できる（区分だけで固定しない）。送ったあとは変えられない", async () => {
+  setup("contractor", {}, { h133: true });
+  const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "月額", wageAmount: 200000,
+    offerTerms: { duties: "営業" }, formalContractRequired: false });
+  assert.equal(made.statusCode, 200, JSON.stringify(made.body));
+  assert.equal(offerRow().formal_contract_required, false);
+  assert.equal(made.body.offer.formalRequired, false);
+  const id = made.body.offer.id;
+  assert.equal((await patchOffer({ id, action: "update", formalContractRequired: true, respondBy: DUE })).statusCode, 200, "送る前なら変えられる");
+  assert.equal(offerRow().formal_contract_required, true);
+  assert.equal((await patchOffer({ id, action: "update", formalContractRequired: "yes", respondBy: DUE })).statusCode, 400, "必要／不要 以外は断る");
+  const d = (await sendDraft(id)).body;
+  assert.equal(d.formalRequired, true, "プレビューにも要否を出す");
+  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "update", formalContractRequired: false, respondBy: DUE });
+  assert.equal(r.statusCode, 409, "送ったあとは変えられない");
+  assert.equal(offerRow().formal_contract_required, true);
+});
+
+await ok("条件通知書PDFの文言：「必要」だけ「正式な契約は別途締結」。「不要」は区分ごとの次の手続き", async () => {
+  await acceptedOf("contractor");
+  assert.ok(D.noticeBody(offerRow(), {}).includes("正式な契約は、承諾のあと別途（電子契約）締結します。"));
+  assert.ok((await viewPublic(tokenIn(sent[0].text))).body.afterAccept.includes("正式な契約の手続き"));
+  await acceptedOf("contractor", { formalContractRequired: false });
+  const body = D.noticeBody(offerRow(), {});
+  assert.ok(body.includes("条件承諾後、稼働開始の手続きへ進みます。") && !body.includes("別途（電子契約）"), body);
+  const v = (await viewPublic(tokenIn(sent[0].text))).body;
+  assert.ok(v.afterAccept.includes("稼働開始の手続きについて") && !v.afterAccept.includes("正式な契約"), v.afterAccept);
+  await acceptedOf("training");
+  assert.ok(D.noticeBody(offerRow(), {}).includes("条件承諾後、育成参加の手続きへ進みます。"), "育成枠の既定は不要");
+});
+
+await ok("「不要」のオファーでは LegalSign の操作をしない（URL 登録・案内・正式契約済み）", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  for (const body of [{ action: "setLegalSign", url: URL1 }, { action: "sendFormal", channel: "manual" }, { action: "markFormalSigned" }]) {
+    const r = await patchOffer({ id, ...body });
+    assert.equal(r.statusCode, 409, body.action);
+    assert.equal(r.body.error, "not_required");
+  }
+  assert.equal(offerRow().legalsign_url, null);
+});
+
+await ok("「必要」のオファー：正式契約済みになるまで引き渡せない（URL を入れる前でも）→ 正式契約済み → 引き渡す", async () => {
+  const { id } = await acceptedOf("contractor");
+  let a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.nextActionCta, a.nextActionKey], ["正式契約へ", "formalContract"], "まず正式契約へ");
+  let r = await handoffOf(id);
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "formal_required");
+  assert.equal(offerRow().handoff_at, null);
+  await patchOffer({ id, action: "setLegalSign", url: URL1 });
+  await patchOffer({ id, action: "sendFormal", channel: "manual" });
+  assert.equal((await handoffOf(id)).body.error, "formal_required", "案内しただけでも引き渡せない");
+  await patchOffer({ id, action: "markFormalSigned" });
+  a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["正式契約済み", "承諾を確認してOfficeへ引き渡す", "handoff"]);
+  r = await handoffOf(id);
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(offerRow().handoff_at && offerRow().handoff_by === "u-owner");
+  a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.handoffState], ["Office引き渡し済み", null, "done"]);
+  assert.match(a.nextAction, /Office へ引き渡し済み/);
+  assert.equal(app().status, "accepted", "引き渡しただけでは社員にしない（応募者の状態は変えない）");
+  assert.equal(app().employee_id ?? null, null);
+});
+
+await ok("「不要」のオファー：条件承諾のまま、HR の確認で引き渡せる。記録・監査ログ・Office への通知（URL・個人情報は書かない）", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  let a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.formalRequired, a.handoffState], ["条件承諾済み", "承諾を確認してOfficeへ引き渡す", false, "ready"]);
+  assert.equal(a.steps.steps.find((s) => s.state === "now").label, "入社/稼働", "正式契約が要らなければ、承諾のあと入社/稼働へ");
+  const r = await handoffOf(id);
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(tl().some((t) => t.event_key === "office_handoff" && t.label === "承諾内容を確認して Office へ引き渡し" && t.detail.includes("正式契約なし")));
+  const log = logged.find((e) => e.action === "hr.offer_handoff");
+  assert.deepEqual(log.detail, { applicantId: "a1", version: 1, offerType: "contractor", formalRequired: false, formalSigned: false });
+  const toOffice = notified.filter((n) => n.dedupeKey === "hr_handoff:a1");
+  assert.ok(toOffice.length >= 1 && toOffice.every((n) => n.link === "/admin-hr.html" && n.title.includes("HRから引き渡し")), JSON.stringify(notified));
+  assert.equal(JSON.stringify(toOffice).includes("candidate@example.test"), false, "通知にメールアドレスは書かない");
+  // 二度押しても1回だけ
+  const again = await handoffOf(id);
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.body.already, true);
+  assert.equal(tl().filter((t) => t.event_key === "office_handoff").length, 1);
+  assert.equal(logged.filter((e) => e.action === "hr.offer_handoff").length, 1);
+  const l = (await listAll()).body.applicants.find((x) => x.id === "a1");
+  assert.equal(l.statusLabel, "Office引き渡し済み", "一覧も同じ");
+});
+
+await ok("育成枠は Office へ引き渡さない（LMS・育成開始へ）", async () => {
+  const { id } = await acceptedOf("training");
+  const a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.nextActionCta, a.nextActionKey], ["LMS・育成開始手続きへ", "advance"]);
+  const r = await handoffOf(id);
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "training");
+  assert.equal(offerRow().handoff_at, null);
+});
+
+await ok("引き渡せるのは社長・管理者・人事。採用担当はできない。承諾していない版は引き渡せない", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = RECRUITER;
+  assert.equal((await handoffOf(id)).statusCode, 403);
+  who = HR_ROLE;
+  assert.equal((await handoffOf(id)).statusCode, 200, "人事（Office に入れる）はできる");
+  assert.equal(offerRow().handoff_by, "u-hr2");
+  setup("contractor", {}, { h133: true });
+  const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "月額", wageAmount: 1, offerTerms: { duties: "x" }, formalContractRequired: false });
+  assert.equal((await handoffOf(made.body.offer.id)).statusCode, 409, "未承諾の版は不可");
+});
+
+await ok("db/133 が無い環境：引き渡しは 503。NEXT ACTION はこれまでどおり［本採用へ進める］系（区分の既定で要否を扱う）", async () => {
+  const { id } = await acceptedOf("contractor", {}, { h133: false });
+  assert.equal("formal_contract_required" in offerRow(), false, "列の無い DB に書かない");
+  const r = await handoffOf(id);
+  assert.equal(r.statusCode, 503);
+  assert.match(r.body.message, /db\/133/);
+  await patchOffer({ id, action: "setLegalSign", url: URL1 });
+  await patchOffer({ id, action: "sendFormal", channel: "manual" });
+  await patchOffer({ id, action: "markFormalSigned" });
+  const a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.nextActionCta, a.nextActionKey, a.handoffState], ["稼働開始準備へ進む", "advance", "unavailable"]);
 });
 
 console.log("\n— db/132 が無い環境 —");

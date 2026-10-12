@@ -360,12 +360,32 @@ await ok("条件承諾後の NEXT ACTION は区分ごと（正社員・パート
   assert.equal(cta("contractor", "sent"), "正式契約済みにする");
   assert.equal(cta("executive_employee", "signed"), "入社手続きへ進む");
   assert.equal(cta("part_time", "signed"), "入社手続きへ進む");
-  assert.equal(cta("training", "signed"), "育成開始手続きへ進む");
+  // 育成枠は正式契約 不要が既定（LMS・育成開始へ）。オファーで「必要」にして正式契約済みなら、育成開始手続きへ
+  assert.equal(cta("training", "signed"), "LMS・育成開始手続きへ");
+  assert.equal(nextActionOf({ status: "accepted", offer_type: "training", formal_state: "signed", formal_required: true }).cta, "育成開始手続きへ進む");
   assert.equal(cta("contractor", "signed"), "稼働開始準備へ進む");
   assert.equal(cta("spot", "signed"), "案件アサインへ進む");
   assert.equal(nextActionOf({ status: "accepted" }).cta, "本採用へ進める", "区分なしは従来どおり");
-  // 状態の言い方：条件承諾済み → 正式契約待ち → 正式契約済み（「契約完了」とは言わない）
+  // 状態の言い方：条件承諾済み → 正式契約待ち → 正式契約済み（「契約完了」とは言わない）→ Office引き渡し済み
   assert.deepEqual(["", "sent", "signed"].map((f) => T.offerStatusLabel("accepted", "contractor", f || null)), ["条件承諾済み", "正式契約待ち", "正式契約済み"]);
+  assert.equal(T.offerStatusLabel("accepted", "contractor", "signed", { handoff: "done" }), "Office引き渡し済み");
+});
+
+await ok("Office への引き渡し（db/133）：正式契約が必要なら正式契約済みのあと、不要なら承諾のあと。育成枠は LMS へ。引き渡し後は CTA なし", () => {
+  const na = (o) => nextActionOf({ status: "accepted", ...o });
+  const act = (o) => [na(o).cta, na(o).action];
+  const H = { handoff_state: "ready" };
+  assert.deepEqual(act({ offer_type: "contractor", formal_required: true, ...H }), ["正式契約へ", "formalContract"], "必要：まず正式契約");
+  assert.deepEqual(act({ offer_type: "contractor", formal_required: true, formal_state: "sent", ...H }), ["正式契約済みにする", "formalContract"]);
+  assert.deepEqual(act({ offer_type: "contractor", formal_required: true, formal_state: "signed", ...H }), ["承諾を確認してOfficeへ引き渡す", "handoff"]);
+  assert.deepEqual(act({ offer_type: "executive_employee", formal_required: false, ...H }), ["承諾を確認してOfficeへ引き渡す", "handoff"], "不要：承諾のまま引き渡す");
+  assert.deepEqual(act({ offer_type: "spot", formal_required: false, ...H }), ["承諾を確認してOfficeへ引き渡す", "handoff"]);
+  assert.deepEqual(act({ offer_type: "training", formal_required: false, ...H }), ["LMS・育成開始手続きへ", "advance"], "育成枠は Office へ送らない");
+  assert.deepEqual(act({ offer_type: "contractor", formal_required: false, handoff_state: "done" }), [null, null]);
+  assert.match(na({ offer_type: "contractor", formal_required: false, handoff_state: "done" }).label, /Office へ引き渡し済み/);
+  assert.match(na({ offer_type: "contractor", handoff_state: "done", advance_claimed_at: new Date().toISOString() }).label, /Office で社員登録の手続き中/);
+  // db/133 が無い環境：これまでどおり（正式契約済みのあと区分ごとの入社・稼働手続き）
+  assert.deepEqual(act({ offer_type: "contractor", formal_state: "signed" }), ["稼働開始準備へ進む", "advance"]);
 });
 
 console.log("\n— これまでの動き・db/129 未適用 —");

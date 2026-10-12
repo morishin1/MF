@@ -382,7 +382,8 @@ await ok("同意のチェックが無ければ承諾できない。チェック�
   const v = await viewPublic(token);
   assert.equal(v.body.responseStatus, "accepted");
   assert.equal(v.body.doneTitle, "条件の承諾を受け付けました。");
-  assert.equal(v.body.afterAccept, "ご承諾ありがとうございます。\n正式な契約の手続きについて、株式会社エイトからご案内します。");
+  // 育成枠は正式契約（LegalSign）不要が既定（db/133）。次の手続き（育成参加）を案内する
+  assert.equal(v.body.afterAccept, "ご承諾ありがとうございます。\n育成参加の手続きについて、株式会社エイトからご案内します。");
   const d = (await getDetail("a1")).body;
   assert.equal(d.applicant.statusLabel, "条件承諾済み");
   assert.equal(d.applicant.nextActionCta, "LMS・育成開始手続きへ");

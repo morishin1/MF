@@ -8,6 +8,7 @@
 //         "markSent"   … 実際に本人へ送ったことを明示的に記録する（Stage 6 §12）
 //         "send"       … ［内容を確認してメールで送信］（オファー作成・メール送信・同意完結 UI/UX改善仕様 §12）。
 //                         1回で 内容の確定 → 本人専用URLの発行 → メール送信 → sent_at → タイムライン → 承諾待ち まで行う
+//         "handoff"    … ［承諾を確認してOfficeへ引き渡す］（db/133）。承諾した版を Office の入社準備キューへ載せる（社員にはしない）
 // GET   /api/hr/offers?id=…
 //         … 送る前の確認画面：本人に見える条件の行・区分ごとのメールの下書き（{{オファーURL}} 入り）・メールで送れるか
 //
@@ -30,7 +31,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canSeeSalary, canAdvanceHire } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput } from "../../../lib/salary.js";
 import { paySplit, splitWage, attachPay, savePay, copyPayToOffer, payFailed, WAGE_COLUMNS } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
@@ -39,8 +40,10 @@ import {
   normalizeOffer, shapeOffer, sha256, newOfferToken, offerExpiresAt,
 } from "../../../lib/hr.js";
 import {
-  offerTypeOf, missingRequired, offerMail, publicOfferItems, OFFER_URL_TAG, todayJst,
+  offerTypeOf, missingRequired, offerMail, publicOfferItems, OFFER_URL_TAG, todayJst, formalRequiredOf,
 } from "../../../lib/hr-offer-types.js";
+import { notify } from "../../../lib/notify.js";
+import { adminSideEmployeeIds } from "../../../lib/messages-admin.js";
 import { sendMail, mailConfig, isEmail } from "../../../lib/mail/index.js";
 import { sendProblems, sendOutcome } from "../../../lib/hr-mail-template.js";
 import { publicBaseUrl } from "../../../lib/onboard-guide.js";
@@ -66,7 +69,14 @@ const OFFER_SNAPSHOT_COLUMNS = [
   "message_to_candidate", "respond_by",
   // 採用区分と区分ごとの条件（db/129。列が無い環境・区分の無い版では undefined のまま＝送らない）
   "offer_type", "offer_terms",
+  // 正式契約（LegalSign）の要否（db/133。列が無い環境では undefined のまま＝送らない）
+  "formal_contract_required",
 ];
+
+// db/133（formal_contract_required）が未適用の環境では、その列を外して書き直す（要否は区分の既定で扱う）
+const FORMAL_COL = "formal_contract_required";
+const missingFormalCol = (e) => Boolean(e) && String(e.message || "").includes(FORMAL_COL) && ["PGRST204", "42703"].includes(e.code);
+const withoutFormal = (row) => { const out = { ...row }; delete out[FORMAL_COL]; return out; };
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -120,12 +130,14 @@ async function create(req, res, sb, ctx, user, salary) {
 
   // 給与は、分けている設定なら専用の表へ（元の行には入れない）
   const { base, wage } = splitWage(row.value);
-  const { data, error } = await sb.from("gw_hr_offers")
-    .insert({
-      ...base, tenant_id: ctx.tenantId, applicant_id: applicant.id, version,
-      token_hash: sha256(token), created_by: user.id,
-    })
-    .select("*").single();
+  const insertRow = {
+    ...base, tenant_id: ctx.tenantId, applicant_id: applicant.id, version,
+    token_hash: sha256(token), created_by: user.id,
+  };
+  let { data, error } = await sb.from("gw_hr_offers").insert(insertRow).select("*").single();
+  if (error && missingFormalCol(error)) {
+    ({ data, error } = await sb.from("gw_hr_offers").insert(withoutFormal(insertRow)).select("*").single());
+  }
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
@@ -170,6 +182,7 @@ async function act(req, res, sb, ctx, user, salary) {
   if (body.action === "setLegalSign") return setLegalSign(res, sb, ctx, user, offer, body, salary);
   if (body.action === "sendFormal") return sendFormal(req, res, sb, ctx, user, offer, body, salary);
   if (body.action === "markFormalSigned") return markFormalSigned(res, sb, ctx, user, offer, salary);
+  if (body.action === "handoff") return handoff(res, sb, ctx, user, offer, salary);
   return json(res, 400, { error: "unknown_action" });
 }
 
@@ -193,8 +206,12 @@ async function update(res, sb, ctx, user, offer, body, salary) {
   const { base, wage } = splitWage(row.value);
   let data = offer;
   if (Object.keys(base).length) {
-    const r = await sb.from("gw_hr_offers").update(base).eq("id", offer.id).select("*").single();
-    if (r.error) return json(res, 500, { error: "db_update_failed", detail: r.error.message });
+    let r = await sb.from("gw_hr_offers").update(base).eq("id", offer.id).select("*").single();
+    if (r.error && missingFormalCol(r.error)) {
+      const rest = withoutFormal(base);
+      r = Object.keys(rest).length ? await sb.from("gw_hr_offers").update(rest).eq("id", offer.id).select("*").single() : { data: offer };
+    }
+    if (r.error) return lockedResponse(res, r.error) || json(res, 500, { error: "db_update_failed", detail: r.error.message });
     data = r.data;
   }
   try {
@@ -395,6 +412,8 @@ async function sendDraft(req, res, sb, ctx, salary) {
     canSend: SENDABLE_STATUSES.includes(applicant.status) && !offer.sent_at && !offer.revoked_at,
     // ready=false は db/132 未適用・区分の無い版（PDF なしで、これまでどおり送る）。stored は作成済み（送った時点の版）
     notice: { ready: Boolean(noticeTitle), title: noticeTitle, stored: Boolean(offer.notice_pdf_path), salaryVisible: salary },
+    // 正式契約（LegalSign）の要否（db/133。列が無ければ区分の既定）。送ったあとは変わらない
+    formalRequired: formalRequiredOf(offer),
   });
 }
 
@@ -607,6 +626,8 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
 // URL は gw_hr_offers.legalsign_url にだけ持つ。監査ログ・タイムライン・console には書かない（事実だけ）
 
 const formalNotReady = (res) => json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+// 正式契約（LegalSign）が要らないオファー（db/133。送ったときに決まっている）では、LegalSign の操作をしない
+const formalNotRequired = (res) => json(res, 409, { error: "not_required", hint: "このオファーは「正式契約（LegalSign）不要」として送っています" });
 const lockedResponse = (res, e) => (e?.code === "55000"
   ? json(res, 409, { error: "locked", hint: "確定した記録は変更できません" }) : null);
 
@@ -619,6 +640,7 @@ async function loadAccepted(sb, ctx, offer) {
 /** LegalSign の URL を登録・直す（本人へ正式契約を案内する前まで） */
 async function setLegalSign(res, sb, ctx, user, offer, body, salary) {
   if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (formalRequiredOf(offer) === false) return formalNotRequired(res);
   if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから登録できます" });
   if (offer.formal_sent_at) return json(res, 409, { error: "locked", hint: "本人へ案内したあとは、URL を変えられません" });
   const checked = checkLegalSignUrl(body?.url);
@@ -662,6 +684,7 @@ function formalMail(offer, { name, company }) {
  */
 async function sendFormal(req, res, sb, ctx, user, offer, body, salary) {
   if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (formalRequiredOf(offer) === false) return formalNotRequired(res);
   if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから案内できます" });
   if (!offer.legalsign_url) return json(res, 400, { error: "invalid_body", hint: "先に LegalSign の URL を登録してください" });
   if (offer.formal_signed_at) return json(res, 409, { error: "invalid_state", hint: "すでに正式契約済みです" });
@@ -738,6 +761,7 @@ async function sendFormal(req, res, sb, ctx, user, offer, body, salary) {
 /** 正式契約済みにする（LegalSign で署名が終わったのを、HR が確かめて押す。誰が・いつ。取り消せない） */
 async function markFormalSigned(res, sb, ctx, user, offer, salary) {
   if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (formalRequiredOf(offer) === false) return formalNotRequired(res);
   if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾していません" });
   if (offer.formal_signed_at) return json(res, 409, { error: "locked", hint: "すでに正式契約済みです" });
   const { data, error } = await sb.from("gw_hr_offers")
@@ -751,5 +775,72 @@ async function markFormalSigned(res, sb, ctx, user, offer, salary) {
   });
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_formal_signed",
     target: `hr_offer:${offer.id}`, detail: { applicantId: offer.applicant_id, version: offer.version } });
+  return json(res, 200, { offer: await shape(ctx, data, salary) });
+}
+
+// ---- 承諾を確認して Office へ引き渡す（db/133） ---------------------------------------
+// 「Office へ引き渡す」＝ Office 担当者の入社準備キュー（admin-hr.html の「HRから引き渡し」）に載せること。
+// 本人を社員にはしない（社員名簿・アカウントは Office が既存の社員登録で作る）。本人に Office の権限も与えない。
+// 押せるのは社長・管理者・人事（canAdvanceHire。社員登録の事前入力・完了と同じ）。
+// 二度押しても1回だけ（handoff_at が空のときだけ書く。DB でも書き換えを止める）
+
+const handoffNotReady = (res) => json(res, 503, { error: "not_ready", message: "db/133_hr_offer_handoff.sql を Supabase に流してください" });
+
+async function handoff(res, sb, ctx, user, offer, salary) {
+  if (!canAdvanceHire(ctx)) return json(res, 403, { error: "forbidden", hint: "Office へ引き渡せるのは社長・管理者・人事です" });
+  if (!Object.prototype.hasOwnProperty.call(offer, "handoff_at")) return handoffNotReady(res);
+  const t = offerTypeOf(offer.offer_type);
+  if (!t) return json(res, 409, { error: "invalid_state", hint: "区分の無い合格通知は、これまでどおり［本採用へ進める］で進めてください" });
+  if (t.key === "training") {
+    return json(res, 409, { error: "training", hint: "育成枠は Office へ引き渡しません。LMS・育成開始の手続きへ進めてください" });
+  }
+  if (offer.handoff_at) return json(res, 200, { already: true, offer: await shape(ctx, offer, salary) });
+  if (!offer.accepted_at || offer.declined_at || offer.revoked_at) {
+    return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾した版だけ、Office へ引き渡せます" });
+  }
+  const required = formalRequiredOf(offer);
+  if (required && !offer.formal_signed_at) {
+    return json(res, 409, { error: "formal_required", hint: "このオファーは正式契約（LegalSign）が必要です。正式契約済みにしてから引き渡してください" });
+  }
+  const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name, status, employee_id")
+    .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!applicant) return json(res, 404, { error: "not_found" });
+  if (applicant.employee_id) return json(res, 409, { error: "already_advanced", hint: "すでに社員登録が済んでいます" });
+  if (applicant.status !== "accepted") return json(res, 409, { error: "invalid_state", hint: "条件承諾済みの方だけ、Office へ引き渡せます" });
+
+  const { data, error } = await sb.from("gw_hr_offers")
+    .update({ handoff_at: new Date().toISOString(), handoff_by: user.id })
+    .eq("id", offer.id).eq("tenant_id", ctx.tenantId).is("handoff_at", null).select("*").maybeSingle();
+  if (error) {
+    if (error.code === "23514") return json(res, 409, { error: "invalid_state", hint: "この版は Office へ引き渡せません（承諾・正式契約の状態を確認してください）" });
+    return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed" });
+  }
+  if (!data) {
+    // 同時に押された：先に入った引き渡しをそのまま返す
+    const { data: now } = await sb.from("gw_hr_offers").select("*").eq("id", offer.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+    if (now?.handoff_at) return json(res, 200, { already: true, offer: await shape(ctx, now, salary) });
+    return json(res, 409, { error: "conflict", hint: "直前に状態が変わりました。開き直してください" });
+  }
+
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "office_handoff",
+    label: "承諾内容を確認して Office へ引き渡し",
+    detail: `第${offer.version}版・${required ? "正式契約済み" : "正式契約なし"}`, created_by: user.id,
+  });
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_handoff", target: `hr_offer:${offer.id}`,
+    detail: { applicantId: applicant.id, version: offer.version, offerType: t.key, formalRequired: required, formalSigned: Boolean(offer.formal_signed_at) },
+  });
+  // Office の人事・労務（社長・人事・管理者）へ知らせる。行き先は入退社の画面（本人の情報・URL は書かない）
+  try {
+    const ids = await adminSideEmployeeIds(admin(), ctx.tenantId);
+    await notify(ids.map((employeeId) => ({
+      tenantId: ctx.tenantId, employeeId, kind: "hr",
+      title: `入社準備：HRから引き渡し（${applicant.name}さん・${t.label}）`,
+      body: "承諾内容の確認が済みました。Office の入退社で社員登録へ進めてください。",
+      link: "/admin-hr.html", dedupeKey: `hr_handoff:${applicant.id}`,
+    })));
+  } catch (e) { console.error("[hr/offers] handoff notify", e?.message || e); }
+
   return json(res, 200, { offer: await shape(ctx, data, salary) });
 }

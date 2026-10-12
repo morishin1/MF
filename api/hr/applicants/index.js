@@ -85,7 +85,7 @@ async function list(req, res, sb, ctx, salary) {
   const acceptedIds = (data || []).filter((a) => a.status === "accepted").map((a) => a.id);
   if (acceptedIds.length) {
     const formal = await readFormalStates(sb, ctx.tenantId, acceptedIds);
-    for (const a of data || []) a.formal_state = formal.byId.get(a.id) ?? null;
+    for (const a of data || []) Object.assign(a, formal.byId.get(a.id) || { formal_state: null });
   }
   // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
   // 無限道場リードの decision（保留・対象外。lib/hr-lead-flow.js）は採用の選考結果ではないので数えない

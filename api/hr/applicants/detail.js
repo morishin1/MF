@@ -18,7 +18,7 @@ import {
   STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
 } from "../../../lib/hr.js";
 import { contactStatusOf } from "../../../lib/hr-messages.js";
-import { OFFER_TYPES_PUBLIC, offerTypeLabel } from "../../../lib/hr-offer-types.js";
+import { OFFER_TYPES_PUBLIC, offerTypeLabel, acceptFactsOf } from "../../../lib/hr-offer-types.js";
 import { readOfferTypes } from "../../../lib/hr.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
@@ -102,7 +102,8 @@ async function one(req, res, sb, ctx, salary) {
   const current = activeOffer(offers);
   // 正式契約（LegalSign）の段階（db/132。承諾した版の記録から。列が無い環境では null＝条件承諾済みのまま）
   const acceptedOffer = (offers || []).find((o) => o.accepted_at);
-  a.formal_state = acceptedOffer?.formal_signed_at ? "signed" : acceptedOffer?.formal_sent_at ? "sent" : null;
+  // 承諾した版の正式契約の段階（db/132）・要否と Office への引き渡し（db/133）
+  Object.assign(a, acceptFactsOf(acceptedOffer));
 
   return json(res, 200, {
     applicant: {
