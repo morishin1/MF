@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261012mgn1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261012mgn1">
+  <link rel="stylesheet" href="../css/app.css?v=20261012mx1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261012mx1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -100,11 +100,12 @@
   <main id="kei-main"><div class="kei-empty">読み込み中…</div></main>
 </div>
 
-<script src="../js/api-client.js?v=20261012mgn1"></script>
-<script src="../js/layout.js?v=20261012mgn1"></script>
-<script src="../js/keiei-layout.js?v=20261012mgn1"></script>
-<script src="/keiei/onboarding.js?v=20261012mgn1"></script>
-<script src="/keiei/pay.js?v=20261012mgn1"></script>
+<script src="../js/api-client.js?v=20261012mx1"></script>
+<script src="../js/layout.js?v=20261012mx1"></script>
+<script src="../js/keiei-layout.js?v=20261012mx1"></script>
+<script src="/keiei/onboarding.js?v=20261012mx1"></script>
+<script src="/keiei/pay.js?v=20261012mx1"></script>
+<script src="/keiei/members.js?v=20261012mx1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -268,6 +269,15 @@
       <div class="kt-grid">${d.money.internal.map(tile).join("")}${link}</div>`);
   }
   const orgBlock = (d) => section("people", "人・組織", `<div class="kt-grid">${d.people.tiles.map(tile).join("")}</div>`);
+  // メンバー実行状況の要約（今日の判断に要る3つだけ。詳細は #members）
+  function memberExecBlock(d) {
+    const m = d.memberExec;
+    if (m === undefined) return "";
+    const more = `<a href="#members" data-role="members-more">メンバー実行状況を見る →</a>`;
+    if (!m) return section("member-exec", "メンバー実行状況", `<div class="kei-none" data-role="members-missing">日報・タスクを読み込めませんでした（0人という意味ではありません）。</div>`, { more });
+    const t = (key, label, v) => `<a class="kt" href="#members" data-key="${key}"><div class="lb">${esc(label)}</div>${v == null ? `<div class="val miss">取得できません</div>` : `<div class="val">${num(v)}<small>人</small></div>`}<div class="sub"></div></a>`;
+    return section("member-exec", "メンバー実行状況", `<div class="kt-grid">${t("follow", "要フォロー", m.followRequired)}${t("nippo", "日報未提出", m.nippoMissing)}${t("tomorrow", "明日の3つ未登録", m.tomorrowMissing)}</div>`, { more });
+  }
 
   // ⑦ リスク・停滞
   function stalledList(S) {
@@ -301,6 +311,7 @@
         + (d.sales === undefined ? "" : byPersonBlock(d.sales))
         + moneyBlock(d)
         + orgBlock(d)
+        + memberExecBlock(d)
         + riskBlock(d);
     },
 
@@ -464,6 +475,13 @@
       else if (view === "pay") await window.KeieiPay.list(main, stale);
       else if (view === "pay-candidates") await window.KeieiPay.candidates(main, stale);
       else await window.KeieiPay.audit(main, stale);
+      return;
+    }
+    // メンバー実行状況（#members）は、keiei/members.js（日報・タスクの既存の判定をまとめて見る）
+    if (view === "members") {
+      KeieiLayout.setActive("members");
+      const mine = ++seq;
+      await window.KeieiMembers.open(el("kei-main"), () => mine !== seq);
       return;
     }
     if (!RENDER[view]) view = "home";

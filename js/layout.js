@@ -693,10 +693,12 @@
   const KEIEI_TABS = [
     { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
     { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
-    // 人・組織を押すと、チーム状況（/admin-team.html。全体の集計）を開く。
+    // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
     // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）
-    { key: "people",  label: "人・組織",     icon: "groups",    views: ["people", "onboarding", "pay"], href: "/admin-team.html",
+    // 経営者が毎日見る入口は「メンバー実行状況」（日報・今日の3つ・明日の3つ・期限超過をまとめて見る。keiei/members.js）
+    { key: "people",  label: "人・組織",     icon: "groups",    views: ["members", "people", "onboarding", "pay"], href: "/keiei/#members",
       sub: [
+        { view: "members", label: "メンバー実行状況" },
         { href: "/admin-team.html",  label: "チーム状況" },
         { href: "/admin-tasks.html", label: "全員のタスク" },
         { view: "onboarding", label: "入社準備" },
