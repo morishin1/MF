@@ -1,7 +1,7 @@
 // 偽の Supabase（メモリ上の表）。/api/office/* の書き込みまで通すためのもの。
 //
 // ■ 実DBの何を真似しているか
-//   ・select / insert / update / upsert / delete と、eq・neq・in・lt・lte・gt・gte・is・ilike・not(is)・order・limit・single・maybeSingle
+//   ・select / insert / update / upsert / delete と、eq・neq・in・lt・lte・gt・gte・is・ilike・not(is)・order・limit・range・single・maybeSingle
 //   ・一意制約（23505）・NOT NULL（23502）・CHECK（23514）：表ごとに、SQL と同じ条件を書いて渡す
 //   ・date 列の比較に、実在しない日付（2026-09-31）を渡したら 22008 で落とす（test/_pgdate.mjs）
 //   ・表が無い（PGRST205）／列が無い（42703）状態の再現（missing）
@@ -44,7 +44,7 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
   function makeClient({ asUser, who }) {
     function from(name) {
       const f = [];
-      let cols = null, head = false, wantCount = false, order = null, lim = null;
+      let cols = null, head = false, wantCount = false, order = null, lim = null, span = null;
       let op = "select";
       let payload = null, upsertOn = null, returning = false, one = null;
 
@@ -121,7 +121,8 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         if (op === "select") {
           let out = tableRows(name).filter(match);
           if (order) out = [...out].sort((a, b) => (a[order.col] < b[order.col] ? -1 : a[order.col] > b[order.col] ? 1 : 0) * (order.asc ? 1 : -1));
-          if (lim) out = out.slice(0, lim);
+          if (span) out = out.slice(span[0], span[1] + 1);
+          else if (lim) out = out.slice(0, lim);
           const res = { data: head ? null : out.map(project), error: null };
           if (wantCount) res.count = out.length;
           return res;
@@ -200,6 +201,7 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         not(k, op, v) { if (op !== "is") throw new Error(`_memdb: not(${op}) は未対応`); f.push(["not_is", k, v]); return q; },
         order(col, o) { order = { col, asc: o?.ascending !== false }; return q; },
         limit(n) { lim = n; return q; },
+        range(a, b) { span = [a, b]; return q; },   // lib/pg-read.js の readAll が使う（1000件ずつずらして読む）
         single() { one = "single"; return q; },
         maybeSingle() { one = "maybe"; return q; },
         then: (fn, rej) => Promise.resolve(finish(run())).then(fn, rej),
