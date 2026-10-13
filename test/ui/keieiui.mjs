@@ -185,14 +185,14 @@ console.log("— 経営者は開ける —");
   check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");
   check(await page.locator("#kp-keiei-nav .kp-ostab").count() === 0, "ホームには2段目のタブが無い");
-  // 「人・組織」を押すとチーム状況（/admin-team.html。全体の集計）へ移る（2026-10-07：日報・勤怠は Office の人・組織）。
-  // ここでは行き先だけ見て、2段目は概要（#people）から見る
-  check(await page.locator('#kp-keiei-nav [data-ktab="people"]').getAttribute("href") === "/admin-team.html", "「人・組織」の行き先はチーム状況");
+  // 「人・組織」を押すとメンバー実行状況（/keiei/#members。日報・今日の3つ・明日の3つ・期限超過をまとめて見る）へ移る。
+  // 日報・勤怠の運用は Office の人・組織のまま。ここでは行き先だけ見て、2段目は概要（#people）から見る
+  check(await page.locator('#kp-keiei-nav [data-ktab="people"]').getAttribute("href") === "/keiei/#members", "「人・組織」の行き先はメンバー実行状況");
   await page.evaluate(() => { location.hash = "#people"; });
   await page.waitForTimeout(300);
   const subs = await page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => [n.dataset.kview || "", n.getAttribute("href")]));
-  check(subs.map((x) => x[0]).join(",") === ",,onboarding,pay,people", `人・組織の2段目: チーム状況・全員のタスク・入社準備・給与管理・概要（いま ${subs.map((x) => x[0]).join(",")}）`);
-  check(subs.slice(0, 2).map((x) => x[1]).join(",") === "/admin-team.html,/admin-tasks.html", `チーム状況／全員のタスクは既存の管理画面（いま ${subs.slice(0, 2).map((x) => x[1]).join(",")}）`);
+  check(subs.map((x) => x[0]).join(",") === "members,,,onboarding,pay,people", `人・組織の2段目: メンバー実行状況・チーム状況・全員のタスク・入社準備・給与管理・概要（いま ${subs.map((x) => x[0]).join(",")}）`);
+  check(subs.slice(1, 3).map((x) => x[1]).join(",") === "/admin-team.html,/admin-tasks.html", `チーム状況／全員のタスクは既存の管理画面（いま ${subs.slice(1, 3).map((x) => x[1]).join(",")}）`);
   const fin = await (async () => { await page.click('#kp-keiei-nav [data-ktab="finance"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();
   check(fin.join(",") === "finance,payroll", `財務の2段目: お金・人件費（いま ${fin.join(",")}）`);
   const risk = await (async () => { await page.click('#kp-keiei-nav [data-ktab="risk"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();

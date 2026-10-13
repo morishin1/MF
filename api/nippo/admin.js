@@ -26,6 +26,7 @@ import { findFollowUps, rankings, recentWorkdays } from "../../lib/follow.js";
 import { kpiRate } from "../../lib/actions.js";
 import { shapeBlocker } from "../../lib/blockers.js";
 import { buildWeek, mondayOf, weekRange } from "../../lib/nippo-week.js";
+import { readFollowSources } from "../../lib/follow-read.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 // 週の表の勤怠（打刻）を見られる人。経営者は、管理者・人事でなくても見る（経営の「人・組織」で勤怠の状況を見るため）
@@ -72,25 +73,16 @@ async function read(req, res, ctx) {
   const prevDays = recentWorkdays(spanFrom, 15).slice(1);   // 直前の14営業日
   const prevFrom = prevDays[prevDays.length - 1];
 
-  const [dayRows, spanRows, setting, detailRows, kpiRows, prevRows,
-         blockerRows, itemRows, spanEvals] = await Promise.all([
+  // 要フォローの材料（直近14営業日の日報・KPI・止まっている仕事・次の行動）は lib/follow-read.js で読む。
+  // 経営のメンバー実行状況（api/keiei?view=members）と同じ読み方にして、画面どうしで数が食い違わないようにする
+  const [dayRows, spanRows, setting, follow, prevRows, spanEvals] = await Promise.all([
     sb.from("tc_nippo").select("*").eq("work_date", date).limit(300),
     sb.from("tc_nippo").select("user_id, work_date")
       .gte("work_date", fromStr).lte("work_date", date).limit(20000),
     sb.from("tc_settings").select("value").eq("key", "nippo_ai_auto_reply").maybeSingle(),
-    sb.from("tc_nippo")
-      .select("user_id, work_date, work_items, tomorrow_plan, consult_note, morning_note")
-      .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
-    sb.from("gw_daily_kpis").select("user_id, work_date, target, actual")
-      .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
+    readFollowSources(sb, { date, userIds: staff.map((e) => e.user_id) }),
     sb.from("tc_nippo").select("user_id, work_items")
       .gte("work_date", prevFrom).lt("work_date", spanFrom).limit(5000),
-    // 止まっている仕事。管理職の仕事はこれを外すこと（要件定義 §24）
-    sb.from("gw_blockers").select("*").eq("status", "open")
-      .order("blocked_since").limit(300),
-    // 期限を過ぎたまま開いている「次にやること」
-    sb.from("gw_action_items").select("user_id, status, due_date")
-      .lte("due_date", date).gte("due_date", spanFrom).limit(5000),
     // 顧客価値の並びに使う。日報から「顧客・チームのためにしたこと」の欄を
     // 外したので、文章を読んでいるAIが付けた点から数える
     sb.from("gw_nippo_ai_evals").select("user_id, work_date, scores")
@@ -151,14 +143,14 @@ async function read(req, res, ctx) {
     // 条件は「相談あり・3日連続KPI未達・日報未提出2日」の3つだけ
     followUps: findFollowUps({
       date, staff,
-      nippos: detailRows.data || [],
-      kpis: kpiRows.data || [],
-      blockers: blockerRows.data || [],
-      items: itemRows.data || [],
+      nippos: follow.nippos,
+      kpis: follow.kpis,
+      blockers: follow.blockers,
+      items: follow.items,
     }),
 
     // 止まっている仕事の一覧。長いものから先に出す（§21 §24）
-    blockers: (blockerRows.data || [])
+    blockers: follow.blockers
       .map((b) => shapeBlocker(b, date, staff.find((e) => e.user_id === b.user_id)?.display_name))
       .sort((a, b) => b.days - a.days),
 
@@ -167,15 +159,15 @@ async function read(req, res, ctx) {
     // 残業時間・日報の文字数・AIとの会話量は数えない
     rankings: rankings({
       staff,
-      nippos: detailRows.data || [],
-      kpis: kpiRows.data || [],
+      nippos: follow.nippos,
+      kpis: follow.kpis,
       prevNippos: prevRows.data || [],
       evals: spanEvals.data || [],
     }),
 
     // その日のKPI達成状況（§12 最上部の「KPI達成」）
     kpiToday: (() => {
-      const today = (kpiRows.data || []).filter((k) => k.work_date === date);
+      const today = (follow.kpis).filter((k) => k.work_date === date);
       const per = new Map();
       for (const k of today) {
         if (!(Number(k.target) > 0)) continue;
@@ -239,20 +231,8 @@ async function readWeek(res, ctx, date) {
   const ref = range.to < today ? range.to : today;
   let followUps = null;
   if (monday <= today) {
-    const spanFrom = recentWorkdays(ref, 14).slice(-1)[0];
-    const [detail, kpis, blockers, items] = await Promise.all([
-      sb.from("tc_nippo").select("user_id, work_date, work_items, tomorrow_plan, consult_note, morning_note")
-        .gte("work_date", spanFrom).lte("work_date", ref).limit(5000),
-      sb.from("gw_daily_kpis").select("user_id, work_date, target, actual")
-        .gte("work_date", spanFrom).lte("work_date", ref).limit(5000),
-      sb.from("gw_blockers").select("*").eq("status", "open").limit(300),
-      sb.from("gw_action_items").select("user_id, status, due_date")
-        .lte("due_date", ref).gte("due_date", spanFrom).limit(5000),
-    ]);
-    followUps = findFollowUps({
-      date: ref, staff, nippos: detail.data || [], kpis: kpis.data || [],
-      blockers: blockers.data || [], items: items.data || [],
-    }).length;
+    const f = await readFollowSources(sb, { date: ref, userIds: staff.map((e) => e.user_id) });
+    followUps = f.ok ? findFollowUps({ date: ref, staff, nippos: f.nippos, kpis: f.kpis, blockers: f.blockers, items: f.items }).length : null;
   }
 
   const week = buildWeek({ monday, today, staff, nippos: nippos || [], entries, fixes, usedTimecard, followUps });

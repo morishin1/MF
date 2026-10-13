@@ -201,7 +201,7 @@ console.log("\n— 経営：全員のタスク・日報・チーム状況 —");
   // 経営者には、経営（/keiei）と同じ横タブで出す（2026-10-06：左メニューは出さない。test/ui/keieiteamui.mjs も見る）
   check(await page.locator(".kp-sidebar").count() === 0, "経営者には左メニューを出さない");
   const subs = (await page.locator("#kp-keiei-nav .kp-ostab").allInnerTexts()).map((x) => x.trim());
-  check(subs.join("/") === "チーム状況/全員のタスク/入社準備/給与管理/概要", `経営の「人・組織」の並び（日報・勤怠は Office）（いま ${subs.join("/")}）`);
+  check(subs.join("/") === "メンバー実行状況/チーム状況/全員のタスク/入社準備/給与管理/概要", `経営の「人・組織」の並び（日報・勤怠は Office）（いま ${subs.join("/")}）`);
   check((await page.locator("#kp-keiei-nav .kp-ostab.on").innerText()).trim() === "全員のタスク", "「全員のタスク」が選ばれている");
   check(/\bon\b/.test((await page.locator('.kp-shortcut[data-shortcut="keiei"]').getAttribute("class")) || ""), "ヘッダーの「経営」が選ばれて見える");
   check((await page.locator(".kp-app").innerText()).includes("経営"), "ヘッダーに「/ 経営」と出る");
