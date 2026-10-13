@@ -17,6 +17,9 @@
     },
     "api/office/timesheet.js": {
       "maxDuration": 60
+    },
+    "api/office/invoices.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [

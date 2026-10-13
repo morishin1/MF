@@ -79,8 +79,11 @@ export const schema = {
   // db/117：仕入請求・支払・月次完了（部分ユニークは、API が先に確かめる。ここでは CHECK だけ）
   gw_vendor_invoices: {
     required: ["tenant_id", "billing_month", "received_on", "subtotal_amount", "total_amount"],
-    defaults: () => ({ status: "received", tax_amount: 0, created_at: nowIso(), updated_at: nowIso() }),
+    defaults: () => ({ status: "received", tax_amount: 0, invoice_kind: "bp", journal_status: "none", created_at: nowIso(), updated_at: nowIso() }),
     check: (r) => (!isMonth(r.billing_month) ? "billing_month" : !["received", "approved", "void"].includes(r.status) ? "status"
+      : !["bp", "general"].includes(r.invoice_kind) ? "invoice_kind" : !inSet(r.due_source, ["invoice", "manual", "master"]) ? "due_source"
+      : !["none", "draft", "confirmed"].includes(r.journal_status) ? "journal_status" : !inSet(r.payment_method, ["transfer", "debit", "card", "cash", "other"]) ? "payment_method"
+      : r.closing_day != null && !(r.closing_day >= 1 && r.closing_day <= 31) ? "closing_day"
       : [r.subtotal_amount, r.tax_amount, r.total_amount].some((v) => v != null && v < 0) ? "amount" : null),
   },
   gw_vendor_invoice_lines: {
@@ -91,7 +94,43 @@ export const schema = {
   gw_office_payments: {
     required: ["tenant_id", "vendor_invoice_id", "billing_month", "amount", "scheduled_on"],
     defaults: () => ({ status: "scheduled", paid_on: null, created_at: nowIso(), updated_at: nowIso() }),
-    check: (r) => (!["scheduled", "paid", "void"].includes(r.status) ? "status" : r.status === "paid" && !r.paid_on ? "paid_on" : r.amount < 0 ? "amount" : null),
+    check: (r) => (!["scheduled", "paid", "void"].includes(r.status) ? "status" : r.status === "paid" && !r.paid_on ? "paid_on" : r.amount < 0 ? "amount"
+      : !inSet(r.method, ["transfer", "debit", "card", "cash", "other"]) ? "method" : (r.paid_amount != null && r.paid_amount < 0) || (r.fee_amount != null && r.fee_amount < 0) ? "paid_amount" : null),
+  },
+  // db/134：支払先マスタ・仕訳明細・MF CSV 出力・設定（RLS ポリシー無し＝API だけ）
+  gw_office_vendors: {
+    unique: [["tenant_id", "name"]],
+    required: ["tenant_id", "name"],
+    defaults: () => ({ is_active: true, created_at: nowIso(), updated_at: nowIso() }),
+    check: (r) => (r.invoice_reg_no != null && !/^T\d{13}$/.test(r.invoice_reg_no) ? "invoice_reg_no"
+      : r.closing_day != null && !(r.closing_day >= 1 && r.closing_day <= 31) ? "closing_day"
+      : r.payment_day != null && !(r.payment_day >= 1 && r.payment_day <= 31) ? "payment_day"
+      : r.payment_month_offset != null && !(r.payment_month_offset >= 0 && r.payment_month_offset <= 6) ? "payment_month_offset"
+      : (r.payment_month_offset == null) !== (r.payment_day == null) ? "terms_pair" : null),
+  },
+  gw_office_invoice_journals: {
+    unique: [["invoice_id", "side", "line_no"]],
+    required: ["tenant_id", "invoice_id", "line_no", "side", "account", "amount"],
+    defaults: () => ({ tags: [], created_at: nowIso(), updated_at: nowIso() }),
+    check: (r) => (!["debit", "credit"].includes(r.side) ? "side" : r.amount < 0 ? "amount" : r.line_no < 1 ? "line_no" : null),
+  },
+  gw_office_mf_exports: {
+    unique: [["tenant_id", "batch_code"]],
+    required: ["tenant_id", "batch_code", "billing_month", "kind", "mode"],
+    defaults: () => ({ invoice_count: 0, row_count: 0, exported_at: nowIso() }),
+    check: (r) => (!isMonth(r.billing_month) ? "billing_month" : !["purchase", "payment", "both"].includes(r.kind) ? "kind" : !["unexported", "all"].includes(r.mode) ? "mode" : null),
+  },
+  gw_office_mf_export_items: {
+    required: ["tenant_id", "export_id", "invoice_id", "kind", "txn_no"],
+    defaults: () => ({ exported_at: nowIso() }),
+    check: (r) => (!["purchase", "payment"].includes(r.kind) ? "kind" : r.txn_no < 1 ? "txn_no" : null),
+  },
+  gw_office_payables_settings: {
+    noId: true,
+    unique: [["tenant_id"]],
+    required: ["tenant_id"],
+    defaults: () => ({ holiday_adjust: "prev", candidates: {}, updated_at: nowIso() }),
+    check: (r) => (!["prev", "next", "none"].includes(r.holiday_adjust) ? "holiday_adjust" : null),
   },
   gw_office_month_closes: {
     required: ["tenant_id", "billing_month"],
@@ -107,7 +146,10 @@ const LEGACY = ["gw_site_contracts", "gw_billing_progress", "gw_submissions", "g
 const NEW = ["gw_office_events", "gw_site_contract_terms", "gw_timesheets", "gw_timesheet_days",
   "gw_vendor_invoices", "gw_vendor_invoice_lines", "gw_office_payments", "gw_office_month_closes"];
 const hasOfficeRole = (c) => ["owner", "manager", "finance"].some((r) => (c?.roles || []).includes(r));
+// db/134 の新しい5表は RLS 有効・ポリシー無し（userClient では読めない。API だけが service role で扱う）
+const NO_POLICY = ["gw_office_vendors", "gw_office_invoice_journals", "gw_office_mf_exports", "gw_office_mf_export_items", "gw_office_payables_settings"];
 export const rls = (name, c) => {
+  if (NO_POLICY.includes(name)) return false;
   if (LEGACY.includes(name)) return Boolean(c?.isAdmin) || hasOfficeRole(c);
   if (NEW.includes(name)) return hasOfficeRole(c);
   if (name === "gw_employees") return Boolean(c?.isAdmin);
@@ -128,7 +170,11 @@ const fks = {
   gw_vendor_invoices: [
     { table: "gw_vendor_invoice_lines", col: "invoice_id", action: "cascade" },
     { table: "gw_office_payments", col: "vendor_invoice_id", action: "cascade" },
+    { table: "gw_office_invoice_journals", col: "invoice_id", action: "cascade" },
+    { table: "gw_office_mf_export_items", col: "invoice_id", action: "cascade" },
   ],
+  gw_office_vendors: [{ table: "gw_vendor_invoices", col: "vendor_id", action: "setnull" }],
+  gw_office_mf_exports: [{ table: "gw_office_mf_export_items", col: "export_id", action: "cascade" }],
 };
 export const mem = createMemDb({ schema, rls, fks });
 export const ctl = { who: null, aal: "aal2" };
@@ -169,6 +215,23 @@ mock.module(atRoot("lib/office-timesheet-ai.js"), {
         ai.calls.push({ params, opts });
         if (ai.reply instanceof Error) throw ai.reply;
         return typeof ai.reply === "function" ? ai.reply(params) : ai.reply;
+      } } },
+    }),
+  },
+});
+
+// 請求書の AI 読取も同じ：本物の readInvoice に、偽の Anthropic client を差し込む（検査・正規化は本物を通す）
+export const aiInvoice = { reply: null, calls: [] };
+const REAL_INV_AI = await import(atRoot("lib/office-invoice-ai.js"));
+mock.module(atRoot("lib/office-invoice-ai.js"), {
+  namedExports: {
+    ...REAL_INV_AI,
+    readInvoice: (args) => REAL_INV_AI.readInvoice({
+      ...args,
+      client: { messages: { create: async (params, opts) => {
+        aiInvoice.calls.push({ params, opts });
+        if (aiInvoice.reply instanceof Error) throw aiInvoice.reply;
+        return typeof aiInvoice.reply === "function" ? aiInvoice.reply(params) : aiInvoice.reply;
       } } },
     }),
   },
