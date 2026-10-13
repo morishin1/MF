@@ -311,9 +311,15 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
     }
     check(/canRecruit/.test(s), `${f} は canRecruit で判定`);
   }
-  // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト（公開）は対象外
-  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p))) {
+  // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト・LP の申込（公開）は対象外
+  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p) && !/\/lp-lead\.js$/.test(p))) {
     check(/canSell/.test(read(f)), `${f} は canSell で判定`);
+  }
+  // LP の申込の口（公開）は、ログインの判定を持たないかわりに Origin で LP だけに絞る
+  {
+    const lp = read("api/sales/lp-lead.js");
+    check(/allowedOrigin/.test(lp) && /forbidden_origin/.test(lp) && !/userClient/.test(lp),
+      "api/sales/lp-lead.js は LP の Origin だけ受ける（利用者の権限では書かない）");
   }
   // Office（/api/office/*）は canAccessOffice。単価・請求額・支払を返すので、例外は作らない。
   // api/office/ はこれから作るので、無いあいだは何も見ない（作った瞬間から全ファイルが対象になる）

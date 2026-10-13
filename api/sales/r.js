@@ -20,6 +20,11 @@
 //     HEAD・先読み（Sec-Purpose: prefetch 等）・UAなし・機械のUA
 //     （Slack・Teams・LINE・メールのセキュリティ製品・HTTPライブラリ）・
 //     同じアタックへの30秒以内の連続（同じIPハッシュ）
+//
+// ■ MGNDigital の LP（lib/sales-lp.js）
+//   飛び先が MGNDigital の LP（既定 https://8grp.co.jp/lp/）のときだけ ?sr=<token> を付けて飛ばす。
+//   LP は申込のときにこれを /api/sales/lp-lead へ送り返し、同じ会社を「申込あり」にする。
+//   ほかのサイトにはトークンを渡さない。通知の文も「MGNDigital LP」と分かるようにする
 
 import { admin } from "../../lib/supabase.js";
 import { notify } from "../../lib/notify.js";
@@ -27,6 +32,7 @@ import { notifySlack } from "../../lib/slack.js";
 import {
   TRACKING_RE, classifyClick, ipHash, statusRank, safeUrl, autoNext, DEDUPE_SECONDS, CLOSED_STATUSES,
 } from "../../lib/sales.js";
+import { withSalesRef, isMgnLp } from "../../lib/sales-lp.js";
 
 function fallbackUrl() {
   return safeUrl(process.env.SALES_FALLBACK_URL) || "https://8grp.co.jp/";
@@ -78,7 +84,7 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error("[sales/r] record failed:", e?.message || e);
   }
-  return redirect(res, dest);
+  return redirect(res, withSalesRef(dest, token));
 }
 
 async function record(sb, a, { ua, dest, req }) {
@@ -144,17 +150,19 @@ async function record(sb, a, { ua, dest, req }) {
     a.service ? `提案サービス：${a.service}` : null,
   ].filter(Boolean);
   const link = `sales/companies.html?id=${c.id}`;
+  // 「いま見ている」とは書かない（クリックしたことしか分からない）
+  const mgn = isMgnLp(dest);
 
   await Promise.all([
     notify(to.map((employeeId) => ({
       tenantId: a.tenant_id, employeeId, kind: "sales",
-      title: `${c.name}が営業リンクをクリックしました`,
+      title: mgn ? `${c.name}がMGNDigitalのLPリンクをクリックしました` : `${c.name}が営業リンクをクリックしました`,
       body: lines.join("\n"), link: `/${link}`,
       // 同じ会社のクリックは1件にまとめて、最新の回数で上書きする
       dedupeKey: `sales_click:${c.id}`,
     }))),
     notifySlack({
-      text: `🔥 営業反応あり\n\n${c.name}${a.service ? `\n${a.service}提案` : ""}`,
+      text: `🔥 ${mgn ? "MGNDigital LPクリック" : "営業反応あり"}\n\n${c.name}${a.service ? `\n${a.service}提案` : ""}`,
       lines: [
         "",
         sentAt ? `${hhmm(sentAt)} フォーム送信` : null,

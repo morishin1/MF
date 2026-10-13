@@ -8,6 +8,10 @@
 // POST  /api/sales/companies/detail { id, action: "contact", replied, replyChannel?, contactChannel?,
 //                                     contacts?, note?, occurredAt?, nextAction?, nextActionOn? }
 //         … 「返信・やり取りを記録」（db/096）。返信元チャネル・いまの連絡手段・連絡先・メモ・NEXT
+// POST  /api/sales/companies/detail { id, action: "lp_candidate", decision: "confirm" | "reject" }
+//         … MGNDigital申込の「既存企業候補」を人が確かめる（lib/sales-lp.js・api/sales/lp-lead.js）。
+//           confirm＝この会社の申込として確定（申込あり＝返信ありと同じ段階・NEXT 商談を予定する）
+//           reject ＝別の会社（記録を残すだけ。状態は動かさない）
 //
 // ■ 営業履歴は3つの表から時系列に混ぜて出す
 //   アタック（gw_sales_approaches）・クリック（gw_sales_click_events）・
@@ -24,7 +28,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   COMPANY_FIELDS, normalizeCompany, shapeCompany, shapeApproach, aggregateApproaches, nextFor, hasUnhandledClick,
-  recentApproach, statusRank, todayJst, isUuid, autoNext,
+  recentApproach, statusRank, todayJst, isUuid, autoNext, bizDayOnOrAfter,
   STATUSES, STATUS_LABEL, NG_REASONS, EVENT_KINDS, EVENT_LABEL, EVENT_ADVANCES, RECENT_DAYS,
   SEND_CHANNELS, REPLY_CHANNELS, CONTACT_CHANNELS, REPLY_CHANNEL_KEYS, CONTACT_CHANNEL_KEYS, HIDE_REASONS,
   SEND_FAIL_REASONS, channelLabel, normalizeContacts, mergeContacts,
@@ -32,6 +36,7 @@ import {
 import { MEETING_FIELDS, shapeMeeting } from "../../../lib/sales-meetings.js";
 import { DEAL_FIELDS, shapeDeal } from "../../../lib/sales-deals.js";
 import { loadMasters } from "../../../lib/sales-master.js";
+import { LP_EVENT, LP_LABEL, LP_NEXT, aggregateLp, parseLpDetail } from "../../../lib/sales-lp.js";
 import { companyEmails } from "../../../lib/sales-timerex.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
@@ -165,6 +170,8 @@ async function one(req, res, sb, ctx) {
       unhandledClick: hasUnhandledClick(c, agg),
       next: next.label, nextKey: next.key, nextDue: next.due, overdue: next.overdue,
     },
+    // MGNDigital の LP 申込（営業履歴の lp_apply / lp_candidate から）。無ければ null
+    lp: lpOf(id, events),
     approaches: sent.map((a) => ({ ...shapeApproach(a), employeeName: name.get(a.employee_id) || null })),
     failedApproaches: failed.map((a) => ({ ...shapeApproach(a), body: undefined, employeeName: name.get(a.employee_id) || null })),
     contactStatus,
@@ -194,6 +201,19 @@ async function one(req, res, sb, ctx) {
     sendChannels: SEND_CHANNELS, replyChannels: REPLY_CHANNELS, contactChannels: CONTACT_CHANNELS,
     hideReasons: HIDE_REASONS, sendFailReasons: SEND_FAIL_REASONS,
   });
+}
+
+function lpOf(id, events) {
+  const g = aggregateLp((events || []).map((e) => ({ ...e, company_id: id }))).get(id);
+  if (!g) return null;
+  const lastCandidate = [...(events || [])].reverse().find((e) => e.event_key === LP_EVENT.candidate) || null;
+  const p = lastCandidate ? parseLpDetail(lastCandidate.detail) : null;
+  return {
+    appliedAt: g.appliedAt, services: g.services, candidate: g.candidate,
+    candidateAt: g.candidate ? g.candidateAt : null,
+    // 確かめるときに見る項目だけ（フォームに書かれた会社名・お名前・メール）
+    candidateInfo: g.candidate && p ? { company: p.company, name: p.name, email: p.email, phone: p.phone } : null,
+  };
 }
 
 async function update(req, res, sb, ctx, user) {
@@ -277,6 +297,7 @@ async function update(req, res, sb, ctx, user) {
 async function addEvent(req, res, sb, ctx, user) {
   const body = await readJson(req);
   if (body.action === "contact") return addContact(res, sb, ctx, user, body);
+  if (body.action === "lp_candidate") return decideLpCandidate(res, sb, ctx, user, body);
   if (!isUuid(body.id)) return json(res, 400, { error: "invalid_body", required: ["id", "kind"] });
   if (!EVENT_LABEL[body.kind]) return json(res, 400, { error: "bad_kind", allowed: Object.keys(EVENT_LABEL) });
 
@@ -443,4 +464,62 @@ async function addContact(res, sb, ctx, user, body) {
     detail: { replied, replyChannel, contactChannel, switched, contactKeys: Object.keys(contacts.value || {}) },
   });
   return json(res, 200, { company: shapeCompany(data || c) });
+}
+
+/**
+ * MGNDigital申込の「既存企業候補」（メールのドメインだけで当たった）を人が確かめる。
+ * 確定したら、トークンで当たった申込と同じ扱い（申込あり・返信ありの段階・NEXT 商談を予定する）。
+ */
+async function decideLpCandidate(res, sb, ctx, user, body) {
+  if (!isUuid(body.id) || !["confirm", "reject"].includes(body.decision)) {
+    return json(res, 400, { error: "invalid_body", required: ["id", "decision(confirm|reject)"] });
+  }
+  const { company: c, error: e0 } = await loadCompany(sb, ctx, body.id);
+  if (e0) return json(res, 500, { error: "db_query_failed", detail: e0.message });
+  if (!c) return json(res, 404, { error: "not_found" });
+  const { data: events } = await sb.from("gw_sales_events").select("id, event_key, detail, occurred_at")
+    .eq("company_id", c.id).in("event_key", Object.values(LP_EVENT)).order("occurred_at", { ascending: true }).limit(500);
+  const g = aggregateLp((events || []).map((e) => ({ ...e, company_id: c.id }))).get(c.id);
+  if (!g?.candidate) return json(res, 409, { error: "no_candidate", hint: "確認待ちのMGNDigital申込はありません" });
+  const cand = [...(events || [])].reverse().find((e) => e.event_key === LP_EVENT.candidate);
+
+  const nowIso = new Date().toISOString();
+  const confirm = body.decision === "confirm";
+  const { error } = await sb.from("gw_sales_events").insert({
+    tenant_id: ctx.tenantId, company_id: c.id,
+    event_key: confirm ? LP_EVENT.apply : LP_EVENT.reject,
+    label: confirm ? `${LP_LABEL.lp_apply}（候補を確認）` : LP_LABEL.lp_reject,
+    // 確定のときは申込の中身（希望サービス・申込ID）を引き継ぐ。一覧の希望サービスはここから出る
+    detail: confirm ? (cand?.detail || null) : null,
+    occurred_at: nowIso, channel: confirm ? "form" : null, employee_id: ctx.employee?.id || null, created_by: user.id,
+  });
+  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
+
+  let company = c;
+  if (confirm) {
+    const patch = { last_contact_at: nowIso, updated_at: nowIso };
+    const closed = Boolean(c.ng_reason) || ["won", "lost", "excluded"].includes(c.status);
+    if (!closed) {
+      if (statusRank("replied") > statusRank(c.status)) patch.status = "replied";
+      if (statusRank(c.status) <= statusRank("replied")) {
+        patch.next_action = LP_NEXT;
+        patch.next_action_on = bizDayOnOrAfter(todayJst());
+      }
+    }
+    const p = parseLpDetail(cand?.detail);
+    const contacts = c.contacts && typeof c.contacts === "object" ? c.contacts : {};
+    const fill = {};
+    if (p.email && !contacts.email) fill.email = p.email;
+    if (p.phone && !contacts.phone) fill.phone = p.phone;
+    if (Object.keys(fill).length) patch.contacts = mergeContacts(contacts, fill);
+    if (p.phone && !c.phone) patch.phone = p.phone;
+    const { data } = await sb.from("gw_sales_companies").update(patch)
+      .eq("id", c.id).eq("tenant_id", ctx.tenantId).select(COMPANY_FIELDS).single();
+    if (data) company = data;
+  }
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: confirm ? "sales.lp_confirm" : "sales.lp_reject",
+    target: `sales_company:${c.id}`, detail: null,
+  });
+  return json(res, 200, { company: shapeCompany(company) });
 }

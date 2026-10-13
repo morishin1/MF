@@ -33,6 +33,7 @@ import { listPage, listFacets } from "../../../lib/sales-list.js";
 import { loadMasters } from "../../../lib/sales-master.js";
 import { CSV_IMPORT_COLUMNS } from "../../../lib/sales-csv-import.js";
 import { dashboardSections } from "../../../lib/sales-dashboard.js";
+import { LP_EVENT_KEYS, aggregateLp, isMgnLp } from "../../../lib/sales-lp.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
@@ -72,9 +73,9 @@ async function list(req, res, sb, ctx) {
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
 
-  const [{ data: approaches }, { data: members }, { data: campaigns }, { data: meetings }] = await Promise.all([
+  const [{ data: approaches }, { data: members }, { data: campaigns }, { data: meetings }, { data: lpEvents }] = await Promise.all([
     sb.from("gw_sales_approaches")
-      .select("id, company_id, employee_id, service, prepared_at, sent_at, first_click_at, last_click_at, click_count, channel")
+      .select("id, company_id, employee_id, service, prepared_at, sent_at, first_click_at, last_click_at, click_count, channel, destination_url")
       .eq("tenant_id", ctx.tenantId).limit(20000),
     sb.from("gw_employees").select("id, display_name")
       .eq("tenant_id", ctx.tenantId).in("status", ["active", "invited"]).order("display_name").limit(300),
@@ -82,6 +83,9 @@ async function list(req, res, sb, ctx) {
     // 進行中の面談（db/090）。表がまだ無ければ空として扱う
     sb.from("gw_sales_meetings").select("id, company_id, status, scheduled_at, created_at")
       .eq("tenant_id", ctx.tenantId).in("status", ["scheduling", "scheduled"]).limit(5000),
+    // MGNDigital の LP 申込（営業履歴の lp_apply / lp_candidate / lp_reject。lib/sales-lp.js）
+    sb.from("gw_sales_events").select("company_id, event_key, detail, occurred_at")
+      .eq("tenant_id", ctx.tenantId).in("event_key", LP_EVENT_KEYS).limit(5000),
   ]);
   const name = new Map((members || []).map((e) => [e.id, e.display_name]));
   const campaignName = new Map((campaigns || []).map((c) => [c.id, c.name]));
@@ -92,6 +96,10 @@ async function list(req, res, sb, ctx) {
     if (!cur || String(m.created_at) > String(cur.created_at)) meetingOf.set(m.company_id, m);
   }
   const today = todayJst();
+  const lp = aggregateLp(lpEvents);
+  // MGNDigital の LP へのリンクがクリックされた会社
+  const mgnClicked = new Set((approaches || [])
+    .filter((a) => (a.click_count || 0) > 0 && isMgnLp(a.destination_url)).map((a) => a.company_id));
 
   const rows = (data || []).map((c) => {
       const g = agg.get(c.id) || null;
@@ -113,6 +121,10 @@ async function list(req, res, sb, ctx) {
         meetingStatus: meetingOf.get(c.id)?.status || null,
         meetingAt: meetingOf.get(c.id)?.scheduled_at || null,
         next: next.label, nextKey: next.key, nextDue: next.due, overdue: next.overdue,
+        mgnClick: mgnClicked.has(c.id),
+        lpAppliedAt: lp.get(c.id)?.appliedAt || null,
+        lpServices: lp.get(c.id)?.services || [],
+        lpCandidate: Boolean(lp.get(c.id)?.candidate),
       };
   });
 

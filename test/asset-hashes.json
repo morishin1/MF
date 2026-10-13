@@ -1,5 +1,5 @@
 {
-  "version": "20261008rec3",
+  "version": "20261012mgn1",
   "files": {
     "css/app.css": "c716128d39f5567c",
     "css/layout.css": "5a190391460e460d",
@@ -15,7 +15,7 @@
     "js/office-layout.js": "e191b8a700a586ff",
     "js/preview.js": "d1725ffbb496c650",
     "js/push.js": "6d99fbc72f947940",
-    "js/sales-detail.js": "9f2636bf1cf3efca",
+    "js/sales-detail.js": "d68f1bdacc99fe70",
     "js/sales-layout.js": "67e2ef972af10e78",
     "js/task-drawer.js": "e48ecbf729b677a9"
   }
