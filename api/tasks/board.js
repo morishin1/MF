@@ -15,7 +15,7 @@ import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
-import { boardRow, boardSummary, nextFocusDate, jstToday, focusState } from "../../lib/focus.js";
+import { boardSummary, nextFocusDate, jstToday, focusRows } from "../../lib/focus.js";
 
 const SQL = "db/072_focus_tasks.sql";
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
@@ -60,46 +60,9 @@ export default async function handler(req, res) {
     return json(res, 500, { error: "db_query_failed", detail: e.message });
   }
 
-  const dayOf = new Map();
-  for (const d of days.data || []) dayOf.set(`${d.employee_id}|${d.focus_date}`, d);
-  // 「やる人」と「決めた人」を分けて持つ。
-  //   今日ぶん … その人がやること（人から回ってきたものも入る）
-  //   明日ぶん … その人が決めたこと（人に渡したものも、決めた側に残る）
-  const doingOf = new Map();
-  const plannedOf = new Map();
-  for (const t of tasks.data || []) {
-    const a = `${t.assignee_id}|${t.focus_date}`;
-    if (!doingOf.has(a)) doingOf.set(a, []);
-    doingOf.get(a).push(t);
-    const owner = t.focus_for || t.assignee_id;
-    const p = `${owner}|${t.focus_date}`;
-    if (!plannedOf.has(p)) plannedOf.set(p, []);
-    plannedOf.get(p).push(t);
-  }
-  const pack = (id, d, planned = false) => ({
-    day: dayOf.get(`${id}|${d}`) || null,
-    tasks: (planned ? plannedOf : doingOf).get(`${id}|${d}`) || [],
-  });
-
-  let rows = (emps || []).map((e) => {
-    const today = pack(e.id, date);
-    const tm = tomorrow ? pack(e.id, tomorrow, true) : { day: null, tasks: [] };
-    return {
-      ...boardRow({ employee: e, today, tomorrow: tm }),
-      // 一覧から開くための、最低限の中身
-      todayList: today.tasks
-        .slice().sort((a, b) => (a.focus_rank || 9) - (b.focus_rank || 9))
-        .map((t) => ({ id: t.id, title: t.title, status: t.status, dueOn: t.due_on })),
-      tomorrowList: tm.tasks
-        .slice().sort((a, b) => (a.focus_rank || 9) - (b.focus_rank || 9))
-        .map((t) => ({ id: t.id, title: t.title, status: t.status, dueOn: t.due_on })),
-      // AIの指摘が付いているか。「AI提案あり」で絞るのに使う
-      hasAi: Boolean(dayOf.get(`${e.id}|${tomorrow}`)?.ai)
-        || tm.tasks.some((t) => t.ai_review),
-      // 何度も持ち越されているタスクがあるか
-      carrying: today.tasks.filter((t) => (t.carry_count || 0) > 0).length,
-    };
-  });
+  // 1人1行（lib/focus.js。経営のメンバー実行状況も同じ関数で作る）
+  let rows = focusRows({ emps: emps || [], days: days.data || [], tasks: tasks.data || [], date, tomorrow })
+    .map(({ _today, _tomorrow, ...r }) => r);
 
   // ---- 絞り込み ----
   const dep = q.get("department");

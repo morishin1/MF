@@ -38,7 +38,9 @@ const read = (p) => readFileSync(p, "utf8");
 const rel = (p) => p.slice(ROOT.length + 1);
 
 const OLD = ["dashboard", "expenses", "revenue", "cash", "accounting"];
-const USED = ["hub", "security", "payroll", "onboarding"];
+const USED = ["hub", "security", "payroll", "onboarding", "members"];
+// メンバー実行状況（#members）は keiei/members.js が呼ぶ（日付・1人の詳細で引数が変わるため、対応表を通さない）。それ以外の画面は対応表だけ
+const MEMBERS_FILE = "keiei/members.js";
 
 // 画面が /api/keiei?view=<名前> と書いている箇所（リテラル）
 const literal = [];
@@ -57,11 +59,12 @@ ok("keiei/index.html の API_VIEW（画面→view の対応表）がある", () 
 });
 
 ok("画面が API を呼ぶのは、この対応表の1か所だけ（ほかにリテラルで /api/keiei?view= と書いた画面は無い）", () => {
-  assert.deepEqual(literal, [], JSON.stringify(literal));
+  assert.deepEqual(literal.filter(([f, v]) => !(f === MEMBERS_FILE && v === "members")), [], JSON.stringify(literal));
+  assert.ok(literal.some(([f, v]) => f === MEMBERS_FILE && v === "members"), "メンバー実行状況が view=members を呼ぶ");
   assert.match(index, /\/api\/keiei\?view=\$\{encodeURIComponent\(API_VIEW\[view\]\)\}/);
 });
 
-ok("画面が呼ぶ view は hub・security・payroll・onboarding だけ", () => {
+ok("画面が呼ぶ view は hub・security・payroll・onboarding・members だけ", () => {
   const called = new Set([...literal.map((x) => x[1]), ...mapped.map((x) => x[1])]);
   assert.deepEqual([...called].sort(), [...USED].sort());
 });

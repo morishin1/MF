@@ -94,15 +94,15 @@ console.log("\n— 経理だけの人：請求・支払／契約・書類。人�
   }
 }
 
-console.log("\n— 経営者：経営は 人・組織＝チーム状況（集計）。権限・アクセス分析は「リスク・権限」—");
+console.log("\n— 経営者：経営は 人・組織＝メンバー実行状況（日報・タスクの集約）。権限・アクセス分析は「リスク・権限」—");
 {
   const page = await open("admin-team.html", "owner");
   const k1 = await labels(page, "#kp-keiei-nav .kp-otab");
   check(k1.join("/") === "ホーム/売上・営業/人・組織/財務/リスク・権限", `経営のタブ（いま ${k1.join("/")}）`);
   const people = await page.locator('#kp-keiei-nav .kp-otab[data-ktab="people"]').getAttribute("href");
-  check(people === "/admin-team.html", `人・組織を押すと、チーム状況（いま ${people}）`);
+  check(people === "/keiei/#members", `人・組織を押すと、メンバー実行状況（いま ${people}）`);
   const k2 = await labels(page, "#kp-keiei-nav .kp-ostab");
-  check(k2.join("/") === "チーム状況/全員のタスク/入社準備/給与管理/概要" && !k2.includes("日報・勤怠"), `人・組織の中に日報・勤怠は無い（いま ${k2.join("/")}）`);
+  check(k2.join("/") === "メンバー実行状況/チーム状況/全員のタスク/入社準備/給与管理/概要" && !k2.includes("日報・勤怠"), `人・組織の中に日報・勤怠は無い（いま ${k2.join("/")}）`);
   await page.close();
 
   const an = await open("admin-analytics.html", "owner");
