@@ -105,6 +105,10 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check(posted[0].recruiterId === RECRUITER.id, "担当も一緒に送られる");
   check((await page.locator("#rows").innerText()).includes("田中 一郎"), "一覧に出る");
   check((await page.locator("#rows").innerText()).includes("セールス"), "職種も出る");
+  // 追加すると、その人の詳細が開く（HRフロー仕様 §1）。いったん閉じて、一覧から開き直す
+  check(await page.locator(".hr-detail").isVisible(), "追加すると、その人の詳細ドロワーが開く");
+  await page.locator(".hr-detail button", { hasText: "閉じる" }).first().click();
+  await page.waitForTimeout(300);
 
   console.log("— 詳細を右ドロワーで開く —");
   await page.locator(".hr-table tr.click").first().click();

@@ -433,5 +433,41 @@ await ok("表が無い（db/124 未適用）ときは 503 と SQL の名前", as
   } finally { mem.state.missing = null; }
 });
 
+
+await ok("日程調整（応募受付／カジュアル面談案内）を未対応の応募者へ送れたら、カジュアル面談・日程調整中（予約待ち）へ進む", async () => {
+  setup();
+  Object.assign(mem.rows.gw_hr_applicants[0], { stage: "applied", status: "todo" });
+  Object.assign(mem.rows.gw_hr_applicants[1], { stage: "casual_interview", status: "interview_scheduled" });
+  const d = await draft(A1);
+  const r = await send({ id: A1, templateId: d.body.rendered.templateId, templateVersion: 1, subject: d.body.rendered.subject, body: d.body.rendered.body, requestKey: key() });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.advanced, true);
+  const a = mem.rows.gw_hr_applicants[0];
+  assert.equal(a.stage, "casual_interview");
+  assert.equal(a.status, "scheduling");
+  assert.ok(mem.rows.gw_hr_timeline.some((t) => t.applicant_id === A1 && t.event_key === "scheduling_sent"));
+  // すでに面談予定の人は戻さない
+  const d2 = await draft(A2);
+  const r2 = await send({ id: A2, templateId: d2.body.rendered.templateId, templateVersion: 1, subject: d2.body.rendered.subject, body: d2.body.rendered.body, requestKey: key() });
+  assert.equal(r2.body.advanced, false);
+  assert.equal(mem.rows.gw_hr_applicants[1].status, "interview_scheduled");
+});
+
+await ok("日程調整ではないひな型（その他）や、送れなかったときは進めない", async () => {
+  setup();
+  Object.assign(mem.rows.gw_hr_applicants[0], { stage: "applied", status: "todo" });
+  const c = await tplPost({ action: "create", name: "連絡", purpose: "other", subject: "ご連絡", body: "{{応募者名}} 様" });
+  assert.equal(c.statusCode, 200, JSON.stringify(c.body));
+  const d = await call(mailApi, { method: "GET", url: `/api/hr/applicants/mail?id=${A1}&templateId=${c.body.template.id}` });
+  const r = await send({ id: A1, templateId: c.body.template.id, templateVersion: 1, subject: d.body.rendered.subject, body: d.body.rendered.body, requestKey: key() });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.advanced, false);
+  assert.equal(mem.rows.gw_hr_applicants[0].status, "todo");
+  mailMode = "failed";
+  const d2 = await draft(A1);
+  await send({ id: A1, templateId: d2.body.rendered.templateId, templateVersion: 1, subject: d2.body.rendered.subject, body: d2.body.rendered.body, requestKey: key() });
+  assert.equal(mem.rows.gw_hr_applicants[0].status, "todo", "送れなければ進めない");
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

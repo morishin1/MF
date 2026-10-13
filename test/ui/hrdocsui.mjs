@@ -140,18 +140,20 @@ await page.waitForTimeout(700);
 {
   check(await page.locator(".hr-detail").count() === 1, "応募者詳細ドロワーが開く");
   const tabs = (await page.locator(".hr-tabs button").allInnerTexts()).map((s) => s.trim());
-  check(tabs.join("/") === "概要/面談/書類/履歴", `タブ（いま ${tabs.join("/")}）`);
+  check(tabs.join("/") === "概要/面談/評価/書類/メール/履歴", `タブ（いま ${tabs.join("/")}）`);
   const ov = await page.locator("#hr-detail-tab").innerText();
   // 概要は値のある項目だけ（空欄は［詳細を表示］の中。応募者ドロワー改善 §6）。メールは未登録でも出す（送信に直結）
-  for (const x of ["面談評価を入力してください", "応募経路", "応募職種", "担当", "メール", "詳細を表示"]) {
+  for (const x of ["応募経路", "応募職種", "担当", "メール", "詳細を表示"]) {
     check(ov.includes(x), `概要に「${x}」`);
   }
+  // NEXT ACTION はタブの外（上）に固定（HRフロー仕様 §14）
+  check((await page.locator("#hr-detail-next").innerText()).includes("面談評価を入力してください"), "NEXT ACTION に「面談評価を入力してください」");
   check(await page.locator("#hr-status").isVisible(), "いまの状態が出る");
   await page.locator("#hr-more-info summary").click();
   const more = await page.locator("#hr-more-info").innerText();
   check(["選考段階"].every((x) => more.includes(x)), "［詳細を表示］で、ほかの項目（選考段階など）も見られる");
   await page.locator("#hr-more-info summary").click();
-  check(await page.locator("#hr-detail-tab .btn-primary").count() === 1, "概要の CTA は1つ");
+  check(await page.locator("#hr-detail-next .btn-primary").count() === 1 && await page.locator("#hr-detail-tab .btn-primary").count() === 0, "主のボタン（CTA）は NEXT ACTION の1つだけ");
   check(ov.includes("履歴書・職務経歴書が未登録です"), "未登録の案内（控えめ）");
 }
 

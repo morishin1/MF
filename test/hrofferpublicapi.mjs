@@ -359,5 +359,16 @@ await ok("期限切れなら回答できない", async () => {
   assert.equal(r.statusCode, 410);
 });
 
+
+await ok("本人が初めて開いたら、採用担当へ「本人がオファーを閲覧しました」（版ごとに1回）", async () => {
+  setup();
+  await get(TOKEN);
+  await get(TOKEN);
+  const n = db.rows.gw_notifications.filter((x) => x.dedupe_key === "hr_offer_viewed:of1");
+  assert.equal(n.length, 1);
+  assert.equal(n[0].employee_id, "e1");
+  assert.match(n[0].title, /閲覧/);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

@@ -13,7 +13,8 @@
 //   idsは呼び出し側（画面）が明示的に選んだものだけ。ここでは絞り込み条件を
 //   受け取らない＝「意図せず全DBを対象にしない」（同指示書 §1）。
 
-import { checkRecruiter } from "../../../lib/hr-recruiter.js";
+import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
+import { notify } from "../../../lib/notify.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
@@ -94,5 +95,6 @@ async function doSetRecruiter(res, sb, ctx, user, rows, recruiterId) {
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_bulk_recruiter",
     target: `hr_applicant:${ids.join(",")}`, detail: { count: ids.length, recruiterId: value },
   });
+  await notifyAssigned(notify, { tenantId: ctx.tenantId, recruiterId: value, actorEmployeeId: ctx.employee?.id || null, applicants: rows });
   return json(res, 200, { updated: ids.length });
 }

@@ -20,6 +20,11 @@
 //   送った記録（gw_hr_mail_sends）には、送った時点の件名・本文・ひな型の ID と版を固定で残す。
 //   監査ログには本文・宛先を残さない。
 //
+// ■ 日程調整を送ったら、選考を進める
+//   カジュアル面談の予約URLを含むひな型（応募受付／カジュアル面談案内）を「未対応」の応募者へ送れたら、
+//   選考：カジュアル面談・状態：日程調整中（NEXT：予約待ち）にする。予約されれば TimeRex の Webhook で面談予定へ。
+//   無限道場リード・ほかの状態の応募者は動かさない（送った記録だけ残す）
+//
 // ■ 予約URL
 //   {{面談予約URL}} はサーバーで、この応募者の ID を付けて作る（lib/hr.js schedulingUrlFor）。
 //   画面から渡された本文に、ほかの応募者の ID の予約URLがあれば送らない。
@@ -71,7 +76,7 @@ export const shapeSend = (s) => ({
 
 async function loadApplicant(sb, ctx, id) {
   if (!id) return null;
-  return must(sb.from("gw_hr_applicants").select("id, tenant_id, name, email, job_title, recruiter_id, lead_category")
+  return must(sb.from("gw_hr_applicants").select("id, tenant_id, name, email, job_title, recruiter_id, lead_category, stage, status")
     .eq("id", String(id)).eq("tenant_id", ctx.tenantId).maybeSingle());
 }
 
@@ -179,18 +184,20 @@ async function send(req, res, sb, ctx, user) {
     error: outcome === "sent" ? null : String(mail.error || "").slice(0, 300) || null, finished_at: new Date().toISOString(),
   }).eq("id", row.id).eq("tenant_id", ctx.tenantId).select(SEND_FIELDS).single());
 
+  let advanced = false;
   if (outcome === "sent") {
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: a.id, event_key: "mail_sent",
       label: `メールを送信：${t.name}`, detail: subject, created_by: user.id,
     });
+    advanced = await advanceAfterScheduling(sb, ctx, user, a, t);
   }
   // 本文・宛先は監査ログに残さない
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_mail", target: `hr_applicant:${a.id}`,
     detail: { send: row.id, template: t.id, version: t.version, status: outcome, providerMessageId: mail.providerMessageId || null } });
 
   const shaped = shapeSend(done);
-  if (outcome === "sent") return json(res, 200, { status: "sent", send: shaped });
+  if (outcome === "sent") return json(res, 200, { status: "sent", send: shaped, advanced });
   if (outcome === "unknown") {
     return json(res, 202, { status: "unknown", send: shaped,
       hint: "送信サービスの応答がなく、送れたかどうか分かりません。相手に届いているか確かめるまで、送り直さないでください" });
@@ -201,3 +208,22 @@ async function send(req, res, sb, ctx, user) {
 
 /** 画面が「送信」を押す前に作る鍵（テスト用にも出す） */
 export const newRequestKey = () => crypto.randomBytes(16).toString("base64url");
+
+// カジュアル面談の予約URLを含むひな型（lib/hr-mail-template.js PURPOSES の booking: "casual"）
+const SCHEDULING_PURPOSES = ["application", "casual"];
+
+/** 日程調整を送れたら、未対応の応募者を「カジュアル面談・日程調整中」へ。進めたら true */
+async function advanceAfterScheduling(sb, ctx, user, a, t) {
+  if (!SCHEDULING_PURPOSES.includes(t.purpose)) return false;
+  if (a.lead_category && a.lead_category !== "recruitment") return false;
+  if (a.status !== "todo" || !["applied", "casual_interview"].includes(a.stage)) return false;
+  const { data, error } = await sb.from("gw_hr_applicants")
+    .update({ stage: "casual_interview", status: "scheduling", updated_at: new Date().toISOString() })
+    .eq("id", a.id).eq("tenant_id", ctx.tenantId).eq("status", "todo").select("id").maybeSingle();
+  if (error || !data) return false;
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: a.id, event_key: "scheduling_sent",
+    label: "日程調整を送付（予約待ち）", detail: t.name, created_by: user.id,
+  });
+  return true;
+}

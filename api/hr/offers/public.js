@@ -113,6 +113,14 @@ async function view(req, res) {
       tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_viewed",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id },
     });
+    // 採用担当へ「本人がオファーを閲覧」（HRフロー仕様 §16。版ごとに1回）
+    if (applicant.recruiter_id) {
+      await notify([{
+        tenantId: applicant.tenant_id, employeeId: applicant.recruiter_id, kind: "hr",
+        title: "本人がオファーを閲覧しました", body: `${applicant.name}（${docName(offer)}・第${offer.version}版）`,
+        link: `/hr/applicants.html?id=${applicant.id}`, dedupeKey: `hr_offer_viewed:${offer.id}`,
+      }]);
+    }
     offer.viewed_at = now; // レスポンスにも反映する
   }
 
