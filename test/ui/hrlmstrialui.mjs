@@ -98,7 +98,7 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
     return send({});
   });
   await page.goto(`${BASE}/hr/applicants.html?id=${A1}`);
-  await page.waitForSelector("#hr-detail-tab .hr-next");
+  await page.waitForSelector(".hr-detail .hr-next");
   if (o.available !== false) await page.waitForSelector("[data-lms-trial] .hd");
   else await page.waitForTimeout(600);
   return { page, st, errs };
@@ -116,7 +116,8 @@ console.log("\n=== 置き場所・面談前・設定なし・ほかの会社 ===
 {
   const { page, st, errs } = await open({ interviewDone: false });
   await page.waitForSelector("[data-lms-wait]");
-  check(await page.evaluate(() => document.querySelector(".hr-next").nextElementSibling?.hasAttribute("data-lms-trial")), "パネルは NEXT ACTION のすぐ下");
+  // NEXT ACTION はタブの外（上）に固定（HRフロー仕様 §14）。体験のパネルは概要タブの先頭
+  check(await page.evaluate(() => document.getElementById("hr-detail-tab").firstElementChild?.hasAttribute("data-lms-trial")), "パネルは概要タブの先頭（NEXT ACTION のすぐ下）");
   check((await page.locator("[data-lms-stage]").innerText()) === "未招待", "段階：未招待");
   check((await page.locator("[data-lms-invite]").count()) === 0, "面談前は［お礼＋無限道場体験を案内］を出さない");
   check((await page.locator("[data-lms-wait]").innerText()).includes("カジュアル面談を実施済みにすると"), "面談前は、実施済みにすると案内できることを出す");

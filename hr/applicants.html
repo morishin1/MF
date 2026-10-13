@@ -50,6 +50,14 @@
     .hr-table tr.click:hover { background:#f6f6f2; }
     .hr-nm { font-weight:700; color:#1b2440; font-size:14px; display:block; }
     .hr-sub2 { font-size:11.5px; color:#6b7080; display:block; margin-top:2px; }
+    .hr-dr-sel { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; padding:0 20px 10px; font-size:12.5px; color:#4a5068; }
+    .hr-dr-sel b { color:#1b2440; }
+    .hr-due { font-size:12px; color:#1b2440; white-space:nowrap; }
+    .hr-due.over { color:#b42318; font-weight:700; }
+    .hr-alerts { display:flex; flex-wrap:wrap; gap:4px; }
+    .hr-alert { font-size:11px; font-weight:700; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+    .hr-alert.danger { background:#fde8e6; color:#b42318; }
+    .hr-alert.warn { background:#fbf1d6; color:#7d5a00; }
 
     .hr-rank { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px;
       border-radius:5px; font-size:11px; font-weight:700; padding:0 6px; }
@@ -351,8 +359,8 @@
     <table class="hr-table">
       <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
+        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th>期限</th><th>警告</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="10" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -366,7 +374,7 @@
 <script src="../js/layout.js?v=20261012mgn1"></script>
 <script src="../js/hr-layout.js?v=20261012mgn1"></script>
 <script src="../js/jst.js?v=20261012mgn1"></script>
-<script src="../js/hr-lms-trial.js?v=20261012lms3"></script>
+<script src="../js/hr-lms-trial.js?v=20261013lms4"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -545,7 +553,7 @@
   const leadInterests = (a) => (a.leadProfile?.interests || []);
 
   const THEAD = {
-    standard: ["応募者", "書類", "選考", "状態", "NEXT", "担当", ""],
+    standard: ["応募者", "書類", "選考", "状態", "NEXT", "担当", "期限", "警告", ""],
     mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
   };
   let theadKind = "standard";
@@ -563,6 +571,20 @@
     const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
     return `<span class="hr-pill" style="background:${bg};color:${fg};">
           <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>`;
+  }
+
+  /** 期限の列：対応期限（超過は赤）。無ければ今日の面談 */
+  function dueCell(a) {
+    if (a.decisionDueOn) return `<span class="${a.overdue ? "hr-due over" : "hr-due"}">${esc(a.decisionDueOn)}</span>`;
+    if (a.nextInterviewAt) return `<span class="hr-due">${esc(fmtDate(a.nextInterviewAt))}</span>`;
+    return `<span class="muted">—</span>`;
+  }
+  /** 警告（起きてはいけない状態。サーバの alerts。lib/hr.js applicantAlerts） */
+  function alertsHtml(a) {
+    const list = a.alerts || [];
+    if (!list.length) return "";
+    return `<span class="hr-alerts">${list.map((x) =>
+      `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>`;
   }
 
   /** 無限道場の一覧の1行 */
@@ -590,6 +612,9 @@
     const list = catList().filter((a) =>
       (!stageFilter || a.stage === stageFilter)
       && (!q || `${a.name} ${a.jobTitle} ${a.source || ""}`.toLowerCase().includes(q)));
+    // 毎日の確認順（期限超過 → 今日対応 → 新規応募 → その他 → 終わったもの。サーバの priority。lib/hr.js）。
+    // 同じ順位の中は、いままでどおり新しい応募が上
+    list.sort((x, y) => (x.priority ?? 3) - (y.priority ?? 3));
     visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
@@ -614,8 +639,10 @@
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
           <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>${decisionBadges(a)}</td>
-        <td>${esc(listNextAction(a))}${a.decisionDueOn ? `<span class="hr-sub2">期限 ${esc(a.decisionDueOn)}</span>` : ""}</td>
+        <td>${esc(listNextAction(a))}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
+        <td data-col="due">${dueCell(a)}</td>
+        <td data-col="alerts">${alertsHtml(a)}</td>
         <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
       </tr>`;
     }).join(""));
@@ -806,7 +833,7 @@
     if (!source) { msg.textContent = "応募媒体を選ぶか入力してください"; return; }
 
     try {
-      await KPLayout.busy(btn, "追加中…", () => API.createHrApplicant({
+      const r = await KPLayout.busy(btn, "追加中…", () => API.createHrApplicant({
         name, jobTitle, source,
         recruiterId: el("a-recruiter").value || null,
         email: el("a-email").value.trim() || undefined,
@@ -817,6 +844,8 @@
       closeModal();
       history.replaceState({}, "", listUrl());
       await load();
+      // 登録したら、その人の詳細を開く（NEXT ACTION：日程調整を送る／メールが無ければ先にメールを登録。HRフロー仕様 §1）
+      if (r?.applicant?.id) await openDetail(r.applicant.id);
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
   }
 
@@ -846,6 +875,20 @@
   }
 
   /** 採用フローのステップバー（応募 → 面談 → 合格 → オファー → 承諾 → 契約 → 入社/稼働。育成枠は育成の流れ） */
+  // 選考ステップ（HRフロー仕様 §14）。選考段階（stage）6つの現在地。見送り・辞退は「選考終了」
+  const SELECTION_STEPS = [["applied", "新規応募"], ["casual_interview", "カジュアル面談"], ["ceo_recommend", "社長推薦"],
+    ["ceo_interview", "社長面談"], ["offer", "内定"], ["joining_scheduled", "入社予定"]];
+  function stageSteps(a) {
+    const at = SELECTION_STEPS.findIndex(([k]) => k === a.stage);
+    const ended = ["passed", "declined"].includes(a.status);
+    return `<ol class="hr-steps" id="hr-stage-steps" aria-label="選考ステップ">${SELECTION_STEPS.map(([k, l], i) => {
+      const st = i < at || (i === at && a.status === "done") ? "done" : i === at ? "now" : "todo";
+      return `<li class="${st}" data-stage="${k}" aria-current="${st === "now" ? "step" : "false"}">
+        <span class="m" aria-hidden="true">${st === "done" ? "✓" : i + 1}</span><span class="l">${esc(l)}</span></li>`;
+    }).join("")}</ol>
+      ${ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(a.statusLabel)}）</div>` : ""}`;
+  }
+
   function stepBar(a) {
     const s = a.steps;
     if (!s || !(s.steps || []).length) return "";
@@ -919,8 +962,44 @@
     // 無限道場リードには書類（履歴書・職務経歴書）が無い
     const TABS = isLead(a)
       ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
-      : [["overview", "概要"], ["interviews", "面談"], ["docs", "書類"], ["history", "履歴"]];
+      : [["overview", "概要"], ["interviews", "面談"], ["eval", "評価"], ["docs", "書類"], ["mail", "メール"], ["history", "履歴"]];
     if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
+    // 採用の応募者は、上から順番を固定する（HRフロー仕様 §14）：
+    //   ① 応募者（氏名・職種・メール・電話・応募媒体）② 選考・状態 ③ NEXT ACTION（主ボタン1つ）
+    //   ④ 選考ステップ（新規応募 → … → 入社予定）⑤ タブ（概要／面談／評価／書類／メール／履歴）
+    // NEXT ACTION はタブの外に置く（どのタブを見ていても、次にすることが見える）
+    if (!isLead(a)) {
+      box.innerHTML = `
+      <div style="padding:20px 20px 10px;display:flex;justify-content:space-between;align-items:flex-start;" id="hr-dr-person">
+        <div style="min-width:0;">
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
+            ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}</div>
+          <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(a.jobTitle)}</div>
+          <div class="hr-head-mail${a.email ? "" : " none"}" id="hr-head-mail">${esc(a.email || "メール未登録")}</div>
+          <div style="font-size:12.5px;color:#6b7080;margin-top:2px;" id="hr-head-meta">電話 ${esc(a.phone || "未登録")} ／ 応募媒体 ${esc(a.source || "—")}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()">
+            <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>
+      <div class="hr-dr-sel" id="hr-dr-sel">
+        <span>選考：<b>${esc(a.stageLabel || "—")}</b></span><span>状態：<b>${esc(a.statusLabel || "—")}</b></span>
+        <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span>
+        ${(a.alerts || []).length ? `<span class="hr-alerts" id="hr-dr-alerts">${a.alerts.map((x) =>
+          `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>` : ""}
+      </div>
+      <div style="padding:0 20px;" id="hr-detail-next">${nextActionBox(a)}</div>
+      ${stageSteps(a)}
+      ${["offer", "joining_scheduled"].includes(a.stage) ? stepBar(a) : ""}
+      <div class="hr-tabs">${TABS.map(([k, l]) =>
+        `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
+      <div class="hr-detail-body" id="hr-detail-tab"></div>`;
+      renderDetailTab();
+      if (window.HrLmsTrial) HrLmsTrial.mount(detail);
+      return;
+    }
     box.innerHTML = `
       <div style="padding:20px 20px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
@@ -1080,6 +1159,37 @@
   }
 
   /** いちばん新しい、評価済みの面談 */
+  // ---- 評価タブ：面談ごとの5項目評価・総合ランク・推薦理由・所感（入力は NEXT ACTION の「評価を入力」から） ----
+  function evalTab(a) {
+    const evs = (detail.interviews || []).filter((i) => i.done && !i.canceled && (i.rank || Object.keys(i.scores || {}).length || i.notes));
+    const rankLabel = detail.rankLabel || {};
+    const head = a.status === "eval_pending"
+      ? `<div class="banner warn" style="margin:0 0 12px;"><span class="material-symbols-outlined">rate_review</span><div>面談の評価がまだ入力されていません。NEXT ACTION の［評価を入力］から入力してください。</div></div>` : "";
+    if (!evs.length) return `${head}<p class="muted" data-eval-empty>まだ評価がありません。</p>`;
+    return head + evs.map((i) => `
+      <section class="hr-flow-sec" data-eval="${esc(i.id)}" style="margin-bottom:12px;">
+        <div class="hr-flow-hd"><h3>${esc(i.kindLabel)}${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:8px;">${esc(i.rank)}</span>` : ""}</h3>
+          <span class="hr-flow-note">${i.scheduledAt ? esc(JST.when(i.scheduledAt)) : ""}${i.interviewerName ? `　${esc(i.interviewerName)}` : ""}</span></div>
+        ${i.rank ? `<div style="font-size:12.5px;color:#1b2440;margin:0 0 8px;">総合：${esc(i.rank)}（${esc(rankLabel[i.rank] || "")}）</div>` : ""}
+        ${(detail.evalItems || []).map((it) => `<div class="hr-score-row"><span class="k">${esc(it.label)}</span><span>${esc(i.scores?.[it.key] ? scaleLabel(i.scores[it.key]) : "—")}</span></div>`).join("")}
+        ${i.recommendReason ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:8px;"><b style="color:#6b7080;font-size:11px;display:block;">推薦理由</b>${esc(i.recommendReason)}</div>` : ""}
+        ${i.notes ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:8px;"><b style="color:#6b7080;font-size:11px;display:block;">所感・メモ</b>${esc(i.notes)}</div>` : ""}
+      </section>`).join("");
+  }
+
+  // ---- メールタブ：この応募者へ送ったメール（api/hr/applicants/mail.js の記録）と［メールを送る］ ----
+  async function loadMailTab(id) {
+    let r = null, err = null;
+    try { r = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(id)}`); } catch (e) { err = e; }
+    const box = el("hr-detail-tab");
+    if (!box || detailTab !== "mail" || detail?.applicant?.id !== id) return;
+    box.innerHTML = `
+      <button class="btn btn-secondary btn-sm" style="margin:0 0 12px;" onclick="openMailForm()">
+        <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
+      ${err ? `<div class="banner warn"><span class="material-symbols-outlined">error</span><div>${esc(err.hint || err.message || "読み込めませんでした")}</div></div>`
+        : `<div data-mail-tab>${mailHistoryHtml(r.sends)}</div>`}`;
+  }
+
   function latestEvaluation() {
     return (detail.interviews || []).find((i) => i.rank) || null;
   }
@@ -1204,9 +1314,12 @@
   async function saveEmailInline(btn) {
     const msg = el("hr-email-msg");
     msg.textContent = "";
+    const wasRegister = detail.applicant.nextActionKey === "registerEmail";
     const err = await saveApplicantEmail(el("hr-email-input").value, btn);
     if (err) { msg.textContent = err; return; }
     emailEditing = false;
+    // メール未登録の NEXT ACTION だったときは、NEXT ACTION ごと描き直す（日程調整を送るへ）
+    if (wasRegister) { await refreshDetail(); return; }
     rerenderEmailRow();
   }
 
@@ -1229,7 +1342,6 @@
         .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
       const missing = docMissingLabels();
       box.innerHTML = `
-        ${nextActionBox(a)}
         ${instructorApplication(a)}
         ${basicInfo(a, ev, evLine)}
         ${missing.length ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">
@@ -1245,6 +1357,11 @@
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
         ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
           : `<p class="muted">まだ面談の記録がありません。</p>`}`;
+    } else if (detailTab === "eval") {
+      box.innerHTML = evalTab(a);
+    } else if (detailTab === "mail") {
+      box.innerHTML = `<p class="muted">読み込み中…</p>`;
+      loadMailTab(a.id);
     } else if (detailTab === "docs") {
       box.innerHTML = renderDocsTab();
     } else {
@@ -1743,6 +1860,8 @@
     const a = withContactAction(detail.applicant);
     const key = a.nextActionKey;
     if (key === "sendSchedulingLink") return openSendSchedulingForm();
+    // メール未登録：概要タブのメール欄をその場で入力にする（保存すると NEXT ACTION が「日程調整を送る」へ）
+    if (key === "registerEmail") { detailTab = "overview"; emailEditing = true; renderDetail(); el("hr-email-input")?.focus(); return; }
     if (key === "leadNextAction") return openLeadNextActionForm();
     if (key === "schedule") return openScheduleForm(a.nextActionKind);
     // 実施する面談が無い（NEXT ACTION は「面談タブを確認」と出している）ときは、面談タブへ
@@ -1807,7 +1926,8 @@
     if (!note) { msg.textContent = "推薦理由を入力してください"; return; }
     try {
       await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({
-        id: detail.applicant.id, stage: "ceo_recommend", status: "ceo_interview_pending", recommendNote: note,
+        // 推薦すると、選考は社長面談・状態は社長面談設定待ち（HRフロー仕様 §4。社長・管理者へ通知）
+        id: detail.applicant.id, stage: "ceo_interview", status: "ceo_interview_pending", recommendNote: note,
       }));
       closeAction();
       await refreshDetail();
@@ -2042,10 +2162,13 @@
       if (t) summary = `採用区分：${t.label}`;
     } else if (decideKind === "hold") {
       const next = el("dc-next").value.trim();
+      // 保留は、保留理由・次に確認すること・再判断期限の3つが必須（サーバでも確かめる）
+      if (!el("dc-reason").value.trim()) { msg.textContent = "保留理由を入力してください"; return; }
       if (!next) { msg.textContent = "次に確認することを入力してください"; return; }
-      body.holdReason = el("dc-reason").value.trim() || undefined;
+      if (!el("dc-due").value) { msg.textContent = "再判断期限を入力してください"; return; }
+      body.holdReason = el("dc-reason").value.trim();
       body.holdNextStep = next;
-      body.decisionDueOn = el("dc-due").value || undefined;
+      body.decisionDueOn = el("dc-due").value;
       summary = [body.holdReason ? `保留理由：${body.holdReason}` : null, `次に確認：${next}`,
         body.decisionDueOn ? `再判断期限：${body.decisionDueOn}` : null].filter(Boolean).join("　");
     } else {
@@ -2377,7 +2500,8 @@
     } catch { /* 記録の再読み込みに失敗しても、結果は出す */ }
     if (mailFlow !== f) return;
     renderMailForm();
-    if (f.phase === "sent") refreshDetail().catch(() => {});
+    // 送れたら詳細と一覧を取り直す（日程調整のひな型なら「カジュアル面談・日程調整中」へ進んでいる）
+    if (f.phase === "sent") { refreshDetail().catch(() => {}); load().catch(() => {}); }
   }
 
   // ---- 日程調整URLを送る（モーダル） ------------------------------------------------
@@ -2398,10 +2522,13 @@
       <textarea id="sc-mail" rows="8" readonly>${esc(schedulingMailTemplate(url))}</textarea>
       <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-mail')">メール文面をコピー</button>
       <div id="sc-msg" class="err-text" style="margin:10px 0;"></div>
-      <div style="display:flex;gap:8px;margin-top:14px;">
-        <button class="btn btn-primary" onclick="submitMarkScheduling(this)">送付済みにする</button>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        ${isLead(detail.applicant) ? "" : `<button class="btn btn-primary" id="sc-send-mail" onclick="closeHrModal();openMailForm()">
+          <span class="material-symbols-outlined icon-inline">mail</span>メールひな型で送る</button>`}
+        <button class="btn ${isLead(detail.applicant) ? "btn-primary" : "btn-secondary"}" onclick="submitMarkScheduling(this)">${isLead(detail.applicant) ? "送付済みにする" : "別の方法で送った（送付済みにする）"}</button>
         <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
       </div>
+      ${isLead(detail.applicant) ? "" : `<p class="muted" style="font-size:12px;margin:8px 0 0;">メールひな型（応募受付／カジュアル面談案内）で送ると、自動で「カジュアル面談・日程調整中（予約待ち）」になります。</p>`}
       <button class="btn btn-secondary btn-sm" style="margin-top:16px;"
               onclick="closeHrModal();openScheduleForm()">TimeRexを使わず、手動で面談を設定する</button>` : `
       <div class="banner warn"><span class="material-symbols-outlined">build</span>
@@ -2442,7 +2569,10 @@ ${url}
 
   async function submitMarkScheduling(btn) {
     try {
-      await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant({ id: detail.applicant.id, status: "scheduling" }));
+      // 採用の応募者は選考もカジュアル面談へ（無限道場リードは段階を変えない）
+      await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant(isLead(detail.applicant)
+        ? { id: detail.applicant.id, status: "scheduling" }
+        : { id: detail.applicant.id, stage: "casual_interview", status: "scheduling" }));
       closeHrModal();
       await refreshDetail();
       await load();

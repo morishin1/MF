@@ -342,6 +342,20 @@ await ok("保留は、理由・次に確認すること・再判断期限を残�
   assert.equal(a.status, "ceo_decision_pending", "保留は判断待ちのまま（自動で終わらせない）");
 });
 
+await ok("保留は、理由・次に確認すること・再判断期限の3つがないと保存しない（サーバでも確かめる）", async () => {
+  setup();
+  who = OWNER;
+  db.rows.gw_hr_applicants = [{ id: "a1", tenant_id: "t1", name: "山田", stage: "ceo_interview",
+    status: "ceo_decision_pending", rank: "B", decision: null }];
+  const full = { id: "a1", decision: "hold", holdReason: "報酬条件", holdNextStep: "給与レンジを確認", decisionDueOn: "2026-10-05" };
+  for (const [k, label] of [["holdReason", "保留理由"], ["holdNextStep", "次に確認すること"], ["decisionDueOn", "再判断期限"]]) {
+    const r = await patchApplicant({ ...full, [k]: undefined });
+    assert.equal(r.statusCode, 400, k);
+    assert.match(r.body.hint, new RegExp(label));
+  }
+  assert.equal(db.rows.gw_hr_applicants[0].decision, null, "何も保存しない");
+});
+
 await ok("見送りは、decision=rejectedとタイムラインが残る", async () => {
   setup();
   who = OWNER;
@@ -360,7 +374,9 @@ await ok("社長推薦されたら、社長・管理者へ知らせる", async (
   who = RECRUITER;
   db.rows.gw_hr_applicants = [{ id: "a1", tenant_id: "t1", name: "山田 太郎", stage: "casual_interview",
     status: "eval_pending", rank: "A", decision: null }];
-  await patchApplicant({ id: "a1", stage: "ceo_recommend", status: "ceo_interview_pending", recommendNote: "推薦します" });
+  // 推薦すると、選考は社長面談・状態は社長面談設定待ちへ（HRフロー仕様 §4）
+  await patchApplicant({ id: "a1", stage: "ceo_interview", status: "ceo_interview_pending", recommendNote: "推薦します" });
+  assert.equal(db.rows.gw_hr_applicants[0].stage, "ceo_interview");
   assert.equal(db.rows.gw_notifications.length, 1);
   assert.equal(db.rows.gw_notifications[0].employee_id, "emp-o1");
   assert.equal(db.rows.gw_notifications[0].kind, "hr");

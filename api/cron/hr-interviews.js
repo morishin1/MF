@@ -61,6 +61,8 @@ export default async function handler(req, res) {
     const target = i.interviewer_id || a.recruiter_id;
     if (!target) continue;
     const lead = a.lead_category === "mugendojo";
+    // 社長面談は5項目評価・ランクを付けない（実施すると社長判断待ちへ進む）。「面談結果が未入力」は送らない
+    if (!lead && i.kind === "ceo") continue;
     // 無限道場：次のアクションを選んだ（面談済のまま止まっていない）なら知らせない
     if (lead && (a.lead_next_action || a.status !== "eval_pending")) continue;
     notifyRows.push({

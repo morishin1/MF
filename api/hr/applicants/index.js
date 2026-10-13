@@ -8,7 +8,8 @@
 // ダッシュボード・採用ファネル・通知の元ネタは、すべてこの一覧から
 // 画面側で組み立てる（別に集計テーブルは作らない。README「State Management」の方針と同じ）。
 
-import { checkRecruiter } from "../../../lib/hr-recruiter.js";
+import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
+import { notify } from "../../../lib/notify.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
@@ -16,7 +17,11 @@ import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib
 import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates } from "../../../lib/hr.js";
+import {
+  normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
+  withContactNext, applicantAlerts, applicantPriority,
+} from "../../../lib/hr.js";
+import { ymd as jstYmd } from "../../../lib/jst.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
 import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js";
 import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
@@ -137,16 +142,21 @@ async function list(req, res, sb, ctx, salary) {
     return n ? { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind } : null;
   };
 
+  const today = jstYmd();
   return json(res, 200, {
-    applicants: (data || []).map((a) => ({
-      ...shapeApplicant(a, nextOf(a)),
-      // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
-      nextInterviewAt: nextOf(a)?.scheduledAt || null,
-      recruiterName: recruiterName.get(a.recruiter_id) || null,
-      interviewCount: interviewCount.get(a.id) || 0,
-      docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
-      contact: contactStatusOf(a.lead_category === "mugendojo" ? null : a.decision, eventsOf.get(a.id)),
-    })),
+    applicants: (data || []).map((a) => {
+      const s = withContactNext({
+        ...shapeApplicant(a, nextOf(a)),
+        // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
+        nextInterviewAt: nextOf(a)?.scheduledAt || null,
+        recruiterName: recruiterName.get(a.recruiter_id) || null,
+        interviewCount: interviewCount.get(a.id) || 0,
+        docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
+        contact: contactStatusOf(a.lead_category === "mugendojo" ? null : a.decision, eventsOf.get(a.id)),
+      });
+      // 警告（起きてはいけない状態）と、毎日の確認順（期限超過 → 今日 → 新規 → その他。lib/hr.js）
+      return { ...s, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
+    }),
     employees: employees || [],
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
@@ -196,6 +206,9 @@ async function create(req, res, sb, ctx, user, salary) {
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_create",
     target: `hr_applicant:${data.id}`, detail: { name: data.name, jobTitle: data.job_title },
   });
+  // ほかの人を担当にして登録したら、その人へ「担当になった」と知らせる
+  await notifyAssigned(notify, { tenantId: ctx.tenantId, recruiterId: data.recruiter_id, actorEmployeeId: ctx.employee?.id || null,
+    applicants: [{ id: data.id, name: data.name }] });
 
   return json(res, 200, { applicant: shapeApplicant(data) });
 }

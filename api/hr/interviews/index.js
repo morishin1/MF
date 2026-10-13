@@ -199,6 +199,16 @@ async function evaluate(res, sb, ctx, user, iv, body) {
   if (row.value.next_due_on !== undefined) patch.decision_due_on = row.value.next_due_on;
 
   await sb.from("gw_hr_applicants").update(patch).eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId);
+  // A（ぜひ社長に会わせたい）は、選考を「社長推薦」へ（推薦するまでの段。推薦すると社長面談へ進む）。
+  // カジュアル面談の評価のときだけ（社長面談の段より後ろへは戻さない）
+  if (row.value.rank === "A" && iv.kind === "casual") {
+    const { data: cur } = await sb.from("gw_hr_applicants").select("stage")
+      .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+    if (["applied", "casual_interview"].includes(cur?.stage)) {
+      await sb.from("gw_hr_applicants").update({ stage: "ceo_recommend", updated_at: now })
+        .eq("id", iv.applicant_id).eq("tenant_id", ctx.tenantId);
+    }
+  }
   await sb.from("gw_hr_timeline").insert([
     { tenant_id: ctx.tenantId, applicant_id: iv.applicant_id, event_key: "evaluated",
       label: "評価入力", created_by: user.id },

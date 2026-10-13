@@ -135,6 +135,7 @@ mock.module(atRoot("lib/gw.js"), {
 const { default: interviews } = await import(atRoot("api/hr/interviews/index.js"));
 const { default: today } = await import(atRoot("api/hr/interviews/today.js"));
 const { default: evalReminderCron } = await import(atRoot("api/cron/hr-interviews.js"));
+const { default: dailyCron } = await import(atRoot("api/cron/hr-daily.js"));
 
 const res = () => {
   const r = { statusCode: 0, body: null };
@@ -253,6 +254,17 @@ await ok("ランクから、対応ステータスが機械的に決まる", asyn
   assert.equal(a.rank, "A");
   assert.equal(a.status, "ceo_recommend_pending");
   assert.equal(a.decision_due_on, "2026-10-01");
+});
+
+await ok("Aランク（カジュアル面談）は、選考が「社長推薦」へ。B は追加確認なのでカジュアル面談のまま", async () => {
+  for (const [rank, stage] of [["A", "ceo_recommend"], ["B", "casual_interview"]]) {
+    setup();
+    db.rows.gw_hr_applicants[0].stage = "casual_interview";
+    const s = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+    await act({ id: s.body.interview.id, action: "conduct" });
+    await act({ id: s.body.interview.id, action: "evaluate", rank });
+    assert.equal(db.rows.gw_hr_applicants[0].stage, stage, rank);
+  }
 });
 
 await ok("Dランクは見送りへ進む。ただしdecisionは自動で確定しない", async () => {
@@ -497,6 +509,74 @@ await ok("一般メンバーは録画URLの登録もできない", async () => {
   who = MEMBER;
   const r = await act({ id: iv.id, action: "update", recordingUrl: "https://drive.google.com/file/d/abc/view" });
   assert.equal(r.statusCode, 403);
+});
+
+
+await ok("社長面談（ランクを付けない）は「面談結果が未入力」を送らない", async () => {
+  setup();
+  db.rows.gw_hr_interviews = [{ id: "iv1", tenant_id: "t1", applicant_id: "a1", kind: "ceo",
+    interviewer_id: "e1", conducted_at: new Date(Date.now() - 3 * 3600000).toISOString(), rank: null }];
+  const r = await runCron();
+  assert.equal(r.body.notified, 0);
+});
+
+console.log("\n=== 毎朝の通知（api/cron/hr-daily.js）：今日の面談・判断期限・回答期限切れ・引き渡し待ち ===\n");
+const runDaily = () => call(dailyCron, { method: "GET", url: "/api/cron/hr-daily" });
+const ymdOff = (d) => new Date(Date.now() + 9 * 3600000 + d * 86400000).toISOString().slice(0, 10);
+
+await ok("今日が面談日・期限が今日/明日/超過・回答期限切れを、担当へ1回だけ知らせる", async () => {
+  setup();
+  const A = db.rows.gw_hr_applicants[0];
+  Object.assign(A, { recruiter_id: "emp-r1", status: "interview_scheduled", decision_due_on: ymdOff(-1) });
+  db.rows.gw_hr_applicants.push(
+    { id: "a2", tenant_id: "t1", name: "佐藤", stage: "ceo_interview", status: "ceo_decision_pending", recruiter_id: "emp-r1", decision_due_on: ymdOff(1) },
+    { id: "a3", tenant_id: "t1", name: "鈴木", stage: "offer", status: "offer_sent", recruiter_id: "emp-r1", decision_due_on: null },
+    { id: "a4", tenant_id: "t1", name: "終了", stage: "casual_interview", status: "passed", recruiter_id: "emp-r1", decision_due_on: ymdOff(-3) },
+    { id: "a5", tenant_id: "t1", name: "リード", stage: "applied", status: "todo", recruiter_id: "emp-r1", decision_due_on: ymdOff(0), lead_category: "mugendojo" },
+    { id: "a6", tenant_id: "t1", name: "期限先", stage: "applied", status: "todo", recruiter_id: "emp-r1", decision_due_on: ymdOff(5) },
+  );
+  db.rows.gw_hr_interviews = [
+    { id: "iv1", tenant_id: "t1", applicant_id: "a1", kind: "casual", interviewer_id: "e1", scheduled_at: new Date(`${ymdOff(0)}T15:00:00+09:00`).toISOString() },
+    { id: "iv2", tenant_id: "t1", applicant_id: "a1", kind: "casual", interviewer_id: "e1", scheduled_at: new Date(`${ymdOff(0)}T16:00:00+09:00`).toISOString(), canceled_at: "x" },
+    { id: "iv3", tenant_id: "t1", applicant_id: "a1", kind: "casual", interviewer_id: "e1", scheduled_at: new Date(`${ymdOff(1)}T10:00:00+09:00`).toISOString() },
+  ];
+  db.rows.gw_hr_offers = [
+    { id: "o1", tenant_id: "t1", applicant_id: "a3", expires_at: new Date(Date.now() - 3600000).toISOString(), revoked_at: null },
+    { id: "o2", tenant_id: "t1", applicant_id: "a3", expires_at: new Date(Date.now() - 3600000).toISOString(), revoked_at: "x" },
+  ];
+  const r = await runDaily();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const keys = db.rows.gw_notifications.map((n) => n.dedupe_key).sort();
+  assert.deepEqual(keys, [`hr_due:a1:${ymdOff(0)}`, `hr_due:a2:${ymdOff(0)}`, `hr_interview_today:iv1:${ymdOff(0)}`, "hr_offer_expired:o1"].sort(), keys.join(" "));
+  const by = (k) => db.rows.gw_notifications.find((n) => n.dedupe_key.startsWith(k));
+  assert.equal(by("hr_interview_today").employee_id, "e1", "面談日は面談担当へ");
+  assert.match(by("hr_due:a1").title, /過ぎています/);
+  assert.match(by("hr_due:a2").title, /明日/);
+  assert.equal(by("hr_offer_expired").employee_id, "emp-r1");
+  const again = await runDaily();
+  assert.equal(again.body.notified, 0, "2回目は増えない");
+  assert.equal(db.rows.gw_notifications.length, 4);
+});
+
+
+await ok("Office への引き渡し待ち（NEXT が「Office へ引き渡す」のまま）だけを知らせる", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "h1", tenant_id: "t1", name: "引き渡し前", stage: "offer", status: "accepted", offer_type: "contractor", recruiter_id: "emp-r1" },
+    { id: "h2", tenant_id: "t1", name: "引き渡し済み", stage: "offer", status: "accepted", offer_type: "contractor", recruiter_id: "emp-r1" },
+    { id: "h3", tenant_id: "t1", name: "正式契約待ち", stage: "offer", status: "accepted", offer_type: "executive_employee", recruiter_id: "emp-r1" },
+    { id: "h4", tenant_id: "t1", name: "育成", stage: "offer", status: "accepted", offer_type: "training", recruiter_id: "emp-r1" },
+  ];
+  const acc = { tenant_id: "t1", accepted_at: "2026-10-01T00:00:00Z", formal_sent_at: null, formal_signed_at: null };
+  db.rows.gw_hr_offers = [
+    { id: "o1", applicant_id: "h1", offer_type: "contractor", formal_contract_required: false, handoff_at: null, ...acc },
+    { id: "o2", applicant_id: "h2", offer_type: "contractor", formal_contract_required: false, handoff_at: "2026-10-02T00:00:00Z", ...acc },
+    { id: "o3", applicant_id: "h3", offer_type: "executive_employee", formal_contract_required: true, handoff_at: null, ...acc },
+    { id: "o4", applicant_id: "h4", offer_type: "training", formal_contract_required: false, handoff_at: null, ...acc },
+  ];
+  await runDaily();
+  assert.deepEqual(db.rows.gw_notifications.map((n) => n.dedupe_key), ["hr_handoff_wait:h1"]);
+  assert.match(db.rows.gw_notifications[0].title, /Office への引き渡し/);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

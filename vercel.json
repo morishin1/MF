@@ -221,6 +221,10 @@
       "schedule": "20 * * * *"
     },
     {
+      "path": "/api/cron/hr-daily",
+      "schedule": "40 23 * * *"
+    },
+    {
       "path": "/api/cron/career",
       "schedule": "40 23 * * *"
     },

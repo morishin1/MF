@@ -196,7 +196,8 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   await page.fill("#rc-note", "営業経験が強く、事業立ち上げ経験あり。報酬条件のみ社長面談で確認したい。");
   await page.locator("#action-root .hr-modal button", { hasText: "社長推薦する" }).click();
   await page.waitForTimeout(700);
-  check(posted.some((p) => p.stage === "ceo_recommend" && p.recommendNote), "推薦理由つきで社長推薦がサーバへ送られる");
+  // 推薦すると、選考は社長面談・状態は社長面談設定待ち（HRフロー仕様 §4）
+  check(posted.some((p) => p.stage === "ceo_interview" && p.status === "ceo_interview_pending" && p.recommendNote), "推薦理由つきで社長推薦がサーバへ送られる（選考：社長面談）");
 
   console.log("\n— GOOD CANDIDATESへ表示 —");
   await page.goto(`${BASE}/hr/`);

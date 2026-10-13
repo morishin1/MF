@@ -3,7 +3,7 @@
 // PATCH /api/hr/applicants/detail { id, action: "leadNextAction", nextAction, note? }
 //       … 無限道場リードの面談後の次のアクション（体験案内・参加検討・申込…。lib/hr-lead-flow.js）
 
-import { checkRecruiter } from "../../../lib/hr-recruiter.js";
+import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
@@ -15,7 +15,7 @@ import { notify } from "../../../lib/notify.js";
 import {
   normalizeApplicant, shapeApplicant, shapeOffer, shapeInterview, activeOffer, STAGE_LABEL, RANK_LABEL,
   RANKS, EVAL_ITEMS, EVAL_SCALE, INTERVIEW_KINDS, decisionMakerEmployeeIds, schedulingUrlFor, pickNextInterview,
-  STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings,
+  STATUSES, STATUS_LABEL, STATUS_OPTIONS, statusChangeWarnings, withContactNext, applicantAlerts,
 } from "../../../lib/hr.js";
 import { contactStatusOf } from "../../../lib/hr-messages.js";
 import { OFFER_TYPES_PUBLIC, offerTypeLabel, acceptFactsOf } from "../../../lib/hr-offer-types.js";
@@ -105,18 +105,21 @@ async function one(req, res, sb, ctx, salary) {
   // 承諾した版の正式契約の段階（db/132）・要否と Office への引き渡し（db/133）
   Object.assign(a, acceptFactsOf(acceptedOffer));
 
+  const shaped = withContactNext({
+    ...shapeApplicant(
+      a,
+      nextInterview && { id: nextInterview.id, scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
+      current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
+    ),
+    nextInterviewAt: nextInterview?.scheduled_at || null,
+    recruiterName: recruiter?.display_name || null,
+    // 本人への連絡状況（未連絡／連絡済み）。タイムラインの判断・連絡の記録から決める（lib/hr-messages.js）
+    // 無限道場リードの decision（保留・対象外）は採用の選考結果ではないので、連絡状況は出さない
+    contact: contactStatusOf(isMugendojo(a) ? null : a.decision, timeline),
+  });
   return json(res, 200, {
-    applicant: {
-      ...shapeApplicant(
-        a,
-        nextInterview && { id: nextInterview.id, scheduledAt: nextInterview.scheduled_at, kind: nextInterview.kind },
-        current && { sentAt: current.sent_at, viewedAt: current.viewed_at, expiresAt: current.expires_at },
-      ),
-      recruiterName: recruiter?.display_name || null,
-      // 本人への連絡状況（未連絡／連絡済み）。タイムラインの判断・連絡の記録から決める（lib/hr-messages.js）
-      // 無限道場リードの decision（保留・対象外）は採用の選考結果ではないので、連絡状況は出さない
-      contact: contactStatusOf(isMugendojo(a) ? null : a.decision, timeline),
-    },
+    // 警告（起きてはいけない状態。一覧と同じ lib/hr.js applicantAlerts）
+    applicant: { ...shaped, alerts: applicantAlerts(shaped) },
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
       ...shapeInterview(i), interviewerName: interviewerName.get(i.interviewer_id) || null,
@@ -170,6 +173,14 @@ async function update(req, res, sb, ctx, user, salary) {
   const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name, recruiter_id")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!before) return json(res, 404, { error: "not_found" });
+  // 保留にするときは、保留理由・次に確認すること・再判断期限の3つが要る（NEXT ACTION を具体的にするため）
+  if (row.value.decision === "hold") {
+    const missing = [
+      !row.value.hold_reason && "保留理由", !row.value.hold_next_step && "次に確認すること",
+      !row.value.decision_due_on && "再判断期限",
+    ].filter(Boolean);
+    if (missing.length) return json(res, 400, { error: "invalid_body", detail: `保留にするには${missing.join("・")}を入力してください`, hint: `保留にするには${missing.join("・")}を入力してください` });
+  }
   if (before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined)
       && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
@@ -213,8 +224,9 @@ async function update(req, res, sb, ctx, user, salary) {
       event_key: `stage_${row.value.stage}`, label: STAGE_LABEL[row.value.stage] || row.value.stage,
       detail: data.rank ? `ランク${data.rank}` : null, created_by: user.id,
     });
-    // 社長推薦されたら、判断できる人（社長・管理者）へ知らせる。通知は増やしすぎない
-    if (row.value.stage === "ceo_recommend") {
+    // 社長推薦されたら（選考は社長面談へ・状態は社長面談設定待ち）、判断できる人（社長・管理者）へ知らせる。
+    // 通知は増やしすぎない（同じ応募者は1件にまとめる）
+    if (row.value.stage === "ceo_interview" && row.value.status === "ceo_interview_pending") {
       const ab = admin();
       const targets = await decisionMakerEmployeeIds(ab, ctx.tenantId);
       await notify(targets.map((employeeId) => ({
@@ -255,6 +267,8 @@ async function update(req, res, sb, ctx, user, salary) {
       tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "recruiter_changed",
       label: "担当を変更", detail: who?.display_name || "未定", created_by: user.id,
     });
+    await notifyAssigned(notify, { tenantId: ctx.tenantId, recruiterId: row.value.recruiter_id, actorEmployeeId: ctx.employee?.id || null,
+      applicants: [{ id: body.id, name: before.name }] });
   }
 
   await gwLog({

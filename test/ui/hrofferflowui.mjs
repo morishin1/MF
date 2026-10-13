@@ -100,7 +100,9 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
 {
   const state = makeState();
   const { ctx, page, errs } = await open(state);
-  check((await page.locator("#hr-steps li.now").innerText()).includes("面談"), "ステップバー：いまは面談");
+  // 選考中（内定より前）は選考ステップ（6段）。採用フローのバー（応募〜入社・稼働）は内定から出す（HRフロー仕様 §14）
+  check((await page.locator("#hr-stage-steps li.now").innerText()).includes("社長面談") && await page.locator("#hr-steps").count() === 0,
+    "選考ステップ：いまは社長面談（採用フローのバーは内定から）");
   await page.locator(".hr-next button", { hasText: "採用判断" }).click();
   await page.waitForTimeout(800);
   check((await page.locator("#dc-tabs button.on").innerText()).includes("合格"), "判断の選択肢は「合格」");

@@ -1,7 +1,7 @@
 // 採用HR 応募者ドロワー：無限道場 体験のパネルと「お礼＋無限道場体験を案内」（api/hr/applicants/lms-trial.js）。
 //
 // ■ 置き場所
-//   hr/applicants.html の概要タブ、NEXT ACTION（.hr-next）のすぐ下。renderDetail() の最後で HrLmsTrial.mount(detail) を呼ぶ。
+//   hr/applicants.html の概要タブの先頭（NEXT ACTION（.hr-next）はタブの外の上。無限道場リードは概要タブの中）。renderDetail() の最後で HrLmsTrial.mount(detail) を呼ぶ。
 //   ドロワーの他の部分には触らない（ページのグローバル：API・KPLayout・HRLayout・openHrModal・closeHrModal・refreshDetail を使う）
 //
 // ■ 見せるもの（LMS が正本。HR には保存しない）
@@ -222,7 +222,7 @@
   /** 読み終えたら、NEXT ACTION の出し方が変わるときだけドロワーを描き直す */
   function syncNextAction(id) {
     if (typeof detail === "undefined" || detail?.applicant?.id !== id || typeof renderDetail !== "function") return;
-    const box = document.querySelector("#hr-detail-tab .hr-next");
+    const box = document.querySelector("#hr-detail-box .hr-next");
     if (!box) return;
     const na = nextAction(detail.applicant);
     if ((box.dataset.lmsNa || "") !== (na?.key || "")) renderDetail();
@@ -230,7 +230,7 @@
 
   /** 体験完了 → NEXT ACTION（採用判断）へ。押すだけで判断は決まらない */
   function toDecision() {
-    const n = document.querySelector("#hr-detail-tab .hr-next");
+    const n = document.querySelector("#hr-detail-box .hr-next");
     if (!n) return;
     n.scrollIntoView({ behavior: "smooth", block: "start" });
     n.style.outline = "3px solid #3b4a8f";
