@@ -325,7 +325,11 @@
     .hd-note { font-size:11.5px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
 
     @media (max-width:760px) {
-      .hr-handoff .row { grid-template-columns:1fr; }
+      /* 狭い幅でも、列が中身の最小幅に引っ張られて横にはみ出さない（minmax(0, 1fr)）。印は折り返す */
+      .hr-handoff .row { grid-template-columns:minmax(0, 1fr); }
+      .hr-handoff .row > * { min-width:0; }
+      .hr-handoff .hx-steps { flex-basis:100%; }
+      .hr-hrdone { white-space:normal; }
       .hr-handoff .act .btn { flex:1 1 100%; }
       .hd-row .btn { margin-left:0; }
       .hr-table thead { display:none; }

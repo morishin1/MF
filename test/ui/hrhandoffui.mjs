@@ -10,7 +10,7 @@
 //      （再アップロード・差し替え・削除の入口を出さない）。見られない（引き渡し前など）ときは理由を出す
 //   4. 入社予定の一覧：「HRから引き渡し」の印と、［入社書類］などの段階を先頭に添えた NEXT ACTION。
 //      詳細に「HRから引き渡し」タブ（引き渡された情報 / 採用時書類 / 入社・契約書類）。HR を通らない人には出さない
-//   5. 390px でも横にはみ出さない
+//   5. 390px（カードは 320px も）でも横にはみ出さない
 //
 // 応答は lib/hire-flow.js・lib/hire-handoff.js・lib/onboard-flow.js の本物の関数で組み立てる（文言をテスト側で作らない）
 import { launch, BASE } from "../_browser.mjs";
@@ -119,7 +119,7 @@ async function open(st, { width = 1300, list = null } = {}) {
 }
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 
-for (const width of [1300, 390]) {
+for (const width of [1300, 390, 320]) {
   console.log(`\n=== HRから引き渡し（${width}px）：引き渡された人だけ・HRで正式契約まで完了・入社の流れ（4つ）・NEXT ACTION ===`);
   const st = state();
   const { ctx, page, errs } = await open(st, { width });
