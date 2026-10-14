@@ -160,6 +160,18 @@
     .hr-doc .m { font-size:11.5px; color:#6b7080; }
     .hr-doc .acts { display:flex; gap:6px; margin-top:10px; align-items:center; position:relative; flex-wrap:wrap; }
     .hr-doc .none { font-size:12.5px; color:#9aa0b4; margin:6px 0 0; }
+    /* 書類タブの見出しと、書類ごとの状態（未登録→登録済み→送付済み→本人確認済み→承諾済み）。色だけでなく文字でも出す */
+    .hr-doc-h { font-size:14px; font-weight:700; color:#1b2440; margin:18px 0 8px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+    .hr-doc-h:first-child { margin-top:0; }
+    .hr-doc-h .sub { font-size:11.5px; font-weight:400; color:#6b7080; }
+    .hr-dst { display:inline-flex; align-items:center; border-radius:999px; padding:1px 9px; font-size:11px; font-weight:700; background:#efefeb; color:#4a5068; margin-left:auto; white-space:nowrap; }
+    .hr-dst[data-st="registered"] { background:#e7eaf3; color:#1b2440; }
+    .hr-dst[data-st="sent"] { background:#fbf1d6; color:#7d5a00; }
+    .hr-dst[data-st="confirmed"] { background:#e1ecf9; color:#1b4b8f; }
+    .hr-dst[data-st="accepted"] { background:#e5f1e2; color:#2f6f3a; }
+    .hr-dst[data-st="declined"], .hr-dst[data-st="revoked"] { background:#fdecea; color:#b3261e; }
+    .hr-doc .t .hr-dst { margin-left:auto; }
+    .hr-doc .note { font-size:11.5px; color:#9aa0b4; margin:4px 0 0; }
     .hr-more { position:relative; }
     .hr-menu-pop { position:absolute; right:0; top:34px; background:#fff; border:1px solid #e2e2dc; border-radius:8px;
       box-shadow:0 8px 24px rgba(27,36,64,.14); min-width:160px; z-index:5; padding:4px 0; }
@@ -1389,14 +1401,18 @@
     return ["resume", "work_history"].map(docGroup).filter((g) => g && !g.latest).map((g) => g.label);
   }
 
+  // 応募書類の状態チップ（登録済み／未登録）
+  const dstChip = (st, label) => `<span class="hr-dst" data-st="${esc(st)}">${esc(label)}</span>`;
+
   function renderDocsTab() {
     if (docsError) return `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(docsError)}</div></div>`;
     if (!docs) return `<p class="muted">読み込み中…</p>`;
-    const main = ["resume", "work_history"].map(docGroup).filter(Boolean);
+    // 応募書類：履歴書・職務経歴書・スキルシートは決まった枠（差し替えると前の版は履歴）、その他は何枚でも
+    const main = ["resume", "work_history", "skill_sheet"].map(docGroup).filter(Boolean);
     const other = docGroup("other");
     const card = (g, d) => `
-      <div class="hr-doc" data-doc="${esc(g.docType)}">
-        <div class="t"><span class="material-symbols-outlined">${esc(g.icon)}</span>${esc(g.label)}</div>
+      <div class="hr-doc" data-doc="${esc(g.docType)}" data-state="${d ? "registered" : "none"}">
+        <div class="t"><span class="material-symbols-outlined">${esc(g.icon)}</span>${esc(g.label)}${d ? dstChip("registered", "登録済み") : dstChip("none", "未登録")}</div>
         ${d ? `
           <div class="f">${esc(d.filename)}</div>
           <div class="m">${esc(fmtDay(d.uploadedAt))} アップロード${d.sizeBytes ? `・${esc(fmtSize(d.sizeBytes))}` : ""}${d.uploadedByName ? `・${esc(d.uploadedByName)}` : ""}${g.history.length ? `・過去の版 ${g.history.length}` : ""}</div>
@@ -1419,9 +1435,10 @@
       </div>`;
     const others = other ? [other.latest, ...other.history].filter(Boolean) : [];
     return `
+      <h3 class="hr-doc-h" id="hr-docs-app">応募書類<span class="sub">履歴書・職務経歴書・スキルシート・その他</span></h3>
       ${main.map((g) => card(g, g.latest)).join("")}
-      <div class="hr-doc" data-doc="other">
-        <div class="t"><span class="material-symbols-outlined">attach_file</span>その他の書類</div>
+      <div class="hr-doc" data-doc="other" data-state="${others.length ? "registered" : "none"}">
+        <div class="t"><span class="material-symbols-outlined">attach_file</span>その他の書類${others.length ? dstChip("registered", `登録済み ${others.length}件`) : dstChip("none", "未登録")}</div>
         ${others.length ? others.map((d) => `
           <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
             <span class="f" style="margin:0;flex:1;min-width:160px;">${esc(d.filename)}
@@ -1438,8 +1455,32 @@
           </div>`).join("") : `<div class="none">未登録</div>`}
         <div class="acts"><button class="btn btn-secondary btn-sm" onclick="openUploadDoc('other')">アップロード</button></div>
       </div>
+      ${condDocsHtml()}
       <p class="muted" style="font-size:11.5px;margin:8px 0 0;">
         書類は採用担当・人事・管理者だけが見られます。表示用のリンクは数分で切れます。</p>`;
+  }
+
+  // 採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）。オファーから自動で並ぶ（ここでは登録しない・二重に持たない）。
+  // 状態：未登録 → 登録済み → 送付済み → 本人確認済み → 承諾済み。PDF は給与・報酬が入るので、見られる人だけに［PDFを開く］を出す
+  function condDocsHtml() {
+    const c = docs?.conditionDocs;
+    if (!c) return "";
+    const canPdf = detail.salaryVisible !== false && c.docsReady;
+    const icon = { offer: "mark_email_read", notice: "gavel", accepted: "verified" };
+    const rows = (c.rows || []).filter((r) => r.applicable !== false).map((r) => `
+      <div class="hr-doc" data-cond="${esc(r.key)}" data-state="${esc(r.state)}">
+        <div class="t"><span class="material-symbols-outlined">${esc(icon[r.key] || "description")}</span>${esc(r.label)}${dstChip(r.state, r.stateLabel)}</div>
+        <div class="m">${r.at ? `${esc(fmtDay(r.at))}${c.version && r.state !== "none" ? `・第${esc(c.version)}版` : ""}` : "　"}</div>
+        ${r.note && r.state === "none" ? `<div class="note">${esc(r.note)}</div>` : ""}
+        <div class="acts">
+          ${r.file && canPdf ? `<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}', '${esc(r.file)}', this)">PDFを開く</button>` : ""}
+          ${r.file && !canPdf && detail.salaryVisible === false ? `<span class="muted" style="font-size:11.5px;">給与・報酬が入るため、PDF は給与を見られる方が確認します</span>` : ""}
+          ${r.key === "offer" && c.offerId ? `<button class="btn btn-secondary btn-sm" onclick="setDetailTab('overview')">オファーを見る</button>` : ""}
+        </div>
+      </div>`).join("");
+    return `
+      <h3 class="hr-doc-h" id="hr-docs-cond">採用条件書類<span class="sub">オファーから自動で並びます（ここでは登録しません）</span></h3>
+      ${rows}`;
   }
 
   function toggleDocMenu(ev, id) {
@@ -1473,7 +1514,7 @@
   let docFile = null;
   function openUploadDoc(type) {
     docFile = null;
-    const types = docs?.types || [{ key: "resume", label: "履歴書" }, { key: "work_history", label: "職務経歴書" }, { key: "other", label: "その他" }];
+    const types = docs?.types || [{ key: "resume", label: "履歴書" }, { key: "work_history", label: "職務経歴書" }, { key: "skill_sheet", label: "スキルシート" }, { key: "other", label: "その他" }];
     const replacing = type !== "other" && docGroup(type)?.latest;
     openActionModal(`
       <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 4px;">${replacing ? "書類を差し替え" : "書類をアップロード"}</h2>

@@ -1,6 +1,7 @@
-// 採用の応募書類（履歴書・職務経歴書・その他）
+// 採用の応募書類（履歴書・職務経歴書・スキルシート・その他）と、採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）の状態
 //
-// GET    /api/hr/documents?applicantId=…            … 種類ごとの最新と、過去の版
+// GET    /api/hr/documents?applicantId=…            … 種類ごとの最新と、過去の版。conditionDocs＝採用条件書類の状態
+//                                                    （オファー gw_hr_offers の列から出す。ファイルは持たない。lib/hr-condition-docs.js）
 // GET    /api/hr/documents?id=…[&applicantId=…][&download=1]
 //                                                  … 見る・保存するための URL（数分だけ有効）。
 //                                                    書類プレビュー（hr/document.html・別タブ）もこれを使う
@@ -28,10 +29,12 @@ import {
   DOC_TYPES, DOC_TYPE_KEYS, DOC_ACCEPT, DOC_MAX_BYTES, docTypeLabel,
   checkDeclaredDoc, checkDocBytes, cleanFilename, groupDocs,
 } from "../../lib/hr-docs.js";
+import { conditionDocsOf } from "../../lib/hr-condition-docs.js";
 
 const BUCKET = "hr";
 const TTL = 60 * 5;
 const SQL = "db/093_hr_documents.sql";
+const SKILL_SQL = "db/135_hr_document_skill_sheet.sql";
 const FIELDS = "id, tenant_id, applicant_id, doc_type, filename, storage_path, mime_type, size_bytes, sha256, "
   + "uploaded_by, deleted_at, created_at";
 const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -88,8 +91,16 @@ async function read(req, res, sb, ctx, user) {
   const names = new Map((emps || []).map((e) => [e.user_id, e.display_name]));
 
   const g = groupDocs(rows);
+  // 採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）。オファーの列から出す。読めなくても応募書類は返す
+  let conditionDocs = null;
+  try {
+    const offers = await must(sb.from("gw_hr_offers").select("*").eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id)
+      .order("version", { ascending: false }));
+    conditionDocs = conditionDocsOf(offers);
+  } catch (e) { console.error("[hr/documents] condition docs", e?.message || e); }
   return json(res, 200, {
     applicant: { id: a.id, name: a.name },
+    conditionDocs,
     documents: DOC_TYPES.map((t) => ({
       docType: t.key, label: t.label, icon: t.icon,
       latest: g[t.key].latest ? view(g[t.key].latest, names) : null,
@@ -154,11 +165,20 @@ async function act(req, res, sb, ctx, user) {
       return json(res, 400, c);
     }
     const now = new Date().toISOString();
-    const row = await must(sb.from("gw_hr_documents").insert({
+    const ins = await sb.from("gw_hr_documents").insert({
       tenant_id: ctx.tenantId, applicant_id: a.id, doc_type: docType,
       filename: cleanFilename(body.filename), storage_path: path, mime_type: c.mime,
       size_bytes: bytes.length, sha256: sha256(bytes), uploaded_by: user.id, created_at: now, updated_at: now,
-    }).select(FIELDS).single());
+    }).select(FIELDS).single();
+    if (ins.error) {
+      // スキルシートは db/135 で種類に加わった。まだ流していない環境では、CHECK（23514）で断られる
+      if (docType === "skill_sheet" && ins.error.code === "23514") {
+        await sb.storage.from(BUCKET).remove([path]);
+        return json(res, 503, { error: "not_ready", message: `スキルシートを登録するには、${SKILL_SQL} を Supabase に流してください` });
+      }
+      throw ins.error;
+    }
+    const row = ins.data;
     await gwLog({
       tenantId: ctx.tenantId, actorId: user.id, action: "hr.document.upload",
       target: `hr_applicant:${a.id}`, detail: { documentId: row.id, docType, filename: row.filename, size: row.size_bytes },

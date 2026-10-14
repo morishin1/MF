@@ -49,6 +49,12 @@ function table(name) {
     then: (fn, rej) => Promise.resolve({ data: rows().map(copy), error: null }).then(fn, rej),
     insert(row) {
       const made = [].concat(row).map((r) => ({ id: r.id || uuid(), ...r }));
+      // db.reject：その行を CHECK 違反（23514）で断る（スキルシートの種類を足す db/135 が未適用の環境の再現）
+      if (name === "gw_hr_documents" && db.reject && made.some(db.reject)) {
+        const e2 = { select: () => e2, single: () => Promise.resolve({ data: null, error: { code: "23514", message: "violates check constraint" } }),
+          then: (fn, rej) => Promise.resolve({ data: null, error: { code: "23514", message: "violates check constraint" } }).then(fn, rej) };
+        return e2;
+      }
       (db.rows[name] = db.rows[name] || []).push(...made);
       const r2 = { select: () => r2, single: () => Promise.resolve({ data: copy(made[0]), error: null }),
         then: (fn, rej) => Promise.resolve({ data: made.map(copy), error: null }).then(fn, rej) };
@@ -160,13 +166,14 @@ const ok = async (name, fn) => {
 function setup() {
   who = RECRUITER;
   store.clear(); signed.length = 0; logged.length = 0;
+  db.reject = null;
   db.rows = {
     gw_hr_applicants: [
       { id: "ap1", tenant_id: "t1", name: "山田 太郎", job_title: "エンジニア", source: "Wantedly", stage: "applied", status: "todo", created_at: "2026-09-01" },
       { id: "ap2", tenant_id: "t1", name: "佐藤 花子", job_title: "営業", source: "リファラル", stage: "applied", status: "todo", created_at: "2026-09-02" },
       { id: "ap9", tenant_id: "t2", name: "他社の応募者", job_title: "x", source: "x", stage: "applied", status: "todo", created_at: "2026-09-03" },
     ],
-    gw_hr_documents: [], gw_hr_interviews: [], gw_employees: [{ user_id: "u-rec", tenant_id: "t1", id: "e-rec", display_name: "採用 担当" }],
+    gw_hr_documents: [], gw_hr_interviews: [], gw_hr_offers: [], gw_employees: [{ user_id: "u-rec", tenant_id: "t1", id: "e-rec", display_name: "採用 担当" }],
   };
 }
 
@@ -367,6 +374,115 @@ await ok("一覧の書類ID：複数版なら最新版・削除済みは出さ�
   assert.deepEqual(by.get("ap2"), { resume: false, resumeId: null, workHistory: false, workHistoryId: null }, "削除済みは出さない");
   assert.equal(/sign|token=|https?:/.test(JSON.stringify(r.body.applicants)), false, "一覧に表示用URLを入れない");
   assert.equal(signed.length, 0, "一覧では署名付きURLを作らない");
+});
+
+console.log("\n— 応募書類の4種類（スキルシート）—");
+await ok("書類の種類は 履歴書・職務経歴書・スキルシート・その他 の順。スキルシートも差し替え・履歴・削除ができる", async () => {
+  setup();
+  const r0 = await get("applicantId=ap1");
+  assert.deepEqual(r0.body.documents.map((d) => [d.docType, d.label]),
+    [["resume", "履歴書"], ["work_history", "職務経歴書"], ["skill_sheet", "スキルシート"], ["other", "その他"]]);
+  assert.ok(r0.body.documents.every((d) => d.latest === null));
+  const a = await upload("ap1", "skill_sheet", PDF, MIME.pdf, "山田太郎_スキルシート_v1.pdf");
+  assert.equal(a.statusCode, 200, JSON.stringify(a.body));
+  db.rows.gw_hr_documents[0].created_at = "2026-09-20T00:00:00Z";
+  await upload("ap1", "skill_sheet", PDF, MIME.pdf, "山田太郎_スキルシート_v2.pdf");
+  db.rows.gw_hr_documents[1].created_at = "2026-09-28T00:00:00Z";
+  const g = (await get("applicantId=ap1")).body.documents.find((d) => d.docType === "skill_sheet");
+  assert.equal(g.latest.filename, "山田太郎_スキルシート_v2.pdf");
+  assert.deepEqual(g.history.map((d) => d.filename), ["山田太郎_スキルシート_v1.pdf"]);
+  assert.equal(g.latest.docTypeLabel, "スキルシート");
+  assert.equal((await del(db.rows.gw_hr_documents[1].id)).statusCode, 200);
+  assert.equal((await get("applicantId=ap1")).body.documents.find((d) => d.docType === "skill_sheet").latest.filename, "山田太郎_スキルシート_v1.pdf");
+});
+await ok("スキルシートは、履歴書・職務経歴書の「そろい具合」（一覧）には数えない", async () => {
+  setup();
+  await upload("ap1", "skill_sheet", PDF, MIME.pdf, "s.pdf");
+  const r = await call(listApi, { method: "GET", url: "/api/hr/applicants" });
+  const d = r.body.applicants.find((a) => a.id === "ap1").docs;
+  assert.deepEqual(d, { resume: false, resumeId: null, workHistory: false, workHistoryId: null });
+});
+await ok("db/135 が未適用（CHECK で断られる）：スキルシートだけ 503 と案内。置いた実体は消す。履歴書などは通る", async () => {
+  setup();
+  db.reject = (r) => r.doc_type === "skill_sheet";
+  const u = await post({ action: "upload", applicantId: "ap1", docType: "skill_sheet", mimeType: MIME.pdf, sizeBytes: PDF.length });
+  put(u.body.path, PDF);
+  const r = await post({ action: "attach", applicantId: "ap1", docType: "skill_sheet", path: u.body.path, filename: "s.pdf" });
+  assert.equal(r.statusCode, 503);
+  assert.equal(r.body.error, "not_ready");
+  assert.match(r.body.message, /db\/135_hr_document_skill_sheet\.sql/);
+  assert.equal(store.has(`hr/${u.body.path}`), false, "置いた実体は消す（孤児を残さない）");
+  assert.equal(db.rows.gw_hr_documents.length, 0);
+  assert.equal((await upload("ap1", "resume", PDF, MIME.pdf, "r.pdf")).statusCode, 200, "ほかの種類はこれまでどおり");
+});
+
+console.log("\n— 採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）—");
+const OFFER = (over = {}) => ({ id: "of1", tenant_id: "t1", applicant_id: "ap1", version: 1, offer_type: "executive_employee", created_at: "2026-10-01T00:00:00Z",
+  sent_at: null, viewed_at: null, accepted_at: null, declined_at: null, revoked_at: null, notice_pdf_path: null, accepted_pdf_path: null,
+  notice_title: null, token_hash: "SECRET-HASH", legalsign_url: "https://legalsign.example/secret", ...over });
+await ok("オファーが無い：3行とも「未登録」", async () => {
+  setup();
+  const c = (await get("applicantId=ap1")).body.conditionDocs;
+  assert.deepEqual(c.rows.map((r) => [r.key, r.label, r.stateLabel]), [["offer", "内定通知書", "未登録"], ["notice", "労働条件通知書", "未登録"], ["accepted", "承諾済みPDF", "未登録"]]);
+  assert.equal(c.offerId, null);
+});
+await ok("オファーを作った → 登録済み／送った → 送付済み／本人が開いた → 本人確認済み／承諾 → 承諾済み（条件通知書・承諾済みPDFも）", async () => {
+  setup();
+  const state = async () => (await get("applicantId=ap1")).body.conditionDocs.rows.map((r) => `${r.key}:${r.stateLabel}`).join(" ");
+  db.rows.gw_hr_offers = [OFFER()];
+  assert.equal(await state(), "offer:登録済み notice:未登録 accepted:未登録", "作っただけ（条件通知書は送るときに作る）");
+  Object.assign(db.rows.gw_hr_offers[0], { sent_at: "2026-10-02T00:00:00Z", notice_pdf_path: "t1/notice/of1.pdf", notice_title: "労働条件通知書" });
+  assert.equal(await state(), "offer:送付済み notice:送付済み accepted:未登録");
+  db.rows.gw_hr_offers[0].viewed_at = "2026-10-03T00:00:00Z";
+  assert.equal(await state(), "offer:本人確認済み notice:本人確認済み accepted:未登録");
+  Object.assign(db.rows.gw_hr_offers[0], { accepted_at: "2026-10-04T00:00:00Z", accepted_pdf_path: "t1/notice/of1_accepted.pdf" });
+  assert.equal(await state(), "offer:承諾済み notice:承諾済み accepted:承諾済み");
+  const c = (await get("applicantId=ap1")).body.conditionDocs;
+  assert.equal(c.offerId, "of1");
+  assert.deepEqual(c.rows.map((r) => r.file), [null, "notice", "accepted"], "PDF を開けるのは、条件通知書と承諾済みPDF");
+  assert.equal(c.rows[2].at, "2026-10-04T00:00:00Z");
+});
+await ok("名前は区分ごと（正社員＝内定通知書・労働条件通知書／業務委託＝業務委託オファー・業務委託条件通知書）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [OFFER({ offer_type: "contractor", sent_at: "2026-10-02T00:00:00Z", notice_pdf_path: "t1/n.pdf" })];
+  const c = (await get("applicantId=ap1")).body.conditionDocs;
+  assert.deepEqual(c.rows.map((r) => r.label), ["業務委託オファー", "業務委託条件通知書", "承諾済みPDF"]);
+});
+await ok("区分の無い従来の合格通知は、条件通知書・承諾済みPDFの行を出さない（applicable=false）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [OFFER({ offer_type: null, sent_at: "2026-10-02T00:00:00Z" })];
+  const c = (await get("applicantId=ap1")).body.conditionDocs;
+  assert.deepEqual(c.rows.map((r) => [r.key, r.applicable]), [["offer", true], ["notice", false], ["accepted", false]]);
+  assert.equal(c.rows[0].label, "合格通知");
+});
+await ok("新しい版を送って古い版を無効化した → いまの版。辞退は「辞退」。承諾した版があればそちらを優先", async () => {
+  setup();
+  db.rows.gw_hr_offers = [OFFER({ id: "o1", version: 1, revoked_at: "2026-10-05T00:00:00Z", sent_at: "2026-10-02T00:00:00Z" }),
+    OFFER({ id: "o2", version: 2, sent_at: "2026-10-06T00:00:00Z" })];
+  let c = (await get("applicantId=ap1")).body.conditionDocs;
+  assert.deepEqual([c.offerId, c.rows[0].stateLabel, c.version], ["o2", "送付済み", 2]);
+  db.rows.gw_hr_offers[1].declined_at = "2026-10-07T00:00:00Z";
+  c = (await get("applicantId=ap1")).body.conditionDocs;
+  assert.equal(c.rows[0].stateLabel, "辞退");
+});
+await ok("他社のオファーは出さない。トークン・LegalSign の URL・給与は返さない", async () => {
+  setup();
+  db.rows.gw_hr_offers = [OFFER({ tenant_id: "t2", id: "ox" }), OFFER({ wage_amount: 480000, sent_at: "2026-10-02T00:00:00Z", notice_pdf_path: "t1/n.pdf" })];
+  const r = await get("applicantId=ap1");
+  assert.equal(r.body.conditionDocs.offerId, "of1");
+  const text = JSON.stringify(r.body);
+  assert.ok(!/SECRET-HASH|legalsign\.example|480000|token_hash|wage/.test(text), "機微な値を返さない");
+});
+await ok("条件通知書の列が無い環境（db/132 未適用）でも、応募書類は返る。内定通知書だけ並ぶ", async () => {
+  setup();
+  const o = OFFER({ sent_at: "2026-10-02T00:00:00Z" });
+  delete o.notice_pdf_path; delete o.accepted_pdf_path;
+  db.rows.gw_hr_offers = [o];
+  const r = await get("applicantId=ap1");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.conditionDocs.docsReady, false);
+  assert.equal(r.body.conditionDocs.rows[0].stateLabel, "送付済み");
+  assert.equal(r.body.documents.length, 4);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
