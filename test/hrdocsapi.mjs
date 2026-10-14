@@ -500,6 +500,8 @@ async function seedDocs() {
   await upload("ap1", "resume", PDF, MIME.pdf, "山田_履歴書_v2.pdf");
   await upload("ap1", "skill_sheet", PDF, MIME.pdf, "山田_スキルシート.pdf");
   await upload("ap2", "resume", PDF, MIME.pdf, "佐藤_履歴書.pdf");
+  // 作成時刻はアップロード順に、はっきり離す（速い環境では同じミリ秒になり、「最新」の判定が入れ替わるため）
+  db.rows.gw_hr_documents.forEach((d, i) => { d.created_at = `2026-10-01T00:00:${String(10 + i).padStart(2, "0")}.000Z`; });
   db.rows.gw_hr_applicants.push({ id: "ap10", tenant_id: "t2", name: "他社の引き渡し済み", job_title: "x", source: "x", stage: "applied", status: "todo", created_at: "2026-09-03" });
   who = RECRUITER;
   signed.length = 0; logged.length = 0;
