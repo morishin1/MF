@@ -15,11 +15,23 @@
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
-    /* 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で並べ直した一覧。
-       操作（作成・送付・受領・照合・支払）は、月次業務の案件の画面で行う（ここでは処理を増やさない） */
-    /* 見た目は共通（.of-chips / .of-chip / .of-table）。状態のラベルは月次業務と同じ色（薄い色＋文字＋アイコン） */
-    .bl-sum { margin:0 0 12px; }
-    .bl-card .v { margin-left:2px; }
+    /* 請求・支払：「支払管理」（請求書のアップロード → 確認 → 仕訳 → 支払予定 → 支払済み → MFクラウド用CSV）と
+       「案件別」（これまでの、月次案件の請求・BP請求書・支払の状況）の2タブ。
+       見た目は共通（.of-chips / .of-chip / .of-table / .of-drawer）。状態は文字＋アイコン＋色（色だけで判断させない） */
+    .bl-tabs { display:flex; gap:4px; border-bottom:1px solid var(--of-line); margin:0 0 14px; }
+    .bl-tab { appearance:none; border:none; background:none; font:inherit; font-size:14px; font-weight:700; color:var(--of-mute); padding:10px 16px; cursor:pointer;
+      border-bottom:3px solid transparent; margin-bottom:-1px; }
+    .bl-tab[aria-selected="true"] { color:var(--of-ink); border-bottom-color:var(--of-blue); }
+    .bl-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin:0 0 12px; }
+    .bl-cards { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin:0 0 14px; }
+    .bl-card { appearance:none; text-align:left; background:#fff; border:1px solid var(--of-line); border-radius:10px; padding:10px 12px; cursor:pointer; font:inherit; color:var(--of-ink); }
+    .bl-card:hover { background:var(--of-bg); }
+    .bl-card .lb { display:block; font-size:12px; font-weight:700; color:var(--of-mute); }
+    .bl-card .v { display:block; font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin-top:2px; }
+    .bl-card.on { background:var(--of-ink); border-color:var(--of-ink); color:#fff; }
+    .bl-card.on .lb { color:#dfe3f0; }
+    .bl-card.warn .v { color:#b3261e; } .bl-card.on.warn .v { color:#fff; }
+    .bl-filterbar { display:flex; align-items:center; gap:8px; margin:-4px 0 10px; font-size:12.5px; color:var(--of-sub); }
     .bl-nm { font-weight:700; color:var(--of-ink); font-size:14px; display:block; }
     .bl-sub { font-size:11.5px; color:var(--of-mute); display:block; margin-top:2px; }
     .bl-st { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 10px 3px 8px; font-size:11.5px; font-weight:700; white-space:nowrap; }
@@ -29,6 +41,85 @@
     .bl-st.warn { background:#fdecea; color:#b3261e; }
     .bl-st.mid  { background:#e7eaf3; color:#1b2440; }
     .bl-st.na   { background:#efefeb; color:#4a5068; }
+    #rows tr.r-overdue td:first-child { box-shadow:inset 3px 0 0 #c0392b; }
+    #rows tr.r-soon td:first-child { box-shadow:inset 3px 0 0 #e0a100; }
+    #rows tr.r-paid td:first-child { box-shadow:inset 3px 0 0 #2f6f3a; }
+    #rows tr[data-id] { cursor:pointer; }
+    #rows tr[data-id]:hover td { background:#fafaf7; }
+    #rows td[data-label="請求日"], #rows td[data-label="対象月"], #rows td[data-label="締め"] { white-space:nowrap; }
+    .bl-amt { font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap; }
+    .bl-due.over { color:#b3261e; font-weight:700; }
+    .bl-kind { display:inline-block; font-size:10.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; }
+    .bl-pdf { display:inline-flex; align-items:center; gap:2px; font-size:11.5px; color:var(--of-mute); }
+    .bl-pdf .material-symbols-outlined { font-size:15px; }
+
+    /* モーダル */
+    .bl-mbg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:60; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .bl-modal { background:#fff; border-radius:14px; width:640px; max-width:100%; max-height:calc(100vh - 32px); overflow-y:auto; box-shadow:0 16px 48px rgba(27,36,64,.35); }
+    .bl-modal.wide { width:860px; }
+    .bl-mh { padding:18px 20px 8px; }
+    .bl-mh h2 { margin:0; font-size:18px; font-weight:900; color:#1b2440; }
+    .bl-mh p { margin:6px 0 0; font-size:12.5px; color:#4a5068; line-height:1.6; }
+    .bl-mb { padding:4px 20px 8px; display:grid; gap:12px; }
+    .bl-mf { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; flex-wrap:wrap; position:sticky; bottom:0; background:#fff; }
+    .bl-mf .of-btn { padding:10px 18px; font-size:14px; }
+    .bl-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+    .bl-grid .full { grid-column:1 / -1; }
+    .bl-f { display:flex; flex-direction:column; gap:3px; font-size:12px; color:#4a5068; font-weight:700; margin:0; }
+    .bl-f input, .bl-f select, .bl-f textarea { margin:0; width:100%; box-sizing:border-box; font-family:inherit; font-size:14px; font-weight:400; color:#1b2440;
+      border:1px solid #cfd2dc; border-radius:8px; padding:7px 9px; background:#fff; }
+    .bl-f textarea { min-height:72px; resize:vertical; }
+    .bl-f small { font-weight:400; color:#6b7080; font-size:11.5px; }
+    .bl-f.ai input, .bl-f.ai select { background:#fff8e1; border-color:#e0a100; }
+    .bl-f .req { color:#b3261e; margin-left:2px; }
+    .bl-er { white-space:pre-line; color:#b3261e; background:#fdecea; border-radius:8px; padding:8px 10px; font-size:12.5px; font-weight:700; line-height:1.6; }
+    .bl-note { background:#f6f6f2; border-radius:10px; padding:10px 12px; font-size:12.5px; color:#4a5068; line-height:1.6; }
+    .bl-note.warn { background:#fbf1d6; color:#7d5a00; }
+    .bl-radio { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:13px; font-weight:400; color:#1b2440; }
+    .bl-radio label { display:flex; align-items:center; gap:5px; margin:0; font-weight:400; cursor:pointer; }
+    .bl-radio input { width:auto; margin:0; }
+    .bl-chk { display:flex; align-items:flex-start; gap:8px; font-size:13px; font-weight:700; color:#1b2440; margin:0; cursor:pointer; }
+    .bl-chk input { width:auto; margin:3px 0 0; }
+    .bl-vt { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .bl-vt th { text-align:left; color:#6b7080; font-weight:700; padding:6px 8px; border-bottom:1px solid #e2e2dc; white-space:nowrap; }
+    .bl-vt td { padding:7px 8px; border-bottom:1px solid #eeeee9; vertical-align:top; }
+    .bl-vt tr.off td { color:#9aa0b4; }
+
+    /* ドロワー（枠は office-layout.js の .of-drawer）*/
+    .bl-dh { position:sticky; top:0; background:#fff; border-bottom:1px solid #e2e2dc; padding:16px 18px 12px; z-index:2; }
+    .bl-dh h2 { font-size:18px; font-weight:700; color:#1b2440; margin:0 0 4px; padding-right:36px; }
+    .bl-x { position:absolute; top:10px; right:10px; appearance:none; border:none; background:#edf2f7; border-radius:8px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+    .bl-db { padding:16px 18px 48px; display:grid; gap:12px; }
+    .bl-next { background:#fff; border:1px solid var(--of-line); border-left:3px solid var(--of-blue); border-radius:10px; padding:12px 14px; }
+    .bl-next.ok { border-left-color:#2f6f3a; }
+    .bl-next .lb { font-size:11.5px; font-weight:700; color:var(--of-mute); }
+    .bl-next .ttl { font-size:17px; font-weight:700; color:var(--of-ink); margin:4px 0 0; }
+    .bl-next .go { margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .bl-next .hint { font-size:11.5px; color:var(--of-mute); margin-top:6px; }
+    .bl-sec { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; scroll-margin-top:88px; }
+    .bl-sec h3 { font-size:13px; font-weight:700; color:#1b2440; margin:0 0 8px; display:flex; align-items:center; gap:6px; }
+    .bl-sec h3 .material-symbols-outlined { font-size:17px; color:#6b7080; }
+    .bl-sec p { margin:0 0 6px; font-size:12.5px; color:#1b2440; line-height:1.6; }
+    .bl-dl { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; font-size:12.5px; margin:0; }
+    .bl-dl dt { color:#6b7080; margin-bottom:2px; } .bl-dl dd { margin:0 0 10px; color:#1b2440; font-weight:600; word-break:break-all; }
+    .bl-prev { border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#f6f6f2; }
+    .bl-prev iframe { width:100%; height:340px; border:0; display:block; background:#fff; }
+    .bl-prev img { width:100%; display:block; max-height:420px; object-fit:contain; background:#fff; }
+    .bl-line { border:1px solid #e2e2dc; border-radius:10px; padding:10px; display:grid; gap:8px; grid-template-columns:repeat(3, minmax(0,1fr)); background:#fcfcfa; }
+    .bl-line .side { grid-column:1 / -1; display:flex; align-items:center; gap:8px; }
+    .bl-line .side select { width:auto; }
+    .bl-line .rm { margin-left:auto; }
+    .bl-bal { display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; font-size:13px; font-weight:700; color:#1b2440; padding:8px 10px; border-radius:8px; background:#f6f6f2; }
+    .bl-bal.bad { background:#fdecea; color:#b3261e; }
+    .bl-bal.good .diff { color:#2f6f3a; }
+    .bl-tl { border-left:2px solid #e2e2dc; margin-left:6px; padding-left:16px; }
+    .bl-tl .row { position:relative; padding-bottom:10px; }
+    .bl-tl .row::before { content:""; position:absolute; left:-21px; top:5px; width:9px; height:9px; border-radius:99px; background:#1b2440; }
+    .bl-tl .d { font-size:11px; color:#6b7080; font-variant-numeric:tabular-nums; }
+    .bl-tl .l { font-size:13px; font-weight:600; color:#1b2440; }
+    .bl-tl .rs { font-size:12px; color:#4a5068; }
+
+    @media (max-width: 980px) { .bl-cards { grid-template-columns:repeat(2, minmax(0,1fr)); } }
     @media (max-width: 860px) {
       .wrap .of-table, .wrap .of-table tbody, .wrap .of-table tr, .wrap .of-table td { display:block; width:100%; box-sizing:border-box; }
       .wrap .of-table { border:none; background:none; }
@@ -36,6 +127,15 @@
       .wrap .of-table tr { background:#fff; border:1px solid #e2e2dc; border-radius:10px; margin-bottom:10px; padding:6px 12px; }
       .wrap .of-table td { display:flex; justify-content:space-between; gap:10px; border:none; padding:5px 0; }
       .wrap .of-table td::before { content:attr(data-label); color:#6b7080; font-size:11px; font-weight:700; flex:none; }
+      #rows tr.r-overdue { border-left:4px solid #c0392b; } #rows tr.r-soon { border-left:4px solid #e0a100; } #rows tr.r-paid { border-left:4px solid #2f6f3a; }
+      #rows tr.r-overdue td:first-child, #rows tr.r-soon td:first-child, #rows tr.r-paid td:first-child { box-shadow:none; }
+      .bl-actions { justify-content:stretch; } .bl-actions .of-btn { flex:1 1 auto; justify-content:center; }
+    }
+    @media (max-width: 640px) {
+      .bl-grid { grid-template-columns:1fr; }
+      .bl-line { grid-template-columns:1fr 1fr; }
+      .bl-dl { grid-template-columns:1fr; }
+      .bl-modal { border-radius:12px; }
     }
   </style>
 </head>
@@ -45,7 +145,7 @@
   <div class="of-head">
     <div>
       <h1 class="of-title">請求・支払</h1>
-      <p class="of-sub" id="sub">売上請求・仕入請求（BP）・支払の状況を、案件ごとに確認できます。</p>
+      <p class="of-sub" id="sub">請求書の登録から、仕訳・支払予定・支払済み・MFクラウド用CSVまでを、この画面で管理します。</p>
     </div>
     <div class="of-month">
       <button type="button" class="of-btn sec" id="prev" aria-label="前の月"><span class="material-symbols-outlined">chevron_left</span></button>
@@ -55,15 +155,38 @@
     </div>
   </div>
 
-  <div id="banner"></div>
-  <div class="of-chips bl-sum" id="sum" aria-label="請求・支払の件数"></div>
+  <div class="bl-tabs" role="tablist" aria-label="請求・支払の表示">
+    <button type="button" class="bl-tab" role="tab" id="tab-pay" data-tab="pay" aria-selected="true" aria-controls="pane-pay">支払管理</button>
+    <button type="button" class="bl-tab" role="tab" id="tab-cases" data-tab="cases" aria-selected="false" aria-controls="pane-cases">案件別</button>
+  </div>
 
-  <table class="of-table" aria-label="請求・支払の一覧">
-    <thead><tr><th>客先</th><th>要員</th><th>売上請求</th><th>仕入請求（BP）</th><th>支払</th><th></th></tr></thead>
-    <tbody id="rows"><tr><td colspan="6" class="of-empty">読み込み中…</td></tr></tbody>
-  </table>
-  <div class="of-empty" id="empty" hidden></div>
+  <!-- ===== 支払管理 ===== -->
+  <section id="pane-pay" role="tabpanel" aria-labelledby="tab-pay">
+    <div class="bl-actions" id="actions"></div>
+    <div id="banner"></div>
+    <div class="bl-cards" id="cards" aria-label="支払の件数（押すと一覧を絞り込みます）"></div>
+    <div class="bl-filterbar" id="filterbar" hidden></div>
+    <table class="of-table" aria-label="請求書の一覧">
+      <thead><tr><th>支払先</th><th>請求番号 / PDF</th><th>請求日</th><th>対象月</th><th>締め</th><th>支払期日</th><th style="text-align:right">税込金額</th><th>仕訳状況</th><th>支払状態</th><th>MF出力状態</th><th>詳細</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="11" class="of-empty">読み込み中…</td></tr></tbody>
+    </table>
+    <div class="of-empty" id="empty" hidden></div>
+  </section>
+
+  <!-- ===== 案件別（これまでの請求・支払の状況。月次業務のデータ）===== -->
+  <section id="pane-cases" role="tabpanel" aria-labelledby="tab-cases" hidden>
+    <p class="of-sub" style="margin:0 0 12px;">売上請求・仕入請求（BP）・支払の状況を、案件ごとに確認できます。操作（作成・送付・受領・照合）は、月次業務の案件の画面で行います。</p>
+    <div id="cs-banner"></div>
+    <div class="of-chips" id="cs-sum" style="margin:0 0 12px;" aria-label="案件別の件数"></div>
+    <table class="of-table" aria-label="案件別の請求・支払の一覧">
+      <thead><tr><th>客先</th><th>要員</th><th>売上請求</th><th>仕入請求（BP）</th><th>支払</th><th></th></tr></thead>
+      <tbody id="cs-rows"><tr><td colspan="6" class="of-empty">読み込み中…</td></tr></tbody>
+    </table>
+    <div class="of-empty" id="cs-empty" hidden></div>
+  </section>
 </div>
+<div id="modal-root"></div>
+<div id="drawer-root"></div>
 
 <script src="../js/api-client.js?v=20261012mx1"></script>
 <script src="../js/device.js?v=20261012mx1"></script>
@@ -74,95 +197,1103 @@
   const O = window.OfficeLayout;
   const esc = O.esc;
 
-  const state = { month: null, data: null, filter: "open", seq: 0 };
+  const state = { tab: "pay", month: null, data: null, filter: null, seq: 0, openId: null, detail: null, vendors: null, cases: null, caseFilter: "open", caseSeq: 0 };
   const qs = new URLSearchParams(location.search);
   if (/^\d{4}-(0[1-9]|1[0-2])$/.test(qs.get("month") || "")) state.month = qs.get("month");
+  if (qs.get("tab") === "cases") state.tab = "cases";
 
-  // 月次業務（monthly.html）と同じデータ・同じ鍵（取ったぶんは、行き来してもすぐ出る）
-  const officeKey = (month) => `office:${month || ""}`;
-  const fetchOffice = (month) => () => API.api(`/api/office${month ? `?month=${encodeURIComponent(month)}` : ""}`);
-  API.warm(officeKey(state.month), fetchOffice(state.month), O.allows);
-
-  O.init({ active: "billing" }).then((ctx) => { if (ctx) { wire(); load(); } });
-
+  const jstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const jstMonth = () => jstToday().slice(0, 7);
   const ymAdd = (ym, n) => {
     const [y, m] = ym.split("-").map(Number);
     const d = new Date(Date.UTC(y, m - 1 + n, 1));
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   };
-  const jstMonth = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 7);
+  const yen = (n) => (n === null || n === undefined || n === "" ? "—" : `¥${Number(n).toLocaleString("ja-JP")}`);
+  const slash = (d) => (d ? String(d).replaceAll("-", "/") : "—");
+  const jpDay = (d) => { if (!d) return ""; const [, m, dd] = String(d).split("-"); return `${Number(m)}月${Number(dd)}日`; };
+  const METHOD = { transfer: "銀行振込", debit: "口座振替", card: "カード", cash: "現金", other: "その他" };
+  const KIND_LABEL = { bp: "BP", general: "" };
+
+  // 取りにいく先（支払管理は /api/office/invoices、案件別は これまでの /api/office）
+  let rev = 0;           // CSV の出力など、API.api を通らない更新のあとに上げる（古い一覧のキャッシュを使わない）
+  const invKey = (month) => `office-invoices:${month || ""}:${rev}`;
+  const fetchInv = (month) => () => API.api(`/api/office/invoices?month=${encodeURIComponent(month)}`);
+  const officeKey = (month) => `office:${month || ""}`;
+  const fetchOffice = (month) => () => API.api(`/api/office${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  if (state.tab === "cases") API.warm(officeKey(state.month), fetchOffice(state.month), O.allows);
+  else if (state.month) API.warm(invKey(state.month), fetchInv(state.month), O.allows);
+
+  O.init({ active: "billing" }).then((ctx) => { if (ctx) { state.me = ctx.me; wire(); if (!state.month) state.month = jstMonth(); showTab(state.tab, true); } });
+
   function setMonth(m) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m || "")) return;
     state.month = m;
-    history.replaceState(null, "", `${location.pathname}?month=${m}`);
-    load();
+    syncUrl();
+    closeDrawer(true);
+    loadActive();
   }
+  function syncUrl() {
+    const p = new URLSearchParams();
+    p.set("month", state.month);
+    if (state.tab === "cases") p.set("tab", "cases");
+    if (state.openId) p.set("id", state.openId);
+    history.replaceState(null, "", `${location.pathname}?${p}`);
+  }
+  function showTab(tab, first) {
+    state.tab = tab;
+    for (const b of document.querySelectorAll(".bl-tab")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+    el("pane-pay").hidden = tab !== "pay";
+    el("pane-cases").hidden = tab !== "cases";
+    el("sub").textContent = tab === "pay"
+      ? "請求書の登録から、仕訳・支払予定・支払済み・MFクラウド用CSVまでを、この画面で管理します。"
+      : "売上請求・仕入請求（BP）・支払の状況を、案件ごとに確認できます。";
+    if (!first) closeDrawer(true);
+    syncUrl();
+    loadActive();
+  }
+  function loadActive() { if (state.tab === "cases") loadCases(); else loadPay(); }
+
   function wire() {
     el("prev").onclick = () => setMonth(ymAdd(state.month || jstMonth(), -1));
     el("next").onclick = () => setMonth(ymAdd(state.month || jstMonth(), 1));
     el("thisMonth").onclick = () => setMonth(jstMonth());
     el("month").onchange = (e) => setMonth(e.target.value);
-    el("sum").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-filter]");
-      if (b) { state.filter = b.dataset.filter; render(); }
+    for (const b of document.querySelectorAll(".bl-tab")) b.onclick = () => showTab(b.dataset.tab);
+    el("cards").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-card]");
+      if (b) { state.filter = state.filter === b.dataset.card ? null : b.dataset.card; renderPay(); }
     });
+    el("filterbar").addEventListener("click", (e) => { if (e.target.closest("[data-clear]")) { state.filter = null; renderPay(); } });
+    el("actions").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b) return;
+      ({ register: openRegister, csv: () => openCsv(), vendors: openVendors, settings: openSettings })[b.dataset.act]?.();
+    });
+    el("rows").addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-id]");
+      if (tr) openDrawer(tr.dataset.id);
+    });
+    el("cs-sum").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-filter]");
+      if (b) { state.caseFilter = b.dataset.filter; renderCases(); }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (el("modal-root").firstElementChild) closeModal();
+      else if (state.openId) closeDrawer();
+    });
+    if (qs.get("id")) state.openId = qs.get("id");
   }
 
-  async function load() {
+  // ===========================================================================================
+  // 支払管理：一覧
+  // ===========================================================================================
+  async function loadPay() {
     const seq = ++state.seq;
     const month = state.month;
+    el("month").value = month;
     try {
-      await API.swr(officeKey(month), fetchOffice(month), (data) => {
-        if (seq !== state.seq) return;
-        state.data = data; state.month = data.month;
-        render();
+      await API.swr(invKey(month), fetchInv(month), (data) => {
+        if (seq !== state.seq || state.tab !== "pay") return;
+        state.data = data; state.month = data.month || month;
+        renderPay();
+        if (state.openId && !state.detail) openDrawer(state.openId, { keepUrl: true });
       });
     } catch (e) {
       if (seq !== state.seq) return;
       state.data = null;
-      el("rows").innerHTML = ""; el("sum").innerHTML = "";
-      el("banner").innerHTML = `<div class="of-banner err" role="alert"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+      el("rows").innerHTML = ""; el("cards").innerHTML = ""; el("actions").innerHTML = "";
+      el("banner").innerHTML = `<div class="of-banner err" role="alert"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
+  const reloadPay = () => loadPay();
+
+  const CARDS = [
+    { key: "unconfirmed", label: "未確認", fn: (r) => r.flags.unconfirmed },
+    { key: "scheduled", label: "支払予定", fn: (r) => r.flags.scheduled },
+    { key: "within7", label: "7日以内", fn: (r) => r.flags.within7 },
+    { key: "payToday", label: "今日支払", fn: (r) => r.flags.payToday },
+    { key: "overdue", label: "支払期限超過", fn: (r) => r.flags.overdue, warn: true },
+    { key: "paid", label: "支払済み", fn: (r) => r.flags.paid },
+    { key: "unjournaled", label: "未仕訳", fn: (r) => r.flags.unjournaled },
+    { key: "mfPending", label: "MF未出力", fn: (r) => r.flags.mfPending },
+  ];
+
+  const st = (tone, label, icon) => `<span class="bl-st ${tone}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${esc(label)}</span>`;
+  function payBadge(r) {
+    const p = r.payment;
+    if (r.flags.void) return st("na", "取り消し", "block");
+    if (r.flags.paid) return st("done", `支払済み / ${jpDay(p.paidOn)} / ${yen(p.paidAmount ?? p.amount)}`, "check_circle");
+    if (r.flags.overdue) return st("warn", `期限超過${p ? ` / 予定 ${jpDay(p.scheduledOn)}` : ""}`, "error");
+    if (p) return st("mid", `支払予定 / ${jpDay(p.scheduledOn)} / ${yen(p.amount)}`, "schedule");
+    return st("todo", "未払い", "payments");
+  }
+  const journalBadge = (r) => r.journalStatus === "confirmed" ? st("done", "仕訳済み", "check_circle")
+    : r.journalStatus === "draft" ? st("todo", "下書き", "edit_note") : st("todo", "未仕訳", "edit_note");
+  function mfBadge(r) {
+    const s = r.mf.state;
+    if (s === "na") return st("na", "—", "remove");
+    if (s === "exported") return st("done", "CSV出力済み", "download_done");
+    if (s === "partial") return st("todo", "一部CSV出力済み", "download");
+    return st("todo", "MF未出力", "download");
+  }
+
+  function renderPay() {
+    const d = state.data;
+    if (!d) return;
+    el("month").value = state.month;
+    const canRecord = Boolean(d.canRecord);
+    el("actions").innerHTML = `
+      ${canRecord ? `<button type="button" class="of-btn sec" data-act="settings"><span class="material-symbols-outlined" aria-hidden="true">tune</span>設定</button>
+        <button type="button" class="of-btn sec" data-act="vendors"><span class="material-symbols-outlined" aria-hidden="true">storefront</span>支払先マスタ</button>
+        <button type="button" class="of-btn sec" data-act="csv"><span class="material-symbols-outlined" aria-hidden="true">download</span>MFクラウドCSV</button>` : ""}
+      <button type="button" class="of-btn" data-act="register"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>請求書を登録</button>`;
+    el("banner").innerHTML = d.closed
+      ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">lock</span><div>この月は月次完了済みです。請求書の登録・仕訳・支払の変更はできません（直すときは、先に月次完了を取り消してください）。</div></div>` : "";
+    const rows = d.rows || [];
+    const sum = d.summary || {};
+    el("cards").innerHTML = CARDS.map((c) => `
+      <button type="button" class="bl-card${c.warn ? " warn" : ""}${state.filter === c.key ? " on" : ""}" data-card="${c.key}" aria-pressed="${state.filter === c.key}">
+        <span class="lb">${esc(c.label)}</span><span class="v">${Number(sum[c.key] ?? rows.filter(c.fn).length)}</span></button>`).join("");
+    const f = CARDS.find((c) => c.key === state.filter);
+    el("filterbar").hidden = !f;
+    el("filterbar").innerHTML = f ? `<span>「${esc(f.label)}」で絞り込み中（${rows.filter(f.fn).length}件）</span><button type="button" class="of-btn sec" data-clear>絞り込みを解除</button>` : "";
+    const list = f ? rows.filter(f.fn) : rows;
+    el("rows").innerHTML = list.map((r) => {
+      const tone = r.flags.overdue ? "r-overdue" : r.flags.paid ? "r-paid" : r.flags.within7 ? "r-soon" : "";
+      return `<tr data-id="${esc(r.id)}" class="${tone}">
+        <td data-label="支払先"><span class="bl-nm">${esc(r.vendorName || "（支払先未設定）")}${KIND_LABEL[r.kind] ? `<span class="bl-kind">${esc(KIND_LABEL[r.kind])}</span>` : ""}</span></td>
+        <td data-label="請求番号 / PDF">${esc(r.invoiceNo || "—")}<span class="bl-sub">${r.hasFile ? `<span class="bl-pdf"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>${esc(r.fileName || "ファイルあり")}</span>` : "ファイルなし"}</span></td>
+        <td data-label="請求日">${esc(slash(r.invoiceDate))}</td>
+        <td data-label="対象月">${esc(r.billingMonth)}</td>
+        <td data-label="締め">${esc(r.closing || "—")}</td>
+        <td data-label="支払期日">${r.dueOn ? `<span class="bl-due${r.flags.overdue ? " over" : ""}">${esc(slash(r.dueOn))}</span>` : `<span class="of-muted">支払期日未設定</span>`}${r.dueSource ? `<span class="bl-sub">${esc(({ invoice: "請求書に記載", manual: "経理が入力", master: "マスタから自動計算" })[r.dueSource] || "")}</span>` : ""}</td>
+        <td data-label="税込金額" class="bl-amt">${esc(yen(r.total))}</td>
+        <td data-label="仕訳状況">${journalBadge(r)}</td>
+        <td data-label="支払状態">${payBadge(r)}</td>
+        <td data-label="MF出力状態">${mfBadge(r)}</td>
+        <td data-label="詳細"><button type="button" class="of-btn sec" data-open="${esc(r.id)}" aria-label="${esc(r.vendorName || "請求書")}の詳細を開く">詳細</button></td>
+      </tr>`;
+    }).join("");
+    const empty = el("empty");
+    empty.hidden = list.length > 0;
+    empty.textContent = rows.length ? `「${f ? f.label : ""}」の請求書はありません。` : "この月の請求書はまだありません。右上の［請求書を登録］から追加できます。";
+    if (state.openId && state.detail) markOpenRow();
+  }
+  function markOpenRow() {
+    for (const tr of document.querySelectorAll("#rows tr.open")) tr.classList.remove("open");
+    document.querySelector(`#rows tr[data-id="${CSS.escape(state.openId)}"]`)?.classList.add("open");
+  }
+
+  // ===========================================================================================
+  // 共通：API・モーダル・フォーム部品
+  // ===========================================================================================
+  const post = (action, body = {}) => API.api("/api/office/invoices", { method: "POST", body: { action, month: state.month, ...body } });
+  const postVendor = (action, body = {}) => API.api("/api/office/vendors", { method: "POST", body: { action, ...body } });
+  const errText = (e) => {
+    const list = e?.body?.errors;
+    return (Array.isArray(list) && list.length ? list.join("\n") : (e.hint || e.detail || e.message || "失敗しました"));
+  };
+
+  let lastFocus = null;
+  function modal({ title, intro, body, buttons, wide = false }) {
+    lastFocus = document.activeElement;
+    el("modal-root").innerHTML = `
+      <div class="bl-mbg" data-mclose-bg>
+        <div class="bl-modal${wide ? " wide" : ""}" role="dialog" aria-modal="true" aria-labelledby="m-title" tabindex="-1">
+          <div class="bl-mh"><h2 id="m-title">${esc(title)}</h2>${intro ? `<p>${intro}</p>` : ""}</div>
+          <div class="bl-mb" id="m-body">${body}</div>
+          <div class="bl-mf" id="m-foot">${buttons.map((b, i) => `<button type="button" class="of-btn${b.kind ? ` ${b.kind}` : ""}" data-mbtn="${i}"${b.id ? ` id="${b.id}"` : ""}>${esc(b.label)}</button>`).join("")}</div>
+        </div>
+      </div>`;
+    const root = el("modal-root");
+    root.querySelector(".bl-mbg").addEventListener("mousedown", (e) => { if (e.target.hasAttribute("data-mclose-bg")) closeModal(); });
+    root.querySelector("#m-foot").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-mbtn]");
+      if (b) buttons[Number(b.dataset.mbtn)].onClick?.(b);
+    });
+    const first = root.querySelector("#m-body input:not([type=hidden]):not([type=file]), #m-body select, #m-body textarea") || root.querySelector(".bl-modal");
+    first?.focus?.();
+    return root;
+  }
+  function closeModal() {
+    el("modal-root").innerHTML = "";
+    if (lastFocus?.focus) { try { lastFocus.focus(); } catch { /* 消えた要素には戻さない */ } }
+  }
+  const setErr = (msg) => {
+    const host = el("m-body");
+    if (!host) return;
+    let box = host.querySelector(".bl-er");
+    if (!msg) { box?.remove(); return; }
+    if (!box) { box = document.createElement("div"); box.className = "bl-er"; box.setAttribute("role", "alert"); host.appendChild(box); }
+    box.textContent = msg;
+    box.scrollIntoView({ block: "nearest" });
+  };
+  const busy = (btn, on) => { if (btn) { btn.disabled = on; btn.dataset.label ??= btn.textContent; btn.textContent = on ? "処理中…" : btn.dataset.label; } };
+
+  // 入力欄：{ name, label, type, value, options:[[v,l]], list:'accounts', req, hint, full, ai }
+  function field(f) {
+    const id = `f-${f.name}`;
+    const val = f.value ?? "";
+    const common = `id="${id}" name="${esc(f.name)}"${f.req ? " required" : ""}${f.ph ? ` placeholder="${esc(f.ph)}"` : ""}${f.list ? ` list="dl-${esc(f.list)}"` : ""}${f.step ? ` step="${f.step}"` : ""}`;
+    let input;
+    if (f.type === "select") input = `<select ${common}>${f.options.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    else if (f.type === "textarea") input = `<textarea ${common}>${esc(val)}</textarea>`;
+    else input = `<input type="${f.type || "text"}" ${common} value="${esc(val)}"${f.inputmode ? ` inputmode="${f.inputmode}"` : ""}>`;
+    return `<label class="bl-f${f.full ? " full" : ""}${f.ai ? " ai" : ""}" for="${id}">${esc(f.label)}${f.req ? `<span class="req" aria-hidden="true">*</span>` : ""}${input}${f.hint ? `<small>${esc(f.hint)}</small>` : ""}</label>`;
+  }
+  const datalists = (c) => ["accounts", "sub_accounts", "departments", "tax_classes"].map((k) => `<datalist id="dl-${k}">${(c?.[k] || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist>`).join("");
+  const val = (name) => (document.getElementById(`f-${name}`)?.value ?? "").trim();
+  const intOrNull = (v) => (v === "" ? null : Number(String(v).replace(/[,\s円¥]/g, "")));
+  const methodOptions = [["", "（選択しない）"], ...Object.entries(METHOD)];
+  const classOptions = () => [["", "（指定なし）"], ...(state.data?.options?.invoiceClasses || ["適格", "80%控除", "70%控除", "50%控除", "30%控除", "控除なし"]).map((c) => [c, c])];
+
+  // ===========================================================================================
+  // 請求書を登録（アップロード → AI 読取（候補）→ 人が確認 → 登録）
+  // ===========================================================================================
+  function dueNote(p) {
+    if (!p) return "";
+    if (!p.date) return "支払先マスタに支払条件が無いため、自動計算できません（「支払期日未設定」として登録します）";
+    return `空欄なら、${p.sourceLabel}：${slash(p.date)}${p.termsLabel ? `（${p.termsLabel}）` : ""} で登録します`;
+  }
+  function invoiceFields(v = {}, o = {}) {
+    const vendors = (state.data?.vendors || []).map((x) => [x.id, x.name]);
+    const ai = (n) => Boolean(o.ai?.[n]);
+    return `
+      <div class="bl-grid">
+        <label class="bl-f full" for="f-vendorId">支払先<span class="req" aria-hidden="true">*</span>
+          <select id="f-vendorId" name="vendorId" required>${[["", "（選んでください）"], ...vendors].map(([id, n]) => `<option value="${esc(id)}"${id === (v.vendorId || "") ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>
+          ${o.vendorHint ? `<small>${esc(o.vendorHint)}</small>` : ""}</label>
+        ${field({ name: "invoiceNo", label: "請求書番号", value: v.invoiceNo, ai: ai("invoiceNo") })}
+        ${field({ name: "invoiceDate", label: "請求日", type: "date", value: v.invoiceDate, req: true, ai: ai("invoiceDate") })}
+        ${field({ name: "billingMonth", label: "対象月", type: "month", value: v.billingMonth || state.month, req: true })}
+        ${field({ name: "receivedOn", label: "受領日", type: "date", value: v.receivedOn || jstToday() })}
+        ${field({ name: "subtotal", label: "小計（税抜・円）", value: v.subtotal ?? "", inputmode: "numeric", ai: ai("subtotal") })}
+        ${field({ name: "tax", label: "消費税（円）", value: v.tax ?? "", inputmode: "numeric", ai: ai("tax") })}
+        ${field({ name: "total", label: "合計（税込・円）", value: v.total ?? "", inputmode: "numeric", req: true, ai: ai("total"), hint: "小計＋消費税＝合計 になるように入れてください（どれか1つを空欄にすると補います）" })}
+        ${field({ name: "closingDay", label: "締め日", type: "select", value: v.closingDay ?? "", options: [["", "（支払先マスタのとおり）"], ...Array.from({ length: 30 }, (_, i) => [i + 1, `${i + 1}日`]), [31, "月末"]] })}
+        ${field({ name: "paymentTerms", label: "支払条件", value: v.paymentTerms, ph: "例：月末締め翌月末払い" })}
+        ${field({ name: "paymentDueOn", label: "支払期日", type: "date", value: v.paymentDueOn, ai: ai("paymentDueOn"), hint: v.dueNote || "空欄なら、支払先マスタから自動計算します" })}
+        <div class="bl-f"><span>支払期日の出どころ</span>
+          <div class="bl-radio" role="radiogroup" aria-label="支払期日の出どころ">
+            <label><input type="radio" name="dueSource" value="invoice"${v.dueSource === "invoice" ? " checked" : ""}>請求書に記載</label>
+            <label><input type="radio" name="dueSource" value="manual"${v.dueSource !== "invoice" ? " checked" : ""}>経理が入力</label>
+          </div><small>請求書に書かれた期日が最優先です。空欄なら、支払先マスタから自動計算します</small></div>
+        ${field({ name: "paymentMethod", label: "支払方法", type: "select", value: v.paymentMethod || "", options: methodOptions })}
+        ${field({ name: "sourceAccount", label: "支払元口座", value: v.sourceAccount, list: "accounts", ph: "例：普通預金" })}
+        ${field({ name: "registrationNo", label: "適格請求書発行事業者の登録番号", value: v.registrationNo, ph: "T1234567890123", ai: ai("registrationNo") })}
+        ${field({ name: "description", label: "摘要（仕訳の摘要の初期値）", value: v.description, full: true, ai: ai("description") })}
+      </div>`;
+  }
+  function readInvoiceInputs() {
+    const radio = document.querySelector('input[name="dueSource"]:checked')?.value || "manual";
+    return {
+      vendorId: val("vendorId"), invoiceNo: val("invoiceNo"), invoiceDate: val("invoiceDate"), month: val("billingMonth"), billingMonth: val("billingMonth"),
+      receivedOn: val("receivedOn"), subtotal: val("subtotal"), tax: val("tax"), total: val("total"),
+      closingDay: val("closingDay") ? Number(val("closingDay")) : null, paymentTerms: val("paymentTerms"),
+      paymentDueOn: val("paymentDueOn") || null, dueSource: radio, paymentMethod: val("paymentMethod") || null,
+      sourceAccount: val("sourceAccount"), registrationNo: val("registrationNo"), description: val("description"),
+    };
+  }
+  async function refreshDueNote() {
+    const vendorId = val("vendorId"), month = val("billingMonth");
+    const hint = document.querySelector("#f-paymentDueOn")?.closest("label")?.querySelector("small");
+    if (!hint) return;
+    if (!vendorId || !month) { hint.textContent = ""; return; }
+    try {
+      const p = await post("preview_due", { vendorId, month });
+      hint.textContent = dueNote(p);
+    } catch { hint.textContent = ""; }
+  }
+
+  function openRegister() {
+    const s = { uploadId: null, fileName: "", aiUsed: false, aiOk: false, ai: {} };
+    modal({
+      title: "請求書を登録", wide: true,
+      intro: "請求書のファイル（PDF／JPEG／PNG・10MBまで）を選ぶと、AI が内容を読み取って<b>候補</b>を入れます。候補は黄色で示します。<b>内容を確認してから</b>登録してください（AI の結果は、自動では確定しません）。",
+      body: `<div class="bl-grid">
+          <label class="bl-f full" for="f-file">請求書ファイル<input type="file" id="f-file" accept="application/pdf,image/jpeg,image/png"><small id="fileState">ファイルは任意です（後からでも、PDF なしでも登録できます）</small></label>
+        </div>
+        <div id="aiBox" hidden></div>
+        <div id="regForm">${invoiceFields({}, {})}</div>
+        ${datalists(state.data?.candidates)}`,
+      buttons: [
+        { label: "キャンセル", kind: "sec", onClick: closeModal },
+        { label: "登録する", id: "regSubmit", onClick: (b) => submitRegister(b, s) },
+      ],
+    });
+    const root = el("modal-root");
+    root.querySelector("#f-file").addEventListener("change", (e) => pickFile(e.target.files?.[0], s));
+    root.querySelector("#regForm").addEventListener("change", (e) => { if (["vendorId", "billingMonth"].includes(e.target.name)) refreshDueNote(); });
+    root.querySelector("#regForm").addEventListener("input", (e) => { if (e.target.closest(".ai")) e.target.closest(".ai").classList.remove("ai"); });
+  }
+
+  async function pickFile(file, s) {
+    const state_ = el("fileState");
+    s.uploadId = null; s.aiUsed = false; s.aiOk = false;
+    el("aiBox").hidden = true; el("aiBox").innerHTML = "";
+    if (!file) { state_.textContent = "ファイルは任意です（後からでも、PDF なしでも登録できます）"; return; }
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { state_.textContent = "PDF・JPEG・PNG のファイルを選んでください"; el("f-file").value = ""; return; }
+    if (file.size > 10 * 1024 * 1024) { state_.textContent = "ファイルは 10MB までです"; el("f-file").value = ""; return; }
+    state_.textContent = "アップロード中…";
+    setErr("");
+    try {
+      const u = await post("upload", { mimeType: file.type, sizeBytes: file.size });
+      const put = await fetch(u.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: file });
+      if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+      s.uploadId = u.uploadId; s.fileName = file.name;
+      state_.textContent = `「${file.name}」を置きました`;
+      el("aiBox").hidden = false;
+      el("aiBox").innerHTML = `<div class="bl-note"><button type="button" class="of-btn sec" id="aiRead"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AIで読み取る</button>
+        <span style="margin-left:8px;">読み取った内容は<b>候補</b>です。入力欄に入れるだけで、登録はしません。</span></div>`;
+      el("aiRead").onclick = (e) => runAi(e.currentTarget, s);
+    } catch (e) {
+      state_.textContent = e.message || "アップロードに失敗しました";
     }
   }
 
-  // 状態の表示：文字＋アイコン＋色（色だけで判断させない）
-  const st = (tone, label, icon) => `<span class="bl-st ${tone}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${esc(label)}</span>`;
+  async function runAi(btn, s) {
+    busy(btn, true); setErr("");
+    try {
+      const r = await post("read", { uploadId: s.uploadId });
+      s.aiUsed = true; s.aiOk = false; s.ai = {};
+      const c = r.candidates || {};
+      const set = (name, v) => {
+        const input = document.getElementById(`f-${name}`);
+        if (!input || v === null || v === undefined) return;
+        input.value = String(v);
+        input.closest("label")?.classList.add("ai");
+        s.ai[name] = true;
+      };
+      set("invoiceNo", c.invoiceNo); set("invoiceDate", c.invoiceDate); set("subtotal", c.subtotal); set("tax", c.tax); set("total", c.total);
+      set("registrationNo", c.registrationNo); set("description", c.description);
+      if (c.dueDate) { set("paymentDueOn", c.dueDate); const r1 = document.querySelector('input[name="dueSource"][value="invoice"]'); if (r1) r1.checked = true; }
+      if (r.vendorMatch) { const sel = el("f-vendorId"); if (sel) { sel.value = r.vendorMatch.id; sel.closest("label")?.classList.add("ai"); } }
+      refreshDueNote();
+      const warns = (r.warnings || []).map((w) => `<li>${esc(w.text)}</li>`).join("");
+      el("aiBox").innerHTML = `<div class="bl-note warn" id="aiResult"><b>AIの読取候補を入れました（黄色の欄）。</b>請求書と見比べて、必要なら直してください。
+          ${r.vendorMatch ? `<div>支払先の候補：${esc(r.vendorMatch.name)}</div>` : c.payeeName ? `<div>請求元の読取：「${esc(c.payeeName)}」（支払先マスタに見つからなかったため、選んでください）</div>` : ""}
+          ${warns ? `<ul style="margin:6px 0 0;padding-left:18px;">${warns}</ul>` : ""}
+          <label class="bl-chk" style="margin-top:8px;"><input type="checkbox" id="aiConfirm">読取候補の内容を、請求書と見比べて確認しました</label></div>`;
+      el("aiConfirm").onchange = (e) => { s.aiOk = e.target.checked; };
+    } catch (e) {
+      el("aiBox").innerHTML = `<div class="bl-note warn"><b>AIで読み取れませんでした。</b>${esc(e.hint || e.message || "")}<br>手入力で登録できます。<br><button type="button" class="of-btn sec" id="aiRead" style="margin-top:6px;">もう一度読み取る</button></div>`;
+      el("aiRead").onclick = (ev) => runAi(ev.currentTarget, s);
+    }
+  }
+
+  async function submitRegister(btn, s, allowDuplicate = false) {
+    setErr("");
+    if (s.aiUsed && !s.aiOk) return setErr("AI の読取候補を確認してから、登録してください（「確認しました」にチェックを入れます）");
+    const b = readInvoiceInputs();
+    if (!b.vendorId) return setErr("支払先を選んでください。無ければ、先に［支払先マスタ］から登録してください");
+    busy(btn, true);
+    try {
+      const r = await post("register", { ...b, uploadId: s.uploadId, fileName: s.fileName, aiRead: s.aiUsed, allowDuplicate });
+      closeModal();
+      state.openId = r.invoiceId; state.detail = null;
+      await reloadPay();
+      openDrawer(r.invoiceId);
+    } catch (e) {
+      busy(btn, false);
+      if (e.code === "duplicate_file" && confirm(`${e.hint}\n\nそれでも登録しますか？`)) return submitRegister(btn, s, true);
+      setErr(errText(e));
+    }
+  }
+
+  // ===========================================================================================
+  // 支払先マスタ
+  // ===========================================================================================
+  async function openVendors() {
+    let data;
+    try { data = await API.api("/api/office/vendors"); } catch (e) { return alert(errText(e)); }
+    state.vendors = data;
+    renderVendorList();
+  }
+  function renderVendorList(msg) {
+    const d = state.vendors;
+    const rows = (d.vendors || []).map((v) => `<tr class="${v.active ? "" : "off"}">
+      <td><b>${esc(v.name)}</b>${v.shortName ? `<br><small>${esc(v.shortName)}</small>` : ""}</td>
+      <td>${esc(v.termsLabel || "—")}</td>
+      <td>${esc(v.stdDebitAccount || "—")} / ${esc(v.stdCreditAccount || "—")}<br><small>${esc(v.stdTaxClass || "")} ${esc(v.stdInvoiceClass || "")}</small></td>
+      <td>${v.active ? "有効" : "無効"}</td>
+      <td style="white-space:nowrap;"><button type="button" class="of-btn sec" data-vedit="${esc(v.id)}">編集</button>
+        <button type="button" class="of-btn sec" data-vtoggle="${esc(v.id)}" data-active="${v.active ? "0" : "1"}">${v.active ? "無効にする" : "有効にする"}</button></td></tr>`).join("");
+    const root = modal({
+      title: "支払先マスタ", wide: true,
+      intro: "毎月同じ情報を入れないための、支払先ごとの標準（締め日・支払条件・標準仕訳）です。無効にしても削除はされません（過去の請求書から参照されるため）。",
+      body: `${msg ? `<div class="bl-note">${esc(msg)}</div>` : ""}
+        <table class="bl-vt" aria-label="支払先の一覧"><thead><tr><th>支払先</th><th>締め・支払</th><th>標準仕訳（借方 / 貸方）</th><th>状態</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" class="of-empty">支払先がまだありません。［新しい支払先］から追加してください。</td></tr>`}</tbody></table>`,
+      buttons: [
+        { label: "閉じる", kind: "sec", onClick: closeModal },
+        { label: "新しい支払先", id: "vNew", onClick: () => renderVendorForm(null) },
+      ],
+    });
+    root.querySelector("#m-body").addEventListener("click", async (e) => {
+      const ed = e.target.closest("[data-vedit]");
+      if (ed) return renderVendorForm(d.vendors.find((v) => v.id === ed.dataset.vedit));
+      const tg = e.target.closest("[data-vtoggle]");
+      if (tg) {
+        try {
+          const r = await postVendor("set_active", { id: tg.dataset.vtoggle, active: tg.dataset.active === "1" });
+          state.vendors = r; await refreshVendorsInList(); renderVendorList("更新しました");
+        } catch (er) { setErr(errText(er)); }
+      }
+    });
+  }
+  async function refreshVendorsInList() { if (state.data) await loadPay(); }
+
+  function renderVendorForm(v) {
+    const cands = state.vendors?.candidates || state.data?.candidates;
+    const x = v || {};
+    const monthOpts = [["", "（未設定）"], ...[0, 1, 2, 3].map((n) => [n, ["当月", "翌月", "翌々月", "3か月後"][n]])];
+    const dayOpts = [["", "（未設定）"], ...Array.from({ length: 30 }, (_, i) => [i + 1, `${i + 1}日`]), [31, "月末"]];
+    modal({
+      title: v ? `支払先を編集：${v.name}` : "新しい支払先", wide: true,
+      intro: "勘定科目・補助科目・部門・税区分は、<b>MFクラウドの正式名称</b>と同じ文字で入れてください（候補から選べます。違う名称は、CSV を取り込むときにエラーになります）。",
+      body: `<div class="bl-grid">
+        ${field({ name: "v_name", label: "支払先名称", value: x.name, req: true, full: true })}
+        ${field({ name: "v_short", label: "略称", value: x.shortName })}
+        ${field({ name: "v_reg", label: "適格請求書発行事業者登録番号（任意）", value: x.registrationNo, ph: "T1234567890123" })}
+        ${field({ name: "v_close", label: "標準締め日", type: "select", value: x.closingDay ?? "", options: dayOpts })}
+        ${field({ name: "v_off", label: "標準の支払月（締め月から）", type: "select", value: x.paymentMonthOffset ?? "", options: monthOpts })}
+        ${field({ name: "v_pday", label: "標準の支払日", type: "select", value: x.paymentDay ?? "", options: dayOpts, hint: "例：月末締め／翌月／月末 → 月末締め翌月末払い" })}
+        ${field({ name: "v_method", label: "標準の支払方法", type: "select", value: x.stdPaymentMethod || "", options: methodOptions })}
+        ${field({ name: "v_debit", label: "標準 借方の勘定科目", value: x.stdDebitAccount, list: "accounts", ph: "例：外注費" })}
+        ${field({ name: "v_debitsub", label: "標準 借方の補助科目", value: x.stdDebitSubAccount, list: "sub_accounts" })}
+        ${field({ name: "v_dept", label: "標準 部門", value: x.stdDepartment, list: "departments" })}
+        ${field({ name: "v_tax", label: "標準 税区分", value: x.stdTaxClass, list: "tax_classes", ph: "例：課対仕入10%" })}
+        ${field({ name: "v_class", label: "標準 インボイス区分", type: "select", value: x.stdInvoiceClass || "", options: classOptions() })}
+        ${field({ name: "v_credit", label: "標準 貸方の勘定科目", value: x.stdCreditAccount, list: "accounts", ph: "例：未払金" })}
+        ${field({ name: "v_creditsub", label: "標準 貸方の補助科目", value: x.stdCreditSubAccount, list: "sub_accounts" })}
+        ${field({ name: "v_source", label: "標準の支払元口座", value: x.stdSourceAccount, list: "accounts", ph: "例：普通預金" })}
+        ${field({ name: "v_memo", label: "メモ", type: "textarea", value: x.memo, full: true })}
+        </div>${datalists(cands)}`,
+      buttons: [
+        { label: "戻る", kind: "sec", onClick: () => renderVendorList() },
+        { label: v ? "保存する" : "登録する", id: "vSave", onClick: (b) => saveVendor(b, v) },
+      ],
+    });
+  }
+  async function saveVendor(btn, v) {
+    setErr("");
+    const n = (k) => (document.getElementById(`f-${k}`)?.value ?? "").trim();
+    const num = (k) => (n(k) === "" ? null : Number(n(k)));
+    const vendor = {
+      name: n("v_name"), shortName: n("v_short"), registrationNo: n("v_reg"), closingDay: num("v_close"),
+      paymentMonthOffset: num("v_off"), paymentDay: num("v_pday"), stdPaymentMethod: n("v_method") || null,
+      stdDebitAccount: n("v_debit"), stdDebitSubAccount: n("v_debitsub"), stdDepartment: n("v_dept"), stdTaxClass: n("v_tax"),
+      stdInvoiceClass: n("v_class") || null, stdCreditAccount: n("v_credit"), stdCreditSubAccount: n("v_creditsub"),
+      stdSourceAccount: n("v_source"), memo: n("v_memo"),
+    };
+    busy(btn, true);
+    try {
+      const r = v ? await postVendor("update", { id: v.id, vendor }) : await postVendor("create", { vendor });
+      state.vendors = r;
+      await refreshVendorsInList();
+      renderVendorList(v ? "保存しました" : "登録しました");
+    } catch (e) { busy(btn, false); setErr(errText(e)); }
+  }
+
+  // ===========================================================================================
+  // 設定（休日調整・既定の科目・候補リスト）
+  // ===========================================================================================
+  async function openSettings() {
+    let d;
+    try { d = await API.api("/api/office/vendors"); } catch (e) { return alert(errText(e)); }
+    const s = d.settings || {}, sc = d.savedCandidates || {};
+    const lines = (k) => (sc[k] || []).join("\n");
+    modal({
+      title: "請求・支払の設定", wide: true,
+      intro: "支払期日が休日のときの調整、仕訳の既定値、入力の候補リストを決めます。候補は MFクラウドの正式名称にそろえてください（MF との自動同期はしません）。",
+      body: `<div class="bl-grid">
+        ${field({ name: "s_hol", label: "支払期日が休日のとき（支払先マスタからの自動計算に使います）", type: "select", value: s.holidayAdjust || "prev", full: true,
+          options: [["prev", "前営業日にする"], ["next", "翌営業日にする"], ["none", "調整しない"]], hint: "請求書に明記された期日は、休日でも調整しません" })}
+        ${field({ name: "s_credit", label: "既定の貸方科目（仕入計上）", value: s.defaultCreditAccount, list: "accounts" })}
+        ${field({ name: "s_source", label: "既定の支払元口座（支払）", value: s.defaultSourceAccount, list: "accounts" })}
+        ${field({ name: "s_method", label: "既定の支払方法", type: "select", value: s.defaultPaymentMethod || "transfer", options: methodOptions })}
+        ${field({ name: "s_fee", label: "振込手数料の勘定科目", value: s.feeAccount, list: "accounts" })}
+        ${field({ name: "s_feetax", label: "振込手数料の税区分", value: s.feeTaxClass, list: "tax_classes" })}
+        ${field({ name: "c_accounts", label: "勘定科目の候補（1行に1つ）", type: "textarea", value: lines("accounts"), hint: "既定の候補に足されます" })}
+        ${field({ name: "c_sub", label: "補助科目の候補（1行に1つ）", type: "textarea", value: lines("sub_accounts") })}
+        ${field({ name: "c_dept", label: "部門の候補（1行に1つ）", type: "textarea", value: lines("departments") })}
+        ${field({ name: "c_tax", label: "税区分の候補（1行に1つ）", type: "textarea", value: lines("tax_classes") })}
+        </div>${datalists(d.candidates)}`,
+      buttons: [
+        { label: "キャンセル", kind: "sec", onClick: closeModal },
+        { label: "保存する", id: "sSave", onClick: async (b) => {
+          setErr("");
+          const n = (k) => (document.getElementById(`f-${k}`)?.value ?? "").trim();
+          const lst = (k) => n(k).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+          busy(b, true);
+          try {
+            await postVendor("save_settings", { settings: {
+              holidayAdjust: n("s_hol"), defaultCreditAccount: n("s_credit"), defaultSourceAccount: n("s_source"), defaultPaymentMethod: n("s_method") || null,
+              feeAccount: n("s_fee"), feeTaxClass: n("s_feetax"),
+              candidates: { accounts: lst("c_accounts"), sub_accounts: lst("c_sub"), departments: lst("c_dept"), tax_classes: lst("c_tax") },
+            } });
+            closeModal(); await reloadPay();
+          } catch (e) { busy(b, false); setErr(errText(e)); }
+        } },
+      ],
+    });
+  }
+
+  // ===========================================================================================
+  // MFクラウドCSV
+  // ===========================================================================================
+  function openCsv(opts = {}) {
+    const month = opts.month || state.month;
+    const kind0 = opts.kind || "both";
+    modal({
+      title: "MFクラウド用CSV",
+      intro: "MFクラウド会計の「仕訳帳」インポート用の CSV（27列・UTF-8 BOM付き）を作ります。<b>CSVを出しただけでは、MFに登録されません。</b>MFクラウドの［仕訳帳］→［インポート］で取り込んでください。",
+      body: `<div class="bl-grid">
+          ${field({ name: "x_month", label: "対象月（請求書の対象月）", type: "month", value: month })}
+          <div class="bl-f"><span>出力する範囲</span><div class="bl-radio" role="radiogroup" aria-label="出力する範囲">
+            <label><input type="radio" name="x_mode" value="unexported" checked>未出力のみ</label>
+            <label><input type="radio" name="x_mode" value="all">全件（出力済みも含む）</label></div></div>
+          <div class="bl-f full"><span>種別</span><div class="bl-radio" role="radiogroup" aria-label="種別">
+            <label><input type="radio" name="x_kind" value="purchase"${kind0 === "purchase" ? " checked" : ""}>仕入計上</label>
+            <label><input type="radio" name="x_kind" value="payment"${kind0 === "payment" ? " checked" : ""}>支払（支払済みだけ）</label>
+            <label><input type="radio" name="x_kind" value="both"${kind0 === "both" ? " checked" : ""}>両方</label></div></div>
+        </div>
+        <div class="bl-note" id="csvPreview" aria-live="polite">対象を確認しています…</div>
+        <div class="bl-note">はじめて使うときは、<a href="#" id="sampleLink">インポート確認用のサンプルCSV</a>（ダミーデータ）で、MFクラウドに取り込めるかを先に試せます。</div>`,
+      buttons: [
+        { label: "閉じる", kind: "sec", onClick: closeModal },
+        { label: "ダウンロード", id: "csvGo", onClick: (b) => downloadCsv(b) },
+      ],
+    });
+    const root = el("modal-root");
+    root.querySelector("#m-body").addEventListener("change", previewCsv);
+    root.querySelector("#sampleLink").onclick = (e) => { e.preventDefault(); downloadSample(); };
+    previewCsv();
+  }
+  const csvArgs = () => ({
+    month: val("x_month"), mode: document.querySelector('input[name="x_mode"]:checked')?.value || "unexported",
+    kind: document.querySelector('input[name="x_kind"]:checked')?.value || "both",
+  });
+  let csvSeq = 0;
+  async function previewCsv() {
+    const a = csvArgs(); const seq = ++csvSeq;
+    const box = el("csvPreview");
+    if (!box) return;
+    try {
+      const r = await API.api(`/api/office/mf-csv?${new URLSearchParams(a)}`);
+      if (seq !== csvSeq || !el("csvPreview")) return;
+      const parts = [];
+      if (a.kind !== "payment") parts.push(`仕入計上：出力できる ${r.purchase.targets}件（仕訳が未確定で出せない ${r.purchase.notReady}件・出力済み ${r.purchase.alreadyExported}件）`);
+      if (a.kind !== "purchase") parts.push(`支払：出力できる ${r.payment.targets}件（支払予定のまま ${r.payment.notReady}件・出力済み ${r.payment.alreadyExported}件）`);
+      const blocked = (r.blocked || []).map((b) => `<li>${esc(b.label)}（${b.kind === "payment" ? "支払" : "仕入計上"}）：${esc(b.reason)}</li>`).join("");
+      box.innerHTML = `${parts.map(esc).join("<br>")}${blocked ? `<div class="bl-er" style="margin-top:8px;">出力できないものがあります。直してから出力してください：<ul style="margin:4px 0 0;padding-left:18px;">${blocked}</ul></div>` : ""}`;
+      const go = el("csvGo"); if (go) go.disabled = !r.canExport;
+      if (!r.canExport && !blocked) box.innerHTML += `<div style="margin-top:6px;"><b>出力できる対象がありません。</b></div>`;
+    } catch (e) { if (seq === csvSeq && el("csvPreview")) box.textContent = errText(e); }
+  }
+  async function fetchBlob(url, opts = {}) {
+    const token = await API.getToken();
+    const r = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts.body ? { "Content-Type": "application/json" } : {}) } });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      const err = new Error(data.hint || data.message || data.error || `エラー (${r.status})`);
+      err.code = data.error; err.hint = data.hint; err.body = data; throw err;
+    }
+    const cd = r.headers.get("Content-Disposition") || "";
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/) || cd.match(/filename="([^"]+)"/);
+    return { blob: await r.blob(), filename: m ? decodeURIComponent(m[1]) : "mf-journal.csv", batch: r.headers.get("X-Mf-Batch") };
+  }
+  function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  async function downloadCsv(btn) {
+    setErr("");
+    busy(btn, true);
+    try {
+      const { blob, filename, batch } = await fetchBlob("/api/office/mf-csv", { method: "POST", body: JSON.stringify(csvArgs()) });
+      saveBlob(blob, filename);
+      el("m-body").innerHTML = `<div class="bl-note"><b>CSVを出力しました。</b>（${esc(filename)}／バッチ ${esc(batch || "")}）<br>これは「CSVを出した」記録です。<b>MFクラウドへ登録された</b>わけではありません。MFクラウドの［仕訳帳］→［インポート］で取り込んでください。</div>`;
+      el("m-foot").innerHTML = `<button type="button" class="of-btn" id="csvDone">閉じる</button>`;
+      el("csvDone").onclick = closeModal;
+      rev++; await loadPay();
+      if (state.openId) openDrawer(state.openId, { keepUrl: true });
+    } catch (e) {
+      busy(btn, false);
+      const blocked = e.body?.blocked;
+      setErr(blocked?.length ? `${e.hint}\n${blocked.map((b) => `・${b.label}：${b.reason}`).join("\n")}` : errText(e));
+    }
+  }
+  async function downloadSample() {
+    try { const { blob, filename } = await fetchBlob("/api/office/mf-csv?sample=1"); saveBlob(blob, filename); }
+    catch (e) { setErr(errText(e)); }
+  }
+
+  // ===========================================================================================
+  // ドロワー（請求書PDF → 基本情報 → 支払条件 → 仕訳 → 支払 → MFクラウド → 履歴）
+  // ===========================================================================================
+  async function openDrawer(id, { keepUrl = false } = {}) {
+    state.openId = id;
+    if (!keepUrl) syncUrl();
+    try {
+      state.detail = await API.api(`/api/office/invoices?id=${encodeURIComponent(id)}`);
+    } catch (e) {
+      state.openId = null; state.detail = null; syncUrl();
+      el("banner").innerHTML = `<div class="of-banner err" role="alert"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>${esc(errText(e))}</div></div>`;
+      return;
+    }
+    renderDrawer();
+  }
+  function closeDrawer(silent) {
+    el("drawer-root").innerHTML = "";
+    state.openId = null; state.detail = null;
+    for (const tr of document.querySelectorAll("#rows tr.open")) tr.classList.remove("open");
+    if (!silent) syncUrl();
+  }
+  
+  function nextCard(d) {
+    const inv = d.invoice, n = inv.next, rec = d.canRecord;
+    const isBp = inv.kind === "bp";
+    const BTN = {
+      confirm: isBp ? null : { label: "内容を確認する", act: "confirm", rec: false },
+      journal: { label: "仕訳を設定する", act: "journal", rec: true },
+      schedule: { label: "支払予定を登録", act: "schedule", rec: true },
+      pay: { label: "支払を確認（支払済みにする）", act: "pay", rec: true },
+      export: { label: "MF CSVへ出力", act: "export", rec: true },
+    }[n.key];
+    const hint = n.key === "confirm" && isBp ? `BP請求書は、<a href="/office/monthly.html?month=${encodeURIComponent(inv.billingMonth)}">月次業務</a>で契約条件と照合して承認します`
+      : BTN && BTN.rec && !rec ? "この操作は、経営者・経理が行います（責任者は見るだけです）" : "";
+    return `<div class="bl-next${n.done ? " ok" : ""}" id="nextCard" aria-label="次にやること"><div class="lb">次にやること</div>
+      <div class="ttl">${esc(n.label)}</div>
+      ${BTN && (!BTN.rec || rec) ? `<div class="go"><button type="button" class="of-btn" data-next="${BTN.act}">${esc(BTN.label)}</button></div>` : ""}
+      ${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
+  }
+
+  function renderDrawer() {
+    const d = state.detail;
+    if (!d) return;
+    const inv = d.invoice;
+    const p = (d.payments || []).filter((x) => x.status !== "void").pop() || null;
+    const editable = inv.kind === "general" && !inv.flags.void && !inv.flags.paid;
+    const previewHtml = d.file?.url
+      ? (/^image\//.test(d.file.mime || "") ? `<img src="${esc(d.file.url)}" alt="請求書のプレビュー">` : `<iframe src="${esc(d.file.url)}" title="請求書のプレビュー"></iframe>`)
+      : `<p class="of-muted" style="padding:14px;">請求書のファイルはありません。</p>`;
+    el("drawer-root").innerHTML = `
+      <div class="bl-dr">
+      <div class="of-drawer-bg" data-dclose></div>
+      <aside class="of-drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title" tabindex="-1">
+        <div class="bl-dh">
+          <button type="button" class="bl-x" data-dclose aria-label="閉じる"><span class="material-symbols-outlined">close</span></button>
+          <h2 id="dr-title">${esc(inv.vendorName || "（支払先未設定）")}${KIND_LABEL[inv.kind] ? `<span class="bl-kind">${esc(KIND_LABEL[inv.kind])}</span>` : ""}</h2>
+          <div class="of-sub" style="margin:0;">${esc(inv.invoiceNo || "請求書番号なし")} ／ ${esc(inv.billingMonth)} ／ <b>${esc(yen(inv.total))}</b></div>
+        </div>
+        <div class="bl-db">
+          ${nextCard(d)}
+          <section class="bl-sec" id="dr-file"><h3><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>請求書PDF</h3>
+            <div class="bl-prev">${previewHtml}</div>
+            ${d.file?.url ? `<p style="margin-top:6px;"><a href="${esc(d.file.url)}" target="_blank" rel="noopener">別のタブで開く</a>（${esc(d.file.name || "")}）</p>` : ""}</section>
+          <section class="bl-sec" id="dr-basic"><h3><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>基本情報</h3>
+            <dl class="bl-dl">
+              <div><dt>支払先</dt><dd>${esc(inv.vendorName || "—")}</dd></div>
+              <div><dt>請求書番号</dt><dd>${esc(inv.invoiceNo || "—")}</dd></div>
+              <div><dt>請求日</dt><dd>${esc(slash(inv.invoiceDate))}</dd></div>
+              <div><dt>対象月 / 受領日</dt><dd>${esc(inv.billingMonth)} / ${esc(slash(inv.receivedOn))}</dd></div>
+              <div><dt>小計（税抜）</dt><dd>${esc(yen(inv.subtotal))}</dd></div>
+              <div><dt>消費税</dt><dd>${esc(yen(inv.tax))}</dd></div>
+              <div><dt>合計（税込）</dt><dd>${esc(yen(inv.total))}</dd></div>
+              <div><dt>登録番号</dt><dd>${esc(inv.registrationNo || "—")}</dd></div>
+              <div><dt>摘要</dt><dd>${esc(inv.description || "—")}</dd></div>
+              <div><dt>状態</dt><dd>${inv.flags.void ? "取り消し" : inv.flags.unconfirmed ? "未確認" : "確認済み"}${inv.approvedAt ? `（${esc(O.fmt(inv.approvedAt))}）` : ""}</dd></div>
+            </dl>
+            ${editable ? `<button type="button" class="of-btn sec" data-edit><span class="material-symbols-outlined" aria-hidden="true">edit</span>基本情報を編集</button>` : ""}
+            ${editable && d.canRecord && inv.status === "approved" && !p ? `<button type="button" class="of-btn sec" data-unconfirm>確認を取り消す</button>` : ""}
+            ${inv.kind === "general" && !inv.flags.void && d.canRecord && !inv.flags.paid ? `<button type="button" class="of-btn sec" data-void>請求書を取り消す</button>` : ""}
+            ${inv.flags.unconfirmed && inv.kind === "general" ? `<button type="button" class="of-btn" data-next="confirm" style="margin-left:6px;"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>内容を確認済みにする</button>` : ""}</section>
+          <section class="bl-sec" id="dr-terms"><h3><span class="material-symbols-outlined" aria-hidden="true">event</span>支払条件</h3>
+            <dl class="bl-dl">
+              <div><dt>締め</dt><dd>${esc(inv.closing || "—")}</dd></div>
+              <div><dt>支払条件</dt><dd>${esc(inv.paymentTerms || "—")}</dd></div>
+              <div><dt>支払期日</dt><dd>${inv.dueOn ? esc(slash(inv.dueOn)) : "支払期日未設定"}</dd></div>
+              <div><dt>期日の出どころ</dt><dd>${esc(inv.dueSourceLabel || "—")}</dd></div>
+              <div><dt>支払方法</dt><dd>${esc(METHOD[inv.paymentMethod] || "—")}</dd></div>
+              <div><dt>支払元口座</dt><dd>${esc(inv.sourceAccount || "—")}</dd></div>
+            </dl></section>
+          ${journalSection(d)}
+          ${paymentSection(d, p)}
+          ${mfSection(d)}
+          <section class="bl-sec" id="dr-history"><h3><span class="material-symbols-outlined" aria-hidden="true">history</span>履歴</h3>
+            ${(d.history || []).length ? `<div class="bl-tl">${d.history.map((h) => `<div class="row"><div class="d">${esc(O.fmt(h.at))}${h.by ? ` ／ ${esc(h.by)}` : ""}</div><div class="l">${esc(histLabel(h.kind))}</div>${h.reason ? `<div class="rs">理由：${esc(h.reason)}</div>` : ""}</div>`).join("")}</div>` : `<p class="of-muted">履歴はまだありません。</p>`}</section>
+        </div>
+      </aside>
+      </div>`;
+    wireDrawer(d);
+    markOpenRow();
+    el("drawer-root").querySelector(".of-drawer")?.focus();
+  }
+  const HIST = {
+    "invoice.register": "請求書を登録", "invoice.update": "基本情報を編集", "invoice.confirm": "内容を確認済みにした", "invoice.unconfirm": "確認を取り消した",
+    "invoice.void": "請求書を取り消した", "journal.save": "仕訳を下書き保存", "journal.confirm": "仕訳を確定", "payment.schedule": "支払予定を登録",
+    "payment.paid": "支払済みにした", "payment.cancel": "支払を取り消した", "invoice.mf_export": "MFクラウド用CSVに出力", "vendor_invoice.register": "BP請求書を登録",
+    "vendor_invoice.approve": "BP請求書を承認", "vendor_invoice.void": "BP請求書を取り消した",
+  };
+  const histLabel = (k) => HIST[k] || k;
+
+  function mfSection(d) {
+    const inv = d.invoice, ex = d.exports || [];
+    return `<section class="bl-sec" id="dr-mf"><h3><span class="material-symbols-outlined" aria-hidden="true">cloud_upload</span>MFクラウド</h3>
+      <p>仕入計上：${inv.mf.purchaseExportedAt ? `CSV出力済み（最終 ${esc(O.fmt(inv.mf.purchaseExportedAt))}）` : inv.journalStatus === "confirmed" ? "MF未出力" : "仕訳の確定後に出力できます"}</p>
+      <p>支払：${inv.mf.paymentExportedAt ? `CSV出力済み（最終 ${esc(O.fmt(inv.mf.paymentExportedAt))}）` : inv.flags.paid ? "MF未出力" : "支払済みにすると出力できます"}</p>
+      ${inv.mfFirstExportedAt ? `<p class="of-muted">初回の出力：${esc(O.fmt(inv.mfFirstExportedAt))}</p>` : ""}
+      <p class="of-muted">「CSV出力済み」は、CSVファイルを出した記録です。MFクラウドへ登録済みという意味ではありません。</p>
+      ${ex.length ? `<div class="bl-tl">${ex.map((x) => `<div class="row"><div class="d">${esc(O.fmt(x.exportedAt))}${x.exportedByName ? ` ／ ${esc(x.exportedByName)}` : ""}</div><div class="l">${x.kind === "payment" ? "支払" : "仕入計上"}（取引No ${esc(x.txnNo)}）</div><div class="rs">バッチ ${esc(x.batchCode || "")}</div></div>`).join("")}</div>` : ""}
+      ${d.canRecord && (inv.journalStatus === "confirmed" || inv.flags.paid) ? `<button type="button" class="of-btn sec" data-next="export"><span class="material-symbols-outlined" aria-hidden="true">download</span>MFクラウドCSVを出力</button>` : ""}</section>`;
+  }
+
+  function paymentSection(d, p) {
+    const inv = d.invoice;
+    const all = d.payments || [];
+    const history = all.filter((x) => x.status === "void");
+    const cur = p ? `<dl class="bl-dl">
+        <div><dt>状態</dt><dd>${p.status === "paid" ? "支払済み" : "支払予定"}</dd></div>
+        <div><dt>支払予定日</dt><dd>${esc(slash(p.scheduledOn))}</dd></div>
+        <div><dt>支払金額</dt><dd>${esc(yen(p.amount))}</dd></div>
+        <div><dt>支払方法</dt><dd>${esc(METHOD[p.method] || "—")}</dd></div>
+        <div><dt>支払元口座</dt><dd>${esc(p.sourceAccount || "—")}</dd></div>
+        ${p.status === "paid" ? `<div><dt>実支払日</dt><dd>${esc(slash(p.paidOn))}</dd></div><div><dt>実支払額</dt><dd>${esc(yen(p.paidAmount))}</dd></div><div><dt>振込手数料</dt><dd>${esc(yen(p.feeAmount ?? 0))}</dd></div>` : ""}
+        <div class="full" style="grid-column:1/-1;"><dt>メモ</dt><dd>${esc(p.memo || "—")}</dd></div></dl>` : `<p>${inv.flags.void ? "取り消した請求書です。" : "支払予定は、まだありません。"}</p>`;
+    const rec = d.canRecord && !inv.flags.void;
+    const btns = !rec ? "" : !p
+      ? (inv.status === "approved" ? `<button type="button" class="of-btn" data-next="schedule">支払予定にする</button>` : `<p class="of-muted">請求書の内容を確認すると、支払予定にできます。</p>`)
+      : p.status === "scheduled"
+        ? `<button type="button" class="of-btn" data-next="pay">支払済みにする</button> <button type="button" class="of-btn sec" data-cancelpay>支払予定を取り消す</button>`
+        : `<button type="button" class="of-btn sec" data-cancelpay>支払を取り消す</button>`;
+    return `<section class="bl-sec" id="dr-pay"><h3><span class="material-symbols-outlined" aria-hidden="true">payments</span>支払</h3>
+      ${cur}${btns}
+      ${history.length ? `<div style="margin-top:10px;"><div class="of-muted" style="margin-bottom:4px;">取り消した支払（消さずに残しています）</div><div class="bl-tl">${history.map((h) => `<div class="row"><div class="d">予定 ${esc(slash(h.scheduledOn))} ／ ${esc(yen(h.amount))}${h.paidOn ? ` ／ 支払済み ${esc(slash(h.paidOn))}` : ""}</div><div class="l">取り消し ${h.cancelledAt ? esc(O.fmt(h.cancelledAt)) : ""}</div><div class="rs">理由：${esc(h.cancelReason || "（理由の記録なし）")}</div></div>`).join("")}</div></div>` : ""}</section>`;
+  }
+
+  // ---- 仕訳 ----------------------------------------------------------------------------------
+  const jstate = { lines: [], summary: "", memo: "", tags: "", journalDate: "", locked: false, source: "" };
+  function journalInit(d) {
+    const j = d.journal;
+    const have = j.lines.length > 0;
+    const src = have ? j : d.suggestion;
+    jstate.lines = (src.lines || []).map((l) => ({ ...l, amount: l.amount ?? "", taxAmount: l.taxAmount ?? "" }));
+    jstate.summary = (have ? j.summary : (d.suggestion.summary || d.invoice.description)) || "";
+    jstate.memo = (have ? j.memo : "") || "";
+    jstate.tags = ((have ? j.tags : d.suggestion.tags) || []).join(",");
+    jstate.journalDate = d.invoice.journalDate || "";
+    jstate.locked = j.status === "confirmed";
+    jstate.source = have ? "saved" : d.suggestion.source;
+  }
+  function journalSection(d) {
+    journalInit(d);
+    const inv = d.invoice;
+    const can = d.canRecord && inv.status === "approved" && !inv.flags.void;
+    let body;
+    if (inv.flags.void) body = `<p class="of-muted">取り消した請求書です。</p>`;
+    else if (inv.status !== "approved") body = `<p class="of-muted">先に請求書の内容を確認してください。確認後に、仕訳を設定できます。</p>`;
+    else if (!d.canRecord) body = readonlyJournal(d) || `<p class="of-muted">仕訳は、経営者・経理が設定します。</p>`;
+    else body = `<div id="jbox"></div>`;
+    return `<section class="bl-sec" id="dr-journal"><h3><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>仕訳<span class="bl-st ${inv.journalStatus === "confirmed" ? "done" : "todo"}" style="margin-left:auto;">${esc(inv.journalLabel)}</span></h3>${body}</section>`;
+  }
+  function readonlyJournal(d) {
+    const j = d.journal;
+    if (!j.lines.length) return "";
+    return `<table class="bl-vt"><tbody>${j.lines.map((l) => `<tr><td>${l.side === "debit" ? "借方" : "貸方"}</td><td>${esc(l.account)}</td><td style="text-align:right;">${esc(yen(l.amount))}</td></tr>`).join("")}</tbody></table>`;
+  }
+  const sumSide = (side) => jstate.lines.filter((l) => l.side === side).reduce((s, l) => s + (Number(String(l.amount).replace(/[,\s円¥]/g, "")) || 0), 0);
+  function taxHint(amount, taxClass) {
+    const m = /(\d+)\s*%/.exec(taxClass || "");
+    const a = Number(String(amount).replace(/[,\s円¥]/g, ""));
+    if (!m || !Number.isFinite(a) || a <= 0 || /対象外|不課税|非課税/.test(taxClass)) return "";
+    return String(Math.floor((a * Number(m[1])) / (100 + Number(m[1]))));
+  }
+  function renderJournalEditor() {
+    const box = el("jbox");
+    if (!box) return;
+    const d = state.detail;
+    const L = jstate.lines;
+    const lock = jstate.locked;
+    const dis = lock ? " disabled" : "";
+    const lineHtml = (l, i) => `
+      <div class="bl-line" data-i="${i}">
+        <div class="side"><select data-k="side" aria-label="${i + 1}行目 借方・貸方"${dis}><option value="debit"${l.side === "debit" ? " selected" : ""}>借方</option><option value="credit"${l.side === "credit" ? " selected" : ""}>貸方</option></select>
+          ${lock ? "" : `<button type="button" class="of-btn sec rm" data-rm="${i}" aria-label="${i + 1}行目を削除"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>`}</div>
+        <label class="bl-f">勘定科目<input data-k="account" list="dl-accounts" value="${esc(l.account || "")}"${dis}></label>
+        <label class="bl-f">補助科目<input data-k="subAccount" list="dl-sub_accounts" value="${esc(l.subAccount || "")}"${dis}></label>
+        <label class="bl-f">部門<input data-k="department" list="dl-departments" value="${esc(l.department || "")}"${dis}></label>
+        <label class="bl-f">取引先<input data-k="partner" value="${esc(l.partner || "")}"${dis}></label>
+        <label class="bl-f">税区分<input data-k="taxClass" list="dl-tax_classes" value="${esc(l.taxClass || "")}"${dis}></label>
+        <label class="bl-f">インボイス区分<select data-k="invoiceClass"${dis}>${classOptions().map(([v, t]) => `<option value="${esc(v)}"${(l.invoiceClass || "") === v ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></label>
+        <label class="bl-f">金額（円）<input data-k="amount" inputmode="numeric" value="${esc(l.amount)}"${dis}></label>
+        <label class="bl-f">税額（円）<input data-k="taxAmount" inputmode="numeric" value="${esc(l.taxAmount)}"${dis}></label>
+      </div>`;
+    const note = jstate.source === "last" ? "支払先の「前回使った仕訳」を初期値にしています。内容を確認してください。"
+      : jstate.source === "vendor" ? "支払先マスタの標準仕訳を初期値にしています。内容を確認してください。"
+        : jstate.source === "blank" ? "支払先マスタに標準仕訳がありません。勘定科目を入れてください。" : "";
+    box.innerHTML = `
+      ${note && !lock ? `<div class="bl-note" style="margin-bottom:8px;">${esc(note)}</div>` : ""}
+      <div style="display:grid;gap:8px;">${L.map(lineHtml).join("")}</div>
+      ${lock ? "" : `<div style="margin:8px 0;"><button type="button" class="of-btn sec" data-addline="debit"><span class="material-symbols-outlined" aria-hidden="true">add</span>借方の行を追加</button>
+        <button type="button" class="of-btn sec" data-addline="credit"><span class="material-symbols-outlined" aria-hidden="true">add</span>貸方の行を追加</button></div>`}
+      <div class="bl-grid" style="margin-top:8px;">
+        <label class="bl-f">取引日（空欄＝請求日）<input type="date" data-j="journalDate" value="${esc(jstate.journalDate)}"${dis}></label>
+        <label class="bl-f">タグ（カンマ区切り）<input data-j="tags" value="${esc(jstate.tags)}"${dis}></label>
+        <label class="bl-f full">摘要<input data-j="summary" value="${esc(jstate.summary)}"${dis}></label>
+        <label class="bl-f full">仕訳メモ<input data-j="memo" value="${esc(jstate.memo)}"${dis}></label>
+      </div>
+      <div class="bl-bal" id="jbal" role="status" aria-live="polite"></div>
+      <div class="bl-er" id="jerr" hidden role="alert"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+        ${lock ? `<button type="button" class="of-btn sec" data-jedit>仕訳を直す</button>`
+          : `<button type="button" class="of-btn sec" data-jsave="0">下書き保存</button><button type="button" class="of-btn" data-jsave="1" id="jconfirm">仕訳を確定</button>`}
+      </div>`;
+    updateBalance();
+  }
+  function updateBalance() {
+    const bal = el("jbal"); if (!bal) return;
+    const dsum = sumSide("debit"), csum = sumSide("credit"), diff = dsum - csum;
+    const total = state.detail?.invoice?.total;
+    bal.className = `bl-bal ${diff === 0 && jstate.lines.length ? "good" : "bad"}`;
+    bal.innerHTML = `<span>借方 ${esc(yen(dsum))}</span><span>貸方 ${esc(yen(csum))}</span><span class="diff">差額 ${esc(diff.toLocaleString("ja-JP"))}円</span>
+      ${total != null && diff === 0 && dsum !== total ? `<span style="font-weight:400;">（請求書の税込金額 ${esc(yen(total))} と違います）</span>` : ""}`;
+    const c = el("jconfirm"); if (c) c.disabled = diff !== 0 || !jstate.lines.length;
+  }
+  function wireJournal() {
+    const box = el("jbox"); if (!box) return;
+    renderJournalEditor();
+    box.addEventListener("input", (e) => {
+      const t = e.target; const line = t.closest("[data-i]");
+      if (line && t.dataset.k) {
+        const l = jstate.lines[Number(line.dataset.i)];
+        l[t.dataset.k] = t.value;
+        if ((t.dataset.k === "taxClass" || t.dataset.k === "amount") && !String(l.taxAmount).trim() && l.side === "debit") {
+          const h = taxHint(l.amount, l.taxClass);
+          if (h) { l.taxAmount = h; line.querySelector('[data-k="taxAmount"]').value = h; }
+        }
+        updateBalance();
+      } else if (t.dataset.j) jstate[t.dataset.j] = t.value;
+    });
+    box.addEventListener("change", (e) => { const t = e.target; if (t.dataset.k === "side") { jstate.lines[Number(t.closest("[data-i]").dataset.i)].side = t.value; updateBalance(); } });
+    box.addEventListener("click", async (e) => {
+      const add = e.target.closest("[data-addline]");
+      if (add) { jstate.lines.push({ side: add.dataset.addline, account: "", amount: "", taxAmount: "", partner: state.detail.vendor?.name || "" }); renderJournalEditor(); return; }
+      const rm = e.target.closest("[data-rm]");
+      if (rm) { jstate.lines.splice(Number(rm.dataset.rm), 1); renderJournalEditor(); return; }
+      if (e.target.closest("[data-jedit]")) { jstate.locked = false; renderJournalEditor(); return; }
+      const sv = e.target.closest("[data-jsave]");
+      if (sv) saveJournal(sv, sv.dataset.jsave === "1");
+    });
+  }
+  async function saveJournal(btn, confirmIt, acknowledgeExported = false) {
+    const err = el("jerr"); err.hidden = true;
+    busy(btn, true);
+    const lines = jstate.lines.map((l) => ({ ...l, amount: intOrNull(l.amount), taxAmount: intOrNull(l.taxAmount) }));
+    try {
+      const r = await post("save_journal", {
+        id: state.openId, lines, summary: jstate.summary, memo: jstate.memo, tags: jstate.tags, journalDate: jstate.journalDate || null,
+        confirm: confirmIt, acknowledgeExported,
+      });
+      state.detail = r;
+      loadPay();
+      renderDrawer();
+      el("dr-journal")?.scrollIntoView({ block: "start" });
+    } catch (e) {
+      busy(btn, false);
+      if (e.code === "exported_change" && confirm(`${e.hint}\n\n続けますか？`)) return saveJournal(btn, confirmIt, true);
+      err.hidden = false; err.textContent = errText(e);
+    }
+  }
+
+  // ---- ドロワーの操作 -------------------------------------------------------------------------
+  function wireDrawer(d) {
+    const root = el("drawer-root").querySelector(".bl-dr");
+    root.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-dclose]")) return closeDrawer();
+      const nx = e.target.closest("[data-next]");
+      if (nx) return doNext(nx.dataset.next, d, nx);
+      if (e.target.closest("[data-edit]")) return openEdit(d);
+      if (e.target.closest("[data-unconfirm]")) return askReason("確認を取り消す", "確認を取り消す理由", "unconfirm", d);
+      if (e.target.closest("[data-void]")) return askReason("請求書を取り消す", "取り消す理由（誤登録・二重登録など）", "void", d);
+      if (e.target.closest("[data-cancelpay]")) return askReason("支払を取り消す", "取り消す理由（金額・日付の誤りなど）", "cancel_payment", d);
+    });
+    wireJournal();
+  }
+  async function doNext(key, d, btn) {
+    const inv = d.invoice;
+    if (key === "confirm") {
+      busy(btn, true);
+      try { state.detail = await post("confirm", { id: inv.id }); loadPay(); renderDrawer(); }
+      catch (e) { busy(btn, false); alert(errText(e)); }
+    } else if (key === "journal") {
+      el("dr-journal")?.scrollIntoView({ block: "start", behavior: "smooth" });
+      el("jbox")?.querySelector("input")?.focus();
+    } else if (key === "schedule") openSchedule(d);
+    else if (key === "pay") openPay(d);
+    else if (key === "export") openCsv({ month: inv.billingMonth, kind: inv.flags.paid ? "both" : "purchase" });
+  }
+
+  function accountOptions() { return datalists(state.detail?.candidates || state.data?.candidates); }
+  function openSchedule(d) {
+    const inv = d.invoice;
+    modal({
+      title: "支払予定にする",
+      intro: `${esc(inv.vendorName || "")}／${esc(inv.invoiceNo || "請求書番号なし")}／請求額 ${esc(yen(inv.total))}`,
+      body: `<div class="bl-grid">
+        ${field({ name: "p_on", label: "支払予定日", type: "date", value: inv.dueOn || "", req: true, hint: inv.dueOn ? `支払期日（${slash(inv.dueOn)}）が入っています` : "支払期日が未設定です。予定日を入れてください" })}
+        ${field({ name: "p_amount", label: "支払金額（円）", value: inv.total ?? "", inputmode: "numeric", req: true })}
+        ${field({ name: "p_method", label: "支払方法", type: "select", value: inv.paymentMethod || d.settings?.defaultPaymentMethod || "transfer", options: methodOptions })}
+        ${field({ name: "p_source", label: "支払元口座", value: inv.sourceAccount || d.settings?.defaultSourceAccount || "", list: "accounts" })}
+        ${field({ name: "p_memo", label: "メモ", value: "", full: true })}</div>${accountOptions()}`,
+      buttons: [
+        { label: "キャンセル", kind: "sec", onClick: closeModal },
+        { label: "支払予定にする", id: "pSave", onClick: (b) => submitPay(b, "schedule", { id: inv.id, scheduledOn: val("p_on"), amount: val("p_amount"), method: val("p_method") || null, sourceAccount: val("p_source"), memo: val("p_memo") }) },
+      ],
+    });
+  }
+  function openPay(d) {
+    const inv = d.invoice;
+    const p = (d.payments || []).filter((x) => x.status !== "void").pop();
+    modal({
+      title: "支払済みにする",
+      intro: `${esc(inv.vendorName || "")}／支払予定 ${esc(slash(p?.scheduledOn))}／${esc(yen(p?.amount))}`,
+      body: `<div class="bl-grid">
+        ${field({ name: "p_on", label: "実支払日", type: "date", value: jstToday() > (p?.scheduledOn || "") && p?.scheduledOn ? p.scheduledOn : jstToday(), req: true, hint: "今日以前の日付にしてください" })}
+        ${field({ name: "p_amount", label: "実支払額（円）", value: p?.amount ?? "", inputmode: "numeric", req: true })}
+        ${field({ name: "p_fee", label: "振込手数料（任意・こちら負担の分）", value: "", inputmode: "numeric" })}
+        ${field({ name: "p_source", label: "支払元口座", value: p?.sourceAccount || inv.sourceAccount || d.settings?.defaultSourceAccount || "", list: "accounts" })}
+        ${field({ name: "p_memo", label: "メモ", value: p?.memo || "", full: true })}</div>${accountOptions()}`,
+      buttons: [
+        { label: "キャンセル", kind: "sec", onClick: closeModal },
+        { label: "支払済みにする", id: "pSave", onClick: (b) => submitPay(b, "pay", { id: inv.id, paidOn: val("p_on"), paidAmount: val("p_amount"), feeAmount: val("p_fee"), sourceAccount: val("p_source"), memo: val("p_memo") }) },
+      ],
+    });
+  }
+  async function submitPay(btn, action, body) {
+    setErr(""); busy(btn, true);
+    try { state.detail = await post(action, body); closeModal(); loadPay(); renderDrawer(); }
+    catch (e) { busy(btn, false); setErr(errText(e)); }
+  }
+  function askReason(title, label, action, d, ack = false) {
+    modal({
+      title, intro: `${esc(d.invoice.vendorName || "")}／${esc(d.invoice.invoiceNo || "請求書番号なし")}。取り消しても記録は消えません（履歴に理由が残ります）。`,
+      body: `<div class="bl-grid">${field({ name: "r_reason", label, type: "textarea", req: true, full: true })}</div>`,
+      buttons: [
+        { label: "やめる", kind: "sec", onClick: closeModal },
+        { label: title, kind: "danger", id: "rSave", onClick: async (b) => {
+          setErr("");
+          const reason = val("r_reason");
+          if (!reason) return setErr("理由を入れてください");
+          busy(b, true);
+          const run = async (acknowledgeExported) => {
+            try {
+              const r = await post(action, { id: d.invoice.id, reason, acknowledgeExported });
+              closeModal(); 
+              if (action === "void") { closeDrawer(); await loadPay(); } else { state.detail = r; loadPay(); renderDrawer(); }
+            } catch (e) {
+              busy(b, false);
+              if (e.code === "exported_change" && confirm(`${e.hint}\n\n続けますか？`)) { busy(b, true); return run(true); }
+              setErr(errText(e));
+            }
+          };
+          await run(ack);
+        } },
+      ],
+    });
+  }
+  function openEdit(d) {
+    const inv = d.invoice;
+    const v = {
+      vendorId: inv.vendorId, invoiceNo: inv.invoiceNo, invoiceDate: inv.invoiceDate, billingMonth: inv.billingMonth, receivedOn: inv.receivedOn,
+      subtotal: inv.subtotal, tax: inv.tax, total: inv.total, closingDay: "", paymentTerms: inv.paymentTerms, paymentDueOn: inv.dueOn,
+      dueSource: inv.dueSource === "invoice" ? "invoice" : "manual", paymentMethod: inv.paymentMethod, sourceAccount: inv.sourceAccount,
+      registrationNo: inv.registrationNo, description: inv.description,
+    };
+    modal({
+      title: "基本情報を編集", wide: true,
+      intro: "金額を直すと、確定済みの仕訳は下書きに戻ります。支払予定があるときは、先に取り消してください。支払期日を空欄にして［マスタから再計算］にチェックすると、支払先マスタから計算し直します。",
+      body: `<div id="editForm">${invoiceFields(v, {})}</div>
+        <label class="bl-chk"><input type="checkbox" id="recompute">支払期日を、支払先マスタから計算し直す</label>${datalists(d.candidates)}`,
+      buttons: [
+        { label: "キャンセル", kind: "sec", onClick: closeModal },
+        { label: "保存する", id: "eSave", onClick: async (b) => {
+          setErr(""); busy(b, true);
+          const f = readInvoiceInputs();
+          const fields = {
+            vendorId: f.vendorId, invoiceNo: f.invoiceNo || null, invoiceDate: f.invoiceDate, billingMonth: f.billingMonth, receivedOn: f.receivedOn,
+            subtotal: f.subtotal, tax: f.tax, total: f.total, paymentTerms: f.paymentTerms || null, paymentMethod: f.paymentMethod,
+            sourceAccount: f.sourceAccount || null, registrationNo: f.registrationNo || null, description: f.description || null, dueSource: f.dueSource,
+          };
+          if (f.closingDay) fields.closingDay = f.closingDay;
+          if (el("recompute").checked) fields.recomputeDue = true; else fields.paymentDueOn = f.paymentDueOn;
+          try {
+            const r = await post("update", { id: inv.id, fields });
+            state.detail = r; closeModal(); loadPay(); renderDrawer();
+          } catch (e) { busy(b, false); setErr(errText(e)); }
+        } },
+      ],
+    });
+  }
+
+  // ===========================================================================================
+  // 案件別（これまでの請求・支払の状況）
+  // ===========================================================================================
+  async function loadCases() {
+    const seq = ++state.caseSeq;
+    const month = state.month;
+    el("month").value = month;
+    try {
+      await API.swr(officeKey(month), fetchOffice(month), (data) => {
+        if (seq !== state.caseSeq || state.tab !== "cases") return;
+        state.cases = data; state.month = data.month;
+        renderCases();
+      });
+    } catch (e) {
+      if (seq !== state.caseSeq) return;
+      state.cases = null;
+      el("cs-rows").innerHTML = ""; el("cs-sum").innerHTML = "";
+      el("cs-banner").innerHTML = `<div class="of-banner err" role="alert"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+    }
+  }
   const sales = (c) => c.state === "sent" ? st("done", c.label, "check_circle") : c.state === "created" ? st("mid", c.label, "description") : st("todo", c.label, "note_add");
-  const vendor = (c) => c.state === "not_applicable" ? st("na", c.label, "remove") : c.state === "received" ? st("done", c.label, "check_circle") : st("todo", c.label, "inbox");
-  const pay = (c) => c.state === "paid" ? st("done", c.label, "check_circle")
+  const vendorSt = (c) => c.state === "not_applicable" ? st("na", c.label, "remove") : c.state === "received" ? st("done", c.label, "check_circle") : st("todo", c.label, "inbox");
+  const payst = (c) => c.state === "paid" ? st("done", c.label, "check_circle")
     : ["not_applicable", "unmanaged"].includes(c.state) ? st("na", c.label, "remove")
       : c.state === "mismatch" ? st("warn", c.label, "error")
         : c.state === "scheduled" ? st("mid", c.label, "schedule") : st("todo", c.label, "edit_note");
-
-  const FILTERS = [
-    { key: "open",   label: "未完了",           fn: O.billingOpen },
-    { key: "sales",  label: "売上請求 未送付",  fn: (r) => r.cols.salesInvoice.state !== "sent" },
-    { key: "vendor", label: "BP請求書 未受領",  fn: (r) => r.cols.vendorInvoice.state === "not_received" },
-    { key: "pay",    label: "支払 未完了",      fn: (r) => O.PAY_OPEN.includes(r.cols.payment.state) },
+  const CASE_FILTERS = [
+    { key: "open", label: "未完了", fn: O.billingOpen },
+    { key: "sales", label: "売上請求 未送付", fn: (r) => r.cols.salesInvoice.state !== "sent" },
+    { key: "vendor", label: "BP請求書 未受領", fn: (r) => r.cols.vendorInvoice.state === "not_received" },
+    { key: "pay", label: "支払 未完了", fn: (r) => O.PAY_OPEN.includes(r.cols.payment.state) },
   ];
-
-  function render() {
-    const d = state.data;
+  function renderCases() {
+    const d = state.cases;
+    if (!d) return;
     el("month").value = state.month;
-    el("banner").innerHTML = d.notReady || d.accessNotReady
+    el("cs-banner").innerHTML = d.notReady || d.accessNotReady
       ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>${esc(d.message || "")}</div></div>` : "";
     const rows = d.rows || [];
-    el("sum").innerHTML = FILTERS.map((f) => `
-      <button type="button" class="of-chip bl-card${state.filter === f.key ? " on" : ""}" data-filter="${f.key}" aria-pressed="${state.filter === f.key}">
-        <span class="lb">${esc(f.label)}</span><b class="v">${rows.filter(f.fn).length}</b>
-      </button>`).join("");
-    const f = FILTERS.find((x) => x.key === state.filter) || FILTERS[0];
+    el("cs-sum").innerHTML = CASE_FILTERS.map((f) => `
+      <button type="button" class="of-chip${state.caseFilter === f.key ? " on" : ""}" data-filter="${f.key}" aria-pressed="${state.caseFilter === f.key}">
+        <span class="lb">${esc(f.label)}</span><b class="v">${rows.filter(f.fn).length}</b></button>`).join("");
+    const f = CASE_FILTERS.find((x) => x.key === state.caseFilter) || CASE_FILTERS[0];
     const list = rows.filter(f.fn);
-    el("rows").innerHTML = list.map((r) => `
+    el("cs-rows").innerHTML = list.map((r) => `
       <tr>
         <td data-label="客先"><span class="bl-nm">${esc(r.siteCompany)}</span>${r.primeCompany ? `<span class="bl-sub">上位：${esc(r.primeCompany)}</span>` : ""}</td>
         <td data-label="要員"><span class="bl-nm">${esc(r.employeeName)}</span>${r.usesVendor ? `<span class="bl-sub">${esc(r.partnerName || "BP会社 未登録")}</span>` : ""}</td>
         <td data-label="売上請求">${sales(r.cols.salesInvoice)}</td>
-        <td data-label="仕入請求（BP）">${vendor(r.cols.vendorInvoice)}</td>
-        <td data-label="支払">${pay(r.cols.payment)}</td>
+        <td data-label="仕入請求（BP）">${vendorSt(r.cols.vendorInvoice)}</td>
+        <td data-label="支払">${payst(r.cols.payment)}</td>
         <td><a class="of-btn sec" href="/office/monthly.html?month=${encodeURIComponent(state.month)}&id=${encodeURIComponent(r.siteContractId)}">案件を開く</a></td>
       </tr>`).join("");
-    const empty = el("empty");
+    const empty = el("cs-empty");
     empty.hidden = list.length > 0;
     empty.textContent = rows.length ? `「${f.label}」の案件はありません。` : "この月に動いている現場契約はありません。";
   }
