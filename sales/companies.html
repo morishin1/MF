@@ -1332,6 +1332,8 @@
   async function openAttack(id, force) {
     el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
     history.replaceState({}, "", listUrl({ attack: id }));
+    // AI営業（/sales/ai.html）の分析・承認済みの営業文。無くても（db/131 の前・未分析）アタックはこれまでどおり
+    const aiP = API.api(`/api/sales/ai/analyze?companyId=${encodeURIComponent(id)}`).catch(() => null);
     try {
       // 先に取りにいっていれば、それを使う（失敗していたら取り直す）
       const pre = attackPrefetch?.id === id ? attackPrefetch.p : null;
@@ -1351,6 +1353,10 @@
         ackRecent: false, recentOther: null };
       // 企業の提案サービスと同じサービスのテンプレートを先に選ぶ
       atk.template = atk.templates.find((x) => x.service && x.service === d.company.service) || atk.templates[0];
+      const ai = await aiP;
+      atk.ai = ai?.ready ? ai : null;
+      atk.aiDraft = (atk.ai?.drafts || []).find((x) => x.status === "approved") || null;
+      atk.useAi = false; atk.aiFinal = null;
 
       if (d.company.ngReason) return renderAttackBlocked(`この企業は営業禁止です（${d.company.ngLabel}）。アタックできません。`);
       if (d.company.hidden) return renderAttackBlocked(`この企業は非表示です（${d.company.hiddenLabel || "理由未設定"}）。再表示してからアタックしてください。`);
@@ -1456,6 +1462,8 @@
   }
 
   function composeBody() {
+    // AI文面（承認済み）は、サーバが作った最終文面（差し込み・署名つき）をそのまま使う（ここで書き換えない）
+    if (atk.useAi) return atk.aiFinal?.body || "";
     const c = atk.company;
     const vars = { company: c.name, sender: myName, url: atk.url, service: atk.template.service || c.service || "" };
     return String(atk.template.body || "").replace(/\{\{\s*(company|sender|url|service)\s*\}\}/g, (_, k) => vars[k] ?? "");
@@ -1512,22 +1520,24 @@
             `<option value="${esc(x.key)}" ${x.key === atk.channel ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><label>テンプレート</label>
-              <select id="at-template" onchange="changeTemplate()">${atk.templates.map((t) =>
-                `<option value="${esc(t.id)}" ${t.id === atk.template.id ? "selected" : ""}>${esc(t.name)}${t.service ? `（${esc(t.service)}）` : ""}</option>`).join("")}</select></div>
+              <select id="at-template" onchange="changeTemplate()">${atk.aiDraft ? `<option value="__ai__" ${atk.useAi ? "selected" : ""}>AI文面（承認済み）${atk.aiDraft.service ? `（${esc(atk.aiDraft.service)}）` : ""}</option>` : ""}${atk.templates.map((t) =>
+                `<option value="${esc(t.id)}" ${!atk.useAi && t.id === atk.template.id ? "selected" : ""}>${esc(t.name)}${t.service ? `（${esc(t.service)}）` : ""}</option>`).join("")}</select></div>
             <div><label>キャンペーン</label>
               <select id="at-campaign"><option value="">（なし）</option>${atk.campaigns.map((m) =>
                 `<option value="${esc(m.id)}" ${m.id === c.campaignId ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></div>
           </div>
           <label style="margin-top:10px;">提案サービス</label>
-          <input id="at-service" type="text" list="dl-at-service" value="${esc(atk.template.service || c.service || "")}">
+          <input id="at-service" type="text" list="dl-at-service" value="${esc(atk.useAi ? atk.aiDraft.service || "" : atk.template.service || c.service || "")}" ${atk.useAi ? "readonly" : ""}>
           <datalist id="dl-at-service">${masters.services.map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
-          ${atk.template.subject ? `<label style="margin-top:10px;">件名</label>
-            <input id="at-subject" type="text" value="${esc(atk.template.subject)}">
+          ${aiCheckHtml()}
+          ${(atk.useAi ? atk.aiFinal?.subject : atk.template.subject) ? `<label style="margin-top:10px;">件名</label>
+            <input id="at-subject" type="text" value="${esc(atk.useAi ? atk.aiFinal.subject : atk.template.subject)}" ${atk.useAi ? "readonly" : ""}>
             <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('at-subject', this)">件名をコピー</button>` : ""}
-          <label style="margin-top:10px;">本文</label>
-          <textarea id="at-body">${esc(body)}</textarea>
+          <label style="margin-top:10px;">本文${atk.useAi ? "（承認済みの AI 文面。送る人・専用URL・署名を差し込んだ最終文面です。直すときは AI営業の画面で直して承認をやり直します）" : ""}</label>
+          <textarea id="at-body" ${atk.useAi ? "readonly" : ""}>${esc(body)}</textarea>
+          ${atk.useAi ? `<label class="sl-chip" style="margin-top:6px;"><input type="checkbox" id="at-ai-confirm" onchange="renderAiLock()">宛名・差出人・専用URL・署名を含む最終文面を確認した</label>` : ""}
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
-            <button class="btn btn-primary btn-sm" onclick="copyText('at-body', this)">
+            <button class="btn btn-primary btn-sm" id="at-copy" onclick="copyText('at-body', this)">
               <span class="material-symbols-outlined icon-inline">content_copy</span>③ 営業文をコピー</button>
             <a href="/sales/templates.html" class="sl-muted" target="_blank" rel="noopener">テンプレートを編集</a>
           </div>
@@ -1540,7 +1550,7 @@
             <p class="sl-muted" style="margin:0 0 8px;">④ ${atk.channel === "form" ? "フォームに貼り付け" : `${esc(channelName(atk.channel))}で貼り付け`} → 内容を確認して送信 → 送り終えたら押してください。</p>
             <div id="at-msg" class="err-text" style="margin:0 0 8px;"></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-primary" onclick="openSent()">
+              <button class="btn btn-primary" id="at-sent" onclick="openSent()">
                 <span class="material-symbols-outlined icon-inline">task_alt</span>送信完了</button>
               <button class="btn btn-secondary" onclick="openFailed()">
                 <span class="material-symbols-outlined icon-inline">cancel_schedule_send</span>送信できなかった</button>
@@ -1549,6 +1559,50 @@
           </div>
         </div>
       </div></div>`;
+    renderAiLock();
+  }
+
+  // ---- AI営業（db/131）：送信可否の確認と、承認済みの AI 文面 --------------------------------
+  // フォームで送るとき、AI の分析が「要確認」のままなら、担当者が受付目的・禁止の記載を確かめるまで
+  // コピー・送信完了を押せない（サーバも 409 ai_send_check_required で止める）。
+  // AI文面を選んだときは、最終文面を確認したチェックが入るまで押せない
+  const aiNeedsCheck = () => atk?.ai?.analysis?.sendCheck === "manual_review" && atk.channel === "form";
+  function aiCheckHtml() {
+    const a = atk.ai?.analysis;
+    if (!a || !a.sendCheck) return "";
+    if (a.sendCheck === "ok_manual") return `<div class="sl-muted" style="margin-top:8px;" id="at-ai-check">AI営業の確認：フォームの受付目的を確認済みです</div>`;
+    if (!aiNeedsCheck()) return "";
+    return `<div class="sl-warn sl-caution" style="display:block;margin-top:10px;" id="at-ai-check">
+      <div style="font-weight:700;margin-bottom:4px;">AI営業の確認：要確認</div>
+      <ul style="margin:0 0 6px;padding-left:18px;">${(a.sendCheckReasons || []).map((r) => `<li>${esc(r.label)}</li>`).join("")}</ul>
+      <button class="btn btn-primary btn-sm" onclick="confirmAiCheck(this)">問い合わせフォームを開いて確認した</button>
+      <div id="at-ai-msg" class="err-text"></div></div>`;
+  }
+  function renderAiLock() {
+    const locked = aiNeedsCheck() || (atk?.useAi && !el("at-ai-confirm")?.checked);
+    for (const id of ["at-copy", "at-sent"]) if (el(id)) el(id).disabled = Boolean(locked);
+  }
+  async function confirmAiCheck(btn) {
+    if (!confirm("問い合わせフォームの受付目的（一般の問い合わせ・取引の相談）と、営業・自動送信の禁止の記載が無いことを確認しましたか？")) return;
+    try {
+      const r = await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/ai/analyze", { method: "PATCH",
+        body: { id: atk.ai.analysis.id, action: "send_check", decision: "ok_manual" } }));
+      atk.ai.analysis = r.analysis;
+      const keep = { body: el("at-body").value };
+      renderAttack();
+      if (!atk.useAi && el("at-body")) el("at-body").value = keep.body;
+    } catch (e) { el("at-ai-msg").textContent = errText(e, "保存できませんでした"); }
+  }
+  async function useAiDraft() {
+    try {
+      const r = await API.api(`/api/sales/ai/drafts?id=${encodeURIComponent(atk.aiDraft.id)}&approachId=${encodeURIComponent(atk.approach.id)}`);
+      atk.aiFinal = r.final;
+      atk.useAi = true;
+    } catch (e) {
+      atk.useAi = false;
+      alert(errText(e, "AI文面を使えません"));
+    }
+    renderAttack();
   }
 
   // チャネルを変える。書きかけの本文・件名・サービスは残す（専用URLは同じものを使い続ける）
@@ -1563,6 +1617,8 @@
 
   async function changeTemplate() {
     const id = el("at-template").value;
+    if (id === "__ai__") return useAiDraft();
+    atk.useAi = false; atk.aiFinal = null;
     atk.template = atk.templates.find((t) => t.id === id) || atk.templates[0];
     // リンク先はテンプレートごとに違うので、専用URLの行き先も直す（URLそのものは変わらない）
     await prepareAttack();
@@ -1572,6 +1628,8 @@
   function openSent() {
     const msg = el("at-msg"); msg.textContent = "";
     if (!el("at-body").value.trim()) { msg.textContent = "営業文が空です"; return; }
+    if (aiNeedsCheck()) { msg.textContent = "AI営業の確認（問い合わせフォームの受付目的）が済んでいません"; return; }
+    if (atk.useAi && !el("at-ai-confirm")?.checked) { msg.textContent = "最終文面を確認したら、チェックを入れてください"; return; }
     openActionModal(`
       <h2>送信完了として記録します</h2>
       <p class="sl-sub" style="margin:0 0 12px;">実際に送ったチャネルを選んでください。営業履歴に「〇〇から送信」として残ります。</p>
@@ -1598,8 +1656,9 @@
         id: atk.approach.id, channel, sendFrom: sendFrom || undefined,
         body: el("at-body").value.trim(), subject: el("at-subject")?.value.trim() || undefined,
         service: el("at-service").value.trim() || null,
-        templateId: atk.template.id || null, campaignId: el("at-campaign").value || null,
+        templateId: atk.useAi ? null : atk.template.id || null, campaignId: el("at-campaign").value || null,
         force: atk.force || undefined, acknowledgeRecent: atk.ackRecent || undefined,
+        aiDraftId: atk.useAi ? atk.aiDraft.id : undefined,
       }));
       rememberFrom(channel, sendFrom);
       closeAction();

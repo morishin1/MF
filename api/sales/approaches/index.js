@@ -6,7 +6,7 @@
 // POST  /api/sales/approaches { companyId, channel?, templateId?, campaignId?, destinationUrl?, force?, acknowledgeRecent? }
 //         … アタックを始める。専用URL（/r/<token>）を発行して返す。
 //           営業文に専用URLを入れてから送るので、送る前に発行しておく必要がある
-// PATCH /api/sales/approaches { id, action: "sent", channel, sendFrom?, body, subject?, service?, templateId?, campaignId?, force?, acknowledgeRecent? }
+// PATCH /api/sales/approaches { id, action: "sent", channel, sendFrom?, body, subject?, service?, templateId?, campaignId?, force?, acknowledgeRecent?, aiDraftId? }
 //         … 「送信完了」。ここではじめて履歴として残る（sent_at が立つ）。送信チャネルは必須
 // PATCH /api/sales/approaches { id, action: "failed", reason, note?, channel? }
 //         … 「送信できなかった」。理由は必須（「その他」はメモも必須）。failed_at が立つ（db/096）
@@ -21,6 +21,15 @@
 //     画面で直近の接触を見せ、「別チャネルで送る」を選んだとき（acknowledgeRecent）だけ通す。
 //     Instagram で反応が無いので X へ切り替える運用はできるが、同じ会社へ気づかずに多重送信はさせない
 //
+// ■ AI営業（db/131）の判定も、サーバで止める（api/sales/ai/*・lib/sales-ai/store.js aiSendGuard）
+//   ・AI の分析で「送信不可」の会社 … 専用URLの発行・送信完了とも 409 ai_send_blocked（承認者が確認済みに直すまで）
+//   ・「要確認」のまま（担当者がフォームの受付目的を確かめていない）… フォームでの送信完了は 409 ai_send_check_required
+//   ・AI の表がまだ無い（db/131 を当てる前）ときは、これまでどおり（止めない）
+// PATCH sent に aiDraftId を付けたとき（AI文面（承認済み）で送った）
+//   ・承認済みで、承認したときから書き換わっていない営業文だけ（409 ai_draft_not_approved / ai_draft_changed）
+//   ・本文・件名は画面から来たものを使わず、サーバが最終文面（差し込み＋共通署名）を作り直して残す
+//   ・アタックに ai_draft_id を付け、営業文を「送信に使用済み」にする。接触の数え方（sent_at）は変えない
+//
 // ■ 送信できなかった
 //   sent_at は立てない。だからアタック数・直近30日の警告には数えず、別チャネルで送り直せる。
 //   会社のステータスは動かさず、NEXT を「別チャネルで再アタックを検討」にする（未対応に戻さない）。
@@ -28,14 +37,15 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell, canForceAttack } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { resolvePeriod } from "../../../lib/sales-period.js";
 import {
   COMPANY_FIELDS, shapeApproach, newTrackingToken, recentApproach, statusRank, safeUrl, isUuid,
   NG_LABEL, RECENT_DAYS, autoNext, bizDayOnOrAfter, todayJst, periodStartJst, agoText,
-  SEND_CHANNEL_KEYS, SEND_FAIL_KEYS, SEND_FAIL_LABEL, NEXT_AFTER_FAIL, HIDE_LABEL, channelLabel,
+  SEND_CHANNEL_KEYS, SEND_FAIL_KEYS, SEND_FAIL_LABEL, NEXT_AFTER_FAIL, HIDE_LABEL, channelLabel, trackingUrl,
 } from "../../../lib/sales.js";
+import { aiSendGuard, usableDraft, finalText } from "../../../lib/sales-ai/store.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql";
 const FIELDS = "id, tenant_id, company_id, campaign_id, template_id, employee_id, service, subject, body, form_url, "
@@ -60,14 +70,7 @@ export default async function handler(req, res) {
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 }
 
-/** 専用URL。PUBLIC_BASE_URL があればそのドメインで、無ければいま開いているホストで作る */
-function trackingUrl(req, token) {
-  const explicit = (process.env.SALES_TRACKING_BASE_URL || process.env.PUBLIC_BASE_URL || "").trim();
-  if (explicit) return `${explicit.replace(/\/+$/, "")}/r/${token}`;
-  const host = req.headers?.["x-forwarded-host"] || req.headers?.host || "gw.8grp.co.jp";
-  const proto = req.headers?.["x-forwarded-proto"] || "https";
-  return `${proto}://${host}/r/${token}`;
-}
+// 専用URLの作り方は lib/sales.js trackingUrl（AI営業の最終文面 api/sales/ai/drafts.js と同じものを使う）
 
 /** 画面から来たチャネル。無ければ fallback、知らない値なら false */
 function sendChannel(v, fallback) {
@@ -197,6 +200,9 @@ async function prepare(req, res, sb, ctx, user) {
 
   const stop = await guard(sb, ctx, c, { force: Boolean(body.force), channel, acknowledgeRecent: Boolean(body.acknowledgeRecent) });
   if (stop) return json(res, stop.status, stop.body);
+  // AI営業で「送信不可」の会社には、専用URLも出さない（「要確認」は、確かめるために画面を開けるよう通す）
+  const aiStop = await aiSendGuard(admin(), ctx.tenantId, c.id, channel);
+  if (aiStop && aiStop.body.error !== "ai_send_check_required") return json(res, aiStop.status, aiStop.body);
 
   let dest = safeUrl(body.destinationUrl);
   if (dest === false) return json(res, 400, { error: "bad_url", hint: "リンク先のURLが正しくありません" });
@@ -274,8 +280,10 @@ async function act(req, res, sb, ctx, user) {
   const channel = sendChannel(body.channel);
   if (channel === false) return json(res, 400, { error: "bad_channel", allowed: SEND_CHANNEL_KEYS });
 
-  const text = String(body.body || "").trim();
-  if (!text) return json(res, 400, { error: "body_required", hint: "営業文が空です" });
+  let text = String(body.body || "").trim();
+  const useAi = body.aiDraftId !== undefined && body.aiDraftId !== null && body.aiDraftId !== "";
+  if (useAi && !isUuid(body.aiDraftId)) return json(res, 400, { error: "bad_ai_draft" });
+  if (!text && !useAi) return json(res, 400, { error: "body_required", hint: "営業文が空です" });
 
   const { data: c } = await sb.from("gw_sales_companies").select(COMPANY_FIELDS)
     .eq("id", a.company_id).eq("tenant_id", ctx.tenantId).maybeSingle();
@@ -285,6 +293,22 @@ async function act(req, res, sb, ctx, user) {
     force: Boolean(body.force), exceptId: a.id, channel, acknowledgeRecent: Boolean(body.acknowledgeRecent),
   });
   if (stop) return json(res, stop.status, stop.body);
+  const db = admin();
+  const aiStop = await aiSendGuard(db, ctx.tenantId, c.id, channel);
+  if (aiStop) return json(res, aiStop.status, aiStop.body);
+
+  // AI文面（承認済み）：承認したままの営業文から、サーバが最終文面を作り直す（画面の本文は使わない）
+  let draft = null, aiSubject;
+  if (useAi) {
+    const { data: d } = await db.from("gw_sales_ai_drafts").select("*").eq("tenant_id", ctx.tenantId).eq("id", body.aiDraftId).maybeSingle();
+    if (!d || d.company_id !== c.id) return json(res, 404, { error: "ai_draft_not_found" });
+    const ok = usableDraft(d);
+    if (!ok.ok) return json(res, 409, ok.body);
+    const final = await finalText(db, ctx, req, d, a);
+    draft = d;
+    text = final.body;
+    aiSubject = final.subject;
+  }
 
   const now = new Date().toISOString();
   const patch = {
@@ -305,6 +329,12 @@ async function act(req, res, sb, ctx, user) {
     if (d) patch.destination_url = d;
   }
   if (body.campaignId !== undefined) patch.campaign_id = isUuid(body.campaignId) ? body.campaignId : null;
+  if (draft) {
+    patch.ai_draft_id = draft.id;
+    patch.subject = aiSubject || null;
+    patch.service = draft.service || patch.service;
+    patch.template_id = null;
+  }
 
   // 送信完了は1回だけ。二度押し・2つのタブからの同時送信で二重にならないよう、
   // まだ送っていない（送れなかったとも記録していない）行だけを更新する
@@ -312,6 +342,11 @@ async function act(req, res, sb, ctx, user) {
     .eq("id", a.id).is("sent_at", null).is("failed_at", null).select(FIELDS).maybeSingle();
   if (e2) return json(res, e2.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: e2.message });
   if (!saved) return json(res, 409, { error: "already_sent", hint: "このアタックは送信完了として記録済みです" });
+  // 使った営業文は「送信に使用済み」（承認したままの行だけ。二重には使わない）
+  if (draft) {
+    await db.from("gw_sales_ai_drafts").update({ status: "used", approach_id: a.id })
+      .eq("tenant_id", ctx.tenantId).eq("id", draft.id).eq("status", "approved");
+  }
 
   // 会社の状態を進める（後ろへは戻さない）。NEXTは「反応確認」を3営業日後に置く。
   // すでにクリック・返信・商談まで進んでいる会社は、そちらの NEXT を残す
@@ -324,7 +359,8 @@ async function act(req, res, sb, ctx, user) {
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "sales.attack_sent",
     target: `sales_company:${c.id}`,
-    detail: { approachId: a.id, channel, service: patch.service, templateId: patch.template_id ?? a.template_id, forced: patch.forced },
+    detail: { approachId: a.id, channel, service: patch.service, templateId: patch.template_id ?? a.template_id, forced: patch.forced,
+      ...(draft ? { aiDraftId: draft.id } : {}) },
   });
   return json(res, 200, { approach: shapeApproach(saved) });
 }
