@@ -168,6 +168,7 @@ mock.module(atRoot("lib/gw.js"), {
     canAdvanceHire: REAL_GW.canAdvanceHire,
     canSeeSalary: REAL_GW.canSeeSalary,
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
+    canOfficeHr: REAL_GW.canOfficeHr,
   },
 });
 

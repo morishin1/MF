@@ -15,6 +15,8 @@
 //   7. 社長・管理者だけができる。recruiter・hrだけの人は使えない
 //   8. Office への引き渡し（db/133）が要る版は、引き渡す前に事前入力・手続き開始・完了のどれもできない（サーバで止める）。
 //      db/133 が無い環境・区分の無い従来の合格通知・育成枠は、これまでどおり進める
+//   9. 認可のあとに service role で読み書きする（Office の人事は採用HRの RLS を持たないことがある）。その前に、順番に確かめる：
+//      認可（権限が無ければ service role を作らない）→ tenant_id → 二重登録（employee_id）→ 状態 → handoff_at → 正式契約（署名済み）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -53,6 +55,7 @@ function table(name) {
         then: (fn) => apply({ asList: true }).then(fn),
       };
       function apply(opts) {
+        if (db.beforeUpdate) { const f = db.beforeUpdate; db.beforeUpdate = null; f(name); }   // 同時に別の人が書いた、を再現する
         const hit = (db.rows[name] || []).filter((x) => g.every(([op, k, v]) => {
           if (op === "is") return v === null ? x[k] == null : x[k] != null;
           return x[k] === v;
@@ -75,8 +78,20 @@ function table(name) {
 }
 const copy = (r) => (r ? { ...r } : null);
 
+// 利用者の権限（RLS）では、何も読めない・書けない（Office の人事＝会計側の管理者は採用HRの gw_is_recruiting を持たない）。
+// advance.js が userClient を使っていたら、どのテストも落ちる。service role（admin）を使うのは、認可のあとだけ
+const spy = { admin: 0, user: 0 };
+const deniedTable = () => {
+  const err = { code: "42501", message: "permission denied (RLS)" };
+  const q = { select: () => q, eq: () => q, is: () => q, order: () => q, limit: () => q, update: () => q, insert: () => q,
+    maybeSingle: () => Promise.resolve({ data: null, error: err }), then: (fn) => Promise.resolve({ data: null, error: err }).then(fn) };
+  return q;
+};
 mock.module(atRoot("lib/supabase.js"), {
-  namedExports: { admin: () => ({ from: table }), userClient: () => ({ from: table }) },
+  namedExports: {
+    admin: () => { spy.admin++; return { from: table }; },
+    userClient: () => { spy.user++; return { from: deniedTable }; },
+  },
 });
 mock.module(atRoot("lib/auth.js"), {
   namedExports: { requireUser: async () => ({ id: "u-1" }), getMemberships: async () => [] },
@@ -125,6 +140,8 @@ const ok = async (name, fn) => {
 function setup() {
   who = OWNER;
   db.missing = null;
+  db.beforeUpdate = null;
+  spy.admin = 0; spy.user = 0;
   logged.length = 0;
   db.rows = {
     gw_hr_applicants: [{
@@ -412,12 +429,116 @@ await ok("取り消した版・辞退した版は見ない（引き渡し済み�
   assert.equal((await getPrefill("a1")).statusCode, 200);
 });
 
-await ok("NEXT ACTION：手続き中の印があっても、引き渡し前なら［承諾を確認してOfficeへ引き渡す］を先に出す", async () => {
+await ok("NEXT ACTION：手続き中の印があっても、引き渡し前なら［承諾内容を確認してOfficeへ引き渡す］を先に出す", async () => {
   const { nextActionOf } = await import(atRoot("lib/hr.js"));
   const base = { status: "accepted", offer_type: "executive_employee", formal_required: true, formal_state: "signed", advance_claimed_at: new Date().toISOString() };
   assert.equal(nextActionOf({ ...base, handoff_state: "ready" }).action, "handoff");
   assert.equal(nextActionOf({ ...base, handoff_state: "unavailable" }).action, "advance", "db/133 が無い環境は従来どおり［続きを開く］");
   assert.equal(nextActionOf({ ...base, offer_type: null, handoff_state: "unavailable" }).cta, "続きを開く");
+});
+
+console.log("\n=== service role を使う前に、認可・tenant_id・二重登録・状態・handoff_at・正式契約を確かめる ===\n");
+
+await ok("認可（canAdvanceHire）が通らない人には、service role を作らない・何も読まない・書かない（利用者の権限のクライアントも使わない）", async () => {
+  for (const w of [RECRUITER, MANAGER, { ...OWNER, tenantId: null }]) {
+    setup();
+    who = w;
+    const before = JSON.stringify(db.rows);
+    for (const r of [await getPrefill("a1"), await claim("a1"), await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" }),
+      await act({ applicantId: "a1", action: "release" })]) assert.equal(r.statusCode, 403, `${w.roles.join()} ${r.statusCode}`);
+    assert.deepEqual([spy.admin, spy.user], [0, 0], `${w.roles.join()}：データのクライアントを作らない`);
+    assert.equal(JSON.stringify(db.rows), before, "何も書かない");
+  }
+});
+
+await ok("認可のあとは service role で読み書きする：採用HRの RLS を持たない Office の人事（会計側の管理者）でも、事前入力 → 手続き開始 → 完了ができる", async () => {
+  setup();
+  who = ADMIN;
+  assert.equal((await getPrefill("a1")).statusCode, 200);
+  assert.equal((await claim("a1")).statusCode, 200);
+  assert.equal((await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" })).statusCode, 200);
+  assert.equal(db.rows.gw_hr_applicants[0].status, "done");
+  assert.ok(spy.admin >= 1 && spy.user === 0, `service role ${spy.admin} 回・利用者の権限 ${spy.user} 回`);
+});
+
+await ok("tenant_id：別のテナントの応募者・社員は、ID を知っていても 404（読まない・結ばない）", async () => {
+  setup();
+  db.rows.gw_hr_applicants.push({ id: "a9", tenant_id: "t2", name: "他社の方", status: "accepted", employee_id: null, advance_claimed_at: null, join_date: "2026-11-01" });
+  db.rows.gw_hr_offers = [typedOffer({ id: "o9", tenant_id: "t2", applicant_id: "a9", handoff_at: "2026-10-12T00:00:00Z" })];
+  for (const r of [await getPrefill("a9"), await claim("a9"), await act({ applicantId: "a9", action: "complete", employeeId: "emp-new1" })]) {
+    assert.equal(r.statusCode, 404);
+  }
+  assert.equal((await act({ applicantId: "a9", action: "release" })).statusCode, 404);
+  assert.equal(db.rows.gw_hr_applicants.find((x) => x.id === "a9").employee_id, null, "他社の応募者は変えない");
+  // 自社の応募者に、他社のオファーだけが付いていても「引き渡し済み」にならない（オファーも tenant_id で絞る）
+  setup();
+  db.rows.gw_hr_offers = [typedOffer({ tenant_id: "t2", handoff_at: "2026-10-12T00:00:00Z" })];
+  assert.equal((await getPrefill("a1")).statusCode, 200, "他社のオファーは見えない＝従来の合格通知と同じ扱い（区分の版が無い）");
+});
+
+await ok("handoff_at：区分つき（育成枠以外）は handoff_at が入るまで 409。入っていれば進む。引き渡し前は事前入力にも条件を返さない", async () => {
+  setup();
+  db.rows.gw_hr_offers = [typedOffer({ handoff_at: null })];
+  const g = await getPrefill("a1");
+  assert.deepEqual([g.statusCode, g.body.error, g.body.prefill], [409, "handoff_required", undefined]);
+  db.rows.gw_hr_offers = [typedOffer({ handoff_at: "2026-10-12T00:00:00Z" })];
+  assert.equal((await getPrefill("a1")).statusCode, 200);
+});
+
+await ok("正式契約：必要な版は署名済み（formal_signed_at）でないと進めない。handoff_at が入っていても（DB の CHECK を通らないデータでも API が止める）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [typedOffer({ formal_signed_at: null, handoff_at: "2026-10-12T00:00:00Z" })];
+  for (const r of [await getPrefill("a1"), await claim("a1"), await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" })]) {
+    assert.deepEqual([r.statusCode, r.body.error], [409, "formal_required"]);
+  }
+  assert.equal(db.rows.gw_hr_applicants[0].employee_id, null);
+  assert.equal(db.rows.gw_hr_applicants[0].advance_claimed_at, null);
+  // 正式契約が不要の版は、署名が無くても進める（handoff_at があれば）
+  db.rows.gw_hr_offers = [typedOffer({ formal_contract_required: false, formal_signed_at: null, handoff_at: "2026-10-12T00:00:00Z" })];
+  assert.equal((await getPrefill("a1")).statusCode, 200);
+  // 育成枠は、正式契約が必要でも Office へ渡さない：これまでどおり（LMS・育成開始）
+  db.rows.gw_hr_offers = [typedOffer({ offer_type: "training", formal_contract_required: true, formal_signed_at: null, handoff_at: null })];
+  assert.equal((await getPrefill("a1")).statusCode, 200);
+});
+
+await ok("二重社員登録の防止：確定は1応募者につき1回だけ。確定済み・同時に別の人が確定した場合は 409 already_advanced（最初の社員のまま）", async () => {
+  setup();
+  assert.equal((await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" })).statusCode, 200);
+  for (const r of [await getPrefill("a1"), await claim("a1"), await act({ applicantId: "a1", action: "complete", employeeId: "emp-new2" })]) {
+    assert.deepEqual([r.statusCode, r.body.error], [409, "already_advanced"]);
+  }
+  assert.equal(db.rows.gw_hr_applicants[0].employee_id, "emp-new1");
+  assert.equal(db.rows.gw_hr_timeline.filter((t) => t.event_key === "advanced").length, 1, "完了の記録は1回だけ");
+  // 同時に押された：読んだ時点では空だったが、書く直前に別の人が確定した。employee_id が空のときだけ書くので、上書きしない
+  setup();
+  db.beforeUpdate = () => { db.rows.gw_hr_applicants[0].employee_id = "emp-first"; };
+  const race = await act({ applicantId: "a1", action: "complete", employeeId: "emp-new2" });
+  assert.deepEqual([race.statusCode, race.body.error], [409, "already_advanced"]);
+  assert.equal(db.rows.gw_hr_applicants[0].employee_id, "emp-first");
+  assert.equal(db.rows.gw_hr_timeline.length, 0, "完了の記録・監査ログも残さない");
+  assert.ok(!logged.some((l) => l.action === "hr.applicant_advance_complete"));
+});
+
+await ok("確かめる順番：tenant（404）→ 二重登録（already_advanced）→ 状態（invalid_state）→ handoff_at → 正式契約", async () => {
+  const h = (extra = {}) => typedOffer({ handoff_at: null, ...extra });
+  // 他社の応募者は、確定済みでも 404（中身を教えない）
+  setup();
+  db.rows.gw_hr_applicants.push({ id: "a9", tenant_id: "t2", status: "accepted", employee_id: "emp-x" });
+  assert.equal((await getPrefill("a9")).statusCode, 404);
+  // 確定済みは、handoff_at が無くても already_advanced（handoff_required ではない）
+  setup();
+  db.rows.gw_hr_applicants[0].employee_id = "emp-x"; db.rows.gw_hr_offers = [h()];
+  assert.equal((await getPrefill("a1")).body.error, "already_advanced");
+  // 承諾済みでない人は、handoff_at が無くても invalid_state
+  setup();
+  db.rows.gw_hr_applicants[0].status = "offer_viewed"; db.rows.gw_hr_offers = [h()];
+  assert.equal((await getPrefill("a1")).body.error, "invalid_state");
+  // handoff_at が無いときは、正式契約が済んでいても handoff_required。あれば、署名が無いと formal_required
+  setup();
+  db.rows.gw_hr_offers = [h({ formal_signed_at: null })];
+  assert.equal((await getPrefill("a1")).body.error, "handoff_required");
+  db.rows.gw_hr_offers = [h({ formal_signed_at: null, handoff_at: "2026-10-12T00:00:00Z" })];
+  assert.equal((await getPrefill("a1")).body.error, "formal_required");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

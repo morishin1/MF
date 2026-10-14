@@ -8,9 +8,13 @@
 //         "markSent"   … 実際に本人へ送ったことを明示的に記録する（Stage 6 §12）
 //         "send"       … ［内容を確認してメールで送信］（オファー作成・メール送信・同意完結 UI/UX改善仕様 §12）。
 //                         1回で 内容の確定 → 本人専用URLの発行 → メール送信 → sent_at → タイムライン → 承諾待ち まで行う
-//         "handoff"    … ［承諾を確認してOfficeへ引き渡す］（db/133）。承諾した版を Office の入社準備キューへ載せる（社員にはしない）
+//         "handoff"    … ［承諾内容を確認してOfficeへ引き渡す］（db/133）。承諾した版を Office の入社準備キューへ載せる（社員にはしない）
 // GET   /api/hr/offers?id=…
 //         … 送る前の確認画面：本人に見える条件の行・区分ごとのメールの下書き（{{オファーURL}} 入り）・メールで送れるか
+// GET   /api/hr/offers?id=…&file=notice|accepted        … 条件通知書PDF・承諾済みPDFを開く
+//         採用HR（canRecruit）… どの版でも。Office の人事・労務（canOfficeHr。採用HRの権限が無い人）… 閲覧専用（officeFile）：
+//         「Office へ引き渡した版」（handoff_at が入っている）だけ。同一テナント・給与を見られる人だけ（PDF に給与・報酬が入る）。
+//         作成・更新・送付・正式契約・引き渡しは、採用HR（canRecruit）だけ。Office からは見るだけ（PDFの生成・保存もしない）
 //
 // ■ 1 offer version = 1 公開token（README Stage 6 §5・§20）
 //   Stage 5作成時にNOT NULL制約対応のプレースホルダーtokenを発行しているが、
@@ -31,7 +35,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit, canSeeSalary, canAdvanceHire } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canSeeSalary, canAdvanceHire, canOfficeHr } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput } from "../../../lib/salary.js";
 import { paySplit, splitWage, attachPay, savePay, copyPayToOffer, payFailed, WAGE_COLUMNS } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
@@ -42,6 +46,7 @@ import {
 import {
   offerTypeOf, missingRequired, offerMail, publicOfferItems, OFFER_URL_TAG, todayJst, formalRequiredOf,
 } from "../../../lib/hr-offer-types.js";
+import { readHandoffOffers } from "../../../lib/hire-handoff.js";
 import { notify } from "../../../lib/notify.js";
 import { adminSideEmployeeIds } from "../../../lib/messages-admin.js";
 import { sendMail, mailConfig, isEmail } from "../../../lib/mail/index.js";
@@ -84,7 +89,8 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
+  // 採用HR（canRecruit）以外は、Office の人事・労務が「引き渡された版のPDFを見る」ことだけできる（officeFile）。ほかは 403
+  if (!canRecruit(ctx)) return officeFile(req, res, ctx, user);
 
   const sb = userClient(req);
   // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す・書かせる。
@@ -586,6 +592,46 @@ async function noticeForManual(sb, ctx, offer) {
 }
 
 /**
+ * Office の人事・労務（採用HRの権限が無い人）が、Office へ引き渡された版の条件通知書PDF・承諾済みPDFを「見る」だけの口。
+ * 採用HRの DB 権限（RLS）を持たないことがあるので、service role で読む。そのため認可を先にすべて確かめる（見てよくなければ何も読まない）：
+ *   ① Office の人事権限（canOfficeHr）かつ GET の file=notice|accepted だけ。更新・送付・引き渡しは 403
+ *   ② 給与を見られる人だけ（条件通知書には給与・報酬が入る。canSeeSalary）
+ *   ③ 同一テナント（版・応募者のどちらも tenant_id で絞る）
+ *   ④ 引き渡した版（handoff_at が入っていて、承諾済みで、無効化・辞退でなく、育成枠でない。readHandoffOffers と同じ）
+ * PDF は保管済みのものを読むだけ（作らない・書き込まない。承諾済みPDFが無ければ 404）。誰がいつ開いたかは監査ログに残す
+ */
+async function officeFile(req, res, ctx, user) {
+  if (req.method !== "GET" || !canOfficeHr(ctx)) return json(res, 403, { error: "forbidden" });
+  const q = new URL(req.url || "/", "http://localhost").searchParams;
+  const id = q.get("id"), file = q.get("file");
+  if (!id || !["notice", "accepted"].includes(file)) return json(res, 403, { error: "forbidden" });
+  if (!canSeeSalary(ctx)) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
+
+  const sb = admin();
+  const { data: offer, error } = await sb.from("gw_hr_offers").select("*").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (error) return json(res, 500, { error: "db_query_failed" });
+  if (!offer) return json(res, 404, { error: "not_found" });
+  const { ready, offers } = await readHandoffOffers(sb, ctx.tenantId, { applicantIds: [offer.applicant_id] });
+  const handed = ready && offers.some((o) => o.id === offer.id && o.tenant_id === ctx.tenantId);
+  if (!handed) {
+    return json(res, 403, { error: "not_handed_off", hint: "Office へ引き渡された方の書類だけ、Office から見られます（採用HRで引き渡しを済ませてください）" });
+  }
+  const { data: applicant } = await sb.from("gw_hr_applicants").select("id").eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!applicant) return json(res, 404, { error: "not_found" });
+  if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+  const path = file === "accepted" ? offer.accepted_pdf_path : offer.notice_pdf_path;
+  if (!path) return json(res, 404, { error: "no_file", hint: file === "accepted" ? "承諾済みPDFはまだありません" : "条件通知書はまだ作っていません" });
+  try {
+    const bytes = await readPdf(path);
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_download", target: `hr_offer:${offer.id}`, detail: { file, via: "office" } });
+    return sendPdf(res, bytes, pdfFileName(offer.notice_title, offer.version, file === "accepted"));
+  } catch (e) {
+    console.error("[hr/offers] office pdf", e?.message || e);
+    return json(res, 500, { error: "pdf_failed", hint: "PDFを用意できませんでした" });
+  }
+}
+
+/**
  * GET /api/hr/offers?id=…&file=preview|notice|accepted … PDF を返す（採用HRを使える人。PDF には給与が入るので、給与を見られる人だけ）
  *   preview  … 送る前の確認用（作るだけで置かない）。作成済みなら、置いたもの
  *   notice   … 送った条件通知書（その版のまま）
@@ -778,7 +824,7 @@ async function markFormalSigned(res, sb, ctx, user, offer, salary) {
   return json(res, 200, { offer: await shape(ctx, data, salary) });
 }
 
-// ---- 承諾を確認して Office へ引き渡す（db/133） ---------------------------------------
+// ---- 承諾内容を確認して Office へ引き渡す（db/133） ---------------------------------------
 // 「Office へ引き渡す」＝ Office 担当者の入社準備キュー（admin-hr.html の「HRから引き渡し」）に載せること。
 // 本人を社員にはしない（社員名簿・アカウントは Office が既存の社員登録で作る）。本人に Office の権限も与えない。
 // 押せるのは社長・管理者・人事（canAdvanceHire。社員登録の事前入力・完了と同じ）。

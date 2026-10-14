@@ -461,7 +461,7 @@ await ok("区分ごとの条件承諾後の NEXT ACTION（業務委託［正式�
   assert.equal(a.steps.steps.find((s) => s.state === "now").label, "入社/稼働");
 });
 
-console.log("\n— 正式契約の要否（オファーごと。db/133）と、承諾を確認して Office へ引き渡す —");
+console.log("\n— 正式契約の要否（オファーごと。db/133）と、承諾内容を確認して Office へ引き渡す —");
 const HR_ROLE = { userId: "u-hr2", tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], apps: ["hr", "office"], employee: { id: "e-hr2", display_name: "人事 次郎" } };
 // 区分ごとに、作る → 送る → 本人が承諾する
 async function acceptedOf(type, extra = {}, opts = { h133: true }) {
@@ -540,7 +540,7 @@ await ok("「必要」のオファー：正式契約済みになるまで引き�
   assert.equal((await handoffOf(id)).body.error, "formal_required", "案内しただけでも引き渡せない");
   await patchOffer({ id, action: "markFormalSigned" });
   a = (await getDetail("a1")).body.applicant;
-  assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["正式契約済み", "承諾を確認してOfficeへ引き渡す", "handoff"]);
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["正式契約済み", "承諾内容を確認してOfficeへ引き渡す", "handoff"]);
   r = await handoffOf(id);
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.ok(offerRow().handoff_at && offerRow().handoff_by === "u-owner");
@@ -554,7 +554,7 @@ await ok("「必要」のオファー：正式契約済みになるまで引き�
 await ok("「不要」のオファー：条件承諾のまま、HR の確認で引き渡せる。記録・監査ログ・Office への通知（URL・個人情報は書かない）", async () => {
   const { id } = await acceptedOf("contractor", { formalContractRequired: false });
   let a = (await getDetail("a1")).body.applicant;
-  assert.deepEqual([a.statusLabel, a.nextActionCta, a.formalRequired, a.handoffState], ["条件承諾済み", "承諾を確認してOfficeへ引き渡す", false, "ready"]);
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.formalRequired, a.handoffState], ["条件承諾済み", "承諾内容を確認してOfficeへ引き渡す", false, "ready"]);
   assert.equal(a.steps.steps.find((s) => s.state === "now").label, "入社/稼働", "正式契約が要らなければ、承諾のあと入社/稼働へ");
   const r = await handoffOf(id);
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
@@ -607,6 +607,119 @@ await ok("db/133 が無い環境：引き渡しは 503。NEXT ACTION はこれ�
   await patchOffer({ id, action: "markFormalSigned" });
   const a = (await getDetail("a1")).body.applicant;
   assert.deepEqual([a.nextActionCta, a.nextActionKey, a.handoffState], ["稼働開始準備へ進む", "advance", "unavailable"]);
+});
+
+console.log("\n— Office の閲覧専用：引き渡した版の条件通知書PDF・承諾済みPDF（service role で読むので、認可を先に確かめる）—");
+// Office の人事・労務（採用HRの権限は無い）：人事ロール＋Office だけ／会計側の管理者
+const OFFICE_HR = { userId: "u-off", tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], apps: ["office"], employee: { id: "e-off", display_name: "人事 労務" } };
+const OFFICE_ADMIN = { userId: "u-oa", tenantId: "t1", isAdmin: true, isHr: false, roles: [], employee: { id: "e-oa", display_name: "管理 太郎" } };
+const pdfBytes = (r) => (r.raw ? r.raw.length : 0);
+
+await ok("引き渡した版だけ、Office の人事権限が見られる（保管済みのPDFを読むだけ）。見たことは監査ログに残る（via: office）", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = OFFICE_HR;
+  for (const f of ["notice", "accepted"]) {
+    const before = await hrFile(id, f);
+    assert.deepEqual([before.statusCode, before.body.error], [403, "not_handed_off"], `引き渡し前（承諾しただけ）は見られない：${f}`);
+  }
+  who = OWNER;
+  assert.equal((await handoffOf(id)).statusCode, 200);
+  logged.length = 0;
+  const files = mem.storageFiles.size;
+  for (const who2 of [OFFICE_HR, OFFICE_ADMIN]) {
+    who = who2;
+    for (const f of ["notice", "accepted"]) {
+      const r = await hrFile(id, f);
+      assert.equal(r.statusCode, 200, `${who2.userId} ${f}：${JSON.stringify(r.body)}`);
+      assert.equal(r.headers["content-type"], "application/pdf");
+      assert.ok(pdfBytes(r) > 500 && r.headers["cache-control"] === "private, no-store");
+    }
+  }
+  assert.equal(mem.storageFiles.size, files, "見るだけ。PDF を作ったり置いたりしない");
+  assert.deepEqual(logged.filter((l) => l.action === "hr.offer_pdf_download").map((l) => [l.actorId, l.detail.file, l.detail.via]),
+    [["u-off", "notice", "office"], ["u-off", "accepted", "office"], ["u-oa", "notice", "office"], ["u-oa", "accepted", "office"]]);
+});
+
+await ok("Office からは、閲覧以外はできない（作成・更新・送付・正式契約・引き渡し・プレビューは 403）", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = OWNER; await handoffOf(id);
+  const rowBefore = JSON.stringify(offerRow());
+  for (const who2 of [OFFICE_HR, OFFICE_ADMIN]) {
+    who = who2;
+    assert.equal((await createOffer({ applicantId: "a1", respondBy: DUE })).statusCode, 403, "作成");
+    for (const body of [{ action: "update", respondBy: DUE }, { action: "send" }, { action: "issueLink" }, { action: "markSent" }, { action: "confirm" },
+      { action: "setLegalSign", url: URL1 }, { action: "sendFormal", channel: "manual" }, { action: "markFormalSigned" }, { action: "handoff" }]) {
+      const r = await patchOffer({ id, ...body });
+      assert.equal(r.statusCode, 403, `${who2.userId} ${body.action}`);
+    }
+    assert.equal((await sendDraft(id)).statusCode, 403, "送る前の確認画面（GET id だけ）");
+    assert.equal((await hrFile(id, "preview")).statusCode, 403, "プレビュー（まだ確定していない版の PDF）は Office に出さない");
+    assert.equal((await hrFile(id, "../x")).statusCode, 403);
+  }
+  assert.equal(JSON.stringify(offerRow()), rowBefore, "版は変わらない");
+});
+
+await ok("引き渡していない版は、Office の人事権限でも見られない（承諾しただけ・育成枠・取り消した版）", async () => {
+  // 承諾しただけ
+  let { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = OFFICE_HR;
+  assert.equal((await hrFile(id, "accepted")).body.error, "not_handed_off");
+  // 育成枠は、そもそも引き渡さない
+  ({ id } = await acceptedOf("training"));
+  who = OFFICE_HR;
+  assert.equal((await hrFile(id, "accepted")).body.error, "not_handed_off");
+  // 引き渡した版を、あとで取り消し（無効化）したら、Office からは見られない
+  ({ id } = await acceptedOf("contractor", { formalContractRequired: false }));
+  who = OWNER; await handoffOf(id);
+  who = OFFICE_HR;
+  assert.equal((await hrFile(id, "accepted")).statusCode, 200);
+  mem.rows.gw_hr_offers.find((o) => o.id === id).revoked_at = "2026-10-20T00:00:00Z";
+  assert.equal((await hrFile(id, "accepted")).body.error, "not_handed_off");
+});
+
+await ok("別のテナントの版は 404（Office の人事権限でも）。自社の版を別テナントの ID で指さない", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = OWNER; await handoffOf(id);
+  who = { ...OFFICE_ADMIN, tenantId: "t2" };
+  const r = await hrFile(id, "accepted");
+  assert.deepEqual([r.statusCode, r.body.error], [404, "not_found"]);
+  who = OFFICE_ADMIN;
+  assert.equal((await hrFile("00000000-0000-4000-8000-0000000000ff", "accepted")).statusCode, 404, "無い ID");
+});
+
+await ok("Office の人事権限が無い人（営業・IT・一般の社員）は 403。給与を見られない設定では Office の人事でも 403", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = OWNER; await handoffOf(id);
+  for (const p of [{ userId: "u-s", tenantId: "t1", isAdmin: false, isHr: false, roles: ["sales"], employee: { id: "e-s" } },
+    { userId: "u-it", tenantId: "t1", isAdmin: false, isHr: false, roles: ["it"], employee: { id: "e-it" } },
+    { userId: "u-m", tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: { id: "e-m" } }]) {
+    who = p;
+    const r = await hrFile(id, "accepted");
+    assert.equal(r.statusCode, 403, p.roles.join());
+    assert.equal(r.raw, null);
+  }
+  process.env.SALARY_OWNER_ONLY = "1";
+  try {
+    who = OFFICE_HR;
+    const r = await hrFile(id, "accepted");
+    assert.deepEqual([r.statusCode, r.body.error], [403, "forbidden"]);
+    assert.match(r.body.hint, /給与・報酬が入る/);
+    who = OWNER;
+    assert.equal((await hrFile(id, "accepted")).statusCode, 200, "経営者は見られる");
+  } finally { delete process.env.SALARY_OWNER_ONLY; }
+});
+
+await ok("保管したPDFが無いとき（承諾済みPDFが未作成）は 404。Office からは作らない（書き込まない）", async () => {
+  const { id } = await acceptedOf("contractor", { formalContractRequired: false });
+  who = OWNER; await handoffOf(id);
+  const row = mem.rows.gw_hr_offers.find((o) => o.id === id);
+  row.accepted_pdf_path = null; row.accepted_pdf_sha256 = null;
+  const files = mem.storageFiles.size;
+  who = OFFICE_HR;
+  const r = await hrFile(id, "accepted");
+  assert.deepEqual([r.statusCode, r.body.error], [404, "no_file"]);
+  assert.equal(mem.rows.gw_hr_offers.find((o) => o.id === id).accepted_pdf_path, null, "行を書き換えない");
+  assert.equal(mem.storageFiles.size, files, "PDF を作らない");
 });
 
 console.log("\n— db/132 が無い環境 —");

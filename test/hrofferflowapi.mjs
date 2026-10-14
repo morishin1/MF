@@ -377,9 +377,9 @@ await ok("Office への引き渡し（db/133）：正式契約が必要なら正
   const H = { handoff_state: "ready" };
   assert.deepEqual(act({ offer_type: "contractor", formal_required: true, ...H }), ["正式契約へ", "formalContract"], "必要：まず正式契約");
   assert.deepEqual(act({ offer_type: "contractor", formal_required: true, formal_state: "sent", ...H }), ["正式契約済みにする", "formalContract"]);
-  assert.deepEqual(act({ offer_type: "contractor", formal_required: true, formal_state: "signed", ...H }), ["承諾を確認してOfficeへ引き渡す", "handoff"]);
-  assert.deepEqual(act({ offer_type: "executive_employee", formal_required: false, ...H }), ["承諾を確認してOfficeへ引き渡す", "handoff"], "不要：承諾のまま引き渡す");
-  assert.deepEqual(act({ offer_type: "spot", formal_required: false, ...H }), ["承諾を確認してOfficeへ引き渡す", "handoff"]);
+  assert.deepEqual(act({ offer_type: "contractor", formal_required: true, formal_state: "signed", ...H }), ["承諾内容を確認してOfficeへ引き渡す", "handoff"]);
+  assert.deepEqual(act({ offer_type: "executive_employee", formal_required: false, ...H }), ["承諾内容を確認してOfficeへ引き渡す", "handoff"], "不要：承諾のまま引き渡す");
+  assert.deepEqual(act({ offer_type: "spot", formal_required: false, ...H }), ["承諾内容を確認してOfficeへ引き渡す", "handoff"]);
   assert.deepEqual(act({ offer_type: "training", formal_required: false, ...H }), ["LMS・育成開始手続きへ", "advance"], "育成枠は Office へ送らない");
   assert.deepEqual(act({ offer_type: "contractor", formal_required: false, handoff_state: "done" }), [null, null]);
   assert.match(na({ offer_type: "contractor", formal_required: false, handoff_state: "done" }).label, /Office へ引き渡し済み/);

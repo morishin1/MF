@@ -12,7 +12,14 @@
 // DELETE /api/hr/documents?id=…                     … 1つの版を消す（実体は消し、記録は残す）
 //
 // ■ 誰が使えるか
-//   採用を扱える人（canRecruit：管理者・経営者・人事・採用担当）だけ。
+//   採用を扱える人（canRecruit：管理者・経営者・人事・採用担当）… 見る・登録・差し替え・削除。
+//   Office の人事・労務（canOfficeHr。採用HRの権限は無い人）… 「Office へ引き渡された人」の書類を見るだけ（閲覧専用。readOnly）。
+//     HR で登録した原本を Office で再登録させない（二重管理しない）ための口。service role で読むので、次をすべて API で確かめる：
+//       ① 同一テナント（応募者・書類・オファーのどれも tenant_id で絞る）
+//       ② 引き渡し済み（その応募者に handoff_at の入った版がある。承諾しただけ・育成枠は見せない）
+//       ③ Office の人事権限（canOfficeHr）
+//       ④ 対象の応募者本人の書類だけ（書類 → 応募者 → 引き渡し済み、の順にたどる。applicantId を渡したら、書類の持ち主と一致すること）
+//     登録・差し替え・削除は 403（Office からはできない）。見せるのは各種類の最新の1つだけ（過去の版は HR で見る）。
 //   営業だけの人（canSell のみ）には、一覧も URL も返さない。
 //
 // ■ 個人情報なので、公開URLを作らない
@@ -22,7 +29,7 @@
 import crypto from "node:crypto";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canRecruit } from "../../lib/gw.js";
+import { gwContext, canRecruit, canOfficeHr, canSeeSalary } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import {
@@ -30,6 +37,7 @@ import {
   checkDeclaredDoc, checkDocBytes, cleanFilename, groupDocs,
 } from "../../lib/hr-docs.js";
 import { conditionDocsOf } from "../../lib/hr-condition-docs.js";
+import { readHandoffOffers } from "../../lib/hire-handoff.js";
 
 const BUCKET = "hr";
 const TTL = 60 * 5;
@@ -44,12 +52,18 @@ export default async function handler(req, res) {
   if (!user) return;
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  // 採用書類は個人情報。採用を扱えない人（営業だけの人を含む）には何も返さない
-  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
+  // 採用書類は個人情報。採用を扱える人か、Office の人事・労務（引き渡された人の書類を見るだけ）以外には何も返さない（営業だけの人を含む）
+  const recruit = canRecruit(ctx);
+  const office = !recruit && canOfficeHr(ctx);
+  if (!recruit && !office) return json(res, 403, { error: "forbidden" });
+  // Office からは登録・差し替え・削除できない（HR で登録した原本を、Office は見るだけ）
+  if (office && req.method !== "GET") {
+    return json(res, 403, { error: "read_only", hint: "書類の登録・差し替え・削除は採用HRで行います。Office では見るだけです" });
+  }
 
   const sb = admin();
   try {
-    if (req.method === "GET") return await read(req, res, sb, ctx, user);
+    if (req.method === "GET") return await read(req, res, sb, ctx, user, office);
     if (req.method === "POST") return await act(req, res, sb, ctx, user);
     if (req.method === "DELETE") return await remove(req, res, sb, ctx, user);
   } catch (e) {
@@ -69,18 +83,33 @@ async function loadApplicant(sb, ctx, id) {
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle());
 }
 
+/**
+ * Office から見てよい応募者か：引き渡した版（handoff_at が入っていて、承諾済みで、無効化・辞退でなく、育成枠でない）がある。
+ * 同一テナントで読む（readHandoffOffers が tenant_id で絞る）。見てよければ、その版（最新の引き渡し）を返す。見てはいけなければ null
+ */
+async function handedOffOffer(sb, ctx, applicantId) {
+  if (!applicantId) return null;
+  const { ready, offers } = await readHandoffOffers(sb, ctx.tenantId, { applicantIds: [applicantId] });
+  if (!ready) return null;
+  return offers.find((o) => o.applicant_id === applicantId && o.tenant_id === ctx.tenantId) || null;
+}
+const notHandedOff = (res) => json(res, 403, { error: "not_handed_off", hint: "Office へ引き渡された方の書類だけ、Office から見られます（採用HRで引き渡しを済ませてください）" });
+
 const view = (r, names) => ({
   id: r.id, docType: r.doc_type, docTypeLabel: docTypeLabel(r.doc_type),
   filename: r.filename, mimeType: r.mime_type, sizeBytes: r.size_bytes,
   uploadedAt: r.created_at, uploadedByName: names.get(r.uploaded_by) || null,
 });
 
-async function read(req, res, sb, ctx, user) {
+async function read(req, res, sb, ctx, user, office = false) {
   const q = new URL(req.url, "http://localhost").searchParams;
-  if (q.get("id")) return fileUrl(res, sb, ctx, user, q.get("id"), q.get("download") === "1", q.get("applicantId"));
+  if (q.get("id")) return fileUrl(res, sb, ctx, user, q.get("id"), q.get("download") === "1", q.get("applicantId"), office);
 
   const a = await loadApplicant(sb, ctx, q.get("applicantId"));
   if (!a) return json(res, 404, { error: "not_found" });
+  // Office（閲覧専用）：引き渡された人だけ。引き渡した版の書類状態と、各種類の最新の1つだけを返す
+  const handed = office ? await handedOffOffer(sb, ctx, a.id) : null;
+  if (office && !handed) return notHandedOff(res);
   const rows = await must(sb.from("gw_hr_documents").select(FIELDS)
     .eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id).order("created_at", { ascending: false }));
 
@@ -94,36 +123,41 @@ async function read(req, res, sb, ctx, user) {
   // 採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）。オファーの列から出す。読めなくても応募書類は返す
   let conditionDocs = null;
   try {
-    const offers = await must(sb.from("gw_hr_offers").select("*").eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id)
-      .order("version", { ascending: false }));
+    const offers = office ? [handed]
+      : await must(sb.from("gw_hr_offers").select("*").eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id)
+        .order("version", { ascending: false }));
     conditionDocs = conditionDocsOf(offers);
   } catch (e) { console.error("[hr/documents] condition docs", e?.message || e); }
   return json(res, 200, {
     applicant: { id: a.id, name: a.name },
     conditionDocs,
+    // Office は見るだけ。条件通知書PDF・承諾済みPDF（給与・報酬が入る）は、給与を見られる人だけ開ける（api/hr/offers の file）
+    ...(office ? { readOnly: true, salaryVisible: canSeeSalary(ctx), offerId: handed.id } : {}),
     documents: DOC_TYPES.map((t) => ({
       docType: t.key, label: t.label, icon: t.icon,
       latest: g[t.key].latest ? view(g[t.key].latest, names) : null,
-      history: g[t.key].history.map((r) => view(r, names)),
+      history: office ? [] : g[t.key].history.map((r) => view(r, names)),
     })),
     types: DOC_TYPES,
     limits: { maxBytes: DOC_MAX_BYTES, accept: DOC_ACCEPT },
   });
 }
 
-async function fileUrl(res, sb, ctx, user, id, download, applicantId) {
+async function fileUrl(res, sb, ctx, user, id, download, applicantId, office = false) {
   const r = await must(sb.from("gw_hr_documents").select(FIELDS).eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle());
   if (!r || r.deleted_at) return json(res, 404, { error: "not_found" });
   // プレビューのURL（?applicant=…&doc=…）で、別の応募者の書類を指していないか
   if (applicantId && r.applicant_id !== applicantId) return json(res, 404, { error: "not_found" });
   const a = await loadApplicant(sb, ctx, r.applicant_id);
+  // Office（閲覧専用）：書類の持ち主（応募者）が、同一テナントで、Office へ引き渡された人であること。書類の ID だけでは見せない
+  if (office && (!a || !(await handedOffOffer(sb, ctx, r.applicant_id)))) return notHandedOff(res);
   const { data, error } = await sb.storage.from(BUCKET)
     .createSignedUrl(r.storage_path, TTL, download ? { download: r.filename } : undefined);
   if (error) return json(res, 404, { error: "file_missing", detail: error.message });
   // 誰がいつ見た・保存したか（URL は残さない）
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: download ? "hr.document.download" : "hr.document.view",
-    target: `hr_applicant:${r.applicant_id}`, detail: { documentId: r.id, docType: r.doc_type },
+    target: `hr_applicant:${r.applicant_id}`, detail: { documentId: r.id, docType: r.doc_type, ...(office ? { via: "office" } : {}) },
   });
   return json(res, 200, {
     url: data.signedUrl, filename: r.filename, mimeType: r.mime_type, download, expiresIn: TTL,

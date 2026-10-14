@@ -7,6 +7,8 @@
 //   4. 差し替えても前の版を残す（最新＋履歴）。削除は実体を消し、記録は残す。前の版が最新に戻る
 //   5. 見るときは private バケットの短時間 signed URL（公開URLを作らない）
 //   6. 応募者一覧に、履歴書・職務経歴書のそろい具合が出る
+//   7. Office の人事・労務（採用HRの権限が無い人）は、「Office へ引き渡された人（handoff_at あり）」の書類を見るだけ。
+//      同一テナント・引き渡し済み・Office の人事権限・本人の書類だけ（service role で読むので API で確かめる）。登録・差し替え・削除は 403
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -23,7 +25,8 @@ let seq = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
 const copy = (r) => (r ? { ...r } : null);
 function matcher(f) {
-  return (r) => f.every(([op, k, v]) => (op === "eq" ? r[k] === v : op === "neq" ? r[k] !== v : op === "in" ? v.includes(r[k]) : true));
+  return (r) => f.every(([op, k, v]) => (op === "eq" ? r[k] === v : op === "neq" ? r[k] !== v : op === "in" ? v.includes(r[k])
+    : op === "is" ? (v === null ? r[k] == null : r[k] === v) : op === "notnull" ? r[k] != null : true));
 }
 function table(name) {
   const f = [];
@@ -41,9 +44,10 @@ function table(name) {
     eq(k, v) { f.push(["eq", k, v]); return q; },
     neq(k, v) { f.push(["neq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
+    is(k, v) { f.push(["is", k, v]); return q; },
+    not(k, op, v) { if (op === "is" && v === null) f.push(["notnull", k, null]); return q; },
     order(col, opts) { if (!order) order = [col, opts?.ascending !== false]; return q; },
     limit() { return q; },
-    not() { return q; },
     maybeSingle: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     single: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     then: (fn, rej) => Promise.resolve({ data: rows().map(copy), error: null }).then(fn, rej),
@@ -122,7 +126,7 @@ const OTHER = { userId: "u-o", tenantId: "t2", isAdmin: true, isHr: true, roles:
 let who = RECRUITER;
 const real = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
-  namedExports: { gwContext: async () => who, canRecruit: real.canRecruit, canManageHr: real.canManageHr, canSeeSalary: real.canSeeSalary },
+  namedExports: { gwContext: async () => who, canRecruit: real.canRecruit, canManageHr: real.canManageHr, canSeeSalary: real.canSeeSalary, canOfficeHr: real.canOfficeHr },
 });
 
 const { default: docsApi } = await import(atRoot("api/hr/documents.js"));
@@ -185,7 +189,7 @@ await ok("採用担当・人事・責任者・経営者は使える（社内権�
     assert.equal((await get("applicantId=ap1")).statusCode, 200, String(p.roles));
   }
 });
-await ok("営業・一般メンバー・会計の管理者だけ・IT・管理だけの人には採用書類を見せない（403）", async () => {
+await ok("営業・一般メンバー・会計の管理者だけ・IT・管理だけの人には採用書類を見せない（403。引き渡し前の応募者は Office の人事権限でも見せない）", async () => {
   setup();
   await upload("ap1", "resume", PDF, MIME.pdf, "山田太郎_履歴書.pdf");
   const id = db.rows.gw_hr_documents[0].id;
@@ -483,6 +487,140 @@ await ok("条件通知書の列が無い環境（db/132 未適用）でも、応
   assert.equal(r.body.conditionDocs.docsReady, false);
   assert.equal(r.body.conditionDocs.rows[0].stateLabel, "送付済み");
   assert.equal(r.body.documents.length, 4);
+});
+
+console.log("— Office の閲覧専用（引き渡された人の書類だけ。service role で読むので API で確かめる）—");
+
+const HANDED = (o = {}) => ({ id: "ofH", tenant_id: "t1", applicant_id: "ap1", version: 1, offer_type: "contractor", accepted_at: "2026-10-10T01:00:00Z",
+  handoff_at: "2026-10-12T06:00:00Z", handoff_by: "u-hr", notice_pdf_path: "t1/notice/ofH.pdf", accepted_pdf_path: "t1/notice/ofH_acc.pdf", notice_title: "業務委託条件通知書", ...o });
+async function seedDocs() {
+  setup();
+  who = RECRUITER;
+  await upload("ap1", "resume", PDF, MIME.pdf, "山田_履歴書_v1.pdf");
+  await upload("ap1", "resume", PDF, MIME.pdf, "山田_履歴書_v2.pdf");
+  await upload("ap1", "skill_sheet", PDF, MIME.pdf, "山田_スキルシート.pdf");
+  await upload("ap2", "resume", PDF, MIME.pdf, "佐藤_履歴書.pdf");
+  db.rows.gw_hr_applicants.push({ id: "ap10", tenant_id: "t2", name: "他社の引き渡し済み", job_title: "x", source: "x", stage: "applied", status: "todo", created_at: "2026-09-03" });
+  who = RECRUITER;
+  signed.length = 0; logged.length = 0;
+  return Object.fromEntries(db.rows.gw_hr_documents.map((d) => [d.filename, d.id]));
+}
+
+await ok("Office の人事権限（会計側の管理者）は、引き渡された人（handoff_at あり）の書類を見られる。読み取り専用・各種類の最新の1つだけ・引き渡した版の条件書類", async () => {
+  const ids = await seedDocs();
+  db.rows.gw_hr_offers = [HANDED(), { ...HANDED({ id: "ofOld", version: 0, handoff_at: null, accepted_at: null }) }];
+  who = ADMIN;
+  const r = await get("applicantId=ap1");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.readOnly, r.body.offerId, r.body.applicant.id], [true, "ofH", "ap1"]);
+  const resume = r.body.documents.find((d) => d.docType === "resume");
+  assert.equal(resume.latest.filename, "山田_履歴書_v2.pdf", "最新の1つ");
+  assert.deepEqual(resume.history, [], "過去の版は Office に出さない（HR で見る）");
+  assert.equal(r.body.documents.find((d) => d.docType === "skill_sheet").latest.filename, "山田_スキルシート.pdf");
+  assert.equal(r.body.conditionDocs.offerId, "ofH", "引き渡した版の書類状態");
+  assert.deepEqual(r.body.conditionDocs.rows.map((x) => x.file), [null, "notice", "accepted"]);
+  assert.equal(typeof r.body.salaryVisible, "boolean");
+});
+
+await ok("見るときは短時間の署名付きURL。誰が見たかを監査ログに残す（via: office）。保存（download）もできる", async () => {
+  const ids = await seedDocs();
+  db.rows.gw_hr_offers = [HANDED()];
+  who = ADMIN;
+  const r = await get(`id=${ids["山田_履歴書_v2.pdf"]}&applicantId=ap1`);
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(/\/sign\/hr\//.test(r.body.url) && signed.length === 1 && signed[0].ttl === 300);
+  assert.deepEqual([logged.at(-1).action, logged.at(-1).detail.via, logged.at(-1).actorId], ["hr.document.view", "office", "u-ad"]);
+  const d = await get(`id=${ids["山田_履歴書_v2.pdf"]}&download=1`);
+  assert.equal(d.statusCode, 200);
+  assert.equal(signed.at(-1).download, "山田_履歴書_v2.pdf");
+  assert.equal(logged.at(-1).action, "hr.document.download");
+});
+
+await ok("引き渡していない応募者の書類は、Office の人事権限でも見られない（承諾しただけ・正式契約の途中・オファーなし・辞退・無効化・育成枠）", async () => {
+  const ids = await seedDocs();
+  for (const [label, offers] of [
+    ["オファーなし", []],
+    ["承諾しただけ（handoff_at なし）", [HANDED({ handoff_at: null, handoff_by: null })]],
+    ["正式契約の途中", [HANDED({ handoff_at: null, formal_contract_required: true, formal_sent_at: "2026-10-11T00:00:00Z" })]],
+    ["辞退", [HANDED({ declined_at: "2026-10-13T00:00:00Z" })]],
+    ["無効化", [HANDED({ revoked_at: "2026-10-13T00:00:00Z" })]],
+    ["育成枠（handoff_at が入っていても Office へは渡さない）", [HANDED({ offer_type: "training" })]],
+  ]) {
+    db.rows.gw_hr_offers = offers;
+    who = ADMIN;
+    const l = await get("applicantId=ap1");
+    assert.deepEqual([l.statusCode, l.body.error], [403, "not_handed_off"], `${label}：一覧`);
+    const f = await get(`id=${ids["山田_履歴書_v2.pdf"]}`);
+    assert.deepEqual([f.statusCode, f.body.error], [403, "not_handed_off"], `${label}：URL`);
+  }
+  assert.equal(signed.length, 0, "URL は1つも出していない");
+});
+
+await ok("別の応募者の書類は見られない：引き渡したのは ap1 だけ。ap1 の引き渡しで ap2 の書類 ID を指しても 403／applicantId とずれた書類は 404", async () => {
+  const ids = await seedDocs();
+  db.rows.gw_hr_offers = [HANDED()];
+  who = ADMIN;
+  const other = await get(`id=${ids["佐藤_履歴書.pdf"]}`);
+  assert.deepEqual([other.statusCode, other.body.error], [403, "not_handed_off"], "ap2 は引き渡していない");
+  const mismatch = await get(`id=${ids["佐藤_履歴書.pdf"]}&applicantId=ap1`);
+  assert.equal(mismatch.statusCode, 404, "applicantId と書類の持ち主がずれている");
+  const ap2 = await get("applicantId=ap2");
+  assert.deepEqual([ap2.statusCode, ap2.body.error], [403, "not_handed_off"]);
+  assert.equal(signed.length, 0);
+});
+
+await ok("別のテナントは見られない：他社の応募者（引き渡し済みでも）・他社の書類は 404。自社の応募者に他社の引き渡しがあっても出ない", async () => {
+  const ids = await seedDocs();
+  db.rows.gw_hr_offers = [HANDED({ id: "ofX", tenant_id: "t2", applicant_id: "ap10" }), HANDED({ id: "ofY", tenant_id: "t2", applicant_id: "ap2" })];
+  db.rows.gw_hr_documents.push({ id: "dx", tenant_id: "t2", applicant_id: "ap10", doc_type: "resume", filename: "他社.pdf", storage_path: "t2/recruit/ap10/x.pdf", mime_type: "application/pdf", created_at: "2026-10-01" });
+  who = ADMIN;   // t1
+  assert.equal((await get("applicantId=ap10")).statusCode, 404, "他社の応募者");
+  assert.equal((await get("id=dx")).statusCode, 404, "他社の書類");
+  const ap2 = await get("applicantId=ap2");
+  assert.deepEqual([ap2.statusCode, ap2.body.error], [403, "not_handed_off"], "自社の応募者に、他社のテナントの引き渡しが付いていても引き渡し済みにならない");
+  assert.equal(signed.length, 0);
+});
+
+await ok("Office からは登録・差し替え・削除ができない（403 read_only）。置き場所の URL も出さず、行も変わらない", async () => {
+  const ids = await seedDocs();
+  db.rows.gw_hr_offers = [HANDED()];
+  who = ADMIN;
+  const before = JSON.stringify(db.rows.gw_hr_documents);
+  const up = await post({ action: "upload", applicantId: "ap1", docType: "resume", mimeType: MIME.pdf, sizeBytes: 10 });
+  assert.deepEqual([up.statusCode, up.body.error], [403, "read_only"]);
+  const at = await post({ action: "attach", applicantId: "ap1", docType: "resume", path: "t1/recruit/ap1/x.pdf", filename: "x.pdf" });
+  assert.deepEqual([at.statusCode, at.body.error], [403, "read_only"]);
+  const rm = await del(ids["山田_履歴書_v2.pdf"]);
+  assert.deepEqual([rm.statusCode, rm.body.error], [403, "read_only"]);
+  assert.equal(JSON.stringify(db.rows.gw_hr_documents), before, "書類の行は変わらない");
+  assert.equal(logged.filter((l) => /upload|delete/.test(l.action)).length, 0, "登録・削除の記録も無い");
+  // 採用HRの人は、これまでどおり登録・削除できる
+  who = RECRUITER;
+  assert.equal((await del(ids["山田_履歴書_v2.pdf"])).statusCode, 200);
+});
+
+await ok("Office の人事権限が無い人（営業・IT・責任者・一般メンバー）は、引き渡した人の書類でも 403", async () => {
+  const ids = await seedDocs();
+  db.rows.gw_hr_offers = [HANDED()];
+  for (const p of [SALES, IT, MEMBER]) {
+    who = p;
+    assert.equal((await get("applicantId=ap1")).statusCode, 403, `${p.roles} 一覧`);
+    assert.equal((await get(`id=${ids["山田_履歴書_v2.pdf"]}`)).statusCode, 403, `${p.roles} URL`);
+  }
+  assert.equal(signed.length, 0);
+});
+
+await ok("採用を扱える人（人事・経営者）は、これまでどおり引き渡し前の応募者の書類も見られ、過去の版も見える（Office の制限は掛からない）", async () => {
+  await seedDocs();
+  db.rows.gw_hr_offers = [];
+  for (const p of [RECRUITER, HR, OWNER]) {
+    who = p;
+    const r = await get("applicantId=ap2");
+    assert.equal(r.statusCode, 200, String(p.roles));
+    assert.equal(r.body.readOnly, undefined, "HR の画面は読み取り専用にしない");
+  }
+  who = HR;
+  assert.equal((await get("applicantId=ap1")).body.documents.find((d) => d.docType === "resume").history.length, 1, "HR には過去の版が出る");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -285,21 +285,49 @@
                            font-family:inherit; }
     .hr-drive .note { font-size:11.5px; color:var(--muted); }
 
+    /* HRから引き渡し（HR で条件承諾・正式契約まで終え、HR が承諾内容を確認して引き渡した人。承諾しただけの人は載らない） */
     .hr-handoff { margin-bottom:14px; border-left:4px solid #2f6f3a; }
     .hr-handoff .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; color:#1b2440; margin-bottom:6px; }
     .hr-handoff .hd .n { background:#e5f1e2; color:#2f6f3a; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:700; }
     .hr-handoff .hd .muted { font-size:12px; }
-    .hr-handoff .row { display:grid; grid-template-columns:minmax(160px, 1.2fr) 2fr auto; gap:8px 14px; align-items:center;
-                       padding:10px 0; border-top:1px solid var(--border); }
+    .hr-handoff .row { display:grid; grid-template-columns:minmax(160px, 1fr) 2fr; gap:8px 14px; align-items:center;
+                       padding:12px 0; border-top:1px solid var(--border); }
     .hr-handoff .who { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .hr-handoff .chip { font-size:11px; background:#e7eaf3; color:#1b2440; border-radius:999px; padding:1px 8px; }
     .hr-handoff .facts { display:flex; gap:6px 12px; flex-wrap:wrap; font-size:12.5px; color:#1b2440; }
     .hr-handoff .facts .ok { color:#2f6f3a; font-weight:700; }
     .hr-handoff .facts .muted { color:var(--muted); }
+    .hr-handoff .row > .flowline, .hr-handoff .row > .nx, .hr-handoff .row > .act, .hr-handoff .row > .hdocs { grid-column:1 / -1; }
+    .hr-handoff .flowline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .hr-handoff .hx-steps { margin:0; flex:1 1 320px; }
+    .hr-hrdone { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; color:#2f6f3a; background:#e5f1e2;
+                 border:1px solid #cfe3cb; border-radius:999px; padding:3px 10px; white-space:nowrap; }
+    .hr-hrdone .material-symbols-outlined { font-size:15px; }
+    .hr-handoff .nx, .hx-hire .nx { display:flex; gap:6px 10px; flex-wrap:wrap; align-items:baseline; font-size:13px; color:#1b2440; }
+    .hr-handoff .nx .k, .hx-hire .nx .k { font-size:10.5px; font-weight:800; letter-spacing:.04em; color:#fff; background:#2f6fd6; border-radius:4px; padding:1px 6px; }
+    .hr-handoff .nx .muted, .hx-hire .nx .muted { font-size:12px; }
+    .hr-handoff .act { display:flex; gap:8px; flex-wrap:wrap; }
+    .hr-handoff .hdocs { border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:#fafbfd; }
+    .hr-handoff .hdocs h4 { margin:0 0 6px; font-size:13.5px; color:#1b2440; }
+    .hr-chip-hr { display:inline-block; margin-left:6px; font-size:10.5px; font-weight:700; color:#2f6f3a; background:#e5f1e2; border-radius:999px; padding:0 7px; vertical-align:middle; }
+    /* 採用時書類（HRから引き渡された原本。閲覧だけ） */
+    .hd-sec { margin:10px 0 0; }
+    .hd-sec h5 { margin:0 0 6px; font-size:12.5px; color:#1b2440; }
+    .hd-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0; border-top:1px solid var(--border); font-size:12.5px; }
+    .hd-row:first-of-type { border-top:0; }
+    .hd-row .nm { font-weight:700; color:#1b2440; min-width:9em; }
+    .hd-row .st { font-size:11px; font-weight:700; border-radius:999px; padding:1px 9px; background:#e7eaf3; color:#4a5068; }
+    .hd-row .st[data-st="registered"], .hd-row .st[data-st="sent"], .hd-row .st[data-st="confirmed"] { background:#e5ecfb; color:#2a4fa8; }
+    .hd-row .st[data-st="accepted"] { background:#e5f1e2; color:#2f6f3a; }
+    .hd-row .st[data-st="declined"], .hd-row .st[data-st="revoked"] { background:#fdecea; color:#b3261e; }
+    .hd-row .when { color:var(--muted); font-size:12px; }
+    .hd-row .btn { margin-left:auto; }
+    .hd-note { font-size:11.5px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
 
     @media (max-width:760px) {
       .hr-handoff .row { grid-template-columns:1fr; }
-      .hr-handoff .act .btn { width:100%; }
+      .hr-handoff .act .btn { flex:1 1 100%; }
+      .hd-row .btn { margin-left:0; }
       .hr-table thead { display:none; }
       .hr-table tr { display:block; border-bottom:1px solid var(--border); padding:10px 0; }
       .hr-table td { display:block; border:0; padding:2px 0; }
@@ -318,7 +346,9 @@
 
   <div id="hr-msg" class="err-text"></div>
 
-  <!-- 採用HRから引き渡された人（db/133）。「入社予定」の上に出す。社員登録へ進むのは Office の人事・労務 -->
+  <!-- HRから引き渡し（db/133）。HR で本人が条件を承諾し、正式契約まで終え、HR が承諾内容を確認して引き渡した人だけ。
+       承諾しただけの人は載らない。「入社予定」の上に出す。社員登録へ進むのは Office の人事・労務。
+       Office は 入社書類 → アカウント・端末 → オリエンテーション → 入社完了 の順に進める（正式契約は HR で完了済み） -->
   <div id="hr-handoff"></div>
 
   <!-- 一覧 -->
@@ -450,32 +480,72 @@
   }
 
   /**
-   * HRから引き渡し（採用HR で本人が条件を承諾し、HR が承諾内容を確認して Office へ引き渡した人。db/133）。
+   * HRから引き渡し（採用HR で本人が条件を承諾し、正式契約まで終え、HR が承諾内容を確認して［Officeへ引き渡す］を押した人。db/133）。
+   * 承諾しただけの人は載らない（handoff_at の入った人だけ）。育成枠は引き渡さない（LMS・育成開始＝HR）。
+   * 正式契約（LegalSign）は HR で完了している。ここは「HRで正式契約まで完了」から始まり、
+   *   入社書類 → アカウント・端末 → オリエンテーション → 入社完了 の順に進める。
    * ［社員登録へ］で既存の社員登録（admin-onboard.html）へ。条件はオファーの版から事前入力される（URL には載せない）。
-   * 「Office へ引き渡す」は Office 担当者の入社準備キューに載せることで、本人に Office の権限を与えるものではない
+   * 「Office へ引き渡す」は Office 担当者の入社準備キューに載せることで、本人に Office の権限を与えるものではない。
+   * HR で登録した書類（履歴書・職務経歴書・スキルシート・内定通知書・労働条件通知書・承諾済みPDF）は、ここで見るだけ
+   * （再アップロードは要らない。登録・差し替え・削除は採用HR）
    */
+  const dayOf = (iso) => (iso ? fmtDateTime(iso).split(" ")[0] : "—");
+  const ymdSlash = (d) => (d ? String(d).slice(0, 10).replace(/-/g, "/") : "未定");
+
+  /** 入社の流れ（入社書類 → アカウント・端末 → オリエンテーション → 入社完了）。lib/hire-flow.js */
+  function hireStepsHtml(steps) {
+    return `<ol class="hx-steps" aria-label="入社の流れ" data-role="hire-steps">${(steps || []).map((s, i) => `<li class="${esc(s.state)}" data-step="${esc(s.key)}" data-state="${esc(s.state)}"${s.state === "current" ? ' aria-current="step"' : ""}>
+      <span class="n">${i + 1}.</span>${esc(s.label)}</li>`).join("")}</ol>`;
+  }
+  /** 4つの前に付ける印：HRで正式契約まで完了（Office のステップではない） */
+  function hrDoneChipHtml(hr) {
+    if (!hr) return "";
+    return `<span class="hr-hrdone" data-role="hr-done" title="${esc(hr.detail || "")}"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>${esc(hr.label)}<span class="muted" style="font-weight:500;">（${esc(hr.detail || "")}）</span></span>`;
+  }
+  const kindOf = (r) => [r.offerTypeLabel, r.employmentType && !String(r.offerTypeLabel || "").includes(r.employmentType) ? r.employmentType : ""].filter(Boolean).join("・");
+  const byOf = (r) => (r.handoffByName ? `（${esc(r.handoffByName)}）` : "");
+
+  function handoffRowHtml(r) {
+    const nx = r.hire?.next || {};
+    const id = esc(r.applicantId);
+    const register = r.claimed
+      ? `<button class="btn btn-secondary btn-sm" data-act="register" onclick="startRegister('${id}', this)">社員登録の続きを開く</button>`
+      : `<button class="btn btn-primary btn-sm" data-act="register" onclick="startRegister('${id}', this)">社員登録へ</button>`;
+    return `
+      <div class="row" data-handoff="${id}" data-next="${esc(nx.key || "")}">
+        <div class="who"><b>${esc(r.name)}</b><span class="chip">${esc(r.offerTypeLabel || "")}</span>${r.jobTitle ? `<span class="chip">${esc(r.jobTitle)}</span>` : ""}</div>
+        <div class="facts">
+          <span class="ok" data-fact="accepted">✓ 条件承諾（${esc(dayOf(r.acceptedAt))}）</span>
+          <span data-fact="join">入社予定：${esc(ymdSlash(r.joinDate))}</span>
+          ${r.employmentType && !String(r.offerTypeLabel || "").includes(r.employmentType) ? `<span data-fact="etype">${esc(r.employmentType)}</span>` : ""}
+          <span class="ok" data-fact="notice">✓ 労働条件通知書 確認済み</span>
+          <span class="muted" data-fact="handoff">引き渡し：${esc(fmtDateTime(r.handoffAt))}${byOf(r)}</span>
+        </div>
+        <div class="flowline">${hrDoneChipHtml(r.hire?.hr)}${hireStepsHtml(r.hire?.steps)}</div>
+        <div class="nx" data-role="next-action"><span class="k">NEXT ACTION</span><b>${esc(nx.label || "")}</b>
+          ${nx.actorLabel ? `<span class="muted">担当：${esc(nx.actorLabel)}</span>` : ""}
+          ${nx.note ? `<span class="muted">${esc(nx.note)}</span>` : ""}</div>
+        <div class="act">
+          ${register}
+          <button class="btn btn-secondary btn-sm" data-act="docs" onclick="toggleHireDocs('${id}', this)">採用時書類を見る</button>
+        </div>
+        <div class="hdocs" id="hd-${id}" hidden></div>
+      </div>`;
+  }
   function renderHandoffs(h) {
     const box = el("hr-handoff");
     const rows = h?.rows || [];
     if (!rows.length) { box.innerHTML = ""; return; }
+    // 開いている書類の欄は、描き直しても開いたままにする（取り込み直しのたびに閉じない）
+    const docsOpen = new Set([...box.querySelectorAll(".hdocs:not([hidden])")].map((n) => n.id));
+    const docsHtml = new Map([...box.querySelectorAll(".hdocs:not([hidden])")].map((n) => [n.id, n.innerHTML]));
     box.innerHTML = `
       <div class="card hr-handoff" id="hr-handoff-card">
         <div class="hd"><b>HRから引き渡し</b><span class="n" id="hr-handoff-n">${rows.length}名</span>
-          <span class="muted">採用HRで条件の承諾を確認済みです。社員登録へ進めてください。</span></div>
-        ${rows.map((r) => `
-          <div class="row" data-handoff="${esc(r.applicantId)}">
-            <div class="who"><b>${esc(r.name)}</b><span class="chip">${esc(r.offerTypeLabel || "")}</span></div>
-            <div class="facts">
-              <span class="ok">✓ 条件承諾済み</span>
-              <span class="${r.formalRequired ? "ok" : "muted"}">${r.formalRequired ? "✓ 正式契約済み" : "正式契約なし"}</span>
-              ${r.joinDate ? `<span>入社・稼働予定：${esc(r.joinDate)}</span>` : ""}
-              <span class="muted">引き渡し：${esc(fmtDateTime(r.handoffAt))}</span>
-            </div>
-            <div class="act">${r.claimed
-              ? `<button class="btn btn-secondary btn-sm" onclick="startRegister('${esc(r.applicantId)}', this)">社員登録の続きを開く</button>`
-              : `<button class="btn btn-primary btn-sm" onclick="startRegister('${esc(r.applicantId)}', this)">社員登録へ</button>`}</div>
-          </div>`).join("")}
+          <span class="muted">HR で条件の承諾・正式契約まで終え、承諾内容の確認が済んで引き渡された人です。社員登録へ進め、入社書類 → アカウント・端末 → オリエンテーション → 入社完了 の順に進めてください。</span></div>
+        ${rows.map(handoffRowHtml).join("")}
       </div>`;
+    for (const id of docsOpen) { const n = el(id); if (n) { n.hidden = false; n.innerHTML = docsHtml.get(id) || ""; } }
   }
   const fmtDateTime = (iso) => {
     if (!iso) return "—";
@@ -492,6 +562,90 @@
     } catch (e) {
       el("hr-msg").textContent = `社員登録へ進めませんでした：${e.hint || e.detail || e.message || "理由が返ってきませんでした"}`;
     }
+  }
+
+  // ---- 採用時書類（HRから引き渡された原本。閲覧だけ） ---------------------------------------
+  //   履歴書・職務経歴書・スキルシート・内定通知書・労働条件通知書・承諾済みPDF は、採用HRが登録した原本を見るだけ。
+  //   Office に同じファイルを置き直さない（二重管理しない）。登録・差し替え・削除は採用HRで行う（Office からは API が 403 で断る）。
+  //   見られるのは、引き渡された人の書類だけ（API が、同一テナント・引き渡し済み・Office の人事権限・本人の書類を確かめる）。
+  //   雇用契約書・業務委託契約書・NDA・入社提出書類は Office（「入社・契約書類」）で扱う
+  function hireDocsHtml(d, applicantId) {
+    const app = (d.documents || []).map((t) => {
+      const l = t.latest;
+      return `<div class="hd-row" data-doc="${esc(t.docType)}" data-state="${l ? "registered" : "none"}">
+        <span class="nm">${esc(t.label)}</span>
+        <span class="st" data-st="${l ? "registered" : "none"}">${l ? "登録済み" : "未登録"}</span>
+        ${l ? `<span class="when">${esc(l.filename)}・${esc(dayOf(l.uploadedAt))}</span>
+          <button class="btn btn-secondary btn-sm" data-act="open-doc" onclick="openHireDoc('${esc(l.id)}', '${esc(applicantId)}', this)">開く</button>` : ""}
+      </div>`;
+    }).join("");
+    const c = d.conditionDocs;
+    const cond = c ? c.rows.map((r) => {
+      if (!r.applicable) return "";
+      const canOpen = r.file && c.docsReady && d.salaryVisible !== false;
+      return `<div class="hd-row" data-cond="${esc(r.key)}" data-state="${esc(r.state)}">
+        <span class="nm">${esc(r.label)}</span>
+        <span class="st" data-st="${esc(r.state)}">${esc(r.stateLabel)}</span>
+        ${r.at ? `<span class="when">${esc(dayOf(r.at))}</span>` : ""}
+        ${r.note ? `<span class="when">${esc(r.note)}</span>` : ""}
+        ${canOpen ? `<button class="btn btn-secondary btn-sm" data-act="open-cond" onclick="openOfferPdf('${esc(c.offerId)}', '${esc(r.file)}', this)">開く</button>`
+          : r.file && d.salaryVisible === false ? `<span class="when">給与・報酬が入るため、権限のある方が確認します</span>` : ""}
+      </div>`;
+    }).join("") : "";
+    return `
+      <div class="hd-sec" data-hire-docs="app"><h5>応募書類</h5>${app}</div>
+      <div class="hd-sec" data-hire-docs="cond"><h5>採用条件書類</h5>${cond || `<div class="muted" style="font-size:12.5px;">オファーの書類はありません。</div>`}</div>
+      <p class="hd-note">採用HRで登録した原本を、そのまま見ています（閲覧専用）。ここで再アップロードする必要はありません。登録・差し替え・削除は採用HRで行います。</p>`;
+  }
+  async function loadHireDocsInto(host, applicantId) {
+    if (!host) return;
+    host.innerHTML = `<div class="muted" style="font-size:12.5px;">読み込み中…</div>`;
+    try {
+      const d = await API.hrDocuments(applicantId);
+      host.innerHTML = hireDocsHtml(d, applicantId);
+    } catch (e) {
+      host.innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.message || "書類を読み込めませんでした")}</div></div>`;
+    }
+  }
+  async function toggleHireDocs(applicantId, btn) {
+    const box = el(`hd-${applicantId}`);
+    if (!box) return;
+    if (!box.hidden) { box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    box.innerHTML = `<h4>採用時書類（HRから引き渡し・閲覧専用）</h4><div id="hdh-${esc(applicantId)}"></div>`;
+    await loadHireDocsInto(el(`hdh-${applicantId}`), applicantId);
+  }
+  // 応募書類を開く。押した直後に別タブを開き、短時間の URL が取れたらそこへ移す（待ってから開くと、ポップアップとして止められる）
+  async function openHireDoc(docId, applicantId, btn) {
+    const w = window.open("", "_blank");
+    if (w) w.opener = null;
+    try {
+      const info = await KPLayout.busy(btn, "開いています…", () => API.hrDocumentUrl(docId, false, applicantId));
+      if (w) w.location.href = info.url; else location.href = info.url;
+    } catch (e) {
+      if (w) w.close();
+      say(e.hint || e.message || "書類を開けませんでした", true);
+    }
+  }
+  // 条件通知書・承諾済みPDF。ログインの鍵が要るので fetch で受け取って保存する
+  async function openOfferPdf(offerId, file, btn) {
+    try {
+      await KPLayout.busy(btn, "読み込み中…", async () => {
+        const token = await API.getToken();
+        const r = await fetch(`/api/hr/offers?id=${encodeURIComponent(offerId)}&file=${encodeURIComponent(file)}`,
+          { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        if (!r.ok) {
+          const b = await r.json().catch(() => ({}));
+          throw new Error(b.hint || b.message || "PDFを開けませんでした");
+        }
+        const blob = await r.blob();
+        const name = decodeURIComponent((/filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") || "") || [])[1] || "offer.pdf");
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      });
+    } catch (e) { say(e.message || "PDFを開けませんでした", true); }
   }
 
   /**
@@ -543,11 +697,14 @@
         nextText = r.next?.title || "—";
         who = r.next?.who || (r.next?.role ? `${r.next.role}（担当者 未設定）` : "未設定");
       }
+      // Office の NEXT ACTION は、入社書類 → アカウント・端末 → オリエンテーション → 入社完了 の言い方にそろえる
+      // （どの段階の話かを先頭に添える。数え方は lib/hire-flow.js が既存の段階の事実から決める。正式契約は HR で完了済み）
+      if (!done && onb && r.hirePhase && r.hirePhase !== "—") nextText = `［${r.hirePhase}］${nextText}`;
       // 名前を取れない行を、空欄のまま出さない（別の人と取り違えないように、操作も出さない）
       const missing = !r.name || r.name === "（不明）";
       const nameCell = missing
         ? `<span class="nm" style="color:#c53030;">対象者情報を取得できません</span><span class="sub">名簿を確認してください</span>`
-        : `<span class="nm">${esc(r.name)}</span><span class="sub">${esc([r.department, r.employmentType].filter(Boolean).join("・"))}</span>`;
+        : `<span class="nm">${esc(r.name)}${r.fromHr ? `<span class="hr-chip-hr" data-role="from-hr">HRから引き渡し</span>` : ""}</span><span class="sub">${esc([r.department, r.employmentType].filter(Boolean).join("・"))}</span>`;
       const date = r.targetOn ? String(r.targetOn).replace(/-/g, "/") : "未設定";
       return `
       <tr class="${missing ? "" : "click"}" ${missing ? "" : `onclick="showDetail('${esc(r.id)}')"`} data-row="${esc(r.id)}">
@@ -819,7 +976,7 @@
   function hxTabsOf(p) {
     return p.kind === "offboarding"
       ? [["basic", "基本情報"], ["contact", "連絡"], ["history", "手続き履歴"], ["drive", "書類の保管先"]]
-      : [["basic", "基本情報"], ...(p.flow ? [["flow", "手続きの進み具合"]] : []), ["drive", "書類の保管先"]];
+      : [["basic", "基本情報"], ...(p.hire?.fromHr ? [["hire", "HRから引き渡し"]] : []), ...(p.flow ? [["flow", "手続きの進み具合"]] : []), ["drive", "書類の保管先"]];
   }
 
   async function showDetail(id) {
@@ -896,11 +1053,13 @@
           ${off ? `
           <div class="hx-pane" role="tabpanel" id="hx-pane-contact" data-pane="contact" ${hxState.tab === "contact" ? "" : "hidden"}><div id="rc-contact-slot"></div></div>
           <div class="hx-pane" role="tabpanel" id="hx-pane-history" data-pane="history" ${hxState.tab === "history" ? "" : "hidden"}><div id="rc-history-slot"></div></div>`
-          : p.flow ? `<div class="hx-pane" role="tabpanel" id="hx-pane-flow" data-pane="flow" ${hxState.tab === "flow" ? "" : "hidden"}>${obFlowTableHtml(p)}</div>` : ""}
+          : `${p.hire?.fromHr ? `<div class="hx-pane" role="tabpanel" id="hx-pane-hire" data-pane="hire" ${hxState.tab === "hire" ? "" : "hidden"}>${hxHireHtml(p)}</div>` : ""}
+             ${p.flow ? `<div class="hx-pane" role="tabpanel" id="hx-pane-flow" data-pane="flow" ${hxState.tab === "flow" ? "" : "hidden"}>${obFlowTableHtml(p)}</div>` : ""}`}
           <div class="hx-pane" role="tabpanel" id="hx-pane-drive" data-pane="drive" ${hxState.tab === "drive" ? "" : "hidden"}>${hxDriveHtml(p)}</div>
         </div>
       </div>`;
     if (!off) loadNotice(p.employeeId);
+    if (!off && p.hire?.fromHr) loadHireDocsInto(el("hire-docs-host"), p.hire.handoff.applicantId);
     if (off) { if (rcFor(p)) renderRetireCase(); loadRetireCase(p.employeeId); }
     if (first) {
       // 上のバーは画面に固定されている。そのぶん引いてから寄せないと、
@@ -1459,6 +1618,57 @@
           <div class="rc-acts">${(cur?.actions || []).map((k, i) => obBtn(p, k, i === 0)).join("")}</div>`
         : `<div style="font-weight:700;color:#256b36;">入社準備はすべて完了しました</div>`}
     </section>`;
+  }
+  /**
+   * HRから引き渡し（入社手続きのタブ）。採用HRで本人が条件を承諾し、正式契約まで終え、HR が引き渡した人の「引き渡された情報」と入社の流れ。
+   *   ① 引き渡された情報と NEXT ACTION（HRで正式契約まで完了 → 入社書類 → アカウント・端末 → オリエンテーション → 入社完了）
+   *   ② 採用時書類 … 採用HRで登録した原本を見るだけ（閲覧専用）。再アップロードは要らない
+   *   ③ 入社・契約書類 … Office で集める・結ぶ書類（雇用契約書・業務委託契約書・NDA・入社提出書類）。既存の6つの段階の状態を並べるだけ
+   */
+  function hxHireHtml(p) {
+    const h = p.hire, f = h, nx = f.next, ho = h.handoff;
+    const v = (x) => (x ? `<span class="v">${esc(x)}</span>` : `<span class="v none">未設定</span>`);
+    const formal = ho.formalRequired === false ? "不要" : ho.formalSignedAt ? `署名済み（${dayOf(ho.formalSignedAt)}）` : "署名済み";
+    // 既存の6つの段階（基本情報 → 契約書の準備 → 本人の確認・署名 → 入社情報・必要書類 → アカウント・貸与品 → 会社確認・完了）のうち、
+    // 書類にあたる3つの状態をそのまま並べる（新しく数えない）
+    const six = new Map((p.flow?.steps || []).map((s) => [s.key, s]));
+    const docRow = (key) => {
+      const st = six.get(key);
+      if (!st) return "";
+      return `<div class="hd-row" data-contract-doc="${esc(key)}" data-state="${esc(st.state)}">
+        <span class="nm">${esc(st.label || key)}</span>
+        <span class="st" data-st="${st.state === "done" ? "accepted" : st.state === "current" ? "sent" : "none"}">${esc(OB_STATE[st.state]?.[0] || st.state)}</span>
+        <span class="when">${esc(st.status || "")}</span>
+        ${(st.actions || []).slice(0, 1).map((k) => obBtn(p, k, false)).join("")}</div>`;
+    };
+    return `
+      <section class="rc-sec hx-hire" id="ob-hire" data-role="hire">
+        <h3>HRから引き渡された情報 <span class="sub">採用HRで条件の承諾・正式契約まで終え、承諾内容を確認して引き渡されました</span></h3>
+        <div class="nx" data-role="hire-next" style="margin:6px 0 8px;"><span class="k">NEXT ACTION</span>
+          <b style="font-size:15px;">${esc(nx.label)}</b>
+          ${nx.actorLabel ? `<span class="muted">担当：${esc(nx.actorLabel)}</span>` : ""}
+          ${nx.note ? `<span class="muted">${esc(nx.note)}</span>` : ""}</div>
+        <div class="flowline" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${hrDoneChipHtml(h.hr)}${hireStepsHtml(f.steps)}</div>
+        <div class="rc-grid" style="margin-top:12px;">
+          <div><div class="k">氏名</div>${v(ho.name)}</div>
+          <div><div class="k">職種</div>${v(ho.jobTitle)}</div>
+          <div><div class="k">雇用区分</div>${v(kindOf(ho))}</div>
+          <div><div class="k">入社予定日</div>${v(ho.joinDate ? ymdSlash(ho.joinDate) : "")}</div>
+          <div><div class="k">条件承諾日</div>${v(ho.acceptedAt ? fmtDateTime(ho.acceptedAt) : "")}</div>
+          <div><div class="k">労働条件通知書</div>${v("確認済み")}</div>
+          <div data-fact="formal"><div class="k">正式契約（HRで完了）</div>${v(formal)}</div>
+          <div data-fact="handoff"><div class="k">引き渡し</div>${v(`${fmtDateTime(ho.handoffAt)}${ho.handoffByName ? `（${ho.handoffByName}）` : ""}`)}</div>
+        </div>
+      </section>
+      <section class="rc-sec" id="ob-hire-docs" data-role="hire-docs">
+        <h3>採用時書類 <span class="sub">HRから引き渡し・閲覧専用</span></h3>
+        <div id="hire-docs-host"><div class="muted" style="font-size:12.5px;">読み込み中…</div></div>
+      </section>
+      <section class="rc-sec" id="ob-contract-docs" data-role="contract-docs">
+        <h3>入社・契約書類 <span class="sub">Office で集める・結ぶ書類（雇用契約書・業務委託契約書・NDA・入社提出書類）</span></h3>
+        ${["contract", "sign", "intake"].map(docRow).join("")
+          || `<div class="muted" style="font-size:12.5px;">入社手続きの進み具合を読み込めませんでした。</div>`}
+      </section>`;
   }
   // 手続きの進み具合（6つの段階の表。タブ）
   function obFlowTableHtml(p) {
