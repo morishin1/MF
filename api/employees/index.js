@@ -17,9 +17,15 @@ import {
 } from "../../lib/accounts.js";
 import { normalizeKind } from "../../lib/partner.js";
 import { guardOwnerTarget, guardLastOwner } from "../../lib/owner-guard.js";
+import { adminFlags, accessForMember } from "../../lib/member-access.js";
+import { loadAppsMany } from "../../lib/app-grants.js";
+import { ymd } from "../../lib/jst.js";
 
-// 退職・退職手続き中は、どのシステムにも入れない状態にする
+// 経営者を退職にしてしまわないための確認の対象（退職予定も含む。退職日が来たら誰もいなくなるため）
 const LEFT = ["leaving", "left"];
+// 社内システム（無限道場・タイムカード・会計）を止めるのは、退職（left）になったときだけ。
+// 退職予定・引継ぎ中（leaving）は、退職日まで通常どおり使える（lib/left-gate.js）
+const CLOSED = ["left"];
 
 const EMPLOYMENT_TYPES = ["正社員", "契約社員", "パート", "アルバイト", "業務委託", "役員", "その他"];
 const STATUSES = ["invited", "active", "leaving", "left"];
@@ -62,11 +68,21 @@ export default async function handler(req, res) {
     }
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
 
-    // 社内ロールを添える。読めない立場（メンバー等）では空のまま返る
-    const { data: grants } = await sb
+    // 社内ロールを添える。
+    //
+    // ■ 管理権限（canManageHr）を通った人には、認可したあとに admin() で全員分を読む
+    //   gw_role_grants の RLS（is_tenant_staff）は、会計側の管理者でない人には行を返さず「空」になる。
+    //   人事（hr）の人が自分の画面を開くと、その空配列が accessForMember に渡り、本人だけ
+    //   「Office は ON なのに中の権限が無い」と計算されていた（経営者が見ると ON なのに、本人が見ると「未設定」）。
+    //   access・4つのボタンの元になる内部ロールは、RLS で空になった値から作らない。
+    //   本人の /api/me（lib/gw.js gwContext）が使う値と同じものを、ここでも使う。読めなければ、空として扱わずエラーにする。
+    // ■ 管理権限が無い人（一般メンバー等）は、従来どおり userClient（RLS が許す範囲。読めなければ空）。access は返さない
+    const manager = canManageHr(ctx);
+    const { data: grants, error: grantsError } = await (manager ? admin() : sb)
       .from("gw_role_grants")
       .select("employee_id, role")
       .eq("tenant_id", ctx.tenantId);
+    if (manager && grantsError) return json(res, 500, { error: "db_query_failed", detail: grantsError.message });
     const byEmployee = new Map();
     for (const g of grants || []) {
       if (!byEmployee.has(g.employee_id)) byEmployee.set(g.employee_id, []);
@@ -81,6 +97,19 @@ export default async function handler(req, res) {
       try {
         accounts = await readAccounts(admin(), (data || []).map((e) => e.user_id));
       } catch { /* 添え物なので、取れなければ空のままにする */ }
+    }
+
+    // 4つのボタン（採用HR / Sales / Office / 経営）と、「利用できる業務」（access）。人事・管理者だけに返す。
+    // 判定は lib/gw.js の accessOf（= その人が /api/me で受け取る access）そのもの。入力（内部ロール・アプリ利用権限・
+    // 会計の管理者か）を集めるだけで、条件はここで書き直さない。読めなかったものは null（「確認できません」）
+    let appsInfo = null;
+    if (canManageHr(ctx)) {
+      const rows = data || [];
+      const [flags, apps] = await Promise.all([
+        adminFlags(admin(), rows.map((e) => e.user_id)),
+        loadAppsMany(admin(), rows.map((e) => e.id), byEmployee),
+      ]);
+      appsInfo = { flags, apps };
     }
 
     // 雇用区分は、人事・管理者以外には返さない。
@@ -101,12 +130,17 @@ export default async function handler(req, res) {
           ...(hideType ? rest : e),
           roles: byEmployee.get(e.id) || [],
           accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
+          ...(appsInfo ? accessForMember(byEmployee.get(e.id) || [], e.user_id, appsInfo.flags, appsInfo.apps.byId.get(e.id) || []) : {}),
         };
       }),
       canManage: canManageHr(ctx),
       canGrantRoles: canManageHr(ctx),
       // 経営者（owner）の付与・剥奪と、経営者の名簿・ログインの変更は、いまの経営者だけ
       canGrantOwner: isOwner(ctx),
+      // 自分の行。経営者でなければ、自分の権限は変えられない（lib/role-change.js の固定ルール）。画面はボタンを止める
+      meEmployeeId: ctx.employee?.id || null,
+      // アプリ利用権限（gw_app_grants, db/119）の状態。"table"=使える / "derived"=表が未適用（内部ロールから導出。変更できない）/ "error"=読めなかった
+      appsState: appsInfo ? appsInfo.apps.state : null,
       systems: SYSTEMS,
       kindReady,
     });
@@ -183,12 +217,17 @@ export default async function handler(req, res) {
 
     // 状態が変わるかどうかを、書き換える前に見ておく
     const { data: before } = await sb
-      .from("gw_employees").select("status, user_id")
+      .from("gw_employees").select("status, user_id, left_on")
       .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+
+    // 退職（left）にするのに退職日が無ければ、今日（日本時間）を退職日にする。
+    // 退職日が空のままだと、退職証明書などの書類を作れない
+    const patch = { ...row.value };
+    if (patch.status === "left" && !patch.left_on && !before?.left_on) patch.left_on = ymd();
 
     const { data, error } = await sb
       .from("gw_employees")
-      .update({ ...row.value, updated_at: new Date().toISOString() })
+      .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", body.id)
       .eq("tenant_id", ctx.tenantId)
       .select(FIELDS)
@@ -207,8 +246,8 @@ export default async function handler(req, res) {
       // 退職にしたら、社内システムの入口をまとめて閉じる。
       // ここを手作業に残すと、辞めた人が無限道場やタイムカードに入れる状態が
       // そのまま残る。逆に在籍へ戻したら開け直す。
-      const wasOut = LEFT.includes(before?.status);
-      const isOut = LEFT.includes(data.status);
+      const wasOut = CLOSED.includes(before?.status);
+      const isOut = CLOSED.includes(data.status);
       if (data.user_id && wasOut !== isOut) {
         const sbAdmin = admin();
         systems = await setAccountsActive(sbAdmin, data.user_id, !isOut);

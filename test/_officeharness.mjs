@@ -76,13 +76,36 @@ export const schema = {
       return null;
     },
   },
+  // db/117：仕入請求・支払・月次完了（部分ユニークは、API が先に確かめる。ここでは CHECK だけ）
+  gw_vendor_invoices: {
+    required: ["tenant_id", "billing_month", "received_on", "subtotal_amount", "total_amount"],
+    defaults: () => ({ status: "received", tax_amount: 0, created_at: nowIso(), updated_at: nowIso() }),
+    check: (r) => (!isMonth(r.billing_month) ? "billing_month" : !["received", "approved", "void"].includes(r.status) ? "status"
+      : [r.subtotal_amount, r.tax_amount, r.total_amount].some((v) => v != null && v < 0) ? "amount" : null),
+  },
+  gw_vendor_invoice_lines: {
+    required: ["tenant_id", "invoice_id", "billing_month", "amount"],
+    defaults: () => ({ voided_at: null, created_at: nowIso() }),
+    check: (r) => (!isMonth(r.billing_month) ? "billing_month" : r.amount < 0 ? "amount" : null),
+  },
+  gw_office_payments: {
+    required: ["tenant_id", "vendor_invoice_id", "billing_month", "amount", "scheduled_on"],
+    defaults: () => ({ status: "scheduled", paid_on: null, created_at: nowIso(), updated_at: nowIso() }),
+    check: (r) => (!["scheduled", "paid", "void"].includes(r.status) ? "status" : r.status === "paid" && !r.paid_on ? "paid_on" : r.amount < 0 ? "amount" : null),
+  },
+  gw_office_month_closes: {
+    required: ["tenant_id", "billing_month"],
+    defaults: () => ({ closed_at: nowIso(), reopened_at: null, rows_total: 0, rows_checked: 0 }),
+    check: (r) => (!isMonth(r.billing_month) ? "billing_month" : null),
+  },
 };
 
 // ---- RLS の再現（db/099・100・105〜107）-----------------------------------------
 //   既存の4表は、既存ポリシー（is_tenant_staff＝会計の管理者）＋ db/100 の Office 権限の読み取り。
 //   新しい4表は、Office 権限（経営者・責任者・経理）の読み取りだけ。名簿は会計の管理者だけ
 const LEGACY = ["gw_site_contracts", "gw_billing_progress", "gw_submissions", "gw_partner_companies"];
-const NEW = ["gw_office_events", "gw_site_contract_terms", "gw_timesheets", "gw_timesheet_days"];
+const NEW = ["gw_office_events", "gw_site_contract_terms", "gw_timesheets", "gw_timesheet_days",
+  "gw_vendor_invoices", "gw_vendor_invoice_lines", "gw_office_payments", "gw_office_month_closes"];
 const hasOfficeRole = (c) => ["owner", "manager", "finance"].some((r) => (c?.roles || []).includes(r));
 export const rls = (name, c) => {
   if (LEGACY.includes(name)) return Boolean(c?.isAdmin) || hasOfficeRole(c);
@@ -99,8 +122,13 @@ const fks = {
     { table: "gw_site_contract_terms", col: "site_contract_id", action: "cascade" },
     { table: "gw_timesheets", col: "site_contract_id", action: "cascade" },
     { table: "gw_office_events", col: "site_contract_id", action: "setnull" },
+    { table: "gw_vendor_invoice_lines", col: "site_contract_id", action: "setnull" },
   ],
   gw_timesheets: [{ table: "gw_timesheet_days", col: "timesheet_id", action: "cascade" }],
+  gw_vendor_invoices: [
+    { table: "gw_vendor_invoice_lines", col: "invoice_id", action: "cascade" },
+    { table: "gw_office_payments", col: "vendor_invoice_id", action: "cascade" },
+  ],
 };
 export const mem = createMemDb({ schema, rls, fks });
 export const ctl = { who: null, aal: "aal2" };

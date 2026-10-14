@@ -9,7 +9,8 @@
 //
 // ■ 返すもの
 //   200 … 反映した（scheduled）／再送で何もしない（resynced）／日時・URLを直した（updated）／
-//         今回扱わない種類（日程変更・キャンセルなど。ignored。後続で対応）
+//         日程変更（rescheduled）／キャンセル（canceled。TIMEREX_SALES_CANCEL_WEBHOOK_TYPES の event だけ）／
+//         取りやめ・実施済みの商談への日程変更（ignored。戻さない）／まだ確認できていない種類（ignored）
 //   404 meeting_not_found … 日程調整中の商談で、企業のメールアドレスが guest_email と一致するものが無い
 //   409 ambiguous_meeting … 一致する商談が2件以上（自動で選ばない。何も書かない）
 //   422 not_sales_calendar … 営業の初回商談カレンダー以外（採用HRの面談など）。何も書かない
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
 
   const parsed = parseSalesTimerex(body);
   if (parsed.skip) {
-    // 日程変更・キャンセルなどは今回は扱わない（何も書かない）。種類の名前だけ残す
+    // 確認できていない種類（キャンセルの event 名など）は何も書かない。種類の名前だけ残す
     console.log("[sales-timerex-webhook] ignored:", parsed.skip, parsed.webhookType || "");
     return json(res, 200, { ok: true, ignored: parsed.skip });
   }

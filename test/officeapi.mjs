@@ -49,6 +49,8 @@ function table(name, { asUser }) {
       if (op === "in") return v.includes(r[k]);
       if (op === "lt") return r[k] < v;
       if (op === "lte") return r[k] <= v;
+      if (op === "neq") return r[k] !== v;
+      if (op === "is") return v === null ? r[k] === null || r[k] === undefined : r[k] === v;
       return true;
     }));
     if (order) out = [...out].sort((a, b) => (a[order] < b[order] ? -1 : 1));
@@ -69,6 +71,8 @@ function table(name, { asUser }) {
     in(k, v) { f.push(["in", k, v]); return q; },
     lt(k, v) { f.push(["lt", k, v]); return q; },
     lte(k, v) { f.push(["lte", k, v]); return q; },
+    neq(k, v) { f.push(["neq", k, v]); return q; },
+    is(k, v) { f.push(["is", k, v]); return q; },
     order(c) { order = c; return q; },
     limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: err() ? null : (rows()[0] ? { ...rows()[0] } : null), error: err() }),
@@ -270,8 +274,16 @@ await ok("要員・客先・BP会社・現在工程・要対応が、既存の�
   assert.equal(bp.primeCompany, "上位商事");
   assert.equal(bp.stage, "timesheet");
   assert.equal(bp.cols.vendorInvoice.label, "未受領");
-  assert.equal(bp.cols.payment.label, "未管理");
+  assert.equal(bp.cols.payment.label, "未着手", "支払の表（db/117）があれば、BP請求書の前は「未着手」");
   assert.equal(r.body.summary.total, 2);
+  // db/117 が未適用なら、支払は「未管理」のまま（一覧は止めない）
+  db.missing = "gw_vendor_invoice_lines";
+  const r2 = await list("2026-09");
+  assert.equal(r2.statusCode, 200);
+  assert.equal(r2.body.rows.find((x) => x.employeeName === "鈴木 花子").cols.payment.label, "未管理");
+  assert.equal(r2.body.phase4.ready, false);
+  assert.match(r2.body.phase4.message, /db\/117/);
+  db.missing = null;
   assert.equal(r.body.deadline, "2026-10-05");
   assert.ok(r.body.filters.length && r.body.stages.length);
 });

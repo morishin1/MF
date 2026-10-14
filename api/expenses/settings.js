@@ -1,12 +1,12 @@
 // GET   /api/expenses/settings          … ワークフロー設定
-// PATCH /api/expenses/settings          … 承認しきい値・勘定科目の変更（管理部のみ）
+// PATCH /api/expenses/settings          … 承認しきい値・勘定科目の変更（経理・事務のみ。canOfficeFinance）
 //
 // 承認経路をコードに埋めず設定に置いているのは、運用しながら
 // 「いくらから代表承認にするか」を変えたくなるため。
 
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeFinance } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { loadWorkflowSettings } from "../../lib/expenses.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "PATCH") {
-    if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+    if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
 
     const body = await readJson(req);
     const patch = { tenant_id: ctx.tenantId, updated_at: new Date().toISOString() };

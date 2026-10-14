@@ -11,7 +11,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
-import { canReviewExpense } from "../../lib/expenses.js";
+import { canReviewRequest } from "../../lib/expenses.js";
 import {
   KINDS, LEAVE_TYPES, LEAVE_LABEL, fiscalYear, leaveBalance, leaveLabel, yen,
 } from "../../lib/requests.js";
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 // ---- 一覧 -------------------------------------------------------------------
 async function list(req, res, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
-  const canReview = canReviewExpense(ctx);
+  const canReview = canReviewRequest(ctx);
   const sb = userClient(req);
 
   let query = sb.from("gw_requests").select(WITH_NAMES).eq("tenant_id", ctx.tenantId);
@@ -138,7 +138,7 @@ async function create(req, res, ctx) {
 
 // ---- 削除 -------------------------------------------------------------------
 async function remove(req, res, ctx) {
-  if (!canReviewExpense(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canReviewRequest(ctx)) return json(res, 403, { error: "forbidden" });
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
 

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261002of1">
+  <link rel="stylesheet" href="../css/app.css?v=20261012mx1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -26,6 +26,20 @@
     /* 選考パイプライン：段階ごとの人数。0人の段階は薄く（押せるがレイアウトは変えない） */
     .hr-stage-tabs button .n { display:inline-block; min-width:1.4em; margin-left:6px; font-weight:700; text-align:center; }
     .hr-stage-tabs button.zero:not(.on) { opacity:.45; }
+    /* 区分（すべて／採用／無限道場）。選考パイプラインより一段上の切り替え（検索・段階の行とは別の行） */
+    .hr-catbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+    .hr-cat-tabs { display:inline-flex; border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#fff; }
+    .hr-cat-tabs button { border:none; border-right:1px solid #e2e2dc; background:#fff; padding:7px 14px; font-size:12.5px;
+      font-weight:600; color:#4a5068; cursor:pointer; font-family:inherit; }
+    .hr-cat-tabs button:last-child { border-right:none; }
+    .hr-cat-tabs button.on { background:#1b2440; color:#fff; }
+    .hr-cat-tabs button .n { margin-left:6px; font-weight:700; }
+    .hr-lead-badge { display:inline-block; margin-left:6px; background:#fbf1d6; color:#7d5a00; border-radius:999px;
+      padding:1px 8px; font-size:10.5px; font-weight:700; vertical-align:middle; }
+    .hr-chips-sm span { display:inline-block; background:#e7eaf3; color:#1b2440; border-radius:999px; padding:1px 8px;
+      font-size:11px; margin:0 4px 3px 0; }
+    .hr-lead-iv { border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; margin:0 0 8px; font-size:12.5px; }
+    .hr-watch-list label { display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13px; border-bottom:1px solid #f0f0ec; }
 
     .hr-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e2dc; border-radius:10px; overflow:hidden; }
     .hr-table th { text-align:left; font-size:11px; color:#6b7080; font-weight:700; padding:10px 14px;
@@ -36,6 +50,14 @@
     .hr-table tr.click:hover { background:#f6f6f2; }
     .hr-nm { font-weight:700; color:#1b2440; font-size:14px; display:block; }
     .hr-sub2 { font-size:11.5px; color:#6b7080; display:block; margin-top:2px; }
+    .hr-dr-sel { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; padding:0 20px 10px; font-size:12.5px; color:#4a5068; }
+    .hr-dr-sel b { color:#1b2440; }
+    .hr-due { font-size:12px; color:#1b2440; white-space:nowrap; }
+    .hr-due.over { color:#b42318; font-weight:700; }
+    .hr-alerts { display:flex; flex-wrap:wrap; gap:4px; }
+    .hr-alert { font-size:11px; font-weight:700; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+    .hr-alert.danger { background:#fde8e6; color:#b42318; }
+    .hr-alert.warn { background:#fbf1d6; color:#7d5a00; }
 
     .hr-rank { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px;
       border-radius:5px; font-size:11px; font-weight:700; padding:0 6px; }
@@ -49,8 +71,10 @@
     .hr-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:40; }
     .hr-drawer { position:fixed; top:0; right:0; bottom:0; width:440px; max-width:92vw; background:#fff;
       z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:22px; }
-    .hr-detail { position:fixed; top:0; right:0; bottom:0; width:560px; max-width:94vw; background:#f6f6f2;
-      z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; padding:0; }
+    .hr-detail { position:fixed; top:0; right:0; bottom:0; width:660px; max-width:94vw; background:#f6f6f2;
+      z-index:41; box-shadow:-8px 0 24px rgba(27,36,64,.15); overflow-y:auto; overflow-x:hidden; padding:0; }
+    /* スマホはフル幅・1列（横にはみ出さない） */
+    @media (max-width:600px) { .hr-detail { width:100vw; max-width:100vw; } }
 
     /* モーダル＝1つの操作を実行する場所。ドロワー（詳細）の上に重ねて出す。
        閉じてもドロワーは閉じない（採用HR応募者一覧・ドロワーUI改善指示書 §4・§5） */
@@ -60,8 +84,73 @@
       box-shadow:0 20px 60px rgba(27,36,64,.28); overscroll-behavior:contain; }
     /* 項目の多い操作（評価・合格通知・書類・応募者追加）。中だけスクロールする */
     .hr-modal.wide { width:680px; max-height:88vh; }
+    /* 評価・採用判断・本人への連絡（hr/applicants.html と hr/ceo-review.html で同じ。直すときは両方そろえる）
+       色は意味のあるものだけ：緑＝内定・黄＝保留・赤＝見送り・オレンジ＝本人へ未連絡 */
+    .hr-flow-sec { border:1px solid #e2e2dc; border-radius:12px; padding:16px 18px; margin:0 0 14px; background:#fff; }
+    .hr-flow-sec.is-wait { background:#fafaf8; }
+    .hr-flow-hd { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 12px; }
+    .hr-flow-hd h3 { font-size:14px; font-weight:700; color:#1b2440; margin:0; display:flex; align-items:center; gap:8px; }
+    .hr-flow-hd .st { font-size:11px; font-weight:700; color:#6b7080; letter-spacing:.06em; }
+    .hr-flow-state { display:inline-flex; align-items:center; gap:3px; border-radius:999px; padding:3px 10px;
+      font-size:11.5px; font-weight:700; background:#efefeb; color:#4a5068; white-space:nowrap; }
+    .hr-flow-state .material-symbols-outlined { font-size:15px; }
+    .hr-flow-state.done { background:#e5f1e2; color:#2f6f3a; }
+    .hr-flow-state.todo { background:#ffedd5; color:#c2410c; }
+    .hr-flow-note { font-size:12.5px; color:#6b7080; margin:0; }
+    .hr-flow-sum { font-size:13px; color:#1b2440; line-height:1.7; }
+
+    .hr-score-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid #f0f0ec; }
+    .hr-score-row:last-of-type { border-bottom:none; }
+    .hr-score-row .k { font-size:13px; color:#1b2440; }
+    .hr-score-opts { display:flex; gap:6px; flex-shrink:0; }
+    .hr-score { width:42px; height:36px; border:1px solid #d9d9d2; border-radius:8px; background:#fff; color:#9aa0b4;
+      font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; padding:0; }
+    .hr-score:disabled { cursor:default; }
+    .hr-score.on[data-v="great"] { background:#2f6f3a; border-color:#2f6f3a; color:#fff; }
+    .hr-score.on[data-v="good"] { background:#e5f1e2; border-color:#2f6f3a; color:#2f6f3a; }
+    .hr-score.on[data-v="fair"] { background:#fbf1d6; border-color:#a16207; color:#a16207; }
+    .hr-score.on[data-v="bad"] { background:#fdecea; border-color:#b3261e; color:#b3261e; }
+
+    .hr-seg { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid #d9d9d2; border-radius:10px; overflow:hidden; background:#fff; margin:0 0 12px; }
+    .hr-seg button { border:none; border-right:1px solid #d9d9d2; background:#fff; color:#4a5068; padding:11px 6px; font-size:14px;
+      font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:4px; }
+    .hr-seg button:last-child { border-right:none; }
+    .hr-seg button .material-symbols-outlined { font-size:18px; }
+    .hr-seg button.on[data-kind="hired"] { background:#2f6f3a; color:#fff; }
+    .hr-seg button.on[data-kind="hold"] { background:#b7791f; color:#fff; }
+    .hr-seg button.on[data-kind="rejected"] { background:#b3261e; color:#fff; }
+    .hr-dk-banner { border:1px solid; border-radius:10px; padding:10px 12px; font-size:12.5px; margin:0 0 12px; display:flex; gap:6px; align-items:flex-start; }
+    .hr-dk-banner .material-symbols-outlined { font-size:18px; }
+    .hr-dk-banner[data-kind="hired"] { background:#e5f1e2; color:#2f6f3a; border-color:#2f6f3a; }
+    .hr-dk-banner[data-kind="hold"] { background:#fbf1d6; color:#8a5a00; border-color:#b7791f; }
+    .hr-dk-banner[data-kind="rejected"] { background:#fdecea; color:#b3261e; border-color:#b3261e; }
+    .btn.hr-dk-save[data-kind="hired"] { background:#2f6f3a; border-color:#2f6f3a; color:#fff; }
+    .btn.hr-dk-save[data-kind="hold"] { background:#b7791f; border-color:#b7791f; color:#fff; }
+    .btn.hr-dk-save[data-kind="rejected"] { background:#b3261e; border-color:#b3261e; color:#fff; }
+    .hr-msg-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+    .hr-msg-actions .later { margin-left:auto; font-size:12.5px; color:#6b7080; background:none; border:none; cursor:pointer; font-family:inherit; }
+
+    /* 一覧・詳細・カードの小さなバッジ（判断と、本人への連絡状況は別のバッジ） */
+    .hr-badges { display:inline-flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+    .hr-badge { display:inline-flex; align-items:center; gap:2px; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .hr-badge .material-symbols-outlined { font-size:13px; }
+    .hr-badge.d-hired { background:#e5f1e2; color:#2f6f3a; }
+    .hr-badge.d-hold { background:#fbf1d6; color:#8a5a00; }
+    .hr-badge.d-rejected { background:#fdecea; color:#b3261e; }
+    .hr-badge.c-pending { background:#ffedd5; color:#c2410c; border:1px solid #fdba74; }
+    .hr-badge.c-done { background:#efefeb; color:#4a5068; }
     /* 確認モーダル（削除など）は、書類のモーダルの上にも出せるように1段上げる */
     .hr-modal-bg.top { z-index:60; } .hr-modal.top { z-index:61; }
+
+    /* メールを送る（ひな型から） */
+    .hr-mail-to { background:#f6f6f2; border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; margin:0 0 12px; font-size:13px; color:#1b2440; word-break:break-all; }
+    .hr-mail-to .lb { font-size:11px; color:#6b7080; margin-right:6px; }
+    .hr-mail-to .sub { font-size:11.5px; color:#4a5068; margin-top:4px; }
+    .hr-mail-hist { list-style:none; padding:0; margin:6px 0 0; }
+    .hr-mail-hist li { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:baseline; font-size:12px; padding:6px 0; border-bottom:1px solid #efefeb; }
+    .hr-mail-hist .t { color:#6b7080; } .hr-mail-hist .s { color:#1b2440; font-weight:600; } .hr-mail-hist .m { color:#6b7080; flex-basis:100%; }
+    .hr-mail-st { border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; }
+    .hr-mail-st.ok { background:#e5f1e2; color:#2f6f3a; } .hr-mail-st.ng { background:#fdecea; color:#b3261e; } .hr-mail-st.warn { background:#fbf1d6; color:#8a5a00; }
 
     /* 書類タブ */
     .hr-doc { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
@@ -103,7 +192,31 @@
     }
     .hr-check-col { width:34px; }
 
-    .hr-next { background:#e6f050; border-radius:10px; padding:16px 18px; margin:0 0 16px; }
+    /* NEXT ACTION：いまの状態と、次に押すボタン1つだけ（高さ 80〜110px 程度。淡い注意色） */
+    .hr-next { background:#f3f8e3; border:1px solid #dde8bd; border-radius:10px; padding:12px 14px; margin:0 0 12px; }
+    .hr-next .row1 { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .hr-next .ttl { font-size:15px; font-weight:700; color:#1b2440; }
+    .hr-next .st { font-size:12px; font-weight:600; color:#4a5068; background:#fff; border:1px solid #dde8bd; border-radius:999px; padding:1px 10px; }
+    .hr-next .chip { font-size:11px; color:#4a5068; }
+    .hr-next .sub { font-size:12px; color:#4a5068; margin:4px 0 8px; line-height:1.5; }
+    .hr-next > .btn { margin-top:0; }
+    .hr-contact-row { padding:0 2px; }
+    /* 概要：値のある項目だけ。メールはその場で登録・編集 */
+    .hr-email-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px; margin:2px 0 10px; }
+    .hr-email-row .k { color:#6b7080; min-width:3em; }
+    .hr-email-row .v { color:#1b2440; font-weight:600; overflow-wrap:anywhere; }
+    .hr-email-row .v.muted { color:#9a5b00; font-weight:600; }
+    .hr-email-row input { flex:1 1 220px; min-width:0; }
+    .hr-email-row .acts { display:flex; gap:6px; }
+    .hr-email-row .err-text { flex-basis:100%; margin:0; }
+    .hr-more-info summary { cursor:pointer; font-size:12.5px; font-weight:700; color:#1b2440; padding:4px 0; }
+    .hr-more-info .when-open, .hr-more-info[open] .when-closed { display:none; }
+    .hr-more-info[open] .when-open { display:inline; }
+    .hr-ceo-brief { display:flex; align-items:center; gap:10px; font-size:13px; color:#1b2440; background:#fff;
+      border:1px solid #e2e2dc; border-radius:8px; padding:8px 12px; margin-top:12px; }
+    .hr-ceo-brief b { font-size:15px; }
+    .hr-head-mail { font-size:12px; color:#4a5068; margin-top:2px; overflow-wrap:anywhere; }
+    .hr-head-mail.none { color:#9a5b00; }
     .hr-next .now { font-size:11px; color:#4a5068; margin-bottom:2px; }
     /* 選考（どこまで進んだか）・状態（いま何待ちか）・NEXT ACTION（次に何をするか）を上から並べる */
     .hr-state { display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; margin:0 0 10px; }
@@ -125,6 +238,93 @@
 
     .hr-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12.5px; }
     .hr-grid2 dt { color:#6b7080; margin-bottom:2px; } .hr-grid2 dd { margin:0 0 10px; color:#1b2440; font-weight:600; }
+    /* スマホは1列（応募者ドロワー改善 §8） */
+    @media (max-width:600px) { .hr-grid2 { grid-template-columns:1fr; gap:4px; } }
+
+    /* 合格後の採用区分のカード（「この方をどの形で迎えますか？」）。PCは横並び、スマホは1列 */
+    .hr-otype-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin:6px 0 4px; }
+    .hr-otype { text-align:left; border:1.5px solid #e2e2dc; border-radius:10px; background:#fff; padding:12px;
+      cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:4px; min-width:0; }
+    .hr-otype:hover { border-color:#9aa0b4; }
+    .hr-otype.on { border-color:#1b2440; background:#eef0f6; box-shadow:inset 0 0 0 1px #1b2440; }
+    .hr-otype .hd { display:flex; align-items:center; gap:6px; font-weight:700; color:#1b2440; font-size:13.5px; }
+    .hr-otype .hd .material-symbols-outlined { font-size:20px; overflow:hidden; width:20px; }
+    .hr-otype .sm { font-size:11.5px; color:#4a5068; line-height:1.5; }
+    .hr-otype .fl { font-size:10.5px; color:#6b7080; line-height:1.5; }
+    @media (max-width: 520px) { .hr-otype-grid { grid-template-columns:1fr; } }
+    /* 区分ごとのオファー入力（必要な項目だけ） */
+    .hr-of-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+    .hr-of-grid .wide { grid-column:1 / -1; }
+    .hr-of-grid label { margin-top:0; }
+    @media (max-width: 520px) { .hr-of-grid { grid-template-columns:1fr; } }
+    .hr-of-docs { font-size:11.5px; color:#4a5068; background:#f6f6f2; border-radius:8px; padding:8px 10px; margin:0 0 12px; }
+    /* オファー：少ない選択肢はボタン・報酬は［区分］＋金額・業務内容は標準文・詳細は閉じた［詳細設定］ */
+    .hr-opt { display:flex; flex-wrap:wrap; gap:6px; }
+    .hr-opt button { border:1.5px solid #d5d7e0; background:#fff; border-radius:8px; padding:7px 14px; min-height:38px;
+      font:inherit; font-size:13px; color:#1b2440; cursor:pointer; }
+    .hr-opt button:hover { border-color:#9aa0b4; }
+    .hr-opt button.on { border-color:#1b2440; background:#1b2440; color:#fff; font-weight:700; }
+    .hr-yen { display:flex; align-items:center; gap:8px; margin-top:8px; }
+    .hr-yen[hidden] { display:none; }
+    .hr-yen input { max-width:180px; }
+    .hr-yen span { font-size:13px; color:#1b2440; white-space:nowrap; font-weight:700; }
+    .hr-tpl { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+    .hr-tpl button { border:1px solid #d5d7e0; background:#f6f6f2; border-radius:999px; padding:4px 10px; font:inherit; font-size:12px;
+      color:#1b2440; cursor:pointer; }
+    .hr-tpl button:hover { border-color:#9aa0b4; }
+    .hr-of-auto { font-size:11.5px; color:#4a5068; margin-top:4px; }
+    .hr-of-more { margin-top:12px; border-top:1px solid #e2e2dc; padding-top:6px; }
+    .hr-of-more summary { cursor:pointer; font-weight:700; color:#1b2440; font-size:13px; padding:8px 0; }
+    .hr-of-more[open] summary { margin-bottom:8px; }
+    /* 開閉で見出しを切り替える（CSS だけ。toggle イベントは開いたあとに遅れて届くので使わない） */
+    .hr-of-more .when-open, .hr-of-more[open] .when-closed { display:none; }
+    .hr-of-more[open] .when-open { display:inline; }
+    .hr-of-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+    .hr-of-preview { border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; background:#fafaf7; }
+    .hr-pdf-box { border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; background:#fff; }
+    .hr-accepted { border:1px solid #e2e2dc; border-radius:10px; padding:8px 12px; margin:8px 0 10px; background:#fff; display:grid; gap:4px; }
+    .hr-accepted .ln { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; color:#1b2440; }
+    .hr-accepted .mk { width:16px; text-align:center; color:#8a8f9e; font-weight:700; }
+    .hr-accepted .mk.ok { color:#2f6f3a; }
+    .hr-accepted .when { color:#4a5068; font-size:12px; }
+    .hr-accepted .btn { padding:2px 10px; margin-left:auto; }
+    .hr-pdf-box .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#1b2440; }
+    .hr-pdf-box .frame { margin-top:10px; height:min(62vh, 640px); border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#f3f3ef; }
+    .hr-pdf-box .frame .empty { padding:24px; }
+    .hr-pdf-box iframe { width:100%; height:100%; border:0; display:block; }
+    .hr-of-preview .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#1b2440; }
+    .hr-of-preview dl { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; margin:10px 0 0; font-size:13px; }
+    .hr-of-preview dt { color:#6b7080; }
+    .hr-of-preview dd { margin:0; color:#1b2440; font-weight:700; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .hr-of-preview details summary { cursor:pointer; font-size:12px; color:#4a5068; margin-top:8px; }
+    .hr-to { font-size:13px; color:#1b2440; overflow-wrap:anywhere; }
+    @media (max-width: 520px) {
+      .hr-of-actions .btn { flex:1 1 100%; }
+      .hr-of-preview dl { grid-template-columns:1fr; gap:0; }
+      .hr-of-preview dd { margin-bottom:6px; }
+    }
+    /* 採用フローのステップバー（候補者詳細の上部に常時表示。いまの段階を強調） */
+    .hr-steps { display:flex; list-style:none; margin:0; padding:0 16px 12px; overflow-x:auto; }
+    .hr-steps li { flex:1 0 auto; min-width:56px; display:flex; flex-direction:column; align-items:center;
+      position:relative; font-size:11px; color:#9aa0b4; }
+    .hr-steps li::before { content:""; position:absolute; top:10px; left:-50%; width:100%; height:2px; background:#e2e2dc; z-index:0; }
+    .hr-steps li:first-child::before { display:none; }
+    .hr-steps li.done::before, .hr-steps li.now::before { background:#3e9c5a; }
+    .hr-steps .m { width:21px; height:21px; border-radius:50%; border:2px solid #c5cfdd; background:#fff; z-index:1;
+      display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; }
+    .hr-steps li.done .m { background:#eaf5ec; border-color:#3e9c5a; color:#256b36; }
+    .hr-steps li.now .m { background:#1b2440; border-color:#1b2440; color:#fff; }
+    .hr-steps .l { margin-top:3px; white-space:nowrap; }
+    .hr-steps li.now .l { color:#1b2440; font-weight:700; }
+    .hr-steps li.done .l { color:#256b36; }
+    .hr-steps-ended { padding:0 20px 10px; font-size:11.5px; color:#b3261e; }
+    /* 390px でも横にはみ出さない（7つの段階を画面の幅に収める。長い名前は2行に） */
+    @media (max-width:480px) {
+      .hr-steps { padding:0 6px 10px; overflow-x:visible; }
+      .hr-steps li { flex:1 1 0; min-width:0; }
+      .hr-steps .l { white-space:normal; text-align:center; font-size:10px; line-height:1.25; }
+    }
+    .hr-tl .row .d .who { margin-left:6px; color:#4a5068; }
 
     .hr-tl { border-left:2px solid #e2e2dc; margin-left:6px; padding-left:16px; }
     .hr-tl .row { position:relative; padding-bottom:16px; }
@@ -144,6 +344,10 @@
   <h1 class="hr-title">応募者</h1>
   <p class="hr-sub">選考中の応募者を一覧で見て、詳細は右ドロワーで開きます。</p>
 
+  <div class="hr-catbar">
+    <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="区分"></div>
+    <span id="lead-tools"></span>
+  </div>
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render()">
     <div class="hr-stage-tabs" id="stage-tabs"></div>
@@ -153,10 +357,10 @@
 
   <div style="overflow-x:auto;">
     <table class="hr-table">
-      <thead><tr>
+      <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
+        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>NEXT</th><th>担当</th><th>期限</th><th>警告</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="10" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -166,10 +370,11 @@
 <div id="hr-modal-root"></div>
 <div id="confirm-root"></div>
 
-<script src="../js/api-client.js?v=20261002of1"></script>
-<script src="../js/layout.js?v=20261002of1"></script>
-<script src="../js/hr-layout.js?v=20261002of1"></script>
-<script src="../js/jst.js?v=20261002of1"></script>
+<script src="../js/api-client.js?v=20261012mx1"></script>
+<script src="../js/layout.js?v=20261012mx1"></script>
+<script src="../js/hr-layout.js?v=20261012mx1"></script>
+<script src="../js/jst.js?v=20261012mx1"></script>
+<script src="../js/hr-lms-trial.js?v=20261013lms4"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -179,6 +384,16 @@
     { key: "ceo_recommend", label: "社長推薦" }, { key: "ceo_interview", label: "社長面談" },
     { key: "offer", label: "内定" }, { key: "joining_scheduled", label: "入社予定" },
   ];
+  // 無限道場リードの段階（lib/hr-lead-flow.js の MUGENDOJO_STAGES と同じ並び）
+  const MD_STAGES = [
+    { key: "applied", label: "新規リード" }, { key: "casual_interview", label: "カジュアル面談" },
+    { key: "md_trial", label: "体験案内" }, { key: "md_considering", label: "参加検討" },
+    { key: "md_applied", label: "申込" }, { key: "md_joined", label: "参加" },
+  ];
+  // 区分。「採用」は無限道場以外（API の既定と同じ）
+  const CATEGORIES = [{ key: "all", label: "すべて" }, { key: "recruitment", label: "採用" }, { key: "mugendojo", label: "無限道場" }];
+  const isLead = (a) => a?.leadCategory === "mugendojo";
+  const inCategory = (a, key) => key === "all" || (key === "mugendojo" ? isLead(a) : !isLead(a));
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
     interview_scheduled: ["#e7eaf3", "#1b2440", "video_call"], eval_pending: ["#fbf1d6", "#7d5a00", "edit_note"],
@@ -192,6 +407,9 @@
     done: ["#e5f1e2", "#2f6f3a", "check_circle"], passed: ["#efefeb", "#4a5068", "remove"],
   };
   const OVERDUE_COLOR = ["#fdecea", "#b3261e", "error"];
+  // 社長判断待ちのうち、保留にしたもの（判断そのものは済んでいない。期限と次の確認事項を見る）
+  const HOLD_COLOR = ["#fbf1d6", "#7d5a00", "pause_circle"];
+  const isOnHold = (a) => a.decision === "hold" && a.status === "ceo_decision_pending";
   const STATUS_LABEL = {
     todo: "未対応", scheduling: "日程調整中", interview_scheduled: "面談予定",
     eval_pending: "評価入力待ち", ceo_recommend_pending: "社長推薦待ち",
@@ -210,20 +428,34 @@
   const recruiterOptions = (selected) => `<option value="">未定</option>` + employees.map((e) =>
     `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.display_name)}</option>`).join("");
   let stageFilter = "";
+  let categoryFilter = "all";
+  let leadReady = true;      // db/118（リードの列）が入っているか。無ければ無限道場の欄を出さない
   let openId = null;
   let canDecide = false;
+  let canAdvance = false;   // 本採用へ進める（社長・管理者・人事）
   // 一覧の複数選択（ページ内表示分だけを対象にする。README §1）
   let selectedIds = new Set();
   let visibleIds = [];
 
   // 表示速度：枠（権限の確認）を待たずに一覧を取りにいき始める。
-  // HRダッシュボードと同じ鍵（hr:applicants）なので、ダッシュボードから来たときは前回の一覧がすぐ出る
-  const fetchApplicants = () => API.listHrApplicants();
-  API.warm("hr:applicants", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
+  // この画面は「すべて／採用／無限道場」を切り替えるので、無限道場リードも含めて取る（category=all）。
+  // HRダッシュボードは採用だけ（既定）を取るので、鍵を分ける（混ぜると、ダッシュボードに無限道場が出る）
+  const fetchApplicants = () => API.api("/api/hr/applicants?category=all");
+  API.warm("hr:applicants:all", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
 
-  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; start(); } });
+  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); start(); } });
+  // 本採用へ進める（社員登録へ）。社長・管理者・人事（社員登録の画面に入れる人＝/api/me の access.officeHr）。
+  // サーバの canAdvanceHire（lib/gw.js）と同じ条件（test/accessparity.mjs が見張る）
+  function canAdvanceOf(me) {
+    const roles = me?.gw?.roles || [];
+    const isAdmin = Boolean(me?.gw?.isAdmin || me?.isAdmin);
+    return isAdmin || roles.includes("owner") || (roles.includes("hr") && Boolean(me?.access?.officeHr));
+  }
 
   function start() {
+    const cat = new URLSearchParams(location.search).get("category");
+    if (CATEGORIES.some((c) => c.key === cat)) categoryFilter = cat;
+    renderCategoryTabs();
     renderStageTabs();
     load();
     const q = new URLSearchParams(location.search);
@@ -233,14 +465,41 @@
 
   // 選考パイプライン：「採用フロー上のどこに人が溜まっているか」。人数は取得済みの応募者から数える
   // （固定値を持たない）。細かい状態（status）は上に出さない
+  /** いまの区分の応募者 */
+  const catList = () => applicants.filter((a) => inCategory(a, categoryFilter));
+  const listUrl = () => (categoryFilter === "all" ? "/hr/applicants.html" : `/hr/applicants.html?category=${categoryFilter}`);
+
+  function renderCategoryTabs() {
+    API.morph(el("cat-tabs"), CATEGORIES.map((c) => {
+      const n = applicants.filter((a) => inCategory(a, c.key)).length;
+      return `<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
+        data-category="${esc(c.key)}" onclick="setCategory('${esc(c.key)}')">${esc(c.label)}<span class="n">${n}</span></button>`;
+    }).join(""));
+    // 無限道場の通知先（運営担当）は、無限道場を見ているときだけ出す
+    el("lead-tools").innerHTML = categoryFilter === "mugendojo"
+      ? `<button class="btn btn-secondary btn-sm" onclick="openLeadWatchers()">
+          <span class="material-symbols-outlined icon-inline">notifications</span>通知先（運営担当）</button>
+        ${leadReady ? "" : `<span class="muted" style="font-size:12px;margin-left:8px;">リードの列がまだありません（db/118_hr_leads.sql 未実行）</span>`}`
+      : "";
+  }
+  function setCategory(key) {
+    categoryFilter = key;
+    stageFilter = "";
+    selectedIds.clear();
+    if (!openId) history.replaceState({}, "", listUrl());
+    renderCategoryTabs(); renderStageTabs(); render();
+  }
+
   function renderStageTabs() {
-    const count = (key) => (key ? applicants.filter((a) => a.stage === key).length : applicants.length);
+    const pool = catList();
+    const count = (key) => (key ? pool.filter((a) => a.stage === key).length : pool.length);
     const tab = (key, label) => {
       const n = count(key);
       return `<button class="${stageFilter === key ? "on" : ""}${n ? "" : " zero"}" data-stage="${esc(key || "all")}"
         onclick="setStage('${esc(key)}')">${esc(label)}<span class="n">${n}</span></button>`;
     };
-    API.morph(el("stage-tabs"), tab("", "すべて") + STAGES.map((s) => tab(s.key, s.label)).join(""));
+    const stages = categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
+    API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s) => tab(s.key, s.label)).join(""));
   }
   function setStage(key) { stageFilter = key; renderStageTabs(); render(); }
 
@@ -249,7 +508,7 @@
   async function loadList() {
     try {
       // 2回目からは前回の一覧をすぐ出し、裏で最新にする（変わった行だけ描き直す）
-      await API.swr("hr:applicants", fetchApplicants, (res) => {
+      await API.swr("hr:applicants:all", fetchApplicants, (res) => {
         if (res.notReady) {
           el("rows").innerHTML = `<tr><td colspan="8"><div class="banner warn">
             <span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div></td></tr>`;
@@ -258,6 +517,8 @@
         applicants = res.applicants || [];
         employees = res.employees || [];
         meEmployeeId = res.meEmployeeId || null;
+        leadReady = res.leadReady !== false;
+        renderCategoryTabs();
         renderStageTabs();
         render();
       });
@@ -280,32 +541,108 @@
     return `<span class="hr-docs" data-docs>${link(d.resumeId, "description", "履歴書")}${link(d.workHistoryId, "work_history", "職務経歴書")}</span>`;
   }
 
+  /** 流入元の1語（UTM → 参照元のドメイン → 直接） */
+  function leadSourceLabel(a) {
+    const utm = [a.utmSource, a.utmMedium].filter(Boolean).join(" / ");
+    if (utm) return utm;
+    const ref = a.attribution?.first?.referrer;
+    if (ref) { try { return new URL(ref).hostname; } catch { /* そのまま下へ */ } }
+    return "直接";
+  }
+  const leadDiagnosis = (a) => a.leadProfile?.diagnosis_label || a.leadProfile?.diagnosis_type || "";
+  const leadInterests = (a) => (a.leadProfile?.interests || []);
+
+  const THEAD = {
+    standard: ["応募者", "書類", "選考", "状態", "NEXT", "担当", "期限", "警告", ""],
+    mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
+  };
+  let theadKind = "standard";
+  function renderThead() {
+    const kind = categoryFilter === "mugendojo" ? "mugendojo" : "standard";
+    if (kind === theadKind && el("chk-all")) return;
+    theadKind = kind;
+    el("thead").innerHTML = `<tr><th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
+      ${THEAD[kind].map((h) => `<th>${esc(h)}</th>`).join("")}</tr>`;
+  }
+  const colCount = () => THEAD[theadKind].length + 1;
+
+  function statusPill(a) {
+    const [bg, fg, icon] = a.overdue ? OVERDUE_COLOR : (STATUS_COLOR[a.status] || STATUS_COLOR.todo);
+    const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
+    return `<span class="hr-pill" style="background:${bg};color:${fg};">
+          <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>`;
+  }
+
+  /** 期限の列：対応期限（超過は赤）。無ければ今日の面談 */
+  function dueCell(a) {
+    if (a.decisionDueOn) return `<span class="${a.overdue ? "hr-due over" : "hr-due"}">${esc(a.decisionDueOn)}</span>`;
+    if (a.nextInterviewAt) return `<span class="hr-due">${esc(fmtDate(a.nextInterviewAt))}</span>`;
+    return `<span class="muted">—</span>`;
+  }
+  /** 警告（起きてはいけない状態。サーバの alerts。lib/hr.js applicantAlerts） */
+  function alertsHtml(a) {
+    const list = a.alerts || [];
+    if (!list.length) return "";
+    return `<span class="hr-alerts">${list.map((x) =>
+      `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>`;
+  }
+
+  /** 無限道場の一覧の1行 */
+  function leadRow(a) {
+    return `
+      <tr class="click" onclick="openDetail('${esc(a.id)}')">
+        <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
+          onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
+        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.leadProfile?.occupation || "")}</span></td>
+        <td>${esc(leadSourceLabel(a))}${a.utmCampaign ? `<span class="hr-sub2">${esc(a.utmCampaign)}</span>` : ""}</td>
+        <td class="hr-chips-sm">${leadInterests(a).map((x) => `<span>${esc(x)}</span>`).join("") || "—"}</td>
+        <td>${esc(leadDiagnosis(a) || "—")}</td>
+        <td>${statusPill(a)}<span class="hr-sub2">${esc(a.stageLabel)}</span></td>
+        <td>${a.nextInterviewAt ? esc(fmtDate(a.nextInterviewAt)) : "—"}</td>
+        <td>${esc(a.recruiterName || "未定")}</td>
+        <td>${esc(JST.date(a.createdAt))}</td>
+        <td>${a.lastContactedAt ? esc(JST.date(a.lastContactedAt)) : "—"}</td>
+        <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
+      </tr>`;
+  }
+
   function render() {
+    renderThead();
     const q = (el("q").value || "").trim().toLowerCase();
-    const list = applicants.filter((a) =>
+    const list = catList().filter((a) =>
       (!stageFilter || a.stage === stageFilter)
-      && (!q || `${a.name} ${a.jobTitle}`.toLowerCase().includes(q)));
+      && (!q || `${a.name} ${a.jobTitle} ${a.source || ""}`.toLowerCase().includes(q)));
+    // 毎日の確認順（期限超過 → 今日対応 → 新規応募 → その他 → 終わったもの。サーバの priority。lib/hr.js）。
+    // 同じ順位の中は、いままでどおり新しい応募が上
+    list.sort((x, y) => (x.priority ?? 3) - (y.priority ?? 3));
     visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
-      API.morph(el("rows"), `<tr><td colspan="8" class="empty">対象がありません。</td></tr>`);
+      API.morph(el("rows"), `<tr><td colspan="${colCount()}" class="empty">対象がありません。</td></tr>`);
+      renderBulkBar();
+      return;
+    }
+    if (theadKind === "mugendojo") {
+      API.morph(el("rows"), list.map(leadRow).join(""));
       renderBulkBar();
       return;
     }
     API.morph(el("rows"), list.map((a) => {
-      const [bg, fg, icon] = a.overdue ? OVERDUE_COLOR : (STATUS_COLOR[a.status] || STATUS_COLOR.todo);
-      const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
+      const [bg, fg, icon] = a.overdue ? OVERDUE_COLOR : isOnHold(a) ? HOLD_COLOR : (STATUS_COLOR[a.status] || STATUS_COLOR.todo);
+      const statusLabel = a.overdue ? "期限超過" : isOnHold(a) ? "保留中（社長判断）" : a.statusLabel;
       return `
       <tr class="click" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
-        <td><span class="hr-nm">${esc(a.name)}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td><span class="hr-nm">${esc(a.name)}${isLead(a) ? `<span class="hr-lead-badge">無限道場</span>` : ""}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
         <td>${docsCell(a)}</td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
-          <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span></td>
-        <td>${esc(a.nextAction)}${a.decisionDueOn ? `<span class="hr-sub2">期限 ${esc(a.decisionDueOn)}</span>` : ""}</td>
+          <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>${decisionBadges(a)}</td>
+        <td>${esc(listNextAction(a))}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
+        <td data-col="due">${dueCell(a)}</td>
+        <td data-col="alerts">${alertsHtml(a)}</td>
         <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
       </tr>`;
     }).join(""));
@@ -496,7 +833,7 @@
     if (!source) { msg.textContent = "応募媒体を選ぶか入力してください"; return; }
 
     try {
-      await KPLayout.busy(btn, "追加中…", () => API.createHrApplicant({
+      const r = await KPLayout.busy(btn, "追加中…", () => API.createHrApplicant({
         name, jobTitle, source,
         recruiterId: el("a-recruiter").value || null,
         email: el("a-email").value.trim() || undefined,
@@ -505,8 +842,10 @@
         note: el("a-note").value.trim() || undefined,
       }));
       closeModal();
-      history.replaceState({}, "", "/hr/applicants.html");
+      history.replaceState({}, "", listUrl());
       await load();
+      // 登録したら、その人の詳細を開く（NEXT ACTION：日程調整を送る／メールが無ければ先にメールを登録。HRフロー仕様 §1）
+      if (r?.applicant?.id) await openDetail(r.applicant.id);
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
   }
 
@@ -514,11 +853,56 @@
   let detail = null;
   let detailTab = "overview";
 
+  // ---- 合格後の採用区分（API が返す lib/hr-offer-types.js が正。画面側に定義を持たない） --------
+  let offerTypesDef = [];
+  let offerTypeReady = true;   // false は db/129 未適用（区分を選ぶ操作だけ止め、これまでの合格通知で進める）
+  const offerTypeDef = (key) => offerTypesDef.find((t) => t.key === key) || null;
+  function takeOfferTypes(d) {
+    if (Array.isArray(d?.offerTypes)) offerTypesDef = d.offerTypes;
+    if (d && "offerTypeReady" in d) offerTypeReady = d.offerTypeReady !== false;
+  }
+
+  /** 採用区分の5つのカード。onPick は選んだときに呼ぶ関数名（区分の key を渡す） */
+  function offerTypeCards(selected, onPick) {
+    if (!offerTypesDef.length) return `<p class="hr-flow-note">採用区分を読み込み中…</p>`;
+    return `<div class="hr-otype-grid" role="radiogroup" aria-label="採用区分">${offerTypesDef.map((t) => `
+      <button type="button" class="hr-otype${selected === t.key ? " on" : ""}" role="radio" aria-checked="${selected === t.key}"
+        data-otype="${esc(t.key)}" onclick="${onPick}('${esc(t.key)}')">
+        <span class="hd"><span class="material-symbols-outlined" aria-hidden="true">${esc(t.icon)}</span>${esc(t.label)}</span>
+        <span class="sm">${esc(t.summary)}</span>
+        <span class="fl">${esc((t.flow || []).join(" → "))}</span>
+      </button>`).join("")}</div>`;
+  }
+
+  /** 採用フローのステップバー（応募 → 面談 → 合格 → オファー → 承諾 → 契約 → 入社/稼働。育成枠は育成の流れ） */
+  // 選考ステップ（HRフロー仕様 §14）。選考段階（stage）6つの現在地。見送り・辞退は「選考終了」
+  const SELECTION_STEPS = [["applied", "新規応募"], ["casual_interview", "カジュアル面談"], ["ceo_recommend", "社長推薦"],
+    ["ceo_interview", "社長面談"], ["offer", "内定"], ["joining_scheduled", "入社予定"]];
+  function stageSteps(a) {
+    const at = SELECTION_STEPS.findIndex(([k]) => k === a.stage);
+    const ended = ["passed", "declined"].includes(a.status);
+    return `<ol class="hr-steps" id="hr-stage-steps" aria-label="選考ステップ">${SELECTION_STEPS.map(([k, l], i) => {
+      const st = i < at || (i === at && a.status === "done") ? "done" : i === at ? "now" : "todo";
+      return `<li class="${st}" data-stage="${k}" aria-current="${st === "now" ? "step" : "false"}">
+        <span class="m" aria-hidden="true">${st === "done" ? "✓" : i + 1}</span><span class="l">${esc(l)}</span></li>`;
+    }).join("")}</ol>
+      ${ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(a.statusLabel)}）</div>` : ""}`;
+  }
+
+  function stepBar(a) {
+    const s = a.steps;
+    if (!s || !(s.steps || []).length) return "";
+    return `<ol class="hr-steps" id="hr-steps" data-flow="${esc(s.flow)}" aria-label="採用の進み具合">${s.steps.map((p, i) => `
+      <li class="${esc(p.state)}" data-step="${esc(p.key)}" aria-current="${p.state === "now" ? "step" : "false"}">
+        <span class="m" aria-hidden="true">${p.state === "done" ? "✓" : i + 1}</span><span class="l">${esc(p.label)}</span></li>`).join("")}</ol>
+      ${s.ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(s.ended)}）</div>` : ""}`;
+  }
+
   async function openDetail(id) {
     // 同じ応募者を開き直す場合（各操作後の再読み込み）は、いま見ているタブを保つ。
     // 呼び出し側が detailTab = "interviews" を先に指定してから呼ぶケースがあるため
     // （openIdはcloseModal()内でnullに戻るため、判定にはdetailの中身を使う）
-    if (detail?.applicant?.id !== id) detailTab = "overview";
+    if (detail?.applicant?.id !== id) { detailTab = "overview"; emailEditing = false; }
     openId = id;
     closeModal();
     const root = el("modal-root");
@@ -528,6 +912,7 @@
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
       detail = d;
+      takeOfferTypes(d);
       renderDetail();
     } catch (e) {
       el("hr-detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
@@ -546,6 +931,7 @@
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
       detail = d;
+      takeOfferTypes(d);
       if (el("hr-detail-box")) renderDetail();
     } catch (e) {
       alert(e.hint || e.detail || e.message || "再読み込みできませんでした");
@@ -564,7 +950,7 @@
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
     openId = null;
-    history.replaceState({}, "", "/hr/applicants.html");
+    history.replaceState({}, "", listUrl());
   }
 
   function setDetailTab(t) { detailTab = t; renderDetail(); }
@@ -573,102 +959,424 @@
     const a = detail.applicant;
     const box = el("hr-detail-box");
     if (!box) return;
-    const TABS = [["overview", "概要"], ["interviews", "面談"], ["docs", "書類"], ["history", "履歴"]];
+    // 無限道場リードには書類（履歴書・職務経歴書）が無い
+    const TABS = isLead(a)
+      ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
+      : [["overview", "概要"], ["interviews", "面談"], ["eval", "評価"], ["docs", "書類"], ["mail", "メール"], ["history", "履歴"]];
     if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
+    // 採用の応募者は、上から順番を固定する（HRフロー仕様 §14）：
+    //   ① 応募者（氏名・職種・メール・電話・応募媒体）② 選考・状態 ③ NEXT ACTION（主ボタン1つ）
+    //   ④ 選考ステップ（新規応募 → … → 入社予定）⑤ タブ（概要／面談／評価／書類／メール／履歴）
+    // NEXT ACTION はタブの外に置く（どのタブを見ていても、次にすることが見える）
+    if (!isLead(a)) {
+      box.innerHTML = `
+      <div style="padding:20px 20px 10px;display:flex;justify-content:space-between;align-items:flex-start;" id="hr-dr-person">
+        <div style="min-width:0;">
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
+            ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}</div>
+          <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(a.jobTitle)}</div>
+          <div class="hr-head-mail${a.email ? "" : " none"}" id="hr-head-mail">${esc(a.email || "メール未登録")}</div>
+          <div style="font-size:12.5px;color:#6b7080;margin-top:2px;" id="hr-head-meta">電話 ${esc(a.phone || "未登録")} ／ 応募媒体 ${esc(a.source || "—")}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()">
+            <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
+        </div>
+      </div>
+      <div class="hr-dr-sel" id="hr-dr-sel">
+        <span>選考：<b>${esc(a.stageLabel || "—")}</b></span><span>状態：<b>${esc(a.statusLabel || "—")}</b></span>
+        <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span>
+        ${(a.alerts || []).length ? `<span class="hr-alerts" id="hr-dr-alerts">${a.alerts.map((x) =>
+          `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>` : ""}
+      </div>
+      <div style="padding:0 20px;" id="hr-detail-next">${nextActionBox(a)}</div>
+      ${stageSteps(a)}
+      ${["offer", "joining_scheduled"].includes(a.stage) ? stepBar(a) : ""}
+      <div class="hr-tabs">${TABS.map(([k, l]) =>
+        `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
+      <div class="hr-detail-body" id="hr-detail-tab"></div>`;
+      renderDetailTab();
+      if (window.HrLmsTrial) HrLmsTrial.mount(detail);
+      return;
+    }
     box.innerHTML = `
       <div style="padding:20px 20px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(a.name)}
-            ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}</div>
+            ${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:8px;">${esc(a.rank)}</span>` : ""}
+            ${isLead(a) ? `<span class="hr-lead-badge">無限道場</span>` : ""}</div>
+          ${isLead(a) ? "" : `<div class="hr-head-mail${a.email ? "" : " none"}" id="hr-head-mail">${esc(a.email || "メール未登録")}</div>`}
           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;">${esc(a.jobTitle)} ／ ${esc(a.source)}</div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()">
+            <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
+        </div>
       </div>
+      ${stepBar(a)}
       <div class="hr-tabs">${TABS.map(([k, l]) =>
         `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
       <div class="hr-detail-body" id="hr-detail-tab"></div>`;
     renderDetailTab();
+    if (window.HrLmsTrial) HrLmsTrial.mount(detail);   // 概要タブに「無限道場 体験」（js/hr-lms-trial.js）
+  }
+
+  /**
+   * 判断済み・本人へ未連絡のとき、ほかにすることが無ければ（見送り）「本人へ連絡」を NEXT ACTION にする。
+   * 保留は「採用判断を更新」、内定は「合格通知を作成」が先に出る（未連絡はバッジと「本人へ連絡」ボタンで並べて出す）
+   */
+  function withContactAction(a) {
+    if (a.contact?.state !== "pending") return a;
+    if (a.decision === "rejected") {
+      return { ...a, nextAction: `本人へ${DECIDE_LABEL[a.decision]}を伝えてください`, nextActionCta: "本人へ連絡", nextActionKey: "contact" };
+    }
+    return a;
+  }
+  const listNextAction = (a) => withContactAction(a).nextAction;
+
+  /** 判断と本人への連絡状況の行（NEXT ACTION の中。判断済みのときだけ） */
+  function contactRow(a) {
+    if (!DECIDE_LABEL[a.decision] || isLead(a)) return "";
+    const pending = a.contact?.state === "pending";
+    return `<div class="hr-contact-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;">
+      <span style="font-size:12px;color:#4a5068;">採用判断</span>${decisionBadges(a)}
+      ${pending && withContactAction(a).nextActionKey !== "contact" ? `<button class="btn btn-secondary btn-sm" onclick="openContactForm('${esc(a.id)}', '${esc(a.decision)}')">
+        <span class="material-symbols-outlined icon-inline">mail</span>本人へ連絡</button>` : ""}
+      ${a.contact?.state === "done" && ["ceo_decision_pending", "passed"].includes(a.status)
+        ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openContactForm('${esc(a.id)}', '${esc(a.decision)}')">もう一度連絡する</button>` : ""}
+    </div>`;
   }
 
   /** NEXT ACTION と、その1つの CTA（原則1つ） */
   function nextActionBox(a) {
+    a = withContactAction(a);
     // 「面談を実施済みにする」は、実施する面談（nextInterviewId）があるときだけ出す。
     // 無ければ面談の記録を確かめてもらう（API も同じ判定。古いデータへの保険）
     if (a.nextActionKey === "conduct" && !a.nextInterviewId) {
       a = { ...a, nextAction: "面談予定の記録を確認してください", nextActionCta: "面談タブを確認", nextActionKey: "checkInterviews" };
     }
+    // 採用区分を選べない環境（db/129 未適用）では、これまでどおり合格通知を作る
+    if (a.nextActionKey === "chooseOfferType" && !offerTypeReady) {
+      a = { ...a, nextAction: "合格通知を作成してください", nextActionCta: "合格通知を作成", nextActionKey: "createOffer" };
+    }
+    // 見出し：オファーの段階では書類名（育成参加決定通知 など）、それ以外は選考段階
+    const otype = offerTypeDef(a.offerType);
+    const offerStage = ["offer_draft_pending", "offer_review_pending", "offer_send_pending", "offer_sent", "offer_viewed",
+      "offer_response_pending", "offer_resend_pending", "accepted"].includes(a.status);
+    const title = otype && offerStage ? otype.offerName : (a.stageLabel || "—");
+    // 見出しと同じ書類名で始まる状態は、重ねて書かない（「育成参加決定通知」＋「下書き（本人未送信）」）
+    const statusText = String(a.statusLabel || "—").startsWith(`${title}の`) ? a.statusLabel.slice(title.length + 1) : (a.statusLabel || "—");
+    // 無限道場 体験（js/hr-lms-trial.js）。面談後・未案内なら主のボタンを［お礼＋無限道場体験を案内］にし、
+    // もとの操作（評価を入力 など）は補助のボタンに回す。案内後は体験の状況を1行で出す
+    const lms = window.HrLmsTrial ? HrLmsTrial.nextAction(a) : null;
+    const canRun = a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : ["advance", "handoff"].includes(a.nextActionKey) ? canAdvance : true);
     return `
-      <div class="hr-next" style="margin:0 0 16px;">
-        <dl class="hr-state now">
-          <dt>選考</dt><dd id="hr-stage">${esc(a.stageLabel || "—")}<small>どこまで進んでいるか</small></dd>
-          <dt>状態</dt><dd id="hr-status">${esc(a.statusLabel || "—")}<small>いま何待ちか</small></dd>
-        </dl>
-        <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION<small style="font-weight:400;margin-left:6px;">次にすること</small></div>
-        <h3>${esc(a.nextAction)}</h3>
-        <div class="meta">担当：${esc(a.recruiterName || "未定")}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
-        ${a.nextActionCta && (!["decide", "advance"].includes(a.nextActionKey) || canDecide)
+      <div class="hr-next" data-lms-na="${esc(lms?.key || "")}">
+        <div class="row1"><span class="ttl" id="hr-stage">${esc(title)}</span><span class="st" id="hr-status">${esc(statusText)}</span>
+          ${a.offerTypeLabel ? `<span class="chip" id="hr-otype">${esc(a.offerTypeLabel)}</span>` : ""}</div>
+        <div class="sub">${esc(lms?.primary ? lms.label : a.nextAction)}${a.decisionDueOn ? `　期限：${esc(a.decisionDueOn)}` : ""}</div>
+        ${isOnHold(a) ? `<div class="hr-dk-banner" data-kind="hold"><span class="material-symbols-outlined">pause_circle</span>
+          <div><b>保留中</b>${a.holdReason ? `　理由：${esc(a.holdReason)}` : ""}${a.holdNextStep ? `<br>次に確認：${esc(a.holdNextStep)}` : ""}${a.decisionDueOn ? `<br>再判断期限：${esc(a.decisionDueOn)}` : ""}</div></div>` : ""}
+        ${lms?.line ? `<div class="sub" data-lms-next>${lms.line}</div>` : ""}
+        ${lms?.primary
+          ? `<button class="btn btn-primary btn-sm" data-lms-next-invite onclick="HrLmsTrial.openSend(false)">${esc(lms.cta)}</button>
+             ${canRun ? `<button class="btn btn-secondary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}`
+          : canRun
           ? `<button class="btn btn-primary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>`
           : a.nextActionKey === "decide"
-            ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">採用判断は社長・管理者が行います。</p>`
+            ? `<p class="muted" style="font-size:12px;margin:0;">採用判断は社長・管理者が行います。</p>`
             : a.nextActionKey === "advance"
-              ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">本採用へ進めるのは社長・管理者が行います。</p>`
+              ? `<p class="muted" style="font-size:12px;margin:0;">本採用へ進めるのは社長・管理者・人事が行います。</p>`
+            : a.nextActionKey === "handoff"
+              ? `<p class="muted" style="font-size:12px;margin:0;">Office への引き渡しは社長・管理者・人事が行います。</p>`
               : a.status === "done" && a.employeeId
                 ? `<a class="btn btn-secondary btn-sm" href="../admin-probation.html?employeeId=${esc(a.employeeId)}">試用期間の管理へ</a>` : ""}
+      </div>
+      ${acceptedPanel(a)}
+      ${contactRow(a)}`;
+  }
+
+  /**
+   * 本人が条件を承諾したあと（区分つき）。承諾した版・日時・承諾済みPDF と、正式契約（LegalSign）の進み具合を1か所で見せる。
+   * 「契約完了」とは書かない（正式な契約は LegalSign。条件の承諾は MF の電子承諾記録）
+   */
+  function acceptedPanel(a) {
+    const o = (detail.offers || []).find((x) => x.offerType && x.status === "accepted");
+    if (!o || !["accepted", "done"].includes(a.status)) return "";
+    const t = offerTypeDef(o.offerType);
+    const canPdf = detail.salaryVisible !== false && o.docsReady && o.noticePdf;
+    // 正式契約（LegalSign）の要否はオファーごと（db/133。送ったときに決まっている）
+    const usesLegalSign = typeof o.formalRequired === "boolean" ? o.formalRequired : Boolean(t?.legalSign);
+    const formal = !usesLegalSign
+      ? (t?.key === "training" ? "" : `<div class="ln" data-acc="formal"><span class="mk ok">✓</span><b>正式契約（LegalSign）</b><span class="when">不要（このオファーで不要として送付）</span></div>`)
+      : o.formalSignedAt
+        ? `<div class="ln" data-acc="formal"><span class="mk ok">✓</span><b>正式契約済み</b><span class="when">${esc(JST.dateTime(o.formalSignedAt))}（LegalSign）</span></div>`
+        : o.formalSentAt
+          ? `<div class="ln" data-acc="formal"><span class="mk">○</span><b>正式契約待ち</b><span class="when">LegalSign の案内：${esc(JST.dateTime(o.formalSentAt))}</span></div>`
+          : `<div class="ln" data-acc="formal"><span class="mk">○</span><b>正式契約（LegalSign）</b><span class="when">${o.legalsignUrl ? "URL 登録済み・まだ案内していません" : "まだ案内していません"}</span></div>`;
+    return `
+      <div class="hr-accepted" id="hr-accepted">
+        <div class="ln" data-acc="accepted"><span class="mk ok">✓</span><b>条件承諾済み</b>
+          <span class="when">${esc(JST.dateTime(o.acceptedAt))}（第${esc(o.version)}版）</span>
+          ${canPdf ? `<button class="btn btn-secondary btn-sm" id="hr-accepted-pdf" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDFを確認する</button>` : ""}</div>
+        ${formal}
+        ${o.handoffAt ? `<div class="ln" data-acc="handoff"><span class="mk ok">✓</span><b>Office へ引き渡し済み</b><span class="when">${esc(JST.dateTime(o.handoffAt))}</span></div>` : ""}
       </div>`;
   }
 
+  /**
+   * 無限道場の講師・メンター応募（lead_type = mugendojo_instructor）。採用の応募者として入る（区分は recruitment）。
+   * 本人が /instructors/recruit で入れた内容（lead_profile）と流入を、概要の上に出す。
+   */
+  const isInstructorApplicant = (a) => a?.attribution?.lead_type === "mugendojo_instructor" || a?.leadProfile?.kind === "instructor";
+  function instructorApplication(a) {
+    if (!isInstructorApplicant(a)) return "";
+    const p = a.leadProfile || {};
+    const first = a.attribution?.first || {};
+    const dd = (v) => esc(v || "—");
+    const pre = (v) => `<dd style="white-space:pre-wrap;font-weight:500;">${dd(v)}</dd>`;
+    const link = (u) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all;">${esc(u)}</a>` : "—");
+    const utm = [first.utm_source, first.utm_medium, first.utm_campaign].filter(Boolean).join(" / ");
+    return `
+        <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">講師・メンター応募の内容</h4>
+        <dl class="hr-grid2" style="margin-bottom:14px;padding-bottom:6px;border-bottom:1px solid #e7eaf3;">
+          <div><dt>現在の仕事・肩書き</dt><dd>${dd(p.occupation)}</dd></div>
+          <div><dt>会社・所属</dt><dd>${dd(p.company)}</dd></div>
+          <div style="grid-column:1/-1;"><dt>専門分野</dt><dd class="hr-chips-sm">${(p.specialties || []).map((x) => `<span>${esc(x)}</span>`).join("") || "—"}</dd></div>
+          <div style="grid-column:1/-1;"><dt>経歴・実績・できること</dt>${pre(p.career_text)}</div>
+          <div style="grid-column:1/-1;"><dt>応募理由</dt>${pre(p.motivation_text)}</div>
+          <div style="grid-column:1/-1;"><dt>講師・メンター経験</dt>${pre(p.teaching_experience)}</div>
+          <div><dt>対応可能な曜日・時間</dt><dd>${dd(p.availability)}</dd></div>
+          <div><dt>オンライン／対面</dt><dd>${dd((p.work_styles || []).join("・"))}</dd></div>
+          <div><dt>プロフィールURL</dt><dd>${link(p.profile_url || a.profileUrl)}</dd></div>
+          <div><dt>SNS／Webサイト</dt><dd>${link(p.website_url)}</dd></div>
+          <div style="grid-column:1/-1;"><dt>その他</dt>${pre(p.note_text)}</div>
+          <div><dt>流入（UTM）</dt><dd>${dd(utm)}</dd></div>
+          <div><dt>送信したページ</dt><dd>${link(a.attribution?.last?.source_url || first.source_url)}</dd></div>
+        </dl>`;
+  }
+
   /** いちばん新しい、評価済みの面談 */
+  // ---- 評価タブ：面談ごとの5項目評価・総合ランク・推薦理由・所感（入力は NEXT ACTION の「評価を入力」から） ----
+  function evalTab(a) {
+    const evs = (detail.interviews || []).filter((i) => i.done && !i.canceled && (i.rank || Object.keys(i.scores || {}).length || i.notes));
+    const rankLabel = detail.rankLabel || {};
+    const head = a.status === "eval_pending"
+      ? `<div class="banner warn" style="margin:0 0 12px;"><span class="material-symbols-outlined">rate_review</span><div>面談の評価がまだ入力されていません。NEXT ACTION の［評価を入力］から入力してください。</div></div>` : "";
+    if (!evs.length) return `${head}<p class="muted" data-eval-empty>まだ評価がありません。</p>`;
+    return head + evs.map((i) => `
+      <section class="hr-flow-sec" data-eval="${esc(i.id)}" style="margin-bottom:12px;">
+        <div class="hr-flow-hd"><h3>${esc(i.kindLabel)}${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:8px;">${esc(i.rank)}</span>` : ""}</h3>
+          <span class="hr-flow-note">${i.scheduledAt ? esc(JST.when(i.scheduledAt)) : ""}${i.interviewerName ? `　${esc(i.interviewerName)}` : ""}</span></div>
+        ${i.rank ? `<div style="font-size:12.5px;color:#1b2440;margin:0 0 8px;">総合：${esc(i.rank)}（${esc(rankLabel[i.rank] || "")}）</div>` : ""}
+        ${(detail.evalItems || []).map((it) => `<div class="hr-score-row"><span class="k">${esc(it.label)}</span><span>${esc(i.scores?.[it.key] ? scaleLabel(i.scores[it.key]) : "—")}</span></div>`).join("")}
+        ${i.recommendReason ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:8px;"><b style="color:#6b7080;font-size:11px;display:block;">推薦理由</b>${esc(i.recommendReason)}</div>` : ""}
+        ${i.notes ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:8px;"><b style="color:#6b7080;font-size:11px;display:block;">所感・メモ</b>${esc(i.notes)}</div>` : ""}
+      </section>`).join("");
+  }
+
+  // ---- メールタブ：この応募者へ送ったメール（api/hr/applicants/mail.js の記録）と［メールを送る］ ----
+  async function loadMailTab(id) {
+    let r = null, err = null;
+    try { r = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(id)}`); } catch (e) { err = e; }
+    const box = el("hr-detail-tab");
+    if (!box || detailTab !== "mail" || detail?.applicant?.id !== id) return;
+    box.innerHTML = `
+      <button class="btn btn-secondary btn-sm" style="margin:0 0 12px;" onclick="openMailForm()">
+        <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
+      ${err ? `<div class="banner warn"><span class="material-symbols-outlined">error</span><div>${esc(err.hint || err.message || "読み込めませんでした")}</div></div>`
+        : `<div data-mail-tab>${mailHistoryHtml(r.sends)}</div>`}`;
+  }
+
   function latestEvaluation() {
     return (detail.interviews || []).find((i) => i.rank) || null;
+  }
+
+  /** 無限道場リードの概要（LP で本人が入れた内容・流入・面談・次のアクション） */
+  function leadOverview(a) {
+    const p = a.leadProfile || {};
+    const first = a.attribution?.first || {};
+    const last = a.attribution?.last || {};
+    const dd = (v) => esc(v || "—");
+    const link = (u) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all;">${esc(u)}</a>` : "—");
+    const utm = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]
+      .map((k) => (first[k] ? `${k.replace("utm_", "")}=${first[k]}` : null)).filter(Boolean).join("　");
+    const lastUtm = [last.utm_source, last.utm_medium, last.utm_campaign].filter(Boolean).join(" / ");
+    const ivs = (detail.interviews || []).filter((i) => !i.canceled);
+    return `
+        ${nextActionBox(a)}
+        <dl class="hr-grid2">
+          <div><dt>氏名</dt><dd>${dd(a.name)}</dd></div>
+          <div><dt>メール</dt><dd>${dd(a.email)}</dd></div>
+          <div><dt>電話</dt><dd>${dd(a.phone)}</dd></div>
+          <div><dt>現在の状況</dt><dd>${dd(p.occupation)}</dd></div>
+          <div><dt>都道府県</dt><dd>${dd(p.prefecture)}</dd></div>
+          <div><dt>担当</dt><dd id="hr-recruiter">${esc(a.recruiterName || "未定")}
+            <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></dd></div>
+          <div><dt>流入元</dt><dd>${esc(leadSourceLabel(a))}</dd></div>
+          <div><dt>UTM（最初）</dt><dd>${dd(utm)}</dd></div>
+          <div><dt>参照元</dt><dd>${link(first.referrer)}</dd></div>
+          <div><dt>最初に来たページ</dt><dd>${link(first.landing_page)}</dd></div>
+          <div><dt>送信したページ</dt><dd>${link(last.source_url || first.source_url)}</dd></div>
+          <div><dt>直近の流入</dt><dd>${dd(lastUtm)}${a.attribution?.touches > 1 ? `<small class="muted">（送信${esc(a.attribution.touches)}回）</small>` : ""}</dd></div>
+          <div><dt>AI経験</dt><dd>${dd(p.ai_experience)}</dd></div>
+          <div><dt>IT経験</dt><dd>${dd(p.it_experience)}</dd></div>
+          <div style="grid-column:1/-1;"><dt>興味・目的</dt><dd class="hr-chips-sm">${(p.interests || []).map((x) => `<span>${esc(x)}</span>`).join("") || "—"}</dd></div>
+          <div style="grid-column:1/-1;"><dt>挑戦してみたいこと</dt><dd style="white-space:pre-wrap;font-weight:500;">${dd(p.challenge_text)}</dd></div>
+          <div><dt>適性診断</dt><dd>${dd(leadDiagnosis(a))}</dd></div>
+          <div><dt>次のアクション</dt><dd>${dd(a.leadNextActionLabel)}</dd></div>
+          <div><dt>登録日</dt><dd>${esc(fmtDate(a.createdAt))}</dd></div>
+          <div><dt>最終接触</dt><dd>${a.lastContactedAt ? esc(fmtDate(a.lastContactedAt)) : "—"}</dd></div>
+        </dl>
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">面談</h4>
+        ${ivs.length ? ivs.map((i) => `<div class="hr-lead-iv">
+            <b>${esc(i.kindLabel)}</b>　${i.scheduledAt ? esc(fmtDate(i.scheduledAt)) : "日時未定"}${i.done ? "（実施済み）" : ""}
+            ${i.memo ? `<div style="white-space:pre-wrap;margin-top:6px;color:#4a5068;">${esc(i.memo)}</div>` : ""}
+          </div>`).join("") : `<p class="muted" style="font-size:12.5px;">まだ面談の予定はありません（本人の TimeRex 予約を待っています）。</p>`}
+        <p class="muted" style="font-size:12px;margin:6px 0 0;">面談メモの編集は<a href="#" onclick="setDetailTab('interviews');return false;">面談タブ</a>、経過は<a href="#" onclick="setDetailTab('history');return false;">履歴タブ</a>で見られます。</p>`;
+  }
+
+  // ---- 概要：値のある項目だけを出す（空欄は［詳細を表示］の中）。メールはその場で登録・編集 --------------------
+  function basicInfo(a, ev, evLine) {
+    const salary = detail.salaryVisible === false ? null
+      : a.wageAmount ? `${a.wageType || ""} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : null;
+    const rank = a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span> ${esc((detail.rankLabel || {})[a.rank] || "")}` : null;
+    const evText = ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : null;
+    // [見出し, 表示（HTML。null は未登録）, 常に通常表示に出すか]
+    const items = [
+      ["応募経路", a.source ? esc(a.source) : null],
+      ["応募職種", a.jobTitle ? esc(a.jobTitle) : null],
+      ["担当", `<span id="hr-recruiter">${esc(a.recruiterName || "未定")}
+        <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></span>`, true],
+      ["ランク", rank],
+      ["最新評価", evText],
+      ["電話", a.phone ? esc(a.phone) : null],
+      ["雇用形態", a.employmentType ? esc(a.employmentType) : null],
+      ["入社予定日", a.joinDate ? esc(a.joinDate) : null],
+      ...(detail.salaryVisible === false ? [] : [["給与", salary ? esc(salary) : null]]),
+      ["勤務地", a.workLocation ? esc(a.workLocation) : null],
+      ["選考段階", a.stageLabel ? esc(a.stageLabel) : null, false],
+    ];
+    const cell = ([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v ?? "—"}</dd></div>`;
+    const shown = items.filter(([k, v, always]) => always || (v != null && k !== "選考段階"));
+    const rest = items.filter((x) => !shown.includes(x));
+    return `
+        <dl class="hr-grid2" id="hr-basic">${shown.map(cell).join("")}</dl>
+        ${emailRow(a)}
+        ${rest.length ? `<details class="hr-more-info" id="hr-more-info">
+          <summary><span class="when-closed">詳細を表示</span><span class="when-open">詳細を閉じる</span></summary>
+          <dl class="hr-grid2" style="margin-top:8px;">${rest.map(cell).join("")}</dl></details>` : ""}`;
+  }
+
+  // メール：登録済みなら［編集］、未登録なら［メールを登録］。押すとその場で入力（大きなモーダルは開かない）
+  let emailEditing = false;
+  const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/;   // lib/mail isEmail と同じ形
+  function emailRow(a) {
+    if (isLead(a)) return "";
+    if (emailEditing) {
+      return `<div class="hr-email-row" id="hr-email-row"><label class="k" for="hr-email-input">メール</label>
+        <input id="hr-email-input" type="email" inputmode="email" autocomplete="off" value="${esc(a.email || "")}" placeholder="example@example.com"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();saveEmailInline(this)}">
+        <span class="acts"><button class="btn btn-primary btn-sm" id="hr-email-save" onclick="saveEmailInline(this)">保存</button>
+          <button class="btn btn-secondary btn-sm" onclick="cancelEmailEdit()">キャンセル</button></span>
+        <div class="err-text" id="hr-email-msg"></div></div>`;
+    }
+    return `<div class="hr-email-row" id="hr-email-row"><span class="k">メール</span>
+      ${a.email ? `<span class="v" id="hr-email">${esc(a.email)}</span><button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="startEmailEdit()">編集</button>`
+        : `<span class="v muted" id="hr-email">未登録</span><button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="startEmailEdit()">メールを登録</button>`}</div>`;
+  }
+  function rerenderEmailRow() {
+    const row = el("hr-email-row");
+    if (row) row.outerHTML = emailRow(detail.applicant);
+    const head = el("hr-head-mail");
+    if (head) { head.textContent = detail.applicant.email || "メール未登録"; head.classList.toggle("none", !detail.applicant.email); }
+  }
+  function startEmailEdit() { emailEditing = true; rerenderEmailRow(); el("hr-email-input")?.focus(); }
+  function cancelEmailEdit() { emailEditing = false; rerenderEmailRow(); }
+
+  /**
+   * 応募者のメールを保存する（PATCH /api/hr/applicants/detail。形は lib/hr.js normalizeApplicant が確かめる）。
+   * 前後の空白は除く。空欄は「未登録」に戻す。保存してもドロワー・送信画面は閉じない
+   * @returns {Promise<string|null>} 保存できなければ理由
+   */
+  async function saveApplicantEmail(value, btn) {
+    const email = String(value || "").trim();
+    if (email && !EMAIL_RE.test(email)) return "メールアドレスの形式を確認してください";
+    try {
+      const r = await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({ id: detail.applicant.id, email }));
+      detail.applicant = { ...detail.applicant, ...(r?.applicant || {}), email: r?.applicant?.email ?? (email || null) };
+      load();   // 一覧も新しいメールに
+      return null;
+    } catch (e) { return e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+  async function saveEmailInline(btn) {
+    const msg = el("hr-email-msg");
+    msg.textContent = "";
+    const wasRegister = detail.applicant.nextActionKey === "registerEmail";
+    const err = await saveApplicantEmail(el("hr-email-input").value, btn);
+    if (err) { msg.textContent = err; return; }
+    emailEditing = false;
+    // メール未登録の NEXT ACTION だったときは、NEXT ACTION ごと描き直す（日程調整を送るへ）
+    if (wasRegister) { await refreshDetail(); return; }
+    rerenderEmailRow();
+  }
+
+  /** 概要の社長面談の評価は1行だけ（詳しくは面談タブ） */
+  function ceoEvalBrief(res) {
+    const iv = (res?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled);
+    if (!iv || (!Object.keys(iv.scores || {}).length && !iv.notes && !iv.rank)) return "";
+    return `<div class="hr-ceo-brief" data-ceo-brief><span>社長面談の評価</span><b>${esc(iv.rank || "—")}</b>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;padding:2px 12px;" onclick="setDetailTab('interviews')">見る</button></div>`;
   }
 
   function renderDetailTab() {
     const a = detail.applicant;
     const box = el("hr-detail-tab");
-    if (detailTab === "overview") {
+    if (detailTab === "overview" && isLead(a)) {
+      box.innerHTML = leadOverview(a);
+    } else if (detailTab === "overview") {
       const ev = latestEvaluation();
       const evLine = ev ? (detail.evalItems || []).filter((e) => ev.scores?.[e.key])
         .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
       const missing = docMissingLabels();
       box.innerHTML = `
-        ${nextActionBox(a)}
-        <dl class="hr-grid2">
-          <div><dt>応募経路</dt><dd>${esc(a.source || "—")}</dd></div>
-          <div><dt>応募職種</dt><dd>${esc(a.jobTitle || "—")}</dd></div>
-          <div><dt>選考段階</dt><dd>${esc(a.stageLabel || "—")}</dd></div>
-          <div><dt>担当</dt><dd id="hr-recruiter">${esc(a.recruiterName || "未定")}
-            <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></dd></div>
-          <div><dt>メール</dt><dd>${esc(a.email || "—")}</dd></div>
-          <div><dt>電話</dt><dd>${esc(a.phone || "—")}</dd></div>
-          <div><dt>ランク</dt><dd>${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span> ${esc((detail.rankLabel || {})[a.rank] || "")}` : "—"}</dd></div>
-          <div><dt>最新評価</dt><dd>${ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : "まだありません"}</dd></div>
-          <div><dt>雇用形態</dt><dd>${esc(a.employmentType || "—")}</dd></div>
-          <div><dt>入社予定日</dt><dd>${esc(a.joinDate || "—")}</dd></div>
-          ${detail.salaryVisible === false ? "" : `<div><dt>給与</dt><dd>${a.wageAmount ? `${esc(a.wageType || "")} ${Number(a.wageAmount).toLocaleString("ja-JP")}円` : "—"}</dd></div>`}
-          <div><dt>勤務地</dt><dd>${esc(a.workLocation || "—")}</dd></div>
-        </dl>
-        ${missing.length ? `<p class="muted" style="font-size:12px;margin:12px 0 0;">
+        ${instructorApplication(a)}
+        ${basicInfo(a, ev, evLine)}
+        ${missing.length ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">
           ${esc(missing.join("・"))}が未登録です。<a href="#" onclick="setDetailTab('docs');return false;">書類タブ</a>から登録できます。</p>` : ""}
+        ${ceoEvalBrief(detail)}
         ${(detail.offers || []).length ? `
-        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">合格通知</h4>
+        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
         ${detail.offers.map(offerRow).join("")}` : ""}`;
     } else if (detailTab === "interviews") {
       box.innerHTML = `
-        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin-bottom:12px;">
+        ${ceoEvalSummary(detail)}
+        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:${ceoEvalSummary(detail) ? "14px" : "0"} 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
         ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
           : `<p class="muted">まだ面談の記録がありません。</p>`}`;
+    } else if (detailTab === "eval") {
+      box.innerHTML = evalTab(a);
+    } else if (detailTab === "mail") {
+      box.innerHTML = `<p class="muted">読み込み中…</p>`;
+      loadMailTab(a.id);
     } else if (detailTab === "docs") {
       box.innerHTML = renderDocsTab();
     } else {
       box.innerHTML = `
         <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">選考タイムライン</h4>
         <div class="hr-tl">${(detail.timeline || []).map((t, i, arr) => `
-          <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}</div>
+          <div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t) ? `<span class="who">・${esc(timelineWho(t))}</span>` : ""}</div>
             <div class="l">${esc(t.label)}${t.detail ? `　${esc(t.detail)}` : ""}${i === arr.length - 1 ? `<span class="now">← 現在</span>` : ""}</div>
           </div>`).join("") || `<p class="muted">まだ記録がありません。</p>`}</div>`;
     }
   }
+
+  // 選考タイムラインの「誰が」。社内の操作は社員名、本人の閲覧・承諾・辞退は「本人」
+  const CANDIDATE_EVENTS = ["offer_viewed", "offer_accepted", "offer_declined"];
+  const timelineWho = (t) => t.actorName || (CANDIDATE_EVENTS.includes(t.eventKey) ? "本人" : "");
 
   // ---- 書類タブ ---------------------------------------------------------------------
   const fmtDay = (iso) => JST.date(iso);   // 日本時間の日付（js/jst.js）
@@ -1148,9 +1856,13 @@
   }
 
   function runNextAction() {
-    const a = detail.applicant;
+    // 画面に出している NEXT ACTION と同じもの（判断済み・本人へ未連絡なら「本人へ連絡」）
+    const a = withContactAction(detail.applicant);
     const key = a.nextActionKey;
     if (key === "sendSchedulingLink") return openSendSchedulingForm();
+    // メール未登録：概要タブのメール欄をその場で入力にする（保存すると NEXT ACTION が「日程調整を送る」へ）
+    if (key === "registerEmail") { detailTab = "overview"; emailEditing = true; renderDetail(); el("hr-email-input")?.focus(); return; }
+    if (key === "leadNextAction") return openLeadNextActionForm();
     if (key === "schedule") return openScheduleForm(a.nextActionKind);
     // 実施する面談が無い（NEXT ACTION は「面談タブを確認」と出している）ときは、面談タブへ
     if (key === "conduct" && !a.nextInterviewId) return setDetailTab("interviews");
@@ -1166,9 +1878,15 @@
     }
     if (key === "recommend") return openRecommendForm();
     if (key === "advance") return startAdvance();
+    if (key === "handoff") return openHandoff();
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
+    if (key === "contact") return openContactForm(a.id, a.decision);
+    if (key === "chooseOfferType") return offerTypeReady ? openOfferTypeModal() : openOfferForm();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
+    if (key === "formalContract") return openFormalContract();
+    // 区分つきは、内容を確認してメールで送る。区分の無い、これまでの合格通知と URL の再発行は従来の画面
+    if (key === "sendOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "sendOffer" || key === "reissueOffer") return openSendOfferForm();
   }
 
@@ -1208,7 +1926,8 @@
     if (!note) { msg.textContent = "推薦理由を入力してください"; return; }
     try {
       await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({
-        id: detail.applicant.id, stage: "ceo_recommend", status: "ceo_interview_pending", recommendNote: note,
+        // 推薦すると、選考は社長面談・状態は社長面談設定待ち（HRフロー仕様 §4。社長・管理者へ通知）
+        id: detail.applicant.id, stage: "ceo_interview", status: "ceo_interview_pending", recommendNote: note,
       }));
       closeAction();
       await refreshDetail();
@@ -1217,63 +1936,336 @@
   }
 
   /** 採用判断（内定・保留・見送り）。社長・管理者だけ（サーバ側でも弾く） */
-  function openDecideForm() {
-    openActionModal(`
-        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">採用判断</h2>
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <button class="btn btn-primary btn-sm" onclick="setDecideKind('hired')">内定</button>
-          <button class="btn btn-secondary btn-sm" onclick="setDecideKind('hold')">保留</button>
-          <button class="btn btn-secondary btn-sm" onclick="setDecideKind('rejected')">見送り</button>
-        </div>
-        <div id="decide-body"></div>
-        <div id="dc-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
-        </div>`);
-    setDecideKind("hired");
+  // 採用判断の部品（下の共通部分）が、この画面で使う口
+  const decideDefaultId = () => detail?.applicant?.id;
+  const openDecisionModal = (html, opts) => openActionModal(html, opts);
+  const closeDecisionModal = () => closeAction();
+  async function afterDecision() { await refreshDetail(); await load(); }
+
+  // ---- 社長面談の評価 → STEP 1 採用判断 → STEP 2 本人へ連絡 ------------------------------
+  // 採用HRの詳細（hr/applicants.html）と CEO REVIEW（hr/ceo-review.html）で同じもの。直すときは両方そろえる。
+  //   ・1つのモーダルの中を、3枚のカード（評価／採用判断／本人へ連絡）に分ける。保存しても閉じずに次の段へ進む
+  //   ・判断はセグメント（選んだものだけ色＋チェック）。説明の帯・確定ボタンも同じ色に切り替わる
+  //   ・評価は面談の scores / notes（状態は動かさない）。判断は応募者の decision。連絡は api/hr/applicants/message.js
+  //   ・本人への連絡状況（未連絡／連絡済み）は API の contact（lib/hr-messages.js。タイムラインから決める）
+  const DECIDE_KINDS = [
+    { key: "hired", label: "合格", icon: "check_circle", submit: "合格にする",
+      note: "合格にします。どの形で迎えるか（採用区分）を選ぶと、その区分のオファー（条件）を作る流れに進みます。" },
+    { key: "hold", label: "保留", icon: "pause_circle", submit: "保留にする",
+      note: "保留にします。社長判断待ちのまま、次に確認することと再判断期限を残します。" },
+    { key: "rejected", label: "見送り", icon: "cancel", submit: "見送りを確定",
+      note: "見送りにします。この応募者の選考は終わります。" },
+  ];
+  const DECIDE_LABEL = Object.fromEntries(DECIDE_KINDS.map((k) => [k.key, k.label]));
+
+  /** 判断と、本人への連絡状況のバッジ（一覧・詳細・CEO REVIEW で同じ） */
+  function decisionBadges(a) {
+    const d = a?.decision;
+    // 無限道場リードの保留・対象外は採用判断ではない（区分のバッジと次のアクションで見る）
+    if (!DECIDE_LABEL[d] || a?.leadCategory === "mugendojo") return "";
+    const c = a.contact?.state;
+    return `<span class="hr-badges" data-decision="${esc(d)}">
+      <span class="hr-badge d-${esc(d)}">${esc(DECIDE_LABEL[d])}</span>
+      ${c === "pending" ? `<span class="hr-badge c-pending" data-contact="pending"><span class="material-symbols-outlined">mark_email_unread</span>本人へ未連絡</span>`
+        : c === "done" ? `<span class="hr-badge c-done" data-contact="done"><span class="material-symbols-outlined">done</span>連絡済み</span>` : ""}
+    </span>`;
+  }
+
+  /** 社長面談の評価（読むだけ）。モーダルと同じ見た目・同じ色のルールで出す（応募者詳細・CEO REVIEW の詳細） */
+  function ceoEvalSummary(res) {
+    const iv = (res?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled);
+    if (!iv || (!Object.keys(iv.scores || {}).length && !iv.notes)) return "";
+    return `<section class="hr-flow-sec" data-ceo-eval style="margin-top:14px;">
+      <div class="hr-flow-hd"><h3><span class="material-symbols-outlined">fact_check</span>社長面談の評価</h3>
+        <span class="hr-flow-note">${iv.scheduledAt ? esc(JST.when(iv.scheduledAt)) : ""}</span></div>
+      ${(res.evalItems || []).map((it) => `<div class="hr-score-row"><span class="k">${esc(it.label)}</span><span class="hr-score-opts">
+        ${(res.evalScale || []).map((s) => `<button type="button" class="hr-score${iv.scores?.[it.key] === s.key ? " on" : ""}" data-v="${esc(s.key)}" disabled>${esc(s.label)}</button>`).join("")}
+      </span></div>`).join("")}
+      ${iv.notes ? `<div style="font-size:12.5px;white-space:pre-wrap;margin-top:10px;color:#1b2440;"><b style="color:#6b7080;font-size:11px;display:block;">社長の所感</b>${esc(iv.notes)}</div>` : ""}
+    </section>`;
   }
 
   let decideKind = "hired";
-  function setDecideKind(kind) {
-    decideKind = kind;
-    const body = el("decide-body");
-    if (kind === "hold") {
-      body.innerHTML = `
-        <label>保留理由</label><input id="dc-reason" type="text">
-        <label style="margin-top:10px;">次に確認すること</label><input id="dc-next" type="text">
-        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date">
-        <button class="btn btn-primary" style="margin-top:14px;" onclick="submitDecide(this)">保留にする</button>`;
-    } else {
-      body.innerHTML = `
-        <label>コメント（任意）</label><textarea id="dc-note" rows="3"></textarea>
-        <button class="btn btn-primary" style="margin-top:14px;" onclick="submitDecide(this)">
-          ${kind === "hired" ? "内定にする" : "見送りを確定"}</button>`;
+  let decideOfferType = null;   // 合格のときの採用区分（「この方をどの形で迎えますか？」）
+  // { applicantId, name, ceoInterview, evalItems, evalScale, scores, step: "decide"|"contact"|"done",
+  //   savedKind, summary, message, sentChannel }
+  let flow = null;
+
+  const flowState = (done, doneText, todoText) => (done
+    ? `<span class="hr-flow-state done"><span class="material-symbols-outlined">check</span>${esc(doneText)}</span>`
+    : `<span class="hr-flow-state todo">${esc(todoText)}</span>`);
+
+  function openDecideForm(applicantId) {
+    const id = applicantId || decideDefaultId();
+    flow = { applicantId: id, name: "", ceoInterview: null, evalItems: [], evalScale: [], scores: {}, step: "decide",
+      savedKind: null, summary: "", message: null, sentChannel: null };
+    decideKind = "hired";
+    decideOfferType = null;
+    for (const k of Object.keys(fieldMemo)) delete fieldMemo[k];
+    openDecisionModal(flowShell(), { wide: true });
+    renderStep1(); renderStep2();
+    loadDecideEval(id);
+  }
+
+  /** 判断済みの人に、あとから本人へ連絡する（STEP 1 は完了のまま、STEP 2 だけを開く） */
+  async function openContactForm(applicantId, kind) {
+    flow = { applicantId, name: "", ceoInterview: null, evalItems: [], evalScale: [], scores: {}, step: "contact",
+      savedKind: kind, summary: `${DECIDE_LABEL[kind] || ""}を決定済み`, message: null, sentChannel: null, contactOnly: true };
+    openDecisionModal(flowShell(), { wide: true });
+    renderStep1();
+    await loadMessage();
+  }
+
+  function flowShell() {
+    return `
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 2px;">${flow.contactOnly ? "本人へ連絡" : "評価・採用判断"}</h2>
+        <p class="hr-sub" id="dc-name" style="margin:0 0 16px;"></p>
+        ${flow.contactOnly ? "" : `<section class="hr-flow-sec" id="dc-eval"><p class="hr-flow-note">社長面談の評価を読み込み中…</p></section>`}
+        <section class="hr-flow-sec" id="dc-step1"></section>
+        <section class="hr-flow-sec" id="dc-step2"></section>
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn btn-secondary" onclick="closeDecisionModal()">閉じる</button>
+        </div>`;
+  }
+
+  /** ① 社長面談の評価・② 社長の所感（実施済み・キャンセルでない、いちばん新しい社長面談） */
+  async function loadDecideEval(id) {
+    let d = null;
+    try { d = await API.getHrApplicant(id); } catch { d = null; }
+    if (!el("dc-eval") || flow?.applicantId !== id) return;
+    // 採用区分の定義（合格のときのカード）。開いた時点でまだ無ければ、ここで描き直す
+    takeOfferTypes(d);
+    if (!decideOfferType && d?.applicant?.offerType) decideOfferType = d.applicant.offerType;
+    if (flow.step === "decide" && decideKind === "hired") renderDecideFields();
+    const iv = (d?.interviews || []).find((i) => i.kind === "ceo" && i.done && !i.canceled) || null;
+    Object.assign(flow, { name: d?.applicant?.name || "", ceoInterview: iv, evalItems: d?.evalItems || [],
+      evalScale: d?.evalScale || [], scores: { ...(iv?.scores || {}) } });
+    el("dc-name").textContent = flow.name;
+    renderEval();
+  }
+
+  function renderEval() {
+    const box = el("dc-eval");
+    if (!box) return;
+    const iv = flow.ceoInterview;
+    if (!iv || !flow.evalItems.length) {
+      box.className = "hr-flow-sec is-wait";
+      box.innerHTML = `<div class="hr-flow-hd"><h3>社長面談の評価</h3></div>
+        <p class="hr-flow-note">実施済みの社長面談がないため、評価は入力できません。判断だけを保存できます。</p>`;
+      return;
     }
+    const locked = flow.step !== "decide";
+    box.className = "hr-flow-sec";
+    box.innerHTML = `
+        <div class="hr-flow-hd"><h3><span class="material-symbols-outlined">fact_check</span>社長面談の評価</h3>
+          <span class="hr-flow-note">${iv.scheduledAt ? esc(JST.when(iv.scheduledAt)) : ""}</span></div>
+        ${flow.evalItems.map((it) => `
+          <div class="hr-score-row" data-item="${esc(it.key)}"><span class="k">${esc(it.label)}</span>
+            <span class="hr-score-opts" role="group" aria-label="${esc(it.label)}">
+              ${flow.evalScale.map((s) => `<button type="button" class="hr-score${flow.scores[it.key] === s.key ? " on" : ""}"
+                data-v="${esc(s.key)}" aria-pressed="${flow.scores[it.key] === s.key}" ${locked ? "disabled" : ""}
+                onclick="setScore('${esc(it.key)}', '${esc(s.key)}')">${esc(s.label)}</button>`).join("")}
+            </span></div>`).join("")}
+        <label style="margin-top:14px;">社長の所感（任意）</label>
+        <textarea id="dc-ceo-notes" rows="3" maxlength="1000" ${locked ? "disabled" : ""}
+          placeholder="良かった点・気になった点・判断の理由">${esc(iv.notes || "")}</textarea>`;
+  }
+
+  function setScore(item, v) {
+    // 同じものをもう一度押したら外す（付け間違いを戻せるように）
+    flow.scores[item] = flow.scores[item] === v ? undefined : v;
+    if (!flow.scores[item]) delete flow.scores[item];
+    const row = document.querySelector(`#dc-eval .hr-score-row[data-item="${item}"]`);
+    row?.querySelectorAll(".hr-score").forEach((b) => {
+      const on = b.dataset.v === flow.scores[item];
+      b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+    });
+  }
+
+  /** ③ 採用判断・④ 補足・⑤ 保存（STEP 1） */
+  function renderStep1() {
+    const box = el("dc-step1");
+    if (!box) return;
+    const done = flow.step !== "decide";
+    const head = `<div class="hr-flow-hd"><h3><span class="st">STEP 1</span>採用判断</h3>${flowState(done, "完了", "未完了")}</div>`;
+    if (done) {
+      box.innerHTML = `${head}<div class="hr-flow-sum">${decisionBadges({ decision: flow.savedKind })}
+        ${flow.summary ? `<div style="margin-top:6px;">${esc(flow.summary)}</div>` : ""}</div>`;
+      return;
+    }
+    const k = DECIDE_KINDS.find((x) => x.key === decideKind) || DECIDE_KINDS[0];
+    box.innerHTML = `${head}
+        <div class="hr-seg" id="dc-tabs" role="radiogroup" aria-label="採用判断">
+          ${DECIDE_KINDS.map((x) => {
+            const on = x.key === decideKind;
+            return `<button type="button" role="radio" class="${on ? "on" : ""}" data-kind="${x.key}" aria-checked="${on}" aria-pressed="${on}"
+              onclick="setDecideKind('${x.key}')">${on ? `<span class="material-symbols-outlined">check</span>` : ""}${esc(x.label)}</button>`;
+          }).join("")}
+        </div>
+        <div class="hr-dk-banner" data-kind="${k.key}"><span class="material-symbols-outlined">${k.icon}</span><div><b>${esc(k.label)}</b>　${esc(k.note)}</div></div>
+        <div id="decide-body"></div>
+        <div id="dc-msg" class="err-text" style="margin:8px 0 0;"></div>
+        <button class="btn hr-dk-save" data-kind="${k.key}" style="margin-top:12px;" onclick="submitDecide(this)">${esc(k.submit)}</button>`;
+    renderDecideFields();
+  }
+
+  // 判断ごとの補足（④）。判断を切り替えても、入れた値はなるべく残す
+  const fieldMemo = {};
+  function renderDecideFields() {
+    for (const id of ["dc-reason", "dc-next", "dc-due", "dc-note"]) if (el(id)) fieldMemo[id] = el(id).value;
+    const v = (id) => esc(fieldMemo[id] || "");
+    const note = `<label${decideKind === "hired" ? ' style="margin-top:12px;"' : ""}>コメント（任意・社内用。本人には送りません）</label><textarea id="dc-note" rows="3">${v("dc-note")}</textarea>`;
+    el("decide-body").innerHTML = decideKind === "hold" ? `
+        <label>保留理由</label><input id="dc-reason" type="text" value="${v("dc-reason")}">
+        <label style="margin-top:10px;">次に確認すること <span style="color:#b3261e;">*</span></label><input id="dc-next" type="text" value="${v("dc-next")}">
+        <label style="margin-top:10px;">再判断期限</label><input id="dc-due" type="date" value="${v("dc-due")}">`
+      : decideKind === "hired" ? `
+        ${offerTypeReady ? `
+        <label>この方をどの形で迎えますか？ <span style="color:#b3261e;">*</span></label>
+        <div id="dc-otypes">${offerTypeCards(decideOfferType, "pickDecideOfferType")}</div>` : `
+        <p class="hr-flow-note">採用区分（正社員・育成枠・業務委託など）を選ぶには db/129 の適用が必要です。いまは合格だけを保存し、これまでの合格通知で進めます。</p>`}
+        ${note}` : note;
+  }
+
+  function pickDecideOfferType(key) {
+    decideOfferType = key;
+    if (el("dc-otypes")) el("dc-otypes").innerHTML = offerTypeCards(decideOfferType, "pickDecideOfferType");
+  }
+
+  function setDecideKind(kind) {
+    for (const id of ["dc-reason", "dc-next", "dc-due", "dc-note"]) if (el(id)) fieldMemo[id] = el(id).value;
+    decideKind = kind;
+    renderStep1();
+  }
+
+  /** 評価欄の入力（変わっていなければ null） */
+  function decideEvalPatch() {
+    const iv = flow?.ceoInterview;
+    if (!iv || !el("dc-ceo-notes")) return null;
+    const scores = { ...flow.scores };
+    const notes = el("dc-ceo-notes").value.trim();
+    const same = JSON.stringify(scores) === JSON.stringify(iv.scores || {}) && notes === (iv.notes || "");
+    return same ? null : { id: iv.id, scores, notes };
   }
 
   async function submitDecide(btn) {
     const msg = el("dc-msg"); msg.textContent = "";
-    const body = { id: detail.applicant.id, decision: decideKind };
+    const body = { id: flow.applicantId, decision: decideKind };
+    let summary = "";
     if (decideKind === "hired") {
+      // 採用区分を選んでから合格にする（区分ごとに、必要な条件だけでオファーを作るため）
+      if (offerTypeReady && offerTypesDef.length && !decideOfferType) { msg.textContent = "どの形で迎えるか（採用区分）を選んでください"; return; }
       body.stage = "offer"; body.status = "offer_draft_pending";
+      if (decideOfferType) body.offerType = decideOfferType;
       body.decisionNote = el("dc-note").value.trim() || undefined;
+      const t = offerTypeDef(decideOfferType);
+      if (t) summary = `採用区分：${t.label}`;
     } else if (decideKind === "hold") {
-      const reason = el("dc-reason").value.trim();
       const next = el("dc-next").value.trim();
+      // 保留は、保留理由・次に確認すること・再判断期限の3つが必須（サーバでも確かめる）
+      if (!el("dc-reason").value.trim()) { msg.textContent = "保留理由を入力してください"; return; }
       if (!next) { msg.textContent = "次に確認することを入力してください"; return; }
-      body.holdReason = reason || undefined;
+      if (!el("dc-due").value) { msg.textContent = "再判断期限を入力してください"; return; }
+      body.holdReason = el("dc-reason").value.trim();
       body.holdNextStep = next;
-      body.decisionDueOn = el("dc-due").value || undefined;
+      body.decisionDueOn = el("dc-due").value;
+      summary = [body.holdReason ? `保留理由：${body.holdReason}` : null, `次に確認：${next}`,
+        body.decisionDueOn ? `再判断期限：${body.decisionDueOn}` : null].filter(Boolean).join("　");
     } else {
       body.status = "passed";
       body.decisionNote = el("dc-note").value.trim() || undefined;
     }
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant(body));
-      closeAction();
-      await refreshDetail();
-      await load();
-    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; }
+      await KPLayout.busy(btn, "保存中…", async () => {
+        const ev = decideEvalPatch();
+        if (ev) await API.updateHrInterview(ev);
+        await API.updateHrApplicant(body);
+      });
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; return; }
+    Object.assign(flow, { step: "contact", savedKind: decideKind, summary });
+    renderEval(); renderStep1();
+    await loadMessage();
+    await afterDecision();
+  }
+
+  /** ⑥ 本人へ連絡（STEP 2） */
+  async function loadMessage() {
+    const box = el("dc-step2");
+    if (!box) return;
+    box.className = "hr-flow-sec";
+    box.innerHTML = `<div class="hr-flow-hd"><h3><span class="st">STEP 2</span>本人へ連絡</h3>${flowState(false, "", "未完了")}</div>
+      <p class="hr-flow-note">文面を用意しています…</p>`;
+    let r = null;
+    try { r = await API.api(`/api/hr/applicants/message?id=${encodeURIComponent(flow.applicantId)}&kind=${encodeURIComponent(flow.savedKind)}`); }
+    catch { r = null; }
+    // 文面を作れない（古いサーバ等）ときは、判断の保存だけで閉じる
+    if (!r?.subject) { if (flow.contactOnly) renderStep2(); else closeDecisionModal(); return; }
+    flow.message = r;
+    if (flow.contactOnly && el("dc-name") && !flow.name) el("dc-name").textContent = r.to ? `宛先：${r.to}` : "";
+    renderStep2();
+  }
+
+  function renderStep2() {
+    const box = el("dc-step2");
+    if (!box) return;
+    const head = (done) => `<div class="hr-flow-hd"><h3><span class="st">STEP 2</span>本人へ連絡</h3>${flowState(done, "連絡済み", "未完了")}</div>`;
+    if (flow.step === "decide") {
+      box.className = "hr-flow-sec is-wait";
+      box.innerHTML = `${head(false)}<p class="hr-flow-note">採用判断を保存すると、本人へ伝える文面がここに出ます。判断の保存と本人への連絡は別の操作です。</p>`;
+      return;
+    }
+    box.className = "hr-flow-sec";
+    if (flow.step === "done") {
+      box.innerHTML = `${head(true)}<p class="hr-flow-sum">${flow.sentChannel === "email" ? "メールで送りました。" : "送付済みとして記録しました。"}選考タイムラインに残っています。</p>`;
+      return;
+    }
+    const r = flow.message;
+    if (!r) { box.innerHTML = `${head(false)}<p class="hr-flow-note">文面を用意できませんでした。</p>`; return; }
+    const canMail = Boolean(r.mail?.configured);
+    // メイン操作は1つだけ：メールで送れるなら「メールで送る」、送れなければ「メールソフトで開く」（宛先が無ければ「コピー」）
+    const primary = canMail ? "email" : r.to ? "mailer" : "copy";
+    const cls = (k) => (k === primary ? "btn btn-primary" : "btn btn-secondary");
+    box.innerHTML = `${head(false)}
+        <p class="hr-flow-note" style="margin-bottom:10px;">${esc(r.label)}の文面です。直してから送れます（社内の評価・所感は入っていません）。</p>
+        <label>宛先</label>
+        <div style="font-size:13px;margin-bottom:8px;">${r.to ? esc(r.to) : `<span class="muted">メールアドレスが登録されていません</span>`}</div>
+        <label>件名</label><input id="msg-subject" type="text" maxlength="200" value="${esc(r.subject)}">
+        <label style="margin-top:10px;">本文</label><textarea id="msg-body" rows="11">${esc(r.body)}</textarea>
+        ${canMail ? "" : `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">mail</span>
+          <div>このシステムからはメールを送れません（${esc(r.mail?.reason || "未設定")}）。${r.to ? "メールソフトで開く" : "コピー"}で送り、送ったら「送付済みにする」を押してください。</div></div>`}
+        <div id="msg-msg" class="err-text" style="margin:8px 0 0;"></div>
+        <div class="hr-msg-actions">
+          ${canMail ? `<button class="${cls("email")}" onclick="sendDecisionMessage('email', this)"><span class="material-symbols-outlined icon-inline">send</span>メールで送る</button>` : ""}
+          ${r.to ? `<button class="${cls("mailer")}" onclick="openMailer()"><span class="material-symbols-outlined icon-inline">open_in_new</span>メールソフトで開く</button>` : ""}
+          <button class="${cls("copy")}" onclick="copyDecisionMessage(this)"><span class="material-symbols-outlined icon-inline">content_copy</span>コピー</button>
+          <button class="btn btn-secondary" onclick="sendDecisionMessage('manual', this)"><span class="material-symbols-outlined icon-inline">task_alt</span>送付済みにする</button>
+          <button class="later" onclick="closeDecisionModal()">あとで連絡する</button>
+        </div>`;
+  }
+
+  function openMailer() {
+    const q = `subject=${encodeURIComponent(el("msg-subject").value)}&body=${encodeURIComponent(el("msg-body").value)}`;
+    window.location.href = `mailto:${encodeURIComponent(flow.message.to)}?${q}`;
+  }
+
+  async function copyDecisionMessage(btn) {
+    const text = `${el("msg-subject").value}\n\n${el("msg-body").value}`;
+    try { await navigator.clipboard.writeText(text); btn.lastChild.textContent = "コピーしました"; }
+    catch { el("msg-body").select(); el("msg-msg").textContent = "コピーできませんでした。本文を選んでコピーしてください"; }
+  }
+
+  async function sendDecisionMessage(channel, btn) {
+    if (channel === "manual" && !confirm("本人へ送ったものとして記録します。よろしいですか？")) return;
+    const msg = el("msg-msg"); msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, channel === "email" ? "送信中…" : "記録中…", () => API.api("/api/hr/applicants/message", {
+        method: "POST", body: { id: flow.applicantId, kind: flow.savedKind, channel,
+          subject: el("msg-subject").value, body: el("msg-body").value },
+      }));
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; return; }
+    Object.assign(flow, { step: "done", sentChannel: channel });
+    renderStep2();
+    await afterDecision();
   }
 
   // 「面談を実施済みにする」の対象が見つからないとき。面談の予定は作らず、面談タブで確かめてもらう
@@ -1296,6 +2288,222 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
   }
 
+  // ---- メールを送る（ひな型から。api/hr/applicants/mail.js） ----------------------------
+  // ひな型を選ぶ → 差し込み済みの件名・本文を確かめる（直せる）→［送信］。
+  //   ・ここで直した内容は、このメール1通だけに使う（ひな型は変わらない）
+  //   ・直したあとにひな型を変えると、直した内容は消える。黙って消さず、確かめる
+  //   ・差し込めない項目（予約URLの設定が無い等）があれば、理由を出して送らせない
+  //   ・送信の鍵（requestKey）は1回の「送信」ごとに1つ。通信が切れてやり直しても、同じ鍵なので2通目は送られない
+  //   ・結果は3つに分ける：送信済み（メールサービスが受け付けた）／失敗／結果不明（すぐに送り直さない）
+  let mailFlow = null;
+  const MAIL_STATUS = {
+    sent: ["送信済み", "ok", "メールサービスが受け付けました（相手に届いた・開いた、ではありません）"],
+    failed: ["失敗", "ng", "送れませんでした"],
+    unknown: ["結果不明", "warn", "送れたかどうか分かりません。相手に届いているか確かめてから、必要なら送り直してください"],
+    sending: ["結果不明", "warn", "送信中のまま終わっています。相手に届いているか確かめてください"],
+    not_sent: ["未送信", "warn", "送信の設定が無く、送っていません"],
+  };
+  const TAG_RE = /\{\{\s*([^{}]+?)\s*\}\}/g;
+  const newMailKey = () => {
+    const b = new Uint8Array(16); crypto.getRandomValues(b);
+    return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  };
+
+  async function openMailForm(templateId) {
+    const id = detail?.applicant?.id;
+    if (!id) return;
+    mailFlow = { applicantId: id, data: null, original: null, key: null, phase: "edit", result: null };
+    openHrModal(`<h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0;">メールを送る</h2>
+      <p class="hr-sub" style="margin:10px 0 0;">読み込み中…</p>`);
+    el("hr-modal-root").querySelector(".hr-modal").classList.add("wide");
+    await loadMailDraft(templateId);
+  }
+
+  async function loadMailDraft(templateId) {
+    const f = mailFlow;
+    let r;
+    try {
+      r = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(f.applicantId)}${templateId ? `&templateId=${encodeURIComponent(templateId)}` : ""}`);
+    } catch (e) {
+      if (mailFlow !== f) return;
+      renderMailError(e.hint || e.message || "読み込めませんでした");
+      return;
+    }
+    if (mailFlow !== f || r.applicant?.id !== f.applicantId) return;   // 別の応募者を開き直した
+    f.data = r;
+    f.original = r.rendered ? { subject: r.rendered.subject, body: r.rendered.body } : null;
+    f.key = newMailKey();
+    f.phase = "edit"; f.result = null;
+    renderMailForm();
+  }
+
+  function renderMailError(text) {
+    const box = el("hr-modal-root").querySelector(".hr-modal");
+    if (!box) return;
+    box.innerHTML = `<h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 10px;">メールを送る</h2>
+      <div class="banner warn"><span class="material-symbols-outlined">error</span><div>${esc(text)}</div></div>
+      <div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-secondary" onclick="closeMailForm()">閉じる</button></div>`;
+  }
+
+  const mailDirty = () => {
+    const f = mailFlow;
+    if (!f?.original || !el("mail-subject")) return false;
+    return el("mail-subject").value !== f.original.subject || el("mail-body").value !== f.original.body;
+  };
+
+  function closeMailForm() {
+    if (mailFlow?.phase === "edit" && mailDirty() && !confirm("直した内容は保存されません（このメールは送っていません）。閉じますか？")) return;
+    mailFlow = null;
+    closeHrModal();
+  }
+
+  function mailHistoryHtml(sends) {
+    if (!sends?.length) return `<p class="muted" style="font-size:12px;margin:4px 0 0;">まだ送っていません。</p>`;
+    return `<ul class="hr-mail-hist">${sends.map((s) => {
+      const st = MAIL_STATUS[s.status] || MAIL_STATUS.unknown;
+      return `<li><span class="hr-mail-st ${st[1]}">${esc(st[0])}</span>
+        <span class="t">${esc(fmtDate(s.createdAt))}</span>
+        <span class="s">${esc(s.subject)}</span>
+        <span class="m">${esc(s.templateName || "")}${s.templateVersion ? `（版${esc(s.templateVersion)}）` : ""}・${esc(s.sentByName || "")}</span></li>`;
+    }).join("")}</ul>`;
+  }
+
+  function renderMailForm() {
+    const f = mailFlow;
+    const box = el("hr-modal-root").querySelector(".hr-modal");
+    if (!f || !box) return;
+    const r = f.data;
+    const a = r.applicant;
+    const rd = r.rendered;
+    const canMail = Boolean(r.mail?.configured);
+    const missing = rd?.missing || [];
+    const unknown = rd?.unknown || [];
+    box.innerHTML = `
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 12px;">メールを送る</h2>
+      <div class="hr-mail-to">
+        <div><span class="lb">宛先</span><b id="mail-to-name">${esc(a.name)} 様</b>
+          <span id="mail-to-email">${a.email ? `&lt;${esc(a.email)}&gt;` : `<span class="err-text">メールアドレスが登録されていません</span>`}</span></div>
+        <div class="sub"><span class="lb">送信元</span>${esc(r.mail?.from || "未設定")}
+          ${r.mail?.replyTo ? `　<span class="lb">返信先</span>${esc(r.mail.replyTo)}` : ""}</div>
+      </div>
+      ${r.templates.length ? `
+      <label>ひな型</label>
+      <select id="mail-tpl" onchange="changeMailTemplate(this)">
+        ${r.templates.map((t) => `<option value="${esc(t.id)}" ${rd && t.id === rd.templateId ? "selected" : ""}>${esc(t.name)}（${esc(t.purposeLabel)}）${t.isDefault ? "・既定" : ""}</option>`).join("")}
+      </select>` : `<div class="banner warn"><span class="material-symbols-outlined">description</span>
+        <div>使えるひな型がありません。<a href="/hr/templates.html">メールひな型</a>で作るか、「使用」にしてください。</div></div>`}
+      ${missing.length ? `<div class="banner warn" id="mail-missing" style="margin-top:10px;"><span class="material-symbols-outlined">warning</span>
+        <div><b>差し込めない項目があります。このままでは送れません。</b>
+        <ul style="margin:4px 0 0;padding-left:18px;">${missing.map((m) => `<li>{{${esc(m.key)}}}：${esc(m.reason)}</li>`).join("")}</ul>
+        <span style="font-size:12px;">登録内容・設定を直すか、本文から該当の部分を直してください。</span></div></div>` : ""}
+      ${unknown.length ? `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">warning</span>
+        <div>使えない差し込み項目があります：${unknown.map((u) => `{{${esc(u)}}}`).join("・")}。本文から直してください。</div></div>` : ""}
+      ${rd ? `
+      <label style="margin-top:10px;">件名</label>
+      <input id="mail-subject" type="text" maxlength="200" value="${esc(rd.subject)}" ${f.phase !== "edit" ? "readonly" : ""}>
+      <label style="margin-top:10px;">本文</label>
+      <textarea id="mail-body" rows="14" ${f.phase !== "edit" ? "readonly" : ""}>${esc(rd.body)}</textarea>
+      <p class="muted" style="font-size:11.5px;margin:4px 0 0;">ここで直した内容は、このメール1通だけに使います（ひな型は変わりません）。</p>` : ""}
+      ${canMail ? "" : `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">mail</span>
+        <div>このシステムからはメールを送れません（${esc(r.mail?.reason || "未設定")}）。</div></div>`}
+      <div id="mail-result" style="margin-top:10px;">${mailResultHtml()}</div>
+      <div id="mail-msg" class="err-text" style="margin:8px 0 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        ${f.phase === "edit" ? `<button class="btn btn-primary" id="mail-send" onclick="sendApplicantMail(this)" ${canMail && rd ? "" : "disabled"}>
+          <span class="material-symbols-outlined icon-inline">send</span>送信</button>` : ""}
+        ${f.phase === "failed" ? `<button class="btn btn-primary" onclick="retryMailEdit()">内容を確かめて送り直す</button>` : ""}
+        <button class="btn btn-secondary" onclick="closeMailForm()">${f.phase === "edit" ? "送らずに閉じる" : "閉じる"}</button>
+      </div>
+      <details style="margin-top:14px;" ${f.phase !== "edit" ? "open" : ""}><summary style="font-size:12.5px;cursor:pointer;">この応募者へ送ったメール（${r.sends?.length || 0}件）</summary>
+        <div id="mail-history">${mailHistoryHtml(r.sends)}</div></details>`;
+    if (f.phase !== "edit" && f.typed) {
+      el("mail-subject").value = f.typed.subject; el("mail-body").value = f.typed.body;
+    }
+  }
+
+  function mailResultHtml() {
+    const f = mailFlow;
+    if (!f?.result) return "";
+    const st = MAIL_STATUS[f.result.status] || MAIL_STATUS.unknown;
+    const cls = st[1] === "ok" ? "ok" : "warn";
+    return `<div class="banner ${cls}" id="mail-result-banner" data-status="${esc(f.result.status)}">
+      <span class="material-symbols-outlined">${st[1] === "ok" ? "check_circle" : st[1] === "ng" ? "error" : "help"}</span>
+      <div><b>${esc(st[0])}</b>　${esc(f.result.hint || st[2])}${f.result.duplicate ? "（同じ送信は2回目なので、送り直していません）" : ""}</div></div>`;
+  }
+
+  function changeMailTemplate(sel) {
+    const f = mailFlow;
+    if (!f) return;
+    if (mailDirty() && !confirm("直した内容は消えます（このメールは送っていません）。ひな型を変えますか？")) {
+      sel.value = f.data.rendered?.templateId || "";
+      return;
+    }
+    loadMailDraft(sel.value);
+  }
+
+  function retryMailEdit() {
+    const f = mailFlow;
+    if (!f) return;
+    // 失敗（送れなかったことが確か）のときだけ、直してから送り直せる。新しい送信なので鍵も新しくする
+    f.phase = "edit"; f.key = newMailKey(); f.result = null;
+    const typed = f.typed;
+    renderMailForm();
+    if (typed) { el("mail-subject").value = typed.subject; el("mail-body").value = typed.body; }
+  }
+
+  async function sendApplicantMail(btn) {
+    const f = mailFlow;
+    if (!f || f.sending) return;              // 二度押し
+    const msg = el("mail-msg"); msg.textContent = "";
+    const subject = el("mail-subject").value, body = el("mail-body").value;
+    const left = [...`${subject}\n${body}`.matchAll(TAG_RE)].map((m) => `{{${m[1]}}}`);
+    if (left.length) { msg.textContent = `差し込まれていない項目が残っています：${[...new Set(left)].join("・")}`; return; }
+    if (/[\r\n]/.test(subject)) { msg.textContent = "件名に改行は使えません"; return; }
+    const a = f.data.applicant;
+    if (!confirm(`${a.name} 様（${a.email}）へ送信します。よろしいですか？`)) return;
+    f.sending = true;
+    f.typed = { subject, body };
+    let r = null, err = null;
+    try {
+      r = await KPLayout.busy(btn, "送信中…", () => API.api("/api/hr/applicants/mail", {
+        method: "POST", invalidates: [],
+        body: { id: f.applicantId, templateId: f.data.rendered.templateId, templateVersion: f.data.rendered.templateVersion,
+          subject, body, requestKey: f.key },
+      }));
+    } catch (e) { err = e; }
+    f.sending = false;
+    if (mailFlow !== f) return;
+    if (err && !err.status) {
+      // 通信が切れて、送れたか分からない。鍵はそのまま（もう一度押しても、送れていれば2通目は送られない）
+      msg.textContent = "通信が切れました。もう一度［送信］を押すと、送れたかどうかを確かめます（送れていれば2通目は送りません）";
+      return;
+    }
+    if (err) {
+      const b = err.body || {};
+      if (b.status === "failed" || b.status === "not_sent") {
+        f.result = { status: b.status, hint: err.hint };
+        f.phase = "failed";
+      } else {
+        // 送る前に断られた（差し込み残り・ひな型が変わった等）。送っていないので、直してそのまま送れる
+        msg.textContent = (b.problems || [err.hint || err.message]).join("／");
+        if (["template_changed", "template_inactive"].includes(b.error)) f.key = newMailKey();
+        return;
+      }
+    } else {
+      f.result = { status: r.status, hint: r.hint, duplicate: r.duplicate };
+      f.phase = r.status === "sent" ? "sent" : r.status === "failed" ? "failed" : "unknown";
+    }
+    // 送った記録を取り直す（ひな型の選択は今のまま）
+    try {
+      const again = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(f.applicantId)}&templateId=${encodeURIComponent(f.data.rendered.templateId)}`);
+      if (mailFlow === f) f.data.sends = again.sends;
+    } catch { /* 記録の再読み込みに失敗しても、結果は出す */ }
+    if (mailFlow !== f) return;
+    renderMailForm();
+    // 送れたら詳細と一覧を取り直す（日程調整のひな型なら「カジュアル面談・日程調整中」へ進んでいる）
+    if (f.phase === "sent") { refreshDetail().catch(() => {}); load().catch(() => {}); }
+  }
+
   // ---- 日程調整URLを送る（モーダル） ------------------------------------------------
   // 通常導線：TimeRexの日程調整URLを送る（README「TimeRex連携」指示書 §5・§6）。
   // 独自の日程調整UIは作らない。TimeRexが未設定なら、手動設定へ逃がす（§21）。
@@ -1314,14 +2522,17 @@
       <textarea id="sc-mail" rows="8" readonly>${esc(schedulingMailTemplate(url))}</textarea>
       <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('sc-mail')">メール文面をコピー</button>
       <div id="sc-msg" class="err-text" style="margin:10px 0;"></div>
-      <div style="display:flex;gap:8px;margin-top:14px;">
-        <button class="btn btn-primary" onclick="submitMarkScheduling(this)">送付済みにする</button>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        ${isLead(detail.applicant) ? "" : `<button class="btn btn-primary" id="sc-send-mail" onclick="closeHrModal();openMailForm()">
+          <span class="material-symbols-outlined icon-inline">mail</span>メールひな型で送る</button>`}
+        <button class="btn ${isLead(detail.applicant) ? "btn-primary" : "btn-secondary"}" onclick="submitMarkScheduling(this)">${isLead(detail.applicant) ? "送付済みにする" : "別の方法で送った（送付済みにする）"}</button>
         <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
       </div>
+      ${isLead(detail.applicant) ? "" : `<p class="muted" style="font-size:12px;margin:8px 0 0;">メールひな型（応募受付／カジュアル面談案内）で送ると、自動で「カジュアル面談・日程調整中（予約待ち）」になります。</p>`}
       <button class="btn btn-secondary btn-sm" style="margin-top:16px;"
               onclick="closeHrModal();openScheduleForm()">TimeRexを使わず、手動で面談を設定する</button>` : `
       <div class="banner warn"><span class="material-symbols-outlined">build</span>
-        <div>TimeRexの日程調整URLが未設定です（環境変数 TIMEREX_CASUAL_INTERVIEW_URL）。
+        <div>TimeRexの日程調整URLが未設定です（環境変数 ${esc(detail.schedulingUrlEnv || "TIMEREX_CASUAL_INTERVIEW_URL")}）。
         手動で面談を設定してください。</div></div>
       <div style="display:flex;gap:8px;margin-top:14px;">
         <button class="btn btn-primary" onclick="closeHrModal();openScheduleForm()">手動で面談を設定</button>
@@ -1331,6 +2542,18 @@
 
   function schedulingMailTemplate(url) {
     const a = detail.applicant;
+    if (isLead(a)) {
+      return `件名：無限道場 無料カジュアル面談の日程調整のお願い
+
+${a.name} 様
+
+このたびは無限道場の無料カジュアル面談にお申し込みいただき、ありがとうございます。
+下記URLより、ご都合の良い日時をお選びください。
+
+${url}
+
+ご不明点がございましたら、このメールにご返信ください。`;
+    }
     return `件名：面談日程のご調整のお願い
 
 ${a.name} 様
@@ -1346,7 +2569,10 @@ ${url}
 
   async function submitMarkScheduling(btn) {
     try {
-      await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant({ id: detail.applicant.id, status: "scheduling" }));
+      // 採用の応募者は選考もカジュアル面談へ（無限道場リードは段階を変えない）
+      await KPLayout.busy(btn, "記録中…", () => API.updateHrApplicant(isLead(detail.applicant)
+        ? { id: detail.applicant.id, status: "scheduling" }
+        : { id: detail.applicant.id, stage: "casual_interview", status: "scheduling" }));
       closeHrModal();
       await refreshDetail();
       await load();
@@ -1500,15 +2726,28 @@ ${url}
     revoked: "無効化", expired: "期限切れ",
   };
   function offerRow(o) {
+    // 区分つきは、本人の承諾＝条件承諾済み（正式契約は LegalSign。承諾した版・日時・承諾記録がこの行に残る）
+    const accepted = o.offerType && o.status === "accepted";
+    const label = !accepted ? (OFFER_STATUS_LABEL[o.status] || o.status)
+      : o.handoffAt ? "Office引き渡し済み" : o.formalSignedAt ? "正式契約済み" : o.formalSentAt ? "正式契約待ち" : "条件承諾済み";
+    const canPdf = detail.salaryVisible !== false && o.docsReady;
     return `
-      <div class="card" style="margin-bottom:10px;">
-        <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版
-          <span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">${esc(OFFER_STATUS_LABEL[o.status] || o.status)}</span></div>
+      <div class="card hr-offer-card" style="margin-bottom:10px;" data-offer="${esc(o.id)}">
+        <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版${o.offerType ? `　${esc(o.offerName || "")}` : ""}
+          <span class="hr-pill" data-offer-state style="background:${accepted ? "#e5f1e2;color:#2f6f3a" : "#e7eaf3;color:#1b2440"};margin-left:6px;">${esc(label)}</span></div>
         <div class="muted" style="font-size:11.5px;margin:4px 0;">回答期限：${esc(o.respondBy || "—")}
           ${o.sentAt ? `　送付：${esc(fmtDate(o.sentAt))}` : ""}
           ${o.viewedAt ? `　閲覧：${esc(fmtDate(o.viewedAt))}` : ""}
-          ${o.acceptedAt ? `　承諾：${esc(fmtDate(o.acceptedAt))}` : ""}
+          ${o.acceptedAt ? `　${accepted ? "条件承諾" : "承諾"}：${esc(fmtDate(o.acceptedAt))}` : ""}
+          ${o.formalSentAt ? `　正式契約の案内：${esc(fmtDate(o.formalSentAt))}` : ""}
+          ${o.formalSignedAt ? `　正式契約済み：${esc(fmtDate(o.formalSignedAt))}` : ""}
           ${o.declinedAt ? `　辞退：${esc(fmtDate(o.declinedAt))}` : ""}</div>
+        ${canPdf && (o.noticePdf || o.acceptedPdf || (accepted && o.noticePdf)) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          ${o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'notice', this)">${esc(o.noticeTitle || "条件通知書")}（PDF）</button>` : ""}
+          ${accepted && o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button>` : ""}
+        </div>` : ""}
+        ${accepted && o.offerType ? `<div class="muted" style="font-size:11.5px;margin-top:4px;" data-offer-formal>正式契約（LegalSign）：${o.formalRequired === false ? "不要" : "必要"}${o.handoffAt ? `　Office へ引き渡し：${esc(fmtDate(o.handoffAt))}` : ""}</div>` : ""}
+        ${accepted && o.docsReady && o.formalRequired !== false && !o.formalSignedAt ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;padding:2px 10px;" onclick="openFormalContract()">正式契約（LegalSign）</button>` : ""}
         ${o.messageToCandidate ? `<div style="font-size:12px;margin-top:4px;">${esc(o.messageToCandidate)}</div>` : ""}
         ${o.declineReason ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">辞退理由：${esc(o.declineReason)}</div>` : ""}
       </div>`;
@@ -1520,7 +2759,301 @@ ${url}
     return list.find((o) => o.status !== "revoked") || null;
   }
 
+  // ---- 採用区分を選ぶ（合格後。区分を選ぶと、その区分のオファーの入力へ進む） ------------------
+  let pickOfferType = null;
+  function openOfferTypeModal() {
+    const a = detail.applicant;
+    pickOfferType = a.offerType || null;
+    openActionModal(`
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">この方をどの形で迎えますか？</h2>
+        <p class="hr-sub" style="margin:0 0 12px;">${esc(a.name)}さん　選んだ区分に必要な項目だけで、オファー（候補者へ送る条件）を作ります。</p>
+        <div id="ot-cards">${offerTypeCards(pickOfferType, "pickModalOfferType")}</div>
+        <div id="ot-msg" class="err-text" style="margin:10px 0 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="ot-save" onclick="submitOfferType(this)">この区分で進む</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>`, { wide: true });
+  }
+  function pickModalOfferType(key) {
+    pickOfferType = key;
+    el("ot-cards").innerHTML = offerTypeCards(pickOfferType, "pickModalOfferType");
+  }
+  async function submitOfferType(btn) {
+    const msg = el("ot-msg"); msg.textContent = "";
+    if (!pickOfferType) { msg.textContent = "採用区分を選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.updateHrApplicant({ id: detail.applicant.id, offerType: pickOfferType }));
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; return; }
+    closeAction();
+    await refreshDetail();
+    load();
+    openOfferForm();   // 続けて、その区分の条件を入れる
+  }
+
+  // ---- オファー（候補者へ送る条件）を作る → 内容を確認してメールで送る ------------------------------
+  // 候補者ごとの差分だけ入力する（オファー作成・メール送信・同意完結 UI/UX改善仕様）。
+  //   ・通常表示は区分ごとの4〜6項目だけ。ほかは［詳細設定を開く］の中（閉じた状態）
+  //   ・よく使う値は既定で入る（業務委託の更新・支払条件・NDA、育成コースの期間、回答期限＝送る日から3日後）
+  //   ・選択肢が少ないもの（報酬の区分・パート/アルバイト・NDA など）はボタン
+  //   ・業務内容は標準文を選んで、そのまま直せる
+  // 項目・既定値・標準文の定義はサーバー（lib/hr-offer-types.js）が正。画面は受け取ったものを並べるだけ
+  let offerFormType = null;
+  let offerPay = "";            // 報酬のボタンで選んだ値（"__none" は育成の［なし］）
+  const PAY_NONE = "__none";
+  const jstYmd = (days = 0) => JST.ymd(new Date(Date.now() + days * 86400000));   // 日本の日付（今日から days 日後）
+  const RESPOND_DAYS = 3;       // 回答期限の既定：送る日から3日後（lib/hr-offer-types.js RESPOND_DAYS と同じ）
+
   function openOfferForm() {
+    const a = detail.applicant;
+    const reviewing = a.status === "offer_review_pending";
+    const o = reviewing ? currentOffer() : null;
+    const t = offerTypeDef(reviewing ? o?.offerType : a.offerType);
+    if (!t) { offerFormType = null; return openLegacyOfferForm(); }
+    offerFormType = t;
+    const hideSalary = detail.salaryVisible === false;
+    const terms = o?.offerTerms || {};
+    // 既存の値：下書きはその版の値、作成時は応募者に入っている条件と既定値（区分の選択肢に無い値は入れない）
+    const valueOf = (f) => {
+      let raw = f.term ? terms[f.key] : (o ? o[f.key] : a[f.key]);
+      if ((raw == null || raw === "") && !o && f.value != null) raw = f.value;
+      if (raw == null) return "";
+      if (f.kind === "select" && !(f.options || []).includes(raw)) return "";
+      return raw;
+    };
+    // 報酬：ボタンの選択と金額。給与区分が区分の選択肢に無ければ、金額も持ち込まない（「月給 30万円」を「時給」にしない）
+    const pay = t.pay || null;
+    const wageF = t.fields.find((f) => f.key === "wageType");
+    const wageType = wageF ? valueOf(wageF) : "";
+    const noneKey = pay?.none?.key;
+    offerPay = pay?.fixed ? pay.fixed : (noneKey && terms[noneKey] === pay.none.no) ? PAY_NONE : wageType || "";
+    const amountF = t.fields.find((f) => f.key === "wageAmount");
+    const amount = amountF && (wageType || (pay?.fixed && (o ? o.wageType : a.wageType) === pay.fixed)) ? valueOf(amountF) : "";
+
+    const shown = (f) => !f.hidden && !(f.salary && hideSalary);
+    const basic = t.fields.filter((f) => f.basic && shown(f));
+    const more = t.fields.filter((f) => !f.basic && shown(f));
+    const respondBy = o?.respondBy && o.respondBy >= jstYmd(0) ? o.respondBy : jstYmd(RESPOND_DAYS);
+    const canChangeType = !reviewing && a.status === "offer_draft_pending";
+    const fieldHtml = (f) => (f.key === "wageAmount" ? (pay ? payControl(t, amount) : "") : offerFieldHtml(f, valueOf(f)));
+    openActionModal(`
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">${esc(t.offerName)}を${reviewing ? "確認" : "作成"}</h2>
+        <p class="hr-sub" style="margin:0 0 12px;">採用区分：<b id="of-type" data-otype="${esc(t.key)}">${esc(t.label)}</b>
+          ${canChangeType ? `<button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="closeAction();openOfferTypeModal()">区分を変える</button>` : ""}
+          　候補者には「${esc(t.offerName)}」として届きます（社内の状態や評価は見えません）。</p>
+        <div class="hr-of-grid" id="of-fields" data-otype="${esc(t.key)}">
+          ${basic.map(fieldHtml).join("")}
+          <div data-field="respondBy"><label for="of-respondby">回答期限 <span style="color:#b3261e;">*</span></label>
+            <input id="of-respondby" type="date" value="${esc(respondBy)}">
+            <div class="hr-of-auto">送る日から${RESPOND_DAYS}日後（自動）。必要なときだけ変えてください</div></div>
+          ${t.key === "training" ? `<div class="wide hr-of-auto" id="of-auto-note"></div>` : ""}
+        </div>
+        ${hideSalary && t.fields.some((f) => f.salary) ? `
+        <p class="hr-sub" style="margin:10px 0 0;">給与・報酬は、権限のある方が入力・確認します（応募者に入っている条件が、そのままオファーに入ります）。</p>` : ""}
+        <details class="hr-of-more" id="of-more">
+          <summary><span class="when-closed">詳細設定を開く</span><span class="when-open">詳細設定を閉じる</span></summary>
+          <div class="hr-of-grid" id="of-more-fields">
+            ${more.map(fieldHtml).join("")}
+            ${formalControlHtml(t, o)}
+            <div class="wide"><label for="of-message">本人向けメッセージ</label>
+              <textarea id="of-message" rows="3">${esc(o?.messageToCandidate || "")}</textarea></div>
+          </div>
+          <div class="hr-of-docs" style="margin:12px 0 0;"><b>この区分の流れ</b>　${esc((t.flow || []).join(" → "))}<br><b>必要書類</b>　${esc((t.documents || []).join("・"))}</div>
+        </details>
+        <div id="of-msg" class="err-text" style="margin:10px 0 0;"></div>
+        <div class="hr-of-actions">
+          <button class="btn btn-secondary" id="of-draft" onclick="submitOffer(this)">下書き保存</button>
+          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndSend(this)">PDFをプレビュー</button>
+          <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+        </div>`, { wide: true });
+    offerAutoFill({ init: true });
+  }
+
+  /**
+   * 正式契約（LegalSign）の 必要／不要（db/133）。区分の既定（育成枠は不要で、選ばせない）から始めて、オファーごとに決める。
+   * 送ったあとは変えられない（条件通知書PDFに、正式契約の有無を書いて送るため）
+   */
+  function formalControlHtml(t, o) {
+    if (t.key === "training") return `<input type="hidden" id="of-formal" value="0">`;
+    const v = (o && typeof o.formalRequired === "boolean" ? o.formalRequired : t.formalDefault !== false) ? "1" : "0";
+    return `<div class="wide" data-field="formal"><label>正式契約（LegalSign）</label>
+      ${segHtml("of-formal", [{ value: "1", label: "必要" }, { value: "0", label: "不要" }], v, { label: "正式契約（LegalSign）" })}
+      <input type="hidden" id="of-formal" value="${v}">
+      <div class="hr-of-auto">「必要」なら、本人の条件承諾のあと LegalSign で正式契約をしてから Office へ引き渡します。
+        「不要」なら、条件承諾のあと${esc(t.nextStep || "次の手続き")}へ進みます（条件通知書にも書きます）。送ったあとは変えられません。</div></div>`;
+  }
+
+  /** ボタンの並び（選択肢が少ないもの）。押すと target（hidden の入力、または報酬）に値が入る */
+  function segHtml(target, opts, v, { clear = false, label = "" } = {}) {
+    return `<div class="hr-opt" role="radiogroup" aria-label="${esc(label)}" data-target="${esc(target)}" data-clear="${clear ? 1 : 0}">${opts.map((op) => `
+      <button type="button" role="radio" aria-checked="${op.value === v}" class="${op.value === v ? "on" : ""}"
+        data-v="${esc(op.value)}" onclick="pickSeg(this)">${esc(op.label)}</button>`).join("")}</div>`;
+  }
+  function pickSeg(btn) {
+    const box = btn.parentElement;
+    const off = btn.classList.contains("on") && box.dataset.clear === "1";   // 必須でなければ、もう一度押すと外れる
+    box.querySelectorAll("button").forEach((b) => {
+      const on = !off && b === btn;
+      b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on));
+    });
+    const v = off ? "" : btn.dataset.v;
+    if (box.dataset.target === "pay") return setOfferPay(v);
+    el(box.dataset.target).value = v;
+  }
+
+  /** 1項目の入力欄（報酬は payControl） */
+  function offerFieldHtml(f, v) {
+    const id = `of-f-${f.key}`;
+    const req = f.required ? ` <span style="color:#b3261e;">*</span>` : "";
+    const unit = f.kind === "number" && f.unit ? `（${esc(f.unit)}）` : "";
+    const auto = f.auto || f.key === "trainingPeriod";
+    let ctl;
+    if (f.presets) {
+      // 育成コース：コースを選ぶ（その他は名前を入れる）。コースを選ぶと、期間と評価日が自動で入る
+      const known = f.presets.some((p) => p.label === v);
+      const other = Boolean(v) && !known;
+      ctl = `<select id="${id}-pick" onchange="pickPreset('${esc(f.key)}')">
+          <option value="">（選択）</option>${f.presets.map((p) => `<option value="${esc(p.label)}" ${p.label === v ? "selected" : ""}>${esc(p.label)}</option>`).join("")}
+          <option value="__other" ${other ? "selected" : ""}>その他</option></select>
+        <input id="${id}" type="text" value="${esc(v)}" placeholder="コース名" ${other ? "" : "hidden"} style="margin-top:6px;" oninput="offerAutoFill()">`;
+    } else if (f.kind === "select" && (f.options || []).length <= 3) {
+      ctl = `${segHtml(id, f.options.map((x) => ({ value: x, label: x })), v, { clear: !f.required, label: f.label })}
+        <input type="hidden" id="${id}" value="${esc(v)}">`;
+    } else if (f.kind === "select") {
+      ctl = `<select id="${id}"><option value="">（選択）</option>${f.options.map((op) =>
+        `<option value="${esc(op)}" ${op === v ? "selected" : ""}>${esc(op)}</option>`).join("")}</select>`;
+    } else if (f.kind === "textarea") {
+      const tpl = f.templates ? `<div class="hr-tpl" aria-label="標準文">${f.templates.map((x) =>
+        `<button type="button" onclick="applyDutyTemplate('${esc(f.key)}', '${esc(x.key)}')">${esc(x.label)}</button>`).join("")}</div>` : "";
+      ctl = `${tpl}<textarea id="${id}" rows="${f.basic ? 2 : 3}" placeholder="${esc(f.placeholder || (f.templates ? "標準文を選ぶか、入力してください" : ""))}">${esc(v)}</textarea>`;
+    } else {
+      const type = f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text";
+      const watch = f.key === "joinDate" || auto ? ` oninput="${auto ? "this.dataset.auto='0';" : ""}offerAutoFill()"` : "";
+      ctl = `<input id="${id}" type="${type}" ${f.kind === "number" ? 'step="any" min="0"' : ""} value="${esc(v)}"
+        placeholder="${esc(f.placeholder || (auto ? "自動で入ります" : ""))}"${watch}>`;
+    }
+    return `<div class="${f.kind === "textarea" ? "wide" : ""}" data-field="${esc(f.key)}">
+      <label for="${f.presets ? `${id}-pick` : id}">${esc(f.label)}${unit}${req}</label>${ctl}</div>`;
+  }
+
+  /** 報酬：区分のボタン（[なし][時給][月額] など）＋金額。パート・アルバイトは時給だけ（区分を選ばせない） */
+  function payControl(t, amount) {
+    const pay = t.pay;
+    const input = `<input id="of-f-wageAmount" type="number" min="0" step="1" inputmode="numeric" value="${esc(amount)}" aria-label="金額">`;
+    if (pay.fixed) {
+      return `<div data-field="pay"><label for="of-f-wageAmount">${esc(pay.label)}</label>
+        <div class="hr-yen" id="of-pay-amount"><span id="of-pay-unit">${esc(pay.fixed)}</span>${input}<span>円</span></div></div>`;
+    }
+    const opts = [...(pay.none ? [{ value: PAY_NONE, label: pay.none.label }] : []), ...pay.buttons];
+    // これまでの版の値（いまのボタンに無い。例：月額固定）は、選ばれた状態で残す
+    if (offerPay && offerPay !== PAY_NONE && !opts.some((x) => x.value === offerPay)) opts.push({ value: offerPay, label: offerPay });
+    const showAmount = offerPay && offerPay !== PAY_NONE;
+    return `<div class="wide" data-field="pay"><label>${esc(pay.label)}</label>
+      ${segHtml("pay", opts, offerPay, { clear: true, label: pay.label })}
+      <div class="hr-yen" id="of-pay-amount" ${showAmount ? "" : "hidden"}><span id="of-pay-unit">${esc(payUnitLabel(offerPay))}</span>${input}<span>円</span></div></div>`;
+  }
+  const payUnitLabel = (v) => (offerFormType?.pay?.buttons || []).find((b) => b.value === v)?.label || v || "";
+  function setOfferPay(v) {
+    offerPay = v;
+    const show = Boolean(v) && v !== PAY_NONE;
+    el("of-pay-amount").hidden = !show;
+    if (show) { el("of-pay-unit").textContent = payUnitLabel(v); el("of-f-wageAmount").focus(); }
+  }
+
+  /** 業務内容の標準文を入れる（入っている文章は置き換える。「その他」は空にして入力へ） */
+  function applyDutyTemplate(key, tplKey) {
+    const f = offerFormType?.fields.find((x) => x.key === key);
+    const tpl = f?.templates?.find((x) => x.key === tplKey);
+    const box = el(`of-f-${key}`);
+    if (!tpl || !box) return;
+    box.value = tpl.text;
+    box.focus();
+  }
+
+  function pickPreset(key) {
+    const pick = el(`of-f-${key}-pick`), input = el(`of-f-${key}`);
+    const f = offerFormType.fields.find((x) => x.key === key);
+    if (pick.value === "__other") {
+      input.hidden = false;
+      if ((f.presets || []).some((p) => p.label === input.value)) input.value = "";
+      input.focus();
+    } else { input.hidden = true; input.value = pick.value; }
+    offerAutoFill();
+  }
+
+  // 育成：期間（コースの既定）と評価日（開始日＋期間）を自動で入れる。手で直した欄は変えない（data-auto="0"）
+  const periodMonthsOf = (s) => { const m = /^\s*(\d{1,2})\s*(?:か|ヶ|ケ|カ|ヵ|箇)?\s*月/.exec(String(s || "")); const n = m ? Number(m[1]) : 0; return n >= 1 && n <= 36 ? n : null; };
+  function reviewDatesOf(start, months) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start || "")) || !months) return null;
+    const [y, m, d] = start.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(y, m - 1 + months + 1, 0)).getUTCDate();
+    const end = new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay)));
+    end.setUTCDate(end.getUTCDate() - 1);
+    const begin = Date.UTC(y, m - 1, d);
+    const mid = new Date(begin + Math.round((end.getTime() - begin) / 86400000 / 2) * 86400000);
+    const fmt = (x) => `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
+    return { mid: fmt(mid), final: fmt(end) };
+  }
+  function offerAutoFill({ init = false } = {}) {
+    const t = offerFormType;
+    if (!t || t.key !== "training") return;
+    const courseF = t.fields.find((f) => f.key === "course");
+    const course = el("of-f-course")?.value || "";
+    const preset = (courseF?.presets || []).find((p) => p.label === course);
+    const per = el("of-f-trainingPeriod");
+    if (init) {
+      // 下書きを開いたとき：自動で入った値のままの欄は、開始日・期間を変えたら追いかける
+      const d0 = reviewDatesOf(el("of-f-joinDate")?.value, periodMonthsOf(per?.value));
+      if (per && preset?.period && per.value === preset.period) per.dataset.auto = "1";
+      for (const [k, v] of [["midReviewOn", d0?.mid], ["finalReviewOn", d0?.final]]) {
+        const n = el(`of-f-${k}`);
+        if (n && v && n.value === v) n.dataset.auto = "1";
+      }
+    }
+    const isAuto = (n) => n && (n.value === "" || n.dataset.auto === "1");
+    if (per && preset?.period && isAuto(per)) { per.value = preset.period; per.dataset.auto = "1"; }
+    const dates = reviewDatesOf(el("of-f-joinDate")?.value, periodMonthsOf(per?.value));
+    for (const [k, v] of [["midReviewOn", dates?.mid], ["finalReviewOn", dates?.final]]) {
+      const n = el(`of-f-${k}`);
+      if (n && v && isAuto(n)) { n.value = v; n.dataset.auto = "1"; }
+    }
+    const note = el("of-auto-note");
+    if (note) {
+      const md = (s) => (s ? `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}` : "—");
+      note.textContent = per?.value
+        ? `育成期間：${per.value}　中間評価 ${md(el("of-f-midReviewOn")?.value)}・最終評価 ${md(el("of-f-finalReviewOn")?.value)}（自動。詳細設定で変えられます）`
+        : "";
+    }
+  }
+
+  /** 区分つきの入力。既存の列の項目はそのまま、区分にしか無い項目は offerTerms にまとめる。空欄は消す（null） */
+  function typedOfferFields(t) {
+    const out = { offerTerms: {}, messageToCandidate: el("of-message").value.trim() || undefined };
+    const payShown = Boolean(el("of-f-wageAmount"));   // 給与を見られない人には出していない（送らない＝変えない）
+    for (const f of t.fields) {
+      let v;
+      if (f.key === "wageType") {
+        if (!payShown || !t.pay) continue;
+        v = t.pay.fixed || (offerPay === PAY_NONE ? "" : offerPay);
+      } else if (t.pay?.none && f.key === t.pay.none.key) {
+        if (!payShown) continue;
+        v = offerPay === PAY_NONE ? t.pay.none.no : offerPay ? t.pay.none.yes : "";
+      } else if (f.key === "wageAmount") {
+        if (!payShown) continue;
+        v = offerPay === PAY_NONE ? "" : String(el("of-f-wageAmount").value || "").trim();
+      } else {
+        const node = el(`of-f-${f.key}`);
+        if (!node) continue;
+        v = String(node.value || "").trim();
+      }
+      if (f.term) { if (v) out.offerTerms[f.key] = v; } else out[f.key] = v;
+    }
+    // 正式契約（LegalSign）の 必要／不要（db/133。列が無い環境では、サーバが外して区分の既定で扱う）
+    if (el("of-formal")) out.formalContractRequired = el("of-formal").value === "1";
+    return out;
+  }
+  const offerFields = () => (offerFormType ? typedOfferFields(offerFormType) : offerFormFields());
+
+  function openLegacyOfferForm() {
     const a = detail.applicant;
     const reviewing = a.status === "offer_review_pending";
     const o = reviewing ? currentOffer() : null;
@@ -1571,7 +3104,7 @@ ${url}
     const msg = el("of-msg"); msg.textContent = "";
     const respondBy = el("of-respondby").value;
     if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
-    const fields = offerFormFields();
+    const fields = offerFields();
     try {
       if (detail.applicant.status === "offer_review_pending") {
         const o = currentOffer();
@@ -1585,6 +3118,286 @@ ${url}
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
 
+  // ［PDFをプレビュー］：入力を下書きとして保存し、送る前のプレビュー（条件通知書PDF・本人に届く内容・メールの件名と本文）へ。
+  //   プレビューでは確定しない（PDF はその場で作って見せるだけ。db/132 の列は送るときに初めて入る）
+  async function submitOfferAndSend(btn) {
+    const msg = el("of-msg"); msg.textContent = "";
+    const t = offerFormType;
+    const respondBy = el("of-respondby").value;
+    if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
+    if (respondBy < jstYmd(0)) { msg.textContent = "回答期限が過ぎています。今日以降の日付にしてください"; return; }
+    const missing = t.fields.filter((f) => f.required && el(`of-f-${f.key}`) && !String(el(`of-f-${f.key}`).value || "").trim()).map((f) => f.label);
+    if (missing.length) { msg.textContent = `次の項目を入力してください：${missing.join("・")}`; return; }
+    if (el("of-f-wageAmount") && offerPay && offerPay !== PAY_NONE && !el("of-f-wageAmount").value) {
+      msg.textContent = `${payUnitLabel(offerPay)}の金額を入力してください`; return;
+    }
+    const fields = offerFields();
+    let offer;
+    try {
+      offer = await KPLayout.busy(btn, "保存中…", async () => {
+        if (detail.applicant.status === "offer_review_pending") {
+          return (await API.updateHrOffer({ id: currentOffer().id, ...fields, respondBy })).offer;
+        }
+        return (await API.createHrOffer({ applicantId: detail.applicant.id, ...fields, respondBy })).offer;
+      });
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; return; }
+    await refreshDetail();
+    load();
+    openOfferSend(offer.id);
+  }
+
+  // ---- 内容を確認して、メールで送る（api/hr/offers の GET と action: "send"） ------------------------
+  //   1回の［メールでオファー送信］で：内容の確定 → 本人専用URLの発行 → メール送信 → 送付済み → 承諾待ち。
+  //   件名・本文は送る直前まで直せる（{{オファーURL}} の位置に本人専用URLが入る）。
+  //   メールで送れない（設定が無い・メールアドレスが無い）ときは、URLを発行して手で送る（従来の流れ）
+  let offerSend = null;
+  async function openOfferSend(offerId) {
+    const id = offerId || currentOffer()?.id;
+    if (!id) return;
+    openActionModal(`
+        <h2 id="sm-title" style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">プレビュー</h2>
+        <div id="sm-box"><div class="empty">読み込み中…</div></div>`, { wide: true });
+    let d;
+    try { d = await API.api(`/api/hr/offers?id=${encodeURIComponent(id)}`); }
+    catch (e) {
+      el("sm-box").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
+      return;
+    }
+    offerSend = { id, d, key: newMailKey() };
+    renderOfferSend();
+    loadSendPdf();
+  }
+
+  function renderOfferSend() {
+    const { d } = offerSend;
+    const o = d.offer;
+    const a = detail.applicant;
+    const items = d.items || [];
+    const top = items.filter((x) => x.highlight), rest = items.filter((x) => !x.highlight);
+    const row = (x) => `<dt>${esc(x.label)}</dt><dd>${esc(x.value)}</dd>`;
+    const waitingSend = a.status === "offer_send_pending" && !d.canSend;   // 送った結果が分からない・手で送った途中
+    const notice = d.notice?.ready ? d.notice : null;
+    if (el("sm-title")) el("sm-title").textContent = notice ? `${notice.title}のプレビュー` : "内容を確認して送信";
+    el("sm-box").innerHTML = `
+      <p class="hr-sub" style="margin:0 0 10px;">${notice && !notice.stored
+        ? "まだ本人には送っていません。［この内容で本人へ送る］を押すと、この内容で確定し、条件通知書PDFを添付してメールで送ります。"
+        : "候補者に届く内容です。送ったあと、この版の内容は変わりません（承諾したときの内容として残ります）。"}</p>
+      ${notice ? `
+      <div class="hr-pdf-box" id="sm-notice">
+        <div class="hd"><span class="material-symbols-outlined" style="font-size:18px;width:18px;overflow:hidden;">picture_as_pdf</span>
+          <span><b>${esc(notice.title)}</b>（PDF・A4）　${notice.stored ? "送った時点の版です" : "送るときに、この内容で確定してメールに添付します"}</span>
+          ${notice.salaryVisible === false ? "" : `<button class="btn btn-secondary btn-sm" id="sm-pdf-open" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', '${notice.stored ? "notice" : "preview"}', this)">PDFを開く</button>`}</div>
+        ${notice.salaryVisible === false
+          ? `<div class="hr-of-auto" id="sm-pdf-hidden">給与・報酬が入るため、PDF は給与を見られる方が確認します。</div>`
+          : pdfInline() ? `<div class="frame" id="sm-pdf-frame-box"><div class="empty" id="sm-pdf-loading">PDFを読み込み中…</div></div>` : ""}
+      </div>` : ""}
+      <div class="hr-of-preview" id="sm-preview" style="margin-top:${notice ? 10 : 0}px;">
+        <div class="hd"><span class="hr-pill" style="background:#1b2440;color:#fff;">${esc(o.offerName || "合格通知")}</span>
+          <b>${esc(d.candidateName)} 様</b>　第${esc(o.version)}版</div>
+        <dl>${top.map(row).join("")}<dt>回答期限</dt><dd>${esc(fmtYmdJa(o.respondBy))}</dd></dl>
+        ${rest.length ? `<details><summary>その他の条件（${rest.length}件）</summary><dl>${rest.map(row).join("")}</dl></details>` : ""}
+      </div>
+      ${o.offerType && typeof d.formalRequired === "boolean" ? `<div class="hr-of-auto" id="sm-formal" style="margin-top:6px;">社内の設定：正式契約（LegalSign）は
+        <b>${d.formalRequired ? "必要" : "不要"}</b>（${d.formalRequired ? "条件承諾のあと LegalSign で正式契約" : "条件承諾のあと、正式契約なしで次の手続きへ"}。条件通知書にも書きます）</div>` : ""}
+      ${!d.to ? `
+      <div class="banner warn" id="sm-email-need" style="margin-top:12px;display:block;">
+        <b>本人のメールアドレスが未登録です</b>
+        <div class="hr-email-row" style="margin:8px 0 0;"><input id="sm-email-new" type="email" inputmode="email" autocomplete="off" placeholder="example@example.com"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();registerSendEmail(this)}">
+          <button class="btn btn-primary btn-sm" onclick="registerSendEmail(this)">登録して続ける</button></div>
+        <div class="err-text" id="sm-email-msg"></div></div>`
+      : d.mail.configured ? "" : `
+      <div class="banner warn" id="sm-nomail" style="margin-top:12px;"><span class="material-symbols-outlined">mail</span>
+        <div>メールで送れません（${esc(d.mail.reason || "設定がありません")}）。URLを発行して、下の文面をコピーして送ってください。</div></div>`}
+      <div class="hr-of-grid" style="margin-top:12px;">
+        <div class="wide"><label>送信先</label>
+          ${offerSend.editTo ? `<div class="hr-email-row" style="margin:0;"><input id="sm-to-input" type="email" inputmode="email" autocomplete="off" value="${esc(d.to || "")}"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();saveSendTo(this)}">
+            <span class="acts"><button class="btn btn-primary btn-sm" onclick="saveSendTo(this)">保存</button>
+              <button class="btn btn-secondary btn-sm" onclick="offerSend.editTo=false;renderOfferSendKeep()">キャンセル</button></span>
+            <div class="err-text" id="sm-to-msg"></div></div>`
+          : `<div class="hr-to" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${esc(d.candidateName)} 様
+              <b id="sm-to">${esc(d.to || "（メールアドレス未登録）")}</b>
+              ${d.to ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" id="sm-to-change" onclick="offerSend.editTo=true;renderOfferSendKeep();el('sm-to-input')?.focus()">変更</button>` : ""}</div>`}</div>
+        <div class="wide"><label for="sm-subject">件名</label><input id="sm-subject" type="text" value="${esc(d.subject)}"></div>
+        <div class="wide"><label for="sm-body">本文</label><textarea id="sm-body" rows="12">${esc(d.body)}</textarea>
+          <div class="hr-of-auto">${esc(d.urlTag)} の位置に、この方専用のURLが入ります（送った記録にはURLを残しません）</div></div>
+      </div>
+      <div id="sm-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="hr-of-actions">
+        ${d.canSend ? (d.mail.configured
+          ? `<button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)">${notice ? "この内容で本人へ送る" : "メールでオファー送信"}</button>`
+          : `<button class="btn btn-primary" id="sm-manual" onclick="sendOfferManual(this)">URLを発行して手で送る</button>`) : ""}
+        ${waitingSend ? `<button class="btn btn-primary" onclick="submitMarkSent(this, '${esc(o.id)}')">送付済みにする</button>
+          <button class="btn btn-secondary" onclick="openSendOfferForm()">URLを再発行する</button>` : ""}
+        ${a.status === "offer_review_pending" ? `<button class="btn btn-secondary" id="sm-edit" onclick="openOfferForm()">条件を修正</button>` : ""}
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`;
+  }
+  const fmtYmdJa = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || "")); return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : "—"; };
+
+  // 件名・本文の手直しを残したまま描き直す（送信先を変える・メールを登録するとき）
+  function renderOfferSendKeep() {
+    const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
+    renderOfferSend();
+    showSendPdf();
+    if (subject != null) el("sm-subject").value = subject;
+    if (body != null) el("sm-body").value = body;
+  }
+  // メールを登録・変更したら、送信先と「メールで送れるか」をサーバーから読み直す（画面は閉じない）
+  async function reloadSendDraft() {
+    const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
+    const d = await API.api(`/api/hr/offers?id=${encodeURIComponent(offerSend.id)}`);
+    offerSend.d = { ...d, subject: subject ?? d.subject, body: body ?? d.body };
+    offerSend.editTo = false;
+    renderOfferSend();
+    showSendPdf();
+  }
+  async function registerSendEmail(btn) {
+    const msg = el("sm-email-msg"); msg.textContent = "";
+    const err = await saveApplicantEmail(el("sm-email-new").value, btn);
+    if (err) { msg.textContent = err; return; }
+    if (!detail.applicant.email) { msg.textContent = "メールアドレスを入力してください"; return; }
+    try { await reloadSendDraft(); } catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+  async function saveSendTo(btn) {
+    const msg = el("sm-to-msg"); msg.textContent = "";
+    const value = el("sm-to-input").value;
+    if (!String(value).trim()) { msg.textContent = "送信先のメールアドレスを入力してください"; return; }
+    const err = await saveApplicantEmail(value, btn);
+    if (err) { msg.textContent = err; return; }
+    try { await reloadSendDraft(); } catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; }
+  }
+
+  // オファーの PDF（条件通知書・承諾済み・送る前の確認用）を取ってくる。ログインの鍵が要るので fetch で受け取る
+  async function fetchOfferPdf(offerId, file) {
+    const token = await API.getToken();
+    const r = await fetch(`/api/hr/offers?id=${encodeURIComponent(offerId)}&file=${encodeURIComponent(file)}`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    if (!r.ok) {
+      const b = await r.json().catch(() => ({}));
+      throw new Error(b.hint || b.message || "PDFを開けませんでした");
+    }
+    const blob = await r.blob();
+    const name = decodeURIComponent((/filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") || "") || [])[1] || "offer.pdf");
+    return { blob, name };
+  }
+  // 開く（保存させる）。スマホではそのまま PDF の表示になる
+  async function openOfferPdf(offerId, file, btn) {
+    try {
+      await KPLayout.busy(btn, "読み込み中…", async () => {
+        const { blob, name } = await fetchOfferPdf(offerId, file);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      });
+    } catch (e) { alert(e.message || "PDFを開けませんでした"); }
+  }
+  // プレビュー画面の中に PDF を出すか。PC だけ（スマホのブラウザは画面の中の PDF を1ページ目しか見せない・見せないので、［PDFを開く］にする）
+  const pdfInline = () => window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
+  // プレビュー画面の PDF。読み込んだものは、描き直し（送信先の変更など）でも使い回す。開くたびに作り直す（直した内容が出る）
+  let sendPdf = null;   // { offerId, url }
+  async function loadSendPdf() {
+    if (sendPdf) { URL.revokeObjectURL(sendPdf.url); sendPdf = null; }
+    const n = offerSend?.d?.notice;
+    if (!n?.ready || n.salaryVisible === false || !pdfInline()) return;
+    const offerId = offerSend.id;
+    try {
+      const { blob } = await fetchOfferPdf(offerId, n.stored ? "notice" : "preview");
+      if (offerSend?.id !== offerId) return;
+      sendPdf = { offerId, url: URL.createObjectURL(blob) };
+      showSendPdf();
+    } catch (e) {
+      const box = el("sm-pdf-frame-box");
+      if (box) box.innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.message || "PDFを表示できませんでした")}</div></div>`;
+    }
+  }
+  function showSendPdf() {
+    const box = el("sm-pdf-frame-box");
+    if (!box || !sendPdf || sendPdf.offerId !== offerSend?.id) return;
+    box.innerHTML = `<iframe id="sm-pdf-frame" title="条件通知書のプレビュー" src="${sendPdf.url}#view=FitH"></iframe>`;
+  }
+
+  function offerMailText() {
+    const subject = el("sm-subject").value.trim();
+    const body = el("sm-body").value;
+    const msg = el("sm-msg"); msg.textContent = "";
+    if (!subject) { msg.textContent = "件名を入力してください"; return null; }
+    if (/[\r\n]/.test(subject)) { msg.textContent = "件名に改行は使えません"; return null; }
+    if (!body.includes(offerSend.d.urlTag)) { msg.textContent = `本文に ${offerSend.d.urlTag} を残してください（本人専用URLが入る場所です）`; return null; }
+    return { subject, body };
+  }
+
+  async function sendOfferMail(btn) {
+    const m = offerMailText();
+    if (!m) return;
+    const f = offerSend;
+    let r = null, err = null;
+    try {
+      r = await KPLayout.busy(btn, "送信中…", () => API.hrOfferAct({ id: f.id, action: "send", ...m, requestKey: f.key }));
+    } catch (e) { err = e; }
+    if (offerSend !== f) return;
+    if (err) {
+      const b = err.body || {};
+      if (b.url) { await afterOfferSendChange(); return showOfferManual(b.url, m, b.hint || err.hint, b.offer?.id || f.id); }
+      if (err.code === "mail_not_configured" || err.code === "no_email") {
+        f.d.mail = { configured: false, reason: err.hint };
+        renderOfferSend();
+      }
+      el("sm-msg").textContent = err.hint || err.detail || err.message || "送れませんでした";
+      return;
+    }
+    await afterOfferSendChange();
+    if (r.status === "unknown") return showOfferManual(r.url, m, r.hint, r.offer?.id || f.id);
+    if (r.status !== "sent") {
+      el("sm-msg").textContent = r.duplicate ? `この送信はすでに処理されています（結果：${r.status}）。画面を開き直してください` : "送れませんでした";
+      return;
+    }
+    el("sm-box").innerHTML = `
+      <div class="banner ok" id="sm-done"><span class="material-symbols-outlined">mark_email_read</span>
+        <div><b>メールでオファーを送りました。</b><br>${esc(f.d.candidateName)} 様の同意を待っています（承諾待ち）。
+          メールサービスが受け付けたことで、相手に届いた・開いた、ではありません。</div></div>
+      <div class="hr-of-actions"><button class="btn btn-primary" onclick="closeAction()">閉じる</button></div>`;
+  }
+
+  // メールで送れないとき：内容を確定して URL を発行し、文面をコピーして手で送る → 送付済みにする
+  async function sendOfferManual(btn) {
+    const m = offerMailText();
+    if (!m) return;
+    const o = offerSend.d.offer;
+    try {
+      const r = await KPLayout.busy(btn, "発行中…", async () => {
+        if (detail.applicant.status === "offer_review_pending") await API.confirmHrOffer(o.id);
+        return API.issueHrOfferLink(o.id);
+      });
+      await afterOfferSendChange();
+      showOfferManual(`${location.origin}/hr/offer.html?token=${encodeURIComponent(r.token)}`, m,
+        "URLを発行しました。文面をコピーして送り、送り終えたら「送付済みにする」を押してください。", r.offer.id);
+    } catch (e) { el("sm-msg").textContent = e.hint || e.detail || e.message || "発行できませんでした"; }
+  }
+
+  function showOfferManual(url, m, hint, offerId) {
+    const text = `件名：${m.subject}\n\n${m.body.split(offerSend.d.urlTag).join(url)}`;
+    el("sm-box").innerHTML = `
+      <div class="banner warn" id="sm-fallback"><span class="material-symbols-outlined">info</span><div>${esc(hint || "")}</div></div>
+      <label style="margin-top:12px;">候補者専用URL（この画面を閉じると、二度と表示されません）</label>
+      <input id="so-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('so-url')">URLをコピー</button>
+      <label style="margin-top:14px;">メール文面</label>
+      <textarea id="so-mail" rows="10" readonly>${esc(text)}</textarea>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('so-mail')">メール文面をコピー</button>
+      <div class="hr-of-actions">
+        <button class="btn btn-primary" onclick="submitMarkSent(this, '${esc(offerId)}')">送付済みにする</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`;
+  }
+
+  async function afterOfferSendChange() {
+    await refreshDetail();
+    load();
+  }
+
   async function submitConfirmOffer(btn) {
     const o = currentOffer();
     if (!o) return;
@@ -1593,7 +3406,7 @@ ${url}
     if (!respondBy) { msg.textContent = "回答期限を入力してください"; return; }
     try {
       await KPLayout.busy(btn, "確定中…", async () => {
-        await API.updateHrOffer({ id: o.id, ...offerFormFields(), respondBy });
+        await API.updateHrOffer({ id: o.id, ...offerFields(), respondBy });
         await API.confirmHrOffer(o.id);
       });
       closeAction();
@@ -1603,14 +3416,15 @@ ${url}
   }
 
   // ---- 本人へ送る・URLを再発行（右ドロワー） -----------------------------------------
-  // Stage 6：メール送信の仕組みは無いので、URLを発行してコピーしてもらい、
+  // 区分の無い、これまでの合格通知と、URL の再発行の画面（区分つきは openOfferSend でメールまで送る）。
+  // Stage 6：URLを発行してコピーしてもらい、
   // 実際に送り終えたら「送付済みにする」を明示的に押してもらう（README §12）
   function openSendOfferForm() {
     const reissuing = ["offer_sent", "offer_viewed", "offer_response_pending"].includes(detail.applicant.status);
     openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">${reissuing ? "URLを再発行" : "本人へ送る"}</h2>
         <p class="hr-sub" style="margin:0 0 14px;">
-          ${reissuing ? "現在のURLは使えなくなります。新しいURLを発行しますか？" : "候補者専用のURLを発行します。メール送信の仕組みはまだ無いので、いつもお使いのメールから手動で送ってください。"}</p>
+          ${reissuing ? "現在のURLは使えなくなります。新しいURLを発行しますか？" : "候補者専用のURLを発行します。いつもお使いのメールから、手動で送ってください。"}</p>
         <div id="so-body">
           <button class="btn btn-primary" onclick="submitIssueLink(this)">${reissuing ? "再発行する" : "URLを発行する"}</button>
         </div>
@@ -1644,13 +3458,14 @@ ${url}
   function offerMailTemplate(url) {
     const a = detail.applicant;
     const o = currentOffer();
-    return `件名：選考結果のご案内
+    const t = offerTypeDef(o?.offerType);
+    return `件名：${t ? `${t.offerName}のご案内` : "選考結果のご案内"}
 
 ${a.name} 様
 
 このたびは弊社採用選考にご参加いただき、ありがとうございました。
 
-選考結果および採用条件について、下記の専用ページよりご確認ください。
+${t ? `${t.offerName}（条件）を、下記の専用ページよりご確認ください。` : "選考結果および採用条件について、下記の専用ページよりご確認ください。"}
 
 ${url}
 
@@ -1674,10 +3489,216 @@ ${url}
     } catch (e) { alert(e.hint || e.detail || e.message || "記録できませんでした"); }
   }
 
+  // ---- 正式契約（LegalSign。db/132） ---------------------------------------------------
+  //   本人の「条件承諾」は正式な契約ではない。正式な契約は LegalSign で行う（最初は URL を登録して本人へ案内するだけ）。
+  //   ① LegalSign の URL（https:// だけ。本人へ案内するまでは直せる）→ ② 本人へ案内（メール／自分で送った記録）
+  //   → ③ LegalSign で署名が終わったら［正式契約済みにする］（誰が・いつ。取り消せない）→ 入社・稼働の手続きへ
+  //   URL は画面とこの版の記録にだけ持つ（監査ログ・タイムラインには「登録した」「案内した」だけ）
+  let formalFlow = null;
+  const acceptedOffer = () => (detail.offers || []).find((o) => o.acceptedAt && o.status !== "revoked") || null;
+  function openFormalContract() {
+    const o = acceptedOffer();
+    if (!o) return;
+    formalFlow = { offerId: o.id, mail: null, key: newMailKey() };
+    openActionModal(`<div id="fc-box"></div>`, { wide: true });
+    renderFormal();
+  }
+  function renderFormal() {
+    const o = acceptedOffer();
+    if (!o || !el("fc-box")) return;
+    const sent = Boolean(o.formalSentAt), signed = Boolean(o.formalSignedAt);
+    const step = (n, done, title, body) => `<section class="hr-flow-sec" style="margin-top:12px;">
+      <div class="hr-flow-hd"><h3>${done ? `<span class="material-symbols-outlined" style="color:#2f6f3a;">check_circle</span>` : `<b style="margin-right:4px;">${n}</b>`}${esc(title)}</h3></div>${body}</section>`;
+    el("fc-box").innerHTML = `
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">正式契約（LegalSign）</h2>
+      <p class="hr-sub" style="margin:0 0 6px;">${esc(detail.applicant.name)} さんは第${esc(o.version)}版の条件を承諾済みです（${esc(fmtDate(o.acceptedAt))}）。
+        正式な契約は LegalSign で行います。条件の承諾は、正式な契約ではありません。</p>
+      ${!o.docsReady ? `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>db/132_hr_offer_documents.sql を Supabase に流すと使えます。</div></div>` : `
+      ${detail.salaryVisible !== false && o.noticePdf ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button></div>` : ""}
+      ${step(1, Boolean(o.legalsignUrl), "LegalSign の URL", sent
+        ? `<p class="hr-sub" style="margin:0;">登録済みです（本人へ案内したため、変えられません）。</p>`
+        : `<div class="hr-email-row" style="margin:0;"><input id="fc-url" type="url" inputmode="url" autocomplete="off" placeholder="https://..."
+              value="${esc(o.legalsignUrl || "")}"><button class="btn ${o.legalsignUrl ? "btn-secondary" : "btn-primary"} btn-sm" id="fc-url-save" onclick="saveLegalSignUrl(this)">保存</button></div>
+           <div class="hr-of-auto">https:// で始まる URL だけ登録できます。本人へ案内するまでは直せます。</div>
+           <div class="err-text" id="fc-url-msg"></div>`)}
+      ${step(2, sent, "本人へ正式契約を案内", !o.legalsignUrl ? `<p class="hr-sub" style="margin:0;">先に LegalSign の URL を登録してください。</p>`
+        : `${sent ? `<p class="hr-sub" style="margin:0 0 8px;">案内済み：${esc(fmtDate(o.formalSentAt))}</p>` : ""}
+           <div id="fc-mail">${signed ? "" : `<button class="btn ${sent ? "btn-secondary" : "btn-primary"} btn-sm" id="fc-guide" onclick="openFormalMail(this)">${sent ? "もう一度案内する" : "本人へ正式契約を案内"}</button>`}</div>`)}
+      ${step(3, signed, "正式契約済みにする", signed
+        ? `<p class="hr-sub" style="margin:0 0 8px;">正式契約済み：${esc(fmtDate(o.formalSignedAt))}</p>
+           ${!["advance", "handoff"].includes(detail.applicant.nextActionKey) ? ""
+             : canAdvance ? `<button class="btn btn-primary btn-sm" id="fc-next" onclick="closeAction();runNextAction()">${esc(detail.applicant.nextActionCta || "本採用へ進める")}</button>`
+             : `<p class="muted" style="font-size:12px;margin:0;">入社・稼働の手続きへ進めるのは社長・管理者・人事が行います。</p>`}`
+        : `<p class="hr-sub" style="margin:0 0 8px;">LegalSign で本人の署名が終わったことを確かめてから押してください（取り消せません）。</p>
+           <button class="btn btn-secondary btn-sm" id="fc-signed" ${o.legalsignUrl || sent ? "" : "disabled"} onclick="markFormalSigned(this)">正式契約済みにする</button>`)}
+      `}
+      <div id="fc-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`;
+  }
+  async function formalAct(btn, label, body) {
+    const r = await KPLayout.busy(btn, label, () => API.hrOfferAct({ id: formalFlow.offerId, ...body }));
+    await refreshDetail();
+    load();
+    return r;
+  }
+  async function saveLegalSignUrl(btn) {
+    const msg = el("fc-url-msg"); msg.textContent = "";
+    const url = el("fc-url").value.trim();
+    if (!/^https:\/\/\S+$/i.test(url)) { msg.textContent = "https:// で始まる URL を入力してください"; return; }
+    try { await formalAct(btn, "保存中…", { action: "setLegalSign", url }); renderFormal(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+  async function openFormalMail(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    let d;
+    try { d = await KPLayout.busy(btn, "読み込み中…", () => API.hrOfferAct({ id: formalFlow.offerId, action: "sendFormal", preview: true })); }
+    catch (e) { msg.textContent = e.hint || e.message || "読み込めませんでした"; return; }
+    formalFlow.mail = d;
+    el("fc-mail").innerHTML = `
+      ${d.mail?.configured ? "" : `<div class="banner warn" style="margin:0 0 8px;"><span class="material-symbols-outlined">mail</span>
+        <div>メールで送れません（${esc(d.mail?.reason || "設定がありません")}）。いつものメールで LegalSign の URL を送り、「自分で送った」を押してください。</div></div>`}
+      <div class="hr-of-grid">
+        <div class="wide"><label>送信先</label><div class="hr-to"><b>${esc(d.to || "（メールアドレス未登録）")}</b></div></div>
+        <div class="wide"><label for="fc-subject">件名</label><input id="fc-subject" type="text" value="${esc(d.subject)}"></div>
+        <div class="wide"><label for="fc-body">本文</label><textarea id="fc-body" rows="9">${esc(d.body)}</textarea>
+          <div class="hr-of-auto">${esc(d.urlTag)} の位置に LegalSign の URL が入ります（送った記録には URL を残しません）</div></div>
+      </div>
+      <div class="hr-of-actions" style="margin-top:8px;">
+        ${d.mail?.configured ? `<button class="btn btn-primary btn-sm" id="fc-send" onclick="sendFormalMail(this)">メールで案内する</button>` : ""}
+        <button class="btn btn-secondary btn-sm" id="fc-manual" onclick="sendFormalManual(this)">自分で送った（記録だけ）</button>
+      </div>`;
+  }
+  async function sendFormalMail(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    const subject = el("fc-subject").value.trim(), body = el("fc-body").value;
+    if (!subject) { msg.textContent = "件名を入力してください"; return; }
+    if (!body.includes(formalFlow.mail.urlTag)) { msg.textContent = `本文に ${formalFlow.mail.urlTag} を残してください`; return; }
+    try {
+      const r = await formalAct(btn, "送信中…", { action: "sendFormal", channel: "email", subject, body, requestKey: formalFlow.key });
+      if (r?.status && r.status !== "sent") { msg.textContent = r.hint || "送れませんでした"; return; }
+      formalFlow.key = newMailKey();
+      renderFormal();
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "送れませんでした"; }
+  }
+  async function sendFormalManual(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    if (!confirm("LegalSign の URL を、本人へ自分で送りましたか？（案内済みとして記録します）")) return;
+    try { await formalAct(btn, "記録中…", { action: "sendFormal", channel: "manual" }); renderFormal(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "記録できませんでした"; }
+  }
+  async function markFormalSigned(btn) {
+    const msg = el("fc-msg"); msg.textContent = "";
+    if (!confirm("LegalSign で本人の署名が終わったことを確かめましたか？（正式契約済みにすると取り消せません）")) return;
+    try { await formalAct(btn, "記録中…", { action: "markFormalSigned" }); renderFormal(); }
+    catch (e) { msg.textContent = e.hint || e.detail || e.message || "記録できませんでした"; }
+  }
+
   // ---- 本採用へ進める（Stage 8） ---------------------------------------------------
   // 実際の社員登録は既存のadmin-onboard.htmlで行う（作り直さない）。
   // 二重手続きを防いでから、応募者IDだけを渡す。給与・勤務条件はURLへ載せず、
   // admin-onboard.html側がサーバから改めて取得する（README Stage 8）
+  // ---- 無限道場リード：面談後の次のアクション ------------------------------------------
+  // 選択肢は API（lib/hr-lead-flow.js）が返す。画面側に定義を持たない
+  function openLeadNextActionForm() {
+    const a = detail.applicant;
+    const opts = (detail.leadNextActions || []).map((x) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">
+        <input type="radio" name="lead-next" value="${esc(x.key)}" ${a.leadNextAction === x.key ? "checked" : ""}> ${esc(x.label)}</label>`).join("");
+    openHrModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">次のアクションを選ぶ</h2>
+      <p class="hr-sub" style="margin:0 0 10px;">${esc(a.name)}さんの、面談後の次のアクションです。段階と状態はこれに合わせて変わります。</p>
+      <div>${opts || `<p class="muted">選択肢を読み込めませんでした。</p>`}</div>
+      <label style="margin-top:10px;">メモ（任意。保留なら次に確認すること）</label>
+      <textarea id="lead-next-note" rows="3" maxlength="500"></textarea>
+      <div id="lead-next-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-primary" onclick="submitLeadNextAction(this)">保存する</button>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+      </div>`);
+  }
+  async function submitLeadNextAction(btn) {
+    const picked = document.querySelector('input[name="lead-next"]:checked');
+    if (!picked) { el("lead-next-msg").textContent = "次のアクションを選んでください"; return; }
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/hr/applicants/detail", { method: "PATCH", body: {
+        id: detail.applicant.id, action: "leadNextAction", nextAction: picked.value, note: el("lead-next-note").value,
+      } }));
+      closeHrModal();
+      await refreshDetail();
+      await load();
+    } catch (e) { el("lead-next-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // ---- 無限道場リードの通知先（運営担当） ------------------------------------------------
+  // 新しいリードが入ったら、ここで選んだ人へ通知する。誰も選んでいなければ採用HRの担当へ届く
+  async function openLeadWatchers() {
+    openHrModal(`<p class="muted">読み込み中…</p>`);
+    try {
+      const r = await API.api("/api/hr/lead-watchers?category=mugendojo");
+      const on = new Set(r.employeeIds || []);
+      openHrModal(`
+        <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">無限道場リードの通知先</h2>
+        <p class="hr-sub" style="margin:0 0 10px;">新しいリードが入ったとき、選んだ人へ通知します。誰も選ばなければ、採用HRの担当（経営者・人事・採用担当）へ届きます。</p>
+        ${r.notReady ? `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(r.message)}</div></div>` : `
+        <div class="hr-watch-list" style="max-height:320px;overflow:auto;">${(r.employees || []).map((e) => `
+          <label><input type="checkbox" name="lead-watch" value="${esc(e.id)}" ${on.has(e.id) ? "checked" : ""}> ${esc(e.display_name)}</label>`).join("")}</div>
+        <div id="lead-watch-msg" class="err-text" style="margin:10px 0;"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-primary" onclick="submitLeadWatchers(this)">保存する</button>
+          <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>
+        </div>`}`);
+    } catch (e) {
+      openHrModal(`<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.detail || e.message)}</div></div>
+        <button class="btn btn-secondary" style="margin-top:12px;" onclick="closeHrModal()">閉じる</button>`);
+    }
+  }
+  async function submitLeadWatchers(btn) {
+    const ids = [...document.querySelectorAll('input[name="lead-watch"]:checked')].map((x) => x.value);
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/hr/lead-watchers", { method: "PUT", body: { category: "mugendojo", employeeIds: ids } }));
+      closeHrModal();
+    } catch (e) { el("lead-watch-msg").textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
+  // ---- 承諾を確認して Office へ引き渡す（db/133） ------------------------------------------
+  //   HR が承諾済みPDF（条件通知書＋電子承諾記録）と内容を確かめてから押す。社員にはしない（社員登録は Office が行う）。
+  //   正式契約が必要なオファーは、正式契約済みになってから（API・DB でも止める）
+  function openHandoff() {
+    const o = acceptedOffer();
+    if (!o) return;
+    const t = offerTypeDef(o.offerType);
+    const canPdf = detail.salaryVisible !== false && o.docsReady && o.noticePdf;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">承諾を確認して Office へ引き渡す</h2>
+      <p class="hr-sub" style="margin:0 0 12px;">${esc(detail.applicant.name)}さん（${esc(t?.label || "")}）を、Office の入社準備（入退社の「HRから引き渡し」）へ載せます。
+        社員名簿・アカウントは Office が社員登録で作ります。本人に Office の権限は付きません。</p>
+      <div class="hr-accepted" id="ho-box" style="margin:0 0 10px;">
+        <div class="ln"><span class="mk ok">✓</span><b>条件承諾済み</b><span class="when">${esc(JST.dateTime(o.acceptedAt))}（第${esc(o.version)}版）</span>
+          ${canPdf ? `<button class="btn btn-secondary btn-sm" id="hd-pdf" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDFを確認する</button>` : ""}</div>
+        <div class="ln"><span class="mk ok">✓</span><b>正式契約（LegalSign）</b><span class="when">${o.formalRequired === false ? "不要（このオファーで不要として送付）" : `正式契約済み ${esc(JST.dateTime(o.formalSignedAt))}`}</span></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:#1b2440;">
+        <input type="checkbox" id="hd-check" onchange="el('hd-go').disabled=!this.checked" style="margin-top:3px;">
+        <span>承諾済みPDFと条件の内容を確認しました</span></label>
+      <div id="hd-msg" class="err-text" style="margin:10px 0 0;"></div>
+      <div class="hr-of-actions">
+        <button class="btn btn-primary" id="hd-go" disabled onclick="submitHandoff(this)">Office へ引き渡す</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+  async function submitHandoff(btn) {
+    const msg = el("hd-msg"); msg.textContent = "";
+    const o = acceptedOffer();
+    if (!o || !el("hd-check").checked) { msg.textContent = "承諾済みPDFと条件の内容を確認してください"; return; }
+    try {
+      await KPLayout.busy(btn, "引き渡し中…", () => API.api("/api/hr/offers", { method: "PATCH", body: { id: o.id, action: "handoff" } }));
+      closeAction();
+      await refreshDetail();
+      load();
+    } catch (e) { msg.textContent = e.hint || e.message || "引き渡せませんでした"; }
+  }
+
   async function startAdvance() {
     try {
       await API.claimHrAdvance(detail.applicant.id);

@@ -11,7 +11,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  accessOf, canRecruit, canSell, canDecideHire, canForceAttack,
+  accessOf, canRecruit, canSell, canDecideHire, canAdvanceHire, canForceAttack,
   canAccessHr, canAccessSales, canAccessOffice, canAccessKeiei,
   canOffice, canKeiei, isOwner,
   HR_ROLES, SALES_ROLES, OFFICE_ROLES, KEIEI_ROLES, RECRUIT_ROLES,
@@ -117,14 +117,36 @@ check(!canDecideHire({ isAdmin: true, roles: [] }), "会計の管理者だけで
 check(canDecideHire({ isAdmin: false, roles: ["owner"] }), "経営者は採用判断ができる");
 check(!canDecideHire({ isAdmin: false, roles: ["recruiter"] }), "採用担当だけでは採用判断はできない");
 check(!canDecideHire({ isAdmin: false, roles: ["manager"] }), "責任者はHRに入れるが、採用判断まではできない");
+
+console.log("— 本採用へ進める（社員登録の事前入力・完了。canAdvanceHire）—");
+// 社長・管理者・人事が最後まで同じ流れを実行できる。給与・owner・IT・管理は広げない
+const adv = [
+  [{ roles: ["owner"] }, true, "社長"],
+  [{ isAdmin: true, roles: [] }, true, "管理者（会計側）"],
+  [{ roles: ["hr"], apps: ["hr", "office"], isHr: true }, true, "人事（HR と Office に入れる）"],
+  [{ roles: ["hr"], apps: ["hr"] }, false, "人事でも Office（社員登録の画面）に入れなければ進めない"],
+  [{ roles: ["recruiter"], isHr: true }, false, "採用担当"],
+  [{ roles: ["manager"] }, false, "責任者"],
+  [{ roles: ["finance"] }, false, "経理"],
+  [{ roles: ["it"] }, false, "IT・管理"],
+  [{ roles: ["labor_advisor"] }, false, "社労士"],
+];
+for (const [ctx, want, label] of adv) check(canAdvanceHire(ctx) === want, `${label} → 本採用へ進める ${want ? "○" : "×"}`);
+{
+  // 画面（hr/applicants.html の canAdvanceOf）も同じ条件：管理者・社長・人事（access.officeHr）
+  const page = read("hr/applicants.html");
+  check(/return isAdmin\s*\|\|\s*roles\.includes\("owner"\)\s*\|\|\s*\(roles\.includes\("hr"\)\s*&&\s*Boolean\(me\?\.access\?\.officeHr\)\)/.test(page),
+    "hr/applicants.html の canAdvanceOf は 管理者・社長・人事（officeHr）");
+}
 check(!canForceAttack({ isAdmin: true, roles: [] }), "会計の管理者だけでは強行アタックもできない");
 check(canForceAttack({ isAdmin: false, roles: ["owner"] }), "経営者は強行アタックができる");
 
 console.log("\n— /api/me がサーバの判定をそのまま返す —");
 {
   const src = read("api/me.js");
-  check(/import \{ accessOf \} from "\.\.\/lib\/gw\.js"/.test(src), "api/me は lib/gw.js の accessOf を使う");
-  check(/access:\s*accessOf\(\{\s*isAdmin,\s*isHr:\s*gw\.isHr,\s*roles:\s*gw\.roles\s*\}\)/.test(src), "access を返している");
+  check(/import \{ accessOf(, isHrOf)? \} from "\.\.\/lib\/gw\.js"/.test(src), "api/me は lib/gw.js の accessOf を使う");
+  // アプリ利用権限（apps）も一緒に渡す（入口は gw_app_grants、中身は内部ロール。db/119）
+  check(/access:\s*accessOf\(\{\s*isAdmin,\s*isHr:\s*gw\.isHr,\s*roles:\s*gw\.roles,\s*apps:\s*gw\.apps\s*\}\)/.test(src), "access を返している");
 }
 
 console.log("\n— 画面はサーバの判定を使う（役割を並べ直さない） —");
@@ -142,25 +164,43 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   check(/const canSell = me\?\.access \? Boolean\(me\.access\.sell\)/.test(read("js/sales-layout.js")),
     "/sales の入口は access.sell");
 
-  // Office：ヘッダーの近道も /office の入口も、access.office だけで決める（役割名を画面に持たない）。
-  // 金額を扱うので、access が無い古い応答では入れない側に倒す
-  check(/office:\s*Boolean\(me\?\.access\?\.office\)/.test(layout), "ヘッダーの Office は access.office だけ（予備の役割判定を持たない）");
+  // Office：ヘッダーの近道は、Office に入れる人（サーバの access：officeHr／officeFinance／office のどれか）だけ。
+  // 行き先も access で決める（人事・労務／経理・事務の人は Office のホーム、月末月初業務だけの人は /office/）。役割名は並べ直さない
+  check(/officeEntry: me\?\.appRole !== "sr" && \(officeHr \|\| officeFinance \|\| Boolean\(me\?\.access\?\.office\) \|\| Boolean\(me\?\.access\?\.officeApp\)\)/.test(layout)
+      && /if \(t\.key === "office"\) return Boolean\(shows\.officeEntry\);/.test(layout),
+    "ヘッダーの Office は、サーバの access（officeApp＝Office の入口・officeHr・officeFinance・office）のどれかがある人だけ");
+  // 担当別の入口は、サーバの判定（access.officeHr / officeFinance）。予備は管理者だけ。役割名は並べ直さない
+  check(/const flag = \(k\) => me\?\.appRole !== "sr" && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
+    "Office の人事・労務／経理・事務は access.officeHr / officeFinance（予備は管理者だけ）");
   const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  // 入口の判定は、覚えている身元（先に描く）と /api/me（裏で確かめる）の両方で同じ関数を使う（API.enterWithMe）
+  // /office/ の入口は access.office だけ。枠は KPLayout（入れない人はホームへ送り返す）
   check(/function allows\(me\) \{ return Boolean\(me\?\.access\?\.office\); \}/.test(officeLayout)
-      && /API\.enterWithMe\(allows,/.test(officeLayout)
-      && /location\.replace\("\/home\.html"\)/.test(officeLayout),
-    "/office の入口は access.office だけで決め、無ければ home.html へ");
+      && /KPLayout\.init\(\{ active: ACTIVE\[opts\.active\] \|\| ACTIVE\.monthly, access: opts\.access \|\| "office" \}\)/.test(officeLayout),
+    "/office の入口は access.office だけで決め（ホームだけ access を渡す）、無ければ KPLayout がホームへ送り返す");
+  // /office/ 配下の各画面の入口：ホームは Office に入れる人の全員、それ以外（月次業務・請求・支払・勤務表・契約条件）は access.office
+  {
+    const home = read("office/index.html");
+    check(/O\.init\(\{ active: "home", access: \["officeHr", "officeFinance", "office", "officeApp"\] \}\)/.test(home), "Office ホームは officeApp（入口）・officeHr・officeFinance・office のどれかで入れる");
+    // ホームは、担当でない API を呼ばない（403 の行を作らない）
+    check(/can\.hr \? safe\(API\.swr\(HR_KEY, \(\) => API\.hrList\(\)/.test(home) && /can\.app \? safe\(API\.swr\(OFFICE_KEY/.test(home)
+      && /can\.fin && !can\.app \? safe\(API\.swr\(`office:closing:\$\{closingMonth\}`, \(\) => API\.closing\(/.test(home), "Office ホームは、担当の API だけ呼ぶ");
+    // 枠を待たずに取りにいく（warm）のも、同じ担当の人だけ
+    check(/KPLayout\.warm\("officeHr", HR_KEY, \(\) => API\.hrList\(\)\)/.test(home) && /API\.warm\(OFFICE_KEY, fetchOffice, O\.allows\)/.test(home),
+      "Office ホームの先読みも、担当の人だけ（人事・労務＝officeHr、月末月初業務＝access.office）");
+    for (const f of ["office/monthly.html", "office/billing.html", "office/timesheet.html", "office/terms.html"]) {
+      const src = read(f);
+      check(/O\.init\(\{ active: "\w+" \}\)/.test(src) && !/O\.init\(\{[^}]*access/.test(src), `${f} は access.office で入口を守る（access を広げない）`);
+    }
+  }
   check(!/["'](owner|manager|finance|hr|sales|recruiter)["']/.test(officeLayout), "/office の画面に役割名を書かない");
-  // Office は役割で入口も見た目も変えない（2026-10-02）：ナビは1つだけ定義し、出し分けは access のキー（needs）だけ。
-  // appRole・admin・owner で、ナビ全体を差し替えない（以前は admin/owner だけ管理画面のナビを足していた）
-  check(!/appRole|isAdmin|\badmin\b|\bowner\b|ADMIN_NAV/.test(officeLayout), "/office の画面は、appRole・admin・owner でナビやレイアウトを分けない");
-  check(/const navFor = \(me\) => NAV\.filter\(\(n\) => !n\.needs \|\| Boolean\(me\?\.access\?\.\[n\.needs\]\)\);/.test(officeLayout),
-    "Office のナビは、全員同じ定義（NAV）を、access のキー（needs）だけで絞る");
-  const navBlock = officeLayout.match(/const NAV = \[([\s\S]*?)\n  \];/)?.[1] || "";
-  const needs = [...navBlock.matchAll(/needs:\s*"(\w+)"/g)].map((m) => m[1]);
-  check(needs.length > 0 && needs.every((k) => Object.keys(accessOf({ roles: [] })).includes(k)), `NAV の needs は、サーバの access（accessOf）のキー（いま ${needs.join("・")}）`);
-  check(!/admin-|\/admin/.test(navBlock), "Office のナビに、管理画面（admin-*.html）を入れない");
+  check(!/appRole|isAdmin|\badmin\b|\bowner\b|ADMIN_NAV|GWへ戻る|of-back/.test(officeLayout), "/office の画面は、appRole・admin・owner で枠を分けない（専用ヘッダー・GWへ戻るを持たない）");
+  // Office の左メニューの項目は、サーバの access のキー（または管理者・経営者の adminApp）だけで出し分ける
+  const officeBlock = layout.slice(layout.indexOf("const OFFICE_TOP = ["), layout.indexOf("// 経営（チーム・会社全体の管理、判断）"));
+  const whens = [...new Set([...officeBlock.matchAll(/when:\s*"(\w+)"/g)].map((m) => m[1]))];
+  const allowed = ["officeHr", "officeFinance", "officeApp", "officeEntry", "officeMonthly", "adminApp"];
+  // 月次業務の入口は、中のタブのどれかに入れる人（月末月初業務＝officeApp、月次締め・月初作業管理＝officeFinance）
+  check(/officeMonthly: officeFinance \|\| Boolean\(me\?\.access\?\.office\),/.test(layout), "月次業務の入口（officeMonthly）＝ officeFinance か access.office");
+  check(whens.length > 0 && whens.every((k) => allowed.includes(k)), `Office の左メニューの when は access 由来のキーだけ（いま ${whens.join("・")}）`);
 
   // 予備の判定（access が無い古い応答のときだけ使う）が、サーバの役割の並びとずれていない
   // （責任者が HR に入れる、という変更のあとに、画面だけ旧仕様のまま残さない）
@@ -194,8 +234,14 @@ console.log("\n— DB の関数も同じ役割 —");
   check(/'hr'/.test(isHr) && /'owner'/.test(isHr) && /is_tenant_staff/.test(isHr), "gw_is_hr（人事の台帳など）は変えていない");
   check(rolesIn(rec).join(",") === [...HR_ROLES].sort().join(","),
     `gw_is_recruiting = ${HR_ROLES.join("・")}（いま ${rolesIn(rec).join("・")}）`);
-  check(rolesIn(sales).join(",") === [...SALES_ROLES].sort().join(","),
-    `gw_is_sales = ${SALES_ROLES.join("・")}（いま ${rolesIn(sales).join("・")}）`);
+  // Sales は db/130 から「owner ロール または Sales のアプリ権限」（lib/gw.js canSell と同じ）。
+  // ロールの並び（SALES_ROLES）ではなく、API の判定そのものとそろっていることを見る
+  const appsIn = (body) => [...body.matchAll(/gw_has_app\(p_tenant,\s*'(\w+)'\)/g)].map((m) => m[1]).sort();
+  check(rolesIn(sales).join(",") === "owner" && appsIn(sales).join(",") === "sales",
+    `gw_is_sales = owner ロール または Sales のアプリ権限（いま ロール ${rolesIn(sales).join("・") || "なし"}／アプリ ${appsIn(sales).join("・") || "なし"}）`);
+  check(canSell({ roles: ["owner"], apps: [] }) && canSell({ roles: [], apps: ["sales"] })
+        && !canSell({ roles: ["manager"], apps: [] }) && !canSell({ roles: ["sales"], apps: [] }),
+    "API の canSell も同じ（経営者・Sales アプリは通る／manager・sales のロールだけでは通らない）");
   check(office !== "" && rolesIn(office).join(",") === [...OFFICE_ROLES].sort().join(","),
     `gw_is_office = ${OFFICE_ROLES.join("・")}（いま ${rolesIn(office).join("・") || "未定義"}）`);
   check(!/is_tenant_staff|gw_is_hr/.test(rec), "gw_is_recruiting に会計の管理者（is_tenant_staff）を含めない");
@@ -257,17 +303,23 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
     const s = read(f);
     // 候補者に送る公開リンク（ログイン不要）は対象外
     if (/public/.test(f)) continue;
-    // 本採用へ進める（社員化）は、採用HRの中でも社長・管理者だけ（canDecideHire）。
-    // 画面（hr/applicants.html）も canDecide のときだけボタンを出すので、403 にはならない
+    // 本採用へ進める（社員化）は、社長・管理者・人事（canAdvanceHire。社員登録の画面 admin-onboard.html に入れる人と同じ）。
+    // 画面（hr/applicants.html）も canAdvance のときだけボタンを出すので、403 にはならない
     if (/advance\.js$/.test(f)) {
-      check(/canDecideHire/.test(s), `${f} は canDecideHire（社長・管理者だけ。画面でもボタンを出し分け）`);
+      check(/canAdvanceHire/.test(s) && !/canDecideHire/.test(s), `${f} は canAdvanceHire（社長・管理者・人事。画面でもボタンを出し分け）`);
       continue;
     }
     check(/canRecruit/.test(s), `${f} は canRecruit で判定`);
   }
-  // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト（公開）は対象外
-  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p))) {
+  // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト・LP の申込（公開）は対象外
+  for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p) && !/\/lp-lead\.js$/.test(p))) {
     check(/canSell/.test(read(f)), `${f} は canSell で判定`);
+  }
+  // LP の申込の口（公開）は、ログインの判定を持たないかわりに Origin で LP だけに絞る
+  {
+    const lp = read("api/sales/lp-lead.js");
+    check(/allowedOrigin/.test(lp) && /forbidden_origin/.test(lp) && !/userClient/.test(lp),
+      "api/sales/lp-lead.js は LP の Origin だけ受ける（利用者の権限では書かない）");
   }
   // Office（/api/office/*）は canAccessOffice。単価・請求額・支払を返すので、例外は作らない。
   // api/office/ はこれから作るので、無いあいだは何も見ない（作った瞬間から全ファイルが対象になる）

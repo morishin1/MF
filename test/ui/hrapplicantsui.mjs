@@ -80,10 +80,11 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   console.log("— 専用ヘッダーが出る —");
   check((await page.locator(".hr-logo").innerText()).includes("HR"), "EIGHT/HR のロゴが出る");
   const navCount = await page.locator(".hr-nav a").count();
-  check(navCount === 3, `ナビは3つだけ（いま ${navCount}）`);
+  check(navCount === 4, `ナビは4つだけ（いま ${navCount}）`);
   const navTexts = await page.locator(".hr-nav a").allInnerTexts();
   check(navTexts.some((t) => t.includes("ダッシュボード")) && navTexts.some((t) => t.includes("応募者"))
-    && navTexts.some((t) => t.includes("CEO REVIEW")), `ダッシュボード／応募者／CEO REVIEW の3つ（いま ${navTexts.join(" / ")}）`);
+    && navTexts.some((t) => t.includes("CEO REVIEW")) && navTexts.some((t) => t.includes("メールひな型")),
+    `ダッシュボード／応募者／CEO REVIEW／メールひな型 の4つ（いま ${navTexts.join(" / ")}）`);
   check((await page.locator(".hr-nav a.on").innerText()).includes("応募者"), "いま見ているタブが選ばれている");
   check(!(await page.locator(".kp-sidebar").count()), "通常のサイドメニューは出さない");
 
@@ -104,18 +105,26 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check(posted[0].recruiterId === RECRUITER.id, "担当も一緒に送られる");
   check((await page.locator("#rows").innerText()).includes("田中 一郎"), "一覧に出る");
   check((await page.locator("#rows").innerText()).includes("セールス"), "職種も出る");
+  // 追加すると、その人の詳細が開く（HRフロー仕様 §1）。いったん閉じて、一覧から開き直す
+  check(await page.locator(".hr-detail").isVisible(), "追加すると、その人の詳細ドロワーが開く");
+  await page.locator(".hr-detail button", { hasText: "閉じる" }).first().click();
+  await page.waitForTimeout(300);
 
   console.log("— 詳細を右ドロワーで開く —");
   await page.locator(".hr-table tr.click").first().click();
   await page.waitForTimeout(500);
   check(await page.locator(".hr-detail").isVisible(), "右ドロワーが開く");
-  check((await page.locator(".hr-detail").innerText()).includes("NEXT ACTION"), "NEXT ACTIONが最優先表示される");
+  check(await page.locator(".hr-detail .hr-next").isVisible(), "NEXT ACTION（いまの状態と次の1つ）が概要の最初に出る");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   check((await page.locator(".hr-detail").innerText()).includes("応募"), "選考タイムラインが出る");
   {
-    // 選考（どこまで進んだか）・状態（いま何待ちか）が NEXT ACTION の前に出る（迷わないUI）
-    const now = await page.locator(".hr-next .now").innerText();
-    check(now.includes("選考") && now.includes("状態"), "「選考」「状態」が NEXT ACTION の前に出る（迷わないUI）");
+    // NEXT ACTION は「いまの状態」と「次に押すボタン1つ」だけ（応募者ドロワー改善 §3・§4：高さ 80〜110px 程度）
+    const card = page.locator(".hr-next");
+    check((await page.locator(".hr-next #hr-status").innerText()).trim().length > 0, "いまの状態が出る");
+    check(await card.locator("button.btn-primary").count() <= 1, "主のボタンは1つだけ");
+    const h = (await card.boundingBox()).height;
+    check(h <= 130, `NEXT ACTION の枠は短い（${Math.round(h)}px）`);
+    check(!(await card.innerText()).includes("どこまで進んでいるか"), "選考・状態の長い説明は出さない");
   }
 
   console.log("— 担当を詳細から変更できる —");

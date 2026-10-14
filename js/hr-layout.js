@@ -3,7 +3,7 @@
 // ■ なぜ KPLayout（サイドメニュー）を使わないか
 //   ユーザーには「/hr という別アプリの中を移動している」ように見せたい
 //   （指示書§1）。左サイドメニュー・通常の帯ではなく、
-//   ロゴ＋3ナビ＋3操作だけの専用ヘッダーにする。
+//   ロゴ＋4ナビ＋3操作だけの専用ヘッダーにする。
 //   esc・busy は KPLayout のものをそのまま使う（作り直さない）。
 //
 // ■ 権限
@@ -18,6 +18,7 @@
     { key: "dashboard", href: "/hr/", label: "ダッシュボード", icon: "dashboard" },
     { key: "applicants", href: "/hr/applicants.html", label: "応募者", icon: "group" },
     { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
+    { key: "templates", href: "/hr/templates.html", label: "メールひな型", icon: "mail" },
   ];
 
   function css() {
@@ -59,6 +60,21 @@
                          padding:10px 14px; font-size:13px; color:#1b2440; cursor:pointer; font-family:inherit; }
       .hr-menu button:hover { background:#f6f6f2; }
       .hr-wrap { max-width:1200px; margin:0 auto; padding:24px 16px 60px; }
+      /* スマホ幅：ヘッダーは2段にする（上：ロゴ・戻る・操作／下：横に流せるタブ）。1行に全部入れると画面が横に伸びる */
+      @media (max-width:720px) {
+        .hr-bar { flex-wrap:wrap; height:auto; padding:6px 12px 0; gap:4px 8px; }
+        .hr-logo { flex:1 1 auto; }
+        .hr-back-t, .hr-add-t { display:none; }
+        .hr-add { padding:7px 8px; }
+        .hr-actions { gap:2px; }
+        .hr-iconbtn, .hr-user { padding:6px; }
+        .hr-logo { font-size:13px; }
+        .hr-nav { order:3; flex:1 0 100%; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; margin:0 -12px; padding:0 12px; }
+        .hr-nav::-webkit-scrollbar { display:none; }
+        .hr-nav a { flex:0 0 auto; height:44px; white-space:nowrap; }
+        .hr-menu { right:12px; top:56px; }
+      }
+
     `;
     document.head.appendChild(style);
   }
@@ -71,7 +87,7 @@
     bar.innerHTML = `
       <div class="hr-logo"><b>EIGHT</b> <span>/ HR</span></div>
       <a class="hr-back" href="../admin-dashboard.html" title="人事・労務 ＞ 採用">
-        <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
+        <span class="material-symbols-outlined">arrow_back</span><span class="hr-back-t">GWへ戻る</span></a>
       <nav class="hr-nav">
         ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
@@ -85,7 +101,7 @@
           <span class="hr-dot hidden" id="hr-bell-dot">0</span>
         </button>
         <button class="hr-add" onclick="location.href='/hr/applicants.html?new=1'">
-          <span class="material-symbols-outlined">person_add</span>応募者追加
+          <span class="material-symbols-outlined">person_add</span><span class="hr-add-t">応募者追加</span>
         </button>
         <button class="hr-user" id="hr-user-btn" onclick="HRLayout.toggleUserMenu()" title="${esc(name)}">
           <span class="material-symbols-outlined">account_circle</span>
@@ -135,6 +151,11 @@
 
 ⑦ その後は既存GWで
 　社員登録 → 契約書 → 電子署名 → 入社手続き
+
+応募者へのメール
+　応募者を開いて［メールを送る］→ ひな型を選ぶ
+　→ 宛先と内容を確かめる（直せる）→［送信］
+　ひな型は［メールひな型］で作る・直す
 
 迷ったら、「NEXT ACTIONを見る」で統一してください。`;
 

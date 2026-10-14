@@ -11,6 +11,10 @@
 //   一度送った面談は、評価が入るまで何度cronが回っても増えない
 //   （読んだ／読んでいないに関わらず、再通知で未読へ戻さない）。
 //
+// ■ 無限道場リード（db/118 の lead_category = mugendojo）
+//   評価（ランク）を付けないので、「面談結果を入力してください」ではなく、
+//   面談後の次のアクション（体験案内・参加検討…）が未選択のときだけ、それを知らせる。
+//
 // 認証: CRON_SECRET があれば Authorization: Bearer <secret> を要求する。
 
 import { json, methodNotAllowed } from "../../lib/http.js";
@@ -45,8 +49,9 @@ export default async function handler(req, res) {
   if (!list.length) return json(res, 200, { ok: true, checked: 0, notified: 0 });
 
   const applicantIds = [...new Set(list.map((i) => i.applicant_id))];
+  // select("*")：lead_category・lead_next_action（db/118）が無い環境でも同じ問い合わせで読む
   const { data: applicants } = await sb.from("gw_hr_applicants")
-    .select("id, name, recruiter_id").in("id", applicantIds);
+    .select("*").in("id", applicantIds);
   const applicantOf = new Map((applicants || []).map((a) => [a.id, a]));
 
   const notifyRows = [];
@@ -55,9 +60,14 @@ export default async function handler(req, res) {
     if (!a) continue;
     const target = i.interviewer_id || a.recruiter_id;
     if (!target) continue;
+    const lead = a.lead_category === "mugendojo";
+    // 社長面談は5項目評価・ランクを付けない（実施すると社長判断待ちへ進む）。「面談結果が未入力」は送らない
+    if (!lead && i.kind === "ceo") continue;
+    // 無限道場：次のアクションを選んだ（面談済のまま止まっていない）なら知らせない
+    if (lead && (a.lead_next_action || a.status !== "eval_pending")) continue;
     notifyRows.push({
       tenantId: i.tenant_id, employeeId: target, kind: "hr",
-      title: "面談結果が未入力です",
+      title: lead ? "面談後の次のアクションが未選択です" : "面談結果が未入力です",
       body: `${a.name}\n${interviewKindLabel(i.kind)}`,
       link: `/hr/applicants.html?id=${i.applicant_id}`,
       dedupeKey: `hr_interview_eval:${i.id}`,

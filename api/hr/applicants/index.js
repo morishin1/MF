@@ -1,10 +1,15 @@
 // GET  /api/hr/applicants          … 応募者一覧（ダッシュボード・応募者一覧・CEO REVIEWで共通利用）
+//      ?category=recruitment（既定）| mugendojo | internship | other | all
+//      既定は採用（＝専用の流れを持つ区分〔無限道場〕以外。インターン等は採用と同じ選考段階を使う）。
+//      無限道場リード（db/118）を採用のダッシュボード・ファネルに混ぜない。
+//      応募者一覧の「すべて／採用／無限道場」は all で取り、画面で分ける
 // POST /api/hr/applicants { name, jobTitle, source, ... } … 応募者を追加
 //
 // ダッシュボード・採用ファネル・通知の元ネタは、すべてこの一覧から
 // 画面側で組み立てる（別に集計テーブルは作らない。README「State Management」の方針と同じ）。
 
-import { checkRecruiter } from "../../../lib/hr-recruiter.js";
+import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
+import { notify } from "../../../lib/notify.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
@@ -12,8 +17,15 @@ import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib
 import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { normalizeApplicant, shapeApplicant, pickNextInterview } from "../../../lib/hr.js";
+import {
+  normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
+  withContactNext, applicantAlerts, applicantPriority,
+} from "../../../lib/hr.js";
+import { ymd as jstYmd } from "../../../lib/jst.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
+import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js";
+import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
+import { DEDICATED_CATEGORIES } from "../../../lib/hr-timerex-calendars.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
@@ -43,8 +55,21 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res, sb, ctx, salary) {
-  const { data, error } = await sb.from("gw_hr_applicants").select(columns(salary))
-    .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(1000);
+  const want = new URL(req.url || "/", "http://localhost").searchParams.get("category") || "recruitment";
+  if (want !== "all" && !LEAD_CATEGORIES.includes(want)) {
+    return json(res, 400, { error: "invalid_query", detail: `category は all / ${LEAD_CATEGORIES.join(" / ")} のいずれかです` });
+  }
+  // リードの列（db/118）が無い環境では、全員が採用。区分では絞れないので、採用・すべては全員、それ以外は0人
+  const query = (fields, withCategory) => {
+    let q = sb.from("gw_hr_applicants").select(fields).eq("tenant_id", ctx.tenantId);
+    if (withCategory && want === "recruitment") for (const c of DEDICATED_CATEGORIES) q = q.neq("lead_category", c);
+    else if (withCategory && want !== "all") q = q.eq("lead_category", want);
+    return q.order("created_at", { ascending: false }).limit(1000);
+  };
+  const first = await selectWithLeadFields(query, columns(salary));
+  const { error, leadReady } = first;
+  let { data } = first;
+  if (!error && !leadReady && !["all", "recruitment"].includes(want)) data = [];
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { applicants: [], notReady: true, message: hint });
@@ -58,6 +83,23 @@ async function list(req, res, sb, ctx, salary) {
     ? attachPay(ctx.tenantId, data || [], "applicant").then(() => null, (e) => e) : Promise.resolve(null);
 
   const ids = (data || []).map((a) => a.id);
+  // 合格後の採用区分（db/129）。状態・NEXT の言い方が区分で変わる。列がまだ無い環境では区分なしとして扱う
+  const offerTypes = await readOfferTypes(sb, ctx.tenantId, ids);
+  for (const a of data || []) a.offer_type = offerTypes.byId.get(a.id) ?? null;
+  // 条件を承諾した人の、正式契約（LegalSign）の段階（db/132。正式契約待ち／正式契約済み）。列が無ければ数えない
+  const acceptedIds = (data || []).filter((a) => a.status === "accepted").map((a) => a.id);
+  if (acceptedIds.length) {
+    const formal = await readFormalStates(sb, ctx.tenantId, acceptedIds);
+    for (const a of data || []) Object.assign(a, formal.byId.get(a.id) || { formal_state: null });
+  }
+  // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
+  // 無限道場リードの decision（保留・対象外。lib/hr-lead-flow.js）は採用の選考結果ではないので数えない
+  const decidedIds = (data || []).filter((a) => a.decision && a.lead_category !== "mugendojo").map((a) => a.id);
+  const contactEventsP = decidedIds.length
+    ? Promise.resolve(sb.from("gw_hr_timeline").select("applicant_id, event_key, occurred_at")
+      .in("applicant_id", decidedIds).in("event_key", CONTACT_EVENT_KEYS).limit(5000))
+      .then((r) => (r.error ? [] : r.data || []), () => [])
+    : Promise.resolve([]);
   const recruiterIds = [...new Set((data || []).map((a) => a.recruiter_id).filter(Boolean))];
   const [{ data: recruiters }, { data: interviewCounts }, { data: employees }, docs] = await Promise.all([
     recruiterIds.length
@@ -77,6 +119,12 @@ async function list(req, res, sb, ctx, salary) {
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
+  const contactEvents = await contactEventsP;
+  const eventsOf = new Map();
+  for (const e of contactEvents) {
+    if (!eventsOf.has(e.applicant_id)) eventsOf.set(e.applicant_id, []);
+    eventsOf.get(e.applicant_id).push(e);
+  }
   const payError = await payAttached;
   if (payError) throw payError;
   const recruiterName = new Map((recruiters || []).map((e) => [e.id, e.display_name]));
@@ -94,20 +142,28 @@ async function list(req, res, sb, ctx, salary) {
     return n ? { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind } : null;
   };
 
+  const today = jstYmd();
   return json(res, 200, {
-    applicants: (data || []).map((a) => ({
-      ...shapeApplicant(a, nextOf(a)),
-      // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
-      nextInterviewAt: nextOf(a)?.scheduledAt || null,
-      recruiterName: recruiterName.get(a.recruiter_id) || null,
-      interviewCount: interviewCount.get(a.id) || 0,
-      docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
-    })),
+    applicants: (data || []).map((a) => {
+      const s = withContactNext({
+        ...shapeApplicant(a, nextOf(a)),
+        // 直近の面談日時（#43：面談日時を変えたら一覧にも出る。NEXT ACTION と同じ面談）
+        nextInterviewAt: nextOf(a)?.scheduledAt || null,
+        recruiterName: recruiterName.get(a.recruiter_id) || null,
+        interviewCount: interviewCount.get(a.id) || 0,
+        docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
+        contact: contactStatusOf(a.lead_category === "mugendojo" ? null : a.decision, eventsOf.get(a.id)),
+      });
+      // 警告（起きてはいけない状態）と、毎日の確認順（期限超過 → 今日 → 新規 → その他。lib/hr.js）
+      return { ...s, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
+    }),
     employees: employees || [],
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
     salaryVisible: salary,
+    // どの区分で取ったか・リードの列（db/118）があるか（無ければ画面は無限道場の欄を出さない）
+    category: want, leadReady,
   });
 }
 
@@ -150,6 +206,9 @@ async function create(req, res, sb, ctx, user, salary) {
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_create",
     target: `hr_applicant:${data.id}`, detail: { name: data.name, jobTitle: data.job_title },
   });
+  // ほかの人を担当にして登録したら、その人へ「担当になった」と知らせる
+  await notifyAssigned(notify, { tenantId: ctx.tenantId, recruiterId: data.recruiter_id, actorEmployeeId: ctx.employee?.id || null,
+    applicants: [{ id: data.id, name: data.name }] });
 
   return json(res, 200, { applicant: shapeApplicant(data) });
 }

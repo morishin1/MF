@@ -35,7 +35,7 @@ import { monthRange, jstDate } from "../../lib/timecard.js";
 import {
   deriveRow, sortRows, summarize, timesheetDeadline, STAGES, FILTERS,
 } from "../../lib/office.js";
-import { normalizeTerms, termsForMonth, settle } from "../../lib/office-calc.js";
+import { normalizeTerms, termsForMonth, settle, expectedPurchase, matchVendorInvoice } from "../../lib/office-calc.js";
 import { sheetState, classifyFiles, latestSubmission } from "../../lib/office-timesheet.js";
 
 // 読む列。単価・精算条件・メモは入れない
@@ -72,6 +72,16 @@ export default async function handler(req, res) {
   }
 
   res.setHeader("Cache-Control", "no-store");
+  const out = await monthData(req, ctx, month, today);
+  return json(res, out.status, out.body);
+}
+
+/**
+ * その月の一覧（行・数字カード・月次進捗）。月次完了（api/office/close.js）も、同じ計算で「全部終わったか」を確かめる
+ * 返り値は { status, body }
+ */
+export async function monthData(req, ctx, month, today = jstDate()) {
+  const reply = (status, body) => ({ status, body });
   const sb = userClient(req);
   const range = monthRange(month);
 
@@ -92,8 +102,8 @@ export default async function handler(req, res) {
   ]) {
     if (!r.error) continue;
     const hint = dbSetupHint(r.error, sql);
-    if (hint) return json(res, 200, { ...payload(month, today, []), notReady: true, message: hint });
-    return json(res, 500, { error: "db_query_failed", detail: r.error.message });
+    if (hint) return reply(200, { ...payload(month, today, []), notReady: true, message: hint });
+    return reply(500, { error: "db_query_failed", detail: r.error.message });
   }
 
   const active = (contractsRes.data || []).filter((c) => !c.period_to || c.period_to >= range.from);
@@ -105,20 +115,23 @@ export default async function handler(req, res) {
       .eq("tenant_id", ctx.tenantId).lt("period_from", range.to);
     if (count > 0) {
       // 空の一覧と同じ形（summary など）で返す。画面は、その上に理由を出すだけでよい
-      return json(res, 200, {
+      return reply(200, {
         ...payload(month, today, []), accessNotReady: true,
         message: "現場契約が登録されていますが、権限の設定が未適用のため表示できません。"
           + "管理者に db/099_access_hr_office.sql と db/100_office_access.sql の実行を依頼してください",
       });
     }
   }
-  if (!active.length) return json(res, 200, payload(month, today, []));
+  if (!active.length) {
+    const p4 = await loadPayables(sb, ctx, month);
+    return reply(200, { ...payload(month, today, []), close: p4.close, phase4: phase4Of(p4) });
+  }
 
   // 氏名・区分・所属・BP会社。判定のあとに、必要な列だけを読む
   const empIds = [...new Set(active.map((c) => c.employee_id))];
   const { data: emps, error: ee } = await admin().from("gw_employees")
     .select(EMPLOYEE_FIELDS).eq("tenant_id", ctx.tenantId).in("id", empIds).limit(2000);
-  if (ee) return json(res, 500, { error: "db_query_failed", detail: ee.message });
+  if (ee) return reply(500, { error: "db_query_failed", detail: ee.message });
   const empById = new Map((emps || []).map((e) => [e.id, e]));
 
   const partnerIds = [...new Set((emps || []).map((e) => e.partner_company_id).filter(Boolean))];
@@ -139,7 +152,7 @@ export default async function handler(req, res) {
 
   // Phase 3：勤務表の状態・確定した稼働時間・契約条件。表が未作成なら、この部分だけ省く
   const p3 = await loadPhase3(sb, ctx, month, range);
-  if (p3.error) return json(res, 500, { error: "db_query_failed", detail: p3.error });
+  if (p3.error) return reply(500, { error: "db_query_failed", detail: p3.error });
   const sheetByKey = new Map((p3.sheets || []).map((t) => [`${t.employee_id}:${t.site_contract_id}`, t]));
   const termsByContract = new Map();
   for (const t of p3.terms || []) {
@@ -154,6 +167,13 @@ export default async function handler(req, res) {
     if (!sheetFilesByKey.has(k)) sheetFilesByKey.set(k, []);
     sheetFilesByKey.get(k).push(f);
   }
+
+  // Phase 6〜8（db/117）：仕入請求・支払・月次完了。表が未作成なら、この部分だけ省く（支払は「未管理」のまま）
+  const p4 = await loadPayables(sb, ctx, month);
+  if (p4.error) return reply(500, { error: "db_query_failed", detail: p4.error });
+  const minutesByContract = new Map();
+  for (const t of p3.sheets || []) if (t.status === "confirmed") minutesByContract.set(t.site_contract_id, t.total_minutes);
+  const payableByContract = p4.ready ? payablesOf(p4, { termsByContract, minutesByContract, month }) : new Map();
 
   const deadline = timesheetDeadline(month);
   const rows = active
@@ -174,10 +194,67 @@ export default async function handler(req, res) {
         engagementKind: c.engagement_kind, siteCompany: c.site_company, primeCompany: c.prime_company || null,
         periodFrom: c.period_from, periodTo: c.period_to || null, renewalStatus: c.renewal_status,
         marks, submissions: filesByKey.get(key) || [],
+        ...(p4.ready ? { payable: payableByContract.get(c.id) || null } : {}),
       }, { today, deadline });
     });
 
-  return json(res, 200, { ...payload(month, today, rows, deadline), phase3: p3.ready ? { ready: true } : { ready: false, message: p3.message } });
+  return reply(200, {
+    ...payload(month, today, rows, deadline),
+    phase3: p3.ready ? { ready: true } : { ready: false, message: p3.message },
+    close: p4.close, phase4: phase4Of(p4),
+  });
+}
+
+const phase4Of = (p4) => (p4.ready ? { ready: true } : { ready: false, message: p4.message });
+
+/** Phase 6〜8 の表を読む（RLS）。表が無ければ ready:false（一覧そのものは止めない） */
+async function loadPayables(sb, ctx, month) {
+  const [lines, invoices, payments, closes] = await Promise.all([
+    sb.from("gw_vendor_invoice_lines").select("invoice_id, site_contract_id, amount")
+      .eq("tenant_id", ctx.tenantId).eq("billing_month", month).is("voided_at", null).limit(5000),
+    sb.from("gw_vendor_invoices").select("id, status, subtotal_amount, tax_amount, total_amount")
+      .eq("tenant_id", ctx.tenantId).eq("billing_month", month).limit(2000),
+    sb.from("gw_office_payments").select("vendor_invoice_id, status, scheduled_on, paid_on")
+      .eq("tenant_id", ctx.tenantId).eq("billing_month", month).neq("status", "void").limit(2000),
+    sb.from("gw_office_month_closes").select("closed_at, closed_by_name, rows_total, rows_checked, check_note")
+      .eq("tenant_id", ctx.tenantId).eq("billing_month", month).is("reopened_at", null).limit(1),
+  ]);
+  for (const r of [lines, invoices, payments, closes]) {
+    if (!r.error) continue;
+    const hint = dbSetupHint(r.error, "db/117_office_payables.sql");
+    if (hint) return { ready: false, message: hint, close: null };
+    return { ready: false, error: r.error.message, close: null };
+  }
+  const c = (closes.data || [])[0] || null;
+  return {
+    ready: true, lines: lines.data || [], invoices: invoices.data || [], payments: payments.data || [],
+    close: c ? { closed: true, closedAt: c.closed_at, closedByName: c.closed_by_name, rowsTotal: c.rows_total, rowsChecked: c.rows_checked, checkNote: c.check_note }
+      : { closed: false },
+  };
+}
+
+/** 現場契約ごとの、仕入請求・照合・支払の状態（lib/office.js の deriveRow が工程に使う） */
+function payablesOf(p4, { termsByContract, minutesByContract, month }) {
+  const out = new Map();
+  for (const inv of p4.invoices) {
+    if (inv.status === "void") continue;
+    const ls = p4.lines.filter((l) => l.invoice_id === inv.id);
+    const m = matchVendorInvoice({
+      invoice: { subtotal: inv.subtotal_amount, tax: inv.tax_amount, total: inv.total_amount },
+      lines: ls.map((l) => ({
+        amount: l.amount,
+        expected: expectedPurchase({ terms: termsForMonth(termsByContract.get(l.site_contract_id) || [], month), minutes: minutesByContract.get(l.site_contract_id) ?? null }),
+      })),
+    });
+    const pay = p4.payments.find((p) => p.vendor_invoice_id === inv.id) || null;
+    for (const l of ls) {
+      out.set(l.site_contract_id, {
+        invoiceStatus: inv.status, match: m.state, issues: m.issues.map((i) => i.text),
+        paymentStatus: pay ? pay.status : null, scheduledOn: pay?.scheduled_on || null, paidOn: pay?.paid_on || null,
+      });
+    }
+  }
+  return out;
 }
 
 function payload(month, today, rows, deadline = timesheetDeadline(month)) {

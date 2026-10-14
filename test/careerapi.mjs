@@ -1156,14 +1156,19 @@ await ok("責任者は、部下の評価・キャリアは扱えるが、給与�
   for (const n of ["240000", "260000", "300000", "+2万"]) assert.ok(!raw.includes(n), `${n} がどこにも出ていない`);
 });
 
-await ok("人事・経営者・管理者（段階1）には、これまでどおり給与が返る", async () => {
+await ok("給与の決定・改定（現在給与・給与レンジ）は経営者だけ。人事・管理者には返らない（2026-10-07 権限分担）", async () => {
   setup();
   await seedAndSet();
-  for (const c of [HR, OWNER, ADMIN]) {
+  who = OWNER;
+  const d = await get("?employeeId=e-taro");
+  assert.equal(d.body.currentWage.wageAmount, 240000);
+  assert.equal(d.body.nextLevel.salaryMin, 260000);
+  for (const c of [HR, ADMIN]) {
     who = c;
-    const d = await get("?employeeId=e-taro");
-    assert.equal(d.body.currentWage.wageAmount, 240000, JSON.stringify(c.roles));
-    assert.equal(d.body.nextLevel.salaryMin, 260000);
+    const x = await get("?employeeId=e-taro");
+    assert.equal(x.statusCode, 200, JSON.stringify(c.roles));
+    assert.ok(!x.body.currentWage?.wageAmount, `給与が返っている：${JSON.stringify(c.roles)}`);
+    assert.ok(x.body.nextLevel && x.body.nextLevel.salaryMin == null, `給与レンジが返っている：${JSON.stringify(c.roles)}`);
   }
 });
 

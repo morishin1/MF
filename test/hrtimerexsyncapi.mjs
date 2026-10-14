@@ -91,6 +91,10 @@ mock.module(atRoot("lib/supabase.js"), {
 mock.module(atRoot("lib/gw-audit.js"), {
   namedExports: { gwLog: async (e) => { logged.push(e); } },
 });
+// 通知（lib/notify.js）は記録だけ（この偽DBは upsert を持たない）
+mock.module(atRoot("lib/notify.js"), {
+  namedExports: { notify: async (rows) => { for (const r of rows || []) (db.rows.gw_notifications = db.rows.gw_notifications || []).push({ employee_id: r.employeeId, title: r.title, dedupe_key: r.dedupeKey }); return { created: (rows || []).length }; } },
+});
 
 const { applyTimerexEvent } = await import(atRoot("lib/hr-timerex.js"));
 
@@ -288,6 +292,21 @@ await ok("不明なtypeは断る", async () => {
 await ok("イベントそのものが無ければ断る（例外を投げない）", async () => {
   const r = await applyTimerexEvent(null);
   assert.equal(r.error, "invalid_event");
+});
+
+
+await ok("カジュアル面談が予約されたら、採用担当へ知らせる（担当がいなければ送らない）", async () => {
+  setup();
+  db.rows.gw_notifications = [];
+  db.rows.gw_hr_applicants[0].recruiter_id = "e-rec";
+  await applyTimerexEvent(booked());
+  const n = db.rows.gw_notifications.filter((x) => x.employee_id === "e-rec");
+  assert.equal(n.length, 1, JSON.stringify(db.rows.gw_notifications));
+  assert.match(n[0].title, /カジュアル面談が予約/);
+  setup();
+  db.rows.gw_notifications = [];
+  await applyTimerexEvent(booked());
+  assert.equal(db.rows.gw_notifications.length, 0);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

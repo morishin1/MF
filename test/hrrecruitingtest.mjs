@@ -270,13 +270,20 @@ ok("録画URLは空欄（削除）を許可する", () => {
 console.log("— NEXT ACTION（nextActionOf） —");
 
 ok("新規応募（未対応）は、日程調整URLを送る（TimeRex連携。README「TimeRex連携」指示書 §5）", () => {
-  const n = nextActionOf({ status: "todo" });
+  const n = nextActionOf({ status: "todo", email: "taro@example.com" });
   assert.equal(n.cta, "日程調整を送る");
   assert.equal(n.action, "sendSchedulingLink");
 });
+ok("新規応募でメールアドレスが無ければ、先に「メールアドレスを登録」（HRフロー仕様 §1）", () => {
+  for (const email of [null, "", "  "]) {
+    const n = nextActionOf({ status: "todo", email });
+    assert.equal(n.cta, "メールアドレスを登録");
+    assert.equal(n.action, "registerEmail");
+  }
+});
 ok("日程調整URL送付後（候補者の予約待ち・面談キャンセル後の両方）は、手動設定が例外導線として残る（§21）", () => {
   const n = nextActionOf({ status: "scheduling" });
-  assert.equal(n.label, "カジュアル面談の日程を再調整してください");
+  assert.match(n.label, /^予約待ち/);
   assert.equal(n.cta, "手動で面談を設定");
   assert.equal(n.action, "schedule");
 });
@@ -322,10 +329,16 @@ ok("社長面談待ちは、社長面談を設定（kind: ceo）", () => {
 
 console.log("— NEXT ACTION：合格通知・本人専用URL（Stage 5・6） —");
 
-ok("合格通知作成待ちは、合格通知を作成", () => {
+ok("合格通知作成待ち：採用区分が無ければ、まず採用区分を選ぶ（面談合格後の採用・育成フロー §4）", () => {
   const n = nextActionOf({ status: "offer_draft_pending" });
-  assert.equal(n.cta, "合格通知を作成");
+  assert.equal(n.cta, "採用区分を選ぶ");
+  assert.equal(n.action, "chooseOfferType");
+});
+ok("合格通知作成待ち：採用区分があれば、その区分のオファーを作成", () => {
+  const n = nextActionOf({ status: "offer_draft_pending", offer_type: "contractor" });
+  assert.equal(n.cta, "オファーを作成");
   assert.equal(n.action, "createOffer");
+  assert.ok(n.label.includes("業務委託オファー"), n.label);
 });
 ok("本人送付待ちは、本人へ送る", () => {
   const n = nextActionOf({ status: "offer_send_pending" });
@@ -432,6 +445,52 @@ ok("環境変数が未設定（空）なら、null（フロント側は手動設
 });
 ok("applicant_idが無ければ、null", () => {
   assert.equal(schedulingUrlFor("https://timerex.net/s/x/casual", null), null);
+});
+
+
+// ---- HRフロー仕様：本人へ連絡・警告（起きてはいけない状態）・毎日の確認順 ----
+const { withContactNext, applicantAlerts, applicantPriority, RANK_LABEL } = await import("../lib/hr.js");
+const base = (o = {}) => ({ status: "todo", email: "a@example.com", recruiterId: "e1", nextActionCta: "日程調整を送る",
+  overdue: false, decision: null, contact: { state: "none" }, leadCategory: "recruitment", ...o });
+
+ok("見送り・本人へ未連絡なら、NEXT ACTION は「本人へ連絡」（サーバで決める）", () => {
+  const s = withContactNext(base({ status: "passed", decision: "rejected", nextActionCta: null, contact: { state: "pending" } }));
+  assert.equal(s.nextActionKey, "contact");
+  assert.equal(s.nextActionCta, "本人へ連絡");
+  // 連絡済み・保留・合格は変えない
+  assert.equal(withContactNext(base({ status: "passed", decision: "rejected", contact: { state: "done" } })).nextActionKey, undefined);
+  assert.equal(withContactNext(base({ status: "ceo_decision_pending", decision: "hold", nextActionKey: "decide", contact: { state: "pending" } })).nextActionKey, "decide");
+});
+
+ok("警告：期限超過・メール未登録・担当なし・評価未入力・本人へ未連絡・承諾後未完了・NEXTなし", () => {
+  const keys = (o) => applicantAlerts(base(o)).map((x) => x.key);
+  assert.deepEqual(keys({}), []);
+  assert.deepEqual(keys({ overdue: true }), ["overdue"]);
+  assert.deepEqual(keys({ email: null, nextActionCta: "メールアドレスを登録" }), ["email"]);
+  assert.deepEqual(keys({ recruiterId: null }), ["owner"]);
+  assert.ok(keys({ status: "eval_pending", nextActionCta: "評価を入力" }).includes("eval"));
+  assert.ok(keys({ status: "passed", decision: "rejected", contact: { state: "pending" }, nextActionCta: "本人へ連絡" }).includes("contact"));
+  assert.ok(keys({ status: "accepted", nextActionCta: "Office へ引き渡す" }).includes("after_accept"));
+  assert.deepEqual(keys({ status: "accepted", nextActionCta: null }), [], "引き渡し済み（NEXTなし）の承諾は警告なし");
+  assert.ok(keys({ status: "ceo_decision_pending", nextActionCta: null }).includes("no_next"));
+  assert.deepEqual(keys({ status: "passed", decision: "rejected", contact: { state: "done" }, nextActionCta: null, email: null, recruiterId: null }), [],
+    "終わった応募者には出さない");
+  assert.deepEqual(applicantAlerts(base({ leadCategory: "mugendojo", recruiterId: null })), [], "無限道場リードは対象外");
+});
+
+ok("毎日の確認順：期限超過 → 今日対応（期限・面談日）→ 新規応募 → その他 → 終わったもの", () => {
+  const today = "2026-10-15";
+  assert.equal(applicantPriority(base({ overdue: true, status: "eval_pending" }), today), 0);
+  assert.equal(applicantPriority(base({ status: "ceo_decision_pending", decisionDueOn: today }), today), 1);
+  assert.equal(applicantPriority(base({ status: "interview_scheduled", nextInterviewAt: "2026-10-15T01:00:00Z" }), today), 1, "日本時間で今日の面談");
+  assert.equal(applicantPriority(base({ status: "interview_scheduled", nextInterviewAt: "2026-10-15T16:00:00Z" }), today), 3, "日本時間では明日");
+  assert.equal(applicantPriority(base({ status: "todo" }), today), 2);
+  assert.equal(applicantPriority(base({ status: "scheduling" }), today), 3);
+  assert.equal(applicantPriority(base({ status: "passed", decision: "rejected", nextActionCta: null }), today), 4);
+});
+
+ok("ランクの意味（HRフロー仕様 §3）：A 社長に会わせたい／B 追加確認／C もう少し確認／D 見送り", () => {
+  assert.equal(RANK_LABEL.B, "追加確認したい");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

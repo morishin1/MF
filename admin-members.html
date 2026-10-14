@@ -9,13 +9,122 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261002of1">
-  <link rel="stylesheet" href="css/layout.css?v=20261002of1">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261012mx1">
+  <link rel="stylesheet" href="css/layout.css?v=20261012mx1">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     .kp-items tr.click { cursor:pointer; }
-    .kp-items tr.click:hover td { background:var(--soft); }
+    .kp-items tr.click:hover td { background:#f6f6f2; }
+
+    /* ページ上部：タイトル＋説明（左）と「メンバー追加」（右） */
+    .mb-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px 16px; flex-wrap:wrap; }
+    .mb-head .kp-greet-sub { margin-bottom:20px; }
+
+    /* 補助機能（まとめて追加・BP企業）：一覧の下に、細い帯で並べる。開いたときだけ中身を出す */
+    .mb-aux { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:10px; align-items:start; margin-top:4px; }
+    .mb-aux .card { padding:10px 14px; margin:0; }
+    .mb-aux .card h2 { margin:0; font-size:13.5px; font-weight:700; }
+    .mb-aux .card h2 small { font-size:11.5px; font-weight:500; color:#6b7080; margin-left:2px; }
+    .mb-aux .card > div:not(.hidden) { margin-top:12px; }
+    .mb-legend summary { cursor:pointer; font-size:12.5px; color:#4a5068; font-weight:600; margin:0 0 8px; }
+    /* 社員一覧：操作は折り返して並べる（横にはみ出さない）。区分は読める幅を確保 */
+    #list td.mb-ops { min-width:170px; }
+    #list td.mb-ops > * { margin:0 4px 4px 0; }
+    #list td.mb-kind { min-width:84px; font-size:12.5px; }
+    .mb-count { font-size:11.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:999px; padding:1px 9px; }
+
+    /* 使える業務：採用HR / Sales / Office / 経営 の4つのボタンだけ。ON＝青・OFF＝白。押すとすぐ保存 */
+    #list td.mb-apps { min-width:300px; }
+    .mb-tgs { display:flex; gap:6px; flex-wrap:wrap; }
+    .mb-tg { appearance:none; cursor:pointer; border:1px solid #d0d5dd; background:#fff; color:#475467; border-radius:999px;
+             padding:6px 14px; min-height:34px; min-width:72px; font:inherit; font-size:13px; font-weight:700;
+             transition:background .12s, color .12s, border-color .12s; }
+    .mb-tg:hover:not(:disabled) { border-color:#98a2b3; }
+    .mb-tg[aria-pressed="true"] { background:#2563eb; border-color:#2563eb; color:#fff; }
+    .mb-tg[aria-pressed="true"]:hover:not(:disabled) { background:#1d4fd8; }
+    .mb-tg:focus-visible { outline:3px solid #93b4fb; outline-offset:2px; }
+    .mb-tg.busy { cursor:progress; opacity:.7; }
+    .mb-tg.busy::after { content:""; display:inline-block; width:11px; height:11px; margin-left:8px; vertical-align:-1px;
+                         border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:mb-spin .7s linear infinite; }
+    @keyframes mb-spin { to { transform:rotate(360deg); } }
+    .mb-tg.locked, .mb-tg:disabled:not(.busy) { cursor:not-allowed; }
+    .mb-tg.locked { background:#eef0f4; border-color:#eef0f4; color:#667085; }
+    .mb-tg.locked[aria-pressed="true"] { background:#b9c8f2; border-color:#b9c8f2; color:#fff; }
+    .mb-tg:disabled:not(.locked):not(.busy) { opacity:.55; }
+    .mb-lockmsg { font-size:11.5px; color:#667085; margin:5px 0 0; line-height:1.6; }
+    .mb-lockmsg.mb-gap { color:#9a5b00; }
+    /* Office は ON なのに、中の業務（責任者・人事・経理など）が無くて使えない人。一覧だけで見つけられるように目立たせる */
+    .mb-warn { appearance:none; display:inline-flex; align-items:center; gap:4px; margin:6px 0 0; padding:3px 10px; border-radius:999px;
+               border:1px solid #f5b25b; background:#fff4e5; color:#b45309; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+    .mb-warn:hover { background:#ffe9cc; }
+    .mb-warn:focus-visible { outline:3px solid #f5b25b; outline-offset:2px; }
+    .mb-guide { border:1px solid #f5b25b; border-left:4px solid #e08a1e; background:#fff8ee; border-radius:8px; padding:10px 12px; margin:0 0 10px;
+                color:#7a4a05; font-size:12.5px; line-height:1.8; }
+    .mb-guide b { color:#7a4a05; }
+    .mb-sum { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; border:1px solid #f5b25b; background:#fff8ee; color:#7a4a05;
+              border-radius:10px; padding:10px 14px; margin:0 0 12px; font-size:13px; }
+    .mb-sum b { color:#b45309; }
+    .mb-sum button { appearance:none; border:1px solid #f5b25b; background:#fff; color:#b45309; border-radius:999px; padding:2px 10px;
+                     font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+    /* Office の中の業務（Office が ON のときだけ）。4つのボタンより一段小さく、すぐ下に置く */
+    .mb-subs { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin:7px 0 0; padding:6px 8px; border-left:2px solid #c7d4f5; background:#f7f9ff; border-radius:0 8px 8px 0; }
+    .mb-subs .lb { font-size:11.5px; color:#475467; font-weight:700; margin-right:2px; }
+    .mb-sub { appearance:none; cursor:pointer; border:1px solid #d0d5dd; background:#fff; color:#475467; border-radius:999px;
+              padding:3px 11px; min-height:28px; font:inherit; font-size:12px; font-weight:700; }
+    .mb-sub[aria-pressed="true"] { background:#dbe6ff; border-color:#2563eb; color:#1d4fd8; }
+    .mb-sub[aria-pressed="true"]::before { content:"✓ "; }
+    .mb-sub.via { opacity:.75; cursor:not-allowed; }
+    .mb-sub:disabled:not(.via) { opacity:.55; cursor:not-allowed; }
+    .mb-sub.busy { cursor:progress; opacity:.7; }
+    .mb-sub:focus-visible { outline:3px solid #93b4fb; outline-offset:2px; }
+    .mb-more { appearance:none; border:0; background:none; color:#2563eb; cursor:pointer; font:inherit; font-size:12.5px; padding:4px 0 0; }
+    .mb-detail td { background:#fafafa; border-bottom:1px solid #e2e2dc; }
+    .mb-detail h4 { margin:0 0 4px; font-size:13px; color:#1b2440; }
+    .mb-detail p { margin:0 0 8px; color:#667085; font-size:12px; line-height:1.7; }
+    .mb-roles { display:flex; flex-wrap:wrap; gap:6px 18px; margin:0 0 8px; }
+    .mb-toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 16px; border-radius:8px;
+                font-weight:700; font-size:13px; box-shadow:0 6px 20px rgba(16,24,40,.18); display:none; z-index:80; }
+    .mb-toast.err { display:block; background:#fef3f2; color:#b42318; border:1px solid #fda29b; }
+    .mb-toast.ok { display:block; background:#ecfdf3; color:#067647; border:1px solid #abefc6; }
+    .mb-toast.warn { display:block; background:#fff4e5; color:#b45309; border:1px solid #f5b25b; }
+
+    /* 退職手続き（退職手続き中・退職の人のドロワーにだけ出す）。既存のカード・ボタンだけで組む */
+    .mb-retire { margin-top:16px; padding-top:14px; border-top:1px solid #e2e2dc; }
+    .mb-retire h3 { margin:0 0 4px; font-size:14px; display:flex; align-items:center; gap:6px; }
+    .mb-retire .rt-prog { font-size:12px; color:#667085; margin:0 0 8px; }
+    .mb-retire .rt-docrow { border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; margin-bottom:8px; background:#fff; }
+    .mb-retire .rt-docrow .nm { font-weight:700; font-size:13px; }
+    .mb-retire .rt-docrow .st { font-size:12px; color:#667085; margin:2px 0 6px; }
+    .mb-retire .rt-docrow.pub .st { color:#1f6f3a; }
+    .mb-retire .rt-acts { display:flex; flex-wrap:wrap; gap:6px; }
+    .mb-retire .rt-cert { border:1px solid #e2e2dc; border-radius:8px; padding:10px 12px; margin:0 0 8px; background:#fafaf7; }
+    .mb-retire .rt-cert h4 { margin:0 0 6px; font-size:13px; }
+    .mb-retire .rt-cert label { font-size:12px; color:#667085; display:block; margin:6px 0 2px; }
+    .mb-retire .rt-cert textarea { width:100%; min-height:190px; font-size:13px; line-height:1.7; box-sizing:border-box; }
+    .mb-retire .rt-cert .row2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .mb-retire .rt-cert .note { font-size:11.5px; color:#667085; margin:6px 0; line-height:1.7; }
+    @media (max-width: 560px) { .mb-retire .rt-cert .row2 { grid-template-columns:1fr; } }
+    .mb-retire .rt-reason { display:grid; grid-template-columns:1fr; gap:6px; margin:6px 0 10px; }
+    @media (max-width: 560px) { .mb-tg { padding:6px 12px; min-width:64px; } #list td.mb-apps { min-width:270px; } }
+
+    /* 追加・編集は右のドロワー（常設の大きなフォームは置かない） */
+    .mb-drawer-bg { position:fixed; inset:0; background:rgba(27,36,64,.35); z-index:60; }
+    .mb-drawer { position:fixed; top:0; right:0; bottom:0; width:460px; max-width:100vw; background:#fff; z-index:61;
+      box-shadow:-8px 0 24px rgba(27,36,64,.15); display:flex; flex-direction:column; }
+    .mb-drawer.hidden, .mb-drawer-bg.hidden { display:none; }
+    .mb-dr-head { display:flex; align-items:center; gap:8px; padding:16px 18px 12px; border-bottom:1px solid #e2e2dc; }
+    .mb-dr-head h2 { margin:0; font-size:17px; font-weight:700; color:#1b2440; display:flex; align-items:center; gap:8px; flex:1; }
+    .mb-dr-head h2 .material-symbols-outlined { font-size:20px; color:#6b7080; }
+    .mb-dr-body { padding:14px 18px; overflow-y:auto; flex:1; }
+    .mb-form { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+    .mb-form > div.wide { grid-column:1 / -1; }
+    .mb-form label { font-size:12px; color:#4a5068; font-weight:600; }
+    .mb-form input, .mb-form select { margin:2px 0 0; width:100%; }
+    .mb-dr-foot { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px 16px; border-top:1px solid #e2e2dc; flex-wrap:wrap; }
+    @media (max-width: 560px) { .mb-form { grid-template-columns:1fr; } }
   </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
@@ -32,8 +141,16 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">メンバー</h1>
-  <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
+  <div class="mb-head">
+    <div>
+      <h1 class="kp-greet">メンバー</h1>
+      <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
+    </div>
+    <!-- 名簿を編集できる人（canManage）にだけ出す。押すと右のドロワーで追加する -->
+    <button class="kp-add hidden" id="add-btn" onclick="openAdd()">
+      <span class="material-symbols-outlined">person_add</span>メンバー追加
+    </button>
+  </div>
 
   <div class="tabs" style="margin-bottom:16px;">
     <button class="tab active" id="tab-employees" onclick="setView('employees')">社員</button>
@@ -41,59 +158,42 @@
   </div>
 
   <div id="view-employees">
-  <div class="card">
-    <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
-    <div class="inline-controls" style="margin-bottom:12px;">
-      <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
-      <div><label>メール</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
-      <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
-      <div><label>役職</label><input id="e-position" type="text" placeholder="主任"></div>
-      <div><label>勤務地</label><input id="e-location" type="text" placeholder="本社"></div>
-      <div>
-        <label>雇用区分</label>
-        <select id="e-type">
-          <option>正社員</option><option>契約社員</option><option>パート</option>
-          <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
-        </select>
-      </div>
-      <!-- プロパー（自社雇用）か、パートナー企業に所属するBPか。
-           075（db/075_partner_bp.sql）が未適用の環境では、この欄ごと隠す -->
-      <div id="e-kind-wrap" class="hidden">
-        <label>区分</label>
-        <select id="e-kind" onchange="toggleKindPartner()">
-          <option value="proper">プロパー</option>
-          <option value="bp">BP</option>
-        </select>
-      </div>
-      <div id="e-partner-wrap" class="hidden">
-        <label>所属先（BP企業）</label>
-        <select id="e-partner"><option value="">（選んでください）</option></select>
-      </div>
-      <div><label>入社日</label><input id="e-joined" type="date"></div>
-      <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
-      <div>
-        <button class="btn btn-primary" id="e-save" onclick="save(this)">
-          <span class="material-symbols-outlined icon-inline">add</span>追加
-        </button>
-      </div>
-      <div id="e-cancel-wrap" style="display:none;">
-        <button class="btn btn-secondary" onclick="resetForm()">
-          <span class="material-symbols-outlined icon-inline">close</span>編集をやめる
-        </button>
-      </div>
-    </div>
-    <p class="muted" style="font-size:12px;margin:0;" id="e-note">
-      メールを入れて追加すると、ログインアカウントもここで作られ、
-      <strong>グループウェア・無限道場・タイムカード・会計</strong>にまとめて登録されます。
-      初回パスワードはこの画面に1回だけ出るので、本人へ直接お渡しください。
+  <!-- 追加・保存の結果（初回パスワードなど）と、行の操作（ログイン・現場契約）の窓。閉じるまで残す -->
+  <div id="e-account"></div>
+  <div id="e-site"></div>
+
+  <!-- サイドメニューの「権限」からここへ飛ぶ。
+       社内権限は名簿の行ごとに渡すもので、専用の画面を作ると
+       同じ人を2か所で探すことになる -->
+  <div class="card" id="roles">
+    <h2><span class="material-symbols-outlined">group</span>社員一覧 <span class="mb-count" id="e-count"></span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportCsv()">
+        <span class="material-symbols-outlined icon-inline">download</span>CSV
+      </button>
+    </h2>
+    <!-- どのアプリへ入れるかは、行の4つのボタン（採用HR / Sales / Office / 経営）が正式な設定元（gw_app_grants, db/119）。
+         アプリの中で何ができるかは、内部ロール（Office の中の3つのスイッチ・行の「高度な権限設定」）が決める。ボタンは押すとすぐ保存される。
+         付け外しは再ログイン不要で、相手が画面を再読込すると、ヘッダーと入口に反映される -->
+    <details class="mb-legend"><summary>使える業務（4つのボタン）の見かた</summary>
+    <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
+      ボタンは「どのアプリへ入れるか」だけを決めます。青＝ON（入れる）、白＝OFF。押すとすぐ保存されます。<br>
+      <b>採用HR</b>（/hr/）・<b>Sales</b>（/sales/）・<b>Office</b>（/office/）・<b>経営</b>（/keiei/・経営者だけ）。
+      経営者はすべてのアプリを使えます（変更できません）。会計の管理者は Office に入れます（変更できません）。<br>
+      <b>Office をONにしただけでは、中の業務は使えません。</b>Office が ON の人には、その下に「Office の中」の3つのスイッチが出ます：
+      <b>人事・労務</b>／<b>経理・事務</b>／<b>月末月初</b>（経理・事務を ON にすると月末月初も使えます）。
+      IT・管理・社労士・経営者・採用担当／営業担当の名札は、行の「高度な権限設定」（ふだんは閉じています）。
+      内部の役割を付けただけでは、アプリへは入れません。
+      付け外しは、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
     </p>
-    <div id="e-msg" class="err-text"></div>
-    <div id="e-account"></div>
-    <div id="e-site"></div>
+    </details>
+    <div id="apps-state"></div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">upload_file</span>まとめて追加
+  <!-- 補助機能：まとめて追加・BP企業（ふだんは閉じた細い帯） -->
+  <div class="mb-aux">
+  <div class="card" id="bulk-card">
+    <h2><span class="material-symbols-outlined">upload_file</span>まとめて追加<small>表計算から貼り付け</small>
       <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="toggleBulk()">
         <span class="material-symbols-outlined icon-inline" id="bulk-caret">expand_more</span>開く
       </button>
@@ -122,7 +222,7 @@
   <!-- BP企業（パートナー企業）の名簿。075（db/075_partner_bp.sql）が
        未適用の環境では notReady になるので、カードごと隠す -->
   <div class="card hidden" id="partner-card">
-    <h2><span class="material-symbols-outlined">apartment</span>BP企業（パートナー企業）
+    <h2><span class="material-symbols-outlined">apartment</span>BP企業<small>BPの所属先</small>
       <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="togglePartner()">
         <span class="material-symbols-outlined icon-inline" id="partner-caret">expand_more</span>開く
       </button>
@@ -152,28 +252,6 @@
     </div>
   </div>
 
-  <!-- サイドメニューの「権限」からここへ飛ぶ。
-       社内権限は名簿の行ごとに渡すもので、専用の画面を作ると
-       同じ人を2か所で探すことになる -->
-  <div class="card" id="roles">
-    <h2><span class="material-symbols-outlined">group</span>名簿
-      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportCsv()">
-        <span class="material-symbols-outlined icon-inline">download</span>CSV
-      </button>
-    </h2>
-    <!-- 業務ツールの利用権限は、ここのチェックが正式な設定元（lib/gw.js HR_ROLES / SALES_ROLES / OFFICE_ROLES / KEIEI_ROLES）。
-         Office 専用のロールは無く、「経理」を使う。
-         付け外しは再ログイン不要で、相手が画面を再読込するとヘッダーと入口に反映される -->
-    <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
-      <b>採用HR</b>（/hr/）を使える：経営者・責任者・人事・採用担当　／
-      <b>Sales</b>（/sales/）を使える：経営者・責任者・営業担当　／
-      <b>Office</b>（/office/）を使える：経営者・責任者・経理　／
-      <b>経営</b>（/keiei/）を使える：経営者だけ<br>
-      経営者は全ツールを使えます。責任者・採用担当などが経営者の権限を引き継ぐことはありません（給与も見えません）。
-      「IT・管理」はシステム管理用で、それだけではどのツールにも入れません。
-      チェックを付け外しすると、相手が画面を再読込したときにヘッダーへ反映されます（再ログインは不要）。
-    </p>
-    <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
   </div>
 
@@ -207,53 +285,144 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261002of1"></script>
-<script src="js/device.js?v=20261002of1"></script>
-<script src="js/layout.js?v=20261002of1"></script>
+<div class="mb-drawer-bg hidden" id="e-drawer-bg" onclick="closeAdd()"></div>
+<aside class="mb-drawer hidden" id="e-drawer" role="dialog" aria-modal="true" aria-labelledby="e-title">
+  <div class="mb-dr-head">
+    <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
+    <button class="btn btn-secondary btn-sm" onclick="closeAdd()" aria-label="閉じる"><span class="material-symbols-outlined icon-inline">close</span></button>
+  </div>
+  <div class="mb-dr-body">
+    <div class="mb-form">
+      <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
+      <div><label>メール</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
+      <div><label>部署</label><input id="e-dept" type="text" placeholder="管理部"></div>
+      <div><label>役職</label><input id="e-position" type="text" placeholder="主任"></div>
+      <div><label>勤務地</label><input id="e-location" type="text" placeholder="本社"></div>
+      <div>
+        <label>雇用区分</label>
+        <select id="e-type">
+          <option>正社員</option><option>契約社員</option><option>パート</option>
+          <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
+        </select>
+      </div>
+      <!-- プロパー（自社雇用）か、パートナー企業に所属するBPか。
+           075（db/075_partner_bp.sql）が未適用の環境では、この欄ごと隠す -->
+      <div id="e-kind-wrap" class="hidden">
+        <label>区分</label>
+        <select id="e-kind" onchange="toggleKindPartner()">
+          <option value="proper">プロパー</option>
+          <option value="bp">BP</option>
+        </select>
+      </div>
+      <div id="e-partner-wrap" class="hidden">
+        <label>所属先（BP企業）</label>
+        <select id="e-partner"><option value="">（選んでください）</option></select>
+      </div>
+      <div><label>入社日</label><input id="e-joined" type="date"></div>
+      <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
+    </div>
+    <div class="mb-retire hidden" id="e-retire" aria-live="polite"></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.7;" id="e-note">
+      メールを入れて追加すると、ログインアカウントもここで作られ、
+      <strong>グループウェア・無限道場・タイムカード・会計</strong>にまとめて登録されます。
+      初回パスワードはこの画面に1回だけ出るので、本人へ直接お渡しください。
+    </p>
+    <div id="e-msg" class="err-text"></div>
+  </div>
+  <div class="mb-dr-foot">
+    <span id="e-cancel-wrap" style="display:none;"></span>
+    <button class="btn btn-secondary" onclick="closeAdd()">閉じる</button>
+    <button class="btn btn-primary" id="e-save" onclick="save(this)">
+      <span class="material-symbols-outlined icon-inline">add</span>追加
+    </button>
+  </div>
+</aside>
+
+
+<script src="js/api-client.js?v=20261012mx1"></script>
+<script src="js/device.js?v=20261012mx1"></script>
+<script src="js/layout.js?v=20261012mx1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   const ROLE_LABEL = { owner: "経営者", hr: "人事", it: "IT・管理", finance: "経理",
                      manager: "責任者", labor_advisor: "社労士", recruiter: "採用担当", sales: "営業担当" };
-  // 各権限で何ができるか（チェックにマウスを乗せると出る）。採用HR・Sales・Office の条件は lib/gw.js と同じ
+  // 内部の役割：アプリの中で何ができるか（アプリへ入れるかは、行の4つのボタン）。lib/gw.js と同じ条件
   const ROLE_HINT = {
-    owner: "経営者：最上位の権限（採用HR・Sales・Office・経営を使え、全員の給与も見られる）。付け外しできるのは経営者だけ",
-    hr: "人事：人事の台帳・入退社と、採用HR（/hr/）を使える",
-    it: "IT・管理：端末・アカウントなどシステム管理用。これだけではどのツールにも入れない",
-    finance: "経理：給与・精算。Office（/office/）を使える。給与は見えない",
-    manager: "責任者：採用HR（/hr/）・Sales（/sales/）・Office（/office/）を使える。給与は見えない（採用判断は経営者・管理者だけ）",
+    owner: "経営者：すべてのアプリを使え、全員の給与も見られる最上位の権限。付け外しできるのは経営者だけ",
+    hr: "人事：Office が ON のとき、人事・労務（社員名簿・入退社・雇用契約など）を使える。人事の管理権限",
+    it: "IT・管理：端末・アカウントなどシステム管理用。これだけではどのアプリにも入れない",
+    finance: "経理：Office が ON のとき、経理・事務と月末月初を使える。給与は見えない",
+    manager: "責任者：Office が ON のとき、月末月初を使える。タスクの上長。給与は見えない（採用判断は経営者・管理者だけ）",
     labor_advisor: "社労士：共有された手続きだけを見る",
-    recruiter: "採用担当：HR（/hr/）だけを使える（人事の機密・給与は見えない）",
-    sales: "営業担当：Sales（/sales/）だけを使える",
+    recruiter: "採用担当：採用HR の担当ラベル（アプリへ入れるかは、採用HR のボタン）",
+    sales: "営業担当：Sales の担当ラベル（アプリへ入れるかは、Sales のボタン）",
+  };
+  // 使える業務の4つのボタン。ON＝そのアプリへ入れる。経営は経営者（owner）から導出する
+  const APPS = [
+    { key: "hr", label: "採用HR" }, { key: "sales", label: "Sales" },
+    { key: "office", label: "Office" }, { key: "keiei", label: "経営" },
+  ];
+  // 経営者でない人は、自分の権限を変えられない・IT・管理と社労士は付け外しできない（lib/role-change.js の固定ルール）
+  const SELF_LOCK = "自分の権限は変更できません。経営者に依頼してください";
+  const OWNER_ONLY_ROLE_TEXT = "IT・管理・社労士の付け外しは、経営者だけができます";
+  const selfLocked = (e) => !canGrantOwner && Boolean(meEmployeeId) && e.id === meEmployeeId;
+  const LOCK_TEXT = {
+    owner: "経営者は、すべてのアプリを使えます。変更できません（外すときは、高度な権限設定の「経営者」）。",
+    accountingAdmin: "会計の管理者のため、Office に入れます。変更できません。",
   };
   // 段階の呼び方は lib/stages.js と合わせる。画面ごとに違う言葉にしない
   const STATUS_LABEL = { invited: "入社準備", active: "メンバー", leaving: "退職手続き中", left: "退職" };
+  // 基本区分（在籍の段階）のプルダウンの言葉。使える業務（4つのボタン）とは別のもの、と分かる名前にしている
+  const STATUS_OPTION_LABEL = { invited: "入社準備中", active: "メンバー（在籍中）", leaving: "退職手続き中", left: "退職" };
   // 同じログインアカウントを使っている社内システム。表示の並び順もこの通り
   const SYSTEM_LABEL = { lms: "無限道場", timecard: "タイムカード", accounting: "会計" };
 
   let employees = [];
   let canGrantRoles = false;  // 社内権限の付け外し（管理者または人事）
   let canGrantOwner = false;  // 経営者（owner）の付け外しと、経営者の名簿・ログインの変更（いまの経営者だけ）
+  let meEmployeeId = null;    // 自分の行。経営者でなければ、自分の権限は変えられない（lib/role-change.js）
   let canManage = false;      // 名簿の追加・編集・削除（管理者または人事）
+  let appsState = null;       // アプリ利用権限（gw_app_grants, db/119）："table"=変更できる / "derived"=表が未適用 / "error"=読めない / null=見る権限なし
+  const openDetail = new Set();   // 「高度な権限設定」を開いている行
+  const busyApps = new Set();     // 保存中のボタン（社員ID:アプリ）。二重に押せない
+  const officeGuide = new Set();  // 「Office内の権限が未設定」の案内を開いている行（Office の中のスイッチの下に出す）
   let editingId = null;      // null なら追加、id が入っていればその人の編集
   let kindReady = false;     // 075（BP）が適用済みか。未適用なら区分の欄ごと隠す
   let partners = [];
   let editingPartnerId = null;
 
-  KPLayout.init({ active: "members", roles: ["admin", "owner"] })
-    .then((ctx) => { if (ctx) { load(); loadPartners(); } });
+  // 表示速度：名簿は枠（権限の確認）を待たずに取りにいき始め、2回目からは前回の内容をすぐ出して裏で最新にする。
+  // BP企業の一覧は、要るときだけ取る（名簿にBPの人がいる／BP企業の欄を開いた／区分でBPを選んだ）
+  const EMP_KEY = "office:employees";
+  const PARTNER_KEY = "office:partners";
+  KPLayout.warm("officeHr", EMP_KEY, () => API.listEmployees());
+
+  KPLayout.init({ active: "members", access: "officeHr" })
+    .then((ctx) => { if (ctx) load(); });
+
+  function applyEmployees(res) {
+    employees = res.employees || [];
+    canGrantRoles = !!res.canGrantRoles;
+    canGrantOwner = !!res.canGrantOwner;
+    meEmployeeId = res.meEmployeeId || null;
+    canManage = !!res.canManage;
+    appsState = res.appsState || null;
+    kindReady = !!res.kindReady;
+    el("e-kind-wrap").classList.toggle("hidden", !kindReady);
+    el("add-btn").classList.toggle("hidden", !canManage);
+    el("e-count").textContent = `${employees.length}人`;
+    // BP企業の欄は、BPの列がある（db/075 適用済み）ときだけ。中身は開いたときに取る
+    el("partner-card").classList.toggle("hidden", !kindReady || partnersNotReady);
+    render();
+    // 名簿にBPの人がいれば、所属先の会社名のために一覧を取る（名簿の表示は待たせない）
+    if (kindReady && employees.some((e) => e.employee_kind === "bp")) ensurePartners();
+  }
 
   async function load() {
     try {
-      const res = await API.listEmployees();
-      employees = res.employees || [];
-      canGrantRoles = !!res.canGrantRoles;
-      canGrantOwner = !!res.canGrantOwner;
-      canManage = !!res.canManage;
-      kindReady = !!res.kindReady;
-      el("e-kind-wrap").classList.toggle("hidden", !kindReady);
-      render();
+      await API.swr(EMP_KEY, () => API.listEmployees(), applyEmployees);
     } catch (e) {
       el("list").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -262,18 +431,29 @@
   }
 
   // --- BP企業（パートナー企業） ------------------------------------------------
+  // 初回は取らない（閉じた欄のために名簿の表示を遅らせない）。要るときに ensurePartners() で1回だけ取る。
+  // 追加・変更・削除のあとは loadPartners() で取り直す
+  let partnersNotReady = false;
+  let partnersOnce = null;
+  function ensurePartners() {
+    if (!partnersOnce) partnersOnce = loadPartners();
+    return partnersOnce;
+  }
+  function applyPartners(res) {
+    if (res.notReady) { partnersNotReady = true; el("partner-card").classList.add("hidden"); return; }
+    partners = res.companies || [];
+    el("partner-card").classList.remove("hidden");
+    renderPartnerSelect();
+    if (!el("partner-body").classList.contains("hidden")) renderPartners();
+    // 名簿の行に会社名を反映し直す
+    if (employees.length) render();
+  }
   async function loadPartners() {
     try {
-      const res = await API.listPartners();
-      if (res.notReady) { el("partner-card").classList.add("hidden"); return; }
-      partners = res.companies || [];
-      el("partner-card").classList.remove("hidden");
-      renderPartnerSelect();
-      renderPartners();
-      // load() と並行で走るので、先に名簿の行が描けていたら会社名を反映し直す
-      if (employees.length) render();
+      await API.swr(PARTNER_KEY, () => API.listPartners(), applyPartners);
     } catch (e) {
       // 075未適用など。区分の欄自体を出していないので、静かに諦める
+      partnersNotReady = true;
       el("partner-card").classList.add("hidden");
     }
   }
@@ -291,10 +471,15 @@
     const open = body.classList.toggle("hidden");
     el("partner-caret").textContent = open ? "expand_more" : "expand_less";
     el("partner-caret").nextSibling.textContent = open ? "開く" : "閉じる";
+    // 開いたときに一覧を出す（まだ取っていなければ、ここで取る）
+    if (!open) { renderPartners(); ensurePartners(); }
   }
 
   function toggleKindPartner() {
-    el("e-partner-wrap").classList.toggle("hidden", el("e-kind").value !== "bp");
+    const bp = el("e-kind").value === "bp";
+    el("e-partner-wrap").classList.toggle("hidden", !bp);
+    // 区分でBPを選んだら、所属先の選択肢のために一覧を取る
+    if (bp) ensurePartners();
   }
 
   async function savePartner(btn) {
@@ -418,7 +603,10 @@
         showAccountResult(res?.account, display_name);
       }
       resetForm();
+      closeAdd();
       await load();
+      // 初回パスワードなどの結果は、一覧の上の窓に、閉じるまで残す
+      if (el("e-account").innerHTML.trim()) el("e-account").scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (e) {
       msg.textContent = e.detail || e.hint || e.message || "保存に失敗しました";
     }
@@ -494,8 +682,184 @@
     el("e-left-wrap").style.display = "";
     el("e-note").textContent = "在籍状態と社内権限は、下の一覧で切り替えます。";
     el("e-msg").textContent = "";
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    showDrawer();
+    loadRetire(e);
   }
+
+  // ---- 退職手続き（退職手続き中・退職の人だけ。書類の登録・公開は api/employees/retire.js）----
+  const RT_STATE = { none: "未登録", processing: "手続き中", draft: "下書き", issued: "発行済み（本人には未公開）", published: "発行済み（本人に公開中）" };
+  let retireFor = null;
+  const slash = (d) => String(d || "").replace(/-/g, "/");
+  async function loadRetire(e) {
+    const box = el("e-retire");
+    retireFor = null;
+    if (!e || !["leaving", "left"].includes(e.status)) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    retireFor = e.id;
+    box.classList.remove("hidden");
+    box.innerHTML = '<div class="muted" style="font-size:12px;">退職手続きを読み込み中…</div>';
+    try {
+      const d = await API.api(`/api/employees/retire?employeeId=${encodeURIComponent(e.id)}`);
+      if (retireFor === e.id) renderRetire(d);
+    } catch (err) {
+      box.innerHTML = `<div class="err-text" id="e-retire-err">${esc(err.hint || err.message || "読み込めませんでした")}</div>`;
+    }
+  }
+  function renderRetire(d) {
+    const rows = d.kinds.map((k) => {
+      const cur = k.current;
+      const st = k.adminState;
+      let label = RT_STATE[st] || "未登録";
+      if (cur && (st === "issued" || st === "published")) label += `　${slash(cur.issuedOn)}${cur.version > 1 ? `　第${cur.version}版` : ""}`;
+      if (cur && st === "processing" && cur.expectedOn) label += `　発行予定 ${slash(cur.expectedOn)}`;
+      const acts = [];
+      if (cur && (st === "issued" || st === "published")) {
+        acts.push(`<button class="btn btn-secondary btn-sm" onclick="retireView('${cur.id}')">PDFを見る</button>`);
+        acts.push(st === "published"
+          ? `<button class="btn btn-secondary btn-sm" onclick="retireDo('unpublish','${cur.id}')">公開停止</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="retireDo('publish','${cur.id}')">本人に公開</button>`);
+      }
+      if (k.kind === "certificate") acts.push(`<button class="btn btn-primary btn-sm" onclick="certOpen()">${st === "issued" || st === "published" ? "再発行（作り直す）" : "証明書を作成"}</button>`);
+      acts.push(`<button class="btn btn-secondary btn-sm" onclick="retirePick('${k.kind}')">${st === "issued" || st === "published" ? "再登録" : "登録"}</button>`);
+      if (st === "none") acts.push(`<button class="btn btn-secondary btn-sm" onclick="retireProgress('${k.kind}','processing')">手続き中にする</button>`);
+      if (st === "processing") acts.push(`<button class="btn btn-secondary btn-sm" onclick="retireProgress('${k.kind}','none')">未登録に戻す</button>`);
+      return `<div class="rt-docrow ${st === "published" ? "pub" : ""}" data-kind="${k.kind}" data-state="${st}">
+        <div class="nm">${esc(k.label)}</div><div class="st">${esc(label)}</div><div class="rt-acts">${acts.join("")}</div></div>`;
+    }).join("");
+    el("e-retire").innerHTML = `
+      <h3><span class="material-symbols-outlined">assignment_turned_in</span>退職手続き</h3>
+      <p class="rt-prog">退職日 ${d.employee.leftOn ? esc(slash(d.employee.leftOn)) : "（未入力）"}　進捗 ${d.progress.done} / ${d.progress.total}
+        （${d.progress.steps.map((s) => `${s.done ? "✓" : "○"}${esc(s.label)}`).join("　")}）</p>
+      ${rows}
+      <div id="e-cert" class="hidden"></div>
+      <input type="file" id="e-retire-file" accept="application/pdf,.pdf" class="hidden">
+      <h4 style="margin:10px 0 4px;font-size:13px;">退職理由</h4>
+      <div class="rt-reason">
+        <select id="e-reason-code"><option value="">（未選択）</option>${d.reasons.map((r) => `<option value="${r.key}" ${d.reason.code === r.key ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select>
+        <input id="e-reason-note" type="text" maxlength="500" placeholder="補足（社内向け。退職証明書には、発行のたびに含めるか選びます）" value="${esc(d.reason.note || "")}">
+        <div><button class="btn btn-secondary btn-sm" onclick="retireReason()">退職理由を保存</button></div>
+      </div>`;
+  }
+
+  // ---- 退職証明書の作成（雛形 → 差し込み → プレビュー → 発行・押印。api/employees/retire-cert.js）----
+  let certState = null;
+  async function certApi(body) { return API.api("/api/employees/retire-cert", { method: "POST", body: { employeeId: retireFor, ...body } }); }
+  async function certOpen() {
+    const box = el("e-cert");
+    box.classList.remove("hidden");
+    box.innerHTML = '<div class="muted" style="font-size:12px;">読み込み中…</div>';
+    try { certState = await certApi({ action: "draft", includeReason: false }); certState.includeReason = false; certState.templateId = ""; renderCert(); }
+    catch (err) { box.innerHTML = `<div class="err-text">${esc(err.hint || err.message || "読み込めませんでした")}</div>`; }
+  }
+  function renderCert() {
+    const d = certState;
+    const seal = d.seals[0];
+    el("e-cert").innerHTML = `
+      <div class="rt-cert" id="e-cert-card">
+        <h4>退職証明書を作成</h4>
+        <label>雛形</label>
+        <select id="c-tpl"><option value="">標準の文面</option>${d.templates.map((t) => `<option value="${esc(t.id)}" ${d.templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+        <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="c-reason" ${d.includeReason ? "checked" : ""} style="width:auto;margin:0;">退職理由を証明書に含める${d.reason.label ? `（${esc(d.reason.label)}）` : "（退職理由が未選択です）"}</label>
+        <label>本文（差し込み済み。このまま直せます）</label>
+        <textarea id="c-body">${esc(d.body)}</textarea>
+        ${d.unresolved.length ? `<div class="err-text">差し込めていない項目：${esc(d.unresolved.join("、"))}</div>` : ""}
+        <div class="row2">
+          <div><label>代表者名</label><input id="c-rep" type="text" maxlength="60" value="${esc(d.company.representative)}"></div>
+          <div><label>会社住所</label><input id="c-addr" type="text" maxlength="200" value="${esc(d.company.address)}"></div>
+        </div>
+        <div style="margin:6px 0;"><button class="btn btn-secondary btn-sm" onclick="certCompany()">代表者名・会社住所を保存</button></div>
+        <p class="note">${seal ? `押印：${esc(seal.name)}（証明書発行用）。` : '<strong>証明書発行用の印鑑が登録されていません。</strong>署名の画面の「印鑑」で、種類「証明書発行用印」を登録してください。'}
+          ${d.canStamp ? "" : "発行・押印は、経営者・管理者だけができます。"}
+          発行したあと、本人に見せるときは「本人に公開」を押してください。</p>
+        <div class="rt-acts">
+          <button class="btn btn-secondary btn-sm" onclick="certPreview()">プレビュー</button>
+          <button class="btn btn-primary btn-sm" id="c-issue" onclick="certIssue()" ${d.canStamp && seal ? "" : "disabled"}>発行・押印</button>
+          <button class="btn btn-secondary btn-sm" onclick="el('e-cert').classList.add('hidden')">閉じる</button>
+        </div>
+      </div>`;
+    el("c-tpl").onchange = () => certRedraft();
+    el("c-reason").onchange = () => certRedraft();
+  }
+  async function certRedraft() {
+    try {
+      const templateId = el("c-tpl").value, includeReason = el("c-reason").checked;
+      const d = await certApi({ action: "draft", templateId: templateId || undefined, includeReason });
+      certState = { ...d, templateId, includeReason }; renderCert();
+    } catch (err) { toast("err", err.hint || err.message || "作り直せませんでした"); }
+  }
+  async function certCompany() {
+    try { await certApi({ action: "company", representative: el("c-rep").value, address: el("c-addr").value }); toast("ok", "保存しました"); }
+    catch (err) { toast("err", err.hint || err.message || "保存できませんでした"); }
+  }
+  async function certPreview() {
+    const w = window.open("", "_blank"); if (w) w.opener = null;
+    try {
+      const r = await certApi({ action: "preview", body: el("c-body").value, includeReason: el("c-reason").checked });
+      const bin = atob(r.pdfBase64); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+      if (w) w.location.href = url;
+    } catch (err) { if (w) w.close(); toast("err", err.hint || err.message || "プレビューできませんでした"); }
+  }
+  async function certIssue() {
+    if (!confirm("この内容で発行し、証明書用の会社印を押します。\n発行したあと、直接の上書きはできません（直すときは再発行）。\nよろしいですか？")) return;
+    el("c-issue").disabled = true;
+    try {
+      const r = await certApi({ action: "issue", body: el("c-body").value, includeReason: el("c-reason").checked });
+      await loadRetire(employees.find((x) => x.id === retireFor));
+      toast("ok", `発行しました（${r.document.issuedNo}）。本人に見せるときは「本人に公開」を押してください`);
+    } catch (err) { el("c-issue").disabled = false; toast("err", err.hint || err.message || "発行できませんでした"); }
+  }
+  async function retireDo(action, docId) {
+    try { await API.api("/api/employees/retire", { method: "POST", body: { action, docId } }); await loadRetire(employees.find((x) => x.id === retireFor)); toast("ok", action === "publish" ? "本人に公開しました" : "公開を止めました"); }
+    catch (err) { toast("err", err.hint || err.message || "変更できませんでした"); }
+  }
+  async function retireView(docId) {
+    const w = window.open("", "_blank"); if (w) w.opener = null;
+    try { const r = await API.api(`/api/employees/retire?docId=${encodeURIComponent(docId)}`); if (w) w.location.href = r.url; }
+    catch (err) { if (w) w.close(); toast("err", err.hint || err.message || "開けませんでした"); }
+  }
+  async function retireProgress(kind, state) {
+    try { await API.api("/api/employees/retire", { method: "POST", body: { action: "progress", employeeId: retireFor, kind, state } }); await loadRetire(employees.find((x) => x.id === retireFor)); }
+    catch (err) { toast("err", err.hint || err.message || "変更できませんでした"); }
+  }
+  async function retireReason() {
+    try {
+      await API.api("/api/employees/retire", { method: "POST", body: { action: "reason", employeeId: retireFor, reasonCode: el("e-reason-code").value || null, reasonNote: el("e-reason-note").value } });
+      toast("ok", "退職理由を保存しました");
+    } catch (err) { toast("err", err.hint || err.message || "保存できませんでした"); }
+  }
+  function retirePick(kind) {
+    const inp = el("e-retire-file");
+    inp.value = "";
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      if (f.type !== "application/pdf") { toast("err", "PDF を選んでください"); return; }
+      try {
+        const sign = await API.api("/api/employees/retire", { method: "POST", body: { action: "upload", employeeId: retireFor, kind, mimeType: f.type, sizeBytes: f.size } });
+        const put = await fetch(sign.uploadUrl, { method: "PUT", headers: { "Content-Type": "application/pdf", "x-upsert": "false" }, body: f });
+        if (!put.ok) throw new Error("アップロードできませんでした");
+        await API.api("/api/employees/retire", { method: "POST", body: { action: "register", employeeId: retireFor, kind, path: sign.path, filename: f.name } });
+        await loadRetire(employees.find((x) => x.id === retireFor));
+        toast("ok", "登録しました。本人に見せるときは「本人に公開」を押してください");
+      } catch (err) { toast("err", err.hint || err.message || "登録できませんでした"); }
+    };
+    inp.click();
+  }
+
+  // ---- 追加・編集のドロワー ----
+  function showDrawer() {
+    el("e-drawer").classList.remove("hidden");
+    el("e-drawer-bg").classList.remove("hidden");
+    setTimeout(() => el("e-name").focus(), 0);
+  }
+  function openAdd() { resetForm(); showDrawer(); }
+  function closeAdd() {
+    el("e-drawer").classList.add("hidden");
+    el("e-drawer-bg").classList.add("hidden");
+    if (editingId) resetForm();
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el("e-drawer").classList.contains("hidden")) closeAdd();
+  });
 
   function resetForm() {
     editingId = null;
@@ -535,29 +899,282 @@
     }
   }
 
+  // アプリ利用権限の状態の案内（表が未適用・読めないとき）
+  function renderAppsState() {
+    const box = el("apps-state");
+    if (!box) return;
+    const note = (kind, icon, text) => `<div class="banner ${kind}" data-role="apps-state" style="margin:0 0 10px;"><span class="material-symbols-outlined">${icon}</span><div>${text}</div></div>`;
+    box.innerHTML = appsState === "derived"
+      ? note("warn", "info", "アプリ利用権限の表（db/119）が、まだ適用されていません。ボタンは、いまの内部の役割から導いた表示です（権限は変わりません）。表が入るまで、ボタンは変更できません。")
+      : appsState === "error"
+        ? note("err", "error", "アプリ利用権限を読み込めませんでした。ボタンの状態は確認できません（変更もできません）。")
+        : "";
+  }
+
   function render() {
+    renderAppsState();
     if (!employees.length) {
       el("list").innerHTML = `<div class="empty">まだ誰も登録されていません。</div>`;
       return;
     }
-    el("list").innerHTML = `
+    const empties = employees.filter((x) => x.status !== "left" && officeEmpty(x));
+    const sum = empties.length ? `<div class="mb-sum" data-role="office-empty-sum" role="status">
+        <span><b>⚠ Office内の権限が未設定：${empties.length}人</b>（Office は ON ですが、中の業務を使えません）</span>
+        ${empties.map((x) => `<button type="button" onclick="showOfficeGuide('${esc(x.id)}')">${esc(x.display_name)}</button>`).join("")}
+      </div>` : "";
+    el("list").innerHTML = `${sum}
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
-            <th>氏名</th><th>部署・役職</th><th>雇用区分</th>${kindReady ? "<th>区分</th>" : ""}<th>状態</th><th>社内権限</th>
+            <th>氏名</th><th>部署・役職</th><th>雇用区分</th>${kindReady ? "<th>区分</th>" : ""}<th>基本区分</th><th>使える業務</th>
             <th>利用中のシステム</th><th>操作</th>
           </tr></thead>
-          <tbody>${employees.map(row).join("")}</tbody>
+          <tbody>${employees.map((e) => row(e) + detailRow(e)).join("")}</tbody>
         </table>
       </div>
       <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.9;">
         <b>利用中のシステム</b>のチップを押すと、その場で開放／停止できます
         （グループウェアは名簿にいる方全員が使うので切れません。止めるときは状態を「退職」に）。<br>
+        <b>使える業務</b>の4つのボタンは、押すとすぐ保存されます（保存中は押せません。失敗したら元に戻ります）。
+        Office が ON の人には、その下に Office の中の業務（人事・労務／経理・事務／月末月初）のスイッチが出ます。
+        IT・管理・社労士・担当者の名札は「高度な権限設定」の中です。<br>
         <b>ログイン</b>でメールアドレスとパスワードを変えられます。
         4つのシステムは同じログインなので、変えると全部に効きます。
         ${canGrantRoles ? "" :
           "<br>いまのアカウントには管理者権限がないため、変更できる項目がありません。"}
       </p>`;
+  }
+
+  // ---- 使える業務：4つのボタン ----------------------------------------------------
+  // ボタンの表示は、サーバが返した e.apps（= lib/gw.js の判定。本人が画面を再読込したあとの /api/me の access と同じ元）だけ。
+  // 画面で役割を並べ直さない。内部の役割（e.roles）は、Office の中のスイッチと高度な権限設定だけ。
+  // Office は ON なのに、Office の中で使える業務が無い（＝本人が Office を開いても何もできない）か。
+  // 判定はサーバが返した access（lib/gw.js accessOf。本人の /api/me と同じ元）。権限の決め方はここで作らない。
+  // Office を押した直後（保存中）だけは、まだ新しい access が無いので、内部の役割（経営者・責任者・人事・経理）と
+  // 会計の管理者かどうかで先に見立てる（保存が終われば、サーバの access で出し直す）
+  const OFFICE_WORK_ROLES = ["owner", "manager", "hr", "finance"];
+  function officeEmpty(e) {
+    if (!e.apps || !e.apps.office || appsState !== "table" || (e.appLocks || {}).office) return false;
+    if (busyApps.has(`${e.id}:office`)) {
+      return !(e.roles || []).some((r) => OFFICE_WORK_ROLES.includes(r)) && e.accessMeta?.accountingAdmin !== true;
+    }
+    if (!e.access) return false;                 // 確かめられないときは出さない（「確認できません」は別に出る）
+    const ac = e.access;
+    return !(ac.office || ac.officeHr || ac.officeFinance);
+  }
+
+  // ---- Office の中の業務：3つのスイッチ（Office が ON のときだけ出す） -----------------------------
+  // 画面の名前と、既存の内部ロールの対応（DB・API はこれまでどおり内部ロールで持つ。ここは見せ方だけ）
+  //   人事・労務 → hr（access.officeHr）／経理・事務 → finance（access.officeFinance）／月末月初 → manager（access.office）
+  // ON／OFF の見え方は、サーバが返した access（lib/gw.js。本人の /api/me と同じ元）。押すと内部ロールを付け外しする。
+  // 別の権限で使えているとき（経営者・会計の管理者・月末月初を経理で）は、ON のまま押せなくし、理由を出す
+  const OFFICE_WORK = [
+    { key: "hr",      role: "hr",      label: "人事・労務", acc: "officeHr",      hint: "メンバー・入退社・勤怠・雇用契約・評価" },
+    { key: "finance", role: "finance", label: "経理・事務", acc: "officeFinance", hint: "経費精算・月次業務・請求・会計" },
+    { key: "month",   role: "manager", label: "月末月初",   acc: "office",        hint: "月末月初の業務（Office の月次）" },
+  ];
+  const busyWork = new Set();     // 保存中の Office の中の業務（社員ID:key）
+
+  function officeWorkState(e, w) {
+    const roles = e.roles || [];
+    const has = roles.includes(w.role);
+    const busy = busyWork.has(`${e.id}:${w.key}`);
+    const on = busy || !e.access ? has || (w.key === "month" && roles.includes("finance")) : Boolean(e.access[w.acc]);
+    let via = null;
+    if (on && !has && !busy) {
+      via = roles.includes("owner") ? "経営者として使えます"
+        : w.key === "month" && roles.includes("finance") ? "経理・事務に含まれます"
+        : e.accessMeta?.accountingAdmin === true ? "会計の管理者として使えます" : "ほかの権限で使えます";
+    }
+    return { has, on, busy, via };
+  }
+
+  function officeWorkHtml(e) {
+    if (!e.apps || !e.apps.office) return "";
+    const live = appsState === "table";
+    const items = OFFICE_WORK.map((w) => {
+      const st = officeWorkState(e, w);
+      const disabled = st.busy || Boolean(st.via) || !live || !canGrantRoles || selfLocked(e) || (e.appLocks || {}).office === "owner";
+      const title = st.via ? `${w.label}：${st.via}` : !canGrantRoles ? "変更には管理者権限が必要です" : selfLocked(e) ? SELF_LOCK
+        : `${w.label}（${w.hint}）：${st.on ? "使える（押すと外す）" : "使えない（押すと付ける）"}`;
+      return `<button type="button" class="mb-sub${st.busy ? " busy" : ""}${st.via ? " via" : ""}" data-work="${w.key}" aria-pressed="${st.on}"
+          ${disabled ? "disabled" : ""} title="${esc(title)}" onclick="setOfficeWork('${esc(e.id)}','${w.key}')">${w.label}</button>`;
+    }).join("");
+    // 同じ理由はまとめる（例：経営者は「経営者として、3つとも使えます」）
+    const byVia = new Map();
+    for (const w of OFFICE_WORK) { const st = officeWorkState(e, w); if (st.via) byVia.set(st.via, [...(byVia.get(st.via) || []), w.label]); }
+    const vias = [...byVia].map(([via, labels]) => labels.length === OFFICE_WORK.length
+      ? `${via.replace(/使えます$/, "")}3つとも使えます`.replace("として3つ", "として、3つ")
+      : `${labels.join("・")}は${via}`);
+    const empty = officeEmpty(e);
+    return `<div class="mb-subs" data-role="office-work" role="group" aria-label="${esc(e.display_name)}が Office の中で使える業務">
+        <span class="lb">Office の中：</span>${items}</div>
+      ${vias.length ? `<div class="mb-lockmsg" data-note="office-via">${esc(vias.join("／"))}</div>` : ""}
+      ${empty && officeGuide.has(e.id) ? officeGuideHtml(e) : ""}`;
+  }
+
+  async function setOfficeWork(employeeId, key) {
+    const w = OFFICE_WORK.find((x) => x.key === key);
+    const e = employees.find((x) => x.id === employeeId);
+    const bk = `${employeeId}:${key}`;
+    if (!w || !e || busyWork.has(bk)) return;
+    const before = [...(e.roles || [])];
+    const grant = !before.includes(w.role);
+    busyWork.add(bk);
+    e.roles = grant ? [...before, w.role] : before.filter((r) => r !== w.role);   // 押した瞬間に見た目を切り替える（失敗したら戻す）
+    render();
+    try {
+      const res = await API.setEmployeeRole(employeeId, w.role, grant);
+      busyWork.delete(bk);
+      if (res && res.apps) applyResult(e, res); else await load();
+      if (!officeEmpty(e)) officeGuide.delete(employeeId);
+      render();
+      const st = officeWorkState(e, w);
+      toast("ok", `${e.display_name} の「${w.label}」を ${grant ? "ON" : "OFF"} にしました${!grant && st.on && st.via ? `（${st.via}）` : ""}`);
+    } catch (err) {
+      busyWork.delete(bk);
+      e.roles = before;
+      render();
+      toast("err", `${e.display_name} の「${w.label}」を変えられませんでした。${err.hint || err.detail || err.message || ""}`);
+    }
+  }
+
+  // 「Office内の権限が未設定」を押したとき：Office の下の3つのスイッチのところに、何を ON にすればよいかを出す（権限は付けない）
+  function showOfficeGuide(id) {
+    officeGuide.add(id);
+    render();
+    const box = document.querySelector(`tr[data-employee="${CSS.escape(id)}"] .mb-guide`);
+    if (box) { box.scrollIntoView({ behavior: "smooth", block: "center" }); box.focus({ preventScroll: true }); }
+  }
+
+  function appsCell(e) {
+    if (!e.apps) return `<span class="muted">—</span>`;
+    const locks = e.appLocks || {};
+    const live = appsState === "table";
+    const btns = APPS.map((a) => {
+      const on = Boolean(e.apps[a.key]);
+      const lock = locks[a.key];
+      const busy = busyApps.has(`${e.id}:${a.key}`);
+      let disabled = busy || Boolean(lock);
+      let title;
+      if (lock) title = LOCK_TEXT[lock];
+      else if (!live) { disabled = true; title = appsState === "derived" ? "アプリ利用権限の表（db/119）が未適用のため、変更できません" : "確認できません"; }
+      else if (!canGrantRoles) { disabled = true; title = "変更には管理者権限が必要です"; }
+      else if (selfLocked(e)) { disabled = true; title = SELF_LOCK; }
+      else if (a.key === "keiei" && !canGrantOwner) { disabled = true; title = "経営の付け外しは、経営者だけができます"; }
+      else title = `${a.label}：${on ? "入れる（押すと外す）" : "入れない（押すと付ける）"}`;
+      return `<button type="button" class="mb-tg${lock ? " locked" : ""}${busy ? " busy" : ""}" data-app="${a.key}" aria-pressed="${on}"
+          ${busy ? 'aria-busy="true"' : ""} ${disabled ? "disabled" : ""} title="${esc(title)}"
+          onclick="setApp('${esc(e.id)}','${a.key}')">${a.label}</button>`;
+    }).join("");
+    // 変更できない理由。会計の管理者の注記は、サーバが access の計算に使った isAdmin（accessMeta.accountingAdmin）そのもの
+    const lockMsg = locks.keiei === "owner" ? ["owner", LOCK_TEXT.owner]
+      : (e.accessMeta?.accountingAdmin === true && locks.office === "accountingAdmin") ? ["accounting-admin", LOCK_TEXT.accountingAdmin]
+      : selfLocked(e) && canGrantRoles ? ["self", SELF_LOCK] : null;
+    const unknown = e.accessMeta && e.accessMeta.accountingAdmin === null;
+    // Office の入口と中の業務が食い違っている人（入れても何もできない／役割があるのに入れない）。判定はサーバの access と内部の役割
+    const officeRoles = (e.roles || []).some((r) => ["hr", "finance", "manager"].includes(r));
+    const empty = officeEmpty(e);
+    const gap = live && !locks.office && !empty && !e.apps.office && officeRoles
+      ? ["office-off", "Office が OFF のため、Office の中の業務（人事・労務など）は使えません"] : null;
+    return `<div class="mb-tgs" role="group" aria-label="${esc(e.display_name)}が使える業務">${btns}</div>
+      ${lockMsg ? `<div class="mb-lockmsg" data-note="${lockMsg[0]}">${esc(lockMsg[1])}</div>` : ""}
+      ${officeWorkHtml(e)}
+      ${empty ? `<button type="button" class="mb-warn" data-note="office-empty" aria-expanded="${officeGuide.has(e.id)}"
+          title="Office は ON ですが、Office の中で使える業務がありません。押すと設定のしかたを出します"
+          onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}
+      ${gap ? `<div class="mb-lockmsg mb-gap" data-note="${gap[0]}">${esc(gap[1])}</div>` : ""}
+      ${unknown ? `<div class="mb-lockmsg" data-note="unknown">会計の管理者かどうかを確認できません。</div>` : ""}
+      <button type="button" class="mb-more" data-role="more" aria-expanded="${openDetail.has(e.id)}"
+              onclick="toggleDetail('${esc(e.id)}')">高度な権限設定</button>`;
+  }
+
+  // 高度な権限設定（ふだんは閉じている）：特殊な役割だけ。
+  //   人事・経理・責任者は、Office の下の3つのスイッチ（人事・労務／経理・事務／月末月初）で付け外しする
+  //   経営者（owner）は特殊な権限としてここに置く（付けると4つのアプリすべて。付け外しは経営者だけ）。
+  //   採用担当・営業担当は、採用HR・Sales のボタンとは別の「担当のラベル」
+  const ADVANCED_ROLES = ["owner", "it", "labor_advisor", "recruiter", "sales"];
+  function detailRow(e) {
+    if (!openDetail.has(e.id)) return "";
+    const roles = e.roles || [];
+    const cols = 7 + (kindReady ? 1 : 0);
+    const boxes = ADVANCED_ROLES.map((r) => `
+      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
+        <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
+               ${canGrantRoles && !selfLocked(e) && (!["owner", "it", "labor_advisor"].includes(r) || canGrantOwner) ? "" : "disabled"}
+               onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
+        ${ROLE_LABEL[r]}
+      </label>`).join("");
+    return `<tr class="mb-detail" data-detail="${esc(e.id)}"><td colspan="${cols}">
+      <h4>高度な権限設定</h4>
+      <p>ふだんは使いません。アプリへ入れるかは上の4つのボタン、Office の中の業務は Office の下の3つのスイッチで決まります。</p>
+      <div class="mb-roles">${boxes}</div>
+      ${selfLocked(e) ? `<p class="mb-lockmsg" data-note="self">${esc(SELF_LOCK)}</p>` : (!canGrantOwner ? `<p class="mb-lockmsg" data-note="owner-only">${esc(OWNER_ONLY_ROLE_TEXT)}</p>` : "")}
+      <p>経営者＝すべてのアプリと全員の給与（付け外しは経営者だけ${canGrantOwner ? "" : "。いまのアカウントでは変えられません"}）／IT・管理＝端末・アカウントなどのシステム管理／社労士＝共有された手続きだけを見る。<br>
+         採用担当・営業担当は担当者の名札です（採用HR・Sales に入れるかは、上のボタンで決まります）。</p>
+    </td></tr>`;
+  }
+  function officeGuideHtml(e) {
+    return `<div class="mb-guide" data-role="office-guide" tabindex="-1" role="note">
+      <b>⚠ Office内の権限が未設定です。</b>${esc(e.display_name)} さんは Office に入れますが、このままでは Office の中の業務を使えません。<br>
+      すぐ上の <b>人事・労務</b>／<b>経理・事務</b>／<b>月末月初</b> のどれかを ON にしてください（役割は自動では付けません。ON にすると、この表示は消えます）。
+    </div>`;
+  }
+  function toggleDetail(id) {
+    if (openDetail.has(id)) openDetail.delete(id); else openDetail.add(id);
+    render();
+  }
+
+  let toastTimer;
+  function toast(kind, text) {
+    let t = el("mb-toast");
+    if (!t) { t = document.createElement("div"); t.id = "mb-toast"; t.className = "mb-toast"; t.setAttribute("role", "status"); t.setAttribute("aria-live", "polite"); document.body.appendChild(t); }
+    t.className = `mb-toast ${kind}`; t.textContent = text;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = "mb-toast"; }, 3600);
+  }
+
+  // サーバの応答（変更直後の内部ロール・4つのボタン・access・accessMeta）で、同じ行をその場で直す。名簿は取り直さない
+  function applyResult(e, res) {
+    if (Array.isArray(res.roles)) e.roles = res.roles;
+    if (res.apps) { e.apps = res.apps; e.appLocks = res.appLocks || {}; }
+    if (res.access !== undefined) e.access = res.access;
+    if (res.accessMeta) e.accessMeta = res.accessMeta;
+    if (res.appsState) appsState = res.appsState;
+  }
+
+  // ボタンを押す＝すぐ保存。保存中は同じボタンを押せない。成功したらその場で反映、失敗したら元に戻してエラーを出す
+  async function setApp(employeeId, app) {
+    const key = `${employeeId}:${app}`;
+    if (busyApps.has(key)) return;
+    const e = employees.find((x) => x.id === employeeId);
+    if (!e || !e.apps) return;
+    const label = APPS.find((a) => a.key === app)?.label || app;
+    const before = Boolean(e.apps[app]);
+    const next = !before;
+    busyApps.add(key);
+    e.apps = { ...e.apps, [app]: next };       // 押した瞬間に見た目を切り替える（失敗したら戻す）
+    if (app === "office" && next && officeEmpty(e)) officeGuide.add(employeeId);
+    render();
+    try {
+      const res = await API.setEmployeeApp(employeeId, app, next);
+      busyApps.delete(key);
+      if (res && res.apps) { applyResult(e, res); render(); }
+      else await load();                         // 応答に新しい値が無いときは、名簿を読み直す
+      const cur = employees.find((x) => x.id === employeeId) || e;
+      if (app === "office" && next && officeEmpty(cur)) {
+        // ON にしただけでは使えない。黙って青くせず、その場で何を付ければよいかを出す（自動では付けない）
+        showOfficeGuide(employeeId);
+        toast("warn", `${cur.display_name} の Office を ON にしました。Office内の権限（責任者・人事・経理）が未設定のため、まだ使えません`);
+      } else {
+        toast("ok", `${e.display_name} の ${label} を ${next ? "ON" : "OFF"} にしました`);
+      }
+    } catch (err) {
+      busyApps.delete(key);
+      e.apps = { ...e.apps, [app]: before };    // 失敗したら元に戻す
+      if (app === "office" && next) officeGuide.delete(employeeId);
+      render();
+      toast("err", `${e.display_name} の ${label} を変えられませんでした。${err.hint || err.detail || err.message || ""}`);
+    }
   }
 
   function kindOf(e) {
@@ -571,30 +1188,23 @@
     // 経営者の名簿・ログイン・在籍状態は、経営者以外は変えられない（サーバでも止める）
     const lockedOwner = roles.includes("owner") && !canGrantOwner;
     const canEdit = canManage && !lockedOwner;
-    const roleCells = Object.keys(ROLE_LABEL).map((r) => `
-      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:11.5px;margin-right:8px;color:inherit;"
-             title="${esc(ROLE_HINT[r] || "")}">
-        <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
-               ${canGrantRoles && (r !== "owner" || canGrantOwner) ? "" : "disabled"}
-               onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
-        ${ROLE_LABEL[r]}
-      </label>`).join("");
-
+    // 使える業務：4つのボタン（Office が ON なら、その下に Office の中の3つのスイッチ）
+    const appCells = appsCell(e);
     return `
-      <tr class="${e.status === "left" ? "done" : ""}">
+      <tr class="${e.status === "left" ? "done" : ""}" data-employee="${esc(e.id)}">
         <td>${esc(e.display_name)}${e.email ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.email)}</span>` : ""}${lockedOwner ? `<br><span class="muted" style="font-size:11px;" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
         <td>${esc(e.department || "—")}${e.position ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.position)}</span>` : ""}</td>
         <td>${esc(e.employment_type || "—")}</td>
-        ${kindReady ? `<td>${esc(kindOf(e))}</td>` : ""}
+        ${kindReady ? `<td class="mb-kind">${esc(kindOf(e))}</td>` : ""}
         <td>
           <select ${canEdit ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
-              `<option value="${k}"${e.status === k ? " selected" : ""}>${v}</option>`).join("")}
+              `<option value="${k}"${e.status === k ? " selected" : ""}>${STATUS_OPTION_LABEL[k] || v}</option>`).join("")}
           </select>
         </td>
-        <td style="min-width:230px;">${roleCells}</td>
+        <td class="mb-apps">${appCells}</td>
         <td style="min-width:190px;">${systemsCell(e)}</td>
-        <td style="white-space:nowrap;">
+        <td class="mb-ops">
           <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
                   onclick="startEdit('${esc(e.id)}')">編集</button>
           ${e.user_id ? `
@@ -1156,11 +1766,23 @@
     }
   }
 
+  // 内部の役割（高度な権限設定）の付け外し。アプリへ入れるかは変わらない（ボタンは別）。
+  // 変更直後の応答（4つのボタン・access・accessMeta）で、同じ行をその場で直す
   async function setRole(employeeId, role, grant, input) {
-    try { await API.setEmployeeRole(employeeId, role, grant); await load(); }
+    try {
+      const res = await API.setEmployeeRole(employeeId, role, grant);
+      const e = employees.find((x) => x.id === employeeId);
+      if (e && res && res.apps) { applyResult(e, res); render(); }
+      else if (e) {
+        const roles = new Set(e.roles || []);
+        if (grant) roles.add(role); else roles.delete(role);
+        e.roles = [...roles];
+        await load();                            // 応答に新しい値が無いときは、名簿を読み直す
+      } else await load();
+    }
     catch (e) {
       input.checked = !grant;   // 失敗したら見た目を元に戻す
-      alert(e.detail || e.hint || e.message || "変更に失敗しました");
+      toast("err", e.detail || e.hint || e.message || "変更に失敗しました");
     }
   }
 
@@ -1168,12 +1790,19 @@
   // 黙って閉じると気づけないので、何が起きたかを必ず出す
   async function setStatus(id, status) {
     const e = employees.find((x) => x.id === id);
-    const out = ["leaving", "left"].includes(status);
-    if (out && e?.user_id &&
-        !confirm(`${e.display_name} さんを「${STATUS_LABEL[status]}」にします。\n\n` +
-                 "無限道場・タイムカード・会計にも入れなくなります。\n" +
+    // 止まるのは「退職」にしたときだけ。退職手続き中（退職予定・引継ぎ中）は、退職日まで通常どおり使える
+    if (status === "left" && e?.user_id &&
+        !confirm(`${e.display_name} さんを「退職」にします。\n\n` +
+                 "社内の画面・無限道場・タイムカード・会計に入れなくなります（退職後の書類だけ見られます）。\n" +
                  "（ログインアカウント自体は消しません。記録が残るため）\n\nよろしいですか？")) {
-      await load();
+      render();             // 選択を元に戻すだけ（データは変わっていないので取り直さない）
+      return;
+    }
+    if (status === "leaving" && e?.user_id &&
+        !confirm(`${e.display_name} さんを「退職手続き中」にします。\n\n` +
+                 "退職日までは、これまでどおり使えます。退職日の翌日から「退職」として扱い、入れなくなります。\n" +
+                 "退職日を入れてください（入れないと、自動では退職になりません）。\n\nよろしいですか？")) {
+      render();
       return;
     }
     try {
@@ -1275,11 +1904,13 @@
   }
 
   function exportCsv() {
-    const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "状態", "社内権限"];
+    const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "基本区分", "使える業務", "内部の役割"];
     const rows = employees.map((e) => [
       e.display_name, e.email || "", e.department || "", e.position || "",
       e.employment_type || "", e.joined_on || "",
-      STATUS_LABEL[e.status] || e.status,
+      STATUS_OPTION_LABEL[e.status] || e.status,
+      // 使える業務は、画面の4つのボタンと同じ値（サーバが返した e.apps）。内部の役割は別の列
+      e.apps ? APPS.filter((a) => e.apps[a.key]).map((a) => a.label).join(" ") : "",
       (e.roles || []).map((r) => ROLE_LABEL[r] || r).join(" "),
     ]);
     const csv = [head, ...rows]

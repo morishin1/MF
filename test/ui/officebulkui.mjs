@@ -54,7 +54,7 @@ function seed() {
 }
 
 const seen = [];        // 画面が呼んだ /api/office/contracts（本文と応答）
-async function open(url = "/office/index.html?month=2026-10", viewport = { width: 1440, height: 1000 }) {
+async function open(url = "/office/monthly.html?month=2026-10", viewport = { width: 1440, height: 1000 }) {
   const page = await br.newPage({ viewport, timezoneId: "Asia/Tokyo" });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
@@ -400,7 +400,7 @@ console.log("\n=== 請求済み・Storage の失敗：消せない（何も消�
 console.log("\n=== スマホ幅：カードでも選べる。横スクロールなし。操作バーが画面に収まる ===");
 {
   seed();
-  const { page, errs } = await open("/office/index.html?month=2026-10", { width: 390, height: 800 });
+  const { page, errs } = await open("/office/monthly.html?month=2026-10", { width: 390, height: 800 });
   check(await page.locator("#selAllM").isVisible(), "表示中をすべて選択（スマホ用）が出る");
   check(await page.locator("#selAll").isVisible() === false, "表の見出し（PC用）は出ない");
   check(await box(page, P1.emp).isVisible(), "各カードに、選択のチェックがある");

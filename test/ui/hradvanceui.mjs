@@ -121,7 +121,43 @@ console.log("\n=== recruiterには「本採用へ進める」ボタンが出な�
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
   check(await page.locator(".hr-next button", { hasText: "本採用へ進める" }).count() === 0, "recruiterにはボタンが出ない");
-  check((await page.locator(".hr-next").innerText()).includes("社長・管理者が行います"), "案内文が出る");
+  check((await page.locator(".hr-next").innerText()).includes("社長・管理者・人事が行います"), "案内文が出る");
+  await page.close();
+}
+
+console.log("\n=== 人事（hr。Office の人事・労務に入れる）にも「本採用へ進める」が出る ===");
+{
+  const applicant = {
+    id: "a1", name: "山田 太郎", jobTitle: "エンジニア", source: "リファラル",
+    stage: "offer", stageLabel: "内定", status: "accepted", statusLabel: "承諾済み",
+    nextAction: "本採用へ進めてください", nextActionCta: "本採用へ進める", nextActionKey: "advance",
+    rank: "A", decision: "hired", decisionDueOn: null,
+  };
+  const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+  });
+  const claimed = [];
+  await page.route("**/api/**", (route) => {
+    const req = route.request(), url = req.url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "hr@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
+        access: { recruit: true, sell: false, office: false, officeApp: true, officeHr: true, officeFinance: false, keiei: false },
+        gw: { employee: { id: "emp-h1", display_name: "人事 次郎" }, roles: ["hr"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/hr\/applicants\/advance/.test(url) && req.method() === "POST") { claimed.push(1); return send({ applicantId: "a1", resumed: false }); }
+    if (/\/api\/hr\/applicants\/detail/.test(url)) return send({ applicant, timeline: [], offers: [] });
+    if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [applicant] });
+    if (/\/admin-onboard\.html/.test(url)) return route.fulfill({ status: 200, contentType: "text/html", body: "<html></html>" });
+    return send({});
+  });
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.waitForTimeout(1000);
+  check(await page.locator(".hr-next button", { hasText: "本採用へ進める" }).count() === 1, "人事にもボタンが出る");
+  await page.locator(".hr-next button", { hasText: "本採用へ進める" }).click();
+  await page.waitForTimeout(800);
+  check(claimed.length === 1 && page.url().includes("admin-onboard.html?applicantId=a1"), "押すと社員登録（admin-onboard）へ進む");
   await page.close();
 }
 
@@ -254,6 +290,128 @@ console.log("\n=== admin-onboard.html：社員ができたら、応募者側の�
     "応募者側の確定（complete）が正しい引数で呼ばれる");
   check(!page.url().includes("applicantId"), "使い終わったらURLからapplicantIdが消える");
 
+  await page.close();
+}
+
+console.log("\n=== admin-onboard.html：応募者側の確定に失敗したら、画面に出して［もう一度試す］ ===");
+{
+  const page = await br.newPage({ viewport: { width: 1300, height: 1400 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+  });
+  let fail = true;
+  const posted = [];
+  const consoleErrs = [];
+  page.on("console", (m) => { if (m.type() === "error") consoleErrs.push(m.text()); });
+  await page.route("**/api/**", (route) => {
+    const req = route.request();
+    const url = req.url();
+    const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "hr@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
+        access: { recruit: true, officeApp: true, officeHr: true },
+        gw: { employee: { id: "emp-h1", display_name: "人事 次郎" }, roles: ["hr"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/hr\/applicants\/advance\?applicantId=/.test(url)) return send({ applicantId: "a1", prefill: { name: "山田 太郎" } });
+    if (/\/api\/hr\/applicants\/advance/.test(url) && req.method() === "PATCH") {
+      posted.push(JSON.parse(req.postData() || "{}"));
+      if (fail) return send({ error: "conflict", hint: "いま別の方が確定しています" }, 409);
+      return send({ ok: true, status: "done" });
+    }
+    if (/\/api\/employees\/onboard/.test(url)) {
+      return send({ levels: [], managers: [], wageTypes: [], allowances: [], workModes: [], jobGroups: [], jobs: [] });
+    }
+    return send({});
+  });
+  await page.goto(`${BASE}/admin-onboard.html?applicantId=a1`);
+  await page.waitForTimeout(800);
+  await page.evaluate(() => { window.renderDone({ name: "山田 太郎", code: "E-1", email: "yamada@example.com", plan: { months: 3 } }); });
+  await page.evaluate(async () => { await window.completeAdvanceIfPending("emp-new1"); });
+  await page.waitForTimeout(300);
+  const box = await page.locator("#advance-error").innerText();
+  check(box.includes("「本採用（社員登録）完了」にできませんでした") && box.includes("いま別の方が確定しています"), "失敗の理由を画面に出す（console だけにしない）");
+  check(box.includes("社員の登録はできています"), "社員はできていることも書く");
+  check(page.url().includes("applicantId=a1"), "失敗したら、やり直せるように applicantId を残す");
+  fail = false;
+  await page.locator("#advance-error button", { hasText: "もう一度試す" }).click();
+  await page.waitForTimeout(500);
+  check(posted.length === 2 && await page.locator("#advance-ok").isVisible(), "［もう一度試す］で応募者側だけ確定し直せる");
+  check(!page.url().includes("applicantId"), "確定できたら URL から applicantId が消える");
+  check(!consoleErrs.some((t) => t.includes("[advance]")), "console にだけ出す書き方はしない");
+  await page.close();
+}
+
+console.log("\n=== admin-onboard.html：既存の無限道場アカウントに紐づけるときは、登録の前に何が変わるかを出す ===");
+{
+  const page = await br.newPage({ viewport: { width: 390, height: 1400 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => {
+    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+  });
+  await page.route("**/api/**", (route) => {
+    const url = route.request().url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "hr@8grp.co.jp", appRole: "member", isAdmin: false, shows: {}, access: { officeApp: true, officeHr: true },
+        gw: { employee: { id: "emp-h1", display_name: "人事 次郎" }, roles: ["hr"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/employees\/onboard/.test(url)) {
+      return send({ levels: [], managers: [], wageTypes: [], allowances: [], workModes: [], jobGroups: [], jobs: [], commonAxes: [] });
+    }
+    return send({});
+  });
+  await page.goto(`${BASE}/admin-onboard.html`);
+  await page.waitForTimeout(800);
+  const value = { name: "高木 沙綾", email: "saya.takagi@example.test", joinDate: "2026-11-01", contract: "無期", probation: "3か月", training: "3か月",
+    weeklyHours: "40時間", workStyle: "指定なし", workMode: "", job: "営業", role: "メンバー", scope: [], programs: [], manager: "上長 一郎", level: 1, accountType: "member", wage: "" };
+  const r = { ok: true, warnings: [], plan: { threeMonthKgi: "KGI", months: [] }, value,
+    account: { kind: "existing", lms: { exists: true, name: "さや（体験）", renames: true, reopens: true, stateLabel: "停止中" } } };
+  await page.evaluate((x) => window.renderPreview(x), r);
+  const t = await page.locator("#pv-existing").innerText();
+  check(t.includes("新しくは作りません") && t.includes("パスワードは変わりません"), "新しく作らない・パスワードは変わらない");
+  check(t.includes("学習履歴・提出物・ロールはそのまま"), "学習履歴・提出物・ロールはそのまま");
+  check(t.includes("無限道場の氏名「さや（体験）」を、名簿の「高木 沙綾」に合わせます"), "氏名を名簿に合わせることを、登録前に明示");
+  check(t.includes("無限道場で停止中のため、利用できる状態に戻します"), "停止中なら利用可能へ戻すことを、登録前に明示");
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  check(over <= 1, `390px で横にはみ出さない（${over}px）`);
+  await page.close();
+}
+
+console.log("\n=== admin-hr.html：「HRから引き渡し」→［社員登録へ］（390px でもはみ出さない） ===");
+for (const width of [1300, 390]) {
+  const page = await br.newPage({ viewport: { width, height: 1200 }, timezoneId: "Asia/Tokyo" });
+  await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })));
+  const claimed = [];
+  await page.route("**/api/**", (route) => {
+    const req = route.request(), url = req.url();
+    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (/\/api\/me\b/.test(url)) {
+      return send({ email: "hr@8grp.co.jp", appRole: "member", isAdmin: false, shows: {}, access: { officeApp: true, officeHr: true },
+        gw: { employee: { id: "emp-h1", display_name: "人事 次郎" }, roles: ["hr"], isAdmin: false, tenantId: "t1", stage: null } });
+    }
+    if (/\/api\/hr\/applicants\/advance/.test(url) && req.method() === "POST") { claimed.push(JSON.parse(req.postData() || "{}")); return send({ applicantId: "a1" }); }
+    if (/\/api\/hr(\?|$)/.test(url)) {
+      return send({ tabs: [{ key: "onboarding", label: "入社予定" }], onboarding: [], offboarding: [], done: [], kpi: null, people: [], roles: [], today: "2026-10-12",
+        handoffs: { ready: true, rows: [
+          { applicantId: "a1", name: "高木 沙綾", offerType: "executive_employee", offerTypeLabel: "正社員・幹部候補", joinDate: "2026-11-01",
+            acceptedAt: "2026-10-10T01:00:00Z", formalRequired: true, formalSignedAt: "2026-10-11T01:00:00Z", handoffAt: "2026-10-12T01:32:00Z", claimed: false },
+          { applicantId: "a2", name: "佐藤 一", offerType: "spot", offerTypeLabel: "スポット・副業", joinDate: null,
+            acceptedAt: "2026-10-10T01:00:00Z", formalRequired: false, formalSignedAt: null, handoffAt: "2026-10-12T02:00:00Z", claimed: true },
+        ] } });
+    }
+    if (/admin-onboard\.html/.test(url)) return route.fulfill({ status: 200, contentType: "text/html", body: "<html></html>" });
+    return send({});
+  });
+  await page.goto(`${BASE}/admin-hr.html`);
+  await page.waitForTimeout(1200);
+  const card = await page.locator("#hr-handoff-card").innerText();
+  check(card.includes("HRから引き渡し") && card.includes("2名"), `[${width}] 「入社予定」の上に「HRから引き渡し 2名」`);
+  check(card.includes("✓ 正式契約済み") && card.includes("正式契約なし") && card.includes("2026/10/12 10:32"), `[${width}] 承諾・正式契約の状態と引き渡し日時（日本時間）`);
+  check(await page.locator('[data-handoff="a2"] button', { hasText: "社員登録の続きを開く" }).count() === 1, `[${width}] 入力中の人は「続きを開く」`);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  check(over <= 1, `[${width}] 横にはみ出さない（${over}px）`);
+  await page.locator('[data-handoff="a1"] button', { hasText: "社員登録へ" }).click();
+  await page.waitForTimeout(800);
+  check(claimed[0]?.applicantId === "a1" && page.url().includes("admin-onboard.html?applicantId=a1"), `[${width}] ［社員登録へ］で確保してから社員登録の画面へ`);
   await page.close();
 }
 

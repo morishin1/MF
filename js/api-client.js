@@ -901,6 +901,10 @@
   const listSalesMeetings = (companyId) => api(`/api/sales/meetings?companyId=${encodeURIComponent(companyId)}`);
   const issueSalesMeeting = (body) => api("/api/sales/meetings", { method: "POST", body });
   const salesMeetingAct = (body) => api("/api/sales/meetings", { method: "PATCH", body });
+  // 営業の案件（db/116）。companyId なしならテナントの案件すべて（分析用）
+  const listSalesDeals = (companyId) => api(`/api/sales/deals${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`);
+  const createSalesDeal = (body) => api("/api/sales/deals", { method: "POST", body });
+  const updateSalesDeal = (body) => api("/api/sales/deals", { method: "PATCH", body });
 
   // ---- 外部メンバー（ゲスト）招待 ----
   const listGuests = () => api("/api/guests");
@@ -916,6 +920,10 @@
 
   const setEmployeeRole = (employeeId, role, grant) =>
     api("/api/employees/roles", { method: "POST", body: { employeeId, role, grant } });
+
+  // アプリ利用権限（採用HR・Sales・Office・経営の4つのボタン）。app = hr / sales / office / keiei
+  const setEmployeeApp = (employeeId, app, grant) =>
+    api("/api/employees/apps", { method: "POST", body: { employeeId, app, grant } });
 
   // opts.create=true でアカウントが無ければ作る（招待）。
   // password を省くと自動生成され、その1回だけ応答に含まれる。
@@ -1020,6 +1028,8 @@
     return api(`/api/nippo/admin${q.toString() ? `?${q}` : ""}`);
   };
   const nippoAdminAct = (body) => api("/api/nippo/admin", { method: "POST", body });
+  // 今週（月〜日）のメンバー別の日報・勤怠。date を含む週を返す
+  const nippoWeek = (date) => api(`/api/nippo/admin?view=week${date ? `&date=${encodeURIComponent(date)}` : ""}`);
 
   // 提出直後にこれを1回叩くと、AIが評価して返す。
   // force:true は管理者だけ（もう一度評価し直す）
@@ -1895,10 +1905,10 @@
     markSalesFollowed, addSalesEvent, listSalesApproaches, prepareSalesAttack, salesAttackAct,
     markSalesAttackSent, discardSalesAttack, markSalesAttackFailed, addSalesContact, listSalesTemplates, createSalesTemplate, updateSalesTemplate,
     listSalesCampaigns, createSalesCampaign, updateSalesCampaign, lookupSalesUrl, bulkSalesCompanies,
-    listSalesMeetings, issueSalesMeeting, salesMeetingAct,
+    listSalesMeetings, issueSalesMeeting, salesMeetingAct, listSalesDeals, createSalesDeal, updateSalesDeal,
     listGuests, createGuest, guestOptions, guestDetail, guestReissue, guestDisable,
     guestUpdateGrants, guestMy, guestInvitePreview, guestRegister,
-    setEmployeeRole, linkEmployeeAccount,
+    setEmployeeRole, setEmployeeApp, linkEmployeeAccount,
     settings, updateSettings,
     listNotifications, markNotificationRead, markAllNotificationsRead,
     listAssets, createAsset, updateAsset, deleteAsset,
@@ -1907,7 +1917,7 @@
     schedule, teamSchedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle,
     googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
-    nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, evaluateNippo,
+    nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, nippoWeek, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem, badges,
     pinAction, reorderActions, recalcActions, adoptProposals, rejectProposals,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,

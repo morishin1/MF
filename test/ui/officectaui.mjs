@@ -147,14 +147,15 @@ const bodyText = (page) => page.locator("body").innerText();
 console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===");
 {
   seed();
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(400);
   const ts = await pillOf(cell(page, "勤務表"));
-  check(ts.text === "未提出" && ts.cls.includes("red") && ts.bg === "rgb(253, 228, 226)" && ts.fg === "rgb(179, 38, 30)", `勤務表：「未提出」は薄い赤の背景＋赤い文字（${ts.text} ${ts.bg} ${ts.fg}）`);
+  // 2026-10-04：状態の色は採用HRの色（js/office-layout.js の TONE・hr/applicants.html の .hr-flow-state）にそろえた
+  check(ts.text === "未提出" && ts.cls.includes("red") && ts.bg === "rgb(253, 236, 234)" && ts.fg === "rgb(179, 38, 30)", `勤務表：「未提出」は薄い赤の背景＋赤い文字（${ts.text} ${ts.bg} ${ts.fg}）`);
   check(ts.icon !== "" && ts.icon !== "radio_button_unchecked" && !/check|task_alt/.test(ts.icon), `未提出のアイコンは ○ でも チェックでもない（${ts.icon}）`);
   const sales = await pillOf(cell(page, "売上請求"));
-  check(sales.text === "未作成" && sales.cls.includes("orange") && sales.bg === "rgb(255, 233, 209)", `売上請求：「未作成」は橙（${sales.text} ${sales.bg}）`);
+  check(sales.text === "未作成" && sales.cls.includes("orange") && sales.bg === "rgb(255, 237, 213)", `売上請求：「未作成」は橙（${sales.text} ${sales.bg}）`);
   const vend = await pillOf(cell(page, "仕入請求")), pay = await pillOf(cell(page, "支払"));
   check(vend.text === "対象外" && vend.cls.includes("gray") && pay.text === "対象外" && pay.cls.includes("gray"), "仕入請求・支払：「対象外」は灰色");
   check((await cell(page, "稼働時間").locator(".of-st").count()) === 0, "稼働時間：勤務表が無いうちは、状態のラベルを出さない（—）");
@@ -174,7 +175,9 @@ console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===
   check(await now.isVisible() && nt.includes(`${TAG}テスト 太郎`) && nt.includes("勤務表が未提出です") && nt.includes("期限 11/5") && nt.includes("勤務表を追加"),
     `ページの一番上：誰の何が未提出か・期限・「勤務表を追加」（${nt.replace(/\s+/g, " ")}）`);
   const nowBox = await now.boundingBox();
-  check(nowBox.y < 200, `一番上の帯は、数字カードより上（上から ${Math.round(nowBox.y)}px）`);
+  // 共通ヘッダー＋Office の横タブ（2段）＋見出しの下、本文のいちばん上。件数（絞り込みのチップ）より上
+  const sumBox = await page.locator("#sum").boundingBox();
+  check(nowBox.y < 320 && nowBox.y < sumBox.y, `次にやることは、本文のいちばん上（上から ${Math.round(nowBox.y)}px・件数は ${Math.round(sumBox.y)}px）`);
   check((await page.locator("#now .of-now-item").count()) === 1, "件数ぶんだけ出る（1件）");
   const [fcNow] = await Promise.all([page.waitForEvent("filechooser", { timeout: 5000 }), now.locator('button[data-cta="pick"]').click()]);
   check(!!fcNow && await page.locator(".of-drawer").count() === 0, "一番上の「勤務表を追加」→ その場でファイル選択（ドロワーは開かない）");
@@ -192,7 +195,7 @@ console.log("\n=== 1. 未提出：赤いラベル＋「勤務表を追加」 ===
 console.log("\n=== 2. ドロワーの「次にやること」＝押せるカード（カード全体でも動く） ===");
 {
   seed();
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.locator(`${ROW} [data-label="要員"]`).click();
   await page.waitForSelector(".of-drawer #dr-next");
@@ -216,7 +219,7 @@ console.log("\n=== 3. ファイルを選ぶ → アップロード → 登録（
 {
   seed();
   seenApi.length = 0;
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), cell(page, "次にやること").locator('button[data-cta="pick"]').click()]);
   await fc.setFiles(atRoot(SAMPLE));
@@ -240,7 +243,7 @@ console.log("\n=== 3. ファイルを選ぶ → アップロード → 登録（
 console.log("\n=== 3b. PNG・JPEG も、同じ流れで確認画面へ ===");
 for (const [ext, mime] of [["png", "image/png"], ["jpg", "image/jpeg"]]) {
   seed();
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector("#now .of-now");
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.locator('#now button[data-cta="pick"]').click()]);
   await fc.setFiles({ name: `sample-2026-10.${ext}`, mimeType: mime, buffer: fs.readFileSync(atRoot(`test/fixtures/office-timesheet/sample-2026-10.${ext}`)) });
@@ -258,18 +261,18 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
   // ファイル1件・未読取の状態にする（実際の操作と同じ：勤務表を追加）
   seed();
   {
-    const { page: up } = await open(`/office/index.html?month=${M}`);
+    const { page: up } = await open(`/office/monthly.html?month=${M}`);
     await up.waitForSelector("#now .of-now");
     const [fcU] = await Promise.all([up.waitForEvent("filechooser"), up.locator('#now button[data-cta="pick"]').click()]);
     await fcU.setFiles(atRoot(SAMPLE));
     await up.waitForURL(/timesheet\.html/, { timeout: 15000 });
     await up.close();
   }
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表"));
-  check(ts.text === "未読取" && ts.cls.includes("yellow") && ts.bg === "rgb(253, 240, 184)", `勤務表：「未読取」は黄色（${ts.text} ${ts.bg}）`);
+  check(ts.text === "未読取" && ts.cls.includes("yellow") && ts.bg === "rgb(251, 241, 214)", `勤務表：「未読取」は黄色（${ts.text} ${ts.bg}）`);
   const cta = cell(page, "次にやること");
   const t = await cta.innerText();
   check(t.includes("勤務表が届いています") && t.includes("AIで読み取る") && !t.includes("勤務表を追加"), `次にやること：勤務表が届いています／AIで読み取る（${t.replace(/\s+/g, " ")}）`);
@@ -295,7 +298,7 @@ console.log("\n=== 4. ファイルあり・未読取：「AIで読み取る」�
 
 console.log("\n=== 5. AI読取済（下書き）：「内容を確認する」 ===");
 {
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表")), wk = await pillOf(cell(page, "稼働時間"));
@@ -320,11 +323,11 @@ console.log("\n=== 6. 確定：「確定内容を見る」。完了のラベル�
   const sv = await sheetPost("save", { days: [{ workDate: "2026-10-14", break: clock(truth("2026-10-14").break) }, { workDate: "2026-10-21", end: clock(truth("2026-10-21").end) }] });
   const cf = await sheetPost("confirm");
   check(sv.statusCode === 200 && cf.statusCode === 200, "（準備）空欄を埋めて、確定した");
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ts = await pillOf(cell(page, "勤務表")), wk = await pillOf(cell(page, "稼働時間"));
-  check(ts.text === "確定済" && ts.cls.includes("green") && ts.bg === "rgb(217, 240, 217)" && ts.icon === "check_circle", `勤務表：「確定済」は薄い緑＋チェック（${ts.text} ${ts.bg} ${ts.icon}）`);
+  check(ts.text === "確定済" && ts.cls.includes("green") && ts.bg === "rgb(229, 241, 226)" && ts.icon === "check_circle", `勤務表：「確定済」は薄い緑＋チェック（${ts.text} ${ts.bg} ${ts.icon}）`);
   check(wk.text === "確定済" && wk.cls.includes("green"), "稼働時間：「確定済」は緑");
   check((await cell(page, "稼働時間").innerText()).includes("154.75h"), "稼働時間：154.75h（= 154:45）");
   const t = await cell(page, "次にやること").innerText();
@@ -350,25 +353,25 @@ console.log("\n=== 6. 確定：「確定内容を見る」。完了のラベル�
 console.log("\n=== 7. 使えないファイル・同じファイル：理由を出して、進まない ===");
 {
   seed(); seenApi.length = 0;
-  const { page } = await open(`/office/index.html?month=${M}`);
+  const { page } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), cell(page, "次にやること").locator('button[data-cta="pick"]').click()]);
   await fc.setFiles({ name: "memo.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
   await page.waitForSelector(".of-cta .er");
   check((await cell(page, "次にやること").innerText()).includes("PDF・JPEG・PNG のファイルを選んでください"), "PDF・JPEG・PNG 以外は、理由を出す");
-  check(page.url().includes("/office/index.html") && seenApi.every((s) => s.action !== "upload"), "移動せず、アップロードもしない");
+  check(page.url().includes("/office/monthly.html") && seenApi.every((s) => s.action !== "upload"), "移動せず、アップロードもしない");
   check(await cell(page, "次にやること").locator('button[data-cta="pick"]').isEnabled(), "もう一度、選び直せる");
   await page.close();
 
   // 同じファイルをもう一度（1回目を登録してから）
   seed(); seenApi.length = 0;
-  const a = await open(`/office/index.html?month=${M}`);
+  const a = await open(`/office/monthly.html?month=${M}`);
   await a.page.waitForSelector(ROW);
   const [fc1] = await Promise.all([a.page.waitForEvent("filechooser"), cell(a.page, "次にやること").locator('button[data-cta="pick"]').click()]);
   await fc1.setFiles(atRoot(SAMPLE));
   await a.page.waitForURL(/timesheet\.html/);
   await a.page.close();
-  const b = await open(`/office/index.html?month=${M}`);
+  const b = await open(`/office/monthly.html?month=${M}`);
   await b.page.waitForSelector(ROW);
   await b.page.locator(`${ROW} [data-label="要員"]`).click();
   await b.page.waitForSelector("#dr-timesheet");
@@ -379,14 +382,14 @@ console.log("\n=== 7. 使えないファイル・同じファイル：理由を�
   await b.page.waitForSelector("#dr-next .er", { timeout: 8000 });
   check((await b.page.locator("#dr-next .er").innerText()).includes("すでに届いています"), "同じファイル：「すでに届いています」と出て、登録しない");
   check(rows("gw_submissions").length === 1, "ファイルは1件のまま");
-  check(b.page.url().includes("/office/index.html"), "移動しない");
+  check(b.page.url().includes("/office/monthly.html"), "移動しない");
   await b.page.close();
 }
 
 console.log("\n=== 8. スマホ幅：押せる場所が、横にはみ出さず見える ===");
 {
   seed();
-  const { page } = await open(`/office/index.html?month=${M}`, { viewport: { width: 390, height: 844 } });
+  const { page } = await open(`/office/monthly.html?month=${M}`, { viewport: { width: 390, height: 844 } });
   await page.waitForSelector(ROW);
   await page.waitForTimeout(300);
   const ov = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -405,7 +408,7 @@ console.log("\n=== 8. スマホ幅：押せる場所が、横にはみ出さず�
 console.log("\n=== 9. 一覧の状態の色（BP・期限超過）は officeui.mjs で見る。ここでは、ページ全体にエラーが無いこと ===");
 {
   seed();
-  const { page, errs } = await open(`/office/index.html?month=${M}`);
+  const { page, errs } = await open(`/office/monthly.html?month=${M}`);
   await page.waitForSelector(ROW);
   await page.locator(`${ROW} [data-label="要員"]`).click();
   await page.waitForSelector("#dr-next");

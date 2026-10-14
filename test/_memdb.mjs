@@ -1,18 +1,21 @@
 // 偽の Supabase（メモリ上の表）。/api/office/* の書き込みまで通すためのもの。
 //
 // ■ 実DBの何を真似しているか
-//   ・select / insert / update / upsert / delete と、eq・neq・in・lt・lte・gt・gte・is・order・limit・single・maybeSingle
+//   ・select / insert / update / upsert / delete と、eq・neq・in・lt・lte・gt・gte・is・ilike・not(is)・order・limit・range・single・maybeSingle
 //   ・一意制約（23505）・NOT NULL（23502）・CHECK（23514）：表ごとに、SQL と同じ条件を書いて渡す
 //   ・date 列の比較に、実在しない日付（2026-09-31）を渡したら 22008 で落とす（test/_pgdate.mjs）
 //   ・表が無い（PGRST205）／列が無い（42703）状態の再現（missing）
 //   ・RLS：userClient は、表ごとの読み取り可否（rls）を通す。書き込みは、ポリシーが無いので、すべて拒否（42501）
 //     → API が、書き込みに userClient を使ったら、テストが落ちる（本物の DB でも落ちる）
-//   ・Storage：置く・読む・消す・署名付きURL。state.storageFail を立てると、消すのが失敗する
+//   ・Storage：置く（upload・署名付きアップロードURL）・読む・消す・署名付きURL。state.storageFail を立てると、置く・消すのが失敗する
 //   ・外部キー（on delete cascade／set null）：createMemDb({ fks }) で、親の表ごとに渡す。親の行を消すと、子も（再帰で）消える／外れる
 
 import crypto from "node:crypto";
 import { pgDateError } from "./_pgdate.mjs";
 
+// ilike のパターン（% と _、\\ でのエスケープ）を正規表現にする。大文字小文字は区別しない
+const likeRe = (p) => new RegExp(`^${String(p).replace(/\\(.)|([%_])|([.*+?^${}()|[\]\\/])/g,
+  (m, esc, wild, special) => (esc !== undefined ? esc.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&") : wild === "%" ? ".*" : wild === "_" ? "." : `\\${special}`))}$`, "is");
 const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 
 export function createMemDb({ schema = {}, rls = () => true, missing = null, fks = {} } = {}) {
@@ -41,7 +44,7 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
   function makeClient({ asUser, who }) {
     function from(name) {
       const f = [];
-      let cols = null, head = false, wantCount = false, order = null, lim = null;
+      let cols = null, head = false, wantCount = false, order = null, lim = null, span = null;
       let op = "select";
       let payload = null, upsertOn = null, returning = false, one = null;
 
@@ -63,6 +66,8 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         if (o === "gt") return x > v;
         if (o === "gte") return x >= v;
         if (o === "is") return v === null ? (x === null || x === undefined) : x === v;
+        if (o === "ilike") return x != null && likeRe(v).test(String(x));
+        if (o === "not_is") return v === null ? !(x === null || x === undefined) : x !== v;
         return true;
       });
       const project = (r) => (cols ? Object.fromEntries(cols.map((c) => [c, clone(r[c]) ?? null])) : clone(r));
@@ -116,7 +121,8 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         if (op === "select") {
           let out = tableRows(name).filter(match);
           if (order) out = [...out].sort((a, b) => (a[order.col] < b[order.col] ? -1 : a[order.col] > b[order.col] ? 1 : 0) * (order.asc ? 1 : -1));
-          if (lim) out = out.slice(0, lim);
+          if (span) out = out.slice(span[0], span[1] + 1);
+          else if (lim) out = out.slice(0, lim);
           const res = { data: head ? null : out.map(project), error: null };
           if (wantCount) res.count = out.length;
           return res;
@@ -191,8 +197,11 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
         gt(k, v) { f.push(["gt", k, v]); return q; },
         gte(k, v) { f.push(["gte", k, v]); return q; },
         is(k, v) { f.push(["is", k, v]); return q; },
+        ilike(k, v) { f.push(["ilike", k, v]); return q; },
+        not(k, op, v) { if (op !== "is") throw new Error(`_memdb: not(${op}) は未対応`); f.push(["not_is", k, v]); return q; },
         order(col, o) { order = { col, asc: o?.ascending !== false }; return q; },
         limit(n) { lim = n; return q; },
+        range(a, b) { span = [a, b]; return q; },   // lib/pg-read.js の readAll が使う（1000件ずつずらして読む）
         single() { one = "single"; return q; },
         maybeSingle() { one = "maybe"; return q; },
         then: (fn, rej) => Promise.resolve(finish(run())).then(fn, rej),
@@ -213,6 +222,13 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
           signed.push({ bucket, path, ttl });
           if (!storageFiles.has(`${bucket}/${path}`)) return { data: null, error: { message: "Object not found" } };
           return { data: { signedUrl: `https://storage.example/${bucket}/${path}?token=t` }, error: null };
+        },
+        // 置く（サーバーから直接）。upsert でなければ、同じパスがあると断る（本物の Storage と同じ）
+        upload: async (path, bytes, opts = {}) => {
+          if (state.storageFail) return { data: null, error: { message: state.storageFail } };
+          if (storageFiles.has(`${bucket}/${path}`) && !opts.upsert) return { data: null, error: { message: "The resource already exists", statusCode: "409" } };
+          storageFiles.set(`${bucket}/${path}`, Buffer.from(bytes));
+          return { data: { path }, error: null };
         },
         download: async (path) => {
           const b = storageFiles.get(`${bucket}/${path}`);

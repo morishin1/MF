@@ -9,6 +9,12 @@
     "api/sign/*.js": {
       "includeFiles": "assets/fonts/**"
     },
+    "api/hr/offers/*.js": {
+      "includeFiles": "assets/fonts/**"
+    },
+    "api/employees/retire-cert.js": {
+      "includeFiles": "assets/fonts/**"
+    },
     "api/office/timesheet.js": {
       "maxDuration": 60
     }
@@ -66,6 +72,10 @@
     {
       "source": "/onboarding",
       "destination": "/onboarding/index.html"
+    },
+    {
+      "source": "/retiree",
+      "destination": "/retiree/index.html"
     },
     {
       "source": "/sales",
@@ -191,6 +201,10 @@
       "schedule": "0 1 * * 1"
     },
     {
+      "path": "/api/cron/leave",
+      "schedule": "5 15 * * *"
+    },
+    {
       "path": "/api/cron/devices",
       "schedule": "20 18 * * *"
     },
@@ -207,8 +221,16 @@
       "schedule": "20 * * * *"
     },
     {
+      "path": "/api/cron/hr-daily",
+      "schedule": "40 23 * * *"
+    },
+    {
       "path": "/api/cron/career",
       "schedule": "40 23 * * *"
+    },
+    {
+      "path": "/api/cron/office-recurring",
+      "schedule": "40 19 * * *"
     }
   ]
 }

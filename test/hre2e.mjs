@@ -149,7 +149,8 @@ mock.module(atRoot("lib/sign-audit.js"), {
   namedExports: { signEvent: async () => {}, ipOf: () => "1.2.3.4", uaOf: () => "test" },
 });
 mock.module(atRoot("lib/pdf-jp.js"), {
-  namedExports: { renderContractPdf: async () => Buffer.from("pdf"), sha256: (b) => "hash-" + String(b).length },
+  namedExports: { renderContractPdf: async () => Buffer.from("pdf"), sha256: (b) => "hash-" + String(b).length,
+    appendSignaturePage: async (b) => Buffer.concat([Buffer.from(b), Buffer.from("+sig")]) },
 });
 
 const OWNER = { tenantId: "t1", isAdmin: false, isHr: true, isAdvisor: false, roles: ["owner"], employee: { id: "emp-o1", display_name: "社長" } };
@@ -164,6 +165,7 @@ mock.module(atRoot("lib/gw.js"), {
     gwContext: async () => who,
     canRecruit: REAL_GW.canRecruit,
     canDecideHire: REAL_GW.canDecideHire,
+    canAdvanceHire: REAL_GW.canAdvanceHire,
     canSeeSalary: REAL_GW.canSeeSalary,
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
   },
@@ -280,7 +282,7 @@ await ok("CEO REVIEWのdecisionPendingに、社長面談ずみの候補者が出
   const iv1 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "conduct" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "evaluate", rank: "A" });
-  await patch(applicantDetail, "/api/hr/applicants/detail", { id: aid, stage: "ceo_recommend", status: "ceo_interview_pending" });
+  await patch(applicantDetail, "/api/hr/applicants/detail", { id: aid, stage: "ceo_interview", status: "ceo_interview_pending" });
   const iv2 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "ceo" });
   await patch(interviews, "/api/hr/interviews", { id: iv2.body.interview.id, action: "conduct" });
 
@@ -440,7 +442,7 @@ await ok("社長は「保留」にでき、理由と次に確認することを�
   const iv1 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "conduct" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "evaluate", rank: "A" });
-  await patch(applicantDetail, "/api/hr/applicants/detail", { id: aid, stage: "ceo_recommend", status: "ceo_interview_pending" });
+  await patch(applicantDetail, "/api/hr/applicants/detail", { id: aid, stage: "ceo_interview", status: "ceo_interview_pending" });
   const iv2 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "ceo" });
   await patch(interviews, "/api/hr/interviews", { id: iv2.body.interview.id, action: "conduct" });
 

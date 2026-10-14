@@ -13,6 +13,8 @@
 //   6. 社員ができたら、応募者側を確定できる（complete）。employee_id は
 //      1応募者につき1回だけ埋まる（二重確定を防ぐ）
 //   7. 社長・管理者だけができる。recruiter・hrだけの人は使えない
+//   8. Office への引き渡し（db/133）が要る版は、引き渡す前に事前入力・手続き開始・完了のどれもできない（サーバで止める）。
+//      db/133 が無い環境・区分の無い従来の合格通知・育成枠は、これまでどおり進める
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -37,6 +39,8 @@ function table(name) {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     is(k, v) { f.push(["is", k, v]); return q; },
+    order() { return q; },
+    limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: e() ? null : copy(rows()[0]) || null, error: e() }),
     then: (fn) => Promise.resolve({ data: e() ? null : rows().map(copy), error: e() }).then(fn),
     update(patch) {
@@ -82,6 +86,10 @@ mock.module(atRoot("lib/gw-audit.js"), {
 });
 const OWNER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["owner"], employee: { id: "emp-o1", display_name: "社長" } };
 const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["recruiter"], employee: { id: "emp-r1", display_name: "採用 花子" } };
+// 人事（hr。HR と Office に入れる）。社長・管理者と同じ流れを最後まで実行できる
+const HR = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], apps: ["hr", "office"], employee: { id: "emp-h1", display_name: "人事 次郎" } };
+const ADMIN = { tenantId: "t1", isAdmin: true, isHr: false, roles: [], employee: { id: "emp-a1", display_name: "管理 三郎" } };
+const MANAGER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["manager"], apps: ["hr", "sales", "office"], employee: { id: "emp-m1", display_name: "責任 四郎" } };
 let who = OWNER;
 // 判定は本物（lib/gw.js）を使う。テストで条件を書き直すと、本番とずれても気づけない
 const REAL_GW = await import(atRoot("lib/gw.js"));
@@ -89,6 +97,7 @@ mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => who,
     canDecideHire: REAL_GW.canDecideHire,
+    canAdvanceHire: REAL_GW.canAdvanceHire,
     canSeeSalary: REAL_GW.canSeeSalary,
   },
 });
@@ -125,6 +134,11 @@ function setup() {
       employee_id: null, advance_claimed_at: null, created_at: "2026-09-20T00:00:00Z", updated_at: "2026-09-20T00:00:00Z",
     }],
     gw_hr_timeline: [],
+    gw_employees: [
+      { id: "emp-new1", tenant_id: "t1", display_name: "山田 太郎" },
+      { id: "emp-new2", tenant_id: "t1", display_name: "山田 太郎（2）" },
+      { id: "emp-other", tenant_id: "t2", display_name: "別の会社の人" },
+    ],
   };
 }
 
@@ -168,11 +182,14 @@ await ok("すでに本採用済みなら取得できない", async () => {
   assert.equal(r.body.error, "already_advanced");
 });
 
-await ok("recruiter・hrだけの人は取得できない", async () => {
+await ok("採用担当（recruiter）・責任者（manager）は取得できない", async () => {
   setup();
-  who = RECRUITER;
-  const r = await getPrefill("a1");
-  assert.equal(r.statusCode, 403);
+  for (const w of [RECRUITER, MANAGER]) {
+    who = w;
+    const r = await getPrefill("a1");
+    assert.equal(r.statusCode, 403, w.roles.join(","));
+    assert.match(r.body.hint, /社長・管理者・人事/);
+  }
 });
 
 console.log("\n=== 本採用の手続きを始める（POST claim） ===\n");
@@ -270,6 +287,43 @@ await ok("employee_idは1応募者につき1回だけ埋まる（二重確定を
   assert.equal(db.rows.gw_hr_applicants[0].employee_id, "emp-new1", "最初のemployeeIdのまま");
 });
 
+await ok("別の会社の社員・存在しない社員とは結ばない", async () => {
+  setup();
+  for (const employeeId of ["emp-other", "emp-none"]) {
+    const r = await act({ applicantId: "a1", action: "complete", employeeId });
+    assert.equal(r.statusCode, 404, employeeId);
+    assert.equal(r.body.error, "employee_not_found");
+  }
+  assert.equal(db.rows.gw_hr_applicants[0].employee_id, null);
+  assert.equal(db.rows.gw_hr_applicants[0].status, "accepted");
+});
+
+await ok("Office へ引き渡されたオファーの版から事前入力する（区分 → 雇用区分・入社手続きの範囲。業務委託は試用期間なし）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [
+    { id: "o-old", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "contractor", revoked_at: "2026-10-01T00:00:00Z", join_date: "2026-10-01" },
+    { id: "o2", tenant_id: "t1", applicant_id: "a1", version: 2, offer_type: "contractor", join_date: "2026-12-01", wage_type: "月額", wage_amount: 250000,
+      probation_months: 3, accepted_at: "2026-10-10T00:00:00Z", formal_contract_required: false, handoff_at: "2026-10-11T00:00:00Z" },
+  ];
+  const r = await getPrefill("a1");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const p = r.body.prefill;
+  assert.deepEqual([p.joinDate, p.employmentType, p.onboardingProfile, p.wageType, p.wageAmount], ["2026-12-01", "業務委託", "contractor", "月給", 250000]);
+  assert.equal(p.probationMonths, undefined, "業務委託に試用期間を持ち込まない");
+  assert.deepEqual([p.offerType, p.offerTypeLabel, p.formalRequired, p.handoffAt], ["contractor", "業務委託", false, "2026-10-11T00:00:00Z"]);
+  // パート・アルバイトは、オファーの区分のまま（正社員に丸めない）
+  db.rows.gw_hr_offers = [{ id: "o3", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "part_time", employment_type: "アルバイト",
+    join_date: "2026-11-15", wage_type: "時給", wage_amount: 1300, weekly_hours: 20, accepted_at: "2026-10-10T00:00:00Z" }];
+  const q = (await getPrefill("a1")).body.prefill;
+  assert.deepEqual([q.employmentType, q.onboardingProfile, q.weeklyHours, q.wageType], ["アルバイト", "full", 20, "時給"]);
+  // スポット：案件単価は給与区分に当てはめず、備考へ
+  db.rows.gw_hr_offers = [{ id: "o4", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "spot", join_date: "2026-11-20",
+    wage_type: "案件単価", wage_amount: 50000, accepted_at: "2026-10-10T00:00:00Z" }];
+  const sp = (await getPrefill("a1")).body.prefill;
+  assert.deepEqual([sp.employmentType, sp.onboardingProfile, sp.wageType, sp.wageAmount], ["業務委託", "spot", undefined, undefined]);
+  assert.match(sp.wageNote, /案件単価 50,000円/);
+});
+
 await ok("employeeIdが無ければ断る", async () => {
   setup();
   const r = await act({ applicantId: "a1", action: "complete" });
@@ -278,11 +332,92 @@ await ok("employeeIdが無ければ断る", async () => {
 
 console.log("\n=== 誰が触れるか ===\n");
 
-await ok("recruiter・hrだけの人は使えない（社長・管理者だけ）", async () => {
+await ok("採用担当（recruiter）・責任者（manager）は使えない", async () => {
+  for (const w of [RECRUITER, MANAGER]) {
+    setup();
+    who = w;
+    assert.equal((await claim("a1")).statusCode, 403);
+    assert.equal((await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" })).statusCode, 403);
+    assert.equal(db.rows.gw_hr_applicants[0].employee_id, null);
+  }
+});
+
+await ok("人事（hr）・管理者も、社長と同じ流れを最後まで実行できる（事前入力 → 手続き開始 → 完了）", async () => {
+  for (const w of [HR, ADMIN]) {
+    setup();
+    who = w;
+    const p = await getPrefill("a1");
+    assert.equal(p.statusCode, 200, JSON.stringify(p.body));
+    assert.equal(p.body.prefill.name, "山田 太郎");
+    assert.equal((await claim("a1")).statusCode, 200);
+    const r = await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(db.rows.gw_hr_applicants[0].status, "done");
+  }
+});
+
+console.log("\n=== Office への引き渡しの前は進めない（db/133） ===\n");
+
+const typedOffer = (extra) => ({ id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, offer_type: "executive_employee",
+  join_date: "2026-12-01", accepted_at: "2026-10-10T00:00:00Z", formal_contract_required: true, formal_signed_at: "2026-10-11T00:00:00Z", ...extra });
+
+await ok("区分つき・正式契約済みでも、Office へ引き渡す前は 事前入力・手続き開始・完了 を断る（409 handoff_required）", async () => {
   setup();
-  who = RECRUITER;
-  const r = await claim("a1");
-  assert.equal(r.statusCode, 403);
+  db.rows.gw_hr_offers = [typedOffer({ handoff_at: null })];
+  const g = await getPrefill("a1");
+  assert.equal(g.statusCode, 409, JSON.stringify(g.body));
+  assert.equal(g.body.error, "handoff_required");
+  assert.match(g.body.hint, /Office へ引き渡/);
+  const c = await claim("a1");
+  assert.equal(c.statusCode, 409);
+  assert.equal(c.body.error, "handoff_required");
+  assert.equal(db.rows.gw_hr_applicants[0].advance_claimed_at, null, "手続き中の印を付けない");
+  const d = await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" });
+  assert.equal(d.statusCode, 409);
+  assert.equal(d.body.error, "handoff_required");
+  assert.equal(db.rows.gw_hr_applicants[0].employee_id, null, "社員と結ばない");
+  assert.equal(db.rows.gw_hr_applicants[0].status, "accepted");
+});
+
+await ok("引き渡したあとは、これまでどおり 事前入力 → 手続き開始 → 完了", async () => {
+  setup();
+  db.rows.gw_hr_offers = [typedOffer({ handoff_at: "2026-10-12T00:00:00Z" })];
+  assert.equal((await getPrefill("a1")).statusCode, 200);
+  assert.equal((await claim("a1")).statusCode, 200);
+  const d = await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" });
+  assert.equal(d.statusCode, 200, JSON.stringify(d.body));
+  assert.equal(db.rows.gw_hr_applicants[0].status, "done");
+});
+
+await ok("db/133 が無い環境（引き渡しの列が無い）・区分の無い従来の合格通知・育成枠は、これまでどおり進める", async () => {
+  for (const offer of [
+    (() => { const o = typedOffer({}); delete o.handoff_at; return o; })(),
+    { id: "o1", tenant_id: "t1", applicant_id: "a1", version: 1, accepted_at: "2026-10-10T00:00:00Z", handoff_at: null },
+    typedOffer({ offer_type: "training", handoff_at: null }),
+  ]) {
+    setup();
+    db.rows.gw_hr_offers = [offer];
+    assert.equal((await getPrefill("a1")).statusCode, 200, JSON.stringify(offer));
+    assert.equal((await claim("a1")).statusCode, 200);
+    assert.equal((await act({ applicantId: "a1", action: "complete", employeeId: "emp-new1" })).statusCode, 200);
+  }
+});
+
+await ok("取り消した版・辞退した版は見ない（引き渡し済みの最新の承諾版で判断する）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [
+    typedOffer({ id: "o2", version: 2, handoff_at: "2026-10-12T00:00:00Z" }),
+    typedOffer({ id: "o1", version: 1, handoff_at: null, revoked_at: "2026-10-09T00:00:00Z" }),
+  ];
+  assert.equal((await getPrefill("a1")).statusCode, 200);
+});
+
+await ok("NEXT ACTION：手続き中の印があっても、引き渡し前なら［承諾を確認してOfficeへ引き渡す］を先に出す", async () => {
+  const { nextActionOf } = await import(atRoot("lib/hr.js"));
+  const base = { status: "accepted", offer_type: "executive_employee", formal_required: true, formal_state: "signed", advance_claimed_at: new Date().toISOString() };
+  assert.equal(nextActionOf({ ...base, handoff_state: "ready" }).action, "handoff");
+  assert.equal(nextActionOf({ ...base, handoff_state: "unavailable" }).action, "advance", "db/133 が無い環境は従来どおり［続きを開く］");
+  assert.equal(nextActionOf({ ...base, offer_type: null, handoff_state: "unavailable" }).cta, "続きを開く");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

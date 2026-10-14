@@ -71,6 +71,10 @@ console.log("\n=== 名簿：BPを追加する（075適用済み） ===");
 
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(1200);
+  // 追加のフォームは、ページ上部の「メンバー追加」で開く右のドロワー（常設のフォームは廃止）
+  check(!(await page.locator("#e-drawer").isVisible()), "追加のフォームは、最初は閉じている（一覧が主役）");
+  await page.locator("#add-btn").click();
+  check(await page.locator("#e-drawer").isVisible(), "「メンバー追加」でドロワーが開く");
 
   console.log("— 区分の欄 —");
   check(await page.locator("#e-kind-wrap").isVisible(), "区分の欄が出る（075適用済みのため）");
@@ -94,6 +98,7 @@ console.log("\n=== 名簿：BPを追加する（075適用済み） ===");
   check(!!sentBp, "送られた");
   check(sentBp?.employee_kind === "bp" && sentBp?.partner_company_id === "co-1",
     "区分と所属先がそのまま送られる");
+  check(!(await page.locator("#e-drawer").isVisible()), "追加できたらドロワーは閉じる");
 
   console.log("— 一覧に会社名まで出る —");
   const listText = await page.locator("#list").innerText();
@@ -152,7 +157,8 @@ console.log("\n=== 075が未適用でも、これまでどおり動く ===");
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(1200);
 
-  check(!(await page.locator("#e-kind-wrap").isVisible()), "区分の欄は出さない");
+  await page.locator("#add-btn").click();
+  check(await page.locator("#e-drawer").isVisible() && !(await page.locator("#e-kind-wrap").isVisible()), "ドロワーを開いても、区分の欄は出さない");
   check(!(await page.locator("#partner-card").isVisible()), "BP企業のカードも出さない");
 
   await page.locator("#e-name").fill("従来どおり");

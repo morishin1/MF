@@ -23,6 +23,7 @@
 //   画面ごとに数え方を書くと、一覧と詳細とホームで数字が違う、が起きる。
 //   数え方は lib/hr-flow.js に1つだけ置く。
 
+import { manualCheckBlock } from "../../lib/retire-cert-request-db.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
@@ -31,10 +32,13 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate } from "../../lib/devices.js";
 import { seed, tell } from "../../lib/hr-run.js";
 import { advance, gatherFactsBulk } from "../../lib/onboard-advance.js";
+import { onboardFlow } from "../../lib/onboard-flow.js";
 import { computeStage, stageOf, progressPct, daysToStart, kpiOf, stuckLine }
   from "../../lib/onboard-stage.js";
 import { MYNUMBER_KEYS, mynumberLabel } from "../../lib/mynumber.js";
 import { requireMfa } from "../../lib/mfa.js";
+import { offerTypeLabel } from "../../lib/hr-offer-types.js";
+import { isAdvanceClaimStale } from "../../lib/hr.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -48,7 +52,7 @@ const P_FIELDS = "id, tenant_id, employee_id, kind, status, target_on, note, pha
   // 入退社の本筋ではないが、ここ以外に置き場所が無い
   + "drive_link, drive_folders, advisor_shared_to, advisor_shared_at";
 const I_FIELDS = "id, procedure_id, item_key, title, category, owner, phase, assignee_id, "
-  + "required, status, due_on, note, sort_order, completed_at";
+  + "required, status, due_on, note, sort_order, completed_at, completed_by";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -119,9 +123,27 @@ async function read(req, res, ctx) {
     if (!one) return json(res, 404, { error: "not_found" });
     const its = items.get(id) || [];
     const raw = list.find((p) => p.id === id);
+    // 入社：6つの段階と次にすること（既存の段階の判定を並べ替えるだけ。lib/onboard-flow.js）
+    let flow = null;
+    if (raw?.kind === "onboarding") {
+      const soft = async (q2) => { try { const { data } = await q2; return data ?? null; } catch { return null; } };
+      const [signRow, assetRows] = await Promise.all([
+        soft(sb.from("gw_sign_requests").select("status, source, first_viewed_at, due_on, sent_at, signed_at")
+          .eq("tenant_id", ctx.tenantId).eq("employee_id", raw.employee_id).eq("doc_kind", "employment")
+          .neq("status", "cancelled").order("sent_at", { ascending: false }).limit(1).maybeSingle()),
+        soft(sb.from("gw_assets").select("id").eq("tenant_id", ctx.tenantId).eq("assigned_to", raw.employee_id).limit(100)),
+      ]);
+      const person = people.get(raw.employee_id);
+      flow = onboardFlow({
+        facts: facts.get(id) || { procedure: raw, items: its }, sign: signRow,
+        employee: { user_id: person?.userId || null }, targetOn: raw.target_on, items: its,
+        assets: (assetRows || []).length, today,
+      });
+    }
     return json(res, 200, {
       procedure: {
         ...one,
+        flow,
         groups: byRole(its).map((g) => ({
           ...g,
           items: g.items.map((i) => item(i, people)),
@@ -165,6 +187,8 @@ async function read(req, res, ctx) {
   // 3つのタブ。完了は入社・退社をまとめて出す
   const finished = (r) => (r.kind === "onboarding" ? r.stage === "complete" : r.phase === "done");
   return json(res, 200, {
+    // 採用HRから引き渡された人（db/133。まだ社員登録していない人だけ）。「入社予定」の上に出す
+    handoffs: await handoffQueue(sb, ctx.tenantId),
     tabs: TABS,
     onboarding: rows.filter((r) => r.kind === "onboarding" && !finished(r)),
     offboarding: rows.filter((r) => r.kind === "offboarding" && !finished(r)),
@@ -175,6 +199,41 @@ async function read(req, res, ctx) {
     roles: ROLES,
     today,
   });
+}
+
+/**
+ * 採用HRから引き渡された人（Office の入社準備キュー。db/133）。HR が本人の承諾内容を確認して
+ * ［承諾を確認してOfficeへ引き渡す］を押した版のうち、まだ社員登録（gw_employees）していない人。
+ * 給与・連絡先・承諾の IP などは出さない（社員登録の画面で、権限のある人にだけ事前入力される）。
+ * db/133 が未適用なら ready=false（画面は何も出さない）
+ */
+async function handoffQueue(sb, tenantId) {
+  try {
+    const { data: offers, error } = await sb.from("gw_hr_offers")
+      .select("id, applicant_id, version, offer_type, join_date, accepted_at, formal_contract_required, formal_signed_at, handoff_at")
+      .eq("tenant_id", tenantId).not("handoff_at", "is", null)
+      .order("handoff_at", { ascending: false }).limit(100);
+    if (error) return { ready: false, rows: [] };
+    const handed = (offers || []).filter((o) => o.handoff_at);
+    const ids = [...new Set(handed.map((o) => o.applicant_id))];
+    if (!ids.length) return { ready: true, rows: [] };
+    const { data: apps } = await sb.from("gw_hr_applicants").select("id, name, status, employee_id, advance_claimed_at")
+      .eq("tenant_id", tenantId).in("id", ids);
+    const byId = new Map((apps || []).map((a) => [a.id, a]));
+    const rows = [];
+    for (const o of handed) {
+      const a = byId.get(o.applicant_id);
+      if (!a || a.employee_id || a.status !== "accepted" || rows.some((r) => r.applicantId === a.id)) continue;
+      rows.push({
+        applicantId: a.id, name: a.name, offerType: o.offer_type, offerTypeLabel: offerTypeLabel(o.offer_type),
+        version: o.version, joinDate: o.join_date || null, acceptedAt: o.accepted_at,
+        formalRequired: o.formal_contract_required !== false, formalSignedAt: o.formal_signed_at || null, handoffAt: o.handoff_at,
+        // 誰かが社員登録の画面で入力中（1時間で外れる。採用HR の「本採用へ進める」と同じ確保）
+        claimed: Boolean(a.advance_claimed_at && !isAdvanceClaimStale(a.advance_claimed_at)),
+      });
+    }
+    return { ready: true, rows };
+  } catch { return { ready: false, rows: [] }; }
 }
 
 /** 一覧の1行。余計なものは出さない */
@@ -235,6 +294,8 @@ function row(p, its, people, today, facts) {
   };
 }
 
+const nameOfUser = (people, userId) => [...people.values()].find((p) => p.userId === userId)?.name || null;
+
 function item(i, people) {
   const def = flowOf(i.item_key) || {};
   return {
@@ -246,6 +307,8 @@ function item(i, people) {
     phase: i.phase,
     done: i.status === "done" || i.status === "na",
     completedAt: i.completed_at,
+    // チェックした人（証跡）。ログインアカウントから名簿の名前を引く。名簿に無ければ名前は出さない
+    completedByName: i.completed_by ? nameOfUser(people, i.completed_by) : null,
     assignee: i.assignee_id
       ? { id: i.assignee_id, name: people.get(i.assignee_id)?.name || "（不明）" }
       : null,
@@ -369,6 +432,12 @@ async function patch(req, res, ctx, user, body, advisorOnly = false) {
   // チェックを付ける・外す
   if (body.itemId && body.done !== undefined) {
     const done = Boolean(body.done);
+    // 退職証明書の交付：本人の申請があるあいだは、手で完了にしない（承認して発行が正本。lib/retire-cert-request-db.js）
+    const { data: target } = await sb.from("gw_procedure_items").select("item_key").eq("id", body.itemId).eq("procedure_id", id).maybeSingle();
+    if (target?.item_key === "off_hr_cert") {
+      const block = await manualCheckBlock(sb, ctx.tenantId, proc.employee_id, done);
+      if (block) return json(res, block.status, block.body);
+    }
     const { error } = await sb.from("gw_procedure_items").update({
       status: done ? "done" : "todo",
       completed_at: done ? now : null,

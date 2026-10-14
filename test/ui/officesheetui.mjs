@@ -193,6 +193,9 @@ console.log("\n=== 直す：その日だけ保存・その場で更新・フォ�
   await page.keyboard.press("Tab");
   const r2 = await s2;
   check(r2.status() === 400, "読めない時刻は 400");
+  // 応答が届いたあと、画面が行を描き直すまで待つ（応答直後に読むと、CI で描き直しの前に当たることがある）
+  await page.waitForFunction(() => /開始「9:5」/.test(document.querySelector('#dayrows tr[data-date$="-06"]')?.innerText || ""),
+    null, { timeout: 5000 }).catch(() => {});
   check((await row(page, 6).innerText()).includes("開始「9:5」を、時刻（例 9:00）で入れてください"), "理由を、その日の行に出す");
   check(await st6.getAttribute("aria-invalid") === "true", "その欄に、エラーの印");
   check(rows("gw_timesheet_days").find((d) => d.work_date === `${M}-06`).start_min == null, "保存されていない");
@@ -441,7 +444,7 @@ console.log("\n=== 一覧（/office）：勤務表の状態・稼働時間・リ
     ].map((r) => O.deriveRow(r, { today: "2026-10-06", deadline }));
     return { month, today: "2026-10-06", deadline, rows: O.sortRows(rs), summary: O.summarize(rs), stages: O.STAGES, filters: O.FILTERS, phase3: { ready: true } };
   };
-  const { page, errs } = await open("/office/index.html?month=2026-09", { list });
+  const { page, errs } = await open("/office/monthly.html?month=2026-09", { list });
   await page.waitForSelector("#rows tr[data-id]");
   const tr = (n) => page.locator(`#rows tr:has-text("${n}")`);
   check((await tr("田中 太郎").locator('[data-label="稼働時間"]').innerText()).includes("162.5h") && (await tr("田中 太郎").locator('[data-label="稼働時間"]').innerText()).includes("確定済"), "確定済み：稼働時間 162.5h・確認済");
@@ -469,7 +472,7 @@ console.log("\n=== 一覧（/office）：勤務表の状態・稼働時間・リ
   await page.close();
 
   // Phase 3 が未適用なら、案内を出し、従来の表示のまま
-  const legacy = await open("/office/index.html?month=2026-09", { list: (m) => ({ ...list(m), phase3: { ready: false, message: "管理者に db/105 の実行を依頼してください" } }) });
+  const legacy = await open("/office/monthly.html?month=2026-09", { list: (m) => ({ ...list(m), phase3: { ready: false, message: "管理者に db/105 の実行を依頼してください" } }) });
   await legacy.page.waitForSelector("#rows tr[data-id]");
   check((await legacy.page.locator("#banner").innerText()).includes("db/105"), "未適用なら、理由を出す");
   check(await legacy.page.locator('a:has-text("勤務表を確認・確定"), a:has-text("AIで読み取る"), a:has-text("内容を確認する"), button[data-cta="pick"]').count() === 0, "未適用なら、勤務表の追加・読取・確認へのボタンは出さない");

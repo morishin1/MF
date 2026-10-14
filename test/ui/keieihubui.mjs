@@ -1,8 +1,9 @@
 // 経営ハブ（/keiei ホーム・経営設定・セキュリティ）を、実際のブラウザで見る。
 //
 // ■ 何を守りたいのか
-//   ・4ブロックだけ。上から ①今日の確認 ②人・組織 ③お金 ④リスク・未処理
-//   ・①は最上部。重要度の高い順。何をすればいいかが先（押す先の名前つき）。0件なら、大きく出さず1行
+//   ・ホームの順番（2026-10-05 の UI/UX 刷新）：①今日の判断 ②10月KGI ③営業ファネル ④担当者別KPI ⑤お金 ⑥人・組織 ⑦リスク・停滞
+//     （②③④は営業の数字があるときだけ。ここでは営業の数字が無い応答を使う → today,money,people,risk。営業の欄は test/ui/keieisalesui.mjs）
+//   ・①は最上部。重要度の高い順（上位5件。残りは「ほか○件を見る」にたたむ）。何をすればいいかが先（押す先の名前つき）。0件なら、大きく出さず1行
 //   ・Board は「売上・請求は Board 連携後に表示します」の1表示だけ。「データ未連携」の空カードを並べない
 //   ・押したら、決めた元システムへ移る（HR・経費精算・会計・月次締め … ）。ここで処理を終わらせない
 //   ・給与・手当・単価の金額は、どこにも出ない
@@ -19,7 +20,7 @@ const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
-async function open({ hub = hubBusy(), security = securityBody(), width = 1280, hash = "" } = {}) {
+async function open({ hub = hubBusy(), security = securityBody(), width = 1280, hash = "", openMore = true } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   const calls = [];
   const moved = [];
@@ -55,6 +56,8 @@ async function open({ hub = hubBusy(), security = securityBody(), width = 1280, 
   await page.addStyleTag({ content: ".material-symbols-outlined{font-size:0!important;width:20px;height:20px;display:inline-block;flex:none}" });
   await page.waitForSelector('[data-block="today"], [data-role="owners"], .kei-banner', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(300);
+  // 「ほか○件を見る」は閉じているので、中身を確かめるときは開く（閉じていること自体は別のテストで見る）
+  if (openMore) await page.evaluate(() => document.querySelectorAll("details.kd-more").forEach((d) => { d.open = true; }));
   page.calls = calls; page.moved = moved;
   return page;
 }
@@ -65,9 +68,9 @@ console.log("— 忙しい日（PC）—");
 {
   const page = await open();
   const blocks = await page.locator("[data-block]").evaluateAll((ns) => ns.map((n) => n.dataset.block));
-  check(blocks.join() === "today,people,money,risk", `4ブロックだけ。順は ①今日の確認 ②人・組織 ③お金 ④リスク・未処理（いま ${blocks.join()}）`);
-  const heads = await page.locator("[data-block] .hub-h").evaluateAll((ns) => ns.map((n) => n.firstChild.textContent.trim()));
-  check(heads.join("|") === "今日の確認|人・組織|お金|リスク・未処理", `見出し（いま ${heads.join("|")}）`);
+  check(blocks.join() === "today,money,people,risk", `営業の数字が無いときは4ブロック。順は ①今日の判断 ⑤お金 ⑥人・組織 ⑦リスク・停滞（いま ${blocks.join()}）`);
+  const heads = await page.locator("[data-block] .kei-sec-h").evaluateAll((ns) => ns.map((n) => n.firstChild.textContent.trim()));
+  check(heads.join("|") === "今日の判断|お金|人・組織|リスク・停滞", `見出し（いま ${heads.join("|")}）`);
   const ys = await page.locator("[data-block]").evaluateAll((ns) => ns.map((n) => Math.round(n.getBoundingClientRect().top)));
   check(ys.every((y, i) => i === 0 || y > ys[i - 1]), `上から順に並ぶ（${ys.join(",")}）`);
   check(page.calls.join() === "hub", `呼ぶ API は hub だけ（いま ${page.calls.join()}）`);
@@ -75,7 +78,7 @@ console.log("— 忙しい日（PC）—");
 
   // ①
   const today = page.locator('[data-block="today"]');
-  const keys = await today.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.key));
+  const keys = await today.locator(".kd-row").evaluateAll((ns) => ns.map((n) => n.dataset.key));
   check(["expense_approval", "request_approval", "ceo_decision", "onboarding_company", "blocker_owner", "renewal_soon", "closing"].every((k) => keys.includes(k)),
     `①に、承認・社長判断・会社の対応待ち・経営判断待ち・契約期限・月次締めが出る（いま ${keys.join()}）`);
   // 労働条件通知書は、件数と状況だけ。アップロード・公開の操作は、入社管理（admin-hr.html）に置く
@@ -87,18 +90,18 @@ console.log("— 忙しい日（PC）—");
     "押す先は入社管理（/keiei の中でアップロードはしない）");
   check((await nu.innerText()).includes("入社管理を開く"), "押す先の名前が「入社管理を開く」");
   check(await today.locator('input[type="file"], button:has-text("アップロード")').count() === 0, "/keiei にはアップロードの操作が無い");
-  const sevs = await today.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
+  const sevs = await today.locator(".kd-row").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
   const rank = { high: 0, mid: 1, low: 2 };
   check(sevs.every((s, i) => i === 0 || rank[s] >= rank[sevs[i - 1]]), `①は重要度の高い順（${sevs.join(",")}）`);
-  check(await today.locator(".hub-it").first().locator(".hub-sev.high").count() === 1, "先頭は「重要」");
+  check(await today.locator(".kd-row").first().locator(".kei-pill.high").count() === 1, "先頭は「重要」");
   const t1 = await today.innerText();
   check(t1.includes("経費の承認（代表）") && t1.includes("2件が代表の承認待ちです（計 150,000円）"), "何をするか＋件数・金額");
   check(t1.includes("経費精算で承認する") && t1.includes("CEO REVIEWで判断する") && t1.includes("入社準備を開く"), "押す先の名前が、動詞つきで出る");
   check(t1.includes("2026年8月の月次締め") && t1.includes("5日を過ぎても、まだ締まっていません"), "月次締めの未完了");
-  check(await today.locator(".hub-count").innerText() === `${keys.length}件`, "①の件数の表示");
+  check(await today.locator('[data-chip="total"] b').innerText() === `${keys.length}件`, "①の件数（要対応）の表示");
 
   // ②
-  const ppl = await page.locator('[data-block="people"] .hub-tile').evaluateAll((ns) => ns.map((n) => [n.dataset.key, n.querySelector(".lb").textContent, n.querySelector(".val").textContent]));
+  const ppl = await page.locator('[data-block="people"] .kt').evaluateAll((ns) => ns.map((n) => [n.dataset.key, n.querySelector(".lb").textContent, n.querySelector(".val").textContent]));
   check(ppl.map((p) => p[0]).join() === "headcount,joining,recruiting,offers,onboarding_open", "②は5つ（在籍・入社予定・採用選考中・内定・入社準備未完了）");
   check(ppl.map((p) => p[2]).join() === "12人,2人,4人,2人,3人", `②の数字（いま ${ppl.map((p) => p[2]).join()}）`);
   check((await page.locator('[data-block="people"]').innerText()).includes("プロパー 10・BP 2"), "在籍の内訳");
@@ -106,8 +109,8 @@ console.log("— 忙しい日（PC）—");
   // ③
   const money = page.locator('[data-block="money"]');
   check(await money.locator('[data-role="board"]').count() === 1, "Board の表示は1つだけ");
-  check((await money.locator('[data-role="board"]').innerText()) === "売上・請求は Board 連携後に表示します", "Board 未接続の1行");
-  check(await money.locator(".hub-tile").count() === 3, "社内の数字は3つ（経費承認待ち・立替支払待ち・会計確認待ち）");
+  check((await money.locator('[data-role="board"]').innerText()) === "売上・請求は Board 連携後に表示します", "Board 未接続の1行（売上・粗利の空カードは置かない）");
+  check(await money.locator(".kt").count() === 4, "数字は4つ（経費承認待ち・立替支払待ち・会計確認待ち＋人件費の入口）");
   const mt = await money.innerText();
   check(mt.includes("230,000円") && mt.includes("41,800円") && mt.includes("仕訳（承認前）"), "金額・件数");
   check(!/データ未連携/.test(await page.locator("#kei-main").innerText()), "「データ未連携」の空カードを並べない");
@@ -115,10 +118,10 @@ console.log("— 忙しい日（PC）—");
 
   // ④
   const risk = page.locator('[data-block="risk"]');
-  const rkeys = await risk.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.key));
+  const rkeys = await risk.locator(".kr-row").evaluateAll((ns) => ns.map((n) => n.dataset.key));
   check(["join_near", "blocker_long", "billing_stale", "recruit_overdue", "renewal_watch"].every((k) => rkeys.includes(k)), `④のリスク（いま ${rkeys.join()}）`);
   check(!rkeys.includes("mfa_missing") && !/二段階認証/.test(await risk.innerText()), "二段階認証が未登録の経営者がいても、④に警告を出さない（任意）");
-  const rs = await risk.locator(".hub-it").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
+  const rs = await risk.locator(".kr-row").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
   check(rs.every((s, i) => i === 0 || rank[s] >= rank[rs[i - 1]]), `④は重要度の高い順（${rs.join(",")}）`);
   check(rs[0] === rs.slice().sort((a, b) => rank[a] - rank[b])[0], "④の先頭は、いちばん重要なもの");
   check(!keys.some((k) => rkeys.includes(k)), "同じ項目が①と④の両方に出ない");
@@ -130,7 +133,8 @@ console.log("— 忙しい日（PC）—");
   check(!/\b0円/.test(all), "「0円」を出さない");
 
   // 経営設定・セキュリティの入口
-  check(await page.locator('[data-role="to-security"]').count() === 1, "経営設定・セキュリティへの小さな入口");
+  // ホームは「今日の判断」に絞る。経営設定・セキュリティは、リスクのタブから入る
+  check(await page.locator('[data-role="to-security"]').count() === 0, "ホームには、経営設定・セキュリティの入口を置かない（リスクのタブの中にある）");
   await page.screenshot({ path: shotPath("keiei-hub-pc.png"), fullPage: true });
   await page.close();
 }
@@ -172,9 +176,30 @@ console.log("\n— 押した先（元システム）—");
   await page.goBack();
   await page.waitForTimeout(500);
   check(page.url().endsWith("#home") || !page.url().includes("#onboarding"), "戻るでホームに戻る");
+  await page.click('#kp-keiei-nav [data-ktab="risk"]');
+  await page.waitForTimeout(400);
+  check(page.url().endsWith("#risk") && await page.locator('[data-role="to-security"]').count() === 1, "リスクのタブに、経営設定・セキュリティへの入口がある");
   await page.click('[data-role="to-security"]');
   await page.waitForTimeout(500);
-  check(page.url().endsWith("#security") && (await text(page)).includes("経営者（owner）"), "ホーム下の小さな入口から、経営設定・セキュリティへ");
+  check(page.url().endsWith("#security") && (await text(page)).includes("経営者（owner）"), "リスクのタブから、経営設定・セキュリティへ");
+  await page.close();
+}
+
+
+console.log("\n— 今日の判断は上位5件。残りはたたむ —");
+{
+  const page = await open({ openMore: false });
+  const today = page.locator('[data-block="today"]');
+  check(await today.locator(":scope > .kd-rows > .kd-row").count() === 5, "初めから見えるのは5件");
+  const more = today.locator('details[data-role="more"]');
+  check(await more.count() === 1 && !(await more.evaluate((n) => n.open)), "残りは閉じている");
+  const total = await today.locator(".kd-row").count();
+  check((await more.locator("summary").innerText()) === `ほか${total - 5}件を見る`, `「ほか${total - 5}件を見る」`);
+  const sevs = await today.locator(".kd-row").evaluateAll((ns) => ns.map((n) => n.dataset.severity));
+  const rank = { high: 0, mid: 1, low: 2 };
+  check(sevs.every((s, i) => i === 0 || rank[s] >= rank[sevs[i - 1]]), "たたんだあとも、重要度の高い順のまま");
+  await more.locator("summary").click();
+  check(await more.evaluate((n) => n.open) && await more.locator(".kd-row").first().isVisible(), "押すと開く");
   await page.close();
 }
 
@@ -182,11 +207,11 @@ console.log("\n— 静かな日（0件は、大きく出さない）—");
 {
   const page = await open({ hub: hubQuiet() });
   const today = page.locator('[data-block="today"]');
-  check(await today.locator(".hub-it").count() === 0 && await today.locator(".hub-panel").count() === 0, "①: 項目もパネルも出ない");
-  check((await today.locator('[data-role="none"]').innerText()) === "今日、経営者が対応するものはありません。", "①: 1行だけ");
+  check(await today.locator(".kd-row").count() === 0 && await today.locator("details").count() === 0, "①: 項目も「ほか」も出ない");
+  check((await today.locator('[data-role="none"]').innerText()) === "今日、経営者が判断するものはありません。", "①: 1行だけ");
   const fs = await today.locator('[data-role="none"]').evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
   check(fs <= 13, `①: 小さく（${fs}px）`);
-  check(await today.locator(".hub-count").innerText() === "0件", "①: 0件");
+  check(await today.locator('[data-chip="total"] b').innerText() === "0件", "①: 0件");
   check((await page.locator('[data-block="risk"] [data-role="none"]').innerText()) === "気付くべき異常はありません。", "④: 1行だけ");
   check(await page.locator('[data-role="unreadable"]').count() === 0, "未読込の注意は出ない");
   check((await page.locator('[data-block="money"] [data-role="board"]').innerText()).includes("Board 連携後"), "Board は未接続の1行のまま");
@@ -200,10 +225,10 @@ console.log("\n— 読めなかった元データを、0 にしない —");
   const banner = await page.locator('[data-role="unreadable"]').innerText();
   check(banner.includes("経費") && banner.includes("採用") && banner.includes("止まっている仕事"), `注意書きに、読めなかったものが並ぶ（${banner.slice(0, 60)}…）`);
   check(banner.includes("問題がないという意味ではありません"), "「問題なし」と読ませない");
-  const miss = await page.locator(".hub-tile .val.miss").count();
+  const miss = await page.locator(".kt .val.miss").count();
   check(miss === 4, `読めなかった数字は「取得できません」（採用選考中・内定・経費承認待ち・立替支払待ち = 4。いま ${miss}）`);
   check(await page.locator('[data-block="money"] [data-key="expense_pending"] .val').innerText() === "取得できません", "経費承認待ち: 取得できません");
-  const tiles = await page.locator(".hub-tile").evaluateAll((ns) => ns.map((n) => n.querySelector(".val").textContent));
+  const tiles = await page.locator(".kt").evaluateAll((ns) => ns.map((n) => n.querySelector(".val").textContent));
   check(!tiles.some((v) => v === "0" || v === "0件" || v === "0人"), "読めない数字を 0 と出さない");
   await page.close();
 }
@@ -213,7 +238,7 @@ console.log("\n— 経営設定・セキュリティ —");
   const page = await open({ hash: "#security" });
   const t = await text(page);
   check(page.calls.join() === "security", "security だけを呼ぶ");
-  check(t.includes("経営設定・セキュリティ") && (await page.locator("#kei-side a.on").getAttribute("data-view")) === "security", "見出しとメニューの強調");
+  check(t.includes("経営設定・セキュリティ") && (await page.locator("#kp-keiei-nav .kp-ostab.on").getAttribute("data-kview")) === "security" && (await page.locator("#kp-keiei-nav .kp-otab.on").getAttribute("data-ktab")) === "risk", "見出しと横タブの強調（リスク → 経営設定・セキュリティ）");
   const rows = await page.locator('[data-role="owners"] tbody tr').evaluateAll((ns) => ns.map((n) => n.innerText.replace(/\s+/g, " ").trim()));
   check(rows.length === 3 && rows[0].includes("森田 経営") && rows[0].includes("登録済み") && rows[1].includes("未設定（任意）") && rows[2].includes("退職"), `経営者と二段階認証の状態（${rows.join(" / ")}）`);
   check(await page.locator('[data-role="warning"]').count() === 0 && await page.locator("#kei-main .kei-pill.warn").count() === 0, "二段階認証が未設定の経営者がいても、警告にしない（黄色の警告も、警告の色の印も出ない）");
@@ -239,9 +264,9 @@ console.log("\n— スマホ幅（390px / 360px）—");
 for (const width of [390, 360]) {
   const page = await open({ width });
   check(await overflow(page) <= 0, `${width}px ホーム: 横スクロールが出ない（はみ出し ${await overflow(page)}px）`);
-  const goes = await page.locator('[data-block="today"] .hub-go').evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
-  check(goes.length >= 6 && goes.every(([l, r]) => l >= 0 && r <= width), `${width}px: 押す先のボタンが、画面の中に収まる`);
-  const tiles = await page.locator('[data-block="people"] .hub-tile').evaluateAll((ns) => ns.map((n) => Math.round(n.getBoundingClientRect().left)));
+  const goes = await page.locator('[data-block="today"] .kei-go').evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
+  check(goes.length >= 5 && goes.every(([l, r]) => l >= 0 && r <= width), `${width}px: 押す先のボタンが、画面の中に収まる`);
+  const tiles = await page.locator('[data-block="people"] .kt').evaluateAll((ns) => ns.map((n) => Math.round(n.getBoundingClientRect().left)));
   check(new Set(tiles).size === 2, `${width}px: 人数の数字は2列（${[...new Set(tiles)].join(",")}）`);
   if (width === 390) await page.screenshot({ path: shotPath("keiei-hub-sp.png"), fullPage: true });
   await page.close();

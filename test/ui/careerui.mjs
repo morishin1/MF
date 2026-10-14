@@ -343,8 +343,8 @@ console.log("\n— 管理：admin-career.html —");
   await page.selectOption("#f-state", "");
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
   check(tabs.join("/") === "キャリア/入社〜育成/3か月育成/自走レベル/評価履歴", `上部タブ（いま ${tabs.join("/")}）`);
-  const side = await page.locator(".kp-sidebar").innerText();
-  check(side.includes("評価・キャリア") && !side.includes("評価・育成"), "左メニューは「評価・キャリア」");
+  const side = await page.locator("#kp-office-nav").innerText();
+  check(side.includes("評価・キャリア") && !side.includes("評価・育成"), "Office のタブは「評価・キャリア」");
 
   await page.selectOption("#f-when", "unset");
   check(await page.locator("#rows tr[data-emp]").count() === 1, "評価時期フィルタ（未設定）");

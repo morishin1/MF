@@ -467,4 +467,75 @@ await ok("ファイル名に区切り文字が入っても落とす", async () =
   assert.ok(!r.body.filename.includes(":"));
 });
 
+console.log("\n== 作成済みPDFを使う（pdf_start）==");
+await ok("作成依頼・条件の入力なしで始められる（条件は空・依頼先は無し・社労士/Slackには知らせない）", async () => {
+  reset();
+  const r = await call(orders, post({ action: "pdf_start", employeeId: "emp-1", title: "雇用契約書" }));
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.order.status, "requested");
+  assert.equal(r.body.order.title, "雇用契約書");
+  assert.deepEqual(db.rows.gw_doc_orders[0].conditions, {});
+  assert.equal(db.rows.gw_doc_orders[0].assignee_name, undefined);
+  assert.equal(r.body.employee.hasAccount, true);
+  assert.equal(r.body.reconciliation.hasAcceptedOffer, false);
+  assert.ok(logged.some((l) => l.action === "doc_order.pdf_start"));
+  assert.ok(!logged.some((l) => l.action === "doc_order.create"), "作成依頼としては記録しない");
+});
+await ok("もう一度押しても（途中で失敗してやり直しても）、依頼は1件のまま", async () => {
+  reset();
+  const a = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  const b = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  assert.equal(b.statusCode, 200);
+  assert.equal(b.body.order.id, a.body.order.id);
+  assert.equal(b.body.reused, true);
+  assert.equal(db.rows.gw_doc_orders.length, 1);
+});
+await ok("取り込み → そのまま署名依頼（作成済みPDFのまま。会社印は足さない）", async () => {
+  reset();
+  const a = await call(orders, post({ action: "pdf_start", employeeId: "emp-1", title: "雇用契約書" }));
+  const id = a.body.order.id;
+  const p = `t1/doc-order/${id}/a.pdf`;
+  db.files[p] = PDF;
+  const at = await call(orders, post({ action: "attach", id, path: p, filename: "雇用契約書.pdf" }));
+  assert.equal(at.statusCode, 200);
+  const s = await call(orders, post({ action: "send", id, dueOn: "2026-10-20" }));
+  assert.equal(s.statusCode, 200);
+  const sr = db.rows.gw_sign_requests[0];
+  assert.equal(sr.source, "uploaded"); assert.equal(sr.employee_id, "emp-1"); assert.equal(sr.seal_id, undefined);
+  assert.equal(s.body.notified, true);
+});
+await ok("署名依頼を出したあとは、同じ人にもう一度始めさせない（409 already_sent）", async () => {
+  const r = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  assert.equal(r.statusCode, 409); assert.equal(r.body.error, "already_sent");
+  assert.equal(db.rows.gw_sign_requests.length, 1);
+});
+await ok("アカウントの無い人は、取り込む前に分かる（hasAccount=false）", async () => {
+  reset(); db.rows.gw_employees[0].user_id = null;
+  const r = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  assert.equal(r.statusCode, 200); assert.equal(r.body.employee.hasAccount, false);
+});
+await ok("他社・名簿に無い人は 404。他の依頼のファイルは取り込ませない", async () => {
+  reset();
+  let r = await call(orders, post({ action: "pdf_start", employeeId: "emp-x" }));
+  assert.equal(r.statusCode, 404);
+  const a = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  r = await call(orders, post({ action: "attach", id: a.body.order.id, path: "t1/doc-order/ほかの依頼/x.pdf", filename: "x.pdf" }));
+  assert.equal(r.statusCode, 403);
+});
+await ok("採用承諾条件の突き合わせは無効にしない（一致しなければ止まる）", async () => {
+  reset();
+  Object.assign(db.rows.gw_employees[0], { employment_type: "アルバイト" });
+  db.rows.gw_hr_applicants = [{ id: "ap1", tenant_id: "t1", employee_id: "emp-1" }];
+  db.rows.gw_hr_offers = [{ id: "of1", applicant_id: "ap1", version: 1, accepted_at: "2026-09-01T00:00:00Z", employment_type: "正社員" }];
+  const r = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  assert.equal(r.statusCode, 409); assert.equal(r.body.error, "offer_mismatch");
+  assert.ok(r.body.mismatches.some((m) => m.label === "雇用形態"));
+  assert.equal(db.rows.gw_doc_orders.length, 0);
+});
+await ok("人事でなければ触れない", async () => {
+  reset(); isHr = false;
+  const r = await call(orders, post({ action: "pdf_start", employeeId: "emp-1" }));
+  assert.equal(r.statusCode, 403);
+});
+
 console.log(`\n合計 ${n} 件 通過`);

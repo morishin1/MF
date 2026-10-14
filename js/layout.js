@@ -174,7 +174,7 @@
    *   （areaOf が active から判定する）。管理画面は Office ではない（ヘッダーの Office は /office/ に1つだけ。
    *   管理画面へは ⚙管理 から入る。2026-10-02 に、Office の入口を役割で分けるのをやめた）。
    *     office   … ダッシュボード／人事・労務／経理・事務（管理画面。ヘッダーのタグは「管理」）
-   *     keiei    … チーム状況・全員のタスク・全員の日報（チーム・会社全体の管理）
+   *     keiei    … 日報・勤怠・チーム状況・全員のタスク（チーム・会社全体の管理）
    *     settings … 権限・端末・アクセス分析・AIナレッジ・システム設定（ヘッダー右の⚙管理から）
    *   上のどちらにも属さない画面は、ホーム領域＝全員と同じ左メニュー。
    *
@@ -186,43 +186,52 @@
    *
    * ready:false は枠だけ用意した項目（押しても遷移しない）。
    */
-  // 管理画面（人事・労務／経理・事務）の最初の行。管理者向けのダッシュボード（全社の今日の状況）
+  // ■ Office（業務アプリ）のナビゲーション。2026-10-03 の再設計で、⚙管理にあった業務メニューをここへ移した。
+  //   共通ヘッダー（採用HR／Sales／Office／経営）の下の横タブ：1段目がカテゴリ（ホーム／人・組織／請求・支払／契約・書類／端末・貸与品）、
+  //   2段目がカテゴリの中の画面（renderOfficeNav）。左サイドバー・ドロワーは持たない。
+  //   Office の画面（/office/* と、業務の管理画面 admin-*.html）は、すべてこのタブと同じヘッダーを使う
+  //   （月次業務の専用ヘッダー・「GWへ戻る」は廃止）。
+  //   ⚙管理は、権限・端末・アクセス分析・AIナレッジ・システム設定だけ（毎日使わない設定系）。
+  //
+  // ■ 見えるかどうかは when（showsFor の shows ＝ /api/me の access。サーバの判定そのもの）だけで決める
+  //   各画面の入口（KPLayout.init の access / roles）と同じ条件にする。出した項目を押して入れない、を作らない
+  //     officeHr      … 人事・労務（管理者・経営者・人事）           lib/gw.js canOfficeHr
+  //     officeFinance … 経理・事務（管理者・経営者・経理）           lib/gw.js canOfficeFinance
+  //     officeApp     … 月末月初業務 /office/（経営者・責任者・経理） lib/gw.js canAccessOffice
+  //     adminApp      … 会計・お知らせ配信（管理者・経営者）
+  //   カテゴリは、中に見える項目が1つも無ければ、カテゴリごと出さない
+  //
+  // ホーム（/office/）。Office に入れる人は全員ここが入口。中身は担当（権限）の分だけ出す
   const OFFICE_TOP = [
-    { key: "dashboard", href: "admin-dashboard.html", label: "ダッシュボード", icon: "dashboard", ready: true },
+    { key: "office_home", href: "/office/", label: "ホーム", icon: "home", ready: true, when: "officeEntry",
+      match: ["office_home", "dashboard"] },
   ];
 
-  // 管理画面: 人事・労務／経理・事務。admin/owner だけ（経理ロール等への開放はバックエンドAPI側の権限拡張も要るため、別タスクで扱う）。
-  // 入口はヘッダー右の ⚙管理（Office の入口ではない）。Office 内の1機能として統合するのは、あとで決める
+  // 2026-10-07 メニュー整理・権限分担：Office は日常の事務運用。人・組織／請求・支払／契約・書類／端末・貸与品。
+  // 判断・承認・重要な権限（給与の金額・経営者の付け外し・アクセス分析）は経営、システム設定は⚙。
+  // 中の画面と URL・when（権限）は、これまでと同じ（置き場所だけ変えた）
   const OFFICE_GROUPS = [
     {
-      key: "office-hr", label: "人事・労務", icon: "group",
+      key: "office-hr", label: "人・組織", icon: "group",
       items: [
-        { key: "members",   href: "admin-members.html",   label: "メンバー",     icon: "badge",      ready: true,
+        // 初めに見るのは今週の日報・勤怠（提出状況・未提出・要確認）。経営は集計（チーム状況）を見る
+        { key: "nippo",     href: "admin-nippo.html",     label: "日報・勤怠",   icon: "edit_note",  ready: true, when: "officeHr" },
+        { key: "members",   href: "admin-members.html",   label: "メンバー",     icon: "badge",      ready: true, when: "officeHr",
           // 新規登録（本採用の実行・gw_employees作成）は、応募者管理ではない。
           // 採用HRの「本採用へ進める」から ?applicantId= 付きで開く先でもあるので、
           // 入口は消さない。見出しまで同じにする必要はないので tabs（帯）では
           // なく match だけにする（帯を出すと、見出しをそろえる制約が働く）
           match: ["members", "onboard"] },
-        { key: "hr_flow",   href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true },
-        { key: "timecard",  href: "admin-timecard.html",  label: "勤怠管理",     icon: "schedule",   ready: true,
+        { key: "hr_flow",   href: "admin-hr.html",        label: "入退社",       icon: "swap_horiz", ready: true, when: "officeHr" },
+        { key: "timecard",  href: "admin-timecard.html",  label: "勤怠管理",     icon: "schedule",   ready: true, when: "officeHr",
           tabs: [
             { key: "timecard", href: "admin-timecard.html", label: "勤怠" },
             { key: "requests", href: "admin-requests.html", label: "休暇・稟議" },
           ] },
-        { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true,
-          // 業務順に並べる: ①契約・面談 → ②契約書作成依頼 → ③電子署名。
-          // 「作成依頼」はadmin-esign.html自身の中のタブ（PANES）の1つで、
-          // 新しい画面は作らない。?tab=order で開くと、そのタブが選ばれた
-          // 状態で開く（admin-esign.html:openFromUrl）
-          tabs: [
-            { key: "contracts",   href: "admin-contracts.html",       label: "契約・面談" },
-            { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
-            { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
-          ] },
         // 評価・キャリア。入口は「キャリア」（admin-career.html）。
         // 3か月育成・自走レベルは既存画面をそのままタブに並べる（作り直さない）。
         // 自走レベル（任せられる範囲）とキャリアLevel（役割・給与レンジ）は別物
-        { key: "career",    href: "admin-career.html",    label: "評価・キャリア", icon: "trending_up", ready: true,
+        { key: "career",    href: "admin-career.html",    label: "評価・キャリア", icon: "trending_up", ready: true, when: "officeHr",
           tabs: [
             { key: "career",         href: "admin-career.html",             label: "キャリア" },
             { key: "career_journey", href: "admin-career.html?tab=journey", label: "入社〜育成" },
@@ -237,25 +246,57 @@
       ],
     },
     {
-      key: "office-ops", label: "経理・事務", icon: "work",
+      key: "office-ops", label: "請求・支払", icon: "request_quote",
       items: [
-        { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true },
-        // 月次締めと月初作業管理は、同じ「月の区切りの仕事」なので1つにまとめる
-        { key: "closing",    href: "admin-closing.html",  label: "月次業務",     icon: "event_available", ready: true,
-          // 月末月初業務（勤務表・稼働・請求。/office/）も Office の「月次業務」の中。
-          // /office/ に入れるのは access.office の人だけなので、when で出し分ける（入れない人に出さない）
+        // 請求・支払：月末月初業務のデータ（/api/office）を、売上請求・仕入請求・支払の目で見る画面（このカテゴリの入口。書類回収・内容確認・支払準備）
+        { key: "office_billing", href: "/office/billing.html", label: "請求・支払", icon: "request_quote", ready: true, when: "officeApp" },
+        { key: "expenses",   href: "admin-expenses.html", label: "経費精算",     icon: "receipt",         ready: true, when: "officeFinance" },
+        // 月次業務：月末月初業務（/office/monthly.html・勤務表・契約条件）と、月次締め・月初作業管理を1つの入口に。
+        // 中のタブは担当の分だけ出す（月末月初業務は officeApp、月次締め・月初作業管理は officeFinance）。
+        // 項目の行き先は、見えるタブの先頭（renderAdminNav）
+        { key: "office_monthly", href: "/office/monthly.html", label: "月次業務", icon: "event_available", ready: true, when: "officeMonthly",
           tabs: [
-            { key: "closing",    href: "admin-closing.html",     label: "月次締め" },
-            { key: "monthstart", href: "admin-month-start.html", label: "月初作業管理" },
-            { key: "office_monthly", href: "/office/",           label: "月末月初業務", when: "officeApp" },
+            { key: "office_monthly", href: "/office/monthly.html",   label: "月末月初業務", when: "officeApp" },
+            { key: "closing",        href: "admin-closing.html",     label: "月次締め",     when: "officeFinance" },
+            { key: "monthstart",     href: "admin-month-start.html", label: "月初作業管理", when: "officeFinance" },
+          ],
+          match: ["office_monthly", "office_timesheet", "office_terms", "closing", "monthstart"] },
+        { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true, when: "adminApp" },
+      ],
+    },
+    {
+      key: "office-docs", label: "契約・書類", icon: "contract",
+      items: [
+        { key: "contracts", href: "admin-contracts.html", label: "雇用契約",     icon: "contract",   ready: true, when: "officeHr",
+          // 業務順に並べる: ①契約・面談 → ②契約書作成依頼 → ③電子署名。
+          // 「作成依頼」はadmin-esign.html自身の中のタブ（PANES）の1つで、
+          // 新しい画面は作らない。?tab=order で開くと、そのタブが選ばれた
+          // 状態で開く（admin-esign.html:openFromUrl）
+          tabs: [
+            { key: "contracts",   href: "admin-contracts.html",       label: "契約・面談" },
+            { key: "esign_order", href: "admin-esign.html?tab=order", label: "契約書作成依頼" },
+            { key: "esign",       href: "admin-esign.html",           label: "電子署名" },
           ] },
-        { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true },
-        { key: "accounting", href: "admin.html",          label: "会計",         icon: "account_balance", ready: true, external: true },
-        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に。社内事務・運営なのでOffice
-        { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true,
+        { key: "templates",  href: "admin-docs.html",     label: "社内文書",     icon: "folder_copy",     ready: true, when: "officeFinance" },
+        // 定例業務マスター（Office の年間業務カレンダーの元。db/125）。見られるカテゴリは中で担当の分だけ。
+        // 契約・書類のタブは、人事・労務だけの人には雇用契約だけ。定例業務は Office ホームのカレンダーの「定例業務を開く」から入る
+        { key: "office_recurring", href: "/office/recurring.html", label: "定例業務", icon: "event_repeat", ready: true, when: "officeFinance" },
+        // 社内のお知らせと、サイト（公開ページ）のお知らせを1つの入口に
+        { key: "notices",   href: "admin-notices.html",   label: "お知らせ配信", icon: "campaign",  ready: true, when: "adminApp",
           tabs: [
             { key: "notices",  href: "admin-notices.html",   label: "社内のお知らせ" },
             { key: "sitenews", href: "admin-site-news.html", label: "サイトのお知らせ" },
+          ] },
+      ],
+    },
+    {
+      // 端末・貸与品（もとは⚙）。登録・貸出・返却・棚卸は Office の実務。API（api/devices・api/assets）と同じ人事の権限
+      key: "office-assets", label: "端末・貸与品", icon: "computer",
+      items: [
+        { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true, when: "officeHr",
+          tabs: [
+            { key: "devices", href: "admin-devices.html", label: "端末管理" },
+            { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
           ] },
       ],
     },
@@ -274,23 +315,19 @@
         { key: "tasks", href: "admin-tasks.html", label: "タスク・予定" },
         { key: "goals", href: "admin-goals.html", label: "今週のゴール" },
       ] },
-    { key: "nippo", href: "admin-nippo.html", label: "全員の日報", icon: "edit_note", ready: true },
-  ];
-
-  // 管理（⚙）: 毎日使わない設定系だけ。ヘッダー右のアイコンが正式な入口
-  const SETTINGS_ITEMS = [
-    // 権限を渡すのは名簿の画面。行き先を分けず、その場所へ直接飛ばす
-    { key: "roles",     href: "admin-members.html#roles", label: "権限",     icon: "key",      ready: true },
-    { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true,
-      tabs: [
-        { key: "devices", href: "admin-devices.html", label: "端末管理" },
-        { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
-      ] },
+    // 日報・勤怠（admin-nippo.html）は Office の「人・組織」へ（2026-10-07）。経営はチーム状況で集計を見る
+    // 利用状況の分析は経営（もとは⚙）。ログイン・操作の履歴は⚙のシステム設定（操作ログ）
     { key: "analytics", href: "admin-analytics.html", label: "アクセス分析", icon: "monitoring", ready: true,
       tabs: [
         { key: "analytics", href: "admin-analytics.html", label: "アクセス分析" },
         { key: "blocks",    href: "admin-blocks.html",    label: "口コミ流入ブロック" },
       ] },
+  ];
+
+  // 管理（⚙）: 毎日使わない設定系だけ（システム設定・外部連携・操作ログ）。ヘッダー右のアイコンが正式な入口
+  const SETTINGS_ITEMS = [
+    // 2026-10-07：権限は経営（リスク・権限）、端末・貸与品は Office、アクセス分析は経営へ移した。
+    // ⚙に残すのは、システム設定（会社情報・外部サービスの状態＝外部連携・操作ログ）と AIナレッジの管理
     // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
     // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
     // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
@@ -309,6 +346,10 @@
    */
   function areaOf(active, path = location.pathname) {
     const file = String(path || "").split("/").pop();
+    // 月末月初業務（/office/ の各画面）は Office の中
+    if (active && /^\/office(\/|$)/.test(String(path || ""))) return "office";
+    // 経営（/keiei/）はパスで決める（画面の中のビューはハッシュで切り替わるので、active に頼らない）
+    if (/^\/keiei(\/|$)/.test(String(path || ""))) return "keiei";
     if (!active || !/^admin-/.test(file)) return "home";
     const hit = (i) => i.key === active || (i.match || []).includes(active);
     if (OFFICE_TOP.some(hit) || OFFICE_GROUPS.some((g) => g.items.some(hit))) return "office";
@@ -335,6 +376,12 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // メニューのリンク（admin-members.html・img/logo.svg など）は、ルート直下の画面からの相対で書いてある。
+  // /office/ のような下の階層の画面でも同じ左メニュー・ヘッダーを使うので、そこでは先頭に / を付けて開く。
+  // ルート直下の画面では、書いたとおりのまま（既存の画面・テストの見た目を変えない）
+  const IN_SUBDIR = typeof location !== "undefined" && /^\/[^/]+\//.test(location.pathname || "");
+  const rootHref = (h) => (IN_SUBDIR && h && !/^(\/|https?:|#|mailto:|tel:)/i.test(h) ? "/" + h : h);
+
   /**
    * **ここ** を太字にする。それ以外の記法は解さない。
    *
@@ -351,6 +398,8 @@
 
   // 管理者側の画面をメンバーが開いた場合などに、行き先へ送り返す
   function homeFor(appRole, stage = null) {
+    // 退職者（left）は、通常の画面を持たない。ログインしたら退職者ポータル（退職後のお手続き）へ
+    if (stage && stage.key === "left") return "/retiree/";
     if (appRole === "sr") return "advisor.html";
     // 入社準備中は、ログインしたらまず入社準備。本人に「どこを見るか」を考えさせない
     if (appRole === "member" && isPreparing(stage)) return "/onboarding/";
@@ -401,19 +450,19 @@
 
   /**
    * このツールを出すか／どこへ行くか。
-   *   office … /api/me の access.office（経営者・責任者・経理）の人だけ。行き先は、役割に関係なく /office/。
-   *            管理者（admin/owner）でも、access.office が無ければ出さない（押しても入れない入口を出さない）
+   *   office … Office に入れる人（officeEntry ＝ 人事・労務／経理・事務／月末月初業務のどれか）。
+   *            行き先は、役割に関係なく Office のホーム（/office/）。中身は担当の分だけ出す
    *   keiei  … 経営者（access.keiei）は /keiei/。管理者はチーム状況（admin-team.html）から
    *            （全員のタスク・日報・チーム状況は管理者も使う。経営アプリそのものは経営者だけ）
    * 権限の判定は showsFor（サーバの判定そのもの）に集めてある。ここでは並べ直さない
    */
   function toolVisible(t, shows) {
-    if (t.key === "office") return Boolean(shows.office);
+    if (t.key === "office") return Boolean(shows.officeEntry);
     if (t.key === "keiei") return Boolean(shows.keiei || shows.team);
     return Boolean(shows[t.key]);
   }
   function toolHref(t, shows) {
-    if (t.key === "keiei") return shows.keiei ? t.href : t.altHref;
+    if (t.key === "keiei") return rootHref(shows.keiei ? t.href : t.altHref);
     return t.href;
   }
 
@@ -421,9 +470,8 @@
     const list = TOOLS.filter((t) => t.ready && toolVisible(t, shows));
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
-      // /office・/keiei の中にいるとき。経営は、管理画面でその領域（チーム管理）を開いているときも選ぶ。
-      // Office は /office/ の中だけ（管理画面の人事・労務・経理・事務は、Office ではない）
-      const on = path.startsWith(s.href) || (s.key === "keiei" && area === "keiei");
+      // /office・/keiei の中にいるとき。管理画面でその領域（Office の業務・チーム管理）を開いているときも選ぶ
+      const on = path.startsWith(s.href) || (s.key === "keiei" && area === "keiei") || (s.key === "office" && area === "office");
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
@@ -439,31 +487,37 @@
     const canPreview = appRole === "admin" || appRole === "owner";
     // Office・⚙管理 は admin/owner だけ（メンバー表示で確認中は出さない。管理者機能を隠す意味が崩れるため）
     const showAdminTools = canPreview && !memberView;
-    const area = showAdminTools ? areaOf(active) : null;
+    // Office の画面の中では「/ Office」を出す（Office に入れる人なら、役割に関係なく同じ）。
+    // 経営・管理（⚙）の領域は管理者・経営者だけ
+    const here = areaOf(active);
+    const area = !memberView && here === "office" && shows.officeEntry ? "office" : (showAdminTools ? here : null);
+    // ⚙管理は設定系だけ（権限・端末・アクセス分析・AIナレッジ・システム設定）。管理者・経営者だけ。
+    // 業務のメニュー（人・組織／請求・支払／契約・書類／端末・貸与品）は Office の左メニューへ移した
+    const showGear = showAdminTools;
 
     const el = document.createElement("div");
     el.className = "topbar";
     el.innerHTML = `
       <div class="brand">
-        <a href="${home}" style="text-decoration:none;color:inherit;">
-          <img src="img/logo.svg" alt="" class="kp-logo">エイト</a>
-        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "管理", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
+        <a href="${rootHref(home)}" style="text-decoration:none;color:inherit;">
+          <img src="${rootHref("img/logo.svg")}" alt="" class="kp-logo">エイト</a>
+        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "Office", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
         ${shortcutsHtml(shows, location.pathname, area)}
-        <span class="kp-who-name">${esc(name)}</span>
+        <span class="kp-who-name" title="${esc(name)}">${esc(name)}</span>
         ${canPreview ? (memberView
-          ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()">
+          ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()" title="管理画面に戻る">
                ${icon("admin_panel_settings", 18)}管理画面に戻る
              </button>`
           : `<button class="btn btn-secondary btn-sm" onclick="KPLayout.viewAsMember()"
                      title="メンバーに見える画面を、このアカウントのまま確認します">
                ${icon("visibility", 18)}メンバー表示
              </button>`) : ""}
-        ${showAdminTools ? `
+        ${showGear ? `
         <div class="kp-bell kp-admin-menu">
-          <button class="icon-btn${area === "settings" || area === "office" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
+          <button class="icon-btn${area === "settings" ? " on" : ""}" id="kp-admin-menu-btn" title="管理"
                   data-shortcut="area-settings" onclick="KPLayout.toggleAdminMenu()">
             ${icon("settings", 20)}
           </button>
@@ -476,7 +530,7 @@
           </button>
           <div class="kp-bell-panel hidden" id="kp-bell-panel"></div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="KPLayout.logout()">
+        <button class="btn btn-secondary btn-sm" onclick="KPLayout.logout()" title="ログアウト">
           ${icon("logout", 18)}ログアウト
         </button>
       </div>`;
@@ -486,18 +540,14 @@
 
   /**
    * ⚙管理のドロップダウン中身。通知ベル（kp-bell-panel）と同じ器を使い回す。
-   * SETTINGS_ITEMS（権限・端末・貸与品・アクセス分析・システム設定）への直リンクだけ。
+   * SETTINGS_ITEMS（AIナレッジ・システム設定＝外部連携・操作ログ）への直リンクだけ。
    * サーバへ確かめに行く必要が無いので、通知と違って毎回その場で組み立てるだけでよい
    */
-  // 管理画面（人事・労務／経理・事務。admin-*.html）の入口。Office の入口ではない（Office は /office/ に1つだけ）。
-  // ヘッダーの「Office」から管理画面へは送らなくなったので、管理者がここから開く
-  const ADMIN_CONSOLE = { key: "console", href: "admin-dashboard.html", label: "管理画面（人事・労務／経理・事務）", icon: "dashboard" };
-
   function adminMenuHtml() {
     return `
       <div class="kp-bell-head"><b>管理</b></div>
-      ${[ADMIN_CONSOLE, ...SETTINGS_ITEMS].map((n) => `
-        <a class="kp-bell-item" href="${esc(n.href)}">
+      ${SETTINGS_ITEMS.map((n) => `
+        <a class="kp-bell-item" href="${esc(rootHref(n.href))}">
           ${icon(n.icon, 18)}<b style="display:inline;margin-left:8px;">${esc(n.label)}</b>
         </a>`).join("")}`;
   }
@@ -539,7 +589,7 @@
         ${unread ? `<button class="btn btn-secondary btn-sm" onclick="KPLayout.readAllNotifications()">すべて既読</button>` : ""}
       </div>
       ${notifications.map((n) => `
-        <a class="kp-bell-item${n.read_at ? "" : " unread"}" href="${esc(n.link || "#")}"
+        <a class="kp-bell-item${n.read_at ? "" : " unread"}" href="${esc(rootHref(n.link || "#"))}"
            onclick="KPLayout.openNotification('${esc(n.id)}')">
           <b>${esc(n.title)}</b>
           ${n.body ? `<small>${esc(n.body)}</small>` : ""}
@@ -618,80 +668,141 @@
     });
   }
 
-  // ---- 管理者メニューの開け閉め -----------------------------------------------
-  // 開いているグループの鍵を覚えておく。読めない・壊れているときは空で始める
-  const NAV_OPEN_KEY = "kp_nav_open";
-  const loadOpen = () => {
-    try {
-      const v = JSON.parse(localStorage.getItem(NAV_OPEN_KEY) || "[]");
-      return new Set(Array.isArray(v) ? v : []);
-    } catch { return new Set(); }
-  };
-  const saveOpen = (set) => {
-    try { localStorage.setItem(NAV_OPEN_KEY, JSON.stringify([...set])); }
-    catch { /* 保存できなくても、その画面のあいだは動く */ }
-  };
-
-  /** いま見ている画面が入っている Office サブグループ。ここは必ず開く */
+  /** いま見ている画面が入っている Office のカテゴリ（人・組織／請求・支払／契約・書類／端末・貸与品） */
   const groupOf = (active) =>
     OFFICE_GROUPS.find((g) => g.items.some((i) => i.key === active || (i.match || []).includes(active))) || null;
 
   /**
-   * 管理者: 左サイドメニュー。いま選んでいる業務領域（ホーム／Office／管理）の中だけを出す。
-   * ホーム・管理は項目が少ないので平らに並べる。Office だけ人事・労務／経理・事務の
-   * 2グループに畳める（社労士のように項目が少ない相手には、従来どおり平らに並べる＝items引数）
+   * 管理者: 左サイドメニュー（管理（⚙）・経営の領域と、社労士）。
+   * Office は左メニューを持たない（renderOfficeNav の横タブ）
    */
   function renderAdminNav(active, items = null, shows = {}) {
     if (items) return renderSidebar(active, items, "admin");
-
-    // ホーム領域（全員と同じ左メニュー）は renderChrome が renderMemberNav で描く。ここは Office・管理だけ
     const area = areaOf(active);
-    if (area === "settings") return renderSidebar(active, SETTINGS_ITEMS, "admin");
     if (area === "keiei") return renderSidebar(active, KEIEI_ITEMS.filter((n) => !n.when || shows[n.when]), "admin");
-
-    const open = loadOpen();
-    const here = groupOf(active);
-    // PC では、いる場所のグループを必ず開く。
-    // 狭い画面ではメニューが本文の上に積まれるので、開いたままにすると
-    // 本文が下に押される。見出しに印を付けるだけにして、畳んでおく
-    const narrow = typeof matchMedia === "function" && matchMedia("(max-width: 860px)").matches;
-    if (here && !narrow) open.add(here.key);
-
-    const el = document.createElement("nav");
-    el.className = "kp-sidebar grouped";
-    el.innerHTML = OFFICE_TOP.map((n) => sideItem(n, active)).join("") + OFFICE_GROUPS.map((g) => {
-      const on = open.has(g.key);
-      const hasActive = here && here.key === g.key;
-      return `
-        <button type="button" class="kp-side-group${on ? " open" : ""}${hasActive ? " here" : ""}"
-                data-group="${esc(g.key)}" aria-expanded="${on}"
-                onclick="KPLayout.toggleNavGroup('${esc(g.key)}')">
-          ${icon(g.icon, 19)}<span class="lb">${esc(g.label)}</span>
-          <span class="kp-side-dot hidden" title="中に対応が必要なものがあります"></span>
-          <span class="ch material-symbols-outlined">expand_more</span>
-        </button>
-        <div class="kp-side-sub${on ? "" : " hidden"}" data-group="${esc(g.key)}">
-          ${g.items.map((n) => sideItem(n, active)).join("")}
-        </div>`;
-    }).join("");
-    document.body.appendChild(el);
-    document.body.classList.add("kp-has-sidebar");
-    document.documentElement.classList.add("kp-has-sidebar");
+    return renderSidebar(active, SETTINGS_ITEMS, "admin");
   }
 
-  /** グループを1つ開け閉めする。描き直さず、その場で切り替える */
-  function toggleNavGroup(key) {
-    const btn = document.querySelector(`.kp-side-group[data-group="${key}"]`);
-    const box = document.querySelector(`.kp-side-sub[data-group="${key}"]`);
-    if (!btn || !box) return;
+  /**
+   * 経営（/keiei/）の横タブ。Office と同じ作り：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、タブを2段で出す。
+   *   1段目：ホーム／売上・営業／人・組織／財務／リスク・権限
+   *   2段目：いまのタブの中の画面（人・組織＝チーム状況・入社準備・給与管理…、財務＝人件費、リスク・権限＝経営設定・セキュリティ・権限・アクセス分析）
+   * 左サイドバーは持たない。画面の中の切り替えは URL のハッシュ（#sales など）で、ページは作り直さない。
+   * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
+   */
+  const KEIEI_TABS = [
+    { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
+    { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
+    // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
+    // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）
+    // 経営者が毎日見る入口は「メンバー実行状況」（日報・今日の3つ・明日の3つ・期限超過をまとめて見る。keiei/members.js）
+    { key: "people",  label: "人・組織",     icon: "groups",    views: ["members", "people", "onboarding", "pay"], href: "/keiei/#members",
+      sub: [
+        { view: "members", label: "メンバー実行状況" },
+        { href: "/admin-team.html",  label: "チーム状況" },
+        { href: "/admin-tasks.html", label: "全員のタスク" },
+        { view: "onboarding", label: "入社準備" },
+        { view: "pay",        label: "給与管理" },
+        { view: "people",     label: "概要" },
+      ] },
+    { key: "finance", label: "財務",         icon: "payments",  views: ["finance", "payroll"],
+      sub: [
+        { view: "finance", label: "お金" },
+        { view: "payroll", label: "人件費" },
+      ] },
+    // 権限・セキュリティ（2026-10-07）：管理者の任命・重要な権限の付与は経営。権限の画面はメンバー一覧の「権限」
+    { key: "risk",    label: "リスク・権限", icon: "warning",   views: ["risk", "security"],
+      sub: [
+        { view: "risk",     label: "リスク・未処理" },
+        { view: "security", label: "経営設定・セキュリティ" },
+        { href: "/admin-members.html#roles",  label: "権限" },
+        { href: "/admin-analytics.html",      label: "アクセス分析" },
+      ] },
+  ];
+  /** URL のハッシュ（#onboarding/<ID>・#pay/<ID> など）から、画面の鍵（view）を取る */
+  const keieiViewOf = (hash = location.hash) => {
+    const v = String(hash || "").replace(/^#/, "").split("/")[0] || "home";
+    return v === "pay-audit" || v === "pay-candidates" ? "pay" : v;
+  };
+  const keieiTabOf = (view) => KEIEI_TABS.find((t) => t.views.includes(view)) || KEIEI_TABS[0];
+  // 経営の画面の外（チーム状況・全員のタスク・全員の日報＝admin-*.html）でも、経営の横タブを出す。
+  // そのときのタブの行き先は /keiei/#… （ページを移る）。いま開いている外の画面は、2段目で選んだ状態にする
+  const KEIEI_EXT_OF = { team: "/admin-team.html", tasks: "/admin-tasks.html", goals: "/admin-tasks.html", analytics: "/admin-analytics.html", blocks: "/admin-analytics.html" };
+  const onKeieiPage = () => /^\/keiei(\/|$)/.test(location.pathname);
+  function keieiNavHtml(view, extActive = null) {
+    const ext = extActive ? KEIEI_EXT_OF[extActive] || null : null;
+    const here = ext ? KEIEI_TABS.find((t) => (t.sub || []).some((n) => n.href === ext)) || KEIEI_TABS[0] : keieiTabOf(view);
+    const base = onKeieiPage() ? "#" : "/keiei/#";
+    const row1 = KEIEI_TABS.map((t) => `<a class="kp-otab${t === here ? " on" : ""}" href="${t.href ? esc(t.href) : `${base}${t.key}`}" data-ktab="${t.key}" data-ic="${t.icon}"${t === here ? ' aria-current="page"' : ""}><span>${esc(t.label)}</span></a>`).join("");
+    const row2 = (here.sub || []).map((n) => {
+      const on = n.view ? !ext && n.view === view : n.href === ext;
+      const cur = on ? ' aria-current="page"' : "";
+      return n.view
+        ? `<a class="kp-ostab${on ? " on" : ""}" href="${base}${n.view}" data-kview="${n.view}"${cur}><span>${esc(n.label)}</span></a>`
+        : `<a class="kp-ostab ext${on ? " on" : ""}" href="${esc(n.href)}"${cur}><span>${esc(n.label)}</span></a>`;
+    }).join("");
+    return `<div class="kp-otabs" role="list">${row1}</div>` + (row2 ? `<div class="kp-ostabs" aria-label="${esc(here.label)}">${row2}</div>` : "");
+  }
+  function renderKeieiNav(active) {
+    const el = document.createElement("nav");
+    el.className = "kp-officenav";
+    el.id = "kp-keiei-nav";
+    el.setAttribute("aria-label", "経営");
+    el.innerHTML = onKeieiPage() ? keieiNavHtml(keieiViewOf()) : keieiNavHtml(null, active);
+    const bar = document.querySelector(".topbar");
+    if (bar && bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling);
+    else document.body.insertBefore(el, document.body.firstChild);
+    document.body.classList.add("kp-has-officenav");
+  }
+  /** 経営の画面を切り替えたとき、タブの強調だけ更新する（ページは作り直さない） */
+  function setKeieiView(view) {
+    const nav = document.getElementById("kp-keiei-nav");
+    if (nav) nav.innerHTML = keieiNavHtml(view || keieiViewOf());
+  }
 
-    const nowOpen = box.classList.toggle("hidden") === false;
-    btn.classList.toggle("open", nowOpen);
-    btn.setAttribute("aria-expanded", String(nowOpen));
+  /**
+   * Office のナビゲーション：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、横タブを2段で出す。
+   *   1段目：ホーム／人・組織／請求・支払／契約・書類／端末・貸与品（カテゴリ。OFFICE_TOP と OFFICE_GROUPS）
+   *   2段目：いまのカテゴリの中の画面（日報・勤怠／メンバー／入退社／… など。OFFICE_GROUPS の items）
+   *   3段目：画面の中の切り替え（勤怠／休暇・稟議 など）は、これまでどおり見出しの下の帯（renderSubnav）
+   * 左サイドバー・狭い画面のドロワーは持たない（採用HR・Sales と同じ、上のタブで行き来する）。
+   * 見える・見えないは when（/api/me の access）だけ。見える画面の無いカテゴリは出さない。
+   * 項目の行き先は、その人に見える先頭のタブ（月次業務のように、中のタブを担当で出し分ける項目）
+   */
+  function renderOfficeNav(active, shows = {}) {
+    const vis = (n) => !n.when || Boolean(shows[n.when]);
+    const first = (n) => {
+      const t = (n.tabs || []).find(vis);
+      return t && t.href !== n.href ? { ...n, href: t.href } : n;
+    };
+    const hit = (n) => n.key === active || (n.match || []).includes(active);
+    const here = groupOf(active);
+    const groups = OFFICE_GROUPS.filter((g) => vis(g) && g.items.some(vis));
+    const top = OFFICE_TOP.filter(vis);
 
-    const open = loadOpen();
-    if (nowOpen) open.add(key); else open.delete(key);
-    saveOpen(open);
+    // アイコン＋名前（採用HR・Sales のヘッダーのタブと同じ）。アイコンは CSS（data-ic → ::before）で描き、タブの文字には混ぜない
+    const cat = (key, href, label, on, badge, ic) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}" data-ic="${esc(ic)}"${on ? ' aria-current="page"' : ""}>`
+      + `<span>${esc(label)}</span>${badge ? `<b class="kp-otab-dot hidden" data-cat-dot="${esc(key)}" title="中に対応が必要なものがあります"></b>` : ""}</a>`;
+    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), false, n.icon)).join("")
+      + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), true, g.icon)).join("");
+
+    const items = here ? here.items.filter(vis).map(first) : [];
+    const row2 = items.map((n) => {
+      const on = hit(n);
+      return `<a class="kp-ostab${on ? " on" : ""}${n.external ? " ext" : ""}" href="${esc(rootHref(n.href))}"${on ? ' aria-current="page"' : ""}>`
+        + `<span>${esc(n.label)}</span><b class="kp-side-badge hidden" data-badge="${esc(badgeKeys(n).join(" "))}"></b></a>`;
+    }).join("");
+
+    const el = document.createElement("nav");
+    el.className = "kp-officenav";
+    el.id = "kp-office-nav";
+    el.setAttribute("aria-label", "Office");
+    el.innerHTML = `<div class="kp-otabs" role="list">${row1}</div>`
+      + (row2 ? `<div class="kp-ostabs" aria-label="${esc(here.label)}">${row2}</div>` : "");
+    const bar = document.querySelector(".topbar");
+    if (bar && bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling);
+    else document.body.insertBefore(el, document.body.firstChild);
+    document.body.classList.add("kp-has-officenav");
   }
 
   /**
@@ -726,7 +837,7 @@
       const on = t.key === active;
       return on
         ? `<span class="kp-subtab on" aria-current="page">${esc(t.label)}</span>`
-        : `<a class="kp-subtab" href="${esc(t.href)}">${esc(t.label)}</a>`;
+        : `<a class="kp-subtab" href="${esc(rootHref(t.href))}">${esc(t.label)}</a>`;
     }).join("");
     head.insertAdjacentElement("afterend", box);
   }
@@ -751,7 +862,7 @@
       + `<b class="kp-side-badge hidden" data-badge="${esc(badgeKeys(n).join(" "))}"></b>`
       + `${n.ready ? "" : '<em>準備中</em>'}`;
     return n.ready
-      ? `<a class="${cls}" href="${n.href}">${inner}</a>`
+      ? `<a class="${cls}" href="${rootHref(n.href)}">${inner}</a>`
       : `<span class="${cls}">${inner}</span>`;
   }
 
@@ -789,12 +900,11 @@
       node.textContent = n > 99 ? "99+" : String(n);
       node.classList.toggle("hidden", !n);
     }
-    // 畳んだグループにも、中に用があることを出す（畳めるのは Office の2グループだけ）。
-    // 開かないと気づけないのでは、畳んだ意味が無くなる
+    // Office のカテゴリのタブにも、中に用があることを出す（開かないと気づけない、を作らない）
     for (const g of OFFICE_GROUPS) {
       const sum = g.items.reduce((a, it) =>
         a + badgeKeys(it).reduce((b, k) => b + (badges[k] || 0), 0), 0);
-      const mark = document.querySelector(`.kp-side-group[data-group="${g.key}"] .kp-side-dot`);
+      const mark = document.querySelector(`[data-cat-dot="${g.key}"]`);
       if (mark) mark.classList.toggle("hidden", !sum);
     }
   }
@@ -892,25 +1002,35 @@
     saveMe(me);
     mfaNudge(me.mfa);
 
+    // 退職者（left）は、どの画面を開いても退職者ポータルへ送る（サーバーも API を止めている：lib/auth.js）
+    if (stage && stage.key === "left" && !/^\/retiree(\/|$)/.test(location.pathname)) {
+      location.replace("/retiree/");
+      return null;
+    }
+
     // 入社準備のあいだは、開いていない画面へ直接来ても中身を出さない。
     // メニューから消すだけだと、ブックマークや共有リンクで入れてしまう
-    if (appRole === "member" && stage && opts.active
-        && !stage.allowed.includes(opts.active)) {
-      location.replace(homeFor(appRole, stage));
+    if (stageBlocks(appRole, stage, opts)) {
+      location.replace(rootHref(homeFor(appRole, stage)));
       return null;
     }
 
     const allowed = opts.roles;
     if (allowed && !allowed.includes(appRole)) {
-      location.replace(homeFor(appRole, stage));
+      location.replace(rootHref(homeFor(appRole, stage)));
       return null;
     }
 
     // roles（appRole）では表せない権限（例：人事・経理など、複数ロールにまたがるもの）は
     // access で見る。appRole は owner/admin/sr/member の4値しか無く、それ単体の人も
     // "member" になる。roles だけで入口を絞ると、API は通るのに画面へ入れない食い違いが起きる
-    if (opts.access && !me.access?.[opts.access]) {
-      location.replace(homeFor(appRole, stage));
+    // access は1つでも、複数（どれか1つ）でもよい。例: Office のダッシュボードは ["officeHr", "officeFinance"]。
+    // 社労士（sr）は Office・管理の画面を開かない（管理者を兼ねていても、advisor の画面だけ）
+    // Office の業務ごとの権限（officeHr / officeFinance）は、サーバ（/api/me の access）の判定。
+    // 古い応答（その2つのキーが無い）のときだけ、管理者（admin/owner）を入れる（showsFor と同じ代替。デプロイの切り替わり中の保険）
+    const need = [].concat(opts.access || []);
+    if (need.length && (appRole === "sr" || !need.some((k) => hasAccess(me, k)))) {
+      location.replace(rootHref(homeFor(appRole, stage)));
       return null;
     }
 
@@ -952,11 +1072,26 @@
     wrap.insertBefore(box, wrap.firstChild);
   }
 
+  /**
+   * 在籍の段階（lib/stages.js の allowed）で、この画面を止めるか。
+   *   ・入社準備中（preparing＝invited）は、段階の表に無い画面を止める（これまでどおり）
+   *   ・在籍中（member）・退職手続き中（leaving）の人が、アプリの画面（Office・採用HR などの access で入口を決める画面）を
+   *     開くときは、段階の表ではなく、このあとの access の判定を正とする。
+   *     段階の表（SCREENS）はグループウェアの画面の鍵だけで、office_home などのアプリの鍵を持たないため、
+   *     Office ON・人事／経理の人でも /office/ からホームへ戻されていた（2026-10-07）
+   *   ・退職（left）は、別に退職者ポータルへ送る（ここでは見ない）
+   */
+  function stageBlocks(appRole, stage, opts) {
+    if (appRole !== "member" || !stage || !Array.isArray(stage.allowed) || !opts.active) return false;
+    if ((stage.key === "member" || stage.key === "leaving") && [].concat(opts.access || []).length) return false;
+    return !stage.allowed.includes(opts.active);
+  }
+
   function clearChrome() {
-    for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar"]) {
+    for (const sel of [".topbar", ".kp-sidebar", ".kp-tabbar", ".kp-officenav"]) {
       for (const n of document.querySelectorAll(sel)) n.remove();
     }
-    document.body.classList.remove("kp-has-sidebar", "kp-has-tabbar");
+    document.body.classList.remove("kp-has-sidebar", "kp-has-tabbar", "kp-has-officenav");
     document.documentElement.classList.remove("kp-has-sidebar");
   }
 
@@ -987,8 +1122,21 @@
     renderTopbar({ name, appRole, memberView, shows, active, stage });
     // 管理者は段階では絞らない。管理画面の並びになるので、この表は使わない
     // 管理者もホーム領域は全員と同じ左メニュー。Office・管理（⚙）に入ったときだけ専用の左メニュー
-    const adminArea = canPreview && !memberView && areaOf(active) !== "home";
-    if (adminArea) renderAdminNav(active, null, shows);
+    // Office の担当者（人事・経理。管理者ではない）は、Office の領域の中だけ専用の左メニュー（自分の担当グループだけ）。
+    // 管理（⚙）・経営の領域は管理者・経営者だけ
+    // Office の領域（業務の管理画面・/office/）は、Office に入れる人なら役割に関係なく同じ左メニュー（担当の分だけ見える）。
+    // 経営・管理（⚙）の領域は管理者・経営者だけ
+    const areaNow = areaOf(active);
+    const officeArea = areaNow === "office" && Boolean(shows.officeEntry) && !memberView;
+    // 経営（/keiei/）は経営者だけ。Office と同じ横タブ（左メニューは持たない）。
+    // チーム状況・全員のタスク・全員の日報（admin-*.html）も、経営者には経営の横タブで出す（経営の中を移っているように見せる）。
+    // 経営に入れない管理者（会計の管理者）は、これまでどおり管理の左メニュー（経営のタブの行き先が開けないため）
+    const keieiApp = areaNow === "keiei" && Boolean(shows.keiei) && !memberView
+      && (/^\/keiei(\/|$)/.test(location.pathname) || Boolean(KEIEI_EXT_OF[active]));
+    const adminArea = officeArea || keieiApp || (areaNow !== "home" && canPreview && !memberView);
+    if (officeArea) renderOfficeNav(active, shows);
+    else if (keieiApp) renderKeieiNav(active);
+    else if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
 
@@ -1021,6 +1169,12 @@
     const staff = me?.isAdmin || gwRoles.includes("owner") || gwRoles.includes("hr");
     // 管理画面（admin-*.html）を開ける人（appRole が admin / owner）
     const adminApp = ["admin", "owner"].includes(me?.appRole || (me?.isAdmin ? "admin" : ""));
+    // Office の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance。/api/me の access）そのもの。
+    // 古い応答（そのキーが無い）のときだけ、管理者（admin/owner）を入れる。社労士（sr）は入れない
+    const acc = me?.access || {};
+    const flag = (k) => me?.appRole !== "sr" && (k in acc ? Boolean(acc[k]) : adminApp);
+    const officeHr = flag("officeHr");
+    const officeFinance = flag("officeFinance");
     return {
       booking: staff || gwRoles.includes("booking"),
       adminApp,
@@ -1033,10 +1187,19 @@
         : ["owner", "manager", "hr", "recruiter"].some((r) => gwRoles.includes(r)),
       sales: me?.access ? Boolean(me.access.sell)
         : ["owner", "manager", "sales"].some((r) => gwRoles.includes(r)),
-      // Office。/office に入れる人は access.office だけ（金額を扱うので、access が無いときは出さない）。
-      // 役割（管理者か経理か）で入口も見た目も変えない。入れる人は全員 /office/ に入り、同じ画面を見る。
-      // 管理者（admin/owner）でも、access.office が無ければ出さない（押して入れない入口を作らない）
+      // 月末月初業務（/office/monthly.html・/api/office）。access.office だけ（金額を扱うので、access が無いときは出さない）
       officeApp: Boolean(me?.access?.office),
+      // 管理画面（⚙管理）の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance）そのもの。
+      // access が無い古い応答のときは、管理者（admin/owner）だけ両方に入れる。社労士（sr）は入れない。
+      officeHr: officeHr,
+      officeFinance: officeFinance,
+      officeAny: officeHr || officeFinance,
+      // Office に入れる人（人事・労務／経理・事務／月末月初業務のどれか）。ヘッダーの Office・Office ホーム（/office/）・左メニュー
+      // officeApp ＝ Office の利用権限（アプリへ入れる）。入っても、中身は内部ロールが決める（人事・労務／経理・事務／月末月初）
+      officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp)),
+      // 月次業務の入口：月末月初業務（officeApp）か、月次締め・月初作業管理（officeFinance）のどちらか
+      officeMonthly: officeFinance || Boolean(me?.access?.office),
+      // Office の業務のどれか（人事・労務／経理・事務／月末月初）。定例業務（/office/recurring.html）の入口
       office: Boolean(me?.access?.office),
       // 経営（/keiei）は経営者だけ。サーバの判定（canKeiei）そのもの
       keiei: me?.access ? Boolean(me.access.keiei) : gwRoles.includes("owner"),
@@ -1144,11 +1307,11 @@
   function showLogin(message) {
     document.body.innerHTML = `
       <div class="topbar"><div class="brand">
-        <img src="img/logo.svg" alt="" class="kp-logo">エイト</div></div>
+        <img src="${rootHref("img/logo.svg")}" alt="" class="kp-logo">エイト</div></div>
       <div class="wrap">
         <div class="card" style="max-width:420px;margin:40px auto;">
           <div style="text-align:center;margin-bottom:18px;">
-            <img src="img/logo.svg" alt="エイト" style="width:64px;height:64px;">
+            <img src="${rootHref("img/logo.svg")}" alt="エイト" style="width:64px;height:64px;">
           </div>
           <h2>${icon("login")}ログイン</h2>
           ${message ? `<div class="banner warn">${icon("warning")}<div>${esc(message)}</div></div>` : ""}
@@ -1202,7 +1365,33 @@
     if (window.KPPush) KPPush.warm();
   }
 
+  /**
+   * /api/me の access を、画面の入口として読む。サーバの判定そのもの（画面で役割を並べ直さない）。
+   * 古い応答（Office の業務ごとの権限 officeHr / officeFinance のキーが無い）のときだけ、管理者（admin/owner）を入れる。
+   * 社労士（sr）は Office の画面を開かない
+   */
+  function hasAccess(me, key) {
+    const role = me?.appRole || (me?.isAdmin ? "admin" : "member");
+    if (role === "sr") return false;
+    if (me?.access && key in me.access) return Boolean(me.access[key]);
+    return (key === "officeHr" || key === "officeFinance") && (role === "admin" || role === "owner");
+  }
+
   window.KPLayout = {
+    hasAccess,
+    /** 経営（/keiei/）の横タブの強調を、画面の切り替えに合わせて直す */
+    setKeieiView,
+    keieiViewOf,
+    /**
+     * 画面のデータを、枠（権限の確認）を待たずに取りにいき始める（API.warm）。
+     * 覚えている身元が、その画面の access（どれか1つ）を持っているときだけ出す。持っていない人のためには呼ばない。
+     * あとで同じ鍵で API.swr を呼べば、取りにいっている最中のものを待つ（2本出さない）
+     * @param {string|string[]} access
+     */
+    warm(access, key, fetcher) {
+      const need = [].concat(access || []);
+      API.warm(key, fetcher, (me) => me?.appRole !== "sr" && need.some((k) => hasAccess(me, k)));
+    },
     /**
      * ログイン確認 → 権限確認 → レイアウト描画。
      * 権限が無ければ本来の画面へ送り返し、null を返す（呼び出し側は何もしない）。
@@ -1218,13 +1407,18 @@
 
       // 覚えている権限で、この画面を開いてよいか。
       // 入社準備のあいだの制限も、覚えているぶんで一度見る。
-      // access（roles では表せない権限）を使う画面は、access を覚えていないので
-      // 先描きはせず、毎回 verify() の確認を待つ
-      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && !opts.access;
+      // access（roles では表せない権限。Office の人事・労務／経理・事務など）を使う画面は、
+      // 覚えている身元（kp_me。/api/me の応答そのもの）の access で同じ判定をする。
+      // 判定できない（覚えていない・社労士・メンバー表示で確認中）ときは、これまでどおり verify() を待つ。
+      // ここは表示の順番だけ。入れるかどうかの最終判断は verify()（違えば送り返す）と、各 API の権限チェック
+      const need = [].concat(opts.access || []);
+      const okAccess = !need.length || (Boolean(cachedMe) && cached?.appRole !== "sr" && !isMemberView()
+        && need.some((k) => hasAccess(cachedMe, k)));
+      const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && okAccess;
       // 覚えている形が古いことがある（allowed を持たない頃のもの）。
       // そこで落ちると、画面が真っ白のまま何も出ない
-      const okStage = !(cached?.appRole === "member" && cached?.stage?.allowed && opts.active
-                        && !cached.stage.allowed.includes(opts.active));
+      const okStage = !stageBlocks(cached?.appRole, cached?.stage, opts)
+        && cached?.stage?.key !== "left";   // 退職者は、覚えている枠を描かず、確かめて退職者ポータルへ送る
 
       // 覚えている権限があれば、通信を待たずに先に描く。
       // この画面を開いてよい権限のときだけ描く（違えばこのあと送り返される）
@@ -1309,12 +1503,10 @@
     // 保存させる（開かずに落とす）
     save: saveFile,
 
-    // 管理者メニューのグループを開け閉めする（サイドメニューの中から呼ばれる）
-    toggleNavGroup,
 
     // メンバーに見える画面を、このアカウントのまま確認する／やめる
     viewAsMember() { setMemberView(true); location.href = "home.html"; },
-    exitMemberView() { setMemberView(false); location.href = "admin-dashboard.html"; },
+    exitMemberView() { setMemberView(false); location.href = rootHref("/office/"); },
     isMemberView,
 
     logout() { API.logout(); clearCache(); setMemberView(false); location.href = "index.html"; },

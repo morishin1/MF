@@ -38,7 +38,9 @@ const read = (p) => readFileSync(p, "utf8");
 const rel = (p) => p.slice(ROOT.length + 1);
 
 const OLD = ["dashboard", "expenses", "revenue", "cash", "accounting"];
-const USED = ["hub", "security", "payroll", "onboarding"];
+const USED = ["hub", "security", "payroll", "onboarding", "members"];
+// メンバー実行状況（#members）は keiei/members.js が呼ぶ（日付・1人の詳細で引数が変わるため、対応表を通さない）。それ以外の画面は対応表だけ
+const MEMBERS_FILE = "keiei/members.js";
 
 // 画面が /api/keiei?view=<名前> と書いている箇所（リテラル）
 const literal = [];
@@ -52,15 +54,17 @@ console.log("— 画面が呼ぶ view —");
 
 ok("keiei/index.html の API_VIEW（画面→view の対応表）がある", () => {
   assert.ok(map, "API_VIEW が見つからない");
-  assert.deepEqual(Object.fromEntries(mapped), { home: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" });
+  // ホーム・売上・営業・人・組織・財務・リスクは、同じ hub の応答を使う（タブを切り替えても取り直さない）
+  assert.deepEqual(Object.fromEntries(mapped), { home: "hub", sales: "hub", people: "hub", finance: "hub", risk: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" });
 });
 
 ok("画面が API を呼ぶのは、この対応表の1か所だけ（ほかにリテラルで /api/keiei?view= と書いた画面は無い）", () => {
-  assert.deepEqual(literal, [], JSON.stringify(literal));
+  assert.deepEqual(literal.filter(([f, v]) => !(f === MEMBERS_FILE && v === "members")), [], JSON.stringify(literal));
+  assert.ok(literal.some(([f, v]) => f === MEMBERS_FILE && v === "members"), "メンバー実行状況が view=members を呼ぶ");
   assert.match(index, /\/api\/keiei\?view=\$\{encodeURIComponent\(API_VIEW\[view\]\)\}/);
 });
 
-ok("画面が呼ぶ view は hub・security・payroll・onboarding だけ", () => {
+ok("画面が呼ぶ view は hub・security・payroll・onboarding・members だけ", () => {
   const called = new Set([...literal.map((x) => x[1]), ...mapped.map((x) => x[1])]);
   assert.deepEqual([...called].sort(), [...USED].sort());
 });
@@ -79,7 +83,7 @@ ok("旧画面のメニュー・描画は、フロントに残っていない（�
   const layout = read(join(ROOT, "js/keiei-layout.js"));
   for (const v of OLD) assert.equal(new RegExp(`key:\\s*"${v}"`).test(layout), false, `メニューに ${v}`);
   for (const v of OLD) assert.equal(new RegExp(`^\\s{4}${v}\\(d\\)\\s*\\{`, "m").test(index), false, `RENDER に ${v}`);
-  assert.deepEqual([...index.matchAll(/^\s{4}(\w+)\(d\)\s*\{/gm)].map((m) => m[1]).sort(), ["home", "onboarding", "payroll", "security"]);
+  assert.deepEqual([...index.matchAll(/^\s{4}(\w+)\(d\)\s*\{/gm)].map((m) => m[1]).sort(), ["finance", "home", "onboarding", "payroll", "people", "risk", "sales", "security"]);
 });
 
 ok("旧画面のブックマーク（#dashboard など）は、ホームへ送る", () => {

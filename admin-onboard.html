@@ -9,10 +9,12 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261002of1">
-  <link rel="stylesheet" href="css/layout.css?v=20261002of1">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261012mx1">
+  <link rel="stylesheet" href="css/layout.css?v=20261012mx1">
+  <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -149,6 +151,18 @@
       <div id="end-wrap" class="hidden">
         <label>契約終了日<span class="req">*</span></label>
         <input id="f-end" type="date" oninput="clearPreview()">
+      </div>
+      <div>
+        <label for="f-emptype">雇用区分</label>
+        <!-- 空欄は、これまでどおり契約区分から（無期＝正社員・有期＝契約社員）。採用HRから引き渡された人は、オファーの区分が入る -->
+        <select id="f-emptype" onchange="clearPreview()">
+          <option value="">契約区分から（無期＝正社員・有期＝契約社員）</option>
+          <option value="正社員">正社員</option><option value="契約社員">契約社員</option>
+          <option value="パート">パート</option><option value="アルバイト">アルバイト</option>
+          <option value="業務委託">業務委託</option>
+        </select>
+        <input type="hidden" id="f-profile" value="">
+        <div class="muted" id="f-profile-note" style="font-size:11.5px;margin-top:4px;"></div>
       </div>
       <div class="full">
         <label>初回パスワード
@@ -289,10 +303,10 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/api-client.js?v=20261002of1"></script>
-<script src="js/device.js?v=20261002of1"></script>
-<script src="js/layout.js?v=20261002of1"></script>
-<script src="js/dropzone.js?v=20261002of1"></script>
+<script src="js/api-client.js?v=20261012mx1"></script>
+<script src="js/device.js?v=20261012mx1"></script>
+<script src="js/layout.js?v=20261012mx1"></script>
+<script src="js/dropzone.js?v=20261012mx1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -313,7 +327,7 @@
   const advanceApplicantId = new URLSearchParams(location.search).get("applicantId") || null;
   let advancePrefillData = null;
 
-  KPLayout.init({ active: "onboard", roles: ["admin", "owner"] })
+  KPLayout.init({ active: "onboard", access: "officeHr" })
     .then((ctx) => {
       if (!ctx) return;
       load();
@@ -394,17 +408,31 @@
     if (p.weeklyHours != null) el("f-hours").value = p.weeklyHours;
     if (p.wageType) el("f-wage-type").value = p.wageType;
     if (p.wageAmount != null) el("f-wage").value = p.wageAmount;
+    if (p.wageNote) el("f-wage-note").value = p.wageNote;
+    if (p.employmentType) el("f-emptype").value = p.employmentType;
+    if (p.onboardingProfile) {
+      el("f-profile").value = p.onboardingProfile;
+      el("f-profile-note").textContent = PROFILE_NOTE[p.onboardingProfile] || "";
+    }
 
     el("notice").innerHTML = `
       <div class="kp-next">
         <div class="now">現在：本採用手続き</div>
         <div class="lb"><span class="material-symbols-outlined">bolt</span>NEXT ACTION</div>
         <h3>社内情報を確認して社員登録してください</h3>
-        <div class="meta">採用HRから、選考時の採用条件を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div>
+        <div class="meta">採用HRから、${p.offerTypeLabel ? `本人が承諾したオファー（${esc(p.offerTypeLabel)}）の条件` : "選考時の採用条件"}を入力しています。STEP 1・STEP 2 はあらためて選んでください。</div>
+        ${p.handoffAt ? `<div class="meta" id="adv-handoff">HRから引き渡し：✓ 条件承諾済み　${p.formalRequired ? "✓ 正式契約済み" : "正式契約なし"}</div>` : ""}
         <button class="btn btn-primary btn-sm" onclick="focusStep3()">
           <span class="material-symbols-outlined icon-inline">person_add</span>社員登録</button>
       </div>`;
   }
+
+  // 入社手続きの範囲（lib/intake.js ONBOARDING_PROFILES）。業務委託・スポットは必要なものだけ作る
+  const PROFILE_NOTE = {
+    full: "",
+    contractor: "業務委託：労働条件通知書・試用期間・社会保険の手続きは作りません（業務委託契約・アカウント・必要な入社手続きだけ）。",
+    spot: "スポット・副業：アカウント・Slack・Webメール・契約など必要な項目だけ作り、ほかは「対象外」にします。",
+  };
 
   // NEXT ACTIONの［社員登録］は、この下にあるSTEP3のフォームへ案内するだけ。
   // 別の画面やボタンを増やさない
@@ -413,16 +441,30 @@
     el("f-name").focus();
   }
 
-  // 社員ができたら、応募者側（gw_hr_applicants）を確定する
-  // （failしても、社員自体はもうできているので、名簿からやり直せる旨は既存の案内のまま）
-  async function completeAdvanceIfPending(employeeId) {
+  // 社員ができたら、応募者側（gw_hr_applicants）を確定する。
+  // 結果は画面に出す（console だけにしない）。失敗しても社員はできているので、［もう一度試す］で応募者側だけやり直せる
+  async function completeAdvanceIfPending(employeeId, btn) {
     if (!advanceApplicantId || !employeeId) return;
+    const box = el("advance-result");
     try {
-      await API.completeHrAdvance(advanceApplicantId, employeeId);
-    } catch (e) {
-      console.error("[advance] 応募者側の確定に失敗:", e.hint || e.detail || e.message);
-    } finally {
+      const run = () => API.completeHrAdvance(advanceApplicantId, employeeId);
+      await (btn ? KPLayout.busy(btn, "確定中…", run) : run());
+      if (box) box.innerHTML = `<div class="banner ok" id="advance-ok"><span class="material-symbols-outlined">task_alt</span>
+        <div>採用HRの応募者も「本採用（社員登録）完了」にしました。</div></div>`;
       history.replaceState({}, "", "admin-onboard.html");
+    } catch (e) {
+      const why = e.hint || e.detail || e.message || "理由が返ってきませんでした";
+      if (box) {
+        box.innerHTML = `<div class="banner err" id="advance-error"><span class="material-symbols-outlined">error</span>
+          <div><b>採用HRの応募者を「本採用（社員登録）完了」にできませんでした</b>
+            <div style="margin-top:5px;font-weight:400;">${esc(why)}</div>
+            <div class="muted" style="margin-top:6px;font-size:11.5px;">社員の登録はできています。応募者のほうは「承諾済み」のままです。
+              ［もう一度試す］で、応募者側だけ確定し直せます。</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="completeAdvanceIfPending('${esc(employeeId)}', this)">もう一度試す</button>
+          </div></div>`;
+      } else {
+        alert(`採用HRの応募者を「本採用（社員登録）完了」にできませんでした：${why}`);
+      }
     }
   }
 
@@ -560,6 +602,9 @@
       trainingPrograms: dojo ? ["無限道場"] : [],
       autonomyLevel: el("f-level").value,
       accountType: el("f-account").value,
+      // 雇用区分・入社手続きの範囲（採用HRから引き渡された人は、オファーの区分から）
+      employmentType: el("f-emptype").value,
+      onboardingProfile: el("f-profile").value,
       wageType: el("f-wage-type").value,
       wageAmount: el("f-wage").value,
       allowances,
@@ -628,6 +673,7 @@
           <dt>メール</dt><dd>${esc(v.email)}</dd>
           <dt>入社日</dt><dd>${esc(v.joinDate)}</dd>
           <dt>契約</dt><dd>${esc(v.contract)}</dd>
+          ${v.employmentType ? `<dt>雇用区分</dt><dd id="pv-emptype">${esc(v.employmentType)}${PROFILE_NOTE[v.profile] ? `<div class="muted" style="font-size:11.5px;font-weight:400;">${esc(PROFILE_NOTE[v.profile])}</div>` : ""}</dd>` : ""}
           <dt>試用期間</dt><dd>${esc(v.probation)}</dd>
           <dt>育成期間</dt><dd>${esc(v.training)}</dd>
           <dt>勤務</dt><dd>${esc(v.weeklyHours)}${v.workStyle !== "指定なし" ? ` ・ ${esc(v.workStyle)}` : ""}</dd>
@@ -657,14 +703,18 @@
       </div>
 
       ${r.account?.kind === "existing" ? `
-        <div class="banner info" style="margin-bottom:14px;">
+        <div class="banner info" id="pv-existing" style="margin-bottom:14px;">
           <span class="material-symbols-outlined">link</span>
-          <div><b>既にあるログインアカウントに紐づけます。</b>
-            <div style="margin-top:4px;">
-              新しくアカウントは作りません。パスワードも変わりません
-              （いま使っているものでログインできます）。
-              このあと、無限道場は「承認済み」に、タイムカードは「在籍」になります。
-            </div>
+          <div><b>既にあるログインアカウントに紐づけます（新しくは作りません）。</b>
+            <ul style="margin:6px 0 0;padding-left:18px;line-height:1.8;">
+              <li>パスワードは変わりません（いま使っているものでログインできます）。</li>
+              ${r.account.lms?.exists ? `<li>無限道場の学習履歴・提出物・ロールはそのままです。</li>` : ""}
+              ${r.account.lms?.renames ? `<li data-lms="rename">無限道場の氏名「${esc(r.account.lms.name)}」を、名簿の「${esc(v.name)}」に合わせます。</li>` : ""}
+              ${r.account.lms?.reopens ? `<li data-lms="reopen">無限道場で${esc(r.account.lms.stateLabel)}のため、利用できる状態に戻します。</li>` : ""}
+              ${r.account.lms && !r.account.lms.exists ? `<li>無限道場には、受講者として新しく登録されます。</li>` : ""}
+              ${r.account.lms ? "" : `<li>無限道場は「承認済み」になります（いまの状態は確かめられませんでした）。</li>`}
+              <li>タイムカードは「在籍」になります。</li>
+            </ul>
           </div>
         </div>`
       : `
@@ -718,6 +768,7 @@
   function renderDone(c) {
     el("done-card").classList.remove("hidden");
     el("done").innerHTML = `
+      ${advanceApplicantId ? `<div id="advance-result" style="margin-bottom:12px;"><div class="muted" style="font-size:12px;">採用HRの応募者を確定しています…</div></div>` : ""}
       <div class="banner ok" style="margin-bottom:14px;">
         <span class="material-symbols-outlined">check_circle</span>
         <div><b>${esc(c.name)} さんを登録しました（${esc(c.code)}）。</b>

@@ -147,10 +147,13 @@ const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, employee: { id: "e
 const ADMIN = { tenantId: "t1", isAdmin: true, isHr: true, employee: { id: "emp-hr", display_name: "事務 花子" } };
 let who = ADMIN;
 let gwContextCalls = 0;
+// 判定は本物（lib/gw.js）をそのまま使う。モックするのは gwContext（ログイン中の人）だけ
+const realGw = await import(atRoot("lib/gw.js"));
 mock.module(atRoot("lib/gw.js"), {
   namedExports: {
     gwContext: async () => { gwContextCalls++; return who; },
     canManageHr: (c) => Boolean(c?.isAdmin || c?.isHr),
+    canOfficeFinance: realGw.canOfficeFinance, canOfficeAny: realGw.canOfficeAny, canOfficeHr: realGw.canOfficeHr,
   },
 });
 
@@ -434,6 +437,18 @@ await ok("一般メンバーは使えない", async () => {
   who = MEMBER;
   const r = await getFile(id);
   assert.equal(r.statusCode, 403);
+});
+
+await ok("月初の請求提出は経理・事務の仕事。経理（finance）は使え、人事（hr）だけの人は使えない", async () => {
+  setup();
+  who = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["finance"], employee: { id: "emp-fin", display_name: "経理 一郎" } };
+  assert.equal((await getList("2026-09")).statusCode, 200, "経理は使える");
+  who = { tenantId: "t1", isAdmin: false, isHr: true, roles: ["hr"], employee: { id: "emp-hr2", display_name: "人事 二郎" } };
+  assert.equal((await getList("2026-09")).statusCode, 403, "人事だけの人は経理・事務のAPIに入れない");
+  who = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["manager"], employee: { id: "emp-mg", display_name: "責任 三郎" } };
+  assert.equal((await getList("2026-09")).statusCode, 403, "責任者（manager）も入れない");
+  who = { tenantId: "t1", isAdmin: true, isHr: false, roles: [], employee: { id: "emp-ad", display_name: "管理 四郎" } };
+  assert.equal((await getList("2026-09")).statusCode, 200, "管理者は両方に入れる");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

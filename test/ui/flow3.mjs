@@ -84,8 +84,8 @@ console.log("— 件数バッジ（管理者・ホーム領域）—");
 
 console.log("— 件数バッジ（管理者・Office領域）—");
 {
-  // admin-expenses.html は Office領域・「経理・事務」グループの画面。
-  // いま見ているグループ（経理・事務）は自動で開く。「人事・労務」は畳まれたまま
+  // admin-expenses.html は Office の「経理・事務」の画面。2段目のタブ（経費精算）に件数が出る。
+  // ほかのカテゴリ（人事・労務）のタブにも、中に用があることの印が付く
   const p = await open("admin-expenses.html", meAdmin);
   const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
   const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
@@ -93,16 +93,15 @@ console.log("— 件数バッジ（管理者・Office領域）—");
   check(await shown("expenses"), "経費精算に件数が出る");
   check((await badge("expenses").textContent()) === "2", "経費の件数が合っている");
 
-  // 畳んだグループ（人事・労務）にも印が付く
-  const dots = await p.locator(".kp-side-group:not(.open) .kp-side-dot:not(.hidden)").count();
-  check(dots > 0, `畳んだグループに印が付く（${dots}個）`);
-
-  // グループを開けば、実際に目に見える
-  await p.locator('.kp-side-group[data-group="office-hr"]').click();
-  await p.waitForTimeout(300);
-  check(await badge("timecard").isVisible(), "「人事・労務」を開くとタイムカードの件数が見える");
-
+  const dot = p.locator('[data-cat-dot="office-hr"]');
+  check(await dot.count() === 1 && await dot.isVisible(), "人事・労務のタブに印が付く（中に勤怠の件数がある）");
   await p.close();
+
+  // カテゴリのタブを開けば、中の画面のタブに件数が見える（勤怠管理 5＝勤怠 4＋休暇・稟議 1。タブの鍵をまとめて背負う）
+  const h = await open("admin-members.html", meAdmin);
+  const tc = h.locator('#kp-office-nav .kp-ostab [data-badge~="timecard"]');
+  check(await tc.isVisible() && (await tc.textContent()) === "5", `「人事・労務」を開くと勤怠管理の件数が見える（いま ${await tc.textContent()}）`);
+  await h.close();
 }
 
 console.log("— 件数バッジ（メンバー）—");

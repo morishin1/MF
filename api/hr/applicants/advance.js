@@ -16,16 +16,25 @@
 //   api/employees/onboard.js をそのまま使う（作り直さない。db/081の設計）。
 //   このAPIは「承諾済み→admin-onboardへ安全につなぐ」ことだけをする
 //
+// ■ Office への引き渡しの前には進めない（db/133）
+//   区分つきの承諾済みオファー（育成枠を除く）は、HR が［承諾を確認してOfficeへ引き渡す］を済ませる
+//   （正式契約が要る版は正式契約済みのあと）までは、事前入力・手続き開始・完了のどれも断る（409 handoff_required）。
+//   画面のボタンを隠すだけでなく、URL・API を直接使っても進めないようにサーバで止める。
+//   db/133 が無い環境・区分の無い従来の合格通知・育成枠は、これまでどおり進める（lib/hr-offer-types.js handoffPendingOf）
+//
 // ■ 権限
-//   admin-onboard.html自体がKPLayout.init({roles:["admin","owner"]})で
-//   社長・管理者だけに絞られているため、ここも同じ基準（canDecideHire）に揃える
+//   社長・管理者・人事（hr）が、最初から最後まで同じ流れを実行できる（lib/gw.js canAdvanceHire）。
+//   社員登録の画面（admin-onboard.html。access: "officeHr"）に入れる人と揃える。
+//   以前は社長・管理者だけで、人事が登録すると事前入力が出ず、
+//   応募者が「承諾済み」のまま残っていた。給与を返すかは canSeeSalary のまま（広げない）
 
 import { json, readJson, methodNotAllowed } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canDecideHire, canSeeSalary } from "../../../lib/gw.js";
+import { gwContext, canAdvanceHire, canSeeSalary } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { advancePrefill, isAdvanceClaimStale } from "../../../lib/hr.js";
+import { advancePrefillFromOffer, isAdvanceClaimStale } from "../../../lib/hr.js";
+import { handoffPendingOf } from "../../../lib/hr-offer-types.js";
 import { guardSalaryOutput } from "../../../lib/salary.js";
 import { attachPay } from "../../../lib/hr-pay.js";
 
@@ -35,7 +44,7 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canDecideHire(ctx)) return json(res, 403, { error: "forbidden", hint: "本採用へ進められるのは社長・管理者だけです" });
+  if (!canAdvanceHire(ctx)) return json(res, 403, { error: "forbidden", hint: "本採用へ進められるのは社長・管理者・人事だけです" });
 
   const sb = userClient(req);
   // 事前入力に給与が入る。見られる人（lib/gw.js canSeeSalary）にだけ返す
@@ -55,7 +64,19 @@ async function findAdvancing(sb, ctx, applicantId) {
   if (a.status !== "accepted") {
     return { deny: { status: 409, body: { error: "invalid_state", hint: "承諾済みの応募者だけ、本採用へ進められます" } } };
   }
-  return { applicant: a };
+  const accepted = await acceptedOfferOf(sb, ctx, a.id);
+  if (handoffPendingOf(accepted)) return { deny: HANDOFF_REQUIRED };
+  return { applicant: a, accepted };
+}
+
+const HANDOFF_REQUIRED = { status: 409, body: { error: "handoff_required",
+  hint: "まだ Office へ引き渡されていません。採用HRで［承諾を確認してOfficeへ引き渡す］を済ませてから、社員登録へ進んでください" } };
+
+/** 本人が承諾した版（取り消し・辞退していない最新）。読めなければ null（従来どおり応募者の値で進める） */
+async function acceptedOfferOf(sb, ctx, applicantId) {
+  const { data: offers } = await sb.from("gw_hr_offers").select("*")
+    .eq("applicant_id", applicantId).eq("tenant_id", ctx.tenantId).order("version", { ascending: false }).limit(20);
+  return (offers || []).find((o) => o.accepted_at && !o.revoked_at && !o.declined_at) || null;
 }
 
 // admin-onboard.html?applicantId=… が読む、採用条件の事前入力だけ
@@ -67,9 +88,14 @@ async function prefill(req, res, sb, ctx) {
   const found = await findAdvancing(sb, ctx, applicantId);
   if (found.deny) return json(res, found.deny.status, found.deny.body);
 
+  // 本人が承諾したオファーの版（Office へ引き渡した版）の条件を土台にする（区分つき。無ければ応募者の値）
+  const accepted = found.accepted;
   // 給与の事前入力は、見られる人にだけ（見られない人の応答からは、lib/salary.js が外す）
-  if (canSeeSalary(ctx)) await attachPay(ctx.tenantId, found.applicant, "applicant");
-  return json(res, 200, { applicantId: found.applicant.id, prefill: advancePrefill(found.applicant) });
+  if (canSeeSalary(ctx)) {
+    await attachPay(ctx.tenantId, found.applicant, "applicant");
+    if (accepted) await attachPay(ctx.tenantId, accepted, "offer");
+  }
+  return json(res, 200, { applicantId: found.applicant.id, prefill: advancePrefillFromOffer(found.applicant, accepted) });
 }
 
 async function claim(req, res, sb, ctx, user) {
@@ -131,7 +157,13 @@ async function complete(res, sb, ctx, user, body) {
   const { data: a } = await sb.from("gw_hr_applicants").select("id, name, employee_id")
     .eq("id", body.applicantId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!a) return json(res, 404, { error: "not_found" });
-  if (a.employee_id) return json(res, 409, { error: "already_advanced" });
+  if (a.employee_id) return json(res, 409, { error: "already_advanced", hint: "すでに本採用の手続きが完了しています" });
+  // Office へ引き渡す前の版で、応募者を確定しない（社員を別の画面から作って結ぶ抜け道も止める）
+  if (handoffPendingOf(await acceptedOfferOf(sb, ctx, a.id))) return json(res, HANDOFF_REQUIRED.status, HANDOFF_REQUIRED.body);
+  // 同じ会社の社員だけを結びつける（別の会社の社員 ID を渡されても結ばない）
+  const { data: emp } = await sb.from("gw_employees").select("id")
+    .eq("id", body.employeeId).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!emp) return json(res, 404, { error: "employee_not_found", hint: "登録した社員が見つかりません。メンバー一覧で確認してください" });
 
   const now = new Date().toISOString();
   const { data, error } = await sb.from("gw_hr_applicants")
@@ -139,7 +171,7 @@ async function complete(res, sb, ctx, user, body) {
     .eq("id", a.id).eq("tenant_id", ctx.tenantId).is("employee_id", null)
     .select("id").maybeSingle();
   if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
-  if (!data) return json(res, 409, { error: "already_advanced" });
+  if (!data) return json(res, 409, { error: "already_advanced", hint: "すでに本採用の手続きが完了しています" });
 
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: a.id, event_key: "advanced",

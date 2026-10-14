@@ -1,4 +1,6 @@
 // GET /api/keiei?view=hub|security|payroll|onboarding[&month=YYYY-MM]   … 画面（/keiei）が呼ぶもの
+// GET /api/keiei?view=members[&date=YYYY-MM-DD][&employeeId=…]           … メンバー実行状況（日報・今日の3つ・明日の3つ・期限超過・要フォロー）
+//   既存の日報・タスクを読むだけ（lib/member-exec-read.js）。employeeId を付けると、その人の詳細（ドロワー）も返す
 // GET /api/keiei?view=dashboard|expenses|revenue|cash|accounting         … 旧ダッシュボード用。画面（/keiei）は呼ばない
 //   旧 view は後方互換のために残している。物理削除は、呼び出しが 0 件と確かめてから別に行う（docs/keiei-hub.md §6）
 //   経営（/keiei）が読む集計。経営者（owner）だけが使える。
@@ -34,14 +36,17 @@ import { guideFact } from "../../lib/onboard-guide.js";
 import { listStatus } from "../../lib/labor-notice.js";
 import { readAll, readIn, chunks } from "../../lib/pg-read.js";
 import { buildHub, buildSecurity } from "../../lib/keiei-hub.js";
-import { readHubFacts, readSecurity, onboardingFact } from "../../lib/keiei-hub-read.js";
+import { readHubFacts, readSecurity, onboardingFact, peopleOf } from "../../lib/keiei-hub-read.js";
+import { readSalesFacts, buildSales, stalledItem, overdueItem } from "../../lib/keiei-sales.js";
+import { targetsOf } from "../../lib/keiei-targets.js";
+import { readMemberExec } from "../../lib/member-exec-read.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
   EXPENSE_CONFIRMED, EXPENSE_PENDING,
 } from "../../lib/keiei.js";
 
-const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding"];
+const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding", "members"];
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -59,6 +64,7 @@ export default async function handler(req, res) {
   try {
     const sb = admin();
     if (view === "hub") return json(res, 200, await hub(sb, ctx));
+    if (view === "members") return await members(res, sb, ctx, q);
     if (view === "security") return json(res, 200, await security(sb, ctx));
     if (view === "dashboard") return json(res, 200, await dashboard(sb, ctx, month));
     if (view === "expenses") return json(res, 200, { month, expense: await expenseOf(sb, ctx, month) });
@@ -78,6 +84,18 @@ const count = async (q) => {
 };
 
 const todayJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
+// ---- メンバー実行状況 ----------------------------------------------------------
+async function members(res, sb, ctx, q) {
+  const today = todayJst();
+  const d = q.get("date");
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(d || "") && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && d <= today ? d : today;
+  const employeeId = q.get("employeeId") || null;
+  const out = await readMemberExec(sb, { tenantId: ctx.tenantId, date, today, employeeId });
+  if (out.error === "roster_unreadable") return json(res, 500, { error: "keiei_failed", detail: "名簿を読めませんでした" });
+  if (out.error === "not_found") return json(res, 404, { error: "not_found" });
+  return json(res, 200, out);
+}
 
 // ---- 各元データの読み出し ------------------------------------------------------
 
@@ -165,8 +183,53 @@ async function hub(sb, ctx) {
   const today = todayJst();
   let ob = null;
   try { ob = onboardingFact(await onboarding(sb, ctx)); } catch { ob = null; }
-  const facts = await readHubFacts(sb, ctx, { today, onboarding: ob });
-  return { ...buildHub({ today, facts }), missingLabel: MISSING_LABEL };
+  const [facts, sales, memberExec] = await Promise.all([
+    readHubFacts(sb, ctx, { today, onboarding: ob }),
+    salesOf10(sb, ctx, today),
+    memberExecSummary(sb, ctx, today),
+  ]);
+  const out = buildHub({ today, facts });
+  // 提案後に止まっている案件は「今日の確認」にも出す（重要の次。同じ事実をリスクには出さない）
+  const stall = sales ? stalledItem(sales) : null;
+  if (stall) {
+    const at = out.attention.findIndex((i) => i.severity !== "high");
+    out.attention.splice(at < 0 ? out.attention.length : at, 0, stall);
+  }
+  // 期限を過ぎたタスクも、重要の次に出す（停滞案件の次）
+  const late = sales ? overdueItem(sales) : null;
+  if (late) {
+    const at = out.attention.findIndex((i) => i.severity !== "high" && i.key !== "sales_stalled");
+    out.attention.splice(at < 0 ? out.attention.length : at, 0, late);
+  }
+  return { ...out, sales, memberExec, missingLabel: MISSING_LABEL };
+}
+
+/** ホームに出す、メンバー実行状況の3つの数（要フォロー・日報未提出・明日の3つ未登録）。読めなければ null（0人とは言わない） */
+async function memberExecSummary(sb, ctx, today) {
+  try {
+    const r = await readMemberExec(sb, { tenantId: ctx.tenantId, date: today, today });
+    if (r.error) return null;
+    const s = r.summary;
+    return {
+      followRequired: s.followRequired,
+      nippoMissing: s.nippoSubmitted == null ? null : s.people - s.nippoSubmitted,
+      tomorrowMissing: s.tomorrowMissing,
+    };
+  } catch { return null; }
+}
+
+/**
+ * 10月の目標と実績・営業ファネル・担当者別・停滞案件（lib/keiei-sales.js）。読み取りだけ。
+ * 失敗しても、ホームのほかのブロックは出す（sales: null。画面は「取得できません」）
+ */
+async function salesOf10(sb, ctx, today) {
+  try {
+    const [facts, people] = await Promise.all([readSalesFacts(sb, ctx, { today }), peopleOf(sb, ctx)]);
+    return buildSales({ today, facts, targets: targetsOf(today.slice(0, 7)), people });
+  } catch (e) {
+    console.error("[keiei] sales:", e?.message || e);
+    return null;
+  }
 }
 
 /** 経営設定・セキュリティ: 経営者の一覧・二段階認証・変更の履歴 */

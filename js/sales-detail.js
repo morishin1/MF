@@ -200,6 +200,8 @@ function renderDetail() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
     </div>
 
+    ${lpBlockHtml(detail.lp)}
+
     <div style="padding:0 20px;">
       ${c.hidden ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">visibility_off</span>
         <div>非表示にしています（${esc(c.hiddenLabel || "理由未設定")}）。通常の一覧・アタック対象には出ません。${c.hiddenNote ? `<br>${esc(c.hiddenNote)}` : ""}</div></div>` : ""}
@@ -239,6 +241,8 @@ function renderDetail() {
         </dl>
         ${c.note ? `<div style="font-size:12.5px;color:#1b2440;white-space:pre-wrap;border-top:1px solid #e2e2dc;padding-top:10px;">${esc(c.note)}</div>` : ""}
       </div>
+
+      ${dealsHtml()}
 
       ${(detail.meetings || []).length ? `
         <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">商談</h4>
@@ -549,11 +553,225 @@ async function reloadDetail() {
   }
 }
 
+// ---- 案件（db/116） ----------------------------------------------------------------
+//
+// 1社に複数の案件を持てる。金額・段階（商談 → 提案 → 最終調整 → 成約／失注）を記録し、
+// 分析の 受注額・見込額・パイプライン はここから数える（金額は営業の案件金額。会計上の売上ではない）。
+// 会社のステータスはサーバが案件に合わせて進める（戻さない）。失注は会社に写さず、
+// その会社の案件がすべて失注になったときだけ「会社も失注にしますか」と聞く。
+// 成約確率の既定値は lib/sales-deals.js の DEFAULT_PROBABILITY・db/116 と同じ
+const DEAL_STAGES = [["meeting", "商談"], ["proposal", "提案"], ["negotiation", "最終調整"], ["won", "成約"], ["lost", "失注"]];
+const DEAL_OPEN = ["meeting", "proposal", "negotiation"];
+const DEAL_PROB = { meeting: 20, proposal: 50, negotiation: 80 };
+const DEAL_PILL = { meeting: "attacked", proposal: "proposal", negotiation: "clicked", won: "won", lost: "lost" };
+const dealYen = (n) => (n == null ? "金額未定" : `${Number(n).toLocaleString("ja-JP")}円`);
+
+function dealsHtml() {
+  const head = (btn) => `<div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;">
+    <h4 style="font-size:13px;color:#1b2440;margin:0;flex:1;">案件</h4>${btn}</div>`;
+  if (detail.dealsReady === false) {
+    return head("") + `<div class="card" style="margin-bottom:16px;"><div class="sl-empty">
+      案件の表がまだ作られていません。管理者に db/116_sales_deals.sql の実行を依頼してください。</div></div>`;
+  }
+  const list = detail.deals || [];
+  const add = `<button class="btn btn-secondary btn-sm" id="dl-add" onclick="openDeal()">
+    <span class="material-symbols-outlined icon-inline">add</span>案件を追加</button>`;
+  if (!list.length) {
+    return head(add) + `<div class="card" style="margin-bottom:16px;"><div class="sl-empty">
+      まだ案件がありません。商談になったら金額と段階を登録すると、分析の受注額・見込額・パイプラインに入ります。</div></div>`;
+  }
+  return head(add) + `<div class="card" style="margin-bottom:16px;">${list.map((d) => `
+    <div class="deal-row" onclick="openDeal('${esc(d.id)}')" role="button" tabindex="0"
+      style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #efefeb;font-size:12.5px;flex-wrap:wrap;cursor:pointer;">
+      <b style="color:#1b2440;">${esc(d.title)}</b>
+      ${statusPill(DEAL_PILL[d.stage] || "attacked", d.stageLabel)}
+      <span style="font-variant-numeric:tabular-nums;">${esc(dealYen(d.amount))}</span>
+      <span class="sl-muted">${d.open
+        ? (d.amount != null ? `見込額 ${esc(dealYen(d.expected))}（${d.probabilityUsed}%${d.probability != null ? "・個別" : ""}）` : "")
+        : d.stage === "won" ? `成約 ${esc(fmtDay(d.wonOn))}` : `失注 ${esc(fmtDay(d.lostOn))}${d.lostReason ? `（${esc(d.lostReason)}）` : ""}`}</span>
+      <span class="sl-muted" style="margin-left:auto;">担当 ${esc(d.ownerName || "未定")}</span>
+    </div>`).join("")}</div>`;
+}
+
+function openDeal(id) {
+  const d = id ? (detail.deals || []).find((x) => x.id === id) : null;
+  const stages = d ? DEAL_STAGES : DEAL_STAGES.filter(([k]) => DEAL_OPEN.includes(k));
+  const stage = d?.stage || "meeting";
+  const ownerOpts = (detail.members || []).map((m) =>
+    `<option value="${esc(m.id)}" ${m.id === (d?.ownerId || detail.company.ownerId) ? "selected" : ""}>${esc(m.display_name)}</option>`).join("");
+  openActionModal(`
+    <h2>${d ? "案件を編集" : "案件を追加"}</h2>
+    <p class="sl-sub" style="margin:-8px 0 12px;">${esc(detail.company.name)}</p>
+    <label>案件名</label>
+    <input id="dl-title" type="text" maxlength="200" placeholder="例：AI/DX 導入支援" value="${esc(d?.title || "")}">
+    <label style="margin-top:10px;">段階</label>
+    <select id="dl-stage" onchange="dealStageChanged()">${stages.map(([k, l]) =>
+      `<option value="${k}" ${k === stage ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+    <label style="margin-top:10px;">案件金額（円・税抜。会計上の売上ではありません）</label>
+    <input id="dl-amount" type="text" inputmode="numeric" placeholder="例：1200000（未定なら空欄）" value="${d?.amount ?? ""}">
+    <div id="dl-prob-box">
+      <label style="margin-top:10px;">成約確率（%）</label>
+      <input id="dl-prob" type="number" min="0" max="100" step="1" value="${d?.probability ?? ""}">
+      <div class="sl-muted" id="dl-prob-hint" style="margin-top:4px;"></div>
+    </div>
+    <label style="margin-top:10px;">成約見込み日</label>
+    <input id="dl-close" type="date" value="${esc(d?.expectedCloseOn || "")}">
+    <div id="dl-lost-box">
+      <label style="margin-top:10px;">失注の理由</label>
+      <input id="dl-lost" type="text" maxlength="500" placeholder="例：予算が合わない" value="${esc(d?.lostReason || "")}">
+    </div>
+    <label style="margin-top:10px;">担当</label>
+    <select id="dl-owner"><option value="">（未定）</option>${ownerOpts}</select>
+    ${d ? "" : `<p class="sl-muted" style="margin:10px 0 0;">この会社に最後に送ったアタックを、案件のもとのアタックとして記録します（あとから変わりません）。</p>`}
+    <div id="dl-msg" class="err-text" style="margin:10px 0;"></div>
+    <div class="sl-modal-foot">
+      <button class="btn btn-primary" onclick="saveDeal(this, ${d ? `'${esc(d.id)}'` : "null"})">${d ? "保存" : "追加"}</button>
+      <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+    </div>`);
+  dealStageChanged();
+}
+
+function dealStageChanged() {
+  const st = el("dl-stage")?.value;
+  if (!st) return;
+  el("dl-prob-box").style.display = DEAL_OPEN.includes(st) ? "" : "none";
+  el("dl-lost-box").style.display = st === "lost" ? "" : "none";
+  el("dl-prob-hint").textContent = DEAL_OPEN.includes(st) ? `空欄なら既定の ${DEAL_PROB[st]}%（${DEAL_STAGES.find(([k]) => k === st)[1]}）を使います` : "";
+}
+
+async function saveDeal(btn, id) {
+  const msg = el("dl-msg"); msg.textContent = "";
+  const stage = el("dl-stage").value;
+  const body = {
+    title: el("dl-title").value.trim(), stage,
+    amount: el("dl-amount").value.trim() === "" ? null : el("dl-amount").value.trim(),
+    probability: DEAL_OPEN.includes(stage) && el("dl-prob").value !== "" ? Number(el("dl-prob").value) : null,
+    expectedCloseOn: el("dl-close").value || null,
+    ownerId: el("dl-owner").value || null,
+  };
+  if (stage === "lost") body.lostReason = el("dl-lost").value.trim() || null;
+  if (!body.title) { msg.textContent = "案件名を入れてください"; return; }
+  if (stage === "won" && (body.amount === null || Number(String(body.amount).replace(/[,，円¥\s]/g, "")) <= 0)) {
+    msg.textContent = "成約にするには0円より大きい案件金額を入れてください"; return;
+  }
+  try {
+    const r = await KPLayout.busy(btn, "保存中…", () => (id
+      ? API.updateSalesDeal({ id, ...body })
+      : API.createSalesDeal({ companyId: detail.company.id, ...body })));
+    closeAction();
+    await reloadDetail();
+    if (r.suggestCompanyLost && confirm("この会社の案件はすべて失注です。会社のステータスも「失注」にしますか？")) {
+      await API.updateSalesCompany({ id: detail.company.id, status: "lost" });
+      await reloadDetail();
+    }
+  } catch (e) { msg.textContent = errText(e, "保存できませんでした"); }
+}
+
 async function markFollowed(btn) {
   try {
     await KPLayout.busy(btn, "保存中…", () => API.markSalesFollowed(detail.company.id));
     await reloadDetail();
   } catch (e) { alert(errText(e, "できませんでした")); }
+}
+
+// ---- MGNDigital の LP 申込（lib/sales-lp.js・api/sales/lp-lead.js） ----------------------------
+//
+// 営業リンク経由の申込は「MGNDigital申込あり」（返信ありと同じ段階）。希望サービスを出す。
+// トークンが無く、メールのドメインだけで当たった申込は「既存企業候補あり」。人が確かめてから確定する。
+function lpBlockHtml(lp) {
+  if (!lp) return "";
+  const svc = (list) => (list || []).length
+    ? list.map((s) => `<span class="sl-chip" style="cursor:default;">${esc(s)}</span>`).join("")
+    : `<span class="sl-muted">希望サービスの選択なし（相談したい）</span>`;
+  if (lp.candidate) {
+    const i = lp.candidateInfo || {};
+    return `<div class="sl-warn sl-caution" id="dt-lp" style="margin:0 20px 12px;"><span class="material-symbols-outlined">help</span>
+      <div style="min-width:0;flex:1;"><b>既存企業候補あり・要確認</b>（MGNDigital申込 ${esc(fmt(lp.candidateAt))}）<br>
+        メールのドメインがこの会社と一致しました。同じ会社か確かめてください。<br>
+        <span class="sl-muted">${esc([i.company && `会社名：${i.company}`, i.name && `お名前：${i.name}`, i.email && `メール：${i.email}`].filter(Boolean).join("　"))}</span>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${svc(lp.services)}</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="decideLp(this, 'confirm')">この会社の申込として確定</button>
+          <button class="btn btn-secondary btn-sm" onclick="decideLp(this, 'reject')">別の会社</button>
+        </div></div></div>`;
+  }
+  if (!lp.appliedAt) return "";
+  return `<div class="sl-warn" id="dt-lp" style="margin:0 20px 12px;background:#e5f1e2;border-color:#bcd9b6;color:#1f4d27;">
+    <span class="material-symbols-outlined">verified</span>
+    <div style="min-width:0;flex:1;"><b>MGNDigital申込あり</b>（${esc(fmt(lp.appliedAt))}）
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${svc(lp.services)}</div></div></div>`;
+}
+async function decideLp(btn, decision) {
+  if (decision === "reject" && !confirm("別の会社の申込として扱います（この会社の状態は変わりません）。よろしいですか？")) return;
+  try {
+    await KPLayout.busy(btn, "保存中…", () => API.addSalesEvent({ id: detail.company.id, action: "lp_candidate", decision }));
+    await reloadDetail();
+  } catch (e) { alert(errText(e, "保存できませんでした")); }
+}
+
+// ---- 電話した（結果・メモ・NEXT・期限を1回で記録）---------------------------------------
+//
+// 営業履歴には「電話」（kind=call）として残す。結果は内容の1行目（「結果：不在」）。
+// 結果に合わせて NEXT と期限の初期値を入れる（その場で変えてよい）。
+const CALL_RESULTS = [
+  ["talked", "話せた", "商談を予定する", 0],
+  ["absent", "不在・留守電", "再電話", 1],
+  ["no_person", "担当者不在", "再電話", 1],
+  ["callback", "折り返し待ち", "折り返し確認", 1],
+  ["declined", "興味なし・断り", "様子見", 20],
+];
+function bizDaysLater(n) {
+  const d = new Date(Date.now() + 9 * 3600000);
+  const day = () => d.getUTCDay();
+  while (day() === 0 || day() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  for (let left = n; left > 0;) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (day() !== 0 && day() !== 6) left--;
+  }
+  return d.toISOString().slice(0, 10);
+}
+let callTarget = null;
+function openCallLog(id, name) {
+  callTarget = { id, name };
+  openActionModal(`
+      <h2>電話した</h2>
+      <p class="sl-sub" style="margin:-8px 0 12px;">${esc(name || "")}</p>
+      <label>結果</label>
+      <div id="cl-results">${CALL_RESULTS.map(([k, l]) => `
+        <label class="sl-chip"><input type="radio" name="cl-result" value="${k}" onchange="pickCallResult('${k}')">${esc(l)}</label>`).join("")}</div>
+      <label style="margin-top:10px;">メモ（任意）</label>
+      <textarea id="cl-memo" rows="3" placeholder="担当の田中様。来週の火曜に再度連絡"></textarea>
+      <h4 style="font-size:13px;color:#1b2440;margin:18px 0 6px;">NEXT（次にやること）</h4>
+      <input id="cl-next" type="text" list="dl-cl-next" placeholder="結果を選ぶと入ります">
+      <datalist id="dl-cl-next">${["商談を予定する", "再電話", "折り返し確認", "資料送付", "メール", "様子見"].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>
+      <input id="cl-next-on" type="date" style="margin-top:6px;">
+      <div id="cl-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" id="cl-save" onclick="submitCallLog(this)">記録する</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+}
+function pickCallResult(k) {
+  const r = CALL_RESULTS.find((x) => x[0] === k);
+  if (!r) return;
+  el("cl-next").value = r[2];
+  el("cl-next-on").value = bizDaysLater(r[3]);
+}
+async function submitCallLog(btn) {
+  const msg = el("cl-msg"); msg.textContent = "";
+  const k = document.querySelector('input[name="cl-result"]:checked')?.value;
+  const r = CALL_RESULTS.find((x) => x[0] === k);
+  if (!r) { msg.textContent = "結果を選んでください"; return; }
+  const memo = el("cl-memo").value.trim();
+  try {
+    await KPLayout.busy(btn, "記録中…", () => API.addSalesEvent({
+      id: callTarget.id, kind: "call", detail: `結果：${r[1]}${memo ? `\n${memo}` : ""}`,
+      nextAction: el("cl-next").value.trim() || null, nextActionOn: el("cl-next-on").value || null,
+    }));
+    closeAction();
+    if (detailOpenId === callTarget.id) await reloadDetail();
+    else detailHost.onChange();
+  } catch (e) { msg.textContent = errText(e, "記録できませんでした"); }
 }
 
 // ---- 履歴を記録（フォロー・電話・返信あり・商談…）＋NEXT ---------------------------

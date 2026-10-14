@@ -23,7 +23,7 @@ let seq = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
 const copy = (r) => (r ? { ...r } : null);
 function matcher(f) {
-  return (r) => f.every(([op, k, v]) => (op === "eq" ? r[k] === v : op === "in" ? v.includes(r[k]) : true));
+  return (r) => f.every(([op, k, v]) => (op === "eq" ? r[k] === v : op === "neq" ? r[k] !== v : op === "in" ? v.includes(r[k]) : true));
 }
 function table(name) {
   const f = [];
@@ -39,6 +39,7 @@ function table(name) {
   const q = {
     select() { return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
+    neq(k, v) { f.push(["neq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
     order(col, opts) { if (!order) order = [col, opts?.ascending !== false]; return q; },
     limit() { return q; },

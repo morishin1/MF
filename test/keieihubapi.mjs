@@ -284,7 +284,11 @@ await ok("給与・契約の表は読まない。応募者は id・段階・状�
   }
   assert.deepEqual([...db.selects.gw_hr_applicants], ["id, stage, status, decision_due_on"]);
   for (const [t, cols] of Object.entries(db.selects)) {
-    for (const c of cols) assert.ok(!/wage|salary|unit_price|commute|amount/.test(c) || t === "gw_expense_reports", `${t}: ${c}`);
+    // 金額の列は、経費（合計）と営業の案件金額（受注額。2026-10 の Phase 1）だけ。給与・単価・手当の列はどの表からも読まない
+    for (const c of cols) {
+      assert.ok(!/wage|salary|unit_price|commute/.test(c), `${t}: ${c}`);
+      assert.ok(!/amount/.test(c) || t === "gw_expense_reports" || t === "gw_sales_deals", `${t}: ${c}`);
+    }
   }
 });
 
@@ -501,6 +505,53 @@ await ok("経営者の一覧を読めなければ、status:missing（0人とは�
   const d = (await call("security")).body;
   assert.equal(d.status, "missing");
   assert.equal(d.owners, undefined);
+});
+
+console.log("\n=== 2026-10 Phase 1：営業（sales）===\n");
+
+await ok("hub は sales（目標と実績・担当者別・停滞）を返す。この会社の行だけ数える。書き込まない", async () => {
+  setup();
+  const sentAt = new Date(Date.now() - 3600000).toISOString();
+  db.rows.gw_sales_approaches = [
+    { id: "a1", tenant_id: "t1", company_id: "c1", employee_id: "e3", sent_at: sentAt, failed_at: null },
+    { id: "a2", tenant_id: "t1", company_id: "c2", employee_id: "e3", sent_at: sentAt, failed_at: sentAt },
+    { id: "ax", tenant_id: "t2", company_id: "cx", employee_id: "ex", sent_at: sentAt, failed_at: null },
+  ];
+  db.rows.gw_sales_deals = [{ id: "d1", tenant_id: "t1", company_id: "c1", owner_id: "e3", title: "テスト案件", stage: "meeting", amount: null, won_on: null, created_at: sentAt, updated_at: sentAt }];
+  const r = await call("hub");
+  assert.equal(r.statusCode, 200);
+  const contact = r.body.sales.funnel.find((x) => x.key === "contact");
+  assert.equal(contact.value, 1, "送れなかったもの・他社の分は数えない");
+  assert.equal(r.body.sales.funnel.find((x) => x.key === "meeting").value, 1);
+  assert.equal(r.body.sales.funnel.find((x) => x.key === "effective").value, null);
+  assert.equal(db.writes.length, 0);
+});
+
+await ok("期限を過ぎた未完了のタスクは「今日の確認」に出る（この会社の分だけ。終わったものは数えない）。0件なら出さない", async () => {
+  setup();
+  db.rows.gw_tasks = [
+    { id: "tk1", tenant_id: "t1", assignee_id: "e3", due_on: "2020-01-01", status: "doing" },
+    { id: "tk2", tenant_id: "t1", assignee_id: null, due_on: "2020-01-02", status: "todo" },
+    { id: "tk3", tenant_id: "t1", assignee_id: "e3", due_on: "2020-01-03", status: "done" },
+    { id: "tkx", tenant_id: "t2", assignee_id: "ex", due_on: "2020-01-01", status: "todo" },
+  ];
+  const r = await call("hub");
+  const item = r.body.attention.find((i) => i.key === "tasks_overdue");
+  assert.ok(item, "tasks_overdue が出る");
+  assert.equal(item.count, 2, "終わったもの・他社の分は数えない");
+  assert.equal(item.href, "/admin-tasks.html");
+  db.rows.gw_tasks = [{ id: "tk9", tenant_id: "t1", assignee_id: "e3", due_on: "2999-01-01", status: "todo" }];
+  assert.equal((await call("hub")).body.attention.some((i) => i.key === "tasks_overdue"), false, "期限内だけなら出さない");
+});
+
+await ok("案件の表が無い（db/116 未適用）：営業の商談・提案・契約は「取得できません」。ほかのブロックはそのまま", async () => {
+  setup();
+  db.missing = new Set(["gw_sales_deals", "gw_sales_deal_history"]);
+  const r = await call("hub");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.sales.funnel.find((x) => x.key === "meeting").status, "missing");
+  assert.ok(r.body.people.tiles.length > 0);
+  assert.equal(r.body.unreadable.includes("案件"), false, "営業の読めなさは、ホーム全体の注意書きに混ぜない（営業の欄の中で出す）");
 });
 
 console.log(`\n${pass} passed / ${fail} failed`);

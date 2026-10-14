@@ -185,5 +185,40 @@ await ok("ソースに、実在のアドレス・送信元を直接書いてい�
   }
 });
 
+await ok("添付は任意。渡さなければ Resend へ送る中身はこれまでと同じ（attachments を付けない）", async () => {
+  const bodies = [];
+  const f = async (url, init) => { bodies.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ id: "m1" }) }; };
+  const r = await sendMail(MSG, { env: FULL, fetchImpl: f });
+  assert.equal(r.status, "sent");
+  assert.equal("attachments" in bodies[0], false);
+});
+
+await ok("PDF を添付すると、Resend へ base64 で渡す（採用HRの条件通知書）", async () => {
+  const bodies = [];
+  const f = async (url, init) => { bodies.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ id: "m2" }) }; };
+  const pdf = new Uint8Array(Buffer.from("%PDF-1.7 test"));
+  const r = await sendMail({ ...MSG, attachments: [{ filename: "育成参加条件通知書_第1版.pdf", content: pdf, contentType: "application/pdf" }] },
+    { env: FULL, fetchImpl: f });
+  assert.equal(r.status, "sent");
+  assert.deepEqual(bodies[0].attachments, [{ filename: "育成参加条件通知書_第1版.pdf", content: Buffer.from(pdf).toString("base64"), content_type: "application/pdf" }]);
+});
+
+await ok("添付できるのは PDF だけ・名前に改行や / は使えない・空は送らない（failed。例外にしない）", async () => {
+  let called = 0;
+  const f = async () => { called++; return { ok: true, json: async () => ({}) }; };
+  const pdf = new Uint8Array([37, 80, 68, 70]);
+  for (const att of [
+    [{ filename: "a.exe", content: pdf, contentType: "application/octet-stream" }],
+    [{ filename: "a\nb.pdf", content: pdf, contentType: "application/pdf" }],
+    [{ filename: "../a.pdf", content: pdf, contentType: "application/pdf" }],
+    [{ filename: "a.pdf", content: new Uint8Array(0), contentType: "application/pdf" }],
+    "x",
+  ]) {
+    const r = await sendMail({ ...MSG, attachments: att }, { env: FULL, fetchImpl: f });
+    assert.equal(r.status, "failed", JSON.stringify(att).slice(0, 60));
+  }
+  assert.equal(called, 0);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

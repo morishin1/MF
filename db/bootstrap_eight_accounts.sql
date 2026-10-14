@@ -73,6 +73,19 @@ select e.tenant_id, e.id, r.role
  where lower(e.email) = 's_morita@gw.8grp.co.jp'
 on conflict (employee_id, role) do nothing;
 
+-- 5b) アプリ利用権限（db/119 を流してある環境だけ）。人事（hr）の入口は 採用HR・Office。owner は暗黙で全部
+do $$
+begin
+  if to_regclass('public.gw_app_grants') is not null then
+    insert into public.gw_app_grants (tenant_id, employee_id, app_key)
+    select e.tenant_id, e.id, a.app_key
+      from public.gw_employees e
+     cross join (values ('hr'), ('office')) as a(app_key)
+     where lower(e.email) = 's_morita@gw.8grp.co.jp'
+    on conflict (employee_id, app_key) do nothing;
+  end if;
+end $$;
+
 -- 6) 確認
 select u.email,
        m.role                        as 会計権限,

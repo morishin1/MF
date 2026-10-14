@@ -148,17 +148,20 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   console.log("\n— 1. 面談を作る（手入力） —");
   await page.locator("button", { hasText: "面談を予定する" }).click();
   await page.waitForTimeout(250);
-  await page.fill("#iv-when", "2026-10-05T14:00");
+  await page.fill("#iv-when", `${today}T14:00`);
   await page.selectOption("#iv-who", "e1");
   await page.selectOption("#iv-method", "online");
   await page.fill("#iv-url", "https://meet.example.com/first");
   await page.locator(".hr-modal button", { hasText: "予定する" }).click();
   await page.waitForTimeout(700);
   check(st.interviews.length === 1, "面談が1件できる");
-  check(st.interviews[0]?.scheduled_at === "2026-10-05T05:00:00.000Z", `JST 14:00 がUTCで保存される（${st.interviews[0]?.scheduled_at}）`);
+  // 期待値も固定文字列にせず、今日（JST）14:00 を UTC に直したものと比べる
+  const todayUtc1400 = new Date(`${today}T14:00:00+09:00`).toISOString();
+  check(st.interviews[0]?.scheduled_at === todayUtc1400, `JST 14:00 がUTCで保存される（${st.interviews[0]?.scheduled_at}）`);
   check(st.interviews[0]?.method === "online", "面談方法も保存される");
   let txt = await card(page).innerText();
-  check(txt.includes("10/5 14:00"), `面談カードに予定日時（${txt.split("\n")[1]?.trim()}）`);
+  // 日時の書き方は HR 共通（js/jst.js JST.when）：今日なら「本日 14:00」
+  check(txt.includes("本日 14:00"), `面談カードに予定日時（${txt.split("\n")[1]?.trim()}）`);
   check(txt.includes("面談方法：オンライン"), "面談カードに面談方法");
 
   console.log("\n— 2. 面談日時を変更して保存 —");
@@ -167,7 +170,7 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   check(await page.locator(".hr-modal").isVisible(), "編集モーダルが開く");
   check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま");
   const before = await page.locator("#rs-when").inputValue();
-  check(before === "2026-10-05T14:00", `いまの日時がローカル時刻（JST）で入っている（${before}）`);
+  check(before === `${today}T14:00`, `いまの日時がローカル時刻（JST）で入っている（${before}）`);
   check(await page.locator("#rs-method").inputValue() === "online", "いまの面談方法が選ばれている");
   await page.fill("#rs-when", `${today}T16:30`);
   await page.selectOption("#rs-who", "e2");
@@ -184,7 +187,7 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   const [m, d] = today.slice(5).split("-").map(Number);
   // 日時の書き方は HR 共通（js/jst.js JST.when）：今日なら「本日 16:30」
   check(txt.includes("本日 16:30"), `面談カードが新しい日時（本日 16:30）`);
-  check(!txt.includes("10/5 14:00"), "古い日時は出ない");
+  check(!txt.includes("本日 14:00"), "古い日時は出ない");
   check(txt.includes("面談担当：面接 一郎") && txt.includes("面談方法：対面"), "面談担当・面談方法も残る");
   await page.locator("button", { hasText: "面談情報を編集" }).click();
   await page.waitForTimeout(250);

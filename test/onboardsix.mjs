@@ -102,7 +102,7 @@ ok("依頼前: ② が経営者の番。③④⑤ はこれから", () => {
   const c = stepOf(r, "contract");
   assert.equal(c.state, "current");
   assert.equal(c.actor, "owner");
-  assert.match(c.note, /作成依頼/);
+  assert.match(c.note, /契約書の準備がまだです/);
   for (const k of ["info", "docs", "company"]) assert.equal(stepOf(r, k).state, "todo", k);
   assert.equal(r.next.label, "労働条件の作成依頼待ち");
   assert.equal(r.needsCompany, true);

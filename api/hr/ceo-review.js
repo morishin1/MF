@@ -1,5 +1,9 @@
-// GET /api/hr/ceo-review … 社長が「今日見るべき候補者だけ」を見る3ブロック
-//   今日会う人／社長に会ってほしい人／社長判断待ち
+// GET /api/hr/ceo-review … 社長が「今日見るべき候補者だけ」を見るブロック
+//   今日会う人／社長に会ってほしい人／社長判断待ち／判断済み・本人へ未連絡（contactPending）
+//
+// ■ 判断済み・本人へ未連絡（lib/hr-messages.js contactStatusOf。DB の列は増やさずタイムラインで決める）
+//   内定・見送りを決めたのに本人へ伝えていない人。内定は合格通知を送れば連絡済みになる。
+//   保留は「社長判断待ち」に残るので、そちらのカードに連絡状況を付ける。
 //
 // 応募者全件は返さない。表示対象は社長推薦（stage: ceo_recommend / ceo_interview）
 // まで進んだ人だけ。事務処理（合格通知・onboarding等）は一切含めない（README §11）。
@@ -15,6 +19,7 @@ import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
 import { paySplit, attachPay } from "../../lib/hr-pay.js";
 import { userClient } from "../../lib/supabase.js";
 import { shapeApplicant, shapeInterview } from "../../lib/hr.js";
+import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../lib/hr-messages.js";
 
 const SQL = "db/081_hr_recruiting.sql・084_hr_ceo_review.sql";
 const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
@@ -23,6 +28,9 @@ const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_titl
   + "employment_type, contract_type, contract_end_date, join_date, probation_months, "
   + "wage_type, wage_amount, weekly_hours, work_location, employee_id, note, created_at, updated_at";
 const RELEVANT_STAGES = ["ceo_recommend", "ceo_interview"];
+// 内定にした人は stage=offer へ進む。本人への連絡が済むまでは「判断済み・本人へ未連絡」に出す
+const FETCH_STAGES = [...RELEVANT_STAGES, "offer"];
+const EMPTY = { todayMeetings: [], recommended: [], decisionPending: [], contactPending: [] };
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -37,21 +45,32 @@ export default async function handler(req, res) {
   // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す
   const salary = guardSalaryOutput(res, canSeeSalary(ctx));
   const { data, error } = await sb.from("gw_hr_applicants").select(salary && !paySplit() ? FIELDS : withoutColumns(FIELDS))
-    .eq("tenant_id", ctx.tenantId).in("stage", RELEVANT_STAGES).limit(500);
+    .eq("tenant_id", ctx.tenantId).in("stage", FETCH_STAGES).limit(500);
   if (error) {
     const hint = dbSetupHint(error, SQL);
-    if (hint) return json(res, 200, { todayMeetings: [], recommended: [], decisionPending: [], notReady: true, message: hint });
+    if (hint) return json(res, 200, { ...EMPTY, notReady: true, message: hint });
     return json(res, 500, { error: "db_query_failed", detail: error.message });
   }
 
   const applicants = data || [];
   // 給与を見られる人にだけ、給与を足す（分けていない設定なら何もしない）
   if (salary) await attachPay(ctx.tenantId, applicants, "applicant");
-  if (!applicants.length) return json(res, 200, { todayMeetings: [], recommended: [], decisionPending: [] });
+  if (!applicants.length) return json(res, 200, EMPTY);
 
   const ids = applicants.map((a) => a.id);
-  const { data: interviews } = await sb.from("gw_hr_interviews").select("*")
-    .in("applicant_id", ids).order("created_at", { ascending: false });
+  const decidedIds = applicants.filter((a) => a.decision).map((a) => a.id);
+  const [{ data: interviews }, { data: contactEvents }] = await Promise.all([
+    sb.from("gw_hr_interviews").select("*").in("applicant_id", ids).order("created_at", { ascending: false }),
+    decidedIds.length
+      ? sb.from("gw_hr_timeline").select("applicant_id, event_key, occurred_at")
+        .in("applicant_id", decidedIds).in("event_key", CONTACT_EVENT_KEYS).limit(5000)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const eventsOf = new Map();
+  for (const e of contactEvents || []) {
+    if (!eventsOf.has(e.applicant_id)) eventsOf.set(e.applicant_id, []);
+    eventsOf.get(e.applicant_id).push(e);
+  }
   const byApplicant = new Map();
   for (const i of interviews || []) {
     if (!byApplicant.has(i.applicant_id)) byApplicant.set(i.applicant_id, []);
@@ -59,7 +78,7 @@ export default async function handler(req, res) {
   }
 
   const jstToday = jstYmd();
-  const todayMeetings = [], recommended = [], decisionPending = [];
+  const todayMeetings = [], recommended = [], decisionPending = [], contactPending = [];
 
   for (const a of applicants) {
     const list = byApplicant.get(a.id) || [];
@@ -79,7 +98,15 @@ export default async function handler(req, res) {
       // のまま（社長が応募書類を読み直さなくても判断材料に辿り着けるように。README §14）
       recordingUrl: evaluated?.recording_url || null,
       ceoInterview: ceoInterview ? shapeInterview(ceoInterview) : null,
+      contact: contactStatusOf(a.decision, eventsOf.get(a.id)),
     };
+
+    // 内定・見送りを決めた人は、判断のブロックには出さない。本人へ未連絡のときだけ「判断済み・本人へ未連絡」へ
+    // （見送りは stage が社長面談のまま status=passed になる。以前は「社長に会ってほしい人」に残っていた）
+    if (a.decision === "hired" || a.decision === "rejected" || a.stage === "offer") {
+      if (card.contact.state === "pending") contactPending.push(card);
+      continue;
+    }
 
     const scheduledToday = ceoInterview && !ceoInterview.conducted_at && ceoInterview.scheduled_at
       && jstYmd(ceoInterview.scheduled_at) === jstToday;   // 日本の日付で比べる（UTC の日付で切らない）
@@ -91,5 +118,5 @@ export default async function handler(req, res) {
   const byTime = (x, y) => String(x.ceoInterview?.scheduledAt || "").localeCompare(String(y.ceoInterview?.scheduledAt || ""));
   todayMeetings.sort(byTime);
 
-  return json(res, 200, { todayMeetings, recommended, decisionPending });
+  return json(res, 200, { todayMeetings, recommended, decisionPending, contactPending });
 }

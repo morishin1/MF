@@ -33,6 +33,12 @@
     .ld-grade.warm { background:#fbf1d6; color:#7d5a00; }
     .ld-grade.lead { background:#e5f1e2; color:#2f6f3a; }
     .ld-list { display:grid; gap:8px; }
+    .ld-grade.mgn { background:#e5f1e2; color:#1f4d27; }
+    .ld-grade.cand { background:#fdeccc; color:#7d4a00; }
+    .ld-grade.recent { background:#ffe3d6; color:#9a3412; }
+    .ld-svc { font-size:11.5px; color:#1f4d27; background:#f1f8ef; border:1px solid #cfe5ca; border-radius:999px; padding:1px 8px; }
+    .ld-acts { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .ld-acts .btn { white-space:nowrap; }
     @media (max-width: 760px) { .ld-card { flex-direction:column; align-items:stretch; } }
   </style>
 </head>
@@ -40,7 +46,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">リード</h1>
-  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追って、「商談を予定する」で商談につなげてください（返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談）。</p>
+  <p class="sl-sub">アタックのあとに反応した企業です。上から順に追ってください（MGNDigital申込・返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談）。クリックだけの会社は、電話番号があれば電話、無ければフォローから。</p>
 
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="stages"></div></div>
   <div class="ld-filters">
@@ -56,10 +62,10 @@
 <div id="modal-root"></div>
 <div id="action-root"></div>
 
-<script src="../js/api-client.js?v=20261002of1"></script>
-<script src="../js/layout.js?v=20261002of1"></script>
-<script src="../js/sales-layout.js?v=20261002of1"></script>
-<script src="../js/sales-detail.js?v=20261001sx1"></script>
+<script src="../js/api-client.js?v=20261012mx1"></script>
+<script src="../js/layout.js?v=20261012mx1"></script>
+<script src="../js/sales-layout.js?v=20261012mx1"></script>
+<script src="../js/sales-detail.js?v=20261012mx1"></script>
 <script>
   let leads = [];
   let stage = "all";
@@ -82,6 +88,7 @@
     ["all", "すべて", () => true],
     ["clicked", "クリックあり", (c) => !inMeeting(c) && (c.status === "clicked" || (c.clickCount > 0 && c.status === "attacked"))],
     ["replied", "返信あり", (c) => !inMeeting(c) && c.status === "replied"],
+    ["mgn", "MGNDigital申込", (c) => Boolean(c.lpAppliedAt || c.lpCandidate)],
     ["scheduling", "予約待ち", (c) => c.meetingStatus === "scheduling"],
     ["scheduled", "商談予定", (c) => c.meetingStatus === "scheduled" || (!inMeeting(c) && c.status === "meeting")],
     ["proposal", "提案中", (c) => c.status === "proposal"],
@@ -121,14 +128,20 @@
   // リード＝アタックのあとに反応があった企業。営業禁止・失注・対象外は出さない
   function isLead(c) {
     if (c.ngReason || ["lost", "excluded"].includes(c.status)) return false;
-    return c.clickCount > 0 || ["replied", "meeting", "proposal", "won"].includes(c.status);
+    return c.clickCount > 0 || Boolean(c.lpAppliedAt || c.lpCandidate) || ["replied", "meeting", "proposal", "won"].includes(c.status);
   }
+  // 30分以内のクリック（「いま見ている」とは言わない。クリックしたことしか分からない）
+  const RECENT_MS = 30 * 60 * 1000;
+  const recentClick = (c) => Boolean(c.lastClickAt) && Date.now() - new Date(c.lastClickAt).getTime() <= RECENT_MS;
+  const phoneOf = (c) => String(c.phone || c.contacts?.phone || "").trim();
+  const telHref = (p) => `tel:${p.replace(/[^0-9+]/g, "")}`;
   // クリックだけならウォームリード、返信から先はリード（要件 §8）
   const isWarm = (c) => !["replied", "meeting", "proposal", "won"].includes(c.status);
 
-  // 要件 §10 の順：返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談 → 提案 → 成約
+  // 順番：MGNDigital申込（候補を含む）→ 返信あり → 複数回クリック → 直近クリック → 未フォロー → 商談 → 提案 → 成約
   function group(c) {
     if (inMeeting(c)) return 3;
+    if ((c.lpAppliedAt || c.lpCandidate) && ["untouched", "attacked", "clicked", "replied"].includes(c.status)) return -1;
     if (c.status === "replied") return 0;
     if (isWarm(c) && c.clickCount >= 2) return 1;
     if (isWarm(c)) return 2;
@@ -136,6 +149,7 @@
   }
   function sorted(list) {
     return [...list].sort((x, y) => group(x) - group(y)
+      || (recentClick(y) ? 1 : 0) - (recentClick(x) ? 1 : 0)
       || (y.unhandledClick ? 1 : 0) - (x.unhandledClick ? 1 : 0)
       || String(y.lastClickAt || y.updatedAt || "").localeCompare(String(x.lastClickAt || x.updatedAt || "")));
   }
@@ -167,6 +181,32 @@
 
   // リードの Primary CTA は「商談を予定する」1つ（要件 Phase 2）。商談予定なら「商談予定を見る」、成約済みは開くだけ
   const cta = (c) => (c.status === "won" ? "開く" : c.meetingStatus === "scheduled" ? "商談予定を見る" : "商談を予定する");
+  // クリックだけのウォームリード（申込・返信・商談の前）は、電話番号があれば「電話する」、無ければ「フォローする」
+  const callable = (c) => isWarm(c) && !inMeeting(c) && !c.lpAppliedAt && !c.lpCandidate && !c.ngReason;
+  function nextText(c) {
+    if (callable(c)) return phoneOf(c) ? "電話する" : "フォローする";
+    if (c.lpCandidate && !c.lpAppliedAt) return "申込の会社を確認する";
+    return c.next;
+  }
+  function actions(c) {
+    if (callable(c)) {
+      const p = phoneOf(c);
+      return p
+        ? `<a class="btn btn-primary btn-sm" href="${esc(telHref(p))}" onclick="event.stopPropagation()" title="${esc(p)}">電話する</a>
+           <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openCallLog('${esc(c.id)}', ${esc(JSON.stringify(c.name))})">電話した</button>`
+        : `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();followLead('${esc(c.id)}')">フォローする</button>`;
+    }
+    // 既存企業候補（メールのドメインだけで当たった申込）は、まず人が確かめる
+    if (c.lpCandidate && !c.lpAppliedAt) {
+      return `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openLead('${esc(c.id)}', false)">申込を確認する</button>`;
+    }
+    return `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openLead('${esc(c.id)}', ${c.status === "won" ? "false" : "true"})">${esc(cta(c))}</button>`;
+  }
+  // フォローする＝ドロワーを開いて「フォローを記録」
+  async function followLead(id) {
+    const shown = await openDetail(id);
+    if (shown) openEvent("follow");
+  }
   // リード一覧 → 右ドロワー →（商談を予定する）→ 中央モーダル。モーダルを閉じると同じドロワーに戻る
   async function openLead(id, meeting) {
     const shown = await openDetail(id);
@@ -187,21 +227,25 @@
     el("list").innerHTML = list.map((c) => {
       const warm = isWarm(c);
       return `
-      <div class="ld-card ${c.unhandledClick ? "hot" : warm ? "warm" : "lead"}" data-id="${esc(c.id)}" onclick="openLead('${esc(c.id)}', false)">
+      <div class="ld-card ${c.unhandledClick || recentClick(c) ? "hot" : warm ? "warm" : "lead"}" data-id="${esc(c.id)}" onclick="openLead('${esc(c.id)}', false)">
         <div class="info">
-          <div class="nm">${c.unhandledClick ? "🔥 " : ""}${esc(c.name)}
+          <div class="nm">${c.unhandledClick || recentClick(c) ? "🔥 " : ""}${esc(c.name)}
             <span class="ld-grade ${warm ? "warm" : "lead"}">${warm ? "ウォームリード" : "リード"}</span>
+            ${c.lpAppliedAt ? `<span class="ld-grade mgn">MGNDigital申込あり</span>` : ""}
+            ${c.lpCandidate ? `<span class="ld-grade cand">既存企業候補あり・要確認</span>` : ""}
+            ${recentClick(c) ? `<span class="ld-grade recent">30分以内にクリック</span>` : ""}
             ${statusPill(c.status, c.statusLabel)}</div>
+          ${(c.lpAppliedAt || c.lpCandidate) && (c.lpServices || []).length ? `<div class="meta">希望サービス：${c.lpServices.map((v) => `<span class="ld-svc">${esc(v)}</span>`).join("")}</div>` : ""}
           <div class="meta">
             <span>${esc(c.lastService || c.service || "—")}</span>
             ${c.lastClickAt ? `<span>${esc(ago(c.lastClickAt))}にクリック</span>` : ""}
-            ${c.clickCount ? `<span class="${c.clickCount >= 2 ? "sl-hot" : ""}">クリック ${c.clickCount}回</span>` : ""}
+            ${c.clickCount ? `<span class="${c.clickCount >= 2 ? "sl-hot" : ""}">${c.mgnClick ? "MGNDigital LP " : ""}クリック ${c.clickCount}回</span>` : ""}
             <span>担当 ${esc(c.ownerName || "未定")}</span>
             ${c.meetingStatus ? `<span class="sl-hot">${c.meetingStatus === "scheduled" ? `商談予定 ${esc(fmt(c.meetingAt))}` : "予約待ち"}</span>` : ""}
           </div>
-          <div class="next">NEXT：${esc(c.next)}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
+          <div class="next">NEXT：${esc(nextText(c))}${c.nextDue ? `（${esc(fmtDay(c.nextDue))}${c.overdue ? "・期限超過" : ""}）` : ""}</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openLead('${esc(c.id)}', ${c.status === "won" ? "false" : "true"})">${esc(cta(c))}</button>
+        <div class="ld-acts">${actions(c)}</div>
       </div>`;
     }).join("");
   }

@@ -2,7 +2,7 @@
 
 import { json, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canOfficeFinance } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 
 const BUCKET = "billing-submissions";
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!canOfficeFinance(ctx)) return json(res, 403, { error: "forbidden" });
 
   const id = new URL(req.url, "http://localhost").searchParams.get("id");
   if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });

@@ -78,6 +78,10 @@ mock.module(atRoot("lib/auth.js"), {
 mock.module(atRoot("lib/gw-audit.js"), {
   namedExports: { gwLog: async (e) => { logged.push(e); } },
 });
+// 通知（lib/notify.js）は記録だけ（この偽DBは upsert を持たない）
+mock.module(atRoot("lib/notify.js"), {
+  namedExports: { notify: async (rows) => { for (const r of rows || []) (db.rows.gw_notifications = db.rows.gw_notifications || []).push({ employee_id: r.employeeId, title: r.title, dedupe_key: r.dedupeKey }); return { created: (rows || []).length }; } },
+});
 const RECRUITER = { tenantId: "t1", isAdmin: false, isHr: false, roles: ["recruiter"], employee: { id: "emp-r1", display_name: "採用 花子" } };
 const MEMBER = { tenantId: "t1", isAdmin: false, isHr: false, roles: [], employee: { id: "emp-m1", display_name: "一般 次郎" } };
 let who = RECRUITER;
@@ -248,6 +252,19 @@ await ok("一般メンバーは使えない", async () => {
   const r = await call({ ids: ["a1"], action: "delete" });
   assert.equal(r.statusCode, 403);
   assert.ok(db.rows.gw_hr_applicants.some((x) => x.id === "a1"), "消えていない");
+});
+
+
+await ok("担当にした人へ「担当になった」を1件にまとめて知らせる（自分を担当にしたときは送らない）", async () => {
+  setup();
+  db.rows.gw_notifications = [];
+  await call({ ids: ["a1", "a2"], action: "setRecruiter", recruiterId: "emp-x" });
+  const n = (db.rows.gw_notifications || []).filter((x) => x.employee_id === "emp-x");
+  assert.equal(n.length, 1, JSON.stringify(db.rows.gw_notifications));
+  assert.match(n[0].title, /2名の応募者の担当/);
+  db.rows.gw_notifications = [];
+  await call({ ids: ["a1"], action: "setRecruiter", recruiterId: who.employee.id });
+  assert.equal(db.rows.gw_notifications.length, 0, "自分を担当にしたら送らない");
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

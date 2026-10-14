@@ -10,6 +10,10 @@
 //        "approve" … 承認・発行。書面を固めて本人に署名依頼を出す       社労士（管理者も可）
 //        "send"    … 届いたPDFのまま本人に署名依頼を出す（承認と同じ道） 管理者
 //        "cancel"  … 取り消す                                          管理者
+//        "pdf_start" … ［作成済みPDFを使う］の入口。作成依頼・条件の入力・依頼先を求めない。
+//                      手続き中の依頼があればそれを使い（やり直し・二重押しでも1件のまま）、無ければ内部で1件作る。
+//                      採用承諾条件との突き合わせ（登録情報・有効な契約 vs 承諾した合格通知）は create と同じに効かせる。
+//                      あとは upload → attach → send（PDFのまま本人に署名依頼）。                 管理者
 //
 // ■ 「誰あてか」を最初に決める
 //   依頼を作る時点で employee_id が要る。あとから紐づけ直す作業を無くすため。
@@ -245,6 +249,7 @@ async function act(req, res, ctx, user, advisor) {
     case "approve": return approve(req, res, sb, ctx, user, body, advisor);
     case "send":    return send(req, res, sb, ctx, user, body);
     case "cancel":  return cancel(res, sb, ctx, user, body);
+    case "pdf_start": return pdfStart(res, sb, ctx, user, body);
     default: return json(res, 400, { error: "unknown_action" });
   }
 }
@@ -603,6 +608,90 @@ async function approve(req, res, sb, ctx, user, body, advisor) {
   });
 }
 
+/**
+ * ［作成済みPDFを使う］の入口。手元の完成したPDFで、そのまま本人に署名を依頼するための箱を用意する。
+ *   ・作成依頼先・社労士への依頼文・PDFに書いてある条件を、入力させない（conditions は空のまま。社労士・Slack には知らせない）
+ *   ・手続き中の依頼（依頼中・確認待ち）があれば、それを使う（アップロードの途中で失敗しても、ここからやり直せる）
+ *   ・署名依頼ずみなら 409（同じ書面を2回送らない）
+ *   ・採用承諾条件との突き合わせは create と同じ（一致しなければ理由つきで人事・社長だけが進められる）。
+ *     突き合わせるのは登録情報・有効な契約と承諾した合格通知。PDFの中身は照合しない（画面でプレビューして人が確かめる）
+ * 返す：order・本人のアカウントの有無（無ければ送れないので、アップロードの前に知らせる）・突き合わせの結果
+ */
+async function pdfStart(res, sb, ctx, user, body) {
+  const employeeId = str(body.employeeId, 40);
+  if (!employeeId) return json(res, 400, { error: "invalid_body", required: ["employeeId"] });
+  const { data: emp } = await sb.from("gw_employees")
+    .select("id, display_name, user_id").eq("id", employeeId).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!emp) return json(res, 404, { error: "employee_not_found" });
+  const docKind = DOC_KIND_KEYS.includes(body.docKind) ? body.docKind : "employment";
+
+  const { data: active } = await sb.from("gw_doc_orders").select(FIELDS)
+    .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("doc_kind", docKind)
+    .in("status", ACTIVE_ORDER_STATUS).order("requested_at", { ascending: false }).limit(1).maybeSingle();
+  if (active?.status === "sent") {
+    return json(res, 409, { error: "already_sent", signRequestId: active.sign_request_id || null,
+      hint: "この人には、すでに署名依頼を出しています（署名の状況から確認できます）" });
+  }
+
+  const recon = docKind === "employment"
+    ? await loadReconciliation(sb, ctx, employeeId)
+    : { linked: false, hasAcceptedOffer: false, mismatches: [] };
+  let override = null;
+  if (recon.mismatches.length) {
+    const reason = str(body.overrideReason, 500);
+    if (!reason) {
+      return json(res, 409, { error: "offer_mismatch", mismatches: recon.mismatches,
+        hint: "採用承諾時の条件と、登録されている条件が異なります。本人と条件を再確認するか、理由を書いて進めてください" });
+    }
+    if (!ctx.isHr) return json(res, 403, { error: "forbidden", hint: "条件不一致のまま進められるのは社長・人事だけです" });
+    override = { reason, mismatches: recon.mismatches };
+  }
+
+  let order = active;
+  if (!order) {
+    const row = {
+      tenant_id: ctx.tenantId, employee_id: employeeId, doc_kind: docKind,
+      title: str(body.title, 120) || kindLabel(docKind),
+      conditions: {}, note: "作成済みPDFで署名を依頼（作成依頼なし）",
+      requested_by: user.id,
+      ...(override ? { override_reason: override.reason, override_by: user.id, override_at: new Date().toISOString() } : {}),
+    };
+    const { data, error } = await sb.from("gw_doc_orders").insert(row).select(FIELDS).single();
+    if (error) {
+      const hint = dbSetupHint(error, SQL);
+      if (hint) return json(res, 503, { error: "not_ready", message: hint });
+      // 同時に押された（もう一方が先に作った）。その1件を使う
+      const { data: again } = await sb.from("gw_doc_orders").select(FIELDS)
+        .eq("tenant_id", ctx.tenantId).eq("employee_id", employeeId).eq("doc_kind", docKind)
+        .in("status", ["requested", "uploaded"]).order("requested_at", { ascending: false }).limit(1).maybeSingle();
+      if (!again) return json(res, 500, { error: "db_insert_failed", detail: error.message });
+      order = again;
+    } else {
+      order = data;
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "doc_order.pdf_start", target: `doc_order:${order.id}`,
+        detail: { title: row.title, employee: emp.display_name, override: Boolean(override) } });
+      if (override) {
+        await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "doc_order.create_override_mismatch", target: `doc_order:${order.id}`,
+          detail: { employee: emp.display_name, reason: override.reason, mismatches: override.mismatches } });
+      }
+      if (docKind === "employment") await advanceFor(sb, ctx, employeeId);
+    }
+  } else if (body.title && order.status === "requested" && !order.file_path) {
+    const t = str(body.title, 120);
+    if (t && t !== order.title) {
+      const { data } = await sb.from("gw_doc_orders").update({ title: t, updated_at: new Date().toISOString() })
+        .eq("id", order.id).select(FIELDS).single();
+      if (data) order = data;
+    }
+  }
+
+  return json(res, 200, {
+    order: shape(order), reused: Boolean(active),
+    employee: { id: emp.id, name: emp.display_name, hasAccount: Boolean(emp.user_id) },
+    reconciliation: { linked: recon.linked, hasAcceptedOffer: recon.hasAcceptedOffer, matched: recon.mismatches.length === 0, overridden: Boolean(override) },
+  });
+}
+
 /** 届いた書面のまま、本人に署名依頼を出す（管理者。承認と同じ道） */
 async function send(req, res, sb, ctx, user, body) {
   const o = await load(sb, ctx, body.id);
@@ -695,14 +784,15 @@ async function issue(req, res, sb, ctx, user, p) {
   await signEvent(ctx, row.id, "sent", req, { id: user.id, name: ctx.employee?.display_name },
     { title: o.title, dueOn, hash, from: p.byAdvisor ? "advisor" : "doc_order", source: p.source });
 
-  // 本人へ。締結のお願い
+  // 本人へ。締結のお願い（依頼は登録済み。お知らせに失敗しても、依頼は「署名の状況」で追える）
+  let notified = true;
   await notify([{
     tenantId: ctx.tenantId, employeeId: o.employee_id, kind: "general",
     title: "署名をお願いします",
     body: `${o.title}（期限 ${dueOn}）`,
     link: "contracts.html",
     dedupeKey: `sign:${row.id}`,
-  }]);
+  }]).catch((ne) => { notified = false; console.error("[orders] お知らせを送れませんでした:", ne?.message || ne); });
   // 社労士が発行したときは、会社にも「発行された」を1通
   if (p.byAdvisor) {
     const { data: grants } = await sb.from("gw_role_grants").select("employee_id")
@@ -730,7 +820,7 @@ async function issue(req, res, sb, ctx, user, p) {
   // ②→③。本人に「締結してください」が届く
   await advanceFor(sb, ctx, o.employee_id);
 
-  return json(res, 200, { ok: true, signRequestId: row.id, dueOn, source: p.source });
+  return json(res, 200, { ok: true, signRequestId: row.id, dueOn, source: p.source, notified });
 }
 
 async function cancel(res, sb, ctx, user, body) {

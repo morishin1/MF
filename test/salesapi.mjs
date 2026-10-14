@@ -125,6 +125,7 @@ function matcher(f) {
     if (op === "is") return (r[k] ?? null) === v;
     if (op === "notnull") return r[k] !== null && r[k] !== undefined;
     if (op === "gte") return r[k] !== null && r[k] !== undefined && r[k] >= v;
+    if (op === "lt") return r[k] !== null && r[k] !== undefined && r[k] < v;
     // like 'x%'（先頭一致）だけ
     if (op === "like") return String(r[k] ?? "").startsWith(v.replace(/%$/, "")) && r[k] !== null && r[k] !== undefined;
     return true;
@@ -179,6 +180,7 @@ function table(name) {
     is(k, v) { f.push(["is", k, v]); return q; },
     not(k) { f.push(["notnull", k]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
+    lt(k, v) { f.push(["lt", k, v]); return q; },
     like(k, v) { f.push(["like", k, v]); return q; },
     order(col, opts) { orders.push([col, opts?.ascending !== false, opts?.nullsFirst ?? (opts?.ascending === false)]); return q; },
     limit(n) { cap = n; return q; },
@@ -301,6 +303,10 @@ function facetCountsRpc(a) {
 }
 function rpc(name, args) {
   rpcCalls.push({ name, args });
+  // db/116：担当が同じテナントの社員か（true/false だけ返す）
+  if (name === "gw_sales_deal_owner_ok" && !rpcMissing) {
+    return Promise.resolve({ data: (db.rows.gw_employees || []).some((e) => e.id === args.p_owner && e.tenant_id === args.p_tenant), error: null });
+  }
   if (rpcMissing || name !== "gw_sales_company_facet_counts") {
     return Promise.resolve({ data: null, error: { code: "PGRST202", message: `Could not find the function public.${name}` } });
   }
@@ -357,12 +363,15 @@ const { default: detail } = await import(atRoot("api/sales/companies/detail.js")
 const { default: approaches } = await import(atRoot("api/sales/approaches/index.js"));
 const { default: templates } = await import(atRoot("api/sales/templates/index.js"));
 const { default: redirect } = await import(atRoot("api/sales/r.js"));
+const { default: lpLead, _resetLpRate } = await import(atRoot("api/sales/lp-lead.js"));
 const { default: lookup } = await import(atRoot("api/sales/lookup.js"));
 const { default: meetingsApi } = await import(atRoot("api/sales/meetings/index.js"));
 const { default: bulkApi } = await import(atRoot("api/sales/companies/bulk.js"));
 const { default: exportApi } = await import(atRoot("api/sales/companies/export.js"));
 const { default: importApi } = await import(atRoot("api/sales/companies/import.js"));
 const { default: mastersApi } = await import(atRoot("api/sales/masters/index.js"));
+const { default: dealsApi } = await import(atRoot("api/sales/deals/index.js"));
+const { default: countsApi } = await import(atRoot("api/sales/approaches/counts.js"));
 const { TRACKING_RE, newTrackingToken, renderTemplate, addBizDays, autoNext, todayJst, classifyClick, isBot } =
   await import(atRoot("lib/sales.js"));
 
@@ -2242,6 +2251,256 @@ await ok("CSV：営業の権限が無い人は 403", async () => {
   assert.equal((await exportPost({ ids: [db.rows.gw_sales_companies[0].id] })).statusCode, 403);
 });
 
+console.log("\n=== 案件（db/116） ===\n");
+
+const newDeal = (body) => call(dealsApi, { method: "POST", url: "/api/sales/deals", body });
+const patchDeal = (body) => call(dealsApi, { method: "PATCH", url: "/api/sales/deals", body });
+const listDeals = (companyId) => call(dealsApi, { method: "GET", url: `/api/sales/deals${companyId ? `?companyId=${companyId}` : ""}` });
+const dealRow = (id) => db.rows.gw_sales_deals.find((d) => d.id === id);
+const coOf = (id) => db.rows.gw_sales_companies.find((c) => c.id === id);
+
+await ok("案件を作ると、もとのアタックは最後に送ったもの・会社は商談へ進む・履歴に残る", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  ageApproaches(40);
+  const { approach: latest } = await sendAttack(c.id, { service: "PCレンタル" });
+  const r = await newDeal({ companyId: c.id, title: "AI/DX 導入支援", amount: "1,200,000" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const d = dealRow(r.body.deal.id);
+  assert.equal(d.approach_id, latest.id, "最後に送ったアタック");
+  assert.equal(d.amount, 1200000);
+  assert.equal(d.stage, "meeting");
+  assert.equal(d.owner_id, coOf(c.id).owner_id, "担当は会社の担当");
+  assert.equal(r.body.deal.probabilityUsed, 20);
+  assert.equal(r.body.deal.expected, 240000);
+  assert.equal(coOf(c.id).status, "meeting");
+  assert.equal(r.body.companyStatus, "meeting");
+  assert.ok(coOf(c.id).next_action, "NEXT が空なら自動で入る");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.event_key === "deal" && /案件を追加：AI\/DX 導入支援（1,200,000円）/.test(e.label)));
+  assert.ok(db.rows.gw_sales_events.some((e) => e.event_key === "status" && /商談/.test(e.label)));
+  assert.ok(logged.some((l) => l.action === "sales.deal_create"));
+});
+
+await ok("案件：入力のチェック（案件名・金額・確率・作るときの段階）", async () => {
+  setup();
+  const c = await newCompany();
+  assert.equal((await newDeal({ companyId: c.id, title: "" })).body.error, "bad_title");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", amount: -1 })).body.error, "bad_amount");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", amount: 1.5 })).body.error, "bad_amount");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", amount: 100000000001 })).body.error, "bad_amount");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", probability: 101 })).body.error, "bad_probability");
+  assert.equal((await newDeal({ companyId: c.id, title: "x", stage: "won", amount: 1 })).body.error, "bad_stage", "作るときに成約にはしない");
+  assert.equal((await newDeal({ companyId: "nope", title: "x" })).statusCode, 400);
+  assert.equal((db.rows.gw_sales_deals || []).length, 0);
+  // アタックの無い会社にも作れる（紹介など）。もとのアタックは null
+  const r = await newDeal({ companyId: c.id, title: "紹介案件" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(dealRow(r.body.deal.id).approach_id, null);
+});
+
+await ok("案件の段階：提案・最終調整で会社は提案、成約は金額が要る、成約で会社も成約", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const { body } = await newDeal({ companyId: c.id, title: "案件A" });
+  const id = body.deal.id;
+  let r = await patchDeal({ id, stage: "proposal" });
+  assert.equal(coOf(c.id).status, "proposal");
+  r = await patchDeal({ id, stage: "negotiation", probability: 70 });
+  assert.equal(r.body.deal.probabilityUsed, 70, "個別の確率を優先");
+  assert.equal(coOf(c.id).status, "proposal");
+  r = await patchDeal({ id, stage: "won" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "amount_required");
+  r = await patchDeal({ id, stage: "won", amount: 0 });
+  assert.equal(r.statusCode, 400, "0円の成約は作らない（DB の制約と同じ）");
+  assert.equal(r.body.error, "amount_required");
+  assert.equal(dealRow(id).stage, "negotiation");
+  r = await patchDeal({ id, stage: "won", amount: 800000 });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(dealRow(id).won_on, todayJst());
+  assert.equal(r.body.deal.expected, 0, "成約は見込に入れない");
+  assert.equal(coOf(c.id).status, "won");
+  assert.ok(db.rows.gw_sales_events.some((e) => e.event_key === "deal" && /最終調整 → 成約/.test(e.label) && e.detail === "800,000円"));
+  // 取り消して進行中へ戻すと、成約日は消える（会社は戻さない）
+  r = await patchDeal({ id, stage: "proposal" });
+  assert.equal(dealRow(id).won_on, null);
+  assert.equal(coOf(c.id).status, "won");
+});
+
+await ok("1件の失注で会社を失注にしない。全部失注になったら聞くだけ（会社は変えない）", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const a = (await newDeal({ companyId: c.id, title: "案件A", amount: 100000 })).body.deal;
+  const b = (await newDeal({ companyId: c.id, title: "案件B" })).body.deal;
+  let r = await patchDeal({ id: a.id, stage: "lost", lostReason: "予算なし" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.suggestCompanyLost, false);
+  assert.equal(coOf(c.id).status, "meeting");
+  assert.equal(dealRow(a.id).lost_on, todayJst());
+  assert.equal(dealRow(a.id).lost_reason, "予算なし");
+  r = await patchDeal({ id: b.id, stage: "lost" });
+  assert.equal(r.body.suggestCompanyLost, true);
+  assert.equal(coOf(c.id).status, "meeting", "会社のステータスは人が決める");
+  // 失注から戻すと、失注日・理由は消える
+  await patchDeal({ id: a.id, stage: "meeting" });
+  assert.equal(dealRow(a.id).lost_on, null);
+  assert.equal(dealRow(a.id).lost_reason, null);
+});
+
+await ok("もとのアタック・会社は、作ったあとは変えられない", async () => {
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const d = (await newDeal({ companyId: c.id, title: "案件A" })).body.deal;
+  const before = dealRow(d.id).approach_id;
+  const other = await newCompany({ name: "別社", siteUrl: "https://other.example.jp/" });
+  const { approach } = await sendAttack(other.id);
+  assert.equal((await patchDeal({ id: d.id, approachId: approach.id })).body.error, "fixed_fields");
+  assert.equal((await patchDeal({ id: d.id, companyId: other.id })).body.error, "fixed_fields");
+  // あとから別のアタックを送っても、案件のもとのアタックは変わらない
+  ageApproaches(40);
+  await sendAttack(c.id);
+  await patchDeal({ id: d.id, stage: "proposal" });
+  assert.equal(dealRow(d.id).approach_id, before);
+});
+
+await ok("会社のステータスは戻さない・営業禁止や対象外の会社は案件で動かさない", async () => {
+  setup();
+  const won = await newCompany({ name: "成約社", siteUrl: "https://won.example.jp/" });
+  coOf(won.id).status = "won";
+  await newDeal({ companyId: won.id, title: "追加案件" });
+  assert.equal(coOf(won.id).status, "won");
+  const ng = await newCompany({ name: "既存顧客社", siteUrl: "https://ng.example.jp/" });
+  coOf(ng.id).ng_reason = "customer";
+  const r = await newDeal({ companyId: ng.id, title: "追加発注" });
+  assert.equal(r.statusCode, 200, "営業禁止（既存顧客など）でも案件は作れる");
+  assert.equal(coOf(ng.id).status, "untouched");
+  const lost = await newCompany({ name: "失注社", siteUrl: "https://lost.example.jp/" });
+  coOf(lost.id).status = "lost";
+  await newDeal({ companyId: lost.id, title: "再提案" });
+  assert.equal(coOf(lost.id).status, "meeting", "失注の会社に新しい案件が立ったら商談へ");
+});
+
+await ok("案件：他テナントのものは見えない・直せない。営業でない人は使えない", async () => {
+  setup();
+  const c = await newCompany();
+  const d = (await newDeal({ companyId: c.id, title: "案件A", amount: 5 })).body.deal;
+  db.rows.gw_sales_deals.push({ id: uuid(), tenant_id: "t2", company_id: "c-other", title: "他社", stage: "meeting", amount: 9 });
+  const all = await listDeals();
+  assert.deepEqual(all.body.deals.map((x) => x.title), ["案件A"]);
+  assert.equal(all.body.deals[0].companyName, "株式会社サンプル", "全体の一覧には会社名もつける");
+  const other = db.rows.gw_sales_deals.find((x) => x.tenant_id === "t2");
+  assert.equal((await patchDeal({ id: other.id, amount: 1 })).statusCode, 404);
+  assert.equal(other.amount, 9);
+  who = MEMBER;
+  assert.equal((await listDeals()).statusCode, 403);
+  assert.equal((await newDeal({ companyId: c.id, title: "x" })).statusCode, 403);
+  assert.equal((await patchDeal({ id: d.id, amount: 1 })).statusCode, 403);
+});
+
+await ok("案件の担当は同じテナントの社員だけ（別テナント・存在しない社員は 400。DB のトリガーでも止める）", async () => {
+  setup();
+  const mine = "00000000-0000-4000-8000-0000000000e2";
+  const other = "00000000-0000-4000-8000-0000000000f9";
+  db.rows.gw_employees.push({ id: mine, tenant_id: "t1", display_name: "営業 三郎", status: "active" });
+  db.rows.gw_employees.push({ id: other, tenant_id: "t2", display_name: "他社 太郎", status: "active" });
+  const c = await newCompany();
+  const bad = await newDeal({ companyId: c.id, title: "案件A", ownerId: other });
+  assert.equal(bad.statusCode, 400);
+  assert.equal(bad.body.error, "bad_owner");
+  assert.equal((db.rows.gw_sales_deals || []).length, 0, "作らない");
+  const ghost = await newDeal({ companyId: c.id, title: "案件A", ownerId: "00000000-0000-4000-8000-0000000000aa" });
+  assert.equal(ghost.statusCode, 400, "存在しない社員も入れない");
+  const ok1 = await newDeal({ companyId: c.id, title: "案件A", ownerId: mine });
+  assert.equal(ok1.statusCode, 200, JSON.stringify(ok1.body));
+  assert.equal(dealRow(ok1.body.deal.id).owner_id, mine);
+  const r = await patchDeal({ id: ok1.body.deal.id, ownerId: other });
+  assert.equal(r.statusCode, 400);
+  assert.equal(dealRow(ok1.body.deal.id).owner_id, mine, "担当は変わらない");
+  assert.equal((await patchDeal({ id: ok1.body.deal.id, ownerId: null })).statusCode, 200, "未定に戻すのはよい");
+  assert.ok(rpcCalls.some((x) => x.name === "gw_sales_deal_owner_ok" && x.args.p_tenant === "t1"), "判定はログインした人のテナントで");
+
+  // DB 側：db/116 のトリガーが、作るとき・担当を変えるときに同じテナントの社員か確かめる
+  const sql = (await import("node:fs")).readFileSync(atRoot("db/116_sales_deals.sql"), "utf8").replace(/--.*$/gm, "");
+  const fn = sql.slice(sql.indexOf("function public.gw_sales_deal_owner_ok"));
+  assert.match(fn.slice(0, fn.indexOf("$$;", fn.indexOf("$$") + 2)), /e\.id = p_owner and e\.tenant_id = p_tenant/);
+  assert.match(sql, /revoke all on function public\.gw_sales_deal_owner_ok\(uuid, uuid\) from anon/);
+  const guard = sql.slice(sql.indexOf("function public.gw_sales_deals_guard"), sql.indexOf("create trigger gw_sales_deals_guard"));
+  const upd = guard.slice(guard.indexOf("if tg_op = 'UPDATE'"), guard.indexOf("return new;"));
+  assert.match(upd, /new\.owner_id is distinct from old\.owner_id\s+and not public\.gw_sales_deal_owner_ok\(new\.owner_id, new\.tenant_id\)/, "担当を変えるとき");
+  const ins = guard.slice(guard.indexOf("return new;"));
+  assert.match(ins, /new\.owner_id is not null and not public\.gw_sales_deal_owner_ok\(new\.owner_id, new\.tenant_id\)/, "作るとき");
+  assert.match(sql, /before insert or update on public\.gw_sales_deals/);
+});
+
+await ok("分析用の案件一覧：5,000件を超えたら truncated（ちょうど5,000件なら省略なし）", async () => {
+  setup();
+  const c = await newCompany();
+  db.rows.gw_sales_deals = Array.from({ length: 5000 }, (_, i) => ({ id: uuid(), tenant_id: "t1", company_id: c.id,
+    title: `案件${i}`, stage: "meeting", amount: 1, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
+  let r = await listDeals();
+  assert.equal(r.body.deals.length, 5000);
+  assert.equal(r.body.truncated, false, "ちょうど5,000件は省略なし");
+  db.rows.gw_sales_deals.push({ id: uuid(), tenant_id: "t1", company_id: c.id, title: "5001件目", stage: "meeting", amount: 1,
+    created_at: "2026-09-01T00:00:00.000Z" });
+  r = await listDeals();
+  assert.equal(r.body.deals.length, 5000, "返すのは5,000件まで");
+  assert.equal(r.body.truncated, true);
+  assert.equal(r.body.deals[0].title, "5001件目", "新しい順");
+  r = await listDeals(c.id);
+  assert.equal(r.body.truncated, false, "会社ごとの一覧は truncated にしない");
+});
+
+await ok("分析期間の始まりは日本時間の日付（今日を1日目に days 日ぶん）。アタック一覧も同じ始まりで切る", async () => {
+  const { periodStartJst } = await import(atRoot("lib/sales.js"));
+  // UTC では 9/30 だが、日本時間ではもう 10/1（朝5時）
+  const early = new Date("2026-09-30T20:00:00Z");
+  assert.deepEqual(periodStartJst(1, early), { date: "2026-10-01", iso: "2026-10-01T00:00:00+09:00" }, "今日だけ");
+  assert.equal(periodStartJst(7, early).date, "2026-09-25");
+  assert.equal(periodStartJst(90, early).date, "2026-07-04");
+  // 日本時間の 23:59 も同じ日
+  assert.equal(periodStartJst(7, new Date("2026-10-01T14:59:00Z")).date, "2026-09-25");
+  assert.equal(periodStartJst(7, new Date("2026-10-01T15:00:00Z")).date, "2026-09-26", "日本時間の0時で日付が変わる");
+  assert.equal(periodStartJst(30, new Date("2026-03-01T03:00:00Z")).date, "2026-01-31", "月をまたぐ");
+
+  setup();
+  const c = await newCompany();
+  await sendAttack(c.id);
+  const r = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=30" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.since, periodStartJst(30).date, "画面が成約日を切るための始まりの日を返す");
+});
+
+await ok("企業詳細に案件が出る。案件のある企業は削除できない", async () => {
+  setup();
+  const c = await newCompany();
+  await newDeal({ companyId: c.id, title: "案件A", amount: 300000 });
+  const g = await getOne(c.id);
+  assert.equal(g.statusCode, 200);
+  assert.equal(g.body.dealsReady, true);
+  assert.equal(g.body.deals[0].title, "案件A");
+  assert.equal(g.body.deals[0].amount, 300000);
+  // 案件の記録は「最終連絡」に数えない
+  assert.equal(g.body.contactStatus?.lastContactAt ?? null, null);
+  db.rows.gw_sales_events = [];   // 営業履歴を消しても、案件があれば止まる
+  const r = await bulk({ ids: [c.id], action: "delete" });
+  assert.equal(r.body.deleted, 0);
+  assert.match(r.body.blocked[0].reasons.join(), /案件あり/);
+});
+
+await ok("成約確率の既定値：DB（db/116 の関数）と画面・API（lib/sales-deals.js）が同じ", async () => {
+  const { DEFAULT_PROBABILITY } = await import(atRoot("lib/sales-deals.js"));
+  const sql = (await import("node:fs")).readFileSync(atRoot("db/116_sales_deals.sql"), "utf8");
+  const fn = sql.slice(sql.indexOf("function public.gw_sales_deal_default_probability"));
+  const inSql = Object.fromEntries([...fn.slice(0, fn.indexOf("$$;")).matchAll(/when '(\w+)'\s+then (\d+)/g)].map((m) => [m[1], Number(m[2])]));
+  for (const [k, v] of Object.entries(DEFAULT_PROBABILITY)) assert.equal(inSql[k], v, `${k}: SQL ${inSql[k]} / JS ${v}`);
+  assert.equal(inSql.won, 100);
+  assert.equal(inSql.lost, 0);
+});
+
 console.log("\n=== ダッシュボード（/sales/）：件数と上位だけ返す（表示速度） ===\n");
 
 // 以前の画面（sales/index.html）が、全件から組み立てていた決まり。サーバへ移しても同じ結果になることを確かめる
@@ -2361,6 +2620,467 @@ await ok("差し込みは決めた4つだけ。知らない {{…}} は残す", 
   const s = renderTemplate("{{company}} {{ sender }} {{url}} {{service}} {{unknown}}",
     { company: "A社", sender: "森", url: "https://x/r/ABC", service: "DX" });
   assert.equal(s, "A社 森 https://x/r/ABC DX {{unknown}}");
+});
+
+console.log("\n=== アタックする企業：アタック優先順（サーバー側で並べてからページに切る） ===\n");
+
+const { NEXT_AFTER_FAIL } = await import(atRoot("lib/sales.js"));
+const ymdJst = (d) => new Date(Date.now() + 9 * 3600000 + d * 86400000).toISOString().slice(0, 10);
+async function seedQueue() {
+  // 243社：通常フォームアタック（未アタック150・再アタック待ち40）／そのほかのNEXT 33（期限付き30・クリック要フォロー3）／別チャネル再アタック 20
+  await seed(243);
+  const cs = db.rows.gw_sales_companies;
+  const kind = new Map();
+  cs.forEach((c, i) => {
+    if (i < 150) kind.set(c.id, "new");
+    else if (i < 190) { c.status = "reattack_wait"; kind.set(c.id, "re"); }
+    else if (i < 220) { c.next_action = "反応確認"; c.next_action_on = ymdJst(-1 - (i % 5)); kind.set(c.id, "next"); }
+    else if (i < 223) {
+      // 送れなかったが、そのあとクリックがあった（要フォロー）→ そのほかの NEXT に入れる
+      c.next_action = NEXT_AFTER_FAIL; c.next_action_on = ymdJst(-1); c.last_click_at = new Date().toISOString(); c.followed_at = null;
+      kind.set(c.id, "next");
+    } else { c.next_action = NEXT_AFTER_FAIL; c.next_action_on = ymdJst(-1 - (i % 3)); kind.set(c.id, "fail"); }
+  });
+  return kind;
+}
+const RANK = { new: 0, re: 1, next: 2, fail: 3 };
+
+await ok("アタック優先順：通常フォームアタック → そのほかのNEXT → 別チャネルで再アタック。101社目以降（2・3ページ目）も同じ順番の続き", async () => {
+  setup();
+  const kind = await seedQueue();
+  const pages = [];
+  for (const page of [1, 2, 3]) {
+    const r = await pageOf({ page, queue: "attack", sort: "priority", order: "asc" });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(r.body.total, 243);
+    assert.equal(r.body.totalPages, 3);
+    assert.equal(r.body.page, page);
+    pages.push(r.body.companies);
+  }
+  assert.deepEqual(pages.map((p) => p.length), [100, 100, 43]);
+  const order = pages.flat().map((c) => kind.get(c.id));
+  assert.equal(new Set(pages.flat().map((c) => c.id)).size, 243, "重複・欠落なし");
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(RANK[order[i - 1]] <= RANK[order[i]], `${i}番目で順番が戻っている（${order[i - 1]} → ${order[i]}）`);
+  }
+  assert.ok(pages[0].every((c) => kind.get(c.id) === "new"), "1ページ目は通常フォームアタック（未アタック）だけ");
+  assert.ok(pages[0].every((c) => c.nextKey === "attack" && c.next === "フォームアタック"));
+  assert.equal(order.indexOf("re"), 150, "再アタック待ちは、未アタックのあと");
+  assert.equal(order.indexOf("fail"), 223, "別チャネルで再アタックは、最後");
+  assert.ok(pages[2].slice(-20).every((c) => c.next === NEXT_AFTER_FAIL));
+  // そのほかの NEXT の中は急ぐ順（クリックの要フォロー → 期限の古い順）
+  const nexts = pages.flat().filter((c) => kind.get(c.id) === "next");
+  const clicked = new Set(db.rows.gw_sales_companies.slice(220, 223).map((c) => c.id));
+  assert.ok(nexts.slice(0, 3).every((c) => clicked.has(c.id)), "クリックの要フォロー（next_group 0）が先");
+  const dated = nexts.slice(3).map((c) => c.nextDue);
+  assert.deepEqual(dated, [...dated].sort(), "期限の古い順");
+});
+
+await ok("アタック優先順：「別チャネルで再アタックを検討」が通常フォームアタックより先頭に来ない（期限が今日でも）", async () => {
+  setup();
+  await seed(5);
+  const cs = db.rows.gw_sales_companies;
+  cs[0].next_action = NEXT_AFTER_FAIL; cs[0].next_action_on = ymdJst(0);
+  const r = (await pageOf({ page: 1, queue: "attack", sort: "priority" })).body.companies;
+  assert.equal(r.length, 5);
+  assert.equal(r[r.length - 1].id, cs[0].id);
+  // 以前の「NEXTの急ぐ順」では先頭に来ていた（この並びは選べるまま残す）
+  const old = (await pageOf({ page: 1, queue: "attack", sort: "next" })).body.companies;
+  assert.equal(old[0].id, cs[0].id);
+});
+
+await ok("アタック優先順：絞り込み（キャンペーン・自分の担当＋担当なし）と一緒に使える。範囲外のページは最後のページ", async () => {
+  setup();
+  const kind = await seedQueue();
+  const camp = "00000000-0000-4000-8000-0000000000c9";
+  db.rows.gw_sales_campaigns = [{ id: camp, tenant_id: "t1", name: "秋" }];
+  const cs = db.rows.gw_sales_companies;
+  for (const i of [5, 160, 200, 230]) cs[i].campaign_id = camp;
+  const r = (await pageOf({ page: 1, queue: "attack", sort: "priority", campaign: camp })).body;
+  assert.deepEqual(r.companies.map((c) => kind.get(c.id)), ["new", "re", "next", "fail"]);
+  const last = (await pageOf({ page: 9, queue: "attack", sort: "priority" })).body;
+  assert.equal(last.page, 3);
+  assert.equal(last.companies.length, 43);
+});
+
+await ok("アタック優先順は、アタックする企業の一覧（queue=attack）だけ", async () => {
+  setup();
+  await seed(3);
+  const r = await pageOf({ page: 1, sort: "priority" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "bad_sort");
+});
+
+console.log("\n=== 1社の削除（企業詳細・フォームアタック画面から） ===\n");
+
+await ok("削除：アタック画面で準備しただけ（未送信）のアタックは、指定したときだけ履歴に数えない", async () => {
+  setup();
+  const c = await newCompany({ name: "開いただけ社", siteUrl: "https://open.example.jp/" });
+  const p = await prepare({ companyId: c.id });
+  assert.equal(p.statusCode, 200, JSON.stringify(p.body));
+  const plain = await bulk({ ids: [c.id], action: "delete", dryRun: true });
+  assert.match(plain.body.blocked[0].reasons.join(), /アタック履歴あり/, "指定しなければ、これまでどおり止める");
+  const dry = await bulk({ ids: [c.id], action: "delete", dryRun: true, ignoreApproachId: p.body.approach.id });
+  assert.deepEqual(dry.body.deletable.map((x) => x.id), [c.id]);
+  const r = await bulk({ ids: [c.id], action: "delete", ignoreApproachId: p.body.approach.id });
+  assert.equal(r.body.deleted, 1);
+  assert.equal(db.rows.gw_sales_companies.length, 0);
+});
+
+await ok("削除：送信済み・送信できなかった・ほかの履歴があれば、準備中のアタックを指定しても消さない", async () => {
+  setup();
+  const sent = await newCompany({ name: "送信済社", siteUrl: "https://sent.example.jp/" });
+  const { approach } = await sendAttack(sent.id);
+  const r1 = await bulk({ ids: [sent.id], action: "delete", ignoreApproachId: approach.id });
+  assert.equal(r1.body.deleted, 0);
+  assert.match(r1.body.blocked[0].reasons.join(), /アタック履歴あり/);
+
+  const failed = await newCompany({ name: "失敗社", siteUrl: "https://failed.example.jp/" });
+  const p = await prepare({ companyId: failed.id });
+  const f = await act({ id: p.body.approach.id, action: "failed", reason: "captcha" });
+  assert.equal(f.statusCode, 200, JSON.stringify(f.body));
+  const r2 = await bulk({ ids: [failed.id], action: "delete", ignoreApproachId: p.body.approach.id });
+  assert.equal(r2.body.deleted, 0, "送信できなかった記録も履歴");
+
+  const memo = await newCompany({ name: "メモあり社", siteUrl: "https://memo2.example.jp/" });
+  const p3 = await prepare({ companyId: memo.id });
+  await addEvent({ id: memo.id, kind: "memo", detail: "電話した" });
+  const r3 = await bulk({ ids: [memo.id], action: "delete", ignoreApproachId: p3.body.approach.id });
+  assert.equal(r3.body.deleted, 0);
+  assert.match(r3.body.blocked[0].reasons.join(), /営業履歴あり/);
+
+  // 2社以上をまとめて消すときは、指定を使わない（1社の画面からだけ）
+  const a = await newCompany({ name: "A社", siteUrl: "https://a2.example.jp/" });
+  const b = await newCompany({ name: "B社", siteUrl: "https://b2.example.jp/" });
+  const pa = await prepare({ companyId: a.id });
+  const r4 = await bulk({ ids: [a.id, b.id], action: "delete", dryRun: true, ignoreApproachId: pa.body.approach.id });
+  assert.deepEqual(r4.body.deletable.map((x) => x.name), ["B社"]);
+});
+
+await ok("削除：案件（db/116）がある企業は消さない。削除できない企業も非表示にはできる", async () => {
+  setup();
+  db.rows.gw_sales_deals = [];
+  const c = await newCompany({ name: "案件社", siteUrl: "https://deal.example.jp/" });
+  db.rows.gw_sales_deals.push({ id: uuid(), tenant_id: "t1", company_id: c.id, stage: "meeting" });
+  const r = await bulk({ ids: [c.id], action: "delete", dryRun: true });
+  assert.match(r.body.blocked[0].reasons.join(), /案件あり/);
+  const h = await bulk({ ids: [c.id], action: "hide", reason: "not_target" });
+  assert.equal(h.statusCode, 200, JSON.stringify(h.body));
+  assert.ok(coRow(c.id).hidden_at, "一覧から非表示にできる");
+  assert.equal(db.rows.gw_sales_companies.length, 1, "データは残る");
+});
+
+console.log("\n=== 担当者別フォームアタック数（/api/sales/approaches/counts） ===\n");
+
+const counts = (qs) => call(countsApi, { method: "GET", url: `/api/sales/approaches/counts?${qs}` });
+const atJst = (ymd, hh = "12") => new Date(`${ymd}T${hh}:00:00+09:00`).toISOString();
+function seedCounts() {
+  const today = ymdJst(0), yday = ymdJst(-1);
+  db.rows.gw_employees.push(
+    { id: "emp-m1", tenant_id: "t1", display_name: "一般 次郎", status: "active" },
+    { id: "emp-x1", tenant_id: "t1", display_name: "退職 太郎", status: "left" },
+    { id: "emp-x2", tenant_id: "t1", display_name: "退職予定 花子", status: "leaving", left_on: ymdJst(10) },
+  );
+  db.rows.gw_role_grants = [{ tenant_id: "t1", employee_id: "emp-a1", role: "owner" }];
+  db.rows.gw_app_grants = [
+    { employee_id: "emp-s1", app_key: "sales" }, { employee_id: "emp-s2", app_key: "sales" },
+    { employee_id: "emp-x1", app_key: "sales" }, { employee_id: "emp-x2", app_key: "sales" },
+    { employee_id: "emp-m1", app_key: "hr" },
+  ];
+  const ap = (employee_id, sent_at, over = {}) => db.rows.gw_sales_approaches.push({
+    id: uuid(), tenant_id: "t1", company_id: "co-1", employee_id, channel: "form", sent_at, click_count: 0, ...over });
+  // 営業 一郎：今日フォーム3件（企業の担当は二郎でも、送った一郎に付く）
+  for (let i = 0; i < 3; i++) ap("emp-s1", atJst(today, "1" + i));
+  ap("emp-s1", atJst(today), { channel: "email" });                  // フォーム以外は数えない
+  ap("emp-s1", null);                                                  // 準備だけ（未送信）は数えない
+  ap("emp-s1", null, { failed_at: atJst(today) });                    // 送信できなかったは数えない
+  ap("emp-s2", atJst(yday, "09")); ap("emp-s2", atJst(yday, "23"));   // 二郎：昨日2件（23時も昨日）
+  ap("emp-s2", atJst(today, "00"));                                    // 0時ちょうどは今日
+  ap("emp-x1", atJst(today));                                          // 退職した人の実績も残す
+  ap(null, atJst(today));                                              // 送った人が分からない
+  return { today, yday };
+}
+
+await ok("本日：channel=form かつ sent_at ありだけを、送った人（employee_id）ごとに数える。0件の Sales メンバーも出す", async () => {
+  setup();
+  seedCounts();
+  const r = await counts("period=today");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const by = Object.fromEntries(r.body.rows.map((x) => [x.name, x.count]));
+  assert.equal(by["営業 一郎"], 3);
+  assert.equal(by["営業 二郎"], 1, "0時ちょうど（日本時間）は今日");
+  assert.equal(by["管理 花子"], 0, "経営者は Sales を使えるので、0件でも出す");
+  assert.equal(by["退職予定 花子"], 0, "退職日までは在籍");
+  assert.equal(by["退職 太郎"], 1, "退職した人でも、期間内の実績は出す");
+  assert.equal(by["（不明）"], 1);
+  assert.equal(by["一般 次郎"], undefined, "Sales を使えない人の0件は出さない");
+  assert.equal(r.body.total, 6);
+  assert.equal(r.body.rows[0].name, "営業 一郎", "多い順");
+  assert.equal(r.body.rows.find((x) => x.name === "退職 太郎").former, true);
+  assert.equal(r.body.period.key, "today");
+  assert.equal(r.body.zeroMembers, "listed");
+});
+
+await ok("昨日・任意期間（日本時間の暦日・両端を含む）", async () => {
+  setup();
+  const { today, yday } = seedCounts();
+  const y = (await counts("period=yesterday")).body;
+  assert.deepEqual(y.rows.filter((x) => x.count).map((x) => [x.name, x.count]), [["営業 二郎", 2]]);
+  assert.equal(y.period.from, yday);
+  const c = (await counts(`period=custom&from=${yday}&to=${today}`)).body;
+  assert.equal(c.total, 8);
+  assert.equal(c.rows.find((x) => x.name === "営業 二郎").count, 3);
+  assert.equal((await counts(`period=custom&from=${today}&to=${yday}`)).statusCode, 400, "開始日が終了日より後");
+  assert.equal((await counts("period=custom&from=2026-02-30&to=2026-03-01")).statusCode, 400, "存在しない日付");
+  assert.equal((await counts("period=foo")).statusCode, 400);
+});
+
+await ok("今週（既定）：期間の指定が無ければ今週。Sales を使えない人は 403", async () => {
+  setup();
+  seedCounts();
+  const r = await counts("");
+  assert.equal(r.body.period.key, "this_week");
+  assert.ok(r.body.total >= 6, "今日ぶんは必ず今週に入る");
+  who = MEMBER;
+  assert.equal((await counts("period=today")).statusCode, 403);
+});
+
+await ok("アタック一覧：from・to で期間を指定できる。days も、いままでどおり使える", async () => {
+  setup();
+  const { yday } = seedCounts();
+  const r = await call(approaches, { method: "GET", url: `/api/sales/approaches?from=${yday}&to=${yday}` });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.approaches.length, 2);
+  assert.equal(r.body.since, yday);
+  assert.equal(r.body.until, yday);
+  const d = await call(approaches, { method: "GET", url: "/api/sales/approaches?days=1" });
+  assert.equal(d.statusCode, 200);
+  assert.ok(d.body.approaches.length >= 6, "今日ぶん（フォーム3・メール1・退職者・不明 ほか）");
+  assert.ok(d.body.approaches.every((a) => a.sentAt > atJst(yday, "23")) && !d.body.until, "昨日ぶんは入らない");
+  assert.equal((await call(approaches, { method: "GET", url: "/api/sales/approaches?from=x&to=y" })).statusCode, 400);
+});
+
+
+console.log("\n=== MGNDigital LP（クリック → 申込 → 正式リード。DB変更なし） ===\n");
+
+const LP = "https://8grp.co.jp/lp/";
+const lpPost = (body, { origin = "https://8grp.co.jp", method = "POST" } = {}) =>
+  call(lpLead, { method, url: "/api/sales/lp-lead", body, headers: origin ? { origin } : {} });
+const lpBody = (over = {}) => ({
+  submissionId: `sub-${Math.random().toString(36).slice(2, 12)}`, company: "株式会社サンプル", name: "田中 太郎",
+  email: "tanaka@sample.co.jp", tel: "03-1234-5678", size: "10〜49名",
+  services: ["グループウェア（30日間）", "無限道場のAI研修"], attribution: { utm_source: "sales", utm_campaign: "autumn" }, ...over,
+});
+const lpEvents = (key) => db.rows.gw_sales_events.filter((e) => !key || e.event_key === key);
+
+await ok("LP 宛ての営業リンクは ?sr=<token> を付けて飛ばす。通知は「MGNDigitalのLPリンク」", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  const r = await click(approach.trackingToken);
+  assert.equal(r.statusCode, 302);
+  assert.equal(r.headers.location, `${LP}?sr=${approach.trackingToken}`);
+  assert.ok(notified.some((n) => n.title === "株式会社サンプルがMGNDigitalのLPリンクをクリックしました"), JSON.stringify(notified.map((n) => n.title)));
+  assert.ok(!notified.some((n) => /閲覧中|見ています/.test(n.title + n.body)), "「いま見ている」とは書かない");
+  assert.match(slacked[0].text, /MGNDigital LPクリック/);
+  assert.equal(db.rows.gw_sales_click_events[0].destination_url, LP, "記録する飛び先にはトークンを入れない");
+  const l = await list();
+  assert.equal(l.body.companies[0].mgnClick, true);
+});
+
+await ok("LP 以外のサイトにはトークンを渡さない（通知もいままでどおり）", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: "https://example.com/service" });
+  const r = await click(approach.trackingToken);
+  assert.equal(r.headers.location, "https://example.com/service");
+  assert.ok(notified.some((n) => n.title === "株式会社サンプルが営業リンクをクリックしました"));
+  assert.equal((await list()).body.companies[0].mgnClick, false);
+});
+
+await ok("申込の口：LP 以外の Origin・Origin なしは 403。プリフライトは LP だけ通す", async () => {
+  setup();
+  assert.equal((await lpPost(lpBody(), { origin: null })).statusCode, 403);
+  assert.equal((await lpPost(lpBody(), { origin: "https://evil.example" })).statusCode, 403);
+  assert.equal((await lpPost(lpBody(), { origin: "http://8grp.co.jp" })).statusCode, 403, "http は受けない");
+  const pre = await lpPost(null, { method: "OPTIONS" });
+  assert.equal(pre.statusCode, 204);
+  assert.equal(pre.headers["access-control-allow-origin"], "https://8grp.co.jp");
+  const bad = await lpPost(null, { method: "OPTIONS", origin: "https://evil.example" });
+  assert.equal(bad.statusCode, 403);
+  assert.equal(bad.headers["access-control-allow-origin"], undefined);
+  assert.equal(lpEvents().length, 0);
+});
+
+await ok("申込の口：形の悪いものは 400（メール・トークン・申込ID）", async () => {
+  setup();
+  assert.equal((await lpPost(lpBody({ email: "not-mail" }))).statusCode, 400);
+  assert.equal((await lpPost(lpBody({ sr: "abc" }))).statusCode, 400);
+  assert.equal((await lpPost(lpBody({ submissionId: "x" }))).statusCode, 400);
+  assert.equal((await lpPost(lpBody({ tel: "<script>" }))).statusCode, 400);
+});
+
+await ok("トークンつきの申込 → 同じ会社が「MGNDigital申込あり」（返信ありの段階）・NEXT 商談を予定する・希望サービス", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  await click(approach.trackingToken);
+  notified.length = 0; slacked.length = 0;
+  const body = lpBody({ sr: approach.trackingToken.toLowerCase() });
+  const r = await lpPost(body);
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.body, { ok: true }, "会社が見つかったかは返さない");
+  const row = db.rows.gw_sales_companies.find((x) => x.id === c.id);
+  assert.equal(row.status, "replied");
+  assert.equal(row.next_action, "商談を予定する");
+  assert.equal(row.contacts.email, "tanaka@sample.co.jp");
+  assert.equal(row.phone, "03-1234-5678", "電話番号が空なら埋める");
+  assert.equal(db.rows.gw_sales_companies.length, 1, "会社を増やさない");
+  const ev = lpEvents("lp_apply");
+  assert.equal(ev.length, 1);
+  assert.match(ev[0].detail, /希望サービス：グループウェア（30日間）、無限道場のAI研修/);
+  assert.match(ev[0].detail, /流入元：sales／autumn/);
+  assert.ok(notified.some((n) => n.title === "株式会社サンプルからMGNDigitalの申込がありました" && n.link === `/sales/leads.html?id=${c.id}`));
+  assert.match(slacked[0].text, /MGNDigital申込/);
+  // 同じ申込IDは2回記録しない
+  await lpPost(body);
+  assert.equal(lpEvents("lp_apply").length, 1);
+  // 一覧：申込あり・希望サービス
+  const l = (await list()).body.companies.find((x) => x.id === c.id);
+  assert.ok(l.lpAppliedAt);
+  assert.deepEqual(l.lpServices, ["グループウェア（30日間）", "無限道場のAI研修"]);
+  assert.equal(l.lpCandidate, false);
+  const d = await getOne(c.id);
+  assert.deepEqual(d.body.lp.services, ["グループウェア（30日間）", "無限道場のAI研修"]);
+  assert.ok(d.body.timeline.some((t) => t.kind === "lp_apply" && t.label === "MGNDigital申込あり"));
+});
+
+await ok("トークンつきの申込：人が入れた連絡先は上書きしない・商談中の会社は状態とNEXTを戻さない", async () => {
+  setup();
+  const c = await newCompany({ phone: "06-0000-0000" });
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  Object.assign(db.rows.gw_sales_companies[0], { status: "meeting", next_action: "商談準備", contacts: { email: "boss@sample.co.jp" } });
+  await lpPost(lpBody({ sr: approach.trackingToken }));
+  const row = db.rows.gw_sales_companies[0];
+  assert.equal(row.status, "meeting");
+  assert.equal(row.next_action, "商談準備");
+  assert.equal(row.contacts.email, "boss@sample.co.jp");
+  assert.equal(row.contacts.phone, "03-1234-5678");
+  assert.equal(row.phone, "06-0000-0000");
+  assert.equal(lpEvents("lp_apply").length, 1, "申込は記録する");
+});
+
+await ok("トークンつきの申込：営業禁止の会社は記録と通知だけ（営業を再開しない）", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  Object.assign(db.rows.gw_sales_companies[0], { ng_reason: "no_sales", status: "attacked" });
+  await lpPost(lpBody({ sr: approach.trackingToken }));
+  assert.equal(db.rows.gw_sales_companies[0].status, "attacked");
+  assert.equal(lpEvents("lp_apply").length, 1);
+  assert.ok(notified.some((n) => /営業禁止/.test(n.body)));
+});
+
+await ok("トークンなし：メールのドメインが1社だけ一致 → 既存企業候補（状態は動かさない）→ 人が確定すると正式リード", async () => {
+  setup();
+  const c = await newCompany();
+  await lpPost(lpBody());
+  assert.equal(db.rows.gw_sales_companies.length, 1, "会社を作らない");
+  assert.equal(db.rows.gw_sales_companies[0].status, "untouched", "人が確かめるまで状態は動かさない");
+  assert.equal(lpEvents("lp_candidate").length, 1);
+  assert.ok(notified.some((n) => /要確認/.test(n.title)));
+  let l = (await list()).body.companies[0];
+  assert.equal(l.lpCandidate, true);
+  assert.equal(l.lpAppliedAt, null);
+  const d = await getOne(c.id);
+  assert.equal(d.body.lp.candidate, true);
+  assert.equal(d.body.lp.candidateInfo.email, "tanaka@sample.co.jp");
+  // 確定
+  const r = await addEvent({ id: c.id, action: "lp_candidate", decision: "confirm" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_sales_companies[0];
+  assert.equal(row.status, "replied");
+  assert.equal(row.next_action, "商談を予定する");
+  assert.equal(row.contacts.email, "tanaka@sample.co.jp");
+  l = (await list()).body.companies[0];
+  assert.equal(l.lpCandidate, false);
+  assert.ok(l.lpAppliedAt);
+  assert.deepEqual(l.lpServices, ["グループウェア（30日間）", "無限道場のAI研修"]);
+  // もう候補は無い
+  assert.equal((await addEvent({ id: c.id, action: "lp_candidate", decision: "confirm" })).statusCode, 409);
+});
+
+await ok("トークンなし：「別の会社」なら記録だけ。フリーメール・一致なしは何もしない", async () => {
+  setup();
+  const c = await newCompany();
+  await lpPost(lpBody());
+  const r = await addEvent({ id: c.id, action: "lp_candidate", decision: "reject" });
+  assert.equal(r.statusCode, 200);
+  assert.equal(db.rows.gw_sales_companies[0].status, "untouched");
+  const l = (await list()).body.companies[0];
+  assert.equal(l.lpCandidate, false);
+  assert.deepEqual(l.lpServices, []);
+  const before = lpEvents().length;
+  await lpPost(lpBody({ email: "someone@gmail.com" }));
+  await lpPost(lpBody({ email: "x@unknown-company.jp" }));
+  assert.equal(lpEvents().length, before);
+  assert.equal(db.rows.gw_sales_companies.length, 1);
+  assert.equal((await addEvent({ id: c.id, action: "lp_candidate", decision: "maybe" })).statusCode, 400);
+});
+
+await ok("連続送信の歯止め：同じ送信元は60秒に3回まで（429）。別の送信元は通る", async () => {
+  setup(); _resetLpRate();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  const from = (ip) => call(lpLead, { method: "POST", url: "/api/sales/lp-lead",
+    body: lpBody({ sr: approach.trackingToken }), headers: { origin: "https://8grp.co.jp", "x-forwarded-for": ip } });
+  const codes = [];
+  for (let i = 0; i < 4; i++) codes.push((await from("198.51.100.7")).statusCode);
+  assert.deepEqual(codes, [200, 200, 200, 429]);
+  assert.equal((await from("198.51.100.8")).statusCode, 200, "別の送信元は数えない");
+  _resetLpRate();
+});
+
+await ok("連続送信の歯止め：同じ会社への申込は10分に3件まで（それ以上は黙って記録しない）", async () => {
+  setup(); _resetLpRate();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  for (let i = 0; i < 5; i++) assert.equal((await lpPost(lpBody({ sr: approach.trackingToken }))).statusCode, 200);
+  assert.equal(lpEvents("lp_apply").length, 3);
+  // 10分より前の記録は数えない
+  for (const e of lpEvents("lp_apply")) e.occurred_at = new Date(Date.now() - 11 * 60000).toISOString();
+  await lpPost(lpBody({ sr: approach.trackingToken }));
+  assert.equal(lpEvents("lp_apply").length, 4);
+});
+
+await ok("連続送信の歯止め：全体で10分に30件を超えたら 429（何も記録しない）", async () => {
+  setup(); _resetLpRate();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  for (let i = 0; i < 30; i++) {
+    db.rows.gw_sales_events.push({ id: `seed${i}`, tenant_id: "t1", company_id: `other${i}`, event_key: "lp_apply",
+      label: "x", detail: null, occurred_at: new Date().toISOString() });
+  }
+  const r = await lpPost(lpBody({ sr: approach.trackingToken }));
+  assert.equal(r.statusCode, 429);
+  assert.equal(lpEvents("lp_apply").filter((e) => e.company_id === c.id).length, 0);
+  assert.equal(db.rows.gw_sales_companies[0].status === "replied", false);
+});
+
+await ok("電話した：結果・メモ・NEXT・期限を1回で記録（kind=call）。未対応クリックは対応済みになる", async () => {
+  setup();
+  const c = await newCompany();
+  const { approach } = await sendAttack(c.id, { destinationUrl: LP });
+  await click(approach.trackingToken);
+  assert.equal((await list()).body.companies[0].unhandledClick, true);
+  const r = await addEvent({ id: c.id, kind: "call", detail: "結果：不在・留守電\n午後に再度", nextAction: "再電話", nextActionOn: "2099-01-05" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_sales_companies[0];
+  assert.equal(row.next_action, "再電話");
+  assert.equal(row.next_action_on, "2099-01-05");
+  const ev = db.rows.gw_sales_events.find((e) => e.event_key === "call");
+  assert.match(ev.detail, /^結果：不在・留守電\n午後に再度$/);
+  assert.equal((await list()).body.companies[0].unhandledClick, false);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

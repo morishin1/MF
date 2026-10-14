@@ -326,15 +326,107 @@ await ok("企業の状態は前へ進めるだけ：提案は提案のまま。�
   }
 });
 
-await ok("日程変更（is_changed）・キャンセルなど event_confirmed 以外は今回は扱わない（200 ignored・何も書かない）", async () => {
+console.log("\n=== 日程変更・キャンセル ===\n");
+
+// 日程変更：採用HRの実 payload で確認できた形（event_confirmed・is_changed・old_event_id → event.id が新しい予約）
+const changed = (from = "evt_s1", to = "evt_s2", start = "2026-10-07T05:00:00+00:00", email) =>
+  booked({}, { id: to, is_changed: true, old_event_id: from, new_event_id: to, start_datetime: start,
+    google_meet_meeting: { join_url: "https://meet.google.com/new-room-xyz" } }, email);
+
+await ok("日程変更：変更前の予約の商談を、新しい予約（日時・Meet URL・event.id）へ付け替える。企業の状態は変えない", async () => {
   setup();
-  const a = await hook(booked({}, { is_changed: true, old_event_id: "evt_s0", new_event_id: "evt_s1" }));
-  assert.equal(a.statusCode, 200);
-  assert.equal(a.body.ignored, "reschedule_not_supported");
-  const b = await hook(booked({ webhook_type: "event_canceled" }));
-  assert.equal(b.body.ignored, "unsupported_webhook_type");
+  await hook(booked());
+  const before = c("c1").status;
+  const r = await hook(changed());
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.action, "rescheduled");
+  assert.equal(m("m1").timerex_event_id, "evt_s2");
+  assert.equal(m("m1").scheduled_at, "2026-10-07T05:00:00.000Z");
+  assert.equal(m("m1").meeting_url, "https://meet.google.com/new-room-xyz");
+  assert.equal(m("m1").status, "scheduled");
+  assert.equal(c("c1").status, before);
+  assert.ok(logged.some((l) => l.action === "sales.meeting_timerex_rescheduled" && l.detail.previousEventId === "evt_s1"));
+  assert.ok(!JSON.stringify(logged).includes("meet.google.com"), "監査ログに Meet URL を入れない");
+});
+
+await ok("日程変更の再送（同じ新しい予約が2回）は二重に書かない。メールが無くても、変更前の予約で決める", async () => {
+  setup();
+  await hook(booked());
+  await hook(changed("evt_s1", "evt_s2", undefined, ""));
+  const n = writes.length;
+  const again = await hook(changed("evt_s1", "evt_s2", undefined, ""));
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.body.action, "resynced");
+  assert.equal(writes.length, n);
+  assert.equal(logged.filter((l) => l.action === "sales.meeting_timerex_rescheduled").length, 1);
+});
+
+await ok("日程変更で変更前の商談が無い：メールで初回と同じ照合（あれば予定にする・無ければ 404 で何も書かない）", async () => {
+  setup();
+  const r = await hook(changed("evt_unknown", "evt_s9"));
+  assert.equal(r.body.action, "scheduled");
+  assert.equal(m("m1").timerex_event_id, "evt_s9");
+  setup();
+  const n = await hook(changed("evt_unknown", "evt_s9", undefined, ""));
+  assert.equal(n.statusCode, 404);
   assert.equal(writes.length, 0);
-  // 壊れた body・start_datetime 無し
+});
+
+await ok("取りやめ・実施済みの商談は、日程変更で戻さない（200 ignored・何も書かない）", async () => {
+  for (const st of ["canceled", "done"]) {
+    setup();
+    Object.assign(m("m1"), { status: st, timerex_event_id: "evt_s1", scheduled_at: "2026-10-05T01:00:00.000Z" });
+    const r = await hook(changed());
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.body.action, "ignored", st);
+    assert.equal(m("m1").status, st);
+    assert.equal(writes.length, 0, st);
+  }
+});
+
+await ok("キャンセルは、実ログで確かめた event 名を TIMEREX_SALES_CANCEL_WEBHOOK_TYPES に入れるまで何も書かない", async () => {
+  setup();
+  await hook(booked());
+  const n = writes.length;
+  const b = await hook(booked({ webhook_type: "event_canceled" }));
+  assert.equal(b.statusCode, 200);
+  assert.equal(b.body.ignored, "unsupported_webhook_type");
+  assert.equal(writes.length, n);
+  assert.equal(m("m1").status, "scheduled");
+  assert.ok(logs.some((l) => l.includes("event_canceled")), "event 名だけは残す（実ログで確かめるため）");
+  // 採用HRの変数（TIMEREX_CANCEL_WEBHOOK_TYPES）は読まない
+  process.env.TIMEREX_CANCEL_WEBHOOK_TYPES = "event_canceled";
+  try { assert.equal((await hook(booked({ webhook_type: "event_canceled" }))).body.ignored, "unsupported_webhook_type"); }
+  finally { delete process.env.TIMEREX_CANCEL_WEBHOOK_TYPES; }
+});
+
+await ok("キャンセル（TIMEREX_SALES_CANCEL_WEBHOOK_TYPES の event）→ 商談は取りやめ。再送は二重にしない。企業の状態は変えない", async () => {
+  process.env.TIMEREX_SALES_CANCEL_WEBHOOK_TYPES = "event_canceled, event_cancelled";
+  try {
+    setup();
+    await hook(booked());
+    const st = c("c1").status;
+    const r = await hook(booked({ webhook_type: "event_canceled" }));
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(r.body.action, "canceled");
+    assert.equal(m("m1").status, "canceled");
+    assert.equal(c("c1").status, st);
+    const n = writes.length;
+    const again = await hook(booked({ webhook_type: "event_cancelled" }));
+    assert.equal(again.body.action, "resynced");
+    assert.equal(writes.length, n);
+    assert.equal(logged.filter((l) => l.action === "sales.meeting_timerex_canceled").length, 1);
+    // 知らない予約のキャンセルは何も書かない（404）。実施済みは戻さない
+    assert.equal((await hook(booked({ webhook_type: "event_canceled" }, { id: "evt_x" }))).statusCode, 404);
+    setup();
+    Object.assign(m("m1"), { status: "done", timerex_event_id: "evt_s1" });
+    assert.equal((await hook(booked({ webhook_type: "event_canceled" }))).body.action, "ignored");
+    assert.equal(m("m1").status, "done");
+  } finally { delete process.env.TIMEREX_SALES_CANCEL_WEBHOOK_TYPES; }
+});
+
+await ok("壊れた body・start_datetime 無しは 400", async () => {
+  setup();
   assert.equal((await hook(null)).statusCode, 400);
   assert.equal((await hook(booked({}, { start_datetime: null }))).statusCode, 400);
 });

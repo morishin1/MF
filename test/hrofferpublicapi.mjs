@@ -41,13 +41,18 @@ function table(name) {
     then: (fn) => Promise.resolve({ data: e() ? null : rows().map(copy), error: e() }).then(fn),
     update(patch) {
       const g = [];
+      const apply = () => {
+        const hit = (db.rows[name] || []).filter((x) => g.every(([k, v]) => (v === null ? (x[k] ?? null) === null : x[k] === v)));
+        for (const x of hit) Object.assign(x, patch);
+        return hit;
+      };
       const r2 = {
         eq: (k, v) => { g.push([k, v]); return r2; },
-        then: (fn) => {
-          const hit = (db.rows[name] || []).filter((x) => g.every(([k, v]) => x[k] === v));
-          for (const x of hit) Object.assign(x, patch);
-          return Promise.resolve({ data: hit.map(copy), error: null }).then(fn);
-        },
+        is: (k, v) => { g.push([k, v]); return r2; },   // is(k, null)：まだ空の行だけ
+        select: () => r2,
+        maybeSingle: () => Promise.resolve({ data: copy(apply()[0]) || null, error: null }),
+        single: () => Promise.resolve({ data: copy(apply()[0]) || null, error: null }),
+        then: (fn) => Promise.resolve({ data: apply().map(copy), error: null }).then(fn),
       };
       return r2;
     },
@@ -352,6 +357,17 @@ await ok("期限切れなら回答できない", async () => {
   db.rows.gw_hr_offers[0].expires_at = PAST;
   const r = await respond(TOKEN, "accept");
   assert.equal(r.statusCode, 410);
+});
+
+
+await ok("本人が初めて開いたら、採用担当へ「本人がオファーを閲覧しました」（版ごとに1回）", async () => {
+  setup();
+  await get(TOKEN);
+  await get(TOKEN);
+  const n = db.rows.gw_notifications.filter((x) => x.dedupe_key === "hr_offer_viewed:of1");
+  assert.equal(n.length, 1);
+  assert.equal(n[0].employee_id, "e1");
+  assert.match(n[0].title, /閲覧/);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -36,12 +36,27 @@ import { reviewFocus, reviewCarry, aiConfigured } from "../../lib/task-ai.js";
 
 const SQL = "db/072_focus_tasks.sql";
 const PRIORITIES = ["low", "normal", "high"];
-const T_FIELDS =
+const T_FIELDS_072 =
   "id, tenant_id, title, body, purpose, done_condition, kpi_link, assignee_id, due_on, "
   + "priority, status, category, result, not_done_reason, completed_at, "
   + "focus_date, focus_rank, focus_for, ai_review, ai_assignee, ai_assignee_why, "
-  + "outcome, tomorrow_reason, coached_at, coached_with, "
   + "carried_from, carry_count, created_by, created_at, updated_at";
+// db/082（ペアコーチング）の列
+const COLS_082 = "outcome, tomorrow_reason, coached_at, coached_with";
+const T_FIELDS_ALL = `${T_FIELDS_072}, ${COLS_082}`;
+// 読む列。082 がまだ無い環境では 072 の列だけにする（ensureFields）。
+// 1列でも無い列を select すると、その問い合わせ全体が失敗し、明日の重要タスクのカードごと出なくなる
+// （日報の ⑦「明日の最優先」が入力できなくなる）。ペアコーチングだけが使えない状態にとどめる
+let T_FIELDS = T_FIELDS_ALL;
+let fieldsCheckedAt = 0;
+async function ensureFields(sb) {
+  if (Date.now() - fieldsCheckedAt < 10 * 60 * 1000) return;
+  const { error } = await sb.from("gw_tasks").select(COLS_082).limit(1);
+  // 列が無い（42703）ときだけ切り替える。表そのものが無い等は、これまでどおり各処理の案内に任せる
+  T_FIELDS = error && (error.code === "42703" || /column .* does not exist/i.test(String(error.message || "")))
+    ? T_FIELDS_072 : T_FIELDS_ALL;
+  fieldsCheckedAt = Date.now();
+}
 
 const str = (v, max = 500) => {
   const s = String(v ?? "").trim();
@@ -59,6 +74,7 @@ export default async function handler(req, res) {
     return json(res, 403, { error: "no_employee", hint: "社員名簿にあなたの行がありません" });
   }
 
+  await ensureFields(admin());
   if (req.method === "GET") return read(req, res, ctx, user);
   if (req.method === "POST") return act(req, res, ctx, user, await readJson(req));
   return methodNotAllowed(res, ["GET", "POST"]);
@@ -250,6 +266,7 @@ async function act(req, res, ctx, user, body) {
     case "check":    return check(res, sb, ctx, who, body);
     case "coach":    return coachTask(res, sb, ctx, user, who, body);
     case "confirm":  return confirm(res, sb, ctx, user, who, body);
+    case "unconfirm": return unconfirm(res, sb, ctx, user, who, body);
     case "complete": return complete(res, sb, ctx, user, who, body);
     case "reopen":   return reopen(res, sb, ctx, who, body);
     case "carry":    return carry(res, sb, ctx, user, who, body);
@@ -616,6 +633,26 @@ async function confirm(res, sb, ctx, user, who, body) {
     tasks: after.tasks.map(shape),
     sent: others.length,
   });
+}
+
+/**
+ * 確定を取り消す（直したいとき）。確定のあとは足す・選ぶが 409 になるのに、
+ * 取り消す手段が無く、日報の画面から明日の重要タスクを直せなくなっていた。
+ * 状態は件数・AIの確認から決め直す（refresh）。配った通知は取り消さない
+ */
+async function unconfirm(res, sb, ctx, user, who, body) {
+  const date = isDate(body.date) ? body.date : nextFocusDate(jstToday());
+  const { day } = await load(sb, ctx.tenantId, who.id, date);
+  if (day?.status === "confirmed") {
+    await setStatus(sb, day.id, "draft", { confirmed_at: null, confirmed_by: null });
+    await refresh(sb, ctx.tenantId, who.id, date, null);
+    await gwLog({
+      tenantId: ctx.tenantId, actorId: user.id, action: "focus.unconfirm",
+      target: `employee:${who.id}`, detail: { date, byAdmin: !who.mine },
+    });
+  }
+  const after = await load(sb, ctx.tenantId, who.id, date);
+  return json(res, 200, { ok: true, state: focusState({ day: after.day, tasks: after.tasks }), tasks: after.tasks.map(shape) });
 }
 
 // ---- 完了 ---------------------------------------------------------------------
