@@ -68,11 +68,21 @@ export default async function handler(req, res) {
     }
     if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
 
-    // 社内ロールを添える。読めない立場（メンバー等）では空のまま返る
-    const { data: grants } = await sb
+    // 社内ロールを添える。
+    //
+    // ■ 管理権限（canManageHr）を通った人には、認可したあとに admin() で全員分を読む
+    //   gw_role_grants の RLS（is_tenant_staff）は、会計側の管理者でない人には行を返さず「空」になる。
+    //   人事（hr）の人が自分の画面を開くと、その空配列が accessForMember に渡り、本人だけ
+    //   「Office は ON なのに中の権限が無い」と計算されていた（経営者が見ると ON なのに、本人が見ると「未設定」）。
+    //   access・4つのボタンの元になる内部ロールは、RLS で空になった値から作らない。
+    //   本人の /api/me（lib/gw.js gwContext）が使う値と同じものを、ここでも使う。読めなければ、空として扱わずエラーにする。
+    // ■ 管理権限が無い人（一般メンバー等）は、従来どおり userClient（RLS が許す範囲。読めなければ空）。access は返さない
+    const manager = canManageHr(ctx);
+    const { data: grants, error: grantsError } = await (manager ? admin() : sb)
       .from("gw_role_grants")
       .select("employee_id, role")
       .eq("tenant_id", ctx.tenantId);
+    if (manager && grantsError) return json(res, 500, { error: "db_query_failed", detail: grantsError.message });
     const byEmployee = new Map();
     for (const g of grants || []) {
       if (!byEmployee.has(g.employee_id)) byEmployee.set(g.employee_id, []);
