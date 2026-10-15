@@ -84,7 +84,8 @@ async function one(req, res, sb, ctx, salary) {
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
   // 選考タイムラインの「誰が」。記録の created_by（ログインの ID）から社員名を引く。本人の操作（承諾など）は null
-  const actorIds = [...new Set((timeline || []).map((t) => t.created_by).filter(Boolean))];
+  // Office へ引き渡した人（gw_hr_offers.handoff_by。db/133）も同じ引き方で名前にする
+  const actorIds = [...new Set([...(timeline || []).map((t) => t.created_by), ...(offers || []).map((o) => o.handoff_by)].filter(Boolean))];
   const { data: actors } = actorIds.length
     ? await sb.from("gw_employees").select("user_id, display_name").eq("tenant_id", ctx.tenantId).in("user_id", actorIds)
     : { data: [] };
@@ -145,7 +146,7 @@ async function one(req, res, sb, ctx, salary) {
     // offerTypeReady=false は db/129 が未適用（採用区分を選ぶ操作だけ止まる）
     offerTypes: OFFER_TYPES_PUBLIC, offerTypeReady: offerTypes.ready,
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
-    offers: (offers || []).map((o) => shapeOffer(o)),
+    offers: (offers || []).map((o) => ({ ...shapeOffer(o), handoffByName: o.handoff_by ? (actorName.get(o.handoff_by) || null) : null })),
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
     salaryVisible: salary,
   });

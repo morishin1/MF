@@ -12,6 +12,8 @@
 //      契約区分・試用期間・勤務時間はテンプレートに上書きされない
 //   4. 社員ができたら、応募者側の確定（complete）が呼ばれる
 import { launch, BASE } from "../_browser.mjs";
+import { hireFlowOf } from "../../lib/hire-flow.js";
+import { handoffFactsOf } from "../../lib/hire-handoff.js";
 
 const br = await launch();
 let bad = 0;
@@ -381,6 +383,20 @@ for (const width of [1300, 390]) {
   const page = await br.newPage({ viewport: { width, height: 1200 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })));
   const claimed = [];
+  // 行は、サーバ（api/hr/index.js handoffQueue）と同じく lib の本物の関数で組む（handoff_at の入った版だけが並ぶ）
+  const queueRow = (a, o, claimedAt) => {
+    const f = handoffFactsOf(o, a, { byName: "人事 花子" });
+    const flow = hireFlowOf({ handoff: f });
+    return { ...f, claimed: Boolean(claimedAt), hire: { hr: flow.hr, steps: flow.steps, next: flow.next } };
+  };
+  const rows = [
+    queueRow({ id: "a1", name: "高木 沙綾", job_title: "エンジニア", employment_type: "正社員" },
+      { id: "o1", applicant_id: "a1", version: 1, offer_type: "executive_employee", join_date: "2026-11-01", accepted_at: "2026-10-10T01:00:00Z",
+        formal_contract_required: true, formal_signed_at: "2026-10-11T01:00:00Z", handoff_at: "2026-10-12T01:32:00Z" }, null),
+    queueRow({ id: "a2", name: "佐藤 一" },
+      { id: "o2", applicant_id: "a2", version: 1, offer_type: "spot", join_date: null, accepted_at: "2026-10-10T01:00:00Z",
+        formal_contract_required: false, handoff_at: "2026-10-12T02:00:00Z" }, "2026-10-12T02:30:00Z"),
+  ];
   await page.route("**/api/**", (route) => {
     const req = route.request(), url = req.url();
     const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
@@ -391,12 +407,7 @@ for (const width of [1300, 390]) {
     if (/\/api\/hr\/applicants\/advance/.test(url) && req.method() === "POST") { claimed.push(JSON.parse(req.postData() || "{}")); return send({ applicantId: "a1" }); }
     if (/\/api\/hr(\?|$)/.test(url)) {
       return send({ tabs: [{ key: "onboarding", label: "入社予定" }], onboarding: [], offboarding: [], done: [], kpi: null, people: [], roles: [], today: "2026-10-12",
-        handoffs: { ready: true, rows: [
-          { applicantId: "a1", name: "高木 沙綾", offerType: "executive_employee", offerTypeLabel: "正社員・幹部候補", joinDate: "2026-11-01",
-            acceptedAt: "2026-10-10T01:00:00Z", formalRequired: true, formalSignedAt: "2026-10-11T01:00:00Z", handoffAt: "2026-10-12T01:32:00Z", claimed: false },
-          { applicantId: "a2", name: "佐藤 一", offerType: "spot", offerTypeLabel: "スポット・副業", joinDate: null,
-            acceptedAt: "2026-10-10T01:00:00Z", formalRequired: false, formalSignedAt: null, handoffAt: "2026-10-12T02:00:00Z", claimed: true },
-        ] } });
+        handoffs: { ready: true, rows } });
     }
     if (/admin-onboard\.html/.test(url)) return route.fulfill({ status: 200, contentType: "text/html", body: "<html></html>" });
     return send({});
@@ -405,7 +416,8 @@ for (const width of [1300, 390]) {
   await page.waitForTimeout(1200);
   const card = await page.locator("#hr-handoff-card").innerText();
   check(card.includes("HRから引き渡し") && card.includes("2名"), `[${width}] 「入社予定」の上に「HRから引き渡し 2名」`);
-  check(card.includes("✓ 正式契約済み") && card.includes("正式契約なし") && card.includes("2026/10/12 10:32"), `[${width}] 承諾・正式契約の状態と引き渡し日時（日本時間）`);
+  check(card.includes("HRで正式契約まで完了") && card.includes("正式契約：署名済み") && card.includes("正式契約：不要") && card.includes("引き渡し：2026/10/12 10:32"),
+    `[${width}] HRで正式契約まで完了（署名済み／不要）と引き渡し日時（日本時間）`);
   check(await page.locator('[data-handoff="a2"] button', { hasText: "社員登録の続きを開く" }).count() === 1, `[${width}] 入力中の人は「続きを開く」`);
   const over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check(over <= 1, `[${width}] 横にはみ出さない（${over}px）`);

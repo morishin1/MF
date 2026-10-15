@@ -26,7 +26,7 @@
 import { manualCheckBlock } from "../../lib/retire-cert-request-db.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageHr, canSeeSalary } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate } from "../../lib/devices.js";
@@ -37,8 +37,9 @@ import { computeStage, stageOf, progressPct, daysToStart, kpiOf, stuckLine }
   from "../../lib/onboard-stage.js";
 import { MYNUMBER_KEYS, mynumberLabel } from "../../lib/mynumber.js";
 import { requireMfa } from "../../lib/mfa.js";
-import { offerTypeLabel } from "../../lib/hr-offer-types.js";
 import { isAdvanceClaimStale } from "../../lib/hr.js";
+import { hireFlowOf } from "../../lib/hire-flow.js";
+import { readHandoffOffers, handoffFactsOf, handoffActorNames } from "../../lib/hire-handoff.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -114,7 +115,11 @@ async function read(req, res, ctx) {
   } catch { /* 070 がまだ */ }
   for (const p of list) p.mynumber_status = mn.get(p.id) || "not_submitted";
 
-  const rows = list.map((p) => row(p, items.get(p.id) || [], people, today, facts.get(p.id)));
+  // 採用HRから引き渡された人（HR が承諾内容を確認して Office へ引き渡した版。応募者と社員が結ばれている人）。
+  // 入社の人には、Office の入社の流れ（入社書類 → アカウント・端末 → オリエンテーション → 入社完了）を添える
+  const hires = await hireLinks(sb, ctx.tenantId, [...new Set(list.filter((p) => p.kind === "onboarding" && p.employee_id).map((p) => p.employee_id))]);
+
+  const rows = list.map((p) => row(p, items.get(p.id) || [], people, today, facts.get(p.id), hires.get(p.employee_id) || null));
 
   // 1人ぶん
   const id = q.get("id");
@@ -140,10 +145,16 @@ async function read(req, res, ctx) {
         assets: (assetRows || []).length, today,
       });
     }
+    // 入社：Office の入社の流れ（4つ）と、HR から引き渡された人には「HRから引き渡された情報」（承諾の事実・HR で終えた正式契約・引き渡した人と日時）
+    const handoff = raw?.kind === "onboarding" ? hires.get(raw.employee_id) || null : null;
+    const hire = raw?.kind === "onboarding"
+      ? { fromHr: Boolean(handoff), handoff, salaryVisible: canSeeSalary(ctx), ...hireFlowOf({ handoff, facts: facts.get(id) || { procedure: raw, items: its } }) }
+      : null;
     return json(res, 200, {
       procedure: {
         ...one,
         flow,
+        hire,
         groups: byRole(its).map((g) => ({
           ...g,
           items: g.items.map((i) => item(i, people)),
@@ -203,41 +214,75 @@ async function read(req, res, ctx) {
 
 /**
  * 採用HRから引き渡された人（Office の入社準備キュー。db/133）。HR が本人の承諾内容を確認して
- * ［承諾を確認してOfficeへ引き渡す］を押した版のうち、まだ社員登録（gw_employees）していない人。
- * 給与・連絡先・承諾の IP などは出さない（社員登録の画面で、権限のある人にだけ事前入力される）。
+ * ［承諾内容を確認してOfficeへ引き渡す］を押した版（handoff_at が入っている）のうち、まだ社員登録（gw_employees）していない人。
+ * 承諾しただけの人は載らない。育成枠は引き渡さない（DB の CHECK でも入らない）。
+ * 給与・連絡先・承諾の IP・LegalSign の URL などは出さない（lib/hire-handoff.js の許可した項目だけ）。
  * db/133 が未適用なら ready=false（画面は何も出さない）
  */
 async function handoffQueue(sb, tenantId) {
   try {
-    const { data: offers, error } = await sb.from("gw_hr_offers")
-      .select("id, applicant_id, version, offer_type, join_date, accepted_at, formal_contract_required, formal_signed_at, handoff_at")
-      .eq("tenant_id", tenantId).not("handoff_at", "is", null)
-      .order("handoff_at", { ascending: false }).limit(100);
-    if (error) return { ready: false, rows: [] };
-    const handed = (offers || []).filter((o) => o.handoff_at);
-    const ids = [...new Set(handed.map((o) => o.applicant_id))];
+    const { ready, offers } = await readHandoffOffers(sb, tenantId);
+    if (!ready) return { ready: false, rows: [] };
+    const ids = [...new Set(offers.map((o) => o.applicant_id))];
     if (!ids.length) return { ready: true, rows: [] };
-    const { data: apps } = await sb.from("gw_hr_applicants").select("id, name, status, employee_id, advance_claimed_at")
-      .eq("tenant_id", tenantId).in("id", ids);
-    const byId = new Map((apps || []).map((a) => [a.id, a]));
+    const apps = [];
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data } = await sb.from("gw_hr_applicants")
+        .select("id, name, status, employee_id, advance_claimed_at, job_title, employment_type")
+        .eq("tenant_id", tenantId).in("id", ids.slice(i, i + 100));
+      apps.push(...(data || []));
+    }
+    const byId = new Map(apps.map((a) => [a.id, a]));
+    const names = await handoffActorNames(sb, tenantId, offers.map((o) => o.handoff_by));
     const rows = [];
-    for (const o of handed) {
+    for (const o of offers) {
       const a = byId.get(o.applicant_id);
       if (!a || a.employee_id || a.status !== "accepted" || rows.some((r) => r.applicantId === a.id)) continue;
+      const f = handoffFactsOf(o, a, { byName: names.get(o.handoff_by) || null });
+      const flow = hireFlowOf({ handoff: f });
       rows.push({
-        applicantId: a.id, name: a.name, offerType: o.offer_type, offerTypeLabel: offerTypeLabel(o.offer_type),
-        version: o.version, joinDate: o.join_date || null, acceptedAt: o.accepted_at,
-        formalRequired: o.formal_contract_required !== false, formalSignedAt: o.formal_signed_at || null, handoffAt: o.handoff_at,
+        ...f,
         // 誰かが社員登録の画面で入力中（1時間で外れる。採用HR の「本採用へ進める」と同じ確保）
         claimed: Boolean(a.advance_claimed_at && !isAdvanceClaimStale(a.advance_claimed_at)),
+        // 入社の流れ（4つ）。引き渡された人は、HR で正式契約まで終わっているので、すぐ社員登録（入社書類の依頼）へ進める
+        // （api/hr/applicants/advance.js は、引き渡し前・正式契約前の人を止める）
+        hire: { hr: flow.hr, steps: flow.steps, next: flow.next },
       });
     }
     return { ready: true, rows };
   } catch { return { ready: false, rows: [] }; }
 }
 
+/**
+ * 入社手続きのある人のうち、採用HRから引き渡された人（応募者の employee_id が結ばれていて、handoff_at の版がある人）の
+ * 「引き渡された情報」。employeeId → facts。採用HRの表が読めなくても、入退社の一覧は出す（空で返す）
+ */
+async function hireLinks(sb, tenantId, employeeIds) {
+  const out = new Map();
+  if (!employeeIds.length) return out;
+  try {
+    const apps = [];
+    for (let i = 0; i < employeeIds.length; i += 100) {
+      const { data } = await sb.from("gw_hr_applicants").select("id, name, employee_id, job_title, employment_type")
+        .eq("tenant_id", tenantId).in("employee_id", employeeIds.slice(i, i + 100));
+      apps.push(...(data || []));
+    }
+    if (!apps.length) return out;
+    const { ready, offers } = await readHandoffOffers(sb, tenantId, { applicantIds: apps.map((a) => a.id) });
+    if (!ready) return out;
+    const names = await handoffActorNames(sb, tenantId, offers.map((o) => o.handoff_by));
+    const byApp = new Map();
+    for (const o of offers) if (!byApp.has(o.applicant_id)) byApp.set(o.applicant_id, o);   // 新しい引き渡しが先
+    for (const a of apps) {
+      const o = byApp.get(a.id);
+      if (o) out.set(a.employee_id, handoffFactsOf(o, a, { byName: names.get(o.handoff_by) || null }));
+    }
+  } catch { /* 採用HRの表が無い・読めない：引き渡しの印は付けない */ }
+  return out;
+}
+
 /** 一覧の1行。余計なものは出さない */
-function row(p, its, people, today, facts) {
+function row(p, its, people, today, facts, handoff = null) {
   const prog = progressOf(its);
 
   // 入社だけ、5段階を持つ。退社はこれまでどおり phase で見る
@@ -265,6 +310,13 @@ function row(p, its, people, today, facts) {
     ? "done"
     : phaseOf(p.kind, p.target_on, its, today);
   const next = nextUp(its);
+  // Office の NEXT ACTION は、入社書類 → アカウント・端末 → オリエンテーション → 入社完了 の4つの言い方にそろえる
+  // （既存の段階の事実を並べ直すだけ。lib/hire-flow.js）。HR から引き渡された人には印を付ける
+  let hire = null;
+  if (p.kind === "onboarding") {
+    const f = hireFlowOf({ handoff, facts: facts || { procedure: p, items: its } });
+    hire = { fromHr: Boolean(handoff), hirePhase: f.next.phase, hireKey: f.next.key, hireNext: f.next.label, hireActor: f.next.actorLabel, hireDone: f.complete };
+  }
   return {
     id: p.id,
     kind: p.kind,
@@ -291,6 +343,7 @@ function row(p, its, people, today, facts) {
     mynumber: p.mynumber_status || "not_submitted",
     mynumberLabel: mynumberLabel(p.mynumber_status),
     ...(stage || {}),
+    ...(hire || {}),
   };
 }
 
