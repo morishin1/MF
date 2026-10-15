@@ -2826,15 +2826,16 @@ ${url}
     if (url && !/^https?:\/\//i.test(url)) { msg.textContent = "面談URLは http:// または https:// で始まるURLを入力してください"; return; }
     if (kind === "casual" && !url) { msg.textContent = "カジュアル面談は面談URLを入力してください"; return; }
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
+      const req = {
         applicantId: detail.applicant.id, kind,
         scheduledAt: when ? JST.fromInput(when) : undefined,
         interviewerId: el("iv-who").value || undefined,
         method: el("iv-method").value || undefined,
         meetingUrl: url || undefined,
-        materialIds: pickedMaterialIds("schedule"),
         memo: el("iv-memo").value.trim() || undefined,
-      }));
+      };
+      if (detail.materialsReady) req.materialIds = pickedMaterialIds("schedule");
+      await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview(req));
       closeAction();
       await refreshDetail("interviews");
       await load();
