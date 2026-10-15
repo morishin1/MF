@@ -144,7 +144,12 @@ const res = () => {
   return r;
 };
 const call = async (h, req) => { const r = res(); await h({ headers: { authorization: "Bearer x" }, ...req }, r); return r; };
-const schedule = (body) => call(interviews, { method: "POST", url: "/api/hr/interviews", body });
+const schedule = (body) => call(interviews, {
+  method: "POST", url: "/api/hr/interviews",
+  body: body.kind === "casual" && body.meetingUrl === undefined
+    ? { ...body, meetingUrl: "https://meet.google.com/test-room" } : body,
+});
+const scheduleRaw = (body) => call(interviews, { method: "POST", url: "/api/hr/interviews", body });
 const act = (body) => call(interviews, { method: "PATCH", url: "/api/hr/interviews", body });
 const getToday = () => call(today, { method: "GET", url: "/api/hr/interviews/today" });
 
@@ -224,6 +229,14 @@ await ok("応募者がいなければ404", async () => {
   setup();
   const r = await schedule({ applicantId: "not-exists", kind: "casual" });
   assert.equal(r.statusCode, 404);
+});
+
+await ok("手入力のカジュアル面談は面談URLなしでは予定できない", async () => {
+  setup();
+  const r = await scheduleRaw({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "meeting_url_required");
+  assert.equal(db.rows.gw_hr_interviews.length, 0);
 });
 
 console.log("\n=== 実施済みにする（conduct） ===\n");
