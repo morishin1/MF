@@ -419,7 +419,10 @@ for (const [width, path, name] of [
       height: Math.round(box(bar).height),
       overflow: document.documentElement.scrollWidth - window.innerWidth,
       // 読み上げの文字＝アイコン（material-symbols）を除いたボタンの文字
-      buttons: [...bar.querySelectorAll(".who > .btn")].map((b) => ({ title: b.title,
+      manual: [...bar.querySelectorAll(".who > .kp-manual-btn")].map((b) => ({ title: b.title,
+        aria: b.getAttribute("aria-label"), href: b.getAttribute("href"),
+        inView: box(b).left >= 0 && box(b).right <= window.innerWidth, w: Math.round(box(b).width) })),
+      buttons: [...bar.querySelectorAll(".who > .btn:not(.kp-manual-btn)")].map((b) => ({ title: b.title,
         text: [...b.childNodes].filter((n) => !(n.classList && n.classList.contains("material-symbols-outlined"))).map((n) => n.textContent).join("").trim(),
         inView: box(b).left >= 0 && box(b).right <= window.innerWidth, w: Math.round(box(b).width) })),
     };
@@ -431,6 +434,9 @@ for (const [width, path, name] of [
   check(r.overflow <= 0, `${tag}: 横スクロールが出ない（はみ出し ${r.overflow}px）`);
   check(r.buttons.map((b) => b.text).join("/") === "メンバー表示/ログアウト" && r.buttons.every((b) => b.inView && b.title && b.w <= 40),
     `${tag}: メンバー表示・ログアウトはアイコンだけで画面内。title と読み上げの文字は残る（${r.buttons.map((b) => `${b.text}:${b.w}px`).join("・")}）`);
+  check(r.manual.length === (path === "admin-nippo.html" ? 1 : 0) && r.manual.every((b) =>
+    b.href === "/guide-hr-office.html#office" && b.title && b.aria && b.inView && b.w <= 40),
+    `${tag}: Officeのみマニュアルのアイコンボタンを表示し、画面内と読み上げを確保する`);
   check(r.nameTitle === r.nameText, `${tag}: 名前の全文は title に残る`);
   if (name && name.length > 12) check(r.nameCut, `${tag}: 入らない名前は…で縮める（近道を削らない）`);
   if (width === 768 && !name) await page.screenshot({ path: shotPath(`header-shortcuts-tablet-${path.replace(".html", "")}.png`), clip: { x: 0, y: 0, width, height: 120 } });
