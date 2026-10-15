@@ -2645,6 +2645,10 @@
 
   function schedulingMailTemplate(url) {
     const a = detail.applicant;
+    const shared = (detail.materialCatalog || [])
+      .filter((m) => m.defaultForCasual && m.shareExternal && m.kind === "url" && m.url)
+      .map((m) => `${m.name}：${m.url}`);
+    const materialText = shared.length ? `\n\n面談前にご覧いただける資料\n${shared.join("\n")}` : "";
     if (isLead(a)) {
       return `件名：無限道場 無料カジュアル面談の日程調整のお願い
 
@@ -2653,7 +2657,7 @@ ${a.name} 様
 このたびは無限道場の無料カジュアル面談にお申し込みいただき、ありがとうございます。
 下記URLより、ご都合の良い日時をお選びください。
 
-${url}
+${url}${materialText}
 
 ご不明点がございましたら、このメールにご返信ください。`;
     }
@@ -2665,7 +2669,7 @@ ${a.name} 様
 つきましては、カジュアル面談の日程調整をお願いしたく、
 下記URLより、ご都合の良い日時をお選びください。
 
-${url}
+${url}${materialText}
 
 ご不明点がございましたら、採用担当までご連絡ください。`;
   }
