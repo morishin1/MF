@@ -144,7 +144,8 @@ const res = () => {
   return r;
 };
 const call = async (h, req) => { const r = res(); await h({ headers: { authorization: "Bearer x" }, ...req }, r); return r; };
-const schedule = (body) => call(interviews, { method: "POST", url: "/api/hr/interviews", body });
+const schedule = (body) => call(interviews, { method: "POST", url: "/api/hr/interviews",
+  body: body?.kind === "casual" && !body.meetingUrl ? { ...body, meetingUrl: "https://meet.example.com/test" } : body });
 const act = (body) => call(interviews, { method: "PATCH", url: "/api/hr/interviews", body });
 const getToday = () => call(today, { method: "GET", url: "/api/hr/interviews/today" });
 
