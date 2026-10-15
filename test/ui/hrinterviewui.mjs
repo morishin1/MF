@@ -154,6 +154,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   const when = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
   await page.fill("#iv-when", when);
   await page.selectOption("#iv-who", "e2");
+  await page.fill("#iv-url", "https://meet.google.com/test-room");
   await page.locator("#action-root .hr-modal button", { hasText: "予定する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.kind === "casual" && p.applicantId === "a1"), "予定がサーバへ送られる");
