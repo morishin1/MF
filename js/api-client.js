@@ -795,25 +795,6 @@
     return api("/api/hr/documents", { method: "POST", body: {
       action: "attach", applicantId, docType, path: sign.path, filename: file.name } });
   }
-  // ---- 採用HR：共通資料（db/136） ----
-  const hrMaterials = (all = false) => api("/api/hr/materials" + (all ? "?all=1" : ""));
-  const hrMaterialFileUrl = (id) => api("/api/hr/materials?id=" + encodeURIComponent(id) + "&file=1");
-  const createHrMaterialUrl = (body) => api("/api/hr/materials", { method: "POST", body: { ...body, action: "create_url" } });
-  const updateHrMaterial = (body) => api("/api/hr/materials", { method: "PATCH", body: { ...body, action: "update" } });
-  const setHrMaterialActive = (id, active) => api("/api/hr/materials", { method: "PATCH", body: { id, action: "set_active", active } });
-  async function uploadHrMaterialPdf(meta, file) {
-    const sign = await api("/api/hr/materials", { method: "POST", body: {
-      action: "upload", mimeType: file.type, sizeBytes: file.size,
-    } });
-    const put = await fetch(sign.uploadUrl, {
-      method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "false" }, body: file,
-    });
-    if (!put.ok) throw new Error("アップロードに失敗しました (" + put.status + ")");
-    return api("/api/hr/materials", { method: "POST", body: {
-      action: "attach", ...meta, path: sign.path, filename: file.name,
-    } });
-  }
-
   const updateHrApplicant = (body) => api("/api/hr/applicants/detail", { method: "PATCH", body });
   // ---- 採用HR：応募者一覧の複数選択操作 ----
   const bulkHrApplicants = (body) => api("/api/hr/applicants/bulk", { method: "POST", body });
@@ -1913,7 +1894,6 @@
     submissionPreview, submitBilling,
     listHrApplicants, createHrApplicant, getHrApplicant, updateHrApplicant,
     hrDocuments, hrDocumentUrl, deleteHrDocument, uploadHrDocument,
-    hrMaterials, hrMaterialFileUrl, createHrMaterialUrl, updateHrMaterial, setHrMaterialActive, uploadHrMaterialPdf,
     bulkHrApplicants, deleteHrApplicants, setHrApplicantsStatus, setHrApplicantsRecruiter,
     scheduleHrInterview, hrInterviewAct, conductHrInterview, evaluateHrInterview, updateHrInterview,
     cancelHrInterview, todayHrInterviews,
