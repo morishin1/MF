@@ -1418,11 +1418,11 @@
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
         ${detail.offers.map(offerRow).join("")}` : ""}`;
     } else if (detailTab === "interviews") {
+      const ordered = orderedInterviews();
       box.innerHTML = `
-        ${ceoEvalSummary(detail)}
-        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:${ceoEvalSummary(detail) ? "14px" : "0"} 0 12px;">
+        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:0 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
-        ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
+        ${ordered.length ? ordered.map(interviewRow).join("")
           : `<p class="muted">まだ面談の記録がありません。</p>`}`;
     } else if (detailTab === "eval") {
       box.innerHTML = evalTab(a);
@@ -1670,6 +1670,76 @@
     } catch (e) { el("del-msg").textContent = e.hint || e.message || "削除できませんでした"; }
   }
 
+  function orderedInterviews() {
+    return [...(detail.interviews || [])].sort((a, b) => {
+      const ta = a.scheduledAt ? Date.parse(a.scheduledAt) : Number.POSITIVE_INFINITY;
+      const tb = b.scheduledAt ? Date.parse(b.scheduledAt) : Number.POSITIVE_INFINITY;
+      if (ta !== tb) return ta - tb;
+      if (a.kind !== b.kind) return a.kind === "casual" ? -1 : 1;
+      return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+    });
+  }
+
+  function allInterviewMaterials() {
+    const map = new Map();
+    for (const m of detail.materials || []) map.set(m.id, m);
+    for (const i of detail.interviews || []) for (const m of i.materials || []) map.set(m.id, m);
+    return [...map.values()];
+  }
+
+  function materialPicker(prefix, selectedIds = [], kind = "casual") {
+    if (!detail.materialsReady) {
+      return `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">info</span><div>面談資料は db/136 適用後に選べます。</div></div>`;
+    }
+    const selected = new Set(selectedIds);
+    const rows = detail.materials || [];
+    if (!rows.length) {
+      return `<p class="muted" style="font-size:12px;margin:10px 0 0;">登録済みの資料がありません。<a href="/hr/materials.html" target="_blank" rel="noopener">資料を登録</a></p>`;
+    }
+    return `<fieldset style="border:1px solid #e2e2dc;border-radius:9px;padding:10px;margin:10px 0 0;">
+      <legend style="font-size:12px;font-weight:700;color:#4a5068;padding:0 4px;">面談で使う資料</legend>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px;">
+        ${rows.map((m) => `<label style="display:flex;gap:6px;align-items:flex-start;margin:0;font-size:12px;font-weight:500;">
+          <input type="checkbox" data-material-picker="${esc(prefix)}" value="${esc(m.id)}" ${selected.has(m.id) ? "checked" : ""} style="width:auto;margin:2px 0 0;">
+          <span><b>${esc(m.name)}</b><br><span class="muted">${esc(m.categoryLabel || "")}${m.defaultForCasual ? "・カジュアル既定" : ""}</span></span>
+        </label>`).join("")}
+      </div></fieldset>`;
+  }
+
+  function pickedMaterialIds(prefix) {
+    return [...document.querySelectorAll(`[data-material-picker="${prefix}"]:checked`)].map((x) => x.value);
+  }
+
+  function defaultMaterialIds(kind) {
+    return kind === "casual" ? (detail.materials || []).filter((m) => m.defaultForCasual).map((m) => m.id) : [];
+  }
+
+  function resetScheduleMaterials() {
+    const kind = el("iv-kind")?.value || "casual";
+    const wanted = new Set(defaultMaterialIds(kind));
+    for (const x of document.querySelectorAll('[data-material-picker="schedule"]')) x.checked = wanted.has(x.value);
+  }
+
+  async function openInterviewMaterial(id) {
+    const m = allInterviewMaterials().find((x) => x.id === id);
+    if (!m) return;
+    if (m.kind === "url" && m.url) {
+      window.open(m.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    try {
+      const r = await API.hrMaterialFileUrl(id);
+      window.open(r.url, "_blank", "noopener,noreferrer");
+    } catch (e) { alert(e.hint || e.detail || e.message || "資料を開けませんでした"); }
+  }
+
+  function interviewMaterialButtons(i) {
+    const rows = i.materials || [];
+    if (!rows.length) return "";
+    return rows.map((m) => `<button class="btn btn-secondary btn-sm" type="button" onclick="openInterviewMaterial('${esc(m.id)}')">
+      <span class="material-symbols-outlined icon-inline">${m.kind === "file" ? "picture_as_pdf" : "description"}</span>${esc(m.name)}</button>`).join("");
+  }
+
   function interviewRow(i) {
     const scoreLine = (detail.evalItems || []).filter((e) => i.scores?.[e.key])
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
@@ -1694,8 +1764,10 @@
         ${scoreLine ? `<div style="font-size:12px;margin-top:4px;">${scoreLine}</div>` : ""}
         ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
+        ${pending && i.scheduledAt && !i.meetingUrl ? `<div class="banner warn" style="margin:8px 0 0;padding:7px 10px;"><span class="material-symbols-outlined">link_off</span><div>面談URLが未登録です。参加ボタンは出していません。${i.fromTimerex ? " TimeRexの予約情報を確認してください。" : " 面談情報を編集してURLを登録してください。"}</div></div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
+          ${interviewMaterialButtons(i)}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
           ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">面談情報を編集</button>` : ""}
           ${pending && !tr ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
@@ -1868,15 +1940,13 @@
     const opts = (detail.interviewers || []).map((p) =>
       `<option value="${esc(p.id)}" ${p.id === iv.interviewerId ? "selected" : ""}>${esc(p.display_name)}</option>`).join("");
     const lock = iv.fromTimerex ? "disabled" : "";
-    // datetime-local には日本時間の年月日時分を入れる（UTC を入れると 9 時間ずれる）
     const whenLocal = JST.toInput(iv.scheduledAt);
     openHrModal(`
       <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談情報を編集</h2>
       <p class="hr-sub" style="margin:0 0 14px;">${esc(iv.kindLabel)}（${esc(detail.applicant.name)}さん）</p>
       ${iv.fromTimerex ? `<div class="banner warn" id="rs-timerex" style="margin:0 0 12px;">
         <span class="material-symbols-outlined">info</span>
-        <div>TimeRexで確定した面談です。日時・面談URLはTimeRex側で変更してください（変更はTimeRexから自動で反映されます）。
-          面談担当・面談方法はここで変更できます。</div></div>` : ""}
+        <div>TimeRexで確定した面談です。日時・面談URLはTimeRex側で変更してください。面談担当・面談方法・資料・メモはここで変更できます。</div></div>` : ""}
       <label>予定日時</label>
       <input id="rs-when" type="datetime-local" value="${esc(whenLocal)}" ${lock}>
       <label style="margin-top:10px;">面談担当</label>
@@ -1884,8 +1954,11 @@
       <label style="margin-top:10px;">面談方法</label>
       <select id="rs-method">${METHODS.map(([k, l]) =>
         `<option value="${k}" ${k === (iv.method || "") ? "selected" : ""}>${l}</option>`).join("")}</select>
-      <label style="margin-top:10px;">面談URL</label>
+      <label style="margin-top:10px;">面談URL ${iv.kind === "casual" && !iv.fromTimerex ? `<span class="muted" style="font-weight:500;">（必須）</span>` : ""}</label>
       <input id="rs-url" type="text" value="${esc(iv.meetingUrl || "")}" placeholder="https://meet.google.com/..." ${lock}>
+      ${materialPicker("edit", iv.materialIds || [], iv.kind)}
+      <label style="margin-top:10px;">面談メモ（任意）</label>
+      <textarea id="rs-memo" rows="4" maxlength="4000">${esc(iv.memo || "")}</textarea>
       <div id="rs-msg" class="err-text" style="margin:10px 0;"></div>
       <div style="display:flex;gap:8px;margin-top:14px;">
         <button class="btn btn-primary" onclick="submitReschedule('${esc(id)}', this)">保存する</button>
@@ -1898,17 +1971,21 @@
     const msg = el("rs-msg"); msg.textContent = "";
     const url = el("rs-url").value.trim();
     if (url && !/^https?:\/\//i.test(url)) { msg.textContent = "面談URLは http:// または https:// で始まるURLを入力してください"; return; }
-    // 空欄は「未定・未設定に戻す」（null）。TimeRex同期済みなら日時・URLは送らない
+    if (!iv?.fromTimerex && iv?.kind === "casual" && !url) { msg.textContent = "カジュアル面談は面談URLを入力してください"; return; }
     const body = { id, interviewerId: el("rs-who").value || null, method: el("rs-method").value || null };
     if (!iv?.fromTimerex) {
       const when = el("rs-when").value;
-      body.scheduledAt = when ? JST.fromInput(when) : null;   // 日本時間として読む（js/jst.js）
+      body.scheduledAt = when ? JST.fromInput(when) : null;
       body.meetingUrl = url || null;
     }
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.updateHrInterview(body));
+      await KPLayout.busy(btn, "保存中…", async () => {
+        await API.updateHrInterview(body);
+        if (detail.materialsReady) await API.hrInterviewAct({ id, action: "materials", materialIds: pickedMaterialIds("edit") });
+        await API.hrInterviewAct({ id, action: "memo", memo: el("rs-memo").value });
+      });
       closeHrModal();
-      await refreshDetail();
+      await refreshDetail("interviews");
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
   }
@@ -2678,20 +2755,24 @@ ${url}
   // ---- 面談を予定する（右ドロワー） ------------------------------------------------
   function openScheduleForm(kind) {
     const kinds = detail.interviewKinds || [{ key: "casual", label: "カジュアル面談" }, { key: "ceo", label: "社長面談" }];
+    const initialKind = kind || "casual";
     const opts = (detail.interviewers || []).map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join("");
     openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">面談を予定する</h2>
         <label>面談種別</label>
-        <select id="iv-kind">${kinds.map((k) =>
-          `<option value="${esc(k.key)}" ${k.key === (kind || "casual") ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
+        <select id="iv-kind" onchange="resetScheduleMaterials()">${kinds.map((k) =>
+          `<option value="${esc(k.key)}" ${k.key === initialKind ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
         <label style="margin-top:10px;">予定日時</label>
         <input id="iv-when" type="datetime-local">
         <label style="margin-top:10px;">面談担当</label>
         <select id="iv-who"><option value="">（未定）</option>${opts}</select>
         <label style="margin-top:10px;">面談方法</label>
         <select id="iv-method">${METHODS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-        <label style="margin-top:10px;">面談URL</label>
+        <label style="margin-top:10px;">面談URL <span class="muted" style="font-weight:500;">（カジュアル面談は必須）</span></label>
         <input id="iv-url" type="text" placeholder="https://meet.google.com/...">
+        ${materialPicker("schedule", defaultMaterialIds(initialKind), initialKind)}
+        <label style="margin-top:10px;">面談メモ（任意）</label>
+        <textarea id="iv-memo" rows="3" maxlength="4000" placeholder="事前に確認したいこと・引き継ぎなど"></textarea>
         <div id="iv-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitSchedule(this)">予定する</button>
@@ -2740,16 +2821,22 @@ ${url}
   async function submitSchedule(btn) {
     const msg = el("iv-msg"); msg.textContent = "";
     const when = el("iv-when").value;
+    const kind = el("iv-kind").value;
+    const url = el("iv-url").value.trim();
+    if (url && !/^https?:\/\//i.test(url)) { msg.textContent = "面談URLは http:// または https:// で始まるURLを入力してください"; return; }
+    if (kind === "casual" && !url) { msg.textContent = "カジュアル面談は面談URLを入力してください"; return; }
     try {
       await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
-        applicantId: detail.applicant.id, kind: el("iv-kind").value,
+        applicantId: detail.applicant.id, kind,
         scheduledAt: when ? JST.fromInput(when) : undefined,
         interviewerId: el("iv-who").value || undefined,
         method: el("iv-method").value || undefined,
-        meetingUrl: el("iv-url").value.trim() || undefined,
+        meetingUrl: url || undefined,
+        materialIds: pickedMaterialIds("schedule"),
+        memo: el("iv-memo").value.trim() || undefined,
       }));
       closeAction();
-      await refreshDetail();
+      await refreshDetail("interviews");
       await load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "予定できませんでした"; }
   }
