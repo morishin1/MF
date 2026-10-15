@@ -221,6 +221,15 @@ await ok("種別が違えば、二重登録にならない（カジュアルと�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
 });
 
+await ok("手入力のカジュアル面談は面談URLなしでは予定できない（400 meeting_url_required・何も作らない）", async () => {
+  setup();
+  const r = await call(interviews, { method: "POST", url: "/api/hr/interviews",
+    body: { applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` } });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "meeting_url_required");
+  assert.equal(db.rows.gw_hr_interviews.length, 0);
+});
+
 await ok("応募者がいなければ404", async () => {
   setup();
   const r = await schedule({ applicantId: "not-exists", kind: "casual" });

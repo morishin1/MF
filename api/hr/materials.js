@@ -60,6 +60,7 @@ async function list(req,res,ctx) {
   const id=new URL(req.url,"http://localhost").searchParams.get("id");
   let q=sb.from("gw_hr_materials").select(FIELDS).eq("tenant_id",ctx.tenantId);
   if (id) {
+    if (!UUID.test(id)) return json(res,400,{error:"invalid_id"});
     const {data,error}=await q.eq("id",id).maybeSingle();
     if (error) throw error;
     if (!data) return json(res,404,{error:"not_found"});

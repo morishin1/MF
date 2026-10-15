@@ -57,12 +57,17 @@ async function put(req,res,ctx,user){
     const got=new Set((mats||[]).filter(m=>m.is_active!==false).map(m=>m.id));
     if(ids.some(id=>!got.has(id)))return json(res,400,{error:"invalid_material",hint:"無効または別会社の資料が含まれています"});
   }
-  const {error:de}=await sb.from("gw_hr_interview_materials").delete().eq("interview_id",interviewId);
-  if(de)throw de;
+  // 先に新しい組を upsert し、そのあとで外れたものだけ消す。
+  // 「全部消してから入れ直す」と、入れ直しが失敗したときに紐付けが全部消えるため（#116 の方式に合わせる）
   if(ids.length){
     const rows=ids.map((id,i)=>({interview_id:interviewId,material_id:id,sort_order:(i+1)*10,created_by:user.id}));
-    const {error}=await sb.from("gw_hr_interview_materials").insert(rows); if(error)throw error;
+    const {error}=await sb.from("gw_hr_interview_materials").upsert(rows,{onConflict:"interview_id,material_id"});
+    if(error)throw error;
   }
+  let del=sb.from("gw_hr_interview_materials").delete().eq("interview_id",interviewId);
+  if(ids.length)del=del.not("material_id","in",`(${ids.join(",")})`);
+  const {error:de}=await del;
+  if(de)throw de;
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.interview_materials",target:`hr_interview:${interviewId}`,detail:{count:ids.length}});
   return json(res,200,{ok:true,materialIds:ids});
 }

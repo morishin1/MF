@@ -28,6 +28,12 @@ assert.match(api,/PDFは20MB以内/);
 assert.match(links,/gw_hr_interview_materials/);
 assert.match(links,/eq\("tenant_id",ctx\.tenantId\)/);
 assert.match(links,/無効または別会社の資料/);
+// 紐付けの更新は「upsert → 外れたものだけ削除」。全部消してから入れ直すと、入れ直し失敗で紐付けが消える
+assert.match(links,/upsert\(rows,\{onConflict:"interview_id,material_id"\}\)/);
+assert.ok(links.indexOf(".upsert(")<links.indexOf(".delete()"),"upsert のあとで delete する");
+assert.match(links,/not\("material_id","in"/);
+// 資料1件の取得（?id=）は UUID 以外を 400 で断る（不正な値で 500 にしない）
+assert.match(read("api/hr/materials.js"),/if \(!UUID\.test\(id\)\) return json\(res,400,\{error:"invalid_id"\}\)/);
 
 assert.match(detail,/materialCatalog/);
 assert.match(detail,/materialsByInterview/);

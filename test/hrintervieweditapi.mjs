@@ -258,6 +258,18 @@ await ok("面談を予定するときにも面談方法を入れられる", asyn
   assert.equal(iv.method, "online");
 });
 
+await ok("面談担当・面談方法・日時は空（null）で未定に戻せる（手動カジュアルの面談URLは残る）", async () => {
+  setup();
+  const iv = await manualInterview({ method: "phone" });
+  const r = await edit({ id: iv.id, interviewerId: null, method: null, scheduledAt: null });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const row = db.rows.gw_hr_interviews.find((i) => i.id === iv.id);
+  assert.equal(row.interviewer_id, null);
+  assert.equal(row.method, null);
+  assert.equal(row.scheduled_at, null);
+  assert.equal(row.meeting_url, "https://meet.example.com/manual");
+});
+
 await ok("手入力のカジュアル面談は、面談URLを空に戻せない", async () => {
   setup();
   const iv = await manualInterview({ method: "phone" });
