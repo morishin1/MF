@@ -93,10 +93,15 @@ await ok("PDF外部共有はAPIでも拒否", async () => {
   assert.match(s, /PDFの候補者向け外部共有は今回対象外です/);
   assert.match(s, /PDFは外部共有できません/);
 });
-await ok("HRナビは CEO REVIEW → 資料 → メールひな型", async () => {
-  const s = await src("js/hr-layout.js");
-  const ceo=s.indexOf('key: "ceo"'), mat=s.indexOf('key: "materials"'), mail=s.indexOf('key: "templates"');
-  assert.ok(ceo >= 0 && ceo < mat && mat < mail);
+await ok("HRナビ拡張は CEO REVIEW の直後に資料を足す", async () => {
+  const s = await src("js/hr-materials-nav.js");
+  assert.match(s, /a\.href = "\/hr\/materials\.html"/);
+  assert.match(s, /ceo\.insertAdjacentElement\("afterend", a\)/);
+});
+await ok("主要HR画面は資料ナビ拡張を読む", async () => {
+  for (const p of ["hr/index.html","hr/applicants.html","hr/ceo-review.html","hr/document.html","hr/templates.html","hr/materials.html"]) {
+    assert.match(await src(p), /hr-materials-nav\.js\?v=20261015hm1/, p);
+  }
 });
 await ok("資料画面は390pxで1列", async () => {
   const s = await src("hr/materials.html");
