@@ -216,7 +216,7 @@ async function runToAccepted({ wageAmount = 300000 } = {}) {
   });
   const applicantId = created.body.applicant.id;
 
-  const iv1 = await post(interviews, "/api/hr/interviews", { applicantId, kind: "casual" });
+  const iv1 = await post(interviews, "/api/hr/interviews", { applicantId, kind: "casual", meetingUrl: "https://meet.example.com/e2e" });
   const iv1Id = iv1.body.interview.id;
   await patch(interviews, "/api/hr/interviews", { id: iv1Id, action: "conduct" });
   await patch(interviews, "/api/hr/interviews", {
@@ -280,7 +280,7 @@ await ok("CEO REVIEWのdecisionPendingに、社長面談ずみの候補者が出
   who = RECRUITER;
   const created = await post(applicants, "/api/hr/applicants", { name: "確認 太郎", jobTitle: "PM", source: "紹介" });
   const aid = created.body.applicant.id;
-  const iv1 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual" });
+  const iv1 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual", meetingUrl: "https://meet.example.com/e2e" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "conduct" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "evaluate", rank: "A" });
   await patch(applicantDetail, "/api/hr/applicants/detail", { id: aid, stage: "ceo_interview", status: "ceo_interview_pending" });
@@ -409,7 +409,7 @@ await ok("Bランクは社長推薦待ちに進む（Aと同じ経路。次回�
   who = RECRUITER;
   const created = await post(applicants, "/api/hr/applicants", { name: "B候補", jobTitle: "デザイナー", source: "SNS" });
   const aid = created.body.applicant.id;
-  const iv = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual" });
+  const iv = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual", meetingUrl: "https://meet.example.com/e2e" });
   await patch(interviews, "/api/hr/interviews", { id: iv.body.interview.id, action: "conduct" });
   const evaled = await patch(interviews, "/api/hr/interviews", { id: iv.body.interview.id, action: "evaluate", rank: "B" });
   assert.equal(evaled.body.status, "ceo_recommend_pending");
@@ -422,7 +422,7 @@ await ok("Dランクは自動で「見送り」になり、社長判断まで進
   who = RECRUITER;
   const created = await post(applicants, "/api/hr/applicants", { name: "D候補", jobTitle: "営業", source: "求人媒体" });
   const aid = created.body.applicant.id;
-  const iv = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual" });
+  const iv = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual", meetingUrl: "https://meet.example.com/e2e" });
   await patch(interviews, "/api/hr/interviews", { id: iv.body.interview.id, action: "conduct" });
   const evaled = await patch(interviews, "/api/hr/interviews", { id: iv.body.interview.id, action: "evaluate", rank: "D" });
   assert.equal(evaled.body.status, "passed");
@@ -440,7 +440,7 @@ await ok("社長は「保留」にでき、理由と次に確認することを�
   who = RECRUITER;
   const created = await post(applicants, "/api/hr/applicants", { name: "保留 太郎", jobTitle: "エンジニア", source: "リファラル" });
   const aid = created.body.applicant.id;
-  const iv1 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual" });
+  const iv1 = await post(interviews, "/api/hr/interviews", { applicantId: aid, kind: "casual", meetingUrl: "https://meet.example.com/e2e" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "conduct" });
   await patch(interviews, "/api/hr/interviews", { id: iv1.body.interview.id, action: "evaluate", rank: "A" });
   await patch(applicantDetail, "/api/hr/applicants/detail", { id: aid, stage: "ceo_interview", status: "ceo_interview_pending" });
