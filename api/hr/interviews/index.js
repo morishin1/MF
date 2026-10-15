@@ -365,6 +365,14 @@ async function checkMaterialIds(ctx, input) {
   return { ok: true, ids };
 }
 
+function materialLinkFailure(error) {
+  const missing = error?.code === "42P01" || error?.code === "PGRST205"
+    || /gw_hr_interview_materials|schema cache|relation .* does not exist/i.test(String(error?.message || ""));
+  return missing
+    ? { ok: false, status: 503, body: { error: "not_ready", hint: `面談資料を使うには ${MATERIAL_SQL} を Supabase に流してください` } }
+    : { ok: false, status: 500, body: { error: "material_link_failed", detail: error?.message || String(error) } };
+}
+
 async function syncInterviewMaterials(ctx, user, interviewId, ids) {
   const ab = admin();
   // 先に追加・並び更新。その後、選択から外れたものだけ消す。途中失敗で既存リンクが全消去されない順序。
@@ -374,17 +382,17 @@ async function syncInterviewMaterials(ctx, user, interviewId, ids) {
       sort_order: (idx + 1) * 10, created_by: user.id,
     }));
     const up = await ab.from("gw_hr_interview_materials").upsert(rows, { onConflict: "interview_id,material_id" });
-    if (up.error) return { ok: false, status: 500, body: { error: "material_link_failed", detail: up.error.message } };
+    if (up.error) return materialLinkFailure(up.error);
   }
   const existing = await ab.from("gw_hr_interview_materials").select("material_id")
     .eq("tenant_id", ctx.tenantId).eq("interview_id", interviewId);
-  if (existing.error) return { ok: false, status: 500, body: { error: "material_link_failed", detail: existing.error.message } };
+  if (existing.error) return materialLinkFailure(existing.error);
   const keep = new Set(ids);
   const remove = (existing.data || []).map((x) => x.material_id).filter((id) => !keep.has(id));
   if (remove.length) {
     const del = await ab.from("gw_hr_interview_materials").delete()
       .eq("tenant_id", ctx.tenantId).eq("interview_id", interviewId).in("material_id", remove);
-    if (del.error) return { ok: false, status: 500, body: { error: "material_link_failed", detail: del.error.message } };
+    if (del.error) return materialLinkFailure(del.error);
   }
   return { ok: true };
 }
