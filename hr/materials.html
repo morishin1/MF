@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>資料 - EIGHT HR</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261012mx1">
+  <style>
+    body{font-family:'Zen Kaku Gothic New',sans-serif}.material-symbols-outlined{font-family:'Material Symbols Rounded'}
+    h1.hr-title{font-size:24px;font-weight:700;color:#1b2440;margin:0 0 4px}.hr-sub{color:#6b7080;font-size:13px;margin:0 0 18px}
+    .hm-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+    .hm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .hm-card{background:#fff;border:1px solid #e2e2dc;border-radius:12px;padding:14px;min-width:0}
+    .hm-card.off{opacity:.62}.hm-head{display:flex;align-items:flex-start;gap:10px}.hm-icon{width:36px;height:36px;border-radius:9px;background:#f0f1f5;display:flex;align-items:center;justify-content:center;color:#1b2440;flex:none}
+    .hm-name{font-size:14px;font-weight:700;color:#1b2440;word-break:break-word}.hm-meta{font-size:11.5px;color:#6b7080;margin-top:2px}.hm-desc{font-size:12.5px;color:#4a5068;margin:10px 0;white-space:pre-wrap;word-break:break-word}
+    .hm-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.hm-tag{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;background:#efefeb;color:#4a5068;font-size:10.5px;font-weight:700}
+    .hm-tag.def{background:#e5f1e2;color:#2f6f3a}.hm-tag.ext{background:#e7eaf3;color:#1b2440}
+    .hm-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.hm-actions .btn{padding:3px 10px}
+    .hm-empty{padding:34px;text-align:center;background:#fff;border:1px dashed #d7d9e2;border-radius:12px;color:#6b7080}
+    .hm-modal-bg{position:fixed;inset:0;background:rgba(27,36,64,.45);z-index:50}.hm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:620px;max-width:94vw;max-height:90vh;overflow-y:auto;background:#fff;border-radius:14px;padding:22px;z-index:51;box-shadow:0 20px 60px rgba(27,36,64,.28)}
+    .hm-modal label{display:block;font-size:12px;font-weight:700;color:#4a5068;margin:11px 0 4px}.hm-modal input,.hm-modal select,.hm-modal textarea{width:100%;box-sizing:border-box}.hm-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hm-check{display:flex!important;align-items:center;gap:7px;font-weight:500!important}.hm-check input{width:auto!important;margin:0}
+    @media(max-width:720px){.hm-grid{grid-template-columns:1fr}.hm-row{grid-template-columns:1fr}}
+    @media(max-width:390px){.hr-wrap{padding-left:10px!important;padding-right:10px!important}.hm-card{padding:12px}.hm-actions .btn{flex:1 1 auto}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="hr-title">資料</h1>
+  <p class="hr-sub">面談で使う会社案内・採用資料・無限道場・サービス資料を一元管理します。面談を設定するときに選び、面談カードからすぐ開けます。</p>
+  <div class="hm-toolbar">
+    <button class="btn btn-primary btn-sm" onclick="openCreate('url')"><span class="material-symbols-outlined icon-inline">link</span>URLを登録</button>
+    <button class="btn btn-secondary btn-sm" onclick="openCreate('file')"><span class="material-symbols-outlined icon-inline">picture_as_pdf</span>PDFを登録</button>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4a5068;margin:0;">
+      <input id="show-off" type="checkbox" style="width:auto;margin:0;" onchange="load()">無効も表示
+    </label>
+  </div>
+  <div id="msg"></div>
+  <div id="cards" class="hm-grid"><div class="hm-empty">読み込み中…</div></div>
+</div>
+<div id="modal-root"></div>
+
+<script src="../js/api-client.js?v=20261012mx1"></script>
+<script src="../js/layout.js?v=20261012mx1"></script>
+<script src="../js/hr-layout.js?v=20261012mx1"></script>
+<script src="../js/jst.js?v=20261012mx1"></script>
+<script>
+  var el=function(id){return document.getElementById(id)};
+  var esc=HRLayout.esc;
+  var materials=[], categories=[], editing=null, createKind="url";
+
+  HRLayout.init({active:"materials",verify:true}).then(function(ctx){if(ctx)load()});
+
+  function catLabel(key){
+    var x=categories.find(function(c){return c.key===key});
+    return x?x.label:key;
+  }
+  function sizeLabel(n){
+    if(!n)return "";
+    return n>=1048576?(n/1048576).toFixed(1)+"MB":Math.max(1,Math.round(n/1024))+"KB";
+  }
+  async function load(){
+    try{
+      var r=await API.hrMaterials(el("show-off").checked);
+      materials=r.materials||[];categories=r.categories||[];
+      render();el("msg").innerHTML="";
+    }catch(e){
+      el("cards").innerHTML='<div class="banner '+(e.code==="not_ready"?"warn":"err")+'"><span class="material-symbols-outlined">'+(e.code==="not_ready"?"build":"error")+'</span><div>'+esc(e.hint||e.detail||e.message||"読み込めませんでした")+'</div></div>';
+    }
+  }
+  function render(){
+    if(!materials.length){el("cards").innerHTML='<div class="hm-empty">資料はまだありません。［URLを登録］または［PDFを登録］から追加してください。</div>';return}
+    el("cards").innerHTML=materials.map(function(m){
+      var icon=m.kind==="file"?"picture_as_pdf":"link";
+      var src=m.kind==="file"?(esc(m.filename||"PDF")+(m.sizeBytes?"・"+esc(sizeLabel(m.sizeBytes)):"")):esc(m.url||"");
+      return '<section class="hm-card '+(m.active?"":"off")+'" data-id="'+esc(m.id)+'">'
+        +'<div class="hm-head"><div class="hm-icon"><span class="material-symbols-outlined">'+icon+'</span></div><div style="min-width:0;flex:1;">'
+        +'<div class="hm-name">'+esc(m.name)+'</div><div class="hm-meta">'+esc(m.categoryLabel||catLabel(m.category))+' ／ '+(m.kind==="file"?"PDF":"URL")+'</div>'
+        +'<div class="hm-meta" style="word-break:break-all;">'+src+'</div></div></div>'
+        +(m.description?'<div class="hm-desc">'+esc(m.description)+'</div>':"")
+        +'<div class="hm-tags">'
+        +(m.defaultForCasual?'<span class="hm-tag def">カジュアル面談の既定</span>':"")
+        +(m.shareExternal?'<span class="hm-tag ext">候補者へ共有可</span>':"")
+        +(!m.active?'<span class="hm-tag">無効</span>':"")+'</div>'
+        +'<div class="hm-actions">'
+        +'<button class="btn btn-primary btn-sm" onclick="openMaterial(\''+esc(m.id)+'\')">'+(m.kind==="file"?"プレビュー":"開く")+'</button>'
+        +'<button class="btn btn-secondary btn-sm" onclick="openEdit(\''+esc(m.id)+'\')">編集</button>'
+        +(m.active?'<button class="btn btn-secondary btn-sm" onclick="setActive(\''+esc(m.id)+'\',false,this)">無効にする</button>':'<button class="btn btn-secondary btn-sm" onclick="setActive(\''+esc(m.id)+'\',true,this)">再有効</button>')
+        +'</div></section>';
+    }).join("");
+  }
+  async function openMaterial(id){
+    var m=materials.find(function(x){return x.id===id});if(!m)return;
+    if(m.kind==="url"){window.open(m.url,"_blank","noopener,noreferrer");return}
+    try{var r=await API.hrMaterialFileUrl(id);window.open(r.url,"_blank","noopener,noreferrer")}catch(e){alert(e.hint||e.detail||e.message||"開けませんでした")}
+  }
+  async function setActive(id,active,btn){
+    if(!active&&!confirm("この資料を無効にします。過去の面談との紐付けは残ります。よろしいですか？"))return;
+    try{await KPLayout.busy(btn,"…",function(){return API.setHrMaterialActive(id,active)});await load()}catch(e){alert(e.hint||e.message||"変更できませんでした")}
+  }
+  function categoryOptions(value){
+    return categories.map(function(c){return '<option value="'+esc(c.key)+'" '+(c.key===value?"selected":"")+'>'+esc(c.label)+'</option>'}).join("");
+  }
+  function openCreate(kind){
+    createKind=kind;editing=null;
+    var isFile=kind==="file";
+    openModal('<h2 style="font-size:17px;margin:0 0 6px;color:#1b2440;">'+(isFile?"PDFを登録":"URLを登録")+'</h2>'
+      +'<label>資料名</label><input id="hm-name" maxlength="160" placeholder="例：株式会社エイト 会社案内">'
+      +'<div class="hm-row"><div><label>カテゴリ</label><select id="hm-cat">'+categoryOptions("company")+'</select></div><div><label>表示順</label><input id="hm-sort" type="number" value="100"></div></div>'
+      +(isFile?'<label>PDF</label><input id="hm-file" type="file" accept=".pdf,application/pdf">':'<label>URL</label><input id="hm-url" type="url" placeholder="https://...">')
+      +'<label>説明（任意）</label><textarea id="hm-desc" rows="3" maxlength="1000"></textarea>'
+      +'<label class="hm-check"><input id="hm-default" type="checkbox">カジュアル面談で最初から選択する</label>'
+      +(!isFile?'<label class="hm-check"><input id="hm-external" type="checkbox">候補者へメール等で共有してよいURL</label>':'<p class="hr-sub" style="font-size:11.5px;margin:8px 0 0;">PDFはHR内だけで利用します。候補者への外部共有は今回対象外です。</p>')
+      +'<div id="hm-err" class="err-text" style="margin-top:10px;"></div><div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-primary" onclick="saveCreate(this)">登録する</button><button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>');
+  }
+  async function saveCreate(btn){
+    var err=el("hm-err");err.textContent="";
+    var meta={name:el("hm-name").value,category:el("hm-cat").value,description:el("hm-desc").value,sortOrder:Number(el("hm-sort").value||100),defaultForCasual:el("hm-default").checked};
+    try{
+      if(createKind==="url"){
+        meta.url=el("hm-url").value.trim();meta.shareExternal=el("hm-external").checked;
+        await KPLayout.busy(btn,"登録中…",function(){return API.createHrMaterialUrl(meta)});
+      }else{
+        var file=el("hm-file").files[0];
+        if(!file){err.textContent="PDFを選んでください";return}
+        if(file.type!=="application/pdf"){err.textContent="PDFを選んでください";return}
+        await KPLayout.busy(btn,"登録中…",function(){return API.uploadHrMaterialPdf(meta,file)});
+      }
+      closeModal();await load();
+    }catch(e){err.textContent=e.hint||e.detail||e.message||"登録できませんでした"}
+  }
+  function openEdit(id){
+    var m=materials.find(function(x){return x.id===id});if(!m)return;editing=m;
+    openModal('<h2 style="font-size:17px;margin:0 0 6px;color:#1b2440;">資料を編集</h2>'
+      +'<label>資料名</label><input id="hm-name" maxlength="160" value="'+esc(m.name)+'">'
+      +'<div class="hm-row"><div><label>カテゴリ</label><select id="hm-cat">'+categoryOptions(m.category)+'</select></div><div><label>表示順</label><input id="hm-sort" type="number" value="'+esc(m.sortOrder)+'"></div></div>'
+      +(m.kind==="url"?'<label>URL</label><input id="hm-url" type="url" value="'+esc(m.url||"")+'">':'<p class="hr-sub" style="margin:10px 0 0;">PDF：'+esc(m.filename||"")+'　※PDF自体を差し替える場合は新しい資料として登録してください。</p>')
+      +'<label>説明（任意）</label><textarea id="hm-desc" rows="3" maxlength="1000">'+esc(m.description||"")+'</textarea>'
+      +'<label class="hm-check"><input id="hm-default" type="checkbox" '+(m.defaultForCasual?"checked":"")+'>カジュアル面談で最初から選択する</label>'
+      +(m.kind==="url"?'<label class="hm-check"><input id="hm-external" type="checkbox" '+(m.shareExternal?"checked":"")+'>候補者へメール等で共有してよいURL</label>':"")
+      +'<div id="hm-err" class="err-text" style="margin-top:10px;"></div><div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-primary" onclick="saveEdit(this)">保存</button><button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>');
+  }
+  async function saveEdit(btn){
+    var err=el("hm-err");err.textContent="";
+    var body={id:editing.id,name:el("hm-name").value,category:el("hm-cat").value,description:el("hm-desc").value,sortOrder:Number(el("hm-sort").value||100),defaultForCasual:el("hm-default").checked};
+    if(editing.kind==="url"){body.url=el("hm-url").value.trim();body.shareExternal=el("hm-external").checked}
+    try{await KPLayout.busy(btn,"保存中…",function(){return API.updateHrMaterial(body)});closeModal();await load()}catch(e){err.textContent=e.hint||e.detail||e.message||"保存できませんでした"}
+  }
+  function openModal(html){el("modal-root").innerHTML='<div class="hm-modal-bg" onclick="closeModal()"></div><div class="hm-modal" role="dialog" aria-modal="true">'+html+'</div>'}
+  function closeModal(){el("modal-root").innerHTML="";editing=null}
+</script>
+</body>
+</html>
