@@ -8,7 +8,7 @@ const links=read("api/hr/interview-materials.js");
 const detail=read("api/hr/applicants/detail.js");
 const page=read("hr/materials.html");
 const applicants=read("hr/applicants.html");
-const layout=read("js/hr-layout.js");
+const nav=read("js/hr-materials-nav.js");
 const interviews=read("api/hr/interviews/index.js");
 
 assert.match(sql,/create table if not exists public\.gw_hr_materials/);
@@ -33,7 +33,7 @@ assert.match(detail,/materialCatalog/);
 assert.match(detail,/materialsByInterview/);
 assert.match(detail,/materialsReady/);
 
-assert.match(layout,/key: "materials".*\/hr\/materials\.html.*label: "資料"/);
+assert.match(nav,/\/hr\/materials\.html/);
 assert.match(page,/HRLayout\.init\(\{active:'materials'\}\)/);
 assert.match(page,/候補者への案内メールにも共有できるURL/);
 
