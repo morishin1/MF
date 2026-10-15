@@ -429,8 +429,10 @@ for (const [width, path, name] of [
   check(!r.overName.length, `${tag}: 近道と名前が重ならない（重なり ${r.overName.join("・") || "なし"}）`);
   check(r.rowSpread <= 12, `${tag}: ヘッダーは1行のまま（縦の中心のずれ ${r.rowSpread}px・高さ ${r.height}px）`);
   check(r.overflow <= 0, `${tag}: 横スクロールが出ない（はみ出し ${r.overflow}px）`);
-  check(r.buttons.map((b) => b.text).join("/") === "メンバー表示/ログアウト" && r.buttons.every((b) => b.inView && b.title && b.w <= 40),
-    `${tag}: メンバー表示・ログアウトはアイコンだけで画面内。title と読み上げの文字は残る（${r.buttons.map((b) => `${b.text}:${b.w}px`).join("・")}）`);
+  // Office の業務画面（admin-nippo）には #119 で「マニュアル」が入る（/guide-hr-office.html#office）。ほかの画面には出ない
+  const wantButtons = (path === "admin-nippo.html" ? "マニュアル/" : "") + "メンバー表示/ログアウト";
+  check(r.buttons.map((b) => b.text).join("/") === wantButtons && r.buttons.every((b) => b.inView && b.title && b.w <= 40),
+    `${tag}: ${wantButtons.replaceAll("/", "・")}はアイコンだけで画面内。title と読み上げの文字は残る（${r.buttons.map((b) => `${b.text}:${b.w}px`).join("・")}）`);
   check(r.nameTitle === r.nameText, `${tag}: 名前の全文は title に残る`);
   if (name && name.length > 12) check(r.nameCut, `${tag}: 入らない名前は…で縮める（近道を削らない）`);
   if (width === 768 && !name) await page.screenshot({ path: shotPath(`header-shortcuts-tablet-${path.replace(".html", "")}.png`), clip: { x: 0, y: 0, width, height: 120 } });

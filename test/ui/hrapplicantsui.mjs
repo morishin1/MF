@@ -143,14 +143,10 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.waitForTimeout(300);
   check(!(await page.locator(".hr-detail").count()), "閉じると消える");
 
-  console.log("— 使い方（1分マニュアル）は、いつでもここから開ける —");
-  await page.locator(".hr-iconbtn[title*='使い方']").click();
-  await page.waitForTimeout(300);
-  const guide = await page.locator(".kp-viewer").innerText();
-  check(guide.includes("1分マニュアル") && guide.includes("NEXT ACTION"), "1分マニュアルが開く");
-  await page.locator("[data-kp-viewer-close]").click();
-  await page.waitForTimeout(200);
-  check(!(await page.locator(".kp-viewer").count()), "閉じると消える");
+  console.log("— 操作マニュアルは、いつでもヘッダーから開ける（#119 で1分マニュアルのボタンから置き換え） —");
+  const manual = page.locator(".hr-actions a.hr-manual");
+  check(await manual.count() === 1 && (await manual.getAttribute("href")) === "/guide-hr-office.html#hr"
+    && (await manual.getAttribute("aria-label") || "").includes("マニュアル"), "ヘッダーに採用HRの操作マニュアル（/guide-hr-office.html#hr）");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
