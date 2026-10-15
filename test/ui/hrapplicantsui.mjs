@@ -3,7 +3,7 @@
 // ■ 何を守るテストか
 //
 //   1. 採用担当（recruiter）としてログインすると、専用ヘッダー
-//      （EIGHT/HR・3ナビ）が出て、一覧が見える
+//      （EIGHT/HR・資料を含む専用ナビ）が出て、一覧が見える
 //   2. 「応募者追加」から追加すると、一覧に出る
 //   3. 行をクリックすると右ドロワーで詳細が開く（NEXT ACTIONが出る）
 //   4. 権限の無い人は home.html へ送り返される
@@ -80,11 +80,11 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   console.log("— 専用ヘッダーが出る —");
   check((await page.locator(".hr-logo").innerText()).includes("HR"), "EIGHT/HR のロゴが出る");
   const navCount = await page.locator(".hr-nav a").count();
-  check(navCount === 4, `ナビは4つだけ（いま ${navCount}）`);
+  check(navCount === 5, `ナビは5つ（いま ${navCount}）`);
   const navTexts = await page.locator(".hr-nav a").allInnerTexts();
   check(navTexts.some((t) => t.includes("ダッシュボード")) && navTexts.some((t) => t.includes("応募者"))
-    && navTexts.some((t) => t.includes("CEO REVIEW")) && navTexts.some((t) => t.includes("メールひな型")),
-    `ダッシュボード／応募者／CEO REVIEW／メールひな型 の4つ（いま ${navTexts.join(" / ")}）`);
+    && navTexts.some((t) => t.includes("CEO REVIEW")) && navTexts.some((t) => t.includes("資料")) && navTexts.some((t) => t.includes("メールひな型")),
+    `ダッシュボード／応募者／CEO REVIEW／資料／メールひな型 の5つ（いま ${navTexts.join(" / ")}）`);
   check((await page.locator(".hr-nav a.on").innerText()).includes("応募者"), "いま見ているタブが選ばれている");
   check(!(await page.locator(".kp-sidebar").count()), "通常のサイドメニューは出さない");
 
