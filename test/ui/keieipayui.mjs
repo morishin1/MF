@@ -35,13 +35,13 @@ function makeServer({ linked = true, evil = false } = {}) {
     { id: "p3", name: "鈴木 契約違い", department: "開発", position: null, status: "active", joinedOn: "2025-04-01" },
     { id: "p4", name: "高橋 退職", department: null, position: null, status: "left", joinedOn: "2024-04-01" },
     { id: "p5", name: "田中 候補なし", department: "総務", position: null, status: "active", joinedOn: "2026-08-01" },
-    { id: "p6", name: "伊藤 入社準備", department: "開発", position: null, status: "invited", joinedOn: "2026-10-15" },
+    { id: "p6", name: "伊藤 入社準備", department: "開発", position: null, status: "invited", joinedOn: day(30) },
   ];
   const contracts = {
     p1: { id: "k1", type: "正社員", periodFrom: "2025-04-01", periodTo: null, wageType: "月給", wageAmount: 300000, wageNote: "役職手当 20000円" },
     p2: { id: "k2", type: "正社員", periodFrom: "2026-09-01", periodTo: null, wageType: "月給", wageAmount: 280000, wageNote: null },
     p3: { id: "k3", type: "正社員", periodFrom: "2025-04-01", periodTo: null, wageType: "月給", wageAmount: 260000, wageNote: null },
-    p6: { id: "k6", type: "正社員", periodFrom: "2026-10-15", periodTo: null, wageType: "年俸", wageAmount: 4800000, wageNote: "資格手当 5000円" },
+    p6: { id: "k6", type: "正社員", periodFrom: day(30), periodTo: null, wageType: "年俸", wageAmount: 4800000, wageNote: "資格手当 5000円" },
   };
   const offers = { p2: { wageType: "月給", wageAmount: 270000, from: "内定（合格通知）" } };
   const declared = { p2: 9000 };
@@ -456,7 +456,7 @@ console.log("\n— 初回給与の候補：確認 → 修正 → 理由入力 �
   await page.click('[data-role="use-candidate"]');
   check(await page.inputValue('[name="baseAmount"]') === "4800000" && await page.inputValue('[name="wageType"]') === "年俸", "写すと入力欄に入る（年俸）");
   await page.click('[data-act="date-hint"]');
-  check(await page.inputValue('[name="effectiveFrom"]') === "2026-10-15", "参考の日付を押すと、適用開始日に入る（経営者が押した場合だけ）");
+  check(await page.inputValue('[name="effectiveFrom"]') === day(30), "参考の日付を押すと、適用開始日に入る（経営者が押した場合だけ）");
   await page.fill('[name="reason"]', "契約どおりに登録");
   await page.click('[data-role="preview-btn"]');
   await page.waitForTimeout(400);
