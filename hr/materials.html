@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>資料 - EIGHT HR</title>
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261015hrm1">
+  <script src="../js/supabase.min.js"></script><script src="../js/config.js"></script>
+  <script src="../js/api-client.js?v=20261015hrm1"></script><script src="../js/layout.js?v=20261015hrm1"></script>
+  <script src="../js/hr-layout.js?v=20261015hrm1"></script>
+  <style>
+    body{font-family:'Zen Kaku Gothic New',sans-serif}.material-symbols-outlined{font-family:'Material Symbols Rounded'}
+    h1{font-size:24px;color:#1b2440;margin:0}.sub{color:#6b7080;font-size:13px;margin:3px 0 18px}
+    .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .card{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:9px;min-width:0}
+    .card.off{opacity:.58}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.name{font-weight:700;color:#1b2440;font-size:14px;overflow-wrap:anywhere}
+    .chip{font-size:10.5px;background:#eef0f5;color:#4a5068;padding:2px 8px;border-radius:999px;font-weight:700}
+    .chip.def{background:#e8f3e8;color:#2f6f3a}.desc{font-size:12px;color:#6b7080;min-height:2.8em}.acts{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}
+    .empty{background:#fff;border:1px dashed #d6d6cf;border-radius:10px;padding:32px;text-align:center;color:#6b7080}
+    dialog{border:0;border-radius:12px;padding:0;max-width:560px;width:calc(100% - 24px);box-shadow:0 20px 60px rgba(27,36,64,.22)}
+    dialog::backdrop{background:rgba(27,36,64,.38)}.modal{padding:20px}.modal h2{margin:0 0 14px;font-size:18px;color:#1b2440}
+    .form{display:grid;gap:10px}.form label{font-size:12px;font-weight:700;color:#4a5068}.form input,.form select,.form textarea{width:100%;box-sizing:border-box}
+    .kind{display:flex;gap:8px}.kind label{border:1px solid #ddd;border-radius:8px;padding:8px 12px;background:#fff;cursor:pointer}
+    .msg{font-size:12px;color:#b42318;min-height:1em}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    @media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:560px){.grid{grid-template-columns:1fr}.hr-wrap{padding-left:12px;padding-right:12px}.top .btn{width:100%}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top"><div><h1>資料</h1><p class="sub">面談で使う会社案内・採用資料・無限道場・サービス資料を共通管理します。</p></div>
+    <button class="btn btn-primary" id="add"><span class="material-symbols-outlined icon-inline">add</span>資料を追加</button></div>
+  <div class="toolbar"><select id="filter"><option value="">すべてのカテゴリ</option></select>
+    <label style="font-size:12px"><input type="checkbox" id="inactive"> 無効も表示</label></div>
+  <div id="banner"></div><div id="grid" class="grid" style="margin-top:12px"></div>
+</main>
+<dialog id="dlg"><div class="modal"><h2 id="dlg-title">資料を追加</h2>
+  <div class="form">
+    <div class="kind" id="kindrow"><label><input type="radio" name="kind" value="url" checked> URL</label><label><input type="radio" name="kind" value="file"> PDF</label></div>
+    <label>資料名<input id="name" maxlength="160" placeholder="会社案内"></label>
+    <label>カテゴリ<select id="category"></select></label>
+    <label id="urlrow">URL<input id="url" type="url" placeholder="https://..."></label>
+    <label id="filerow" hidden>PDF<input id="file" type="file" accept="application/pdf,.pdf"></label>
+    <label>説明<textarea id="description" rows="3" maxlength="1000"></textarea></label>
+    <label>並び順<input id="sort" type="number" value="100"></label>
+    <label><input id="default" type="checkbox"> カジュアル面談で初期選択する</label>
+    <label id="externalrow"><input id="external" type="checkbox"> 候補者への案内メールにも共有できるURLにする</label>
+    <div id="msg" class="msg"></div>
+    <div class="acts"><button class="btn btn-primary" id="save">保存</button><button class="btn btn-secondary" id="cancel">閉じる</button></div>
+  </div>
+</div></dialog>
+<script>
+let DATA={materials:[],categories:[]}, edit=null;
+const $=id=>document.getElementById(id), esc=s=>HRLayout.esc(s);
+const catLabel=k=>DATA.categories.find(x=>x.key===k)?.label||k;
+async function load(){
+  try{ DATA=await API.api('/api/hr/materials'); renderFilters(); render(); }
+  catch(e){ $('banner').innerHTML='<div class="banner warn">'+esc(e.hint||e.message)+'</div>'; }
+}
+function renderFilters(){
+  const cur=$('filter').value;
+  $('filter').innerHTML='<option value="">すべてのカテゴリ</option>'+DATA.categories.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.label)+'</option>').join('');
+  $('filter').value=cur;
+  $('category').innerHTML=DATA.categories.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.label)+'</option>').join('');
+}
+function render(){
+  const cat=$('filter').value, showOff=$('inactive').checked;
+  const rows=DATA.materials.filter(m=>(!cat||m.category===cat)&&(showOff||m.active));
+  $('grid').innerHTML=rows.length?rows.map(card).join(''):'<div class="empty">資料はまだありません。［資料を追加］から登録してください。</div>';
+}
+function card(m){
+  return '<section class="card '+(m.active?'':'off')+'"><div class="row"><span class="material-symbols-outlined">'+(m.kind==='file'?'picture_as_pdf':'link')+'</span><span class="name">'+esc(m.name)+'</span></div>'+
+    '<div class="row"><span class="chip">'+esc(catLabel(m.category))+'</span><span class="chip">'+(m.kind==='file'?'PDF':'URL')+'</span>'+
+    (m.defaultForCasual?'<span class="chip def">カジュアル面談の初期資料</span>':'')+(m.shareExternal?'<span class="chip">外部共有可</span>':'')+
+    (!m.active?'<span class="chip">無効</span>':'')+'</div><div class="desc">'+esc(m.description||'')+'</div>'+
+    '<div class="acts"><button class="btn btn-secondary btn-sm" onclick="openMat(\''+m.id+'\')">開く</button>'+
+    '<button class="btn btn-secondary btn-sm" onclick="editMat(\''+m.id+'\')">編集</button>'+
+    '<button class="btn btn-secondary btn-sm" onclick="toggleMat(\''+m.id+'\','+(!m.active)+')">'+(m.active?'無効にする':'再表示')+'</button></div></section>';
+}
+async function openMat(id){
+  try{ const r=await API.api('/api/hr/materials',{method:'POST',body:{action:'open',id}}); window.open(r.url,'_blank','noopener'); }
+  catch(e){ alert(e.hint||e.message); }
+}
+function resetForm(m){
+  edit=m||null; $('dlg-title').textContent=m?'資料を編集':'資料を追加'; $('name').value=m?.name||''; $('category').value=m?.category||'company';
+  $('url').value=m?.url||''; $('description').value=m?.description||''; $('sort').value=m?.sortOrder??100; $('default').checked=Boolean(m?.defaultForCasual);
+  $('external').checked=Boolean(m?.shareExternal); $('file').value=''; $('msg').textContent='';
+  const kind=m?.kind||'url'; document.querySelectorAll('[name=kind]').forEach(x=>{x.checked=x.value===kind;x.disabled=Boolean(m)});
+  syncKind(kind); $('dlg').showModal();
+}
+function syncKind(kind){ $('urlrow').hidden=kind!=='url'; $('filerow').hidden=kind!=='file'; $('externalrow').hidden=kind!=='url'; if(kind==='file')$('external').checked=false; }
+function editMat(id){ resetForm(DATA.materials.find(x=>x.id===id)); }
+async function toggleMat(id,active){
+  try{ await API.api('/api/hr/materials',{method:'PATCH',body:{id,action:'set_active',active}}); await load(); }catch(e){alert(e.hint||e.message)}
+}
+async function save(){
+  const kind=document.querySelector('[name=kind]:checked').value;
+  const body={name:$('name').value.trim(),category:$('category').value,description:$('description').value.trim(),sortOrder:Number($('sort').value||100),
+    defaultForCasual:$('default').checked,shareExternal:$('external').checked,url:$('url').value.trim()};
+  $('msg').textContent='';
+  try{
+    if(edit){
+      await API.api('/api/hr/materials',{method:'PATCH',body:{...body,id:edit.id,action:'update'}});
+    }else if(kind==='url'){
+      await API.api('/api/hr/materials',{method:'POST',body});
+    }else{
+      const f=$('file').files[0]; if(!f){$('msg').textContent='PDFを選んでください';return}
+      const sign=await API.api('/api/hr/materials',{method:'POST',body:{action:'upload',filename:f.name,mimeType:f.type||'application/pdf',sizeBytes:f.size}});
+      const put=await fetch(sign.uploadUrl,{method:'PUT',headers:{'Content-Type':'application/pdf','x-upsert':'false'},body:f});
+      if(!put.ok)throw new Error('PDFのアップロードに失敗しました');
+      await API.api('/api/hr/materials',{method:'POST',body:{...body,action:'attach',path:sign.path,filename:f.name,shareExternal:false}});
+    }
+    $('dlg').close(); await load();
+  }catch(e){$('msg').textContent=e.hint||e.detail||e.message}
+}
+(async()=>{const x=await HRLayout.init({active:'materials'});if(!x)return;await load()})();
+$('add').onclick=()=>resetForm(null); $('cancel').onclick=()=>$('dlg').close(); $('save').onclick=save;
+$('filter').onchange=render; $('inactive').onchange=render; document.querySelectorAll('[name=kind]').forEach(x=>x.onchange=()=>syncKind(x.value));
+</script>
+</body></html>
