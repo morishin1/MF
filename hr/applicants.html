@@ -1695,6 +1695,7 @@
             : `予定：${esc(fmtDate(i.scheduledAt))}`}
           ${i.interviewerName ? `　面談担当：${esc(i.interviewerName)}` : ""}
           ${i.methodLabel ? `　面談方法：${esc(i.methodLabel)}` : ""}</div>
+        ${pending && i.kind === "casual" && !i.meetingUrl ? `<div class="banner warn" style="margin:6px 0;padding:7px 9px;font-size:12px;">面談URLが未登録です。［面談情報を編集］から登録してください。</div>` : ""}
         ${scoreLine ? `<div style="font-size:12px;margin-top:4px;">${scoreLine}</div>` : ""}
         ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
