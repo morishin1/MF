@@ -209,10 +209,15 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
   const page = await newPage(state);
   await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForTimeout(1000);
+  // 既定は「選考中」。見送り（passed）は「不採用」タブに分かれる
+  const active = await page.locator("#rows tr").allInnerTexts();
+  const r2 = active.find((t) => t.includes("鈴木 花子")) || "";
+  check(!active.some((t) => t.includes("山田 太郎")), "選考中（既定）に見送りの人は出ない");
+  await page.locator('#cat-tabs button[data-category="rejected"]').click();
+  await page.waitForTimeout(300);
   const rows = await page.locator("#rows tr").allInnerTexts();
   const r1 = rows.find((t) => t.includes("山田 太郎")) || "";
-  const r2 = rows.find((t) => t.includes("鈴木 花子")) || "";
-  check(r1.includes("見送り") && r1.includes("本人へ未連絡"), "一覧：見送り｜本人へ未連絡");
+  check(r1.includes("見送り") && r1.includes("本人へ未連絡"), "不採用タブ：見送り｜本人へ未連絡");
   check(r1.includes("本人へ見送りを伝えてください"), "一覧の NEXT：本人へ見送りを伝えてください");
   check(r2.includes("合格") && r2.includes("連絡済み") && !r2.includes("未連絡"), "一覧：合格｜連絡済み");
 

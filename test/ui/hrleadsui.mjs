@@ -114,7 +114,7 @@ check(tabs.length === 4 && /選考中\s*2/.test(tabs[0]) && /採用\s*1/.test(ta
   check(rows.includes("無限道場"), "選考中では無限道場リードに印が付く");
 }
 
-await page.locator("#cat-tabs button", { hasText: "採用" }).click();
+await page.locator('#cat-tabs button[data-category="recruitment"]').click();
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
@@ -123,7 +123,7 @@ await page.waitForTimeout(300);
 }
 
 console.log("\n=== 不採用タブ（見送り・辞退） ===");
-await page.locator("#cat-tabs button", { hasText: "不採用" }).click();
+await page.locator('#cat-tabs button[data-category="rejected"]').click();
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
@@ -139,7 +139,7 @@ await page.waitForTimeout(300);
 }
 
 console.log("\n=== 無限道場タブ ===");
-await page.locator("#cat-tabs button", { hasText: "無限道場" }).click();
+await page.locator('#cat-tabs button[data-category="mugendojo"]').click();
 await page.waitForTimeout(300);
 {
   const head = await page.locator("#thead").innerText();

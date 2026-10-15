@@ -74,19 +74,19 @@ await page.route("**/api/**", (route) => {
 console.log("\n=== 一覧 ===");
 await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
-await page.locator("#cat-tabs button", { hasText: "採用" }).click();
+await page.locator('#cat-tabs button[data-category="recruitment"]').click();
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
   check(rows.includes("講師 太郎") && !rows.includes("山田 花子"), "講師応募者は採用タブに出る（無料カウンセリングのリードは出ない）");
   check(rows.includes(INSTRUCTOR_JOB_TITLE), `募集職種「${INSTRUCTOR_JOB_TITLE}」で判別できる`);
 }
-await page.locator("#cat-tabs button", { hasText: "無限道場" }).click();
+await page.locator('#cat-tabs button[data-category="mugendojo"]').click();
 await page.waitForTimeout(300);
 check(!(await page.locator("#rows").innerText()).includes("講師 太郎"), "無限道場（無料カウンセリング）タブには出ない");
 
 console.log("\n=== 詳細 ===");
-await page.locator("#cat-tabs button", { hasText: "採用" }).click();
+await page.locator('#cat-tabs button[data-category="recruitment"]').click();
 await page.waitForTimeout(300);
 await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().click();
 await page.waitForTimeout(600);
