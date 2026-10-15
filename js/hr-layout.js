@@ -18,7 +18,6 @@
     { key: "dashboard", href: "/hr/", label: "ダッシュボード", icon: "dashboard" },
     { key: "applicants", href: "/hr/applicants.html", label: "応募者", icon: "group" },
     { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
-    { key: "materials", href: "/hr/materials.html", label: "資料", icon: "folder" },
     { key: "templates", href: "/hr/templates.html", label: "メールひな型", icon: "mail" },
   ];
 
