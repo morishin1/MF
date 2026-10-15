@@ -1720,6 +1720,8 @@
     for (const x of document.querySelectorAll('[data-material-picker="schedule"]')) x.checked = wanted.has(x.value);
   }
 
+  const interviewMaterialFileUrl = (id) => API.api("/api/hr/materials?id=" + encodeURIComponent(id) + "&file=1");
+
   async function openInterviewMaterial(id) {
     const m = allInterviewMaterials().find((x) => x.id === id);
     if (!m) return;
@@ -1728,7 +1730,7 @@
       return;
     }
     try {
-      const r = await API.hrMaterialFileUrl(id);
+      const r = await interviewMaterialFileUrl(id);
       window.open(r.url, "_blank", "noopener,noreferrer");
     } catch (e) { alert(e.hint || e.detail || e.message || "資料を開けませんでした"); }
   }
