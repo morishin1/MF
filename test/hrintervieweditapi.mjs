@@ -736,9 +736,12 @@ await ok("109未適用（method列が無い）でも、新規予約・再送・�
 
 console.log("\n=== 面談を予定するときの面談担当（編集と同じ規則） ===\n");
 
+// 手動のカジュアル面談は面談URLが必須（db/136）。ここでは面談担当の規則だけを見るので、URLは付けて送る
+const CASUAL_URL = "https://meet.google.com/abc-defg-hij";
+
 await ok("別の会社の社員を面談担当にして予定しようとすると断る", async () => {
   setup();
-  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: FIRST_AT, interviewerId: "e9" });
+  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: FIRST_AT, interviewerId: "e9", meetingUrl: CASUAL_URL });
   assert.equal(r.statusCode, 400);
   assert.equal(r.body.error, "invalid_interviewer");
   assert.equal(db.rows.gw_hr_interviews.filter((i) => i.tenant_id === "t1").length, 0, "面談は作られない");
@@ -747,21 +750,21 @@ await ok("別の会社の社員を面談担当にして予定しようとする�
 
 await ok("存在しない社員を面談担当にして予定しようとすると断る", async () => {
   setup();
-  const r = await schedule({ applicantId: "a1", kind: "casual", interviewerId: "no-such" });
+  const r = await schedule({ applicantId: "a1", kind: "casual", interviewerId: "no-such", meetingUrl: CASUAL_URL });
   assert.equal(r.statusCode, 400);
   assert.equal(r.body.error, "invalid_interviewer");
 });
 
 await ok("同じ会社の社員なら予定できる", async () => {
   setup();
-  const r = await schedule({ applicantId: "a1", kind: "casual", interviewerId: "e2" });
+  const r = await schedule({ applicantId: "a1", kind: "casual", interviewerId: "e2", meetingUrl: CASUAL_URL });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.interview.interviewerId, "e2");
 });
 
 await ok("面談担当が空（未定）でも予定できる", async () => {
   setup();
-  const r1 = await schedule({ applicantId: "a1", kind: "casual" });
+  const r1 = await schedule({ applicantId: "a1", kind: "casual", meetingUrl: CASUAL_URL });
   assert.equal(r1.statusCode, 200, JSON.stringify(r1.body));
   const r2 = await schedule({ applicantId: "a1", kind: "ceo", interviewerId: "" });
   assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
