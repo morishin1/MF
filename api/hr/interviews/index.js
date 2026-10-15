@@ -43,9 +43,11 @@ import {
   decisionMakerEmployeeIds, interviewKindForStage, isTimerexInterview, TIMEREX_MANAGED_COLUMNS,
   INTERVIEW_MEMO_MAX,
 } from "../../../lib/hr.js";
+import { normalizeMaterialIds } from "../../../lib/hr-materials.js";
 
 const SQL = "db/081_hr_recruiting.sql・083_hr_interview_meeting_url.sql・109_hr_interview_edit.sql";
 const SQL_EDIT = "db/109_hr_interview_edit.sql";
+const MATERIAL_SQL = "db/136_hr_materials_interview.sql";
 // 面談の予定そのもの（キャンセル済みの面談では直させない）
 const SCHEDULE_COLUMNS = ["scheduled_at", "interviewer_id", "meeting_url", "method"];
 
@@ -77,6 +79,19 @@ async function create(req, res, sb, ctx, user) {
     .eq("id", body.applicantId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant) return json(res, 404, { error: "not_found" });
 
+  // 手動で作るカジュアル面談は、参加URLを必須にする。TimeRex由来の面談はこのPOSTを通らない。
+  if (row.value.kind === "casual" && !row.value.meeting_url) {
+    return json(res, 400, { error: "meeting_url_required", detail: "カジュアル面談の面談URLを入力してください" });
+  }
+
+  const checkedMaterials = await checkMaterialIds(ctx, body.materialIds);
+  if (!checkedMaterials.ok) return json(res, checkedMaterials.status, checkedMaterials.body);
+
+  const memo = body.memo == null ? null : String(body.memo).replace(/\r\n/g, "\n").trim();
+  if (memo && memo.length > INTERVIEW_MEMO_MAX) {
+    return json(res, 400, { error: "invalid_body", detail: `メモは${INTERVIEW_MEMO_MAX}文字以内にしてください` });
+  }
+
   const { data: open } = await sb.from("gw_hr_interviews").select("id")
     .eq("applicant_id", applicant.id).eq("kind", row.value.kind)
     .is("conducted_at", null).is("canceled_at", null).limit(1);
@@ -85,12 +100,20 @@ async function create(req, res, sb, ctx, user) {
   }
 
   const { data, error } = await sb.from("gw_hr_interviews")
-    .insert({ ...row.value, tenant_id: ctx.tenantId, applicant_id: applicant.id, created_by: user.id })
+    .insert({
+      ...row.value, tenant_id: ctx.tenantId, applicant_id: applicant.id, created_by: user.id,
+      ...(memo ? { memo, memo_updated_at: new Date().toISOString(), memo_updated_by: user.id } : {}),
+    })
     .select("*").single();
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
+  }
+
+  if (checkedMaterials.ids !== undefined) {
+    const linked = await syncInterviewMaterials(ctx, user, data.id, checkedMaterials.ids);
+    if (!linked.ok) return json(res, linked.status, linked.body);
   }
 
   const now = new Date().toISOString();
@@ -134,6 +157,7 @@ async function act(req, res, sb, ctx, user) {
   if (body.action === "evaluate") return evaluate(res, sb, ctx, user, iv, body);
   if (body.action === "update") return updateInterview(res, sb, ctx, user, iv, body);
   if (body.action === "memo") return saveMemo(res, sb, ctx, user, iv, body);
+  if (body.action === "materials") return saveMaterials(res, ctx, user, iv, body);
   if (body.action === "cancel") return cancelInterview(res, sb, ctx, user, iv);
   return json(res, 400, { error: "unknown_action" });
 }
@@ -253,6 +277,12 @@ async function updateInterview(res, sb, ctx, user, iv, body) {
   if (!changed.length) return json(res, 200, { interview: shapeInterview(iv), changed: [] });
   const patch = Object.fromEntries(changed.map((c) => [c, row.value[c]]));
 
+  // 既存の手動カジュアル面談を編集するときは、URLなしに戻せない。
+  // 歴史データのURL空欄は、編集しない限りそのまま残す。
+  if (!isTimerexInterview(iv) && iv.kind === "casual" && "meeting_url" in patch && !patch.meeting_url) {
+    return json(res, 400, { error: "meeting_url_required", detail: "カジュアル面談の面談URLを入力してください" });
+  }
+
   // 面談担当は、同じ会社の社員だけ（別の会社の人を指定させない。作成と同じ規則）
   const bad = await checkInterviewer(sb, ctx.tenantId, patch.interviewer_id);
   if (bad) return json(res, 400, bad);
@@ -311,6 +341,65 @@ async function saveMemo(res, sb, ctx, user, iv, body) {
     detail: { applicantId: iv.applicant_id, length: text.length, cleared: !text },
   });
   return json(res, 200, { interview: shapeInterview(data) });
+}
+
+async function checkMaterialIds(ctx, input) {
+  const ids = normalizeMaterialIds(input);
+  if (ids === undefined) return { ok: true, ids: undefined };
+  if (ids === null) return { ok: false, status: 400, body: { error: "invalid_material_ids", detail: "資料の選択が正しくありません" } };
+  if (!ids.length) return { ok: true, ids: [] };
+
+  const ab = admin();
+  const got = await ab.from("gw_hr_materials").select("id").eq("tenant_id", ctx.tenantId)
+    .eq("is_active", true).in("id", ids);
+  if (got.error) {
+    const notReady = got.error.code === "42P01" || got.error.code === "PGRST205"
+      || /gw_hr_materials|schema cache|relation .* does not exist/i.test(String(got.error.message || ""));
+    return notReady
+      ? { ok: false, status: 503, body: { error: "not_ready", hint: `面談資料を使うには ${MATERIAL_SQL} を Supabase に流してください` } }
+      : { ok: false, status: 500, body: { error: "db_query_failed", detail: got.error.message } };
+  }
+  if ((got.data || []).length !== ids.length) {
+    return { ok: false, status: 400, body: { error: "invalid_material_ids", detail: "無効または別会社の資料が含まれています" } };
+  }
+  return { ok: true, ids };
+}
+
+async function syncInterviewMaterials(ctx, user, interviewId, ids) {
+  const ab = admin();
+  // 先に追加・並び更新。その後、選択から外れたものだけ消す。途中失敗で既存リンクが全消去されない順序。
+  if (ids.length) {
+    const rows = ids.map((materialId, idx) => ({
+      interview_id: interviewId, material_id: materialId, tenant_id: ctx.tenantId,
+      sort_order: (idx + 1) * 10, created_by: user.id,
+    }));
+    const up = await ab.from("gw_hr_interview_materials").upsert(rows, { onConflict: "interview_id,material_id" });
+    if (up.error) return { ok: false, status: 500, body: { error: "material_link_failed", detail: up.error.message } };
+  }
+  const existing = await ab.from("gw_hr_interview_materials").select("material_id")
+    .eq("tenant_id", ctx.tenantId).eq("interview_id", interviewId);
+  if (existing.error) return { ok: false, status: 500, body: { error: "material_link_failed", detail: existing.error.message } };
+  const keep = new Set(ids);
+  const remove = (existing.data || []).map((x) => x.material_id).filter((id) => !keep.has(id));
+  if (remove.length) {
+    const del = await ab.from("gw_hr_interview_materials").delete()
+      .eq("tenant_id", ctx.tenantId).eq("interview_id", interviewId).in("material_id", remove);
+    if (del.error) return { ok: false, status: 500, body: { error: "material_link_failed", detail: del.error.message } };
+  }
+  return { ok: true };
+}
+
+async function saveMaterials(res, ctx, user, iv, body) {
+  const checked = await checkMaterialIds(ctx, body.materialIds);
+  if (!checked.ok) return json(res, checked.status, checked.body);
+  if (checked.ids === undefined) return json(res, 400, { error: "invalid_body", required: ["materialIds"] });
+  const synced = await syncInterviewMaterials(ctx, user, iv.id, checked.ids);
+  if (!synced.ok) return json(res, synced.status, synced.body);
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.interview_materials",
+    target: `hr_interview:${iv.id}`, detail: { applicantId: iv.applicant_id, count: checked.ids.length },
+  });
+  return json(res, 200, { ok: true, materialIds: checked.ids });
 }
 
 // 面談をキャンセルする。物理削除しない（履歴・監査ログは残す。README「応募者一覧・
