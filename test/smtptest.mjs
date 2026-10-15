@@ -85,7 +85,7 @@ await ok("日本語件名・本文をSMTP用メッセージにする",()=>{
   assert.match(raw,/Reply-To: <reply@example\.com>/);
   assert.match(raw,/Content-Type: text\/plain; charset="UTF-8"/);
   assert.match(raw,/Content-Transfer-Encoding: base64/);
-  assert.match(raw,new RegExp(Buffer.from("1行目\\r\\n2行目","utf8").toString("base64")));
+  assert.match(raw,new RegExp(Buffer.from("1行目\r\n2行目","utf8").toString("base64")));
 });
 
 await ok("PDF添付はmultipart + base64にする",()=>{
