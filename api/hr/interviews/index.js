@@ -69,6 +69,10 @@ async function create(req, res, sb, ctx, user) {
   if (!body?.applicantId) return json(res, 400, { error: "invalid_body", required: ["applicantId"] });
   const row = normalizeInterview(body);
   if (row.error) return json(res, 400, row);
+  // 手動で作るカジュアル面談は参加URLを必須にする。TimeRex由来は別経路でURLが同期される。
+  if (row.value.kind === "casual" && !row.value.meeting_url) {
+    return json(res, 400, { error: "meeting_url_required", hint: "カジュアル面談は面談URLを入力してください" });
+  }
   // 面談担当は、同じ会社の社員だけ（編集と同じ規則。未定＝空は通す）
   const bad = await checkInterviewer(sb, ctx.tenantId, row.value.interviewer_id);
   if (bad) return json(res, 400, bad);
@@ -248,6 +252,11 @@ async function updateInterview(res, sb, ctx, user, iv, body) {
   if (isTimerexInterview(iv)) {
     const locked = TIMEREX_MANAGED_COLUMNS.filter((c) => c in row.value && !same(c));
     if (locked.length) return json(res, 409, { ...TIMEREX_MANAGED, fields: locked });
+  }
+  // 既存のURL未登録データは触らないが、手動カジュアル面談でURLを明示的に空へ戻すことは許さない。
+  if (!isTimerexInterview(iv) && iv.kind === "casual" && Object.prototype.hasOwnProperty.call(body, "meetingUrl")
+      && !row.value.meeting_url) {
+    return json(res, 400, { error: "meeting_url_required", hint: "カジュアル面談は面談URLを入力してください" });
   }
   const changed = cols.filter((c) => !same(c));
   if (!changed.length) return json(res, 200, { interview: shapeInterview(iv), changed: [] });
