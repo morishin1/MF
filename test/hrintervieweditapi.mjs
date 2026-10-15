@@ -166,7 +166,11 @@ const res = () => {
   return r;
 };
 const call = async (h, req) => { const r = res(); await h({ headers: { authorization: "Bearer x" }, ...req }, r); return r; };
-const schedule = (body) => call(interviews, { method: "POST", url: "/api/hr/interviews", body });
+const schedule = (body) => call(interviews, {
+  method: "POST", url: "/api/hr/interviews",
+  body: body.kind === "casual" && body.meetingUrl === undefined
+    ? { ...body, meetingUrl: "https://meet.google.com/test-room" } : body,
+});
 const act = (body) => call(interviews, { method: "PATCH", url: "/api/hr/interviews", body });
 const edit = (body) => act({ ...body, action: "update" });
 const memo = (id, text) => act({ id, action: "memo", memo: text });
@@ -258,16 +262,25 @@ await ok("面談を予定するときにも面談方法を入れられる", asyn
   assert.equal(iv.method, "online");
 });
 
-await ok("空（null）で送ると、面談担当・面談方法・面談URL・日時を未定に戻せる", async () => {
+await ok("面談担当・面談方法・日時は未定に戻せるが、手動カジュアル面談のURLは残す", async () => {
   setup();
   const iv = await manualInterview({ method: "phone" });
-  const r = await edit({ id: iv.id, interviewerId: null, method: null, meetingUrl: "", scheduledAt: null });
+  const r = await edit({ id: iv.id, interviewerId: null, method: null, scheduledAt: null });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const row = db.rows.gw_hr_interviews.find((i) => i.id === iv.id);
   assert.equal(row.interviewer_id, null);
   assert.equal(row.method, null);
-  assert.equal(row.meeting_url, null);
+  assert.equal(row.meeting_url, "https://meet.example.com/manual");
   assert.equal(row.scheduled_at, null);
+});
+
+await ok("手動カジュアル面談のURLを空にして保存しようとすると断る", async () => {
+  setup();
+  const iv = await manualInterview();
+  const r = await edit({ id: iv.id, meetingUrl: "" });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.error, "meeting_url_required");
+  assert.equal(db.rows.gw_hr_interviews.find((i) => i.id === iv.id).meeting_url, "https://meet.example.com/manual");
 });
 
 await ok("日時を変えると、選考タイムラインにJSTの新しい日時で残る", async () => {
@@ -702,7 +715,8 @@ await ok("未設定（null）の既存TimeRex面談は、再送でMeetならオ�
 
 await ok("手入力の面談を引き継ぐ（adopted_manual）とき、面談方法が未設定ならオンラインになる", async () => {
   setup();
-  const iv = await manualInterview({ meetingUrl: "" });
+  const iv = await manualInterview();
+  iv.meeting_url = "";     // db/136以前の履歴データ（URL空欄）は残り得る
   iv.method = null;        // 109適用済みの列（未設定）
   const r = await tx();
   assert.equal(r.action, "adopted_manual");
