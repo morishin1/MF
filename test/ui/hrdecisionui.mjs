@@ -226,7 +226,11 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
     "概要の社長面談の評価は1行だけ（詳細は展開しない）");
   await page.locator("[data-ceo-brief] button", { hasText: "見る" }).click();
   await page.waitForTimeout(300);
-  check(await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 1, "［見る］で面談タブに社長面談の評価（モーダルと同じ見た目）");
+  // 評価は各面談カードの中にまとめる（#117：面談一覧の上に社長面談の評価だけを重ねて出さない）
+  const ceoCard = page.locator("#hr-detail-tab .card", { hasText: "社長面談" });
+  check(await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 0
+    && (await ceoCard.count()) === 1 && (await ceoCard.innerText()).includes("コミュニケーション：○"),
+    "［見る］で面談タブ：社長面談の評価は面談カードの中（一覧の上に重ねて出さない）");
   await page.locator('.hr-tabs button[data-tab="overview"]').click();
   await page.waitForTimeout(200);
   await page.locator(".hr-next button", { hasText: "本人へ連絡" }).click();
