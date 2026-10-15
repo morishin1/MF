@@ -421,10 +421,24 @@
     { key: "md_trial", label: "体験案内" }, { key: "md_considering", label: "参加検討" },
     { key: "md_applied", label: "申込" }, { key: "md_joined", label: "参加" },
   ];
-  // 区分。「採用」は無限道場以外（API の既定と同じ）
-  const CATEGORIES = [{ key: "all", label: "すべて" }, { key: "recruitment", label: "採用" }, { key: "mugendojo", label: "無限道場" }];
+  // 上段の区分。デフォルトは「選考中」＝見送り・辞退を除いた、まだ対応中の人だけ。
+  // 「不採用」には見送り（passed）と辞退（declined）をまとめる。削除とは別で、履歴は残す。
+  const CLOSED_NEGATIVE = new Set(["passed", "declined"]);
+  const CATEGORIES = [
+    { key: "active", label: "選考中" },
+    { key: "recruitment", label: "採用" },
+    { key: "mugendojo", label: "無限道場" },
+    { key: "rejected", label: "不採用" },
+  ];
   const isLead = (a) => a?.leadCategory === "mugendojo";
-  const inCategory = (a, key) => key === "all" || (key === "mugendojo" ? isLead(a) : !isLead(a));
+  const isRejected = (a) => CLOSED_NEGATIVE.has(a?.status);
+  const inCategory = (a, key) => {
+    if (key === "rejected") return isRejected(a);
+    if (key === "active") return !isRejected(a);
+    if (key === "mugendojo") return !isRejected(a) && isLead(a);
+    if (key === "recruitment") return !isRejected(a) && !isLead(a);
+    return !isRejected(a); // 古い ?category=all も選考中として扱う
+  };
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
     interview_scheduled: ["#e7eaf3", "#1b2440", "video_call"], eval_pending: ["#fbf1d6", "#7d5a00", "edit_note"],
@@ -459,7 +473,7 @@
   const recruiterOptions = (selected) => `<option value="">未定</option>` + employees.map((e) =>
     `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.display_name)}</option>`).join("");
   let stageFilter = "";
-  let categoryFilter = "all";
+  let categoryFilter = "active";
   let leadReady = true;      // db/118（リードの列）が入っているか。無ければ無限道場の欄を出さない
   let openId = null;
   let canDecide = false;
@@ -485,7 +499,8 @@
 
   function start() {
     const cat = new URLSearchParams(location.search).get("category");
-    if (CATEGORIES.some((c) => c.key === cat)) categoryFilter = cat;
+    if (cat === "all") categoryFilter = "active"; // 旧URL互換
+    else if (CATEGORIES.some((c) => c.key === cat)) categoryFilter = cat;
     renderCategoryTabs();
     renderStageTabs();
     load();
@@ -498,7 +513,7 @@
   // （固定値を持たない）。細かい状態（status）は上に出さない
   /** いまの区分の応募者 */
   const catList = () => applicants.filter((a) => inCategory(a, categoryFilter));
-  const listUrl = () => (categoryFilter === "all" ? "/hr/applicants.html" : `/hr/applicants.html?category=${categoryFilter}`);
+  const listUrl = () => (categoryFilter === "active" ? "/hr/applicants.html" : `/hr/applicants.html?category=${categoryFilter}`);
 
   function renderCategoryTabs() {
     API.morph(el("cat-tabs"), CATEGORIES.map((c) => {
@@ -521,15 +536,23 @@
     renderCategoryTabs(); renderStageTabs(); render();
   }
 
+  function stageMatch(a, key) {
+    if (!key) return true;
+    if (key === "status:passed") return a.status === "passed";
+    if (key === "status:declined") return a.status === "declined";
+    return a.stage === key;
+  }
   function renderStageTabs() {
     const pool = catList();
-    const count = (key) => (key ? pool.filter((a) => a.stage === key).length : pool.length);
+    const count = (key) => (key ? pool.filter((a) => stageMatch(a, key)).length : pool.length);
     const tab = (key, label) => {
       const n = count(key);
       return `<button class="${stageFilter === key ? "on" : ""}${n ? "" : " zero"}" data-stage="${esc(key || "all")}"
         onclick="setStage('${esc(key)}')">${esc(label)}<span class="n">${n}</span></button>`;
     };
-    const stages = categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
+    const stages = categoryFilter === "rejected"
+      ? [{ key: "status:passed", label: "不採用" }, { key: "status:declined", label: "辞退" }]
+      : categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
     API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s) => tab(s.key, s.label)).join(""));
   }
   function setStage(key) { stageFilter = key; renderStageTabs(); render(); }
@@ -641,7 +664,7 @@
     renderThead();
     const q = (el("q").value || "").trim().toLowerCase();
     const list = catList().filter((a) =>
-      (!stageFilter || a.stage === stageFilter)
+      stageMatch(a, stageFilter)
       && (!q || `${a.name} ${a.jobTitle} ${a.source || ""}`.toLowerCase().includes(q)));
     // 毎日の確認順（期限超過 → 今日対応 → 新規応募 → その他 → 終わったもの。サーバの priority。lib/hr.js）。
     // 同じ順位の中は、いままでどおり新しい応募が上
