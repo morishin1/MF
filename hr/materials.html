@@ -53,6 +53,17 @@
   var el=function(id){return document.getElementById(id)};
   var esc=HRLayout.esc;
   var materials=[], categories=[], editing=null, createKind="url";
+  var matList=function(all){return API.api("/api/hr/materials"+(all?"?all=1":""))};
+  var matFile=function(id){return API.api("/api/hr/materials?id="+encodeURIComponent(id)+"&file=1")};
+  var matCreateUrl=function(body){return API.api("/api/hr/materials",{method:"POST",body:Object.assign({},body,{action:"create_url"})})};
+  var matUpdate=function(body){return API.api("/api/hr/materials",{method:"PATCH",body:Object.assign({},body,{action:"update"})})};
+  var matActive=function(id,active){return API.api("/api/hr/materials",{method:"PATCH",body:{id:id,action:"set_active",active:active}})};
+  async function matUploadPdf(meta,file){
+    var sign=await API.api("/api/hr/materials",{method:"POST",body:{action:"upload",mimeType:file.type,sizeBytes:file.size}});
+    var put=await fetch(sign.uploadUrl,{method:"PUT",headers:{"Content-Type":file.type,"x-upsert":"false"},body:file});
+    if(!put.ok)throw new Error("アップロードに失敗しました ("+put.status+")");
+    return API.api("/api/hr/materials",{method:"POST",body:Object.assign({},meta,{action:"attach",path:sign.path,filename:file.name})});
+  }
 
   HRLayout.init({active:"materials",verify:true}).then(function(ctx){if(ctx)load()});
 
@@ -66,7 +77,7 @@
   }
   async function load(){
     try{
-      var r=await API.hrMaterials(el("show-off").checked);
+      var r=await matList(el("show-off").checked);
       materials=r.materials||[];categories=r.categories||[];
       render();el("msg").innerHTML="";
     }catch(e){
@@ -97,11 +108,11 @@
   async function openMaterial(id){
     var m=materials.find(function(x){return x.id===id});if(!m)return;
     if(m.kind==="url"){window.open(m.url,"_blank","noopener,noreferrer");return}
-    try{var r=await API.hrMaterialFileUrl(id);window.open(r.url,"_blank","noopener,noreferrer")}catch(e){alert(e.hint||e.detail||e.message||"開けませんでした")}
+    try{var r=await matFile(id);window.open(r.url,"_blank","noopener,noreferrer")}catch(e){alert(e.hint||e.detail||e.message||"開けませんでした")}
   }
   async function setActive(id,active,btn){
     if(!active&&!confirm("この資料を無効にします。過去の面談との紐付けは残ります。よろしいですか？"))return;
-    try{await KPLayout.busy(btn,"…",function(){return API.setHrMaterialActive(id,active)});await load()}catch(e){alert(e.hint||e.message||"変更できませんでした")}
+    try{await KPLayout.busy(btn,"…",function(){return matActive(id,active)});await load()}catch(e){alert(e.hint||e.message||"変更できませんでした")}
   }
   function categoryOptions(value){
     return categories.map(function(c){return '<option value="'+esc(c.key)+'" '+(c.key===value?"selected":"")+'>'+esc(c.label)+'</option>'}).join("");
@@ -124,12 +135,12 @@
     try{
       if(createKind==="url"){
         meta.url=el("hm-url").value.trim();meta.shareExternal=el("hm-external").checked;
-        await KPLayout.busy(btn,"登録中…",function(){return API.createHrMaterialUrl(meta)});
+        await KPLayout.busy(btn,"登録中…",function(){return matCreateUrl(meta)});
       }else{
         var file=el("hm-file").files[0];
         if(!file){err.textContent="PDFを選んでください";return}
         if(file.type!=="application/pdf"){err.textContent="PDFを選んでください";return}
-        await KPLayout.busy(btn,"登録中…",function(){return API.uploadHrMaterialPdf(meta,file)});
+        await KPLayout.busy(btn,"登録中…",function(){return matUploadPdf(meta,file)});
       }
       closeModal();await load();
     }catch(e){err.textContent=e.hint||e.detail||e.message||"登録できませんでした"}
@@ -149,7 +160,7 @@
     var err=el("hm-err");err.textContent="";
     var body={id:editing.id,name:el("hm-name").value,category:el("hm-cat").value,description:el("hm-desc").value,sortOrder:Number(el("hm-sort").value||100),defaultForCasual:el("hm-default").checked};
     if(editing.kind==="url"){body.url=el("hm-url").value.trim();body.shareExternal=el("hm-external").checked}
-    try{await KPLayout.busy(btn,"保存中…",function(){return API.updateHrMaterial(body)});closeModal();await load()}catch(e){err.textContent=e.hint||e.detail||e.message||"保存できませんでした"}
+    try{await KPLayout.busy(btn,"保存中…",function(){return matUpdate(body)});closeModal();await load()}catch(e){err.textContent=e.hint||e.detail||e.message||"保存できませんでした"}
   }
   function openModal(html){el("modal-root").innerHTML='<div class="hm-modal-bg" onclick="closeModal()"></div><div class="hm-modal" role="dialog" aria-modal="true">'+html+'</div>'}
   function closeModal(){el("modal-root").innerHTML="";editing=null}
