@@ -26,7 +26,7 @@
     /* 選考パイプライン：段階ごとの人数。0人の段階は薄く（押せるがレイアウトは変えない） */
     .hr-stage-tabs button .n { display:inline-block; min-width:1.4em; margin-left:6px; font-weight:700; text-align:center; }
     .hr-stage-tabs button.zero:not(.on) { opacity:.45; }
-    /* 区分（すべて／採用／無限道場）。選考パイプラインより一段上の切り替え（検索・段階の行とは別の行） */
+    /* 区分（選考中／採用／無限道場／不採用）。選考パイプラインより一段上の切り替え（検索・段階の行とは別の行） */
     .hr-catbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
     .hr-cat-tabs { display:inline-flex; border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#fff; }
     .hr-cat-tabs button { border:none; border-right:1px solid #e2e2dc; background:#fff; padding:7px 14px; font-size:12.5px;
@@ -483,7 +483,7 @@
   let visibleIds = [];
 
   // 表示速度：枠（権限の確認）を待たずに一覧を取りにいき始める。
-  // この画面は「すべて／採用／無限道場」を切り替えるので、無限道場リードも含めて取る（category=all）。
+  // この画面は「選考中／採用／無限道場／不採用」を切り替えるので、閉じた人も含めて一度取得する（category=all）。
   // HRダッシュボードは採用だけ（既定）を取るので、鍵を分ける（混ぜると、ダッシュボードに無限道場が出る）
   const fetchApplicants = () => API.api("/api/hr/applicants?category=all");
   API.warm("hr:applicants:all", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
