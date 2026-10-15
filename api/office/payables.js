@@ -176,7 +176,8 @@ async function payload(req, ctx, month) {
   return {
     month,
     canRecordPayment: canRecordPayment(ctx),
-    invoices: (invoices || []).map(view),
+    // 一般経費の請求書（db/134。明細が無い）は、月次の BP 請求の画面には出さない（請求・支払の画面で扱う）
+    invoices: (invoices || []).filter((i) => (lines || []).some((l) => l.invoice_id === i.id)).map(view),
     // まだ請求書（明細）が登録されていない BP 契約
     pending: bpContracts.filter((c) => !lined.has(c.id)).map((c) => {
       const e = empById.get(c.employee_id);
