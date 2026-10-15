@@ -11,7 +11,8 @@
   <link rel="stylesheet" href="../css/app.css?v=20261015hrm1">
   <script src="../js/supabase.min.js"></script><script src="../js/config.js"></script>
   <script src="../js/api-client.js?v=20261012mx1"></script><script src="../js/layout.js?v=20261012mx1"></script>
-  <script src="../js/hr-layout.js?v=20261012mx1"></script>\n<script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
+  <script src="../js/hr-layout.js?v=20261012mx1"></script>
+  <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
   <style>
     body{font-family:'Zen Kaku Gothic New',sans-serif}.material-symbols-outlined{font-family:'Material Symbols Rounded'}
     h1{font-size:24px;color:#1b2440;margin:0}.sub{color:#6b7080;font-size:13px;margin:3px 0 18px}
@@ -26,6 +27,8 @@
     dialog::backdrop{background:rgba(27,36,64,.38)}.modal{padding:20px}.modal h2{margin:0 0 14px;font-size:18px;color:#1b2440}
     .form{display:grid;gap:10px}.form label{font-size:12px;font-weight:700;color:#4a5068}.form input,.form select,.form textarea{width:100%;box-sizing:border-box}
     .kind{display:flex;gap:8px}.kind label{border:1px solid #ddd;border-radius:8px;padding:8px 12px;background:#fff;cursor:pointer}
+    /* 共通CSSの label{display:block} が hidden 属性より強いので、ダイアログ内だけ hidden を効かせる */
+    #dlg [hidden]{display:none!important}
     .msg{font-size:12px;color:#b42318;min-height:1em}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     @media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:560px){.grid{grid-template-columns:1fr}.hr-wrap{padding-left:12px;padding-right:12px}.top .btn{width:100%}}
