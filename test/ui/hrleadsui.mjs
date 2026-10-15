@@ -1,9 +1,9 @@
-// 採用HR：応募者一覧の「すべて／採用／無限道場」と、無限道場リードの詳細（/hr/applicants.html）を実際のブラウザで通す。
+// 採用HR：応募者一覧の「選考中／採用／無限道場／不採用」と、無限道場リードの詳細（/hr/applicants.html）を実際のブラウザで通す。
 //
 // ■ 何を守るテストか（無限道場LP → グループウェアHR リード連携 STEP E）
 //   1. 区分のタブに人数が出て、切り替えられる（?category= で開ける・URLにも残る）
 //   2. 無限道場タブは専用の列（流入元・興味・適性診断・面談日時・登録日・最終接触）と、無限道場の段階
-//   3. 採用タブには無限道場リードが出ない。すべてタブでは「無限道場」の印が付く
+//   3. 採用タブには無限道場リードが出ない。選考中は見送り・辞退を除外。不採用タブに見送り・辞退をまとめる
 //   4. 詳細：LP で本人が入れた内容・UTM・面談・次のアクション。書類タブは出さない
 //   5. 次のアクションを選ぶと PATCH（action: leadNextAction）が送られる
 //   6. 通知先（運営担当）を選んで保存できる
@@ -37,6 +37,14 @@ const lead = shapeApplicant({
 const rec = shapeApplicant({
   id: "r1", name: "田中 一郎", source: "Wantedly", job_title: "エンジニア", stage: "applied", status: "todo",
   lead_category: "recruitment", created_at: "2026-09-29T03:00:00Z",
+});
+const rejected = shapeApplicant({
+  id: "r2", name: "見送り 花子", source: "Wantedly", job_title: "営業", stage: "ceo_interview", status: "passed",
+  decision: "rejected", lead_category: "recruitment", created_at: "2026-09-28T03:00:00Z",
+});
+const declined = shapeApplicant({
+  id: "r3", name: "辞退 次郎", source: "Wantedly", job_title: "事務", stage: "offer", status: "declined",
+  lead_category: "recruitment", created_at: "2026-09-27T03:00:00Z",
 });
 
 const page = await br.newPage({ viewport: { width: 1400, height: 1000 }, timezoneId: "Asia/Tokyo" });
@@ -83,7 +91,7 @@ await page.route("**/api/**", (route) => {
   }
   if (/\/api\/hr\/applicants\b/.test(url)) {
     listUrls.push(url);
-    return send({ applicants: [lead, rec].map((a) => ({ ...a, nextInterviewAt: a.id === "md1" ? "2026-10-01T05:00:00Z" : null })),
+    return send({ applicants: [lead, rec, rejected, declined].map((a) => ({ ...a, nextInterviewAt: a.id === "md1" ? "2026-10-01T05:00:00Z" : null })),
       employees: EMPLOYEES, meEmployeeId: RECRUITER.id, category: "all", leadReady: true });
   }
   if (/\/api\/hr\/documents/.test(url)) return send({ documents: [], limits: {} });
@@ -97,9 +105,14 @@ await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
 check(listUrls.some((u) => /category=all/.test(u)), "一覧は category=all で取る（この画面で区分を切り替える）");
 const tabs = await page.locator("#cat-tabs button").allInnerTexts();
-check(tabs.length === 3 && /すべて\s*2/.test(tabs[0]) && /採用\s*1/.test(tabs[1]) && /無限道場\s*1/.test(tabs[2]),
-  `すべて2／採用1／無限道場1（いま ${tabs.join(" | ")}）`);
-check((await page.locator("#rows").innerText()).includes("無限道場"), "すべてタブでは無限道場リードに印が付く");
+check(tabs.length === 4 && /選考中\s*2/.test(tabs[0]) && /採用\s*1/.test(tabs[1]) && /無限道場\s*1/.test(tabs[2]) && /不採用\s*2/.test(tabs[3]),
+  `選考中2／採用1／無限道場1／不採用2（いま ${tabs.join(" | ")}）`);
+{
+  const rows = await page.locator("#rows").innerText();
+  check(rows.includes("田中 一郎") && rows.includes("山田 太郎"), "デフォルトの選考中には対応中の応募者だけ出る");
+  check(!rows.includes("見送り 花子") && !rows.includes("辞退 次郎"), "デフォルトの選考中から見送り・辞退を除外");
+  check(rows.includes("無限道場"), "選考中では無限道場リードに印が付く");
+}
 
 await page.locator("#cat-tabs button", { hasText: "採用" }).click();
 await page.waitForTimeout(300);
@@ -107,6 +120,22 @@ await page.waitForTimeout(300);
   const rows = await page.locator("#rows").innerText();
   check(rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "採用タブに無限道場リードは出ない");
   check((await page.locator("#thead").innerText()).includes("書類"), "採用タブはいつもの列");
+}
+
+console.log("\n=== 不採用タブ（見送り・辞退） ===");
+await page.locator("#cat-tabs button", { hasText: "不採用" }).click();
+await page.waitForTimeout(300);
+{
+  const rows = await page.locator("#rows").innerText();
+  check(rows.includes("見送り 花子") && rows.includes("辞退 次郎"), "不採用タブに見送り・辞退をまとめる");
+  check(!rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "選考中の人は不採用タブに出さない");
+  const subtabs = await page.locator("#stage-tabs button").allInnerTexts();
+  check(subtabs.length === 3 && /すべて\s*2/.test(subtabs[0]) && /不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]),
+    `不採用タブ内は すべて2／不採用1／辞退1（いま ${subtabs.join(" | ")}）`);
+  await page.locator('#stage-tabs button[data-stage="status:declined"]').click();
+  await page.waitForTimeout(200);
+  const onlyDeclined = await page.locator("#rows").innerText();
+  check(onlyDeclined.includes("辞退 次郎") && !onlyDeclined.includes("見送り 花子"), "辞退だけに絞り込める");
 }
 
 console.log("\n=== 無限道場タブ ===");
