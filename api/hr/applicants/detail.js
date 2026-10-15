@@ -20,6 +20,7 @@ import {
 import { contactStatusOf } from "../../../lib/hr-messages.js";
 import { OFFER_TYPES_PUBLIC, offerTypeLabel, acceptFactsOf } from "../../../lib/hr-offer-types.js";
 import { readOfferTypes } from "../../../lib/hr.js";
+import { shapeHrMaterial } from "../../../lib/hr-materials.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
@@ -83,6 +84,7 @@ async function one(req, res, sb, ctx, salary) {
       .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
+  const materialState = await readInterviewMaterials(sb, ctx, interviews || []);
   // 選考タイムラインの「誰が」。記録の created_by（ログインの ID）から社員名を引く。本人の操作（承諾など）は null
   // Office へ引き渡した人（gw_hr_offers.handoff_by。db/133）も同じ引き方で名前にする
   const actorIds = [...new Set([...(timeline || []).map((t) => t.created_by), ...(offers || []).map((o) => o.handoff_by)].filter(Boolean))];
@@ -124,7 +126,12 @@ async function one(req, res, sb, ctx, salary) {
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
       ...shapeInterview(i), interviewerName: interviewerName.get(i.interviewer_id) || null,
+      materialIds: (materialState.byInterview.get(i.id) || []).map((m) => m.id),
+      materials: materialState.byInterview.get(i.id) || [],
     })),
+    // db/136：面談で選べる会社共通資料。未適用でも応募者詳細そのものは壊さない。
+    materials: materialState.active,
+    materialsReady: materialState.ready,
     // 評価UI・面談予定フォームの元。画面側で項目を持たない（ここが正）
     evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: RANKS, rankLabel: RANK_LABEL,
     interviewKinds: INTERVIEW_KINDS,
@@ -150,6 +157,45 @@ async function one(req, res, sb, ctx, salary) {
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
     salaryVisible: salary,
   });
+}
+
+async function readInterviewMaterials(sb, ctx, interviews) {
+  const empty = { ready: false, active: [], byInterview: new Map() };
+  const all = await sb.from("gw_hr_materials")
+    .select("id,tenant_id,name,category,kind,url,storage_path,filename,mime_type,size_bytes,description,sort_order,is_active,share_external,default_for_casual,created_by,updated_by,created_at,updated_at")
+    .eq("tenant_id", ctx.tenantId)
+    .order("sort_order", { ascending: true }).order("created_at", { ascending: true });
+  if (all.error) {
+    const missing = all.error.code === "42P01" || all.error.code === "PGRST205"
+      || /gw_hr_materials|schema cache|relation .* does not exist/i.test(String(all.error.message || ""));
+    if (missing) return empty;
+    throw all.error;
+  }
+
+  const shaped = (all.data || []).map(shapeHrMaterial);
+  const ids = (interviews || []).map((i) => i.id);
+  let links = [];
+  if (ids.length) {
+    const got = await sb.from("gw_hr_interview_materials").select("interview_id,material_id,sort_order")
+      .eq("tenant_id", ctx.tenantId).in("interview_id", ids).order("sort_order", { ascending: true });
+    if (got.error) {
+      const missing = got.error.code === "42P01" || got.error.code === "PGRST205"
+        || /gw_hr_interview_materials|schema cache|relation .* does not exist/i.test(String(got.error.message || ""));
+      if (missing) return empty;
+      throw got.error;
+    }
+    links = got.data || [];
+  }
+
+  const byId = new Map(shaped.map((m) => [m.id, m]));
+  const byInterview = new Map();
+  for (const link of links) {
+    const m = byId.get(link.material_id);
+    if (!m) continue;
+    if (!byInterview.has(link.interview_id)) byInterview.set(link.interview_id, []);
+    byInterview.get(link.interview_id).push(m);
+  }
+  return { ready: true, active: shaped.filter((m) => m.active), byInterview };
 }
 
 // 採用判断（社長面談のあとの内定・保留・見送り）そのものは、社長・管理者だけ
