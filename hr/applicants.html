@@ -1418,11 +1418,15 @@
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
         ${detail.offers.map(offerRow).join("")}` : ""}`;
     } else if (detailTab === "interviews") {
+      const ivs = [...(detail.interviews || [])].sort((a, b) => {
+        const aa = a.scheduledAt ? Date.parse(a.scheduledAt) : Date.parse(a.createdAt || 0);
+        const bb = b.scheduledAt ? Date.parse(b.scheduledAt) : Date.parse(b.createdAt || 0);
+        return aa - bb;
+      });
       box.innerHTML = `
-        ${ceoEvalSummary(detail)}
-        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:${ceoEvalSummary(detail) ? "14px" : "0"} 0 12px;">
+        <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:0 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
-        ${(detail.interviews || []).length ? detail.interviews.map(interviewRow).join("")
+        ${ivs.length ? ivs.map(interviewRow).join("")
           : `<p class="muted">まだ面談の記録がありません。</p>`}`;
     } else if (detailTab === "eval") {
       box.innerHTML = evalTab(a);
@@ -1696,6 +1700,8 @@
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
+          ${(i.materials || []).map((m) => `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterial('${esc(m.id)}')">${esc(m.name)}</button>`).join("")}
+          ${detail.materialsReady ? `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterialsEditor('${esc(i.id)}')">資料を変更</button>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
           ${pending ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${esc(i.id)}')">面談情報を編集</button>` : ""}
           ${pending && !tr ? `<button class="btn btn-secondary btn-sm" onclick="openCancelInterviewModal('${esc(i.id)}')">面談をキャンセル</button>` : ""}
@@ -2676,27 +2682,79 @@ ${url}
   }
 
   // ---- 面談を予定する（右ドロワー） ------------------------------------------------
+  function materialChecks(selected = [], kind = "casual") {
+    if (!detail.materialsReady) return '<p class="muted" style="font-size:12px;">資料機能は db/136 適用後に使えます。</p>';
+    const sel = new Set(selected);
+    const mats = detail.materialCatalog || [];
+    if (!mats.length) return '<p class="muted" style="font-size:12px;">共通資料はまだありません。<a href="/hr/materials.html" target="_blank">資料タブで登録</a></p>';
+    return '<div style="display:grid;gap:6px;margin-top:6px;">' + mats.map((m) => {
+      const on = sel.size ? sel.has(m.id) : (kind === "casual" && m.defaultForCasual);
+      return '<label style="display:flex;align-items:center;gap:7px;font-weight:500;margin:0;"><input type="checkbox" name="iv-material" value="'+esc(m.id)+'" '+(on?'checked':'')+' style="width:auto;margin:0;">'+esc(m.name)+'</label>';
+    }).join('') + '</div>';
+  }
+
+  async function openInterviewMaterial(id) {
+    try {
+      const r = await API.api('/api/hr/materials', { method:'POST', body:{ action:'open', id } });
+      window.open(r.url, '_blank', 'noopener,noreferrer');
+    } catch (e) { alert(e.hint || e.detail || e.message || '資料を開けませんでした'); }
+  }
+
+  function openInterviewMaterialsEditor(id) {
+    const iv = (detail.interviews || []).find((x) => x.id === id);
+    if (!iv) return;
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">面談資料を選ぶ</h2>
+      <p class="hr-sub" style="margin:0 0 14px;">${esc(detail.applicant.name)}さん　${esc(iv.kindLabel)}</p>
+      <label>この面談で使う資料</label>
+      ${materialChecks((iv.materials || []).map((m) => m.id), iv.kind)}
+      <div id="ivmats-msg" class="err-text" style="margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" onclick="saveInterviewMaterials('${esc(id)}', this)">保存する</button>
+        <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
+      </div>`);
+  }
+
+  async function saveInterviewMaterials(id, btn) {
+    const msg = el("ivmats-msg"); if (msg) msg.textContent = "";
+    const materialIds = [...document.querySelectorAll('input[name="iv-material"]:checked')].map((x) => x.value);
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api('/api/hr/interview-materials', { method:'PUT', body:{ interviewId:id, materialIds } }));
+      closeAction(); await refreshDetail("interviews");
+    } catch (e) { if (msg) msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; }
+  }
+
   function openScheduleForm(kind) {
     const kinds = detail.interviewKinds || [{ key: "casual", label: "カジュアル面談" }, { key: "ceo", label: "社長面談" }];
+    const chosen = kind || "casual";
     const opts = (detail.interviewers || []).map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join("");
     openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 16px;">面談を予定する</h2>
         <label>面談種別</label>
-        <select id="iv-kind">${kinds.map((k) =>
-          `<option value="${esc(k.key)}" ${k.key === (kind || "casual") ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
+        <select id="iv-kind" onchange="refreshScheduleMaterials()">${kinds.map((k) =>
+          `<option value="${esc(k.key)}" ${k.key === chosen ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
         <label style="margin-top:10px;">予定日時</label>
         <input id="iv-when" type="datetime-local">
         <label style="margin-top:10px;">面談担当</label>
         <select id="iv-who"><option value="">（未定）</option>${opts}</select>
         <label style="margin-top:10px;">面談方法</label>
         <select id="iv-method">${METHODS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-        <label style="margin-top:10px;">面談URL</label>
+        <label style="margin-top:10px;">面談URL <span style="color:#b3261e;">（カジュアル面談は必須）</span></label>
         <input id="iv-url" type="text" placeholder="https://meet.google.com/...">
+        <label style="margin-top:10px;">面談で使う資料</label>
+        <div id="iv-materials">${materialChecks([], chosen)}</div>
+        <label style="margin-top:10px;">面談メモ（任意）</label>
+        <textarea id="iv-memo" rows="3" maxlength="4000" placeholder="この面談で確認したいことなど"></textarea>
         <div id="iv-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitSchedule(this)">予定する</button>
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
         </div>`);
+  }
+
+  function refreshScheduleMaterials() {
+    const box = el("iv-materials"); if (!box) return;
+    box.innerHTML = materialChecks([], el("iv-kind").value);
   }
 
   /**
@@ -2740,14 +2798,24 @@ ${url}
   async function submitSchedule(btn) {
     const msg = el("iv-msg"); msg.textContent = "";
     const when = el("iv-when").value;
+    const kind = el("iv-kind").value;
+    const meetingUrl = el("iv-url").value.trim();
+    if (kind === "casual" && !meetingUrl) { msg.textContent = "カジュアル面談は面談URLを入力してください"; return; }
+    if (meetingUrl && !/^https?:\/\//i.test(meetingUrl)) { msg.textContent = "面談URLは http:// または https:// で始めてください"; return; }
+    const materialIds = [...document.querySelectorAll('input[name="iv-material"]:checked')].map((x) => x.value);
+    const memo = el("iv-memo").value.trim();
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
-        applicantId: detail.applicant.id, kind: el("iv-kind").value,
+      const out = await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
+        applicantId: detail.applicant.id, kind,
         scheduledAt: when ? JST.fromInput(when) : undefined,
         interviewerId: el("iv-who").value || undefined,
         method: el("iv-method").value || undefined,
-        meetingUrl: el("iv-url").value.trim() || undefined,
+        meetingUrl: meetingUrl || undefined,
       }));
+      if (out?.interview?.id && detail.materialsReady) {
+        await API.api('/api/hr/interview-materials', { method:'PUT', body:{ interviewId:out.interview.id, materialIds } });
+      }
+      if (out?.interview?.id && memo) await API.hrInterviewAct({ id:out.interview.id, action:"memo", memo });
       closeAction();
       await refreshDetail();
       await load();
