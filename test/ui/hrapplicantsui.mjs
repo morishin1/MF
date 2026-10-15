@@ -80,11 +80,13 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   console.log("— 専用ヘッダーが出る —");
   check((await page.locator(".hr-logo").innerText()).includes("HR"), "EIGHT/HR のロゴが出る");
   const navCount = await page.locator(".hr-nav a").count();
-  check(navCount === 4, `ナビは4つだけ（いま ${navCount}）`);
+  // 資料タブ（db/136・js/hr-materials-nav.js）が加わり5つ
+  check(navCount === 5, `ナビは5つだけ（いま ${navCount}）`);
   const navTexts = await page.locator(".hr-nav a").allInnerTexts();
   check(navTexts.some((t) => t.includes("ダッシュボード")) && navTexts.some((t) => t.includes("応募者"))
-    && navTexts.some((t) => t.includes("CEO REVIEW")) && navTexts.some((t) => t.includes("メールひな型")),
-    `ダッシュボード／応募者／CEO REVIEW／メールひな型 の4つ（いま ${navTexts.join(" / ")}）`);
+    && navTexts.some((t) => t.includes("CEO REVIEW")) && navTexts.some((t) => t.includes("資料"))
+    && navTexts.some((t) => t.includes("メールひな型")),
+    `ダッシュボード／応募者／CEO REVIEW／資料／メールひな型 の5つ（いま ${navTexts.join(" / ")}）`);
   check((await page.locator(".hr-nav a.on").innerText()).includes("応募者"), "いま見ているタブが選ばれている");
   check(!(await page.locator(".kp-sidebar").count()), "通常のサイドメニューは出さない");
 
