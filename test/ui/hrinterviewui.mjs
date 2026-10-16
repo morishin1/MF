@@ -154,6 +154,11 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   const when = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
   await page.fill("#iv-when", when);
   await page.selectOption("#iv-who", "e2");
+  // 手動のカジュアル面談は面談URLが必須（#117）。URLなしでは送らない
+  await page.locator("#action-root .hr-modal button", { hasText: "予定する" }).click();
+  await page.waitForTimeout(300);
+  check(!posted.length && (await page.locator("#iv-msg").innerText()).includes("面談URL"), "面談URLなしでは予定を送らない");
+  await page.fill("#iv-url", "https://meet.google.com/abc-defg-hij");
   await page.locator("#action-root .hr-modal button", { hasText: "予定する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.kind === "casual" && p.applicantId === "a1"), "予定がサーバへ送られる");

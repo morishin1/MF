@@ -82,6 +82,40 @@ async function one(req, res, sb, ctx, salary) {
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", ctx.tenantId)
       .in("status", ["active", "invited"]).order("display_name").limit(300),
   ]);
+  // db/136: 共通の面談資料。未適用の環境では採用HR全体を止めず、資料機能だけ not ready にする。
+  let materialCatalog = [];
+  let materialsReady = true;
+  const materialsByInterview = new Map();
+  try {
+    const ab = admin();
+    const [{ data: mats, error: me }, { data: links, error: le }] = await Promise.all([
+      ab.from("gw_hr_materials").select("id,name,category,kind,url,filename,is_active,share_external,default_for_casual,sort_order")
+        .eq("tenant_id", ctx.tenantId).eq("is_active", true).order("sort_order").order("created_at"),
+      (interviews || []).length
+        ? ab.from("gw_hr_interview_materials").select("interview_id,material_id,sort_order")
+            .in("interview_id", (interviews || []).map((x) => x.id)).order("sort_order")
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (me) throw me;
+    if (le) throw le;
+    materialCatalog = (mats || []).map((m) => ({
+      id: m.id, name: m.name, category: m.category, kind: m.kind,
+      url: m.kind === "url" ? m.url : null, filename: m.filename || null,
+      shareExternal: Boolean(m.share_external), defaultForCasual: Boolean(m.default_for_casual),
+      sortOrder: m.sort_order,
+    }));
+    const byId = new Map(materialCatalog.map((m) => [m.id, m]));
+    for (const link of links || []) {
+      const m = byId.get(link.material_id);
+      if (!m) continue;
+      const list = materialsByInterview.get(link.interview_id) || [];
+      list.push({ ...m, sortOrder: link.sort_order });
+      materialsByInterview.set(link.interview_id, list);
+    }
+  } catch (e) {
+    materialsReady = false;
+  }
+
   const interviewerName = new Map((interviewers || []).map((e) => [e.id, e.display_name]));
   // 選考タイムラインの「誰が」。記録の created_by（ログインの ID）から社員名を引く。本人の操作（承諾など）は null
   // Office へ引き渡した人（gw_hr_offers.handoff_by。db/133）も同じ引き方で名前にする
@@ -124,7 +158,10 @@ async function one(req, res, sb, ctx, salary) {
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
       ...shapeInterview(i), interviewerName: interviewerName.get(i.interviewer_id) || null,
+      materials: materialsByInterview.get(i.id) || [],
     })),
+    materialCatalog,
+    materialsReady,
     // 評価UI・面談予定フォームの元。画面側で項目を持たない（ここが正）
     evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: RANKS, rankLabel: RANK_LABEL,
     interviewKinds: INTERVIEW_KINDS,
