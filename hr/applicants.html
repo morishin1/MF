@@ -1583,7 +1583,7 @@
   function condDocsHtml() {
     const c = docs?.conditionDocs;
     if (!c) return "";
-    const canPdf = detail.salaryVisible !== false && c.docsReady;
+    const canSalaryPdf = detail.salaryVisible !== false && c.docsReady;
     const icon = { offer: "mark_email_read", notice: "gavel", accepted: "verified" };
     const rows = (c.rows || []).filter((r) => r.applicable !== false).map((r) => `
       <div class="hr-doc" data-cond="${esc(r.key)}" data-state="${esc(r.state)}">
@@ -1591,8 +1591,8 @@
         <div class="m">${r.at ? `${esc(fmtDay(r.at))}${c.version && r.state !== "none" ? `・第${esc(c.version)}版` : ""}` : "　"}</div>
         ${r.note && r.state === "none" ? `<div class="note">${esc(r.note)}</div>` : ""}
         <div class="acts">
-          ${r.file && canPdf ? `<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}', '${esc(r.file)}', this)">PDFを開く</button>` : ""}
-          ${r.file && !canPdf && detail.salaryVisible === false ? `<span class="muted" style="font-size:11.5px;">給与・報酬が入るため、PDF は給与を見られる方が確認します</span>` : ""}
+          ${r.file && (r.file === "offer" || canSalaryPdf) ? `<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}', '${esc(r.file)}', this)">PDFを開く</button>` : ""}
+          ${r.file && r.file !== "offer" && !canSalaryPdf && detail.salaryVisible === false ? `<span class="muted" style="font-size:11.5px;">給与・報酬が入るため、PDF は給与を見られる方が確認します</span>` : ""}
           ${r.key === "offer" && c.offerId ? `<button class="btn btn-secondary btn-sm" onclick="setDetailTab('overview')">オファーを見る</button>` : ""}
         </div>
       </div>`).join("");
