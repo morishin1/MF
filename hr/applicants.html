@@ -382,6 +382,7 @@
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
     <div class="hr-stage-tabs" id="stage-tabs"></div>
   </div>
+  <div id="source-summary" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px;"></div>
 
   <div id="bulkbar"></div>
 
@@ -423,7 +424,7 @@
   ];
   // 上段の区分。デフォルトは「選考中」＝見送り・辞退を除いた、まだ対応中の人だけ。
   // 区分タブ（選考中／業務委託／無限道場／終了）。どのタブに入るかはサーバ（lib/hr.js listTabOf → a.listTab）が決める。
-  // 「終了」には見送り（passed）と辞退（declined）が自動で入る。削除とは別で、履歴・メール・面談・書類は残る
+  // 「終了」には見送り（passed）・辞退（declined）・募集終了（position_closed）が自動で入る。削除とは別で履歴等は残る
   const CATEGORIES = [
     { key: "active", label: "選考中" },
     { key: "contractor", label: "業務委託" },
@@ -433,7 +434,7 @@
   // 古い URL（?category=recruitment / rejected / all）も開けるように
   const CATEGORY_ALIAS = { all: "active", recruitment: "active", rejected: "closed" };
   const isLead = (a) => a?.leadCategory === "mugendojo";
-  const tabOf = (a) => a?.listTab || (["passed", "declined"].includes(a?.status) ? "closed" : isLead(a) ? "mugendojo" : "active");
+  const tabOf = (a) => a?.listTab || (["passed", "declined", "position_closed"].includes(a?.status) ? "closed" : isLead(a) ? "mugendojo" : "active");
   const inCategory = (a, key) => tabOf(a) === (CATEGORY_ALIAS[key] || key);
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
@@ -446,6 +447,7 @@
     offer_response_pending: ["#e7eaf3", "#1b2440", "hourglass_empty"],
     accepted: ["#e5f1e2", "#2f6f3a", "check_circle"], declined: ["#efefeb", "#4a5068", "remove"],
     done: ["#e5f1e2", "#2f6f3a", "check_circle"], passed: ["#efefeb", "#4a5068", "remove"],
+    position_closed: ["#efefeb", "#4a5068", "inventory_2"],
   };
   const OVERDUE_COLOR = ["#fdecea", "#b3261e", "error"];
   // 社長判断待ちのうち、保留にしたもの（判断そのものは済んでいない。期限と次の確認事項を見る）
@@ -459,12 +461,14 @@
     offer_review_pending: "社内確認待ち", offer_send_pending: "本人送付待ち",
     offer_sent: "本人送付済み", offer_viewed: "本人が閲覧済み", offer_resend_pending: "URL再送待ち",
     offer_response_pending: "承諾待ち", accepted: "承諾済み", declined: "辞退",
-    done: "完了", passed: "見送り",
+    done: "完了", passed: "見送り", position_closed: "募集終了",
   };
 
   let applicants = [];
   let employees = [];
   let meEmployeeId = null;   // 応募者を追加するときの担当の初期値（登録する本人）
+  let sourceOptions = ["Wantedly", "Green", "Indeed", "求人ボックス", "エージェント", "リファラル", "自社サイト", "SNS", "イベント・セミナー", "その他"];
+  let sourceCounts = [];
   /** 担当の選択肢（一括変更・追加・詳細で同じもの） */
   const recruiterOptions = (selected) => `<option value="">未定</option>` + employees.map((e) =>
     `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.display_name)}</option>`).join("");
@@ -525,6 +529,16 @@
         ${leadReady ? "" : `<span class="muted" style="font-size:12px;margin-left:8px;">リードの列がまだありません（db/118_hr_leads.sql 未実行）</span>`}`
       : "";
   }
+  function renderSourceSummary() {
+    const box = el("source-summary");
+    if (!box) return;
+    const rows = (sourceCounts || []).filter((x) => Number(x.count) > 0);
+    box.innerHTML = rows.length
+      ? `<span style="font-size:11.5px;color:#6b7080;">応募媒体</span>${rows.map((x) =>
+          `<span class="hr-chip" style="margin:0;padding:3px 9px;">${esc(x.label)} <b>${esc(x.count)}</b></span>`).join("")}`
+      : "";
+  }
+
   function setCategory(key) {
     categoryFilter = key;
     stageFilter = "";
@@ -538,6 +552,7 @@
     if (!key) return true;
     if (key === "status:passed") return a.status === "passed";
     if (key === "status:declined") return a.status === "declined";
+    if (key === "status:position_closed") return a.status === "position_closed";
     return a.stage === key;
   }
   function renderStageTabs() {
@@ -549,7 +564,7 @@
         onclick="setStage('${esc(key)}')">${esc(label)}<span class="n">${n}</span></button>`;
     };
     const stages = categoryFilter === "closed"
-      ? [{ key: "status:passed", label: "見送り・不採用" }, { key: "status:declined", label: "辞退" }]
+      ? [{ key: "status:passed", label: "見送り・不採用" }, { key: "status:declined", label: "辞退" }, { key: "status:position_closed", label: "募集終了" }]
       : categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
     API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s) => tab(s.key, s.label)).join(""));
   }
@@ -594,7 +609,10 @@
         applicants = res.applicants || [];
         employees = res.employees || [];
         meEmployeeId = res.meEmployeeId || null;
+        if (Array.isArray(res.sources?.options) && res.sources.options.length) sourceOptions = res.sources.options;
+        sourceCounts = Array.isArray(res.sources?.counts) ? res.sources.counts : [];
         leadReady = res.leadReady !== false;
+        renderSourceSummary();
         renderCategoryTabs();
         renderStageTabs();
         render();
@@ -866,8 +884,7 @@
   // ---- 応募者を追加（右ドロワー） ------------------------------------------------
   const SOURCE_HISTORY_KEY = "hr_sources";
   function sourceSuggestions() {
-    const fromData = [...new Set(applicants.map((a) => a.source).filter(Boolean))];
-    return fromData.length ? fromData : ["リファラル", "Wantedly", "Green", "エージェント", "自社サイト"];
+    return sourceOptions;
   }
 
   async function openAdd() {
@@ -1051,7 +1068,7 @@
     // 無限道場リードには書類（履歴書・職務経歴書）が無い
     const TABS = isLead(a)
       ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
-      : [["overview", "概要"], ["interviews", "面談"], ["eval", "評価"], ["docs", "書類"], ["mail", "メール"], ["history", "履歴"]];
+      : [["overview", "基本情報"], ["interviews", "選考"], ["docs", "書類"], ["mail", "メール"], ["history", "履歴"]];
     if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
     // 採用の応募者は、上から順番を固定する（HRフロー仕様 §14）：
     //   ① 応募者（氏名・職種・メール・電話・応募媒体）② 選考・状態 ③ NEXT ACTION（主ボタン1つ）
@@ -1476,19 +1493,22 @@
         ${(detail.offers || []).length ? `
         <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
         ${detail.offers.map(offerRow).join("")}` : ""}`;
-    } else if (detailTab === "interviews") {
+    } else if (detailTab === "interviews" || detailTab === "eval") {
+      // 旧URL/状態の eval は互換のため残し、画面上は「選考」に面談＋評価をまとめる。
+      if (detailTab === "eval") detailTab = "interviews";
       const ivs = [...(detail.interviews || [])].sort((a, b) => {
         const aa = a.scheduledAt ? Date.parse(a.scheduledAt) : Date.parse(a.createdAt || 0);
         const bb = b.scheduledAt ? Date.parse(b.scheduledAt) : Date.parse(b.createdAt || 0);
         return aa - bb;
       });
       box.innerHTML = `
+        <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">面談</h4>
         <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:0 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
         ${ivs.length ? ivs.map(interviewRow).join("")
-          : `<p class="muted">まだ面談の記録がありません。</p>`}`;
-    } else if (detailTab === "eval") {
-      box.innerHTML = evalTab(a);
+          : `<p class="muted">まだ面談の記録がありません。</p>`}
+        <h4 style="font-size:13px;color:#1b2440;margin:20px 0 10px;">評価</h4>
+        ${evalTab(a)}`;
     } else if (detailTab === "mail") {
       box.innerHTML = `<p class="muted">読み込み中…</p>`;
       loadMailTab(a.id);
@@ -1583,19 +1603,20 @@
   function condDocsHtml() {
     const c = docs?.conditionDocs;
     if (!c) return "";
-    const canPdf = detail.salaryVisible !== false && c.docsReady;
     const icon = { offer: "mark_email_read", notice: "gavel", accepted: "verified" };
-    const rows = (c.rows || []).filter((r) => r.applicable !== false).map((r) => `
+    const rows = (c.rows || []).filter((r) => r.applicable !== false).map((r) => {
+      const canPdf = r.file === "offer" ? c.offerPdfReady !== false : (detail.salaryVisible !== false && c.docsReady);
+      return `
       <div class="hr-doc" data-cond="${esc(r.key)}" data-state="${esc(r.state)}">
         <div class="t"><span class="material-symbols-outlined">${esc(icon[r.key] || "description")}</span>${esc(r.label)}${dstChip(r.state, r.stateLabel)}</div>
         <div class="m">${r.at ? `${esc(fmtDay(r.at))}${c.version && r.state !== "none" ? `・第${esc(c.version)}版` : ""}` : "　"}</div>
         ${r.note && r.state === "none" ? `<div class="note">${esc(r.note)}</div>` : ""}
         <div class="acts">
           ${r.file && canPdf ? `<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}', '${esc(r.file)}', this)">PDFを開く</button>` : ""}
-          ${r.file && !canPdf && detail.salaryVisible === false ? `<span class="muted" style="font-size:11.5px;">給与・報酬が入るため、PDF は給与を見られる方が確認します</span>` : ""}
+          ${r.file && r.file !== "offer" && !canPdf && detail.salaryVisible === false ? `<span class="muted" style="font-size:11.5px;">給与・報酬が入るため、PDF は給与を見られる方が確認します</span>` : ""}
           ${r.key === "offer" && c.offerId ? `<button class="btn btn-secondary btn-sm" onclick="setDetailTab('overview')">オファーを見る</button>` : ""}
         </div>
-      </div>`).join("");
+      </div>`; }).join("");
     return `
       <h3 class="hr-doc-h" id="hr-docs-cond">採用条件書類<span class="sub">オファーから自動で並びます（ここでは登録しません）</span></h3>
       ${rows}`;
@@ -3444,6 +3465,7 @@ ${url}${materialText}
     const top = items.filter((x) => x.highlight), rest = items.filter((x) => !x.highlight);
     const row = (x) => `<dt>${esc(x.label)}</dt><dd>${esc(x.value)}</dd>`;
     const waitingSend = a.status === "offer_send_pending" && !d.canSend;   // 送った結果が分からない・手で送った途中
+    const offerLetter = d.offerLetter?.ready ? d.offerLetter : null;
     const notice = d.notice?.ready ? d.notice : null;
     const docWarnings = Array.isArray(notice?.warnings) ? notice.warnings : [];
     if (el("sm-title")) el("sm-title").textContent = notice ? `${notice.title}のプレビュー` : "内容を確認して送信";
@@ -3451,6 +3473,13 @@ ${url}${materialText}
       <p class="hr-sub" style="margin:0 0 10px;">${notice && !notice.stored
         ? "まだ本人には送っていません。［この内容で本人へ送る］を押すと、この内容で確定し、条件通知書PDFを添付してメールで送ります。"
         : "候補者に届く内容です。送ったあと、この版の内容は変わりません（承諾したときの内容として残ります）。"}</p>
+      ${offerLetter ? `
+      <div class="hr-pdf-box" id="sm-offer-letter" style="margin-bottom:8px;">
+        <div class="hd"><span class="material-symbols-outlined" style="font-size:18px;width:18px;overflow:hidden;">description</span>
+          <span><b>${esc(offerLetter.title)}</b>（PDF・A4）　${offerLetter.stored ? "送った時点の版です" : "送るときに、この内容で確定して添付します"}</span>
+          <button class="btn btn-secondary btn-sm" id="sm-offer-pdf-open" style="padding:2px 10px;"
+            onclick="openOfferPdf('${esc(o.id)}', '${offerLetter.stored ? "offer" : "previewOffer"}', this)">PDFを開く</button></div>
+      </div>` : ""}
       ${notice ? `
       <div class="hr-pdf-box" id="sm-notice">
         <div class="hd"><span class="material-symbols-outlined" style="font-size:18px;width:18px;overflow:hidden;">picture_as_pdf</span>
