@@ -1,7 +1,7 @@
 // 採用HR：応募者詳細のドロワー・モーダル整理と、履歴書・職務経歴書のアップロードを、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（HR 応募者詳細UI改善）
-//   1. 応募者詳細は右ドロワー1枚。タブは 概要 / 面談 / 書類 / 履歴
+//   1. 応募者詳細は右ドロワー1枚。タブは 基本情報 / 選考 / 書類 / メール / 履歴
 //   2. 概要に NEXT ACTION と、CTA は1つ
 //   3. 評価の入力は中央モーダル（600〜720px・中だけスクロール）。右ドロワーを2枚重ねない
 //      背景を押すと評価モーダルだけ閉じ、応募者詳細は残る。保存後もドロワーは開いたまま反映
@@ -134,13 +134,13 @@ console.log("— 一覧：書類のそろい具合 —");
   check(!(await page.locator("#rows [data-docs]").first().innerText()).trim(), "「なし」「—」も出さない");
 }
 
-console.log("\n— 応募者詳細は右ドロワー1枚・タブは4つ —");
+console.log("\n— 応募者詳細は右ドロワー1枚・タブは5つ —");
 await page.locator("#rows tr.click").first().click();
 await page.waitForTimeout(700);
 {
   check(await page.locator(".hr-detail").count() === 1, "応募者詳細ドロワーが開く");
   const tabs = (await page.locator(".hr-tabs button").allInnerTexts()).map((s) => s.trim());
-  check(tabs.join("/") === "概要/面談/評価/書類/メール/履歴", `タブ（いま ${tabs.join("/")}）`);
+  check(tabs.join("/") === "基本情報/選考/書類/メール/履歴", `タブ（いま ${tabs.join("/")}）`);
   const ov = await page.locator("#hr-detail-tab").innerText();
   // 概要は値のある項目だけ（空欄は［詳細を表示］の中。応募者ドロワー改善 §6）。メールは未登録でも出す（送信に直結）
   for (const x of ["応募経路", "応募職種", "担当", "メール", "詳細を表示"]) {
