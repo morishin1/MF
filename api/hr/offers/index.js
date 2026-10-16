@@ -653,7 +653,8 @@ async function officeFile(req, res, ctx, user) {
   }
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id").eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant) return json(res, 404, { error: "not_found" });
-  if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+  if (file === "offer" && !offerLetterReady(offer)) return json(res, 503, { error: "not_ready", message: "db/137_hr_finish.sql を Supabase に流してください" });
+  if (file !== "offer" && !offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
   const path = file === "offer" ? offer.offer_pdf_path : file === "accepted" ? offer.accepted_pdf_path : offer.notice_pdf_path;
   if (!path) return json(res, 404, { error: "no_file", hint: file === "offer" ? "オファー通知PDFはまだありません" : file === "accepted" ? "承諾済みPDFはまだありません" : "条件通知書はまだ作っていません" });
   try {
@@ -678,8 +679,6 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
   if (["preview", "notice", "accepted"].includes(file) && !salary) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
   const { data: offer } = await sb.from("gw_hr_offers").select("*").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!offer) return json(res, 404, { error: "not_found" });
-  if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
-  if (!noticeTitleOf(offer)) return json(res, 404, { error: "no_notice", hint: "区分の無い合格通知には条件通知書がありません" });
   try {
     if (file === "offer" || file === "previewOffer") {
       if (!offerLetterReady(offer)) return json(res, 503, { error: "not_ready", message: "db/137_hr_finish.sql を Supabase に流してください" });
@@ -694,6 +693,8 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
       await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_preview", target: `hr_offer:${offer.id}`, detail: { file: "offer", version: offer.version } });
       return sendPdf(res, built.bytes, `確認用_${pdfFileName(built.title, offer.version)}`);
     }
+    if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+    if (!noticeTitleOf(offer)) return json(res, 404, { error: "no_notice", hint: "区分の無い合格通知には条件通知書がありません" });
     if (file === "accepted") {
       const acc = await ensureAcceptedPdf(sb, offer);
       if (!acc) return json(res, 404, { error: "no_file", hint: "承諾済みPDFはまだありません" });
