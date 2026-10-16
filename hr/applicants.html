@@ -382,6 +382,7 @@
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
     <div class="hr-stage-tabs" id="stage-tabs"></div>
   </div>
+  <div id="source-summary" class="muted" style="font-size:12px;margin:8px 0 2px;"></div>
 
   <div id="bulkbar"></div>
 
@@ -430,6 +431,8 @@
     { key: "mugendojo", label: "無限道場" },
     { key: "closed", label: "終了" },
   ];
+  // 応募媒体は固定マスターを先に出す。過去に入力された独自値は消さず、候補の末尾に残す。
+  const SOURCE_OPTIONS = ["Wantedly", "自社サイト", "リファラル", "エージェント", "Green", "Indeed", "SNS", "イベント・紹介"];
   // 古い URL（?category=recruitment / rejected / all）も開けるように
   const CATEGORY_ALIAS = { all: "active", recruitment: "active", rejected: "closed" };
   const isLead = (a) => a?.leadCategory === "mugendojo";
@@ -683,8 +686,22 @@
       </tr>`;
   }
 
+  function renderSourceSummary() {
+    const pool = catList();
+    const counts = new Map();
+    for (const a of pool) {
+      const k = String(a.source || "未設定").trim() || "未設定";
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    const ordered = [...SOURCE_OPTIONS, ...[...counts.keys()].filter((x) => !SOURCE_OPTIONS.includes(x)).sort()];
+    el("source-summary").innerHTML = pool.length
+      ? `応募媒体（このタブ）：${ordered.filter((x) => counts.get(x)).map((x) => `<span class="hr-chip" style="padding:2px 8px;margin:0 4px 4px 0;">${esc(x)} <b>${counts.get(x)}</b></span>`).join("")}`
+      : "";
+  }
+
   function render() {
     renderThead();
+    renderSourceSummary();
     const q = (el("q").value || "").trim().toLowerCase();
     const list = catList().filter((a) =>
       stageMatch(a, stageFilter)
@@ -867,7 +884,7 @@
   const SOURCE_HISTORY_KEY = "hr_sources";
   function sourceSuggestions() {
     const fromData = [...new Set(applicants.map((a) => a.source).filter(Boolean))];
-    return fromData.length ? fromData : ["リファラル", "Wantedly", "Green", "エージェント", "自社サイト"];
+    return [...SOURCE_OPTIONS, ...fromData.filter((x) => !SOURCE_OPTIONS.includes(x))];
   }
 
   async function openAdd() {
