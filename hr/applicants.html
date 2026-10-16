@@ -986,7 +986,7 @@
     ["ceo_interview", "社長面談"], ["offer", "内定"], ["joining_scheduled", "入社予定"]];
   function stageSteps(a) {
     const at = SELECTION_STEPS.findIndex(([k]) => k === a.stage);
-    const ended = ["passed", "declined"].includes(a.status);
+    const ended = ["passed", "declined", "position_closed"].includes(a.status);
     return `<ol class="hr-steps" id="hr-stage-steps" aria-label="選考ステップ">${SELECTION_STEPS.map(([k, l], i) => {
       const st = i < at || (i === at && a.status === "done") ? "done" : i === at ? "now" : "todo";
       return `<li class="${st}" data-stage="${k}" aria-current="${st === "now" ? "step" : "false"}">
