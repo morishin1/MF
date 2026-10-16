@@ -6,8 +6,8 @@
 //                    チェックした（agreed: true）ときだけ。承諾＝条件の承諾（HR では「条件承諾済み」。正式契約は LegalSign）
 //        "decline" … 本人が辞退する（理由は任意）
 //
-// GET  /api/hr/offers/public?token=…&file=notice|accepted
-//        … 条件通知書PDF・承諾済みPDF（条件通知書＋電子承諾記録）を本人が保存する（db/132）。閲覧の記録は変えない
+// GET  /api/hr/offers/public?token=…&file=offer|notice|accepted
+//        … 採用決定通知PDF・条件通知書PDF・承諾済みPDF（条件通知書＋電子承諾記録）を本人が保存する。閲覧の記録は変えない
 //
 // ■ 承諾した版は、回答期限を過ぎても見られる（条件・PDF・正式契約の案内を確かめられるように。回答はもうできない）
 //
@@ -37,7 +37,7 @@ import { notify } from "../../../lib/notify.js";
 import { sha256, TOKEN_RE, shapePublicOffer, decisionMakerEmployeeIds } from "../../../lib/hr.js";
 import { attachPay } from "../../../lib/hr-pay.js";
 import { offerTypeOf, AGREEMENT } from "../../../lib/hr-offer-types.js";
-import { offerDocsReady, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName } from "../../../lib/hr-offer-docs.js";
+import { offerDocsReady, offerLetterPathOf, offerLetterTitleOf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName } from "../../../lib/hr-offer-docs.js";
 import { ipOf, uaOf } from "../../../lib/sign-audit.js";
 
 // 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
@@ -129,31 +129,41 @@ async function view(req, res) {
   return json(res, 200, { ...shapePublicOffer(offer, applicant, tenant, recruiter), ...docsView(offer) });
 }
 
-/** 条件通知書PDF・承諾済みPDF・正式契約（LegalSign）の案内（db/132 が無ければ出さない） */
+/** 採用決定通知PDF・条件通知書PDF・承諾済みPDF・正式契約（LegalSign）の案内 */
 function docsView(offer) {
-  if (!offerDocsReady(offer)) return { noticePdf: false, acceptedPdf: false, formal: null };
+  const typed = Boolean(offerTypeOf(offer.offer_type));
+  const ready = offerDocsReady(offer);
   return {
-    noticePdf: Boolean(offer.notice_pdf_path),
-    acceptedPdf: Boolean(offer.accepted_at && offer.notice_pdf_path),
-    // 正式契約の URL は、HR が本人へ案内したあと・正式契約済みになる前だけ見せる
-    formal: offer.accepted_at ? {
+    // 採用決定通知は db/132 に依存しない。送付済みの区分つきオファーでは、同時にStorageへ保存している。
+    offerPdf: Boolean(typed && offer.sent_at),
+    offerLetterTitle: typed ? offerLetterTitleOf(offer) : null,
+    noticePdf: Boolean(ready && offer.notice_pdf_path),
+    acceptedPdf: Boolean(ready && offer.accepted_at && offer.notice_pdf_path),
+    // 正式契約の URL は、db/132 があり、HR が本人へ案内したあと・正式契約済みになる前だけ見せる
+    formal: ready && offer.accepted_at ? {
       url: offer.formal_sent_at && !offer.formal_signed_at ? offer.legalsign_url : null,
       sent: Boolean(offer.formal_sent_at), signed: Boolean(offer.formal_signed_at),
     } : null,
   };
 }
 
-/** 本人が PDF を保存する（条件通知書・承諾済み）。閲覧の記録・状態は変えない */
+/** 本人が PDF を保存する（採用決定通知・条件通知書・承諾済み）。閲覧の記録・状態は変えない */
 async function file(req, res) {
   const q = new URL(req.url, "http://localhost").searchParams;
   const kind = q.get("file");
-  if (!["notice", "accepted"].includes(kind)) return json(res, 400, { error: "invalid_query" });
+  if (!["offer", "notice", "accepted"].includes(kind)) return json(res, 400, { error: "invalid_query" });
   const sb = admin();
   const found = await findByToken(sb, q.get("token") || "");
   if (found.deny) return json(res, found.status || 404, found.deny);
   const { offer, applicant } = found;
-  if (!offerDocsReady(offer) || !offer.notice_pdf_path) return json(res, 404, { error: "no_file", hint: "PDFはありません。採用担当までお問い合わせください。" });
   try {
+    if (kind === "offer") {
+      if (!offer.sent_at || !offerTypeOf(offer.offer_type)) return json(res, 404, { error: "no_file", hint: "採用通知PDFはありません。採用担当までお問い合わせください。" });
+      const bytes = await readPdf(offerLetterPathOf(offer));
+      await gwLog({ tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_pdf_saved", target: `hr_offer:${offer.id}`, detail: { file: kind } });
+      return sendPdf(res, bytes, pdfFileName(offerLetterTitleOf(offer), offer.version));
+    }
+    if (!offerDocsReady(offer) || !offer.notice_pdf_path) return json(res, 404, { error: "no_file", hint: "PDFはありません。採用担当までお問い合わせください。" });
     if (kind === "accepted") {
       const acc = await ensureAcceptedPdf(sb, offer);
       if (!acc) return json(res, 404, { error: "no_file", hint: "承諾済みのPDFはまだありません。" });
