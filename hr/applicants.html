@@ -903,9 +903,9 @@
         <label style="margin-top:10px;">応募媒体 <span style="color:#b3261e;">*</span></label>
         <div id="a-sources">${sourceSuggestions().map((s) => `
           <label class="hr-chip" style="cursor:pointer;">
-            <input type="radio" name="a-source" value="${esc(s)}" style="width:auto;margin:0 4px 0 0;">${esc(s)}
+            <input type="radio" name="a-source" value="${esc(s)}" style="width:auto;margin:0 4px 0 0;" onchange="toggleOtherSource()">${esc(s)}
           </label>`).join("")}</div>
-        <input id="a-source-other" type="text" placeholder="その他（自由入力）" style="margin-top:6px;">
+        <input id="a-source-other" type="text" placeholder="その他の媒体名" style="margin-top:6px;" hidden>
         <label style="margin-top:10px;">応募形態</label>
         <select id="a-employment">
           <option value="">未定（選考中に入ります）</option>
@@ -927,15 +927,25 @@
       </div>`;
   }
 
+  function toggleOtherSource() {
+    const picked = document.querySelector('input[name="a-source"]:checked')?.value;
+    const input = el("a-source-other");
+    if (!input) return;
+    input.hidden = picked !== "その他";
+    if (!input.hidden) input.focus();
+    else input.value = "";
+  }
+
   async function submitAdd(btn) {
     const msg = el("a-msg"); msg.textContent = "";
     const name = el("a-name").value.trim();
     const jobTitle = el("a-job").value.trim();
     const picked = document.querySelector('input[name="a-source"]:checked');
-    const source = (el("a-source-other").value.trim()) || (picked ? picked.value : "");
+    const otherSource = el("a-source-other").value.trim();
+    const source = picked?.value === "その他" ? otherSource : (picked?.value || "");
     if (!name) { msg.textContent = "氏名を入力してください"; return; }
     if (!jobTitle) { msg.textContent = "応募職種を入力してください"; return; }
-    if (!source) { msg.textContent = "応募媒体を選ぶか入力してください"; return; }
+    if (!source) { msg.textContent = picked?.value === "その他" ? "その他の媒体名を入力してください" : "応募媒体を選んでください"; return; }
 
     try {
       const r = await KPLayout.busy(btn, "追加中…", () => API.createHrApplicant({
