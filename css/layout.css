@@ -778,3 +778,7 @@ body.kp-has-officenav .kp-add .material-symbols-outlined{ font-size:18px; }
 body.kp-has-officenav .kp-add.hidden{ display:none; }
 /* リンクで作ったボタン（a.btn）は下線を引かない（採用HR・Sales の button.btn と同じ見た目にする） */
 body.kp-has-officenav a.btn{ text-decoration:none; }
+
+/* HR・Office 業務マニュアルのヘッダーリンク */
+.topbar .kp-manual-btn { white-space:nowrap; flex:0 0 auto; text-decoration:none; }
+.topbar .kp-manual-btn .material-symbols-outlined { font-size:18px; }

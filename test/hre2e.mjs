@@ -27,6 +27,9 @@ import { mock } from "node:test";
 
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
+/** 今日（JST）から n 日後の YYYY-MM-DD */
+const jstPlusDays = (n) => new Date(Date.now() + 9 * 3600000 + n * 86400000).toISOString().slice(0, 10);
+const JOIN_ON = jstPlusDays(30);
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(_HERE);
 const atRoot = (p) => _join(ROOT, p);
@@ -241,9 +244,11 @@ async function runToAccepted({ wageAmount = 300000 } = {}) {
   // （その確認は test/salaryguardapi.mjs）
   who = HR;
   const offer = await post(offers, "/api/hr/offers", {
-    applicantId, respondBy: "2026-10-15",
+    // 回答期限・入社日は「今日（JST）から数えた日」にする。固定日付だと、その日を過ぎた瞬間に
+    // 公開URLが 410 expired を返してテストが落ちる（2026-10-16 に実際に落ちた）
+    applicantId, respondBy: jstPlusDays(14),
     employmentType: "正社員", jobTitle: "エンジニア", contractType: "無期",
-    joinDate: "2026-11-01", probationMonths: 3, wageType: "月給", wageAmount,
+    joinDate: JOIN_ON, probationMonths: 3, wageType: "月給", wageAmount,
     weeklyHours: 40, workLocation: "本社",
   });
   const offerId = offer.body.offer.id;
@@ -323,11 +328,11 @@ console.log("\n=== 本採用へ進める → 契約書作成依頼 → 社労士
 function seedOnboardedEmployee({ employeeId = "emp-new1", wageAmount = 300000, procStage = "conditions" } = {}) {
   db.rows.gw_employees = [{
     id: employeeId, tenant_id: "t1", display_name: "山田 太郎", employment_type: "正社員",
-    joined_on: "2026-11-01", position: "エンジニア", user_id: "user-new1", status: "active",
+    joined_on: JOIN_ON, position: "エンジニア", user_id: "user-new1", status: "active",
   }];
   db.rows.gw_contracts = [{
     id: "c1", tenant_id: "t1", employee_id: employeeId, status: "active",
-    fixed_term: false, period_from: "2026-11-01", period_to: null,
+    fixed_term: false, period_from: JOIN_ON, period_to: null,
     probation_months: 3, weekly_hours: 40, job_content: "エンジニア",
     wage_type: "月給", wage_amount: wageAmount,
   }];

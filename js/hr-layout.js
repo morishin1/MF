@@ -42,6 +42,12 @@
       .hr-nav a .material-symbols-outlined { font-size:19px; }
       .hr-nav a.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
       .hr-actions { display:flex; align-items:center; gap:8px; }
+      .hr-manual { display:inline-flex; align-items:center; gap:5px; text-decoration:none;
+                   padding:6px 10px; border:1px solid #d0d4de; border-radius:7px;
+                   color:#1b2440; font-size:12px; font-weight:700; white-space:nowrap; }
+      .hr-manual:hover { background:#f6f6f2; }
+      .hr-manual:focus-visible { outline:2px solid #3668a5; outline-offset:2px; }
+      .hr-manual .material-symbols-outlined { font-size:18px; }
       .hr-iconbtn { position:relative; border:none; background:none; cursor:pointer; padding:8px;
                     border-radius:8px; color:#4a5068; display:flex; }
       .hr-iconbtn:hover { background:#f6f6f2; }
@@ -93,9 +99,9 @@
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
       </nav>
       <div class="hr-actions">
-        <button class="hr-iconbtn" onclick="HRLayout.showGuide()" title="使い方（1分マニュアル）">
-          <span class="material-symbols-outlined">help</span>
-        </button>
+        <a class="hr-manual" href="/guide-hr-office.html#hr" title="採用HRの操作マニュアル" aria-label="採用HRの操作マニュアル">
+          <span class="material-symbols-outlined">menu_book</span><span>マニュアル</span>
+        </a>
         <button class="hr-iconbtn" id="hr-bell-btn" onclick="HRLayout.toggleBell()" title="通知">
           <span class="material-symbols-outlined">notifications</span>
           <span class="hr-dot hidden" id="hr-bell-dot">0</span>

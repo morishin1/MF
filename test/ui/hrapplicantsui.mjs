@@ -145,14 +145,14 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.waitForTimeout(300);
   check(!(await page.locator(".hr-detail").count()), "閉じると消える");
 
-  console.log("— 使い方（1分マニュアル）は、いつでもここから開ける —");
-  await page.locator(".hr-iconbtn[title*='使い方']").click();
-  await page.waitForTimeout(300);
-  const guide = await page.locator(".kp-viewer").innerText();
-  check(guide.includes("1分マニュアル") && guide.includes("NEXT ACTION"), "1分マニュアルが開く");
-  await page.locator("[data-kp-viewer-close]").click();
-  await page.waitForTimeout(200);
-  check(!(await page.locator(".kp-viewer").count()), "閉じると消える");
+  console.log("— 採用HRマニュアルへヘッダーから移動できる —");
+  const manual = page.locator(".hr-manual");
+  check(await manual.isVisible(), "採用HRヘッダーにマニュアルが表示される");
+  check(await manual.getAttribute("href") === "/guide-hr-office.html#hr", "採用HRの章へ直接移動する");
+  await manual.click();
+  await page.waitForURL("**/guide-hr-office.html#hr");
+  check((await page.title()).includes("採用HR・Office 操作マニュアル"), "新しい操作マニュアルが開く");
+  check((await page.locator("body").innerText()).includes("応募者"), "採用HRの操作説明が載っている");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
+  <title>採用HR・Office 操作マニュアル | エイト</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#1b2440; --sub:#4a5068; --muted:#6b7080; --line:#e2e2dc; --bg:#f6f6f2; --paper:#fff; --accent:#304a80; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; scroll-padding-top:112px; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.85 'Zen Kaku Gothic New',sans-serif; }
+    a { color:#2558a3; } a:hover { text-decoration:underline; }
+    a:focus-visible { outline:3px solid #2f72ca; outline-offset:3px; }
+    .bar { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+    .bar-in { max-width:1160px; margin:auto; min-height:60px; display:flex; align-items:center; flex-wrap:wrap; gap:10px 18px; padding:10px 18px; }
+    .brand { font-weight:900; font-size:17px; text-decoration:none; color:var(--ink); }
+    .brand small { font-size:12px; color:var(--muted); font-weight:500; margin-left:8px; }
+    .nav { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; }
+    .nav a { display:inline-flex; align-items:center; justify-content:center; min-height:35px; padding:5px 12px; border:1px solid #d0d4de; border-radius:7px; color:var(--ink); font-weight:700; text-decoration:none; font-size:12.5px; }
+    .nav a:hover { background:#eef0f6; }
+    .nav a.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+    main { max-width:1160px; margin:0 auto; padding:27px 18px 70px; }
+    .hero { margin:0 0 18px; }
+    .eyebrow { color:var(--muted); font-size:12px; font-weight:700; margin-bottom:5px; }
+    h1 { font-size:27px; line-height:1.45; margin:0 0 10px; }
+    .lead { color:var(--sub); margin:0; max-width:900px; }
+    .scope { padding:12px 16px; border:1px solid #d4dbe8; background:#edf2fa; border-radius:10px; font-size:13px; margin:18px 0 24px; }
+    .jump { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin:0 0 28px; }
+    .jump a { text-decoration:none; border:1px solid var(--line); border-radius:12px; background:#fff; padding:18px 19px; color:var(--ink); }
+    .jump a:hover { background:#f3f6fb; border-color:#afc1de; }
+    .jump strong { display:block; font-size:17px; } .jump span { color:var(--muted); font-size:12.5px; }
+    section { scroll-margin-top:112px; }
+    .chapter { margin:36px 0 10px; border-bottom:2px solid var(--ink); padding:0 0 12px; }
+    .chapter h2 { font-size:23px; margin:0; } .chapter p { color:var(--muted); margin:4px 0 0; }
+    .toc { display:flex; gap:7px; flex-wrap:wrap; margin:14px 0 22px; }
+    .toc a { background:#fff; border:1px solid var(--line); color:var(--ink); border-radius:50px; padding:5px 12px; text-decoration:none; font-size:12px; font-weight:700; }
+    .toc a:hover { border-color:var(--accent); }
+    .panel { background:var(--paper); border:1px solid var(--line); border-radius:13px; padding:20px 22px; margin:13px 0; }
+    .panel h3 { font-size:18px; margin:0 0 8px; line-height:1.5; }
+    .panel h4 { font-size:14px; margin:15px 0 6px; }
+    .panel p { margin:5px 0 10px; } .panel p:last-child { margin-bottom:0; }
+    .panel ol,.panel ul { margin:6px 0 8px; padding-left:23px; } .panel li { margin:4px 0; }
+    .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:10px 0; }
+    .flow b { background:#edf1f9; border-radius:6px; padding:6px 9px; font-size:12px; }
+    .flow span { color:#7d8496; }
+    .linkline { border-top:1px dashed var(--line); margin-top:14px!important; padding-top:10px; }
+    .caution { padding:10px 13px; border-left:3px solid #bd792b; background:#fff8ea; border-radius:4px; font-size:12.5px; margin:10px 0; }
+    .ok { padding:10px 13px; border-left:3px solid #37754a; background:#eef7f0; border-radius:4px; font-size:12.5px; margin:10px 0; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .grid .panel { margin:0; }
+    details { border-top:1px solid var(--line); padding:11px 0; }
+    details summary { cursor:pointer; font-weight:700; }
+    details p { margin:7px 0 0; color:var(--sub); }
+    .small { font-size:12px; color:var(--muted); }
+    footer { color:var(--muted); border-top:1px solid var(--line); margin-top:34px; padding-top:16px; font-size:12px; }
+    @media(max-width:700px) {
+      html { scroll-padding-top:110px; }
+      main { padding:20px 12px 45px; }
+      .bar-in { gap:6px 10px; padding:9px 12px; }
+      .brand { flex:1 1 100%; }
+      .brand small { font-size:11px; }
+      .nav { margin-left:0; gap:6px; width:100%; }
+      .nav a { flex:1 1 auto; padding:5px 7px; }
+      h1 { font-size:22px; }
+      .chapter h2 { font-size:20px; }
+      .panel { padding:16px; }
+      .grid { grid-template-columns:1fr; }
+    }
+    @media print {
+      .bar,.jump,.toc { display:none!important; }
+      body { background:#fff; }
+      main { max-width:none; padding:0; }
+      .panel { break-inside:avoid; }
+      section { break-before:auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <div class="bar-in">
+      <a class="brand" href="/home.html">EIGHT <small>HR・Office 操作マニュアル</small></a>
+      <nav class="nav" aria-label="マニュアルの移動">
+        <a href="#hr">採用HR</a>
+        <a href="#office">Office</a>
+        <a class="primary" href="/home.html">社内ポータルへ</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="hero">
+      <div class="eyebrow">株式会社エイト | 業務操作ガイド</div>
+      <h1>採用から入社・退社まで、画面に沿って進める</h1>
+      <p class="lead">採用HRは「応募・面談・採用判断・内定・承諾」、Officeは「社員登録・入社準備・日常管理・退社」を扱います。操作の順番と担当が分かるようにまとめました。</p>
+    </div>
+    <div class="scope"><strong>利用にあたって：</strong>操作できるメニューやボタンはログイン中の権限によって異なります。マニュアルのリンク先で権限エラーになる場合は、管理担当者に権限をご確認ください。個人情報は権限のある画面だけで扱ってください。</div>
+    <div class="jump">
+      <a href="#hr"><strong>採用HRマニュアル →</strong><span>応募者登録・面談・判断・メール・内定・Officeへの引き継ぎ</span></a>
+      <a href="#office"><strong>Officeマニュアル →</strong><span>入社・契約・退社・勤怠・経費・月次業務・書類・貸与品</span></a>
+    </div>
+
+    <section id="hr" class="chapter">
+      <h2>01. 採用HR</h2>
+      <p>対象：採用担当・人事・責任者・経営者（表示内容は権限によって異なります）</p>
+    </section>
+    <nav class="toc" aria-label="採用HRの目次">
+      <a href="#hr-home">全体の見方</a><a href="#hr-applicant">応募者登録</a><a href="#hr-interview">面談・評価</a>
+      <a href="#hr-decision">採用判断</a><a href="#hr-mail">メール</a><a href="#hr-handoff">内定・引き継ぎ</a>
+    </nav>
+    <section class="panel" id="hr-home">
+      <h3>ダッシュボードと応募者一覧</h3>
+      <p><a href="/hr/">採用HRを開く</a>と、今日の面談、採用状況、最近の応募者などを確認できます。<a href="/hr/applicants.html">［応募者］</a>では選考中の人を一覧で把握し、対象者を開いて詳細を操作します。</p>
+      <div class="ok"><strong>日々の基本：</strong>応募者を開き、表示される「NEXT ACTION」と期限を確認してから次の作業を行います。</div>
+      <p class="linkline">開く：<a href="/hr/">ダッシュボード</a> ／ <a href="/hr/applicants.html">応募者一覧</a></p>
+    </section>
+    <section class="panel" id="hr-applicant">
+      <h3>応募者を新しく登録する・書類を確認する</h3>
+      <ol>
+        <li><a href="/hr/applicants.html">［応募者］</a>の［応募者追加］を押します。</li>
+        <li>氏名、連絡先、応募区分など、画面の必要項目を入力して登録します。</li>
+        <li>一覧から応募者を開き、［概要］で登録内容を確認します。</li>
+        <li>［書類］で履歴書・職務経歴書・スキルシート等の提出状況を確認します。必要な書類が無ければ依頼します。</li>
+        <li>担当者・期限・現在の選考状態を確認し、次の対応へ進めます。</li>
+      </ol>
+      <div class="caution">「見送り・辞退」は選考終了の記録として扱います。応募者データの［削除］とは別の操作です。履歴を残すため、選考終了だけを理由に削除しないでください。</div>
+    </section>
+    <section class="panel" id="hr-interview">
+      <h3>面談日程・実施・評価を記録する</h3>
+      <ol>
+        <li>応募者詳細の［NEXT ACTION］を確認し、面談の予約・日程調整を行います。TimeRexなどの予約導線が設定されている場合は案内します。</li>
+        <li>面談予定を確認し、実施後は［面談］で面談結果・メモなどを記録します。</li>
+        <li>［評価］で必要な評価を入力し、社長に判断を依頼する候補者は社長推薦に進めます。</li>
+        <li>未対応・期限超過の人を一覧で確認し、連絡漏れを防ぎます。</li>
+      </ol>
+      <p class="linkline">開く：<a href="/hr/applicants.html">応募者一覧</a> ／ <a href="/hr/">今日の面談</a></p>
+    </section>
+    <section class="panel" id="hr-decision">
+      <h3>CEO REVIEW・採用判断</h3>
+      <ol>
+        <li>採用担当は評価・推薦内容を整理して、判断者に引き継ぎます。</li>
+        <li>判断権限のある人は<a href="/hr/ceo-review.html">［CEO REVIEW］</a>で対象者の情報と面談履歴を確認します。</li>
+        <li>採用・保留・見送り等を判断し、必要に応じて追加面談や確認事項を設定します。</li>
+        <li>採用を進める場合は合格通知・条件提示の準備に進みます。</li>
+      </ol>
+      <div class="caution">CEO REVIEW は判断権限のあるアカウントにのみ表示されます。採用担当の評価入力と最終判断は別の操作です。</div>
+      <p class="linkline">開く：<a href="/hr/ceo-review.html">CEO REVIEW</a></p>
+    </section>
+    <section class="panel" id="hr-mail">
+      <h3>応募者へのメール・ひな型の管理</h3>
+      <ol>
+        <li><a href="/hr/templates.html">［メールひな型］</a>で用途ごとの件名・本文を作成し、必要なものを既定に設定します。</li>
+        <li>応募者詳細の［メール］または［メールを送る］から送信画面を開きます。</li>
+        <li>宛先・差し込み後の氏名・面談予約URL・件名・本文を確認し、必要ならその場で編集します。</li>
+        <li>［送信］を押し、表示された送信結果と履歴を確認します。</li>
+      </ol>
+      <p>差し込み項目には応募者名・募集職種・面談予約URL・担当者名・会社名などがあります。ひな型の編集と個別メールの編集は別です。</p>
+      <div class="caution"><strong>送信結果不明の場合：</strong>二重送信を避けるため、まず送信履歴やメール側の状況を確認してください。「送信済み」は相手が開封したことを意味しません。</div>
+      <p class="linkline">開く：<a href="/hr/templates.html">メールひな型</a> ／ <a href="/help.html#hr-mail">メールの詳細ガイド</a></p>
+    </section>
+    <section class="panel" id="hr-handoff">
+      <h3>内定・承諾からOfficeの社員登録へ</h3>
+      <div class="flow" aria-label="採用から入社への流れ">
+        <b>採用判断</b><span>→</span><b>合格通知・条件提示</b><span>→</span><b>本人承諾</b><span>→</span><b>本採用へ進める</b><span>→</span><b>Officeで入社準備</b>
+      </div>
+      <ol>
+        <li>応募者詳細で［合格通知］など該当する操作を開き、条件・送付内容を確認します。</li>
+        <li>本人の承諾状況を確認します。承諾前にOfficeでの社員登録を完了扱いにしないでください。</li>
+        <li>承諾後に採用HRの［本採用へ進める］を使い、Office側の登録に引き継ぎます。</li>
+        <li>Officeの担当者が本人情報・必要書類・入社日・アカウント等の準備を進めます。</li>
+      </ol>
+      <div class="ok"><strong>担当の境界：</strong>応募・評価・採用判断・内定・承諾は採用HR。正式な社員登録以降の入社手続きと在籍管理はOffice。雇用契約・署名の履歴は該当画面で確認します。</div>
+      <p class="linkline">次に開く：<a href="/admin-members.html">Office ＞ メンバー</a> ／ <a href="/admin-hr.html">Office ＞ 入退社</a> ／ <a href="#office-join">入社マニュアルへ</a></p>
+    </section>
+
+    <section id="office" class="chapter">
+      <h2>02. Office</h2>
+      <p>対象：人事・労務、経理・事務、管理者、経営者など。権限のあるカテゴリのみ表示されます。</p>
+    </section>
+    <nav class="toc" aria-label="Officeの目次">
+      <a href="#office-home">ホーム・権限</a><a href="#office-join">入社手続き</a><a href="#office-contract">契約・署名</a>
+      <a href="#office-person">本人・社労士</a><a href="#office-leave">退社手続き</a><a href="#office-time">勤怠・申請</a>
+      <a href="#office-expense">経費</a><a href="#office-month">月次・請求</a><a href="#office-recur">定例業務</a>
+      <a href="#office-docs">文書・お知らせ</a><a href="#office-assets">端末・貸与品</a><a href="#office-career">評価・育成</a>
+    </nav>
+    <section class="panel" id="office-home">
+      <h3>Officeの画面と担当範囲</h3>
+      <p><a href="/office/">Officeホーム</a>で「今日やること」、今月のカレンダー、今週の予定、月次進捗を確認します。タブは「人・組織」「請求・支払」「契約・書類」「端末・貸与品」のように業務別です。</p>
+      <ol>
+        <li>Officeホームの対応件数・期限超過・担当業務を確認します。</li>
+        <li>該当するカテゴリから対象画面へ移動します。</li>
+        <li>対象者や対象月を選び、完了した作業だけを完了として記録します。</li>
+      </ol>
+      <div class="caution">表示される項目はOfficeの担当権限に応じて異なります。給与額の決定、重要な権限変更など、経営側の判断が必要な操作はOffice担当者だけで確定しないでください。</div>
+      <p class="linkline">開く：<a href="/office/">Officeホーム</a></p>
+    </section>
+    <section class="panel" id="office-join">
+      <h3>入社手続き（人事・労務）</h3>
+      <p>採用HRで本人の承諾が取れて引き継がれたら、Officeで社員登録と入社準備を行います。入社日が来ただけでは手続き完了になりません。</p>
+      <div class="flow" aria-label="入社の作業順">
+        <b>社員登録</b><span>→</span><b>入社書類</b><span>→</span><b>アカウント・端末</b><span>→</span><b>オリエンテーション</b><span>→</span><b>会社確認・完了</b>
+      </div>
+      <ol>
+        <li><a href="/admin-members.html">［人・組織 ＞ メンバー］</a>で引き継がれた応募者の社員登録を行い、入社日・所属・連絡先を確認します。</li>
+        <li><a href="/admin-hr.html">［人・組織 ＞ 入退社］</a>で対象者の［手続きを開く］を押します。新規作成が必要な場合は［入退社を登録する］から「入社」を選びます。</li>
+        <li>画面上部の「次にすること」と各チェックリストを確認し、担当ごとに作業します。</li>
+        <li>労働条件通知・契約書の確認、本人の提出書類、社労士確認、必要情報の回収・確認を進めます。</li>
+        <li>アカウント・権限・会社PC・貸与品を準備し、入社オリエンテーションを案内します。</li>
+        <li>提出済みと会社確認済みを区別して確認し、必須作業が終わっていることを確認します。</li>
+      </ol>
+      <div class="caution">署名依頼には本人のログインアカウントが必要です。本人に入社準備をしてもらうためだけにOffice管理権限を付ける必要はありません。マイナンバーの値をグループウェアに直接保存しない運用を守ってください。</div>
+      <p class="linkline">開く：<a href="/admin-members.html">メンバー</a> ／ <a href="/admin-hr.html">入退社</a> ／ <a href="/help.html#hr-onboarding">詳しい入社ガイド</a></p>
+    </section>
+    <section class="panel" id="office-contract">
+      <h3>労働条件通知・契約書・電子署名</h3>
+      <ol>
+        <li>採用HRで案内・承諾された条件と、Officeで管理する契約情報が一致していることを確認します。</li>
+        <li><a href="/admin-contracts.html">［契約・書類 ＞ 雇用契約］</a>で対象者と契約内容・契約期間等を確認します。</li>
+        <li>新たに作成・送付する必要がある場合は<a href="/admin-esign.html?tab=order">［契約書作成依頼］</a>、または<a href="/admin-esign.html">［電子署名］</a>で該当する手続きを進めます。</li>
+        <li>署名依頼済み・本人の署名・締結済み・会社確認済みを区別し、必要な書類と記録がそろったことを確認します。</li>
+      </ol>
+      <div class="caution">契約情報の読み取りや登録だけでは、本人への電子署名依頼は送られません。送付・署名は該当する操作と結果を別途確認してください。</div>
+      <p class="linkline">開く：<a href="/admin-contracts.html">雇用契約</a> ／ <a href="/admin-esign.html">電子署名</a> ／ <a href="/help.html#contracts">契約書の詳細ガイド</a></p>
+    </section>
+    <section class="panel" id="office-person">
+      <h3>入社する本人・社労士が行うこと</h3>
+      <div class="grid">
+        <div>
+          <h4>入社予定の本人</h4>
+          <ol>
+            <li><a href="/onboarding/">入社準備</a>にログインします。</li>
+            <li>契約の確認・署名、必要情報・書類の提出、案内資料の確認を進めます。</li>
+            <li>提出後は会社からの確認や差し戻しが無いか確認します。</li>
+          </ol>
+        </div>
+        <div>
+          <h4>社労士</h4>
+          <ol>
+            <li><a href="/advisor.html">社労士用の手続き画面</a>で、共有された対象者・書類を確認します。</li>
+            <li>担当する手続きの状況を確認し、必要な確認を人事へ返します。</li>
+            <li>共有範囲外の従業員情報は参照しません。</li>
+          </ol>
+        </div>
+      </div>
+      <p class="linkline">開く：<a href="/onboarding/">入社準備（本人）</a> ／ <a href="/advisor.html">社労士画面</a></p>
+    </section>
+    <section class="panel" id="office-leave">
+      <h3>退社手続き（人事・労務）</h3>
+      <p>退職日・担当を確定し、作業漏れをチェックリストで管理します。本人への案内、貸与品回収、外部アカウント停止、最終精算、書類発行を別々に確認します。</p>
+      <div class="flow" aria-label="退社の作業順">
+        <b>退職合意</b><span>→</span><b>停止・返却</b><span>→</span><b>最終給与・精算</b><span>→</span><b>書類発行</b><span>→</span><b>完了</b>
+      </div>
+      <ol>
+        <li><a href="/admin-hr.html">［人・組織 ＞ 入退社］</a>の［入退社を登録する］で「退社」を選ぶか、既存の退社対象者の［手続きを開く］を押します。</li>
+        <li>退職日、最終出勤日、担当、引き継ぎ内容を確認します。必要に応じて［日付を変える］で修正します。</li>
+        <li>［本人へ案内］や再通知で案内内容を準備し、本人に連絡します。コピーする方式の案内は、コピーしただけでは送信されません。</li>
+        <li>会社PC等の返却を確認し、<a href="/admin-assets.html">貸与品台帳</a>に反映します。Google Workspace・Slack・GitHub・Vercelなど外部サービスは停止後に記録します。</li>
+        <li>未精算の経費、最終給与、退職関連書類と本人への公開状況を確認します。給与額の確定・退職証明書の発行などは権限のある判断者に依頼します。</li>
+        <li>チェックリストと操作履歴を確認し、未完了がなくなってから完了扱いにします。</li>
+      </ol>
+      <div class="caution">退職日を変更しただけで、在籍状態やすべての外部アカウントが停止するわけではありません。Google Workspace等は実際の停止作業と「停止済」の記録を照合してください。</div>
+      <p class="linkline">開く：<a href="/admin-hr.html">入退社</a> ／ <a href="/admin-assets.html">アカウント・貸与品</a> ／ <a href="/help.html#hr-offboarding">退社の詳細ガイド</a></p>
+    </section>
+    <div class="grid">
+      <section class="panel" id="office-time">
+        <h3>勤怠・休暇・稟議</h3>
+        <ol>
+          <li><a href="/admin-timecard.html">［人・組織 ＞ 勤怠管理］</a>で打刻・勤怠の状況を確認します。</li>
+          <li><a href="/admin-requests.html">［休暇・稟議］</a>で申請を確認し、担当権限の範囲で対応します。</li>
+          <li>不備は本人に修正を依頼し、締めに向けて未処理を減らします。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/admin-timecard.html">勤怠</a> ／ <a href="/admin-requests.html">休暇・稟議</a></p>
+      </section>
+      <section class="panel" id="office-expense">
+        <h3>経費精算</h3>
+        <ol>
+          <li><a href="/admin-expenses.html">［請求・支払 ＞ 経費精算］</a>を開きます。</li>
+          <li>申請者、日付、金額、領収書など証憑と申請内容を確認します。</li>
+          <li>差し戻し・確認・精算状況を担当権限に応じて更新します。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/admin-expenses.html">経費精算</a> ／ <a href="/help.html#expense">申請のガイド</a></p>
+      </section>
+      <section class="panel" id="office-month">
+        <h3>月末月初業務・請求・支払</h3>
+        <ol>
+          <li><a href="/office/billing.html">［請求・支払］</a>で書類回収・内容確認・支払準備の状況を見ます。</li>
+          <li><a href="/office/monthly.html">［月次業務］</a>で対象月を選び、勤務表・請求書等の収集・確認を行います。</li>
+          <li>必要に応じて<a href="/admin-closing.html">［月次締め］</a>や<a href="/admin-month-start.html">［月初作業管理］</a>の未完了を確認します。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/office/billing.html">請求・支払</a> ／ <a href="/office/monthly.html">月次業務</a></p>
+      </section>
+      <section class="panel" id="office-recur">
+        <h3>定例業務・Officeカレンダー</h3>
+        <ol>
+          <li><a href="/office/">ホーム</a>の日付を押し、担当・期限・状態を確認します。</li>
+          <li><a href="/office/recurring.html">［定例業務］</a>で繰り返し業務や年次の予定を管理します。</li>
+          <li>更新・停止・再有効化などは対象の予定と影響を確認して行います。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/office/recurring.html">定例業務</a></p>
+      </section>
+      <section class="panel" id="office-docs">
+        <h3>社内文書・お知らせ配信</h3>
+        <ol>
+          <li><a href="/admin-docs.html">［契約・書類 ＞ 社内文書］</a>で文書の登録・管理を行います。</li>
+          <li>配信権限がある場合は<a href="/admin-notices.html">［お知らせ配信］</a>から内容・公開先を確認します。</li>
+          <li>個人の提出書類と全社公開の社内文書を混同しないでください。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/admin-docs.html">社内文書</a> ／ <a href="/admin-notices.html">お知らせ配信</a></p>
+      </section>
+      <section class="panel" id="office-assets">
+        <h3>端末・貸与品・アカウント</h3>
+        <ol>
+          <li><a href="/admin-devices.html">［端末・貸与品 ＞ 端末管理］</a>で端末の登録状況を確認します。</li>
+          <li><a href="/admin-assets.html">［アカウント・貸与品］</a>で貸与先と返却状況を管理します。</li>
+          <li>入社時は貸与・権限付与、退社時は返却・権限停止を照合します。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/admin-devices.html">端末管理</a> ／ <a href="/admin-assets.html">貸与品</a></p>
+      </section>
+      <section class="panel" id="office-career">
+        <h3>評価・キャリア・入社後育成</h3>
+        <ol>
+          <li><a href="/admin-career.html?tab=journey">［入社〜育成］</a>で入社後の進行状況を確認します。</li>
+          <li><a href="/admin-growth.html">［3か月育成］</a>と<a href="/admin-autonomy.html">［自走レベル］</a>で該当する記録を確認します。</li>
+          <li>評価・給与に関する重要な判断は定められた権限に従います。</li>
+        </ol>
+        <p class="linkline">開く：<a href="/admin-career.html">評価・キャリア</a> ／ <a href="/admin-growth.html">3か月育成</a></p>
+      </section>
+      <section class="panel" id="office-faq">
+        <h3>よくある質問</h3>
+        <details><summary>HRで承諾済みなのに、入退社に表示されません</summary><p>承諾だけでOfficeへの引き継ぎが完了しているとは限りません。採用HRの［本採用へ進める］とOfficeの社員登録状況を確認します。</p></details>
+        <details><summary>入社手続きが完了になりません</summary><p>本人提出・会社確認・契約や必要書類・オリエンテーション等の必須項目をチェックします。入社日だけでは完了になりません。</p></details>
+        <details><summary>退社日を変更したのにアカウントが使えます</summary><p>日付変更と外部サービス停止は別の処理です。対象アカウントの停止状況とチェックリストを確認します。</p></details>
+        <details><summary>Officeのメニューが表示されません</summary><p>人事・経理・月次業務などの担当権限によって表示が異なります。管理担当者に確認してください。</p></details>
+      </section>
+    </div>
+    <footer>
+      このページは操作手順の案内です。契約・給与・個人情報の最終判断は社内規程および権限に従ってください。
+      共通の説明は <a href="/help.html">使い方ガイド</a> もご覧ください。
+    </footer>
+  </main>
+</body>
+</html>

@@ -494,6 +494,8 @@
     // ⚙管理は設定系だけ（権限・端末・アクセス分析・AIナレッジ・システム設定）。管理者・経営者だけ。
     // 業務のメニュー（人・組織／請求・支払／契約・書類／端末・貸与品）は Office の左メニューへ移した
     const showGear = showAdminTools;
+    // Office 業務画面のみ、担当者向けマニュアルをヘッダーに置く。
+    const showOfficeManual = here === "office" && Boolean(shows.officeEntry);
 
     const el = document.createElement("div");
     el.className = "topbar";
@@ -506,6 +508,9 @@
       </div>
       <div class="who">
         ${shortcutsHtml(shows, location.pathname, area)}
+        ${showOfficeManual ? `<a class="btn btn-secondary btn-sm kp-manual-btn" href="/guide-hr-office.html#office"
+            title="Officeの操作マニュアル" aria-label="Officeの操作マニュアル">
+            ${icon("menu_book", 18)}<span class="kp-manual-label">マニュアル</span></a>` : ""}
         <span class="kp-who-name" title="${esc(name)}">${esc(name)}</span>
         ${canPreview ? (memberView
           ? `<button class="btn btn-primary btn-sm" onclick="KPLayout.exitMemberView()" title="管理画面に戻る">
