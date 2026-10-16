@@ -174,7 +174,7 @@ console.log("\n=== 部品（lib/salary.js） ===\n");
 
 await ok("応答から、入れ子・配列の中まで給与のキーを外す。ほかのキーは残す", async () => {
   const out = SAL.redactSalary({
-    a: 1, wageAmount: 300000, currentWage: { wageType: "月給" }, compensationScope: "研修参加時間",
+    a: 1, wageAmount: 300000, currentWage: { wageType: "月給" }, compensationScope: "研修参加時間", allowances: "住宅手当",
     list: [{ id: "x", salary_min: 1, salary_note: "n", name: "山田" }],
     levels: [{ salaryMin: 200000, salaryMax: 300000, levelName: "L1" }],
     labels: { salaryDecisions: { none: "なし" } },
@@ -183,7 +183,7 @@ await ok("応答から、入れ子・配列の中まで給与のキーを外す�
 });
 
 await ok("入力から給与のキーを外す（元は変えない）", async () => {
-  const body = { id: "a1", wageAmount: 1, wage_type: "x", compensationScope: "研修参加時間", name: "山田" };
+  const body = { id: "a1", wageAmount: 1, wage_type: "x", compensationScope: "研修参加時間", allowances: "住宅手当", name: "山田" };
   const out = SAL.dropSalaryInput(body);
   assert.deepEqual(out, { id: "a1", name: "山田" });
   assert.equal(body.wageAmount, 1);
