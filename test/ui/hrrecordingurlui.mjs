@@ -70,7 +70,7 @@ console.log("\n=== 応募者詳細：録画URLの登録・変更 ===");
 
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator(".hr-tabs button", { hasText: "面談" }).click();
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   await page.waitForTimeout(300);
 
   console.log("\n— 録画が無い実施済み面談は「未登録」＋登録ボタン —");

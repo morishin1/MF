@@ -4,8 +4,8 @@
 //   1. 一覧：期限・警告（起きてはいけない状態）の列、毎日の確認順（期限超過 → 今日 → 新規 → その他）
 //   2. 応募者を追加すると、その人の詳細ドロワーが開く（NEXT ACTION：メール未登録なら「メールアドレスを登録」）
 //   3. メールを登録すると NEXT ACTION が「日程調整を送る」へ。日程調整は「メールひな型で送る」が主の導線
-//   4. ドロワーは上から 応募者 → 選考・状態 → NEXT ACTION → 選考ステップ（6段）→ タブ（概要/面談/評価/書類/メール/履歴）
-//   5. 評価タブ・メールタブ
+//   4. ドロワーは上から 応募者 → 選考・状態 → NEXT ACTION → 選考ステップ（6段）→ タブ（基本情報/選考/書類/メール/履歴）
+//   5. 選考タブ（面談＋評価）・メールタブ
 //   6. 社長推薦すると、選考は社長面談（stage=ceo_interview）で送る
 import { launch, BASE } from "../_browser.mjs";
 
@@ -156,7 +156,7 @@ console.log("\n=== 追加するとドロワーが開く → メールを登録 �
   await page.close();
 }
 
-console.log("\n=== ドロワーの順番・選考ステップ・評価タブ・メールタブ・社長推薦 ===");
+console.log("\n=== ドロワーの順番・選考ステップ・選考タブ・メールタブ・社長推薦 ===");
 {
   const { page, posted, errs } = await openPage();
   await page.goto(`${BASE}/hr/applicants.html?id=a5`);
@@ -173,12 +173,12 @@ console.log("\n=== ドロワーの順番・選考ステップ・評価タブ・�
   check(steps.join("→") === "新規応募→カジュアル面談→社長推薦→社長面談→内定→入社予定", `選考ステップ6段（${steps.join("→")}）`);
   check((await page.locator("#hr-stage-steps li.now").innerText()).includes("社長推薦"), "いまは社長推薦");
   const tabs = await page.locator(".hr-tabs button").allInnerTexts();
-  check(tabs.join("/") === "概要/面談/評価/書類/メール/履歴", `タブ（${tabs.join("/")}）`);
+  check(tabs.join("/") === "基本情報/選考/書類/メール/履歴", `タブ（${tabs.join("/")}）`);
   check((await page.locator("#hr-head-meta").innerText()).includes("Wantedly"), "応募媒体が見える");
 
-  await page.locator('.hr-tabs button[data-tab="eval"]').click();
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   const ev = await page.locator("#hr-detail-tab").innerText();
-  check(ev.includes("総合：A") && ev.includes("コミュニケーション") && ev.includes("◎") && ev.includes("即戦力です"), "評価タブに5項目・総合ランク・推薦理由");
+  check(ev.includes("総合：A") && ev.includes("コミュニケーション") && ev.includes("◎") && ev.includes("即戦力です"), "選考タブに面談＋5項目評価・総合ランク・推薦理由");
   check(await page.locator("#hr-detail-next").isVisible(), "タブを変えても NEXT ACTION は見える");
 
   await page.locator('.hr-tabs button[data-tab="mail"]').click();

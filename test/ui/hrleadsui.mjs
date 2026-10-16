@@ -128,8 +128,8 @@ await page.waitForTimeout(300);
   check(rows.includes("見送り 花子") && rows.includes("辞退 次郎"), "終了タブに見送り・辞退をまとめる");
   check(!rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "選考中の人は終了タブに出さない");
   const subtabs = await page.locator("#stage-tabs button").allInnerTexts();
-  check(subtabs.length === 3 && /すべて\s*2/.test(subtabs[0]) && /見送り・不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]),
-    `終了タブ内は すべて2／見送り・不採用1／辞退1（いま ${subtabs.join(" | ")}）`);
+  check(subtabs.length === 4 && /すべて\s*2/.test(subtabs[0]) && /見送り・不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]) && /募集終了\s*0/.test(subtabs[3]),
+    `終了タブ内は すべて2／見送り・不採用1／辞退1／募集終了0（いま ${subtabs.join(" | ")}）`);
   await page.locator('#stage-tabs button[data-stage="status:declined"]').click();
   await page.waitForTimeout(200);
   const onlyDeclined = await page.locator("#rows").innerText();
