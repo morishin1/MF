@@ -79,7 +79,7 @@
   承諾済み・取り消し／辞退でない・育成枠でない・正式契約が必要なら署名済み・社員登録前、を確かめてから `handoff_at` / `handoff_by` を一度だけ書く。
   二度押しても変わらない（`already: true`）。タイムライン `office_handoff`・監査ログ `hr.offer_handoff`・Office の人事・労務への通知。
 - Office のキュー：`GET /api/hr` の `handoffs`（`handoff_at` の入った版だけ。承諾済みだけの人・育成枠は出さない）。
-  出す項目は `lib/hire-handoff.js` の許可した項目だけ（給与・連絡先・承諾の IP・LegalSign の URL は出さない）。
+  出す項目は `lib/hire-handoff.js` の許可した項目だけ。氏名・メール・電話・職種・雇用区分・入社予定日など、入社準備に必要な情報を再入力なしで引き継ぐ。給与・承諾の IP・LegalSign の URL は出さない。
 - Office の入社の流れ（4つ）：`lib/hire-flow.js`。既存の段階（`lib/onboard-stage.js` の `computeStage`）の事実を並べ直すだけで、第3の判定は作らない。
 - 書類の閲覧専用：`api/hr/documents.js`（応募書類）・`api/hr/offers`（`GET ?id=…&file=notice|accepted`。条件通知書PDF・承諾済みPDF）。
   Office の人事・労務（採用HRの権限が無い人）は、service role で読むため、次を**API で必ず確かめる**：
@@ -101,7 +101,7 @@
 
 ## 7. DB
 
-この変更で**新しく必要な SQL は `db/135_hr_document_skill_sheet.sql` だけ**（スキルシートの種類を足す。`gw_hr_documents.doc_type` の CHECK を 3 種類 → 4 種類に置き換える）。
+応募書類のスキルシートには `db/135_hr_document_skill_sheet.sql`、オファー通知PDFの分離と「募集終了」には `db/137_hr_finish.sql` を使う。。db/135 はスキルシートの種類を足す。`gw_hr_documents.doc_type` の CHECK を 3 種類 → 4 種類に置き換える）。
 
 - 置き換えるのは「`gw_hr_documents` の CHECK で、見ている列が `doc_type` 1つだけ、許す値がちょうど `resume`・`work_history`・`other`」の制約**だけ**。
   `doc_type` を含む CHECK を広く探して消すことはしない（将来、別の `doc_type` 関連の CHECK が増えても巻き込まない）。1つに特定できなければ何も変えずに止まる。既存データは変えない。
@@ -116,3 +116,12 @@
   `test/hrdocsapi.mjs`（書類の Office 閲覧専用・条件書類の状態）、`test/hrtest.mjs`（Office のキュー・入社の流れ）
 - UI：`test/ui/hrhandoffui.mjs`（Office の「HRから引き渡し」・採用時書類・詳細タブ・390px）、`test/ui/hrofferdocsui.mjs`（HR の「条件承諾済み」・最終確認・正式契約・育成枠）、
   `test/ui/hradvanceui.mjs`・`test/ui/hroffersendui.mjs`・`test/ui/hrdocsconditionui.mjs`
+
+
+## 9. 2026-10-16 仕上げ
+
+- 採用・参画の決定を知らせる「内定通知書／採用通知書／育成参加決定通知書等」と、詳細条件を知らせる「労働条件通知書／育成参加条件通知書等」を別PDFにした。
+- HR → Office は、本人のメール・電話も認可済みの Office 人事へ引き継ぐ。Office で再入力しない。
+- 応募者詳細は「基本情報／選考／書類／メール／履歴」の5タブに整理し、面談と評価は「選考」にまとめる。
+- 応募媒体は固定候補で登録し、媒体別件数を一覧に表示する。
+- 見送り・辞退に加えて「募集終了」を終了タブへ自動分類する。
