@@ -443,7 +443,7 @@ await ok("オファーを作った → 登録済み／送った → 送付済み
   assert.equal(await state(), "offer:承諾済み notice:承諾済み accepted:承諾済み");
   const c = (await get("applicantId=ap1")).body.conditionDocs;
   assert.equal(c.offerId, "of1");
-  assert.deepEqual(c.rows.map((r) => r.file), [null, "notice", "accepted"], "PDF を開けるのは、条件通知書と承諾済みPDF");
+  assert.deepEqual(c.rows.map((r) => r.file), ["offer", "notice", "accepted"], "採用決定通知・条件通知書・承諾済みPDFをそれぞれ開ける");
   assert.equal(c.rows[2].at, "2026-10-04T00:00:00Z");
 });
 await ok("名前は区分ごと（正社員＝内定通知書・労働条件通知書／業務委託＝業務委託オファー・業務委託条件通知書）", async () => {
@@ -520,7 +520,7 @@ await ok("Office の人事権限（会計側の管理者）は、引き渡され
   assert.deepEqual(resume.history, [], "過去の版は Office に出さない（HR で見る）");
   assert.equal(r.body.documents.find((d) => d.docType === "skill_sheet").latest.filename, "山田_スキルシート.pdf");
   assert.equal(r.body.conditionDocs.offerId, "ofH", "引き渡した版の書類状態");
-  assert.deepEqual(r.body.conditionDocs.rows.map((x) => x.file), [null, "notice", "accepted"]);
+  assert.deepEqual(r.body.conditionDocs.rows.map((x) => x.file), ["offer", "notice", "accepted"]);
   assert.equal(typeof r.body.salaryVisible, "boolean");
 });
 
