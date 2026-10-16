@@ -53,7 +53,7 @@ import { sendMail, mailConfig, isEmail } from "../../../lib/mail/index.js";
 import { sendProblems, sendOutcome } from "../../../lib/hr-mail-template.js";
 import { publicBaseUrl } from "../../../lib/onboard-guide.js";
 import {
-  offerDocsReady, noticeTitleOf, offerLetterTitleOf, buildOfferLetterPdf, buildNoticePdf,
+  offerDocsReady, noticeTitleOf, offerLetterTitleOf, offerLetterPathOf, buildOfferLetterPdf, buildNoticePdf,
   ensureOfferLetterPdf, ensureNoticePdf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName,
   checkLegalSignUrl,
 } from "../../../lib/hr-offer-docs.js";
@@ -650,8 +650,7 @@ async function officeFile(req, res, ctx, user) {
   try {
     let bytes, title, accepted = false;
     if (file === "offer") {
-      const built = await ensureOfferLetterPdf(offer, { candidateName: applicant.name || "", company: "" });
-      bytes = built.bytes; title = built.title;
+      bytes = await readPdf(offerLetterPathOf(offer)); title = offerLetterTitleOf(offer);
     } else {
       if (!path) return json(res, 404, { error: "no_file", hint: file === "accepted" ? "承諾済みPDFはまだありません" : "条件通知書はまだ作っていません" });
       bytes = await readPdf(path); title = offer.notice_title; accepted = file === "accepted";
