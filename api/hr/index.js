@@ -216,7 +216,7 @@ async function read(req, res, ctx) {
  * 採用HRから引き渡された人（Office の入社準備キュー。db/133）。HR が本人の承諾内容を確認して
  * ［承諾内容を確認してOfficeへ引き渡す］を押した版（handoff_at が入っている）のうち、まだ社員登録（gw_employees）していない人。
  * 承諾しただけの人は載らない。育成枠は引き渡さない（DB の CHECK でも入らない）。
- * 給与・連絡先・承諾の IP・LegalSign の URL などは出さない（lib/hire-handoff.js の許可した項目だけ）。
+ * 給与・承諾の IP・LegalSign の URL などは出さない。メール・電話は入社準備のため認可済み Office 人事へ引き継ぐ。
  * db/133 が未適用なら ready=false（画面は何も出さない）
  */
 async function handoffQueue(sb, tenantId) {
@@ -228,7 +228,7 @@ async function handoffQueue(sb, tenantId) {
     const apps = [];
     for (let i = 0; i < ids.length; i += 100) {
       const { data } = await sb.from("gw_hr_applicants")
-        .select("id, name, status, employee_id, advance_claimed_at, job_title, employment_type")
+        .select("id, name, email, phone, status, employee_id, advance_claimed_at, job_title, employment_type")
         .eq("tenant_id", tenantId).in("id", ids.slice(i, i + 100));
       apps.push(...(data || []));
     }
@@ -263,7 +263,7 @@ async function hireLinks(sb, tenantId, employeeIds) {
   try {
     const apps = [];
     for (let i = 0; i < employeeIds.length; i += 100) {
-      const { data } = await sb.from("gw_hr_applicants").select("id, name, employee_id, job_title, employment_type")
+      const { data } = await sb.from("gw_hr_applicants").select("id, name, email, phone, employee_id, job_title, employment_type")
         .eq("tenant_id", tenantId).in("employee_id", employeeIds.slice(i, i + 100));
       apps.push(...(data || []));
     }
