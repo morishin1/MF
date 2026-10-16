@@ -302,6 +302,25 @@ await ok("下書き：宛先（氏名・メール）・差し込み済み・担�
   assert.match(none.body.mail.reason, /メールアドレス/);
 });
 
+await ok("送れない理由は担当者向けの言葉で、メール未登録と送信設定の不足を両方返す（管理者向けの詳細は別）", async () => {
+  setup();
+  mailMode = "skipped";
+  const both = await draft(A3);
+  assert.equal(both.body.mail.configured, false);
+  assert.equal(both.body.mail.hasEmail, false);
+  assert.deepEqual(both.body.mail.reasons.map((x) => x.key), ["no_email", "not_configured"]);
+  assert.match(both.body.mail.reasons[1].text, /管理者に連絡/);
+  assert.doesNotMatch(both.body.mail.reasons[1].text, /MAIL_/);         // 担当者向けの文に環境変数名を出さない
+  assert.match(both.body.mail.systemReason, /MAIL_SEND_ENABLED/);         // 管理者向けの詳細には出す
+  const cfgOnly = await draft(A1);
+  assert.deepEqual(cfgOnly.body.mail.reasons.map((x) => x.key), ["not_configured"]);
+  mailMode = "sent";
+  const fine = await draft(A1);
+  assert.equal(fine.body.mail.configured, true);
+  assert.deepEqual(fine.body.mail.reasons, []);
+  assert.equal(fine.body.mail.systemReason, null);
+});
+
 await ok("差し込めない項目は理由つきで出す。そのままでは送れない", async () => {
   setup();
   const c = await tplPost({ action: "create", name: "社長面談", purpose: "ceo", subject: "社長面談のご案内", body: "{{応募者名}} 様\n{{面談予約URL}}" });
@@ -393,6 +412,8 @@ await ok("結果：失敗は 502・時間切れは結果不明 202・どちら�
   const n = await send({ ...base, requestKey: key() });
   assert.equal(n.statusCode, 409);
   assert.equal(n.body.error, "mail_not_configured");
+  assert.match(n.body.hint, /管理者に連絡/);
+  assert.match(n.body.systemReason, /MAIL_SEND_ENABLED/);
 });
 
 await ok("送らないもの：ほかの応募者の予約URL・件名の改行・メールアドレス無し・非表示／直されたひな型", async () => {

@@ -20,6 +20,9 @@
     },
     "api/office/invoices.js": {
       "maxDuration": 60
+    },
+    "api/hr/applicants/mail.js": {
+      "maxDuration": 30
     }
   },
   "redirects": [

@@ -181,6 +181,46 @@ await ok("応募者全件ではなく、社長推薦以降だけを返す", asyn
   assert.equal(all[0].recommendNote, "営業経験が強い");
 });
 
+// ---- 取りこぼしていたケース（2026-10-16 HR改善 §5）。判定は lib/hr.js ceoReviewBucket に一本化 ----
+await ok("状態を手動で「社長判断待ち」にした人は、段階がカジュアル面談のままでも「社長判断待ち」に出る", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "手動で判断待ち", stage: "casual_interview", status: "ceo_decision_pending", rank: "A", decision: null },
+  ];
+  const r = await getCeoReview();
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.decisionPending.map((c) => c.name), ["手動で判断待ち"]);
+});
+
+await ok("状態が「社長面談設定待ち」の人は、段階が新規応募のままでも「社長に会ってほしい人」に出る", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "設定待ち", stage: "applied", status: "ceo_interview_pending", rank: "A", decision: null },
+  ];
+  const r = await getCeoReview();
+  assert.deepEqual(r.body.recommended.map((c) => c.name), ["設定待ち"]);
+});
+
+await ok("以前の判断（見送り）が残ったまま選考を再開した人も、判断前の状態なら出る", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "再開", stage: "ceo_recommend", status: "ceo_interview_pending", rank: "A", decision: "rejected" },
+  ];
+  const r = await getCeoReview();
+  assert.deepEqual(r.body.recommended.map((c) => c.name), ["再開"]);
+  assert.equal(r.body.contactPending.length, 0);
+});
+
+await ok("社長段階で見送り（status=passed・判断なし）や次回調整（C評価）の人は、社長の一覧に出さない", async () => {
+  setup();
+  db.rows.gw_hr_applicants = [
+    { id: "a1", tenant_id: "t1", name: "C評価", stage: "ceo_recommend", status: "next_scheduling_pending", rank: "C", decision: null },
+    { id: "a2", tenant_id: "t1", name: "D評価", stage: "ceo_recommend", status: "passed", rank: "D", decision: null },
+  ];
+  const r = await getCeoReview();
+  assert.equal([...r.body.todayMeetings, ...r.body.recommended, ...r.body.decisionPending].length, 0);
+});
+
 await ok("今日面談予定の人は「今日会う人」へ", async () => {
   setup();
   db.rows.gw_hr_applicants = [

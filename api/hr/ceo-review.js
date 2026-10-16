@@ -18,7 +18,7 @@ import { gwContext, canDecideHire, canSeeSalary } from "../../lib/gw.js";
 import { guardSalaryOutput, withoutColumns } from "../../lib/salary.js";
 import { paySplit, attachPay } from "../../lib/hr-pay.js";
 import { userClient } from "../../lib/supabase.js";
-import { shapeApplicant, shapeInterview } from "../../lib/hr.js";
+import { shapeApplicant, shapeInterview, ceoReviewBucket, CEO_STAGES, CEO_REVIEW_STATUSES } from "../../lib/hr.js";
 import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../lib/hr-messages.js";
 
 const SQL = "db/081_hr_recruiting.sql・084_hr_ceo_review.sql";
@@ -27,9 +27,9 @@ const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_titl
   + "recommend_note, decision_note, hold_reason, hold_next_step, "
   + "employment_type, contract_type, contract_end_date, join_date, probation_months, "
   + "wage_type, wage_amount, weekly_hours, work_location, employee_id, note, created_at, updated_at";
-const RELEVANT_STAGES = ["ceo_recommend", "ceo_interview"];
 // 内定にした人は stage=offer へ進む。本人への連絡が済むまでは「判断済み・本人へ未連絡」に出す
-const FETCH_STAGES = [...RELEVANT_STAGES, "offer"];
+const FETCH_STAGES = [...CEO_STAGES, "offer"];
+
 const EMPTY = { todayMeetings: [], recommended: [], decisionPending: [], contactPending: [] };
 
 export default async function handler(req, res) {
@@ -44,8 +44,18 @@ export default async function handler(req, res) {
   const sb = userClient(req);
   // 給与は、見られる人（lib/gw.js canSeeSalary）にだけ返す
   const salary = guardSalaryOutput(res, canSeeSalary(ctx));
-  const { data, error } = await sb.from("gw_hr_applicants").select(salary && !paySplit() ? FIELDS : withoutColumns(FIELDS))
-    .eq("tenant_id", ctx.tenantId).in("stage", FETCH_STAGES).limit(500);
+  const cols = salary && !paySplit() ? FIELDS : withoutColumns(FIELDS);
+  // 段階で拾う人と、段階が社長より前でも状態が社長面談待ち・社長判断待ちの人（手動で状態を変えた人を取りこぼさない）。
+  // 新しく動いた人から読み、件数が多くても、いま判断が要る人が上限で切れないようにする
+  const [byStage, byStatus] = await Promise.all([
+    sb.from("gw_hr_applicants").select(cols).eq("tenant_id", ctx.tenantId).in("stage", FETCH_STAGES)
+      .order("updated_at", { ascending: false }).limit(1000),
+    sb.from("gw_hr_applicants").select(cols).eq("tenant_id", ctx.tenantId).in("status", CEO_REVIEW_STATUSES)
+      .order("updated_at", { ascending: false }).limit(1000),
+  ]);
+  const error = byStage.error || byStatus.error;
+  const seen = new Set();
+  const data = [...(byStage.data || []), ...(byStatus.data || [])].filter((a) => !seen.has(a.id) && seen.add(a.id));
   if (error) {
     const hint = dbSetupHint(error, SQL);
     if (hint) return json(res, 200, { ...EMPTY, notReady: true, message: hint });
@@ -59,13 +69,15 @@ export default async function handler(req, res) {
 
   const ids = applicants.map((a) => a.id);
   const decidedIds = applicants.filter((a) => a.decision).map((a) => a.id);
-  const [{ data: interviews }, { data: contactEvents }] = await Promise.all([
-    sb.from("gw_hr_interviews").select("*").in("applicant_id", ids).order("created_at", { ascending: false }),
+  const [{ data: interviews, error: ivError }, { data: contactEvents }] = await Promise.all([
+    sb.from("gw_hr_interviews").select("*").in("applicant_id", ids).order("created_at", { ascending: false }).limit(5000),
     decidedIds.length
       ? sb.from("gw_hr_timeline").select("applicant_id, event_key, occurred_at")
         .in("applicant_id", decidedIds).in("event_key", CONTACT_EVENT_KEYS).limit(5000)
       : Promise.resolve({ data: [] }),
   ]);
+  // 面談が読めないと「今日会う人」が黙って空になる。読めなかったことを返す
+  if (ivError) return json(res, 500, { error: "db_query_failed", detail: ivError.message });
   const eventsOf = new Map();
   for (const e of contactEvents || []) {
     if (!eventsOf.has(e.applicant_id)) eventsOf.set(e.applicant_id, []);
@@ -101,18 +113,12 @@ export default async function handler(req, res) {
       contact: contactStatusOf(a.decision, eventsOf.get(a.id)),
     };
 
-    // 内定・見送りを決めた人は、判断のブロックには出さない。本人へ未連絡のときだけ「判断済み・本人へ未連絡」へ
-    // （見送りは stage が社長面談のまま status=passed になる。以前は「社長に会ってほしい人」に残っていた）
-    if (a.decision === "hired" || a.decision === "rejected" || a.stage === "offer") {
-      if (card.contact.state === "pending") contactPending.push(card);
-      continue;
-    }
-
-    const scheduledToday = ceoInterview && !ceoInterview.conducted_at && ceoInterview.scheduled_at
-      && jstYmd(ceoInterview.scheduled_at) === jstToday;   // 日本の日付で比べる（UTC の日付で切らない）
-    if (scheduledToday) todayMeetings.push(card);
-    else if (a.status === "ceo_decision_pending") decisionPending.push(card);
-    else recommended.push(card);
+    // どのブロックに出すかは lib/hr.js ceoReviewBucket（集計・NEXT ACTION と同じ判定）
+    const bucket = ceoReviewBucket(a, { interviews: list, contactState: card.contact.state, today: jstToday });
+    if (bucket === "todayMeetings") todayMeetings.push(card);
+    else if (bucket === "decisionPending") decisionPending.push(card);
+    else if (bucket === "recommended") recommended.push(card);
+    else if (bucket === "contactPending") contactPending.push(card);
   }
 
   const byTime = (x, y) => String(x.ceoInterview?.scheduledAt || "").localeCompare(String(y.ceoInterview?.scheduledAt || ""));
