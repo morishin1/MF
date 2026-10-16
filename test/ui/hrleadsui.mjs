@@ -105,33 +105,31 @@ await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
 check(listUrls.some((u) => /category=all/.test(u)), "一覧は category=all で取る（この画面で区分を切り替える）");
 const tabs = await page.locator("#cat-tabs button").allInnerTexts();
-check(tabs.length === 4 && /選考中\s*2/.test(tabs[0]) && /採用\s*1/.test(tabs[1]) && /無限道場\s*1/.test(tabs[2]) && /不採用\s*2/.test(tabs[3]),
-  `選考中2／採用1／無限道場1／不採用2（いま ${tabs.join(" | ")}）`);
+// 区分は 選考中／業務委託／無限道場／終了（HR改善 2026-10-16 §4）。無限道場リードは選考中に混ぜない
+check(tabs.length === 4 && /選考中\s*1/.test(tabs[0]) && /業務委託\s*0/.test(tabs[1]) && /無限道場\s*1/.test(tabs[2]) && /終了\s*2/.test(tabs[3]),
+  `選考中1／業務委託0／無限道場1／終了2（いま ${tabs.join(" | ")}）`);
 {
   const rows = await page.locator("#rows").innerText();
-  check(rows.includes("田中 一郎") && rows.includes("山田 太郎"), "デフォルトの選考中には対応中の応募者だけ出る");
+  check(rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "デフォルトの選考中には通常採用の対応中の応募者だけ出る（無限道場リードは出ない）");
   check(!rows.includes("見送り 花子") && !rows.includes("辞退 次郎"), "デフォルトの選考中から見送り・辞退を除外");
-  check(rows.includes("無限道場"), "選考中では無限道場リードに印が付く");
+  check((await page.locator("#thead").innerText()).includes("書類"), "選考中はいつもの列");
 }
 
-await page.locator('#cat-tabs button[data-category="recruitment"]').click();
+// 旧URL（?category=recruitment）でも開ける（選考中として扱う）
+await page.goto(`${BASE}/hr/applicants.html?category=recruitment`);
+await page.waitForTimeout(800);
+check((await page.locator("#cat-tabs button.on").innerText()).includes("選考中"), "旧URL ?category=recruitment は選考中で開く");
+
+console.log("\n=== 終了タブ（見送り・辞退） ===");
+await page.locator('#cat-tabs button[data-category="closed"]').click();
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
-  check(rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "採用タブに無限道場リードは出ない");
-  check((await page.locator("#thead").innerText()).includes("書類"), "採用タブはいつもの列");
-}
-
-console.log("\n=== 不採用タブ（見送り・辞退） ===");
-await page.locator('#cat-tabs button[data-category="rejected"]').click();
-await page.waitForTimeout(300);
-{
-  const rows = await page.locator("#rows").innerText();
-  check(rows.includes("見送り 花子") && rows.includes("辞退 次郎"), "不採用タブに見送り・辞退をまとめる");
-  check(!rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "選考中の人は不採用タブに出さない");
+  check(rows.includes("見送り 花子") && rows.includes("辞退 次郎"), "終了タブに見送り・辞退をまとめる");
+  check(!rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "選考中の人は終了タブに出さない");
   const subtabs = await page.locator("#stage-tabs button").allInnerTexts();
-  check(subtabs.length === 3 && /すべて\s*2/.test(subtabs[0]) && /不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]),
-    `不採用タブ内は すべて2／不採用1／辞退1（いま ${subtabs.join(" | ")}）`);
+  check(subtabs.length === 3 && /すべて\s*2/.test(subtabs[0]) && /見送り・不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]),
+    `終了タブ内は すべて2／見送り・不採用1／辞退1（いま ${subtabs.join(" | ")}）`);
   await page.locator('#stage-tabs button[data-stage="status:declined"]').click();
   await page.waitForTimeout(200);
   const onlyDeclined = await page.locator("#rows").innerText();

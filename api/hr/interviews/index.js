@@ -41,7 +41,7 @@ import { dateTime as jstDateTime } from "../../../lib/jst.js";
 import {
   normalizeInterview, shapeInterview, nextStatusFromRank, interviewKindLabel, RANK_LABEL,
   decisionMakerEmployeeIds, interviewKindForStage, isTimerexInterview, TIMEREX_MANAGED_COLUMNS,
-  INTERVIEW_MEMO_MAX,
+  INTERVIEW_MEMO_MAX, laterStage,
 } from "../../../lib/hr.js";
 
 const SQL = "db/081_hr_recruiting.sql・083_hr_interview_meeting_url.sql・109_hr_interview_edit.sql";
@@ -98,7 +98,8 @@ async function create(req, res, sb, ctx, user) {
   }
 
   const now = new Date().toISOString();
-  const newStage = row.value.kind === "ceo" ? "ceo_interview" : "casual_interview";
+  // 段階は後ろへ戻さない（社長推薦まで進んだ人に追加のカジュアル面談を入れても、社長の対象から外さない）
+  const newStage = laterStage(applicant.stage, row.value.kind === "ceo" ? "ceo_interview" : "casual_interview");
   await sb.from("gw_hr_applicants")
     .update({ status: "interview_scheduled", stage: newStage, updated_at: now })
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);

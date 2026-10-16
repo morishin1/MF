@@ -221,6 +221,14 @@ await ok("種別が違えば、二重登録にならない（カジュアルと�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
 });
 
+await ok("社長推薦まで進んだ人にカジュアル面談を追加しても、段階は社長推薦のまま（CEO REVIEW から消さない）", async () => {
+  setup();
+  Object.assign(db.rows.gw_hr_applicants[0], { stage: "ceo_recommend", status: "ceo_interview_pending", rank: "A" });
+  const r = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(db.rows.gw_hr_applicants[0].stage, "ceo_recommend");
+});
+
 await ok("手入力のカジュアル面談は面談URLなしでは予定できない（400 meeting_url_required・何も作らない）", async () => {
   setup();
   const r = await call(interviews, { method: "POST", url: "/api/hr/interviews",

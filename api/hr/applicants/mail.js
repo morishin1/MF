@@ -49,8 +49,8 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
   const ctx = await gwContext(user.id);
-  if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
-  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
+  if (!ctx.tenantId) return json(res, 403, { error: "no_membership", hint: "このアカウントは会社に所属していないため、メールを送れません。管理者に確認してください" });
+  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden", hint: "応募者へのメールは、採用担当・人事・経営者だけが送れます" });
   const sb = admin();
   try {
     if (req.method === "GET") {
@@ -62,7 +62,8 @@ export default async function handler(req, res) {
     const hint = dbSetupHint(e, SQL);
     if (hint) return json(res, 503, { error: "not_ready", message: hint });
     console.error("[hr/applicants/mail]", e?.message || e);
-    return json(res, 500, { error: "applicant_mail_failed" });
+    return json(res, 500, { error: "applicant_mail_failed",
+      hint: "サーバーで想定外のエラーが起きました。下の「送ったメール」で送れたかどうかを確認し、時間をおいてもう一度お試しください" });
   }
   return methodNotAllowed(res, ["GET", "POST"]);
 }
@@ -91,12 +92,22 @@ async function valuesFor(sb, ctx, a, purpose) {
   return mailValues({ applicant: a, purpose, companyName: tenant?.name, ownerName, senderName: ctx.employee?.display_name });
 }
 
+// 送れない理由は、担当者向けの言葉（reasons）と、管理者向けの詳細（systemReason：環境変数名など）を分けて返す。
+// メール未登録と送信設定の不足が同時にあるときは、両方を返す（片方だけ直して、まだ送れない、を防ぐ）
 function configView(a) {
   const cfg = mailConfig("recruiting");
   const hasEmail = isEmail(a.email);
+  const reasons = [];
+  if (!a.email) reasons.push({ key: "no_email", text: "応募者のメールアドレスが登録されていません。下の欄から登録できます" });
+  else if (!hasEmail) reasons.push({ key: "invalid_email", text: "応募者のメールアドレスの形式が正しくありません。下の欄から直せます" });
+  if (!cfg.configured) reasons.push({ key: "not_configured", text: "このシステムのメール送信の設定がまだ完了していません。管理者に連絡してください" });
   return {
     configured: cfg.configured && hasEmail,
-    reason: !hasEmail ? "応募者のメールアドレスが登録されていません" : cfg.reason,
+    hasEmail, systemConfigured: !!cfg.configured,
+    reasons,
+    // 管理者向けの詳細（値そのものは出さない。設定の名前だけ）
+    systemReason: cfg.configured ? null : cfg.reason,
+    reason: reasons.map((r) => r.text).join("／") || null,
     from: cfg.from || null, replyTo: cfg.replyTo || null,
   };
 }
@@ -143,7 +154,7 @@ async function send(req, res, sb, ctx, user) {
 
   const a = await loadApplicant(sb, ctx, b?.id);
   if (!a) return json(res, 404, { error: "not_found" });
-  if (!isEmail(a.email)) return json(res, 400, { error: "no_email", hint: "応募者のメールアドレスが登録されていません" });
+  if (!isEmail(a.email)) return json(res, 400, { error: "no_email", hint: "応募者のメールアドレスが登録されていない（または形式が正しくない）ため送れません。送信画面の宛先欄から登録してください" });
 
   const t = b?.templateId ? await must(sb.from("gw_hr_mail_templates").select(TPL_FIELDS)
     .eq("id", String(b.templateId)).eq("tenant_id", ctx.tenantId).maybeSingle()) : null;
@@ -159,7 +170,8 @@ async function send(req, res, sb, ctx, user) {
   if (problems.length) return json(res, 400, { error: "cannot_send", hint: problems[0], problems });
 
   const cfg = mailConfig("recruiting");
-  if (!cfg.configured) return json(res, 409, { error: "mail_not_configured", hint: `メール送信の設定がありません（${cfg.reason}）` });
+  if (!cfg.configured) return json(res, 409, { error: "mail_not_configured",
+    hint: "このシステムのメール送信の設定がまだ完了していません。管理者に連絡してください", systemReason: cfg.reason });
 
   // 先に「送信中」で記録する（同じ鍵の同時の2回目は、一意の索引で入れられない＝送らない）
   const { data: row, error: insErr } = await sb.from("gw_hr_mail_sends").insert({
