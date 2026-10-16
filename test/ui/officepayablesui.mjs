@@ -121,7 +121,8 @@ console.log("\n=== 2タブ：既定は「支払管理」。「案件別」には
   check(!calls.some((c) => /^GET \/api\/office(\?|$)/.test(c)), "既定の表示では、案件別のデータ（/api/office）を取りにいかない");
   check((await texts(page, "#cards .bl-card .lb")).join("|") === "未確認|支払予定|7日以内|今日支払|支払期限超過|支払済み|未仕訳|MF未出力", `サマリーカード8枚（いま ${(await texts(page, "#cards .bl-card .lb")).join("|")}）`);
   await page.locator("#tab-cases").click();
-  await page.waitForSelector("#cs-rows tr");
+  // 最初から「読み込み中…」の行があるので、行ではなく中身が届くのを待つ
+  await page.waitForFunction(() => /顧客A社/.test(document.querySelector("#cs-rows")?.innerText || ""));
   check(await page.locator("#pane-cases").isVisible() && await page.locator("#pane-pay").isHidden(), "案件別に切り替わる");
   check((await texts(page, "#pane-cases thead th")).join("|") === "客先|要員|売上請求|仕入請求（BP）|支払|", "案件別の表は、これまでと同じ列");
   check((await page.locator("#cs-rows").innerText()).includes("顧客A社") && (await page.locator("#cs-rows").innerText()).includes("田中 太郎"), "案件別に、客先・要員が出る");
@@ -199,7 +200,8 @@ console.log("\n=== 請求書を登録：PDF・AI読取（候補→確認→登�
     check(labels.some((t) => t.startsWith(l)), `入力項目：${l}`);
   }
   await page.selectOption("#f-vendorId", vid);
-  await page.waitForFunction(() => /支払先マスタから自動計算/.test(document.querySelector("#f-paymentDueOn")?.closest("label")?.innerText || ""));
+  // 既定の案内文にも「支払先マスタから自動計算」が入っているので、計算結果の文言（〜で登録します）を待つ
+  await page.waitForFunction(() => /で登録します|自動計算できません/.test(document.querySelector("#f-paymentDueOn")?.closest("label")?.innerText || ""));
   const hint = await page.locator("#f-paymentDueOn").locator("xpath=ancestor::label").innerText();
   check(/2026\/11\/30/.test(hint) && /月末締め翌月末払い/.test(hint), `支払先を選ぶと、マスタから自動計算した支払期日が見える（${hint.replace(/\s+/g, " ").slice(-60)}）`);
   // AI 読取：ファイルを置く → 候補が黄色で入る → 確認するまで登録できない

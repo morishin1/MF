@@ -135,7 +135,8 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   await page.waitForTimeout(400);
   const modal = page.locator("#action-root .hr-modal");
   check((await modal.locator("h2").innerText()).includes("業務委託オファーを作成"), "見出し：業務委託オファーを作成");
-  const strip = (xs) => xs.map((s) => s.replace(/\s*\*$/, "").trim());
+  // 項目名の後ろの「*」（必須）と「確認推奨」の印（#125）は除いて比べる
+  const strip = (xs) => xs.map((s) => s.replace(/\s*確認推奨\s*$/, "").replace(/\s*\*$/, "").trim());
   const basic = strip(await modal.locator("#of-fields label").allInnerTexts());
   check(basic.join("/") === "業務内容/報酬/契約開始日/稼働目安/回答期限", `通常表示（${basic.join("/")}）`);
   // 閉じた詳細設定の中は、見えていない（textContent で読む）
@@ -188,7 +189,7 @@ console.log("\n=== あとから採用区分を選ぶ（正社員・幹部候補�
   check(state.calls.some(([k, b]) => k === "applicant" && b.offerType === "executive_employee"), "区分が保存される");
   const modal = page.locator("#action-root .hr-modal");
   check((await modal.locator("h2").innerText()).includes("内定通知を作成"), "続けて「内定通知を作成」");
-  const labels = (await modal.locator("#of-fields label").allInnerTexts()).map((s) => s.replace(/\s*\*$/, "").trim()).join("/");
+  const labels = (await modal.locator("#of-fields label").allInnerTexts()).map((s) => s.replace(/\s*確認推奨\s*$/, "").replace(/\s*\*$/, "").trim()).join("/");
   check(labels === "職種/給与/入社予定日/勤務地/回答期限", `正社員の通常表示（${labels}）`);
   const more = (await modal.locator("#of-more-fields label").allTextContents()).join("/");
   for (const l of ["役職", "試用期間", "勤務時間", "インセンティブ", "その他条件", "業務内容"]) check(more.includes(l), `正社員の詳細設定：${l}`);
@@ -208,7 +209,8 @@ console.log("\n=== 給与を見られない人（採用担当） ===");
   await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
   await page.waitForTimeout(400);
   const modal = page.locator("#action-root .hr-modal");
-  const labels = (await modal.locator("#of-fields label, #of-more-fields label").allTextContents()).join("/");
+  // 「給与の締日・支払日」（#125）は金額ではないので出してよい。金額・区分・インセンティブの欄だけを見る
+  const labels = (await modal.locator("#of-fields label, #of-more-fields label").allTextContents()).filter((l) => !l.startsWith("給与の締日")).join("/");
   check(!labels.includes("給与") && !labels.includes("インセンティブ"), "給与・インセンティブの欄を出さない");
   check(await modal.locator('[data-field="pay"]').count() === 0, "報酬のボタンも出さない");
   check((await modal.innerText()).includes("権限のある方が入力・確認します"), "誰が入れるかを案内");
