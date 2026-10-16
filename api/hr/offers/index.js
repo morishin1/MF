@@ -677,12 +677,14 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
   try {
     if (file === "offer" || file === "offerPreview") {
       const { applicant, company } = await loadSendContext(sb, ctx, offer);
-      const built = file === "offerPreview" && !offer.sent_at
+      // 送付前は必ずプレビューだけ（Storageへ置かない）。送付済みの版だけ保存版を返す。
+      const preview = file === "offerPreview" || !offer.sent_at;
+      const built = preview
         ? await buildOfferLetterPdf(offer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) })
         : await ensureOfferLetterPdf(offer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
-      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: file === "offerPreview" ? "hr.offer_letter_preview" : "hr.offer_pdf_download",
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: preview ? "hr.offer_letter_preview" : "hr.offer_pdf_download",
         target: `hr_offer:${offer.id}`, detail: { file: "offer", version: offer.version } });
-      return sendPdf(res, built.bytes, `${file === "offerPreview" ? "確認用_" : ""}${pdfFileName(built.title, offer.version)}`);
+      return sendPdf(res, built.bytes, `${preview ? "確認用_" : ""}${pdfFileName(built.title, offer.version)}`);
     }
     if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
     if (!noticeTitleOf(offer)) return json(res, 404, { error: "no_notice", hint: "区分の無い合格通知には条件通知書がありません" });
