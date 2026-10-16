@@ -37,7 +37,7 @@ import { notify } from "../../../lib/notify.js";
 import { sha256, TOKEN_RE, shapePublicOffer, decisionMakerEmployeeIds } from "../../../lib/hr.js";
 import { attachPay } from "../../../lib/hr-pay.js";
 import { offerTypeOf, AGREEMENT } from "../../../lib/hr-offer-types.js";
-import { offerDocsReady, offerLetterPathOf, offerLetterTitleOf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName } from "../../../lib/hr-offer-docs.js";
+import { offerDocsReady, offerLetterTitleOf, ensureOfferLetterPdf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName } from "../../../lib/hr-offer-docs.js";
 import { ipOf, uaOf } from "../../../lib/sign-audit.js";
 
 // 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
@@ -155,13 +155,17 @@ async function file(req, res) {
   const sb = admin();
   const found = await findByToken(sb, q.get("token") || "");
   if (found.deny) return json(res, found.status || 404, found.deny);
-  const { offer, applicant } = found;
+  const { offer, applicant, tenant, recruiter } = found;
   try {
     if (kind === "offer") {
       if (!offer.sent_at || !offerTypeOf(offer.offer_type)) return json(res, 404, { error: "no_file", hint: "採用通知PDFはありません。採用担当までお問い合わせください。" });
-      const bytes = await readPdf(offerLetterPathOf(offer));
+      // 新機能導入前に送った版は保存PDFが無いことがあるため、その場合だけ送付済みの不変な版から補完する。
+      const built = await ensureOfferLetterPdf(offer, {
+        candidateName: applicant.name, company: tenant?.name || "",
+        issuerName: recruiter?.display_name || "採用担当", contactEmail: recruiter?.email || null,
+      });
       await gwLog({ tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_pdf_saved", target: `hr_offer:${offer.id}`, detail: { file: kind } });
-      return sendPdf(res, bytes, pdfFileName(offerLetterTitleOf(offer), offer.version));
+      return sendPdf(res, built.bytes, pdfFileName(offerLetterTitleOf(offer), offer.version));
     }
     if (!offerDocsReady(offer) || !offer.notice_pdf_path) return json(res, 404, { error: "no_file", hint: "PDFはありません。採用担当までお問い合わせください。" });
     if (kind === "accepted") {
