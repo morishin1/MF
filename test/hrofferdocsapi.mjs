@@ -27,7 +27,9 @@ process.env.PUBLIC_BASE_URL = "https://gw.example.test";
 
 const DOC_COLS = ["notice_title", "notice_pdf_path", "notice_pdf_sha256", "accept_name", "accept_email", "accept_ip", "accept_ua",
   "accept_text", "accepted_pdf_path", "accepted_pdf_sha256", "legalsign_url", "formal_sent_at", "formal_sent_by", "formal_signed_at", "formal_signed_by"];
+const OFFER_PDF_COLS = ["offer_title", "offer_pdf_path", "offer_pdf_sha256"];
 let docsOn = true;   // db/132 が適用済みの DB か（false＝列が無い）
+let h137On = false;  // db/137 のオファー通知PDF列
 let h133On = false;  // db/133 が適用済みの DB か（正式契約の要否・Office への引き渡しの列）
 const H133_COLS = ["formal_contract_required", "handoff_at", "handoff_by"];
 const mem = createMemDb({
@@ -35,6 +37,7 @@ const mem = createMemDb({
     gw_hr_mail_sends: { unique: [["tenant_id", "request_key"]], required: ["tenant_id", "to_email", "subject", "body", "request_key"] },
     gw_hr_offers: { defaults: () => ({
       ...(docsOn ? Object.fromEntries(DOC_COLS.map((c) => [c, null])) : {}),
+      ...(h137On ? Object.fromEntries(OFFER_PDF_COLS.map((c) => [c, null])) : {}),
       ...(h133On ? Object.fromEntries(H133_COLS.map((c) => [c, null])) : {}),
     }) },
   },
@@ -110,8 +113,8 @@ const ok = async (name, fn) => {
 };
 
 const DUE = T.defaultRespondBy();
-function setup(offerType = "training", extra = {}, { docs = true, h133 = false } = {}) {
-  mem.reset(); logged.length = 0; sent.length = 0; notified.length = 0; mailMode = "sent"; who = OWNER; docsOn = docs; h133On = h133;
+function setup(offerType = "training", extra = {}, { docs = true, h137 = false, h133 = false } = {}) {
+  mem.reset(); logged.length = 0; sent.length = 0; notified.length = 0; mailMode = "sent"; who = OWNER; docsOn = docs; h137On = h137; h133On = h133;
   delete process.env.LEGALSIGN_ALLOWED_HOSTS;
   mem.rows.tenants = [{ id: "t1", name: "株式会社エイト" }];
   mem.rows.gw_employees = [
@@ -225,6 +228,36 @@ await ok("育成の報酬対象は給与権限が無い人向けの警告から�
   assert.ok(!visible.includes("報酬の対象"), JSON.stringify(visible));
   const owner = T.documentWarnings("training", training, { salary: true });
   assert.ok(owner.includes("報酬の対象"), JSON.stringify(owner));
+});
+
+await ok("db/137：オファー通知書と条件通知書を別PDFでプレビュー・保存・2点添付する", async () => {
+  setup("training", {}, { docs: true, h137: true });
+  const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" } });
+  assert.equal(made.statusCode, 200, JSON.stringify(made.body));
+  const id = made.body.offer.id;
+  const d = (await sendDraft(id)).body;
+  assert.deepEqual([d.offerLetter.ready, d.offerLetter.title, d.offerLetter.stored], [true, "育成参加決定通知書", false]);
+  assert.deepEqual([d.notice.ready, d.notice.title, d.notice.stored], [true, "育成参加条件通知書", false]);
+  assert.ok(d.body.includes("「育成参加決定通知書」「育成参加条件通知書」（PDF）を添付しています"), d.body);
+
+  const p1 = await hrFile(id, "previewOffer");
+  const p2 = await hrFile(id, "preview");
+  assert.equal(p1.statusCode, 200); assert.equal(p2.statusCode, 200);
+  assert.equal(mem.storageFiles.size, 0, "プレビューは保存しない");
+
+  const s = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  assert.equal(s.statusCode, 200, JSON.stringify(s.body));
+  assert.equal(sent.at(-1).attachments.length, 2, "オファー通知書＋条件通知書の2点");
+  const row = offerRow();
+  assert.ok(row.offer_pdf_path && row.offer_pdf_sha256 && row.offer_title === "育成参加決定通知書");
+  assert.ok(row.notice_pdf_path && row.notice_pdf_sha256 && row.notice_title === "育成参加条件通知書");
+  assert.equal(mem.storageFiles.size, 2, "別ファイルとして2点保存");
+  assert.equal((await hrFile(id, "offer")).statusCode, 200);
+  const token = tokenIn(sent.at(-1).text);
+  const v = await viewPublic(token);
+  assert.equal(v.body.offerPdf, true);
+  assert.equal(v.body.offerTitle, "育成参加決定通知書");
+  assert.equal((await pubFile(token, "offer")).statusCode, 200);
 });
 
 await ok("送る前：下書きに書類名と添付の案内。プレビューの PDF は作るだけで置かない（db/132 の列も入れない）", async () => {
