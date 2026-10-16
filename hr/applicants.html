@@ -3170,6 +3170,8 @@ ${url}${materialText}
   function offerFieldHtml(f, v) {
     const id = `of-f-${f.key}`;
     const req = f.required ? ` <span style="color:#b3261e;">*</span>` : "";
+    const recommended = f.documentRecommended && !f.required
+      ? ` <span style="font-size:10px;color:#7d5a00;background:#fbf1d6;border-radius:999px;padding:1px 6px;">確認推奨</span>` : "";
     const unit = f.kind === "number" && f.unit ? `（${esc(f.unit)}）` : "";
     const auto = f.auto || f.key === "trainingPeriod";
     let ctl;
@@ -3198,7 +3200,7 @@ ${url}${materialText}
         placeholder="${esc(f.placeholder || (auto ? "自動で入ります" : ""))}"${watch}>`;
     }
     return `<div class="${f.kind === "textarea" ? "wide" : ""}" data-field="${esc(f.key)}">
-      <label for="${f.presets ? `${id}-pick` : id}">${esc(f.label)}${unit}${req}</label>${ctl}</div>`;
+      <label for="${f.presets ? `${id}-pick` : id}">${esc(f.label)}${unit}${req}${recommended}</label>${ctl}</div>`;
   }
 
   /** 報酬：区分のボタン（[なし][時給][月額] など）＋金額。パート・アルバイトは時給だけ（区分を選ばせない） */
@@ -3443,6 +3445,7 @@ ${url}${materialText}
     const row = (x) => `<dt>${esc(x.label)}</dt><dd>${esc(x.value)}</dd>`;
     const waitingSend = a.status === "offer_send_pending" && !d.canSend;   // 送った結果が分からない・手で送った途中
     const notice = d.notice?.ready ? d.notice : null;
+    const docWarnings = Array.isArray(notice?.warnings) ? notice.warnings : [];
     if (el("sm-title")) el("sm-title").textContent = notice ? `${notice.title}のプレビュー` : "内容を確認して送信";
     el("sm-box").innerHTML = `
       <p class="hr-sub" style="margin:0 0 10px;">${notice && !notice.stored
@@ -3460,6 +3463,11 @@ ${url}${materialText}
       ${notice ? `<div class="hr-of-auto" id="sm-doc-check" style="margin:8px 0 0;padding:8px 10px;background:#f6f6f2;border-radius:8px;">
         送付前に、<b>宛名・条件／報酬・回答期限・承諾後の流れ・問い合わせ先</b>をPDFで確認してください。
         登録済みの会社印がある場合は、PDFに会社印も表示します。
+      </div>` : ""}
+      ${docWarnings.length ? `<div class="banner warn" id="sm-doc-warnings" style="margin:8px 0 0;display:block;">
+        <b>通知書の確認推奨項目に未入力があります</b>
+        <div style="margin-top:4px;">${esc(docWarnings.join("・"))}</div>
+        <div style="font-size:11.5px;margin-top:4px;">送信はできますが、本人への説明不足を防ぐため、必要な項目は［条件を修正］から入力してください。</div>
       </div>` : ""}
       <div class="hr-of-preview" id="sm-preview" style="margin-top:${notice ? 10 : 0}px;">
         <div class="hd"><span class="hr-pill" style="background:#1b2440;color:#fff;">${esc(o.offerName || "合格通知")}</span>
