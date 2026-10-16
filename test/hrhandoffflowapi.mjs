@@ -246,14 +246,15 @@ await ok("Office のキューの中身：HRで正式契約まで完了（署名�
   assert.equal(q.ready, true);
   assert.equal(q.rows.length, 1);
   const row = q.rows[0];
-  assert.deepEqual([row.applicantId, row.name, row.offerTypeLabel, row.joinDate, row.formalRequired, row.handoffByName],
-    ["a1", "高木 沙綾", "業務委託", "2026-11-01", true, "社長 一郎"]);
+  assert.deepEqual([row.applicantId, row.name, row.email, row.phone, row.offerTypeLabel, row.joinDate, row.formalRequired, row.handoffByName],
+    ["a1", "高木 沙綾", "candidate@example.test", null, "業務委託", "2026-11-01", true, "社長 一郎"]);
   assert.ok(row.formalSignedAt && row.handoffAt && row.acceptedAt);
   assert.deepEqual(row.hire.steps.map((s) => s.key), ["docs", "account", "orientation", "complete"], "Office の流れは 入社書類 → アカウント・端末 → オリエンテーション → 入社完了");
   assert.equal(row.hire.steps[0].state, "current");
   assert.deepEqual([row.hire.hr.label, row.hire.hr.detail], ["HRで正式契約まで完了", "正式契約：署名済み"]);
   const text = JSON.stringify(q);
-  for (const secret of ["200000", "candidate@example.test", "sign.example.test", "203.0.113.5", "u-owner"]) assert.equal(text.includes(secret), false, `${secret} を出さない`);
+  for (const secret of ["200000", "sign.example.test", "203.0.113.5", "u-owner"]) assert.equal(text.includes(secret), false, `${secret} を出さない`);
+  assert.ok(text.includes("candidate@example.test"), "Office へ本人メールを引き継ぐ");
 });
 
 await ok("引き渡すと誰が・いつが残る（handoff_by / handoff_at）。二度押しても変わらない（記録は1回だけ・通知も1回）", async () => {
