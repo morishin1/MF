@@ -157,6 +157,53 @@ await ok("書類名は区分ごと（労働条件通知書／育成参加条件�
   assert.equal(t(null), null, "区分の無い合格通知には作らない");
 });
 
+await ok("通知書本文は、目的・条件・報酬・評価・回答・承諾後・変更/辞退・問い合わせまで丁寧に案内する", () => {
+  const training = {
+    id: "o-doc", version: 1, offer_type: "training", join_date: "2026-11-01",
+    wage_type: "時給", wage_amount: 1500, respond_by: DUE,
+    offer_terms: { course: "無限道場", trainingPeriod: "3か月", midReviewOn: "2026-12-17", finalReviewOn: "2027-01-31" },
+    formal_contract_required: false,
+  };
+  const body = D.noticeBody(training, {
+    candidateName: "テスト 候補者", company: "株式会社エイト",
+    issuerName: "採用 花子", contactEmail: "hr@example.test",
+  });
+  for (const phrase of [
+    "■ 本書について", "育成プログラムへの参加にあたり", "■ 主な条件", "■ 報酬・給与",
+    "■ 評価と今後の進め方", "中間評価および最終評価", "■ 回答期限・承諾方法",
+    "■ 承諾後の流れ", "■ 変更・辞退について", "■ 発行元・お問い合わせ",
+    "会社名：株式会社エイト", "担当者：採用 花子", "メール：hr@example.test",
+  ]) assert.ok(body.includes(phrase), phrase);
+  assert.ok(body.includes("条件承諾後、育成参加の手続きへ進みます。"), body);
+  assert.ok(body.includes("正式な契約が必要な場合は別途契約手続きを行います。"), body);
+});
+
+await ok("業務委託の通知書は、正式契約と支払条件の確認を誤解なく案内する", () => {
+  const contractor = {
+    id: "o-doc2", version: 1, offer_type: "contractor", join_date: "2026-11-01",
+    wage_type: "月額", wage_amount: 200000, respond_by: DUE,
+    offer_terms: { duties: "営業活動および顧客フォロー", paymentTerms: "月末締め翌月末払い" },
+    formal_contract_required: true,
+  };
+  const body = D.noticeBody(contractor, { candidateName: "委託 太郎", company: "株式会社エイト" });
+  assert.ok(body.includes("業務委託としてのご参画にあたり"), body);
+  assert.ok(body.includes("消費税、経費、請求方法、締日・支払日"), body);
+  assert.ok(body.includes("正式な契約は、承諾のあと別途（電子契約）締結します。"), body);
+  assert.ok(!body.includes("■ 評価と今後の進め方"), body);
+});
+
+await ok("オファーメールも、承諾前の質問・変更相談と承諾後の流れを案内する", () => {
+  const offer = {
+    offer_type: "training", employment_type: "育成枠", respond_by: DUE,
+    formal_contract_required: false,
+  };
+  const m = T.offerMail(offer, { name: "テスト 候補者", company: "株式会社エイト", attachment: "育成参加条件通知書" });
+  assert.ok(m.body.includes("専用ページにも同じ条件を表示しています"), m.body);
+  assert.ok(m.body.includes("条件についてご不明な点や変更のご希望"), m.body);
+  assert.ok(m.body.includes("承諾前にこのメールへご返信ください"), m.body);
+  assert.ok(m.body.includes("承諾後の流れ：条件承諾後、育成参加の手続きへ進みます。"), m.body);
+});
+
 await ok("送る前：下書きに書類名と添付の案内。プレビューの PDF は作るだけで置かない（db/132 の列も入れない）", async () => {
   setup();
   const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" } });
