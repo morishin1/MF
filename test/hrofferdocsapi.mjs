@@ -204,6 +204,29 @@ await ok("オファーメールも、承諾前の質問・変更相談と承諾�
   assert.ok(m.body.includes("承諾後の流れ：条件承諾後、育成参加の手続きへ進みます。"), m.body);
 });
 
+await ok("通知書の確認推奨項目は、不足を警告するが required とは分けて扱う", () => {
+  const executive = {
+    offer_type: "executive_employee", job_title: "PM", join_date: "2026-11-01",
+    work_location: "東京都内", wage_type: "月給", wage_amount: 300000,
+    offer_terms: { workHours: "9:00〜18:00", duties: "プロジェクト管理" },
+  };
+  const w = T.documentWarnings("executive_employee", executive);
+  assert.ok(w.includes("休憩") && w.includes("休日・休暇") && w.includes("時間外労働"), JSON.stringify(w));
+  assert.ok(w.includes("給与の締日・支払日") && w.includes("勤務地の変更の範囲") && w.includes("業務内容の変更の範囲"), JSON.stringify(w));
+  assert.equal(T.missingRequired("executive_employee", executive).length, 0, "確認推奨は必須入力とは別");
+});
+
+await ok("育成の報酬対象は給与権限が無い人向けの警告からも外す", () => {
+  const training = {
+    offer_type: "training", join_date: "2026-11-01",
+    offer_terms: { course: "無限道場", implementationMethod: "オンライン", trainingContent: "AI研修", evaluationMethod: "課題・理解度" },
+  };
+  const visible = T.documentWarnings("training", training, { salary: false });
+  assert.ok(!visible.includes("報酬の対象"), JSON.stringify(visible));
+  const owner = T.documentWarnings("training", training, { salary: true });
+  assert.ok(owner.includes("報酬の対象"), JSON.stringify(owner));
+});
+
 await ok("送る前：下書きに書類名と添付の案内。プレビューの PDF は作るだけで置かない（db/132 の列も入れない）", async () => {
   setup();
   const made = await createOffer({ applicantId: "a1", respondBy: DUE, joinDate: "2026-11-01", wageType: "時給", wageAmount: 1500, offerTerms: { course: "無限道場" } });
