@@ -37,7 +37,7 @@ import { notify } from "../../../lib/notify.js";
 import { sha256, TOKEN_RE, shapePublicOffer, decisionMakerEmployeeIds } from "../../../lib/hr.js";
 import { attachPay } from "../../../lib/hr-pay.js";
 import { offerTypeOf, AGREEMENT } from "../../../lib/hr-offer-types.js";
-import { offerDocsReady, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName } from "../../../lib/hr-offer-docs.js";
+import { offerDocsReady, offerLetterReady, offerTitleOf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName } from "../../../lib/hr-offer-docs.js";
 import { ipOf, uaOf } from "../../../lib/sign-audit.js";
 
 // 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
@@ -129,29 +129,42 @@ async function view(req, res) {
   return json(res, 200, { ...shapePublicOffer(offer, applicant, tenant, recruiter), ...docsView(offer) });
 }
 
-/** 条件通知書PDF・承諾済みPDF・正式契約（LegalSign）の案内（db/132 が無ければ出さない） */
+/** オファー通知PDF・条件通知書PDF・承諾済みPDF・正式契約の案内 */
 function docsView(offer) {
-  if (!offerDocsReady(offer)) return { noticePdf: false, acceptedPdf: false, formal: null };
+  const docs132 = offerDocsReady(offer);
   return {
-    noticePdf: Boolean(offer.notice_pdf_path),
-    acceptedPdf: Boolean(offer.accepted_at && offer.notice_pdf_path),
+    offerPdf: offerLetterReady(offer) && Boolean(offer.offer_pdf_path),
+    offerTitle: offer.offer_title || offerTitleOf(offer) || null,
+    noticePdf: docs132 && Boolean(offer.notice_pdf_path),
+    acceptedPdf: docs132 && Boolean(offer.accepted_at && offer.notice_pdf_path),
     // 正式契約の URL は、HR が本人へ案内したあと・正式契約済みになる前だけ見せる
-    formal: offer.accepted_at ? {
+    formal: docs132 && offer.accepted_at ? {
       url: offer.formal_sent_at && !offer.formal_signed_at ? offer.legalsign_url : null,
       sent: Boolean(offer.formal_sent_at), signed: Boolean(offer.formal_signed_at),
     } : null,
   };
 }
 
-/** 本人が PDF を保存する（条件通知書・承諾済み）。閲覧の記録・状態は変えない */
+/** 本人が PDF を保存する（オファー通知・条件通知書・承諾済み）。閲覧の記録・状態は変えない */
 async function file(req, res) {
   const q = new URL(req.url, "http://localhost").searchParams;
   const kind = q.get("file");
-  if (!["notice", "accepted"].includes(kind)) return json(res, 400, { error: "invalid_query" });
+  if (!["offer", "notice", "accepted"].includes(kind)) return json(res, 400, { error: "invalid_query" });
   const sb = admin();
   const found = await findByToken(sb, q.get("token") || "");
   if (found.deny) return json(res, found.status || 404, found.deny);
   const { offer, applicant } = found;
+  if (kind === "offer") {
+    if (!offerLetterReady(offer) || !offer.offer_pdf_path) return json(res, 404, { error: "no_file", hint: "オファー通知PDFはありません。採用担当までお問い合わせください。" });
+    try {
+      const bytes = await readPdf(offer.offer_pdf_path);
+      await gwLog({ tenantId: applicant.tenant_id, actorId: null, action: "hr.offer_pdf_saved", target: `hr_offer:${offer.id}`, detail: { file: kind } });
+      return sendPdf(res, bytes, pdfFileName(offer.offer_title || offerTitleOf(offer), offer.version));
+    } catch (e) {
+      console.error("[hr/offers/public] offer pdf", e?.message || e);
+      return json(res, 500, { error: "pdf_failed", hint: "PDFを用意できませんでした。時間をおいてお試しください。" });
+    }
+  }
   if (!offerDocsReady(offer) || !offer.notice_pdf_path) return json(res, 404, { error: "no_file", hint: "PDFはありません。採用担当までお問い合わせください。" });
   try {
     if (kind === "accepted") {
