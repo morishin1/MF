@@ -111,7 +111,7 @@ await ok("引き渡された情報：氏名・メール・電話・職種・雇�
   assert.deepEqual([f.formalRequired, f.formalSignedAt, f.handoffAt, f.handoffByName], [true, "2026-10-11T08:00:00Z", HAND, "人事 花子"]);
   assert.equal(f.noticeConfirmedAt, "2026-10-09T23:00:00Z", "通知書の確認＝本人が最初に開いた日時");
   const text = JSON.stringify(f);
-  for (const s of ["480000", "203.0.113.9", "UA", "x@example.test", "SECRET", "営業", "saya@", "090-0000", "sign.example", "u-hr"]) assert.equal(text.includes(s), false, `${s} を返さない`);
+  for (const s of ["480000", "203.0.113.9", "UA", "x@example.test", "SECRET", "営業", "sign.example", "u-hr"]) assert.equal(text.includes(s), false, `${s} を返さない`);
 });
 
 await ok("職種・雇用区分はオファーに無ければ応募者の値。通知書の確認日時が無ければ承諾の日時", async () => {
