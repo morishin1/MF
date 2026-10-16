@@ -254,7 +254,7 @@ await ok("送る前：下書きに書類名と添付の案内。プレビュー�
   assert.equal(offerRow().notice_pdf_path, null);
 });
 
-await ok("［メールでオファー送信］：確定した版から PDF を作って置き、パス・SHA-256・書類名を記録し、メールに添付する", async () => {
+await ok("［メールでオファー送信］：採用決定通知PDFと条件通知書PDFを別々に作って保存・添付する", async () => {
   setup();
   const { id, r } = await sendTraining();
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
@@ -265,10 +265,16 @@ await ok("［メールでオファー送信］：確定した版から PDF を�
   assert.ok(bytes, "Storage（hr）に置いた");
   assert.equal(o.notice_pdf_sha256, pdfSha(bytes), "記録のハッシュ＝置いたPDFのハッシュ");
   const att = sent[0].attachments;
-  assert.equal(att.length, 1);
-  assert.deepEqual([att[0].filename, att[0].contentType], ["育成参加条件通知書_第1版.pdf", "application/pdf"]);
-  assert.equal(pdfSha(att[0].content), o.notice_pdf_sha256, "添付したのは、記録した PDF そのもの");
-  assert.ok(tl().some((t) => t.event_key === "offer_sent" && t.detail.includes("育成参加条件通知書（PDF）添付")));
+  assert.equal(att.length, 2);
+  const offerAtt = att.find((x) => x.filename.includes("育成参加決定通知書"));
+  const noticeAtt = att.find((x) => x.filename.includes("育成参加条件通知書"));
+  assert.ok(offerAtt && noticeAtt, JSON.stringify(att.map((x) => x.filename)));
+  assert.equal(offerAtt.contentType, "application/pdf");
+  assert.equal(noticeAtt.contentType, "application/pdf");
+  assert.equal(pdfSha(noticeAtt.content), o.notice_pdf_sha256, "条件通知書の添付＝記録した PDF");
+  assert.ok(stored(`t1/offers/a1/${id}/offer-v1.pdf`), "採用決定通知PDFもStorageに保存");
+  assert.equal(pdfSha(offerAtt.content), pdfSha(stored(`t1/offers/a1/${id}/offer-v1.pdf`)), "採用決定通知も保存版と同じ");
+  assert.ok(tl().some((t) => t.event_key === "offer_sent" && t.detail.includes("育成参加決定通知書（PDF）添付") && t.detail.includes("育成参加条件通知書（PDF）添付")));
   assert.ok(mem.rows.gw_hr_mail_sends[0].template_name.includes("条件通知書PDF添付"));
   const n = await hrFile(id, "notice");
   assert.equal(pdfSha(n.raw), o.notice_pdf_sha256, "HR が開くのも同じ PDF");
@@ -286,8 +292,10 @@ await ok("送れなかったあとの送り直しは、同じ版の同じ PDF �
   const again = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
   assert.equal(again.statusCode, 200, JSON.stringify(again.body));
   assert.deepEqual({ path: offerRow().notice_pdf_path, sha: offerRow().notice_pdf_sha256 }, first);
-  assert.equal(pdfSha(sent[1].attachments[0].content), first.sha);
-  assert.equal([...mem.storageFiles.keys()].filter((k) => k.includes("/notice-")).length, 1, "PDF は1つだけ");
+  const noticeAgain = sent[1].attachments.find((x) => x.filename.includes("育成参加条件通知書"));
+  assert.equal(pdfSha(noticeAgain.content), first.sha);
+  assert.equal([...mem.storageFiles.keys()].filter((k) => k.includes("/notice-")).length, 1, "条件通知書PDF は1つだけ");
+  assert.equal([...mem.storageFiles.keys()].filter((k) => /\/offer-v1\.pdf$/.test(k)).length, 1, "採用決定通知PDFも1つだけ");
 });
 
 await ok("条件通知書を作った版は直せない（送った書面と中身をずらさない）", async () => {
@@ -301,10 +309,11 @@ await ok("条件通知書を作った版は直せない（送った書面と中�
   assert.ok(up.body.hint.includes("条件通知書"));
 });
 
-await ok("給与を見られない人は、PDF（給与が入る）を開けない", async () => {
+await ok("給与を見られない人も採用決定通知PDFは開けるが、給与が入る条件通知書・承諾済みPDFは開けない", async () => {
   setup();
   const { id } = await sendTraining();
   who = RECRUITER;
+  assert.equal((await hrFile(id, "offer")).statusCode, 200, "採用決定通知には給与を載せない");
   for (const f of ["preview", "notice", "accepted"]) {
     const r = await hrFile(id, f);
     assert.equal(r.statusCode, 403, f);
@@ -322,6 +331,9 @@ await ok("手で送るとき（URLを発行）も、本人が保存できるよ�
   const link = await patchOffer({ id, action: "issueLink" });
   assert.equal(link.statusCode, 200);
   assert.ok(offerRow().notice_pdf_path, "条件通知書を置いた");
+  assert.ok(stored(`t1/offers/a1/${id}/offer-v1.pdf`), "採用決定通知PDFも置いた");
+  const offerPdf = await pubFile(link.body.token, "offer");
+  assert.equal(offerPdf.statusCode, 200);
   const f = await pubFile(link.body.token, "notice");
   assert.equal(f.statusCode, 200);
   assert.equal(pdfSha(f.raw), offerRow().notice_pdf_sha256);
