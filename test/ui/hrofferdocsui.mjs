@@ -14,7 +14,7 @@
 // 応答は lib/hr.js・lib/hr-offer-types.js・lib/hr-offer-docs.js の本物の関数で組み立てる（文言をテスト側で作らない）
 import { launch, BASE } from "../_browser.mjs";
 import { shapeApplicant, shapePublicOffer, shapeOffer, normalizeApplicant } from "../../lib/hr.js";
-import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG, acceptFactsOf, formalRequiredOf } from "../../lib/hr-offer-types.js";
+import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG, acceptFactsOf, formalRequiredOf, documentWarnings } from "../../lib/hr-offer-types.js";
 import { checkLegalSignUrl, noticeTitleOf } from "../../lib/hr-offer-docs.js";
 
 const br = await launch();
@@ -81,7 +81,7 @@ async function open(st, { width = 1300 } = {}) {
         return send({ offer: shapeOffer(o), items: publicOfferItems(o), to: st.row.email, candidateName: st.row.name,
           subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG,
           mail: { configured: Boolean(st.row.email) && st.mailConfigured, reason: st.row.email ? null : "候補者のメールアドレスが登録されていません" },
-          canSend: true, notice: { ready: true, title, stored: false, salaryVisible: true }, formalRequired: formalRequiredOf(o) });
+          canSend: true, notice: { ready: true, title, stored: false, salaryVisible: true, warnings: documentWarnings(o.offer_type, o) }, formalRequired: formalRequiredOf(o) });
       }
       const b = body(); st.calls.push([b.action, b]);
       if (b.action === "setLegalSign") {
@@ -189,6 +189,11 @@ for (const width of [1300, 390]) {
   check(await page.locator("#sm-email-need").isVisible(), `[${width}] 「本人のメールアドレスが未登録です」`);
   check(await page.locator("#sm-send").count() === 0, `[${width}] 未登録のうちは送れない`);
   check((await page.locator("#sm-notice").innerText()).includes("育成参加条件通知書"), `[${width}] 条件通知書（PDF）を添付する案内`);
+  const docCheck = await page.locator("#sm-doc-check").innerText();
+  check(docCheck.includes("宛名・条件／報酬・回答期限・承諾後の流れ・問い合わせ先"), `[${width}] 送付前にPDFの確認ポイントを明示`);
+  check(docCheck.includes("会社印"), `[${width}] 登録済みの会社印がPDFに出ることを案内`);
+  check(await page.locator("#sm-doc-warnings").isVisible(), `[${width}] 確認推奨項目の未入力を送付前に警告`);
+  check((await page.locator("#sm-doc-warnings").innerText()).includes("実施方法"), `[${width}] 具体的な不足項目名を表示`);
   await page.fill("#sm-email-new", "bad-mail");
   await page.locator("#sm-email-need button", { hasText: "登録して続ける" }).click();
   await page.waitForTimeout(300);
