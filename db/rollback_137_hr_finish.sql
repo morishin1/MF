@@ -29,7 +29,7 @@ create or replace function public.gw_hr_offers_lock_documents()
 returns trigger
 language plpgsql
 set search_path = public
-as $
+as $$
 declare
   c text;
   o jsonb := to_jsonb(old);
@@ -51,7 +51,7 @@ begin
       using errcode = '55000', hint = '本人へ案内した URL は変えられません';
   end if;
   return new;
-end $;
+end $$;
 
 notify pgrst, 'reload schema';
 commit;
