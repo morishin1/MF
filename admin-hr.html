@@ -519,6 +519,8 @@
       <div class="row" data-handoff="${id}" data-next="${esc(nx.key || "")}">
         <div class="who"><b>${esc(r.name)}</b><span class="chip">${esc(r.offerTypeLabel || "")}</span>${r.jobTitle ? `<span class="chip">${esc(r.jobTitle)}</span>` : ""}</div>
         <div class="facts">
+          ${r.email ? `<span data-fact="email">メール：<b>${esc(r.email)}</b></span>` : ""}
+          ${r.phone ? `<span data-fact="phone">電話：<b>${esc(r.phone)}</b></span>` : ""}
           <span class="ok" data-fact="accepted">✓ 条件承諾（${esc(dayOf(r.acceptedAt))}）</span>
           <span data-fact="join">入社予定：${esc(ymdSlash(r.joinDate))}</span>
           ${r.employmentType && !String(r.offerTypeLabel || "").includes(r.employmentType) ? `<span data-fact="etype">${esc(r.employmentType)}</span>` : ""}
@@ -586,14 +588,14 @@
     const c = d.conditionDocs;
     const cond = c ? c.rows.map((r) => {
       if (!r.applicable) return "";
-      const canOpen = r.file && c.docsReady && d.salaryVisible !== false;
+      const canOpen = r.file && (r.file === "offer" || (c.docsReady && d.salaryVisible !== false));
       return `<div class="hd-row" data-cond="${esc(r.key)}" data-state="${esc(r.state)}">
         <span class="nm">${esc(r.label)}</span>
         <span class="st" data-st="${esc(r.state)}">${esc(r.stateLabel)}</span>
         ${r.at ? `<span class="when">${esc(dayOf(r.at))}</span>` : ""}
         ${r.note ? `<span class="when">${esc(r.note)}</span>` : ""}
         ${canOpen ? `<button class="btn btn-secondary btn-sm" data-act="open-cond" onclick="openOfferPdf('${esc(c.offerId)}', '${esc(r.file)}', this)">開く</button>`
-          : r.file && d.salaryVisible === false ? `<span class="when">給与・報酬が入るため、権限のある方が確認します</span>` : ""}
+          : r.file && r.file !== "offer" && d.salaryVisible === false ? `<span class="when">給与・報酬が入るため、権限のある方が確認します</span>` : ""}
       </div>`;
     }).join("") : "";
     return `
@@ -631,7 +633,7 @@
       say(e.hint || e.message || "書類を開けませんでした", true);
     }
   }
-  // 条件通知書・承諾済みPDF。ログインの鍵が要るので fetch で受け取って保存する
+  // 内定/採用通知・条件通知書・承諾済みPDF。ログインの鍵が要るので fetch で受け取って保存する
   async function openOfferPdf(offerId, file, btn) {
     try {
       await KPLayout.busy(btn, "読み込み中…", async () => {
