@@ -53,7 +53,8 @@ import { sendMail, mailConfig, isEmail } from "../../../lib/mail/index.js";
 import { sendProblems, sendOutcome } from "../../../lib/hr-mail-template.js";
 import { publicBaseUrl } from "../../../lib/onboard-guide.js";
 import {
-  offerDocsReady, noticeTitleOf, buildNoticePdf, ensureNoticePdf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName,
+  offerDocsReady, noticeTitleOf, offerLetterTitleOf, buildOfferLetterPdf, buildNoticePdf,
+  ensureOfferLetterPdf, ensureNoticePdf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName,
   checkLegalSignUrl,
 } from "../../../lib/hr-offer-docs.js";
 
@@ -295,7 +296,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
       tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_issue",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version },
     });
-    await noticeForManual(sb, ctx, data);
+    await documentsForManual(sb, ctx, data);
     return json(res, 200, { offer: await shape(ctx, data, salary), token });
   }
 
@@ -533,25 +534,31 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
     });
   }
 
-  // 4) 条件通知書PDF（確定したこの版から作る。db/132 が無い・区分の無い版は PDF なしで、これまでどおり送る）
-  let notice = null;
+  // 4) 採用決定通知PDFと条件通知書PDFを確定する。
+  // 採用決定通知はDB列を増やさず決定的なStorageパスに保存。条件通知書はdb/132の確定列を使う。
+  let offerLetter = null, notice = null;
   try {
     const payOffer = { ...claimed };
     await attachPay(ctx.tenantId, payOffer, "offer");
+    offerLetter = await ensureOfferLetterPdf(payOffer, { candidateName: applicant.name, company, ...noticeMeta(ctx) });
     notice = await ensureNoticePdf(sb, payOffer, { candidateName: applicant.name, company, ...noticeMeta(ctx) });
     if (notice) Object.assign(claimed, { notice_title: notice.title, notice_pdf_path: notice.path, notice_pdf_sha256: notice.sha256 });
   } catch (e) {
-    console.error("[hr/offers] notice pdf", e?.message || e);
+    console.error("[hr/offers] offer documents", e?.message || e);
     await sb.from("gw_hr_offers").update({ sent_at: null }).eq("id", offer.id).eq("tenant_id", ctx.tenantId);
-    await finish({ status: "not_sent", error: "条件通知書PDFを作れませんでした" });
-    return json(res, 500, { error: "notice_failed", hint: "条件通知書PDFを作れませんでした。時間をおいて、もう一度送ってください（内容は確定したままです）" });
+    await finish({ status: "not_sent", error: "採用書類PDFを作れませんでした" });
+    return json(res, 500, { error: "document_failed", hint: "採用書類PDFを作れませんでした。時間をおいて、もう一度送ってください（内容は確定したままです）" });
   }
 
-  // 5) メールを送る（本文の {{オファーURL}} に本人専用URLを入れて。条件通知書PDFを添付）
+  // 5) メールを送る。採用決定通知PDFと条件通知書PDFを別々に添付する。
   const url = offerUrl(req, token);
+  const attachments = [
+    ...(offerLetter ? [{ filename: pdfFileName(offerLetter.title, offer.version), content: offerLetter.bytes, contentType: "application/pdf" }] : []),
+    ...(notice ? [{ filename: pdfFileName(notice.title, offer.version), content: notice.bytes, contentType: "application/pdf" }] : []),
+  ];
   const mail = await sendMail({
     purpose: "recruiting", to: applicant.email, subject, text: text.split(OFFER_URL_TAG).join(url),
-    ...(notice ? { attachments: [{ filename: pdfFileName(notice.title, offer.version), content: notice.bytes, contentType: "application/pdf" }] } : {}),
+    ...(attachments.length ? { attachments } : {}),
   });
   const outcome = sendOutcome(mail);
   const send = await finish({
@@ -572,7 +579,7 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
       .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_sent",
-      label: `${docLabel}をメールで送付`, detail: `第${offer.version}版${notice ? `・${notice.title}（PDF）添付` : ""}　件名：${subject}`, created_by: user.id,
+      label: `${docLabel}をメールで送付`, detail: `第${offer.version}版${offerLetter ? `・${offerLetter.title}（PDF）添付` : ""}${notice ? `・${notice.title}（PDF）添付` : ""}　件名：${subject}`, created_by: user.id,
     });
     return json(res, 200, { status: "sent", offer: await shape(ctx, claimed, salary), send, applicantStatus: "offer_sent" });
   }
@@ -597,16 +604,18 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
 
 // ---- 条件通知書PDF・承諾済みPDF（db/132） ------------------------------------------------
 
-/** 手で送るとき（URL を発行）にも、本人が保存できるよう条件通知書PDFを用意しておく。作れなくても URL の発行は止めない */
-async function noticeForManual(sb, ctx, offer) {
-  if (!offerDocsReady(offer) || !noticeTitleOf(offer) || offer.notice_pdf_path) return;
+/** 手で送るとき（URL を発行）にも、採用決定通知と条件通知書を用意する。PDF作成失敗だけでURL発行は止めない */
+async function documentsForManual(sb, ctx, offer) {
   try {
     const { applicant, company } = await loadSendContext(sb, ctx, offer);
     const payOffer = { ...offer };
     await attachPay(ctx.tenantId, payOffer, "offer");
-    const n = await ensureNoticePdf(sb, payOffer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
-    if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
-  } catch (e) { console.error("[hr/offers] notice pdf (manual)", e?.message || e); }
+    await ensureOfferLetterPdf(payOffer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
+    if (offerDocsReady(offer) && noticeTitleOf(offer) && !offer.notice_pdf_path) {
+      const n = await ensureNoticePdf(sb, payOffer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
+      if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
+    }
+  } catch (e) { console.error("[hr/offers] offer documents (manual)", e?.message || e); }
 }
 
 /**
@@ -622,8 +631,8 @@ async function officeFile(req, res, ctx, user) {
   if (req.method !== "GET" || !canOfficeHr(ctx)) return json(res, 403, { error: "forbidden" });
   const q = new URL(req.url || "/", "http://localhost").searchParams;
   const id = q.get("id"), file = q.get("file");
-  if (!id || !["notice", "accepted"].includes(file)) return json(res, 403, { error: "forbidden" });
-  if (!canSeeSalary(ctx)) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
+  if (!id || !["offer", "notice", "accepted"].includes(file)) return json(res, 403, { error: "forbidden" });
+  if (file !== "offer" && !canSeeSalary(ctx)) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
 
   const sb = admin();
   const { data: offer, error } = await sb.from("gw_hr_offers").select("*").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
@@ -634,15 +643,21 @@ async function officeFile(req, res, ctx, user) {
   if (!handed) {
     return json(res, 403, { error: "not_handed_off", hint: "Office へ引き渡された方の書類だけ、Office から見られます（採用HRで引き渡しを済ませてください）" });
   }
-  const { data: applicant } = await sb.from("gw_hr_applicants").select("id").eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  const { data: applicant } = await sb.from("gw_hr_applicants").select("id, name").eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant) return json(res, 404, { error: "not_found" });
-  if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
-  const path = file === "accepted" ? offer.accepted_pdf_path : offer.notice_pdf_path;
-  if (!path) return json(res, 404, { error: "no_file", hint: file === "accepted" ? "承諾済みPDFはまだありません" : "条件通知書はまだ作っていません" });
+  if (file !== "offer" && !offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+  let path = file === "accepted" ? offer.accepted_pdf_path : file === "notice" ? offer.notice_pdf_path : null;
   try {
-    const bytes = await readPdf(path);
+    let bytes, title, accepted = false;
+    if (file === "offer") {
+      const built = await ensureOfferLetterPdf(offer, { candidateName: applicant.name || "", company: "" });
+      bytes = built.bytes; title = built.title;
+    } else {
+      if (!path) return json(res, 404, { error: "no_file", hint: file === "accepted" ? "承諾済みPDFはまだありません" : "条件通知書はまだ作っていません" });
+      bytes = await readPdf(path); title = offer.notice_title; accepted = file === "accepted";
+    }
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_download", target: `hr_offer:${offer.id}`, detail: { file, via: "office" } });
-    return sendPdf(res, bytes, pdfFileName(offer.notice_title, offer.version, file === "accepted"));
+    return sendPdf(res, bytes, pdfFileName(title, offer.version, accepted));
   } catch (e) {
     console.error("[hr/offers] office pdf", e?.message || e);
     return json(res, 500, { error: "pdf_failed", hint: "PDFを用意できませんでした" });
@@ -656,13 +671,22 @@ async function officeFile(req, res, ctx, user) {
  *   accepted … 承諾済みPDF（条件通知書＋電子承諾記録）。まだ無ければ、承諾の記録から作って置く
  */
 async function offerFile(res, sb, ctx, user, id, file, salary) {
-  if (!id || !["preview", "notice", "accepted"].includes(file)) return json(res, 400, { error: "invalid_query" });
-  if (!salary) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
+  if (!id || !["offer", "offerPreview", "preview", "notice", "accepted"].includes(file)) return json(res, 400, { error: "invalid_query" });
+  if (!["offer", "offerPreview"].includes(file) && !salary) return json(res, 403, { error: "forbidden", hint: "条件通知書には給与・報酬が入るため、権限のある方が確認します" });
   const { data: offer } = await sb.from("gw_hr_offers").select("*").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!offer) return json(res, 404, { error: "not_found" });
-  if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
-  if (!noticeTitleOf(offer)) return json(res, 404, { error: "no_notice", hint: "区分の無い合格通知には条件通知書がありません" });
   try {
+    if (file === "offer" || file === "offerPreview") {
+      const { applicant, company } = await loadSendContext(sb, ctx, offer);
+      const built = file === "offerPreview" && !offer.sent_at
+        ? await buildOfferLetterPdf(offer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) })
+        : await ensureOfferLetterPdf(offer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: file === "offerPreview" ? "hr.offer_letter_preview" : "hr.offer_pdf_download",
+        target: `hr_offer:${offer.id}`, detail: { file: "offer", version: offer.version } });
+      return sendPdf(res, built.bytes, `${file === "offerPreview" ? "確認用_" : ""}${pdfFileName(built.title, offer.version)}`);
+    }
+    if (!offerDocsReady(offer)) return json(res, 503, { error: "not_ready", message: "db/132_hr_offer_documents.sql を Supabase に流してください" });
+    if (!noticeTitleOf(offer)) return json(res, 404, { error: "no_notice", hint: "区分の無い合格通知には条件通知書がありません" });
     if (file === "accepted") {
       const acc = await ensureAcceptedPdf(sb, offer);
       if (!acc) return json(res, 404, { error: "no_file", hint: "承諾済みPDFはまだありません" });
