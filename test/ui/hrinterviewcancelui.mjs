@@ -75,7 +75,7 @@ console.log("\n=== 面談日時の変更 ===");
 
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator(".hr-tabs button", { hasText: "面談" }).click();
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   await page.waitForTimeout(300);
 
   console.log("\n— 予定中の面談には、日時変更・キャンセルのボタンが出る —");
@@ -159,7 +159,7 @@ console.log("\n=== 面談キャンセル ===");
 
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator(".hr-tabs button", { hasText: "面談" }).click();
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   await page.waitForTimeout(300);
 
   console.log("\n— キャンセル確認モーダルが開く（ドロワーは閉じない） —");
@@ -181,7 +181,7 @@ console.log("\n=== 面談キャンセル ===");
   await page.waitForTimeout(700);
   check(patched.some((p) => p.action === "cancel" && p.id === "iv1"), "cancelアクションが送られる");
   check(await page.locator(".hr-detail").isVisible(), "保存後も応募者詳細ドロワーは開いたまま");
-  // NEXT ACTION は「概要」タブにある（ドロワーの整理：概要／面談／書類／履歴）
+  // NEXT ACTION はタブの外にあり、基本情報／選考／書類／メール／履歴へ整理
   await page.locator('.hr-tabs button[data-tab="overview"]').click();
   check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"),
     "NEXT ACTIONが「再調整してください」へ戻る");
