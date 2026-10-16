@@ -4,7 +4,7 @@
 //   1. 引き渡した版（handoff_at が入っている）だけ読む。承諾しただけ・正式契約の途中の版は、Office に出ない
 //   2. 承諾済み・取り消し／辞退でない版だけ。育成枠・区分なしは、Office へ引き渡さない（handoff_at が入っていても出さない）
 //   3. Office に出すのは「承諾した事実」と「HR で終えた正式契約の状態」と「誰が・いつ引き渡したか」だけ。
-//      給与・連絡先・承諾の IP・トークン・LegalSign の URL を返さない
+//      給与・承諾の IP・トークン・LegalSign の URL を返さない（メール・電話は Office へ引き継ぐ）
 //   4. 別のテナントの版は読まない（service role で読むので、tenant_id で必ず絞る）。応募者を絞って読める（100件ずつ）
 import assert from "node:assert/strict";
 import { handoffFactsOf, readHandoffOffers, handoffActorNames } from "../lib/hire-handoff.js";
@@ -95,7 +95,7 @@ await ok("読めなかった（表が無い・権限）ときは ready=false。�
   assert.deepEqual([r.ready, r.offers], [false, []]);
 });
 
-await ok("引き渡された情報：氏名・職種・雇用区分・入社予定日・承諾日・通知書の確認・正式契約の状態・引き渡し日時だけ。給与・連絡先・承諾の記録・LegalSign の URL は返さない", async () => {
+await ok("引き渡された情報：氏名・メール・電話・職種・雇用区分・入社予定日・承諾日・通知書の確認・正式契約の状態・引き渡し日時。給与・承諾の記録・LegalSign の URL は返さない", async () => {
   const f = handoffFactsOf(offer({
     job_title: "デザイナー", employment_type: "業務委託", join_date: "2026-11-15", viewed_at: "2026-10-09T23:00:00Z",
     notice_title: "業務委託条件通知書", notice_pdf_path: "t1/n.pdf", accepted_pdf_path: "t1/a.pdf",
