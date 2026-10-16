@@ -50,7 +50,7 @@ async function openWith(interview) {
   });
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator(".hr-tabs button", { hasText: "面談" }).click();
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   await page.waitForTimeout(300);
   return { page, patched, errs };
 }
