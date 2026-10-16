@@ -3457,6 +3457,10 @@ ${url}${materialText}
           ? `<div class="hr-of-auto" id="sm-pdf-hidden">給与・報酬が入るため、PDF は給与を見られる方が確認します。</div>`
           : pdfInline() ? `<div class="frame" id="sm-pdf-frame-box"><div class="empty" id="sm-pdf-loading">PDFを読み込み中…</div></div>` : ""}
       </div>` : ""}
+      ${notice ? `<div class="hr-of-auto" id="sm-doc-check" style="margin:8px 0 0;padding:8px 10px;background:#f6f6f2;border-radius:8px;">
+        送付前に、<b>宛名・条件／報酬・回答期限・承諾後の流れ・問い合わせ先</b>をPDFで確認してください。
+        登録済みの会社印がある場合は、PDFに会社印も表示します。
+      </div>` : ""}
       <div class="hr-of-preview" id="sm-preview" style="margin-top:${notice ? 10 : 0}px;">
         <div class="hd"><span class="hr-pill" style="background:#1b2440;color:#fff;">${esc(o.offerName || "合格通知")}</span>
           <b>${esc(d.candidateName)} 様</b>　第${esc(o.version)}版</div>

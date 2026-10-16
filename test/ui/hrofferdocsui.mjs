@@ -189,6 +189,9 @@ for (const width of [1300, 390]) {
   check(await page.locator("#sm-email-need").isVisible(), `[${width}] 「本人のメールアドレスが未登録です」`);
   check(await page.locator("#sm-send").count() === 0, `[${width}] 未登録のうちは送れない`);
   check((await page.locator("#sm-notice").innerText()).includes("育成参加条件通知書"), `[${width}] 条件通知書（PDF）を添付する案内`);
+  const docCheck = await page.locator("#sm-doc-check").innerText();
+  check(docCheck.includes("宛名・条件／報酬・回答期限・承諾後の流れ・問い合わせ先"), `[${width}] 送付前にPDFの確認ポイントを明示`);
+  check(docCheck.includes("会社印"), `[${width}] 登録済みの会社印がPDFに出ることを案内`);
   await page.fill("#sm-email-new", "bad-mail");
   await page.locator("#sm-email-need button", { hasText: "登録して続ける" }).click();
   await page.waitForTimeout(300);
