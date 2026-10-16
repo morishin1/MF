@@ -1,7 +1,7 @@
 // 応募一覧のタブ（lib/hr.js listTabOf）と、応募形態（employmentType）の受け付け。
 //   選考中／業務委託／無限道場／終了 を画面ごとに判定しない（shapeApplicant の listTab を使う）
 import assert from "node:assert/strict";
-import { listTabOf, isContractorApplicant, shapeApplicant, normalizeApplicant } from "../lib/hr.js";
+import { listTabOf, isContractorApplicant, shapeApplicant, normalizeApplicant, APPLICANT_SOURCES, sourceStats } from "../lib/hr.js";
 
 let pass = 0, fail = 0;
 const ok = (name, fn) => {
@@ -23,6 +23,7 @@ ok("見送り・辞退は、業務委託・無限道場でも「終了」（自�
   assert.equal(listTabOf(A({ status: "passed" })), "closed");
   assert.equal(listTabOf(A({ status: "declined", employment_type: "業務委託" })), "closed");
   assert.equal(listTabOf(A({ status: "passed", lead_category: "mugendojo" })), "closed");
+  assert.equal(listTabOf(A({ status: "position_closed" })), "closed", "募集終了も終了タブ");
 });
 ok("無限道場リードは「無限道場」", () => assert.equal(listTabOf(A({ lead_category: "mugendojo", stage: "md_trial" })), "mugendojo"));
 ok("shapeApplicant が listTab と ceoNeeded を返す", () => {
@@ -31,6 +32,16 @@ ok("shapeApplicant が listTab と ceoNeeded を返す", () => {
   assert.equal(s.ceoNeeded, true);
   assert.equal(shapeApplicant(A({})).ceoNeeded, false);
 });
+ok("応募媒体は固定候補で、既存の自由記述は「その他」に集計する", () => {
+  assert.deepEqual(APPLICANT_SOURCES, ["Wantedly", "Green", "Indeed", "求人ボックス", "エージェント", "リファラル", "自社サイト", "SNS", "イベント・セミナー", "その他"]);
+  const s = sourceStats([
+    { source: "Wantedly" }, { source: "Wantedly" }, { source: "自社サイト" }, { source: "旧媒体名" }, { source: null },
+  ]);
+  assert.equal(s.find((x) => x.key === "Wantedly").count, 2);
+  assert.equal(s.find((x) => x.key === "自社サイト").count, 1);
+  assert.equal(s.find((x) => x.key === "その他").count, 1);
+});
+
 ok("応募者の追加・編集で応募形態（employmentType）を受け付ける", () => {
   const v = normalizeApplicant({ name: "山田", jobTitle: "PM", source: "Wantedly", employmentType: "業務委託" });
   assert.equal(v.value?.employment_type ?? v.employment_type, "業務委託");
