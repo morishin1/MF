@@ -200,7 +200,7 @@ const items = () => db.rows.gw_procedure_items;
 
 console.log("\n=== 入退社：採用HRから引き渡された人（Office の入社準備キュー。db/133）===\n");
 
-await ok("引き渡し済み（handoff_at あり）・まだ社員登録していない人だけを「HRから引き渡し」に出す。承諾しただけの人は出さない（給与・メール・承諾の記録は出さない）", async () => {
+await ok("引き渡し済みだけをOfficeへ出し、入社準備用メールは引き継ぐ。給与・承諾の秘密情報は出さない", async () => {
   setup();
   const now = new Date().toISOString();
   db.rows.gw_hr_applicants = [
@@ -225,7 +225,8 @@ await ok("引き渡し済み（handoff_at あり）・まだ社員登録して�
   assert.equal(h.ready, true);
   assert.deepEqual(h.rows.map((x) => x.name).sort(), ["入力中 四郎", "高木 沙綾"], "承諾だけ・正式契約の途中の人は、引き渡されるまで Office に出ない");
   const a1 = h.rows.find((x) => x.applicantId === "a1");
-  assert.deepEqual([a1.offerTypeLabel, a1.formalRequired, a1.joinDate, a1.claimed, a1.jobTitle, a1.employmentType], ["正社員・幹部候補", true, "2026-11-01", false, "エンジニア", "正社員"]);
+  assert.deepEqual([a1.offerTypeLabel, a1.formalRequired, a1.joinDate, a1.claimed, a1.jobTitle, a1.employmentType, a1.email],
+    ["正社員・幹部候補", true, "2026-11-01", false, "エンジニア", "正社員", "saya@example.test"]);
   assert.deepEqual([a1.handoffByName, a1.noticePdf, a1.offerId, a1.acceptedAt != null, a1.handoffAt != null], ["事務 花子", true, "o1", true, true], "引き渡した人（名簿の名前）・日時");
   assert.deepEqual(a1.hire.hr, { label: "HRで正式契約まで完了", detail: "正式契約：署名済み", formalRequired: true, formalSignedAt: a1.formalSignedAt });
   assert.deepEqual(a1.hire.steps.map((s) => s.key), ["docs", "account", "orientation", "complete"], "Office の流れは 入社書類 → アカウント・端末 → オリエンテーション → 入社完了");
@@ -233,7 +234,7 @@ await ok("引き渡し済み（handoff_at あり）・まだ社員登録して�
   const a4 = h.rows.find((x) => x.applicantId === "a4");
   assert.deepEqual([a4.formalRequired, a4.claimed, a4.hire.hr.detail], [false, true, "正式契約：不要"], "スポット（正式契約なし）・社員登録の画面で入力中");
   const text = JSON.stringify(h);
-  for (const secret of ["400000", "203.0.113.1", "saya@example.test", "sign.example.test", "u-admin"]) assert.equal(text.includes(secret), false, `${secret} を出さない`);
+  for (const secret of ["400000", "203.0.113.1", "sign.example.test", "u-admin"]) assert.equal(text.includes(secret), false, `${secret} を出さない`);
 });
 
 await ok("育成枠は handoff_at が入っていても Office に出さない（引き渡さない）", async () => {
