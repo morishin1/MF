@@ -24,5 +24,34 @@ alter table public.gw_hr_offers
   drop column if exists offer_pdf_path,
   drop column if exists offer_pdf_sha256;
 
+-- db/132 のロック関数へ戻す（trigger は同じ関数名を呼ぶため作り直し不要）。
+create or replace function public.gw_hr_offers_lock_documents()
+returns trigger
+language plpgsql
+set search_path = public
+as $
+declare
+  c text;
+  o jsonb := to_jsonb(old);
+  n jsonb := to_jsonb(new);
+begin
+  foreach c in array array[
+    'notice_title', 'notice_pdf_path', 'notice_pdf_sha256',
+    'accept_name', 'accept_email', 'accept_ip', 'accept_ua', 'accept_text',
+    'accepted_pdf_path', 'accepted_pdf_sha256', 'accepted_at',
+    'formal_sent_at', 'formal_sent_by', 'formal_signed_at', 'formal_signed_by'
+  ] loop
+    if o ->> c is not null and (n ->> c) is distinct from (o ->> c) then
+      raise exception 'gw_hr_offers.% は確定後に変更できません（db/132）', c
+        using errcode = '55000', hint = '条件通知書・承諾記録・正式契約済みの記録は書き換えられません';
+    end if;
+  end loop;
+  if old.formal_sent_at is not null and new.legalsign_url is distinct from old.legalsign_url then
+    raise exception 'gw_hr_offers.legalsign_url は正式契約の案内後に変更できません（db/132）'
+      using errcode = '55000', hint = '本人へ案内した URL は変えられません';
+  end if;
+  return new;
+end $;
+
 notify pgrst, 'reload schema';
 commit;
