@@ -29,7 +29,7 @@ const NULLS = { notice_title: "労働条件通知書", notice_pdf_path: "t1/n.pd
 // 引き渡した版（DB の行）と応募者。サーバ（api/hr/index.js handoffQueue）と同じ作り方で応答を組む
 const state = () => ({
   apps: [
-    { id: "a1", name: "高木 沙綾", status: "accepted", employee_id: null, advance_claimed_at: null, job_title: "エンジニア", employment_type: "正社員" },
+    { id: "a1", name: "高木 沙綾", email: "saya@example.test", phone: "090-1111-2222", status: "accepted", employee_id: null, advance_claimed_at: null, job_title: "エンジニア", employment_type: "正社員" },
     { id: "a2", name: "佐藤 一", status: "accepted", employee_id: null, advance_claimed_at: null, job_title: "デザイナー", employment_type: "業務委託" },
     { id: "a3", name: "鈴木 花", status: "accepted", employee_id: null, advance_claimed_at: new Date().toISOString(), job_title: null, employment_type: "業務委託" },
   ],
@@ -133,6 +133,7 @@ for (const width of [1300, 390, 320]) {
   check((await r1.locator('[data-fact="accepted"]').innerText()).includes("✓ 条件承諾") && (await r1.locator('[data-fact="accepted"]').innerText()).includes("2026/10/10"), `[${width}] 条件承諾日`);
   check((await r1.locator('[data-fact="join"]').innerText()).includes("2026/11/01"), `[${width}] 入社予定日`);
   check((await r1.locator('[data-fact="notice"]').innerText()).includes("労働条件通知書") && (await r1.locator('[data-fact="notice"]').innerText()).includes("確認済み"), `[${width}] 労働条件通知書：確認済み`);
+  check((await r1.innerText()).includes("saya@example.test") && (await r1.innerText()).includes("090-1111-2222"), `[${width}] HRからメール・電話を引き継ぐ`);
   const hand = await r1.locator('[data-fact="handoff"]').innerText();
   check(hand.includes("引き渡し：2026/10/12 10:32") && hand.includes("人事 花子"), `[${width}] 引き渡した日時（日本時間）と人`);
   check((await r1.locator('[data-role="hr-done"]').innerText()).includes("HRで正式契約まで完了") && (await r1.locator('[data-role="hr-done"]').innerText()).includes("正式契約：署名済み"), `[${width}] 「HRで正式契約まで完了（正式契約：署名済み）」`);
@@ -266,6 +267,7 @@ console.log("\n=== 入社予定の一覧・詳細：「HRから引き渡し」�
     check(await pane.locator('input[type="url"], button:has-text("正式契約"), button:has-text("LegalSign"), [data-act="formal"]').count() === 0, `[${width}] Office に LegalSign の操作（URL 登録・案内・正式契約済み）は無い`);
     check(nx2.includes("LegalSign の正式契約は HR で済んでいます"), `[${width}] 契約書類（雇用契約書など）の準備は、LegalSign の正式契約とは別だと分かる`);
     const docs = await pane.locator("#ob-hire-docs").innerText();
+    check((await page.locator("#ob-hire").innerText()).includes("saya@example.test") && (await page.locator("#ob-hire").innerText()).includes("090-1111-2222"), `[${width}] 詳細にもHR連絡先`);
     check(docs.includes("採用時書類") && docs.includes("HRから引き渡し・閲覧専用") && docs.includes("履歴書") && docs.includes("承諾済みPDF"), `[${width}] 採用時書類（HRから引き渡し・閲覧専用）`);
     const cdocs = await pane.locator("#ob-contract-docs").innerText();
     check(cdocs.includes("入社・契約書類") && cdocs.includes("契約書の準備") && cdocs.includes("本人の確認・署名") && cdocs.includes("入社情報・必要書類"),

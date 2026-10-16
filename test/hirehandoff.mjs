@@ -95,7 +95,7 @@ await ok("読めなかった（表が無い・権限）ときは ready=false。�
   assert.deepEqual([r.ready, r.offers], [false, []]);
 });
 
-await ok("引き渡された情報：氏名・職種・雇用区分・入社予定日・承諾日・通知書の確認・正式契約の状態・引き渡し日時だけ。給与・連絡先・承諾の記録・LegalSign の URL は返さない", async () => {
+await ok("引き渡された情報：入社準備に必要なメール・電話もOfficeへ渡す。給与・承諾の記録・LegalSign URLは返さない", async () => {
   const f = handoffFactsOf(offer({
     job_title: "デザイナー", employment_type: "業務委託", join_date: "2026-11-15", viewed_at: "2026-10-09T23:00:00Z",
     notice_title: "業務委託条件通知書", notice_pdf_path: "t1/n.pdf", accepted_pdf_path: "t1/a.pdf",
@@ -103,15 +103,16 @@ await ok("引き渡された情報：氏名・職種・雇用区分・入社予�
     wage_amount: 480000, accept_ip: "203.0.113.9", accept_ua: "UA", accept_email: "x@example.test", token_hash: "SECRET", offer_terms: { duties: "営業" },
   }), { ...APP, email: "saya@example.test", phone: "090-0000-0000" }, { byName: "人事 花子" });
   assert.deepEqual(Object.keys(f).sort(), [
-    "acceptedAt", "acceptedPdf", "applicantId", "employmentType", "formalRequired", "formalSignedAt", "handoffAt", "handoffByName",
-    "joinDate", "jobTitle", "name", "noticeConfirmedAt", "noticePdf", "noticeTitle", "offerId", "offerType", "offerTypeLabel", "version",
+    "acceptedAt", "acceptedPdf", "applicantId", "email", "employmentType", "formalRequired", "formalSignedAt", "handoffAt", "handoffByName",
+    "joinDate", "jobTitle", "name", "noticeConfirmedAt", "noticePdf", "noticeTitle", "offerId", "offerType", "offerTypeLabel", "phone", "version",
   ].sort());
-  assert.deepEqual([f.name, f.jobTitle, f.employmentType, f.joinDate, f.acceptedAt, f.offerTypeLabel],
-    ["高木 沙綾", "デザイナー", "業務委託", "2026-11-15", ACC, "業務委託"], "オファーの値が応募者の値より先");
+  assert.deepEqual([f.name, f.email, f.phone, f.jobTitle, f.employmentType, f.joinDate, f.acceptedAt, f.offerTypeLabel],
+    ["高木 沙綾", "saya@example.test", "090-0000-0000", "デザイナー", "業務委託", "2026-11-15", ACC, "業務委託"], "連絡先は応募者、条件はオファーの値を優先");
   assert.deepEqual([f.formalRequired, f.formalSignedAt, f.handoffAt, f.handoffByName], [true, "2026-10-11T08:00:00Z", HAND, "人事 花子"]);
   assert.equal(f.noticeConfirmedAt, "2026-10-09T23:00:00Z", "通知書の確認＝本人が最初に開いた日時");
   const text = JSON.stringify(f);
-  for (const s of ["480000", "203.0.113.9", "UA", "x@example.test", "SECRET", "営業", "saya@", "090-0000", "sign.example", "u-hr"]) assert.equal(text.includes(s), false, `${s} を返さない`);
+  for (const s of ["480000", "203.0.113.9", "UA", "x@example.test", "SECRET", "営業", "sign.example", "u-hr"]) assert.equal(text.includes(s), false, `${s} を返さない`);
+  assert.ok(text.includes("saya@example.test") && text.includes("090-0000-0000"), "Officeへ本人連絡先は引き継ぐ");
 });
 
 await ok("職種・雇用区分はオファーに無ければ応募者の値。通知書の確認日時が無ければ承諾の日時", async () => {

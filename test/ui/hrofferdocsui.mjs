@@ -15,7 +15,7 @@
 import { launch, BASE } from "../_browser.mjs";
 import { shapeApplicant, shapePublicOffer, shapeOffer, normalizeApplicant } from "../../lib/hr.js";
 import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG, acceptFactsOf, formalRequiredOf, documentWarnings } from "../../lib/hr-offer-types.js";
-import { checkLegalSignUrl, noticeTitleOf } from "../../lib/hr-offer-docs.js";
+import { checkLegalSignUrl, offerTitleOf, noticeTitleOf } from "../../lib/hr-offer-docs.js";
 
 const br = await launch();
 let bad = 0;
@@ -76,12 +76,16 @@ async function open(st, { width = 1300 } = {}) {
           headers: { "content-disposition": `attachment; filename="offer.pdf"; filename*=UTF-8''${encodeURIComponent("育成参加条件通知書_第1版.pdf")}` } });
       }
       if (m === "GET") {
+        const offerTitle = offerTitleOf(o);
         const title = noticeTitleOf(o);
-        const mail = offerMail(o, { name: st.row.name, company: "株式会社エイト", attachment: title });
+        const mail = offerMail(o, { name: st.row.name, company: "株式会社エイト", attachments: [offerTitle, title].filter(Boolean) });
         return send({ offer: shapeOffer(o), items: publicOfferItems(o), to: st.row.email, candidateName: st.row.name,
           subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG,
           mail: { configured: Boolean(st.row.email) && st.mailConfigured, reason: st.row.email ? null : "候補者のメールアドレスが登録されていません" },
-          canSend: true, notice: { ready: true, title, stored: false, salaryVisible: true, warnings: documentWarnings(o.offer_type, o) }, formalRequired: formalRequiredOf(o) });
+          canSend: true,
+          offerLetter: { ready: true, title: offerTitle, stored: false },
+          notice: { ready: true, title, stored: false, salaryVisible: true, warnings: documentWarnings(o.offer_type, o) },
+          formalRequired: formalRequiredOf(o) });
       }
       const b = body(); st.calls.push([b.action, b]);
       if (b.action === "setLegalSign") {
@@ -188,6 +192,7 @@ for (const width of [1300, 390]) {
   }
   check(await page.locator("#sm-email-need").isVisible(), `[${width}] 「本人のメールアドレスが未登録です」`);
   check(await page.locator("#sm-send").count() === 0, `[${width}] 未登録のうちは送れない`);
+  check((await page.locator("#sm-offer-letter").innerText()).includes("育成参加決定通知書"), `[${width}] オファー通知PDFを条件通知書と分けて表示`);
   check((await page.locator("#sm-notice").innerText()).includes("育成参加条件通知書"), `[${width}] 条件通知書（PDF）を添付する案内`);
   const docCheck = await page.locator("#sm-doc-check").innerText();
   check(docCheck.includes("宛名・条件／報酬・回答期限・承諾後の流れ・問い合わせ先"), `[${width}] 送付前にPDFの確認ポイントを明示`);
@@ -210,6 +215,9 @@ for (const width of [1300, 390]) {
   await page.waitForTimeout(800);
   check((await page.locator("#sm-to").innerText()) === "second@example.test", `[${width}] 送信先を［変更］すると最新のメールになる`);
   check(st.row.email === "second@example.test", `[${width}] 応募者のメールも変わる`);
+  await page.locator("#sm-offer-pdf-open").click();
+  await page.waitForTimeout(300);
+  check(st.calls.some(([k, f]) => k === "file" && f === "previewOffer"), `[${width}] オファー通知PDFを別プレビューできる`);
   const before = st.calls.filter(([k]) => k === "file").length;
   await page.locator("#sm-pdf-open").click();
   await page.waitForTimeout(500);

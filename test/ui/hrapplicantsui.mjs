@@ -67,7 +67,9 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
         applicants = [...applicants, made];
         return send({ applicant: made });
       }
-      return send({ applicants, employees: EMPLOYEES, meEmployeeId: RECRUITER.id });
+      return send({ applicants, employees: EMPLOYEES, meEmployeeId: RECRUITER.id,
+        sources: { options: ["Wantedly", "Green", "Indeed", "求人ボックス", "エージェント", "リファラル", "自社サイト", "SNS", "イベント・セミナー", "その他"],
+          counts: [{ key: "Wantedly", label: "Wantedly", count: applicants.filter((a) => a.source === "Wantedly").length }] } });
     }
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     if (/\/api\/badges/.test(url)) return send({ badges: {} });
@@ -98,6 +100,8 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.waitForTimeout(400);
   await page.fill("#a-name", "田中 一郎");
   await page.fill("#a-job", "セールス");
+  const sourceLabels = await page.locator('#a-sources input[name="a-source"]').evaluateAll((xs) => xs.map((x) => x.value));
+  check(sourceLabels.join("|") === "Wantedly|Green|Indeed|求人ボックス|エージェント|リファラル|自社サイト|SNS|イベント・セミナー|その他", "応募媒体は固定候補");
   await page.locator('input[name="a-source"]').first().check();
   check((await page.locator("#a-recruiter").inputValue()) === RECRUITER.id, "担当の初期値は登録する本人");
   await page.locator("button", { hasText: "追加する" }).click();
@@ -119,6 +123,8 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check(await page.locator(".hr-detail .hr-next").isVisible(), "NEXT ACTION（いまの状態と次の1つ）が概要の最初に出る");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   check((await page.locator(".hr-detail").innerText()).includes("応募"), "選考タイムラインが出る");
+  const detailTabs = await page.locator(".hr-detail .hr-tabs button").allInnerTexts();
+  check(detailTabs.join("|") === "基本情報|選考|書類|メール|履歴", `詳細タブを5つに整理（${detailTabs.join("|")}）`);
   {
     // NEXT ACTION は「いまの状態」と「次に押すボタン1つ」だけ（応募者ドロワー改善 §3・§4：高さ 80〜110px 程度）
     const card = page.locator(".hr-next");

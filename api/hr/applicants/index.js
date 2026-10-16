@@ -19,7 +19,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
-  withContactNext, applicantAlerts, applicantPriority,
+  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats,
 } from "../../../lib/hr.js";
 import { ymd as jstYmd } from "../../../lib/jst.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
@@ -158,6 +158,8 @@ async function list(req, res, sb, ctx, salary) {
       return { ...s, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
     }),
     employees: employees || [],
+    // 応募媒体：固定候補と、現在の一覧（category=allなら全応募者）の件数
+    sources: { options: APPLICANT_SOURCES, counts: sourceStats(data || []) },
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
