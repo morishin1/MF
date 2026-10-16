@@ -199,7 +199,7 @@ async function update(res, sb, ctx, user, offer, body, salary) {
     return json(res, 409, { error: "invalid_state", hint: "社内確認待ちの間だけ、内容を直せます" });
   }
   // 本人向けPDFを作った版は直さない（送った書面と中身がずれないように。db/132・137）
-  if (offer.offer_pdf_path || offer.notice_pdf_path) return json(res, 409, { error: "invalid_state", hint: "本人向けPDFを作った版は直せません" });
+  if (offer.offer_pdf_path || offer.notice_pdf_path) return json(res, 409, { error: "invalid_state", hint: "オファー通知書・条件通知書など本人向けPDFを作った版は直せません" });
 
   const row = normalizeOffer(body, null, {
     partial: true, offerType: offer.offer_type || null, salary, previousTerms: offer.offer_terms || {},
