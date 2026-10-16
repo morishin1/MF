@@ -44,7 +44,7 @@ import {
   normalizeOffer, shapeOffer, sha256, newOfferToken, offerExpiresAt,
 } from "../../../lib/hr.js";
 import {
-  offerTypeOf, missingRequired, offerMail, publicOfferItems, OFFER_URL_TAG, todayJst, formalRequiredOf,
+  offerTypeOf, missingRequired, documentWarnings, offerMail, publicOfferItems, OFFER_URL_TAG, todayJst, formalRequiredOf,
 } from "../../../lib/hr-offer-types.js";
 import { readHandoffOffers } from "../../../lib/hire-handoff.js";
 import { notify } from "../../../lib/notify.js";
@@ -432,7 +432,10 @@ async function sendDraft(req, res, sb, ctx, salary) {
     subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG, mail: mailReady(applicant),
     canSend: SENDABLE_STATUSES.includes(applicant.status) && !offer.sent_at && !offer.revoked_at,
     // ready=false は db/132 未適用・区分の無い版（PDF なしで、これまでどおり送る）。stored は作成済み（送った時点の版）
-    notice: { ready: Boolean(noticeTitle), title: noticeTitle, stored: Boolean(offer.notice_pdf_path), salaryVisible: salary },
+    notice: {
+      ready: Boolean(noticeTitle), title: noticeTitle, stored: Boolean(offer.notice_pdf_path), salaryVisible: salary,
+      warnings: documentWarnings(offer.offer_type, offer, { salary }),
+    },
     // 正式契約（LegalSign）の要否（db/133。列が無ければ区分の既定）。送ったあとは変わらない
     formalRequired: formalRequiredOf(offer),
   });
