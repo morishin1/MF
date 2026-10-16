@@ -396,6 +396,21 @@ async function loadSendContext(sb, ctx, offer) {
   return { applicant, company: tenant?.name || null };
 }
 
+const addressOnly = (v) => {
+  const s = String(v || "").trim();
+  const m = s.match(/<([^<>]+)>\s*$/);
+  return (m ? m[1] : s).trim() || null;
+};
+
+// 条件通知書の発行元。値そのものはPDFにだけ入り、監査ログには残さない。
+function noticeMeta(ctx) {
+  const cfg = mailConfig("recruiting");
+  return {
+    issuerName: ctx.employee?.display_name || "採用担当",
+    contactEmail: addressOnly(cfg.replyTo || cfg.from),
+  };
+}
+
 // 送る前の確認画面：本人に見える条件・メールの下書き・メールで送れるか
 async function sendDraft(req, res, sb, ctx, salary) {
   const id = new URL(req.url || "/", "http://localhost").searchParams.get("id");
@@ -520,7 +535,7 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   try {
     const payOffer = { ...claimed };
     await attachPay(ctx.tenantId, payOffer, "offer");
-    notice = await ensureNoticePdf(sb, payOffer, { candidateName: applicant.name, company });
+    notice = await ensureNoticePdf(sb, payOffer, { candidateName: applicant.name, company, ...noticeMeta(ctx) });
     if (notice) Object.assign(claimed, { notice_title: notice.title, notice_pdf_path: notice.path, notice_pdf_sha256: notice.sha256 });
   } catch (e) {
     console.error("[hr/offers] notice pdf", e?.message || e);
@@ -586,7 +601,7 @@ async function noticeForManual(sb, ctx, offer) {
     const { applicant, company } = await loadSendContext(sb, ctx, offer);
     const payOffer = { ...offer };
     await attachPay(ctx.tenantId, payOffer, "offer");
-    const n = await ensureNoticePdf(sb, payOffer, { candidateName: applicant?.name, company });
+    const n = await ensureNoticePdf(sb, payOffer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
     if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
   } catch (e) { console.error("[hr/offers] notice pdf (manual)", e?.message || e); }
 }
@@ -658,7 +673,7 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
     if (file === "notice") return json(res, 404, { error: "no_file", hint: "条件通知書はまだ作っていません（送るときに作ります）" });
     const { applicant, company } = await loadSendContext(sb, ctx, offer);
     await attachPay(ctx.tenantId, offer, "offer");
-    const built = await buildNoticePdf(offer, { candidateName: applicant?.name, company });
+    const built = await buildNoticePdf(offer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
     // プレビューは確定しない（置かない・db/132 の列は入れない）。見たという事実だけ残す
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_preview", target: `hr_offer:${offer.id}`, detail: { version: offer.version } });
     return sendPdf(res, built.bytes, `確認用_${pdfFileName(built.title, offer.version)}`);
