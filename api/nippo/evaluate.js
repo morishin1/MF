@@ -63,7 +63,12 @@ async function run(res, sb, ctx, user, nippo, { force }) {
     .from("gw_nippo_ai_evals").select("*")
     .eq("nippo_id", nippo.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
 
-  if (!force && last?.status === "completed") return json(res, 200, { evaluation: shape(last), cached: true });
+  if (!force && last?.status === "completed") {
+    // 評価は済んでいるのに共有サマリーだけ失敗した日を、再評価せずに補完する。
+    // 既に共有があればAIは呼ばない。
+    await ensureShare(sb, ctx, nippo);
+    return json(res, 200, { evaluation: shape(last), cached: true });
+  }
 
   // 走っている最中に二重で叩かれた場合。1分以内なら待ってもらう
   if (!force && last?.status === "processing" && Date.now() - new Date(last.updated_at).getTime() < 60000) {
@@ -154,6 +159,18 @@ async function run(res, sb, ctx, user, nippo, { force }) {
   return json(res, 200, { evaluation: shape(saved) });
 }
 
+// 評価済みなのに共有だけ無い場合の補完。既存共有は触らず、AI課金も増やさない。
+async function ensureShare(sb, ctx, nippo) {
+  try {
+    const { data } = await sb.from("gw_nippo_shares").select("id").eq("nippo_id", nippo.id).maybeSingle();
+    if (data) return true;
+    return await buildShare(sb, ctx, nippo);
+  } catch (e) {
+    console.error("[nippo-eval] 共有サマリーの補完に失敗:", e.message);
+    return false;
+  }
+}
+
 // ---- みんなの日報に出すサマリー ------------------------------------------------
 // 公開してよい4項目（今日やったこと・成果・学び・明日やること）だけを持つ
 // 別の表に入れる。点数・未達理由・相談事項は、この表に列そのものが無い。
@@ -161,13 +178,13 @@ async function run(res, sb, ctx, user, nippo, { force }) {
 async function buildShare(sb, ctx, nippo) {
   try {
     const s = await summarizeForShare(nippo);
-    if (!s.ok) return;
+    if (!s.ok) return false;
 
     // 本人が「みんなには出さない」にしていたら、その設定を引き継ぐ
     const { data: prev } = await sb.from("gw_nippo_shares")
       .select("visible").eq("nippo_id", nippo.id).maybeSingle();
 
-    await sb.from("gw_nippo_shares").upsert({
+    const { error } = await sb.from("gw_nippo_shares").upsert({
       tenant_id: ctx.tenantId,
       nippo_id: nippo.id,
       user_id: nippo.user_id,
@@ -181,8 +198,14 @@ async function buildShare(sb, ctx, nippo) {
       model: s.model,
       updated_at: new Date().toISOString(),
     }, { onConflict: "nippo_id" });
+    if (error) {
+      console.error("[nippo-eval] 共有サマリーを保存できませんでした:", error.message);
+      return false;
+    }
+    return true;
   } catch (e) {
     console.error("[nippo-eval] 共有サマリーを作れませんでした:", e.message);
+    return false;
   }
 }
 
