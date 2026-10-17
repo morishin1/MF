@@ -168,7 +168,11 @@ function setup() {
     { id: "e8", tenant_id: T1, user_id: "u8", display_name: "退職済み", status: "left" },
     { id: "b1", tenant_id: T2, user_id: "ub", display_name: "他社", status: "active" },
   ];
-  mem.rows.tc_nippo = [{ user_id: "u1", work_date: "2026-10-05" }, { user_id: "u1", work_date: "2026-10-06" }, { user_id: "ub", work_date: "2026-10-05" }];
+  mem.rows.tc_nippo = [
+    { user_id: "u1", work_date: "2026-10-05", submitted_at: "2026-10-05T09:00:00Z" },
+    { user_id: "u1", work_date: "2026-10-06", submitted_at: "2026-10-06T09:00:00Z" },
+    { user_id: "ub", work_date: "2026-10-05", submitted_at: "2026-10-05T09:00:00Z" },
+  ];
   mem.rows.gw_time_entries = [
     { tenant_id: T1, employee_id: "e1", ...at("2026-10-05") }, { tenant_id: T1, employee_id: "e1", ...at("2026-10-06") },
     { tenant_id: T1, employee_id: "e2", ...at("2026-10-05", false) },
