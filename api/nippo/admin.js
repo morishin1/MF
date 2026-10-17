@@ -17,7 +17,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
-import { jstDate, weekStart, isDate } from "../../lib/nippo.js";
+import { jstDate, weekStart, isDate, isSubmittedNippo } from "../../lib/nippo.js";
 import { analyzeNippo } from "../../lib/ai.js";
 import { shape as shapeEval } from "./evaluate.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
@@ -77,11 +77,11 @@ async function read(req, res, ctx) {
   // 経営のメンバー実行状況（api/keiei?view=members）と同じ読み方にして、画面どうしで数が食い違わないようにする
   const [dayRows, spanRows, setting, follow, prevRows, spanEvals] = await Promise.all([
     sb.from("tc_nippo").select("*").eq("work_date", date).limit(300),
-    sb.from("tc_nippo").select("user_id, work_date")
+    sb.from("tc_nippo").select("user_id, work_date, submitted_at")
       .gte("work_date", fromStr).lte("work_date", date).limit(20000),
     sb.from("tc_settings").select("value").eq("key", "nippo_ai_auto_reply").maybeSingle(),
     readFollowSources(sb, { date, userIds: staff.map((e) => e.user_id) }),
-    sb.from("tc_nippo").select("user_id, work_items")
+    sb.from("tc_nippo").select("user_id, work_date, work_items, submitted_at")
       .gte("work_date", prevFrom).lt("work_date", spanFrom).limit(5000),
     // 顧客価値の並びに使う。日報から「顧客・チームのためにしたこと」の欄を
     // 外したので、文章を読んでいるAIが付けた点から数える
@@ -90,7 +90,7 @@ async function read(req, res, ctx) {
       .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
   ]);
 
-  const nippos = dayRows.data || [];
+  const nippos = (dayRows.data || []).filter(isSubmittedNippo);
   const ids = nippos.map((n) => n.id);
 
   // その日の日報のAI評価（1件につき最新のものだけ）
@@ -114,7 +114,7 @@ async function read(req, res, ctx) {
   }
 
   // 提出率の推移。土日は分母から外す（出社日でない日を「未提出」と数えない）
-  const submitted = new Set((spanRows.data || []).map((r) => `${r.user_id}|${r.work_date}`));
+  const submitted = new Set((spanRows.data || []).filter(isSubmittedNippo).map((r) => `${r.user_id}|${r.work_date}`));
   const trend = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(`${date}T00:00:00Z`);
@@ -161,7 +161,7 @@ async function read(req, res, ctx) {
       staff,
       nippos: follow.nippos,
       kpis: follow.kpis,
-      prevNippos: prevRows.data || [],
+      prevNippos: (prevRows.data || []).filter(isSubmittedNippo),
       evals: spanEvals.data || [],
     }),
 
@@ -206,7 +206,7 @@ async function readWeek(res, ctx, date) {
   const userIds = staff.map((e) => e.user_id);
 
   const { data: nippos } = userIds.length
-    ? await sb.from("tc_nippo").select("user_id, work_date")
+    ? await sb.from("tc_nippo").select("user_id, work_date, submitted_at")
       .in("user_id", userIds).gte("work_date", range.from).lte("work_date", range.to).limit(5000)
     : { data: [] };
 
@@ -235,7 +235,7 @@ async function readWeek(res, ctx, date) {
     followUps = f.ok ? findFollowUps({ date: ref, staff, nippos: f.nippos, kpis: f.kpis, blockers: f.blockers, items: f.items }).length : null;
   }
 
-  const week = buildWeek({ monday, today, staff, nippos: nippos || [], entries, fixes, usedTimecard, followUps });
+  const week = buildWeek({ monday, today, staff, nippos: (nippos || []).filter(isSubmittedNippo), entries, fixes, usedTimecard, followUps });
   return json(res, 200, { ...week, attendanceNote });
 }
 

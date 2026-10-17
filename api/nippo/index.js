@@ -28,7 +28,7 @@ import { admin } from "../../lib/supabase.js";
 import {
   jstDate, weekStart, isDate, nextDay, normalizeNippo, hasContent,
   lastWorkdayOfWeek, weeklyFilled,
-  normalizeMorning, hasMorning, evaluateDaily, CRITERIA, isDone,
+  normalizeMorning, hasMorning, evaluateDaily, CRITERIA, isDone, isSubmittedNippo,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { closeItems, shapeItem } from "../../lib/actions.js";
@@ -139,6 +139,10 @@ async function read(req, res, user, ctx) {
     replies = (data || []).filter((r) => !(r.kind === "admin" && r.draft_only));
   }
 
+  // 朝入力だけの行は tc_nippo に存在するが、「日報提出」ではない。
+  // チームの提出状況は submitted_at が入った行だけで数える。
+  const submittedTodayRows = (today.data || []).filter(isSubmittedNippo);
+
   // 週の締め日。この日は、振り返りを書かないと日報を出せない
   const closingOn = lastWorkdayOfWeek(weekStart(date), prefs.data?.workdays);
 
@@ -180,9 +184,9 @@ async function read(req, res, user, ctx) {
     })),
     // 今日やると決めた重要タスクと、明日ぶんの状態（lib/focus.js）
     focus,
-    team: (today.data || []).sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
+    team: submittedTodayRows.sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     notSubmitted: (roster || [])
-      .filter((e) => e.user_id && !(today.data || []).some((n) => n.user_id === e.user_id))
+      .filter((e) => e.user_id && !submittedTodayRows.some((n) => n.user_id === e.user_id))
       .map((e) => e.display_name),
   });
 }
@@ -208,12 +212,12 @@ async function morning(res, user, ctx, body) {
 
   const sb = admin();
   const { data: existing } = await sb
-    .from("tc_nippo").select("id, morning_at, work_items")
+    .from("tc_nippo").select("id, morning_at, submitted_at, work_items")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
 
   // 終業時の入力を出したあとで朝の欄を書き換えられると、
   // 結果に合わせた後付けになる。そこだけは止める
-  if (existing?.work_items?.some(isDone)) {
+  if (existing?.submitted_at || existing?.work_items?.some(isDone)) {
     return json(res, 409, {
       error: "already_reported",
       hint: "今日はもう終業時の入力を出しています。朝の内容は書き換えられません。",
@@ -226,6 +230,7 @@ async function morning(res, user, ctx, body) {
     user_name: ctx.employee.display_name,
     employ_type: ctx.employee.employment_type || null,
     work_date: date,
+    submitted_at: null,
     updated_at: new Date().toISOString(),
   };
   // 「今日の最優先」「今日やること」は、朝に書いても gw_action_items へは
@@ -307,6 +312,7 @@ async function submit(res, user, ctx, body) {
     user_name: ctx.employee.display_name,
     employ_type: ctx.employee.employment_type || null,
     work_date: date,
+    submitted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 

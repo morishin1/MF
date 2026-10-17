@@ -168,7 +168,11 @@ function setup() {
     { id: "e8", tenant_id: T1, user_id: "u8", display_name: "退職済み", status: "left" },
     { id: "b1", tenant_id: T2, user_id: "ub", display_name: "他社", status: "active" },
   ];
-  mem.rows.tc_nippo = [{ user_id: "u1", work_date: "2026-10-05" }, { user_id: "u1", work_date: "2026-10-06" }, { user_id: "ub", work_date: "2026-10-05" }];
+  mem.rows.tc_nippo = [
+    { user_id: "u1", work_date: "2026-10-05", submitted_at: "2026-10-05T09:00:00Z" },
+    { user_id: "u1", work_date: "2026-10-06", submitted_at: "2026-10-06T09:00:00Z" },
+    { user_id: "ub", work_date: "2026-10-05", submitted_at: "2026-10-05T09:00:00Z" },
+  ];
   mem.rows.gw_time_entries = [
     { tenant_id: T1, employee_id: "e1", ...at("2026-10-05") }, { tenant_id: T1, employee_id: "e1", ...at("2026-10-06") },
     { tenant_id: T1, employee_id: "e2", ...at("2026-10-05", false) },
@@ -227,6 +231,30 @@ await ok("打刻の表が読めないとき：勤怠は「読めません」で�
     assert.equal(r.body.attendance, false);
     assert.match(r.body.attendanceNote, /読めませんでした/);
   } finally { mem.state.missing = null; }
+});
+
+await ok("GW-06：朝入力だけの行は、日次・週次とも提出済みに数えない", async () => {
+  setup(); who = ADMIN;
+  mem.rows.tc_settings = [];
+  mem.rows.gw_nippo_ai_evals = [];
+  mem.rows.tc_nippo = [
+    { id: "n-morning", user_id: "u1", user_name: "山田", work_date: "2026-10-07",
+      morning_at: "2026-10-07T00:00:00Z", submitted_at: null, work_items: [{ task: "提案書" }] },
+    { id: "n-done", user_id: "u2", user_name: "佐藤", work_date: "2026-10-07",
+      morning_at: "2026-10-07T00:00:00Z", submitted_at: "2026-10-07T08:30:00Z", work_items: [{ task: "実装", result: "完了" }] },
+  ];
+  const daily = await get("date=2026-10-07");
+  assert.equal(daily.statusCode, 200, JSON.stringify(daily.body));
+  assert.equal(daily.body.members.find((x) => x.name === "山田").submitted, false, "朝入力だけは未提出");
+  assert.equal(daily.body.members.find((x) => x.name === "佐藤").submitted, true, "終業提出は提出済み");
+  assert.ok(daily.body.notSubmitted.includes("山田"));
+  assert.ok(!daily.body.notSubmitted.includes("佐藤"));
+  assert.ok(!daily.body.nippos.some((x) => x.id === "n-morning"), "管理者の日報一覧にも朝だけの行を出さない");
+
+  const week = await get("view=week&date=2026-10-07");
+  assert.equal(week.statusCode, 200, JSON.stringify(week.body));
+  assert.deepEqual(week.body.members.find((x) => x.name === "山田").today, { nippo: "today", submitted: false });
+  assert.deepEqual(week.body.members.find((x) => x.name === "佐藤").today, { nippo: "ok", submitted: true });
 });
 
 await ok("日次の応答は変わらない（view を付けなければ従来どおり）", async () => {
