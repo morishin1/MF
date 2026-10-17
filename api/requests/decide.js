@@ -61,89 +61,130 @@ export default async function handler(req, res) {
 
   const now = new Date().toISOString();
   const note = body.note ? String(body.note).slice(0, 500) : null;
-  const patch = { updated_at: now, decision_note: note };
 
-  if (body.action === "approve") {
-    if (r.status === "pending") {
-      patch.status = nextStatusFor(r.kind);
-      patch.approved_by = ctx.employee?.id || null;
-      patch.approved_at = now;
-    } else if (r.status === "pending_owner") {
-      if (!isOwner) {
-        return json(res, 403, { error: "owner_required", hint: "稟議の最終承認は代表（経営者権限）が行います" });
-      }
-      patch.status = "approved";
-      patch.owner_approved_by = ctx.employee?.id || null;
-      patch.owner_approved_at = now;
-    } else {
-      return json(res, 409, { error: "not_pending", hint: `すでに「${STATUS_LABEL[r.status]}」です` });
-    }
-  } else if (body.action === "reject") {
-    if (r.status !== "pending" && r.status !== "pending_owner") {
-      return json(res, 409, { error: "not_pending", hint: `すでに「${STATUS_LABEL[r.status]}」です` });
-    }
-    patch.status = "rejected";
+  // 通信切れなどで「承認は保存されたのに画面は失敗表示」になった場合、
+  // 同じ操作をもう一度受けても409にせず、休暇のカレンダーだけ安全に再同期できる。
+  // Google側も申請ID由来の固定event idを使うため、重複予定は作らない。
+  const replay = r.kind === "leave" && (
+    (body.action === "approve" && r.status === "approved")
+    || (body.action === "cancel" && r.status === "cancelled")
+    || (body.action === "reject" && r.status === "rejected")
+  );
+
+  let saved = null;
+  if (replay) {
+    saved = {
+      id: r.id, kind: r.kind, status: r.status,
+      approved_at: r.approved_at || null, owner_approved_at: r.owner_approved_at || null,
+      decision_note: r.decision_note || null, gcal_link: r.gcal_link || null, gcal_error: r.gcal_error || null,
+    };
   } else {
-    if (r.status === "rejected" || r.status === "cancelled") {
-      return json(res, 409, { error: "already_closed" });
+    const patch = { updated_at: now, decision_note: note };
+
+    if (body.action === "approve") {
+      if (r.status === "pending") {
+        patch.status = nextStatusFor(r.kind);
+        patch.approved_by = ctx.employee?.id || null;
+        patch.approved_at = now;
+      } else if (r.status === "pending_owner") {
+        if (!isOwner) {
+          return json(res, 403, { error: "owner_required", hint: "稟議の最終承認は代表（経営者権限）が行います" });
+        }
+        patch.status = "approved";
+        patch.owner_approved_by = ctx.employee?.id || null;
+        patch.owner_approved_at = now;
+      } else {
+        return json(res, 409, { error: "not_pending", hint: `すでに「${STATUS_LABEL[r.status]}」です` });
+      }
+    } else if (body.action === "reject") {
+      if (r.status !== "pending" && r.status !== "pending_owner") {
+        return json(res, 409, { error: "not_pending", hint: `すでに「${STATUS_LABEL[r.status]}」です` });
+      }
+      patch.status = "rejected";
+    } else {
+      if (r.status === "rejected" || r.status === "cancelled") {
+        return json(res, 409, { error: "already_closed" });
+      }
+      // 承認後の取り下げは管理部の判断で行う。休暇は予定表にも出ているため
+      if (r.status === "approved" && !isReviewer) {
+        return json(res, 409, { error: "already_approved", hint: "承認後の取り消しは管理部へご連絡ください" });
+      }
+      patch.status = "cancelled";
     }
-    // 承認後の取り下げは管理部の判断で行う。休暇は予定表にも出ているため
-    if (r.status === "approved" && !isReviewer) {
-      return json(res, 409, { error: "already_approved", hint: "承認後の取り消しは管理部へご連絡ください" });
-    }
-    patch.status = "cancelled";
+
+    // GW-05：先に申請の状態を確定する。
+    // カレンダー・通知・監査ログの一時障害で「承認そのもの」まで失敗扱いにしない。
+    const written = await sb
+      .from("gw_requests")
+      .update(patch)
+      .eq("id", r.id)
+      .eq("tenant_id", ctx.tenantId)
+      .select("id, kind, status, approved_at, owner_approved_at, decision_note, gcal_link, gcal_error")
+      .single();
+    if (written.error) return json(res, 500, { error: "db_update_failed", detail: written.error.message });
+    saved = written.data;
   }
 
-  // 有給が確定したらカレンダーへ。取り消し・却下なら消す
+  // 休暇のカレンダー連携は、承認状態をDBへ保存したあとに行う。
+  // 失敗してもHTTP 500にはせず「申請は処理済み・カレンダーだけ要確認」と返す。
   let calendar = { skipped: "not_applicable" };
   if (r.kind === "leave") {
-    const goingLive = patch.status === "approved";
+    const goingLive = saved.status === "approved";
+    const record = { ...r, ...saved };
 
-    // まず社内の予定表。Googleより先にこちらを書く。
-    //
-    // ここが抜けていた。承認しても mf の「スケジュール」には何も出ず、
-    // Google 側はサービスアカウントが未設定だと黙って戻るので、
-    // たいていの環境では文字どおり何も起きていなかった。
-    // 社内の予定表は mf だけで完結するので、こちらが本命
-    await syncLeaveEvent(sb, ctx, r, goingLive);
-
+    await syncLeaveEvent(sb, ctx, record, goingLive);
     calendar = await syncAllDay({
-      record: r,
+      record,
       action: goingLive ? "upsert" : "delete",
       summary: `${r.applicant?.display_name || ""}さん ${LEAVE_LABEL[r.leave_type] || "休暇"}`,
       description: "エイト 社内ポータルの休暇申請から自動で作成されました。",
       startsOn: r.starts_on,
       endsOn: r.ends_on,
     });
+
     if (!calendar.skipped) {
-      patch.gcal_error = calendar.error || null;
+      const calPatch = { gcal_error: calendar.error || null, updated_at: new Date().toISOString() };
       if (!calendar.error) {
-        patch.gcal_calendar_id = calendar.calendarId ?? null;
-        patch.gcal_event_id = calendar.eventId ?? null;
-        patch.gcal_link = calendar.link ?? null;
+        calPatch.gcal_calendar_id = calendar.calendarId ?? null;
+        calPatch.gcal_event_id = calendar.eventId ?? null;
+        calPatch.gcal_link = calendar.link ?? null;
+      }
+      const meta = await sb.from("gw_requests")
+        .update(calPatch).eq("id", r.id).eq("tenant_id", ctx.tenantId)
+        .select("id, kind, status, approved_at, owner_approved_at, decision_note, gcal_link, gcal_error")
+        .single();
+      if (!meta.error && meta.data) {
+        saved = meta.data;
+      } else if (meta.error) {
+        console.error("[requests] カレンダー結果を申請へ保存できませんでした:", meta.error.message);
+        calendar = { ...calendar, error: calendar.error || "カレンダーの反映結果を申請へ保存できませんでした" };
       }
     }
   }
 
-  const { data: saved, error: ue } = await sb
-    .from("gw_requests")
-    .update(patch)
-    .eq("id", r.id)
-    .select("id, kind, status, approved_at, owner_approved_at, decision_note, gcal_link, gcal_error")
-    .single();
-  if (ue) return json(res, 500, { error: "db_update_failed", detail: ue.message });
-
-  await announce({ ctx, r, saved, action: body.action, note, isMine });
-  await gwLog({
-    tenantId: ctx.tenantId, actorId: ctx.employee?.id || null,
-    action: `request.${body.action}`, target: r.id,
-    detail: { kind: r.kind, status: saved.status, title: r.title },
-  });
+  // 状態が変わった初回だけ通知・監査ログを残す。再同期で二重通知しない。
+  if (!replay) {
+    try {
+      await announce({ ctx, r, saved, action: body.action, note, isMine });
+    } catch (e) {
+      console.error("[requests] 承認後の通知に失敗:", e?.message || e);
+    }
+    try {
+      await gwLog({
+        tenantId: ctx.tenantId, actorId: ctx.employee?.id || null,
+        action: `request.${body.action}`, target: r.id,
+        detail: { kind: r.kind, status: saved.status, title: r.title },
+      });
+    } catch (e) {
+      console.error("[requests] 承認後の監査ログに失敗:", e?.message || e);
+    }
+  }
 
   return json(res, 200, {
     request: saved,
+    replayed: replay,
     calendar: calendar.skipped ? { synced: false, reason: calendar.skipped }
-      : (calendar.error ? { synced: false, error: calendar.error } : { synced: true, link: calendar.link || null }),
+      : (calendar.error ? { synced: false, error: calendar.error } : { synced: true, link: calendar.link || null, reused: Boolean(calendar.reused) }),
   });
 }
 
