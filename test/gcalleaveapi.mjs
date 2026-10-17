@@ -71,4 +71,10 @@ assert.equal(calls.filter((c) => c.method === "POST").length, 2, "再実行で�
 assert.equal(calls.filter((c) => c.method === "PATCH").length, 1, "既存ならPATCHへ切り替える");
 assert.ok(calls.filter((c) => c.method === "POST").every((c) => c.body.id === stable), "毎回同じevent id");
 
+// DBにevent idを書き戻せなかった状態でも、取消時は申請IDから同じ予定を消せる。
+const del = await syncAllDay({ ...args, action: "delete" });
+assert.equal(del.error, null);
+const deleted = calls.find((c) => c.method === "DELETE");
+assert.ok(deleted && deleted.url.endsWith("/events/" + stable), "保存前に通信が切れていても固定IDの予定を削除する");
+
 console.log("すべて通過");
