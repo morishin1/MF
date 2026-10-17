@@ -1,5 +1,5 @@
 import {
-  normalizeNippo, evaluateDaily, hasContent, SUCCESS_MET, IMPROVE_TAGS, MAX_WINS,
+  normalizeNippo, evaluateDaily, hasContent, isSubmittedNippo, SUCCESS_MET, IMPROVE_TAGS, MAX_WINS,
 } from "../lib/nippo.js";
 
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,11 @@ const atRoot = (p) => _join(ROOT, p);
 
 let bad = 0;
 const ok = (c, m) => { if (!c) { console.log("NG:", m); bad++; } };
+
+// ---- 提出済みの共通判定（GW-06） ----
+ok(isSubmittedNippo({ submitted_at: "2026-10-17T08:00:00Z" }), "submitted_at があれば提出済み");
+ok(!isSubmittedNippo({ submitted_at: null, morning_at: "2026-10-17T00:00:00Z" }), "朝入力だけは未提出");
+ok(isSubmittedNippo({ user_id: "legacy", work_date: "2026-10-16" }), "submitted_at を選ばない旧/簡易入力は後方互換");
 
 // ---- 朝のゴールは達成できたか ----
 for (const k of ["o", "d", "x"]) {
