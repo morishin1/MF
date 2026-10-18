@@ -100,6 +100,10 @@
       "destination": "/sales/leads.html"
     },
     {
+      "source": "/sales/proposals",
+      "destination": "/sales/proposals.html"
+    },
+    {
       "source": "/sales/analytics",
       "destination": "/sales/analytics.html"
     },

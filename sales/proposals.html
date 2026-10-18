@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>提案管理 - EIGHT SALES</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; }
+    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+
+    /* いちばん上：今日やること（押すとその絞り込み） */
+    .pp-sum { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:18px; }
+    .pp-sum button { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; text-align:left;
+      cursor:pointer; font-family:inherit; }
+    .pp-sum button.hot { background:#fdecea; border-color:#c0392b; border-width:2px; }
+    .pp-sum button.warn { background:#fff4d6; border-color:#e0a100; }
+    .pp-sum .lb { font-size:12px; color:#6b7080; font-weight:700; display:flex; align-items:center; gap:5px; }
+    .pp-sum button.hot .lb { color:#b3261e; }
+    .pp-sum .lb .material-symbols-outlined { font-size:16px; }
+    .pp-sum .v { font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
+    .pp-sum .v small { font-size:13px; font-weight:700; margin-left:2px; }
+
+    .pp-filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .pp-filters button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 12px; font-size:12px;
+      font-weight:500; color:#4a5068; cursor:pointer; font-family:inherit; white-space:nowrap; }
+    .pp-filters button.on { background:#1b2440; border-color:#1b2440; color:#fff; font-weight:700; }
+    .pp-filters button .c { font-weight:700; margin-left:4px; font-variant-numeric:tabular-nums; }
+    .pp-filters button.alert:not(.on) { border-color:#c0392b; color:#b3261e; }
+
+    .pp-table td.due, .pp-table td.nw { white-space:nowrap; }
+    a.btn { text-decoration:none; }
+    .pp-table tr.overdue td:first-child { box-shadow:inset 3px 0 0 #c0392b; }
+    .pp-over { color:#b3261e; font-weight:700; }
+    .pp-small { font-size:11.5px; color:#6b7080; display:block; margin-top:2px; }
+    .pp-tag { display:inline-block; border-radius:6px; padding:2px 7px; font-size:11px; font-weight:700; background:#e7eaf3; color:#1b2440; }
+    .pp-tag.enger { background:#e6f050; color:#1b2440; }
+    .pp-tag.warn { background:#fbf1d6; color:#7d5a00; }
+    .pp-tag.err { background:#fdecea; color:#b3261e; }
+
+    .pp-cards { display:none; gap:8px; }
+    .pp-card { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px; padding:12px 14px; cursor:pointer; }
+    .pp-card.overdue { border-left-color:#c0392b; }
+    .pp-card b { color:#1b2440; font-size:14.5px; }
+    .pp-card .l { font-size:12px; color:#4a5068; margin-top:4px; }
+
+    .pp-sec { margin-top:28px; }
+    .pp-sec summary { cursor:pointer; font-size:15px; font-weight:700; color:#1b2440; margin-bottom:10px; }
+    .pp-kpi { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+    .pp-kpi > div { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:10px 12px; }
+    .pp-kpi .lb { font-size:11px; color:#6b7080; font-weight:700; }
+    .pp-kpi .v { font-size:20px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; }
+    .pp-kpi .s { font-size:11px; color:#9aa0b4; }
+
+    /* 詳細 */
+    .pp-box { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:14px 16px; margin:0 20px 14px; }
+    .pp-box h4 { font-size:13px; color:#1b2440; margin:0 0 10px; display:flex; align-items:center; gap:6px; }
+    .pp-check { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:12.5px; }
+    .pp-check li { display:flex; gap:8px; align-items:center; color:#4a5068; }
+    .pp-check li .material-symbols-outlined { font-size:18px; color:#c8ccd8; }
+    .pp-check li.ok .material-symbols-outlined { color:#2f6f3a; }
+    .pp-check li.now { color:#1b2440; font-weight:700; }
+    .pp-check li.now .material-symbols-outlined { color:#e0a100; }
+    .pp-task { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #efefeb; font-size:12.5px; }
+    .pp-task:last-child { border-bottom:none; }
+    .pp-task .t { flex:1; min-width:0; }
+    .pp-task .t b { color:#1b2440; }
+    .pp-task .ops { display:flex; gap:4px; flex-wrap:wrap; }
+    .pp-task.done { color:#9aa0b4; }
+    .pp-task.done b { color:#6b7080; text-decoration:line-through; }
+    .pp-task.overdue b { color:#b3261e; }
+    .pp-linkbtn { border:none; background:none; color:#3f4bab; font-size:12px; cursor:pointer; padding:2px 4px; font-family:inherit; }
+    .pp-contact { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+    .pp-opt { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
+    .pp-opt label { display:flex; gap:8px; align-items:center; border:1px solid #e2e2dc; border-radius:8px; padding:9px 10px; margin:0;
+      font-size:13px; color:#1b2440; font-weight:500; cursor:pointer; }
+    .pp-opt label input { width:auto; margin:0; }
+    .pp-opt label:has(input:checked) { border-color:#1b2440; background:#f3f5fb; font-weight:700; }
+    .pp-msg { color:#b3261e; font-size:12.5px; margin-top:8px; min-height:1em; }
+    .pp-tpl { white-space:pre-wrap; font-size:12.5px; background:#f6f6f2; border-radius:8px; padding:10px 12px; max-height:220px; overflow:auto; }
+
+    @media (max-width: 1000px) {
+      .pp-sum, .pp-kpi { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    }
+    @media (max-width: 760px) {
+      .pp-sum, .pp-kpi { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .pp-tablewrap { display:none; }
+      .pp-cards { display:grid; }
+      .pp-opt { grid-template-columns:1fr; }
+      .pp-box { margin:0 12px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1 class="sl-title">提案管理</h1>
+  <p class="sl-sub">提案を送ったあとの電話・メール・回答確認・面談までを、提案ごとに追います。dx.enger で送った提案は自動で入ります。</p>
+
+  <div id="notice"></div>
+  <div class="pp-sum" id="sum"></div>
+
+  <div class="sl-toolbar">
+    <select id="f-owner" onchange="ppSet('owner', this.value)" style="display:none;"></select>
+    <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
+    <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
+    <select id="f-sort" onchange="ppSet('sort', this.value)">
+      <option value="due">期限超過・期限が近い順</option>
+      <option value="elapsed">提案からの経過が長い順</option>
+      <option value="sent">提案日が新しい順</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">
+      <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
+  </div>
+  <div class="pp-filters" id="filters"></div>
+
+  <div class="pp-tablewrap" style="overflow-x:auto;">
+    <table class="sl-table pp-table">
+      <thead><tr>
+        <th>提案日時</th><th>企業</th><th>種別</th><th>提案</th><th>マッチング担当</th><th>営業担当</th>
+        <th>進捗</th><th>次の行動・期限</th><th>経過</th><th>電話</th><th>メール</th><th>連携</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="12" class="empty">読み込み中…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="pp-cards" id="cards"></div>
+
+  <div class="pp-sec" id="kpi-sec"></div>
+  <div class="pp-sec" id="admin-sec"></div>
+</div>
+
+<div id="pp-drawer"></div>
+<div id="pp-action"></div>
+
+<script src="../js/api-client.js?v=20261015man1"></script>
+<script src="../js/layout.js?v=20261015man1"></script>
+<script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script>
+  // 画面の値（選択肢・ラベル）はサーバ（lib/sales-proposals.js）が返す。ここに同じ一覧を書かない
+  const $ = (id) => document.getElementById(id);
+  const esc = SalesLayout.esc;
+  const { fmt, statusPill } = SalesLayout;
+  const STATE = { filter: "open", owner: "", service: "", q: "", sort: "due" };
+  let data = null;      // 一覧の応答
+  let detail = null;    // 詳細の応答
+  let openId = null;
+  let seq = 0;
+
+  const STATUS_PILL = {
+    call_wait: "clicked", mail_wait: "clicked", reply_wait: "attacked", meeting_adjust: "meeting", meeting_done: "meeting",
+    considering: "attacked", reproposal: "reattack_wait", won: "won", lost: "lost", stopped: "excluded", closed_no_reply: "lost",
+  };
+  const pill = (status, label) => statusPill(STATUS_PILL[status] || "untouched", label);
+  const errText = (e, f) => e.hint || e.detail || e.message || f || "失敗しました";
+  const localInput = (iso) => {
+    const d = iso ? new Date(iso) : new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const dueText = (iso, overdue) => iso ? `<span class="${overdue ? "pp-over" : ""}">${esc(fmt(iso))}${overdue ? "（超過）" : ""}</span>` : "—";
+
+  // URL に絞り込みを持つ（戻る・共有で同じ一覧になる）
+  function readUrl() {
+    const sp = new URLSearchParams(location.search);
+    for (const k of ["filter", "owner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
+    return sp.get("id");
+  }
+  function writeUrl() {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "open") && !(k === "sort" && v === "due")) sp.set(k, v);
+    if (openId) sp.set("id", openId);
+    history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
+  }
+
+  const startId = readUrl();
+  SalesLayout.init({ active: "proposals" }).then(async (ctx) => {
+    if (!ctx) return;
+    // メール文の名乗り（ログイン中の社員名）
+    window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
+    $("f-q").value = STATE.q;
+    $("f-sort").value = STATE.sort;
+    await load();
+    if (startId) ppOpen(startId);
+  });
+
+  async function load() {
+    const my = ++seq;
+    const qs = new URLSearchParams({ filter: STATE.filter, sort: STATE.sort });
+    if (STATE.owner) qs.set("owner", STATE.owner);
+    if (STATE.service) qs.set("service", STATE.service);
+    if (STATE.q) qs.set("q", STATE.q);
+    try {
+      const d = await API.api(`/api/sales/proposals?${qs}`);
+      if (my !== seq) return;
+      data = d;
+      render();
+    } catch (e) {
+      if (my !== seq) return;
+      const notReady = e.code === "not_ready";
+      $("rows").innerHTML = `<tr><td colspan="12" class="empty">表示できません</td></tr>`;
+      $("notice").innerHTML = `<div class="banner ${notReady ? "warn" : "err"}"><span class="material-symbols-outlined">${notReady ? "build" : "error"}</span>
+        <div>${esc(errText(e, "取得に失敗しました"))}</div></div>`;
+    }
+  }
+
+  function ppSet(k, v) { STATE[k] = v; writeUrl(); load(); }
+  let qTimer = null;
+  function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
+
+  function render() {
+    const d = data;
+    $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
+    // 今日やること
+    const t = d.today || {};
+    const cards = [
+      { lb: "今日の電話", icon: "call", v: t.call, f: "today" },
+      { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
+      { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
+      { lb: "面談調整", icon: "event", v: t.meeting, f: "meeting" },
+      { lb: "期限超過", icon: "alarm", v: t.overdue, f: "overdue", hot: true },
+    ];
+    if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", v: d.counts?.unassigned ?? 0, f: "unassigned", warn: true });
+    else cards.push({ lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true });
+    $("sum").innerHTML = cards.map((c) => `
+      <button onclick="ppSet('filter','${c.f}')" class="${c.hot && c.v ? "hot" : c.warn && c.v ? "warn" : ""}">
+        <div class="lb"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.lb)}</div>
+        <div class="v">${c.v || 0}<small>件</small></div></button>`).join("");
+
+    // 絞り込み
+    $("filters").innerHTML = d.labels.filters.filter((f) => d.manager || !f.managerOnly).map((f) => `
+      <button class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
+        onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`).join("");
+
+    // 担当（管理側だけ）・サービス
+    const owner = $("f-owner");
+    if (d.manager) {
+      owner.style.display = "";
+      owner.innerHTML = `<option value="">担当：全員</option><option value="me">自分の担当</option><option value="none">担当未割当</option>`
+        + (d.members || []).map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
+      owner.value = STATE.owner;
+    }
+    const svc = $("f-service");
+    svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
+    svc.value = STATE.service;
+
+    renderRows(d.proposals || []);
+    renderKpi(d);
+    renderAdmin(d);
+  }
+
+  const callCell = (r) => r.call ? `${esc(r.call.label)}<span class="pp-small">${esc(fmt(r.call.lastAt))}${r.call.count > 1 ? `・${r.call.count}回` : ""}</span>`
+    : r.closed ? "—" : `<span class="pp-over">未実施</span>`;
+  const mailCell = (r) => r.mail ? `送信${r.mail.selfReported ? "（自己申告）" : ""}<span class="pp-small">${esc(fmt(r.mail.lastAt))}</span>` : "—";
+  const syncCell = (r) => r.sourceSystem === "enger"
+    ? `<span class="pp-tag enger">dx.enger</span>${r.companyId ? "" : `<span class="pp-small">企業未紐付け</span>`}`
+    : `<span class="pp-tag">手入力</span>`;
+
+  function renderRows(rows) {
+    if (!rows.length) {
+      $("rows").innerHTML = `<tr><td colspan="12" class="empty">この条件の提案はありません</td></tr>`;
+      $("cards").innerHTML = `<div class="sl-empty">この条件の提案はありません</div>`;
+      return;
+    }
+    $("rows").innerHTML = rows.map((r) => `
+      <tr class="click${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
+        <td style="white-space:nowrap;">${esc(fmt(r.sentAt))}</td>
+        <td><span class="sl-nm">${esc(r.companyName)}</span>${r.contactStop ? `<span class="pp-tag err">連絡停止</span>` : ""}</td>
+        <td>${esc(r.service || "—")}</td>
+        <td>${esc(r.title)}${r.sourceCode ? `<span class="pp-small">${esc(r.sourceCode)}</span>` : ""}</td>
+        <td>${esc(r.matchingOwnerName || "—")}</td>
+        <td>${r.salesOwnerName ? esc(r.salesOwnerName) : `<span class="pp-tag warn">未割当</span>`}</td>
+        <td>${pill(r.status, r.statusLabel)}${r.closeReasonLabel ? `<span class="pp-small">${esc(r.closeReasonLabel)}</span>` : ""}</td>
+        <td class="due">${r.next ? `${esc(r.next.title)}<span class="pp-small">${dueText(r.next.dueAt, r.next.overdue)}</span>` : "—"}</td>
+        <td style="white-space:nowrap;">${r.elapsedDays}日</td>
+        <td class="nw">${callCell(r)}</td>
+        <td class="nw">${mailCell(r)}</td>
+        <td>${syncCell(r)}</td>
+      </tr>`).join("");
+    // スマホ：電話先・次の行動・期限が先に見えるカード
+    $("cards").innerHTML = rows.map((r) => `
+      <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+          <b>${esc(r.companyName)}</b>${pill(r.status, r.statusLabel)}</div>
+        <div class="l">${esc(r.title)}${r.service ? `・${esc(r.service)}` : ""}</div>
+        <div class="l"><b style="font-size:12.5px;">次：${esc(r.next ? r.next.title : "—")}</b>${r.next ? `　${dueText(r.next.dueAt, r.next.overdue)}` : ""}</div>
+        <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : "未実施"}　経過 ${r.elapsedDays}日　担当：${esc(r.salesOwnerName || "未割当")}</div>
+      </div>`).join("");
+  }
+
+  function renderKpi(d) {
+    const k = d.kpi?.total;
+    if (!k) { $("kpi-sec").innerHTML = ""; return; }
+    const v = (x, unit = "%") => (x == null ? "—" : `${x}${unit}`);
+    const minTxt = (m) => (m == null ? "—" : m < 60 ? `${m}分` : `${Math.floor(m / 60)}時間${m % 60 ? `${m % 60}分` : ""}`);
+    const tiles = [
+      ["提案後の電話実施率", v(k.callRate), `${k.called}/${k.callBase}件・目標100%`],
+      ["電話の期限内実施率", v(k.onTimeRate), `${k.onTime}/${k.onTimeBase}件・目標90%`],
+      ["初回電話までの時間", minTxt(k.firstCallMedianMin), `中央値・${k.firstCallMeasured}件`],
+      ["不通時のメール実施率", v(k.mailRate), `${k.mailDone}/${k.mailBase}件・目標100%`],
+      ["提案→面談率", v(k.meetingRate), `${k.meetings}/${k.proposals}件・目標20%`],
+      ["面談→成約率", v(k.wonRate), `${k.won}/${k.meetings}件・目標30%`],
+    ];
+    const owners = (d.kpi.byOwner || []).filter((r) => r.proposals);
+    $("kpi-sec").innerHTML = `
+      <div class="sl-sec-h">KPI（直近${d.kpi.days}日に送った提案）</div>
+      <div class="sl-sec-sub">定義は「使い方」の KPI の定義を参照。自社が電話・メールしていない無回答は、企業の応答に数えません</div>
+      <div class="pp-kpi">${tiles.map(([lb, val, s]) => `<div><div class="lb">${esc(lb)}</div><div class="v">${esc(val)}</div><div class="s">${esc(s)}</div></div>`).join("")}</div>
+      ${d.manager && owners.length ? `<div style="overflow-x:auto;"><table class="sl-table">
+        <thead><tr><th>営業担当</th><th>提案</th><th>対応中</th><th>電話実施率</th><th>期限内</th><th>初回電話</th><th>不通時メール</th><th>面談化</th><th>成約</th><th>期限超過</th></tr></thead>
+        <tbody>${owners.map((r) => `<tr>
+          <td>${esc(r.ownerName)}</td><td>${r.proposals}</td><td>${r.open}</td><td>${v(r.callRate)}</td><td>${v(r.onTimeRate)}</td>
+          <td>${minTxt(r.firstCallMedianMin)}</td><td>${v(r.mailRate)}</td><td>${v(r.meetingRate)}</td><td>${r.won}</td>
+          <td>${r.overdueTasks ? `<span class="pp-over">${r.overdueTasks}</span>` : 0}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
+  }
+
+  // ---- 管理側：連携エラー・設定 ----------------------------------------------------
+  async function renderAdmin(d) {
+    if (!d.manager) { $("admin-sec").innerHTML = ""; return; }
+    const s = d.settings;
+    $("admin-sec").innerHTML = `
+      <details ${d.syncIssues ? "open" : ""}><summary>dx.enger 連携の確認 ${d.syncIssues ? `<span class="pp-tag err">${d.syncIssues}件</span>` : `<span class="pp-tag">問題なし</span>`}</summary>
+        <div id="sync-list" class="sl-empty">読み込み中…</div></details>
+      <details style="margin-top:14px;"><summary>フォローの設定</summary>
+        <div class="card" style="max-width:640px;">
+          <div class="inline-controls">
+            <div><label>営業開始</label><input type="time" id="st-start" value="${esc(s.bizStart)}"></div>
+            <div><label>営業終了</label><input type="time" id="st-end" value="${esc(s.bizEnd)}"></div>
+            <div><label>初回電話の期限（分）</label><input type="number" id="st-first" min="5" max="480" value="${s.firstCallMinutes}"></div>
+          </div>
+          <div class="inline-controls" style="margin-top:10px;">
+            <div><label>再フォロー（営業日）</label><input type="number" id="st-refollow" min="1" max="20" value="${s.refollowBizDays}"></div>
+            <div><label>管理者確認（営業日）</label><input type="number" id="st-review" min="1" max="30" value="${s.reviewBizDays}"></div>
+          </div>
+          <label style="margin-top:10px;">自社の休業日（YYYY-MM-DD を改行かカンマで。祝日・年末年始は登録済み）</label>
+          <textarea id="st-holidays" rows="2">${esc((s.extraHolidays || []).join("\n"))}</textarea>
+          <div class="pp-msg" id="st-msg"></div>
+          <button class="btn btn-primary btn-sm" onclick="ppSaveSettings(this)">保存（これから作るタスクの期限に効きます）</button>
+        </div></details>`;
+    try {
+      const r = await API.api("/api/sales/proposals/sync");
+      $("sync-list").className = "";
+      $("sync-list").innerHTML = r.items.length ? `<div style="overflow-x:auto;"><table class="sl-table">
+        <thead><tr><th>受信</th><th>内容</th><th>状態</th><th>回数</th><th></th></tr></thead><tbody>
+        ${r.items.map((i) => `<tr><td style="white-space:nowrap;">${esc(fmt(i.receivedAt))}</td>
+          <td>${esc(i.messageLabel || i.message || "—")}<span class="pp-small">${esc(i.eventType)}・dx.enger 提案 ${esc(i.sourceProposalId || "—")}</span></td>
+          <td>${i.status === "error" ? `<span class="pp-tag err">失敗</span>` : `<span class="pp-tag warn">要確認</span>`}</td>
+          <td>${i.attempts}</td>
+          <td style="white-space:nowrap;">${i.proposalId ? `<button class="pp-linkbtn" onclick="ppOpen('${esc(i.proposalId)}')">提案を開く</button>` : ""}
+            <button class="pp-linkbtn" onclick="ppResolve('${esc(i.id)}', this)">確認済みにする</button></td></tr>`).join("")}
+        </tbody></table></div>` : `<div class="sl-empty">未確認の連携エラー・要確認はありません</div>`;
+    } catch (e) {
+      $("sync-list").innerHTML = `<div class="sl-empty">${esc(errText(e))}</div>`;
+    }
+  }
+  async function ppResolve(id, btn) {
+    try { await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/sync", { method: "PATCH", body: { id } })); load(); }
+    catch (e) { alert(errText(e)); }
+  }
+  async function ppSaveSettings(btn) {
+    const body = {
+      bizStart: $("st-start").value, bizEnd: $("st-end").value, firstCallMinutes: Number($("st-first").value),
+      refollowBizDays: Number($("st-refollow").value), reviewBizDays: Number($("st-review").value),
+      extraHolidays: $("st-holidays").value,
+    };
+    try {
+      await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/settings", { method: "PATCH", body }));
+      $("st-msg").style.color = "#2f6f3a"; $("st-msg").textContent = "保存しました";
+    } catch (e) { $("st-msg").style.color = ""; $("st-msg").textContent = errText(e); }
+  }
+
+  // ---- 詳細（右ドロワー） ------------------------------------------------------
+  async function ppOpen(id) {
+    openId = id;
+    writeUrl();
+    const my = ++seq;
+    $("pp-drawer").innerHTML = `<div class="sl-drawer-bg" onclick="ppClose()"></div>
+      <div class="sl-detail" id="pp-detail"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+    try {
+      const d = await API.api(`/api/sales/proposals/detail?id=${encodeURIComponent(id)}`);
+      if (my !== seq || openId !== id) return;
+      detail = d;
+      renderDetail();
+    } catch (e) {
+      if (my !== seq || openId !== id || !$("pp-detail")) return;
+      $("pp-detail").innerHTML = `<div class="banner err" style="margin:20px;"><span class="material-symbols-outlined">error</span>
+        <div>${esc(e.code === "not_found" ? "この提案は見つからないか、担当ではないため表示できません" : errText(e))}</div></div>
+        <div style="padding:0 20px;"><button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button></div>`;
+    }
+  }
+  function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; writeUrl(); }
+
+  // チェックリスト：電話 → 不通ならメール → 回答確認 → 再フォロー → 結果確定
+  function checklist(p, tasks, acts) {
+    const has = (k, fn = () => true) => acts.some((a) => a.kind === k && fn(a));
+    const noAnswer = has("call", (a) => ["no_answer", "absent"].includes(a.result));
+    const replied = has("reply") || has("call", (a) => a.result === "connected");
+    const open = (kind) => tasks.some((t) => t.status === "open" && t.kind === kind);
+    const items = [
+      { lb: "電話（結果を記録）", ok: has("call"), now: open("call") && !has("call") },
+      { lb: "不通のときは確認メール", ok: has("mail") || (has("call") && !noAnswer), now: open("mail"), skip: has("call") && !noAnswer },
+      { lb: "回答の確認", ok: replied || has("check"), now: open("reply_check") },
+      { lb: "再フォロー（未回答のとき）", ok: replied || tasks.some((t) => t.source_event === "auto:refollow" && t.status === "done"), now: open("refollow"), skip: replied },
+      { lb: "結果の確定（成約・見送り・クローズ）", ok: p.closed, now: open("manager_review") || p.status === "meeting_done" },
+    ];
+    return `<ul class="pp-check">${items.map((i) => `<li class="${i.ok ? "ok" : i.now ? "now" : ""}">
+      <span class="material-symbols-outlined">${i.ok ? "check_circle" : i.now ? "pending" : "radio_button_unchecked"}</span>
+      ${esc(i.lb)}${i.skip && i.ok ? `<span class="sl-muted">（不要）</span>` : ""}</li>`).join("")}</ul>`;
+  }
+
+  function renderDetail() {
+    const box = $("pp-detail");
+    if (!box || !detail) return;
+    const p = detail.proposal;
+    const tasks = detail.tasks || [];
+    const acts = detail.activities || [];
+    const openTasks = tasks.filter((t) => t.status === "open");
+    const doneTasks = tasks.filter((t) => t.status !== "open");
+    const phone = p.contactPhone || detail.company?.phone || null;
+    const review = openTasks.some((t) => t.kind === "manager_review");
+
+    const cta = p.closed
+      ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
+      : `<button class="btn btn-primary sl-cta-main" onclick="ppCall()"><span class="material-symbols-outlined icon-inline">call</span>電話の結果を記録</button>
+         <div class="sl-cta-sub">
+           <button class="btn btn-secondary btn-sm" onclick="ppMail()">確認メールを送った</button>
+           <button class="btn btn-secondary btn-sm" onclick="ppReply()">企業から返信あり</button>
+           <button class="btn btn-secondary btn-sm" onclick="ppCheck()">返信なし（回答確認）</button>
+           <button class="btn btn-secondary btn-sm" onclick="ppMeeting()">面談</button>
+           <button class="btn btn-secondary btn-sm" onclick="ppResult()">結果・状態</button>
+           ${detail.manager && review ? `<button class="btn btn-secondary btn-sm" onclick="ppDecision()">管理者の判断</button>` : ""}
+         </div>`;
+
+    box.innerHTML = `
+      <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="min-width:0;">
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(p.companyName)}</div>
+          <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
+          <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            ${pill(p.status, p.statusLabel)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}
+            <span>${esc(p.service || "")}</span><span>提案 ${esc(fmt(p.sentAt))}（${p.elapsedDays}日経過）</span>
+            ${p.sourceSystem === "enger" ? `<span class="pp-tag enger">dx.enger</span>` : `<span class="pp-tag">手入力</span>`}
+            ${p.contactStop ? `<span class="pp-tag err">連絡停止の希望</span>` : ""}
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
+      </div>
+
+      <div class="sl-next" style="margin:14px 20px 12px;">
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>次の行動</div>
+        <h3>${esc(p.next ? p.next.title : p.closed ? "—" : "タスクはありません")}</h3>
+        <div class="meta">${p.next ? `期限：${dueText(p.next.dueAt, p.next.overdue)}　担当：${esc(p.next.assigneeName || "未定")}` : ""}
+          ${p.meetingAt ? `　面談：${esc(fmt(p.meetingAt))}` : ""}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
+      </div>
+
+      <div class="pp-box">
+        <h4><span class="material-symbols-outlined">contact_phone</span>先方の窓口</h4>
+        <div style="font-size:13px;color:#1b2440;">${esc(p.contactName || "担当者名 未登録")}</div>
+        <div class="pp-contact">
+          ${phone ? `<a class="btn btn-primary btn-sm" href="tel:${esc(phone.replace(/[^0-9+]/g, ""))}"><span class="material-symbols-outlined icon-inline">call</span>${esc(phone)}</a>` : `<span class="sl-muted">電話番号 未登録</span>`}
+          ${p.contactEmail ? `<span class="sl-muted">${esc(p.contactEmail)}</span>` : `<span class="sl-muted">メール 未登録</span>`}
+          <button class="pp-linkbtn" onclick="ppContact()">窓口を直す</button>
+        </div>
+      </div>
+
+      <div class="pp-box">
+        <h4><span class="material-symbols-outlined">checklist</span>チェックリスト</h4>
+        ${checklist(p, tasks, acts)}
+      </div>
+
+      <div class="pp-box">
+        <h4 style="justify-content:space-between;"><span style="display:flex;gap:6px;align-items:center;"><span class="material-symbols-outlined">task_alt</span>タスク</span>
+          ${p.closed ? "" : `<button class="pp-linkbtn" onclick="ppTaskAdd()">＋ タスクを足す</button>`}</h4>
+        ${openTasks.length ? openTasks.map((t) => taskRow(t)).join("") : `<div class="sl-empty">開いているタスクはありません</div>`}
+        ${doneTasks.length ? `<details style="margin-top:8px;"><summary class="sl-muted" style="cursor:pointer;">完了・取り消し（${doneTasks.length}件）</summary>
+          ${doneTasks.map((t) => taskRow(t)).join("")}</details>` : ""}
+      </div>
+
+      <div class="pp-box">
+        <h4><span class="material-symbols-outlined">info</span>提案の情報</h4>
+        <dl class="sl-grid2">
+          <div><dt>マッチング担当</dt><dd>${esc(p.matchingOwnerName || "—")}</dd></div>
+          <div><dt>営業担当</dt><dd>${esc(p.salesOwnerName || "未割当")}
+            ${detail.manager ? ` <button class="pp-linkbtn" onclick="ppAssign()">変更</button>` : ""}</dd></div>
+          <div><dt>案件</dt><dd>${esc(p.jobTitle || "—")}</dd></div>
+          <div><dt>人材</dt><dd>${esc(p.talentInitials || "—")}</dd></div>
+          <div><dt>dx.enger</dt><dd>${p.sourceUrl ? `<a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">提案を開く${p.sourceCode ? `（${esc(p.sourceCode)}）` : ""}</a>` : "—"}
+            ${p.sourceStage ? `<span class="pp-small">ステージ：${esc(p.sourceStage)}</span>` : ""}</dd></div>
+          <div><dt>企業（/sales）</dt><dd>${detail.company
+            ? `<a href="/sales/companies.html?id=${esc(detail.company.id)}">${esc(detail.company.name)}</a><span class="pp-small">${esc(detail.company.statusLabel)}${detail.company.ng ? "・営業禁止" : ""}</span>
+               <button class="pp-linkbtn" onclick="ppLink()">付け替え</button>`
+            : `<span class="pp-tag warn">未紐付け</span> <button class="pp-linkbtn" onclick="ppLink()">紐付ける</button>`}</dd></div>
+        </dl>
+        <div class="sl-muted" style="font-size:11.5px;">企業と紐付けると、この提案の電話・メール・返信・面談が企業の営業履歴にも残ります（社名だけで自動では紐付けません）</div>
+      </div>
+
+      <div style="padding:0 20px 24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;">
+          <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
+          <button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>
+        </div>
+        ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
+          <div class="row"><div class="d">${esc(fmt(a.occurredAt))}${a.employeeName ? `　${esc(a.employeeName)}` : ""}</div>
+            <div class="l">${esc(a.label)}</div>
+            ${a.nextAt ? `<div class="x">日時：${esc(fmt(a.nextAt))}</div>` : ""}
+            ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
+          : `<div class="sl-empty">まだ記録がありません</div>`}
+      </div>`;
+  }
+
+  function taskRow(t) {
+    const cls = t.status !== "open" ? "done" : t.overdue ? "overdue" : "";
+    const ops = t.status === "open" ? `<div class="ops">
+      <button class="pp-linkbtn" onclick="ppTaskDue('${esc(t.id)}')">期限変更</button>
+      ${t.kind === "manual" ? `<button class="pp-linkbtn" onclick="ppTaskDone('${esc(t.id)}')">完了</button>` : ""}
+      ${!t.auto || detail.manager ? `<button class="pp-linkbtn" onclick="ppTaskCancel('${esc(t.id)}')">取り消し</button>` : ""}</div>` : "";
+    return `<div class="pp-task ${cls}"><div class="t"><b>${esc(t.title)}</b>
+      <span class="pp-small">${esc(t.kindLabel)}・期限 ${esc(fmt(t.dueAt))}${t.overdue ? "（超過）" : ""}・${esc(t.assigneeName || "担当未定")}
+        ${t.status === "done" ? `・完了 ${esc(fmt(t.doneAt))}${t.late ? "（期限後）" : ""}` : ""}${t.status === "canceled" ? `・取り消し（${esc(t.cancelReason || "")}）` : ""}</span></div>${ops}</div>`;
+  }
+
+  // ---- 操作（中央モーダル） ----------------------------------------------------
+  function modal(html) {
+    $("pp-action").innerHTML = `<div class="sl-modal-bg" onclick="ppCloseAction()"></div><div class="sl-modal" role="dialog" aria-modal="true">${html}</div>`;
+  }
+  function ppCloseAction() { $("pp-action").innerHTML = ""; }
+  const radios = (name, list, checked) => `<div class="pp-opt">${list.map((o) => `
+    <label><input type="radio" name="${name}" value="${esc(o.key)}" ${o.key === checked ? "checked" : ""} onchange="ppToggle()">${esc(o.label)}</label>`).join("")}</div>`;
+  const picked = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || null;
+  const foot = (fn, label = "記録する") => `<div class="pp-msg" id="m-msg"></div>
+    <div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="${fn}">${esc(label)}</button>
+    <button class="btn btn-secondary" onclick="ppCloseAction()">やめる</button></div>`;
+  const whenField = (label = "実施日時") => `<label>${esc(label)}</label><input type="datetime-local" id="m-at" value="${localInput()}">`;
+  const noteField = (label = "メモ（任意）") => `<label style="margin-top:10px;">${esc(label)}</label><textarea id="m-note" rows="2"></textarea>`;
+  let toggle = () => {};
+  function ppToggle() { toggle(); }
+
+  function flash(text) {
+    const box = $("pp-detail");
+    if (!box) return;
+    const div = document.createElement("div");
+    div.className = "banner ok";
+    div.style.margin = "12px 20px 0";
+    div.innerHTML = `<span class="material-symbols-outlined">check_circle</span><div>${esc(text)}</div>`;
+    box.insertBefore(div, box.firstChild);
+    setTimeout(() => div.remove(), 6000);
+  }
+  async function send(body, okText = "保存しました") {
+    const btn = $("m-ok");
+    try {
+      const r = await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/detail", { method: "POST", body: { id: detail.proposal.id, ...body } }));
+      detail = r;
+      ppCloseAction();
+      renderDetail();
+      load();
+      // 何が記録され、次に何ができたかを、その場で知らせる（押しても何も起きないように見せない）
+      if (r.recorded) flash(`記録しました：${r.recorded.label}${r.recorded.createdTasks.length ? `　→ 次のタスク：${r.recorded.createdTasks.join("・")}` : ""}`);
+      else if (okText) flash(okText);
+    } catch (e) {
+      $("m-msg").textContent = errText(e);
+    }
+  }
+
+  function ppCall() {
+    const L = detail.labels;
+    modal(`<h2>電話の結果を記録</h2>
+      <label>結果（必須）</label>${radios("m-result", L.callResults)}
+      <div id="m-outcome" style="display:none;"><label>話した内容（必須）</label>${radios("m-out", L.outcomes)}</div>
+      <div id="m-next" style="display:none;"><label id="m-next-lb">日時</label><input type="datetime-local" id="m-nextat"></div>
+      ${whenField("電話した日時")}${noteField()}
+      <div class="sl-muted" style="font-size:11.5px;margin-top:8px;">不通・担当者不在なら、その営業日中の確認メールのタスクができます</div>
+      ${foot("ppSendCall()")}`);
+    toggle = () => {
+      const r = picked("m-result");
+      const def = L.callResults.find((x) => x.key === r);
+      $("m-outcome").style.display = r === "connected" ? "" : "none";
+      $("m-next").style.display = def?.needsAt ? "" : "none";
+      $("m-next-lb").textContent = r === "callback" ? "折り返しの予定日時（必須）" : "先方の希望日時（必須）";
+    };
+  }
+  function ppSendCall() {
+    if (!picked("m-result")) { $("m-msg").textContent = "結果を選んでください"; return; }
+    send({ action: "call", result: picked("m-result"), outcome: picked("m-out"), nextAt: $("m-nextat").value || null,
+      occurredAt: $("m-at").value, note: $("m-note").value });
+  }
+
+  function mailTemplate() {
+    const p = detail.proposal;
+    const name = (window.__me && window.__me.name) || "";
+    return {
+      subject: `ご提案の件（${p.title}）`,
+      body: `${p.companyName}\n${p.contactName ? `${p.contactName} 様` : "ご担当者様"}\n\nいつもお世話になっております。株式会社エイトの${name}です。\n\n`
+        + `先ほどお送りしたご提案（${p.title}）について、お電話を差し上げましたがご不在のようでしたので、メールにてご連絡いたしました。\n`
+        + `ご確認いただけましたら、ご検討の状況をお知らせいただけますと幸いです。\n\nご不明な点がございましたら、お気軽にご連絡ください。\n何卒よろしくお願いいたします。`,
+    };
+  }
+  function ppMail() {
+    const p = detail.proposal;
+    const t = mailTemplate();
+    const mailto = p.contactEmail ? `mailto:${encodeURIComponent(p.contactEmail)}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.body)}` : null;
+    modal(`<h2>確認メールを送った</h2>
+      <div class="sl-warn sl-caution"><span class="material-symbols-outlined">info</span>
+        <div>/sales からはまだメールを送れません。テンプレートでメールを送ってから「送った」を記録してください（自己申告として記録します）。</div></div>
+      <label>件名</label><div class="pp-tpl">${esc(t.subject)}</div>
+      <label style="margin-top:8px;">本文</label><div class="pp-tpl" id="m-tpl">${esc(t.body)}</div>
+      <div style="display:flex;gap:8px;margin:8px 0 10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="ppCopyTpl(this)">本文をコピー</button>
+        ${mailto ? `<a class="btn btn-secondary btn-sm" href="${esc(mailto)}">メールソフトで開く</a>` : `<span class="sl-muted">宛先メールが未登録です</span>`}
+      </div>
+      ${whenField("送った日時")}${noteField()}
+      ${foot("ppSendMail()", "送ったことを記録する")}`);
+  }
+  async function ppCopyTpl(btn) {
+    const t = mailTemplate();
+    try { await navigator.clipboard.writeText(`件名：${t.subject}\n\n${t.body}`); btn.textContent = "コピーしました"; }
+    catch { btn.textContent = "コピーできませんでした"; }
+  }
+  function ppSendMail() { send({ action: "mail", occurredAt: $("m-at").value, note: $("m-note").value }); }
+
+  function ppReply() {
+    const L = detail.labels;
+    modal(`<h2>企業から返信・回答があった</h2>
+      <label>内容（必須）</label>${radios("m-out", L.outcomes)}
+      <label>どこで</label><select id="m-ch"><option value="email">メール</option><option value="phone">電話</option><option value="form">フォーム</option><option value="line">LINE</option><option value="other">その他</option></select>
+      ${whenField("返信があった日時")}${noteField()}${foot("ppSendReply()")}`);
+  }
+  function ppSendReply() {
+    if (!picked("m-out")) { $("m-msg").textContent = "内容を選んでください"; return; }
+    send({ action: "reply", outcome: picked("m-out"), channel: $("m-ch").value, occurredAt: $("m-at").value, note: $("m-note").value });
+  }
+
+  function ppCheck() {
+    modal(`<h2>返信が無いことを確認した</h2>
+      <p class="sl-muted" style="font-size:12.5px;">提案から${detail.settings.refollowBizDays}営業日で再フォロー、${detail.settings.reviewBizDays}営業日で管理者の確認（継続・保留・クローズ）のタスクができます。</p>
+      ${noteField()}${foot("ppSendCheck()")}`);
+  }
+  function ppSendCheck() { send({ action: "check", note: $("m-note").value }); }
+
+  function ppMeeting() {
+    const L = detail.labels;
+    modal(`<h2>面談</h2><label>内容（必須）</label>${radios("m-result", L.meetingResults)}
+      <div id="m-next" style="display:none;"><label>面談の日時（必須）</label><input type="datetime-local" id="m-nextat"></div>
+      ${noteField()}${foot("ppSendMeeting()")}`);
+    toggle = () => { $("m-next").style.display = picked("m-result") === "scheduled" ? "" : "none"; };
+  }
+  function ppSendMeeting() {
+    if (!picked("m-result")) { $("m-msg").textContent = "内容を選んでください"; return; }
+    send({ action: "meeting", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
+  }
+
+  function ppResult() {
+    const L = detail.labels;
+    const opts = Object.keys(L.reasonsFor).map((k) => ({ key: k, label: L.statuses.find((s) => s.key === k)?.label || k }));
+    modal(`<h2>結果・状態</h2><label>結果（必須）</label>${radios("m-st", opts)}
+      <div id="m-reason-box" style="display:none;"><label>理由（企業側・人材側・営業判断を分けて記録）</label><select id="m-reason"></select></div>
+      ${noteField()}${foot("ppSendResult()", "保存する")}`);
+    toggle = () => {
+      const st = picked("m-st");
+      const list = (L.reasonsFor[st] || []);
+      $("m-reason-box").style.display = list.some(Boolean) ? "" : "none";
+      $("m-reason").innerHTML = list.map((k) => `<option value="${esc(k || "")}">${esc(k ? L.closeReasons.find((r) => r.key === k)?.label || k : "（理由なし）")}</option>`).join("");
+    };
+  }
+  function ppSendResult() {
+    if (!picked("m-st")) { $("m-msg").textContent = "結果を選んでください"; return; }
+    send({ action: "result", status: picked("m-st"), reason: $("m-reason").value || null, note: $("m-note").value });
+  }
+
+  function ppDecision() {
+    const L = detail.labels;
+    modal(`<h2>管理者の判断</h2><label>判断（必須）</label>${radios("m-result", L.decisions)}
+      <div id="m-next" style="display:none;"><label>次に連絡する日時（必須）</label><input type="datetime-local" id="m-nextat"></div>
+      ${noteField("理由・メモ")}${foot("ppSendDecision()", "決める")}`);
+    toggle = () => { $("m-next").style.display = picked("m-result") === "continue" ? "" : "none"; };
+  }
+  function ppSendDecision() {
+    if (!picked("m-result")) { $("m-msg").textContent = "判断を選んでください"; return; }
+    send({ action: "decision", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
+  }
+
+  function ppMemo() { modal(`<h2>メモを残す</h2>${noteField("メモ（必須）")}${foot("ppSendMemo()", "残す")}`); }
+  function ppSendMemo() { send({ action: "memo", note: $("m-note").value }); }
+
+  function ppAssign() {
+    const cur = detail.proposal.salesOwnerId || "";
+    modal(`<h2>営業担当の変更</h2>
+      <select id="m-owner"><option value="">未定</option>${(detail.members || []).map((m) => `<option value="${esc(m.id)}" ${m.id === cur ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
+      <p class="sl-muted" style="font-size:12px;">開いているタスクも新しい担当に移ります。これまでの記録（誰が電話したか）は変わりません。</p>
+      ${foot("ppSendAssign()", "変更する")}`);
+  }
+  function ppSendAssign() { send({ action: "assign", ownerId: $("m-owner").value || null }); }
+
+  function ppTaskAdd() {
+    modal(`<h2>タスクを足す</h2><label>内容（必須）</label><input type="text" id="m-title" maxlength="200">
+      <label style="margin-top:10px;">期限（必須）</label><input type="datetime-local" id="m-due">
+      ${detail.manager ? `<label style="margin-top:10px;">担当</label><select id="m-assignee"><option value="">営業担当</option>
+        ${(detail.members || []).map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("")}</select>` : ""}
+      ${foot("ppSendTaskAdd()", "足す")}`);
+  }
+  function ppSendTaskAdd() {
+    send({ action: "task_add", title: $("m-title").value, dueAt: $("m-due").value || null, assigneeId: $("m-assignee")?.value || null });
+  }
+  function ppTaskDue(taskId) {
+    const t = detail.tasks.find((x) => x.id === taskId);
+    modal(`<h2>期限を変える</h2><div class="sl-muted" style="font-size:12.5px;margin-bottom:8px;">${esc(t.title)}（いま ${esc(fmt(t.dueAt))}）</div>
+      <label>新しい期限（必須）</label><input type="datetime-local" id="m-due" value="${localInput(t.dueAt)}">
+      ${noteField("理由（必須・履歴に残ります）")}${foot(`ppSendTaskDue('${esc(taskId)}')`, "変える")}`);
+  }
+  function ppSendTaskDue(taskId) { send({ action: "task_due", taskId, dueAt: $("m-due").value, reason: $("m-note").value }); }
+  function ppTaskDone(taskId) {
+    modal(`<h2>タスクを完了する</h2>${noteField("何をしたか（必須）")}${foot(`ppSendTaskDone('${esc(taskId)}')`, "完了にする")}`);
+  }
+  function ppSendTaskDone(taskId) { send({ action: "task_done", taskId, note: $("m-note").value }); }
+  function ppTaskCancel(taskId) {
+    modal(`<h2>タスクを取り消す</h2>${noteField("理由（必須・履歴に残ります）")}${foot(`ppSendTaskCancel('${esc(taskId)}')`, "取り消す")}`);
+  }
+  function ppSendTaskCancel(taskId) { send({ action: "task_cancel", taskId, reason: $("m-note").value }); }
+
+  function ppContact() {
+    const p = detail.proposal;
+    modal(`<h2>先方の窓口</h2>
+      <label>担当者名</label><input type="text" id="m-cname" value="${esc(p.contactName || "")}">
+      <label style="margin-top:10px;">電話番号</label><input type="tel" id="m-cphone" value="${esc(p.contactPhone || "")}">
+      <label style="margin-top:10px;">メール</label><input type="email" id="m-cmail" value="${esc(p.contactEmail || "")}">
+      ${foot("ppSendContact()", "保存する")}`);
+  }
+  function ppSendContact() {
+    send({ action: "contact", contactName: $("m-cname").value, contactPhone: $("m-cphone").value, contactEmail: $("m-cmail").value });
+  }
+
+  function ppLink() {
+    modal(`<h2>/sales の企業に紐付ける</h2>
+      <p class="sl-muted" style="font-size:12px;">社名だけでは自動で紐付けません。同じ会社かを確かめて選んでください（付け替え・解除も記録に残ります）。</p>
+      <input type="text" id="m-cq" placeholder="企業名・URLで探す" value="${esc(detail.proposal.companyName)}" oninput="ppFindCompany()">
+      <div id="m-clist" style="margin-top:8px;max-height:240px;overflow:auto;"></div>
+      <div class="sl-modal-foot" style="flex-wrap:wrap;">
+        ${detail.company ? "" : `<button class="btn btn-secondary btn-sm" onclick="ppLinkCreate(this)">見つからない：この提案から企業を登録</button>`}
+        ${detail.company ? `<button class="btn btn-secondary btn-sm" onclick="ppLinkTo(null)">紐付けを外す</button>` : ""}
+        <button class="btn btn-secondary btn-sm" onclick="ppCloseAction()">やめる</button></div>
+      <div class="pp-msg" id="m-msg"></div>`);
+    ppFindCompany();
+  }
+  let findTimer = null;
+  function ppFindCompany() {
+    clearTimeout(findTimer);
+    findTimer = setTimeout(async () => {
+      const q = $("m-cq")?.value.trim();
+      if (!q) { $("m-clist").innerHTML = ""; return; }
+      try {
+        const r = await API.api(`/api/sales/companies?page=1&limit=20&q=${encodeURIComponent(q)}&visibility=all`);
+        const list = r.companies || r.rows || [];
+        $("m-clist").innerHTML = list.length ? list.map((c) => `
+          <div class="pp-task"><div class="t"><b>${esc(c.name)}</b><span class="pp-small">${esc(c.domain || c.siteUrl || "")}${c.statusLabel ? `・${esc(c.statusLabel)}` : ""}</span></div>
+            <div class="ops"><button class="btn btn-primary btn-sm" onclick="ppLinkTo('${esc(c.id)}')">この企業</button></div></div>`).join("")
+          : `<div class="sl-empty">見つかりません</div>`;
+      } catch (e) { $("m-clist").innerHTML = `<div class="sl-empty">${esc(errText(e))}</div>`; }
+    }, 250);
+  }
+  async function ppLinkTo(companyId) {
+    try {
+      detail = await API.api("/api/sales/proposals/detail", { method: "POST", body: { id: detail.proposal.id, action: "link", companyId } });
+      ppCloseAction(); renderDetail(); load();
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+  async function ppLinkCreate(btn) {
+    try {
+      detail = await KPLayout.busy(btn, "登録中…", () => API.api("/api/sales/proposals/detail", { method: "POST", body: { id: detail.proposal.id, action: "link", create: true } }));
+      ppCloseAction(); renderDetail(); load();
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+
+  // 手で足す（dx.enger 以外の提案：システム開発・PC・レンタル・AI / DX など）
+  function ppOpenNew() {
+    const members = data?.manager ? data.members || [] : [];
+    modal(`<h2>提案を手で追加</h2>
+      <p class="sl-muted" style="font-size:12px;">dx.enger で送った提案は自動で入ります。ここは dx.enger を通さない提案のための入口です。</p>
+      <label>企業名（必須）</label><input type="text" id="n-company" maxlength="200">
+      <label style="margin-top:10px;">提案の内容（必須）</label><input type="text" id="n-title" maxlength="200" placeholder="例：PCレンタル 20台">
+      <label style="margin-top:10px;">サービス</label><input type="text" id="n-service" list="n-services" maxlength="100">
+      <datalist id="n-services">${["ENGER", "システム開発", "PCレンタル", "AI / DX", "ホームページ改善", "地方創生", "その他"].map((s) => `<option>${s}</option>`).join("")}</datalist>
+      <label style="margin-top:10px;">提案した日時</label><input type="datetime-local" id="n-sent" value="${localInput()}">
+      ${members.length ? `<label style="margin-top:10px;">営業担当</label><select id="n-owner"><option value="">自分</option>
+        ${members.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("")}</select>` : ""}
+      <label style="margin-top:10px;">先方の担当者・電話・メール（任意）</label>
+      <div class="inline-controls"><div><input type="text" id="n-cname" placeholder="担当者名"></div>
+        <div><input type="tel" id="n-cphone" placeholder="電話"></div><div><input type="email" id="n-cmail" placeholder="メール"></div></div>
+      ${foot("ppSendNew()", "追加する")}`);
+  }
+  async function ppSendNew() {
+    const body = {
+      companyName: $("n-company").value, title: $("n-title").value, service: $("n-service").value || null, sentAt: $("n-sent").value,
+      contactName: $("n-cname").value, contactPhone: $("n-cphone").value, contactEmail: $("n-cmail").value,
+    };
+    if ($("n-owner")?.value) body.salesOwnerId = $("n-owner").value;
+    try {
+      const r = await KPLayout.busy($("m-ok"), "追加中…", () => API.api("/api/sales/proposals", { method: "POST", body }));
+      ppCloseAction();
+      await load();
+      ppOpen(r.proposal.id);
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+
+</script>
+
+</body>
+</html>
