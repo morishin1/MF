@@ -4,8 +4,8 @@
 -- ■ 先にやること
 --   1. アプリを 138 より前の版へ戻す（/sales/proposals.html・/api/sales/proposals/* が無い版）。
 --      アプリが新しいまま表を消すと、提案管理の画面が「この機能に必要なテーブルがまだ作られていません」になる
---   2. dx.enger 側の連携（GW_SALES_INTAKE_URL）を止める。止めないと、届いた提案が 503 not_ready で溜まる
---      （dx.enger は 2xx 以外を再送するので、表を作り直せば後から入る）
+--   2. dx.enger 側の連携を止める（dx.enger の Vercel から GW_SALES_SECRET を消す）。止めないと、届いた提案が 503 not_ready になる
+--      （dx.enger は 503 を控え enger.dx2_gw_sales_outbox に残して送り直すので、表を作り直せば後から入る）
 --
 -- ■ 消えるもの
 --   提案・行動の記録・タスク・設定・連携の記録・企業の紐付け（この6つの表の中身すべて）。
