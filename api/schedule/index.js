@@ -27,9 +27,10 @@ const FIELDS =
   "id, title, body, location, category, all_day, starts_at, ends_at, created_at, " +
   "visibility, source, gcal_event_id, gcal_synced_at";
 
-const CATEGORIES = ["work", "meeting", "visit", "private", "other"];
+// 予定表は業務専用。私用・非公開の予定は新規登録させない。
+const CATEGORIES = ["work", "meeting", "visit", "other"];
 // private=自分だけ（既定） / busy=時間だけ / shared=件名と場所まで
-const VISIBILITIES = ["private", "busy", "shared"];
+// 社内の仕事の予定は全員に件名・時刻・場所を共有する（メモは非公開）。
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -242,12 +243,12 @@ function normalize(body, { partial = false } = {}) {
     v.category = body.category;
   }
 
-  if (has("visibility")) {
-    if (!VISIBILITIES.includes(body.visibility)) {
-      return { error: "invalid_visibility", detail: VISIBILITIES.join(", ") };
-    }
-    v.visibility = body.visibility;
+  // 古い画面・外部クライアントから private / busy が送られても公開漏れを作らない。
+  // 更新時も業務予定は常に shared。既存の「私用」は category の検証で弾く。
+  if (has("visibility") && body.visibility !== "shared") {
+    return { error: "invalid_visibility", hint: "仕事の予定は全社員に共有されます" };
   }
+  v.visibility = "shared";
 
   if (!partial || has("startsAt") || has("endsAt")) {
     const s = new Date(body.startsAt);
