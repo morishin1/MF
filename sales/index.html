@@ -37,6 +37,66 @@
     .db-click .sl-row { border-left-color:#e0a100; }
     .db-click .sl-row b { font-size:15px; }
     .db-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
+
+    /* チーム実績：Officeの月カレンダーに合わせて「月→日→担当者→数字」を1画面で */
+    .sp-section { background:#fff; border:1px solid #e2e2dc; border-radius:14px; padding:18px 20px 20px; margin:0 0 25px; }
+    .sp-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin:0 0 6px; }
+    .sp-head h2 { font-size:16px; color:#1b2440; margin:0; display:flex; align-items:center; gap:6px; }
+    .sp-head h2 span { font-size:20px; }
+    .sp-nav { display:flex; align-items:center; flex-wrap:wrap; gap:5px; }
+    .sp-nav strong { font-size:14px; color:#1b2440; padding:0 8px; min-width:96px; text-align:center; }
+    .sp-nav button { font:inherit; font-size:12px; background:#fff; color:#4a5068; border:1px solid #e2e2dc; border-radius:8px; padding:5px 9px; cursor:pointer; }
+    .sp-nav button:disabled { opacity:.35; cursor:default; }
+    .sp-sub { font-size:11.5px; color:#6b7080; margin:0 0 14px; line-height:1.7; }
+    .sp-tiles { display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); gap:7px; margin:0 0 14px; }
+    .sp-tile { font:inherit; background:#f9f9f6; border:1px solid #e5e5df; border-radius:9px; padding:9px 4px; cursor:pointer; text-align:center; color:#1b2440; }
+    .sp-tile.selected { border-color:#1b2440; background:#eff2fa; box-shadow:inset 0 0 0 1px #1b2440; }
+    .sp-tile span { display:block; font-size:10px; color:#6b7080; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-tile strong { display:inline-block; font-size:22px; margin:4px 0 1px; font-weight:900; font-variant-numeric:tabular-nums; }
+    .sp-tile small { font-size:10px; margin-left:2px; }
+    .sp-split { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(240px,.85fr); gap:14px; align-items:start; }
+    .sp-controls { display:flex; align-items:center; gap:12px; margin:0 0 8px; flex-wrap:wrap; }
+    .sp-controls b { font-size:12px; }
+    .sp-metrics { display:flex; flex-wrap:wrap; gap:5px; }
+    .sp-metrics button { font:inherit; font-size:11px; padding:5px 8px; border-radius:99px; background:#fff; color:#4a5068; border:1px solid #e2e2dc; cursor:pointer; }
+    .sp-metrics button.on { background:#1b2440; color:#fff; border-color:#1b2440; }
+    .sp-week-head,.sp-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+    .sp-week-head span { background:#f6f6f2; font-size:10px; color:#6b7080; text-align:center; border:1px solid #e6e6e0; border-right:0; padding:5px 0; }
+    .sp-week-head span:last-child { border-right:1px solid #e6e6e0; }
+    .sp-grid { border-left:1px solid #e6e6e0; }
+    .sp-day { appearance:none; font:inherit; background:#fff; border:0; border-right:1px solid #e6e6e0; border-bottom:1px solid #e6e6e0; min-height:70px; padding:4px 5px; display:flex; flex-direction:column; align-items:flex-start; text-align:left; cursor:pointer; min-width:0; gap:3px; }
+    .sp-day:hover { background:#f7f8fd; }
+    .sp-day.selected { background:#edf2ff; box-shadow:inset 0 0 0 2px #1b2440; }
+    .sp-day.outside { background:#fafaf8; opacity:.58; }
+    .sp-day.weekend .sp-day-num { color:#b3261e; }
+    .sp-day.today .sp-day-num { color:#fff; background:#1b2440; border-radius:999px; padding:0 5px; }
+    .sp-day-num { font-size:11px; color:#1b2440; font-weight:700; }
+    .sp-day strong { font-size:18px; color:#1b2440; line-height:1.1; font-variant-numeric:tabular-nums; }
+    .sp-day strong small { font-size:9px; color:#6b7080; padding-left:2px; }
+    .sp-zero { color:#ccc; font-size:12px; }
+    .sp-day-names { font-size:10px; color:#6b7080; line-height:1.4; overflow:hidden; max-height:2.8em; }
+    .sp-mobile-days { display:none; }
+    .sp-panel { background:#f9f9f6; border:1px solid #e6e6e0; border-radius:10px; padding:12px 14px; }
+    .sp-panel h3 { font-size:13px; margin:0 0 12px; color:#1b2440; line-height:1.6; }
+    .sp-member-day { display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid #e2e2dc; padding:9px 0; font-size:12px; }
+    .sp-member-day strong { font-size:20px; font-variant-numeric:tabular-nums; }
+    .sp-member-day small { font-size:10px; padding-left:4px; }
+    .sp-definition { font-size:11px; color:#6b7080; margin:8px 0 15px; line-height:1.7; }
+    .sp-table-wrap h3 { font-size:13px; margin:18px 0 8px; color:#1b2440; }
+    .sp-table-scroll { overflow-x:auto; }
+    .sp-table { min-width:770px; }
+    .sp-table th,.sp-table td { padding:9px 10px; font-size:11.5px; }
+    .sp-table td:first-child { min-width:120px; }
+    .sp-table td:first-child b { display:block; font-size:12.5px; }
+    .sp-table td:first-child small { display:block; color:#6b7080; }
+    .sp-table .sp-n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sp-table .sp-active-col { background:#edf2ff; font-weight:800; color:#1b2440; }
+    .sp-bar { display:block; background:#e9e9e6; border-radius:99px; height:4px; margin-top:5px; overflow:hidden; }
+    .sp-bar i { display:block; background:#697db2; height:100%; border-radius:99px; }
+    .sp-total { background:#f5f5f1; font-weight:800; }
+    @media (max-width:1050px) { .sp-tiles { grid-template-columns:repeat(5,1fr); } }
+    @media (max-width:760px) { .sp-split { grid-template-columns:minmax(0,1fr); } .sp-section { padding:14px 12px; } .sp-tiles { grid-template-columns:repeat(3,1fr); } .sp-grid,.sp-week-head { display:none; } .sp-mobile-days { display:flex; overflow-x:auto; gap:5px; padding:2px 0 12px; } .sp-mobile-days button { display:flex; flex-direction:column; align-items:center; flex:0 0 45px; background:#fff; border:1px solid #e2e2dc; border-radius:8px; padding:5px 0; font:inherit; cursor:pointer; } .sp-mobile-days button.on { background:#1b2440; color:#fff; } .sp-mobile-days small,.sp-mobile-days i { font-size:10px; font-style:normal; } .sp-mobile-days b { font-size:15px; } }
+
     @media (max-width: 760px) { .db-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   </style>
 </head>
@@ -47,6 +107,37 @@
   <p class="sl-sub">今日、どこを追って、どこに営業すればよいかが分かります。上から順に片付けてください。</p>
 
   <div class="db-sum" id="sum"></div>
+
+  <section class="sp-section" id="sp-performance" aria-labelledby="sp-title">
+    <div class="sp-head">
+      <h2 id="sp-title"><span class="material-symbols-outlined">calendar_month</span>チーム実績カレンダー</h2>
+      <div class="sp-nav" aria-label="集計月">
+        <button id="sp-prev" type="button" onclick="SalesPerformanceCalendar.monthMove(-1)">＜ 前月</button>
+        <strong id="sp-month"></strong>
+        <button id="sp-today" type="button" onclick="SalesPerformanceCalendar.monthMove(0)">今月</button>
+        <button id="sp-next" type="button" onclick="SalesPerformanceCalendar.monthMove(1)">翌月 ＞</button>
+      </div>
+    </div>
+    <p class="sp-sub" id="sp-notice">読み込み中…</p>
+    <div class="sp-tiles" id="sp-tiles" aria-label="今月の活動実績"></div>
+    <div class="sp-controls">
+      <b>カレンダーに表示する数字</b>
+      <div class="sp-metrics" id="sp-metric" role="group" aria-label="実績の種類"></div>
+    </div>
+    <p class="sp-definition" id="sp-definition"></p>
+    <div class="sp-split">
+      <div>
+        <div id="sp-calendar" aria-label="日別の営業実績"><div class="sl-empty">読み込み中…</div></div>
+        <div class="sp-mobile-days" id="sp-mobile-days" aria-label="日付を選ぶ"></div>
+      </div>
+      <aside class="sp-panel" id="sp-day" aria-live="polite"></aside>
+    </div>
+    <div class="sp-table-wrap">
+      <h3>メンバー別の実績 <small id="sp-role-note" style="font-weight:400;color:#6b7080;"></small></h3>
+      <div id="sp-member"></div>
+    </div>
+  </section>
+
 
   <div class="db-sec db-click" id="sec-click">
     <div class="db-sec-h"><span class="t">🔥 ① リード・未対応</span><span class="n" id="n-click"></span>
@@ -85,6 +176,7 @@
 <script src="../js/api-client.js?v=20261015man1"></script>
 <script src="../js/layout.js?v=20261015man1"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-performance-calendar.js?v=20261020team1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -105,7 +197,7 @@
   ]).then(([dash, ap]) => ({ dash, ap }));
   API.warm(KEY, fetchDashboard, SalesLayout.allows);
 
-  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) { load(); SalesPerformanceCalendar.init(); } });
 
   async function load() {
     try {
