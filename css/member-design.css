@@ -1,0 +1,134 @@
+/* EIGHT Groupware — Member UI foundation v1
+   Visual source of truth: /hr/, /sales/, and Office cards.
+   Scope intentionally limited to pages opting into body.gw-member-ui.
+   CSS only: preserves existing routes, roles, form events and server APIs.
+*/
+body.gw-member-ui {
+  --primary: #3182ce;
+  --primary-dark: #1b2440;
+  --text: #1b2440;
+  --border: #e2e2dc;
+  --muted: #6b7080;
+  --bg: #f6f6f2;
+  --soft: #f0f2f5;
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Keep menu icons from becoming large raw text when the web font is late. */
+body.gw-member-ui .material-symbols-outlined {
+  font-family: 'Material Symbols Rounded';
+  font-feature-settings: 'liga';
+  font-weight: normal;
+  font-style: normal;
+  display: inline-block;
+  width: 1em;
+  max-width: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Layout: same top navigation rhythm as HR/Sales, without altering KPLayout. */
+body.gw-member-ui .topbar {
+  min-height: 56px;
+  padding: 6px 18px;
+  gap: 10px;
+  background: #fff;
+  border-color: var(--border);
+}
+body.gw-member-ui .topbar .brand {
+  color: var(--primary-dark);
+  font-size: 14px;
+  letter-spacing: .01em;
+}
+body.gw-member-ui .topbar .who { min-width: 0; }
+body.gw-member-ui .kp-shortcuts { min-width: 0; }
+body.gw-member-ui .kp-sidebar {
+  top: 56px;
+  background: #fff;
+  border-color: var(--border);
+  scrollbar-width: thin;
+}
+body.gw-member-ui .kp-side-item {
+  color: #4a5068;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9px;
+}
+body.gw-member-ui .kp-side-item.on {
+  background: #1b2440;
+  color: #fff;
+}
+body.gw-member-ui .kp-side-item:hover:not(.on) { background: #f3f4ef; }
+body.gw-member-ui .kp-side-item .material-symbols-outlined { font-size: 19px; }
+body.gw-member-ui .kp-tabbar {
+  background: #fff;
+  border-color: var(--border);
+}
+body.gw-member-ui .kp-tab.on {
+  color: #1b2440;
+  background: #f2f4f5;
+  border-top-color: #1b2440;
+}
+
+/* Consistent typography, surface, input/button treatment. */
+body.gw-member-ui .kp-greet,
+body.gw-member-ui h1.kp-greet { color: #1b2440; font-weight: 700; }
+body.gw-member-ui .kp-greet-sub,
+body.gw-member-ui .muted { color: #6b7080; }
+body.gw-member-ui .card {
+  background: #fff;
+  border: 1px solid #e2e2dc;
+  border-radius: 11px;
+  box-shadow: none;
+}
+body.gw-member-ui .card h2 { color: #1b2440; }
+body.gw-member-ui .btn,
+body.gw-member-ui button,
+body.gw-member-ui input,
+body.gw-member-ui select,
+body.gw-member-ui textarea { font-family: inherit; }
+body.gw-member-ui .btn { border-radius: 8px; }
+body.gw-member-ui .btn-secondary { background: #efefeb; color: #1b2440; }
+body.gw-member-ui .btn-primary { background: #1b2440; color: #fff; }
+body.gw-member-ui .btn-primary:hover:not(:disabled) { background: #2e3b5a; }
+body.gw-member-ui input,
+body.gw-member-ui select,
+body.gw-member-ui textarea { border-color: #d9ddd9; }
+body.gw-member-ui input:focus-visible,
+body.gw-member-ui select:focus-visible,
+body.gw-member-ui textarea:focus-visible,
+body.gw-member-ui button:focus-visible,
+body.gw-member-ui a:focus-visible {
+  outline: 2px solid #3182ce;
+  outline-offset: 2px;
+}
+body.gw-member-ui .kp-tiles,
+body.gw-member-ui .kp-grid { min-width: 0; }
+body.gw-member-ui .wrap {
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Sidebar offset is still owned by css/layout.css, intentionally. */
+@media (min-width: 861px) {
+  body.gw-member-ui.kp-has-sidebar .wrap {
+    margin-left: 216px;
+    max-width: none;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+@media (max-width: 860px) {
+  body.gw-member-ui .topbar { padding: 8px 12px; }
+  body.gw-member-ui.kp-has-sidebar .wrap { margin-left: 0; }
+  body.gw-member-ui .kp-sidebar.member { display: none; }
+  body.gw-member-ui .wrap { padding-left: 14px; padding-right: 14px; }
+}
+@media (max-width: 520px) {
+  body.gw-member-ui .card { border-radius: 10px; }
+  body.gw-member-ui .kp-tab { font-size: 11px; }
+}
