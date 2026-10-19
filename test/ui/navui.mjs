@@ -166,7 +166,7 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
   check(await page.locator(".kp-sidebar.member").count() === 1, "管理者でもメンバーと同じ左メニュー");
   const items = (await page.locator(".kp-sidebar.member .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts())
     .map((s) => s.trim());
-  for (const x of ["ホーム", "今日やること", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+  for (const x of ["ホーム", "カレンダー", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `管理者の左にも「${x}」`);
   }
   const side = await page.locator(".kp-sidebar.member").innerText();
@@ -304,7 +304,7 @@ console.log("\n— メンバーの左メニュー —");
     .map((s) => s.trim());
   check(items.length <= 9, `項目は9つまで（いま ${items.length}: ${items.join("・")}）`);
   // 評価・キャリア再設計 §37 の7つ
-  for (const x of ["ホーム", "今日やること", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+  for (const x of ["ホーム", "カレンダー", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `「${x}」`);
   }
   check(!items.some((i) => i.includes("スペース予約")), "スペース予約は通常メニューに出さない");
@@ -315,9 +315,9 @@ console.log("\n— メンバーの左メニュー —");
     check(!side.includes(x), `メンバーに「${x}」を出さない`);
   }
 
-  // タスク・日報・予定は「今日やること」の中のタブ
+  // カレンダーが毎日の入口。タスク・日報は同じ帯のタブで行き来する。
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
-  check(tabs.join("/") === "タスク/日報/スケジュール", `今日やることの帯（いま ${tabs.join("/")}）`);
+  check(tabs.join("/") === "カレンダー/タスク/日報", `カレンダーの帯（いま ${tabs.join("/")}）`);
   check(!side.includes("スケジュール"), "「スケジュール」は左メニューに出ていない");
 
   check(await fits(page, ".kp-sidebar.member"), await fitsNote(page, ".kp-sidebar.member"));
