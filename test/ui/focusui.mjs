@@ -167,6 +167,7 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
       }
       return send(f);
     }
+    if (/\/api\/schedule\/day-gate/.test(url)) return send({ready:true,targetDate:"2026-09-17",count:1});
     if (/\/api\/nippo\/plan/.test(url)) return send({ plan: null });
     if (/\/api\/nippo\b/.test(url)) {
       return send({
@@ -186,8 +187,8 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
   await page.goto(`${BASE}/nippo.html`);
   await page.waitForTimeout(1000);
 
-  console.log("\n— 明日が未確定でも、日報の欄は最初から開いている（日報提出ハードロック修正） —");
-  check(await page.locator("#write-card").isVisible(), "日報の欄は最初から触れる");
+  console.log("\n— 翌営業日の予定が登録済みなら、タスクが未確定でも日報入力可 —");
+  check(await page.locator("#write-card").isVisible(), "翌営業日の予定があるので日報欄は開く");
   check(!(await page.locator("#submit-btn").isDisabled()), "提出ボタンも最初から押せる");
 
   console.log("\n— 決める画面 —");
