@@ -202,6 +202,19 @@
     .fc-lv.l3 { background:#fff3d6; color:#975a16; }
     .fc-lv.l4 { background:#e8f5ec; color:#256b36; }
     .fc-coach-form { border-color:#2b6cb0; background:#f8fafd; margin-top:8px; }
+
+    /* 翌営業日の時間割を日報提出前に点検する */
+    .np-next-line { display:grid; grid-template-columns:minmax(160px,1fr) 110px 110px minmax(130px,1fr) auto; gap:7px; align-items:center; margin:8px 0; }
+    .np-next-line input { width:100%; margin:0; min-width:0; }
+    .np-next-line .np-remove { white-space:nowrap; }
+    .np-next-message { font-size:13px; line-height:1.8; padding:12px; border:1px solid var(--border); border-radius:9px; margin:12px 0; }
+    .np-next-message strong { display:block; margin-bottom:5px; }
+    .np-next-message ul { margin:6px 0 0; padding-left:20px; }
+    @media(max-width:720px) {
+      .np-next-line { grid-template-columns:minmax(0,1fr) 1fr 1fr auto; }
+      .np-next-line .np-p-title { grid-column:1 / -1; }
+      .np-next-line .np-p-place { grid-column:1 / 4; }
+    }
   </style>
 </head>
 <body>
@@ -265,6 +278,23 @@
     <h2><span class="material-symbols-outlined">bolt</span>明日の重要タスクを決める
       <span id="focus-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <div id="focus-body"><span class="muted">読み込み中…</span></div>
+  </div>
+
+
+  <!-- 終業時に翌営業日の時間割を入力。必ずAI/時間チェックを見てから日報提出。 -->
+  <div class="card" id="next-plan-card" style="border-left:4px solid #3e9c5a;">
+    <h2><span class="material-symbols-outlined">calendar_month</span>翌営業日の業務スケジュール
+      <span id="np-next-date" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <p class="kp-greet-sub" style="margin:0 0 12px;">開始・終了時間とやることを入力してください。保存した予定は全社員のカレンダー（Office／経営からも閲覧可能）に反映されます。</p>
+    <div id="np-next-list"><div class="empty">読み込み中…</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addNextPlan()">予定を追加</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="np-next-review-btn" onclick="runNextPlanReview(this)">AIで時間割を確認</button>
+      <a href="/team-schedule.html" class="btn btn-secondary btn-sm">社員全員の予定を見る</a>
+    </div>
+    <div id="np-next-result" aria-live="polite"></div>
+    <p id="np-next-error" class="err-text"></p>
+    <p class="muted" style="font-size:12px;">AIは時間の重複、詰め込みすぎ、重要タスクとの整合などを助言します。変更は本人が決めます。AIが利用できない場合も時間チェックを表示します。</p>
   </div>
 
   <!-- 入力 -->
@@ -536,6 +566,7 @@
     // メモの置き場所（#memo-box2）は renderFocus() が作る。
     // 先に作ってから読まないと、出来上がる前に書き込もうとして消える
     await loadFocus();
+    await loadNextPlan();
     loadMemos();
     loadPlan();
     renderMidday();
@@ -1359,11 +1390,23 @@
       }
     }
 
+    // 未レビューなら、まず本人に明日の時間割へのコメントを表示する。
+    // AIが使えない日でも時間重複等の確認結果を先に表示し、日報は止めない。
+    const signature = nextPlanSignature();
+    if (signature !== nextPlanReviewedSignature) {
+      await runNextPlanReview(el("np-next-review-btn"));
+      el("next-plan-card").scrollIntoView({ behavior:"smooth", block:"center" });
+      return;
+    }
+
     // KPIの実績は、1つ目の数字を日報側にも残す（AI評価が達成率を使う）
     const firstKpi = body.kpiActuals.find((k) => k.actual !== "");
     if (firstKpi) body.kpiActual = firstKpi.actual;
 
     try {
+      // 日報が残って予定だけ消える事態を避けるため、予定を保存してから日報を提出。
+      // 部分成功で再試行しても、保存済みの行IDを使って更新し二重登録を避ける。
+      await KPLayout.busy(btn, "予定を保存中…", () => saveNextPlan());
       const res = await KPLayout.busy(btn, "送信中…", () => API.submitNippo(body));
       clearDraft(body.date);
       const ai = res.ai || {};
@@ -1386,6 +1429,152 @@
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
     }
+  }
+
+
+  // ---- 翌営業日の業務予定（既存 gw_calendar_events を正本にする） ------------
+  let nextPlanTarget = null;
+  let nextPlanRemoved = new Set();
+  let nextPlanReviewedSignature = null;
+  const npTime = iso => new Date(new Date(iso).getTime() + 9*3600000).toISOString().slice(11,16);
+  const nextBusinessDay = from => {
+    const d = new Date(from + "T12:00:00+09:00");
+    do { d.setUTCDate(d.getUTCDate()+1); } while ([0,6].includes(d.getUTCDay()));
+    return d.toISOString().slice(0,10);
+  };
+  const nextPlanKey = () => "workplan:" + (API.currentEmail() || "member") + ":" + (nextPlanTarget || "");
+  function invalidateNextPlan() {
+    nextPlanReviewedSignature = null;
+    el("np-next-result").innerHTML = "";
+    el("np-next-error").textContent = "";
+    try {
+      localStorage.setItem(nextPlanKey(), JSON.stringify({
+        entries: readNextPlan(false), removed: [...nextPlanRemoved]
+      }));
+    } catch (_) {}
+  }
+  function addNextPlan(e = {}) {
+    const line = document.createElement("div");
+    line.className = "np-next-line";
+    line.dataset.id = e.id || "";
+    line.innerHTML =
+      '<input class="np-p-title" aria-label="業務内容" maxlength="200" placeholder="業務内容（例：営業30件）" value="' + esc(e.title||"") + '">' +
+      '<input class="np-p-start" aria-label="開始時間" type="time" value="' + esc(e.start||"09:00") + '">' +
+      '<input class="np-p-end" aria-label="終了時間" type="time" value="' + esc(e.end||"10:00") + '">' +
+      '<input class="np-p-place" aria-label="場所（任意）" maxlength="200" placeholder="場所（任意）" value="' + esc(e.location||"") + '">' +
+      '<button type="button" class="btn btn-secondary btn-sm np-remove" aria-label="この予定を外す">削除</button>';
+    line.querySelector(".np-remove").addEventListener("click", () => {
+      if (line.dataset.id) nextPlanRemoved.add(line.dataset.id);
+      line.remove();
+      invalidateNextPlan();
+    });
+    line.querySelectorAll("input").forEach(n => n.addEventListener("input",invalidateNextPlan));
+    el("np-next-list").appendChild(line);
+    if (!e.fromLoad) invalidateNextPlan();
+  }
+  function readNextPlan(check = true) {
+    const rows = [...document.querySelectorAll("#np-next-list .np-next-line")].map(n=>({
+      id:n.dataset.id||null,
+      title:n.querySelector(".np-p-title").value.trim(),
+      start:n.querySelector(".np-p-start").value,
+      end:n.querySelector(".np-p-end").value,
+      location:n.querySelector(".np-p-place").value.trim()
+    }));
+    if(check) {
+      for(const r of rows) {
+        if (!r.title && !r.id && !r.location) continue; // 初期の空行
+        if (!r.title || !r.start || !r.end || r.end <= r.start) {
+          throw new Error("翌日の予定は件名・開始・終了時間を入れてください（終了は開始より後）。");
+        }
+      }
+    }
+    return rows.filter(r=>r.title || r.id || r.location);
+  }
+  const nextPlanSignature = () => JSON.stringify({
+    date:nextPlanTarget, entries:readNextPlan(false), removed:[...nextPlanRemoved]
+  });
+  async function loadNextPlan() {
+    nextPlanTarget = focusData?.tomorrowDate || nextBusinessDay(el("f-date").value || jstToday());
+    el("np-next-date").textContent = nextPlanTarget;
+    el("np-next-list").innerHTML = "";
+    el("np-next-result").innerHTML = "";
+    el("np-next-error").textContent = "";
+    nextPlanRemoved = new Set();
+    nextPlanReviewedSignature = null;
+    const from = nextPlanTarget+"T00:00:00+09:00";
+    const to = new Date(new Date(from).getTime()+86400000).toISOString();
+    let saved = [];
+    try {
+      const result = await API.schedule(from,to);
+      saved = (result.events||[]).filter(e=>
+        e.source === "self" && e.category !== "private" &&
+        new Date(new Date(e.starts_at).getTime()+9*3600000).toISOString().slice(0,10) === nextPlanTarget);
+    } catch(err) {
+      el("np-next-error").textContent = "予定表を読み込めませんでした："+(err.hint||err.detail||err.message);
+    }
+    let entries = saved.map(e=>({
+      id:e.id,title:e.title,start:npTime(e.starts_at),end:npTime(e.ends_at),location:e.location||"",fromLoad:true
+    }));
+    try {
+      const draft = JSON.parse(localStorage.getItem(nextPlanKey()) || "null");
+      if (draft && Array.isArray(draft.entries)) {
+        // 下書き復元時も既存の保存IDを保つ。削除候補以外を勝手に消さない。
+        entries = draft.entries.map(e=>({...e,fromLoad:true}));
+        nextPlanRemoved = new Set((draft.removed||[]).filter(id=>saved.some(e=>e.id===id)));
+      }
+    } catch (_) {}
+    if (!entries.length) entries.push({fromLoad:true});
+    entries.forEach(addNextPlan);
+  }
+  async function runNextPlanReview(btn) {
+    const msg = el("np-next-error");
+    msg.textContent = "";
+    let entries;
+    try { entries=readNextPlan(true); }
+    catch(e){msg.textContent=e.message; return false;}
+    const signature = nextPlanSignature();
+    const reviewBody = entries.map(e=>({title:e.title,start:e.start,end:e.end}));
+    try {
+      const r = await KPLayout.busy(btn,"確認中…",() =>
+        API.reviewWorkDayPlan(el("f-date").value||jstToday(),nextPlanTarget,reviewBody));
+      if(signature !== nextPlanSignature()) return false; // 実行中に編集された
+      nextPlanReviewedSignature = signature;
+      const tips=(r.suggestions||[]).map(s=>"<li>"+esc(s)+"</li>").join("");
+      const name = r.ai ? "AIの判定" : "時間割の自動チェック（AI評価なし）";
+      const result = r.verdict === "adjust" ? "改善するとよい点があります" : "大きな問題は見つかりませんでした";
+      el("np-next-result").innerHTML =
+        '<div class="np-next-message"><strong>'+esc(name)+"："+esc(result)+'</strong><div>'+esc(r.summary||"")+'</div>'+
+        (tips ? "<ul>"+tips+"</ul>" : "") +
+        '<p style="margin-top:8px;">予定を変更する場合は、変更後にもう一度確認してください。問題なければ「日報を提出」を押してください。</p></div>';
+      return true;
+    } catch(e) {
+      msg.textContent = "時間割を確認できませんでした："+(e.hint||e.detail||e.message)+"。再度お試しください。";
+      return false;
+    }
+  }
+  async function saveNextPlan() {
+    const entries = readNextPlan(true);
+    // 一覧で自分が「削除」を選んだ登録済み業務予定だけを消す。
+    for(const id of [...nextPlanRemoved]) {
+      await API.deleteEvent(id);
+      nextPlanRemoved.delete(id);
+    }
+    for(const row of entries) {
+      const item = {
+        title:row.title, location:row.location||null, category:"work", visibility:"shared",
+        startsAt:nextPlanTarget+"T"+row.start+":00+09:00",
+        endsAt:nextPlanTarget+"T"+row.end+":00+09:00"
+      };
+      // 画面から編集した既存行ならIDで更新。新規行は成功後にIDを控え、再送しても増やさない。
+      const result = row.id ? await API.updateEvent({id:row.id,...item}) : await API.createEvent(item);
+      if(!row.id && result.event?.id) {
+        const line=[...document.querySelectorAll("#np-next-list .np-next-line")]
+          .find(n=>!n.dataset.id && n.querySelector(".np-p-title").value.trim()===row.title &&
+            n.querySelector(".np-p-start").value===row.start);
+        if(line) line.dataset.id=result.event.id;
+      }
+    }
+    try { localStorage.removeItem(nextPlanKey()); } catch (_) {}
   }
 
   // ---- 明日の重要タスク（候補から選ぶ。日報は絶対にブロックしない） -----------
