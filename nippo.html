@@ -318,11 +318,29 @@
     </div>
     <div id="np-next-result" aria-live="polite"></div>
     <p id="np-next-error" class="err-text"></p>
-    <p class="muted" style="font-size:12px;">予定が埋まっていることだけを目標にするのではなく、必要な業務・余白・時間配分を確認します。予定ゼロの日も日報は提出できます。</p>
+    <p class="muted" style="font-size:12px;">翌営業日の仕事予定を最低1件登録すると日報が書けます。先に週の予定を登録しておけば毎日の再入力は不要です。</p>
+  </div>
+
+  <!-- 翌営業日の業務予定を登録するまで、日報入力欄は開かない。 -->
+  <div class="card" id="np-schedule-gate" style="border-left:4px solid #cf8425;" aria-live="polite">
+    <h2><span class="material-symbols-outlined">calendar_month</span>日報を書く前に、翌営業日の予定を登録してください</h2>
+    <p class="kp-greet-sub" style="margin:0 0 10px;">
+      月・週のカレンダーで事前に入力済みであれば、もう一度登録する必要はありません。
+      <b id="np-gate-target">対象日を確認しています…</b>
+    </p>
+    <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0;">
+      <label for="np-gate-report-date" style="font-size:12px;font-weight:700;">日報の日付</label>
+      <input id="np-gate-report-date" type="date" style="width:auto;margin:0;" onchange="selectGateReportDate(this.value)">
+      <a id="np-gate-calendar" class="btn btn-primary btn-sm" href="/calendar.html">予定をカレンダーに登録</a>
+      <button type="button" class="btn btn-secondary btn-sm" id="np-gate-check-btn" onclick="refreshScheduleGate(this)">登録状況を再確認</button>
+    </div>
+    <p id="np-gate-msg" class="kp-greet-sub" style="font-size:13px;line-height:1.8;">
+      予定を確認しています…
+    </p>
   </div>
 
   <!-- 入力 -->
-  <div class="card" id="write-card">
+  <div class="card hidden" id="write-card">
     <h2><span class="material-symbols-outlined">edit_note</span>日報を書く
       <span id="date-tag" class="kp-chip" style="margin-left:8px;"></span>
       <span id="draft-tag" class="np-draft" style="margin-left:8px;"></span>
@@ -559,6 +577,9 @@
   const jstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 
   async function start() {
+    el("np-gate-report-date").value = jstToday();
+    el("np-gate-report-date").max = jstToday();
+    setScheduleGateLocked(true, "翌営業日の予定を確認しています…");
     el("f-date").value = jstToday();
     el("f-date").max = jstToday();
     el("f-date").addEventListener("change", () => load(el("f-date").value));
@@ -571,12 +592,16 @@
   }
 
   async function load(date) {
+    const gateSeq=++nextScheduleGateSeq;
+    setScheduleGateLocked(true, "翌営業日の予定を確認しています…");
+    el("np-gate-report-date").value=date;
     try {
       data = await API.nippo(date);
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
+      el("np-gate-msg").textContent="日報情報を取得できません。時間をおいてお試しください。";
       return;
     }
     el("notice").innerHTML = "";
@@ -591,6 +616,7 @@
     // 先に作ってから読まないと、出来上がる前に書き込もうとして消える
     await loadFocus();
     await loadNextPlan();
+    await checkNextScheduleGate(gateSeq);
     loadMemos();
     loadPlan();
     renderMidday();
@@ -1380,6 +1406,9 @@
   }
 
   async function submit(btn) {
+    // 読み込み後に別画面で予定が削除された場合も、送信前に最新のDB状態を確認。
+    const allowed=await checkNextScheduleGate(++nextScheduleGateSeq);
+    if(!allowed)return;
     const msg = el("f-msg");
     msg.textContent = "";
     el("f-result").innerHTML = "";
@@ -1453,6 +1482,52 @@
     }
   }
 
+
+
+  // ---- 翌営業日予定の必須確認 ---------------------------------------------
+  let nextScheduleGateSeq=0;
+  let nextScheduleReady=false;
+  function setScheduleGateLocked(locked,message){
+    nextScheduleReady=!locked;
+    el("write-card").classList.toggle("hidden",locked);
+    el("np-schedule-gate").classList.toggle("hidden",!locked);
+    if(message)el("np-gate-msg").textContent=message;
+  }
+  function selectGateReportDate(s){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||s>jstToday())return;
+    el("f-date").value=s;
+    load(s);
+  }
+  async function checkNextScheduleGate(seq){
+    const day=el("f-date").value||jstToday();
+    el("np-gate-report-date").value=day;
+    try{
+      const r=await API.api("/api/schedule/day-gate?date="+encodeURIComponent(day));
+      if(seq!==nextScheduleGateSeq||day!==el("f-date").value)return false;
+      el("np-gate-target").textContent="対象：翌営業日 "+r.targetDate;
+      el("np-gate-calendar").href="/calendar.html?date="+encodeURIComponent(r.targetDate);
+      if(!r.ready){
+        setScheduleGateLocked(true,"翌営業日（"+r.targetDate+"）に仕事の予定がありません。最低1件登録してから日報を入力してください。");
+        return false;
+      }
+      setScheduleGateLocked(false);
+      el("np-gate-msg").textContent="予定 "+r.count+"件を確認しました。日報を入力できます。";
+      return true;
+    }catch(e){
+      if(seq!==nextScheduleGateSeq)return false;
+      setScheduleGateLocked(true,"予定の登録状況を確認できません。再確認してください。"+(e.hint||e.detail||e.message||""));
+      return false;
+    }
+  }
+  async function refreshScheduleGate(btn){
+    btn.disabled=true;
+    el("np-gate-msg").textContent="登録状況を再確認しています…";
+    try{
+      await loadNextPlan(); // 週の登録状況も最新データを表示する
+      const ready=await checkNextScheduleGate(++nextScheduleGateSeq);
+      if(ready)el("write-card").scrollIntoView({behavior:"smooth",block:"start"});
+    }finally{btn.disabled=false;}
+  }
 
   // ---- 週次事前入力の確認：日報では予定を変更せず、週カレンダーが正本 ---
   let nextPlanTarget=null;
