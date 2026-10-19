@@ -74,6 +74,7 @@
       <button class="btn btn-secondary btn-sm" id="wk-review" onclick="reviewDay(this)">AIで時間割を確認</button>
     </div>
     <div id="wk-message" role="status" class="wk-summary"></div>
+    <div id="wk-ai-result" aria-live="polite"></div>
   </div>
   <p class="muted" style="font-size:12px;margin-top:16px;">全社員への公開項目は件名・日時・場所です。個人用メモは公開しません。<a href="/team-schedule.html">社員全員の予定を見る</a></p>
 </div>
@@ -207,10 +208,19 @@
     if(dirty){msg("AI確認の前に、変更した予定を保存してください。",true);return}
     const entries=dayEvents(selected).filter(e=>!e.all_day).map(e=>({title:e.title,start:hhmm(e.starts_at),end:hhmm(e.ends_at)}));
     btn.disabled=true;msg("時間割を確認中…");
+    el("wk-ai-result").innerHTML="";
     try{
       const r=await API.api("/api/schedule/review",{method:"POST",body:{mode:"planned",reportDate:previousWorkday(selected),date:selected,entries}});
-      const tips=[r.summary,...(r.suggestions||[])].filter(Boolean).join("／");
-      msg((r.ai?"AIコメント":"時間割の基本チェック")+"："+tips);
+      msg((r.ai?"AIコメント":"時間割の基本チェック")+"："+(r.summary||""));
+      const tips=(r.suggestions||[]).map(x=>'<li>'+KPLayout.esc(x)+'</li>').join("");
+      const total=r.metrics?.totalMinutes||0;
+      el("wk-ai-result").innerHTML='<details class="wk-ai-detail" style="margin-top:10px;border:1px solid var(--border);padding:12px;border-radius:9px;">'+
+        '<summary style="cursor:pointer;font-size:13px;font-weight:700">AIの判断理由・改善案を詳しく見る</summary>'+
+        '<div style="font-size:12.5px;line-height:1.9;padding-top:10px;">'+
+        '<p><b>予定合計</b>：'+Math.floor(total/60)+'時間'+total%60+'分 ／ 重複'+(r.metrics?.overlaps||0)+'件</p>'+
+        (r.details?'<p><b>判断理由</b><br>'+KPLayout.esc(r.details)+'</p>':"")+
+        (r.priorityAdvice?'<p><b>優先順位</b><br>'+KPLayout.esc(r.priorityAdvice)+'</p>':"")+
+        (tips?'<b>改善提案</b><ul>'+tips+'</ul>':"")+'</div></details>';
     }catch(e){msg("確認できませんでした："+(e.hint||e.detail||e.message),true)}
     finally{btn.disabled=false;}
   }
