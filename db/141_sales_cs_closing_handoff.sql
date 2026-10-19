@@ -75,13 +75,15 @@ create policy gw_sales_proposal_handoffs_read on public.gw_sales_proposal_handof
 grant select on public.gw_sales_proposal_handoffs to authenticated;
 revoke insert, update, delete on public.gw_sales_proposal_handoffs from authenticated, anon;
 
+alter table public.gw_sales_proposal_activities add column if not exists slack_sent_at timestamptz;
+
 -- 既存の時系列にも引継ぎの記録を残す
 alter table public.gw_sales_proposal_activities drop constraint if exists gw_sales_proposal_activities_kind_check;
 alter table public.gw_sales_proposal_activities drop constraint if exists gw_sales_proposal_activities_kind_chk;
 alter table public.gw_sales_proposal_activities
   add constraint gw_sales_proposal_activities_kind_chk check (kind in (
     'matched','sent','call','mail','reply','check','meeting','result','decision','assign',
-    'due_change','task','memo','contact','link','sync','handoff'
+    'due_change','task','memo','contact','link','sync','handoff','cs_decision'
   ));
 
 -- 処理は1トランザクション: RLSを迂回する箇所は権限とテナント/担当を自分で厳格に確認する。
@@ -133,6 +135,10 @@ begin
        where a.proposal_id=v.id and
          ((a.kind='call' and a.result='connected') or a.kind='reply')) then
       raise exception 'cs_contact_required' using errcode='23514';
+    end if;
+    if not exists (select 1 from public.gw_sales_proposal_activities a
+       where a.proposal_id=v.id and a.kind='cs_decision' and a.result in ('advance','needs_detail')) then
+      raise exception 'cs_approval_required' using errcode='23514';
     end if;
   end if;
   select * into v_settings from public.gw_sales_proposal_settings where tenant_id=v.tenant_id;
