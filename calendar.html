@@ -136,6 +136,7 @@
   </section>
   <p class="cal-guide" style="margin-top:12px">週単位の一括入力は<a href="/work-week.html">週間プラン</a>から利用できます。既存の予定や日報・重要タスクは引き継ぎ、重複作成しません。</p>
 </div>
+<div id="cal-drawer-root"></div>
 <script src="/js/api-client.js?v=20261020cal1"></script>
 <script src="/js/layout.js?v=20261020cal1"></script>
 <script>
@@ -162,13 +163,13 @@
     const d=new Date(current.getFullYear(),current.getMonth(),current.getDate());
     return [d,add(d,1)];
   }
-  function setScope(s){if(scope===s)return;scope=s;closeForm();load();}
-  function setView(v){if(view===v)return;view=v;closeForm();load();}
-  function goToday(){current=new Date();selected=dateKey(current);closeForm();load();}
+  function setScope(s){if(scope===s)return;scope=s;closeForm();closeDayDrawer();load();}
+  function setView(v){if(view===v)return;view=v;closeForm();closeDayDrawer();load();}
+  function goToday(){current=new Date();selected=dateKey(current);closeForm();closeDayDrawer();load();}
   function move(n){
     if(view==="month"){current=new Date(current.getFullYear(),current.getMonth()+n,1);}
     else current=add(current,n*(view==="week"?7:1));
-    selected=dateKey(current);closeForm();load();
+    selected=dateKey(current);closeForm();closeDayDrawer();load();
   }
   function timeLabel(e){return e.allDay?"終日":hm(e.startsAt)+"–"+hm(e.endsAt);}
   function localEvents(){return events.map(e=>{
@@ -290,9 +291,33 @@
       else document.querySelectorAll(".cal-date").forEach(n=>n.classList.toggle("picked",n.dataset.date===s));
       renderDayEvents();
     }
-    if(hour!==undefined && scope==="mine")openForm(null,hour);
-    el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});
+    if(hour!==undefined && scope==="mine"){
+      closeDayDrawer();openForm(null,hour);
+      el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});
+    }else openDayDrawer(s);
   }
+
+  // Officeと同じ日付詳細ドロワー。社員の予定は他人から編集させない。
+  function openDayDrawer(s){
+    const rows=eventsOn(s);
+    const items=rows.map(e=>'<div class="oc-card"><b>'+esc(e.title)+'</b>'+
+      '<div class="m">'+esc(timeLabel(e))+
+      (scope==="team"?"・担当："+esc(e.employeeName):"")+
+      (e.location?"・場所："+esc(e.location):"")+'</div>'+
+      (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button></div>':"")+
+      '</div>').join("");
+    el("cal-drawer-root").innerHTML='<div class="cal-drawer-bg" onclick="closeDayDrawer()"></div>'+
+      '<aside class="cal-drawer" role="dialog" aria-modal="true" aria-label="'+esc(officeDayLabel(s))+' の予定" tabindex="-1">'+
+      '<div class="oc-dr"><div class="oc-dr-h"><h2>'+esc(officeDayLabel(s))+'</h2>'+
+      '<button type="button" class="cal-drawer-close" onclick="closeDayDrawer()">閉じる</button></div>'+
+      (scope==="mine"?'<div class="cal-drawer-actions"><button type="button" class="btn btn-primary btn-sm" onclick="drawerAdd()">＋ この日に予定を登録</button></div>':"")+
+      (items||'<p class="muted">この日の業務予定はありません。</p>')+'</div></aside>';
+    el("cal-drawer-root").querySelector(".cal-drawer").focus();
+  }
+  function closeDayDrawer(){el("cal-drawer-root").innerHTML="";}
+  function drawerEdit(id){closeDayDrawer();openForm(id);el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
+  function drawerAdd(){closeDayDrawer();newEvent();el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&el("cal-drawer-root").innerHTML)closeDayDrawer();});
   function renderDayEvents(){
     el("cal-daytitle").textContent=selected+" の予定";
     el("cal-ai-result").innerHTML="";
