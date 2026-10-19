@@ -36,6 +36,7 @@ await page.route("**/api/**",route=>{
     if(method==="DELETE"){own.splice(own.findIndex(o=>o.id===url.searchParams.get("id")),1);return send({ok:true});}
   }
   if(url.pathname==="/api/schedule/team")return send({events:team.slice(),people:[{id:"emp1",name:"自分"},{id:"emp2",name:"他メンバー"}]});
+  if(url.pathname==="/api/schedule/review")return send({ai:true,verdict:"good",summary:"時間配分は妥当です",details:"予定の重複がなく、休憩の余地があります。",priorityAdvice:"先に営業アタックを行います。",metrics:{totalMinutes:180,overlaps:0},suggestions:["営業アタックを優先"]});
   if(url.pathname==="/api/notifications")return send({notifications:[],unread:0});
   return send({});
 });
@@ -45,6 +46,12 @@ assert((await page.locator("#cal-title").innerText()).includes("年"),"最初は
 assert(await page.locator("#scope-mine").evaluate(x=>x.classList.contains("on")),"初期状態は自分");
 assert(await page.locator("#view-month").evaluate(x=>x.classList.contains("on")),"初期状態は月");
 assert(await page.locator(".cal-date").count()>=28,"1か月分のカレンダーが並ぶ");
+assert(await page.locator(".oc-grid").count()===1,"Officeと同じ月間グリッド");
+assert(await page.locator(".oc-dow").count()===7,"Officeと同じ月曜始まり");
+assert((await page.locator(".oc-dow").first().innerText())==="月","週の始まりは月曜");
+assert(await page.locator(".oc-strip").count()===1,"Officeと同じスマホ日付ストリップ");
+assert((await page.locator("#cal-list-heading").innerText()).includes("自分の予定一覧"),"自分の月間予定一覧を表示");
+assert((await page.locator("#cal-list").innerText()).includes("営業アタック"),"自分の予定が一覧に出る");
 assert((await page.locator("#cal-grid").innerText()).includes("営業アタック"),"自分の予定が月間に出る");
 await page.locator("#cal-new").click();
 await page.locator("#f-title").fill("面談");
@@ -54,10 +61,12 @@ await page.locator("#cal-save").click();
 await page.waitForTimeout(300);
 assert(operations.some(x=>x.method==="POST"&&x.data.title==="面談"&&x.data.visibility==="shared"),"選択日の予定を社内共有で保存");
 assert((await page.locator("#cal-grid").innerText()).includes("面談"),"保存後に予定が画面に反映");
+assert((await page.locator("#cal-list").innerText()).includes("面談"),"保存した予定が月間一覧にも反映");
 await page.locator("#scope-team").click();
 await page.waitForTimeout(350);
 assert((await page.locator("#cal-grid").innerText()).includes("他メンバー"),"全員表示で担当者が出る");
 assert((await page.locator("#cal-grid").innerText()).includes("会社MTG"),"全員の業務予定が見える");
+assert((await page.locator("#cal-list-heading").innerText()).includes("全員"),"一覧も全員モードに切り替わる");
 assert(await page.locator("#cal-new").isHidden(),"全員表示では他人の予定を編集させない");
 await page.locator("#view-week").click();
 assert(await page.locator(".cal-week").count()===1,"週表示に切り替わる");
@@ -65,6 +74,11 @@ await page.locator("#view-day").click();
 assert(await page.locator(".cal-dayview").count()===1,"日表示に切り替わる");
 await page.locator("#scope-mine").click();
 assert(await page.locator("#cal-new").isVisible(),"自分へ戻ると新規登録可能");
+await page.locator("#cal-ai-btn").click();
+await page.waitForTimeout(300);
+assert(await page.locator("#cal-ai-result details.cal-ai-detail").count()===1,"AIの詳細を折りたたみで確認可能");
+await page.locator("#cal-ai-result details.cal-ai-detail summary").click();
+assert((await page.locator("#cal-ai-result").innerText()).includes("判断理由"),"AI判定の根拠を表示");
 assert(errors.length===0,"画面JavaScriptエラーなし: "+errors.join(" / "));
 await br.close();
 console.log(bad.length?bad.length+" NG":"月週日・自分全員・予定登録 すべて通過");
