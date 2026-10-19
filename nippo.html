@@ -275,7 +275,8 @@
   </div>
 
   <!-- 声かけの設定。1日3回だけ -->
-  <div id="push-card" class="card hidden">
+  <details id="push-card" class="card hidden">
+    <summary style="font-size:13px;font-weight:700;cursor:pointer;color:var(--primary-dark);">通知・声かけの設定（必要なときだけ開く）</summary>
     <h2><span class="material-symbols-outlined">notifications_active</span>声かけ
       <span id="push-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <p class="kp-greet-sub" style="margin:0 0 14px;">
@@ -283,7 +284,7 @@
       mf を開いていなくても届きます。急ぎのこと以外は、この3回だけです。
     </p>
     <div id="push-body"></div>
-  </div>
+  </details>
 
   <!-- 昼。見るだけ。入力欄は置かない -->
   <div id="mid-card" class="card hidden" style="border-left:4px solid #d69e2e;">
