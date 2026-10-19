@@ -1,11 +1,9 @@
 // GET /api/schedule/team?from=&to=   … 社員全員の業務予定（本人を含む）
 //
 // ■ 何を返すか
-//   visibility が private でない行だけ。既定は private なので、
-//   本人が「見せる」と選んだ予定しか出てこない。
-//
-//   busy   … 時間だけ。件名も場所も種類も返さない（「予定あり」とだけ出す）
-//   shared … 件名と場所まで
+//   旧 private / busy の社内業務予定も表示（元データを消さない）。
+//   「私用」カテゴリー・休暇や予約の自動作成行・Google個人予定は対象外。
+//   本人を含む、同じ会社の在籍メンバーだけに返す。
 //
 //   メモ（body）はどちらでも返さない。
 //   持ち物や相手の連絡先を書く欄なので、公開範囲を上げただけで
@@ -49,7 +47,6 @@ export default async function handler(req, res) {
     .from("gw_calendar_events")
     .select("id, employee_id, title, location, category, all_day, starts_at, ends_at, visibility")
     .eq("tenant_id", ctx.tenantId)
-    .neq("visibility", "private")
     .eq("source", "self")                   // 休暇・予約の自動生成は会社の業務予定に含めない
     .neq("category", "private")             // 過去の私用も公開しない
     .gte("starts_at", from).lt("starts_at", to)
@@ -81,7 +78,7 @@ export default async function handler(req, res) {
   return json(res, 200, { events, people: [...people.values()] });
 }
 
-/** 公開範囲に合わせて、返す項目そのものを組み立て直す */
+/** 社員に必要な業務情報だけを明示的に返し、本文・メモは含めない */
 function strip(r, person) {
   const base = {
     id: r.id,
@@ -93,6 +90,5 @@ function strip(r, person) {
     endsAt: r.ends_at,
     visibility: r.visibility,
   };
-  if (r.visibility !== "shared") return base;   // busy は時間だけ
   return { ...base, title: r.title, location: r.location || null, category: r.category };
 }
