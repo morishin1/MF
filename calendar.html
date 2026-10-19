@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/css/app.css?v=20261020cal1">
 <link rel="stylesheet" href="/css/layout.css?v=20261020cal1">
 <style>
-  .cal-wrap{max-width:1400px;margin:0 auto;padding:18px 15px 58px}
+  .cal-wrap{max-width:1400px;margin:0 auto;padding:18px 15px 58px;--of-ink:#263b60;--of-line:#e4e7eb;--of-mute:#667789;--of-faint:#9ca5af;--of-sub:#54647c}
   .cal-top{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
   .cal-top h1{font-size:23px;margin:0 14px 0 0;white-space:nowrap;color:var(--primary-dark,#132a48)}
   .cal-top .cal-title{font-size:20px;font-weight:700;margin:0 6px;color:var(--primary-dark,#132a48);min-width:150px}
@@ -20,7 +20,7 @@
   .cal-switch button.on{color:#fff;background:var(--primary,#286fb4)}
   .cal-break{flex:1}
   .cal-guide{font-size:12px;color:var(--muted,#667);margin:0 0 14px;line-height:1.7}
-  .cal-month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--border,#dce2ea);border-left:1px solid var(--border,#dce2ea);background:#fff;border-radius:10px;overflow:hidden}
+  .cal-month{border-radius:0}
   .cal-day-head{border-right:1px solid var(--border,#dce2ea);border-bottom:1px solid var(--border,#dce2ea);padding:9px 2px;text-align:center;font-size:12px;color:var(--muted,#667);font-weight:700}
   .cal-date{border:0;border-right:1px solid var(--border,#dce2ea);border-bottom:1px solid var(--border,#dce2ea);
     padding:6px 5px;min-height:103px;text-align:left;background:#fff;min-width:0;color:inherit;
@@ -100,8 +100,16 @@
   </div>
   <p class="cal-guide">最初は自分の予定を表示します。日付を押して予定を追加・変更できます。「全員」に切り替えると社内メンバーの仕事の予定が見られます。日報は<a href="/nippo.html">こちら</a>。</p>
   <div id="cal-message" class="cal-state" role="status"></div>
-  <div id="cal-grid" class="cal-scroll" aria-label="業務カレンダー"></div>
-  <section class="cal-panel" id="cal-panel">
+  <section class="of-panel">
+    <div class="oc-head"><b id="oc-month-heading">今月の業務カレンダー</b><span class="cal-guide" style="margin:0">日付を押すと予定一覧が見られます</span></div>
+    <div id="cal-grid" class="cal-scroll" aria-label="業務カレンダー"></div>
+  </section>
+  <section class="cal-list-panel" id="cal-list-section">
+    <h2 id="cal-list-heading">自分の予定一覧（今月）</h2>
+    <p id="cal-list-summary" class="cal-list-summary"></p>
+    <div id="cal-list" aria-live="polite"><span class="muted">読み込み中…</span></div>
+  </section>
+    <section class="cal-panel" id="cal-panel">
     <h2 id="cal-daytitle">選択した日の予定</h2>
     <div id="cal-dayevents"><span class="muted">予定を読み込み中…</span></div>
     <div id="cal-edit" class="cal-form" hidden>
@@ -140,9 +148,9 @@
   const startMonday=d=>add(d,-(d.getDay()+6)%7);
   function range(){
     if(view==="month"){
-      const first=monthBegin(current),grid=add(first,-first.getDay());
+      const first=monthBegin(current),grid=add(first,-(first.getDay()+6)%7);
       const last=new Date(current.getFullYear(),current.getMonth()+1,0);
-      const n=Math.ceil((first.getDay()+last.getDate())/7)*7;
+      const n=Math.ceil((((first.getDay()+6)%7)+last.getDate())/7)*7;
       return [grid,add(grid,n)];
     }
     if(view==="week"){const monday=startMonday(current);return [monday,add(monday,7)];}
@@ -204,24 +212,44 @@
   }
   function smallEvent(e){
     const time=e.allDay?"":hm(e.startsAt)+" ";
-    return '<span class="cal-event '+(scope==="team"?"team":"")+'" title="'+esc(e.employeeName+" "+time+e.title)+'">'+
-      (scope==="team"?'<b>'+esc(e.employeeName)+" </b>":"")+esc(time+e.title)+'</span>';
+    const label=(scope==="team"?e.employeeName+" ":"")+time+e.title;
+    return '<span class="oc-ev cal-event '+(scope==="team"?"team":"")+'" title="'+esc(label)+'">'+esc(label)+'</span>';
   }
+  const officeDays=["月","火","水","木","金","土","日"];
+  const officeDow=s=>(new Date(s+"T12:00:00+09:00").getUTCDay()+6)%7;
+  const officeDayLabel=s=>Number(s.slice(5,7))+"月"+Number(s.slice(8,10))+"日（"+officeDays[officeDow(s)]+"）";
   function dayCell(s,out=false){
     const d=new Date(s+"T12:00:00+09:00"),list=eventsOn(s),isToday=s===dateKey(new Date());
-    return '<button type="button" class="cal-date'+(out?" out":"")+(isToday?" today":"")+(s===selected?" picked":"")+
-      '" data-date="'+s+'" onclick="selectDate(this.dataset.date)" aria-label="'+s+' '+list.length+'件">'+
-      '<span class="cal-num">'+d.getDate()+'</span>'+
+    return '<button type="button" class="oc-day cal-date'+(out?" out":"")+(officeDow(s)>=5?" off":"")+(isToday?" today":"")+(s===selected?" picked":"")+
+      '" data-date="'+s+'" onclick="selectDate(this.dataset.date)" aria-label="'+esc(officeDayLabel(s)+" 予定"+list.length+"件")+'">'+
+      '<span class="oc-num cal-num">'+d.getDate()+'</span>'+
       list.slice(0,3).map(smallEvent).join("")+
-      (list.length>3?'<span class="cal-more">ほか '+(list.length-3)+' 件</span>':
-        list.length===0?'<span class="cal-empty">＋</span>':"")+'</button>';
+      (list.length>3?'<span class="oc-more cal-more">+'+(list.length-3)+'件</span>':"")+'</button>';
   }
   function renderMonth(){
-    const [start,end]=range();
-    const headers=dayNames.map(x=>'<div class="cal-day-head">'+x+'</div>').join("");
+    const [start,end]=range(),s=dateKey(start),e=dateKey(add(end,-1));
     const cells=[];
-    for(let d=new Date(start);d<end;d=add(d,1)){const s=dateKey(d);cells.push(dayCell(s,d.getMonth()!==current.getMonth()));}
-    el("cal-grid").innerHTML='<div class="cal-month">'+headers+cells.join("")+'</div>';
+    for(let d=new Date(start);d<end;d=add(d,1)){const key=dateKey(d);cells.push(dayCell(key,d.getMonth()!==current.getMonth()));}
+    // Officeと同じ月曜〜日曜の月間グリッドとスマホ用日付ストリップ。
+    const month=[];
+    for(let d=new Date(current.getFullYear(),current.getMonth(),1);d.getMonth()===current.getMonth();d=add(d,1)){
+      const key=dateKey(d),total=eventsOn(key).length;
+      month.push('<button type="button" class="oc-sd'+(officeDow(key)>=5?" off":"")+(key===dateKey(new Date())?" today":"")+(key===selected?" on":"")+
+        '" data-date="'+key+'" onclick="selectDate(this.dataset.date)">'+
+        '<small>'+officeDays[officeDow(key)]+'</small><b>'+d.getDate()+'</b><i>'+(total?total+"件":"")+'</i></button>');
+    }
+    el("oc-month-heading").textContent=current.toLocaleDateString("ja-JP",{year:"numeric",month:"long"})+" の業務予定";
+    el("cal-grid").innerHTML='<div class="oc-grid cal-month" role="grid">'+
+      officeDays.map(x=>'<div class="oc-dow cal-day-head">'+x+'</div>').join("")+cells.join("")+'</div>'+
+      '<div class="oc-strip">'+month.join("")+'</div><div class="oc-day-cards">'+
+      '<div class="oc-cat">'+esc(officeDayLabel(selected))+'</div>'+dayCardsMobile(selected)+'</div>';
+  }
+  function dayCardsMobile(s){
+    const list=eventsOn(s);
+    return list.length?list.map(e=>'<div class="oc-card"><b>'+esc(e.title)+'</b>'+
+      '<div class="m">'+esc(timeLabel(e))+(scope==="team"?"・"+esc(e.employeeName):"")+
+      (e.location?"・"+esc(e.location):"")+'</div></div>').join(""):
+      '<p class="muted">この日の予定はありません。</p>';
   }
   function renderWeek(){
     const [start]=range();const dates=Array.from({length:7},(_,i)=>dateKey(add(start,i)));
@@ -246,14 +274,15 @@
       list.filter(e=>e.allDay?h===7:Number(hm(e.startsAt).slice(0,2))===h).map(smallEvent).join("")+'</button></div>';
     el("cal-grid").innerHTML='<div class="cal-dayview">'+rows+'</div>';
   }
-  function render(){header();if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();}
+  function render(){header();if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();renderEventList();}
   function selectDate(s,hour){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return;
     if (selected !== s) closeForm();
     selected=s;
     if(view==="day"){const [y,m,d]=s.split("-").map(Number);current=new Date(y,m-1,d);render();}
     else {
-      document.querySelectorAll(".cal-date").forEach(n=>n.classList.toggle("picked",n.dataset.date===s));
+      if(view==="month")renderMonth();
+      else document.querySelectorAll(".cal-date").forEach(n=>n.classList.toggle("picked",n.dataset.date===s));
       renderDayEvents();
     }
     if(hour!==undefined && scope==="mine")openForm(null,hour);
@@ -271,6 +300,27 @@
     ).join(""):'<p class="muted" style="font-size:13px">予定はまだ登録されていません。</p>';
     if(scope==="mine"&&!list.length)el("cal-dayevents").innerHTML+='<button class="btn btn-secondary btn-sm" onclick="newEvent()">この日に追加</button>';
   }
+  function renderEventList(){
+    const [start,end]=range(),startDate=dateKey(start),endDate=dateKey(end);
+    let rows=localEvents().filter(e=>jstDay(e.startsAt)>=startDate&&jstDay(e.startsAt)<endDate).sort((a,b)=>a.startsAt.localeCompare(b.startsAt));
+    if(view==="month")rows=rows.filter(e=>jstDay(e.startsAt).slice(0,7)===dateKey(current).slice(0,7));
+    const title=(scope==="mine"?"自分":"全員")+"の予定一覧（"+(view==="month"?"今月":view==="week"?"今週":"今日")+"）";
+    el("cal-list-heading").textContent=title;
+    el("cal-list-summary").textContent=rows.length+"件の業務予定";
+    if(!rows.length){el("cal-list").innerHTML='<p class="muted">予定はまだ登録されていません。</p>';return;}
+    let prev="",html="";
+    for(const e of rows){
+      const date=jstDay(e.startsAt);
+      if(date!==prev){prev=date;html+='<div class="cal-list-date">'+esc(officeDayLabel(date))+'</div>';}
+      html+='<div class="cal-list-card"><span class="cal-list-time">'+esc(timeLabel(e))+'</span>'+
+        '<div class="cal-list-info"><b>'+esc(e.title)+'</b>'+
+        (scope==="team"?'<span class="cal-list-person">'+esc(e.employeeName)+'</span>':"")+
+        (e.location?'<div class="cal-list-person">'+esc(e.location)+'</div>':"")+'</div>'+
+        (e.own&&scope==="mine"?'<div class="cal-list-actions"><button class="cal-list-btn" type="button" onclick="editListEvent(\''+esc(e.id)+'\',\''+date+'\')">編集</button></div>':"")+'</div>';
+    }
+    el("cal-list").innerHTML=html;
+  }
+  function editListEvent(id,date){selected=date;renderDayEvents();openForm(id);el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
   function newEvent(){openForm(null);}
   function openForm(id,hour){
     if(scope!=="mine")return;
