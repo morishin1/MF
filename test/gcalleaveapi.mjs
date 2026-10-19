@@ -38,7 +38,7 @@ global.fetch = async (url, opts = {}) => {
       status: 200, headers: { "content-type": "application/json" },
     });
   }
-  if (method === "DELETE") return new Response("", { status: 204 });
+  if (method === "DELETE") return new Response(null, { status: 204 });
   return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
 };
 
