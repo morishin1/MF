@@ -116,7 +116,7 @@
     .db-categories button.on { color:#fff; background:#1b2440; border-color:#1b2440; }
     .db-categories button strong { font-variant-numeric:tabular-nums; }
     .db-work .db-sec { margin:0; }
-    .db-work .db-click { background:transparent; border:0; padding:0; }
+    .db-work .db-click { background:#fff9e8; border:1px solid #f1deb2; border-radius:9px; padding:10px 12px; }
     .db-work .db-click .db-sec-h .t { color:#1b2440; font-size:14px; }
     .db-work .db-sec-h { margin:0 0 10px; }
     .db-work .sl-row { padding:10px 9px; margin-bottom:6px; }
@@ -320,7 +320,7 @@
       const button = el("db-tab-" + name);
       button.classList.toggle("on", name === tab);
       button.setAttribute("aria-selected", String(name === tab));
-      button.tabIndex = name === tab ? 0 : -1;
+      // タブは通常のボタンとしてTabキーで移動可能にする。
     }
   }
 
