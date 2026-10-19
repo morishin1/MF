@@ -47,10 +47,31 @@ assert(await page.locator("#scope-mine").evaluate(x=>x.classList.contains("on"))
 assert(await page.locator("#view-month").evaluate(x=>x.classList.contains("on")),"初期状態は月");
 assert(await page.locator(".cal-date").count()>=28,"1か月分のカレンダーが並ぶ");
 assert(await page.locator(".oc-grid").count()===1,"Officeと同じ月間グリッド");
+const gridMetrics=await page.locator(".oc-grid").evaluate(n=>{
+  const style=getComputedStyle(n);
+  const cells=[...n.querySelectorAll(".oc-dow")].map(x=>x.getBoundingClientRect());
+  return {display:style.display,columns:style.gridTemplateColumns.split(" ").filter(Boolean).length,
+    firstRow:cells.map(x=>Math.round(x.top)), widths:cells.map(x=>Math.round(x.width))};
+});
+assert(gridMetrics.display==="grid"&&gridMetrics.columns===7,"月間カレンダーが実際に7列表示（CSSとレイアウト）");
+assert(new Set(gridMetrics.firstRow).size===1,"曜日ヘッダーが同じ横列に並ぶ");
+assert(gridMetrics.widths.every(n=>n>=35),"7列の表示幅が正常");
 assert(await page.locator(".oc-dow").count()===7,"Officeと同じ月曜始まり");
 assert((await page.locator(".oc-dow").first().innerText())==="月","週の始まりは月曜");
 assert(await page.locator(".oc-strip").count()===1,"Officeと同じスマホ日付ストリップ");
 assert((await page.locator("#cal-list-heading").innerText()).includes("自分の予定一覧"),"自分の月間予定一覧を表示");
+const layoutMetrics=await page.locator(".cal-wrap").evaluate(n=>{
+ const r=n.getBoundingClientRect();
+ const side=document.querySelector(".kp-sidebar")?.getBoundingClientRect();
+ return {left:r.left,right:r.right,sideRight:side?.right||0,viewport:innerWidth};
+});
+assert(layoutMetrics.left>=layoutMetrics.sideRight-1,"本文がサイドメニューに重ならない");
+assert(layoutMetrics.right<=layoutMetrics.viewport+1,"本文が画面幅からはみ出さない");
+const iconMetrics=await page.locator(".kp-sidebar .material-symbols-outlined").first().evaluate(n=>{
+ const s=getComputedStyle(n);
+ return {family:s.fontFamily,width:n.getBoundingClientRect().width};
+});
+assert(iconMetrics.family.includes("Material Symbols")&&iconMetrics.width<=35,"アイコン表示を共通メニューでも有効化");
 assert((await page.locator("#cal-list").innerText()).includes("営業アタック"),"自分の予定が一覧に出る");
 await page.locator('.oc-grid .cal-date[data-date="'+today+'"]').click();
 assert(await page.locator(".cal-drawer").count()===1,"Officeと同じ右ドロワーが日付選択で開く");
