@@ -48,6 +48,8 @@ assert.equal(result.status,200);
 assert.equal(result.body.ai,false);
 assert.equal(result.body.metrics.overlaps,1);
 assert.equal(result.body.verdict,"adjust");
+assert(typeof result.body.details==="string"&&result.body.details.includes("時間"),"AIがなくても時間配分の詳しい理由を返す");
+assert(typeof result.body.priorityAdvice==="string","優先順位の詳細コメントがある");
 assert(result.body.suggestions.some(s=>s.includes("重複")));
 assert.equal(aiCalls,0);
 assert.equal(inspect([{title:"集中作業",start:"09:00",end:"10:00"}]).totalMinutes,60);
@@ -58,6 +60,7 @@ assert.equal(result.status,200);
 assert.equal(result.body.ai,true);
 assert.equal(aiCalls,1);
 assert(result.body.suggestions.includes("午前中に集中作業を置く"));
+assert(typeof result.body.details==="string"&&result.body.details.length>0,"AIの判断理由が返る");
 
 result=await check(req([{title:"不正な時間",start:"11:00",end:"10:00"}]));
 assert.equal(result.status,400);
@@ -92,6 +95,8 @@ assert(weekUI.includes("API.createEvent(") && weekUI.includes("API.updateEvent("
 assert(weekUI.includes("wk-calendar") && weekUI.includes("wk-status"),"週単位のカレンダーと入力状態");
 assert(nippo.includes('id="np-week-days"'),"日報は週の入力状況を表示");
 assert(nippo.includes('<details class="fc-detail-toggle fc-advanced">'),"長い詳細設定を折りたたむ");
+assert(nippo.includes("AIの判断理由・改善案を詳しく見る"),"日報で判定理由を開ける");
+assert(src("calendar.html").includes("cal-ai-detail"),"カレンダーでもAI判定の詳細を開ける");
 assert(!nippo.includes("saveNextPlan("),"日報側で予定を再保存しない");
 assert(nippo.includes('const res = await KPLayout.busy(btn, "送信中…"'),"日報の提出は維持");
 assert(sql.includes('drop policy if exists gw_calendar_events_peer_select'),"共有はAPIだけ（本文のRLS漏れ防止）");
