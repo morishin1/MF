@@ -767,6 +767,81 @@
   function ppMemo() { modal(`<h2>メモを残す</h2>${noteField("メモ（必須）")}${foot("ppSendMemo()", "残す")}`); }
   function ppSendMemo() { send({ action: "memo", note: $("m-note").value }); }
 
+  // ---- 提案担当→CS→クロージング：バトンタッチ -----------------------------
+  function ppHandoff(stage) {
+    const targets = (detail.handoffTargets || {})[stage] || [];
+    const cs = stage === "cs";
+    if (!targets.length) {
+      modal('<h2>担当チームが未設定です</h2><p class="sl-muted">管理者に「フォローの設定」からCS・クロージング担当を登録してもらってください。</p>' +
+        '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">閉じる</button></div>');
+      return;
+    }
+    const decisions = cs
+      ? [{ key: "advance", label: "提案送信済み・CS対応を開始" }, { key: "other", label: "その他" }]
+      : [{ key: "advance", label: "進行・詳細商談へ" }, { key: "needs_detail", label: "条件調整・詳細確認が必要" }];
+    modal('<h2>' + (cs ? "CSへ正式に引き継ぐ" : "クロージングへ引き継ぐ") + '</h2>' +
+      '<p class="sl-muted" style="font-size:12px;">いつ・誰から誰へ・何の理由で渡したかを記録し、Slackでチームに共有します。</p>' +
+      '<label>引継ぎ先（必須）</label><select id="m-howner">' +
+      targets.map((t) => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join("") + '</select>' +
+      '<label>判断（必須）</label>' + radios("m-hdecision", decisions, decisions[0].key) +
+      '<label>引継ぎ理由（必須）</label><textarea id="m-hreason" rows="2" maxlength="500" placeholder="例：面談希望あり・開始時期と単価の詳細確認が必要"></textarea>' +
+      '<label>次の担当がすること（必須）</label><textarea id="m-hnext" rows="2" maxlength="500" placeholder="例：先方に連絡して詳細ヒアリングの日程を決める"></textarea>' +
+      '<label>次の対応期限（任意）</label><input type="datetime-local" id="m-hdue">' +
+      foot("ppCommitHandoff('" + stage + "')", "引継ぎを確定しSlackで共有"));
+  }
+  async function ppCommitHandoff(stage) {
+    const reason = $("m-hreason").value.trim(), nextAction = $("m-hnext").value.trim();
+    if (!reason || !nextAction) { $("m-msg").textContent = "引継ぎ理由と次の対応を入力してください"; return; }
+    const oldId = detail.proposal.id;
+    const body = { id: oldId, action: "transfer", toStage: stage,
+      ownerId: $("m-howner").value, decision: picked("m-hdecision"),
+      reason, nextAction, nextAt: $("m-hdue").value || null };
+    try {
+      const res = await KPLayout.busy($("m-ok"), "処理中…",
+        () => API.api("/api/sales/proposals/handoff", { method: "POST", body }));
+      ppCloseAction();
+      ppClose(); // 新しい担当以外には、引継ぎ後の詳細が見えない場合がある
+      await load();
+      alert(res.slack?.sent ? "引継ぎを記録し、Slackにも共有しました" : "引継ぎを記録しました（Slackの共有は未確認です）");
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+  function ppCsDecision() {
+    modal('<h2>CS：連絡後の進行判断</h2>' +
+      '<p class="sl-muted" style="font-size:12px;">通話成功または返信の記録が必要です。CSで判断できる範囲の一次確認を行い、詳細はクロージングに渡します。</p>' +
+      '<label>判断（必須）</label>' + radios("m-cdecision", [
+        { key:"advance", label:"進める（クロージングへ）" },
+        { key:"needs_detail", label:"詳細確認・条件調整が必要" },
+        { key:"hold", label:"保留・再連絡" }, { key:"decline", label:"見送り" },
+      ], "advance") +
+      '<label>理由（必須）</label><textarea id="m-creason" rows="2" maxlength="500"></textarea>' +
+      '<label>次の対応（必須）</label><textarea id="m-cnext" rows="2" maxlength="500"></textarea>' +
+      foot("ppCommitCsDecision()", "CS判断を記録・Slack共有"));
+  }
+  async function ppCommitCsDecision() {
+    const reason = $("m-creason").value.trim(), nextAction = $("m-cnext").value.trim();
+    if (!reason || !nextAction) { $("m-msg").textContent = "理由と次の対応を入力してください"; return; }
+    const id = detail.proposal.id;
+    try {
+      const res = await KPLayout.busy($("m-ok"), "処理中…",
+        () => API.api("/api/sales/proposals/handoff", { method:"POST",
+          body:{ id, action:"cs_decision", decision:picked("m-cdecision"), reason, nextAction } }));
+      ppCloseAction();
+      await ppOpen(id); load();
+      alert(res.slack?.sent ? "CSの判断を記録してSlackに共有しました" : "CSの判断を記録しました（Slackの共有は未確認です）");
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+  async function ppReshareHandoff(id) {
+    if (!confirm("この引継ぎをSlackに再共有しますか？")) return;
+    try {
+      const proposalId = detail.proposal.id;
+      const r = await API.api("/api/sales/proposals/handoff", {
+        method:"POST", body:{ id:proposalId, action:"resend", handoffId:id }
+      });
+      await ppOpen(proposalId);
+      alert(r.slack?.sent ? "Slackへ共有しました" : "共有結果：" + (r.slack?.skipped || r.slack?.error || "未確認"));
+    } catch (e) { alert(errText(e)); }
+  }
+
   function ppAssign() {
     const cur = detail.proposal.salesOwnerId || "";
     modal(`<h2>営業担当の変更</h2>
