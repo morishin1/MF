@@ -214,6 +214,7 @@
     {
       key: "office-hr", label: "人・組織", icon: "group",
       items: [
+        { key: "team_schedule", href: "/team-schedule.html", label: "社員スケジュール", icon: "calendar_month", ready: true, when: "officeEntry" },
         // 初めに見るのは今週の日報・勤怠（提出状況・未提出・要確認）。経営は集計（チーム状況）を見る
         { key: "nippo",     href: "admin-nippo.html",     label: "日報・勤怠",   icon: "edit_note",  ready: true, when: "officeHr" },
         { key: "members",   href: "admin-members.html",   label: "メンバー",     icon: "badge",      ready: true, when: "officeHr",
@@ -706,6 +707,7 @@
         { view: "members", label: "メンバー実行状況" },
         { href: "/admin-team.html",  label: "チーム状況" },
         { href: "/admin-tasks.html", label: "全員のタスク" },
+        { href: "/team-schedule.html", label: "社員スケジュール" },
         { view: "onboarding", label: "入社準備" },
         { view: "pay",        label: "給与管理" },
         { view: "people",     label: "概要" },
