@@ -31,7 +31,7 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
@@ -42,6 +42,7 @@ import {
   SQL_FILE, loadPeople, salesMembers, loadSettingsRow, loadProposal, loadTasks, recordAndPlan, insertTasks,
 } from "../../../lib/sales-proposals-db.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
+import { notifySentShared } from "../../../lib/sales-proposal-handoff-slack.js";
 import { STATUS_LABEL as COMPANY_STATUS_LABEL } from "../../../lib/sales.js";
 
 const RECORDS = ["sent", "call", "mail", "reply", "check", "meeting", "result", "memo", "decision"];
@@ -154,6 +155,12 @@ async function act(req, res, sb, ctx, user) {
           kind: n.value.kind, result: n.value.result || null, reason: n.value.outcome || null,
           from: proposal.status, to: out.proposal.status, createdTasks: out.created.length,
         });
+      }
+      if (action === "sent") {
+        // dx.engerを使わず提案した場合もCS/クロージングに共有。Slack失敗は提案記録を巻き戻さない。
+        const shared = await notifySentShared(admin(), { proposalId: proposal.id, settingsRow: settingsRow || null,
+          employees: people.employees || [] });
+        if (shared.error) console.error("[sales/proposals/detail] sent share:", shared.error);
       }
       const detail = await detailOf(sb, ctx, out.proposal);
       if (detail.error) return fail(res, detail.error);
