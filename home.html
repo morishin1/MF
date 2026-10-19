@@ -326,8 +326,8 @@
     }
 
     if (ctx.me?.gw?.employee) loadCareerAsk();
-    loadFocus();
-    loadMemberSchedule();
+    // focus取得後の正式な翌営業日（土日祝対応）で予定を表示する。
+    loadFocus().then(() => loadMemberSchedule());
     loadDashboard();
     // 4つの件数（日報・予定・タスク・申請）。2回目からは前回の数字をすぐ出し、裏で最新にする
     await API.swr(HOME.statsKey(), loadStats, renderTiles);
