@@ -100,6 +100,25 @@
     .act-row .b { flex: 1; height: 7px; border-radius: 4px; background: var(--border); overflow: hidden; }
     .act-row .b span { display: block; height: 100%; background: var(--primary); }
     .act-row .v { width: 34px; text-align: right; color: var(--muted); }
+
+    /* ログイン直後: 予定と次の一手を先に表示。HR/Sales準拠のコンパクトなカード */
+    .member-dash-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:4px 0 12px}
+    .member-dash-top h2{margin:0;font-size:16px;color:var(--primary-dark);font-weight:700}
+    .member-dash-top p{margin:3px 0 0;font-size:12px;color:var(--muted)}
+    .member-dash-actions{display:flex;gap:7px;flex-wrap:wrap}
+    .member-dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px;min-width:0}
+    .member-dash-card{min-width:0;background:#fff;border:1px solid var(--border);border-radius:11px;padding:14px 16px}
+    .member-dash-card .dh{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:9px;min-width:0}
+    .member-dash-card .dh b{font-size:14px;color:var(--primary-dark)}
+    .member-dash-card .dh small{font-size:11px;color:var(--muted)}
+    .member-dash-card .dh .material-symbols-outlined{font-size:18px;margin-right:4px}
+    .member-dash-event{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;min-width:0}
+    .member-dash-event time{font-size:11px;white-space:nowrap;color:var(--muted);min-width:95px}
+    .member-dash-event .title{font-weight:600;min-width:0;overflow-wrap:anywhere}
+    .member-dash-more{display:inline-block;margin-top:10px;font-size:12px;color:var(--primary-dark);font-weight:700;text-decoration:none}
+    .member-dash-empty{font-size:12px;color:var(--muted);line-height:1.7;padding:7px 0}
+    .member-dash-warning{border-left:3px solid #b7791f;padding-left:10px}
+    @media(max-width:650px){.member-dash-grid{grid-template-columns:minmax(0,1fr)}.member-dash-card{padding:12px 14px}.member-dash-top{gap:7px}}
   </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
@@ -118,6 +137,32 @@
 <div class="wrap">
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
+
+  <!-- ログイン直後に自分の仕事の予定を確認。データは既存本人用 API だけを読む。 -->
+  <section id="member-dashboard" aria-label="自分の業務ダッシュボード">
+    <div class="member-dash-top">
+      <div>
+        <h2>今日の仕事</h2>
+        <p>予定の確認、重要タスク、日報への移動をここから。</p>
+      </div>
+      <div class="member-dash-actions">
+        <a class="btn btn-primary btn-sm" href="schedule.html"><span class="material-symbols-outlined icon-inline">calendar_month</span>カレンダー</a>
+        <a class="btn btn-secondary btn-sm" href="nippo.html"><span class="material-symbols-outlined icon-inline">edit_note</span>日報</a>
+      </div>
+    </div>
+    <div class="member-dash-grid">
+      <section class="member-dash-card" aria-label="今日の予定">
+        <div class="dh"><b><span class="material-symbols-outlined">today</span>今日の予定</b><small id="member-today-date"></small></div>
+        <div id="member-today-events"><div class="member-dash-empty">予定を読み込み中…</div></div>
+        <a class="member-dash-more" href="schedule.html">予定の登録・確認 →</a>
+      </section>
+      <section class="member-dash-card" aria-label="翌営業日の予定">
+        <div class="dh"><b><span class="material-symbols-outlined">event_upcoming</span>翌営業日の予定</b><small id="member-next-date"></small></div>
+        <div id="member-next-events"><div class="member-dash-empty">予定を読み込み中…</div></div>
+        <a class="member-dash-more" href="schedule.html" id="member-next-link">明日の予定を登録・確認 →</a>
+      </section>
+    </div>
+  </section>
 
   <!-- 会社から契約・入社手続き・キャリアの確認が届いているときだけ、いま必要なもの1つ（api/career/me?summary=1） -->
   <div id="career-ask" class="hidden"></div>
@@ -282,6 +327,7 @@
 
     if (ctx.me?.gw?.employee) loadCareerAsk();
     loadFocus();
+    loadMemberSchedule();
     loadDashboard();
     // 4つの件数（日報・予定・タスク・申請）。2回目からは前回の数字をすぐ出し、裏で最新にする
     await API.swr(HOME.statsKey(), loadStats, renderTiles);
@@ -340,6 +386,55 @@
       setTimeout(() => { if (msg.textContent.includes("残しました")) msg.textContent = ""; }, 4000);
     } catch (e) {
       msg.textContent = e.hint || e.message || "保存できませんでした";
+    }
+  }
+
+  // ---- ログイン後ホーム：今日と翌営業日の仕事予定 ---------------------------
+  const msJstDate = d=>new Date(d.getTime()+9*3600000).toISOString().slice(0,10);
+  const msPlus = (s,n)=>{
+    const d=new Date(s+"T12:00:00+09:00");
+    d.setUTCDate(d.getUTCDate()+n);
+    return d.toISOString().slice(0,10);
+  };
+  const msNextWorkday = s=>{
+    let d=s;
+    do {d=msPlus(d,1)} while([0,6].includes(new Date(d+"T12:00:00+09:00").getUTCDay()));
+    return d;
+  };
+  const msTime = iso=>new Date(iso).toLocaleTimeString("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit"});
+  const msRender = (id,list,missing)=>{
+    const box=el(id);
+    if(!box)return;
+    const events=[...list].sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at)));
+    if(!events.length){
+      box.innerHTML='<div class="member-dash-empty'+(missing?' member-dash-warning':'')+'">'+
+        (missing?"仕事の予定が未登録です。日報前に翌営業日の予定を登録しましょう。":"登録された予定はありません。")+'</div>';
+      return;
+    }
+    box.innerHTML=events.slice(0,3).map(e=>
+      '<div class="member-dash-event"><time>'+(e.all_day?'終日':esc(msTime(e.starts_at)))+'</time>'+
+      '<div class="title">'+esc(e.title||'業務予定')+
+      (e.location?'<div style="font-size:11px;color:var(--muted);font-weight:400">'+esc(e.location)+'</div>':'')+
+      '</div></div>').join('')+
+      (events.length>3?'<div class="member-dash-empty">ほか '+(events.length-3)+' 件</div>':'');
+  };
+  async function loadMemberSchedule(){
+    const today=msJstDate(new Date());
+    const target=focusData?.tomorrowDate||msNextWorkday(today);
+    el("member-today-date").textContent=today.slice(5).replace("-","/");
+    el("member-next-date").textContent=target.slice(5).replace("-","/");
+    // カレンダーで別の日に飛びたい場合も既存の予定画面から遷移できる。
+    const from=today+"T00:00:00+09:00",to=msPlus(target,1)+"T00:00:00+09:00";
+    try{
+      const data=await API.schedule(from,to);
+      const events=(data.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
+      const key=e=>new Date(new Date(e.starts_at).getTime()+9*3600000).toISOString().slice(0,10);
+      msRender("member-today-events",events.filter(e=>key(e)===today),false);
+      msRender("member-next-events",events.filter(e=>key(e)===target),true);
+    }catch(e){
+      const error='<div class="member-dash-empty">予定を取得できませんでした。カレンダーで確認してください。</div>';
+      el("member-today-events").innerHTML=error;
+      el("member-next-events").innerHTML=error;
     }
   }
 
