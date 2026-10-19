@@ -249,6 +249,7 @@
   function render(){header();if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();}
   function selectDate(s,hour){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return;
+    if (selected !== s) closeForm();
     selected=s;
     if(view==="day"){const [y,m,d]=s.split("-").map(Number);current=new Date(y,m-1,d);render();}
     else {
