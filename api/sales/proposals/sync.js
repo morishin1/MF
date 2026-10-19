@@ -5,6 +5,8 @@
 //
 // ■ 何が出るか（message）
 //   owner_unmatched … 営業担当（dx.enger の CL担当）を社員名簿から決められなかった → 提案管理で担当を割り当てる
+//   slack_failed    … 起票の Slack 通知を送れなかった（ベルには届いている）
+//   closed_before_sent … 終わった提案に「企業へ送った」が届いた（状態は変えない）
 //   db_failed など  … 受け付けに失敗した（dx.enger が再送する。続くときは管理者へ）
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
@@ -18,6 +20,8 @@ export const SYNC_MESSAGE_LABEL = {
   owner_unmatched: "営業担当を決められませんでした（担当を割り当ててください）",
   not_sent_yet: "まだ送っていない提案の更新でした（起票していません）",
   concurrent: "同じ提案が同時に届きました（1件にまとめました）",
+  slack_failed: "Slack に送れませんでした（ベルの通知は届いています。SALES_SLACK_WEBHOOK_URL を確かめてください）",
+  closed_before_sent: "終わった提案（見送り・連絡停止など）に、企業へ提案を送った連携が届きました（状態は変えていません）",
 };
 
 export default async function handler(req, res) {

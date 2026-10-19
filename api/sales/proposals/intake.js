@@ -1,4 +1,5 @@
-// POST /api/sales/proposals/intake … dx.enger で「送った」提案を、/sales 提案管理に起票する（サーバー間だけ）
+// POST /api/sales/proposals/intake … dx.enger でマッチングが確定した提案を /sales 提案管理に起票し、
+//                                     企業へ提案を送ったら電話待ちへ進める（サーバー間だけ。db/138・db/140）
 //
 // ■ ブラウザからは呼ばせない
 //   dx.enger のサーバーが HMAC-SHA256 で署名して送る（lib/sales-proposal-intake.js verifyGwSignature・用途 "proposal"）。
@@ -7,9 +8,11 @@
 // ■ 環境変数
 //   ENGER_SALES_SECRET        署名の鍵（dx.enger 側の GW_SALES_SECRET と同じ値。32文字以上）。未設定なら 503（常に拒否）
 //   SALES_PROPOSAL_TENANT_ID  起票するテナント。リクエストからは決めない（固定）。未設定なら 503
+//   SALES_SLACK_WEBHOOK_URL   起票を知らせる Slack（営業のチャンネル）。無ければ SLACK_WEBHOOK_URL。どちらも無ければ Slack は送らない
 //
 // ■ 本文
-//   1件 { event_id, event_type: "proposal.sent" | "proposal.updated", occurred_at, proposal: {…} }
+//   1件 { event_id, event_type: "proposal.matched" | "proposal.sent" | "proposal.updated", occurred_at, proposal: {…} }
+//       proposal.matched … マッチング確定（提案待ち・提案準備・Slack）／ proposal.sent … 企業へ提案を送った（電話待ち・30分）
 //   まとめて { events: [ …50件まで ] }（dx.enger の再送の回で使う）
 //   中身は docs/sales-proposals.md「連携API」
 //
@@ -26,6 +29,8 @@ import { admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { verifyGwSignature, readEvents, intakeEvent, INTAKE_PURPOSE } from "../../../lib/sales-proposal-intake.js";
+import { notifyProposalSlack } from "../../../lib/sales-proposal-slack.js";
+import { settingsOf } from "../../../lib/sales-proposals.js";
 import { SQL_FILE } from "../../../lib/sales-proposals-db.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -78,6 +83,16 @@ export default async function handler(req, res) {
         tenantId, employeeId, kind: "sales", title: out.notify.title, body: out.notify.body,
         link: out.notify.link, dedupeKey: out.notify.dedupeKey,
       })));
+    }
+    // Slack：起票したときだけ・提案ごとに1回（送れなかったら連携の確認に「要確認」で残す。ベルには届いている）
+    if (out.slack) {
+      const ownerName = (employees || []).find((e) => e.id === out.slack.proposal.sales_owner_id)?.display_name || null;
+      const sent = await notifyProposalSlack(sb, { ...out.slack, ownerName, slackMembers: settingsOf(settingsRow).slackMembers });
+      if (sent.error) {
+        console.error("[sales-proposals/intake] slack:", sent.error, v.eventId);
+        await sb.from("gw_sales_proposal_sync_log").update({ status: "warning", message: [...out.warnings, "slack_failed"].join(","), updated_at: new Date().toISOString() })
+          .eq("tenant_id", tenantId).eq("source_system", "enger").eq("event_id", v.eventId);
+      }
     }
   }
   // 1件でも失敗したら 500（dx.enger は失敗したぶんを再送する。成功したぶんは replayed になるだけ）

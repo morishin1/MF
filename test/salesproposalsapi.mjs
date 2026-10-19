@@ -13,6 +13,8 @@
 //  10. 別テナント・権限の無い社員・担当でない営業担当には見えない
 //  11. 返信なしは 3営業日で再フォロー、5営業日で管理者確認（1回の無回答で終わりにしない）
 //  12. 営業時間外・休日の送信は、次の営業日の始業から期限。連絡停止の希望で自動の追客が止まる
+//  13. マッチング確定（db/140）：提案待ち・提案準備・ベルと Slack（提案ごとに1回）。電話の期限は始めない
+//  14. 企業へ送った（dx.enger／Sales で記録）：電話待ち・提案準備は完了・送った時刻から30分の電話。順が入れ替わっても同じ
 //  ほか：署名（鍵・用途・時刻）、自動タスクはチェックで完了にできない、期限変更は理由が必須、
 //        企業に紐付ければ企業の営業履歴にも写る、ドメインが1社一致したら自動で紐付く
 import assert from "node:assert/strict";
@@ -29,19 +31,24 @@ const E_OWNER = uid(11), E_MGR = uid(12), E_S1 = uid(13), E_S2 = uid(14), E_NONE
 const nowIso = () => new Date().toISOString();
 const inSet = (v, set) => v === null || v === undefined || set.includes(v);
 
-const STATUSES = ["call_wait", "mail_wait", "reply_wait", "meeting_adjust", "meeting_done", "considering", "reproposal", "won", "lost", "stopped", "closed_no_reply"];
+const STATUSES = ["proposal_wait", "call_wait", "mail_wait", "reply_wait", "meeting_adjust", "meeting_done", "considering", "reproposal", "won", "lost", "stopped", "closed_no_reply"];
 const CLOSED = ["won", "lost", "stopped", "closed_no_reply"];
-// db/138 の CHECK と同じ条件
+// 途中の失敗を1回だけ起こす（提案を電話待ちにする更新で落とす）。送り直しで埋まることを確かめる
+const failOnce = { callWait: false };
+// db/138・db/140 の CHECK と同じ条件
 const mem = createMemDb({
   schema: {
     gw_sales_proposals: {
-      required: ["tenant_id", "company_name", "title", "sent_at", "status"],
+      required: ["tenant_id", "company_name", "title", "status"],
       unique: [["tenant_id", "source_system", "source_proposal_id"]],
       defaults: () => ({ status: "call_wait", source_system: "manual", contact_stop: false, created_at: nowIso(), updated_at: nowIso() }),
       check: (r) => (!inSet(r.status, STATUSES) ? "status"
         : CLOSED.includes(r.status) !== Boolean(r.closed_at) ? "gw_sales_proposals_closed"
         : ["lost", "stopped", "closed_no_reply"].includes(r.status) && !r.close_reason ? "gw_sales_proposals_reason"
-        : r.source_system === "enger" && !r.source_proposal_id ? "gw_sales_proposals_source_key" : null),
+        : r.source_system === "enger" && !r.source_proposal_id ? "gw_sales_proposals_source_key"
+        : r.status === "proposal_wait" && r.sent_at ? "gw_sales_proposals_wait_chk"
+        : !r.sent_at && !r.matched_at ? "gw_sales_proposals_start_chk"
+        : failOnce.callWait && r.status === "call_wait" ? (failOnce.callWait = false, "injected_failure") : null),
     },
     gw_sales_proposal_activities: {
       required: ["tenant_id", "proposal_id", "kind"],
@@ -80,6 +87,20 @@ mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async (rows) => {
 const REAL_GW = await import(atRoot("lib/gw.js"));
 let who = null;
 mock.module(atRoot("lib/gw.js"), { namedExports: { gwContext: async () => who, canSell: REAL_GW.canSell } });
+
+// Slack（Incoming Webhook）は外へ出さずに捕まえる。slackDown で「送れなかった」を作る
+const slackPosts = [];
+let slackDown = false;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, opts = {}) => {
+  if (String(url).startsWith("https://hooks.slack.test/")) {
+    if (slackDown) return new Response("down", { status: 500 });
+    slackPosts.push({ url: String(url), body: JSON.parse(opts.body) });
+    return new Response("ok", { status: 200 });
+  }
+  return realFetch(url, opts);
+};
+process.env.SALES_SLACK_WEBHOOK_URL = "https://hooks.slack.test/sales";
 
 const SECRET = "test-enger-sales-secret-0123456789abcdef";
 process.env.ENGER_SALES_SECRET = SECRET;
@@ -151,7 +172,7 @@ const tasksOf = (pid) => tbl("gw_sales_proposal_tasks").filter((t) => t.proposal
 const actsOf = (pid) => tbl("gw_sales_proposal_activities").filter((a) => a.proposal_id === pid);
 
 function setup() {
-  mem.reset(); logged.length = 0; notified.length = 0; evn = 0;
+  mem.reset(); logged.length = 0; notified.length = 0; evn = 0; slackPosts.length = 0; slackDown = false;
   mem.rows.gw_employees = [
     { id: E_OWNER, tenant_id: T1, display_name: "経営 者", email: "owner@eight.example", status: "active" },
     { id: E_MGR, tenant_id: T1, display_name: "管理 職", email: "mgr@eight.example", status: "active" },
@@ -559,12 +580,196 @@ await ok("企業に紐付いていれば、電話・メール・返信は企業�
   assert.equal(mem.rows.gw_sales_companies.find((x) => x.id === proposals()[0].company_id).name, "新規 株式会社");
 });
 
-await ok("DB 未適用（表が無い）なら 503 not_ready と、流す SQL の案内", async () => {
+await ok("DB 未適用（表が無い）なら 503 not_ready と、流す SQL の案内（db/138・db/140）", async () => {
   setup();
   mem.state.missing = "gw_sales_proposals";
   const r = await list(MANAGER);
-  assert.equal(r.statusCode, 503); assert.match(r.body.message, /db\/138_sales_proposals\.sql/);
+  assert.equal(r.statusCode, 503); assert.match(r.body.message, /db\/138_sales_proposals\.sql/); assert.match(r.body.message, /db\/140_sales_proposal_matching\.sql/);
   mem.state.missing = null;
+});
+
+// ---- 13・14. マッチング確定（db/140） -------------------------------------------------
+const matchedAt = () => new Date(Date.now() - 5 * 60000).toISOString();
+const evm = (over = {}, pOver = {}) => {
+  const e = ev({ event_id: `enger:proposal.matched:${over.pid || "p-1"}:fixed01`, event_type: "proposal.matched", ...over },
+    { sent_at: null, matched_at: matchedAt(), ...pOver });
+  return e;
+};
+
+await ok("13 マッチング確定で起票：提案待ち・送信日時は空・提案準備1件（電話のタスクは作らない）・ベルと Slack（メンション）", async () => {
+  setup();
+  mem.rows.gw_sales_proposal_settings = [{ tenant_id: T1, slack_members: { [E_S1]: "U0S1ABCDE" } }];
+  const r = await intake(evm());
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body)); assert.equal(r.body.result, "created");
+  const p = proposals()[0];
+  assert.equal(p.status, "proposal_wait"); assert.equal(p.sent_at, null); assert.ok(p.matched_at); assert.equal(p.sales_owner_id, E_S1);
+  const ts = tasksOf(p.id);
+  assert.deepEqual(ts.map((t) => [t.kind, t.source_event, t.assignee_id]), [["prepare", "auto:prepare", E_S1]], "電話のタスクは無い（30分を始めない）");
+  assert.deepEqual(actsOf(p.id).map((a) => a.kind), ["matched"]);
+  assert.deepEqual(notified.map((n) => n.employeeId), [E_S1]); assert.match(notified[0].title, /マッチング確定/); assert.match(notified[0].title, /提案準備/);
+  assert.equal(slackPosts.length, 1, "Slack に1回");
+  const text = slackPosts[0].body.text;
+  assert.match(text, /マッチング確定・提案待ち/); assert.match(text, /<@U0S1ABCDE>/, "営業担当をメンション");
+  assert.match(text, /株式会社テスト/); assert.match(text, /T\.K\./); assert.ok(!/madoguchi|03-1111/i.test(text), "窓口の連絡先は載せない");
+  assert.ok(p.slack_notified_at, "通知済みの印");
+  // 一覧：提案待ち・電話未実施に数えない・今日の提案準備
+  const l = await list(S1);
+  assert.equal(l.body.counts.proposal_wait, 1); assert.equal(l.body.counts.no_call, 0);
+  // 「今日の提案準備」は期限が今日のものだけ（終業まで1時間を切って確定した・休日なら翌営業日の期限なので0件）。流す時刻で変わらないよう、期限から決める
+  const jstDay = (iso) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10);
+  assert.equal(l.body.today.prepare, jstDay(ts[0].due_at) === jstDay(new Date().toISOString()) ? 1 : 0, "今日の提案準備");
+  assert.equal(l.body.kpi.total.proposals, 0, "KPI は企業へ送った提案だけ");
+  // dx.enger への状態：提案待ち・確定日時あり・送信日時なし
+  const st = await statusOf(["p-1"]);
+  assert.equal(st.body.items[0].status, "proposal_wait"); assert.equal(st.body.items[0].status_label, "マッチング済み・提案待ち");
+  assert.ok(st.body.items[0].matched_at); assert.equal(st.body.items[0].sent_at, null);
+  assert.match(st.body.items[0].next_task.title, /提案準備/);
+});
+
+await ok("13 確定の重複：同じイベントは replayed・別のイベント（ゴミ箱から戻した等）は記録だけ。提案もタスクも Slack も増えない", async () => {
+  setup();
+  const b = evm();
+  await intake(b);
+  assert.equal((await intake(b)).body.result, "replayed");
+  const again = await intake(evm({ event_id: "enger:proposal.matched:p-1:restore1" }));
+  assert.equal(again.body.result, "updated");
+  assert.equal(proposals().length, 1); assert.equal(tasksOf(proposals()[0].id).length, 1); assert.equal(slackPosts.length, 1);
+  // 同時に2つ届いても Slack は1回（先に印を取った方だけ）
+  setup();
+  const [x, y] = await Promise.all([intake(evm({ pid: "p-9" }, { id: "p-9" })), intake(evm({ pid: "p-9", event_id: "enger:proposal.matched:p-9:other01" }, { id: "p-9" }))]);
+  const results = [x.body.result, y.body.result];
+  assert.equal(results.filter((r) => r === "created").length, 1, `起票は1回だけ（${results.join(",")}）`);
+  assert.ok(results.every((r) => ["created", "updated", "replayed"].includes(r)), results.join(","));
+  assert.equal(proposals().length, 1); assert.equal(slackPosts.length, 1);
+  // 確定日時の無い確定・未来の確定は 400（下書きを起票しない）
+  setup();
+  const bad = await intake(evm({}, { matched_at: null }));
+  assert.equal(bad.statusCode, 400); assert.equal(bad.body.field, "proposal.matched_at");
+  assert.equal(proposals().length, 0); assert.equal(slackPosts.length, 0);
+});
+
+await ok("14 確定のあとに dx.enger から企業へ送った：電話待ち・提案準備は完了（送った記録とひも付け）・電話は送った時刻から30分。Slack は増えない", async () => {
+  setup();
+  await intake(evm());
+  const p0 = proposals()[0];
+  const sentAt = new Date(Date.now() - 60000).toISOString();
+  const r = await intake(ev({}, { sent_at: sentAt }));
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body)); assert.equal(r.body.result, "updated");
+  const p = proposals()[0];
+  assert.equal(p.status, "call_wait"); assert.equal(p.sent_at, sentAt); assert.equal(p.matched_at, p0.matched_at, "確定日時は変えない");
+  const ts = tasksOf(p.id);
+  const prep = ts.find((t) => t.kind === "prepare");
+  const sentAct = actsOf(p.id).find((a) => a.kind === "sent");
+  assert.equal(prep.status, "done"); assert.equal(prep.done_activity_id, sentAct.id, "提案準備は送った記録で完了");
+  const call = ts.find((t) => t.kind === "call");
+  assert.equal(call.source_event, "auto:first_call"); assert.equal(call.assignee_id, E_S1);
+  assert.ok(Date.parse(call.due_at) >= Date.parse(sentAt), "期限は送った時刻から（確定から数えない）");
+  assert.ok(notified.some((n) => n.dedupeKey === `sales_proposal_call:${p.id}` && /初回電話/.test(n.title)), "電話の期限をベルで知らせる");
+  assert.equal(slackPosts.length, 1, "Slack は確定のときの1回だけ");
+  // 送り直し：再送の記録だけ。電話は増えない
+  await intake(ev({}, { sent_at: new Date().toISOString() }));
+  assert.equal(tasksOf(p.id).filter((t) => t.kind === "call").length, 1);
+  assert.equal(proposals()[0].sent_at, sentAt, "送信日時は最初のまま");
+  assert.equal(actsOf(p.id).filter((a) => a.kind === "sent" && a.result === "resent").length, 1);
+});
+
+await ok("14 送信の受け付けが途中で落ちても、同じイベントの送り直しで電話のタスクが1つだけできる（提案準備も完了）", async () => {
+  setup();
+  await intake(evm());
+  const b = ev();
+  failOnce.callWait = true;
+  const first = await intake(b);
+  assert.equal(first.statusCode, 500, "途中で落ちたら 500（dx.enger が送り直す）");
+  assert.equal(proposals()[0].status, "proposal_wait", "提案の状態はまだ変わっていない");
+  const again = await intake(b);
+  assert.equal(again.statusCode, 200, JSON.stringify(again.body)); assert.equal(again.body.result, "updated");
+  const p = proposals()[0];
+  assert.equal(p.status, "call_wait"); assert.ok(p.sent_at);
+  const ts = tasksOf(p.id);
+  assert.equal(ts.filter((t) => t.kind === "call").length, 1, "電話は1つだけ");
+  assert.equal(ts.find((t) => t.kind === "prepare").status, "done");
+  assert.equal(actsOf(p.id).filter((a) => a.kind === "sent").length, 1, "送った記録も1つだけ");
+});
+
+await ok("14 確定と送信が同時に届いても、電話待ち・電話のタスク1つ・提案準備は残らない（どちらが先に作っても）", async () => {
+  for (let i = 0; i < 4; i++) {
+    setup();
+    const [m, s2] = i % 2
+      ? await Promise.all([intake(evm()), intake(ev())])
+      : (await Promise.all([intake(ev()), intake(evm())])).reverse();
+    assert.equal(m.statusCode, 200, JSON.stringify(m.body)); assert.equal(s2.statusCode, 200, JSON.stringify(s2.body));
+    assert.equal(proposals().length, 1);
+    const p = proposals()[0];
+    assert.equal(p.status, "call_wait", `回 ${i}`); assert.ok(p.sent_at);
+    const ts = tasksOf(p.id);
+    assert.equal(ts.filter((t) => t.kind === "call").length, 1, `電話は1つ（回 ${i}）`);
+    assert.ok(ts.filter((t) => t.kind === "prepare").every((t) => t.status === "done"), `提案準備は開いたまま残らない（回 ${i}）`);
+    assert.equal(slackPosts.length, 1, `Slack は1回（回 ${i}）`);
+  }
+});
+
+await ok("14 届く順が逆（送信が先・確定があと）：送信で電話待ちに起票し、確定は日時を補うだけ（提案準備は作らない・Slack は1回）", async () => {
+  setup();
+  const r = await intake(ev());
+  assert.equal(r.body.result, "created");
+  assert.equal(proposals()[0].status, "call_wait"); assert.equal(proposals()[0].matched_at ?? null, null);
+  assert.equal(slackPosts.length, 1); assert.match(slackPosts[0].body.text, /提案送信・電話待ち/);
+  const m = await intake(evm());
+  assert.equal(m.body.result, "updated");
+  const p = proposals()[0];
+  assert.equal(p.status, "call_wait"); assert.ok(p.matched_at, "確定日時を補う");
+  assert.equal(tasksOf(p.id).filter((t) => t.kind === "prepare").length, 0); assert.equal(slackPosts.length, 1);
+});
+
+await ok("14 Sales で「企業へ提案した」：提案待ちのときだけ。電話・メールなどは送るまで記録できない。記録すると電話待ち＋30分", async () => {
+  setup();
+  await intake(evm());
+  const p = proposals()[0];
+  const early = await act(S1, p.id, { action: "call", result: "no_answer" });
+  assert.equal(early.statusCode, 409); assert.equal(early.body.error, "not_sent");
+  assert.equal((await act(S1, p.id, { action: "mail" })).statusCode, 409);
+  assert.equal((await act(S2, p.id, { action: "sent" })).statusCode, 404, "担当でない営業担当には見えない");
+  const r = await act(S1, p.id, { action: "sent", channel: "phone", note: "電話で提案" });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(proposals()[0].status, "call_wait"); assert.ok(proposals()[0].sent_at);
+  assert.deepEqual(r.body.recorded.createdTasks.length, 1); assert.match(r.body.recorded.createdTasks[0], /初回電話/);
+  assert.equal(tasksOf(p.id).find((t) => t.kind === "prepare").status, "done");
+  assert.equal(actsOf(p.id).find((a) => a.kind === "sent").evidence, "self_report");
+  const twice = await act(S1, p.id, { action: "sent" });
+  assert.equal(twice.statusCode, 409); assert.equal(twice.body.error, "already_sent");
+  assert.equal((await act(S1, p.id, { action: "call", result: "no_answer" })).statusCode, 200, "送ったあとは電話を記録できる");
+  // 提案待ちのまま見送り（人材の辞退など）にもできる
+  setup();
+  await intake(evm());
+  const q = proposals()[0];
+  const lost = await act(S1, q.id, { action: "result", status: "lost", reason: "talent_declined" });
+  assert.equal(lost.statusCode, 200); assert.equal(proposals()[0].status, "lost");
+  assert.equal(tasksOf(q.id).find((t) => t.kind === "prepare").status, "canceled", "提案準備は取り消し（完了にはしない）");
+});
+
+await ok("13 Slack：送れなかったら印を戻して連携の確認に要確認。未設定なら送らない（ベルは届く）。担当未割当は名前の代わりに未割当", async () => {
+  setup();
+  slackDown = true;
+  const r = await intake(evm());
+  assert.equal(r.statusCode, 200);
+  assert.equal(proposals()[0].slack_notified_at, null, "送れなかった印は戻す");
+  const log = tbl("gw_sales_proposal_sync_log")[0];
+  assert.equal(log.status, "warning"); assert.match(log.message, /slack_failed/);
+  assert.ok(notified.length >= 1, "ベルには届いている");
+  // 未設定
+  setup();
+  const keepS = process.env.SALES_SLACK_WEBHOOK_URL, keepG = process.env.SLACK_WEBHOOK_URL;
+  process.env.SALES_SLACK_WEBHOOK_URL = ""; process.env.SLACK_WEBHOOK_URL = "";
+  try {
+    await intake(evm());
+    assert.equal(slackPosts.length, 0); assert.equal(proposals()[0].slack_notified_at ?? null, null);
+    assert.equal(tbl("gw_sales_proposal_sync_log")[0].status, "ok");
+  } finally { process.env.SALES_SLACK_WEBHOOK_URL = keepS; process.env.SLACK_WEBHOOK_URL = keepG || ""; }
+  // 担当未割当（CL担当が社員名簿に無い）
+  setup();
+  await intake(evm({}, { sales_owner: { name: "知らない人", email: "nobody@eight.example" } }));
+  assert.match(slackPosts[0].body.text, /担当未割当/);
+  assert.deepEqual(notified.map((n) => n.employeeId).sort(), [E_MGR, E_OWNER].sort(), "管理側に知らせる");
 });
 
 console.log(`\nsales proposals: 合計 ${pass + fail} 件中 ${pass} 件 通過`);

@@ -3,6 +3,8 @@
 // GET  /api/sales/proposals/detail?id=…   … 提案・行動の記録（時系列）・タスク（完了・取り消しも）・紐付いた企業
 // POST /api/sales/proposals/detail { id, action, … }
 //   記録（どれも「誰が・いつ」を残す。タスクは記録で片付く）
+//     sent     { occurredAt?, channel?, note? }                … 企業へ提案した（提案待ちのときだけ。dx.enger 以外で送ったとき）
+//                                                                 → 電話待ちへ進み、送った時刻から30分以内の電話のタスク（提案準備は完了）
 //     call     { result, outcome?, occurredAt?, nextAt?, note? } … 電話。結果は必須（チェックだけで完了にしない）
 //     mail     { occurredAt?, note? }                          … 確認メールを送った（いまは自己申告）
 //     reply    { outcome, channel?, occurredAt?, note? }       … 企業から返信・回答
@@ -23,6 +25,8 @@
 //     link     { companyId | null } / { create: true }         … /sales の企業に紐付ける・外す・企業として登録（監査ログ）
 //
 // ■ 終わった提案（成約・見送り・連絡停止・クローズ）には、メモと管理側の判断（継続＝再開）しか足せない
+// ■ 提案待ち（マッチング確定・まだ企業へ提案していない）には、電話・メール・返信・回答確認・面談・管理者の判断を記録しない
+//   （30分の電話の期限は、企業へ提案を送ってから始める）。先に「企業へ提案した」を記録する
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
@@ -40,7 +44,9 @@ import {
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { STATUS_LABEL as COMPANY_STATUS_LABEL } from "../../../lib/sales.js";
 
-const RECORDS = ["call", "mail", "reply", "check", "meeting", "result", "memo", "decision"];
+const RECORDS = ["sent", "call", "mail", "reply", "check", "meeting", "result", "memo", "decision"];
+// 企業へ提案を送るまでは記録しないもの（提案待ちのとき）
+const AFTER_SENT = ["call", "mail", "reply", "check", "meeting", "decision"];
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -129,8 +135,14 @@ async function act(req, res, sb, ctx, user) {
       if (isClosed(proposal.status) && !["memo", "decision"].includes(action)) {
         return json(res, 409, { error: "closed", hint: `この提案は「${STATUS_LABEL[proposal.status]}」で終わっています。再開は管理者の判断（継続）で行います` });
       }
-      if (["call", "mail"].includes(action) && !ctx.employee?.id) {
-        return json(res, 400, { error: "no_employee", hint: "社員名簿に登録が無いと、電話・メールの実施者を記録できません" });
+      if (action === "sent" && proposal.status !== "proposal_wait") {
+        return json(res, 409, { error: "already_sent", hint: "この提案は、もう企業へ提案した記録があります" });
+      }
+      if (proposal.status === "proposal_wait" && AFTER_SENT.includes(action)) {
+        return json(res, 409, { error: "not_sent", hint: "まだ企業へ提案していません。先に「企業へ提案した」を記録してください（dx.enger から提案メールを送ると自動で記録されます）" });
+      }
+      if (["call", "mail", "sent"].includes(action) && !ctx.employee?.id) {
+        return json(res, 400, { error: "no_employee", hint: "社員名簿に登録が無いと、実施者を記録できません" });
       }
       const n = normalizeActivity(action, body, { now });
       if (n.error) return json(res, 400, n);
