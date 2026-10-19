@@ -1457,6 +1457,7 @@
     const line = document.createElement("div");
     line.className = "np-next-line";
     line.dataset.id = e.id || "";
+    line.dataset.category = e.category || "work";
     line.innerHTML =
       '<input class="np-p-title" aria-label="業務内容" maxlength="200" placeholder="業務内容（例：営業30件）" value="' + esc(e.title||"") + '">' +
       '<input class="np-p-start" aria-label="開始時間" type="time" value="' + esc(e.start||"09:00") + '">' +
@@ -1475,6 +1476,7 @@
   function readNextPlan(check = true) {
     const rows = [...document.querySelectorAll("#np-next-list .np-next-line")].map(n=>({
       id:n.dataset.id||null,
+      category:n.dataset.category||"work",
       title:n.querySelector(".np-p-title").value.trim(),
       start:n.querySelector(".np-p-start").value,
       end:n.querySelector(".np-p-end").value,
@@ -1507,13 +1509,13 @@
     try {
       const result = await API.schedule(from,to);
       saved = (result.events||[]).filter(e=>
-        e.source === "self" && e.category !== "private" &&
+        e.source === "self" && e.category !== "private" && !e.all_day &&
         new Date(new Date(e.starts_at).getTime()+9*3600000).toISOString().slice(0,10) === nextPlanTarget);
     } catch(err) {
       el("np-next-error").textContent = "予定表を読み込めませんでした："+(err.hint||err.detail||err.message);
     }
     let entries = saved.map(e=>({
-      id:e.id,title:e.title,start:npTime(e.starts_at),end:npTime(e.ends_at),location:e.location||"",fromLoad:true
+      id:e.id,title:e.title,category:e.category,start:npTime(e.starts_at),end:npTime(e.ends_at),location:e.location||"",fromLoad:true
     }));
     try {
       const draft = JSON.parse(localStorage.getItem(nextPlanKey()) || "null");
@@ -1561,7 +1563,7 @@
     }
     for(const row of entries) {
       const item = {
-        title:row.title, location:row.location||null, category:"work", visibility:"shared",
+        title:row.title, location:row.location||null, category:row.category||"work", visibility:"shared",
         startsAt:nextPlanTarget+"T"+row.start+":00+09:00",
         endsAt:nextPlanTarget+"T"+row.end+":00+09:00"
       };
