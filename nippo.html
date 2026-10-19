@@ -1538,10 +1538,20 @@
       if(signature!==nextPlanSignature())return false;
       nextPlanReviewedSignature=signature;
       const advice=(r.suggestions||[]).map(s=>"<li>"+esc(s)+"</li>").join("");
+      const total=r.metrics?.totalMinutes ?? 0;
+      const detailText=esc(r.details||"");
+      const priority=esc(r.priorityAdvice||"");
+      const metrics='<p style="margin:8px 0;">予定合計：'+Math.floor(total/60)+'時間'+(total%60)+'分 ／ 時間の重複：'+(r.metrics?.overlaps||0)+'件</p>';
       box.innerHTML='<div class="np-next-message"><strong>'+
         (r.ai?"AIのコメント":"時間割の基本チェック")+"："+
         (r.verdict==="adjust"?"見直せる点があります":"大きな問題は見つかりませんでした")+
-        '</strong><div>'+esc(r.summary||"")+'</div>'+(advice?"<ul>"+advice+"</ul>":"")+
+        '</strong><div>'+esc(r.summary||"")+'</div>'+
+        '<details class="np-ai-detail" style="margin:10px 0;"><summary style="cursor:pointer;font-weight:700;color:var(--primary-dark);">AIの判断理由・改善案を詳しく見る</summary>'+
+        '<div style="padding:12px 4px 4px;line-height:1.85;">'+metrics+
+        (detailText?'<p><b>判断理由</b><br>'+detailText+'</p>':"")+
+        (priority?'<p><b>優先順位の助言</b><br>'+priority+'</p>':"")+
+        (advice?'<b>改善提案</b><ul>'+advice+'</ul>':"")+
+        '</div></details>'+
         '<p style="margin-top:7px;">問題なければ、このまま日報を提出してください。</p></div>';
       return true;
     }catch(e){
