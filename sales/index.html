@@ -291,6 +291,7 @@
   let sections = {};
   let approaches = [];
   let activeCategory = "click";
+  let categoryInitialized = false;
 
   // 表示速度：
   //   ・企業の全件ではなく、4段の件数と上位だけを受け取る（GET /api/sales/companies?view=dashboard）。
@@ -323,10 +324,10 @@
     }
   }
 
-  function dashboardCategory(key) {
+  function dashboardCategory(key, switchTab = true) {
     if (!["click", "replied", "follow", "attack"].includes(key)) return;
     activeCategory = key;
-    dashboardTab("tasks");
+    if (switchTab) dashboardTab("tasks");
     for (const item of ["click", "replied", "follow", "attack"]) {
       el("sec-" + item).hidden = item !== key;
       const button = document.querySelector('[data-db-category="' + item + '"]');
@@ -386,7 +387,12 @@
         '" onclick="dashboardCategory(\'' + s.key + '\')">' + esc(s.label) + ' <strong>' + n + '</strong></button>';
     }).join(""));
     for (const s of SECTIONS) renderSection(s, sections[s.key] || { total: 0, rows: [] });
-    dashboardCategory(activeCategory);
+    if (!categoryInitialized) {
+      const hash = (location.hash || "").match(/^#sec-(click|replied|follow|attack)$/);
+      if (!hash) activeCategory = SECTIONS.find((x) => (sections[x.key]?.total || 0) > 0)?.key || "click";
+      categoryInitialized = true;
+    }
+    dashboardCategory(activeCategory, false);
     renderHistory();
   }
 
