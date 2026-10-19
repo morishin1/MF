@@ -191,6 +191,8 @@ console.log("\n=== 日報：明日の3件を決めてから ===");
   check(!(await page.locator("#submit-btn").isDisabled()), "提出ボタンも最初から押せる");
 
   console.log("\n— 決める画面 —");
+  // 詳細は長いスクロールを防ぐため折りたたみ。任意で開ける。
+  await page.locator("#focus-card details.fc-advanced summary").click();
   const box = await page.locator("#focus-card").innerText();
   check(/明日の重要タスクを決める/.test(box), "見出し");
   check(/2026-09-17/.test(box), "いつのぶんか");
