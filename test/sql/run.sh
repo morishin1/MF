@@ -10,7 +10,7 @@
 #
 # ■ 流す順番
 #   db/schema.sql → db/005 → db/041 → db/081 → db/099 → db/100 → test/sql/*.sql のシナリオ
-#   （db/101・db/102・db/103・db/104・db/105・db/110・db/123・db/124・db/125・db/088→094→119→120→130（Sales の権限）・db/088→094→096→119→120→130→138（Sales の提案管理）・…→138→140（提案管理の起点をマッチング確定に）は、シナリオの中で流す。安全装置が止めるところ・表が無いときから確かめるため）
+#   （db/101・db/102・db/103・db/104・db/105・db/110・db/123・db/124・db/125・db/088→094→119→120→130（Sales の権限）・db/088→094→096→119→120→130→138（Sales の提案管理）・…→138→140（提案管理の起点をマッチング確定に）・→138→140→141（CS/クロージング引継ぎ）は、シナリオの中で流す。安全装置が止めるところ・表が無いときから確かめるため）
 #   最後に、緊急復旧の手順（docs/keiei-owner-recovery.md）の SQL を、文書のまま流して確かめる（owner_recovery.sql）
 #   新しい migration を足したら、ここに足して、対応するシナリオも test/sql/ に置く。
 set -euo pipefail
@@ -50,7 +50,7 @@ for sc in 132_hr_offer_documents 133_hr_offer_handoff 139_hr_contract_procedure;
   OUT+="$(SCEN_ROOT="$ROOT" "${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done
 export SCEN_ROOT="$ROOT"   # 101 のシナリオが、db/101 を読むために使う
-for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices 123_retire_case 124_hr_mail_templates 125_office_recurring 126_grant_rules 127_retire_cert_requests 130_sales_access 138_sales_proposals 140_sales_proposal_matching check_pay_reconcile check_exposure; do
+for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices 123_retire_case 124_hr_mail_templates 125_office_recurring 126_grant_rules 127_retire_cert_requests 130_sales_access 138_sales_proposals 140_sales_proposal_matching 141_sales_cs_closing_handoff check_pay_reconcile check_exposure; do
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done

@@ -119,7 +119,7 @@ ok("設定：始業 < 終業・再フォロー ≤ 管理者確認・休業日�
   assert.equal(L.normalizeSettings({ extraHolidays: "2026-13-01" }, S).field, "extraHolidays");
   assert.deepEqual(L.normalizeSettings({ extraHolidays: "2026-10-20, 2026-10-19\n2026-10-20" }, S).value.extra_holidays, ["2026-10-19", "2026-10-20"]);
   assert.deepEqual(L.settingsOf({ biz_start: "10:00:00", biz_end: "19:00:00", first_call_minutes: 45, refollow_biz_days: 2, review_biz_days: 4, extra_holidays: ["2026-10-19"] }),
-    { bizStart: "10:00", bizEnd: "19:00", firstCallMinutes: 45, refollowBizDays: 2, reviewBizDays: 4, extraHolidays: ["2026-10-19"], slackMembers: {} });
+    { bizStart: "10:00", bizEnd: "19:00", firstCallMinutes: 45, refollowBizDays: 2, reviewBizDays: 4, extraHolidays: ["2026-10-19"], slackMembers: {}, csMembers: [], closingMembers: [] });
   // Slack のメンバーID（db/140）：社員ID → U…。形の違うもの・空はその人の登録を外す
   const E = "00000000-0000-4000-8000-000000000013";
   assert.deepEqual(L.normalizeSettings({ slackMembers: { [E]: " u0123abcd " } }, S).value.slack_members, { [E]: "U0123ABCD" });
@@ -222,13 +222,14 @@ ok("値の一覧が SQL（db/138・db/140 の CHECK）と同じ：状態・理�
   assert.deepEqual(listsOf("close_reason")[0], L.CLOSE_REASONS.map((r) => r.key).sort(), "理由コード");
   // 状態・記録の種類・タスクの種類は db/140 が付け直した名前つきの CHECK が正（提案待ち・マッチング確定・提案準備）
   const sql140 = readFileSync(join(ROOT, "db/140_sales_proposal_matching.sql"), "utf8");
-  const named = (name, col) => {
-    const m = new RegExp(`add constraint ${name} check \\(${col} in \\(([\\s\\S]*?)\\)\\);`).exec(sql140);
+  const sql141 = readFileSync(join(ROOT, "db/141_sales_cs_closing_handoff.sql"), "utf8");
+  const named = (name, col, src = sql140) => {
+    const m = new RegExp(`add constraint ${name} check \\(${col} in \\(([\\s\\S]*?)\\)\\);`).exec(src);
     assert.ok(m, name);
     return [...m[1].replace(/--[^\n]*/g, "").matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();
   };
   assert.deepEqual(named("gw_sales_proposals_status_chk", "status"), [...L.STATUS_KEYS].sort(), "提案の状態");
-  assert.deepEqual(named("gw_sales_proposal_activities_kind_chk", "kind"), Object.keys(L.ACTIVITY_LABEL).sort(), "記録の種類");
+  assert.deepEqual(named("gw_sales_proposal_activities_kind_chk", "kind", sql141), Object.keys(L.ACTIVITY_LABEL).sort(), "記録の種類");
   assert.deepEqual(named("gw_sales_proposal_tasks_kind_chk", "kind"), L.TASK_KINDS.map((t) => t.key).sort(), "タスクの種類");
   // db/138 の一覧に、db/140 で足したものだけが増えている（消した値が無い）
   const [old138] = listsOf("status");

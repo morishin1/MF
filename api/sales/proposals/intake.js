@@ -30,6 +30,7 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { verifyGwSignature, readEvents, intakeEvent, INTAKE_PURPOSE } from "../../../lib/sales-proposal-intake.js";
 import { notifyProposalSlack } from "../../../lib/sales-proposal-slack.js";
+import { notifySentShared } from "../../../lib/sales-proposal-handoff-slack.js";
 import { settingsOf } from "../../../lib/sales-proposals.js";
 import { SQL_FILE } from "../../../lib/sales-proposals-db.js";
 
@@ -83,6 +84,17 @@ export default async function handler(req, res) {
         tenantId, employeeId, kind: "sales", title: out.notify.title, body: out.notify.body,
         link: out.notify.link, dedupeKey: out.notify.dedupeKey,
       })));
+    }
+    // 企業への初回提案送信は、従来のマッチング確定通知とは別にCS・クロージング全員へ共有。
+    if (v.eventType === "proposal.sent" && (out.result === "created" || out.result === "updated") && out.proposalId) {
+      const shared = await notifySentShared(sb, { proposalId: out.proposalId, settingsRow, employees: employees || [] });
+      if (shared.error) {
+        console.error("[sales-proposals/intake] sent share:", shared.error, v.eventId);
+        await sb.from("gw_sales_proposal_sync_log").update({ status: "warning",
+          message: [...out.warnings, "sent_share_failed"].join(","),
+          updated_at: new Date().toISOString() })
+          .eq("tenant_id", tenantId).eq("source_system", "enger").eq("event_id", v.eventId);
+      }
     }
     // Slack：起票したときだけ・提案ごとに1回（送れなかったら連携の確認に「要確認」で残す。ベルには届いている）
     if (out.slack) {

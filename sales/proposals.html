@@ -280,7 +280,7 @@
         <td>${esc(r.title)}${r.sourceCode ? `<span class="pp-small">${esc(r.sourceCode)}</span>` : ""}</td>
         <td>${esc(r.matchingOwnerName || "—")}</td>
         <td>${r.salesOwnerName ? esc(r.salesOwnerName) : `<span class="pp-tag warn">未割当</span>`}</td>
-        <td>${pill(r.status, r.statusLabel)}${r.closeReasonLabel ? `<span class="pp-small">${esc(r.closeReasonLabel)}</span>` : ""}</td>
+        <td>${pill(r.status, r.statusLabel)}<span class="pp-small">${r.handoffStage === "closing" ? "クロージング" : r.handoffStage === "cs" ? "CS対応" : "提案担当"}</span>${r.closeReasonLabel ? `<span class="pp-small">${esc(r.closeReasonLabel)}</span>` : ""}</td>
         <td class="due">${r.next ? `${esc(r.next.title)}<span class="pp-small">${dueText(r.next.dueAt, r.next.overdue)}</span>` : "—"}</td>
         <td style="white-space:nowrap;">${r.elapsedDays}日</td>
         <td class="nw">${callCell(r)}</td>
@@ -294,7 +294,7 @@
           <b>${esc(r.companyName)}</b>${pill(r.status, r.statusLabel)}</div>
         <div class="l">${esc(r.title)}${r.service ? `・${esc(r.service)}` : ""}</div>
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next ? r.next.title : "—")}</b>${r.next ? `　${dueText(r.next.dueAt, r.next.overdue)}` : ""}</div>
-        <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}　経過 ${r.elapsedDays}日　担当：${esc(r.salesOwnerName || "未割当")}</div>
+        <div class="l">${esc(r.handoffStage === "closing" ? "クロージング" : r.handoffStage === "cs" ? "CS対応" : "提案担当")}　電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}　経過 ${r.elapsedDays}日　担当：${esc(r.salesOwnerName || "未割当")}</div>
       </div>`).join("");
   }
 
@@ -352,6 +352,15 @@
               <input type="text" data-slack="${esc(m.id)}" value="${esc((s.slackMembers || {})[m.id] || "")}" placeholder="U0123ABCD" autocomplete="off">`).join("")
               || `<span class="sl-muted">Sales を使える社員がいません</span>`}
           </div>
+          <label style="margin-top:14px;">CSチーム（中村・工藤など：企業へ提案後の連絡・一次対応）</label>
+          <div class="sl-muted" style="font-size:11.5px;margin-bottom:4px;">チェックした人に、提案送信・CS判断・引継ぎをSlackで共有します。</div>
+          <div style="display:flex;gap:8px 16px;flex-wrap:wrap;">${(d.members || []).map((m) =>
+            `<label style="display:flex;gap:5px;align-items:center;"><input type="checkbox" data-team="cs" value="${esc(m.id)}"
+            ${(s.csMembers || []).includes(m.id) ? "checked" : ""}>${esc(m.name)}</label>`).join("")}</div>
+          <label style="margin-top:14px;">クロージングチーム（池永・野澤など：詳細商談・成約）</label>
+          <div style="display:flex;gap:8px 16px;flex-wrap:wrap;">${(d.members || []).map((m) =>
+            `<label style="display:flex;gap:5px;align-items:center;"><input type="checkbox" data-team="closing" value="${esc(m.id)}"
+            ${(s.closingMembers || []).includes(m.id) ? "checked" : ""}>${esc(m.name)}</label>`).join("")}</div>
           <div class="pp-msg" id="st-msg"></div>
           <button class="btn btn-primary btn-sm" onclick="ppSaveSettings(this)">保存（これから作るタスクの期限に効きます）</button>
         </div></details>`;
@@ -381,6 +390,8 @@
       refollowBizDays: Number($("st-refollow").value), reviewBizDays: Number($("st-review").value),
       extraHolidays: $("st-holidays").value,
       slackMembers: Object.fromEntries([...document.querySelectorAll("#st-slack [data-slack]")].map((el) => [el.dataset.slack, el.value.trim()])),
+      csMembers: [...document.querySelectorAll('[data-team="cs"]:checked')].map((el) => el.value),
+      closingMembers: [...document.querySelectorAll('[data-team="closing"]:checked')].map((el) => el.value),
     };
     try {
       await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/settings", { method: "PATCH", body }));
@@ -485,6 +496,40 @@
       </div>
 
       <div class="pp-box">
+        <h4><span class="material-symbols-outlined">hub</span>バトンタッチ｜提案 → CS → クロージング</h4>
+        <div style="font-size:12.5px;line-height:1.9;">
+          <b>提案担当：</b>${esc(p.matchingOwnerName || "未設定")}　→
+          <b>CS：</b>${esc(p.csOwnerName || "担当未割当")}　→
+          <b>クロージング：</b>${esc(p.closingOwnerName || "担当未割当")}
+        </div>
+        <div style="font-size:12px;margin-top:4px;">現在：<b>${p.handoffStage === "closing" ? "クロージング中" : p.handoffStage === "cs" ? "CS対応中" : "提案準備中"}</b>
+          ${p.sentAt ? `　提案送信のSlack共有：${p.sentSharedAt ? "送信記録あり" : "未確認"}` : ""}</div>
+        ${p.closed ? '<p class="sl-muted">この提案は完了しています。</p>' : !p.sentAt
+          ? '<p class="sl-muted">企業へ提案した後、CS担当に引き継ぎます。</p>' : `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+            ${detail.canHandoff && p.handoffStage === "cs" && p.csOwnerId && detail.csContacted
+              ? '<button class="btn btn-secondary btn-sm" onclick="ppCsDecision()">接続後のCS判断を記録</button>' : ""}
+            ${detail.canHandoff && (p.handoffStage === "proposal" || (p.handoffStage === "cs" && !p.csOwnerId))
+              ? '<button class="btn btn-primary btn-sm" onclick="ppHandoff(\'cs\')">CSに正式引継ぎ</button>' : ""}
+            ${detail.canHandoff && p.handoffStage === "cs" && p.csOwnerId &&
+              ["advance","needs_detail"].includes(detail.csDecision)
+              ? '<button class="btn btn-primary btn-sm" onclick="ppHandoff(\'closing\')">クロージングに引継ぎ</button>' : ""}
+          </div>
+          ${p.handoffStage === "cs" && p.csOwnerId && !detail.csContacted ? '<p class="sl-muted">相手への接続が確認できるまで、電話・メールでフォローして記録してください。</p>' : ""}
+          ${p.handoffStage === "cs" && p.csOwnerId && detail.csContacted && !["advance","needs_detail"].includes(detail.csDecision)
+            ? '<p class="sl-muted">通話後の判断を記録し、進める案件のみクロージングへ渡してください。</p>' : ""}
+        `}
+        ${(detail.handoffs || []).length ? `<details style="margin-top:10px;"><summary style="cursor:pointer;">バトンタッチ履歴（${detail.handoffs.length}件）</summary>
+           ${detail.handoffs.map(h => `<div style="border-top:1px solid #e5e7eb;padding:9px 0;font-size:12px;">
+             <b>${esc(h.fromName)} → ${esc(h.toName)}</b>　${esc(fmt(h.at))}
+             <div>判断：${esc(h.decision)}／理由：${esc(h.reason)}</div>
+             <div>次の対応：${esc(h.nextAction)}${h.nextAt ? '・期限：'+esc(fmt(h.nextAt)) : ""}</div>
+             <div class="sl-muted">Slack共有：${h.slackSent ? "済み" : "未確認"}
+               ${detail.manager && !h.slackSent ? `<button class="pp-linkbtn" onclick="ppReshareHandoff('${esc(h.id)}')">再共有</button>` : ""}</div>
+           </div>`).join("")}</details>` : '<p class="sl-muted">引継ぎ履歴はまだありません。</p>'}
+      </div>
+
+      <div class="pp-box">
         <h4><span class="material-symbols-outlined">contact_phone</span>先方の窓口</h4>
         <div style="font-size:13px;color:#1b2440;">${esc(p.contactName || "担当者名 未登録")}</div>
         <div class="pp-contact">
@@ -532,7 +577,8 @@
         </div>
         ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
           <div class="row"><div class="d">${esc(fmt(a.occurredAt))}${a.employeeName ? `　${esc(a.employeeName)}` : ""}</div>
-            <div class="l">${esc(a.label)}</div>
+            <div class="l">${esc(a.label)}${a.kind === "cs_decision" ? `：${esc(({advance:"進める",needs_detail:"詳細確認",hold:"保留",decline:"見送り"})[a.result] || a.result || "判断")}` : ""}</div>
+            ${a.kind === "cs_decision" && a.detail?.nextAction ? `<div class="x">次の対応：${esc(a.detail.nextAction)}</div>` : ""}
             ${a.nextAt ? `<div class="x">日時：${esc(fmt(a.nextAt))}</div>` : ""}
             ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
           : `<div class="sl-empty">まだ記録がありません</div>`}
@@ -721,6 +767,81 @@
 
   function ppMemo() { modal(`<h2>メモを残す</h2>${noteField("メモ（必須）")}${foot("ppSendMemo()", "残す")}`); }
   function ppSendMemo() { send({ action: "memo", note: $("m-note").value }); }
+
+  // ---- 提案担当→CS→クロージング：バトンタッチ -----------------------------
+  function ppHandoff(stage) {
+    const targets = (detail.handoffTargets || {})[stage] || [];
+    const cs = stage === "cs";
+    if (!targets.length) {
+      modal('<h2>担当チームが未設定です</h2><p class="sl-muted">管理者に「フォローの設定」からCS・クロージング担当を登録してもらってください。</p>' +
+        '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">閉じる</button></div>');
+      return;
+    }
+    const decisions = cs
+      ? [{ key: "advance", label: "提案送信済み・CS対応を開始" }, { key: "other", label: "その他" }]
+      : [{ key: "advance", label: "進行・詳細商談へ" }, { key: "needs_detail", label: "条件調整・詳細確認が必要" }];
+    modal('<h2>' + (cs ? "CSへ正式に引き継ぐ" : "クロージングへ引き継ぐ") + '</h2>' +
+      '<p class="sl-muted" style="font-size:12px;">いつ・誰から誰へ・何の理由で渡したかを記録し、Slackでチームに共有します。</p>' +
+      '<label>引継ぎ先（必須）</label><select id="m-howner">' +
+      targets.map((t) => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join("") + '</select>' +
+      '<label>判断（必須）</label>' + radios("m-hdecision", decisions, decisions[0].key) +
+      '<label>引継ぎ理由（必須）</label><textarea id="m-hreason" rows="2" maxlength="500" placeholder="例：面談希望あり・開始時期と単価の詳細確認が必要"></textarea>' +
+      '<label>次の担当がすること（必須）</label><textarea id="m-hnext" rows="2" maxlength="500" placeholder="例：先方に連絡して詳細ヒアリングの日程を決める"></textarea>' +
+      '<label>次の対応期限（任意）</label><input type="datetime-local" id="m-hdue">' +
+      foot("ppCommitHandoff('" + stage + "')", "引継ぎを確定しSlackで共有"));
+  }
+  async function ppCommitHandoff(stage) {
+    const reason = $("m-hreason").value.trim(), nextAction = $("m-hnext").value.trim();
+    if (!reason || !nextAction) { $("m-msg").textContent = "引継ぎ理由と次の対応を入力してください"; return; }
+    const oldId = detail.proposal.id;
+    const body = { id: oldId, action: "transfer", toStage: stage,
+      ownerId: $("m-howner").value, decision: picked("m-hdecision"),
+      reason, nextAction, nextAt: $("m-hdue").value || null };
+    try {
+      const res = await KPLayout.busy($("m-ok"), "処理中…",
+        () => API.api("/api/sales/proposals/handoff", { method: "POST", body }));
+      ppCloseAction();
+      ppClose(); // 新しい担当以外には、引継ぎ後の詳細が見えない場合がある
+      await load();
+      alert(res.slack?.sent ? "引継ぎを記録し、Slackにも共有しました" : "引継ぎを記録しました（Slackの共有は未確認です）");
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+  function ppCsDecision() {
+    modal('<h2>CS：連絡後の進行判断</h2>' +
+      '<p class="sl-muted" style="font-size:12px;">通話成功または返信の記録が必要です。CSで判断できる範囲の一次確認を行い、詳細はクロージングに渡します。</p>' +
+      '<label>判断（必須）</label>' + radios("m-cdecision", [
+        { key:"advance", label:"進める（クロージングへ）" },
+        { key:"needs_detail", label:"詳細確認・条件調整が必要" },
+        { key:"hold", label:"保留・再連絡" }, { key:"decline", label:"見送り" },
+      ], "advance") +
+      '<label>理由（必須）</label><textarea id="m-creason" rows="2" maxlength="500"></textarea>' +
+      '<label>次の対応（必須）</label><textarea id="m-cnext" rows="2" maxlength="500"></textarea>' +
+      foot("ppCommitCsDecision()", "CS判断を記録・Slack共有"));
+  }
+  async function ppCommitCsDecision() {
+    const reason = $("m-creason").value.trim(), nextAction = $("m-cnext").value.trim();
+    if (!reason || !nextAction) { $("m-msg").textContent = "理由と次の対応を入力してください"; return; }
+    const id = detail.proposal.id;
+    try {
+      const res = await KPLayout.busy($("m-ok"), "処理中…",
+        () => API.api("/api/sales/proposals/handoff", { method:"POST",
+          body:{ id, action:"cs_decision", decision:picked("m-cdecision"), reason, nextAction } }));
+      ppCloseAction();
+      await ppOpen(id); load();
+      alert(res.slack?.sent ? "CSの判断を記録してSlackに共有しました" : "CSの判断を記録しました（Slackの共有は未確認です）");
+    } catch (e) { $("m-msg").textContent = errText(e); }
+  }
+  async function ppReshareHandoff(id) {
+    if (!confirm("この引継ぎをSlackに再共有しますか？")) return;
+    try {
+      const proposalId = detail.proposal.id;
+      const r = await API.api("/api/sales/proposals/handoff", {
+        method:"POST", body:{ id:proposalId, action:"resend", handoffId:id }
+      });
+      await ppOpen(proposalId);
+      alert(r.slack?.sent ? "Slackへ共有しました" : "共有結果：" + (r.slack?.skipped || r.slack?.error || "未確認"));
+    } catch (e) { alert(errText(e)); }
+  }
 
   function ppAssign() {
     const cur = detail.proposal.salesOwnerId || "";
