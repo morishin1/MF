@@ -991,9 +991,6 @@
   // 「時間だけ」の予定には title が入っていない（サーバで落としてある）
   const teamSchedule = (from, to) =>
     api(`/api/schedule/team?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-  // 日報提出前に翌営業日の業務予定をAIレビュー（予定は保存しない）
-  const reviewWorkDayPlan = (reportDate, date, entries) =>
-    api("/api/schedule/review", { method: "POST", body: { reportDate, date, entries } });
 
   // 自分の Google カレンダーとの連携。トークンは画面には返ってこない
   const googleLink = () => api("/api/google/connect");
@@ -1917,7 +1914,7 @@
     listAssets, createAsset, updateAsset, deleteAsset,
     listSpaces, createSpace, updateSpace, deleteSpace,
     listBookings, createBooking, decideBooking, deleteBooking,
-    schedule, teamSchedule, reviewWorkDayPlan, createEvent, updateEvent, deleteEvent, syncEventToGoogle,
+    schedule, teamSchedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle,
     googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
     nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, nippoWeek, evaluateNippo,

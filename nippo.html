@@ -1538,7 +1538,9 @@
     const reviewBody = entries.map(e=>({title:e.title,start:e.start,end:e.end}));
     try {
       const r = await KPLayout.busy(btn,"確認中…",() =>
-        API.reviewWorkDayPlan(el("f-date").value||jstToday(),nextPlanTarget,reviewBody));
+        API.api("/api/schedule/review", { method:"POST", body:{
+          reportDate:el("f-date").value||jstToday(), date:nextPlanTarget, entries:reviewBody
+        }}));
       if(signature !== nextPlanSignature()) return false; // 実行中に編集された
       nextPlanReviewedSignature = signature;
       const tips=(r.suggestions||[]).map(s=>"<li>"+esc(s)+"</li>").join("");
