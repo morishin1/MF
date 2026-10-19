@@ -50,8 +50,14 @@ export default async function handler(req,res){
   const body = await readJson(req);
   const date = body?.date;
   const reportDate = body?.reportDate;
-  if(!DATE.test(String(date||"")) || !DATE.test(String(reportDate||""))
-      || nextFocusDate(reportDate) !== date) {
+  // 日報の翌営業日レビューに加え、週カレンダーからは任意の予定日を事前確認できる。
+  // 計画モードはログイン済み本人だけ・最大180日先まで。週末・祝日も許可。
+  const planning = body?.mode === "planned";
+  const jstToday = new Date(Date.now()+9*3600000).toISOString().slice(0,10);
+  const maxDay = new Date(Date.now()+9*3600000+180*86400000).toISOString().slice(0,10);
+  if(!DATE.test(String(date||"")) ||
+    (planning ? (date < jstToday || date > maxDay) :
+      (!DATE.test(String(reportDate||"")) || nextFocusDate(reportDate) !== date))) {
     return json(res,400,{error:"invalid_date",hint:"対象の日付を確認してください"});
   }
   const input = body?.entries;
