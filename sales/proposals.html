@@ -577,7 +577,8 @@
         </div>
         ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
           <div class="row"><div class="d">${esc(fmt(a.occurredAt))}${a.employeeName ? `　${esc(a.employeeName)}` : ""}</div>
-            <div class="l">${esc(a.label)}</div>
+            <div class="l">${esc(a.label)}${a.kind === "cs_decision" ? `：${esc(({advance:"進める",needs_detail:"詳細確認",hold:"保留",decline:"見送り"})[a.result] || a.result || "判断")}` : ""}</div>
+            ${a.kind === "cs_decision" && a.detail?.nextAction ? `<div class="x">次の対応：${esc(a.detail.nextAction)}</div>` : ""}
             ${a.nextAt ? `<div class="x">日時：${esc(fmt(a.nextAt))}</div>` : ""}
             ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
           : `<div class="sl-empty">まだ記録がありません</div>`}
