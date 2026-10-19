@@ -614,7 +614,10 @@ await ok("13 マッチング確定で起票：提案待ち・送信日時は空�
   assert.ok(p.slack_notified_at, "通知済みの印");
   // 一覧：提案待ち・電話未実施に数えない・今日の提案準備
   const l = await list(S1);
-  assert.equal(l.body.counts.proposal_wait, 1); assert.equal(l.body.counts.no_call, 0); assert.equal(l.body.today.prepare, 1);
+  assert.equal(l.body.counts.proposal_wait, 1); assert.equal(l.body.counts.no_call, 0);
+  // 「今日の提案準備」は期限が今日のものだけ（終業まで1時間を切って確定した・休日なら翌営業日の期限なので0件）。流す時刻で変わらないよう、期限から決める
+  const jstDay = (iso) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10);
+  assert.equal(l.body.today.prepare, jstDay(ts[0].due_at) === jstDay(new Date().toISOString()) ? 1 : 0, "今日の提案準備");
   assert.equal(l.body.kpi.total.proposals, 0, "KPI は企業へ送った提案だけ");
   // dx.enger への状態：提案待ち・確定日時あり・送信日時なし
   const st = await statusOf(["p-1"]);
