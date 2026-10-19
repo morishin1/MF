@@ -1,7 +1,7 @@
 // 営業アタック管理（/sales）専用の、軽いヘッダー。
 //
 // ■ /hr と同じ作り（js/hr-layout.js）
-//   左サイドメニューではなく、ロゴ＋5ナビ＋操作だけの専用ヘッダーにする。
+//   左サイドメニューではなく、ロゴ＋6ナビ＋操作だけの専用ヘッダーにする。
 //   「テンプレート」「キャンペーン」は上に出しすぎず、各画面から開く（要件 §24）。
 //   esc・busy は KPLayout のものをそのまま使う（作り直さない）。
 //
@@ -18,6 +18,8 @@
     { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
     { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
     { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
+    // 提案管理（db/138）。dx.enger で送った提案の電話・メール・回答確認。企業の「提案」ステータスとは別のもの
+    { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
   ];
 
@@ -254,6 +256,8 @@
 ⑥ 相手が営業文のリンクを開くと、通知が届く
 
 ⑦ 「リード」に出た企業から優先してフォロー → 面談・商談へ
+
+⑧ dx.enger で送った提案は「提案」に入ります。期限までに電話して結果を記録（不通ならメール → 回答確認）
 
 迷ったら「NEXT」を見てください。
 30日以内にアタックした企業・営業禁止の企業には送れません。`;

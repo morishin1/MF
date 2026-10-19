@@ -2,7 +2,7 @@
 //
 // ■ 何を守るテストか
 //
-//   1. 営業担当としてログインすると、専用ヘッダー（EIGHT/SALES・5ナビ）が出る
+//   1. 営業担当としてログインすると、専用ヘッダー（EIGHT/SALES・6ナビ）が出る
 //   2. ダッシュボードの「今やること」に、未対応クリックが件数つきで出る
 //   3. 企業一覧 → 右ドロワー → フォームアタック → 本文に専用URLが入る →
 //      「送信完了」で本文つきの記録が送られる
@@ -467,9 +467,9 @@ console.log("\n=== 営業担当：ダッシュボード ===");
 
   check((await page.locator(".sl-logo").innerText()).includes("SALES"), "EIGHT/SALES のロゴが出る");
   const nav = await page.locator(".sl-nav a").allInnerTexts();
-  check(nav.length === 5, `ナビは5つ（いま ${nav.length}: ${nav.join(" / ")}）`);
-  check(["ダッシュボード", "企業", "アタック", "リード", "分析"].every((l) => nav.some((t) => t.includes(l))),
-    "ダッシュボード／企業／アタック／リード／分析");
+  check(nav.length === 6, `ナビは6つ（いま ${nav.length}: ${nav.join(" / ")}）`);
+  check(["ダッシュボード", "企業", "アタック", "リード", "提案", "分析"].every((l) => nav.some((t) => t.includes(l))),
+    "ダッシュボード／企業／アタック／リード／提案（提案管理・db/138）／分析");
   check(!nav.some((t) => t.includes("反応")), "「反応」タブは無くなった（リードへ）");
   check((await page.locator(".sl-nav a.on").innerText()).includes("ダッシュボード"), "いま見ているタブが選ばれている");
 
