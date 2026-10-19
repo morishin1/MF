@@ -112,6 +112,11 @@
     <section class="cal-panel" id="cal-panel">
     <h2 id="cal-daytitle">選択した日の予定</h2>
     <div id="cal-dayevents"><span class="muted">予定を読み込み中…</span></div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="btn btn-secondary btn-sm" id="cal-ai-btn" onclick="reviewSelectedDay(this)">AIで予定を確認</button>
+      <span class="muted" style="font-size:12px">AIの判断理由・改善案は詳細を開いて確認できます</span>
+    </div>
+    <div id="cal-ai-result" aria-live="polite"></div>
     <div id="cal-edit" class="cal-form" hidden>
       <h3 id="cal-formtitle" style="font-size:15px;margin:0 0 10px">予定の追加</h3>
       <div class="cols">
@@ -290,6 +295,8 @@
   }
   function renderDayEvents(){
     el("cal-daytitle").textContent=selected+" の予定";
+    el("cal-ai-result").innerHTML="";
+    el("cal-ai-btn").hidden=scope!=="mine"||selected<dateKey(new Date());
     const list=eventsOn(selected);
     el("cal-dayevents").innerHTML=list.length?list.map(e=>
       '<div class="cal-dayrow"><span class="tm">'+esc(timeLabel(e))+'</span>'+
@@ -321,6 +328,32 @@
     el("cal-list").innerHTML=html;
   }
   function editListEvent(id,date){selected=date;renderDayEvents();openForm(id);el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
+  async function reviewSelectedDay(btn){
+    if(scope!=="mine"||selected<dateKey(new Date()))return;
+    const date=selected;
+    const entries=eventsOn(date).filter(e=>!e.allDay).map(e=>({title:e.title,start:hm(e.startsAt),end:hm(e.endsAt)}));
+    if(entries.length>24){el("cal-ai-result").textContent="予定が24件を超えているため、分割して確認してください。";return;}
+    btn.disabled=true;
+    el("cal-ai-result").textContent="時間割を確認中…";
+    try{
+      const r=await API.api("/api/schedule/review",{method:"POST",body:{mode:"planned",date,entries}});
+      if(selected!==date)return;
+      const advice=(r.suggestions||[]).map(x=>"<li>"+esc(x)+"</li>").join("");
+      const min=r.metrics?.totalMinutes||0;
+      el("cal-ai-result").innerHTML='<div class="oc-card" style="margin-top:12px;">'+
+        '<b>'+(r.ai?"AIの判定":"時間割の自動チェック")+'：'+(r.verdict==="adjust"?"改善の余地あり":"概ね問題なし")+'</b>'+
+        '<div class="m">'+esc(r.summary||"")+'</div>'+
+        '<details class="cal-ai-detail" style="margin-top:9px;"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--of-ink)">AIの判断理由・改善案を詳しく見る</summary>'+
+        '<div class="m" style="padding:10px 0;line-height:1.8;">'+
+        '<p><b>予定の時間</b>：'+Math.floor(min/60)+'時間'+min%60+'分、重複'+(r.metrics?.overlaps||0)+'件</p>'+
+        (r.details?'<p><b>判断理由</b><br>'+esc(r.details)+'</p>':"")+
+        (r.priorityAdvice?'<p><b>優先順位の助言</b><br>'+esc(r.priorityAdvice)+'</p>':"")+
+        (advice?'<b>具体的な改善案</b><ul>'+advice+'</ul>':"")+
+        '</div></details></div>';
+    }catch(e){
+      if(selected===date)el("cal-ai-result").textContent="AIチェックに失敗しました："+(e.hint||e.detail||e.message);
+    }finally{btn.disabled=false;}
+  }
   function newEvent(){openForm(null);}
   function openForm(id,hour){
     if(scope!=="mine")return;
