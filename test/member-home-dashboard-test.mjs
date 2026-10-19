@@ -1,0 +1,27 @@
+// ログイン後メンバーホームの表示と既存データ境界の回帰テスト。
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {dirname,join} from "node:path";
+import {fileURLToPath} from "node:url";
+const root=dirname(dirname(fileURLToPath(import.meta.url)));
+const read=p=>readFileSync(join(root,p),"utf8");
+const home=read("home.html");
+const app=read("index.html");
+assert(home.includes('id="member-dashboard"'),"ログイン後の最初に業務ダッシュボード");
+assert(home.indexOf('id="member-dashboard"')<home.indexOf('id="f3"'),"予定を先に表示し次に今日のタスク");
+assert(home.includes('id="member-today-events"'),"今日の予定一覧");
+assert(home.includes('id="member-next-events"'),"翌営業日の予定一覧");
+assert(home.includes('href="nippo.html"'),"日報への導線");
+assert(home.includes('href="schedule.html"'),"カレンダーへの導線");
+assert(home.includes('loadFocus().then(() => loadMemberSchedule())'),"祝日を含む翌営業日を取得してから表示");
+assert(home.includes('focusData?.tomorrowDate||msNextWorkday(today)'),"翌営業日を既存の業務ロジックと合わせる");
+assert(home.includes("API.schedule(from,to)"),"本人予定の既存APIだけを使う");
+assert(home.includes('e.source==="self"&&e.category!=="private"'),"業務予定だけを表示する");
+assert(home.includes("msRender(\"member-today-events\""),"今日の予定描画");
+assert(home.includes("msRender(\"member-next-events\""),"翌営業日予定描画");
+assert(home.includes('id="more"'),"従来の分析詳細を残す");
+assert(home.includes('id="memo-box"')&&home.includes('id="prop-card"'),"既存メモ・AI提案を維持");
+assert(home.includes('KPLayout.init({ active: "home"'),"既存ロールを変更しない");
+assert(app.includes('KPLayout.homeFor(appRole, stage)'),"既存のログイン後ルーティングを維持する");
+assert(read("office/index.html").includes("oc-grid"),"Officeの既存カレンダーは維持する");
+console.log("メンバーホーム：予定、タスク、日報、ログイン後の権限は正常");
