@@ -217,6 +217,14 @@
     }catch(e){msg("確認できませんでした："+(e.hint||e.detail||e.message),true)}
     finally{btn.disabled=false;}
   }
+  // 日報の週一覧から日付を選んで遷移した場合、その日を開く。
+  const fromLink = new URLSearchParams(location.search).get("date");
+  if (fromLink && /^\d{4}-\d{2}-\d{2}$/.test(fromLink) &&
+      !Number.isNaN(new Date(fromLink+"T12:00:00+09:00").getTime())) {
+    selected=fromLink;
+    const [y,m,d]=fromLink.split("-").map(Number);
+    weekStart=monday(new Date(y,m-1,d));
+  }
   KPLayout.init({active:"schedule",roles:["member","admin","owner"]}).then(ctx=>{if(ctx)loadWeek()});
 </script>
 </body>
