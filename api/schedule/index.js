@@ -70,6 +70,7 @@ async function list(req, res, ctx) {
   const [events, bookings, tasks, external] = await Promise.all([
     sb.from("gw_calendar_events")
       .select(FIELDS)
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id)
       .gte("starts_at", from).lt("starts_at", to)
       .order("starts_at").limit(500)
       .then((r) => r.data || [], () => []),
