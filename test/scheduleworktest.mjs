@@ -87,7 +87,13 @@ assert(!team.includes('.neq("visibility", "private")'),"旧非公開の業務予
 assert(view.includes('API.teamSchedule('),"社員一覧は同一APIから取得する");
 assert(nippo.includes('await loadNextPlan()'),"日報で翌営業日の予定を読む");
 assert(nippo.includes('signature !== nextPlanReviewedSignature'),"提出前チェックを要求");
-assert(nippo.indexOf('await KPLayout.busy(btn, "予定を保存中…"') < nippo.indexOf('const res = await KPLayout.busy(btn, "送信中…"'),"予定保存後に日報提出");
+const weekUI=src("work-week.html");
+assert(weekUI.includes("API.createEvent(") && weekUI.includes("API.updateEvent("),"週カレンダーで事前保存と変更");
+assert(weekUI.includes("wk-calendar") && weekUI.includes("wk-status"),"週単位のカレンダーと入力状態");
+assert(nippo.includes('id="np-week-days"'),"日報は週の入力状況を表示");
+assert(nippo.includes('<details class="fc-detail-toggle fc-advanced">'),"長い詳細設定を折りたたむ");
+assert(!nippo.includes("saveNextPlan("),"日報側で予定を再保存しない");
+assert(nippo.includes('const res = await KPLayout.busy(btn, "送信中…"'),"日報の提出は維持");
 assert(sql.includes('drop policy if exists gw_calendar_events_peer_select'),"共有はAPIだけ（本文のRLS漏れ防止）");
 
 console.log("社員の仕事予定・翌日AIレビュー・RLS すべて通過");
