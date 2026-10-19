@@ -10,7 +10,7 @@ const pages=["home.html","tasks.html","nippo.html","messages.html","menu.html",
 for(const p of pages){
   const c=read(p);
   assert(c.includes('<body class="gw-member-ui">'),p+" opts into the design");
-  assert(c.includes('href="css/member-design.css?v=20261020-ui1"'),p+" loads the scoped CSS");
+  assert(c.includes('href="css/member-design.css"'),p+" loads the scoped CSS");
   assert(c.includes("Zen+Kaku+Gothic+New"),p+" uses HR/Sales font");
   assert(c.includes("Material+Symbols+Rounded"),p+" uses HR/Sales icon family");
   assert(c.indexOf("css/member-design.css")>c.indexOf("css/layout.css"),
