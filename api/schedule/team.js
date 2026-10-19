@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     .filter((r) => people.has(r.employee_id))
     .map((r) => strip(r, people.get(r.employee_id)));
 
-  return json(res, 200, { events, people: [...people.values()] });
+  return json(res, 200, { events, people: [...people.values()], truncated: rows.length >= LIMIT });
 }
 
 /** 社員に必要な業務情報だけを明示的に返し、本文・メモは含めない */
