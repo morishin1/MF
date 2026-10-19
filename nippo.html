@@ -261,6 +261,25 @@
 
 <div id="pane-mine">
 
+  <!-- 翌営業日の業務予定を登録するまで、日報入力欄は開かない。 -->
+  <div class="card" id="np-schedule-gate" style="border-left:4px solid #cf8425;" aria-live="polite">
+    <h2><span class="material-symbols-outlined">calendar_month</span>日報を書く前に、翌営業日の予定を登録してください</h2>
+    <p class="kp-greet-sub" style="margin:0 0 10px;">
+      月・週のカレンダーで事前に入力済みであれば、もう一度登録する必要はありません。
+      <b id="np-gate-target">対象日を確認しています…</b>
+    </p>
+    <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0;">
+      <label for="np-gate-report-date" style="font-size:12px;font-weight:700;">日報の日付</label>
+      <input id="np-gate-report-date" type="date" style="width:auto;margin:0;" onchange="selectGateReportDate(this.value)">
+      <a id="np-gate-calendar" class="btn btn-primary btn-sm" href="/calendar.html">予定をカレンダーに登録</a>
+      <button type="button" class="btn btn-secondary btn-sm" id="np-gate-check-btn" onclick="refreshScheduleGate(this)">登録状況を再確認</button>
+    </div>
+    <p id="np-gate-msg" class="kp-greet-sub" style="font-size:13px;line-height:1.8;">
+      予定を確認しています…
+    </p>
+  </div>
+
+
   <!-- 受け取った感謝（過去に送られたぶん） -->
   <div id="thanks-card" class="card hidden">
     <h2><span class="material-symbols-outlined">favorite</span>あなたへの感謝</h2>
@@ -319,24 +338,6 @@
     <div id="np-next-result" aria-live="polite"></div>
     <p id="np-next-error" class="err-text"></p>
     <p class="muted" style="font-size:12px;">翌営業日の仕事予定を最低1件登録すると日報が書けます。先に週の予定を登録しておけば毎日の再入力は不要です。</p>
-  </div>
-
-  <!-- 翌営業日の業務予定を登録するまで、日報入力欄は開かない。 -->
-  <div class="card" id="np-schedule-gate" style="border-left:4px solid #cf8425;" aria-live="polite">
-    <h2><span class="material-symbols-outlined">calendar_month</span>日報を書く前に、翌営業日の予定を登録してください</h2>
-    <p class="kp-greet-sub" style="margin:0 0 10px;">
-      月・週のカレンダーで事前に入力済みであれば、もう一度登録する必要はありません。
-      <b id="np-gate-target">対象日を確認しています…</b>
-    </p>
-    <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0;">
-      <label for="np-gate-report-date" style="font-size:12px;font-weight:700;">日報の日付</label>
-      <input id="np-gate-report-date" type="date" style="width:auto;margin:0;" onchange="selectGateReportDate(this.value)">
-      <a id="np-gate-calendar" class="btn btn-primary btn-sm" href="/calendar.html">予定をカレンダーに登録</a>
-      <button type="button" class="btn btn-secondary btn-sm" id="np-gate-check-btn" onclick="refreshScheduleGate(this)">登録状況を再確認</button>
-    </div>
-    <p id="np-gate-msg" class="kp-greet-sub" style="font-size:13px;line-height:1.8;">
-      予定を確認しています…
-    </p>
   </div>
 
   <!-- 入力 -->
