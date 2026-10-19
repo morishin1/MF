@@ -26,6 +26,7 @@ import { docStatusOf } from "../../../lib/hr-docs.js";
 import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js";
 import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
 import { DEDICATED_CATEGORIES } from "../../../lib/hr-timerex-calendars.js";
+import { readContractStates } from "../../../lib/hr-contract-db.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
@@ -92,6 +93,9 @@ async function list(req, res, sb, ctx, salary) {
     const formal = await readFormalStates(sb, ctx.tenantId, acceptedIds);
     for (const a of data || []) Object.assign(a, formal.byId.get(a.id) || { formal_state: null });
   }
+  // 社労士の正式PDFで進める人の、契約手続きの状態（社労士へ依頼待ち／依頼済み／書類受領・確認待ち…。db/139 が無ければ載せない）
+  const contract = await readContractStates(sb, ctx.tenantId, data || []);
+  for (const a of data || []) if (contract.has(a.id)) a.contract_state = contract.get(a.id);
   // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
   // 無限道場リードの decision（保留・対象外。lib/hr-lead-flow.js）は採用の選考結果ではないので数えない
   const decidedIds = (data || []).filter((a) => a.decision && a.lead_category !== "mugendojo").map((a) => a.id);

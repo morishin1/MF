@@ -20,6 +20,8 @@ import {
 import { contactStatusOf } from "../../../lib/hr-messages.js";
 import { OFFER_TYPES_PUBLIC, offerTypeLabel, acceptFactsOf } from "../../../lib/hr-offer-types.js";
 import { readOfferTypes } from "../../../lib/hr.js";
+import { readContractStates } from "../../../lib/hr-contract-db.js";
+import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
@@ -139,6 +141,14 @@ async function one(req, res, sb, ctx, salary) {
   const acceptedOffer = (offers || []).find((o) => o.accepted_at);
   // 承諾した版の正式契約の段階（db/132）・要否と Office への引き渡し（db/133）
   Object.assign(a, acceptFactsOf(acceptedOffer));
+  // 社労士の正式PDFで進める版の、契約手続きの状態（db/139。表が無い環境では載せない＝これまでどおり）
+  a.contract_state = (await readContractStates(sb, ctx.tenantId, [a], offers || [])).get(a.id) ?? null;
+  // 契約手続き（db/139）が使えるか。オファーを作る前（区分を選んだあと）は列があるかを確かめる（画面のオファー入力の出し分け）
+  let contractOn = (offers || []).some((o) => contractReady(o));
+  if (!contractOn && !(offers || []).length && OFFICIAL_TYPES.includes(a.offer_type) && a.status === "offer_draft_pending") {
+    const probe = await sb.from("gw_hr_offers").select("doc_route").eq("tenant_id", ctx.tenantId).limit(1);
+    contractOn = !probe.error;
+  }
 
   const shaped = withContactNext({
     ...shapeApplicant(
@@ -182,6 +192,8 @@ async function one(req, res, sb, ctx, salary) {
     // 合格後の採用区分の定義（lib/hr-offer-types.js が正。画面側に定義を持たない）。
     // offerTypeReady=false は db/129 が未適用（採用区分を選ぶ操作だけ止まる）
     offerTypes: OFFER_TYPES_PUBLIC, offerTypeReady: offerTypes.ready,
+    // 契約手続き（社労士の正式PDF・db/139）：使える環境か・正式PDFで進める区分（画面のオファー入力・書類タブの出し分け）
+    contract: { ready: contractOn, types: OFFICIAL_TYPES },
     // 通知書は候補者専用URLの平文を含まないので、そのまま返してよい（tokenは無い）
     offers: (offers || []).map((o) => ({ ...shapeOffer(o), handoffByName: o.handoff_by ? (actorName.get(o.handoff_by) || null) : null })),
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
