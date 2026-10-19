@@ -152,7 +152,7 @@ begin
     tenant_id,proposal_id,from_stage,to_stage,from_owner_id,to_owner_id,actor_employee_id,
     reason,decision,next_action,next_at,created_by
   ) values (
-    v.tenant_id,v.id,v.handoff_stage,p_to_stage,v.sales_owner_id,p_to_owner,v_actor,
+    v.tenant_id,v.id,case when p_to_stage='cs' then 'proposal' else v.handoff_stage end,p_to_stage,v.sales_owner_id,p_to_owner,v_actor,
     btrim(p_reason),p_decision,btrim(p_next_action),p_next_at,(select auth.uid())
   ) returning id into v_handoff;
   update public.gw_sales_proposals
@@ -169,7 +169,7 @@ begin
     tenant_id,proposal_id,company_id,kind,occurred_at,employee_id,created_by,note,detail
   ) values (
     v.tenant_id,v.id,v.company_id,'handoff',now(),v_actor,(select auth.uid()),btrim(p_reason),
-    jsonb_build_object('handoffId',v_handoff,'fromStage',v.handoff_stage,'toStage',p_to_stage,
+    jsonb_build_object('handoffId',v_handoff,'fromStage',case when p_to_stage='cs' then 'proposal' else v.handoff_stage end,'toStage',p_to_stage,
       'fromOwner',v.sales_owner_id,'toOwner',p_to_owner,'decision',p_decision,
       'nextAction',p_next_action,'nextAt',p_next_at)
   );
