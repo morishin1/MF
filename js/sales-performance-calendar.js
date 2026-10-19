@@ -62,6 +62,9 @@
       $("sp-metric").innerHTML = "";
       $("sp-member").innerHTML = "";
       $("sp-day").innerHTML = "";
+      if ($("sp-mini-tiles")) $("sp-mini-tiles").innerHTML =
+        '<div class="db-mini-loading">実績を読み込めませんでした。実績タブで再確認してください。</div>';
+      if ($("sp-mini-members")) $("sp-mini-members").innerHTML = "";
       renderNav();
     }
   }
@@ -81,6 +84,7 @@
     if (!state.data) return;
     const d = state.data;
     renderNav();
+    renderCompact();
     $("sp-notice").textContent = d.note || "";
     $("sp-role-note").textContent = d.manager
       ? "全員の実績です。CS担当・クロージング担当を変更しても過去の実施者の数字は残ります。"
@@ -96,6 +100,36 @@
     renderDay();
   }
 
+  // 初期タブでは4つの数字と上位5人だけ。Office風の月間カレンダーと9指標は実績タブで閲覧する。
+  function renderCompact() {
+    const d = state.data;
+    if (!d || !$("sp-mini-tiles")) return;
+    const keys = ["attacks", "sent", "connected", "won"];
+    const names = { attacks: "フォーム送信", sent: "提案送信", connected: "企業接続", won: "成約" };
+    const units = { attacks: "件", sent: "件", connected: "件", won: "件" };
+    $("sp-mini-tiles").innerHTML = keys.map((k) =>
+      '<div class="db-mini-tile"><span>' + names[k] + '</span><strong>' +
+      count(d.totals?.[k]) + '</strong><small>' + units[k] + '</small></div>').join("");
+    const members = [...(d.members || [])].sort((a, b) => {
+      const score = (r) => countMetric(r.totals, "sent") + countMetric(r.totals, "connected")
+        + countMetric(r.totals, "won");
+      return score(b) - score(a) || String(a.name).localeCompare(String(b.name), "ja");
+    });
+    const cols = ["sent", "connected", "won"];
+    $("sp-mini-members").innerHTML =
+      '<b>' + (d.manager ? "メンバー別の実績" : "自分の実績") + '</b>' +
+      '<div class="db-mini-member head"><span class="nm">名前</span>' +
+      '<span>提案</span><span>接続</span><span>成約</span></div>' +
+      (members.slice(0, 5).map((r) => '<div class="db-mini-member"><span class="nm" title="' +
+        esc(r.name) + '">' + esc(r.name) + '</span>' +
+        cols.map((k) => '<span>' + countMetric(r.totals, k) + '</span>').join("") + '</div>').join("") ||
+        '<p class="sl-empty">表示できる実績はありません</p>') +
+      (members.length > 5 ? '<p class="db-mini-note">ほか' + (members.length - 5) +
+        '名の実績は詳細で確認できます。</p>' : "");
+    $("sp-mini-note").textContent = Number(state.ym.slice(5, 7)) +
+      "月の記録から集計（日本時間）。詳細では電話・引継ぎ・面談も確認できます。";
+  }
+
   function choose(metric) {
     if (!state.data?.metrics.some((m) => m.key === metric)) return;
     state.metric = metric; render();
@@ -107,7 +141,11 @@
     const first = state.ym + "-01";
     const offset = (dateOf(first).getUTCDay() + 6) % 7;
     const start = addDays(first, -offset);
-    const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+    // 必要な週数だけ作る。6週固定の余分な空白を防ぐ。
+    const [year, month] = state.ym.split("-").map(Number);
+    const monthDays = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const cellCount = Math.ceil((offset + monthDays) / 7) * 7;
+    const days = Array.from({ length: cellCount }, (_, i) => addDays(start, i));
     // 日付の下に選択した指標の数字と、実施した人の名前を表示
     const cell = (day) => {
       const total = countMetric(d.days?.[day], state.metric);
