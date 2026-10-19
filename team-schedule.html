@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>社員スケジュール｜エイト</title>
+  <link rel="stylesheet" href="/css/app.css?v=20261020schedule">
+  <link rel="stylesheet" href="/css/layout.css?v=20261020schedule">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
+  <style>
+    .ts-wrap { max-width:1100px; margin:0 auto; padding:20px 16px 60px; }
+    .ts-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:16px 0 20px; }
+    .ts-toolbar input,.ts-toolbar select { width:auto; max-width:100%; margin:0; }
+    .ts-grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+    .ts-person { background:white; border:1px solid var(--border,#e3e6eb); border-radius:12px; padding:16px; }
+    .ts-h { font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; justify-content:space-between; }
+    .ts-e { border-top:1px solid var(--border,#e3e6eb); margin-top:10px; padding-top:10px; }
+    .ts-e time { display:block; font-size:12px; font-weight:700; color:var(--primary,#29467c); }
+    .ts-e b { display:block; margin-top:3px; overflow-wrap:anywhere; }
+    .ts-e small { display:block; margin-top:3px; color:var(--muted,#677); }
+    .ts-empty { color:var(--muted,#677); font-size:13px; margin-top:10px; }
+    .ts-note { font-size:12px; color:var(--muted,#677); line-height:1.8; }
+  </style>
+</head>
+<body>
+<div class="ts-wrap">
+  <h1 class="kp-greet">社員スケジュール</h1>
+  <p class="kp-greet-sub">全社員の仕事の予定を、担当者ごとに確認できます。未入力も分かります。</p>
+  <div class="ts-toolbar">
+    <button class="btn btn-secondary btn-sm" onclick="shift(-1)">前日</button>
+    <input id="ts-date" type="date" aria-label="表示する日付" onchange="load()">
+    <button class="btn btn-secondary btn-sm" onclick="shift(1)">翌日</button>
+    <button class="btn btn-secondary btn-sm" onclick="today()">今日</button>
+    <select id="ts-person" aria-label="メンバーを絞り込む" onchange="render()"><option value="">社員全員</option></select>
+    <button class="btn btn-secondary btn-sm" onclick="load()">更新</button>
+    <a class="btn btn-primary btn-sm" href="/schedule.html">自分の予定を登録</a>
+  </div>
+  <p class="ts-note">予定の件名・日時・場所を表示します。日報・予定のメモ・個人Googleカレンダーは表示しません。社内ログインした社員のみ閲覧できます。</p>
+  <div id="ts-msg" role="status"></div>
+  <div id="ts-grid" class="ts-grid"></div>
+</div>
+<script src="/js/api-client.js?v=20261020schedule"></script>
+<script src="/js/layout.js?v=20261020schedule"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const keyOf = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  const selectedDate = () => $("ts-date").value;
+  let snapshot = { events: [], people: [] };
+  let seq = 0;
+  function today() { $("ts-date").value = keyOf(new Date()); load(); }
+  function shift(n) {
+    const [y,m,d] = selectedDate().split("-").map(Number);
+    const v = new Date(y,m-1,d+n);
+    $("ts-date").value = keyOf(v);
+    load();
+  }
+  function hm(value) {
+    return new Date(value).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Tokyo"});
+  }
+  function render() {
+    const who = $("ts-person").value;
+    const people = snapshot.people.filter(p => !who || who === p.id);
+    const events = snapshot.events;
+    $("ts-grid").innerHTML = people.length ? people.map(person => {
+      const list = events.filter(e => e.employeeId === person.id).sort((a,b) => a.startsAt.localeCompare(b.startsAt));
+      return `<section class="ts-person">
+        <div class="ts-h"><span>${esc(person.name)}${person.department ? ` <small>（${esc(person.department)}）</small>` : ""}</span><span class="kp-chip">${list.length}件</span></div>
+        ${list.length ? list.map(e => `<div class="ts-e"><time>${e.allDay ? "終日" : hm(e.startsAt)+"–"+hm(e.endsAt)}</time><b>${esc(e.title || "業務")}</b>${e.location ? `<small>場所：${esc(e.location)}</small>` : ""}</div>`).join("") : '<p class="ts-empty">業務予定が未入力です</p>'}
+      </section>`;
+    }).join("") : '<div class="empty">対象の社員はありません。</div>';
+  }
+  async function load() {
+    const request = ++seq;
+    const date = selectedDate();
+    if (!date) return;
+    $("ts-msg").textContent = "読み込み中…";
+    const from = date + "T00:00:00+09:00";
+    const toDate = new Date(date + "T00:00:00+09:00");
+    toDate.setDate(toDate.getDate()+1);
+    const to = new Date(toDate.getTime()).toISOString();
+    try {
+      const d = await API.teamSchedule(from,to);
+      if (request !== seq) return;
+      snapshot = d;
+      const sel = $("ts-person");
+      const value = sel.value;
+      sel.innerHTML = '<option value="">社員全員</option>' + (d.people || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+      sel.value = (d.people || []).some(p => p.id === value) ? value : "";
+      $("ts-msg").textContent = `${date} ・ 社員 ${(d.people||[]).length}名、予定 ${(d.events||[]).length}件`;
+      render();
+    } catch(e) {
+      if(request !== seq) return;
+      $("ts-msg").textContent = "予定を取得できませんでした：" + (e.hint || e.detail || e.message);
+      $("ts-grid").innerHTML = "";
+    }
+  }
+  KPLayout.init({ active:"schedule", roles:["member","admin","owner"] }).then(ctx => {
+    if(ctx) today();
+  });
+</script>
+</body>
+</html>
