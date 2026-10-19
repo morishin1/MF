@@ -101,7 +101,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">提案を送ったあとの電話・メール・回答確認・面談までを、提案ごとに追います。dx.enger で送った提案は自動で入ります。</p>
+  <p class="sl-sub">マッチング確定から、企業への提案・電話・メール・回答確認・面談までを、提案ごとに追います。dx.enger でマッチングが確定した提案は自動で入り（提案待ち）、企業へ提案を送ると電話のタスクに進みます。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
@@ -153,7 +153,7 @@
   let seq = 0;
 
   const STATUS_PILL = {
-    call_wait: "clicked", mail_wait: "clicked", reply_wait: "attacked", meeting_adjust: "meeting", meeting_done: "meeting",
+    proposal_wait: "untouched", call_wait: "clicked", mail_wait: "clicked", reply_wait: "attacked", meeting_adjust: "meeting", meeting_done: "meeting",
     considering: "attacked", reproposal: "reattack_wait", won: "won", lost: "lost", stopped: "excluded", closed_no_reply: "lost",
   };
   const pill = (status, label) => statusPill(STATUS_PILL[status] || "untouched", label);
@@ -219,6 +219,7 @@
     // 今日やること
     const t = d.today || {};
     const cards = [
+      { lb: "提案準備", icon: "edit_note", v: t.prepare, f: "proposal_wait" },
       { lb: "今日の電話", icon: "call", v: t.call, f: "today" },
       { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
       { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
@@ -254,8 +255,12 @@
     renderAdmin(d);
   }
 
+  // 提案待ち（まだ企業へ提案していない）は、電話の「未実施」を赤にしない（30分の期限は提案を送ってから）
   const callCell = (r) => r.call ? `${esc(r.call.label)}<span class="pp-small">${esc(fmt(r.call.lastAt))}${r.call.count > 1 ? `・${r.call.count}回` : ""}</span>`
-    : r.closed ? "—" : `<span class="pp-over">未実施</span>`;
+    : r.closed ? "—" : r.waiting ? `<span class="sl-muted">提案前</span>` : `<span class="pp-over">未実施</span>`;
+  // 提案日時。提案待ちはマッチング確定の日時と「未提案」
+  const sentCell = (r) => r.sentAt ? esc(fmt(r.sentAt))
+    : `<span class="sl-muted">確定 ${esc(fmt(r.matchedAt))}</span><span class="pp-small">未提案</span>`;
   const mailCell = (r) => r.mail ? `送信${r.mail.selfReported ? "（自己申告）" : ""}<span class="pp-small">${esc(fmt(r.mail.lastAt))}</span>` : "—";
   const syncCell = (r) => r.sourceSystem === "enger"
     ? `<span class="pp-tag enger">dx.enger</span>${r.companyId ? "" : `<span class="pp-small">企業未紐付け</span>`}`
@@ -269,7 +274,7 @@
     }
     $("rows").innerHTML = rows.map((r) => `
       <tr class="click${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
-        <td style="white-space:nowrap;">${esc(fmt(r.sentAt))}</td>
+        <td style="white-space:nowrap;">${sentCell(r)}</td>
         <td><span class="sl-nm">${esc(r.companyName)}</span>${r.contactStop ? `<span class="pp-tag err">連絡停止</span>` : ""}</td>
         <td>${esc(r.service || "—")}</td>
         <td>${esc(r.title)}${r.sourceCode ? `<span class="pp-small">${esc(r.sourceCode)}</span>` : ""}</td>
@@ -289,7 +294,7 @@
           <b>${esc(r.companyName)}</b>${pill(r.status, r.statusLabel)}</div>
         <div class="l">${esc(r.title)}${r.service ? `・${esc(r.service)}` : ""}</div>
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next ? r.next.title : "—")}</b>${r.next ? `　${dueText(r.next.dueAt, r.next.overdue)}` : ""}</div>
-        <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : "未実施"}　経過 ${r.elapsedDays}日　担当：${esc(r.salesOwnerName || "未割当")}</div>
+        <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}　経過 ${r.elapsedDays}日　担当：${esc(r.salesOwnerName || "未割当")}</div>
       </div>`).join("");
   }
 
@@ -302,6 +307,7 @@
       ["提案後の電話実施率", v(k.callRate), `${k.called}/${k.callBase}件・目標100%`],
       ["電話の期限内実施率", v(k.onTimeRate), `${k.onTime}/${k.onTimeBase}件・目標90%`],
       ["初回電話までの時間", minTxt(k.firstCallMedianMin), `中央値・${k.firstCallMeasured}件`],
+      ["マッチング確定→提案", minTxt(k.prepareMedianMin), `中央値・${k.prepareMeasured}件`],
       ["不通時のメール実施率", v(k.mailRate), `${k.mailDone}/${k.mailBase}件・目標100%`],
       ["提案→面談率", v(k.meetingRate), `${k.meetings}/${k.proposals}件・目標20%`],
       ["面談→成約率", v(k.wonRate), `${k.won}/${k.meetings}件・目標30%`],
@@ -339,6 +345,13 @@
           </div>
           <label style="margin-top:10px;">自社の休業日（YYYY-MM-DD を改行かカンマで。祝日・年末年始は登録済み）</label>
           <textarea id="st-holidays" rows="2">${esc((s.extraHolidays || []).join("\n"))}</textarea>
+          <label style="margin-top:10px;">Slack のメンバーID（マッチング確定の Slack 通知で営業担当をメンションします。空なら名前だけ）</label>
+          <div class="sl-muted" style="font-size:11.5px;margin-bottom:6px;">Slack でその人のプロフィール →「︙」→「メンバーIDをコピー」（U から始まる英数字）</div>
+          <div id="st-slack" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 10px;align-items:center;">
+            ${(d.members || []).map((m) => `<span style="font-size:12.5px;">${esc(m.name)}</span>
+              <input type="text" data-slack="${esc(m.id)}" value="${esc((s.slackMembers || {})[m.id] || "")}" placeholder="U0123ABCD" autocomplete="off">`).join("")
+              || `<span class="sl-muted">Sales を使える社員がいません</span>`}
+          </div>
           <div class="pp-msg" id="st-msg"></div>
           <button class="btn btn-primary btn-sm" onclick="ppSaveSettings(this)">保存（これから作るタスクの期限に効きます）</button>
         </div></details>`;
@@ -367,6 +380,7 @@
       bizStart: $("st-start").value, bizEnd: $("st-end").value, firstCallMinutes: Number($("st-first").value),
       refollowBizDays: Number($("st-refollow").value), reviewBizDays: Number($("st-review").value),
       extraHolidays: $("st-holidays").value,
+      slackMembers: Object.fromEntries([...document.querySelectorAll("#st-slack [data-slack]")].map((el) => [el.dataset.slack, el.value.trim()])),
     };
     try {
       await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/settings", { method: "PATCH", body }));
@@ -402,6 +416,7 @@
     const replied = has("reply") || has("call", (a) => a.result === "connected");
     const open = (kind) => tasks.some((t) => t.status === "open" && t.kind === kind);
     const items = [
+      { lb: "企業へ提案（提案準備）", ok: Boolean(p.sentAt), now: p.waiting },
       { lb: "電話（結果を記録）", ok: has("call"), now: open("call") && !has("call") },
       { lb: "不通のときは確認メール", ok: has("mail") || (has("call") && !noAnswer), now: open("mail"), skip: has("call") && !noAnswer },
       { lb: "回答の確認", ok: replied || has("check"), now: open("reply_check") },
@@ -424,8 +439,16 @@
     const phone = p.contactPhone || detail.company?.phone || null;
     const review = openTasks.some((t) => t.kind === "manager_review");
 
+    // 提案待ち：まだ企業へ提案していない。電話・メールの記録は出さない（30分の電話は提案を送ってから）
+    const waitingCta = `<button class="btn btn-primary sl-cta-main" onclick="ppSent()"><span class="material-symbols-outlined icon-inline">send</span>企業へ提案した（記録）</button>
+         <div class="sl-cta-sub">
+           <button class="btn btn-secondary btn-sm" onclick="ppResult()">結果・状態</button>
+           ${p.sourceUrl ? `<a class="btn btn-secondary btn-sm" href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">dx.enger で提案内容を開く</a>` : ""}
+         </div>
+         <div class="sl-muted" style="font-size:11.5px;width:100%;">dx.enger から企業へ提案メールを送ると、自動で「電話待ち」に進み、送った時刻から${esc(String(detail.settings?.firstCallMinutes ?? 30))}分以内の電話のタスクができます。dx.enger 以外（自分のメール・電話）で提案したときは「企業へ提案した」を押してください。</div>`;
     const cta = p.closed
       ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
+      : p.waiting ? waitingCta
       : `<button class="btn btn-primary sl-cta-main" onclick="ppCall()"><span class="material-symbols-outlined icon-inline">call</span>電話の結果を記録</button>
          <div class="sl-cta-sub">
            <button class="btn btn-secondary btn-sm" onclick="ppMail()">確認メールを送った</button>
@@ -443,7 +466,9 @@
           <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
           <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${pill(p.status, p.statusLabel)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}
-            <span>${esc(p.service || "")}</span><span>提案 ${esc(fmt(p.sentAt))}（${p.elapsedDays}日経過）</span>
+            <span>${esc(p.service || "")}</span>${p.sentAt
+              ? `<span>提案 ${esc(fmt(p.sentAt))}（${p.elapsedDays}日経過）</span>${p.matchedAt ? `<span>確定 ${esc(fmt(p.matchedAt))}</span>` : ""}`
+              : `<span>マッチング確定 ${esc(fmt(p.matchedAt))}（企業へはまだ提案していません）</span>`}
             ${p.sourceSystem === "enger" ? `<span class="pp-tag enger">dx.enger</span>` : `<span class="pp-tag">手入力</span>`}
             ${p.contactStop ? `<span class="pp-tag err">連絡停止の希望</span>` : ""}
           </div>
@@ -566,6 +591,16 @@
       $("m-msg").textContent = errText(e);
     }
   }
+
+  // 企業へ提案した（dx.enger 以外で送ったとき）。電話待ちへ進み、送った時刻から30分以内の電話のタスク
+  function ppSent() {
+    modal(`<h2>企業へ提案した</h2>
+      <p class="sl-muted" style="font-size:12.5px;margin:0 0 10px;">dx.enger から提案メールを送った場合は自動で記録されます。ここは自分のメール・電話などで提案したときに使います。</p>
+      <label>提案した日時</label><input type="datetime-local" id="m-at" value="${localInput()}">
+      <label>方法</label><select id="m-ch"><option value="email">メール</option><option value="phone">電話</option><option value="form">問い合わせフォーム</option><option value="other">その他</option></select>
+      ${noteField("メモ（任意）")}${foot("ppSendSent()", "記録する（電話待ちへ）")}`);
+  }
+  function ppSendSent() { send({ action: "sent", occurredAt: $("m-at").value, channel: $("m-ch").value, note: $("m-note").value }, "記録しました（電話待ちになりました）"); }
 
   function ppCall() {
     const L = detail.labels;
@@ -779,7 +814,7 @@
   function ppOpenNew() {
     const members = data?.manager ? data.members || [] : [];
     modal(`<h2>提案を手で追加</h2>
-      <p class="sl-muted" style="font-size:12px;">dx.enger で送った提案は自動で入ります。ここは dx.enger を通さない提案のための入口です。</p>
+      <p class="sl-muted" style="font-size:12px;">dx.enger の提案はマッチング確定で自動で入ります。ここは dx.enger を通さない提案のための入口です。</p>
       <label>企業名（必須）</label><input type="text" id="n-company" maxlength="200">
       <label style="margin-top:10px;">提案の内容（必須）</label><input type="text" id="n-title" maxlength="200" placeholder="例：PCレンタル 20台">
       <label style="margin-top:10px;">サービス</label><input type="text" id="n-service" list="n-services" maxlength="100">

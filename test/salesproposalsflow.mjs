@@ -4,7 +4,8 @@
 //   1. 期限は営業時間・土日・祝日・自社休業日に合わせる（送信30分以内／その営業日中／翌営業日／n営業日後）
 //   2. 自動タスク：同じものを2回作らない・終わった提案と連絡停止には作らない・返信があれば追客を片付ける
 //   3. KPI の分母と分子（自社が連絡していない無回答を企業の応答に混ぜない・連絡停止は電話の分母から外す）
-//   4. 値の一覧が SQL（db/138 の CHECK）と JS でずれていない
+//   4. 値の一覧が SQL（db/138・db/140 の CHECK）と JS でずれていない
+//   5. マッチング確定（db/140）：提案待ちの間は電話の期限を始めない。提案準備の期限。企業へ送ったら30分の電話（送った時刻から）
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -118,7 +119,14 @@ ok("設定：始業 < 終業・再フォロー ≤ 管理者確認・休業日�
   assert.equal(L.normalizeSettings({ extraHolidays: "2026-13-01" }, S).field, "extraHolidays");
   assert.deepEqual(L.normalizeSettings({ extraHolidays: "2026-10-20, 2026-10-19\n2026-10-20" }, S).value.extra_holidays, ["2026-10-19", "2026-10-20"]);
   assert.deepEqual(L.settingsOf({ biz_start: "10:00:00", biz_end: "19:00:00", first_call_minutes: 45, refollow_biz_days: 2, review_biz_days: 4, extra_holidays: ["2026-10-19"] }),
-    { bizStart: "10:00", bizEnd: "19:00", firstCallMinutes: 45, refollowBizDays: 2, reviewBizDays: 4, extraHolidays: ["2026-10-19"] });
+    { bizStart: "10:00", bizEnd: "19:00", firstCallMinutes: 45, refollowBizDays: 2, reviewBizDays: 4, extraHolidays: ["2026-10-19"], slackMembers: {} });
+  // Slack のメンバーID（db/140）：社員ID → U…。形の違うもの・空はその人の登録を外す
+  const E = "00000000-0000-4000-8000-000000000013";
+  assert.deepEqual(L.normalizeSettings({ slackMembers: { [E]: " u0123abcd " } }, S).value.slack_members, { [E]: "U0123ABCD" });
+  assert.deepEqual(L.normalizeSettings({ slackMembers: { [E]: "" } }, S).value.slack_members, {});
+  assert.equal(L.normalizeSettings({ slackMembers: { [E]: "@営業" } }, S).field, "slackMembers");
+  assert.equal(L.normalizeSettings({ slackMembers: { "not-uuid": "U0123ABCD" } }, S).field, "slackMembers");
+  assert.deepEqual(L.settingsOf({ slack_members: { [E]: "U0123ABCD", bad: "U1", x: 1 } }).slackMembers, { [E]: "U0123ABCD" }, "読むときも形の合うものだけ");
 });
 
 ok("KPI：電話実施率は連絡停止（電話の前）を分母から外す。期限内・不通時メール・面談化・成約・初回電話の中央値", () => {
@@ -151,17 +159,80 @@ ok("KPI：電話実施率は連絡停止（電話の前）を分母から外す�
   assert.deepEqual(by.map((r) => [r.ownerId, r.proposals]), [["e1", 2], ["e2", 2]]);
 });
 
-ok("値の一覧が SQL（db/138 の CHECK）と同じ：状態・理由・タスクの種類・記録の種類", () => {
+ok("マッチング確定：提案準備は当日の終業まで（終業まで1時間を切った・営業時間外・休日は次の営業日の終業）", () => {
+  assert.equal(L.prepareDue(J("2026-10-19T10:00"), S), J("2026-10-19T18:00"));
+  assert.equal(L.prepareDue(J("2026-10-19T16:59"), S), J("2026-10-19T18:00"));
+  assert.equal(L.prepareDue(J("2026-10-19T17:00"), S), J("2026-10-20T18:00"), "終業まで1時間を切ったら翌営業日");
+  assert.equal(L.prepareDue(J("2026-10-19T07:30"), S), J("2026-10-19T18:00"), "始業前はその日");
+  assert.equal(L.prepareDue(J("2026-10-16T20:00"), S), J("2026-10-19T18:00"), "金曜の夜 → 月曜");
+  assert.equal(L.prepareDue(J("2026-10-11T10:00"), S), J("2026-10-13T18:00"), "日曜 → 祝日（10/12）を飛ばす");
+  const p = { status: "proposal_wait", matched_at: J("2026-10-19T10:00"), sales_owner_id: "e1", contact_stop: false };
+  const [t] = L.matchedTasks(p, S);
+  assert.equal(t.kind, "prepare"); assert.equal(t.source_event, "auto:prepare"); assert.equal(t.assignee_id, "e1"); assert.equal(t.due_at, J("2026-10-19T18:00"));
+  assert.deepEqual(L.matchedTasks({ ...p, contact_stop: true }, S), [], "連絡停止には作らない");
+  assert.deepEqual(L.matchedTasks({ ...p, status: "call_wait", sent_at: J("2026-10-19T10:00") }, S), [], "送った提案には作らない");
+  assert.deepEqual(L.firstTasks({ ...p, sent_at: null }, S), [], "送っていない提案に電話のタスクを作らない（30分を始めない）");
+});
+
+ok("企業へ送った（sent）：提案待ち → 電話待ち・提案準備を完了・電話は送った時刻から30分（確定の時刻からではない）", () => {
+  const prep = { id: "t1", kind: "prepare", status: "open", source_event: "auto:prepare" };
+  const p = { status: "proposal_wait", matched_at: J("2026-10-19T09:10"), sent_at: null, sales_owner_id: "e1", contact_stop: false };
+  const a = { id: "a1", kind: "sent", occurred_at: J("2026-10-19T14:00") };
+  const r = L.planFollowUp({ proposal: p, activity: a, tasks: [prep], now: J("2026-10-19T14:01"), settings: S });
+  assert.equal(r.patch.status, "call_wait"); assert.equal(r.patch.sent_at, J("2026-10-19T14:00"));
+  assert.deepEqual(r.complete, ["t1"], "提案準備は送った記録で完了");
+  assert.equal(r.create.length, 1); assert.equal(r.create[0].kind, "call"); assert.equal(r.create[0].source_event, "auto:first_call");
+  assert.equal(r.create[0].due_at, J("2026-10-19T14:30"), "送った 14:00 から30分");
+  // 2回目の送信（送り直し）：状態も送信日時も変えない・電話は増やさない
+  const again = L.planFollowUp({ proposal: { ...p, status: "call_wait", sent_at: J("2026-10-19T14:00") }, activity: { ...a, id: "a2" },
+    tasks: [{ id: "c1", kind: "call", status: "open", source_event: "auto:first_call" }], now: J("2026-10-19T15:00"), settings: S });
+  assert.deepEqual(again.patch, {}); assert.deepEqual(again.create, []);
+  // 連絡停止の希望がある提案：送っても電話は作らない
+  const stop = L.planFollowUp({ proposal: { ...p, contact_stop: true }, activity: a, tasks: [prep], now: J("2026-10-19T14:01"), settings: S });
+  assert.equal(stop.patch.status, "call_wait"); assert.deepEqual(stop.create, []);
+  // 入力：Sales で「企業へ提案した」（自己申告）
+  const n = L.normalizeActivity("sent", { occurredAt: "2026-10-19T14:00", channel: "phone" }, { now: J("2026-10-19T14:05") }).value;
+  assert.equal(n.kind, "sent"); assert.equal(n.channel, "phone"); assert.equal(n.evidence, "self_report"); assert.equal(n.occurred_at, J("2026-10-19T14:00"));
+  assert.equal(L.normalizeActivity("sent", { occurredAt: "2026-10-19T16:00" }, { now: J("2026-10-19T14:05") }).field, "occurredAt", "未来の提案日時は不可");
+  assert.equal(L.activityLabel({ kind: "sent", result: "sent", evidence: "self_report" }), "提案送信（Sales で記録）");
+  assert.equal(L.activityLabel({ kind: "matched", result: "matched" }), "マッチング確定");
+});
+
+ok("一覧：提案待ちは「提案待ち」に出て「電話未実施」には出ない。経過は確定から・並びは確定日。KPI は確定→提案の中央値", () => {
+  const now = J("2026-10-21T12:00");
+  const wait = L.shapeProposal({ id: "w", status: "proposal_wait", matched_at: J("2026-10-19T10:00"), sent_at: null, company_name: "A", title: "x" }, { now });
+  const sent = L.shapeProposal({ id: "s", status: "call_wait", matched_at: J("2026-10-20T10:00"), sent_at: J("2026-10-20T11:00"), company_name: "B", title: "y" }, { now });
+  assert.equal(wait.sentAt, null); assert.equal(wait.waiting, true); assert.equal(wait.elapsedDays, 2, "確定から数える");
+  assert.equal(L.filterRows([wait, sent], { filter: "proposal_wait", now }).map((r) => r.id).join(), "w");
+  assert.equal(L.filterRows([wait, sent], { filter: "no_call", now }).map((r) => r.id).join(), "s", "提案待ちは電話未実施に数えない");
+  assert.equal([wait, sent].sort(L.SORTS.sent).map((r) => r.id).join(), "s,w", "提案日の新しい順（提案待ちは確定日）");
+  const k = L.computeKpis([
+    { id: "s", status: "call_wait", matched_at: J("2026-10-20T10:00"), sent_at: J("2026-10-20T11:00") },
+    { id: "t", status: "call_wait", matched_at: J("2026-10-20T10:00"), sent_at: J("2026-10-20T10:20") },
+    { id: "u", status: "call_wait", matched_at: null, sent_at: J("2026-10-20T10:20") },
+  ], [], [], { now }).total;
+  assert.equal(k.prepareMedianMin, 40, "60分と20分の中央値（確定の無い提案は数えない）"); assert.equal(k.prepareMeasured, 2);
+});
+
+ok("値の一覧が SQL（db/138・db/140 の CHECK）と同じ：状態・理由・タスクの種類・記録の種類", () => {
   const sql = readFileSync(join(ROOT, "db/138_sales_proposals.sql"), "utf8");
   // 列の CHECK（in (…) の値）をすべて拾う。kind は「記録」と「タスク」の2つの表にある（出てくる順）
   const listsOf = (col) => [...sql.matchAll(new RegExp(`${col} text[^\\n]*check \\(${col} (?:is null or ${col} )?in \\(([\\s\\S]*?)\\)\\)`, "g"))]
     .map((m) => [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort());
-  const [proposalStatus] = listsOf("status");
-  assert.deepEqual(proposalStatus, [...L.STATUS_KEYS].sort(), "提案の状態");
   assert.deepEqual(listsOf("close_reason")[0], L.CLOSE_REASONS.map((r) => r.key).sort(), "理由コード");
-  const [activityKinds, taskKinds] = listsOf("kind");
-  assert.deepEqual(activityKinds, Object.keys(L.ACTIVITY_LABEL).sort(), "記録の種類");
-  assert.deepEqual(taskKinds, L.TASK_KINDS.map((t) => t.key).sort(), "タスクの種類");
+  // 状態・記録の種類・タスクの種類は db/140 が付け直した名前つきの CHECK が正（提案待ち・マッチング確定・提案準備）
+  const sql140 = readFileSync(join(ROOT, "db/140_sales_proposal_matching.sql"), "utf8");
+  const named = (name, col) => {
+    const m = new RegExp(`add constraint ${name} check \\(${col} in \\(([\\s\\S]*?)\\)\\);`).exec(sql140);
+    assert.ok(m, name);
+    return [...m[1].replace(/--[^\n]*/g, "").matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();
+  };
+  assert.deepEqual(named("gw_sales_proposals_status_chk", "status"), [...L.STATUS_KEYS].sort(), "提案の状態");
+  assert.deepEqual(named("gw_sales_proposal_activities_kind_chk", "kind"), Object.keys(L.ACTIVITY_LABEL).sort(), "記録の種類");
+  assert.deepEqual(named("gw_sales_proposal_tasks_kind_chk", "kind"), L.TASK_KINDS.map((t) => t.key).sort(), "タスクの種類");
+  // db/138 の一覧に、db/140 で足したものだけが増えている（消した値が無い）
+  const [old138] = listsOf("status");
+  assert.deepEqual(L.STATUS_KEYS.filter((k) => !old138.includes(k)), ["proposal_wait"]);
   // 理由コードの組み合わせ（どの状態にどの理由）も、SQL の値の中に収まる
   for (const [st, list] of Object.entries(L.REASONS_FOR)) {
     assert.ok(L.STATUS_KEYS.includes(st), st);

@@ -7,10 +7,31 @@ Phase 2 の前半（dx.enger → Sales の起票・Sales → dx.enger の状態�
 - API：`api/sales/proposals/{index,detail,settings,sync,intake,status}.js`
 - 決まりごと：`lib/sales-proposals.js`（期限・自動タスク・KPI・入力）／`lib/sales-proposal-intake.js`（連携）／`lib/sales-proposals-db.js`（DB 操作）
 - DB：`db/138_sales_proposals.sql`（確認 `db/check_138_sales_proposals.sql`・戻す `db/rollback_138_sales_proposals.sql`）
+  ＋ `db/140_sales_proposal_matching.sql`（起点をマッチング確定にする。確認 `db/check_140_…`・戻す `db/rollback_140_…`）
+- Slack：`lib/sales-proposal-slack.js`（起票を営業担当へ即時に知らせる。提案ごとに1回）
 - テスト：`test/salesproposalsapi.mjs`・`test/salesproposalsflow.mjs`・`test/ui/salesproposalsui.mjs`・`test/sql/138_sales_proposals.sql`
 
-> **状態**：コードとテストは揃っているが、**本番の DB（db/138）は未適用・本番の動作は未確認**。
+> **状態**：コードとテストは揃っているが、**本番の DB（db/138・db/140）の適用・本番の動作は未確認**。
 > 本番 SQL の適用・環境変数の設定・マージは、依頼者の承認後に行う。
+
+## 0. 連携の起点（2026-10-19 変更・db/140）
+
+**dx.enger の提案管理でマッチングが確定した時点**（案件×人材の組を提案管理に登録した時点）で Sales に起票する。
+企業向けの提案メールを送った時点では遅い（マッチング担当の仕事が終わった瞬間に営業担当へ引き継ぐ）。
+
+```
+① dx.enger｜提案管理でマッチング確定（案件×人材の組を登録）
+   → Sales に起票：「マッチング済み・提案待ち」＋営業担当の「提案準備」タスク → Slack・ベルで営業担当に即時通知
+② 営業担当｜提案内容を確認して企業へ提案（dx.enger から提案メール／自分のメール・電話なら Sales で「企業へ提案した」）
+   → Sales：「電話待ち」へ進め、送った時刻から30分以内の電話タスク（提案準備は完了）
+③ Sales｜電話・メール・面談・成約（Sales が正本）
+```
+
+- **マッチング確定と企業への提案送信は別の事実**（`matched_at`／`sent_at`）。提案待ちの間は `sent_at` が空で、
+  電話・メール・回答確認などは記録できない（API で止める）。30分の電話の期限は、提案を送ってから始める。
+- 何が「確定」か（dx.enger 側）：`recordMatchProposal` で**新しい組を登録したとき**（提案管理に登録する・提案する（保存）・
+  提案メール作成・一括登録）と、ゴミ箱から戻したとき、承認待ちの提案を承認したとき。
+  候補の表示・AI 診断・比較・メールの下書きでは何も送らない（dx.enger の `docs/ops/20261019_gw_sales_link.md`）。
 
 ---
 
@@ -35,7 +56,8 @@ Phase 2 の前半（dx.enger → Sales の起票・Sales → dx.enger の状態�
 
 | いつ | 何が起きる | 期限 |
 |---|---|---|
-| 提案送信（T0。dx.enger で**企業向けの提案メールを送った**とき） | 提案を起票・電話タスク | 営業時間内なら送信から **30分**。始業前はその日の始業＋30分、終業後・土日祝・自社休業日は次の営業日の始業＋30分 |
+| マッチング確定（dx.enger の提案管理で組を登録した。db/140） | 提案を起票（**マッチング済み・提案待ち**）・提案準備のタスク・Slack とベルで営業担当に通知 | その営業日の終業（終業まで1時間を切っていたら・営業時間外・休日は次の営業日の終業） |
+| 提案送信（T0。dx.enger で**企業向けの提案メールを送った**／Sales で「企業へ提案した」） | 提案待ち → **電話待ち**・提案準備を完了・電話タスク（まだ無い提案なら、ここで起票） | 営業時間内なら送信から **30分**。始業前はその日の始業＋30分、終業後・土日祝・自社休業日は次の営業日の始業＋30分 |
 | 電話「不通」「担当者不在」 | 確認メールのタスク・状態「メール待ち」 | **その営業日の終業**まで（終業後・休日なら次の営業日の終業） |
 | 電話「折り返し予定」「再連絡希望」 | 電話のタスク（先方の日時） | 入力した日時 |
 | 電話「通話できた」 | 内容（必須）で分ける：面談調整へ／検討中／見送り／別候補希望 | 面談調整→翌営業日の終業までに日程確定。検討中→3営業日後に確認 |
@@ -53,7 +75,8 @@ Phase 2 の前半（dx.enger → Sales の起票・Sales → dx.enger の状態�
 
 ### 状態と理由コード
 
-`電話待ち → メール待ち → 回答待ち → 面談調整 → 面談実施 → 成約／見送り`、分岐に `継続検討` `再提案依頼` `連絡停止` `クローズ（無回答）`。
+`マッチング済み・提案待ち → 電話待ち → メール待ち → 回答待ち → 面談調整 → 面談実施 → 成約／見送り`、
+分岐に `継続検討` `再提案依頼` `連絡停止` `クローズ（無回答）`。提案待ちのまま見送り・連絡停止・再提案依頼にもできる（「結果・状態」）。
 
 | 状態 | 理由コード（企業側・人材側・営業判断を分ける） |
 |---|---|
@@ -113,14 +136,20 @@ HR リード（用途なし）・自治体 LP（`sales.`）の署名とは混ざ
 
 ### `POST /api/sales/proposals/intake`（dx.enger → Sales）
 
+| `event_type` | いつ（dx.enger） | Sales |
+|---|---|---|
+| `proposal.matched` | マッチング確定（`matched_at` 必須・`sent_at` は空） | 起票（提案待ち・提案準備・Slack）。既にあれば `matched_at` を補うだけ |
+| `proposal.sent` | 企業へ提案を送った（`sent_at` 必須） | 提案待ち → 電話待ち（30分の電話）。まだ無ければ起票して電話待ち。送信済みなら「再送」の記録だけ |
+| `proposal.updated` | ステージの更新・担当の補完 | 写しを最新に。まだ無い提案は起票しない |
+
 ```json
 {
-  "event_id": "enger:proposal.sent:<提案ID>:<送信ごとの値>",
-  "event_type": "proposal.sent",          // または proposal.updated（ステージの更新・担当の補完）
+  "event_id": "enger:proposal.matched:<提案ID>:<固定値>",
+  "event_type": "proposal.matched",       // proposal.sent（企業へ送った）・proposal.updated（ステージの更新・担当の補完）
   "occurred_at": "2026-10-19T01:00:00Z",
   "proposal": {
     "id": "<enger.proposals.id>", "code": "P-0001", "url": "https://agent.enger.jp/proposals/<id>", "stage": "提案中",
-    "sent_at": "2026-10-19T01:00:00Z", "service": "ENGER", "job_title": "Java 開発", "talent_initials": "T.K.",
+    "matched_at": "2026-10-19T00:40:00Z", "sent_at": null, "service": "ENGER", "job_title": "Java 開発", "talent_initials": "T.K.",
     "company": { "id": "<enger.companies.id か null>", "name": "株式会社〇〇", "website": "https://…", "phone": "03-…" },
     "contact": { "name": null, "email": "<提案メールの宛先>", "phone": null },
     "matching_owner": { "name": "<提案者>", "email": "…" },
@@ -133,13 +162,23 @@ HR リード（用途なし）・自治体 LP（`sales.`）の署名とは混ざ
 - 返り値：200 `{ ok, results: [{ event_id, result: created|updated|replayed|skipped|error, proposal_id, warnings }] }`。
   400 `invalid_body`（`field`。**直さない限り同じなので再送しない**）／401／503 `not_configured`・`not_ready`／500（**再送してよい**）。
 - 冪等：同じ `event_id` は1回だけ（`replayed`）。同じ提案は1件だけ。送り直し（別の `event_id`）は「再送」の記録だけで、タスクは増えない。
-  下書き（`sent_at` が無い）・まだ無い提案の `proposal.updated` は起票しない。終わった提案は再開しない。
+  提案準備・初回電話のタスクは提案ごとに1つ（`auto:prepare`・`auto:first_call`）。Slack は提案ごとに1回（`slack_notified_at`）。
+  確定日時の無い `proposal.matched`・送信日時の無い `proposal.sent` は 400。まだ無い提案の `proposal.updated` は起票しない。終わった提案は再開しない。
+- 届く順が入れ替わっても同じ結果：送信が先に届けば電話待ちで起票し、あとから届いた確定は `matched_at` を補うだけ（提案準備は作らない）。
 - 営業担当：`sales_owner.email` → 社員名簿のメール（小文字・在籍中・同じテナント）→ 表示名（空白を除いてちょうど1人）。
   決まらなければ担当未割当で起票し、管理側へ通知・「連携の確認」に `owner_unmatched`。
 
+### Slack（起票の即時通知。db/140）
+
+- 送り先：`SALES_SLACK_WEBHOOK_URL`（営業のチャンネル）→ 無ければ `SLACK_WEBHOOK_URL`。どちらも無ければ送らない（ベルには届く）。
+- 中身：「マッチング確定・提案待ち　@営業担当」・社名・案件／イニシャル・マッチング担当・提案準備の期限・提案管理へのリンク。
+  人材の氏名・窓口の連絡先は載せない。営業担当のメンションは「フォローの設定」で Slack のメンバーIDを登録した人だけ（無ければ名前）。
+- 提案ごとに1回：`slack_notified_at` を「空のときだけ入れる」更新で取った1件だけが送る。送れなければ印を戻し、
+  「連携の確認」に `slack_failed`（要確認）で残す。Slack API・Bot は使わない（Incoming Webhook だけ）。
+
 ### `POST /api/sales/proposals/status`（dx.enger → Sales の読み取り）
 
-本文 `{ "source_proposal_ids": [ … 100件まで ] }` → `{ ok, items: [{ source_proposal_id, status, status_label, close_reason,
+本文 `{ "source_proposal_ids": [ … 100件まで ] }` → `{ ok, items: [{ source_proposal_id, status, status_label, matched_at, sent_at, close_reason,
 close_reason_label, closed, contact_stop, sales_owner_name, last_call, last_mail_at, replied_at, meeting_at, next_task, overdue,
 reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先・記録のメモは返さない。
 
@@ -165,9 +204,13 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 
 1. `db/138_sales_proposals.sql` を Supabase（グループウェア）の SQL Editor で Run（べき等。前提 088・096・119・120・130 が無ければ何も変えずに止まる）
 2. `db/check_138_sales_proposals.sql` を Run して ❌ が無いこと
+2b. `db/140_sales_proposal_matching.sql` を Run（べき等。db/138 が無ければ止まる）→ `db/check_140_sales_proposal_matching.sql` で ❌ が無いこと。
+   **アプリ（MF）のマージより先に**流す（新しいアプリは matched_at を読む。無いと提案管理が「実行を依頼してください」になる）
+2c. （任意）Vercel に `SALES_SLACK_WEBHOOK_URL`。提案管理の「フォローの設定」で営業担当の Slack のメンバーID
 3. Vercel（グループウェア）に `ENGER_SALES_SECRET`（32文字以上のランダム）と `SALES_PROPOSAL_TENANT_ID`（テナントの UUID）
 4. dx.enger 側（別 PR）に同じ鍵と送り先 URL を設定（dx.enger の `docs/ops/20261019_gw_sales_link.md`）
-5. 戻すとき：先にアプリを戻し、dx.enger の連携を止めてから `db/rollback_138_sales_proposals.sql`（提案管理のデータは消える）
+5. 戻すとき：先にアプリを戻し、dx.enger の連携を止めてから `db/rollback_140_sales_proposal_matching.sql`
+   （提案待ちの提案が残っていると止まる）→ 必要なら `db/rollback_138_sales_proposals.sql`（提案管理のデータは消える）
 
 `db/138` を流す前でも、既存の /sales は今までどおり動く（提案管理の画面だけが「db/138 の実行を依頼してください」を出す）。
 
@@ -179,7 +222,9 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 | /sales からのメール送信と送信履歴の紐付け | 未実装（自己申告で記録） |
 | 企業応答スコア（30/25/20/15/10 点・A〜E・データ不足・手動調整） | 未実装（Phase 3） |
 | dx.enger 側でのステージ反映（面談・見送り・成約を enger.proposals に書く） | しない（状態 API で表示し、dx.enger の専用操作で人が確定する） |
-| dx.enger の提案取り消し（ゴミ箱）の連携 | 未実装（`proposal.withdrawn` の追加候補） |
+| dx.enger の提案取り消し（ゴミ箱）の連携 | 未実装（`proposal.withdrawn` の追加候補）。確定のあとに dx.enger で提案をやめた場合、Sales の提案待ちは残る → 「結果・状態」で見送りにする |
+| 提案準備・30分電話の期限前の督促（Slack・ベル） | 未実装（起票時の通知だけ。期限は一覧・今日やることで赤く出る） |
+| db/140 より前の提案（dx.enger で登録済み・まだ企業へ送っていない） | 自動では起票しない（大量の Slack を流さない）。送ったときに電話待ちで起票される |
 | 他サービスの提案の自動起票 | 手入力で対応（共通モデルは `source_system` で拡張できる） |
 
 ---
@@ -188,7 +233,10 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 
 ### 営業担当
 
-1. ヘッダーの **「提案」** を開く。上の「今日の電話」「期限超過」を押すと、その提案だけに絞れる
+0. Slack・ベルに「マッチング確定・提案待ち」が届いたら、提案を開いて内容を確認し、企業へ提案する
+   - dx.enger の提案詳細から企業向けの提案メールを送る → 自動で「電話待ち」になり、30分以内の電話のタスクができる
+   - 自分のメール・電話で提案した → Sales の提案を開き **「企業へ提案した（記録）」**（同じく電話待ちになる）
+1. ヘッダーの **「提案」** を開く。上の「提案準備」「今日の電話」「期限超過」を押すと、その提案だけに絞れる（絞り込みの「マッチング済み」＝提案待ち）
 2. 提案を押すと右に詳細が出る。**電話番号を押して電話**し、「電話の結果を記録」で結果を選ぶ
    - 不通・不在 → 「確認メールを送る」タスクができる。テンプレートをコピー（またはメールソフトで開く）して送り、「確認メールを送った」を押す
    - 折り返し予定・再連絡希望 → 日時を入れる（その日時に電話のタスク）

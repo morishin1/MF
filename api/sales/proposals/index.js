@@ -1,6 +1,6 @@
-// /sales 提案管理（db/138_sales_proposals.sql・docs/sales-proposals.md）
+// /sales 提案管理（db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・docs/sales-proposals.md）
 //
-// GET  /api/sales/proposals?filter=open|today|overdue|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
+// GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
 //                          &owner=me|all|<社員ID>&service=…&q=…&sort=due|elapsed|sent&days=30
 //        … 一覧（提案単位）。絞り込みの件数・今日の件数・KPI（担当別）・管理側には担当未割当・連携エラーの件数
 // POST /api/sales/proposals { companyName, title, service?, salesOwnerId?, sentAt?, contactName?, contactEmail?, contactPhone?, companyId? }
@@ -90,18 +90,19 @@ async function list(req, res, sb, ctx) {
   // 今日やること（自分の分。管理側は全体）
   const todayEnd = todayEndIso(now);
   const openTasks = (tks.data || []).filter((t) => t.status === "open" && (manager && ownerQ !== "me" ? true : t.assignee_id === me));
-  const today = { call: 0, mail: 0, reply_check: 0, meeting: 0, other: 0, overdue: 0 };
+  const today = { prepare: 0, call: 0, mail: 0, reply_check: 0, meeting: 0, other: 0, overdue: 0 };
   for (const t of openTasks) {
     if (t.due_at < now) today.overdue++;
     if (t.due_at > todayEnd) continue;
-    if (t.kind === "call" || t.kind === "refollow") today.call++;
+    if (t.kind === "prepare") today.prepare++;
+    else if (t.kind === "call" || t.kind === "refollow") today.call++;
     else if (t.kind === "mail") today.mail++;
     else if (t.kind === "reply_check") today.reply_check++;
     else if (t.kind === "meeting_fix" || t.kind === "meeting_result") today.meeting++;
     else today.other++;
   }
 
-  // KPI（期間内に送った提案。担当で絞ったときはその担当だけ）
+  // KPI（期間内に企業へ送った提案。提案待ち（まだ送っていない）は入れない。担当で絞ったときはその担当だけ）
   const { iso: since } = periodStartJst(days, new Date(now));
   const scopedIds = new Set(scoped.map((r) => r.id));
   const inPeriod = proposals.filter((p) => scopedIds.has(p.id) && p.sent_at >= since);
