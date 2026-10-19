@@ -205,13 +205,10 @@
   }
   async function reviewDay(btn){
     if(dirty){msg("AI確認の前に、変更した予定を保存してください。",true);return}
-    if([0,6].includes(new Date(selected+"T12:00:00+09:00").getUTCDay())){
-      msg("AIの営業日レビューは平日が対象です。休日予定は通常の予定登録で管理できます。");return;
-    }
     const entries=dayEvents(selected).filter(e=>!e.all_day).map(e=>({title:e.title,start:hhmm(e.starts_at),end:hhmm(e.ends_at)}));
     btn.disabled=true;msg("時間割を確認中…");
     try{
-      const r=await API.api("/api/schedule/review",{method:"POST",body:{reportDate:previousWorkday(selected),date:selected,entries}});
+      const r=await API.api("/api/schedule/review",{method:"POST",body:{mode:"planned",reportDate:previousWorkday(selected),date:selected,entries}});
       const tips=[r.summary,...(r.suggestions||[])].filter(Boolean).join("／");
       msg((r.ai?"AIコメント":"時間割の基本チェック")+"："+tips);
     }catch(e){msg("確認できませんでした："+(e.hint||e.detail||e.message),true)}
