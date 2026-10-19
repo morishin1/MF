@@ -44,8 +44,8 @@ run "$ROOT/db/100_hr_pay.sql"       # べき等（2回流しても、行が増�
 
 # シナリオは、それぞれ別の DB の上で流す（お互いの行に影響されない）
 OUT=""
-# 採用HR（db/129 → db/132：条件通知書・電子承諾記録・正式契約 → db/133：Office への引き渡し）。ほかの PR が直す下の一覧の行とは分けて置く
-for sc in 132_hr_offer_documents 133_hr_offer_handoff; do
+# 採用HR（db/129 → db/132：条件通知書・電子承諾記録・正式契約 → db/133：Office への引き渡し → db/139：契約手続き）。ほかの PR が直す下の一覧の行とは分けて置く
+for sc in 132_hr_offer_documents 133_hr_offer_handoff 139_hr_contract_procedure; do
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$(SCEN_ROOT="$ROOT" "${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done

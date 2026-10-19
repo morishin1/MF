@@ -12,6 +12,12 @@
 // GET   /api/hr/offers?id=…
 //         … 送る前の確認画面：本人に見える条件の行・区分ごとのメールの下書き（{{オファーURL}} 入り）・メールで送れるか
 // GET   /api/hr/offers?id=…&file=notice|accepted        … 条件通知書PDF・承諾済みPDFを開く
+//
+// ■ 社労士の正式PDFで進める版（db/139・lib/hr-contract.js usesOfficial）
+//   社労士・依頼・受領・承認・LegalSign の登録・締結の記録は /api/hr/offers/contract。ここ（send・issueLink）は
+//   「承認した正式PDF」を、送る（URLを出す）と同時に notice_* と official_doc_id に固定する（同じ版を本人・承諾記録・Office が使う）。
+//   承認した正式PDFが無い・LegalSign の登録（または例外ルート）が無い・保存されたPDFが記録と違う、ときは送らない。
+//   HR が作る条件通知書PDFは「社労士へ依頼するときの条件案」（プレビューだけ。本人へは送らない）
 //         採用HR（canRecruit）… どの版でも。Office の人事・労務（canOfficeHr。採用HRの権限が無い人）… 閲覧専用（officeFile）：
 //         「Office へ引き渡した版」（handoff_at が入っている）だけ。同一テナント・給与を見られる人だけ（PDF に給与・報酬が入る）。
 //         作成・更新・送付・正式契約・引き渡しは、採用HR（canRecruit）だけ。Office からは見るだけ（PDFの生成・保存もしない）
@@ -49,13 +55,15 @@ import {
 import { readHandoffOffers } from "../../../lib/hire-handoff.js";
 import { notify } from "../../../lib/notify.js";
 import { adminSideEmployeeIds } from "../../../lib/messages-admin.js";
-import { sendMail, mailConfig, isEmail } from "../../../lib/mail/index.js";
+import { sendMail, mailConfig, isEmail, attachmentProblem } from "../../../lib/mail/index.js";
 import { sendProblems, sendOutcome } from "../../../lib/hr-mail-template.js";
 import { publicBaseUrl } from "../../../lib/onboard-guide.js";
 import {
   offerDocsReady, offerLetterReady, offerTitleOf, noticeTitleOf, buildOfferPdf, buildNoticePdf,
   ensureOfferPdf, ensureNoticePdf, ensureAcceptedPdf, readPdf, sendPdf, pdfFileName, checkLegalSignUrl,
 } from "../../../lib/hr-offer-docs.js";
+import { sha256 as bytesSha256 } from "../../../lib/pdf-jp.js";
+import { usesOfficial, handoffBlockers, contractReady, initialDocRoute } from "../../../lib/hr-contract.js";
 
 // 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
 const docName = (row) => offerTypeOf(row?.offer_type)?.offerName || "合格通知";
@@ -129,7 +137,7 @@ async function create(req, res, sb, ctx, user, salary) {
     if (missing.length) return missingResponse(res, missing);
   }
 
-  const { data: existing } = await sb.from("gw_hr_offers").select("version")
+  const { data: existing } = await sb.from("gw_hr_offers").select("*")
     .eq("applicant_id", applicant.id).order("version", { ascending: false }).limit(1);
   const version = (existing?.[0]?.version || 0) + 1;
   const token = newOfferToken();
@@ -139,6 +147,9 @@ async function create(req, res, sb, ctx, user, salary) {
   const insertRow = {
     ...base, tenant_id: ctx.tenantId, applicant_id: applicant.id, version,
     token_hash: sha256(token), created_by: user.id,
+    // 2つ目以降の版は、契約手続きの流れ（db/139）を作るときに入れる（前の版の行に列があれば db/139 がある）。
+    // 最初の版は空のまま（lib/hr-contract.js docRouteOf が、送る前の区分つきの版を正式PDFの流れとして扱う）
+    ...(existing?.[0] && contractReady(existing[0]) && applicant.offer_type ? { doc_route: initialDocRoute(applicant.offer_type) } : {}),
   };
   let { data, error } = await sb.from("gw_hr_offers").insert(insertRow).select("*").single();
   if (error && missingFormalCol(error)) {
@@ -277,15 +288,23 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
 
   const token = newOfferToken();
   const now = new Date().toISOString();
+  // 社労士の正式PDFで進める版は、URL を出す前に正式PDF（承認した版）を固定する（本人が開いた時点で送付済みになるため）
+  const official = usesOfficial(offer) ? await officialGate(ctx, offer) : null;
+  if (official?.error) return gateResponse(res, official);
+  // 正式PDFの版で、LegalSign の案内・締結を記録したあとは再発行しない（締結の記録は新しい版へ引き継げない＝黙って消さない）
+  if (official && offer.sent_at && (offer.formal_sent_at || offer.formal_signed_at)) {
+    return json(res, 409, { error: "reissue_blocked",
+      hint: "LegalSign の案内・締結を記録したあとの版は、URLを再発行できません（締結の記録を新しい版へ引き継げないため）。本人には案内済みのURLから同意してもらってください" });
+  }
 
   // まだ一度も本人へ送っていなければ、その行のtokenを差し替えるだけでよい。
   // 送付済みの行を差し替えるときは、新しい版を足して古い行を無効化する
   // （db/081の設計どおり。送付済みの内容は上書きしない＝旧URLは必ず失効する）
   if (!offer.sent_at) {
     const { data, error } = await sb.from("gw_hr_offers")
-      .update({ token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by) })
+      .update({ token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), ...(official ? officialFix(official.doc) : {}) })
       .eq("id", offer.id).select("*").single();
-    if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    if (error) return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed", detail: error.message });
 
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_link_issued",
@@ -307,6 +326,8 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
     .insert({
       ...snapshot, tenant_id: ctx.tenantId, applicant_id: applicant.id, version: nextVersion,
       token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), created_by: user.id,
+      // 再発行した版は、送った版と同じ流れ（HR の条件通知書で送った版は、そのまま HR の条件通知書。db/139 がある環境だけ）
+      ...(!official && contractReady(offer) ? { doc_route: "generated" } : {}),
     })
     .select("*").single();
   if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
@@ -316,6 +337,16 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
   } catch (e) {
     // 給与を引き継げなかった新しい版は残さない（前の版は、有効のまま）
     return payFailed(res, e, () => sb.from("gw_hr_offers").delete().eq("id", made.id));
+  }
+  // 社労士の正式PDFで案内した版の再発行：条件は同じなので、承認した正式PDFを新しい版へ引き継いで固定する
+  // （本人の同意は引き継がない＝新しい版の accepted_at は空。LegalSign の登録も同じPDFなので引き継ぐ）
+  if (official) {
+    const carried = await carryOfficialDoc(sb, ctx, user, official.doc, made, offer);
+    if (carried.error) {
+      await sb.from("gw_hr_offers").delete().eq("id", made.id);
+      return json(res, 500, { error: "db_insert_failed", hint: "正式PDFを新しい版へ引き継げませんでした。時間をおいてもう一度お試しください" });
+    }
+    Object.assign(made, carried.offer);
   }
   await sb.from("gw_hr_offers").update({ revoked_at: now }).eq("id", offer.id);
   await sb.from("gw_hr_applicants").update({ status: "offer_resend_pending", updated_at: now })
@@ -341,11 +372,14 @@ async function markSent(res, sb, ctx, user, offer, salary) {
     return json(res, 409, { error: "invalid_state", hint: "いまは送付済みにできる状態ではありません" });
   }
   if (offer.revoked_at) return json(res, 409, { error: "invalid_state", hint: "この合格通知はすでに無効です" });
+  if (usesOfficial(offer) && !offer.official_doc_id) {
+    return json(res, 409, { error: "official_not_ready", hint: "先に承認した正式PDFで本人専用URLを発行してください（書類タブの「契約手続き」）" });
+  }
 
   const now = new Date().toISOString();
   const { data, error } = await sb.from("gw_hr_offers")
     .update({ sent_at: offer.sent_at || now }).eq("id", offer.id).select("*").single();
-  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+  if (error) return json(res, error.code === "23514" ? 409 : 500, { error: "db_update_failed", detail: error.message });
 
   await sb.from("gw_hr_applicants").update({ status: "offer_sent", updated_at: now })
     .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
@@ -411,6 +445,41 @@ function noticeMeta(ctx) {
   };
 }
 
+// ---- 社労士の正式PDF（db/139）：送る前の確かめと、送る版への固定 ------------------------------
+
+const OFFICIAL_SQL = "db/139_hr_contract_procedure.sql";
+/**
+ * 正式PDFの版を本人へ案内してよいか。よければ { doc, bytes }（verify=false なら bytes なし）、だめなら { status, error, hint }。
+ *   ① 承認した正式PDFがある（案内済みの版は、固定した正式PDF）
+ *   ② 正式契約が要る版は、LegalSign に同じ版を登録した記録がある（または例外ルート）
+ *   ③ 保存されているPDFが、受け取ったときの SHA-256 と同じ（Storage を直接書き換えられていない）
+ */
+async function officialGate(ctx, offer, { verify = true } = {}) {
+  const { data: docs, error } = await admin().from("gw_hr_offer_official_docs")
+    .select("id, revision, title, file_path, file_sha256, file_size, status, doc_kind")
+    .eq("tenant_id", ctx.tenantId).eq("offer_id", offer.id);
+  if (error) return { status: 503, error: "not_ready", hint: `${OFFICIAL_SQL} を Supabase に流してください` };
+  const doc = offer.official_doc_id ? (docs || []).find((d) => d.id === offer.official_doc_id) : (docs || []).find((d) => d.status === "approved");
+  if (!doc) return { status: 409, error: "official_not_ready", hint: "社労士作成の正式PDFを受け取り、条件と照合して承認してから本人へ案内します（書類タブの「契約手続き」）" };
+  if (formalRequiredOf(offer) !== false && offer.contract_route !== "other"
+      && !(offer.legalsign_url && offer.legalsign_doc_sha256 === doc.file_sha256)) {
+    return { status: 409, error: "legalsign_not_ready", doc,
+      hint: "LegalSign に承認した正式PDFを登録した記録（または例外ルートの選択）が先です（書類タブの「契約手続き」）" };
+  }
+  if (!verify) return { doc };
+  let bytes;
+  try { bytes = await readPdf(doc.file_path); } catch { return { status: 409, error: "official_unreadable", hint: "正式PDFを読めませんでした。契約手続きからアップロードし直してください" }; }
+  if (bytesSha256(bytes) !== doc.file_sha256) {
+    return { status: 409, error: "official_mismatch", hint: "保存されている正式PDFが受け取ったときの記録（SHA-256）と違います。人事・管理者に確認してください" };
+  }
+  return { doc, bytes };
+}
+/** 送る（URLを出す）版に、正式PDFを固定する列 */
+const officialFix = (doc) => ({
+  doc_route: "official", official_doc_id: doc.id, notice_title: doc.title, notice_pdf_path: doc.file_path, notice_pdf_sha256: doc.file_sha256,
+});
+const gateResponse = (res, gate) => json(res, gate.status, { error: gate.error, hint: gate.hint });
+
 // 送る前の確認画面：本人に見える条件・メールの下書き・メールで送れるか
 async function sendDraft(req, res, sb, ctx, salary) {
   const id = new URL(req.url || "/", "http://localhost").searchParams.get("id");
@@ -425,13 +494,25 @@ async function sendDraft(req, res, sb, ctx, salary) {
   const items = publicOfferItems(offer).filter((it) => salary || !it.salary);
   // オファー通知PDF（db/137）と条件通知書PDF（db/132）。送るときに確定してメールに添付する
   const offerLetterTitle = offerLetterReady(offer) ? (offer.offer_title || offerTitleOf(offer)) : null;
-  const noticeTitle = offerDocsReady(offer) ? (offer.notice_title || noticeTitleOf(offer)) : null;
+  // 社労士の正式PDFで進める版は、本人へは正式PDF（承認した版）を送る。HR の条件通知書は条件案（送らない）
+  let official = null;
+  if (usesOfficial(offer)) {
+    const gate = await officialGate(ctx, offer, { verify: false });
+    official = {
+      ready: !gate.error, error: gate.error || null, hint: gate.hint || null,
+      doc: gate.doc ? { id: gate.doc.id, revision: gate.doc.revision, title: gate.doc.title, size: gate.doc.file_size, sha256: gate.doc.file_sha256 } : null,
+      contractRoute: offer.contract_route || null, legalsign: Boolean(offer.legalsign_url),
+    };
+  }
+  const noticeTitle = official ? (official.doc?.title || null) : offerDocsReady(offer) ? (offer.notice_title || noticeTitleOf(offer)) : null;
   const mail = offerMail(offer, { name: applicant.name, company, attachments: [offerLetterTitle, noticeTitle].filter(Boolean) });
   // offer の給与は、見られない人には出口（json）で外れる。送った記録は、応募者のメールの履歴（api/hr/applicants/mail.js）に並ぶ
   return json(res, 200, {
     offer: shapeOffer(offer), items, to: applicant.email || null, candidateName: applicant.name,
     subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG, mail: mailReady(applicant),
-    canSend: SENDABLE_STATUSES.includes(applicant.status) && !offer.sent_at && !offer.revoked_at,
+    canSend: SENDABLE_STATUSES.includes(applicant.status) && !offer.sent_at && !offer.revoked_at && (!official || official.ready),
+    // 社労士の正式PDF（db/139）。null はこれまでどおり（HR の条件通知書を送る）
+    official,
     // オファー通知書は給与を含まない。条件通知書は給与・報酬を含むため salaryVisible を見る
     offerLetter: {
       ready: Boolean(offerLetterTitle), title: offerLetterTitle, stored: Boolean(offer.offer_pdf_path),
@@ -487,6 +568,9 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   if (!ready.configured) {
     return json(res, 409, { error: isEmail(applicant.email) ? "mail_not_configured" : "no_email", hint: `メールで送れません（${ready.reason}）。URLを発行して、手で送ってください` });
   }
+  // 社労士の正式PDFで進める版：承認した正式PDF・LegalSign の登録・中身のハッシュを確かめてから送る（送った記録を作る前に止める）
+  const official = usesOfficial(offer) ? await officialGate(ctx, offer) : null;
+  if (official?.error) return gateResponse(res, official);
 
   // 1) 送った記録を「送信中」で先に入れる（同じ鍵の同時の2回目は、一意の索引で入れられない＝送らない）
   const cfg = mailConfig("recruiting");
@@ -519,7 +603,7 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   const now = new Date().toISOString();
   const token = newOfferToken();
   const { data: claimed, error: claimErr } = await sb.from("gw_hr_offers")
-    .update({ token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), sent_at: now })
+    .update({ token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), sent_at: now, ...(official ? officialFix(official.doc) : {}) })
     .eq("id", offer.id).eq("tenant_id", ctx.tenantId).is("sent_at", null).is("revoked_at", null)
     .select("*").maybeSingle();
   if (claimErr || !claimed) {
@@ -545,7 +629,10 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
     await attachPay(ctx.tenantId, payOffer, "offer");
     const meta = { candidateName: applicant.name, company, ...noticeMeta(ctx) };
     offerLetter = await ensureOfferPdf(sb, payOffer, meta);
-    notice = await ensureNoticePdf(sb, payOffer, meta);
+    // 正式PDFの版は、承認した正式PDFそのもの（作らない）。それ以外は HR の条件通知書
+    notice = official
+      ? { title: official.doc.title, path: official.doc.file_path, sha256: official.doc.file_sha256, bytes: official.bytes }
+      : await ensureNoticePdf(sb, payOffer, meta);
     if (offerLetter) Object.assign(claimed, { offer_title: offerLetter.title, offer_pdf_path: offerLetter.path, offer_pdf_sha256: offerLetter.sha256 });
     if (notice) Object.assign(claimed, { notice_title: notice.title, notice_pdf_path: notice.path, notice_pdf_sha256: notice.sha256 });
   } catch (e) {
@@ -557,12 +644,20 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
 
   // 5) メールを送る。db/137 適用後はオファー通知書＋条件通知書の2点を添付する。
   const url = offerUrl(req, token);
-  const attachments = [
+  let attachments = [
     offerLetter ? { filename: pdfFileName(offerLetter.title, offer.version), content: offerLetter.bytes, contentType: "application/pdf" } : null,
     notice ? { filename: pdfFileName(notice.title, offer.version), content: notice.bytes, contentType: "application/pdf" } : null,
   ].filter(Boolean);
+  // 正式PDFが大きくてメールに添付できないときは、添付せずに本人専用URLのページで確認してもらう（送るのは同じ版）
+  let mailText = text.split(OFFER_URL_TAG).join(url);
+  let noticeAttached = Boolean(notice);
+  if (official && attachmentProblem(attachments)) {
+    attachments = attachments.filter((a) => a.content !== notice.bytes);
+    noticeAttached = false;
+    mailText += `\n\n※ ${notice.title}（PDF）は容量が大きいため添付していません。上の本人専用URLのページからご確認・保存いただけます。`;
+  }
   const mail = await sendMail({
-    purpose: "recruiting", to: applicant.email, subject, text: text.split(OFFER_URL_TAG).join(url),
+    purpose: "recruiting", to: applicant.email, subject, text: mailText,
     ...(attachments.length ? { attachments } : {}),
   });
   const outcome = sendOutcome(mail);
@@ -584,7 +679,7 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
       .eq("id", applicant.id).eq("tenant_id", ctx.tenantId);
     await sb.from("gw_hr_timeline").insert({
       tenant_id: ctx.tenantId, applicant_id: applicant.id, event_key: "offer_sent",
-      label: `${docLabel}をメールで送付`, detail: `第${offer.version}版${offerLetter ? `・${offerLetter.title}（PDF）` : ""}${notice ? `・${notice.title}（PDF）` : ""}添付　件名：${subject}`, created_by: user.id,
+      label: `${docLabel}をメールで送付`, detail: `第${offer.version}版${offerLetter ? `・${offerLetter.title}（PDF）` : ""}${notice && noticeAttached ? `・${notice.title}（PDF）` : ""}添付${official ? `${noticeAttached ? "" : `（${notice.title}は本人専用ページで確認）`}・社労士の正式PDF 受領第${official.doc.revision}版` : ""}　件名：${subject}`, created_by: user.id,
     });
     return json(res, 200, { status: "sent", offer: await shape(ctx, claimed, salary), send, applicantStatus: "offer_sent" });
   }
@@ -612,6 +707,8 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
 /** 手で送るとき（URL 発行）にも、本人が保存できるPDFを先に固定する。失敗してもURL発行自体は止めない。 */
 async function documentsForManual(sb, ctx, offer) {
   if (!offerTypeOf(offer?.offer_type)) return;
+  // 正式PDFの版は、条件通知書を作らない（承認した正式PDFを issueLink で固定済み）。オファー通知PDFだけ作る
+  const official = Boolean(offer.official_doc_id);
   try {
     const { applicant, company } = await loadSendContext(sb, ctx, offer);
     const payOffer = { ...offer };
@@ -619,7 +716,7 @@ async function documentsForManual(sb, ctx, offer) {
     const meta = { candidateName: applicant?.name, company, ...noticeMeta(ctx) };
     const [letter, n] = await Promise.all([
       (!offer.offer_pdf_path ? ensureOfferPdf(sb, payOffer, meta) : null),
-      (!offer.notice_pdf_path ? ensureNoticePdf(sb, payOffer, meta) : null),
+      (!offer.notice_pdf_path && !official ? ensureNoticePdf(sb, payOffer, meta) : null),
     ]);
     if (letter) Object.assign(offer, { offer_title: letter.title, offer_pdf_path: letter.path, offer_pdf_sha256: letter.sha256 });
     if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
@@ -702,8 +799,13 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
       return sendPdf(res, acc.bytes, pdfFileName(offer.notice_title, offer.version, true));
     }
     if (offer.notice_pdf_path) {
+      const bytes = await readPdf(offer.notice_pdf_path);
+      // 社労士の正式PDF（外から受け取ったファイル）は、記録のハッシュと同じか確かめてから返す
+      if (offer.official_doc_id && bytesSha256(bytes) !== offer.notice_pdf_sha256) {
+        return json(res, 409, { error: "official_mismatch", hint: "保存されている正式PDFが記録（SHA-256）と違います。人事・管理者に確認してください" });
+      }
       await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_download", target: `hr_offer:${offer.id}`, detail: { file: "notice" } });
-      return sendPdf(res, await readPdf(offer.notice_pdf_path), pdfFileName(offer.notice_title, offer.version));
+      return sendPdf(res, bytes, pdfFileName(offer.notice_title, offer.version));
     }
     if (file === "notice") return json(res, 404, { error: "no_file", hint: "条件通知書はまだ作っていません（送るときに作ります）" });
     const { applicant, company } = await loadSendContext(sb, ctx, offer);
@@ -711,7 +813,8 @@ async function offerFile(res, sb, ctx, user, id, file, salary) {
     const built = await buildNoticePdf(offer, { candidateName: applicant?.name, company, ...noticeMeta(ctx) });
     // プレビューは確定しない（置かない・db/132 の列は入れない）。見たという事実だけ残す
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_pdf_preview", target: `hr_offer:${offer.id}`, detail: { version: offer.version } });
-    return sendPdf(res, built.bytes, `確認用_${pdfFileName(built.title, offer.version)}`);
+    // 正式PDFの版では、HR の条件通知書は「社労士へ依頼するときの条件案」（本人へは送らない）
+    return sendPdf(res, built.bytes, `${usesOfficial(offer) ? "条件案_社労士依頼用_" : "確認用_"}${pdfFileName(built.title, offer.version)}`);
   } catch (e) {
     console.error("[hr/offers] pdf", e?.message || e);
     return json(res, 500, { error: "pdf_failed", hint: "PDFを用意できませんでした" });
@@ -734,8 +837,12 @@ async function loadAccepted(sb, ctx, offer) {
 }
 
 /** LegalSign の URL を登録・直す（本人へ正式契約を案内する前まで） */
+const useContract = (res) => json(res, 409, { error: "use_contract",
+  hint: "社労士の正式PDFで進めるオファーです。LegalSign の登録・締結の記録は、書類タブの「契約手続き」から行います" });
+
 async function setLegalSign(res, sb, ctx, user, offer, body, salary) {
   if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (usesOfficial(offer)) return useContract(res);
   if (formalRequiredOf(offer) === false) return formalNotRequired(res);
   if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから登録できます" });
   if (offer.formal_sent_at) return json(res, 409, { error: "locked", hint: "本人へ案内したあとは、URL を変えられません" });
@@ -763,7 +870,8 @@ function formalMail(offer, { name, company }) {
     subject: `【${c}】正式なご契約のお手続きのご案内`,
     body: [
       `${name} 様`, "",
-      "このたびは条件をご承諾いただき、ありがとうございます。", "",
+      offer.accepted_at ? "このたびは条件をご承諾いただき、ありがとうございます。"
+        : "先日ご案内した条件について、正式なご契約のお手続きをご案内いたします（条件へのご同意は、先日のご案内のページからお願いいたします）。", "",
       "正式なご契約は、電子契約サービス（LegalSign）で行います。",
       "下記より内容をご確認のうえ、署名のお手続きをお願いいたします。", "",
       "［正式契約の手続きへ］", FORMAL_URL_TAG, "",
@@ -781,7 +889,9 @@ function formalMail(offer, { name, company }) {
 async function sendFormal(req, res, sb, ctx, user, offer, body, salary) {
   if (!offerDocsReady(offer)) return formalNotReady(res);
   if (formalRequiredOf(offer) === false) return formalNotRequired(res);
-  if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから案内できます" });
+  // 正式PDFの版は、本人へ案内したあとなら（同意の前でも）LegalSign を案内できる。これまでの版は承諾のあと
+  const officialSent = usesOfficial(offer) && offer.official_doc_id && offer.sent_at;
+  if (!offer.accepted_at && !officialSent) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾してから案内できます" });
   if (!offer.legalsign_url) return json(res, 400, { error: "invalid_body", hint: "先に LegalSign の URL を登録してください" });
   if (offer.formal_signed_at) return json(res, 409, { error: "invalid_state", hint: "すでに正式契約済みです" });
   const applicant = await loadAccepted(sb, ctx, offer);
@@ -857,6 +967,7 @@ async function sendFormal(req, res, sb, ctx, user, offer, body, salary) {
 /** 正式契約済みにする（LegalSign で署名が終わったのを、HR が確かめて押す。誰が・いつ。取り消せない） */
 async function markFormalSigned(res, sb, ctx, user, offer, salary) {
   if (!offerDocsReady(offer)) return formalNotReady(res);
+  if (usesOfficial(offer)) return useContract(res);
   if (formalRequiredOf(offer) === false) return formalNotRequired(res);
   if (!offer.accepted_at) return json(res, 409, { error: "invalid_state", hint: "本人が条件を承諾していません" });
   if (offer.formal_signed_at) return json(res, 409, { error: "locked", hint: "すでに正式契約済みです" });
@@ -903,6 +1014,12 @@ async function handoff(res, sb, ctx, user, offer, salary) {
   if (!applicant) return json(res, 404, { error: "not_found" });
   if (applicant.employee_id) return json(res, 409, { error: "already_advanced", hint: "すでに社員登録が済んでいます" });
   if (applicant.status !== "accepted") return json(res, 409, { error: "invalid_state", hint: "条件承諾済みの方だけ、Office へ引き渡せます" });
+  // 社労士の正式PDFの版：承認した版＝案内した版＝同意した版＝LegalSign に登録した版＝締結を確かめた版、を確かめる
+  if (usesOfficial(offer)) {
+    const gate = await officialGate(ctx, offer, { verify: false });
+    const blockers = gate.doc ? handoffBlockers(offer, gate.doc) : [gate.hint || "正式PDFを確かめられません"];
+    if (blockers.length) return json(res, 409, { error: "contract_blocked", hint: `Office へ引き渡せません：${blockers.join("／")}`, blockers });
+  }
 
   const { data, error } = await sb.from("gw_hr_offers")
     .update({ handoff_at: new Date().toISOString(), handoff_by: user.id })
@@ -939,4 +1056,32 @@ async function handoff(res, sb, ctx, user, offer, salary) {
   } catch (e) { console.error("[hr/offers] handoff notify", e?.message || e); }
 
   return json(res, 200, { offer: await shape(ctx, data, salary) });
+}
+
+// ---- 再発行：承認した正式PDFを新しい版へ引き継ぐ（db/139） ------------------------------------
+/**
+ * 条件が同じ新しい版（再発行）へ、案内した正式PDFの受領記録を写して固定する。
+ * 本人の同意・締結の記録は引き継がない。LegalSign の登録（同じPDF）は引き継ぐ（案内メールの記録は引き継がない）
+ */
+async function carryOfficialDoc(sb, ctx, user, doc, made, from) {
+  const sbAdmin = admin();
+  const { data: src } = await sbAdmin.from("gw_hr_offer_official_docs").select("*").eq("id", doc.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!src) return { error: "not_found" };
+  const { data: copy, error } = await sbAdmin.from("gw_hr_offer_official_docs").insert({
+    tenant_id: ctx.tenantId, applicant_id: src.applicant_id, offer_id: made.id, revision: 1,
+    doc_kind: src.doc_kind, title: src.title, file_path: src.file_path, file_sha256: src.file_sha256, file_size: src.file_size,
+    file_name: src.file_name, received_on: src.received_on, author_name: src.author_name, uploaded_by: src.uploaded_by,
+    status: "approved", reviewed_by: src.reviewed_by, reviewed_at: src.reviewed_at, review_note: src.review_note, checks: src.checks || {},
+    carried_from: src.id,
+  }).select("id, title, file_path, file_sha256").single();
+  if (error || !copy) return { error: "insert_failed" };
+  const legal = from.contract_route === "other"
+    ? { contract_route: "other" }
+    : from.legalsign_url && from.legalsign_doc_sha256 === src.file_sha256
+      ? { contract_route: "legalsign", legalsign_url: from.legalsign_url, legalsign_doc_id: copy.id, legalsign_doc_sha256: copy.file_sha256 }
+      : {};
+  const { data, error: upErr } = await sb.from("gw_hr_offers").update({ ...officialFix(copy), ...legal })
+    .eq("id", made.id).eq("tenant_id", ctx.tenantId).select("*").single();
+  if (upErr || !data) return { error: "update_failed" };
+  return { offer: data };
 }
