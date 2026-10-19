@@ -36,7 +36,7 @@ assert(calendar.includes("layout.js?v="+v),"カレンダー画面も新しいメ
 assert(calendar.includes('class="wrap cal-wrap"'),"本文はサイドバー対応の共通wrapを使う");
 assert(calendar.includes("Material+Symbols+Rounded"),"共通アイコンフォントを読み込む");
 assert(calendar.includes("Zen+Kaku+Gothic+New"),"Officeと同じ書体");
-assert(/\\.oc-grid\\s*\\{\\s*display:grid;\\s*grid-template-columns:repeat\\(7/.test(calendar),"Officeと同じ7列カレンダーCSSを持つ");
+assert(calendar.includes(".oc-grid { display:grid; grid-template-columns:repeat(7, minmax(0,1fr))"),"Officeと同じ7列カレンダーCSSを持つ");
 assert(calendar.includes(".cal-wrap .oc-grid.cal-month{display:grid"),"7列表示をカレンダーに適用");
 assert(calendar.includes(".cal-wrap .oc-grid.cal-month{display:none"),"スマホではOffice式の横スクロール日付へ切り替える");
 console.log("カレンダーナビ・月週日・自分全員・セキュリティの確認すべて通過");
