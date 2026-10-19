@@ -648,7 +648,7 @@ await ok("13 確定の重複：同じイベントは replayed・別のイベン�
   assert.equal(proposals().length, 0); assert.equal(slackPosts.length, 0);
 });
 
-await ok("14 確定のあとに dx.enger から企業へ送った：電話待ち・提案準備は完了（送った記録とひも付け）・電話は送った時刻から30分。Slack は増えない", async () => {
+await ok("14 確定のあとに dx.enger から企業へ送った：電話待ち・提案準備は完了（送った記録とひも付け）・電話は送った時刻から30分。Slack はCS・クロージングにも共有", async () => {
   setup();
   await intake(evm());
   const p0 = proposals()[0];
@@ -665,7 +665,8 @@ await ok("14 確定のあとに dx.enger から企業へ送った：電話待ち
   assert.equal(call.source_event, "auto:first_call"); assert.equal(call.assignee_id, E_S1);
   assert.ok(Date.parse(call.due_at) >= Date.parse(sentAt), "期限は送った時刻から（確定から数えない）");
   assert.ok(notified.some((n) => n.dedupeKey === `sales_proposal_call:${p.id}` && /初回電話/.test(n.title)), "電話の期限をベルで知らせる");
-  assert.equal(slackPosts.length, 1, "Slack は確定のときの1回だけ");
+  assert.equal(slackPosts.length, 2, "マッチングと提案送信で1回ずつ共有");
+  assert.ok(slackPosts.some(x => /CSフォロー開始/.test(x.body.text)), "CSとクロージングへの通知");
   // 送り直し：再送の記録だけ。電話は増えない
   await intake(ev({}, { sent_at: new Date().toISOString() }));
   assert.equal(tasksOf(p.id).filter((t) => t.kind === "call").length, 1);
@@ -704,7 +705,7 @@ await ok("14 確定と送信が同時に届いても、電話待ち・電話の�
     const ts = tasksOf(p.id);
     assert.equal(ts.filter((t) => t.kind === "call").length, 1, `電話は1つ（回 ${i}）`);
     assert.ok(ts.filter((t) => t.kind === "prepare").every((t) => t.status === "done"), `提案準備は開いたまま残らない（回 ${i}）`);
-    assert.equal(slackPosts.length, 1, `Slack は1回（回 ${i}）`);
+    assert.equal(slackPosts.length, 2, `マッチングと提案送信で2回（回 ${i}）`);
   }
 });
 
@@ -713,12 +714,12 @@ await ok("14 届く順が逆（送信が先・確定があと）：送信で電�
   const r = await intake(ev());
   assert.equal(r.body.result, "created");
   assert.equal(proposals()[0].status, "call_wait"); assert.equal(proposals()[0].matched_at ?? null, null);
-  assert.equal(slackPosts.length, 1); assert.match(slackPosts[0].body.text, /提案送信・電話待ち/);
+  assert.equal(slackPosts.length, 2); assert.match(slackPosts[1].body.text, /提案送信・電話待ち/);
   const m = await intake(evm());
   assert.equal(m.body.result, "updated");
   const p = proposals()[0];
   assert.equal(p.status, "call_wait"); assert.ok(p.matched_at, "確定日時を補う");
-  assert.equal(tasksOf(p.id).filter((t) => t.kind === "prepare").length, 0); assert.equal(slackPosts.length, 1);
+  assert.equal(tasksOf(p.id).filter((t) => t.kind === "prepare").length, 0); assert.equal(slackPosts.length, 2);
 });
 
 await ok("14 Sales で「企業へ提案した」：提案待ちのときだけ。電話・メールなどは送るまで記録できない。記録すると電話待ち＋30分", async () => {
