@@ -113,9 +113,10 @@ begin
   if v.status in ('won','lost','stopped','closed_no_reply') or v.sent_at is null then
     raise exception 'proposal_not_active' using errcode='23514';
   end if;
-  if (v.handoff_stage = 'proposal' and p_to_stage <> 'cs')
-     or (v.handoff_stage = 'cs' and p_to_stage <> 'closing')
-     or v.handoff_stage = 'closing' then
+  -- 提案送信で自動的にCS段階へ進むが、CS担当が未定なら一度だけCSへ正式に割り当てられる。
+  if not ((v.handoff_stage = 'proposal' and p_to_stage = 'cs')
+      or (v.handoff_stage = 'cs' and v.cs_owner_id is null and p_to_stage = 'cs')
+      or (v.handoff_stage = 'cs' and p_to_stage = 'closing')) then
     raise exception 'invalid_handoff_transition' using errcode='23514';
   end if;
   if not public.gw_sales_employee_ok(p_to_owner, v.tenant_id) then
