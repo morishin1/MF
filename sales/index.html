@@ -37,6 +37,141 @@
     .db-click .sl-row { border-left-color:#e0a100; }
     .db-click .sl-row b { font-size:15px; }
     .db-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
+
+    /* チーム実績：Officeの月カレンダーに合わせて「月→日→担当者→数字」を1画面で */
+    .sp-section { background:#fff; border:1px solid #e2e2dc; border-radius:14px; padding:18px 20px 20px; margin:0 0 25px; }
+    .sp-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin:0 0 6px; }
+    .sp-head h2 { font-size:16px; color:#1b2440; margin:0; display:flex; align-items:center; gap:6px; }
+    .sp-head h2 span { font-size:20px; }
+    .sp-nav { display:flex; align-items:center; flex-wrap:wrap; gap:5px; }
+    .sp-nav strong { font-size:14px; color:#1b2440; padding:0 8px; min-width:96px; text-align:center; }
+    .sp-nav button { font:inherit; font-size:12px; background:#fff; color:#4a5068; border:1px solid #e2e2dc; border-radius:8px; padding:5px 9px; cursor:pointer; }
+    .sp-nav button:disabled { opacity:.35; cursor:default; }
+    .sp-sub { font-size:11.5px; color:#6b7080; margin:0 0 14px; line-height:1.7; }
+    .sp-tiles { display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); gap:7px; margin:0 0 14px; }
+    .sp-tile { font:inherit; background:#f9f9f6; border:1px solid #e5e5df; border-radius:9px; padding:9px 4px; cursor:pointer; text-align:center; color:#1b2440; }
+    .sp-tile.selected { border-color:#1b2440; background:#eff2fa; box-shadow:inset 0 0 0 1px #1b2440; }
+    .sp-tile span { display:block; font-size:10px; color:#6b7080; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-tile strong { display:inline-block; font-size:22px; margin:4px 0 1px; font-weight:900; font-variant-numeric:tabular-nums; }
+    .sp-tile small { font-size:10px; margin-left:2px; }
+    .sp-split { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(240px,.85fr); gap:14px; align-items:start; }
+    .sp-controls { display:flex; align-items:center; gap:12px; margin:0 0 8px; flex-wrap:wrap; }
+    .sp-controls b { font-size:12px; }
+    .sp-metrics { display:flex; flex-wrap:wrap; gap:5px; }
+    .sp-metrics button { font:inherit; font-size:11px; padding:5px 8px; border-radius:99px; background:#fff; color:#4a5068; border:1px solid #e2e2dc; cursor:pointer; }
+    .sp-metrics button.on { background:#1b2440; color:#fff; border-color:#1b2440; }
+    .sp-week-head,.sp-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+    .sp-week-head span { background:#f6f6f2; font-size:10px; color:#6b7080; text-align:center; border:1px solid #e6e6e0; border-right:0; padding:5px 0; }
+    .sp-week-head span:last-child { border-right:1px solid #e6e6e0; }
+    .sp-grid { border-left:1px solid #e6e6e0; }
+    .sp-day { appearance:none; font:inherit; background:#fff; border:0; border-right:1px solid #e6e6e0; border-bottom:1px solid #e6e6e0; min-height:70px; padding:4px 5px; display:flex; flex-direction:column; align-items:flex-start; text-align:left; cursor:pointer; min-width:0; gap:3px; }
+    .sp-day:hover { background:#f7f8fd; }
+    .sp-day.selected { background:#edf2ff; box-shadow:inset 0 0 0 2px #1b2440; }
+    .sp-day.outside { background:#fafaf8; opacity:.58; }
+    .sp-day.weekend .sp-day-num { color:#b3261e; }
+    .sp-day.today .sp-day-num { color:#fff; background:#1b2440; border-radius:999px; padding:0 5px; }
+    .sp-day-num { font-size:11px; color:#1b2440; font-weight:700; }
+    .sp-day strong { font-size:18px; color:#1b2440; line-height:1.1; font-variant-numeric:tabular-nums; }
+    .sp-day strong small { font-size:9px; color:#6b7080; padding-left:2px; }
+    .sp-zero { color:#ccc; font-size:12px; }
+    .sp-day-names { font-size:10px; color:#6b7080; line-height:1.4; overflow:hidden; max-height:2.8em; }
+    .sp-mobile-days { display:none; }
+    .sp-panel { background:#f9f9f6; border:1px solid #e6e6e0; border-radius:10px; padding:12px 14px; }
+    .sp-panel h3 { font-size:13px; margin:0 0 12px; color:#1b2440; line-height:1.6; }
+    .sp-member-day { display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid #e2e2dc; padding:9px 0; font-size:12px; }
+    .sp-member-day strong { font-size:20px; font-variant-numeric:tabular-nums; }
+    .sp-member-day small { font-size:10px; padding-left:4px; }
+    .sp-definition { font-size:11px; color:#6b7080; margin:8px 0 15px; line-height:1.7; }
+    .sp-table-wrap h3 { font-size:13px; margin:18px 0 8px; color:#1b2440; }
+    .sp-table-scroll { overflow-x:auto; }
+    .sp-table { min-width:770px; }
+    .sp-table th,.sp-table td { padding:9px 10px; font-size:11.5px; }
+    .sp-table td:first-child { min-width:120px; }
+    .sp-table td:first-child b { display:block; font-size:12.5px; }
+    .sp-table td:first-child small { display:block; color:#6b7080; }
+    .sp-table .sp-n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sp-table .sp-active-col { background:#edf2ff; font-weight:800; color:#1b2440; }
+    .sp-bar { display:block; background:#e9e9e6; border-radius:99px; height:4px; margin-top:5px; overflow:hidden; }
+    .sp-bar i { display:block; background:#697db2; height:100%; border-radius:99px; }
+    .sp-total { background:#f5f5f1; font-weight:800; }
+    @media (max-width:1050px) { .sp-tiles { grid-template-columns:repeat(5,1fr); } }
+    @media (max-width:760px) { .sp-split { grid-template-columns:minmax(0,1fr); } .sp-section { padding:14px 12px; } .sp-tiles { grid-template-columns:repeat(3,1fr); } .sp-grid,.sp-week-head { display:none; } .sp-mobile-days { display:flex; overflow-x:auto; gap:5px; padding:2px 0 12px; } .sp-mobile-days button { display:flex; flex-direction:column; align-items:center; flex:0 0 45px; background:#fff; border:1px solid #e2e2dc; border-radius:8px; padding:5px 0; font:inherit; cursor:pointer; } .sp-mobile-days button.on { background:#1b2440; color:#fff; } .sp-mobile-days small,.sp-mobile-days i { font-size:10px; font-style:normal; } .sp-mobile-days b { font-size:15px; } }
+
+    /* ダッシュボードの情報は、長い縦積みではなくタブ＋2カラムで切り替える */
+    [hidden] { display:none !important; }
+    .db-sum { margin-bottom:12px; }
+    .db-sum a { padding:10px 13px; }
+    .db-sum .v { font-size:23px; }
+    .db-tabs { display:flex; align-items:center; gap:6px; border-bottom:1px solid #e2e2dc; margin:0 0 16px; padding:0 1px 8px; overflow-x:auto; }
+    .db-tab { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; font:inherit; border:1px solid transparent; background:transparent; border-radius:9px; padding:9px 14px; color:#4a5068; cursor:pointer; font-size:13px; font-weight:700; }
+    .db-tab:hover { background:#ededeb; }
+    .db-tab.on { background:#1b2440; color:#fff; }
+    .db-tab .material-symbols-outlined { font-size:17px; }
+    .db-workgrid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(285px,1fr); align-items:start; gap:16px; }
+    .db-work { min-width:0; background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:14px 16px 10px; }
+    .db-work h2,.db-mini h2 { font-size:15px; margin:0 0 5px; color:#1b2440; }
+    .db-work .db-help { font-size:11.5px; color:#6b7080; margin:0 0 12px; }
+    .db-categories { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+    .db-categories button { font:inherit; border:1px solid #e2e2dc; background:#f8f8f5; color:#4a5068; font-size:11.5px; font-weight:700; border-radius:20px; padding:6px 10px; cursor:pointer; }
+    .db-categories button.on { color:#fff; background:#1b2440; border-color:#1b2440; }
+    .db-categories button strong { font-variant-numeric:tabular-nums; }
+    .db-work .db-sec { margin:0; }
+    .db-work .db-click { background:#fff9e8; border:1px solid #f1deb2; border-radius:9px; padding:10px 12px; }
+    .db-work .db-click .db-sec-h .t { color:#1b2440; font-size:14px; }
+    .db-work .db-sec-h { margin:0 0 10px; }
+    .db-work .sl-rows { max-height:410px; overflow-y:auto; overscroll-behavior:contain; }
+    .db-work .sl-row { padding:10px 9px; margin-bottom:6px; }
+    .db-work .sl-row b { font-size:13px; }
+    .db-work .db-click .sl-row b { font-size:13px; }
+    .db-work .sl-row .now, .db-work .sl-row .n { font-size:11px; line-height:1.4; }
+    .db-work .sl-row .btn { flex:0 0 auto; }
+    .db-actions-foot { border-top:1px solid #e2e2dc; margin-top:8px; padding:11px 0 3px; display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12px; }
+    .db-actions-foot a { color:#1b2440; font-weight:700; text-decoration:none; }
+    .db-mini { min-width:0; background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:14px 15px 13px; }
+    .db-mini-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; }
+    .db-mini-head h2 { margin:0; }
+    .db-mini-link { border:0; background:none; color:#4a5068; cursor:pointer; font:inherit; font-size:11.5px; text-decoration:underline; }
+    .db-mini-note { color:#6b7080; font-size:11px; margin:3px 0 10px; }
+    .db-mini-tiles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+    .db-mini-tile { background:#f6f6f2; padding:9px 11px; border-radius:8px; color:#1b2440; }
+    .db-mini-tile span { font-size:11px; color:#6b7080; display:block; }
+    .db-mini-tile strong { font-size:23px; line-height:1.3; font-variant-numeric:tabular-nums; }
+    .db-mini-tile small { font-size:10px; margin-left:3px; }
+    .db-mini-members { margin-top:12px; }
+    .db-mini-members > b { font-size:12px; display:block; margin-bottom:7px; }
+    .db-mini-member { display:grid; grid-template-columns:minmax(78px,1fr) repeat(3,46px); gap:5px; align-items:center; border-top:1px solid #ededeb; padding:7px 0; font-size:11px; }
+    .db-mini-member .nm { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; }
+    .db-mini-member span:not(.nm) { text-align:right; font-variant-numeric:tabular-nums; }
+    .db-mini-member.head { color:#6b7080; font-size:10px; padding:5px 0; }
+    .db-mini-loading { font-size:12px; color:#6b7080; padding:9px 0; }
+    /* 実績タブも固定高ではなく内部だけスクロール。画面の縦伸びを最小化 */
+    .sp-section { margin-bottom:16px; padding:15px 17px; }
+    .sp-tiles { grid-template-columns:repeat(9,minmax(0,1fr)); gap:5px; margin-bottom:11px; }
+    .sp-tile { padding:6px 2px; }
+    .sp-tile strong { font-size:19px; margin:2px 0; }
+    .sp-day { min-height:51px; padding:3px 5px; gap:1px; }
+    .sp-day strong { font-size:15px; }
+    .sp-day-names { white-space:nowrap; text-overflow:ellipsis; max-height:1.4em; }
+    #sp-day { max-height:280px; overflow-y:auto; }
+    .sp-table-scroll { max-height:280px; overflow:auto; }
+    .sp-table thead { position:sticky; top:0; z-index:1; }
+    .sp-table .sp-total { position:sticky; bottom:0; z-index:1; }
+    #db-history-pane { background:#fff; border:1px solid #e2e2dc; border-radius:12px; padding:15px; }
+    #db-history-pane .db-sec { margin-bottom:0; }
+    @media (max-width:920px) { .db-workgrid { grid-template-columns:1fr; } .db-mini-members { max-width:100%; } }
+    @media (max-width:600px) {
+      .db-tabs { gap:2px; }
+      .db-tab { padding:8px 10px; font-size:12px; }
+      .db-work,.db-mini { padding:12px 11px; }
+      .db-mini-tiles { grid-template-columns:repeat(4,1fr); }
+      .db-mini-tile { padding:7px 5px; text-align:center; }
+      .db-mini-tile span { font-size:10px; }
+      .db-mini-tile strong { font-size:18px; }
+      .sp-section { padding:11px; }
+      .sp-tiles { grid-template-columns:repeat(3,1fr); }
+      .sp-table-scroll { max-height:260px; }
+    }
+
     @media (max-width: 760px) { .db-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   </style>
 </head>
@@ -44,32 +179,95 @@
 
 <div class="wrap">
   <h1 class="sl-title">ダッシュボード</h1>
-  <p class="sl-sub">今日、どこを追って、どこに営業すればよいかが分かります。上から順に片付けてください。</p>
+  <p class="sl-sub">今日の対応とメンバーの実績を、タブで切り替えて確認できます。</p>
 
   <div class="db-sum" id="sum"></div>
 
+
+  <nav class="db-tabs" role="tablist" aria-label="ダッシュボードの表示切替">
+    <button type="button" class="db-tab on" id="db-tab-tasks" role="tab" aria-controls="db-tasks-pane" aria-selected="true" onclick="dashboardTab('tasks')"><span class="material-symbols-outlined">task_alt</span>今日の対応</button>
+    <button type="button" class="db-tab" id="db-tab-performance" role="tab" aria-controls="db-performance-pane" aria-selected="false" onclick="dashboardTab('performance')"><span class="material-symbols-outlined">calendar_month</span>メンバー実績・カレンダー</button>
+    <button type="button" class="db-tab" id="db-tab-history" role="tab" aria-controls="db-history-pane" aria-selected="false" onclick="dashboardTab('history')"><span class="material-symbols-outlined">history</span>営業履歴</button>
+  </nav>
+  <div id="db-tasks-pane" role="tabpanel" aria-labelledby="db-tab-tasks">
+    <div class="db-workgrid">
+      <section class="db-work" aria-labelledby="db-work-title">
+        <h2 id="db-work-title">対応が必要な企業</h2>
+        <p class="db-help">種類を切り替えて確認。最優先の5件を表示します。</p>
+        <div class="db-categories" id="db-categories" role="group" aria-label="対応の種類"></div>
   <div class="db-sec db-click" id="sec-click">
-    <div class="db-sec-h"><span class="t">🔥 ① リード・未対応</span><span class="n" id="n-click"></span>
+    <div class="db-sec-h"><span class="t">リード・未対応</span><span class="n" id="n-click"></span>
       <a href="/sales/leads.html">リード一覧</a></div>
     <div class="sl-rows" id="list-click"></div>
   </div>
 
-  <div class="db-sec" id="sec-replied">
-    <div class="db-sec-h"><span class="t">② 返信あり</span><span class="n" id="n-replied"></span></div>
+  <div class="db-sec" id="sec-replied" hidden>
+    <div class="db-sec-h"><span class="t">返信あり</span><span class="n" id="n-replied"></span></div>
     <div class="sl-rows" id="list-replied"></div>
   </div>
 
-  <div class="db-sec" id="sec-follow">
-    <div class="db-sec-h"><span class="t">③ 今日フォロー</span><span class="n" id="n-follow"></span></div>
+  <div class="db-sec" id="sec-follow" hidden>
+    <div class="db-sec-h"><span class="t">今日フォロー</span><span class="n" id="n-follow"></span></div>
     <div class="sl-rows" id="list-follow"></div>
   </div>
 
-  <div class="db-sec" id="sec-attack">
-    <div class="db-sec-h"><span class="t">④ 今日アタック</span><span class="n" id="n-attack"></span>
+  <div class="db-sec" id="sec-attack" hidden>
+    <div class="db-sec-h"><span class="t">今日アタック</span><span class="n" id="n-attack"></span>
       <a href="/sales/attack.html">アタック画面へ</a></div>
     <div class="sl-rows" id="list-attack"></div>
   </div>
 
+
+        <div class="db-actions-foot">
+          <span class="sl-muted">続きは各一覧で確認</span>
+          <a id="db-list-link" href="/sales/leads.html">一覧を見る →</a>
+        </div>
+      </section>
+      <aside class="db-mini" aria-label="今月の営業実績">
+        <div class="db-mini-head">
+          <h2>今月のチーム実績</h2>
+          <button class="db-mini-link" type="button" onclick="dashboardTab('performance')">詳細・カレンダーを見る →</button>
+        </div>
+        <div class="db-mini-tiles" id="sp-mini-tiles"><p class="db-mini-loading">読み込み中…</p></div>
+        <div class="db-mini-members" id="sp-mini-members"></div>
+        <p class="db-mini-note" id="sp-mini-note">記録済みの営業活動から自動集計します。</p>
+      </aside>
+    </div>
+  </div>
+  <div id="db-performance-pane" role="tabpanel" aria-labelledby="db-tab-performance" hidden>
+  <section class="sp-section" id="sp-performance" aria-labelledby="sp-title">
+    <div class="sp-head">
+      <h2 id="sp-title"><span class="material-symbols-outlined">calendar_month</span>チーム実績カレンダー</h2>
+      <div class="sp-nav" aria-label="集計月">
+        <button id="sp-prev" type="button" onclick="SalesPerformanceCalendar.monthMove(-1)">＜ 前月</button>
+        <strong id="sp-month"></strong>
+        <button id="sp-today" type="button" onclick="SalesPerformanceCalendar.monthMove(0)">今月</button>
+        <button id="sp-next" type="button" onclick="SalesPerformanceCalendar.monthMove(1)">翌月 ＞</button>
+      </div>
+    </div>
+    <p class="sp-sub" id="sp-notice">読み込み中…</p>
+    <div class="sp-tiles" id="sp-tiles" aria-label="今月の活動実績"></div>
+    <div class="sp-controls">
+      <b>カレンダーに表示する数字</b>
+      <div class="sp-metrics" id="sp-metric" role="group" aria-label="実績の種類"></div>
+    </div>
+    <p class="sp-definition" id="sp-definition"></p>
+    <div class="sp-split">
+      <div>
+        <div id="sp-calendar" aria-label="日別の営業実績"><div class="sl-empty">読み込み中…</div></div>
+        <div class="sp-mobile-days" id="sp-mobile-days" aria-label="日付を選ぶ"></div>
+      </div>
+      <aside class="sp-panel" id="sp-day" aria-live="polite"></aside>
+    </div>
+    <div class="sp-table-wrap">
+      <h3>メンバー別の実績 <small id="sp-role-note" style="font-weight:400;color:#6b7080;"></small></h3>
+      <div id="sp-member"></div>
+    </div>
+  </section>
+
+
+  </div>
+  <div id="db-history-pane" role="tabpanel" aria-labelledby="db-tab-history" hidden>
   <div class="db-sec" id="sec-history">
     <div class="db-sec-h"><span class="t">⑤ 最近の営業履歴</span>
       <a href="/sales/attack.html">送った履歴をすべて見る</a></div>
@@ -80,11 +278,13 @@
       </table>
     </div>
   </div>
+  </div>
 </div>
 
 <script src="../js/api-client.js?v=20261015man1"></script>
 <script src="../js/layout.js?v=20261015man1"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-performance-calendar.js?v=20261020compact2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -92,6 +292,8 @@
 
   let sections = {};
   let approaches = [];
+  let activeCategory = "click";
+  let categoryInitialized = false;
 
   // 表示速度：
   //   ・企業の全件ではなく、4段の件数と上位だけを受け取る（GET /api/sales/companies?view=dashboard）。
@@ -105,7 +307,42 @@
   ]).then(([dash, ap]) => ({ dash, ap }));
   API.warm(KEY, fetchDashboard, SalesLayout.allows);
 
-  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => {
+    if (!ctx) return;
+    const found = (location.hash || "").match(/^#sec-(click|replied|follow|attack)$/);
+    if (found) dashboardCategory(found[1]);
+    load();
+    SalesPerformanceCalendar.init();
+  });
+
+  function dashboardTab(tab) {
+    if (!["tasks", "performance", "history"].includes(tab)) return;
+    for (const name of ["tasks", "performance", "history"]) {
+      el("db-" + name + "-pane").hidden = name !== tab;
+      const button = el("db-tab-" + name);
+      button.classList.toggle("on", name === tab);
+      button.setAttribute("aria-selected", String(name === tab));
+      // タブは通常のボタンとしてTabキーで移動可能にする。
+    }
+  }
+
+  function dashboardCategory(key, switchTab = true) {
+    if (!["click", "replied", "follow", "attack"].includes(key)) return;
+    activeCategory = key;
+    if (switchTab) dashboardTab("tasks");
+    for (const item of ["click", "replied", "follow", "attack"]) {
+      el("sec-" + item).hidden = item !== key;
+      const button = document.querySelector('[data-db-category="' + item + '"]');
+      if (button) {
+        button.classList.toggle("on", item === key);
+        button.setAttribute("aria-pressed", String(item === key));
+      }
+    }
+    const hrefs = { click: "/sales/leads.html", replied: "/sales/companies.html?status=replied",
+      follow: "/sales/companies.html", attack: "/sales/attack.html" };
+    el("db-list-link").href = hrefs[key];
+    el("db-list-link").textContent = key === "attack" ? "アタック画面へ →" : "一覧を見る →";
+  }
 
   async function load() {
     try {
@@ -140,12 +377,24 @@
     // 描き直すときは、変わったところだけ変える（API.morph。点滅させない）
     API.morph(el("sum"), SECTIONS.map((s) => {
       const n = sections[s.key]?.total || 0;
-      return `<a href="#sec-${s.key}" class="${s.hot && n ? "hot" : ""}">
+      return `<a href="#sec-${s.key}" onclick="dashboardCategory('${s.key}')" class="${s.hot && n ? "hot" : ""}">
         <div class="lb"><span class="material-symbols-outlined">${s.icon}</span>${esc(s.label)}</div>
         <div class="v">${n}<small>社</small></div></a>`;
     }).join(""));
 
+    API.morph(el("db-categories"), SECTIONS.map((s) => {
+      const n = sections[s.key]?.total || 0;
+      return '<button type="button" data-db-category="' + s.key + '" class="' +
+        (activeCategory === s.key ? 'on' : '') + '" aria-pressed="' + (activeCategory === s.key) +
+        '" onclick="dashboardCategory(\'' + s.key + '\')">' + esc(s.label) + ' <strong>' + n + '</strong></button>';
+    }).join(""));
     for (const s of SECTIONS) renderSection(s, sections[s.key] || { total: 0, rows: [] });
+    if (!categoryInitialized) {
+      const hash = (location.hash || "").match(/^#sec-(click|replied|follow|attack)$/);
+      if (!hash) activeCategory = SECTIONS.find((x) => (sections[x.key]?.total || 0) > 0)?.key || "click";
+      categoryInitialized = true;
+    }
+    dashboardCategory(activeCategory, false);
     renderHistory();
   }
 
@@ -155,7 +404,8 @@
       API.morph(el(`list-${s.key}`), `<div class="sl-empty">${esc(s.label)}の企業はありません</div>`);
       return;
     }
-    API.morph(el(`list-${s.key}`), rows.map((c) => `
+    const visibleRows = rows.slice(0, 5);
+    API.morph(el(`list-${s.key}`), visibleRows.map((c) => `
       <div class="sl-row${c.unhandledClick ? " hot" : ""}${c.overdue ? " overdue" : ""}">
         <div class="info"><b>${esc(c.name)}</b>
           <div class="now">${s.key === "click"
@@ -165,7 +415,7 @@
         </div>
         <button class="btn btn-primary btn-sm" onclick="location.href='${esc(s.href(c))}'">${esc(s.cta)}</button>
       </div>`).join("")
-      + (total > rows.length ? `<div class="db-more">ほか${total - rows.length}社</div>` : ""));
+      + (total > visibleRows.length ? `<div class="db-more">残り${total - visibleRows.length}社は一覧から確認</div>` : ""));
   }
 
   function renderHistory() {
@@ -173,7 +423,7 @@
       API.morph(el("history"), `<tr><td colspan="5" class="empty">直近14日の送信はありません。</td></tr>`);
       return;
     }
-    API.morph(el("history"), approaches.slice(0, 15).map((a) => `
+    API.morph(el("history"), approaches.slice(0, 10).map((a) => `
       <tr class="click" onclick="location.href='/sales/companies.html?id=${esc(a.companyId)}'">
         <td style="white-space:nowrap;">${esc(fmt(a.sentAt))}</td>
         <td><span class="sl-nm">${esc(a.companyName || "—")}</span></td>

@@ -421,6 +421,17 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         body: "{{company}}\nご担当者様\n\n{{sender}}です。\n詳細はこちら\n{{url}}", destinationUrl: "https://8grp.co.jp/service/dx",
         archived: false, uses: 0 }] });
     }
+    // ダッシュボードのチーム実績カレンダー（新UI。個人は自分だけ）
+    if (/\/api\/sales\/member-performance\b/.test(url)) {
+      const keys = ["attacks","matches","sent","calls","connected","decisions","handoffs","meetings","won"];
+      const totals = Object.fromEntries(keys.map((k) => [k, 0]));
+      totals.attacks = 12; totals.sent = 4; totals.connected = 2; totals.won = 1;
+      const members = [{ employeeId:"emp-s1", name:"営業 一郎", role:["CS"], totals,
+        days:{ [TODAY]:totals } }];
+      return send({ month:TODAY.slice(0,7), manager:isAdmin,
+        metrics:keys.map((key) => ({key,short:key,label:key,unit:"件"})),
+        totals, days:{ [TODAY]:totals }, members, definitions:{}, note:"社内実績の表示テスト" });
+    }
     // 担当者別フォームアタック数（本物は api/sales/approaches/counts.js）
     if (/\/api\/sales\/approaches\/counts/.test(url)) {
       const sp = new URL(url).searchParams;
@@ -473,18 +484,30 @@ console.log("\n=== 営業担当：ダッシュボード ===");
   check(!nav.some((t) => t.includes("反応")), "「反応」タブは無くなった（リードへ）");
   check((await page.locator(".sl-nav a.on").innerText()).includes("ダッシュボード"), "いま見ているタブが選ばれている");
 
-  const order = await page.locator(".db-sec .db-sec-h .t").allInnerTexts();
-  check(order.join("|") === "🔥 ① リード・未対応|② 返信あり|③ 今日フォロー|④ 今日アタック|⑤ 最近の営業履歴",
-    `上から クリック→返信→フォロー→アタック→履歴（いま ${order.join(" / ")}）`);
-  check(await page.locator(".db-sec").first().evaluate((e) => e.id) === "sec-click", "いちばん上はリード・未対応");
+  check((await page.locator("#db-tab-tasks").getAttribute("aria-selected")) === "true",
+    "初期画面は今日の対応");
+  check(await page.locator("#db-performance-pane").isHidden(), "カレンダー全体は初期画面で非表示");
+  check(await page.locator("#db-history-pane").isHidden(), "履歴は初期画面で非表示");
+  check(await page.locator("#sec-click").isVisible(), "未対応リードを最優先で表示");
+  check(await page.locator("#sec-attack").isHidden(), "ほかのカテゴリは隠す");
+  check((await page.locator("#db-categories button").count()) === 4, "リード/返信/フォロー/アタックを切替");
+  check((await page.locator("#sp-mini-tiles").innerText()).includes("12"), "今月の実績が初期画面に表示");
+  check(await page.locator(".db-sec").first().evaluate((e) => e.id) === "sec-click", "未対応リードが優先");
   const bg = await page.locator("#sec-click").evaluate((e) => getComputedStyle(e).backgroundColor);
   check(bg !== "rgba(0, 0, 0, 0)", `クリックありは色で目立たせる（${bg}）`);
   check((await page.locator("#list-click").innerText()).includes("反応商事"), "クリックした企業が①に出る");
   check((await page.locator(".db-sum a.hot").innerText()).includes("リード・未対応"), "件数の段でもリード・未対応を強調");
   check(/1\s*社/.test(await page.locator(".db-sum a.hot").innerText()), "リード・未対応は1社");
+  await page.locator('[data-db-category="attack"]').click();
+  check(await page.locator("#sec-attack").isVisible(), "カテゴリを切り替えてアタックを表示");
   check((await page.locator("#list-attack").innerText()).includes("株式会社サンプル"), "未アタックの企業は④に出る");
   check(!(await page.locator("#list-attack").innerText()).includes("反応商事"), "①に出した企業は下の段に重ねて出さない");
-  check((await page.locator("#history").innerText()).includes("直近14日の送信はありません"), "最近の営業履歴の段が出る（送信なし）");
+  await page.locator("#db-tab-performance").click();
+  check(await page.locator("#sp-performance").isVisible(), "実績・カレンダーを開ける");
+  check(await page.locator("#db-tasks-pane").isHidden(), "実績タブでは長い対応一覧を隠す");
+  await page.locator("#db-tab-history").click();
+  check(await page.locator("#sec-history").isVisible(), "営業履歴を開ける");
+  check((await page.locator("#history").innerText()).includes("直近14日の送信はありません"), "最近の営業履歴を確認できる");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
