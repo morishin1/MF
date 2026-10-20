@@ -41,7 +41,10 @@ const api=read("api/nippo/index.js");
 const checker=read("api/schedule/day-gate.js");
 const ui=read("nippo.html");
 assert(api.includes("await checkNextWorkSchedule(sb, ctx, date)"),"日報POSTはサーバで判定");
-assert(api.indexOf("const scheduleGate = await checkNextWorkSchedule(")>=0 && api.indexOf("const scheduleGate = await checkNextWorkSchedule(")<api.indexOf("const { data: existing } = await sb"),"日報の既存データ取得より前に判定");
+const gatePos=api.indexOf("const scheduleGate = await checkNextWorkSchedule(");
+const subsequentWrite=api.indexOf("const row = {",gatePos);
+assert(gatePos>=0 && subsequentWrite>gatePos && api.indexOf(".from(\"tc_nippo\")",subsequentWrite)>subsequentWrite,
+  "日報の保存より前に予定登録を検証する");
 assert(api.includes('error:"next_schedule_required"'),"未登録でAPI 400");
 assert(checker.includes("checkNextWorkSchedule(admin(),ctx,date)"),"UI用GETも本人予定をDBで判定");
 assert(ui.includes('id="np-schedule-gate"'),"未登録時に案内カード");
