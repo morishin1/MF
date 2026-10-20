@@ -57,6 +57,8 @@ async function open(h, { width = 1280 } = {}) {
       const r = h.focus(b);
       return send(r.body, r.status || 200);
     }
+    if (/\/api\/schedule\/day-gate/.test(url)) return send({ready:true,targetDate:NEXT,count:1});
+    if (/\/api\/schedule\/review/.test(url)) return send({ai:false,verdict:"good",summary:"予定確認済み",suggestions:[],metrics:{totalMinutes:60,overlaps:0}});
     if (/\/api\/nippo\/plan/.test(url)) return send({ plan: null });
     if (/\/api\/nippo\b/.test(url)) {
       if (req.method() === "POST") {
@@ -123,6 +125,8 @@ console.log("\n=== 明日の重要タスク（今日の分）は、タスクのI
   await page.locator("#f-work .np-item").nth(2).locator(".did .no").click();
   await page.locator("#f-work .np-item").nth(2).locator("[data-k='undone_reason']").fill("10件まで");
   await page.locator("#submit-btn").click();
+  await page.waitForTimeout(250);
+  await page.locator("#submit-btn").click();
   await page.waitForTimeout(600);
   const sent = posted.find((p) => p.kind === "nippo")?.body;
   check(sent?.workItems?.length === 3 && sent.workItems[0].task_id === ids[0] && sent.workItems[0].done === "1",
@@ -148,6 +152,8 @@ console.log("\n=== 明日の最優先：入力 → 保存 → 再取得 → 翌�
   await page.locator("#f-work .np-item [data-k='task']").first().fill("A社へ提案");
   await page.locator("#f-work .np-item").first().locator(".did .yes").click();
   await page.fill("#f-tomorrow", "B社へ見積を出す");
+  await page.locator("#submit-btn").click();
+  await page.waitForTimeout(250);
   await page.locator("#submit-btn").click();
   await page.waitForTimeout(600);
   const sent = posted.find((p) => p.kind === "nippo")?.body;

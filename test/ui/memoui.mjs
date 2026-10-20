@@ -130,6 +130,7 @@ console.log("\n=== 日報：とりあえずメモをどうするか決める ===
       return send({ memos: decided ? [] : memos, bodyMax: 200, aiReady: true, employeeId: "emp-1" });
     }
     if (/\/api\/tasks\/focus/.test(url)) return send(FOCUS);
+    if (/\/api\/schedule\/day-gate/.test(url)) return send({ready:true,targetDate:"2026-09-17",count:1});
     if (/\/api\/nippo\/plan/.test(url)) return send({ plan: null });
     if (/\/api\/nippo\b/.test(url)) {
       return send({

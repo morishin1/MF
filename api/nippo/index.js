@@ -33,6 +33,7 @@ import {
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
 import { closeItems, shapeItem } from "../../lib/actions.js";
 import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focus.js";
+import { checkNextWorkSchedule } from "../../lib/schedule-gate.js";
 import { shape as shapeEval } from "./evaluate.js";
 
 export default async function handler(req, res) {
@@ -269,6 +270,24 @@ async function submit(res, user, ctx, body) {
   }
 
   const sb = admin();
+
+  // 新しい日報提出ルール：次の営業日の仕事予定が最低1件、本人のカレンダーに必要。
+  // 画面操作を迂回する直接POSTや古いクライアントでも登録させない。
+  // 読込障害時は「未入力」と断定せず503にし、無確認の提出もしない。
+  const scheduleGate = await checkNextWorkSchedule(sb, ctx, date);
+  if (scheduleGate.error) {
+    return json(res, 503, {
+      error:"schedule_check_unavailable",
+      hint:"翌営業日の予定を確認できません。時間をおいてから再度お試しください"
+    });
+  }
+  if (!scheduleGate.ready) {
+    return json(res, 400, {
+      error:"next_schedule_required",
+      hint:"日報を提出するには、先に翌営業日（"+scheduleGate.targetDate+"）の仕事の予定を1件以上カレンダーに登録してください",
+      scheduleDate:scheduleGate.targetDate
+    });
+  }
 
   // 明日の重要タスクが決まっていないと、日報は出せない。
   //

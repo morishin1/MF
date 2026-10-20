@@ -1,4 +1,4 @@
-// 日報は、明日のタスクが未確定・0件でも絶対にブロックしない（日報提出ハードロック修正）。
+// 翌営業日の業務予定は必須。翌日の重要タスクは未確定・0件でも日報を止めない。
 //
 // ■ 何を守るテストか
 //
@@ -135,6 +135,13 @@ function setup({ status = null, tasks = [], missing = [] } = {}) {
     gw_focus_days: status ? [{ id: "d1", tenant_id: "t1", employee_id: "emp-1",
                                focus_date: TOMORROW, status }] : [],
     gw_tasks: tasks,
+    // 新ルール: 明日の重要タスクが0件でもOKだが、業務カレンダーは1件必須。
+    gw_calendar_events: [{
+      id: "cal-next-1", tenant_id: "t1", employee_id: "emp-1",
+      source: "self", category: "work", title: "翌日の仕事を計画",
+      starts_at: TOMORROW+"T09:00:00+09:00",
+      ends_at: TOMORROW+"T10:00:00+09:00", all_day:false
+    }],
   };
 }
 const body = (over = {}) => ({
@@ -142,7 +149,7 @@ const body = (over = {}) => ({
   tomorrow: "明日もやる", ...over,
 });
 
-console.log("\n=== 日報は、明日のタスクが未確定・0件でもブロックしない ===\n");
+console.log("\n=== 翌営業日の業務予定があれば、重要タスク未確定でも日報可 ===\n");
 
 await ok("何も決めていなくても、出せる", async () => {
   setup();

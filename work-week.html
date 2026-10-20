@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>週間業務カレンダー｜エイト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/css/app.css?v=20261020cal1">
+<link rel="stylesheet" href="/css/layout.css?v=20261020cal1">
+<link rel="stylesheet" href="/css/member-design.css">
+<style>
+  .wk-shell{max-width:1220px;margin:0 auto;padding:24px 16px 76px}
+  .wk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .wk-head h1{font-size:25px;margin:0 0 5px;color:var(--primary-dark,#162f55)}
+  .wk-head p{font-size:13px;color:var(--muted,#68748a);margin:0;line-height:1.7}
+  .wk-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:18px 0 15px}
+  .wk-actions .btn{white-space:nowrap}
+  .wk-caption{font-weight:700;margin-left:6px;color:var(--primary-dark,#162f55)}
+  .wk-status{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px}
+  .wk-pill{border:1px solid var(--border,#e0e4e9);background:#fff;border-radius:10px;padding:10px 14px;font-size:13px}
+  .wk-pill b{font-size:19px;margin-right:4px}
+  .wk-scroll{overflow-x:auto;padding-bottom:6px}
+  .wk-calendar{display:grid;grid-template-columns:repeat(7,minmax(145px,1fr));gap:9px;min-width:1050px}
+  .wk-day{background:#fff;border:1px solid var(--border,#dfe3e9);border-radius:12px;min-height:190px;cursor:pointer;text-align:left;padding:11px 10px;color:inherit;font:inherit;display:block;transition:border-color .15s}
+  .wk-day:hover,.wk-day:focus-visible{border-color:var(--primary,#3a78b6);outline-offset:2px}
+  .wk-day[aria-pressed="true"]{border:2px solid var(--primary,#3a78b6);padding:10px 9px}
+  .wk-day .d{font-weight:800;font-size:14px}
+  .wk-day .status{font-size:11px;color:var(--muted,#68748a);margin:6px 0 12px}
+  .wk-day .ev{border-left:3px solid #7c9ecb;padding:4px 0 5px 7px;margin:5px 0;font-size:11.5px;overflow-wrap:anywhere}
+  .wk-day .ev .tm{display:block;color:var(--muted,#68748a);font-size:10.5px}
+  .wk-day .placeholder{font-size:12px;color:var(--muted,#68748a)}
+  .wk-day.is-empty:not(.is-weekend) .status{color:#ae6725}
+  .wk-day.is-today .d::after{content:" 今日";color:var(--primary,#2969a7);font-size:10px}
+  .wk-editor{background:#fff;border:1px solid var(--border,#e2e5e9);border-radius:14px;padding:17px;margin-top:16px}
+  .wk-editor h2{font-size:18px;margin:0 0 6px}
+  .wk-editor .muted{font-size:12px;line-height:1.8}
+  .wk-row{display:grid;grid-template-columns:minmax(0,2fr) 108px 108px minmax(0,1.3fr) auto;gap:8px;align-items:center;margin:8px 0}
+  .wk-row input{width:100%;min-width:0;margin:0}
+  .wk-summary{font-size:13px;line-height:1.8;margin-top:10px}
+  @media(max-width:750px){
+    .wk-row{grid-template-columns:minmax(0,1fr) minmax(90px,.55fr) minmax(90px,.55fr) auto}
+    .wk-row .wk-title{grid-column:1/-1}
+    .wk-row .wk-place{grid-column:1/4}
+    .wk-editor{padding:12px}
+  }
+</style>
+</head>
+<body class="gw-member-ui">
+<div class="wrap wk-shell">
+  <div class="wk-head">
+    <div>
+      <h1>週間業務カレンダー</h1>
+      <p>予定は週単位で先に登録。日報を書く日は確認するだけで大丈夫です。</p>
+    </div>
+    <a class="btn btn-secondary btn-sm" href="/nippo.html">日報に戻る</a>
+  </div>
+  <div class="wk-actions">
+    <button class="btn btn-secondary btn-sm" onclick="moveWeek(-1)">← 前週</button>
+    <button class="btn btn-secondary btn-sm" onclick="moveWeek(0)">今週</button>
+    <button class="btn btn-secondary btn-sm" onclick="moveWeek(1)">翌週 →</button>
+    <span class="wk-caption" id="wk-range"></span>
+  </div>
+  <div id="wk-status" class="wk-status" aria-live="polite"></div>
+  <p class="muted" style="font-size:12px;">曜日をクリックすると、その日の予定を編集できます。未入力は確認用の目安であり、勤務時間や人事評価の判定ではありません。土日も必要なら入力できます。</p>
+  <div class="wk-scroll"><div class="wk-calendar" id="wk-calendar" aria-label="一週間の業務予定"></div></div>
+  <div class="wk-editor" id="wk-editor">
+    <h2 id="wk-edit-title">日付を選んでください</h2>
+    <p class="muted">時刻と業務内容を登録すると、社内のスケジュールに即時反映されます。</p>
+    <div id="wk-edit-rows"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+      <button class="btn btn-secondary btn-sm" onclick="addRow()">＋ 時間枠を追加</button>
+      <button class="btn btn-primary btn-sm" id="wk-save" onclick="saveDay(this)">この日の予定を保存</button>
+      <button class="btn btn-secondary btn-sm" id="wk-review" onclick="reviewDay(this)">AIで時間割を確認</button>
+    </div>
+    <div id="wk-message" role="status" class="wk-summary"></div>
+    <div id="wk-ai-result" aria-live="polite"></div>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:16px;">全社員への公開項目は件名・日時・場所です。個人用メモは公開しません。<a href="/team-schedule.html">社員全員の予定を見る</a></p>
+</div>
+<script src="/js/api-client.js?v=20261020cal1"></script>
+<script src="/js/layout.js?v=20261020cal1"></script>
+<script>
+  const el=id=>document.getElementById(id);
+  const esc=KPLayout.esc;
+  const dateKey=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  const jstDate = iso => new Date(new Date(iso).getTime()+9*3600000).toISOString().slice(0,10);
+  const hhmm=iso=>new Date(new Date(iso).getTime()+9*3600000).toISOString().slice(11,16);
+  const dayNames=["日","月","火","水","木","金","土"];
+  const addDays=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+  const monday=d=>addDays(d,-(d.getDay()+6)%7);
+  let weekStart=monday(new Date()), selected=dateKey(new Date()), saved=[], removed=new Set(), reqSeq=0, dirty=false;
+  function dayEvents(key){return saved.filter(e=>e.source==="self"&&e.category!=="private"&&jstDate(e.starts_at)===key);}
+  function msg(s,bad=false){el("wk-message").style.color=bad?"#a53222":"";el("wk-message").textContent=s;}
+  function moveWeek(offset){
+    if(!checkDirty())return;
+    weekStart=offset===0?monday(new Date()):addDays(weekStart,offset*7);
+    selected=dateKey(weekStart);
+    loadWeek();
+  }
+  function checkDirty(){
+    return !dirty || confirm("編集中の内容は保存されていません。移動しますか？");
+  }
+  async function loadWeek(){
+    const seq=++reqSeq;
+    const from=dateKey(weekStart)+"T00:00:00+09:00";
+    const to=dateKey(addDays(weekStart,7))+"T00:00:00+09:00";
+    el("wk-range").textContent=dateKey(weekStart)+" ～ "+dateKey(addDays(weekStart,6));
+    el("wk-calendar").innerHTML='<p class="muted">読み込み中…</p>';
+    try{
+      const d=await API.schedule(from,to);
+      if(seq!==reqSeq)return;
+      saved=(d.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
+      dirty=false;removed.clear();
+      paintCalendar();
+      selectDay(selected,true);
+    }catch(e){if(seq===reqSeq)el("wk-calendar").textContent="予定を読み込めません："+(e.hint||e.detail||e.message);}
+  }
+  function paintCalendar(){
+    const today=dateKey(new Date());
+    let planned=0, weekday=0, total=0;
+    el("wk-calendar").innerHTML=Array.from({length:7},(_,i)=>{
+      const d=addDays(weekStart,i),k=dateKey(d),events=dayEvents(k).sort((a,b)=>a.starts_at.localeCompare(b.starts_at));
+      const working=i<5;weekday+=working?1:0; planned+=working&&events.length?1:0;total+=events.length;
+      return '<button type="button" class="wk-day'+(events.length?'':' is-empty')+(working?'':' is-weekend')+(k===today?' is-today':'')+
+        '" aria-pressed="'+(k===selected)+'" data-date="'+k+'" onclick="selectDay(this.dataset.date)">'+
+        '<div class="d">'+(d.getMonth()+1)+'/'+d.getDate()+'（'+dayNames[d.getDay()]+'）</div>'+
+        '<div class="status">'+(events.length?events.length+"件の予定":"未入力")+'</div>'+
+        (events.length?events.map(e=>'<div class="ev"><span class="tm">'+(e.all_day?"終日":hhmm(e.starts_at)+"–"+hhmm(e.ends_at))+'</span>'+esc(e.title)+'</div>').join(""):'<div class="placeholder">＋ 予定を追加</div>')+'</button>';
+    }).join("");
+    const unfilled=weekday-planned;
+    el("wk-status").innerHTML=
+      '<div class="wk-pill"><b>'+planned+'/'+weekday+'</b>平日の予定登録日</div>'+
+      '<div class="wk-pill"><b>'+total+'</b>予定件数</div>'+
+      '<div class="wk-pill"><b>'+unfilled+'</b>予定未入力の平日</div>';
+  }
+  function selectDay(k,force=false){
+    if(!force && !checkDirty())return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(k))return;
+    selected=k;
+    dirty=false;removed.clear();
+    document.querySelectorAll(".wk-day").forEach(n=>n.setAttribute("aria-pressed",String(n.dataset.date===selected)));
+    el("wk-edit-title").textContent=k+" の業務予定";
+    el("wk-edit-rows").innerHTML="";
+    const events=dayEvents(k).filter(e=>!e.all_day);
+    events.forEach(e=>addRow({id:e.id,title:e.title,start:hhmm(e.starts_at),end:hhmm(e.ends_at),location:e.location||"",category:e.category},true));
+    if(!events.length)addRow({},true);
+    msg(events.length?events.length+"件登録済み。必要な日だけ変更してください。":"未入力です。業務を予定している日なら、時間枠を入力してください。");
+  }
+  function addRow(v={},quiet=false){
+    if(document.querySelectorAll(".wk-row").length>=30){msg("1日に登録できる予定は30件までです。",true);return}
+    const row=document.createElement("div");
+    row.className="wk-row";row.dataset.id=v.id||"";row.dataset.category=v.category||"work";
+    row.innerHTML='<input class="wk-title" type="text" maxlength="200" aria-label="業務内容" placeholder="業務内容（例：提案資料作成）" value="'+esc(v.title||"")+'">'+
+      '<input class="wk-start" type="time" aria-label="開始" value="'+esc(v.start||"09:00")+'">'+
+      '<input class="wk-end" type="time" aria-label="終了" value="'+esc(v.end||"10:00")+'">'+
+      '<input class="wk-place" type="text" maxlength="200" aria-label="場所" placeholder="場所（任意）" value="'+esc(v.location||"")+'">'+
+      '<button type="button" class="btn btn-secondary btn-sm wk-remove">削除</button>';
+    row.querySelectorAll("input").forEach(n=>n.addEventListener("input",()=>{dirty=true;msg("編集中・未保存");}));
+    row.querySelector(".wk-remove").addEventListener("click",()=>{
+      if(row.dataset.id)removed.add(row.dataset.id);
+      row.remove();dirty=true;msg("削除は保存後に反映されます。");
+    });
+    el("wk-edit-rows").appendChild(row);
+    if(!quiet){dirty=true;msg("時間枠を追加しました。保存してください。");}
+  }
+  function readRows(){
+    const rows=[...document.querySelectorAll(".wk-row")].map(r=>({
+      el:r,id:r.dataset.id||null,category:r.dataset.category||"work",
+      title:r.querySelector(".wk-title").value.trim(),start:r.querySelector(".wk-start").value,
+      end:r.querySelector(".wk-end").value,location:r.querySelector(".wk-place").value.trim()
+    }));
+    for(const r of rows){
+      if(!r.title&&!r.id&&!r.location)continue;
+      if(!r.title||!r.start||!r.end||r.end<=r.start)throw Error("業務内容・開始時間・終了時間を正しく入力してください。");
+    }
+    return rows.filter(r=>r.title||r.id||r.location);
+  }
+  async function saveDay(btn){
+    let rows;try{rows=readRows()}catch(e){msg(e.message,true);return}
+    btn.disabled=true;msg("保存中…");
+    try{
+      for(const id of [...removed]){
+        await API.deleteEvent(id);removed.delete(id);saved=saved.filter(e=>e.id!==id);
+      }
+      for(const r of rows){
+        const fields={title:r.title,category:r.category,location:r.location||null,visibility:"shared",
+          startsAt:selected+"T"+r.start+":00+09:00",endsAt:selected+"T"+r.end+":00+09:00"};
+        const x=r.id?await API.updateEvent({id:r.id,...fields}):await API.createEvent(fields);
+        r.el.dataset.id=x.event.id;
+        const index=saved.findIndex(e=>e.id===x.event.id);
+        if(index>=0)saved[index]=x.event;else saved.push(x.event);
+      }
+      dirty=false;paintCalendar();msg("保存しました。ほかの社員のスケジュールにも反映されます。");
+    }catch(e){msg("保存に失敗しました："+(e.hint||e.detail||e.message)+"。保存できた予定は残っています。",true);}
+    finally{btn.disabled=false;}
+  }
+  function previousWorkday(s){
+    const d=new Date(s+"T12:00:00+09:00");
+    for(let i=0;i<14;i++){
+      d.setUTCDate(d.getUTCDate()-1);
+      const dow=d.getUTCDay();
+      if(dow!==0&&dow!==6)return d.toISOString().slice(0,10);
+    }
+    return null;
+  }
+  async function reviewDay(btn){
+    if(dirty){msg("AI確認の前に、変更した予定を保存してください。",true);return}
+    const entries=dayEvents(selected).filter(e=>!e.all_day).map(e=>({title:e.title,start:hhmm(e.starts_at),end:hhmm(e.ends_at)}));
+    btn.disabled=true;msg("時間割を確認中…");
+    el("wk-ai-result").innerHTML="";
+    try{
+      const r=await API.api("/api/schedule/review",{method:"POST",body:{mode:"planned",reportDate:previousWorkday(selected),date:selected,entries}});
+      msg((r.ai?"AIコメント":"時間割の基本チェック")+"："+(r.summary||""));
+      const tips=(r.suggestions||[]).map(x=>'<li>'+KPLayout.esc(x)+'</li>').join("");
+      const total=r.metrics?.totalMinutes||0;
+      el("wk-ai-result").innerHTML='<details class="wk-ai-detail" style="margin-top:10px;border:1px solid var(--border);padding:12px;border-radius:9px;">'+
+        '<summary style="cursor:pointer;font-size:13px;font-weight:700">AIの判断理由・改善案を詳しく見る</summary>'+
+        '<div style="font-size:12.5px;line-height:1.9;padding-top:10px;">'+
+        '<p><b>予定合計</b>：'+Math.floor(total/60)+'時間'+total%60+'分 ／ 重複'+(r.metrics?.overlaps||0)+'件</p>'+
+        (r.details?'<p><b>判断理由</b><br>'+KPLayout.esc(r.details)+'</p>':"")+
+        (r.priorityAdvice?'<p><b>優先順位</b><br>'+KPLayout.esc(r.priorityAdvice)+'</p>':"")+
+        (tips?'<b>改善提案</b><ul>'+tips+'</ul>':"")+'</div></details>';
+    }catch(e){msg("確認できませんでした："+(e.hint||e.detail||e.message),true)}
+    finally{btn.disabled=false;}
+  }
+  // 日報の週一覧から日付を選んで遷移した場合、その日を開く。
+  const fromLink = new URLSearchParams(location.search).get("date");
+  if (fromLink && /^\d{4}-\d{2}-\d{2}$/.test(fromLink) &&
+      !Number.isNaN(new Date(fromLink+"T12:00:00+09:00").getTime())) {
+    selected=fromLink;
+    const [y,m,d]=fromLink.split("-").map(Number);
+    weekStart=monday(new Date(y,m-1,d));
+  }
+  KPLayout.init({active:"schedule",roles:["member","admin","owner"]}).then(ctx=>{if(ctx)loadWeek()});
+</script>
+</body>
+</html>

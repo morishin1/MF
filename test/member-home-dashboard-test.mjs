@@ -12,7 +12,8 @@ assert(home.indexOf('id="member-dashboard"')<home.indexOf('id="f3"'),"予定を�
 assert(home.includes('id="member-today-events"'),"今日の予定一覧");
 assert(home.includes('id="member-next-events"'),"翌営業日の予定一覧");
 assert(home.includes('href="nippo.html"'),"日報への導線");
-assert(home.includes('href="schedule.html"'),"カレンダーへの導線");
+assert(home.includes('href="calendar.html"'),"新しい月間カレンダーへの導線");
+assert(home.includes('member-next-link').toString() && home.includes('"calendar.html?date="'),"翌営業日へ直接予定登録");
 assert(home.includes('loadFocus().then(() => loadMemberSchedule())'),"祝日を含む翌営業日を取得してから表示");
 assert(home.includes('focusData?.tomorrowDate||msNextWorkday(today)'),"翌営業日を既存の業務ロジックと合わせる");
 assert(home.includes("API.schedule(from,to)"),"本人予定の既存APIだけを使う");

@@ -1,11 +1,9 @@
-// GET /api/schedule/team?from=&to=   … 同僚の予定のうち、公開されている分だけ
+// GET /api/schedule/team?from=&to=   … 社員全員の業務予定（本人を含む）
 //
 // ■ 何を返すか
-//   visibility が private でない行だけ。既定は private なので、
-//   本人が「見せる」と選んだ予定しか出てこない。
-//
-//   busy   … 時間だけ。件名も場所も種類も返さない（「予定あり」とだけ出す）
-//   shared … 件名と場所まで
+//   旧 private / busy の社内業務予定も表示（元データを消さない）。
+//   「私用」カテゴリー・休暇や予約の自動作成行・Google個人予定は対象外。
+//   本人を含む、同じ会社の在籍メンバーだけに返す。
 //
 //   メモ（body）はどちらでも返さない。
 //   持ち物や相手の連絡先を書く欄なので、公開範囲を上げただけで
@@ -49,38 +47,38 @@ export default async function handler(req, res) {
     .from("gw_calendar_events")
     .select("id, employee_id, title, location, category, all_day, starts_at, ends_at, visibility")
     .eq("tenant_id", ctx.tenantId)
-    .neq("visibility", "private")
-    .neq("employee_id", ctx.employee.id)      // 自分の分は本体の API が返している
+    .eq("source", "self")                   // 休暇・予約の自動生成は会社の業務予定に含めない
+    .neq("category", "private")             // 過去の私用も公開しない
     .gte("starts_at", from).lt("starts_at", to)
     .order("starts_at")
     .limit(LIMIT);
   if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
 
   const rows = data || [];
-  const ids = [...new Set(rows.map((r) => r.employee_id))];
 
-  // 在籍している人だけ。退職者の予定が残っていても出さない
+  // 全員の予定表として使うため、予定の無い在籍社員も返す（未入力を判別する）。
+  // 認証・tenant・社員名簿チェックは上で済ませている。
+  const { data: emps, error: empError } = await sb
+    .from("gw_employees")
+    .select("id, display_name, department, status")
+    .eq("tenant_id", ctx.tenantId)
+    .in("status", ["active", "invited"])
+    .order("display_name")
+    .limit(300);
+  if (empError) return json(res, 500, { error: "employees_query_failed", detail: empError.message });
   const people = new Map();
-  if (ids.length) {
-    const { data: emps } = await sb
-      .from("gw_employees")
-      .select("id, display_name, department, status")
-      .eq("tenant_id", ctx.tenantId)
-      .in("id", ids);
-    for (const e of emps || []) {
-      if (e.status === "left") continue;
-      people.set(e.id, { id: e.id, name: e.display_name, department: e.department || null });
-    }
+  for (const e of emps || []) {
+    people.set(e.id, { id: e.id, name: e.display_name, department: e.department || null });
   }
 
   const events = rows
     .filter((r) => people.has(r.employee_id))
     .map((r) => strip(r, people.get(r.employee_id)));
 
-  return json(res, 200, { events, people: [...people.values()] });
+  return json(res, 200, { events, people: [...people.values()], truncated: rows.length >= LIMIT });
 }
 
-/** 公開範囲に合わせて、返す項目そのものを組み立て直す */
+/** 社員に必要な業務情報だけを明示的に返し、本文・メモは含めない */
 function strip(r, person) {
   const base = {
     id: r.id,
@@ -92,6 +90,5 @@ function strip(r, person) {
     endsAt: r.ends_at,
     visibility: r.visibility,
   };
-  if (r.visibility !== "shared") return base;   // busy は時間だけ
   return { ...base, title: r.title, location: r.location || null, category: r.category };
 }
