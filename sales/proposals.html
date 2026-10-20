@@ -85,6 +85,18 @@
     .pp-msg { color:#b3261e; font-size:12.5px; margin-top:8px; min-height:1em; }
     .pp-tpl { white-space:pre-wrap; font-size:12.5px; background:#f6f6f2; border-radius:8px; padding:10px 12px; max-height:220px; overflow:auto; }
 
+
+    .pp-flow-box { border-color:#cfd6df; }
+    .pp-flow-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+    .pp-flow-step { border:1px solid #e4e8ec; background:#f6f7f9; padding:8px 7px; border-radius:8px; min-width:0; }
+    .pp-flow-step b { display:block; font-size:12px; color:#535b6a; }
+    .pp-flow-step small { display:block; font-size:11px; color:#6b7080; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pp-flow-step.active { background:#f2f8d7; border-color:#b9d36a; }
+    .pp-flow-step.done { background:#edf5ee; border-color:#b4d1b9; }
+    .pp-flow-action { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
+    .pp-flow-hint { font-size:11.5px; color:#5f6575; }
+    .pp-more-actions summary { cursor:pointer; font-size:12px; font-weight:700; color:#4a5068; }
+    .pp-more-actions[open] { padding-top:7px; width:100%; }
     @media (max-width: 1000px) {
       .pp-sum, .pp-kpi { grid-template-columns:repeat(3,minmax(0,1fr)); }
     }
@@ -439,6 +451,37 @@
       ${esc(i.lb)}${i.skip && i.ok ? `<span class="sl-muted">（不要）</span>` : ""}</li>`).join("")}</ul>`;
   }
 
+
+  function ppStageIndex(p) {
+    return p.handoffStage === "closing" ? 2 : p.handoffStage === "cs" && p.csOwnerId ? 1 : 0;
+  }
+  // 今できる一つのアクションだけを案内する。
+  function ppFlowAction(p, d) {
+    if (p.closed) return '<span class="pp-flow-hint">対応終了</span>';
+    const stage = ppStageIndex(p);
+    let label = "", action = "", enabled = true, hint = "";
+    if (stage === 0) {
+      label = "CSへ引継ぐ"; action = "ppHandoff('cs')";
+      if (!p.sentAt) { enabled = false; hint = "先に企業へ提案してください"; }
+      else if (!(d.handoffTargets?.cs || []).length) { enabled = false; hint = "管理者がCS担当を設定してください"; }
+    } else if (stage === 1 && !d.csContacted) {
+      label = "電話結果を記録"; action = "ppCall()";
+      hint = "通話または返信の記録後にCS判断へ";
+    } else if (stage === 1 && !["advance","needs_detail"].includes(d.csDecision)) {
+      label = "CS判断を記録"; action = "ppCsDecision()";
+      hint = "進行判断後にクロージングへ";
+    } else if (stage === 1) {
+      label = "クロージングへ引継ぐ"; action = "ppHandoff('closing')";
+      if (!(d.handoffTargets?.closing || []).length) { enabled = false; hint = "管理者がクロージング担当を設定してください"; }
+    } else { label = "面談を記録"; action = "ppMeeting()"; }
+    if (!d.canHandoff && stage !== 2 && !(stage === 1 && !d.csContacted)) {
+      enabled = false; hint = "現在の担当者または管理者が操作できます";
+    }
+    return '<button type="button" class="btn btn-primary btn-sm" onclick="' + action +
+      '"' + (enabled ? "" : ' disabled aria-disabled="true"') + '>' + esc(label) + '</button>' +
+      (hint ? '<span class="pp-flow-hint">' + esc(hint) + '</span>' : "");
+  }
+
   function renderDetail() {
     const box = $("pp-detail");
     if (!box || !detail) return;
@@ -461,14 +504,14 @@
       ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
       : p.waiting ? waitingCta
       : `<button class="btn btn-primary sl-cta-main" onclick="ppCall()"><span class="material-symbols-outlined icon-inline">call</span>電話の結果を記録</button>
-         <div class="sl-cta-sub">
+         <details class="pp-more-actions"><summary>その他の操作</summary><div class="sl-cta-sub">
            <button class="btn btn-secondary btn-sm" onclick="ppMail()">確認メールを送った</button>
            <button class="btn btn-secondary btn-sm" onclick="ppReply()">企業から返信あり</button>
            <button class="btn btn-secondary btn-sm" onclick="ppCheck()">返信なし（回答確認）</button>
            <button class="btn btn-secondary btn-sm" onclick="ppMeeting()">面談</button>
            <button class="btn btn-secondary btn-sm" onclick="ppResult()">結果・状態</button>
            ${detail.manager && review ? `<button class="btn btn-secondary btn-sm" onclick="ppDecision()">管理者の判断</button>` : ""}
-         </div>`;
+         </div></details>`;
 
     box.innerHTML = `
       <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -487,38 +530,13 @@
         <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
       </div>
 
-      <div class="sl-next" style="margin:14px 20px 12px;">
-        <div class="lb"><span class="material-symbols-outlined">bolt</span>次の行動</div>
-        <h3>${esc(p.next ? p.next.title : p.closed ? "—" : "タスクはありません")}</h3>
-        <div class="meta">${p.next ? `期限：${dueText(p.next.dueAt, p.next.overdue)}　担当：${esc(p.next.assigneeName || "未定")}` : ""}
-          ${p.meetingAt ? `　面談：${esc(fmt(p.meetingAt))}` : ""}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
-      </div>
-
-      <div class="pp-box">
-        <h4><span class="material-symbols-outlined">hub</span>バトンタッチ｜提案 → CS → クロージング</h4>
-        <div style="font-size:12.5px;line-height:1.9;">
-          <b>提案担当：</b>${esc(p.matchingOwnerName || "未設定")}　→
-          <b>CS：</b>${esc(p.csOwnerName || "担当未割当")}　→
-          <b>クロージング：</b>${esc(p.closingOwnerName || "担当未割当")}
+      <div class="pp-box pp-flow-box">
+        <h4><span class="material-symbols-outlined">hub</span>引継ぎ｜提案 → CS → クロージング</h4>
+        <div class="pp-flow-steps">
+          ${[["① 提案",p.matchingOwnerName || "未設定"],["② CS",p.csOwnerName || "未割当"],["③ クロージング",p.closingOwnerName || "未割当"]].map(([label,name],i) =>
+            `<div class="pp-flow-step ${i < ppStageIndex(p) ? "done" : i === ppStageIndex(p) ? "active" : ""}"><b>${esc(label)}</b><small>${esc(name)}</small></div>`).join("")}
         </div>
-        <div style="font-size:12px;margin-top:4px;">現在：<b>${p.handoffStage === "closing" ? "クロージング中" : p.handoffStage === "cs" ? "CS対応中" : "提案準備中"}</b>
-          ${p.sentAt ? `　提案送信のSlack共有：${p.sentSharedAt ? "送信記録あり" : "未確認"}` : ""}</div>
-        ${p.closed ? '<p class="sl-muted">この提案は完了しています。</p>' : !p.sentAt
-          ? '<p class="sl-muted">企業へ提案した後、CS担当に引き継ぎます。</p>' : `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-            ${detail.canHandoff && p.handoffStage === "cs" && p.csOwnerId && detail.csContacted
-              ? '<button class="btn btn-secondary btn-sm" onclick="ppCsDecision()">接続後のCS判断を記録</button>' : ""}
-            ${detail.canHandoff && (p.handoffStage === "proposal" || (p.handoffStage === "cs" && !p.csOwnerId))
-              ? '<button class="btn btn-primary btn-sm" onclick="ppHandoff(\'cs\')">CSに正式引継ぎ</button>' : ""}
-            ${detail.canHandoff && p.handoffStage === "cs" && p.csOwnerId &&
-              ["advance","needs_detail"].includes(detail.csDecision)
-              ? '<button class="btn btn-primary btn-sm" onclick="ppHandoff(\'closing\')">クロージングに引継ぎ</button>' : ""}
-          </div>
-          ${p.handoffStage === "cs" && p.csOwnerId && !detail.csContacted ? '<p class="sl-muted">相手への接続が確認できるまで、電話・メールでフォローして記録してください。</p>' : ""}
-          ${p.handoffStage === "cs" && p.csOwnerId && detail.csContacted && !["advance","needs_detail"].includes(detail.csDecision)
-            ? '<p class="sl-muted">通話後の判断を記録し、進める案件のみクロージングへ渡してください。</p>' : ""}
-        `}
+        <div class="pp-flow-action">${ppFlowAction(p, detail)}</div>
         ${(detail.handoffs || []).length ? `<details style="margin-top:10px;"><summary style="cursor:pointer;">バトンタッチ履歴（${detail.handoffs.length}件）</summary>
            ${detail.handoffs.map(h => `<div style="border-top:1px solid #e5e7eb;padding:9px 0;font-size:12px;">
              <b>${esc(h.fromName)} → ${esc(h.toName)}</b>　${esc(fmt(h.at))}
@@ -527,6 +545,15 @@
              <div class="sl-muted">Slack共有：${h.slackSent ? "済み" : "未確認"}
                ${detail.manager && !h.slackSent ? `<button class="pp-linkbtn" onclick="ppReshareHandoff('${esc(h.id)}')">再共有</button>` : ""}</div>
            </div>`).join("")}</details>` : '<p class="sl-muted">引継ぎ履歴はまだありません。</p>'}
+      </div>
+
+
+      <div class="sl-next" style="margin:14px 20px 12px;">
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>次の行動</div>
+        <h3>${esc(p.next ? p.next.title : p.closed ? "—" : "タスクはありません")}</h3>
+        <div class="meta">${p.next ? `期限：${dueText(p.next.dueAt, p.next.overdue)}　担当：${esc(p.next.assigneeName || "未定")}` : ""}
+          ${p.meetingAt ? `　面談：${esc(fmt(p.meetingAt))}` : ""}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
       </div>
 
       <div class="pp-box">
