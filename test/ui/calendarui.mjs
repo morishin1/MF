@@ -26,6 +26,13 @@ await page.route("**/api/**",route=>{
   if(url.pathname==="/api/schedule"){
     if(method==="GET")return send({events:own.slice(),tasks:[],bookings:[],external:{events:[]},googleLink:{}});
     const data=JSON.parse(req.postData()||"{}");operations.push({method,data});
+    if(method==="POST"&&data.action==="batch_create"){
+      const saved=data.events.map((e,i)=>({id:"batch-"+operations.length+"-"+i,title:e.title,location:e.location,
+        category:e.category,all_day:false,source:"self",visibility:e.visibility,employee_id:"emp1",
+        starts_at:new Date(e.startsAt).toISOString(),ends_at:new Date(e.endsAt).toISOString()}));
+      own.push(...saved);
+      return send({ok:true,count:saved.length,events:saved});
+    }
     if(method==="POST"){
       const event={id:"c",title:data.title,location:data.location,category:data.category,all_day:false,source:"self",
         starts_at:new Date(data.startsAt).toISOString(),ends_at:new Date(data.endsAt).toISOString(),
@@ -88,6 +95,24 @@ await page.waitForTimeout(300);
 assert(operations.some(x=>x.method==="POST"&&x.data.title==="面談"&&x.data.visibility==="shared"),"選択日の予定を社内共有で保存");
 assert((await page.locator("#cal-grid").innerText()).includes("面談"),"保存後に予定が画面に反映");
 assert((await page.locator("#cal-list").innerText()).includes("面談"),"保存した予定が月間一覧にも反映");
+
+await page.locator("#cal-batch-new").click();
+assert(await page.locator("#cal-batch-rows .cal-batch-row").count()===2,"まとめて追加を開くと2行を表示");
+const tomorrow=new Date(new Date(today+"T12:00:00+09:00").getTime()+86400000).toISOString().slice(0,10);
+await page.locator(".cal-batch-row .cal-batch-title input").first().fill("まとめて予定A");
+await page.locator(".cal-batch-row .cal-batch-title input").nth(1).fill("まとめて予定B");
+await page.locator(".cal-batch-row .cal-batch-date input").nth(1).fill(tomorrow);
+await page.locator("#cal-batch-add").click();
+assert(await page.locator("#cal-batch-rows .cal-batch-row").count()===3,"予定をあとから増やせる");
+await page.locator("#cal-batch-save").click();
+await page.waitForTimeout(450);
+const batch=operations.filter(x=>x.method==="POST"&&x.data.action==="batch_create");
+assert(batch.length===1,"一度の通信で一括保存");
+assert(batch[0]?.data.events.length===2,"空白の行は送らずに2件保存");
+assert(batch[0]?.data.events[0].startsAt.slice(0,10)===today&&batch[0]?.data.events[1].startsAt.slice(0,10)===tomorrow,
+  "異なる日付をまとめて登録");
+assert((await page.locator("#cal-list").innerText()).includes("まとめて予定A"),"一括保存した予定がカレンダーに反映");
+assert(await page.locator("#cal-batch-panel").isHidden(),"保存後は入力欄を閉じる");
 await page.locator("#scope-team").click();
 await page.waitForTimeout(350);
 assert((await page.locator("#cal-grid").innerText()).includes("他メンバー"),"全員表示で担当者が出る");
@@ -97,6 +122,7 @@ assert(!(await page.locator(".cal-drawer").innerText()).includes("編集する")
 await page.locator(".cal-drawer-close").first().click();
 assert((await page.locator("#cal-list-heading").innerText()).includes("全員"),"一覧も全員モードに切り替わる");
 assert(await page.locator("#cal-new").isHidden(),"全員表示では他人の予定を編集させない");
+assert(await page.locator("#cal-batch-new").isHidden(),"全員表示では一括入力も使えない");
 await page.locator("#view-week").click();
 assert(await page.locator(".cal-week").count()===1,"週表示に切り替わる");
 await page.locator("#view-day").click();
