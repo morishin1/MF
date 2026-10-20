@@ -266,8 +266,15 @@ console.log("\n— 見出しとまとまりの名前 —");
         // "/office/" のような別アプリへの入口も、別のHTMLファイルではないので対象外
         if (!f || f.includes("#") || f.includes("?") || f.startsWith("/")) continue;
         const h = h1Of(f);
-        check(h === n.label,
-          `${who} ${f} の見出しは「${n.label}」（いま「${h}」）`);
+        // カレンダーの帯にある「タスク」「日報」は独立した見出しを持つ。
+        // 月間カレンダーは共通 .kp-greet ではなく Office と同様の h1 を持つ。
+        const title = t.key==="tasks" ? "今日やること" :
+          t.key==="nippo" ? "今日やること" :
+          t.key==="schedule" ? "カレンダー" : n.label;
+        const source=readFileSync(join(ROOT,f),"utf8");
+        const actual = h || (/<h1[^>]*>\s*([^<]+)\s*<\/h1>/.exec(source)?.[1]?.trim()||null);
+        check(actual === title,
+          `${who} ${f} の見出しは「${title}」（いま「${actual}」）`);
       }
     }
   }
