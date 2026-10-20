@@ -13,9 +13,12 @@ new Script(ui, { filename: "sales-performance-calendar.js" });
 const inline = html.match(/<script>\s*([\s\S]*?)<\/script>/);
 assert.ok(inline);
 new Script(inline[1], { filename: "sales/index.html" });
-for (const text of ["sp-calendar", "sp-member", "sp-day", "sp-metric", "sp-month", "SalesPerformanceCalendar.init()"]) {
-  assert.ok(html.includes(text), text + " is connected");
+// 営業のトップ画面は現在4段の対応キュー。実績カレンダーは独立JSとして維持。
+for (const text of ["sp-calendar", "sp-member", "sp-day", "sp-metric", "sp-month"]) {
+  assert.ok(ui.includes(text), text + " is available in the calendar module");
 }
+assert.ok(html.includes('id="sec-click"') && html.includes('id="sec-attack"'),
+  "実運用トップは4段の営業キューを表示");
 assert.equal(monthBounds("bad"), null);
 assert.equal(monthBounds("2026-13"), null);
 assert.equal(monthBounds("2026-10").sinceIso, "2026-09-30T15:00:00.000Z");
