@@ -79,6 +79,22 @@
     .cal-form .cols>div:first-child{grid-column:1/-1}
     .cal-form .cols>div:last-child{grid-column:1/-1}
   }
+
+  /* 複数日・複数件を、一枚のフォームで続けて入力する */
+  .cal-batch-row{display:grid;grid-template-columns:140px minmax(170px,1.8fr) 100px 100px minmax(130px,1fr) auto;gap:8px;align-items:end;margin:8px 0}
+  .cal-batch-row>div{min-width:0}
+  .cal-batch-row label{display:block;font-size:11.5px;font-weight:700;margin-bottom:4px}
+  .cal-batch-row input{width:100%;min-width:0;box-sizing:border-box}
+  .cal-batch-row .btn{margin-bottom:1px}
+  .cal-batch-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .cal-batch-note{font-size:12px;color:var(--of-mute);margin:5px 0}
+  @media(max-width:780px){
+    .cal-batch-row{grid-template-columns:repeat(2,minmax(0,1fr));padding:9px;border:1px solid var(--of-line);border-radius:9px}
+    .cal-batch-row .cal-batch-title{grid-column:1/-1;grid-row:1}
+    .cal-batch-row .cal-batch-location{grid-column:1/-1}
+    .cal-batch-row .cal-batch-date{grid-column:1/-1}
+    .cal-batch-row .cal-batch-remove{justify-self:end}
+  }
   /* Office と同じカレンダーの構造・デザインを読み込む */
     .oc-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:0 0 10px; }
     .oc-head b { font-size:16px; color:var(--of-ink); }
@@ -174,9 +190,22 @@
       <button type="button" id="view-day" onclick="setView('day')">日</button>
     </div>
     <button type="button" class="btn btn-primary btn-sm" id="cal-new" onclick="newEvent()">＋ 予定を登録</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="cal-batch-new" onclick="openBatch()">＋ まとめて追加</button>
   </div>
   <p class="cal-guide">最初は自分の予定を表示します。日付を押して予定を追加・変更できます。「全員」に切り替えると社内メンバーの仕事の予定が見られます。日報は<a href="/nippo.html">こちら</a>。</p>
   <div id="cal-message" class="cal-state" role="status"></div>
+  <section class="cal-panel" id="cal-batch-panel" hidden aria-label="予定をまとめて追加">
+    <h2>予定をまとめて追加</h2>
+    <p class="cal-batch-note">日付が違う予定も一度に登録できます。空欄の行は保存しません。</p>
+    <div id="cal-batch-rows"></div>
+    <div class="cal-batch-actions">
+      <button type="button" class="btn btn-secondary btn-sm" id="cal-batch-add" onclick="batchAddRow()">＋ 行を追加</button>
+      <button type="button" class="btn btn-primary btn-sm" id="cal-batch-save" onclick="batchSave(this)">まとめて保存</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeBatch()">閉じる</button>
+    </div>
+    <p id="cal-batch-msg" class="cal-state" role="status" aria-live="polite"></p>
+    <p class="cal-batch-note">仕事の予定として全社員に共有します。Googleカレンダーへの書き出しは予定ごとに操作できます。</p>
+  </section>
   <section class="of-panel">
     <div class="oc-head"><b id="oc-month-heading">今月の業務カレンダー</b><span class="cal-guide" style="margin:0">日付を押すと予定一覧が見られます</span></div>
     <div id="cal-grid" class="cal-scroll" aria-label="業務カレンダー"></div>
@@ -267,6 +296,8 @@
     ["mine","team"].forEach(s=>el("scope-"+s).classList.toggle("on",scope===s));
     ["month","week","day"].forEach(s=>el("view-"+s).classList.toggle("on",view===s));
     el("cal-new").hidden=scope!=="mine";
+    el("cal-batch-new").hidden=scope!=="mine";
+    if(scope!=="mine")closeBatch();
   }
   async function load(){
     const seq=++serial,[start,end]=range();
@@ -456,6 +487,85 @@
       if(selected===date)el("cal-ai-result").textContent="AIチェックに失敗しました："+(e.hint||e.detail||e.message);
     }finally{btn.disabled=false;}
   }
+
+  // 行を追加して最後に一度だけ保存。個々の登録とは別の入力欄にして誤操作を防ぐ。
+  let batchSaving=false;
+  function openBatch(){
+    if(scope!=="mine")return;
+    closeForm();closeDayDrawer();
+    el("cal-batch-panel").hidden=false;
+    el("cal-batch-rows").innerHTML="";
+    el("cal-batch-msg").textContent="";
+    batchAddRow({date:selected,start:"09:00",end:"10:00"});
+    batchAddRow({date:selected,start:"10:00",end:"11:00"});
+    el("cal-batch-panel").scrollIntoView({behavior:"smooth",block:"start"});
+    el("cal-batch-rows").querySelector(".cal-batch-title input")?.focus({preventScroll:true});
+  }
+  function closeBatch(){
+    if(batchSaving)return;
+    el("cal-batch-panel").hidden=true;
+    el("cal-batch-rows").innerHTML="";
+    el("cal-batch-msg").textContent="";
+  }
+  function batchAddRow(opts={}){
+    if(batchSaving)return;
+    const list=el("cal-batch-rows");
+    if(list.children.length>=30){el("cal-batch-msg").textContent="最大30件までです。";return;}
+    const last=list.lastElementChild;
+    const prevEnd=last?.querySelector(".cal-batch-end input")?.value||"09:00";
+    const start=opts.start||prevEnd;
+    const [hour,min]=start.split(":").map(Number);
+    const end=opts.end||pad(Math.min(23,hour+1))+":"+pad(min||0);
+    const date=opts.date||last?.querySelector(".cal-batch-date input")?.value||selected;
+    const row=document.createElement("div");row.className="cal-batch-row";
+    const field=(cls,label,type,value,attr="")=>'<div class="'+cls+'"><label>'+label+'</label>'+
+      '<input type="'+type+'" '+attr+' value="'+esc(value)+'"></div>';
+    row.innerHTML=field("cal-batch-date","日付","date",date)+
+      field("cal-batch-title","業務内容","text",opts.title||"",'maxlength="200" placeholder="例：A社と打ち合わせ"')+
+      field("cal-batch-start","開始","time",start,'step="900"')+
+      field("cal-batch-end","終了","time",end,'step="900"')+
+      field("cal-batch-location","場所（任意）","text",opts.location||"",'maxlength="200" placeholder="オンラインなど"')+
+      '<button type="button" class="btn btn-secondary btn-sm cal-batch-remove" aria-label="この行を削除">削除</button>';
+    row.querySelector(".cal-batch-remove").addEventListener("click",()=>{
+      if(!batchSaving){row.remove();el("cal-batch-msg").textContent="";}
+    });
+    list.appendChild(row);
+    el("cal-batch-msg").textContent="";
+  }
+  function readBatch(){
+    const entries=[];
+    const rows=[...el("cal-batch-rows").children];
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i],value=cls=>row.querySelector("."+cls+" input").value.trim();
+      const title=value("cal-batch-title"),location=value("cal-batch-location");
+      if(!title&&!location)continue;
+      const date=value("cal-batch-date"),start=value("cal-batch-start"),end=value("cal-batch-end");
+      if(!title||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!start||!end||end<=start)
+        throw Error((i+1)+"行目：日付・業務内容・開始と終了を確認してください");
+      entries.push({title,location:location||null,category:"work",visibility:"shared",
+        startsAt:at(date,start),endsAt:at(date,end)});
+    }
+    if(!entries.length)throw Error("予定の内容を入力してください");
+    return entries;
+  }
+  async function batchSave(btn){
+    if(batchSaving||scope!=="mine")return;
+    const msg=el("cal-batch-msg");let entries;
+    try{entries=readBatch();}catch(e){msg.textContent=e.message;return;}
+    batchSaving=true;btn.disabled=true;el("cal-batch-add").disabled=true;
+    msg.textContent=entries.length+"件を保存中…";
+    try{
+      const result=await API.api("/api/schedule",{method:"POST",body:{action:"batch_create",events:entries}});
+      const first=entries[0].startsAt.slice(0,10);
+      batchSaving=false;closeBatch();
+      selected=first;
+      const [y,m,d]=first.split("-").map(Number);current=new Date(y,m-1,d);
+      await load();
+      message((result.count||entries.length)+"件の予定を保存しました。");
+    }catch(e){msg.textContent=e.hint||e.detail||e.message||"保存できませんでした";}
+    finally{batchSaving=false;btn.disabled=false;el("cal-batch-add").disabled=false;}
+  }
+
   function newEvent(){openForm(null);}
   function openForm(id,hour){
     if(scope!=="mine")return;
