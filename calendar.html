@@ -540,7 +540,7 @@
       const title=value("cal-batch-title"),location=value("cal-batch-location");
       if(!title&&!location)continue;
       const date=value("cal-batch-date"),start=value("cal-batch-start"),end=value("cal-batch-end");
-      if(!title||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!start||!end||end<=start)
+      if(!title||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!start||!end||end<=start)
         throw Error((i+1)+"行目：日付・業務内容・開始と終了を確認してください");
       entries.push({title,location:location||null,category:"work",visibility:"shared",
         startsAt:at(date,start),endsAt:at(date,end)});
