@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>社員スケジュール｜エイト</title>
+  <link rel="stylesheet" href="/css/app.css?v=20261020cal1">
+  <link rel="stylesheet" href="/css/layout.css?v=20261020cal1">
+<link rel="stylesheet" href="/css/member-design.css">
+  <style>
+    .ts-wrap { max-width:1100px; margin:0 auto; padding:20px 16px 60px; }
+    .ts-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:16px 0 20px; }
+    .ts-toolbar input,.ts-toolbar select { width:auto; max-width:100%; margin:0; }
+    .ts-grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+    .ts-person { background:white; border:1px solid var(--border,#e3e6eb); border-radius:12px; padding:16px; }
+    .ts-h { font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; justify-content:space-between; }
+    .ts-e { border-top:1px solid var(--border,#e3e6eb); margin-top:10px; padding-top:10px; }
+    .ts-e time { display:block; font-size:12px; font-weight:700; color:var(--primary,#29467c); }
+    .ts-e b { display:block; margin-top:3px; overflow-wrap:anywhere; }
+    .ts-e small { display:block; margin-top:3px; color:var(--muted,#677); }
+    .ts-empty { color:var(--muted,#677); font-size:13px; margin-top:10px; }
+    .ts-note { font-size:12px; color:var(--muted,#677); line-height:1.8; }
+    .ts-team-week{overflow-x:auto;margin:16px 0 20px}
+    .ts-team-table{border-collapse:collapse;min-width:1000px;width:100%;font-size:12px;background:#fff}
+    .ts-team-table th,.ts-team-table td{border:1px solid var(--border,#e2e6eb);padding:9px;vertical-align:top;min-width:120px}
+    .ts-team-table thead th{background:var(--bg2,#f5f7f9);font-size:11px}
+    .ts-team-table thead th:first-child{min-width:125px}
+    .ts-team-table .ts-wk-name{position:sticky;left:0;background:#fff;font-weight:700;z-index:1}
+    .ts-team-table td.ts-wk-cell{cursor:pointer}
+    .ts-team-table td.ts-wk-cell:hover{background:#f0f6ff}
+    .ts-team-table .ts-wk-item{font-size:11px;margin:3px 0;border-left:2px solid #739ac2;padding-left:5px;overflow-wrap:anywhere}
+    .ts-team-table .ts-wk-none{color:var(--muted,#889);font-size:11px}
+  </style>
+</head>
+<body class="gw-member-ui">
+<div class="wrap ts-wrap">
+  <h1 class="kp-greet">社員スケジュール</h1>
+  <p class="kp-greet-sub">全社員の仕事の予定を、担当者ごとに確認できます。未入力も分かります。</p>
+  <div class="ts-toolbar">
+    <button class="btn btn-secondary btn-sm" onclick="shift(-1)">前日</button>
+    <input id="ts-date" type="date" aria-label="表示する日付" onchange="load()">
+    <button class="btn btn-secondary btn-sm" onclick="shift(1)">翌日</button>
+    <button class="btn btn-secondary btn-sm" onclick="shift(-7)">前週</button>
+    <button class="btn btn-secondary btn-sm" onclick="shift(7)">翌週</button>
+    <button class="btn btn-secondary btn-sm" onclick="today()">今日</button>
+    <select id="ts-person" aria-label="メンバーを絞り込む" onchange="render()"><option value="">社員全員</option></select>
+    <button class="btn btn-secondary btn-sm" onclick="load()">更新</button>
+    <a class="btn btn-primary btn-sm" href="/schedule.html">自分の予定を登録</a>
+  </div>
+  <p class="ts-note">予定の件名・日時・場所を表示します。日報・予定のメモ・個人Googleカレンダーは表示しません。社内ログインした社員のみ閲覧できます。</p>
+  <div id="ts-msg" role="status"></div>
+  <h2 style="font-size:17px;margin:18px 0 6px">1週間の登録状況</h2>
+  <p class="ts-note">日付のマスをクリックすると、その日の予定が下に表示されます。予定の件数は勤務実績や評価ではありません。</p>
+  <div class="ts-team-week" id="ts-team-week"></div>
+  <h2 style="font-size:17px;margin:18px 0 9px" id="ts-day-label">日別の詳細</h2>
+  <div id="ts-grid" class="ts-grid"></div>
+</div>
+<script src="/js/api-client.js?v=20261020cal1"></script>
+<script src="/js/layout.js?v=20261020cal1"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = KPLayout.esc;
+  const keyOf = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  const selectedDate = () => $("ts-date").value;
+  const jstDate = iso => new Date(new Date(iso).getTime()+9*3600000).toISOString().slice(0,10);
+  const monday = date => {
+    const d=new Date(date+"T12:00:00+09:00");
+    d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);
+    return d.toISOString().slice(0,10);
+  };
+  const plus = (date,n)=>new Date(new Date(date+"T12:00:00+09:00").getTime()+n*86400000).toISOString().slice(0,10);
+  const weekdays=["月","火","水","木","金","土","日"];
+
+  let snapshot = { events: [], people: [] };
+  let seq = 0;
+  function today() { $("ts-date").value = keyOf(new Date()); load(); }
+  function shift(n) {
+    const [y,m,d] = selectedDate().split("-").map(Number);
+    const v = new Date(y,m-1,d+n);
+    $("ts-date").value = keyOf(v);
+    load();
+  }
+  function hm(value) {
+    return new Date(value).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Tokyo"});
+  }
+  function render() {
+    const who = $("ts-person").value;
+    const people = snapshot.people.filter(p => !who || who === p.id);
+    const events = snapshot.events;
+    const day=selectedDate();
+    $("ts-day-label").textContent="日別の詳細（"+day+"）";
+    const weekDates=Array.from({length:7},(_,i)=>plus(monday(day),i));
+    $("ts-team-week").innerHTML='<table class="ts-team-table"><thead><tr><th>メンバー</th>'+
+      weekDates.map((s,i)=>'<th>'+weekdays[i]+' '+s.slice(5).replace("-","/")+'</th>').join("")+
+      '</tr></thead><tbody>'+
+      people.map(p=>'<tr><td class="ts-wk-name">'+esc(p.name)+'</td>'+
+        weekDates.map(s=>{
+          const dayEvents=events.filter(e=>e.employeeId===p.id&&jstDate(e.startsAt)===s).sort((a,b)=>a.startsAt.localeCompare(b.startsAt));
+          return '<td class="ts-wk-cell" data-date="'+s+'" onclick="pickWeekDay(this.dataset.date)">'+
+            (dayEvents.length?dayEvents.map(e=>'<div class="ts-wk-item">'+(e.allDay?"終日":hm(e.startsAt))+' '+esc(e.title||"業務")+'</div>').join(""):
+              '<span class="ts-wk-none">未入力</span>')+'</td>';
+        }).join("")+'</tr>').join("")+
+      '</tbody></table>';
+    $("ts-grid").innerHTML = people.length ? people.map(person => {
+      const list = events.filter(e => e.employeeId === person.id && jstDate(e.startsAt) === day)
+        .sort((a,b) => a.startsAt.localeCompare(b.startsAt));
+      return `<section class="ts-person">
+        <div class="ts-h"><span>${esc(person.name)}${person.department ? ` <small>（${esc(person.department)}）</small>` : ""}</span><span class="kp-chip">${list.length}件</span></div>
+        ${list.length ? list.map(e => `<div class="ts-e"><time>${e.allDay ? "終日" : hm(e.startsAt)+"–"+hm(e.endsAt)}</time><b>${esc(e.title || "業務")}</b>${e.location ? `<small>場所：${esc(e.location)}</small>` : ""}</div>`).join("") : '<p class="ts-empty">業務予定が未入力です</p>'}
+      </section>`;
+    }).join("") : '<div class="empty">対象の社員はありません。</div>';
+  }
+  function pickWeekDay(s){$("ts-date").value=s;render();$("ts-grid").scrollIntoView({behavior:"smooth",block:"start"});}
+  async function load() {
+    const request = ++seq;
+    const date = selectedDate();
+    if (!date) return;
+    $("ts-msg").textContent = "読み込み中…";
+    const first = monday(date);
+    const from = first + "T00:00:00+09:00";
+    const to = plus(first,7) + "T00:00:00+09:00";
+    try {
+      const d = await API.teamSchedule(from,to);
+      if (request !== seq) return;
+      snapshot = d;
+      const sel = $("ts-person");
+      const value = sel.value;
+      sel.innerHTML = '<option value="">社員全員</option>' + (d.people || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+      sel.value = (d.people || []).some(p => p.id === value) ? value : "";
+      $("ts-msg").textContent = `週 ${monday(date)} ～ ${plus(monday(date),6)} ・ 社員 ${(d.people||[]).length}名、予定 ${(d.events||[]).length}件`;
+      render();
+    } catch(e) {
+      if(request !== seq) return;
+      $("ts-msg").textContent = "予定を取得できませんでした：" + (e.hint || e.detail || e.message);
+      $("ts-grid").innerHTML = "";
+      $("ts-team-week").innerHTML = "";
+    }
+  }
+  KPLayout.init({ active:"schedule", roles:["member","admin","owner"] }).then(ctx => {
+    if(ctx) today();
+  });
+</script>
+</body>
+</html>
