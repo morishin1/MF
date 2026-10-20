@@ -34,7 +34,7 @@ assert(api.includes('body?.action === "batch_create"')&&api.includes('prepareCal
   "既存と同じ検証ロジックを一括保存でも使用");
 assert(api.includes('.insert(rows).select(FIELDS)'),"一度のINSERTで全件保存");
 assert(api.includes('tenant_id: ctx.tenantId, employee_id: ctx.employee.id'),"テナントと所有者をサーバで固定");
-assert(html.includes('id="cal-batch-new"')&&html.includes('id="cal-batch-panel"'),
+assert(html.includes('id="cal-new"')&&html.includes('id="cal-batch-panel"'),
   "カレンダーに複数予定の入力導線");
 assert(html.includes('if(scope!=="mine")closeBatch()'),"全社員モードでは一括入力を閉じる");
 assert(html.includes('action:"batch_create",events:entries'),"一度にまとめて登録");
