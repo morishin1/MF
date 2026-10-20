@@ -596,8 +596,7 @@
 
       <div class="sl-next" style="margin:14px 20px 12px;">
         <div class="lb"><span class="material-symbols-outlined">bolt</span>次にやること</div>
-        <h3>${esc(primary.label || "対応終了")}</h3>
-        <div class="meta">${p.next && !p.closed ? `タスク：${esc(p.next.title)}　期限：${dueText(p.next.dueAt, p.next.overdue)}` : ""}
+        <div class="meta">${p.next && !p.closed ? `期限：${dueText(p.next.dueAt, p.next.overdue)}　担当：${esc(p.next.assigneeName || "未定")}` : ""}
           ${p.meetingAt ? `　面談：${esc(fmt(p.meetingAt))}` : ""}</div>
         <div class="pp-next-actions">${cta}</div>
       </div>
