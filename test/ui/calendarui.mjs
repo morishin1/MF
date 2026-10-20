@@ -123,8 +123,10 @@ assert((await page.locator("#cal-list-heading").innerText()).includes("全員"),
 assert(await page.locator("#cal-new").isHidden(),"全員表示では他人の予定を編集させない");
 assert(await page.locator("#cal-new").isHidden(),"全員表示では追加モーダルも使えない");
 await page.locator("#view-week").click();
+await page.locator(".cal-week").waitFor();
 assert(await page.locator(".cal-week").count()===1,"週表示に切り替わる");
 await page.locator("#view-day").click();
+await page.locator(".cal-dayview").waitFor();
 assert(await page.locator(".cal-dayview").count()===1,"日表示に切り替わる");
 await page.locator("#scope-mine").click();
 assert(await page.locator("#cal-new").isVisible(),"自分へ戻ると新規登録可能");
