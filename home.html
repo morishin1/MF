@@ -146,7 +146,7 @@
         <p>予定の確認、重要タスク、日報への移動をここから。</p>
       </div>
       <div class="member-dash-actions">
-        <a class="btn btn-primary btn-sm" href="schedule.html"><span class="material-symbols-outlined icon-inline">calendar_month</span>カレンダー</a>
+        <a class="btn btn-primary btn-sm" href="calendar.html"><span class="material-symbols-outlined icon-inline">calendar_month</span>カレンダー</a>
         <a class="btn btn-secondary btn-sm" href="nippo.html"><span class="material-symbols-outlined icon-inline">edit_note</span>日報</a>
       </div>
     </div>
@@ -154,12 +154,12 @@
       <section class="member-dash-card" aria-label="今日の予定">
         <div class="dh"><b><span class="material-symbols-outlined">today</span>今日の予定</b><small id="member-today-date"></small></div>
         <div id="member-today-events"><div class="member-dash-empty">予定を読み込み中…</div></div>
-        <a class="member-dash-more" href="schedule.html">予定の登録・確認 →</a>
+        <a class="member-dash-more" href="calendar.html">予定の登録・確認 →</a>
       </section>
       <section class="member-dash-card" aria-label="翌営業日の予定">
         <div class="dh"><b><span class="material-symbols-outlined">event_upcoming</span>翌営業日の予定</b><small id="member-next-date"></small></div>
         <div id="member-next-events"><div class="member-dash-empty">予定を読み込み中…</div></div>
-        <a class="member-dash-more" href="schedule.html" id="member-next-link">明日の予定を登録・確認 →</a>
+        <a class="member-dash-more" href="calendar.html" id="member-next-link">明日の予定を登録・確認 →</a>
       </section>
     </div>
   </section>
@@ -423,6 +423,7 @@
     const target=focusData?.tomorrowDate||msNextWorkday(today);
     el("member-today-date").textContent=today.slice(5).replace("-","/");
     el("member-next-date").textContent=target.slice(5).replace("-","/");
+    el("member-next-link").href="calendar.html?date="+encodeURIComponent(target);
     // カレンダーで別の日に飛びたい場合も既存の予定画面から遷移できる。
     const from=today+"T00:00:00+09:00",to=msPlus(target,1)+"T00:00:00+09:00";
     try{
