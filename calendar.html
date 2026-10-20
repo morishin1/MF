@@ -97,7 +97,7 @@
   }
 
   /* Googleカレンダー風：日付選択から開く一枚のスケジュール入力ダイアログ */
-  .cal-batch-backdrop[hidden],.cal-batch-result[hidden],.cal-batch-inputs[hidden]{display:none!important}
+  .cal-batch-backdrop[hidden],.cal-batch-result[hidden],.cal-batch-inputs[hidden],#cal-batch-save[hidden],#cal-batch-again[hidden]{display:none!important}
   .cal-batch-backdrop{position:fixed;inset:0;z-index:11000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(21,34,58,.56)}
   .cal-batch-dialog{background:#fff;border-radius:18px;box-shadow:0 24px 64px rgba(0,0,0,.22);width:min(860px,100%);max-height:min(92vh,900px);display:flex;flex-direction:column;overflow:hidden;color:#1b2440}
   .cal-batch-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 24px 14px;border-bottom:1px solid #e5eaf1}
@@ -224,8 +224,7 @@
       <button type="button" id="view-week" onclick="setView('week')">週</button>
       <button type="button" id="view-day" onclick="setView('day')">日</button>
     </div>
-    <button type="button" class="btn btn-primary btn-sm" id="cal-new" onclick="newEvent()">＋ 予定を登録</button>
-    <button type="button" class="btn btn-secondary btn-sm" id="cal-batch-new" onclick="openBatch()">＋ まとめて追加</button>
+    <button type="button" class="btn btn-primary btn-sm" id="cal-new" onclick="newEvent()">＋ 予定を追加</button>
   </div>
   <p class="cal-guide">最初は自分の予定を表示します。日付を押して予定を追加・変更できます。「全員」に切り替えると社内メンバーの仕事の予定が見られます。日報は<a href="/nippo.html">こちら</a>。</p>
   <div id="cal-message" class="cal-state" role="status"></div>
@@ -344,7 +343,6 @@
     ["mine","team"].forEach(s=>el("scope-"+s).classList.toggle("on",scope===s));
     ["month","week","day"].forEach(s=>el("view-"+s).classList.toggle("on",view===s));
     el("cal-new").hidden=scope!=="mine";
-    el("cal-batch-new").hidden=scope!=="mine";
     if(scope!=="mine")closeBatch();
   }
   async function load(){
