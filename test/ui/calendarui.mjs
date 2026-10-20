@@ -121,7 +121,7 @@ assert(!(await page.locator(".cal-drawer").innerText()).includes("編集する")
 await page.locator(".cal-drawer-close").first().click();
 assert((await page.locator("#cal-list-heading").innerText()).includes("全員"),"一覧も全員モードに切り替わる");
 assert(await page.locator("#cal-new").isHidden(),"全員表示では他人の予定を編集させない");
-assert(await page.locator("#cal-batch-new").isHidden(),"全員表示では一括入力も使えない");
+assert(await page.locator("#cal-new").isHidden(),"全員表示では追加モーダルも使えない");
 await page.locator("#view-week").click();
 assert(await page.locator(".cal-week").count()===1,"週表示に切り替わる");
 await page.locator("#view-day").click();
