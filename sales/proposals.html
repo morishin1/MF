@@ -26,6 +26,16 @@
     .pp-sum .lb .material-symbols-outlined { font-size:16px; }
     .pp-sum .v { font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
     .pp-sum .v small { font-size:13px; font-weight:700; margin-left:2px; }
+    /* 押して絞り込んでいるカード */
+    .pp-sum button.on { background:#1b2440; border-color:#1b2440; border-width:2px; }
+    .pp-sum button.on .lb, .pp-sum button.on .v { color:#fff; }
+    .pp-sum button:focus-visible { outline:2px solid #1b2440; outline-offset:2px; }
+    .pp-active { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:-8px 0 12px; font-size:13px; color:#1b2440; }
+    .pp-active[hidden] { display:none; }
+    .pp-active b { font-weight:700; }
+    @media (max-width: 900px) { .pp-sum { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width: 480px) { .pp-sum { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .pp-sum button { padding:10px 12px; } .pp-sum .v { font-size:22px; } }
 
     .pp-filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
     .pp-filters button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 12px; font-size:12px;
@@ -117,6 +127,7 @@
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
+  <div class="pp-active" id="active" hidden></div>
 
   <div class="sl-toolbar">
     <select id="f-owner" onchange="ppSet('owner', this.value)" style="display:none;"></select>
@@ -222,6 +233,13 @@
   }
 
   function ppSet(k, v) { STATE[k] = v; writeUrl(); load(); }
+  // 集計カード：押すとその提案に絞り、選択中をもう一度押すと解除。スマホでは一覧へ移る
+  async function ppCard(f) {
+    STATE.filter = STATE.filter === f ? "open" : f;
+    writeUrl();
+    await load();
+    if (STATE.filter !== "open" && window.matchMedia("(max-width: 900px)").matches) $("filters")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
@@ -229,24 +247,37 @@
     const d = data;
     $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
     // 今日やること
-    const t = d.today || {};
+    // 件数は一覧と同じ数え方（counts）。押すと同じ条件で絞る（件数と一覧が一致する）
+    const n = (k) => d.counts?.[k] ?? 0;
     const cards = [
-      { lb: "提案準備", icon: "edit_note", v: t.prepare, f: "proposal_wait" },
-      { lb: "今日の電話", icon: "call", v: t.call, f: "today" },
-      { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
-      { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
-      { lb: "面談調整", icon: "event", v: t.meeting, f: "meeting" },
-      { lb: "期限超過", icon: "alarm", v: t.overdue, f: "overdue", hot: true },
+      { lb: "提案準備", icon: "edit_note", f: "task_prepare" },
+      { lb: "今日の電話", icon: "call", f: "task_call" },
+      { lb: "今日のメール", icon: "mail", f: "task_mail" },
+      { lb: "回答確認", icon: "mark_email_unread", f: "task_reply_check" },
+      { lb: "面談調整", icon: "event", f: "task_meeting" },
+      { lb: "期限超過", icon: "alarm", f: "overdue", hot: true },
     ];
-    if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", v: d.counts?.unassigned ?? 0, f: "unassigned", warn: true });
-    else cards.push({ lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true });
-    $("sum").innerHTML = cards.map((c) => `
-      <button onclick="ppSet('filter','${c.f}')" class="${c.hot && c.v ? "hot" : c.warn && c.v ? "warn" : ""}">
+    if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", f: "unassigned", warn: true });
+    else cards.push({ lb: "電話未実施", icon: "phone_missed", f: "no_call", warn: true });
+    $("sum").innerHTML = cards.map((c) => {
+      const v = n(c.f), on = STATE.filter === c.f;
+      return `
+      <button onclick="ppCard('${c.f}')" class="${on ? "on" : c.hot && v ? "hot" : c.warn && v ? "warn" : ""}" aria-pressed="${on}"
+        data-filter="${c.f}" title="${on ? "もう一度押すと絞り込みを解除" : "この提案だけに絞る"}">
         <div class="lb"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.lb)}</div>
-        <div class="v">${c.v || 0}<small>件</small></div></button>`).join("");
+        <div class="v">${v}<small>件</small></div></button>`;
+    }).join("");
 
-    // 絞り込み
-    $("filters").innerHTML = d.labels.filters.filter((f) => d.manager || !f.managerOnly).map((f) => `
+    // いま何で絞っているか（解除できる）
+    const cur = d.labels.filters.find((f) => f.key === STATE.filter);
+    const act = $("active");
+    act.hidden = !cur || STATE.filter === "open";
+    act.innerHTML = cur ? `<span class="material-symbols-outlined icon-inline">filter_alt</span>
+      <span>絞り込み中：<b>${esc(cur.label)}</b>（${(d.proposals || []).length}件）</span>
+      <button class="btn btn-secondary btn-sm" onclick="ppSet('filter','open')" id="clear-filter">絞り込みを解除</button>` : "";
+
+    // 絞り込み（集計カード用の条件はチップに出さない）
+    $("filters").innerHTML = d.labels.filters.filter((f) => !f.card && (d.manager || !f.managerOnly)).map((f) => `
       <button class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
         onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`).join("");
 

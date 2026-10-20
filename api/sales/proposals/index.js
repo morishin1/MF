@@ -2,7 +2,7 @@
 //
 // GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
 //                          &owner=me|all|<社員ID>&service=…&q=…&sort=due|elapsed|sent&days=30
-//        … 一覧（提案単位）。絞り込みの件数・今日の件数・KPI（担当別）・管理側には担当未割当・連携エラーの件数
+//        … 一覧（提案単位）。絞り込みの件数・今日の件数（filter=task_* で同じ提案に絞れる）・KPI（担当別）・管理側には担当未割当・連携エラーの件数
 // POST /api/sales/proposals { companyName, title, service?, salesOwnerId?, sentAt?, contactName?, contactEmail?, contactPhone?, companyId? }
 //        … /sales で提案を手で足す（システム開発・PC・レンタルなど dx.enger 以外。dx.enger の提案は自動で入る）
 //
@@ -17,7 +17,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   PROPOSAL_FIELDS, TASK_FIELDS, FILTER_KEYS, SORTS, STATUS_LABEL, LABELS, canManageProposals, shapeProposal, filterRows,
-  countFilters, computeKpis, firstTasks, settingsOf, isUuid, readWhen, todayEndIso,
+  countFilters, computeKpis, firstTasks, settingsOf, isUuid, readWhen,
 } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, loadPeople, salesMembers, loadSettingsRow, insertTasks, inChunks } from "../../../lib/sales-proposals-db.js";
 import { periodStartJst } from "../../../lib/sales.js";
@@ -84,23 +84,16 @@ async function list(req, res, sb, ctx) {
   const ownerId = manager ? (ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null) : null;
   const scoped = shaped.filter((r) => (ownerQ === "none" && manager ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
     && (!q || `${r.companyName} ${r.title} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
-  const counts = countFilters(scoped, { now, manager });
+  // 件数は、一覧と同じ範囲（担当・検索語・サービス）で数える（チップ・集計カードの数と、押したあとの一覧が一致する）
+  const counts = countFilters(scoped.filter((r) => !service || r.service === service), { now, manager });
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
 
-  // 今日やること（自分の分。管理側は全体）
-  const todayEnd = todayEndIso(now);
-  const openTasks = (tks.data || []).filter((t) => t.status === "open" && (manager && ownerQ !== "me" ? true : t.assignee_id === me));
-  const today = { prepare: 0, call: 0, mail: 0, reply_check: 0, meeting: 0, other: 0, overdue: 0 };
-  for (const t of openTasks) {
-    if (t.due_at < now) today.overdue++;
-    if (t.due_at > todayEnd) continue;
-    if (t.kind === "prepare") today.prepare++;
-    else if (t.kind === "call" || t.kind === "refollow") today.call++;
-    else if (t.kind === "mail") today.mail++;
-    else if (t.kind === "reply_check") today.reply_check++;
-    else if (t.kind === "meeting_fix" || t.kind === "meeting_result") today.meeting++;
-    else today.other++;
-  }
+  // 今日やること（上の集計カード）。一覧と同じ範囲（担当・検索語）の提案を、提案単位で数える。
+  // カードを押したときの絞り込み（FILTERS の task_*）と同じ判定なので、件数と一覧が一致する
+  const today = {
+    prepare: counts.task_prepare, call: counts.task_call, mail: counts.task_mail,
+    reply_check: counts.task_reply_check, meeting: counts.task_meeting, overdue: counts.overdue,
+  };
 
   // KPI（期間内に企業へ送った提案。提案待ち（まだ送っていない）は入れない。担当で絞ったときはその担当だけ）
   const { iso: since } = periodStartJst(days, new Date(now));

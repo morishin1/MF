@@ -177,6 +177,29 @@ console.log("\n=== 管理側：一覧 ===");
   await page.locator("#filters button", { hasText: "期限超過" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#rows tr.click").count() === 1, "「期限超過」で絞ると1件");
+
+  // SALES-01：上の集計カードを押すと、カードの件数と同じ数の提案に絞れる。選択中が分かり、解除できる
+  await page.locator("#filters button", { hasText: "対応中" }).click();
+  await page.waitForTimeout(400);
+  for (const f of ["task_prepare", "task_call", "overdue"]) {
+    const card = page.locator(`#sum button[data-filter="${f}"]`);
+    const want = Number((await card.locator(".v").innerText()).replace(/\D/g, ""));
+    await card.click();
+    await page.waitForTimeout(400);
+    const got = await page.locator("#rows tr.click").count();
+    check(got === want, `カード ${f}：件数 ${want} ＝ 一覧 ${got}`);
+    check(await page.locator(`#sum button[data-filter="${f}"].on`).count() === 1 && await page.locator("#sum button.on").count() === 1, `${f}：押したカードだけが選択中`);
+    check(await page.locator("#active").isVisible() && (await page.locator("#active").innerText()).includes(`${got}件`), `${f}：絞り込み中の表示と件数`);
+    check(new URL(page.url()).searchParams.get("filter") === f, `${f}：URL に絞り込みが残る（戻っても同じ）`);
+  }
+  await page.locator("#clear-filter").click();
+  await page.waitForTimeout(400);
+  check(await page.locator("#sum button.on").count() === 0 && await page.locator("#active").isHidden(), "［絞り込みを解除］で選択中が消える");
+  check(await page.locator("#rows tr.click").count() === 4, "解除すると対応中の4件に戻る");
+  const pc = page.locator('#sum button[data-filter="task_prepare"]');
+  await pc.click(); await page.waitForTimeout(300); await pc.click(); await page.waitForTimeout(400);
+  check(await page.locator("#sum button.on").count() === 0, "選択中のカードをもう一度押すと解除");
+  check(!(await page.locator("#filters").innerText()).includes("今日の電話"), "集計カード用の条件はチップに重ねて出さない");
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
   await page.close();
 }
@@ -252,6 +275,16 @@ console.log("\n=== スマホ（390px） ===");
   check(await page.locator("#cards .pp-card").count() === 3, "カードで3件");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check(over <= 1, `横にはみ出さない（${over}px）`);
+  // SALES-01：スマホでも集計カードを押すと、件数どおりに絞れて一覧の位置へ移る
+  const mcard = page.locator('#sum button[data-filter="overdue"]');
+  const mwant = Number((await mcard.locator(".v").innerText()).replace(/\D/g, ""));
+  await mcard.click(); await page.waitForTimeout(800);
+  check(await page.locator("#cards .pp-card").count() === mwant, `スマホ：期限超過カード ${mwant} 件 ＝ 一覧`);
+  check(await page.evaluate(() => window.scrollY) > 0, "スマホ：押すと一覧の位置へ移る");
+  const over2 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  check(over2 <= 1, `絞り込み中も横にはみ出さない（${over2}px）`);
+  await page.screenshot({ path: shotPath("proposals-card-filter-mobile.png"), fullPage: true });
+  await page.locator("#clear-filter").click(); await page.waitForTimeout(400);
   await page.screenshot({ path: shotPath("proposals-list-mobile.png"), fullPage: true });
   await page.locator("#cards .pp-card").first().click();
   await page.waitForSelector("#pp-detail .sl-next");

@@ -773,5 +773,59 @@ await ok("13 Slack：送れなかったら印を戻して連携の確認に要�
   assert.deepEqual(notified.map((n) => n.employeeId).sort(), [E_MGR, E_OWNER].sort(), "管理側に知らせる");
 });
 
+// ---- SALES-01：上の集計カード（今日やること）と、押したあとの一覧が一致する ------------------
+await ok("SALES-01 集計カードの件数 ＝ そのカードで絞った一覧の件数（担当・サービス・検索語で同じ範囲。期限超過は提案単位）", async () => {
+  setup();
+  const sent = new Date(Date.now() - 2 * 86400000).toISOString();
+  const soon = new Date(Date.now() + 60000).toISOString();   // 今日中（日本時間の今日の終わりより前とは限らないので、下で判定）
+  const past = new Date(Date.now() - 3600000).toISOString();
+  const far = new Date(Date.now() + 10 * 86400000).toISOString();
+  const P = (n, over) => ({ id: uid(500 + n), tenant_id: T1, company_name: `会社${n}`, title: `提案${n}`, status: "call_wait",
+    source_system: "manual", sent_at: sent, sales_owner_id: E_S1, service: "ENGER", ...over });
+  mem.rows.gw_sales_proposals = [
+    P(1, {}), P(2, { sales_owner_id: E_S2 }), P(3, { status: "mail_wait", service: "無限道場" }),
+    P(4, { status: "proposal_wait", sent_at: null, matched_at: sent }), P(5, { status: "reply_wait" }),
+    P(6, { status: "meeting_adjust" }), P(7, { status: "lost", close_reason: "client_declined", closed_at: sent }),
+    P(8, { status: "mail_wait" }),
+  ];
+  const T = (n, pid, kind, due, over = {}) => ({ id: uid(600 + n), tenant_id: T1, proposal_id: uid(500 + pid), kind, title: kind,
+    due_at: due, status: "open", assignee_id: E_S1, auto: true, ...over });
+  mem.rows.gw_sales_proposal_tasks = [
+    T(1, 1, "call", past), T(2, 1, "refollow", past),            // 1件の提案に期限切れ2件 → 期限超過は1件
+    T(3, 2, "call", soon, { assignee_id: E_S2 }),
+    T(4, 3, "mail", soon), T(5, 4, "prepare", soon), T(6, 5, "reply_check", soon), T(7, 6, "meeting_fix", soon),
+    T(8, 7, "call", past),                                      // 終わった提案は数えない
+    T(9, 8, "mail", far),                                       // 明日以降は今日のカードに入れない
+  ];
+  const cards = ["task_prepare", "task_call", "task_mail", "task_reply_check", "task_meeting", "overdue"];
+  const check = async (as, qs = "") => {
+    const all = await list(as, qs ? `?${qs}` : "");
+    assert.equal(all.statusCode, 200, JSON.stringify(all.body));
+    for (const k of cards) {
+      const r = await list(as, `?${qs ? `${qs}&` : ""}filter=${k}`);
+      assert.equal(r.body.proposals.length, all.body.counts[k], `${qs || "全体"}：${k} の件数と一覧が一致`);
+      assert.ok(r.body.proposals.every((p) => !p.closed), `${k}：終わった提案は入らない`);
+    }
+    return all.body;
+  };
+  const m = await check(MANAGER);
+  assert.equal(m.counts.overdue, 1, "期限超過は提案単位（同じ提案の2件を2と数えない）");
+  assert.equal(m.counts.task_mail, 1, "明日以降のメールは今日に入れない");
+  assert.equal(m.today.overdue, m.counts.overdue, "互換の today も同じ数");
+  assert.equal(m.counts.task_call, 1 + Number(soon <= new Date(`${new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)}T23:59:59.999+09:00`).toISOString()));
+  // 担当を1人に絞ると、カードも同じ範囲
+  const one = await check(MANAGER, `owner=${E_S2}`);
+  assert.equal(one.counts.overdue, 0); assert.equal(one.counts.task_prepare, 0);
+  // サービス・検索語でも同じ範囲
+  const svc = await check(MANAGER, `service=${encodeURIComponent("無限道場")}`);
+  assert.equal(svc.counts.task_prepare, 0, "サービスで絞ると他のサービスの提案準備は数えない");
+  await check(MANAGER, `q=${encodeURIComponent("会社3")}`);
+  // 営業担当は自分の提案だけ
+  const s1 = await check(S1);
+  assert.equal(s1.counts.overdue, 1);
+  // チップの一覧には集計カード用の条件を出さない（card=true で区別）
+  assert.ok(m.labels.filters.filter((f) => f.card).map((f) => f.key).join() === "task_prepare,task_call,task_mail,task_reply_check,task_meeting");
+});
+
 console.log(`\nsales proposals: 合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) process.exit(1);
