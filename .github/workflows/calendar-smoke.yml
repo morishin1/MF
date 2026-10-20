@@ -1,0 +1,34 @@
+name: カレンダー操作の確認
+on:
+  pull_request:
+    paths:
+      - "calendar.html"
+      - "api/schedule/**"
+      - "lib/schedule-batch.js"
+      - "test/ui/calendarui.mjs"
+      - "test/schedulebatchtest.mjs"
+      - ".github/workflows/calendar-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: 予定の一括登録とAI結果
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: node test/schedulebatchtest.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: HTMLテスト用ローカルサーバ
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/calendar-web.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/calendar.html && break
+            sleep 0.5
+          done
+      - run: node test/ui/calendarui.mjs

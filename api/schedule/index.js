@@ -3,6 +3,7 @@
 //          ・自分のスペース予約
 //          ・自分のタスクの期限
 // POST   /api/schedule             … 予定を作る
+// POST   /api/schedule {action:"batch_create",events:[…]} … 1〜30件を一括作成
 // PATCH  /api/schedule {id, ...}   … 予定を直す
 // DELETE /api/schedule?id=…        … 予定を消す
 // POST   /api/schedule {action:"push"|"unpush", id}
@@ -22,6 +23,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { fetchExternalEvents, pushEvent, unpushEvent, linkStatus } from "../../lib/google-link.js";
+import { prepareCalendarBatch } from "../../lib/schedule-batch.js";
 
 const FIELDS =
   "id, title, body, location, category, all_day, starts_at, ends_at, created_at, " +
@@ -45,6 +47,7 @@ export default async function handler(req, res) {
   if (req.method === "GET") return list(req, res, ctx);
   if (req.method === "POST") {
     const body = await readJson(req);
+    if (body?.action === "batch_create") return createBatch(req, res, ctx, body.events);
     // 書き出しは作成と同じ口にした。押すたびに別のURLを覚える必要がない
     if (body?.action === "push" || body?.action === "unpush") {
       return syncOne(req, res, ctx, body);
@@ -115,6 +118,20 @@ async function create(req, res, ctx, body) {
   let google = null;
   if (body?.pushToGoogle) google = await pushAndRecord(ctx, data);
   return json(res, 200, { event: data, google });
+}
+
+// まとめて登録：1回のINSERTで全件登録（途中まで保存・再実行による重複を避ける）。
+async function createBatch(req, res, ctx, events) {
+  const parsed = prepareCalendarBatch(events, normalize);
+  if (parsed.error) return json(res, 400, parsed);
+  // テナントと社員はリクエストを信用せず、ログイン中の本人に固定する。
+  const rows = parsed.rows.map((row) => ({ ...row, tenant_id: ctx.tenantId, employee_id: ctx.employee.id }));
+  const { data, error } = await userClient(req).from("gw_calendar_events")
+    .insert(rows).select(FIELDS);
+  if (error) return json(res, error.code === "42501" ? 403 : 500, {
+    error: "batch_insert_failed", hint: "予定を一括保存できませんでした。内容を確認して再度お試しください",
+  });
+  return json(res, 200, { ok: true, count: data?.length || rows.length, events: data || [] });
 }
 
 async function update(req, res, ctx) {
