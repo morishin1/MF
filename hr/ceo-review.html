@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
   <link rel="stylesheet" href="../css/app.css?v=20261020cal1">
+  <link rel="stylesheet" href="../css/action-feedback.css?v=20261020cal1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -137,9 +138,29 @@
 <script src="../js/hr-layout.js?v=20261020cal1"></script>
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
 <script src="../js/jst.js?v=20261020cal1"></script>
+<script src="../js/action-feedback.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
+  function hrBlocked(title,message,fieldId){
+    const node=fieldId&&el(fieldId);
+    if(fieldId&&fieldId.startsWith("iv-")&&el("iv-msg")) el("iv-msg").textContent=message;
+    if(fieldId&&fieldId.startsWith("dc-")&&el("dc-msg")) el("dc-msg").textContent=message;
+    const opts={title,message};
+    if(node){
+      opts.actionLabel="入力欄を確認";
+      opts.onAction=()=>{node.scrollIntoView({behavior:"smooth",block:"center"});node.focus({preventScroll:true});};
+    }
+    KPActionFeedback.show(opts);
+  }
+  function hrApiBlocked(e, fieldId){
+    const raw=String(e?.hint||e?.detail||e?.message||"");
+    const title=e?.status===403?"操作権限を確認してください":"処理を完了できませんでした";
+    const message=e?.status===403?"この操作の担当者・権限を確認してください。":
+      (/[ぁ-んァ-ン一-龯]/.test(raw)&&!/\b(?:SQLSTATE|PGRST|permission denied)\b/i.test(raw)?raw:
+      "入力内容を確認し、解決しない場合は管理者へ連絡してください。");
+    hrBlocked(title,message,e?.status===403?null:fieldId);
+  }
 
   let data = { todayMeetings: [], recommended: [], decisionPending: [], contactPending: [] };
   let employees = [];
@@ -257,6 +278,15 @@
   async function submitSchedule(applicantId, btn) {
     const msg = el("iv-msg"); msg.textContent = "";
     const when = el("iv-when").value;
+    if(!when){hrBlocked("面談日時が未入力です","面談の予定日時を入力してから設定してください。","iv-when");return;}
+    if(!Number.isFinite(new Date(when).getTime())){
+      hrBlocked("面談日時を確認してください","正しい日時を入力してください。","iv-when");return;
+    }
+    const url=el("iv-url").value.trim();
+    if(url){
+      try{const parsed=new URL(url);if(!["https:","http:"].includes(parsed.protocol))throw new Error("url");}
+      catch{hrBlocked("面談URLの形式を確認してください","https:// で始まる有効な面談URLを入力してください。","iv-url");return;}
+    }
     try {
       await KPLayout.busy(btn, "保存中…", () => API.scheduleHrInterview({
         applicantId, kind: "ceo",
@@ -266,16 +296,16 @@
       }));
       closeAction();
       await load();
-    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "設定できませんでした"; }
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "設定できませんでした"; hrApiBlocked(e,"iv-when"); }
   }
 
   async function conductCeoInterview(ivId, applicantId) {
-    if (!ivId) { alert("面談が見つかりません"); return; }
+    if (!ivId) { KPActionFeedback.show({title:"対象の面談を確認できません",message:"面談一覧を更新して、対象者の面談を再確認してください。",actionLabel:"一覧を更新",onAction:()=>load()});return; }
     if (!confirm("この面談を実施済みにします。よろしいですか？")) return;
     try {
       await API.conductHrInterview(ivId);
       await load();
-    } catch (e) { alert(e.hint || e.detail || e.message || "できませんでした"); }
+    } catch (e) { hrApiBlocked(e); }
   }
 
   // 採用判断の部品（下の共通部分）が、この画面で使う口
@@ -484,7 +514,7 @@
       body.decisionNote = el("dc-note").value.trim() || undefined;
     } else if (decideKind === "hold") {
       const next = el("dc-next").value.trim();
-      if (!next) { msg.textContent = "次に確認することを入力してください"; return; }
+      if (!next) { hrBlocked("次に確認することが未入力です","保留する場合は、次に誰が何を確認するか入力してください。","dc-next"); return; }
       body.holdReason = el("dc-reason").value.trim() || undefined;
       body.holdNextStep = next;
       body.decisionDueOn = el("dc-due").value || undefined;
@@ -500,7 +530,7 @@
         if (ev) await API.updateHrInterview(ev);
         await API.updateHrApplicant(body);
       });
-    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; return; }
+    } catch (e) { msg.textContent = e.hint || e.detail || e.message || "できませんでした"; hrApiBlocked(e,decideKind==="hold"?"dc-next":null); return; }
     Object.assign(flow, { step: "contact", savedKind: decideKind, summary });
     renderEval(); renderStep1();
     await loadMessage();
