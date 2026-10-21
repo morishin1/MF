@@ -105,7 +105,9 @@
 <script src="../js/keiei-layout.js?v=20261020cal1"></script>
 <script src="/keiei/onboarding.js?v=20261020cal1"></script>
 <script src="/keiei/pay.js?v=20261020cal1"></script>
-<script src="/keiei/members.js?v=20261020cal1"></script>
+<script src="/keiei/members.js?v=20261021ks1"></script>
+<!-- 予定・日報確認（#schedule）。共有の版（?v=20261020cal1）は上げず、このファイルだけ自分の版で読む -->
+<script src="/keiei/schedule.js?v=20261021ks1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -482,6 +484,13 @@
       KeieiLayout.setActive("members");
       const mine = ++seq;
       await window.KeieiMembers.open(el("kei-main"), () => mine !== seq);
+      return;
+    }
+    // 予定・日報確認（#schedule）は、keiei/schedule.js（日報の提出とカレンダーの業務予定を、全員／メンバー別・日／週／月で見る）
+    if (view === "schedule") {
+      KeieiLayout.setActive("members");
+      const mine = ++seq;
+      await window.KeieiSchedule.open(el("kei-main"), () => mine !== seq);
       return;
     }
     if (!RENDER[view]) view = "home";
