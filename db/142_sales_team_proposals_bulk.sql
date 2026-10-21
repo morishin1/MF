@@ -176,6 +176,76 @@ end $$;
 revoke all on function public.gw_sales_bulk_proposals(uuid[],text,text,text) from public, anon;
 grant execute on function public.gw_sales_bulk_proposals(uuid[],text,text,text) to authenticated;
 
+
+-- 任意の追加担当：主担当は変えない。各役割に補助担当（最大10名）を付けられる。
+create table if not exists public.gw_sales_proposal_supporters (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  proposal_id uuid not null references public.gw_sales_proposals(id),
+  stage text not null check (stage in ('proposal','cs','closing')),
+  employee_id uuid not null references public.gw_employees(id) on delete cascade,
+  added_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(proposal_id,stage,employee_id)
+);
+create index if not exists idx_gw_sales_supporters_proposal
+  on public.gw_sales_proposal_supporters(proposal_id,stage);
+alter table public.gw_sales_proposal_supporters enable row level security;
+drop policy if exists gw_sales_supporters_select on public.gw_sales_proposal_supporters;
+create policy gw_sales_supporters_select on public.gw_sales_proposal_supporters
+  for select to authenticated
+  using (public.gw_is_sales(tenant_id) and public.gw_sales_proposal_visible_id(proposal_id));
+grant select on public.gw_sales_proposal_supporters to authenticated;
+revoke insert, update, delete on public.gw_sales_proposal_supporters from authenticated, anon;
+
+-- 補助担当の追加/除外は、現在担当する本人だけ。記録は追記しておく。
+create or replace function public.gw_sales_set_supporters(
+  p_proposal uuid, p_stage text, p_members uuid[]
+) returns integer
+language plpgsql security definer set search_path=''
+as $$
+declare
+  v_tenant uuid;
+  v_owner uuid;
+  v_old uuid[];
+  v_member uuid;
+  v_count integer;
+begin
+  select tenant_id,sales_owner_id into v_tenant,v_owner
+    from public.gw_sales_proposals where id=p_proposal and archived_at is null for update;
+  if v_tenant is null or not public.gw_sales_proposal_editable(v_tenant,v_owner) then
+    raise exception 'forbidden' using errcode='42501';
+  end if;
+  if p_stage not in ('proposal','cs','closing') or p_stage is null
+     or p_members is null or cardinality(p_members)>10 then
+    raise exception 'invalid_members_or_stage' using errcode='23514';
+  end if;
+  if exists (select 1 from unnest(p_members) x where x is null) or
+     (select count(distinct x) from unnest(p_members) x) <> cardinality(p_members) then
+    raise exception 'invalid_duplicate_members' using errcode='23514';
+  end if;
+  for v_member in select unnest(p_members) loop
+    if not public.gw_sales_employee_ok(v_member,v_tenant) then
+      raise exception 'invalid_member' using errcode='23514';
+    end if;
+  end loop;
+  select coalesce(array_agg(employee_id order by employee_id),'{}'::uuid[]) into v_old
+    from public.gw_sales_proposal_supporters where proposal_id=p_proposal and stage=p_stage;
+  delete from public.gw_sales_proposal_supporters
+    where proposal_id=p_proposal and stage=p_stage
+      and employee_id <> all(p_members);
+  insert into public.gw_sales_proposal_supporters(tenant_id,proposal_id,stage,employee_id,added_by)
+    select v_tenant,p_proposal,p_stage,member,(select auth.uid()) from unnest(p_members) member
+    on conflict (proposal_id,stage,employee_id) do nothing;
+  get diagnostics v_count=row_count;
+  insert into public.gw_sales_proposal_activities(tenant_id,proposal_id,kind,employee_id,created_by,note,detail)
+    values(v_tenant,p_proposal,'memo',v_owner,(select auth.uid()),
+      '共同担当者を更新',jsonb_build_object('stage',p_stage,'before',v_old,'after',p_members));
+  return cardinality(p_members);
+end $$;
+revoke all on function public.gw_sales_set_supporters(uuid,text,uuid[]) from public, anon;
+grant execute on function public.gw_sales_set_supporters(uuid,text,uuid[]) to authenticated;
+
 comment on function public.gw_sales_bulk_proposals(uuid[],text,text,text) is
   '現在の提案担当本人のみが最大50件を編集・アーカイブ・復元する。元データ・履歴は削除しない(db/142)';
 commit;
