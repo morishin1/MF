@@ -749,7 +749,7 @@
     };
   }
   function ppSendCall() {
-    if (!picked("m-result")) { ppShowIssue({title:"電話・面談・判断の結果が未選択です",message:"該当する結果を選んでください。",field:"m-result"}); return; }
+    if (!picked("m-result")) { ppShowIssue({title:"電話の結果が未選択です",message:"「通話できた」「不在」など、電話の結果を選んでください。",field:"m-result"}); return; }
     send({ action: "call", result: picked("m-result"), outcome: picked("m-out"), nextAt: $("m-nextat").value || null,
       occurredAt: $("m-at").value, note: $("m-note").value });
   }
@@ -814,7 +814,7 @@
     toggle = () => { $("m-next").style.display = picked("m-result") === "scheduled" ? "" : "none"; };
   }
   function ppSendMeeting() {
-    if (!picked("m-result")) { $("m-msg").textContent = "内容を選んでください"; return; }
+    if (!picked("m-result")) { ppShowIssue({title:"面談の結果が未選択です",message:"面談の結果を選んでください。",field:"m-result"}); return; }
     send({ action: "meeting", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
   }
 
@@ -844,7 +844,7 @@
     toggle = () => { $("m-next").style.display = picked("m-result") === "continue" ? "" : "none"; };
   }
   function ppSendDecision() {
-    if (!picked("m-result")) { $("m-msg").textContent = "判断を選んでください"; return; }
+    if (!picked("m-result")) { ppShowIssue({title:"管理者の判断が未選択です",message:"判断を選んでください。",field:"m-result"}); return; }
     send({ action: "decision", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
   }
 
