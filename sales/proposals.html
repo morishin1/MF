@@ -35,6 +35,24 @@
     .pp-filters button.alert:not(.on) { border-color:#c0392b; color:#b3261e; }
 
     .pp-table td.due, .pp-table td.nw { white-space:nowrap; }
+    .pp-table .pp-check-col { width:36px; text-align:center; padding:6px; }
+    .pp-table input[type=checkbox],.pp-card input[type=checkbox] { width:17px; height:17px; accent-color:#1b2440; cursor:pointer; }
+    .pp-chain-line { display:flex; align-items:center; gap:5px; line-height:1.5; white-space:nowrap; font-size:12px; }
+    .pp-chain-line em { font-size:10px; font-style:normal; color:#6b7080; background:#f0f1f4; border-radius:4px; padding:1px 4px; flex:0 0 66px; }
+    .pp-chain-line strong { font-weight:700; color:#1b2440; }
+    .pp-chain-line .pending { color:#b26c00; }
+    .pp-chain-line.active em { background:#eff5d1; color:#566400; }
+    .pp-row-readonly { opacity:.9; }
+    .pp-view-badge { display:inline-block; margin-top:3px; color:#778090; font-size:10px; }
+    .pp-bulk { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 12px;padding:8px 10px;background:#f6f7f5;border:1px solid #e2e2dc;border-radius:9px; }
+    .pp-bulk button { font:inherit;cursor:pointer; }
+    .pp-bulk button:disabled { opacity:.4;cursor:default; }
+    .pp-bulk-note { margin-left:auto;color:#6b7080;font-size:11px; }
+    .pp-bulk .pp-danger { color:#a52626;border-color:#dcb0b0; }
+    .pp-list-meta { font-size:11px; color:#6b7080; margin:0 0 8px; }
+    .pp-readonly-note { padding:12px;margin:12px 20px;background:#f6f7f5;border-radius:9px;font-size:12px;color:#4a5068; }
+    .pp-no-actions { display:none !important; }
+
     a.btn { text-decoration:none; }
     .pp-table tr.overdue td:first-child { box-shadow:inset 3px 0 0 #c0392b; }
     .pp-over { color:#b3261e; font-weight:700; }
@@ -113,13 +131,13 @@
 
 <div class="wrap">
   <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">マッチング確定から、企業への提案・電話・メール・回答確認・面談までを、提案ごとに追います。dx.enger でマッチングが確定した提案は自動で入り（提案待ち）、企業へ提案を送ると電話のタスクに進みます。</p>
+  <p class="sl-sub">チームの提案を全件閲覧できます。<b>ENGER提案者 → CS → クロージング</b>を一覧で確認し、自分の担当案件だけ編集・引継ぎできます。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
 
   <div class="sl-toolbar">
-    <select id="f-owner" onchange="ppSet('owner', this.value)" style="display:none;"></select>
+    <select id="f-owner" onchange="ppSet('owner', this.value)"></select>
     <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
     <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
     <select id="f-sort" onchange="ppSet('sort', this.value)">
@@ -131,11 +149,20 @@
       <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
   </div>
   <div class="pp-filters" id="filters"></div>
+  <div class="pp-bulk" id="pp-bulk">
+    <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>選択して編集</button>
+    <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>選択して削除（一覧から除外）</button>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
+    <span class="pp-bulk-note">チェックできるのは自分の担当案件だけ。削除は履歴を残すアーカイブです。</span>
+  </div>
+  <div class="pp-list-meta" id="pp-list-meta"></div>
 
   <div class="pp-tablewrap" style="overflow-x:auto;">
     <table class="sl-table pp-table">
       <thead><tr>
-        <th>提案日時</th><th>企業</th><th>種別</th><th>提案</th><th>マッチング担当</th><th>営業担当</th>
+        <th class="pp-check-col"><input type="checkbox" id="pp-all" aria-label="表示中の自分の案件をすべて選択" onchange="ppSelectAll(this.checked)"></th>
+        <th>提案日時</th><th>企業</th><th>種別</th><th>提案</th><th>提案 → CS → クロージング</th>
         <th>進捗</th><th>次の行動・期限</th><th>経過</th><th>電話</th><th>メール</th><th>連携</th>
       </tr></thead>
       <tbody id="rows"><tr><td colspan="12" class="empty">読み込み中…</td></tr></tbody>
@@ -158,11 +185,12 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "open", owner: "", service: "", q: "", sort: "due" };
+  const STATE = { filter: "all", owner: "", service: "", q: "", sort: "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
   let seq = 0;
+  const selected = new Set();
 
   const STATUS_PILL = {
     proposal_wait: "untouched", call_wait: "clicked", mail_wait: "clicked", reply_wait: "attacked", meeting_adjust: "meeting", meeting_done: "meeting",
@@ -185,7 +213,7 @@
   }
   function writeUrl() {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "open") && !(k === "sort" && v === "due")) sp.set(k, v);
+    for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "sent")) sp.set(k, v);
     if (openId) sp.set("id", openId);
     history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
   }
@@ -221,7 +249,7 @@
     }
   }
 
-  function ppSet(k, v) { STATE[k] = v; writeUrl(); load(); }
+  function ppSet(k, v) { STATE[k] = v; selected.clear(); writeUrl(); load(); }
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
@@ -252,7 +280,7 @@
 
     // 担当（管理側だけ）・サービス
     const owner = $("f-owner");
-    if (d.manager) {
+    {
       owner.style.display = "";
       owner.innerHTML = `<option value="">担当：全員</option><option value="me">自分の担当</option><option value="none">担当未割当</option>`
         + (d.members || []).map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
@@ -262,7 +290,12 @@
     svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
     svc.value = STATE.service;
 
-    renderRows(d.proposals || []);
+    const allVisible = d.proposals || [];
+    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
+    $("pp-list-meta").textContent = "表示中：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件・上限あり）" : "") +
+      "　全員の提案を閲覧できます。他人の提案は詳細も閲覧専用です。";
+    renderRows(allVisible);
+    ppBulkState();
     renderKpi(d);
     renderAdmin(d);
   }
