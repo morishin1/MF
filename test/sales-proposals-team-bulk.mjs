@@ -11,6 +11,8 @@ const html = readFileSync(resolve(ROOT, "sales/proposals.html"), "utf8");
 const inline = html.match(/<script>\s*([\s\S]*?)<\/script>/);
 assert.ok(inline, "提案管理のJavaScriptが存在する");
 new Script(inline[1], { filename: "sales/proposals.html" });
+const cols = readFileSync(resolve(ROOT, "js/sales-proposal-columns.js"), "utf8");
+new Script(cols, { filename: "js/sales-proposal-columns.js" });
 const list = readFileSync(resolve(ROOT, "api/sales/proposals/index.js"), "utf8");
 const detail = readFileSync(resolve(ROOT, "api/sales/proposals/detail.js"), "utf8");
 const handoff = readFileSync(resolve(ROOT, "api/sales/proposals/handoff.js"), "utf8");
@@ -18,9 +20,11 @@ const bulk = readFileSync(resolve(ROOT, "api/sales/proposals/bulk.js"), "utf8");
 const intake = readFileSync(resolve(ROOT, "lib/sales-proposal-intake.js"), "utf8");
 const sql = readFileSync(resolve(ROOT, "db/142_sales_team_proposals_bulk.sql"), "utf8");
 
-for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore", "pp-all", "pp-list-meta"]) {
+for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore", "pp-column-head", "pp-list-meta"]) {
   assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, "要素:" + id);
 }
+assert.ok(cols.includes('id="pp-all"'), "全選択は動的な列ヘッダに表示");
+assert.ok(cols.includes('"proposal", "cs", "closing"') || cols.includes('"proposal","cs","closing"'), "担当3列を一覧に表示");
 assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は全件");
 assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
 for (const label of ["提案者", "CS担当", "クロージング"]) assert.ok(inline[1].includes(label), label);
