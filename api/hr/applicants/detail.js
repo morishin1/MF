@@ -2,6 +2,16 @@
 // PATCH /api/hr/applicants/detail { id, ... } … 応募者本体を更新
 // PATCH /api/hr/applicants/detail { id, action: "leadNextAction", nextAction, note? }
 //       … 無限道場リードの面談後の次のアクション（体験案内・参加検討・申込…。lib/hr-lead-flow.js）
+//
+// 早期引き渡し（新フロー。db/143・lib/hr-office-intake-ops.js。機能フラグ HR_OFFICE_INTAKE=1 のときだけ。OFF なら 409）
+// PATCH { id, action: "saveHearing", hearing: {項目: 値}, unresolved: [項目], pay?: {...} } … 条件ヒアリングを記録
+// PATCH { id, action: "confirmHearing" }                          … 人事担当が内容を確認（不足があれば 409）
+// PATCH { id, action: "approveHearingException", reason }         … 未確定のまま引き渡す例外の承認（社長・管理者だけ）
+// PATCH { id, action: "officeHandoff", confirm: true, officeAssigneeId?, clientRequestId? } … ［Officeへ引き渡す］（一度だけ）
+//
+// ■ 大事な状態は飛び越えさせない（lib/hr-state-guard.js。機能フラグに関係なく）
+//   合格（decision = hired）は社長・管理者だけ（応募者の状態に関係なく）。承諾済み・完了は手動では付けない。
+//   合格通知の段階へは合格のあとだけ。Office へ引き渡し済み・社員登録済みの人の状態は変えない
 
 import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
@@ -22,6 +32,11 @@ import { OFFER_TYPES_PUBLIC, offerTypeLabel, acceptFactsOf } from "../../../lib/
 import { readOfferTypes } from "../../../lib/hr.js";
 import { readContractStates } from "../../../lib/hr-contract-db.js";
 import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
+import { statusChangeBlock } from "../../../lib/hr-state-guard.js";
+import { intakeEnabled, readIntakeFacts, activeIntakeIds } from "../../../lib/hr-office-intake.js";
+import {
+  recordCeoDecision, saveHearing, confirmHearing, approveException, officeHandoff, intakeView,
+} from "../../../lib/hr-office-intake-ops.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
@@ -143,6 +158,11 @@ async function one(req, res, sb, ctx, salary) {
   Object.assign(a, acceptFactsOf(acceptedOffer));
   // 社労士の正式PDFで進める版の、契約手続きの状態（db/139。表が無い環境では載せない＝これまでどおり）
   a.contract_state = (await readContractStates(sb, ctx.tenantId, [a], offers || [])).get(a.id) ?? null;
+  // 早期引き渡し（新フロー）の段階（機能フラグ ON のときだけ。旧フローの人には載らない）
+  if (intakeEnabled()) {
+    const facts = await readIntakeFacts(admin(), ctx.tenantId, [a.id]);
+    if (facts.byId.has(a.id)) a.office_intake = facts.byId.get(a.id);
+  }
   // 契約手続き（db/139）が使えるか。オファーを作る前（区分を選んだあと）は列があるかを確かめる（画面のオファー入力の出し分け）
   let contractOn = (offers || []).some((o) => contractReady(o));
   if (!contractOn && !(offers || []).length && OFFICIAL_TYPES.includes(a.offer_type) && a.status === "offer_draft_pending") {
@@ -198,6 +218,8 @@ async function one(req, res, sb, ctx, salary) {
     offers: (offers || []).map((o) => ({ ...shapeOffer(o), handoffByName: o.handoff_by ? (actorName.get(o.handoff_by) || null) : null })),
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）
     salaryVisible: salary,
+    // 早期引き渡し（条件ヒアリング・Office への引き渡し）。フラグ OFF なら { enabled:false } だけ（画面は何も出さない）
+    officeIntake: await intakeView({ ctx, salary, applicantId: a.id }),
   });
 }
 
@@ -211,6 +233,11 @@ async function update(req, res, sb, ctx, user, salary) {
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
   if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
   if (body.action === "leadNextAction") return setLeadNextAction(res, sb, ctx, user, body);
+  const intakeOps = { saveHearing, confirmHearing, approveHearingException: approveException, officeHandoff };
+  if (intakeOps[body.action]) {
+    const r = await intakeOps[body.action]({ ctx, user, body, salary });
+    return json(res, r.status, r.body);
+  }
   // 給与を見られない人は、給与の欄を書き換えられない（見えていない値を上書きしてしまわないため）
   const row = normalizeApplicant(salary ? body : dropSalaryInput(body), { partial: true });
   if (row.error) return json(res, 400, row);
@@ -220,9 +247,30 @@ async function update(req, res, sb, ctx, user, salary) {
     if (!rc.ok) return json(res, 400, rc);
   }
 
-  const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name, recruiter_id")
+  const { data: before } = await sb.from("gw_hr_applicants").select("stage, status, decision, name, recruiter_id, employee_id")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!before) return json(res, 404, { error: "not_found" });
+  // 社長の合格は、社長・管理者だけ（応募者の状態に関係なく。採用担当のランク評価だけでは合格にしない）
+  if (row.value.decision === "hired" && !canDecideHire(ctx)) {
+    return json(res, 403, { error: "forbidden", hint: "合格（採用判断）は社長・管理者だけができます" });
+  }
+  // 状態・選考段階・判断を動かすとき：大事な状態を飛び越えない・Office へ引き渡し済みの人は動かさない
+  const moving = ["status", "stage", "decision", "offer_type"].some((k) => k in row.value && row.value[k] !== before[k]);
+  if (moving) {
+    let movedIds;
+    try {
+      movedIds = await activeIntakeIds(admin(), ctx.tenantId, [body.id]);
+    } catch (e) {
+      return json(res, 500, { error: "db_query_failed", detail: e?.message || String(e) });
+    }
+    const block = statusChangeBlock({
+      before, to: "status" in row.value ? row.value.status : before.status,
+      decision: "decision" in row.value ? row.value.decision : undefined,
+      canDecide: canDecideHire(ctx), movedToOffice: movedIds.has(body.id),
+    });
+    // 社長判断待ちから動かす権限は、下の採用判断の確かめ（ヒントの言い方が違う）に任せる
+    if (block && block.error !== "forbidden") return json(res, block.status, { error: block.error, hint: block.hint });
+  }
   // 保留にするときは、保留理由・次に確認すること・再判断期限の3つが要る（NEXT ACTION を具体的にするため）
   if (row.value.decision === "hold") {
     const missing = [
@@ -234,6 +282,13 @@ async function update(req, res, sb, ctx, user, salary) {
   if (before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined)
       && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
+  }
+  // 社長判断の確定記録（db/143。機能フラグ ON のときだけ。判断者・日時・応募者ID）。応募者を変える前に記録する
+  //（記録できなければ、合格にもしない）。採用担当の早期見送り（社長判断ではない）は記録しない
+  if ("decision" in row.value && row.value.decision && row.value.decision !== before.decision && canDecideHire(ctx)) {
+    const rec = await recordCeoDecision({ ctx, user, applicantId: body.id, decision: row.value.decision,
+      note: row.value.decision_note ?? row.value.hold_reason ?? null });
+    if (rec) return json(res, rec.status, rec.body);
   }
   // 採用区分（db/129）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
   let beforeOfferType = null;
@@ -347,6 +402,15 @@ async function setStatus(res, sb, ctx, user, body) {
   if ((before.status === "ceo_decision_pending" || to === "ceo_decision_pending") && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "社長判断待ちの状態を変えられるのは社長・管理者だけです" });
   }
+  // 承諾済み・完了・合格通知の段階（合格の前）へは手動で変えない。社員登録済み・Office へ引き渡し済みの人は動かさない
+  let movedIds;
+  try {
+    movedIds = await activeIntakeIds(admin(), ctx.tenantId, [body.id]);
+  } catch (e) {
+    return json(res, 500, { error: "db_query_failed", detail: e?.message || String(e) });
+  }
+  const block = statusChangeBlock({ before, to, canDecide: canDecideHire(ctx), movedToOffice: movedIds.has(body.id) });
+  if (block) return json(res, block.status, { error: block.error, hint: block.hint });
 
   const { data: interviews } = await sb.from("gw_hr_interviews")
     .select("id, kind, scheduled_at, conducted_at, canceled_at, timerex_event_id")

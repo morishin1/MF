@@ -44,6 +44,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary, canAdvanceHire, canOfficeHr } from "../../../lib/gw.js";
 import { guardSalaryOutput, dropSalaryInput } from "../../../lib/salary.js";
 import { paySplit, splitWage, attachPay, savePay, copyPayToOffer, payFailed, WAGE_COLUMNS } from "../../../lib/hr-pay.js";
+import { activeIntakeIds } from "../../../lib/hr-office-intake.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
@@ -124,6 +125,14 @@ async function create(req, res, sb, ctx, user, salary) {
   if (!applicant) return json(res, 404, { error: "not_found" });
   if (applicant.status !== "offer_draft_pending") {
     return json(res, 409, { error: "invalid_state", hint: "いまは合格通知を作成できる状態ではありません" });
+  }
+  // Office へ早期引き渡し済み（db/143）の人の条件の版は、HR では作らない（Office が作る。PR B）
+  try {
+    if ((await activeIntakeIds(admin(), ctx.tenantId, [applicant.id])).has(applicant.id)) {
+      return json(res, 409, { error: "moved_to_office", hint: "Office へ引き渡し済みです。条件の版は Office で作ります" });
+    }
+  } catch (e) {
+    return json(res, 500, { error: "db_query_failed", detail: e?.message || String(e) });
   }
   // 給与が見えない人の操作でも、応募者の条件は、サーバの中でそのまま引き継ぐ（応答には載らない）
   await attachPay(ctx.tenantId, applicant, "applicant");

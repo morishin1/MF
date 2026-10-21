@@ -1,12 +1,20 @@
 // POST /api/hr/applicants/bulk { ids: [...], action, status?, recruiterId? }
 //   action: "delete" | "setStatus" | "setRecruiter"
 //
+// ■ 大事な状態は一括で飛び越えさせない・契約の履歴は消させない（lib/hr-state-guard.js。機能フラグに関係なく）
+//   setStatus：承諾済み・完了・合格通知の段階へは入れない。社員登録済み・承諾済み・Office へ引き渡し済みの人は動かさない。
+//              社長判断待ちの出入りは社長・管理者だけ。社長合格の人は「辞退」「募集終了」へだけ。
+//              1人でも当てはまれば、何も変えずに 409（だれが・なぜ を返す）
+//   delete   ：オファーの版（handoff_at を含む）・社労士への依頼・正式PDF・社長判断・ヒアリング・早期引き渡しのある人が
+//              1人でも入っていれば、何も消さずに 409。DB でも db/143 の gw_hr_applicants_guard が止める
+//   （以前は、どの status へも・どの応募者でも変えられ、削除でオファー等も一緒に消えていた）
+//
 // 応募者一覧の複数選択操作（採用HR応募者一覧・ドロワーUI改善指示書 §1）。
 //
 // ■ 削除は選考終了とは別の操作（同指示書 §2）
 //   辞退・見送りは既存のstage/status（合格通知フロー・採用判断）で扱う。
 //   ここでの delete は「登録ミス等で応募者レコードそのものを削除する」操作で、
-//   gw_hr_interviews/gw_hr_timeline/gw_hr_offers も on delete cascade で一緒に消える
+//   gw_hr_interviews/gw_hr_timeline も on delete cascade で一緒に消える（契約の履歴がある人は上のとおり消さない）
 //   （面談"キャンセル"は別途 /api/hr/interviews の action=cancel。物理削除しない）。
 //
 // ■ ページ内選択だけを対象にする
@@ -17,8 +25,10 @@ import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
 import { notify } from "../../../lib/notify.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { gwContext, canRecruit, canDecideHire } from "../../../lib/gw.js";
+import { userClient, admin } from "../../../lib/supabase.js";
+import { statusChangeBlock, contractHistoryOf, historyBlockedBody } from "../../../lib/hr-state-guard.js";
+import { activeIntakeIds } from "../../../lib/hr-office-intake.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { STATUSES } from "../../../lib/hr.js";
 
@@ -44,7 +54,7 @@ export default async function handler(req, res) {
 
   const sb = userClient(req);
   // 自テナント内に実在する行だけに絞る（他テナントのidが混ざっていても弾く）
-  const { data: rows, error: selErr } = await sb.from("gw_hr_applicants").select("id, name")
+  const { data: rows, error: selErr } = await sb.from("gw_hr_applicants").select("id, name, status, decision, employee_id")
     .in("id", ids).eq("tenant_id", ctx.tenantId);
   if (selErr) {
     const hint = dbSetupHint(selErr, SQL);
@@ -61,8 +71,19 @@ export default async function handler(req, res) {
 
 async function doDelete(res, sb, ctx, user, rows) {
   const ids = rows.map((r) => r.id);
+  let history;
+  try {
+    history = await contractHistoryOf(admin(), ctx.tenantId, ids);
+  } catch (e) {
+    return json(res, 500, { error: "db_query_failed", detail: e?.message || String(e) });
+  }
+  if (history.size) return json(res, 409, historyBlockedBody(rows, history));
   const { error } = await sb.from("gw_hr_applicants").delete().in("id", ids).eq("tenant_id", ctx.tenantId);
-  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
+  if (error) {
+    // DB の安全装置（db/143）が止めたとき（読んだあとに履歴ができた等）
+    if (error.code === "23503") return json(res, 409, { error: "has_contract_history", hint: error.message });
+    return json(res, error.code === "42501" ? 403 : 500, { error: "db_delete_failed", detail: error.message });
+  }
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_delete",
     target: `hr_applicant:${ids.join(",")}`, detail: { count: ids.length, names: rows.map((r) => r.name) },
@@ -73,6 +94,25 @@ async function doDelete(res, sb, ctx, user, rows) {
 async function doSetStatus(res, sb, ctx, user, rows, status) {
   if (!STATUSES.includes(status)) return json(res, 400, { error: "invalid_body", detail: "status が不正です" });
   const ids = rows.map((r) => r.id);
+  let moved;
+  try {
+    moved = await activeIntakeIds(admin(), ctx.tenantId, ids);
+  } catch (e) {
+    return json(res, 500, { error: "db_query_failed", detail: e?.message || String(e) });
+  }
+  const canDecide = canDecideHire(ctx);
+  const blocked = [];
+  for (const r of rows) {
+    const b = statusChangeBlock({ before: r, to: status, canDecide, movedToOffice: moved.has(r.id), bulk: true });
+    if (b) blocked.push({ id: r.id, name: r.name, status: b.status, error: b.error, hint: b.hint });
+  }
+  if (blocked.length) {
+    const code = blocked.every((b) => b.status === 403) ? 403 : 409;
+    return json(res, code, {
+      error: code === 403 ? "forbidden" : "protected_state", blocked,
+      hint: `変えられない応募者がいるため、何も変えていません（${blocked.map((b) => `${b.name}：${b.hint}`).join("／")}）`,
+    });
+  }
   const { error } = await sb.from("gw_hr_applicants")
     .update({ status, updated_at: new Date().toISOString() }).in("id", ids).eq("tenant_id", ctx.tenantId);
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });

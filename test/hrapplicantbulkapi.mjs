@@ -7,6 +7,9 @@
 //   3. 他テナントのid・存在しないidが混ざっても、実在＆自テナントの行だけを対象にする
 //   4. 空のids・不正なactionは断る。一度に選べる件数には上限がある
 //   5. recruiterロールだけの人も使える。一般メンバーは使えない
+//   6. 大事な状態（社長合格・承諾済み・Office への引き渡し・社員登録の完了）を一括で飛び越えない。
+//      契約の履歴（オファーの版など）がある応募者は削除しない（lib/hr-state-guard.js。db/143 の PR A で追加。
+//      以前はどの status へも一括で変えられ、削除でオファーも一緒に消えていた）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 
@@ -235,6 +238,34 @@ await ok("知らないactionは断る", async () => {
   setup();
   const r = await call({ ids: ["a1"], action: "archive" });
   assert.equal(r.statusCode, 400);
+});
+
+console.log("\n=== 大事な状態を一括で飛び越えない・履歴を消さない ===\n");
+
+await ok("承諾済み・完了・合格通知の段階へは一括で変えられない（何も変わらない）", async () => {
+  setup();
+  for (const st of ["accepted", "done", "offer_draft_pending", "offer_sent"]) {
+    const r = await call({ ids: ["a1", "a2"], action: "setStatus", status: st });
+    assert.equal(r.statusCode, 409, st);
+  }
+  assert.equal(db.rows.gw_hr_applicants.find((x) => x.id === "a1").status, "todo");
+});
+
+await ok("社長判断待ちへの一括変更は、採用担当にはできない", async () => {
+  setup();
+  const r = await call({ ids: ["a1"], action: "setStatus", status: "ceo_decision_pending" });
+  assert.equal(r.statusCode, 403);
+});
+
+await ok("オファーの版がある応募者は削除できない（409・何も消えない）", async () => {
+  setup();
+  db.rows.gw_hr_offers = [{ id: "o1", tenant_id: "t1", applicant_id: "a1", handoff_at: null }];
+  const r = await call({ ids: ["a1", "a2"], action: "delete" });
+  assert.equal(r.statusCode, 409);
+  assert.equal(r.body.error, "has_contract_history");
+  assert.equal(db.rows.gw_hr_applicants.filter((x) => x.tenant_id === "t1").length, 2);
+  assert.equal(db.rows.gw_hr_offers.length, 1);
+  delete db.rows.gw_hr_offers;
 });
 
 console.log("\n=== 誰が触れるか（既存HR権限設計に従う） ===\n");
