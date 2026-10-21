@@ -49,20 +49,16 @@ async function list(req, res, sb, ctx) {
   const sp = new URL(req.url, "http://localhost").searchParams;
   const manager = canManageProposals(ctx);
   const me = ctx.employee?.id || null;
-  const filter = FILTER_KEYS.includes(sp.get("filter")) ? sp.get("filter") : "open";
+  const filter = FILTER_KEYS.includes(sp.get("filter")) ? sp.get("filter") : "all";
   const sort = SORTS[sp.get("sort")] ? sp.get("sort") : "due";
-  const ownerQ = sp.get("owner") || (manager ? "all" : "me");
+  const ownerQ = sp.get("owner") || "all";
   const service = sp.get("service") || null;
   const q = String(sp.get("q") || "").trim().toLowerCase().slice(0, 100);
   const days = Math.min(365, Math.max(7, Number(sp.get("days")) || 30));
   const now = new Date().toISOString();
 
   let query = sb.from("gw_sales_proposals").select(PROPOSAL_FIELDS).eq("tenant_id", ctx.tenantId);
-  // 営業担当は自分の担当だけ（URL の値で範囲を広げない）
-  if (!manager) {
-    if (!me) return json(res, 200, { proposals: [], counts: {}, kpi: null, manager, labels: LABELS, notice: "社員名簿に登録が無いため、担当の提案を表示できません" });
-    query = query.eq("sales_owner_id", me);
-  }
+  // 同じテナントのSales利用者は全提案を閲覧可。編集権は提案の現在担当本人だけ。
   const { data: rows, error } = await query.order("sent_at", { ascending: false }).limit(LIMIT + 1);
   if (error) return fail(res, error);
   const truncated = (rows || []).length > LIMIT;
@@ -79,17 +75,20 @@ async function list(req, res, sb, ctx) {
   if (acts.error) return fail(res, acts.error);
   if (tks.error) return fail(res, tks.error);
 
-  const shaped = proposals.map((p) => shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }));
-  // 担当で絞る（管理側だけ。営業担当はもう自分の分しか無い）
-  const ownerId = manager ? (ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null) : null;
-  const scoped = shaped.filter((r) => (ownerQ === "none" && manager ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
-    && (!q || `${r.companyName} ${r.title} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
+  const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+    canEdit: Boolean(me && p.sales_owner_id === me && !p.archived_at),
+    canRestore: Boolean(me && p.sales_owner_id === me && p.archived_at),
+  }));
+  // 全件閲覧。フィルタ「自分／担当者／未割当」は表示だけに影響する。
+  const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;
+  const scoped = shaped.filter((r) => (ownerQ === "none" ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
+    && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const counts = countFilters(scoped, { now, manager });
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
 
   // 今日やること（自分の分。管理側は全体）
   const todayEnd = todayEndIso(now);
-  const openTasks = (tks.data || []).filter((t) => t.status === "open" && (manager && ownerQ !== "me" ? true : t.assignee_id === me));
+  const openTasks = (tks.data || []).filter((t) => t.status === "open" && !proposals.find((p) => p.id === t.proposal_id)?.archived_at && t.assignee_id === me);
   const today = { prepare: 0, call: 0, mail: 0, reply_check: 0, meeting: 0, other: 0, overdue: 0 };
   for (const t of openTasks) {
     if (t.due_at < now) today.overdue++;
@@ -105,24 +104,25 @@ async function list(req, res, sb, ctx) {
   // KPI（期間内に企業へ送った提案。提案待ち（まだ送っていない）は入れない。担当で絞ったときはその担当だけ）
   const { iso: since } = periodStartJst(days, new Date(now));
   const scopedIds = new Set(scoped.map((r) => r.id));
-  const inPeriod = proposals.filter((p) => scopedIds.has(p.id) && p.sent_at >= since);
+  const inPeriod = proposals.filter((p) => !p.archived_at && scopedIds.has(p.id) && p.sent_at >= since);
   const kpi = computeKpis(inPeriod, acts.data || [], tks.data || [], { now });
   kpi.byOwner = kpi.byOwner.map((r) => ({ ...r, ownerName: people.nameOf(r.ownerId) || (r.ownerId ? "（退職・不明）" : "担当未割当") }));
   kpi.days = days;
 
   let syncIssues = null;
-  let members = [];
+  let members = await salesMembers(ctx.tenantId, people.employees);
   if (manager) {
     const { count } = await sb.from("gw_sales_proposal_sync_log").select("id", { count: "exact", head: true })
       .eq("tenant_id", ctx.tenantId).neq("status", "ok").is("resolved_at", null);
     syncIssues = count ?? null;
-    members = await salesMembers(ctx.tenantId, people.employees);
   }
   const services = [...new Set(shaped.map((r) => r.service).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
 
   return json(res, 200, {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
-    members, services, syncIssues, truncated, settings: settingsOf(settingsRow), labels: LABELS,
+    members, services, syncIssues, truncated,
+    notice: truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
+    settings: settingsOf(settingsRow), labels: LABELS,
   });
 }
 
@@ -136,8 +136,8 @@ async function create(req, res, sb, ctx, user) {
   if (!companyName || !title) return json(res, 400, { error: "invalid_body", required: ["companyName", "title"], hint: "企業名と提案の内容を入れてください" });
   const owner = body.salesOwnerId === undefined || body.salesOwnerId === "" ? me : body.salesOwnerId;
   if (owner !== null && !isUuid(owner)) return json(res, 400, { error: "invalid_body", field: "salesOwnerId" });
-  // 営業担当は自分が担当の提案だけ足せる（他人に割り当てるのは管理側）
-  if (!manager && owner !== me) return json(res, 403, { error: "forbidden", hint: "ほかの人を担当にした提案は、管理者が登録します" });
+  // 自分以外を直接担当にした新規登録を禁止（役割の偽装防止）。
+  if (!me || owner !== me) return json(res, 403, { error: "forbidden", hint: "新しい提案はログイン中の本人担当で登録してください" });
   const sentAt = readWhen(body.sentAt);
   if (sentAt === undefined) return json(res, 400, { error: "invalid_body", field: "sentAt" });
   if (body.companyId && !isUuid(body.companyId)) return json(res, 400, { error: "invalid_body", field: "companyId" });
@@ -151,7 +151,9 @@ async function create(req, res, sb, ctx, user) {
   const row = {
     tenant_id: ctx.tenantId, source_system: "manual", company_id: body.companyId || null, company_name: companyName,
     service: str(body.service, 100), title, contact_name: str(body.contactName, 100), contact_email: email,
-    contact_phone: str(body.contactPhone, 40), sales_owner_id: owner, sent_at: sentAt || new Date().toISOString(),
+    contact_phone: str(body.contactPhone, 40), sales_owner_id: owner,
+    matching_owner_name: ctx.employee?.display_name || null, matching_owner_email: ctx.employee?.email || null,
+    sent_at: sentAt || new Date().toISOString(),
     status: "call_wait", created_by: user.id, updated_by: user.id,
   };
   const { data: made, error } = await sb.from("gw_sales_proposals").insert(row).select(PROPOSAL_FIELDS).single();
