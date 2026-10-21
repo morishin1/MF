@@ -178,7 +178,7 @@
   // 操作できない理由は押した場所ですぐに表示し、具体的な入力欄に戻れるようにする。
   function ppShowIssue(issue) {
     if (!issue) return false;
-    const field = issue.field && $(issue.field);
+    const field = issue.field && ($(issue.field) || document.querySelector(`input[name="${issue.field}"]`));
     if ($("m-msg")) $("m-msg").textContent = issue.message;
     const opts = { title: issue.title, message: issue.message };
     if (field) {
@@ -856,8 +856,7 @@
     const targets = (detail.handoffTargets || {})[stage] || [];
     const cs = stage === "cs";
     if (!targets.length) {
-      modal('<h2>担当チームが未設定です</h2><p class="sl-muted">管理者に「フォローの設定」からCS・クロージング担当を登録してもらってください。</p>' +
-        '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">閉じる</button></div>');
+      ppFlowBlocked(stage === "cs" ? "cs_team" : "closing_team");
       return;
     }
     const decisions = cs
