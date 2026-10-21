@@ -38,7 +38,8 @@ export default async function handler(req, res) {
   if (!proposal) return json(res, 404, { error: "not_found" });
   const me = ctx.employee?.id || null;
   const manager = canManageProposals(ctx);
-  if (!manager && me !== proposal.sales_owner_id) return json(res, 403, { error: "forbidden" });
+  if (!me || me !== proposal.sales_owner_id || proposal.archived_at)
+    return json(res, 403, { error: "readonly", hint: "引継ぎできるのは現在の担当者本人です" });
   const action = clean(body.action, 30);
   const priv = admin();
 
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
     const nextAt = readWhen(body.nextAt);
     if (!reason || !nextAction || !["advance", "needs_detail", "hold", "other"].includes(decision) || nextAt === undefined)
       return json(res, 400, { error: "invalid_body", hint: "判断・引継ぎ理由・次のアクションを記入してください" });
-    const { data: handoffId, error } = await sb.rpc("gw_sales_transfer_proposal", {
+    const { data: handoffId, error } = await sb.rpc("gw_sales_transfer_proposal_owner", {
       p_proposal: proposal.id, p_to_stage: toStage, p_to_owner: body.ownerId,
       p_reason: reason, p_decision: decision, p_next_action: nextAction, p_next_at: nextAt,
     });
