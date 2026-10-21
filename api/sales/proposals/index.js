@@ -65,24 +65,35 @@ async function list(req, res, sb, ctx) {
   const proposals = truncated ? rows.slice(0, LIMIT) : rows || [];
   const ids = proposals.map((p) => p.id);
 
-  const [acts, tks, people, settingsRow] = await Promise.all([
+  const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
       .select("id, proposal_id, kind, result, outcome, evidence, occurred_at, employee_id").in("proposal_id", chunk).limit(1000)),
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).in("proposal_id", chunk).limit(1000)),
     loadPeople(ctx.tenantId),
     loadSettingsRow(sb, ctx.tenantId),
+    inChunks(ids, (chunk) => sb.from("gw_sales_proposal_supporters")
+      .select("proposal_id, stage, employee_id").in("proposal_id", chunk).limit(1000)),
   ]);
   if (acts.error) return fail(res, acts.error);
   if (tks.error) return fail(res, tks.error);
+  if (collaborators.error) return fail(res, collaborators.error);
+  const extra = new Map();
+  for (const c of collaborators.data || []) {
+    if (!extra.has(c.proposal_id)) extra.set(c.proposal_id, { proposal: [], cs: [], closing: [] });
+    const item = extra.get(c.proposal_id);
+    if (item[c.stage]) item[c.stage].push({ id: c.employee_id });
+  }
 
   const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+    supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
+      .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(me && p.sales_owner_id === me && !p.archived_at),
     canRestore: Boolean(me && p.sales_owner_id === me && p.archived_at),
   }));
   // 全件閲覧。フィルタ「自分／担当者／未割当」は表示だけに影響する。
   const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;
   const scoped = shaped.filter((r) => (ownerQ === "none" ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
-    && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
+    && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const counts = countFilters(scoped, { now, manager });
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
 
