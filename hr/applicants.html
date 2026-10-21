@@ -452,6 +452,7 @@
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
 <script src="../js/jst.js?v=20261020cal1"></script>
 <script src="../js/hr-lms-trial.js?v=20261013lms4"></script>
+<script src="../js/hr-office-intake.js?v=20261021intake1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -470,12 +471,15 @@
   // 上段の区分。デフォルトは「選考中」＝見送り・辞退を除いた、まだ対応中の人だけ。
   // 区分タブ（選考中／業務委託／無限道場／終了）。どのタブに入るかはサーバ（lib/hr.js listTabOf → a.listTab）が決める。
   // 「終了」には見送り（passed）・辞退（declined）・募集終了（position_closed）が自動で入る。削除とは別で履歴等は残る
-  const CATEGORIES = [
+  // 「Officeへ移動済み」（早期引き渡し。db/143）は、サーバが listTabs に入れたとき（機能フラグ HR_OFFICE_INTAKE が ON）だけ出す
+  let CATEGORIES = [
     { key: "active", label: "選考中" },
     { key: "contractor", label: "業務委託" },
     { key: "mugendojo", label: "無限道場" },
     { key: "closed", label: "終了" },
   ];
+  // 一覧を読むまでは分からない区分（URL・前回の表示で指定されたら、読んでから確かめる）
+  const LATE_CATEGORIES = ["office"];
   // 古い URL（?category=recruitment / rejected / all）も開けるように
   const CATEGORY_ALIAS = { all: "active", recruitment: "active", rejected: "closed" };
   const isLead = (a) => a?.leadCategory === "mugendojo";
@@ -534,6 +538,13 @@
   API.warm("hr:applicants:all", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
 
   HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); start(); } });
+  // 早期引き渡し（条件ヒアリング・［Officeへ引き渡す］。js/hr-office-intake.js）。詳細・モーダル・再読み込みはこの画面のものを使う
+  if (window.HRIntake) HRIntake.init({
+    detail: () => detail, openModal: openActionModal, closeModal: closeAction,
+    refresh: async (reloadList) => { await refreshDetail(); if (reloadList) load(); },
+    employees: () => detail?.interviewers || employees,
+    offerTypes: () => offerTypesDef, offerTypeLabel: (k) => offerTypeDef(k)?.label || null,
+  });
   // 本採用へ進める（社員登録へ）。社長・管理者・人事（社員登録の画面に入れる人＝/api/me の access.officeHr）。
   // サーバの canAdvanceHire（lib/gw.js）と同じ条件（test/accessparity.mjs が見張る）
   function canAdvanceOf(me) {
@@ -545,7 +556,7 @@
   function start() {
     const cat = new URLSearchParams(location.search).get("category");
     const want = CATEGORY_ALIAS[cat] || cat;   // 旧URL互換
-    if (CATEGORIES.some((c) => c.key === want)) categoryFilter = want;
+    if (CATEGORIES.some((c) => c.key === want) || LATE_CATEGORIES.includes(want)) categoryFilter = want;
     restoreView();
     renderCategoryTabs();
     renderStageTabs();
@@ -610,7 +621,7 @@
     };
     const stages = categoryFilter === "closed"
       ? [{ key: "status:passed", label: "見送り・不採用" }, { key: "status:declined", label: "辞退" }, { key: "status:position_closed", label: "募集終了" }]
-      : categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
+      : categoryFilter === "mugendojo" ? MD_STAGES : categoryFilter === "office" ? [] : STAGES;
     API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s) => tab(s.key, s.label)).join(""));
   }
   function setStage(key) { stageFilter = key; saveView(); renderStageTabs(); render(); }
@@ -630,7 +641,7 @@
     if (!v) return;
     // URL で区分を指定して開いたときは URL を優先。段階・検索は、同じ区分のときだけ戻す
     const urlCat = new URLSearchParams(location.search).get("category");
-    if (!urlCat && CATEGORIES.some((c) => c.key === v.category)) categoryFilter = v.category;
+    if (!urlCat && (CATEGORIES.some((c) => c.key === v.category) || LATE_CATEGORIES.includes(v.category))) categoryFilter = v.category;
     if (v.category === categoryFilter) {
       stageFilter = typeof v.stage === "string" ? v.stage : "";
       if (v.q && el("q")) el("q").value = v.q;
@@ -657,6 +668,9 @@
         if (Array.isArray(res.sources?.options) && res.sources.options.length) sourceOptions = res.sources.options;
         sourceCounts = Array.isArray(res.sources?.counts) ? res.sources.counts : [];
         leadReady = res.leadReady !== false;
+        // 区分タブはサーバが決める（「Officeへ移動済み」は早期引き渡しが使えるときだけ）。無ければ選考中へ戻す
+        if (Array.isArray(res.listTabs) && res.listTabs.length) CATEGORIES = res.listTabs;
+        if (!CATEGORIES.some((c) => c.key === categoryFilter)) categoryFilter = "active";
         renderSourceSummary();
         renderCategoryTabs();
         renderStageTabs();
@@ -778,7 +792,7 @@
         <td>${docsCell(a)}</td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
         <td><span class="hr-pill" style="background:${bg};color:${fg};">
-          <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>${decisionBadges(a)}</td>
+          <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>${decisionBadges(a)}${intakeListMeta(a)}</td>
         <td>${esc(listNextAction(a))}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
         <td data-col="due">${dueCell(a)}</td>
@@ -792,6 +806,14 @@
       const y = restoreScrollY; restoreScrollY = 0;
       requestAnimationFrame(() => window.scrollTo(0, y));
     }
+  }
+
+  /** Officeへ移動済みの人：採用区分・引き渡し日時・Office担当（一覧の状態の下に1行） */
+  function intakeListMeta(a) {
+    const x = a.officeIntake;
+    if (!x || !["handed_off", "withdrawn"].includes(x.phase)) return "";
+    const who = employees.find((e) => e.id === x.officeAssigneeId)?.display_name || "未定";
+    return `<span class="hr-sub2" data-intake-meta>${a.offerTypeLabel ? `${esc(a.offerTypeLabel)}・` : ""}引き渡し ${esc(JST.dateTime(x.handedAt))}・Office担当 ${esc(who)}</span>`;
   }
 
   // ---- 複数選択・一括操作 -----------------------------------------------------------
@@ -841,13 +863,16 @@
   }
   function closeHrModal() { el("hr-modal-root").innerHTML = ""; }
 
+  // 一括では変えられない状態（承諾済み・完了・合格通知の段階。サーバ lib/hr-state-guard.js も断る）は選択肢に出さない
+  const BULK_HIDDEN_STATUSES = ["accepted", "done", "offer_draft_pending", "offer_review_pending", "offer_send_pending", "offer_sent",
+    "offer_viewed", "offer_resend_pending", "offer_response_pending"];
   function openBulkStatusModal() {
     const n = selectedIds.size;
     openHrModal(`
       <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">ステータス変更</h2>
       <p class="hr-sub" style="margin:0 0 14px;">${n}名のステータスを変更します。</p>
       <label>変更後のステータス</label>
-      <select id="bs-status">${Object.entries(STATUS_LABEL).map(([k, l]) =>
+      <select id="bs-status">${Object.entries(STATUS_LABEL).filter(([k]) => !BULK_HIDDEN_STATUSES.includes(k)).map(([k, l]) =>
         `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
       <div id="bs-msg" class="err-text" style="margin:10px 0;"></div>
       <div style="display:flex;gap:8px;margin-top:14px;">
@@ -1554,6 +1579,7 @@
         .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
       const missing = docMissingLabels();
       box.innerHTML = `
+        ${window.HRIntake ? HRIntake.card() : ""}
         ${instructorApplication(a)}
         ${basicInfo(a, ev, evLine)}
         ${missing.length ? `<p class="muted" style="font-size:12px;margin:8px 0 0;">
@@ -2132,6 +2158,9 @@
     if (key === "recommend") return openRecommendForm();
     if (key === "advance") return startAdvance();
     if (key === "handoff") return openHandoff();
+    // 早期引き渡し（新フロー）：条件ヒアリング・［Officeへ引き渡す］（js/hr-office-intake.js）
+    if (key === "hearing") return HRIntake.openHearing();
+    if (key === "officeHandoff") return HRIntake.openHandoff();
     if (key === "reject") return confirmDecisionMove("reject");
     if (key === "decide") return openDecideForm();
     if (key === "contact") return openContactForm(a.id, a.decision);
