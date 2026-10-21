@@ -97,6 +97,14 @@
     .pp-flow-hint { font-size:11.5px; color:#5f6575; }
     .pp-more-actions summary { cursor:pointer; font-size:12px; font-weight:700; color:#4a5068; }
     .pp-more-actions[open] { padding-top:7px; width:100%; }
+
+    .pp-flow-done { display:flex; gap:5px; flex-wrap:wrap; margin-top:9px; }
+    .pp-done-chip { color:#27623a; background:#eff7f0; border-radius:6px; padding:3px 7px; font-size:11px; }
+    .pp-next-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .pp-next-actions .pp-more-actions { width:100%; }
+    .pp-collapsible { padding:12px 16px; }
+    .pp-collapsible summary, .pp-history summary { cursor:pointer; font-size:12.5px; font-weight:700; color:#4a5068; }
+    .pp-collapsible[open] summary, .pp-history[open] summary { margin-bottom:10px; }
     @media (max-width: 1000px) {
       .pp-sum, .pp-kpi { grid-template-columns:repeat(3,minmax(0,1fr)); }
     }
@@ -455,31 +463,81 @@
   function ppStageIndex(p) {
     return p.handoffStage === "closing" ? 2 : p.handoffStage === "cs" && p.csOwnerId ? 1 : 0;
   }
-  // 今できる一つのアクションだけを案内する。
-  function ppFlowAction(p, d) {
-    if (p.closed) return '<span class="pp-flow-hint">対応終了</span>';
+
+  // 履歴と未完了タスクを正として、次に押すボタンを毎回選び直す。
+  function ppNextAction(p, d) {
     const stage = ppStageIndex(p);
-    let label = "", action = "", enabled = true, hint = "";
-    if (stage === 0) {
-      label = "CSへ引継ぐ"; action = "ppHandoff('cs')";
-      if (!p.sentAt) { enabled = false; hint = "先に企業へ提案してください"; }
-      else if (!(d.handoffTargets?.cs || []).length) { enabled = false; hint = "管理者がCS担当を設定してください"; }
-    } else if (stage === 1 && !d.csContacted) {
-      label = "電話結果を記録"; action = "ppCall()";
-      hint = "通話または返信の記録後にCS判断へ";
-    } else if (stage === 1 && !["advance","needs_detail"].includes(d.csDecision)) {
-      label = "CS判断を記録"; action = "ppCsDecision()";
-      hint = "進行判断後にクロージングへ";
-    } else if (stage === 1) {
-      label = "クロージングへ引継ぐ"; action = "ppHandoff('closing')";
-      if (!(d.handoffTargets?.closing || []).length) { enabled = false; hint = "管理者がクロージング担当を設定してください"; }
-    } else { label = "面談を記録"; action = "ppMeeting()"; }
-    if (!d.canHandoff && stage !== 2 && !(stage === 1 && !d.csContacted)) {
-      enabled = false; hint = "現在の担当者または管理者が操作できます";
+    const history = d.activities || [];
+    const open = (d.tasks || []).filter(t => t.status === "open");
+    const hasTask = k => open.some(t => t.kind === k);
+    const lastCall = history.find(a => a.kind === "call");
+    const lastMail = history.find(a => a.kind === "mail");
+    const lastCheck = history.find(a => a.kind === "check");
+    const btn = (label, action, hint = "", disabled = false) => ({ label, action, hint, disabled });
+    if (p.closed) return { label:null, action:null, hint:"対応終了" };
+    if (!p.sentAt) return btn("企業へ提案した", "ppSent()", "ENGERから送信した場合は自動で反映されます");
+    if (stage === 0 && (d.handoffTargets?.cs || []).length && d.canHandoff) {
+      return btn("CSへ引継ぐ", "ppHandoff('cs')");
     }
-    return '<button type="button" class="btn btn-primary btn-sm" onclick="' + action +
-      '"' + (enabled ? "" : ' disabled aria-disabled="true"') + '>' + esc(label) + '</button>' +
-      (hint ? '<span class="pp-flow-hint">' + esc(hint) + '</span>' : "");
+    if (stage === 1 && d.csContacted) {
+      if (["advance","needs_detail"].includes(d.csDecision)) {
+        const targets = (d.handoffTargets?.closing || []).length;
+        return btn("クロージングへ引継ぐ", "ppHandoff('closing')", targets ? "" : "管理者がクロージング担当を設定してください", !targets || !d.canHandoff);
+      }
+      if (d.csDecision === "decline") return btn("見送りを記録", "ppResult()");
+      if (d.csDecision === "hold") return btn("再連絡を記録", "ppCall()");
+      return btn("CS判断を記録", "ppCsDecision()", "", !d.canHandoff);
+    }
+    if (stage === 2) {
+      return p.status === "meeting_done"
+        ? btn("成約・見送りを記録", "ppResult()")
+        : btn(p.meetingAt ? "面談結果を記録" : "面談を記録", "ppMeeting()");
+    }
+    // 連絡がついていない場合、前回の記録を終わった操作として扱う。
+    if (hasTask("mail")) return btn("確認メールを送った", "ppMail()");
+    if (hasTask("reply_check")) return btn("回答を確認", "ppCheck()", "返信があれば「その他の操作」から記録");
+    if (hasTask("refollow")) return btn("再連絡を記録", "ppCall()");
+    if (hasTask("manager_review")) return d.manager ? btn("管理者の判断", "ppDecision()") : btn("管理者の確認待ち", null, "", true);
+    if (lastCall?.result === "callback" || lastCall?.result === "recall") return btn("再電話を記録", "ppCall()");
+    if (lastCall && ["no_answer","absent"].includes(lastCall.result) &&
+      (!lastMail || lastMail.occurredAt < lastCall.occurredAt)) return btn("確認メールを送った", "ppMail()");
+    if (lastMail && (!lastCheck || lastCheck.occurredAt < lastMail.occurredAt)) return btn("回答を確認", "ppCheck()", "返信があれば「その他の操作」から記録");
+    if (lastCall) return btn("再電話を記録", "ppCall()");
+    return btn("電話の結果を記録", "ppCall()");
+  }
+
+  function ppDoneBadges(p, d) {
+    const history = d.activities || [];
+    const done = [];
+    if (p.sentAt) done.push("✓ 提案済み");
+    if (p.csOwnerId) done.push("✓ CS引継ぎ済み");
+    if (p.call) done.push("✓ 電話記録済み（" + p.call.label + "）");
+    if (p.mail) done.push("✓ メール記録済み");
+    if (history.some(a => a.kind === "check")) done.push("✓ 回答確認済み");
+    if (history.some(a => a.kind === "cs_decision")) done.push("✓ CS判断記録済み");
+    if (p.closingOwnerId) done.push("✓ クロージング引継ぎ済み");
+    return done.map(t => '<span class="pp-done-chip">' + esc(t) + '</span>').join("");
+  }
+
+  function ppMoreActions(p, d, primary) {
+    if (p.closed && !d.manager) return "";
+    const options = p.closed
+      ? [["再開（管理者）","ppDecision()"]]
+      : p.waiting ? [["結果・状態","ppResult()"]]
+      : [
+        ["電話・再電話","ppCall()"], ["確認メールを送った","ppMail()"],
+        ["企業から返信あり","ppReply()"], ["返信なしを確認","ppCheck()"],
+        ["面談","ppMeeting()"], ["結果・状態","ppResult()"],
+        ...(ppStageIndex(p) === 1 && d.csContacted && d.canHandoff ? [["CS判断を変更","ppCsDecision()"]] : []),
+        ...(d.manager && (d.tasks || []).some(t => t.kind === "manager_review" && t.status === "open") ? [["管理者の判断","ppDecision()"]] : []),
+      ];
+    const other = options.filter(([,fn]) => fn !== primary.action);
+    if (!other.length && !p.waiting) return "";
+    return `<details class="pp-more-actions"><summary>その他の操作</summary>
+      <div class="sl-cta-sub" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+        ${other.map(([label, fn]) => `<button type="button" class="btn btn-secondary btn-sm" onclick="${fn}">${esc(label)}</button>`).join("")}
+        ${p.waiting && p.sourceUrl ? `<a class="btn btn-secondary btn-sm" href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">ENGERで開く</a>` : ""}
+      </div></details>`;
   }
 
   function renderDetail() {
@@ -493,25 +551,13 @@
     const phone = p.contactPhone || detail.company?.phone || null;
     const review = openTasks.some((t) => t.kind === "manager_review");
 
-    // 提案待ち：まだ企業へ提案していない。電話・メールの記録は出さない（30分の電話は提案を送ってから）
-    const waitingCta = `<button class="btn btn-primary sl-cta-main" onclick="ppSent()"><span class="material-symbols-outlined icon-inline">send</span>企業へ提案した（記録）</button>
-         <div class="sl-cta-sub">
-           <button class="btn btn-secondary btn-sm" onclick="ppResult()">結果・状態</button>
-           ${p.sourceUrl ? `<a class="btn btn-secondary btn-sm" href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">dx.enger で提案内容を開く</a>` : ""}
-         </div>
-         <div class="sl-muted" style="font-size:11.5px;width:100%;">dx.enger から企業へ提案メールを送ると、自動で「電話待ち」に進み、送った時刻から${esc(String(detail.settings?.firstCallMinutes ?? 30))}分以内の電話のタスクができます。dx.enger 以外（自分のメール・電話）で提案したときは「企業へ提案した」を押してください。</div>`;
-    const cta = p.closed
-      ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
-      : p.waiting ? waitingCta
-      : `<button class="btn btn-primary sl-cta-main" onclick="ppCall()"><span class="material-symbols-outlined icon-inline">call</span>電話の結果を記録</button>
-         <details class="pp-more-actions"><summary>その他の操作</summary><div class="sl-cta-sub">
-           <button class="btn btn-secondary btn-sm" onclick="ppMail()">確認メールを送った</button>
-           <button class="btn btn-secondary btn-sm" onclick="ppReply()">企業から返信あり</button>
-           <button class="btn btn-secondary btn-sm" onclick="ppCheck()">返信なし（回答確認）</button>
-           <button class="btn btn-secondary btn-sm" onclick="ppMeeting()">面談</button>
-           <button class="btn btn-secondary btn-sm" onclick="ppResult()">結果・状態</button>
-           ${detail.manager && review ? `<button class="btn btn-secondary btn-sm" onclick="ppDecision()">管理者の判断</button>` : ""}
-         </div></details>`;
+
+    const primary = ppNextAction(p, detail);
+    const cta = `
+      ${primary.action ? `<button type="button" class="btn btn-primary sl-cta-main" onclick="${primary.action}"
+          ${primary.disabled ? 'disabled aria-disabled="true"' : ""}>${esc(primary.label)}</button>` : ""}
+      ${primary.hint ? `<span class="pp-flow-hint">${esc(primary.hint)}</span>` : ""}
+      ${ppMoreActions(p, detail, primary)}`;
 
     box.innerHTML = `
       <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -536,7 +582,7 @@
           ${[["① 提案",p.matchingOwnerName || "未設定"],["② CS",p.csOwnerName || "未割当"],["③ クロージング",p.closingOwnerName || "未割当"]].map(([label,name],i) =>
             `<div class="pp-flow-step ${i < ppStageIndex(p) ? "done" : i === ppStageIndex(p) ? "active" : ""}"><b>${esc(label)}</b><small>${esc(name)}</small></div>`).join("")}
         </div>
-        <div class="pp-flow-action">${ppFlowAction(p, detail)}</div>
+        <div class="pp-flow-done">${ppDoneBadges(p, detail)}</div>
         ${(detail.handoffs || []).length ? `<details style="margin-top:10px;"><summary style="cursor:pointer;">バトンタッチ履歴（${detail.handoffs.length}件）</summary>
            ${detail.handoffs.map(h => `<div style="border-top:1px solid #e5e7eb;padding:9px 0;font-size:12px;">
              <b>${esc(h.fromName)} → ${esc(h.toName)}</b>　${esc(fmt(h.at))}
@@ -549,11 +595,10 @@
 
 
       <div class="sl-next" style="margin:14px 20px 12px;">
-        <div class="lb"><span class="material-symbols-outlined">bolt</span>次の行動</div>
-        <h3>${esc(p.next ? p.next.title : p.closed ? "—" : "タスクはありません")}</h3>
-        <div class="meta">${p.next ? `期限：${dueText(p.next.dueAt, p.next.overdue)}　担当：${esc(p.next.assigneeName || "未定")}` : ""}
+        <div class="lb"><span class="material-symbols-outlined">bolt</span>次にやること</div>
+        <div class="meta">${p.next && !p.closed ? `期限：${dueText(p.next.dueAt, p.next.overdue)}　担当：${esc(p.next.assigneeName || "未定")}` : ""}
           ${p.meetingAt ? `　面談：${esc(fmt(p.meetingAt))}` : ""}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
+        <div class="pp-next-actions">${cta}</div>
       </div>
 
       <div class="pp-box">
@@ -566,10 +611,10 @@
         </div>
       </div>
 
-      <div class="pp-box">
-        <h4><span class="material-symbols-outlined">checklist</span>チェックリスト</h4>
+      <details class="pp-box pp-collapsible">
+        <summary>チェックリスト</summary>
         ${checklist(p, tasks, acts)}
-      </div>
+      </details>
 
       <div class="pp-box">
         <h4 style="justify-content:space-between;"><span style="display:flex;gap:6px;align-items:center;"><span class="material-symbols-outlined">task_alt</span>タスク</span>
@@ -597,9 +642,9 @@
         <div class="sl-muted" style="font-size:11.5px;">企業と紐付けると、この提案の電話・メール・返信・面談が企業の営業履歴にも残ります（社名だけで自動では紐付けません）</div>
       </div>
 
-      <div style="padding:0 20px 24px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;">
-          <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
+      <details class="pp-history" style="padding:0 20px 24px;">
+        <summary>対応履歴（${acts.length}件）</summary>
+        <div style="display:flex;justify-content:flex-end;align-items:center;margin:4px 0 10px;">
           <button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>
         </div>
         ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
@@ -609,7 +654,7 @@
             ${a.nextAt ? `<div class="x">日時：${esc(fmt(a.nextAt))}</div>` : ""}
             ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
           : `<div class="sl-empty">まだ記録がありません</div>`}
-      </div>`;
+      </details>`;
   }
 
   function taskRow(t) {
@@ -658,7 +703,7 @@
       renderDetail();
       load();
       // 何が記録され、次に何ができたかを、その場で知らせる（押しても何も起きないように見せない）
-      if (r.recorded) flash(`記録しました：${r.recorded.label}${r.recorded.createdTasks.length ? `　→ 次のタスク：${r.recorded.createdTasks.join("・")}` : ""}`);
+      if (r.recorded) flash("✓ 保存しました");
       else if (okText) flash(okText);
     } catch (e) {
       $("m-msg").textContent = errText(e);
@@ -855,7 +900,7 @@
           body:{ id, action:"cs_decision", decision:picked("m-cdecision"), reason, nextAction } }));
       ppCloseAction();
       await ppOpen(id); load();
-      alert(res.slack?.sent ? "CSの判断を記録してSlackに共有しました" : "CSの判断を記録しました（Slackの共有は未確認です）");
+      flash("✓ CS判断を記録しました");
     } catch (e) { $("m-msg").textContent = errText(e); }
   }
   async function ppReshareHandoff(id) {

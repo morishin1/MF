@@ -203,7 +203,8 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.locator("#m-ok").click();
   await page.waitForTimeout(500);
   const after = await page.locator("#pp-detail").innerText();
-  check(after.includes("記録しました：電話：不通"), "記録したことがその場で分かる");
+  check(after.includes("✓ 電話記録済み（不通）"), "電話完了を短いチェック表示に切り替える");
+  check(await page.locator("#pp-detail .sl-cta-main").innerText() === "確認メールを送った", "不通を保存するとメインボタンがメールに切り替わる");
   check(after.includes("不通のため確認メールを送る"), "メールのタスクができる");
   check(after.includes("メール待ち"), "状態はメール待ち");
 
@@ -213,7 +214,10 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.waitForTimeout(500);
   const after2 = await page.locator("#pp-detail").innerText();
   check(after2.includes("返信を確認する"), "回答確認のタスクができる");
-  check(after2.includes("メール：送信（自己申告）"), "履歴にメール（自己申告）");
+  check(after2.includes("✓ メール記録済み"), "メール完了をチェック表示に切り替える");
+  check(await page.locator("#pp-detail .sl-cta-main").innerText() === "回答を確認", "メール保存後はメインボタンが回答確認に切り替わる");
+  await page.locator("#pp-detail .pp-history summary").click();
+  check((await page.locator("#pp-detail .pp-history").innerText()).includes("メール：送信（自己申告）"), "閉じた履歴を開けば内容を確認できる");
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
   await page.close();
 }

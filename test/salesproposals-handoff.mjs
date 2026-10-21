@@ -51,4 +51,39 @@ const shaped = shapeProposal({ ...p, tenant_id: CS, source_system: "manual",
   matched_at: "2026-10-19T11:00:00Z", status: "call_wait", updated_at: "2026-10-19T12:00:00Z" });
 assert.equal(shaped.handoffStage, "cs");
 assert.equal(shaped.csOwnerId, CS);
+
+
+// 電話・メール・CS判断を保存したら同じ主ボタンを出し続けない。
+const begin = inline[1].indexOf("function ppStageIndex(p) {");
+const end = inline[1].indexOf("function renderDetail() {", begin);
+assert.ok(begin >= 0 && end > begin, "進行状況に応じた主ボタンの計算がある");
+const screen = { esc: (value) => String(value) };
+new Script(inline[1].slice(begin, end) + "\nthis.nextAction = ppNextAction; this.doneBadges = ppDoneBadges;")
+  .runInNewContext(screen);
+const state = { sentAt:"2026-10-20T06:00:00Z", handoffStage:"cs", csOwnerId:CS, closed:false };
+const view = { activities:[], tasks:[], csContacted:false, csDecision:null, canHandoff:true, manager:true,
+  handoffTargets:{ cs:[{id:CS}], closing:[{id:CLOSER}] } };
+const checkNext = (name,p,d,label) =>
+  assert.equal(screen.nextAction(p,d).label, label, name);
+checkNext("未記録は電話", state, view, "電話の結果を記録");
+checkNext("不通を記録したらメール", state,
+  { ...view, activities:[{kind:"call",result:"no_answer",occurredAt:"2026-10-20T07:00:00Z"}], tasks:[{kind:"mail",status:"open"}] },
+  "確認メールを送った");
+checkNext("メールを記録したら回答確認", state,
+  { ...view, activities:[{kind:"mail",occurredAt:"2026-10-20T07:30:00Z"}], tasks:[{kind:"reply_check",status:"open"}] },
+  "回答を確認");
+checkNext("未回答の再フォロー", state, { ...view, tasks:[{kind:"refollow",status:"open"}] }, "再連絡を記録");
+checkNext("接続したらCS判断", state, { ...view, csContacted:true }, "CS判断を記録");
+checkNext("CSが進行判断したらクロージング", state,
+  { ...view, csContacted:true, csDecision:"advance" }, "クロージングへ引継ぐ");
+checkNext("クロージングで面談", { ...state, handoffStage:"closing" }, view, "面談を記録");
+checkNext("面談後は結果", { ...state, handoffStage:"closing", status:"meeting_done" }, view, "成約・見送りを記録");
+checkNext("終了済みは主ボタンなし", { ...state, closed:true }, view, null);
+assert.match(screen.doneBadges({ ...state, call:{label:"不通"} }, view), /電話記録済み（不通）/,
+  "完了した電話はチェックで表示する");
+assert.ok(html.includes('class="pp-history"') && html.includes('class="pp-box pp-collapsible"'),
+  "履歴とチェックリストは折りたたむ");
+assert.ok(html.includes('class="pp-next-actions"') && !html.includes("ppFlowAction(p, detail)"),
+  "メイン操作を一箇所にまとめる");
+
 console.log("PASS Sales handoff UI syntax, role validation, stages and Slack privacy");
