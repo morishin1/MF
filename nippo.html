@@ -819,7 +819,7 @@
   // 通知から来たとき、その場所まで運ぶ。
   // 画面を開いて自分で探させると、通知の意味が半分になる
   function focusFromHash() {
-    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "submit-btn" }[location.hash];
+    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "np-submit-entry" }[location.hash];
     if (!to) return;
     const node = el(to);
     if (node && !node.classList.contains("hidden")) {
