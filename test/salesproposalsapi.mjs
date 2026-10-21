@@ -214,6 +214,7 @@ const actsOf = (pid) => tbl("gw_sales_proposal_activities").filter((a) => a.prop
 
 function setup() {
   mem.reset(); logged.length = 0; notified.length = 0; evn = 0; slackPosts.length = 0; slackDown = false;
+  mem.rows.gw_sales_proposal_handoffs = [];
   mem.rows.gw_employees = [
     { id: E_OWNER, tenant_id: T1, display_name: "経営 者", email: "owner@eight.example", status: "active" },
     { id: E_MGR, tenant_id: T1, display_name: "管理 職", email: "mgr@eight.example", status: "active" },
@@ -350,6 +351,72 @@ await ok("営業担当が決まらなければ未割当（要確認）で起票�
   assert.ok(actsOf(proposals()[0].id).some((a) => a.kind === "sync" && /確認中/.test(a.note)), "dx.enger のステージ変更が記録に残る");
 });
 
+await ok("ENGERでCL担当を変更したらSales担当・未完了タスク・ベル・Slackが新担当へ移る（再送で二重にならない）", async () => {
+  setup();
+  await intake(ev());
+  const p=proposals()[0];
+  const initialTasks=tasksOf(p.id).length;
+  const oldHistory=actsOf(p.id).length;
+  const updated=ev({event_type:"proposal.updated", occurred_at:new Date(Date.now()+1000).toISOString()},
+    {sales_owner:{name:"営業 二郎",email:"s2@eight.example"}});
+  const res=await intake(updated);
+  assert.equal(res.statusCode,200,JSON.stringify(res.body));
+  assert.equal(p.sales_owner_id,E_S2,"ENGERの新CLがSalesの営業担当");
+  assert.equal(tasksOf(p.id).length,initialTasks,"タスクの二重起票なし");
+  assert.equal(tasksOf(p.id)[0].assignee_id,E_S2,"旧担当の未完了タスクを新担当へ");
+  assert.equal(actsOf(p.id).filter(x=>x.kind==="assign").length,1,"誰から誰への変更か履歴");
+  assert.ok(actsOf(p.id).length>oldHistory);
+  assert.ok(notified.some(x=>x.employeeId===E_S2 && /営業担当/.test(x.title)),"ベル通知");
+  assert.ok(slackPosts.some(x=>/CL担当変更/.test(x.body.text||"")),"Slack通知");
+  const count=notified.length;
+  assert.equal((await intake(updated)).body.result,"replayed","再送は冪等");
+  assert.equal(notified.length,count,"新担当に二重通知なし");
+});
+
+await ok("後着した古いCL更新はSalesの担当を巻き戻さず、ENGERのCLが同じなら手動変更も上書きしない",async()=>{
+  setup();
+  await intake(ev());
+  const p=proposals()[0];
+  const t=Date.now();
+  await intake(ev({event_type:"proposal.updated",occurred_at:new Date(t+1500).toISOString()},
+    {sales_owner:{name:"営業 二郎",email:"s2@eight.example"}}));
+  assert.equal(p.sales_owner_id,E_S2);
+  const stale=await intake(ev({event_type:"proposal.updated",occurred_at:new Date(t+900).toISOString()},
+    {sales_owner:{name:"営業 一郎",email:"s1@eight.example"}}));
+  assert.equal(stale.body.result,"skipped","古い更新は無視");
+  assert.equal(p.sales_owner_id,E_S2);
+  p.sales_owner_id=E_S1; // 営業担当がSalesで手動調整されたケース
+  await intake(ev({event_type:"proposal.updated",occurred_at:new Date(t+2000).toISOString()},
+    {sales_owner:{name:"営業 二郎",email:"s2@eight.example"}}));
+  assert.equal(p.sales_owner_id,E_S1,"ENGERのCLに実変更が無ければ上書きしない");
+});
+
+await ok("正式にCS/クロージングへ引き継いだ提案はENGERのCL更新では巻き戻さない",async()=>{
+  setup();
+  await intake(ev());
+  const p=proposals()[0];
+  mem.rows.gw_sales_proposal_handoffs=[{tenant_id:T1,proposal_id:p.id,to_stage:"cs"}];
+  const updated=await intake(ev({event_type:"proposal.updated",occurred_at:new Date(Date.now()+2000).toISOString()},
+    {sales_owner:{name:"営業 二郎",email:"s2@eight.example"}}));
+  assert.equal(updated.statusCode,200);
+  assert.ok(updated.body.results[0].warnings.includes("owner_handoff_protected"));
+  assert.equal(p.sales_owner_id,E_S1,"CS担当者を上書きしない");
+  assert.equal(tasksOf(p.id)[0].assignee_id,E_S1,"タスクも触らない");
+});
+
+await ok("ENGERのCL未登録・名寄せ失敗は古い営業担当を残さず管理者へ対応を促す",async()=>{
+  setup();
+  await intake(ev());
+  const p=proposals()[0];
+  const res=await intake(ev({event_type:"proposal.updated",occurred_at:new Date(Date.now()+2000).toISOString()},
+    {sales_owner:{name:"未知のCL",email:null}}));
+  assert.equal(res.statusCode,200);
+  assert.equal(p.sales_owner_id,null,"誤った旧担当は残さない");
+  assert.equal(tasksOf(p.id)[0].assignee_id,null,"未割当タスクにする");
+  assert.ok(res.body.results[0].warnings.includes("owner_unmatched"));
+  assert.ok(notified.some(x=>[E_MGR,E_OWNER].includes(x.employeeId) && /未割当/.test(x.title)),
+    "管理側へ確認通知");
+});
 await ok("企業：dx.enger の企業IDの紐付けがあればその企業。無ければサイトのドメインが1社一致したときだけ。社名だけでは紐付けない", async () => {
   setup();
   await intake(ev());
