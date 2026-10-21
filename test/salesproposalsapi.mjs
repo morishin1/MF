@@ -532,13 +532,9 @@ await ok("11 返信なし：1回目で再フォロー（3営業日）、2回目�
   assert.equal(tasksOf(p.id).filter((t) => t.source_event === "auto:review").length, 1, "管理者確認は1回だけ");
   assert.equal((await act(S1, p.id, { action: "decision", result: "close" })).statusCode, 403, "判断は管理者");
   const r = await act(MANAGER, p.id, { action: "decision", result: "close", note: "3回連絡して無回答" });
-  assert.equal(r.statusCode, 200);
-  assert.equal(proposals()[0].status, "closed_no_reply"); assert.equal(proposals()[0].close_reason, "no_reply");
-  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "done");
-  // 管理者は再開できる（継続）
-  const again = await act(MANAGER, p.id, { action: "decision", result: "continue", nextAt: "2026-11-02T10:00" });
-  assert.equal(again.statusCode, 200);
-  assert.equal(proposals()[0].status, "reply_wait"); assert.equal(proposals()[0].closed_at, null);
+  assert.equal(r.statusCode, 403, "管理者でも他人の提案は閲覧だけで判断を書き込めない");
+  assert.equal(proposals()[0].status, "reply_wait", "勝手にクローズしない");
+  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "open", "管理者レビューは未解決として残す");
 });
 
 // ---- 12. 営業時間・連絡停止 ---------------------------------------------------------
