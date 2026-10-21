@@ -77,7 +77,7 @@ create policy gw_sales_proposal_tasks_update on public.gw_sales_proposal_tasks
 -- db/141の関数定義にあるアクセス条件のみの書き換えは再定義せず、
 -- 既存RPCに対して、引継ぎ先に渡す前に権限を確認するラッパーを新設。
 -- 旧RPCは authenticated から取り上げ、専用ラッパーだけ使わせる。
-revoke all on function public.gw_sales_transfer_proposal(uuid,text,uuid,text,text,timestamptz) from public, anon, authenticated;
+revoke all on function public.gw_sales_transfer_proposal(uuid,text,uuid,text,text,text,timestamptz) from public, anon, authenticated;
 -- db/141の function は SECURITY DEFINER なので内部呼出しは可能。
 create or replace function public.gw_sales_transfer_proposal_owner(
   p_proposal uuid, p_to_stage text, p_to_owner uuid,
