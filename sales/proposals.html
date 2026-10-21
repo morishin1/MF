@@ -965,7 +965,7 @@
       const res = await KPLayout.busy($("m-ok"), "処理中…",
         () => API.api("/api/sales/proposals/handoff", { method: "POST", body }));
       ppCloseAction();
-      ppClose(); // 新しい担当以外には、引継ぎ後の詳細が見えない場合がある
+      ppClose(); // 引継ぎ後も詳細は閲覧できるが、操作権限は次の担当者に移る
       await load();
       alert(res.slack?.sent ? "引継ぎを記録し、Slackにも共有しました" : "引継ぎを記録しました（Slackの共有は未確認です）");
     } catch (e) { $("m-msg").textContent = errText(e); }
@@ -1097,7 +1097,6 @@
 
   // 手で足す（dx.enger 以外の提案：システム開発・PC・レンタル・AI / DX など）
   function ppOpenNew() {
-    const members = data?.manager ? data.members || [] : [];
     modal(`<h2>提案を手で追加</h2>
       <p class="sl-muted" style="font-size:12px;">dx.enger の提案はマッチング確定で自動で入ります。ここは dx.enger を通さない提案のための入口です。</p>
       <label>企業名（必須）</label><input type="text" id="n-company" maxlength="200">
@@ -1105,8 +1104,7 @@
       <label style="margin-top:10px;">サービス</label><input type="text" id="n-service" list="n-services" maxlength="100">
       <datalist id="n-services">${["ENGER", "システム開発", "PCレンタル", "AI / DX", "ホームページ改善", "地方創生", "その他"].map((s) => `<option>${s}</option>`).join("")}</datalist>
       <label style="margin-top:10px;">提案した日時</label><input type="datetime-local" id="n-sent" value="${localInput()}">
-      ${members.length ? `<label style="margin-top:10px;">営業担当</label><select id="n-owner"><option value="">自分</option>
-        ${members.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("")}</select>` : ""}
+      <p class="sl-muted" style="font-size:12px;">登録者本人を提案担当として登録します。引継ぎは提案詳細から行ってください。</p>
       <label style="margin-top:10px;">先方の担当者・電話・メール（任意）</label>
       <div class="inline-controls"><div><input type="text" id="n-cname" placeholder="担当者名"></div>
         <div><input type="tel" id="n-cphone" placeholder="電話"></div><div><input type="email" id="n-cmail" placeholder="メール"></div></div>
@@ -1117,7 +1115,6 @@
       companyName: $("n-company").value, title: $("n-title").value, service: $("n-service").value || null, sentAt: $("n-sent").value,
       contactName: $("n-cname").value, contactPhone: $("n-cphone").value, contactEmail: $("n-cmail").value,
     };
-    if ($("n-owner")?.value) body.salesOwnerId = $("n-owner").value;
     try {
       const r = await KPLayout.busy($("m-ok"), "追加中…", () => API.api("/api/sales/proposals", { method: "POST", body }));
       ppCloseAction();
