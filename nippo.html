@@ -142,6 +142,18 @@
     .fd-cm form { display: flex; gap: 6px; margin-top: 8px; }
     .fd-cm form input { margin: 0; font-size: 12.5px; }
   
+    /* 日報提出の入り口を常時表示。予定確認で入力欄を隠す場合も操作先を失わせない。 */
+    .np-submit-entry { position:sticky; top:8px; z-index:8; display:flex; align-items:center;
+      justify-content:space-between; gap:14px; flex-wrap:wrap; border:1px solid var(--border);
+      border-left:4px solid var(--primary); border-radius:10px; background:#fff;
+      padding:12px 16px; margin:10px 0 16px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    .np-submit-entry h2 { font-size:14px; margin:0 0 3px; }
+    .np-submit-entry p { font-size:12px; margin:0; line-height:1.6; color:var(--muted); }
+    .np-submit-entry .np-submit-action { white-space:nowrap; min-width:132px; }
+    .np-submit-entry .np-submit-action.locked { background:#edf0f3; border-color:#cbd0d6; color:#4b5563; }
+    @media(max-width:580px) { .np-submit-entry { top:3px; padding:10px 12px; gap:8px; }
+      .np-submit-entry .np-submit-action { width:100%; min-width:0; } }
+
     /* ── 明日の重要タスク ── */
     .fc-step { display:flex; gap:8px; align-items:center; font-size:12.5px; margin:0 0 14px;
                flex-wrap:wrap; color:var(--muted); }
@@ -260,7 +272,19 @@
 
   <div id="notice"></div>
 
+
 <div id="pane-mine">
+
+  <section class="np-submit-entry" id="np-submit-entry" aria-label="日報の提出">
+    <div>
+      <h2>終業時の日報</h2>
+      <p id="np-submit-status" role="status" aria-live="polite">翌営業日の予定を確認しています…</p>
+    </div>
+    <button type="button" class="btn btn-primary np-submit-action locked" id="np-submit-top"
+            aria-describedby="np-submit-status" aria-disabled="true" onclick="submitFromHeader(this)">
+      <span class="material-symbols-outlined icon-inline">send</span>日報を提出
+    </button>
+  </section>
 
   <!-- 翌営業日の業務予定を登録するまで、日報入力欄は開かない。 -->
   <div class="card" id="np-schedule-gate" style="border-left:4px solid #cf8425;" aria-live="polite">
@@ -603,15 +627,17 @@
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
-      el("np-gate-msg").textContent="日報情報を取得できません。時間をおいてお試しください。";
+      setScheduleGateLocked(true,"日報情報を取得できません。時間をおいて再確認してください。");
       return;
     }
     el("notice").innerHTML = "";
     el("date-tag").textContent = data.today ? "提出済み" : "未提出";
     el("date-tag").className = `kp-chip ${data.today ? "event" : "draft"}`;
-    el("submit-btn").innerHTML = data.today
+    const submitLabel = data.today
       ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して保存'
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
+    el("submit-btn").innerHTML = submitLabel;
+    el("np-submit-top").innerHTML = submitLabel;
 
     renderTodos();
     // メモの置き場所（#memo-box2）は renderFocus() が作る。
@@ -795,7 +821,7 @@
   // 通知から来たとき、その場所まで運ぶ。
   // 画面を開いて自分で探させると、通知の意味が半分になる
   function focusFromHash() {
-    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "submit-btn" }[location.hash];
+    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "np-submit-entry" }[location.hash];
     if (!to) return;
     const node = el(to);
     if (node && !node.classList.contains("hidden")) {
@@ -1491,9 +1517,32 @@
   let nextScheduleReady=false;
   function setScheduleGateLocked(locked,message){
     nextScheduleReady=!locked;
+    // 予定未登録・API障害時も提出ボタンの場所は消さず、理由を伝える。
+    // 入力欄は従来どおり予定が確認できるまで表示しない。
     el("write-card").classList.toggle("hidden",locked);
     el("np-schedule-gate").classList.toggle("hidden",!locked);
+    const top=el("np-submit-top");
+    top.classList.toggle("locked",locked);
+    top.setAttribute("aria-disabled",String(locked));
+    top.title=locked?"翌営業日の予定を登録・確認すると提出できます":"日報を提出する";
+    el("np-submit-status").textContent=locked
+      ? (message || "翌営業日の予定を登録・確認すると提出できます。")
+      : "翌営業日の予定を確認済み。日報を提出できます。";
     if(message)el("np-gate-msg").textContent=message;
+  }
+  async function submitFromHeader(btn){
+    if(!data || !nextScheduleReady){
+      // 禁止の理由を見せる。ボタンは見つかるが、条件確認前には提出しない。
+      el("np-schedule-gate").scrollIntoView({behavior:"smooth",block:"center"});
+      return;
+    }
+    await submit(btn);
+    if(!nextScheduleReady){
+      el("np-schedule-gate").scrollIntoView({behavior:"smooth",block:"center"});
+    }else if(el("f-msg").textContent){
+      // 上部のボタンで検証エラーが起きたとき、下方のメッセージを見失わせない。
+      el("f-msg").scrollIntoView({behavior:"smooth",block:"center"});
+    }
   }
   function selectGateReportDate(s){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||s>jstToday())return;
