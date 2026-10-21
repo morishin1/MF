@@ -590,6 +590,7 @@
   }
   // 今できる一つのアクションだけを案内する。
   function ppFlowAction(p, d) {
+    if (!d.canEdit) return '<span class="pp-flow-hint">この提案は閲覧のみです。引継ぎは現在の担当者が操作します。</span>';
     if (p.closed) return '<span class="pp-flow-hint">対応終了</span>';
     const stage = ppStageIndex(p);
     let label = "", action = "", enabled = true, hint = "";
@@ -633,7 +634,9 @@
            ${p.sourceUrl ? `<a class="btn btn-secondary btn-sm" href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">dx.enger で提案内容を開く</a>` : ""}
          </div>
          <div class="sl-muted" style="font-size:11.5px;width:100%;">dx.enger から企業へ提案メールを送ると、自動で「電話待ち」に進み、送った時刻から${esc(String(detail.settings?.firstCallMinutes ?? 30))}分以内の電話のタスクができます。dx.enger 以外（自分のメール・電話）で提案したときは「企業へ提案した」を押してください。</div>`;
-    const cta = p.closed
+    const cta = !detail.canEdit
+      ? '<div class="pp-readonly-note">他の担当者の提案です。電話・メール・引継ぎなどは現在の担当者が登録します。</div>'
+      : p.closed
       ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
       : p.waiting ? waitingCta
       : `<button class="btn btn-primary sl-cta-main" onclick="ppCall()"><span class="material-symbols-outlined icon-inline">call</span>電話の結果を記録</button>
@@ -663,6 +666,7 @@
         <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
       </div>
 
+      ${!detail.canEdit ? '<div class="pp-readonly-note">閲覧モード：他の担当者の案件は内容を確認できますが、変更・削除はできません。</div>' : ""}
       <div class="pp-box pp-flow-box">
         <h4><span class="material-symbols-outlined">hub</span>引継ぎ｜提案 → CS → クロージング</h4>
         <div class="pp-flow-steps">
@@ -676,7 +680,7 @@
              <div>判断：${esc(h.decision)}／理由：${esc(h.reason)}</div>
              <div>次の対応：${esc(h.nextAction)}${h.nextAt ? '・期限：'+esc(fmt(h.nextAt)) : ""}</div>
              <div class="sl-muted">Slack共有：${h.slackSent ? "済み" : "未確認"}
-               ${detail.manager && !h.slackSent ? `<button class="pp-linkbtn" onclick="ppReshareHandoff('${esc(h.id)}')">再共有</button>` : ""}</div>
+               ${detail.canEdit && detail.manager && !h.slackSent ? `<button class="pp-linkbtn" onclick="ppReshareHandoff('${esc(h.id)}')">再共有</button>` : ""}</div>
            </div>`).join("")}</details>` : '<p class="sl-muted">引継ぎ履歴はまだありません。</p>'}
       </div>
 
@@ -695,7 +699,7 @@
         <div class="pp-contact">
           ${phone ? `<a class="btn btn-primary btn-sm" href="tel:${esc(phone.replace(/[^0-9+]/g, ""))}"><span class="material-symbols-outlined icon-inline">call</span>${esc(phone)}</a>` : `<span class="sl-muted">電話番号 未登録</span>`}
           ${p.contactEmail ? `<span class="sl-muted">${esc(p.contactEmail)}</span>` : `<span class="sl-muted">メール 未登録</span>`}
-          <button class="pp-linkbtn" onclick="ppContact()">窓口を直す</button>
+          ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">窓口を直す</button>` : ""}
         </div>
       </div>
 
@@ -706,7 +710,7 @@
 
       <div class="pp-box">
         <h4 style="justify-content:space-between;"><span style="display:flex;gap:6px;align-items:center;"><span class="material-symbols-outlined">task_alt</span>タスク</span>
-          ${p.closed ? "" : `<button class="pp-linkbtn" onclick="ppTaskAdd()">＋ タスクを足す</button>`}</h4>
+          ${p.closed || !detail.canEdit ? "" : `<button class="pp-linkbtn" onclick="ppTaskAdd()">＋ タスクを足す</button>`}</h4>
         ${openTasks.length ? openTasks.map((t) => taskRow(t)).join("") : `<div class="sl-empty">開いているタスクはありません</div>`}
         ${doneTasks.length ? `<details style="margin-top:8px;"><summary class="sl-muted" style="cursor:pointer;">完了・取り消し（${doneTasks.length}件）</summary>
           ${doneTasks.map((t) => taskRow(t)).join("")}</details>` : ""}
@@ -717,15 +721,15 @@
         <dl class="sl-grid2">
           <div><dt>マッチング担当</dt><dd>${esc(p.matchingOwnerName || "—")}</dd></div>
           <div><dt>営業担当</dt><dd>${esc(p.salesOwnerName || "未割当")}
-            ${detail.manager ? ` <button class="pp-linkbtn" onclick="ppAssign()">変更</button>` : ""}</dd></div>
+            ${detail.canAssign ? ` <button class="pp-linkbtn" onclick="ppAssign()">初回担当を設定</button>` : ""}</dd></div>
           <div><dt>案件</dt><dd>${esc(p.jobTitle || "—")}</dd></div>
           <div><dt>人材</dt><dd>${esc(p.talentInitials || "—")}</dd></div>
           <div><dt>dx.enger</dt><dd>${p.sourceUrl ? `<a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">提案を開く${p.sourceCode ? `（${esc(p.sourceCode)}）` : ""}</a>` : "—"}
             ${p.sourceStage ? `<span class="pp-small">ステージ：${esc(p.sourceStage)}</span>` : ""}</dd></div>
           <div><dt>企業（/sales）</dt><dd>${detail.company
             ? `<a href="/sales/companies.html?id=${esc(detail.company.id)}">${esc(detail.company.name)}</a><span class="pp-small">${esc(detail.company.statusLabel)}${detail.company.ng ? "・営業禁止" : ""}</span>
-               <button class="pp-linkbtn" onclick="ppLink()">付け替え</button>`
-            : `<span class="pp-tag warn">未紐付け</span> <button class="pp-linkbtn" onclick="ppLink()">紐付ける</button>`}</dd></div>
+               ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppLink()">付け替え</button>` : ""}`
+            : `<span class="pp-tag warn">未紐付け</span> ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppLink()">紐付ける</button>` : ""}` }</dd></div>
         </dl>
         <div class="sl-muted" style="font-size:11.5px;">企業と紐付けると、この提案の電話・メール・返信・面談が企業の営業履歴にも残ります（社名だけで自動では紐付けません）</div>
       </div>
@@ -733,7 +737,7 @@
       <div style="padding:0 20px 24px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;">
           <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
-          <button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>
+          ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>` : ""}
         </div>
         ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
           <div class="row"><div class="d">${esc(fmt(a.occurredAt))}${a.employeeName ? `　${esc(a.employeeName)}` : ""}</div>
@@ -747,7 +751,7 @@
 
   function taskRow(t) {
     const cls = t.status !== "open" ? "done" : t.overdue ? "overdue" : "";
-    const ops = t.status === "open" ? `<div class="ops">
+    const ops = t.status === "open" && detail.canEdit ? `<div class="ops">
       <button class="pp-linkbtn" onclick="ppTaskDue('${esc(t.id)}')">期限変更</button>
       ${t.kind === "manual" ? `<button class="pp-linkbtn" onclick="ppTaskDone('${esc(t.id)}')">完了</button>` : ""}
       ${!t.auto || detail.manager ? `<button class="pp-linkbtn" onclick="ppTaskCancel('${esc(t.id)}')">取り消し</button>` : ""}</div>` : "";
