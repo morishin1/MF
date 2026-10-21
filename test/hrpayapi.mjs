@@ -199,6 +199,8 @@ await ok("CEO REVIEW・本採用の事前入力も、gw_hr_pay の値", async ()
   const r = await review();
   const all = [...r.body.todayMeetings, ...r.body.recommended, ...r.body.decisionPending];
   assert.equal(all[0].wageAmount, 350000);
+  // 本人が承諾した版（区分の無い、これまでの合格通知・給与は応募者のもの）。承諾した版が無いと社員登録へ進めない（PR B）
+  db.rows.gw_hr_offers.push({ id: "o-a3", tenant_id: "t1", applicant_id: "a3", version: 1, accepted_at: "2026-10-01T00:00:00Z", revoked_at: null, declined_at: null });
   const p = await prefill("a3");
   assert.equal(p.body.prefill.wageAmount, 380000);
 });

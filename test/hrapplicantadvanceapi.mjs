@@ -150,6 +150,8 @@ function setup() {
       probation_months: 3, wage_type: "月給", wage_amount: 400000, weekly_hours: 40,
       employee_id: null, advance_claimed_at: null, created_at: "2026-09-20T00:00:00Z", updated_at: "2026-09-20T00:00:00Z",
     }],
+    // 本人が承諾した版（区分の無い、これまでの合格通知）。承諾した版が無い「承諾済み」だけでは進めない（PR B で閉じた抜け道）
+    gw_hr_offers: [{ id: "o-legacy", tenant_id: "t1", applicant_id: "a1", version: 1, accepted_at: "2026-10-01T00:00:00Z", revoked_at: null, declined_at: null }],
     gw_hr_timeline: [],
     gw_employees: [
       { id: "emp-new1", tenant_id: "t1", display_name: "山田 太郎" },
@@ -473,7 +475,9 @@ await ok("tenant_id：別のテナントの応募者・社員は、ID を知っ�
   // 自社の応募者に、他社のオファーだけが付いていても「引き渡し済み」にならない（オファーも tenant_id で絞る）
   setup();
   db.rows.gw_hr_offers = [typedOffer({ tenant_id: "t2", handoff_at: "2026-10-12T00:00:00Z" })];
-  assert.equal((await getPrefill("a1")).statusCode, 200, "他社のオファーは見えない＝従来の合格通知と同じ扱い（区分の版が無い）");
+  // 他社のオファーは見えない＝承諾した版が無い。「承諾済み」だけでは進めない（PR B で閉じた抜け道。以前はここが 200 だった）
+  const g = await getPrefill("a1");
+  assert.deepEqual([g.statusCode, g.body.error], [409, "acceptance_required"], "他社のオファーで通さない");
 });
 
 await ok("handoff_at：区分つき（育成枠以外）は handoff_at が入るまで 409。入っていれば進む。引き渡し前は事前入力にも条件を返さない", async () => {
