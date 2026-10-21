@@ -1,0 +1,25 @@
+/* 全社共通：進めない理由と次の操作を明確にするモーダル */
+.kp-action-feedback {
+  border: 1px solid #d7dbe2;
+  border-radius: 14px;
+  padding: 0;
+  color: var(--primary-dark, #253047);
+  background: #fff;
+  box-shadow: 0 20px 70px rgba(15, 23, 42, .23);
+  max-width: min(420px, calc(100vw - 26px));
+  width: 100%;
+  margin: auto;
+}
+.kp-action-feedback::backdrop { background: rgba(18, 26, 45, .45); }
+.kp-action-feedback-body { padding: 20px 22px 18px; }
+.kp-action-feedback-icon { color: #ab6b18; font-size: 27px; display: block; margin-bottom: 8px; }
+.kp-action-feedback h2 { font-size: 17px; margin: 0 0 10px; line-height: 1.5; }
+.kp-action-feedback p { margin: 0; font-size: 13px; line-height: 1.9; white-space: pre-line; color: #455064; }
+.kp-action-feedback-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.kp-action-feedback-actions .btn { font-size: 12px; text-decoration: none; }
+.kp-action-feedback #kp-action-feedback-primary[hidden] { display: none; }
+@media (max-width: 480px) {
+  .kp-action-feedback-body { padding: 17px 15px 15px; }
+  .kp-action-feedback-actions { display: grid; grid-template-columns: 1fr; }
+  .kp-action-feedback-actions .btn { width: 100%; justify-content: center; }
+}

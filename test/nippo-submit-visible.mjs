@@ -7,7 +7,7 @@ import { Script } from "node:vm";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(resolve(ROOT, "nippo.html"), "utf8");
-for (const id of ["np-submit-entry", "np-submit-top", "np-submit-status", "np-schedule-gate",
+for (const id of ["np-submit-entry", "np-submit-top", "np-submit-status", "np-submit-recheck", "np-schedule-gate",
   "submit-btn", "write-card", "np-gate-msg"]) {
   assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, id + " must be unique");
 }
@@ -26,9 +26,14 @@ for (const [i, s] of scripts.entries()) {
 }
 const js = scripts.at(-1)[1];
 assert.ok(js.includes('el("write-card").classList.toggle("hidden",locked)'), "予定ゲートは残す");
-assert.ok(js.includes('top.setAttribute("aria-disabled",String(locked))'), "提出状態を連動");
+assert.ok(js.includes('el("np-submit-top").dataset.canSubmit=String(!locked)'), "提出可能かをボタンに反映");
 assert.ok(js.includes('if(!data || !nextScheduleReady)'), "予定未登録・取得失敗時は送信しない");
 assert.ok(js.includes('await submit(btn)'), "予定登録済みなら元の日報送信処理へ");
 assert.ok(js.includes('el("np-submit-top").innerHTML = submitLabel'), "提出済みの日報は上部ボタンも保存に変わる");
 assert.ok(js.includes('"#evening": "np-submit-entry"'), "終業通知は非表示のボタンではなく提出入口へ移動");
-console.log("PASS: member Nippo submit action stays visible with schedule gate and safely submits when ready");
+assert.ok(html.includes('<details class="card" id="np-schedule-gate"'), "予定登録の詳細案内は必要なときだけ開く");
+assert.ok(html.includes('js/action-feedback.js?v=20261020cal1'), "共通のアラート部品を読み込む");
+assert.ok(js.includes('function showSubmitBlockNotice()'), "提出ができない理由をクリック時に通知する");
+assert.ok(js.includes('KPActionFeedback.show({title:"今日の成果が未入力です"'), "未入力項目も理由を提示する");
+assert.ok(js.includes('actionHref:el("np-gate-calendar").getAttribute("href")'), "予定未入力ならカレンダーの登録画面へ誘導する");
+console.log("PASS: member Nippo always offers submission and actionable blocked-step dialogs");
