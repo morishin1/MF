@@ -85,11 +85,11 @@ create or replace function public.gw_sales_transfer_proposal_owner(
 ) returns uuid
 language plpgsql security definer set search_path = ''
 as $$
-declare v_tenant uuid; v_owner uuid;
+declare v_tenant uuid; v_owner uuid; v_archived timestamptz;
 begin
-  select tenant_id, sales_owner_id into v_tenant, v_owner
+  select tenant_id, sales_owner_id, archived_at into v_tenant, v_owner, v_archived
   from public.gw_sales_proposals where id = p_proposal for update;
-  if v_tenant is null or not public.gw_sales_proposal_editable(v_tenant,v_owner) then
+  if v_tenant is null or v_archived is not null or not public.gw_sales_proposal_editable(v_tenant,v_owner) then
     raise exception 'forbidden' using errcode='42501';
   end if;
   return public.gw_sales_transfer_proposal(p_proposal,p_to_stage,p_to_owner,p_reason,p_decision,p_next_action,p_next_at);
