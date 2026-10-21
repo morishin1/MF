@@ -281,6 +281,8 @@ console.log("\n— 入社準備の詳細：入社案内を作り、案内URLを�
   await page.click('[data-act="save"]');
   await page.waitForTimeout(400);
   check((await page.locator("#guide-err").innerText()).includes("金額"), "詳細: 金額を書くと、理由つきで断られる");
+  check(await page.locator("#kp-action-feedback").isVisible(), "保存できない理由をアラートに表示");
+  await page.locator("#kp-action-feedback .btn-secondary").click();
   check(detail.st.draft.message === undefined, "詳細: 断られた内容は保存されない");
 
   await page.fill('#guide-form [name="message"]', "ようこそ");
@@ -298,7 +300,13 @@ console.log("\n— 入社準備の詳細：入社案内を作り、案内URLを�
   check(/save_guide,issue_guide$/.test(acts), `詳細: 発行の前に、いまの入力を保存する（${acts}）`);
   t = await bodyText(page);
   check(t.includes("発行済み 版1"), "詳細: 発行済み 版1");
-  check((await page.locator('[data-act="issue"]').isDisabled()) && t.includes("変わっていません"), "詳細: 変更が無ければ、発行し直せない");
+  check(!(await page.locator('[data-act="issue"]').isDisabled()) && t.includes("変わっていません"), "詳細: 変更が無くても発行ボタンから理由を確認できる");
+  const beforeRepeat = detail.st.posts.length;
+  await page.click('[data-act="issue"]');
+  check(await page.locator("#kp-action-feedback").isVisible(), "変更なしの再発行は理由アラート");
+  check((await page.locator("#kp-action-feedback-message").innerText()).includes("変更して"), "変更する必要を説明");
+  check(detail.st.posts.length === beforeRepeat, "変更なしの再発行はAPIを呼ばない");
+  await page.locator("#kp-action-feedback .btn-secondary").click();
   check((await page.locator('[data-act="issue"]').innerText()).includes("版2"), "詳細: 次の発行は版2");
   check(t.includes("確認待ち"), "詳細: 本人の確認待ちと出る");
   check((await page.locator('.kei-st[data-step="guide"]').getAttribute("data-state")) === "current", "詳細: ① が要対応（本人の確認待ち）");
@@ -326,7 +334,15 @@ console.log("\n— 入社準備の詳細：入社案内を作り、案内URLを�
   // メール（未設定）
   const mail = page.locator('[data-section="mail"]');
   check((await mail.innerText()).includes("メール送信は使えません") && (await mail.innerText()).includes("案内URL"), "詳細: メール未設定なら、そう言って、URLのコピーへ案内する");
-  check(await page.locator('[data-act="send"]').isDisabled() && await page.locator('[data-act="test"]').isDisabled(), "詳細: 未設定では、送信・テスト送信は押せない");
+  check(!(await page.locator('[data-act="send"]').isDisabled()) && !(await page.locator('[data-act="test"]').isDisabled()),
+    "詳細: メール未設定でもボタンから理由を確認できる");
+  await page.click('[data-act="send"]');
+  check(await page.locator("#kp-action-feedback").isVisible(), "メール未設定時に送信できない理由を表示");
+  check((await page.locator("#kp-action-feedback-message").innerText()).includes("設定"), "メール設定の必要性を表示");
+  await page.locator("#kp-action-feedback .btn-secondary").click();
+  await page.click('[data-act="test"]');
+  check(await page.locator("#kp-action-feedback").isVisible(), "テスト送信にも理由を表示");
+  await page.locator("#kp-action-feedback .btn-secondary").click();
   await page.click('[data-act="preview"]');
   await page.waitForTimeout(400);
   const pv = await page.locator('[data-role="mail-preview"]').innerText();
