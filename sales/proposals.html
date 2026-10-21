@@ -352,26 +352,45 @@
       (selected.has(r.id) ? " checked" : "") + ' onclick="event.stopPropagation()" onchange="ppSelectOne(this.dataset.pid,this.checked)">';
   };
 
+  function ppOwnerCell(r,role) {
+    const names={proposal:r.matchingOwnerName || (r.sourceSystem === "manual" ? r.salesOwnerName : null),
+      cs:r.csOwnerName,closing:r.closingOwnerName};
+    const primary=names[role];
+    const extras=r.supporters?.[role] || [];
+    return '<div class="pp-owner-cell"><strong class="'+(!primary?'pending':'')+'">'+esc(primary || "未割当")+'</strong>'+
+      (extras.length ? '<small title="'+esc(extras.map(x=>x.name).join("・"))+'">＋'+esc(extras.map(x=>x.name).join("・"))+'</small>' : '')+
+      '</div>';
+  }
+  function ppColumnCell(key,r) {
+    switch(key) {
+    case "date": return sentCell(r);
+    case "company": return '<span class="sl-nm">'+esc(r.companyName)+'</span>'+
+      (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
+    case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
+    case "service": return esc(r.service || "—");
+    case "title": return esc(r.title)+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
+    case "status": return pill(r.status,r.statusLabel)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
+    case "next": return r.next?esc(r.next.title)+'<span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
+    case "elapsed": return esc(String(r.elapsedDays))+"日";
+    case "phone": return callCell(r);
+    case "mail": return mailCell(r);
+    case "sync": return syncCell(r);
+    default: return "—";
+    }
+  }
+
   function renderRows(rows) {
     if (!rows.length) {
-      $("rows").innerHTML = '<tr><td colspan="12" class="empty">この条件の提案はありません</td></tr>';
+      $("pp-column-head").innerHTML = SalesProposalColumns.head(STATE.sort);
+      $("rows").innerHTML = '<tr><td colspan="14" class="empty">この条件の提案はありません</td></tr>';
       $("cards").innerHTML = '<div class="sl-empty">この条件の提案はありません</div>';
       return;
     }
+    $("pp-column-head").innerHTML = SalesProposalColumns.head(STATE.sort);
     $("rows").innerHTML = rows.map((r) => `
       <tr class="click${r.overdue ? " overdue" : ""}${!r.canEdit ? " pp-row-readonly" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <td class="pp-check-col">${ppCheckInput(r)}</td>
-        <td style="white-space:nowrap;">${sentCell(r)}</td>
-        <td><span class="sl-nm">${esc(r.companyName)}</span>${r.contactStop ? '<span class="pp-tag err">連絡停止</span>' : ""}</td>
-        <td>${esc(r.service || "—")}</td>
-        <td>${esc(r.title)}${r.sourceCode ? `<span class="pp-small">${esc(r.sourceCode)}</span>` : ""}</td>
-        <td class="pp-chain">${ppChain(r)}${!r.canEdit ? '<span class="pp-view-badge">閲覧のみ</span>' : ""}</td>
-        <td>${pill(r.status, r.statusLabel)}${r.archived ? '<span class="pp-small">アーカイブ済み</span>' : ""}</td>
-        <td class="due">${r.next ? `${esc(r.next.title)}<span class="pp-small">${dueText(r.next.dueAt,r.next.overdue)}</span>` : "—"}</td>
-        <td style="white-space:nowrap;">${r.elapsedDays}日</td>
-        <td class="nw">${callCell(r)}</td>
-        <td class="nw">${mailCell(r)}</td>
-        <td>${syncCell(r)}</td>
+        ${SalesProposalColumns.cellHtml(r,ppColumnCell)}
       </tr>`).join("");
     $("cards").innerHTML = rows.map((r) => `
       <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
