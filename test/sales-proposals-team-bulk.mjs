@@ -44,7 +44,7 @@ assert.ok(sql.includes('gw_sales_proposal_visible(p_tenant uuid, p_owner uuid)')
 assert.ok(sql.includes('gw_sales_proposal_editable_id'), "活動記録も本人だけ編集");
 assert.ok(sql.includes('for update to authenticated'), "更新RLS");
 assert.ok(sql.includes('gw_sales_bulk_proposals('), "一括操作はトランザクション");
-assert.ok(sql.includes("p_action in ('archive','restore','edit')"), "アーカイブ・復元・編集");
+assert.ok(sql.includes("p_action not in ('archive','restore','edit')"), "アーカイブ・復元・編集");
 assert.ok(sql.includes('if v_count <> cardinality(v_ids)'), "1件でも取得できないと全件ロールバック");
 assert.ok(sql.includes('v.tenant_id <> v_tenant'), "複数テナント混在禁止");
 assert.ok(sql.includes("cancel_reason='提案をアーカイブしたため'"), "アーカイブ時は未完了タスク停止");
