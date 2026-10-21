@@ -309,6 +309,50 @@ await ok("営業担当が決まらなければ未割当（要確認）で起票�
   assert.ok(actsOf(proposals()[0].id).some((a) => a.kind === "sync" && /確認中/.test(a.note)), "dx.enger のステージ変更が記録に残る");
 });
 
+await ok("ENGERのCL担当変更でSales営業担当・未完了タスク・変更履歴・通知が更新される。正式CS引継ぎは上書きしない", async () => {
+  setup();
+  const initial = ev();
+  assert.equal((await intake(initial)).statusCode, 200);
+  const p = proposals()[0];
+  assert.equal(p.sales_owner_id, E_S1);
+  const beforeTasks = tasksOf(p.id).filter(t => t.status === "open");
+  assert.ok(beforeTasks.length >= 1 && beforeTasks[0].assignee_id === E_S1);
+
+  // ENGEr提案画面でCL担当を変更 -> updateイベント
+  const move = ev({event_type:"proposal.updated"}, {
+    sales_owner: {name:"営業 二郎",email:"s2@eight.example"}
+  });
+  const updated = await intake(move);
+  assert.equal(updated.statusCode, 200, JSON.stringify(updated.body));
+  assert.equal(proposals()[0].sales_owner_id, E_S2);
+  assert.ok(tasksOf(p.id).filter(t=>t.status === "open").every(t=>t.assignee_id === E_S2));
+  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 1);
+  assert.equal(actsOf(p.id).find(t=>t.kind==="assign").detail.from, E_S1);
+  assert.equal(actsOf(p.id).find(t=>t.kind==="assign").detail.to, E_S2);
+  assert.ok(notified.some(n=>n.employeeId === E_S2 && /CL担当変更/.test(n.title)), "新担当への通知");
+  const taskCount=tasksOf(p.id).length, changeCount=actsOf(p.id).length;
+  assert.equal((await intake(move)).body.result, "replayed");
+  assert.equal(tasksOf(p.id).length, taskCount, "再送でタスク増加なし");
+  assert.equal(actsOf(p.id).length, changeCount, "再送で変更履歴を重複追加しない");
+
+  // CSへ正式に引継ぎ済みなら、ENGER側のCL担当変更はSalesの担当を上書きしない
+  proposals()[0].cs_owner_id = E_S2;
+  const ignored = ev({event_type:"proposal.updated"}, {
+    sales_owner: {name:"営業 一郎",email:"s1@eight.example"}
+  });
+  assert.equal((await intake(ignored)).statusCode, 200);
+  assert.equal(proposals()[0].sales_owner_id, E_S2);
+  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 1);
+
+  // CLが社員名簿から特定できなければ既存担当を維持し、連携要確認にする
+  proposals()[0].cs_owner_id = null;
+  const unknown = ev({event_type:"proposal.updated"}, {sales_owner:{name:"不明な人",email:"unknown@eight.example"}});
+  const result=await intake(unknown);
+  assert.equal(result.statusCode,200);
+  assert.equal(proposals()[0].sales_owner_id,E_S2);
+  assert.ok((result.body.results?.[0]?.warnings || result.body.warnings || []).includes("owner_unmatched"));
+});
+
 await ok("企業：dx.enger の企業IDの紐付けがあればその企業。無ければサイトのドメインが1社一致したときだけ。社名だけでは紐付けない", async () => {
   setup();
   await intake(ev());
