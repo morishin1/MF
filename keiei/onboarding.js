@@ -76,7 +76,7 @@
       ${warn}
       <div id="guide-err" class="kei-err">${T.err && T.err.at === "guide" ? esc(T.err.text) : ""}</div>
       <button class="kei-btn sec" data-act="save">下書きを保存</button>
-      <button class="kei-btn" data-act="issue" ${issued && !g.dirty ? "disabled" : ""}>${issued ? `発行し直す（版${g.version + 1}）` : "発行する"}</button>
+      <button class="kei-btn" data-act="issue" ${issued && !g.dirty ? 'title="変更点がないため再発行できません。クリックすると理由を表示します"' : ""}>${issued ? `発行し直す（版${g.version + 1}）` : "発行する"}</button>
       ${issued && !g.dirty ? `<span class="kei-mute">前回の発行から、変わっていません</span>` : ""}
       ${issued && g.dirty ? `<span class="kei-mute">前回の発行から変わっています。発行し直すと、本人は確認し直します</span>` : ""}
     </div>`;
@@ -136,8 +136,8 @@
       ${status}
       <div class="kei-sub" style="margin:0 0 8px;">宛先：${m.to ? esc(m.to) : `<b>名簿にメールアドレスがありません</b>`}</div>
       <button class="kei-btn sec" data-act="preview">メールの文面を見る</button>
-      <button class="kei-btn sec" data-act="test" ${cfg.configured && m.canTest ? "" : "disabled"}>テスト送信（自分あて）</button>
-      <button class="kei-btn" data-act="send" ${canSend ? "" : "disabled"}>${m.history.some((h) => h.kind === "send" && h.status === "sent") ? "再送する" : "本人へ送信"}</button>
+      <button class="kei-btn sec" data-act="test" ${cfg.configured && m.canTest ? "" : 'title="送信条件を確認してください。クリックすると理由を表示します"'}>テスト送信（自分あて）</button>
+      <button class="kei-btn" data-act="send" ${canSend ? "" : 'title="宛先・送信設定を確認してください。クリックすると理由を表示します"'}>${m.history.some((h) => h.kind === "send" && h.status === "sent") ? "再送する" : "本人へ送信"}</button>
       ${preview}
       <div id="mail-err" class="kei-err">${T.err && T.err.at === "mail" ? esc(T.err.text) : ""}</div>
       ${T.msg ? `<div class="kei-okmsg" data-role="msg">${esc(T.msg)}</div>` : ""}
@@ -174,17 +174,35 @@
     catch (e) { setErr(at, e); }
     if (!isCurrent() || !main) return;
     render();
-    // 失敗を、押したボタンの近くに見せる
-    const box = main.querySelector(`#${at}-err`);
-    if (box && T.err) box.scrollIntoView({ block: "nearest" });
+    // 失敗を、押したボタンの近く＋共通アラートに表示する。
+    const box = main.querySelector('#'+at+'-err');
+    if (T.err) {
+      if (box) box.scrollIntoView({block:"nearest"});
+      window.KPActionFeedback?.show({
+        title:"操作を完了できませんでした",
+        message:T.err.text,
+        actionLabel:"対象項目を確認",
+        onAction:()=>{(box||main).scrollIntoView({behavior:"smooth",block:"center"});
+          main.querySelector(at==="guide"?"#guide-form input":"#"+at+"-err")?.focus({preventScroll:true});},
+      });
+    }
   }
 
   const actions = {
     save: (btn) => run(btn, "guide", async () => { D = await call("save_guide", { fields: fields() }); T.msg = null; }),
-    issue: (btn) => run(btn, "guide", async () => {
-      D = await call("save_guide", { fields: fields() });
-      D = await call("issue_guide");
-    }),
+    issue: (btn) => {
+      if (D.guide.version > 0 && !D.guide.dirty) {
+        KPActionFeedback.show({title:"案内に変更点がありません",
+          message:"現在の入社案内はすでに発行済みです。内容を変更して「下書きを保存」すると、再発行できます。",
+          actionLabel:"入社案内を確認",
+          onAction:()=>main.querySelector("#guide-form")?.scrollIntoView({behavior:"smooth",block:"start"})});
+        return;
+      }
+      return run(btn, "guide", async () => {
+        D = await call("save_guide", { fields: fields() });
+        D = await call("issue_guide");
+      });
+    },
     invite: (btn) => run(btn, "invite", async () => {
       const days = Number(main.querySelector("#invite-days")?.value || 7);
       const r = await call("create_invite", { days });
@@ -203,14 +221,32 @@
       const r = await call("preview_mail");
       T.preview = r.preview;
     }),
-    test: (btn) => run(btn, "mail", async () => {
-      const r = await call("test_mail"); D = r; T.msg = `テスト送信しました（宛先：${r.result.to}）`;
-    }),
-    send: (btn) => run(btn, "mail", async () => {
-      const e = D.employee;
-      if (!confirm(`${e.name} さん（${D.mail.to}）へ、入社案内のメールを送ります。よろしいですか。\n\n送った内容は、履歴に残ります。`)) return;
-      const r = await call("send_mail"); D = r; T.url = null; T.msg = `${e.name} さんへ送信しました（${r.result.to}）`;
-    }),
+    test: (btn) => {
+      if (!D.mail.config.configured || !D.mail.canTest) {
+        KPActionFeedback.show({title:"テスト送信の準備が必要です",
+          message:!D.mail.config.configured
+            ?"送信元メールの設定が未完了です。管理者にメール設定を確認してもらってください。"
+            :"テスト送信できる状態ではありません。メール設定と操作権限を確認してください。"});
+        return;
+      }
+      return run(btn, "mail", async () => {
+        const r = await call("test_mail"); D = r; T.msg = \`テスト送信しました（宛先：\${r.result.to}）\`;
+      });
+    },
+    send: (btn) => {
+      if (!D.mail.to || !D.mail.config.configured) {
+        KPActionFeedback.show({title:"メール送信の準備が必要です",
+          message:!D.mail.to
+            ?"社員名簿にメールアドレスが登録されていません。名簿でメールアドレスを確認してください。"
+            :"送信元メールの設定が未完了です。管理者にメール設定を確認してもらってください。"});
+        return;
+      }
+      return run(btn, "mail", async () => {
+        const e = D.employee;
+        if (!confirm(\`\${e.name} さん（\${D.mail.to}）へ、入社案内のメールを送ります。よろしいですか。\\n\\n送った内容は、履歴に残ります。\`)) return;
+        const r = await call("send_mail"); D = r; T.url = null; T.msg = \`\${e.name} さんへ送信しました（\${r.result.to}）\`;
+      });
+    },
     body: (btn) => run(btn, "mail", async () => {
       const r = await API.api(`/api/keiei/onboarding?employeeId=${encodeURIComponent(empId)}&mailId=${encodeURIComponent(btn.dataset.id)}`);
       T.body = r.mail;
