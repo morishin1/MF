@@ -311,36 +311,136 @@
     ? `<span class="pp-tag enger">dx.enger</span>${r.companyId ? "" : `<span class="pp-small">企業未紐付け</span>`}`
     : `<span class="pp-tag">手入力</span>`;
 
+  // 3担当者と現在の段階を必ず同じ行で表示する（担当未割当は明示）。
+  function ppChain(r) {
+    const stage = r.handoffStage === "closing" ? 2 : r.handoffStage === "cs" && r.csOwnerId ? 1 : 0;
+    const names = [
+      ["提案者", r.matchingOwnerName || (r.sourceSystem === "manual" ? r.salesOwnerName : null)],
+      ["CS担当", r.csOwnerName],
+      ["クロージング", r.closingOwnerName],
+    ];
+    return names.map(([label,name],i) =>
+      '<span class="pp-chain-line ' + (stage===i ? "active" : "") + '"><em>' + esc(label) +
+        '</em><strong class="' + (!name ? "pending" : "") + '">' + esc(name || "未割当") + '</strong></span>').join("");
+  }
+  const ppCheckInput = (r) => {
+    const enabled = r.canEdit || r.canRestore;
+    return '<input type="checkbox" data-pid="' + esc(r.id) + '" aria-label="' + esc(r.companyName) +
+      'を選択" ' + (enabled ? '' : 'disabled title="他の担当者の案件は閲覧のみ"') +
+      (selected.has(r.id) ? " checked" : "") + ' onclick="event.stopPropagation()" onchange="ppSelectOne(this.dataset.pid,this.checked)">';
+  };
+
   function renderRows(rows) {
     if (!rows.length) {
-      $("rows").innerHTML = `<tr><td colspan="12" class="empty">この条件の提案はありません</td></tr>`;
-      $("cards").innerHTML = `<div class="sl-empty">この条件の提案はありません</div>`;
+      $("rows").innerHTML = '<tr><td colspan="12" class="empty">この条件の提案はありません</td></tr>';
+      $("cards").innerHTML = '<div class="sl-empty">この条件の提案はありません</div>';
       return;
     }
     $("rows").innerHTML = rows.map((r) => `
-      <tr class="click${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
+      <tr class="click${r.overdue ? " overdue" : ""}${!r.canEdit ? " pp-row-readonly" : ""}" onclick="ppOpen('${esc(r.id)}')">
+        <td class="pp-check-col">${ppCheckInput(r)}</td>
         <td style="white-space:nowrap;">${sentCell(r)}</td>
-        <td><span class="sl-nm">${esc(r.companyName)}</span>${r.contactStop ? `<span class="pp-tag err">連絡停止</span>` : ""}</td>
+        <td><span class="sl-nm">${esc(r.companyName)}</span>${r.contactStop ? '<span class="pp-tag err">連絡停止</span>' : ""}</td>
         <td>${esc(r.service || "—")}</td>
         <td>${esc(r.title)}${r.sourceCode ? `<span class="pp-small">${esc(r.sourceCode)}</span>` : ""}</td>
-        <td>${esc(r.matchingOwnerName || "—")}</td>
-        <td>${r.salesOwnerName ? esc(r.salesOwnerName) : `<span class="pp-tag warn">未割当</span>`}</td>
-        <td>${pill(r.status, r.statusLabel)}<span class="pp-small">${r.handoffStage === "closing" ? "クロージング" : r.handoffStage === "cs" ? "CS対応" : "提案担当"}</span>${r.closeReasonLabel ? `<span class="pp-small">${esc(r.closeReasonLabel)}</span>` : ""}</td>
-        <td class="due">${r.next ? `${esc(r.next.title)}<span class="pp-small">${dueText(r.next.dueAt, r.next.overdue)}</span>` : "—"}</td>
+        <td class="pp-chain">${ppChain(r)}${!r.canEdit ? '<span class="pp-view-badge">閲覧のみ</span>' : ""}</td>
+        <td>${pill(r.status, r.statusLabel)}${r.archived ? '<span class="pp-small">アーカイブ済み</span>' : ""}</td>
+        <td class="due">${r.next ? `${esc(r.next.title)}<span class="pp-small">${dueText(r.next.dueAt,r.next.overdue)}</span>` : "—"}</td>
         <td style="white-space:nowrap;">${r.elapsedDays}日</td>
         <td class="nw">${callCell(r)}</td>
         <td class="nw">${mailCell(r)}</td>
         <td>${syncCell(r)}</td>
       </tr>`).join("");
-    // スマホ：電話先・次の行動・期限が先に見えるカード
     $("cards").innerHTML = rows.map((r) => `
       <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-          <b>${esc(r.companyName)}</b>${pill(r.status, r.statusLabel)}</div>
-        <div class="l">${esc(r.title)}${r.service ? `・${esc(r.service)}` : ""}</div>
-        <div class="l"><b style="font-size:12.5px;">次：${esc(r.next ? r.next.title : "—")}</b>${r.next ? `　${dueText(r.next.dueAt, r.next.overdue)}` : ""}</div>
-        <div class="l">${esc(r.handoffStage === "closing" ? "クロージング" : r.handoffStage === "cs" ? "CS対応" : "提案担当")}　電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}　経過 ${r.elapsedDays}日　担当：${esc(r.salesOwnerName || "未割当")}</div>
+          <div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}<b>${esc(r.companyName)}</b></div>
+          ${pill(r.status, r.statusLabel)}
+        </div>
+        <div class="l">${esc(r.title)}${r.service ? "・"+esc(r.service) : ""}</div>
+        <div class="l">${ppChain(r)}</div>
+        <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
+          ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>
+        <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}
+          ・経過 ${r.elapsedDays}日 ${!r.canEdit ? "・閲覧のみ" : ""}</div>
       </div>`).join("");
+  }
+
+  function ppBulkState() {
+    const rows = data?.proposals || [];
+    const sel = rows.filter((r) => selected.has(r.id));
+    $("pp-selected").textContent = sel.length + "件選択";
+    const editable = sel.length && sel.every((r) => r.canEdit);
+    const restorable = sel.length && sel.every((r) => r.canRestore);
+    $("pp-bulk-edit").disabled = !editable;
+    $("pp-bulk-archive").disabled = !editable;
+    $("pp-bulk-restore").disabled = !restorable;
+    const able = rows.filter((r) => r.canEdit || r.canRestore);
+    const all = $("pp-all");
+    if (all) {
+      all.checked = able.length > 0 && able.every((r) => selected.has(r.id));
+      all.indeterminate = able.length > 0 && !all.checked && able.some((r) => selected.has(r.id));
+    }
+  }
+  function ppSelectOne(id, checked) {
+    if (!(data?.proposals || []).some((r) => r.id === id && (r.canEdit || r.canRestore))) return;
+    if (checked && selected.size < 50) selected.add(id);
+    else if (!checked) selected.delete(id);
+    else { alert("一度に選択できるのは最大50件です"); }
+    for (const checkbox of document.querySelectorAll('input[data-pid]')) {
+      checkbox.checked = selected.has(checkbox.dataset.pid);
+    }
+    ppBulkState();
+  }
+  function ppSelectAll(checked) {
+    const able = (data?.proposals || []).filter((r) => r.canEdit || r.canRestore).slice(0, 50);
+    if (checked) { for (const r of able) selected.add(r.id); }
+    else selected.clear();
+    for (const checkbox of document.querySelectorAll('input[data-pid]')) checkbox.checked = selected.has(checkbox.dataset.pid);
+    ppBulkState();
+  }
+  function ppBulkEdit() {
+    const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
+    if (!rows.length || rows.some((r) => !r.canEdit)) return;
+    const oneManual = rows.length === 1 && rows[0].sourceSystem === "manual";
+    modal('<h2>選択した提案を編集（' + rows.length + '件）</h2>' +
+      '<p class="sl-muted">全件に共通の「種別」を変更できます。ENGER連携元の提案名は変更できません。</p>' +
+      '<label>種別（変更しない場合は空欄）</label><input id="m-bservice" maxlength="100" placeholder="例：ENGER・システム開発・AI/DX">' +
+      (oneManual ? '<label>提案名（1件のみ、変更しない場合は空欄）</label><input id="m-btitle" maxlength="200" value="' +
+        esc(rows[0].title) + '">' : '') + foot("ppSaveBulkEdit()", "変更を保存"));
+  }
+  async function ppSaveBulkEdit() {
+    const service = $("m-bservice").value.trim(), title = $("m-btitle")?.value.trim() || null;
+    if (!service && !title) { $("m-msg").textContent = "変更内容を入力してください"; return; }
+    await ppCommitBulk("edit", { service: service || null, title });
+  }
+  function ppBulkArchive() {
+    const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
+    if (!rows.length || rows.some((r) => !r.canEdit)) return;
+    modal('<h2>一覧から削除（アーカイブ）</h2><p>選択した' + rows.length +
+      '件を一覧から除外します。引継ぎ・電話の記録は削除されず、未完了タスクは取り消されます。</p>' +
+      '<p class="sl-muted">「アーカイブ」から復元できます。復元してもタスクは自動的には再開しません。</p>' +
+      foot("ppCommitBulk('archive')", "アーカイブする"));
+  }
+  function ppBulkRestore() {
+    const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
+    if (!rows.length || rows.some((r) => !r.canRestore)) return;
+    modal('<h2>アーカイブから復元（' + rows.length + '件）</h2>' +
+      '<p>一覧へ戻します。必要な電話・フォローのタスクは手動で再登録してください。</p>' +
+      foot("ppCommitBulk('restore')", "復元する"));
+  }
+  async function ppCommitBulk(action, fields={}) {
+    const ids = [...selected];
+    if (!ids.length || ids.length > 50) return;
+    try {
+      const result = await KPLayout.busy($("m-ok"), "処理中…",
+        () => API.api("/api/sales/proposals/bulk", { method:"POST", body:{ action, ids, ...fields } }));
+      ppCloseAction();
+      selected.clear();
+      await load();
+      if (detail?.proposal && ids.includes(detail.proposal.id)) ppClose();
+      alert(result.count + "件の" + ({edit:"編集",archive:"アーカイブ",restore:"復元"}[action]||"更新") + "が完了しました");
+    } catch (e) { $("m-msg").textContent = errText(e); }
   }
 
   function renderKpi(d) {
