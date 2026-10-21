@@ -1,0 +1,68 @@
+// Sales 提案管理チーム全件閲覧・3担当表示・本人だけチェックボックス編集の回帰テスト
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Script } from "node:vm";
+import { shapeProposal, filterRows, FILTER_KEYS } from "../lib/sales-proposals.js";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const html = readFileSync(resolve(ROOT, "sales/proposals.html"), "utf8");
+const inline = html.match(/<script>\s*([\s\S]*?)<\/script>/);
+assert.ok(inline, "提案管理のJavaScriptが存在する");
+new Script(inline[1], { filename: "sales/proposals.html" });
+const list = readFileSync(resolve(ROOT, "api/sales/proposals/index.js"), "utf8");
+const detail = readFileSync(resolve(ROOT, "api/sales/proposals/detail.js"), "utf8");
+const handoff = readFileSync(resolve(ROOT, "api/sales/proposals/handoff.js"), "utf8");
+const bulk = readFileSync(resolve(ROOT, "api/sales/proposals/bulk.js"), "utf8");
+const intake = readFileSync(resolve(ROOT, "lib/sales-proposal-intake.js"), "utf8");
+const sql = readFileSync(resolve(ROOT, "db/142_sales_team_proposals_bulk.sql"), "utf8");
+
+for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore", "pp-all", "pp-list-meta"]) {
+  assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, "要素:" + id);
+}
+assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は全件");
+assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
+for (const label of ["提案者", "CS担当", "クロージング"]) assert.ok(inline[1].includes(label), label);
+assert.ok(inline[1].includes('!r.canEdit ? " pp-row-readonly"'), "他人の提案は閲覧バッジ");
+assert.ok(inline[1].includes('r.canEdit || r.canRestore'), "自分の提案のみ選択");
+assert.ok(inline[1].includes('!detail.canEdit'), "他人の詳細は閲覧専用");
+assert.ok(inline[1].includes('!detail.canEdit ?'), "CTA編集禁止");
+assert.ok(inline[1].includes('detail.canAssign'), "管理者は未割当の担当のみ初回設定");
+assert.ok(!inline[1].includes('id="n-owner"'), "手動提案で他人名義の登録不可");
+
+assert.ok(!list.includes('query = query.eq("sales_owner_id", me)'), "一覧GETでは担当者でアクセス制限しない");
+assert.ok(list.includes('canEdit: Boolean(me && p.sales_owner_id === me'), "更新権限は本人だけ");
+assert.ok(detail.includes('if (!canEdit && !canAssign) return json(res, 403'), "更新POSTで他人の編集を拒否");
+assert.ok(detail.includes('proposal.sales_owner_id)'), "未割当かどうかの検証");
+assert.ok(handoff.includes('me !== proposal.sales_owner_id'), "引継ぎRPCは現担当のみ");
+assert.ok(handoff.includes('gw_sales_transfer_proposal_owner'), "引継ぎRLS保護ラッパー");
+assert.ok(bulk.includes('ids.length > 50') && bulk.includes('p_ids: ids'), "選択50件まで");
+assert.ok(intake.includes('matchOwner(emps, p.matchingOwner)'), "ENGER提案者を初回担当にする");
+
+assert.ok(sql.includes('gw_sales_proposal_visible(p_tenant uuid, p_owner uuid)'), "同テナント全件閲覧");
+assert.ok(sql.includes('gw_sales_proposal_editable_id'), "活動記録も本人だけ編集");
+assert.ok(sql.includes('for update to authenticated'), "更新RLS");
+assert.ok(sql.includes('gw_sales_bulk_proposals('), "一括操作はトランザクション");
+assert.ok(sql.includes("p_action in ('archive','restore','edit')"), "アーカイブ・復元・編集");
+assert.ok(sql.includes('if v_count <> cardinality(v_ids)'), "1件でも取得できないと全件ロールバック");
+assert.ok(sql.includes('v.tenant_id <> v_tenant'), "複数テナント混在禁止");
+assert.ok(sql.includes("cancel_reason='提案をアーカイブしたため'"), "アーカイブ時は未完了タスク停止");
+
+const owner = "10000000-0000-4000-8000-000000000001";
+const cs = "10000000-0000-4000-8000-000000000002";
+const close = "10000000-0000-4000-8000-000000000003";
+const p = shapeProposal({ id: "p1", source_system: "enger", company_name: "テスト社", title: "Java",
+  matching_owner_name: "藤本", sales_owner_id: cs, handoff_stage: "cs",
+  cs_owner_id: cs, closing_owner_id: close, status: "call_wait", sent_at: "2026-10-20T09:00:00Z",
+  archived_at: null, updated_at: "2026-10-20T10:00:00Z",
+},{ nameOf:(id)=>id===cs?"中村":id===close?"池永":id===owner?"藤本":null });
+assert.equal(p.matchingOwnerName, "藤本");
+assert.equal(p.csOwnerName, "中村");
+assert.equal(p.closingOwnerName, "池永");
+assert.equal(p.archived,false);
+assert.ok(FILTER_KEYS.includes("archived"));
+assert.equal(filterRows([p],{filter:"all"}).length,1);
+assert.equal(filterRows([{...p,archived:true}],{filter:"all"}).length,0);
+assert.equal(filterRows([{...p,archived:true}],{filter:"archived"}).length,1);
+console.log("PASS Sales all-team proposal visibility / proposer-CS-closer chain / owner-only bulk archive & edit");
