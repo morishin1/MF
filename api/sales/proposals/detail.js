@@ -211,8 +211,10 @@ async function act(req, res, sb, ctx, user) {
       }
       // 担当未割当の場合だけ管理者が初回割当する。RLSを迂回するためAPIで厳格にtenant/roleを検証。
       const { data: after, error: e1 } = await admin().from("gw_sales_proposals").update({ sales_owner_id: to, updated_by: user.id })
-        .eq("id", proposal.id).eq("tenant_id", ctx.tenantId).select(PROPOSAL_FIELDS).single();
+        .eq("id", proposal.id).eq("tenant_id", ctx.tenantId).is("sales_owner_id", null).is("archived_at", null)
+        .select(PROPOSAL_FIELDS).maybeSingle();
       if (e1) return fail(res, e1);
+      if (!after) return json(res, 409, { error: "owner_changed", hint: "ほかの担当者が先に割り当てました。再読み込みしてください" });
       // 前の担当（または未定）のままの開いているタスクを、新しい担当へ寄せる。記録（誰がやったか）は書き換えない
       const { tasks } = await loadTasks(admin(), proposal.id);
       const move = tasks.filter((t) => t.status === "open" && t.kind !== "manager_review"
