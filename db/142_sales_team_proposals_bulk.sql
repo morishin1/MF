@@ -150,20 +150,20 @@ begin
   end if;
   v_owner := public.gw_employee_id(v_tenant);
   if p_action = 'archive' then
-    update public.gw_sales_proposals set archived_at=now(), archived_by=v_user, updated_by=v_user
+    update public.gw_sales_proposals set archived_at=now(), archived_by=v_user, updated_by=v_user, updated_at=now()
     where id=any(v_ids);
     update public.gw_sales_proposal_tasks
       set status='canceled', cancel_reason='提案をアーカイブしたため'
       where proposal_id=any(v_ids) and status='open';
     v_note := '提案をアーカイブ';
   elsif p_action = 'restore' then
-    update public.gw_sales_proposals set archived_at=null, archived_by=null, updated_by=v_user
+    update public.gw_sales_proposals set archived_at=null, archived_by=null, updated_by=v_user, updated_at=now()
     where id=any(v_ids);
     v_note := '提案をアーカイブから復元（タスクは自動再開しません）';
   else
     update public.gw_sales_proposals set
       service=coalesce(btrim(p_service),service),
-      title=coalesce(btrim(p_title),title), updated_by=v_user where id=any(v_ids);
+      title=coalesce(btrim(p_title),title), updated_by=v_user, updated_at=now() where id=any(v_ids);
     v_note := '提案情報を編集';
   end if;
   insert into public.gw_sales_proposal_activities(
