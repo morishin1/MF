@@ -239,7 +239,7 @@ await ok("1 下書き（送信日時が無い）・まだ無い提案の更新�
   const r1 = await intake(ev({}, { sent_at: null }));
   assert.equal(r1.statusCode, 400); assert.equal(r1.body.field, "proposal.sent_at");
   const r2 = await intake(ev({ event_type: "proposal.updated" }));
-  assert.equal(r2.statusCode, 200); assert.equal(r2.body.result, "skipped");
+  assert.equal(r2.statusCode, 503); assert.equal(r2.body.error, "not_ready", "未起票のCL変更は再送対象にする（破棄しない）");
   assert.equal(proposals().length, 0); assert.equal(tbl("gw_sales_proposal_tasks").length, 0);
 });
 
