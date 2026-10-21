@@ -80,7 +80,48 @@ const logged = [];
 const notified = [];
 // 書き込みは本物の DB では RLS（db/138。test/sql/138_sales_proposals.sql で確かめている）が守る。
 // ここでは API の判定（管理側・担当だけ）を確かめるため、userClient も書ける偽物にする
-mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: () => mem.admin(), userClient: () => mem.admin() } });
+// サーバ側の同期RPCの挙動を偽DB上で再現する（実SQLはtest/sql/143で別途検証）。
+function mockSalesDb() {
+  const db = mem.admin();
+  const originalRpc = db.rpc?.bind(db);
+  db.rpc = async (name, args) => {
+    if (name !== "gw_sales_apply_enger_cl_owner")
+      return originalRpc ? originalRpc(name,args) : { data:null, error:{ code:"PGRST202" } };
+    const p = (mem.rows.gw_sales_proposals || []).find((row) =>
+      row.id === args.p_proposal && row.tenant_id === args.p_tenant && row.source_system === "enger");
+    if (!p) return { data:null, error:{code:"42501",message:"enger_proposal_not_found"} };
+    if (p.enger_cl_synced_at && args.p_event_at <= p.enger_cl_synced_at)
+      return { data:{state:"stale"},error:null };
+    const keyChanged = p.enger_cl_key == null
+      ? p.sales_owner_id !== args.p_new_owner
+      : p.enger_cl_key !== args.p_cl_key;
+    const previous = p.sales_owner_id ?? null;
+    p.enger_cl_key = args.p_cl_key;
+    p.enger_cl_synced_at = args.p_event_at;
+    if (!keyChanged) return {data:{state:"same"},error:null};
+    if (CLOSED.includes(p.status)) return {data:{state:"closed"},error:null};
+    if ((mem.rows.gw_sales_proposal_handoffs||[]).some((h) => h.proposal_id===p.id))
+      return {data:{state:"protected"},error:null};
+    if (previous === args.p_new_owner) return {data:{state:"same"},error:null};
+    p.sales_owner_id = args.p_new_owner;
+    let count = 0;
+    for (const t of (mem.rows.gw_sales_proposal_tasks||[])) {
+      if (t.proposal_id!==p.id || t.status!=="open" ||
+          (t.assignee_id != null && t.assignee_id!==previous)) continue;
+      t.assignee_id = args.p_new_owner;
+      count++;
+    }
+    (mem.rows.gw_sales_proposal_activities ||= []).push({
+      id:uid(80000 + (mem.rows.gw_sales_proposal_activities||[]).length),proposal_id:p.id,
+      tenant_id:p.tenant_id,kind:"assign",occurred_at:args.p_event_at,
+      note:"ENGER CL担当の変更をSalesの営業担当へ自動反映",
+      detail:{via:"enger",from:previous,to:args.p_new_owner,movedTasks:count},
+    });
+    return {data:{state:"changed",from:previous,to:args.p_new_owner,movedTasks:count},error:null};
+  };
+  return db;
+}
+mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: mockSalesDb, userClient: mockSalesDb } });
 mock.module(atRoot("lib/auth.js"), { namedExports: { requireUser: async () => ({ id: "u-1" }), getMemberships: async () => [] } });
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async (e) => { logged.push(e); } } });
 mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async (rows) => { notified.push(...rows); return { created: rows.length }; } } });
@@ -239,7 +280,7 @@ await ok("1 下書き（送信日時が無い）・まだ無い提案の更新�
   const r1 = await intake(ev({}, { sent_at: null }));
   assert.equal(r1.statusCode, 400); assert.equal(r1.body.field, "proposal.sent_at");
   const r2 = await intake(ev({ event_type: "proposal.updated" }));
-  assert.equal(r2.statusCode, 200); assert.equal(r2.body.result, "skipped");
+  assert.equal(r2.statusCode, 503); assert.equal(r2.body.error, "not_ready");
   assert.equal(proposals().length, 0); assert.equal(tbl("gw_sales_proposal_tasks").length, 0);
 });
 
