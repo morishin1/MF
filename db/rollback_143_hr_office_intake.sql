@@ -3,6 +3,7 @@
 -- 早期引き渡し・応募者の安全装置を外す）
 --
 -- ■ 先にやること
+--   0. db/144 を適用しているなら、先に db/rollback_144_hr_office_intake_contract.sql を流す（流していなくても、ここで外す）
 --   1. アプリを db/143 より前の版へ戻すか、環境変数 HR_OFFICE_INTAKE を外す（既定は OFF）。
 --      OFF のままなら、HR の画面・API は早期引き渡しの表を使わない（「Officeへ移動済み」タブ・ヒアリング・引き渡しは出ない）
 --   2. 有効な（差し戻していない）早期引き渡しが無いか確かめる。あると、Office で手続き中の人の記録が消えるため、
@@ -36,6 +37,10 @@ begin
   end if;
 end $$;
 
+-- db/144（Office の契約手続きとつなぐ安全装置）を先に戻していなければ、ここで外す（db/144 は db/143 の関数・表を使う）
+drop trigger if exists gw_hr_offers_intake_guard on public.gw_hr_offers;
+drop function if exists public.gw_hr_offers_intake_guard();
+
 drop trigger if exists gw_hr_applicants_guard on public.gw_hr_applicants;
 drop function if exists public.gw_hr_applicants_guard();
 
@@ -46,6 +51,7 @@ drop table if exists public.gw_hr_hearing_pay;
 drop table if exists public.gw_hr_hearings;
 drop table if exists public.gw_hr_ceo_decisions;
 
+drop function if exists public.gw_hr_office_intakes_link();   -- db/144（trigger は表と一緒に消えた）
 drop function if exists public.gw_hr_office_intake_events_check();
 drop function if exists public.gw_hr_office_intakes_guard();
 drop function if exists public.gw_hr_office_intakes_lock_hearing();
