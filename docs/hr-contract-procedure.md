@@ -11,6 +11,20 @@
 > **状態**：コードとテストは揃っているが、**本番の DB（db/139）は未適用・本番の動作は未確認**。
 > db/137 の本番適用も未確認（db/139 は 081・129・132・133・137 が前提。無ければ何も変えずに止まる）。
 
+> **2026-10-21（PR B・機能フラグ `HR_OFFICE_INTAKE`。既定 OFF）：早期引き渡し（新フロー）の人は、この手続きを Office が行う。**
+> 社長合格 → 条件ヒアリング → ［Officeへ引き渡す］（db/143）を済ませた人は、①〜⑦ を **Office 人事・労務の「HRからの引き継ぎ」**
+> （`/admin-hr.html`・`api/hr/office-intakes.js`）で進める。処理の本体は同じ関数（`lib/hr-offer-ops.js`・`lib/hr-contract-ops.js`。
+> `api/hr/offers/index.js`・`contract.js` から移した）で、db/139 の表・版・SHA-256・締結の証跡をそのまま使う（契約の表は二重に作らない）。
+> 違いは次だけ：
+> - ① 会社の採用条件を作るのは Office の人事。**確定（給与・報酬を決める）は経営者だけ**（`canDecideSalary`）。人事が作った条件の給与は捨てる（経営者が入れる）
+> - ④ 本人への案内は**本人専用URLを発行して手で送り［送付済みにする］**（Office からはメールを送らない。正式契約の案内メールも同じ）
+> - ⑦「Officeへ引き渡す」は Office 側では **［社員登録へ進める準備］**（同じ `handoff` の処理。Office が受け手なので通知しない）
+> - HR からは**見るだけ**（書き込みは 409 `moved_to_office`。カードは `movedToOffice: true` でボタンなし）。DB でも画面から直接は書けない（db/144）
+> - Office の API は、認可（`canOfficeHr`）→ 二段階認証 → フラグ → テナント → 引き渡しの有無・版がその応募者のものか → 状態、を先に確かめてから service role で呼ぶ
+>
+> **旧フロー（新しい合格記録が無い人・オファーの版がすでにある人。既存の「内定」を含む）は、この文書のまま HR で進める（変えていない）。**
+> 詳しくは `docs/hr-office-handoff.md`「Office の手続き（PR B）」。
+
 ---
 
 ## 1. 既存の仕組みとの関係（重複させない）
@@ -79,7 +93,8 @@
 
 ## 6. API
 
-`/api/hr/offers/contract`（採用HR＝canRecruit。書き込みは service role で、権限と状態をここで先に確かめる）
+`/api/hr/offers/contract`（採用HR＝canRecruit。書き込みは service role で、権限と状態をここで先に確かめる）。
+処理の本体は `lib/hr-contract-ops.js`（Office の `api/hr/office-intakes.js` の `contract` も同じ関数。早期引き渡し済みの人への HR からの書き込みは 409）
 
 | メソッド | 内容 | 権限 |
 |---|---|---|
