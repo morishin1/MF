@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
   <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <link rel="stylesheet" href="../css/action-feedback.css?v=20261020cal1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -95,6 +96,8 @@
     .pp-flow-step.done { background:#edf5ee; border-color:#b4d1b9; }
     .pp-flow-action { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
     .pp-flow-hint { font-size:11.5px; color:#5f6575; }
+    .pp-flow-blocked { border:1px solid #bdc3ca !important; background:#f3f4f5 !important; color:#465167 !important; cursor:pointer; }
+    .pp-flow-blocked:focus-visible { outline:3px solid #91a9cd; outline-offset:2px; }
     .pp-more-actions summary { cursor:pointer; font-size:12px; font-weight:700; color:#4a5068; }
     .pp-more-actions[open] { padding-top:7px; width:100%; }
     @media (max-width: 1000px) {
@@ -153,6 +156,8 @@
 <script src="../js/api-client.js?v=20261020cal1"></script>
 <script src="../js/layout.js?v=20261020cal1"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/action-feedback.js?v=20261020cal1"></script>
+<script src="../js/sales-proposal-feedback.js?v=20261020cal1"></script>
 <script>
   // 画面の値（選択肢・ラベル）はサーバ（lib/sales-proposals.js）が返す。ここに同じ一覧を書かない
   const $ = (id) => document.getElementById(id);
@@ -170,6 +175,51 @@
   };
   const pill = (status, label) => statusPill(STATUS_PILL[status] || "untouched", label);
   const errText = (e, f) => e.hint || e.detail || e.message || f || "失敗しました";
+  // 操作できない理由は押した場所ですぐに表示し、具体的な入力欄に戻れるようにする。
+  function ppShowIssue(issue) {
+    if (!issue) return false;
+    const field = issue.field && ($(issue.field) || document.querySelector(`input[name="${issue.field}"]`));
+    if ($("m-msg")) $("m-msg").textContent = issue.message;
+    const opts = { title: issue.title, message: issue.message };
+    if (field) {
+      opts.actionLabel = "入力箇所を確認";
+      opts.onAction = () => { field.scrollIntoView({behavior:"smooth",block:"center"}); field.focus({preventScroll:true}); };
+    }
+    KPActionFeedback.show(opts);
+    return true;
+  }
+  function ppShowServerError(e) {
+    const message = SalesProposalFeedback.formatError(e);
+    if ($("m-msg")) $("m-msg").textContent = message;
+    const opts = { title: "操作を完了できませんでした", message };
+    const id = detail?.proposal?.id;
+    if (e?.code === "not_connected" && detail?.canHandoff) {
+      opts.actionLabel = "電話の結果を記録";
+      opts.onAction = () => { ppCloseAction(); ppCall(); };
+    } else if (e?.code === "not_sent_or_closed" && id && !detail?.proposal?.closed) {
+      opts.actionLabel = "提案送信を記録";
+      opts.onAction = () => { ppCloseAction(); ppSent(); };
+    } else if (e?.code === "owner_changed" && id) {
+      opts.actionLabel = "案件を再読み込み";
+      opts.onAction = () => ppOpen(id);
+    } else if ($("m-ok") && !["forbidden", "readonly"].includes(e?.code)) {
+      opts.actionLabel = "入力箇所を確認";
+      opts.onAction = () => $("m-ok")?.closest(".sl-modal")?.querySelector("input:not([type=hidden]), textarea, select")?.focus();
+    }
+    KPActionFeedback.show(opts);
+  }
+  function ppFlowBlocked(key) {
+    const list = {
+      sent: ["提案送信が必要です", "先に企業へ提案を送信してください。送信済みの場合は送信記録を登録します。", "提案送信を記録", () => ppSent()],
+      cs_team: ["CS担当が未設定です", "管理者が「フォローの設定」でCS担当を登録してください。", detail?.manager ? "フォロー設定を確認" : null, () => $("admin-sec")?.scrollIntoView({behavior:"smooth",block:"start"})],
+      closing_team: ["クロージング担当が未設定です", "管理者が「フォローの設定」でクロージング担当を登録してください。", detail?.manager ? "フォロー設定を確認" : null, () => $("admin-sec")?.scrollIntoView({behavior:"smooth",block:"start"})],
+      owner: ["担当者の確認が必要です", "現在の担当者または管理者に、この案件の操作を依頼してください。", null, null],
+    };
+    const entry = list[key];
+    if (!entry) return;
+    KPActionFeedback.show({title:entry[0],message:entry[1],
+      ...(entry[2] ? {actionLabel:entry[2],onAction:entry[3]} : {})});
+  }
   const localInput = (iso) => {
     const d = iso ? new Date(iso) : new Date();
     const p = (n) => String(n).padStart(2, "0");
@@ -459,11 +509,11 @@
   function ppFlowAction(p, d) {
     if (p.closed) return '<span class="pp-flow-hint">対応終了</span>';
     const stage = ppStageIndex(p);
-    let label = "", action = "", enabled = true, hint = "";
+    let label = "", action = "", enabled = true, hint = "", blocked = "";
     if (stage === 0) {
       label = "CSへ引継ぐ"; action = "ppHandoff('cs')";
-      if (!p.sentAt) { enabled = false; hint = "先に企業へ提案してください"; }
-      else if (!(d.handoffTargets?.cs || []).length) { enabled = false; hint = "管理者がCS担当を設定してください"; }
+      if (!p.sentAt) { enabled = false; blocked = "sent"; hint = "先に企業へ提案してください"; }
+      else if (!(d.handoffTargets?.cs || []).length) { enabled = false; blocked = "cs_team"; hint = "管理者がCS担当を設定してください"; }
     } else if (stage === 1 && !d.csContacted) {
       label = "電話結果を記録"; action = "ppCall()";
       hint = "通話または返信の記録後にCS判断へ";
@@ -472,13 +522,14 @@
       hint = "進行判断後にクロージングへ";
     } else if (stage === 1) {
       label = "クロージングへ引継ぐ"; action = "ppHandoff('closing')";
-      if (!(d.handoffTargets?.closing || []).length) { enabled = false; hint = "管理者がクロージング担当を設定してください"; }
+      if (!(d.handoffTargets?.closing || []).length) { enabled = false; blocked = "closing_team"; hint = "管理者がクロージング担当を設定してください"; }
     } else { label = "面談を記録"; action = "ppMeeting()"; }
     if (!d.canHandoff && stage !== 2 && !(stage === 1 && !d.csContacted)) {
-      enabled = false; hint = "現在の担当者または管理者が操作できます";
+      enabled = false; blocked = "owner"; hint = "現在の担当者または管理者が操作できます";
     }
-    return '<button type="button" class="btn btn-primary btn-sm" onclick="' + action +
-      '"' + (enabled ? "" : ' disabled aria-disabled="true"') + '>' + esc(label) + '</button>' +
+    return '<button type="button" class="btn btn-primary btn-sm' + (enabled ? "" : " pp-flow-blocked") + '" onclick="' +
+      (enabled ? action : "ppFlowBlocked('" + blocked + "')") +
+      '" title="' + esc(enabled ? label : "押すと進めない理由を確認できます") + '">' + esc(label) + '</button>' +
       (hint ? '<span class="pp-flow-hint">' + esc(hint) + '</span>' : "");
   }
 
@@ -651,6 +702,11 @@
   }
   async function send(body, okText = "保存しました") {
     const btn = $("m-ok");
+    const callNeedsAt = body.action === "call" && (detail?.labels?.callResults || [])
+      .find((x) => x.key === body.result)?.needsAt;
+    if (ppShowIssue(SalesProposalFeedback.validate(body.action, body, {
+      callNeedsAt, currentOwner: detail?.proposal?.salesOwnerId || null
+    }))) return;
     try {
       const r = await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/detail", { method: "POST", body: { id: detail.proposal.id, ...body } }));
       detail = r;
@@ -661,7 +717,7 @@
       if (r.recorded) flash(`記録しました：${r.recorded.label}${r.recorded.createdTasks.length ? `　→ 次のタスク：${r.recorded.createdTasks.join("・")}` : ""}`);
       else if (okText) flash(okText);
     } catch (e) {
-      $("m-msg").textContent = errText(e);
+      ppShowServerError(e);
     }
   }
 
@@ -693,7 +749,7 @@
     };
   }
   function ppSendCall() {
-    if (!picked("m-result")) { $("m-msg").textContent = "結果を選んでください"; return; }
+    if (!picked("m-result")) { ppShowIssue({title:"電話の結果が未選択です",message:"「通話できた」「不在」など、電話の結果を選んでください。",field:"m-result"}); return; }
     send({ action: "call", result: picked("m-result"), outcome: picked("m-out"), nextAt: $("m-nextat").value || null,
       occurredAt: $("m-at").value, note: $("m-note").value });
   }
@@ -739,7 +795,7 @@
       ${whenField("返信があった日時")}${noteField()}${foot("ppSendReply()")}`);
   }
   function ppSendReply() {
-    if (!picked("m-out")) { $("m-msg").textContent = "内容を選んでください"; return; }
+    if (!picked("m-out")) { ppShowIssue({title:"企業からの回答が未選択です",message:"回答内容を選んでください。",field:"m-out"}); return; }
     send({ action: "reply", outcome: picked("m-out"), channel: $("m-ch").value, occurredAt: $("m-at").value, note: $("m-note").value });
   }
 
@@ -758,7 +814,7 @@
     toggle = () => { $("m-next").style.display = picked("m-result") === "scheduled" ? "" : "none"; };
   }
   function ppSendMeeting() {
-    if (!picked("m-result")) { $("m-msg").textContent = "内容を選んでください"; return; }
+    if (!picked("m-result")) { ppShowIssue({title:"面談の結果が未選択です",message:"面談の結果を選んでください。",field:"m-result"}); return; }
     send({ action: "meeting", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
   }
 
@@ -776,7 +832,7 @@
     };
   }
   function ppSendResult() {
-    if (!picked("m-st")) { $("m-msg").textContent = "結果を選んでください"; return; }
+    if (!picked("m-st")) { ppShowIssue({title:"提案結果が未選択です",message:"結果を選んでください。",field:"m-st"}); return; }
     send({ action: "result", status: picked("m-st"), reason: $("m-reason").value || null, note: $("m-note").value });
   }
 
@@ -788,7 +844,7 @@
     toggle = () => { $("m-next").style.display = picked("m-result") === "continue" ? "" : "none"; };
   }
   function ppSendDecision() {
-    if (!picked("m-result")) { $("m-msg").textContent = "判断を選んでください"; return; }
+    if (!picked("m-result")) { ppShowIssue({title:"管理者の判断が未選択です",message:"判断を選んでください。",field:"m-result"}); return; }
     send({ action: "decision", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
   }
 
@@ -800,8 +856,7 @@
     const targets = (detail.handoffTargets || {})[stage] || [];
     const cs = stage === "cs";
     if (!targets.length) {
-      modal('<h2>担当チームが未設定です</h2><p class="sl-muted">管理者に「フォローの設定」からCS・クロージング担当を登録してもらってください。</p>' +
-        '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">閉じる</button></div>');
+      ppFlowBlocked(stage === "cs" ? "cs_team" : "closing_team");
       return;
     }
     const decisions = cs
@@ -819,7 +874,10 @@
   }
   async function ppCommitHandoff(stage) {
     const reason = $("m-hreason").value.trim(), nextAction = $("m-hnext").value.trim();
-    if (!reason || !nextAction) { $("m-msg").textContent = "引継ぎ理由と次の対応を入力してください"; return; }
+    const blocked = SalesProposalFeedback.validate("transfer", {
+      ownerId:$("m-howner").value, decision:picked("m-hdecision"), reason, nextAction, nextAt:$("m-hdue").value
+    });
+    if (ppShowIssue(blocked)) return;
     const oldId = detail.proposal.id;
     const body = { id: oldId, action: "transfer", toStage: stage,
       ownerId: $("m-howner").value, decision: picked("m-hdecision"),
@@ -831,7 +889,7 @@
       ppClose(); // 新しい担当以外には、引継ぎ後の詳細が見えない場合がある
       await load();
       alert(res.slack?.sent ? "引継ぎを記録し、Slackにも共有しました" : "引継ぎを記録しました（Slackの共有は未確認です）");
-    } catch (e) { $("m-msg").textContent = errText(e); }
+    } catch (e) { ppShowServerError(e); }
   }
   function ppCsDecision() {
     modal('<h2>CS：連絡後の進行判断</h2>' +
@@ -847,7 +905,10 @@
   }
   async function ppCommitCsDecision() {
     const reason = $("m-creason").value.trim(), nextAction = $("m-cnext").value.trim();
-    if (!reason || !nextAction) { $("m-msg").textContent = "理由と次の対応を入力してください"; return; }
+    const blocked = SalesProposalFeedback.validate("cs_decision", {
+      decision:picked("m-cdecision"), reason, nextAction
+    });
+    if (ppShowIssue(blocked)) return;
     const id = detail.proposal.id;
     try {
       const res = await KPLayout.busy($("m-ok"), "処理中…",
@@ -856,7 +917,7 @@
       ppCloseAction();
       await ppOpen(id); load();
       alert(res.slack?.sent ? "CSの判断を記録してSlackに共有しました" : "CSの判断を記録しました（Slackの共有は未確認です）");
-    } catch (e) { $("m-msg").textContent = errText(e); }
+    } catch (e) { ppShowServerError(e); }
   }
   async function ppReshareHandoff(id) {
     if (!confirm("この引継ぎをSlackに再共有しますか？")) return;
@@ -981,12 +1042,13 @@
       contactName: $("n-cname").value, contactPhone: $("n-cphone").value, contactEmail: $("n-cmail").value,
     };
     if ($("n-owner")?.value) body.salesOwnerId = $("n-owner").value;
+    if (ppShowIssue(SalesProposalFeedback.validate("new", body))) return;
     try {
       const r = await KPLayout.busy($("m-ok"), "追加中…", () => API.api("/api/sales/proposals", { method: "POST", body }));
       ppCloseAction();
       await load();
       ppOpen(r.proposal.id);
-    } catch (e) { $("m-msg").textContent = errText(e); }
+    } catch (e) { ppShowServerError(e); }
   }
 
 </script>
