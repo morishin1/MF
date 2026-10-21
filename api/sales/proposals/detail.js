@@ -74,7 +74,6 @@ async function visibleProposal(sb, ctx, id) {
   const { proposal, error } = await loadProposal(sb, ctx.tenantId, id);
   if (error) return { error };
   if (!proposal) return { proposal: null };
-  if (!canManageProposals(ctx) && proposal.sales_owner_id !== (ctx.employee?.id || "__none__")) return { proposal: null };
   return { proposal };
 }
 
@@ -112,7 +111,9 @@ async function detailOf(sb, ctx, proposal) {
       at: h.created_at, slackSent: Boolean(h.slack_sent_at),
     })),
     handoffTargets: { cs: targets(settings.csMembers), closing: targets(settings.closingMembers) },
-    canHandoff: manager || Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id),
+    canEdit: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
+    canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
+    canHandoff: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
     csContacted: connected, csDecision: latestDecision,
     proposal: shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }),
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
@@ -146,6 +147,11 @@ async function act(req, res, sb, ctx, user) {
   if (!proposal) return json(res, 404, { error: "not_found" });
   const manager = canManageProposals(ctx);
   const action = String(body.action || "");
+  const me = ctx.employee?.id || null;
+  const canEdit = Boolean(me && proposal.sales_owner_id === me && !proposal.archived_at);
+  const canAssign = Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at && action === "assign");
+  if (!canEdit && !canAssign) return json(res, 403, { error: "readonly",
+    hint: "他の担当者の提案は閲覧専用です。操作するには現在の担当者から正式に引き継いでもらってください" });
   const now = new Date().toISOString();
 
   try {
@@ -187,6 +193,8 @@ async function act(req, res, sb, ctx, user) {
 
     if (action === "assign") {
       if (!manager) return json(res, 403, { error: "forbidden", hint: "営業担当の割り当ては管理者が行います" });
+      if (proposal.sales_owner_id) return json(res, 409, { error: "owner_change_requires_handoff",
+        hint: "担当者がいる提案は「CSに引継ぐ」「クロージングに引継ぐ」を使ってください。直接変更できません" });
       const to = body.ownerId || null;
       if (to !== null && !isUuid(to)) return json(res, 400, { error: "invalid_body", field: "ownerId" });
       if (to === proposal.sales_owner_id) return json(res, 400, { error: "nothing_to_update" });
@@ -195,18 +203,19 @@ async function act(req, res, sb, ctx, user) {
         const members = await salesMembers(ctx.tenantId, people.employees);
         if (!members.some((m) => m.id === to)) return json(res, 400, { error: "bad_owner", hint: "Sales を使える在籍中の社員から選んでください" });
       }
-      const { data: after, error: e1 } = await sb.from("gw_sales_proposals").update({ sales_owner_id: to, updated_by: user.id })
+      // 担当未割当の場合だけ管理者が初回割当する。RLSを迂回するためAPIで厳格にtenant/roleを検証。
+      const { data: after, error: e1 } = await admin().from("gw_sales_proposals").update({ sales_owner_id: to, updated_by: user.id })
         .eq("id", proposal.id).eq("tenant_id", ctx.tenantId).select(PROPOSAL_FIELDS).single();
       if (e1) return fail(res, e1);
       // 前の担当（または未定）のままの開いているタスクを、新しい担当へ寄せる。記録（誰がやったか）は書き換えない
-      const { tasks } = await loadTasks(sb, proposal.id);
+      const { tasks } = await loadTasks(admin(), proposal.id);
       const move = tasks.filter((t) => t.status === "open" && t.kind !== "manager_review"
         && (t.assignee_id === proposal.sales_owner_id || !t.assignee_id)).map((t) => t.id);
       if (move.length) {
-        const { error: e2 } = await sb.from("gw_sales_proposal_tasks").update({ assignee_id: to }).in("id", move).eq("status", "open");
+        const { error: e2 } = await admin().from("gw_sales_proposal_tasks").update({ assignee_id: to }).in("id", move).eq("status", "open");
         if (e2) return fail(res, e2);
       }
-      await sb.from("gw_sales_proposal_activities").insert({
+      await admin().from("gw_sales_proposal_activities").insert({
         tenant_id: ctx.tenantId, proposal_id: proposal.id, company_id: proposal.company_id, kind: "assign", occurred_at: now,
         employee_id: ctx.employee?.id || null, created_by: user.id,
         note: `営業担当：${people.nameOf(proposal.sales_owner_id) || "未定"} → ${people.nameOf(to) || "未定"}`,
