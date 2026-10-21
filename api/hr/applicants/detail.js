@@ -263,10 +263,13 @@ async function update(req, res, sb, ctx, user, salary) {
     } catch (e) {
       return json(res, 500, { error: "db_query_failed", detail: e?.message || String(e) });
     }
+    if (movedIds.has(body.id)) {
+      return json(res, 409, { error: "moved_to_office", hint: "Office へ引き渡し済みです。このあとの状態は Office の手続きで変わります" });
+    }
     const block = statusChangeBlock({
       before, to: "status" in row.value ? row.value.status : before.status,
       decision: "decision" in row.value ? row.value.decision : undefined,
-      canDecide: canDecideHire(ctx), movedToOffice: movedIds.has(body.id),
+      canDecide: canDecideHire(ctx),
     });
     // 社長判断待ちから動かす権限は、下の採用判断の確かめ（ヒントの言い方が違う）に任せる
     if (block && block.error !== "forbidden") return json(res, block.status, { error: block.error, hint: block.hint });
@@ -283,13 +286,6 @@ async function update(req, res, sb, ctx, user, salary) {
       && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
   }
-  // 社長判断の確定記録（db/143。機能フラグ ON のときだけ。判断者・日時・応募者ID）。応募者を変える前に記録する
-  //（記録できなければ、合格にもしない）。採用担当の早期見送り（社長判断ではない）は記録しない
-  if ("decision" in row.value && row.value.decision && row.value.decision !== before.decision && canDecideHire(ctx)) {
-    const rec = await recordCeoDecision({ ctx, user, applicantId: body.id, decision: row.value.decision,
-      note: row.value.decision_note ?? row.value.hold_reason ?? null });
-    if (rec) return json(res, rec.status, rec.body);
-  }
   // 採用区分（db/129）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
   let beforeOfferType = null;
   if ("offer_type" in row.value) {
@@ -304,6 +300,13 @@ async function update(req, res, sb, ctx, user, salary) {
     beforeOfferType = ot?.offer_type ?? null;
   }
 
+  // 社長判断の確定記録（db/143。機能フラグ ON のときだけ。判断者・日時・応募者ID）。確かめが全部済んでから、応募者を変える前に記録する
+  //（記録できなければ、合格にもしない）。採用担当の早期見送り（社長判断ではない）は記録しない
+  if ("decision" in row.value && row.value.decision && row.value.decision !== before.decision && canDecideHire(ctx)) {
+    const rec = await recordCeoDecision({ ctx, user, applicantId: body.id, decision: row.value.decision,
+      note: row.value.decision_note ?? row.value.hold_reason ?? null });
+    if (rec) return json(res, rec.status, rec.body);
+  }
   const { data, error } = await sb.from("gw_hr_applicants")
     .update({ ...splitWage(row.value).base, updated_at: new Date().toISOString() })
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(columns(salary)).maybeSingle();

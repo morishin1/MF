@@ -399,6 +399,9 @@ await ok("手動の状態変更・本体の更新・オファー作成・一括�
   as(OWNER);
   assert.equal((await patch({ id: "a1", action: "setStatus", status: "offer_review_pending" })).body.error, "moved_to_office");
   assert.equal((await patch({ id: "a1", status: "passed", decision: "rejected" })).body.error, "moved_to_office");
+  assert.equal((await patch({ id: "a1", decision: "rejected" })).body.error, "moved_to_office", "状態を変えずに判断だけ変えるのも断る");
+  assert.equal((await patch({ id: "a1", stage: "joining_scheduled" })).body.error, "moved_to_office", "選考段階だけ変えるのも断る");
+  assert.equal((await patch({ id: "a1", note: "メモ" })).statusCode, 200, "メモなど状態以外は直せる");
   const o = await call(offersApi, { method: "POST", url: "/api/hr/offers", body: { applicantId: "a1" } });
   assert.equal(o.statusCode, 409);
   assert.equal(o.body.error, "moved_to_office");
