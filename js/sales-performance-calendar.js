@@ -100,7 +100,7 @@
     renderDay();
   }
 
-  // 初期タブでは4つの数字と上位5人だけ。Office風の月間カレンダーと9指標は実績タブで閲覧する。
+  // 初期タブでは4つの数字と上位6人だけ。Office風の月間カレンダーと9指標は実績タブで閲覧する。
   function renderCompact() {
     const d = state.data;
     if (!d || !$("sp-mini-tiles")) return;
@@ -120,11 +120,11 @@
       '<b>' + (d.manager ? "メンバー別の実績" : "自分の実績") + '</b>' +
       '<div class="db-mini-member head"><span class="nm">名前</span>' +
       '<span>提案</span><span>接続</span><span>成約</span></div>' +
-      (members.slice(0, 5).map((r) => '<div class="db-mini-member"><span class="nm" title="' +
+      (members.slice(0, 6).map((r) => '<div class="db-mini-member"><span class="nm" title="' +
         esc(r.name) + '">' + esc(r.name) + '</span>' +
         cols.map((k) => '<span>' + countMetric(r.totals, k) + '</span>').join("") + '</div>').join("") ||
         '<p class="sl-empty">表示できる実績はありません</p>') +
-      (members.length > 5 ? '<p class="db-mini-note">ほか' + (members.length - 5) +
+      (members.length > 6 ? '<p class="db-mini-note">ほか' + (members.length - 6) +
         '名の実績は詳細で確認できます。</p>' : "");
     $("sp-mini-note").textContent = Number(state.ym.slice(5, 7)) +
       "月の記録から集計（日本時間）。詳細では電話・引継ぎ・面談も確認できます。";
