@@ -230,7 +230,7 @@
         return;
       }
       return run(btn, "mail", async () => {
-        const r = await call("test_mail"); D = r; T.msg = \`テスト送信しました（宛先：\${r.result.to}）\`;
+        const r = await call("test_mail"); D = r; T.msg = `テスト送信しました（宛先：${r.result.to}）`;
       });
     },
     send: (btn) => {
@@ -243,8 +243,8 @@
       }
       return run(btn, "mail", async () => {
         const e = D.employee;
-        if (!confirm(\`\${e.name} さん（\${D.mail.to}）へ、入社案内のメールを送ります。よろしいですか。\\n\\n送った内容は、履歴に残ります。\`)) return;
-        const r = await call("send_mail"); D = r; T.url = null; T.msg = \`\${e.name} さんへ送信しました（\${r.result.to}）\`;
+        if (!confirm(`${e.name} さん（${D.mail.to}）へ、入社案内のメールを送ります。よろしいですか。\\n\\n送った内容は、履歴に残ります。`)) return;
+        const r = await call("send_mail"); D = r; T.url = null; T.msg = `${e.name} さんへ送信しました（${r.result.to}）`;
       });
     },
     body: (btn) => run(btn, "mail", async () => {
