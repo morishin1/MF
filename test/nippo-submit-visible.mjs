@@ -32,7 +32,7 @@ assert.ok(js.includes('await submit(btn)'), "予定登録済みなら元の日�
 assert.ok(js.includes('el("np-submit-top").innerHTML = submitLabel'), "提出済みの日報は上部ボタンも保存に変わる");
 assert.ok(js.includes('"#evening": "np-submit-entry"'), "終業通知は非表示のボタンではなく提出入口へ移動");
 assert.ok(html.includes('<details class="card" id="np-schedule-gate"'), "予定登録の詳細案内は必要なときだけ開く");
-assert.ok(html.includes('js/action-feedback.js?v=20261021alert1'), "共通のアラート部品を読み込む");
+assert.ok(html.includes('js/action-feedback.js?v=20261020cal1'), "共通のアラート部品を読み込む");
 assert.ok(js.includes('function showSubmitBlockNotice()'), "提出ができない理由をクリック時に通知する");
 assert.ok(js.includes('KPActionFeedback.show({title:"今日の成果が未入力です"'), "未入力項目も理由を提示する");
 assert.ok(js.includes('actionHref:el("np-gate-calendar").getAttribute("href")'), "予定未入力ならカレンダーの登録画面へ誘導する");
