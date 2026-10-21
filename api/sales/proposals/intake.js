@@ -29,7 +29,7 @@ import { admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { verifyGwSignature, readEvents, intakeEvent, INTAKE_PURPOSE } from "../../../lib/sales-proposal-intake.js";
-import { notifyProposalSlack } from "../../../lib/sales-proposal-slack.js";
+import { notifyProposalSlack, notifyOwnerChangedSlack } from "../../../lib/sales-proposal-slack.js";
 import { notifySentShared } from "../../../lib/sales-proposal-handoff-slack.js";
 import { settingsOf } from "../../../lib/sales-proposals.js";
 import { SQL_FILE } from "../../../lib/sales-proposals-db.js";
@@ -85,7 +85,22 @@ export default async function handler(req, res) {
         link: out.notify.link, dedupeKey: out.notify.dedupeKey,
       })));
     }
-    // 企業への初回提案送信は、従来のマッチング確定通知とは別にCS・クロージング全員へ共有。
+    // CL担当が変更されたら、新しく担当する本人へSlackでも知らせる。
+    // 署名検証と担当更新が成功したイベントだけ。重複イベントはintakeEventでreplayedにする。
+    if (out.ownerChanged && out.proposalId) {
+      const changed = await notifyOwnerChangedSlack({
+        ownerChanged: { ...out.ownerChanged, proposalId: out.proposalId },
+        employees: employees || [], slackMembers: settingsOf(settingsRow).slackMembers,
+      });
+      if (changed.error) {
+        console.error("[sales-proposals/intake] owner Slack failed:", changed.error, v.eventId);
+        await sb.from("gw_sales_proposal_sync_log").update({
+          status: "warning", message: [...out.warnings, "owner_slack_failed"].join(","),
+          updated_at: new Date().toISOString(),
+        }).eq("tenant_id", tenantId).eq("source_system", "enger").eq("event_id", v.eventId);
+      }
+    }
+    // 企業への初回提案送信は、従来のマッチング確定通知とは別にCS・クロージング全員へ共有.
     if (v.eventType === "proposal.sent" && (out.result === "created" || out.result === "updated") && out.proposalId) {
       const shared = await notifySentShared(sb, { proposalId: out.proposalId, settingsRow, employees: employees || [] });
       if (shared.error) {
