@@ -13,6 +13,9 @@ for (const id of ["np-submit-entry", "np-submit-top", "np-submit-status", "np-sc
 }
 assert.ok(html.indexOf('id="np-submit-top"') < html.indexOf('id="np-schedule-gate"'),
   "提出ボタンは予定ゲートより前にある");
+assert.ok(html.indexOf('id="pane-mine"') < html.indexOf('id="np-submit-top"')
+  && html.indexOf('id="np-submit-top"') < html.indexOf('id="pane-feed"'),
+  "提出ボタンは自分の日報タブ内にあり、みんなの日報には出さない");
 assert.ok(html.indexOf('id="np-submit-top"') < html.indexOf('id="write-card"'),
   "提出ボタンは日報入力欄の隠す領域の外にある");
 assert.ok(html.includes('onclick="submitFromHeader(this)"'), "上部の提出ボタンは実際の提出処理につながる");
