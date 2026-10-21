@@ -27,4 +27,5 @@ assert.ok(js.includes('top.setAttribute("aria-disabled",String(locked))'), "提�
 assert.ok(js.includes('if(!data || !nextScheduleReady)'), "予定未登録・取得失敗時は送信しない");
 assert.ok(js.includes('await submit(btn)'), "予定登録済みなら元の日報送信処理へ");
 assert.ok(js.includes('el("np-submit-top").innerHTML = submitLabel'), "提出済みの日報は上部ボタンも保存に変わる");
+assert.ok(js.includes('"#evening": "np-submit-entry"'), "終業通知は非表示のボタンではなく提出入口へ移動");
 console.log("PASS: member Nippo submit action stays visible with schedule gate and safely submits when ready");
