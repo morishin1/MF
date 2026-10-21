@@ -79,15 +79,17 @@ async function visibleProposal(sb, ctx, id) {
 
 async function detailOf(sb, ctx, proposal) {
   const now = new Date().toISOString();
-  const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }] = await Promise.all([
+  const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }, { data: supporters, error: e4 }] = await Promise.all([
     sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("proposal_id", proposal.id).order("occurred_at", { ascending: true }).limit(1000),
     loadTasks(sb, proposal.id),
     loadPeople(ctx.tenantId),
     loadSettingsRow(sb, ctx.tenantId),
     sb.from("gw_sales_proposal_handoffs").select("*").eq("tenant_id", ctx.tenantId)
       .eq("proposal_id", proposal.id).order("created_at", { ascending: false }).limit(100),
+    sb.from("gw_sales_proposal_supporters").select("id,stage,employee_id,created_at")
+      .eq("proposal_id", proposal.id).eq("tenant_id", ctx.tenantId).limit(100),
   ]);
-  if (e1 || e2 || e3) return { error: e1 || e2 || e3 };
+  if (e1 || e2 || e3 || e4) return { error: e1 || e2 || e3 || e4 };
   let company = null;
   if (proposal.company_id) {
     const { data: c } = await sb.from("gw_sales_companies").select("id, name, status, phone, site_url, owner_id, ng_reason")
@@ -101,7 +103,11 @@ async function detailOf(sb, ctx, proposal) {
   const targets = (ids) => allSales.filter((m) => ids.includes(m.id));
   const connected = (activities || []).some((a) => (a.kind === "call" && a.result === "connected") || a.kind === "reply");
   const latestDecision = (activities || []).filter((a) => a.kind === "cs_decision").at(-1)?.result || null;
+  const supportersByStage = Object.fromEntries(["proposal", "cs", "closing"].map((stage) => [stage,
+    (supporters || []).filter((p) => p.stage === stage)
+      .map((p) => ({ id: p.employee_id, name: people.nameOf(p.employee_id) || "退職・不明", addedAt: p.created_at }))]));
   return {
+    supporters: supportersByStage,
     handoffs: (handoffs || []).map((h) => ({
       id: h.id, fromStage: h.from_stage, toStage: h.to_stage,
       fromName: people.nameOf(h.from_owner_id) || "未割当",
@@ -119,7 +125,7 @@ async function detailOf(sb, ctx, proposal) {
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,
-    members: manager ? allSales : [],
+    members: ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id ? allSales : [],
     settings, labels: LABELS,
   };
 }
