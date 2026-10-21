@@ -106,6 +106,7 @@ declare
   v public.gw_sales_proposals%rowtype;
   v_user uuid := (select auth.uid());
   v_owner uuid;
+  v_tenant uuid;
   v_count int := 0;
   v_ids uuid[];
   v_note text;
@@ -129,7 +130,8 @@ begin
   end if;
   -- 対象のロック、テナントと所有者検証を先に全部実行し、部分成功を防ぐ。
   for v in select * from public.gw_sales_proposals where id = any(v_ids) order by id for update loop
-    if not public.gw_sales_proposal_editable(v.tenant_id,v.sales_owner_id) then
+    if v_tenant is null then v_tenant := v.tenant_id; end if;
+    if v.tenant_id <> v_tenant or not public.gw_sales_proposal_editable(v.tenant_id,v.sales_owner_id) then
       raise exception 'forbidden' using errcode='42501';
     end if;
     if p_action = 'edit' and (v.archived_at is not null or (p_title is not null and v.source_system = 'enger')) then
@@ -144,7 +146,7 @@ begin
   if v_count <> cardinality(v_ids) then
     raise exception 'selection_not_found' using errcode='42501';
   end if;
-  v_owner := public.gw_employee_id((select tenant_id from public.gw_sales_proposals where id=v_ids[1]));
+  v_owner := public.gw_employee_id(v_tenant);
   if p_action = 'archive' then
     update public.gw_sales_proposals set archived_at=now(), archived_by=v_user, updated_by=v_user
     where id=any(v_ids);
