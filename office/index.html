@@ -222,12 +222,14 @@
     CAL.today = todayJst();
     if (!CAL.ym) CAL.ym = CAL.today.slice(0, 7);
     const calP = API.api(calUrl(CAL.today.slice(0, 7))).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
-    const [b, hr, cl, of] = await Promise.all([
+    const [b, hr, cl, of, ik] = await Promise.all([
       // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
       safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
       can.hr ? safe(API.swr(HR_KEY, () => API.hrList(), () => {}, { quiet: true })) : none,
       can.fin && !can.app ? safe(API.swr(`office:closing:${closingMonth}`, () => API.closing(closingMonth), () => {}, { quiet: true })) : none,
       can.app ? safe(API.swr(OFFICE_KEY, fetchOffice, (d) => { officeData = d; })) : none,
+      // HRからの引き継ぎ（早期引き渡し・db/143）。機能フラグ OFF なら { enabled:false }＝カードを出さない
+      can.hr ? safe(API.api("/api/hr/office-intakes?summary=1")) : none,
     ]);
     if (of && of.ok) officeData = officeData || of.v;
     const badges = b.ok ? (b.v?.badges || {}) : {};
@@ -239,6 +241,7 @@
     const summary = od?.summary || null;
     const officeFail = can.app && !(of && of.ok);
     const onboarding = hr ? (hr.ok ? (hr.v?.onboarding || []).length : undefined) : null;
+    const intake = ik && ik.ok && ik.v?.enabled ? ik.v : null;
     const offboarding = hr ? (hr.ok ? (hr.v?.offboarding || []).length : undefined) : null;
     const left = can.app ? (summary ? summary.total - (summary.byStage?.done || 0) : (officeFail ? undefined : 0)) : null;
     const closing = cl ? (cl.ok ? cl.v : undefined) : null;
@@ -253,6 +256,7 @@
       can.fin && { icon: "receipt", label: "経費承認待ち", v: b.ok ? (badges.expenses || 0) : undefined, href: "/admin-expenses.html" },
       can.app ? { icon: "event_available", label: "月次残件", v: left, of: summary?.total, href: "/office/monthly.html" }
         : can.fin && { icon: "event_available", label: "月次残件", v: closingOpen, hint: `${closingMonth} の月次締め`, href: "/admin-closing.html" },
+      intake && { icon: "move_to_inbox", label: "HRからの引き継ぎ", v: intake.open, href: "/admin-hr.html#hr-intake", hint: "社長合格・条件ヒアリング済みで、採用HRから引き渡された人（採用条件〜入社準備）" },
       can.hr && { icon: "how_to_reg", label: "入社準備", v: onboarding, href: "/admin-hr.html" },
       can.app && { icon: "event_busy", label: "契約期限", v: expiring == null ? expiring : expiring.length, href: "/office/monthly.html?tag=expiring" },
       can.app && { icon: "request_quote", label: "請求未完了", v: billOpen, href: "/office/billing.html" },
@@ -289,6 +293,7 @@
     if (can.hr) {
       add(0, "人事・労務", "勤怠の修正申請", "打刻の修正申請", badges.timecard || 0, "/admin-timecard.html", "勤怠を確認");
       add(0, "人事・労務", "休暇・稟議の承認", "承認待ち", badges.requests || 0, "/admin-requests.html", "申請を承認");
+      if (intake) add(0, "人事・労務", "HRからの引き継ぎ（未着手）", "採用HRから引き渡された人の受領・着手", intake.counts?.not_started || 0, "/admin-hr.html#hr-intake", "引き継ぎを開く");
       add(3, "人事・労務", "入社準備", "進行中の入社", onboarding || 0, "/admin-hr.html", "入社準備を開く");
       add(3, "人事・労務", "退社手続き", "進行中の退社", offboarding || 0, "/admin-hr.html", "退社手続きを開く");
       add(3, "人事・労務", "契約書の署名待ち", "署名がまだ返ってきていない契約書", badges.esign || 0, "/admin-esign.html", "署名状況を確認");

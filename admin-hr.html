@@ -353,6 +353,10 @@
   <!-- HRから引き渡し（db/133）。HR で本人が条件を承諾し、正式契約まで終え、HR が承諾内容を確認して引き渡した人だけ。
        承諾しただけの人は載らない。「入社予定」の上に出す。社員登録へ進むのは Office の人事・労務。
        Office は 入社書類 → アカウント・端末 → オリエンテーション → 入社完了 の順に進める（正式契約は HR で完了済み） -->
+  <!-- HRからの引き継ぎ（早期引き渡し・db/143。機能フラグ HR_OFFICE_INTAKE が ON のときだけ出る。js/office-hr-intake.js）。
+       社長合格・条件ヒアリングのあと採用HRが［Officeへ引き渡す］を押した人。採用条件・社労士・正式PDF・本人の同意・契約・入社準備を Office で進める -->
+  <div id="hr-intake" hidden></div>
+
   <div id="hr-handoff"></div>
 
   <!-- 一覧 -->
@@ -418,6 +422,8 @@
 
 <script src="js/api-client.js?v=20261020cal1"></script>
 <script src="js/layout.js?v=20261020cal1"></script>
+<!-- 専用の版（全体のアセット版は上げない。hr/applicants.html の js/hr-office-intake.js と同じ扱い） -->
+<script src="/js/office-hr-intake.js?v=20261021intakeB1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -436,6 +442,8 @@
     // 通知から直接この人を開く（api/hr が出すリンク）
     const q = new URLSearchParams(location.search);
     openId = q.get("id");
+    // HRからの引き継ぎ（機能フラグ OFF なら何も出さない。サーバが { enabled:false } を返す）
+    if (window.OfficeHrIntake) OfficeHrIntake.mount(el("hr-intake"));
     load();
     loadOrientation();
     loadRetention();

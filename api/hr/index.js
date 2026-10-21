@@ -40,6 +40,7 @@ import { requireMfa } from "../../lib/mfa.js";
 import { isAdvanceClaimStale } from "../../lib/hr.js";
 import { hireFlowOf } from "../../lib/hire-flow.js";
 import { readHandoffOffers, handoffFactsOf, handoffActorNames } from "../../lib/hire-handoff.js";
+import { intakeEnabled, activeIntakeIds } from "../../lib/hr-office-intake.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -234,10 +235,12 @@ async function handoffQueue(sb, tenantId) {
     }
     const byId = new Map(apps.map((a) => [a.id, a]));
     const names = await handoffActorNames(sb, tenantId, offers.map((o) => o.handoff_by));
+    // 早期引き渡し（db/143。フラグ ON）を受けた人は「HRからの引き継ぎ」（api/hr/office-intakes.js）に1件だけ出す（ここには重ねない）
+    const viaIntake = intakeEnabled() ? await activeIntakeIds(sb, tenantId, ids).catch(() => new Set()) : new Set();
     const rows = [];
     for (const o of offers) {
       const a = byId.get(o.applicant_id);
-      if (!a || a.employee_id || a.status !== "accepted" || rows.some((r) => r.applicantId === a.id)) continue;
+      if (!a || a.employee_id || a.status !== "accepted" || viaIntake.has(a.id) || rows.some((r) => r.applicantId === a.id)) continue;
       const f = handoffFactsOf(o, a, { byName: names.get(o.handoff_by) || null });
       const flow = hireFlowOf({ handoff: f });
       rows.push({

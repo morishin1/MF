@@ -16,7 +16,8 @@
 //   Office の人事・労務（canOfficeHr。採用HRの権限は無い人）… 「Office へ引き渡された人」の書類を見るだけ（閲覧専用。readOnly）。
 //     HR で登録した原本を Office で再登録させない（二重管理しない）ための口。service role で読むので、次をすべて API で確かめる：
 //       ① 同一テナント（応募者・書類・オファーのどれも tenant_id で絞る）
-//       ② 引き渡し済み（その応募者に handoff_at の入った版がある。承諾しただけ・育成枠は見せない）
+//       ② 引き渡し済み（その応募者に handoff_at の入った版がある。承諾しただけ・育成枠は見せない）、または
+//          早期引き渡し（db/143。機能フラグ HR_OFFICE_INTAKE が ON のとき）を受けた人（差し戻していない引き渡しがある）
 //       ③ Office の人事権限（canOfficeHr）
 //       ④ 対象の応募者本人の書類だけ（書類 → 応募者 → 引き渡し済み、の順にたどる。applicantId を渡したら、書類の持ち主と一致すること）
 //     登録・差し替え・削除は 403（Office からはできない）。見せるのは各種類の最新の1つだけ（過去の版は HR で見る）。
@@ -38,6 +39,7 @@ import {
 } from "../../lib/hr-docs.js";
 import { conditionDocsOf } from "../../lib/hr-condition-docs.js";
 import { readHandoffOffers } from "../../lib/hire-handoff.js";
+import { intakeEnabled, activeIntakeOf } from "../../lib/hr-office-intake.js";
 
 const BUCKET = "hr";
 const TTL = 60 * 5;
@@ -93,6 +95,14 @@ async function handedOffOffer(sb, ctx, applicantId) {
   if (!ready) return null;
   return offers.find((o) => o.applicant_id === applicantId && o.tenant_id === ctx.tenantId) || null;
 }
+/**
+ * 早期引き渡し（db/143）を受けた人か（フラグ ON のときだけ。差し戻した引き渡しは数えない。辞退・不成立のあとも履歴として見られる）。
+ * 読めないときは見せない（null）
+ */
+async function intakeOf(sb, ctx, applicantId) {
+  if (!applicantId || !intakeEnabled()) return null;
+  try { return await activeIntakeOf(sb, ctx.tenantId, applicantId); } catch { return null; }
+}
 const notHandedOff = (res) => json(res, 403, { error: "not_handed_off", hint: "Office へ引き渡された方の書類だけ、Office から見られます（採用HRで引き渡しを済ませてください）" });
 
 const view = (r, names) => ({
@@ -109,7 +119,8 @@ async function read(req, res, sb, ctx, user, office = false) {
   if (!a) return json(res, 404, { error: "not_found" });
   // Office（閲覧専用）：引き渡された人だけ。引き渡した版の書類状態と、各種類の最新の1つだけを返す
   const handed = office ? await handedOffOffer(sb, ctx, a.id) : null;
-  if (office && !handed) return notHandedOff(res);
+  const intake = office && !handed ? await intakeOf(sb, ctx, a.id) : null;
+  if (office && !handed && !intake) return notHandedOff(res);
   const rows = await must(sb.from("gw_hr_documents").select(FIELDS)
     .eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id).order("created_at", { ascending: false }));
 
@@ -123,7 +134,7 @@ async function read(req, res, sb, ctx, user, office = false) {
   // 採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）。オファーの列から出す。読めなくても応募書類は返す
   let conditionDocs = null;
   try {
-    const offers = office ? [handed]
+    const offers = office && handed ? [handed]
       : await must(sb.from("gw_hr_offers").select("*").eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id)
         .order("version", { ascending: false }));
     conditionDocs = conditionDocsOf(offers);
@@ -132,7 +143,7 @@ async function read(req, res, sb, ctx, user, office = false) {
     applicant: { id: a.id, name: a.name },
     conditionDocs,
     // Office は見るだけ。条件通知書PDF・承諾済みPDF（給与・報酬が入る）は、給与を見られる人だけ開ける（api/hr/offers の file）
-    ...(office ? { readOnly: true, salaryVisible: canSeeSalary(ctx), offerId: handed.id } : {}),
+    ...(office ? { readOnly: true, salaryVisible: canSeeSalary(ctx), offerId: handed?.id || null, ...(intake ? { officeIntakeId: intake.id } : {}) } : {}),
     documents: DOC_TYPES.map((t) => ({
       docType: t.key, label: t.label, icon: t.icon,
       latest: g[t.key].latest ? view(g[t.key].latest, names) : null,
@@ -150,7 +161,7 @@ async function fileUrl(res, sb, ctx, user, id, download, applicantId, office = f
   if (applicantId && r.applicant_id !== applicantId) return json(res, 404, { error: "not_found" });
   const a = await loadApplicant(sb, ctx, r.applicant_id);
   // Office（閲覧専用）：書類の持ち主（応募者）が、同一テナントで、Office へ引き渡された人であること。書類の ID だけでは見せない
-  if (office && (!a || !(await handedOffOffer(sb, ctx, r.applicant_id)))) return notHandedOff(res);
+  if (office && (!a || !((await handedOffOffer(sb, ctx, r.applicant_id)) || (await intakeOf(sb, ctx, r.applicant_id))))) return notHandedOff(res);
   const { data, error } = await sb.storage.from(BUCKET)
     .createSignedUrl(r.storage_path, TTL, download ? { download: r.filename } : undefined);
   if (error) return json(res, 404, { error: "file_missing", detail: error.message });

@@ -346,6 +346,8 @@ await ok("CEO REVIEW: 管理者・経営者には給与が返る（段階1）。
 
 await ok("本採用への事前入力: 給与は、見られる人にだけ入る", async () => {
   setup(); who = OWNER;
+  // 本人が承諾した版（区分の無い、これまでの合格通知・給与は応募者のもの）。承諾した版が無いと社員登録へ進めない（PR B）
+  db.rows.gw_hr_offers.push({ id: "o-a3", tenant_id: "t1", applicant_id: "a3", version: 1, accepted_at: "2026-10-01T00:00:00Z", revoked_at: null, declined_at: null });
   let r = await prefill("a3");
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.prefill.wageAmount, 380000);
