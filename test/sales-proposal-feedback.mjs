@@ -67,9 +67,9 @@ assert.ok(html.includes('src="../js/action-feedback.js?v=20261020cal1"'),
 assert.ok(html.includes('src="../js/sales-proposal-feedback.js?v=20261020cal1"'),
   "Sales用の入力チェックを読み込む");
 assert.ok(html.includes("function ppFlowBlocked(key)"),"操作できない理由を表示");
-assert.ok(html.includes('ppShowIssue(SalesProposalFeedback.validate("transfer"'),
+assert.ok(html.includes('SalesProposalFeedback.validate("transfer"') && html.includes('ppShowIssue(blocked)'),
   "引継ぎ前に必須項目を確認");
-assert.ok(html.includes('ppShowIssue(SalesProposalFeedback.validate("cs_decision"'),
+assert.ok(html.includes('SalesProposalFeedback.validate("cs_decision"') && html.includes('ppShowIssue(blocked)'),
   "CS判断の必須項目を確認");
 assert.ok(html.includes('ppShowIssue(SalesProposalFeedback.validate("new"'),
   "提案新規登録の必須項目を確認");
