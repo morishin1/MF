@@ -34,7 +34,8 @@ returns boolean language sql stable security definer set search_path = ''
 as $$
   select exists (
     select 1 from public.gw_sales_proposals p
-    where p.id = p_proposal and public.gw_sales_proposal_editable(p.tenant_id, p.sales_owner_id)
+    where p.id = p_proposal and p.archived_at is null
+      and public.gw_sales_proposal_editable(p.tenant_id, p.sales_owner_id)
   )
 $$;
 revoke all on function public.gw_sales_proposal_editable(uuid,uuid) from public;
@@ -50,8 +51,8 @@ create policy gw_sales_proposals_select on public.gw_sales_proposals
 drop policy if exists gw_sales_proposals_update on public.gw_sales_proposals;
 create policy gw_sales_proposals_update on public.gw_sales_proposals
   for update to authenticated
-  using (public.gw_sales_proposal_editable(tenant_id, sales_owner_id))
-  with check (public.gw_sales_proposal_editable(tenant_id, sales_owner_id));
+  using (archived_at is null and public.gw_sales_proposal_editable(tenant_id, sales_owner_id))
+  with check (archived_at is null and public.gw_sales_proposal_editable(tenant_id, sales_owner_id));
 drop policy if exists gw_sales_proposals_insert on public.gw_sales_proposals;
 create policy gw_sales_proposals_insert on public.gw_sales_proposals
   for insert to authenticated with check (public.gw_sales_proposal_editable(tenant_id, sales_owner_id));
@@ -59,7 +60,8 @@ create policy gw_sales_proposals_insert on public.gw_sales_proposals
 drop policy if exists gw_sales_proposal_activities_insert on public.gw_sales_proposal_activities;
 create policy gw_sales_proposal_activities_insert on public.gw_sales_proposal_activities
   for insert to authenticated with check (
-    public.gw_is_sales(tenant_id) and public.gw_sales_proposal_editable_id(proposal_id));
+    public.gw_is_sales(tenant_id) and public.gw_sales_proposal_editable_id(proposal_id)
+    and (employee_id is null or employee_id = public.gw_employee_id(tenant_id)));
 
 drop policy if exists gw_sales_proposal_tasks_insert on public.gw_sales_proposal_tasks;
 create policy gw_sales_proposal_tasks_insert on public.gw_sales_proposal_tasks
