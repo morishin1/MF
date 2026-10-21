@@ -42,6 +42,15 @@
     .pp-owner-cell strong { display:block; color:#1b2440; font-size:12.5px; }
     .pp-owner-cell small { display:block; color:#6b7080; font-size:10.5px; }
     .pp-owner-cell .pending { color:#96680c; }
+    .pp-supporters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-top:11px; }
+    .pp-supporters > div { background:#f9faf8; border:1px solid #e7e7e2; border-radius:8px; padding:9px; min-width:0; }
+    .pp-supporters b { display:block; font-size:11.5px; color:#1b2440; margin-bottom:5px; }
+    .pp-supporters small { display:block; font-size:11px; color:#5f6575; overflow-wrap:anywhere; }
+    .pp-supporters button { margin-top:7px; font:inherit; font-size:11px; border:1px solid #cdd4da; background:#fff; padding:5px 8px; border-radius:7px; cursor:pointer; }
+    .pp-supporter-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; max-height:230px; overflow-y:auto; }
+    .pp-supporter-options label { display:flex; align-items:center; gap:8px; font-size:12px; padding:7px; border:1px solid #eee; border-radius:7px; }
+    .pp-supporter-options label input { width:auto; margin:0; }
+    @media (max-width:650px) { .pp-supporters,.pp-supporter-options { grid-template-columns:1fr; } }
     .pp-col-row { display:flex; gap:8px; align-items:center; border-bottom:1px solid #ededeb; padding:7px 0; }
     .pp-col-row label { flex:1; display:flex; align-items:center; gap:7px; font-size:12px; margin:0; }
     .pp-col-row button { border:1px solid #ddd; border-radius:6px; background:#fff; padding:3px 8px; cursor:pointer; }
@@ -715,6 +724,14 @@
             `<div class="pp-flow-step ${i < ppStageIndex(p) ? "done" : i === ppStageIndex(p) ? "active" : ""}"><b>${esc(label)}</b><small>${esc(name)}</small></div>`).join("")}
         </div>
         <div class="pp-flow-action">${ppFlowAction(p, detail)}</div>
+        <div class="pp-supporters" aria-label="各役割の共同担当者">
+          ${[["proposal","① 提案担当"],["cs","② CS担当"],["closing","③ クロージング担当"]].map(([stage,label])=>`
+            <div><b>${esc(label)}の共同担当</b>
+              <small>${(detail.supporters?.[stage]||[]).length?
+                (detail.supporters[stage]||[]).map(x=>esc(x.name)).join("・"):"未設定"}</small>
+              ${detail.canEdit?`<button type="button" onclick="ppEditSupporters(\'${stage}\')">＋ 担当を追加・変更</button>`:""}
+            </div>`).join("")}
+        </div>
         ${(detail.handoffs || []).length ? `<details style="margin-top:10px;"><summary style="cursor:pointer;">バトンタッチ履歴（${detail.handoffs.length}件）</summary>
            ${detail.handoffs.map(h => `<div style="border-top:1px solid #e5e7eb;padding:9px 0;font-size:12px;">
              <b>${esc(h.fromName)} → ${esc(h.toName)}</b>　${esc(fmt(h.at))}
@@ -799,6 +816,33 @@
     return `<div class="pp-task ${cls}"><div class="t"><b>${esc(t.title)}</b>
       <span class="pp-small">${esc(t.kindLabel)}・期限 ${esc(fmt(t.dueAt))}${t.overdue ? "（超過）" : ""}・${esc(t.assigneeName || "担当未定")}
         ${t.status === "done" ? `・完了 ${esc(fmt(t.doneAt))}${t.late ? "（期限後）" : ""}` : ""}${t.status === "canceled" ? `・取り消し（${esc(t.cancelReason || "")}）` : ""}</span></div>${ops}</div>`;
+  }
+
+  function ppEditSupporters(stage) {
+    if (!detail?.canEdit || !["proposal","cs","closing"].includes(stage)) return;
+    const label = {proposal:"提案",cs:"CS",closing:"クロージング"}[stage];
+    const chosen = new Set((detail.supporters?.[stage]||[]).map((x)=>x.id));
+    const options=(detail.members||[]).map(m=>'<label><input type="checkbox" data-supporter="' +
+      esc(m.id) + '"' + (chosen.has(m.id)?' checked':'') + '>'+esc(m.name)+'</label>').join('');
+    modal('<h2>'+label+'の共同担当を設定</h2>'+
+      '<p class="sl-muted" style="font-size:12px;">主担当は変更せず、対応を支援するメンバーを最大10名まで登録できます。追加・変更は履歴に残ります。</p>'+
+      '<div class="pp-supporter-options">'+(options||'<div class="sl-empty">選べるSalesメンバーがいません</div>')+'</div>'+
+      '<div class="pp-msg" id="m-msg"></div>'+
+      '<div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="ppSaveSupporters(\''+
+      stage+'\')">保存する</button><button class="btn btn-secondary" onclick="ppCloseAction()">やめる</button></div>');
+  }
+  async function ppSaveSupporters(stage) {
+    if (!detail?.canEdit || !["proposal","cs","closing"].includes(stage)) return;
+    const members=[...document.querySelectorAll("input[data-supporter]:checked")].map((x)=>x.dataset.supporter);
+    if (members.length>10) { $("m-msg").textContent="共同担当は各段階10名までです"; return; }
+    try {
+      await KPLayout.busy($("m-ok"),"保存中…",()=>API.api("/api/sales/proposals/supporters",{
+        method:"POST",body:{id:detail.proposal.id,stage,members}
+      }));
+      ppCloseAction();
+      const result=await API.api("/api/sales/proposals/detail?id="+encodeURIComponent(detail.proposal.id));
+      detail=result; renderDetail(); load();
+    } catch(e) { if ($("m-msg")) $("m-msg").textContent=errText(e); else alert(errText(e)); }
   }
 
   // ---- 操作（中央モーダル） ----------------------------------------------------
