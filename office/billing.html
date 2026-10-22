@@ -598,7 +598,7 @@
   async function pickFile(file, s) {
     const state_ = el("fileState");
     const seq = ++s.uploadSeq;
-    s.uploadId = null; s.aiUsed = false; s.aiOk = false; s.aiReading = false;
+    s.uploadId = null; s.aiUsed = false; s.aiOk = false; s.aiReading = false; s.uploading = false;
     el("aiBox").hidden = true; el("aiBox").innerHTML = "";
     if (!file) { state_.textContent = "ファイルは任意です（後からでも、PDF なしでも登録できます）"; return; }
     if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { state_.textContent = "PDF・JPEG・PNG のファイルを選んでください"; el("f-file").value = ""; return; }
@@ -657,7 +657,7 @@
         if (sel && [...sel.options].some((o) => o.value === r.vendorMatch.id)) {
           sel.value = r.vendorMatch.id; sel.closest("label")?.classList.add("ai");
         }
-      } else if (c.payeeName && state.data?.canRecord) {
+      } else if (c.payeeName && state.data?.canRecord && !el("f-vendorId")?.value) {
         // 新規マスタはAIだけで作らず、人が請求元を確認して保存する。
         showQuickVendor(s);
       }
