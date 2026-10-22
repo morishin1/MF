@@ -547,16 +547,20 @@
     ? `<span class="pp-tag enger">dx.enger</span>${r.companyId ? "" : `<span class="pp-small">企業未紐付け</span>`}`
     : `<span class="pp-tag">手入力</span>`;
 
-  // 担当の選択は3役割で独立。プルダウンでは正式な工程の引継ぎを進めない。
+  // ENGERの提案担当は元システムの担当を固定表示。CS・クロージングは詳細内で変更。
+  const ppOwnerName = (r,role) => role === "proposal"
+    ? (r.sourceSystem === "enger" ? (r.matchingOwnerName || "未割当") : (r.proposalOwnerName || r.matchingOwnerName || "未割当"))
+    : role === "cs" ? (r.csOwnerName || "未割当") : (r.closingOwnerName || "未割当");
   // ENGER元の担当名は参照情報として残し、内部の提案担当IDだけを更新する。
   const ppOwnerId = (r, role) => role === "proposal"
     ? (r.proposalOwnerId || ((r.handoffStage || "proposal") === "proposal" ? r.salesOwnerId : null))
     : role === "cs" ? r.csOwnerId : r.closingOwnerId;
 
   function ppOwnerSelect(r, role) {
+    if (!["cs","closing"].includes(role)) return "";
     const names = {proposal:"提案担当",cs:"CS担当",closing:"クロージング担当"};
     const current = ppOwnerId(r,role) || "";
-    const members = data?.members || [];
+    const members = detail?.members || data?.members || [];
     const label = role === "proposal" ? (r.proposalOwnerName || r.matchingOwnerName || "未割当")
       : role === "cs" ? (r.csOwnerName || "未割当") : (r.closingOwnerName || "未割当");
     // 退職/権限解除などで現在値が候補にない場合も、表示を消さない。
@@ -572,6 +576,7 @@
       '</select>';
   }
   async function ppInlineOwner(select, id, role) {
+    if (!["cs","closing"].includes(role) || detail?.proposal?.id !== id) return;
     const next = select.value || null;
     const expected = select.dataset.current || null;
     if (next === expected) return;
@@ -595,7 +600,7 @@
     const stage = r.handoffStage === "closing" ? 2 : r.handoffStage === "cs" && r.csOwnerId ? 1 : 0;
     return [["proposal","提案担当"],["cs","CS担当"],["closing","クロージング担当"]].map(([role,name],i) =>
       '<div class="pp-chain-line ' + (stage===i ? "active" : "") + '"><em>' + name + '</em>' +
-      ppOwnerSelect(r,role) + '</div>').join("");
+      '<strong>' + esc(ppOwnerName(r,role)) + '</strong></div>').join("");
   }
   const ppCheckInput = (r) => {
     const enabled = r.canEdit || r.canRestore;
@@ -606,11 +611,9 @@
 
   function ppOwnerCell(r, role) {
     const extras = r.supporters?.[role] || [];
-    return '<div class="pp-owner-cell">' + ppOwnerSelect(r,role) +
-      (role === "proposal" && r.sourceSystem === "enger" && r.matchingOwnerName
-        ? '<small title="ENGER連携元の担当者（変更されません）">元：' + esc(r.matchingOwnerName) + '</small>' : '') +
-      (extras.length ? '<small title="' + esc(extras.map(x=>x.name).join("・")) + '">補助＋' + extras.length + '</small>' : '') +
-      '</div>';
+    return '<div class="pp-owner-cell"><strong>' + esc(ppOwnerName(r,role)) + '</strong>' +
+      (extras.length ? '<small title="' + esc(extras.map(x=>x.name).join("・")) +
+        '">補助＋' + extras.length + '</small>' : '') + '</div>';
   }
   function ppColumnCell(key,r) {
     switch(key) {
