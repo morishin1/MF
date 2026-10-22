@@ -8,11 +8,11 @@
 //   5. マッチング確定（db/140）：提案待ちの間は電話の期限を始めない。提案準備の期限。企業へ送ったら30分の電話（送った時刻から）
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const L = await import(join(ROOT, "lib/sales-proposals.js"));
+const L = await import(pathToFileURL(join(ROOT, "lib/sales-proposals.js")).href);
 const S = { ...L.DEFAULT_SETTINGS };
 
 let pass = 0, fail = 0;

@@ -73,6 +73,12 @@
     .pp-bulk .pp-danger { color:#a52626;border-color:#dcb0b0; }
     .pp-list-meta { font-size:11px; color:#6b7080; margin:0 0 8px; }
     .pp-readonly-note { padding:12px;margin:12px 20px;background:#f6f7f5;border-radius:9px;font-size:12px;color:#4a5068; }
+    .pp-assignment { margin-top:12px;padding:11px;background:#f9faf8;border:1px solid #e2e7df;border-radius:9px; }
+    .pp-assignment-head { display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap; }
+    .pp-assignment-head b { color:#1b2440;font-size:12.5px; }
+    .pp-assignment-history { border-top:1px solid #e5e7e2;margin-top:9px;padding-top:8px; }
+    .pp-assignment-item { border-bottom:1px solid #e9ebe7;padding:8px 0;font-size:11.5px;color:#4a5068; }
+    .pp-assignment-item:last-child { border-bottom:0; }
     .pp-no-actions { display:none !important; }
 
     a.btn { text-decoration:none; }
@@ -197,7 +203,7 @@
 
 <div class="wrap">
   <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">全件閲覧・自分の担当だけ編集。案件を選ぶと対応履歴を確認できます。</p>
+  <p class="sl-sub">全件を閲覧できます。担当者本人と管理者は直接編集でき、他メンバーは担当変更を申請できます。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
@@ -800,9 +806,16 @@
   function ppStageIndex(p) {
     return p.handoffStage === "closing" ? 2 : p.handoffStage === "cs" && p.csOwnerId ? 1 : 0;
   }
+  function ppAssignmentStage(p) { return ["proposal", "cs", "closing"][ppStageIndex(p)] || "proposal"; }
+  function ppAssignmentOwnerId(p, stage) {
+    return stage === "proposal" ? p.salesOwnerId : stage === "cs" ? (p.csOwnerId || p.salesOwnerId) : (p.closingOwnerId || p.salesOwnerId);
+  }
+  function ppAssignmentOwnerName(p, stage) {
+    return stage === "proposal" ? p.salesOwnerName : stage === "cs" ? (p.csOwnerName || p.salesOwnerName) : (p.closingOwnerName || p.salesOwnerName);
+  }
   // 今できる一つのアクションだけを案内する。
   function ppFlowAction(p, d) {
-    if (!d.canEdit) return '<span class="pp-flow-hint">この提案は閲覧のみです。引継ぎは現在の担当者が操作します。</span>';
+    if (!d.canEdit) return '<span class="pp-flow-hint">引継ぎの確定は現在の担当者または管理者が操作します。</span>';
     if (p.closed) return '<span class="pp-flow-hint">対応終了</span>';
     const stage = ppStageIndex(p);
     let label = "", action = "", enabled = true, hint = "", blocked = "";
@@ -848,7 +861,7 @@
          </div>
          <div class="sl-muted" style="font-size:11.5px;width:100%;">dx.enger から企業へ提案メールを送ると、自動で「電話待ち」に進み、送った時刻から${esc(String(detail.settings?.firstCallMinutes ?? 30))}分以内の電話のタスクができます。dx.enger 以外（自分のメール・電話）で提案したときは「企業へ提案した」を押してください。</div>`;
     const cta = !detail.canEdit
-      ? '<div class="pp-readonly-note">他の担当者の提案です。電話・メール・引継ぎなどは現在の担当者が登録します。</div>'
+      ? '<div class="pp-readonly-note">閲覧モードです。担当変更は下の「担当変更を申請」から依頼できます。活動記録は担当者または管理者が登録します。</div>'
       : p.closed
       ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
       : p.waiting ? waitingCta
@@ -879,13 +892,41 @@
         <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
       </div>
 
-      ${!detail.canEdit ? '<div class="pp-readonly-note">閲覧モード：他の担当者の案件は内容を確認できますが、変更・削除はできません。</div>' : ""}
+      ${!detail.canEdit ? '<div class="pp-readonly-note">閲覧モード：提案内容や活動記録は変更できません。担当変更は申請できます。</div>' : ""}
       <div class="pp-box pp-flow-box">
         <h4><span class="material-symbols-outlined">hub</span>引継ぎ｜提案 → CS → クロージング</h4>
         <div class="pp-flow-steps">
-          ${[["① 提案",p.matchingOwnerName || "未設定"],["② CS",p.csOwnerName || "未割当"],["③ クロージング",p.closingOwnerName || "未割当"]].map(([label,name],i) =>
+          ${[["① 提案",p.salesOwnerName || "未割当"],["② CS",p.csOwnerName || "未割当"],["③ クロージング",p.closingOwnerName || "未割当"]].map(([label,name],i) =>
             `<div class="pp-flow-step ${i < ppStageIndex(p) ? "done" : i === ppStageIndex(p) ? "active" : ""}"><b>${esc(label)}</b><small>${esc(name)}</small></div>`).join("")}
         </div>
+        ${(() => {
+          const stage = ppAssignmentStage(p);
+          const stageName = ({proposal:"提案",cs:"CS",closing:"クロージング"})[stage];
+          const currentOwnerId = ppAssignmentOwnerId(p, stage);
+          const currentOwnerName = ppAssignmentOwnerName(p, stage) || "未割当";
+          const targets = stage === "proposal" ? (detail.assignmentMembers || []) : ((detail.handoffTargets || {})[stage] || []);
+          const history = detail.assignmentRequests || [];
+          const pending = history.some(r => r.stage === stage && r.status === "pending");
+          const actionButton = !p.closed && pending && !detail.canEdit
+            ? '<span class="pp-tag warn">変更申請を確認中</span>'
+            : !p.closed && detail.canEdit
+            ? `<button type="button" class="pp-linkbtn" ${targets.length || stage === "proposal" ? "" : "disabled"} onclick="ppAssignment('direct')">${currentOwnerId ? "担当を変更" : "担当を割り当て"}</button>`
+            : !p.closed && detail.canRequestAssignments
+              ? `<button type="button" class="pp-linkbtn" ${targets.length ? "" : "disabled"} onclick="ppAssignment('request')">担当変更を申請</button>` : "";
+          return `<div class="pp-assignment">
+            <div class="pp-assignment-head"><b>${esc(stageName)}担当：${esc(currentOwnerName)}</b>${actionButton}</div>
+            ${!targets.length && stage !== "proposal" ? '<div class="pp-small">担当候補が未設定です。管理者がフォロー設定でチームを登録してください。</div>' : ""}
+            ${pending && detail.canEdit ? '<div class="pp-small">承認待ちの変更依頼があります。直接変更すると、その申請は履歴に残して終了します。</div>' : ""}
+            ${p.next?.overdue && !currentOwnerId && detail.manager ? '<div class="pp-small" style="color:#b3261e;">期限超過・未割当です。管理者はここからすぐに担当を割り当てられます。</div>' : ""}
+            ${history.length ? `<div class="pp-assignment-history"><b style="font-size:11.5px;color:#1b2440;">担当変更履歴</b>
+              ${history.map(r => `<div class="pp-assignment-item"><b>${r.changeType === "direct" ? "直接変更" : "変更申請"}</b>　${esc(fmt(r.createdAt))}<br>
+                （${esc(({proposal:"提案",cs:"CS",closing:"クロージング"})[r.stage] || r.stage)}）${esc(r.fromName)} → ${esc(r.toName)}　・申請者：${esc(r.requesterName)}${r.reviewerName && r.changeType !== "direct" ? `　・確認者：${esc(r.reviewerName)}` : ""}<br>
+                理由：${esc(r.reason)}${r.reviewNote ? `<br>回答：${esc(r.reviewNote)}` : ""}
+                ${r.status === "pending" ? `<span class="pp-tag warn">承認待ち</span>` : `<span class="pp-small">${r.status === "approved" ? "承認・変更済み" : r.status === "superseded" ? "直接変更に伴い終了" : "却下"}</span>`}
+                ${r.canReview ? `<div style="display:flex;gap:6px;margin-top:5px;"><button type="button" class="pp-linkbtn" onclick="ppReviewAssignment('${esc(r.id)}','approve')">承認</button><button type="button" class="pp-linkbtn" onclick="ppReviewAssignment('${esc(r.id)}','reject')">却下</button></div>` : ""}
+              </div>`).join("")}</div>` : '<div class="pp-small">担当変更履歴はまだありません。</div>'}
+          </div>`;
+        })()}
         <div class="pp-flow-action">${ppFlowAction(p, detail)}</div>
         <div class="pp-supporters" aria-label="各役割の共同担当者">
           ${[["proposal","① 提案担当"],["cs","② CS担当"],["closing","③ クロージング担当"]].map(([stage,label])=>`
@@ -941,8 +982,8 @@
         <h4><span class="material-symbols-outlined">info</span>提案の情報</h4>
         <dl class="sl-grid2">
           <div><dt>マッチング担当</dt><dd>${esc(p.matchingOwnerName || "—")}</dd></div>
-          <div><dt>営業担当</dt><dd>${esc(p.salesOwnerName || "未割当")}
-            ${detail.canAssign ? ` <button class="pp-linkbtn" onclick="ppAssign()">初回担当を設定</button>` : ""}</dd></div>
+          <div><dt>営業担当</dt><dd>${esc(p.salesOwnerName || "未割当")}</dd></div>
+          ${p.sourceSystem === "enger" ? `<div><dt>ENGER上のCL担当</dt><dd>${esc(p.engerClOwnerName || "未登録")}</dd></div>` : ""}
           <div><dt>案件</dt><dd>${esc(p.jobTitle || "—")}</dd></div>
           <div><dt>人材</dt><dd>${esc(p.talentInitials || "—")}</dd></div>
           <div><dt>dx.enger</dt><dd>${p.sourceUrl ? `<a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">提案を開く${p.sourceCode ? `（${esc(p.sourceCode)}）` : ""}</a>` : "—"}
@@ -1265,14 +1306,58 @@
     } catch (e) { alert(errText(e)); }
   }
 
-  function ppAssign() {
-    const cur = detail.proposal.salesOwnerId || "";
-    modal(`<h2>営業担当の変更</h2>
-      <select id="m-owner"><option value="">未定</option>${(detail.members || []).map((m) => `<option value="${esc(m.id)}" ${m.id === cur ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
-      <p class="sl-muted" style="font-size:12px;">開いているタスクも新しい担当に移ります。これまでの記録（誰が電話したか）は変わりません。</p>
-      ${foot("ppSendAssign()", "変更する")}`);
+  function ppAssignment(mode) {
+    const p = detail.proposal;
+    const stage = ppAssignmentStage(p);
+    const stageName = ({proposal:"提案",cs:"CS",closing:"クロージング"})[stage];
+    const targets = stage === "proposal" ? (detail.assignmentMembers || []) : ((detail.handoffTargets || {})[stage] || []);
+    if (!targets.length && stage !== "proposal") return;
+    const current = ppAssignmentOwnerId(p, stage);
+    const defaultReason = detail.manager && !p.salesOwnerId && p.next?.overdue ? "期限超過・未割当のため管理者が割当" : "";
+    const isRequest = mode === "request";
+    modal(`<h2>${isRequest ? "担当変更を申請" : "担当を直接変更"}（${stageName}）</h2>
+      <p class="sl-muted" style="font-size:12px;">${isRequest ? "希望する担当者と理由を入力してください。現在の担当者または管理者が確認します。" : "開いているタスクも新しい担当へ移し、変更者・日時・理由を履歴に残します。"}</p>
+      <label>変更後の担当（必須）</label><select id="m-assignment-owner"><option value="">${isRequest ? "選択してください" : "未割当"}</option>${targets.map((m) => `<option value="${esc(m.id)}" ${m.id === current ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
+      <label>理由（必須）</label><textarea id="m-assignment-reason" rows="3" maxlength="500">${esc(defaultReason)}</textarea>
+      ${foot(`ppCommitAssignment('${mode}','${stage}')`, isRequest ? "変更を申請" : "担当を保存")}`);
   }
-  function ppSendAssign() { send({ action: "assign", ownerId: $("m-owner").value || null }); }
+  async function ppCommitAssignment(mode, stage) {
+    const ownerId = $("m-assignment-owner").value || null;
+    const reason = $("m-assignment-reason").value.trim();
+    const current = stage === "proposal" ? detail.proposal.salesOwnerId : stage === "cs" ? detail.proposal.csOwnerId : detail.proposal.closingOwnerId;
+    if (!ownerId && mode === "request") { ppShowIssue({title:"担当者が未選択です",message:"変更後の担当者を選んでください。",field:"m-assignment-owner"}); return; }
+    if (ownerId === current) { ppShowIssue({title:"担当者が変わっていません",message:"現在と異なる担当者を選んでください。",field:"m-assignment-owner"}); return; }
+    if (!reason) { ppShowIssue({title:"理由が未入力です",message:"変更理由を入力してください。",field:"m-assignment-reason"}); return; }
+    const proposalId = detail.proposal.id;
+    try {
+      await KPLayout.busy($("m-ok"), "保存中…", () => API.api("/api/sales/proposals/assignment-requests", {
+        method:"POST", body:{ action:mode, proposalId, stage, ownerId, reason }
+      }));
+      ppCloseAction();
+      await ppOpen(proposalId);
+      load();
+      flash(mode === "request" ? "担当変更を申請しました。承認後に担当が切り替わります。" : "担当を変更し、履歴に保存しました。");
+    } catch (e) { ppShowServerError(e); }
+  }
+  function ppReviewAssignment(requestId, decision) {
+    const approve = decision === "approve";
+    modal(`<h2>担当変更を${approve ? "承認" : "却下"}</h2>
+      <p class="sl-muted" style="font-size:12px;">${approve ? "承認すると担当と未完了タスクを切り替え、変更履歴を残します。" : "却下理由は任意で履歴に残せます。"}</p>
+      <label>${approve ? "承認メモ（任意）" : "却下理由（任意）"}</label><textarea id="m-assignment-note" rows="2" maxlength="500"></textarea>
+      ${foot(`ppCommitAssignmentReview('${esc(requestId)}','${decision}')`, approve ? "承認する" : "却下する")}`);
+  }
+  async function ppCommitAssignmentReview(requestId, decision) {
+    const proposalId = detail.proposal.id;
+    try {
+      await KPLayout.busy($("m-ok"), "保存中…", () => API.api("/api/sales/proposals/assignment-requests", {
+        method:"POST", body:{ action:decision, requestId, note:$("m-assignment-note").value.trim() }
+      }));
+      ppCloseAction();
+      await ppOpen(proposalId);
+      load();
+      flash(decision === "approve" ? "担当変更を承認しました。担当とタスクを更新しました。" : "担当変更を却下し、履歴に保存しました。");
+    } catch (e) { ppShowServerError(e); }
+  }
 
   function ppTaskAdd() {
     modal(`<h2>タスクを足す</h2><label>内容（必須）</label><input type="text" id="m-title" maxlength="200">

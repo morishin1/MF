@@ -69,7 +69,7 @@ function fail(res, error) {
   return json(res, error.code === "42501" ? 403 : 500, { error: "db_failed", detail: error.message });
 }
 
-/** 見てよい提案か（DB の RLS と同じ。営業担当は自分の担当だけ）。見えないものは「無い」と答える */
+/** 見てよい提案か（DB の RLS と同じ。Sales 利用者は同一テナントを閲覧できる） */
 async function visibleProposal(sb, ctx, id) {
   const { proposal, error } = await loadProposal(sb, ctx.tenantId, id);
   if (error) return { error };
@@ -79,7 +79,8 @@ async function visibleProposal(sb, ctx, id) {
 
 async function detailOf(sb, ctx, proposal) {
   const now = new Date().toISOString();
-  const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }, { data: supporters, error: e4 }] = await Promise.all([
+  const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow,
+    { data: handoffs, error: e3 }, { data: supporters, error: e4 }, { data: assignmentChanges, error: e5 }] = await Promise.all([
     sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("proposal_id", proposal.id).order("occurred_at", { ascending: true }).limit(1000),
     loadTasks(sb, proposal.id),
     loadPeople(ctx.tenantId),
@@ -88,8 +89,10 @@ async function detailOf(sb, ctx, proposal) {
       .eq("proposal_id", proposal.id).order("created_at", { ascending: false }).limit(100),
     sb.from("gw_sales_proposal_supporters").select("id,stage,employee_id,created_at")
       .eq("proposal_id", proposal.id).eq("tenant_id", ctx.tenantId).limit(100),
+    sb.from("gw_sales_proposal_assignment_requests").select("*").eq("proposal_id", proposal.id)
+      .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(100),
   ]);
-  if (e1 || e2 || e3 || e4) return { error: e1 || e2 || e3 || e4 };
+  if (e1 || e2 || e3 || e4 || e5) return { error: e1 || e2 || e3 || e4 || e5 };
   let company = null;
   if (proposal.company_id) {
     const { data: c } = await sb.from("gw_sales_companies").select("id, name, status, phone, site_url, owner_id, ng_reason")
@@ -103,6 +106,7 @@ async function detailOf(sb, ctx, proposal) {
   const targets = (ids) => allSales.filter((m) => ids.includes(m.id));
   const connected = (activities || []).some((a) => (a.kind === "call" && a.result === "connected") || a.kind === "reply");
   const latestDecision = (activities || []).filter((a) => a.kind === "cs_decision").at(-1)?.result || null;
+  const assignmentStageOwner = { proposal: proposal.sales_owner_id, cs: proposal.cs_owner_id, closing: proposal.closing_owner_id };
   const supportersByStage = Object.fromEntries(["proposal", "cs", "closing"].map((stage) => [stage,
     (supporters || []).filter((p) => p.stage === stage)
       .map((p) => ({ id: p.employee_id, name: people.nameOf(p.employee_id) || "退職・不明", addedAt: p.created_at }))]));
@@ -117,15 +121,29 @@ async function detailOf(sb, ctx, proposal) {
       at: h.created_at, slackSent: Boolean(h.slack_sent_at),
     })),
     handoffTargets: { cs: targets(settings.csMembers), closing: targets(settings.closingMembers) },
-    canEdit: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
-    canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
-    canHandoff: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
+    assignmentRequests: (assignmentChanges || []).map((r) => ({
+      id: r.id, stage: r.stage, changeType: r.change_type, fromName: people.nameOf(r.from_owner_id) || "未割当",
+      toName: people.nameOf(r.to_owner_id) || "未割当", requesterName: people.nameOf(r.requested_by_employee_id) || "退職・不明",
+      reviewerName: people.nameOf(r.reviewed_by_employee_id) || null, status: r.status, reason: r.reason,
+      reviewNote: r.review_note, createdAt: r.created_at, resolvedAt: r.resolved_at,
+      canReview: Boolean(ctx.employee?.id && !manager && r.status === "pending"
+        ? assignmentStageOwner[r.stage] === ctx.employee.id && r.requested_by_employee_id !== ctx.employee.id
+        : manager && r.status === "pending" && r.requested_by_employee_id !== ctx.employee?.id),
+    })),
+    canEdit: Boolean(ctx.employee?.id && !proposal.archived_at
+      && (manager || proposal.sales_owner_id === ctx.employee.id)),
+    canAssign: Boolean(manager && !proposal.archived_at),
+    canManageAssignments: Boolean(manager && !proposal.archived_at),
+    canRequestAssignments: Boolean(ctx.employee?.id && !manager && !proposal.archived_at),
+    canHandoff: Boolean(ctx.employee?.id && !proposal.archived_at
+      && (manager || proposal.sales_owner_id === ctx.employee.id)),
     csContacted: connected, csDecision: latestDecision,
     proposal: shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }),
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,
-    members: ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id ? allSales : [],
+    members: ctx.employee?.id && (manager || proposal.sales_owner_id === ctx.employee.id) ? allSales : [],
+    assignmentMembers: allSales,
     settings, labels: LABELS,
   };
 }
@@ -154,10 +172,10 @@ async function act(req, res, sb, ctx, user) {
   const manager = canManageProposals(ctx);
   const action = String(body.action || "");
   const me = ctx.employee?.id || null;
-  const canEdit = Boolean(me && proposal.sales_owner_id === me && !proposal.archived_at);
-  const canAssign = Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at && action === "assign");
+  const canEdit = Boolean(me && !proposal.archived_at && (manager || proposal.sales_owner_id === me));
+  const canAssign = Boolean((manager || proposal.sales_owner_id === me) && !proposal.archived_at && action === "assign");
   if (!canEdit && !canAssign) return json(res, 403, { error: "readonly",
-    hint: "他の担当者の提案は閲覧専用です。操作するには現在の担当者から正式に引き継いでもらってください" });
+    hint: "他メンバーの案件です。担当変更は「変更を申請」から依頼してください" });
   const now = new Date().toISOString();
 
   try {
@@ -198,44 +216,33 @@ async function act(req, res, sb, ctx, user) {
     }
 
     if (action === "assign") {
-      if (!manager) return json(res, 403, { error: "forbidden", hint: "営業担当の割り当ては管理者が行います" });
-      if (proposal.sales_owner_id) return json(res, 409, { error: "owner_change_requires_handoff",
-        hint: "担当者がいる提案は「CSに引継ぐ」「クロージングに引継ぐ」を使ってください。直接変更できません" });
+      if (!manager && proposal.sales_owner_id !== me) return json(res, 403, { error: "forbidden" });
+      const activeStage = proposal.handoff_stage === "closing" ? "closing"
+        : proposal.handoff_stage === "cs" && proposal.cs_owner_id ? "cs" : "proposal";
+      const stage = String(body.stage || activeStage);
+      if (!["proposal", "cs", "closing"].includes(stage)) return json(res, 400, { error: "invalid_body", field: "stage" });
       const to = body.ownerId || null;
       if (to !== null && !isUuid(to)) return json(res, 400, { error: "invalid_body", field: "ownerId" });
-      if (to === proposal.sales_owner_id) return json(res, 400, { error: "nothing_to_update" });
+      const reason = String(body.reason || "").trim().slice(0, 500);
+      if (!reason) return json(res, 400, { error: "invalid_body", field: "reason", hint: "担当を変える理由を入力してください" });
       const people = await loadPeople(ctx.tenantId);
       if (to) {
         const members = await salesMembers(ctx.tenantId, people.employees);
         if (!members.some((m) => m.id === to)) return json(res, 400, { error: "bad_owner", hint: "Sales を使える在籍中の社員から選んでください" });
       }
-      // 担当未割当の場合だけ管理者が初回割当する。RLSを迂回するためAPIで厳格にtenant/roleを検証。
-      const { data: after, error: e1 } = await admin().from("gw_sales_proposals").update({ sales_owner_id: to, updated_by: user.id })
-        .eq("id", proposal.id).eq("tenant_id", ctx.tenantId).is("sales_owner_id", null).is("archived_at", null)
-        .select(PROPOSAL_FIELDS).maybeSingle();
-      if (e1) return fail(res, e1);
-      if (!after) return json(res, 409, { error: "owner_changed", hint: "ほかの担当者が先に割り当てました。再読み込みしてください" });
-      // 前の担当（または未定）のままの開いているタスクを、新しい担当へ寄せる。記録（誰がやったか）は書き換えない
-      const { tasks } = await loadTasks(admin(), proposal.id);
-      const move = tasks.filter((t) => t.status === "open" && t.kind !== "manager_review"
-        && (t.assignee_id === proposal.sales_owner_id || !t.assignee_id)).map((t) => t.id);
-      if (move.length) {
-        const { error: e2 } = await admin().from("gw_sales_proposal_tasks").update({ assignee_id: to }).in("id", move).eq("status", "open");
-        if (e2) return fail(res, e2);
-      }
-      await admin().from("gw_sales_proposal_activities").insert({
-        tenant_id: ctx.tenantId, proposal_id: proposal.id, company_id: proposal.company_id, kind: "assign", occurred_at: now,
-        employee_id: ctx.employee?.id || null, created_by: user.id,
-        note: `営業担当：${people.nameOf(proposal.sales_owner_id) || "未定"} → ${people.nameOf(to) || "未定"}`,
-        detail: { from: proposal.sales_owner_id || null, to, movedTasks: move.length },
+      const { data: changeId, error: e1 } = await sb.rpc("gw_sales_proposal_assign_stage_owner", {
+        p_proposal: proposal.id, p_stage: stage, p_to_owner: to, p_reason: reason,
       });
+      if (e1) return fail(res, e1);
       if (to && to !== ctx.employee?.id) {
         await notify([{ tenantId: ctx.tenantId, employeeId: to, kind: "sales",
           title: `提案の担当になりました：${proposal.company_name}`, body: `「${proposal.title}」\n提案管理で次の行動を確認してください。`,
-          link: `/sales/proposals.html?id=${proposal.id}`, dedupeKey: `sales_proposal_assign:${proposal.id}` }]);
+          link: `/sales/proposals.html?id=${proposal.id}`, dedupeKey: `sales_proposal_assign:${proposal.id}:${changeId}` }]);
       }
-      await audit(ctx, user, "assign", proposal, { from: proposal.sales_owner_id || null, to, movedTasks: move.length });
-      return done(res, sb, ctx, after);
+      await audit(ctx, user, "assign", proposal, { stage, to, reason, changeId });
+      const after = await loadProposal(sb, ctx.tenantId, proposal.id);
+      if (after.error) return fail(res, after.error);
+      return done(res, sb, ctx, after.proposal || proposal);
     }
 
     if (action === "task_add") {

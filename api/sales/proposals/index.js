@@ -58,7 +58,7 @@ async function list(req, res, sb, ctx) {
   const now = new Date().toISOString();
 
   let query = sb.from("gw_sales_proposals").select(PROPOSAL_FIELDS).eq("tenant_id", ctx.tenantId);
-  // 同じテナントのSales利用者は全提案を閲覧可。編集権は提案の現在担当本人だけ。
+  // 同じテナントのSales利用者は全提案を閲覧可。編集権は現在担当本人または管理側。
   const { data: rows, error } = await query.order("sent_at", { ascending: false }).limit(LIMIT + 1);
   if (error) return fail(res, error);
   const truncated = (rows || []).length > LIMIT;
@@ -87,8 +87,8 @@ async function list(req, res, sb, ctx) {
   const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
-    canEdit: Boolean(me && p.sales_owner_id === me && !p.archived_at),
-    canRestore: Boolean(me && p.sales_owner_id === me && p.archived_at),
+    canEdit: Boolean(me && !p.archived_at && (manager || p.sales_owner_id === me)),
+    canRestore: Boolean(me && p.archived_at && (manager || p.sales_owner_id === me)),
   }));
   // 全件閲覧。フィルタ「自分／担当者／未割当」は表示だけに影響する。
   const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;

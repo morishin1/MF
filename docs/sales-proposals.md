@@ -4,14 +4,15 @@
 Phase 2 の前半（dx.enger → Sales の起票・Sales → dx.enger の状態の返事）をここで実装した。
 
 - 画面：`/sales/proposals.html`（ヘッダーの「提案」）
-- API：`api/sales/proposals/{index,detail,settings,sync,intake,status}.js`
+- API：`api/sales/proposals/{index,detail,assignment-requests,handoff,settings,sync,intake,status}.js`
 - 決まりごと：`lib/sales-proposals.js`（期限・自動タスク・KPI・入力）／`lib/sales-proposal-intake.js`（連携）／`lib/sales-proposals-db.js`（DB 操作）
 - DB：`db/138_sales_proposals.sql`（確認 `db/check_138_sales_proposals.sql`・戻す `db/rollback_138_sales_proposals.sql`）
   ＋ `db/140_sales_proposal_matching.sql`（起点をマッチング確定にする。確認 `db/check_140_…`・戻す `db/rollback_140_…`）
+- 担当変更：`db/143_sales_proposal_assignment_requests.sql`（担当変更・申請・承認履歴、ENGER CL担当の分離。確認 `db/check_143_sales_proposal_assignment_requests.sql`）
 - Slack：`lib/sales-proposal-slack.js`（起票を営業担当へ即時に知らせる。提案ごとに1回）
 - テスト：`test/salesproposalsapi.mjs`・`test/salesproposalsflow.mjs`・`test/ui/salesproposalsui.mjs`・`test/sql/138_sales_proposals.sql`
 
-> **状態**：コードとテストは揃っているが、**本番の DB（db/138・db/140）の適用・本番の動作は未確認**。
+> **状態**：担当変更申請・承認（db/143）はコードとテストを追加済み。本番の DB 適用・本番動作は未確認。PR を確認してから適用する。
 > 本番 SQL の適用・環境変数の設定・マージは、依頼者の承認後に行う。
 
 ## 0. 連携の起点（2026-10-19 変更・db/140）
@@ -106,12 +107,13 @@ Phase 2 の前半（dx.enger → Sales の起票・Sales → dx.enger の状態�
 
 | 人 | 見える提案 | できること |
 |---|---|---|
-| 営業担当（Sales のアプリ権限） | **自分が担当の提案だけ** | 電話・メール・返信・面談・結果の記録、手動タスク、期限変更（理由必須）、窓口・企業の紐付け、自分が担当の提案の手入力 |
-| 管理側（経営者・マネージャー・会計の管理者で、Sales を使える人） | テナントの全件・担当未割当 | 上に加えて 担当の割り当て・変更、管理者確認（継続・保留・クローズ・再開）、自動タスクの取り消し、設定、連携エラーの確認 |
+| 営業担当（Sales のアプリ権限） | **テナント内の全提案** | 自分が現在担当する提案の電話・メール・返信・面談・結果の記録、手動タスク、期限変更（理由必須）、窓口・企業の紐付け。ほかの提案は閲覧し、担当変更を申請 |
+| 管理側（経営者・マネージャー・会計の管理者で、Sales を使える人） | テナントの全件・担当未割当 | 担当提案の直接編集・保存、期限超過・未割当の即時割当、担当変更の直接確定・申請承認、引継ぎ、管理者判断、自動タスクの取り消し、設定、連携エラーの確認 |
 | Sales を使えない社員・退職者・別テナント・ログインなし | 見えない | — |
 
-- 判定は DB の RLS（`gw_sales_proposal_visible`）と API（`canManageProposals`・担当の確認）の**両方**で止める。URL の `owner=all` で範囲は広がらない。
-- 担当を変えても、過去の記録（誰が電話したか）は書き換えない。開いているタスクだけ新しい担当へ移す。
+- 判定は DB の RLS（`gw_sales_proposal_visible` / `gw_sales_proposal_editable`）と API（`canManageProposals`・担当確認）の**両方**で行う。URL の `owner=all` で範囲は広がらない。
+- 他メンバーの担当変更申請は現在の担当者または管理者が承認・却下する。申請者本人の自己承認はできない。変更者、日時、理由、承認者、回答は担当変更履歴に残る。
+- 担当を変えても、過去の記録（誰が電話したか）は書き換えない。開いているタスクだけ新しい担当へ移す。ENGER の CL 担当は参照用に別保存し、Sales の担当・タスクを自動で上書きしない。
 
 ## 5. 企業との関係
 
@@ -140,7 +142,7 @@ HR リード（用途なし）・自治体 LP（`sales.`）の署名とは混ざ
 |---|---|---|
 | `proposal.matched` | マッチング確定（`matched_at` 必須・`sent_at` は空） | 起票（提案待ち・提案準備・Slack）。既にあれば `matched_at` を補うだけ |
 | `proposal.sent` | 企業へ提案を送った（`sent_at` 必須） | 提案待ち → 電話待ち（30分の電話）。まだ無ければ起票して電話待ち。送信済みなら「再送」の記録だけ |
-| `proposal.updated` | ステージの更新・担当の補完 | 写しを最新に。まだ無い提案は起票しない |
+| `proposal.updated` | ステージ・ENGER上のCL担当の更新 | 写しと「ENGER上のCL担当」を最新にする。Salesの担当・タスクは上書きしない。まだ無い提案は起票しない |
 
 ```json
 {
@@ -165,8 +167,8 @@ HR リード（用途なし）・自治体 LP（`sales.`）の署名とは混ざ
   提案準備・初回電話のタスクは提案ごとに1つ（`auto:prepare`・`auto:first_call`）。Slack は提案ごとに1回（`slack_notified_at`）。
   確定日時の無い `proposal.matched`・送信日時の無い `proposal.sent` は 400。まだ無い提案の `proposal.updated` は起票しない。終わった提案は再開しない。
 - 届く順が入れ替わっても同じ結果：送信が先に届けば電話待ちで起票し、あとから届いた確定は `matched_at` を補うだけ（提案準備は作らない）。
-- 営業担当：`sales_owner.email` → 社員名簿のメール（小文字・在籍中・同じテナント）→ 表示名（空白を除いてちょうど1人）。
-  決まらなければ担当未割当で起票し、管理側へ通知・「連携の確認」に `owner_unmatched`。
+- 起票時のSales担当：`matching_owner` を社員名簿のメール（小文字・在籍中・同じテナント）→ 表示名（空白を除いてちょうど1人）で照合し、決まらないときだけ `sales_owner` を候補にする。
+  決まらなければ担当未割当で起票し、管理側へ通知・「連携の確認」に `owner_unmatched`。ENGER上のCL担当は `enger_cl_owner_id/name` に別保存し、以降の更新ではSales担当を自動変更しない。
 
 ### Slack（起票の即時通知。db/140）
 
@@ -206,11 +208,11 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 2. `db/check_138_sales_proposals.sql` を Run して ❌ が無いこと
 2b. `db/140_sales_proposal_matching.sql` を Run（べき等。db/138 が無ければ止まる）→ `db/check_140_sales_proposal_matching.sql` で ❌ が無いこと。
    **アプリ（MF）のマージより先に**流す（新しいアプリは matched_at を読む。無いと提案管理が「実行を依頼してください」になる）
-2c. （任意）Vercel に `SALES_SLACK_WEBHOOK_URL`。提案管理の「フォローの設定」で営業担当の Slack のメンバーID
+2c. `db/141_sales_cs_closing_handoff.sql`、`db/142_sales_team_proposals_bulk.sql`、`db/143_sales_proposal_assignment_requests.sql` をこの順に Run → `db/check_143_sales_proposal_assignment_requests.sql` で ❌ が無いこと。**PRレビュー完了後・本番反映前に確認**する。
+2d. （任意）Vercel に `SALES_SLACK_WEBHOOK_URL`。提案管理の「フォローの設定」で営業担当の Slack のメンバーID
 3. Vercel（グループウェア）に `ENGER_SALES_SECRET`（32文字以上のランダム）と `SALES_PROPOSAL_TENANT_ID`（テナントの UUID）
 4. dx.enger 側（別 PR）に同じ鍵と送り先 URL を設定（dx.enger の `docs/ops/20261019_gw_sales_link.md`）
-5. 戻すとき：先にアプリを戻し、dx.enger の連携を止めてから `db/rollback_140_sales_proposal_matching.sql`
-   （提案待ちの提案が残っていると止まる）→ 必要なら `db/rollback_138_sales_proposals.sql`（提案管理のデータは消える）
+5. 戻すとき：先にアプリを戻し、dx.enger の連携を止めてから、担当依頼の履歴を保全する必要がある場合は `db/143` を削除せずアプリのみ戻す。DB を戻す場合は `db/rollback_140_sales_proposal_matching.sql`（提案待ちの提案が残っていると止まる）→ 必要なら `db/rollback_138_sales_proposals.sql`（提案管理のデータは消える）。
 
 `db/138` を流す前でも、既存の /sales は今までどおり動く（提案管理の画面だけが「db/138 の実行を依頼してください」を出す）。
 
@@ -236,7 +238,7 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 0. Slack・ベルに「マッチング確定・提案待ち」が届いたら、提案を開いて内容を確認し、企業へ提案する
    - dx.enger の提案詳細から企業向けの提案メールを送る → 自動で「電話待ち」になり、30分以内の電話のタスクができる
    - 自分のメール・電話で提案した → Sales の提案を開き **「企業へ提案した（記録）」**（同じく電話待ちになる）
-1. ヘッダーの **「提案」** を開く。上の「提案準備」「今日の電話」「期限超過」を押すと、その提案だけに絞れる（絞り込みの「マッチング済み」＝提案待ち）
+1. ヘッダーの **「提案」** を開く。全件を閲覧でき、担当案件は編集できます。他メンバーの案件は担当変更を申請できます。上の「提案準備」「今日の電話」「期限超過」を押すと、その提案だけに絞れます（絞り込みの「マッチング済み」＝提案待ち）
 2. 提案を押すと右に詳細が出る。**電話番号を押して電話**し、「電話の結果を記録」で結果を選ぶ
    - 不通・不在 → 「確認メールを送る」タスクができる。テンプレートをコピー（またはメールソフトで開く）して送り、「確認メールを送った」を押す
    - 折り返し予定・再連絡希望 → 日時を入れる（その日時に電話のタスク）
@@ -248,7 +250,8 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 
 ### 管理者（経営者・マネージャー）
 
-- 「担当未割当」の提案に営業担当を割り当てる（詳細の「営業担当 → 変更」）
+- 詳細の担当欄から提案担当を変更する。期限超過・未割当の案件は理由を確認してその場で割り当てる
+- 他メンバーから届いた担当変更依頼を詳細の「担当変更履歴」から承認・却下する
 - 「期限超過」と下の KPI（担当別）で滞留を確認する
 - 5営業日で返信の無い提案には「管理者確認」タスクが来る。「管理者の判断」で 継続（次の連絡日時）・保留・クローズ を決める
 - 「dx.enger 連携の確認」：担当を決められなかった提案・受け付けに失敗した連携が出る。対応したら「確認済みにする」

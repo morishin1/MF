@@ -21,6 +21,7 @@ const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 export function createMemDb({ schema = {}, rls = () => true, missing = null, fks = {} } = {}) {
   const rows = {};                       // 表名 → 行の配列
   const state = { missing, log: [], storageFail: null };    // log … 書いた操作（表・種類・行数）／storageFail … Storage の削除を失敗させる（メッセージ）
+  const rpcHandlers = new Map();
   const storageFiles = new Map();        // "bucket/path" → Buffer
   const uploadUrls = [];
   const removed = [];
@@ -208,7 +209,12 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
       };
       return q;
     }
-    return { from, storage: storageApi() };
+    return { from, storage: storageApi(), rpc: async (name, args) => {
+      const handler = rpcHandlers.get(name);
+      if (!handler) return { data: null, error: { code: "42883", message: `function ${name} does not exist` } };
+      try { return { data: await handler(args, { asUser, who, rows, state }), error: null }; }
+      catch (error) { return { data: null, error: { code: error?.code || "XX000", message: error?.message || String(error) } }; }
+    } };
   }
 
   function storageApi() {
@@ -247,6 +253,7 @@ export function createMemDb({ schema = {}, rls = () => true, missing = null, fks
 
   return {
     rows, state, storageFiles, uploadUrls, removed, signed,
+    registerRpc(name, handler) { rpcHandlers.set(name, handler); },
     admin: () => makeClient({ asUser: false, who: null }),
     userClient: (who) => makeClient({ asUser: true, who }),
     put: (bucket, path, buf) => storageFiles.set(`${bucket}/${path}`, Buffer.from(buf)),

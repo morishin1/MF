@@ -19,6 +19,8 @@ const handoff = readFileSync(resolve(ROOT, "api/sales/proposals/handoff.js"), "u
 const bulk = readFileSync(resolve(ROOT, "api/sales/proposals/bulk.js"), "utf8");
 const intake = readFileSync(resolve(ROOT, "lib/sales-proposal-intake.js"), "utf8");
 const sql = readFileSync(resolve(ROOT, "db/142_sales_team_proposals_bulk.sql"), "utf8");
+const assignmentSql = readFileSync(resolve(ROOT, "db/143_sales_proposal_assignment_requests.sql"), "utf8");
+const assignmentApi = readFileSync(resolve(ROOT, "api/sales/proposals/assignment-requests.js"), "utf8");
 
 for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore", "pp-column-head", "pp-list-meta"]) {
   assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, "要素:" + id);
@@ -44,15 +46,20 @@ assert.ok(inline[1].includes('!r.canEdit ? " pp-row-readonly"'), "他人の提�
 assert.ok(inline[1].includes('r.canEdit || r.canRestore'), "自分の提案のみ選択");
 assert.ok(inline[1].includes('!detail.canEdit'), "他人の詳細は閲覧専用");
 assert.ok(inline[1].includes('!detail.canEdit ?'), "CTA編集禁止");
-assert.ok(inline[1].includes('detail.canAssign'), "管理者は未割当の担当のみ初回設定");
+assert.ok(inline[1].includes('ppAssignment(\'direct\')') && inline[1].includes('担当変更を申請'), "担当者・管理者の直接変更と他メンバーの申請UI");
+assert.ok(inline[1].includes('担当変更履歴') && inline[1].includes('ppReviewAssignment'), "担当変更の履歴と承認UI");
+assert.ok(inline[1].includes('ENGER上のCL担当'), "ENGER CL担当をSales担当と分けて表示");
 assert.ok(!inline[1].includes('id="n-owner"'), "手動提案で他人名義の登録不可");
 
 assert.ok(!list.includes('query = query.eq("sales_owner_id", me)'), "一覧GETでは担当者でアクセス制限しない");
-assert.ok(list.includes('canEdit: Boolean(me && p.sales_owner_id === me'), "更新権限は本人だけ");
-assert.ok(detail.includes('if (!canEdit && !canAssign) return json(res, 403'), "更新POSTで他人の編集を拒否");
-assert.ok(detail.includes('proposal.sales_owner_id)'), "未割当かどうかの検証");
-assert.ok(handoff.includes('me !== proposal.sales_owner_id'), "引継ぎRPCは現担当のみ");
+assert.ok(list.includes('manager || p.sales_owner_id === me'), "一覧の直接編集権限は管理者または担当本人");
+assert.ok(detail.includes('if (!canEdit && !canAssign) return json(res, 403'), "更新POSTで他メンバーの直接編集を拒否");
+assert.ok(detail.includes('proposal.sales_owner_id === me'), "担当者本人の直接編集権限を検証");
+assert.ok(handoff.includes('!manager && me !== proposal.sales_owner_id'), "引継ぎRPCは現担当または管理者");
 assert.ok(handoff.includes('gw_sales_transfer_proposal_owner'), "引継ぎRLS保護ラッパー");
+assert.ok(assignmentApi.includes('gw_sales_proposal_request_assignment') && assignmentApi.includes('gw_sales_proposal_review_assignment_request'), "担当変更申請・承認は専用RPC");
+assert.ok(assignmentSql.includes('gw_sales_is_manager(p_tenant)'), "DB RLSで管理者の直接編集を許可");
+assert.ok(assignmentSql.includes('self_review_forbidden') && assignmentSql.includes('status=\'pending\''), "自己承認禁止・申請履歴保存");
 assert.ok(bulk.includes('ids.length > 50') && bulk.includes('p_ids: ids'), "選択50件まで");
 assert.ok(intake.includes('matchOwner(emps, p.matchingOwner)'), "ENGER提案者を初回担当にする");
 
@@ -81,4 +88,4 @@ assert.ok(FILTER_KEYS.includes("archived"));
 assert.equal(filterRows([p],{filter:"all"}).length,1);
 assert.equal(filterRows([{...p,archived:true}],{filter:"all"}).length,0);
 assert.equal(filterRows([{...p,archived:true}],{filter:"archived"}).length,1);
-console.log("PASS Sales all-team proposal visibility / proposer-CS-closer chain / owner-only bulk archive & edit");
+console.log("PASS Sales all-team visibility / owner-manager edit / assignment requests / history");
