@@ -49,17 +49,18 @@
   @media(max-width:760px){.ha-wrap{padding:22px 12px 60px}.ha-grid{grid-template-columns:1fr}.ha-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ha-kpi{padding:13px}.ha-kpi strong{font-size:27px}}
   @media(max-width:390px){.ha-bar-row{grid-template-columns:85px 1fr 32px 40px;gap:5px}.ha-stage-row{grid-template-columns:95px 1fr 30px;gap:6px}.ha-kpi small{display:block;margin:0}}
 
-  /* 共通HR/Officeデザイン基準を保持（採用分析では既存UIに影響させない） */
-    h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
-    .hr-today { display:grid; gap:8px; margin-bottom:22px; }
-    .hr-today-count { font-size:12px; color:#6b7080; margin-bottom:2px; }
-    .hr-today-row { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px;
-    .hr-today-row.overdue { border-left-color:#c0392b; }
-    .hr-today-row .info { flex:1; min-width:0; }
-    .hr-today-row b { display:block; color:#1b2440; font-size:14px; }
-    .hr-today-row .now { color:#6b7080; font-size:12px; margin-top:3px; }
-    .hr-today-row .n { color:#1b2440; font-size:12.5px; margin-top:3px; font-weight:500; }
-    .hr-today-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
+  /* HRとOfficeで共有する画面デザイントークン（既存画面との整合性維持） */
+  h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
+  .hr-sec-h { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
+  .hr-today { display:grid; gap:8px; margin-bottom:22px; }
+  .hr-today-count { font-size:12px; color:#6b7080; margin-bottom:2px; }
+  .hr-today-row { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px;
+      padding:12px 14px; display:flex; align-items:center; gap:14px; }
+  .hr-today-row.overdue { border-left-color:#c0392b; }
+  .hr-today-row .info { flex:1; min-width:0; }
+  .hr-today-row b { display:block; color:#1b2440; font-size:14px; }
+  .hr-today-row .now { color:#6b7080; font-size:12px; margin-top:3px; }
+  .hr-today-row .n { color:#1b2440; font-size:12.5px; margin-top:3px; font-weight:500; }
 </style>
 </head>
 <body>
