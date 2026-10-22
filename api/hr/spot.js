@@ -10,6 +10,10 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SQL="db/145_hr_spot_talents.sql";
 const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,survey_phone,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,deleted_at,created_at";
+const LEGACY_FIELDS=FIELDS.replace("survey_phone,","").replace("deleted_at,","");
+const needsMigration=(e)=>["42703","PGRST204","PGRST200"].includes(e?.code)
+  || /survey_phone|deleted_at|gw_hr_spot_bulk/.test(String(e?.message||""));
+const migrationMessage="db/146_hr_spot_bulk.sql をSupabaseに適用してください（未適用でも一覧は閲覧できます）。";
 const text=(s,max)=>typeof s==="string"?s.trim().slice(0,max):"";
 const error=(res,e)=>json(res,["42P01","PGRST205"].includes(e?.code)?503:500,{error:["42P01","PGRST205"].includes(e?.code)?"not_ready":"db_failed",message:["42P01","PGRST205"].includes(e?.code)?SQL+" を適用してください":"保存に失敗しました"});
 async function one(sb,tenantId,id){
@@ -25,15 +29,31 @@ export default async function handler(req,res){
   if(req.method==="GET"&&String(req.query?.summary||"")==="1"){
     const {count,error:e}=await sb.from("gw_hr_spot_talents").select("id",{count:"exact",head:true})
       .eq("tenant_id",ctx.tenantId).is("deleted_at",null);
+    if(e&&needsMigration(e)){
+      const fallback=await sb.from("gw_hr_spot_talents").select("id",{count:"exact",head:true})
+        .eq("tenant_id",ctx.tenantId);
+      if(fallback.error)return error(res,fallback.error);
+      return json(res,200,{count:fallback.count||0,upgradeRequired:true});
+    }
     if(e)return error(res,e);
     return json(res,200,{count:count||0});
   }
   if(req.method==="GET"){
     const {data,error:e}=await sb.from("gw_hr_spot_talents").select(FIELDS).eq("tenant_id",ctx.tenantId).order("worked_on",{ascending:false}).limit(500);
+    if(e&&needsMigration(e)){
+      const old=await sb.from("gw_hr_spot_talents").select(LEGACY_FIELDS).eq("tenant_id",ctx.tenantId).order("worked_on",{ascending:false}).limit(500);
+      if(old.error)return error(res,old.error);
+      return json(res,200,{people:(old.data||[]).map(p=>({...p,deleted_at:null,survey_phone:null})),
+        upgradeRequired:true,message:migrationMessage});
+    }
     if(e)return error(res,e);
     return json(res,200,{people:data||[]});
   }
   if(req.method!=="POST")return methodNotAllowed(res,["GET","POST"]);
+  // DB146適用前に部分的な変更を試みない。既存の一覧はGETで閲覧可能。
+  const probe=await sb.from("gw_hr_spot_talents").select("id,survey_phone,deleted_at").eq("tenant_id",ctx.tenantId).limit(0);
+  if(probe.error&&needsMigration(probe.error))return json(res,503,{error:"not_ready",message:migrationMessage});
+  if(probe.error)return error(res,probe.error);
   const b=await readJson(req);
   if(!b||typeof b!=="object")return json(res,400,{error:"invalid_body"});
   if(b.action==="create"){
@@ -91,7 +111,7 @@ export default async function handler(req,res){
     }
     const name=String(b.name||"").trim(),source=String(b.source||"").trim(),date=String(b.workedOn||"").trim();
     if(!name||name.length>100||!source||source.length>80||
-      !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+"T00:00:00Z"))||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+"T00:00:00Z"))||
       (b.workNote!=null&&String(b.workNote).length>500))
       return json(res,400,{error:"invalid_fields",message:"氏名・勤務日・媒体・メモの入力を確認してください"});
     const {data:changed,error:e}=await sb.from("gw_hr_spot_talents")
