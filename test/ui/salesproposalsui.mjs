@@ -162,7 +162,9 @@ console.log("\n=== 管理側：一覧 ===");
   const waitRow = await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).innerText();
   check(waitRow.includes("マッチング済み・提案待ち") && waitRow.includes("未提案"), `提案待ちの行：状態・未提案を表示（${waitRow.replace(/\s+/g, " ")}）`);
   check(!(await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).locator(".pp-over").count()), "提案待ちの電話を赤くしない");
-  check((await page.locator("#sum").innerText()).includes("提案準備"), "今日やることに「提案準備」");
+  check(await page.locator("#today-summary").evaluate((el) => !el.open), "今日やることは初期状態で折りたたまれている");
+  await page.locator("#today-summary > summary").click();
+  check((await page.locator("#sum").innerText()).includes("提案準備"), "今日やることを開くと「提案準備」");
   const slackInputs = await page.locator("#st-slack [data-slack]").count();
   check(slackInputs === 3, `設定に Slack のメンバーIDの欄（Sales を使える3人。いま ${slackInputs}）`);
   const overdueRow = page.locator("#rows tr.overdue");
@@ -171,10 +173,20 @@ console.log("\n=== 管理側：一覧 ===");
   check((await page.locator("#sum").innerText()).includes("担当未割当"), "管理側には「担当未割当」の件数");
   check(await page.locator("#f-owner").isVisible(), "管理側は担当で絞れる");
   check((await page.locator("#admin-sec").innerText()).includes("dx.enger 連携の確認"), "連携エラー・設定が出る");
+  check(await page.locator("#admin-sec details").first().evaluate((el) => !el.open), "dx.enger連携の詳細は初期状態で折りたたまれている");
+  await page.locator("#admin-sec details").first().locator("summary").click();
+  check((await page.locator("#sync-list").innerText()).length > 0, "連携確認を開くと内容を見られる");
+  await page.locator("#admin-sec details").first().locator("summary").click();
+  const kpiDetails = page.locator("#kpi-sec details.pp-analysis");
+  check(await kpiDetails.count() === 1, "詳しいKPIを折りたたんで表示");
+  check(await kpiDetails.evaluate((el) => !el.open), "詳しいKPIは初期状態で折りたたまれている");
+  await kpiDetails.locator("summary").click();
+  check(await kpiDetails.locator("details.pp-owner-breakdown").evaluate((el) => !el.open), "担当別集計も別に折りたたむ");
+  await kpiDetails.locator("summary").click();
   const first = await page.locator("#rows tr.click").first().innerText();
   check(first.includes("テスト工業"), "期限超過がいちばん上（期限順）");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
-  await page.locator("#filters button", { hasText: "期限超過" }).click();
+  await page.locator("#f-filter").selectOption("overdue");
   await page.waitForTimeout(400);
   check(await page.locator("#rows tr.click").count() === 1, "「期限超過」で絞ると1件");
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
@@ -263,6 +275,55 @@ console.log("\n=== スマホ（390px） ===");
   await page.close();
 }
 
+console.log("\n=== ページネーション ===");
+{
+  const template = mem.rows.gw_sales_proposals.find((p) => p.source_proposal_id === "p-1");
+  for (let i = 0; i < 22; i++) {
+    mem.rows.gw_sales_proposals.push({
+      ...template,
+      id: uid(300 + i),
+      source_proposal_id: "page-" + String(i + 1).padStart(2, "0"),
+      company_name: "ページ確認 " + String(i + 1).padStart(2, "0"),
+      title: "ページネーション確認",
+    });
+  }
+  const { page, errs } = await openAs(S1);
+  check(await page.locator("#pp-page-size").inputValue() === "20", "初期表示は20件");
+  check(await page.locator("#rows tr.click").count() === 20, "一覧は1ページ20件に分かれる");
+  check((await page.locator("#pp-range").innerText()) === "1–20 / 26件", "全件数と表示範囲を表示");
+  check(await page.locator("#pp-list-controls").evaluate((el) => getComputedStyle(el).position) === "sticky", "一覧操作はスクロール中も固定");
+  check(await page.locator("#pp-column-head th").first().evaluate((el) => getComputedStyle(el).position) === "sticky", "表の見出しを固定");
+  const headerLabel = await page.locator("#pp-all").getAttribute("aria-label");
+  check(headerLabel === "このページの編集できる提案を選択", "一括選択の対象をこのページと明示");
+  await page.locator("#pp-all").check();
+  const selectedFirst = parseInt(await page.locator("#pp-selected").innerText(), 10);
+  check(selectedFirst > 0 && selectedFirst <= 20, "このページの編集可能な提案だけを選択");
+  await page.locator("#pp-page-next").click();
+  check(await page.locator("#rows tr.click").count() === 6, "次ページには残り6件を表示");
+  check((await page.locator("#pp-range").innerText()) === "21–26 / 26件", "次ページの範囲を表示");
+  await page.locator("#pp-all").check();
+  const selectedBoth = parseInt(await page.locator("#pp-selected").innerText(), 10);
+  check(selectedBoth > selectedFirst && selectedBoth <= 50, "ページをまたいで選択を維持し、上限50件を守る");
+  await page.locator("#pp-page-size").selectOption("50");
+  check(await page.locator("#rows tr.click").count() === 26, "50件表示に切り替えられる");
+  check(await page.locator("#pp-page-next").isDisabled(), "全件を表示したら次ページを無効にする");
+  await page.locator("#pp-clear-selection").click();
+  check((await page.locator("#pp-selected").innerText()) === "0件選択", "選択解除で複数ページの選択をまとめて解除");
+  check(!errs.length, "ページ切り替えで画面エラーがない");
+  await page.close();
+
+  const mobile = await openAs(S1, { width: 390, height: 844 });
+  check(await mobile.page.locator("#cards .pp-card").count() === 20, "スマホも20件ずつ表示");
+  await mobile.page.locator("#pp-page-next").click();
+  check(await mobile.page.locator("#cards .pp-card").count() === 6, "スマホでもページ切り替えできる");
+  const overflow = await mobile.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  check(overflow <= 1, "ページ操作を含めスマホで横にはみ出さない");
+  check(await mobile.page.locator("#pp-list-controls").evaluate((el) => getComputedStyle(el).position) === "sticky", "スマホでも一覧操作を固定");
+  await mobile.page.close();
+}
+
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\n提案管理の画面は動いています");
 process.exit(bad ? 1 : 0);
+
+
