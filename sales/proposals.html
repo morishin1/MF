@@ -243,6 +243,25 @@
       .pp-bulk { width:calc(100vw - 20px); flex-wrap:wrap; padding:9px; gap:6px; }
       .pp-bulk .btn { flex:1 1 auto; }
     }
+
+    /* 中央モーダル内部は概要・対応・履歴を2列に整理する */
+    #pp-detail { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px 16px; padding-bottom:18px; }
+    #pp-detail > .pp-detail-header, #pp-detail > .pp-flow-box,
+    #pp-detail > .pp-readonly-note, #pp-detail > .pp-info-box, #pp-detail > .pp-history-box { grid-column:1/-1; }
+    #pp-detail > .pp-box { margin:0 20px; min-width:0; }
+    #pp-detail > .sl-next { margin:0 0 0 20px !important; min-width:0; }
+    #pp-detail > .pp-contact-box { margin-left:0; }
+    #pp-detail > .pp-checklist-box { margin-right:0; }
+    #pp-detail > .pp-task-box { margin-left:0; }
+    #pp-detail > .pp-info-box { margin:0 20px; }
+    #pp-detail > .pp-history-box { padding:4px 22px 22px; }
+    #pp-detail > .pp-readonly-note { margin:8px 20px 0; }
+    #pp-detail > .pp-flow-box { margin-top:6px; }
+    @media (max-width:900px) {
+      #pp-detail { grid-template-columns:1fr; gap:10px; }
+      #pp-detail > .pp-box, #pp-detail > .sl-next { margin:0 12px !important; }
+      #pp-detail > .pp-history-box { padding:4px 12px 18px; }
+    }
   </style>
 </head>
 <body class="pp-wide-page">
@@ -1016,7 +1035,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-contact-box">
         <h4><span class="material-symbols-outlined">contact_phone</span>先方の窓口</h4>
         <div style="font-size:13px;color:#1b2440;">${esc(p.contactName || "担当者名 未登録")}</div>
         <div class="pp-contact">
@@ -1026,12 +1045,12 @@
         </div>
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-checklist-box">
         <h4><span class="material-symbols-outlined">checklist</span>チェックリスト</h4>
         ${checklist(p, tasks, acts)}
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-task-box">
         <h4 style="justify-content:space-between;"><span style="display:flex;gap:6px;align-items:center;"><span class="material-symbols-outlined">task_alt</span>タスク</span>
           ${p.closed || !detail.canEdit ? "" : `<button class="pp-linkbtn" onclick="ppTaskAdd()">＋ タスクを足す</button>`}</h4>
         ${openTasks.length ? openTasks.map((t) => taskRow(t)).join("") : `<div class="sl-empty">開いているタスクはありません</div>`}
@@ -1039,7 +1058,7 @@
           ${doneTasks.map((t) => taskRow(t)).join("")}</details>` : ""}
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-info-box">
         <h4><span class="material-symbols-outlined">info</span>提案の情報</h4>
         <dl class="sl-grid2">
           <div><dt>マッチング担当</dt><dd>${esc(p.matchingOwnerName || "—")}</dd></div>
@@ -1057,7 +1076,7 @@
         <div class="sl-muted" style="font-size:11.5px;">企業と紐付けると、この提案の電話・メール・返信・面談が企業の営業履歴にも残ります（社名だけで自動では紐付けません）</div>
       </div>
 
-      <div style="padding:0 20px 24px;">
+      <div class="pp-history-box">
         <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;">
           <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>` : ""}
