@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="../css/app.css?v=20261020cal1">
 <style>
   body{font-family:"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;color:#1b2440}
-  .ha-wrap{max-width:1160px;margin:0 auto;padding:32px 24px 70px}
+  .ha-wrap{max-width:1160px;width:100%;min-width:0;box-sizing:border-box;margin:0 auto;padding:32px 24px 70px;overflow-x:clip}
   .ha-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap}
   .ha-top h1{font-size:24px;margin:0 0 5px;color:#1b2440}
   .ha-top p{color:#6b7080;margin:0;font-size:13px}
@@ -20,7 +20,7 @@
   .ha-tools select{padding:8px 9px;border:1px solid #d5d9e0;border-radius:8px;background:white;color:#1b2440}
   .ha-link{color:#1b2440;font-size:12px;background:white;padding:8px 10px;border:1px solid #d5d9e0;border-radius:8px;text-decoration:none;font-weight:600}
   .ha-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
-  .ha-kpi,.ha-panel{border:1px solid #e1e4e9;background:white;border-radius:12px;padding:18px}
+  .ha-kpi,.ha-panel{min-width:0;max-width:100%;overflow-wrap:anywhere;border:1px solid #e1e4e9;background:white;border-radius:12px;padding:18px}
   .ha-kpi>span{display:block;color:#606c7d;font-size:12px;font-weight:600}
   .ha-kpi strong{font-size:32px;line-height:1.3;display:inline-block;margin-top:7px}
   .ha-kpi small{font-size:11px;color:#6b7080;margin-left:7px}
@@ -29,7 +29,8 @@
   .ha-panel p{font-size:11.5px;color:#6b7080;line-height:1.7;margin:0 0 15px}
   .ha-bar-row,.ha-stage-row{display:grid;grid-template-columns:minmax(75px,140px) 1fr 40px 45px;gap:10px;align-items:center;min-height:32px;font-size:12px}
   .ha-stage-row{grid-template-columns:130px 1fr 38px}
-  .ha-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ha-bar-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ha-bar-row >*,.ha-stage-row >*{min-width:0}
   .ha-bar-row b,.ha-stage-row b{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}
   .ha-bar-pct{color:#84909f;font-size:11px;text-align:right}
   .ha-bar-track{height:8px;border-radius:8px;background:#edf0f5;overflow:hidden}
