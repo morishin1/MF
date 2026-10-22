@@ -200,13 +200,56 @@
       .pp-quick-filters {flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px; }
       .pp-quick-filters button {flex:none;}
     }
+
+    .pp-wide-page .wrap { max-width:none; width:100%; box-sizing:border-box; padding:18px clamp(14px,2vw,36px) 95px; }
+    .pp-tablewrap { max-height:min(70vh,780px); overflow-x:auto; }
+    .pp-table { width:100%; min-width:1380px; table-layout:auto; }
+    .pp-table td:has(.pp-company-name) { min-width:205px; max-width:270px; }
+    .pp-company-name { display:block; min-width:185px; max-width:255px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:keep-all; }
+    .pp-table .pp-owner-cell { min-width:110px; max-width:170px; }
+    .pp-table .pp-owner-cell strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pp-table td { vertical-align:top; line-height:1.55; }
+    .pp-bulk { position:fixed; left:50%; bottom:max(14px,env(safe-area-inset-bottom)); transform:translateX(-50%);
+      z-index:36; width:max-content; max-width:calc(100vw - 28px); box-sizing:border-box; padding:11px 16px;
+      margin:0; background:#fff; border:1px solid #b9c6da; box-shadow:0 12px 38px rgba(27,36,64,.22);
+      border-radius:14px; justify-content:center; gap:10px; }
+    .pp-bulk[hidden] { display:none !important; }
+    .pp-bulk-note { display:none; }
+    body.pp-detail-open { overflow:hidden; }
+    #pp-drawer .pp-detail-backdrop { position:fixed; inset:0; background:rgba(20,26,44,.5); z-index:40; }
+    #pp-drawer .pp-detail-dialog { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      width:min(1160px,calc(100vw - 44px)); max-height:min(91dvh,950px); overflow:auto; z-index:41;
+      background:#f8f9fa; border-radius:16px; box-shadow:0 20px 70px rgba(20,26,44,.28);
+      overscroll-behavior:contain; }
+    #pp-drawer .pp-detail-header { position:sticky; top:0; z-index:3; padding:16px 22px 14px;
+      display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+      background:#fff; border-bottom:1px solid #e1e5ea; }
+    #pp-drawer .pp-detail-header > div { min-width:0; }
+    #pp-drawer .pp-detail-dialog .pp-box { margin:12px 20px; }
+    #pp-drawer .pp-detail-dialog .pp-flow-steps { gap:10px; }
+    #pp-drawer .pp-role-editor { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px; margin-top:14px; }
+    .pp-role-field { background:#fff; border:1px solid #e0e5ec; border-radius:9px; padding:11px;
+      display:flex; flex-direction:column; gap:6px; margin:0; min-width:0; }
+    .pp-role-field > span { font-size:12px; font-weight:700; color:#4a5068; }
+    .pp-role-field > strong { font-size:14px; color:#1b2440; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pp-role-field small { font-size:10.5px; color:#6b7080; }
+    .pp-role-field .pp-role-select { width:100%; max-width:none; min-width:0; }
+    @media(max-width:760px) {
+      #pp-drawer .pp-detail-dialog { width:calc(100vw - 18px); max-height:95dvh; border-radius:13px; }
+      #pp-drawer .pp-detail-header { padding:12px; }
+      #pp-drawer .pp-detail-dialog .pp-box { margin:10px 12px; }
+      #pp-drawer .pp-role-editor { grid-template-columns:1fr; }
+      .pp-bulk { width:calc(100vw - 20px); flex-wrap:wrap; padding:9px; gap:6px; }
+      .pp-bulk .btn { flex:1 1 auto; }
+    }
   </style>
 </head>
-<body>
+<body class="pp-wide-page">
 
 <div class="wrap">
   <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">管理者は全件操作できます。担当は一覧のプルダウンから変更できます（正式な引継ぎ操作とは別です）。</p>
+  <p class="sl-sub">管理者は全件操作できます。企業を押すと詳細モーダルでCS・クロージング担当を変更できます。ENGERの提案担当は固定表示です。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
@@ -239,14 +282,6 @@
     <summary>その他の条件 <span id="pp-extra-filter" class="pp-extra-current"></span></summary>
     <div class="pp-filters" id="filters-extra" aria-label="その他の条件"></div>
   </details>
-  <div class="pp-bulk" id="pp-bulk">
-    <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
-    <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>選択して編集</button>
-    <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>選択して削除（一覧から除外）</button>
-    <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
-    <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">選択解除</button>
-    <span class="pp-bulk-note">管理者は全件選択・削除できます。削除は履歴を残すアーカイブです。</span>
-  </div>
   <div class="pp-list-meta" id="pp-list-meta"></div>
 
   <div class="pp-tablewrap" style="overflow-x:auto;">
@@ -269,6 +304,14 @@
   <section id="pp-view-admin" role="tabpanel" aria-labelledby="pp-tab-admin" hidden><div class="pp-sec" id="admin-sec"></div></section>
 </div>
 
+<div class="pp-bulk" id="pp-bulk" role="toolbar" aria-label="選択した提案の一括操作" hidden>
+    <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>編集</button>
+    <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>削除</button>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">解除</button>
+    <span class="pp-bulk-note">管理者は全件選択・削除できます。削除は履歴を残すアーカイブです。</span>
+  </div>
 <div id="pp-drawer"></div>
 <div id="pp-action"></div>
 
@@ -572,7 +615,7 @@
   function ppColumnCell(key,r) {
     switch(key) {
     case "date": return sentCell(r);
-    case "company": return '<span class="sl-nm">'+esc(r.companyName)+'</span>'+
+    case "company": return '<span class="sl-nm pp-company-name" title="'+esc(r.companyName)+'">'+esc(r.companyName)+'</span>'+
       (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
@@ -628,6 +671,7 @@
     const rows = data?.proposals || [];
     const sel = rows.filter((r) => selected.has(r.id));
     $("pp-selected").textContent = sel.length + "件選択";
+    $("pp-bulk").hidden = sel.length === 0;
     const editable = sel.length && sel.every((r) => r.canEdit);
     const restorable = sel.length && sel.every((r) => r.canRestore);
     $("pp-bulk-edit").disabled = !editable;
@@ -802,13 +846,15 @@
     } catch (e) { $("st-msg").style.color = ""; $("st-msg").textContent = errText(e); }
   }
 
-  // ---- 詳細（右ドロワー） ------------------------------------------------------
+  // ---- 詳細（中央ワイドモーダル） ------------------------------------------------------
   async function ppOpen(id) {
     openId = id;
     writeUrl();
     const my = ++seq;
-    $("pp-drawer").innerHTML = `<div class="sl-drawer-bg" onclick="ppClose()"></div>
-      <div class="sl-detail" id="pp-detail"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+    document.body.classList.add("pp-detail-open");
+    $("pp-drawer").innerHTML = `<div class="pp-detail-backdrop" onclick="ppClose()"></div>
+      <div class="pp-detail-dialog" role="dialog" aria-modal="true" aria-label="提案の詳細">
+        <div id="pp-detail"><div class="empty" style="padding:40px;">読み込み中…</div></div></div>`;
     try {
       const d = await API.api(`/api/sales/proposals/detail?id=${encodeURIComponent(id)}`);
       if (my !== seq || openId !== id) return;
@@ -821,7 +867,7 @@
         <div style="padding:0 20px;"><button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button></div>`;
     }
   }
-  function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; writeUrl(); }
+  function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; document.body.classList.remove("pp-detail-open"); writeUrl(); }
 
   // チェックリスト：電話 → 不通ならメール → 回答確認 → 再フォロー → 結果確定
   function checklist(p, tasks, acts) {
@@ -894,7 +940,7 @@
          </div>
          <div class="sl-muted" style="font-size:11.5px;width:100%;">dx.enger から企業へ提案メールを送ると、自動で「電話待ち」に進み、送った時刻から${esc(String(detail.settings?.firstCallMinutes ?? 30))}分以内の電話のタスクができます。dx.enger 以外（自分のメール・電話）で提案したときは「企業へ提案した」を押してください。</div>`;
     const cta = !detail.canEdit
-      ? '<div class="pp-readonly-note">電話・メール・正式引継ぎなどの記録は現在の担当者が登録します。担当変更は一覧のプルダウンから可能です。</div>'
+      ? '<div class="pp-readonly-note">電話・メール・正式引継ぎなどの記録は現在の担当者が登録します。CS担当・クロージング担当はこの詳細から変更できます。</div>'
       : p.closed
       ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
       : p.waiting ? waitingCta
@@ -909,7 +955,7 @@
          </div></details>`;
 
     box.innerHTML = `
-      <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+      <div class="pp-detail-header">
         <div style="min-width:0;">
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(p.companyName)}</div>
           <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
@@ -925,7 +971,7 @@
         <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
       </div>
 
-      ${!detail.canEdit ? '<div class="pp-readonly-note">閲覧モード：他の担当者の案件は内容を確認できますが、変更・削除はできません。</div>' : ""}
+      ${!detail.canEdit ? '<div class="pp-readonly-note">対応記録は閲覧のみです。CS・クロージング担当は変更できます。</div>' : ""}
       <div class="pp-box pp-flow-box">
         <h4><span class="material-symbols-outlined">hub</span>引継ぎ｜提案 → CS → クロージング</h4>
         <div class="pp-flow-steps">
