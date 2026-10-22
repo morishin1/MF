@@ -149,18 +149,65 @@
       .pp-opt { grid-template-columns:1fr; }
       .pp-box { margin:0 12px 12px; }
     }
+
+    /* ページ全体を縦長にしない。一覧は内部スクロール、KPIと設定はタブに分離。 */
+    [hidden] { display:none !important; }
+    .pp-view-tabs { display:flex;gap:6px;border-bottom:1px solid #dfe3e7;margin:8px 0 14px;overflow-x:auto; }
+    .pp-view-tabs button { border:0;border-bottom:3px solid transparent;background:transparent;color:#5b6473;padding:10px 18px;cursor:pointer;font:700 13px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap; }
+    .pp-view-tabs button.on { border-bottom-color:#1b2440;color:#1b2440; }
+    .pp-view-tabs button:focus-visible { outline:2px solid #3964bb;outline-offset:-3px; }
+    .pp-tab-badge { display:inline-block;background:#fdecea;color:#a62c22;padding:1px 6px;border-radius:10px;margin-left:4px; }
+    .pp-view-tabs + section { scroll-margin-top:64px; }
+    .pp-more-filters { margin:-2px 0 10px; }
+    .pp-more-filters > summary { font-size:12px;font-weight:700;color:#4d5b6c;cursor:pointer;padding:5px 0; }
+    .pp-more-filters .pp-filters { padding:9px 0 3px; }
+    .pp-extra-current { color:#a52626; }
+    .pp-main-tools { margin-bottom:8px; }
+    .pp-sum { grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;margin-bottom:9px; }
+    .pp-sum button { padding:8px 10px;min-width:0; }
+    .pp-sum .lb { font-size:11px; }
+    .pp-sum .v { font-size:20px; }
+    .pp-bulk { margin:7px 0; }
+    .pp-bulk-note { display:none; }
+    .pp-list-meta { margin:4px 0 8px; }
+    .pp-tablewrap { max-height:min(62vh,680px);overflow:auto !important;background:#fff;border:1px solid #e3e6e9;border-radius:9px; }
+    .pp-table thead th { position:sticky;top:0;z-index:2;background:#f6f7f8;box-shadow:0 1px 0 #dfe3e7; }
+    .pp-table tbody tr:hover { background:#f8faf2; }
+    .pp-pagination { display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin:10px 0 18px;font-size:12px;color:#586172; }
+    .pp-pagination #pp-page-info { margin-right:auto;font-weight:700; }
+    .pp-pagination select,.pp-pagination button { font:inherit;border:1px solid #d2d9df;border-radius:7px;background:#fff;padding:6px 9px;color:#273047; }
+    .pp-pagination button { cursor:pointer;min-width:60px; }
+    .pp-pagination button:disabled { cursor:default;opacity:.4; }
+    #pp-view-kpi .pp-sec,#pp-view-admin .pp-sec { margin-top:8px; }
+    @media(max-width:1000px) { .pp-sum {display:flex;overflow-x:auto;padding-bottom:5px;scroll-snap-type:x proximity;} .pp-sum button {flex:0 0 125px;scroll-snap-align:start;} }
+    @media(max-width:760px) { .pp-view-tabs button { padding:10px 12px; }
+      .pp-cards { max-height:min(62vh,600px);overflow-y:auto;overscroll-behavior:contain; }
+      .pp-main-tools { display:flex;flex-wrap:wrap;gap:7px; }
+      .pp-main-tools #f-q { flex:1 1 100%;min-width:0; }
+      .pp-main-tools select { flex:1 1 40%;min-width:0; }
+      .pp-pagination {gap:6px;justify-content:space-between;}
+      .pp-pagination #pp-page-info {flex:1 1 100%;}
+      .pp-pagination label {font-size:11px;}
+      .pp-quick-filters {flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px; }
+      .pp-quick-filters button {flex:none;}
+    }
   </style>
 </head>
 <body>
 
 <div class="wrap">
   <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">チームの提案を全件閲覧できます。<b>ENGER提案者 → CS → クロージング</b>を一覧で確認し、自分の担当案件だけ編集・引継ぎできます。</p>
+  <p class="sl-sub">全件閲覧・自分の担当だけ編集。案件を選ぶと対応履歴を確認できます。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
-
-  <div class="sl-toolbar">
+  <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
+    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
+    <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
+    <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
+  </nav>
+  <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
+  <div class="sl-toolbar pp-main-tools">
     <select id="f-owner" onchange="ppSet('owner', this.value)"></select>
     <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
     <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
@@ -178,7 +225,11 @@
     <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">
       <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
   </div>
-  <div class="pp-filters" id="filters"></div>
+  <div class="pp-filters pp-quick-filters" id="filters" aria-label="よく使う条件"></div>
+  <details class="pp-more-filters" id="pp-more-filters">
+    <summary>その他の条件 <span id="pp-extra-filter" class="pp-extra-current"></span></summary>
+    <div class="pp-filters" id="filters-extra" aria-label="その他の条件"></div>
+  </details>
   <div class="pp-bulk" id="pp-bulk">
     <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
     <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>選択して編集</button>
@@ -196,9 +247,17 @@
     </table>
   </div>
   <div class="pp-cards" id="cards"></div>
-
-  <div class="pp-sec" id="kpi-sec"></div>
-  <div class="pp-sec" id="admin-sec"></div>
+  <div class="pp-pagination" aria-label="提案のページ切替">
+    <span id="pp-page-info" aria-live="polite"></span>
+    <label for="pp-page-size">表示件数</label>
+    <select id="pp-page-size" onchange="ppSetPageSize(this.value)" aria-label="1ページの件数"><option value="20">20件</option><option value="50">50件</option></select>
+    <button type="button" id="pp-page-prev" onclick="ppChangePage(-1)" aria-label="前のページ">前へ</button>
+    <span id="pp-page-label"></span>
+    <button type="button" id="pp-page-next" onclick="ppChangePage(1)" aria-label="次のページ">次へ</button>
+  </div>
+  </section>
+  <section id="pp-view-kpi" role="tabpanel" aria-labelledby="pp-tab-kpi" hidden><div class="pp-sec" id="kpi-sec"></div></section>
+  <section id="pp-view-admin" role="tabpanel" aria-labelledby="pp-tab-admin" hidden><div class="pp-sec" id="admin-sec"></div></section>
 </div>
 
 <div id="pp-drawer"></div>
