@@ -95,5 +95,12 @@ assert.ok(roleSql.includes("public.gw_sales_employee_ok(p_owner, v.tenant_id)"),
 assert.ok(roleSql.includes("gw_sales_proposal_activities"), "変更履歴を保存");
 assert.ok(!roleSql.includes("delete from public.gw_sales_proposals"), "削除はアーカイブで履歴維持");
 assert.ok(roles.includes("gw_sales_set_proposal_stage_owner"), "専用APIから履歴付きRPCを実行");
+assert.ok(roleSql.includes("create or replace function public.gw_sales_transfer_proposal_owner("),
+  "管理者の正式引継ぎRPCを再定義");
+assert.ok(roleSql.includes("create or replace function public.gw_sales_set_supporters("),
+  "管理者の共同担当RPCを再定義");
+assert.ok(readFileSync(resolve(ROOT, "api/sales/proposals/supporters.js"), "utf8")
+  .includes("canManageProposals(ctx)"), "管理者は他人の共同担当も編集可能");
+
 assert.equal(p.proposalOwnerId, null, "既存レコードの元担当未登録でも形が壊れない");
 console.log("PASS Sales all-team visibility / manager bulk actions / inline stage owner updates");
