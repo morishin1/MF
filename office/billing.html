@@ -513,7 +513,7 @@
   }
 
   function openRegister() {
-    const s = { uploadId: null, fileName: "", aiUsed: false, aiOk: false, ai: {}, uploadSeq: 0, aiReading: false, vendorSuggestedName: "", vendorSuggestedReg: "" };
+    const s = { uploadId: null, fileName: "", aiUsed: false, aiOk: false, ai: {}, uploadSeq: 0, aiReading: false, uploading: false, vendorSuggestedName: "", vendorSuggestedReg: "" };
     modal({
       title: "請求書を登録", wide: true,
       intro: "PDF／画像を選ぶと、自動でアップロードしてAI読取を開始します。読み取った値は<b>黄色の候補</b>として入力欄へ反映します。支払先が未登録なら、<b>同じ画面で追加</b>できます。内容を確認してから登録してください（AIでは自動確定しません）。",
@@ -604,6 +604,7 @@
     if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { state_.textContent = "PDF・JPEG・PNG のファイルを選んでください"; el("f-file").value = ""; return; }
     if (file.size > 10 * 1024 * 1024) { state_.textContent = "ファイルは 10MB までです"; el("f-file").value = ""; return; }
     state_.textContent = "アップロード中…";
+    s.uploading = true;
     setErr("");
     try {
       const u = await post("upload", { mimeType: file.type, sizeBytes: file.size });
@@ -621,6 +622,8 @@
     } catch (e) {
       if (seq !== s.uploadSeq) return;
       state_.textContent = e.message || "アップロードに失敗しました";
+    } finally {
+      if (seq === s.uploadSeq) s.uploading = false;
     }
   }
 
@@ -677,6 +680,7 @@
 
   async function submitRegister(btn, s, allowDuplicate = false) {
     setErr("");
+    if (s.uploading || s.aiReading) return setErr("請求書ファイルのアップロード・AI読取中です。完了してから登録してください。");
     if (s.aiUsed && !s.aiOk) return setErr("AI の読取候補を確認してから、登録してください（「確認しました」にチェックを入れます）");
     const b = readInvoiceInputs();
     if (!b.vendorId) return setErr("支払先を選んでください。無ければ、先に［支払先マスタ］から登録してください");
