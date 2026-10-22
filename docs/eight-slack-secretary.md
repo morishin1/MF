@@ -1,89 +1,132 @@
-# EIGHT秘書（Slack 社員向けAI窓口）導入手順 — MVP
+# EIGHT秘書（Slack 社員向けAI窓口）導入・運用手順
 
-社長専用Dotsとは**別アプリ・別権限**です。Dotsの社長個人のメール・Drive・GW接続情報は利用しません。
-実装: `api/slack/eight-secretary.js`（受信）→ Supabase のキュー → `api/cron/eight-secretary.js`（毎分実行）→ Slack返信。
+社長専用Dotsとは**別アプリ・別権限**です。Dotsの社長個人のメール・Drive・GW接続情報、既存Pちゃん Bot の接続・token は利用しません。
+実装: `api/slack/eight-secretary.js`（受信・署名検証・キュー投入）→ Supabase のキュー（`db/147`）→ `api/cron/eight-secretary.js`（毎分）→ `lib/eight-slack-secretary.js` → Slack返信。
 
-## この段階でできること
-- Slackの**EIGHT秘書BotへのDM**で質問。受付した質問は1分周期のジョブで処理します（即時返信ではありません）。
-- GWの `gw_ai_knowledge` を、Slack IDに手動で紐付けた社員の既存GW権限に合わせて検索。一般公開 (`all`) に加え、人事 (`hr`)・経理 (`finance`)・管理者 (`admin`) の知識は既存の閲覧権限を持つ社員だけが回答に使えます。
-- 資料に基づく回答に加え、依頼された場合は低リスクで元に戻せる業務改善案を「提案」と明記して返します。
-- 根拠が無い質問、社長決裁が必要な質問は、森田さんのSlack DMへ質問を送信。
-- 森田さんが**そのDMのスレッド内**で `承認: 回答本文` と返信すると、質問者のDMスレッドへ正式回答。
-- SlackイベントIDで受信の重複を防止。bot投稿を再処理しない。社内名簿との本人紐付けは手動で厳格に確認。
+> 状態: 実装とモック／ローカルPostgreSQLでの検証まで。Slack Appの作成・権限付与・インストール、実Slack送信、本番DB適用、本番マージは**それぞれ代表の承認後**に行います。
 
-## 未実装（次の段階）
-- Slackの公開チャンネルでの @メンション受付（DMのみ）
-- 本人の日報・予定など、GWの個人業務データを直接読んでの個別コーチング
+## できること
+- Slackの**EIGHT秘書BotへのDM**で質問。1分周期のジョブで処理します（即時返信ではありません）。
+- Slack ID に**明示的に紐付けた**在籍社員の既存GW権限の範囲で `gw_ai_knowledge`（`db/113`）を検索して回答。一般（`all`）に加え、人事（`hr`）・経理（`finance`）・管理者（`admin`）の資料は既存の閲覧権限を持つ社員だけが使えます。
+- 依頼された場合は、低リスクで元に戻せる業務改善案を「提案」と明記して返します。
+- 根拠が無い質問、社長決裁が必要な質問は**代表のSlack DM**へ判断依頼を送信。
+- 代表が**その判断依頼のスレッド内**で `承認: 回答本文` と返信すると、約1〜2分後に質問者のDMスレッドへ `【社長確認済み】` として回答。
+
+## この PR の範囲外（未実装・別途設計）
+- Slack公開チャンネル／プライベートチャンネルでの @メンション受付（DMのみ。`app_mentions:read`・`channels:history` 等は付与しない）
+- 日報・予定の AI 行動コーチ（MF #167 の別作業）。本人の日報・予定など個人業務データは読みません
+- カレンダー連携
 - 社長専用DotsとのAPI自動同期
-- Slackの返信が万一失敗した後の再配信管理画面
-- 社長が操作しやすい承認ボタン／社員・Slack本人紐付け管理画面
+- 承認ボタン（Interactivity）、社員・Slack本人紐付けの管理画面、停止案件の管理画面
 
-## 管理者が行う作業（機密情報をチャットやGitHubに貼らない）
+## 安全規則（実装済み・モックテスト済み）
 
-1. Supabase（`mf` が使用する**既存DB**）のSQL Editorで `db/147_slack_ai_secretary.sql` を適用。
-2. [Slack API](https://api.slack.com/apps) で**新規Slack App（From scratch）** を作成。
-   - App Display Name: `Pちゃん（EIGHT秘書）`
-   - Bot Token Scopes: `chat:write`、`im:history`
-   - Event Subscriptions / Subscribe to bot events: `message.im`
-   - App Home: メッセージ（DM）を有効化
-   - Event Request URL: `https://gw.8grp.co.jp/api/slack/eight-secretary`
-   - SlackのRequest URL確認は署名チェックが必要なため、先に環境変数とデプロイを済ませてからURLの検証を行う
-   - ワークスペース管理者がインストールを承認する
-3. Vercelの`mf`プロジェクトに下記の環境変数を**サーバー側Secret**として設定。コードやPRに値を入れない。
-   - `SLACK_AI_SIGNING_SECRET` = Slack Basic Information の Signing Secret
-   - `SLACK_AI_BOT_TOKEN` = Slack OAuth Bot User OAuth Token（xoxb-）
-   - `SLACK_AI_TEAM_ID` = 実際のSlack Workspace ID（T...）
-   - `SLACK_AI_OWNER_USER_ID` = 社長本人のSlackユーザーID（U...）
-   - `SLACK_AI_TENANT_ID` = mfの`tenants.id`（UUID）
-   - `CRON_SECRET` = 既存のVercel Cron認証シークレット（既にある場合は**変更しない**）
-4. GWの `gw_employees` に存在する在籍社員と、Slack本人IDを**人が確認**して `gw_slack_ai_users` に登録。氏名だけの自動マッチは禁止。退職者・外部参加者は登録しない。
-5. `admin-ai.html` で社内ナレッジの内容・公開範囲・閲覧可能な社員を確認し、管理者が必要分だけ有効化する。Slack Bot が参照する範囲は質問者の既存GW権限に連動する。
-6. PRをレビューし、SQL・Secrets・Slack Appの準備ができた後に、管理者が本番マージ・デプロイを承認。
-7. 会社のテストユーザー1人のDMで「日報の書き方は？」等を質問。本人のGW権限内の知識だけに基づく回答を確認。
-8. 回答資料のない質問を送り、社長に確認DMが届くことを確認。社長がテスト用の回答を明示して承認し、本人へ届くことを確認。**テスト前に相手の同意を得る**。
+| 規則 | 実装 | テスト |
+|---|---|---|
+| 本人確認：Slack workspace（team ID）＋ tenant ＋ `gw_slack_ai_users` の明示紐付け（Slack user ID ↔ GW employee_id）。表示名では決めない | 受信で `team_id` 照合、処理で紐付け・在籍・GWアカウント・`gwContext` の tenant/社員一致を確認。`revoked_at` 入りの紐付け・別tenant・別workspace・未登録は拒否 | access: 未紐付け・退職・tenant不一致等 8件、approval: `identity:` 4件 |
+| 権限の再確認：検索時と**送信直前**の両方。代表の権限で代用しない | 検索は質問者のスコープのみ。即時回答はAI処理後に再照合、承認回答は送信直前に質問時スナップショットと比較 | access: delivery revalidation 7件・immediate-answer 4件、approval: `permission:` |
+| 承認は「回答本文・質問・質問者・宛先・承認メッセージ」に結び付く | 承認時に `approval_hash`（SHA-256）を保存し、送信直前に再計算。不一致・欠落は `review_required` | approval: `binding:` 5件 |
+| 承認後の編集・削除・重複承認で承認失効 | 承認から60秒は送信を保留。保留中に代表が承認メッセージを編集（`message_changed`）・削除（`message_deleted`）、または別の承認を送ると、承認を取り消して `pending` に戻し、その ts 以前の承認は以後受け付けない（再承認が必要） | approval: `approval:` 7件 |
+| 判断依頼を送った代表DMのスレッドだけが承認できる | `owner_dm_channel` + `owner_dm_ts` で照合 | approval: `only the owner DM thread` |
+| 二重送信防止 | `event_id` 主キー＋`message_key`（channel:ts）一意索引、キューの CAS 取得、承認送信前に `delivery_attempted` を記録（承認ハッシュ付き CAS） | secretary: duplicate、approval: `dedupe:`、SQL: concurrent workers |
+| 結果不明は自動再送しない／`failed`・`review_required` も自動再送しない | 送信例外は `delivery_uncertain`。`failed` イベント・停止案件はジョブが再処理しない | secretary / approval: `delivery_uncertain` 等 |
+| 指示注入を権限変更として扱わない | スコープは DB の権限からだけ決定。質問・資料はモデルへ未信頼 JSON として渡す。社員の「承認:」は承認にならない | approval: `injection:` 2件、secretary: prompt |
+| キュー保存失敗を成功扱いしない | 判断依頼の保存・代表DM ts の保存・完了記録の失敗は `failed`（または例外）にし、質問者へ「依頼しました」を送らない | access: persistence 2件、approval: `queue:` 2件 |
+| 代表向けの報告は代表DMだけ | 判断依頼・承認受付・承認取消・送信停止・送信結果不明の通知は代表DM（判断依頼スレッド）へ。チャンネルへは送らない | approval / access の owner notice 確認 |
 
-## 運用上の注意
-- 受信から返信までは最大で約1分＋AI処理時間がかかります。Cron停止時は返信されません。
-- Cronには `CRON_SECRET` を必須にしています。受信にはSlackのHMAC署名と5分以内のタイムスタンプが必要。
-- Slackに存在するだけでは回答対象になりません。GWの在籍社員・明示したID紐付け・同一テナントを検証します。
-- Slack IDからGW社員を解決した後、既存のGWロールとアプリ利用権限から回答対象者の知識スコープを決めます。service role はサーバー内だけで使い、別社員の記録は読みません。
-- 質問文とナレッジ本文は未信頼データとしてモデルに渡し、その中の命令に従わず、必要な根拠だけを短く回答するよう指示します。Slackの書式解釈とリンク展開も無効にしています。
-- AIは人事評価・懲戒・契約締結・給与・値引きなどの判断を自動実行しません。
-- Slackへの送信は**EIGHT秘書Bot名義**。社長本人アカウントを使いません。
-- 社長からの承認はBotが投稿した判断依頼メッセージの**Slackスレッドに返信**すること。返信本文の先頭に `承認:` を付けます。
-- キュー処理が失敗した場合 `gw_slack_ai_events.state='failed'` に残ります。社長承認後の送信は重複を防ぐため送信前に `delivery_attempted` を記録します。通信結果が曖昧なときは `delivery_uncertain` に止め、Slack上の送信を人が確認するまで自動再送しません。
-- 承認返信の送信直前にも在籍状態・Slack/GW本人紐付け・質問時の知識スコープを再照合します。退職、紐付け先変更、権限縮小、照合失敗、または質問時スコープ未記録の旧データは `review_required` に留め、自動送信・別宛先への転送・権限復旧後の自動再送をしません。管理者が宛先と回答を再確認する必要があります。
-- スコープ比較は保守的な送信停止であり、社長が書いた回答本文の機密性を自動判定するものではありません。確認直後の権限変更と外部Slack送信を同一トランザクションにはできないため、緊急の利用停止時には保留中の承認返信も停止・確認してください。
-- 即時AI回答も、AI処理後の送信直前に本人・スコープを再照合します。不一致や照合障害は送信せず、イベントを `failed` として管理者確認に回します。
-- 1分ごとのVercel Cronを使うため、対象チームのプランがProまたはEnterpriseであることを確認してください。Hobbyプランでは1分間隔のCronはデプロイできません。
-- Botが使う `gw_ai_knowledge` は既存のSQL `db/113_ai_assistant.sql` が必要。利用前に有効な資料を設定してください。
-- 社長判断依頼で引用された情報は社長のSlack DMへ送られます。機密を質問に記載しない運用も周知してください。
+補足:
+- 承認の保留（60秒）は `DEFAULT_APPROVAL_HOLD_MS`。Cron が1分周期なので、承認から送信まで実際は1〜2分です。送信処理に入った後の編集は取り消せません（代表DMに「編集後の内容は送っていません」と通知）。
+- 確認直後の権限変更と外部Slack送信は同一トランザクションにできません。緊急の利用停止時は該当者の紐付けを失効（`revoked_at`）させ、保留中の承認も確認してください。
+- スコープ比較は保守的な送信停止であり、代表が書いた回答本文の機密性を自動判定するものではありません。
+- 判断依頼には質問本文が含まれ、代表のDMに届きます。機密を質問に書かない運用も周知してください。
+- 送信は**EIGHT秘書（AI）Bot名義**。社長本人アカウントは使わず、AIであることを表示名で明示します。
 
-## 確認方法
-```sh
-node --experimental-test-module-mocks test/eight-slack-secretary.mjs
-node --experimental-test-module-mocks test/eight-slack-secretary-access.mjs
-npm test
-```
+## Slack App（専用・最小権限）
 
-## 停止した回答の管理者確認（自動通知なし）
+manifest: [`docs/slack/eight-secretary-app-manifest.json`](slack/eight-secretary-app-manifest.json)（Slack の「Create New App → From an app manifest」に貼る）。
 
-この変更は先に上記 SQL を適用してからコードをリリースします。適用順序を逆にしないでください。既存の承認待ちデータには質問時スコープがないため、送信時に `review_required` になります。現在の権限を過去のスナップショットとして埋めず、宛先・回答内容を人が再確認してください。
+| 項目 | 値 | 理由 |
+|---|---|---|
+| Bot scope `chat:write` | 必須 | 質問者DM・代表DMへの返信（ユーザーIDを channel に指定すると Bot とのDMに投稿） |
+| Bot scope `im:history` | 必須 | `message.im` イベント（DMの受信と、代表の承認メッセージの編集・削除）の購読に必要 |
+| Bot event `message.im` | 必須 | DMだけを受け付ける |
+| それ以外 | 付与しない | `im:write`・`users:read`・`channels:*`・`app_mentions:read`・user scope・Interactivity は不要 |
+| Request URL | `https://<GW本番ドメイン>/api/slack/eight-secretary` | プレースホルダ。デプロイと環境変数設定の後に Slack 側で検証 |
 
-`review_required` と `failed` は現段階では社長へ自動通知されません。稼働中は管理者が以下の読み取り専用照会を定期確認します（対象のテナント／SlackワークスペースIDを確認して指定）。
+- 未検証: 新しい専用 App から各社員との1対1 DM に投稿できるか（既存 P Bot では他メンバーとの1対1 DM 失敗の記録あり）。テスト送信で失敗した場合のみ、`im:write`（`conversations.open` 用）追加を**改めて承認を得て**検討します。
+- App Home の Messages タブを有効化（社員が Bot にDMできるようにする）。
+
+## 環境変数（名前のみ。値はVercelのサーバー側Secretに設定し、コード・PR・チャットに書かない）
+- `SLACK_AI_SIGNING_SECRET`（Slack Basic Information の Signing Secret）
+- `SLACK_AI_BOT_TOKEN`（Bot User OAuth Token）
+- `SLACK_AI_TEAM_ID`（対象 Slack Workspace ID）
+- `SLACK_AI_OWNER_USER_ID`（代表本人の Slack ユーザーID。承認・編集の判定と代表DMの宛先。受信側でも編集イベントの絞り込みに使う）
+- `SLACK_AI_TENANT_ID`（mf の `tenants.id`）
+- `CRON_SECRET`（既存の Vercel Cron 認証。既にある場合は**変更しない**）
+
+## DB（`db/147_slack_ai_secretary.sql`）
+- 前提: `schema.sql`（tenants）、`005_groupware_core.sql`（gw_employees）。回答時に `113_ai_assistant.sql`（`gw_ai_knowledge`）を読むため、113 が本番適用済みであることを先に確認します。
+- 表: `gw_slack_ai_users`（明示紐付け・`revoked_at`）、`gw_slack_ai_events`（受信キュー・`message_key` 一意）、`gw_slack_ai_escalations`（判断依頼・承認結び付け）。
+- RLS 有効・ポリシー無し、`anon` / `authenticated` の表権限を `revoke`（service role のサーバー処理だけが使う）。
+- 再実行可能（べき等）。承認結び付けの CHECK 制約は旧データを検証しない `not valid`（旧データはアプリ側で送信せず `review_required`）。
+- 確認（読み取りのみ）: `db/check_147_slack_ai_secretary.sql`。戻し: `db/rollback_147_slack_ai_secretary.sql`（記録・未処理イベントがあると中断し、何も消さない）。
+- 番号: 147 は main・オープン PR（143: #151/#157/#163、144: #154、148: #167 等）と重複なし。
+- ローカル検証: `test/sql/run.sh`（使い捨て PostgreSQL 16。リモートDBには接続しない）で 099→113→147 の適用・再適用、RLS、一意性、CAS、承認結び付け制約、2セッション同時取得、ロールバック安全装置、再適用を確認。
+
+## 導入手順（各段階で承認を得る）
+1. **［承認］本番DB適用**: Supabase（mf が使う既存DB）の SQL Editor で `db/113` が適用済みか確認後、`db/147_slack_ai_secretary.sql` を適用し、`db/check_147_slack_ai_secretary.sql` で確認。コードより先に適用する（順序を逆にしない）。
+2. **［承認］Slack App作成・インストール**: manifest から専用 App を作成し、ワークスペース管理者がインストールを承認。scope は上表の2つだけ。
+3. **［承認］環境変数設定**: 上記の名前で Vercel にサーバー側 Secret を設定。
+4. **［承認］本番マージ・デプロイ** 後、Slack の Event Subscriptions で Request URL を検証。1分間隔 Cron のため Vercel プランが Pro/Enterprise であることを確認。
+5. **紐付け登録**: GW の `gw_employees` の在籍社員と Slack ユーザーIDを**人が確認**して `gw_slack_ai_users` に登録（SQL 末尾の例）。氏名だけの自動照合は禁止。退職者・外部参加者は登録しない。失効は `revoked_at` を入れる。
+6. `admin-ai.html` で社内ナレッジの内容・公開範囲を確認し、必要分だけ有効化。
+7. **［承認］テスト送信**: 送信元（EIGHT秘書（AI））・宛先（同意を得たテスト社員1名と代表）・本文を事前に承認してから、①資料で答えられる質問、②資料の無い質問→代表DM→承認→本人回答、③承認メッセージの編集で承認が取り消されること、を確認。
+
+## 停止・異常時の確認手順（runbook）
+
+自動で再送・状態の巻き戻し・宛先変更はしません。下の照会はすべて**読み取りのみ**です（質問・回答本文は表示しない）。状態の書き換えはせず、記録は監査用にそのまま残します。
 
 ```sql
-select id, created_at, status, delivery_error
+-- 判断依頼の停止・不明・処理中
+select id, created_at, status, delivery_error, delivery_attempted_at, approved_at
 from public.gw_slack_ai_escalations
 where tenant_id = '<対象テナントUUID>'::uuid
   and status in ('review_required', 'delivery_uncertain', 'delivery_attempted')
 order by created_at;
 
+-- 受信イベントの失敗・処理中（processing が10分以上続くものは処理落ちの可能性）
 select event_id, received_at, state, last_error
 from public.gw_slack_ai_events
 where slack_team_id = '<対象SlackワークスペースID>'
   and state in ('failed', 'processing')
 order by received_at;
+
+-- 承認が取り消された依頼（代表の再承認待ち）
+select id, created_at, delivery_error, approval_invalidated_ts
+from public.gw_slack_ai_escalations
+where tenant_id = '<対象テナントUUID>'::uuid
+  and status = 'pending' and delivery_error in ('approval_edited', 'approval_deleted', 'approval_conflict')
+order by created_at;
 ```
 
-`processing` / `delivery_attempted` は実行中の可能性があるため、照会しただけで障害と断定しません。実行ログとSlack側の送信有無を突き合わせます。停止理由が本人・権限の変化なら、対象者と回答の範囲を再確認してから新たな承認を得ます。宛先変更、`queued` / `pending` への手動戻し、再送を自動化しないでください。
+| 状態 | 意味 | 手動確認と対応 |
+|---|---|---|
+| `review_required`（`requester_access_changed` / `requester_scopes_reduced` / `requester_scope_snapshot_missing` / `requester_access_check_failed`） | 承認後に質問者の在籍・紐付け・権限が変わった、または確認できなかった。**送信していない** | 代表DMに通知済み。管理者が質問者の在籍・権限と回答内容の範囲を確認し、必要なら社員に再質問してもらう（新しい依頼として承認を取り直す）。旧承認の流用・宛先変更はしない |
+| `review_required`（`approval_binding_mismatch` / `approval_binding_missing`） | 承認後に質問・宛先・回答本文が変わった、または旧データで結び付けが無い。**送信していない** | DB変更の経緯を確認。社員に再質問してもらい、新しい依頼で承認を取り直す |
+| `delivery_uncertain` | Slack への送信で通信エラー等。**届いた可能性がある** | 代表DMに通知済み。質問者本人に `【社長確認済み】` が届いたか確認（本人の画面で）。未着なら代表または管理者が人として回答するか、社員に再質問してもらう。自動再送しない |
+| `delivery_attempted` が数分以上続く | 送信処理中に処理落ちした可能性。届いた可能性がある | `delivery_uncertain` と同じ扱い |
+| イベント `failed` | 受信後の処理で失敗（本人照合の変化、保存失敗、Slack送信失敗など）。返信が届いた可能性もある | `last_error` を確認。質問者に返信の有無を確認し、必要なら再質問してもらう（新しいメッセージは新しいイベント）。`queued` に戻さない |
+| イベント `processing` が10分以上 | ワーカーが途中で停止 | Vercel のログと突き合わせ、質問者に返信の有無を確認。`queued` に戻さない |
+| `pending`＋`approval_edited` 等 | 代表が承認メッセージを編集・削除、または承認を複数送ったため承認取消。**送信していない** | 代表DMに通知済み。代表が判断依頼スレッドに新しく `承認: 回答本文` を1件送る |
+
+紐付けの緊急停止は `revoked_at` を入れる（本番での実行は承認後）。Cron（`/api/cron/eight-secretary`）を止めると処理は止まり、受信はキューに溜まります。
+
+## 確認方法（モック・ローカルのみ。実Slack・実DBに接続しない）
+```sh
+node --experimental-test-module-mocks test/eight-slack-secretary.mjs
+node --experimental-test-module-mocks test/eight-slack-secretary-access.mjs
+node --experimental-test-module-mocks test/eight-slack-secretary-approval.mjs
+node test/run.mjs node
+test/sql/run.sh   # root 以外のユーザーで実行（PostgreSQL 16）
+```
+モックとローカルDBでのPASSは、実Slackでの配信成功や本番DBでの動作の保証ではありません。
