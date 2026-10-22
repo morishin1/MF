@@ -519,6 +519,7 @@
     `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.display_name)}</option>`).join("");
   let stageFilter = "";
   let categoryFilter = "active";
+  let spotCount = null;
   let leadReady = true;      // db/118（リードの列）が入っているか。無ければ無限道場の欄を出さない
   let openId = null;
   let canDecide = false;
@@ -550,6 +551,7 @@
     renderCategoryTabs();
     renderStageTabs();
     load();
+    loadSpotCount();
     const q = new URLSearchParams(location.search);
     if (q.get("new")) openAdd();
     if (q.get("id")) openDetail(q.get("id"));
@@ -561,10 +563,17 @@
   const catList = () => applicants.filter((a) => inCategory(a, categoryFilter));
   const listUrl = () => (categoryFilter === "active" ? "/hr/applicants.html" : `/hr/applicants.html?category=${categoryFilter}`);
 
+  async function loadSpotCount() {
+    try {
+      const r=await API.api("/api/hr/spot?summary=1");
+      spotCount=Number(r.count);
+    } catch { spotCount=null; }
+    renderCategoryTabs();
+  }
   function renderCategoryTabs() {
     API.morph(el("cat-tabs"), CATEGORIES.map((c) => {
       const n = applicants.filter((a) => inCategory(a, c.key)).length;
-      return `${c.key === "closed" ? '<a role="tab" aria-selected="false" class="spot-link" href="/hr/spot.html">スポット人材</a>' : ""}<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
+      return `${c.key === "closed" ? '<a role="tab" aria-selected="false" class="spot-link" href="/hr/spot.html">スポット人材<span class="n">'+(spotCount===null?"—":spotCount)+'</span></a>' : ""}<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
         data-category="${esc(c.key)}" onclick="setCategory('${esc(c.key)}')">${esc(c.label)}<span class="n">${n}</span></button>`;
     }).join(""));
     // 無限道場の通知先（運営担当）は、無限道場を見ているときだけ出す
