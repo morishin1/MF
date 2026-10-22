@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     return json(res, 503, { error: 'slack_ai_not_configured' });
   }
   try {
-    const out = await processQueuedEvents(admin(), config, 15);
+    const out = await processQueuedEvents(admin(), config, 5);
     return json(res, 200, { ok: true, ...out });
   } catch (e) {
     console.error('[slack-secretary-worker]', e?.message || e);
