@@ -146,8 +146,8 @@ try {
       approved_answer: '回答', requester_channel: 'D123', requester_thread_ts: '1.2',
     }],
   });
-  await processQueuedEvents(db, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner' });
-  await processQueuedEvents(db, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner' });
+  await processQueuedEvents(db, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner', ownerDmChannel: 'Downer' });
+  await processQueuedEvents(db, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner', ownerDmChannel: 'Downer' });
   assert.equal(db.rows.gw_slack_ai_escalations[0].status, 'answered');
   assert.equal(posted.length, 2, 'an approved reply is only delivered once');
 
@@ -173,8 +173,8 @@ try {
   const oldWarn = console.warn;
   console.warn = () => {};
   try {
-    await processQueuedEvents(uncertainDb, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner' });
-    await processQueuedEvents(uncertainDb, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner' });
+    await processQueuedEvents(uncertainDb, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner', ownerDmChannel: 'Downer' });
+    await processQueuedEvents(uncertainDb, { tenantId: 'tenant-1', teamId: 'T123', botToken: 'xoxb-test', ownerSlackId: 'Uowner', ownerDmChannel: 'Downer' });
   } finally {
     console.warn = oldWarn;
   }

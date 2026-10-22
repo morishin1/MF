@@ -6,7 +6,7 @@ mock.module('../lib/auth.js', { namedExports: { getMemberships: async () => acti
 mock.module('../lib/supabase.js', { namedExports: { admin: () => activeDb } });
 mock.module('../lib/ai-assistant.js', { namedExports: { askAssistant: async input => { aiInputs.push(input); if (onAi) onAi(); return aiResult; } } });
 const { processSlackEvent, processQueuedEvents, slackPost } = await import('../lib/eight-slack-secretary.js');
-const config = { tenantId: 'tenant', teamId: 'T1', ownerSlackId: 'Uowner', botToken: 'mock-only', approvalHoldMs: 0 };
+const config = { tenantId: 'tenant', teamId: 'T1', ownerSlackId: 'Uowner', botToken: 'mock-only', approvalHoldMs: 0, ownerDmChannel: 'Downer', autoAnswer: true };
 const toRequester = () => sent.filter(m => m.channel === 'D1');
 const toOwner = () => sent.filter(m => m.channel === 'Downer' || m.channel === 'Uowner');
 let sent = [], failure;

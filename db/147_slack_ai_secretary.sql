@@ -65,7 +65,9 @@ alter table public.gw_slack_ai_escalations
   add column if not exists approval_ts text,
   add column if not exists approved_at timestamptz,
   add column if not exists approval_hash text,
-  add column if not exists approval_invalidated_ts text;
+  add column if not exists approval_invalidated_ts text,
+  -- 自動回答 OFF（既定）のとき、資料に基づく AI 回答案を代表の承認用に保持する（社員へは未送信）。
+  add column if not exists ai_draft_answer text;
 alter table public.gw_slack_ai_escalations
   drop constraint if exists gw_slack_ai_escalations_status_check;
 alter table public.gw_slack_ai_escalations

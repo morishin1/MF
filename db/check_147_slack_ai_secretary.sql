@@ -16,7 +16,7 @@ select table_name, column_name from information_schema.columns
    and (table_name, column_name) in (('gw_slack_ai_users','revoked_at'), ('gw_slack_ai_events','message_key'),
      ('gw_slack_ai_escalations','owner_dm_channel'), ('gw_slack_ai_escalations','approval_ts'),
      ('gw_slack_ai_escalations','approved_at'), ('gw_slack_ai_escalations','approval_hash'),
-     ('gw_slack_ai_escalations','approval_invalidated_ts'), ('gw_slack_ai_escalations','requester_knowledge_scopes'))
+     ('gw_slack_ai_escalations','approval_invalidated_ts'), ('gw_slack_ai_escalations','ai_draft_answer'), ('gw_slack_ai_escalations','requester_knowledge_scopes'))
  order by 1, 2;
 select indexname from pg_indexes where schemaname = 'public' and tablename like 'gw_slack_ai_%' order by indexname;
 select conname, convalidated from pg_constraint

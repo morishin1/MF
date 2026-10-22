@@ -11,7 +11,7 @@ const { processSlackEvent, processQueuedEvents, approvalBindingHash, compareSlac
   await import('../lib/eight-slack-secretary.js');
 const { createSlackEventsHandler } = await import('../api/slack/eight-secretary.js');
 
-const base = { tenantId: 'tenant', teamId: 'T1', ownerSlackId: 'Uowner', botToken: 'mock-only' };
+const base = { tenantId: 'tenant', teamId: 'T1', ownerSlackId: 'Uowner', botToken: 'mock-only', ownerDmChannel: 'Downer', autoAnswer: true };
 const held = { ...base, approvalHoldMs: 60_000 };
 const instant = { ...base, approvalHoldMs: 0 };
 let sent = [], failure = null;
@@ -277,7 +277,7 @@ console.log('PASS: approval binding / identity / dedupe / injection / queue, ' +
 {
   const { readFileSync } = await import('node:fs');
   const manifest = JSON.parse(readFileSync(new URL('../docs/slack/eight-secretary-app-manifest.json', import.meta.url), 'utf8'));
-  assert.deepEqual(manifest.oauth_config.scopes.bot.slice().sort(), ['chat:write', 'im:history'], 'bot scopes stay minimal');
+  assert.deepEqual(manifest.oauth_config.scopes.bot.slice().sort(), ['chat:write', 'im:history', 'im:write', 'users:read'], 'bot scopes stay minimal');
   assert.equal(manifest.oauth_config.scopes.user, undefined, 'no user-token scopes');
   assert.deepEqual(manifest.settings.event_subscriptions.bot_events, ['message.im'], 'DM events only (no channel mentions)');
   assert.equal(manifest.settings.interactivity, undefined);
@@ -285,5 +285,5 @@ console.log('PASS: approval binding / identity / dedupe / injection / queue, ' +
   assert.equal(manifest.features.app_home.messages_tab_enabled, true);
   assert.match(manifest.features.bot_user.display_name, /AI/, 'the bot does not hide that it is an AI');
   assert.ok(!/xox[a-z]-|hooks\.slack\.com/.test(JSON.stringify(manifest)), 'no secrets in the manifest');
-  console.log('PASS: Slack App manifest keeps chat:write + im:history / message.im only');
+  console.log('PASS: Slack App manifest keeps chat:write, im:history, im:write, users:read / message.im only');
 }

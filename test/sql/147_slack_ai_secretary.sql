@@ -56,7 +56,7 @@ select pg_temp.expect('authenticated has no table privilege',
   (select count(*)::int from information_schema.role_table_grants where table_name like 'gw_slack_ai_%' and grantee in ('anon','authenticated')), 0);
 select pg_temp.expect('approval binding columns exist',
   (select count(*)::int from information_schema.columns where table_name='gw_slack_ai_escalations'
-    and column_name in ('owner_dm_channel','approval_ts','approved_at','approval_hash','approval_invalidated_ts')), 5);
+    and column_name in ('owner_dm_channel','approval_ts','approved_at','approval_hash','approval_invalidated_ts','ai_draft_answer')), 6);
 
 -- テスト用データ（service role 相当＝postgres で投入）
 insert into public.tenants(id,name) values
