@@ -18,13 +18,14 @@
 //  ほか：署名（鍵・用途・時刻）、自動タスクはチェックで完了にできない、期限変更は理由が必須、
 //        企業に紐付ければ企業の営業履歴にも写る、ドメインが1社一致したら自動で紐付く
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { mock } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join as _join } from "node:path";
 import { createMemDb } from "./_memdb.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const atRoot = (p) => _join(ROOT, p);
+const atRoot = (p) => pathToFileURL(_join(ROOT, p)).href;
 const uid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const T1 = uid(1), T2 = uid(2);
 const E_OWNER = uid(11), E_MGR = uid(12), E_S1 = uid(13), E_S2 = uid(14), E_NONE = uid(15), E_T2 = uid(16), E_LEFT = uid(17);
@@ -64,6 +65,10 @@ const mem = createMemDb({
       defaults: () => ({ status: "open", auto: false, created_at: nowIso(), updated_at: nowIso() }),
       check: (r) => ((r.status === "done") !== Boolean(r.done_at && r.done_activity_id) ? "gw_sales_proposal_tasks_done"
         : r.status === "canceled" && !String(r.cancel_reason || "").trim() ? "gw_sales_proposal_tasks_cancel" : null),
+    },
+    gw_sales_proposal_assignment_requests: {
+      required: ["tenant_id", "proposal_id", "stage", "change_type", "status", "reason"],
+      defaults: () => ({ created_at: nowIso() }),
     },
     gw_sales_proposal_sync_log: {
       required: ["tenant_id", "event_id", "event_type", "status"],
@@ -113,6 +118,7 @@ const { default: intakeApi } = await import(atRoot("api/sales/proposals/intake.j
 const { default: statusApi } = await import(atRoot("api/sales/proposals/status.js"));
 const { default: settingsApi } = await import(atRoot("api/sales/proposals/settings.js"));
 const { default: syncApi } = await import(atRoot("api/sales/proposals/sync.js"));
+const { default: assignmentApi } = await import(atRoot("api/sales/proposals/assignment-requests.js"));
 const { signGwRequest } = await import(atRoot("lib/sales-proposal-intake.js"));
 const { signLeadRequest } = await import(atRoot("lib/hr-leads.js"));
 
@@ -124,6 +130,66 @@ const S1 = ctxOf(E_S1, ["sales"]);
 const S2 = ctxOf(E_S2, ["sales"]);
 const NOPERM = ctxOf(E_NONE, [], { apps: [] });
 const OTHER_T = ctxOf(E_T2, ["owner"], { tenantId: T2, apps: [] });
+
+const rpcError = (code, message) => Object.assign(new Error(message), { code });
+const stageOwner = (proposal, stage) => stage === "proposal" ? proposal.sales_owner_id
+  : stage === "cs" ? proposal.cs_owner_id || proposal.sales_owner_id : proposal.closing_owner_id || proposal.sales_owner_id;
+function applyAssignment(proposal, stage, ownerId, actorId, reason, changeId) {
+  const fromOwner = stageOwner(proposal, stage);
+  if (fromOwner === ownerId) throw rpcError("23514", "assignment_unchanged");
+  if (stage === "proposal" || proposal.handoff_stage === stage) proposal.sales_owner_id = ownerId;
+  if (stage === "cs" && proposal.cs_owner_id) proposal.cs_owner_id = ownerId;
+  if (stage === "closing" && proposal.closing_owner_id) proposal.closing_owner_id = ownerId;
+  for (const task of tasksOf(proposal.id)) {
+    if (task.status === "open" && task.kind !== "manager_review" && (task.assignee_id === fromOwner || !task.assignee_id)) task.assignee_id = ownerId;
+  }
+  tbl("gw_sales_proposal_activities").push({ id: randomUUID(), tenant_id: proposal.tenant_id,
+    proposal_id: proposal.id, company_id: proposal.company_id, kind: "assign", occurred_at: nowIso(),
+    employee_id: actorId, note: `担当変更（${stage}）：${reason}`, detail: { stage, from: fromOwner, to: ownerId, reason, changeId } });
+  return fromOwner;
+}
+mem.registerRpc("gw_sales_proposal_assign_stage_owner", ({ p_proposal, p_stage, p_to_owner, p_reason }) => {
+  const proposal = tbl("gw_sales_proposals").find((p) => p.id === p_proposal && p.tenant_id === who?.tenantId);
+  const actor = who?.employee?.id;
+  const manager = Boolean(who?.isAdmin || who?.roles?.some((r) => ["owner", "manager"].includes(r)));
+  if (!proposal || (!manager && proposal.sales_owner_id !== actor)) throw rpcError("42501", "forbidden");
+  if (!p_reason?.trim()) throw rpcError("23514", "reason_required");
+  const from = stageOwner(proposal, p_stage);
+  const id = randomUUID();
+  applyAssignment(proposal, p_stage, p_to_owner, actor, p_reason, id);
+  tbl("gw_sales_proposal_assignment_requests").push({ id, tenant_id: proposal.tenant_id, proposal_id: proposal.id,
+    stage: p_stage, change_type: "direct", from_owner_id: from, to_owner_id: p_to_owner,
+    requested_by_employee_id: actor, reviewed_by_employee_id: actor, status: "approved", reason: p_reason,
+    created_at: nowIso(), resolved_at: nowIso() });
+  return id;
+});
+mem.registerRpc("gw_sales_proposal_request_assignment", ({ p_proposal, p_stage, p_to_owner, p_reason }) => {
+  const proposal = tbl("gw_sales_proposals").find((p) => p.id === p_proposal && p.tenant_id === who?.tenantId);
+  const actor = who?.employee?.id;
+  const manager = Boolean(who?.isAdmin || who?.roles?.some((r) => ["owner", "manager"].includes(r)));
+  if (!proposal || manager || proposal.sales_owner_id === actor || stageOwner(proposal, p_stage) === actor) throw rpcError("23514", "request_not_needed");
+  if (tbl("gw_sales_proposal_assignment_requests").some((r) => r.proposal_id === p_proposal && r.stage === p_stage && r.status === "pending")) throw rpcError("23505", "pending request");
+  const id = randomUUID();
+  tbl("gw_sales_proposal_assignment_requests").push({ id, tenant_id: proposal.tenant_id, proposal_id: proposal.id,
+    stage: p_stage, change_type: "request", from_owner_id: stageOwner(proposal, p_stage), to_owner_id: p_to_owner,
+    requested_by_employee_id: actor, reviewed_by_employee_id: null, status: "pending", reason: p_reason,
+    review_note: null, created_at: nowIso(), resolved_at: null });
+  return id;
+});
+mem.registerRpc("gw_sales_proposal_review_assignment_request", ({ p_request, p_decision, p_note }) => {
+  const request = tbl("gw_sales_proposal_assignment_requests").find((r) => r.id === p_request);
+  const proposal = tbl("gw_sales_proposals").find((p) => p.id === request?.proposal_id);
+  const actor = who?.employee?.id;
+  const manager = Boolean(who?.isAdmin || who?.roles?.some((r) => ["owner", "manager"].includes(r)));
+  if (!request || !proposal || request.status !== "pending") throw rpcError("23514", "request_not_pending");
+  if (request.requested_by_employee_id === actor) throw rpcError("42501", "self_review_forbidden");
+  if (!manager && stageOwner(proposal, request.stage) !== actor) throw rpcError("42501", "forbidden");
+  if (stageOwner(proposal, request.stage) !== request.from_owner_id) throw rpcError("23514", "request_stale");
+  if (p_decision === "approve") applyAssignment(proposal, request.stage, request.to_owner_id, actor, request.reason, request.id);
+  request.status = p_decision === "approve" ? "approved" : "rejected";
+  request.reviewed_by_employee_id = actor; request.review_note = p_note; request.resolved_at = nowIso();
+  return request.id;
+});
 
 const res = () => {
   const r = { statusCode: 0, body: null, headers: {} };
@@ -280,7 +346,7 @@ await ok("3 同じイベントの再送は replayed（増えない）。送り�
   assert.equal(proposals().length, 2);
 });
 
-await ok("営業担当が決まらなければ未割当（要確認）で起票し、管理側へ通知。あとで決まれば担当とタスクが寄る", async () => {
+await ok("ENGER担当が確定時に照合できなければSalesは未割当のまま。CL担当の後続変更は参照欄だけ更新", async () => {
   setup();
   const r = await intake(ev({}, { sales_owner: { name: "知らない 人", email: "nobody@eight.example" } }));
   assert.equal(r.body.result, "created"); assert.deepEqual(r.body.results[0].warnings, ["owner_unmatched"]);
@@ -300,23 +366,26 @@ await ok("営業担当が決まらなければ未割当（要確認）で起票�
   setup();
   await intake(ev({}, { sales_owner: { name: "営業　二郎", email: null } }));
   assert.equal(proposals()[0].sales_owner_id, E_S2);
-  // 後から担当が分かったとき（提案の更新）：担当と、開いているタスクの担当が決まる
+  // 後からCL担当が分かったとき（提案の更新）：Salesの担当・タスクは未割当のまま
   setup();
   await intake(ev({}, { sales_owner: { name: "誰か", email: null } }));
   await intake(ev({ event_type: "proposal.updated" }, { stage: "確認中" }));
-  assert.equal(proposals()[0].sales_owner_id, E_S1);
-  assert.equal(tasksOf(proposals()[0].id)[0].assignee_id, E_S1);
+  assert.equal(proposals()[0].sales_owner_id, null);
+  assert.equal(proposals()[0].enger_cl_owner_id, E_S1);
+  assert.equal(tasksOf(proposals()[0].id)[0].assignee_id, null);
   assert.ok(actsOf(proposals()[0].id).some((a) => a.kind === "sync" && /確認中/.test(a.note)), "dx.enger のステージ変更が記録に残る");
 });
 
-await ok("ENGERのCL担当変更でSales営業担当・未完了タスク・変更履歴・通知が更新される。正式CS引継ぎは上書きしない", async () => {
+await ok("ENGERのCL担当変更は参照情報だけ更新し、Sales担当・タスク・履歴・通知を上書きしない", async () => {
   setup();
   const initial = ev();
   assert.equal((await intake(initial)).statusCode, 200);
   const p = proposals()[0];
   assert.equal(p.sales_owner_id, E_S1);
+  assert.equal(p.enger_cl_owner_id, E_S1);
   const beforeTasks = tasksOf(p.id).filter(t => t.status === "open");
   assert.ok(beforeTasks.length >= 1 && beforeTasks[0].assignee_id === E_S1);
+  const notifiedBefore = notified.length;
 
   // ENGEr提案画面でCL担当を変更 -> updateイベント
   const move = ev({event_type:"proposal.updated"}, {
@@ -324,12 +393,11 @@ await ok("ENGERのCL担当変更でSales営業担当・未完了タスク・変�
   });
   const updated = await intake(move);
   assert.equal(updated.statusCode, 200, JSON.stringify(updated.body));
-  assert.equal(proposals()[0].sales_owner_id, E_S2);
-  assert.ok(tasksOf(p.id).filter(t=>t.status === "open").every(t=>t.assignee_id === E_S2));
-  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 1);
-  assert.equal(actsOf(p.id).find(t=>t.kind==="assign").detail.from, E_S1);
-  assert.equal(actsOf(p.id).find(t=>t.kind==="assign").detail.to, E_S2);
-  assert.ok(notified.some(n=>n.employeeId === E_S2 && /CL担当変更/.test(n.title)), "新担当への通知");
+  assert.equal(proposals()[0].sales_owner_id, E_S1);
+  assert.equal(proposals()[0].enger_cl_owner_id, E_S2);
+  assert.ok(tasksOf(p.id).filter(t=>t.status === "open").every(t=>t.assignee_id === E_S1));
+  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 0);
+  assert.equal(notified.length, notifiedBefore, "ENGERの担当変更ではSales通知を追加しない");
   const taskCount=tasksOf(p.id).length, changeCount=actsOf(p.id).length;
   assert.equal((await intake(move)).body.result, "replayed");
   assert.equal(tasksOf(p.id).length, taskCount, "再送でタスク増加なし");
@@ -341,15 +409,17 @@ await ok("ENGERのCL担当変更でSales営業担当・未完了タスク・変�
     sales_owner: {name:"営業 一郎",email:"s1@eight.example"}
   });
   assert.equal((await intake(ignored)).statusCode, 200);
-  assert.equal(proposals()[0].sales_owner_id, E_S2);
-  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 1);
+  assert.equal(proposals()[0].sales_owner_id, E_S1);
+  assert.equal(proposals()[0].enger_cl_owner_id, E_S1);
+  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 0);
 
   // CLが社員名簿から特定できなければ既存担当を維持し、連携要確認にする
   proposals()[0].cs_owner_id = null;
   const unknown = ev({event_type:"proposal.updated"}, {sales_owner:{name:"不明な人",email:"unknown@eight.example"}});
   const result=await intake(unknown);
   assert.equal(result.statusCode,200);
-  assert.equal(proposals()[0].sales_owner_id,E_S2);
+  assert.equal(proposals()[0].sales_owner_id,E_S1);
+  assert.equal(proposals()[0].enger_cl_owner_id,null);
   assert.ok((result.body.results?.[0]?.warnings || result.body.warnings || []).includes("owner_unmatched"));
 });
 
@@ -437,9 +507,9 @@ await ok("期限の変更は理由が必須で、記録に残る。自動タス�
   const dc = actsOf(p.id).find((a) => a.kind === "due_change");
   assert.equal(dc.note, "先方が午後不在"); assert.equal(dc.detail.from, before);
   assert.equal((await act(S1, p.id, { action: "task_cancel", taskId: t.id, reason: "不要" })).statusCode, 403);
-  assert.equal((await act(MANAGER, p.id, { action: "task_cancel", taskId: t.id, reason: "重複" })).statusCode, 403,
-    "管理者も他人の担当案件は変更できない");
-  assert.equal(tasksOf(p.id)[0].status, "open");
+  assert.equal((await act(MANAGER, p.id, { action: "task_cancel", taskId: t.id, reason: "重複" })).statusCode, 200,
+    "管理者は他人の担当案件も直接変更できる");
+  assert.equal(tasksOf(p.id)[0].status, "canceled");
 });
 
 // ---- 7. 期限超過 -----------------------------------------------------------------
@@ -498,33 +568,53 @@ await ok("8 見送りは理由コード（企業側／人材側）を分けて�
 });
 
 // ---- 9. 担当変更 -----------------------------------------------------------------
-await ok("9 他人の担当変更を禁止し、管理者は未割当のみ初回割当できる。担当変更後も過去の人の記録を保持", async () => {
+await ok("9 担当者本人と管理者は直接変更でき、他メンバーは変更申請・承認。履歴とタスクを更新", async () => {
   const p = await made();
   await act(S1, p.id, { action: "call", result: "no_answer" });
-  assert.equal((await act(S1, p.id, { action: "assign", ownerId: E_S2 })).statusCode, 403);
-  assert.equal((await act(MANAGER, p.id, { action: "assign", ownerId: E_S2 })).statusCode, 403,
-    "管理者でも他人の担当案件を直接変更できない");
+  assert.equal((await act(S1, p.id, { action: "assign", ownerId: E_S2, reason: "担当交代" })).statusCode, 200,
+    "担当本人は担当変更を直接保存できる");
+  assert.equal(proposals()[0].sales_owner_id, E_S2);
+  assert.ok(tasksOf(p.id).filter(t => t.status === "open").every(t => t.assignee_id === E_S2));
   assert.equal((await detail(S2, p.id)).statusCode, 200, "引継ぎ前も全員閲覧できる");
-  assert.equal((await act(S2, p.id, { action: "call", result: "connected" })).statusCode, 403);
-  // 正式引継ぎRPCの操作で担当が切り替わった場合、以後は新担当だけが編集できる。
-  proposals()[0].sales_owner_id = E_S2;
+  assert.equal((await act(S1, p.id, { action: "call", result: "connected" })).statusCode, 403, "変更後は旧担当が編集できない");
+  assert.equal((await act(S2, p.id, { action: "call", result: "connected", outcome:"considering" })).statusCode, 200, "新担当が編集できる");
   assert.equal((await detail(S1, p.id)).statusCode, 200, "旧担当も閲覧できる");
   assert.equal((await act(S1, p.id, { action: "memo", note: "旧担当" })).statusCode, 403);
-  assert.equal((await act(S2, p.id, { action: "memo", note: "新担当" })).statusCode, 200);
   assert.equal(actsOf(p.id).find((a) => a.kind === "call").employee_id, E_S1, "過去の活動者は変わらない");
 
-  // 管理者が触れるのは未割当提案の「最初の担当」だけ。
+  // 他メンバーは申請でき、現在の担当が承認すると担当・タスクが切り替わる。
+  const req = await call(assignmentApi, { method:"POST", body:{ action:"request", proposalId:p.id, stage:"proposal",
+    ownerId:E_S1, reason:"前任者の継続対応を希望" }, as:S1 });
+  assert.equal(req.statusCode, 200, JSON.stringify(req.body));
+  assert.equal(tbl("gw_sales_proposal_assignment_requests").at(-1).status, "pending");
+  const selfReview = await call(assignmentApi, { method:"POST", body:{ action:"approve", requestId:req.body.requestId }, as:S1 });
+  assert.equal(selfReview.statusCode, 403, "申請者本人は承認できない");
+  const reviewed = await call(assignmentApi, { method:"POST", body:{ action:"approve", requestId:req.body.requestId, note:"前任者へ戻します" }, as:S2 });
+  assert.equal(reviewed.statusCode, 200, JSON.stringify(reviewed.body));
+  assert.equal(proposals()[0].sales_owner_id, E_S1);
+  assert.equal(tbl("gw_sales_proposal_assignment_requests").at(-1).reviewed_by_employee_id, E_S2);
+  assert.equal(tbl("gw_sales_proposal_assignment_requests").at(-1).review_note, "前任者へ戻します");
+  assert.ok(tasksOf(p.id).filter(t => t.status === "open").every(t => t.assignee_id === E_S1));
+  assert.equal(actsOf(p.id).filter(a => a.kind === "assign").length, 2, "直接変更と承認を両方履歴に残す");
+
+  // 管理者は他人の担当案件も直接変更でき、未割当・期限超過もすぐ割り当てられる。
+  const reassigned = await call(assignmentApi, { method:"POST", body:{ action:"direct", proposalId:p.id, stage:"proposal",
+    ownerId:E_S2, reason:"管理者が担当を再調整" }, as:MANAGER });
+  assert.equal(reassigned.statusCode, 200, JSON.stringify(reassigned.body));
+  assert.equal(proposals()[0].sales_owner_id, E_S2);
   setup();
   await intake(ev({}, { sales_owner: { name: "未登録", email: "unknown@example.com" } }));
   const unassigned = proposals()[0];
   assert.equal(unassigned.sales_owner_id, null);
-  assert.equal((await act(MANAGER, unassigned.id, { action: "assign", ownerId: E_NONE })).statusCode, 400);
+  assert.equal((await call(assignmentApi, { method:"POST", body:{ action:"direct", proposalId:unassigned.id, stage:"proposal",
+    ownerId:E_NONE, reason:"期限超過・未割当のため管理者が割当" }, as:MANAGER })).statusCode, 400);
   notified.length = 0;
-  const assigned = await act(MANAGER, unassigned.id, { action: "assign", ownerId: E_S2 });
+  const assigned = await call(assignmentApi, { method:"POST", body:{ action:"direct", proposalId:unassigned.id, stage:"proposal",
+    ownerId:E_S2, reason:"期限超過・未割当のため管理者が割当" }, as:MANAGER });
   assert.equal(assigned.statusCode, 200, JSON.stringify(assigned.body));
   assert.equal(proposals()[0].sales_owner_id, E_S2);
   assert.deepEqual(notified.map((n) => n.employeeId), [E_S2]);
-  assert.equal((await detail(MANAGER, unassigned.id)).statusCode, 200, "管理者も閲覧だけできる");
+  assert.equal((await detail(MANAGER, unassigned.id)).statusCode, 200, "管理者も詳細を開ける");
 });
 
 // ---- 10. 見える範囲 --------------------------------------------------------------
@@ -536,10 +626,11 @@ await ok("10 Sales利用者はテナント内全提案を閲覧でき、他人�
   assert.equal((await list(NOPERM)).statusCode, 403);
   const s1 = await list(S1, "?filter=all&owner=all");
   assert.deepEqual(new Set(s1.body.proposals.map((p) => p.sourceProposalId)), new Set(["p-1","p-2","p-3"]));
-  assert.equal(s1.body.proposals.filter((p) => p.canEdit).length,1,"本人の担当提案だけ編集可能");
+  assert.equal(s1.body.proposals.filter((p) => p.canEdit).length,1,"一般メンバーは本人担当だけ編集可能");
   assert.equal(s1.body.counts.unassigned, undefined, "担当未割当の件数は管理側だけ");
   const mgr = await list(MANAGER, "?filter=all");
   assert.equal(mgr.body.proposals.length, 3); assert.equal(mgr.body.counts.unassigned, 1);
+  assert.ok(mgr.body.proposals.every((p) => p.canEdit), "管理者は全提案を編集可能");
   assert.equal((await list(MANAGER, "?filter=all&owner=none")).body.proposals.length, 1);
   assert.equal((await list(OWNER, "?filter=all")).body.proposals.length, 3, "経営者は Sales アプリ権限が無くても全件");
   const other = await list(OTHER_T, "?filter=all");
@@ -576,9 +667,9 @@ await ok("11 返信なし：1回目で再フォロー（3営業日）、2回目�
   assert.equal(tasksOf(p.id).filter((t) => t.source_event === "auto:review").length, 1, "管理者確認は1回だけ");
   assert.equal((await act(S1, p.id, { action: "decision", result: "close" })).statusCode, 403, "判断は管理者");
   const r = await act(MANAGER, p.id, { action: "decision", result: "close", note: "3回連絡して無回答" });
-  assert.equal(r.statusCode, 403, "管理者でも他人の提案は閲覧だけで判断を書き込めない");
-  assert.equal(proposals()[0].status, "reply_wait", "勝手にクローズしない");
-  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "open", "管理者レビューは未解決として残す");
+  assert.equal(r.statusCode, 200, "管理者は他人の提案に判断を保存できる");
+  assert.equal(proposals()[0].status, "closed_no_reply", "管理者の判断を保存");
+  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "done", "管理者レビューを解決");
 });
 
 // ---- 12. 営業時間・連絡停止 ---------------------------------------------------------
