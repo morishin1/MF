@@ -135,7 +135,12 @@
   "headers": [
     {
       "source": "/(js|css)/(.*)",
-      "has": [{ "type": "query", "key": "v" }],
+      "has": [
+        {
+          "type": "query",
+          "key": "v"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
@@ -145,7 +150,12 @@
     },
     {
       "source": "/(js|css)/(.*)",
-      "missing": [{ "type": "query", "key": "v" }],
+      "missing": [
+        {
+          "type": "query",
+          "key": "v"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
@@ -241,6 +251,10 @@
     {
       "path": "/api/cron/office-recurring",
       "schedule": "40 19 * * *"
+    },
+    {
+      "path": "/api/cron/eight-secretary",
+      "schedule": "* * * * *"
     }
   ]
 }
