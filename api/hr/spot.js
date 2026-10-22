@@ -70,6 +70,8 @@ export default async function handler(req,res){
   }
   if(b.action==="mark"){
     if(!["candidate","closed"].includes(b.status)||p.applicant_id)return json(res,400,{error:"invalid_status"});
+    if(b.status==="candidate"&&(!Array.isArray(p.staff_scores)||p.staff_scores.length!==5))
+      return json(res,409,{error:"evaluation_required",message:"先に社員評価の5項目を保存してください"});
     if(b.status==="candidate"&&(!p.contact_consent||!p.survey_answered_at||!["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)))
       return json(res,409,{error:"consent_required",message:"本人アンケートの連絡同意が必要です"});
     const {error:e}=await sb.from("gw_hr_spot_talents").update({status:b.status,updated_at:new Date().toISOString()})
