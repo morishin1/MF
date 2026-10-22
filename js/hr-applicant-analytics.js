@@ -66,7 +66,7 @@
     const total=rows.reduce((v,r)=>v+r[1],0);
     return rows.slice(0,maxRows).map(([label,n])=>
       '<div class="ha-bar-row"><div class="ha-bar-label">'+escapeText(label)+'</div>'+
-      '<div class="ha-bar-track"><div class="ha-bar-value" style="width:'+Math.max(n/max*100,3)+'%"></div></div>'+
+      '<div class="ha-bar-track"><div class="ha-bar-value" style="width:'+(n?Math.max(n/max*100,3):0)+'%"></div></div>'+
       '<b>'+n+'件</b><span class="ha-bar-pct">'+percent(n,total)+'</span></div>'
     ).join("");
   }
@@ -84,10 +84,10 @@
       jobs:bars(data.jobs),
       outcomes:bars(states,3),
       stages:data.stage.map(x=>
-        '<div class="ha-stage-row"><span>'+escapeText(x.label)+'</span><div class="ha-bar-track"><div class="ha-bar-value" style="width:'+Math.max(3,x.n/stageMax*100)+'%"></div></div><b>'+x.n+'人</b></div>'
+        '<div class="ha-stage-row"><span>'+escapeText(x.label)+'</span><div class="ha-bar-track"><div class="ha-bar-value" style="width:'+(x.n?Math.max(3,x.n/stageMax*100):0)+'%"></div></div><b>'+x.n+'人</b></div>'
       ).join(""),
       trend:trends.map(x=>
-        '<div class="ha-trend-col"><b>'+x.count+'</b><div class="ha-trend-track"><i style="height:'+Math.max(4,x.count/trendMax*100)+'%"></i></div><small>'+escapeText(x.name.slice(5))+'月</small></div>'
+        '<div class="ha-trend-col"><b>'+x.count+'</b><div class="ha-trend-track"><i style="height:'+(x.count?Math.max(4,x.count/trendMax*100):0)+'%"></i></div><small>'+escapeText(x.name.slice(5))+'月</small></div>'
       ).join(""),
       note:(data.limited
         ? '応募者APIは現在、最大1000件を取得します。1000件以上の全期間集計は集計専用APIが必要です。'
