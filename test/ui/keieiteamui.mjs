@@ -48,7 +48,7 @@ for (const [path, sub] of PAGES) {
   check(await page.locator("#kp-keiei-nav").count() === 1, "経営の横タブが出る");
   check(await page.locator(".kp-sidebar").count() === 0, "旧い左メニューは出ない");
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").allInnerTexts();
-  check(tabs.map((t) => t.trim()).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `1段目（${tabs.join("|")}）`);
+  check(tabs.map((t) => t.trim()).join("|") === "予定・日報|経営サマリー|売上・営業|人・組織|財務|リスク・権限", `1段目（${tabs.join("|")}）`);
   check((await page.locator("#kp-keiei-nav .kp-otab.on").innerText()).trim() === "人・組織", "「人・組織」が選ばれている");
   const on = await page.locator("#kp-keiei-nav .kp-ostab.on").allInnerTexts();
   check(on.length === 1 && on[0].trim() === sub, `2段目は「${sub}」が選ばれている（${on.join("|")}）`);
