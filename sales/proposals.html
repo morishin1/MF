@@ -279,6 +279,9 @@
   let detail = null;    // 詳細の応答
   let openId = null;
   let seq = 0;
+  let ppPage = 1;
+  let ppPageSize = 20;
+  let ppActiveView = "list";
   const selected = new Set();
   SalesProposalColumns.init({
     changed: () => { if (data) { renderRows(data.proposals || []); ppBulkState(); } },
@@ -329,8 +332,8 @@
   function ppFlowBlocked(key) {
     const list = {
       sent: ["提案送信が必要です", "先に企業へ提案を送信してください。送信済みの場合は送信記録を登録します。", "提案送信を記録", () => ppSent()],
-      cs_team: ["CS担当が未設定です", "管理者が「フォローの設定」でCS担当を登録してください。", detail?.manager ? "フォロー設定を確認" : null, () => $("admin-sec")?.scrollIntoView({behavior:"smooth",block:"start"})],
-      closing_team: ["クロージング担当が未設定です", "管理者が「フォローの設定」でクロージング担当を登録してください。", detail?.manager ? "フォロー設定を確認" : null, () => $("admin-sec")?.scrollIntoView({behavior:"smooth",block:"start"})],
+      cs_team: ["CS担当が未設定です", "管理者が「フォローの設定」でCS担当を登録してください。", detail?.manager ? "フォロー設定を確認" : null, () => { ppSwitchView("admin"); $("admin-sec")?.scrollIntoView({behavior:"smooth",block:"start"}); }],
+      closing_team: ["クロージング担当が未設定です", "管理者が「フォローの設定」でクロージング担当を登録してください。", detail?.manager ? "フォロー設定を確認" : null, () => { ppSwitchView("admin"); $("admin-sec")?.scrollIntoView({behavior:"smooth",block:"start"}); }],
       owner: ["担当者の確認が必要です", "現在の担当者または管理者に、この案件の操作を依頼してください。", null, null],
     };
     const entry = list[key];
@@ -389,7 +392,7 @@
     }
   }
 
-  function ppSet(k, v) { STATE[k] = v; selected.clear(); writeUrl(); load(); }
+  function ppSet(k, v) { STATE[k] = v; ppPage = 1; selected.clear(); writeUrl(); load(); }
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
@@ -414,9 +417,16 @@
         <div class="v">${c.v || 0}<small>件</small></div></button>`).join("");
 
     // 絞り込み
-    $("filters").innerHTML = d.labels.filters.filter((f) => d.manager || !f.managerOnly).map((f) => `
-      <button class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
-        onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`).join("");
+    // よく使う条件を優先し、残りは必要なときだけ開く。
+    const quickKeys = new Set(["all","open","today","overdue","proposal_wait","no_call","meeting","unassigned"]);
+    const visibleFilters = d.labels.filters.filter((f) => d.manager || !f.managerOnly);
+    const filterButton = (f) => `<button type="button" class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
+      onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`;
+    $("filters").innerHTML = visibleFilters.filter((f) => quickKeys.has(f.key)).map(filterButton).join("");
+    $("filters-extra").innerHTML = visibleFilters.filter((f) => !quickKeys.has(f.key)).map(filterButton).join("");
+    const extra = visibleFilters.find((f) => f.key === STATE.filter && !quickKeys.has(f.key));
+    $("pp-extra-filter").textContent = extra ? "・" + extra.label : "";
+    if (extra) $("pp-more-filters").open = true;
 
     // 担当（管理側だけ）・サービス
     const owner = $("f-owner");
@@ -432,12 +442,46 @@
 
     const allVisible = d.proposals || [];
     for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
-    $("pp-list-meta").textContent = "表示中：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件・上限あり）" : "") +
-      "　全員の提案を閲覧できます。他人の提案は詳細も閲覧専用です。";
+    $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ 他人の案件は閲覧のみ";
+    $("pp-tab-admin").hidden = !d.manager;
+    $("pp-sync-count").hidden = !d.syncIssues;
+    $("pp-sync-count").textContent = d.syncIssues ? String(d.syncIssues) : "";
+    if (!d.manager && ppActiveView === "admin") ppSwitchView("list");
     renderRows(allVisible);
     ppBulkState();
     renderKpi(d);
     renderAdmin(d);
+  }
+
+  // 一覧・分析・連携を切り替え、長い縦スクロールをなくす。
+  function ppSwitchView(view) {
+    if (!["list","kpi","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "list";
+    ppActiveView = view;
+    for (const key of ["list","kpi","admin"]) {
+      $("pp-view-" + key).hidden = key !== view;
+      $("pp-tab-" + key).classList.toggle("on", key === view);
+      $("pp-tab-" + key).setAttribute("aria-selected", String(key === view));
+      $("pp-tab-" + key).tabIndex = key === view ? 0 : -1;
+    }
+    if (view !== "list") window.scrollTo({ top:0, behavior:"smooth" });
+  }
+  function ppPageRows() {
+    return (data?.proposals || []).slice((ppPage - 1) * ppPageSize, ppPage * ppPageSize);
+  }
+  function ppSetPageSize(value) {
+    ppPageSize = value === "50" ? 50 : 20;
+    ppPage = 1;
+    if (data) { renderRows(data.proposals || []); ppBulkState(); }
+  }
+  function ppChangePage(delta) {
+    const pages = Math.max(1, Math.ceil((data?.proposals?.length || 0) / ppPageSize));
+    ppPage = Math.max(1, Math.min(pages, ppPage + delta));
+    if (data) { renderRows(data.proposals || []); ppBulkState(); }
+    const container = $("pp-view-list");
+    if (container) container.scrollIntoView({ behavior:"smooth",block:"start" });
+    const table = document.querySelector(".pp-tablewrap");
+    if (table) table.scrollTop = 0;
+    if ($("cards")) $("cards").scrollTop = 0;
   }
 
   // 提案待ち（まだ企業へ提案していない）は、電話の「未実施」を赤にしない（30分の期限は提案を送ってから）
@@ -498,6 +542,15 @@
   }
 
   function renderRows(rows) {
+    const pages = Math.max(1, Math.ceil(rows.length / ppPageSize));
+    ppPage = Math.max(1, Math.min(ppPage, pages));
+    const start = (ppPage - 1) * ppPageSize;
+    const shown = rows.slice(start, start + ppPageSize);
+    $("pp-page-info").textContent = rows.length ? `${start + 1}～${start + shown.length}件 / 全${rows.length}件` : "0件";
+    $("pp-page-label").textContent = `${ppPage} / ${pages}ページ`;
+    $("pp-page-prev").disabled = ppPage <= 1;
+    $("pp-page-next").disabled = ppPage >= pages;
+    $("pp-page-size").value = String(ppPageSize);
     if (!rows.length) {
       $("pp-column-head").innerHTML = SalesProposalColumns.head(STATE.sort);
       $("rows").innerHTML = '<tr><td colspan="14" class="empty">この条件の提案はありません</td></tr>';
@@ -505,12 +558,12 @@
       return;
     }
     $("pp-column-head").innerHTML = SalesProposalColumns.head(STATE.sort);
-    $("rows").innerHTML = rows.map((r) => `
+    $("rows").innerHTML = shown.map((r) => `
       <tr class="click${r.overdue ? " overdue" : ""}${!r.canEdit ? " pp-row-readonly" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <td class="pp-check-col">${ppCheckInput(r)}</td>
         ${SalesProposalColumns.cellHtml(r,ppColumnCell)}
       </tr>`).join("");
-    $("cards").innerHTML = rows.map((r) => `
+    $("cards").innerHTML = shown.map((r) => `
       <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
           <div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}<b>${esc(r.companyName)}</b></div>
@@ -534,7 +587,7 @@
     $("pp-bulk-edit").disabled = !editable;
     $("pp-bulk-archive").disabled = !editable;
     $("pp-bulk-restore").disabled = !restorable;
-    const able = rows.filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
     const all = $("pp-all");
     if (all) {
       all.checked = able.length > 0 && able.every((r) => selected.has(r.id));
@@ -552,9 +605,9 @@
     ppBulkState();
   }
   function ppSelectAll(checked) {
-    const able = (data?.proposals || []).filter((r) => r.canEdit || r.canRestore).slice(0, 50);
-    if (checked) { for (const r of able) selected.add(r.id); }
-    else selected.clear();
+    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    if (checked) { for (const r of able) { if (selected.size >= 50) break; selected.add(r.id); } }
+    else { for (const r of able) selected.delete(r.id); }
     for (const checkbox of document.querySelectorAll('input[data-pid]')) checkbox.checked = selected.has(checkbox.dataset.pid);
     ppBulkState();
   }
