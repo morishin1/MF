@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>スポット人材 | EIGHT HR</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440;background:#f6f6f2}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:1240px;margin:24px auto;padding:0 20px 60px}
+h1{font-size:24px;margin:0 0 8px}.sub{font-size:13px;color:#6b7080;margin:0 0 22px}
+.cat{display:flex;width:max-content;max-width:100%;overflow-x:auto;border:1px solid #e2e2dc;border-radius:9px;background:#fff;margin-bottom:18px}
+.cat a{white-space:nowrap;padding:9px 13px;color:#4a5068;border-right:1px solid #e2e2dc;text-decoration:none;font-size:13px}
+.cat a.on{background:#1b2440;color:white;font-weight:700}
+.bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+input,select,textarea{font:inherit;border:1px solid #d0d4de;border-radius:8px;padding:9px;width:100%}input[type=date]{width:auto}
+button{font:inherit;background:#1b2440;color:white;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:600}
+button.secondary{background:white;color:#1b2440;border:1px solid #d0d4de}
+button:disabled{opacity:.5;cursor:not-allowed}
+/* スポット人材では専用の登録ボタンだけを表示し、通常応募者の追加と混同しない */
+.hr-app .hr-add{display:none}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+.card{background:white;border:1px solid #e2e2dc;padding:14px;border-radius:10px}
+.card strong{font-size:25px}.card span{display:block;font-size:12px;color:#6b7080}
+.tablebox{background:white;border:1px solid #e2e2dc;border-radius:12px;overflow-x:auto}
+table{border-collapse:collapse;min-width:680px;width:100%}th,td{text-align:left;padding:13px;border-bottom:1px solid #e2e2dc;font-size:13px}th{background:#f6f6f2;font-size:12px}
+tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:11px;padding:4px 9px;background:#eef0f5;border-radius:99px;white-space:nowrap}
+#overlay[hidden]{display:none!important}.shade{position:fixed;inset:0;background:#1b244060;z-index:40}
+.drawer{position:fixed;right:0;top:0;bottom:0;width:480px;max-width:100%;overflow:auto;background:#f6f6f2;z-index:41;padding:20px;box-shadow:-12px 0 36px #0002}
+.field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}
+.panel{border:1px solid #e2e2dc;border-radius:10px;background:white;padding:16px;margin:12px 0}
+.panel h3{font-size:14px;margin:0 0 12px}.pair{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px;font-size:13px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.warn{color:#b3261e;font-size:13px}
+#notice{min-height:24px;font-size:13px;margin-bottom:8px}.muted{color:#6b7080}.full{width:100%}
+@media(max-width:620px){.wrap{padding:0 12px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.drawer{width:100%;padding:12px}.card{padding:10px}.card strong{font-size:20px}}
+</style></head><body>
+<div class="wrap">
+<h1>応募者</h1><p class="sub">スポット勤務から継続採用につなげる人材を管理します。</p>
+<nav class="cat" aria-label="応募者区分">
+<a href="/hr/applicants.html?category=active">選考中</a>
+<a href="/hr/applicants.html?category=contractor">業務委託</a>
+<a href="/hr/applicants.html?category=mugendojo">無限道場</a>
+<a href="/hr/spot.html" class="on" aria-current="page">スポット人材</a>
+<a href="/hr/applicants.html?category=closed">終了</a>
+</nav>
+<div class="cards">
+<div class="card"><span>勤務者</span><strong id="total">—</strong></div>
+<div class="card"><span>長期勤務希望</span><strong id="long">—</strong></div>
+<div class="card"><span>採用候補</span><strong id="candidates">—</strong></div>
+</div>
+<div class="bar">
+<div style="display:flex;flex-wrap:wrap;gap:8px;flex:1"><input id="query" aria-label="氏名検索" placeholder="氏名・媒体で検索" style="max-width:270px">
+<select id="filter" aria-label="絞り込み" style="max-width:180px"><option value="">すべて</option><option value="invited">回答待ち</option>
+<option value="answered">回答済み</option><option value="evaluated">評価済み</option><option value="candidate">長期採用候補</option><option value="converted">選考へ移動済み</option><option value="closed">終了</option></select></div>
+<button id="add">＋ スポット人材を登録</button>
+</div>
+<div id="notice" role="status"></div>
+<div class="tablebox"><table><thead><tr><th>氏名・媒体</th><th>勤務日</th><th>アンケート</th><th>社員評価</th><th>状態</th><th></th></tr></thead>
+<tbody id="rows"><tr><td colspan="6">読み込み中…</td></tr></tbody></table></div>
+</div>
+<div id="overlay" hidden><div class="shade" id="shade"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="スポット人材詳細"></aside></div>
+<script src="../js/vendor/qrcode-generator.js?v=20261022spot1"></script>
+<script src="../js/api-client.js?v=20261020cal1"></script>
+<script src="../js/layout.js?v=20261020cal1"></script>
+<script src="../js/hr-layout.js?v=20261020cal1"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const labels={registered:"未送付",invited:"回答待ち",answered:"回答済み",evaluated:"評価済み",
+ candidate:"採用候補",converted:"選考へ移動済み",closed:"終了"};
+const scoreLabels=["電話対応","PC入力の正確さ","習得の早さ","報告・相談","安定感"];
+let people=[],current=null,busy=false;
+function message(s,err=false){$("notice").className=err?"warn":"muted";$("notice").textContent=s;}
+function totalScore(p){return Array.isArray(p.staff_scores)?p.staff_scores.reduce((a,b)=>a+b,0)+" / 25":"未評価";}
+function qrSvg(content){
+ const qr=qrcode(0,"M");qr.addData(content,"Byte");qr.make();
+ const n=qr.getModuleCount(), pad=4, w=n+pad*2;let d="";
+ for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(qr.isDark(y,x))d+="M"+(x+pad)+" "+(y+pad)+"h1v1h-1z";
+ return '<svg viewBox="0 0 '+w+' '+w+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="アンケートURLのQRコード" shape-rendering="crispEdges" style="display:block;width:220px;max-width:100%;margin:12px auto"><rect width="'+w+'" height="'+w+'" fill="white"/><path d="'+d+'" fill="black"/></svg>';
+}
+
+function status(p){return p.survey_answered_at?"回答済み":"未回答";}
+async function load(){
+ try{const r=await API.api("/api/hr/spot");people=r.people||[];
+ $("total").textContent=people.length;
+ $("long").textContent=people.filter(p=>["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)).length;
+ $("candidates").textContent=people.filter(p=>p.status==="candidate").length;
+ render();
+ }catch(e){message(e.hint||e.message,true);$("rows").innerHTML='<tr><td colspan="6">データを読み込めませんでした。</td></tr>';}
+}
+function render(){
+ const q=$("query").value.trim().toLowerCase(),f=$("filter").value;
+ const shown=people.filter(p=>(!q||(p.name+" "+p.source).toLowerCase().includes(q))&&(!f||p.status===f));
+ $("rows").innerHTML=shown.length?shown.map(p=>
+ '<tr data-id="'+esc(p.id)+'"><td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.source)+'</div></td>'+
+ '<td>'+esc(p.worked_on)+'</td><td>'+status(p)+'</td><td>'+esc(totalScore(p))+'</td>'+
+ '<td><span class="pill">'+esc(labels[p.status]||p.status)+'</span></td><td>›</td></tr>').join("")
+ :'<tr><td colspan="6">該当するスポット人材がいません。</td></tr>';
+}
+function hide(){$("overlay").hidden=true;current=null;}
+function show(html){$("drawer").innerHTML=html;$("overlay").hidden=false;}
+function pair(label,val){return '<div class="pair"><span class="muted">'+esc(label)+'</span><b>'+esc(val??"未回答")+'</b></div>';}
+function detail(id){
+ const p=people.find(x=>x.id===id);if(!p)return;current=id;
+ const a=p.survey_answers||{};
+ let h='<div class="bar"><h2>'+esc(p.name)+'</h2><button class="secondary" data-action="close">閉じる</button></div>'+
+ '<div class="muted">'+esc(p.source)+' ／ 勤務日 '+esc(p.worked_on)+'</div>'+
+ '<div class="panel"><h3>本人アンケート</h3>'+
+ pair("状態",status(p))+pair("継続希望",a.longTerm)+pair("勤務日数",a.weekly)+
+ pair("曜日",a.days?.join("、"))+pair("時間",a.hours?.join("、"))+
+ pair("興味",a.interests?.join("、"))+pair("開始時期",a.start)+
+ pair("連絡の同意",p.contact_consent?"あり":"なし")+
+ pair("連絡先",p.contact_consent?p.survey_email:"—")+
+ '<div class="muted" style="font-size:12px;overflow-wrap:anywhere">'+esc(a.comment||"")+'</div></div>'+
+ '<div class="panel"><h3>社内評価（5項目）</h3><p class="muted">担当者が実際の勤務を確認して入力します。</p>';
+ for(let i=0;i<5;i++){
+ h+='<div class="field"><label for="score'+i+'">'+esc(scoreLabels[i])+'</label>'+
+ '<select id="score'+i+'"><option value="">評価を選択</option>'+
+ [1,2,3,4,5].map(n=>'<option value="'+n+'" '+(p.staff_scores?.[i]===n?"selected":"")+'>'+n+' 点</option>').join("")+'</select></div>';
+ }
+ h+='<div class="field"><label for="staffNote">勤務時のメモ（社内限定）</label>'+
+ '<textarea id="staffNote" rows="3" maxlength="1000">'+esc(p.staff_note||"")+'</textarea></div>'+
+ '<button data-action="score" class="full">評価を保存</button></div>'+
+ '<div class="panel"><h3>次のアクション</h3>';
+ if(!p.survey_answered_at&&p.status!=="closed"&&!p.applicant_id){
+ h+='<p class="muted">アンケートURLを発行して本人に案内します。再発行すると以前のURLは無効になります。</p>'+
+ '<button data-action="invite" class="full">アンケートURLを発行</button>';
+ }
+ if(p.survey_answered_at&&p.contact_consent&&!p.applicant_id&&p.status!=="closed"){
+ if(p.status!=="candidate")h+=Array.isArray(p.staff_scores)?'<button data-action="candidate" class="full">長期採用候補に追加</button>':'<p class="muted">先に5項目の社員評価を保存してください。</p>';
+ else h+='<button data-action="promote" class="full">HRの選考中へ引き継ぐ</button>';
+ }else if(p.survey_answered_at&&!p.contact_consent){
+ h+='<p class="muted">本人の連絡同意がないため採用のご案内は行えません。</p>';
+ }
+ if(p.applicant_id)h+='<a href="/hr/applicants.html?id='+encodeURIComponent(p.applicant_id)+'">HR応募者詳細を見る →</a>';
+ if(!p.applicant_id&&p.status!=="closed")h+='<div class="actions"><button data-action="closed" class="secondary">終了にする</button></div>';
+ h+='</div>';
+ show(h);
+}
+async function mutate(action,body={}){
+ if(busy)return;busy=true;
+ try{const data=await API.api("/api/hr/spot",{method:"POST",body:{action,id:current,...body}});
+  await load();
+  if(action==="invite"){
+   const link=new URL(data.url,location.origin).href;
+   show('<h2>アンケートURL発行完了</h2><p>このURLを本人へ送付してください。URLはこの画面を閉じると再表示できません。</p>'+
+     '<div id="spotQR" aria-label="アンケートQRコード"></div>'+
+     '<div class="field"><input id="surveyLink" aria-label="アンケートURL" readonly value="'+esc(link)+'"></div>'+
+     '<div class="actions"><button data-action="copy">URLをコピー</button><button data-action="close" class="secondary">閉じる</button></div>'+
+     '<p class="muted">期限：'+esc(data.expiresAt?.slice(0,10))+'。回答は任意です。</p>');
+   try{$("spotQR").innerHTML=qrSvg(link);}catch{$("spotQR").textContent="QRコードを表示できません。URLをコピーしてください。";}
+  }else{const old=current;if(action==="promote"){location.href="/hr/applicants.html?id="+encodeURIComponent(data.applicantId);return;}detail(old);message("保存しました");}
+ }catch(e){alert(e.hint||e.message);}
+ finally{busy=false;}
+}
+function openAdd(){
+ current=null;
+ show('<div class="bar"><h2>スポット人材を登録</h2><button class="secondary" data-action="close">閉じる</button></div>'+
+ '<form id="createSpot"><div class="field"><label for="name">氏名・タイミー表示名</label><input id="name" maxlength="100" required></div>'+
+ '<div class="field"><label for="workedOn">勤務日</label><input id="workedOn" type="date" required></div>'+
+ '<div class="field"><label for="source">応募媒体</label><select id="source"><option>タイミー</option><option>その他スポット勤務</option></select></div>'+
+ '<div class="field"><label for="workNote">勤務メモ（任意）</label><textarea id="workNote" rows="3" maxlength="500"></textarea></div>'+
+ '<button type="submit" class="full">登録する</button></form>');
+ $("workedOn").value=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"});
+}
+$("add").addEventListener("click",openAdd);
+$("shade").addEventListener("click",hide);
+$("query").addEventListener("input",render);$("filter").addEventListener("change",render);
+$("rows").addEventListener("click",e=>{const tr=e.target.closest("tr[data-id]");if(tr)detail(tr.dataset.id);});
+$("drawer").addEventListener("submit",async e=>{if(e.target.id!=="createSpot")return;e.preventDefault();
+ await mutate("create",{name:$("name").value,workedOn:$("workedOn").value,source:$("source").value,workNote:$("workNote").value});
+ hide();});
+$("drawer").addEventListener("click",async e=>{
+ const btn=e.target.closest("[data-action]");if(!btn)return;
+ const a=btn.dataset.action;
+ if(a==="close"){hide();return;}
+ if(a==="copy"){try{await navigator.clipboard.writeText($("surveyLink").value);btn.textContent="コピーしました";}
+   catch{$("surveyLink").select();document.execCommand("copy");btn.textContent="コピーしました";}return;}
+ if(a==="invite"){await mutate("invite");return;}
+ if(a==="score"){const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
+  if(scores.some(n=>!n||n<1||n>5)){alert("5項目すべてを評価してください");return;}
+  await mutate("score",{scores,note:$("staffNote").value});return;}
+ if(a==="candidate"){if(confirm("本人の同意を確認し、採用候補に登録しますか？"))await mutate("mark",{status:"candidate"});return;}
+ if(a==="promote"){if(confirm("既存HRの「選考中」に引き継ぎますか？"))await mutate("promote");return;}
+ if(a==="closed"){if(confirm("この人材の管理を終了しますか？")){await mutate("mark",{status:"closed"});hide();}return;}
+});
+HRLayout.init({active:"applicants"}).then(ctx=>{if(ctx)load();});
+})();
+</script></body></html>

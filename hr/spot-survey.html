@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>お仕事体験アンケート | 株式会社エイト</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440;background:#f6f6f2}
+*{box-sizing:border-box}body{margin:0}main{max-width:690px;margin:30px auto;padding:24px;background:white;border:1px solid #e2e2dc;border-radius:16px}
+h1{font-size:23px}h2{font-size:15px;margin:0 0 10px}p{line-height:1.75;color:#4a5068}fieldset{padding:17px;border:1px solid #e2e2dc;border-radius:10px;margin:16px 0}
+legend{font-weight:700;padding:0 6px}label{display:block;padding:5px 0;cursor:pointer}input[type=checkbox],input[type=radio]{margin-right:7px}
+input[type=email],textarea{width:100%;padding:10px;border:1px solid #cbd0d9;border-radius:7px;font:inherit}
+button{background:#1b2440;color:white;border:0;border-radius:9px;padding:13px 24px;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.5}
+.muted{font-size:12px;color:#6b7080}.error{color:#b3261e}#form{display:none}
+@media(max-width:720px){main{margin:0;border:0;border-radius:0;padding:18px}h1{font-size:21px}}
+</style></head><body><main>
+<div class="muted">EIGHT / HR</div><h1>お仕事体験アンケート</h1>
+<p>本日はご勤務ありがとうございました。今後の働き方について教えてください。回答は任意で、約2分です。今回の勤務評価・報酬に影響しません。回答内容は継続採用のご案内と採用管理のために利用します。</p>
+<div id="msg" role="status">アンケートを確認しています…</div>
+<form id="form">
+<fieldset><legend>1. 今回のお仕事はいかがでしたか？</legend>
+<label><input type="radio" name="experience" value="とても楽しかった" required>とても楽しかった</label>
+<label><input type="radio" name="experience" value="楽しかった">楽しかった</label>
+<label><input type="radio" name="experience" value="普通">普通</label>
+<label><input type="radio" name="experience" value="少し合わなかった">少し合わなかった</label>
+</fieldset>
+<fieldset><legend>2. 今後もエイトで働いてみたいですか？</legend>
+<label><input type="radio" name="longTerm" value="ぜひ継続したい" required>ぜひ継続したい</label>
+<label><input type="radio" name="longTerm" value="条件が合えば">条件が合えば</label>
+<label><input type="radio" name="longTerm" value="単発のみ">単発勤務なら</label>
+<label><input type="radio" name="longTerm" value="希望しない">今のところ希望しない</label>
+</fieldset>
+<fieldset><legend>3. 長期勤務するなら週何日程度ですか？</legend>
+<label><input type="radio" name="weekly" value="週1日" required>週1日</label>
+<label><input type="radio" name="weekly" value="週2〜3日">週2〜3日</label>
+<label><input type="radio" name="weekly" value="週4〜5日">週4〜5日</label>
+<label><input type="radio" name="weekly" value="相談したい">相談したい</label><label><input type="radio" name="weekly" value="希望しない／未定">希望しない・未定</label>
+</fieldset>
+<fieldset><legend>4. 勤務できる曜日（複数選択）</legend><div id="days"></div></fieldset>
+<fieldset><legend>5. 勤務できる時間（複数選択）</legend><div id="hours"></div></fieldset>
+<fieldset><legend>6. 興味のある仕事（複数選択）</legend><div id="interests"></div></fieldset>
+<fieldset><legend>7. いつ頃から勤務できますか？</legend>
+<label><input type="radio" name="start" value="すぐに" required>すぐに</label>
+<label><input type="radio" name="start" value="1週間以内">1週間以内</label>
+<label><input type="radio" name="start" value="1か月以内">1か月以内</label>
+<label><input type="radio" name="start" value="未定">未定</label>
+</fieldset>
+<fieldset><legend>8. 感想・挑戦してみたい仕事（任意）</legend><textarea name="comment" maxlength="500" rows="3"></textarea></fieldset>
+<fieldset><legend>今後の採用案内</legend>
+<label><input type="checkbox" name="contactConsent">今後の継続勤務・採用について、メールでの案内を希望します（任意）</label>
+<div id="emailBox" style="display:none"><label for="email">ご連絡先メールアドレス</label><input type="email" id="email" maxlength="200" autocomplete="email"></div>
+<p class="muted">連絡を希望しない場合は、メールアドレスの入力は不要です。登録情報は採用担当者のみが管理します。</p>
+</fieldset>
+<button type="submit" id="send">アンケートを送信</button>
+</form></main>
+<script>
+(function(){
+const token=new URLSearchParams(location.hash.slice(1)).get("token")||"";
+// トークンを画面URLやアクセス解析に残さない（送信はPOSTの本文のみ）
+if(token)history.replaceState({}, "", "/hr/spot-survey.html");
+const form=document.getElementById("form"),msg=document.getElementById("msg");
+const opts={days:["月","火","水","木","金","土","日"],hours:["9:00〜13:00","13:00〜17:00","9:00〜17:00","相談"],
+ interests:["AI活用","企業フォロー","営業支援","IT・AI企画","AIまち","事務・入力","幅広く"]};
+for(const [key,values] of Object.entries(opts))document.getElementById(key).innerHTML=
+ values.map(v=>'<label><input type="checkbox" name="'+key+'" value="'+v+'">'+v+'</label>').join("");
+const consent=form.elements.contactConsent,email=form.elements.email;
+consent.addEventListener("change",()=>{document.getElementById("emailBox").style.display=consent.checked?"block":"none";email.required=consent.checked;if(!consent.checked)email.value="";});
+fetch("/api/hr/spot-survey",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check",token}),cache:"no-store"})
+ .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.message||"このURLはご利用いただけません");msg.textContent="";form.style.display="block";})
+ .catch(e=>{msg.className="error";msg.textContent=e.message;});
+const checked=name=>Array.from(form.querySelectorAll('input[name="'+name+'"]:checked')).map(x=>x.value);
+form.addEventListener("submit",async ev=>{
+ ev.preventDefault();
+ const val=k=>form.querySelector('input[name="'+k+'"]:checked')?.value;
+ const answers={experience:val("experience"),longTerm:val("longTerm"),weekly:val("weekly"),
+ days:checked("days"),hours:checked("hours"),interests:checked("interests"),start:val("start"),
+ comment:form.elements.comment.value,contactConsent:consent.checked,email:email.value};
+ const send=document.getElementById("send");send.disabled=true;msg.textContent="送信しています…";
+ try{
+ const r=await fetch("/api/hr/spot-survey",{method:"POST",headers:{"Content-Type":"application/json"},
+ body:JSON.stringify({action:"submit",token,answers}),cache:"no-store"});
+ const d=await r.json();if(!r.ok)throw Error(d.message||"送信に失敗しました");
+ form.remove();msg.textContent="ご回答ありがとうございました。";
+ // ブラウザ履歴にトークン付きのURLを残さない
+ history.replaceState({}, "", "/hr/spot-survey.html");
+ }catch(e){msg.className="error";msg.textContent=e.message;send.disabled=false;}
+});
+})();
+</script></body></html>
