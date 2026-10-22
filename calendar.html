@@ -348,7 +348,7 @@
     const d=new Date(current.getFullYear(),current.getMonth(),current.getDate());
     return [d,add(d,1)];
   }
-  function setScope(s){if(scope===s)return;closeBatch();scope=s;closeForm();closeDayDrawer();load();}
+  function setScope(s){if(scope===s)return;closeBatch();scope=s;if(s==="team"&&view==="month")view="week";closeForm();closeDayDrawer();load();}
   function setView(v){if(view===v)return;closeBatch();view=v;closeForm();closeDayDrawer();load();}
   function goToday(){closeBatch();current=new Date();selected=dateKey(current);closeForm();closeDayDrawer();load();}
   function move(n){
@@ -365,7 +365,7 @@
     };
     return {...e,employeeName:e.employeeName||e.name||"社員",own:e.employeeId===myEmployeeId};
   }).filter(e=>e.title&&e.category!=="private");}
-  function eventsOn(s){return localEvents().filter(e=>jstDay(e.startsAt)===s).sort((a,b)=>a.startsAt.localeCompare(b.startsAt));}
+  function eventsOn(s){return localEvents().filter(e=>jstDay(e.startsAt)===s&&(scope!=="team"||CalendarTeamBoard.keep(e))).sort((a,b)=>a.startsAt.localeCompare(b.startsAt));}
   function message(t,err=false){el("cal-message").textContent=t||"";el("cal-message").style.color=err?"#a83b2d":"";}
   function header(){
     let title=view==="month"?current.toLocaleDateString("ja-JP",{year:"numeric",month:"long"}):
@@ -444,6 +444,11 @@
       '<p class="muted">この日の予定はありません。</p>';
   }
   function renderWeek(){
+    if(scope==="team"){
+      const [start]=range(),dates=Array.from({length:7},(_,i)=>dateKey(add(start,i)));
+      el("oc-month-heading").textContent="メンバー別・週間スケジュール";
+      return CalendarTeamBoard.render("week",{root:el("cal-grid"),dates,events:localEvents(),dayLabel:officeDayLabel,open:openTeamCell});
+    }
     const [start]=range();const dates=Array.from({length:7},(_,i)=>dateKey(add(start,i)));
     const head='<div class="cal-day-head"></div>'+dates.map(s=>{
       const d=new Date(s+"T12:00:00+09:00");
@@ -459,6 +464,10 @@
     el("cal-grid").innerHTML='<div class="cal-week">'+head+lines+'</div>';
   }
   function renderDay(){
+    if(scope==="team"){
+      el("oc-month-heading").textContent="メンバー別・"+officeDayLabel(dateKey(current));
+      return CalendarTeamBoard.render("day",{root:el("cal-grid"),day:dateKey(current),events:localEvents(),open:openTeamCell});
+    }
     const s=dateKey(current),list=eventsOn(s);
     let rows="";
     for(let h=7;h<22;h++)rows+='<div class="cal-drow"><div class="cal-time">'+pad(h)+':00</div>'+
@@ -466,7 +475,7 @@
       list.filter(e=>e.allDay?h===7:Number(hm(e.startsAt).slice(0,2))===h).map(smallEvent).join("")+'</button></div>';
     el("cal-grid").innerHTML='<div class="cal-dayview">'+rows+'</div>';
   }
-  function render(){header();if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();renderEventList();}
+  function render(){header();CalendarTeamBoard.sync(employees,render,scope);if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();renderEventList();}
   function selectDate(s,hour){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return;
     if (selected !== s) closeForm();
@@ -482,8 +491,9 @@
   }
 
   // Officeと同じ日付詳細ドロワー。社員の予定は他人から編集させない。
-  function openDayDrawer(s){
-    const rows=eventsOn(s);
+  function openTeamCell(s,p){selected=s;openDayDrawer(s,p);renderDayEvents();}
+  function openDayDrawer(s,personId){
+    const rows=eventsOn(s).filter(e=>!personId||e.employeeId===personId);
     const items=rows.map(e=>'<div class="oc-card"><b>'+esc(e.title)+'</b>'+
       '<div class="m">'+esc(timeLabel(e))+
       (scope==="team"?"・担当："+esc(e.employeeName):"")+
@@ -522,7 +532,11 @@
     if(view==="month")rows=rows.filter(e=>jstDay(e.startsAt).slice(0,7)===dateKey(current).slice(0,7));
     const title=(scope==="mine"?"自分":"全員")+"の予定一覧（"+(view==="month"?"今月":view==="week"?"今週":"今日")+"）";
     el("cal-list-heading").textContent=title;
-    el("cal-list-summary").textContent=rows.length+"件の業務予定";
+    el("cal-list-summary").textContent=rows.length+"件の業務予定／クリックで展開";
+    if(scope==="team"){
+      el("cal-list").innerHTML='<p class="muted">全員の予定は上のカレンダーに表示しています。メンバーと日付を押すと詳細を確認できます。</p>';
+      return;
+    }
     if(!rows.length){el("cal-list").innerHTML='<p class="muted">予定はまだ登録されていません。</p>';return;}
     let prev="",html="";
     for(const e of rows){
