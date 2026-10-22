@@ -1,0 +1,33 @@
+name: KEIEI予定・日報画面の重点テスト（PR専用）
+on:
+  push:
+    branches: [feat/keiei-schedule-default-modal-20261022]
+    paths:
+      - "keiei/**"
+      - "js/layout.js"
+      - "test/**"
+      - ".github/workflows/keiei-modal-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/mypage.html && break
+            sleep 0.5
+          done
+      - name: 予定・日報と既存経営画面
+        run: |
+          node --experimental-test-module-mocks test/ui/keieischeduleui.mjs
+          node --experimental-test-module-mocks test/ui/keieiui.mjs
