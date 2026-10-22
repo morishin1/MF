@@ -262,6 +262,10 @@
       #pp-detail > .pp-box, #pp-detail > .sl-next { margin:0 12px !important; }
       #pp-detail > .pp-history-box { padding:4px 12px 18px; }
     }
+
+    .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+      overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
+    .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
   </style>
 </head>
 <body class="pp-wide-page">
@@ -605,8 +609,14 @@
         method:"POST", body:{ id, role, ownerId:next, expectedOwnerId:expected }
       });
       const hadDetail = detail?.proposal?.id === id;
+      const scroll = document.querySelector(".pp-detail-dialog")?.scrollTop || 0;
       await load();
-      if (hadDetail) await ppOpen(id);
+      if (hadDetail && openId === id) {
+        detail = await API.api("/api/sales/proposals/detail?id=" + encodeURIComponent(id));
+        renderDetail();
+        const dialog = document.querySelector(".pp-detail-dialog");
+        if (dialog) dialog.scrollTop = scroll;
+      }
       KPActionFeedback.show({ title:"担当者を更新しました",
         message:"変更履歴を記録しました。正式な工程の引継ぎは別途行ってください。" });
     } catch (e) {
@@ -641,9 +651,9 @@
       (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
-    case "title": return esc(r.title)+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
+    case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
     case "status": return pill(r.status,r.statusLabel)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
-    case "next": return r.next?esc(r.next.title)+'<span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
+    case "next": return r.next?'<span class="pp-cell-clamp" title="'+esc(r.next.title)+'">'+esc(r.next.title)+'</span><span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
     case "elapsed": return esc(String(r.elapsedDays))+"日";
     case "phone": return callCell(r);
     case "mail": return mailCell(r);
@@ -890,6 +900,11 @@
     }
   }
   function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; document.body.classList.remove("pp-detail-open"); writeUrl(); }
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if ($("pp-action")?.innerHTML) { ppCloseAction(); event.preventDefault(); }
+    else if (openId) { ppClose(); event.preventDefault(); }
+  });
 
   // チェックリスト：電話 → 不通ならメール → 回答確認 → 再フォロー → 結果確定
   function checklist(p, tasks, acts) {
