@@ -172,7 +172,7 @@ console.log("\n=== 管理側：一覧 ===");
   check(await page.locator("#f-owner").isVisible(), "管理側は担当で絞れる");
   check((await page.locator("#admin-sec").innerText()).includes("dx.enger 連携の確認"), "連携エラー・設定が出る");
   const first = await page.locator("#rows tr.click").first().innerText();
-  check(first.includes("テスト工業"), "期限超過がいちばん上（期限順）");
+  check((await page.locator("#f-sort").inputValue()) === "sent", "初期並びは提案日時の新しい順（期限超過は絞り込みで確認）");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
 
   // 画面をタブで分割。管理画面とKPIを縦に積まない。
@@ -249,6 +249,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   check(after.includes("不通のため確認メールを送る"), "メールのタスクができる");
   check(after.includes("メール待ち"), "状態はメール待ち");
 
+  await page.locator("#pp-detail details.pp-more-actions summary").click();
   await page.locator("#pp-detail button", { hasText: "確認メールを送った" }).click();
   check((await page.locator(".sl-modal").innerText()).includes("自己申告"), "メールは自己申告と明示");
   await page.locator("#m-ok").click();
