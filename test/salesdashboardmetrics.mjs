@@ -67,11 +67,13 @@ const oneDay = computeSalesDashboardMetrics(dailyProposals, [], { since: "2026-1
 assert.equal(oneDay.counts.matched, 1, "1日は日本時間の当日だけ");
 assert.equal(oneDay.trend.length, 1, "1日は日別1本");
 assert.equal(oneDay.trend[0].matched, 1);
+assert.equal(oneDay.trend[0].label, "10/22", "1日のグラフ表示は日付だけにする");
 const sevenDays = computeSalesDashboardMetrics(dailyProposals, [], { since: "2026-10-16", days: 7 });
 assert.equal(sevenDays.counts.matched, 3, "7日は当日を含む7日・8日前は除外");
 assert.equal(sevenDays.trend.length, 7, "7日は日別の7本");
 assert.equal(sevenDays.trend.reduce((sum, b) => sum + b.matched, 0), 3);
 assert.equal(sevenDays.trend[0].matched, 1, "初日を含む");
+assert.equal(sevenDays.trend[0].label, "10/16", "7日は日付を簡潔に表示する");
 
 const jsInsights = read("js/sales-dashboard-insights.js");
 assert.match(jsInsights, /\[1, 7, 30, 90, 365\]\.map/, "期間に1日と7日が表示される");
