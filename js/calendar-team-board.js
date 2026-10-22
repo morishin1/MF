@@ -34,7 +34,7 @@ function sync(people,render,scope){
  dep.innerHTML='<option value="">すべての部署</option>'+deps.map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join("");
  person.innerHTML='<option value="">全員を表示</option>'+members.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name||"社員")+'</option>').join("");
  dep.value=state.department;person.value=state.person;root.querySelector("#ct-search").value=state.query;
- note.textContent="表示："+visible().length+"名／"+members.length+"名。時間と件名をカレンダー上で比較できます。予定を押すと詳細へ（私用・本文メモは共有されません）。";
+ note.textContent="表示："+visible().length+"名／"+members.length+"名。時間と件名をカレンダー上で比較できます。予定を押すと詳細へ。『予定なし』は休暇・休日を意味しません（私用・本文メモは非公開）。";
 }
 function eventsOf(day,p,list,slot){
  return list.filter(e=>e.employeeId===p.id&&jstDay(e.startsAt)===day).filter(e=>{
@@ -49,7 +49,7 @@ function cell(day,p,list,slot){
  let html='<div class="ct-cell'+(day===today?" today":"")+'">';
  for(const e of rows.slice(0,max)){
   html+='<button type="button" class="ct-event '+tone(p.id)+'" data-ct-date="'+esc(day)+'" data-ct-person="'+esc(p.id)+'" title="'+esc(time(e)+" "+e.title+(e.location?" ／ "+e.location:""))+'">'+
-    '<b>'+esc(time(e))+'</b><span>'+esc(e.title||"業務予定")+'</span></button>';
+    '<b>'+esc(time(e))+'</b><span>'+esc(e.title||"業務予定")+'</span>'+(e.location?'<small>場所：'+esc(e.location)+'</small>':"")+'</button>';
  }
  if(rows.length>max)html+='<button type="button" class="ct-more" data-ct-date="'+esc(day)+'" data-ct-person="'+esc(p.id)+'">+'+(rows.length-max)+'件を見る</button>';
  if(!rows.length)html+='<button type="button" class="ct-empty" data-ct-date="'+esc(day)+'" data-ct-person="'+esc(p.id)+'">予定なし</button>';
