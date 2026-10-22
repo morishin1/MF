@@ -34,13 +34,29 @@ create table if not exists public.gw_slack_ai_escalations (
   requester_thread_ts text not null,
   owner_dm_ts text,
   question text not null,
-  status text not null default 'pending' check(status in ('pending','approved_pending_delivery','answered')),
+  status text not null default 'pending' check(status in (
+    'pending', 'approved_pending_delivery', 'delivery_attempted', 'delivery_uncertain', 'answered'
+  )),
   approved_answer text,
+  delivery_attempted_at timestamptz,
+  delivery_error text,
   created_at timestamptz not null default now(),
   answered_at timestamptz
 );
-create index if not exists gw_slack_ai_escalations_owner_idx
-  on public.gw_slack_ai_escalations (owner_dm_ts, status);
+-- Keep this script safe to re-run if the original MVP schema was already created.
+alter table public.gw_slack_ai_escalations
+  add column if not exists delivery_attempted_at timestamptz,
+  add column if not exists delivery_error text;
+alter table public.gw_slack_ai_escalations
+  drop constraint if exists gw_slack_ai_escalations_status_check;
+alter table public.gw_slack_ai_escalations
+  add constraint gw_slack_ai_escalations_status_check check(status in (
+    'pending', 'approved_pending_delivery', 'delivery_attempted', 'delivery_uncertain', 'answered'
+  ));
+drop index if exists public.gw_slack_ai_escalations_owner_idx;
+create unique index if not exists gw_slack_ai_escalations_owner_msg_uidx
+  on public.gw_slack_ai_escalations (owner_dm_ts)
+  where owner_dm_ts is not null;
 alter table public.gw_slack_ai_escalations enable row level security;
 -- Explicit manual linking required; do not infer Slack/GW identity by display name.
 -- EXAMPLE (fill verified IDs only, run manually):
