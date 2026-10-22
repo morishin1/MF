@@ -44,7 +44,11 @@ export default async function handler(req,res){
 
   if(b.action==="import"){
     // 外部メールからの情報は推測で応募者情報に上書きしない。
-    if(!["gmail","manual"].includes(b.provider))return json(res,400,{error:"invalid_provider"});
+    // Gmail実連携は認証済みの別プロバイダ接続ができるまで禁止。
+    // HR担当による手動貼り付けを「Gmail由来の確定データ」と偽装させない。
+    if(b.provider==="gmail")return json(res,409,{error:"source_not_connected",
+      message:"Gmailの自動取り込みは未接続です。現在は手動受付を使用してください"});
+    if(b.provider!=="manual")return json(res,400,{error:"invalid_provider"});
     const providerMessageId=str(b.providerMessageId,200);
     const originalId=String(b.providerMessageId||"").trim();
     if(!providerMessageId||originalId!==providerMessageId)
