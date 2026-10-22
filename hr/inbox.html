@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>採用メール新着受付 | EIGHT HR</title>
+<link rel="icon" href="../img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/app.css?v=20261020cal1">
+<style>
+body{font-family:system-ui,"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;color:#1b2440}
+.in-wrap{max-width:1120px;margin:0 auto;padding:28px 18px 70px}
+.in-head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.in-head h1{font-size:23px;margin:0}.in-sub{font-size:12px;color:#657185;line-height:1.65}
+.in-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:18px 0}
+.in-tools select,.in-tools input,.in-card textarea,.in-card input,.in-card select,.in-dialog textarea,.in-dialog input,.in-dialog select{
+  border:1px solid #d1d6df;border-radius:8px;padding:9px;font:inherit;font-size:13px;min-width:0;background:#fff}
+.in-tools input{flex:1;min-width:160px}
+.in-button{background:#1b2440;color:white;padding:10px 13px;border-radius:8px;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:700}
+.in-button.secondary{background:#fff;color:#1b2440;border:1px solid #d1d6df}
+.in-button:disabled{opacity:.5;cursor:wait}
+.in-card{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:16px;margin:12px 0}
+.in-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.in-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700}
+.in-form label.wide{grid-column:1/-1}
+.in-form textarea{min-height:130px;resize:vertical}
+.in-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.in-grid{display:grid;gap:9px}
+.in-item{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:14px;display:flex;gap:12px;align-items:center;justify-content:space-between}
+.in-item h3{font-size:14px;margin:0 0 3px;overflow-wrap:anywhere}
+.in-meta{font-size:11px;color:#687386;line-height:1.6;overflow-wrap:anywhere}
+.in-pill{display:inline-block;font-size:11px;border-radius:100px;background:#eef1f7;padding:3px 8px;color:#1b2440;margin-right:5px}
+.in-pill.new{background:#fff3d4;color:#804f00}
+.in-empty{font-size:12px;color:#657185}
+#inModal[hidden],#pasteWrap[hidden]{display:none!important}
+.in-overlay{position:fixed;inset:0;background:#1b244080;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.in-dialog{width:min(610px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:14px;padding:22px}
+.in-dialog h2{font-size:18px;margin:0 0 10px}
+.in-dialog label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;margin:12px 0}
+.in-dialog textarea{min-height:125px;resize:vertical;white-space:pre-wrap}
+.in-dialog input,.in-dialog select,.in-dialog textarea{width:100%}
+.in-dialog .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.in-message{font-size:12px;min-height:18px;margin-top:8px;white-space:pre-wrap}
+.in-message.error{color:#b3261e}.in-message.ok{color:#236d3e}
+@media(max-width:650px){.in-wrap{padding:18px 11px 54px}.in-form{grid-template-columns:1fr}.in-form label.wide{grid-column:auto}.in-dialog{padding:16px}}
+</style>
+</head><body>
+<main class="in-wrap">
+  <header class="in-head"><div><h1>採用メール新着受付</h1>
+    <p class="in-sub">saiyou@8grp.co.jp 宛ての応募候補を、担当者が確認してHR応募者に紐づける画面です。</p></div>
+    <a class="in-button secondary" style="text-decoration:none" href="/hr/applicants.html">応募者一覧へ戻る</a>
+  </header>
+  <div class="in-card">
+    <strong>メールの取り込み状態</strong>
+    <p class="in-sub">現在は安全な手動入力に対応しています。Gmail/Xserverからの定期的な自動取得はまだ接続されていません。受信しただけでは正式応募者にならず、応募者の新規作成も行いません。</p>
+    <button type="button" class="in-button" id="pasteButton">＋ 受信メールを候補として登録</button>
+    <span id="newCount" class="in-pill new">新着 — 件</span>
+    <div id="pasteWrap" hidden style="margin-top:15px">
+      <form id="pasteForm" class="in-form">
+        <label>受信日時 <input name="receivedAt" type="datetime-local" required></label>
+        <label>差出人メール <input name="senderAddress" type="email" placeholder="送信元（求人媒体の通知アドレス等）"></label>
+        <label class="wide">件名 <input name="subject" maxlength="300" required></label>
+        <label>氏名候補 <input name="candidateName" maxlength="100" placeholder="不明な場合は空欄"></label>
+        <label>応募職種候補 <input name="jobTitle" maxlength="180"></label>
+        <label>応募媒体候補 <input name="source" maxlength="80" placeholder="Wantedlyなど"></label>
+        <label>返信先メール（任意） <input name="replyTo" type="email"></label>
+        <label class="wide">メール本文（最大5000文字） <textarea name="bodyText" maxlength="5000" placeholder="応募者の個人情報を必要以上に転記しないでください"></textarea></label>
+        <div class="in-foot" style="grid-column:1/-1">
+          <button type="button" class="in-button secondary" id="pasteClose">やめる</button>
+          <button type="submit" class="in-button">候補として保存</button>
+        </div>
+      </form>
+    </div>
+    <div id="inStatus" class="in-message" role="status" aria-live="polite"></div>
+  </div>
+  <div class="in-tools">
+    <select id="inFilter" aria-label="状態で絞り込む">
+      <option value="new">新着</option><option value="review">要確認</option>
+      <option value="linked">応募者に紐づけ済み</option><option value="ignored">対象外</option><option value="">すべて</option>
+    </select>
+    <input id="inSearch" type="search" placeholder="件名・氏名・媒体で検索" aria-label="メールを検索">
+    <button class="in-button secondary" id="refresh" type="button">更新</button>
+  </div>
+  <div class="in-grid" id="inList"><p class="in-empty">読み込み中…</p></div>
+  <p class="in-sub" id="inCap"></p>
+</main>
+<div id="inModal" hidden class="in-overlay">
+  <section class="in-dialog" role="dialog" aria-modal="true" aria-label="受信メール詳細">
+    <div class="in-head"><h2 id="inTitle"></h2><button type="button" class="in-button secondary" id="modalClose">閉じる</button></div>
+    <div id="inDetails"></div>
+    <label>担当者メモ <textarea id="inNote" maxlength="1000"></textarea></label>
+    <label>既存応募者に紐づける
+      <select id="applicantSelect"><option value="">（応募者を選択）</option></select>
+    </label>
+    <p class="in-sub">新しい応募者は「応募者一覧」で登録してから、ここで紐づけてください。取り込みだけでは応募者データやステータスは変更されません。</p>
+    <div class="actions">
+      <button class="in-button" type="button" data-in-act="link">既存応募者に紐づける</button>
+      <button class="in-button secondary" type="button" data-in-act="review">要確認にする</button>
+      <button class="in-button secondary" type="button" data-in-act="ignored">対象外にする</button>
+      <a class="in-button secondary" style="text-decoration:none" href="/hr/applicants.html?new=1">応募者を新規登録</a>
+    </div>
+    <div id="inModalStatus" class="in-message" role="status" aria-live="polite"></div>
+  </section>
+</div>
+<script src="../js/api-client.js?v=20261020cal1"></script>
+<script src="../js/layout.js?v=20261020cal1"></script>
+<script src="../js/hr-layout.js?v=20261020cal1"></script>
+<script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
+<script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
+<script>
+(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const local=(iso)=>{
+    const date=new Date(iso);
+    if(!Number.isFinite(date.getTime()))return"";
+    return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).format(date);
+  };
+  const api=(body)=>API.api("/api/hr/inbox",{method:"POST",body});
+  async function manualMailId(mail){
+    // 再登録しても同じ受信情報なら同じID。本文を平文のIDやURLに含めない。
+    const value=[mail.recipient,mail.receivedAt,mail.senderAddress,mail.subject,mail.bodyText]
+      .map(v=>String(v||"")).join("\u001f");
+    const bytes=new TextEncoder().encode(value);
+    const digest=await crypto.subtle.digest("SHA-256",bytes);
+    return "manual-"+[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }
+  const states={new:"新着",review:"要確認",linked:"応募者紐づけ済み",ignored:"対象外"};
+  let mails=[],applicants=[],current=null,busy=false;
+  function tell(id,msg,error){const el=$(id);el.className="in-message"+(error?" error":msg?" ok":"");el.textContent=msg;}
+  function filtered(){
+    const key=$("inFilter").value,q=$("inSearch").value.trim().toLowerCase();
+    return mails.filter(m=>(!key||m.status===key)&&(!q||
+      [m.subject,m.candidate_name_guess,m.job_title_guess,m.source_guess,m.sender_address].join(" ").toLowerCase().includes(q)));
+  }
+  function render(){
+    $("newCount").textContent="新着 "+mails.filter(m=>m.status==="new").length+"件";
+    const rows=filtered();
+    $("inList").innerHTML=rows.length?rows.map(m=>
+      '<article class="in-item"><div style="min-width:0">'+
+      '<span class="in-pill'+(m.status==="new"?" new":"")+'">'+esc(states[m.status]||m.status)+'</span>'+
+      '<h3>'+esc(m.subject||"（件名なし）")+'</h3>'+
+      '<div class="in-meta">'+esc(local(m.received_at))+' ／ '+esc(m.candidate_name_guess||"氏名未確認")+
+      (m.job_title_guess?' ／ '+esc(m.job_title_guess):'')+(m.source_guess?' ／ '+esc(m.source_guess):'')+'</div></div>'+
+      '<button class="in-button secondary" type="button" data-mail-id="'+esc(m.id)+'">確認</button></article>').join(""):
+      '<p class="in-empty">この条件の受信候補はありません。</p>';
+  }
+  async function load(){
+    try{
+      tell("inStatus","");
+      const r=await API.api("/api/hr/inbox");
+      mails=r.mails||[];
+      $("inCap").textContent=r.capped?"最新500件まで表示しています。期間全体の集計ではありません。":"";
+      render();
+    }catch(e){tell("inStatus",e.hint||e.message||"読み込めませんでした",true);}
+  }
+  async function loadApplicants(){
+    try{
+      const r=await API.listHrApplicants();
+      applicants=r.applicants||[];
+    }catch(e){tell("inModalStatus","応募者一覧を読み込めませんでした。応募者リンクの操作はできません。",true);}
+  }
+  function open(id){
+    const m=mails.find(v=>v.id===id);if(!m)return;
+    current=m.id;
+    $("inTitle").textContent=m.subject||"（件名なし）";
+    const info='<p class="in-meta">受信：'+esc(local(m.received_at))+' ／ 送信元：'+esc(m.sender_address||"不明")+
+      (m.reply_to?' ／ 返信先：'+esc(m.reply_to):'')+'</p>'+
+      '<p class="in-meta">媒体：'+esc(m.source_guess||"未分類")+' ／ 氏名候補：'+esc(m.candidate_name_guess||"未確認")+
+      ' ／ 職種候補：'+esc(m.job_title_guess||"未確認")+'</p>'+
+      '<div class="in-card" style="white-space:pre-wrap;font-size:12px;max-height:230px;overflow:auto">'+esc(m.body_text||"本文未登録")+'</div>';
+    $("inDetails").innerHTML=info;
+    $("inNote").value=m.review_note||"";
+    $("applicantSelect").innerHTML='<option value="">（応募者を選択）</option>'+applicants.map(a=>
+      '<option value="'+esc(a.id)+'">'+esc(a.name||"未設定")+' ／ '+esc(a.jobTitle||"職種未設定")+'</option>').join("");
+    $("inModal").hidden=false;
+    tell("inModalStatus","");
+    const linked=m.status==="linked";
+    $("inModal").querySelectorAll("[data-in-act]").forEach(b=>b.disabled=linked);
+    $("inNote").disabled=linked;
+    $("applicantSelect").disabled=linked;
+  }
+  function close(){$("inModal").hidden=true;current=null;}
+  $("inFilter").addEventListener("change",render);
+  $("inSearch").addEventListener("input",render);
+  $("refresh").addEventListener("click",load);
+  $("inList").addEventListener("click",e=>{const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
+  $("modalClose").addEventListener("click",close);
+  $("inModal").addEventListener("click",e=>{if(e.target===$("inModal"))close();});
+  $("pasteButton").addEventListener("click",()=>{$("pasteWrap").hidden=!$("pasteWrap").hidden;});
+  $("pasteClose").addEventListener("click",()=>{$("pasteWrap").hidden=true;});
+  $("pasteForm").addEventListener("submit",async e=>{
+    e.preventDefault();if(busy)return;busy=true;
+    const button=e.target.querySelector('button[type="submit"]');button.disabled=true;
+    const data=new FormData(e.target);
+    try{
+      const now=new Date(String(data.get("receivedAt"))+"+09:00");
+      if(!Number.isFinite(now.getTime()))throw Error("受信日時を確認してください");
+      const body={action:"import",provider:"manual",
+        recipient:"saiyou@8grp.co.jp",
+        receivedAt:now.toISOString(),subject:String(data.get("subject")||""),
+        senderAddress:String(data.get("senderAddress")||""),replyTo:String(data.get("replyTo")||""),
+        candidateName:String(data.get("candidateName")||""),jobTitle:String(data.get("jobTitle")||""),
+        source:String(data.get("source")||""),bodyText:String(data.get("bodyText")||"")};
+      body.providerMessageId=await manualMailId(body);
+      const r=await api(body);
+      if(r.duplicate)throw Error("同じ受信メールは既に登録されています。新着・要確認・すべての一覧を確認してください");
+      tell("inStatus","受信候補として保存しました。正式応募者にはまだ登録されていません。");
+      e.target.reset();$("pasteWrap").hidden=true;
+      await load();
+    }catch(err){tell("inStatus",err.hint||err.message||"保存できませんでした",true);}
+    finally{busy=false;button.disabled=false;}
+  });
+  $("inModal").addEventListener("click",async e=>{
+    const b=e.target.closest("[data-in-act]");if(!b||busy||!current)return;
+    const action=b.dataset.inAct;
+    if(action==="link"&&!$("applicantSelect").value){
+      tell("inModalStatus","紐づける既存応募者を選択してください。",true);return;
+    }
+    busy=true;b.disabled=true;
+    try{
+      const r=await api(action==="link"
+        ?{action:"link",id:current,applicantId:$("applicantSelect").value}
+        :{action:"review",id:current,status:action,note:$("inNote").value});
+      if(!r.ok)throw Error("保存できませんでした");
+      close();await load();
+    }catch(err){tell("inModalStatus",err.hint||err.message||"保存できませんでした",true);}
+    finally{busy=false;b.disabled=false;}
+  });
+  HRLayout.init({active:"applicants"}).then(async ctx=>{if(!ctx)return;await Promise.all([load(),loadApplicants()]);});
+})();
+</script>
+</body></html>
