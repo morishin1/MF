@@ -533,7 +533,7 @@
   el("wrap").addEventListener("keydown",event=>{
     if(event.key!=="Enter"&&event.key!==" ")return;
     const trigger=event.target.closest('[role="button"][data-cal-event-id]');
-    if(!trigger||event.target.closest(".cal-list-actions"))return;
+    if(!trigger||event.target.closest(".cal-list-actions, .cal-dayrow button"))return;
     event.preventDefault();openSingleEvent(trigger.dataset.calEventId);
   });
   let calPreviousFocus=null,calPreviousOverflow="";
