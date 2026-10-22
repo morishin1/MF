@@ -17,8 +17,9 @@
   const defaultSource=v=>String(v||"未記録").trim()||"未記録";
   const defaultJob=v=>String(v||"未記録").trim()||"未記録";
   const dateRange=(today,days)=>{
-    const base=new Date(today+"T00:00:00+09:00");
-    return new Date(base.getTime()-(days-1)*86400000).toISOString().slice(0,10);
+    const base=new Date(today+"T00:00:00Z");
+    base.setUTCDate(base.getUTCDate()-(days-1));
+    return base.toISOString().slice(0,10);
   };
   const percent=(part,total)=>total?Math.round(part/total*100)+"%":"—";
   function period(applicants,days,today){
@@ -36,9 +37,9 @@
   function summarize(applicants,days,today){
     const cohort=period(applicants,days,today);
     const statuses=Object.fromEntries([...CLOSED].map(x=>[x,cohort.filter(a=>a.status===x).length]));
-    const active=cohort.filter(a=>!CLOSED.has(a.status));
+    const active=cohort.filter(a=>!CLOSED.has(a.status)&&!["accepted","done"].includes(a.status));
     const interviewRecords=cohort.filter(a=>Number(a.interviewCount)>0).length;
-    const offerStage=cohort.filter(a=>["offer","joining_scheduled"].includes(a.stage)).length;
+    const offerStage=cohort.filter(a=>["offer","joining_scheduled"].includes(a.stage)&&!CLOSED.has(a.status)).length;
     const todayMonth=today.slice(0,7);
     const months=[];
     const md=new Date(today.slice(0,7)+"-15T12:00:00+09:00");
