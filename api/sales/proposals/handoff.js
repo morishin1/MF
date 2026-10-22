@@ -38,7 +38,8 @@ export default async function handler(req, res) {
   if (!proposal) return json(res, 404, { error: "not_found" });
   const me = ctx.employee?.id || null;
   const manager = canManageProposals(ctx);
-  if (!manager && me !== proposal.sales_owner_id) return json(res, 403, { error: "forbidden" });
+  if (!me || (!manager && me !== proposal.sales_owner_id) || proposal.archived_at)
+    return json(res, 403, { error: "readonly", hint: "引継ぎできるのは現在の担当者本人です" });
   const action = clean(body.action, 30);
   const priv = admin();
 
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
     const nextAt = readWhen(body.nextAt);
     if (!reason || !nextAction || !["advance", "needs_detail", "hold", "other"].includes(decision) || nextAt === undefined)
       return json(res, 400, { error: "invalid_body", hint: "判断・引継ぎ理由・次のアクションを記入してください" });
-    const { data: handoffId, error } = await sb.rpc("gw_sales_transfer_proposal", {
+    const { data: handoffId, error } = await sb.rpc("gw_sales_transfer_proposal_owner", {
       p_proposal: proposal.id, p_to_stage: toStage, p_to_owner: body.ownerId,
       p_reason: reason, p_decision: decision, p_next_action: nextAction, p_next_at: nextAt,
     });
@@ -90,7 +91,7 @@ export default async function handler(req, res) {
     if (ec) return dbError(res, ec);
     if (!(connected || []).some((a) => a.kind === "reply" || a.result === "connected"))
       return json(res, 409, { error: "not_connected", hint: "まず通話結果「通話できた」または企業からの返信を記録してください" });
-    const { data: row, error: e1 } = await sb.from("gw_sales_proposal_activities").insert({
+    const { data: row, error: e1 } = await (manager ? priv : sb).from("gw_sales_proposal_activities").insert({
       tenant_id: ctx.tenantId, proposal_id: proposal.id, company_id: proposal.company_id,
       kind: "cs_decision", result: decision, occurred_at: new Date().toISOString(),
       employee_id: me, created_by: user.id, note: reason,
