@@ -18,9 +18,9 @@ export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
   res.setHeader("Referrer-Policy","no-referrer");
   res.setHeader("X-Content-Type-Options","nosniff");
-  if(!["GET","POST"].includes(req.method))return methodNotAllowed(res,["GET","POST"]);
-  const b=req.method==="POST"?await readJson(req):{};
-  const token=req.method==="GET"?req.query?.token:b?.token;
+  if(req.method!=="POST")return methodNotAllowed(res,["POST"]);
+  const b=await readJson(req);
+  const token=b?.token;
   if(typeof token!=="string"||!TOKEN.test(token))return json(res,404,{error:"not_found"});
   const hash=createHash("sha256").update(token).digest("hex");
   const sb=admin();
@@ -30,7 +30,8 @@ export default async function handler(req,res){
   if(e)return json(res,503,{error:"not_ready"});
   if(!p||!p.survey_expires_at||new Date(p.survey_expires_at).getTime()<Date.now()||p.survey_answered_at||p.status==="closed"||p.status==="converted")
     return json(res,410,{error:"expired",message:"このアンケートURLは期限切れか回答済みです。"});
-  if(req.method==="GET")return json(res,200,{ok:true});
+  if(b?.action==="check")return json(res,200,{ok:true});
+  if(b?.action!=="submit")return json(res,400,{error:"invalid_action"});
   const a=b.answers;
   if(!a||!Object.keys(choices).every(k=>choices[k].includes(a[k]))
     ||!validList(a.days,days)||!validList(a.hours,hours)||!validList(a.interests,interests)
