@@ -91,7 +91,7 @@ export default async function handler(req, res) {
     if (ec) return dbError(res, ec);
     if (!(connected || []).some((a) => a.kind === "reply" || a.result === "connected"))
       return json(res, 409, { error: "not_connected", hint: "まず通話結果「通話できた」または企業からの返信を記録してください" });
-    const { data: row, error: e1 } = await sb.from("gw_sales_proposal_activities").insert({
+    const { data: row, error: e1 } = await (manager ? priv : sb).from("gw_sales_proposal_activities").insert({
       tenant_id: ctx.tenantId, proposal_id: proposal.id, company_id: proposal.company_id,
       kind: "cs_decision", result: decision, occurred_at: new Date().toISOString(),
       employee_id: me, created_by: user.id, note: reason,
