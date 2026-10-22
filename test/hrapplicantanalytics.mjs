@@ -27,12 +27,14 @@ assert.match(view.kpi,/対象期間の応募/);
 assert.match(view.outcomes,/見送り・不採用/);
 assert.doesNotMatch(JSON.stringify(view),/応募理由：.+確定/,"理由を創作しない");
 assert.equal(A.escapeText("<img onerror=alert(1)>"),"&lt;img onerror=alert(1)&gt;");
-const page=read("hr/index.html"),nav=read("js/hr-layout.js"),apps=read("hr/applicants.html");
+const page=read("hr/index.html"),nav=read("js/hr-nav-analytics.js"),apps=read("hr/applicants.html");
 for(const src of page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))
  if(src[1].trim())new Script(src[1]);
 assert.match(page,/HRApplicantAnalytics\.summarize/);
 assert.match(page,/応募動機・応募経路の詳しい理由：未収集/);
-assert.match(nav,/href: "\/hr\/applicants\.html", label: "ダッシュボード"/);
-assert.match(nav,/href: "\/hr\/", label: "応募分析"/);
+assert.match(nav,/applicant\.innerHTML/);
+assert.match(nav,/oldDashboard\.innerHTML/);
+assert.match(nav,/nav\.insertBefore\(applicant,oldDashboard\)/);
+assert.match(page,/hr-nav-analytics\.js\?v=20261023hr1/);
 assert.match(apps,/<h1 class="hr-title">採用ダッシュボード<\/h1>/);
 console.log("HR応募分析：JST・期間・媒体・職種・段階・未記録・XSS・ナビ 静的チェック OK");
