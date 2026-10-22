@@ -38,7 +38,7 @@ function from(name){
   if(doing==="insert"){
    if(rows.some(x=>x.tenant_id===values.tenant_id&&x.provider===values.provider&&x.provider_message_id===values.provider_message_id))
     return {data:null,error:{code:"23505"}};
-   const record={id:"12345678-1234-4234-8234-000000000002",status:"new",...values};
+   const record={id:"12345678-1234-4234-8234-000000000002",status:"new",applicant_id:null,...values};
    rows.push(record);return {data:clone(record),error:null};
   }
   if(doing==="update"){
