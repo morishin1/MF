@@ -6,7 +6,7 @@ import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { loadProposal, loadPeople, salesMembers } from "../../../lib/sales-proposals-db.js";
-import { isUuid } from "../../../lib/sales-proposals.js";
+import { isUuid, canManageProposals } from "../../../lib/sales-proposals.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -24,8 +24,8 @@ export default async function handler(req, res) {
   const { proposal, error } = await loadProposal(sb, ctx.tenantId, b.id);
   if (error) return json(res, 500, { error: "db_failed" });
   if (!proposal) return json(res, 404, { error: "not_found" });
-  if (proposal.archived_at || !ctx.employee?.id || proposal.sales_owner_id !== ctx.employee.id) {
-    return json(res, 403, { error: "readonly", hint: "共同担当を変更できるのは現在の主担当者だけです" });
+  if (proposal.archived_at || !ctx.employee?.id || (!canManageProposals(ctx) && proposal.sales_owner_id !== ctx.employee.id)) {
+    return json(res, 403, { error: "readonly", hint: "共同担当は現在の主担当者または管理者が変更できます" });
   }
   const staff = await loadPeople(ctx.tenantId);
   const allowed = new Set((await salesMembers(ctx.tenantId, staff.employees)).map((x) => x.id));
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     p_proposal: proposal.id, p_stage: b.stage, p_members: b.members,
   });
   if (e) {
-    const hint = dbSetupHint(e, "db/142_sales_team_proposals_bulk.sql");
+    const hint = dbSetupHint(e, "db/145_sales_proposal_inline_owners.sql");
     if (hint) return json(res, 503, { error: "not_ready", hint });
     return json(res, e.code === "42501" ? 403 : e.code === "23514" ? 409 : 500, {
       error: "save_failed", hint: ["42501", "23514"].includes(e.code) ? e.message : "共同担当を更新できませんでした",
