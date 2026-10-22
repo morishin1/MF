@@ -17,7 +17,7 @@
   ];
 
   function periodControls() {
-    el("metrics-period").innerHTML = [30, 90, 365].map((n) =>
+    el("metrics-period").innerHTML = [1, 7, 30, 90, 365].map((n) =>
       '<button type="button" class="' + (days === n ? 'on' : '') + '" aria-pressed="' + (days === n) +
       '" onclick="SalesInsights.changePeriod(' + n + ')">' + (n === 365 ? "1年" : n + "日") + '</button>'
     ).join("");
@@ -141,7 +141,7 @@
   }
   window.SalesInsights = {
     load,
-    changePeriod(n) { if (![30,90,365].includes(n)) return; days = n; load(); },
+    changePeriod(n) { if (![1,7,30,90,365].includes(n)) return; days = n; load(); },
     changeRole(key) { if (!Object.hasOwn(roles,key)) return; role = key; roleHtml(); }
   };
 })();
