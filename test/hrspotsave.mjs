@@ -15,6 +15,7 @@ const table=()=>{
   const q={
     select(){return q;},
     eq(k,v){conditions.push([k,v]);return q;},
+    is(k,v){conditions.push([k,v]);return q;},
     update(values){patch=values;return q;},
     async maybeSingle(){
       if(dbFailure&&patch)return {data:null,error:dbFailure};
@@ -59,9 +60,31 @@ await test("採点が揃わなければメモも誤上書きしない",async()=>
  assert.equal(r.statusCode,400);
  assert.equal(stored.staff_note,null);
 });
-await test("退会・移行済みはメモを編集できない",async()=>{
+await test("終了済みでも後から評価メモを保存でき、終了タブを維持する",async()=>{
  stored.status="closed";
+ const r=await call({action:"note",id:ID,note:"勤務終了後に所感を入力"});
+ assert.equal(r.statusCode,200,JSON.stringify(r.body));
+ assert.equal(stored.staff_note,"勤務終了後に所感を入力");
+ assert.equal(stored.status,"closed");
+});
+await test("終了済みの5項目を事後評価しても終了ステータスを保つ",async()=>{
+ stored.status="closed";
+ const r=await call({action:"score",id:ID,scores:[4,5,3,4,5],note:"後日評価"});
+ assert.equal(r.statusCode,200,JSON.stringify(r.body));
+ assert.deepEqual(stored.staff_scores,[4,5,3,4,5]);
+ assert.equal(stored.status,"closed");
+ assert.equal(r.body.person.status,"closed");
+});
+await test("HR選考へ引き継ぎ済みの評価は閲覧のみ",async()=>{
+ stored.status="converted";stored.applicant_id="another-applicant";
  const r=await call({action:"note",id:ID,note:"更新禁止"});
+ assert.equal(r.statusCode,409);
+ assert.equal(r.body.error,"read_only");
+ assert.equal(stored.staff_note,null);
+});
+await test("応募者紐づけがある場合は状態に関わらず評価不可",async()=>{
+ stored.applicant_id="another-applicant";
+ const r=await call({action:"score",id:ID,scores:[1,2,3,4,5],note:"更新禁止"});
  assert.equal(r.statusCode,409);
  assert.equal(stored.staff_note,null);
 });
