@@ -1,0 +1,28 @@
+// 定量目標・時間見積の純粋関数（lib/behavior-coach-goals.js）。引継ぎ資料の合成27テストをそのまま移したもの（import 先だけ変更）。
+import test from 'node:test';import assert from 'node:assert/strict';import {buildGoalReview,verifyGoalReview} from '../lib/behavior-coach-goals.js';
+const fixture=()=>({memberId:'synthetic-A',sourceRevision:'v1',active:true,scopeConfirmed:true,nextWorkday:'2026-10-26',evidence:[{id:'p',memberId:'synthetic-A',revision:'1',checkedAt:'2026-10-22T08:00:00Z',kind:'plan'},{id:'r',memberId:'synthetic-A',revision:'1',checkedAt:'2026-10-22T08:00:00Z',kind:'member_report'}],goal:{task:'合成案件の確認',deliverable:'確認記録',metricType:'activity',quantity:3,unit:'件',quantityOrigin:'member_registered',quantityRefs:['p'],refs:['p'],completionCriteria:'対象と確認結果の記録',qualityCriteria:'重複を除き確認項目を満たす'},timing:{plannedMinutes:60,plannedOrigin:'member_estimate',actualMinutes:75,actualOrigin:'member_report',actualRefs:['r'],refs:['p','r'],complete:true,sameDefinition:true,qualityComparable:true,difficultyComparable:true,overlapping:false}});
+test('registered quantity retained; no send/agreement',()=>{const r=buildGoalReview(fixture());assert.equal(r.goal.quantity,3);assert.equal(r.goal.quantityStatus,'registered_not_replaced');assert.equal(r.agreement,'not_established');assert.equal(r.sendEnabled,false);});
+test('missing quantity stays null',()=>{const f=fixture();delete f.goal.quantity;const r=buildGoalReview(f);assert.equal(r.goal.quantity,null);assert.ok(r.missing.includes('件数の根拠'));});
+test('AI ungrounded number rejected',()=>{const f=fixture();f.goal.quantityOrigin='ai_guess';assert.throws(()=>buildGoalReview(f),/unsupported_quantity/);});
+test('registered zero is not missing',()=>{const f=fixture();f.goal.quantity=0;assert.equal(buildGoalReview(f).goal.quantity,0);});
+test('provisional never agreed',()=>{const f=fixture();f.goal.quantityOrigin='member_provisional';assert.equal(buildGoalReview(f).goal.quantityStatus,'provisional_not_agreed');});
+test('comparable difference, not rating',()=>{assert.equal(buildGoalReview(fixture()).timing.differenceMinutes,15);});
+test('calendar slot not actual duration nor comparison basis',()=>{const f=fixture();f.timing.plannedOrigin='calendar_slot';f.timing.actualMinutes=null;assert.equal(buildGoalReview(f).timing.actualMinutes,null);assert.equal(buildGoalReview(f).timing.differenceMinutes,null);});
+test('actual requires actual source',()=>{const f=fixture();f.timing.actualRefs=['p'];assert.throws(()=>buildGoalReview(f),/actual_not_evidence/);});
+for(const k of ['complete','sameDefinition','qualityComparable','difficultyComparable'])test('no comparison without '+k,()=>{const f=fixture();f.timing[k]=false;assert.equal(buildGoalReview(f).timing.differenceMinutes,null);});
+test('overlap not summed or compared',()=>{const f=fixture();f.timing.overlapping=true;f.timing.breakdown={execution:40,waiting:40};assert.equal(buildGoalReview(f).timing.differenceMinutes,null);});
+test('unknown scope and day preserved, no weekday invented',()=>{const f=fixture();f.scopeConfirmed=null;f.active=null;f.nextWorkday=null;const r=buildGoalReview(f);assert.equal(r.excluded,false);assert.equal(r.nextWorkday,null);assert.ok(r.missing.includes('契約上の業務範囲'));});
+test('inactive excluded',()=>{const f=fixture();f.active=false;assert.equal(buildGoalReview(f).excluded,true);});
+test('quality missing triggers confirmation not number replacement',()=>{const f=fixture();f.goal.qualityCriteria=null;const r=buildGoalReview(f);assert.equal(r.goal.quantity,3);assert.ok(r.missing.includes('品質条件'));});
+test('cross member evidence rejected',()=>{const f=fixture();f.evidence[0].memberId='other';assert.throws(()=>buildGoalReview(f),/invalid_evidence/);});
+test('duplicate evidence rejected',()=>{const f=fixture();f.evidence.push(f.evidence[0]);assert.throws(()=>buildGoalReview(f),/invalid_evidence/);});
+test('revision changes review hash',()=>{const f=fixture();const a=buildGoalReview(f).reviewHash;f.sourceRevision='v2';assert.notEqual(buildGoalReview(f).reviewHash,a);});
+test('maximum three questions, no automatic improvement',()=>{const f=fixture();f.goal.quantity=null;f.goal.qualityCriteria=null;f.timing.complete=false;const r=buildGoalReview(f);assert.ok(r.questions.length<=3);assert.equal(r.improvement,null);});
+test('improvement requires evidence',()=>{const f=fixture();f.improvement={text:'確認項目を先に整理',refs:['unknown']};assert.throws(()=>buildGoalReview(f),/ungrounded_improvement/);});
+test('nonfinite/negative time rejected',()=>{for(const value of [Infinity,-1,NaN]){const f=fixture();f.timing.actualMinutes=value;assert.throws(()=>buildGoalReview(f),/invalid_actual_minutes/);}});
+test('metric categories preserved',()=>{for(const m of ['activity','output','outcome']){const f=fixture();f.goal.metricType=m;assert.equal(buildGoalReview(f).goal.metricType,m);}});
+
+test('unknown overlap cannot be compared',()=>{const f=fixture();delete f.timing.overlapping;assert.equal(buildGoalReview(f).timing.differenceMinutes,null);});
+test('payload does not share mutable input references',()=>{const f=fixture();const r=buildGoalReview(f);f.evidence[0].revision='changed';f.goal.refs.push('x');assert.equal(r.evidence[0].revision,'1');assert.deepEqual(r.goal.refs,['p']);assert.equal(verifyGoalReview(r),true);});
+test('payload modification detected by verification',()=>{const r=buildGoalReview(fixture());r.goal.quantity=100;assert.equal(verifyGoalReview(r),false);});
+test('value provenance and comparison conditions retained',()=>{const r=buildGoalReview(fixture());assert.deepEqual(r.goal.quantityRefs,['p']);assert.equal(r.goal.quantityOrigin,'member_registered');assert.deepEqual(r.timing.actualRefs,['r']);assert.equal(r.timing.actualOrigin,'member_report');assert.equal(r.timing.conditions.overlapping,false);});
