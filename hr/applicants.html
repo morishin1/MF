@@ -29,7 +29,7 @@
     /* 区分（選考中／採用／無限道場／不採用）。選考パイプラインより一段上の切り替え（検索・段階の行とは別の行） */
     .hr-catbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
     .hr-cat-tabs { display:inline-flex; border:1px solid #e2e2dc; border-radius:8px; overflow:hidden; background:#fff; }
-    .hr-cat-tabs button { border:none; border-right:1px solid #e2e2dc; background:#fff; padding:7px 14px; font-size:12.5px;
+    .hr-cat-tabs button, .hr-cat-tabs a.spot-link { display:inline-flex;align-items:center;text-decoration:none; border:none; border-right:1px solid #e2e2dc; background:#fff; padding:7px 14px; font-size:12.5px;
       font-weight:600; color:#4a5068; cursor:pointer; font-family:inherit; }
     .hr-cat-tabs button:last-child { border-right:none; }
     .hr-cat-tabs button.on { background:#1b2440; color:#fff; }
@@ -564,7 +564,7 @@
   function renderCategoryTabs() {
     API.morph(el("cat-tabs"), CATEGORIES.map((c) => {
       const n = applicants.filter((a) => inCategory(a, c.key)).length;
-      return `<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
+      return `${c.key === "closed" ? '<a role="tab" aria-selected="false" class="spot-link" href="/hr/spot.html">スポット人材</a>' : ""}<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
         data-category="${esc(c.key)}" onclick="setCategory('${esc(c.key)}')">${esc(c.label)}<span class="n">${n}</span></button>`;
     }).join(""));
     // 無限道場の通知先（運営担当）は、無限道場を見ているときだけ出す
