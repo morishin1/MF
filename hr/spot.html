@@ -82,7 +82,7 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const labels={registered:"未送付",invited:"回答待ち",answered:"回答済み",evaluated:"評価済み",
  candidate:"採用候補",converted:"選考へ移動済み",closed:"終了"};
 const scoreLabels=["電話対応","PC入力の正確さ","習得の早さ","報告・相談","安定感"];
-let people=[],current=null,busy=false,selected=new Set(),visiblePickIds=[];
+let people=[],current=null,busy=false,upgradeRequired=false,selected=new Set(),visiblePickIds=[];
 async function loadApplicantCounts(){
   try{
     const r=await API.api("/api/hr/applicants?category=all");
@@ -91,13 +91,13 @@ async function loadApplicantCounts(){
     for(const [key,n] of Object.entries(values))$("count-"+key).textContent=n;
   }catch{for(const k of ["active","contractor","mugendojo","closed"])$("count-"+k).textContent="—";}
 }
-function canSelect(p){return p.deleted_at?!p.applicant_id:!p.applicant_id&&p.status!=="converted";}
+function canSelect(p){return !upgradeRequired&&(p.deleted_at?!p.applicant_id:!p.applicant_id&&p.status!=="converted");}
 function selectedRows(){return people.filter(p=>selected.has(p.id));}
 function bulkState(){
  const archived=$("filter").value==="archived",size=selected.size;
  $("selectedCount").textContent=size+"件選択";
- for(const id of ["bulkCandidate","bulkClosed","bulkArchive"])$(id).disabled=!size||archived||busy;
- $("bulkRestore").hidden=!archived;$("bulkRestore").disabled=!size||!archived||busy;
+ for(const id of ["bulkCandidate","bulkClosed","bulkArchive"])$(id).disabled=!size||archived||busy||upgradeRequired;
+ $("bulkRestore").hidden=!archived;$("bulkRestore").disabled=!size||!archived||busy||upgradeRequired;
  $("bulkArchive").hidden=archived;
  const all=$("selectAll");all.checked=visiblePickIds.length>0&&visiblePickIds.every(id=>selected.has(id));
  all.indeterminate=visiblePickIds.some(id=>selected.has(id))&&!all.checked;
@@ -114,7 +114,9 @@ function qrSvg(content){
 
 function status(p){return p.survey_answered_at?"回答済み":"未回答";}
 async function load(){
- try{const r=await API.api("/api/hr/spot");people=r.people||[];
+ try{const r=await API.api("/api/hr/spot");upgradeRequired=Boolean(r.upgradeRequired);people=r.people||[];
+ $("add").disabled=upgradeRequired;
+ if(upgradeRequired)message(r.message||"データベースの更新待ちです。閲覧のみできます。",true);else message("");
  $("total").textContent=people.filter(p=>!p.deleted_at).length;
  $("count-spot").textContent=people.filter(p=>!p.deleted_at).length;
  $("long").textContent=people.filter(p=>!p.deleted_at&&["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)).length;
@@ -210,6 +212,7 @@ async function mutate(action,body={}){
  finally{busy=false;bulkState();}
 }
 function openAdd(){
+ if(upgradeRequired){message("データベースの更新待ちのため、新規登録できません。",true);return;}
  current=null;
  show('<div class="bar"><h2>スポット人材を登録</h2><button class="secondary" data-action="close">閉じる</button></div>'+
  '<form id="createSpot"><div class="field"><label for="name">氏名・タイミー表示名</label><input id="name" maxlength="100" required></div>'+
