@@ -23,6 +23,9 @@
     },
     "api/hr/applicants/mail.js": {
       "maxDuration": 30
+    },
+    "api/cron/eight-secretary.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
