@@ -143,6 +143,11 @@ function show(html){$("drawer").innerHTML=html;$("overlay").hidden=false;}
 function pair(label,val){return '<div class="pair"><span class="muted">'+esc(label)+'</span><b>'+esc(val??"未回答")+'</b></div>';}
 function detail(id){
  const p=people.find(x=>x.id===id);if(!p)return;current=id;
+ if(p.deleted_at){
+   show('<div class="bar"><h2>'+esc(p.name)+'</h2><button class="secondary" data-action="close">閉じる</button></div>'+
+     '<div class="panel"><b>削除済みのスポット人材</b><p>アンケートと社員評価の履歴は保持しています。復元するには、一覧でチェックを入れて「選択して復元」を押してください。</p></div>');
+   return;
+ }
  const a=p.survey_answers||{};
  let h='<div class="bar"><h2>'+esc(p.name)+'</h2><button class="secondary" data-action="close">閉じる</button></div>'+
  '<div class="muted">'+esc(p.source)+' ／ 勤務日 '+esc(p.worked_on)+'</div>'+
@@ -195,7 +200,13 @@ async function mutate(action,body={}){
    try{$("spotQR").innerHTML=qrSvg(link);}catch{$("spotQR").textContent="QRコードを表示できません。URLをコピーしてください。";}
   }else{const old=current;if(action==="promote"){location.href="/hr/applicants.html?id="+encodeURIComponent(data.applicantId);return;}detail(old);message("保存しました");}
   return data;
- }catch(e){message(e.hint||e.message,true);alert(e.hint||e.message);return null;}
+ }catch(e){
+    message(e.hint||e.message,true);
+    if(e.code==="already_registered"&&e.body?.existingId){
+      const existing=e.body.existingId;hide();detail(existing);
+    }else alert(e.hint||e.message);
+    return null;
+  }
  finally{busy=false;bulkState();}
 }
 function openAdd(){
