@@ -54,7 +54,7 @@ export default async function handler(req,res){
       survey_token_hash:hash,survey_expires_at:expires,survey_sent_at:new Date().toISOString(),status:"invited",updated_at:new Date().toISOString()
     }).eq("tenant_id",ctx.tenantId).eq("id",id).is("survey_answered_at",null);
     if(e)return error(res,e);
-    return json(res,200,{url:"/hr/spot-survey.html?token="+token,expiresAt:expires});
+    return json(res,200,{url:"/hr/spot-survey.html#token="+token,expiresAt:expires});
   }
   if(b.action==="score"){
     if(p.applicant_id||p.status==="closed")return json(res,409,{error:"read_only"});
@@ -70,7 +70,7 @@ export default async function handler(req,res){
   }
   if(b.action==="mark"){
     if(!["candidate","closed"].includes(b.status)||p.applicant_id)return json(res,400,{error:"invalid_status"});
-    if(b.status==="candidate"&&(!p.contact_consent||!p.survey_answered_at))
+    if(b.status==="candidate"&&(!p.contact_consent||!p.survey_answered_at||!["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)))
       return json(res,409,{error:"consent_required",message:"本人アンケートの連絡同意が必要です"});
     const {error:e}=await sb.from("gw_hr_spot_talents").update({status:b.status,updated_at:new Date().toISOString()})
       .eq("tenant_id",ctx.tenantId).eq("id",id);
