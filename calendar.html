@@ -526,7 +526,7 @@
   }
   el("wrap").addEventListener("click",event=>{
     const trigger=event.target.closest("[data-cal-event-id]");
-    if(!trigger||!el("wrap").contains(trigger)||event.target.closest(".cal-list-actions"))return;
+    if(!trigger||!el("wrap").contains(trigger)||event.target.closest(".cal-list-actions, .cal-dayrow button"))return;
     event.preventDefault();event.stopPropagation();
     openSingleEvent(trigger.dataset.calEventId);
   });
