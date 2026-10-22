@@ -5,9 +5,9 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { isUuid } from "../../../lib/sales-proposals.js";
+import { isUuid, canManageProposals } from "../../../lib/sales-proposals.js";
 
-const SQL_FILE = "db/142_sales_team_proposals_bulk.sql";
+const SQL_FILE = "db/145_sales_proposal_inline_owners.sql";
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
   const user = await requireUser(req, res);
@@ -39,8 +39,8 @@ export default async function handler(req, res) {
     if (hint) return json(res, 503, { error: "not_ready", hint });
     return json(res, 500, { error: "db_failed" });
   }
-  if ((check || []).length !== ids.length || check.some((p) => p.sales_owner_id !== ctx.employee.id))
-    return json(res, 403, { error: "readonly", hint: "他の担当者の提案は閲覧のみです。選択を外してください" });
+  if ((check || []).length !== ids.length || (!canManageProposals(ctx) && check.some((p) => p.sales_owner_id !== ctx.employee.id)))
+    return json(res, 403, { error: "readonly", hint: "担当者本人またはSales管理者だけが一括操作できます" });
 
   const { data: changed, error } = await sb.rpc("gw_sales_bulk_proposals", {
     p_ids: ids, p_action: action, p_service: service, p_title: title,
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     const hint = dbSetupHint(error, SQL_FILE);
     if (hint) return json(res, 503, { error: "not_ready", hint });
     if (error.code === "42501") return json(res, 403, { error: "readonly",
-      hint: "担当が変更されたか、他人の提案が含まれています。再読み込みしてください" });
+      hint: "担当が変更されたか、実行権限がありません。再読み込みしてください" });
     if (error.code === "23514") return json(res, 409, { error: "conflict",
       hint: "編集できない提案・アーカイブ済みの提案が含まれています。内容を確認してください" });
     console.error("[sales/proposals/bulk] failed", error.code || error.message);
