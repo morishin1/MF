@@ -696,7 +696,7 @@
    * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
    */
   const KEIEI_TABS = [
-    { key: "schedule", label: "予定・日報", icon: "calendar_month", views: ["schedule"], href: "/keiei/#schedule" },
+    { key: "schedule", label: "予定・日報", icon: "calendar_month", views: ["schedule"] },
     { key: "home",    label: "経営サマリー", icon: "home", views: ["home"] },
     { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
     // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
