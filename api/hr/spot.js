@@ -22,6 +22,12 @@ export default async function handler(req,res){
   if(!ctx.tenantId||!canRecruit(ctx))return json(res,403,{error:"forbidden"});
   res.setHeader("Cache-Control","private, no-store");
   const sb=admin();
+  if(req.method==="GET"&&String(req.query?.summary||"")==="1"){
+    const {count,error:e}=await sb.from("gw_hr_spot_talents").select("id",{count:"exact",head:true})
+      .eq("tenant_id",ctx.tenantId).is("deleted_at",null);
+    if(e)return error(res,e);
+    return json(res,200,{count:count||0});
+  }
   if(req.method==="GET"){
     const {data,error:e}=await sb.from("gw_hr_spot_talents").select(FIELDS).eq("tenant_id",ctx.tenantId).order("worked_on",{ascending:false}).limit(500);
     if(e)return error(res,e);
