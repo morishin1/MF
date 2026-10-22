@@ -529,7 +529,7 @@
     if(!trigger||!el("wrap").contains(trigger)||event.target.closest(".cal-list-actions, .cal-dayrow button"))return;
     event.preventDefault();event.stopPropagation();
     openSingleEvent(trigger.dataset.calEventId);
-  });
+  },true); // capture: 日付セルのonclickより先に予定クリックを処理
   el("wrap").addEventListener("keydown",event=>{
     if(event.key!=="Enter"&&event.key!==" ")return;
     const trigger=event.target.closest('[role="button"][data-cal-event-id]');
