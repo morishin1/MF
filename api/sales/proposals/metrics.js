@@ -44,16 +44,23 @@ export default async function handler(req, res) {
     return basis && new Date(basis).getTime() >= new Date(since + "T00:00:00+09:00").getTime();
   });
   const ids = cohort.map((p) => p.id);
+  let activityTruncated = false;
   const [acts, people] = await Promise.all([
-    inChunks(ids, (part) => sb.from("gw_sales_proposal_activities").select(ACT_FIELDS)
-      .eq("tenant_id", ctx.tenantId).in("proposal_id", part)
-      .in("kind", ["sent", "call", "reply", "meeting"]).order("occurred_at", { ascending: true })
-      .limit(ACT_LIMIT + 1)),
+    inChunks(ids, async (part) => {
+      const result = await sb.from("gw_sales_proposal_activities").select(ACT_FIELDS)
+        .eq("tenant_id", ctx.tenantId).in("proposal_id", part)
+        .in("kind", ["sent", "call", "reply", "meeting"]).order("occurred_at", { ascending: true })
+        .limit(ACT_LIMIT + 1);
+      if ((result.data || []).length > ACT_LIMIT) {
+        activityTruncated = true;
+        return { ...result, data: result.data.slice(0, ACT_LIMIT) };
+      }
+      return result;
+    }),
     loadPeople(ctx.tenantId),
   ]);
   if (acts.error) return json(res, 500, { error: "db_failed", detail: acts.error.message });
   // 1チャンクの活動が上限を超えると電話率等が不正確になるので警告を返す。
-  const activityTruncated = Math.ceil(ids.length / 50) * ACT_LIMIT < (acts.data || []).length;
   const result = computeSalesDashboardMetrics(scoped, acts.data || [], { since, days, nameOf: people.nameOf });
   return json(res, 200, {
     ...result, manager, truncated, activityTruncated,
