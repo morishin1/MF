@@ -148,7 +148,27 @@ function detail(id){
 }
 async function mutate(action,body={}){
  if(busy)return;busy=true;
- try{const data=await API.api("/api/hr/spot",{method:"POST",body:{action,id:current,...body}});
+ const isSave=action==="score"||action==="note";
+ const bar=$("spotSaveBar");
+ if(bar)bar.querySelectorAll("button").forEach(b=>b.disabled=true);
+ const msg=$("spotSaveFeedback");
+ if(isSave&&msg){msg.className="spot-save-feedback";msg.textContent="保存しています…";}
+ try{
+  const data=await API.api("/api/hr/spot",{method:"POST",body:{action,id:current,...body}});
+  if(isSave){
+    if(!data?.person?.id)throw Error("保存結果を確認できませんでした。再読み込みして確認してください");
+    const p=people.find(v=>v.id===current);
+    if(p)Object.assign(p,data.person);
+    render();
+    if(action==="score"){
+      const position=$("drawer").scrollTop,old=current;
+      detail(old);
+      $("drawer").scrollTop=position;
+    }
+    const status=$("spotSaveFeedback");
+    if(status){status.className="spot-save-feedback ok";status.textContent=action==="score"?"✓ 5項目と評価メモを保存しました。":"✓ 評価メモを保存しました。";}
+    return;
+  }
   await load();
   if(action==="invite"){
    const link=new URL(data.url,location.origin).href;
@@ -159,8 +179,17 @@ async function mutate(action,body={}){
      '<p class="muted">期限：'+esc(data.expiresAt?.slice(0,10))+'。回答は任意です。</p>');
    try{$("spotQR").innerHTML=qrSvg(link);}catch{$("spotQR").textContent="QRコードを表示できません。URLをコピーしてください。";}
   }else{const old=current;if(action==="promote"){location.href="/hr/applicants.html?id="+encodeURIComponent(data.applicantId);return;}detail(old);message("保存しました");}
- }catch(e){alert(e.hint||e.message);}
- finally{busy=false;}
+ }catch(e){
+   const reason=e.hint||e.message||"保存できませんでした。";
+   if(isSave){
+     const status=$("spotSaveFeedback");
+     if(status){status.className="spot-save-feedback error";status.textContent="保存できませんでした："+reason;}
+   }else alert(reason);
+ }finally{
+   busy=false;
+   const footer=$("spotSaveBar");
+   if(footer)footer.querySelectorAll("button").forEach(b=>b.disabled=false);
+ }
 }
 function openAdd(){
  current=null;
@@ -186,9 +215,16 @@ $("drawer").addEventListener("click",async e=>{
  if(a==="copy"){try{await navigator.clipboard.writeText($("surveyLink").value);btn.textContent="コピーしました";}
    catch{$("surveyLink").select();document.execCommand("copy");btn.textContent="コピーしました";}return;}
  if(a==="invite"){await mutate("invite");return;}
- if(a==="score"){const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
-  if(scores.some(n=>!n||n<1||n>5)){alert("5項目すべてを評価してください");return;}
-  await mutate("score",{scores,note:$("staffNote").value});return;}
+ if(a==="note"){await mutate("note",{note:$("staffNote").value});return;}
+ if(a==="score"){
+  const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
+  if(scores.some(n=>!Number.isInteger(n)||n<1||n>5)){
+    const status=$("spotSaveFeedback");
+    if(status){status.className="spot-save-feedback error";status.textContent="5項目すべてを1〜5点で入力してください。メモだけなら［メモだけ保存］を利用できます。";}
+    return;
+  }
+  await mutate("score",{scores,note:$("staffNote").value});return;
+ }
  if(a==="candidate"){if(confirm("本人の同意を確認し、採用候補に登録しますか？"))await mutate("mark",{status:"candidate"});return;}
  if(a==="promote"){if(confirm("既存HRの「選考中」に引き継ぎますか？"))await mutate("promote");return;}
  if(a==="closed"){if(confirm("この人材の管理を終了しますか？")){await mutate("mark",{status:"closed"});hide();}return;}
