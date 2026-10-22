@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId || !canSell(ctx)) return json(res, 403, { error: "forbidden" });
   const requested = Number(new URL(req.url, "http://localhost").searchParams.get("days"));
-  const days = [30, 90, 365].includes(requested) ? requested : 30;
+  const days = [1, 7, 30, 90, 365].includes(requested) ? requested : 30;
   const { date: since } = periodStartJst(days);
   const sb = userClient(req);
 
